@@ -1,5 +1,6 @@
 import { monthKey, plannedDaysForMonth } from "./years";
 import type { LearningRoadmap, MonthPlan, ProgressYear, RoadmapStep } from "./model";
+import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
 
 /** 시안 전용 장기 계획. 중등 3개월, 고등 과정 4개월 — 사용자 지정(2026-09-15). */
 const FUTURE_COURSES = [
@@ -23,12 +24,13 @@ export function buildSampleRoadmap(asOf: string): { roadmap: LearningRoadmap; ye
   let cursor = 2026 * 12 + 10; // 2026년 11월. 이미 있는 11~12월 상세 계획은 유지한다.
   for (const course of FUTURE_COURSES) {
     const first = cursor;
-    const last = cursor + course.duration - 1;
+    const duration = course.group.startsWith("중등") ? MATH_LEARNING_CADENCE.regular.months : course.duration;
+    const last = cursor + duration - 1;
     steps.push({ id: course.id, label: course.label, group: course.group,
       startMonth: monthKey(Math.floor(first / 12), first % 12 + 1),
       endMonth: monthKey(Math.floor(last / 12), last % 12 + 1), estimated: true,
       description: course.topics.join(" · ") });
-    for (let index = 0; index < course.duration; index++, cursor++) {
+    for (let index = 0; index < duration; index++, cursor++) {
       const year = Math.floor(cursor / 12);
       if (year === 2026) continue;
       const plans = byYear.get(year) ?? [];

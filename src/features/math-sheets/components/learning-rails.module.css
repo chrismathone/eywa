@@ -1,0 +1,229 @@
+.rails {
+  --rail-ink: var(--blue);
+  --rail-light: color-mix(in srgb, var(--blue) 52%, var(--card));
+  --rail-tick: color-mix(in srgb, var(--blue) 20%, var(--card));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 55px;
+  gap: 8px 14px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.plot {
+  position: relative;
+  height: 122px;
+  min-width: 0;
+}
+.ruler {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  pointer-events: none;
+}
+.guides {
+  stroke: var(--rail-ink);
+  stroke-width: 0.6px;
+  opacity: 0.065;
+}
+.minorTicks {
+  stroke: var(--rail-tick);
+  stroke-width: 0.65px;
+}
+.majorTicks {
+  stroke: var(--rail-ink);
+  stroke-width: 0.8px;
+  opacity: 0.3;
+}
+.endTicks {
+  stroke: var(--rail-ink);
+  stroke-width: 1px;
+  opacity: 0.28;
+}
+.interval {
+  position: absolute;
+  left: var(--interval-start);
+  width: var(--interval-width);
+  top: 43px;
+  height: 34px;
+  background: color-mix(in srgb, var(--blue) 3.5%, transparent);
+  pointer-events: none;
+  transition: left 320ms ease, width 320ms ease;
+}
+.targetGuide {
+  position: absolute;
+  top: 40px;
+  height: 40px;
+  left: var(--target-position);
+  border-left: 1px dashed color-mix(in srgb, var(--blue) 30%, transparent);
+  pointer-events: none;
+  transition: left 320ms ease;
+}
+.track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--blue) 7%, var(--card));
+  border-radius: 99px;
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--blue) 6%, transparent);
+}
+.currentTrack { top: 43px; }
+.targetTrack { top: 77px; height: 3px; }
+.currentFill,
+.targetFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  transition: width 320ms ease;
+}
+.currentFill {
+  width: var(--current-position);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--blue) 68%, var(--card)), var(--rail-ink));
+  box-shadow: inset 0 1px 0 #ffffff38, 0 1px 3px color-mix(in srgb, var(--blue) 12%, transparent);
+}
+.targetFill {
+  width: var(--target-position);
+  background: var(--rail-light);
+}
+.currentMarker,
+.targetMarker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  z-index: 1;
+  transition: left 320ms ease;
+}
+.currentMarker {
+  left: var(--current-position);
+  width: 13px;
+  height: 13px;
+  background: var(--rail-ink);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 18%, transparent), 0 2px 5px color-mix(in srgb, var(--blue) 20%, transparent);
+}
+.currentMarker::before,
+.targetMarker::before {
+  content: "";
+  position: absolute;
+  width: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.currentMarker::before { bottom: 11px; height: 10px; }
+.targetMarker {
+  left: var(--target-position);
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--rail-light);
+  background: var(--card);
+  box-shadow: 0 0 0 2px var(--card);
+}
+.targetMarker::before { top: 10px; height: 11px; }
+.annotation {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  height: 26px;
+  gap: 7px;
+  padding: 0 8px 0 0;
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--card));
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--rail-ink);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  z-index: 2;
+  transition: left 320ms ease, transform 320ms ease;
+}
+.currentAnnotation {
+  top: 0;
+  left: var(--current-position);
+  transform: translateX(calc(-1 * var(--current-position)));
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--blue) 5%, transparent);
+}
+.targetAnnotation {
+  top: 96px;
+  left: var(--target-position);
+  transform: translateX(calc(-1 * var(--target-position)));
+  border-color: color-mix(in srgb, var(--blue) 17%, var(--card));
+}
+.annotationTag {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px 0 0 4px;
+  background: var(--rail-ink);
+  color: white;
+}
+.targetAnnotation .annotationTag {
+  background: color-mix(in srgb, var(--blue) 8%, var(--card));
+  color: var(--rail-ink);
+  border-right: 1px solid color-mix(in srgb, var(--blue) 14%, var(--card));
+}
+.blockName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 550;
+}
+.values { position: relative; color: var(--rail-ink); }
+.currentValue,
+.targetValue {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+.currentValue { top: 43px; }
+.targetValue { top: 77px; }
+.values b { font-size: 16px; font-weight: 650; letter-spacing: -0.04em; }
+.values small { font-size: 10px; font-weight: 450; }
+.targetValue b { font-size: 13px; font-weight: 550; }
+.scale {
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  grid-column: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; }
+.rails[data-planned="false"] .annotation {
+  border-color: var(--line);
+  color: var(--text-dim);
+  box-shadow: none;
+}
+.rails[data-planned="false"] .annotationTag {
+  background: var(--bg-soft);
+  color: var(--text-dim);
+}
+@container (max-width: 260px) {
+  .scaleTick { display: none; }
+}
+@media (max-width: 720px) {
+  .rails { grid-template-columns: minmax(0, 1fr) 46px; column-gap: 12px; }
+  .values b { font-size: 14px; }
+  .targetValue b { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .currentFill, .targetFill, .currentMarker, .targetMarker,
+  .annotation, .interval, .targetGuide { transition: none; }
+}

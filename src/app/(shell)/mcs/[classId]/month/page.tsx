@@ -22,10 +22,10 @@ export default async function McsMonthPage({
   searchParams,
 }: {
   params: Promise<{ classId: string }>;
-  searchParams: Promise<{ month?: string; student?: string }>;
+  searchParams: Promise<{ month?: string; student?: string; track?: string }>;
 }) {
   const { classId } = await params;
-  const { month, student } = await searchParams;
+  const { month, student, track } = await searchParams;
   // 반 전환 드롭다운 목록은 시트와 **독립**이라 나란히 받는다(B4) — 가벼운 목록이지 랜딩 집계가 아니다.
   const [res, options] = await Promise.all([
     getMathSheetMonth(classId, month ?? null),
@@ -79,6 +79,7 @@ export default async function McsMonthPage({
           data={data}
           learning={learning}
           initialStudentId={student}
+          initialTrack={track === "supplement" || track === "regular" ? track : undefined}
           classOptions={classOptions}
         />
       </div>

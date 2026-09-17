@@ -5,6 +5,7 @@ import { requireMcsClassAccess } from "./access";
 import type { MathSheetMonthData } from "./month-queries";
 import {
   buildLearningProgress,
+  isLearningTrackDate,
   type LearningData,
   type LearningGoal,
   type LearningRecord,
@@ -23,6 +24,7 @@ export async function getMathLearningData(
     goals: {},
     progress: {},
     records: {},
+    supplement: { goals: {}, progress: {}, records: {} },
     status: "ok",
     referenceDate,
     context: monthData.learningContext ?? {
@@ -34,13 +36,21 @@ export async function getMathLearningData(
   if (!gate.ok) return { ...result, status: "failed" };
   const admin = createAdminClient(),
     tenantId = gate.access.tenantId;
-  const { data, error } = await admin
+  const [legacy, standard] = await Promise.all([admin
     .from("math_learning_goals")
     .select(
       "student_id, study_grade, start_block, end_block, start_date, end_date, textbook",
     )
     .eq("tenant_id", tenantId)
-    .eq("class_id", classId);
+    .eq("class_id", classId), admin
+    .from("math_learning_track_goals")
+    .select("student_id, study_grade, start_block, end_block, start_date, end_date, textbook, track, block_count")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId)
+    .lte("start_date", endOfMonth)
+    .gte("end_date", monthRange(monthData.month).from)
+    .order("start_date")]);
+  const error = legacy.error ?? standard.error;
   if (error)
     return {
       ...result,
@@ -49,7 +59,7 @@ export async function getMathLearningData(
         : "failed",
     };
   const visibleIds = new Set(monthData.students.map((s) => s.studentId));
-  for (const row of data ?? []) {
+  for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, track: "regular", block_count: null as number | null })), ...(standard.data ?? [])]) {
     if (!visibleIds.has(String(row.student_id))) continue;
     const goal: LearningGoal = {
       studentId: String(row.student_id),
@@ -59,10 +69,13 @@ export async function getMathLearningData(
       startDate: row.start_date,
       endDate: row.end_date,
       textbook: row.textbook,
+      track: row.track === "supplement" ? "supplement" : "regular",
+      blockCount: row.block_count,
     };
-    result.goals[goal.studentId] = goal;
+    const group = goal.track === "supplement" ? result.supplement! : result;
+    group.goals[goal.studentId] = goal;
   }
-  const goals = Object.values(result.goals);
+  const goals = [...Object.values(result.goals), ...Object.values(result.supplement!.goals)];
   if (!goals.length) return result;
   const firstDate = goals.reduce(
     (date, goal) => (goal.startDate < date ? goal.startDate : date),
@@ -77,7 +90,7 @@ export async function getMathLearningData(
   };
   try {
     const records = await fetchAllPagedInChunks<Row>(
-      goals.map((g) => g.studentId),
+      [...new Set(goals.map((g) => g.studentId))],
       (chunk, from, to) =>
         admin
           .from("lesson_reports")
@@ -103,15 +116,16 @@ export async function getMathLearningData(
       byStudent.set(row.student_id, list);
     }
     for (const goal of goals) {
-      const history = byStudent.get(goal.studentId) ?? [];
-      result.progress[goal.studentId] = buildLearningProgress(
+      const history = (byStudent.get(goal.studentId) ?? []).filter((record) => isLearningTrackDate(record.date, goal.track) && record.date >= goal.startDate && (goal.track !== "supplement" || record.date <= goal.endDate));
+      const group = goal.track === "supplement" ? result.supplement! : result;
+      group.progress[goal.studentId] = buildLearningProgress(
         goal,
         result.context,
         history,
         referenceDate,
         monthData.month,
       );
-      result.records[goal.studentId] = history.slice(-30).reverse();
+      group.records[goal.studentId] = history.slice(-30).reverse();
     }
   } catch {
     // Do not present a report fetch failure as zero progress or a learner falling behind.

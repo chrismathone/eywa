@@ -143,4 +143,25 @@ describe("전체 목표 저장 경계", () => {
     expect(mocks.revalidate).not.toHaveBeenCalled();
     expect(mocks.log).not.toHaveBeenCalled();
   });
+  it("새 정규 계획은 24블록으로 저장하고 기존 목표 표를 덮지 않는다", async () => {
+    expect((await saveMathLearningGoals({ ...input, track: "regular", blockCount: 24, endDate: "2026-10-31" })).ok).toBe(true);
+    expect(mocks.from).toHaveBeenCalledWith("math_learning_track_goals");
+    expect(mocks.from).not.toHaveBeenCalledWith("math_learning_goals");
+    expect(mocks.save.mock.calls[0][0][0]).toMatchObject({ track: "regular", block_count: 24 });
+    expect(mocks.save.mock.calls[0][1]).toEqual({ onConflict: "tenant_id,class_id,student_id,track,start_date" });
+  });
+  it("수요일 일정이 없는 반에는 복습 목표를 저장하지 않는다", async () => {
+    expect((await saveMathLearningGoals({ ...input, track: "supplement", blockCount: 4 })).ok).toBe(false);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("수요일 4블록은 정규 계획과 별도 키로 저장한다", async () => {
+    rows.class_schedules = [{ ...(rows.class_schedules[0] as object), day_of_week: "wed" }];
+    expect((await saveMathLearningGoals({ ...input, track: "supplement", blockCount: 4 })).ok).toBe(true);
+    expect(mocks.save.mock.calls[0][0][0]).toMatchObject({ track: "supplement", block_count: 4 });
+    expect(mocks.save.mock.calls[0][1].onConflict).toContain("track");
+  });
+  it("정규 목표에 4블록을 위조하면 저장 전에 거절한다", async () => {
+    expect((await saveMathLearningGoals({ ...input, track: "regular", blockCount: 4 })).ok).toBe(false);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
 });

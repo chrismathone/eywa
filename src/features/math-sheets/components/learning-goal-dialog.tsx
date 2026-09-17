@@ -11,16 +11,19 @@ import {
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   CURRICULUM_GRADES,
-  flatLessons,
+  curriculumForGradeSemester,
+  semesterOfLesson,
+  semestersForGrade,
+  type Semester,
   resolveStudyGrade,
 } from "@/features/onescreen/curriculum";
-import { addDays } from "@/lib/date-kst";
+import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
 import {
-  goalBlocks,
+  learningBlocks,
   learningDays,
   learningGoalError,
   plannedAt,
-  recordBlockIndex,
+  standardGoalDates,
   type LearningData,
   type LearningGoal,
 } from "../lib/learning-plan";
@@ -42,48 +45,41 @@ export function LearningGoalDialog({
   const router = useRouter();
   const [scope, setScope] = useState(studentId ?? "all");
   const eligible = data.students.filter((s) => s.rosterPhase !== "ended");
-  const initialStudent =
-    data.students.find((s) => s.studentId === studentId) ?? eligible[0];
-  const initialGrade = resolveStudyGrade(
-    initialStudent?.rail?.nowGrade ?? initialStudent?.grade ?? "중1",
-  );
-  const grade = CURRICULUM_GRADES.includes(initialGrade) ? initialGrade : "중1";
-  const initialBlocks = flatLessons(grade);
-  const recent = initialStudent?.rail?.nowLesson ?? "";
-  const recentIndex = recordBlockIndex(recent, grade);
-  const legacyTarget =
-    data.goals[initialStudent?.studentId ?? ""]?.targetProgress ?? "";
-  const legacyEnd = recordBlockIndex(legacyTarget, grade);
-  const fallback: LearningGoal = {
-    studentId: initialStudent?.studentId ?? "",
-    studyGrade: grade,
-    startBlock:
-      initialBlocks[
-        recentIndex == null
-          ? 0
-          : Math.min(recentIndex + 1, initialBlocks.length - 1)
-      ] ?? "",
-    endBlock:
-      initialBlocks[
-        legacyEnd != null && legacyEnd > (recentIndex ?? -1)
-          ? legacyEnd
-          : initialBlocks.length - 1
-      ] ?? "",
-    startDate: data.today,
-    endDate: addDays(data.today, 90),
-    textbook: data.goals[initialStudent?.studentId ?? ""]?.textbook ?? null,
+  const track = learning.track ?? "regular";
+  const policy = MATH_LEARNING_CADENCE[track];
+  const goalForStudent = (id: string | null): LearningGoal => {
+    const student = data.students.find((s) => s.studentId === id) ?? eligible[0];
+    const saved = learning.goals[student?.studentId ?? ""];
+    if (saved?.blockCount) return saved;
+    const resolved = resolveStudyGrade(saved?.studyGrade ?? student?.rail?.nowGrade ?? student?.grade ?? "중1");
+    const grade = CURRICULUM_GRADES.includes(resolved) ? resolved : "중1";
+    const recent = saved?.startBlock ?? student?.rail?.nowLesson ?? "";
+    const semester = semesterOfLesson(grade, recent);
+    const topics = curriculumForGradeSemester(grade, semester).flatMap((unit) => unit.lessons);
+    const reviewTopic = topics.includes(recent) ? recent : topics[0] ?? "";
+    return {
+      studentId: student?.studentId ?? "",
+      studyGrade: grade,
+      startBlock: track === "supplement" ? reviewTopic : topics[0] ?? "",
+      endBlock: track === "supplement" ? reviewTopic : topics.at(-1) ?? "",
+      ...standardGoalDates(data.month, track),
+      track,
+      blockCount: policy.totalBlocks,
+      textbook: saved?.textbook ?? data.goals[student?.studentId ?? ""]?.textbook ?? null,
+    };
   };
   const [goal, setGoal] = useState<LearningGoal>(
-    () => learning.goals[initialStudent?.studentId ?? ""] ?? fallback,
+    () => goalForStudent(studentId),
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const blocks = useMemo(() => flatLessons(goal.studyGrade), [goal.studyGrade]);
+  const semester = semesterOfLesson(goal.studyGrade, goal.startBlock);
+  const blocks = useMemo(() => curriculumForGradeSemester(goal.studyGrade, semester).flatMap((unit) => unit.lessons), [goal.studyGrade, semester]);
   const selectedIds =
     scope === "all" ? eligible.map((s) => s.studentId) : [scope];
   const previewGoal = { ...goal, studentId: selectedIds[0] ?? "" };
   const preview = learningDays(previewGoal, learning.context);
-  const total = goalBlocks(goal).length;
+  const total = learningBlocks(goal).length;
   const validation = learningGoalError(goal);
   const update = (patch: Partial<LearningGoal>) => {
     setGoal((previous) => ({ ...previous, ...patch }));
@@ -92,7 +88,7 @@ export function LearningGoalDialog({
   const selectScope = (id: string) => {
     setScope(id);
     setError(null);
-    if (learning.goals[id]) setGoal(learning.goals[id]);
+    setGoal(goalForStudent(id));
   };
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -106,7 +102,7 @@ export function LearningGoalDialog({
     }
     if (!preview.length) {
       setError(
-        "목표 기간에 수업이 없습니다. 기간과 반 시간표를 확인해 주세요.",
+        "목표 기간에 수업이 없는 달이 있습니다. 선택한 반의 수업 요일과 수강 기간을 확인해 주세요.",
       );
       return;
     }
@@ -140,8 +136,7 @@ export function LearningGoalDialog({
       <DialogContent className="sm:max-w-xl" showCloseButton={!pending}>
         <DialogTitle>전체 목표 설정</DialogTitle>
         <DialogDescription>
-          시작·완료 블록과 기간을 정하면 반 시간표와 학원 휴강일에 맞춰
-          월간·주간·일간 목표를 자동 배분합니다.
+          {track === "regular" ? "한 학기의 단원을 24블록으로 나눠 월 8블록씩, 3개월에 완료합니다." : "기존 학습이나 현행 심화 내용을 수요일 월 4블록으로 복습합니다. 정규 진도에는 합산하지 않습니다."}
         </DialogDescription>
         <form onSubmit={submit} className={styles.goalForm}>
           <fieldset disabled={pending}>
@@ -168,7 +163,7 @@ export function LearningGoalDialog({
                   aria-label="학습 과정"
                   value={goal.studyGrade}
                   onChange={(e) => {
-                    const next = flatLessons(e.target.value);
+                    const next = curriculumForGradeSemester(e.target.value, 1).flatMap((unit) => unit.lessons);
                     update({
                       studyGrade: e.target.value,
                       startBlock: next[0] ?? "",
@@ -182,56 +177,48 @@ export function LearningGoalDialog({
                 </select>
               </label>
             </div>
-            <div>
-              <span className={styles.fieldLabel}>시작 블록</span>
-              <SearchableSelect
-                ariaLabel="시작 블록"
-                value={goal.startBlock}
-                options={blocks.map((b, i) => ({
-                  value: b,
-                  label: b,
-                  hint: `${i + 1}블록`,
-                }))}
-                onValueChange={(value) => update({ startBlock: value })}
-                searchPlaceholder="시작 블록 검색"
-              />
-            </div>
-            <div>
-              <span className={styles.fieldLabel}>완료 목표 블록</span>
-              <SearchableSelect
-                ariaLabel="완료 목표 블록"
-                value={goal.endBlock}
-                options={blocks.map((b, i) => ({
-                  value: b,
-                  label: b,
-                  hint: `${i + 1}블록`,
-                }))}
-                onValueChange={(value) => update({ endBlock: value })}
-                searchPlaceholder="목표 블록 검색"
-              />
-            </div>
             <div className={styles.formPair}>
               <label>
-                시작일
-                <input
-                  aria-label="목표 시작일"
-                  type="date"
-                  required
-                  value={goal.startDate}
-                  onChange={(e) => update({ startDate: e.target.value })}
-                />
+                학기
+                <select aria-label="목표 학기" value={semester} onChange={(e) => {
+                  const topics = curriculumForGradeSemester(goal.studyGrade, Number(e.target.value) as Semester).flatMap((unit) => unit.lessons);
+                  update({ startBlock: topics[0] ?? "", endBlock: topics.at(-1) ?? "" });
+                }}>
+                  {semestersForGrade(goal.studyGrade).map((s) => <option key={s} value={s}>{s}학기</option>)}
+                </select>
               </label>
               <label>
-                완료 예정일
-                <input
-                  aria-label="목표 완료 예정일"
-                  type="date"
-                  required
-                  min={goal.startDate}
-                  value={goal.endDate}
-                  onChange={(e) => update({ endDate: e.target.value })}
-                />
+                {track === "regular" ? "시작 월" : "복습 월"}
+                <input aria-label="목표 시작 월" type="month" required value={goal.startDate.slice(0, 7)} onChange={(e) => {
+                  if (/^\d{4}-\d{2}$/.test(e.target.value)) update(standardGoalDates(e.target.value, track));
+                }} />
               </label>
+            </div>
+            <div>
+              <span className={styles.fieldLabel}>시작 단원</span>
+              <SearchableSelect
+                ariaLabel="시작 단원"
+                value={goal.startBlock}
+                options={blocks.map((b) => ({
+                  value: b,
+                  label: b,
+                }))}
+                onValueChange={(value) => update({ startBlock: value })}
+                searchPlaceholder="기존 진도표에서 단원 검색"
+              />
+            </div>
+            <div>
+              <span className={styles.fieldLabel}>{track === "regular" ? "완료 목표 단원" : "복습·심화 목표 단원"}</span>
+              <SearchableSelect
+                ariaLabel="완료 목표 단원"
+                value={goal.endBlock}
+                options={blocks.map((b) => ({
+                  value: b,
+                  label: b,
+                }))}
+                onValueChange={(value) => update({ endBlock: value })}
+                searchPlaceholder="기존 진도표에서 단원 검색"
+              />
             </div>
             <label>
               교재
@@ -254,18 +241,21 @@ export function LearningGoalDialog({
             <strong>
               {validation
                 ? "시작·완료 블록과 기간을 확인해 주세요"
-                : `전체 ${total}블록 · 수업 ${preview.length}회`}
+                : `전체 ${total}블록 · 월 ${policy.monthlyBlocks}블록 · ${policy.months}개월`}
             </strong>
+            <p>{goal.startDate} – {goal.endDate}</p>
             {!validation && preview.length > 0 ? (
               <p>
-                오늘까지 {plannedAt(preview, data.today)}블록 · 수업당 평균{" "}
-                {(total / preview.length).toFixed(1)}블록
+                오늘까지 {plannedAt(preview, data.today)}블록 · {track === "supplement"
+                  ? `수요일 수업 ${preview.length}회 중 4블록 목표`
+                  : `수업당 평균 ${(total / preview.length).toFixed(1)}블록`}
                 <br />
-                마지막 수업 {preview.at(-1)!.date}에 전체 목표 도달
+                {preview.find((day) => day.target === total)?.date} 수업까지 전체 목표 도달
               </p>
             ) : null}
             <p>
-              반 시간표와 학생의 수강 기간을 반영하고 휴강일은 제외합니다.
+              {track === "regular" ? "기존 단원을 24블록에 균등 배분합니다. 월별 8블록을 정규 수업일에 나누고 수요일은 제외합니다." : "수요일 수업 기록을 한 회당 1블록으로 집계합니다. 같은 단원을 반복해도 복습 횟수는 누적됩니다."}
+              {" "}휴강일과 수강 기간을 반영합니다.
               {scope === "all"
                 ? " 미리보기는 첫 학생 기준이며 학생별 수강 기간에 따라 배분됩니다. 반 전체에 저장하면 기존 전체 목표를 새 설정으로 바꿉니다."
                 : ""}

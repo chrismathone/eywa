@@ -80,6 +80,34 @@
   align-items: center;
   gap: 24px;
 }
+.trackSwitcher {
+  margin: 0 24px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.trackSwitcher > div {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.trackSwitcher button {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 650;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.trackSwitcher button[aria-pressed="true"] {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+.trackSwitcher button span { font-size: 11px; margin-left: 6px; font-weight: 450; }
+.trackSwitcher p { font-size: 12px; color: var(--text-dim); }
 .goalSummary small {
   display: block;
   color: var(--text-dim);
@@ -237,67 +265,6 @@
   text-overflow: ellipsis;
   overflow: hidden;
   color: var(--text-dim);
-}
-.rails {
-  min-width: 0;
-}
-.railRow {
-  display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) 66px;
-  align-items: center;
-  gap: 9px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.railRow b {
-  text-align: right;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--blue);
-  white-space: nowrap;
-}
-.track {
-  height: 7px;
-  background: var(--line);
-  position: relative;
-  border-radius: 4px;
-}
-.currentFill,
-.targetFill {
-  height: 100%;
-  position: absolute;
-  left: 0;
-  top: 0;
-  border-radius: 4px;
-}
-.currentFill {
-  background: var(--blue);
-}
-.currentFill[data-visible="true"]:after {
-  content: "";
-  position: absolute;
-  right: -3px;
-  top: -2px;
-  width: 11px;
-  height: 11px;
-  background: var(--blue);
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--card);
-}
-.targetFill {
-  background: color-mix(in srgb, var(--blue) 55%, var(--card));
-}
-.targetRow,
-.targetRow b {
-  color: var(--blue);
-}
-.scale {
-  display: flex;
-  justify-content: space-between;
-  margin: 0 75px 0 69px;
-  color: var(--text-faint);
-  font-size: 10px;
 }
 .rate {
   font-size: 25px;
@@ -483,12 +450,6 @@
 .focusCourse span {
   font-size: 12px;
   color: var(--text-dim);
-}
-.focusMain .track {
-  height: 8px;
-}
-.focusMain .railRow {
-  margin-bottom: 13px;
 }
 .currentBlock {
   font-size: 12px;
@@ -748,6 +709,10 @@
 }
 
 @media (max-width: 720px) {
+  .trackSwitcher { margin: 0 16px 18px; }
+  .trackSwitcher button { padding: 9px 8px; font-size: 12px; }
+  .trackSwitcher button span { display: block; margin: 5px 0 0; text-align: left; }
+  .trackSwitcher p { font-size: 11px; }
   .heading {
     padding: 19px 16px;
     align-items: flex-start;
@@ -850,18 +815,6 @@
   }
   .course span {
     font-size: 11px;
-  }
-  .railRow {
-    grid-template-columns: 52px minmax(0, 1fr) 61px;
-    gap: 7px;
-    font-size: 11px;
-  }
-  .railRow b {
-    font-size: 11px;
-  }
-  .scale {
-    margin-left: 59px;
-    margin-right: 68px;
   }
   .focusLayout {
     grid-template-columns: 1fr;

@@ -24,6 +24,8 @@ const inputSchema = z.object({
   startDate: z.string(),
   endDate: z.string(),
   textbook: z.string().trim().max(500).nullable(),
+  track: z.enum(["regular", "supplement"]).default("regular"),
+  blockCount: z.number().int().positive().nullable().optional(),
 });
 
 export async function saveMathLearningGoals(
@@ -109,7 +111,10 @@ export async function saveMathLearningGoals(
           "선택한 학생의 목표 기간에 수업이 없습니다. 기간과 시간표를 확인해 주세요.",
       };
   }
-  const { error } = await admin.from("math_learning_goals").upsert(
+  if (value.track === "supplement" && value.blockCount !== 4)
+    return { ok: false, error: "수요일 목표는 한 달·4블록으로 설정해 주세요." };
+  const standard = value.blockCount != null;
+  const { error } = await admin.from(standard ? "math_learning_track_goals" : "math_learning_goals").upsert(
     studentIds.map((studentId) => ({
       tenant_id: tenantId,
       class_id: classId,
@@ -121,8 +126,9 @@ export async function saveMathLearningGoals(
       end_date: value.endDate,
       textbook: value.textbook || null,
       updated_by: user.id,
+      ...(standard ? { track: value.track, block_count: value.blockCount } : {}),
     })),
-    { onConflict: "tenant_id,class_id,student_id" },
+    { onConflict: standard ? "tenant_id,class_id,student_id,track,start_date" : "tenant_id,class_id,student_id" },
   );
   if (error)
     return {
@@ -144,6 +150,8 @@ export async function saveMathLearningGoals(
       startDate: value.startDate,
       endDate: value.endDate,
       textbook: value.textbook,
+      track: value.track,
+      blockCount: value.blockCount ?? null,
     },
   });
   revalidatePath(`/mcs/${classId}/month`);

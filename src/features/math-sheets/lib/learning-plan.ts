@@ -1,4 +1,5 @@
-import { flatLessons, splitLessons } from "@/features/onescreen/curriculum";
+import { flatLessons, splitLessons, semesterOfLesson } from "@/features/onescreen/curriculum";
+import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { addDays, monthRange, shiftMonth } from "@/lib/date-kst";
 import { classDaysOf, type MathScheduleRow } from "./class-days";
 import type { EnrollSpan } from "@/features/attendance/enrollment-span";
@@ -13,6 +14,9 @@ export type LearningGoal = {
   startDate: string;
   endDate: string;
   textbook: string | null;
+  track?: MathLearningTrack;
+  /** Absent only on goals saved before the 24-block semester plan. */
+  blockCount?: number | null;
 };
 export type LearningRecord = {
   date: string;
@@ -61,7 +65,31 @@ export type LearningData = {
   status: "ok" | "missing-table" | "failed";
   referenceDate: string;
   context: LearningContext;
+  track?: MathLearningTrack;
+  supplement?: Pick<LearningData, "goals" | "progress" | "records">;
 };
+
+export function standardGoalDates(month: string, track: MathLearningTrack) {
+  return {
+    startDate: `${month}-01`,
+    endDate: monthRange(shiftMonth(month, MATH_LEARNING_CADENCE[track].months - 1)).to,
+  };
+}
+
+/** One course interval is divided into teaching blocks without changing the source curriculum. */
+export function learningBlocks(goal: LearningGoal): string[] {
+  const topics = goalBlocks(goal);
+  if (!goal.blockCount || !topics.length) return topics;
+  return Array.from({ length: goal.blockCount }, (_, index) => {
+    const from = Math.floor((topics.length * index) / goal.blockCount!);
+    const to = Math.max(from, Math.ceil((topics.length * (index + 1)) / goal.blockCount!) - 1);
+    return from === to ? topics[from]! : `${topics[from]} ~ ${topics[to]}`;
+  });
+}
+
+export function isLearningTrackDate(date: string, track: MathLearningTrack = "regular") {
+  return (dowKeyOf(date) === "wed") === (track === "supplement");
+}
 
 export function validPlanDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -89,6 +117,15 @@ export function learningGoalError(goal: LearningGoal): string | null {
     return "같은 과정에서 시작 블록과 그 이후의 목표 블록을 선택해 주세요.";
   if ((goal.textbook?.length ?? 0) > 500)
     return "교재 이름은 500자 이내로 입력해 주세요.";
+  if (goal.blockCount != null) {
+    const track = goal.track ?? "regular";
+    const policy = MATH_LEARNING_CADENCE[track];
+    const dates = standardGoalDates(goal.startDate.slice(0, 7), track);
+    if (goal.blockCount !== policy.totalBlocks || goal.startDate !== dates.startDate || goal.endDate !== dates.endDate)
+      return track === "regular" ? "정규 목표는 시작 월부터 3개월·24블록으로 설정해 주세요." : "수요일 목표는 한 달·4블록으로 설정해 주세요.";
+    if (track === "regular" && semesterOfLesson(goal.studyGrade, goal.startBlock) !== semesterOfLesson(goal.studyGrade, goal.endBlock))
+      return "정규 목표는 같은 학기의 시작·완료 단원으로 설정해 주세요.";
+  }
   return null;
 }
 
@@ -108,7 +145,8 @@ export function learningDays(
       if (
         date < goal.startDate ||
         date > goal.endDate ||
-        context.holidays[date]
+        context.holidays[date] ||
+        !isLearningTrackDate(date, goal.track)
       )
         continue;
       if (
@@ -124,7 +162,20 @@ export function learningDays(
       dates.push(date);
     }
   }
-  const blocks = goalBlocks(goal);
+  const blocks = learningBlocks(goal);
+  if (goal.blockCount != null) {
+    const policy = MATH_LEARNING_CADENCE[goal.track ?? "regular"];
+    const groups = Array.from({ length: policy.months }, (_, index) => {
+      const month = shiftMonth(goal.startDate.slice(0, 7), index);
+      return dates.filter((date) => date.startsWith(month));
+    });
+    // A missing month cannot silently count as eight completed teaching blocks.
+    if (groups.some((group) => !group.length)) return [];
+    return groups.flatMap((group, monthIndex) => group.map((date, dayIndex) => {
+      const target = monthIndex * policy.monthlyBlocks + Math.ceil(policy.monthlyBlocks * (dayIndex + 1) / group.length);
+      return { date, target, block: blocks[target - 1] ?? null };
+    }));
+  }
   return dates.map((date, i) => {
     const target = Math.floor((blocks.length * (i + 1)) / dates.length);
     return { date, target, block: blocks[target - 1] ?? null };
@@ -171,26 +222,38 @@ export function buildLearningProgress(
   planMonth = referenceDate.slice(0, 7),
 ): LearningProgress {
   const days = learningDays(goal, context),
-    blocks = goalBlocks(goal),
+    blocks = learningBlocks(goal),
     total = blocks.length;
   const course = flatLessons(goal.studyGrade),
     start = course.indexOf(goal.startBlock);
   let current: number | null = null,
     currentBlock: string | null = null,
     currentDate: string | null = null;
+  const topicCount = goalBlocks(goal).length;
+  const reviewDates = new Set<string>();
+  const plannedDates = new Set(days.map((day) => day.date));
   // Latest position wins, including a return to earlier blocks for revision. Future reports never count.
   for (const record of [...records].sort((a, b) =>
     a.date.localeCompare(b.date),
   )) {
-    if (record.date < goal.startDate || record.date > referenceDate) continue;
+    if (record.date < goal.startDate || record.date > referenceDate || !isLearningTrackDate(record.date, goal.track)) continue;
+    if (goal.track === "supplement") {
+      if (record.date > goal.endDate || !plannedDates.has(record.date) || !record.progress?.trim()) continue;
+      reviewDates.add(record.date);
+      current = Math.min(total, reviewDates.size);
+      currentBlock = record.progress.trim();
+      currentDate = record.date;
+      continue;
+    }
     const index = recordBlockIndex(record.progress, goal.studyGrade);
     if (index == null) continue;
-    current = Math.max(0, Math.min(total, index - start + 1));
+    const position = goal.blockCount && topicCount ? ((index - start + 1) / topicCount) * total : index - start + 1;
+    current = Math.round(Math.max(0, Math.min(total, position)) * 10) / 10;
     currentBlock = course[index] ?? null;
     currentDate = record.date;
   }
   const target = plannedAt(days, referenceDate),
-    difference = current == null ? null : current - target;
+    difference = current == null ? null : Math.round((current - target) * 10) / 10;
   const remainingDays = days.filter((d) => d.date > referenceDate).length;
   const range = monthRange(planMonth);
   const dow = new Date(`${referenceDate}T00:00:00Z`).getUTCDay();

@@ -35,6 +35,9 @@ import {
   testScoresOf,
 } from "../lib/test-score";
 import styles from "./learning-overview.module.css";
+import { LearningRails } from "./learning-rails";
+import type { MathLearningTrack } from "@/features/progress/learning-cadence";
+import { isLearningTrackDate, learningBlocks } from "../lib/learning-plan";
 
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
@@ -61,51 +64,25 @@ function Status({
   );
 }
 
-export function LearningRails({ progress }: { progress?: LearningProgress }) {
-  return (
-    <div className={styles.rails}>
-      <div className={styles.railRow}>
-        <span>현재진도</span>
-        <div className={styles.track}>
-          <i
-            className={styles.currentFill}
-            data-visible={Boolean(progress?.percent)}
-            style={{ width: `${progress?.percent ?? 0}%` }}
-          />
-        </div>
-        <b>{progress?.current == null ? "—" : `${progress.current}블록`}</b>
-      </div>
-      <div className={`${styles.railRow} ${styles.targetRow}`}>
-        <span>목표진도</span>
-        <div className={styles.track}>
-          <i
-            className={styles.targetFill}
-            style={{ width: `${progress?.targetPercent ?? 0}%` }}
-          />
-        </div>
-        <b>{progress ? `${progress.target}블록` : "—"}</b>
-      </div>
-      <div className={styles.scale}>
-        <span>시작 0</span>
-        <span>
-          {progress ? `전체 ${progress.total}블록` : "전체 목표 미설정"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 export function LearningOverview({
   data,
-  learning,
+  learning: allLearning,
   classOptions,
   initialStudentId,
+  initialTrack,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
   classOptions: { id: string; name: string }[];
   initialStudentId?: string;
+  initialTrack?: MathLearningTrack;
 }) {
+  const schedules = data.learningContext?.schedules ?? [];
+  const defaultTrack: MathLearningTrack = schedules.length > 0 && schedules.every((s) => s.dayOfWeek === "wed") ? "supplement" : "regular";
+  const [track, setTrack] = useState<MathLearningTrack>(initialTrack ?? defaultTrack);
+  const learning: LearningData = track === "regular"
+    ? { ...allLearning, track }
+    : { ...allLearning, ...(allLearning.supplement ?? { goals: {}, progress: {}, records: {} }), track };
   const [selected, setSelected] = useState<string | null>(() =>
     data.students.some((s) => s.studentId === initialStudentId)
       ? initialStudentId!
@@ -128,11 +105,21 @@ export function LearningOverview({
     window.history.pushState(null, "", url);
   };
   useEffect(() => {
-    const onBack = () =>
-      setSelected(new URL(window.location.href).searchParams.get("student"));
+    const onBack = () => {
+      const params = new URL(window.location.href).searchParams;
+      setSelected(params.get("student"));
+      setTrack(params.get("track") === "supplement" ? "supplement" : params.get("track") === "regular" ? "regular" : defaultTrack);
+    };
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
-  }, []);
+  }, [defaultTrack]);
+  const selectTrack = (next: MathLearningTrack) => {
+    setTrack(next);
+    setFilter("all");
+    const url = new URL(window.location.href);
+    url.searchParams.set("track", next);
+    window.history.pushState(null, "", url);
+  };
   const matches = (student: MathStudentRow, kind: Filter) => {
     const progress = learning.progress[student.studentId];
     if (kind === "all") return true;
@@ -160,7 +147,7 @@ export function LearningOverview({
   const common = uniqueGoals.size === 1 ? goals[0] : null;
   const thisMonth = data.today.slice(0, 7);
   const hrefFor = (month: string) =>
-    `/mcs/${data.classId}/month?month=${month}${selected ? `&student=${selected}` : ""}`;
+    `/mcs/${data.classId}/month?month=${month}&track=${track}${selected ? `&student=${selected}` : ""}`;
   const editable = data.canEdit && learning.status === "ok";
   return (
     <div className={styles.root}>
@@ -246,6 +233,13 @@ export function LearningOverview({
             </button>
           ) : null}
         </header>
+        <div className={styles.trackSwitcher}>
+          <div role="group" aria-label="수업 목표 구분">
+            <button type="button" aria-pressed={track === "regular"} onClick={() => selectTrack("regular")}>정규 진도 <span>월 8블록</span></button>
+            <button type="button" aria-pressed={track === "supplement"} onClick={() => selectTrack("supplement")}>수요일 복습·심화 <span>월 4블록</span></button>
+          </div>
+          <p>{track === "regular" ? "한 학기 24블록 · 3개월 완주" : "기존 학습·현행 심화 복습 · 정규 진도와 별도 집계"}</p>
+        </div>
         {!student ? (
           <>
             <div className={styles.goalSummary}>
@@ -357,12 +351,10 @@ export function LearningOverview({
                                 "현재 수업"}
                             </strong>
                             <span>
-                              {progress?.currentBlock ??
-                                s.rail?.nowLesson ??
-                                "아직 진도 기록이 없습니다"}
+                              {goal ? `전체 목표 · ${goal.endBlock}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} />
+                          <LearningRails progress={progress} goal={goal} recentBlock={!goal && track === "regular" && (!s.rail?.rail.nowDate || isLearningTrackDate(s.rail.rail.nowDate)) ? s.rail?.nowLesson : undefined} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
@@ -471,6 +463,7 @@ function StudentFocus({
     learning.records[student.studentId] ??
     Object.entries(student.records)
       .filter(([date]) => date <= learning.referenceDate)
+      .filter(([date]) => isLearningTrackDate(date, learning.track))
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([date, r]) => ({
         date,
@@ -478,7 +471,7 @@ function StudentFocus({
         textbook: r.textbook,
         homework: r.homework,
       }));
-  const legacyGoal = data.goals[student.studentId];
+  const legacyGoal = learning.track === "supplement" ? undefined : data.goals[student.studentId];
   return (
     <div className={styles.focusLayout}>
       <aside className={styles.studentList} aria-label="학생 선택">
@@ -537,13 +530,25 @@ function StudentFocus({
                 완료
               </span>
             </div>
-            <LearningRails progress={progress} />
+            <LearningRails progress={progress} goal={goal} />
             <p className={styles.currentBlock}>
               {progress.currentBlock ?? "현재 진도 확인 필요"}
               {progress.currentDate
                 ? ` (${shortDate(progress.currentDate)} 기록)`
                 : ""}
             </p>
+            {goal.blockCount === 24 ? (
+              <details className={styles.dailyPlan}>
+                <summary>24블록 학기 진도표 · 월 8블록</summary>
+                <p className={styles.meta}>기존 단원을 균등 배분한 계획입니다. 현재 위치는 수업 기록의 단원을 24블록으로 환산합니다.</p>
+                <div>
+                  <table>
+                    <thead><tr><th>월</th><th>블록</th><th>학습 단원</th></tr></thead>
+                    <tbody>{learningBlocks(goal).map((label, index) => <tr key={index}><td>{Math.floor(index / 8) + 1}개월차</td><td>{index + 1}블록</td><td>{label}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </details>
+            ) : null}
             <div className={styles.hierarchy}>
               {[
                 {
