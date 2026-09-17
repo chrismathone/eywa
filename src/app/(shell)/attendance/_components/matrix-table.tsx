@@ -53,7 +53,9 @@ const HEAD_CORNER_Z = "z-[60]";
 //    (104/84는 12~13px 시절 값이라 16px에서 이름 4자 + 「반이동」 뱃지가 끊겼다.)
 // 이름은 148px을 유지하고 뱃지는 아랫줄에 둔다. 학교·학년은 압축 표기와 원문 툴팁을 사용한다.
 // 2026-09-17: 학교 88→80, 날짜 최소 30→28로 줄여 학교 오른쪽 청구액 열을 마련한다.
-const COL_W = { name: 148, school: 80, classBilled: 88, money: 68, units: 40, rate: 64, day: 28 } as const;
+// 2026-09-17: 맨 오른쪽 학생 총액 '청구·납입' 두 열은 없앴다(원장 *"이미 학교학년 옆에 청구액이 배정되어있으므로 의미없음"*) —
+//   합계 줄의 청구·납입 합과 정산액은 그대로다(같은 `money` 조회). 🔴 되살리지 말 것.
+const COL_W = { name: 148, school: 80, classBilled: 88, units: 40, rate: 64, day: 28 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -212,7 +214,7 @@ export function MatrixTable({
     sheetTf(lang, key, vars);
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
   const showClassBilled = classBilledAmounts !== undefined;
-  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (money ? 2 : 0);
+  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
   const tierMissingIds = new Set(
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
@@ -238,7 +240,6 @@ export function MatrixTable({
     COL_W.school +
     (showClassBilled ? COL_W.classBilled : 0) +
     days.length * COL_W.day +
-    (money ? COL_W.money * 2 : 0) +
     COL_W.units +
     COL_W.rate;
 
@@ -256,12 +257,6 @@ export function MatrixTable({
           {days.map((d) => (
             <col key={d.date} />
           ))}
-          {money ? (
-            <>
-              <col style={{ width: COL_W.money }} />
-              <col style={{ width: COL_W.money }} />
-            </>
-          ) : null}
           <col style={{ width: COL_W.units }} />
           <col style={{ width: COL_W.rate }} />
         </colgroup>
@@ -337,19 +332,6 @@ export function MatrixTable({
                 </th>
               );
             })}
-            {money ? (
-              <>
-                <th
-                  className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-l px-2 py-2 text-right whitespace-nowrap`}
-                  title={t("att.col.billedTitle")}
-                >
-                  <span className="micro">{t("att.col.billed")}</span>
-                </th>
-                <th className={`bg-bg-soft sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} px-2 py-2 text-center whitespace-nowrap`}>
-                  <span className="micro">{t("att.col.paid")}</span>
-                </th>
-              </>
-            ) : null}
             {/* 폰에서는 합계 열의 가로 고정을 푼다 — 이름·우측 합계가 날짜 칸 전체를 덮어 터치할 수 없었다. */}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th
@@ -382,7 +364,6 @@ export function MatrixTable({
                     days={days}
                     holidays={holidays}
                     classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
-                    money={money ? money.byStudent[s.id] ?? null : undefined}
                     lockBefore={lockBefore}
                     classLabel={g.className}
                     tierMissing={tierMissingIds.has(s.id)}
@@ -405,7 +386,6 @@ export function MatrixTable({
                 days={days}
                 holidays={holidays}
                 classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
-                money={money ? money.byStudent[s.id] ?? null : undefined}
                 lockBefore={lockBefore}
                 classLabel={g.className}
                 tierMissing={tierMissingIds.has(s.id)}
