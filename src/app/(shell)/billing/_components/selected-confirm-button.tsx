@@ -3,6 +3,7 @@ import { useTransition } from "react";
 import { Loader2 } from "@/components/icons/eywa-icon-compat";
 import { confirmSelectedTerms, type SelectedTermInput } from "@/features/billing/session-terms/server/selected-confirm-actions";
 import { validSessionQuantity } from "@/features/billing/session-pricing";
+import { isUntouchedScaledSessions } from "@/features/billing/session-terms/last-month-suggestion";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";
 import { useSessionTermsState } from "./session-terms-state";
 
@@ -10,6 +11,13 @@ export type TermDraft = { sessions: string; price: string };
 
 /** 이름 목록을 짧게 — `김지우, 박경현 외 3명`. */
 const namesText = (names: string[]) => `${names.slice(0, 2).join(", ")}${names.length > 2 ? ` 외 ${names.length - 2}명` : ""}`;
+
+/** 선택 일괄 확정 전 확인 문구 — 지난 달 비율로 예정과 다르게 채운 시수(최대 5명 나열). */
+export function scaledConfirmText(rows: SessionTermRow[]): string {
+  const lines = rows.slice(0, 5).map((r) => `· ${r.studentName}: 예정 ${r.plannedSessions ?? 0} → ${r.lastMonth?.sessions}시수`);
+  if (rows.length > 5) lines.push(`외 ${rows.length - 5}명`);
+  return ["지난 달 비율로 예정과 다르게 채운 시수가 있습니다.", ...lines, "", "이대로 확정할까요?"].join("\n");
+}
 
 /**
  * 선택한 미확정 행을 **각 행에 보이는 값**(시수 칸 × 단가 칸, EiE는 월 금액)으로 확정할 입력으로 바꾼다 — 순수.
@@ -64,6 +72,10 @@ export function SelectedConfirmButton({
       return;
     }
     if (items.length === 0) return;
+    // 🔴 지난 달 비율로 **예정과 다르게** 채운 시수가 손대지 않은 채 섞여 있으면 한 번 묻는다 — 한 달만 휴원·결석으로 줄였던 학생도
+    //    같은 모양으로 채워져 화면만으로는 구분이 안 된다(적대적 리뷰 2026-09-17). 단가만 옮긴 칸은 묻지 않는다.
+    const scaled = rows.filter((r) => isUntouchedScaledSessions(r, draftOf(r).sessions));
+    if (scaled.length > 0 && !window.confirm(scaledConfirmText(scaled))) return;
     onMessage(null);
     const nameOf = new Map(rows.map((r) => [r.id, r.studentName]));
     start(async () => {
