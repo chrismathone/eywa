@@ -15,7 +15,9 @@ import {
   attendanceSlotShare,
   classTeacherIdsInRange,
   classTeacherRole,
+  ownInsertSlotStarts,
   ownsAttendanceSlot,
+  teachesClassOn,
   type AttendanceSlotShare,
   type AxisSlot,
   type ClassTeacherRole,
@@ -63,6 +65,40 @@ export function scopeRoleOf(
 /** 강사 전체 보기가 이 반을 그 강사 표로 그리나(그 달에 담임이거나 교시 담당) — 아니면 스코프 저장은 잘못된 요청. */
 export function scopeTeaches(facts: ScopeClassFacts | undefined, teacherId: string, date: string): boolean {
   return scopeRoleOf(facts, teacherId, date) !== null;
+}
+
+/**
+ * 그 **날짜**에 이 강사가 이 반에서 수업하나 — 화면(월간 매트릭스 `ownDates`)과 같은 함수(`teachesClassOn`)·같은 재료.
+ * 강사 보기는 그 강사가 맡은 날만 그리고 나머지 날은 입력을 막는다(원장 2026-09-17) — 저장도 같은 판정으로 거절한다(#77).
+ * ⚠️ 담임 시작일은 넣지 않는다(`buildScopeOwner`와 같은 이유 — 그 칸은 격자가 막는다. 서버는 더 넓게 받는 쪽으로만 다르다).
+ */
+export function scopeTeachesOn(facts: ScopeClassFacts | undefined, teacherId: string, date: string): boolean {
+  if (!facts) return false;
+  return teachesClassOn({
+    scopeTeacherId: teacherId,
+    homeroomTeacherId: facts.homeroomTeacherId,
+    slots: facts.slots,
+    date,
+    homeroomSince: null,
+  });
+}
+
+/**
+ * 강사 출석부 칸에 제 몫 기록이 없을 때 **새로 만들 교시** — 화면·저장이 같은 재료로(`ownInsertSlotStarts`).
+ * null = 종전대로 교시 없는 "그날 전체" 한 행. 재료가 없으면 null(호출부가 `scopeShareOf`로 먼저 거른다).
+ */
+export function scopeInsertSlots(
+  facts: ScopeClassFacts | undefined,
+  teacherId: string,
+  date: string,
+): string[] | null {
+  if (!facts) return null;
+  return ownInsertSlotStarts({
+    scopeTeacherId: teacherId,
+    homeroomTeacherId: facts.homeroomTeacherId,
+    slots: facts.slots,
+    date,
+  });
 }
 
 export type ScopeOwner = (classId: string, date: string, row: DayTargetRow) => boolean;

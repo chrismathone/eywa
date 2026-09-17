@@ -1,7 +1,7 @@
--- 0270b — 0270a 후속: ① `class_schedules.lab_separate`의 not null을 푼다 ② 수강에 '*LAB 교시 배정' 칸을 둔다
+-- 0271b — 0271a 후속: ① `class_schedules.lab_separate`의 not null을 푼다 ② 수강에 '*LAB 교시 배정' 칸을 둔다
 --
 -- ① 적대적 리뷰(2026-09-17): 옛 영어 시간표 가져오기 되돌리기(`rollback_english_structure`)는
---    `insert … select r.* from jsonb_populate_record(null::class_schedules, rec)`로 행을 되살린다. 0270a 전에 찍힌
+--    `insert … select r.* from jsonb_populate_record(null::class_schedules, rec)`로 행을 되살린다. 0271a 전에 찍힌
 --    스냅샷엔 `lab_separate` 키가 없어 **NULL**이 들어가고, not null에 걸려 되돌리기 **전체가 실패**한다.
 --    앱은 이 칸을 `.eq(true)`로만 읽고 쓸 때는 늘 true/false를 명시하므로 NULL = 꺼짐으로 충분하다.
 --
@@ -23,7 +23,7 @@ alter table public.enrollments
   add column if not exists lab_separate boolean default false;
 
 comment on column public.enrollments.lab_separate is
-  '이 수강생을 반의 따로 수업(*LAB) 교시에 배정 — LAB실 출석부에서 *LAB 교시에만 선다(0270b). NULL = 꺼짐.';
+  '이 수강생을 반의 따로 수업(*LAB) 교시에 배정 — LAB실 출석부에서 *LAB 교시에만 선다(0271b). NULL = 꺼짐.';
 
 -- 칸 추가 직후 API 스키마 캐시가 늦으면 insert 본문의 새 키가 PGRST204로 거절된다 — 바로 다시 읽게 한다.
 notify pgrst, 'reload schema';

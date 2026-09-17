@@ -61,7 +61,7 @@ type SlotRow = {
   period_label: string | null;
   merge_group: string | null;
   /**
-   * LAB '따로 수업(*LAB)' 표식(0270a) — **따로 읽어 채운다**(아래 조회에 컬럼을 끼우면 0270a 전엔 드래그가 전부 막힌다).
+   * LAB '따로 수업(*LAB)' 표식(0271a) — **따로 읽어 채운다**(아래 조회에 컬럼을 끼우면 0271a 전엔 드래그가 전부 막힌다).
    * undefined = 못 읽었다 → insert에서 칸을 뺀다(칸 없는 DB에 키를 실으면 insert가 실패한다).
    */
   lab_separate?: boolean;

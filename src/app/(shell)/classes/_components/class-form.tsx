@@ -51,7 +51,7 @@ type Schedule = {
   classroomId?: string | null;
   /** 저장된 표시 라벨 — 자리(LAB·JJ)면 담당 드롭다운이 그 자리로 열린다. */
   slotTeacherLabel?: string | null;
-  /** LAB '따로 수업(*LAB)' 표식(0270a). */
+  /** LAB '따로 수업(*LAB)' 표식(0271a). */
   labSeparate?: boolean;
 };
 

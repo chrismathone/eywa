@@ -88,7 +88,7 @@ export type ClassScheduleSlot = {
   classroomId: string | null;
   /** 표시 라벨(시트 원문). 자리(LAB·JJ)는 `teacherId`가 비고 여기에만 있다. */
   slotTeacherLabel: string | null;
-  /** LAB '따로 수업(*LAB)' 표식(0270a) — 못 읽었으면 false(`ClassDetail.labSeparateKnown`으로 가른다). */
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 못 읽었으면 false(`ClassDetail.labSeparateKnown`으로 가른다). */
   labSeparate: boolean;
 };
 
@@ -117,7 +117,7 @@ export type ClassDetail = {
   pendingTeacherDate: string | null;
   pendingTeacherReason: string | null;
   scheduleSlots: ClassScheduleSlot[];
-  /** '따로 수업(*LAB)' 표식을 읽었는가(0270a 미적용·조회 실패면 false — 수정 폼이 토글을 숨긴다). */
+  /** '따로 수업(*LAB)' 표식을 읽었는가(0271a 미적용·조회 실패면 false — 수정 폼이 토글을 숨긴다). */
   labSeparateKnown: boolean;
   /** **오늘** 명단에 있는 학생 수(휴원 포함, 미래 시작 제외). */
   studentCount: number;
@@ -757,7 +757,7 @@ export async function getClassDetail(id: string): Promise<ClassDetail | null> {
       .select("start_date, end_date, is_transferred")
       .eq("class_id", id)
       .or(`end_date.is.null,end_date.gte.${today}`),
-    // '따로 수업(*LAB)' 표식(0270a) — **따로 fail-soft로**. 위 교시 조회에 컬럼을 끼우면 0270a 전엔 오류가
+    // '따로 수업(*LAB)' 표식(0271a) — **따로 fail-soft로**. 위 교시 조회에 컬럼을 끼우면 0271a 전엔 오류가
     // 삼켜져 수정 폼이 빈 격자로 열리고, 그대로 저장하면 그 반의 교시가 전부 마감된다([[#95]]).
     loadLabSeparateIds(supabase, { kind: "class", classId: id }),
   ]);

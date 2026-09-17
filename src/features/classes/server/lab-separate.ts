@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * LAB '따로 수업(*LAB)' 표식(0270a `class_schedules.lab_separate`) 조회 — **단일 진입점**.
+ * LAB '따로 수업(*LAB)' 표식(0271a `class_schedules.lab_separate`) 조회 — **단일 진입점**.
  *
  * 원장 2026-09-17 *"랩실 옆에 토글키를 두고 토글하게 되면 LAB -> *LAB 밑줄 + 이탤릭체"*.
  *

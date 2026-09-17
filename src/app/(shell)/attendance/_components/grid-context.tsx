@@ -16,7 +16,7 @@ import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-acti
 import { cellKey, classIdOfRow, parseCellKey, rowKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
-import { NOT_MINE_MESSAGE } from "@/features/attendance/cell-display";
+import { NOT_MINE_MESSAGE, type NotMineReason } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
 import {
   ghostOptimisticValue,
@@ -173,7 +173,7 @@ export function GridProvider({
    * 이유·근거는 matrix-table `notMine` 주석. 잠금(7일)과 달리 **날짜가 아니라 칸 단위**다.
    * ⚠️ 다른 선생님 교시 기록이 있는 빗금 칸은 여기 없다 — 입력하면 상태만 옮긴다(`initial`의 `g`, 원장 2026-09-14).
    */
-  notMine?: Record<string, true | "seat">;
+  notMine?: Record<string, NotMineReason>;
   lockBefore: string | null;
   /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
   initialCollapsed?: string[];
@@ -283,8 +283,26 @@ export function GridProvider({
    */
   const notMineNote = useCallback(
     (key: string): string | null =>
-      notMine?.[key] === "seat" ? tf("att.lock.seatOnly", {}) : notMine?.[key] ? NOT_MINE_MESSAGE : null,
+      notMine?.[key] === "seat"
+        ? tf("att.lock.seatOnly", {})
+        : notMine?.[key] === "day"
+          ? tf("att.lock.notOwnDay", {})
+          : notMine?.[key]
+            ? NOT_MINE_MESSAGE
+            : null,
     [notMine, tf],
+  );
+  /**
+   * 한 칸 입력을 막는 **첫 사유 문장**(없으면 null) — 칸 툴팁(matrix-row `lockedReason`)과 **같은 순서**:
+   * 강사 보기의 '수업하지 않는 날'(원장 2026-09-17) → 7일 잠금 → 그 밖의 막는 칸(자리뿐 등).
+   */
+  const blockNoteOf = useCallback(
+    (key: string, date: string): string | null => {
+      const reason = notMine?.[key];
+      if (reason === "day") return notMineNote(key);
+      return lockNoteOf(date) ?? notMineNote(key);
+    },
+    [notMine, notMineNote, lockNoteOf],
   );
   /**
    * 입력하면 **다른 선생님 교시에 상태만 옮기는** 빗금 칸인가(원장 2026-09-14) — 칸의 지금 값이 빗금 표시 값(`g`)이면.
@@ -387,13 +405,9 @@ export function GridProvider({
       // 🔴 잠긴 칸(7일 경과)도 **사유를 띄운다** — 예전엔 여기서 조용히 반환해, 붙여넣기·Delete·타이핑
       //    확정이 안내 없이 원래 값으로 되돌아갔다("쳤는데 사라졌다"). 범위(writeMany)는 이미
       //    "N칸은 수정 기간(7일)이 지나…"로 알리고 있었으므로, 단건만 침묵인 모순이었다(2026-08-20).
-      const lockNote = lockNoteOf(p.date);
-      if (lockNote) {
-        setError(lockNote);
-        return;
-      }
-      // 막는 칸(자리뿐 · 담임 이전 기록 등) — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
-      const blockedNote = notMineNote(key);
+      // 막는 칸(7일 잠금 · 수업하지 않는 날 · 자리뿐 등) — 조용히 무시하면 "쳤는데 반응이 없다"가 되므로 사유를 띄운다.
+      // 사유 순서는 칸 툴팁과 같다(`blockNoteOf`).
+      const blockedNote = blockNoteOf(key, p.date);
       if (blockedNote) {
         setError(blockedNote);
         return;
@@ -418,7 +432,7 @@ export function GridProvider({
       if (undoRef.current.length > 50) undoRef.current.shift();
       pushCell(key, val, prev);
     },
-    [store, lockNoteOf, notMineNote, isGhost, pushCell, showNotice, tf],
+    [store, blockNoteOf, isGhost, pushCell, showNotice, tf],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
@@ -635,20 +649,46 @@ export function GridProvider({
         if (!group) return;
         // 🔴 그 사이 빗금 칸이 된 칸(남의 교시 기록이 생겼다)도 되돌리지 않는다 — 되쓰면 제 기록 복구가 아니라 남의 교시로
         //    상태 옮기기가 나간다(적대 재리뷰 2026-09-14). 빗금 칸 입력뿐인 작업은 그 자리에서 말하고 멈춘다.
-        const restorable = group.cells.filter(({ key: k }) => !store.valueOf(k)?.g);
-        const notRestored = (group.ghost ?? 0) + group.cells.length - restorable.length;
+        // 🔴 그 사이 **막는 칸**이 된 칸(새로고침으로 '수업하지 않는 날'·'제 교시 기록 없음'·자리뿐이 됐다)과 수정 기간이 지난
+        //    칸도 건너뛴다 — 입력(writeOne·writeMany)이 막는 칸을 되돌리기가 뚫으면 서버가 거절하고, 칸엔 되살리려던 값이 남는다
+        //    (적대 리뷰 2026-09-17).
+        let ghostSkipped = group.ghost ?? 0;
+        let lockedSkipped = 0;
+        const restorable = group.cells.filter(({ key: k }) => {
+          if (store.valueOf(k)?.g) {
+            ghostSkipped += 1;
+            return false;
+          }
+          const p = parseCellKey(k);
+          if (!p || isNotMine(k) || isLocked(p.date)) {
+            lockedSkipped += 1;
+            return false;
+          }
+          return true;
+        });
+        // 건너뛴 사유를 **사유대로** 말한다 — 잠긴 칸에 "그 칸에 다시 입력하세요"(빗금 옮기기 문장)를 쓰면 거짓이다(적대 재리뷰).
         if (restorable.length === 0) {
-          if (notRestored > 0) setError(tf("att.grid.ghostUndoBlock", {}));
+          if (lockedSkipped > 0) setError(tf("att.grid.undoLockedBlock", {}));
+          else if (ghostSkipped > 0) setError(tf("att.grid.ghostUndoBlock", {}));
           return;
         }
         // 한 그룹(= 한 번의 입력·채우기)을 통째로 되돌린다. 값이 칸마다 달라 범위 액션을 못 쓰므로 칸별로 되쓴다.
         for (const { key: k, prev } of restorable) {
           // 🔴 되돌리는 값은 **명시**로(null → "1") — ""(기본)로 보내면 지운 칸을 되살릴 때 서버가 수학 자동
           //    시수를 넣어 원래 값(1)과 달라진다(auto-units.ts). "1"은 저장값 null이라 옛 기록 그대로다.
-          pushCell(k, prev ? { status: prev.s as "present" | "absent", units: prev.u === null ? "1" : String(prev.u) } : null, prev);
+          // 세 번째 인자 = 실패하면 되칠할 값 = **지금** 값이다(되살리려던 값을 칠하면 서버와 영영 안 같아져 새로고침 전까지 남는다).
+          pushCell(
+            k,
+            prev ? { status: prev.s as "present" | "absent", units: prev.u === null ? "1" : String(prev.u) } : null,
+            store.valueOf(k),
+          );
         }
         // 섞인 작업은 제 칸만 돌아온다 — 빗금 칸이 그대로라는 사실을 말한다(조용히 반쪽만 되돌리지 않는다).
-        if (notRestored > 0) showNotice(tf("att.grid.ghostUndoPartial", { n: notRestored }));
+        const skippedNotes = [
+          ghostSkipped > 0 ? tf("att.grid.ghostUndoPartial", { n: ghostSkipped }) : null,
+          lockedSkipped > 0 ? tf("att.grid.undoLockedPartial", { n: lockedSkipped }) : null,
+        ].filter(Boolean);
+        if (skippedNotes.length > 0) showNotice(skippedNotes.join(" · "));
         const first = parseCellKey(restorable[0]!.key);
         if (first) store.select({ row: first.row, col: first.date }, false);
         return;
@@ -680,13 +720,9 @@ export function GridProvider({
         //    통째로 못 친다 — 한 행을 왼쪽부터 끄는 흔한 조작에서 앵커가 빗금이기 쉽다(영어 빗금 887칸).
         //    범위는 `writeMany`가 잠금·빗금을 걸러내고 "N칸은 … 건너뛰었습니다"로 알린다.
         // ⚠️ 잠금을 **먼저** 본다 — 칸 툴팁(matrix-row)의 우선순위와 같은 순서라야 호버와 안내가 같은 말을 한다.
-        const lockNote = sel.size <= 1 ? lockNoteOf(active.col) : null;
-        if (lockNote) {
-          setError(lockNote);
-          return;
-        }
-        if (sel.size <= 1 && isNotMine(key)) {
-          setError(notMineNote(key) ?? NOT_MINE_MESSAGE);
+        const blockNote = sel.size <= 1 ? blockNoteOf(key, active.col) : null;
+        if (blockNote) {
+          setError(blockNote);
           return;
         }
         store.setBuffer(appendChar(store.buffer, e.key));
@@ -747,7 +783,7 @@ export function GridProvider({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [store, commit, writeMany, writeOne, pushCell, isNotMine, notMineNote, lockNoteOf, showNotice, tf]);
+  }, [store, commit, writeMany, writeOne, pushCell, isNotMine, isLocked, blockNoteOf, showNotice, tf]);
 
   const ctx = useMemo<Ctx>(
     () => ({

@@ -6,6 +6,7 @@ import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/featu
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
+import { AttendanceScopeProvider } from "./scope-context";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/features/attendance/server/actions", () => ({
@@ -1014,5 +1015,110 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(setAttendanceCell).toHaveBeenCalledTimes(2); // ①을 되돌리는 저장이 나가지 않는다
     expect(container.textContent).toContain("되돌리기로 돌리지 않습니다");
     expect(own.textContent).toBe("1");
+  });
+});
+
+/**
+ * 🔴 원장 2026-09-17: *"그냥 출석부에 담당하는 날만 표시하면 된다. 담당하지 않는 날은 표시할 이유도 없지."* ·
+ *    *"말그대로 내가 수업한 학생의 출석만 보고 싶은것."* — 조회가 `ownDates`(그 강사가 수업하는 날)를 싣고, 격자는 그 밖의 날을
+ *    **빈칸으로 그리되 입력을 막는다**. 같은 날 *"내 출석부 상에서 자유롭게 숫자 설정만 하는거야"* — 수업하는 날 칸은 제 교시
+ *    기록이 없어도(남의 기록뿐이어도) 열린다(저장이 제 교시 행을 만든다).
+ */
+describe("강사 보기 — 그 강사가 수업하는 날만(원장 2026-09-17)", () => {
+  const D1 = "2026-07-01"; // 수 — 이 강사가 수업하는 날
+  const D2 = "2026-07-02"; // 목 — 수업하지 않는 날
+  function renderOwnDays(opts: { lockBefore?: string | null } = {}) {
+    const m = matrix([
+      { id: S1, name: "곽경찬", grade: "초6", school: "칠성초", enrolledAt: null, attendDows: [3, 4], spans: [], badges: [] },
+    ]);
+    m.classDows = [3, 4];
+    m.ownDates = [D1];
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    const view = render(
+      <GridProvider
+        rows={src.rows}
+        cols={src.cols}
+        initial={src.initial}
+        slotCounts={src.slotCounts}
+        notMine={src.notMine}
+        lockBefore={opts.lockBefore ?? null}
+      >
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} lockBefore={opts.lockBefore ?? null} />
+      </GridProvider>,
+    );
+    return { ...view, src };
+  }
+  const cellAt = (c: HTMLElement, date: string) => c.querySelector<HTMLElement>(`[data-cell-key$="${date}"]`)!;
+
+  it("🔴 격자 잠금 사유 — 수업하지 않는 날 = day · 수업하는 날은 열린다", () => {
+    const { src } = renderOwnDays();
+    expect(src.notMine[cellKey(rowKey(C, S1), D2)]).toBe("day");
+    expect(src.notMine[cellKey(rowKey(C, S1), D1)]).toBeUndefined();
+  });
+
+  it("🔴 수업하지 않는 날은 빈칸·수업요일 색 없음·잠금 — 숫자를 쳐도 저장이 안 나간다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    const { container } = renderOwnDays();
+    const cell = cellAt(container, D2);
+    expect(cell.className).toContain("cursor-not-allowed");
+    expect(cell.className).not.toContain("bg-att-classday");
+    expect(cell.style.backgroundImage).toBe(""); // 빗금 없음
+    expect(tipOf(cell)).toContain("수업하지 않는 날");
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "1" });
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(setAttendanceCell).not.toHaveBeenCalled();
+    // 수업하는 날은 그대로 수업요일 색 + 열림
+    expect(cellAt(container, D1).className).not.toContain("cursor-not-allowed");
+    expect(cellAt(container, D1).className).toContain("bg-att-classday");
+  });
+
+  it("🔴 수업하는 날 빈칸에 숫자를 치면 강사 렌즈(scopeTeacherId)를 싣고 저장한다 — 서버가 제 교시 행을 만든다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValue({ ok: true } as never);
+    const m = matrix([
+      { id: S1, name: "곽경찬", grade: "초6", school: "칠성초", enrolledAt: null, attendDows: [3, 4], spans: [], badges: [] },
+    ]);
+    m.classDows = [3, 4];
+    m.ownDates = [D1];
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    const { container } = render(
+      <AttendanceScopeProvider scope={{ teacherId: "t-me", classIds: [C] }}>
+        <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} slotCounts={src.slotCounts} notMine={src.notMine} lockBefore={null}>
+          <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+        </GridProvider>
+      </AttendanceScopeProvider>,
+    );
+    const cell = cellAt(container, D1);
+    expect(cell.className).not.toContain("cursor-not-allowed");
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "3" });
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(setAttendanceCell).toHaveBeenCalledWith(
+      expect.objectContaining({ classId: C, studentId: S1, sessionDate: D1, scopeTeacherId: "t-me" }),
+    );
+  });
+
+  it("🔴 7일이 지난 칸이어도 '수업하지 않는 날'이 사유다 — 툴팁·타이핑 안내가 같은 순서(적대 재리뷰 2026-09-17)", () => {
+    const { container } = renderOwnDays({ lockBefore: "2026-07-10" });
+    const notOwn = cellAt(container, D2);
+    expect(tipOf(notOwn)).toContain("수업하지 않는 날");
+    expect(tipOf(notOwn)).not.toContain("7일");
+    fireEvent.mouseDown(notOwn, { button: 0 });
+    fireEvent.keyDown(notOwn, { key: "1" });
+    expect(container.textContent).toContain("수업하지 않는 날");
+  });
+
+  it("머리 줄도 수업하는 날만 수업요일 색 — 반 요일 합집합으로 칠하지 않는다", () => {
+    const { container } = renderOwnDays();
+    const heads = [...container.querySelectorAll("thead th")].filter((th) => /^[12]/.test(th.textContent ?? ""));
+    expect(heads[0]!.className).toContain("bg-att-classday");
+    expect(heads[1]!.className).not.toContain("bg-att-classday");
   });
 });

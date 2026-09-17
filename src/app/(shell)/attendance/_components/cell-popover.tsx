@@ -305,7 +305,10 @@ export function CellPopover({
               <div className="flex flex-col gap-1">
                 {/* ⚠️ 잠금 사유가 이미 같은 말을 했으면 **반복하지 않는다**(빗금 칸의 기본 경로).
                     7일 잠금과 겹칠 때만 두 문장이 서로 다른 정보를 담는다. */}
-                {hasOtherRecords && (locked === NOT_MINE_MESSAGE || locked === t("att.lock.seatOnly")) ? null : (
+                {(hasOtherRecords && (locked === NOT_MINE_MESSAGE || locked === t("att.lock.seatOnly"))) ||
+                // 강사 보기의 '수업하지 않는 날' — 잠금 사유가 이미 말했고, "기록이 없는 날"은 사실이 아닐 수 있다
+                // (남의 기록이 있어도 이 보기엔 안 싣는다, 원장 2026-09-17 · 적대 리뷰).
+                locked === t("att.lock.notOwnDay") ? null : (
                   <p className="text-text-dim text-xs leading-tight">
                     {/* ⚠️ 사유 문장은 NOT_MINE_MESSAGE 단일 소스 — 여기 사본을 두면 사유가 늘 때
                         (2026-08-19 '담임 이전 기록') 한쪽만 고쳐져 같은 칸이 화면마다 다른 말을 한다. */}

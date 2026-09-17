@@ -165,7 +165,7 @@ export type ScheduleSlot = {
   studentCount: number;
   // 셀 단위 라벨(ijw slotTeachers/slotRooms) — 통합뷰 미니그리드. null=반 기본 상속.
   slotTeacherLabel: string | null;
-  /** LAB '따로 수업(*LAB)' 표식(0270a) — **켜진 LAB 교시에만** true가 실린다(없으면 꺼짐). 표시 전용. */
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — **켜진 LAB 교시에만** true가 실린다(없으면 꺼짐). 표시 전용. */
   labSeparate?: true;
   slotRoomLabel: string | null;
   // 강의실 FK(교실뷰 버킷팅) — 실효 강의실 = slotRoomId ?? classRoomId(overlap-detect와 같은 우선순위).
@@ -302,7 +302,7 @@ async function fetchSlots(
           // order 없는 .range()는 OFFSET 페이지가 흔들려 행이 중복·누락될 수 있다(카운트가 틀어짐) → id tie-break.
           return q.order("id").range(from, to);
         }),
-    // LAB '따로 수업(*LAB)' 표식(0270a) — 🔴 **위 뿌리 조회에 컬럼을 끼우지 않는다**([[#95]]: 전원이 매일 여는
+    // LAB '따로 수업(*LAB)' 표식(0271a) — 🔴 **위 뿌리 조회에 컬럼을 끼우지 않는다**([[#95]]: 전원이 매일 여는
     //    시간표다). 켜진 행 id만 따로·fail-soft로 받는다(null = 모름 → 표식 없이 그린다).
     loadLabSeparateIds(supabase, { kind: "window", from: scheduleWeek.start, to: scheduleWeek.end, ...(db ? { tenantId: db.tenantId } : {}) }),
   ]);

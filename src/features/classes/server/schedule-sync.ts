@@ -31,13 +31,13 @@ export async function loadCurrentSlots(
   rows?: PriorSlot[];
   error?: string;
   /**
-   * 0270a '따로 수업(*LAB)' 칸을 읽었는가. false면 호출부는 **insert에서 `lab_separate`를 빼고** 폼 값도
+   * 0271a '따로 수업(*LAB)' 칸을 읽었는가. false면 호출부는 **insert에서 `lab_separate`를 빼고** 폼 값도
    * 무시한다 — 칸이 없는 DB에 키를 실으면 delete 뒤 insert 전체가 실패해 그 반의 교시가 사라진다([[#95]]).
    */
   labSeparateSupported?: boolean;
 }> {
   // 한 반의 슬롯 = 요일×교시라 수십 행 상한(폼 파서도 80 상한) → 페이징 불필요.
-  // 표식은 **따로 fail-soft로** 받는다(lab-separate.ts 주석) — 이 조회에 컬럼을 끼우면 0270a 전엔 저장이 전부 막힌다.
+  // 표식은 **따로 fail-soft로** 받는다(lab-separate.ts 주석) — 이 조회에 컬럼을 끼우면 0271a 전엔 저장이 전부 막힌다.
   const [{ data, error }, labLookup] = await Promise.all([
     supabase
       .from("class_schedules")

@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-09-17T10:41:17.083Z",
+  "views": 5,
+  "viewportWidths": [
+    1440,
+    1024,
+    390
+  ],
+  "documentOverflow": 0,
+  "consoleErrors": [],
+  "checks": [
+    "search and empty state",
+    "status filters",
+    "student detail",
+    "individual goal update",
+    "bulk goal update",
+    "actual records preserved",
+    "last session reaches target",
+    "monotonic schedule",
+    "holidays excluded",
+    "date validation",
+    "calendar navigation",
+    "student selection",
+    "keyboard tab navigation",
+    "mobile goal dialog"
+  ]
+}

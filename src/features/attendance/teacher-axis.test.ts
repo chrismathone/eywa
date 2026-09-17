@@ -15,11 +15,13 @@ import {
   classTeacherRole,
   isSeatSlot,
   normalizeAxisTime,
+  ownInsertSlotStarts,
   ownsAttendanceSlot,
   resolveTaughtBy,
   slotLiveOn,
   slotOverlapsRange,
   taughtByForSlot,
+  teachesClassOn,
   type AxisSlot,
 } from "./teacher-axis";
 
@@ -692,5 +694,134 @@ describe("출결 알림 수신자(attendanceNoticeRecipients)", () => {
       validFrom: "2026-09-01",
       validTo: null,
     });
+  });
+});
+
+describe("강사 출석부가 그리는 날(teachesClassOn) — 원장 2026-09-17 \"담당하는 날만 표시\"", () => {
+  // MED b 9월 모양: 화 16:20 담임(송지혜 역할) · 금 16:20 추민아(SLOT_A) · 두 날 모두 17:20 JJ.
+  const SLOTS: AxisSlot[] = [
+    slot({ dayOfWeek: "tue", startTime: "16:20:00", teacherId: HOMEROOM }),
+    slot({ dayOfWeek: "tue", startTime: "17:20:00", teacherId: null, slotTeacherLabel: "JJ" }),
+    slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_A }),
+    slot({ dayOfWeek: "fri", startTime: "17:20:00", teacherId: null, slotTeacherLabel: "JJ" }),
+  ];
+  const on = (scopeTeacherId: string | null, date: string, over: Partial<Parameters<typeof teachesClassOn>[0]> = {}) =>
+    teachesClassOn({ scopeTeacherId, homeroomTeacherId: HOMEROOM, slots: SLOTS, date, ...over });
+
+  it("🔴 교시 담당은 자기 교시가 있는 요일만 — 금요일 강사에게 화요일은 그리는 날이 아니다", () => {
+    expect(on(SLOT_A, "2026-09-11")).toBe(true); // 금
+    expect(on(SLOT_A, "2026-09-08")).toBe(false); // 화
+  });
+
+  it("담임도 남이 맡은 요일은 안 그린다(자리 JJ는 누구 것도 아니다)", () => {
+    expect(on(HOMEROOM, "2026-09-08")).toBe(true); // 화 = 담임 교시
+    expect(on(HOMEROOM, "2026-09-11")).toBe(false); // 금 = 추민아 + JJ
+  });
+
+  it("교시가 하나도 없는 날(수업 없는 요일·시간표 밖 보강)은 담임만 그린다 — resolveTaughtBy의 담임 폴백과 같은 결", () => {
+    expect(on(HOMEROOM, "2026-09-09")).toBe(true); // 수 — 교시 없음
+    expect(on(SLOT_A, "2026-09-09")).toBe(false);
+  });
+
+  it("🔴 자리(JJ)만 도는 날은 아무도 그리지 않는다 — 오늘 출결 처리 현황과 같은 뜻(적대 리뷰 2026-09-17)", () => {
+    const seatOnly = [slot({ dayOfWeek: "thu", startTime: "18:20:00", teacherId: null, slotTeacherLabel: "JJ" })];
+    expect(on(HOMEROOM, "2026-09-10", { slots: seatOnly })).toBe(false);
+    expect(on(SLOT_A, "2026-09-10", { slots: seatOnly })).toBe(false);
+  });
+
+  it("담당 미지정 교시는 담임 몫 — 수학 담임 화면은 한 칸도 안 바뀐다", () => {
+    const math = [slot({ dayOfWeek: "mon", startTime: "16:20:00", teacherId: null })];
+    expect(on(HOMEROOM, "2026-09-07", { slots: math })).toBe(true);
+    expect(on(SLOT_A, "2026-09-07", { slots: math })).toBe(false);
+  });
+
+  it("끝난 배치·아직 안 시작한 배치는 그 날의 근거가 아니다(행 분할 이력, #88)", () => {
+    const history = [
+      slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_B, validTo: "2026-08-31" }),
+      slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_A, validFrom: "2026-09-01" }),
+    ];
+    expect(on(SLOT_B, "2026-08-28", { slots: history })).toBe(true);
+    expect(on(SLOT_B, "2026-09-04", { slots: history })).toBe(false);
+    expect(on(SLOT_A, "2026-09-04", { slots: history })).toBe(true);
+  });
+
+  it("한 교시에 담당이 둘이면(모호) 둘 다 안 그린다 — 지어내지 않는다", () => {
+    const amb = [
+      slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_A }),
+      slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_B }),
+    ];
+    expect(on(SLOT_A, "2026-09-11", { slots: amb })).toBe(false);
+    expect(on(SLOT_B, "2026-09-11", { slots: amb })).toBe(false);
+  });
+
+  it("담임이 되기 전 날은 안 그린다 · 반별 보기(scope 없음)는 전부 그린다", () => {
+    expect(on(HOMEROOM, "2026-09-08", { homeroomSince: "2026-09-10" })).toBe(false);
+    expect(on(HOMEROOM, "2026-09-15", { homeroomSince: "2026-09-10" })).toBe(true);
+    expect(on(null, "2026-09-11")).toBe(true);
+  });
+});
+
+describe("제 몫 기록이 없는 칸에 새로 만들 교시(ownInsertSlotStarts) — 원장 2026-09-17 \"남의 출석부를 건드리는건 아니지\"", () => {
+  // MED a 9월 모양: 화 16:20 SLOT_A + 17:20 JJ · 수 16:20 SLOT_B + 17:20 담임.
+  const SLOTS: AxisSlot[] = [
+    slot({ dayOfWeek: "tue", startTime: "16:20:00", teacherId: SLOT_A }),
+    slot({ dayOfWeek: "tue", startTime: "17:20:00", teacherId: null, slotTeacherLabel: "JJ" }),
+    slot({ dayOfWeek: "wed", startTime: "16:20:00", teacherId: SLOT_B }),
+    slot({ dayOfWeek: "wed", startTime: "17:20:00", teacherId: HOMEROOM }),
+  ];
+  const plan = (scopeTeacherId: string, date: string, slots: AxisSlot[] = SLOTS) =>
+    ownInsertSlotStarts({ scopeTeacherId, homeroomTeacherId: HOMEROOM, slots, date });
+
+  it("🔴 다른 선생님과 나눠 맡는 날은 제 교시 행으로 만든다 — 그날 전체 행이면 남의 출석부에도 숫자가 선다", () => {
+    expect(plan(HOMEROOM, "2026-09-09")).toEqual(["17:20"]);
+    expect(plan(SLOT_B, "2026-09-09")).toEqual(["16:20"]);
+  });
+
+  it("🔴 자리 JJ와 함께 도는 날도 제 교시 행 — JJ 문 저장이 그날 전체 행을 함께 덮는다(적대 리뷰 2026-09-17)", () => {
+    expect(plan(SLOT_A, "2026-09-08")).toEqual(["16:20"]);
+  });
+
+  it("혼자 맡는 날(다른 교시·자리 없음)은 종전대로 그날 전체 한 행(null)", () => {
+    const alone = [
+      slot({ dayOfWeek: "tue", startTime: "16:20:00", teacherId: SLOT_A }),
+      slot({ dayOfWeek: "tue", startTime: "17:20:00", teacherId: SLOT_A }),
+    ];
+    expect(plan(SLOT_A, "2026-09-08", alone)).toBeNull();
+  });
+
+  it("수학처럼 담당 미지정 교시만 도는 날은 null — 수학 자동 시수가 붙는 그날 전체 행이 그대로다", () => {
+    const math = [
+      slot({ dayOfWeek: "mon", startTime: "16:20:00", teacherId: null }),
+      slot({ dayOfWeek: "mon", startTime: "17:15:00", teacherId: null }),
+    ];
+    expect(plan(HOMEROOM, "2026-09-07", math)).toBeNull();
+  });
+
+  it("그 강사 교시가 그날 둘이면 둘 다(시각 오름차순)", () => {
+    const two = [
+      slot({ dayOfWeek: "thu", startTime: "18:20:00", teacherId: SLOT_A }),
+      slot({ dayOfWeek: "thu", startTime: "16:20:00", teacherId: SLOT_B }),
+      slot({ dayOfWeek: "thu", startTime: "17:20:00", teacherId: SLOT_A }),
+    ];
+    expect(plan(SLOT_A, "2026-09-10", two)).toEqual(["17:20", "18:20"]);
+  });
+
+  it("모호한 교시(담당 둘)는 남의 교시로 센다 · 제 교시가 없으면 null", () => {
+    const amb = [
+      slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_A }),
+      slot({ dayOfWeek: "fri", startTime: "16:20:00", teacherId: SLOT_B }),
+      slot({ dayOfWeek: "fri", startTime: "17:20:00", teacherId: HOMEROOM }),
+    ];
+    expect(plan(HOMEROOM, "2026-09-11", amb)).toEqual(["17:20"]);
+    expect(plan(SLOT_A, "2026-09-11", amb)).toBeNull();
+  });
+
+  it("끝난 배치는 그날의 근거가 아니다(행 분할 이력)", () => {
+    const history = [
+      slot({ dayOfWeek: "wed", startTime: "16:20:00", teacherId: SLOT_B, validTo: "2026-08-31" }),
+      slot({ dayOfWeek: "wed", startTime: "17:20:00", teacherId: HOMEROOM }),
+    ];
+    expect(plan(HOMEROOM, "2026-09-09", history)).toBeNull();
+    expect(plan(HOMEROOM, "2026-08-26", history)).toEqual(["17:20"]);
   });
 });

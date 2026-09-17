@@ -69,7 +69,7 @@ export type GridSlot = {
   teacherName: string | null; // 반 기본 강사(담임)
   classroomName: string | null; // 반 기본 강의실
   slotTeacherLabel: string | null; // 셀 강사/LAB(ijw slotTeachers)
-  /** LAB '따로 수업(*LAB)' 표식(0270a) — 켜진 LAB 교시에만 true. */
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 켜진 LAB 교시에만 true. */
   labSeparate?: true;
   slotRoomLabel: string | null; // 셀 강의실(ijw slotRooms)
   classBgColor: string | null;
@@ -88,7 +88,7 @@ export type GridCell = {
   label: string;
   isLab: boolean;
   time?: string;
-  /** LAB '따로 수업(*LAB)' 표식(0270a) — 켜진 LAB 칸에만 실린다. 표시 규약은 lab-separate.ts. */
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 켜진 LAB 칸에만 실린다. 표시 규약은 lab-separate.ts. */
   labSeparate?: true;
 };
 export type GridPeriodRow = { order: number; label: string; time: string };

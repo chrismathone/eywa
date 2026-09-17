@@ -82,7 +82,7 @@ type ScheduleInput = {
    * `teacher_id = null` + `slot_teacher_label = <자리>`로 저장한다(teacher-label.ts 규칙).
    */
   seatLabel?: string | null;
-  /** LAB '따로 수업(*LAB)' 표식(0270a) — 폼이 `*_labsep_i`를 보냈을 때만 값이 있다(없으면 기존 행 승계). */
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 폼이 `*_labsep_i`를 보냈을 때만 값이 있다(없으면 기존 행 승계). */
   labSeparate?: boolean;
 };
 
@@ -363,7 +363,7 @@ export async function updateClass(
   // 라벨·기간을 전부 null로 덮어쓰는데 그땐 복구가 불가능하다(규칙 B3: error를 `?? []`로 삼키지 않는다).
   if (priorRes.error || !priorRes.rows) return { error: priorRes.error ?? SAVE_FAILED };
   const prior = priorRes.rows;
-  // 0270a '따로 수업(*LAB)' 칸을 못 읽었으면(미적용·조회 실패) 폼 값도 버리고 insert에서 칸을 뺀다([[#95]]) —
+  // 0271a '따로 수업(*LAB)' 칸을 못 읽었으면(미적용·조회 실패) 폼 값도 버리고 insert에서 칸을 뺀다([[#95]]) —
   // 키를 실은 insert가 delete 뒤에 실패하면 그 반의 현재 교시가 사라진다.
   const labSupported = priorRes.labSeparateSupported === true;
   if (!labSupported) {

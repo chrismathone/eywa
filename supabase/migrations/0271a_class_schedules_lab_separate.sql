@@ -1,4 +1,4 @@
--- 0270a — LAB 자리 교시에 **'따로 수업(*LAB)' 표식**을 둔다
+-- 0271a — LAB 자리 교시에 **'따로 수업(*LAB)' 표식**을 둔다
 --
 -- 원장(2026-09-17, 반 수정 폼 교시별 담당 편집기 + 통합뷰 반 카드 캡처와 함께):
 -- *"랩실 옆에 토글키를 두고 토글하게 되면 LAB -> *LAB 밑줄 + 이탤릭체 + 가 되도록 변경해줘.
@@ -14,7 +14,7 @@
 -- ⚠️ 1단계는 **표시만**이다 — 자리 출석부 명단·출결·시수는 이 칸을 안 본다.
 -- ⚠️ 앱은 기존 `class_schedules` 조회에 이 칸을 **끼우지 않고** 켜진 행 id만 따로 읽는다(`lab-separate.ts`) —
 --    적용 전에 배포돼도 시간표·반 수정이 산다([[#95]]). 그래도 순서는 SQL 먼저가 원칙이다.
--- ⚠️ `not null`은 0270b에서 푼다 — 옛 가져오기 되돌리기(`rollback_english_structure`)가 `jsonb_populate_record`로
+-- ⚠️ `not null`은 0271b에서 푼다 — 옛 가져오기 되돌리기(`rollback_english_structure`)가 `jsonb_populate_record`로
 --    이 칸이 없던 스냅샷을 되살리면 NULL이 들어가 되돌리기 전체가 실패한다.
 --
 -- 롤백: 스크립트·기억에만 둔다(본문에 붙이지 않는다).
@@ -25,4 +25,4 @@ alter table public.class_schedules
   add column if not exists lab_separate boolean not null default false;
 
 comment on column public.class_schedules.lab_separate is
-  'LAB 자리 교시의 따로 수업(*LAB) 표식 — 표시 전용(0270a). LAB이 아닌 교시에선 의미 없음.';
+  'LAB 자리 교시의 따로 수업(*LAB) 표식 — 표시 전용(0271a). LAB이 아닌 교시에선 의미 없음.';

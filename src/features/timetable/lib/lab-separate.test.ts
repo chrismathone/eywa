@@ -57,9 +57,9 @@ describe("'따로 수업(*LAB)' 표시 (원장 2026-09-17)", () => {
   });
 });
 
-describe("🔴 0270a 칸을 기존 조회에 끼우지 않는다 — SQL 적용 전 배포에도 안 죽게([[#95]])", () => {
+describe("🔴 0271a 칸을 기존 조회에 끼우지 않는다 — SQL 적용 전 배포에도 안 죽게([[#95]])", () => {
   const SRC = join(process.cwd(), "src");
-  // 명시 컬럼으로 class_schedules를 읽는 곳 — 여기에 lab_separate가 들어가면 0270a 전엔 시간표 500·반 수정 폼 빈 격자.
+  // 명시 컬럼으로 class_schedules를 읽는 곳 — 여기에 lab_separate가 들어가면 0271a 전엔 시간표 500·반 수정 폼 빈 격자.
   const FILES = [
     "features/timetable/server/queries.ts",
     "features/classes/server/queries.ts",

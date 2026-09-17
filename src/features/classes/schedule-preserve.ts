@@ -36,7 +36,7 @@ export type IncomingSlot = {
   /** 담당 칸에서 **자리(LAB·JJ)** 를 골랐으면 그 이름. 없으면 사람 담당이거나 담임 상속. */
   seatLabel?: string | null;
   /**
-   * LAB 자리 교시의 '따로 수업(*LAB)' 표식(0270a) — **폼이 보냈을 때만** 값이 있다.
+   * LAB 자리 교시의 '따로 수업(*LAB)' 표식(0271a) — **폼이 보냈을 때만** 값이 있다.
    * undefined = 폼이 이 칸을 안 보냈다(옛 탭·다른 입력 경로) → 기존 행 값을 승계한다(`isSpecialProvided`와 같은 규약).
    */
   labSeparate?: boolean;
@@ -55,7 +55,7 @@ export type PriorSlot = {
   slotRoomLabel: string | null;
   periodLabel: string | null;
   mergeGroup: string | null;
-  /** 0270a 표식. 칸을 못 읽었으면 undefined(= false로 본다 — 호출부가 그때는 쓰기에서 칸을 뺀다). */
+  /** 0271a 표식. 칸을 못 읽었으면 undefined(= false로 본다 — 호출부가 그때는 쓰기에서 칸을 뺀다). */
   labSeparate?: boolean;
 };
 

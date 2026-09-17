@@ -25,7 +25,7 @@ type InitialSlot = {
   classroomId?: string | null;
   /** 저장된 표시 라벨 — 자리(LAB·JJ)면 드롭다운이 그 자리로 열린다. */
   slotTeacherLabel?: string | null;
-  /** LAB '따로 수업(*LAB)' 표식(0270a). */
+  /** LAB '따로 수업(*LAB)' 표식(0271a). */
   labSeparate?: boolean;
 };
 
@@ -108,7 +108,7 @@ export function ScheduleGrid({
   onJumpToOutside?: () => void;
   /**
    * LAB 교시 옆 **'따로 수업(*LAB)' 토글**을 세우고 값을 보낼지(원장 2026-09-17). 끄면 토글도 hidden도 없다 —
-   * 서버가 기존 값을 승계한다. 표식을 못 읽었거나(0270a 미적용·조회 실패) 생성 폼이면 끈다(모른 채 "꺼짐"을
+   * 서버가 기존 값을 승계한다. 표식을 못 읽었거나(0271a 미적용·조회 실패) 생성 폼이면 끈다(모른 채 "꺼짐"을
    * 보내면 켜 둔 표식이 저장 한 번에 꺼진다).
    */
   labSeparateEnabled?: boolean;
