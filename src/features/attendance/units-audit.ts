@@ -49,7 +49,7 @@ export function unitsAuditFields(input: {
    * · 결석·공결 = 0(시수를 안 쓴다).
    * · `split` = 친 숫자 그대로(배분이 합을 정확히 그 값으로 맞춘다, `splitUnitsAcrossSlots`).
    * · `each` = 행마다 같은 값이라 **행 수를 곱한다**.
-   * · 빈칸·"1"(`unitsVal === null`)은 "교시마다 기본"이라 두 갈래 모두 **행 수만큼**이 된다(2교시면 칸은 2).
+   * · 빈 기본값(`unitsVal === null`)만 행 수를 따른다. 명시한 1은 호출부가 숫자 1로 넘긴다.
    */
   const nextUnits = COUNTABLE_STATUSES.has(input.status)
     ? round1(

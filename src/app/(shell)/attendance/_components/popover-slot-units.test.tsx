@@ -85,7 +85,6 @@ function build(
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
@@ -102,7 +101,7 @@ const cellAt = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$
 const statusOf = (el: HTMLElement) => tipRow(el.getAttribute("data-tip"), "상태");
 
 describe("🔴 팝오버 '출석' — 교시가 둘인 칸도 격자 타이핑과 같은 값으로 칠한다(리뷰 2026-09-11)", () => {
-  it("칠한 값 = 2 = 서버 합 · 저장엔 강사 보기가 실린다 · 서버 값 2로 새로고침되면 덮개가 벗겨진다", async () => {
+  it("팝오버 시수 1은 합계 1로 저장하고 새로고침 뒤에도 유지한다", async () => {
     const actions = await import("@/features/attendance/server/actions");
     vi.mocked(actions.setAttendanceCell).mockClear();
     const { container, rerender } = render(build("absent", null));
@@ -111,18 +110,18 @@ describe("🔴 팝오버 '출석' — 교시가 둘인 칸도 격자 타이핑�
     fireEvent.contextMenu(cellAt(container));
     fireEvent.click(screen.getByRole("button", { name: "출석" }));
     // 낙관 반영 — 시수를 비운 '출석' = 교시마다 기본(1) → 내 교시 둘의 합 2(종전엔 1로 칠했다).
-    expect(cellAt(container).textContent).toBe("2");
+    expect(cellAt(container).textContent).toBe("1");
     await waitFor(() => expect(actions.setAttendanceCell).toHaveBeenCalledTimes(1));
     expect(vi.mocked(actions.setAttendanceCell).mock.calls[0]![0]).toMatchObject({
       status: "present",
-      units: "",
+      units: "1",
       scopeTeacherId: T,
     });
     // 성공 보정 — 서버 자동 시수가 없으니 칠한 그 값이 결과다.
-    await waitFor(() => expect(cellAt(container).textContent).toBe("2"));
+    await waitFor(() => expect(cellAt(container).textContent).toBe("1"));
 
-    rerender(build("present", 2)); // 저장 응답의 새로고침 — 서버 합 2(내 교시 둘 × 기본 1)
-    expect(cellAt(container).textContent).toBe("2");
+    rerender(build("present", null, [0.5, 0.5])); // 저장 응답의 새로고침 — 서버 합 2(내 교시 둘 × 기본 1)
+    expect(cellAt(container).textContent).toBe("1");
     // 덮개가 벗겨졌는지 — 그 뒤 다른 화면이 결석으로 되돌리면 칸이 그대로 따라간다(덮개가 남았으면 2에 굳는다).
     rerender(build("absent", null));
     await waitFor(() => expect(cellAt(container).textContent).toBe("0"));
@@ -149,11 +148,11 @@ describe("🔴 팝오버 '출석' — 교시가 둘인 칸도 격자 타이핑�
     await waitFor(() => expect(cellAt(container).textContent).toBe("0"));
   });
 
-  it("같은 입력이면 격자 타이핑도 같은 값 — 격자에 1을 쳐도 칸은 2(교시마다 기본)", async () => {
+  it("격자에 1을 치면 교시 수와 관계없이 합계 1이다", async () => {
     const { container } = render(build("absent", null));
     fireEvent.mouseDown(cellAt(container), { button: 0 });
     fireEvent.keyDown(cellAt(container), { key: "1" });
     fireEvent.keyDown(cellAt(container), { key: "Enter" });
-    await waitFor(() => expect(cellAt(container).textContent).toBe("2"));
+    await waitFor(() => expect(cellAt(container).textContent).toBe("1"));
   });
 });

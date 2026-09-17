@@ -5,7 +5,6 @@ import {
   HEAD_ROW_H,
   TODAY_HEAD,
   notMineCell,
-  sharedOtherSlots,
 } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
@@ -120,15 +119,6 @@ export function buildGridSource(
    */
   // 값 = 막는 사유 — `"seat"`는 자리(JJ·랩실) 기록뿐인 칸(사유 문장이 다르다, 원장 2026-09-12), true는 그 밖.
   const notMine: Record<string, true | "seat"> = {};
-  /**
-   * 값은 **있지만** 그 날 **다른 선생님 교시**도 함께 있는 칸 → 키 → 함께 바뀌는 교시 수.
-   * 잠그지는 않는다(내 교시가 있으니 고칠 권리가 있다). 대신 범위 작업에서 **사정거리를 말해 준다** —
-   * 종전엔 칸에 `3`이 떠서 "3건이 접혀 있다"가 보였는데, 지금은 `1`만 보이고 툴바 칩이
-   * "칸 = 이 선생님 교시"라고 단언해 **"내 것만 지워진다"는 오해를 화면이 심는다**(적대 리뷰 2026-08-18).
-   * 🔴 **자리(JJ·랩실)는 세지 않는다**(원장 2026-09-12) — 강사 보기 저장은 그 행을 안 건드리므로, 세면
-   *    "함께 바뀝니다"·지우기 막힘이 거짓말이 된다(`sharedOtherSlots` 단일 소스).
-   */
-  const alsoWrites: Record<string, number> = {};
   for (const g of groups) {
     for (const s of g.matrix.students) {
       const marks = g.matrix.marks[s.id] ?? {};
@@ -160,9 +150,7 @@ export function buildGridSource(
           if (gv) initial[key] = { ...gv, g: true };
           continue;
         }
-        // 값이 있는 칸 — 함께 바뀌는 건 다른 선생님 교시뿐(자리 JJ·랩실 행은 저장이 안 건드린다, 원장 2026-09-12).
-        const shared = sharedOtherSlots(others).length;
-        if (shared > 0) alsoWrites[key] = shared;
+        // 본인 기록 저장은 이 표의 교시만 고친다. 다른 선생님 기록은 함께 쓰지 않는다.
       }
     }
   }
@@ -174,7 +162,7 @@ export function buildGridSource(
   for (const g of groups) {
     if (g.matrix.autoUnits && Object.keys(g.matrix.autoUnits).length > 0) autoUnits[g.classId] = g.matrix.autoUnits;
   }
-  return { rows, cols, initial, slotCounts, notMine, alsoWrites, autoUnits };
+  return { rows, cols, initial, slotCounts, notMine, autoUnits };
 }
 
 /**
@@ -258,7 +246,7 @@ export function MatrixTable({
     // 격자가 **화면의 유일한 세로 스크롤**이다(scrollY) — 그래야 `thead sticky top-0`이 실제로 붙고
     // 스크롤바도 하나만 생긴다. 높이는 부모(page.tsx의 `min-h-0 flex-1`)가 정해 준다 — 상수·vh 계산 없음.
     <div data-help="att-cell" className="h-full min-h-0">
-    <DragScrollArea scrollY className="bg-card shadow-card h-full rounded-2xl">
+    <DragScrollArea pan={false} scrollY className="bg-card shadow-card h-full rounded-2xl">
       <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: tableMinWidth }}>
         {/* 열 폭의 단일 소스 — 셀의 `w-*`가 아니라 여기가 정한다(table-fixed). 접기와 무관하게 불변. */}
         <colgroup>

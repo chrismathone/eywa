@@ -133,15 +133,6 @@ describe("강사 보기 시수 배분 — 배선", () => {
     expect(noteOnly).toContain("scopeFieldsFor(scope, classId)");
   });
 
-  it("🔴 '함께 바뀜' 셈은 자리를 뺀 한 함수(sharedOtherSlots) — 격자·칸이 같은 수를 말한다", () => {
-    for (const rel of [
-      ["app", "(shell)", "attendance", "_components", "matrix-table.tsx"],
-      ["app", "(shell)", "attendance", "_components", "attendance-cell.tsx"],
-    ]) {
-      expect(stripComments(read(...rel)), rel.join("/")).toContain("sharedOtherSlots(");
-    }
-  });
-
   it("🔴 저장마다 감사로그(담임 시작일)를 읽지 않는다 — 반응속도 1순위(2026-09-11), 그 칸은 격자가 막는다", () => {
     const server = stripComments(read("features", "attendance", "server", "scope-ownership.ts"));
     const pure = stripComments(read("features", "attendance", "scope-ownership.ts"));

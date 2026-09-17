@@ -59,6 +59,7 @@ type Ctx = {
   commitAndMove: (dx: number, dy: number) => void;
   /** 칸 선택 — 타이핑 중이던 버퍼를 **먼저 확정한다**(클릭 한 번에 입력이 사라지지 않게). */
   selectCell: (row: string, col: string, extend: boolean) => void;
+  startSelection: (pointerId: number) => void;
   startFill: () => void;
   /**
    * 빗금 칸에 상태를 옮긴다(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*) — 빗금 칸 팝오버가 격자 타이핑과
@@ -143,7 +144,6 @@ export function GridProvider({
   initial,
   slotCounts,
   notMine,
-  alsoWrites,
   lockBefore,
   initialCollapsed,
   autoUnits,
@@ -174,12 +174,6 @@ export function GridProvider({
    * ⚠️ 다른 선생님 교시 기록이 있는 빗금 칸은 여기 없다 — 입력하면 상태만 옮긴다(`initial`의 `g`, 원장 2026-09-14).
    */
   notMine?: Record<string, true | "seat">;
-  /**
-   * 값이 있으면서 그 날 **다른 선생님 교시도 함께 있는** 칸 → 함께 바뀌는 교시 수(matrix-table `alsoWrites`).
-   * 자리(JJ·랩실) 행은 세지 않는다 — 강사 보기 저장이 그 행을 안 건드린다(원장 2026-09-12).
-   * 막지는 않는다 — 범위 작업 뒤 몇 칸이 그런지 알려 주기만 한다(칸 숫자가 사정거리를 안 보여주므로).
-   */
-  alsoWrites?: Record<string, number>;
   lockBefore: string | null;
   /** 지난번에 접어 둔 반(계정 설정). 없으면 전부 펼침. */
   initialCollapsed?: string[];
@@ -315,8 +309,7 @@ export function GridProvider({
    *    곱하지 않는다. 서버가 그 합을 교시별로 나눠 담으므로(`splitUnitsAcrossSlots`) 다시 읽어도 합은 그대로다.
    *    ⚠️ 종전엔 여기서 교시 수만큼 곱했다 — 서버가 같은 값을 교시마다 썼기 때문인데, 그게 부풀림의 정체였다
    *       (3교시 반에 4를 치면 12). 서버와 **함께** 고쳐야 화면과 DB가 안 갈린다.
-   * ⚠️ 빈칸·"1"(=기본 배수)은 여전히 "교시마다 정상"이라 그날 합이 교시 수다(원장 확정 — 클릭으로 찍는
-   *    출석과 같은 값을 유지한다). 결석은 시수가 없어 곱할 것도 나눌 것도 없다.
+   * 명시한 1도 합계 1이다. 숫자를 입력하지 않은 기본값만 교시 수를 따른다.
    */
   const autoUnitsOf = useCallback(
     (classId: string, date: string): number | null => autoUnits?.[classId]?.[date] ?? null,
@@ -420,28 +413,12 @@ export function GridProvider({
         showNotice(tf("att.grid.ghostNotice", {}));
         return;
       }
-      const shared = alsoWrites?.[key] ?? 0;
-      // 🔴 **섞인 칸의 단건 삭제는 막는다.** 강사 보기의 삭제는 그날 **다른 선생님 교시 행까지** 지우므로
-      //    정유진 화면에서 한 칸을 지우면 이다교 교시가 함께 사라지는데, 이 화면의 숫자는 1이라 무엇을 지웠는지
-      //    흔적조차 없다. 범위 Delete는 빗금 칸만 걸러서 이 경로가 남아 있었다(인계 문서 2026-08-19).
-      //    ⚠️ 자리(JJ·랩실) 행은 `shared`에 안 든다 — 서버가 그 행을 남기고 제 몫 행만 지운다(원장 2026-09-12).
-      //    ⚠️ 문을 닫는 게 아니다 — 반별 보기에선 그 칸이 3으로 보이고 그대로 지울 수 있다(#103).
-      if (val === null && shared > 0) {
-        setError(
-          tf("att.grid.sharedBlock", { n: shared }),
-        );
-        return;
-      }
       const prev = store.valueOf(key);
       undoRef.current.push({ cells: [{ key, prev }] });
       if (undoRef.current.length > 50) undoRef.current.shift();
       pushCell(key, val, prev);
-      // 값을 **쓰는** 경우엔 막지 않는다(내 교시가 있으니 고칠 권리가 있다) — 대신 사정거리를 말한다.
-      // 칸 숫자가 내 교시만 보여주므로 이 문장이 없으면 "내 것만 바뀐다"고 믿는다.
-      // ⚠️ 이 문장은 **성공 알림**이다 — 실패 채널(빨강)에 실으면 잘 저장된 순간마다 경고가 뜬다.
-      if (shared > 0) showNotice(tf("att.grid.sharedNotice", { n: shared }));
     },
-    [store, lockNoteOf, notMineNote, isGhost, alsoWrites, pushCell, showNotice, tf],
+    [store, lockNoteOf, notMineNote, isGhost, pushCell, showNotice, tf],
   );
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
@@ -454,24 +431,16 @@ export function GridProvider({
       //    없는 채로 남의 기록이 지워지고 화면은 그대로라 무엇을 지웠는지 아무도 모른다
       //    (적대적 리뷰 2026-08-18). ⚠️ 서버도 그 칸을 거절한다(noneOwned) — 여기서 먼저 사유를 말한다.
       const mine = unlocked.filter((p) => !isNotMine(cellKey(p.row, p.date)));
-      // 🔴 **삭제만은 섞인 칸도 뺀다** — 단건 경로와 같은 이유다(지우기는 그날 다른 선생님 교시 행까지
-      //    지운다). 안 빼면 "1칸 선택하면 거절, 2칸 선택하면 실행"이라는 모순이 남고, 그 사이 남의 교시
-      //    기록이 흔적 없이 지워진다(적대적 리뷰 2026-08-19).
-      //    ⚠️ 자리(JJ·랩실) 행만 섞인 칸은 여기서 안 걸린다 — 서버가 그 행을 남기고 제 몫 행만 지운다(원장 2026-09-12).
-      //    ⚠️ 값을 **쓰는** 범위 작업은 그대로 통과한다(고칠 권리가 있는 칸이다) — 아래에서 사정거리만 알린다.
-      //    🔴 빗금 칸(다른 선생님 교시 기록)도 **지우기에서만** 뺀다 — writeOne과 같은 이유(원장 2026-09-14 기본값).
       const clearable = val === null ? mine.filter((p) => !isGhost(cellKey(p.row, p.date))) : mine;
-      const targets = val === null ? clearable.filter((p) => !alsoWrites?.[cellKey(p.row, p.date)]) : clearable;
+      const targets = clearable;
       // 건너뛴 칸을 조용히 빼지 않는다 — 몇 칸이 안 들어갔는지 말해 주지 않으면 채워진 줄 안다.
       const lockedCount = all.length - unlocked.length;
       const notMineCount = unlocked.length - mine.length;
       const ghostClearCount = mine.length - clearable.length;
-      const mixedCount = clearable.length - targets.length;
       const skipNote = [
         lockedCount > 0 ? tf("att.grid.skip.locked", { n: lockedCount }) : null,
         notMineCount > 0 ? tf("att.grid.skip.notMine", { n: notMineCount }) : null,
         ghostClearCount > 0 ? tf("att.grid.skip.ghostClear", { n: ghostClearCount }) : null,
-        mixedCount > 0 ? tf("att.grid.skip.mixed", { n: mixedCount }) : null,
       ].filter(Boolean);
       if (targets.length === 0) {
         if (skipNote.length > 0) {
@@ -546,29 +515,20 @@ export function GridProvider({
         }
         scheduleRefresh();
         const skipped = res.blocked + lockedCount + notMineCount;
-        // 🔴 함께 바뀐 **다른 선생님 교시**를 말해 준다 — 칸 숫자는 내 교시만 보여주므로 사용자는 "내 것만
-        //    지웠다"고 믿는다. 저장은 그날 다른 선생님 교시에도 간다(자리 JJ·랩실 행은 제외 — 원장 2026-09-12).
-        const shared = targets.filter((t) => alsoWrites?.[cellKey(t.row, t.date)]).length;
-        // 🔴 `mixedCount`도 여기서 말한다 — skipNote는 targets가 0·1일 때만 뜨므로, 2칸 이상 남으면
-        //    섞인 칸이 **조용히** 빠졌다(5칸 잡아 지우면 3칸만 지워지는데 화면은 무음).
         const failNotes = [
           skipped > 0 ? tf("att.grid.clear.skipped", { n: skipped }) : null,
-          mixedCount > 0 ? tf("att.grid.clear.mixed", { n: mixedCount }) : null,
           ghostClearCount > 0
             ? tf("att.grid.skip.tail", { list: tf("att.grid.skip.ghostClear", { n: ghostClearCount }) })
             : null,
         ].filter(Boolean);
         if (failNotes.length > 0) setError(failNotes.join(" · "));
-        // ⚠️ `shared`는 서버가 반려한 칸(res.blocked)까지 세므로, 반려가 섞였으면 단정하지 않는다.
-        // 빗금 칸 입력은 **서버가 옮긴 칸**만 센다 — 칸 숫자가 이 표 몫이 아니라는 사실을 함께 말한다(원장 2026-09-14).
         const notices = [
-          shared > 0 ? tf(res.blocked > 0 ? "att.grid.clear.sharedMaybe" : "att.grid.clear.shared", { n: shared }) : null,
           ghostByServer.size > 0 ? tf("att.grid.ghostNoticeMany", { n: ghostByServer.size }) : null,
         ].filter(Boolean);
         if (notices.length > 0) showNotice(notices.join(" · "));
       });
     },
-    [store, isLocked, isNotMine, isGhost, alsoWrites, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
+    [store, isLocked, isNotMine, isGhost, writeOne, scheduleRefresh, toValue, showNotice, tf, scope],
   );
 
   /** 버퍼 확정 — 범위가 잡혀 있으면 전체에. 확정할 수 없는 입력이면 아무 일도 없다. */
@@ -581,6 +541,35 @@ export function GridProvider({
     if (selected.size > 1) writeMany(selected, val);
     else writeOne(cellKey(active.row, active.col), val);
   }, [store, writeMany, writeOne]);
+
+  const selectionPointer = useRef<number | null>(null);
+  const startSelection = useCallback((pointerId: number) => {
+    selectionPointer.current = pointerId;
+  }, []);
+  useEffect(() => {
+    const stop = () => { selectionPointer.current = null; };
+    const move = (e: PointerEvent) => {
+      if (selectionPointer.current !== e.pointerId) return;
+      if (!(e.buttons & 1)) { stop(); return; }
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-cell-key]");
+      const pos = parseCellKey(el?.dataset.cellKey ?? "");
+      if (pos && store.rows.includes(pos.row) && store.cols.includes(pos.date)) {
+        store.setFocus({ row: pos.row, col: pos.date });
+      }
+    };
+    const up = (e: PointerEvent) => { if (selectionPointer.current === e.pointerId) stop(); };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+    window.addEventListener("blur", stop);
+    return () => {
+      stop();
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      window.removeEventListener("blur", stop);
+    };
+  }, [store]);
 
   const [filling, setFilling] = useState(false);
   const startFill = useCallback(() => {
@@ -779,11 +768,12 @@ export function GridProvider({
         store.select({ row, col }, extend);
       },
       startFill,
+      startSelection,
       autoUnitsOf,
       toValue,
       transferGhost: (key: string, status: string) => writeOne(key, { status, units: "" }),
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, autoUnitsOf, toValue, writeOne],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, startSelection, autoUnitsOf, toValue, writeOne],
   );
 
   return (
