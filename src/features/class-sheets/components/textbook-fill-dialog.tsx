@@ -18,7 +18,8 @@ import { sheetDowLabel, sheetDowLabelByIndex, type SheetLang } from "@/features/
 import type { ApplyPreview, ApplyPreviewRow, ClassSlotChoice, LessonPace } from "@/features/textbooks/types";
 
 /**
- * **교재 깔기** — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 수업일마다 쭈루룩 깔린다.
+ * **교재 배정** — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 수업일마다 순서대로 들어간다.
+ * ⚠️ 종전 이름은 '교재 깔기'였다(원장 2026-09-16 *"교재깔기라는 멘트가 부적절함 새로운 단어로 변경"*).
  *
  * 🔴 원장 2026-09-16(월간 시트 캡처와 함께): *"반배정은 반배정 저기서 하지말고 여기서 교재 선택하고
  *    몇차시에 할지 선택하면 해당 서식에 맞춰서 추가되게 — 예를들어서 16시 수업 클릭 17시 수업 클릭 하고
@@ -45,7 +46,6 @@ const OUTCOME = {
   add: { label: "fill.out.add", title: "fill.out.add.title", tone: "text-primary" },
   fill: { label: "fill.out.fill", title: "fill.out.fill.title", tone: "text-green" },
   "skip-filled": { label: "fill.out.filled", title: "fill.out.filled.title", tone: "text-text-faint" },
-  "skip-empty-lesson": { label: "fill.out.empty", title: "fill.out.empty.title", tone: "text-amber" },
   "skip-full": { label: "fill.out.full", title: "fill.out.full.title", tone: "text-danger" },
   "skip-past": { label: "fill.out.past", title: "fill.out.past.title", tone: "text-text-faint" },
 } as const satisfies Record<ApplyPreviewRow["outcome"], { label: string; title: string; tone: string }>;
@@ -204,6 +204,11 @@ export function TextbookFillDialog({
 
   const rows = preview?.rows ?? [];
   const willWrite = rows.filter((r) => r.outcome === "add" || r.outcome === "fill").length;
+  // ⚠️ 진도가 아직 빈 차수 — 기입은 **된다**(교재·페이지/시간이 들어간다). 막지 않고 알리기만 한다.
+  // 🔑 **지금 쓰는 칸만** 센다 — 전체를 세면 지난 날짜·이미 적힌 칸까지 섞여 옆의 '기입 N'보다 큰 수가 된다.
+  const noProgress = rows.filter(
+    (r) => (r.outcome === "add" || r.outcome === "fill") && !r.progress && !r.homework,
+  ).length;
   const canPreview = picked.size > 0 && !!bookId && !!startDate;
 
   return (
@@ -211,7 +216,7 @@ export function TextbookFillDialog({
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-base font-bold">{tf("fill.title", { class: className })}</DialogTitle>
-<DialogDescription className="text-xs">{t("fill.desc")}</DialogDescription>
+          <DialogDescription className="text-xs">{t("fill.desc")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
@@ -357,6 +362,11 @@ export function TextbookFillDialog({
                     <span>
                       {t("fill.count")} <b className="num">{willWrite}</b>
                     </span>
+                    {noProgress > 0 ? (
+                      <span className="text-text-dim" title={t("fill.noProgress.title")}>
+                        {t("fill.noProgress")} <span className="num">{noProgress}</span>
+                      </span>
+                    ) : null}
                     {preview.skippedHolidays.length > 0 ? (
                       <span
                         className="text-text-dim"

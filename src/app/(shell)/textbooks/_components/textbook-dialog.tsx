@@ -10,7 +10,7 @@ import {
   loadTextbookDetail,
   saveTextbook,
   saveTextbookLessons,
-  setTextbookActive,
+  deleteTextbook,
   type LessonPatch,
 } from "@/features/textbooks/server/actions";
 import {
@@ -24,6 +24,22 @@ import { CoverField } from "./cover-field";
 import { LessonsEditor, type LessonValue } from "./lessons-editor";
 
 const MAX_SESSIONS = 200;
+
+/**
+ * 삭제 확인 문구 — **무엇이 사라지고 무엇이 남는지**를 그대로 적는다.
+ * 🔑 "이미 시트에 적힌 것은 남는다"가 핵심이다 — 이 한 줄이 없으면 아무도 지우지 못한다(그리고
+ *    실제로 남는다: 시트는 교재이름을 자유 텍스트로 든다).
+ */
+function deleteWarning(title: string, filledLessons: number, planCount: number | null): string {
+  const lines = [`'${title || "(이름 없음)"}' 교재를 삭제할까요?`, ""];
+  if (filledLessons > 0) lines.push(`· 차수별 진도·과제 ${filledLessons}개가 함께 지워집니다.`);
+  // ⚠️ 0이라고 "배정 없음"이라 단정하지 않는다 — 이 수는 목록을 연 시점의 값이라 그 사이에 생겼을 수 있다.
+  //    셀 수 없었거나(null) 0이면 **숫자 없이** 알린다(빠뜨린 문장이 곧 거짓 안심이 된다).
+  if (planCount !== null && planCount > 0) lines.push(`· 반 배정 ${planCount}건이 함께 지워집니다.`);
+  else lines.push("· 이 교재를 태우고 있는 반 배정이 있으면 함께 지워집니다.");
+  lines.push("· 이미 시트에 적힌 교재이름·진도·과제는 그대로 남습니다.", "", "되돌릴 수 없습니다.");
+  return lines.join("\n");
+}
 
 /**
  * 교재 등록·수정 — **한 화면, 저장 버튼 하나**.
@@ -41,12 +57,15 @@ export function TextbookDialog({
   textbookId,
   skillAreas,
   canWrite,
+  planCount,
   onClose,
 }: {
   mode: "create" | "edit";
   textbookId: string | null;
   skillAreas: SkillAreaSetting[];
   canWrite: boolean;
+  /** 이 교재를 태우고 있는 반 배정 수 — 삭제 확인 문구에만 쓴다. 셀 수 없었으면 null([[#89]]). */
+  planCount: number | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -59,7 +78,6 @@ export function TextbookDialog({
   const [skillArea, setSkillArea] = useState<string>(skillAreas[0]?.key ?? "");
   const [pageTime, setPageTime] = useState("");
   const [sessionCount, setSessionCount] = useState(0);
-  const [isActive, setIsActive] = useState(true);
 
   /** 아직 안 올린 표지 / '지우기' 예약 / 이미 저장된 표지 주소. */
   const [coverFile, setCoverFile] = useState<File | null>(null);
@@ -75,7 +93,6 @@ export function TextbookDialog({
     setSkillArea(d.textbook.skillArea ?? "");
     setPageTime(d.textbook.pageTime ?? "");
     setSessionCount(d.textbook.sessionCount);
-    setIsActive(d.textbook.isActive);
     setCoverUrl(d.coverUrl);
     setCoverFile(null);
     setCoverCleared(false);
@@ -309,33 +326,30 @@ export function TextbookDialog({
                 <Button type="button" disabled={busy || !title.trim()} onClick={() => void onSave()}>
                   {busy ? "저장 중…" : id ? "저장" : "교재 등록"}
                 </Button>
+                {/* 🔴 폐지가 아니라 **삭제**다(원장 2026-09-16) — 감추기만 하면 같은 이름으로 다시
+                    등록할 수 없어, 지운 줄 알고 다시 만들다 막힌다. 사라지는 것·남는 것은 확인 문구에 적는다. */}
                 {id ? (
                   <Button
                     type="button"
-                    variant={isActive ? "destructive" : "outline"}
+                    variant="destructive"
                     disabled={busy}
                     onClick={() => {
-                      if (
-                        isActive &&
-                        !window.confirm("이 교재를 폐지할까요? 목록에서 감춰지고, 이미 시트에 적힌 이름은 그대로 남습니다.")
-                      ) {
-                        return;
-                      }
+                      if (!window.confirm(deleteWarning(title, filled, planCount))) return;
                       setBusy(true);
-                      void setTextbookActive(id, !isActive)
+                      void deleteTextbook(id)
                         .then((r) => {
                           if (!r.ok) {
                             setError(r.error);
                             return;
                           }
-                          setIsActive(!isActive);
-                          toast.success(isActive ? "폐지했습니다" : "되살렸습니다");
+                          toast.success("교재를 삭제했습니다");
                           router.refresh();
+                          onClose();
                         })
                         .finally(() => setBusy(false));
                     }}
                   >
-                    {isActive ? "폐지" : "되살리기"}
+                    삭제
                   </Button>
                 ) : null}
                 <Button type="button" variant="ghost" className="ml-auto" disabled={busy} onClick={onClose}>

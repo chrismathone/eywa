@@ -50,7 +50,6 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       subject: "english",
       skillArea: sp.area ?? null,
       q: sp.q ?? null,
-      includeInactive: sp.inactive === "1",
       page: Number(sp.page ?? 1) || 1,
     }),
     tab === "plans" ? getClassTextbookPlans({}) : Promise.resolve({ status: "ok" as TextbookTableStatus, rows: [] }),
@@ -82,7 +81,7 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       {/* ⚠️ 배지는 **거르지 않았을 때만** 숫자를 단다 — 검색 중에 `교재 6`이 뜨면 전체가 6권인 줄 안다. */}
       <FaceTabs
         faces={textbookFaces({
-          books: sp.q || sp.area || sp.inactive === "1" ? null : list.total,
+          books: sp.q || sp.area ? null : list.total,
           plans: plans.status === "ok" && tab === "plans" ? plans.rows.length : null,
         })}
         active={tab}

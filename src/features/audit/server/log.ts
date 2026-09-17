@@ -265,8 +265,10 @@ export const AUDIT_ACTIONS = {
   //    "누가 이 반 시트에 이 교재를 통째로 넣었는지"를 역검수할 수 있어야 한다.
   textbook_create: "교재 등록",
   textbook_update: "교재 수정",
-  textbook_retire: "교재 폐지",
-  textbook_restore: "교재 되살리기",
+  textbook_delete: "교재 삭제",
+  // ⚠️ 폐지(감추기)는 **폐기된 경로**다(원장 2026-09-16 *"여기 폐지말고 삭제로 변경"*) — 라벨만 남긴 것은
+  //    그렇게 남은 과거 기록 1건(제목 `테스트`)을 읽기 위해서다. 새로 남는 일은 없다.
+  textbook_retire: "교재 폐지(지금은 없는 기능)",
   textbook_lessons_save: "교재 차수 저장",
   textbook_cover_set: "교재 표지 등록",
   textbook_cover_clear: "교재 표지 삭제",
