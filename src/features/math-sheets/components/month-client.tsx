@@ -222,7 +222,7 @@ export function MonthClient({
                 <span
                   key={s}
                   className={`num rounded-full px-2 py-0.5 text-xs font-bold ${TONE_SOFT[RAIL_TONE[s]]}`}
-                  title="이 달 목표(시작 → 목표 차시)에 견준 현재 위치 — 학생마다 대표 트랙 하나"
+                  title="이 달 목표(시작 → 목표 블록)에 견준 현재 위치 — 학생마다 대표 트랙 하나"
                 >
                   {RAIL_STATUS_LABEL[s]} {data.railSummary[s]}
                 </span>

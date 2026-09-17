@@ -26,7 +26,7 @@ function fmtDate(d: string | null): string {
   return d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "";
 }
 
-/** 1행(현재진도) 아래 글 — 차시 이름 + 날짜. 이 달 기록이 없으면 "이후 기록 없음"을 숨기지 않는다. */
+/** 1행(현재진도) 아래 글 — 블록 이름 + 날짜. 이 달 기록이 없으면 "이후 기록 없음"을 숨기지 않는다. */
 function nowTextOf(r: StudentRail): string | null {
   if (!r.nowLesson) return null;
   if (r.rail.nowDate) return `${r.nowLesson} (${fmtDate(r.rail.nowDate)})`;
@@ -35,8 +35,8 @@ function nowTextOf(r: StudentRail): string | null {
 }
 
 /**
- * 2행(목표진도) 아래 글 — 목표 차시 이름. 목표가 없거나 견줄 수 없으면 **이유가 이름보다 먼저다**(라벨 단일 소스) —
- * 목표 차시 자체는 바로 위 목표 칸에 적혀 있어서, 여기서 이름을 되풀이하면 "왜 막대가 비었나"의 답이 사라진다.
+ * 2행(목표진도) 아래 글 — 목표 블록 이름. 목표가 없거나 견줄 수 없으면 **이유가 이름보다 먼저다**(라벨 단일 소스) —
+ * 목표 블록 자체는 바로 위 목표 칸에 적혀 있어서, 여기서 이름을 되풀이하면 "왜 막대가 비었나"의 답이 사라진다.
  */
 function goalTextOf(r: StudentRail): string | null {
   if (r.rail.status === "no-goal" || r.rail.status === "goal-behind") return RAIL_STATUS_LABEL[r.rail.status];
@@ -136,13 +136,13 @@ export function StudentHeadCell({
             ) : r.rail.progressPct != null ? (
               <b className={`font-extrabold ${TONE_TEXT[tone]}`}>{r.rail.progressPct}%</b>
             ) : r.rail.moved != null && r.rail.moved > 0 ? (
-              // 목표가 없어 %를 못 낼 때 — "이 달 시작 위치에서 지금까지 몇 차시 나갔나"(원장 2026-09-02 *"이 +3차시는
+              // 목표가 없어 %를 못 낼 때 — "이 달 시작 위치에서 지금까지 몇 블록 나갔나"(원장 2026-09-02 *"이 +3블록는
               // 무얼 뜻하나"* → 뜻이 글자에 없어서 '이 달'을 앞에 붙이고 툴팁을 달았다).
               <b
                 className="text-text-dim font-extrabold"
-                title="이 달 시작 위치에서 지금까지 나간 차시 수 — 목표가 없어 진행률(%) 대신 적습니다"
+                title="이 달 시작 위치에서 지금까지 나간 블록 수 — 목표가 없어 진행률(%) 대신 적습니다"
               >
-                이 달 +{r.rail.moved}차시
+                이 달 +{r.rail.moved}블록
               </b>
             ) : null}
             {diff ? <span className={`font-bold ${TONE_TEXT[tone]}`}>{diff}</span> : null}

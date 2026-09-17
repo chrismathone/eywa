@@ -36,6 +36,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 // 휴일 판정 자료는 학원설정 하나뿐 — 내장 법정공휴일 표는 쓰지 않는다([[holiday.ts]]).
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { isHolidayOn } from "@/features/class-sheets/lib/holiday";
+import type { LearningContext } from "../lib/learning-plan";
 
 /**
  * MCS **월간 뷰** 조회 — 반 1개 × 달 1개, 축은 **학생 × 수업일**.
@@ -112,6 +113,8 @@ export type StudentRail = {
 export type RailSummary = Record<GoalRailStatus, number>;
 
 export type MathSheetMonthData = {
+  /** Overall goals use the full timetable and holiday range, rather than only the selected month. */
+  learningContext?: LearningContext;
   classId: string;
   className: string;
   month: string;
@@ -209,7 +212,7 @@ export async function getMathSheetMonth(
       .eq("class_id", classId),
     admin
       .from("enrollments")
-      .select("student_id, start_date, end_date, is_transferred")
+      .select("student_id, start_date, end_date, is_transferred, attendance_days")
       .eq("tenant_id", tenantId)
       .eq("class_id", classId),
     // 한 반 한 달이면 수백 행이지만 상한을 두지 않는다(B2) — 큰 반 × 긴 달이면 1,000에 닿을 수 있다.
@@ -522,6 +525,19 @@ export async function getMathSheetMonth(
   return {
     ok: true,
     data: {
+      learningContext: {
+        schedules: (schedRes.data ?? []).map((row) => ({
+          dayOfWeek: String(row.day_of_week), startTime: String(row.start_time),
+          endTime: row.end_time ? String(row.end_time) : null,
+          validFrom: row.valid_from ? String(row.valid_from).slice(0, 10) : null,
+          validTo: row.valid_to ? String(row.valid_to).slice(0, 10) : null,
+        })),
+        holidays: buildHolidayMap(settings.operations.holidays),
+        spans: Object.fromEntries(rows.map(student => [student.studentId, (enrRes.data ?? [])
+          .filter(e => String(e.student_id) === student.studentId)
+          .flatMap(e => mathSpansOf([{ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true }], withdrawnByStudent.get(student.studentId) ?? null)
+            .map(span => ({ ...span, attendanceDays: e.attendance_days ?? null })))])),
+      },
       classId: access.classId,
       className: access.className,
       month,
