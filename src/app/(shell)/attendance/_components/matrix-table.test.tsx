@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { tipRow, tipText } from "@/components/hover-tip/tip";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
@@ -90,6 +90,28 @@ function renderTable() {
     />,
   );
 }
+
+describe("학교·학년 오른쪽 반별 청구액", () => {
+  it.each([true, false])("반별 정렬=%s에서도 금액·0원·미확정을 구분한다", (showGroups) => {
+    const { container } = render(
+      <MatrixTable
+        groups={[GROUP]} days={DAYS} holidays={{}} showGroups={showGroups}
+        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        classBilledAmounts={{ [rowKey(C, S1)]: 210000, [rowKey(C, S2)]: 0 }}
+      />,
+    );
+    expect(screen.getAllByRole("columnheader").slice(0, 3).map((h) => h.textContent)).toEqual([
+      expect.stringContaining("이름"), "학교·학년", "청구액",
+    ]);
+    for (const [name, amount] of [["이도윤", "210,000"], ["박서준", "0"], ["한가온", "미확정"]]) {
+      const row = screen.getByText(name!).closest("tr")!;
+      expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(amount!);
+      expect(row.children).toHaveLength(DAYS.length + 5);
+    }
+    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 5));
+    expect(screen.queryByRole("columnheader", { name: "납입" })).not.toBeInTheDocument();
+  });
+});
 
 it("touch opens the attendance editor without changing a recorded status", () => {
   renderTable();
