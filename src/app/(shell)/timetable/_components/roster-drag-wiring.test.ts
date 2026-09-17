@@ -115,3 +115,19 @@ describe("적용일 — 툴바 값과 건별 값이 갈리지 않는다", () => 
     expect(board).toContain("if (queueMove({ ...moveDate, moveOn })) queued(");
   });
 });
+
+describe("퇴원 칸 드롭 팝업 — '수강 종료'가 아니라 '마지막 수업일'", () => {
+  const roster = read("roster-move.tsx");
+
+  it("제목·날짜 칸이 마지막 수업일이다(퇴원관리 '수강종료' 유형과 안 겹친다)", () => {
+    expect(roster).toContain('isWithdraw ? "마지막 수업일"');
+    expect(roster).toContain("반 마지막 수업일을 정할까요?");
+    expect(roster).not.toContain('isWithdraw ? "수강 종료"');
+    expect(roster).not.toContain("반에서 수강 종료할까요?");
+    expect(roster).not.toContain('isWithdraw ? "종료일"');
+  });
+
+  it("무엇이 되는지(종강·수강종료·퇴원)는 같은 EndScopeNote가 말한다", () => {
+    expect(roster).toContain("EndScopeNote");
+  });
+});
