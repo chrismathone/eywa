@@ -1250,8 +1250,8 @@ export const SHEET_DICT = {
   "att.notice.scope.a": { ko: "칸 숫자는 ", en: "The number in each cell counts only " },
   "att.notice.scope.b": { ko: "이 선생님이 맡은 교시", en: "the periods this teacher takes" },
   "att.notice.scope.c": {
-    ko: "만 셉니다. 같은 반이라도 다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체 숫자는 ",
-    en: ". Even in the same class, other teachers' periods and the seat rooms (JJ·Lab) appear only as hatching and are left out of the session and attendance-rate totals — for the whole class, use ",
+    ko: "만 셉니다. 같은 반이라도 이 선생님이 수업하지 않는 날·다른 선생님 교시·자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체 숫자는 ",
+    en: ". Even in the same class, days this teacher doesn't teach, other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use ",
   },
   "att.notice.scope.d": { ko: "반별 보기", en: "the class view" },
   "att.notice.scope.e": { ko: "에서 봅니다.", en: " instead." },
@@ -1312,8 +1312,8 @@ export const SHEET_DICT = {
   "att.sort": { ko: "정렬", en: "Sort" },
   "att.sort.aria": { ko: "정렬 기준", en: "Sort by" },
   "att.scopeChip.title": {
-    ko: "칸 숫자는 이 선생님이 맡은 교시만 셉니다. 다른 선생님 교시와 자리(JJ·랩)는 빗금으로만 표시되고 시수·출석률에는 들어가지 않습니다 — 반 전체 숫자는 반별 보기에서 봅니다.",
-    en: "The number in each cell counts only the periods this teacher takes. Other teachers' periods and the seat rooms (JJ·Lab) appear only as hatching and are left out of the session and attendance-rate totals — for the whole class, use the class view.",
+    ko: "이 선생님이 수업하는 날과 맡은 교시의 출결만 보입니다. 다른 선생님 교시와 자리(JJ·랩) 기록은 보이지 않고 시수·출석률에도 들어가지 않습니다 — 반 전체는 반별 보기에서 봅니다.",
+    en: "Only the days this teacher teaches and the periods they take are shown. Other teachers' periods and the seat rooms (JJ·Lab) are hidden and left out of the session and attendance-rate totals — for the whole class, use the class view.",
   },
   "att.scopeChip": { ko: "칸 = 이 선생님 교시", en: "Cells = this teacher's periods" },
   "att.notices": { ko: "안내 {n}", en: "Notes {n}" },
@@ -1404,22 +1404,15 @@ export const SHEET_DICT = {
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
   "att.col.schoolGrade": { ko: "학교·학년", en: "School · grade" },
-  // ⚠️ `Billed`는 `att.col.billed`(그 학생의 이 달 청구서 총액)가 이미 쓴다 — 이쪽은 **이 반 몫**이라
-  //    같은 영어로 뭉치면 눌러 보기 전엔 두 열을 구분할 수 없다(`lang-wiring.test.ts` 가드).
+  // 이 반 몫 청구액. 학생 총액 '청구·납입' 열은 2026-09-17 원장 지시로 없앴다(합계 줄의 청구·납입은 `att.totals.*`).
   "att.col.classBilled": { ko: "청구액", en: "Class billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
   },
   "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
-  "att.col.billed": { ko: "청구", en: "Billed" },
-  "att.col.paid": { ko: "납입", en: "Paid" },
   "att.col.units": { ko: "시수", en: "Sessions" },
   "att.col.rate": { ko: "출석률", en: "Rate" },
-  "att.col.billedTitle": {
-    ko: "그 학생의 이 달 청구서 총액(다른 과목 포함) — 반별 배분이 아닙니다",
-    en: "That student's total invoice for the month (other subjects included) — not a per-class share",
-  },
   "att.group.slotTitle": {
     ko: "이 반의 담임은 다른 선생님이고, 교시(시간표 슬롯) 담당으로 배선돼 있어 이 목록에 있습니다.",
     en: "Another teacher is homeroom for this class; it is listed here because this teacher is assigned to a timetable period.",
@@ -1511,6 +1504,17 @@ export const SHEET_DICT = {
   "att.cell.ghostTransfer": {
     ko: "여기에 입력하면 그 교시 기록에 상태만 옮깁니다(시수는 그대로 · 이 표 합계엔 안 들어갑니다)",
     en: "Entering here moves only the status onto that period's record (sessions unchanged, not counted in this table)",
+  },
+  // 🔴 강사 보기는 그 강사가 수업하는 날만 그린다(원장 2026-09-17 *"담당하지 않는 날은 표시할 이유도 없지"*) — 그 밖의 날 칸.
+  "att.lock.notOwnDay": {
+    ko: "이 선생님이 이 반을 수업하지 않는 날이라 선생님 출석부에서는 비워 둡니다 — 반 전체는 반별 보기에서 봅니다",
+    en: "This teacher doesn't teach this class on this day, so it stays empty in the teacher's register — see the class view for the whole class",
+  },
+  // 🔴 수업하는 날인데 선생님 교시 기록은 없고 다른 기록(다른 선생님 교시·JJ·랩실)만 있는 칸(원장 2026-09-17 *"내가 수업한
+  //    학생의 출석만"* — 그 기록은 안 보여 준다). 여기서 입력하면 선생님 교시에 기록이 생기지 않아 막는다.
+  "att.lock.noOwnRecord": {
+    ko: "이 날 선생님 교시에 찍힌 출결이 없어 여기서는 입력하지 않습니다 — 교시별 출결 화면(영어는 영어 강사 시트)에서 입력해 주세요",
+    en: "Nothing is recorded for your period on this day, so it can't be entered here — enter it on the per-period screen (the English teacher sheet for English)",
   },
   // 🔴 자리(JJ·랩실) 기록뿐인 칸 — 강사 보기는 그 행을 안 쓴다(원장 2026-09-12 *"jj는 개인강사 출석부에 넣음 안되지"*).
   "att.lock.seatOnly": {
@@ -1697,6 +1701,15 @@ export const SHEET_DICT = {
   "att.grid.ghostUndoBlock": {
     ko: "다른 선생님 교시에 옮긴 상태는 되돌리기로 돌리지 않습니다 — 필요하면 그 칸에 다시 입력하세요",
     en: "A status moved onto another teacher's period is not undone — enter that cell again if needed",
+  },
+  // 되돌리기가 건너뛴 **잠긴 칸** — 그 사이 수업하지 않는 날·제 교시 기록 없음·수정 기간 경과가 된 칸(적대 재리뷰 2026-09-17).
+  "att.grid.undoLockedBlock": {
+    ko: "잠긴 칸(수업하지 않는 날 · 선생님 교시 기록 없음 · 수정 기간 경과)이라 되돌리지 않았습니다",
+    en: "Not undone — the cell is locked (a day this teacher doesn't teach, no record for your period, or past the edit window)",
+  },
+  "att.grid.undoLockedPartial": {
+    ko: "{n}칸은 잠겨 있어 되돌리지 않았습니다",
+    en: "{n} locked cells were not undone",
   },
   "att.grid.ghostUndoPartial": {
     ko: "{n}칸(다른 선생님 교시에 옮긴 상태)은 되돌리지 않았습니다",

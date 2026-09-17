@@ -31,7 +31,10 @@ const h = vi.hoisted(() => {
       let upserts: Record<string, unknown>[] | undefined;
       let inIds: string[] | undefined;
       const builder: Record<string, unknown> = {};
+      let periodEq: string | undefined;
       for (const method of ["select", "eq", "neq", "order", "range", "gte", "lte", "or", "not", "is"]) builder[method] = () => builder;
+      // 청구 기간(`period`)만은 거른다 — 지난 달 기준 로더가 어느 달을 읽는지 잠그려고. 기간이 없는 행은 그대로 통과(다른 테스트 불변).
+      builder.eq = (column: string, value: unknown) => { if (column === "period") periodEq = value as string; return builder; };
       builder.in = (column: string, values: string[]) => { if (column === "id") inIds = values; return builder; };
       builder.delete = () => { state.deletes.push(table); return builder; };
       builder.maybeSingle = () => { single = true; return builder; };
@@ -49,7 +52,7 @@ const h = vi.hoisted(() => {
           state.tables[table] = upserts;
           state.writes.push(...upserts.map((row) => ({ table, patch: row })));
         }
-        const all = state.tables[table] ?? [];
+        const all = (state.tables[table] ?? []).filter((row) => periodEq === undefined || !("period" in row) || row.period === periodEq);
         // update … .select()는 실제로 바꾼 행만 돌려준다(id로 좁힌 경우).
         const rows = patch && inIds ? all.filter((row) => inIds!.includes(row.id as string)) : all;
         return Promise.resolve({ data: single ? rows[0] ?? null : rows, error: null }).then(resolve, reject);
@@ -160,6 +163,74 @@ describe("설정 → 회차 화면 조회·확정", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  /** 이번 달(9월) 청구서 1 + 지난 달(8월) 청구서 1 · 8월 확정 6시수 × 21,250원 · 수강·배치(월 1교시)까지. */
+  const seedLastMonth = () => {
+    h.state.tables.invoices[0].period = "2026-09";
+    h.state.tables.invoices.push({ id: "prev", student_id: "student", line_items: [], period: "2026-08" });
+    Object.assign(h.state.tables.invoice_session_terms[0], { confirmed_sessions: null, unit_price: null, amount: null, confirmed_at: null });
+    h.state.tables.invoice_session_terms.push({ id: "old", invoice_id: "prev", class_id: "class", subject: "english", planned_sessions: 7, confirmed_sessions: 6, unit_price: 21250, amount: 127500, pricing_mode: "per_session", quantity_basis: "attendance_units", confirmed_at: "2026-08-30", note: null, class: { class_name: "영어반", english_track: "injaewon" } });
+    const enrollment = { student_id: "student", class_id: "class", start_date: "2026-01-01", end_date: null, attendance_days: ["mon"], on_hold: false, class: { subject: "english", is_active: true } };
+    h.state.tables.enrollments = [enrollment];
+    h.state.tables.class_schedules = [{ class_id: "class", day_of_week: "mon", start_time: "16:00", end_time: "16:55", valid_from: "2026-01-01", valid_to: null, slot_teacher_label: null }];
+    return enrollment;
+  };
+  const lastOf = async (id = "term") => (await getSessionTermsView("2026-09", undefined, { lastMonth: true })).rows.find((r) => r.id === id)?.lastMonth ?? null;
+
+  it("지난 달 기준 미리 채우기 — 회차 확정 면에서만 읽고, 미확정 행에 **지난 달** 확정 단가를 싣는다", async () => {
+    seedLastMonth();
+    expect((await getSessionTermsView("2026-09")).rows.find((r) => r.id === "term")?.lastMonth ?? null).toBeNull();
+    expect(await lastOf()).toMatchObject({ price: 21250, last: { sessions: 6, price: 21250 } });
+    // 기간 연결 — 로더가 지난 달이 아니라 이번 달 청구서를 읽으면 확정 행이 없어 제안이 사라진다.
+    h.state.tables.invoices[1].period = "2026-07";
+    expect(await lastOf()).toBeNull();
+  });
+
+  it("지난 달 기준 조회가 깨져도 목록은 그대로 뜬다(제안만 없음 + 서버 로그)", async () => {
+    seedLastMonth();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const original = h.client.from.bind(h.client);
+    let invoiceCalls = 0;
+    const fromSpy = vi.spyOn(h.client, "from").mockImplementation((table: string) => {
+      // 첫 청구서 조회 = 이번 달 목록, 둘째 = 지난 달 기준 로더.
+      if (table === "invoices" && ++invoiceCalls === 2) throw new Error("boom");
+      return original(table);
+    });
+    try {
+      const view = await getSessionTermsView("2026-09", undefined, { lastMonth: true });
+      expect(view.rows.find((r) => r.id === "term")).toMatchObject({ confirmedSessions: null, lastMonth: null });
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      fromSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("🔴 지난 달 기준 미리 채우기 — 예정 0·휴원(예정 불확실)·이번 달 회차 행 중복(확정 포함)·지난 달 확정 중복·EiE 월 정액은 채우지 않는다", async () => {
+    const enrollment = seedLastMonth();
+    expect(await lastOf()).not.toBeNull();
+    // 수강·배치가 없으면 이번 달 예정 0 — 단가만 채우면 0원으로 일괄 확정된다.
+    h.state.tables.enrollments = [];
+    expect(await lastOf()).toBeNull();
+    // 예정은 0보다 큰데 불확실(같은 반에 휴원 수강 이력)이면 채우지 않는다 — 예정 0 경로와 따로 잠근다.
+    h.state.tables.enrollments = [enrollment, { ...enrollment, on_hold: true, end_date: "2026-09-05" }];
+    expect(await lastOf()).toBeNull();
+    h.state.tables.enrollments = [enrollment];
+    expect(await lastOf()).not.toBeNull();
+    // 이번 달 EiE 월 정액 행.
+    h.state.tables.invoice_session_terms[0].class = { class_name: "영어반", english_track: "eie" };
+    expect(await lastOf()).toBeNull();
+    h.state.tables.invoice_session_terms[0].class = { class_name: "영어반", english_track: "injaewon" };
+    // 지난 달 확정이 둘이면 어느 쪽이 맞는지 모른다.
+    h.state.tables.invoice_session_terms.push({ ...h.state.tables.invoice_session_terms[1], id: "old2", confirmed_sessions: 0 });
+    expect(await lastOf()).toBeNull();
+    h.state.tables.invoice_session_terms.pop();
+    expect(await lastOf()).not.toBeNull();
+    // 이번 달 같은 학생·반 회차 행이 둘 — 한쪽이 이미 확정이어도.
+    h.state.tables.invoices.push({ id: "invoice2", student_id: "student", line_items: [], period: "2026-09" });
+    h.state.tables.invoice_session_terms.push({ ...h.state.tables.invoice_session_terms[0], id: "dup", invoice_id: "invoice2", confirmed_sessions: 9, unit_price: 21250, amount: 191250, confirmed_at: "2026-09-10" });
+    expect(await lastOf()).toBeNull();
   });
 
   it("계획 갱신은 개인 등원 요일을 지키고 JJ·LAB 교시를 포함한다", async () => {

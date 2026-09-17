@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { addDays, kstDateOf, kstMonth, kstTimeOf, kstToday, monthDayLabel, monthRange } from "@/lib/date-kst";
+import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { attendanceRate } from "@/lib/calc/attendance";
 import {
@@ -15,13 +15,7 @@ import {
   recordedOnlyMatrixRow,
   recordedOnlyStudentIds,
 } from "@/features/attendance/monthly-makeup-roster";
-import {
-  ghostCellKind,
-  ghostGridValue,
-  rollupDay,
-  type GhostValue,
-  type SlotMark,
-} from "@/features/attendance/cell-display";
+import { rollupDay, type GhostValue, type SlotMark } from "@/features/attendance/cell-display";
 import { stripProxyMemo } from "@/features/attendance/proxy-memo";
 import { buildHolidayMap, dowsFromKeys, resolveAttendDows } from "@/features/attendance/calendar";
 import {
@@ -38,7 +32,12 @@ import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
 // 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
-import { attendanceSlotShare, classTeacherIdsInRange, ownsAttendanceSlot } from "@/features/attendance/teacher-axis";
+import {
+  attendanceSlotShare,
+  classTeacherIdsInRange,
+  ownsAttendanceSlot,
+  teachesClassOn,
+} from "@/features/attendance/teacher-axis";
 import type { PeriodMode } from "@/features/attendance/view-prefs";
 import {
   deriveMarksFromReports,
@@ -591,6 +590,9 @@ export type AttendanceMatrix = {
   /**
    * studentId → date → **이 표가 세지 않는 교시**(강사 전체 보기에서 남의 교시·자리 JJ·LAB).
    * `scopeTeacherId`를 안 넘긴 반별 보기에선 항상 비어 있다.
+   * 🔴 **2026-09-17부터 강사 전체 보기에서도 늘 비어 있다**(원장 *"내가 수업한 학생의 출석만 보고 싶은것"*) — 남의 교시를
+   *    빗금으로 보이던 표시를 걷었다. 그 사실은 `noOwnRecord`(입력 막기)만 남긴다. 아래 설명은 걷기 전의 규약이다
+   *    (격자·칸의 빗금 코드는 이 값이 비면 그리지 않는다).
    *
    * 🔴 왜 따로 싣나: 칸 값(marks/units)은 **주인의 교시만** 담아야 합계·출석률·격자가 한 숫자를 말한다.
    *    그렇다고 남의 교시를 통째로 숨기면 그 칸이 빈칸이 되고, 월간 출석부는 입력 격자라 사람이 거기
@@ -606,6 +608,21 @@ export type AttendanceMatrix = {
    * ⚠️ 선택 필드 — 없으면(옛 픽스처·반별 보기) 빗금 위 값이 안 보일 뿐 저장은 서버가 같은 판정으로 한다.
    */
   ghostValues?: Record<string, Record<string, GhostValue>>;
+  /**
+   * 강사 전체 보기에서 **그 강사가 이 반에서 수업하는 날**(`teachesClassOn`) — 반별 보기엔 없다(= 전부 그린다).
+   *
+   * 🔴 원장 2026-09-17: *"그냥 출석부에 담당하는 날만 표시하면 된다. 담당하지 않는 날은 표시할 이유도 없지."* ·
+   *    *"말그대로 내가 수업한 학생의 출석만 보고 싶은것."* — 이 목록 밖 날짜는 값·메모·예약·수업보고서 파생을 **싣지 않고**,
+   *    격자는 그 칸을 수업 없는 칸처럼 그리며 입력을 막는다(저장도 같은 판정으로 거절한다 — `scopeTeachesOn`).
+   * ⚠️ 명단(학생 줄)은 줄이지 않는다 — 원장 전용 금액 합계가 이 명단으로 학생을 고르기 때문이다(page.tsx `money`).
+   */
+  ownDates?: string[];
+  /**
+   * studentId → date → true. 그 강사가 수업하는 날인데 **그 강사 교시 기록은 없고 다른 기록(다른 선생님 교시·자리
+   * JJ·랩실)만 있는 칸**(강사 전체 보기 전용). 그 기록은 보여 주지 않고(원장 2026-09-17) 입력만 막는다 — 여기서 받으면
+   * 서버가 제 교시 행을 만들지 않는다(그날 칸 저장은 남의 교시 행을 고르거나 거절한다). 교시별 출결은 영어 강사 시트에서 찍는다.
+   */
+  noOwnRecord?: Record<string, Record<string, true>>;
   /**
    * studentId → date → true. **교시를 안 남긴 기록(day-level)이 값에 섞인 칸**(강사 전체 보기 전용).
    *
@@ -793,8 +810,8 @@ export async function getMonthlyAttendanceMatrix(
    * 🔴 원장 제보 2026-08-19: *"김주현 선생님이 출결한것도 아닌데 보이는것도 같이 수정해야겠네."*
    *    담임은 반 단위 속성이라 시간 축이 없어서, 8/10·8/14 인계 **이전**인 8/3~8/10 기록(전임이 넣은
    *    27행)이 새 담임 출석부에 그대로 떴다.
-   * ⚠️ **표시 축뿐이다** — 값에서 빼고 빗금(ghosts)으로 남긴다. 빈칸으로 두면 사람이 그 위에 다시 찍어
-   *    옛 기록을 덮는다([[#103]]). 반별 보기(scopeTeacherId=null)와 급여 별지는 이 값을 안 넘긴다.
+   * ⚠️ **표시 축뿐이다** — 그 날짜는 그리지 않는다(`ownDates` 밖 — 값·메모 없이 격자가 입력을 막는다, 2026-09-17. 그전엔 빗금으로
+   *    남겼다). 반별 보기(scopeTeacherId=null)와 급여 별지는 이 값을 안 넘긴다.
    * ⚠️ 판정(담임 폴백으로 잡힌 반인가 · 근거가 있는가)은 **호출부**가 한다 — 교시 담당으로 잡힌 반은
    *    그 사람이 실제로 가르쳤으므로 대상이 아니고, 근거가 없으면 null이라 종전대로 전부 보인다.
    */
@@ -915,10 +932,10 @@ export async function getMonthlyAttendanceMatrix(
      * B2: 명단을 만드는 조회라 무페이징 select 금지 → 페이지네이션(반 1개·한 기간이라 가볍다).
      *     PostgREST엔 distinct가 없어 행을 받아 코드에서 접는다(tie-break `id`로 OFFSET 안정).
      */
-    fetchAllPaged<{ student_id: string }>((from, to) =>
+    fetchAllPaged<{ student_id: string; session_date: string }>((from, to) =>
       supabase
         .from("attendance_records")
-        .select("student_id")
+        .select("student_id, session_date")
         .eq("class_id", classId)
         .gte("session_date", startIso)
         .lte("session_date", endIso)
@@ -995,29 +1012,27 @@ export async function getMonthlyAttendanceMatrix(
     recordedVia: string | null = null,
   ): boolean => ownsAttendanceSlot(slotInput(date, slotStart, seatLabel, recordedVia));
   /**
-   * 몫이 아닌 교시가 **자리(JJ·랩실)** 인가 — 저장(`buildScopeShare`)과 같은 함수(`attendanceSlotShare`)·같은 재료.
-   * 🔴 강사 보기 저장은 자리 행을 안 건드린다(원장 2026-09-12) — 격자가 그 행을 "함께 바뀝니다"·지우기 막힘에 세면
-   *    거짓말이 되므로, 세지 않는 교시(`ghosts`)에 자리 표식(`seat`)을 단다.
+   * 강사 전체 보기가 **그리는 날** — 그 강사가 이 반에서 수업하는 날만(원장 2026-09-17, `AttendanceMatrix.ownDates` 주석).
+   * 반별 보기는 null(전부 그린다 — 종전과 같은 숫자). 판정은 축 단일 소스 `teachesClassOn`, 재료는 이미 받은 슬롯(추가 왕복 0).
    */
-  const seatSlot = (
-    date: string,
-    slotStart: string | null,
-    seatLabel: string | null = null,
-    recordedVia: string | null = null,
-  ): boolean => attendanceSlotShare(slotInput(date, slotStart, seatLabel, recordedVia)) === "seat";
-  /**
-   * 담임 시작일만 빼면 **몫**이 되는 교시인가 — 저장은 담임 시작일을 안 읽어 이 행을 제 몫으로 쓴다(`buildScopeOwner`).
-   * 🔴 그 칸에 빗금 칸 입력(상태만 옮기기, 원장 2026-09-14)을 열면 저장은 시수까지 나눠 쓰므로 표식(`pre`)을 달아
-   *    격자가 종전대로 막게 한다(`ghostCellKind` `locked`). 담임 시작일이 없는 표는 늘 false(추가 계산 없음).
-   */
-  const preSlot = (
-    date: string,
-    slotStart: string | null,
-    seatLabel: string | null = null,
-    recordedVia: string | null = null,
-  ): boolean =>
-    !!scopeSince &&
-    ownsAttendanceSlot({ ...slotInput(date, slotStart, seatLabel, recordedVia), homeroomSince: null });
+  const ownDateSet = scopeTeacherId
+    ? new Set(
+        days
+          .filter(
+            (d) =>
+              !d.placeholder &&
+              teachesClassOn({
+                scopeTeacherId,
+                homeroomTeacherId,
+                slots: axisSlots,
+                date: d.date,
+                homeroomSince: scopeSince,
+              }),
+          )
+          .map((d) => d.date),
+      )
+    : null;
+  const drawsDate = (date: string) => !ownDateSet || ownDateSet.has(date);
 
   /**
    * 이 반을 그 기간에 맡은 강사가 **둘 이상인가** — 아래 `dayAxis` 안내를 붙일지 정한다.
@@ -1029,8 +1044,23 @@ export async function getMonthlyAttendanceMatrix(
    * ⚠️ 판정은 가시성 축(`classTeacherIdsInRange`)과 **같은 함수**로 한다 — 화면에 뜨는 사람 수와
    *    문구가 어긋나지 않게. 추가 쿼리 0(이미 받은 슬롯으로 계산).
    */
-  const sharedByTeachers =
-    classTeacherIdsInRange({ homeroomTeacherId, slots: axisSlots, from: startIso, to: endIso }).length > 1;
+  const monthTeachers = classTeacherIdsInRange({ homeroomTeacherId, slots: axisSlots, from: startIso, to: endIso });
+  const sharedByTeachers = monthTeachers.length > 1;
+  /**
+   * 그 **날짜**를 그리는 강사가 둘 이상인가 — 강사 보기는 그 강사가 수업하는 날만 그리므로(원장 2026-09-17) "다른 선생님 화면에도
+   * 같은 값" 안내는 달이 아니라 **그날** 기준이어야 참이다(화 H · 금 A인 반의 금요일 칸은 A 화면에만 선다, 적대 리뷰 2026-09-17).
+   * ⚠️ 담임 시작일은 모르므로(그 강사의 것만 안다) 넣지 않는다 — 넓게 세는 쪽이 안내를 빠뜨리지 않는다.
+   */
+  const sharedOnCache = new Map<string, boolean>();
+  const sharedOn = (date: string): boolean => {
+    const hit = sharedOnCache.get(date);
+    if (hit !== undefined) return hit;
+    const n = monthTeachers.filter((t) =>
+      teachesClassOn({ scopeTeacherId: t, homeroomTeacherId, slots: axisSlots, date, homeroomSince: null }),
+    ).length;
+    sharedOnCache.set(date, n > 1);
+    return n > 1;
+  };
 
   const studentMap = new Map<string, MatrixStudent>();
   // 파생 판정용 수강 구간 — 한 학생이 같은 반에 재등록해 여러 행일 수 있어 **전 구간**을 모은다
@@ -1098,14 +1128,22 @@ export async function getMonthlyAttendanceMatrix(
     .map((s) => s.id);
   // 🔴 보강 **예약된** 학생도 같은 규약으로 합친다 — 기록이 아직 없어도 그날 이 반에 오기로 한 사람이라 명단에
   //    서야 강사가 '보강 추가' 없이 그 칸을 찍는다(예약 행이 있어 `hasReservedMakeup`이 저장 문을 연다).
+  /**
+   * 🔴 강사 보기 + **담임이 아닌 반**은 그 강사가 수업하는 날의 기록·예약으로만 명단에 합친다(원장 2026-09-17, 적대 리뷰) — 안 그러면
+   *    남의 날에만 온 보강 방문자가 빈 줄로 서고 인원에도 잡힌다. ⚠️ **담임 반은 종전대로 전부** — 원장 전용 금액 합계가 담임 반의
+   *    명단(`matrix.students`)으로 학생을 고르므로 줄이면 돈 숫자가 바뀐다(page.tsx `money`).
+   */
+  const narrowExtras = !!ownDateSet && homeroomTeacherId !== scopeTeacherId;
+  const extraRecorded = narrowExtras ? recordedRows.filter((r) => ownDateSet!.has(r.session_date)) : recordedRows;
+  const extraReserved = narrowExtras ? reservedRows.filter((r) => ownDateSet!.has(r.makeupDate)) : reservedRows;
   const extraIds = recordedOnlyStudentIds(
-    [...recordedRows.map((r) => r.student_id), ...reservedRows.map((r) => r.studentId)],
+    [...extraRecorded.map((r) => r.student_id), ...extraReserved.map((r) => r.studentId)],
     enrolledStudentIds,
   );
   // 예약만 있는 학생(기록 없음·수강 없음) — 명단엔 서되 **총원엔 안 센다**(아직 안 온 사람, 적대 리뷰 2026-09-14).
-  const recordedIdSet = new Set(recordedRows.map((r) => r.student_id));
+  const recordedIdSet = new Set(extraRecorded.map((r) => r.student_id));
   const reservedOnlyIds = new Set(
-    reservedRows.map((r) => r.studentId).filter((id) => !enrolledStudentIds.includes(id) && !recordedIdSet.has(id)),
+    extraReserved.map((r) => r.studentId).filter((id) => !enrolledStudentIds.includes(id) && !recordedIdSet.has(id)),
   );
   if (extraIds.length > 0) {
     const extras = await fetchInChunks<{
@@ -1131,20 +1169,13 @@ export async function getMonthlyAttendanceMatrix(
 
   // 보강 예약 칸(0264a) — studentId → date → 예약. 명단에 없는 학생(조회 실패 등)의 예약은 싣지 않는다.
   const reservations: Record<string, Record<string, MatrixReservation>> = {};
-  /**
-   * 이름을 나중에 채울 자리 — [예약 칸, 예약자 id]. 🔴 여기서 바로 조회하지 않는다: 아래 빗금 칸 입력자 이름과
-   * **같은 표(users)**를 보므로 한 번에 묻는다(B4 — 독립인 왕복을 줄줄이 세우지 않는다).
-   */
+  /** 이름을 나중에 채울 자리 — [예약 칸, 예약자 id]. 출결 기록 조회와 독립이라 기록 블록 밖에서 한 번에 묻는다. */
   const reservationCreators: [MatrixReservation, string][] = [];
-  /**
-   * 빗금(세지 않는) 교시 → **그 행을 찍은 사람의 id**(원장 2026-09-15 *"이 화면 몫 아닌 출석부 체크를 누가
-   * 했는지 마우스 올리면 알아볼 수 있게"*). 🔴 **세지 않는 교시에만** 담는다 — 제 몫 칸은 이름을 안 쓰는데
-   * 담으면 칸 수천 개의 페이로드만 늘어난다.
-   */
-  const recorderOf = new Map<SlotMark, string>();
   if (reservedRows.length > 0) {
     for (const r of reservedRows) {
       if (!studentMap.has(r.studentId)) continue;
+      // 강사 보기 — 그 강사가 수업하지 않는 날의 예약 칸은 그리지 않는다(원장 2026-09-17, `ownDates`).
+      if (!drawsDate(r.makeupDate)) continue;
       // 같은 날 예약이 둘(교시 둘)이면 이른 교시가 칸을 대표한다(조회가 slot_start 오름차순).
       if (reservations[r.studentId]?.[r.makeupDate]) continue;
       reservations[r.studentId] ??= {};
@@ -1168,7 +1199,9 @@ export async function getMonthlyAttendanceMatrix(
   const notes: Record<string, Record<string, string>> = {};
   const units: Record<string, Record<string, number>> = {};
   const slots: Record<string, Record<string, SlotMark[]>> = {};
+  // 2026-09-17부터 늘 비어 있다 — 남의 교시는 보여 주지 않는다(`AttendanceMatrix.ghosts` 주석).
   const ghosts: Record<string, Record<string, SlotMark[]>> = {};
+  const noOwnRecord: Record<string, Record<string, true>> = {};
   const dayAxis: Record<string, Record<string, true>> = {};
   const derived: Record<string, Record<string, true>> = {};
 
@@ -1188,14 +1221,11 @@ export async function getMonthlyAttendanceMatrix(
       seat_label: string | null;
       /** 그 행을 쓴 문(0212a) — JJ는 라벨이 없어 `"seat"`가 유일한 자리 표식일 수 있다(리뷰 2026-09-12). */
       recorded_via: string | null;
-      recorded_at: string;
-      /** 그 행을 **찍은 사람**(귀속이 아니라 입력자 — `teacher-axis.ts`). 빗금 칸 카드가 이름으로 편다. */
-      recorded_by: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
         .select(
-          "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via, recorded_at, recorded_by",
+          "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via",
         )
         .eq("class_id", classId)
         .in("student_id", chunk)
@@ -1219,13 +1249,20 @@ export async function getMonthlyAttendanceMatrix(
         studentId: string;
         date: string;
         note: string | null;
-        /** 남의 교시에 달린 메모 — 내 교시 메모가 하나도 없을 때만 쓴다(아래 주석). */
+        /**
+         * 같은 날 **남의 교시에 달린 메모** — 제 교시 값이 있는 칸에서 제 메모가 없을 때만 쓴다(아래 접기 주석).
+         * ⚠️ 제 교시 값이 없는 칸엔 절대 안 싣는다(그 칸은 남의 기록을 보여 주지 않는다, 원장 2026-09-17).
+         */
         otherNote: string | null;
         slots: SlotMark[];
-        others: SlotMark[];
+        /** 이 표의 몫이 아닌 교시 기록이 있나 — 값은 싣지 않고 입력 막기(`noOwnRecord`)에만 쓴다. */
+        hasOthers: boolean;
       }
     >();
     for (const r of records) {
+      // 🔴 강사 보기 — 그 강사가 이 반에서 수업하지 않는 날의 기록은 싣지 않는다(원장 2026-09-17 *"담당하지 않는 날은
+      //    표시할 이유도 없지"*). 값·메모·교시 무엇도 그 칸에 서지 않는다(`ownDates`).
+      if (!drawsDate(r.session_date)) continue;
       const slot = (r.slot_start as string | null) ?? null;
       const k = `${r.student_id}::${r.session_date}::${slot ?? ""}`;
       if (seen.has(k)) continue; // 같은 교시의 옛 정정본(append-only)
@@ -1239,63 +1276,51 @@ export async function getMonthlyAttendanceMatrix(
           note: null,
           otherNote: null,
           slots: [] as SlotMark[],
-          others: [] as SlotMark[],
+          hasOthers: false,
         };
       // 시수(배수) — null=기본 1. numeric은 문자열로 올 수 있어 Number 변환.
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
-      // 주인 몫이면 칸 값(marks/units/slots)으로, 아니면 표시 전용(ghosts)으로 — 값과 표시를 갈라야
-      // 합계·출석률·격자가 한 숫자를 말한다(AttendanceMatrix.ghosts 주석).
+      // 주인 몫이면 칸 값(marks/units/slots)으로. 반별 보기는 전부 몫이다(종전과 같은 숫자).
       const mine = ownsSlot(r.session_date, slot, r.seat_label, r.recorded_via);
-      // 세지 않는 교시 중 **자리(JJ·랩실)** 는 표식을 단다 — 강사 보기 저장이 그 행을 안 건드리므로(원장 2026-09-12)
-      // 격자·칸·팝오버가 "함께 바뀝니다"·지우기 막힘의 셈에서 뺀다(`sharedOtherSlots`).
-      const seat = !mine && seatSlot(r.session_date, slot, r.seat_label, r.recorded_via);
-      const pre = !mine && !seat && preSlot(r.session_date, slot, r.seat_label, r.recorded_via);
-      const mark: SlotMark = {
+      if (!mine) {
+        // 🔴 이 표의 몫이 아닌 교시(다른 선생님 교시·자리 JJ·랩실·담임이 되기 전 기록)는 **보여 주지 않는다**
+        //    (원장 2026-09-17 *"말그대로 내가 수업한 학생의 출석만 보고 싶은것"*). 그전엔 빗금 + 흐린 값 + 입력자·메모로
+        //    섰다(2026-08-19 · 09-14 · 09-15). 기록이 있다는 사실만 남겨 제 교시 기록이 없는 칸의 입력을 막는다.
+        cell.hasOthers = true;
+        // 남의 교시 메모는 **후보로만** 쥔다 — 같은 날 결석 사유("병결")가 다른 교시 행에만 적히는 일이 흔하다(오늘 출결이
+        // 첫 교시에 사유를 적고 ECS가 제 교시에 결석만 찍는다). 제 값이 있는 칸에서 제 메모가 없을 때만 보인다.
+        // 🔴 자리(JJ·랩실) 행의 메모는 후보가 아니다 — 자리 담당이 적은 메모가 강사 칸에 서면 "jj는 개인강사 출석부에 넣음
+        //    안되지"(원장 2026-09-12)와 부딪힌다(적대 재리뷰 2026-09-17). 판정은 저장과 같은 함수(`attendanceSlotShare`).
+        if (r.note && attendanceSlotShare(slotInput(r.session_date, slot, r.seat_label, r.recorded_via)) !== "seat") {
+          const hasReason = stripProxyMemo(r.note as string) !== "";
+          if (cell.otherNote === null || (hasReason && stripProxyMemo(cell.otherNote) === "")) {
+            cell.otherNote = r.note as string;
+          }
+        }
+        byCell.set(cellKey, cell);
+        continue;
+      }
+      cell.slots.push({
         slot,
         status: r.status as AttendanceStatus,
         units: raw !== null && Number.isFinite(raw) ? raw : null,
-        ...(seat ? { seat: true as const } : {}),
-        ...(pre ? { pre: true as const } : {}),
-      };
-      (mine ? cell.slots : cell.others).push(mark);
-      // 입력 시각은 **KST**로 편다(`recorded_at`은 UTC 타임스탬프 — 그대로 자르면 9시간 이르다, date-kst 규약).
-      // 🔴 시각은 **입력자를 몰라도** 싣는다 — 키오스크 체크인은 일부러 `recorded_by`를 안 남기는데(익명 문),
-      //    이름에 묶어 두면 "언제 찍혔나"까지 함께 사라진다(적대 리뷰 2026-09-15).
-      if (!mine) {
-        if (r.recorded_by) recorderOf.set(mark, r.recorded_by);
-        const day = kstDateOf(r.recorded_at);
-        const time = kstTimeOf(r.recorded_at);
-        if (day && time) mark.at = `${monthDayLabel(day)} ${time}`;
-      }
+      });
       // 메모는 **가장 최근에 찍힌 것** 하나(순회가 recorded_at 내림차순이라 처음 만난 것).
       // ⚠️ 교시마다 메모가 다를 수 있지만 칸이 하나라 다 못 적는다 — 교시별 메모는 영어 수업 시트에서 본다.
-      // ⚠️ **내 교시 메모가 우선**이다(강사 전체 보기) — 칸의 값은 내 교시인데 메모만 남의 교시 것이면
-      //    그 칸이 서로 다른 두 사실을 한 번에 말한다. 내 교시에 메모가 없을 때만 남의 것을 보여 준다.
       // 🔴 `대신 입력` 줄뿐인 메모는 **사유가 적힌 메모에 자리를 내준다**(원장 2026-09-14 빗금 칸 입력) — 옮기기는 그날
       //    여러 교시 행에 같은 시각으로 그 줄을 붙여서, 먼저 오는 행이 사유("병결")를 가렸다(적대 리뷰 2026-09-14).
       if (r.note) {
         const hasReason = stripProxyMemo(r.note as string) !== "";
-        if (mine) {
-          if (cell.note === null || (hasReason && stripProxyMemo(cell.note) === "")) cell.note = r.note as string;
-        } else if (cell.otherNote === null || (hasReason && stripProxyMemo(cell.otherNote) === "")) {
-          cell.otherNote = r.note as string;
-        }
+        if (cell.note === null || (hasReason && stripProxyMemo(cell.note) === "")) cell.note = r.note as string;
       }
       byCell.set(cellKey, cell);
     }
 
     // 하루치를 한 칸으로 접는다 — 숫자는 시수 **합**, 색은 대표 상태(cell-display.rollupDay 단일 소스).
     for (const cell of byCell.values()) {
-      // 주인 몫이 아닌 교시는 값이 아니라 **표시**로만 남는다(빗금+툴팁) — 빈칸으로 두면 사람이 그 위에
-      // 다시 찍어 남의 기록을 덮는다(#103). 반별 보기에선 others가 항상 비어 있다.
-      if (cell.others.length > 0) {
-        ghosts[cell.studentId] ??= {};
-        ghosts[cell.studentId]![cell.date] = cell.others;
-      }
-      // 🔴 메모는 **값보다 먼저** 싣는다 — 빗금 칸(내 몫 0)의 메모까지 버리면 화면에서 사라지는 것이
-      //    결석 사유다(실측 78칸: "8/3~5 가족여행" · "병결" · "수학학원 늘 늦게끝남"). 값은 빼더라도
-      //    표시는 남긴다는 이 화면의 규약과도 어긋난다 — 툴팁·접힌 모서리가 이 값을 그린다.
-      const note = cell.note ?? cell.otherNote;
+      // 🔴 메모는 **내 교시 메모가 우선**이고, 없으면 같은 날 남의 교시 메모(결석 사유)를 — **제 교시 값이 있는 칸에서만**
+      //    보인다(적대 리뷰 2026-09-17: 막으면 내 결석 칸의 사유가 사라진다 · 제 값 없는 칸에 실으면 남의 기록을 보이는 꼴).
+      const note = cell.note ?? (cell.slots.length > 0 ? cell.otherNote : null);
       if (note) {
         notes[cell.studentId] ??= {};
         notes[cell.studentId]![cell.date] = note;
@@ -1303,12 +1328,16 @@ export async function getMonthlyAttendanceMatrix(
       const day = rollupDay(cell.slots);
       // 🔴 주인 몫이 하나도 없는 칸은 **값을 만들지 않는다** — 여기서 0을 실으면 격자·합계·복사
       //    어느 쪽도 0을 제대로 못 읽는다(units 레코드는 0을 안 담는 규약이라 합계가 1로 되살아난다).
-      if (!day) continue;
+      if (!day) {
+        // 수업하는 날인데 제 교시 기록은 없고 남의 기록만 있다 — 빈칸으로 그리되 입력은 막는다(`noOwnRecord` 주석).
+        if (cell.hasOthers) (noOwnRecord[cell.studentId] ??= {})[cell.date] = true;
+        continue;
+      }
       marks[cell.studentId] ??= {};
       marks[cell.studentId]![cell.date] = day.status as AttendanceStatus;
       // 교시를 안 남긴 기록이 값에 섞였나 — 강사 전체 보기 + **담당이 둘 이상인 반**에서만 뜻이 있다
       // (반별 보기는 원래 반 전체이고, 혼자 맡는 반은 그 값이 남의 화면에 뜨지 않는다 = 위 sharedByTeachers).
-      if (scopeTeacherId && sharedByTeachers && cell.slots.some((x) => x.slot === null)) {
+      if (scopeTeacherId && sharedByTeachers && cell.slots.some((x) => x.slot === null) && sharedOn(cell.date)) {
         dayAxis[cell.studentId] ??= {};
         dayAxis[cell.studentId]![cell.date] = true;
       }
@@ -1330,17 +1359,13 @@ export async function getMonthlyAttendanceMatrix(
    * 🔴 **기록 블록 밖**에 둔다(재리뷰 2026-09-15) — 예약자 이름은 출결 기록과 무관한 일이라, 안에 두면
    *    '학생이 하나도 없는 달'처럼 그 블록을 안 타는 경로가 생기는 순간 예약자 이름이 **조용히** 빈 채로 나간다.
    */
-  // 예약자·빗금 교시 입력자 이름 — **한 번에** 묻는다(같은 users 표. 조회 실패·권한이면 이름만 빠진다, fail-soft).
-  const nameIds = [...new Set([...reservationCreators.map(([, id]) => id), ...recorderOf.values()])];
+  // 예약자 이름 — **한 번에** 묻는다(조회 실패·권한이면 이름만 빠진다, fail-soft).
+  const nameIds = [...new Set(reservationCreators.map(([, id]) => id))];
   if (nameIds.length > 0) {
     const names = await getReservationCreatorNames(supabase, nameIds);
     for (const [entry, id] of reservationCreators) {
       const name = names.get(id)?.trim();
       if (name) entry.createdByName = name;
-    }
-    for (const [mark, id] of recorderOf) {
-      const name = names.get(id)?.trim();
-      if (name) mark.by = name;
     }
   }
 
@@ -1435,7 +1460,10 @@ export async function getMonthlyAttendanceMatrix(
       // 🔴 담임 이전 칸은 이 표의 값이 아니다 — **파생은 `ownsSlot`을 안 탄다**. 수기 기록만 빗금으로
       //    빼고 여기를 안 막으면, 그 날짜가 보고서 파생 '출석'으로 **되살아난다**(JJ2A는 8/3~8/10에
       //    전임이 쓴 보고서가 14건 있어 실제로 그렇게 된다).
-      .filter((d) => !scopeSince || d.date >= scopeSince);
+      .filter((d) => !scopeSince || d.date >= scopeSince)
+      // 🔴 강사 보기는 그 강사가 수업하는 날만 그린다(원장 2026-09-17) — 파생도 같은 날만 메운다. 안 막으면 안 가르치는
+      //    요일이 보고서 파생 '출석'·'결석'으로 되살아난다(수기 기록만 걸러 봐야 소용없다 — 위 담임 이전 칸과 같은 결).
+      .filter((d) => drawsDate(d.date));
 
     for (const s of students) {
       const dows = new Set(s.attendDows);
@@ -1482,20 +1510,6 @@ export async function getMonthlyAttendanceMatrix(
   const presentRate =
     totalRecords > 0 ? Math.round(attendanceRate(presentCount, totalRecords) * 10) / 10 : 0;
 
-  /**
-   * 빗금 칸 중 **입력하면 다른 선생님 교시에 상태만 옮기는 칸**의 표시 값(원장 2026-09-14) — 격자·칸이 같은 판정
-   * (`ghostCellKind`)으로 입력을 연다. ⚠️ 파생을 합친 **뒤**에 가른다 — 파생 값 칸은 옮기지 않는다(판정 함수 주석).
-   * 반별 보기는 ghosts가 비어 늘 빈 객체다(추가 조회 0 — 받아 둔 행으로만 계산).
-   */
-  const ghostValues: Record<string, Record<string, GhostValue>> = {};
-  for (const [sid, byDate] of Object.entries(ghosts)) {
-    for (const [date, others] of Object.entries(byDate)) {
-      const kind = ghostCellKind({ hasValue: !!marks[sid]?.[date], derivedValue: !!derived[sid]?.[date], others });
-      const value = kind === "transfer" ? ghostGridValue(others) : null;
-      if (value) (ghostValues[sid] ??= {})[date] = value;
-    }
-  }
-
   return {
     classes,
     selectedClassId: classId,
@@ -1509,7 +1523,8 @@ export async function getMonthlyAttendanceMatrix(
     units,
     slots,
     ghosts,
-    ghostValues,
+    // 강사 보기 — 그리는 날(그 강사가 수업하는 날)과, 그 날 중 제 교시 기록 없이 남의 기록만 있는 칸(입력 막기).
+    ...(ownDateSet ? { ownDates: [...ownDateSet], noOwnRecord } : {}),
     dayAxis,
     derived,
     derivedActive,

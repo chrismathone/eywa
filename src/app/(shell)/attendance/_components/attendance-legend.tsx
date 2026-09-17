@@ -1,7 +1,6 @@
 import type { AttendanceStatus } from "@/features/attendance/server/queries";
 import {
   DAY_TONE,
-  GHOST_HATCH,
   TODAY_HEAD,
   cellDisplay,
   rollupDay,
@@ -37,30 +36,22 @@ const MIXED_SAMPLE = cellDisplay("present", 1, {
  *    빈 공간**(*"이 사이 빈공간"*)을 이 줄이 채운다.
  * 🔴 **격자의 칠을 세운다**(원장 *"이런 미등원도 범례 추가"* → *"이런것들"*) —
  *    출결 다섯 + 교시가 섞인 날의 줄무늬 + 날짜 성격 넷(등원요일·주말·학원 휴일·미등원) + 오늘 열 머리(남색)
- *    + 강사 전체 보기의 빗금 + 보강 예약(0264a — 어느 보기·어느 달에나 칸이 설 수 있어 늘 세운다).
+ *    + 보강 예약(0264a — 어느 보기·어느 달에나 칸이 설 수 있어 늘 세운다).
+ *    ⚠️ 강사 전체 보기의 **빗금 칩은 걷었다**(원장 2026-09-17 *"담당하는 날만 표시"* — 격자에 빗금이 더는 안 선다).
  *    ⚠️ 일부러 뺀 것: 흰 칸(수업 없는 평일 — 기본 배경이라 설명이 소음). 격자에 새 칠을 더하면 여기도 함께 볼 것.
  * 🔴 칩을 세우는 기준은 **이 화면에 그 칠이 나올 수 있는가**(구조)다 — 이 달에 실제로 나왔는가(데이터)가 아니다.
  *    · 줄무늬·학원 휴일·미등원은 어느 보기·어느 달에나 나올 수 있어 늘 세운다(데이터로 가리면 칩이 달마다 들락거린다).
- *    · 빗금은 강사 전체 보기에서만, 오늘 열 머리는 **보고 있는 달에 오늘이 있을 때만** 격자에 생긴다 —
+ *    · 오늘 열 머리는 **보고 있는 달에 오늘이 있을 때만** 격자에 생긴다 —
  *      그 밖에선 화면에 있을 수 없는 칠이라 세우지 않는다.
- * 🔴 빗금 낱말은 **"이 화면 몫 아님"** — "다른 선생님 교시"라고 쓰지 말 것. 빗금은 자리(JJ·랩실) 기록·교시를
- *    안 남긴 옛 기록·담임이 되기 전 기록에도 나온다(`cell-display.ts` `NOT_MINE_MESSAGE` 주석과 같은 규칙 —
- *    적대적 리뷰 2026-09-14가 잡았다).
- * 🔴 칩은 **셀·머리와 같은 함수·같은 상수**로 그린다(`cellDisplay`·`rollupDay`·`DAY_TONE`·`TODAY_HEAD`·`GHOST_HATCH`) —
+ * 🔴 칩은 **셀·머리와 같은 함수·같은 상수**로 그린다(`cellDisplay`·`rollupDay`·`DAY_TONE`·`TODAY_HEAD`) —
  *    색을 여기 다시 적으면 셀 색을 바꾸는 날(같은 날의 톤업처럼) 범례만 옛 색으로 남는다.
  * ⚠️ **서버 컴포넌트**다(훅 없음) — 화면 언어는 페이지가 prop으로 내려준다(`matrix-table.tsx`와 같은 규약).
  */
 export function AttendanceLegend({
   lang = "ko",
-  showGhost,
   showToday,
 }: {
   lang?: SheetLang;
-  /**
-   * 빗금(이 화면 몫이 아닌 기록) 칩 — **강사 전체 보기에서만** 격자에 나오므로 그때만 세운다.
-   * 반별 보기에 세우면 화면에 없는 칠을 설명하는 범례가 된다.
-   */
-  showGhost: boolean;
   /**
    * 오늘 열 머리(남색) 칩 — 격자에 **오늘 열이 있을 때만** 세운다(지난·다음 달엔 남색 머리가 없다).
    * 판정은 표와 같은 날짜 목록(`days[].isToday`)으로 페이지가 한다.
@@ -111,13 +102,6 @@ export function AttendanceLegend({
         <span className={ITEM}>
           <span className={`${SWATCH} ${TODAY_HEAD.bg}`} />
           {t("att.legend.today")}
-        </span>
-      ) : null}
-      {showGhost ? (
-        <span className={ITEM}>
-          {/* 빗금은 배경**색**이 아니라 무늬라 셀처럼 backgroundImage로 얹는다(cell-display.ts GHOST_HATCH 주석). */}
-          <span className={`${SWATCH} bg-white`} style={{ backgroundImage: GHOST_HATCH }} />
-          {t("att.legend.ghost")}
         </span>
       ) : null}
     </div>

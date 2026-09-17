@@ -30,7 +30,7 @@ export const attendance: HelpManual = {
       key: "att-view",
       label: "보기",
       zone: "toolbar",
-      body: "반별 / 강사 전체. 강사 보기에서 저장하면 그 강사 교시만 시수가 나뉘고, 자리(JJ·랩실) 기록은 건드리지 않습니다.",
+      body: "반별 / 강사 전체. 강사 보기는 그 강사가 수업하는 날·교시 출결만 보이고, 다른 날은 빈칸으로 잠깁니다.",
     },
     {
       n: 4,

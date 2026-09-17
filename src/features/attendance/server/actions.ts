@@ -34,10 +34,18 @@ import {
   SCOPE_INVALID_MESSAGE,
   SCOPE_LOAD_FAILED_MESSAGE,
   SCOPE_NOT_TAUGHT_MESSAGE,
+  NOT_OWN_DAY_MESSAGE,
   type DayTargetRow,
   type DayUnitsPlan,
 } from "../scoped-split";
-import { buildScopeShare, isScopeClassIds, isScopeTeacherId, scopeTeaches, type ScopeShare } from "../scope-ownership";
+import {
+  buildScopeShare,
+  isScopeClassIds,
+  isScopeTeacherId,
+  scopeTeaches,
+  scopeTeachesOn,
+  type ScopeShare,
+} from "../scope-ownership";
 import { loadScopeFacts } from "./scope-ownership";
 import { NOT_MINE_MESSAGE } from "../cell-display";
 // 빗금 칸 입력(원장 2026-09-14) — 제 몫 0 · 다른 선생님 교시 행에 상태만 옮긴다. 판정·메모 규칙은 순수 모듈 한 곳.
@@ -681,6 +689,9 @@ export async function setAttendanceCell(input: {
     if (!facts) return { error: SCOPE_LOAD_FAILED_MESSAGE };
     // 그 달에 이 반을 안 맡은 강사의 보기에서 온 저장 — 화면이 오래됐다(반 배치가 바뀌었다).
     if (!scopeTeaches(facts.get(classId), teacherId, sessionDate)) return { error: SCOPE_NOT_TAUGHT_MESSAGE };
+    // 🔴 강사 보기는 그 강사가 수업하는 날만 그린다(원장 2026-09-17) — 그 밖의 날 칸은 격자가 막고, 저장도 같은 판정으로
+    //    거절한다(#77 — 화면만 막으면 오래된 화면·만든 요청이 남의 날에 기록을 만든다). 메모만·지우기·쓰기 세 갈래 공통.
+    if (!scopeTeachesOn(facts.get(classId), teacherId, sessionDate)) return { error: NOT_OWN_DAY_MESSAGE };
     return { share: buildScopeShare({ teacherId, facts }) };
   };
   /** 강사 보기 칸의 그날 행(정정 이력 포함, 최근 입력 먼저) + 판정기 — 메모만·지우기 갈래가 쓴다(두 조회 병렬, B4). */
@@ -2051,6 +2062,7 @@ export async function setAttendanceRange(input: {
   // 강사 전체 보기에서 온 범위 — 판정 재료(`scopeFacts`)는 위 기존 기록 조회와 함께 받아 두었다(B4).
   let scopeShare: ScopeShare | null = null;
   let notTaught = 0;
+  let notOwnDay = 0;
   let noneOwned = 0;
   if (scopeTeacherId && scopedForFacts.length > 0) {
     // 🔴 몫을 못 가리면 저장하지 않는다 — 스코프 없이 나누면 남의 교시로 시수가 새는 바로 그 버그가 난다.
@@ -2061,6 +2073,12 @@ export async function setAttendanceRange(input: {
       (c) => !isScoped(c) || scopeTeaches(facts.get(c.classId), scopeTeacherId, c.sessionDate),
     );
     notTaught = before - allowed.length;
+    // 🔴 그 강사가 수업하지 않는 날 칸은 건너뛴다(원장 2026-09-17) — 단건 저장(`scopeShareOf`)과 같은 판정. 격자가 먼저 뺀다.
+    const beforeDay = allowed.length;
+    allowed = allowed.filter(
+      (c) => !isScoped(c) || scopeTeachesOn(facts.get(c.classId), scopeTeacherId, c.sessionDate),
+    );
+    notOwnDay = beforeDay - allowed.length;
     // 판정기는 받아 둔 재료로만 만든다 — 추가 조회 없음(담임 시작일은 안 읽는다, `buildScopeOwner` 주석).
     scopeShare = buildScopeShare({ teacherId: scopeTeacherId, facts });
   }
@@ -2121,9 +2139,11 @@ export async function setAttendanceRange(input: {
       skippedSeatRows += seat.length;
       return true;
     });
-    if (allowed.length === 0 && notTaught + noneOwned > 0) {
+    if (allowed.length === 0 && notTaught + notOwnDay + noneOwned > 0) {
       // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다(채우기 갈래와 같은 규약).
-      return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : rejectMessage() };
+      return {
+        error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : notOwnDay > 0 ? NOT_OWN_DAY_MESSAGE : rejectMessage(),
+      };
     }
     for (let i = 0; i < ids.length; i += CHUNK) {
       const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
@@ -2196,9 +2216,9 @@ export async function setAttendanceRange(input: {
     plans.set(k, plan);
     return true;
   });
-  if (allowed.length === 0 && notTaught + noneOwned > 0) {
+  if (allowed.length === 0 && notTaught + notOwnDay + noneOwned > 0) {
     // 조용한 0건 금지 — 격자가 그 칸에 하는 말과 같은 문장으로 알린다.
-    return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : rejectMessage() };
+    return { error: notTaught > 0 ? SCOPE_NOT_TAUGHT_MESSAGE : notOwnDay > 0 ? NOT_OWN_DAY_MESSAGE : rejectMessage() };
   }
 
   const nowIso = new Date().toISOString();

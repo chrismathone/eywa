@@ -5,6 +5,7 @@ import {
   HEAD_ROW_H,
   TODAY_HEAD,
   notMineCell,
+  type NotMineReason,
 } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
@@ -53,7 +54,9 @@ const HEAD_CORNER_Z = "z-[60]";
 //    (104/84는 12~13px 시절 값이라 16px에서 이름 4자 + 「반이동」 뱃지가 끊겼다.)
 // 이름은 148px을 유지하고 뱃지는 아랫줄에 둔다. 학교·학년은 압축 표기와 원문 툴팁을 사용한다.
 // 2026-09-17: 학교 88→80, 날짜 최소 30→28로 줄여 학교 오른쪽 청구액 열을 마련한다.
-const COL_W = { name: 148, school: 80, classBilled: 88, money: 68, units: 40, rate: 64, day: 28 } as const;
+// 2026-09-17: 맨 오른쪽 학생 총액 '청구·납입' 두 열은 없앴다(원장 *"이미 학교학년 옆에 청구액이 배정되어있으므로 의미없음"*) —
+//   합계 줄의 청구·납입 합과 정산액은 그대로다(같은 `money` 조회). 🔴 되살리지 말 것.
+const COL_W = { name: 148, school: 80, classBilled: 88, units: 40, rate: 64, day: 28 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -77,8 +80,8 @@ export type MatrixGroup = {
   workerSource?: "report" | "attendance" | null;
   /**
    * "8/10부터 담임" — 그 날짜 **이전 칸이 왜 값에서 빠졌는지** 밝힌다(2026-08-19).
-   * 담임은 반 단위 속성이라 시간 축이 없어 인계 전 기록까지 새 담임 표에 잡혔다. 이제 값에서 빼되
-   * 빗금으로 남기는데, 표식이 없으면 "왜 8월 초가 비었지"가 된다. null이면 종전과 같은 표기.
+   * 담임은 반 단위 속성이라 시간 축이 없어 인계 전 기록까지 새 담임 표에 잡혔다. 이제 그 날짜는 그리지 않는데
+   * (2026-09-17 — 그전엔 빗금), 표식이 없으면 "왜 8월 초가 비었지"가 된다. null이면 종전과 같은 표기.
    */
   sinceLabel?: string | null;
 };
@@ -118,9 +121,19 @@ export function buildGridSource(
    *    같은 칸이 반별 보기에선 그대로 입력 가능하다(#103: 되돌릴 문을 아예 막지는 않는다).
    */
   // 값 = 막는 사유 — `"seat"`는 자리(JJ·랩실) 기록뿐인 칸(사유 문장이 다르다, 원장 2026-09-12), true는 그 밖.
-  const notMine: Record<string, true | "seat"> = {};
+  // `"day"` = 그 강사가 이 반을 수업하지 않는 날 · `"none"` = 수업하는 날인데 제 교시 기록 없이 남의 기록만 있는 칸
+  // (강사 전체 보기, 원장 2026-09-17 *"담당하는 날만 표시"* — 판정은 조회 `ownDates`·`noOwnRecord`).
+  const notMine: Record<string, NotMineReason> = {};
   for (const g of groups) {
+    const ownDates = g.matrix.ownDates ? new Set(g.matrix.ownDates) : null;
     for (const s of g.matrix.students) {
+      if (ownDates) {
+        for (const date of cols) {
+          const key = cellKey(rowKey(g.classId, s.id), date);
+          if (!ownDates.has(date)) notMine[key] = "day";
+          else if (g.matrix.noOwnRecord?.[s.id]?.[date]) notMine[key] = "none";
+        }
+      }
       const marks = g.matrix.marks[s.id] ?? {};
       const units = g.matrix.units[s.id] ?? {};
       const slots = g.matrix.slots[s.id] ?? {};
@@ -211,8 +224,19 @@ export function MatrixTable({
   const tf = (key: Parameters<typeof sheetTf>[1], vars: Record<string, string | number>) =>
     sheetTf(lang, key, vars);
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
+  // 강사 전체 보기의 그리는 날 합집합(`ownDates`) — 반별 보기는 null(요일로 칠한다, 종전).
+  const ownDateUnion = groups.some((g) => g.matrix.ownDates)
+    ? new Set(
+        groups.flatMap((g) =>
+          (g.matrix.ownDates ?? []).filter((date) => {
+            const day = days.find((x) => x.date === date);
+            return !!day && g.matrix.classDows.includes(day.dow);
+          }),
+        ),
+      )
+    : null;
   const showClassBilled = classBilledAmounts !== undefined;
-  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (money ? 2 : 0);
+  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
   const tierMissingIds = new Set(
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
@@ -238,7 +262,6 @@ export function MatrixTable({
     COL_W.school +
     (showClassBilled ? COL_W.classBilled : 0) +
     days.length * COL_W.day +
-    (money ? COL_W.money * 2 : 0) +
     COL_W.units +
     COL_W.rate;
 
@@ -256,12 +279,6 @@ export function MatrixTable({
           {days.map((d) => (
             <col key={d.date} />
           ))}
-          {money ? (
-            <>
-              <col style={{ width: COL_W.money }} />
-              <col style={{ width: COL_W.money }} />
-            </>
-          ) : null}
           <col style={{ width: COL_W.units }} />
           <col style={{ width: COL_W.rate }} />
         </colgroup>
@@ -301,7 +318,9 @@ export function MatrixTable({
                 );
               }
               const holiday = holidays[d.date];
-              const isClassDay = classDows.has(d.dow) && !holiday;
+              // 강사 전체 보기는 **그 강사가 수업하는 날**만 수업요일로 칠한다(원장 2026-09-17) — 반 요일 합집합이면
+              // 안 가르치는 요일 머리까지 민트가 되어 본문(빈 칸)과 어긋난다.
+              const isClassDay = (ownDateUnion ? ownDateUnion.has(d.date) : classDows.has(d.dow)) && !holiday;
               // 배경 = 오늘 > 수업요일(민트) > 주말·휴일(회색) > 수업 없는 평일(흰색). 본문 셀과 같은 DAY_TONE.
               // 글자색 = 일요일·공휴일이면 빨강(달력 관행).
               // 🔴 휴일은 주말보다 **먼저** 본다(2026-09-07 "셀을 구분") — 뒤에 두면 토요일 휴일이
@@ -337,19 +356,6 @@ export function MatrixTable({
                 </th>
               );
             })}
-            {money ? (
-              <>
-                <th
-                  className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-l px-2 py-2 text-right whitespace-nowrap`}
-                  title={t("att.col.billedTitle")}
-                >
-                  <span className="micro">{t("att.col.billed")}</span>
-                </th>
-                <th className={`bg-bg-soft sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} px-2 py-2 text-center whitespace-nowrap`}>
-                  <span className="micro">{t("att.col.paid")}</span>
-                </th>
-              </>
-            ) : null}
             {/* 폰에서는 합계 열의 가로 고정을 푼다 — 이름·우측 합계가 날짜 칸 전체를 덮어 터치할 수 없었다. */}
             {/* 시수 합 — 소비 상태(출석·지각·조퇴·보강) 셀의 배수 합(기본 1). 구 출석부 '합계' 관행. */}
             <th
@@ -382,7 +388,6 @@ export function MatrixTable({
                     days={days}
                     holidays={holidays}
                     classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
-                    money={money ? money.byStudent[s.id] ?? null : undefined}
                     lockBefore={lockBefore}
                     classLabel={g.className}
                     tierMissing={tierMissingIds.has(s.id)}
@@ -405,7 +410,6 @@ export function MatrixTable({
                 days={days}
                 holidays={holidays}
                 classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
-                money={money ? money.byStudent[s.id] ?? null : undefined}
                 lockBefore={lockBefore}
                 classLabel={g.className}
                 tierMissing={tierMissingIds.has(s.id)}

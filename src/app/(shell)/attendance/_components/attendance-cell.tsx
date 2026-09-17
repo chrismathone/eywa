@@ -111,11 +111,12 @@ export function AttendanceCell({
   /** 수기 기록이 아니라 수업보고서에서 파생한 값 — 툴팁에 출처 표시. */
   derived?: boolean;
   /**
-   * 이 칸을 왜 못 고치는가 — `"past"`(수정 기간 7일 경과) · `"notMine"`(이 표의 몫이 아닌 빗금 칸).
+   * 이 칸을 왜 못 고치는가 — `"past"`(수정 기간 7일 경과) · `"notMine"`(이 표의 몫이 아닌 빗금 칸) · `"seatOnly"`(자리 기록뿐) ·
+   * `"notOwnDay"`(강사 보기 — 그 강사가 수업하지 않는 날) · `"noOwnRecord"`(수업하는 날인데 제 교시 기록 없이 남의 기록만, 원장 2026-09-17).
    * 🔴 **문장이 아니라 사유 코드**다. 문장(157B)을 서버가 칸마다 만들어 내려보내면 잠긴 칸 수천 개가
    *    그대로 RSC 페이로드 곱이 된다(강사 전체 보기 실측 1MB대) — 표시는 클라에서 편다.
    */
-  lockedReason?: "past" | "notMine" | "seatOnly" | null;
+  lockedReason?: "past" | "notMine" | "seatOnly" | "notOwnDay" | "noOwnRecord" | null;
   /**
    * 그날 교시가 **둘 이상**일 때만 오는 교시별 기록(0196a) — 숫자(합)·줄무늬·툴팁의 근거.
    * 대부분의 칸은 undefined라 종전과 완전히 같이 그려진다.
@@ -194,6 +195,10 @@ export function AttendanceCell({
       ? (ctx?.lockNoteOf(sessionDate) ?? null)
       : lockedReason === "seatOnly"
         ? t("att.lock.seatOnly")
+        : lockedReason === "notOwnDay"
+          ? t("att.lock.notOwnDay")
+          : lockedReason === "noOwnRecord"
+            ? t("att.lock.noOwnRecord")
         : lockedReason === "notMine"
           ? NOT_MINE_MESSAGE
           : null;

@@ -299,7 +299,7 @@ export function ownsAttendanceSlot(input: {
    *
    * 🔴 원장 제보 2026-08-19: *"김주현 선생님이 출결한것도 아닌데 보이는것도 같이 수정해야겠네."*
    *    `classes.teacher_id`는 **현재** 담임이라 시간 축이 없다 — 인계 이전(전임이 넣은) 기록까지
-   *    새 담임 몫으로 잡혔다. 그래서 이 경계 이전 칸은 값에서 뺀다(표시는 빗금으로 남는다).
+   *    새 담임 몫으로 잡혔다. 그래서 이 경계 이전 칸은 값에서 뺀다(월간 강사 보기는 그 날짜 자체를 안 그린다 — `teachesClassOn`).
    * 🔴 **교시(slotStart) 유무보다 먼저 본다.** day-level 기록(수학이 사실상 전부)은 아래에서 통과시키는데,
    *    문제의 그 27행이 전부 day-level이라 나중에 보면 아무 효과가 없다.
    * ⚠️ **교시 담당으로 잡힌 반에는 넘기지 말 것** — 그 사람은 그날 실제로 그 교시를 가르쳤다.
@@ -346,6 +346,56 @@ export function ownsAttendanceSlot(input: {
       slotStart: input.slotStart,
     }).teacherId === input.scopeTeacherId
   );
+}
+
+/**
+ * **강사 출석부(렌즈)가 이 날짜를 그리는가** — 그 강사가 그날 이 반에서 수업하는 날인가.
+ *
+ * 🔴 원장 2026-09-17: *"그냥 출석부에 담당하는 날만 표시하면 된다. 담당하지 않는 날은 표시할 이유도 없지."* ·
+ *    *"말그대로 내가 수업한 학생의 출석만 보고 싶은것."* — 그전엔 안 가르치는 요일도 남의 기록이 빗금+흐린 값으로 섰다
+ *    (추민아 선생님 보기의 MED b 화·수 = 송지혜 선생님 교시).
+ *
+ * 판정(교시 귀속 `resolveTaughtBy`와 같은 규칙):
+ *   ① 그날 유효한 **사람 교시**(자리 LAB·JJ 제외) 중 하나라도 그 강사에게 귀속되면 → 그리는 날.
+ *   ② 그날 유효한 교시가 **하나도 없는 날**(수업 없는 요일·시간표 밖 보강) → **담임만** 그린다
+ *      (`resolveTaughtBy`의 "후보 없음 → 담임"과 같은 결 — 수학 담임 화면은 이 규칙으로 한 칸도 안 바뀐다, 실측 2026-09-17).
+ *   ②' **자리(LAB·JJ)만 도는 날**은 아무도 그리지 않는다 — 그날은 사람이 가르치는 수업이 없다(오늘 출결 처리 현황
+ *      `teacher-processing.ts`도 그날 담임을 '수업 안 함'으로 센다 — 두 화면이 "그날 수업하나"를 다르게 말하지 않게).
+ *      실측(8/1~9/17): 그런 날의 기록 102건은 전부 자리 기록이라 어느 강사의 값도 아니었다(적대 리뷰 2026-09-17).
+ *   ③ 담임이 되기 전 날(`homeroomSince`)은 그리지 않는다(`ownsAttendanceSlot`과 같은 경계).
+ * ⚠️ 반별 보기(scope 없음)는 전부 그린다. ⚠️ 교시 담당이 모호(한 교시에 담당 둘)하면 둘 다 안 그린다 — 지어내지 않는다.
+ */
+export function teachesClassOn(input: {
+  scopeTeacherId: string | null;
+  homeroomTeacherId: string | null;
+  slots: readonly AxisSlot[];
+  date: string;
+  homeroomSince?: string | null;
+}): boolean {
+  if (!input.scopeTeacherId) return true;
+  if (input.homeroomSince && input.date < input.homeroomSince) return false;
+  const dow = axisDowOf(input.date);
+  if (!dow) return false;
+  const starts = new Set<string>();
+  let liveAny = false;
+  for (const s of input.slots) {
+    if (s.dayOfWeek !== dow || !slotLiveOn(s, input.date)) continue;
+    liveAny = true;
+    if (isSeatSlot(s)) continue;
+    const start = normalizeAxisTime(s.startTime);
+    if (start) starts.add(start);
+  }
+  if (!liveAny) return input.homeroomTeacherId === input.scopeTeacherId;
+  for (const start of starts) {
+    const who = resolveTaughtBy({
+      homeroomTeacherId: input.homeroomTeacherId,
+      slots: input.slots,
+      date: input.date,
+      slotStart: start,
+    });
+    if (who.teacherId === input.scopeTeacherId) return true;
+  }
+  return false;
 }
 
 /** 강사 렌즈에서 교시 한 칸의 몫 — 이 표의 주인 · 자리(JJ·랩실) · 그 밖(다른 선생님 교시 등). */

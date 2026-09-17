@@ -721,8 +721,8 @@ export default async function AttendancePage({
           statsCount.recorded === 0 && !allGroups.some((g) => g.matrix.derivedActive) ? (
             <p key="empty" className={noticeClass}>
               {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
-              {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 빗금으로
-                  화면에 보이는데 여기서 그냥 "기록이 없다"고 하면 두 문장이 서로를 부정한다. */}
+              {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 이 보기에 안 보일 뿐
+                  반에는 있을 수 있어(2026-09-17부터 빗금도 없다) 그냥 "기록이 없다"고 하면 반별 보기와 서로를 부정한다. */}
               {sheetT(
                 lang,
                 mode === "teacher" ? "att.notice.empty.teacherPre" : "att.notice.empty.classPre",
@@ -1043,11 +1043,9 @@ export default async function AttendancePage({
               *"휴일 표시 제거"*로 걷어냈다. 휴일은 이제 **셀 색(붉은 계열) + 헤더 빨간 날짜 + 날짜 툴팁**으로
               읽히고, 그 색의 뜻은 이 범례가 말한다(`att.legend.holiday`).
               🔴 휴일 이름 줄을 되살리지 말 것 — 되살리려면 원장 확인이 먼저다.
-              빗금 칩은 강사 전체 보기(`mode === "teacher"`)에서만 — 반별 보기 격자엔 빗금이 안 나온다.
               오늘 칩은 격자에 **오늘 열이 있을 때만**(지난·다음 달엔 남색 머리가 없다) — 표와 같은 `visibleDays`로 판정. */}
           <AttendanceLegend
             lang={lang}
-            showGhost={mode === "teacher"}
             showToday={visibleDays.some((d) => d.isToday)}
           />
           <MatrixTable
