@@ -8,11 +8,8 @@ import {
   type GridRowMode,
   type WeekGridRow,
 } from "@/features/students/lib/week-grid";
+import { tableContentHeight } from "@/features/students/lib/week-grid-row-height";
 import { StudentPeriodGrid } from "./student-period-grid";
-
-// 교시 1칸 기준 높이 — 과목 탭 중 **실제로 그리는 행이 가장 많은 표** 기준 총높이. 행이 적은 과목은 이
-// 총높이에 맞춰 행 높이를 늘려 채운다 → 탭을 바꿔도 카드 높이가 안 흔들림(사용자 요청 2026-07-08).
-const BASE_ROW_H = 46;
 
 /**
  * 학생 개인 주간 시간표(읽기전용) — 수업 탭 상단. 과목별 탭(수학/영어/…)으로 그 과목을 실제 시간표처럼
@@ -43,16 +40,16 @@ export function StudentWeekGrid({
   const extra = [...new Set(withSlots.map((r) => r.subject))].filter((s) => !inSettings.includes(s));
   const subjectKeys = [...inSettings, ...extra];
   const modeOf = (s: string): GridRowMode => (usedRowSubjects.includes(s) ? "used" : "all");
-  // 탭 전환 시 높이 고정 — 각 과목 표가 **실제로 그리는** 행 수(평일·주말) 중 최대 기준.
-  // ⚠️ 교시표 길이로 재지 말 것 — '수업 있는 교시만' 과목(영어)은 15줄 표에서 몇 줄만 그려, 표 길이로 잡으면
-  //    다른 과목의 행이 까닭 없이 늘어난다(표를 두 번 짓지만 학생 한 명 분이라 비용은 무시할 만하다).
-  const shownRowCounts = subjectKeys.flatMap((s) =>
+  // 탭 전환 시 높이 고정 — 각 과목 표의 **내용 높이**(칸 줄 수) 중 최댓값. 행이 적은 과목은 이
+  // 총높이에 맞춰 행을 늘려 채운다(2026-07-08). ⚠️ 행수×고정px로 재지 말 것 — v5 xs=14px 세 줄이
+  // 46px에 안 들어가 옆 칸으로 흘렀다. 표를 두 번 짓지만 학생 한 명 분이라 비용은 무시할 만하다.
+  const tableHeights = subjectKeys.flatMap((s) =>
     [false, true]
       .map((weekend) => buildSubjectPeriodGrid(rows, s, weekend, config, modeOf(s)))
       .filter((g) => g.days.length > 0)
-      .map((g) => g.rows.length),
+      .map(tableContentHeight),
   );
-  const targetTableH = BASE_ROW_H * Math.max(1, ...shownRowCounts);
+  const targetTableH = Math.max(1, ...tableHeights);
 
   // 슬롯 있는 행이 없으면 그리드 숨김(빈 판 방지).
   if (withSlots.length === 0) return null;
