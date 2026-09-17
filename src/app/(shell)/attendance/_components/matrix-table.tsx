@@ -43,20 +43,18 @@ const HEAD_CORNER_Z = "z-[60]";
  * `table-fixed` + `<colgroup>`으로 폭을 내용에서 떼어내면 접든 펼치든 같은 자리에 선다.
  *
  * ⚠️ 날짜 칸만 폭을 **안 준다**(auto) — 남는 가로 폭을 날짜 칸들이 똑같이 나눠 갖는다. 표에 `minWidth`를
- *    걸어 두므로 아무리 좁아져도 한 칸 30px 아래로는 안 내려간다(좁으면 가로 스크롤).
+ *    걸어 두므로 아무리 좁아져도 한 칸 28px 아래로는 안 내려간다(좁으면 가로 스크롤).
  * ⚠️ 시수·출석률에 폭을 주는 건 sticky `right-[64px]`이 **출석률 폭과 짝**이기 때문 — 이 값이 늘면 두 열이 겹친다.
  * ⚠️ 폭을 넘는 글자는 잘리고 `title`에 원문이 남는다(`truncate`) — 넓히면 그만큼 날짜 칸이 줄어든다.
  */
 // 학교·학년은 압축 표기("경명여중2", school-grade.ts) **한 열** — 두 열이던 것을 합쳐 날짜 칸에 폭을
 // 돌려줬다(원장 2026-08-10). 되돌려 나누지 말 것.
-// 컴팩트(원장 2026-08-10 "최대한 컴팩트. 날짜열은 현재가 아주 좋으니 건드리지말것") — 날짜 칸은 그대로,
-// 고정 열만 조인다. ⚠️ rate(64)는 시수 열의 sticky right-[64px]와 짝이라 함께 고치지 않으면 겹친다.
+// rate(64)는 시수 열의 sticky right-[64px]와 짝이라 함께 고치지 않으면 겹친다.
 // ⚠️ 폭은 **타입 스케일 v5(2026-09-08)** 기준 실측이다 — 글자 크기를 바꾸면 이 표도 함께 볼 것.
 //    (104/84는 12~13px 시절 값이라 16px에서 이름 4자 + 「반이동」 뱃지가 끊겼다.)
-// ⚠️ 2026-09-14: 이름 132 → **148**, 학교 96 → **88**(원장 *"이름이 짤리는건 최악. 학교학년 열너비를
-//    줄이던지 이름 너비를 더 주고"*). 같은 날 뱃지를 아랫줄로 내려 첫 줄은 이름이 열을 통째로 쓴다.
-//    학교는 압축 표기라 88px에 `대구일중2`(5자 ≈ 70px + 좌우 여백 12px)가 들어간다. 날짜 칸 몫은 4px만 준다.
-const COL_W = { name: 148, school: 88, money: 68, units: 40, rate: 64, day: 30 } as const;
+// 이름은 148px을 유지하고 뱃지는 아랫줄에 둔다. 학교·학년은 압축 표기와 원문 툴팁을 사용한다.
+// 2026-09-17: 학교 88→80, 날짜 최소 30→28로 줄여 학교 오른쪽 청구액 열을 마련한다.
+const COL_W = { name: 148, school: 80, classBilled: 88, money: 68, units: 40, rate: 64, day: 28 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -188,6 +186,7 @@ export function MatrixTable({
   days,
   holidays,
   showGroups,
+  classBilledAmounts,
   money,
   moneyNote,
   lockBefore,
@@ -202,6 +201,8 @@ export function MatrixTable({
   holidays: Record<string, string>;
   /** 반 머리행·총합 행 표시(강사 전체 보기). */
   showGroups: boolean;
+  /** 학생×반별 청구액(회차 확정과 동일). 빈 객체도 열을 표시하고 미매칭은 '미확정'. */
+  classBilledAmounts?: Record<string, number>;
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
   /**
@@ -222,7 +223,8 @@ export function MatrixTable({
   const tf = (key: Parameters<typeof sheetTf>[1], vars: Record<string, string | number>) =>
     sheetTf(lang, key, vars);
   const classDows = new Set(groups.flatMap((g) => g.matrix.classDows));
-  const colSpan = days.length + 4 + (money ? 2 : 0);
+  const showClassBilled = classBilledAmounts !== undefined;
+  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (money ? 2 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
   const tierMissingIds = new Set(
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
@@ -246,6 +248,7 @@ export function MatrixTable({
   const tableMinWidth =
     COL_W.name +
     COL_W.school +
+    (showClassBilled ? COL_W.classBilled : 0) +
     days.length * COL_W.day +
     (money ? COL_W.money * 2 : 0) +
     COL_W.units +
@@ -261,6 +264,7 @@ export function MatrixTable({
         <colgroup>
           <col style={{ width: COL_W.name }} />
           <col style={{ width: COL_W.school }} />
+          {showClassBilled ? <col style={{ width: COL_W.classBilled }} /> : null}
           {days.map((d) => (
             <col key={d.date} />
           ))}
@@ -288,6 +292,14 @@ export function MatrixTable({
             >
               <span className="micro">{t("att.col.schoolGrade")}</span>
             </th>
+            {showClassBilled ? (
+              <th
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+                title={t("att.col.classBilledTitle")}
+              >
+                <span className="micro">{t("att.col.classBilled")}</span>
+              </th>
+            ) : null}
             {days.map((d) => {
               // 그 달에 없는 날 — 빈 여백(번호·요일 없음). 폭은 다른 날 칸과 동일(min-w)로 고정.
               if (d.placeholder) {
@@ -295,7 +307,7 @@ export function MatrixTable({
                 return (
                   <th
                     key={d.date}
-                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[30px] border-r`}
+                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[28px] border-r`}
                     aria-hidden
                   />
                 );
@@ -330,7 +342,7 @@ export function MatrixTable({
                 <th
                   key={d.date}
                   title={holiday ?? undefined}
-                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[30px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
+                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[28px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
@@ -381,6 +393,7 @@ export function MatrixTable({
                     matrix={g.matrix}
                     days={days}
                     holidays={holidays}
+                    classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
                     money={money ? money.byStudent[s.id] ?? null : undefined}
                     lockBefore={lockBefore}
                     classLabel={g.className}
@@ -403,6 +416,7 @@ export function MatrixTable({
                 matrix={g.matrix}
                 days={days}
                 holidays={holidays}
+                classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
                 money={money ? money.byStudent[s.id] ?? null : undefined}
                 lockBefore={lockBefore}
                 classLabel={g.className}

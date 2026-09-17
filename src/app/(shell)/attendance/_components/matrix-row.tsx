@@ -22,6 +22,7 @@ export function MatrixRow({
   matrix,
   days,
   holidays,
+  classBilled,
   money,
   lockBefore,
   classLabel,
@@ -39,6 +40,8 @@ export function MatrixRow({
   matrix: AttendanceMatrix;
   days: AttendanceMatrix["days"];
   holidays: Record<string, string>;
+  /** undefined = 열 없음, null = 미확정, 0 = 매칭된 0원. */
+  classBilled?: number | null;
   /** 원장 전용 금액 열(강사 전체 보기). undefined = 열 자체 없음. */
   money?: StudentMoney | null;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
@@ -110,7 +113,7 @@ export function MatrixRow({
       </td>
       {/* 학교·학년 = 표시 표준 압축("경명여중2", school-grade.ts) — 두 열로 나누던 것을 합쳐 날짜 칸에
           폭을 돌려준다(원장 2026-08-10). 원문(학교·학년 따로)은 title에 남긴다. */}
-      <td className="border-line text-text-dim border-b border-r px-1.5 py-1 text-xs">
+      <td className="border-line text-text-dim border-b border-r px-1 py-1 text-xs">
         <span
           className="block truncate"
           title={[student.school, student.grade].filter(Boolean).join(" · ") || undefined}
@@ -127,10 +130,17 @@ export function MatrixRow({
           </span>
         ) : null}
       </td>
+      {classBilled !== undefined ? (
+        <td className="border-line num border-b border-r px-1 py-1 text-right text-xs whitespace-nowrap">
+          {classBilled === null ? (
+            <span className="text-text-faint">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
+          ) : formatMoney(classBilled)}
+        </td>
+      ) : null}
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
         if (d.placeholder) {
-          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[30px] border-b border-r" aria-hidden />;
+          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[28px] border-b border-r" aria-hidden />;
         }
         const holiday = holidays[d.date];
         // 그 날 이 반 소속이 아니었나 — 8월 5일에 그만둔 학생의 나머지 26칸을 "수업하는 날"로
@@ -152,7 +162,7 @@ export function MatrixRow({
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
         // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
         return (
-          <td key={d.date} className="border-line relative min-w-[30px] border-b border-r p-0 text-center align-middle">
+          <td key={d.date} className="border-line relative min-w-[28px] border-b border-r p-0 text-center align-middle">
             <AttendanceCell
               studentId={student.id}
               classId={classId}

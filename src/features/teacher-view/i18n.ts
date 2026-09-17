@@ -1337,6 +1337,12 @@ export const SHEET_DICT = {
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
   "att.col.schoolGrade": { ko: "학교·학년", en: "School · grade" },
+  "att.col.classBilled": { ko: "청구액", en: "Billed" },
+  "att.col.classBilledTitle": {
+    ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
+    en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
+  },
+  "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
   "att.col.billed": { ko: "청구", en: "Billed" },
   "att.col.paid": { ko: "납입", en: "Paid" },
   "att.col.units": { ko: "시수", en: "Sessions" },

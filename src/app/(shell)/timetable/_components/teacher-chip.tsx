@@ -8,6 +8,8 @@ import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { formatSchoolGrade } from "@/features/exports/math-timetable/student-format";
 import { readableTextColor } from "@/lib/color-utils";
 import type { ClassDetailQuick } from "./class-cell";
+
+export type TeacherCellColor = { bg: string; text: string };
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { useClassVisible, useSearchTone } from "./search-context";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
@@ -24,7 +26,16 @@ function metaLabel(school: string | null | undefined, grade: string | null | und
   return sg === "-" ? "" : sg;
 }
 
-export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; offAxisNote?: string | null }) {
+export function TeacherChip({
+  slot,
+  offAxisNote,
+  teacherColor,
+}: {
+  slot: ClassDetailQuick;
+  offAxisNote?: string | null;
+  /** 강사뷰에서 담임/교시 담당 색을 셀 배경으로 칠한다. 자리(LAB/JJ)는 호출부에서 넘기지 않는다. */
+  teacherColor?: TeacherCellColor | null;
+}) {
   const [open, setOpen] = useState(false);
   const subjects = useSubjectMaps();
   // 학생 검색 — 걸린 반의 칩만 남는다. ⚠️ 훅은 조건 없이 전부 부른 **뒤에** 내보낸다(훅 규칙).
@@ -32,7 +43,9 @@ export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; off
   //    축까지 접으면 "몇 시 자리인지"가 무너져 검색 결과의 위치를 못 읽는다.
   const visible = useClassVisible([slot.classId ?? slot.id]);
   const color = SUBJECT_SOFT[subjects.colorOf(slot.subject)];
-  const headerStyle = slot.classBgColor
+  const headerStyle = teacherColor
+    ? { background: teacherColor.bg, color: teacherColor.text }
+    : slot.classBgColor
     ? { background: slot.classBgColor, color: slot.classTextColor ?? readableTextColor(slot.classBgColor) }
     : undefined;
   /**
@@ -89,7 +102,7 @@ export function TeacherChip({ slot, offAxisNote }: { slot: ClassDetailQuick; off
           type="button"
           onClick={() => setOpen((o) => !o)}
           title={open ? "반명으로" : "학생 명단"}
-          className={`block w-full cursor-pointer px-1.5 py-1 text-left transition hover:brightness-95 ${slot.classBgColor ? "" : color} ${
+          className={`block w-full cursor-pointer px-1.5 py-1 text-left transition hover:brightness-95 ${teacherColor || slot.classBgColor ? "" : color} ${
             open ? "border-line shrink-0 border-b" : "min-h-0 flex-1 overflow-hidden"
           }`}
           style={headerStyle}
