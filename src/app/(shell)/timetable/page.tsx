@@ -193,7 +193,7 @@ export default async function TimetablePage({
   // 이동 적용일 — 미래 주면 그 주 월요일에 예약, 이번 주면 오늘 즉시(undefined→RPC current_date).
   const effectiveDate = isFutureWeek ? week : undefined;
 
-  // 강사(또는 겸직-강사뷰)는 본인 담당 반만(intra-tenant PII 누수 차단). master/직원은 전체.
+  // 강사(또는 겸직-강사뷰)는 담임 반 ∪ 그 주에 교시 하나라도 맡은 반만(intra-tenant PII 누수 차단, 원장 2026-09-17). master/직원은 전체.
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;

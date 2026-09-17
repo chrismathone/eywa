@@ -24,6 +24,8 @@ import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
 // 보고서 과목 판정 규칙은 RPC(0150a) SQL에 내장 — 규칙 문서·테스트는 lib/report-subject.ts가 담당(동기 유지).
 import { compareStudentLines } from "../lib/student-sort";
+import { teachingClassIdsInWeek } from "../lib/teacher-classes";
+import { reportError } from "@/lib/observability/report-error";
 import { pairScheduledMoves, type ScheduledMoveRow } from "../lib/scheduled-move";
 import type { TeacherColorMap } from "../lib/class-grid";
 import {
@@ -551,8 +553,45 @@ function latestReportsCached(tenantId: string, studentIds: string[]): Promise<un
   )();
 }
 
+/**
+ * 강사 스코프 시간표 재료 — 담임 반(전역 `getTeacherScope`, 불변) + 내가 교시 담당(FK)인 배치 행 id(그 주 앞뒤로 넉넉히).
+ * 어느 반이 서는지는 [`teachingClassIdsInWeek`](../lib/teacher-classes.ts)가 그 주 슬롯과 겹쳐 정한다.
+ * 🔴 교시 담당 조회가 실패하면 **담임 반만**(종전 동작) — 넓히는 쪽 실패로 화면이 죽지 않게, 좁은 쪽으로 떨어진다.
+ */
+async function loadTeacherTimetableScope(
+  teacherId: string,
+  from: string,
+  to: string,
+  db?: TimetableDb,
+): Promise<{ homeroomClassIds: string[]; mySlotIds: string[] }> {
+  const supabase = db?.supabase ?? (await createClient());
+  const [{ classIds }, mySlotIds] = await Promise.all([
+    getTeacherScope(teacherId),
+    fetchAllPaged<{ id: string }>((a, b) => {
+      let q = supabase
+        .from("class_schedules")
+        .select("id")
+        .eq("teacher_id", teacherId)
+        .lte("valid_from", to)
+        .or(`valid_to.is.null,valid_to.gte.${from}`);
+      if (db) q = q.eq("tenant_id", db.tenantId); // admin 경로 — RLS 우회라 명시 격리
+      return q.order("id").range(a, b);
+    }).then(
+      (rows) => rows.map((r) => r.id),
+      (e: unknown) => {
+        // ⚠️ 담임 반이 없는 강사(원어민)는 이 실패 하나로 시간표가 통째로 빈다 — "배정 없음"과 화면에서 구별되지 않으니
+        //    로그만은 반드시 남긴다(scope로 grep, 리뷰 2026-09-17).
+        reportError(e, { scope: "timetable.teacherScope.taughtSlots", teacherId });
+        return [] as string[];
+      },
+    ),
+  ]);
+  return { homeroomClassIds: classIds, mySlotIds };
+}
+
 export async function getWeeklyScheduleWithStudents(
   // db = 세션 없는 호출(cron) 주입 — teacherId 스코핑은 세션 전제(getTeacherScope)라 db와 병용 불가.
+  // ⚠️ 함께 넘기면 담임 반(세션 조회)은 비고 교시 담당 반(db 조회)만 선다 — 지금 둘을 함께 넘기는 호출부는 없다.
   opts?: {
     referenceDate?: string;
     teacherId?: string;
@@ -575,16 +614,21 @@ export async function getWeeklyScheduleWithStudents(
 
   // skipCounts — 이 함수는 바로 아래에서 정확한 로스터를 조회하므로 근사 카운트 쿼리(전 enrollment)를
   // 생략하고, 반환 직전에 로스터 재원 수로 studentCount를 다시 채운다(같은 데이터 2회 조회 제거).
-  let slots = await fetchSlots(referenceDate, db, { skipCounts: true, futureNames: opts?.futureNames });
+  // 강사 스코프 재료는 슬롯과 독립이라 함께 띄운다(B4 — 강사 화면만 도는 왕복).
+  const [weekSlots, teacherScope] = await Promise.all([
+    fetchSlots(referenceDate, db, { skipCounts: true, futureNames: opts?.futureNames }),
+    teacherId ? loadTeacherTimetableScope(teacherId, shiftDays(referenceDate, -7), shiftDays(weekEnd, 7), db) : Promise.resolve(null),
+  ]);
+  let slots = weekSlots;
   // 과목 스코핑(선택) — 한 과목만 필요한 호출부(과목별 익스포터 등)는 classIds를 먼저 좁혀
   // 무거운 학생/수강/진도 조회량을 줄인다(전 과목 로딩 방지, B2). 필터 후 빈 결과는 아래 조기반환.
   if (subject) slots = slots.filter((s) => s.subject === subject);
-  // 강사 스코핑(intra-tenant PII) — teacher면 본인 담당 반만. 안 하면 강사가 /timetable 직타 시
-  // 전 학생 명단(이름·학교·학년·진도)이 노출된다. RLS는 테넌트만 격리하므로 앱레벨에서 좁힌다.
-  if (teacherId) {
-    const { classIds: scoped } = await getTeacherScope(teacherId);
-    if (scoped.length === 0) return [];
-    const allow = new Set(scoped);
+  // 강사 스코핑(intra-tenant PII) — teacher면 **담임 반 ∪ 그 주에 교시 하나라도 맡은 반**만(원장 2026-09-17
+  // *"'담당'뿐만 아니라 '내가 수업하는 수업' 모두"*). 안 하면 강사가 /timetable 직타 시 전 학생 명단(이름·학교·
+  // 학년·진도)이 노출된다. RLS는 테넌트만 격리하므로 앱레벨에서 좁힌다.
+  if (teacherScope) {
+    const allow = teachingClassIdsInWeek(slots, teacherScope.homeroomClassIds, teacherScope.mySlotIds);
+    if (allow.size === 0) return [];
     slots = slots.filter((s) => allow.has(s.classId));
   }
   if (slots.length === 0) return [];
