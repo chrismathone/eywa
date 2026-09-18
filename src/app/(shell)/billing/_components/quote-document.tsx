@@ -10,7 +10,13 @@ const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(Math.round(n))}원`;
 
 const CELL = "border-line border px-2 py-1.5 text-[12px]";
-const HEAD = "border-line bg-gold/15 text-foreground border px-2 py-1.5 text-[12px] font-bold text-center";
+// 머리 칸 정렬은 값 칸과 **같은 쪽**(원장 2026-09-18 *"견적서랑 지출결의서도 맞춰줘"*) — 짧은 값 가운데 · 메모·상세내용 왼쪽 ·
+// 금액 오른쪽. 정렬 유틸을 뺀 바탕(HEAD_BASE)에서 한 벌씩 만든다 — `HEAD`(text-center) 뒤에 text-right를 덧붙이면
+// 둘 중 무엇이 이기는지는 문자열 순서가 아니라 생성된 CSS 순서가 정한다([[#116]]).
+const HEAD_BASE = "border-line bg-gold/15 text-foreground border px-2 py-1.5 text-[12px] font-bold";
+const HEAD = `${HEAD_BASE} text-center`;
+const HEAD_LEFT = `${HEAD_BASE} text-left`;
+const HEAD_RIGHT = `${HEAD_BASE} text-right`;
 
 export function QuoteDocument({
   academyName,
@@ -101,8 +107,8 @@ export function QuoteDocument({
             <th className={`${HEAD} w-[30%]`}>반</th>
             <th className={`${HEAD} w-[14%]`}>요일</th>
             <th className={`${HEAD} w-[10%]`}>시수</th>
-            <th className={`${HEAD} w-[16%]`}>금액</th>
-            <th className={`${HEAD} w-[16%]`}>기타</th>
+            <th className={`${HEAD_RIGHT} w-[16%]`}>금액</th>
+            <th className={`${HEAD_LEFT} w-[16%]`}>기타</th>
           </tr>
         </thead>
         <tbody>
@@ -117,7 +123,7 @@ export function QuoteDocument({
               l.isSubtotal ? (
                 <tr key={i} className="bg-bg-soft font-bold">
                   <td className={CELL} />
-                  <td className={CELL}>{l.name} 소계</td>
+                  <td className={`${CELL} text-center`}>{l.name} 소계</td>
                   <td className={CELL} />
                   <td className={`${CELL} text-center`}>{sessionsLabel(l)}</td>
                   <td className={`${CELL} num text-right`}>{won(l.price)}</td>
@@ -125,8 +131,8 @@ export function QuoteDocument({
                 </tr>
               ) : (
                 <tr key={i}>
-                  <td className={CELL}>{[l.month, l.category].filter(Boolean).join(" ")}</td>
-                  <td className={CELL}>{l.name}</td>
+                  <td className={`${CELL} text-center`}>{[l.month, l.category].filter(Boolean).join(" ")}</td>
+                  <td className={`${CELL} text-center`}>{l.name}</td>
                   <td className={`${CELL} text-center`}>{l.days}</td>
                   {/* 🔴 학부모 종이에 **"0회"**를 찍지 않는다(원장: *"시수가 0으로 출력되면 학부모는 '?'를
                       생각할듯"*). 판정은 `sessionsLabel` 단일 소스 — 월 고정은 '월 정액', 회당은 '—'. */}
@@ -146,9 +152,9 @@ export function QuoteDocument({
           <thead>
             <tr>
               <th className={`${HEAD} w-[18%]`}>구분</th>
-              <th className={`${HEAD} w-[50%]`}>상세내용</th>
-              <th className={`${HEAD} w-[16%]`}>금액</th>
-              <th className={`${HEAD} w-[16%]`}>기타</th>
+              <th className={`${HEAD_LEFT} w-[50%]`}>상세내용</th>
+              <th className={`${HEAD_RIGHT} w-[16%]`}>금액</th>
+              <th className={`${HEAD_LEFT} w-[16%]`}>기타</th>
             </tr>
           </thead>
           <tbody>

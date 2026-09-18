@@ -15,7 +15,14 @@ import { ExpensePrintBar } from "./expense-print-bar";
 // ⚠️ 값 칸의 `px-3`은 그대로 — 좁히면 값이 답답해진다.
 const cellBase = "border-foreground/70 border py-2";
 const cell = `${cellBase} px-3`;
-const headCell = `${cellBase} bg-bg-soft px-1.5 text-center font-bold break-keep`;
+const headBase = `${cellBase} bg-bg-soft px-1.5 font-bold break-keep`;
+const headCell = `${headBase} text-center`;
+// 항목 표 머리는 값 칸과 **같은 쪽**(원장 2026-09-18 *"견적서랑 지출결의서도 맞춰줘"*) — 사용내역(글) 왼쪽 · 금액 오른쪽.
+// 정렬 유틸을 뺀 바탕에서 만든다(headCell 뒤에 text-right를 덧붙이면 승자를 생성된 CSS 순서가 정한다 — 위 주석).
+// 여백도 값 칸(px-3)과 같게 — 왼쪽·오른쪽 정렬은 여백이 곧 글자 위치다. 단 `총액(VAT포함)`은 칸이 좁아 px-1.5 그대로(넘친다).
+const headLeft = `${cellBase} bg-bg-soft px-3 text-left font-bold break-keep`;
+const headRight = `${cellBase} bg-bg-soft px-3 text-right font-bold break-keep`;
+const headRightTight = `${headBase} text-right`;
 // 결재란은 폭이 자동인 별도 표라(퍼센트 폭 아님) 라벨이 접힐 일이 없다 — 옛 headCell 문자열을 **그대로** 뗀 것이다.
 // 🔴 한 글자도 바꾸지 말 것: 호출부가 `px-5 py-0.5`·`px-2`로 덮어쓰는데, 충돌하는 Tailwind 유틸의 승자는
 //    클래스 문자열 순서가 아니라 **생성된 CSS 순서**라 값을 빼면 승자가 조용히 뒤바뀐다
@@ -140,10 +147,10 @@ export function ExpenseDocument({ expense }: { expense: ExpenseRow }) {
               <th className={headCell}>No.</th>
               <th className={headCell}>용도</th>
               <th className={headCell}>거래처</th>
-              <th className={headCell}>사용내역</th>
+              <th className={headLeft}>사용내역</th>
               <th className={headCell}>수량</th>
-              <th className={headCell}>금액</th>
-              <th className={headCell}>총액(VAT포함)</th>
+              <th className={headRight}>금액</th>
+              <th className={headRightTight}>총액(VAT포함)</th>
             </tr>
           </thead>
           <tbody>
