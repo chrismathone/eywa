@@ -177,16 +177,16 @@ describe("전체 목표 저장 경계", () => {
   });
   it("다른 화면에서 먼저 만든 목표를 새 설정으로 덮어쓰지 않는다", async () => {
     mocks.save.mockResolvedValue({ error: { code: "23505" } });
-    const result = await saveMathLearningGoals({ ...input, track: "regular", blockCount: 24, endDate: "2026-10-31" });
+    const result = await saveMathLearningGoals({ ...input, track: "regular", blockCount: 12, endDate: "2026-10-31" });
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining("목표 확장") });
     expect(mocks.revalidate).not.toHaveBeenCalled();
     expect(mocks.log).not.toHaveBeenCalled();
   });
-  it("새 정규 계획은 24블록으로 저장하고 기존 목표 표를 덮지 않는다", async () => {
-    expect((await saveMathLearningGoals({ ...input, track: "regular", blockCount: 24, endDate: "2026-10-31" })).ok).toBe(true);
+  it("새 정규 계획은 12블록으로 저장하고 기존 목표 표를 덮지 않는다", async () => {
+    expect((await saveMathLearningGoals({ ...input, track: "regular", blockCount: 12, endDate: "2026-10-31" })).ok).toBe(true);
     expect(mocks.from).toHaveBeenCalledWith("math_learning_track_goals");
     expect(mocks.from).not.toHaveBeenCalledWith("math_learning_goals");
-    expect(mocks.save.mock.calls[0][0][0]).toMatchObject({ track: "regular", block_count: 24 });
+    expect(mocks.save.mock.calls[0][0][0]).toMatchObject({ track: "regular", block_count: 12 });
   });
   it("정규 반에는 복습 목표를 저장하지 않는다", async () => {
     expect((await saveMathLearningGoals({ ...input, track: "supplement", blockCount: 4 })).ok).toBe(false);
@@ -297,6 +297,14 @@ describe("목표 확장 저장", () => {
     expect(await saveMathLearningGoals(value)).toEqual({ ok: true });
     expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ end_study_grade: "중2", milestones: value.milestones }));
     expect(filters).toContainEqual(["math_learning_track_goals", "updated_at", value.updatedAt]);
+  });
+  it("24블록 단위로 저장된 이전 목표도 12블록 단위로 확장한다", async () => {
+    const value = extension();
+    const existing = rows.math_learning_track_goals[0] as { block_count: number; milestones: { blockCount: number }[] };
+    existing.block_count *= 2;
+    existing.milestones = existing.milestones.map((stop) => ({ ...stop, blockCount: stop.blockCount * 2 }));
+    expect(await saveMathLearningGoals(value)).toEqual({ ok: true });
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ block_count: value.blockCount, milestones: value.milestones }));
   });
   it("확장을 가장해 이전 도착점을 바꾸면 저장하지 않는다", async () => {
     const value = extension();

@@ -10,6 +10,8 @@ import {
   learningGoalError,
   learningStatusLabel,
   recordBlockIndex,
+  normalizeLearningGoal,
+  planLearningGoal,
   type LearningContext,
   type LearningGoal,
 } from "./learning-plan";
@@ -41,10 +43,10 @@ const record = (date: string, index: number) => ({
   textbook: null,
 });
 
-describe("반별 정규 24블록과 복습 심화 4블록", () => {
+describe("반별 정규 12블록과 복습 심화 4블록", () => {
   const topics = curriculumForGradeSemester("중1", 1).flatMap((unit) => unit.lessons);
   const regular: LearningGoal = {
-    ...goal, track: "regular", blockCount: 24,
+    ...goal, track: "regular", blockCount: 12,
     startBlock: topics[0], endBlock: topics.at(-1)!,
     ...standardGoalDates("2026-09", "regular"),
   };
@@ -59,33 +61,33 @@ describe("반별 정규 24블록과 복습 심화 4블록", () => {
     startBlock: topics[0], endBlock: topics[0],
   };
 
-  it("한 학기는 기존 단원 수와 무관하게 24블록이며 원본 단원은 보존한다", () => {
-    expect(learningBlocks(regular)).toHaveLength(24);
+  it("한 학기는 기존 단원 수와 무관하게 12블록이며 원본 단원은 보존한다", () => {
+    expect(learningBlocks(regular)).toHaveLength(12);
     expect(goalBlocks(regular)).toEqual(topics);
     expect(learningBlocks(regular)[0]).toContain(topics[0]);
     expect(learningBlocks(regular).at(-1)).toContain(topics.at(-1));
     expect(regular.endDate).toBe("2026-11-30");
     expect(standardGoalDates("2026-12", "regular").endDate).toBe("2027-02-28");
   });
-  it("휴강과 달별 수업 횟수가 달라도 월 목표는 8·16·24블록이다", () => {
+  it("휴강과 달별 수업 횟수가 달라도 월 목표는 4·8·12블록이다", () => {
     const days = learningDays(regular, mixed);
-    expect(plannedAt(days, "2026-09-30")).toBe(8);
-    expect(plannedAt(days, "2026-10-31")).toBe(16);
-    expect(plannedAt(days, "2026-11-30")).toBe(24);
+    expect(plannedAt(days, "2026-09-30")).toBe(4);
+    expect(plannedAt(days, "2026-10-31")).toBe(8);
+    expect(plannedAt(days, "2026-11-30")).toBe(12);
     expect(days.some((day) => new Date(`${day.date}T00:00:00Z`).getUTCDay() === 3)).toBe(true);
     expect(days.some((day) => day.date === "2026-09-24")).toBe(false);
   });
   it("정규 반에서는 수요일 기록도 같은 정규 진도로 반영한다", () => {
     const monday = { date: "2026-09-14", progress: topics[12], textbook: null };
     const p = buildLearningProgress(regular, mixed, [monday, { ...monday, date: "2026-09-16", progress: topics[0] }], "2026-09-17");
-    expect(p.current).toBe(Math.round(1 / topics.length * 24 * 10) / 10);
+    expect(p.current).toBe(Math.round(1 / topics.length * 12 * 10) / 10);
     expect(p.currentBlock).toBe(topics[0]);
     expect(p.currentDate).toBe("2026-09-16");
-    expect(p.total).toBe(24);
+    expect(p.total).toBe(12);
   });
-  it("마지막 단원에 도달하면 정확히 24블록·100%가 된다", () => {
+  it("마지막 단원에 도달하면 정확히 12블록·100%가 된다", () => {
     const p = buildLearningProgress(regular, mixed, [{ date: "2026-09-17", progress: topics.at(-1)!, textbook: null }], "2026-09-17");
-    expect(p.current).toBe(24);
+    expect(p.current).toBe(12);
     expect(p.percent).toBe(100);
     expect(p.status).toBe("done");
   });
@@ -112,12 +114,34 @@ describe("반별 정규 24블록과 복습 심화 4블록", () => {
   it("수업 없는 달을 몰래 완료 처리하거나 다른 달에 떠넘기지 않는다", () => {
     expect(learningDays(regular, { ...mixed, spans: { student: [{ start: "2026-09-01", end: "2026-10-31" }] } })).toEqual([]);
   });
-  it("24블록의 수·3개월 기간·학기 경계를 서버에서도 검증할 수 있다", () => {
+  it("12블록의 수·3개월 기간·학기 경계를 서버에서도 검증할 수 있다", () => {
     for (const patch of [
-      { blockCount: 12 }, { startDate: "2026-09-02" }, { endDate: "2026-12-31" }, { endBlock: blocks.at(-1)! },
+      { blockCount: 24 }, { startDate: "2026-09-02" }, { endDate: "2026-12-31" }, { endBlock: blocks.at(-1)! },
     ]) expect(learningGoalError({ ...regular, ...patch })).not.toBeNull();
     expect(learningGoalError(regular)).toBeNull();
     expect(learningGoalError(review)).toBeNull();
+  });
+  it("기존 24블록 정거장을 날짜와 수정 버전을 보존해 한 번만 환산한다", () => {
+    const first = planLearningGoal(regular);
+    const next = { ...planLearningGoal({ ...first, endBlock: blocks.at(-1)! }, first), updatedAt: "version" };
+    const legacy = { ...next, blockCount: next.blockCount! * 2,
+      milestones: next.milestones!.map((stop) => ({ ...stop, blockCount: stop.blockCount * 2 })) };
+    const normalized = normalizeLearningGoal(legacy);
+    expect(normalized).toEqual(next);
+    expect(normalizeLearningGoal(normalized)).toBe(normalized);
+    expect(learningGoalError(normalized)).toBeNull();
+    expect(learningDays(normalized, mixed).at(-1)?.target).toBe(24);
+    expect(legacy.blockCount).toBe(48);
+    const extension = planLearningGoal({ ...normalized, endStudyGrade: "중2", endBlock: flatLessons("중2").at(-1)! }, legacy);
+    expect(extension.milestones?.slice(0, 2)).toEqual(normalized.milestones);
+    expect(learningGoalError(extension)).toBeNull();
+  });
+  it("새 24블록·6개월 계획과 복습 목표, 비표준 옛 목표는 다시 나누지 않는다", () => {
+    const year = planLearningGoal({ ...regular, endBlock: blocks.at(-1)! });
+    expect(year.blockCount).toBe(24);
+    expect(normalizeLearningGoal(year)).toBe(year);
+    expect(normalizeLearningGoal(review)).toBe(review);
+    expect(normalizeLearningGoal(goal)).toBe(goal);
   });
 });
 

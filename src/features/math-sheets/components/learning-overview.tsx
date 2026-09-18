@@ -551,12 +551,12 @@ function StudentFocus({
             </p>
             {goal.blockCount && learning.track !== "supplement" ? (
               <details className={styles.dailyPlan}>
-                <summary>전체 {goal.blockCount}블록 진도표 · 월 8블록</summary>
+                <summary>전체 {goal.blockCount}블록 진도표 · 월 {MATH_LEARNING_CADENCE.regular.monthlyBlocks}블록</summary>
                 <p className={styles.meta}>과정별 단원을 배분한 계획입니다. 목표 확장 시 이전 정거장의 배분은 유지됩니다.</p>
                 <div>
                   <table>
                     <thead><tr><th>월</th><th>블록</th><th>학습 단원</th></tr></thead>
-                    <tbody>{learningBlocks(goal).map((label, index) => <tr key={index}><td>{Math.floor(index / 8) + 1}개월차</td><td>{index + 1}블록</td><td>{label}</td></tr>)}</tbody>
+                    <tbody>{learningBlocks(goal).map((label, index) => <tr key={index}><td>{Math.floor(index / MATH_LEARNING_CADENCE.regular.monthlyBlocks) + 1}개월차</td><td>{index + 1}블록</td><td>{label}</td></tr>)}</tbody>
                   </table>
                 </div>
               </details>
