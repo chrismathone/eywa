@@ -534,6 +534,8 @@ export type MatrixStudent = {
   spans: EnrollSpan[];
   /** 그 달의 신입·퇴원·반이동 표식 — 대부분의 학생은 빈 배열. */
   badges: LifecycleBadge[];
+  /** 학생 퇴원일(`students.withdrawn_at`) — 이름 칸 퇴원 서식(시간표와 같은 판정). 모르면 undefined. */
+  withdrawnAt?: string | null;
 };
 
 /** 월별 출석부 칸에 실리는 예약 한 건(0264a) — 칸·팝오버·툴팁이 읽는 것만(예약자 이름은 서버가 붙인다). */
@@ -910,8 +912,9 @@ export async function getMonthlyAttendanceMatrix(
       .select(
         // is_transferred = 반이동 종료 표식. 없으면 `isEnrolledOn`이 일반 종료로 보고
         // **옮겨간 학생을 옛 반에 적용일 하루 더 남긴다**(2026-09-01 실측).
-        `id, start_date, end_date, on_hold, is_transferred, attendance_days,
-       student:student_id ( id, name, grade, school )`,
+        // is_transferred_in·withdrawn_at = 이름 칸 서식(신입·전입·퇴원 — 시간표와 같은 판정, name-tone.ts).
+        `id, start_date, end_date, on_hold, is_transferred, is_transferred_in, attendance_days,
+       student:student_id ( id, name, grade, school, withdrawn_at )`,
       )
       .eq("class_id", classId)
       .lte("start_date", endIso),
@@ -1062,7 +1065,7 @@ export async function getMonthlyAttendanceMatrix(
     if (e.on_hold) continue;
     if (e.end_date && e.end_date < startIso) continue;
     const s = (Array.isArray(e.student) ? e.student[0] : e.student) as
-      | { id: string; name: string; grade: string | null; school: string | null }
+      | { id: string; name: string; grade: string | null; school: string | null; withdrawn_at?: string | null }
       | undefined;
     if (!s) continue;
     const list = rangesById.get(s.id) ?? [];
@@ -1070,6 +1073,7 @@ export async function getMonthlyAttendanceMatrix(
       start: e.start_date as string,
       end: (e.end_date as string | null) ?? null,
       isTransferred: e.is_transferred === true,
+      isTransferredIn: (e as { is_transferred_in?: boolean | null }).is_transferred_in === true,
     });
     rangesById.set(s.id, list);
     if (!studentMap.has(s.id)) {
@@ -1082,6 +1086,7 @@ export async function getMonthlyAttendanceMatrix(
         attendDows: resolveAttendDows(e.attendance_days as string[] | null, classDows),
         spans: [],
         badges: [],
+        withdrawnAt: s.withdrawn_at ?? null,
       });
     }
   }

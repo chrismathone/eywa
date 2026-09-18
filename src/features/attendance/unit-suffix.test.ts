@@ -27,12 +27,15 @@ describe("차수 단위 글자 — 영어 U · 수학 T (원장 2026-09-18)", ()
     expect(attendanceUnitSuffix("subject_42", SUBJECTS)).toBeNull();
   });
 
-  it("표시 = `숫자 단위`, 정수는 소수점 없이", () => {
-    expect(formatUnitsWithSuffix(3, "U")).toBe("3 U");
+  it("🔴 표시 = `숫자 단위`, **항상 소수 한 자리**(원장 2026-09-18 \"3.0 이렇게\")", () => {
+    expect(formatUnitsWithSuffix(3, "U")).toBe("3.0 U");
     expect(formatUnitsWithSuffix(1.5, "U")).toBe("1.5 U");
-    expect(formatUnitsWithSuffix(2, "T")).toBe("2 T");
+    expect(formatUnitsWithSuffix(2, "T")).toBe("2.0 T");
     expect(formatUnitsWithSuffix(4.5, null)).toBe("4.5");
     expect(formatUnitsWithSuffix(-4.5, "T")).toBe("-4.5 T");
+    // 0은 부호 없이(-0.0 금지) · 부동소수 꼬리 없이.
+    expect(formatUnitsWithSuffix(-0, "T")).toBe("0.0 T");
+    expect(formatUnitsWithSuffix(0.1 + 0.2, null)).toBe("0.3");
   });
 });
 

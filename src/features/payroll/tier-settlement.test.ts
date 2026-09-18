@@ -122,6 +122,21 @@ describe("computeTierSettlement — 빠진 값은 0으로 치지 않고 명단�
     expect(r.total).toBe(78_402); // floor1(21,250×9×0.911×0.45)=floor1(78,402.9375)=78,402.9 → 78,402
   });
 
+  it("🔴 미지정은 **반·학생 줄** 단위로 가린다 — 한 반만 비었으면 그 반 줄만(원장 2026-09-18 제보)", () => {
+    // 같은 학생이 두 반: A반은 티어 있음, B반은 미지정 → 「단가」는 B반 줄에만 서야 한다.
+    const r = computeTierSettlement(
+      [
+        row({ studentId: "s", classId: "A", units: 4 }),
+        row({ studentId: "s", classId: "B", tierLabel: null, units: 2 }),
+      ],
+      prices,
+      { groupRates: { 초등: 45 }, defaultRate: null },
+    );
+    expect(r.missingTierRowKeys).toEqual(["B|s"]);
+    // 학생 단위 목록(요약 문구용)은 그대로 — 금액·집계는 불변.
+    expect(r.missingTierStudentIds).toEqual(["s"]);
+  });
+
   it("단가표에 없는 티어·비율 없는 과정도 각각 명단으로", () => {
     const r = computeTierSettlement(
       [

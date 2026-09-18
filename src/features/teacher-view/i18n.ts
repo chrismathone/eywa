@@ -1515,8 +1515,8 @@ export const SHEET_DICT = {
   "att.row.thisClass": { ko: "이 반", en: "this class" },
   "att.row.attendDows": { ko: "등원 {dows}", en: "Class days {dows}" },
   "att.row.noTierTitle": {
-    ko: "{name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다",
-    en: "{name} — no rate tier is set, so this student is left out of the pay figure. Set the tier on the enrolment to include them",
+    ko: "{name} — 수업 티어도, 회차 확정 단가도 아직 없습니다(정산액에서 빠져 있음). 회차 확정에서 단가를 확정하면 표식이 사라지고, 수강의 티어를 지정하면 정산액에 들어갑니다",
+    en: "{name} — no rate tier and no confirmed session price yet (left out of the pay figure). Confirming the price in session terms clears this mark; setting the tier on the enrolment adds them to the pay figure",
   },
   "att.row.noTier": { ko: "단가", en: "No rate" },
   "att.row.tierTitle": { ko: "단가 티어 {tier}", en: "Rate tier {tier}" },
@@ -1565,6 +1565,15 @@ export const SHEET_DICT = {
   },
   "att.totals.search": { ko: "검색 합계", en: "Search total" },
   "att.totals.all": { ko: "합계", en: "Total" },
+  // 합계 행(원장 2026-09-18) — 출석률 칸은 행 출석률의 **평균**, 등록 차수 합은 옛 일수 기준 확정을 뺀다.
+  "att.totals.rateAvgTitle": {
+    ko: "학생별 출석률의 평균입니다(기록이 없는 학생은 빼고 셉니다).",
+    en: "Average of each student's attendance rate (students with no records are left out).",
+  },
+  "att.totals.daysBasisSkipped": {
+    ko: "옛 일수 기준 확정 {n}건은 단위가 달라 합에서 뺐습니다.",
+    en: "{n} old day-count confirmations are left out — the unit differs.",
+  },
   "att.totals.searching": { ko: "검색 중 — 전체 아님", en: "Searching — not the full set" },
   "att.totals.classes": { ko: "개 반", en: " classes" },
   "att.totals.units": { ko: "시수 ", en: "Sessions " },
@@ -1614,7 +1623,8 @@ export const SHEET_DICT = {
     ko: "배분율 {rate}% · 정산액은 수납관리 > 강사 정산에서",
     en: "Share {rate}% · the pay figure lives in Billing > Teacher pay",
   },
-  "att.stat.enrolled": { ko: "등록", en: "On roll" },
+  // 원장 2026-09-18 *"등록 -> 담당"* — 이 출석부에 서 있는 학생 수(그 강사·그 반이 맡은 학생)다. 원생 '등록'과 헷갈린다.
+  "att.stat.enrolled": { ko: "담당", en: "Assigned" },
   "att.stat.people": { ko: "명", en: "students" },
   "att.stat.rate": { ko: "출석률", en: "Rate" },
   "att.stat.noRecord": { ko: "기록 없음", en: "no records" },
@@ -2284,6 +2294,20 @@ export const SHEET_DICT = {
     en: "Learning trend (overall) · empty when there is little record",
   },
   "os.row.trendAria": { ko: "{name} {subject} 학습 추세", en: "{name} {subject} learning trend" },
+  // '학습 추세 미발송'(원장 2026-09-18) — 켜면 학부모 카드의 학습 추세 절이 빈다. 같은 선생님·같은 반에서 계속 유지.
+  "os.row.trendOptOut": { ko: "학습 추세 미발송", en: "Hold trend" },
+  "os.row.trendOptOutTitle": {
+    ko: "체크하면 이 학생의 학습 추세를 학부모에게 보내지 않습니다. 이 반에서는 다음 보고서에도 계속 유지됩니다.",
+    en: "When checked, this student's learning trend is not sent to parents. It stays on for later reports in this class.",
+  },
+  "os.row.trendOptOutFail": {
+    ko: "학습 추세 미발송을 저장하지 못했습니다",
+    en: "Couldn't save the trend setting",
+  },
+  "os.row.trendOptOutOn": {
+    ko: "학습 추세 미발송 — 이 칸은 학부모에게 보내지 않습니다",
+    en: "Trend held — this text is not sent to parents",
+  },
   "os.row.genSentLocked": {
     ko: "이미 발송된 보고서 — 수정할 수 없습니다",
     en: "This report has already been sent — it cannot be edited",

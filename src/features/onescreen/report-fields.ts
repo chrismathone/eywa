@@ -24,6 +24,11 @@ export type ReportFieldSource = {
   draft: string;
   /** 학습 추세(종합분석) 초안. 비면 미저장. */
   trendDraft?: string;
+  /**
+   * **학습 추세 미발송**(원장 2026-09-18) — 켜져 있으면 초안이 있어도 비운다. 저장·미리보기가 이 함수 하나를
+   * 지나므로 "미리보기엔 없는데 학부모는 받는다"가 생기지 않는다(`trend-optout.ts`).
+   */
+  trendHidden?: boolean;
   /** 학원설정 표시 토글 — off인 테스트는 저장·표시 둘 다에서 빠진다(입력칸도 숨겨져 값이 안 생긴다). */
   showDailyTest: boolean;
   showCheckTest: boolean;
@@ -80,6 +85,6 @@ export function buildReportFields(src: ReportFieldSource): ReportFields {
     // 모드 B에서 1문단만 비우면 초안이 "\n\n2문단"으로 유지된다(편집 중 글자가 위 칸으로 튀는 것 방지,
     // comment-paragraphs.ts 불변식). 학부모에게 나가는 값은 여기서 다듬는다 — 앞 빈 줄 금지.
     notes: src.draft.trim(),
-    trendNote: src.trendDraft?.trim() || undefined,
+    trendNote: src.trendHidden ? undefined : src.trendDraft?.trim() || undefined,
   };
 }

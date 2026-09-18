@@ -174,7 +174,8 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
     // 차이확인 = 수업 차수 − 등록 차수. 🔴 등록 차수가 미확정이면 숫자를 지어내지 않고 `—`.
     expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[5]).toHaveTextContent("—");
-    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 7));
+    // 요약 줄(맨 아래)은 전 열을 덮는다 — 그 위 합계 행(2026-09-18)은 열마다 칸이 선다.
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 7));
   });
 
   it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {
@@ -442,26 +443,22 @@ describe("출석부 표 골격", () => {
     expect(screen.getByText("한가온").closest("td")!.children).toHaveLength(1);
   });
 
-  it("🔴 표식만 있고 등원요일이 없어도 아랫줄에 선다 — 첫 줄은 언제나 이름뿐(원장 2026-09-14)", () => {
+  it("🔴 생애주기 표식은 이름 칸에 서지 않는다 — 이름 칸은 이름뿐(원장 2026-09-18: 수강 기간 양옆 회색 날짜 칸으로)", () => {
     renderTable();
     const cell = screen.getByText("박서준").closest("td")!;
-    const lines = [...cell.children];
-    expect(lines).toHaveLength(2);
-    expect(lines[0]!.textContent).toBe("박서준");
-    expect(lines[1]!.textContent).toBe("퇴원");
+    expect(cell.children).toHaveLength(1);
+    expect(cell.textContent).toBe("박서준");
   });
 
-  it("그 달에 나간 학생은 이름 칸에 '퇴원' 표식이 붙는다(아랫줄)", () => {
+  it("🔴 표식을 놓을 회색 칸이 없으면 **그리지 않는다**(원장 2026-09-18 — 이름 옆으로 돌려보내지 않는다)", () => {
+    // 박서준은 7/15 퇴원인데 이 격자엔 7/1·7/2뿐이고 구간도 비어 있어(=회색 칸 없음) 놓을 자리가 없다.
     renderTable();
-    const badge = screen.getByText("퇴원");
-    expect(badge.closest("td")).toBe(screen.getByText("박서준").closest("td"));
-    expect(badge).toHaveAttribute("title", "2026-07-15 퇴원");
+    expect(screen.queryByText("퇴원")).toBeNull();
+    // 배치 규칙 자체는 features/attendance/badge-placement.test.ts가 잠근다.
   });
 
-  it("🔴 표식이 이름을 밀어내지 않는다 — 표식은 아랫줄이라 첫 줄은 이름이 열을 다 쓴다", () => {
+  it("이름은 열을 다 쓰고 넘치면 잘린다(표식이 이름을 밀어내던 시절의 가드)", () => {
     renderTable();
-    // 뱃지가 첫 줄에 있던 동안 이름이 "김…"으로 잘렸다(원장 2026-09-14 "이름이 짤리는건 최악").
-    expect(screen.getByText("퇴원").closest("span")!.className).toContain("shrink-0");
     expect(screen.getByText("박서준").parentElement!.textContent).toBe("박서준");
     expect(screen.getByText("박서준").className).toContain("min-w-0");
   });
@@ -1155,5 +1152,56 @@ describe("강사 보기 — 수업요일은 색으로, 입력은 모든 날에(�
     const heads = [...container.querySelectorAll("thead th")].filter((th) => /^[12]/.test(th.textContent ?? ""));
     expect(heads[0]!.className).toContain("bg-att-classday");
     expect(heads[1]!.className).not.toContain("bg-att-classday");
+  });
+});
+
+describe("합계 행(원장 2026-09-18)", () => {
+  const WITH_MARKS: MatrixGroup = {
+    ...GROUP,
+    unitSuffix: "T",
+    matrix: {
+      ...GROUP.matrix,
+      marks: { [S1]: { "2026-07-01": "present", "2026-07-02": "absent" }, [S2]: { "2026-07-01": "present" } },
+      units: { [S1]: { "2026-07-01": 1.5 } },
+    },
+  };
+  function renderTotals() {
+    return render(
+      <MatrixTable
+        groups={[WITH_MARKS]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={WITH_MARKS.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        classBilledAmounts={{ [rowKey(C, S1)]: 210000, [rowKey(C, S2)]: 90000 }}
+        termSessionsByRow={{ [rowKey(C, S1)]: { units: 8, daysBasis: false }, [rowKey(C, S2)]: { units: 5, daysBasis: true } }}
+      />,
+    );
+  }
+
+  it("'이름'·'학교학년'을 합친 칸에 '합계'라고 적는다(따로 라벨 자리를 찾지 않게)", () => {
+    const { container } = renderTotals();
+    const row = container.querySelector("tfoot tr")!;
+    const first = row.querySelector("td")!;
+    expect(first).toHaveAttribute("colspan", "2");
+    expect(first.textContent).toBe("합계");
+  });
+
+  it("청구액·수업 차수·등록 차수 합 — 🔴 등록 차수 합에서 옛 일수 기준 확정은 뺀다(단위가 다르다)", () => {
+    const { container } = renderTotals();
+    const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
+    expect(cells[1]!.textContent).toBe("300,000"); // 청구액 210,000 + 90,000
+    expect(cells[2]!.textContent).toBe("2.5 T"); // 수업 차수: 1.5(S1 7/1) + 1(S2 7/1)
+    expect(cells[3]!.textContent).toBe("8.0 T"); // 등록 차수: S1 8 · S2는 일수 기준이라 제외
+    expect(cells[4]!.textContent).toBe(""); // 차이확인은 비운다
+  });
+
+  it("날짜별로 그날 시수 합 · 출석률은 학생별 출석률의 **평균**", () => {
+    const { container } = renderTotals();
+    const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
+    expect(cells[5]!.textContent).toBe("2.5"); // 7/1: 1.5 + 1
+    expect(cells[6]!.textContent).toBe(""); // 7/2: 결석만 — 시수 0
+    // S1 = 1/2 = 50% · S2 = 1/1 = 100% → 평균 75%(전체 2/3=67%가 아니다).
+    expect(cells.at(-1)!.textContent).toBe("75%");
   });
 });

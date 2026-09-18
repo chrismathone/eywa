@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flatLessons } from "@/features/onescreen/curriculum";
 import type { MathSheetMonthData } from "./month-queries";
 
-const mocks = vi.hoisted(() => ({ access: vi.fn(), from: vi.fn(), records: vi.fn() }));
+const mocks = vi.hoisted(() => ({ access: vi.fn(), from: vi.fn(), records: vi.fn(), track: vi.fn() }));
 vi.mock("./access", () => ({ requireMcsClassAccess: mocks.access }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: mocks.from }) }));
 vi.mock("@/lib/supabase/batch", () => ({ fetchAllPagedInChunks: mocks.records }));
+vi.mock("./learning-track", () => ({ readMathLearningTrack: mocks.track }));
 import { getMathLearningData } from "./learning-queries";
 
 const topics = flatLessons("중1");
@@ -25,6 +26,7 @@ let filters: unknown[][];
 beforeEach(() => {
   vi.clearAllMocks();
   filters = [];
+  mocks.track.mockResolvedValue("regular");
   mocks.access.mockResolvedValue({ ok: true, access: { tenantId: "tenant" } });
   mocks.from.mockImplementation((table: string) => {
     const query = {
@@ -47,22 +49,28 @@ beforeEach(() => {
   ]);
 });
 
-describe("정규·수요일 계획 조회", () => {
-  it("같은 학생의 두 계획과 기록을 분리하고 새 정규 계획을 우선한다", async () => {
+describe("반별 수업 유형의 계획 조회", () => {
+  it("반의 정규 목표만 읽고 수요일을 포함한 모든 기록을 반영한다", async () => {
     const data = await getMathLearningData("class", monthData);
     expect(data.status).toBe("ok");
     expect(data.progress[studentId].total).toBe(24);
-    expect(data.progress[studentId].current).toBe(12);
-    expect(data.supplement?.progress[studentId].total).toBe(4);
-    expect(data.supplement?.progress[studentId].current).toBe(1);
-    expect(data.records[studentId].map((record) => record.date)).toEqual(["2026-09-14"]);
-    expect(data.supplement?.records[studentId].map((record) => record.date)).toEqual(["2026-09-16"]);
+    expect(data.progress[studentId].current).toBe(1.2);
+    expect(data.records[studentId].map((record) => record.date)).toEqual(["2026-09-16", "2026-09-14"]);
     expect(Object.keys(data.goals)).toEqual([studentId]);
     expect(mocks.records.mock.calls[0][0]).toEqual([studentId]);
     expect(filters).toContainEqual(["math_learning_track_goals", "tenant_id", "tenant"]);
     expect(filters).toContainEqual(["math_learning_track_goals", "class_id", "class"]);
     expect(filters).toContainEqual(["math_learning_track_goals", "lte", "start_date", "2026-09-30"]);
-    expect(filters).toContainEqual(["math_learning_track_goals", "gte", "end_date", "2026-09-01"]);
+    expect(filters).toContainEqual(["math_learning_track_goals", "track", "regular"]);
+    expect(filters.some((filter) => filter[1] === "gte" && filter[2] === "end_date")).toBe(false);
+  });
+  it("복습 심화 반은 월요일과 수요일 기록을 함께 집계한다", async () => {
+    mocks.track.mockResolvedValue("supplement");
+    const data = await getMathLearningData("class", monthData);
+    expect(data.track).toBe("supplement");
+    expect(data.progress[studentId].total).toBe(4);
+    expect(data.progress[studentId].current).toBe(2);
+    expect(filters).toContainEqual(["math_learning_track_goals", "track", "supplement"]);
   });
   it("권한 거절 시 학생 계획을 조회하지 않는다", async () => {
     mocks.access.mockResolvedValue({ ok: false });
@@ -75,6 +83,5 @@ describe("정규·수요일 계획 조회", () => {
     const data = await getMathLearningData("class", monthData);
     expect(data.status).toBe("failed");
     expect(data.progress).toEqual({});
-    expect(data.supplement?.progress).toEqual({});
   });
 });

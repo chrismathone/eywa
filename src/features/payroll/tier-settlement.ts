@@ -107,6 +107,13 @@ export type TierSettlementResult = {
   missingTierStudents: string[];
   /** 같은 학생들의 id — 화면이 **행 단위로**(이름 칸 배경) 누가 빠졌는지 가리키기 위한 값(동명이인 안전). */
   missingTierStudentIds: string[];
+  /**
+   * 단가(티어) 미지정인 **반·학생 줄** — `${classId}|${studentId}`(출석부 행 키와 같은 모양).
+   * 🔴 단가는 **학생 × 반**마다 따로다(수강 `salary_tier`). 학생 id로만 표시하면 한 반만 비어도 그 학생의
+   *    **모든 반 줄**에 「단가」가 붙는다(원장 2026-09-18 제보 — 표식이 회차 확정의 미확정·미배분보다 훨씬 많았다).
+   *    금액·집계엔 영향 없는 표시용 키다.
+   */
+  missingTierRowKeys: string[];
   /** 단가표에 없는 티어 라벨(오타·미등록). */
   missingPriceTiers: string[];
   /** 비율을 못 정한 과정(그룹 비율·기본 비율 둘 다 없음). */
@@ -140,6 +147,7 @@ export function computeTierSettlement(
   const excludedLines: TierSettlementExcluded[] = [];
   const missingTierStudents = new Set<string>();
   const missingTierStudentIds = new Set<string>();
+  const missingTierRowKeys = new Set<string>();
   const missingPriceTiers = new Set<string>();
   const missingRateGroups = new Set<string>();
 
@@ -148,6 +156,7 @@ export function computeTierSettlement(
     if (!row.tierLabel) {
       missingTierStudents.add(row.studentName);
       missingTierStudentIds.add(row.studentId);
+      missingTierRowKeys.add(`${row.classId}|${row.studentId}`);
       excludedUnits += row.units;
       excludedLines.push({ ...excludedOf(row), reason: "no-tier", tierLabel: null });
       continue;
@@ -196,6 +205,7 @@ export function computeTierSettlement(
     unitsTotal,
     missingTierStudents: [...missingTierStudents].sort((a, b) => a.localeCompare(b, "ko")),
     missingTierStudentIds: [...missingTierStudentIds],
+    missingTierRowKeys: [...missingTierRowKeys],
     missingPriceTiers: [...missingPriceTiers].sort((a, b) => a.localeCompare(b, "ko")),
     missingRateGroups: [...missingRateGroups],
     excludedUnits,

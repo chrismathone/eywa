@@ -1149,21 +1149,46 @@ export type LessonReportRow = {
   subject: string;
 };
 
-/** 학생 최근 수업보고서 N건(최신순) + 발송상태·링크상태·열람수(P2a/P3). 데이터는 Edutrix 이식(import-lesson-reports.cjs). */
-export async function getStudentLessonReports(studentId: string, limit = 12): Promise<LessonReportRow[]> {
+/** 진도 탭 한 쪽 크기(원장 2026-09-18 *"전체 페이지네이션해서 10건씩"*) — 목록 표준(50)의 명시 예외. */
+export const STUDENT_REPORTS_PAGE_SIZE = 10;
+
+/**
+ * 학생 수업보고서 **한 쪽**(최신순) + 전체 건수 — 발송상태·링크상태·열람수(P2a/P3).
+ * 원장 2026-09-18: *"'최근 12'건이 아니고 전체 페이지네이션해서 10건씩 넘기도록 해. 날짜 조회 가능하도록 필터 기능도"*.
+ *
+ * 🔴 건수는 `count: "exact"`로 **행을 받지 않고** 센다(B2) · 🔴 정렬에 `id`를 덧붙인다 — 같은 날 보고서가 여럿이면
+ *    날짜만으론 순서가 흔들려 쪽을 넘길 때 한 줄이 두 쪽에 서거나 사라진다.
+ * ⚠️ 날짜 필터는 **보고서 날짜**(`report_date`) 기준이고 양 끝을 포함한다. 형식이 어긋난 값은 무시한다.
+ */
+export async function getStudentLessonReportsPage(
+  studentId: string,
+  opts: { page?: number; pageSize?: number; from?: string | null; to?: string | null } = {},
+): Promise<{ rows: LessonReportRow[]; total: number }> {
+  const pageSize = opts.pageSize ?? STUDENT_REPORTS_PAGE_SIZE;
+  const page = Math.max(1, Math.floor(opts.page ?? 1));
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const from = opts.from && iso.test(opts.from) ? opts.from : null;
+  const to = opts.to && iso.test(opts.to) ? opts.to : null;
   const supabase = await createClient();
-  const { data } = await supabase
+  let q = supabase
     .from("lesson_reports")
     .select(
       "id, report_date, progress, exam_info, homework_score, teacher_name, classnote_status, revoked_at, subject, class_id",
+      { count: "exact" },
     )
-    .eq("student_id", studentId)
+    .eq("student_id", studentId);
+  if (from) q = q.gte("report_date", from);
+  if (to) q = q.lte("report_date", to);
+  const start = (page - 1) * pageSize;
+  const { data, count } = await q
     .order("report_date", { ascending: false })
-    .limit(limit);
-  if (!data) return [];
+    .order("id", { ascending: false })
+    .range(start, start + pageSize - 1);
+  const total = count ?? 0;
+  if (!data || data.length === 0) return { rows: [], total };
 
   // 학부모 열람 수(share_link_views) — 이 보고서 id들로 조회 후 JS 집계(roster와 동일 패턴, RLS 테넌트 격리).
-  // 반 과목 — 보고서 subject가 비어도 반이 있으면 그 반의 과목이 진실(reportSubject 2순위). 12건뿐이라 가볍다.
+  // 반 과목 — 보고서 subject가 비어도 반이 있으면 그 반의 과목이 진실(reportSubject 2순위). 한 쪽(10건)뿐이라 가볍다.
   // 서로 독립이라 병렬(B4).
   const ids = data.map((r) => r.id);
   const classIds = [...new Set(data.map((r) => r.class_id).filter(Boolean))] as string[];
@@ -1182,7 +1207,7 @@ export async function getStudentLessonReports(studentId: string, limit = 12): Pr
   for (const v of viewRows)
     viewCountById.set(v.lesson_report_id, (viewCountById.get(v.lesson_report_id) ?? 0) + 1);
 
-  return data.map((r) => ({
+  const rows: LessonReportRow[] = data.map((r) => ({
     id: r.id,
     reportDate: r.report_date,
     progress: r.progress,
@@ -1197,6 +1222,7 @@ export async function getStudentLessonReports(studentId: string, limit = 12): Pr
       classSubject: r.class_id ? classSubjectById.get(r.class_id) : null,
     }),
   }));
+  return { rows, total };
 }
 
 // === 성적 목표설정(grade_goals) — 실제 점수와 매칭해 달성 여부 산출 ===

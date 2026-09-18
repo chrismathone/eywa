@@ -983,7 +983,7 @@ describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김�
 
   it("상태 변경은 한글 라벨로, 모르는 값은 숨긴다", () => {
     expect(auditDetail("enrollment_consultation_outcome", { from: "consulted", to: "enrolled" }, ctx())).toBe(
-      "상담완료 → 재원생 등록",
+      "상담완료 → 재원생 등록 완료", // 원장 2026-09-18 라벨 변경
     );
     expect(auditDetail("enrollment_consultation_outcome", { from: "zzz", to: "declined" }, ctx())).toBe("→ 거절");
   });

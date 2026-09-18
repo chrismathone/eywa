@@ -10,6 +10,11 @@ export type AttendanceBillingTerm = {
   class_id: string | null;
   amount: number | null;
   confirmed_sessions: number | null;
+  /**
+   * 확정 시 저장한 회당 단가(월 정액이면 월 금액) — 확정 해제면 null. 「단가」 표식 연동 재료(원장 2026-09-18).
+   * ⚠️ 선택 필드 — 금액·차수 계산은 이 값을 안 읽는다(청구액은 배분·반 매칭, 차수는 `confirmed_sessions`).
+   */
+  unit_price?: number | null;
   allocation_line_index: number | null;
   allocation_amount: number | null;
   allocation_source: unknown;
@@ -105,4 +110,34 @@ export function attendanceClassConfirmedSessions(
     };
   }
   return out;
+}
+
+/**
+ * 회차 확정에서 **단가까지 확정된** 학생×반 줄(`rowKey`) — 출석부 「단가」 표식을 떼는 재료(원장 2026-09-18
+ * *"회차 확정의 단가가 확정되었으면 출석부 단가 라벨 지울것. 해당 단가와 연동하면 될듯"*).
+ *
+ * 🔴 그 줄의 회차 행이 **전부** 확정(`confirmed_sessions`)이고 단가(`unit_price`)가 있을 때만 담는다 — 같은 학생·반에
+ *    청구서가 둘이라 한쪽이 아직 미확정이면 회차 확정 화면엔 그 행이 '미확정'으로 남아 있다(표식도 남긴다).
+ * 🔴 회차 행이 없는 줄(청구서 없음·반 미매칭)은 안 담는다 — 확정한 사실이 없다.
+ * ⚠️ **표시 전용**이다 — 강사 정산액(티어 단가 × 시수 × 0.911 × 비율)은 이 값을 읽지 않는다. 표식만 떼고
+ *    정산에서 빠진 시수는 그대로라, 합계 줄의 '단가 미지정 N명 · N시수 제외'는 계속 선다(그게 사실이다).
+ *    정산을 회차 단가로 채우는 것은 돈 산식 변경이라 별건(골든마스터 규율).
+ */
+export function attendanceClassPriceConfirmedRows(
+  classes: readonly AttendanceBillingClass[],
+  invoices: readonly AttendanceInvoice[],
+  terms: readonly AttendanceBillingTerm[],
+): string[] {
+  const classById = new Map(classes.map((c) => [c.classId, new Set(c.studentIds)]));
+  const studentByInvoice = new Map(invoices.map((i) => [i.id, i.student_id]));
+  const state = new Map<string, boolean>();
+  for (const term of terms) {
+    if (!term.class_id) continue;
+    const studentId = studentByInvoice.get(term.invoice_id);
+    if (!studentId || !classById.get(term.class_id)?.has(studentId)) continue;
+    const key = rowKey(term.class_id, studentId);
+    const priced = term.confirmed_sessions !== null && term.unit_price != null;
+    state.set(key, (state.get(key) ?? true) && priced);
+  }
+  return [...state].filter(([, ok]) => ok).map(([key]) => key);
 }

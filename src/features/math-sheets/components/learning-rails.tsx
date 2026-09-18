@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import {
   learningBlocks,
+  goalMilestones,
   type LearningGoal,
   type LearningProgress,
 } from "../lib/learning-plan";
@@ -88,6 +89,9 @@ export function LearningRails({
           aria-description={currentText}
         >
           <span className={styles.currentFill} />
+          {goal && total > 0 ? goalMilestones(goal).slice(0, -1).map((stop, index) => (
+            <span key={index} className={styles.milestoneTick} style={{ left: `${position(stop.blockCount)}%` }} title={`${index + 1}차 목표 · ${stop.studyGrade} · ${stop.endBlock}`} />
+          )) : null}
           {total > 0 && current != null ? <span className={styles.currentMarker} /> : null}
         </div>
         <div

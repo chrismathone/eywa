@@ -1,14 +1,12 @@
 .rails {
-  --rail-ink: var(--blue);
-  --rail-light: color-mix(in srgb, var(--blue) 52%, var(--card));
-  --rail-tick: color-mix(in srgb, var(--blue) 20%, var(--card));
+  --blue: #0000ff;
+  --rail-ink: #0000ff;
+  --rail-tick: color-mix(in srgb, var(--rail-ink) 20%, var(--card));
   /* 목표진도(2행)는 **붉은색 계열**(원장 2026-09-18 *"수학 mcs에서 목표진도는 붉은색계열로 전부"*).
      🔴 현재진도(파랑)와 **색으로** 갈린다 — 두 줄이 같은 눈금을 쓰기 때문에, 색이 같으면 어느 줄이
         사실이고 어느 줄이 계획인지 눈으로 못 가른다.
-     ⚠️ 여기 빨강은 '위험'이 아니라 **계획 줄의 신원**이다(빠름·느림 판정은 그대로 글자·칩이 말한다) —
-        `--danger`를 쓰되 채도를 낮춘 파생값으로만 칠해 경고처럼 읽히지 않게 한다. */
-  --goal-ink: var(--danger);
-  --goal-light: color-mix(in srgb, var(--danger) 46%, var(--card));
+     원장 2026-09-18: 현재는 순수 파랑, 목표는 순수 빨강. 채움에는 혼합색을 쓰지 않는다. */
+  --goal-ink: #ff0000;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 55px;
   gap: 8px 14px;
@@ -63,7 +61,7 @@
   top: 40px;
   height: 40px;
   left: var(--target-position);
-  border-left: 1px dashed color-mix(in srgb, var(--danger) 30%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--goal-ink) 30%, transparent);
   pointer-events: none;
   transition: left 320ms ease;
 }
@@ -78,6 +76,14 @@
   box-shadow: inset 0 1px 1px color-mix(in srgb, var(--blue) 6%, transparent);
 }
 .currentTrack { top: 43px; }
+.milestoneTick {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 13px;
+  background: var(--rail-ink);
+  transform: translateX(-50%);
+}
 .targetTrack { top: 77px; height: 3px; }
 .currentFill,
 .targetFill {
@@ -88,12 +94,11 @@
 }
 .currentFill {
   width: var(--current-position);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--blue) 68%, var(--card)), var(--rail-ink));
-  box-shadow: inset 0 1px 0 #ffffff38, 0 1px 3px color-mix(in srgb, var(--blue) 12%, transparent);
+  background: var(--rail-ink);
 }
 .targetFill {
   width: var(--target-position);
-  background: var(--goal-light);
+  background: var(--goal-ink);
 }
 .currentMarker,
 .targetMarker {
@@ -126,11 +131,11 @@
   left: var(--target-position);
   width: 10px;
   height: 10px;
-  border: 1.5px solid var(--goal-light);
+  border: 1.5px solid var(--goal-ink);
   background: var(--card);
   box-shadow: 0 0 0 2px var(--card);
 }
-.targetMarker::before { top: 10px; height: 11px; }
+.targetMarker::before { top: 10px; height: 11px; background: var(--goal-ink); }
 .annotation {
   position: absolute;
   display: inline-flex;
@@ -160,7 +165,7 @@
   top: 96px;
   left: var(--target-position);
   transform: translateX(calc(-1 * var(--target-position)));
-  border-color: color-mix(in srgb, var(--danger) 20%, var(--card));
+  border-color: color-mix(in srgb, var(--goal-ink) 20%, var(--card));
   color: var(--goal-ink);
 }
 .annotationTag {
@@ -176,9 +181,9 @@
   color: white;
 }
 .targetAnnotation .annotationTag {
-  background: color-mix(in srgb, var(--danger) 9%, var(--card));
+  background: color-mix(in srgb, var(--goal-ink) 9%, var(--card));
   color: var(--goal-ink);
-  border-right: 1px solid color-mix(in srgb, var(--danger) 16%, var(--card));
+  border-right: 1px solid color-mix(in srgb, var(--goal-ink) 16%, var(--card));
 }
 .blockName {
   min-width: 0;
