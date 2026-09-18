@@ -18,6 +18,7 @@
   height: 122px;
   min-width: 0;
 }
+.description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ruler {
   position: absolute;
   inset: 0;
@@ -46,25 +47,6 @@
   stroke-width: 1px;
   opacity: 0.28;
 }
-.interval {
-  position: absolute;
-  left: var(--interval-start);
-  width: var(--interval-width);
-  top: 43px;
-  height: 34px;
-  background: color-mix(in srgb, var(--blue) 3.5%, transparent);
-  pointer-events: none;
-  transition: left 320ms ease, width 320ms ease;
-}
-.targetGuide {
-  position: absolute;
-  top: 40px;
-  height: 40px;
-  left: var(--target-position);
-  border-left: 1px dashed color-mix(in srgb, var(--goal-ink) 30%, transparent);
-  pointer-events: none;
-  transition: left 320ms ease;
-}
 .track {
   position: absolute;
   left: 0;
@@ -76,14 +58,6 @@
   box-shadow: inset 0 1px 1px color-mix(in srgb, var(--blue) 6%, transparent);
 }
 .currentTrack { top: 43px; }
-.milestoneTick {
-  position: absolute;
-  top: -4px;
-  width: 2px;
-  height: 13px;
-  background: var(--rail-ink);
-  transform: translateX(-50%);
-}
 .targetTrack { top: 77px; height: 3px; }
 .currentFill,
 .targetFill {
@@ -136,6 +110,8 @@
   box-shadow: 0 0 0 2px var(--card);
 }
 .targetMarker::before { top: 10px; height: 11px; background: var(--goal-ink); }
+.targetMarker:not(:last-child)::before { display: none; }
+.rails[data-dense] .targetMarker { width: 3px; height: 9px; border: 0; border-radius: 0; background: var(--goal-ink); box-shadow: none; }
 .annotation {
   position: absolute;
   display: inline-flex;
@@ -219,6 +195,7 @@
   line-height: 1.5;
 }
 .scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; }
+.goalTick { color: var(--goal-ink); font-weight: 650; opacity: 1; }
 .rails[data-planned="false"] .annotation {
   border-color: var(--line);
   color: var(--text-dim);
@@ -228,8 +205,8 @@
   background: var(--bg-soft);
   color: var(--text-dim);
 }
-@container (max-width: 260px) {
-  .scaleTick { display: none; }
+@container (max-width: 420px) {
+  .fractionTick { display: none; }
 }
 @media (max-width: 720px) {
   .rails { grid-template-columns: minmax(0, 1fr) 46px; column-gap: 12px; }
@@ -238,5 +215,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .currentFill, .targetFill, .currentMarker, .targetMarker,
-  .annotation, .interval, .targetGuide { transition: none; }
+  .annotation { transition: none; }
 }

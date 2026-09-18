@@ -8,6 +8,14 @@ const first: LearningGoal = planLearningGoal({ studentId: "s", studyGrade: "중1
 const context: LearningContext = { schedules: ["mon", "wed"].map((dayOfWeek) => ({ dayOfWeek, startTime: "16:00", endTime: "17:00", validFrom: null, validTo: null })), holidays: {}, spans: { s: [{ start: "2026-01-01", end: null }] } };
 
 describe("여러 과정을 잇는 최종 목표와 정거장", () => {
+  it("복습 심화 확장도 앞 목표의 4블록 배분과 도착 단원을 보존한다", () => {
+    const review = planLearningGoal({ ...first, track: "supplement" });
+    const second = planLearningGoal({ ...review, endStudyGrade: "중2", endBlock: flatLessons("중2").at(-1)! }, review);
+    const third = planLearningGoal({ ...second, endStudyGrade: "중3", endBlock: flatLessons("중3").at(-1)! }, second);
+    expect(learningGoalError(third)).toBeNull();
+    expect(learningBlocks(third).slice(0, 4).map(label => label.replaceAll("중1 · ", ""))).toEqual(learningBlocks(review));
+    for (const stop of goalMilestones(third)) expect(learningBlocks(third)[stop.blockCount - 1]).toContain(stop.endBlock);
+  });
   it("중1에서 대수까지 필요한 과정을 포함하고 다른 선택과목은 끼우지 않는다", () => {
     const goal = planLearningGoal({ ...first, endStudyGrade: "대수", endBlock: flatLessons("대수").at(-1)! });
     expect(learningCoursePath("중1", "대수")).toEqual(["중1", "중2", "중3", "공통수학1", "공통수학2", "대수"]);

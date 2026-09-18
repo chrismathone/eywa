@@ -104,12 +104,17 @@ function allocatedSegments(goal: LearningGoal): { topics: LearningTopic[]; block
   const topics = learningTopics(goal);
   if (!topics.length) return [];
   if (!goal.blockCount) return [{ topics, blocks: topics.length, offset: 0 }];
-  if (goal.track === "supplement") return [{ topics, blocks: goal.blockCount, offset: 0 }];
   const result: { topics: LearningTopic[]; blocks: number; offset: number }[] = [];
   let from = 0, offset = 0;
   for (const milestone of goalMilestones(goal)) {
     const to = topics.findIndex((topic, index) => index >= from && topic.grade === milestone.studyGrade && topic.lesson === milestone.endBlock);
     if (to < from) return [];
+    if (goal.track === "supplement") {
+      result.push({ topics: topics.slice(from, to + 1), blocks: milestone.blockCount - offset, offset });
+      offset = milestone.blockCount;
+      from = to + 1;
+      continue;
+    }
     const segments = topicSegments(topics.slice(from, to + 1));
     const blocks = (milestone.blockCount - offset) / segments.length;
     for (const segment of segments) {

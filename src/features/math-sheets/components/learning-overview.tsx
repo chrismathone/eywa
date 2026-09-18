@@ -390,7 +390,7 @@ export function LearningOverview({
                           <Status student={s} progress={progress} />
                           <p className={styles.meta}>
                             {progress
-                              ? `목표 ${progress.target}블록`
+                              ? `기준일 계획 ${progress.target}블록`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
@@ -435,11 +435,10 @@ export function LearningOverview({
           <span>
             <i className={styles.blueDot} />
             현재 진도 <i className={styles.targetDot} />
-            목표 진도
+            단계별 목표
           </span>
           <span>
-            {learning.referenceDate} 기준 · 수업 당일 목표는 수업 종료까지의
-            계획입니다.
+            정수는 목표 단계 · 소수는 단계 안의 진도 · {learning.referenceDate} 기준
           </span>
         </footer>
       </div>
@@ -570,19 +569,19 @@ function StudentFocus({
                   note: goal.endBlock,
                 },
                 {
-                  label: `${Number(data.month.slice(5))}월 목표`,
+                  label: `${Number(data.month.slice(5))}월 계획`,
                   value: progress.month.to,
                   date: progress.month.endDate,
                   note: `${progress.month.to - progress.month.from}블록 학습`,
                 },
                 {
-                  label: "이번 주 목표",
+                  label: "이번 주 계획",
                   value: progress.week.to,
                   date: progress.week.endDate,
                   note: `${progress.week.to - progress.week.from}블록 학습`,
                 },
                 {
-                  label: "기준일 목표",
+                  label: "기준일 계획",
                   value: progress.target,
                   date: learning.referenceDate,
                   note:
