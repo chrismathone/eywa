@@ -395,9 +395,11 @@
   margin-top: 7px;
 }
 .focusMain {
-  padding: 26px;
+  padding: 16px;
   min-width: 0;
 }
+.planArchive { margin-top: 18px; border: 1px solid var(--line); border-radius: 7px; padding: 14px; font-size: 12px; }
+.planArchive > summary { cursor: pointer; font-weight: 600; }
 .focusTitle {
   display: flex;
   align-items: center;
@@ -680,7 +682,7 @@
     grid-template-columns: 180px minmax(0, 1fr);
   }
   .focusMain {
-    padding: 20px;
+    padding: 12px;
   }
   .hierarchy > div {
     padding: 13px 10px;
@@ -823,7 +825,7 @@
     font-size: 15px;
   }
   .focusMain {
-    padding: 20px 16px;
+    padding: 12px 8px;
   }
   .focusTitle {
     gap: 8px;

@@ -257,6 +257,8 @@ export default async function ClassDetailPage({
                 id: s.id,
                 name: s.name,
                 grade: s.grade,
+                // 단체 배정 목록의 학교·학년 표기·검색(원장 2026-09-18 — 특강은 학교·학년 단위로 모은다).
+                school: s.school,
               }))}
             />
           ) : null}
