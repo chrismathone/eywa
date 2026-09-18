@@ -5,7 +5,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { RINGS, strokeArcPath } from "../geometry";
 import { PACE_META, paceLabel } from "../pace";
-import { HAIRLINE } from "../palette";
+import { ACTUAL_STROKE, HAIRLINE } from "../palette";
 import { periodCount, periodPercent } from "../learning-dashboard";
 import { CX, CY } from "./svg-consts";
 import { useProgressMap } from "./map-state";
@@ -38,7 +38,7 @@ export const CurrentPosition = memo(function CurrentPosition({ viewed = false }:
     return <g className="pointer-events-none select-none" data-clock-center={viewed ? "" : undefined} data-learning-center>
       <circle cx={CX} cy={CY} r={RINGS.center} fill="var(--card)" stroke={HAIRLINE} />
       <circle cx={CX} cy={CY} r={ARC_R} fill="none" stroke="var(--bg-soft)" strokeWidth={ARC_W} />
-      {metrics.percent != null && metrics.percent > 0 ? <path d={strokeArcPath(ARC_R, 0, metrics.percent * 3.6)} fill="none" stroke="var(--green)" strokeWidth={ARC_W} /> : null}
+      {metrics.percent != null && metrics.percent > 0 ? <path d={strokeArcPath(ARC_R, 0, metrics.percent * 3.6)} fill="none" stroke={ACTUAL_STROKE} strokeWidth={ARC_W} /> : null}
       <g textAnchor="middle" dominantBaseline="central" fill="var(--foreground)">
         <text x={CX} y={CY - 88} fontSize={20}>MCS 전체 목표</text>
         <text x={CX} y={CY - 40} fontSize={68} fontWeight={700}>{periodPercent(progress, metrics.percent ?? 0, metrics.total)}</text>

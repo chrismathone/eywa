@@ -8,7 +8,7 @@ import { knownProgress, periodCount, periodPercent, progressUnit } from "../lear
 import { drillLevel } from "../drilldown";
 import { monthOf, resolveDay, resolveWeek } from "../focus";
 import { CX, CY, DRILL_RINGS, arcPath, midAngle, polar, strokeArcPath, withGap } from "../geometry";
-import { FOCUS_INK, HAIRLINE, HOLIDAY_INK, HOLIDAY_SELECTED_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
+import { ACTUAL_STROKE, FOCUS_INK, HAIRLINE, HOLIDAY_COMPLETED_INK, HOLIDAY_INK, HOLIDAY_SELECTED_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
 import { classDaysOfWeek } from "../session-layout";
 import type { HoverTarget } from "../tooltip-content";
 import { DialGuides } from "./dial-guides";
@@ -62,7 +62,7 @@ export const DrilldownDial = memo(function DrilldownDial() {
     periods = month.weeks.filter(w => !w.inactive).map((w) => ({
       key: `w${w.index}`, title: `${w.index}주`, subtitle: formatRange(w.start, w.end),
       metric: metric(w.pct, w.plannedPages), label: `${month.month}월 ${w.index}주차 · ${metric(w.pct, w.plannedPages)} · 날짜별로 확대`,
-      fill: WEEK_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : WEEK_INK[w.status], accent: "var(--green)",
+      fill: WEEK_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : WEEK_INK[w.status], accent: ACTUAL_STROKE,
       pct: w.pct, current: w.isCurrent, selected: focus.week === w.index,
       target: { kind: "week", month: month.month, week: w.index }, onSelect: () => selectWeek(month.month, w.index),
     }));
@@ -74,8 +74,8 @@ export const DrilldownDial = memo(function DrilldownDial() {
         metric: d.plannedPages ? periodCount(progress, d.donePages, d.plannedPages) : dayStatusLabel(d),
         label: `${formatMdW(d.date)} · ${dayDescription(d)}`,
         fill: STATUS_FILL[d.status],
-        ink: d.holidayName ? selected ? HOLIDAY_SELECTED_INK : HOLIDAY_INK : selected ? FOCUS_INK : STATUS_INK[d.status],
-        accent: d.holidayName ? HOLIDAY_INK : "var(--green)", pct: pctOf(d.donePages, d.plannedPages),
+        ink: d.holidayName ? selected ? HOLIDAY_SELECTED_INK : d.status === "completed" ? HOLIDAY_COMPLETED_INK : HOLIDAY_INK : selected ? FOCUS_INK : STATUS_INK[d.status],
+        accent: d.holidayName ? HOLIDAY_INK : ACTUAL_STROKE, pct: pctOf(d.donePages, d.plannedPages),
         current: d.isToday, selected,
         target: { kind: "day", date: d.date }, onSelect: () => selectDay(d.date),
       };
@@ -122,7 +122,7 @@ export const DrilldownDial = memo(function DrilldownDial() {
         <g className="pointer-events-none select-none" textAnchor="middle" dominantBaseline="central">
           <circle cx={CX} cy={CY} r={DRILL_RINGS.center} fill="var(--card)" stroke={HAIRLINE} />
           <circle cx={CX} cy={CY} r={PROGRESS_RADIUS} fill="none" stroke="var(--bg-soft)" strokeWidth={PROGRESS_WIDTH} />
-          {aggregate.pct > 0 ? <path d={strokeArcPath(PROGRESS_RADIUS, 0, aggregate.pct * 3.6)} fill="none" stroke="var(--green)" strokeWidth={PROGRESS_WIDTH} strokeLinecap="round" /> : null}
+          {aggregate.pct > 0 ? <path d={strokeArcPath(PROGRESS_RADIUS, 0, aggregate.pct * 3.6)} fill="none" stroke={ACTUAL_STROKE} strokeWidth={PROGRESS_WIDTH} strokeLinecap="round" /> : null}
           <text x={CX} y={CY - 95} fontSize={27} fontWeight={700} fill="var(--foreground)">{scopeLabel}</text>
           <text x={CX} y={CY - 15} fontSize={centerValue === "수업 없음" ? 54 : 84} fontWeight={700} fill={mode === "day" && day.holidayName ? HOLIDAY_INK : "var(--foreground)"}>{centerValue}</text>
           <text x={CX} y={CY + 53} fontSize={25} fill="var(--text-dim)">{progress.estimated ? `계획 ${aggregate.plannedPages}${progressUnit(progress)}` : periodCount(progress, aggregate.donePages, aggregate.plannedPages)}</text>

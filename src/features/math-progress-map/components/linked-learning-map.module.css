@@ -1,4 +1,5 @@
-.root { --current: #0000ff; --goal: #ff0000; color: var(--text, #171717); font-variant-numeric: tabular-nums; }
+/* 실제 진도 = 파랑, 목표 = 빨강 — MCS 막대와 같은 값(globals.css `--mcs-*`). */
+.root { --current: var(--mcs-actual); --goal: var(--mcs-goal); color: var(--text, #171717); font-variant-numeric: tabular-nums; }
 .root { display: flex; flex-direction: column; gap: 14px; min-width: 0; container-type: inline-size; }
 .dashboardGrid, .bottomGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 .periodControls { padding-top: 6px; }
@@ -62,8 +63,12 @@
 .lessons strong { display: block; font-size: 12px; font-weight: 600; }
 .lessons small { display: block; font-size: 10px; margin-top: 4px; color: var(--text-dim, #666); }
 .lessons > button > span:last-child { margin-left: auto; flex-shrink: 0; font-size: 10px; color: var(--text-dim, #666); }
-.lessonDot { width: 9px; height: 9px; flex-shrink: 0; border: 1px solid var(--current); border-radius: 50%; }
-.lessonDot[data-reached="true"] { border-color: var(--goal); background: var(--goal); }
+.lessonDot { width: 9px; height: 9px; flex-shrink: 0; border: 1px solid var(--line-strong, #999); border-radius: 50%; }
+/* 도달 = 실제 진도라 막대의 현재진도와 같은 파랑이다(2026-09-19 전엔 목표색 빨강이었다 — 막대와 뜻이 뒤집혀 있었다).
+   아직 안 온 차시는 막대의 빈 트랙처럼 무채색 테두리. */
+.lessonDot[data-reached="true"] { border-color: var(--current); background: var(--current); }
+/* 진도맵 곁 '입학부터 종강까지' — 과정 카드의 알약·테두리(앱 blue 유틸)를 MCS 파랑으로 맞춘다. */
+.mcsTones { --blue: var(--mcs-actual); --blue-soft: color-mix(in srgb, var(--mcs-actual) 12%, var(--card, #fff)); }
 .lessonDetail { padding: 15px 20px; font-size: 12px; border-bottom: 1px solid var(--line, #ddd); }
 .lessonDetail p { margin: 5px 0; }
 .lessonDetail button { margin: 7px 6px 0 0; }

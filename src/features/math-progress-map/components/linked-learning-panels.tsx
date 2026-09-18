@@ -40,7 +40,7 @@ export function LinkedCurriculumPosition({ goal, progress, onLesson, onSelectGoa
   const actual = lessons.find(lesson => lesson.position === metrics.current);
   const next = actual ? lessons.find(lesson => lesson.position > actual.position && lesson.inGoal && (lesson.grade !== actual.grade || unitOfLesson(lesson) !== unitOfLesson(actual))) : null;
   const stops = goalMilestones(goal);
-  return <section className={styles.bottomPanel} aria-label="입학부터 종강까지">
+  return <section className={`${styles.bottomPanel} ${styles.mcsTones}`} aria-label="입학부터 종강까지">
     <div className={styles.bottomHeading}><h3>입학부터 종강까지</h3>
       <span>{progress.history?.enrolledAt ? `${progress.history.enrolledAt} 등록` : "등록일 미확인"} → <button onClick={() => onSelectGoal(goal.endDate, metrics.total)}>{goal.endDate} 목표</button></span>
     </div>

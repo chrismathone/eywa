@@ -1,7 +1,7 @@
 .root,
 .goalDialog {
-  --blue: #0000ff;
-  --blue-soft: color-mix(in srgb, #0000ff 8%, var(--card));
+  --blue: var(--mcs-actual);
+  --blue-soft: color-mix(in srgb, var(--mcs-actual) 8%, var(--card));
 }
 .root {
   min-width: 0;
@@ -312,7 +312,7 @@
   background: var(--blue);
 }
 .targetDot {
-  background: #ff0000;
+  background: var(--mcs-goal);
   margin-left: 10px;
 }
 .back {
@@ -894,11 +894,11 @@
 .milestones { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; margin: 16px 0; }
 .milestones li { display: flex; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; align-items: flex-start; }
 .milestones li > div { min-width: 0; }
-.stopNumber { flex: 0 0 24px; height: 24px; display: grid; place-items: center; color: #ff0000; border: 1px solid #ff0000; border-radius: 50%; font-size: 11px; font-weight: 700; }
+.stopNumber { flex: 0 0 24px; height: 24px; display: grid; place-items: center; color: var(--mcs-goal); border: 1px solid var(--mcs-goal); border-radius: 50%; font-size: 11px; font-weight: 700; }
 .milestones strong { font-size: 12px; font-weight: 700; }
 .milestones p { font-size: 12px; line-height: 1.7; margin-top: 4px; overflow-wrap: anywhere; }
 .milestones small { display: block; font-size: 11px; color: var(--text-dim); line-height: 1.7; margin-top: 5px; }
-.milestones li[data-reached] .stopNumber { color: white; background: #ff0000; border-color: #ff0000; }
+.milestones li[data-reached] .stopNumber { color: white; background: var(--mcs-goal); border-color: var(--mcs-goal); }
 @media (max-width: 720px) {
   .classTrack, .trackEditor { margin-left: 16px; margin-right: 16px; }
   .formPair { grid-template-columns: 1fr; }

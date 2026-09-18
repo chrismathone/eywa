@@ -126,6 +126,10 @@ export const HAIRLINE = "var(--line)";
 
 /** 날짜 표식은 학습 상태와 별개다. 선택된 공휴일은 선택 배경에 맞춰 붉은 글자의 대비를 확보한다. */
 export const HOLIDAY_INK = "var(--danger)";
+/** 완료 칸 위 공휴일 글자 — MCS는 완료가 진한 파랑 채움이라 흰 글자(progress-map.module.css), 그 밖은 빨강 그대로. */
+export const HOLIDAY_COMPLETED_INK = "var(--map-holiday-completed-ink, var(--danger))";
+/** 실제 진도의 선·호(가운데 진도 호·드릴 칸 테두리) — MCS는 막대의 파랑, 그 밖은 기존 초록. */
+export const ACTUAL_STROKE = "var(--map-actual, var(--green))";
 export const HOLIDAY_SELECTED_INK = "var(--map-holiday-selected-ink, color-mix(in srgb, var(--danger) 28%, white))";
 export const HOLIDAY_FILL = tint("--danger", 7);
 export const HOLIDAY_TICK_FILL = tint("--danger", 42);

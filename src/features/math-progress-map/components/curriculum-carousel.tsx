@@ -95,7 +95,7 @@ export function CurriculumCarousel({ steps }: { steps: RoadmapStep[] }) {
                     aria-label={`${step.label} · ${step.startMonth}~${step.endMonth} · ${status}`}
                     className={`flex h-28 w-full flex-col gap-1.5 rounded-xl border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
                       selected ? "border-primary bg-primary text-primary-foreground"
-                        : current ? "border-danger text-foreground"
+                        : current ? `${ledger ? "border-blue" : "border-danger"} text-foreground`
                           : "border-line text-foreground enabled:hover:border-primary enabled:hover:bg-primary-softer"
                     }`}
                   >
@@ -104,7 +104,7 @@ export function CurriculumCarousel({ steps }: { steps: RoadmapStep[] }) {
                         {step.label}
                         <EyIcon name="check" size={14} className={selected ? "" : "invisible"} />
                       </span>
-                      <Pill color={ledger ? done ? "danger" : current ? "blue" : "neutral" : current ? "danger" : done ? "green" : "neutral"} soft={!current && !selected} className="shrink-0">{status}</Pill>
+                      <Pill color={ledger ? done || current ? "blue" : "neutral" : current ? "danger" : done ? "green" : "neutral"} soft={!current && !selected} className="shrink-0">{status}</Pill>
                     </span>
                     <span className="num text-xs font-medium whitespace-nowrap">{step.startMonth ? `${formatYearMonth(step.startMonth)} ~ ${formatYearMonth(step.endMonth)}` : "기간 미정"}</span>
                     <span className="line-clamp-2 text-xs leading-relaxed break-keep" title={step.description}>{step.description}</span>

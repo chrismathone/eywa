@@ -5,7 +5,7 @@ import { formatMdW, weekdayLabel } from "../calendar";
 import { dayDescription } from "../day-schedule";
 import { resolveDay, resolveWeek } from "../focus";
 import { GAP, RINGS, arcPath, midAngle, polar, withGap } from "../geometry";
-import { FOCUS_INK, HAIRLINE, HOLIDAY_INK, HOLIDAY_SELECTED_INK, RING_STROKE, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
+import { FOCUS_INK, HAIRLINE, HOLIDAY_COMPLETED_INK, HOLIDAY_INK, HOLIDAY_SELECTED_INK, RING_STROKE, STATUS_FILL, STATUS_INK, TODAY_STROKE } from "../palette";
 import { daySessionLayout } from "../session-layout";
 import { ringActive } from "../view-mode";
 import { useProgressMap } from "./map-state";
@@ -38,7 +38,7 @@ export const DayRing = memo(function DayRing() {
         const dow = weekdayLabel(d.date);
         const path = arcPath(RINGS.day[0], RINGS.day[1], a0, a1);
         const focused = focus.day === d.date;
-        const ink = d.holidayName ? focused ? HOLIDAY_SELECTED_INK : HOLIDAY_INK
+        const ink = d.holidayName ? focused ? HOLIDAY_SELECTED_INK : d.status === "completed" ? HOLIDAY_COMPLETED_INK : HOLIDAY_INK
           : focused ? FOCUS_INK : STATUS_INK[d.status];
         const light = d.status === "no-plan" || d.status === "planned" || d.status === "none";
         return (
