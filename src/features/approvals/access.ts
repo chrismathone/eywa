@@ -21,6 +21,7 @@ export const APPROVAL_PILOT_USER_IDS: readonly string[] = [
   // 테스터(tst@gmail.com, teacher) — 원장이 두 아이디로 직접 테스트(2026-08-18 지시). 강사 역할이라
   // 진입은 미니셸 '내 메뉴' 드롭다운(teacher-menu LINKS에 전자결재 항목 등록됨).
   "09705ab8-05cf-48ab-8f06-d54a3d990b5c", // 테스터 (teacher)
+  "a2df25d8-6857-45de-b95e-57b22b829bd7", // 엄소윤 (admin · 데스크) — 원장 추가 지시 2026-09-18
 ];
 
 /**
