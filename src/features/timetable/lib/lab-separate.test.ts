@@ -55,6 +55,15 @@ describe("'따로 수업(*LAB)' 표시 (원장 2026-09-17)", () => {
     expect(virtual.match(/VIRTUAL_LAB_CELL_CLASS = "([^"]*)"/)?.[1]).not.toContain("underline");
     expect(LAB_SEPARATE_TEXT_CLASS).not.toContain("outline");
   });
+
+  it("🔴 이탤릭은 합성을 켜야 보인다 — body가 font-synthesis:none이고 Pretendard엔 이탤릭 서체가 없다(원장 2026-09-18)", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const virtual = readFileSync(join(process.cwd(), "src/features/timetable/lib/virtual-lab.ts"), "utf8");
+    // 전제가 바뀌면(전역 합성을 켜면) 이 가드도 함께 다시 볼 것.
+    expect(css).toMatch(/font-synthesis:\s*none/);
+    expect(LAB_SEPARATE_TEXT_CLASS).toContain("[font-synthesis:style]");
+    expect(virtual.match(/VIRTUAL_LAB_CELL_CLASS = "([^"]*)"/)?.[1]).toContain("[font-synthesis:style]");
+  });
 });
 
 describe("🔴 0271a 칸을 기존 조회에 끼우지 않는다 — SQL 적용 전 배포에도 안 죽게([[#95]])", () => {

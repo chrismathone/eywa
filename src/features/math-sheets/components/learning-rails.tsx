@@ -1,67 +1,48 @@
-import type { CSSProperties } from "react";
-import {
-  learningBlocks,
-  goalMilestones,
-  type LearningGoal,
-  type LearningProgress,
-} from "../lib/learning-plan";
+import { useId, type CSSProperties } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { goalMilestones, type LearningGoal, type LearningProgress } from "../lib/learning-plan";
+import { learningAxisLabel, learningAxisPosition } from "../lib/learning-axis";
+import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
 
-/** A shared block ruler: positions use exact counts, not rounded display percentages. */
-export function LearningRails({
-  progress,
-  goal,
-  recentBlock,
-}: {
+/** Integer positions are fixed goals; fractional positions show actual progress. */
+export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
   progress?: LearningProgress;
   goal?: LearningGoal;
   recentBlock?: string | null;
+  recentGrade?: string | null;
 }) {
-  const total = progress?.total ?? 0;
+  const goalDescriptionId = useId();
+  const stops = goal ? goalMilestones(goal) : [];
+  const total = stops.length;
   const current = progress?.current ?? null;
-  const target = progress?.target ?? 0;
-  const position = (count: number) =>
-    total ? Math.max(0, Math.min(100, (count / total) * 100)) : 0;
-  const currentPosition = position(current ?? 0);
-  const targetPosition = position(target);
-  const currentLabel =
-    progress?.currentBlock ?? recentBlock ?? "진도 기록 확인 필요";
-  const targetLabel = !total
-    ? "전체 목표를 설정해 주세요"
-    : target === 0
-      ? "아직 배분된 블록 없음"
-      : (goal && learningBlocks(goal)[target - 1]) || `누적 ${target}블록`;
+  const axisCurrent = current == null ? null : learningAxisPosition(current, stops);
+  const position = (value: number) => total ? value / total * 100 : 0;
+  const currentPosition = position(axisCurrent ?? 0);
+  const currentBlock = progress?.currentBlock ?? recentBlock;
+  const currentLabel = currentBlock ? learningBlockLabel(currentBlock, goal?.studyGrade ?? recentGrade) : "진도 기록 확인 필요";
+  const finalStop = stops.at(-1);
+  const finalLabel = finalStop ? learningBlockLabel(finalStop.endBlock, finalStop.studyGrade) : "전체 목표를 설정해 주세요";
+  const describeStop = (index: number) => `${index + 1}차 목표 · ${learningBlockLabel(stops[index].endBlock, stops[index].studyGrade)} · ${stops[index].endDate}`;
+  const currentText = axisCurrent == null ? "현재 진도 확인 필요" : `현재 ${learningAxisLabel(axisCurrent)} / 최종 목표 ${total} · ${currentLabel}`;
+  const goalText = total ? stops.map((_, index) => describeStop(index)).join("; ") : "전체 목표 미설정";
+  const variables = { "--current-position": `${currentPosition}%`, "--target-position": total ? "100%" : "0%" } as CSSProperties;
 
-  // Each minor tick is a block; long courses thin ticks at whole-block intervals.
-  // Three SVG paths keep a class full of rulers inexpensive to render.
-  const step = Math.max(1, Math.ceil(total / 120));
-  const majorStep = goal?.blockCount === 24 ? 8 : total > 60 ? 10 : total > 20 ? 5 : total > 8 ? 2 : 1;
+  // Tenths within each goal; long journeys thin minor ticks and labels independently.
+  const minorStep = Math.max(1, Math.ceil(total / 12));
+  const labelStep = Math.max(1, Math.ceil(total / 4));
   let minorTicks = "", majorTicks = "", guides = "";
-  for (let block = 1; block < total; block++) {
-    const x = ((block / total) * 1000).toFixed(2);
-    if (block % majorStep === 0) {
+  for (let tick = 1; tick < total * 10; tick++) {
+    const x = (tick / (total * 10) * 1000).toFixed(2);
+    if (tick % 10 === 0) {
       majorTicks += `M${x} 30v8M${x} 83v8`;
       guides += `M${x} 38v45`;
-    } else if (block % step === 0) {
-      minorTicks += `M${x} 32v4M${x} 85v4`;
+    } else if (tick % minorStep === 0) {
+      minorTicks += `M${x} 30v6M${x} 85v6`;
     }
   }
-  const labelStep = Math.max(majorStep, Math.ceil(total / 4 / majorStep) * majorStep);
-  const labels: number[] = [];
-  for (let block = labelStep; block < total * 0.8; block += labelStep) {
-    if (block / total > 0.18) labels.push(block);
-  }
-  const currentText = current == null ? "현재 진도 확인 필요" : `${current} / ${total}블록 · ${currentLabel}`;
-  const targetText = total ? `${target} / ${total}블록 · ${targetLabel}` : "전체 목표 미설정";
-  const variables = {
-    "--current-position": `${currentPosition}%`,
-    "--target-position": `${targetPosition}%`,
-    "--interval-start": `${Math.min(currentPosition, targetPosition)}%`,
-    "--interval-width": `${Math.abs(currentPosition - targetPosition)}%`,
-  } as CSSProperties;
-
   return (
-    <div className={styles.rails} style={variables} data-planned={total > 0}>
+    <div className={styles.rails} style={variables} data-planned={total > 0} data-dense={total > 12 || undefined}>
       <div className={styles.plot}>
         {total > 0 ? (
           <svg className={styles.ruler} viewBox="0 0 1000 122" preserveAspectRatio="none" aria-hidden="true">
@@ -71,55 +52,55 @@ export function LearningRails({
             <path className={styles.endTicks} d="M0 35v16M1000 35v16M0 69v16M1000 69v16" vectorEffect="non-scaling-stroke" />
           </svg>
         ) : null}
-        {total > 0 && current != null ? <div className={styles.interval} aria-hidden="true" /> : null}
-        {total > 0 ? <div className={styles.targetGuide} aria-hidden="true" /> : null}
-
         <div className={`${styles.annotation} ${styles.currentAnnotation}`} title={`현재 진도 · ${currentLabel}`}>
-          <span className={styles.annotationTag}>현재</span>
-          <span className={styles.blockName}>{currentLabel}</span>
+          <span className={styles.annotationTag}>현재</span><span className={styles.blockName}>{currentLabel}</span>
         </div>
-        <div
-          className={`${styles.track} ${styles.currentTrack}`}
-          role={total > 0 && current != null ? "progressbar" : "img"}
-          aria-label="현재진도"
-          aria-valuemin={total > 0 && current != null ? 0 : undefined}
-          aria-valuemax={total > 0 && current != null ? total : undefined}
-          aria-valuenow={total > 0 && current != null ? current : undefined}
-          aria-valuetext={total > 0 && current != null ? currentText : undefined}
-          aria-description={currentText}
-        >
+        <div className={`${styles.track} ${styles.currentTrack}`}
+          role={total > 0 && axisCurrent != null ? "progressbar" : "img"} aria-label="현재진도"
+          aria-valuemin={total > 0 && axisCurrent != null ? 0 : undefined}
+          aria-valuemax={total > 0 && axisCurrent != null ? total : undefined}
+          aria-valuenow={total > 0 && axisCurrent != null ? axisCurrent : undefined}
+          aria-valuetext={total > 0 && axisCurrent != null ? currentText : undefined} aria-description={currentText}>
           <span className={styles.currentFill} />
-          {goal && total > 0 ? goalMilestones(goal).slice(0, -1).map((stop, index) => (
-            <span key={index} className={styles.milestoneTick} style={{ left: `${position(stop.blockCount)}%` }} title={`${index + 1}차 목표 · ${stop.studyGrade} · ${stop.endBlock}`} />
-          )) : null}
-          {total > 0 && current != null ? <span className={styles.currentMarker} /> : null}
+          {total > 0 && axisCurrent != null ? <span className={styles.currentMarker} /> : null}
         </div>
-        <div
-          className={`${styles.track} ${styles.targetTrack}`}
-          role={total > 0 ? "progressbar" : "img"}
-          aria-label="목표진도"
-          aria-valuemin={total > 0 ? 0 : undefined}
-          aria-valuemax={total > 0 ? total : undefined}
-          aria-valuenow={total > 0 ? target : undefined}
-          aria-valuetext={total > 0 ? targetText : undefined}
-          aria-description={targetText}
-        >
+        <div className={`${styles.track} ${styles.targetTrack}`} role="img" aria-label="목표진도" aria-describedby={goalDescriptionId}>
           <span className={styles.targetFill} />
-          {total > 0 ? <span className={styles.targetMarker} /> : null}
         </div>
-        <div className={`${styles.annotation} ${styles.targetAnnotation}`} title={`기준일 목표 진도 · ${targetLabel}`}>
-          <span className={styles.annotationTag}>목표</span>
-          <span className={styles.blockName}>{targetLabel}</span>
+        {stops.map((stop, index) => (
+          <Tooltip key={index}>
+            <TooltipTrigger className={styles.targetMarker} data-goal-number={index + 1}
+              data-final={index === total - 1 || undefined} delay={0}
+              style={{ left: `${position(index + 1)}%` }} aria-label={`${index + 1}차 목표`}
+              aria-describedby={`${goalDescriptionId}-stop-${index}`}
+              onClick={(event) => event.stopPropagation()} />
+            <TooltipContent id={`${goalDescriptionId}-stop-${index}`} role="tooltip" className={styles.goalTooltip} side="top" sideOffset={10}>
+              <div>
+                <strong>{index + 1}차 목표</strong>
+                <p>{learningBlockLabel(stop.endBlock, stop.studyGrade)}</p>
+                <small>완료 예정 · {stop.endDate}</small>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+        <div className={`${styles.annotation} ${styles.targetAnnotation}`} title={`최종 목표 · ${finalLabel}`}>
+          <span className={styles.annotationTag}>{total ? `${total}차 목표` : "목표"}</span>
+          <span className={styles.blockName}>{finalLabel}</span>
         </div>
       </div>
+      <span id={goalDescriptionId} className={styles.description}>{goalText}</span>
       <div className={styles.values} aria-hidden="true">
-        <span className={styles.currentValue}>{current == null ? "—" : <><b>{current}</b><small>블록</small></>}</span>
-        <span className={styles.targetValue}>{total ? <><b>{target}</b><small>블록</small></> : "—"}</span>
+        <span className={styles.currentValue}>{axisCurrent == null ? "—" : <b>{learningAxisLabel(axisCurrent)}</b>}</span>
+        <span className={styles.targetValue}>{total ? <><b>{total}</b><small>차 목표</small></> : "—"}</span>
       </div>
-      <div className={styles.scale} aria-hidden="true">
-        <span>시작 0</span>
-        {labels.map((block) => <span key={block} className={styles.scaleTick} style={{ left: `${position(block)}%` }}>{block}</span>)}
-        <span>{total ? `전체 ${total}블록` : "전체 목표 미설정"}</span>
+      <div className={styles.scale} aria-label="목표 수직선 눈금">
+        <span>0</span>
+        {Array.from({ length: Math.max(0, total * 10 - 1) }, (_, i) => i + 1).filter(tick => {
+          if (tick % 10 === 0) return (tick / 10) % labelStep === 0;
+          return total <= 4 && tick % (total === 1 ? 1 : 5) === 0;
+        }).map(tick => <span key={tick} className={`${styles.scaleTick} ${tick % 10 ? styles.fractionTick : styles.goalTick}`}
+          style={{ left: `${position(tick / 10)}%` }}>{tick % 10 ? tick / 10 : `${tick / 10}차`}</span>)}
+        <span className={styles.goalTick}>{total ? `${total}차` : "전체 목표 미설정"}</span>
       </div>
     </div>
   );

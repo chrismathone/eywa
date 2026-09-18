@@ -650,12 +650,13 @@ export async function getClassesPage(
  *    빈 칸이 되어 저장 한 번에 담임이 NULL로 지워진다(반 수정 페이지의 '현재 담임 고정' 참조).
  */
 export async function getClassTeacherOptions(): Promise<
-  { id: string; name: string; subjects: string[] }[]
+  { id: string; name: string; subjects: string[]; bgColor: string | null; textColor: string | null }[]
 > {
   const supabase = await createClient();
   const { data } = await supabase
     .from("users")
-    .select("id, display_name, system_role, subjects")
+    // bg_color·text_color = 강사 퍼스널 색(0054a) — 반 수정 '주간 스케줄' 격자가 강사 칸을 이 색으로 칠한다(원장 2026-09-18).
+    .select("id, display_name, system_role, subjects, bg_color, text_color")
     .in("system_role", [...ASSIGNABLE_TEACHER_ROLES])
     .eq("status", "active")
     .order("display_name");
@@ -663,6 +664,8 @@ export async function getClassTeacherOptions(): Promise<
     id: u.id,
     name: u.display_name,
     subjects: u.subjects ?? [],
+    bgColor: u.bg_color ?? null,
+    textColor: u.text_color ?? null,
   }));
 }
 

@@ -1,7 +1,7 @@
 .rails {
   --blue: #0000ff;
   --rail-ink: #0000ff;
-  --rail-tick: color-mix(in srgb, var(--rail-ink) 20%, var(--card));
+  --rail-tick: color-mix(in srgb, var(--rail-ink) 48%, var(--card));
   /* 목표진도(2행)는 **붉은색 계열**(원장 2026-09-18 *"수학 mcs에서 목표진도는 붉은색계열로 전부"*).
      🔴 현재진도(파랑)와 **색으로** 갈린다 — 두 줄이 같은 눈금을 쓰기 때문에, 색이 같으면 어느 줄이
         사실이고 어느 줄이 계획인지 눈으로 못 가른다.
@@ -18,6 +18,7 @@
   height: 122px;
   min-width: 0;
 }
+.description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .ruler {
   position: absolute;
   inset: 0;
@@ -29,41 +30,22 @@
 }
 .guides {
   stroke: var(--rail-ink);
-  stroke-width: 0.6px;
-  opacity: 0.065;
+  stroke-width: 1px;
+  opacity: 0.16;
 }
 .minorTicks {
   stroke: var(--rail-tick);
-  stroke-width: 0.65px;
+  stroke-width: 1px;
 }
 .majorTicks {
   stroke: var(--rail-ink);
-  stroke-width: 0.8px;
-  opacity: 0.3;
+  stroke-width: 1.2px;
+  opacity: 0.55;
 }
 .endTicks {
   stroke: var(--rail-ink);
   stroke-width: 1px;
-  opacity: 0.28;
-}
-.interval {
-  position: absolute;
-  left: var(--interval-start);
-  width: var(--interval-width);
-  top: 43px;
-  height: 34px;
-  background: color-mix(in srgb, var(--blue) 3.5%, transparent);
-  pointer-events: none;
-  transition: left 320ms ease, width 320ms ease;
-}
-.targetGuide {
-  position: absolute;
-  top: 40px;
-  height: 40px;
-  left: var(--target-position);
-  border-left: 1px dashed color-mix(in srgb, var(--goal-ink) 30%, transparent);
-  pointer-events: none;
-  transition: left 320ms ease;
+  opacity: 0.5;
 }
 .track {
   position: absolute;
@@ -76,14 +58,6 @@
   box-shadow: inset 0 1px 1px color-mix(in srgb, var(--blue) 6%, transparent);
 }
 .currentTrack { top: 43px; }
-.milestoneTick {
-  position: absolute;
-  top: -4px;
-  width: 2px;
-  height: 13px;
-  background: var(--rail-ink);
-  transform: translateX(-50%);
-}
 .targetTrack { top: 77px; height: 3px; }
 .currentFill,
 .targetFill {
@@ -128,14 +102,34 @@
 }
 .currentMarker::before { bottom: 11px; height: 10px; }
 .targetMarker {
+  top: 77px;
   left: var(--target-position);
   width: 10px;
   height: 10px;
+  padding: 0;
   border: 1.5px solid var(--goal-ink);
   background: var(--card);
   box-shadow: 0 0 0 2px var(--card);
+  cursor: help;
 }
+.targetMarker::after { content: ""; position: absolute; inset: -8px; }
+.targetMarker:focus-visible { outline: 2px solid var(--goal-ink); outline-offset: 4px; }
 .targetMarker::before { top: 10px; height: 11px; background: var(--goal-ink); }
+.targetMarker:not([data-final])::before { display: none; }
+.rails[data-dense] .targetMarker { width: 3px; height: 9px; border: 0; border-radius: 0; background: var(--goal-ink); box-shadow: none; }
+.goalTooltip {
+  max-width: min(320px, calc(100vw - 24px));
+  border: 1px solid color-mix(in srgb, #ff0000 25%, var(--card));
+  background: var(--card);
+  color: #ff0000;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 10%);
+}
+.goalTooltip p { margin: 2px 0; }
+.goalTooltip small { color: var(--text-dim); font-size: 10px; }
+.goalTooltip > [aria-hidden="true"] { background: var(--card); }
 .annotation {
   position: absolute;
   display: inline-flex;
@@ -219,6 +213,7 @@
   line-height: 1.5;
 }
 .scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; }
+.goalTick { color: var(--goal-ink); font-weight: 650; opacity: 1; }
 .rails[data-planned="false"] .annotation {
   border-color: var(--line);
   color: var(--text-dim);
@@ -228,8 +223,8 @@
   background: var(--bg-soft);
   color: var(--text-dim);
 }
-@container (max-width: 260px) {
-  .scaleTick { display: none; }
+@container (max-width: 420px) {
+  .fractionTick { display: none; }
 }
 @media (max-width: 720px) {
   .rails { grid-template-columns: minmax(0, 1fr) 46px; column-gap: 12px; }
@@ -238,5 +233,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .currentFill, .targetFill, .currentMarker, .targetMarker,
-  .annotation, .interval, .targetGuide { transition: none; }
+  .annotation { transition: none; }
 }

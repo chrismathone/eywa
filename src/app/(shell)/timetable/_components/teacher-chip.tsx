@@ -13,6 +13,11 @@ export type TeacherCellColor = { bg: string; text: string };
 import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { useClassVisible, useSearchTone } from "./search-context";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
+import {
+  isLabSeparateSlot,
+  LAB_SEPARATE_LABEL,
+  LAB_SEPARATE_TEXT_CLASS,
+} from "@/features/timetable/lib/lab-separate";
 
 // 강사뷰(10분 격자) 전용 칩 — 기본은 시트처럼 **반명+방만**, 클릭하면 그 자리에서 재원 학생
 // 명단으로 전환(다시 클릭=복귀). 블록 높이는 고정(10분 축)이라 명단이 넘치면 블록 내부 스크롤.
@@ -55,6 +60,9 @@ export function TeacherChip({
    */
   const markEdgeColor = slot.classBgColor ? readableTextColor(slot.classBgColor) : "#ffffff";
   const active = slot.students.filter((s) => (s.status ?? "active") === "active");
+  // '따로 수업(*LAB)' — LAB 열의 칩은 반 이름만 보여 어느 교시가 따로 수업인지 안 보인다(원장 2026-09-18
+  // *"통합뷰나 여러가지 뷰에서도 *LAB 밑줄 이탤릭체 적용"*). 판정·모양은 lab-separate.ts 단일 소스.
+  const labSeparate = isLabSeparateSlot(slot.slotTeacherLabel, slot.labSeparate);
   if (!visible) return null;
 
   return (
@@ -120,6 +128,11 @@ export function TeacherChip({
                한 줄에 욱여넣어 반명이 잘리던 것 해소(2026-07-06 사용자 지적). */
             <div className="text-center">
               <span className="block text-xs leading-tight font-bold break-keep">{slot.className}</span>
+              {labSeparate ? (
+                <span className={`mt-0.5 block text-xs font-bold ${LAB_SEPARATE_TEXT_CLASS}`}>
+                  {LAB_SEPARATE_LABEL}
+                </span>
+              ) : null}
               {slot.classroomName ? (
                 <span className="mt-0.5 block text-xs opacity-75">{slot.classroomName}</span>
               ) : null}

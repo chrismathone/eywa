@@ -49,8 +49,9 @@ export const VIRTUAL_LAB_LABEL = "*LAB";
  * 바탕을 칠하지 않고 파란 점선 테두리 + 이탤릭.
  * ⚠️ 테두리는 `border`가 아니라 `outline` — 칸의 격자선(border)과 축이 달라 서로를 덮지 않고, 레이아웃도 안 민다.
  * ⚠️ 색은 globals.css에 있는 토큰(`--color-blue`)만 쓴다 — 없는 토큰 유틸은 에러 없이 무색이 된다.
+ * 🔴 `[font-synthesis:style]`을 빼지 말 것 — body가 합성을 끄고 Pretendard엔 이탤릭 서체가 없어 이것 없이는 곧게 선다.
  */
-export const VIRTUAL_LAB_CELL_CLASS = "text-blue italic outline-1 outline-dashed -outline-offset-2 outline-blue/60";
+export const VIRTUAL_LAB_CELL_CLASS = "text-blue italic [font-synthesis:style] outline-1 outline-dashed -outline-offset-2 outline-blue/60";
 
 /** 0255a `seat_period_moves` 한 줄(앱 표기). `sessionDate`="YYYY-MM-DD", `slotStart`="HH:MM". */
 export type SeatMoveRow = { seat: string; sessionDate: string; classId: string; studentId: string; slotStart: string };

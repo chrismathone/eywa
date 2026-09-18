@@ -40,6 +40,7 @@ import { LearningRails } from "./learning-rails";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { learningBlocks } from "../lib/learning-plan";
 import { courseRangeLabel } from "../lib/learning-path";
+import { learningBlockLabel } from "../lib/learning-label";
 import { setMathClassLearningTrack } from "../server/learning-actions";
 import { LearningMilestones } from "./learning-milestones";
 
@@ -362,10 +363,10 @@ export function LearningOverview({
                                 "현재 수업"}
                             </strong>
                             <span>
-                              {goal ? `전체 목표 · ${goal.endBlock}` : "전체 목표 미설정"}
+                              {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} goal={goal} recentBlock={!goal && track === "regular" ? s.rail?.nowLesson : undefined} />
+                          <LearningRails progress={progress} goal={goal} recentBlock={!goal && track === "regular" ? s.rail?.nowLesson : undefined} recentGrade={s.rail?.nowGrade} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
@@ -390,7 +391,7 @@ export function LearningOverview({
                           <Status student={s} progress={progress} />
                           <p className={styles.meta}>
                             {progress
-                              ? `목표 ${progress.target}블록`
+                              ? `기준일 계획 ${progress.target}블록`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
@@ -435,11 +436,10 @@ export function LearningOverview({
           <span>
             <i className={styles.blueDot} />
             현재 진도 <i className={styles.targetDot} />
-            목표 진도
+            단계별 목표
           </span>
           <span>
-            {learning.referenceDate} 기준 · 수업 당일 목표는 수업 종료까지의
-            계획입니다.
+            정수는 목표 단계 · 소수는 단계 안의 진도 · {learning.referenceDate} 기준
           </span>
         </footer>
       </div>
@@ -544,7 +544,7 @@ function StudentFocus({
             <LearningRails progress={progress} goal={goal} />
             <LearningMilestones goal={goal} progress={progress} />
             <p className={styles.currentBlock}>
-              {progress.currentBlock ?? "현재 진도 확인 필요"}
+              {progress.currentBlock ? learningBlockLabel(progress.currentBlock, goal.studyGrade) : "현재 진도 확인 필요"}
               {progress.currentDate
                 ? ` (${shortDate(progress.currentDate)} 기록)`
                 : ""}
@@ -567,22 +567,22 @@ function StudentFocus({
                   label: "전체 목표",
                   value: progress.total,
                   date: goal.endDate,
-                  note: goal.endBlock,
+                  note: learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade),
                 },
                 {
-                  label: `${Number(data.month.slice(5))}월 목표`,
+                  label: `${Number(data.month.slice(5))}월 계획`,
                   value: progress.month.to,
                   date: progress.month.endDate,
                   note: `${progress.month.to - progress.month.from}블록 학습`,
                 },
                 {
-                  label: "이번 주 목표",
+                  label: "이번 주 계획",
                   value: progress.week.to,
                   date: progress.week.endDate,
                   note: `${progress.week.to - progress.week.from}블록 학습`,
                 },
                 {
-                  label: "기준일 목표",
+                  label: "기준일 계획",
                   value: progress.target,
                   date: learning.referenceDate,
                   note:

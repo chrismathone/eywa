@@ -14,8 +14,12 @@ import { LAB_ROOM_LABEL, specialSlotLabel } from "./teacher-label";
 
 export const LAB_SEPARATE_LABEL = "*LAB";
 
-/** 글자 모양 — 밑줄 + 이탤릭(바탕·글자색은 LAB 칸 그대로). */
-export const LAB_SEPARATE_TEXT_CLASS = "italic underline underline-offset-2";
+/**
+ * 글자 모양 — 밑줄 + 이탤릭(바탕·글자색은 LAB 칸 그대로).
+ * 🔴 `[font-synthesis:style]`을 빼지 말 것 — body가 `font-synthesis: none`(globals.css)이고 Pretendard엔 이탤릭 서체가
+ *    없어서, 이것 없이는 `italic`이 **아무 일도 안 한다**(원장 2026-09-18 *"*LAB 밑줄 이탤릭체 적용"* — 9/17부터 곧게 섰다).
+ */
+export const LAB_SEPARATE_TEXT_CLASS = "italic [font-synthesis:style] underline underline-offset-2";
 
 /** 칸 툴팁 — 가상 `*LAB`의 "임시" 설명과 갈라 둔다. */
 export const LAB_SEPARATE_TIP = "LAB · 따로 수업(반 수정에서 켠 표식)";
