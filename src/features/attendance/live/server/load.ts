@@ -21,7 +21,10 @@ import { weekdayIndexOf } from "@/lib/date-kst";
 import { classifySignal, hhmm, resolveSlotStatus } from "../signals";
 import { saveSlotFor } from "../slot-axis";
 import { canonicalRoomName, resolveRoomName } from "../seating-floors";
-import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { LAB_ROOM_LABEL, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+// LAB '따로 수업(*LAB)' 배정 — 자리 출석부와 **같은 재료·같은 판정**(화면마다 다른 명단이 서면 안 된다).
+import { labSplitKey, labSplitSlotShows } from "@/features/attendance/seat/lab-split";
+import { loadLabSplitInputs } from "@/features/attendance/seat/server/lab-split";
 // 출결 강사 귀속 축 단일 소스(자리는 담임 폴백 금지 · 담당 없으면 담임) — 월간 출석부와 같은 규칙.
 import { taughtByForSlot } from "@/features/attendance/teacher-axis";
 // 보강 예약(0264a) — 그 교시 칸에 예약된 학생을 미리 세운다(fail-soft, 표 없음 = 없음).
@@ -55,6 +58,8 @@ export async function holidayNameOf(date: string): Promise<string | null> {
 }
 
 type SlotRow = {
+  /** 배치 행 id — '따로 수업(*LAB)' 표식(0271a)이 행 id 명단으로 오므로 필요하다. */
+  id: string;
   class_id: string;
   start_time: string;
   end_time: string | null;
@@ -96,7 +101,7 @@ export async function loadLiveSlots(
     supabase
       .from("class_schedules")
       .select(
-        "class_id, start_time, end_time, teacher_id, period_label, slot_teacher_label, classroom_id, slot_room_label",
+        "id, class_id, start_time, end_time, teacher_id, period_label, slot_teacher_label, classroom_id, slot_room_label",
       )
       .eq("day_of_week", dayEnum)
       .lte("valid_from", date)
@@ -120,7 +125,7 @@ export async function loadLiveSlots(
   const slotClassIds = [...new Set(slots.map((s) => s.class_id))];
 
   // 2) 반 메타(활성만) + 그 반들의 수강행 + 그날 출결 — 서로 독립이라 병렬(B4).
-  const [classRows, enrollRows, recordRows, reservedRaw, testStudentIds] = await Promise.all([
+  const [classRows, enrollRows, recordRows, reservedRaw, testStudentIds, labSplit] = await Promise.all([
     fetchInChunks<{
       id: string;
       class_name: string;
@@ -180,6 +185,8 @@ export async function loadLiveSlots(
     getReservationsOn(date, slotClassIds),
     // 테스트 학생 id(데스크 표면에서만 — 위 opts) — 독립 조회라 함께(B4). 조회 실패 = 빈 집합 = 지금 동작(fail-open).
     opts.excludeTestStudents ? getTestStudentIds(supabase) : Promise.resolve(new Set<string>()),
+    // LAB '따로 수업(*LAB)' 배정 재료(0271a·0271b) — 자리 출석부와 같은 로더(fail-soft: 모르면 null = 안 가른다).
+    loadLabSplitInputs(supabase, { classIds: slotClassIds, date, tenantId: null }),
   ]);
 
   const activeClasses = new Map(
@@ -306,6 +313,21 @@ export async function loadLiveSlots(
   const roomNameById = new Map(rooms.map((r) => [r.id, r.name]));
   const roomNames = rooms.map((r) => r.name);
 
+  /**
+   * 그 날 반마다 자리(LAB) 교시가 어떻게 갈리는가 — `*LAB`이 있으면 그 반은 둘로 나뉜다(0271a·0271b).
+   * 🔴 판정은 자리 출석부·시간표와 **같은 함수**(`labSplitSlotShows`)다. 재료를 모르면(labSplit=null) 안 가른다.
+   */
+  const labDayByClass = new Map<string, { sep: boolean; normal: boolean }>();
+  if (labSplit) {
+    for (const s of slots) {
+      if (specialSlotLabel(s.slot_teacher_label) !== LAB_ROOM_LABEL) continue;
+      const cur = labDayByClass.get(s.class_id) ?? { sep: false, normal: false };
+      if (labSplit.separateIds.has(String(s.id))) cur.sep = true;
+      else cur.normal = true;
+      labDayByClass.set(s.class_id, cur);
+    }
+  }
+
   // 6) 슬롯 × 학생 조립.
   const out: LiveSlot[] = [];
   for (const slot of slots) {
@@ -322,6 +344,18 @@ export async function loadLiveSlots(
     // 그 교시에 예약된 보강 학생(0264a) — 정규 명단 뒤에 붙인다(수강생이면 정규 명단에 이미 있어 표식만 붙는다).
     const reservedHere = reservedBySlot.get(`${slot.class_id}|${start}`);
     const expected = new Set<string>([...(expectedByClass.get(slot.class_id) ?? []), ...(reservedHere?.keys() ?? [])]);
+    // *LAB 배정 — 켠 원생은 *LAB 칸에만, 끈 원생은 일반 LAB 칸에만(원장 2026-09-18). 자리 출석부와 같은 판정.
+    // 🔴 **보강으로 온 학생은 안 뺀다** — 그 교시에 오기로 한 사실이 배정보다 구체적이다.
+    const labDay = special === LAB_ROOM_LABEL ? labDayByClass.get(slot.class_id) : undefined;
+    if (labSplit && labDay?.sep) {
+      const slotSeparate = labSplit.separateIds.has(String(slot.id));
+      for (const sid of [...expected]) {
+        if (reservedHere?.has(sid)) continue;
+        const flagged = labSplit.flagged.has(labSplitKey(slot.class_id, sid));
+        if (!labSplitSlotShows({ slotSeparate, flagged, dayHasSeparate: true, dayHasNormal: labDay.normal }))
+          expected.delete(sid);
+      }
+    }
     if (expected.size === 0) continue; // 명단 0명 = 보여줄 것이 없다
     // "이 교시에 기록이 있나" — 교시별 기록이 있거나, 그날 전체 기록이 있으면 강사가 손을 댄 것이다.
     const hasAnyRecord = slotHasRecord.has(`${slot.class_id}|${start}`) || dayHasRecord.has(slot.class_id);

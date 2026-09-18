@@ -15,6 +15,8 @@ import type { AttendanceMark } from "@/features/attendance/cell-display";
 import type { PeriodWindow } from "@/features/periods/resolve";
 import type { SpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { hhmm } from "./seat";
+// *LAB 배정 판정 — 자리 출석부(일)·시간표·원생 시간표와 한 벌.
+import { labSplitKey, labSplitSlotShows } from "./lab-split";
 import {
   classifySeatRecord,
   commonSlotMinutes,
@@ -62,6 +64,11 @@ export function buildSeatMonthly(input: {
   periodLabelOf?: (start: string, end: string) => string;
   /** 학생별 **다른 반** 수강 구간 — 퇴원이 실은 반이동인지 가르는 데만 쓴다(없으면 신입·퇴원까지). */
   otherSpans?: ReadonlyMap<string, readonly OtherSpan[]>;
+  /**
+   * '따로 수업(*LAB)' 배정 — 켠 수강의 `(반|학생)` 키(0271b). 🔴 **모르면(undefined·null) 한 칸도 안 가른다**
+   * (조회 실패를 "아무도 안 켰다"로 읽으면 멀쩡한 LAB 칸이 통째로 사라진다).
+   */
+  labFlagged?: ReadonlySet<string> | null;
 }): SeatMonthlyView {
   const {
     month,
@@ -75,6 +82,7 @@ export function buildSeatMonthly(input: {
     wantLabel,
     periodLabelOf,
     otherSpans,
+    labFlagged,
   } = input;
   const badgeRange = { first: window.start, last: window.end };
   const classById = new Map(classes.map((c) => [c.id, c]));
@@ -118,7 +126,19 @@ export function buildSeatMonthly(input: {
         if (d.placeholder) continue;
         const holiday = Boolean(holidays[d.date]);
         const enrolled = isEnrolledOn(d.date, spans);
-        const live = classSlots.filter((s) => isSlotLiveOnDate(s, d.date));
+        const liveAll = classSlots.filter((s) => isSlotLiveOnDate(s, d.date));
+        // *LAB 배정 — 켠 원생은 *LAB 교시만, 끈 원생은 일반 LAB 교시만(자리 출석부·시간표와 **같은 판정**).
+        //    🔴 재료를 모르면 그대로다. ⚠️ 기록이 있는 교시는 아래에서 다시 들어온다(사실이 규칙을 이긴다).
+        const live = labFlagged
+          ? liveAll.filter((s) =>
+              labSplitSlotShows({
+                slotSeparate: s.separate === true,
+                flagged: labFlagged.has(labSplitKey(classId, row.studentId)),
+                dayHasSeparate: liveAll.some((x) => x.separate === true),
+                dayHasNormal: liveAll.some((x) => x.separate !== true),
+              }),
+            )
+          : liveAll;
         const expected = enrolled && attendDows.includes(d.dow) && !holiday && live.length > 0;
         const starts = new Set(live.map((s) => hhmm(s.start)));
         for (const [key] of recByKey) {

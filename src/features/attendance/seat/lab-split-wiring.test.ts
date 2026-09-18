@@ -50,9 +50,17 @@ describe("LAB '따로 수업(*LAB)' 배정 배선", () => {
       "src/features/attendance/seat/lab-split.ts",
       "src/features/timetable/lib/lab-separate.ts",
       "src/features/students/lib/class-slots.ts",
+      // 그 날 그 교시에 앉는 원생을 **따로 계산하던** 두 곳(2026-09-18 전수 조사로 찾았다).
+      "src/features/attendance/live/server/load.ts", // 오늘 출결 보드(좌석표·출결 모드)
+      "src/features/attendance/seat/monthly-build.ts", // 자리 월간 출석부(화면·인쇄)
     ]) {
       expect(read(f), f).toContain("labSplitSlotShows");
     }
+    // 🔴 두 곳 다 재료를 모르면 안 가른다(조회 실패가 LAB 칸을 비우지 않게).
+    expect(read("src/features/attendance/live/server/load.ts")).toMatch(/if \(labSplit && labDay\?\.sep\)/);
+    expect(read("src/features/attendance/seat/server/monthly-queries.ts")).toMatch(
+      /labFlagged:\s*labSeparateSlotIds \? labFlagged : null/,
+    );
     // 원생 주간 시간표 = 격자·텍스트 요약이 **같은 행 목록**을 쓴다(한쪽만 가르면 두 표기가 갈린다).
     const q = read("src/features/students/server/queries.ts");
     expect(q).toContain("filterLabSeparateRows(");
