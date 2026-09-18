@@ -5,7 +5,9 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { DOW_KEYS, dowIndexOf, resolveAttendDows } from "@/features/attendance/calendar";
-import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { LAB_ROOM_LABEL, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+import { buildLabSplitDefaults } from "../lab-split";
+import { loadLabSplitInputs } from "./lab-split";
 import {
   groupByStart,
   hhmm,
@@ -95,6 +97,13 @@ export type SeatDay = {
    * 찍힌 것). 사실이 규칙을 이긴다 — 교시 선택이 지워져도 이 기록은 그 교시에 선다.
    */
   offSlotByCell: Record<string, Record<string, SeatStudent>>;
+  /**
+   * `반id|학생id` → 선택(이동·고정)이 없을 때 설 교시들 — LAB '따로 수업(*LAB)' 학생 배정(0271b, [`lab-split.ts`](../lab-split.ts)).
+   * 🔴 명단(`rosterByPeriod`)은 **거르지 않는다** — 교시 선택과 같은 자리(`seatShowsAtPeriod`)에서 감춘다. 여기서 먼저
+   *    거르면 사람이 끌어 옮긴 교시가 배정을 못 이기고(그 교시 명단에 학생이 없다) 학생이 사라진다.
+   * 배정할 것이 없거나(랩실이 아님·*LAB 교시 없음·켠 학생 없음) 재료를 모르면 비어 있다 = 종전 화면 그대로.
+   */
+  defaultSlotsByCell?: Record<string, string[]>;
 };
 
 function toSeatStudent(
@@ -163,7 +172,7 @@ async function loadSeatDay(
 
   let slotQ = supabase
     .from("class_schedules")
-    .select("class_id, start_time, end_time, slot_teacher_label")
+    .select("id, class_id, start_time, end_time, slot_teacher_label")
     .eq("day_of_week", dowKey)
     .not("slot_teacher_label", "is", null)
     .lte("valid_from", date)
@@ -185,8 +194,9 @@ async function loadSeatDay(
 
   const classIds = [...new Set(seatRows.map((r) => r.class_id as string))];
 
-  // 반 이름 · 수강생 · 그날 출결 — 서로 독립이라 병렬(B4). id 수십 개까지 갈 수 있어 청크 헬퍼(B3).
-  const [classes, enrollments, records] = await Promise.all([
+  // 반 이름 · 수강생 · 그날 출결 · (랩실) *LAB 배정 재료 — 서로 독립이라 병렬(B4). id 수십 개까지 갈 수 있어 청크 헬퍼(B3).
+  // *LAB 배정은 **랩실만** 묻는다 — JJ실엔 *LAB이 없다(왕복 0).
+  const [classes, enrollments, records, labSplit] = await Promise.all([
     // 🔵 `bg_color`/`text_color`는 **이미 있는 컬럼**(0054a 계열)이라 새 스키마를 요구하지 않는다([[#95]]).
     fetchInChunks<{ id: string; class_name: string; bg_color: string | null; text_color: string | null }>(
       classIds,
@@ -269,6 +279,7 @@ async function loadSeatDay(
               .in("class_id", chunk)
               .eq("session_date", date),
     ),
+    wantLabel === LAB_ROOM_LABEL ? loadLabSplitInputs(supabase, { classIds, date, tenantId }) : Promise.resolve(null),
   ]);
 
   const nameById = new Map(classes.map((c) => [c.id, c.class_name]));
@@ -414,5 +425,27 @@ async function loadSeatDay(
     }));
   }
 
-  return { date, periods, rosterByPeriod, slotsByClass, markedSlotsByCell, busyStartsByClass, offSlotByCell };
+  // *LAB 배정 — 교시 선택의 기본값(명단은 그대로, 감추기는 seatShowsAtPeriod 한 곳). 재료를 모르면 비워 둔다.
+  const defaultSlotsByCell = labSplit
+    ? buildLabSplitDefaults({
+        slots: seatRows.map((r) => ({
+          classId: r.class_id as string,
+          start: hhmm(r.start_time as string),
+          separate: labSplit.separateIds.has(String(r.id)),
+        })),
+        studentsByClass: new Map([...studentsByClass].map(([classId, list]) => [classId, list.map((s) => s.id)])),
+        flagged: labSplit.flagged,
+      })
+    : {};
+
+  return {
+    date,
+    periods,
+    rosterByPeriod,
+    slotsByClass,
+    markedSlotsByCell,
+    busyStartsByClass,
+    offSlotByCell,
+    defaultSlotsByCell,
+  };
 }

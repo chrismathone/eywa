@@ -170,6 +170,8 @@ export const AUDIT_ACTIONS = {
   enrollment_reschedule: "예약 변경(날짜·반)",
   enrollment_schedule_cancel: "예약 취소",
   enrollment_days_update: "등원 요일 수정",
+  // LAB '따로 수업(*LAB)' 학생 배정(0271b, 원장 2026-09-17) — 날짜 없이 즉시 적용이라 이력은 여기뿐이다.
+  enrollment_lab_separate: "따로 수업(*LAB) 배정",
   enrollment_dates_update: "수강 기간 수정",
   student_merge: "학생 병합",
   student_dup_confirm: "동명이인 정상 확인",
