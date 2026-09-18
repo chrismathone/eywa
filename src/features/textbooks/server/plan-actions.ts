@@ -22,7 +22,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { resolvePeriodLabel, tableToEntries } from "@/features/class-sheets/lib/period-label";
 import { isWeekendDow } from "@/features/class-sheets/lib/grid-rows";
+import { canonicalSlotTeacherLabel } from "@/features/timetable/lib/teacher-label";
 import { dowKeyOf } from "@/features/class-sheets/lib/week";
+import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
 import {
@@ -414,6 +416,39 @@ async function computeTargets(loaded: LoadedPlan): Promise<Computed | { error: s
     pace: plan.pace,
     lookaheadDays: MAX_LOOKAHEAD_DAYS,
   });
+
+  /**
+   * 🔴 **한 배정엔 같은 담당의 교시만 담는다**(원장 2026-09-18: *"교사가 다르면 교재배정을 새로해야지"*).
+   *    섞으면 차수가 두 선생님 칸에 **번갈아** 들어간다 — 추민아 1차수 · 송지혜 2차수 · 추민아 3차수…
+   *    두 사람의 진도가 한 줄로 엮여 어느 쪽도 자기 진도를 못 읽는다.
+   * 🔴 화면에서만 막지 않는다([[#77]]) — 서버 액션은 공개 엔드포인트라 여기서 다시 센다.
+   * 🔴 **실제로 쓸 칸만 센다** — `schedules`엔 끝난 배치 이력이 함께 들어 있어([[#88]]) 원본 행을 그대로 세면
+   *    `중고E_중1 MED` 월 17:20처럼 담당이 바뀌어 온 칸(부원장 → Daniella → Jane)이 "셋이 섞였다"로 잡혀
+   *    **멀쩡한 배정이 거절된다**. 그래서 배분 결과(`targets`)의 그 날짜에 **살아 있는** 행만 본다.
+   * ⚠️ 비교는 **정규화한 원문**(`canonicalSlotTeacherLabel`)으로 — `부원장`과 `Yoojin`은 같은 사람이라
+   *    원문 그대로 세면 한 사람인데 둘로 보여 역시 거절된다.
+   * ⚠️ 옛 축 방식(`slotPicks` 없음)엔 걸지 않는다 — 축은 원래 그 반 전 교시를 뜻해 담당이 섞이는 게 정상이다.
+   */
+  if (plan.slotPicks && plan.slotPicks.length > 0) {
+    const labels = new Set<string>();
+    const seen = new Set<string>();
+    for (const t of schedule.targets) {
+      const key = `${dowKeyOf(t.date)}|${t.slotStart}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // `slotsByDateOf`와 같은 규칙 — 그 날짜에 살아 있는 행 중 **처음 만난 것**이 그 칸의 주인이다.
+      const row = schedules.find(
+        (r) =>
+          r.dayOfWeek === dowKeyOf(t.date) &&
+          String(r.startTime).slice(0, 5) === t.slotStart &&
+          slotLiveOnDate({ dayOfWeek: r.dayOfWeek, validFrom: r.validFrom, validTo: r.validTo }, t.date),
+      );
+      labels.add(canonicalSlotTeacherLabel(row?.slotTeacherLabel ?? null) ?? "");
+    }
+    if (labels.size > 1) {
+      return { error: "한 배정엔 같은 담당의 교시만 담을 수 있습니다 — 선생님이 다르면 따로 배정해 주세요" };
+    }
+  }
 
   // 교시 라벨 — 월간 뷰와 같은 규약(요일별 표 + 주말 별도). 못 찾으면 null(지어내지 않는다).
   const periodsConfig = settingsToPeriodsConfig(settings.operations);

@@ -750,6 +750,10 @@ export const SHEET_DICT = {
     en: "Pick periods and a book; each lesson lands on that time slot, class day by class day. Holidays are skipped and cells that already have text are left alone.",
   },
   "fill.slots": { ko: "교시 — 고른 시각에 차수가 들어갑니다", en: "Periods — lessons go into the times you pick" },
+  "fill.slots.oneTeacher": {
+    ko: "한 번에 한 선생님 교시만 담깁니다 — 다른 선생님 교시를 고르면 그쪽으로 바뀝니다(따로 배정하세요).",
+    en: "One assignment covers one teacher — picking another teacher’s period switches to it (assign theirs separately).",
+  },
   "fill.slots.none": { ko: "이 반에 도는 교시가 없습니다.", en: "This class has no periods running." },
   // ⚠️ `Book`은 `month.goal.book`(교재명)이 이미 쓴다 — 같은 영어로 뭉치면 두 칸이 구분이 안 된다.
   "fill.book": { ko: "교재", en: "Textbook" },

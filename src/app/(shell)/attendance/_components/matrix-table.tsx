@@ -18,6 +18,7 @@ import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context"
 import { LiveRecords, MatrixColumnTotalsRow } from "./live-totals";
 import { columnTotals } from "@/features/attendance/grid/column-totals";
 import { MatrixRow } from "./matrix-row";
+import { hasNoLessonDays, noLessonZeroView } from "@/features/attendance/no-lesson-row";
 import { MatrixTotalsSummary } from "./totals-row";
 import { StickyFitRow } from "./sticky-fit-row";
 // 🔴 이 파일은 **서버 컴포넌트**다(GridProvider의 children으로 렌더된다) — 훅을 쓸 수 없어
@@ -275,6 +276,30 @@ export function MatrixTable({
   // 🔴 열의 유무는 **제 데이터**가 정한다 — 청구액에 묶어 두면 등록 차수를 안 받은 호출부에서 열만 서고
   //    전 행이 '미확정'이 된다("확정을 안 했다"는 거짓 사실). 지금 두 값은 같은 조회에서 함께 온다.
   const showTermSessions = termSessionsByRow !== undefined;
+  /**
+   * 그 달 **수업날이 하나도 없는** 줄 → 청구액·등록 차수·수업 차수를 0으로(원장 2026-09-18 *"'미확정' 이 아니라 등록차수를 0,
+   * 청구액을 0, 수업차수도 0"*). 🔴 **여기 한 곳**에서 정해 줄 칸과 합계 행이 같은 두 벌(`billedView`·`termView`)을 본다.
+   * 판정 = 줄이 수업요일 색을 칠하는 기준(`hasNoLessonDays`) · 청구액과 등록 차수가 둘 다 빈 줄만(`noLessonZeroView`).
+   */
+  const noLesson = noLessonZeroView({
+    rows: groups.flatMap((g) =>
+      g.matrix.students.map((s) => ({
+        key: rowKey(g.classId, s.id),
+        noLessons: hasNoLessonDays({
+          days,
+          holidays,
+          attendDows: s.attendDows,
+          spans: s.spans,
+          marks: g.matrix.marks[s.id] ?? {},
+          derived: g.matrix.derived[s.id],
+        }),
+      })),
+    ),
+    ...(classBilledAmounts ? { billed: classBilledAmounts } : {}),
+    ...(termSessionsByRow ? { term: termSessionsByRow } : {}),
+  });
+  const billedView = noLesson.billed;
+  const termView = noLesson.term;
   // 이름·학교·수업 차수·출석률(4) + 날짜 + 청구액 + 등록 차수·차이확인(둘은 한 짝).
   const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (showTermSessions ? 2 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 **반·학생 줄** — 「단가」 표식(합계 뱃지만으론 못 찾는다).
@@ -487,8 +512,9 @@ export function MatrixTable({
                     matrix={g.matrix}
                     days={days}
                     holidays={holidays}
-                    classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
-                    termSessions={showTermSessions ? termSessionsByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
                     unitSuffix={g.unitSuffix ?? null}
                     noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                     lockBefore={lockBefore}
@@ -512,8 +538,9 @@ export function MatrixTable({
                 matrix={g.matrix}
                 days={days}
                 holidays={holidays}
-                classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
-                termSessions={showTermSessions ? termSessionsByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
                 unitSuffix={g.unitSuffix ?? null}
                 noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                 lockBefore={lockBefore}
@@ -598,8 +625,8 @@ export function MatrixTable({
             days={days}
             showClassBilled={showClassBilled}
             showTermSessions={showTermSessions}
-            billedByRow={classBilledAmounts}
-            termByRow={termSessionsByRow}
+            billedByRow={billedView}
+            termByRow={termView}
             suffix={totalsSuffix}
             fallback={columnTotalsFallback}
             lang={lang}

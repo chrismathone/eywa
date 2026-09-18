@@ -41,18 +41,24 @@ export function RowLessonCountCell({
   row,
   fallback,
   suffix = null,
+  zeroAsNumber = false,
 }: {
   row: string;
   fallback: Counted;
   /** 단위 한 글자(영어 `U` · 수학 `T`, 원장 2026-09-18). */
   suffix?: AttendanceUnitSuffix;
+  /**
+   * 0을 `—`가 아니라 **숫자로** 적는다 — 그 달 수업날이 하나도 없는 줄(`hasNoLessonDays`, 원장 2026-09-18
+   * *"수업차수도 0 으로"*). 수업날이 있는 줄의 0은 "아직 안 찍었다"라 종전대로 `—`다.
+   */
+  zeroAsNumber?: boolean;
 }) {
   const c = useRowCount(row) ?? fallback;
   // 여백은 이웃(청구액·등록 차수)과 같은 `px-1 py-1` — 옛 오른쪽 sticky 자리의 `py-2`가 따라왔던 것이다.
   // 배경(연파랑)은 등록 차수 칸과 같은 토큰 — 두 칸이 한 짝이라는 걸 색이 말한다(원장 2026-09-18).
   return (
     <td className="border-line text-foreground num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
-      {c.units > 0 ? formatUnitsWithSuffix(c.units, suffix) : "—"}
+      {c.units > 0 || zeroAsNumber ? formatUnitsWithSuffix(c.units, suffix) : "—"}
     </td>
   );
 }
@@ -68,17 +74,24 @@ export function RowLessonCountCell({
 export function RowSessionDiffCell({
   row,
   fallback,
-  term,
+  term: termIn,
   suffix = null,
   lang = "ko",
+  termSynthetic = false,
 }: {
   row: string;
   fallback: Counted;
   term: AttendanceTermSessions | null;
   suffix?: AttendanceUnitSuffix;
   lang?: SheetLang;
+  /**
+   * 등록 차수가 확정값이 아니라 수업날 없는 줄에 **지어 넣은 0**이다(`noLessonZeroView`). 그 줄에 값을 치면(보강 등) 더는 수업날
+   * 없는 줄이 아니므로, 그 0에서 뺀 `+1.0` 같은 신호를 내지 않고 미확정(`—`)으로 돌아간다(새로고침 뒤 서버 값과 같은 모양).
+   */
+  termSynthetic?: boolean;
 }) {
   const c = useRowCount(row) ?? fallback;
+  const term = termSynthetic && c.units > 0 ? null : termIn;
   const diff = attendanceUnitsDiff(c.units, term);
   if (diff === null) {
     return (
