@@ -61,7 +61,7 @@ export type LeaveOverview = {
   /** 0252a 적용 여부 — false면 화면이 배너를 띄우고 조정 버튼을 잠근다. */
   tableReady: boolean;
   /**
-   * 사용 기간 칸(0271a) 적용 여부 — false면 조정 창의 **사용 기간 입력만** 잠근다(일수·사유는 그대로).
+   * 사용 기간 칸(0270b) 적용 여부 — false면 조정 창의 **사용 기간 입력만** 잠근다(일수·사유는 그대로).
    * 🔴 `tableReady`와 따로 두는 이유: 컬럼만 없는 창에서 조정 기능 전체를 잠그면, 이미 되는 일까지
    *    못 하게 된다([[#95]] expand/contract는 "덜 되게"가 아니라 "그만큼만 되게"다).
    */
@@ -93,7 +93,7 @@ type AdjRaw = {
   reason: string;
   created_at: string;
   created_by: string | null;
-  /** 0271a 미적용 창에서는 아예 안 실려 온다(선택 필드) — 그 창에선 화면도 날짜 자리를 비운다. */
+  /** 0270b 미적용 창에서는 아예 안 실려 온다(선택 필드) — 그 창에선 화면도 날짜 자리를 비운다. */
   used_start?: string | null;
   used_end?: string | null;
 };
@@ -170,7 +170,7 @@ async function loadAdjustments(tenantId: string, userIds: string[]): Promise<Adj
     if (isMissingRelation({ message: e instanceof Error ? e.message : String(e) })) {
       return { rows: null, usedRangeReady: false };
     }
-    // 사용 기간 칸(0271a)만 없는 창 — 그 칸을 빼고 다시 읽는다([[#95]]). 표는 이미 있어 조정 합계·이력은
+    // 사용 기간 칸(0270b)만 없는 창 — 그 칸을 빼고 다시 읽는다([[#95]]). 표는 이미 있어 조정 합계·이력은
     // 그대로 보여야 하고, 비는 것은 날짜 자리뿐이다.
     if (isMissingUsedRangeColumn(e)) {
       return { rows: await selectAdjustments(tenantId, userIds, false), usedRangeReady: false };
@@ -274,7 +274,7 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
         createdAt: a.created_at,
         // 기록자가 퇴사(inactive)했거나 계정이 지워졌으면 이름을 모른다 — 지어내지 않고 null.
         createdByName: (a.created_by && nameById.get(a.created_by)) || null,
-        // 실제 휴가 사용 기간(0271a) — 부여 행과 칸 미적용 창에서는 null(화면이 그 자리를 비운다).
+        // 실제 휴가 사용 기간(0270b) — 부여 행과 칸 미적용 창에서는 null(화면이 그 자리를 비운다).
         usedStart: a.used_start ?? null,
         usedEnd: a.used_end ?? null,
       })),

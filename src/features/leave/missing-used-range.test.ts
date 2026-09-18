@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isMissingUsedRangeColumn } from "./missing-used-range";
 
-describe("사용 기간 칸(0271a) 미적용 판정", () => {
+describe("사용 기간 칸(0270b) 미적용 판정", () => {
   it("조회 실패(42703)와 쓰기 실패(PGRST204)를 둘 다 알아본다", () => {
     expect(
       isMissingUsedRangeColumn({

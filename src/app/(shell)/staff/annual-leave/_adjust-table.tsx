@@ -44,7 +44,7 @@ type Props = {
   /** 0252a 미적용이면 조정 버튼을 잠근다(표는 그대로 읽힌다). */
   tableReady: boolean;
   /**
-   * 사용 기간 칸(0271a)이 있나 — 없으면 **기간 입력만** 잠근다(일수·사유는 그대로 쓴다).
+   * 사용 기간 칸(0270b)이 있나 — 없으면 **기간 입력만** 잠근다(일수·사유는 그대로 쓴다).
    * 🔴 조정 기능 전체를 잠그지 않는다 — 칸 하나가 없다고 되는 일까지 막으면 안 된다([[#95]]).
    */
   usedRangeReady: boolean;
@@ -372,7 +372,7 @@ function AdjustDialog({
             />
           </label>
 
-          {/* 실제 휴가 **사용 기간**(0271a, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일
+          {/* 실제 휴가 **사용 기간**(0270b, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일
               이렇게 길게해야지 하루씩만 할수있는게 말이안되자나"*) — 선택 입력이고 하루면 종료일을 비운다.
               결재 밖에서 쓴 연차를 차감할 때 "언제부터 언제까지 쉬었나"를 사유 문장이 아니라 칸으로 남긴다
               (내 정보 카드가 이 기간으로 줄을 세운다).
@@ -395,7 +395,7 @@ function AdjustDialog({
                   title={
                     usedRangeReady
                       ? "결재 밖에서 쓴 연차를 차감할 때 그 기간의 첫날 — 이월·특별휴가 부여면 비워 두세요"
-                      : "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0271a"
+                      : "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0270b"
                   }
                   className="border-line bg-card text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none transition disabled:opacity-50"
                 />
@@ -420,7 +420,7 @@ function AdjustDialog({
             <span className="text-text-faint block text-xs break-keep">
               {usedRangeReady
                 ? "차감(−)이 언제 쓴 연차인지 남깁니다 — 본인 '내 정보' 화면에 이 기간으로 표시됩니다. 부여(+)면 비워 두세요."
-                : "마이그레이션 0271a를 적용하면 사용 기간을 적을 수 있습니다(지금은 일수·사유만 기록됩니다)."}
+                : "마이그레이션 0270b를 적용하면 사용 기간을 적을 수 있습니다(지금은 일수·사유만 기록됩니다)."}
             </span>
           </div>
 

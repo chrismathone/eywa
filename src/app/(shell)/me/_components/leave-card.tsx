@@ -40,7 +40,7 @@ type Entry =
       kind: "adj";
       key: string;
       sortKey: string;
-      /** 실제 휴가 사용 기간(0271a). 없으면 적은 날을 대신 보여 준다. */
+      /** 실제 휴가 사용 기간(0270b). 없으면 적은 날을 대신 보여 준다. */
       usedStart: string | null;
       usedEnd: string | null;
       recordedAt: string;

@@ -1,5 +1,5 @@
 /**
- * `leave_adjustments`의 **휴가 사용 기간 칸**(`used_start`·`used_end`, 0271a — 0270a의 `used_on`이 개명한 것)
+ * `leave_adjustments`의 **휴가 사용 기간 칸**(`used_start`·`used_end`, 0270b — 0270a의 `used_on`이 개명한 것)
  * **미적용 판정** — 순수 함수(조회·쓰기 공용, Vitest).
  *
  * 🔑 왜 필요한가: eywa는 SQL을 사람이 손으로 적용하므로 **앱이 먼저 배포되는 창**이 늘 있다([[#95]]).

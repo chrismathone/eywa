@@ -129,7 +129,7 @@ describe("게이트 배선", () => {
   });
 });
 
-describe("조정의 휴가 사용 기간(0271a, 원장 2026-09-18)", () => {
+describe("조정의 휴가 사용 기간(0270b, 원장 2026-09-18)", () => {
   it("🔴 기간은 서버가 **그 구간 안인지** 가둔다 — 화면 min·max는 게이트가 아니다([[#77]])", () => {
     const actions = read("src/features/leave/server/actions.ts");
     expect(actions).toContain('formData.get("usedStart")');
@@ -147,7 +147,7 @@ describe("조정의 휴가 사용 기간(0271a, 원장 2026-09-18)", () => {
     const actions = read("src/features/leave/server/actions.ts");
     expect(actions).toContain("if (usedEnd && !usedStart)");
     expect(actions).toContain("usedStart && usedEnd && usedEnd < usedStart");
-    const sql = read("supabase/migrations/0271a_leave_adjustment_used_range.sql");
+    const sql = read("supabase/migrations/0270b_leave_adjustment_used_range.sql");
     expect(sql).toContain("check (used_end is null or (used_start is not null and used_end >= used_start))");
   });
 
@@ -163,7 +163,7 @@ describe("조정의 휴가 사용 기간(0271a, 원장 2026-09-18)", () => {
     expect(history).not.toContain("sumAdjustments");
   });
 
-  it("0271a 미적용에도 살아 있다([[#95]]) — 조회는 칸을 빼고 다시 읽고, 쓰기는 빈 값이면 키를 안 보낸다", () => {
+  it("0270b 미적용에도 살아 있다([[#95]]) — 조회는 칸을 빼고 다시 읽고, 쓰기는 빈 값이면 키를 안 보낸다", () => {
     const admin = read("src/features/leave/server/admin.ts");
     expect(admin).toContain("isMissingUsedRangeColumn");
     expect(admin).toContain("selectAdjustments(tenantId, userIds, false)");

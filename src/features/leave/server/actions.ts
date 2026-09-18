@@ -44,7 +44,7 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TABLE_MISSING_MSG =
   "연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션 0252a를 적용하면 바로 쓸 수 있습니다";
 const USED_RANGE_MISSING_MSG =
-  "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0271a를 적용하면 쓸 수 있습니다(기간을 비우면 지금도 저장됩니다)";
+  "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0270b를 적용하면 쓸 수 있습니다(기간을 비우면 지금도 저장됩니다)";
 
 async function requireAdjuster() {
   const user = await getCurrentUser();
@@ -118,7 +118,7 @@ export async function addLeaveAdjustment(
   if (!reason) return { error: "조정 사유를 적어 주세요 — 나중에 누구도 이유를 되찾지 못합니다" };
   if (reason.length > MAX_REASON) return { error: `사유는 ${MAX_REASON}자를 넘을 수 없습니다` };
 
-  // 실제 휴가 **사용 기간**(0271a, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일 이렇게
+  // 실제 휴가 **사용 기간**(0270b, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일 이렇게
   // 길게해야지 하루씩만 할수있는게 말이안되자나"*) — 선택 입력이고, 하루면 종료일을 비운다.
   // 이월·특별휴가 부여(+)엔 기간이 없고, 결재 밖에서 쓴 연차를 차감(−)할 때 "언제부터 언제까지 쉬었나"를
   // 사유 문장이 아니라 칸으로 남긴다.
@@ -212,7 +212,7 @@ export async function addLeaveAdjustment(
     days: delta,
     reason,
     created_by: user.id,
-    // 🔑 비었으면 **키 자체를 안 보낸다** — 0271a 미적용 창에서 `used_start: null`만 실어도 PGRST204로
+    // 🔑 비었으면 **키 자체를 안 보낸다** — 0270b 미적용 창에서 `used_start: null`만 실어도 PGRST204로
     //    거절돼, 기간을 적지도 않은 사람까지 조정을 못 하게 된다([[#95]] expand/contract).
     ...(usedStart ? { used_start: usedStart } : {}),
     ...(usedEnd ? { used_end: usedEnd } : {}),
