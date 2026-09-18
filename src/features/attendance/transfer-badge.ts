@@ -25,6 +25,24 @@ export type TransferBadgeClass = {
   students: readonly { id: string; spans: readonly EnrollSpan[] }[];
 };
 
+/**
+ * 이 반의 구간이 **기록된 반이동**인가 — 그렇다면 어떤 추측도 그 표식을 지우지 못한다.
+ *
+ * 🔑 근거는 `enrollments.is_transferred`(반이동 RPC가 옛 행에 찍는 값)다. 수강 배정 창의 '반이동' 토글과
+ *    시간표 드래그가 만드는 이동은 전부 그 RPC를 지나므로, **사람이 반이동이라고 말한 것**은 여기서 걸린다.
+ * 🔴 ①특강 ②감싸인 구간은 "모양만 보고 반이동처럼 보이는 것"을 걷어내는 추측이라, 사실과 부딪치면 사실이 이긴다
+ *    (원장 2026-09-18 *"이 반이동 기능과 라벨표시 기능을 적절히 배선해서 합리적인 라벨이"*).
+ * ⚠️ 나간 쪽(`transferOut`)은 이 반 구간에 바로 찍혀 있고, 들어온 쪽(`transferIn`)은 **다른 반의 옛 구간**이
+ *    내 시작일에 끝나 있는 것으로 알아본다(RPC가 `옛 end_date = 새 start_date`로 닫는다).
+ */
+function hasRecordedTransfer(
+  mine: readonly EnrollSpan[],
+  others: readonly { spans: readonly EnrollSpan[] }[],
+): boolean {
+  if (mine.some((s) => s.isTransferred === true)) return true;
+  return mine.some((m) => others.some((o) => o.spans.some((s) => s.isTransferred === true && s.end === m.start)));
+}
+
 /** `a`가 `b` **안에** 통째로 드는가(같은 날 경계 포함). `a`는 끝난 구간이어야 한다. */
 function containedIn(a: EnrollSpan, b: EnrollSpan): boolean {
   if (!a.end) return false;
@@ -50,11 +68,13 @@ export function suppressedTransferRows(classes: readonly TransferBadgeClass[]): 
   for (const c of classes) {
     const special = isSpecialLecture({ isSpecial: c.isSpecial, className: c.className });
     for (const s of c.students) {
+      const others = (byStudent.get(s.id) ?? []).filter((o) => o.classId !== c.classId);
+      // 🔴 **기록된 반이동이면 아무것도 지우지 않는다** — 추측이 사실을 덮으면 안 된다.
+      if (hasRecordedTransfer(s.spans, others)) continue;
       if (special) {
         out.add(transferRowKey(c.classId, s.id));
         continue;
       }
-      const others = (byStudent.get(s.id) ?? []).filter((o) => o.classId !== c.classId);
       // 이 반의 **끝난** 구간이 다른 반 구간 안에 통째로 들면 특강으로 본다.
       const inside = s.spans.some((mine) => others.some((o) => o.spans.some((his) => containedIn(mine, his))));
       if (inside) out.add(transferRowKey(c.classId, s.id));

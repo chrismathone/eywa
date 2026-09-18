@@ -60,6 +60,26 @@ describe("'반이동' 표식을 떼는 규칙 (원장 2026-09-18)", () => {
     expect(has("short", "stu-2")).toBe(true);
   });
 
+  it("🔴 기록된 반이동(`is_transferred`)은 특강 반이어도 표식을 남긴다 — 추측이 사실을 덮지 않는다", () => {
+    const has = run([
+      {
+        classId: "special",
+        className: "주말내신특강(고1)",
+        students: [{ id: S, spans: [{ start: "2026-09-01", end: "2026-09-12", isTransferred: true }] }],
+      },
+    ]);
+    expect(has("special")).toBe(false);
+  });
+
+  it("🔴 들어온 쪽도 남긴다 — 다른 반의 옛 구간이 내 시작일에 반이동으로 끝나 있다", () => {
+    const has = run([
+      { classId: "old", className: "A반", students: [{ id: S, spans: [{ start: "2026-03-01", end: "2026-09-12", isTransferred: true }] }] },
+      // 감싸이지도 특강도 아니지만, 예약 취소 전까지 이 구간은 '전입'이다.
+      { classId: "new", className: "B반 특강", students: [{ id: S, spans: [{ start: "2026-09-12", end: "2026-09-30" }] }] },
+    ]);
+    expect(has("new")).toBe(false);
+  });
+
   it("반 하나뿐이면(반별 보기) ②는 성립할 수 없다 — ①만 남는다", () => {
     const has = run([
       { classId: "only", className: "A반", students: [{ id: S, spans: [{ start: "2026-09-01", end: "2026-09-30" }] }] },

@@ -63,6 +63,10 @@ const APPROVED_INLINE_SVG = [
   // 2026-09-15 진도맵 세로 타임라인 옆 **시계**(회전 표시 삼각형 aria-hidden · '실제 오늘' 점 aria-label) —
   // 차트 부품이지 아이콘이 아니다(dial-layer와 같은 성격).
   "src/features/math-progress-map/components/timeline/circular-progress-clock.tsx",
+  // 2026-09-17 MCS 학습 레일의 **블록 눈금**(작은/긴 눈금·안내선·양끝 `<path>` 넷, aria-hidden) —
+  // 차트 눈금이지 아이콘이 아니다(sparkline과 같은 성격). 레일을 만든 커밋이 이 목록을 안 고쳐
+  // 가드가 하루 동안 빨간 채였다 — 새 인라인 SVG는 **같은 커밋에서** 여기에 적을 것.
+  "src/features/math-sheets/components/learning-rails.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다
