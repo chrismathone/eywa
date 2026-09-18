@@ -41,6 +41,7 @@ import {
  */
 const CLASS_HISTORY_ACTIONS: readonly SystemReadableAuditAction[] = [
   "class_update",
+  "class_period_enrollments",
   "class_archive",
   "class_unarchive",
   "class_end_term",

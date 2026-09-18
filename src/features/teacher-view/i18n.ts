@@ -3698,6 +3698,16 @@ export const SHEET_DICT = {
   },
   "cls.d.info": { ko: "반 정보", en: "About this class" },
   "cls.d.timetable": { ko: "시간표", en: "Timetable" },
+  // 반 정보 '운영 기간'(원장 2026-09-18) — 날짜는 반 수정의 운영 기간 그대로(class-period-view.tsx).
+  "cls.d.period": { ko: "운영 기간", en: "Term dates" },
+  "cls.d.periodOpen": { ko: "종료일 없음", en: "No end date" },
+  "cls.d.periodMixed": { ko: "교시마다 다름", en: "Varies by slot" },
+  "cls.d.periodEnded": { ko: "운영 종료", en: "Ended" },
+  "cls.d.periodNone": { ko: "시간표 교시가 없어 운영 기간이 없습니다", en: "No term dates — this class has no timetable slots" },
+  "cls.d.periodEndsHint": {
+    ko: "종료일이 지나면 이 반 수강이 그날로 끝납니다(새로 배정한 학생도)",
+    en: "After the end date, enrollments in this class end on that date, including new ones",
+  },
   "cls.d.att30": { ko: "최근 30일 출결", en: "Attendance, last 30 days" },
   "cls.d.rate": { ko: "출석률", en: "Attendance rate" },
   "cls.d.records": { ko: "총 건수", en: "In all" },
@@ -3711,6 +3721,8 @@ export const SHEET_DICT = {
   "cls.d.allDays": { ko: "모두", en: "Every day" },
   "cls.d.onlyDays": { ko: "{days}만", en: "{days} only" },
   "cls.d.toNow": { ko: "~ 현재", en: "~ now" },
+  // 종료일이 빈 수강 + 반 운영 종료일이 있을 때(원장 2026-09-18) — 저장이 아니라 표시다(0274a, 끝나면 cron이 닫는다).
+  "cls.d.toPlannedEnd": { ko: "~ {date} (운영 종료)", en: "~ {date} (term ends)" },
   "cls.d.onHold": { ko: "휴원", en: "On hold" },
   // EiE 토글 — LAB '따로 수업(*LAB)' 학생 배정(0271b). 글자는 표식 그대로(`*LAB`)라 여기엔 설명만 둔다.
   "cls.d.labSepAria": { ko: "따로 수업(*LAB) 배정", en: "separate LAB (*LAB) assignment" },
