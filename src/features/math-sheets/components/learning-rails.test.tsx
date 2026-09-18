@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningRails } from "./learning-rails";
 import { flatLessons } from "@/features/onescreen/curriculum";
@@ -29,16 +29,17 @@ describe("현재 진도와 고정 목표 수직선", () => {
     ], "2026-09-18");
     render(<div onClick={onSelect}><LearningRails goal={first} progress={state} /></div>);
     const marker = screen.getByRole("button", { name: "현재 진도 상세" });
-    marker.focus();
+    act(() => marker.focus());
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent("기준 수업일 · 2026-08-31");
-    expect(tooltip).not.toHaveTextContent("2026-09-14");
+    expect(tooltip.querySelector("small")).not.toHaveTextContent("2026-09-14");
+    expect(tooltip).toHaveTextContent("최근 발송 보고서 · 2026-09-14 수업");
     expect(tooltip).toHaveTextContent("마지막 확인 진도");
     expect(marker).toHaveAccessibleDescription(expect.stringContaining("2026-08-31"));
     fireEvent.click(marker);
     expect(onSelect).not.toHaveBeenCalled();
   });
-  it("최신 내신대비와 목표 시작 전 마지막 확인 단원의 날짜를 함께 표시한다", () => {
+  it("최근 발송 설명은 본문에서 제거하고 현재 진도에 마우스를 올리면 확인한다", () => {
     const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [
       { date: "2026-08-31", progress: "수학 회전체", textbook: null },
       { date: "2026-09-14", progress: "수학 내신대비", textbook: null },
@@ -46,7 +47,8 @@ describe("현재 진도와 고정 목표 수직선", () => {
     render(<LearningRails goal={first} progress={state} />);
     expect(screen.getByText("마지막 확인")).toBeVisible();
     expect(screen.getByText("중1 2학기, 회전체")).toBeVisible();
-    expect(screen.getByText(/최근 발송 보고서 · 2026-09-14 수업/)).toHaveTextContent("진도선은 2026-08-31 마지막 확인 단원 기준");
+    expect(screen.queryByText(/최근 발송 보고서 · 2026-09-14 수업/)).not.toBeInTheDocument();
+    expect(screen.getByTitle(/최근 발송 보고서 · 2026-09-14 수업/)).toHaveAttribute("title", expect.stringContaining("진도선은 2026-08-31 마지막 확인 단원 기준"));
     expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", String(learningCurrentPosition(first, state)));
   });
   it("단원 위치를 모르는 최신 발송 내용도 보이지만 진행률은 만들지 않는다", () => {
@@ -55,19 +57,19 @@ describe("현재 진도와 고정 목표 수직선", () => {
     ], "2026-09-18");
     render(<LearningRails goal={first} progress={state} />);
     expect(screen.getByText("중1, 내신대비")).toBeVisible();
-    expect(screen.getByText(/단원 위치 확인 필요/)).toBeVisible();
+    expect(screen.getByTitle(/단원 위치 확인 필요/)).toBeVisible();
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
   it("목표 없는 학생도 발송 보고서의 최근 단원을 표시한다", () => {
     render(<LearningRails recentRecord={{ date: "2026-09-14", progress: "수학 회전체", textbook: null }} />);
     expect(screen.getByText("중1 2학기, 회전체")).toBeVisible();
-    expect(screen.getByText(/최근 발송 보고서 · 2026-09-14 수업/)).toBeVisible();
+    expect(screen.getByTitle(/최근 발송 보고서 · 2026-09-14 수업/)).toBeVisible();
   });
   it("보강 수업 횟수만 확인될 때는 차시 위치 확인이 필요하다고 표시한다", () => {
     const record = { date: "2026-09-14", progress: "수학 내신대비", textbook: null };
     render(<LearningRails goal={{ ...first, track: "supplement" }} progress={{ ...progress, current: 2, currentBlock: record.progress, latestRecord: record, currentIsLatest: true }} />);
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-    expect(screen.getByText(/단원 위치 확인 필요/)).toBeVisible();
+    expect(screen.getByTitle(/단원 위치 확인 필요/)).toBeVisible();
   });
   it("보강 목표도 이전 2학기부터 이후 4학기의 모든 차시를 표시한다", () => {
     let goal = planLearningGoal({ ...first, track: "supplement", startBlock: "다각형", endBlock: "상대도수" });
@@ -85,12 +87,17 @@ describe("현재 진도와 고정 목표 수직선", () => {
     expect(container.querySelector('[data-lesson="다각형"]')).toHaveAttribute("title", "중1 2학기, 다각형");
     expect(ticks[ticks.length - 1]).toHaveAttribute("title", "중3 1학기, 이차함수의 최댓값과 최솟값");
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", String(learningCurrentPosition(goal, state)));
-    expect(container.querySelectorAll('[data-goal-number]')).toHaveLength(6);
-    expect(container.querySelector('[data-goal-number="6"]')).toHaveStyle({ left: "100%" });
+    expect(container.querySelectorAll('[data-goal-number]')).toHaveLength(4);
+    expect(container.querySelector('[data-goal-number="4"]')).toHaveStyle({ left: "100%" });
   });
   it("저장된 목표가 없는 학기는 완료일을 추정하지 않는다", () => {
     render(<LearningRails goal={first} progress={progress} />);
-    expect(screen.getByRole("img", { name: "목표진도" })).toHaveAccessibleDescription(expect.stringContaining("완료일 미설정"));
+    expect(screen.getByRole("img", { name: "목표진도" })).not.toHaveAccessibleDescription(expect.stringContaining("완료일 미설정"));
+    expect(screen.getAllByRole("button", { name: /차 목표$/ })).toHaveLength(1);
+    const scale = screen.getByLabelText("목표 수직선 눈금");
+    expect(scale).toHaveTextContent("중1 1학기");
+    expect(scale).not.toHaveTextContent("중1 2학기");
+    expect(scale).not.toHaveTextContent(/[1-6]차/);
     expect(screen.getByRole("img", { name: "목표진도" })).toHaveAccessibleDescription(expect.stringContaining(first.endDate));
   });
   it("목표 위치는 차시 수에 비례하고 전체 폭은 차시 수 곱하기 고정 간격이다", () => {
@@ -101,7 +108,7 @@ describe("현재 진도와 고정 목표 수직선", () => {
     const stops = learningGoalTicks(goal, topics);
     const { container, rerender } = render(<LearningRails goal={goal} progress={state} />);
     const positions = () => [...container.querySelectorAll<HTMLElement>('[data-goal-number]')].map(el => el.style.left);
-    const expected = stops.map(stop => `${stop.position / topics.length * 100}%`);
+    const expected = stops.filter(stop => stop.hasGoal).map(stop => `${stop.position / topics.length * 100}%`);
     expect(positions()).toEqual(expected);
     expect(container.querySelector('[data-planned]')).toHaveStyle({ "--ruler-width": `${topics.length * LEARNING_LESSON_WIDTH}px` });
     rerender(<LearningRails goal={goal} progress={{ ...state, target: 100 }} />);
