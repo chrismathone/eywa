@@ -92,7 +92,10 @@ function dayDateLabels(weekMonday?: string): Partial<Record<DayOfWeek, string>> 
 
 /** 구간 → 칩 표시용 슬롯(대표 슬롯 + 구간 전체 시간범위 — hover 시각이 병합 범위를 정확히 표시). */
 function intervalSlot(iv: ClassInterval<ScheduleSlotWithStudents>): ScheduleSlotWithStudents {
-  return { ...iv.slots[0]!, startTime: minToHM(iv.startMin), endTime: minToHM(iv.endMin) };
+  const merged = { ...iv.slots[0]!, startTime: minToHM(iv.startMin), endTime: minToHM(iv.endMin) };
+  // '따로 수업(*LAB)'은 **구간 전체가** 따로 수업일 때만 — 대표 슬롯 하나만 보면 이어 붙은 평소 LAB까지 `*LAB`으로 읽힌다.
+  if (!iv.slots.every((s) => s.labSeparate === true)) delete merged.labSeparate;
+  return merged;
 }
 
 type TeacherCol = { name: string; days: DayOfWeek[]; color: { bg: string; text: string } | null };

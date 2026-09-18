@@ -44,6 +44,8 @@ export type ClassDetailQuick = {
    *    옛 코드가 `as unknown as` 캐스트로 넘기며 **강의실 FK를 통째로 못 읽고 있었다**(적대 리뷰 2026-09-04).
    */
   slotTeacherLabel?: string | null;
+  /** LAB '따로 수업(*LAB)' 표식(0271a) — 켜진 LAB 교시에만 true. 강사뷰 LAB 열 칩이 `*LAB`을 단다. */
+  labSeparate?: true;
   slotRoomLabel?: string | null;
   slotRoomId?: string | null;
   classRoomId?: string | null;

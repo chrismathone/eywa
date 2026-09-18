@@ -119,7 +119,8 @@ export function ClassForm({
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
-  teacherOptions: { id: string; name: string }[];
+  /** 강사 퍼스널 색(bgColor·textColor)을 함께 넘기면 주간 스케줄 격자가 강사 칸을 그 색으로 칠한다. */
+  teacherOptions: { id: string; name: string; bgColor?: string | null; textColor?: string | null }[];
   classroomOptions: { id: string; name: string; capacity: number | null }[];
   subjectOptions?: { value: string; label: string }[];
   /** 테넌트 교시설정 → 클릭그리드의 교시→시각. 미전달 시 기본 교시표. */
