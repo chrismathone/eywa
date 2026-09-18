@@ -3,6 +3,7 @@ import { ProgressContainerPanel } from "@/features/progress/components/progress-
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteBadge } from "@/features/onescreen/classnote-badge";
+import { ReportOpenLink } from "./report-open-link";
 
 // ijw StudentDetail ProgressTab 이식 — 최근 수업보고서 표(날짜·선생님·진도·시험·숙제).
 // + P2a/P3 보강: ClassNote 발송 상태 · 학부모 링크(열람수/취소/만료) — "저장한 보고서 확인"을 여기서.
@@ -72,6 +73,11 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
                 <th className="micro px-4 py-2 text-center">숙제</th>
                 <th className="micro px-4 py-2 text-center">ClassNote</th>
                 <th className="micro px-4 py-2 text-center">학부모 링크</th>
+                {/* 실제 수업보고서 바로가기(원장 2026-09-18). 🔴 학부모 링크(`/r/…`)로 보내지 말 것 — 그 페이지는
+                    워커 밖의 **모든 방문을 학부모 열람으로 적는다**(바로 옆 '학부모 링크' 열이 "1회 열람"으로 오염된다).
+                    내부 문서(`/lesson_reports/[id]/print`)는 **같은 카드**(ParentReportCard)를 그리되 열람을 안 적고,
+                    강사 게이트도 이 탭과 같은 함수(`canViewStudentDetail`)다. */}
+                <th className="micro px-4 py-2 text-center">보고서</th>
               </tr>
             </thead>
             <tbody className="divide-border divide-y">
@@ -90,6 +96,9 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
                       {cn.label}
                     </td>
                     <td className={`px-4 py-2 text-center text-xs whitespace-nowrap ${link.cls}`}>{link.label}</td>
+                    <td className="px-4 py-2 text-center text-xs whitespace-nowrap">
+                      <ReportOpenLink reportId={r.id} reportDate={r.reportDate} />
+                    </td>
                   </tr>
                 );
               })}
@@ -97,8 +106,6 @@ export async function ProgressTab({ studentId }: { studentId: string }) {
           </table>
         </div>
       )}
-
-      <p className="text-text-faint text-center text-xs">진도 데이터는 Edutrix 수업보고서에서 이식됩니다.</p>
     </div>
   );
 }
