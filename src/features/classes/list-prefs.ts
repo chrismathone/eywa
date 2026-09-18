@@ -1,8 +1,8 @@
 import type { ClassSort } from "./server/queries";
-import { DAY_KEYS, parseClassSort, parseClassView, type ViewMode } from "./list-filters";
+import { DAY_KEYS, parseClassKind, parseClassSort, parseClassView, type ClassKindFilter, type ViewMode } from "./list-filters";
 
 /**
- * 수업목록 **보기 설정**(`users.ui_prefs.classes`) — 과목·담임·요일(다중)·정렬·보기(표/카드).
+ * 수업목록 **보기 설정**(`users.ui_prefs.classes`) — 구분(정규/특강)·과목·담임·요일(다중)·정렬·보기(표/카드).
  *
  * 원장 2026-08-04 *"모든 뷰 세팅은 계정 귀속 — 당연하지만 항상"*: 종전 필터바(`class-filter-bar.tsx`)는 localStorage
  * `eywa-classes-filters`에 남겨 다른 PC·다른 포트에서 조용히 리셋됐다([[#90]]). 2026-09-03 열 머리 필터로 바꾸며 DB로
@@ -13,6 +13,8 @@ import { DAY_KEYS, parseClassSort, parseClassView, type ViewMode } from "./list-
  * 서버·클라 양쪽이 쓰는 순수 모듈 — `"use client"`도 `server-only`도 붙이지 말 것([[#61]]·[[#81]]).
  */
 export type ClassListPrefs = {
+  /** 구분(정규/특강, 2026-09-18) — 과목과 같은 결의 보기 필터라 계정에 남긴다. */
+  kind: ClassKindFilter;
   subject: string;
   teacher: string;
   /** 요일 키(mon…sun) — 하나라도 운영하는 반. 빈 배열 = 전체. */
@@ -22,6 +24,7 @@ export type ClassListPrefs = {
 };
 
 export const DEFAULT_CLASS_LIST_PREFS: ClassListPrefs = {
+  kind: "all",
   subject: "all",
   teacher: "all",
   days: [],
@@ -51,6 +54,7 @@ export function parseClassDays(raw: unknown): string[] {
 export function parseClassListPrefs(raw: unknown): ClassListPrefs {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   return {
+    kind: parseClassKind(o.kind),
     subject: str(o.subject, "all"),
     teacher: str(o.teacher, "all"),
     days: parseClassDays(o.days),

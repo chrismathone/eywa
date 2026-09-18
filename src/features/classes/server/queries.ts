@@ -12,6 +12,7 @@ import type { ClassroomAssignData } from "../lib/classroom-assign";
 import { listMakeupPoolClassIds } from "@/features/attendance/server/makeup-pool";
 import { canViewClassDetail } from "./class-scope";
 import { loadLabSeparateIds } from "./lab-separate";
+import { matchesClassKind, type ClassKindFilter } from "../list-filters";
 
 /**
  * "만료되지 않은 스케줄" PostgREST `or` 절 — `valid_to`가 무기한(null)이거나 오늘 이후(**포함**).
@@ -71,6 +72,8 @@ export type ClassListFilters = {
   active?: "all" | "active" | "closed";
   /** 상태(운영/종강/폐지/전체) — 수업목록 기본값은 화면에서 "operating"으로 넘긴다. */
   status?: ClassStatusFilter;
+  /** 구분(정규/특강) — 수업목록 열 머리. 판정은 `matchesClassKind`(= 알약과 같은 `isSpecialLecture`). */
+  kind?: ClassKindFilter;
   sort?: ClassSort; // 미지정 시 "name"
 };
 
@@ -532,7 +535,17 @@ export async function getClassesPage(
    *    들어가면 PostgREST 400으로 이 화면이 통째로 죽는다([[#95]]). 조회 실패는 빈 배열이라 fail-open.
    */
   const poolIds = new Set(await listMakeupPoolClassIds());
-  const matched = (classes ?? []).filter((c) => !poolIds.has(c.id as string));
+  // 구분(정규/특강) — 이름 폴백이 있어 SQL로 옮기지 않는다(`isSpecialLecture` 한 벌, 알약과 같은 판정). 전건을 이미 받아
+  // 메모리에서 정렬·페이지를 나누는 조회라 여기서 거르면 총수·쪽수가 같이 맞고, 뒤의 수강·교시 조회도 그만큼 준다.
+  const kind = options.kind ?? "all";
+  const matched = (classes ?? []).filter(
+    (c) =>
+      !poolIds.has(c.id as string) &&
+      matchesClassKind(kind, {
+        isSpecial: (c as { is_special?: boolean | null }).is_special,
+        className: c.class_name as string,
+      }),
+  );
   const classIds = matched.map((c) => c.id);
 
   // 학생수·요일 — 매칭 수업 id를 청크로 조회(전건 .in() 414 회피). 요일은 청크 **안에서도 페이징**한다 —

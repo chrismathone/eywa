@@ -3568,6 +3568,10 @@ export const SHEET_DICT = {
     en: "Retired and finished classes are hidden by default. Change the status to see them too.",
   },
   "cls.empty.showAll": { ko: "전체 상태로 보기", en: "Show every status" },
+  // 구분(정규/특강, 2026-09-18) — 시간표 툴바 `구분`과 같은 말. ⚠️ 정규를 "Regular"로 두지 말 것(`평시`가 이미 그 말이다 — lang-wiring 가드).
+  "cls.col.kind": { ko: "구분", en: "Type" },
+  "cls.kind.regular": { ko: "정규", en: "Standard" },
+  "cls.kind.special": { ko: "특강", en: "Special" },
   "cls.col.subject": { ko: "과목", en: "Subject" },
   "cls.col.name": { ko: "반 이름", en: "Class name" },
   "cls.col.teacher": { ko: "담임", en: "Homeroom" },
