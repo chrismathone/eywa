@@ -12,7 +12,9 @@ export type CreateTenantState =
   | { error?: string; fieldErrors?: Record<string, string> }
   | undefined;
 
-const SLUG_RE = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
+// 2~40자 — 지점 약어(`cs` = 침산, 원장 2026-09-18)가 두 글자라 하한을 3에서 2로 내렸다. 한 번 정하면 안 바꾼다(URL엔 안 쓰지만
+// env `PUBLIC_BRAND_TENANT_SLUG`·스크립트 `--tenant=`가 가리킨다).
+const SLUG_RE = /^[a-z][a-z0-9-]{0,38}[a-z0-9]$/;
 
 /**
  * 신규 학원(tenant) + 원장(master) 동시 생성.
@@ -38,7 +40,7 @@ export async function createTenantWithMaster(
 
   const fieldErrors: Record<string, string> = {};
   if (!slug || !SLUG_RE.test(slug)) {
-    fieldErrors.slug = "영문 소문자·숫자·하이픈 3~40자 (예: ijw-demo)";
+    fieldErrors.slug = "영문 소문자·숫자·하이픈 2~40자 (예: cs)";
   }
   if (!name) fieldErrors.name = "학원 이름을 입력하세요";
   if (!masterEmail || !masterEmail.includes("@")) fieldErrors.masterEmail = "이메일 형식이 올바르지 않습니다";

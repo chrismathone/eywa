@@ -19,7 +19,7 @@
 2. **Vercel env(Production)** 바꾸기 — 🔴 값을 바꿔도 **돌고 있는 배포본은 안 바뀐다**(배포 시점 스냅샷). 바꾼 뒤 3번 재배포.
    - `NEXT_PUBLIC_APP_URL=https://eywa.kr`
    - `LEGACY_REDIRECT_HOSTS=eywa-alpha.vercel.app`
-   - (지점이 둘 이상이면) `PUBLIC_BRAND_TENANT_SLUG=injaewon`
+   - (지점이 둘 이상이면) `PUBLIC_BRAND_TENANT_SLUG=cs`(침산 — 옛 slug `injaewon`은 09-18에 개명됐다)
 3. **재배포**(main에 빈 커밋을 올리거나 Vercel "Redeploy") → 배포 success 뒤 확인:
    - `https://eywa.kr/login` 로고·학원명 · `https://eywa-alpha.vercel.app/inventory/asset/MN-001` → `https://eywa.kr/inventory/asset/MN-001` 308
    - `https://eywa-alpha.vercel.app/api/webhooks/assemblyai`는 **308이 아니어야** 한다(옛 호스트에서 그대로 처리).
@@ -39,9 +39,20 @@
 6. **문서 값 정리**: `docs/setup-and-ops.md`의 배포 표(alias `eywa-alpha.vercel.app`) · `.env.local.example`의 `NEXT_PUBLIC_APP_URL` 예시.
 7. **옛 별칭은 지우지 않는다** — 붙여 둔 QR 라벨·이미 보낸 공유 링크가 그 호스트로 온다. 308이 새 도메인으로 보내 준다.
 
+## 지금 테넌트 = 침산(cs) — 원장 2026-09-18 *"전부 모두 침산(cs) 테넌트로. 현재 존재하는 모든것."*
+- `tenants` 한 행: id `becaa316-e636-42e9-9d09-08b133e0b094` · slug **`cs`**(옛 `injaewon`, 09-18 개명) · name **인재원 침산** ·
+  학원설정 `profile.name` 인재원 · `branchLabel` 침산. 지금 있는 모든 데이터(학생·반·직원·출결·수납·설정·스토리지)가 이 id다.
+- **"첫 번째 테넌트"에 기대던 결합은 전부 fail-closed로 바꿨다** — 둘째 지점이 생겨도 침산 것이 남의 학원으로 새지 않게:
+  ClassNote 워커(`CLASSNOTE_TENANT_ID`, 원래 fail-closed) · makeedu 워커(`MAKEEDU_TENANT_ID`, 09-18 fail-closed로) ·
+  구글 캘린더 크론(`GOOGLE_CALENDAR_TENANT_ID`, 09-18 fail-closed로). 학원이 1개인 동안은 env 없이 그 하나로 돈다.
+- 이미 id로 박혀 있는 것: Vercel `IJW_TENANT_ID`·`TODAYS_MATH_TENANT_ID`·`CONSULT_EXPORT_TENANT_ID`.
+
 ## 지점(테넌트)을 하나 더 만드는 날 (도메인과 별개)
-1. super-admin → 학원 추가(slug는 영문 소문자 — **한 번 정하면 안 바꾼다**, 지금도 수정 폼에 slug가 없다).
-2. Vercel env `PUBLIC_BRAND_TENANT_SLUG=injaewon`(로그인 화면·탭 제목의 회사 브랜드 = 대표 지점) + 재배포.
+0. **먼저 침산을 env로 못박는다**(안 하면 위 셋이 "학원 2개"를 보고 멈춘다 — 멈추는 게 맞지만 그날 발송·동기화가 선다):
+   - 연동 PC(`C:\eywa-sync-pc`) `.env`: `CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `MAKEEDU_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`
+   - Vercel env: `GOOGLE_CALENDAR_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `PUBLIC_BRAND_TENANT_SLUG=cs` → 재배포
+1. super-admin → 학원 추가(slug는 영문 소문자 2~40자, 지점 약어 — **한 번 정하면 안 바꾼다**, 지금도 수정 폼에 slug가 없다).
+2. (0번에서 이미) `PUBLIC_BRAND_TENANT_SLUG=cs` = 로그인 화면·탭 제목의 회사 브랜드는 침산 것.
 3. 자리 PIN 화면에 지점 선택이 뜨는지 · 새 지점 학원설정에서 `seatPins`를 정했는지 확인.
 4. 직원은 **지점마다 계정 하나**(codex 권고 — `users.tenant_id`는 1:1, 옮길 때 값을 바꾸지 말 것).
 5. 알려진 한계(원장 결정 필요): 자산 QR `/inventory/asset/<code>`는 자산ID가 **전 지점에서 유일할 때만** 열린다 —

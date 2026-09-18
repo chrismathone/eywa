@@ -24,7 +24,7 @@ const argOf = (n) => {
   return i >= 0 ? process.argv[i + 1] : null;
 };
 const DIR = argOf("--dir") ?? "C:/Users/user/Downloads";
-const TENANT_SLUG = argOf("--tenant") ?? "injaewon";
+const TENANT_SLUG = argOf("--tenant") ?? "cs"; // 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 
 // school-name.ts와 **같은 규칙**이어야 한다. .cjs라 TS를 못 불러 옮겨 적되, 바뀌면 양쪽을 함께 고칠 것.
 // (규칙의 진실은 src/features/schools/school-name.ts + 그 테스트다.)

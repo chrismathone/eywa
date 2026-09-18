@@ -164,12 +164,14 @@ function isPushableConsultation(outcome, studentMakeeduId) {
   return !studentMakeeduId;
 }
 
-// 단일 테넌트 해석(현재 인재원 1개). 멀티테넌트면 env MAKEEDU_TENANT_ID로 고정 주입.
+// 테넌트 해석 — env MAKEEDU_TENANT_ID(침산 id)가 있으면 그 학원, 없으면 학원이 **정확히 1개일 때만** 그 학원.
+// 🔴 둘 이상인데 env가 없으면 멈춘다(ClassNote 워커 `resolveTenant`와 같은 fail-closed). 종전 "created_at 첫 학원"은
+//    둘째 지점이 생기는 날 makeedu 데이터를 조용히 남의 학원에 붓는 규칙이었다(원장 2026-09-18 "전부 침산 테넌트로").
 async function resolveTenantId(sql) {
   if (process.env.MAKEEDU_TENANT_ID) return process.env.MAKEEDU_TENANT_ID;
-  const t = await sql`select id from tenants order by created_at limit 1`;
-  if (!t.length) throw new Error("no tenant");
-  return t[0].id;
+  const t = await sql`select id from tenants limit 2`;
+  if (t.length === 1) return t[0].id;
+  throw new Error(`테넌트 ${t.length}개 — MAKEEDU_TENANT_ID env를 지정해야 함(공유 DB 오배정 방지)`);
 }
 
 // 동기화 성공 후 도메인별 마지막 시각 기록(makeedu_sync_state, 화면 'N분 전' 표시용). service_role로 호출.

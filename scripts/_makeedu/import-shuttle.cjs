@@ -29,7 +29,7 @@ const L = require("./lib.cjs");
 
 const APPLY = process.argv.includes("--apply");
 const FROM = (process.argv.find((a) => a.startsWith("--from=")) || "").slice("--from=".length);
-const TENANT_SLUG = process.env.EYWA_TENANT_SLUG || "injaewon";
+const TENANT_SLUG = process.env.EYWA_TENANT_SLUG || "cs"; // 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 
 /**
  * 정류장 통합표 — 왼쪽(makeedu 표기)을 오른쪽(대표 이름)으로 합친다.

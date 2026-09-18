@@ -16,8 +16,11 @@ import { runGoogleCalendarImport } from "@/features/calendar/server/google-impor
  *
  * 🔴 **읽기만 한다**(구글에 쓰지 않는다) · **손으로 만든 일정은 안 건드린다** · **사람이 고친 행은 안 덮는다**.
  * 🔴 캘린더 목록(`GOOGLE_CALENDAR_IDS`)이 없으면 **아무 일도 안 한다** — 목록을 모르면 삭제 정리를 할 수 없다.
- * ⚠️ 테넌트는 `tenants` 전건이 아니라 **캘린더를 실제로 쓰는 한 곳**만 돈다(지금 injaewon 단일 운영).
- *    여러 테넌트가 각자 구글을 붙이면 그때 env가 아니라 테넌트 설정으로 옮겨야 한다.
+ * ⚠️ 테넌트는 `tenants` 전건이 아니라 **캘린더를 실제로 쓰는 한 곳**만 돈다 — 원장 2026-09-18 *"전부 모두 침산(cs)
+ *    테넌트로. 현재 존재하는 모든것"*: env `GOOGLE_CALENDAR_TENANT_ID`(침산 id)가 있으면 그 학원, 없으면 학원이 **정확히
+ *    1개일 때만** 그 학원이다. 🔴 학원이 둘 이상인데 env가 없으면 **아무 학원도 고르지 않는다**(종전 "created_at 첫
+ *    학원"은 둘째 지점이 생기는 날 조용히 남의 학원에 일정을 부을 수 있는 규칙이었다 — ClassNote 워커의 fail-closed와
+ *    같은 결). 여러 테넌트가 각자 구글을 붙이면 그때 env가 아니라 테넌트 설정으로 옮겨야 한다.
  */
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -30,20 +33,38 @@ export async function GET(req: Request) {
   }
 
   const admin = createAdminClient();
-  // 캘린더를 쓰는 테넌트 = 지금은 유일한 운영 테넌트. 여럿이 되면 설정 기반으로 바꾼다.
-  const { data: tenantRow, error: tErr } = await admin
-    .from("tenants")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (tErr || !tenantRow?.id) {
-    reportError(tErr ?? new Error("tenant 없음"), { where: "google-calendar-import:tenant" });
-    return NextResponse.json({ error: "테넌트 조회 실패" }, { status: 500 });
+  // 캘린더를 쓰는 테넌트 = env로 못박은 침산, 없으면 학원이 정확히 1개일 때만(위 주석). 2행만 받아 단일/복수를 가른다.
+  const pinned = process.env.GOOGLE_CALENDAR_TENANT_ID?.trim();
+  let tenantId: string | null = null;
+  if (pinned) {
+    // 🔴 env 값이 실제 학원인지 확인한다 — 임포트는 쓰기 오류를 세지 않아(`if (!error)`), 없는 id(오타)를 그대로 넘기면
+    //    calendar_events FK에 막힌 insert가 전부 조용히 실패하고 크론은 `{ok:true, inserted:0}`으로 초록이 된다(리뷰 2026-09-18).
+    const { data: row, error: pErr } = await admin.from("tenants").select("id").eq("id", pinned).maybeSingle();
+    if (pErr || !row?.id) {
+      reportError(pErr ?? new Error(`GOOGLE_CALENDAR_TENANT_ID=${pinned} 에 해당하는 학원이 없음`), {
+        where: "google-calendar-import:tenant",
+      });
+      return NextResponse.json({ error: "GOOGLE_CALENDAR_TENANT_ID가 가리키는 학원이 없음" }, { status: 500 });
+    }
+    tenantId = String(row.id);
+  }
+  if (!tenantId) {
+    const { data: rows, error: tErr } = await admin.from("tenants").select("id").limit(2);
+    if (tErr) {
+      reportError(tErr, { where: "google-calendar-import:tenant" });
+      return NextResponse.json({ error: "테넌트 조회 실패" }, { status: 500 });
+    }
+    if ((rows?.length ?? 0) !== 1) {
+      reportError(new Error(`tenant ${rows?.length ?? 0}개 — GOOGLE_CALENDAR_TENANT_ID env를 지정해야 함`), {
+        where: "google-calendar-import:tenant",
+      });
+      return NextResponse.json({ error: "테넌트를 특정할 수 없음 — GOOGLE_CALENDAR_TENANT_ID 필요" }, { status: 500 });
+    }
+    tenantId = String(rows![0]!.id);
   }
 
   try {
-    const summary = await runGoogleCalendarImport(String(tenantRow.id));
+    const summary = await runGoogleCalendarImport(tenantId);
     // 캘린더 화면은 메뉴에서 뺐지만 라우트는 살아 있다 — 열었을 때 최신이 보이게.
     revalidatePath("/calendar");
     return NextResponse.json({ ok: true, ...summary });

@@ -26,7 +26,7 @@ const argOf = (name) => {
 const XLSX = (argOf("--xlsx") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 const NOTION_DS = argOf("--notion"); // 노션 `입학 상담 카드 DB`의 data_source id
 const DUMP = argOf("--dump"); // 병합 결과를 JSON으로 (검토용, PII 포함 — 리포 밖에만)
-const TENANT_SLUG = argOf("--tenant") ?? "injaewon";
+const TENANT_SLUG = argOf("--tenant") ?? "cs"; // 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 
 if (!XLSX.length && !NOTION_DS) {
   console.error("사용법: --xlsx \"경로1.xlsx,경로2.xlsx\" [--notion <data_source_id>] [--tenant injaewon] [--apply]");

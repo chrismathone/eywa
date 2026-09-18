@@ -15,8 +15,8 @@ export function NewTenantForm() {
       <Field
         name="slug"
         label="학원 slug"
-        placeholder="ijw-demo"
-        hint="영문 소문자·숫자·하이픈 3~40자. 도메인 식별자로 사용."
+        placeholder="cs"
+        hint="영문 소문자·숫자·하이픈 2~40자(지점 약어, 예: cs=침산). 한 번 정하면 바꾸지 않는다."
         error={fe.slug}
       />
       <Field name="name" label="학원 이름" placeholder="인재원" error={fe.name} />
