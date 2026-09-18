@@ -701,6 +701,8 @@ export function auditDetail(
       const n = num(m.count);
       return n === null ? null : `${n}건`;
     }
+    case "enrollment_lab_separate":
+      return join(ctx.nameOf(m.studentId), ctx.nameOf(m.classId), m.on === true ? "켬" : m.on === false ? "끔" : null);
     case "enrollment_dates_update": {
       const f = str(m.field);
       // 조용히 깨지는 걸 **알고도** 저장한 정정은 그 사실을 함께 적는다(2026-09-10) — 저장 전에

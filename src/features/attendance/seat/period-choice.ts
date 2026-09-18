@@ -110,11 +110,18 @@ export function seatShowsAtPeriod(v: {
   busyStarts?: readonly string[];
   /** 제 반 자리 교시 **밖**의 교시에서 이미 자리 기록이 찍혔는가(옮겨 가서 찍혔다). */
   movedOutMarked?: boolean;
+  /**
+   * 선택이 없을 때 설 교시들 — '따로 수업(*LAB)' 학생 배정(0271b, [`lab-split.ts`](./lab-split.ts)).
+   * 🔴 **선택보다 뒤**다: 사람이 끌어 옮긴 교시·고정이 배정을 이긴다(배정은 반 상세 토글 한 번, 선택은 그날의 사정).
+   * 비었거나 없으면 종전대로 다 세운다.
+   */
+  defaultSlots?: readonly string[];
 }): boolean {
   if (v.markedSlots.includes(v.slotStart)) return true;
   const target = seatChoiceTarget(v);
   if (target) return target === v.slotStart;
   if (v.movedOutMarked) return false;
+  if (v.defaultSlots && v.defaultSlots.length > 0) return v.defaultSlots.includes(v.slotStart);
   return true;
 }
 
@@ -135,6 +142,8 @@ export type SeatChoiceInputs = {
   busyStartsByClass?: Readonly<Record<string, readonly string[]>>;
   /** `반id|학생id` → 제 반 자리 교시 밖에서 이미 자리 기록이 찍힌 교시들. */
   movedOutSlotsByCell?: Readonly<Record<string, readonly string[]>>;
+  /** `반id|학생id` → 선택이 없을 때 설 교시들('따로 수업(*LAB)' 배정, 0271b). 없으면 종전 그대로. */
+  defaultSlotsByCell?: Readonly<Record<string, readonly string[]>>;
 };
 
 /**
@@ -162,6 +171,7 @@ export function applySeatPeriodChoices<R extends ChoiceRoster<{ id: string }>>(
           periodStarts: v.periodStarts,
           busyStarts: v.busyStartsByClass?.[r.classId],
           movedOutMarked: (v.movedOutSlotsByCell?.[key]?.length ?? 0) > 0,
+          defaultSlots: v.defaultSlotsByCell?.[key],
         });
       }),
     };
@@ -191,6 +201,8 @@ export function applySeatPeriodChoicesByPeriod<R extends ChoiceRoster<{ id: stri
     markedSlotsByCell: Readonly<Record<string, readonly string[]>>;
     /** 반 → 그 날 이 반의 다른 수업 시작들(겹치는 시각으로의 선택은 버린다). */
     busyStartsByClass?: Readonly<Record<string, readonly string[]>>;
+    /** `반id|학생id` → 선택이 없을 때 설 교시들('따로 수업(*LAB)' 배정, 0271b). */
+    defaultSlotsByCell?: Readonly<Record<string, readonly string[]>>;
     /** `반id|학생id` → 교시 → 제 반 자리 교시 밖에서 이미 찍힌 자리 기록을 얹은 학생. */
     offSlotByCell?: Readonly<Record<string, Readonly<Record<string, StudentOf<R>>>>>;
     /** 기록 없는 빈 칸 — 옮겨 온 학생을 그 교시에 처음 세울 때(상태·메모·기록자를 비운다). */
@@ -210,6 +222,7 @@ export function applySeatPeriodChoicesByPeriod<R extends ChoiceRoster<{ id: stri
     periodStarts,
     busyStartsByClass: v.busyStartsByClass,
     movedOutSlotsByCell,
+    defaultSlotsByCell: v.defaultSlotsByCell,
   };
 
   /** 반 → 그 반의 제 교시 명단(처음 나오는 교시 하나) — 옮겨 온 학생의 **유일한** 재료. */

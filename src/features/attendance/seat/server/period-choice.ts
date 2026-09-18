@@ -104,7 +104,10 @@ export async function getSeatPeriodChoices(
  *    "옮겨 가서 찍힌 학생"을 원래 교시에 되살린다(화면과 서버 명단이 갈린다).
  */
 export function applySeatDayChoices(
-  day: Pick<SeatDay, "rosterByPeriod" | "slotsByClass" | "markedSlotsByCell" | "busyStartsByClass" | "offSlotByCell">,
+  day: Pick<
+    SeatDay,
+    "rosterByPeriod" | "slotsByClass" | "markedSlotsByCell" | "busyStartsByClass" | "offSlotByCell" | "defaultSlotsByCell"
+  >,
   load: Pick<SeatPeriodChoiceLoad, "moves" | "pins">,
   date: string,
 ): Record<string, SeatClassRoster[]> {
@@ -114,6 +117,8 @@ export function applySeatDayChoices(
     markedSlotsByCell: day.markedSlotsByCell,
     busyStartsByClass: day.busyStartsByClass,
     offSlotByCell: day.offSlotByCell,
+    // LAB '따로 수업(*LAB)' 배정(0271b) — 선택이 없을 때만 본다(seatShowsAtPeriod).
+    defaultSlotsByCell: day.defaultSlotsByCell,
     blank: blankSeatCell,
   });
 }

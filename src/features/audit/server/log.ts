@@ -170,6 +170,8 @@ export const AUDIT_ACTIONS = {
   enrollment_reschedule: "예약 변경(날짜·반)",
   enrollment_schedule_cancel: "예약 취소",
   enrollment_days_update: "등원 요일 수정",
+  // LAB '따로 수업(*LAB)' 학생 배정(0271b, 원장 2026-09-17) — 날짜 없이 즉시 적용이라 이력은 여기뿐이다.
+  enrollment_lab_separate: "따로 수업(*LAB) 배정",
   enrollment_dates_update: "수강 기간 수정",
   student_merge: "학생 병합",
   student_dup_confirm: "동명이인 정상 확인",
@@ -243,6 +245,8 @@ export const AUDIT_ACTIONS = {
   // 칸을 떠날 때 전후 값 한 줄(원장 결정 2026-09-14, `math-sheets/server/goal-audit-actions.ts`). 위 키는 옛 행과
   // '지난 달 목표 가져오기'(한 번 누름) 표시용으로 남는다 — 저장 액션은 더 이상 디바운스마다 남기지 않는다.
   mcs_goal_edit: "수학 시트 학생 월간 목표 수정",
+  // 반의 수업 유형(정규 진도 / 복습 심화) — 화면 문구(`learning-overview.tsx`)와 같은 말로 적는다.
+  mcs_class_learning_track: "수학 시트 반 수업 유형 변경",
 
   // 재고관리(0242a) — 자산 등록/수정/상태 · 대여 시작/반납 · 실사 기록 · 소모품 수량. 상세는 describe.ts.
   inventory_asset_create: "자산 등록",

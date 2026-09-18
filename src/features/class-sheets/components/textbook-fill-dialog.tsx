@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -56,6 +56,9 @@ function dayLabel(date: string, lang: SheetLang): string {
 }
 
 type Book = { id: string; title: string; skillArea: string | null; sessionCount: number };
+
+/** 칩을 담당으로 묶는 키 — 담당이 없는 칸은 빈 문자열로 한 묶음이 된다(자기들끼리는 섞여도 된다). */
+const teacherKeyOf = (s: ClassSlotChoice): string => s.teacherLabel ?? "";
 
 export function TextbookFillDialog({
   classId,
@@ -136,6 +139,21 @@ export function TextbookFillDialog({
   }
 
   const canPreview = picked.size > 0 && !!bookId && !!startDate;
+  /**
+   * 지금 고른 담당. 아무것도 안 골랐으면 **null**(그때는 전부 고를 수 있다).
+   * ⚠️ 담당 없는 칸은 `""`로 묶는다 — `?? null`로 접으면 "안 고름"과 구분이 안 돼 규칙이 새어 나간다.
+   */
+  const firstPicked = slots.find((s) => picked.has(s.key));
+  const pickedTeacher = firstPicked ? teacherKeyOf(firstPicked) : null;
+  /**
+   * 고른 칩들이 실제로 가리키는 칸 목록(`"mon|17:20"`) — 서버가 받는 값이다.
+   * 🔴 **`useMemo`여야 한다** — 매 렌더 새 배열이면 아래 `runPreview`의 정체성이 계속 바뀌어
+   *    자동 미리보기 effect가 무한히 돈다(요청이 끝없이 나간다).
+   */
+  const pickedSlots = useMemo(
+    () => slots.filter((s) => picked.has(s.key)).flatMap((s) => s.picks),
+    [slots, picked],
+  );
 
   const runPreview = useCallback(async () => {
     const token = ++gen.current;
@@ -146,7 +164,7 @@ export function TextbookFillDialog({
       const pv = await previewTextbookFill({
         classId,
         textbookId: bookId,
-        slotStarts: [...picked],
+        slotPicks: pickedSlots,
         pace,
         termMode,
         startDate,
@@ -167,7 +185,7 @@ export function TextbookFillDialog({
       //    겹친 요청 사이의 '계산 중…' 표시는 아래 `calculating`이 파생값으로 메운다.
       setBusy(false);
     }
-  }, [classId, bookId, picked, pace, termMode, startDate, startLessonNo, t]);
+  }, [classId, bookId, pickedSlots, pace, termMode, startDate, startLessonNo, t]);
 
   /**
    * 🔴 **미리보기는 스스로 돈다** — 원장 제보 2026-09-17(*"기입자체가안됌"*, 교시·교재를 바꿔 가며 세 번).
@@ -192,7 +210,7 @@ export function TextbookFillDialog({
       const res = await applyTextbookFill({
         classId,
         textbookId: bookId,
-        slotStarts: [...picked],
+        slotPicks: pickedSlots,
         pace,
         termMode,
         startDate,
@@ -255,23 +273,32 @@ export function TextbookFillDialog({
             <>
               <div className="flex flex-col gap-1.5">
                 <span className="text-text-dim text-xs font-bold">{t("fill.slots")}</span>
+                <span className="text-text-faint text-xs">{t("fill.slots.oneTeacher")}</span>
                 {slots.length === 0 ? (
                   <p className="text-text-dim text-xs">{t("fill.slots.none")}</p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {slots.map((s) => {
-                      const on = picked.has(s.start);
+                      // 🔴 칩 하나 = **(시각, 담당)** 한 묶음이다(원장 2026-09-18) — 같은 17:20이라도
+                      //    월은 추민아, 목은 JJ일 수 있어 시각으로 묶으면 남의 칸까지 데려간다.
+                      const on = picked.has(s.key);
                       const dows = [...s.dows].sort((a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b));
+                      // 다른 담당의 칩은 **같이 담기지 않는다**(아래 onClick) — 지금 고른 담당이 아니면 흐리게.
+                      const otherTeacher = pickedTeacher !== null && teacherKeyOf(s) !== pickedTeacher;
                       return (
                         <button
-                          key={s.start}
+                          key={s.key}
                           type="button"
                           aria-pressed={on}
                           onClick={() => {
+                            // 🔴 **한 배정엔 한 담당만**(원장 2026-09-18 *"교사가 다르면 교재배정을 새로해야지"*).
+                            //    섞으면 차수가 두 선생님 칸에 번갈아 들어가 둘 다 제 진도를 못 읽는다.
+                            //    막아 두는 대신 **고른 것으로 갈아탄다** — 못 누르는 칩은 고장으로 읽힌다.
                             setPicked((prev) => {
+                              if (otherTeacher) return new Set([s.key]);
                               const next = new Set(prev);
-                              if (next.has(s.start)) next.delete(s.start);
-                              else next.add(s.start);
+                              if (next.has(s.key)) next.delete(s.key);
+                              else next.add(s.key);
                               return next;
                             });
                             invalidate();
@@ -279,8 +306,11 @@ export function TextbookFillDialog({
                           className={`rounded-lg border px-2.5 py-1 text-left text-xs transition ${
                             on
                               ? "border-primary bg-primary text-primary-foreground"
-                              : "border-line text-text-dim hover:border-primary hover:text-foreground"
+                              : otherTeacher
+                                ? "border-line-faint text-text-faint hover:border-primary hover:text-foreground"
+                                : "border-line text-text-dim hover:border-primary hover:text-foreground"
                           }`}
+                          title={otherTeacher ? t("fill.slots.oneTeacher") : undefined}
                         >
                           <span className="num font-bold">{s.start}</span>
                           {s.periodLabel ? <span className="ml-1 opacity-80">{s.periodLabel}</span> : null}

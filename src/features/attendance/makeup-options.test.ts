@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   absenceOptionLabel,
   buildAbsenceOptions,
+  isWithinMakeupDeadline,
+  makeupDeadlineOf,
   subjectMatchesAnchor,
   type AbsenceRow,
 } from "./makeup-options";
@@ -233,5 +235,58 @@ describe("앵커 없는 보강 — 강사 과목 폴백", () => {
   it("🔴 앵커가 있으면 앵커가 이긴다(폴백은 무시)", () => {
     const r = buildAbsenceOptions(rows, "2026-09-02", new Set(), "english", ["math"]);
     expect(r.options.map((o) => o.classId)).toEqual(["e1", "x1"]);
+  });
+});
+
+describe("보강 기한 — 결석한 달의 다음 달 말일(원장 2026-09-18 \"9월 결석이면 10월 마지막날까지\")", () => {
+  it("날 수가 아니라 달로 센다 — 그 달 첫날·끝날 결석 모두 다음 달 말일", () => {
+    expect(makeupDeadlineOf("2026-09-01")).toBe("2026-10-31");
+    expect(makeupDeadlineOf("2026-09-30")).toBe("2026-10-31");
+    expect(makeupDeadlineOf("2026-08-20")).toBe("2026-09-30");
+  });
+  it("해를 넘기고 · 짧은 달 · 윤년", () => {
+    expect(makeupDeadlineOf("2026-12-15")).toBe("2027-01-31");
+    expect(makeupDeadlineOf("2026-01-31")).toBe("2026-02-28");
+    expect(makeupDeadlineOf("2028-01-10")).toBe("2028-02-29");
+  });
+  it("형식이 아니면 판정하지 않는다(막지 않는다)", () => {
+    expect(makeupDeadlineOf("9/10")).toBe("");
+    expect(isWithinMakeupDeadline("9/10", "2026-09-18")).toBe(true);
+  });
+  it("기한 당일까지는 되고 다음 날부터 안 된다", () => {
+    expect(isWithinMakeupDeadline("2026-09-10", "2026-10-31")).toBe(true);
+    expect(isWithinMakeupDeadline("2026-09-10", "2026-11-01")).toBe(false);
+  });
+  it("🔴 선보강(결석일이 보강일보다 뒤)은 언제나 된다 — 시험 직전에 당겨 하는 보강", () => {
+    expect(isWithinMakeupDeadline("2026-10-10", "2026-10-05")).toBe(true);
+  });
+
+  it("강사뷰만 거르고 뺀 수를 함께 준다 — 사무실 화면(기본)은 종전 그대로", () => {
+    const rows = [
+      row("c1", "초6 MS2A", "2026-09-10"),
+      row("c1", "초6 MS2A", "2026-08-20"),
+      row("c1", "초6 MS2A", "2026-07-31"),
+      row("c1", "초6 MS2A", "2026-06-04"),
+    ];
+    const teacher = buildAbsenceOptions(rows, "2026-09-18", new Set(), null, null, { deadline: true });
+    expect(teacher.options.map((o) => o.date)).toEqual(["2026-09-10", "2026-08-20"]);
+    expect(teacher.hiddenByDeadline).toBe(2);
+
+    const office = buildAbsenceOptions(rows, "2026-09-18");
+    expect(office.options).toHaveLength(4);
+    // 🔑 사무실 화면엔 이 칸 자체가 없다 — 화면이 '기한을 거는 화면인가'를 이 유무로 안다.
+    expect("hiddenByDeadline" in office).toBe(false);
+  });
+
+  it("기한 수는 과목 필터 **뒤**에 센다 — 한 결석을 두 숫자에 겹쳐 세지 않는다", () => {
+    const rows: AbsenceRow[] = [
+      { classId: "m", className: "수학", date: "2026-06-04", subject: "math" },
+      { classId: "e", className: "영어", date: "2026-06-05", subject: "english" },
+      { classId: "m", className: "수학", date: "2026-09-10", subject: "math" },
+    ];
+    const out = buildAbsenceOptions(rows, "2026-09-18", new Set(), "math", null, { deadline: true });
+    expect(out.options.map((o) => o.date)).toEqual(["2026-09-10"]);
+    expect(out.hiddenBySubject).toBe(1);
+    expect(out.hiddenByDeadline).toBe(1);
   });
 });

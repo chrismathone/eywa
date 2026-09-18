@@ -77,6 +77,19 @@ const GROUP: MatrixGroup = {
   ]),
 };
 
+/**
+ * 모든 줄에 **수업날이 있는** 묶음 — 등원 요일이 빈 줄(박서준·한가온)에 7/1(수)을 준다.
+ * 🔑 수업날이 하나도 없는 줄은 '미확정'·`—` 대신 0으로 적으므로(원장 2026-09-18, `hasNoLessonDays`) '미확정'을 보려면
+ *    그 줄에 수업날이 있어야 한다.
+ */
+const LESSON_GROUP: MatrixGroup = {
+  ...GROUP,
+  matrix: {
+    ...GROUP.matrix,
+    students: GROUP.matrix.students.map((s) => (s.attendDows.length > 0 ? s : { ...s, attendDows: [3] })),
+  },
+};
+
 function renderTable() {
   return render(
     <MatrixTable
@@ -154,8 +167,8 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
   it.each([true, false])("반별 정렬=%s에서도 금액·0원·미확정을 구분한다", (showGroups) => {
     const { container } = render(
       <MatrixTable
-        groups={[GROUP]} days={DAYS} holidays={{}} showGroups={showGroups}
-        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        groups={[LESSON_GROUP]} days={DAYS} holidays={{}} showGroups={showGroups}
+        ordered={LESSON_GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
         classBilledAmounts={{ [rowKey(C, S1)]: 210000, [rowKey(C, S2)]: 0 }}
         termSessionsByRow={{ [rowKey(C, S1)]: { units: 8, daysBasis: false } }}
       />,
@@ -181,11 +194,11 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
   it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {
     render(
       <MatrixTable
-        groups={[GROUP]}
+        groups={[LESSON_GROUP]}
         days={DAYS}
         holidays={{}}
         showGroups={false}
-        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        ordered={LESSON_GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
         classBilledAmounts={{}}
         termSessionsByRow={{ [rowKey(C, S1)]: { units: 6, daysBasis: true } }}
       />,
@@ -199,6 +212,52 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     // 다른 행은 평범한 '미확정'(표식이 번지지 않는다).
     expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
     expect(screen.queryByRole("columnheader", { name: "납입" })).not.toBeInTheDocument();
+  });
+
+  it("🔴 그 달 수업날이 하나도 없는 줄은 '미확정'·`—` 대신 0 — 실제 값이 있으면 그 값(원장 2026-09-18)", () => {
+    render(
+      <MatrixTable
+        groups={[GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        // 박서준 = 수업날 없음 + 확정 등록 차수 3 → 그 사실은 그대로. 한가온 = 수업날 없음 + 값 없음 → 0.
+        classBilledAmounts={{ [rowKey(C, S1)]: 210000 }}
+        termSessionsByRow={{ [rowKey(C, S2)]: { units: 3, daysBasis: false } }}
+      />,
+    );
+    const cells = (name: string) => within(screen.getByText(name).closest("tr")!).getAllByRole("cell");
+    // 한가온: 청구액 0 · 수업 차수 0.0 · 등록 차수 0.0 · 차이 0.0(색 없음)
+    expect(cells("한가온")[2]).toHaveTextContent(/^0$/);
+    expect(cells("한가온")[3]).toHaveTextContent("0.0");
+    expect(cells("한가온")[4]).toHaveTextContent("0.0");
+    expect(cells("한가온")[5]).toHaveTextContent("0.0");
+    // 🔴 박서준: 확정값(3)이 있는 줄은 **통째로** 손대지 않는다 — 청구액만 0으로 바꾸면 "0원 | 3.0"이라는 모순이 선다.
+    expect(cells("박서준")[4]).toHaveTextContent("3.0");
+    expect(cells("박서준")[2]).toHaveTextContent("미확정");
+    // 이도윤(수요일 등원 — 7/1이 수업날): 수업날이 있는 줄의 빈 등록 차수는 여전히 '미확정', 빈 수업 차수는 `—`.
+    expect(cells("이도윤")[4]).toHaveTextContent("미확정");
+    expect(cells("이도윤")[3]).toHaveTextContent("—");
+  });
+
+  it("🔴 합계 행도 같은 값을 본다 — 줄이 전부 0이면 합계도 0(`—`가 아니다)", () => {
+    const { container } = render(
+      <MatrixTable
+        groups={[GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        // 이도윤(수업날 있음)은 빼고 둘만 — 둘 다 수업날 없음 + 값 없음.
+        ordered={[S2, S3].map((id) => ({ classId: C, studentId: id }))}
+        classBilledAmounts={{}}
+        termSessionsByRow={{}}
+      />,
+    );
+    // 합계 행 = tfoot 첫 줄 — [합계] · 청구액 · 수업 차수 · 등록 차수 · 차이…
+    const totals = container.querySelector("tfoot tr")!.querySelectorAll("td");
+    expect(totals[1]).toHaveTextContent(/^0$/);
+    expect(totals[3]).toHaveTextContent("0.0");
   });
 });
 

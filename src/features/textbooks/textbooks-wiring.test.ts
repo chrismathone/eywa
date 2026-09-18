@@ -156,3 +156,60 @@ describe("교재목록 — fail-soft (0266a 미적용)", () => {
     expect(opts).toContain("return [];");
   });
 });
+
+/**
+ * 🔴 **교시는 (요일, 시각)으로 고른다** — 원장 제보 2026-09-18(*"추민아 선생님이 배정해도 송지혜
+ *    선생님까지 다같이 배정됌"*). 같은 시각의 담당이 요일마다 갈리는 조합이 실측 **60개(반×시각)**라
+ *    시각만으로 묶으면 남의 칸에 차수가 내려앉는다. 되돌리는 길은 줄을 하나씩 지우는 것뿐이다.
+ */
+describe("교재 배정 — 칸은 요일까지 고른다", () => {
+  it("칩을 (시각, 담당)으로 묶는다 — 시각만으로 묶지 않는다", () => {
+    const q = read("src", "features", "textbooks", "server", "queries.ts");
+    expect(q).toContain("`${start}|${label}`");
+    // 담당 이름은 시트 달력과 같은 해석기를 탄다(닉네임 `Jane` → `추민아`).
+    expect(q).toContain("resolveTeacherLabel");
+  });
+
+  it("배분 함수가 요일을 보고 거른다", () => {
+    const sched = read("src", "features", "textbooks", "lesson-schedule.ts");
+    expect(sched).toContain("slotsOfPicks(all, dowKeyOf(date), picked)");
+    // 🔴 옛 이름으로 되돌아가면(시각만) 이 가드가 먼저 깨진다.
+    expect(sched).not.toContain("slotsOfStarts");
+  });
+
+  it("창이 칩 키로 고르고, 서버엔 칸 목록을 넘긴다", () => {
+    const dlg = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
+    expect(dlg).toContain("picked.has(s.key)");
+    expect(dlg).toContain("slotPicks: pickedSlots");
+    // 🔴 매 렌더 새 배열이면 자동 미리보기가 무한히 돈다.
+    expect(dlg).toContain("useMemo(");
+  });
+
+  it("저장 칸 이름이 SQL과 앱에서 같다", () => {
+    const sql = read("supabase", "migrations", "0268a_class_textbook_plan_slots.sql");
+    expect(sql).toContain("slot_picks text[]");
+    const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
+    expect(plan).toContain("slot_picks: slotPicks");
+    expect(plan).not.toContain("slot_starts");
+  });
+});
+
+/**
+ * 🔴 **한 배정엔 한 담당만** — 원장 2026-09-18(*"지금 남들 + 자기수업 다 넣을수있자나 교사가 다르면
+ *    교재배정을 새로해야지"*). 섞으면 차수가 두 선생님 칸에 **번갈아** 들어가 둘 다 제 진도를 못 읽는다.
+ */
+describe("교재 배정 — 한 배정엔 한 담당만", () => {
+  it("창은 다른 담당을 고르면 그쪽으로 갈아탄다(섞이지 않는다)", () => {
+    const dlg = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
+    expect(dlg).toContain("if (otherTeacher) return new Set([s.key]);");
+    // 규칙을 말로도 적는다 — 칩이 흐려진 이유를 사람이 알 수 있어야 한다.
+    expect(dlg).toContain("fill.slots.oneTeacher");
+  });
+
+  it("🔴 서버가 다시 센다 — 화면 조건은 게이트가 아니다([[#77]])", () => {
+    const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
+    expect(plan).toContain("labels.size > 1");
+    // 부원장/Yoojin이 한 사람이라 정규화한 뒤에 센다(안 그러면 멀쩡한 배정이 거절된다).
+    expect(plan).toContain("canonicalSlotTeacherLabel");
+  });
+});

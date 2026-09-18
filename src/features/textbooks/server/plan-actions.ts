@@ -22,10 +22,19 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { resolvePeriodLabel, tableToEntries } from "@/features/class-sheets/lib/period-label";
 import { isWeekendDow } from "@/features/class-sheets/lib/grid-rows";
+import { canonicalSlotTeacherLabel } from "@/features/timetable/lib/teacher-label";
 import { dowKeyOf } from "@/features/class-sheets/lib/week";
+import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
-import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS, type LessonPace, type SlotAxis } from "../lesson-schedule";
+import {
+  buildLessonSchedule,
+  MAX_LOOKAHEAD_DAYS,
+  parseSlotPick,
+  slotPickKey,
+  type LessonPace,
+  type SlotAxis,
+} from "../lesson-schedule";
 import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice } from "../types";
 import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOOKS_NOT_READY } from "./access";
 
@@ -37,10 +46,10 @@ export type ClassTextbookPlanInput = {
   id?: string | null;
   classId: string;
   textbookId: string;
-  /** 옛 축(0268a 이전). `slotStarts`가 있으면 표시·호환용으로만 저장된다. */
+  /** 옛 축(0268a 이전). `slotPicks`가 있으면 표시·호환용으로만 저장된다. */
   slotAxis: SlotAxis;
-  /** 고른 교시 시작시각(`"HH:MM"`) — 원장 2026-09-16 "16시 수업 클릭 17시 수업 클릭". */
-  slotStarts?: string[] | null;
+  /** 고른 교시(`"mon|17:20"`) — 요일까지 담는다(원장 2026-09-18, `lesson-schedule.ts` 주석). */
+  slotPicks?: string[] | null;
   pace: LessonPace;
   termMode: "regular" | "exam";
   startDate: string;
@@ -52,12 +61,32 @@ export type ClassTextbookPlanInput = {
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * `slot_starts`(0268a)가 아직 없는 DB인가.
- * 🔴 **코드만 본다** — 메시지에 `slot_starts`가 들어갔다고 "컬럼 없음"으로 보면, 그 칸의 CHECK 위반
- *    (`class_textbook_plans_slot_starts_len`, 23514)까지 같은 갈래로 삼켜져 사람이 고른 교시가
+ * 한 배정이 담을 수 있는 교시 칸 수. 요일까지 세는 값이라(`"mon|17:20"`) 시각 기준이던 옛 상한(12)보다
+ * 넉넉해야 한다 — 주 6일 × 하루 4교시 = 24가 현실 최대다.
+ */
+const MAX_SLOT_PICKS = 48;
+
+/**
+ * 고른 교시를 정규화한다 — 모양이 틀린 값은 **버린다**(형식은 앱이 지킨다, 0268a CHECK는 개수만 본다).
+ * ⚠️ 정렬해 둔다: RPC가 날짜·교시 오름차순을 전제로 락을 잡고(교착 회피), 감사로그도 같은 순서로 남는다.
+ */
+function normalizeSlotPicks(raw: readonly string[] | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const v of raw ?? []) {
+    const parsed = parseSlotPick(String(v));
+    if (!parsed) continue;
+    out.add(parsed.dow ? slotPickKey(parsed.dow, parsed.start) : parsed.start);
+  }
+  return [...out].sort();
+}
+
+/**
+ * `slot_picks`(0268a)가 아직 없는 DB인가.
+ * 🔴 **코드만 본다** — 메시지에 `slot_picks`가 들어갔다고 "컬럼 없음"으로 보면, 그 칸의 CHECK 위반
+ *    (`class_textbook_plans_slot_picks_len`, 23514)까지 같은 갈래로 삼켜져 사람이 고른 교시가
  *    조용히 사라진다(적대적 리뷰 P2).
  */
-function isMissingSlotStartsColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+function isMissingSlotPicksColumn(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
   return error.code === "42703" || error.code === "PGRST204";
 }
@@ -69,14 +98,14 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
   const today = kstToday();
 
   // 🔴 형식은 **앱이 지킨다**(0268a CHECK는 개수만 본다) — 시간표에서 뽑은 값만 오지만 한 번 더 거른다.
-  const HHMM = /^[0-2][0-9]:[0-5][0-9]$/;
-  const slotStarts = [...new Set((input.slotStarts ?? []).map((v) => String(v).slice(0, 5)))]
-    .filter((v) => HHMM.test(v))
-    .sort();
-  if ((input.slotStarts ?? []).length > 0 && slotStarts.length === 0) {
+  const slotPicks = normalizeSlotPicks(input.slotPicks);
+  if ((input.slotPicks ?? []).length > 0 && slotPicks.length === 0) {
     return { ok: false, error: "교시를 다시 골라 주세요" };
   }
-  if (slotStarts.length > 12) return { ok: false, error: "한 배정에 교시를 12개까지 고를 수 있습니다" };
+  // 요일까지 세므로 상한을 올린다 — 주 6일 × 하루 4교시가 들어와도 막히지 않게(옛 상한 12는 시각 기준이었다).
+  if (slotPicks.length > MAX_SLOT_PICKS) {
+    return { ok: false, error: `한 배정에 교시를 ${MAX_SLOT_PICKS}칸까지 고를 수 있습니다` };
+  }
   const axis: SlotAxis = input.slotAxis === "jj" ? "jj" : "class";
   const pace: LessonPace = input.pace === "day" ? "day" : "period";
   const termMode = input.termMode === "exam" ? "exam" : "regular";
@@ -134,7 +163,7 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
       : {}),
   };
   /** 0268a가 적용됐을 때만 실린다 — 아래에서 42703이면 이 칸을 빼고 다시 쓴다([[#95]]). */
-  const withSlots = slotStarts.length > 0 ? { ...payload, slot_starts: slotStarts } : payload;
+  const withSlots = slotPicks.length > 0 ? { ...payload, slot_picks: slotPicks } : payload;
 
   /** 같은 (반, 교재) 배정이 이미 있으면 **갈아 끼운다** — 교시만 바꿔 다시 거는 게 정상 흐름이다. */
   // 🔴 **축까지 같은 행**만 갈아 끼운다 — 유니크가 `(tenant, class, textbook, slot_axis)`라 축이 다른
@@ -165,11 +194,11 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
       .update(withSlots)
       .eq("tenant_id", gate.access.tenantId)
       .eq("id", targetId);
-    if (error && isMissingSlotStartsColumn(error)) {
+    if (error && isMissingSlotPicksColumn(error)) {
       // 🔴 **고른 교시가 있으면 조용히 떨어뜨리지 않는다**(적대적 리뷰 P0) — 축으로 폴백하면 사람이
       //    고르지도 않은 교시에까지 차수가 깔린다(16:20만 골랐는데 16:20·17:20·18:20 전부, 3배 속도로).
       //    되돌리려면 줄을 하나씩 지워야 하니 "잘못 눌러도 잃을 게 없다"가 깨진다. 거절이 맞다.
-      if (slotStarts.length > 0) return { ok: false, error: SLOTS_NOT_READY };
+      if (slotPicks.length > 0) return { ok: false, error: SLOTS_NOT_READY };
       ({ error } = await admin
         .from("class_textbook_plans")
         .update(payload)
@@ -182,7 +211,7 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
         error: friendlyTextbookError(error, "배정을 수정하지 못했습니다", "이 반에 같은 교재가 이미 배정돼 있습니다"),
       };
     }
-    await logAction({ action: "textbook_plan_update", targetType: "class", targetLabel: gate.access.className, metadata: { id: targetId, textbookId: input.textbookId, slots: slotStarts } });
+    await logAction({ action: "textbook_plan_update", targetType: "class", targetLabel: gate.access.className, metadata: { id: targetId, textbookId: input.textbookId, slots: slotPicks } });
     revalidatePath("/textbooks");
     return { ok: true, id: targetId };
   }
@@ -193,9 +222,9 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
     .insert({ ...withSlots, ...base })
     .select("id")
     .single();
-  if (error && isMissingSlotStartsColumn(error)) {
+  if (error && isMissingSlotPicksColumn(error)) {
     // 🔴 위와 같은 이유 — 고른 교시가 있으면 거절한다(P0).
-    if (slotStarts.length > 0) return { ok: false, error: SLOTS_NOT_READY };
+    if (slotPicks.length > 0) return { ok: false, error: SLOTS_NOT_READY };
     ({ data, error } = await admin
       .from("class_textbook_plans")
       .insert({ ...payload, ...base })
@@ -212,7 +241,7 @@ export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Prom
     action: "textbook_plan_create",
     targetType: "class",
     targetLabel: gate.access.className,
-    metadata: { id: data.id, textbookId: input.textbookId, axis, pace, slots: slotStarts },
+    metadata: { id: data.id, textbookId: input.textbookId, axis, pace, slots: slotPicks },
   });
   revalidatePath("/textbooks");
   return { ok: true, id: data.id as string };
@@ -247,7 +276,7 @@ type LoadedPlan = {
     termMode: "regular" | "exam";
     startDate: string;
     startLessonNo: number;
-    slotStarts: string[] | null;
+    slotPicks: string[] | null;
   };
 };
 
@@ -257,11 +286,11 @@ async function loadPlan(planId: string): Promise<LoadedPlan | { error: string }>
   const BASE = "id, tenant_id, class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no";
   let { data, error } = await admin
     .from("class_textbook_plans")
-    .select(`${BASE}, slot_starts`)
+    .select(`${BASE}, slot_picks`)
     .eq("id", planId)
     .maybeSingle();
   // 0268a 미적용이면 그 칸 없이 한 번 더 — 그 배정은 옛 축 방식으로 읽는다([[#95]]).
-  if (error && isMissingSlotStartsColumn(error)) {
+  if (error && isMissingSlotPicksColumn(error)) {
     ({ data, error } = await admin.from("class_textbook_plans").select(BASE).eq("id", planId).maybeSingle());
   }
   if (error) return { error: isMissingTextbookTable(error) ? TEXTBOOKS_NOT_READY : "배정을 찾지 못했습니다" };
@@ -283,10 +312,10 @@ async function loadPlan(planId: string): Promise<LoadedPlan | { error: string }>
       termMode: data.term_mode === "exam" ? "exam" : "regular",
       startDate: String(data.start_date),
       startLessonNo: Number(data.start_lesson_no ?? 1),
-      slotStarts:
-        Array.isArray((data as { slot_starts?: unknown }).slot_starts) &&
-        ((data as { slot_starts: unknown[] }).slot_starts.length ?? 0) > 0
-          ? (data as { slot_starts: unknown[] }).slot_starts.map((v) => String(v).slice(0, 5))
+      slotPicks:
+        Array.isArray((data as { slot_picks?: unknown }).slot_picks) &&
+        ((data as { slot_picks: unknown[] }).slot_picks.length ?? 0) > 0
+          ? normalizeSlotPicks((data as { slot_picks: unknown[] }).slot_picks.map((v) => String(v)))
           : null,
     },
   };
@@ -383,10 +412,43 @@ async function computeTargets(loaded: LoadedPlan): Promise<Computed | { error: s
     holidays: buildHolidayMap(settings.operations.holidays),
     axis: plan.axis,
     // 고른 교시가 있으면 **그것이 축을 이긴다**(0268a) — 없으면 옛 축 방식.
-    slotStarts: plan.slotStarts,
+    slotPicks: plan.slotPicks,
     pace: plan.pace,
     lookaheadDays: MAX_LOOKAHEAD_DAYS,
   });
+
+  /**
+   * 🔴 **한 배정엔 같은 담당의 교시만 담는다**(원장 2026-09-18: *"교사가 다르면 교재배정을 새로해야지"*).
+   *    섞으면 차수가 두 선생님 칸에 **번갈아** 들어간다 — 추민아 1차수 · 송지혜 2차수 · 추민아 3차수…
+   *    두 사람의 진도가 한 줄로 엮여 어느 쪽도 자기 진도를 못 읽는다.
+   * 🔴 화면에서만 막지 않는다([[#77]]) — 서버 액션은 공개 엔드포인트라 여기서 다시 센다.
+   * 🔴 **실제로 쓸 칸만 센다** — `schedules`엔 끝난 배치 이력이 함께 들어 있어([[#88]]) 원본 행을 그대로 세면
+   *    `중고E_중1 MED` 월 17:20처럼 담당이 바뀌어 온 칸(부원장 → Daniella → Jane)이 "셋이 섞였다"로 잡혀
+   *    **멀쩡한 배정이 거절된다**. 그래서 배분 결과(`targets`)의 그 날짜에 **살아 있는** 행만 본다.
+   * ⚠️ 비교는 **정규화한 원문**(`canonicalSlotTeacherLabel`)으로 — `부원장`과 `Yoojin`은 같은 사람이라
+   *    원문 그대로 세면 한 사람인데 둘로 보여 역시 거절된다.
+   * ⚠️ 옛 축 방식(`slotPicks` 없음)엔 걸지 않는다 — 축은 원래 그 반 전 교시를 뜻해 담당이 섞이는 게 정상이다.
+   */
+  if (plan.slotPicks && plan.slotPicks.length > 0) {
+    const labels = new Set<string>();
+    const seen = new Set<string>();
+    for (const t of schedule.targets) {
+      const key = `${dowKeyOf(t.date)}|${t.slotStart}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // `slotsByDateOf`와 같은 규칙 — 그 날짜에 살아 있는 행 중 **처음 만난 것**이 그 칸의 주인이다.
+      const row = schedules.find(
+        (r) =>
+          r.dayOfWeek === dowKeyOf(t.date) &&
+          String(r.startTime).slice(0, 5) === t.slotStart &&
+          slotLiveOnDate({ dayOfWeek: r.dayOfWeek, validFrom: r.validFrom, validTo: r.validTo }, t.date),
+      );
+      labels.add(canonicalSlotTeacherLabel(row?.slotTeacherLabel ?? null) ?? "");
+    }
+    if (labels.size > 1) {
+      return { error: "한 배정엔 같은 담당의 교시만 담을 수 있습니다 — 선생님이 다르면 따로 배정해 주세요" };
+    }
+  }
 
   // 교시 라벨 — 월간 뷰와 같은 규약(요일별 표 + 주말 별도). 못 찾으면 null(지어내지 않는다).
   const periodsConfig = settingsToPeriodsConfig(settings.operations);
@@ -678,7 +740,7 @@ export type TextbookFillInput = {
   classId: string;
   textbookId: string;
   /** 고른 교시 시작시각(`"HH:MM"`). 비면 거절한다 — 축으로 떨어뜨리지 않는다. */
-  slotStarts: string[];
+  slotPicks: string[];
   pace: LessonPace;
   termMode: "regular" | "exam";
   startDate: string;
@@ -697,12 +759,11 @@ async function loadFillInput(input: TextbookFillInput): Promise<LoadedPlan | { e
   if (!gate.ok) return { error: gate.error };
   if (!YMD_RE.test(input.startDate)) return { error: "시작일을 골라 주세요" };
 
-  const HHMM = /^[0-2][0-9]:[0-5][0-9]$/;
-  const slotStarts = [...new Set(input.slotStarts.map((v) => String(v).slice(0, 5)))].filter((v) => HHMM.test(v)).sort();
+  const slotPicks = normalizeSlotPicks(input.slotPicks);
   // 🔴 **비면 거절**한다 — 빈 목록을 그대로 넘기면 `buildLessonSchedule`이 옛 축으로 떨어져 고르지도 않은
   //    교시에까지 깔린다(적대적 리뷰 P0와 같은 실패).
-  if (slotStarts.length === 0) return { error: "교시를 하나 이상 골라 주세요" };
-  if (slotStarts.length > 12) return { error: "한 번에 교시를 12개까지 고를 수 있습니다" };
+  if (slotPicks.length === 0) return { error: "교시를 하나 이상 골라 주세요" };
+  if (slotPicks.length > MAX_SLOT_PICKS) return { error: `한 번에 교시를 ${MAX_SLOT_PICKS}칸까지 고를 수 있습니다` };
 
   return {
     gate,
@@ -715,7 +776,7 @@ async function loadFillInput(input: TextbookFillInput): Promise<LoadedPlan | { e
       termMode: input.termMode === "exam" ? "exam" : "regular",
       startDate: input.startDate,
       startLessonNo: Math.max(1, Math.min(200, Math.trunc(Number(input.startLessonNo) || 1))),
-      slotStarts,
+      slotPicks,
     },
   };
 }
@@ -744,7 +805,7 @@ export async function applyTextbookFill(
     classId: input.classId,
     textbookId: input.textbookId,
     slotAxis: "class",
-    slotStarts: loaded.plan.slotStarts ?? [],
+    slotPicks: loaded.plan.slotPicks ?? [],
     pace: loaded.plan.pace,
     termMode: loaded.plan.termMode,
     startDate: input.startDate,
