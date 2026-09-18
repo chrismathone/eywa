@@ -164,9 +164,10 @@ export function SeatBoard({
    */
   choicesApplied?: boolean;
   /**
-   * 수업계획(진도) 구획을 **접은 채** 시작하고 요약 줄의 [수업계획 펼치기]로 연다 — JJ실 '전체' 보기만(원장 2026-09-18
-   * *"펼치기"* — 하루치 교시가 다 서니 계획 표까지 모두 펴면 화면이 계획으로 덮인다). 교시 하나 보기는 종전대로 늘 편다.
-   * 🔑 펼친 적 없는 교시의 계획 블록은 **올리지도 않는다**(저널·저장 큐·presence가 블록마다 붙는다).
+   * 수업계획(진도) 구획을 **접은 채** 시작한다 — JJ실 '전체' 보기만(원장 2026-09-18 *"펼치기"* — 하루치 교시가 다 서니
+   * 계획 표까지 모두 펴면 화면이 계획으로 덮인다). 펴는 문은 둘: 카드마다의 접기 줄(**반마다**, 원장 같은 날 *"각각의
+   * 수업이 펼치기 접기가 되어야함"*) + 요약 줄의 [수업계획 모두 펼치기]. 교시 하나 보기는 종전대로 늘 편다.
+   * 🔑 펼친 적 없는 반의 계획 블록은 **올리지도 않는다**(저널·저장 큐·presence가 블록마다 붙는다).
    */
   foldPlans?: boolean;
 }) {
@@ -186,9 +187,24 @@ export function SeatBoard({
     onBlur: auditBlur,
   } = useSeatBoardSaves(seat, date, activeStart);
   const showJj = seatHasJjFields(seat);
-  // 접힘 — 교시 판마다 제 것(교시마다 접어 둔다). 한 번 펼친 블록은 접어도 내리지 않는다(`SeatPlanFold` 주석).
-  const [planOpen, setPlanOpen] = useState(!foldPlans);
-  const [planMounted, setPlanMounted] = useState(!foldPlans);
+  /**
+   * 접힘 — 교시 판마다 제 것이고 그 안에서 **반마다 따로**다(원장 2026-09-18 *"각각의 수업이 펼치기 접기가
+   * 되어야함. 당일"*). 키가 없는 반은 접힌 것(`foldPlans`일 때만 이 상태가 쓰인다).
+   * 🔑 한 번 펼친 블록은 접어도 **내리지 않는다**(`SeatPlanFold` 주석) — 그래서 `mounted`가 따로 있다.
+   */
+  const [planOpenBy, setPlanOpenBy] = useState<Record<string, boolean>>({});
+  const [planMountedBy, setPlanMountedBy] = useState<Record<string, boolean>>({});
+  /** 한 반 블록을 올린다 — 내리는 짝은 **없다**(위 🔑). */
+  const mountPlan = useCallback((classId: string) => {
+    setPlanMountedBy((m) => (m[classId] ? m : { ...m, [classId]: true }));
+  }, []);
+  const togglePlan = useCallback(
+    (classId: string) => {
+      mountPlan(classId);
+      setPlanOpenBy((o) => ({ ...o, [classId]: !o[classId] }));
+    },
+    [mountPlan],
+  );
   /**
    * 반마다 계획 저장 충돌 수 — 🔴 충돌은 계획 블록 **안에만** 표시되고 토스트가 없다. 접힌 채 두면 저장이 멈춘 걸 아무도
    * 모르므로(적대 리뷰 2026-09-18) **접힌 버튼이 그 수를 붉게 말한다**.
@@ -201,8 +217,23 @@ export function SeatBoard({
       setPlanConflicts((m) => ((m[classId] ?? 0) === count ? m : { ...m, [classId]: count })),
     [],
   );
-  const conflictN = Object.values(planConflicts).reduce((a, b) => a + b, 0);
-  const planFold: SeatPlanFold | undefined = foldPlans ? { open: planOpen, mounted: planMounted } : undefined;
+  // 요약 칩의 충돌 수는 **아직 접힌 반**만 더한다 — 펼친 반의 충돌은 블록 안에 보이므로, 합치면 접힌 반에 충돌이 있는
+  // 것처럼 읽힌다(재리뷰 2026-09-18).
+  const conflictN = Object.entries(planConflicts)
+    .filter(([id]) => !planOpenBy[id])
+    .reduce((a, [, n]) => a + n, 0);
+  const planFold: SeatPlanFold | undefined = useMemo(
+    () =>
+      foldPlans
+        ? {
+            openOf: (classId: string) => planOpenBy[classId] ?? false,
+            mountedOf: (classId: string) => planMountedBy[classId] ?? false,
+            conflictsOf: (classId: string) => planConflicts[classId] ?? 0,
+            toggle: togglePlan,
+          }
+        : undefined,
+    [foldPlans, planOpenBy, planMountedBy, planConflicts, togglePlan],
+  );
   // 문 선택은 여기 한 줄 — 참조 고정(계획 블록이 `memo`라 매 렌더 새 객체면 표가 통째로 다시 그려진다).
   const viaPin = plans?.viaPin ?? false;
   const planApi = useMemo(() => (viaPin ? seatPlanApi(seat) : ECS_PLAN_API), [viaPin, seat]);
@@ -256,7 +287,24 @@ export function SeatBoard({
   const placed = applySeatPlacements(raw, mergeSeatPlacements(raw, placements ?? [], overlay));
   const view = placed.rosters;
   /** 이 교시에서 계획을 볼 수 있는 반 수 — 0이면 펼칠 것이 없어 버튼을 안 세운다(어느 반이 실리는지는 서버가 정했다). */
-  const planClassN = plans ? view.filter((r) => plans.plans[r.classId]).length : 0;
+  /**
+   * 이 교시에서 계획 구획이 서는 반 — 접기 줄(반별)과 '모두' 버튼이 이 집합을 쓴다.
+   * ⚠️ 같은 반이 한 교시에 두 줄로 설 수 있어(중복 슬롯) id로 거른다 — 접힘은 반 id 키라 두 카드가 함께 열린다.
+   */
+  const planClassIds = plans ? [...new Set(view.filter((r) => plans.plans[r.classId]).map((r) => r.classId))] : [];
+  const planClassN = planClassIds.length;
+  /** 아직 접혀 있는 반 수 — '모두' 버튼은 **남은 것**을 편다(일부만 열린 상태에서 "N개 반"이 거짓이 되지 않게). */
+  const closedPlanN = planClassIds.filter((id) => !planOpenBy[id]).length;
+  const allPlansOpen = planClassN > 0 && closedPlanN === 0;
+  const toggleAllPlans = () => {
+    const open = !allPlansOpen;
+    if (open) for (const id of planClassIds) mountPlan(id);
+    setPlanOpenBy((o) => {
+      const next = { ...o };
+      for (const id of planClassIds) next[id] = open;
+      return next;
+    });
+  };
   const resetCounts = seatResetCounts(placed.applied);
   /**
    * 반별 **이 교시로 지정된** 학생 수 — 머리줄 [교시 지정 N명 해제]가 그대로 쓴다.
@@ -336,29 +384,27 @@ export function SeatBoard({
           ) : null}
         </span>
         {foldPlans && planClassN > 0 ? (
+          // 일괄 동작이라 `aria-expanded`를 달지 않는다 — 일부만 열린 상태에서 그 값이 거짓이 된다(재리뷰 2026-09-18).
+          // 반마다의 열림은 카드의 접기 줄이 말한다.
           <button
             type="button"
-            aria-expanded={planOpen}
-            onClick={() => {
-              setPlanMounted(true);
-              setPlanOpen((o) => !o);
-            }}
+            onClick={toggleAllPlans}
             title={
-              planOpen
-                ? "이 교시의 수업계획을 접습니다 — 적어 둔 내용은 그대로입니다"
+              allPlansOpen
+                ? "이 교시의 수업계획을 모두 접습니다 — 적어 둔 내용은 그대로입니다"
                 : conflictN > 0
                   ? "수업계획에 저장이 멈춘 칸이 있습니다 — 펼쳐서 충돌한 칸의 서버값/내 값을 고르세요"
-                  : `이 교시 ${planClassN}개 반의 수업계획을 펼칩니다`
+                  : `이 교시에서 아직 접힌 ${closedPlanN}개 반의 수업계획을 한 번에 펼칩니다(반마다 따로도 됩니다)`
             }
             className={`${TOOLBAR_CHIP} ${
-              planOpen ? TOOLBAR_CHIP_ON : conflictN > 0 ? "border-danger text-danger" : TOOLBAR_CHIP_OFF
+              allPlansOpen ? TOOLBAR_CHIP_ON : conflictN > 0 ? "border-danger text-danger" : TOOLBAR_CHIP_OFF
             } font-semibold`}
           >
-            {planOpen
-              ? "수업계획 접기"
+            {allPlansOpen
+              ? "수업계획 모두 접기"
               : conflictN > 0
-                ? `수업계획 펼치기 · 저장 충돌 ${conflictN}건`
-                : `수업계획 펼치기 · ${planClassN}개 반`}
+                ? `수업계획 모두 펼치기 · 저장 충돌 ${conflictN}건`
+                : `수업계획 모두 펼치기 · ${closedPlanN}개 반`}
           </button>
         ) : null}
         {(!readOnly && waiting > 0) || (canMove && resetAllTargets.length > 0) ? (
