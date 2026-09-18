@@ -498,6 +498,8 @@ export type StudentLine = {
    * [`seat-pin-mark.ts`](../lib/seat-pin-mark.ts) 단일 소스 — 화면에서 다시 만들지 말 것.
    */
   seatPinNote?: string;
+  /** LAB '따로 수업(*LAB)' 배정(0271b) — 이름을 LAB 파랑 + 이탤릭으로. 판정 = lab-separate.ts `applyLabSeparateMarks`. */
+  labSeparate?: true;
 };
 export type ScheduleSlotWithStudents = ScheduleSlot & {
   students: StudentLine[];

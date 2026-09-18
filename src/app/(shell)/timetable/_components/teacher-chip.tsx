@@ -16,6 +16,7 @@ import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
 import {
   isLabSeparateSlot,
   LAB_SEPARATE_LABEL,
+  LAB_SEPARATE_STUDENT_CLASS,
   LAB_SEPARATE_TEXT_CLASS,
 } from "@/features/timetable/lib/lab-separate";
 
@@ -168,6 +169,9 @@ function ChipStudentRow({ student }: { student: ClassDetailQuick["students"][num
         <span className={SEAT_PIN_MARK_CLASS} {...tipProps(student.seatPinNote)}>
           {student.name}
         </span>
+      ) : student.labSeparate ? (
+        // LAB '따로 수업(*LAB)' 배정(0271b) — 기본뷰·통합뷰와 같은 서식 상수.
+        <span className={LAB_SEPARATE_STUDENT_CLASS}>{student.name}</span>
       ) : (
         student.name
       )}

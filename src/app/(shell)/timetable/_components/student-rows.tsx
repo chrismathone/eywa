@@ -13,6 +13,7 @@ import { movingTone, RECENT_ROW_CLASS, useTimetableColorMode } from "./timetable
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
+import { LAB_SEPARATE_STUDENT_CLASS } from "@/features/timetable/lib/lab-separate";
 
 /**
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
@@ -53,6 +54,8 @@ export type StudentQuick = {
    * 판정·서식은 [`seat-pin-mark.ts`](../../../../features/timetable/lib/seat-pin-mark.ts) 단일 소스.
    */
   seatPinNote?: string;
+  /** LAB '따로 수업(*LAB)' 배정(0271b) — 이름을 LAB 파랑 + 이탤릭으로. 판정 = lab-separate.ts `applyLabSeparateMarks`. */
+  labSeparate?: true;
   /** 수강 시작일(YYYY-MM-DD) — hover에서 신입 시작일·전입일 표시용. 런타임엔 StudentLine 전체가 도착. */
   enrollmentDate?: string | null;
   englishName?: string | null;
@@ -107,12 +110,15 @@ function NameInner({
   meta,
   badge,
   pinNote,
+  labSeparate,
 }: {
   name: string;
   meta: string;
   badge?: string;
   /** 자리(랩실) 교시 고정 — 이름만 파란 밑줄 이탤릭 + 그 문장이 툴팁(원장 2026-09-10). */
   pinNote?: string;
+  /** LAB '따로 수업(*LAB)' 배정(0271b) — 이름만 LAB 파랑 + 이탤릭(원장 2026-09-18). 교시 고정이 있으면 고정이 이긴다. */
+  labSeparate?: boolean;
 }) {
   return (
     <>
@@ -122,6 +128,8 @@ function NameInner({
       {pinNote ? (
         // 🔴 툴팁을 달지 않는다 — 이 줄은 이미 hover 카드를 띄운다(카드의 '자리' 줄이 같은 문구를 말한다).
         <span className={SEAT_PIN_MARK_CLASS}>{name}</span>
+      ) : labSeparate ? (
+        <span className={LAB_SEPARATE_STUDENT_CLASS}>{name}</span>
       ) : (
         name
       )}
@@ -340,6 +348,7 @@ function StudentRowView({
   const canEditDays = (coveringDays?.length ?? 0) >= 2 && !!slotId;
   // 자리(랩실) 교시 고정 — 서버가 명단에 실어 보낸 문구 그대로(화면이 판정을 다시 하지 않는다).
   const pinNote = student?.seatPinNote;
+  const labSeparate = student?.labSeparate === true;
   const isDragging = dnd?.isDragging ?? false;
   // 🔴 줄 **내용**은 메모이즈한다 — dnd-kit은 드래그 중 `over`가 바뀔 때마다 무장된 줄을 다시 그린다.
   //    같은 엘리먼트를 돌려주면 React가 그 서브트리를 통째로 건너뛴다.
@@ -361,7 +370,7 @@ function StudentRowView({
           title={moveTitle}
           className={`min-w-0 ${NAME_CLASS} ${moving ? "line-through" : ""}`}
         >
-          <NameInner name={name} meta={targetKey ? "" : meta} badge={badge} pinNote={pinNote} />
+          <NameInner name={name} meta={targetKey ? "" : meta} badge={badge} pinNote={pinNote} labSeparate={labSeparate} />
         </StudentNameLink>
         {/* 반 이동=작은 "→", 같은 반 요일 편집=" →목만" 배지(학생이름 우선이라 반이름은 뺌).
             🔴 예약 이동은 **그 건의 날짜**를 함께 적는다 — 툴바 값 하나만 보면 건별 날짜가 안 보인다
@@ -389,7 +398,8 @@ function StudentRowView({
     // ⚠️ `moveTitle`도 넣는다 — 예약 이동 툴팁이 줄 안(링크)에 붙어 있어서, 날짜가 바뀌었는데 이 값이
     //    안 바뀌면 메모가 옛 문장을 붙들고 있는다(`targetKey`가 날짜를 담지만 문구는 반 이름도 쓴다).
     // ⚠️ `pinNote`도 넣는다 — 빠뜨리면 고정을 걸거나 푼 뒤 그 줄만 옛 모습을 붙들고 있는다.
-    [studentId, name, meta, badge, moving, targetKey, moveTitle, pinNote],
+    // ⚠️ `labSeparate`도 같은 이유(반 상세에서 켜고 끈 뒤 그 줄만 옛 모습을 붙들지 않게).
+    [studentId, name, meta, badge, moving, targetKey, moveTitle, pinNote, labSeparate],
   );
   const row = (
     <div
@@ -461,6 +471,7 @@ function StudentCard({ student }: { student: StudentQuick }) {
       textbook={student.latestTextbook}
       report={student.latestReport}
       pinNote={student.seatPinNote}
+      labSeparate={student.labSeparate === true}
     />
   );
 }
@@ -501,7 +512,13 @@ export function StudentRow({
   const rowCls = `${NAME_CLASS} select-none px-2 py-[3px] leading-tight`;
   const inner = (
     <>
-      <NameInner name={name} meta={saved ? "" : meta} badge={badge} pinNote={student.seatPinNote} />
+      <NameInner
+        name={name}
+        meta={saved ? "" : meta}
+        badge={badge}
+        pinNote={student.seatPinNote}
+        labSeparate={student.labSeparate === true}
+      />
       {/* 예약 이동 — `→`는 나감, `←`는 들어옴. 전문(기존 반 이름 포함)은 툴팁에. */}
       {saved ? (
         <span className="text-xs font-bold">

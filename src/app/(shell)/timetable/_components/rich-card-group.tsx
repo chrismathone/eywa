@@ -36,7 +36,12 @@ import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
 // '따로 수업(*LAB)' 표식(원장 2026-09-17) — 수업설정에 있는 LAB 교시. 아래 임시 칸과 글자는 같고 모양이 다르다.
-import { LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS, LAB_SEPARATE_TIP } from "@/features/timetable/lib/lab-separate";
+import {
+  LAB_SEPARATE_LABEL,
+  LAB_SEPARATE_STUDENT_CLASS,
+  LAB_SEPARATE_TEXT_CLASS,
+  LAB_SEPARATE_TIP,
+} from "@/features/timetable/lib/lab-separate";
 // *LAB 임시 칸(원장 2026-09-11) — 판정은 서버가 끝냈고 여기선 **어디에 그릴지**와 서식만(단일 소스).
 import {
   borrowFromRoster,
@@ -1111,7 +1116,9 @@ function RosterRow({
     <>
       {/* 자리(랩실) 교시 고정 — 기본뷰 학생 줄과 **같은 서식 상수·같은 문구**(뷰마다 다르게 보이면 안 된다). */}
       <span
-        className={`${moving && !scheduledMove ? "line-through" : ""}${s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : ""}`}
+        className={`${moving && !scheduledMove ? "line-through" : ""}${
+          s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : s.labSeparate ? ` ${LAB_SEPARATE_STUDENT_CLASS}` : ""
+        }`}
       >
         {s.name}
       </span>
@@ -1192,6 +1199,7 @@ function RosterRow({
           textbook={s.latestTextbook}
           report={s.latestReport}
           pinNote={s.seatPinNote}
+          labSeparate={s.labSeparate === true}
         />
       }
     >

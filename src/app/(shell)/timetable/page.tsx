@@ -21,6 +21,8 @@ import { applySeatPinMarks, NO_SEAT_PINS } from "@/features/timetable/lib/seat-p
 import { getSeatLiveSlots, getSeatPins } from "@/features/timetable/server/seat-pins";
 import { buildVirtualLabs, knownLabSources, NO_VIRTUAL_LABS } from "@/features/timetable/lib/virtual-lab";
 import { getSeatWeekMoves } from "@/features/timetable/server/seat-moves";
+import { getLabSeparateEnrollmentIdSet } from "@/features/enrollments/server/lab-separate";
+import { applyLabSeparateMarks } from "@/features/timetable/lib/lab-separate";
 import {
   settingsToPeriodsConfig,
   slotPeriodRow,
@@ -197,7 +199,7 @@ export default async function TimetablePage({
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins, seatMoves] = await Promise.all([
+  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
     //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
@@ -225,6 +227,9 @@ export default async function TimetablePage({
     paramView === null || paramView === "integrated"
       ? getSeatWeekMoves(user.tenantId, referenceDate)
       : Promise.resolve(null),
+    // ***LAB 배정 원생** 표식 재료(0271b, 원장 2026-09-18 *"이름 색을 lab 과 같은 색상으로 해주고 이탤릭체로"*) —
+    // 교시 고정과 같은 판정 자리(교실뷰는 명단이 없어 왕복 안 함). fail-soft(null = 표식 없이). 🔑 병렬(B4).
+    paramView === "rooms" && roomsViewAllowed ? Promise.resolve(null) : getLabSeparateEnrollmentIdSet(),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -345,15 +350,20 @@ export default async function TimetablePage({
   //    표식을 얹을 명단도 없다). 반면 **다른 시간으로 옮긴** 고정의 목표 교시는 남의 반 자리 교시라 필터·강사
   //    범위 뒤엔 안 보인다 → 학원 전체 배치(`liveStarts`, 고정이 있을 때만 조회)로 본다. 고정이 0줄이면 입력을
   //    그대로 돌려주므로 평소 비용은 0이다.
-  const slots = applySeatPinMarks(
-    applyGradeFilter(
-      keepEnglishTrack(
-        kindSlots.filter((s) => s.subject === subject),
-        englishTrack,
+  // 이어서 ***LAB 배정 원생** 표식(0271b) — 그 주 *LAB 교시가 있는 반의 켠 원생 이름만 LAB 파랑 + 이탤릭(lab-separate.ts).
+  //    켠 수강이 없으면 입력을 그대로 돌려준다(평소 비용 0).
+  const slots = applyLabSeparateMarks(
+    applySeatPinMarks(
+      applyGradeFilter(
+        keepEnglishTrack(
+          kindSlots.filter((s) => s.subject === subject),
+          englishTrack,
+        ),
+        viewPrefs.grades,
       ),
-      viewPrefs.grades,
+      { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
     ),
-    { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
+    labSeparateIds,
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
 

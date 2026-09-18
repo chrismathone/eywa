@@ -42,6 +42,8 @@ export type GridStudent = {
    * 판정·서식은 [`seat-pin-mark.ts`](./seat-pin-mark.ts) 단일 소스(화면에서 다시 만들지 말 것).
    */
   seatPinNote?: string;
+  /** LAB '따로 수업(*LAB)' 배정(0271b) — 이름을 LAB 파랑 + 이탤릭으로. 판정 = lab-separate.ts `applyLabSeparateMarks`. */
+  labSeparate?: true;
   englishName?: string | null;
   // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도·수강 시작일.
   attendanceDays?: string[];

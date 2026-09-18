@@ -28,3 +28,54 @@ export const LAB_SEPARATE_TIP = "LAB · 따로 수업(반 수정에서 켠 표�
 export function isLabSeparateSlot(slotTeacherLabel: string | null | undefined, labSeparate: boolean | null | undefined): boolean {
   return labSeparate === true && specialSlotLabel(slotTeacherLabel) === LAB_ROOM_LABEL;
 }
+
+/**
+ * **\*LAB에 배정된 원생**(0271b `enrollments.lab_separate`)의 이름 서식 — LAB 칸과 같은 파랑 + 이탤릭.
+ * 원장 2026-09-18 *"*LAB 이 켜진 학생은 이름 색을 lab 과 같은 색상으로 해주고 이탤릭체로"*.
+ * 🔑 **밑줄은 없다** — 밑줄까지 있는 파란 이탤릭은 랩실 **교시 고정**(`SEAT_PIN_MARK_CLASS`)이다. 둘 다면 고정이 이긴다
+ *    (고정이 더 구체적인 사실 — 어느 교시로 옮겼는지까지 말한다).
+ * 🔴 `[font-synthesis:style]`을 빼지 말 것 — body가 합성을 끄고 Pretendard엔 이탤릭 서체가 없다(`LAB_SEPARATE_TEXT_CLASS` 주석).
+ * ⚠️ 줄이 아니라 **이름 span**에 얹는다 — 줄엔 tone(신입 빨강·전입 초록·검색)이 붙어 있어 같은 축 유틸을 이어 붙이면
+ *    승자를 CSS 순서가 정한다([[#116]]). 자식이면 상속을 확실히 이긴다.
+ */
+export const LAB_SEPARATE_STUDENT_CLASS = "text-blue italic [font-synthesis:style]";
+
+/** 이 모듈이 학생 줄에서 읽는 것 전부. */
+type LabStudentLike = { enrollmentId?: string; status?: string; labSeparate?: true };
+type LabSlotLike<S> = { classId: string; labSeparate?: true; students: S[] };
+
+/**
+ * 그 주 시간표 슬롯의 명단에 **\*LAB 배정 표식**을 얹는다 — 서버에서 한 번, 세 뷰(기본·통합·강사)가 함께 쓴다.
+ *
+ * 🔴 **그 주에 \*LAB 교시가 있는 반에만** — 교시 표식을 끈 뒤 남은 배정은 뜻을 잃었다(지난 사실을 현재로 읽히게 하지 않는다).
+ * 🔴 **퇴원 줄엔 안 붙인다** — 나간 원생이 파랗게 서면 "지금 다니는 아이"로 읽힌다.
+ * 🔴 명단에서 빼거나 더하지 않는다 — 바뀌는 것은 이름의 글꼴과 색뿐(인원·검색·드래그·엑셀 불변).
+ * 🔑 명단 배열의 **참조 공유**를 지킨다(한 반의 슬롯들이 같은 `students` 인스턴스를 나눠 갖는다 — RSC 페이로드,
+ *    `applySeatPinMarks`와 같은 규약). 켠 수강이 없으면 입력을 그대로 돌려준다.
+ */
+export function applyLabSeparateMarks<S extends LabStudentLike, T extends LabSlotLike<S>>(
+  slots: readonly T[],
+  enrollmentIds: ReadonlySet<string> | null,
+): T[] {
+  if (!enrollmentIds || enrollmentIds.size === 0) return slots as T[];
+  const classesWithSep = new Set(slots.filter((s) => s.labSeparate === true).map((s) => s.classId));
+  if (classesWithSep.size === 0) return slots as T[];
+
+  const cache = new Map<S[], S[]>();
+  return slots.map((slot) => {
+    if (!classesWithSep.has(slot.classId)) return slot;
+    let next = cache.get(slot.students);
+    if (!next) {
+      let changed = false;
+      const mapped = slot.students.map((st) => {
+        if (st.status === "withdrawn" || !st.enrollmentId || !enrollmentIds.has(st.enrollmentId)) return st;
+        changed = true;
+        // 제네릭 스프레드라 TS가 `S`로 좁히지 못한다 — 필드 하나를 더할 뿐이라 여기서 단언한다.
+        return { ...st, labSeparate: true as const } as S;
+      });
+      next = changed ? mapped : slot.students;
+      cache.set(slot.students, next);
+    }
+    return next === slot.students ? slot : { ...slot, students: next };
+  });
+}

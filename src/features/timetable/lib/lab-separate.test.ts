@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildRichCardGroups, type GridSlot } from "./class-grid";
-import { isLabSeparateSlot, LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS } from "./lab-separate";
+import {
+  applyLabSeparateMarks,
+  isLabSeparateSlot,
+  LAB_SEPARATE_LABEL,
+  LAB_SEPARATE_STUDENT_CLASS,
+  LAB_SEPARATE_TEXT_CLASS,
+} from "./lab-separate";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
 
 const slot = (p: Partial<GridSlot>): GridSlot => ({
@@ -88,5 +94,58 @@ describe("🔴 0271a 칸을 기존 조회에 끼우지 않는다 — SQL 적용 
     const code = readFileSync(join(SRC, "features/classes/server/actions.ts"), "utf8");
     expect(code).toContain("labSeparateSupported === true");
     expect(code).toMatch(/labSupported \? \{ lab_separate:/);
+  });
+});
+
+describe("*LAB 배정 원생 이름 표식 (0271b, 원장 2026-09-18 *\"이름 색을 lab 과 같은 색상으로 해주고 이탤릭체로\"*)", () => {
+  const st = (id: string, over: Record<string, unknown> = {}) => ({
+    studentId: `s-${id}`,
+    enrollmentId: `e-${id}`,
+    status: "active" as string,
+    ...over,
+  });
+
+  it("서식 = LAB 칸과 같은 파랑 + 이탤릭(합성 켬) · 밑줄 없음(밑줄은 교시 고정)", () => {
+    expect(LAB_SEPARATE_STUDENT_CLASS).toContain("text-blue");
+    expect(LAB_SEPARATE_STUDENT_CLASS).toContain("italic");
+    expect(LAB_SEPARATE_STUDENT_CLASS).toContain("[font-synthesis:style]");
+    expect(LAB_SEPARATE_STUDENT_CLASS).not.toContain("underline");
+  });
+
+  it("그 주 *LAB 교시가 있는 반의 켠 원생에만 붙는다 — 한 반의 슬롯들은 같은 명단 배열을 공유한다", () => {
+    const roster = [st("a"), st("b")];
+    const slots = [
+      { classId: "pl1b", students: roster },
+      { classId: "pl1b", labSeparate: true as const, students: roster },
+      { classId: "other", students: [st("c")] },
+    ];
+    const out = applyLabSeparateMarks(slots, new Set(["e-a", "e-c"]));
+    expect(out[0]!.students[0]).toMatchObject({ labSeparate: true });
+    expect(out[0]!.students[1]).not.toHaveProperty("labSeparate");
+    expect(out[0]!.students).toBe(out[1]!.students); // 참조 공유 유지(RSC 페이로드)
+    // *LAB 교시가 없는 반은 켜져 있어도 안 붙인다(뜻을 잃은 배정).
+    expect(out[2]!.students[0]).not.toHaveProperty("labSeparate");
+    expect(out[2]).toBe(slots[2]);
+  });
+
+  it("🔴 퇴원 줄엔 안 붙인다 · 수강 id를 모르면 안 붙인다 · 재료가 없으면 입력 그대로", () => {
+    const slots = [{ classId: "pl1b", labSeparate: true as const, students: [st("a", { status: "withdrawn" }), st("b", { enrollmentId: undefined })] }];
+    const out = applyLabSeparateMarks(slots, new Set(["e-a", "e-b"]));
+    expect(out).toEqual(slots);
+    expect(applyLabSeparateMarks(slots, null)).toBe(slots);
+    expect(applyLabSeparateMarks(slots, new Set())).toBe(slots);
+  });
+
+  it("🔴 세 뷰(기본·통합·강사)가 같은 서식 상수를 쓴다", () => {
+    for (const f of [
+      "src/app/(shell)/timetable/_components/student-rows.tsx",
+      "src/app/(shell)/timetable/_components/rich-card-group.tsx",
+      "src/app/(shell)/timetable/_components/teacher-chip.tsx",
+    ]) {
+      expect(readFileSync(join(process.cwd(), f), "utf8"), f).toContain("LAB_SEPARATE_STUDENT_CLASS");
+    }
+    expect(readFileSync(join(process.cwd(), "src/app/(shell)/timetable/page.tsx"), "utf8")).toMatch(
+      /applyLabSeparateMarks\(/,
+    );
   });
 });
