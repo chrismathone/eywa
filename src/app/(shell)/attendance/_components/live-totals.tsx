@@ -8,9 +8,11 @@ import {
 } from "@/features/attendance/unit-suffix";
 import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
-import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { EMPTY_COUNT, rateDecimal, ratePercent, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import { useRowCount, useRowsCount } from "./grid-context";
+import { useColumnTotals, useRowCount, useRowsCount } from "./grid-context";
+import type { ColumnTotals } from "@/features/attendance/grid/column-totals";
+import { formatMoney } from "@/features/attendance/money-format";
 import { useAttendanceSearch } from "./search-context";
 import { useSheetT } from "@/features/teacher-view/lang-context";
 
@@ -316,5 +318,110 @@ export function LiveStats({
         valueClass="text-amber"
       />
     </div>
+  );
+}
+
+/**
+ * **합계 행**(원장 2026-09-18) — 열 아래에 맞춘 한 줄: `합계`(이름·학교학년 병합) · 청구액 합 · 수업 차수 합 · 등록 차수 합 ·
+ * 날짜별 시수 합 · 출석률 평균. *"'이름'과 '학교학년' 행을 병합해서 '합계'라고 셀 안에 적으면"*.
+ *
+ * 🔴 **검색을 따른다** — 아래 요약 줄과 같은 규약(좁혀 놓고 전체인 척하지 않는다, [[#89]]): 검색 중이면 라벨이
+ *    `검색 합계`가 되고 숫자는 걸린 행만 센다.
+ * 🔴 시수·출석률은 **입력을 즉시 따라간다**(격자 `useColumnTotals` → `countCells`). 격자가 없으면 서버가 같은 함수로
+ *    만든 `fallback`을 쓴다.
+ * 🔴 등록 차수 합에서 옛 **일수 기준** 확정은 뺀다 — 시수가 아니라 출석 일수라 더하면 단위가 다른 수의 합이 된다.
+ * ⚠️ 차이확인 열은 비운다(원장이 합계를 요청한 열은 청구액·수업 차수·등록 차수다).
+ */
+export function MatrixColumnTotalsRow({
+  rows,
+  days,
+  showClassBilled,
+  showTermSessions,
+  billedByRow,
+  termByRow,
+  suffix = null,
+  fallback,
+  lang = "ko",
+}: {
+  /** 표의 모든 행 키(검색 전). */
+  rows: readonly string[];
+  days: readonly { date: string; placeholder?: boolean }[];
+  showClassBilled: boolean;
+  showTermSessions: boolean;
+  billedByRow?: Record<string, number | null>;
+  termByRow?: Record<string, AttendanceTermSessions | null>;
+  /** 표의 반들이 **한 단위**일 때만(영어만 U · 수학만 T). 섞이면 null — 한 글자로 묶으면 거짓이다. */
+  suffix?: AttendanceUnitSuffix;
+  fallback: ColumnTotals;
+  lang?: SheetLang;
+}) {
+  const search = useAttendanceSearch();
+  const searching = search?.active ?? false;
+  const scope = searching ? rows.filter((r) => search!.matched.has(r)) : rows;
+  const live = useColumnTotals(scope);
+  // 검색 중인데 격자가 없으면(테스트·첫 렌더) 서버 값은 **전체**라 쓸 수 없다 — 비워 둔다.
+  const totals = live ?? (searching ? null : fallback);
+
+  let billed = 0;
+  let billedAny = false;
+  let term = 0;
+  let termAny = false;
+  let daysBasisSkipped = 0;
+  for (const r of scope) {
+    const b = billedByRow?.[r];
+    if (typeof b === "number") {
+      billed += b;
+      billedAny = true;
+    }
+    const t = termByRow?.[r];
+    if (t) {
+      if (t.daysBasis) daysBasisSkipped++;
+      else {
+        term += t.units;
+        termAny = true;
+      }
+    }
+  }
+  const cell = "border-line border-t-2 border-r px-1 py-1.5 text-xs font-bold whitespace-nowrap num";
+  return (
+    <tr className="bg-bg-soft">
+      <td
+        colSpan={2}
+        className="border-line bg-bg-soft sticky left-0 z-10 border-t-2 border-r px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap"
+      >
+        {sheetT(lang, searching ? "att.totals.search" : "att.totals.all")}
+      </td>
+      {showClassBilled ? (
+        <td className={`${cell} bg-att-col-billed text-right`}>{billedAny ? formatMoney(billed) : "—"}</td>
+      ) : null}
+      <td className={`${cell} bg-att-col-sessions text-right`}>
+        {totals ? formatUnitsWithSuffix(totals.units, suffix) : "—"}
+      </td>
+      {showTermSessions ? (
+        <>
+          <td
+            className={`${cell} bg-att-col-sessions text-right`}
+            title={daysBasisSkipped > 0 ? sheetTf(lang, "att.totals.daysBasisSkipped", { n: daysBasisSkipped }) : undefined}
+          >
+            {termAny ? formatUnitsWithSuffix(term, suffix) : "—"}
+          </td>
+          <td className={cell} />
+        </>
+      ) : null}
+      {days.map((d) => {
+        const u = d.placeholder ? undefined : totals?.dayUnits[d.date];
+        return (
+          <td key={d.date} className={`${cell} px-0 text-center`}>
+            {u ? formatUnitsWithSuffix(u, null) : ""}
+          </td>
+        );
+      })}
+      <td
+        className={`border-line bg-bg-soft sticky right-0 z-10 border-t-2 border-l px-2 py-1.5 text-right text-xs font-bold whitespace-nowrap num ${rateColorOf(totals?.rateAvg ?? null)}`}
+        title={sheetT(lang, "att.totals.rateAvgTitle")}
+      >
+        {totals?.rateAvg == null ? "—" : `${totals.rateAvg}%`}
+      </td>
+    </tr>
   );
 }

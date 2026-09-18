@@ -121,7 +121,8 @@ describe("급여명세서 별지 — 그 달 출석부", () => {
       },
     ];
     render1({ groups: moved });
-    expect(screen.getByText("반이동")).toBeTruthy();
+    // 다른 반으로 갔으니 '전출'(원장 2026-09-18 — 반이동 표식을 전입/전출로 갈랐다).
+    expect(screen.getByText("전출")).toBeTruthy();
     expect(screen.queryByText("퇴원")).toBeNull();
     expect(screen.queryByText(/퇴원 \d+명/)).toBeNull();
   });

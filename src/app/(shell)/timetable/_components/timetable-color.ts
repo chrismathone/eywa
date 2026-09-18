@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 import type { PillColor } from "@/components/atoms/pill";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { usePrefs, type TimetableColorMode } from "@/components/workspace/use-prefs";
+import { RECENT_ROW_CLASS, VIVID_STUDENT_TONE } from "@/features/timetable/lib/student-tone";
 
 // PillColor → globals.css 색 변수(color-mix 기준). subjects.ts 팔레트와 1:1. neutral은 회색이라 그대로 폴백.
 const COLOR_VAR: Record<PillColor, string> = {
@@ -34,7 +35,7 @@ export function useTimetableColorMode(): TimetableColorMode {
 export function withdrawnTone(mode: TimetableColorMode): string {
   if (mode === "pastel") return "bg-ink/80! font-medium text-white/65";
   if (mode === "mid") return "bg-ink/80! font-bold text-white/85";
-  return "bg-ink/80! font-bold text-white"; // vivid = 가장 또렷
+  return VIVID_STUDENT_TONE.withdrawn; // vivid = 가장 또렷(출석부 이름 칸과 같은 값 — student-tone.ts)
 }
 
 /**
@@ -87,7 +88,8 @@ export function holdTone(mode: TimetableColorMode): string {
   if (mode === "mid") return "bg-[#a4c2f4]/85 text-ink font-medium";
   return "bg-[#a4c2f4] text-ink font-bold"; // vivid = 가장 또렷
 }
-export const RECENT_ROW_CLASS = "bg-[#f4cccc] text-[#7f1d1d]"; // 등록 31~60일 = light red 1 (대비 6.9:1)
+// 등록 31~60일 = light red 1 — 값은 서버·클라 공용 모듈(student-tone.ts)에 있다(출석부 이름 칸도 같은 값).
+export { RECENT_ROW_CLASS };
 
 /**
  * 재원 학생 한 줄 tone(신입/전입/일반) — 모드별 강도. 퇴원·대기는 호출부에서 별도 처리(무영향).
@@ -102,9 +104,9 @@ export function timetableStudentTone(
 ): string {
   if (mode === "vivid") {
     // vivid = 이름을 bold로 확실히 굵게(사용자 요청 "더 쨍하게"). 신입=빨강 채움, 전입=민트 채움.
-    if (s.isTransferredIn) return "bg-[#bbf7d0] font-bold text-[#14512b]";
-    if (s.isNew) return "bg-danger font-bold text-white";
-    if (s.isRecent) return `${RECENT_ROW_CLASS} font-bold`;
+    if (s.isTransferredIn) return VIVID_STUDENT_TONE.transferIn;
+    if (s.isNew) return VIVID_STUDENT_TONE.new;
+    if (s.isRecent) return VIVID_STUDENT_TONE.recent;
     return "font-bold text-foreground";
   }
   if (mode === "mid") {

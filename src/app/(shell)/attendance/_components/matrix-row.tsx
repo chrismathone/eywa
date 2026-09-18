@@ -2,7 +2,7 @@ import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/featur
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatDows } from "@/features/attendance/calendar";
 // 🔴 서버 컴포넌트라 훅을 못 쓴다 — 언어는 `MatrixTable`이 prop으로 내려준다.
-import { badgeLabelOf, badgeTitle, isEnrolledOn } from "@/features/attendance/enrollment-span";
+import { badgeLabelOf, isEnrolledOn } from "@/features/attendance/enrollment-span";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { BADGE_BASE, BADGE_TONE, notMineCell } from "@/features/attendance/cell-display";
 import { countMarks } from "@/features/attendance/grid/totals";
@@ -11,6 +11,10 @@ import { formatMoney } from "@/features/attendance/money-format";
 import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
+import { placeLifecycleBadges } from "@/features/attendance/badge-placement";
+import { attendanceNameTone } from "@/features/attendance/name-tone";
+import { VIVID_STUDENT_TONE_STICKY } from "@/features/timetable/lib/student-tone";
+import { kstToday } from "@/lib/date-kst";
 import { AttendanceCell } from "./attendance-cell";
 import { RowLessonCountCell, RowSessionDiffCell, RowTotalCells } from "./live-totals";
 
@@ -72,26 +76,25 @@ export function MatrixRow({
   const ownDates = matrix.ownDates ? new Set(matrix.ownDates) : null;
   const attendLabel = formatDows(student.attendDows);
   /**
-   * 생애주기 표식(신입·퇴원·반이동·종강) — 원장 2026-09-18 *"이름 옆에 라벨들이 날자 셀 위에 올 수 있는지"*.
-   * 🔴 **그 달 격자에 그 날짜가 있을 때만** 칸으로 옮긴다 — 지난 달에 일어난 일은 놓을 칸이 없어
-   *    이름 옆에 남는다(칸이 없다고 안 그리면 표식이 통째로 사라진다).
+   * 생애주기 표식(신입·퇴원·반이동·종강)은 **수강 기간 양옆의 회색 칸** 위에 얹는다(원장 2026-09-18
+   * *"나는 양옆의 회색 셀에다가 라벨을 얹고 싶었는데"* · *"양옆에 회색셀이 없으면 따로 표시하지말도록"*).
+   * 판정은 [`placeLifecycleBadges`](@/features/attendance/badge-placement) 단일 소스(순수 · Vitest).
+   * 🔴 처음엔 표식을 그 날짜 칸 **자체**에 얹었다가 출결 값("1")을 덮었다 — 값 칸에는 절대 얹지 않는다.
+   * 🔴 회색 칸이 없으면 **그리지 않는다**(이름 옆으로 돌려보내지 않는다 — 원장 지시).
    * 🔴 '반이동'만 떼고 나머지는 그대로다(특강 판정은 표가 넘겨준다).
    */
+  // 이름 칸 서식 기준일 = min(오늘, 그 달 마지막 날) — 지난 달 시트는 그 달 끝의 사실.
+  const today = kstToday();
+  const monthLast = days.filter((d) => !d.placeholder).at(-1)?.date ?? today;
+  const nameTone = attendanceNameTone(student.spans, student.withdrawnAt, monthLast < today ? monthLast : today);
   const shownBadges = noTransferBadge
     ? student.badges.filter((b) => b.kind !== "transferIn" && b.kind !== "transferOut")
     : student.badges;
-  const gridDates = new Set(days.filter((d) => !d.placeholder).map((d) => d.date));
-  const badgesOnDate = new Map<string, typeof shownBadges>();
-  const badgesByName: typeof shownBadges = [];
-  for (const b of shownBadges) {
-    if (!gridDates.has(b.date)) {
-      badgesByName.push(b);
-      continue;
-    }
-    const list = badgesOnDate.get(b.date) ?? [];
-    list.push(b);
-    badgesOnDate.set(b.date, list);
-  }
+  const badgesOnDate = placeLifecycleBadges(
+    shownBadges,
+    days.filter((d) => !d.placeholder).map((d) => d.date),
+    (date) => !isEnrolledOn(date, student.spans) && !marks[date],
+  );
 
   return (
     <tr className="hover:bg-bg-soft/40">
@@ -101,22 +104,26 @@ export function MatrixRow({
           ⚠️ 열 폭이 고정(colgroup)이라 넘치는 글자는 잘린다 — 원문은 `title`에 남긴다. */}
       {/* 단가 미지정(정산 제외)은 「단가」 라벨 **하나로만** 표시 — 셀 배경까지 칠하면 이중 표기로
           읽힌다(원장 2026-08-10: "배경색 노란건 지워"). 설명은 라벨 툴팁이 담당. */}
-      <td className="border-line text-foreground sticky left-0 z-10 border-b border-r bg-card px-2 py-1">
+      {/* 이름 칸 서식 = 시간표 학생 줄과 **같은 판정·같은 색**(원장 2026-09-18 — 신입 빨강·퇴원 검정·전입 민트·31~60일
+          연빨강, name-tone.ts · student-tone.ts). 서식이 없으면 종전 카드 바탕. */}
+      <td
+        className={`border-line sticky left-0 z-10 border-b border-r px-2 py-1 ${
+          nameTone ? VIVID_STUDENT_TONE_STICKY[nameTone] : "text-foreground bg-card"
+        }`}
+      >
         <span className="flex items-center gap-1">
           <span className="min-w-0 truncate text-xs leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
         </span>
-        {/* 🔴 **모든 라벨이 아랫줄**(등원요일 옆) — 신입·퇴원·반이동까지 내렸다(원장 2026-09-14
-            *"반이동 퇴원 라벨을 위치이동시켜서 이름 더 잘보이게. 이름이 짤리는건 최악"*). 첫 줄에 두면
-            뱃지 둘("반이동"+"퇴원" ≈ 80px)이 132px 열의 절반을 먹어 이름이 "김…"으로 잘렸다(실측).
-            이제 첫 줄은 이름뿐이라 열 폭(148px)을 통째로 쓴다. 아랫줄은 요일 두 글자뿐이라 자리가 남고,
-            모자라면 요일(`min-w-0 truncate`)이 줄임표로 양보한다 — 「단가」가 쓰던 문법 그대로. */}
-        {attendLabel || tierMissing || badgesByName.length > 0 ? (
+        {/* 첫 줄은 이름뿐, 아랫줄은 등원요일 + 「단가」(원장 2026-09-14 *"이름이 짤리는건 최악"*).
+            🔴 신입·퇴원·전입·전출·종강 표식은 2026-09-18부터 이 칸에 없다 — 수강 기간 양옆 **회색 날짜 칸**에 선다
+            (badge-placement.ts). 그래서 열 폭이 148 → 96으로 줄었다. 모자라면 요일이 줄임표로 양보한다. */}
+        {attendLabel || tierMissing ? (
           <span className="flex items-center gap-1">
             {attendLabel ? (
               <span
-                className="text-text-faint min-w-0 truncate text-xs leading-tight font-medium"
+                className={`min-w-0 truncate text-xs leading-tight font-medium ${nameTone ? "opacity-85" : "text-text-faint"}`}
                 title={sheetTf(lang, "att.row.attendDows", { dows: attendLabel })}
               >
                 {attendLabel}
@@ -124,17 +131,8 @@ export function MatrixRow({
             ) : null}
             {/* 라벨 묶음은 **한 번만** 우측 정렬한다(ml-auto가 둘이면 뒤엣것이 자리를 또 밀어 사이가 벌어진다).
                 크기·색은 화면과 인쇄물 단일 소스(BADGE_BASE·BADGE_TONE). */}
-            {badgesByName.length > 0 || tierMissing ? (
+            {tierMissing ? (
               <span className="ml-auto flex shrink-0 items-center gap-1">
-                {badgesByName.map((b) => (
-                  <span
-                    key={`${b.kind}-${b.date}`}
-                    title={badgeTitle(b, classLabel ?? sheetT(lang, "att.row.thisClass"), lang)}
-                    className={`${BADGE_BASE} ${BADGE_TONE[b.kind]}`}
-                  >
-                    {badgeLabelOf(b.kind, lang)}
-                  </span>
-                ))}
                 {tierMissing ? (
                   <span
                     className={`${BADGE_BASE} bg-amber-300 text-amber-950`}
@@ -283,9 +281,15 @@ export function MatrixRow({
                    쌓임 맥락을 안 만들어서, 10 이상을 주면 가로로 스크롤할 때 이 칩이 **고정된 이름 열 위로 떠오른다**.
                    반대로 z가 없으면 오른쪽 칸의 버튼(`absolute`, DOM 순서가 뒤)이 넘친 부분을 덮는다.
                 ⚠️ 덮개라 `title`(반이동 "A반 → B반")은 못 띄운다 — 그 설명은 이름 열에 남는 표식에만 있다. */}
-            {badgesOnDate.get(d.date)?.length ? (
-              <span className="pointer-events-none absolute inset-x-0 top-1/2 z-[9] flex -translate-y-1/2 justify-center gap-1 whitespace-nowrap">
-                {badgesOnDate.get(d.date)!.map((b) => (
+            {badgesOnDate.get(d.date) ? (
+              // 시작 표식은 칸 **오른쪽 끝**에 붙어 왼쪽(회색)으로, 끝 표식은 **왼쪽 끝**에 붙어 오른쪽(회색)으로 넘친다 —
+              // 가운데에 두면 반대편 값 칸을 덮는다.
+              <span
+                className={`pointer-events-none absolute top-1/2 z-[9] flex -translate-y-1/2 gap-1 whitespace-nowrap ${
+                  badgesOnDate.get(d.date)!.align === "end" ? "right-0.5" : "left-0.5"
+                }`}
+              >
+                {badgesOnDate.get(d.date)!.badges.map((b) => (
                   <span
                     key={`${b.kind}-${b.date}`}
                     className={`${BADGE_BASE} ${BADGE_TONE[b.kind]} shadow-card`}

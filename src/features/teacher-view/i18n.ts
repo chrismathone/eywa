@@ -1565,6 +1565,15 @@ export const SHEET_DICT = {
   },
   "att.totals.search": { ko: "검색 합계", en: "Search total" },
   "att.totals.all": { ko: "합계", en: "Total" },
+  // 합계 행(원장 2026-09-18) — 출석률 칸은 행 출석률의 **평균**, 등록 차수 합은 옛 일수 기준 확정을 뺀다.
+  "att.totals.rateAvgTitle": {
+    ko: "학생별 출석률의 평균입니다(기록이 없는 학생은 빼고 셉니다).",
+    en: "Average of each student's attendance rate (students with no records are left out).",
+  },
+  "att.totals.daysBasisSkipped": {
+    ko: "옛 일수 기준 확정 {n}건은 단위가 달라 합에서 뺐습니다.",
+    en: "{n} old day-count confirmations are left out — the unit differs.",
+  },
   "att.totals.searching": { ko: "검색 중 — 전체 아님", en: "Searching — not the full set" },
   "att.totals.classes": { ko: "개 반", en: " classes" },
   "att.totals.units": { ko: "시수 ", en: "Sessions " },
@@ -1614,7 +1623,8 @@ export const SHEET_DICT = {
     ko: "배분율 {rate}% · 정산액은 수납관리 > 강사 정산에서",
     en: "Share {rate}% · the pay figure lives in Billing > Teacher pay",
   },
-  "att.stat.enrolled": { ko: "등록", en: "On roll" },
+  // 원장 2026-09-18 *"등록 -> 담당"* — 이 출석부에 서 있는 학생 수(그 강사·그 반이 맡은 학생)다. 원생 '등록'과 헷갈린다.
+  "att.stat.enrolled": { ko: "담당", en: "Assigned" },
   "att.stat.people": { ko: "명", en: "students" },
   "att.stat.rate": { ko: "출석률", en: "Rate" },
   "att.stat.noRecord": { ko: "기록 없음", en: "no records" },

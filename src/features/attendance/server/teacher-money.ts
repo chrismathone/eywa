@@ -42,6 +42,8 @@ export type TierSettlementInfo =
       missingTierStudents: string[];
       /** 미지정 학생 id — 이름 칸 「단가」 라벨 표시용(동명이인 안전). */
       missingTierStudentIds: string[];
+      /** 단가 미지정 **반·학생 줄**(`classId|studentId`) — 「단가」 표식은 이걸로 붙인다(학생 단위로 붙이면 모든 반에 번진다). */
+      missingTierRowKeys: string[];
       missingPriceTiers: string[];
       excludedUnits: number;
       /** 학생별 티어 라벨(여럿이면 " · " join) — 학교·학년 열 아랫줄 표시용(라벨만, 금액 아님). */
@@ -62,6 +64,8 @@ export type TierSettlementInfo =
       status: "hold";
       missingTierStudents: string[];
       missingTierStudentIds: string[];
+      /** 단가 미지정 **반·학생 줄**(`classId|studentId`) — 「단가」 표식은 이걸로 붙인다(학생 단위로 붙이면 모든 반에 번진다). */
+      missingTierRowKeys: string[];
       missingPriceTiers: string[];
       missingRateGroups: string[];
       tierByStudent: Record<string, string>;
@@ -201,6 +205,7 @@ async function computeTierSettlementInfo(
         status: "hold",
         missingTierStudents: result.missingTierStudents,
         missingTierStudentIds: result.missingTierStudentIds,
+        missingTierRowKeys: result.missingTierRowKeys,
         missingPriceTiers: result.missingPriceTiers,
         missingRateGroups: result.missingRateGroups,
         tierByStudent,
@@ -212,6 +217,7 @@ async function computeTierSettlementInfo(
       rowCount: result.rowCount,
       missingTierStudents: result.missingTierStudents,
       missingTierStudentIds: result.missingTierStudentIds,
+      missingTierRowKeys: result.missingTierRowKeys,
       missingPriceTiers: result.missingPriceTiers,
       excludedUnits: result.excludedUnits,
       tierByStudent,

@@ -28,6 +28,11 @@ export type EnrollSpan = {
    * ⚠️ 모르면(undefined) **일반 종료로 본다** — 근거 없이 하루 일찍 지우지 않는다.
    */
   isTransferred?: boolean;
+  /**
+   * 이 구간이 **반이동으로 시작**됐나(`enrollments.is_transferred_in`) — 이름 칸 서식(전입 민트 vs 신입 빨강)이 쓴다.
+   * ⚠️ 모르면(undefined) 신입으로 본다 — 시간표 조회와 같은 규약(`is_transferred_in !== true`).
+   */
+  isTransferredIn?: boolean;
 };
 
 /** 반이동으로 볼 최대 공백(일). 이보다 벌어지면 '쉬었다 재등록'이지 이동이 아니다. */
@@ -297,8 +302,10 @@ export function lifecycleBadgesInRange(
 export const BADGE_LABEL: Record<LifecycleBadge["kind"], string> = {
   new: "신입",
   left: "퇴원",
-  transferIn: "반이동",
-  transferOut: "반이동",
+  // 원장 2026-09-18 *"반이동 라벨에서. 전입, 전출 로 라벨 변경. 우리반으로 왔으면 전입, 다른반으로 갔으면 전출"* —
+  // 같은 사건의 두 쪽을 한 낱말로 적으면 이 반에 온 건지 떠난 건지 표식만 보고 모른다. 시간표도 '전입'이라 부른다.
+  transferIn: "전입",
+  transferOut: "전출",
   classEnded: "종강",
 };
 
@@ -309,8 +316,8 @@ export const BADGE_LABEL: Record<LifecycleBadge["kind"], string> = {
 export const BADGE_LABEL_EN: Record<LifecycleBadge["kind"], string> = {
   new: "New",
   left: "Left",
-  transferIn: "Moved",
-  transferOut: "Moved",
+  transferIn: "Moved in",
+  transferOut: "Moved out",
   // 수업목록 반 상태 '종강'(`cls.status.ended`)과 같은 영어 — 같은 한국어가 화면마다 다른 영어가 되지 않게.
   classEnded: "Finished",
 };

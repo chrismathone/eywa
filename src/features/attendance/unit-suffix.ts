@@ -11,7 +11,6 @@
  *    모르는 것에 글자를 붙이면 그 단위가 사실인 것처럼 읽힌다.
  */
 import { subjectGroupOf, type ProgramSubject } from "@/features/students/program";
-import { formatSessionUnits } from "./session-units";
 
 export type AttendanceUnitSuffix = "U" | "T" | null;
 
@@ -25,11 +24,13 @@ export function attendanceUnitSuffix(
 }
 
 /**
- * 표시 문자열 — `1.5 T` · 단위가 없으면 숫자만(`1.5`).
- * ⚠️ 숫자 서식은 `formatSessionUnits` 그대로다(정수는 소수점 없이) — 여기서 새로 반올림하지 않는다.
+ * 표시 문자열 — `3.0 T` · `1.5 U` · 단위가 없으면 숫자만(`1.5`).
+ * 🔴 **항상 소수 한 자리**(원장 2026-09-18 *"차수들 소숫점 단위까지 표시해 3.0 이렇게"*) — 정수만 `3`으로 적으면
+ *    열에서 자릿수가 들쭉날쭉하고 `3`과 `3.5`가 다른 단위처럼 읽힌다. 값은 이미 0.1 단위라 반올림 손실이 없다.
+ * ⚠️ 이 모양은 **출석부 차수 세 열 전용**이다 — 앱의 다른 시수 표기(`formatSessionUnits`: 정수는 소수점 없이)는 그대로.
  */
 export function formatUnitsWithSuffix(units: number, suffix: AttendanceUnitSuffix): string {
-  const n = formatSessionUnits(units);
+  const n = (Math.round(units * 10) / 10).toFixed(1);
   return suffix ? `${n} ${suffix}` : n;
 }
 

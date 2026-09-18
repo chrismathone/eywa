@@ -16,6 +16,7 @@ import { saveAttendanceCollapsed } from "@/features/attendance/server/prefs-acti
 import { cellKey, classIdOfRow, parseCellKey, rowKey } from "@/features/attendance/grid/model";
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
+import { columnTotals, type ColumnTotals } from "@/features/attendance/grid/column-totals";
 import { NOT_MINE_MESSAGE, type NotMineReason } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
 import {
@@ -129,6 +130,20 @@ export function useRowsCount(rows?: readonly string[]): Counted | null {
   const get = useCallback(() => store?.getValueVersion() ?? 0, [store]);
   useSyncExternalStore(subscribe, get, () => 0);
   return store ? countCells(store.valuesOfRows(rows)) : null;
+}
+
+/**
+ * 합계 행(원장 2026-09-18)의 격자 쪽 숫자 — 수업 차수 합 · 날짜별 시수 · 출석률 평균. 값이 바뀔 때마다 다시 센다.
+ * 🔴 식은 `columnTotals`(→ `countCells`) 한 곳 — 서버 첫 렌더도 같은 함수로 폴백을 만든다.
+ * 격자가 없으면 null → 호출부가 서버 값으로 그린다.
+ */
+export function useColumnTotals(rows: readonly string[]): ColumnTotals | null {
+  const ctx = useContext(GridCtx);
+  const store = ctx?.store;
+  const subscribe = useCallback((cb: () => void) => (store ? store.subscribeValues(cb) : () => {}), [store]);
+  const get = useCallback(() => store?.getValueVersion() ?? 0, [store]);
+  useSyncExternalStore(subscribe, get, () => 0);
+  return store ? columnTotals(rows.map((r) => store.cellsOfRow(r))) : null;
 }
 
 /**
