@@ -20,13 +20,13 @@ describe("여러 과정을 잇는 최종 목표와 정거장", () => {
     const goal = planLearningGoal({ ...first, endStudyGrade: "대수", endBlock: flatLessons("대수").at(-1)! });
     expect(learningCoursePath("중1", "대수")).toEqual(["중1", "중2", "중3", "공통수학1", "공통수학2", "대수"]);
     expect(learningGoalError(goal)).toBeNull();
-    expect(learningBlocks(goal)).toHaveLength(216);
+    expect(learningBlocks(goal)).toHaveLength(108);
     expect(goal.endDate).toBe("2028-11-30");
     expect(learningBlocks(goal).at(-1)).toContain("대수");
-    expect(learningDays(goal, context).at(-1)?.target).toBe(216);
+    expect(learningDays(goal, context).at(-1)?.target).toBe(108);
     const progress = buildLearningProgress(goal, context, [{ date: "2026-09-16", progress: `수학 ${flatLessons("중2")[0]}`, textbook: null }], "2026-09-18");
-    expect(progress.current).toBeGreaterThan(48);
-    expect(progress.current).toBeLessThan(72);
+    expect(progress.current).toBeGreaterThan(24);
+    expect(progress.current).toBeLessThan(36);
     expect(progress.currentBlock).toContain("중2");
   });
   it("2차·3차 확장 시 이전 도착점·날짜·배분과 현재 진도가 그대로 유지된다", () => {
@@ -37,7 +37,7 @@ describe("여러 과정을 잇는 최종 목표와 정거장", () => {
     expect(goalMilestones(third).slice(0, 2)).toEqual(goalMilestones(second));
     expect(goalMilestones(second)[0]).toEqual(goalMilestones(first)[0]);
     expect(goalMilestones(third)).toHaveLength(3);
-    expect(learningBlocks(third).slice(0, 24).map((label) => label.replaceAll("중1 · ", ""))).toEqual(learningBlocks(first));
+    expect(learningBlocks(third).slice(0, 12).map((label) => label.replaceAll("중1 · ", ""))).toEqual(learningBlocks(first));
     const records = [{ date: "2026-09-16", progress: semester[10], textbook: null }];
     expect(buildLearningProgress(third, context, records, "2026-09-18").current).toBe(buildLearningProgress(first, context, records, "2026-09-18").current);
     expect(learningDays(third, context).filter((day) => day.date <= first.endDate).map((day) => day.target)).toEqual(learningDays(first, context).map((day) => day.target));

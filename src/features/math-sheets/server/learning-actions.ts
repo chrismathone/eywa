@@ -11,6 +11,7 @@ import {
   learningDays,
   learningGoalError,
   goalMilestones,
+  normalizeLearningGoal,
   type LearningContext,
   type LearningGoal,
 } from "../lib/learning-plan";
@@ -68,10 +69,10 @@ export async function saveMathLearningGoals(
       .eq("track", classTrack).eq("start_date", value.startDate).maybeSingle();
     if (error || !existing || existing.updated_at !== value.updatedAt)
       return { ok: false, error: "목표가 변경되었습니다. 새로고침 후 다시 확장해 주세요." };
-    const oldStops = goalMilestones({ studentId: studentIds[0], studyGrade: existing.study_grade,
+    const oldStops = goalMilestones(normalizeLearningGoal({ studentId: studentIds[0], studyGrade: existing.study_grade,
       endStudyGrade: existing.end_study_grade ?? undefined, startBlock: existing.start_block,
       endBlock: existing.end_block, startDate: existing.start_date, endDate: existing.end_date,
-      blockCount: existing.block_count, milestones: existing.milestones, textbook: null });
+      blockCount: existing.block_count, milestones: existing.milestones, textbook: null, track: classTrack }));
     const stops = value.milestones ?? [];
     const sameStop = (a: typeof oldStops[number], b: typeof oldStops[number]) => a.studyGrade === b.studyGrade && a.endBlock === b.endBlock && a.endDate === b.endDate && a.blockCount === b.blockCount;
     if (value.studyGrade !== existing.study_grade || value.startBlock !== existing.start_block || stops.length !== oldStops.length + 1 || oldStops.some((stop, i) => !sameStop(stop, stops[i])))
@@ -220,7 +221,7 @@ const resetSchema = z.object({
   track: z.enum(["regular", "supplement"]).default("regular"),
   /** 지울 계획의 시작일(`YYYY-MM-01`). 표준 계획은 이 날짜까지 맞아야 한 칸만 지운다. */
   startDate: z.string(),
-  /** 표준 24/4블록 계획인가 — 저장과 **같은 갈래**로 표를 고른다(아니면 옛 `math_learning_goals`). */
+  /** 표준 학습 계획인가 — 저장과 같은 갈래로 표를 고른다(아니면 옛 `math_learning_goals`). */
   standard: z.boolean().default(true),
 });
 

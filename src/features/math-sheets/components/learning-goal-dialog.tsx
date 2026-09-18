@@ -122,7 +122,7 @@ export function LearningGoalDialog({ data, learning, studentId, onClose, canRese
             <p>{[...new Set(learningTopics(goal).map((topic) => topic.grade))].join(" → ")}</p>
             {!validation ? <p>{goal.startDate} 시작 – {goal.endDate} 최종 도착</p> : null}
             {!validation && preview.length ? <p>오늘까지 {plannedAt(preview, data.today)}블록 · 수업당 평균 {(total / preview.length).toFixed(1)}블록</p> : null}
-            <p>{track === "regular" ? "각 학기·과정 구간을 24블록·3개월로 나누고 월 8블록씩 배분합니다." : "복습 심화는 월 4블록이며, 수업 기록을 날짜별로 누적합니다."} 이 반의 모든 수업 요일과 휴강일·수강 기간을 반영합니다.</p>
+            <p>{track === "regular" ? `각 학기·과정 구간을 ${policy.totalBlocks}블록·${policy.months}개월로 나누고 월 ${policy.monthlyBlocks}블록씩 배분합니다.` : "복습 심화는 월 4블록이며, 수업 기록을 날짜별로 누적합니다."} 이 반의 모든 수업 요일과 휴강일·수강 기간을 반영합니다.</p>
           </div>
           {error ? <p role="alert" className={styles.error}>{error}</p> : null}
           <div className={styles.formActions}>

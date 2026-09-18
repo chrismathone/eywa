@@ -1,4 +1,5 @@
 import { CURRICULUM_GRADES, flatLessons, semesterOfLesson, splitLessons } from "@/features/onescreen/curriculum";
+import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
 
 export type LearningMilestone = {
   studyGrade: string;
@@ -72,7 +73,7 @@ export function topicSegments(topics: LearningTopic[]): LearningTopic[][] {
 }
 
 export function regularBlockCount(range: LearningRange): number {
-  return topicSegments(learningTopics(range)).length * 24;
+  return topicSegments(learningTopics(range)).length * MATH_LEARNING_CADENCE.regular.totalBlocks;
 }
 
 export function courseRangeLabel(range: LearningRange): string {

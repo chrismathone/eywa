@@ -5,6 +5,7 @@ import { requireMcsClassAccess } from "./access";
 import type { MathSheetMonthData } from "./month-queries";
 import {
   buildLearningProgress,
+  normalizeLearningGoal,
   type LearningData,
   type LearningGoal,
   type LearningRecord,
@@ -77,7 +78,7 @@ export async function getMathLearningData(
       milestones: row.milestones,
       updatedAt: row.updated_at,
     };
-    result.goals[goal.studentId] = goal;
+    result.goals[goal.studentId] = normalizeLearningGoal(goal);
   }
   const goals = Object.values(result.goals);
   if (!goals.length) return result;

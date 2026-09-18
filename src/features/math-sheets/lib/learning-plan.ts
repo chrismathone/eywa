@@ -17,7 +17,7 @@ export type LearningGoal = {
   endDate: string;
   textbook: string | null;
   track?: MathLearningTrack;
-  /** Absent only on goals saved before the 24-block semester plan. */
+  /** Absent only on goals saved before standard semester plans. */
   blockCount?: number | null;
   milestones?: LearningMilestone[];
   updatedAt?: string;
@@ -84,14 +84,26 @@ export function goalMilestones(goal: LearningGoal): LearningMilestone[] {
   return goal.milestones?.length ? goal.milestones : [{ studyGrade: goal.endStudyGrade ?? goal.studyGrade, endBlock: goal.endBlock, endDate: goal.endDate, blockCount: goal.blockCount ?? goalBlocks(goal).length }];
 }
 
+/** Read old 24-block plans in the current unit, preserving dates and optimistic-lock tokens. */
+export function normalizeLearningGoal(goal: LearningGoal): LearningGoal {
+  if (goal.track === "supplement" || !goal.blockCount || goal.blockCount % 24 !== 0) return goal;
+  const legacyEnd = monthRange(shiftMonth(goal.startDate.slice(0, 7), goal.blockCount / 8 - 1)).to;
+  if (goal.endDate !== legacyEnd) return goal;
+  const stops = goalMilestones(goal);
+  if (stops.some((stop) => !Number.isInteger(stop.blockCount / 2))) return goal;
+  return { ...goal, blockCount: goal.blockCount / 2,
+    milestones: stops.map((stop) => ({ ...stop, blockCount: stop.blockCount / 2 })) };
+}
+
 /** Extending keeps every previous stop and its allocation; only the new tail is planned. */
 export function planLearningGoal(draft: LearningGoal, previous?: LearningGoal): LearningGoal {
+  if (previous) previous = normalizeLearningGoal(previous);
   const track = draft.track ?? "regular";
   const goal = previous ? { ...draft, studyGrade: previous.studyGrade, startBlock: previous.startBlock, startDate: previous.startDate, updatedAt: previous.updatedAt } : draft;
   const nextStop = { studyGrade: goal.endStudyGrade ?? goal.studyGrade, endBlock: goal.endBlock, endDate: goal.endDate, blockCount: 0 };
   const topics = learningTopics({ ...goal, milestones: [...(previous ? goalMilestones(previous) : []), nextStop] });
   const oldEnd = previous ? topics.findIndex((topic) => topic.grade === (previous.endStudyGrade ?? previous.studyGrade) && topic.lesson === previous.endBlock) : -1;
-  const added = track === "supplement" ? 4 : topicSegments(topics.slice(oldEnd + 1)).length * 24;
+  const added = track === "supplement" ? MATH_LEARNING_CADENCE.supplement.totalBlocks : topicSegments(topics.slice(oldEnd + 1)).length * MATH_LEARNING_CADENCE.regular.totalBlocks;
   const count = (previous?.blockCount ?? (previous ? goalBlocks(previous).length : 0)) + added;
   const dates = standardGoalDates(goal.startDate.slice(0, 7), track, count);
   return {
@@ -179,8 +191,8 @@ export function learningGoalError(goal: LearningGoal): string | null {
       previousCount = milestone.blockCount;
       previousDate = milestone.endDate;
     }
-    if (track === "regular" && (!allocatedSegments(goal).length || allocatedSegments(goal).some((segment) => segment.blocks !== 24)))
-      return "정규 목표는 학기별 24블록·3개월로 배분해 주세요.";
+    if (track === "regular" && (!allocatedSegments(goal).length || allocatedSegments(goal).some((segment) => segment.blocks !== policy.totalBlocks)))
+      return `정규 목표는 학기별 ${policy.totalBlocks}블록·${policy.months}개월로 배분해 주세요.`;
   }
   return null;
 }
@@ -224,7 +236,7 @@ export function learningDays(
       const month = shiftMonth(goal.startDate.slice(0, 7), index);
       return dates.filter((date) => date.startsWith(month));
     });
-    // A missing month cannot silently count as eight completed teaching blocks.
+    // A missing month cannot silently count as completed teaching blocks.
     if (groups.some((group) => !group.length)) return [];
     return groups.flatMap((group, monthIndex) => group.map((date, dayIndex) => {
       const target = monthIndex * policy.monthlyBlocks + Math.ceil(policy.monthlyBlocks * (dayIndex + 1) / group.length);

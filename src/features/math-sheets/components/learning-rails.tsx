@@ -1,7 +1,8 @@
 import { useId, type CSSProperties } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { goalMilestones, type LearningGoal, type LearningProgress } from "../lib/learning-plan";
-import { learningAxisLabel, learningAxisPosition } from "../lib/learning-axis";
+import { learningAxisLabel, learningAxisPosition, learningAxisTicks } from "../lib/learning-axis";
+import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
 import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
 
@@ -23,21 +24,24 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
   const currentLabel = currentBlock ? learningBlockLabel(currentBlock, goal?.studyGrade ?? recentGrade) : "진도 기록 확인 필요";
   const finalStop = stops.at(-1);
   const finalLabel = finalStop ? learningBlockLabel(finalStop.endBlock, finalStop.studyGrade) : "전체 목표를 설정해 주세요";
-  const describeStop = (index: number) => `${index + 1}차 목표 · ${learningBlockLabel(stops[index].endBlock, stops[index].studyGrade)} · ${stops[index].endDate}`;
+  const describeStop = (index: number) => `${index + 1}차 목표 · ${learningBlockLabel(stops[index].endBlock, stops[index].studyGrade)} · ${stops[index].endDate} · 누적 ${stops[index].blockCount}블록`;
   const currentText = axisCurrent == null ? "현재 진도 확인 필요" : `현재 ${learningAxisLabel(axisCurrent)} / 최종 목표 ${total} · ${currentLabel}`;
   const goalText = total ? stops.map((_, index) => describeStop(index)).join("; ") : "전체 목표 미설정";
   const variables = { "--current-position": `${currentPosition}%`, "--target-position": total ? "100%" : "0%" } as CSSProperties;
 
-  // Tenths within each goal; long journeys thin minor ticks and labels independently.
-  const minorStep = Math.max(1, Math.ceil(total / 12));
+  const ticks = learningAxisTicks(stops);
+  const monthlyBlocks = MATH_LEARNING_CADENCE[goal?.track ?? "regular"].monthlyBlocks;
   const labelStep = Math.max(1, Math.ceil(total / 4));
-  let minorTicks = "", majorTicks = "", guides = "";
-  for (let tick = 1; tick < total * 10; tick++) {
-    const x = (tick / (total * 10) * 1000).toFixed(2);
-    if (tick % 10 === 0) {
+  let minorTicks = "", monthTicks = "", majorTicks = "", guides = "";
+  for (const tick of ticks) {
+    if (tick.position === total) continue;
+    const x = (tick.position / total * 1000).toFixed(2);
+    if (tick.goal) {
       majorTicks += `M${x} 30v8M${x} 83v8`;
       guides += `M${x} 38v45`;
-    } else if (tick % minorStep === 0) {
+    } else if (tick.block % monthlyBlocks === 0) {
+      monthTicks += `M${x} 28v10M${x} 83v10`;
+    } else {
       minorTicks += `M${x} 30v6M${x} 85v6`;
     }
   }
@@ -48,6 +52,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
           <svg className={styles.ruler} viewBox="0 0 1000 122" preserveAspectRatio="none" aria-hidden="true">
             <path className={styles.guides} d={guides} vectorEffect="non-scaling-stroke" />
             <path className={styles.minorTicks} d={minorTicks} vectorEffect="non-scaling-stroke" />
+            <path className={styles.majorTicks} d={monthTicks} vectorEffect="non-scaling-stroke" />
             <path className={styles.majorTicks} d={majorTicks} vectorEffect="non-scaling-stroke" />
             <path className={styles.endTicks} d="M0 35v16M1000 35v16M0 69v16M1000 69v16" vectorEffect="non-scaling-stroke" />
           </svg>
@@ -78,7 +83,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
               <div>
                 <strong>{index + 1}차 목표</strong>
                 <p>{learningBlockLabel(stop.endBlock, stop.studyGrade)}</p>
-                <small>완료 예정 · {stop.endDate}</small>
+                <small>완료 예정 · {stop.endDate} · 누적 {stop.blockCount}블록</small>
               </div>
             </TooltipContent>
           </Tooltip>
@@ -95,11 +100,11 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
       </div>
       <div className={styles.scale} aria-label="목표 수직선 눈금">
         <span>0</span>
-        {Array.from({ length: Math.max(0, total * 10 - 1) }, (_, i) => i + 1).filter(tick => {
-          if (tick % 10 === 0) return (tick / 10) % labelStep === 0;
-          return total <= 4 && tick % (total === 1 ? 1 : 5) === 0;
-        }).map(tick => <span key={tick} className={`${styles.scaleTick} ${tick % 10 ? styles.fractionTick : styles.goalTick}`}
-          style={{ left: `${position(tick / 10)}%` }}>{tick % 10 ? tick / 10 : `${tick / 10}차`}</span>)}
+        {ticks.filter(tick => tick.position < total && (tick.goal
+          ? tick.position % labelStep === 0
+          : total <= 4 && tick.block % monthlyBlocks === 0 && ticks.length <= 48
+        )).map(tick => <span key={tick.block} className={`${styles.scaleTick} ${tick.goal ? styles.goalTick : styles.fractionTick}`}
+          style={{ left: `${position(tick.position)}%` }}>{tick.goal ? `${tick.position}차` : `${tick.block}블록`}</span>)}
         <span className={styles.goalTick}>{total ? `${total}차` : "전체 목표 미설정"}</span>
       </div>
     </div>

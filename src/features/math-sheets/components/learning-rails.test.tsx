@@ -10,7 +10,7 @@ const progress = buildLearningProgress(first, { schedules: [], holidays: {}, spa
 
 describe("현재 진도와 고정 목표 수직선", () => {
   it("오늘 계획이 3/4여도 유일한 빨간 목표는 수직선 끝에 둔다", () => {
-    const { container } = render(<LearningRails goal={first} progress={{ ...progress, current: 12, target: 36 }} />);
+    const { container } = render(<LearningRails goal={first} progress={{ ...progress, current: 6, target: 18 }} />);
     expect(screen.getByRole("img", { name: "목표진도" })).toHaveAccessibleDescription(expect.stringContaining("1차 목표"));
     expect(container.querySelector('[data-goal-number="1"]')).toHaveStyle({ left: "100%" });
     expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuemax", "1");

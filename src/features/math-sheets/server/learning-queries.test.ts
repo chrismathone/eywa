@@ -53,8 +53,10 @@ describe("반별 수업 유형의 계획 조회", () => {
   it("반의 정규 목표만 읽고 수요일을 포함한 모든 기록을 반영한다", async () => {
     const data = await getMathLearningData("class", monthData);
     expect(data.status).toBe("ok");
-    expect(data.progress[studentId].total).toBe(24);
-    expect(data.progress[studentId].current).toBe(1.2);
+    expect(data.goals[studentId].blockCount).toBe(12);
+    expect(data.goals[studentId].endDate).toBe(row.end_date);
+    expect(data.progress[studentId].total).toBe(12);
+    expect(data.progress[studentId].current).toBe(0.6);
     expect(data.records[studentId].map((record) => record.date)).toEqual(["2026-09-16", "2026-09-14"]);
     expect(Object.keys(data.goals)).toEqual([studentId]);
     expect(mocks.records.mock.calls[0][0]).toEqual([studentId]);
