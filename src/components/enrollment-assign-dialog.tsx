@@ -475,10 +475,14 @@ export function EnrollmentAssignDialog({
                     }}
                     placeholder="기존 반 선택..."
                     searchPlaceholder="반 이름 검색..."
+                    // 이름 / 과목 / 날짜 **열 맞춤**(원장 2026-09-18) — 과목은 짧은 글자 열, 날짜는 시작일(`~`까지 고정 11자).
+                    // ⚠️ 종료 예정일은 여기 안 싣는다(열이 넘친다) — 고르면 아래 경고가 "그날까지 늘어난다"를 따로 말한다.
+                    sideColumns={{ hint: "w-16 text-left", meta: "num w-24 text-left" }}
                     options={fromOptions.map((m) => ({
                       value: m.enrollmentId,
                       label: m.className,
-                      hint: `${m.subject ? subjects.labelOf(m.subject) : ""} · ${periodLabel({ start: m.startDate, end: m.endDate })}`,
+                      hint: m.subject ? subjects.labelOf(m.subject) : "",
+                      meta: `${m.startDate}~`,
                     }))}
                   />
                 )}
