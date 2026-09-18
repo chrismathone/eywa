@@ -2,7 +2,9 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
-import type { TierRow } from "@/features/payroll/tier-settlement";
+import { sessionPriceOf, type SessionPriceTerm, type TierRow } from "@/features/payroll/tier-settlement";
+import { autoSalaryGroup, isSalaryGroup, type SalaryGroup } from "@/features/payroll/salary-group";
+import { programOf, type ProgramSubject } from "@/features/students/program";
 
 /**
  * 티어 정산 **입력 행 조립** — (학생 × 반 × 티어)의 그 달 시수 합.
@@ -20,6 +22,11 @@ import type { TierRow } from "@/features/payroll/tier-settlement";
  * · class_salary_settings.applies_dows가 지정된 반은 **그 요일 출결만** 정산에 넣는다
  *   (이성우 = 주말만 급여. 출결 자체는 진실로 남고 급여만 거른다).
  * · "그 달" = 달력월(세션 아님) — 시트가 달력월이라 여기서도 달력월이다.
+ * · 🔑 **단가 = 회차 확정 단가 우선**(원장 2026-09-18 — 수학 반만): 그 달 청구서(`invoices.period` = 달력월, void 제외)의
+ *   회차 행이 전부 확정·시수 기준이면 그 단가를 줄에 싣는다(`sessionPriceOf`). 없으면 종전대로 티어.
+ *   🔴 **기록 예외 티어 줄엔 안 붙인다** — 같은 반 안에서 일부 교시만 다른 티어(교시 분리 0.5T)로 적은 것은 사람이
+ *      그 기록에 직접 정한 값이다. 회차 단가는 학생×반 하나라 그 차이를 표현하지 못한다.
+ *   🔴 **영어는 대상이 아니다**(원장 선택) — 영어 반엔 티어가 0건이라, 붙이면 영어 강사 정산액이 처음으로 생긴다.
  */
 export type TierRowsResult = {
   rows: TierRow[];
@@ -58,14 +65,16 @@ export async function collectTierRows(
    *    다른 학원의 단가까지 읽어 라벨이 겹치는 순간 남의 금액으로 급여를 계산한다.
    *    세션 클라이언트(출석부 경로)는 RLS가 이미 테넌트를 가르므로 생략해도 안전하다.
    */
-  tenantId?: string,
+  tenantId: string | undefined,
+  /** 학원설정 과목(`operations.subjects`) — 회차 단가를 붙일 **수학 반** 판정(`programOf`, 수학(심화) 포함). */
+  subjects: readonly ProgramSubject[],
 ): Promise<TierRowsResult | null> {
   if (classIds.length === 0) return null;
   const { from, to } = monthBounds(month);
 
   const tierQuery = supabase.from("salary_tiers").select("label, unit_price");
 
-  const [tiers, tierEnrollments, records, dowSettings] = await Promise.all([
+  const [tiers, tierEnrollments, records, dowSettings, classMeta, sessionTerms] = await Promise.all([
     tenantId ? tierQuery.eq("tenant_id", tenantId) : tierQuery,
     fetchInChunks<{ student_id: string; class_id: string; salary_tier: string | null }>(classIds, (chunk) =>
       supabase.from("enrollments").select("student_id, class_id, salary_tier").in("class_id", chunk),
@@ -93,9 +102,35 @@ export async function collectTierRows(
         .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
         .range(f, t),
     ),
-    fetchInChunks<{ class_id: string; applies_dows: string[] | null }>(classIds, (chunk) =>
-      supabase.from("class_salary_settings").select("class_id, applies_dows").in("class_id", chunk),
+    fetchInChunks<{ class_id: string; applies_dows: string[] | null; salary_group: string | null }>(classIds, (chunk) =>
+      supabase.from("class_salary_settings").select("class_id, applies_dows, salary_group").in("class_id", chunk),
     ),
+    // 반 과목·이름 — 수학 반 판정(회차 단가 대상)과 반 과정(특강 판정) 재료.
+    fetchInChunks<{ id: string; class_name: string | null; subject: string | null; english_track: string | null }>(
+      classIds,
+      (chunk) => {
+        const q = supabase.from("classes").select("id, class_name, subject, english_track").in("id", chunk);
+        return tenantId ? q.eq("tenant_id", tenantId) : q;
+      },
+    ),
+    // 그 달 회차 행(반 기준) — 청구서는 **컬럼 힌트** 임베드(`invoice:invoice_id`, [[#94]])로 달·학생을 함께 받는다.
+    // 🔴 청구서는 void 제외 · 그 달(`period`)만 — 회차 확정 화면과 같은 집합.
+    fetchAllPagedInChunks<
+      SessionPriceTerm & {
+        class_id: string | null;
+        invoice: { student_id: string } | { student_id: string }[] | null;
+      }
+    >(classIds, (chunk, f, t) => {
+      const q = supabase
+        .from("invoice_session_terms")
+        .select(
+          "class_id, confirmed_sessions, unit_price, pricing_mode, quantity_basis, invoice:invoice_id!inner ( student_id, period, status )",
+        )
+        .in("class_id", chunk)
+        .eq("invoice.period", month)
+        .neq("invoice.status", "void");
+      return (tenantId ? q.eq("tenant_id", tenantId) : q).order("id", { ascending: true }).range(f, t);
+    }),
   ]);
 
   if (tiers.error) return null;
@@ -118,8 +153,32 @@ export async function collectTierRows(
   }
 
   const appliesDowsByClass = new Map<string, Set<string>>();
+  const manualGroupByClass = new Map<string, SalaryGroup>();
   for (const s of dowSettings) {
     if (s.applies_dows && s.applies_dows.length > 0) appliesDowsByClass.set(s.class_id, new Set(s.applies_dows));
+    if (isSalaryGroup(s.salary_group)) manualGroupByClass.set(s.class_id, s.salary_group);
+  }
+
+  // 반 과정(수동 지정 ?? 반 이름) · 수학 반 집합.
+  const classGroupOf = new Map<string, SalaryGroup | null>();
+  const mathClassIds = new Set<string>();
+  for (const c of classMeta) {
+    classGroupOf.set(c.id, manualGroupByClass.get(c.id) ?? autoSalaryGroup(c.class_name));
+    if (programOf({ subject: c.subject, english_track: c.english_track }, subjects) === "math") mathClassIds.add(c.id);
+  }
+
+  // 학생×반 → 그 달 회차 행들 → 정산에 쓸 회차 단가(전부 확정·시수 기준·한 단가일 때만).
+  const termsByRow = new Map<string, SessionPriceTerm[]>();
+  for (const t of sessionTerms) {
+    const inv = Array.isArray(t.invoice) ? t.invoice[0] : t.invoice;
+    if (!t.class_id || !inv?.student_id || !mathClassIds.has(t.class_id)) continue;
+    const k = `${inv.student_id}|${t.class_id}`;
+    (termsByRow.get(k) ?? termsByRow.set(k, []).get(k)!).push(t);
+  }
+  const sessionPriceByRow = new Map<string, number>();
+  for (const [k, list] of termsByRow) {
+    const p = sessionPriceOf(list);
+    if (p !== null) sessionPriceByRow.set(k, p);
   }
 
   const effective = effectiveAttendanceRecords(records);
@@ -152,13 +211,20 @@ export async function collectTierRows(
   const nameById = new Map<string, string>(named.map((n) => [n.id, n.name]));
 
   return {
-    rows: [...unitsByRow.values()].map((r) => ({
-      studentId: r.studentId,
-      studentName: nameById.get(r.studentId) ?? "",
-      classId: r.classId,
-      tierLabel: r.tierLabel,
-      units: r.units,
-    })),
+    rows: [...unitsByRow.values()].map((r) => {
+      const rowKey = `${r.studentId}|${r.classId}`;
+      // 기록 예외 티어 줄(수강 티어와 다른 라벨)엔 회차 단가를 안 붙인다 — 위 머리 주석.
+      const recordException = r.tierLabel !== null && r.tierLabel !== (enrollTier.get(rowKey) ?? null);
+      return {
+        studentId: r.studentId,
+        studentName: nameById.get(r.studentId) ?? "",
+        classId: r.classId,
+        tierLabel: r.tierLabel,
+        units: r.units,
+        sessionPrice: recordException ? null : (sessionPriceByRow.get(rowKey) ?? null),
+        classGroup: classGroupOf.get(r.classId) ?? null,
+      };
+    }),
     priceByTier,
     tierByStudent: Object.fromEntries([...tierSetByStudent].map(([id, set]) => [id, [...set].join(" · ")])),
     nameById,

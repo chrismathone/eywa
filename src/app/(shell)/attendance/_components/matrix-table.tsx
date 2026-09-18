@@ -236,7 +236,8 @@ export function MatrixTable({
   termSessionsByRow?: Record<string, AttendanceTermSessions>;
   /**
    * 회차 확정에서 **단가까지 확정된** 학생×반 줄(`rowKey`) — 이 줄엔 「단가」 표식을 달지 않는다(원장 2026-09-18
-   * *"회차 확정의 단가가 확정되었으면 출석부 단가 라벨 지울것"*). 표시 전용 — 정산액·합계 줄 경고는 그대로다.
+   * *"회차 확정의 단가가 확정되었으면 출석부 단가 라벨 지울것"*). 표시 전용 — 수학 줄은 정산 자체가 회차 단가를 읽어
+   * 이미 `missingTierRowKeys`에서 빠진다(tier-rows.ts). 이 목록은 영어 줄·정산에 못 쓰는 확정분의 표식을 뗀다.
    */
   priceConfirmedRows?: readonly string[];
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */

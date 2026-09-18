@@ -132,7 +132,9 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   // 셋은 서로 독립이라 병렬(B4) — 직렬로 두면 명세서 첫 페인트가 세 왕복을 합산한다.
   // ⚠️ 신상(academy_documents)은 명세서 성패를 좌우하지 않으므로 실패해도 접는다(지어내진 않는다).
   const [collected, metrics, resume] = await Promise.all([
-    classIds.length > 0 ? collectTierRows(admin, period, classIds, user.tenantId) : Promise.resolve(null),
+    classIds.length > 0
+      ? collectTierRows(admin, period, classIds, user.tenantId, settings.operations.subjects)
+      : Promise.resolve(null),
     loadMetrics(supabase, classIds, period, year),
     supabase
       .from("academy_documents")
