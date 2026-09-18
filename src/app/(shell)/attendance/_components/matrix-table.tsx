@@ -9,6 +9,8 @@ import {
 } from "@/features/attendance/cell-display";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
+import type { AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
+import { suppressedTransferRows, transferRowKey } from "@/features/attendance/transfer-badge";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
 import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
@@ -61,17 +63,29 @@ const HEAD_CORNER_Z = "z-[60]";
 //   (회차 확정의 확정 시수)를 더했다(원장 *"우측 시수를 청구액 우측으로 이동. 수업 차수로 이름 변경"* ·
 //   *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로"*). 오른쪽 고정은 이제 출석률 하나뿐이라
 //   `right-[64px]` 짝이 사라졌다.
-// ⚠️ 두 열의 88px은 **머리 글자 폭**이 정한다(폭을 줄이면 머리가 잘린다). 실측(`.micro` = Pretendard 500 · 14px):
-//    `수업 차수`·`등록 차수` **53.2px** · `Attended` 61.3px · `Registered` **71.5px** — 좌우 여백 8px을 빼면 80px이라
-//    가장 긴 `Registered`가 8.5px 남기고 들어간다. `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨을 잠근다.
-//    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것 — `th`엔 말줄임이 없어 넘친 글자가 옆 칸 머리에 덮여 **잘린 채** 보인다.
-const COL_W = { name: 148, school: 80, classBilled: 88, units: 88, termSessions: 88, rate: 64, day: 28 } as const;
+// 2026-09-18: 원장 *"열 너비 최대한 압축. 그렇다고 자동으로 늘어나게는 하지말고 고정된 최대한 압축"* —
+//   학교 80→72 · 청구액/수업 차수/등록 차수 88→76으로 줄이고, 그 자리에 **차이확인**(64) 열을 더했다.
+//   🔴 `auto`로 바꾸지 말 것 — 폭이 내용에서 나오면 반을 접을 때마다 표가 출렁인다(위 문단, 원장 2026-08-06).
+// ⚠️ 이 폭은 **머리 글자**가 정한다(`th`엔 말줄임이 없어 넘친 글자가 옆 칸 머리에 덮여 **잘린 채** 보인다).
+//    실측(`.micro` = Pretendard 14px · letter-spacing 0.02em): 한글 12.4px/자 · 라틴 7.7px/자이고,
+//    2026-09-18에 머리·본문을 **굵게**(원장 지시) 바꿔 약 4% 넓어졌다 → 가드는 한글 12.9 · 라틴 8.0으로 잰다.
+//    그래서 영어 라벨을 짧은 낱말로 줄였다(`School`·`Billed`·`Attended`·`Enrolled`·`Diff`) — 뜻은 머리 툴팁이 편다.
+//    `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨 길이를 잠근다.
+//    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것.
+const COL_W = { name: 148, school: 72, classBilled: 76, units: 76, termSessions: 76, diff: 64, rate: 64, day: 28 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
   classId: string;
   className: string;
   subjectLabel: string;
+  /**
+   * 차수 뒤 단위 한 글자 — 영어 `U` · 수학 `T`(원장 2026-09-18). 반 **과목**이 정한다
+   * ([`unit-suffix.ts`](@/features/attendance/unit-suffix)) — 겸직 강사의 표엔 두 과목이 섞여 선다.
+   */
+  unitSuffix?: AttendanceUnitSuffix;
+  /** 특강 토글(0133a) — '반이동' 표식을 뗀다([`transfer-badge.ts`](@/features/attendance/transfer-badge)). */
+  isSpecial?: boolean;
   matrix: AttendanceMatrix;
   /**
    * 이 반에서 지금 보고 있는 강사의 역할("교시 담당" 등) — 담임이 아닌 반이 목록에 있는 이유를 밝힌다.
@@ -249,8 +263,8 @@ export function MatrixTable({
   // 🔴 열의 유무는 **제 데이터**가 정한다 — 청구액에 묶어 두면 등록 차수를 안 받은 호출부에서 열만 서고
   //    전 행이 '미확정'이 된다("확정을 안 했다"는 거짓 사실). 지금 두 값은 같은 조회에서 함께 온다.
   const showTermSessions = termSessionsByRow !== undefined;
-  // 이름·학교·수업 차수·출석률(4) + 날짜 + 청구액·등록 차수.
-  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (showTermSessions ? 1 : 0);
+  // 이름·학교·수업 차수·출석률(4) + 날짜 + 청구액 + 등록 차수·차이확인(둘은 한 짝).
+  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (showTermSessions ? 2 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 학생 — 이름 칸 배경으로 행 단위 표시(합계 뱃지만으론 못 찾는다).
   const tierMissingIds = new Set(
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierStudentIds : [],
@@ -258,6 +272,18 @@ export function MatrixTable({
   // 학생별 단가 티어 라벨(학교·학년 열 아랫줄) — 라벨만이라 금액 비노출. 원장 전용 금액 보기에서만 존재.
   const tierByStudent: Record<string, string> =
     money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.tierByStudent : {};
+  /**
+   * '반이동' 표식을 떼는 (반·학생) — 특강 반 + "다른 수강 구간 안에 통째로 든 수강"(원장 2026-09-18).
+   * 🔴 재료는 **이 표의 모든 묶음**이라 여기서 한 번에 센다(행 컴포넌트는 제 반밖에 모른다).
+   */
+  const noTransferBadge = suppressedTransferRows(
+    groups.map((g) => ({
+      classId: g.classId,
+      className: g.className,
+      isSpecial: g.isSpecial,
+      students: g.matrix.students.map((s) => ({ id: s.id, spans: s.spans })),
+    })),
+  );
   const totalCount = sumCounts(groups.map((g) => groupCount(g.matrix)));
   /**
    * 행 키 → 서버 집계 — 클라 합계의 폴백이자 **검색 모수로 다시 세는 재료**(2026-08-20).
@@ -276,7 +302,7 @@ export function MatrixTable({
     COL_W.school +
     (showClassBilled ? COL_W.classBilled : 0) +
     COL_W.units +
-    (showTermSessions ? COL_W.termSessions : 0) +
+    (showTermSessions ? COL_W.termSessions + COL_W.diff : 0) +
     days.length * COL_W.day +
     COL_W.rate;
 
@@ -293,6 +319,7 @@ export function MatrixTable({
           {showClassBilled ? <col style={{ width: COL_W.classBilled }} /> : null}
           <col style={{ width: COL_W.units }} />
           {showTermSessions ? <col style={{ width: COL_W.termSessions }} /> : null}
+          {showTermSessions ? <col style={{ width: COL_W.diff }} /> : null}
           {days.map((d) => (
             <col key={d.date} />
           ))}
@@ -310,15 +337,16 @@ export function MatrixTable({
             </th>
             <th
               className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-center whitespace-nowrap`}
+              title={t("att.col.schoolGradeTitle")}
             >
-              <span className="micro">{t("att.col.schoolGrade")}</span>
+              <span className="micro font-bold">{t("att.col.schoolGrade")}</span>
             </th>
             {showClassBilled ? (
               <th
                 className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.classBilledTitle")}
               >
-                <span className="micro">{t("att.col.classBilled")}</span>
+                <span className="micro font-bold">{t("att.col.classBilled")}</span>
               </th>
             ) : null}
             {/* 수업 차수 = 출석부에서 센 시수(소비 상태 칸의 배수 합) · 등록 차수 = 회차 확정의 확정 시수(원장 2026-09-17). */}
@@ -327,14 +355,24 @@ export function MatrixTable({
               className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
               title={t("att.col.lessonCountTitle")}
             >
-              <span className="micro">{t("att.col.lessonCount")}</span>
+              <span className="micro font-bold">{t("att.col.lessonCount")}</span>
             </th>
             {showTermSessions ? (
               <th
                 className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.termSessionsTitle")}
               >
-                <span className="micro">{t("att.col.termSessions")}</span>
+                <span className="micro font-bold">{t("att.col.termSessions")}</span>
+              </th>
+            ) : null}
+            {/* 차이확인 = **수업 차수 − 등록 차수**(원장 2026-09-18). 등록 차수와 한 짝이라 같은 조건으로 선다 —
+                뺄 수가 없으면 열만 서고 전 행이 `—`가 된다. */}
+            {showTermSessions ? (
+              <th
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+                title={t("att.col.sessionDiffTitle")}
+              >
+                <span className="micro font-bold">{t("att.col.sessionDiff")}</span>
               </th>
             ) : null}
             {days.map((d) => {
@@ -415,6 +453,8 @@ export function MatrixTable({
                     holidays={holidays}
                     classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termSessionsByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    unitSuffix={g.unitSuffix ?? null}
+                    noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                     lockBefore={lockBefore}
                     classLabel={g.className}
                     tierMissing={tierMissingIds.has(s.id)}
@@ -438,6 +478,8 @@ export function MatrixTable({
                 holidays={holidays}
                 classBilled={showClassBilled ? classBilledAmounts[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termSessionsByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                unitSuffix={g.unitSuffix ?? null}
+                noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                 lockBefore={lockBefore}
                 classLabel={g.className}
                 tierMissing={tierMissingIds.has(s.id)}

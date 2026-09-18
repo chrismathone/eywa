@@ -553,6 +553,8 @@ export type AttendanceMatrix = {
     id: string;
     className: string;
     subject: string;
+    /** 특강 토글(0133a) 그대로 — 표에서 '반이동' 표식을 뗄지 가른다(판정은 `isSpecialLecture()`). */
+    isSpecial: boolean;
     teacherId: string | null;
     teacherName: string | null;
     // 담임 재직 여부 — 퇴직(inactive) 담임 반은 살아있는 한 노출하되, 강사 필터에 "(퇴직)" 표시.
@@ -843,6 +845,7 @@ export async function getMonthlyAttendanceMatrix(
       id: c.id,
       className: c.className,
       subject: c.subject,
+      isSpecial: c.isSpecial,
       reportOptout: c.reportOptout,
       teacherId: c.teacherId,
       teacherName: c.teacherName,

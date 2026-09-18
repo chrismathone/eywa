@@ -8,11 +8,11 @@ import { BADGE_BASE, BADGE_TONE, notMineCell } from "@/features/attendance/cell-
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
-import { formatSessionUnits } from "@/features/attendance/session-units";
+import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
 import { AttendanceCell } from "./attendance-cell";
-import { RowLessonCountCell, RowTotalCells } from "./live-totals";
+import { RowLessonCountCell, RowSessionDiffCell, RowTotalCells } from "./live-totals";
 
 /**
  * 출석부 매트릭스의 학생 행 하나 — 반별 보기와 강사 전체 보기가 **같은 행 컴포넌트**를 쓴다.
@@ -26,6 +26,8 @@ export function MatrixRow({
   holidays,
   classBilled,
   termSessions,
+  unitSuffix = null,
+  noTransferBadge = false,
   lockBefore,
   classLabel,
   tierMissing,
@@ -49,6 +51,13 @@ export function MatrixRow({
    * 원장 2026-09-17 *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로 보여줄것"*.
    */
   termSessions?: AttendanceTermSessions | null;
+  /** 차수 뒤 단위 한 글자(영어 `U` · 수학 `T`, 원장 2026-09-18). null이면 숫자만. */
+  unitSuffix?: AttendanceUnitSuffix;
+  /**
+   * 이 행의 **'반이동' 표식을 뗀다**(특강 반 · 다른 수강 구간 안에 통째로 든 수강, 원장 2026-09-18).
+   * 🔴 판정은 표가 한다([`transfer-badge.ts`](@/features/attendance/transfer-badge)) — 행은 제 반밖에 모른다.
+   */
+  noTransferBadge?: boolean;
   /** 이 날짜 **이전**은 강사가 수정 못 함(7일 창). null = 제한 없음(관리자 이상). */
   lockBefore?: string | null;
   /** 단가(수업 티어) 미지정 — 정산액에서 빠진 학생. 이름 칸 「단가」 라벨로 드러낸다. */
@@ -62,6 +71,27 @@ export function MatrixRow({
   // 강사 전체 보기 — 그 강사가 이 반을 수업하는 날(원장 2026-09-17 *"담당하는 날만 표시"*). 반별 보기는 null(전부).
   const ownDates = matrix.ownDates ? new Set(matrix.ownDates) : null;
   const attendLabel = formatDows(student.attendDows);
+  /**
+   * 생애주기 표식(신입·퇴원·반이동·종강) — 원장 2026-09-18 *"이름 옆에 라벨들이 날자 셀 위에 올 수 있는지"*.
+   * 🔴 **그 달 격자에 그 날짜가 있을 때만** 칸으로 옮긴다 — 지난 달에 일어난 일은 놓을 칸이 없어
+   *    이름 옆에 남는다(칸이 없다고 안 그리면 표식이 통째로 사라진다).
+   * 🔴 '반이동'만 떼고 나머지는 그대로다(특강 판정은 표가 넘겨준다).
+   */
+  const shownBadges = noTransferBadge
+    ? student.badges.filter((b) => b.kind !== "transferIn" && b.kind !== "transferOut")
+    : student.badges;
+  const gridDates = new Set(days.filter((d) => !d.placeholder).map((d) => d.date));
+  const badgesOnDate = new Map<string, typeof shownBadges>();
+  const badgesByName: typeof shownBadges = [];
+  for (const b of shownBadges) {
+    if (!gridDates.has(b.date)) {
+      badgesByName.push(b);
+      continue;
+    }
+    const list = badgesOnDate.get(b.date) ?? [];
+    list.push(b);
+    badgesOnDate.set(b.date, list);
+  }
 
   return (
     <tr className="hover:bg-bg-soft/40">
@@ -82,7 +112,7 @@ export function MatrixRow({
             뱃지 둘("반이동"+"퇴원" ≈ 80px)이 132px 열의 절반을 먹어 이름이 "김…"으로 잘렸다(실측).
             이제 첫 줄은 이름뿐이라 열 폭(148px)을 통째로 쓴다. 아랫줄은 요일 두 글자뿐이라 자리가 남고,
             모자라면 요일(`min-w-0 truncate`)이 줄임표로 양보한다 — 「단가」가 쓰던 문법 그대로. */}
-        {attendLabel || tierMissing || student.badges.length > 0 ? (
+        {attendLabel || tierMissing || badgesByName.length > 0 ? (
           <span className="flex items-center gap-1">
             {attendLabel ? (
               <span
@@ -94,9 +124,9 @@ export function MatrixRow({
             ) : null}
             {/* 라벨 묶음은 **한 번만** 우측 정렬한다(ml-auto가 둘이면 뒤엣것이 자리를 또 밀어 사이가 벌어진다).
                 크기·색은 화면과 인쇄물 단일 소스(BADGE_BASE·BADGE_TONE). */}
-            {student.badges.length > 0 || tierMissing ? (
+            {badgesByName.length > 0 || tierMissing ? (
               <span className="ml-auto flex shrink-0 items-center gap-1">
-                {student.badges.map((b) => (
+                {badgesByName.map((b) => (
                   <span
                     key={`${b.kind}-${b.date}`}
                     title={badgeTitle(b, classLabel ?? sheetT(lang, "att.row.thisClass"), lang)}
@@ -120,7 +150,7 @@ export function MatrixRow({
       </td>
       {/* 학교·학년 = 표시 표준 압축("경명여중2", school-grade.ts) — 두 열로 나누던 것을 합쳐 날짜 칸에
           폭을 돌려준다(원장 2026-08-10). 원문(학교·학년 따로)은 title에 남긴다. */}
-      <td className="border-line text-text-dim border-b border-r px-1 py-1 text-xs">
+      <td className="border-line text-foreground border-b border-r px-1 py-1 text-xs font-bold">
         <span
           className="block truncate"
           title={[student.school, student.grade].filter(Boolean).join(" · ") || undefined}
@@ -137,37 +167,52 @@ export function MatrixRow({
           </span>
         ) : null}
       </td>
+      {/* 청구액 = 크림 · 수업/등록 차수 = 연파랑(원장 2026-09-18 색 지정, `--att-col-*`).
+          🔴 행 hover(`hover:bg-bg-soft/40`)는 이 칸들에선 안 비친다 — 열 색이 이기는 게 맞다(열을 보라고 칠한 색이다). */}
       {classBilled !== undefined ? (
-        <td className="border-line num border-b border-r px-1 py-1 text-right text-xs whitespace-nowrap">
+        <td className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
           {classBilled === null ? (
-            <span className="text-text-faint">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
+            <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
           ) : formatMoney(classBilled)}
         </td>
       ) : null}
       {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
-      <RowLessonCountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} />
+      <RowLessonCountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} suffix={unitSuffix} />
       {/* 등록 차수 = 회차 확정의 확정 시수. **확정 전엔 숫자를 안 지어낸다**(미확정으로 적는다).
           🔴 옛 **일수 기준** 확정은 단위가 달라(시수가 아니라 출석 일수) 회차 확정 화면이 붉게 칠하는 값이다
              (원장 2026-09-16). 여기서도 점선 밑줄 + 마우스 오버 카드로 그 사실을 적는다 — 감추지 않는다. */}
       {termSessions !== undefined ? (
-        <td className="border-line num border-b border-r px-1 py-1 text-right text-xs whitespace-nowrap">
+        <td className="border-line num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
           {termSessions === null ? (
-            <span className="text-text-faint">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
+            <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
           ) : termSessions.daysBasis ? (
             <span
-              className="text-danger cursor-help font-bold underline decoration-dotted underline-offset-4"
+              className="text-danger cursor-help underline decoration-dotted underline-offset-4"
               {...tipProps({
                 title: sheetT(lang, "att.row.daysBasis"),
                 lines: [sheetT(lang, "att.row.daysBasisWhat"), sheetT(lang, "att.row.daysBasisHow")],
               })}
             >
-              {formatSessionUnits(termSessions.units)}
+              {formatUnitsWithSuffix(termSessions.units, unitSuffix)}
               <span className="sr-only"> · {sheetT(lang, "att.row.daysBasis")}</span>
             </span>
           ) : (
-            formatSessionUnits(termSessions.units)
+            formatUnitsWithSuffix(termSessions.units, unitSuffix)
           )}
         </td>
+      ) : null}
+      {/* 차이확인 = 수업 차수 − 등록 차수(원장 2026-09-18). 양수=파랑 · 음수=빨강 · 0=색 없음.
+          🔴 **뺄 수 없으면 숫자를 지어내지 않는다** — 미확정이거나 옛 '일수 기준' 확정(단위가 다르다)이면 `—`.
+          ⚠️ 왼쪽 '수업 차수'는 칸을 치면 서버 왕복 없이 바뀌는데(클라 집계) 이 열은 **서버 값**이라,
+             입력 직후 한 박자 어긋날 수 있다. 격자를 떠나면(새로고침) 맞는다. */}
+      {termSessions !== undefined ? (
+        <RowSessionDiffCell
+          row={rowKey(classId, student.id)}
+          fallback={countMarks(marks, units)}
+          term={termSessions}
+          suffix={unitSuffix}
+          lang={lang}
+        />
       ) : null}
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
@@ -230,6 +275,26 @@ export function MatrixRow({
               studentName={student.name}
               className={classLabel}
             />
+            {/* 생애주기 표식을 **그 날짜 칸 위에** 얹는다(원장 2026-09-18) — 이름 칸에 몰려 나던
+                「반이동」 줄이 언제 일어난 일인지 칸으로 말한다.
+                🔴 `pointer-events-none` 필수 — 이 칸은 **입력 칸**이라 덮개가 포인터를 먹으면 출결을 못 찍는다.
+                🔴 칸(28px)보다 넓어 옆으로 넘치는 건 의도다(td에 overflow를 걸지 말 것 — 걸면 두 글자만 남는다).
+                🔴 `z-[9]`는 **이름 열(sticky `z-10`)보다 낮고 옆 칸보다 높은** 자리다 — 날짜 td는 `relative`라
+                   쌓임 맥락을 안 만들어서, 10 이상을 주면 가로로 스크롤할 때 이 칩이 **고정된 이름 열 위로 떠오른다**.
+                   반대로 z가 없으면 오른쪽 칸의 버튼(`absolute`, DOM 순서가 뒤)이 넘친 부분을 덮는다.
+                ⚠️ 덮개라 `title`(반이동 "A반 → B반")은 못 띄운다 — 그 설명은 이름 열에 남는 표식에만 있다. */}
+            {badgesOnDate.get(d.date)?.length ? (
+              <span className="pointer-events-none absolute inset-x-0 top-1/2 z-[9] flex -translate-y-1/2 justify-center gap-1 whitespace-nowrap">
+                {badgesOnDate.get(d.date)!.map((b) => (
+                  <span
+                    key={`${b.kind}-${b.date}`}
+                    className={`${BADGE_BASE} ${BADGE_TONE[b.kind]} shadow-card`}
+                  >
+                    {badgeLabelOf(b.kind, lang)}
+                  </span>
+                ))}
+              </span>
+            ) : null}
           </td>
         );
       })}

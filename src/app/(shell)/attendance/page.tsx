@@ -20,11 +20,13 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
-import { getTeacherMoney } from "@/features/attendance/server/teacher-money";import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
+import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
+import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
 import { classWorkerLabel } from "@/features/attendance/class-worker";
 import { getAttendanceClassBilledAmounts } from "@/features/attendance/server/class-billing";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
+import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { AbsenceIntakeButton } from "./_components/absence-intake-button";
@@ -236,6 +238,8 @@ export default async function AttendancePage({
     loadAttendanceViewPrefs(),
   ]);
   const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
+  // 특강 토글(0133a) — 표식 규칙이 반마다 읽는다. 목록 쪽 타입엔 없어 반 목록 원본에서 되짚는다.
+  const matrixClassById = new Map(base.classes.map((c) => [c.id, c]));
   const subjectMaps = buildSubjectMaps(operations.subjects);
 
   // ── 과목 → 강사 → 반 계층(넓→좁). 위를 고르면 아래 선택지가 좁혀지는 cascade. ──
@@ -495,6 +499,9 @@ export default async function AttendancePage({
           classId: c.id,
           className: classNameFor(c.className, lang),
           subjectLabel: subjectMaps.labelOf(c.subject),
+          // 차수 단위(영어 U · 수학 T) · 특강 여부 — 겸직 강사의 표엔 두 과목 반이 섞여 서므로 **반마다** 정한다.
+          unitSuffix: attendanceUnitSuffix(c.subject, operations.subjects),
+          isSpecial: matrixClassById.get(c.id)?.isSpecial ?? false,
           matrix: teacherMatrices[i]!,
           // 담임이 아닌 반이 왜 여기 있는지 밝힌다 — 라벨이 없으면 "남의 반이 왜 뜨지"가 된다.
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
@@ -512,6 +519,8 @@ export default async function AttendancePage({
               classId: effectiveClassId,
               className: classNameFor(selectedClass.className, lang),
               subjectLabel: subjectMaps.labelOf(selectedClass.subject),
+              unitSuffix: attendanceUnitSuffix(selectedClass.subject, operations.subjects),
+              isSpecial: matrixClassById.get(effectiveClassId)?.isSpecial ?? false,
               matrix,
               ...workerOf(effectiveClassId),
             },

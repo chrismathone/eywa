@@ -1,6 +1,14 @@
 "use client";
 
 import { formatSessionUnits } from "@/features/attendance/session-units";
+import {
+  attendanceUnitsDiff,
+  formatUnitsWithSuffix,
+  type AttendanceUnitSuffix,
+} from "@/features/attendance/unit-suffix";
+import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import { tipProps } from "@/components/hover-tip/tip";
+import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { EMPTY_COUNT, rateDecimal, ratePercent, sumCounts, type Counted } from "@/features/attendance/grid/totals";
 import { useRowCount, useRowsCount } from "./grid-context";
 import { useAttendanceSearch } from "./search-context";
@@ -27,12 +35,80 @@ function rateColorOf(rate: number | null): string {
  * '수업 차수' 칸 — 출석부에서 센 시수(소비 상태 칸의 배수 합).
  * 🔴 오른쪽 sticky가 아니라 **청구액 옆**이다(원장 2026-09-17 *"우측 시수를 청구액 우측으로 이동. 수업 차수로 이름 변경"*).
  */
-export function RowLessonCountCell({ row, fallback }: { row: string; fallback: Counted }) {
+export function RowLessonCountCell({
+  row,
+  fallback,
+  suffix = null,
+}: {
+  row: string;
+  fallback: Counted;
+  /** 단위 한 글자(영어 `U` · 수학 `T`, 원장 2026-09-18). */
+  suffix?: AttendanceUnitSuffix;
+}) {
   const c = useRowCount(row) ?? fallback;
   // 여백은 이웃(청구액·등록 차수)과 같은 `px-1 py-1` — 옛 오른쪽 sticky 자리의 `py-2`가 따라왔던 것이다.
+  // 배경(연파랑)은 등록 차수 칸과 같은 토큰 — 두 칸이 한 짝이라는 걸 색이 말한다(원장 2026-09-18).
   return (
-    <td className="border-line text-foreground num border-b border-r px-1 py-1 text-right text-xs whitespace-nowrap">
-      {c.units > 0 ? formatSessionUnits(c.units) : "—"}
+    <td className="border-line text-foreground num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+      {c.units > 0 ? formatUnitsWithSuffix(c.units, suffix) : "—"}
+    </td>
+  );
+}
+
+/**
+ * '차이확인' 칸 = **수업 차수 − 등록 차수**(원장 2026-09-18) — 양수 파랑 · 음수 빨강 솔리드 + 흰 굵은 글씨.
+ *
+ * 🔴 수업 차수는 **칸을 치면 즉시** 바뀌므로(클라 집계) 차이도 같은 값을 보고 다시 센다 —
+ *    서버 값만 보면 방금 친 칸이 반영 안 된 차이가 남아 "수업 차수는 바뀌었는데 차이는 그대로"가 된다.
+ * 🔴 **뺄 수 없으면 `—`**: 미확정(`null`)이거나 옛 '일수 기준' 확정(단위가 시수가 아니라 출석 일수)이면
+ *    빼는 순간 단위가 다른 두 수의 차가 나온다. 0으로 치면 "전부 초과"라는 거짓 신호가 열 전체에 깔린다.
+ */
+export function RowSessionDiffCell({
+  row,
+  fallback,
+  term,
+  suffix = null,
+  lang = "ko",
+}: {
+  row: string;
+  fallback: Counted;
+  term: AttendanceTermSessions | null;
+  suffix?: AttendanceUnitSuffix;
+  lang?: SheetLang;
+}) {
+  const c = useRowCount(row) ?? fallback;
+  const diff = attendanceUnitsDiff(c.units, term);
+  if (diff === null) {
+    return (
+      <td
+        className="border-line text-text-dim num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap"
+        title={sheetT(lang, term?.daysBasis ? "att.row.diffDaysBasis" : "att.row.diffUnconfirmed")}
+      >
+        —
+      </td>
+    );
+  }
+  // 0 = 계획대로 — 색을 칠하지 않는다(전부 칠하면 색이 신호이길 그만둔다).
+  const fill =
+    diff > 0
+      ? "bg-att-diff-plus text-white"
+      : diff < 0
+        ? "bg-att-diff-minus text-white"
+        : "text-foreground";
+  return (
+    <td className={`border-line num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap ${fill}`}>
+      <span
+        {...tipProps({
+          title: sheetT(lang, "att.row.diffTip"),
+          lines: [
+            `${sheetT(lang, "att.col.lessonCount")} ${formatUnitsWithSuffix(c.units, suffix)}`,
+            `${sheetT(lang, "att.col.termSessions")} ${formatUnitsWithSuffix(term!.units, suffix)}`,
+          ],
+        })}
+      >
+        {diff > 0 ? "+" : ""}
+        {formatUnitsWithSuffix(diff, suffix)}
+      </span>
     </td>
   );
 }

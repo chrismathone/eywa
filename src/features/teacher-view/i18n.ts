@@ -1412,9 +1412,14 @@ export const SHEET_DICT = {
 
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
-  "att.col.schoolGrade": { ko: "학교·학년", en: "School · grade" },
+  // ⚠️ 2026-09-18 열 폭 압축(80→72) — 영어 라벨은 **한 낱말**이어야 머리가 안 넘친다(뜻은 아래 툴팁이 편다).
+  "att.col.schoolGrade": { ko: "학교·학년", en: "School" },
+  "att.col.schoolGradeTitle": {
+    ko: "학생의 학교와 학년입니다(줄이면 「경명여중2」처럼 적습니다 — 원문은 마우스 오버).",
+    en: "The student's school and grade (shown compact; hover a value for the full text).",
+  },
   // 이 반 몫 청구액. 학생 총액 '청구·납입' 열은 2026-09-17 원장 지시로 없앴다(합계 줄의 청구·납입은 `att.totals.*`).
-  "att.col.classBilled": { ko: "청구액", en: "Class billed" },
+  "att.col.classBilled": { ko: "청구액", en: "Billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
@@ -1427,7 +1432,7 @@ export const SHEET_DICT = {
     ko: "출석부에서 센 시수입니다(출석·지각·조퇴·보강 칸의 배수 합).",
     en: "Sessions counted from this sheet (present, late, early leave and make-up cells).",
   },
-  "att.col.termSessions": { ko: "등록 차수", en: "Registered" },
+  "att.col.termSessions": { ko: "등록 차수", en: "Enrolled" },
   "att.col.termSessionsTitle": {
     ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다.",
     en: "Sessions confirmed in billing. Shown as unconfirmed until then.",
@@ -1441,6 +1446,21 @@ export const SHEET_DICT = {
   "att.row.daysBasisHow": {
     ko: "수납관리 '회차 확정'에서 해제한 뒤 시수를 확인해 다시 확정하세요.",
     en: "Release it in billing, check the sessions and confirm again.",
+  },
+  // 차이확인(원장 2026-09-18) = 수업 차수 − 등록 차수. 양수 파랑 · 음수 빨강 · 0은 색 없음.
+  "att.col.sessionDiff": { ko: "차이확인", en: "Diff" },
+  "att.col.sessionDiffTitle": {
+    ko: "수업 차수에서 등록 차수를 뺀 값입니다. 양수는 등록보다 많이 들은 것, 음수는 덜 들은 것입니다.",
+    en: "Attended minus enrolled sessions. Positive means more attended than enrolled, negative means fewer.",
+  },
+  "att.row.diffTip": { ko: "수업 차수 − 등록 차수", en: "Attended − enrolled" },
+  "att.row.diffUnconfirmed": {
+    ko: "등록 차수가 아직 확정되지 않아 뺄 수 없습니다.",
+    en: "Enrolled sessions are not confirmed yet, so there is nothing to subtract.",
+  },
+  "att.row.diffDaysBasis": {
+    ko: "등록 차수가 옛 일수 기준이라 단위가 달라 뺄 수 없습니다 — 회차 확정에서 다시 확정하세요.",
+    en: "The enrolled value uses the old day-count basis, so the units differ — confirm it again in billing.",
   },
   "att.col.rate": { ko: "출석률", en: "Rate" },
   "att.group.slotTitle": {

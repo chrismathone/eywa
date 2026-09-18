@@ -157,28 +157,38 @@ describe("🔴 시트 본문 문구가 사전을 탄다 — 화면 파일에 한
     }
   });
 
-  it("🔴 월별 출석부 '수업 차수·등록 차수' 머리는 열 폭 안에 든다(한·영 모두)", () => {
+  it("🔴 월별 출석부 왼쪽 값 열 머리는 열 폭 안에 든다(한·영 모두)", () => {
     // `th`엔 말줄임이 없어 넘친 글자는 옆 칸 머리에 덮여 **잘린 채** 보인다(적대 리뷰 2026-09-17).
     // 폭은 화면이 정하므로 상수를 **거기서 읽는다**(둘이 갈리면 가드가 거짓으로 통과한다).
     const table = readFileSync(
       join(process.cwd(), "src", "app", "(shell)", "attendance", "_components", "matrix-table.tsx"),
       "utf8",
     );
+    // 🔴 파일 전체가 아니라 **`COL_W` 한 줄**에서 읽는다 — 다른 곳의 `units: 2` 같은 값이 섞이면 가드가 거짓으로 통과한다.
+    const colW = table.match(/const COL_W = \{([^}]+)\}/)![1]!;
     const widths = Object.fromEntries(
-      [...table.matchAll(/(units|termSessions): (\d+)/g)].map((m) => [m[1]!, Number(m[2])]),
+      [...colW.matchAll(/(\w+): (\d+)/g)].map((m) => [m[1]!, Number(m[2])]),
     );
-    const PAD = 8; // `px-1` 좌우
-    for (const [key, col] of [
-      ["att.col.lessonCount", "units"],
-      ["att.col.termSessions", "termSessions"],
+    /**
+     * 글자당 폭 — 헤드리스 Chrome 실측(Pretendard · 14px · letter-spacing 0.02em = `.micro`)에
+     * 2026-09-18 **굵게** 전환분 약 4%를 얹었다. 한글 12.38 → 12.9 · 라틴 7.66 → 8.0.
+     * 🔴 공백·가운뎃점을 한글 폭으로 세지 말 것 — `학교·학년`(57.6px)이 64.5px로 부풀어, 들어가는 라벨을
+     *    가드가 막는다(그러면 폭을 도로 넓히게 된다).
+     */
+    const textWidth = (t: string) =>
+      [...t].reduce((w, ch) => w + (ch === " " ? 4 : ch === "·" ? 6 : /[가-힣]/.test(ch) ? 12.9 : 8), 0);
+    for (const [key, col, pad] of [
+      // 학교·학년만 `px-1.5`(12px), 나머지는 `px-1`(8px).
+      ["att.col.schoolGrade", "school", 12],
+      ["att.col.classBilled", "classBilled", 8],
+      ["att.col.lessonCount", "units", 8],
+      ["att.col.termSessions", "termSessions", 8],
+      ["att.col.sessionDiff", "diff", 8],
     ] as const) {
-      const room = widths[col]! - PAD;
+      const room = widths[col]! - pad;
       expect(room, col).toBeGreaterThan(0);
-      // 글자당 폭은 **헤드리스 Chrome 실측**(Pretendard 500 · 14px · letter-spacing 0.02em = `.micro`).
-      // 실측 최대치: 한글 12.38px/자(`수업 차수` 53.22px) · 라틴 7.66px/자(`Attended` 61.28px).
-      // 🔴 라틴을 7px로 잡으면 대문자 섞인 11자 라벨이 **가드는 통과하고 화면에서 넘친다**(재리뷰 2026-09-17).
-      expect(SHEET_DICT[key].ko.length * 12.4, key).toBeLessThanOrEqual(room);
-      expect(SHEET_DICT[key].en.length * 7.7, key).toBeLessThanOrEqual(room);
+      expect(textWidth(SHEET_DICT[key].ko), `${key} ko`).toBeLessThanOrEqual(room);
+      expect(textWidth(SHEET_DICT[key].en), `${key} en`).toBeLessThanOrEqual(room);
     }
   });
 

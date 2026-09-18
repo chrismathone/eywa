@@ -160,19 +160,21 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
         termSessionsByRow={{ [rowKey(C, S1)]: { units: 8, daysBasis: false } }}
       />,
     );
-    // 열 순서(원장 2026-09-17): 이름 · 학교학년 · 청구액 · 수업 차수 · 등록 차수 · 날짜… · 출석률
-    expect(screen.getAllByRole("columnheader").slice(0, 5).map((h) => h.textContent)).toEqual([
-      expect.stringContaining("이름"), "학교·학년", "청구액", "수업 차수", "등록 차수",
+    // 열 순서(원장 2026-09-17·09-18): 이름 · 학교학년 · 청구액 · 수업 차수 · 등록 차수 · 차이확인 · 날짜… · 출석률
+    expect(screen.getAllByRole("columnheader").slice(0, 6).map((h) => h.textContent)).toEqual([
+      expect.stringContaining("이름"), "학교·학년", "청구액", "수업 차수", "등록 차수", "차이확인",
     ]);
     for (const [name, amount] of [["이도윤", "210,000"], ["박서준", "0"], ["한가온", "미확정"]]) {
       const row = screen.getByText(name!).closest("tr")!;
       expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(amount!);
-      expect(row.children).toHaveLength(DAYS.length + 6);
+      expect(row.children).toHaveLength(DAYS.length + 7);
     }
     // 등록 차수 = 회차 확정의 확정 시수. 확정 전이면 '미확정'(0을 지어내지 않는다).
     expect(within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("8");
     expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
-    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 6));
+    // 차이확인 = 수업 차수 − 등록 차수. 🔴 등록 차수가 미확정이면 숫자를 지어내지 않고 `—`.
+    expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[5]).toHaveTextContent("—");
+    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 7));
   });
 
   it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {

@@ -189,6 +189,10 @@
   --color-att-outside: var(--att-outside);
   --color-att-holiday: var(--att-holiday);
   --color-att-holiday-ink: var(--att-holiday-ink);
+  --color-att-col-billed: var(--att-col-billed);
+  --color-att-col-sessions: var(--att-col-sessions);
+  --color-att-diff-plus: var(--att-diff-plus);
+  --color-att-diff-minus: var(--att-diff-minus);
 
   /* sidebar */
   --color-sidebar: var(--sidebar);
@@ -431,6 +435,17 @@
      🔴 결석 잉크(`--att-absent-ink`)를 빌려 쓰지 말 것 — 값이 같아도 뜻(휴일 ≠ 결석)이 달라 토큰을 가른다. */
   --att-holiday-ink: #7a1111;
   --att-outside: #b4b4c0;
+
+  /* 월별 출석부 **왼쪽 값 열**의 틴트·채움(원장 2026-09-18 색 지정) — 청구액 = 크림 · 수업/등록 차수 = 연파랑 ·
+     차이확인(수업−등록) = 양수 파랑 / 음수 빨강 솔리드.
+     🔴 위 `--att-*`(출결 격자 팔레트)를 빌려 쓰지 않는다 — 그쪽은 **출결 상태색**이라 톤업 지시 한 번에 이 열이
+        조용히 딸려 간다(2026-09-14 톤업이 `--att-absent`를 바꾼 선례). 뜻이 다르면 토큰을 가른다.
+     ⚠️ 차이 채움 둘은 **흰 굵은 글씨**를 얹는 솔리드라, 원장이 보여 준 색보다 한 단계 진하게 골랐다
+        (보여 준 값 그대로면 흰 글자가 4.11·4.16:1로 WCAG 4.5 미달). `palette-contrast.test.ts`가 실제로 계산해 잠근다. */
+  --att-col-billed: #fdf0cd;
+  --att-col-sessions: #c9dcf1;
+  --att-diff-plus: #2b6fd0;
+  --att-diff-minus: #e01b1b;
 
   /* sidebar — v4: 캔버스와 같은 화이트가 됐으므로 구분은 border-r(승압 헤어라인)가 담당.
      활성/hover 항목은 회색(#f5f5f7, 화이트 위 비가시)이 아니라 네이비 틴트 — 브랜드 대비 강화. */
