@@ -18,7 +18,12 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
 import { absenceMemo, shortDate } from "@/features/onescreen/makeup-absence-link";
-import { absenceOptionLabel, type MakeupAbsenceList } from "../makeup-options";
+import {
+  absenceOptionLabel,
+  isWithinMakeupDeadline,
+  makeupDeadlineMessage,
+  type MakeupAbsenceList,
+} from "../makeup-options";
 import type { MakeupSlotOption } from "../makeup-slot";
 
 /**
@@ -98,6 +103,17 @@ export function MakeupConfirmDialog({
   onCancel: () => void;
 }) {
   const { options: absenceOptions, hiddenBySubject, subjectLabel } = absences;
+  /**
+   * 보강 기한(결석한 달의 다음 달 말일)을 거는 화면인가 — 서버가 강사뷰일 때만 `hiddenByDeadline`을 싣는다(원장 2026-09-18).
+   * 🔑 판정을 여기서 다시 하지 않는다 — 서버가 세션으로 정한 값의 **유무**가 곧 답이다.
+   */
+  const deadlineOn = absences.hiddenByDeadline !== undefined;
+  const hiddenByDeadline = absences.hiddenByDeadline ?? 0;
+  /** 뺀 기한 초과 결석 — 조용히 사라지면 "결석이 없다"는 거짓이 된다(과목 필터와 같은 규약). */
+  const deadlineNote =
+    hiddenByDeadline > 0
+      ? ` 보강 기한(결석한 달의 다음 달 말일)이 지난 결석 ${hiddenByDeadline}건은 뺐습니다.`
+      : "";
   /** 과목 라벨이 없으면(설정에 없는 키) 이름 대신 "이 과목" — raw 키는 화면에 안 쓴다. */
   const subjectWord = subjectLabel ? `${subjectLabel} 과목` : "이 과목";
   const canMerge = candidates.length > 0;
@@ -131,9 +147,25 @@ export function MakeupConfirmDialog({
   const asksAbsence = mode === "separate";
   /** '직접 입력'을 골라 놓고 날짜를 비운 상태 — 조용히 '추가 보강'이 되지 않게 막는다. */
   const customEmpty = asksAbsence && absencePick === PICK_CUSTOM && !customDate;
+  /**
+   * 직접 입력한 날짜가 보강 기한을 넘었다(강사뷰) — 🔴 입력 순간이 아니라 **매 렌더** 다시 본다: 목록이 늦게 와서
+   * `deadlineOn`이 나중에 켜져도 먼저 넣은 날짜를 놓치지 않는다(재리뷰 2026-09-18). 서버 문도 같은 판정이다.
+   */
+  const customExpired =
+    asksAbsence &&
+    absencePick === PICK_CUSTOM &&
+    deadlineOn &&
+    !!customDate &&
+    !isWithinMakeupDeadline(customDate, makeupDate);
+  /**
+   * 결석 목록을 불러오는 중에 '직접 입력'으로 확인하면 기한 판정 재료(`deadlineOn`)가 아직 없다 — 그대로 보내면 보강 칸은
+   * 저장되고 결석분 연결만 서버에서 거절되는 **반쪽 저장**이 된다(재리뷰 2026-09-18). 목록이 올 때까지만 잠근다.
+   */
+  const customWaiting = asksAbsence && absencePick === PICK_CUSTOM && !!absenceLoading;
   /** 교시를 물어야 하는 화면인데 아직 안 골랐다 — 첫 교시로 조용히 밀어 넣지 않는다. */
   const slotUnpicked = !!slotOptions && slotOptions.length > 0 && !slotPick;
-  const blocked = (canMerge && !chosen) || addUnits === null || customEmpty || slotUnpicked;
+  const blocked =
+    (canMerge && !chosen) || addUnits === null || customEmpty || customExpired || customWaiting || slotUnpicked;
 
   // 🔴 **portal로 body에 붙인다** — ECS 오늘 보드는 카드가 `zoom` 래퍼(글씨 크게) 안이라, 그 안에서
   //    `position:fixed`를 쓰면 좌표가 배율만큼 곱해져 모달이 화면 밖으로 밀린다([[#98]] 사촌 함정).
@@ -278,11 +310,13 @@ export function MakeupConfirmDialog({
                 ? "결석 기록을 불러오는 중…"
                 : absenceOptions.length === 0
                   ? hiddenBySubject > 0
-                    ? `${subjectWord}에 메울 결석이 없습니다 — 다른 과목 결석 ${hiddenBySubject}건은 과목이 달라 뺐습니다.`
-                    : "최근 1년 결석 기록이 없습니다 — 추가 보강이면 그대로 두세요."
+                    ? `${subjectWord}에 메울 결석이 없습니다 — 다른 과목 결석 ${hiddenBySubject}건은 과목이 달라 뺐습니다.${deadlineNote}`
+                    : hiddenByDeadline > 0
+                      ? `메울 수 있는 결석이 없습니다 —${deadlineNote} 추가 보강이면 그대로 두세요.`
+                      : "최근 1년 결석 기록이 없습니다 — 추가 보강이면 그대로 두세요."
                   : hiddenBySubject > 0
-                    ? `과목이 다른 결석 ${hiddenBySubject}건은 뺐습니다(${subjectWord} 보강). 반을 옮겼어도 이전 반 결석이 함께 보입니다.`
-                    : "반을 옮겼어도 이전 반 결석이 함께 보입니다(이월 보강)."}
+                    ? `과목이 다른 결석 ${hiddenBySubject}건은 뺐습니다(${subjectWord} 보강). 반을 옮겼어도 이전 반 결석이 함께 보입니다.${deadlineNote}`
+                    : `반을 옮겼어도 이전 반 결석이 함께 보입니다(이월 보강).${deadlineNote}`}
             </p>
             {absencePick === PICK_CUSTOM ? (
               <div className="mt-2">
@@ -305,6 +339,9 @@ export function MakeupConfirmDialog({
                   className="border-line bg-bg-soft focus:border-primary h-8 rounded-lg border px-2 text-sm outline-none"
                 />
                 {customNote ? <p className="text-amber mt-1.5 text-xs leading-snug">{customNote}</p> : null}
+                {customExpired ? (
+                  <p className="text-amber mt-1.5 text-xs leading-snug">{makeupDeadlineMessage(customDate)}.</p>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -337,6 +374,10 @@ export function MakeupConfirmDialog({
             ? "어느 수업의 보강인지 골라 주세요."
             : customEmpty
               ? "결석 날짜를 고르거나, 결석분이 아니면 '결석분 아님'을 고르세요."
+            : customExpired
+              ? "기한 안의 결석을 고르거나, 결석분이 아니면 '결석분 아님'을 고르세요."
+            : customWaiting
+              ? "결석 기록을 불러오는 중입니다 — 잠시 뒤 확인할 수 있습니다."
             : addUnits === null
               ? "보강 시수는 0보다 큰 숫자로 적어 주세요(0.5 = 1시간)."
               : mode === "merge" && chosen

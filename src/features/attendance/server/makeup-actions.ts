@@ -7,7 +7,7 @@
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { effectiveTeacherScope, getShellView } from "@/lib/auth/view-mode";
 import { getMakeupAbsenceOptions } from "./makeup-options";
 import type { MakeupAbsenceList } from "../makeup-options";
 
@@ -35,5 +35,8 @@ export async function fetchMakeupAbsences(
   //    보강 추가에서 전 과목 결석이 뜨던 것. 사무실 계정은 담당 반이 없어 scope가 null이라 안 걸러진다
   //    (전 학원을 보는 자리라 그게 맞다). 강사뷰·겸직은 effectiveTeacherId를 그대로 따른다.
   const teacherSubjects = anchorClassId ? null : ((await effectiveTeacherScope())?.subjects ?? null);
-  return getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects);
+  // 🔴 보강 기한(결석한 달의 다음 달 말일)은 **강사뷰**에서만 건다(원장 2026-09-18 *"강사뷰 보강 추가할때 1개월 초과된
+  //    보강은 보여주지말것"*) — 셸과 같은 판정(실 강사 + 겸직의 강사뷰). 사무실 화면은 1년치 그대로. 클라 값은 안 믿는다.
+  const deadline = (await getShellView()) === "teacher";
+  return getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects, deadline);
 }

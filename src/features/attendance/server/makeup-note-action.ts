@@ -21,6 +21,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
+import { makeupDeadlineError } from "./makeup-deadline-gate";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
@@ -53,6 +54,9 @@ export async function noteMakeupAgainstAbsence(input: {
   if (!studentId || !makeupClassId || !absentClassId) return { error: "필수 값이 누락되었습니다" };
   if (!YMD.test(makeupDate) || !YMD.test(absentDate)) return { error: "잘못된 날짜입니다" };
   if (absentDate === makeupDate) return { error: "결석한 날과 보강한 날이 같습니다" };
+  // 보강 기한(결석한 달의 다음 달 말일) — 강사뷰 목록이 빼는 결석을 '직접 입력'으로 되살리지 못하게 같은 판정(#77).
+  const deadlineError = await makeupDeadlineError(absentDate, makeupDate);
+  if (deadlineError) return { error: deadlineError };
 
   const supabase = await createClient();
 
