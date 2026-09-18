@@ -57,9 +57,9 @@ export type ClassTextbookPlanRow = {
   sessionCount: number;
   slotAxis: SlotAxis;
   /**
-   * 고른 교시 시작시각(`"HH:MM"`, 0268a). null = 옛 배정(축으로 읽는다) 또는 0268a 미적용.
+   * 고른 교시(`"mon|17:20"`, 0268a). null = 옛 배정(축으로 읽는다) 또는 0268a 미적용.
    */
-  slotStarts: string[] | null;
+  slotPicks: string[] | null;
   pace: LessonPace;
   termMode: "regular" | "exam";
   startDate: string;
@@ -108,14 +108,24 @@ export type ApplyResult = {
 
 /** 배정 다이얼로그가 고르는 교시 한 칸 — 그 반이 실제로 도는 시각. */
 export type ClassSlotChoice = {
+  /**
+   * 이 칩을 가리키는 키 — 화면의 선택 상태이자 저장 값의 재료.
+   * 🔴 **같은 시각이라도 담당이 다르면 다른 칩**이다(원장 2026-09-18) — 아래 `teacherLabel` 참조.
+   */
+  key: string;
   /** `"HH:MM"` — 계획 줄 `slot_start`와 같은 표기. */
   start: string;
   /** 교시 라벨(`8교시`). 없으면 null — 지어내지 않는다. */
   periodLabel: string | null;
   /** 자리면 그 이름(JJ), 강사 수업이면 null. */
   seat: "JJ" | null;
-  /** 표시용 담당 문자열(시간표와 같은 값). 권한 근거로 쓰지 말 것. */
+  /**
+   * 표시용 담당 문자열(시간표와 같은 값). 권한 근거로 쓰지 말 것.
+   * 🔑 이 값이 **칩을 가르는 축**이다 — 담당이 갈리는 날은 다른 칩으로 선다.
+   */
   teacherLabel: string | null;
-  /** 이 시각이 도는 요일(mon…sun) — "월·목" 처럼 보여 준다. */
+  /** 이 칩이 도는 요일(mon…sun) — "월·목" 처럼 보여 주고, 기입 대상도 이 요일들뿐이다. */
   dows: string[];
+  /** 기입에 넘길 값 — 요일마다 `"mon|17:20"`(= `slotPickKey`). */
+  picks: string[];
 };
