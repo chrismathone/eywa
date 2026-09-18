@@ -40,11 +40,21 @@ export default async function StudentDetailPage({
 }: {
   params: Promise<{ id: string }>;
   // jjFrom·jjTo = 성적 탭 인재원 학습 분석 기간(JJ실에서 들어오면 그 기간 그대로 — 2026-09-11).
-  searchParams: Promise<{ tab?: string; back?: string; jjFrom?: string; jjTo?: string }>;
+  // page·from·to = 진도 탭 쪽·보고서 날짜 조회(원장 2026-09-18). 탭 링크가 `?tab=`만 싣기 때문에 탭을 옮기면 초기화된다.
+  searchParams: Promise<{
+    tab?: string;
+    back?: string;
+    jjFrom?: string;
+    jjTo?: string;
+    page?: string;
+    from?: string;
+    to?: string;
+  }>;
 }) {
   const user = await requireAccess("students");
   const { id } = await params;
-  const { tab: tabParam, back: backParam, jjFrom, jjTo } = await searchParams;
+  const { tab: tabParam, back: backParam, jjFrom, jjTo, page: pageParam, from: fromParam, to: toParam } =
+    await searchParams;
   const requestedTab = isStudentTabKey(tabParam) ? tabParam : "overview";
   // 학생을 **어디서 열었는지** — 영구 삭제 뒤 돌아갈 자리다(원장 2026-09-09: 신규생 관리에서 삭제하면
   // 그 창이 원생목록으로 바뀌어 신규생 관리로 못 돌아갔다). 목록마다 링크에 `?back=<경로>`를 달면 된다.
@@ -224,7 +234,14 @@ export default async function StudentDetailPage({
         ) : tab === "grades" ? (
           <GradesTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
         ) : tab === "progress" ? (
-          <ProgressTab studentId={student.id} />
+          <ProgressTab
+            studentId={student.id}
+            page={Math.max(1, Math.floor(Number(pageParam) || 1))}
+            from={fromParam ?? null}
+            to={toParam ?? null}
+            // 쪽 링크가 다시 싣는 값이라 **검증된 내부 경로만** 넘긴다(위 backHref와 같은 판정).
+            back={isInternalPath(backParam) ? backParam : null}
+          />
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (
