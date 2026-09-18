@@ -48,7 +48,7 @@ function intervalTopics(range: LearningRange): LearningTopic[] {
 }
 
 export function learningTopics(range: LearningRange): LearningTopic[] {
-  if (!range.milestones?.length || range.track === "supplement") return intervalTopics(range);
+  if (!range.milestones?.length) return intervalTopics(range);
   const topics: LearningTopic[] = [];
   let grade = range.studyGrade, lesson = range.startBlock;
   for (const [index, milestone] of range.milestones.entries()) {
