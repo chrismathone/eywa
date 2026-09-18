@@ -212,6 +212,7 @@ export function MatrixTable({
   showGroups,
   classBilledAmounts,
   termSessionsByRow,
+  priceConfirmedRows,
   money,
   moneyNote,
   lockBefore,
@@ -233,6 +234,11 @@ export function MatrixTable({
    * 키가 없으면 '미확정'(0을 지어내지 않는다). `daysBasis`면 그 숫자는 시수가 아니라 옛 **출석 일수**다.
    */
   termSessionsByRow?: Record<string, AttendanceTermSessions>;
+  /**
+   * 회차 확정에서 **단가까지 확정된** 학생×반 줄(`rowKey`) — 이 줄엔 「단가」 표식을 달지 않는다(원장 2026-09-18
+   * *"회차 확정의 단가가 확정되었으면 출석부 단가 라벨 지울것"*). 표시 전용 — 정산액·합계 줄 경고는 그대로다.
+   */
+  priceConfirmedRows?: readonly string[];
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
   /**
@@ -273,8 +279,12 @@ export function MatrixTable({
   // 단가(티어) 미지정으로 정산에서 빠진 **반·학생 줄** — 「단가」 표식(합계 뱃지만으론 못 찾는다).
   // 🔴 학생 id가 아니라 **줄**(`classId|studentId`)로 가린다(원장 2026-09-18 제보) — 단가는 학생 × 반마다 따로라
   //    학생 id로 가리면 한 반만 비어도 그 학생의 모든 반 줄에 「단가」가 붙었다(표식이 실제보다 훨씬 많았다).
+  // 🔗 회차 확정에서 단가를 확정한 줄은 뺀다(원장 2026-09-18) — 표식은 "아직 아무 데서도 단가를 안 정했다"는 뜻이 된다.
+  const priceConfirmed = new Set(priceConfirmedRows ?? []);
   const tierMissingRows = new Set(
-    money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierRowKeys : [],
+    (money && money.tierSettlement.status !== "unwired" ? money.tierSettlement.missingTierRowKeys : []).filter(
+      (key) => !priceConfirmed.has(key),
+    ),
   );
   // 학생별 단가 티어 라벨(학교·학년 열 아랫줄) — 라벨만이라 금액 비노출. 원장 전용 금액 보기에서만 존재.
   const tierByStudent: Record<string, string> =

@@ -1515,8 +1515,8 @@ export const SHEET_DICT = {
   "att.row.thisClass": { ko: "이 반", en: "this class" },
   "att.row.attendDows": { ko: "등원 {dows}", en: "Class days {dows}" },
   "att.row.noTierTitle": {
-    ko: "{name} — 단가(수업 티어) 미지정이라 정산액에서 빠져 있습니다. 수강의 티어를 지정하면 계산에 들어갑니다",
-    en: "{name} — no rate tier is set, so this student is left out of the pay figure. Set the tier on the enrolment to include them",
+    ko: "{name} — 수업 티어도, 회차 확정 단가도 아직 없습니다(정산액에서 빠져 있음). 회차 확정에서 단가를 확정하면 표식이 사라지고, 수강의 티어를 지정하면 정산액에 들어갑니다",
+    en: "{name} — no rate tier and no confirmed session price yet (left out of the pay figure). Confirming the price in session terms clears this mark; setting the tier on the enrolment adds them to the pay figure",
   },
   "att.row.noTier": { ko: "단가", en: "No rate" },
   "att.row.tierTitle": { ko: "단가 티어 {tier}", en: "Rate tier {tier}" },

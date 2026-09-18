@@ -138,13 +138,21 @@ const MONEY: TeacherMoney = {
   },
 };
 
-function renderSheet(money: TeacherMoney | null = MONEY) {
+function renderSheet(money: TeacherMoney | null = MONEY, priceConfirmedRows?: string[]) {
   const src = buildGridSource(GROUPS, DAYS, ORDERED);
   const view = render(
     <AttendanceSearchProvider rows={SEARCH_ROWS}>
       <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
         <AttendanceSearchToggle />
-        <MatrixTable groups={GROUPS} days={DAYS} holidays={{}} showGroups money={money} ordered={ORDERED} />
+        <MatrixTable
+          groups={GROUPS}
+          days={DAYS}
+          holidays={{}}
+          showGroups
+          money={money}
+          ordered={ORDERED}
+          priceConfirmedRows={priceConfirmedRows}
+        />
       </GridProvider>
     </AttendanceSearchProvider>,
   );
@@ -261,5 +269,25 @@ describe("검색을 지우면 원래 표기 그대로 돌아온다", () => {
     expect(flat(container)).not.toBe(before);
     type(input, "");
     expect(flat(container)).toBe(before);
+  });
+});
+
+describe("「단가」 표식 ↔ 회차 확정 단가 (원장 2026-09-18)", () => {
+  const badgeOf = (container: HTMLElement) => container.querySelector('[title^="최유나 — "]');
+
+  it("티어가 없고 회차 단가도 확정 전이면 그 줄에 「단가」가 선다", () => {
+    const { container } = renderSheet();
+    expect(badgeOf(container)?.textContent).toBe("단가");
+  });
+
+  it("🔴 회차 확정에서 단가를 확정한 줄은 표식을 뗀다 — 합계 줄 경고(정산에서 빠진 사실)는 그대로", () => {
+    const { container } = renderSheet(MONEY, [rowKey(CB, S3)]);
+    expect(badgeOf(container)).toBeNull();
+    expect(flat(container)).toContain("단가 미지정 1명");
+  });
+
+  it("다른 줄의 확정은 이 줄 표식에 영향이 없다", () => {
+    const { container } = renderSheet(MONEY, [rowKey(CA, S3), rowKey(CB, S1)]);
+    expect(badgeOf(container)?.textContent).toBe("단가");
   });
 });

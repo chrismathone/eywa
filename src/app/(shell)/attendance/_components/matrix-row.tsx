@@ -86,7 +86,13 @@ export function MatrixRow({
   // 이름 칸 서식 기준일 = min(오늘, 그 달 마지막 날) — 지난 달 시트는 그 달 끝의 사실.
   const today = kstToday();
   const monthLast = days.filter((d) => !d.placeholder).at(-1)?.date ?? today;
-  const nameTone = attendanceNameTone(student.spans, student.withdrawnAt, monthLast < today ? monthLast : today);
+  // 🔴 표식은 **거르기 전 원본**을 넘긴다 — 특강 줄은 '전입/전출' 표시만 떼는 것이지 전출 사실이 없어진 게 아니다.
+  const nameTone = attendanceNameTone(
+    student.spans,
+    student.withdrawnAt,
+    monthLast < today ? monthLast : today,
+    student.badges,
+  );
   const shownBadges = noTransferBadge
     ? student.badges.filter((b) => b.kind !== "transferIn" && b.kind !== "transferOut")
     : student.badges;

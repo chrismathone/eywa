@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { attendanceClassBilledAmounts, attendanceClassConfirmedSessions, type AttendanceBillingTerm } from "./class-billing";
+import {
+  attendanceClassBilledAmounts,
+  attendanceClassConfirmedSessions,
+  attendanceClassPriceConfirmedRows,
+  type AttendanceBillingTerm,
+} from "./class-billing";
 import { rowKey } from "./grid/model";
 
 const classes = [
@@ -111,5 +116,26 @@ describe("출석부 '등록 차수' — 회차 확정의 확정 시수 (원장 2
       term({ id: "t2", invoice_id: "i2", confirmed_sessions: 2.2 }),
     ];
     expect(attendanceClassConfirmedSessions(classes, [invoice, second], rows)[key]!.units).toBe(3.3);
+  });
+});
+
+describe("「단가」 표식 연동 — 회차 확정에서 단가까지 확정된 줄 (원장 2026-09-18)", () => {
+  it("확정 시수와 단가가 함께 있는 줄만 돌려준다", () => {
+    expect(attendanceClassPriceConfirmedRows(classes, [invoice], [term({ unit_price: 30000 })])).toEqual([key]);
+    expect(attendanceClassPriceConfirmedRows(classes, [invoice], [term({ unit_price: null })])).toEqual([]);
+    expect(attendanceClassPriceConfirmedRows(classes, [invoice], [term({ confirmed_sessions: null, unit_price: null })])).toEqual([]);
+  });
+
+  it("🔴 같은 학생·반 회차 행이 둘이면 **둘 다** 확정이어야 한다 — 하나라도 미확정이면 회차 확정에 남아 있다", () => {
+    const invoices = [invoice, { ...invoice, id: "i2" }];
+    const done = term({ unit_price: 30000 });
+    expect(attendanceClassPriceConfirmedRows(classes, invoices, [done, term({ id: "t2", invoice_id: "i2", confirmed_sessions: null })])).toEqual([]);
+    expect(attendanceClassPriceConfirmedRows(classes, invoices, [done, term({ id: "t2", invoice_id: "i2", unit_price: 10000 })])).toEqual([key]);
+  });
+
+  it("출석부에 없는 학생·반, 반 없는 회차 행은 담지 않는다", () => {
+    expect(attendanceClassPriceConfirmedRows([classes[1]!], [invoice], [term({ unit_price: 30000 })])).toEqual([]);
+    expect(attendanceClassPriceConfirmedRows(classes, [invoice], [term({ class_id: null, unit_price: 30000 })])).toEqual([]);
+    expect(attendanceClassPriceConfirmedRows(classes, [], [term({ unit_price: 30000 })])).toEqual([]);
   });
 });

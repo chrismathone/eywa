@@ -48,7 +48,7 @@ describe("강사 출석부 청구액 조회 범위", () => {
   });
 
   it("허용된 반이 없으면 청구서를 조회하지 않는다", async () => {
-    expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "forbidden", studentIds: ["s1"] }])).toEqual({ billed: {}, confirmedSessions: {} });
+    expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "forbidden", studentIds: ["s1"] }])).toEqual({ billed: {}, confirmedSessions: {}, priceConfirmed: [] });
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
