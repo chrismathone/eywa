@@ -1,5 +1,15 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { MathClassCard } from "./server/landing";
+
+const mocks = vi.hoisted(() => ({ landing: vi.fn() }));
+vi.mock("./server/landing", () => ({ getMathSheetLanding: mocks.landing }));
+vi.mock("@/features/math-progress-map/server/access", () => ({ canPreviewProgressMap: async () => false }));
+vi.mock("@/components/embed-link", () => ({ EmbedLink: (props: Record<string, unknown>) => createElement("a", props) }));
+vi.mock("@/components/period-nav", () => ({ PeriodNav: () => createElement("div", null, "월 선택") }));
+import Page from "@/app/(shell)/mcs/page";
 import {
   groupMathCardsByTeacher,
   splitLandingByTrack,
@@ -88,36 +98,35 @@ describe("groupMathCardsByTeacher — 담임 묶기", () => {
   });
 });
 
-describe("배선 — 랜딩 화면이 이 규칙을 실제로 탄다", () => {
-  const page = readFileSync("src/app/(shell)/mcs/page.tsx", "utf8");
-
-  it("랜딩이 splitLandingByTrack을 부른다", () => {
-    expect(page).toContain("splitLandingByTrack");
-    expect(page).toMatch(/const panels = splitLandingByTrack\(data\.cards\)/);
+describe("랜딩에서 반과 작성률 표시", () => {
+  const card = (name: string, special: boolean, shown = 10): MathClassCard => ({
+    classId: name, className: name, isSpecial: special, teacherName: "김선생", dayCount: 8,
+    elapsedDays: 3, studentCount: 5, extraCount: 0, extraTitle: null, written: shown, shown, pct: shown ? 100 : 0,
   });
-
-  it("🔴 한쪽이 비면(=null) 단일 흐름으로 떨어진다 — 원장 \"특강 없으면 정규만\"", () => {
-    // `panels ? (…분단…) : (…단일…)` — null 분기가 있어야 빈 반쪽이 안 생긴다.
-    expect(page).toMatch(/\)\s*:\s*panels\s*\?\s*\(/);
-    expect(page).toMatch(/<TeacherGroups[\s\S]*?columnsClass=\{FULL_COLUMNS\}/);
+  async function render(cards: MathClassCard[]) {
+    mocks.landing.mockResolvedValue({ ok: true, data: { cards, month: "2026-09", monthLabel: "2026년 9월", emptyReason: null } });
+    return renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+  }
+  it("한 종류만 있으면 빈 반쪽 제목을 표시하지 않는다", async () => {
+    const html = await render([card("정규반", false)]);
+    expect(html).toContain("정규반");
+    expect(html).not.toContain(">특강<");
+    expect(html).toContain("/mcs/정규반/month?month=2026-09");
   });
-
-  it("두 흐름이 같은 기계(TeacherGroups)로 그려진다 — 두 벌이면 갈린다", () => {
-    expect(page.match(/<TeacherGroups/g)?.length).toBe(2);
+  it("두 종류가 있으면 모든 반이 한 번씩 나타난다", async () => {
+    const html = await render([card("정규반", false), card("특강반", true)]);
+    expect(html.match(/href="\/mcs\//g)).toHaveLength(2);
+    expect(html).toContain(">정규<");
+    expect(html).toContain(">특강<");
   });
-
-  it("판정은 서버가 단일 소스로 실어 준다 — 화면이 반 이름을 다시 읽지 않는다", () => {
-    // 반 이름을 화면에서 다시 읽는 순간 시간표와 갈린다 — 판정은 서버(landing.ts) 한 곳뿐이다.
-    expect(page).not.toMatch(/includes\(\s*"특강"\s*\)/);
-    expect(page).not.toContain("isSpecialLecture");
+  it("작성 대상이 없는 반은 100% 대신 출결 기록 없음을 표시한다", async () => {
+    const html = await render([card("빈반", true, 0)]);
+    expect(html).toContain("출결 기록 없음");
+    expect(html).not.toContain('role="progressbar"');
+    expect(html).not.toContain("100%");
+  });
+  it("분류는 시간표와 같은 서버 판정만 사용한다", () => {
     const landing = readFileSync("src/features/math-sheets/server/landing.ts", "utf8");
     expect(landing).toContain("isSpecialLecture(");
-  });
-
-  it("⚠️ 좁은 폭(~768px)에선 두 단이 위아래로 쌓인다 — 반 이름이 잘리지 않게", () => {
-    expect(page).toMatch(/grid-cols-1 gap-y-5 md:grid-cols-2/);
-    // 한 단 안 격자에 sm:/md: 다열을 다시 넣지 말 것(단 폭이 반이라 이름이 통째로 잘린다).
-    const panelCols = page.match(/const PANEL_COLUMNS = "([^"]+)"/)?.[1] ?? "";
-    expect(panelCols).not.toMatch(/(sm|md|lg):grid-cols-/);
   });
 });

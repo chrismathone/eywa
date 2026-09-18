@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flatLessons } from "@/features/onescreen/curriculum";
+import { planLearningGoal } from "../lib/learning-plan";
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(),
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   log: vi.fn(),
   revalidate: vi.fn(),
+  track: vi.fn(),
 }));
 vi.mock("./access", () => ({
   requireMcsClassAccess: mocks.access,
@@ -21,6 +23,7 @@ vi.mock("@/features/owner/server/queries", () => ({
 }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: mocks.log }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidate }));
+vi.mock("./learning-track", () => ({ readMathLearningTrack: mocks.track }));
 import { resetMathLearningGoals, saveMathLearningGoals } from "./learning-actions";
 
 const classId = "11111111-1111-4111-8111-111111111111",
@@ -41,6 +44,7 @@ const input = {
 let rows: Record<string, unknown[]>;
 let filters: Array<[string, string, unknown]>;
 let deleted: string[];
+let updatedRows: unknown[];
 /** delete().select()가 돌려줄 행 — 기본은 "한 건 지워졌다". */
 const deleteRows: Record<string, unknown[]> = {
   math_learning_track_goals: [{ student_id: "22222222-2222-4222-8222-222222222222" }],
@@ -54,6 +58,7 @@ beforeEach(() => {
     access: { tenantId, classId, className: "수학반", user: { id: userId } },
   });
   mocks.save.mockResolvedValue({ error: null });
+  mocks.track.mockResolvedValue("regular");
   rows = {
     class_schedules: [
       {
@@ -76,9 +81,11 @@ beforeEach(() => {
   };
   filters = [];
   deleted = [];
+  updatedRows = [{ student_id: studentId }];
   mocks.canReset.mockResolvedValue(true);
   mocks.from.mockImplementation((table: string) => {
     let deleting = false;
+    let updating = false;
     const query = {
       select: () => query,
       delete: () => {
@@ -91,12 +98,15 @@ beforeEach(() => {
         return query;
       },
       in: () => query,
+      maybeSingle: () => Promise.resolve({ data: rows[table]?.[0] ?? null, error: null }),
+      update: (value: unknown) => { updating = true; mocks.save(value); return query; },
       then: (resolve: (value: unknown) => unknown) =>
         Promise.resolve({
-          data: deleting ? (deleteRows[table] ?? []) : (rows[table] ?? []),
-          error: deleteErrors[table] ?? null,
+          data: deleting ? (deleteRows[table] ?? []) : updating ? updatedRows : (rows[table] ?? []),
+          error: deleting ? deleteErrors[table] ?? null : null,
         }).then(resolve),
       upsert: mocks.save,
+      insert: mocks.save,
     };
     return query;
   });
@@ -165,22 +175,27 @@ describe("전체 목표 저장 경계", () => {
     expect(mocks.revalidate).not.toHaveBeenCalled();
     expect(mocks.log).not.toHaveBeenCalled();
   });
+  it("다른 화면에서 먼저 만든 목표를 새 설정으로 덮어쓰지 않는다", async () => {
+    mocks.save.mockResolvedValue({ error: { code: "23505" } });
+    const result = await saveMathLearningGoals({ ...input, track: "regular", blockCount: 24, endDate: "2026-10-31" });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("목표 확장") });
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+    expect(mocks.log).not.toHaveBeenCalled();
+  });
   it("새 정규 계획은 24블록으로 저장하고 기존 목표 표를 덮지 않는다", async () => {
     expect((await saveMathLearningGoals({ ...input, track: "regular", blockCount: 24, endDate: "2026-10-31" })).ok).toBe(true);
     expect(mocks.from).toHaveBeenCalledWith("math_learning_track_goals");
     expect(mocks.from).not.toHaveBeenCalledWith("math_learning_goals");
     expect(mocks.save.mock.calls[0][0][0]).toMatchObject({ track: "regular", block_count: 24 });
-    expect(mocks.save.mock.calls[0][1]).toEqual({ onConflict: "tenant_id,class_id,student_id,track,start_date" });
   });
-  it("수요일 일정이 없는 반에는 복습 목표를 저장하지 않는다", async () => {
+  it("정규 반에는 복습 목표를 저장하지 않는다", async () => {
     expect((await saveMathLearningGoals({ ...input, track: "supplement", blockCount: 4 })).ok).toBe(false);
     expect(mocks.save).not.toHaveBeenCalled();
   });
-  it("수요일 4블록은 정규 계획과 별도 키로 저장한다", async () => {
-    rows.class_schedules = [{ ...(rows.class_schedules[0] as object), day_of_week: "wed" }];
+  it("월요일 복습 심화 반도 월 4블록 계획을 저장한다", async () => {
+    mocks.track.mockResolvedValue("supplement");
     expect((await saveMathLearningGoals({ ...input, track: "supplement", blockCount: 4 })).ok).toBe(true);
     expect(mocks.save.mock.calls[0][0][0]).toMatchObject({ track: "supplement", block_count: 4 });
-    expect(mocks.save.mock.calls[0][1].onConflict).toContain("track");
   });
   it("정규 목표에 4블록을 위조하면 저장 전에 거절한다", async () => {
     expect((await saveMathLearningGoals({ ...input, track: "regular", blockCount: 4 })).ok).toBe(false);
@@ -239,7 +254,7 @@ describe("전체 목표 초기화(배정 취소) — 원장 이상급", () => {
     expect(deleted).toEqual(["math_learning_track_goals", "math_learning_goals"]);
   });
 
-  it("🔴 수요일 복습 초기화는 옛 표(정규)를 건드리지 않는다", async () => {
+  it("🔴 복습 심화 초기화는 옛 표(정규)를 건드리지 않는다", async () => {
     await resetMathLearningGoals({ ...resetInput, track: "supplement" });
     expect(deleted).toEqual(["math_learning_track_goals"]);
   });
@@ -264,6 +279,40 @@ describe("전체 목표 초기화(배정 취소) — 원장 이상급", () => {
   it("진짜 DB 오류는 성공으로 알리지 않는다", async () => {
     deleteErrors.math_learning_track_goals = { code: "XX000" };
     expect((await resetMathLearningGoals(resetInput)).ok).toBe(false);
+    expect(mocks.log).not.toHaveBeenCalled();
+  });
+});
+
+describe("목표 확장 저장", () => {
+  function extension() {
+    const first = { ...planLearningGoal({ ...input, studentId, track: "regular" }), updatedAt: "2026-09-18T00:00:00Z" };
+    const next = planLearningGoal({ ...first, endStudyGrade: "중2", endBlock: flatLessons("중2").at(-1)! }, first);
+    rows.math_learning_track_goals = [{ study_grade: first.studyGrade, end_study_grade: first.studyGrade,
+      start_block: first.startBlock, end_block: first.endBlock, start_date: first.startDate, end_date: first.endDate,
+      block_count: first.blockCount, milestones: first.milestones, updated_at: first.updatedAt }];
+    return { ...next, classId, studentIds: [studentId], mode: "extend" as const };
+  }
+  it("기존 정거장을 유지하고 버전이 같은 목표에만 다음 정거장을 저장한다", async () => {
+    const value = extension();
+    expect(await saveMathLearningGoals(value)).toEqual({ ok: true });
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ end_study_grade: "중2", milestones: value.milestones }));
+    expect(filters).toContainEqual(["math_learning_track_goals", "updated_at", value.updatedAt]);
+  });
+  it("확장을 가장해 이전 도착점을 바꾸면 저장하지 않는다", async () => {
+    const value = extension();
+    value.milestones![0] = { ...value.milestones![0], endBlock: blocks[8] };
+    expect((await saveMathLearningGoals(value)).ok).toBe(false);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("다른 화면에서 수정한 목표를 오래된 데이터로 확장하지 않는다", async () => {
+    const value = extension();
+    expect((await saveMathLearningGoals({ ...value, updatedAt: "old" })).ok).toBe(false);
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+  it("조회 뒤 동시 수정으로 갱신 대상이 없어져도 성공으로 표시하지 않는다", async () => {
+    const value = extension(); updatedRows = [];
+    expect((await saveMathLearningGoals(value)).ok).toBe(false);
+    expect(mocks.revalidate).not.toHaveBeenCalled();
     expect(mocks.log).not.toHaveBeenCalled();
   });
 });

@@ -1,14 +1,16 @@
-import { flatLessons, splitLessons, semesterOfLesson } from "@/features/onescreen/curriculum";
+import { flatLessons, splitLessons } from "@/features/onescreen/curriculum";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { addDays, monthRange, shiftMonth } from "@/lib/date-kst";
 import { classDaysOf, type MathScheduleRow } from "./class-days";
 import type { EnrollSpan } from "@/features/attendance/enrollment-span";
 import { dowKeyOf } from "@/features/class-sheets/lib/week";
+import { learningTopics, learningTopicIndex, topicSegments, type LearningMilestone, type LearningTopic } from "./learning-path";
 
 /** A goal is stored once; monthly, weekly and daily targets are derived, never copied into reports. */
 export type LearningGoal = {
   studentId: string;
   studyGrade: string;
+  endStudyGrade?: string;
   startBlock: string;
   endBlock: string;
   startDate: string;
@@ -17,6 +19,8 @@ export type LearningGoal = {
   track?: MathLearningTrack;
   /** Absent only on goals saved before the 24-block semester plan. */
   blockCount?: number | null;
+  milestones?: LearningMilestone[];
+  updatedAt?: string;
 };
 export type LearningRecord = {
   date: string;
@@ -66,29 +70,65 @@ export type LearningData = {
   referenceDate: string;
   context: LearningContext;
   track?: MathLearningTrack;
-  supplement?: Pick<LearningData, "goals" | "progress" | "records">;
 };
 
-export function standardGoalDates(month: string, track: MathLearningTrack) {
+export function standardGoalDates(month: string, track: MathLearningTrack, blocks: number = MATH_LEARNING_CADENCE[track].totalBlocks) {
   return {
     startDate: `${month}-01`,
-    endDate: monthRange(shiftMonth(month, MATH_LEARNING_CADENCE[track].months - 1)).to,
+    endDate: monthRange(shiftMonth(month, Math.max(1, blocks / MATH_LEARNING_CADENCE[track].monthlyBlocks) - 1)).to,
   };
 }
 
 /** One course interval is divided into teaching blocks without changing the source curriculum. */
-export function learningBlocks(goal: LearningGoal): string[] {
-  const topics = goalBlocks(goal);
-  if (!goal.blockCount || !topics.length) return topics;
-  return Array.from({ length: goal.blockCount }, (_, index) => {
-    const from = Math.floor((topics.length * index) / goal.blockCount!);
-    const to = Math.max(from, Math.ceil((topics.length * (index + 1)) / goal.blockCount!) - 1);
-    return from === to ? topics[from]! : `${topics[from]} ~ ${topics[to]}`;
-  });
+export function goalMilestones(goal: LearningGoal): LearningMilestone[] {
+  return goal.milestones?.length ? goal.milestones : [{ studyGrade: goal.endStudyGrade ?? goal.studyGrade, endBlock: goal.endBlock, endDate: goal.endDate, blockCount: goal.blockCount ?? goalBlocks(goal).length }];
 }
 
-export function isLearningTrackDate(date: string, track: MathLearningTrack = "regular") {
-  return (dowKeyOf(date) === "wed") === (track === "supplement");
+/** Extending keeps every previous stop and its allocation; only the new tail is planned. */
+export function planLearningGoal(draft: LearningGoal, previous?: LearningGoal): LearningGoal {
+  const track = draft.track ?? "regular";
+  const goal = previous ? { ...draft, studyGrade: previous.studyGrade, startBlock: previous.startBlock, startDate: previous.startDate, updatedAt: previous.updatedAt } : draft;
+  const nextStop = { studyGrade: goal.endStudyGrade ?? goal.studyGrade, endBlock: goal.endBlock, endDate: goal.endDate, blockCount: 0 };
+  const topics = learningTopics({ ...goal, milestones: [...(previous ? goalMilestones(previous) : []), nextStop] });
+  const oldEnd = previous ? topics.findIndex((topic) => topic.grade === (previous.endStudyGrade ?? previous.studyGrade) && topic.lesson === previous.endBlock) : -1;
+  const added = track === "supplement" ? 4 : topicSegments(topics.slice(oldEnd + 1)).length * 24;
+  const count = (previous?.blockCount ?? (previous ? goalBlocks(previous).length : 0)) + added;
+  const dates = standardGoalDates(goal.startDate.slice(0, 7), track, count);
+  return {
+    ...goal, ...dates, blockCount: count,
+    milestones: [...(previous ? goalMilestones(previous) : []), { studyGrade: goal.endStudyGrade ?? goal.studyGrade, endBlock: goal.endBlock, endDate: dates.endDate, blockCount: count }],
+  };
+}
+
+function allocatedSegments(goal: LearningGoal): { topics: LearningTopic[]; blocks: number; offset: number }[] {
+  const topics = learningTopics(goal);
+  if (!topics.length) return [];
+  if (!goal.blockCount) return [{ topics, blocks: topics.length, offset: 0 }];
+  if (goal.track === "supplement") return [{ topics, blocks: goal.blockCount, offset: 0 }];
+  const result: { topics: LearningTopic[]; blocks: number; offset: number }[] = [];
+  let from = 0, offset = 0;
+  for (const milestone of goalMilestones(goal)) {
+    const to = topics.findIndex((topic, index) => index >= from && topic.grade === milestone.studyGrade && topic.lesson === milestone.endBlock);
+    if (to < from) return [];
+    const segments = topicSegments(topics.slice(from, to + 1));
+    const blocks = (milestone.blockCount - offset) / segments.length;
+    for (const segment of segments) {
+      result.push({ topics: segment, blocks, offset });
+      offset += blocks;
+    }
+    from = to + 1;
+  }
+  return result;
+}
+
+export function learningBlocks(goal: LearningGoal): string[] {
+  const crossCourse = goal.studyGrade !== (goal.endStudyGrade ?? goal.studyGrade);
+  return allocatedSegments(goal).flatMap(({ topics, blocks }) => Array.from({ length: blocks }, (_, index) => {
+    const from = Math.floor(topics.length * index / blocks);
+    const to = Math.max(from, Math.ceil(topics.length * (index + 1) / blocks) - 1);
+    const label = (topic: LearningTopic) => crossCourse ? `${topic.grade} · ${topic.lesson}` : topic.lesson;
+    return from === to ? label(topics[from]) : `${label(topics[from])} ~ ${label(topics[to])}`;
+  }));
 }
 
 export function validPlanDate(value: string): boolean {
@@ -98,12 +138,9 @@ export function validPlanDate(value: string): boolean {
 }
 
 export function goalBlocks(
-  goal: Pick<LearningGoal, "studyGrade" | "startBlock" | "endBlock">,
+  goal: Pick<LearningGoal, "studyGrade" | "endStudyGrade" | "startBlock" | "endBlock">,
 ): string[] {
-  const blocks = flatLessons(goal.studyGrade);
-  const start = blocks.indexOf(goal.startBlock),
-    end = blocks.indexOf(goal.endBlock);
-  return start < 0 || end < start ? [] : blocks.slice(start, end + 1);
+  return learningTopics(goal).map((topic) => topic.lesson);
 }
 
 export function learningGoalError(goal: LearningGoal): string | null {
@@ -111,20 +148,34 @@ export function learningGoalError(goal: LearningGoal): string | null {
     return "시작일과 완료 예정일을 확인해 주세요.";
   if (goal.startDate > goal.endDate)
     return "완료 예정일은 시작일 이후로 정해 주세요.";
-  if (goal.endDate > addDays(goal.startDate, 730))
-    return "전체 목표 기간은 2년 이내로 설정해 주세요.";
+  if (goal.endDate > addDays(goal.startDate, goal.blockCount ? 3653 : 730))
+    return `전체 목표 기간은 ${goal.blockCount ? "10" : "2"}년 이내로 설정해 주세요.`;
   if (!goalBlocks(goal).length)
-    return "같은 과정에서 시작 블록과 그 이후의 목표 블록을 선택해 주세요.";
+    return "시작 단원보다 뒤에 있는 최종 목표 과정·단원을 선택해 주세요.";
   if ((goal.textbook?.length ?? 0) > 500)
     return "교재 이름은 500자 이내로 입력해 주세요.";
   if (goal.blockCount != null) {
     const track = goal.track ?? "regular";
     const policy = MATH_LEARNING_CADENCE[track];
-    const dates = standardGoalDates(goal.startDate.slice(0, 7), track);
-    if (goal.blockCount !== policy.totalBlocks || goal.startDate !== dates.startDate || goal.endDate !== dates.endDate)
-      return track === "regular" ? "정규 목표는 시작 월부터 3개월·24블록으로 설정해 주세요." : "수요일 목표는 한 달·4블록으로 설정해 주세요.";
-    if (track === "regular" && semesterOfLesson(goal.studyGrade, goal.startBlock) !== semesterOfLesson(goal.studyGrade, goal.endBlock))
-      return "정규 목표는 같은 학기의 시작·완료 단원으로 설정해 주세요.";
+    if (!Number.isInteger(goal.blockCount) || goal.blockCount <= 0 || goal.blockCount > policy.monthlyBlocks * 120)
+      return "전체 목표는 10년 이내의 블록 수로 설정해 주세요.";
+    const milestones = goalMilestones(goal);
+    if (milestones.length > 100) return "목표 정거장은 100개 이내로 설정해 주세요.";
+    const last = milestones.at(-1)!;
+    if (last.studyGrade !== (goal.endStudyGrade ?? goal.studyGrade) || last.endBlock !== goal.endBlock || last.endDate !== goal.endDate || last.blockCount !== goal.blockCount)
+      return "마지막 정거장과 최종 목표가 일치해야 합니다.";
+    let previousCount = 0, previousDate = goal.startDate;
+    for (const milestone of milestones) {
+      if (!Number.isInteger(milestone.blockCount) || milestone.blockCount <= previousCount || !validPlanDate(milestone.endDate) || milestone.endDate <= previousDate)
+        return "목표 정거장의 순서와 완료일을 확인해 주세요.";
+      const dates = standardGoalDates(goal.startDate.slice(0, 7), track, milestone.blockCount);
+      if (milestone.blockCount % policy.monthlyBlocks || goal.startDate !== dates.startDate || milestone.endDate !== dates.endDate)
+        return "목표 기간과 월별 블록 수를 확인해 주세요.";
+      previousCount = milestone.blockCount;
+      previousDate = milestone.endDate;
+    }
+    if (track === "regular" && (!allocatedSegments(goal).length || allocatedSegments(goal).some((segment) => segment.blocks !== 24)))
+      return "정규 목표는 학기별 24블록·3개월로 배분해 주세요.";
   }
   return null;
 }
@@ -145,8 +196,7 @@ export function learningDays(
       if (
         date < goal.startDate ||
         date > goal.endDate ||
-        context.holidays[date] ||
-        !isLearningTrackDate(date, goal.track)
+        context.holidays[date]
       )
         continue;
       if (
@@ -165,7 +215,7 @@ export function learningDays(
   const blocks = learningBlocks(goal);
   if (goal.blockCount != null) {
     const policy = MATH_LEARNING_CADENCE[goal.track ?? "regular"];
-    const groups = Array.from({ length: policy.months }, (_, index) => {
+    const groups = Array.from({ length: goal.blockCount / policy.monthlyBlocks }, (_, index) => {
       const month = shiftMonth(goal.startDate.slice(0, 7), index);
       return dates.filter((date) => date.startsWith(month));
     });
@@ -224,19 +274,18 @@ export function buildLearningProgress(
   const days = learningDays(goal, context),
     blocks = learningBlocks(goal),
     total = blocks.length;
-  const course = flatLessons(goal.studyGrade),
-    start = course.indexOf(goal.startBlock);
+  const course = learningTopics(goal);
+  const segments = allocatedSegments(goal);
   let current: number | null = null,
     currentBlock: string | null = null,
     currentDate: string | null = null;
-  const topicCount = goalBlocks(goal).length;
   const reviewDates = new Set<string>();
   const plannedDates = new Set(days.map((day) => day.date));
   // Latest position wins, including a return to earlier blocks for revision. Future reports never count.
   for (const record of [...records].sort((a, b) =>
     a.date.localeCompare(b.date),
   )) {
-    if (record.date < goal.startDate || record.date > referenceDate || !isLearningTrackDate(record.date, goal.track)) continue;
+    if (record.date < goal.startDate || record.date > referenceDate) continue;
     if (goal.track === "supplement") {
       if (record.date > goal.endDate || !plannedDates.has(record.date) || !record.progress?.trim()) continue;
       reviewDates.add(record.date);
@@ -245,11 +294,24 @@ export function buildLearningProgress(
       currentDate = record.date;
       continue;
     }
-    const index = recordBlockIndex(record.progress, goal.studyGrade);
-    if (index == null) continue;
-    const position = goal.blockCount && topicCount ? ((index - start + 1) / topicCount) * total : index - start + 1;
+    const index = learningTopicIndex(record.progress, course);
+    if (index == null) {
+      // Preserve the legacy same-course behavior for records outside a selected interval.
+      if (goal.studyGrade !== (goal.endStudyGrade ?? goal.studyGrade)) continue;
+      const before = recordBlockIndex(record.progress, goal.studyGrade);
+      if (before == null) continue;
+      const full = flatLessons(goal.studyGrade);
+      current = before < full.indexOf(goal.startBlock) ? 0 : total;
+      currentBlock = full[before]; currentDate = record.date;
+      continue;
+    }
+    const topic = course[index];
+    const segment = segments.find((s) => s.topics.some((t) => t.grade === topic.grade && t.lesson === topic.lesson));
+    if (!segment) continue;
+    const local = segment.topics.findIndex((t) => t.grade === topic.grade && t.lesson === topic.lesson);
+    const position = segment.offset + (local + 1) / segment.topics.length * segment.blocks;
     current = Math.round(Math.max(0, Math.min(total, position)) * 10) / 10;
-    currentBlock = course[index] ?? null;
+    currentBlock = goal.studyGrade === (goal.endStudyGrade ?? goal.studyGrade) ? topic.lesson : `${topic.grade} · ${topic.lesson}`;
     currentDate = record.date;
   }
   const target = plannedAt(days, referenceDate),

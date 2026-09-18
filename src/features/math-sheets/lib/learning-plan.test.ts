@@ -41,7 +41,7 @@ const record = (date: string, index: number) => ({
   textbook: null,
 });
 
-describe("정규 24블록과 수요일 복습 4블록", () => {
+describe("반별 정규 24블록과 복습 심화 4블록", () => {
   const topics = curriculumForGradeSemester("중1", 1).flatMap((unit) => unit.lessons);
   const regular: LearningGoal = {
     ...goal, track: "regular", blockCount: 24,
@@ -72,15 +72,15 @@ describe("정규 24블록과 수요일 복습 4블록", () => {
     expect(plannedAt(days, "2026-09-30")).toBe(8);
     expect(plannedAt(days, "2026-10-31")).toBe(16);
     expect(plannedAt(days, "2026-11-30")).toBe(24);
-    expect(days.some((day) => new Date(`${day.date}T00:00:00Z`).getUTCDay() === 3)).toBe(false);
+    expect(days.some((day) => new Date(`${day.date}T00:00:00Z`).getUTCDay() === 3)).toBe(true);
     expect(days.some((day) => day.date === "2026-09-24")).toBe(false);
   });
-  it("정규 진도는 단원 위치를 24블록으로 환산하고 수요일 복습으로 후퇴하지 않는다", () => {
+  it("정규 반에서는 수요일 기록도 같은 정규 진도로 반영한다", () => {
     const monday = { date: "2026-09-14", progress: topics[12], textbook: null };
     const p = buildLearningProgress(regular, mixed, [monday, { ...monday, date: "2026-09-16", progress: topics[0] }], "2026-09-17");
-    expect(p.current).toBe(Math.round(13 / topics.length * 24 * 10) / 10);
-    expect(p.currentBlock).toBe(topics[12]);
-    expect(p.currentDate).toBe("2026-09-14");
+    expect(p.current).toBe(Math.round(1 / topics.length * 24 * 10) / 10);
+    expect(p.currentBlock).toBe(topics[0]);
+    expect(p.currentDate).toBe("2026-09-16");
     expect(p.total).toBe(24);
   });
   it("마지막 단원에 도달하면 정확히 24블록·100%가 된다", () => {
@@ -89,13 +89,13 @@ describe("정규 24블록과 수요일 복습 4블록", () => {
     expect(p.percent).toBe(100);
     expect(p.status).toBe("done");
   });
-  it("수요일은 월 4블록이며 같은 단원의 복습도 날짜별로 누적한다", () => {
+  it("복습 심화 반은 요일과 무관하게 월 4블록이며 같은 단원도 날짜별로 누적한다", () => {
     const days = learningDays(review, mixed);
-    expect(days.every((day) => new Date(`${day.date}T00:00:00Z`).getUTCDay() === 3)).toBe(true);
+    expect(days.some((day) => new Date(`${day.date}T00:00:00Z`).getUTCDay() === 1)).toBe(true);
     expect(days.at(-1)?.target).toBe(4);
     const records = ["2026-09-02", "2026-09-09", "2026-09-14", "2026-09-16", "2026-09-16", "2026-09-23"].map((date) => ({ date, progress: topics[0], textbook: null }));
     const p = buildLearningProgress(review, mixed, records, "2026-09-17");
-    expect(p.current).toBe(3); // Monday, duplicate Wednesday and future report do not count.
+    expect(p.current).toBe(4); // All class days count, duplicate/future reports do not.
     expect(p.total).toBe(4);
     expect(p.currentBlock).toBe(topics[0]);
   });
