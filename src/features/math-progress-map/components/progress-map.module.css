@@ -63,6 +63,24 @@
   color-scheme: dark;
 }
 
+.original {
+  /* 확정 시안의 일·주·월 팔레트. MCS 막대의 현재/목표 색상과 독립적이다. */
+  --green: #0d7743;
+  --map-completed-fill: #cfe4d9;
+  --map-completed-ink: #0d7743;
+  --map-quarter-1: #5f89da;
+  --map-quarter-2: #4a9972;
+  --map-quarter-3: #b38147;
+  --map-quarter-4: #917cd6;
+  --map-quarter-1-fill: #e3ebf9;
+  --map-quarter-2-fill: #dfede7;
+  --map-quarter-3-fill: #f7eadb;
+  --map-quarter-4-fill: #f8f6fc;
+  --map-quarter-opacity: 1;
+}
+
+.quarterSegment { opacity: var(--map-quarter-opacity, .75); }
+
 .original [data-dial-layer="guides"] {
   display: none;
 }
@@ -78,7 +96,7 @@
 .compactLegend { display: grid; grid-template-columns: repeat(3, max-content); gap: 5px 12px; margin-left: auto; padding: 2px 0; }
 .compactLegend > li { white-space: nowrap; font-size: 11px; }
 .mapFrame { width: 80%; }
-.surface[data-learning="true"] { --green: #ff0000; --map-completed-tick: #ff0000; --map-week-completed-fill: #ff0000; --map-completed-ink: #ff0000; --map-progress-fill: #e5e5ff; --map-progress-ink: #0000ff; --map-in-progress-tick: #0000ff; }
+/* MCS도 기존 시계 팔레트를 쓴다: 주·날짜 눈금은 네이비, 일간 완료는 연녹색, 월은 분기색. */
 .surface[data-learning="true"] .mapFrame { width: 100%; }
 @media (max-width: 1023px) { .mapFrame { width: 100%; } }
 

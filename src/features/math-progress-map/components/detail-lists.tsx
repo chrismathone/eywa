@@ -61,7 +61,7 @@ function MonthRow({ m }: { m: MonthView }) {
 export function YearList({ months: allMonths, grouped = false }: { months: MonthView[]; grouped?: boolean }) {
   // 🔴 종강 뒤 달은 **줄을 세우지 않는다** — 링에선 칸을 남기지만(원이라 빼면 이가 빠진다) 목록엔 그럴 이유가 없고,
   //    남겨 두면 눌러도 아무 일도 안 일어나는 줄이 된다(무반응은 고장으로 읽힌다, 적대 리뷰 2026-09-16).
-  const months = allMonths.filter((m) => !m.afterEnd);
+  const months = allMonths.filter((m) => !m.beforeStart && !m.afterEnd);
   if (!grouped) {
     return (
       <ul className="flex flex-col gap-0.5">
@@ -109,7 +109,7 @@ export function MonthList({ month }: { month: MonthView }) {
   const { focus, selectWeek } = useProgressMap();
   return (
     <ul className="flex flex-col gap-0.5">
-      {month.weeks.map((w) => (
+      {month.weeks.filter(w => !w.inactive).map((w) => (
         <DetailRow
           key={w.index}
           on={focus.week === w.index}

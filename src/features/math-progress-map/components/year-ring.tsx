@@ -47,17 +47,18 @@ export const YearRing = memo(function YearRing({ showYear = false }: { showYear?
         const pp = { x: c.x, y: c.y + STACK_DY + 1 };
         const pill = pctPill(m.status === "completed" ? "completed" : m.isCurrent ? "in-progress" : "other");
         // 종강 뒤 달 — 칸은 남기되(원이라 빼면 이가 빠진다) 누르지 못하고, 뜻 없는 `—` 알약은 아예 안 그린다.
-        const dead = m.afterEnd;
+        const dead = m.beforeStart || m.afterEnd;
         return (
           <g key={m.month} opacity={dead ? AFTER_END_OPACITY : undefined}>
             <Segment
               d={arcPath(RINGS.year[0], RINGS.year[1], a0, a1)}
               fill={dead ? AFTER_END_FILL : m.plannedPages === 0 ? STATUS_FILL["no-plan"] : m.isPast || m.isCurrent ? tint.mid : tint.soft}
-              stroke={m.isCurrent ? TODAY_STROKE : undefined}
-              strokeWidth={m.isCurrent ? CURRENT_STROKE_WIDTH : 0}
-              dashed={m.isCurrent}
-              selected={focused}
-              label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 · 종강 이후` : `${showYear ? `${year}년 ` : ""}${m.month}월 · ${m.plan?.chapter ?? "계획 없음"} · 진도율 ${periodPercent(progress, m.pct, m.plannedPages)}`}
+              stroke={!dead && m.isCurrent ? TODAY_STROKE : undefined}
+              strokeWidth={!dead && m.isCurrent ? CURRENT_STROKE_WIDTH : 0}
+              dashed={!dead && m.isCurrent}
+              selected={!dead && focused}
+              disabled={dead}
+              label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 · ${m.beforeStart ? "첫 등원 이전" : "종강 이후"}` : `${showYear ? `${year}년 ` : ""}${m.month}월 · ${m.plan?.chapter ?? "계획 없음"} · 진도율 ${periodPercent(progress, m.pct, m.plannedPages)}`}
               target={{ kind: "month", month: m.month }}
               onSelect={dead || !years.includes(year) ? undefined : () => selectMonth(m.month)}
             />

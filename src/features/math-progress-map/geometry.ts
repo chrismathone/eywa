@@ -25,9 +25,9 @@ export const RINGS = {
   yearArc: [136, 142] as Band,
   /** '일간' 라벨 알약(높이 28)이 12시에 앉는 반지름 — 가운데 원(132)과 일간 링(162) 사이에 딱 들어간다 */
   dayLabel: 147,
-  /** 일간 — 초점 주 7일을 넓혀 그린다 */
+  /** 일간 — 초점 주의 실제 수업일을 넓혀 그린다 */
   day: [162, 230] as Band,
-  /** 주간 — 그 해 모든 날을 가는 눈금으로 */
+  /** 주간 — 각 주의 실제 수업을 눈금으로 */
   week: [238, 298] as Band,
   /** 월간 — 달마다 주 칸 */
   month: [306, 378] as Band,
@@ -51,7 +51,7 @@ export const DRILL_RINGS = {
 /** 달 칸 사이 틈(도). 주·일 칸은 더 좁다. */
 export const GAP = { month: 0.6, week: 0.5, dayTick: 0.08, dayRing: 1.2, quarter: 1.5 } as const;
 
-/** 일간 링 — 하루 한 칸의 각도(7일 = 77°). */
+/** 일간 링 — 수업 한 칸의 각도(2회 = 22°). */
 export const DAY_RING_STEP = 11;
 
 /**
@@ -128,7 +128,7 @@ export function midAngle([a0, a1]: readonly [number, number]): number {
 
 /**
  * 일간 링의 칸 각도 — 기준 칸의 중심을 anchorAngle에 맞추고 하루 `DAY_RING_STEP`°씩 펼친다.
- * anchorIndex는 월=0 ~ 일=6. 달 첫·마지막 주의 빈 요일도 포함해 선택한 날짜가 원래 눈금과 같은 방향에 선다.
+ * anchorIndex는 표시할 수업의 순번이다. 선택한 수업을 같은 날짜 눈금과 나란히 맞춘다.
  * 기준 칸을 생략하면 전체 묶음의 가운데를 맞춘다.
  */
 export function dayRingAngles(anchorAngle: number, dayCount: number, anchorIndex = (dayCount - 1) / 2): [number, number][] {

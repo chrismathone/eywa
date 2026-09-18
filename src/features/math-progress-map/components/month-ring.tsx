@@ -30,9 +30,9 @@ export const MonthRing = memo(function MonthRing({ showYear = false }: { showYea
           const angles = weekAngles(year, m.month, w.index);
           if (!angles) return null;
           const [a0, a1] = withGap(angles, GAP.week);
-          // 종강 뒤 달의 주차 — 칸만 남기고 글자·클릭을 뺀다(연간 링과 같은 판정 한 곳: `m.afterEnd`).
-          const dead = m.afterEnd;
-          const focused = year === view.year && focus.month === m.month && focus.week === w.index;
+          // 첫 등원 이전·종강 이후 주차는 칸만 남기고 글자·클릭·날짜 강조를 뺀다.
+          const dead = w.inactive;
+          const focused = !dead && year === view.year && focus.month === m.month && focus.week === w.index;
           const light = w.status === "no-plan" || w.status === "planned" || w.status === "none";
           const stroke = w.isCurrent ? TODAY_STROKE : light ? HAIRLINE : undefined;
           const lp = polar(LABEL_R, midAngle(angles));
@@ -41,11 +41,12 @@ export const MonthRing = memo(function MonthRing({ showYear = false }: { showYea
               <Segment
                 d={arcPath(RINGS.month[0], RINGS.month[1], a0, a1)}
                 fill={dead ? AFTER_END_FILL : WEEK_FILL[w.status]}
-                stroke={stroke}
-                strokeWidth={w.isCurrent ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
-                dashed={w.isCurrent}
+                stroke={dead ? undefined : stroke}
+                strokeWidth={dead ? 0 : w.isCurrent ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
+                dashed={!dead && w.isCurrent}
                 selected={focused}
-                label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · 종강 이후` : `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${periodPercent(progress, w.pct, w.plannedPages)}`}
+                disabled={dead}
+                label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${m.afterEnd ? "종강 이후" : "첫 등원 이전"}` : `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${periodPercent(progress, w.pct, w.plannedPages)}`}
                 target={{ kind: "week", month: m.month, week: w.index }}
                 onSelect={dead || !years.includes(year) ? undefined : () => selectWeek(m.month, w.index, year)}
               />

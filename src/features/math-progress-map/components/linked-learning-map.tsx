@@ -8,6 +8,7 @@ import { learningBlockLabel } from "@/features/math-sheets/lib/learning-label";
 import { learningTimelineTopicIndex } from "@/features/math-sheets/lib/learning-path";
 import { buildLearningMap, learningSheetHref, lessonsInPeriod, mapPeriod, type LearningMapLesson } from "../learning-map";
 import { buildLearningDashboard } from "../learning-dashboard";
+import { courseStartDate } from "../course-start";
 import { ProgressMapSnapshot } from "./map-state";
 import { useLinkedMapState } from "./linked-map-state";
 import { PeriodSelector } from "./period-selector";
@@ -63,7 +64,7 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
     </section>
     <div className={styles.periodControls}><PeriodSelector />
       <div className={styles.controls}>
-        <label>날짜 <input type="date" aria-label="진도맵 날짜" value={selection.date} min={`${map.years[0]}-01-01`} max={`${map.years.at(-1)}-12-31`}
+        <label>날짜 <input type="date" aria-label="진도맵 날짜" value={selection.date} min={courseStartDate(dashboard) ?? `${map.years[0]}-01-01`} max={`${map.years.at(-1)}-12-31`}
           onChange={event => { if (/^\d{4}-\d{2}-\d{2}$/.test(event.target.value)) select({ date: event.target.value, mode: "day" }); }} /></label>
         <button onClick={() => select({ date: map.referenceDate, mode: "year" })}>기준일로</button>
         {undated.length ? <button aria-pressed={selection.undated} onClick={() => select({ undated: !selection.undated })}>날짜 미확정 {undated.length}차시</button> : null}

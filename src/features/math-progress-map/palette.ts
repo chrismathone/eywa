@@ -23,7 +23,7 @@ function tint(token: string, pct: number): string {
 }
 
 function quarterTint(q: number, token: string, pct: number): string {
-  return `color-mix(in srgb, var(--map-quarter-${q}, var(${token})) ${pct}%, var(--map-tint-base, white))`;
+  return `var(--map-quarter-${q}-fill, color-mix(in srgb, var(--map-quarter-${q}, var(${token})) ${pct}%, var(--map-tint-base, white)))`;
 }
 
 export const QUARTER_TINT: Record<1 | 2 | 3 | 4, QuarterTint> = {
@@ -46,7 +46,7 @@ export function displayStatusOf(status: ProgressStatus | null, date: string, asO
 }
 
 /**
- * **종강 뒤 칸** — 학습 상태가 아니라 "여기부터는 수업이 없다"는 뜻이라 상태색 어느 것도 쓰지 않는다
+ * **첫 등원 이전·종강 이후 칸** — 학습 상태가 아니라 수강기간 밖이므로 상태색 어느 것도 쓰지 않는다
  * (`no-plan`(흰 칸)과도 다르다 — 그건 수업 기간 안의 빈 달이다). 원장 2026-09-16.
  */
 export const AFTER_END_FILL = tint("--neutral-fill", 8);
@@ -55,7 +55,7 @@ export const AFTER_END_OPACITY = 0.4;
 
 export const STATUS_FILL: Record<DisplayStatus, string> = {
   unknown: "var(--bg-soft)",
-  completed: tint("--green", 20),
+  completed: `var(--map-completed-fill, ${tint("--green", 20)})`,
   "in-progress": `var(--map-progress-fill, ${tint("--chart-3", 30)})`,
   missed: tint("--neutral-fill", 42),
   planned: "var(--bg-soft)",

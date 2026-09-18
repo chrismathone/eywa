@@ -59,7 +59,7 @@ export function ContinuousDial() {
         const quarterMonths = months.filter((month) => month.quarter === q.q);
         const donePages = quarterMonths.reduce((sum, month) => sum + month.donePages, 0);
         const plannedPages = quarterMonths.reduce((sum, month) => sum + month.plannedPages, 0);
-        return { ...q, months: quarterMonths, donePages, plannedPages, pct: pctOf(donePages, plannedPages), afterEnd: quarterMonths.every(month => month.afterEnd) };
+        return { ...q, months: quarterMonths, donePages, plannedPages, pct: pctOf(donePages, plannedPages), afterEnd: quarterMonths.every(month => month.afterEnd), beforeStart: quarterMonths.every(month => month.beforeStart) };
       }),
     },
     selectMonth: (month: number) => {
@@ -67,7 +67,8 @@ export function ContinuousDial() {
       setViewedPosition(monthPosition(year, month));
     },
     selectQuarter: (quarter: 1 | 2 | 3 | 4) => {
-      const month = months[(quarter - 1) * 3]!;
+      const month = months.find(month => month.quarter === quarter && !month.beforeStart && !month.afterEnd);
+      if (!month) return;
       const year = Number(month.weeks[0]!.start.slice(0, 4));
       if (!years.includes(year)) return;
       setViewedPosition(monthPosition(year, month.month));

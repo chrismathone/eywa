@@ -5,26 +5,34 @@ import { daysInMonth, weeksOfMonth, ymd } from "../calendar";
 import { monthPosition, periodAt } from "../continuous-timeline";
 import { buildYearView } from "../derive";
 import { focusOfDate } from "../focus";
-import { readMapSelection, type LearningMap, type MapSelection } from "../learning-map";
+import { mapPeriod, readMapSelection, type LearningMap, type MapSelection } from "../learning-map";
+import { courseStartDate } from "../course-start";
 import type { MapDisplay, StudentProgress } from "../model";
 import { planVsActual } from "../pace";
 import { progressForYear } from "../years";
 import type { ProgressMapState } from "./map-state";
 
 type Selection = MapSelection & { display: MapDisplay; revision: number };
-function read(params: URLSearchParams, map: LearningMap): Selection {
+function read(params: URLSearchParams, map: LearningMap, start: string | null): Selection {
   const display = params.get("display");
-  return { ...readMapSelection(params, map), display: display === "full" || display === "continuous" ? display : "drill", revision: 0 };
+  const selection = readMapSelection(params, map);
+  if (start && selection.date < start && map.years.includes(Number(start.slice(0, 4)))) selection.date = start;
+  return { ...selection, display: display === "full" || display === "continuous" ? display : "drill", revision: 0 };
 }
 
 /** One selection for rings, timeline, rails, roadmap and browser history. Exploration never changes the report reference date. */
 export function useLinkedMapState(sourceProgress: StudentProgress, map: LearningMap, initialQuery: string) {
-  const [selection, setSelection] = useState(() => read(new URLSearchParams(initialQuery), map));
+  const start = courseStartDate(sourceProgress);
+  const [selection, setSelection] = useState(() => read(new URLSearchParams(initialQuery), map, start));
   const latest = useRef(selection);
   const select = useCallback((patch: Partial<Selection>, scroll = false) => {
     const previous = latest.current;
     const next = { ...previous, lesson: null, undated: false, ...patch, revision: previous.revision + (scroll ? 0 : 1) };
     if (!map.years.includes(Number(next.date.slice(0, 4)))) return;
+    if (start && next.date < start) {
+      if (mapPeriod(next).to < start) return;
+      next.date = start;
+    }
     if (next.date === previous.date && next.mode === previous.mode && next.display === previous.display && next.lesson === previous.lesson && next.undated === previous.undated) return;
     const url = new URL(window.location.href);
     url.searchParams.set("date", next.date); url.searchParams.set("view", next.mode); url.searchParams.set("display", next.display);
@@ -35,15 +43,15 @@ export function useLinkedMapState(sourceProgress: StudentProgress, map: Learning
     // Preserve Next's navigation state; scrolling replaces the current location instead of filling history.
     window.history[scroll ? "replaceState" : "pushState"](window.history.state, "", url);
     latest.current = next; setSelection(next);
-  }, [map]);
+  }, [map, start]);
   useEffect(() => {
     const back = () => {
-      const next = { ...read(new URLSearchParams(window.location.search), map), revision: latest.current.revision + 1 };
+      const next = { ...read(new URLSearchParams(window.location.search), map, start), revision: latest.current.revision + 1 };
       latest.current = next; setSelection(next);
     };
     window.addEventListener("popstate", back);
     return () => window.removeEventListener("popstate", back);
-  }, [map]);
+  }, [map, start]);
   const year = Number(selection.date.slice(0, 4));
   const progress = useMemo(() => progressForYear(sourceProgress, year), [sourceProgress, year]);
   const view = useMemo(() => buildYearView(progress), [progress]);
