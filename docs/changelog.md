@@ -7,6 +7,8 @@
 - 반 상세 EiE 토글(0271b)로 켠 원생의 이름을 **기본·통합·강사뷰 명단 모두** `text-blue italic`(LAB 칸과 같은 파랑)으로. 서식 단일 소스 = `LAB_SEPARATE_STUDENT_CLASS`,
   판정 = `applyLabSeparateMarks`(서버에서 한 번 — 그 주 *LAB 교시가 있는 반만 · 퇴원 줄 제외 · 명단 배열 참조 공유 유지). hover 카드에 `LAB · 따로 수업(*LAB) 배정` 한 줄.
 - 🔑 **밑줄 없음** — 밑줄까지 있는 파란 이탤릭은 랩실 **교시 고정**(9/10)이다. 둘 다면 고정이 이긴다.
+- 🔴 **이름 뒤 `/학교학년` 꼬리까지 같은 색·기울기**(원장 같은 날 캡처 *"전체를 파랑 및 이탤릭으로"* — 이름만 칠했더니 `유희린`은 파랑인데 `/침산초3`은 검정이라
+  한 줄이 두 색으로 갈렸다). 판정 = `labSeparateMetaClass` 한 벌(세 뷰 공용) · **교시 고정 줄은 이름만**(밑줄이 꼬리까지 끌리면 이름·학교에 통째로 줄이 그어진다).
 - 재료 = 켠 수강 id만 따로·fail-soft로(`getLabSeparateEnrollmentIdSet`, 시간표 뿌리 조회에 칸을 끼우지 않는다 [[#95]]) · 페이지 Promise.all에 병렬(B4) · 교실뷰는 왕복 안 함.
 - 🔴 랩실 교시 고정(`SEAT_PIN_MARK_CLASS`)의 이탤릭도 9/10부터 **한 번도 안 섰다**(body `font-synthesis: none` + Pretendard 이탤릭 없음) → `[font-synthesis:style]` 추가.
 

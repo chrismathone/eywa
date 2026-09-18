@@ -8,6 +8,7 @@ import {
   LAB_SEPARATE_LABEL,
   LAB_SEPARATE_STUDENT_CLASS,
   LAB_SEPARATE_TEXT_CLASS,
+  labSeparateMetaClass,
 } from "./lab-separate";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
 
@@ -147,5 +148,21 @@ describe("*LAB 배정 원생 이름 표식 (0271b, 원장 2026-09-18 *\"이름 �
     expect(readFileSync(join(process.cwd(), "src/app/(shell)/timetable/page.tsx"), "utf8")).toMatch(
       /applyLabSeparateMarks\(/,
     );
+  });
+
+  it("🔴 이름 뒤 `/학교학년` 꼬리도 같은 서식 — 세 뷰가 같은 판정 함수를 쓴다(원장 2026-09-18 \"전체를 파랑 및 이탤릭으로\")", () => {
+    // 이름만 칠하면 `유희린`은 파랑인데 `/침산초3`은 검정이라 한 줄이 두 색으로 갈린다.
+    expect(labSeparateMetaClass(true, undefined)).toBe(LAB_SEPARATE_STUDENT_CLASS);
+    expect(labSeparateMetaClass(false, undefined)).toBe("");
+    expect(labSeparateMetaClass(undefined, undefined)).toBe("");
+    // 교시 고정 줄은 이름만 — 밑줄이 꼬리까지 끌리면 `유희린/침산초3` 전체에 줄이 그어진다.
+    expect(labSeparateMetaClass(true, "월 2교시 고정")).toBe("");
+    for (const f of [
+      "src/app/(shell)/timetable/_components/student-rows.tsx",
+      "src/app/(shell)/timetable/_components/rich-card-group.tsx",
+      "src/app/(shell)/timetable/_components/teacher-chip.tsx",
+    ]) {
+      expect(readFileSync(join(process.cwd(), f), "utf8"), f).toContain("labSeparateMetaClass(");
+    }
   });
 });

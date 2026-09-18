@@ -32,13 +32,26 @@ export function isLabSeparateSlot(slotTeacherLabel: string | null | undefined, l
 /**
  * **\*LAB에 배정된 원생**(0271b `enrollments.lab_separate`)의 이름 서식 — LAB 칸과 같은 파랑 + 이탤릭.
  * 원장 2026-09-18 *"*LAB 이 켜진 학생은 이름 색을 lab 과 같은 색상으로 해주고 이탤릭체로"*.
+ * 🔴 **이름 뒤 `/학교학년` 꼬리까지 함께** 파랗게 한다(원장 2026-09-18 캡처 *"전체를 파랑 및 이탤릭으로"* — 이름만 칠했더니
+ *    `유희린`은 파랑인데 `/침산초3`은 검정이라 한 줄이 두 색으로 갈렸다). 꼬리 쪽은 [`labSeparateMetaClass`](#labSeparateMetaClass).
  * 🔑 **밑줄은 없다** — 밑줄까지 있는 파란 이탤릭은 랩실 **교시 고정**(`SEAT_PIN_MARK_CLASS`)이다. 둘 다면 고정이 이긴다
  *    (고정이 더 구체적인 사실 — 어느 교시로 옮겼는지까지 말한다).
  * 🔴 `[font-synthesis:style]`을 빼지 말 것 — body가 합성을 끄고 Pretendard엔 이탤릭 서체가 없다(`LAB_SEPARATE_TEXT_CLASS` 주석).
- * ⚠️ 줄이 아니라 **이름 span**에 얹는다 — 줄엔 tone(신입 빨강·전입 초록·검색)이 붙어 있어 같은 축 유틸을 이어 붙이면
- *    승자를 CSS 순서가 정한다([[#116]]). 자식이면 상속을 확실히 이긴다.
+ * ⚠️ 줄(링크 엘리먼트)이 아니라 **안쪽 span**에 얹는다 — 줄엔 tone(신입 빨강·전입 초록·검색)이 붙어 있어 같은 축 유틸을
+ *    이어 붙이면 승자를 CSS 순서가 정한다([[#116]]). 자식이면 상속을 확실히 이긴다.
  */
 export const LAB_SEPARATE_STUDENT_CLASS = "text-blue italic [font-synthesis:style]";
+
+/**
+ * 이름 뒤 **`/학교학년` 꼬리**에 이어 붙일 서식 — 세 뷰(기본·통합·강사)가 같은 판정을 쓰라고 함수로 둔다.
+ *
+ * 🔴 **교시 고정이 걸린 줄엔 안 붙인다** — 고정 표식은 밑줄까지 있어서 꼬리까지 끌면 `유희린/침산초3` 전체에 밑줄이 그어진다
+ *    (그 표식이 말하는 것은 *이 아이가 어느 교시에 고정됐나*지 학교가 아니다). 그 줄은 종전대로 이름만.
+ * ⚠️ 돌려주는 값은 **앞 공백 없는 클래스 문자열 또는 빈 문자열**이다 — 호출부가 `${base}${x ? ` ${x}` : ""}`로 잇는다.
+ */
+export function labSeparateMetaClass(labSeparate?: boolean, pinNote?: string | null): string {
+  return labSeparate === true && !pinNote ? LAB_SEPARATE_STUDENT_CLASS : "";
+}
 
 /** 이 모듈이 학생 줄에서 읽는 것 전부. */
 type LabStudentLike = { enrollmentId?: string; status?: string; labSeparate?: true };

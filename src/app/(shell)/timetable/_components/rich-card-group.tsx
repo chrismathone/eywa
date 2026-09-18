@@ -41,6 +41,7 @@ import {
   LAB_SEPARATE_STUDENT_CLASS,
   LAB_SEPARATE_TEXT_CLASS,
   LAB_SEPARATE_TIP,
+  labSeparateMetaClass,
 } from "@/features/timetable/lib/lab-separate";
 // *LAB 임시 칸(원장 2026-09-11) — 판정은 서버가 끝냈고 여기선 **어디에 그릴지**와 서식만(단일 소스).
 import {
@@ -1111,6 +1112,7 @@ function RosterRow({
         saved: false,
       })
     : (saved?.title ?? "");
+  const metaMark = labSeparateMetaClass(s.labSeparate, s.seatPinNote);
   // 기본뷰 StudentRow와 같은 조립 — 이름이 먼저, 메타는 `/`로 붙어 좁으면 메타부터 잘린다(생략부호 없이 clip).
   const inner = (
     <>
@@ -1137,7 +1139,8 @@ function RosterRow({
           {shortMoveDate(saved.on)}
         </span>
       ) : meta ? (
-        <span className="text-xs opacity-90">/{meta}</span>
+        // 🔴 꼬리도 이름과 같은 색·기울기(*LAB 줄은 한 줄 통째로 — 원장 2026-09-18 *"전체를 파랑 및 이탤릭으로"*).
+        <span className={`text-xs opacity-90${metaMark ? ` ${metaMark}` : ""}`}>/{meta}</span>
       ) : null}
     </>
   );
