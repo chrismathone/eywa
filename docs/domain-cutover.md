@@ -31,9 +31,11 @@
    - **키오스크**: 기기 토큰 쿠키가 호스트 단위 → 새 주소에서 **기기 다시 등록**(`kiosk_device_register` 감사로그로 확인).
    - **휴대폰 웹푸시**(셔틀 체크 계정): 구독이 오리진 단위 → 새 주소에서 '켜기' 다시(iOS는 홈 화면 앱을 **새 주소로 다시 추가**).
    - **연동 PC 워커**(`C:\eywa-sync-pc` — makeedu·ClassNote): DB 직결이라 host 무관하지만 **ClassNote 워커가 학부모 게시글에
-     박는 `/r` 공유 링크와 캡처 주소는 env**다 — 그 PC의 `.env`에서 `CLASSNOTE_SHARE_BASE=https://eywa.kr` ·
+     박는 `/r` 공유 링크와 캡처 주소는 env**다 — 그 PC의 **`.env.local`**(워커·워처는 전부 `node --env-file=.env.local`로 뜬다 —
+     `.env`는 아무도 안 읽는다)에서 `CLASSNOTE_SHARE_BASE=https://eywa.kr` ·
      `CLASSNOTE_SCREENSHOT_BASE=https://eywa.kr` 둘 다 바꾼다(`scripts/_classnote/classnote-core.mjs:29-30` ·
      `classnote-inbox-store.mjs:91`가 읽는다. 안 바꾸면 새 게시글이 계속 옛 호스트 링크를 실어 학부모 클릭·캡처마다 308로 한 번 튕긴다).
+     바꾼 뒤 **`scripts/_classnote/setup-classnote-pc.ps1`을 다시 실행**한다(돌고 있는 데몬은 옛 env를 든 채라 — 스크립트가 옛 인스턴스를 내리고 새 env로 재시작).
      코드 기본값 `DEFAULT_SHARE_BASE`(`classnote-core.mjs:30`, 지금 `eywa-alpha`)도 새 주소로 고쳐 zip으로 이관
      (`docs/classnote-integration.md` env 표의 예시 값도 함께).
 6. **문서 값 정리**: `docs/setup-and-ops.md`의 배포 표(alias `eywa-alpha.vercel.app`) · `.env.local.example`의 `NEXT_PUBLIC_APP_URL` 예시.
@@ -49,7 +51,9 @@
 
 ## 지점(테넌트)을 하나 더 만드는 날 (도메인과 별개)
 0. **먼저 침산을 env로 못박는다**(안 하면 위 셋이 "학원 2개"를 보고 멈춘다 — 멈추는 게 맞지만 그날 발송·동기화가 선다):
-   - 연동 PC(`C:\eywa-sync-pc`) `.env`: `CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `MAKEEDU_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`
+   - 연동 PC(`C:\eywa-sync-pc`) **`.env.local`**(`.env`가 아니다 — 워커·워처 전부 `--env-file=.env.local`):
+     `CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `MAKEEDU_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`
+     → **`setup-classnote-pc.ps1`·`setup-sync-pc.ps1` 재실행**(돌고 있는 데몬·워처는 옛 env를 든 채 — 스크립트가 옛 인스턴스를 내리고 새 env로 재시작. ClassNote 워처는 테넌트를 연결당 한 번만 푼다)
    - Vercel env: `GOOGLE_CALENDAR_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `PUBLIC_BRAND_TENANT_SLUG=cs` → 재배포
 1. super-admin → 학원 추가(slug는 영문 소문자 2~40자, 지점 약어 — **한 번 정하면 안 바꾼다**, 지금도 수정 폼에 slug가 없다).
 2. (0번에서 이미) `PUBLIC_BRAND_TENANT_SLUG=cs` = 로그인 화면·탭 제목의 회사 브랜드는 침산 것.
