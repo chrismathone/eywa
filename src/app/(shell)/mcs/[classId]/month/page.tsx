@@ -6,6 +6,8 @@ import { getMathClassOptions } from "@/features/math-sheets/server/landing";
 import { countRosterPhases, rosterExtraParts } from "@/features/math-sheets/lib/roster";
 import { LearningOverview } from "@/features/math-sheets/components/learning-overview";
 import { getMathLearningData } from "@/features/math-sheets/server/learning-queries";
+import { canResetMathLearningGoals } from "@/features/math-sheets/server/access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — eywa" };
 
@@ -48,6 +50,8 @@ export default async function McsMonthPage({
 
   const { data } = res;
   const learning = await getMathLearningData(classId, data);
+  // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
+  const canResetGoals = await canResetMathLearningGoals(await getCurrentUser());
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
   //    섞여 있다(카드와 **같은 함수**로 센다).
   const counts = countRosterPhases(data.students.map((s) => s.rosterPhase));
@@ -81,6 +85,7 @@ export default async function McsMonthPage({
           initialStudentId={student}
           initialTrack={track === "supplement" || track === "regular" ? track : undefined}
           classOptions={classOptions}
+          canResetGoals={canResetGoals}
         />
       </div>
     </div>

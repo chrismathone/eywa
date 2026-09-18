@@ -5,6 +5,7 @@ import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode"
 import { getDelegatedClassIdsInRange } from "@/features/classes/server/delegation";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 
 /**
  * MCS(Math Class Sheet) 공용 접근 게이트 — 조회·모든 서버 액션이 **전부** 이 함수를 통과한다
@@ -55,6 +56,18 @@ async function delegatedClassIds(): Promise<string[]> {
     // 보조 갈래가 죽어도 본 게이트는 살아 있어야 한다(담당 반 동작으로 강등 = fail-closed).
     return [];
   }
+}
+
+/**
+ * **전체 목표 '초기화'(배정 취소)는 원장 이상급** — 원장 2026-09-18 *"'초기화'는 원장 이상급"*.
+ *
+ * 🔴 저장(`canWrite`)과 **다른 문**이다: 저장은 덮어쓰기라 되돌릴 값이 화면에 남지만, 초기화는 행을 지워
+ *    누가 무엇을 지웠는지가 감사로그에만 남는다. 담임(scoped)이 반 전체 목표를 한 번에 날릴 수 있으면 안 된다.
+ * 🔴 super_admin은 명단·게이트를 **언제나** 통과한다(앱 전역 규약, 원장 2026-08-13).
+ */
+export async function canResetMathLearningGoals(user: CurrentUser | null): Promise<boolean> {
+  if (!user) return false;
+  return user.systemRole === "master" || (await isCurrentUserSuperAdmin());
 }
 
 export async function requireMcsClassAccess(

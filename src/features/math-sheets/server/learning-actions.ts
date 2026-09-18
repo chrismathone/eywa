@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireMcsClassAccess } from "./access";
+import { canResetMathLearningGoals, requireMcsClassAccess } from "./access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { mathSpansOf } from "../lib/roster";
@@ -157,4 +157,91 @@ export async function saveMathLearningGoals(
   revalidatePath(`/mcs/${classId}/month`);
   revalidatePath("/mcs");
   return { ok: true };
+}
+
+const resetSchema = z.object({
+  classId: z.string().uuid(),
+  studentIds: z.array(z.string().uuid()).min(1).max(100),
+  track: z.enum(["regular", "supplement"]).default("regular"),
+  /** 지울 계획의 시작일(`YYYY-MM-01`). 표준 계획은 이 날짜까지 맞아야 한 칸만 지운다. */
+  startDate: z.string(),
+  /** 표준 24/4블록 계획인가 — 저장과 **같은 갈래**로 표를 고른다(아니면 옛 `math_learning_goals`). */
+  standard: z.boolean().default(true),
+});
+
+/**
+ * 전체 목표 **초기화(배정 취소)** — 원장 2026-09-18 *"초기화 기능도 추가. 배정 취소하고 싶을때."*
+ *
+ * 🔴 권한은 저장보다 좁다(**원장 이상급**, `canResetMathLearningGoals`) — 행을 지우는 일이라
+ *    담임이 반 전체 목표를 한 번에 날릴 수 있으면 안 된다. 화면 버튼과 **같은 함수**를 서버가 다시 본다([[#77]]).
+ * 🔴 지우는 범위는 **저장이 쓰는 그 한 칸**이다(같은 반·같은 학생·같은 구분·같은 시작월) — 표를 통째로 비우지 않는다.
+ *    그래서 다른 달·다른 구분(수요일 복습)의 계획은 남는다.
+ * ⚠️ 표준 계획을 지워도 옛 `math_learning_goals`의 목표가 있으면 **그 목표가 다시 보인다**(읽기 폴백) —
+ *    그건 되살아난 게 아니라 원래 있던 이전 목표다.
+ */
+export async function resetMathLearningGoals(
+  input: z.input<typeof resetSchema>,
+): Promise<{ ok: true; removed: number } | { ok: false; error: string }> {
+  const parsed = resetSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "초기화할 대상을 확인해 주세요." };
+  const value = parsed.data,
+    studentIds = [...new Set(value.studentIds)];
+  const gate = await requireMcsClassAccess(value.classId, { write: true });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!(await canResetMathLearningGoals(gate.access.user)))
+    return { ok: false, error: "전체 목표 초기화는 원장만 할 수 있습니다." };
+  const admin = createAdminClient(),
+    { tenantId, classId } = gate.access;
+  const missing = (code?: string) => ["42P01", "PGRST205"].includes(code ?? "");
+  /**
+   * 🔴 **두 표를 함께 지운다** — 표준 계획만 지우면 옛 `math_learning_goals`의 목표가 읽기 폴백으로
+   *    **곧바로 다시 뜬다**(화면상 "초기화가 안 됐다"). 사람이 말한 '배정 취소'는 그 학생에게 목표가
+   *    없는 상태다.
+   * 🔴 표준 계획은 (구분 · 시작월)까지 맞춰 **그 한 칸만** 지운다(다른 달·수요일 복습 계획은 남는다).
+   * 🔴 옛 표엔 구분 칸이 없어 **정규 초기화일 때만** 건드린다 — 수요일 복습을 지우며 정규 목표를 날리면 안 된다.
+   */
+  const standardDelete = value.standard
+    ? await admin
+        .from("math_learning_track_goals")
+        .delete()
+        .eq("tenant_id", tenantId)
+        .eq("class_id", classId)
+        .in("student_id", studentIds)
+        .eq("track", value.track)
+        .eq("start_date", value.startDate)
+        .select("student_id")
+    : { data: [], error: null };
+  const legacyDelete =
+    value.track === "regular"
+      ? await admin
+          .from("math_learning_goals")
+          .delete()
+          .eq("tenant_id", tenantId)
+          .eq("class_id", classId)
+          .in("student_id", studentIds)
+          .select("student_id")
+      : { data: [], error: null };
+  // 표가 아직 없는 환경은 **실패가 아니다**([[#95]]) — 다른 한쪽만 지우고 넘어간다.
+  const realError = [standardDelete.error, legacyDelete.error].find((e) => e && !missing(e.code));
+  if (realError)
+    return { ok: false, error: "전체 목표를 초기화하지 못했습니다. 다시 시도해 주세요." };
+  const data = [...(standardDelete.data ?? []), ...(legacyDelete.data ?? [])];
+  if (!data.length)
+    return { ok: false, error: "초기화할 전체 목표가 없습니다." };
+  await logAction({
+    action: "mcs_learning_goal_reset",
+    targetType: "class",
+    targetLabel: gate.access.className,
+    metadata: {
+      classId,
+      studentIds,
+      track: value.track,
+      startDate: value.startDate,
+      standard: value.standard,
+      removed: data.length,
+    },
+  });
+  revalidatePath(`/mcs/${classId}/month`);
+  revalidatePath("/mcs");
+  return { ok: true, removed: data.length };
 }

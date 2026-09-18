@@ -661,6 +661,15 @@
   gap: 8px;
   margin-top: 20px;
 }
+/* '초기화'(배정 취소)는 **왼쪽 끝** — 공용 삭제 규약 `[삭제][취소][저장]`.
+   🔴 저장 옆에 두지 말 것(되돌릴 수 없는 버튼과 기본 동작이 붙으면 오클릭이 난다).
+   확인 단계(`data-danger`)에서만 붉게 — 평소엔 다른 보조 버튼과 같은 무게다. */
+.resetButton { margin-right: auto; }
+.resetButton[data-danger] {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--card));
+  background: color-mix(in srgb, var(--danger) 6%, var(--card));
+}
 .error {
   font-size: 13px;
   color: var(--danger);

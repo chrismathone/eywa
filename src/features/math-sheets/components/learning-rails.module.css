@@ -2,6 +2,13 @@
   --rail-ink: var(--blue);
   --rail-light: color-mix(in srgb, var(--blue) 52%, var(--card));
   --rail-tick: color-mix(in srgb, var(--blue) 20%, var(--card));
+  /* 목표진도(2행)는 **붉은색 계열**(원장 2026-09-18 *"수학 mcs에서 목표진도는 붉은색계열로 전부"*).
+     🔴 현재진도(파랑)와 **색으로** 갈린다 — 두 줄이 같은 눈금을 쓰기 때문에, 색이 같으면 어느 줄이
+        사실이고 어느 줄이 계획인지 눈으로 못 가른다.
+     ⚠️ 여기 빨강은 '위험'이 아니라 **계획 줄의 신원**이다(빠름·느림 판정은 그대로 글자·칩이 말한다) —
+        `--danger`를 쓰되 채도를 낮춘 파생값으로만 칠해 경고처럼 읽히지 않게 한다. */
+  --goal-ink: var(--danger);
+  --goal-light: color-mix(in srgb, var(--danger) 46%, var(--card));
   display: grid;
   grid-template-columns: minmax(0, 1fr) 55px;
   gap: 8px 14px;
@@ -56,7 +63,7 @@
   top: 40px;
   height: 40px;
   left: var(--target-position);
-  border-left: 1px dashed color-mix(in srgb, var(--blue) 30%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--danger) 30%, transparent);
   pointer-events: none;
   transition: left 320ms ease;
 }
@@ -86,7 +93,7 @@
 }
 .targetFill {
   width: var(--target-position);
-  background: var(--rail-light);
+  background: var(--goal-light);
 }
 .currentMarker,
 .targetMarker {
@@ -119,7 +126,7 @@
   left: var(--target-position);
   width: 10px;
   height: 10px;
-  border: 1.5px solid var(--rail-light);
+  border: 1.5px solid var(--goal-light);
   background: var(--card);
   box-shadow: 0 0 0 2px var(--card);
 }
@@ -153,7 +160,8 @@
   top: 96px;
   left: var(--target-position);
   transform: translateX(calc(-1 * var(--target-position)));
-  border-color: color-mix(in srgb, var(--blue) 17%, var(--card));
+  border-color: color-mix(in srgb, var(--danger) 20%, var(--card));
+  color: var(--goal-ink);
 }
 .annotationTag {
   display: flex;
@@ -168,9 +176,9 @@
   color: white;
 }
 .targetAnnotation .annotationTag {
-  background: color-mix(in srgb, var(--blue) 8%, var(--card));
-  color: var(--rail-ink);
-  border-right: 1px solid color-mix(in srgb, var(--blue) 14%, var(--card));
+  background: color-mix(in srgb, var(--danger) 9%, var(--card));
+  color: var(--goal-ink);
+  border-right: 1px solid color-mix(in srgb, var(--danger) 16%, var(--card));
 }
 .blockName {
   min-width: 0;
@@ -190,7 +198,7 @@
   white-space: nowrap;
 }
 .currentValue { top: 43px; }
-.targetValue { top: 77px; }
+.targetValue { top: 77px; color: var(--goal-ink); }
 .values b { font-size: 16px; font-weight: 650; letter-spacing: -0.04em; }
 .values small { font-size: 10px; font-weight: 450; }
 .targetValue b { font-size: 13px; font-weight: 550; }

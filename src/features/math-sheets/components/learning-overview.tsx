@@ -70,12 +70,15 @@ export function LearningOverview({
   classOptions,
   initialStudentId,
   initialTrack,
+  canResetGoals = false,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
   classOptions: { id: string; name: string }[];
   initialStudentId?: string;
   initialTrack?: MathLearningTrack;
+  /** 전체 목표 '초기화'(배정 취소) — **원장 이상급**만(원장 2026-09-18). 서버가 같은 함수로 다시 본다. */
+  canResetGoals?: boolean;
 }) {
   const schedules = data.learningContext?.schedules ?? [];
   const defaultTrack: MathLearningTrack = schedules.length > 0 && schedules.every((s) => s.dayOfWeek === "wed") ? "supplement" : "regular";
@@ -437,6 +440,7 @@ export function LearningOverview({
           data={data}
           learning={learning}
           studentId={goalEditor.studentId}
+          canReset={canResetGoals}
           onClose={() => setGoalEditor(null)}
         />
       ) : null}

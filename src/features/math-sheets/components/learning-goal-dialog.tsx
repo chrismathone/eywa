@@ -28,7 +28,7 @@ import {
   type LearningGoal,
 } from "../lib/learning-plan";
 import type { MathSheetMonthData } from "../server/month-queries";
-import { saveMathLearningGoals } from "../server/learning-actions";
+import { resetMathLearningGoals, saveMathLearningGoals } from "../server/learning-actions";
 import styles from "./learning-overview.module.css";
 
 export function LearningGoalDialog({
@@ -36,11 +36,14 @@ export function LearningGoalDialog({
   learning,
   studentId,
   onClose,
+  canReset = false,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
   studentId: string | null;
   onClose: () => void;
+  /** 전체 목표 '초기화'(배정 취소) — **원장 이상급**만(원장 2026-09-18). 서버가 같은 함수로 다시 본다([[#77]]). */
+  canReset?: boolean;
 }) {
   const router = useRouter();
   const [scope, setScope] = useState(studentId ?? "all");
@@ -72,6 +75,8 @@ export function LearningGoalDialog({
     () => goalForStudent(studentId),
   );
   const [error, setError] = useState<string | null>(null);
+  /** 초기화는 **되돌릴 수 없어** 그 자리에서 한 번 더 묻는다(회의록 '더보기'와 같은 규약). */
+  const [confirmReset, setConfirmReset] = useState(false);
   const [pending, startTransition] = useTransition();
   const semester = semesterOfLesson(goal.studyGrade, goal.startBlock);
   const blocks = useMemo(() => curriculumForGradeSemester(goal.studyGrade, semester).flatMap((unit) => unit.lessons), [goal.studyGrade, semester]);
@@ -84,11 +89,41 @@ export function LearningGoalDialog({
   const update = (patch: Partial<LearningGoal>) => {
     setGoal((previous) => ({ ...previous, ...patch }));
     setError(null);
+    // 🔴 지울 대상(구분·시작월)이 바뀌면 확인 단계를 내린다 — 안 내리면 방금 본 문장과 다른 달이 지워진다.
+    if (patch.startDate !== undefined || patch.track !== undefined) setConfirmReset(false);
   };
   const selectScope = (id: string) => {
     setScope(id);
     setError(null);
+    setConfirmReset(false);
     setGoal(goalForStudent(id));
+  };
+  const reset = () => {
+    if (!selectedIds.length) {
+      setError("초기화할 학생을 선택해 주세요.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        const result = await resetMathLearningGoals({
+          classId: data.classId,
+          studentIds: selectedIds,
+          track,
+          startDate: goal.startDate,
+          standard: goal.blockCount != null,
+        });
+        if (!result.ok) {
+          setError(result.error);
+          setConfirmReset(false);
+          return;
+        }
+        router.refresh();
+        onClose();
+      } catch {
+        setError("전체 목표를 초기화하지 못했습니다. 다시 시도해 주세요.");
+        setConfirmReset(false);
+      }
+    });
   };
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -267,6 +302,24 @@ export function LearningGoalDialog({
             </p>
           ) : null}
           <div className={styles.formActions}>
+            {/* 🔴 '초기화'는 **왼쪽 끝**(공용 삭제 규약 `[삭제][취소][저장]`) — 저장 옆에 두지 말 것.
+                🔴 원장 이상급에게만 **버튼 자체가 없다**(서버도 같은 함수로 다시 본다 — 화면은 게이트가 아니다). */}
+            {canReset ? (
+              <button
+                type="button"
+                className={`${styles.button} ${styles.resetButton}`}
+                data-danger={confirmReset || undefined}
+                disabled={pending}
+                onClick={() => (confirmReset ? reset() : setConfirmReset(true))}
+                title={
+                  scope === "all"
+                    ? "이 반 학생 전체의 이 달 전체 목표를 지웁니다."
+                    : "선택한 학생의 이 달 전체 목표를 지웁니다."
+                }
+              >
+                {pending && confirmReset ? "초기화 중…" : confirmReset ? "정말 초기화할까요?" : "초기화"}
+              </button>
+            ) : null}
             <button
               type="button"
               className={styles.button}
