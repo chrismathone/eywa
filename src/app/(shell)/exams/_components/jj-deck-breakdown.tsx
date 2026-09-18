@@ -43,8 +43,9 @@ export function JjDeckBreakdown({
         <table className="w-full text-sm [&_td]:whitespace-nowrap [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
           <thead className="border-line border-b [&_th]:whitespace-nowrap">
             <tr>
-              {["반", "응시", "평균", "최고", "최저"].map((h) => (
-                <th key={h} className="micro px-4 py-2.5 text-center">
+              {/* 열 제목과 값은 같은 축(원장 2026-09-18) — 반 이름은 왼쪽, 숫자는 오른쪽(성적관리 시험 목록 표와 같은 규약). */}
+              {["반", "응시", "평균", "최고", "최저"].map((h, i) => (
+                <th key={h} className={`micro px-4 py-2.5 ${i === 0 ? "text-left" : "text-right"}`}>
                   {h}
                 </th>
               ))}

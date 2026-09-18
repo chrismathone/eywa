@@ -47,14 +47,22 @@ type ColKey = (typeof COLS)[number]["key"];
 const LABEL = Object.fromEntries(COLS.map((c) => [c.key, c.label])) as Record<ColKey, string>;
 
 /**
- * 열 제목은 가운데(데이터 표 규약) + 시트처럼 **위에 고정**(옛 시트의 `freeze A4`). 고정은 스크롤 컨테이너
+ * 열 제목과 값은 같은 축(원장 2026-09-18) — 가운데, 긴 글(상담 내용)과 학생이름은 둘 다 왼쪽(이름 뒤에 '반 배정 완료'·녹음
+ * 표식이 붙어 가운데로 모으면 이름 시작이 줄마다 달라진다 — 실측). 연락처는 번호가 칸을 채워 손대지 않았다 + 시트처럼 **위에 고정**(옛 시트의 `freeze A4`). 고정은 스크롤 컨테이너
  * (DragScrollArea 안쪽 div) 기준이라 표 영역이 높이를 가져야 한다 — 페이지 루트의 flex 기둥이 남는 높이를
  * 이 표에 준다(`min-h-0 flex-1`). 🔴 `border-collapse`면 sticky 칸의 테두리가 함께 밀려 사라진다([[#71]]) →
  * `border-separate`.
  */
-const TH =
-  "bg-bg-soft text-foreground border-b-line sticky top-0 z-10 border-b px-2 py-2 text-center text-xs font-bold whitespace-nowrap";
+const TH_BASE =
+  "bg-bg-soft text-foreground border-b-line sticky top-0 z-10 border-b px-2 py-2 text-xs font-bold whitespace-nowrap";
+const TH = `${TH_BASE} text-center`;
+const TH_LEFT = `${TH_BASE} text-left`;
 const TD = "border-b-line border-b px-2 py-1.5 align-top text-xs leading-[1.4] break-keep";
+/**
+ * 가운데 칸 — 더블클릭 편집 칸(CellFace)은 버튼이 제 `text-left`를 들고 있어 td 정렬을 안 따른다 → 바로 아래
+ * 버튼만 가운데로 덮는다. 좁은 화면 카드(.consult-sheet, <640px)는 td를 왼쪽으로 되돌리니 버튼도 함께 왼쪽.
+ */
+const TD_CENTER = `${TD} text-center [&>button]:text-center max-sm:[&>button]:text-left`;
 /** 접수 아래 '경과'를 붙이는 창 — relativeTimeKo가 상대 표기를 돌려주는 구간(7일 미만)과 같은 값. */
 const RECENT_MS = 7 * 86_400_000;
 
@@ -120,7 +128,7 @@ export function EnrollmentTable({
           <thead>
             <tr>
               {COLS.map((c) => (
-                <th key={c.key} scope="col" className={TH}>
+                <th key={c.key} scope="col" className={c.key === "log" || c.key === "name" ? TH_LEFT : TH}>
                   {c.label}
                 </th>
               ))}
@@ -173,7 +181,7 @@ export function EnrollmentTable({
                     </div>
                   </td>
                   <td
-                    className={TD}
+                    className={TD_CENTER}
                     data-label={LABEL.school}
                     data-empty={emptyAttr(schoolGradeLabel(c.prospectSchool, c.prospectGrade))}
                   >
@@ -191,7 +199,7 @@ export function EnrollmentTable({
                   >
                     <EditableTextCell id={c.id} field="parentPhone" value={c.parentPhone} canEdit={canWrite} />
                   </td>
-                  <td className={TD} data-label={LABEL.counselor} data-empty={emptyAttr(c.consultantId || c.consultantName)}>
+                  <td className={TD_CENTER} data-label={LABEL.counselor} data-empty={emptyAttr(c.consultantId || c.consultantName)}>
                     <EditableSelectCell
                       id={c.id}
                       field="consultantId"
@@ -202,7 +210,7 @@ export function EnrollmentTable({
                       {c.consultantName}
                     </EditableSelectCell>
                   </td>
-                  <td className={TD} data-label={LABEL.subject} data-empty={emptyAttr(subject)}>
+                  <td className={TD_CENTER} data-label={LABEL.subject} data-empty={emptyAttr(subject)}>
                     <EditableSelectCell
                       id={c.id}
                       field="subject"
@@ -224,7 +232,7 @@ export function EnrollmentTable({
                       <div className="text-xs leading-[1.45] whitespace-pre-line">{c.parentRequest?.trim()}</div>
                     </EditableTextCell>
                   </td>
-                  <td className={`${TD} num`} data-label={LABEL.date}>
+                  <td className={`${TD_CENTER} num`} data-label={LABEL.date}>
                     {received ? <div>{received}</div> : null}
                     {/* 경과는 **7일 이내만** — relativeTimeKo는 7일이 지나면 절대 날짜를 돌려줘 접수일과 같은 날짜를
                         두 번 적는다. 판정은 서버가 준 nowMs 기준이라 첫 렌더가 서버·클라 같다(하이드레이션 안전). */}

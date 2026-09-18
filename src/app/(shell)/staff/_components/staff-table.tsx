@@ -72,7 +72,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
     contractTerms: (s) => (
       // 상한은 em — 표 글자 −/+ 배수(StaffTableScaleBox font-size)를 그대로 따른다. 2026-09-08 v5 글자 기준 실측:
       // 옛 220px는 13px 시절 값이라 16px에서 `주 5일 09:00~18:00 · 4대보험 가입 · 급여제 강사`(≈17em=272px)가 잘렸다. 14em ≈ 224px@100%.
-      <span className="block max-w-[14em] truncate" title={s.contractTerms ?? ""}>
+      <span className="mx-auto block max-w-[14em] truncate" title={s.contractTerms ?? ""}>
         {s.contractTerms ?? "—"}
       </span>
     ),
@@ -86,7 +86,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
         "—"
       ),
     subjects: (s) => (
-      <span className="flex flex-wrap gap-1">
+      <span className="flex flex-wrap justify-center gap-1">
         {s.subjects.length > 0
           ? s.subjects.map((k) => (
               <Pill key={k} color={subjects.colorOf(k)}>
@@ -130,7 +130,6 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
     status: "상태",
     updatedAt: "수정일",
   };
-  const rightAligned = new Set<StaffColumnKey>(["classes", "students"]);
 
   return (
     <table
@@ -139,7 +138,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
       style={{ minWidth: Math.max(560, cols.length * 116) }}
     >
       <thead>
-        {/* 열 제목은 전부 가운데(데이터 표 규약 2026-08-05 — 숫자 열도 제목은 가운데, 본문 값만 우측), 나머지 본문은 좌측 그대로.
+        {/* 열 제목과 값은 같은 축(원장 2026-09-18) — 제목도 값도 전부 가운데(숫자 열 포함).
             크기는 본문과 같다(옛 0.9em은 v5에서 14.4px). */}
         <tr className="bg-bg-soft/70 text-foreground text-center">
           {cols.map((k) => (
@@ -161,7 +160,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
             {cols.map((k) => (
               <td
                 key={k}
-                className={`text-foreground ${CELL} ${rightAligned.has(k) ? "text-right" : ""} ${
+                className={`text-foreground ${CELL} text-center ${
                   k === "contractTerms" ? "" : "whitespace-nowrap"
                 }`}
               >

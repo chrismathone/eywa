@@ -106,7 +106,7 @@ export function MonthRail({
               return (
                 <th
                   key={date}
-                  className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-center text-xs font-bold whitespace-nowrap ${
+                  className={`border-line-faint sticky top-0 z-[2] border-r border-b p-0 text-left text-xs font-bold whitespace-nowrap ${
                     offDays.has(date)
                       ? "text-amber bg-amber-soft shadow-[inset_0_-2px_0_var(--amber)]"
                       : holiday
@@ -124,7 +124,8 @@ export function MonthRail({
                           })}`
                         : t(canEdit ? "month.cell.edit" : "month.cell.view")
                     }
-                    className="hover:text-primary w-full cursor-pointer px-2 py-1.5 font-bold"
+                    // 날짜 머리는 본문 진도 줄(왼쪽)과 같은 축 — 버튼은 UA 기본이 가운데라 여기서 왼쪽을 준다(원장 2026-09-18).
+                    className="hover:text-primary w-full cursor-pointer px-2 py-1.5 text-left font-bold"
                   >
                     {/* 휴일 글자 = 출석부 휴일 잉크(`text-att-holiday-ink`) — 공용 `text-danger`는 휴일 회색
                         (`--att-weekend`) 위에서 대비 3.75로 WCAG 4.5를 깼다(2026-09-14). */}
@@ -236,7 +237,7 @@ export function MonthRail({
               // 🔴 휴일엔 앰버(재촉)를 쓰지 않는다 — 안 쓴 휴일은 작성률 분모에도 없다. 수는 사실이라 그대로 적는다.
               const short = filled < slots.length && !isHolidayOn(data.holidays, date);
               return (
-                <td key={date} className="border-line-strong border-t px-2 py-1.5 text-center">
+                <td key={date} className="border-line-strong border-t px-2 py-1.5 text-left">
                   <span className={`num text-xs ${short ? "text-amber font-bold" : "text-text-faint"}`}>
                     {filled}/{slots.length}
                   </span>

@@ -55,7 +55,8 @@ export function DocList({
           <tr className="text-text-dim text-sm [&_th]:font-bold">
             <th className="px-3 py-2 text-center">문서번호</th>
             <th className="px-3 py-2 text-center">양식</th>
-            <th className="px-3 py-2 text-center">제목</th>
+            {/* 열 제목과 값은 같은 축(원장 2026-09-18) — 제목(긴 글)만 제목·값 모두 왼쪽, 나머지는 가운데. */}
+            <th className="px-3 py-2 text-left">제목</th>
             {showDrafter ? <th className="px-3 py-2 text-center">기안자</th> : null}
             <th className="px-3 py-2 text-center">기안일</th>
             <th className="px-3 py-2 text-center">진행</th>
@@ -67,8 +68,8 @@ export function DocList({
             const status = docStatusLabel(d.status);
             return (
               <tr key={d.id} className="hover:bg-bg-soft/30">
-                <td className="num text-text-dim px-3 py-2 text-sm whitespace-nowrap">{d.docNo}</td>
-                <td className="text-text-dim px-3 py-2 text-sm whitespace-nowrap">
+                <td className="num text-text-dim px-3 py-2 text-center text-sm whitespace-nowrap">{d.docNo}</td>
+                <td className="text-text-dim px-3 py-2 text-center text-sm whitespace-nowrap">
                   {APPROVAL_FORM_LABEL[d.form] ?? d.form}
                 </td>
                 <td className="px-3 py-2 text-sm">
@@ -77,17 +78,17 @@ export function DocList({
                   </Link>
                 </td>
                 {showDrafter ? (
-                  <td className="text-foreground px-3 py-2 text-sm whitespace-nowrap">
+                  <td className="text-foreground px-3 py-2 text-center text-sm whitespace-nowrap">
                     {d.drafterName}
                     {d.drafterJobTitle ? (
                       <span className="text-text-faint"> {d.drafterJobTitle}</span>
                     ) : null}
                   </td>
                 ) : null}
-                <td className="num text-text-dim px-3 py-2 text-sm whitespace-nowrap">
+                <td className="num text-text-dim px-3 py-2 text-center text-sm whitespace-nowrap">
                   {d.submittedAt.slice(0, 10)}
                 </td>
-                <td className="text-text-dim px-3 py-2 text-sm whitespace-nowrap">
+                <td className="text-text-dim px-3 py-2 text-center text-sm whitespace-nowrap">
                   {deferred.has(d.id) ? <span className="text-amber font-bold">후결 확인</span> : progressLabel(d)}
                 </td>
                 <td className="px-3 py-2 text-center">

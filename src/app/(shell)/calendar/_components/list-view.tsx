@@ -6,8 +6,10 @@ import { shortDate } from "./event-row";
 
 /**
  * 목록(표) 뷰 — 조건(연도·태그)에 맞는 일정을 표로 조사한다(0224a 다중 뷰).
- * 서버 컴포넌트: 데이터·필터는 page가 URL로 확정해 내려준다. 표 규약 = 열 제목 가운데 16px 굵게 +
+ * 서버 컴포넌트: 데이터·필터는 page가 URL로 확정해 내려준다. 표 규약 = 열 제목 16px 굵게 +
  * 열 구분선 `--line-faint`(doc-list 선례), 본문 16px, 가로 넘침은 자체 스크롤(페이지 가로 스크롤 금지).
+ * 열 제목과 값은 같은 축(원장 2026-09-18) — 가운데, 문장이 되는 제목과 색 점이 앞에 서는 태그는 둘 다 왼쪽
+ * (태그를 가운데로 모으면 이름 길이마다 점이 들쭉날쭉해진다 — 실측).
  */
 
 function spanDays(start: string, end: string): number {
@@ -31,8 +33,8 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
             <th className="px-3 py-2 text-center">날짜</th>
             <th className="px-3 py-2 text-center">시간</th>
             <th className="px-3 py-2 text-center">일수</th>
-            <th className="px-3 py-2 text-center">태그</th>
-            <th className="px-3 py-2 text-center">제목</th>
+            <th className="px-3 py-2 text-left">태그</th>
+            <th className="px-3 py-2 text-left">제목</th>
             <th className="px-3 py-2 text-center">작성</th>
           </tr>
         </thead>
@@ -42,7 +44,7 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
             const time = eventTimeLabel(e);
             const dot = dotProps(eventDisplayColor(e));
             return (
-              <tr key={e.id} className="hover:bg-bg-soft/30">
+              <tr key={e.id} className="hover:bg-bg-soft/30 text-center">
                 <td className="num px-3 py-2 text-sm whitespace-nowrap">
                   {shortDate(e.startDate)}
                   {e.endDate !== e.startDate ? (
@@ -55,7 +57,7 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
                 <td className="num text-text-dim px-3 py-2 text-center text-sm whitespace-nowrap">
                   {days}일
                 </td>
-                <td className="px-3 py-2 text-sm whitespace-nowrap">
+                <td className="px-3 py-2 text-left text-sm whitespace-nowrap">
                   {e.tag ? (
                     <span className="inline-flex items-center gap-1.5">
                       <span
@@ -69,7 +71,7 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
                     <span className="text-text-faint">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-sm font-medium break-keep">{e.title}</td>
+                <td className="px-3 py-2 text-left text-sm font-medium break-keep">{e.title}</td>
                 <td className="text-text-dim px-3 py-2 text-sm whitespace-nowrap">
                   {e.createdByName ?? <span className="text-text-faint">—</span>}
                 </td>

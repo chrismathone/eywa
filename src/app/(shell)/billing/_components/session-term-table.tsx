@@ -295,7 +295,7 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
       <td className="text-foreground px-3 py-2 font-medium">
         {/* 누르면 원생 상세를 **새 창**으로(원장 2026-09-17) — 회차 확정 창은 그대로 둔다. */}
         {/* 반 요일과 다른 개별 등원 요일은 이름 옆에(원장 2026-09-17). 한 줄 flex — 인라인 링크의 말줄임은 안 먹는다([[#111]]). */}
-        <div className="flex min-w-0 items-center gap-1">
+        <div className="flex min-w-0 items-center justify-center gap-1">
           <WindowLink href={`/students/${r.studentId}`} title={r.studentName} frameTarget="window" className="min-w-0 truncate hover:underline">
             {/* WindowLink의 title은 창 제목이라 속성으로 안 나간다 — 잘린 이름은 이 title로 끝까지 본다. */}
             <span title={r.studentName}>{r.studentName}</span>
@@ -328,10 +328,10 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
         ) : null}
       </td>
       {/* 학교·학년 — "칠성초6"(schoolGradeLabel 한 벌, 공백 join 금지). 긴 학교명은 말줄임 + 전문 title. */}
-      <td className="text-text-dim truncate px-3 py-2 text-xs" title={schoolGrade || undefined}>
+      <td className="text-text-dim truncate px-3 py-2 text-center text-xs" title={schoolGrade || undefined}>
         {schoolGrade || "—"}
       </td>
-      <td className="text-text-dim truncate px-3 py-2 text-xs" title={r.homeroomTeacherName ?? undefined}>
+      <td className="text-text-dim truncate px-3 py-2 text-center text-xs" title={r.homeroomTeacherName ?? undefined}>
         {r.homeroomTeacherName ?? "—"}
       </td>
       <td className="num px-3 py-2 text-center">
@@ -435,7 +435,7 @@ function TermRow({ r, listId, draft, onDraft, selected, onSelect }: { r: Row; li
         <TermNoteCell id={r.id} note={r.note} studentName={r.studentName} />
       </td>
       {/* 기타(옛 '개별') — 확정·해제. 오른쪽에 고정(STICKY_END_ROW). */}
-      <td className={`${STICKY_END_ROW} px-3 py-2 text-right`}>
+      <td className={`${STICKY_END_ROW} px-3 py-2 text-center`}>
         {confirmed ? (
           <form action={unconfirmAction} className="inline">
             <input type="hidden" name="id" value={r.id} />
@@ -567,7 +567,7 @@ export function SessionTermGroups({
             <th className="px-2 py-2 text-center font-bold">
               <span className="sr-only">선택</span>
             </th>
-            {/* 열 제목은 전부 가운데(원장 2026-09-17) — 본문 값의 정렬(숫자 오른쪽 등)은 그대로. */}
+            {/* 열 제목과 값은 같은 축(원장 2026-09-18) — 기본 가운데, 금액 열은 오른쪽, 메모는 왼쪽. */}
             <th className="px-3 py-2 text-center font-bold">이름</th>
             <th className="px-3 py-2 text-center font-bold">학교학년</th>
             <th className="px-3 py-2 text-center font-bold" title="반의 현재 담임 — 지난 달을 열어도 지금 담임이 보입니다">
@@ -575,10 +575,12 @@ export function SessionTermGroups({
             </th>
             <th className="px-3 py-2 text-center font-bold">예정 시수</th>
             <th className="px-3 py-2 text-center font-bold">확정 시수</th>
-            <th className="px-3 py-2 text-center font-bold">단가 및 수강료</th>
-            <th className="px-3 py-2 text-center font-bold">예상 및 확정 청구액</th>
+            <th className="px-3 py-2 text-right font-bold">단가 및 수강료</th>
+            <th className="px-3 py-2 text-right font-bold">예상 및 확정 청구액</th>
+            {/* 실납 청구액은 금액 + 배분 표식 + 수납 연결이 한 칸에 서는 묶음이라 가운데 그대로 — 오른쪽에 붙이면 오른쪽 고정 '기타' 열에
+                가려 "실납 청"만 보인다(원장 2026-09-18 실측). */}
             <th className="px-3 py-2 text-center font-bold">실납 청구액</th>
-            <th className="px-3 py-2 text-center font-bold">메모(특이사항)</th>
+            <th className="px-3 py-2 text-left font-bold">메모(특이사항)</th>
             <th className={`${STICKY_END} bg-bg-soft px-3 py-2 text-center font-bold`}>기타</th>
           </tr>
         </thead>

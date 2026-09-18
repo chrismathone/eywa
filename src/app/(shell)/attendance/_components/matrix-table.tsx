@@ -362,8 +362,9 @@ export function MatrixTable({
         <thead>
           {/* 높이 고정 — 칸의 scroll-margin-top과 짝을 이룬다(cell-display.ts `HEAD_ROW_H` 주석). */}
           <tr className={HEAD_ROW_H}>
+            {/* 이름 열 머리는 본문 이름(왼쪽, flex)과 같은 축 — 칸 가운데에 머리만 서면 이름과 다른 자리에 선다(원장 2026-09-18). */}
             <th
-              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-center whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-left whitespace-nowrap`}
             >
               {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
               {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
@@ -377,23 +378,24 @@ export function MatrixTable({
             </th>
             {showClassBilled ? (
               <th
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
                 title={t("att.col.classBilledTitle")}
               >
                 <span className="micro font-bold">{t("att.col.classBilled")}</span>
               </th>
             ) : null}
-            {/* 수업 차수 = 출석부에서 센 시수(소비 상태 칸의 배수 합) · 등록 차수 = 회차 확정의 확정 시수(원장 2026-09-17). */}
+            {/* 수업 차수 = 출석부에서 센 시수(소비 상태 칸의 배수 합) · 등록 차수 = 회차 확정의 확정 시수(원장 2026-09-17).
+                청구액·수업 차수·등록 차수는 본문 값이 오른쪽 정렬이라 머리도 오른쪽(같은 축, 원장 2026-09-18). */}
             <th
               data-help="att-lesson-count"
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
               title={t("att.col.lessonCountTitle")}
             >
               <span className="micro font-bold">{t("att.col.lessonCount")}</span>
             </th>
             {showTermSessions ? (
               <th
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
                 title={t("att.col.termSessionsTitle")}
               >
                 <span className="micro font-bold">{t("att.col.termSessions")}</span>
