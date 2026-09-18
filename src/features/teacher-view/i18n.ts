@@ -1047,9 +1047,9 @@ export const SHEET_DICT = {
     ko: "조정 내역을 불러오지 못했습니다 — 조정이 있었다면 위 숫자에 빠져 있을 수 있습니다.",
     en: "Couldn't load adjustments — if there are any, the numbers above may not include them.",
   },
-  "me.leave.usedOnNotReady": {
-    ko: "조정의 사용일은 준비가 끝나면 함께 표시됩니다.",
-    en: "Dates on adjustments will show once the update is applied.",
+  "me.leave.usedRangeNotReady": {
+    ko: "조정의 휴가 사용 기간은 준비가 끝나면 함께 표시됩니다.",
+    en: "Leave dates on adjustments will show once the update is applied.",
   },
   "me.leave.loadFailed": { ko: "휴가 내역을 불러오지 못했습니다.", en: "Couldn't load your leave history." },
   "me.reportName.blocked.a": {

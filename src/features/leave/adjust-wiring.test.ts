@@ -75,11 +75,12 @@ describe("게이트 배선", () => {
     const actions = read("src/features/leave/server/actions.ts");
     expect(actions).toContain("resolveLeavePeriod");
     expect(actions).toContain("adjustmentDaysFor");
-    // 폼에서 읽는 값은 대상·방식·일수·사유·사용일뿐이다(구간·현재 총 부여를 받으면 오래된 화면이 이긴다).
-    // ⚠️ `usedOn`은 **날짜 한 칸**이지 구간이 아니다 — 서버가 구간을 다시 계산해 그 안인지 가둔다(아래).
+    // 폼에서 읽는 값은 대상·방식·일수·사유·사용 기간뿐이다(구간·현재 총 부여를 받으면 오래된 화면이 이긴다).
+    // ⚠️ `usedStart`·`usedEnd`는 **휴가를 쓴 날**이지 연차 구간이 아니다 — 구간은 서버가 다시 계산해
+    //    그 안인지 가둔다(아래).
     const read_keys = [...actions.matchAll(/formData\.get\("([a-zA-Z]+)"\)/g)].map((m) => m[1]);
     expect(new Set(read_keys)).toEqual(
-      new Set(["userId", "reason", "mode", "days", "adjustmentId", "usedOn"]),
+      new Set(["userId", "reason", "mode", "days", "adjustmentId", "usedStart", "usedEnd"]),
     );
   });
 
@@ -93,8 +94,10 @@ describe("게이트 배선", () => {
     // 음수 총 부여도 화면이 먼저 막는다(grantedTotal이 0으로 잘려 하한 검사에 안 걸린다).
     // 차단 조건은 **한 이름**으로 모아 둔다 — 버튼 속성에 늘어놓으면 조건이 늘 때 한쪽만 고치게 된다.
     expect(ui.replace(/\s+/g, " ")).toContain(
-      "const blocked = !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedOnBad || !reason.trim();",
+      "const blocked = !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedRangeBad || !reason.trim();",
     );
+    // 🔴 일수-기간 불일치는 **경고만**이라 차단 조건에 들어가면 안 된다(반차·반반차면 원래 안 맞는다).
+    expect(ui.replace(/\s+/g, " ")).not.toContain("rangeMismatch ||");
     expect(ui.replace(/\s+/g, " ")).toContain("<SubmitButton label=\"조정 기록\" blocked={blocked} />");
     // 상한 상수는 화면·서버가 **같은 것**을 읽는다(값이 갈리면 버튼은 열리는데 서버만 거절한다).
     expect(ui).toContain("MAX_LEAVE_TOTAL");
@@ -126,49 +129,75 @@ describe("게이트 배선", () => {
   });
 });
 
-describe("조정의 휴가 사용일(0270a, 원장 2026-09-18)", () => {
-  it("🔴 사용일은 서버가 **그 구간 안인지** 가둔다 — 화면 min·max는 게이트가 아니다([[#77]])", () => {
+describe("조정의 휴가 사용 기간(0271a, 원장 2026-09-18)", () => {
+  it("🔴 기간은 서버가 **그 구간 안인지** 가둔다 — 화면 min·max는 게이트가 아니다([[#77]])", () => {
     const actions = read("src/features/leave/server/actions.ts");
-    expect(actions).toContain('formData.get("usedOn")');
-    expect(actions).toContain("usedOn < target.period.start || usedOn > target.period.end");
+    expect(actions).toContain('formData.get("usedStart")');
+    expect(actions).toContain('formData.get("usedEnd")');
+    // 양 끝을 **둘 다** 본다 — 시작만 보면 구간 끝을 넘겨 끝나는 기간이 그대로 들어온다.
+    expect(actions.replace(/\s+/g, " ")).toContain(
+      "const outsidePeriod = [usedStart, usedEnd] .filter(Boolean) .some((d) => d < target.period.start || d > target.period.end);",
+    );
     // 형식도 서버가 본다(달력 밖에서 임의 문자열을 넣어도 통과하지 않게).
-    expect(actions).toContain("YMD_RE.test(usedOn)");
+    expect(actions).toContain("YMD_RE.test(usedStart)");
+    expect(actions).toContain("YMD_RE.test(usedEnd)");
   });
 
-  it("🔴 사용일을 '사용'으로 두 번 세지 않는다 — 차감은 days가 이미 한다", () => {
-    // 잔여 산식(balance.ts)에 사용일이 들어가면 같은 연차가 두 번 깎인다. 산식 파일은 날짜를 모른다.
+  it("🔴 거꾸로 된 기간·시작 없는 종료를 서버가 거절한다(DB 제약과 같은 판정)", () => {
+    const actions = read("src/features/leave/server/actions.ts");
+    expect(actions).toContain("if (usedEnd && !usedStart)");
+    expect(actions).toContain("usedStart && usedEnd && usedEnd < usedStart");
+    const sql = read("supabase/migrations/0271a_leave_adjustment_used_range.sql");
+    expect(sql).toContain("check (used_end is null or (used_start is not null and used_end >= used_start))");
+  });
+
+  it("🔴 기간을 '사용'으로 두 번 세지 않는다 — 차감은 days가 이미 한다", () => {
+    // 잔여 산식(balance.ts)에 사용 기간이 들어가면 같은 연차가 두 번 깎인다. 산식 파일은 날짜를 모른다.
     const balance = read("src/features/leave/balance.ts");
-    expect(balance).not.toContain("usedOn <");
-    expect(balance).not.toContain("used_on");
+    expect(balance).not.toContain("usedStart <");
+    expect(balance).not.toContain("used_start");
+    expect(balance).not.toContain("used_end");
     // 내역 조회도 숫자를 세지 않는다(세는 곳은 getMyLeaveBalance 한 곳).
     const history = read("src/features/leave/server/my-history.ts");
     expect(history).not.toContain("remainingDays");
     expect(history).not.toContain("sumAdjustments");
   });
 
-  it("0270a 미적용에도 살아 있다([[#95]]) — 조회는 칸을 빼고 다시 읽고, 쓰기는 빈 값이면 키를 안 보낸다", () => {
+  it("0271a 미적용에도 살아 있다([[#95]]) — 조회는 칸을 빼고 다시 읽고, 쓰기는 빈 값이면 키를 안 보낸다", () => {
     const admin = read("src/features/leave/server/admin.ts");
-    expect(admin).toContain("isMissingUsedOnColumn");
+    expect(admin).toContain("isMissingUsedRangeColumn");
     expect(admin).toContain("selectAdjustments(tenantId, userIds, false)");
     const history = read("src/features/leave/server/my-history.ts");
-    expect(history).toContain("isMissingUsedOnColumn");
+    expect(history).toContain("isMissingUsedRangeColumn");
     const actions = read("src/features/leave/server/actions.ts");
-    // 빈 사용일에 `used_on: null`을 실으면 컬럼 없는 창에서 **조정 전체**가 거절된다.
-    expect(actions.replace(/\s+/g, " ")).toContain("...(usedOn ? { used_on: usedOn } : {})");
+    // 빈 기간에 `used_start: null`을 실으면 칸 없는 창에서 **조정 전체**가 거절된다.
+    expect(actions.replace(/\s+/g, " ")).toContain("...(usedStart ? { used_start: usedStart } : {})");
+    expect(actions.replace(/\s+/g, " ")).toContain("...(usedEnd ? { used_end: usedEnd } : {})");
     // 표 없음과 칸 없음은 **다른 안내**다(한 문구로 뭉치면 무엇을 적용해야 하는지 알 수 없다).
     expect(actions).toContain("TABLE_MISSING_MSG");
-    expect(actions).toContain("USED_ON_MISSING_MSG");
+    expect(actions).toContain("USED_RANGE_MISSING_MSG");
   });
 
-  it("칸이 없으면 **사용일 입력만** 잠긴다 — 조정 기능 전체를 잠그지 않는다", () => {
+  it("칸이 없으면 **기간 입력만** 잠긴다 — 조정 기능 전체를 잠그지 않는다", () => {
     const admin = read("src/features/leave/server/admin.ts");
-    expect(admin).toContain("usedOnReady");
+    expect(admin).toContain("usedRangeReady");
     const page = read("src/app/(shell)/staff/annual-leave/page.tsx");
-    expect(page).toContain("usedOnReady={overview.usedOnReady}");
+    expect(page).toContain("usedRangeReady={overview.usedRangeReady}");
     const ui = read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx");
-    expect(ui).toContain("disabled={!usedOnReady}");
+    expect(ui).toContain("disabled={!usedRangeReady}");
     // 표가 없을 때 잠그는 것(tableReady)과 축이 다르다 — 둘을 한 값으로 합치지 말 것.
     expect(ui).toContain("disabled={!r.period || !tableReady}");
+  });
+
+  it("기간 표기는 두 화면이 **같은 순수 함수**를 쓴다(글자가 갈리면 같은 줄이 달라 보인다)", () => {
+    for (const f of [
+      "src/app/(shell)/staff/annual-leave/_adjust-table.tsx",
+      "src/app/(shell)/me/_components/leave-card.tsx",
+    ]) {
+      expect(read(f)).toContain("usedRangeLabel");
+    }
+    // 일수 계산도 휴가 신청과 같은 함수(일요일 제외)라 두 화면이 같은 숫자를 말한다.
+    expect(read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx")).toContain("countLeaveDays(");
   });
 });
 

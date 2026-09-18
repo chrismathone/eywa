@@ -19,7 +19,7 @@ import {
   roundDays,
 } from "../balance";
 import { canAdjustLeave, LEAVE_ADJUST_DENIED_MSG } from "../access";
-import { isMissingUsedOnColumn } from "../missing-used-on";
+import { isMissingUsedRangeColumn } from "../missing-used-range";
 import { adjustmentDaysFor, reservedLeaveDays } from "./admin";
 import { isMissingRelation } from "@/features/approvals/server/queries";
 import type { LeaveActionState } from "../action-state";
@@ -43,8 +43,8 @@ const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const TABLE_MISSING_MSG =
   "연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션 0252a를 적용하면 바로 쓸 수 있습니다";
-const USED_ON_MISSING_MSG =
-  "사용일 칸이 아직 준비되지 않았습니다 — 마이그레이션 0270a를 적용하면 쓸 수 있습니다(사용일을 비우면 지금도 저장됩니다)";
+const USED_RANGE_MISSING_MSG =
+  "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0271a를 적용하면 쓸 수 있습니다(기간을 비우면 지금도 저장됩니다)";
 
 async function requireAdjuster() {
   const user = await getCurrentUser();
@@ -118,12 +118,25 @@ export async function addLeaveAdjustment(
   if (!reason) return { error: "조정 사유를 적어 주세요 — 나중에 누구도 이유를 되찾지 못합니다" };
   if (reason.length > MAX_REASON) return { error: `사유는 ${MAX_REASON}자를 넘을 수 없습니다` };
 
-  // 실제 휴가 **사용일**(0270a, 원장 2026-09-18) — 선택 입력이다. 이월·특별휴가 부여(+)엔 사용일이
-  // 없고, 결재 밖에서 쓴 연차를 차감(−)할 때 "언제 쓴 건지"를 사유 문장이 아니라 칸으로 남긴다.
+  // 실제 휴가 **사용 기간**(0271a, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일 이렇게
+  // 길게해야지 하루씩만 할수있는게 말이안되자나"*) — 선택 입력이고, 하루면 종료일을 비운다.
+  // 이월·특별휴가 부여(+)엔 기간이 없고, 결재 밖에서 쓴 연차를 차감(−)할 때 "언제부터 언제까지 쉬었나"를
+  // 사유 문장이 아니라 칸으로 남긴다.
   // 🔴 이 값은 기록·표시용이고 **잔여 산식에는 들어가지 않는다** — 차감은 아래 `delta`가 이미 한다
-  //    (사용일을 '사용'으로 또 세면 같은 연차가 두 번 깎인다, balance.ts 규약).
-  const usedOn = String(formData.get("usedOn") ?? "").trim();
-  if (usedOn && !YMD_RE.test(usedOn)) return { error: "사용일은 날짜로 골라 주세요(예: 2026-09-18)" };
+  //    (기간을 '사용'으로 또 세면 같은 연차가 두 번 깎인다, balance.ts 규약).
+  const usedStart = String(formData.get("usedStart") ?? "").trim();
+  const usedEnd = String(formData.get("usedEnd") ?? "").trim();
+  if (usedStart && !YMD_RE.test(usedStart)) {
+    return { error: "사용 시작일은 날짜로 골라 주세요(예: 2026-09-18)" };
+  }
+  if (usedEnd && !YMD_RE.test(usedEnd)) {
+    return { error: "사용 종료일은 날짜로 골라 주세요(예: 2026-09-18)" };
+  }
+  // 시작 없이 종료만 있는 줄은 뜻이 없다(DB 제약과 같은 판정 — 여기서 한글로 먼저 말한다).
+  if (usedEnd && !usedStart) return { error: "사용 시작일을 먼저 고르세요" };
+  if (usedStart && usedEnd && usedEnd < usedStart) {
+    return { error: "사용 종료일이 시작일보다 앞섭니다" };
+  }
 
   const mode = String(formData.get("mode") ?? "delta") === "total" ? "total" : "delta";
   // 🔴 **빈 칸을 먼저 거른다** — `Number("")`는 NaN이 아니라 **0**이라 그냥 통과하고, '총 부여를 지정'
@@ -144,12 +157,16 @@ export async function addLeaveAdjustment(
   if ("error" in loaded) return { error: loaded.error };
   const { target } = loaded;
 
-  // 🔴 사용일은 **그 구간 안**이어야 한다 — 조정 행의 축이 (직원, 연차 구간)이라 구간 밖 날짜를 적으면
+  // 🔴 사용 기간은 **그 구간 안**이어야 한다 — 조정 행의 축이 (직원, 연차 구간)이라 구간 밖 날짜를 적으면
   //    내 정보 목록에서 그 줄만 엉뚱한 해에 서고, 정작 그 해 잔여와는 아무 관계가 없어진다. 구간을
   //    서버가 다시 계산해 두었으니(위 loadTarget) 클라가 보낸 날짜를 여기서 가둔다.
-  if (usedOn && (usedOn < target.period.start || usedOn > target.period.end)) {
+  // ⚠️ 양 끝을 **둘 다** 본다 — 시작만 보면 구간 끝을 넘겨 끝나는 기간이 그대로 들어온다.
+  const outsidePeriod = [usedStart, usedEnd]
+    .filter(Boolean)
+    .some((d) => d < target.period.start || d > target.period.end);
+  if (outsidePeriod) {
     return {
-      error: `사용일이 이 연차 구간(${target.period.start} ~ ${target.period.end}) 밖입니다 — 그 날이 속한 구간에서 조정하세요`,
+      error: `사용 기간이 이 연차 구간(${target.period.start} ~ ${target.period.end}) 밖입니다 — 그 날이 속한 구간에서 조정하세요`,
     };
   }
 
@@ -195,14 +212,15 @@ export async function addLeaveAdjustment(
     days: delta,
     reason,
     created_by: user.id,
-    // 🔑 비었으면 **키 자체를 안 보낸다** — 0270a 미적용 창에서 `used_on: null`만 실어도 PGRST204로
-    //    거절돼, 사용일을 적지도 않은 사람까지 조정을 못 하게 된다([[#95]] expand/contract).
-    ...(usedOn ? { used_on: usedOn } : {}),
+    // 🔑 비었으면 **키 자체를 안 보낸다** — 0271a 미적용 창에서 `used_start: null`만 실어도 PGRST204로
+    //    거절돼, 기간을 적지도 않은 사람까지 조정을 못 하게 된다([[#95]] expand/contract).
+    ...(usedStart ? { used_start: usedStart } : {}),
+    ...(usedEnd ? { used_end: usedEnd } : {}),
   });
   if (error) {
     if (isMissingRelation(error)) return { error: TABLE_MISSING_MSG };
-    // 사용일을 **적었을 때만** 이 문구 — 무엇을 하면 지금 저장되는지(비우기)까지 함께 말한다.
-    if (usedOn && isMissingUsedOnColumn(error)) return { error: USED_ON_MISSING_MSG };
+    // 기간을 **적었을 때만** 이 문구 — 무엇을 하면 지금 저장되는지(비우기)까지 함께 말한다.
+    if (usedStart && isMissingUsedRangeColumn(error)) return { error: USED_RANGE_MISSING_MSG };
     return { error: `저장 실패 — ${error.message}` };
   }
 
@@ -216,8 +234,9 @@ export async function addLeaveAdjustment(
       after: newTotal,
       period: `${target.period.start} ~ ${target.period.end}`,
       reason,
-      // 사용일까지 남긴다 — 나중에 "이 차감이 언제 쓴 연차였나"를 로그만으로도 되짚게.
-      usedOn: usedOn || null,
+      // 사용 기간까지 남긴다 — 나중에 "이 차감이 언제 쓴 연차였나"를 로그만으로도 되짚게.
+      usedStart: usedStart || null,
+      usedEnd: usedEnd || null,
     },
   });
   revalidatePath("/staff/annual-leave");
