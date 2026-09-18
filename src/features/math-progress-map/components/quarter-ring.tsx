@@ -7,13 +7,14 @@ import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
 import { FONT, SEGMENT_TEXT } from "./svg-consts";
 import { ClockLabel } from "./clock-label";
+import { periodPercent } from "../learning-dashboard";
 
 /**
  * 분기 링 — 맨 바깥 가는 띠 넷 + 바깥 라벨. 색은 분기 정체(파스텔 잉크)이고, 초점 분기는 학원색 테두리.
  * 열두 달 링을 감싸는 활성 테두리는 연간 링이 그린다(분기 보기 = 바깥 띠 + 열두 달 함께).
  */
 export const QuarterRing = memo(function QuarterRing() {
-  const { view, mode, focus, selectQuarter } = useProgressMap();
+  const { view, progress, mode, focus, selectQuarter } = useProgressMap();
   const focusQ = Math.floor((focus.month - 1) / 3) + 1;
   return (
     <g>
@@ -31,7 +32,7 @@ export const QuarterRing = memo(function QuarterRing() {
               d={arcPath(RINGS.quarter[0], RINGS.quarter[1], a0, a1)}
               fill={tint.ink}
               selected={focused}
-              label={dead ? `${tint.label} · 종강 이후` : `${tint.label} · 진도율 ${q.pct}%`}
+              label={dead ? `${tint.label} · 종강 이후` : `${tint.label} · 진도율 ${periodPercent(progress, q.pct, q.plannedPages)}`}
               target={{ kind: "quarter", q: q.q }}
               onSelect={dead ? undefined : () => selectQuarter(q.q)}
               className={focused ? "" : "opacity-75"}

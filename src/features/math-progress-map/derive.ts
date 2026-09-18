@@ -24,6 +24,7 @@ export type DayView = {
   holidayName: string | null;
   /** 정기 비수업일 또는 휴강 사유. 기록이 없다는 이유만으로 채우지 않는다. */
   noClassReason: string | null;
+  isClassDay: boolean | null;
 };
 
 export type WeekView = {
@@ -79,11 +80,13 @@ export function pctOf(done: number, planned: number): number {
   return Math.max(0, Math.min(100, Math.round((done / planned) * 100)));
 }
 
-export function plannedPagesOf(r: Pick<DailyProgress, "startPage" | "endPage">): number {
+export function plannedPagesOf(r: Pick<DailyProgress, "startPage" | "endPage" | "lessons">): number {
+  if (r.lessons) return r.lessons.positions.length;
   return r.startPage > 0 && r.endPage >= r.startPage ? r.endPage - r.startPage + 1 : 0;
 }
 
-export function donePagesOf(r: Pick<DailyProgress, "startPage" | "endPage" | "completedPage">): number {
+export function donePagesOf(r: Pick<DailyProgress, "startPage" | "endPage" | "completedPage" | "lessons">): number {
+  if (r.lessons) return r.lessons.done;
   const planned = plannedPagesOf(r);
   if (planned === 0) return 0;
   return Math.max(0, Math.min(planned, r.completedPage - r.startPage + 1));
@@ -113,14 +116,16 @@ function topicOf(days: DayView[]): string | null {
 function buildWeek(w: { index: number; start: string; end: string; days: string[] }, byDate: Map<string, DailyProgress>, asOf: string, calendar?: ProgressCalendar): WeekView {
   const days: DayView[] = w.days.map((date) => {
     const record = byDate.get(date) ?? null;
+    const schedule = daySchedule(date, record, calendar);
     return {
       date,
       record,
-      status: displayStatusOf(record?.status ?? null, date, asOf),
+      status: record?.lessons && !record.lessons.known && record.lessons.positions.length ? "unknown"
+        : !record && schedule.isClassDay && date > asOf ? "planned" : displayStatusOf(record?.status ?? null, date, asOf),
       plannedPages: record ? plannedPagesOf(record) : 0,
       donePages: record ? donePagesOf(record) : 0,
       isToday: date === asOf,
-      ...daySchedule(date, record, calendar),
+      ...schedule,
     };
   });
   const plannedPages = days.reduce((s, d) => s + d.plannedPages, 0);
@@ -135,7 +140,7 @@ function buildWeek(w: { index: number; start: string; end: string; days: string[
     plannedPages,
     donePages,
     pct: pctOf(donePages, plannedPages),
-    status: groupStatus(plannedPages, donePages, w.end < asOf, isCurrent),
+    status: days.some(day => day.status === "unknown") ? "unknown" : groupStatus(plannedPages, donePages, w.end < asOf, isCurrent),
     topic: topicOf(days),
     pageFrom: paged[0]?.record?.startPage ?? null,
     pageTo: paged[paged.length - 1]?.record?.endPage ?? null,
@@ -157,7 +162,7 @@ export function buildYearView(p: StudentProgress): YearView {
     const recorded = weeks.reduce((s, w) => s + w.plannedPages, 0);
     // 🔴 "기록이 있다" = **계획 쪽이 있는 기록** — 휴강 행(0쪽)만 있는 달이 연간 계획을 버리고 0%로 떨어지지 않게.
     const hasPaged = recorded > 0;
-    const plannedPages = hasPaged || !plan ? recorded : plan.endPage - plan.startPage + 1;
+    const plannedPages = p.learningMap || hasPaged || !plan ? recorded : plan.endPage - plan.startPage + 1;
     const donePages = weeks.reduce((s, w) => s + w.donePages, 0);
     const paged = weeks.filter((w) => w.pageFrom != null);
     const pageFrom = hasPaged ? (paged[0]?.pageFrom ?? null) : (plan?.startPage ?? null);
@@ -172,13 +177,13 @@ export function buildYearView(p: StudentProgress): YearView {
       plannedPages,
       donePages,
       pct: pctOf(donePages, plannedPages),
-      status: groupStatus(plannedPages, donePages, isPast, isCurrent),
+      status: weeks.some(week => week.status === "unknown") ? "unknown" : groupStatus(plannedPages, donePages, isPast, isCurrent),
       isCurrent,
       isPast,
       // 🔴 **로드맵 한 축으로 막지 않는다** — 로드맵이 낡아 종강 뒤에도 기록이 쌓이면(실데이터에선 흔하다)
       //    그 달이 옅어지고 클릭까지 막혀 **기록이 있는데 못 여는** 달이 된다(적대 리뷰 2026-09-16).
       //    원장이 가리킨 화면(진도율 자리에 `—`만 남은 달)과 정확히 같은 집합으로 좁힌다.
-      afterEnd: isAfterCourseEnd(endMonth, p.year, m) && plannedPages === 0 && donePages === 0,
+      afterEnd: isAfterCourseEnd(endMonth, p.year, m) && plannedPages === 0 && donePages === 0 && !(p.learningMap && weeks.some(week => week.days.some(day => day.record))),
       pageFrom,
       pageTo,
     });

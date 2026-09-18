@@ -49,7 +49,7 @@ export const DRILL_RINGS = {
 } as const;
 
 /** 달 칸 사이 틈(도). 주·일 칸은 더 좁다. */
-export const GAP = { month: 0.6, week: 0.5, dayTick: 0.28, dayRing: 1.2, quarter: 1.5 } as const;
+export const GAP = { month: 0.6, week: 0.5, dayTick: 0.08, dayRing: 1.2, quarter: 1.5 } as const;
 
 /** 일간 링 — 하루 한 칸의 각도(7일 = 77°). */
 export const DAY_RING_STEP = 11;

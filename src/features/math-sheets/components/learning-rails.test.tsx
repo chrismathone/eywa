@@ -10,6 +10,17 @@ const first = planLearningGoal({ studentId: "s", studyGrade: "중1", startBlock:
 const progress = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [], "2026-09-18");
 
 describe("현재 진도와 고정 목표 수직선", () => {
+  it("같은 학기에 목표가 둘 있어도 모든 목표 점과 동작을 보존한다", () => {
+    const onSelect = vi.fn();
+    const goal = planLearningGoal({ ...first, track: "supplement", startBlock: "다각형", endBlock: "부채꼴의 호의 길이와 넓이" });
+    const extended = planLearningGoal({ ...goal, endBlock: "상대도수" }, goal);
+    const state = { ...progress, currentBlock: "수학 다각형" };
+    render(<LearningRails goal={extended} progress={state} onSelectPosition={onSelect} />);
+    expect(screen.getByRole("button", { name: "1차 목표" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2차 목표" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "1차 목표" }));
+    expect(onSelect).toHaveBeenCalledWith(expect.any(Number), goal.endDate, "goal");
+  });
   it("소수 블록에 있는 진도 점도 세부 단원 눈금에 정확히 놓인다", () => {
     const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [
       { date: "2026-08-31", progress: flatLessons("중1")[0], textbook: null },
@@ -96,22 +107,22 @@ describe("현재 진도와 고정 목표 수직선", () => {
     expect(screen.getAllByRole("button", { name: /차 목표$/ })).toHaveLength(1);
     const scale = screen.getByLabelText("목표 수직선 눈금");
     expect(scale).toHaveTextContent("중1 1학기");
-    expect(scale).not.toHaveTextContent("중1 2학기");
+    expect(scale).toHaveTextContent("중1 2학기");
     expect(scale).not.toHaveTextContent(/[1-6]차/);
     expect(screen.getByRole("img", { name: "목표진도" })).toHaveAccessibleDescription(expect.stringContaining(first.endDate));
   });
-  it("목표 위치는 차시 수에 비례하고 전체 폭은 차시 수 곱하기 고정 간격이다", () => {
+  it("화면 공통 배율을 사용해도 목표와 현재의 차시 위치는 유지된다", () => {
     let goal: LearningGoal = first;
     for (const grade of ["중2", "중3", "공통수학1"]) goal = planLearningGoal({ ...goal, endStudyGrade: grade, endBlock: flatLessons(grade).at(-1)! }, goal);
     const state = { ...progress, current: 12, target: 3, currentBlock: "수학 다각형" };
     const topics = learningTopicTicks(goal, state);
     const stops = learningGoalTicks(goal, topics);
-    const { container, rerender } = render(<LearningRails goal={goal} progress={state} />);
+    const { container, rerender } = render(<LearningRails goal={goal} progress={state} scaleLessons={250} />);
     const positions = () => [...container.querySelectorAll<HTMLElement>('[data-goal-number]')].map(el => el.style.left);
     const expected = stops.filter(stop => stop.hasGoal).map(stop => `${stop.position / topics.length * 100}%`);
     expect(positions()).toEqual(expected);
-    expect(container.querySelector('[data-planned]')).toHaveStyle({ "--ruler-width": `${topics.length * LEARNING_LESSON_WIDTH}px` });
-    rerender(<LearningRails goal={goal} progress={{ ...state, target: 100 }} />);
+    expect(container.querySelector('[data-planned]')).toHaveStyle({ "--lesson-count": String(topics.length), "--scale-lessons": "250", "--lesson-max-width": `${LEARNING_LESSON_WIDTH}px` });
+    rerender(<LearningRails goal={goal} progress={{ ...state, target: 100 }} scaleLessons={200} />);
     expect(positions()).toEqual(expected);
     expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuemax", String(topics.length));
   });

@@ -69,15 +69,17 @@ export function CurriculumCarousel({ steps }: { steps: RoadmapStep[] }) {
   return (
     <div className="relative mt-3" data-curriculum-carousel="">
       <div style={{ maskImage: "linear-gradient(to right, transparent, black 8%, black 92%, transparent)" }}>
-        <DragScrollArea fade={false} hideBar momentum={false}>
+        <DragScrollArea className="h-30" fade={false} hideBar momentum={false}>
           <ol ref={listRef} className="flex w-max gap-3 py-1" aria-label="장기 커리큘럼">
             {steps.map((step, index) => {
               const current = step.id === progress.currentStepId;
-              const done = Boolean(step.endMonth) && step.endMonth < progress.asOf.slice(0, 7);
+              const ledger = progress.learningMap?.lessons.filter(lesson => lesson.inGoal && `${lesson.grade}:${lesson.semester}` === step.id);
+              const done = ledger ? ledger.length > 0 && ledger.every(lesson => lesson.reached === true) : Boolean(step.endMonth) && step.endMonth < progress.asOf.slice(0, 7);
               const selected = index === selectedIndex;
-              const target = selected ? monthKey(view.year, focus.month) : current ? progress.asOf.slice(0, 7) : step.startMonth;
+              const target = selected ? monthKey(view.year, focus.month) : current && !ledger ? progress.asOf.slice(0, 7) : step.startMonth;
               const enabled = Boolean(target) && years.includes(Number(target.slice(0, 4)));
-              const status = current ? "학습 중" : done ? "완료" : step.estimated ? "예상" : "예정";
+              const status = ledger ? done ? "완료" : progress.learningMap!.metrics.current == null ? "확인 필요" : current ? "학습 중" : "예정"
+                : current ? "학습 중" : done ? "완료" : step.estimated ? "예상" : "예정";
               return (
                 <li key={step.id} className="w-64 shrink-0 sm:w-72">
                   <button
@@ -102,7 +104,7 @@ export function CurriculumCarousel({ steps }: { steps: RoadmapStep[] }) {
                         {step.label}
                         <EyIcon name="check" size={14} className={selected ? "" : "invisible"} />
                       </span>
-                      <Pill color={current ? "danger" : done ? "green" : "neutral"} soft={!current && !selected} className="shrink-0">{status}</Pill>
+                      <Pill color={ledger ? done ? "danger" : current ? "blue" : "neutral" : current ? "danger" : done ? "green" : "neutral"} soft={!current && !selected} className="shrink-0">{status}</Pill>
                     </span>
                     <span className="num text-xs font-medium whitespace-nowrap">{step.startMonth ? `${formatYearMonth(step.startMonth)} ~ ${formatYearMonth(step.endMonth)}` : "기간 미정"}</span>
                     <span className="line-clamp-2 text-xs leading-relaxed break-keep" title={step.description}>{step.description}</span>

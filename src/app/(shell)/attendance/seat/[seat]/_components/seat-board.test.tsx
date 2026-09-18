@@ -76,6 +76,12 @@ const rosters: SeatClassRoster[] = [
   },
 ];
 
+/** 반 둘 — '전체' 보기의 **반별** 접기(원장 2026-09-18)를 보려면 한 교시에 카드가 둘 이상이어야 한다. */
+const twoRosters: SeatClassRoster[] = [
+  rosters[0]!,
+  { ...rosters[0]!, classId: "c2", className: "중등E_초6 MED α", students: [] },
+];
+
 const periods = [{ start: "16:20", ends: ["17:00"], classIds: ["c1"] }];
 
 describe("자리 출석부 본문", () => {
@@ -170,10 +176,11 @@ describe("마지막 수업 — 원장 2026-09-11 'LAB이나 JJ가 마지막 수�
   });
 });
 
-describe("JJ실 '전체' 보기 — 수업계획은 교시마다 접은 채(원장 2026-09-18 \"펼치기\")", () => {
+describe("JJ실 '전체' 보기 — 수업계획은 **반마다** 접은 채(원장 2026-09-18 \"펼치기\" · \"각각의 수업이 펼치기 접기\")", () => {
   const plans = {
     plans: {
       c1: { classId: "c1", canEdit: true, showExamTerm: true, skillAreas: [], lines: [] },
+      c2: { classId: "c2", canEdit: true, showExamTerm: true, skillAreas: [], lines: [] },
     },
     tenantId: "t1",
     userId: "u1",
@@ -195,31 +202,74 @@ describe("JJ실 '전체' 보기 — 수업계획은 교시마다 접은 채(원�
     expect(screen.queryByTestId("plan-c1")).toBeNull();
     expect(planMounts).toHaveLength(0);
 
-    const toggle = screen.getByRole("button", { name: "수업계획 펼치기 · 1개 반" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    const toggle = screen.getByRole("button", { name: "수업계획 모두 펼치기 · 1개 반" });
     fireEvent.click(toggle);
     expect(screen.getByTestId("plan-c1")).toBeVisible();
-    expect(screen.getByRole("button", { name: "수업계획 접기" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "수업계획 모두 접기" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "수업계획 접기" }));
+    fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 접기" }));
     // 🔴 내리지 않는다 — 다시 올리면 첫 화면의 서버 줄로 되살아나 방금 고친 칸이 옛 값이 된다.
     expect(screen.getByTestId("plan-c1")).not.toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "수업계획 펼치기 · 1개 반" }));
+    fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 펼치기 · 1개 반" }));
     expect(screen.getByTestId("plan-c1")).toBeVisible();
     expect(planMounts).toEqual(["c1"]);
+  });
+
+  it("🔴 반마다 따로 편다 — 한 반을 펴도 옆 반은 접힌 채(원장 2026-09-18 \"각각의 수업이 펼치기 접기가 되어야함\")", () => {
+    planMounts.length = 0;
+    render(<SeatBoard {...base} rosters={twoRosters} showChips={false} foldPlans plans={plans} />);
+    // 카드마다 접기 줄 하나 — 접근 이름에 **반 이름**이 붙는다(같은 이름의 버튼이 교시×반만큼 서지 않게).
+    expect(screen.getAllByRole("button", { name: /수업계획 펼치기$/ })).toHaveLength(2);
+    const c1 = screen.getByRole("button", { name: "중등E_초5 의치대 수업계획 펼치기" });
+    expect(c1).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(c1);
+    expect(screen.getByTestId("plan-c1")).toBeVisible();
+    // 옆 반은 올리지도 않는다 — 블록마다 저널·저장 큐·presence가 붙는다.
+    expect(screen.queryByTestId("plan-c2")).toBeNull();
+    expect(planMounts).toEqual(["c1"]);
+    expect(screen.getByRole("button", { name: "중등E_초5 의치대 수업계획 접기" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "중등E_초6 MED α 수업계획 펼치기" })).toHaveAttribute("aria-expanded", "false");
+
+    // '모두 펼치기'는 **남은** 반을 센다(일부만 열린 상태에서 "2개 반"이라 적으면 거짓) — 누르면 남은 반까지 편다.
+    fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 펼치기 · 1개 반" }));
+    expect(screen.getByTestId("plan-c2")).toBeVisible();
+    expect(screen.getByRole("button", { name: "수업계획 모두 접기" })).toBeTruthy();
+  });
+
+  it("🔴 반별 접힘에 저장 충돌이 있으면 그 카드 버튼이 붉게 말한다 — 옆 반 충돌을 제 것으로 적지 않는다", () => {
+    conflictFor.c2 = 3;
+    try {
+      render(<SeatBoard {...base} rosters={twoRosters} showChips={false} foldPlans plans={plans} />);
+      fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 펼치기 · 2개 반" }));
+      fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 접기" }));
+      // 접근 이름에도 건수가 실린다(화면 글자와 같은 말).
+      const btn = screen.getByRole("button", { name: "중등E_초6 MED α 수업계획 펼치기 · 저장 충돌 3건" });
+      expect(btn.textContent).toContain("저장 충돌 3건");
+      expect(btn.className).toContain("text-danger");
+      // 충돌이 없는 반은 그냥 '펼치기' — 남의 충돌 수를 옮겨 적지 않는다.
+      const other = screen.getByRole("button", { name: "중등E_초5 의치대 수업계획 펼치기" });
+      expect(other.textContent).not.toContain("충돌");
+      expect(other.className).not.toContain("text-danger");
+    } finally {
+      delete conflictFor.c2;
+    }
   });
 
   it("🔴 접은 계획에 저장 충돌이 있으면 버튼이 그 수를 붉게 말한다 — 접힌 블록 안에 충돌을 가두지 않는다", () => {
     conflictFor.c1 = 2;
     try {
       render(<SeatBoard {...base} showChips={false} foldPlans plans={plans} />);
-      fireEvent.click(screen.getByRole("button", { name: "수업계획 펼치기 · 1개 반" }));
-      fireEvent.click(screen.getByRole("button", { name: "수업계획 접기" }));
-      const btn = screen.getByRole("button", { name: "수업계획 펼치기 · 저장 충돌 2건" });
+      fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 펼치기 · 1개 반" }));
+      fireEvent.click(screen.getByRole("button", { name: "수업계획 모두 접기" }));
+      const btn = screen.getByRole("button", { name: "수업계획 모두 펼치기 · 저장 충돌 2건" });
       expect(btn.className).toContain("text-danger");
       // ⚠️ 잠그지는 않는다 — 이 화면에서 못 푸는 충돌이 남으면 새로고침 전까지 영영 잠긴다.
       expect(btn).toBeEnabled();
       expect(screen.getByTestId("plan-c1")).not.toBeVisible();
+      // 펼친 반의 충돌은 요약 칩에 안 더한다 — 블록 안에 보이는 것을 접힌 반 것처럼 적지 않는다(재리뷰 2026-09-18).
+      fireEvent.click(screen.getByRole("button", { name: "중등E_초5 의치대 수업계획 펼치기 · 저장 충돌 2건" }));
+      expect(screen.getByRole("button", { name: "수업계획 모두 접기" }).textContent).not.toContain("충돌");
     } finally {
       delete conflictFor.c1;
     }

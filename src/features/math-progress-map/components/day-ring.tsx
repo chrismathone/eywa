@@ -11,6 +11,7 @@ import { useProgressMap } from "./map-state";
 import { Segment } from "./segment";
 import { CURRENT_STROKE_WIDTH, FONT, FOCUS_STROKE_WIDTH, SEGMENT_TEXT } from "./svg-consts";
 import { ClockLabel } from "./clock-label";
+import { periodCount } from "../learning-dashboard";
 
 const WEEKDAY_R = 209;
 const DAYNUM_R = 182;
@@ -22,7 +23,7 @@ const DAYNUM_R = 182;
  * 링 이름표는 이 요일 부채꼴을 피해서 배치한다(`ring-labels.tsx`).
  */
 export const DayRing = memo(function DayRing() {
-  const { view, mode, focus, selectDay } = useProgressMap();
+  const { view, progress, mode, focus, selectDay } = useProgressMap();
   const active = ringActive("day", mode);
   const week = resolveWeek(view, focus);
   const slots = weekdaySlots(week);
@@ -63,7 +64,7 @@ export const DayRing = memo(function DayRing() {
               strokeWidth={d.isToday ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
               dashed={d.isToday}
               selected={focused}
-              label={`${formatMdW(d.date)} · ${dayDescription(d)}${d.plannedPages ? ` · ${d.donePages}/${d.plannedPages}쪽` : ""}`}
+              label={`${formatMdW(d.date)} · ${dayDescription(d)}${d.plannedPages ? ` · ${periodCount(progress, d.donePages, d.plannedPages)}` : ""}`}
               target={{ kind: "day", date: d.date }}
               onSelect={() => selectDay(d.date)}
             />

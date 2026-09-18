@@ -37,7 +37,7 @@ export const QUARTER_TINT: Record<1 | 2 | 3 | 4, QuarterTint> = {
  * 화면 상태 — 저장 상태 4종에 **날짜**를 얹어 다섯으로 가른다(`not-started`가 기준일 뒤면 예정, 앞이면 미학습).
  * 주말·기록 없는 날은 `none`(흰 칸, 범례 밖).
  */
-export type DisplayStatus = "completed" | "in-progress" | "missed" | "planned" | "no-plan" | "none";
+export type DisplayStatus = "completed" | "in-progress" | "missed" | "planned" | "no-plan" | "none" | "unknown";
 
 export function displayStatusOf(status: ProgressStatus | null, date: string, asOf: string): DisplayStatus {
   if (status == null) return "none";
@@ -54,6 +54,7 @@ export const AFTER_END_FILL = tint("--neutral-fill", 8);
 export const AFTER_END_OPACITY = 0.4;
 
 export const STATUS_FILL: Record<DisplayStatus, string> = {
+  unknown: "var(--bg-soft)",
   completed: tint("--green", 20),
   "in-progress": `var(--map-progress-fill, ${tint("--chart-3", 30)})`,
   missed: tint("--neutral-fill", 42),
@@ -66,11 +67,12 @@ export const STATUS_FILL: Record<DisplayStatus, string> = {
 export const TICK_FILL: Record<DisplayStatus, string> = {
   ...STATUS_FILL,
   completed: `var(--map-completed-tick, ${tint("--green", 74)})`,
-  "in-progress": "var(--amber)",
+  "in-progress": "var(--map-in-progress-tick, var(--amber))",
 };
 
 /** 작은 글자는 옅은 칸 위에 진한 잉크로 — 앱 토큰을 따라가면서 명도 대비를 확보한다. */
 export const STATUS_INK: Record<DisplayStatus, string> = {
+  unknown: "var(--foreground)",
   completed: "var(--map-completed-ink, color-mix(in srgb, var(--green) 80%, var(--foreground)))",
   "in-progress": "var(--map-progress-ink, color-mix(in srgb, var(--amber) 80%, var(--foreground)))",
   missed: "var(--foreground)",
@@ -91,6 +93,7 @@ export const WEEK_INK: Record<DisplayStatus, string> = {
 };
 
 export const STATUS_LABEL: Record<DisplayStatus, string> = {
+  unknown: "진도 확인 필요",
   completed: "완료",
   "in-progress": "진행 중",
   missed: "미학습",
@@ -104,6 +107,7 @@ export const LEGEND_ORDER: readonly DisplayStatus[] = ["completed", "in-progress
 
 /** 상태 → 알약 색(목록·상세 패널). */
 export const STATUS_PILL: Record<DisplayStatus, PillColor> = {
+  unknown: "neutral",
   completed: "green",
   "in-progress": "amber",
   missed: "neutral",

@@ -28,9 +28,21 @@ describe("등록 이후 수업보고서로 복원한 진도", () => {
   it("보고서의 날짜는 보존하고 사이의 빠진 차시 날짜만 추정으로 채운다", () => {
     const history = buildLearningHistory(goal, base, records, "2026-07-09", "2026-09-18");
     expect(history.lessons.find(item => item.lesson === lessons[10])).toMatchObject({ date: "2026-07-13", estimated: false });
-    expect(history.lessons.find(item => item.lesson === lessons[11])).toMatchObject({ date: "2026-07-15", estimated: true });
+    expect(history.lessons.find(item => item.lesson === lessons[11])).toMatchObject({ date: "2026-07-23", estimated: true });
     expect(history.lessons.find(item => item.lesson === lessons[15])).toMatchObject({ date: "2026-07-23", estimated: false });
     expect(history.lessons.every(item => item.date >= "2026-07-09" && item.date <= "2026-09-18")).toBe(true);
+    expect(history.lessons.every(item => records.some(record => record.date === item.date))).toBe(true);
+  });
+  it("빈 차시는 시험 보고서가 발송된 수업일에도 배분하되 발송 시각이나 보고서 없는 평일로 옮기지 않는다", () => {
+    const reported = [
+      { date: "2026-07-13", progress: lessons[10], textbook: null, sentAt: "2026-07-14T01:00:00Z" },
+      { date: "2026-07-16", progress: "내신대비", textbook: null },
+      { date: "2026-07-23", progress: lessons[15], textbook: null },
+      { date: "2026-10-01", progress: lessons[19], textbook: null },
+    ];
+    const history = buildLearningHistory(goal, base, reported, "2026-07-01", "2026-09-18");
+    expect(history.lessons.find(item => item.lesson === lessons[11])).toMatchObject({ date: "2026-07-16", estimated: true });
+    expect(new Set(history.lessons.map(item => item.date))).toEqual(new Set(["2026-07-13", "2026-07-16", "2026-07-23"]));
   });
   it("오래 재원한 학생도 날짜는 최근 1년으로 제한하고 윤년 날짜를 보정한다", () => {
     const history = buildLearningHistory(goal, base, records, "2020-01-01", "2026-09-18");

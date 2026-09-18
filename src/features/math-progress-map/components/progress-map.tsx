@@ -3,6 +3,7 @@
 import { memo, useCallback, useRef, useState, type ReactNode } from "react";
 import { drillLevel, drillSceneKey, parentDrillMode } from "../drilldown";
 import { tooltipContent, type HoverTarget } from "../tooltip-content";
+import { knownProgress } from "../learning-dashboard";
 import { CurrentPosition } from "./current-position";
 import { ContinuousDial } from "./continuous-dial";
 import { DayRing } from "./day-ring";
@@ -67,11 +68,11 @@ export function ProgressMap({ navy = false, controls }: { navy?: boolean; contro
         if (next === display) return;
         setDisplay(next);
         setHover(null);
-        if (next === "drill") setMode("year");
+        if (next === "drill" && !progress.learningMap) setMode("year");
       }} />
       <div className="overflow-x-auto px-1 py-1">
         {/* 데스크톱은 최대 너비에서 20% 줄이고, 폰에서는 전체 너비를 사용한다. */}
-        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} ${mapStyles.mapFrame} mx-auto ${continuous ? "min-w-0" : "min-w-[360px]"}`}
+        <div className={`${navy ? mapStyles.dialTheme : mapStyles.original} ${mapStyles.mapFrame} mx-auto ${continuous || progress.learningMap ? "min-w-0" : "min-w-[360px]"}`}
           onContextMenu={(event) => {
             if (!explore) return;
             event.preventDefault();
@@ -98,7 +99,7 @@ export const MapDrawing = memo(function MapDrawing({ center }: { center?: ReactN
     <div
       className={styles.dial}
       role="group"
-      aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 ${progress.estimated ? "예상 진도" : `진도율 ${view.pct}%`}`}
+      aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 ${progress.estimated ? "예상 진도" : knownProgress(progress) ? `진도율 ${view.pct}%` : "진도 확인 필요"}`}
     >
       <DialLayer name="guides"><DialGuides full /></DialLayer>
       <DialLayer name="quarters"><QuarterRing /></DialLayer>

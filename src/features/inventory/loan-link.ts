@@ -101,3 +101,34 @@ export function holderEditBlockReason(
   }
   return null;
 }
+
+/**
+ * 반납하면 자산이 돌아갈 상태 — 대여 전 상태(`prev_status`). 대여중·폐기로는 되돌리지 않고, 없으면(가져온 기록) 사용중.
+ * 🔑 화면(반납 창의 안내 문장)과 서버(`returnLoan`)가 **같은 함수**를 쓴다 — 갈리면 "사용중으로 돌아갑니다"라고
+ *    말해 놓고 수리중으로 되돌린다.
+ */
+export function restoredStatusAfterReturn(prevStatus: string | null | undefined): string {
+  return prevStatus && prevStatus !== "on_loan" && prevStatus !== "disposed" ? prevStatus : "in_use";
+}
+
+/**
+ * 이 자산의 **열린 대여**(out) — 자산 표에서 상태를 바꾸거나 사용자를 비우면 이 대여를 반납 처리로 잇는다
+ * (원장 2026-09-18 *"굳이 대여중으로 가지않고 자산에서 바로 상태 변경이나 사용자를 비우면 반납할 수 있게"*).
+ * DB 부분 유니크(`inventory_loans_open_uniq`)가 자산당 하나를 보장한다.
+ */
+export function openLoanOf<T extends Pick<InventoryLoan, "status">>(loans: readonly T[]): T | null {
+  return loans.find((l) => l.status === "out") ?? null;
+}
+
+/**
+ * 자산 표에서 **상태를 골라** 반납할 때 대여 기록이 남을 상태 — `assetStatusForLoan`의 거꾸로.
+ * · 분실 → **회수불가**(돌려받지 못했다 — 가져오기가 세운 관행 NB-006과 같은 짝)
+ * · 확인필요 → **확인필요**(누가 갖고 있는지 모른다 — 돌려받은 게 아니다)
+ * · 그 밖(사용중·수리중·미등록·폐기 등) → **반납완료**
+ * 🔴 분실을 고르고 대여 기록을 '반납완료'로 남기면 대여 면은 "돌려받았다"고, 자산 표는 "잃어버렸다"고 말한다.
+ */
+export function loanStatusForReturnTarget(nextStatus: string | null | undefined): "returned" | "unreturnable" | "check" {
+  if (nextStatus === "lost") return "unreturnable";
+  if (nextStatus === "check") return "check";
+  return "returned";
+}

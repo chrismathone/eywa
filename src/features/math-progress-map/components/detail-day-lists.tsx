@@ -79,7 +79,7 @@ export function DayCard({ day, week }: { day: DayView; week: WeekView }) {
       <div className="flex flex-col gap-2">
         {day.holidayName ? <div><Pill color="danger">{day.holidayName}</Pill></div> : null}
         <p className="text-text-dim text-sm">
-          {WEEKDAY_KO[weekdayOf(day.date)]}요일 · {day.noClassReason ? `수업이 없는 날입니다. (${day.noClassReason})` : `기록도 계획도 없는 날입니다. (${week.index}주)`}
+          {WEEKDAY_KO[weekdayOf(day.date)]}요일 · {day.noClassReason ? `수업이 없는 날입니다. (${day.noClassReason})` : day.isClassDay ? dayStatusLabel(day) : `기록도 계획도 없는 날입니다. (${week.index}주)`}
         </p>
         {nav}
       </div>

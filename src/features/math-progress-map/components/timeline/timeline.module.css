@@ -73,6 +73,18 @@
 
 .timelineColumn { min-width: 0; padding: 8px 4px 45vh; background: white; }
 .timelineCard { min-width: 0; height: min(907px, calc(100dvh - 141px)); min-height: 0; align-self: start; overflow: hidden; display: flex; flex-direction: column; border: 1px solid #e9eff6; border-radius: 16px; background: white; }
+.timelineCard[data-learning="true"] { --timeline-ink: #171717; --timeline-muted: #61718a; --timeline-blue: #0000ff; --timeline-green: #ff0000; --timeline-orange: #bd6412; --timeline-line: #e0e7ef; }
+.timelineCard[data-learning="true"] .progressTrack i { background: #0000ff; }
+.timelineCard[data-learning="true"] .monthItem[data-status="completed"] .progressTrack i,
+.timelineCard[data-learning="true"] .monthItem[data-status="completed"] .statusSymbol,
+.timelineCard[data-learning="true"] .quarter[data-status="completed"] .quarterNode { background: #ff0000; }
+.timelineCard[data-learning="true"] .monthItem[data-status="completed"] .monthProgress b { color: #ff0000; }
+.timelineCard[data-learning="true"] .monthItem[data-status="current"] .monthProgress b { color: #0000ff; }
+.timelineCard[data-learning="true"] .quarter[data-status="unknown"] .quarterNode,
+.timelineCard[data-learning="true"] .quarter[data-status="no-plan"] .quarterNode { background: #a4adba; border-color: #eef1f5; }
+.timelineCard[data-learning="true"] .monthTitle > strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.timelineCard[data-learning="true"] .quarter[data-status="no-plan"] .quarterLabel h3,
+.timelineCard[data-learning="true"] .quarter[data-status="unknown"] .quarterLabel h3 { color: var(--timeline-muted); }
 .timelineCardHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid #edf1f5; }
 .timelineCardHeader h2 { font-size: 18px; font-weight: 800; letter-spacing: -.035em; }
 .timelineCardHeader p { margin-top: 3px; color: var(--timeline-muted); font-size: 11px; }

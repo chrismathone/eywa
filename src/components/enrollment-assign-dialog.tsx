@@ -20,6 +20,8 @@ import {
   type MovableEnrollment,
 } from "@/features/enrollments/server/movable-actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+import { BulkAssignFailures, EnrollmentBulkPicker } from "@/components/enrollment-bulk-picker";
+import { useBulkAssign } from "@/components/use-bulk-assign";
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABEL: Record<string, string> = {
@@ -36,6 +38,8 @@ export type AssignDialogStudent = {
   id: string;
   name: string;
   grade: string | null;
+  /** 단체 배정 목록의 학교·학년 표기·검색용(반 상세만 싣는다). */
+  school?: string | null;
 };
 
 export type AssignDialogClass = {
@@ -140,6 +144,22 @@ export function EnrollmentAssignDialog({
   const [endDate, setEndDate] = useState("");
 
   /**
+   * ── 단체 배정(원장 2026-09-18) ── *"특강같은 수업에 단체 배정하고 싶은데"* · *"원생에서 수업 배정할때는
+   * 단체배정 기능 필요없고, 수업에서 원생 배정할떄는 단체 배정 가능하게"* — **반 → 학생 모드에서만** 선다.
+   * 켜면 학생 칸이 체크 목록이 되고 시작일·종료일·등원 요일은 고른 학생 모두에게 같이 간다.
+   * 🔴 반이동과 함께 켜지지 않는다 — 반이동은 학생마다 '어느 반에서'를 따로 골라야 해서 단체로 못 한다.
+   */
+  const bulk = useBulkAssign({
+    classId: isStudentMode ? null : fixedClass?.id ?? null,
+    names: studentOptions ?? [],
+    startDate,
+    endDate,
+    attendingDays,
+    onDone: () => onClose(true),
+  });
+  const resetBulk = bulk.reset;
+
+  /**
    * ── 반이동 예약(원장 2026-09-18) ────────────────────────────────────────────────
    * *"기존 수업이 있는 학생에게 '새로운 수강 배정'을 하려고 하는 경우 … 좌하단에 '반이동' 토글 …
    *  '배정'을 누르면 해당 날짜로 '반이동' 예약 처리 … 예를 들어 9/12 반이동이면 9/11까지 이전수업,
@@ -226,7 +246,18 @@ export function EnrollmentAssignDialog({
     const next = !transferMode;
     setTransferMode(next);
     setTransferError(null);
-    if (next) loadMovable(transferStudentId);
+    if (next) {
+      bulk.setMode(false);
+      loadMovable(transferStudentId);
+    }
+  };
+  const toggleBulk = () => {
+    const next = !bulk.on;
+    bulk.setMode(next);
+    if (next) {
+      setTransferMode(false);
+      setTransferError(null);
+    }
   };
   // 같은 (학생,반)에 기간이 겹치는 배정은 DB GiST가 거부한다 → **누르기 전에** 화면에서 막고 이유를 준다.
   // (겹치는데도 저장을 누르면 서버가 영문 제약 에러를 냈던 2026-07-28 제보의 근본 원인.)
@@ -348,17 +379,24 @@ export function EnrollmentAssignDialog({
       setTransferError(null);
       setPickedStudentId("");
       setLoadingMovable(false);
+      resetBulk();
       // 닫기 전에 걸어 둔 조회가 다시 연 창을 덮지 않게 — 옛 요청을 무효로 만든다.
       latestMovableRequest.current = "";
     }
     prevOpenForReset.current = open;
-  }, [open]);
+  }, [open, resetBulk]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-xl border p-6 shadow-lg">
+      {/* 단체 배정은 목록이 길어 작은 창에서 넘친다 — 그때만 창 안 스크롤(🔴 평소엔 안 건다: 인라인
+          SearchableSelect 목록이 스크롤 상자에 잘린다). */}
+      <div
+        className={`bg-background border-border w-full max-w-md rounded-xl border p-6 shadow-lg ${
+          bulk.on ? "max-h-full overflow-y-auto" : ""
+        }`}
+      >
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">수강 배정</p>
@@ -380,7 +418,11 @@ export function EnrollmentAssignDialog({
               )}
             </h2>
             <p className="text-muted-foreground text-xs">
-              {isStudentMode ? "배정할 반을 선택하세요" : "배정할 학생을 선택하세요"}
+              {isStudentMode
+                ? "배정할 반을 선택하세요"
+                : bulk.on
+                  ? "배정할 학생을 여러 명 선택하세요"
+                  : "배정할 학생을 선택하세요"}
             </p>
           </div>
           <button
@@ -398,7 +440,8 @@ export function EnrollmentAssignDialog({
         <form
           action={formAction}
           onSubmit={(e) => {
-            if (transferMode) e.preventDefault();
+            // 단체 배정도 폼 제출(createEnrollment — 한 명용)을 타지 않는다.
+            if (transferMode || bulk.on) e.preventDefault();
           }}
           className="space-y-3"
         >
@@ -430,7 +473,16 @@ export function EnrollmentAssignDialog({
             </div>
           ) : null}
 
-          {!isStudentMode && studentOptions ? (
+          {!isStudentMode && studentOptions && bulk.on ? (
+            <EnrollmentBulkPicker
+              options={studentOptions}
+              selected={bulk.ids}
+              onChange={bulk.pick}
+              disabled={bulk.pending}
+            />
+          ) : null}
+
+          {!isStudentMode && studentOptions && !bulk.on ? (
             <div className="space-y-1.5">
               <label className="text-foreground block text-sm font-medium">학생 선택</label>
               <SearchableSelect
@@ -629,28 +681,52 @@ export function EnrollmentAssignDialog({
 
           {state?.error ? <p className="text-chart-4 text-sm">{state.error}</p> : null}
           {transferError ? <p className="text-chart-4 text-sm">{transferError}</p> : null}
+          {bulk.on && bulk.error ? <p className="text-chart-4 text-sm">{bulk.error}</p> : null}
+          {bulk.on ? <BulkAssignFailures failures={bulk.failures} doneCount={bulk.doneCount} /> : null}
 
           {/* 🔴 '반이동' 토글은 **좌하단**(원장 2026-09-18) — 켜면 이 창이 '새 배정'이 아니라
               '옛 반 종료 + 새 반 시작' 한 쌍을 만든다. 끄면 종전 그대로다. */}
           <footer className="flex items-center justify-between gap-2 pt-2">
-            <button
-              type="button"
-              onClick={toggleTransfer}
-              aria-pressed={transferMode}
-              title="기존에 다니던 반을 이 반으로 옮깁니다. 이동 날짜 전날까지 이전 반, 그날부터 이 반입니다."
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                transferMode
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              반이동
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleTransfer}
+                aria-pressed={transferMode}
+                title="기존에 다니던 반을 이 반으로 옮깁니다. 이동 날짜 전날까지 이전 반, 그날부터 이 반입니다."
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  transferMode
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                반이동
+              </button>
+              {!isStudentMode ? (
+                <button
+                  type="button"
+                  onClick={toggleBulk}
+                  aria-pressed={bulk.on}
+                  title="여러 학생을 같은 시작일·등원 요일로 한 번에 배정합니다."
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    bulk.on
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  단체 배정
+                </button>
+              ) : null}
+            </div>
             <div className="flex items-center gap-2">
               <Button type="button" variant="ghost" onClick={() => onClose(false)}>
                 취소
               </Button>
-              {transferMode ? (
+              {bulk.on ? (
+                <Button type="button" onClick={bulk.run} disabled={bulk.pending || bulk.ids.length === 0}>
+                  {bulk.pending ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
+                  {bulk.ids.length > 0 ? `${bulk.ids.length}명 배정` : "배정"}
+                </Button>
+              ) : transferMode ? (
                 <Button
                   type="button"
                   onClick={runTransfer}

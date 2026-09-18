@@ -3,7 +3,7 @@ import { monthPosition } from "./continuous-timeline";
 import type { DayView, MonthView, YearView } from "./derive";
 import type { StudentProgress } from "./model";
 
-export type TimelineStatus = "completed" | "current" | "future" | "no-plan";
+export type TimelineStatus = "completed" | "current" | "future" | "no-plan" | "unknown";
 export type CurriculumPeriod = {
   id: string;
   year: number;
@@ -38,6 +38,7 @@ export function quarterCurriculumLabel(periods: readonly CurriculumPeriod[]): st
  * 2026-09-15·09-16 두 번 있었다). 이 상수를 손볼 땐 그 자리도 함께 볼 것.
  */
 export const TIMELINE_STATUS = {
+  unknown: { label: "진도 확인 필요", symbol: "○" },
   completed: { label: "완료", symbol: "✓" },
   current: { label: "진행 중", symbol: "●" },
   future: { label: "예정", symbol: "○" },
@@ -57,10 +58,11 @@ export function curriculumPeriods(view: YearView, progress: StudentProgress): Cu
       const count = units.get(topic) ?? { done: 0, planned: 0 };
       units.set(topic, { done: count.done + day.donePages, planned: count.planned + day.plannedPages });
     }
-    const first = days[0]?.record;
+    const first = days[0]?.record ?? month.weeks.flatMap(week => week.days).find(day => day.record)?.record;
     const isActual = view.year === actualYear && month.month === actualMonth;
     const isPast = monthPosition(view.year, month.month) < monthPosition(actualYear, actualMonth);
-    const status: TimelineStatus = month.plannedPages === 0 ? "no-plan" : isActual ? "current"
+    const status: TimelineStatus = month.plannedPages === 0 ? "no-plan" : month.status === "unknown" ? "unknown"
+      : progress.learningMap && month.pct === 100 ? "completed" : isActual ? "current"
       : month.pct === 100 ? "completed" : isPast ? "current" : "future";
     return {
       id: `${view.year}-${String(month.month).padStart(2, "0")}`,
@@ -68,10 +70,10 @@ export function curriculumPeriods(view: YearView, progress: StudentProgress): Cu
       bookName: month.plan?.bookName ?? first?.bookName ?? "교재 계획 없음",
       semester: month.plan?.semester ?? "",
       chapter: month.plan?.chapter ?? first?.chapter ?? "학습 계획이 없습니다",
-      subChapter: [...units.keys()].join(" · "),
+      subChapter: [...units.keys()].join(" · ") || first?.subChapter || "",
       startDate: ymd(view.year, month.month, 1), targetEndDate: ymd(view.year, month.month, daysInMonth(view.year, month.month)),
-      progress: month.pct, completedUnits: [...units.values()].filter((unit) => unit.done >= unit.planned).length,
-      totalUnits: units.size, status, isActual, isPast, source: month,
+      progress: month.pct, completedUnits: progress.learningMap ? month.donePages : [...units.values()].filter((unit) => unit.done >= unit.planned).length,
+      totalUnits: progress.learningMap ? month.plannedPages : units.size, status, isActual, isPast, source: month,
     };
   });
 }

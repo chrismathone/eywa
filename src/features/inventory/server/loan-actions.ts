@@ -5,7 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { dateField, idField, textField } from "../form";
-import { loanMismatchOf } from "../loan-link";
+import { loanMismatchOf, loanStatusForReturnTarget, restoredStatusAfterReturn } from "../loan-link";
+import { isAssetStatus } from "../status";
 import { friendlyInventoryError, requireInventoryWrite } from "./access";
 import type { InventoryActionState } from "./asset-actions";
 
@@ -97,6 +98,13 @@ export async function startLoan(fd: FormData): Promise<InventoryActionState> {
   return { ok: true };
 }
 
+/**
+ * 반납 — 대여 면의 [반납], 그리고 **자산 표에서 바로**(원장 2026-09-18 *"굳이 대여중으로 가지않고 자산에서 바로
+ * 상태 변경이나 사용자를 비우면 반납할 수 있게. 반납 날짜 지정 팝업으로 연계되게"*).
+ * 🔑 자산 표에서 상태를 골라 들어오면 `nextStatus`가 실린다 — 그때는 대여 전 상태가 아니라 **사람이 고른 상태**로 바꾼다.
+ *    폐기를 고르면 폐기일 = 반납일(CHECK `disposed_on is null or status='disposed'`와 짝).
+ * 🔴 대여중으로는 못 바꾼다(반납하면서 다시 대여중이면 뜻이 없다).
+ */
 export async function returnLoan(fd: FormData): Promise<InventoryActionState> {
   const ctx = await requireInventoryWrite();
   if ("error" in ctx) return ctx;
@@ -105,6 +113,10 @@ export async function returnLoan(fd: FormData): Promise<InventoryActionState> {
   const ret = dateField(fd, "returnedOn", "반납일");
   if ("error" in ret) return ret;
   const returnedOn = ret.value ?? kstToday();
+  if (returnedOn > kstToday()) return { error: "반납일은 미래 날짜로 정할 수 없습니다" };
+  const nextRaw = String(fd.get("nextStatus") ?? "").trim();
+  if (nextRaw && (!isAssetStatus(nextRaw) || nextRaw === "on_loan")) return { error: "상태 값이 올바르지 않습니다" };
+  const chosen = nextRaw || null;
 
   const admin = createAdminClient();
   const { data: loan, error: loanErr } = await admin
@@ -126,13 +138,14 @@ export async function returnLoan(fd: FormData): Promise<InventoryActionState> {
     .maybeSingle();
   if (assetErr) return { error: friendlyInventoryError(assetErr, "자산을 불러오지 못했습니다") };
 
-  // 🔑 되돌릴 상태 — 대여 전 상태(prev_status). 대여중/폐기로는 되돌리지 않는다(없으면 사용중).
-  const prev = loan.prev_status;
-  const restored = prev && prev !== "on_loan" && prev !== "disposed" ? prev : "in_use";
+  // 🔑 바꿀 상태 — 사람이 고른 상태(자산 표에서 들어온 경우) → 없으면 대여 전 상태(prev_status, 없으면 사용중).
+  const restored = chosen ?? restoredStatusAfterReturn(loan.prev_status as string | null);
+  // 대여 기록이 남을 상태 — 분실을 골랐으면 회수불가, 확인필요면 확인필요(돌려받은 게 아니다). 그 밖은 반납완료.
+  const loanStatus = loanStatusForReturnTarget(chosen);
 
   const { error: upLoanErr } = await admin
     .from("inventory_loans")
-    .update({ status: "returned", returned_on: returnedOn })
+    .update({ status: loanStatus, returned_on: returnedOn })
     .eq("id", loanId)
     .eq("tenant_id", ctx.tenantId)
     .eq("status", "out");
@@ -142,7 +155,12 @@ export async function returnLoan(fd: FormData): Promise<InventoryActionState> {
   if (asset && asset.status === "on_loan") {
     const { error: upAssetErr } = await admin
       .from("inventory_assets")
-      .update({ status: restored, holder_name: null, holder_user_id: null })
+      .update({
+        status: restored,
+        holder_name: null,
+        holder_user_id: null,
+        disposed_on: restored === "disposed" ? returnedOn : null,
+      })
       .eq("id", loan.asset_id)
       .eq("tenant_id", ctx.tenantId)
       .eq("status", "on_loan");
@@ -156,6 +174,9 @@ export async function returnLoan(fd: FormData): Promise<InventoryActionState> {
     metadata: {
       loanId, assetId: loan.asset_id, assetCode: asset?.asset_code ?? null, borrowerName: loan.borrower_name,
       returnedOn, restoredStatus: asset && asset.status === "on_loan" ? restored : null,
+      // 자산 표에서 상태를 골라 반납했는지(원장 2026-09-18) — 감사로그 문장이 '되돌림'과 '바꿈'을 가른다.
+      chosenStatus: chosen,
+      loanStatus,
     },
   });
   refresh();
