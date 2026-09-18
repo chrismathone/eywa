@@ -220,13 +220,18 @@ function matchIncomingToPrior(incoming: IncomingSlot[], prior: PriorSlot[]): (Pr
   return matched;
 }
 
-/** 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(폼 값이 이기는) 종료시각·'따로 수업' 표식. */
+/**
+ * 이 슬롯의 **이력 있는 값**이 바뀌었나 — 담당·강의실·(폼 값이 이기는) 종료시각.
+ *
+ * 🔴 '따로 수업(*LAB)' 표식은 **여기 넣지 않는다**(원장 2026-09-18 *"분명히 pl1b에서 설정을 했는데 반영되지 않음"*).
+ *    9/17엔 표식도 "오늘부터 새 구간"으로 갈랐는데, 그러면 켠 날 이전 요일(이번 주 화요일)은 옛 행이라 통합뷰가
+ *    `LAB` 그대로였다 — 설정했는데 지금 보는 시간표에 안 뜬다. 표식은 **표시 전용**(lab-separate.ts)이라 이력으로
+ *    남길 사실이 아니다 → 그 행을 **제자리에서 고친다**(재삽입 값은 `resolveLabSeparate`가 그대로 싣는다).
+ *    담당·강의실이 함께 바뀐 저장은 종전대로 가르고, 새 행이 표식을 들고 간다.
+ */
 function slotChanged(incoming: IncomingSlot, prior: PriorSlot, pairs?: PeriodPairs): boolean {
   if ((incoming.teacherId ?? null) !== (prior.teacherId ?? null)) return true;
   if ((incoming.classroomId ?? null) !== (prior.classroomId ?? null)) return true;
-  // 표식을 켜고 끄는 것도 **오늘부터 새 구간**이다 — 덮어쓰면 지난 주 시간표에도 `*LAB`이 뜬다(원장 2026-08-04
-  // "주차변경시에 실제로 일어났던 모든것이 반영되도록"). 판정은 재삽입 값과 **같은 함수**로 한다.
-  if (resolveLabSeparate(incoming, prior) !== (prior.labSeparate ?? false)) return true;
   // 종료시각은 **폼 값이 이길 때만** 실제로 바뀐다(formEndTimeWins) — 판정을 preserveScheduleFields와
   // 반드시 같은 함수로 할 것. 어긋나면 값은 바뀌는데 마감 행이 안 남거나(이력 구멍) 그 반대가 된다.
   if (formEndTimeWins(incoming, prior, pairs) && hm(incoming.endTime) !== hm(prior.endTime)) return true;

@@ -55,12 +55,29 @@ describe("'따로 수업(*LAB)' 표식 저장 규칙 (원장 2026-09-17)", () =>
     expect(row).toMatchObject({ slotTeacherLabel: "LAB", labSeparate: true });
   });
 
-  it("🔴 켜고 끄는 것도 오늘부터 새 구간 — 옛 행은 어제까지로 마감되고(지난 주엔 `*LAB`이 안 뜬다) 새 행은 오늘 시작", () => {
-    const archives = planSlotArchives({ incoming: [incoming({ labSeparate: true })], prior: [prior()], today: TODAY });
+  it("🔴 켜고 끄는 것은 **제자리에서** 고친다 — 마감 행 없이 옛 시작일 그대로(원장 2026-09-18: 켠 날 이전 요일도 바로 `*LAB`)", () => {
+    // 9/17엔 오늘부터 갈랐다 → 이번 주 화요일(켠 날 이전)이 옛 행이라 통합뷰에 `LAB` 그대로였다.
+    expect(planSlotArchives({ incoming: [incoming({ labSeparate: true })], prior: [prior()], today: TODAY })).toEqual([]);
+    expect(planSlotArchives({ incoming: [incoming({ labSeparate: false })], prior: [prior({ labSeparate: true })], today: TODAY })).toEqual([]);
+    const [on] = preserveScheduleFields({ incoming: [incoming({ labSeparate: true })], prior: [prior()], period: noPeriod, today: TODAY });
+    expect(on).toMatchObject({ validFrom: "2026-09-01", labSeparate: true });
+    // 수정 폼은 늘 운영 기간을 함께 보낸다(교시 시작일 9/1) — 그래도 같은 행이다.
+    const [withForm] = preserveScheduleFields({
+      incoming: [incoming({ labSeparate: true })],
+      prior: [prior()],
+      period: { validFrom: "2026-09-01", validTo: null, provided: true },
+      today: TODAY,
+    });
+    expect(withForm).toMatchObject({ validFrom: "2026-09-01", labSeparate: true });
+  });
+
+  it("담당·강의실이 **함께** 바뀐 저장은 종전대로 오늘부터 가르고, 새 행이 표식을 들고 간다", () => {
+    const moved = incoming({ labSeparate: true, classroomId: "r603" });
+    const archives = planSlotArchives({ incoming: [moved], prior: [prior()], today: TODAY });
     expect(archives).toHaveLength(1);
     expect(archives[0]).toMatchObject({ validTo: "2026-09-16", labSeparate: false });
-    const [row] = preserveScheduleFields({ incoming: [incoming({ labSeparate: true })], prior: [prior()], period: noPeriod, today: TODAY });
-    expect(row).toMatchObject({ validFrom: TODAY, labSeparate: true });
+    const [row] = preserveScheduleFields({ incoming: [moved], prior: [prior()], period: noPeriod, today: TODAY });
+    expect(row).toMatchObject({ validFrom: TODAY, labSeparate: true, classroomId: "r603" });
   });
 
   it("값이 그대로면 마감 행도 새 구간도 없다(저장 한 번에 이력이 쌓이지 않는다)", () => {
@@ -77,26 +94,27 @@ describe("'따로 수업(*LAB)' 표식 저장 규칙 (원장 2026-09-17)", () =>
 });
 
 describe("🔴 가른 행은 오늘부터 — 수정 폼이 운영 기간(시작일)을 함께 보내도 옛 행과 안 겹친다 (적대적 리뷰 2026-09-17)", () => {
+  // 표식은 2026-09-18부터 가르지 않는다 — 가르기 규칙 회귀는 **강의실 변경**을 방아쇠로 지킨다.
   // 실제 수정 폼 조건: 교시 시작일이 모두 9/1이라 폼이 시작일 칸을 9/1로 채워 보낸다.
   const formPeriod = { validFrom: "2026-09-01", validTo: null, provided: true };
 
-  it("표식을 켜면 옛 행은 9/16까지, 새 행은 9/17부터 — 9/1~9/16에 두 줄이 살지 않는다", () => {
-    const args = { incoming: [incoming({ labSeparate: true })], prior: [prior()], today: TODAY };
+  it("강의실을 바꾸면 옛 행은 9/16까지, 새 행은 9/17부터 — 9/1~9/16에 두 줄이 살지 않는다", () => {
+    const args = { incoming: [incoming({ classroomId: "r603" })], prior: [prior()], today: TODAY };
     expect(planSlotArchives(args)[0]).toMatchObject({ validFrom: "2026-09-01", validTo: "2026-09-16" });
     const [row] = preserveScheduleFields({ ...args, period: formPeriod });
-    expect(row).toMatchObject({ validFrom: TODAY, labSeparate: true });
+    expect(row).toMatchObject({ validFrom: TODAY, classroomId: "r603" });
   });
 
-  it("같은 날 다시 끄면 오늘 시작한 행이라 더 가르지 않는다(누를 때마다 행이 늘지 않는다)", () => {
-    const today = prior({ validFrom: TODAY, labSeparate: true });
-    expect(planSlotArchives({ incoming: [incoming({ labSeparate: false })], prior: [today], today: TODAY })).toEqual([]);
-    const [row] = preserveScheduleFields({ incoming: [incoming({ labSeparate: false })], prior: [today], period: formPeriod, today: TODAY });
-    expect(row).toMatchObject({ validFrom: TODAY, labSeparate: false });
+  it("같은 날 다시 바꾸면 오늘 시작한 행이라 더 가르지 않는다(누를 때마다 행이 늘지 않는다)", () => {
+    const today = prior({ validFrom: TODAY, classroomId: "r603" });
+    expect(planSlotArchives({ incoming: [incoming({ classroomId: "r604" })], prior: [today], today: TODAY })).toEqual([]);
+    const [row] = preserveScheduleFields({ incoming: [incoming({ classroomId: "r604" })], prior: [today], period: formPeriod, today: TODAY });
+    expect(row).toMatchObject({ validFrom: TODAY, classroomId: "r604" });
   });
 
   it("폼이 **오늘보다 뒤** 시작일을 보냈으면(개강을 미루는 명시 입력) 그 날짜가 이긴다", () => {
     const [row] = preserveScheduleFields({
-      incoming: [incoming({ labSeparate: true })],
+      incoming: [incoming({ classroomId: "r603" })],
       prior: [prior()],
       period: { validFrom: "2026-10-01", validTo: null, provided: true },
       today: TODAY,
@@ -105,16 +123,16 @@ describe("🔴 가른 행은 오늘부터 — 수정 폼이 운영 기간(시작
   });
 
   it("🔴 이미 끝난 구간으로 저장하면(종료일이 어제) 시작일을 오늘로 당기지 않는다 — `시작 > 종료` 유령 행 방지", () => {
-    // 3/1부터 돌던 반을 "어제(8/31)부로 끝내며" 같은 저장에서 표식도 켠다.
+    // 3/1부터 돌던 반을 "어제(8/31)부로 끝내며" 같은 저장에서 강의실도 바로잡는다.
     const old = prior({ validFrom: "2026-03-01" });
     const ended = { validFrom: "2026-03-01", validTo: "2026-08-31", provided: true };
-    const [row] = preserveScheduleFields({ incoming: [incoming({ labSeparate: true })], prior: [old], period: ended, today: TODAY });
+    const [row] = preserveScheduleFields({ incoming: [incoming({ classroomId: "r603" })], prior: [old], period: ended, today: TODAY });
     expect(row).toMatchObject({ validFrom: "2026-03-01", validTo: "2026-08-31" });
     expect(row!.validFrom <= row!.validTo!).toBe(true);
     // 그 짝은 마감 행도 안 만든다(재삽입 행이 같은 구간을 덮는다).
-    expect(planSlotArchives({ incoming: [incoming({ labSeparate: true })], prior: [old], today: TODAY, periodValidTo: "2026-08-31" })).toEqual([]);
+    expect(planSlotArchives({ incoming: [incoming({ classroomId: "r603" })], prior: [old], today: TODAY, periodValidTo: "2026-08-31" })).toEqual([]);
     // 종료일이 없거나 오늘 이후면 종전대로 오늘부터 가른다.
-    expect(planSlotArchives({ incoming: [incoming({ labSeparate: true })], prior: [old], today: TODAY, periodValidTo: null })).toHaveLength(1);
+    expect(planSlotArchives({ incoming: [incoming({ classroomId: "r603" })], prior: [old], today: TODAY, periodValidTo: null })).toHaveLength(1);
   });
 
   it("가르지 않는 행은 종전대로 폼 시작일을 따른다", () => {
