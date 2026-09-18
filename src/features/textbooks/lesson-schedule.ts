@@ -21,6 +21,7 @@
 import { slotsByDateOf, type MonthScheduleRow, type MonthSlot } from "@/features/class-sheets/lib/month-assemble";
 import { holidayNameOn, type HolidayMap } from "@/features/class-sheets/lib/holiday";
 import { shiftDays } from "@/features/timetable/lib/week";
+import { dowKeyOf } from "@/features/class-sheets/lib/week";
 import { LAB_ROOM_LABEL, SELF_STUDY_ROOM_LABEL } from "@/features/timetable/lib/teacher-label";
 
 /** 차수를 태울 교시 축. LAB은 축이 아니다(위 ②). */
@@ -56,15 +57,53 @@ export function slotsOfAxis(slots: readonly MonthSlot[], axis: SlotAxis): MonthS
 }
 
 /**
- * **고른 시각의 교시만** 남긴다(원장 2026-09-16: *"16시 수업 클릭 17시 수업 클릭"*).
+ * 고른 교시 한 칸 = **`"요일|시작시각"`**(`"mon|17:20"`).
  *
- * 🔑 사람이 고르는 건 축이 아니라 **시각**이다 — 같은 반의 같은 시각이라도 어떤 칸은 자리(JJ), 어떤 칸은
- *    강사 수업이라 축으로는 "이 두 칸만"을 표현할 수 없었다. 시각으로 고르면 자리든 수업이든 그대로 따라온다.
+ * 🔴 **요일이 꼭 붙어야 한다**(원장 제보 2026-09-18: *"추민아 선생님이 배정해도 송지혜 선생님까지 다같이
+ *    배정됌"*). 처음엔 시각만으로 골랐는데, **같은 시각의 담당이 요일마다 갈린다** — `중고E_중1 MED`는
+ *    월 17:20이 추민아(Jane)이고 목 17:20은 JJ(자습실)다. 시각만 고르면 추민아의 기입이 목요일 자습실
+ *    칸까지 내려앉는다. 실측(2026-09-18) 이렇게 갈리는 조합이 **60개(반×시각)**라 예외가 아니라 상례다.
+ * ⚠️ 옛 모양(`"17:20"`, 요일 없음)도 읽는다 — "그 시각의 모든 요일"이라는 뜻이다(0268a 적용 전 배정은
+ *    없지만, 값이 한 벌이라 읽는 쪽이 관대한 편이 안전하다).
+ * ⚠️ **담당은 키에 안 넣는다**(요일·시각까지만) — 넣으면 시간표가 바뀌어 담당이 교체되는 순간 그 배정이
+ *    조용히 멈춘다. 칸을 가리키는 좌표는 (요일, 시각)이고 담당은 그 칸의 **지금 표시**일 뿐이다.
+ *    그래서 담당이 교체되면 이어지는 차수는 새 담당의 칸에 들어간다(계획 줄 자체가 반 단위라 그게 맞다).
+ */
+const DOW_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const HHMM_RE = /^[0-2]\d:[0-5]\d$/;
+
+/** 화면·저장이 같은 글자를 쓰도록 키를 **한 곳에서** 만든다. */
+export function slotPickKey(dow: string, start: string): string {
+  return `${dow}|${start}`;
+}
+
+/** `"mon|17:20"` → `{ dow, start }`. 요일이 없으면 `dow: null`(모든 요일). 모양이 틀리면 null. */
+export function parseSlotPick(value: string): { dow: string | null; start: string } | null {
+  const raw = String(value ?? "").trim();
+  const bar = raw.indexOf("|");
+  if (bar < 0) return HHMM_RE.test(raw) ? { dow: null, start: raw } : null;
+  const dow = raw.slice(0, bar);
+  const start = raw.slice(bar + 1);
+  if (!(DOW_KEYS as readonly string[]).includes(dow) || !HHMM_RE.test(start)) return null;
+  return { dow, start };
+}
+
+/**
+ * **그 요일에 고른 교시만** 남긴다.
+ *
  * 🔴 **LAB만은 여전히 뺀다** — ECS가 표시·집계에서 언제나 빼는 자리라, 여기서만 넣으면 아무도 안 보는
  *    칸에 기록이 쌓인다. 고를 수 있는 목록 자체에 LAB을 안 올리지만, 여기서도 한 번 더 막는다.
  */
-export function slotsOfStarts(slots: readonly MonthSlot[], starts: ReadonlySet<string>): MonthSlot[] {
-  return slots.filter((s) => s.seat !== LAB_ROOM_LABEL && starts.has(s.slotStart));
+export function slotsOfPicks(
+  slots: readonly MonthSlot[],
+  dow: string,
+  picks: ReadonlySet<string>,
+): MonthSlot[] {
+  return slots.filter(
+    (s) =>
+      s.seat !== LAB_ROOM_LABEL &&
+      (picks.has(slotPickKey(dow, s.slotStart)) || picks.has(s.slotStart)),
+  );
 }
 
 /** 시작일부터 `days`일치 날짜 문자열(오름차순). `slotsByDateOf`에 그대로 넘긴다. */
@@ -86,18 +125,18 @@ export function buildLessonSchedule(input: {
   schedules: readonly MonthScheduleRow[];
   holidays: HolidayMap | null | undefined;
   /**
-   * 옛 방식 — 축으로 고른다. `slotStarts`가 있으면 **안 쓴다**(0268a 이후 새 배정은 전부 시각 선택).
+   * 옛 방식 — 축으로 고른다. `slotPicks`가 있으면 **안 쓴다**(0268a 이후 새 배정은 전부 칸 선택).
    * 값이 없는 옛 배정을 계속 읽기 위해 남겨 둔다([[#95]] expand/contract).
    */
   axis: SlotAxis;
-  /** 고른 교시 시작시각(`"HH:MM"`). 있으면 축 대신 이걸로 거른다. */
-  slotStarts?: readonly string[] | null;
+  /** 고른 교시(`"mon|17:20"`). 있으면 축 대신 이걸로 거른다 — 위 `slotsOfPicks` 주석. */
+  slotPicks?: readonly string[] | null;
   pace: LessonPace;
   /** 훑을 날 수(기본 = 상한). 테스트·짧은 미리보기에서 줄여 쓴다. */
   lookaheadDays?: number;
 }): LessonSchedule {
   const { startDate, lessonNos, schedules, holidays, axis, pace } = input;
-  const picked = input.slotStarts && input.slotStarts.length > 0 ? new Set(input.slotStarts) : null;
+  const picked = input.slotPicks && input.slotPicks.length > 0 ? new Set(input.slotPicks) : null;
   const dates = lookaheadDates(startDate, input.lookaheadDays ?? MAX_LOOKAHEAD_DAYS);
   const slotsByDate = slotsByDateOf(dates, schedules);
 
@@ -109,7 +148,7 @@ export function buildLessonSchedule(input: {
   for (const date of dates) {
     if (cursor >= lessonNos.length) break;
     const all = slotsByDate[date] ?? [];
-    const daySlots = picked ? slotsOfStarts(all, picked) : slotsOfAxis(all, axis);
+    const daySlots = picked ? slotsOfPicks(all, dowKeyOf(date), picked) : slotsOfAxis(all, axis);
     // 수업이 없는 날은 휴일이어도 알리지 않는다 — 어차피 앉을 칸이 없어 "건너뛴 수업일"이 아니다.
     if (daySlots.length === 0) continue;
 

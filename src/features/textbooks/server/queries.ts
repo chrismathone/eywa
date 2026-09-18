@@ -16,6 +16,7 @@ import type {
   TextbookRow,
   TextbookTableStatus,
 } from "../types";
+import { slotPickKey } from "../lesson-schedule";
 import type { LessonPace, SlotAxis } from "../lesson-schedule";
 
 /**
@@ -289,16 +290,16 @@ export function textbookOptionsTag(tenantId: string): string {
 const PLAN_COLS_BASE =
   "id, class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no, is_active, last_applied_at";
 /**
- * 🔴 **컬럼 폴백**([[#95]]) — `slot_starts`는 0268a가 더한 칸이고 SQL은 손으로 적용한다. 적용 전에
+ * 🔴 **컬럼 폴백**([[#95]]) — `slot_picks`는 0268a가 더한 칸이고 SQL은 손으로 적용한다. 적용 전에
  *    이 이름을 select에 넣으면 PostgREST가 `42703`으로 400을 주고 화면이 통째로 죽는다.
- *    그래서 **한 번 더 시도**한다: 있으면 쓰고, 없으면 옛 축 방식(slot_starts=null)으로 읽는다.
+ *    그래서 **한 번 더 시도**한다: 있으면 쓰고, 없으면 옛 축 방식(slot_picks=null)으로 읽는다.
  */
-const PLAN_COLS = `${PLAN_COLS_BASE}, slot_starts`;
+const PLAN_COLS = `${PLAN_COLS_BASE}, slot_picks`;
 
 /** `42703`(컬럼 없음)·PGRST204인가 — 0268a 미적용 신호. */
 function isMissingSlotStarts(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
-  // 🔴 **코드만** — 메시지 substring은 이 칸의 CHECK 이름(`..._slot_starts_len`)과 부딪혀
+  // 🔴 **코드만** — 메시지 substring은 이 칸의 CHECK 이름(`..._slot_picks_len`)과 부딪혀
   //    제약 위반까지 "컬럼 없음"으로 삼킨다(적대적 리뷰 P2).
   return error.code === "42703" || error.code === "PGRST204";
 }
@@ -314,7 +315,7 @@ type PlanDbRow = {
   start_lesson_no: number;
   is_active: boolean;
   last_applied_at: string | null;
-  slot_starts?: string[] | null;
+  slot_picks?: string[] | null;
 };
 
 /** 반 배정 목록. `classId`를 주면 그 반만. */
@@ -340,7 +341,7 @@ export async function getClassTextbookPlans(opts: {
     return q;
   };
 
-  // 0268a 적용 전이면 `slot_starts` 없이 한 번 더 — 그 경우 옛 축 방식으로 읽힌다.
+  // 0268a 적용 전이면 `slot_picks` 없이 한 번 더 — 그 경우 옛 축 방식으로 읽힌다.
   let cols = PLAN_COLS;
   {
     const probe = await admin
@@ -426,7 +427,7 @@ export async function getClassTextbookPlans(opts: {
         skillArea: book?.skill_area ?? null,
         sessionCount: Number(book?.session_count ?? 0),
         slotAxis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
-        slotStarts: Array.isArray(p.slot_starts) && p.slot_starts.length > 0 ? p.slot_starts.map(String) : null,
+        slotPicks: Array.isArray(p.slot_picks) && p.slot_picks.length > 0 ? p.slot_picks.map(String) : null,
         pace: (p.pace === "day" ? "day" : "period") as LessonPace,
         termMode: p.term_mode === "exam" ? "exam" : "regular",
         startDate: p.start_date,
@@ -481,21 +482,33 @@ export async function getClassSlotChoices(
   const user = await getCurrentUser();
   if (!user) return { status: "ok", rows: [] };
 
-  const [{ requireEcsClassAccess }, { getTenantSettings }, { settingsToPeriodsConfig, weekdayTableFor }, periodLabel, gridRows] =
-    await Promise.all([
-      import("@/features/class-sheets/server/access"),
-      import("@/features/owner/server/queries"),
-      import("@/features/timetable/lib/periods"),
-      import("@/features/class-sheets/lib/period-label"),
-      import("@/features/class-sheets/lib/grid-rows"),
-    ]);
+  const [
+    { requireEcsClassAccess },
+    { getTenantSettings },
+    { settingsToPeriodsConfig, weekdayTableFor },
+    periodLabel,
+    gridRows,
+    { getTeacherLabelMap },
+    { resolveTeacherLabel },
+  ] = await Promise.all([
+    import("@/features/class-sheets/server/access"),
+    import("@/features/owner/server/queries"),
+    import("@/features/timetable/lib/periods"),
+    import("@/features/class-sheets/lib/period-label"),
+    import("@/features/class-sheets/lib/grid-rows"),
+    import("@/features/timetable/server/queries"),
+    import("@/features/timetable/lib/teacher-label"),
+  ]);
 
   const gate = await requireEcsClassAccess(classId);
   if (!gate.ok) return { status: "ok", rows: [] };
 
   const today = kstToday();
-  const [schedRes, settings] = await Promise.all([
-    createAdminClient()
+  const admin = createAdminClient();
+  // 🔴 담당 이름은 **시트 달력과 같은 해석기**를 탄다 — 시간표에 저장된 건 닉네임(`Jane`)이고 달력은
+  //    `추민아`로 보여 준다. 칩만 원문을 적으면 같은 칸이 두 이름으로 불려 "내 교시가 어느 거지"가 된다.
+  const [schedRes, settings, labelMap] = await Promise.all([
+    admin
       .from("class_schedules")
       .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label")
       .eq("tenant_id", gate.access.tenantId)
@@ -505,6 +518,9 @@ export async function getClassSlotChoices(
       .order("start_time", { ascending: true })
       .range(0, 299),
     getTenantSettings(),
+    // ⚠️ 이름 해석은 **표시용**이다 — 실패해도 칩은 떠야 한다(원문 닉네임으로 폴백). 여기서 throw하면
+    //    교시를 못 골라 기입 자체가 막히는데, 그건 이름이 예쁘지 않은 것보다 훨씬 나쁘다.
+    getTeacherLabelMap({ supabase: admin, tenantId: gate.access.tenantId }).catch(() => undefined),
   ]);
   if (schedRes.error) return { status: "failed", rows: [] };
 
@@ -522,36 +538,45 @@ export async function getClassSlotChoices(
    *    → 갈리면 **지어내지 않는다**: 교시 라벨·자리·담당은 전부 같을 때만 적고, 아니면 비운다.
    *    (고른 시각이 그 날들 전부에 적용된다는 뜻은 그대로다 — 원장이 고른 "그 시각은 앞으로 쭉".)
    */
-  type Acc = { ends: Set<string>; seats: Set<string>; labels: Set<string>; dows: string[]; weekend: boolean };
+  type Acc = { start: string; label: string; ends: Set<string>; dows: string[]; weekend: boolean };
   const acc = new Map<string, Acc>();
   for (const r of schedRes.data ?? []) {
-    const seat = specialSlotLabel((r.slot_teacher_label as string | null) ?? null);
+    const label = (r.slot_teacher_label as string | null) ?? "";
+    const seat = specialSlotLabel(label || null);
     if (seat === "LAB") continue; // 🔴 위 주석
     const start = String(r.start_time).slice(0, 5);
     const dow = String(r.day_of_week);
-    const cur = acc.get(start) ?? { ends: new Set(), seats: new Set(), labels: new Set(), dows: [], weekend: false };
+    // 🔴 묶는 축이 **(시각, 담당)**이다 — 시각만으로 묶으면 담당이 요일마다 갈리는 칸이 한 칩에 뭉쳐,
+    //    추민아가 고른 17:20이 목요일 JJ(자습실)까지 데려간다(위 주석).
+    const key = `${start}|${label}`;
+    const cur = acc.get(key) ?? { start, label, ends: new Set(), dows: [], weekend: false };
     cur.ends.add(r.end_time ? String(r.end_time).slice(0, 5) : "");
-    cur.seats.add(seat === "JJ" ? "JJ" : "");
-    cur.labels.add((r.slot_teacher_label as string | null) ?? "");
     if (!cur.dows.includes(dow)) cur.dows.push(dow);
     if (gridRows.isWeekendDow(dow)) cur.weekend = true;
-    acc.set(start, cur);
+    acc.set(key, cur);
   }
 
-  const rows: ClassSlotChoice[] = [...acc.entries()].map(([start, a]) => {
+  const rows: ClassSlotChoice[] = [...acc.entries()].map(([key, a]) => {
     const onlyEnd = a.ends.size === 1 ? ([...a.ends][0] ?? "") : null;
-    const onlySeat = a.seats.size === 1 ? ([...a.seats][0] ?? "") : null;
-    const onlyLabel = a.labels.size === 1 ? ([...a.labels][0] ?? "") : null;
+    const seat = specialSlotLabel(a.label || null);
     return {
-      start,
+      key,
+      start: a.start,
       // 종료가 갈리면 교시 이름을 안 적는다(둘 중 하나만 맞는 이름을 다는 것보다 없는 편이 낫다).
       periodLabel:
-        onlyEnd === null ? null : periodLabel.resolvePeriodLabel(start, onlyEnd || null, tables, a.weekend),
-      seat: onlySeat === "JJ" ? "JJ" : null,
-      teacherLabel: onlyLabel ? onlyLabel : null,
+        onlyEnd === null ? null : periodLabel.resolvePeriodLabel(a.start, onlyEnd || null, tables, a.weekend),
+      seat: seat === "JJ" ? "JJ" : null,
+      teacherLabel: a.label ? (resolveTeacherLabel(a.label, labelMap) ?? a.label) : null,
       dows: a.dows,
+      picks: a.dows.map((d) => slotPickKey(d, a.start)),
     };
   });
 
-  return { status: "ok", rows: rows.sort((a, b) => (a.start < b.start ? -1 : 1)) };
+  // 시각 순 → 같은 시각이면 담당 이름 순(칩 순서가 호출마다 흔들리지 않게).
+  return {
+    status: "ok",
+    rows: rows.sort((a, b) =>
+      a.start !== b.start ? (a.start < b.start ? -1 : 1) : (a.teacherLabel ?? "").localeCompare(b.teacherLabel ?? "", "ko"),
+    ),
+  };
 }

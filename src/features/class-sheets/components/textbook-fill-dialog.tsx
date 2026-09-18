@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -136,6 +136,15 @@ export function TextbookFillDialog({
   }
 
   const canPreview = picked.size > 0 && !!bookId && !!startDate;
+  /**
+   * 고른 칩들이 실제로 가리키는 칸 목록(`"mon|17:20"`) — 서버가 받는 값이다.
+   * 🔴 **`useMemo`여야 한다** — 매 렌더 새 배열이면 아래 `runPreview`의 정체성이 계속 바뀌어
+   *    자동 미리보기 effect가 무한히 돈다(요청이 끝없이 나간다).
+   */
+  const pickedSlots = useMemo(
+    () => slots.filter((s) => picked.has(s.key)).flatMap((s) => s.picks),
+    [slots, picked],
+  );
 
   const runPreview = useCallback(async () => {
     const token = ++gen.current;
@@ -146,7 +155,7 @@ export function TextbookFillDialog({
       const pv = await previewTextbookFill({
         classId,
         textbookId: bookId,
-        slotStarts: [...picked],
+        slotPicks: pickedSlots,
         pace,
         termMode,
         startDate,
@@ -167,7 +176,7 @@ export function TextbookFillDialog({
       //    겹친 요청 사이의 '계산 중…' 표시는 아래 `calculating`이 파생값으로 메운다.
       setBusy(false);
     }
-  }, [classId, bookId, picked, pace, termMode, startDate, startLessonNo, t]);
+  }, [classId, bookId, pickedSlots, pace, termMode, startDate, startLessonNo, t]);
 
   /**
    * 🔴 **미리보기는 스스로 돈다** — 원장 제보 2026-09-17(*"기입자체가안됌"*, 교시·교재를 바꿔 가며 세 번).
@@ -192,7 +201,7 @@ export function TextbookFillDialog({
       const res = await applyTextbookFill({
         classId,
         textbookId: bookId,
-        slotStarts: [...picked],
+        slotPicks: pickedSlots,
         pace,
         termMode,
         startDate,
@@ -260,18 +269,20 @@ export function TextbookFillDialog({
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
                     {slots.map((s) => {
-                      const on = picked.has(s.start);
+                      // 🔴 칩 하나 = **(시각, 담당)** 한 묶음이다(원장 2026-09-18) — 같은 17:20이라도
+                      //    월은 추민아, 목은 JJ일 수 있어 시각으로 묶으면 남의 칸까지 데려간다.
+                      const on = picked.has(s.key);
                       const dows = [...s.dows].sort((a, b) => DOW_ORDER.indexOf(a) - DOW_ORDER.indexOf(b));
                       return (
                         <button
-                          key={s.start}
+                          key={s.key}
                           type="button"
                           aria-pressed={on}
                           onClick={() => {
                             setPicked((prev) => {
                               const next = new Set(prev);
-                              if (next.has(s.start)) next.delete(s.start);
-                              else next.add(s.start);
+                              if (next.has(s.key)) next.delete(s.key);
+                              else next.add(s.key);
                               return next;
                             });
                             invalidate();
