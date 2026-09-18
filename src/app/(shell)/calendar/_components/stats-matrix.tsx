@@ -172,7 +172,8 @@ export function StatsMatrix({
           </colgroup>
           <thead className="border-line bg-bg-soft/50 border-b [&_th]:whitespace-nowrap">
             <tr className="text-text-dim text-sm [&_th]:font-bold">
-              <th className="px-3 py-2 text-center">태그</th>
+              {/* 태그는 제목·값 모두 왼쪽 — 색 점이 앞에 서서 가운데로 모으면 이름 길이마다 점이 들쭉날쭉해진다(원장 2026-09-18 실측). */}
+              <th className="px-3 py-2 text-left">태그</th>
               <th className={`px-2 py-2 text-center ${DIVIDER}`}>연도</th>
               {MONTHS.map((m) => (
                 <th key={m} className={`px-1.5 py-2 text-center ${DIVIDER}`}>

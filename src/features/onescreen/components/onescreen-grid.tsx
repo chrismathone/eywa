@@ -347,8 +347,9 @@ export function OneScreenGrid({
               <th className={TH}>
                 {/* 고정 폭 열(144px — 2026-09-08 v5 글자 기준 실측으로 128→144)이라 버튼이 옆에 나란히 못 선다 — 넘치면 아랫줄로 접는다
                     (docs/design-conventions.md "고정 폭 표 칸의 가로 나열은 flex-wrap"). nowrap은 TH가 이미
-                    걸고 있어 낱말이 쪼개지지는 않는다. */}
-                <span className="flex flex-wrap items-center justify-center gap-1">
+                    걸고 있어 낱말이 쪼개지지는 않는다.
+                    머리는 **왼쪽** — 본문 이름 줄(점·이름·배지)이 왼쪽에서 시작해, 가운데 머리는 값과 다른 자리에 섰다(원장 2026-09-18). */}
+                <span className="flex flex-wrap items-center justify-start gap-1">
                   {t("os.col.student")}
                   {bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
                 </span>

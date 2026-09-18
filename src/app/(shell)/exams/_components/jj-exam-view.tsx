@@ -16,8 +16,21 @@ import { getJjClassOptions, getJjExamSummary, type JjViewer } from "@/features/i
 import { JjClassFilter } from "./jj-class-filter";
 import { JJ_SCOPE_FAILED, JjFailBanner, JjNote, JjPeriodLine, kstDateTime, rangeNote } from "./jj-shared";
 
-const TH = "micro px-4 py-3 text-center";
+const TH = "micro px-4 py-3";
 const NUM = "num text-text-dim px-4 py-2.5 text-right text-xs";
+/**
+ * 열 제목 + 정렬 — 열 제목과 값은 같은 축(원장 2026-09-18): 글·날짜는 왼쪽, 숫자는 오른쪽
+ * (성적관리 시험 목록 표와 같은 규약). 아래 본문 칸과 같은 정렬이어야 한다.
+ */
+const HEAD: ReadonlyArray<readonly [string, string]> = [
+  ["시험", "text-left"],
+  ["구분", "text-left"],
+  ["응시", "text-right"],
+  ["평균", "text-right"],
+  ["최고", "text-right"],
+  ["최저", "text-right"],
+  ["최근 제출", "text-left"],
+];
 
 export async function JjExamView({
   viewer,
@@ -71,8 +84,8 @@ export async function JjExamView({
           <table className="w-full text-sm [&_td]:whitespace-nowrap [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
             <thead className="border-line border-b [&_th]:whitespace-nowrap">
               <tr>
-                {["시험", "구분", "응시", "평균", "최고", "최저", "최근 제출"].map((h) => (
-                  <th key={h} className={TH}>
+                {HEAD.map(([h, align]) => (
+                  <th key={h} className={`${TH} ${align}`}>
                     {h}
                   </th>
                 ))}

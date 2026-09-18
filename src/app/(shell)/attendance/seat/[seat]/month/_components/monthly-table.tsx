@@ -41,12 +41,13 @@ export function MonthlyTable({
           <col style={{ width: COL.rate }} />
         </colgroup>
         <thead>
+          {/* 이름·학교 열 머리는 본문 값과 같은 축(왼쪽, 원장 2026-09-18) — 넓은 칸 가운데에 머리만 서면 값과 다른 자리에 선다. */}
           <tr className={HEAD_ROW_H}>
-            <th className={`bg-bg-soft sticky top-0 left-0 z-[60] ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-center`}>
+            <th className={`bg-bg-soft sticky top-0 left-0 z-[60] ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-left`}>
               <CollapseAllButton classIds={view.groups.map((g) => g.classId)} />
               <span className="micro">이름</span>
             </th>
-            <th className={`bg-bg-soft border-line sticky top-0 z-50 ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-center`}>
+            <th className={`bg-bg-soft border-line sticky top-0 z-50 ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-left`}>
               <span className="micro">학교·학년</span>
             </th>
             {days.map((d) => {

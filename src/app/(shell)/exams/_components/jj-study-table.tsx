@@ -46,8 +46,9 @@ export function JjStudyTable({
       <table className="w-full text-sm [&_td]:whitespace-nowrap [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
-            {HEAD.map((h) => (
-              <th key={h} className="micro px-4 py-3 text-center">
+            {/* 열 제목과 값은 같은 축(원장 2026-09-18) — 학생·인재원 반은 왼쪽, 숫자는 오른쪽(반 줄 숫자와 같은 열). */}
+            {HEAD.map((h, i) => (
+              <th key={h} className={`micro px-4 py-3 ${i < 2 ? "text-left" : "text-right"}`}>
                 {h}
               </th>
             ))}

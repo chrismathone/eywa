@@ -101,7 +101,8 @@ describe("시트형 목록뷰 — 열·규약", () => {
     render(<EnrollmentTable rows={[row()]} nowMs={0} canWrite={false} />);
     expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual(HEADS);
     for (const th of screen.getAllByRole("columnheader")) {
-      expect(th.className).toContain("text-center");
+      // 열 제목과 값은 같은 축(원장 2026-09-18) — 상담 내용(긴 글)·학생이름(뒤에 표식)은 제목·값 모두 왼쪽, 나머지는 가운데.
+      expect(th.className).toContain(["상담 내용", "학생이름"].includes(th.textContent ?? "") ? "text-left" : "text-center");
       expect(th.className).toContain("sticky"); // 시트의 freeze A4 — 열 제목이 위에 고정
     }
   });
