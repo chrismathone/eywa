@@ -69,7 +69,8 @@ const HEAD_CORNER_Z = "z-[60]";
 // ⚠️ 이 폭은 **머리 글자**가 정한다(`th`엔 말줄임이 없어 넘친 글자가 옆 칸 머리에 덮여 **잘린 채** 보인다).
 //    실측(`.micro` = Pretendard 14px · letter-spacing 0.02em): 한글 12.4px/자 · 라틴 7.7px/자이고,
 //    2026-09-18에 머리·본문을 **굵게**(원장 지시) 바꿔 약 4% 넓어졌다 → 가드는 한글 12.9 · 라틴 8.0으로 잰다.
-//    그래서 영어 라벨을 짧은 낱말로 줄였다(`School`·`Billed`·`Attended`·`Enrolled`·`Diff`) — 뜻은 머리 툴팁이 편다.
+//    그래서 영어 라벨을 짧은 낱말로 줄였다(`Sch·Gr`·`Billed`·`Attended`·`Reg.`·`Diff`) — 뜻은 머리 툴팁이 편다.
+//    🔴 짧게 고를 땐 **다른 뜻이 이미 쓰는 영어**를 피할 것(`School`·`Enrolled`로 한 번 lang-wiring 가드를 깼다).
 //    `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨 길이를 잠근다.
 //    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것.
 const COL_W = { name: 148, school: 72, classBilled: 76, units: 76, termSessions: 76, diff: 64, rate: 64, day: 28 } as const;

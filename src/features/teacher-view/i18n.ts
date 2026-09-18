@@ -1413,7 +1413,9 @@ export const SHEET_DICT = {
   // ── 월별 출석부 격자(열 머리·도움말·범례·합계) ──────────────────
   "att.col.name": { ko: "이름", en: "Name" },
   // ⚠️ 2026-09-18 열 폭 압축(80→72) — 영어 라벨은 **한 낱말**이어야 머리가 안 넘친다(뜻은 아래 툴팁이 편다).
-  "att.col.schoolGrade": { ko: "학교·학년", en: "School" },
+  // 🔴 영어 `School`은 원생 필터 '학교'(stu.filter.field.school)가 이미 쓴다 — 뜻이 다른 두 한국어가 같은 영어로
+  //    뭉치면 lang-wiring 가드가 막는다(2026-09-18 (1)에서 한 번 깼다). 짧게 `Sch·Gr`.
+  "att.col.schoolGrade": { ko: "학교·학년", en: "Sch·Gr" },
   "att.col.schoolGradeTitle": {
     ko: "학생의 학교와 학년입니다(줄이면 「경명여중2」처럼 적습니다 — 원문은 마우스 오버).",
     en: "The student's school and grade (shown compact; hover a value for the full text).",
@@ -1432,7 +1434,8 @@ export const SHEET_DICT = {
     ko: "출석부에서 센 시수입니다(출석·지각·조퇴·보강 칸의 배수 합).",
     en: "Sessions counted from this sheet (present, late, early leave and make-up cells).",
   },
-  "att.col.termSessions": { ko: "등록 차수", en: "Enrolled" },
+  // 🔴 `Enrolled`는 원생 상태 '재원'이 쓴다(stu.filter.status.enrolled·cls.card.enrolled) — 등록 차수는 `Reg.`(뜻은 툴팁).
+  "att.col.termSessions": { ko: "등록 차수", en: "Reg." },
   "att.col.termSessionsTitle": {
     ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다.",
     en: "Sessions confirmed in billing. Shown as unconfirmed until then.",
