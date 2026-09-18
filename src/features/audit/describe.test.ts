@@ -146,6 +146,12 @@ describe("auditDetail — 액션별 한글 상세", () => {
     );
   });
 
+  it("class_period_enrollments: 운영 종료일 · 닫은 수강 수", () => {
+    expect(auditDetail("class_period_enrollments", { classId: SID, periodEnd: "2026-09-21", changed: 5 }, ctx())).toBe(
+      "운영 종료일 2026-09-21 · 수강 5건 종료",
+    );
+  });
+
   it("class_end_term / class_handover_*: 날짜·새 담임", () => {
     expect(auditDetail("class_end_term", { classId: SID, closedAt: "2026-07-10" }, ctx())).toBe("종강일 2026-07-10");
     expect(

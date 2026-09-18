@@ -214,6 +214,7 @@
 }
 .scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; }
 .goalTick { color: var(--goal-ink); font-weight: 650; opacity: 1; }
+.source { grid-column: 1 / -1; margin: 0; color: var(--text-dim); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
 .rails[data-planned="false"] .annotation {
   border-color: var(--line);
   color: var(--text-dim);

@@ -725,6 +725,12 @@ export function auditDetail(
       const d = str(m.closedAt);
       return d ? `종강일 ${d}` : null;
     }
+    // 반 운영 기간이 끝나 그 반 수강을 닫음(0274a, 2026-09-18 — 매일 밤 cron, 행위자 '시스템(운영 기간 종료)').
+    case "class_period_enrollments": {
+      const d = str(m.periodEnd);
+      const n = typeof m.changed === "number" ? m.changed : null;
+      return join(d ? `운영 종료일 ${d}` : null, n !== null ? `수강 ${n}건 종료` : null);
+    }
     // 반 수정(2026-08-04 신설) — 그동안 **폼 저장에 로그가 아예 없어서** 담당·강의실이 언제 누구로
     // 바뀌었는지 되살릴 근거가 없었다. 바뀐 항목만 적는다(안 바뀐 건 안 적는다).
     // 🔴 2026-08-05: 예전엔 항목 이름만 적어 "변경: 강의실"이었다 — 어디서 어디로 바뀌었는지가 없어

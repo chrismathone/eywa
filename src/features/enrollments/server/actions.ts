@@ -10,6 +10,7 @@ import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
+import { PERIOD_END_REASON } from "@/features/classes/server/period-enrollments";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -465,7 +466,7 @@ export async function updateEnrollmentDates(
   const supabase = await createClient();
   const { data: current, error: fetchErr } = await supabase
     .from("enrollments")
-    .select("start_date, end_date, student_id, class_id, is_transferred, is_transferred_in")
+    .select("start_date, end_date, student_id, class_id, is_transferred, is_transferred_in, withdrawal_reason")
     .eq("id", enrollmentId)
     .single();
   if (fetchErr || !current) return { error: "수강 정보를 찾을 수 없습니다" };
@@ -537,7 +538,12 @@ export async function updateEnrollmentDates(
     field === "start"
       ? { start_date: value as string }
       : value
-        ? { end_date: value }
+        ? {
+            end_date: value,
+            // 운영 기간이 닫은 수강(0274a 표식)의 종료일을 사람이 고치면 **사람의 값**이 된다 — 표식을 지워야 반의 기간을
+            // 다시 열 때 이 값을 덮지 않는다(적대 리뷰 2026-09-18). 다른 사유(퇴원 사유 등)는 그대로 둔다.
+            ...((current.withdrawal_reason as string | null) === PERIOD_END_REASON ? { withdrawal_reason: null } : {}),
+          }
         : { end_date: null, withdrawal_reason: null, is_transferred: false };
 
   const { error } = await supabase.from("enrollments").update(patch).eq("id", enrollmentId);

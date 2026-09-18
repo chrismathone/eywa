@@ -40,6 +40,8 @@ import { DelegateAction, DelegationBanner } from "./_components/class-delegation
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
+import { ClassPeriodView } from "./_components/class-period-view";
+import { classOperatingPeriod } from "@/features/classes/class-period";
 import { isLabSeparateSlot, LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS } from "@/features/timetable/lib/lab-separate";
 import { slotPhase } from "@/features/classes/schedule-summary";
 import { ClassHistorySection } from "./_components/history-section";
@@ -181,6 +183,18 @@ export default async function ClassDetailPage({
   //    (LAB으로만 도는 요일을 후보에서 지우면 그날 오는 학생의 등원 요일을 못 고른다, 리뷰 2026-09-17).
   const classDays =
     labSeparateSlots.length > 0 ? summarizeSchedule(klass.scheduleSlots, today).days : schedule.days;
+  /**
+   * 운영 기간(반 수정의 운영 기간 그대로 — 원장 2026-09-18). 카드와 학생 줄이 **같은 값**을 쓴다.
+   * 🔑 기간이 아직 안 끝났으면 수강 종료일은 **저장하지 않고**(0274a — 앱 26곳이 "종료일 비었음 = 수강 중"으로 판정한다)
+   *    학생 줄의 빈 종료일 자리에 "~ 9/21 (운영 종료)"로 **표시만** 한다. 끝나면 매일 밤 cron이 그 날로 닫는다.
+   */
+  const classPeriod = classOperatingPeriod(klass.scheduleSlots, today);
+  const plannedEnd = classPeriod && !classPeriod.ended ? classPeriod.validTo : null;
+  /** 종료일이 빈 학생 줄의 끝 표기 — 운영 종료일이 있고 그 전에 시작한 수강이면 그 날, 아니면 종전 "~ 현재". */
+  const openEndLabel = (startDate: string) =>
+    plannedEnd && startDate <= plannedEnd
+      ? sheetTf(lang, "cls.d.toPlannedEnd", { date: plannedEnd })
+      : sheetT(lang, "cls.d.toNow");
   const attendanceBadge = (days: string[]) =>
     days.length > 0 && days.length < classDays.length
       ? sheetTf(lang, "cls.d.onlyDays", {
@@ -366,6 +380,10 @@ export default async function ClassDetailPage({
             <Info className="text-primary size-4" />
             <h2 className="text-foreground text-sm font-bold">{sheetT(lang, "cls.d.info")}</h2>
           </header>
+          {/* 운영 기간(시작·종강) — 반 수정의 운영 기간 그대로(원장 2026-09-18). 종료일이 있으면 수강이 그날 끝난다(0274a). */}
+          <Card title={sheetT(lang, "cls.d.period")}>
+            <ClassPeriodView period={classPeriod} lang={lang} />
+          </Card>
           <Card title={sheetT(lang, "cls.d.timetable")} icon={<CalendarClock className="size-3.5" />}>
             <ScheduleSummaryView
               schedule={schedule}
@@ -513,7 +531,7 @@ export default async function ClassDetailPage({
                             enrollmentId={s.enrollmentId}
                             field="end"
                             value={s.endDate}
-                            emptyLabel={sheetT(lang, "cls.d.toNow")}
+                            emptyLabel={openEndLabel(s.enrolledAt)}
                           />
                         ) : s.endDate ? (
                           <>
@@ -521,7 +539,7 @@ export default async function ClassDetailPage({
                             <span className="num">{s.endDate}</span>
                           </>
                         ) : (
-                          sheetT(lang, "cls.d.toNow")
+                          openEndLabel(s.enrolledAt)
                         )}
                       </span>
                       {/* 휴원 = caution(amber) — 학생목록·상세 배지와 같은 색(종전엔 chart-3 직접 참조). */}

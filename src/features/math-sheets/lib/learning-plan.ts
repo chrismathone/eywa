@@ -27,6 +27,7 @@ export type LearningRecord = {
   progress: string | null;
   textbook: string | null;
   homework?: string | null;
+  sentAt?: string | null;
 };
 export type LearningStatus =
   | "no-goal"
@@ -43,6 +44,9 @@ export type LearningProgress = {
   current: number | null;
   currentBlock: string | null;
   currentDate: string | null;
+  /** Latest sent report; its free text may differ from the last identifiable curriculum unit. */
+  latestRecord?: LearningRecord | null;
+  currentIsLatest?: boolean;
   target: number;
   difference: number | null;
   status: LearningStatus;
@@ -296,19 +300,24 @@ export function buildLearningProgress(
   let current: number | null = null,
     currentBlock: string | null = null,
     currentDate: string | null = null;
+  let latestRecord: LearningRecord | null = null;
+  let currentRecord: LearningRecord | null = null;
   const reviewDates = new Set<string>();
   const plannedDates = new Set(days.map((day) => day.date));
   // Latest position wins, including a return to earlier blocks for revision. Future reports never count.
   for (const record of [...records].sort((a, b) =>
-    a.date.localeCompare(b.date),
+    a.date.localeCompare(b.date) || (a.sentAt ?? "").localeCompare(b.sentAt ?? ""),
   )) {
-    if (record.date < goal.startDate || record.date > referenceDate) continue;
+    if (record.date > referenceDate) continue;
+    if (goal.track === "supplement" && (record.date < goal.startDate || record.date > goal.endDate)) continue;
+    latestRecord = record;
     if (goal.track === "supplement") {
       if (record.date > goal.endDate || !plannedDates.has(record.date) || !record.progress?.trim()) continue;
       reviewDates.add(record.date);
       current = Math.min(total, reviewDates.size);
       currentBlock = record.progress.trim();
       currentDate = record.date;
+      currentRecord = record;
       continue;
     }
     const index = learningTopicIndex(record.progress, course);
@@ -320,6 +329,7 @@ export function buildLearningProgress(
       const full = flatLessons(goal.studyGrade);
       current = before < full.indexOf(goal.startBlock) ? 0 : total;
       currentBlock = full[before]; currentDate = record.date;
+      currentRecord = record;
       continue;
     }
     const topic = course[index];
@@ -330,6 +340,7 @@ export function buildLearningProgress(
     current = Math.round(Math.max(0, Math.min(total, position)) * 10) / 10;
     currentBlock = goal.studyGrade === (goal.endStudyGrade ?? goal.studyGrade) ? topic.lesson : `${topic.grade} · ${topic.lesson}`;
     currentDate = record.date;
+    currentRecord = record;
   }
   const target = plannedAt(days, referenceDate),
     difference = current == null ? null : Math.round((current - target) * 10) / 10;
@@ -356,6 +367,8 @@ export function buildLearningProgress(
     current,
     currentBlock,
     currentDate,
+    latestRecord,
+    currentIsLatest: currentRecord != null && currentRecord === latestRecord,
     target,
     difference,
     status,

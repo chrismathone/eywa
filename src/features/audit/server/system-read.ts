@@ -30,6 +30,7 @@ export const SYSTEM_READABLE_AUDIT_ACTIONS = [
   "class_handover_cancel",
   "class_handover_bulk",
   "class_update",
+  "class_period_enrollments",
   "class_delegate",
   "class_delegate_revoke",
   "class_archive",

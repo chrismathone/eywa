@@ -366,7 +366,7 @@ export function LearningOverview({
                               {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} goal={goal} recentBlock={!goal && track === "regular" ? s.rail?.nowLesson : undefined} recentGrade={s.rail?.nowGrade} />
+                          <LearningRails progress={progress} goal={goal} recentRecord={learning.records[s.studentId]?.[0]} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
@@ -471,17 +471,7 @@ function StudentFocus({
 }) {
   const goal = learning.goals[student.studentId],
     progress = learning.progress[student.studentId];
-  const records =
-    learning.records[student.studentId] ??
-    Object.entries(student.records)
-      .filter(([date]) => date <= learning.referenceDate)
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([date, r]) => ({
-        date,
-        progress: r.progress,
-        textbook: r.textbook,
-        homework: r.homework,
-      }));
+  const records = learning.records[student.studentId] ?? [];
   const legacyGoal = learning.track === "supplement" ? undefined : data.goals[student.studentId];
   return (
     <div className={styles.focusLayout}>
@@ -663,7 +653,7 @@ function StudentFocus({
         ) : null}
         <div className={styles.records}>
           <h4>
-            최근 수업 기록 <span>{records.length}건</span>
+            최근 발송 수업보고서 <span>{records.length}건</span>
           </h4>
           {records.length ? (
             records.map((r, i) => {
@@ -672,7 +662,7 @@ function StudentFocus({
                 <div className={styles.record} key={`${r.date}:${i}`}>
                   <time>{shortDate(r.date)}</time>
                   <div>
-                    <strong>{r.progress || "진도 입력 없음"}</strong>
+                    <strong>{r.progress ? learningBlockLabel(r.progress, goal?.studyGrade) : "진도 입력 없음"}</strong>
                     {r.textbook ? <p>{r.textbook}</p> : null}
                     {r.homework ? <p>과제: {r.homework}</p> : null}
                     {scores ? (
@@ -691,7 +681,7 @@ function StudentFocus({
             })
           ) : (
             <p className={styles.empty}>
-              기준일까지 작성된 수업 기록이 없습니다.
+              기준일까지 발송된 수업보고서가 없습니다.
             </p>
           )}
         </div>

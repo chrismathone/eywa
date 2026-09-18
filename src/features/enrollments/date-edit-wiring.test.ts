@@ -55,7 +55,9 @@ describe("수강 날짜 인라인 편집 배선", () => {
    */
   it("반 상세는 비었을 때의 말을 그대로 유지한다(emptyLabel)", () => {
     const src = read("src/app/(shell)/classes/[id]/page.tsx");
-    expect(src).toMatch(/emptyLabel=\{sheetT\(lang, "cls\.d\.toNow"\)\}/);
+    // 2026-09-18부터 반 운영 종료일이 있으면 "~ 9/21 (운영 종료)"를 보인다(0274a — 저장이 아니라 표시). 없으면 종전 `~ 현재`.
+    expect(src).toContain("emptyLabel={openEndLabel(s.enrolledAt)}");
+    expect(src).toMatch(/: sheetT\(lang, "cls\.d\.toNow"\);/);
   });
 
   it("공용 컴포넌트는 저장 경로가 updateEnrollmentDates 하나뿐이다", () => {

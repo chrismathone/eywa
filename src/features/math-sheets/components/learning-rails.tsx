@@ -1,17 +1,18 @@
 import { useId, type CSSProperties } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { goalMilestones, type LearningGoal, type LearningProgress } from "../lib/learning-plan";
+import { goalMilestones, type LearningGoal, type LearningProgress, type LearningRecord } from "../lib/learning-plan";
 import { learningAxisLabel, learningAxisPosition, learningAxisTicks } from "../lib/learning-axis";
 import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
 import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
 
 /** Integer positions are fixed goals; fractional positions show actual progress. */
-export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
+export function LearningRails({ progress, goal, recentBlock, recentGrade, recentRecord }: {
   progress?: LearningProgress;
   goal?: LearningGoal;
   recentBlock?: string | null;
   recentGrade?: string | null;
+  recentRecord?: LearningRecord | null;
 }) {
   const goalDescriptionId = useId();
   const stops = goal ? goalMilestones(goal) : [];
@@ -20,7 +21,8 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
   const axisCurrent = current == null ? null : learningAxisPosition(current, stops);
   const position = (value: number) => total ? value / total * 100 : 0;
   const currentPosition = position(axisCurrent ?? 0);
-  const currentBlock = progress?.currentBlock ?? recentBlock;
+  const latestRecord = progress?.latestRecord ?? recentRecord;
+  const currentBlock = progress?.currentBlock ?? latestRecord?.progress ?? recentBlock;
   const currentLabel = currentBlock ? learningBlockLabel(currentBlock, goal?.studyGrade ?? recentGrade) : "진도 기록 확인 필요";
   const finalStop = stops.at(-1);
   const finalLabel = finalStop ? learningBlockLabel(finalStop.endBlock, finalStop.studyGrade) : "전체 목표를 설정해 주세요";
@@ -28,6 +30,10 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
   const currentText = axisCurrent == null ? "현재 진도 확인 필요" : `현재 ${learningAxisLabel(axisCurrent)} / 최종 목표 ${total} · ${currentLabel}`;
   const goalText = total ? stops.map((_, index) => describeStop(index)).join("; ") : "전체 목표 미설정";
   const variables = { "--current-position": `${currentPosition}%`, "--target-position": total ? "100%" : "0%" } as CSSProperties;
+  const carried = Boolean(progress?.currentDate && latestRecord && !progress.currentIsLatest);
+  const sourceText = latestRecord
+    ? `최근 발송 보고서 · ${latestRecord.date} 수업 · ${latestRecord.progress ? learningBlockLabel(latestRecord.progress, goal?.studyGrade ?? recentGrade) : "진도 입력 없음"}${carried ? ` · 진도선은 ${progress!.currentDate} 마지막 확인 단원 기준` : current == null && goal ? " · 단원 위치 확인 필요" : ""}`
+    : null;
 
   const ticks = learningAxisTicks(stops);
   const monthlyBlocks = MATH_LEARNING_CADENCE[goal?.track ?? "regular"].monthlyBlocks;
@@ -57,8 +63,8 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
             <path className={styles.endTicks} d="M0 35v16M1000 35v16M0 69v16M1000 69v16" vectorEffect="non-scaling-stroke" />
           </svg>
         ) : null}
-        <div className={`${styles.annotation} ${styles.currentAnnotation}`} title={`현재 진도 · ${currentLabel}`}>
-          <span className={styles.annotationTag}>현재</span><span className={styles.blockName}>{currentLabel}</span>
+        <div className={`${styles.annotation} ${styles.currentAnnotation}`} title={`현재 진도 · ${currentLabel}${progress?.currentDate ? ` · ${progress.currentDate} 수업보고서 기준` : ""}`}>
+          <span className={styles.annotationTag}>{carried ? "마지막 확인" : "현재"}</span><span className={styles.blockName}>{currentLabel}</span>
         </div>
         <div className={`${styles.track} ${styles.currentTrack}`}
           role={total > 0 && axisCurrent != null ? "progressbar" : "img"} aria-label="현재진도"
@@ -107,6 +113,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
           style={{ left: `${position(tick.position)}%` }}>{tick.goal ? `${tick.position}차` : `${tick.block}블록`}</span>)}
         <span className={styles.goalTick}>{total ? `${total}차` : "전체 목표 미설정"}</span>
       </div>
+      {sourceText ? <p className={styles.source}>{sourceText}</p> : null}
     </div>
   );
 }
