@@ -15,6 +15,9 @@ import {
   subjectWeekdayPeriods,
 } from "@/features/timetable/lib/periods";
 import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
+// *LAB 재료 — 켠 교시(0271a)·켠 수강(0271b). 둘 다 fail-soft.
+import { loadLabSeparateIds } from "@/features/classes/server/lab-separate";
+import { loadLabSplitCellsForClasses } from "./lab-split";
 import { hhmm, SEAT_DB_LABEL, type SeatKey } from "../seat";
 import { buildMonthDays, isSlotLiveOnDate, padDaysTo31, type SeatAttRecord, type SeatSlotDef } from "../monthly";
 import {
@@ -36,7 +39,8 @@ export async function getSeatMonthly(seat: SeatKey, month: string): Promise<Seat
   const qEnd = bounds ? addDays(bounds.end, 45) : `${month}-31`;
   const want = SEAT_DB_LABEL[seat];
 
-  const [rawSlots, settings] = await Promise.all([
+  // '따로 수업(*LAB)' 켠 교시(0271a) — 배치 조회와 **병렬**(B4), 따로·fail-soft([[#95]]). 모르면 안 가른다.
+  const [rawSlots, settings, labSeparateSlotIds] = await Promise.all([
     fetchAllPaged<{
       id: string;
       class_id: string;
@@ -58,6 +62,7 @@ export async function getSeatMonthly(seat: SeatKey, month: string): Promise<Seat
         .range(from, to),
     ),
     getTenantSettings(),
+    loadLabSeparateIds(supabase, { kind: "window", from: qStart, to: qEnd }),
   ]);
 
   const seatRows = rawSlots.filter((r) => specialSlotLabel(r.slot_teacher_label) === want);
@@ -84,13 +89,16 @@ export async function getSeatMonthly(seat: SeatKey, month: string): Promise<Seat
       end: hhmm(r.end_time),
       validFrom: r.valid_from,
       validTo: r.valid_to,
+      separate: labSeparateSlotIds ? labSeparateSlotIds.has(String(r.id)) : undefined,
     }))
     .filter((s) => days.some((d) => !d.placeholder && isSlotLiveOnDate(s, d.date)));
 
   const liveClassIds = [...new Set(slots.map((s) => s.classId))];
-  const [enrollments, records] = await Promise.all([
+  // '따로 수업(*LAB)' 재료 — 켠 교시(0271a)·켠 수강(0271b). 둘 다 따로·fail-soft([[#95]]), 모르면 안 가른다.
+  const [enrollments, records, labFlagged] = await Promise.all([
     fetchEnrollments(supabase, liveClassIds, periodWindow.start, periodWindow.end),
     fetchRecords(supabase, liveClassIds, periodWindow.start, periodWindow.end),
+    loadLabSplitCellsForClasses(supabase, { classIds: liveClassIds, tenantId: null }),
   ]);
 
   // 표식(퇴원/반이동) 판정용 — 그 학생들의 **다른 반** 수강. 반이동은 떠난 뒤 14일 안에 시작한 반을
@@ -115,6 +123,8 @@ export async function getSeatMonthly(seat: SeatKey, month: string): Promise<Seat
     records,
     wantLabel: want,
     periodLabelOf,
+    // 🔴 켠 교시를 모르면(labSeparateSlotIds=null) 배정도 안 넘긴다 — 한쪽만 알면 전부 "끈 원생"으로 읽혀 *LAB 칸이 비어 버린다.
+    labFlagged: labSeparateSlotIds ? labFlagged : null,
   });
 }
 

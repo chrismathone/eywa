@@ -8,7 +8,7 @@
      원장 2026-09-18: 현재는 순수 파랑, 목표는 순수 빨강. 채움에는 혼합색을 쓰지 않는다. */
   --goal-ink: #ff0000;
   display: grid;
-  grid-template-columns: var(--ruler-width) 65px;
+  grid-template-columns: var(--ruler-width) 85px;
   gap: 8px 14px;
   width: max-content;
   font-variant-numeric: tabular-nums;
@@ -29,15 +29,15 @@
   pointer-events: none;
 }
 .guides {
-  stroke: var(--rail-ink);
-  stroke-width: 1px;
-  opacity: 0.16;
+  stroke: var(--goal-ink);
+  stroke-width: 1.2px;
+  opacity: 0.45;
 }
 .topicTick {
   position: absolute;
-  top: 36px;
+  top: 39px;
   width: 6px;
-  height: 48px;
+  height: 42px;
   transform: translateX(-50%);
   cursor: help;
 }
@@ -46,12 +46,12 @@
   position: absolute;
   left: 50%;
   width: 1px;
-  height: 14px;
+  height: 8px;
   transform: translateX(-50%);
-  background: color-mix(in srgb, var(--rail-ink) 65%, var(--card));
+  background: color-mix(in srgb, var(--rail-ink) 15%, var(--card));
 }
 .topicTick::before { top: 0; }
-.topicTick::after { bottom: 0; background: color-mix(in srgb, var(--goal-ink) 60%, var(--card)); }
+.topicTick::after { bottom: 0; background: color-mix(in srgb, var(--goal-ink) 15%, var(--card)); }
 .topicTick:hover::before { background: var(--rail-ink); width: 2px; }
 .topicTick:hover::after { background: var(--goal-ink); width: 2px; }
 .endTicks {
@@ -60,6 +60,8 @@
   opacity: 0.5;
 }
 .track {
+  z-index: 1;
+  pointer-events: none;
   position: absolute;
   left: 0;
   right: 0;
@@ -221,6 +223,7 @@
 .values small { font-size: 10px; font-weight: 450; }
 .targetValue b { font-size: 13px; font-weight: 550; }
 .scale {
+  min-height: 15px;
   container-type: inline-size;
   position: relative;
   display: flex;
@@ -233,8 +236,8 @@
 }
 .scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; white-space: nowrap; }
 .goalTick { color: var(--goal-ink); font-weight: 650; opacity: 1; }
-.source { grid-column: 1 / -1; margin: 0; color: var(--text-dim); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
-.rails[data-planned="false"] { width: 100%; grid-template-columns: minmax(0, 1fr) 65px; }
+.reportSource { color: var(--text-dim); font-size: 10px; line-height: 1.6; }
+.rails[data-planned="false"] { width: 100%; grid-template-columns: minmax(0, 1fr) 85px; }
 .rails[data-planned="false"] .annotation {
   border-color: var(--line);
   color: var(--text-dim);

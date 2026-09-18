@@ -26,6 +26,8 @@ export type SeatSlotDef = {
   end: string;
   validFrom: string | null;
   validTo: string | null;
+  /** '따로 수업(*LAB)' 교시인가(0271a) — 켠 원생만 이 칸에 선다. 모르면 undefined(안 가른다). */
+  separate?: boolean;
 };
 
 export type SeatAttRecord = {

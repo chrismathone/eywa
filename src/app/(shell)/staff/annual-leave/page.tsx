@@ -63,12 +63,12 @@ export default async function AnnualLeavePage() {
         </p>
       ) : null}
 
-      {/* 0270a 미적용 — 조정은 그대로 되고 **사용일 칸만** 잠긴다([[#95]]). 표 배너와 따로 두는 이유는
+      {/* 0270b 미적용 — 조정은 그대로 되고 **사용 기간 칸만** 잠긴다([[#95]]). 표 배너와 따로 두는 이유는
           둘이 다른 사실이기 때문이다(표가 없으면 조정 자체가 안 되고, 칸이 없으면 날짜만 못 적는다). */}
-      {!overview.loadError && overview.tableReady && !overview.usedOnReady ? (
+      {!overview.loadError && overview.tableReady && !overview.usedRangeReady ? (
         <p className="border-line bg-bg-soft/50 text-text-dim rounded-xl border border-dashed px-4 py-2.5 text-sm break-keep">
-          조정에 <b className="text-foreground">휴가 사용일</b>을 적는 칸은 마이그레이션{" "}
-          <span className="num">0270a</span>를 적용한 뒤부터 쓸 수 있습니다 — 그전까지 조정은 일수와
+          조정에 <b className="text-foreground">휴가 사용 기간</b>을 적는 칸은 마이그레이션{" "}
+          <span className="num">0270b</span>를 적용한 뒤부터 쓸 수 있습니다 — 그전까지 조정은 일수와
           사유만 기록됩니다.
         </p>
       ) : null}
@@ -83,7 +83,7 @@ export default async function AnnualLeavePage() {
       <AdjustTable
         rows={overview.rows}
         tableReady={overview.tableReady}
-        usedOnReady={overview.usedOnReady}
+        usedRangeReady={overview.usedRangeReady}
       />
     </div>
   );

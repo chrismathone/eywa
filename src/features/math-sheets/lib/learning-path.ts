@@ -62,6 +62,26 @@ export function learningTopics(range: LearningRange): LearningTopic[] {
   return topics;
 }
 
+/** Full curriculum for the selected path; do not invent an unselected elective. */
+export function learningTimelineTopics(range: LearningRange): LearningTopic[] {
+  const courses = [...new Set([
+    ...learningCoursePath("초1", "공통수학2"),
+    ...learningCoursePath("초1", range.studyGrade),
+    ...learningTopics(range).map(topic => topic.grade),
+  ])];
+  return courses.flatMap(grade => flatLessons(grade).map(lesson => ({
+    grade, lesson, semester: semesterOfLesson(grade, lesson),
+  })));
+}
+
+/** Use the selected course to disambiguate repeated names before locating them on the full ruler. */
+export function learningTimelineTopicIndex(progress: string | null, range: LearningRange, topics = learningTimelineTopics(range)): number | null {
+  const selected = learningTopics(range);
+  const index = learningTopicIndex(progress, selected);
+  const qualified = index == null ? progress : `${selected[index].grade} · ${selected[index].lesson}`;
+  return learningTopicIndex(qualified, topics);
+}
+
 export function topicSegments(topics: LearningTopic[]): LearningTopic[][] {
   const segments: LearningTopic[][] = [];
   for (const topic of topics) {

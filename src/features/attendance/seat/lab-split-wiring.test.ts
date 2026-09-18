@@ -42,4 +42,30 @@ describe("LAB '따로 수업(*LAB)' 배정 배선", () => {
       /defaultSlotsByCell:\s*choiceDay\.defaultSlotsByCell/,
     );
   });
+
+  it("🔴 자리를 가르는 세 표면이 **같은 판정 함수**를 쓴다(원장 2026-09-18 *\"모든 곳에 배선\"*)", () => {
+    // 자리 출석부 · 시간표 격자 명단 · 원생 주간 시간표. 한 곳이라도 제 규칙을 새로 적으면
+    // "출석부엔 있는데 시간표엔 없다"가 된다(같은 아이가 화면마다 다른 교시에 선다).
+    for (const f of [
+      "src/features/attendance/seat/lab-split.ts",
+      "src/features/timetable/lib/lab-separate.ts",
+      "src/features/students/lib/class-slots.ts",
+      // 그 날 그 교시에 앉는 원생을 **따로 계산하던** 두 곳(2026-09-18 전수 조사로 찾았다).
+      "src/features/attendance/live/server/load.ts", // 오늘 출결 보드(좌석표·출결 모드)
+      "src/features/attendance/seat/monthly-build.ts", // 자리 월간 출석부(화면·인쇄)
+    ]) {
+      expect(read(f), f).toContain("labSplitSlotShows");
+    }
+    // 🔴 두 곳 다 재료를 모르면 안 가른다(조회 실패가 LAB 칸을 비우지 않게).
+    expect(read("src/features/attendance/live/server/load.ts")).toMatch(/if \(labSplit && labDay\?\.sep\)/);
+    expect(read("src/features/attendance/seat/server/monthly-queries.ts")).toMatch(
+      /labFlagged:\s*labSeparateSlotIds \? labFlagged : null/,
+    );
+    // 원생 주간 시간표 = 격자·텍스트 요약이 **같은 행 목록**을 쓴다(한쪽만 가르면 두 표기가 갈린다).
+    const q = read("src/features/students/server/queries.ts");
+    expect(q).toContain("filterLabSeparateRows(");
+    expect(q).toContain("getStudentLabSeparateEnrollmentIds");
+    // 🔴 재료를 모르면 안 가른다 — 조회 실패가 수업을 지우는 쪽으로 틀리지 않게.
+    expect(q).toMatch(/labSlotIds && labFlaggedEnrollments \? .*: null/);
+  });
 });

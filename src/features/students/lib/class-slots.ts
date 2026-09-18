@@ -13,10 +13,13 @@ import {
   type PeriodsConfig,
 } from "@/features/timetable/lib/periods";
 import {
+  LAB_ROOM_LABEL,
   resolveTeacherLabel,
   specialSlotLabel,
   type TeacherLabelMap,
 } from "@/features/timetable/lib/teacher-label";
+// 🔑 자리를 가르는 규칙은 자리 출석부·시간표 격자와 한 벌이다(순수 모듈).
+import { labSplitSlotShows } from "@/features/attendance/seat/lab-split";
 import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/seating-floors";
 
 /** 반 배치 한 줄 — DB 원자료를 정리한 모양. 시각 `HH:MM`, 날짜 `YYYY-MM-DD`. */
@@ -32,6 +35,8 @@ export type ScheduleRow = {
   roomLabel: string | null;
   teacherId: string | null;
   teacherLabel: string | null;
+  /** '따로 수업(\*LAB)' 교시인가(0271a) — 호출부가 따로 읽어 실어 준다([[#95]]: 뿌리 select에 칸을 안 끼운다). */
+  labSeparate?: boolean;
 };
 
 /** 개별 슬롯(요일 하나 × 시작시각 하나) — 학생 주간 시간표 격자의 재료. */
@@ -51,7 +56,43 @@ export type ClassSlot = {
   teacherName: string | null;
   /** 자리(LAB·JJ) 교시면 그 이름 — 사람이 아니라 방이라 화면이 다르게 그린다. */
   seat: string | null;
+  /** 그 자리가 '따로 수업(\*LAB)' 교시면 true — 격자가 `LAB` 대신 `*LAB`(이탤릭·밑줄)로 그린다. */
+  labSeparate?: true;
 };
+
+/**
+ * **\*LAB 배정으로 이 원생의 자리 교시를 가른다** — 켠 원생은 \*LAB 교시만, 끈 원생은 일반 LAB 교시만
+ * (원장 2026-09-18 *"*lab은 *lab이 체크된 학생만 떠야함"*). 판정은 자리 출석부·시간표 격자와 **같은 함수**
+ * [`labSplitSlotShows`](../../attendance/seat/lab-split.ts).
+ *
+ * 🔴 **모르면(null) 한 줄도 안 뺀다** — 칸이 없거나 조회가 실패했을 때 수업이 사라지는 쪽으로 틀리지 않는다.
+ * 🔴 강사 교시·JJ는 그대로 — 가르는 것은 LAB 자리뿐이다.
+ */
+export function filterLabSeparateRows<R extends Pick<ScheduleRow, "day" | "teacherLabel" | "labSeparate">>(
+  rows: readonly R[],
+  flagged: boolean | null,
+): R[] {
+  if (flagged === null) return [...rows];
+  const isLab = (r: R) => specialSlotLabel(r.teacherLabel) === LAB_ROOM_LABEL;
+  const days = new Map<string, { sep: boolean; normal: boolean }>();
+  for (const r of rows) {
+    if (!isLab(r)) continue;
+    const cur = days.get(r.day) ?? { sep: false, normal: false };
+    if (r.labSeparate === true) cur.sep = true;
+    else cur.normal = true;
+    days.set(r.day, cur);
+  }
+  return rows.filter((r) => {
+    if (!isLab(r)) return true;
+    const d = days.get(r.day);
+    return labSplitSlotShows({
+      slotSeparate: r.labSeparate === true,
+      flagged,
+      dayHasSeparate: d?.sep === true,
+      dayHasNormal: d?.normal === true,
+    });
+  });
+}
 
 /** 등록 강의실 — id → 이름(FK 해석), 이름 목록(맨숫자 라벨 정정의 근거). 보관된 방도 넣는다(옛 배치가 읽혀야 한다). */
 export type RoomBook = { nameById: ReadonlyMap<string, string>; names: readonly string[] };
@@ -123,6 +164,8 @@ export function buildClassSlots(
     .map((s) => {
       const seat = specialSlotLabel(s.teacherLabel);
       return {
+        // 켜진 자리 교시에만 싣는다(화면이 `*LAB`으로 그린다) — 강사 교시엔 뜻이 없다.
+        ...(seat === LAB_ROOM_LABEL && s.labSeparate === true ? { labSeparate: true as const } : {}),
         day: s.day,
         startTime: s.startTime,
         endTime: s.endTime,

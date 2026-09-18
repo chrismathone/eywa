@@ -4,7 +4,7 @@ import { addDays, monthRange, shiftMonth } from "@/lib/date-kst";
 import { classDaysOf, type MathScheduleRow } from "./class-days";
 import type { EnrollSpan } from "@/features/attendance/enrollment-span";
 import { dowKeyOf } from "@/features/class-sheets/lib/week";
-import { learningTopics, learningTopicIndex, topicSegments, type LearningMilestone, type LearningTopic } from "./learning-path";
+import { learningTopics, learningTopicIndex, learningTimelineTopics, learningTimelineTopicIndex, topicSegments, type LearningMilestone, type LearningTopic } from "./learning-path";
 
 /** A goal is stored once; monthly, weekly and daily targets are derived, never copied into reports. */
 export type LearningGoal = {
@@ -39,7 +39,15 @@ export type LearningStatus =
   | "ahead"
   | "done";
 export type PlannedDay = { date: string; target: number; block: string | null };
+export type LearningHistory = {
+  enrolledAt: string | null;
+  fromDate: string;
+  start: { grade: string; lesson: string } | null;
+  lessons: { grade: string; lesson: string; date: string; estimated: boolean }[];
+};
 export type LearningProgress = {
+  referenceDate?: string;
+  history?: LearningHistory;
   total: number;
   current: number | null;
   currentBlock: string | null;
@@ -304,6 +312,7 @@ export function buildLearningProgress(
     blocks = learningBlocks(goal),
     total = blocks.length;
   const course = learningTopicPositions(goal);
+  const timeline = learningTimelineTopics(goal);
   let current: number | null = null,
     currentBlock: string | null = null,
     currentDate: string | null = null;
@@ -316,26 +325,32 @@ export function buildLearningProgress(
     a.date.localeCompare(b.date) || (a.sentAt ?? "").localeCompare(b.sentAt ?? ""),
   )) {
     if (record.date > referenceDate) continue;
-    if (goal.track === "supplement" && (record.date < goal.startDate || record.date > goal.endDate)) continue;
+    if (goal.track === "supplement" && record.date > goal.endDate) continue;
     latestRecord = record;
     if (goal.track === "supplement") {
-      if (record.date > goal.endDate || !plannedDates.has(record.date) || !record.progress?.trim()) continue;
-      reviewDates.add(record.date);
-      current = Math.min(total, reviewDates.size);
-      currentBlock = record.progress.trim();
-      currentDate = record.date;
-      currentRecord = record;
+      if (record.date >= goal.startDate && plannedDates.has(record.date) && record.progress?.trim()) {
+        reviewDates.add(record.date);
+        current = Math.min(total, reviewDates.size);
+      }
+      const index = learningTimelineTopicIndex(record.progress, goal, timeline);
+      if (index != null) {
+        const topic = timeline[index];
+        currentBlock = topic.grade === goal.studyGrade && goal.studyGrade === (goal.endStudyGrade ?? goal.studyGrade) ? topic.lesson : `${topic.grade} · ${topic.lesson}`;
+        currentDate = record.date;
+        currentRecord = record;
+      }
       continue;
     }
     const index = learningTopicIndex(record.progress, course);
     if (index == null) {
-      // Preserve the legacy same-course behavior for records outside a selected interval.
-      if (goal.studyGrade !== (goal.endStudyGrade ?? goal.studyGrade)) continue;
-      const before = recordBlockIndex(record.progress, goal.studyGrade);
+      // The displayed history can precede a saved goal, including goals spanning several grades.
+      const before = learningTimelineTopicIndex(record.progress, goal, timeline);
       if (before == null) continue;
-      const full = flatLessons(goal.studyGrade);
-      current = before < full.indexOf(goal.startBlock) ? 0 : total;
-      currentBlock = full[before]; currentDate = record.date;
+      const start = timeline.findIndex(topic => topic.grade === goal.studyGrade && topic.lesson === goal.startBlock);
+      current = before < start ? 0 : total;
+      const topic = timeline[before];
+      currentBlock = topic.grade === goal.studyGrade && goal.studyGrade === (goal.endStudyGrade ?? goal.studyGrade) ? topic.lesson : `${topic.grade} · ${topic.lesson}`;
+      currentDate = record.date;
       currentRecord = record;
       continue;
     }
@@ -366,6 +381,7 @@ export function buildLearningProgress(
               ? "ahead"
               : "on";
   return {
+    referenceDate,
     total,
     current,
     currentBlock,
@@ -400,7 +416,8 @@ export function buildLearningProgress(
 }
 
 export function learningStatusLabel(
-  progress: LearningProgress | undefined,
+  progress: Pick<LearningProgress, "status" | "difference"> | undefined,
+  unit = "블록",
 ): string {
   if (!progress) return "전체 목표 없음";
   switch (progress.status) {
@@ -413,9 +430,9 @@ export function learningStatusLabel(
     case "done":
       return "목표 도달";
     case "behind":
-      return `${Math.abs(progress.difference ?? 0)}블록 느림`;
+      return `${Math.abs(progress.difference ?? 0)}${unit} 느림`;
     case "ahead":
-      return `${progress.difference}블록 빠름`;
+      return `${progress.difference}${unit} 빠름`;
     default:
       return "계획대로";
   }

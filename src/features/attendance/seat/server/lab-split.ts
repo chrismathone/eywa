@@ -34,6 +34,32 @@ export async function loadLabSplitInputs(
   return { separateIds, flagged };
 }
 
+/**
+ * **월간(기간) 자리 출석부용** — 켠 수강의 `(반|학생)`을 날짜 조건 없이 읽는다.
+ * 🔑 배정은 수강의 속성이라 날짜가 없다 — 그 달 어느 날 수강이 살아 있었는지는 월간 표가 `spans`로 이미 안다.
+ * 🔴 fail-soft(모르면 null = 안 가른다).
+ */
+export async function loadLabSplitCellsForClasses(
+  supabase: Db,
+  args: { classIds: readonly string[]; tenantId: string | null },
+): Promise<Set<string> | null> {
+  if (args.classIds.length === 0) return new Set();
+  try {
+    const rows = await fetchInChunks<{ class_id: string; student_id: string }>([...args.classIds], (chunk) => {
+      let q = supabase
+        .from("enrollments")
+        .select("class_id, student_id")
+        .eq("lab_separate", true)
+        .in("class_id", chunk);
+      if (args.tenantId) q = q.eq("tenant_id", args.tenantId);
+      return q;
+    });
+    return new Set(rows.map((r) => labSplitKey(String(r.class_id), String(r.student_id))));
+  } catch {
+    return null;
+  }
+}
+
 /** 켠 수강의 `(반|학생)` — 그 날 살아 있는 수강만. 실패·칸 없음이면 null. */
 async function loadFlaggedCells(
   supabase: Db,

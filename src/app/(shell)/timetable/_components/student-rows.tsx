@@ -13,7 +13,7 @@ import { movingTone, RECENT_ROW_CLASS, useTimetableColorMode } from "./timetable
 import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
-import { LAB_SEPARATE_STUDENT_CLASS } from "@/features/timetable/lib/lab-separate";
+import { LAB_SEPARATE_STUDENT_CLASS, labSeparateMetaClass } from "@/features/timetable/lib/lab-separate";
 
 /**
  * 시간표 셀 학생 행(단일 셀·합반 공용) — class-cell.tsx에서 추출(200줄 규칙).
@@ -120,6 +120,7 @@ function NameInner({
   /** LAB '따로 수업(*LAB)' 배정(0271b) — 이름만 LAB 파랑 + 이탤릭(원장 2026-09-18). 교시 고정이 있으면 고정이 이긴다. */
   labSeparate?: boolean;
 }) {
+  const metaMark = labSeparateMetaClass(labSeparate, pinNote);
   return (
     <>
       <IndexBadge badge={badge} />
@@ -133,7 +134,10 @@ function NameInner({
       ) : (
         name
       )}
-      {meta ? <span className="opacity-90">/{meta}</span> : null}
+      {/* 🔴 꼬리도 이름과 같은 색·기울기로 — *LAB 줄은 한 줄이 통째로 파란 이탤릭이다(원장 2026-09-18 *"전체를 파랑 및 이탤릭으로"*). */}
+      {meta ? (
+        <span className={`opacity-90${metaMark ? ` ${metaMark}` : ""}`}>/{meta}</span>
+      ) : null}
     </>
   );
 }

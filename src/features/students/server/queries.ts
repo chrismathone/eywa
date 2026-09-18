@@ -17,11 +17,15 @@ import { invoiceOutstanding } from "@/features/billing/calc";
 import { settingsToPeriodsConfig, enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import {
   buildClassSlots,
+  filterLabSeparateRows,
   liveScheduleRows,
   roomBookOf,
   type ClassSlot,
   type ScheduleRow,
 } from "../lib/class-slots";
+// '따로 수업(*LAB)' 재료 — 켠 교시(0271a)·켠 수강(0271b). 둘 다 fail-soft(모르면 안 가른다).
+import { loadLabSeparateIds } from "@/features/classes/server/lab-separate";
+import { getStudentLabSeparateEnrollmentIds } from "@/features/enrollments/server/lab-separate";
 import { goalAchieved } from "../grades-meta";
 import {
   subjectAxisOf,
@@ -889,7 +893,9 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   // ② 등록 강의실 전건(테넌트 RLS, 보관된 방 포함) — FK → 이름(`본원606`), FK 없는 맨숫자 라벨 → 등록 이름
   //    정정의 근거(좌석표·ECS와 같은 규약 · 목록은 whitelist라 무페이징 금지). ⚠️ 표시 전용이라 실패해도 탭은
   //    산다(라벨·반 기본 강의실로 떨어진다).
-  const [scheds, roomRows, labelMap, settings] = await Promise.all([
+  // ③·④ '따로 수업(*LAB)' 재료 — 켠 교시 id(0271a)와 이 원생의 켠 수강 id(0271b). 둘 다 **따로·fail-soft**로 읽는다
+  //    ([[#95]]: 위 뿌리 select에 칸을 끼우면 칸 없는 DB에서 이 탭이 통째로 죽는다). 하나라도 모르면 안 가른다.
+  const [scheds, roomRows, labelMap, settings, labSlotIds, labFlaggedEnrollments] = await Promise.all([
     fetchAllPagedInChunks<ScheduleDbRow>(classIds, (chunk, from, to) =>
       supabase
         .from("class_schedules")
@@ -909,6 +915,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     getTeacherLabelMap(),
     // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준.
     getTenantSettings(),
+    loadLabSeparateIds(supabase, { kind: "classes", classIds }),
+    getStudentLabSeparateEnrollmentIds(studentId),
   ]);
   const rooms = roomBookOf(roomRows);
 
@@ -925,6 +933,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       roomLabel: s.slot_room_label ?? null,
       teacherId: s.teacher_id ?? null,
       teacherLabel: s.slot_teacher_label ?? null,
+      ...(labSlotIds?.has(String(s.id)) ? { labSeparate: true } : {}),
     });
     schedByClass.set(s.class_id, arr);
   }
@@ -973,9 +982,16 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     // 지난 수강이면 **그 수강의 마지막 날**(당시 스케줄이 사실 — 오늘 기준이면 종강 반은 전멸한다).
     const endYmd = e.end_date ? String(e.end_date).slice(0, 10) : null;
     const refDate = endYmd && endYmd < today ? endYmd : today;
-    const rawSlots = liveScheduleRows(schedByClass.get(e.class_id) ?? [], refDate);
+    // *LAB 배정으로 자리 교시를 가른다 — 켠 원생은 *LAB만, 끈 원생은 일반 LAB만(원장 2026-09-18).
+    //    🔴 재료를 하나라도 모르면 `null`을 넘겨 **한 줄도 빼지 않는다**(수업이 사라지는 쪽으로 틀리지 않는다).
+    //    격자·텍스트 요약이 **같은 행 목록**을 쓰므로 두 표기가 갈리지 않는다.
+    const labFlagged = labSlotIds && labFlaggedEnrollments ? labFlaggedEnrollments.has(String(e.id)) : null;
+    const liveSlots = liveScheduleRows(schedByClass.get(e.class_id) ?? [], refDate);
+    const rawSlots = filterLabSeparateRows(liveSlots, labFlagged);
     // 반 운영 요일(분리등원 선택지) = 이 반 **유효** 스케줄의 distinct 요일(요일순 — 만료 요일 금지).
-    const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => rawSlots.some((s) => s.day === d));
+    // 🔴 *LAB 가르기 **전** 목록으로 센다 — 이건 "이 반이 도는 요일"이라 한 원생의 배정으로 줄면
+    //    그 요일을 등원 요일로 고를 수 없게 된다(그 반은 그날 여전히 돈다).
+    const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => liveSlots.some((s) => s.day === d));
     // 등원요일 필터(분리등원)·교시 라벨·교시 담당·자리·강의실 = class-slots `buildClassSlots`
     // (텍스트 요약 groupSchedule과 같은 등원 요일 필터 · 강의실은 좌석표·ECS와 같은 FK 우선 규칙).
     const slots: ClassSlot[] = buildClassSlots(rawSlots, {

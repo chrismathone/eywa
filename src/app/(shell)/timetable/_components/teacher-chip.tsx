@@ -18,6 +18,7 @@ import {
   LAB_SEPARATE_LABEL,
   LAB_SEPARATE_STUDENT_CLASS,
   LAB_SEPARATE_TEXT_CLASS,
+  labSeparateMetaClass,
 } from "@/features/timetable/lib/lab-separate";
 
 // 강사뷰(10분 격자) 전용 칩 — 기본은 시트처럼 **반명+방만**, 클릭하면 그 자리에서 재원 학생
@@ -162,6 +163,7 @@ export function TeacherChip({
 function ChipStudentRow({ student }: { student: ClassDetailQuick["students"][number] }) {
   const tone = useSearchTone(student, "text-foreground");
   const meta = metaLabel(student.school, student.grade);
+  const metaMark = labSeparateMetaClass(student.labSeparate, student.seatPinNote);
   const inner = (
     <>
       {/* 자리(랩실) 교시 고정 — 기본뷰·통합뷰와 **같은 서식 상수**. 강사뷰 칩은 재원만 세우므로 퇴원 갈래가 없다. */}
@@ -176,7 +178,9 @@ function ChipStudentRow({ student }: { student: ClassDetailQuick["students"][num
         student.name
       )}
       {/* 기본뷰 StudentRow와 동일한 톤(opacity-90) — 뷰마다 메타 진하기가 다르면 같은 학생이 달리 보인다. */}
-      {meta ? <span className="opacity-90">/{meta}</span> : null}
+      {meta ? (
+        <span className={`opacity-90${metaMark ? ` ${metaMark}` : ""}`}>/{meta}</span>
+      ) : null}
     </>
   );
   const rowCls = `block overflow-hidden whitespace-nowrap text-clip px-1.5 py-[2px] leading-tight ${tone}`;

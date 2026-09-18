@@ -5,7 +5,7 @@ import type { MathSheetMonthData } from "./month-queries";
 const mocks = vi.hoisted(() => ({ access: vi.fn(), from: vi.fn(), records: vi.fn(), track: vi.fn() }));
 vi.mock("./access", () => ({ requireMcsClassAccess: mocks.access }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: mocks.from }) }));
-vi.mock("@/lib/supabase/batch", () => ({ fetchAllPagedInChunks: mocks.records }));
+vi.mock("@/lib/supabase/batch", () => ({ fetchAllPagedInChunks: mocks.records, fetchInChunks: async (ids: string[], run: (ids: string[]) => PromiseLike<{ data: unknown }>) => (await run(ids)).data }));
 vi.mock("./learning-track", () => ({ readMathLearningTrack: mocks.track }));
 import { getMathLearningData } from "./learning-queries";
 
@@ -24,9 +24,15 @@ const monthData = {
 } as unknown as MathSheetMonthData;
 let filters: unknown[][];
 let reportRows: Record<string, unknown>[];
+let previousReportRows: Record<string, unknown>[];
+let enrollmentRows: Record<string, unknown>[];
+let registeredAt: string;
 beforeEach(() => {
   vi.clearAllMocks();
   filters = [];
+  registeredAt = "2026-01-01";
+  previousReportRows = [];
+  enrollmentRows = [{ student_id: studentId, class_id: "class", start_date: "2026-01-01", end_date: null }];
   reportRows = [
     { student_id: studentId, report_date: "2026-09-14", progress: topics[9], textbook: null, classnote_sent_at: "2026-09-14T10:00:00Z" },
     { student_id: studentId, report_date: "2026-09-16", progress: topics[0], textbook: null, classnote_sent_at: "2026-09-16T10:00:00Z" },
@@ -34,17 +40,18 @@ beforeEach(() => {
   mocks.track.mockResolvedValue("regular");
   mocks.access.mockResolvedValue({ ok: true, access: { tenantId: "tenant" } });
   mocks.from.mockImplementation((table: string) => {
+    let previousReports = false;
     const query = {
       select: () => query,
       eq: (key: string, value: unknown) => { filters.push([table, key, value]); return query; },
       lte: (key: string, value: unknown) => { filters.push([table, "lte", key, value]); return query; },
       gte: (key: string, value: unknown) => { filters.push([table, "gte", key, value]); return query; },
-      in: (key: string, value: unknown) => { filters.push([table, "in", key, value]); return query; },
+      in: (key: string, value: unknown) => { filters.push([table, "in", key, value]); if (key === "class_id") previousReports = true; return query; },
       or: (value: string) => { filters.push([table, "or", value]); return query; },
       is: (key: string, value: unknown) => { filters.push([table, "is", key, value]); return query; },
       order: (key: string, options?: unknown) => { filters.push([table, "order", key, options]); return query; },
       range: () => query,
-      then: (resolve: (value: unknown) => unknown) => Promise.resolve({ error: null, data: table === "lesson_reports" ? reportRows : table === "math_learning_goals" ? [row] : [
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({ error: null, data: table === "students" ? [{ id: studentId, enrolled_at: registeredAt }] : table === "enrollments" ? enrollmentRows : table === "lesson_reports" ? previousReports ? previousReportRows : reportRows : table === "math_learning_goals" ? [row] : [
         { ...row, track: "regular", block_count: 24 },
         { ...row, end_block: topics[0], end_date: "2026-09-30", track: "supplement", block_count: 4 },
         { ...row, student_id: "not-on-roster", track: "regular", block_count: 24 },
@@ -92,6 +99,30 @@ describe("반별 수업 유형의 계획 조회", () => {
     expect(data.progress[studentId].latestRecord?.date).toBe("2026-09-14");
     expect(data.progress[studentId].currentIsLatest).toBe(false);
     expect(data.records[studentId].map((record) => record.date)).toEqual(["2026-09-14", "2026-08-31"]);
+  });
+  it("등록일과 이전 반 이력을 읽되 현재 반 진도는 다른 반 기록으로 바꾸지 않는다", async () => {
+    registeredAt = "2026-07-09";
+    enrollmentRows = [
+      { student_id: studentId, class_id: "class", start_date: "2026-09-01", end_date: null },
+      { student_id: studentId, class_id: "previous", start_date: "2026-07-09", end_date: "2026-08-31" },
+      { student_id: studentId, class_id: "concurrent", start_date: "2026-08-01", end_date: null },
+    ];
+    previousReportRows = [
+      { student_id: studentId, class_id: "previous", report_date: "2026-07-13", progress: topics[0], textbook: null },
+      { student_id: studentId, class_id: "concurrent", report_date: "2026-09-16", progress: topics.at(-1), textbook: null },
+      { student_id: studentId, class_id: "previous", report_date: "2026-09-10", progress: topics[19], textbook: null },
+    ];
+    const data = await getMathLearningData("class", monthData);
+    expect(data.status).toBe("ok");
+    expect(data.progress[studentId].currentBlock).toBe(topics[0]);
+    expect(data.progress[studentId].history?.enrolledAt).toBe("2026-07-09");
+    expect(data.progress[studentId].history?.fromDate).toBe("2026-07-09");
+    expect(data.progress[studentId].history?.lessons.find(lesson => lesson.lesson === topics[0])?.date).toBe("2026-07-13");
+    expect(filters).toContainEqual(["lesson_reports", "in", "class_id", ["previous"]]);
+    expect(filters).toContainEqual(["lesson_reports", "classes.subject", "math"]);
+    expect(filters).toContainEqual(["lesson_reports", "classes.math_learning_track", "regular"]);
+    expect(filters).toContainEqual(["students", "tenant_id", "tenant"]);
+    expect(filters).toContainEqual(["enrollments", "in", "student_id", [studentId]]);
   });
   it("목표가 없어도 최신 발송 진도를 조회한다", async () => {
     reportRows = [{ student_id: "no-goal", report_date: "2026-09-16", progress: topics[9], textbook: null }];

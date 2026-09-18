@@ -14,6 +14,8 @@ import {
   periodRowHeightsForGrid,
   sumSpan,
 } from "@/features/students/lib/week-grid-row-height";
+// LAB '따로 수업(*LAB)' 표식 — 시간표와 같은 글자·모양(단일 소스).
+import { LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS, LAB_SEPARATE_TIP } from "@/features/timetable/lib/lab-separate";
 
 const DAY_KO: Record<DayOfWeek, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -172,8 +174,14 @@ function PeriodTable({
                         {/* 🔴 자리(LAB·JJ) 교시는 **사람이 아니라 방**이다 — 이름 자리에 자리 이름을 적고
                             테두리 알약으로 사람과 구분한다(원장 2026-09-07 "JJ실도 있을텐데 표현 제대로"). */}
                         {c.seat ? (
-                          <span className="border-line text-text-dim mt-0.5 w-fit rounded-full border px-1 text-xs">
-                            {c.seat}
+                          // '따로 수업(*LAB)' 교시면 시간표와 **같은 글자·같은 모양**(`*LAB` 이탤릭+밑줄, 0271a).
+                          <span
+                            className={`border-line text-text-dim mt-0.5 w-fit rounded-full border px-1 text-xs${
+                              c.labSeparate ? ` ${LAB_SEPARATE_TEXT_CLASS}` : ""
+                            }`}
+                            title={c.labSeparate ? LAB_SEPARATE_TIP : undefined}
+                          >
+                            {c.labSeparate ? LAB_SEPARATE_LABEL : c.seat}
                           </span>
                         ) : c.teacherName ? (
                           <span className="text-text-dim mt-0.5 text-xs">{c.teacherName}</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -43,6 +43,7 @@ import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { setMathClassLearningTrack } from "../server/learning-actions";
 import { LearningMilestones } from "./learning-milestones";
+import { learningRailMetrics, type LearningRailMetrics } from "../lib/learning-axis";
 
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
@@ -55,7 +56,7 @@ function Status({
   progress,
   student,
 }: {
-  progress?: LearningProgress;
+  progress?: Pick<LearningProgress, "status" | "difference">;
   student: MathStudentRow;
 }) {
   return (
@@ -64,7 +65,7 @@ function Status({
         ? "수강 종료"
         : student.rosterPhase === "upcoming"
           ? "수강 예정"
-          : learningStatusLabel(progress)}
+          : learningStatusLabel(progress, "차시")}
     </span>
   );
 }
@@ -118,8 +119,12 @@ export function LearningOverview({
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
   }, []);
+  const summaries = useMemo(() => Object.fromEntries(Object.entries(learning.goals).flatMap(([id, goal]) => {
+    const progress = learning.progress[id];
+    return progress ? [[id, learningRailMetrics(goal, progress)]] : [];
+  })), [learning.goals, learning.progress]);
   const matches = (student: MathStudentRow, kind: Filter) => {
-    const progress = learning.progress[student.studentId];
+    const progress = summaries[student.studentId];
     if (kind === "all") return true;
     if (student.rosterPhase !== "on") return false;
     if (kind === "missing")
@@ -333,6 +338,7 @@ export function LearningOverview({
                   {shown.map((s) => {
                     const progress = learning.progress[s.studentId],
                       goal = learning.goals[s.studentId];
+                    const summary = summaries[s.studentId];
                     return (
                       <tr
                         key={s.studentId}
@@ -370,40 +376,40 @@ export function LearningOverview({
                         </td>
                         <td>
                           <strong className={styles.rate}>
-                            {progress?.percent == null ? (
+                            {summary?.percent == null ? (
                               "—"
                             ) : (
                               <>
-                                {progress.percent}
+                                {summary.percent}
                                 <small>%</small>
                               </>
                             )}
                           </strong>
                           <p className={styles.meta}>
-                            {progress?.current == null
+                            {summary?.current == null
                               ? goal
                                 ? "진도 확인 필요"
                                 : "전체 목표 미설정"
-                              : `${progress.current} / ${progress.total}블록`}
+                              : `${summary.current} / ${summary.total}차시`}
                           </p>
                         </td>
                         <td>
-                          <Status student={s} progress={progress} />
+                          <Status student={s} progress={summary} />
                           <p className={styles.meta}>
-                            {progress
-                              ? `기준일 계획 ${progress.target}블록`
+                            {summary
+                              ? `기준일 계획 ${summary.target}차시`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
                         <td>
                           <strong className={styles.pace}>
-                            {progress?.requiredPace == null
+                            {summary?.requiredPace == null
                               ? "—"
-                              : `${progress.requiredPace.toFixed(1)}블록`}
+                              : `${summary.requiredPace.toFixed(1)}차시`}
                           </strong>
                           <p className={styles.meta}>
-                            {progress
-                              ? `남은 수업 ${progress.remainingDays}회`
+                            {summary
+                              ? `남은 수업 ${summary.remainingDays}회`
                               : "전체 목표 미설정"}
                           </p>
                         </td>
@@ -423,6 +429,7 @@ export function LearningOverview({
           <StudentFocus
             data={data}
             learning={learning}
+            summaries={summaries}
             student={student}
             onSelect={selectStudent}
             onEdit={
@@ -439,7 +446,7 @@ export function LearningOverview({
             단계별 목표
           </span>
           <span>
-            정수는 목표 단계 · 소수는 단계 안의 진도 · {learning.referenceDate} 기준
+            {learning.referenceDate} 기준
           </span>
         </footer>
       </div>
@@ -459,18 +466,21 @@ export function LearningOverview({
 function StudentFocus({
   data,
   learning,
+  summaries,
   student,
   onSelect,
   onEdit,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
+  summaries: Record<string, LearningRailMetrics>;
   student: MathStudentRow;
   onSelect: (id: string) => void;
   onEdit?: () => void;
 }) {
   const goal = learning.goals[student.studentId],
     progress = learning.progress[student.studentId];
+  const summary = summaries[student.studentId];
   const records = learning.records[student.studentId] ?? [];
   const legacyGoal = learning.track === "supplement" ? undefined : data.goals[student.studentId];
   return (
@@ -491,15 +501,15 @@ function StudentFocus({
             <strong>
               {s.name}
               <small>
-                {learning.progress[s.studentId]?.percent == null
+                {summaries[s.studentId]?.percent == null
                   ? "—"
-                  : `${learning.progress[s.studentId].percent}%`}
+                  : `${summaries[s.studentId].percent}%`}
               </small>
             </strong>
             <span>
               {s.school} {s.grade}
             </span>
-            <Status student={s} progress={learning.progress[s.studentId]} />
+            <Status student={s} progress={summaries[s.studentId]} />
           </button>
         ))}
       </aside>
@@ -509,7 +519,7 @@ function StudentFocus({
       >
         <div className={styles.focusTitle}>
           <h3>{student.name}</h3>
-          <Status student={student} progress={progress} />
+          <Status student={student} progress={summary} />
           {onEdit ? (
             <button className={styles.button} onClick={onEdit}>
               {goal ? "목표 확장" : "목표 설정"}
@@ -593,16 +603,16 @@ function StudentFocus({
               ))}
             </div>
             <div className={styles.insight}>
-              <strong>{learningStatusLabel(progress)}.</strong>
-              {progress.status === "done"
+              <strong>{learningStatusLabel(summary, "차시")}.</strong>
+              {summary.status === "done"
                 ? " 설정한 전체 학습 목표를 마쳤습니다."
-                : progress.requiredPace == null
-                  ? progress.status === "no-data"
+                : summary.requiredPace == null
+                  ? summary.status === "no-data"
                     ? " 수업보고서의 진도 기록을 확인해 주세요."
-                    : progress.remainingDays === 0
+                    : summary.remainingDays === 0
                       ? " 목표 기간의 수업이 끝났습니다. 완료일과 수업 계획을 확인해 주세요."
                       : " 시간표와 목표 기간을 확인해 주세요."
-                  : ` ${goal.endDate}까지 목표를 마치려면 남은 ${progress.remainingDays}회 수업에서 평균 ${progress.requiredPace.toFixed(1)}블록씩 진행하면 됩니다.`}
+                  : ` 목표를 마치려면 남은 ${summary.remainingDays}회 수업에서 평균 ${summary.requiredPace.toFixed(1)}차시씩 진행하면 됩니다.`}
             </div>
             <details className={styles.dailyPlan}>
               <summary>

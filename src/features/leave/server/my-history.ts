@@ -20,7 +20,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { leaveRowMatchesPeriod, type PeriodWindow } from "../balance";
-import { isMissingUsedOnColumn } from "../missing-used-on";
+import { isMissingUsedRangeColumn } from "../missing-used-range";
 
 /** 결재로 낸 휴가 한 건. 종류·상태 **라벨은 화면**이 단일 소스에서 뽑는다(여기선 원값만 옮긴다). */
 export type MyLeaveDoc = {
@@ -33,12 +33,13 @@ export type MyLeaveDoc = {
   status: string;
 };
 
-/** 사무실이 적은 조정 한 줄. `usedOn`은 실제 휴가 사용일(0270a, 부여 행은 null). */
+/** 사무실이 적은 조정 한 줄. 사용 기간은 차감 행에만 있다(부여 행은 null, 하루면 끝이 null). */
 export type MyLeaveAdjustment = {
   id: string;
   days: number;
   reason: string;
-  usedOn: string | null;
+  usedStart: string | null;
+  usedEnd: string | null;
   createdAt: string;
 };
 
@@ -47,8 +48,8 @@ export type MyLeaveHistory = {
   adjustments: MyLeaveAdjustment[];
   /** 조정을 **실제로 읽었나** — false면 화면이 "아직 못 읽었다"를 밝힌다(빈 목록과 구분, [[#89]]). */
   adjustmentsReady: boolean;
-  /** 사용일 칸(0270a)이 있나 — false면 조정 줄에 날짜가 비는 이유를 화면이 말한다. */
-  usedOnReady: boolean;
+  /** 사용 기간 칸(0270b)이 있나 — false면 조정 줄에 날짜가 비는 이유를 화면이 말한다. */
+  usedRangeReady: boolean;
   /** 휴가 문서 조회 실패 — 한글 한 줄(원문은 화면이 툴팁으로만). */
   error?: string;
   errorRaw?: string;
@@ -76,7 +77,8 @@ type AdjRow = {
   created_at: string;
   period_start: string;
   period_end: string;
-  used_on?: string | null;
+  used_start?: string | null;
+  used_end?: string | null;
 };
 
 function num(v: unknown): number {
@@ -85,15 +87,15 @@ function num(v: unknown): number {
 }
 
 /**
- * 내 조정 줄 — 사용일 칸을 **먼저** 넣어 읽고, 컬럼이 없으면(0270a 전) 그 칸만 빼고 다시 읽는다.
- * 🔴 표가 없는 것과 컬럼이 없는 것을 구분한다 — 표가 없으면 조정 기능 자체가 준비 안 된 것이고,
- *    컬럼만 없으면 조정은 이미 쌓여 있으니 **목록은 보여야** 한다(날짜만 빈다).
+ * 내 조정 줄 — 사용 기간 칸을 **먼저** 넣어 읽고, 칸이 없으면(0270b 전) 그 칸만 빼고 다시 읽는다.
+ * 🔴 표가 없는 것과 칸이 없는 것을 구분한다 — 표가 없으면 조정 기능 자체가 준비 안 된 것이고,
+ *    칸만 없으면 조정은 이미 쌓여 있으니 **목록은 보여야** 한다(날짜만 빈다).
  */
 async function loadMyAdjustments(
   supabase: SupabaseClient,
   userId: string,
   period: PeriodWindow,
-): Promise<{ rows: AdjRow[]; ready: boolean; usedOnReady: boolean }> {
+): Promise<{ rows: AdjRow[]; ready: boolean; usedRangeReady: boolean }> {
   const query = (cols: string) =>
     supabase
       .from("leave_adjustments")
@@ -104,21 +106,21 @@ async function loadMyAdjustments(
       .gte("period_end", period.start)
       .limit(500); // 한 사람·한 구간의 수기 조정 — 상한에 닿지 않는다(절단 방지용 명시 상한, B2)
 
-  const withUsedOn = await query(`${ADJ_COLS}, used_on`);
-  if (!withUsedOn.error) {
-    return { rows: (withUsedOn.data ?? []) as unknown as AdjRow[], ready: true, usedOnReady: true };
+  const withRange = await query(`${ADJ_COLS}, used_start, used_end`);
+  if (!withRange.error) {
+    return { rows: (withRange.data ?? []) as unknown as AdjRow[], ready: true, usedRangeReady: true };
   }
-  if (isMissingUsedOnColumn(withUsedOn.error)) {
+  if (isMissingUsedRangeColumn(withRange.error)) {
     const base = await query(ADJ_COLS);
     if (!base.error) {
-      return { rows: (base.data ?? []) as unknown as AdjRow[], ready: true, usedOnReady: false };
+      return { rows: (base.data ?? []) as unknown as AdjRow[], ready: true, usedRangeReady: false };
     }
-    return { rows: [], ready: false, usedOnReady: false };
+    return { rows: [], ready: false, usedRangeReady: false };
   }
   // 표 없음(0252a 전)도, 그 밖의 실패도 이 화면에선 같은 뜻이다 — "조정을 아직 못 읽었다".
   // 🔴 던지지 않는다: 잔여(getMyLeaveBalance)는 이미 조정을 fail-soft 0으로 처리하므로, 여기서 던져 봐야
   //    내 정보 화면만 죽고 사실은 하나도 더 알려 주지 못한다([[#95]]).
-  return { rows: [], ready: false, usedOnReady: false };
+  return { rows: [], ready: false, usedRangeReady: false };
 }
 
 export async function getMyLeaveHistory(userId: string, period: PeriodWindow): Promise<MyLeaveHistory> {
@@ -161,17 +163,18 @@ export async function getMyLeaveHistory(userId: string, period: PeriodWindow): P
       id: a.id,
       days: num(a.days),
       reason: (a.reason ?? "").trim(),
-      usedOn: a.used_on ?? null,
+      usedStart: a.used_start ?? null,
+      usedEnd: a.used_end ?? null,
       createdAt: a.created_at,
     }))
-    // 사용일이 있으면 그 날짜로, 없으면 적은 날로 줄을 세운다(목록의 축은 "언제의 일인가").
-    .sort((a, b) => (b.usedOn ?? b.createdAt).localeCompare(a.usedOn ?? a.createdAt));
+    // 사용 기간이 있으면 그 **시작일**로, 없으면 적은 날로 줄을 세운다(목록의 축은 "언제의 일인가").
+    .sort((a, b) => (b.usedStart ?? b.createdAt).localeCompare(a.usedStart ?? a.createdAt));
 
   return {
     docs,
     adjustments,
     adjustmentsReady: adj.ready,
-    usedOnReady: adj.usedOnReady,
+    usedRangeReady: adj.usedRangeReady,
     ...(formsRes.error
       ? { error: "휴가 내역을 불러오지 못했습니다", errorRaw: formsRes.error.message }
       : {}),

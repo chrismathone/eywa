@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { leavePeriodLabel } from "@/features/leave/accrual";
 import { formatSignedDays } from "@/features/leave/balance";
 import { formatLeaveDays, isLeaveKind, LEAVE_KIND_LABEL } from "@/features/leave/request-days";
+import { usedRangeLabel } from "@/features/leave/used-range";
 import { docStatusLabel, type DocStatus } from "@/features/approvals/types";
 import { sheetT } from "@/features/teacher-view/i18n";
 import type { LeaveBalance } from "@/features/approvals/server/queries";
@@ -39,8 +40,9 @@ type Entry =
       kind: "adj";
       key: string;
       sortKey: string;
-      /** 실제 휴가 사용일(0270a). 없으면 적은 날을 대신 보여 준다. */
-      usedOn: string | null;
+      /** 실제 휴가 사용 기간(0270b). 없으면 적은 날을 대신 보여 준다. */
+      usedStart: string | null;
+      usedEnd: string | null;
       recordedAt: string;
       days: number;
       reason: string;
@@ -81,9 +83,10 @@ export function LeaveCard({
     ...(history?.adjustments ?? []).map<Entry>((a) => ({
       kind: "adj",
       key: `adj-${a.id}`,
-      // 사용일이 있으면 그 날짜로 줄을 세운다 — 이 목록의 축은 "언제의 일인가"다.
-      sortKey: a.usedOn ?? a.createdAt.slice(0, 10),
-      usedOn: a.usedOn,
+      // 사용 기간이 있으면 그 **시작일**로 줄을 세운다 — 이 목록의 축은 "언제의 일인가"다.
+      sortKey: a.usedStart ?? a.createdAt.slice(0, 10),
+      usedStart: a.usedStart,
+      usedEnd: a.usedEnd,
       recordedAt: a.createdAt.slice(0, 10),
       days: a.days,
       reason: a.reason,
@@ -127,8 +130,8 @@ export function LeaveCard({
         {history && !history.adjustmentsReady ? (
           <p className="text-text-faint mt-1 text-xs break-keep">{t("me.leave.adjustUnread")}</p>
         ) : null}
-        {history?.adjustmentsReady && !history.usedOnReady && history.adjustments.length > 0 ? (
-          <p className="text-text-faint mt-1 text-xs break-keep">{t("me.leave.usedOnNotReady")}</p>
+        {history?.adjustmentsReady && !history.usedRangeReady && history.adjustments.length > 0 ? (
+          <p className="text-text-faint mt-1 text-xs break-keep">{t("me.leave.usedRangeNotReady")}</p>
         ) : null}
         {/* 조정이 한 줄이라도 있을 때만 — 없는 사람에게 설명만 띄우면 무슨 말인지 알 수 없다. */}
         {history?.adjustments.length ? (
@@ -162,7 +165,9 @@ export function LeaveCard({
                   <>
                     <span className="min-w-0">
                       <span className="num text-foreground font-semibold">
-                        {e.usedOn ?? `${t("me.leave.recordedOn")} ${e.recordedAt}`}
+                        {e.usedStart
+                          ? usedRangeLabel(e.usedStart, e.usedEnd)
+                          : `${t("me.leave.recordedOn")} ${e.recordedAt}`}
                       </span>
                       <span className="text-text-dim ml-2">{t("me.leave.adjustTag")}</span>
                       {e.reason ? (
