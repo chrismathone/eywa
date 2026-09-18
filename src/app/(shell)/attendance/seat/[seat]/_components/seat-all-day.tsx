@@ -75,6 +75,8 @@ export type SeatChoiceDay = {
   markedSlotsByCell: Readonly<Record<string, readonly string[]>>;
   busyStartsByClass: Readonly<Record<string, readonly string[]>>;
   offSlotByCell: Readonly<Record<string, Readonly<Record<string, SeatStudent>>>>;
+  /** LAB '따로 수업(*LAB)' 학생 배정(0271b) — 선택이 없을 때 설 교시들. 없으면 종전 그대로. */
+  defaultSlotsByCell?: Readonly<Record<string, readonly string[]>>;
   /**
    * 학생 축(원장 2026-09-11 이후) — 학생 id → 그날 이 자리 밖 수업(다음 행선지 조회와 같은 하루치, 새 왕복 0).
    * 없거나 그 학생 키가 없으면(모름) 화면은 이 축으로 막지 않는다 — 서버가 자기 조회로 다시 본다.
@@ -196,6 +198,7 @@ export function SeatAllDay({
           markedSlotsByCell: choiceDay.markedSlotsByCell,
           busyStartsByClass: choiceDay.busyStartsByClass,
           offSlotByCell: choiceDay.offSlotByCell,
+          defaultSlotsByCell: choiceDay.defaultSlotsByCell,
           blank: blankSeatCell,
         },
       ),

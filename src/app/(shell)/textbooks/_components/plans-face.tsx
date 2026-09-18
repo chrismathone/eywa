@@ -9,9 +9,19 @@ import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas
 import type { ClassTextbookPlanRow } from "@/features/textbooks/types";
 import { ApplyDialog } from "./apply-dialog";
 
-/** 0268a 이전 배정 — 교시를 안 고르고 **축**으로 태웠다. `slotStarts`가 없을 때만 쓴다. */
+/** 0268a 이전 배정 — 교시를 안 고르고 **축**으로 태웠다. `slotPicks`가 없을 때만 쓴다. */
 const AXIS_LABEL: Record<string, string> = { class: "정규 수업", jj: "JJ 자습실" };
 const PACE_LABEL: Record<string, string> = { period: "교시마다 1차수", day: "하루에 1차수" };
+
+/** 요일 글자 — 이 화면은 사무실만 보므로 한글 한 벌이면 된다(강사 시트는 사전을 쓴다). */
+const DOW_KO: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일" };
+
+/** `"mon|17:20"` → `"월 17:20"`. 요일이 없는 옛 값은 시각만 적는다. */
+function slotPickLabel(pick: string): string {
+  const bar = pick.indexOf("|");
+  if (bar < 0) return pick;
+  return `${DOW_KO[pick.slice(0, bar)] ?? pick.slice(0, bar)} ${pick.slice(bar + 1)}`;
+}
 
 /** "2026-09-16T05:00:00Z" → "9/16" (없으면 null). */
 function shortDate(iso: string | null): string | null {
@@ -78,10 +88,10 @@ export function PlansFace({ rows, skillAreas }: { rows: ClassTextbookPlanRow[]; 
                         <span className="text-text-faint text-xs">미지정</span>
                       )}
                     </td>
-                    {/* 고른 교시가 있으면 **그 시각**을 그대로 보여 준다 — 축(정규/JJ)은 0268a 이전 배정의 폴백이다. */}
+                    {/* 고른 칸이 있으면 **요일·시각**을 그대로 보여 준다 — 축(정규/JJ)은 0268a 이전 배정의 폴백이다. */}
                     <td className="py-1.5 text-center text-xs">
-                      {p.slotStarts ? (
-                        <span className="num">{p.slotStarts.join(" · ")}</span>
+                      {p.slotPicks ? (
+                        <span className="num">{p.slotPicks.map(slotPickLabel).join(" · ")}</span>
                       ) : (
                         (AXIS_LABEL[p.slotAxis] ?? p.slotAxis)
                       )}

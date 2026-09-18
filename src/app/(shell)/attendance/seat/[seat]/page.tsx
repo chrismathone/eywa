@@ -319,6 +319,8 @@ export default async function SeatAttendancePage({
             markedSlotsByCell: day.markedSlotsByCell,
             busyStartsByClass: day.busyStartsByClass,
             offSlotByCell: day.offSlotByCell,
+            // LAB '따로 수업(*LAB)' 배정 — 서버 명단(`applySeatDayChoices`)과 같은 값이어야 화면·게이트가 안 갈린다.
+            ...(day.defaultSlotsByCell ? { defaultSlotsByCell: day.defaultSlotsByCell } : {}),
             // 🔑 학생 축 — 다음 행선지와 같은 하루치(새 왕복 0, 보이는 교시의 학생 = 끌 수 있는 카드). 서버는 다시 본다([[#77]]).
             studentClasses: nextDay.classesByStudent,
           }}
