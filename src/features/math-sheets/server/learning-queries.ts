@@ -17,6 +17,7 @@ import { buildLearningHistory } from "../lib/learning-history";
 export async function getMathLearningData(
   classId: string,
   monthData: MathSheetMonthData,
+  options: { studentId?: string; allRecords?: boolean } = {},
 ): Promise<LearningData> {
   const gate = await requireMcsClassAccess(classId);
   const endOfMonth = monthRange(monthData.month).to;
@@ -62,7 +63,7 @@ export async function getMathLearningData(
         ? "missing-table"
         : "failed",
     };
-  const visibleIds = new Set(monthData.students.map((s) => s.studentId));
+  const visibleIds = new Set(monthData.students.filter(s => !options.studentId || s.studentId === options.studentId).map((s) => s.studentId));
   for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, track: "regular", block_count: null as number | null, end_study_grade: null, milestones: [], updated_at: undefined })), ...(standard.data ?? [])]) {
     if (!visibleIds.has(String(row.student_id)) || row.track !== track) continue;
     const goal: LearningGoal = {
@@ -149,14 +150,15 @@ export async function getMathLearningData(
     }
     for (const studentId of visibleIds) {
       const goal = result.goals[studentId];
-      const history = (byStudent.get(studentId) ?? []).filter((record) => !goal || goal.track !== "supplement" || (record.date >= goal.startDate && record.date <= goal.endDate));
+      const firstEnrollment = enrollments.filter(item => item.student_id === studentId && item.start_date).map(item => item.start_date!).sort()[0];
+      const enrolledAt = students.find(student => student.id === studentId)?.enrolled_at ?? firstEnrollment ?? null;
+      const currentRecords = (byStudent.get(studentId) ?? []).filter(record => !enrolledAt || record.date >= enrolledAt);
+      const history = currentRecords.filter((record) => !goal || goal.track !== "supplement" || (record.date >= goal.startDate && record.date <= goal.endDate));
       if (goal) {
-        const firstEnrollment = enrollments.filter(item => item.student_id === studentId && item.start_date).map(item => item.start_date!).sort()[0];
-        const enrolledAt = students.find(student => student.id === studentId)?.enrolled_at ?? firstEnrollment ?? null;
         result.progress[studentId] = buildLearningProgress(
           goal,
           result.context,
-          (byStudent.get(studentId) ?? []).filter(record => !enrolledAt || record.date >= enrolledAt),
+          currentRecords,
           referenceDate,
           monthData.month,
         );
@@ -164,7 +166,9 @@ export async function getMathLearningData(
           ...(previousByStudent.get(studentId) ?? []), ...(byStudent.get(studentId) ?? []),
         ], enrolledAt, referenceDate);
       }
-      result.records[studentId] = history.slice(-30).reverse();
+      result.records[studentId] = (options.allRecords
+        ? currentRecords.filter(record => goal?.track !== "supplement" || record.date <= goal.endDate)
+        : history.slice(-30)).reverse();
     }
   } catch {
     // Do not present a report fetch failure as zero progress or a learner falling behind.

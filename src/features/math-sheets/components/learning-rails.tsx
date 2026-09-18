@@ -1,25 +1,31 @@
 import { useId, type CSSProperties } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type LearningGoal, type LearningProgress, type LearningRecord } from "../lib/learning-plan";
-import { LEARNING_LESSON_WIDTH, learningCurrentPosition, learningGoalTicks, learningTargetPosition, learningTopicTicks } from "../lib/learning-axis";
+import { LEARNING_LESSON_WIDTH, learningCurrentPosition, learningGoalTicks, learningMilestoneTicks, learningTargetPosition, learningTopicTicks } from "../lib/learning-axis";
 import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
 
-/** One lesson has the same width everywhere; goals sit on their actual lesson. */
-export function LearningRails({ progress, goal, recentBlock, recentGrade, recentRecord }: {
+/** Students share a responsive lesson width; goals sit on their actual lesson. */
+export function LearningRails({ progress, goal, recentBlock, recentGrade, recentRecord, scaleLessons, selectedPositions, selectedActualPositions, onSelectPosition }: {
   progress?: LearningProgress;
   goal?: LearningGoal;
   recentBlock?: string | null;
   recentGrade?: string | null;
   recentRecord?: LearningRecord | null;
+  scaleLessons?: number;
+  selectedPositions?: readonly number[];
+  selectedActualPositions?: readonly number[];
+  onSelectPosition?: (position: number, date?: string | null, kind?: "current" | "goal" | "history") => void;
 }) {
   const goalDescriptionId = useId();
   const topicTicks = goal ? learningTopicTicks(goal, progress) : [];
   const stops = goal ? learningGoalTicks(goal, topicTicks) : [];
-  const goalStops = stops.filter(stop => stop.hasGoal);
+  const goalStops = goal ? learningMilestoneTicks(goal, topicTicks) : [];
   const total = topicTicks.length;
   const targetPosition = goal ? learningTargetPosition(goal, topicTicks) : 0;
   const axisCurrent = goal ? learningCurrentPosition(goal, progress, topicTicks) : null;
+  const pastStops = stops.filter(stop => stop.semesterEndPosition <= (axisCurrent ?? 0)
+    && !goalStops.some(goal => goal.position === stop.semesterEndPosition));
   const position = (value: number) => total ? value / total * 100 : 0;
   const currentPosition = position(axisCurrent ?? 0);
   const latestRecord = progress?.latestRecord ?? recentRecord;
@@ -30,19 +36,21 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
   const currentText = axisCurrent == null ? "현재 진도 확인 필요" : `현재 ${axisCurrent} / 목표 ${targetPosition}차시 · ${currentLabel}`;
   const goalText = goalStops.length ? goalStops.map(stop => `${stop.goalNumber}차 목표 · ${learningBlockLabel(stop.endBlock, stop.studyGrade)} · ${stop.endDate}`).join("; ") : goal ? `전체 목표 · ${finalLabel} · ${goal.endDate}` : "전체 목표 미설정";
   const variables = { "--current-position": `${currentPosition}%`, "--target-position": `${position(targetPosition)}%`,
-    "--ruler-width": `${total * LEARNING_LESSON_WIDTH}px` } as CSSProperties;
+    "--lesson-count": total, "--scale-lessons": Math.max(1, total, scaleLessons ?? total),
+    "--lesson-max-width": `${LEARNING_LESSON_WIDTH}px` } as CSSProperties;
   const carried = Boolean(progress?.currentDate && latestRecord && !progress.currentIsLatest);
   const sourceText = latestRecord
     ? `최근 발송 보고서 · ${latestRecord.date} 수업 · ${latestRecord.progress ? learningBlockLabel(latestRecord.progress, goal?.studyGrade ?? recentGrade) : "진도 입력 없음"}${carried ? ` · 진도선은 ${progress!.currentDate} 마지막 확인 단원 기준` : axisCurrent == null && goal ? " · 단원 위치 확인 필요" : ""}`
     : null;
 
-  const guides = goalStops.map(stop => `M${stop.position / total * 1000} 36v48`).join("");
+  const guides = [...goalStops.map(stop => stop.position), ...pastStops.map(stop => stop.semesterEndPosition)]
+    .map(position => `M${position / total * 1000} 36v48`).join("");
   return (
     <div className={styles.viewport}>
     <div className={styles.rails} style={variables} data-planned={total > 0}>
       <div className={styles.plot}>
         {total > 0 ? (
-          <svg className={styles.ruler} viewBox="0 0 1000 122" preserveAspectRatio="none" aria-hidden="true">
+          <svg className={styles.ruler} viewBox="0 0 1000 136" preserveAspectRatio="none" aria-hidden="true">
             <path className={styles.guides} d={guides} vectorEffect="non-scaling-stroke" />
             <path className={styles.endTicks} d="M0 35v16M1000 35v16M0 69v16M1000 69v16" vectorEffect="non-scaling-stroke" />
           </svg>
@@ -61,7 +69,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
         {total > 0 && axisCurrent != null ? (
           <Tooltip>
             <TooltipTrigger className={styles.currentMarker} delay={0} aria-label="현재 진도 상세"
-              aria-describedby={`${goalDescriptionId}-current`} onClick={(event) => event.stopPropagation()} />
+              aria-describedby={`${goalDescriptionId}-current`} onClick={(event) => { event.stopPropagation(); onSelectPosition?.(axisCurrent, progress?.currentDate, "current"); }} />
             <TooltipContent id={`${goalDescriptionId}-current`} role="tooltip" className={styles.currentTooltip} side="top" sideOffset={10}>
               <div>
                 <strong>{carried ? "마지막 확인 진도" : "현재 진도"}</strong>
@@ -80,7 +88,12 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
             const label = learningBlockLabel(tick.lesson, tick.grade);
             const description = `${label}${tick.date ? ` · ${tick.estimated ? "추정" : "수업보고서"} ${tick.date}` : ""}`;
             return <span key={`${tick.grade}:${tick.lesson}`} role="listitem" aria-label={description} title={description}
-              className={styles.topicTick} data-lesson={tick.lesson} style={{ left: `${position(tick.position)}%` }} />;
+              className={styles.topicTick} data-lesson={tick.lesson} data-selected={selectedPositions?.includes(tick.position) || undefined}
+              data-actual-selected={selectedActualPositions?.includes(tick.position) || undefined}
+              style={{ left: `${position(tick.position)}%` }}>
+              {onSelectPosition ? <button className={styles.topicHit} aria-label={`${label} 진도맵에서 보기`}
+                onClick={event => { event.stopPropagation(); onSelectPosition(tick.position); }} /> : null}
+            </span>;
           })}
         </div>
         {goalStops.map((stop, index) => (
@@ -89,7 +102,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
               data-final={index === goalStops.length - 1 || undefined} delay={0}
               style={{ left: `${position(stop.position)}%` }} aria-label={`${stop.goalNumber}차 목표`}
               aria-describedby={`${goalDescriptionId}-stop-${index}`}
-              onClick={(event) => event.stopPropagation()} />
+              onClick={(event) => { event.stopPropagation(); onSelectPosition?.(stop.position, stop.endDate, "goal"); }} />
             <TooltipContent id={`${goalDescriptionId}-stop-${index}`} role="tooltip" className={styles.goalTooltip} side="top" sideOffset={10}>
               <div>
                 <strong>{stop.goalNumber}차 목표</strong>
@@ -99,6 +112,25 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
             </TooltipContent>
           </Tooltip>
         ))}
+        {pastStops.map(stop => (
+          <Tooltip key={`semester-${stop.number}`}>
+            <TooltipTrigger className={styles.targetMarker} data-semester-end={stop.number} delay={0}
+              style={{ left: `${position(stop.semesterEndPosition)}%` }} aria-label={`${stop.studyGrade} ${stop.semester}학기 진도`}
+              onClick={event => { event.stopPropagation(); onSelectPosition?.(stop.semesterEndPosition, stop.observedDate, "history"); }} />
+            <TooltipContent role="tooltip" className={styles.goalTooltip} side="top" sideOffset={10}>
+              <div>
+                <strong>{stop.studyGrade} {stop.semester}학기</strong>
+                <p>{learningBlockLabel(topicTicks[stop.semesterEndPosition - 1].lesson, stop.studyGrade)}</p>
+                <small>{stop.observedDate ? `${stop.estimated ? "추정 수업일" : "수업보고서"} · ${stop.observedDate}` : "학기 종료일 확인 필요"}</small>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
+        <div className={styles.scale} aria-label="목표 수직선 눈금">
+          {stops.map(stop => <span key={stop.number} className={styles.scaleTick}
+            title={stop.observedDate ? `${stop.estimated ? "추정" : "수업보고서"} ${stop.observedDate}` : undefined}
+            style={{ left: `${position(stop.semesterEndPosition)}%` }}><span>{stop.studyGrade}</span>{" "}<span>{stop.semester}학기</span></span>)}
+        </div>
         <div className={`${styles.annotation} ${styles.targetAnnotation}`} title={`최종 목표 · ${finalLabel}`}>
           <span className={styles.annotationTag}>{finalStop ? `${finalStop.goalNumber}차 목표` : "목표"}</span>
           <span className={styles.blockName}>{finalLabel}</span>
@@ -108,12 +140,6 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
       <div className={styles.values} aria-hidden="true">
         <span className={styles.currentValue}>{axisCurrent == null ? "—" : <><b>{axisCurrent}</b><small>차시</small></>}</span>
         <span className={styles.targetValue}>{goal ? <><b>{targetPosition}</b><small>차시 목표</small></> : "—"}</span>
-      </div>
-      <div className={styles.scale} aria-label="목표 수직선 눈금">
-        {stops.filter(stop => !goalStops.some(goal => goal.position === stop.semesterEndPosition)).map(stop => <span key={stop.number} className={styles.scaleTick}
-          title={stop.observedDate ? `${stop.estimated ? "추정" : "수업보고서"} ${stop.observedDate}` : undefined}
-          style={{ left: `${position(stop.semesterEndPosition)}%` }}>{stop.studyGrade} {stop.semester}학기</span>)}
-        {!stops.length ? <span className={styles.goalTick}>전체 목표 미설정</span> : null}
       </div>
     </div>
     </div>

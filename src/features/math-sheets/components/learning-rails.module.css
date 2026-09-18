@@ -1,5 +1,7 @@
-.viewport { min-width: 0; overflow-x: auto; padding: 0 6px 3px; }
+.viewport { container-type: inline-size; min-width: 0; overflow-x: auto; padding: 0 6px 3px; }
 .rails {
+  --lesson-width: min(var(--lesson-max-width), max(1px, calc((100cqw - 99px) / var(--scale-lessons))));
+  --ruler-width: calc(var(--lesson-count) * var(--lesson-width));
   --blue: #0000ff;
   --rail-ink: #0000ff;
   /* 목표진도(2행)는 **붉은색 계열**(원장 2026-09-18 *"수학 mcs에서 목표진도는 붉은색계열로 전부"*).
@@ -15,7 +17,7 @@
 }
 .plot {
   position: relative;
-  height: 122px;
+  height: 136px;
   min-width: 0;
 }
 .description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -23,7 +25,7 @@
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 100%;
+  height: 136px;
   overflow: visible;
   fill: none;
   pointer-events: none;
@@ -36,7 +38,7 @@
 .topicTick {
   position: absolute;
   top: 39px;
-  width: 6px;
+  width: min(6px, var(--lesson-width));
   height: 42px;
   transform: translateX(-50%);
   cursor: help;
@@ -54,6 +56,11 @@
 .topicTick::after { bottom: 0; background: color-mix(in srgb, var(--goal-ink) 15%, var(--card)); }
 .topicTick:hover::before { background: var(--rail-ink); width: 2px; }
 .topicTick:hover::after { background: var(--goal-ink); width: 2px; }
+.topicTick[data-selected] { background: color-mix(in srgb, var(--blue) 8%, transparent); }
+.topicTick[data-actual-selected]::before { background: var(--rail-ink); height: 12px; top: -4px; }
+.topicTick[data-selected]::after { background: var(--goal-ink); }
+.topicHit { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; background: transparent; border: 0; cursor: pointer; }
+.topicHit:focus-visible { outline: 2px solid var(--rail-ink); outline-offset: 1px; }
 .endTicks {
   stroke: var(--rail-ink);
   stroke-width: 1px;
@@ -177,7 +184,7 @@
   box-shadow: 0 2px 5px color-mix(in srgb, var(--blue) 5%, transparent);
 }
 .targetAnnotation {
-  top: 96px;
+  top: 110px;
   left: var(--target-position);
   transform: translateX(calc(-1 * var(--target-position)));
   border-color: color-mix(in srgb, var(--goal-ink) 20%, var(--card));
@@ -223,20 +230,25 @@
 .values small { font-size: 10px; font-weight: 450; }
 .targetValue b { font-size: 13px; font-weight: 550; }
 .scale {
-  min-height: 15px;
-  container-type: inline-size;
-  position: relative;
-  display: flex;
-  justify-content: space-between;
-  grid-column: 1;
+  position: absolute;
+  top: 89px;
+  left: 0;
+  right: 0;
+  height: 15px;
   min-width: 0;
-  color: var(--text-dim);
+  color: var(--goal-ink);
   font-size: 10px;
   line-height: 1.5;
 }
-.scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; white-space: nowrap; }
-.goalTick { color: var(--goal-ink); font-weight: 650; opacity: 1; }
+.scaleTick { position: absolute; transform: translateX(-50%); font-weight: 550; white-space: nowrap; }
 .reportSource { color: var(--text-dim); font-size: 10px; line-height: 1.6; }
+@container (max-width: 600px) {
+  .plot { height: 179px; }
+  .scale { font-size: 9px; }
+  .scaleTick { display: flex; flex-direction: column; text-align: center; line-height: 13px; }
+  .scaleTick:nth-child(even) { top: 30px; }
+  .targetAnnotation { top: 153px; }
+}
 .rails[data-planned="false"] { width: 100%; grid-template-columns: minmax(0, 1fr) 85px; }
 .rails[data-planned="false"] .annotation {
   border-color: var(--line);

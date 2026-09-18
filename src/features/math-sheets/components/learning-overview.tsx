@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { EmbedLink } from "@/components/embed-link";
+import { learningMapHref } from "@/features/math-progress-map/learning-map";
 import dynamic from "next/dynamic";
 import {
   SheetBarDivider,
@@ -43,7 +45,7 @@ import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { setMathClassLearningTrack } from "../server/learning-actions";
 import { LearningMilestones } from "./learning-milestones";
-import { learningRailMetrics, type LearningRailMetrics } from "../lib/learning-axis";
+import { learningRailMetrics, learningTopicTicks, type LearningRailMetrics } from "../lib/learning-axis";
 
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
@@ -119,10 +121,17 @@ export function LearningOverview({
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
   }, []);
-  const summaries = useMemo(() => Object.fromEntries(Object.entries(learning.goals).flatMap(([id, goal]) => {
-    const progress = learning.progress[id];
-    return progress ? [[id, learningRailMetrics(goal, progress)]] : [];
-  })), [learning.goals, learning.progress]);
+  const { summaries, scaleLessons } = useMemo(() => {
+    const summaries: Record<string, LearningRailMetrics> = {};
+    let scaleLessons = 1;
+    for (const [id, goal] of Object.entries(learning.goals)) {
+      const progress = learning.progress[id];
+      const topics = learningTopicTicks(goal, progress);
+      scaleLessons = Math.max(scaleLessons, topics.length);
+      if (progress) summaries[id] = learningRailMetrics(goal, progress, topics);
+    }
+    return { summaries, scaleLessons };
+  }, [learning.goals, learning.progress]);
   const matches = (student: MathStudentRow, kind: Filter) => {
     const progress = summaries[student.studentId];
     if (kind === "all") return true;
@@ -360,6 +369,8 @@ export function LearningOverview({
                           <p className={styles.meta}>
                             {s.school} {s.grade}
                           </p>
+                          {goal && progress ? <EmbedLink href={learningMapHref(data.classId, s.studentId, data.month)}
+                            className={styles.button} prefetch={false} onClick={event => event.stopPropagation()}>진도맵</EmbedLink> : null}
                         </td>
                         <td>
                           <div className={styles.course}>
@@ -372,7 +383,7 @@ export function LearningOverview({
                               {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} goal={goal} recentRecord={learning.records[s.studentId]?.[0]} />
+                          <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
@@ -430,6 +441,7 @@ export function LearningOverview({
             data={data}
             learning={learning}
             summaries={summaries}
+            scaleLessons={scaleLessons}
             student={student}
             onSelect={selectStudent}
             onEdit={
@@ -467,6 +479,7 @@ function StudentFocus({
   data,
   learning,
   summaries,
+  scaleLessons,
   student,
   onSelect,
   onEdit,
@@ -474,6 +487,7 @@ function StudentFocus({
   data: MathSheetMonthData;
   learning: LearningData;
   summaries: Record<string, LearningRailMetrics>;
+  scaleLessons: number;
   student: MathStudentRow;
   onSelect: (id: string) => void;
   onEdit?: () => void;
@@ -520,6 +534,7 @@ function StudentFocus({
         <div className={styles.focusTitle}>
           <h3>{student.name}</h3>
           <Status student={student} progress={summary} />
+          {goal && progress ? <EmbedLink href={learningMapHref(data.classId, student.studentId, data.month)} className={styles.button} prefetch={false}>진도맵 열기</EmbedLink> : null}
           {onEdit ? (
             <button className={styles.button} onClick={onEdit}>
               {goal ? "목표 확장" : "목표 설정"}
@@ -541,7 +556,7 @@ function StudentFocus({
                 완료
               </span>
             </div>
-            <LearningRails progress={progress} goal={goal} />
+            <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} />
             <LearningMilestones goal={goal} progress={progress} />
             <p className={styles.currentBlock}>
               {progress.currentBlock ? learningBlockLabel(progress.currentBlock, goal.studyGrade) : "현재 진도 확인 필요"}

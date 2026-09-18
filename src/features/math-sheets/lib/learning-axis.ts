@@ -1,8 +1,8 @@
 import { goalMilestones, learningTopicPositions, type LearningGoal, type LearningProgress } from "./learning-plan";
 import { learningTimelineTopics, learningTimelineTopicIndex, topicSegments } from "./learning-path";
 
-/** The same physical spacing applies to every lesson, student, goal, and viewport. */
-export const LEARNING_LESSON_WIDTH = 6;
+/** Maximum lesson spacing; available width sets a shared scale for every student in the view. */
+export const LEARNING_LESSON_WIDTH = 12;
 
 /** Two previous semesters plus the current semester and the next three; electives stay explicit. */
 export function learningTopicTicks(goal: LearningGoal, progress?: LearningProgress) {
@@ -37,6 +37,14 @@ export function learningGoalTicks(goal: LearningGoal, topics = learningTopicTick
       position: tick.position, hasGoal: Boolean(stop), observedDate: semesterEnd.date, estimated: semesterEnd.estimated,
       endDate: stop?.endDate ?? null, blockCount: stop?.blockCount ?? null,
     };
+  });
+}
+
+/** Multiple saved goals may share a semester, especially in review classes. Keep every one. */
+export function learningMilestoneTicks(goal: LearningGoal, topics = learningTopicTicks(goal)) {
+  return goalMilestones(goal).flatMap((stop, index) => {
+    const topic = topics.find(topic => topic.grade === stop.studyGrade && topic.lesson === stop.endBlock);
+    return topic ? [{ ...stop, position: topic.position, goalNumber: index + 1 }] : [];
   });
 }
 
