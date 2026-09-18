@@ -1,7 +1,7 @@
 import { useId, type CSSProperties } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { goalMilestones, type LearningGoal, type LearningProgress, type LearningRecord } from "../lib/learning-plan";
-import { learningAxisLabel, learningAxisPosition, learningAxisTicks } from "../lib/learning-axis";
+import { learningAxisLabel, learningAxisPosition, learningAxisTicks, learningTopicTicks } from "../lib/learning-axis";
 import { MATH_LEARNING_CADENCE } from "@/features/progress/learning-cadence";
 import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
@@ -36,6 +36,11 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
     : null;
 
   const ticks = learningAxisTicks(stops);
+  const topicTicks = goal ? learningTopicTicks(goal) : [];
+  const topicTickPath = topicTicks.map((tick) => {
+    const x = (tick.position / total * 1000).toFixed(2);
+    return `M${x} 33v4M${x} 85v4`;
+  }).join("");
   const monthlyBlocks = MATH_LEARNING_CADENCE[goal?.track ?? "regular"].monthlyBlocks;
   const labelStep = Math.max(1, Math.ceil(total / 4));
   let minorTicks = "", monthTicks = "", majorTicks = "", guides = "";
@@ -57,6 +62,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
         {total > 0 ? (
           <svg className={styles.ruler} viewBox="0 0 1000 122" preserveAspectRatio="none" aria-hidden="true">
             <path className={styles.guides} d={guides} vectorEffect="non-scaling-stroke" />
+            <path className={styles.topicTicks} data-ticks="topics" d={topicTickPath} vectorEffect="non-scaling-stroke" />
             <path className={styles.minorTicks} d={minorTicks} vectorEffect="non-scaling-stroke" />
             <path className={styles.majorTicks} d={monthTicks} vectorEffect="non-scaling-stroke" />
             <path className={styles.majorTicks} d={majorTicks} vectorEffect="non-scaling-stroke" />
@@ -73,8 +79,20 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
           aria-valuenow={total > 0 && axisCurrent != null ? axisCurrent : undefined}
           aria-valuetext={total > 0 && axisCurrent != null ? currentText : undefined} aria-description={currentText}>
           <span className={styles.currentFill} />
-          {total > 0 && axisCurrent != null ? <span className={styles.currentMarker} /> : null}
         </div>
+        {total > 0 && axisCurrent != null ? (
+          <Tooltip>
+            <TooltipTrigger className={styles.currentMarker} delay={0} aria-label="현재 진도 상세"
+              aria-describedby={`${goalDescriptionId}-current`} onClick={(event) => event.stopPropagation()} />
+            <TooltipContent id={`${goalDescriptionId}-current`} role="tooltip" className={styles.currentTooltip} side="top" sideOffset={10}>
+              <div>
+                <strong>{carried ? "마지막 확인 진도" : "현재 진도"}</strong>
+                <p>{currentLabel}</p>
+                <small>기준 수업일 · {progress?.currentDate ?? "날짜 확인 필요"} · 누적 {current}블록</small>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
         <div className={`${styles.track} ${styles.targetTrack}`} role="img" aria-label="목표진도" aria-describedby={goalDescriptionId}>
           <span className={styles.targetFill} />
         </div>
@@ -113,6 +131,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
           style={{ left: `${position(tick.position)}%` }}>{tick.goal ? `${tick.position}차` : `${tick.block}블록`}</span>)}
         <span className={styles.goalTick}>{total ? `${total}차` : "전체 목표 미설정"}</span>
       </div>
+      {topicTicks.length ? <p className={styles.source}>기본 눈금 1블록 · 짧은 눈금 세부 단원</p> : null}
       {sourceText ? <p className={styles.source}>{sourceText}</p> : null}
     </div>
   );

@@ -37,6 +37,7 @@
   stroke: var(--rail-tick);
   stroke-width: 1px;
 }
+.topicTicks { stroke: var(--rail-tick); stroke-width: 1px; }
 .majorTicks {
   stroke: var(--rail-ink);
   stroke-width: 1.2px;
@@ -84,9 +85,12 @@
   transition: left 320ms ease;
 }
 .currentMarker {
+  top: 43px;
   left: var(--current-position);
   width: 13px;
   height: 13px;
+  padding: 0;
+  cursor: help;
   background: var(--rail-ink);
   border: 2px solid var(--card);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 18%, transparent), 0 2px 5px color-mix(in srgb, var(--blue) 20%, transparent);
@@ -112,24 +116,29 @@
   box-shadow: 0 0 0 2px var(--card);
   cursor: help;
 }
+.currentMarker::after,
 .targetMarker::after { content: ""; position: absolute; inset: -8px; }
+.currentMarker:focus-visible { outline: 2px solid var(--rail-ink); outline-offset: 4px; }
 .targetMarker:focus-visible { outline: 2px solid var(--goal-ink); outline-offset: 4px; }
 .targetMarker::before { top: 10px; height: 11px; background: var(--goal-ink); }
 .targetMarker:not([data-final])::before { display: none; }
 .rails[data-dense] .targetMarker { width: 3px; height: 9px; border: 0; border-radius: 0; background: var(--goal-ink); box-shadow: none; }
-.goalTooltip {
+.goalTooltip { --point-ink: #ff0000; }
+.currentTooltip { --point-ink: #0000ff; }
+.goalTooltip,
+.currentTooltip {
   max-width: min(320px, calc(100vw - 24px));
-  border: 1px solid color-mix(in srgb, #ff0000 25%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--point-ink) 25%, var(--card));
   background: var(--card);
-  color: #ff0000;
+  color: var(--point-ink);
   font-size: 11px;
   line-height: 1.6;
   overflow-wrap: anywhere;
   box-shadow: 0 3px 12px rgb(0 0 0 / 10%);
 }
-.goalTooltip p { margin: 2px 0; }
-.goalTooltip small { color: var(--text-dim); font-size: 10px; }
-.goalTooltip > [aria-hidden="true"] { background: var(--card); }
+.goalTooltip p, .currentTooltip p { margin: 2px 0; }
+.goalTooltip small, .currentTooltip small { color: var(--text-dim); font-size: 10px; }
+.goalTooltip > [aria-hidden="true"], .currentTooltip > [aria-hidden="true"] { background: var(--card); }
 .annotation {
   position: absolute;
   display: inline-flex;

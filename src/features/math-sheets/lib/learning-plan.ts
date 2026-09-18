@@ -142,6 +142,14 @@ function allocatedSegments(goal: LearningGoal): { topics: LearningTopic[]; block
   return result;
 }
 
+/** Both the current marker and curriculum ticks use these same rounded block positions. */
+export function learningTopicPositions(goal: LearningGoal): (LearningTopic & { block: number })[] {
+  return allocatedSegments(goal).flatMap(({ topics, blocks, offset }) => topics.map((topic, index) => ({
+    ...topic,
+    block: Math.round((offset + (index + 1) / topics.length * blocks) * 10) / 10,
+  })));
+}
+
 export function learningBlocks(goal: LearningGoal): string[] {
   const crossCourse = goal.studyGrade !== (goal.endStudyGrade ?? goal.studyGrade);
   return allocatedSegments(goal).flatMap(({ topics, blocks }) => Array.from({ length: blocks }, (_, index) => {
@@ -295,8 +303,7 @@ export function buildLearningProgress(
   const days = learningDays(goal, context),
     blocks = learningBlocks(goal),
     total = blocks.length;
-  const course = learningTopics(goal);
-  const segments = allocatedSegments(goal);
+  const course = learningTopicPositions(goal);
   let current: number | null = null,
     currentBlock: string | null = null,
     currentDate: string | null = null;
@@ -333,11 +340,7 @@ export function buildLearningProgress(
       continue;
     }
     const topic = course[index];
-    const segment = segments.find((s) => s.topics.some((t) => t.grade === topic.grade && t.lesson === topic.lesson));
-    if (!segment) continue;
-    const local = segment.topics.findIndex((t) => t.grade === topic.grade && t.lesson === topic.lesson);
-    const position = segment.offset + (local + 1) / segment.topics.length * segment.blocks;
-    current = Math.round(Math.max(0, Math.min(total, position)) * 10) / 10;
+    current = Math.max(0, Math.min(total, topic.block));
     currentBlock = goal.studyGrade === (goal.endStudyGrade ?? goal.studyGrade) ? topic.lesson : `${topic.grade} · ${topic.lesson}`;
     currentDate = record.date;
     currentRecord = record;

@@ -1,3 +1,5 @@
+import { goalMilestones, learningTopicPositions, type LearningGoal } from "./learning-plan";
+
 /** Each numbered goal occupies one unit; progress within that goal is fractional. */
 export function learningAxisPosition(block: number, stops: readonly { blockCount: number }[]): number {
   if (!Number.isFinite(block) || block <= 0) return 0;
@@ -24,4 +26,14 @@ export function learningAxisTicks(stops: readonly { blockCount: number }[]): { b
     previous = stop.blockCount;
   }
   return ticks;
+}
+
+/** All fractional curriculum endpoints; integer positions already have block ticks. */
+export function learningTopicTicks(goal: LearningGoal): { block: number; position: number }[] {
+  if (goal.track === "supplement") return [];
+  const stops = goalMilestones(goal);
+  const blocks = new Set(learningTopicPositions(goal).map((topic) => topic.block));
+  return [...blocks].filter((block) => !Number.isInteger(block)).map((block) => ({
+    block, position: learningAxisPosition(block, stops),
+  }));
 }

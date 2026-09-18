@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { learningAxisPosition, learningAxisTicks } from "./learning-axis";
+import { learningAxisPosition, learningAxisTicks, learningTopicTicks } from "./learning-axis";
+import { buildLearningProgress, goalMilestones, planLearningGoal } from "./learning-plan";
+import { learningTopics } from "./learning-path";
+import { flatLessons } from "@/features/onescreen/curriculum";
 
 describe("목표 단계 수직선", () => {
   it("한 목표는 끝이 1이고 그 안의 실제 진도는 소수다", () => {
@@ -39,5 +42,34 @@ describe("실제 블록 단위 눈금", () => {
   it("복습 목표는 실제 4블록이며 미설정이면 눈금이 없다", () => {
     expect(learningAxisTicks([{ blockCount: 4 }])).toHaveLength(4);
     expect(learningAxisTicks([])).toEqual([]);
+  });
+});
+
+describe("세부 단원 눈금과 현재 위치 일치", () => {
+  const first = planLearningGoal({ studentId: "s", studyGrade: "중2", startBlock: "삼각형의 내심", endBlock: flatLessons("중2").at(-1)!, startDate: "2026-09-01", endDate: "2026-11-30", textbook: null });
+  const goal = planLearningGoal({ ...first, endStudyGrade: "공통수학1", endBlock: flatLessons("공통수학1").at(-1)! }, first);
+
+  it("모든 과정의 모든 단원 위치에 눈금이 있고 블록 눈금 사이도 빠짐없이 표시한다", () => {
+    const stops = goalMilestones(goal);
+    const detail = learningTopicTicks(goal);
+    const positions = new Set([...learningAxisTicks(stops), ...detail].map((tick) => tick.position));
+    expect(detail.length).toBeGreaterThan(0);
+    expect(detail.every((tick) => !Number.isInteger(tick.block))).toBe(true);
+    expect(new Set(detail.map((tick) => tick.block)).size).toBe(detail.length);
+    for (const topic of learningTopics(goal)) {
+      const state = buildLearningProgress(goal, { schedules: [], holidays: {}, spans: {} }, [
+        { date: "2026-08-31", progress: `${topic.grade} · ${topic.lesson}`, textbook: null },
+      ], "2026-09-18");
+      expect(state.current).not.toBeNull();
+      expect(positions.has(learningAxisPosition(state.current!, stops)), `${topic.grade} ${topic.lesson}`).toBe(true);
+    }
+  });
+  it("목표를 확장해도 이전 단원의 수직선 위치는 바뀌지 않는다", () => {
+    const later = learningTopicTicks(goal);
+    for (const tick of learningTopicTicks(first)) expect(later).toContainEqual(tick);
+  });
+  it("수업 횟수로 세는 복습·심화와 단원당 1블록인 옛 목표에는 가짜 단원 눈금을 만들지 않는다", () => {
+    expect(learningTopicTicks({ ...first, track: "supplement" })).toEqual([]);
+    expect(learningTopicTicks({ ...first, blockCount: null, milestones: [] })).toEqual([]);
   });
 });

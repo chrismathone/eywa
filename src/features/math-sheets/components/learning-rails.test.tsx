@@ -1,14 +1,42 @@
-import { render, screen, cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningRails } from "./learning-rails";
 import { flatLessons } from "@/features/onescreen/curriculum";
 import { planLearningGoal, buildLearningProgress, type LearningGoal } from "../lib/learning-plan";
+import { learningAxisPosition, learningTopicTicks } from "../lib/learning-axis";
 
 afterEach(cleanup);
 const first = planLearningGoal({ studentId: "s", studyGrade: "중1", startBlock: flatLessons("중1")[0], endBlock: flatLessons("중1").at(-1)!, startDate: "2026-09-01", endDate: "2026-11-30", textbook: null, track: "regular" });
 const progress = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [], "2026-09-18");
 
 describe("현재 진도와 고정 목표 수직선", () => {
+  it("소수 블록에 있는 진도 점도 세부 단원 눈금에 정확히 놓인다", () => {
+    const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [
+      { date: "2026-08-31", progress: flatLessons("중1")[0], textbook: null },
+    ], "2026-09-18");
+    const { container } = render(<LearningRails goal={first} progress={state} />);
+    const x = (learningAxisPosition(state.current!, first.milestones!) * 1000).toFixed(2);
+    const path = container.querySelector('[data-ticks="topics"]')!.getAttribute("d")!;
+    expect(path).toContain(`M${x} 33v4M${x} 85v4`);
+    expect(path.match(/M/g)).toHaveLength(learningTopicTicks(first).length * 2);
+  });
+  it("파란 점은 키보드로도 날짜를 확인할 수 있고 클릭해도 학생 행이 열리지 않는다", async () => {
+    const onSelect = vi.fn();
+    const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [
+      { date: "2026-08-31", progress: "수학 회전체", textbook: null },
+      { date: "2026-09-14", progress: "수학 내신대비", textbook: null },
+    ], "2026-09-18");
+    render(<div onClick={onSelect}><LearningRails goal={first} progress={state} /></div>);
+    const marker = screen.getByRole("button", { name: "현재 진도 상세" });
+    marker.focus();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("기준 수업일 · 2026-08-31");
+    expect(tooltip).not.toHaveTextContent("2026-09-14");
+    expect(tooltip).toHaveTextContent("마지막 확인 진도");
+    expect(marker).toHaveAccessibleDescription(expect.stringContaining("2026-08-31"));
+    fireEvent.click(marker);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
   it("최신 내신대비와 목표 시작 전 마지막 확인 단원의 날짜를 함께 표시한다", () => {
     const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [
       { date: "2026-08-31", progress: "수학 회전체", textbook: null },
