@@ -110,7 +110,7 @@ function WeekDetail({ period, week, automaticOpen }: { period: CurriculumPeriod;
   if (current !== expansion) setExpansion(current);
   const { open } = current;
   // 수업 없는 날을 선택해 표시한 행도 스크롤 중에는 유지해 목록 높이가 바뀌지 않게 한다.
-  const days = week.days.filter((day) => day.record || day.isToday || day.date === current.includedDate);
+  const days = week.days.filter((day) => day.record || day.isClassDay || day.isToday || day.date === current.includedDate);
   const noClass = week.days.every((day) => day.noClassReason);
   const detailId = `week-${period.id}-${week.index}`;
   return <section className={styles.weekSection} data-active-week={automaticOpen ? "true" : undefined} aria-label={`${period.month}월 ${week.index}주차 학습 내용`}>
@@ -124,10 +124,11 @@ function WeekDetail({ period, week, automaticOpen }: { period: CurriculumPeriod;
       {days.length ? <ul>{days.map((day) => {
         const selected = day.date === selectedDate;
         const label = day.isToday ? "현재" : dayStatusLabel(day);
+        const topic = day.record?.subChapter || day.record?.chapter || dayStatusLabel(day);
         return <li key={day.date} data-today={day.isToday ? "true" : undefined} data-selected-day={selected ? "true" : undefined}>
-          <button type="button" onClick={() => selectDay(day.date)} aria-current={selected ? "date" : undefined} aria-label={`${formatMdW(day.date)} ${day.record?.subChapter || day.record?.chapter || "기록 없음"} ${label}`}>
+          <button type="button" onClick={() => selectDay(day.date)} aria-current={selected ? "date" : undefined} aria-label={`${formatMdW(day.date)} ${topic} ${label}`}>
             <span className={styles.dayState} data-status={day.isToday ? "current" : day.status}>{day.isToday ? "●" : day.status === "completed" ? <EyIcon name="check" size={12} strokeWidth={3} className="inline-block align-middle" /> : "○"}</span>
-            <time>{formatMdW(day.date)}</time><span className={styles.dayTopic}>{day.record?.subChapter || day.record?.chapter || "기록 없음"}</span>
+            <time>{formatMdW(day.date)}</time><span className={styles.dayTopic}>{topic}</span>
             <span className={styles.dayPages}>{day.plannedPages ? sourceProgress.learningMap ? periodCount(sourceProgress, day.donePages, day.plannedPages) : `p.${day.record!.startPage}–${day.record!.endPage}` : day.noClassReason || "—"}</span>
           </button>
         </li>;

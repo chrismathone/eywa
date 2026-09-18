@@ -1,5 +1,5 @@
 import { splitLessons } from "@/features/onescreen/curriculum";
-import { addDays, monthRange, shiftMonth } from "@/lib/date-kst";
+import { monthRange, shiftMonth } from "@/lib/date-kst";
 import { learningTimelineTopics, learningTimelineTopicIndex } from "./learning-path";
 import type { LearningGoal, LearningHistory, LearningProgress, LearningRecord } from "./learning-plan";
 
@@ -9,6 +9,7 @@ export function buildLearningHistory(goal: LearningGoal, progress: LearningProgr
   const yearAgo = `${previousYearMonth}-${String(Math.min(Number(referenceDate.slice(8)), Number(monthRange(previousYearMonth).to.slice(8)))).padStart(2, "0")}`;
   const fromDate = enrolledAt && enrolledAt > yearAgo ? enrolledAt : yearAgo;
   const topics = learningTimelineTopics(goal);
+  const reportedDates = [...new Set(records.filter(record => record.date <= referenceDate && (!enrolledAt || record.date >= enrolledAt)).map(record => record.date))].sort();
   const observations: { index: number; date: string }[] = [];
   for (const record of [...records].sort((a, b) => a.date.localeCompare(b.date) || (a.sentAt ?? "").localeCompare(b.sentAt ?? ""))) {
     if (record.date > referenceDate || (enrolledAt && record.date < enrolledAt)) continue;
@@ -26,9 +27,12 @@ export function buildLearningHistory(goal: LearningGoal, progress: LearningProgr
   for (let i = 1; i < observations.length; i++) {
     const before = observations[i - 1], after = observations[i];
     if (after.index <= before.index || after.date === before.date) continue;
-    const days = Math.round((Date.parse(after.date) - Date.parse(before.date)) / 86_400_000);
+    // 수업이 확인되지 않은 달력 날짜에 진도를 만들어 넣지 않는다.
+    // 단원을 특정할 수 없는 시험·복습 보고서도 실제 수업일의 근거가 된다.
+    const days = reportedDates.filter(date => date > before.date && date <= after.date);
     for (let index = before.index + 1; index < after.index; index++) {
-      if (!dates.has(index)) dates.set(index, { date: addDays(before.date, Math.round(days * (index - before.index) / (after.index - before.index))), estimated: true });
+      const date = days[Math.ceil(days.length * (index - before.index) / (after.index - before.index)) - 1];
+      if (date && !dates.has(index)) dates.set(index, { date, estimated: true });
     }
   }
   const recent = observations.filter(item => item.date >= fromDate);

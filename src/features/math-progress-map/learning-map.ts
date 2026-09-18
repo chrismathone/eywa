@@ -6,7 +6,7 @@ import { daysInMonth, weeksOfMonth, ymd } from "./calendar";
 export type LearningMapLesson = ReturnType<typeof learningTopicTicks>[number] & {
   label: string;
   plannedDate: string | null;
-  /** A planning slot, or a historical observation if the lesson precedes the saved plan. Never fabricated. */
+  /** Report-backed study date, otherwise the plan for an unreached lesson. Unknown completed dates stay null. */
   calendarDate: string | null;
   reached: boolean | null;
   inGoal: boolean;
@@ -20,10 +20,11 @@ export function buildLearningMap(goal: LearningGoal, progress: LearningProgress)
   const lessons: LearningMapLesson[] = topics.map(topic => {
     const block = course.get(`${topic.grade}:${topic.lesson}`);
     const plannedDate = block == null ? null : progress.days.find(day => day.target >= block)?.date ?? null;
+    const reached = metrics.current == null ? null : topic.position <= metrics.current;
     return { ...topic, label: learningBlockLabel(topic.lesson, topic.grade), plannedDate,
-      // Missing schedules must not be replaced by report dates and passed off as a plan.
-      calendarDate: block == null ? topic.date ?? null : plannedDate,
-      reached: metrics.current == null ? null : topic.position <= metrics.current,
+      // 실제 진도는 보고서의 수업일에 놓는다. 날짜를 모르는 완료 차시는 계획일로 꾸미지 않는다.
+      calendarDate: topic.date ?? (reached ? null : plannedDate),
+      reached,
       inGoal: topic.position <= metrics.total };
   });
   const referenceDate = progress.referenceDate ?? goal.startDate;

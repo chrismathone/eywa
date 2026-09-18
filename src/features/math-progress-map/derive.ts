@@ -24,6 +24,7 @@ export type DayView = {
   holidayName: string | null;
   /** 정기 비수업일 또는 휴강 사유. 기록이 없다는 이유만으로 채우지 않는다. */
   noClassReason: string | null;
+  isClassDay: boolean | null;
 };
 
 export type WeekView = {
@@ -115,14 +116,16 @@ function topicOf(days: DayView[]): string | null {
 function buildWeek(w: { index: number; start: string; end: string; days: string[] }, byDate: Map<string, DailyProgress>, asOf: string, calendar?: ProgressCalendar): WeekView {
   const days: DayView[] = w.days.map((date) => {
     const record = byDate.get(date) ?? null;
+    const schedule = daySchedule(date, record, calendar);
     return {
       date,
       record,
-      status: record?.lessons && !record.lessons.known && record.lessons.positions.length ? "unknown" : displayStatusOf(record?.status ?? null, date, asOf),
+      status: record?.lessons && !record.lessons.known && record.lessons.positions.length ? "unknown"
+        : !record && schedule.isClassDay && date > asOf ? "planned" : displayStatusOf(record?.status ?? null, date, asOf),
       plannedPages: record ? plannedPagesOf(record) : 0,
       donePages: record ? donePagesOf(record) : 0,
       isToday: date === asOf,
-      ...daySchedule(date, record, calendar),
+      ...schedule,
     };
   });
   const plannedPages = days.reduce((s, d) => s + d.plannedPages, 0);

@@ -3,7 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { EmbedLink } from "@/components/embed-link";
 import { LearningRails } from "@/features/math-sheets/components/learning-rails";
-import { learningStatusLabel, type LearningGoal, type LearningProgress, type LearningRecord } from "@/features/math-sheets/lib/learning-plan";
+import { learningStatusLabel, type LearningContext, type LearningGoal, type LearningProgress, type LearningRecord } from "@/features/math-sheets/lib/learning-plan";
 import { learningBlockLabel } from "@/features/math-sheets/lib/learning-label";
 import { learningTimelineTopicIndex } from "@/features/math-sheets/lib/learning-path";
 import { buildLearningMap, learningSheetHref, lessonsInPeriod, mapPeriod, type LearningMapLesson } from "../learning-map";
@@ -23,15 +23,16 @@ type Props = {
   student: { studentId: string; name: string; school: string | null; grade: string | null };
   classId: string; className: string; month: string;
   goal: LearningGoal; progress: LearningProgress; records: LearningRecord[];
+  context: LearningContext;
   initialQuery?: string;
   embedded?: boolean;
   headerActions?: ReactNode;
   reportScores?: Record<string, TestScoreSource>;
 };
 
-export function LinkedLearningMap({ student, classId, className, month, goal, progress, records, initialQuery = "", embedded = false, headerActions, reportScores }: Props) {
+export function LinkedLearningMap({ student, classId, className, month, goal, progress, records, context, initialQuery = "", embedded = false, headerActions, reportScores }: Props) {
   const map = useMemo(() => buildLearningMap(goal, progress), [goal, progress]);
-  const dashboard = useMemo(() => buildLearningDashboard(student, goal, progress, records, map), [student, goal, progress, records, map]);
+  const dashboard = useMemo(() => buildLearningDashboard(student, goal, progress, records, map, context), [student, goal, progress, records, map, context]);
   const { selection, select, state } = useLinkedMapState(dashboard, map, initialQuery);
   const period = mapPeriod(selection);
   const selectedLessons = lessonsInPeriod(map, period, selection.undated);

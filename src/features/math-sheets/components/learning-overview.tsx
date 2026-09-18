@@ -553,6 +553,7 @@ function StudentFocus({
               key={JSON.stringify([data.classId, student.studentId, data.month, goal, progress.referenceDate, progress.currentBlock, progress.history?.start])}
               student={student} classId={data.classId} className={data.className} month={data.month}
               goal={goal} progress={progress} records={records} reportScores={student.records}
+              context={learning.context}
               initialQuery={initialQuery} embedded
               headerActions={<>
                 {student.rosterPhase !== "on" ? <Status student={student} progress={summary} /> : null}

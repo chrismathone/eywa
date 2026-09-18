@@ -7,6 +7,18 @@ vi.mock("@/components/embed-link", () => ({ EmbedLink: ({ href, children }: { hr
 afterEach(cleanup);
 
 describe("진도맵 ↔ 프로그레스바 상호 선택", () => {
+  it("세 지도에서 반별 수업일과 비수업일을 구분하고 보고서 없는 수업일도 목록에 남긴다", () => {
+    const f = learningMapFixture();
+    const { container } = render(<LinkedLearningMap {...f} initialQuery="date=2026-09-17&view=day&display=full" />);
+    for (const name of ["연간 지도", "연속 지도", "단계별 지도"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      const labels = [...container.querySelectorAll('svg path[aria-label]')].map(node => node.getAttribute("aria-label")!);
+      expect(labels.some(label => label.startsWith("9/15 (화)") && label.includes("수업 없음"))).toBe(true);
+      expect(labels.some(label => label.startsWith("9/17 (목)") && label.includes("수업일 · 진도 기록 없음"))).toBe(true);
+      expect(screen.getByRole("region", { name: "진도 목록" })).toHaveTextContent("수업일 · 진도 기록 없음");
+      expect(screen.getByLabelText("전체 진도율")).toHaveTextContent("38%59 / 155차시");
+    }
+  });
   it("현재 점은 마지막 확인 날짜를 열고 기준일 진도율은 고정한다", () => {
     const f = learningMapFixture();
     window.history.replaceState(null, "", "/mcs/progress-map?classId=c&student=s&month=2026-09&embed=1");

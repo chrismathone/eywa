@@ -68,14 +68,22 @@ describe("실제 진도맵과 MCS 공통 차시 원장", () => {
     expect(map.metrics).toMatchObject({ current: 2, total: 98 });
     expect(map.lessons).toHaveLength(98);
   });
-  it("일정 누락은 일정 미확정으로 남고 보고서 날짜로 대체되지 않는다", () => {
+  it("일정 누락 시 계획일은 미확정으로 남고 실제 보고서 수업일은 유지한다", () => {
     const { goal, progress } = learningMapFixture();
     const map = buildLearningMap(goal, { ...progress, days: [], status: "no-schedule" });
     const known = map.lessons.find(lesson => lesson.lesson === "직각삼각형의 합동")!;
     expect(known.date).toBe("2026-08-27");
     expect(known.plannedDate).toBeNull();
-    expect(known.calendarDate).toBeNull();
+    expect(known.calendarDate).toBe("2026-08-27");
     expect(map.metrics.status).toBe("no-schedule");
+  });
+  it("완료한 진도를 미래 계획일로 그리지 않고 확인된 수업일에만 놓는다", () => {
+    const f = learningMapFixture();
+    const map = buildLearningMap(f.goal, f.progress);
+    const dates = new Set(f.records.map(record => record.date));
+    for (const lesson of map.lessons.filter(lesson => lesson.reached && lesson.calendarDate)) expect(dates.has(lesson.calendarDate!)).toBe(true);
+    expect(map.lessons.find(lesson => lesson.position === map.metrics.current)?.calendarDate).toBe(f.progress.currentDate);
+    expect(map.lessons.filter(lesson => lesson.reached && !lesson.date).every(lesson => lesson.calendarDate === null)).toBe(true);
   });
   it("목표 날짜 배분은 실제 수업일과 공휴일·수강 종료 조건을 따른다", () => {
     const { goal, progress } = learningMapFixture();

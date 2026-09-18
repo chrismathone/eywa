@@ -1,9 +1,9 @@
 import { flatLessons, splitLessons } from "@/features/onescreen/curriculum";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
 import { addDays, monthRange, shiftMonth } from "@/lib/date-kst";
-import { classDaysOf, type MathScheduleRow } from "./class-days";
+import { type MathScheduleRow } from "./class-days";
+import { learningClassDates } from "./learning-class-dates";
 import type { EnrollSpan } from "@/features/attendance/enrollment-span";
-import { dowKeyOf } from "@/features/class-sheets/lib/week";
 import { learningTopics, learningTopicIndex, learningTimelineTopics, learningTimelineTopicIndex, topicSegments, type LearningMilestone, type LearningTopic } from "./learning-path";
 
 /** A goal is stored once; monthly, weekly and daily targets are derived, never copied into reports. */
@@ -222,33 +222,7 @@ export function learningDays(
   context: LearningContext,
 ): PlannedDay[] {
   if (learningGoalError(goal)) return [];
-  const dates: string[] = [];
-  const spans = context.spans[goal.studentId] ?? [];
-  for (
-    let month = goal.startDate.slice(0, 7);
-    month <= goal.endDate.slice(0, 7);
-    month = shiftMonth(month, 1)
-  ) {
-    for (const { date } of classDaysOf(month, context.schedules)) {
-      if (
-        date < goal.startDate ||
-        date > goal.endDate ||
-        context.holidays[date]
-      )
-        continue;
-      if (
-        !spans.some(
-          (s) =>
-            s.start <= date &&
-            (s.end == null || date <= s.end) &&
-            (!s.attendanceDays?.length ||
-              s.attendanceDays.includes(dowKeyOf(date))),
-        )
-      )
-        continue;
-      dates.push(date);
-    }
-  }
+  const dates = learningClassDates(goal.studentId, context, goal.startDate, goal.endDate);
   const blocks = learningBlocks(goal);
   if (goal.blockCount != null) {
     const policy = MATH_LEARNING_CADENCE[goal.track ?? "regular"];
