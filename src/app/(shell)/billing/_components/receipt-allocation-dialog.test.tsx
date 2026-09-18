@@ -11,7 +11,7 @@ vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", ()
 const source = [{ kind: "수업", description: "통합 수강료", amount: 300000, discount: 20000, paid: 280000 }];
 function view(): ReceiptAllocationView {
   return { source, lines: [{ index: 0, kind: "수업", description: "통합 수강료", amount: 300000, source: source[0] }], terms: [1, 2].map((i) => ({
-    id: `term${i}`, invoiceId: "invoice", studentId: "student", studentName: "학생", studentGrade: "중1", subject: "math", classId: `class${i}`, className: `수학${i}반`, monthlyPrice: null, pricingMode: "per_session", plannedSessions: 4, confirmedSessions: 4, unitPrice: 25000 * i, amount: 100000 * i, confirmedAt: "2026-09-16", note: null, classAmount: null,
+    id: `term${i}`, invoiceId: "invoice", studentId: "student", studentName: "학생", studentGrade: "중1", subject: "math", classId: `class${i}`, className: `수학${i}반`, monthlyPrice: null, pricingMode: "per_session", plannedSessions: 4, confirmedSessions: 4, unitPrice: 25000 * i, amount: 100000 * i, confirmedAt: "2026-09-16", note: null, classAmount: null, termState: "term" as const,
   })) };
 }
 async function open(data = view()) {
@@ -208,5 +208,25 @@ describe("수납 연결·배분", () => {
     expect(await screen.findByText("수납 내역이 변경되었습니다")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(h.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("회차 행이 없는 반(출석부 줄에 맞춤, 원장 2026-09-18)", () => {
+  it("'회차 없음' 반은 한글 표식 + 저장하면 행이 생긴다는 안내가 서고, 연결하면 가상 id 그대로 서버에 보낸다(서버가 만든다)", async () => {
+    const data = view();
+    const VID = "v:11111111-1111-4111-8111-111111111111:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    Object.assign(data.terms[1], { id: VID, termState: "missing", confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null });
+    vi.mocked(saveReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    await open(data);
+    expect(screen.getByText("회차 없음")).toBeInTheDocument();
+    expect(screen.getByText(/배분을 저장하는 순간 회차 행이 만들어집니다/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학1반 배분금액"), { target: { value: "150000" } });
+    fireEvent.change(screen.getByLabelText("수학2반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학2반 배분금액"), { target: { value: "150000" } });
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    await waitFor(() => expect(saveReceiptAllocation).toHaveBeenCalled());
+    const rows = vi.mocked(saveReceiptAllocation).mock.calls[0][2];
+    expect(rows.map((r) => r.termId).sort()).toEqual(["term1", VID].sort());
   });
 });

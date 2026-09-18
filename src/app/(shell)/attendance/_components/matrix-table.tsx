@@ -12,7 +12,7 @@ import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import type { AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { suppressedTransferRows, transferRowKey } from "@/features/attendance/transfer-badge";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
 import { LiveRecords, MatrixColumnTotalsRow } from "./live-totals";
@@ -214,6 +214,7 @@ export function MatrixTable({
   classBilledAmounts,
   termSessionsByRow,
   priceConfirmedRows,
+  noInvoiceRows,
   money,
   moneyNote,
   lockBefore,
@@ -241,6 +242,12 @@ export function MatrixTable({
    * 이미 `missingTierRowKeys`에서 빠진다(tier-rows.ts). 이 목록은 영어 줄·정산에 못 쓰는 확정분의 표식을 뗀다.
    */
   priceConfirmedRows?: readonly string[];
+  /**
+   * 그 달 **청구서가 없거나 취소된** 학생×반 줄(`rowKey` → 이유, 2026-09-18) — 청구액·등록 차수·차이확인이 '미확정' 대신 `—`.
+   * 회차 행이 없어도 청구서가 있으면 이 맵에 없다(종전 '미확정' — 회차 확정에서 만들 수 있다). 판정은 순수
+   * [`attendanceNoInvoiceRows`](@/features/attendance/class-billing). 🔴 수업날 없는 줄의 0(`noLessonZeroView`)이 이긴다.
+   */
+  noInvoiceRows?: ReadonlyMap<string, AttendanceInvoiceGap>;
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
   /**
@@ -515,6 +522,7 @@ export function MatrixTable({
                     classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
+                    noInvoice={noInvoiceRows?.get(rowKey(g.classId, s.id)) ?? null}
                     unitSuffix={g.unitSuffix ?? null}
                     noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                     lockBefore={lockBefore}
@@ -541,6 +549,7 @@ export function MatrixTable({
                 classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
+                noInvoice={noInvoiceRows?.get(rowKey(g.classId, s.id)) ?? null}
                 unitSuffix={g.unitSuffix ?? null}
                 noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                 lockBefore={lockBefore}

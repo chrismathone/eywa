@@ -323,6 +323,14 @@ export function auditTargetName(metadata: Meta | null, nameOf: AuditNameOf): str
   );
 }
 
+/** 회차 행이 만들어진 계기(`term-materialize.ts` `MaterializeReason`) → 한글. 🔴 모르는 값은 null — 영문을 흘리지 않는다. */
+const MATERIALIZE_REASON_KO: Record<string, string> = {
+  confirm: "개별 확정",
+  confirm_selected: "선택 일괄 확정",
+  confirm_class: "반 일괄 확정",
+  allocate: "수납 배분",
+};
+
 /**
  * 감사로그 1건의 metadata를 한글 상세 문장으로. null = 표기할 상세 없음("—").
  * 모르는 액션은 uuid를 걸러낸 키값 나열 폴백(원문 JSON은 뷰어가 title 툴팁으로 보존).
@@ -334,6 +342,18 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    case "session_term_create": {
+      // 출석부 줄에 맞춰 생긴 회차 행 — 어느 달·어느 반·어느 저장이 만들었나·예정 시수(기록만 있는 줄은 예정이 없다).
+      const reason = str(m.reason);
+      const cls = ctx.nameOf(m.classId);
+      const planned = num(m.plannedSessions);
+      return join(
+        str(m.period),
+        cls ? `${cls} 반` : null,
+        reason && MATERIALIZE_REASON_KO[reason] ? `${MATERIALIZE_REASON_KO[reason]} 때 생성` : null,
+        planned === null ? "예정 없음(기록만)" : `예정 ${planned}시수`,
+      );
+    }
     case "session_term_monthly_units": {
       const sessions = num(m.sessions);
       const amount = won(m.amountPreserved);

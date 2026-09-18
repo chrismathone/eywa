@@ -26,6 +26,61 @@ export type AttendanceBillingTerm = {
 };
 export type AttendanceBillingClass = { classId: string; className: string; studentIds: readonly string[] };
 
+/**
+ * 학생의 **그 달 청구서 상태** — 회차 확정 화면의 `termRowState`(billing/session-terms/month-roster.ts)와 같은 갈래
+ * (원장 2026-09-18 *"출석부에 존재하는 행 개수와, 회차 확정의 행 개수가 서로 유기적으로 일치해야해"* — 두 화면이 같은 줄을
+ * 같은 말로 불러야 한다).
+ *  · `ok`   취소(void) 아닌 청구서가 하나라도 있다 → 회차 행이 없어도 회차 확정에서 만들 수 있다('미확정').
+ *  · `void` 청구서가 있긴 한데 **전부** 취소됐다 → 확정·배분할 수납이 없다('—').
+ *  · `none` 그 달 청구서가 없다 → 붙일 청구서가 없다('—').
+ * 🔴 raw 코드다 — 화면은 사전(`att.row.noInvoice*`)을 거친 글자만 내보낸다.
+ */
+export type AttendanceInvoiceState = "ok" | "none" | "void";
+
+/** '—'로 서는 이유 — `ok`가 아닌 두 갈래(화면·툴팁이 문구를 가른다). */
+export type AttendanceInvoiceGap = Exclude<AttendanceInvoiceState, "ok">;
+
+/**
+ * 학생별 청구서 상태 — 입력 청구서는 **void 포함**으로 읽은 그 달 것이어야 한다(void를 빼고 읽으면 `void`와 `none`이 안 갈린다).
+ * ⚠️ `studentIds`에 든 학생만 키를 만든다(출석부가 물어본 학생 밖은 판정 대상이 아니다) — 청구서가 없는 학생도 `none`으로
+ *    **반드시** 키가 선다(없는 키 = "판정 안 함"이라 '미확정' 그대로다).
+ */
+export function attendanceInvoiceStateByStudent(
+  studentIds: readonly string[],
+  invoices: readonly { student_id: string; status: string | null }[],
+): Record<string, AttendanceInvoiceState> {
+  const out: Record<string, AttendanceInvoiceState> = {};
+  for (const id of studentIds) out[id] = "none";
+  for (const invoice of invoices) {
+    if (!(invoice.student_id in out)) continue;
+    // 하나라도 살아 있으면 ok — void는 다른 청구서가 없을 때만 남는다.
+    if (invoice.status !== "void") out[invoice.student_id] = "ok";
+    else if (out[invoice.student_id] === "none") out[invoice.student_id] = "void";
+  }
+  return out;
+}
+
+/**
+ * 출석부에서 **'미확정' 대신 `—`로 적을 줄**(`rowKey`) → 이유(원장 2026-09-18 선택 = *'—'(해당 없음)*: 청구서가 없거나
+ * 취소된 줄. 청구서는 있는데 회차 행만 없는 줄은 종전대로 '미확정' — 회차 확정 화면에서 확정할 수 있으니).
+ * 🔑 판정은 **학생 단위**다(청구서는 학생 × 달) — 그 학생의 모든 반 줄이 같은 이유를 받는다. 회차 행은 청구서에 매달리므로
+ *    상태가 `ok`가 아닌 학생에겐 살아 있는 회차 행이 있을 수 없다(= "회차 행이 없는 줄에만").
+ * ⚠️ 상태 맵에 없는 학생(출석부가 안 물어본 반)은 넣지 않는다 — 모르는 것을 '청구서 없음'으로 읽지 않는다.
+ */
+export function attendanceNoInvoiceRows(
+  roster: readonly { classId: string; studentIds: readonly string[] }[],
+  invoiceStateByStudent: Readonly<Record<string, AttendanceInvoiceState>>,
+): Map<string, AttendanceInvoiceGap> {
+  const out = new Map<string, AttendanceInvoiceGap>();
+  for (const c of roster) {
+    for (const studentId of c.studentIds) {
+      const state = invoiceStateByStudent[studentId];
+      if (state === "none" || state === "void") out.set(rowKey(c.classId, studentId), state);
+    }
+  }
+  return out;
+}
+
 /** 회차 확정의 '이 반 청구액'과 동일: 유효한 배분 우선, 없으면 반 이름 매칭. */
 export function attendanceClassBilledAmounts(
   classes: readonly AttendanceBillingClass[],

@@ -373,6 +373,8 @@ export const AUDIT_ACTIONS = {
   refund_request_delete: "환불 요청서 삭제",
   textbook_notice_send: "교재 요청서 학부모 발송",
   session_terms_refresh: "청구 회차 계획 갱신",
+  // 출석부 줄인데 회차 행이 없던 학생 — 확정·배분을 저장하는 순간 행이 생긴다(`term-materialize.ts`, 원장 2026-09-18).
+  session_term_create: "청구 회차 행 생성(출석부 줄에 맞춤)",
   session_term_confirm_class: "청구 회차 반 일괄 확정",
   session_term_confirm: "청구 회차 확정",
   session_term_confirm_selected: "청구 회차 선택 일괄 확정",

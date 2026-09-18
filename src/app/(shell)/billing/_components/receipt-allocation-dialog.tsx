@@ -13,8 +13,12 @@ import { initialReceiptDraft } from "@/features/billing/session-terms/receipt-su
 import { ReceiptSuggestions } from "./receipt-suggestions";
 import { receiptRefundState } from "@/features/billing/session-terms/receipt-refund";
 import { unlinkedZeroBlockers } from "@/features/billing/session-terms/unlinked-zero";
+import { TERM_STATE_LABEL } from "@/features/billing/session-terms/month-roster";
+import { tipProps } from "@/components/hover-tip/tip";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
+/** 회차 행이 없는 줄(출석부엔 있는데 행이 없는 반) — 배분을 저장하는 순간 행이 생긴다(원장 2026-09-18). 문구는 `TERM_STATE_LABEL` 한 벌. */
+const MISSING_TIP = tipProps({ title: TERM_STATE_LABEL.missing.label, lines: [TERM_STATE_LABEL.missing.tip] });
 
 function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }: { invoiceId: string; studentName: string; data: ReceiptAllocationView; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -110,7 +114,7 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
         const line = data.lines.find((row) => String(row.index) === draft[term.id].line);
         const remaining = line ? receiptRemainder(line, term.id, draft) : null;
         return <tr key={term.id} className="border-line border-b">
-          <td className="py-3 pr-3">{term.className}{term.confirmedSessions === null ? <span className="text-amber ml-2">미확정</span> : null}{term.enrollmentLabel ? <span className="text-text-dim mt-1 block text-xs">{term.enrollmentLabel}</span> : null}</td>
+          <td className="py-3 pr-3">{term.className}{term.termState === "missing" ? <span className="text-amber bg-amber-soft ml-2 cursor-help rounded-sm px-1.5 py-0.5 text-xs font-medium" {...MISSING_TIP}>{TERM_STATE_LABEL.missing.label}</span> : term.confirmedSessions === null ? <span className="text-amber ml-2">미확정</span> : null}{term.enrollmentLabel ? <span className="text-text-dim mt-1 block text-xs">{term.enrollmentLabel}</span> : null}</td>
           <td className="num pr-3">{term.amount === null ? "—" : won(term.amount)}</td>
           <td className="pr-3">
             <select aria-label={`${term.className} 수납 항목`} disabled={pending} value={draft[term.id].line} className="border-input bg-background max-w-64 rounded-md border px-2 py-1.5" onChange={(e) => {
@@ -128,7 +132,7 @@ function AllocationDialog({ invoiceId, studentName, data: initialData, onClose }
         </tr>;
       })}
     </tbody></table></div>
-    <p className="text-text-dim mb-3 text-sm">배분만 저장하면 시수는 미확정으로 유지됩니다. 시수 확정 후 ‘시수 검증 → 분배 저장’을 하면 강사 정산에 반영됩니다.</p>
+    <p className="text-text-dim mb-3 text-sm">배분만 저장하면 시수는 미확정으로 유지됩니다. 시수 확정 후 ‘시수 검증 → 분배 저장’을 하면 강사 정산에 반영됩니다.{data.terms.some((term) => term.termState === "missing") ? " ‘회차 없음’ 반은 배분을 저장하는 순간 회차 행이 만들어집니다." : ""}</p>
     <footer className="flex items-center justify-between gap-4"><div className="text-text-dim text-sm">{error ? <p role="alert" className="text-danger">{error}</p> : !complete ? "연결한 수납 항목을 다시 선택해 주세요." : zeroBlock.matchedTerms.length ? `${zeroBlock.matchedTerms.map((t) => t.className ?? "반").join(", ")}에 맞는 수납 항목이 있습니다. 0원으로 두지 말고 연결해 주세요.` : !valid ? "각 수납 항목의 배분 합계를 청구액과 맞춰 주세요." : hasLinks ? `${zeroCount ? `연결하지 않은 확정 반 ${zeroCount}개는 0원으로 저장합니다. ${zeroBlock.unlinkedLines.length ? `어느 반에도 연결하지 않은 수업 항목이 남습니다(${leftoverText}). ` : ""}` : ""}저장한 배분금액에 강사 배분율을 적용합니다.` : "연결 없이 저장하면 기존 배분을 해제합니다."}</div><button type="button" disabled={pending || !valid} onClick={save} className="bg-primary text-primary-foreground shrink-0 rounded-md px-4 py-2 text-sm font-bold disabled:opacity-40">{pending ? "저장 중…" : "배분 저장"}</button></footer>
   </dialog>;
 }

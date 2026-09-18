@@ -14,8 +14,13 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
+import { TERM_STATE_LABEL } from "@/features/billing/session-terms/month-roster";
+import { tipProps } from "@/components/hover-tip/tip";
 
 const PAGE_SIZE = 50;
+
+/** 회차 행이 없는 줄(출석부엔 있는데 행이 없는 학생) — 미확정으로 서고 실 출석은 줄 집합이 센 시수. 문구는 `TERM_STATE_LABEL` 한 벌. */
+const MISSING_TIP = tipProps({ title: TERM_STATE_LABEL.missing.label, lines: [TERM_STATE_LABEL.missing.tip, "실 출석은 그 달 출석부에 찍힌 시수입니다."] });
 
 // 출석부와 같은 소수 한 자리 시수. 기존 일수 확정은 행별 안내와 함께 보존한다.
 const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -263,6 +268,10 @@ export async function SessionVerificationFace({
                       <td className="num px-3 py-2 text-right">
                         {r.confirmedSessions !== null ? (
                           <>{r.confirmedSessions}{r.pricingMode !== "monthly" && r.quantityBasis === "days" ? <span className="text-amber block text-xs">기존 일수 기준</span> : null}</>
+                        ) : r.termState === "missing" ? (
+                          <span className="text-amber cursor-help text-xs" {...MISSING_TIP}>
+                            {TERM_STATE_LABEL.missing.label}
+                          </span>
                         ) : (
                           <span className="text-text-dim" title="회차 확정 전 — 계획 회차는 참고">
                             {r.plannedSessions ?? "—"}

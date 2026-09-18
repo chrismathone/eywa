@@ -3,6 +3,8 @@ import {
   attendanceClassBilledAmounts,
   attendanceClassConfirmedSessions,
   attendanceClassPriceConfirmedRows,
+  attendanceInvoiceStateByStudent,
+  attendanceNoInvoiceRows,
   type AttendanceBillingTerm,
 } from "./class-billing";
 import { rowKey } from "./grid/model";
@@ -137,5 +139,43 @@ describe("「단가」 표식 연동 — 회차 확정에서 단가까지 확정
     expect(attendanceClassPriceConfirmedRows([classes[1]!], [invoice], [term({ unit_price: 30000 })])).toEqual([]);
     expect(attendanceClassPriceConfirmedRows(classes, [invoice], [term({ class_id: null, unit_price: 30000 })])).toEqual([]);
     expect(attendanceClassPriceConfirmedRows(classes, [], [term({ unit_price: 30000 })])).toEqual([]);
+  });
+});
+
+/**
+ * 회차 행이 없는 줄의 두 갈래(원장 2026-09-18 선택) — 청구서가 있으면 '미확정'(회차 확정에서 만들 수 있다), 없거나 취소됐으면
+ * `—`(만들 곳이 없다). 회차 확정 화면의 `termRowState`(`missing` / `no_invoice` / `void_invoice`)와 같은 줄이어야 한다.
+ */
+describe("학생별 청구서 상태 · '—'로 적을 줄 (2026-09-18)", () => {
+  it("살아 있는 청구서가 하나라도 있으면 ok · 취소뿐이면 void · 없으면 none — 물어본 학생 전원에게 키가 선다", () => {
+    expect(
+      attendanceInvoiceStateByStudent(
+        ["s1", "s2", "s3", "s4"],
+        [
+          { student_id: "s1", status: "issued" },
+          { student_id: "s2", status: "void" },
+          // s4 = 취소 + 재발행: 순서와 무관하게 ok(살아 있는 게 하나라도 있다).
+          { student_id: "s4", status: "void" },
+          { student_id: "s4", status: "paid" },
+          { student_id: "outsider", status: "issued" },
+        ],
+      ),
+    ).toEqual({ s1: "ok", s2: "void", s3: "none", s4: "ok" });
+  });
+
+  it("🔴 청구서 상태가 null이어도 취소는 아니다 — void 글자 그대로만 취소", () => {
+    expect(attendanceInvoiceStateByStudent(["s1"], [{ student_id: "s1", status: null }])).toEqual({ s1: "ok" });
+  });
+
+  it("`—` 줄 = 상태가 none·void인 학생의 **모든 반 줄** — ok·모름(키 없음)은 넣지 않는다", () => {
+    const rows = attendanceNoInvoiceRows(classes, { s1: "none", s2: "void" });
+    expect([...rows]).toEqual([
+      [rowKey("c1", "s1"), "none"],
+      [rowKey("c1", "s2"), "void"],
+      [rowKey("c2", "s1"), "none"],
+    ]);
+    expect(attendanceNoInvoiceRows(classes, { s1: "ok" }).size).toBe(0);
+    // 🔴 상태 맵에 없는 학생(출석부가 안 물어본 반)은 '청구서 없음'으로 읽지 않는다 — 종전 '미확정' 그대로.
+    expect(attendanceNoInvoiceRows(classes, {}).size).toBe(0);
   });
 });

@@ -6,7 +6,7 @@ import {
   formatUnitsWithSuffix,
   type AttendanceUnitSuffix,
 } from "@/features/attendance/unit-suffix";
-import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { EMPTY_COUNT, rateDecimal, ratePercent, sumCounts, type Counted } from "@/features/attendance/grid/totals";
@@ -78,6 +78,7 @@ export function RowSessionDiffCell({
   suffix = null,
   lang = "ko",
   termSynthetic = false,
+  noInvoice = null,
 }: {
   row: string;
   fallback: Counted;
@@ -89,15 +90,28 @@ export function RowSessionDiffCell({
    * 없는 줄이 아니므로, 그 0에서 뺀 `+1.0` 같은 신호를 내지 않고 미확정(`—`)으로 돌아간다(새로고침 뒤 서버 값과 같은 모양).
    */
   termSynthetic?: boolean;
+  /**
+   * 그 달 청구서가 없거나(`none`) 취소된(`void`) 학생의 줄(2026-09-18) — 등록 차수가 `—`인 이유가 '아직 확정 전'이 아니라
+   * '확정할 곳이 없다'라, `—`의 툴팁을 그 문구로 바꾼다. 청구서가 있으면 null(종전 문구).
+   */
+  noInvoice?: AttendanceInvoiceGap | null;
 }) {
   const c = useRowCount(row) ?? fallback;
   const term = termSynthetic && c.units > 0 ? null : termIn;
   const diff = attendanceUnitsDiff(c.units, term);
   if (diff === null) {
+    // 옛 일수 기준 확정이면 회차 행이 있다(= 청구서가 있다) — 그 문구가 먼저. 청구서 없음은 회차 행이 없는 줄에만 선다.
+    const why = term?.daysBasis
+      ? "att.row.diffDaysBasis"
+      : noInvoice === "void"
+        ? "att.row.invoiceVoidTip"
+        : noInvoice === "none"
+          ? "att.row.noInvoiceTip"
+          : "att.row.diffUnconfirmed";
     return (
       <td
         className="border-line text-text-dim num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap"
-        title={sheetT(lang, term?.daysBasis ? "att.row.diffDaysBasis" : "att.row.diffUnconfirmed")}
+        title={sheetT(lang, why)}
       >
         —
       </td>

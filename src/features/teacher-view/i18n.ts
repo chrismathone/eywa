@@ -1467,6 +1467,18 @@ export const SHEET_DICT = {
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
   },
   "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
+  /* 회차 행이 없는 줄의 두 갈래(원장 2026-09-18 선택): 청구서가 **있으면** '미확정'(회차 확정에서 만들 수 있다), 청구서가 없거나
+     취소됐으면 `—`(만들 곳이 없다) + 이유 카드. 회차 확정 화면의 '청구서 없음'·'청구서 취소'(`TERM_STATE_LABEL`)와 같은 줄이다.
+     ⚠️ `—`는 두 언어가 같은 글자다(기호) — 뜻은 툴팁이 편다. */
+  "att.row.noInvoice": { ko: "—", en: "—" },
+  "att.row.noInvoiceTip": {
+    ko: "이 달 청구서가 없습니다 — 회차 확정 화면에도 '청구서 없음'으로 서고 확정·배분은 잠깁니다.",
+    en: "No bill this month — session confirmation lists this row as 'no bill' and confirming or allocating is locked.",
+  },
+  "att.row.invoiceVoidTip": {
+    ko: "이 달 청구서가 취소(void)됐습니다 — 확정·배분할 수납이 없습니다.",
+    en: "This month's bill was voided — there is no payment to confirm or allocate.",
+  },
   // 월별 출석부 열(원장 2026-09-17) — 출석부에서 센 '수업 차수'와 회차 확정에서 확정한 '등록 차수'를 나란히.
   // ⚠️ 영어 라벨은 **열 폭 안에 들어가는 한 낱말**이다(가드 `name-wiring.test.ts`) — 뜻은 `*Title` 툴팁이 편다.
   "att.col.lessonCount": { ko: "수업 차수", en: "Attended" },
@@ -1477,8 +1489,8 @@ export const SHEET_DICT = {
   // 🔴 `Enrolled`는 원생 상태 '재원'이 쓴다(stu.filter.status.enrolled·cls.card.enrolled) — 등록 차수는 `Reg.`(뜻은 툴팁).
   "att.col.termSessions": { ko: "등록 차수", en: "Reg." },
   "att.col.termSessionsTitle": {
-    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다.",
-    en: "Sessions confirmed in billing. Shown as unconfirmed until then.",
+    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다. 그 달 청구서가 없으면(또는 취소됐으면) '—'로 보입니다.",
+    en: "Sessions confirmed in billing. Shown as unconfirmed until then, or as '—' when there is no bill this month (or it was voided).",
   },
   // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
   "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },

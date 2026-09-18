@@ -17,6 +17,19 @@ const ctx = (names: Record<string, string> = {}) => ({
   subjectLabel: (key: string) => ({ math: "수학", english: "영어" })[key] ?? key,
 });
 
+describe("auditDetail — 청구 회차 행 생성(출석부 줄에 맞춤, 2026-09-18)", () => {
+  const CID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  it("어느 달·어느 반·왜·예정 시수를 한 줄로 — 기록만 있는 줄은 '예정 없음', 모르는 계기는 영문을 흘리지 않는다", () => {
+    expect(
+      auditDetail("session_term_create", { period: "2026-09", classId: CID, studentId: SID, reason: "confirm_class", plannedSessions: 9 }, ctx({ [CID]: "수학A" })),
+    ).toBe("2026-09 · 수학A 반 · 반 일괄 확정 때 생성 · 예정 9시수");
+    expect(auditDetail("session_term_create", { period: "2026-09", reason: "allocate", plannedSessions: null }, ctx())).toBe("2026-09 · 수납 배분 때 생성 · 예정 없음(기록만)");
+    expect(auditDetail("session_term_create", { period: "2026-09", reason: "bogus_reason", plannedSessions: 3 }, ctx())).toBe("2026-09 · 예정 3시수");
+    // '대상' 열은 metadata의 학생 이름으로(auditTargetName 규약).
+    expect(auditTargetName({ studentId: SID, classId: CID }, ctx({ [SID]: "김학생", [CID]: "수학A" }).nameOf)).toBe("김학생");
+  });
+});
+
 describe("auditDetail — 도움말 게시판(0265a)", () => {
   it("질문·답변은 제목만 한글로", () => {
     expect(auditDetail("help_post_create", { title: "출석부가 안 열려요" }, ctx())).toBe("출석부가 안 열려요");

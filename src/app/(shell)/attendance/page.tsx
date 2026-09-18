@@ -23,7 +23,8 @@ import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMa
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
 import { classWorkerLabel } from "@/features/attendance/class-worker";
-import { getAttendanceClassBilledAmounts } from "@/features/attendance/server/class-billing";
+import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling } from "@/features/attendance/server/class-billing";
+import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
@@ -477,17 +478,55 @@ export default async function AttendancePage({
   const workerClassIds = (
     mode === "teacher" ? teacherClasses.map((c) => c.id) : effectiveClassId ? [effectiveClassId] : []
   ).filter(Boolean);
-  const [workers, classBilledAmounts] = await Promise.all([
+  /**
+   * 청구 조회에 넘기는 **담당 반**의 학생×반 — 청구액·등록 차수·「단가」·청구서 상태가 **같은 목록**에서 나온다.
+   * 보강 묶음(`makeupGroup`, 아래)의 줄은 따로 읽어 합친다(`loadMakeupPool` → `billingRoster`).
+   */
+  const homeBillingRoster =
+    mode === "teacher"
+      ? teacherClasses.map((c, i) => ({ classId: c.id, studentIds: teacherMatrices[i]!.students.map((s) => s.id) }))
+      : effectiveClassId
+        ? [{ classId: effectiveClassId, studentIds: matrix.students.map((s) => s.id) }]
+        : [];
+  /**
+   * 보이지 않는 '보강' 반 — 찾기 → 명단(격자) → 그 명단의 청구 판정을 **한 사슬**로 묶어 담당 반 조회와 **나란히** 돌린다(B4).
+   * 🔑 보강 반의 청구는 명단이 정해진 뒤에야 물을 수 있어 **두 번째 조회**다. 담당 반 청구 조회를 이 사슬 뒤로 미루지 않으려고
+   *    따로 뒀다(출석부는 강사 전원이 매일 여는 화면이다).
+   * 🔑 청구 판정을 받는 이유(2026-09-18): 회차 확정 화면은 보강 반 줄도 세우고 확정·'청구서 없음'까지 판정한다(`loadMonthRoster`).
+   *    여기서 빼 두면 그 줄은 확정한 뒤에도 '미확정', 청구서가 없어도 `—`가 아니라 '미확정'으로 남았다.
+   * ⚠️ 반별 보기·보강 반이 없는 강사·명단이 빈 보강 반은 청구 조회를 **하지 않는다**(종전과 같은 왕복 수).
+   * 🔴 `allowClassIds`엔 **여기서 스스로 푼** id(`findMakeupPoolClass(user.tenantId, effectiveTeacher)`)만 넘긴다 — 쿼리 문자열·폼 값
+   *    같은 클라 입력으로 채우지 말 것(강사 축 밖 반의 청구액을 읽는 뒷문이 된다). 서버도 보강 반인지 DB로 다시 확인한다.
+   * 묶음을 그리는 규약은 아래 `makeupGroup` 주석.
+   */
+  const loadMakeupPool = async () => {
+    const makeupPoolClassId =
+      mode === "teacher" && effectiveTeacher ? await findMakeupPoolClass(user.tenantId, effectiveTeacher) : null;
+    const poolMatrix = makeupPoolClassId
+      ? await getMonthlyAttendanceMatrix(month, makeupPoolClassId, "month", null, null, makeupPoolClassId)
+      : null;
+    if (!makeupPoolClassId || !poolMatrix || poolMatrix.students.length === 0) {
+      return { classId: makeupPoolClassId, matrix: poolMatrix, roster: null, billing: null };
+    }
+    const roster = { classId: makeupPoolClassId, studentIds: poolMatrix.students.map((s) => s.id) };
+    const billing = await getAttendanceClassBilledAmounts(month, [roster], { allowClassIds: [makeupPoolClassId] });
+    return { classId: makeupPoolClassId, matrix: poolMatrix, roster, billing };
+  };
+  const [workers, homeBilling, makeupPool] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
-    getAttendanceClassBilledAmounts(
-      month,
-      mode === "teacher"
-        ? teacherClasses.map((c, i) => ({ classId: c.id, studentIds: teacherMatrices[i]!.students.map((s) => s.id) }))
-        : effectiveClassId
-          ? [{ classId: effectiveClassId, studentIds: matrix.students.map((s) => s.id) }]
-          : [],
-    ),
+    getAttendanceClassBilledAmounts(month, homeBillingRoster),
+    loadMakeupPool(),
   ]);
+  /** 청구 판정을 받은 **모든** 학생×반(담당 반 + 명단이 있는 보강 반) — `—` 줄 판정과 표의 청구 칸이 같은 목록·같은 판정을 본다. */
+  const billingRoster = makeupPool.roster ? [...homeBillingRoster, makeupPool.roster] : homeBillingRoster;
+  const classBilledAmounts = makeupPool.billing
+    ? mergeAttendanceClassBilling(homeBilling, makeupPool.billing)
+    : homeBilling;
+  /**
+   * '미확정' 대신 `—`로 적을 줄 — 그 달 청구서가 없거나 취소된 학생의 줄(원장 2026-09-18 선택). 청구서는 있는데 회차 행만 없는
+   * 줄은 종전 '미확정'(회차 확정에서 만들 수 있다). 판정 = 순수 `attendanceNoInvoiceRows`(회차 확정 화면과 같은 갈래).
+   */
+  const noInvoiceRows = attendanceNoInvoiceRows(billingRoster, classBilledAmounts.invoiceStateByStudent);
   const workerOf = (classId: string) => {
     const w = workers.get(classId) ?? null;
     return { workerLabel: classWorkerLabel(w, lang), workerSource: w?.source ?? null };
@@ -537,24 +576,19 @@ export default async function AttendancePage({
    *    "어디에도 안 보이게" 하는 장치다. 출석부만 이렇게 **일부러** 불러온다.
    * ⚠️ 보강을 한 적 없는 강사는 반 자체가 없어(lazy 생성) 묶음도 안 선다 — 정상이다.
    * ⚠️ 반별 보기(mode !== "teacher")엔 안 붙인다. 그 화면은 고른 반의 책이라 남의 보강이 낄 자리가 아니다.
+   * 🔗 조회(반 찾기·명단·청구 판정)는 위 `loadMakeupPool`이 담당 반 청구 조회와 나란히 한다 — 청구액·등록 차수·`—` 줄도
+   *    담당 반과 같은 판정을 받는다(2026-09-18, 회차 확정 화면이 이 줄을 확정·'청구서 없음'으로 판정하므로).
    */
-  const makeupPoolClassId =
-    mode === "teacher" && effectiveTeacher
-      ? await findMakeupPoolClass(user.tenantId, effectiveTeacher)
-      : null;
-  const makeupPoolMatrix = makeupPoolClassId
-    ? await getMonthlyAttendanceMatrix(month, makeupPoolClassId, "month", null, null, makeupPoolClassId)
-    : null;
   const makeupGroup: MatrixGroup | null =
-    makeupPoolMatrix && makeupPoolMatrix.students.length > 0
+    makeupPool.classId && makeupPool.matrix && makeupPool.matrix.students.length > 0
       ? {
-          classId: makeupPoolClassId!,
+          classId: makeupPool.classId,
           // 🔴 이 묶음 이름은 반 이름이 아니라 **출결 상태 '보강'과 같은 낱말**이다 —
           //    그래서 반 이름 표기표가 아니라 출결 라벨 단일 소스를 읽는다(두 화면이 같은 말을 쓴다).
           className: attendanceLabelOf("makeup", lang) ?? MAKEUP_POOL_PREFIX,
           // 과목 라벨은 비운다 — 이 묶음은 한 과목이 아니다(그 강사가 한 보강 전부가 여기 모인다).
           subjectLabel: "",
-          matrix: makeupPoolMatrix,
+          matrix: makeupPool.matrix,
         }
       : null;
 
@@ -682,7 +716,7 @@ export default async function AttendancePage({
   /**
    * 강사 전체 보기의 주인 — 저장이 **그 강사 몫 교시에만** 시수를 나누게 서버에 알린다(원장 제보 2026-09-11:
    * *"새로고침하면 강제로 어떤 숫자로 롤백"*). 칸 값이 `effectiveTeacher` 스코프로 계산된 반(`teacherMatrices`)만
-   * 싣는다 — 보강 묶음(`makeupPoolMatrix`)은 스코프 없이 그려지므로 넣지 않는다(화면과 저장이 같은 판정을 쓰게).
+   * 싣는다 — 보강 묶음(`makeupPool.matrix`)은 스코프 없이 그려지므로 넣지 않는다(화면과 저장이 같은 판정을 쓰게).
    * ⚠️ 클라가 보내는 건 "어느 보기인가"뿐이다 — 몫은 서버가 DB로 다시 판정한다(#77).
    */
   const attendanceScope =
@@ -1095,6 +1129,7 @@ export default async function AttendancePage({
             classBilledAmounts={classBilledAmounts.billed}
             termSessionsByRow={classBilledAmounts.confirmedSessions}
             priceConfirmedRows={classBilledAmounts.priceConfirmed}
+            noInvoiceRows={noInvoiceRows}
             money={money}
             moneyNote={moneyNote}
             lang={lang}

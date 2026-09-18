@@ -9,7 +9,7 @@ import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
 import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
-import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
 import { placeLifecycleBadges } from "@/features/attendance/badge-placement";
 import { attendanceNameTone } from "@/features/attendance/name-tone";
@@ -37,6 +37,7 @@ export function MatrixRow({
   tierMissing,
   tierLabel,
   noLessonZero = false,
+  noInvoice = null,
   lang = "ko",
 }: {
   /** 화면 언어 — 표가 내려준다(서버 컴포넌트라 훅을 못 쓴다). 안 주면 한국어. */
@@ -74,6 +75,12 @@ export function MatrixRow({
    * 수업 차수도 `—` 대신 0으로 적고, 등록 차수 0은 지어낸 값이라 차이 칸이 거기서 뺀 숫자로 신호를 내지 않는다.
    */
   noLessonZero?: boolean;
+  /**
+   * 그 달 **청구서가 없거나(`none`) 취소된(`void`)** 학생의 줄(원장 2026-09-18 선택 = `—`) — 회차 행이 없어도 만들 곳이 없어
+   * 청구액·등록 차수·차이확인을 '미확정' 대신 `—`로 적고 이유는 마우스 오버 카드에. 청구서가 있는데 회차 행만 없으면 null(종전
+   * '미확정' — 회차 확정에서 만들 수 있다). 판정은 표가 한다(`noInvoiceRows`). ⚠️ 수업날 없는 줄의 0이 이긴다(값이 null이 아니라 안 탄다).
+   */
+  noInvoice?: AttendanceInvoiceGap | null;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -179,11 +186,10 @@ export function MatrixRow({
       </td>
       {/* 청구액 = 크림 · 수업/등록 차수 = 연파랑(원장 2026-09-18 색 지정, `--att-col-*`).
           🔴 행 hover(`hover:bg-bg-soft/40`)는 이 칸들에선 안 비친다 — 열 색이 이기는 게 맞다(열을 보라고 칠한 색이다). */}
+      {/* 값이 없는 칸 = '미확정'(청구서는 있어 회차 확정에서 만들 수 있다) 또는 `—`(청구서가 없거나 취소 — 만들 곳이 없다, 2026-09-18). */}
       {classBilled !== undefined ? (
         <td className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
-          {classBilled === null ? (
-            <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
-          ) : formatMoney(classBilled)}
+          {classBilled === null ? <UnconfirmedMark noInvoice={noInvoice} lang={lang} /> : formatMoney(classBilled)}
         </td>
       ) : null}
       {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
@@ -199,7 +205,7 @@ export function MatrixRow({
       {termSessions !== undefined ? (
         <td className="border-line num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
           {termSessions === null ? (
-            <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
+            <UnconfirmedMark noInvoice={noInvoice} lang={lang} />
           ) : termSessions.daysBasis ? (
             <span
               className="text-danger cursor-help underline decoration-dotted underline-offset-4"
@@ -226,6 +232,7 @@ export function MatrixRow({
           fallback={countMarks(marks, units)}
           term={termSessions}
           termSynthetic={noLessonZero}
+          noInvoice={noInvoice}
           suffix={unitSuffix}
           lang={lang}
         />
@@ -323,5 +330,22 @@ export function MatrixRow({
       {/* 시수·출석률은 **입력을 즉시 따라간다**(클라 집계) — 서버 값은 첫 렌더 폴백. */}
       <RowTotalCells row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} />
     </tr>
+  );
+}
+
+/**
+ * 청구액·등록 차수 칸의 **값 없음** 표기 — 청구서가 있으면 '미확정'(회차 확정에서 확정할 수 있다), 없거나 취소됐으면 `—` + 이유 카드
+ * (원장 2026-09-18 선택). 두 칸이 같은 조각을 써야 한 줄에서 한 칸은 '미확정', 한 칸은 `—`가 되지 않는다.
+ * 🔴 문구는 전부 사전(`att.row.*`) — 이 파일엔 한글 리터럴이 없다(`name-wiring` 가드).
+ */
+function UnconfirmedMark({ noInvoice, lang }: { noInvoice: AttendanceInvoiceGap | null; lang: SheetLang }) {
+  if (!noInvoice) return <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>;
+  return (
+    <span
+      className="text-text-dim cursor-help"
+      {...tipProps(sheetT(lang, noInvoice === "void" ? "att.row.invoiceVoidTip" : "att.row.noInvoiceTip"))}
+    >
+      {sheetT(lang, "att.row.noInvoice")}
+    </span>
   );
 }

@@ -13,7 +13,13 @@ import { monthRange } from "../plan";
 import { suggestReceiptAllocations, type ReceiptSuggestion } from "../receipt-suggestion";
 import { isTuitionReceipt } from "../tuition-receipt";
 import { unlinkedZeroBlockers } from "../unlinked-zero";
+import { isVirtualTermId } from "../month-roster";
+import { materializeVirtualTerms } from "./term-materialize";
 
+/**
+ * `terms`엔 회차 행이 없는 줄(가상 id, `termState: "missing"`)도 선다 — 이 학생의 그 달 출석부 줄인데 행이 없는 반(보강 방문 등).
+ * 배분을 저장하는 순간 서버가 행을 만들고 실 id로 저장한다(`saveReceiptAllocation`).
+ */
 export type ReceiptAllocationView = { period?: string; lines: ReceiptLine[]; source: unknown; suggestions?: ReceiptSuggestion[]; terms: (SessionTermRow & { enrollmentLabel?: string })[] };
 /**
  * `lineIndex: null` = 연결할 수납 항목이 없는 확정 반을 0원으로 저장(0269a — 금액은 0만).
@@ -54,13 +60,27 @@ export async function mergeReceiptItems(invoiceId: string, source: unknown, indi
   return { committed: true, error: "수납 합산 변경은 저장됐습니다. 창을 다시 열어 확인해 주세요." };
 }
 
-export async function saveReceiptAllocation(invoiceId: string, source: unknown, rows: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
+export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
-  if (!Array.isArray(rows) || rows.length > 500 || rows.some((row) => !Number.isSafeInteger(row.amount) || row.amount < 0 || (row.lineIndex === null ? row.amount !== 0 : !Number.isInteger(row.lineIndex) || row.lineIndex < 0))) return { error: "배분금액과 연결 항목을 확인해 주세요" };
+  if (!Array.isArray(input) || input.length > 500 || input.some((row) => !Number.isSafeInteger(row.amount) || row.amount < 0 || (row.lineIndex === null ? row.amount !== 0 : !Number.isInteger(row.lineIndex) || row.lineIndex < 0))) return { error: "배분금액과 연결 항목을 확인해 주세요" };
   const eligible = new Set(receiptLines(source).filter((line) => isTuitionReceipt(line.source)).map((line) => line.index));
-  if (rows.some((row) => row.lineIndex !== null && !eligible.has(row.lineIndex))) return { error: "수업 청구액에만 배분할 수 있습니다" };
+  if (input.some((row) => row.lineIndex !== null && !eligible.has(row.lineIndex))) return { error: "수업 청구액에만 배분할 수 있습니다" };
   const db = await createClient();
+  // 회차 행이 없는 줄(가상 id) — 이 청구서의 학생·그 달 출석부 줄인지 서버가 다시 본 뒤(#77) 행을 만들고 실 id로 바꿔 저장한다.
+  // 한 줄이라도 못 만들면 아무것도 저장하지 않는다(배분 합계가 청구액과 맞아야 해서 일부만 저장할 수 없다).
+  let rows = input;
+  const virtualIds = input.map((row) => row.termId).filter(isVirtualTermId);
+  if (virtualIds.length > 0) {
+    const { data: invoice, error: invoiceError } = await db.from("invoices").select("period, status").eq("id", invoiceId).maybeSingle();
+    if (invoiceError || !invoice) return { error: "청구서를 찾을 수 없습니다" };
+    if (invoice.status === "void") return { error: "취소된 청구서에는 배분할 수 없습니다" };
+    if (!monthRange(invoice.period)) return { error: "청구월을 확인해 주세요" };
+    const made = await materializeVirtualTerms(db, { tenantId: user.tenantId, period: invoice.period, reason: "allocate", invoiceId }, virtualIds);
+    if (made.error) return { error: made.error };
+    if (made.failed.size > 0) return { error: `${made.failed.size}개 반의 회차 행을 만들지 못했습니다 — ${[...made.failed.values()][0]}` };
+    rows = input.map((row) => ({ ...row, termId: made.ids.get(row.termId) ?? row.termId }));
+  }
   if (rows.some((row) => row.lineIndex === null)) {
     if (!rows.some((row) => row.lineIndex !== null)) return { error: "수납 항목에 한 반 이상 연결한 뒤 남은 반을 0원으로 저장할 수 있습니다" };
     // '연결 안 함 = 0원'은 빠뜨린 연결을 덮지 못한다 — 화면과 같은 함수로 다시 본다(#77). 확정 여부는 DB 함수가 다시 본다.

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { tipRow, tipText } from "@/components/hover-tip/tip";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
+import type { AttendanceInvoiceGap } from "@/features/attendance/class-billing";
 import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
@@ -239,6 +240,64 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     // 이도윤(수요일 등원 — 7/1이 수업날): 수업날이 있는 줄의 빈 등록 차수는 여전히 '미확정', 빈 수업 차수는 `—`.
     expect(cells("이도윤")[4]).toHaveTextContent("미확정");
     expect(cells("이도윤")[3]).toHaveTextContent("—");
+  });
+
+  /**
+   * 회차 행이 없는 줄의 두 갈래(원장 2026-09-18 선택): 청구서가 있으면 종전 '미확정'(회차 확정에서 만들 수 있다), 청구서가 없거나
+   * 취소됐으면 `—` + 이유 카드(만들 곳이 없다 — 회차 확정 화면의 '청구서 없음'·'청구서 취소'와 같은 줄).
+   */
+  it("🔴 청구서가 없거나 취소된 줄은 '미확정' 대신 `—` + 이유 — 회차만 없는 줄(청구서 있음)은 '미확정' 그대로", () => {
+    render(
+      <MatrixTable
+        groups={[LESSON_GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={LESSON_GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        // 이도윤 = 청구서는 있는데 회차 행만 없음(맵에 없다) · 박서준 = 청구서 없음 · 한가온 = 청구서 취소.
+        classBilledAmounts={{}}
+        termSessionsByRow={{}}
+        noInvoiceRows={new Map<string, AttendanceInvoiceGap>([[rowKey(C, S2), "none"], [rowKey(C, S3), "void"]])}
+      />,
+    );
+    const cells = (name: string) => within(screen.getByText(name).closest("tr")!).getAllByRole("cell");
+    // 청구액·등록 차수·차이확인 세 칸이 **한 줄에서 같은 말**을 한다(한 칸은 '미확정', 한 칸은 `—`가 되지 않는다).
+    for (const [name, why] of [["박서준", "청구서가 없습니다"], ["한가온", "취소(void)"]] as const) {
+      expect(cells(name)[2]).toHaveTextContent(/^—$/);
+      expect(cells(name)[4]).toHaveTextContent(/^—$/);
+      expect(cells(name)[5]).toHaveTextContent(/^—$/);
+      // 이유는 카드(`data-tip`)로 — 청구액·등록 차수 칸 둘 다(차이확인 칸은 종전대로 `title`).
+      for (const i of [2, 4]) expect(tipText(cells(name)[i]!.querySelector("[data-tip]")!.getAttribute("data-tip"))).toContain(why);
+      expect(cells(name)[5]!.getAttribute("title")).toContain(why);
+      expect(cells(name)[2]).not.toHaveTextContent("미확정");
+    }
+    // 청구서가 있는 줄은 종전 그대로 '미확정'(회차 확정에서 확정할 수 있다) · 차이 칸 `—`의 이유도 종전 문구.
+    expect(cells("이도윤")[2]).toHaveTextContent("미확정");
+    expect(cells("이도윤")[4]).toHaveTextContent("미확정");
+    expect(cells("이도윤")[5]!.getAttribute("title")).toContain("아직 확정되지 않아");
+    expect(cells("이도윤")[2]!.querySelector("[data-tip]")).toBeNull();
+  });
+
+  it("🔴 청구서가 없어도 수업날 없는 줄의 0이 이긴다 — 실제 값이 있으면 그 값", () => {
+    render(
+      <MatrixTable
+        groups={[GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        // 한가온 = 수업날 없음 + 청구서 없음 → 0(`—`가 아니다) · 박서준 = 수업날 없음 + 확정 3 → 그대로(청구서 없음 표식은 안 탄다).
+        classBilledAmounts={{}}
+        termSessionsByRow={{ [rowKey(C, S2)]: { units: 3, daysBasis: false } }}
+        noInvoiceRows={new Map<string, AttendanceInvoiceGap>([[rowKey(C, S3), "none"]])}
+      />,
+    );
+    const cells = (name: string) => within(screen.getByText(name).closest("tr")!).getAllByRole("cell");
+    expect(cells("한가온")[2]).toHaveTextContent(/^0$/);
+    expect(cells("한가온")[4]).toHaveTextContent("0.0");
+    expect(cells("한가온")[5]).toHaveTextContent("0.0");
+    expect(cells("한가온")[2]!.querySelector("[data-tip]")).toBeNull();
+    expect(cells("박서준")[4]).toHaveTextContent("3.0");
   });
 
   it("🔴 합계 행도 같은 값을 본다 — 줄이 전부 0이면 합계도 0(`—`가 아니다)", () => {
