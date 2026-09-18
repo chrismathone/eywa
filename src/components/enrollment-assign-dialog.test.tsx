@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 const moveBatch = vi.fn();
 const createEnrollment = vi.fn();
 const listMovable = vi.fn();
+const createBulk = vi.fn();
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/features/owner/operations-context", () => ({
@@ -25,6 +26,9 @@ vi.mock("@/features/enrollments/server/actions", () => ({
 }));
 vi.mock("@/features/enrollments/server/movable-actions", () => ({
   listMovableEnrollments: (...a: unknown[]) => listMovable(...a),
+}));
+vi.mock("@/features/enrollments/server/bulk-assign-actions", () => ({
+  createEnrollmentsBulk: (...a: unknown[]) => createBulk(...a),
 }));
 
 import { EnrollmentAssignDialog } from "./enrollment-assign-dialog";
@@ -184,7 +188,7 @@ describe("수강 배정 창의 '반이동' 토글", () => {
     await waitFor(() => expect(listMovable).toHaveBeenCalledWith("s-b"));
     // 이제서야 A의 늦은 응답이 도착한다.
     resolveA({ ok: true, items: [{ ...MOVABLE[0]!, enrollmentId: "e-a" }] });
-    await user.click(screen.getByRole("button", { name: /배정/ }));
+    await user.click(screen.getByRole("button", { name: "배정" }));
     await waitFor(() => expect(moveBatch).toHaveBeenCalled());
     expect(moveBatch.mock.calls[0]![0][0].enrollmentId).toBe("e-b");
   });
@@ -199,5 +203,91 @@ describe("수강 배정 창의 '반이동' 토글", () => {
     await user.click(screen.getByText("고등M 고1 BS4F 수"));
     await user.click(screen.getByRole("button", { name: /배정/ }));
     await waitFor(() => expect(screen.getByText("시간이 겹칩니다")).toBeInTheDocument());
+  });
+});
+
+/**
+ * **단체 배정 모드**(원장 2026-09-18 *"수업에서 원생 배정할떄는 단체 배정 가능하게"*) — 반 상세에서만 선다.
+ * 🔴 잘못 배선하면 한 명용 `createEnrollment`가 돌아 첫 학생만 들어가거나, 반이동과 섞여 이중 등록이 된다.
+ */
+describe("수강 배정 창의 '단체 배정' 모드", () => {
+  const PEOPLE = [
+    { id: "s-a", name: "가학생", grade: "고1", school: "경명여고" },
+    { id: "s-b", name: "나학생", grade: "고1", school: "대구고" },
+    { id: "s-c", name: "다학생", grade: "중3", school: "경명여중" },
+  ];
+  function openClass(onClose: (assigned: boolean) => void = () => {}) {
+    return render(
+      <EnrollmentAssignDialog
+        open
+        onClose={onClose}
+        mode="add-student-to-class"
+        fixedClass={CLASSES[0]}
+        studentOptions={PEOPLE}
+      />,
+    );
+  }
+
+  it("🔴 원생 상세(학생 → 반)엔 단체 배정 토글이 없다", () => {
+    open();
+    expect(screen.queryByRole("button", { name: "단체 배정" })).toBeNull();
+  });
+
+  it("켜면 체크 목록이 되고, 학년으로 좁혀 모두 고른 뒤 한 번에 배정한다(한 명용 액션은 안 탄다)", async () => {
+    createBulk.mockResolvedValue({
+      results: [
+        { studentId: "s-a", ok: true, enrollmentId: "e-1" },
+        { studentId: "s-b", ok: true, enrollmentId: "e-2" },
+      ],
+    });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    openClass(onClose);
+    await user.click(screen.getByRole("button", { name: "단체 배정" }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    await user.type(screen.getByRole("searchbox"), "고1");
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "보이는 2명 모두 선택" }));
+    await user.click(screen.getByRole("button", { name: "2명 배정" }));
+    await waitFor(() => expect(createBulk).toHaveBeenCalledTimes(1));
+    const arg = createBulk.mock.calls[0]![0];
+    expect(arg.classId).toBe("c-new");
+    expect(arg.studentIds).toEqual(["s-a", "s-b"]);
+    expect(arg.endDate).toBeNull();
+    // 반 전 요일(월·목) 그대로 — 서버가 '전 요일'로 정리한다.
+    expect(arg.attendanceDays).toEqual(["mon", "thu"]);
+    expect(createEnrollment).not.toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith(true));
+  });
+
+  it("🔴 일부가 막히면 닫지 않고, 막힌 학생과 이유를 적고, 그 학생만 선택에 남긴다", async () => {
+    createBulk.mockResolvedValue({
+      results: [
+        { studentId: "s-a", ok: true, enrollmentId: "e-1" },
+        { studentId: "s-b", ok: false, error: "휴원 중인 학생은 배정할 수 없습니다" },
+      ],
+    });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    openClass(onClose);
+    await user.click(screen.getByRole("button", { name: "단체 배정" }));
+    await user.click(screen.getByRole("checkbox", { name: /가학생/ }));
+    await user.click(screen.getByRole("checkbox", { name: /나학생/ }));
+    await user.click(screen.getByRole("button", { name: "2명 배정" }));
+    await waitFor(() => expect(screen.getByText(/1명은 배정하지 못했습니다/)).toBeInTheDocument());
+    expect(screen.getByText(/1명은 배정했습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/휴원 중인 학생은 배정할 수 없습니다/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "1명 배정" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("🔴 반이동을 켜면 단체 배정이 꺼진다 — 둘은 함께 설 수 없다", async () => {
+    const user = userEvent.setup();
+    openClass();
+    await user.click(screen.getByRole("button", { name: "단체 배정" }));
+    expect(screen.getByRole("button", { name: "단체 배정" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    expect(screen.getByRole("button", { name: "단체 배정" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
   });
 });

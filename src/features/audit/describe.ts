@@ -33,6 +33,7 @@ import {
 } from "@/features/billing/textbook-audit";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { assetStatusLabel } from "@/features/inventory/status";
+import { loanStatusLabel } from "@/features/inventory/loan-status";
 import { assetCategoryLabel } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
@@ -1104,7 +1105,12 @@ export function auditDetail(
       const who = str(m.borrowerName);
       const on = str(m.returnedOn);
       const restored = assetStatusLabel(str(m.restoredStatus));
-      return join(code ? `「${code}」` : null, who ? `${who} 반납` : "반납", on, restored ? `${restored}으로 되돌림` : null);
+      // 자산 표에서 상태를 골라 반납했으면 '바꿈'(원장 2026-09-18) — 대여 전 상태로 돌린 것과 다른 일이다.
+      const verb = str(m.chosenStatus) ? "바꿈" : "되돌림";
+      // 분실·확인필요를 골랐으면 대여 기록이 '회수불가'·'확인필요'로 남는다 — 그땐 '반납'이라 부르지 않는다.
+      const what = loanStatusLabel(str(m.loanStatus) ?? "returned");
+      const closed = str(m.loanStatus) && str(m.loanStatus) !== "returned" ? what : "반납";
+      return join(code ? `「${code}」` : null, who ? `${who} ${closed}` : closed, on, restored ? `${restored}으로 ${verb}` : null);
     }
     case "inventory_audit": {
       const code = str(m.assetCode);
