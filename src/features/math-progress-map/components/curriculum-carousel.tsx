@@ -69,7 +69,7 @@ export function CurriculumCarousel({ steps }: { steps: RoadmapStep[] }) {
   return (
     <div className="relative mt-3" data-curriculum-carousel="">
       <div style={{ maskImage: "linear-gradient(to right, transparent, black 8%, black 92%, transparent)" }}>
-        <DragScrollArea fade={false} hideBar momentum={false}>
+        <DragScrollArea className="h-30" fade={false} hideBar momentum={false}>
           <ol ref={listRef} className="flex w-max gap-3 py-1" aria-label="장기 커리큘럼">
             {steps.map((step, index) => {
               const current = step.id === progress.currentStepId;

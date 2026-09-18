@@ -85,7 +85,7 @@ export function periodMetrics(lessons: LearningMapLesson[], known: boolean) {
 }
 
 export function learningMapHref(classId: string, studentId: string, month: string) {
-  return `/mcs/progress-map?${new URLSearchParams({ classId, student: studentId, month })}`;
+  return learningSheetHref(classId, studentId, month);
 }
 
 export function learningSheetHref(classId: string, studentId: string, month: string) {

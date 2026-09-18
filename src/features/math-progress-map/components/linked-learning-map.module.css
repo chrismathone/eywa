@@ -1,5 +1,5 @@
 .root { --current: #0000ff; --goal: #ff0000; color: var(--text, #171717); font-variant-numeric: tabular-nums; }
-.root { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.root { display: flex; flex-direction: column; gap: 14px; min-width: 0; container-type: inline-size; }
 .dashboardGrid, .bottomGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 .periodControls { padding-top: 6px; }
 .periodControls .controls { padding: 8px 0 0; }
@@ -33,7 +33,7 @@
 .goalList button { display: flex; text-align: left; gap: 10px; width: 100%; padding: 10px 0; color: var(--goal); cursor: pointer; }
 .goalList time { white-space: nowrap; }
 .lessonList > summary { font-size: 12px; padding: 14px 20px; }
-@media (max-width: 1023px) { .dashboardGrid, .bottomGrid { grid-template-columns: minmax(0, 1fr); } }
+@container (max-width: 1023px) { .dashboardGrid, .bottomGrid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .bottomPanel { padding: 14px; } .comparison, .currentNext { gap: 10px; } }
 .header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 16px 20px; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: 12px; }
 .header h2 { font-size: 22px; font-weight: 750; margin: 0; }
@@ -73,6 +73,7 @@
 .records article { padding: 12px 0; border-bottom: 1px solid var(--line, #eee); }
 .records article button { color: var(--current); text-decoration: underline; margin-right: 10px; cursor: pointer; }
 .records p { color: var(--text-dim, #666); margin: 5px 0; }
+.records article > time { margin-right: 10px; }
 .root button:focus-visible, .root a:focus-visible { outline: 2px solid var(--current); outline-offset: 3px; }
 @media (max-width: 900px) { .header { gap: 14px; } }
 @media (max-width: 480px) { .header, .rail { padding-left: 12px; padding-right: 12px; } .header h2 { font-size: 19px; } .header h2 span { display: block; margin: 3px 0 0; } .overall { margin-left: auto; } .status { flex: 1; } .back { width: 100%; } .panelHeading { padding: 14px 12px; flex-wrap: wrap; } .lessons > button { padding: 12px; } .controls { gap: 7px; } .controls button { padding: 5px 8px; } }
