@@ -31,6 +31,10 @@ const nextPure = strip(read("src", "features", "attendance", "seat", "next-desti
 const destRoom = strip(read("src", "features", "attendance", "seat", "destination-room.ts"));
 const chips = strip(read(...DIR, "seat-period-chips.tsx"));
 const allDay = strip(read(...DIR, "seat-all-day.tsx"));
+const jjAllDay = strip(read(...DIR, "seat-jj-all-day.tsx"));
+const board = strip(read(...DIR, "seat-board.tsx"));
+const jjMarks = strip(read("src", "features", "attendance", "seat", "server", "jj-marks.ts"));
+const jjPlan = strip(read("src", "features", "attendance", "seat", "server", "jj-plan.ts"));
 
 describe("① 출결은 세 버튼 · 같은 폭 · 언제나 셋", () => {
   it("세 상태를 목록으로 돌려 그린다 — 상태별 조건부 렌더가 없다", () => {
@@ -256,16 +260,23 @@ describe("⑦ JJ실 카드는 속살까지 줄맞춤(`grid-rows-subgrid`)", () =
     expect(jj).not.toContain("items-start");
   });
   it("계획 구획이 없는 카드도 그 행을 차지한다(빈 자리)", () => {
-    const block = jj.slice(jj.indexOf("{plan && slotPlan ?"));
+    const block = jj.slice(jj.indexOf("{planBlock ? ("));
     expect(block.slice(0, 900)).toContain("<div />");
+  });
+  it("🔴 접힌 계획도 그 행을 차지한다 — 바깥 div는 남기고 안쪽만 감춘다('전체' 보기, 2026-09-18)", () => {
+    const block = jj.slice(jj.indexOf("{planBlock ? ("));
+    expect(block.slice(0, 900)).toContain('<div className="min-w-0">');
+    expect(block.slice(0, 900)).toContain("<div hidden={!planFold.open}>");
   });
 });
 
 describe("⑨ '전체' 보기 — 하루를 한 번에, 조회는 안 늘린다", () => {
-  it("칩 줄은 **한 벌**이고 '전체'는 랩실에서만 선다", () => {
+  it("칩 줄은 **한 벌**이고 '전체'는 로그인 화면의 두 자리 모두에 선다(JJ실 2026-09-18)", () => {
     expect(chips).toContain("export function SeatPeriodChips");
-    expect(shellPage).toContain('const allowAllView = seat === "lab";');
-    expect(shellPage).toContain("showAll={allowAllView}");
+    expect(shellPage).toContain("const viewAll = startParam === SEAT_ALL_PERIODS;");
+    // 옛 게이트(`seat === "lab"`)가 되살아나면 JJ실 칩 줄에서 '전체'가 사라진다.
+    expect(shellPage).not.toContain("allowAllView");
+    expect(jjAllDay).toContain("<SeatPeriodChips periods={periods} activeStart={SEAT_ALL_PERIODS} hrefFor={hrefFor} showAll />");
   });
   it("교시마다 조회를 새로 하지 않는다 — 배치·다음 행선지는 하루치 한 벌", () => {
     expect(shellPage).toContain("getSeatPlacementsForDay(user.tenantId, seat, date)");
@@ -277,9 +288,44 @@ describe("⑨ '전체' 보기 — 하루를 한 번에, 조회는 안 늘린다"
   it("🔴 하루치를 한 번에 찍는 일괄 버튼은 만들지 않는다 — 교시 요약 줄 안에만 둔다", () => {
     expect(shellPage).not.toMatch(/fillSeat|일괄|전원 출석/);
   });
-  it("'전체'에선 칩 줄을 교시마다 반복하지 않는다", () => {
+  it("'전체'에선 칩 줄을 교시마다 반복하지 않는다 — JJ실 조각도", () => {
+    expect(jjAllDay).toContain("showChips={false}");
+    expect(shellPage).toContain("<SeatJjAllDay");
     // 교시 판은 2026-09-10부터 `SeatAllDay`(바깥 드래그 컨텍스트)가 그린다 — 칩은 위에 한 번뿐이다.
     expect(allDay).toContain("showChips={false}");
     expect(shellPage).toContain("<SeatAllDay");
+  });
+});
+
+describe("⑩ JJ실 '전체' 보기 — 원장 2026-09-18 \"펼치기\"(수업계획은 교시마다 접은 채)", () => {
+  it("JJ 칸·계획은 **하루치 한 번씩** 읽는다 — 교시마다 부르지 않는다(B6)", () => {
+    expect(shellPage).toContain("attachJjMarksForPeriods(rosterByPeriod, user.tenantId, date)");
+    expect(shellPage).toContain("loadSeatJjPlansForPeriods(");
+    // 교시 하나 몫은 '전체'에선 안 읽는다(같은 줄을 두 번 읽지 않게).
+    expect(shellPage).toContain("period && !jjAll && seatHasJjFields(seat)");
+    expect(shellPage).toContain("period && !jjAll");
+  });
+  it("🔴 게이트는 교시 하나 보기와 같은 함수 · **반마다 한 번**", () => {
+    // 교시 하나 보기도 여러 교시 함수의 한 칸짜리다 — 두 보기가 다른 반의 계획을 보이면 안 된다.
+    expect(jjPlan).toContain("loadSeatJjPlansForPeriods(seat, [{ start: slotStart, classIds }], tenantId, date)");
+    expect(jjPlan).toContain("new Set(periods.flatMap((p) => p.classIds))");
+    expect(jjPlan.match(/requireEcsClassAccess\(/g) ?? []).toHaveLength(1);
+  });
+  it("JJ 칸 조회도 한 벌 — 교시 하나(`attachJjMarks`)와 전체(`attachJjMarksForPeriods`)가 같은 함수를 부른다", () => {
+    expect(jjMarks.match(/await fetchJjMarksOfDay\(/g) ?? []).toHaveLength(2);
+    expect(jjMarks.match(/\.from\("class_sheet_student_marks"\)/g) ?? []).toHaveLength(1);
+  });
+  it("교시 판은 교시 하나 보기와 **같은 보드**이고 계획은 접힌 채 — 드래그 컨텍스트는 안 가져온다", () => {
+    expect(jjAllDay).toContain("<SeatBoard");
+    expect(jjAllDay).toContain("foldPlans");
+    expect(jjAllDay).not.toContain("@dnd-kit");
+    expect(jjAllDay).not.toContain("SeatAllDay");
+    // 교시 판이 줄어들면 교시들이 화면 높이를 나눠 가지며 잘린다(랩실 2026-09-10 제보와 같은 자리).
+    expect(jjAllDay).toContain('className="shrink-0"');
+  });
+  it("🔴 접힘은 보드마다 · 한 번 펼친 블록은 접어도 내리지 않는다", () => {
+    expect(board).toContain("useState(!foldPlans)");
+    expect(board).toContain("setPlanMounted(true);");
+    expect(board).not.toContain("setPlanMounted(false)");
   });
 });

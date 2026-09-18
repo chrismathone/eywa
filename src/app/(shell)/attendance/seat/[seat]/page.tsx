@@ -29,8 +29,8 @@ import {
 } from "@/features/attendance/seat/seat";
 import { seatHasJjFields } from "@/features/attendance/seat/jj-fields";
 import { prevPeriodAbsences, seatDayCells } from "@/features/attendance/seat/prev-period";
-import { attachJjMarks } from "@/features/attendance/seat/server/jj-marks";
-import { loadSeatJjPlans } from "@/features/attendance/seat/server/jj-plan";
+import { attachJjMarks, attachJjMarksForPeriods } from "@/features/attendance/seat/server/jj-marks";
+import { loadSeatJjPlans, loadSeatJjPlansForPeriods } from "@/features/attendance/seat/server/jj-plan";
 import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
 import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 import { getSeatPlacementsForDay } from "@/features/attendance/seat/server/placements";
@@ -40,6 +40,7 @@ import { SEAT_ALL_PERIODS } from "./_components/seat-period-chips";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
 import { SeatAllDay } from "./_components/seat-all-day";
+import { SeatJjAllDay } from "./_components/seat-jj-all-day";
 import { applySeatDayChoices, getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
 import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 
@@ -109,14 +110,14 @@ export default async function SeatAttendancePage({
   const rosterByPeriod = applySeatDayChoices(day, periodChoiceLoad, date);
 
   /**
-   * **'전체' 보기**(원장 2026-09-10 ⑨ *"한번에 오늘 전체 볼 수 있게. 스크롤링으로 시간대별로 분리해서"*).
-   * 🔴 **랩실만** 연다 — JJ실은 교시마다 진도(수업계획) 블록이 붙어서 하루치를 펼치면 조회도 화면도
-   *    교시 수만큼 불어난다(B6). 그래서 칩도 랩실에서만 세운다.
-   * 🔑 조회는 **늘리지 않았다** — 하루 명단은 원래 `getSeatDay` 한 번이고, 배치·다음 행선지도 하루치를
-   *    한 번 받아 교시별로 나눈다(`getSeatPlacementsForDay`·`getSeatNextDestinationsBySlot`).
+   * **'전체' 보기**(원장 2026-09-10 ⑨ *"한번에 오늘 전체 볼 수 있게. 스크롤링으로 시간대별로 분리해서"*) — 랩실·JJ실 둘 다.
+   * JJ실은 2026-09-18부터(원장 *"펼치기"*): 교시마다 진도(수업계획) 블록이 붙어 하루치를 다 펴면 화면이 계획으로
+   * 덮이므로 **계획은 교시마다 접은 채** 시작한다(`SeatJjAllDay` → `SeatBoard foldPlans`).
+   * 🔑 조회는 **교시 수만큼 늘리지 않는다**(B6) — 하루 명단은 원래 `getSeatDay` 한 번이고, 배치·다음 행선지·
+   *    JJ 칸·계획도 하루치를 한 번 받아 교시별로 나눈다(`…ForDay`·`…BySlot`·`…ForPeriods`).
+   * ⚠️ 공개 PIN 화면(`/seat/jj`)은 그대로 교시 하나다 — 그 문은 따로 정한다(`(seat)/seat/[seat]/page.tsx`).
    */
-  const allowAllView = seat === "lab";
-  const viewAll = allowAllView && startParam === SEAT_ALL_PERIODS;
+  const viewAll = startParam === SEAT_ALL_PERIODS;
 
   const fallbackIdx = pickPeriodIndex(day.periods, date === today ? kstNowHm() : "00:00");
   const idx = startParam && !viewAll ? day.periods.findIndex((p) => p.start === startParam) : fallbackIdx;
@@ -128,13 +129,16 @@ export default async function SeatAttendancePage({
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
   const readOnly = date !== today && !canEditPast;
 
+  /** JJ실 '전체' 보기인가 — 이때만 JJ 칸·계획을 하루치로 읽는다(교시 하나 몫은 안 읽는다). */
+  const jjAll = viewAll && seatHasJjFields(seat);
+
   // 명단(듣기·단어)과 계획(진도)은 서로 독립이라 병렬(B4).
   // 🔴 계획은 **자리 권한이 아니라 영어 시트 권한**이 연다 — 아르바이트·viewer에겐 반마다 빈 값이 온다.
-  const [rosters, plans, placementsDay, nextDay] = await Promise.all([
-    period && seatHasJjFields(seat)
+  const [rosters, plans, jjRostersByStart, jjPlansByStart, placementsDay, nextDay] = await Promise.all([
+    period && !jjAll && seatHasJjFields(seat)
       ? attachJjMarks(rosterByPeriod[period.start] ?? [], user.tenantId, date, period.start)
       : Promise.resolve(period ? (rosterByPeriod[period.start] ?? []) : []),
-    period
+    period && !jjAll
       ? loadSeatJjPlans(
           seat,
           period.slots.map((sl) => sl.classId),
@@ -143,6 +147,16 @@ export default async function SeatAttendancePage({
           period.start,
         )
       : Promise.resolve({}),
+    // JJ실 '전체' 보기 — 하루치 한 번씩(교시 수와 무관, B6). 교시 하나 보기와 **같은 게이트·같은 조회**의 여러 교시판이다.
+    jjAll ? attachJjMarksForPeriods(rosterByPeriod, user.tenantId, date) : Promise.resolve(null),
+    jjAll
+      ? loadSeatJjPlansForPeriods(
+          seat,
+          day.periods.map((per) => ({ start: per.start, classIds: per.slots.map((sl) => sl.classId) })),
+          user.tenantId,
+          date,
+        )
+      : Promise.resolve(null),
     // 자리 **배치**(드래그로 옮긴 자리, 0254a) — 하루치 한 번(교시는 화면에서 나눈다).
     // fail-soft라 표가 없어도 화면은 그대로 산다([[#95]]).
     getSeatPlacementsForDay(user.tenantId, seat, date),
@@ -212,7 +226,10 @@ export default async function SeatAttendancePage({
 
   // 계획(진도) 구획이 서는 화면에서만 의미가 있다 — 교재 제안은 ECS와 **같은 목록**이고 fail-soft다.
   // 🔴 공개 PIN 자리 화면(`(seat)/seat/[seat]`)은 같은 `SeatBoard`를 그리지만 세션이 없어 여기 없다.
-  const textbookOptions = Object.keys(plans).length > 0 ? await loadEcsTextbookOptions() : [];
+  const anyPlan =
+    Object.keys(plans).length > 0 ||
+    Object.values(jjPlansByStart ?? {}).some((byClass) => Object.keys(byClass).length > 0);
+  const textbookOptions = anyPlan ? await loadEcsTextbookOptions() : [];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -293,7 +310,7 @@ export default async function SeatAttendancePage({
           seat={seat}
           date={date}
           shownStart={viewAll ? null : period.start}
-          showAll={allowAllView}
+          showAll
           // 🔑 하루치 재료를 통째로 넘긴다 — 낙관 반영 때문에 클라가 같은 순수 함수로 다시 접는다.
           choiceDay={{
             moves: periodChoiceLoad.moves,
@@ -322,6 +339,26 @@ export default async function SeatAttendancePage({
             placements: placementsDay.bySlot[p.start] ?? [],
           }))}
         />
+      ) : jjAll ? (
+        <SeatJjAllDay
+          key={`${seat}|${date}`}
+          seat={seat}
+          date={date}
+          readOnly={readOnly}
+          hrefFor={hrefFor}
+          planMeta={{ tenantId: user.tenantId, userId: user.id, weekMonday: mondayOf(date) }}
+          periods={day.periods.map((p) => ({
+            start: p.start,
+            classIds: p.slots.map((s) => s.classId),
+            rosters: jjRostersByStart?.[p.start] ?? rosterByPeriod[p.start] ?? [],
+            prevAbsentByCell: prevAbsentFor(p.start, ambiguousClassIds(p)),
+            nextStartByStudent: nextBySlot[p.start]?.startByStudent,
+            nextRoomByStudent: nextBySlot[p.start]?.roomByStudent,
+            lastByStudent: nextBySlot[p.start]?.lastByStudent,
+            placements: placementsDay.bySlot[p.start] ?? [],
+            plans: jjPlansByStart?.[p.start] ?? {},
+          }))}
+        />
       ) : (
         <SeatBoard
           key={`${seat}|${date}|${period.start}`}
@@ -332,7 +369,7 @@ export default async function SeatAttendancePage({
             ends: p.ends,
             classIds: p.slots.map((s) => s.classId),
           }))}
-          showAllChip={allowAllView}
+          showAllChip
           activeStart={period.start}
           rosters={rosters}
           readOnly={readOnly}

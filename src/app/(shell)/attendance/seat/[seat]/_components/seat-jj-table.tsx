@@ -52,9 +52,20 @@ export type SeatPlanContext = {
   flushFields: () => Promise<unknown>;
 };
 
+/**
+ * 수업계획 구획의 **접힘** — '전체' 보기에서만 온다(없으면 늘 펼친 채 = 교시 하나 보기, 종전 그대로).
+ * 🔑 `mounted`는 한 번 펼친 뒤로 계속 참이다 — 접을 때 블록을 **내리지 않고 감추기만** 한다.
+ *    내렸다가 다시 올리면 블록이 첫 화면의 서버 줄(`initialLines`)로 되살아나 방금 고친 칸이 옛 값으로
+ *    보이고, 그 옛 값이 CAS 기대값이 되어 다음 입력이 거짓 충돌로 뜬다(`SlotPlanBlock` 머리 주석 ⚠️).
+ */
+export type SeatPlanFold = { open: boolean; mounted: boolean };
+
 type JjTableProps = {
   rosters: SeatClassRoster[];
   plan?: SeatPlanContext;
+  planFold?: SeatPlanFold;
+  /** 반마다 계획 저장 충돌 수 — 접을 수 있는 보기('전체')만 넘긴다(접힌 블록 안의 충돌 표시는 안 보인다). */
+  onPlanConflicts?: (classId: string, count: number) => void;
   statusOf: (classId: string, student: SeatClassRoster["students"][number]) => SeatStatus | null;
   noteOf: (classId: string, student: SeatClassRoster["students"][number]) => string | null;
   onSaveNote: (classId: string, studentId: string, note: string, status: SeatStatus | null) => void;
@@ -69,6 +80,11 @@ type JjTableProps = {
   readOnly: boolean;
   pending: boolean;
 };
+
+/** JJ실 안내 한 줄 — 교시 하나 보기는 보드가, '전체' 보기는 위에서 한 번만 적는다(교시마다 반복 금지). */
+export function SeatJjNote() {
+  return <p className="text-text-dim px-1 text-xs">듣기 레벨·누적 암기 단어수는 영어 시트 JJ 칸과 같은 기록입니다.</p>;
+}
 
 /**
  * JJ실 출석부 — 반은 **가로**, 학생은 반 안에서 **세로**.
@@ -99,6 +115,8 @@ export function SeatJjTable(props: JjTableProps) {
           key={r.classId}
           roster={r}
           plan={props.plan}
+          planFold={props.planFold}
+          onPlanConflicts={props.onPlanConflicts}
           statusOf={props.statusOf}
           noteOf={props.noteOf}
           onSaveNote={props.onSaveNote}
@@ -118,6 +136,8 @@ export function SeatJjTable(props: JjTableProps) {
 function SeatJjClass({
   roster: r,
   plan,
+  planFold,
+  onPlanConflicts,
   statusOf,
   noteOf,
   onSaveNote,
@@ -140,6 +160,32 @@ function SeatJjClass({
     (patches: CarryPatch[]) => onCarried?.(classId, patches),
     [onCarried, classId],
   );
+  const handleConflicts = useCallback(
+    (count: number) => onPlanConflicts?.(classId, count),
+    [onPlanConflicts, classId],
+  );
+  // 진도(수업계획) 블록 — 권한이 없는 반은 `plan.plans[classId]`가 없어 null이다(구획 자체가 안 생긴다).
+  const planBlock =
+    plan && slotPlan ? (
+      <SlotPlanBlock
+        classId={r.classId}
+        api={plan.api}
+        tenantId={plan.tenantId}
+        userId={plan.userId}
+        weekMonday={plan.weekMonday}
+        planDate={plan.date}
+        slotStart={plan.slotStart}
+        initialLines={slotPlan.lines}
+        skillAreas={slotPlan.skillAreas}
+        // 🔴 지난 날짜 보기(readOnly)에서는 진도도 못 고친다 — 출결만 막고 계획을 열어 두면
+        //    "지난 날짜는 보기만" 안내가 거짓말이 된다. 쓰기 자격은 서버가 다시 본다(#77).
+        canEdit={slotPlan.canEdit && !readOnly}
+        showExamTerm={slotPlan.showExamTerm}
+        onCarried={handleCarried}
+        flushHost={plan.flushFields}
+        onConflicts={onPlanConflicts ? handleConflicts : undefined}
+      />
+    ) : null;
   return (
     <section className="border-line row-span-3 grid min-w-0 grid-rows-subgrid overflow-hidden rounded-2xl border">
       <header className="bg-bg-soft border-line flex flex-wrap items-center gap-2 border-b px-3 py-1.5 text-sm">
@@ -170,24 +216,16 @@ function SeatJjClass({
       </header>
       {/* 진도(수업계획) — ECS 교시 카드와 **같은 순서**(머리 → 진도 → 학생)이고 같은 기록·같은 저장 경로다.
           권한이 없는 반은 `plan.plans[classId]`가 없어 이 구획 자체가 안 생긴다. */}
-      {plan && slotPlan ? (
-        <SlotPlanBlock
-          classId={r.classId}
-          api={plan.api}
-          tenantId={plan.tenantId}
-          userId={plan.userId}
-          weekMonday={plan.weekMonday}
-          planDate={plan.date}
-          slotStart={plan.slotStart}
-          initialLines={slotPlan.lines}
-          skillAreas={slotPlan.skillAreas}
-          // 🔴 지난 날짜 보기(readOnly)에서는 진도도 못 고친다 — 출결만 막고 계획을 열어 두면
-          //    "지난 날짜는 보기만" 안내가 거짓말이 된다. 쓰기 자격은 서버가 다시 본다(#77).
-          canEdit={slotPlan.canEdit && !readOnly}
-          showExamTerm={slotPlan.showExamTerm}
-          onCarried={handleCarried}
-          flushHost={plan.flushFields}
-        />
+      {planBlock ? (
+        planFold ? (
+          // 🔴 접혀도 **이 행 자리는 남긴다**(바깥 div) — 비면 표가 계획 행으로 올라와 옆 카드와 어긋난다.
+          //    감추기는 안쪽 div에만(`hidden`) — 한 번 올린 블록은 내리지 않는다(`SeatPlanFold` 주석).
+          <div className="min-w-0">
+            {planFold.mounted ? <div hidden={!planFold.open}>{planBlock}</div> : null}
+          </div>
+        ) : (
+          planBlock
+        )
       ) : (
         // 🔴 계획 구획이 없는 카드도 **그 행을 차지해야** 한다 — 안 그러면 표가 계획 행으로 올라와
         //    옆 카드와 다시 어긋난다(권한 없는 반·랩실이 그 경우다).

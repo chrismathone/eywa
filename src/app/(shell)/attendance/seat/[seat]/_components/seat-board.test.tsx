@@ -23,6 +23,26 @@ vi.mock("@/features/attendance/seat/server/actions", () => ({
 vi.mock("@/features/attendance/seat/server/mark-actions", () => ({
   setSeatJjField,
 }));
+/** 계획 블록은 저널·presence·저장 큐를 들고 있어 여기선 **올라왔는지**만 본다(마운트마다 반 id를 적는다). */
+const { planMounts, conflictFor } = vi.hoisted(() => ({
+  planMounts: [] as string[],
+  /** 반 id → 올라오자마자 알릴 저장 충돌 수(없으면 안 알린다). */
+  conflictFor: {} as Record<string, number>,
+}));
+vi.mock("@/features/class-sheets/components/slot-plan-block", async () => {
+  const { useEffect } = await import("react");
+  return {
+    SlotPlanBlock: ({ classId, onConflicts }: { classId: string; onConflicts?: (n: number) => void }) => {
+      useEffect(() => {
+        planMounts.push(classId);
+      }, [classId]);
+      useEffect(() => {
+        if (conflictFor[classId]) onConflicts?.(conflictFor[classId]!);
+      }, [classId, onConflicts]);
+      return <section data-testid={`plan-${classId}`}>수업계획</section>;
+    },
+  };
+});
 
 afterEach(() => {
   cleanup();
@@ -147,5 +167,77 @@ describe("마지막 수업 — 원장 2026-09-11 'LAB이나 JJ가 마지막 수�
       />,
     );
     expect(screen.getByText("마지막 수업")).toBeTruthy();
+  });
+});
+
+describe("JJ실 '전체' 보기 — 수업계획은 교시마다 접은 채(원장 2026-09-18 \"펼치기\")", () => {
+  const plans = {
+    plans: {
+      c1: { classId: "c1", canEdit: true, showExamTerm: true, skillAreas: [], lines: [] },
+    },
+    tenantId: "t1",
+    userId: "u1",
+    weekMonday: "2026-08-10",
+  };
+  const base = {
+    seat: "jj" as const,
+    date: "2026-08-14",
+    periods: [],
+    activeStart: "16:20",
+    rosters,
+    readOnly: false,
+    hrefFor: "/attendance/seat/jj?date=2026-08-14&start=",
+  };
+
+  it("접힌 채 시작하고 블록을 올리지도 않는다 — 누르면 펼치고, 다시 누르면 **감추기만** 한다(다시 올리지 않는다)", () => {
+    planMounts.length = 0;
+    render(<SeatBoard {...base} showChips={false} foldPlans plans={plans} />);
+    expect(screen.queryByTestId("plan-c1")).toBeNull();
+    expect(planMounts).toHaveLength(0);
+
+    const toggle = screen.getByRole("button", { name: "수업계획 펼치기 · 1개 반" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(screen.getByTestId("plan-c1")).toBeVisible();
+    expect(screen.getByRole("button", { name: "수업계획 접기" })).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "수업계획 접기" }));
+    // 🔴 내리지 않는다 — 다시 올리면 첫 화면의 서버 줄로 되살아나 방금 고친 칸이 옛 값이 된다.
+    expect(screen.getByTestId("plan-c1")).not.toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "수업계획 펼치기 · 1개 반" }));
+    expect(screen.getByTestId("plan-c1")).toBeVisible();
+    expect(planMounts).toEqual(["c1"]);
+  });
+
+  it("🔴 접은 계획에 저장 충돌이 있으면 버튼이 그 수를 붉게 말한다 — 접힌 블록 안에 충돌을 가두지 않는다", () => {
+    conflictFor.c1 = 2;
+    try {
+      render(<SeatBoard {...base} showChips={false} foldPlans plans={plans} />);
+      fireEvent.click(screen.getByRole("button", { name: "수업계획 펼치기 · 1개 반" }));
+      fireEvent.click(screen.getByRole("button", { name: "수업계획 접기" }));
+      const btn = screen.getByRole("button", { name: "수업계획 펼치기 · 저장 충돌 2건" });
+      expect(btn.className).toContain("text-danger");
+      // ⚠️ 잠그지는 않는다 — 이 화면에서 못 푸는 충돌이 남으면 새로고침 전까지 영영 잠긴다.
+      expect(btn).toBeEnabled();
+      expect(screen.getByTestId("plan-c1")).not.toBeVisible();
+    } finally {
+      delete conflictFor.c1;
+    }
+  });
+
+  it("교시 하나 보기는 종전대로 — 늘 펼친 채, 버튼 없음", () => {
+    render(<SeatBoard {...base} periods={periods} plans={plans} />);
+    expect(screen.getByTestId("plan-c1")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /수업계획/ })).toBeNull();
+  });
+
+  it("계획을 볼 수 있는 반이 없으면 펼칠 것이 없어 버튼을 안 세운다", () => {
+    render(<SeatBoard {...base} showChips={false} foldPlans />);
+    expect(screen.queryByRole("button", { name: /수업계획/ })).toBeNull();
+  });
+
+  it("안내 한 줄은 교시마다 반복하지 않는다 — 칩 줄을 바깥이 그리는 보기에선 보드가 안 적는다", () => {
+    render(<SeatBoard {...base} showChips={false} foldPlans plans={plans} />);
+    expect(screen.queryByText(/영어 시트 JJ 칸과 같은 기록/)).toBeNull();
   });
 });
