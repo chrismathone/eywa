@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { learningAxisPosition, learningAxisTicks, learningTopicTicks } from "./learning-axis";
-import { buildLearningProgress, goalMilestones, planLearningGoal } from "./learning-plan";
+import { learningAxisPosition, learningAxisTicks, learningCurrentPosition, learningTopicTicks } from "./learning-axis";
+import { buildLearningProgress, planLearningGoal } from "./learning-plan";
 import { learningTopics } from "./learning-path";
 import { flatLessons } from "@/features/onescreen/curriculum";
 
@@ -50,26 +50,40 @@ describe("세부 단원 눈금과 현재 위치 일치", () => {
   const goal = planLearningGoal({ ...first, endStudyGrade: "공통수학1", endBlock: flatLessons("공통수학1").at(-1)! }, first);
 
   it("모든 과정의 모든 단원 위치에 눈금이 있고 블록 눈금 사이도 빠짐없이 표시한다", () => {
-    const stops = goalMilestones(goal);
     const detail = learningTopicTicks(goal);
-    const positions = new Set([...learningAxisTicks(stops), ...detail].map((tick) => tick.position));
-    expect(detail.length).toBeGreaterThan(0);
-    expect(detail.every((tick) => !Number.isInteger(tick.block))).toBe(true);
+    const positions = new Set(detail.map((tick) => tick.position));
+    expect(detail).toHaveLength(learningTopics(goal).length);
+    expect(detail.some((tick) => Number.isInteger(tick.block))).toBe(true);
     expect(new Set(detail.map((tick) => tick.block)).size).toBe(detail.length);
     for (const topic of learningTopics(goal)) {
       const state = buildLearningProgress(goal, { schedules: [], holidays: {}, spans: {} }, [
         { date: "2026-08-31", progress: `${topic.grade} · ${topic.lesson}`, textbook: null },
       ], "2026-09-18");
       expect(state.current).not.toBeNull();
-      expect(positions.has(learningAxisPosition(state.current!, stops)), `${topic.grade} ${topic.lesson}`).toBe(true);
+      expect(positions.has(learningCurrentPosition(goal, state)!), `${topic.grade} ${topic.lesson}`).toBe(true);
     }
   });
   it("목표를 확장해도 이전 단원의 수직선 위치는 바뀌지 않는다", () => {
     const later = learningTopicTicks(goal);
     for (const tick of learningTopicTicks(first)) expect(later).toContainEqual(tick);
   });
-  it("수업 횟수로 세는 복습·심화와 단원당 1블록인 옛 목표에는 가짜 단원 눈금을 만들지 않는다", () => {
-    expect(learningTopicTicks({ ...first, track: "supplement" })).toEqual([]);
-    expect(learningTopicTicks({ ...first, blockCount: null, milestones: [] })).toEqual([]);
+  it("복습·심화도 모든 차시를 표시하고 0.1블록보다 가까운 차시를 합치지 않는다", () => {
+    const review = planLearningGoal({ ...first, studyGrade: "초1", endStudyGrade: "초3", startBlock: flatLessons("초1")[0], endBlock: flatLessons("초3").at(-1)!, track: "supplement" });
+    const ticks = learningTopicTicks(review);
+    expect(ticks).toHaveLength(learningTopics(review).length);
+    expect(ticks.length).toBeGreaterThan(40);
+    expect(new Set(ticks.map(tick => tick.position)).size).toBe(ticks.length);
+    expect(ticks[1].block - ticks[0].block).toBeLessThan(0.1);
+    expect(ticks.at(-1)?.position).toBe(1);
+  });
+  it("단원당 1블록인 옛 목표도 모든 차시를 표시한다", () => {
+    const legacy = { ...first, blockCount: null, milestones: [] };
+    expect(learningTopicTicks(legacy)).toHaveLength(learningTopics(legacy).length);
+  });
+  it("수업 횟수를 차시 위치로 사용하지 않고 확인 불가능한 차시는 추정하지 않는다", () => {
+    const review = planLearningGoal({ ...first, track: "supplement" });
+    const state = buildLearningProgress(first, { schedules: [], holidays: {}, spans: {} }, [], "2026-09-18");
+    expect(learningCurrentPosition(review, { ...state, current: 2, currentBlock: review.startBlock })).toBe(learningTopicTicks(review)[0].position);
+    expect(learningCurrentPosition(review, { ...state, current: 2, currentBlock: "내신대비" })).toBeNull();
   });
 });

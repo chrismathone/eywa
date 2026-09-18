@@ -1,3 +1,4 @@
+.viewport { min-width: 0; overflow-x: auto; padding: 0 6px 3px; }
 .rails {
   --blue: #0000ff;
   --rail-ink: #0000ff;
@@ -10,7 +11,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 55px;
   gap: 8px 14px;
-  min-width: 0;
+  min-width: var(--ruler-min-width);
   font-variant-numeric: tabular-nums;
 }
 .plot {
@@ -37,7 +38,27 @@
   stroke: var(--rail-tick);
   stroke-width: 1px;
 }
-.topicTicks { stroke: var(--rail-tick); stroke-width: 1px; }
+.topicTick {
+  position: absolute;
+  top: 36px;
+  width: 6px;
+  height: 48px;
+  transform: translateX(-50%);
+  cursor: help;
+}
+.topicTick::before, .topicTick::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  height: 14px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--rail-ink) 65%, var(--card));
+}
+.topicTick::before { top: 0; }
+.topicTick::after { bottom: 0; background: color-mix(in srgb, var(--goal-ink) 60%, var(--card)); }
+.topicTick:hover::before { background: var(--rail-ink); width: 2px; }
+.topicTick:hover::after { background: var(--goal-ink); width: 2px; }
 .majorTicks {
   stroke: var(--rail-ink);
   stroke-width: 1.2px;

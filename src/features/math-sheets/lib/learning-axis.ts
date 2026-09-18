@@ -1,4 +1,5 @@
-import { goalMilestones, learningTopicPositions, type LearningGoal } from "./learning-plan";
+import { goalMilestones, learningTopicPositions, type LearningGoal, type LearningProgress } from "./learning-plan";
+import { learningTopicIndex } from "./learning-path";
 
 /** Each numbered goal occupies one unit; progress within that goal is fractional. */
 export function learningAxisPosition(block: number, stops: readonly { blockCount: number }[]): number {
@@ -28,12 +29,19 @@ export function learningAxisTicks(stops: readonly { blockCount: number }[]): { b
   return ticks;
 }
 
-/** All fractional curriculum endpoints; integer positions already have block ticks. */
-export function learningTopicTicks(goal: LearningGoal): { block: number; position: number }[] {
-  if (goal.track === "supplement") return [];
+/** One tick per lesson in every track, including lessons at integer block positions. */
+export function learningTopicTicks(goal: LearningGoal) {
   const stops = goalMilestones(goal);
-  const blocks = new Set(learningTopicPositions(goal).map((topic) => topic.block));
-  return [...blocks].filter((block) => !Number.isInteger(block)).map((block) => ({
-    block, position: learningAxisPosition(block, stops),
+  return learningTopicPositions(goal).map((topic) => ({
+    ...topic, position: learningAxisPosition(topic.block, stops),
   }));
+}
+
+/** The curriculum ruler shows a lesson's location, including in classes that count review days. */
+export function learningCurrentPosition(goal: LearningGoal, progress: LearningProgress | undefined, topics = learningTopicTicks(goal)): number | null {
+  const index = learningTopicIndex(progress?.currentBlock ?? null, topics);
+  if (index != null) return topics[index].position;
+  // A review-day count says nothing about which curriculum lesson was reached.
+  if (goal.track === "supplement" || progress?.current == null) return null;
+  return learningAxisPosition(progress.current, goalMilestones(goal));
 }
