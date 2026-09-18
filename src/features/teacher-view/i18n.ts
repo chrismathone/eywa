@@ -1012,6 +1012,42 @@ export const SHEET_DICT = {
   "me.reportName.label": { ko: "발송에 표시할 이름", en: "Name to show on reports" },
   "me.reportName.ph": { ko: "예: 영어 이름", en: "e.g. your English name" },
   "me.save": { ko: "저장", en: "Save" },
+
+  // 내 연차(원장 2026-09-18) — 부여·사용·잔여와 "언제 썼는지". 숫자는 balance.ts, 라벨은 여기.
+  // ⚠️ 일수 표기("3일")·휴가 종류·결재 상태는 각자 **단일 소스**가 따로 있다(여기 옮기지 말 것).
+  "me.leave.title": { ko: "연차", en: "Annual leave" },
+  "me.leave.desc": {
+    ko: "부여는 입사일 기준 법정 계산에 사무실 조정을 더한 값입니다",
+    en: "Granted = statutory days from your hire date plus office adjustments",
+  },
+  "me.leave.legal": { ko: "법정", en: "Statutory" },
+  "me.leave.adjust": { ko: "조정", en: "Adjustment" },
+  "me.leave.granted": { ko: "총 부여", en: "Granted" },
+  "me.leave.used": { ko: "사용", en: "Used" },
+  "me.leave.pending": { ko: "결재중", en: "In approval" },
+  "me.leave.remaining": { ko: "잔여", en: "Remaining" },
+  "me.leave.history": { ko: "사용·조정 내역", en: "Leave and adjustment history" },
+  "me.leave.empty": { ko: "이 구간에는 아직 기록이 없습니다.", en: "No records in this leave year yet." },
+  "me.leave.adjustTag": { ko: "조정", en: "Adjustment" },
+  // 🔴 목록에 휴가와 조정이 나란히 서면 "조정도 사용에 들어갔나"로 읽힌다 — 한 줄로 못 박는다.
+  "me.leave.adjustNote": {
+    ko: "조정(+/−)은 부여 일수를 늘리거나 줄인 몫이라 위 '사용'에는 들어가지 않습니다.",
+    en: "Adjustments (+/−) change the granted days, so they are not counted under ‘Used’ above.",
+  },
+  "me.leave.recordedOn": { ko: "기록", en: "Recorded" },
+  "me.leave.noHire": {
+    ko: "입사일이 등록되지 않아 연차를 계산할 수 없습니다 — 사무실에 입사일 등록을 요청하세요.",
+    en: "Your hire date isn't registered yet, so leave can't be calculated — ask the office to add it.",
+  },
+  "me.leave.adjustUnread": {
+    ko: "조정 내역을 불러오지 못했습니다 — 조정이 있었다면 위 숫자에 빠져 있을 수 있습니다.",
+    en: "Couldn't load adjustments — if there are any, the numbers above may not include them.",
+  },
+  "me.leave.usedOnNotReady": {
+    ko: "조정의 사용일은 준비가 끝나면 함께 표시됩니다.",
+    en: "Dates on adjustments will show once the update is applied.",
+  },
+  "me.leave.loadFailed": { ko: "휴가 내역을 불러오지 못했습니다.", en: "Couldn't load your leave history." },
   "me.reportName.blocked.a": {
     ko: "저장된 이름이 있지만 같은 이름의 직원이 있어 지금은",
     en: "You have a saved name, but another staff member has the same name, so reports currently go out",

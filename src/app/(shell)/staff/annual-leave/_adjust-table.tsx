@@ -42,9 +42,14 @@ type Props = {
   rows: LeaveOverviewRow[];
   /** 0252a 미적용이면 조정 버튼을 잠근다(표는 그대로 읽힌다). */
   tableReady: boolean;
+  /**
+   * 사용일 칸(0270a)이 있나 — 없으면 **사용일 입력만** 잠근다(일수·사유는 그대로 쓴다).
+   * 🔴 조정 기능 전체를 잠그지 않는다 — 컬럼 하나가 없다고 되는 일까지 막으면 안 된다([[#95]]).
+   */
+  usedOnReady: boolean;
 };
 
-export function AdjustTable({ rows, tableReady }: Props) {
+export function AdjustTable({ rows, tableReady, usedOnReady }: Props) {
   const [query, setQuery] = useState("");
   const [openFor, setOpenFor] = useState<string | null>(null);
 
@@ -166,7 +171,12 @@ export function AdjustTable({ rows, tableReady }: Props) {
       </DragScrollArea>
 
       {target ? (
-        <AdjustDialog row={target} open onClose={() => setOpenFor(null)} />
+        <AdjustDialog
+          row={target}
+          usedOnReady={usedOnReady}
+          open
+          onClose={() => setOpenFor(null)}
+        />
       ) : null}
     </>
   );
@@ -219,10 +229,12 @@ const MODE_META: Record<Mode, { label: string; hint: string; placeholder: string
 
 function AdjustDialog({
   row,
+  usedOnReady,
   open,
   onClose,
 }: {
   row: LeaveOverviewRow;
+  usedOnReady: boolean;
   open: boolean;
   onClose: () => void;
 }) {
@@ -234,12 +246,15 @@ function AdjustDialog({
   const [mode, setMode] = useState<Mode>("delta");
   const [days, setDays] = useState("");
   const [reason, setReason] = useState("");
+  const [usedOn, setUsedOn] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
-  // 성공하면 창을 닫고 입력을 비운다 — 안 비우면 다음에 그 사람을 다시 열었을 때 지난 값이 남는다.
+  // 성공하면 창을 닫고 입력을 비운다 — 안 비우면 다음에 그 사람을 다시 열었을 때 지난 값이 남는다
+  // (사용일은 특히 위험하다 — 남은 날짜가 다음 사람 차감에 그대로 붙는다).
   useResultToast(state, () => {
     setDays("");
     setReason("");
+    setUsedOn("");
     onClose();
   });
   useResultToast(delState, () => setConfirmId(null));
@@ -260,6 +275,12 @@ function AdjustDialog({
   // '총 부여를 지정'에 음수를 넣으면 grantedTotal이 0으로 잘려 belowUsed(0 < 0)에 안 걸린다 —
   // 미리보기가 "총 0일"을 정상 결과처럼 보여 주지 않게 여기서 따로 잡는다(적대 리뷰 2026-09-08).
   const negativeTotal = valid && mode === "total" && roundDays(raw) < 0;
+  // 사용일은 **그 구간 안**에서만 — 서버와 같은 판정이고 화면은 미리 알려 주기만 한다([[#77]]).
+  const usedOnBad = !!usedOn && !!row.period && (usedOn < row.period.start || usedOn > row.period.end);
+  // 🔴 제출 차단 조건은 **한 이름**으로 모은다 — 버튼 속성에 길게 늘어놓으면 조건을 더할 때
+  //    미리보기만 고치고 버튼을 빼먹는다(2026-09-08 적대 리뷰가 잡은 자리와 같은 함정).
+  const blocked =
+    !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedOnBad || !reason.trim();
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? undefined : onClose())}>
@@ -338,6 +359,35 @@ function AdjustDialog({
             />
           </label>
 
+          {/* 실제 휴가 **사용일**(0270a, 원장 2026-09-18) — 선택 입력. 결재 밖에서 쓴 연차를 차감할 때
+              "언제 쓴 건지"를 사유 문장이 아니라 칸으로 남긴다(내 정보 카드가 이 날짜로 줄을 세운다).
+              🔴 min·max로 구간을 가두지만 그게 게이트는 아니다 — 서버가 같은 판정을 한다([[#77]]). */}
+          <label className="block space-y-1">
+            <span className="text-text-dim text-xs font-semibold">
+              휴가 사용일 <span className="text-text-faint font-normal">(선택)</span>
+            </span>
+            <input
+              name="usedOn"
+              value={usedOn}
+              onChange={(e) => setUsedOn(e.target.value)}
+              type="date"
+              disabled={!usedOnReady}
+              min={row.period?.start}
+              max={row.period?.end}
+              title={
+                usedOnReady
+                  ? "결재 밖에서 쓴 연차를 차감할 때 그 날짜를 적습니다 — 이월·특별휴가 부여면 비워 두세요"
+                  : "사용일 칸이 아직 준비되지 않았습니다 — 마이그레이션 0270a"
+              }
+              className="border-line bg-card text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none transition disabled:opacity-50"
+            />
+            <span className="text-text-faint block text-xs break-keep">
+              {usedOnReady
+                ? "차감(−)이 언제 쓴 연차인지 남깁니다 — 본인 '내 정보' 화면에 이 날짜로 표시됩니다. 부여(+)면 비워 두세요."
+                : "마이그레이션 0270a를 적용하면 사용일을 적을 수 있습니다(지금은 일수·사유만 기록됩니다)."}
+            </span>
+          </label>
+
           {/* 미리보기 — 무엇이 저장되고 총 몇 일이 되는지 누르기 전에 보인다. */}
           <div className="border-line bg-bg-soft/40 rounded-lg border px-3 py-2 text-xs break-keep">
             {!valid ? (
@@ -362,6 +412,12 @@ function AdjustDialog({
                 이미 사용·결재중인 {formatLeaveDays(reserved)}보다 적게 조정할 수 없습니다 (결과{" "}
                 {formatLeaveDays(nextTotal)}).
               </span>
+            ) : usedOnBad ? (
+              <span className="text-danger">
+                사용일이 이 연차 구간(
+                <span className="num">{row.period ? leavePeriodLabel(row.period) : "—"}</span>) 밖입니다 —
+                그 날이 속한 구간에서 조정하세요.
+              </span>
             ) : (
               <span className="text-text-dim">
                 조정 <b className="text-foreground num">{formatSignedDays(delta)}</b> 기록 → 총 부여{" "}
@@ -377,12 +433,7 @@ function AdjustDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               닫기
             </Button>
-            <SubmitButton
-              label="조정 기록"
-              blocked={
-                !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || !reason.trim()
-              }
-            />
+            <SubmitButton label="조정 기록" blocked={blocked} />
           </div>
         </form>
 
@@ -401,7 +452,15 @@ function AdjustDialog({
                     </span>
                     <span className="text-foreground ml-2 break-keep">{a.reason}</span>
                     <span className="text-text-faint ml-2 whitespace-nowrap">
-                      <span className="num">{a.createdAt.slice(0, 10)}</span>
+                      {/* 사용일이 있으면 **그 날짜를 앞에** 둔다 — 이 줄에서 사람이 찾는 사실은
+                          "언제 쓴 연차인가"이고 적은 날짜는 그다음이다. */}
+                      {a.usedOn ? (
+                        <>
+                          사용 <span className="num">{a.usedOn}</span>
+                          {" · "}
+                        </>
+                      ) : null}
+                      기록 <span className="num">{a.createdAt.slice(0, 10)}</span>
                       {a.createdByName ? ` · ${a.createdByName}` : null}
                     </span>
                   </div>

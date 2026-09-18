@@ -75,9 +75,12 @@ describe("게이트 배선", () => {
     const actions = read("src/features/leave/server/actions.ts");
     expect(actions).toContain("resolveLeavePeriod");
     expect(actions).toContain("adjustmentDaysFor");
-    // 폼에서 읽는 값은 대상·방식·일수·사유뿐이다(구간·현재 총 부여를 받으면 오래된 화면이 이긴다).
+    // 폼에서 읽는 값은 대상·방식·일수·사유·사용일뿐이다(구간·현재 총 부여를 받으면 오래된 화면이 이긴다).
+    // ⚠️ `usedOn`은 **날짜 한 칸**이지 구간이 아니다 — 서버가 구간을 다시 계산해 그 안인지 가둔다(아래).
     const read_keys = [...actions.matchAll(/formData\.get\("([a-zA-Z]+)"\)/g)].map((m) => m[1]);
-    expect(new Set(read_keys)).toEqual(new Set(["userId", "reason", "mode", "days", "adjustmentId"]));
+    expect(new Set(read_keys)).toEqual(
+      new Set(["userId", "reason", "mode", "days", "adjustmentId", "usedOn"]),
+    );
   });
 
   it("🔴 빈 일수 칸이 '총 0일로'로 읽히지 않는다(화면·서버 두 겹)", () => {
@@ -88,9 +91,11 @@ describe("게이트 배선", () => {
     expect(actions).toContain("newTotal > MAX_LEAVE_TOTAL");
     const ui = read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx");
     // 음수 총 부여도 화면이 먼저 막는다(grantedTotal이 0으로 잘려 하한 검사에 안 걸린다).
+    // 차단 조건은 **한 이름**으로 모아 둔다 — 버튼 속성에 늘어놓으면 조건이 늘 때 한쪽만 고치게 된다.
     expect(ui.replace(/\s+/g, " ")).toContain(
-      "blocked={ !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || !reason.trim() }",
+      "const blocked = !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedOnBad || !reason.trim();",
     );
+    expect(ui.replace(/\s+/g, " ")).toContain("<SubmitButton label=\"조정 기록\" blocked={blocked} />");
     // 상한 상수는 화면·서버가 **같은 것**을 읽는다(값이 갈리면 버튼은 열리는데 서버만 거절한다).
     expect(ui).toContain("MAX_LEAVE_TOTAL");
     expect(actions).toContain("MAX_LEAVE_TOTAL");
@@ -118,6 +123,80 @@ describe("게이트 배선", () => {
       expect(src).toContain("createAdminClient");
       expect(src).toContain('"tenant_id"');
     }
+  });
+});
+
+describe("조정의 휴가 사용일(0270a, 원장 2026-09-18)", () => {
+  it("🔴 사용일은 서버가 **그 구간 안인지** 가둔다 — 화면 min·max는 게이트가 아니다([[#77]])", () => {
+    const actions = read("src/features/leave/server/actions.ts");
+    expect(actions).toContain('formData.get("usedOn")');
+    expect(actions).toContain("usedOn < target.period.start || usedOn > target.period.end");
+    // 형식도 서버가 본다(달력 밖에서 임의 문자열을 넣어도 통과하지 않게).
+    expect(actions).toContain("YMD_RE.test(usedOn)");
+  });
+
+  it("🔴 사용일을 '사용'으로 두 번 세지 않는다 — 차감은 days가 이미 한다", () => {
+    // 잔여 산식(balance.ts)에 사용일이 들어가면 같은 연차가 두 번 깎인다. 산식 파일은 날짜를 모른다.
+    const balance = read("src/features/leave/balance.ts");
+    expect(balance).not.toContain("usedOn <");
+    expect(balance).not.toContain("used_on");
+    // 내역 조회도 숫자를 세지 않는다(세는 곳은 getMyLeaveBalance 한 곳).
+    const history = read("src/features/leave/server/my-history.ts");
+    expect(history).not.toContain("remainingDays");
+    expect(history).not.toContain("sumAdjustments");
+  });
+
+  it("0270a 미적용에도 살아 있다([[#95]]) — 조회는 칸을 빼고 다시 읽고, 쓰기는 빈 값이면 키를 안 보낸다", () => {
+    const admin = read("src/features/leave/server/admin.ts");
+    expect(admin).toContain("isMissingUsedOnColumn");
+    expect(admin).toContain("selectAdjustments(tenantId, userIds, false)");
+    const history = read("src/features/leave/server/my-history.ts");
+    expect(history).toContain("isMissingUsedOnColumn");
+    const actions = read("src/features/leave/server/actions.ts");
+    // 빈 사용일에 `used_on: null`을 실으면 컬럼 없는 창에서 **조정 전체**가 거절된다.
+    expect(actions.replace(/\s+/g, " ")).toContain("...(usedOn ? { used_on: usedOn } : {})");
+    // 표 없음과 칸 없음은 **다른 안내**다(한 문구로 뭉치면 무엇을 적용해야 하는지 알 수 없다).
+    expect(actions).toContain("TABLE_MISSING_MSG");
+    expect(actions).toContain("USED_ON_MISSING_MSG");
+  });
+
+  it("칸이 없으면 **사용일 입력만** 잠긴다 — 조정 기능 전체를 잠그지 않는다", () => {
+    const admin = read("src/features/leave/server/admin.ts");
+    expect(admin).toContain("usedOnReady");
+    const page = read("src/app/(shell)/staff/annual-leave/page.tsx");
+    expect(page).toContain("usedOnReady={overview.usedOnReady}");
+    const ui = read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx");
+    expect(ui).toContain("disabled={!usedOnReady}");
+    // 표가 없을 때 잠그는 것(tableReady)과 축이 다르다 — 둘을 한 값으로 합치지 말 것.
+    expect(ui).toContain("disabled={!r.period || !tableReady}");
+  });
+});
+
+describe("내 정보 연차 카드(원장 2026-09-18)", () => {
+  it("숫자는 잔여 산식 단일 소스에서 온다 — 화면이 다시 세지 않는다", () => {
+    const page = read("src/app/(shell)/me/page.tsx");
+    expect(page).toContain("getMyLeaveBalance");
+    expect(page).toContain("getMyLeaveHistory");
+    const card = read("src/app/(shell)/me/_components/leave-card.tsx");
+    // 카드는 그리기만 한다(합계를 다시 만들면 카드 안에서 숫자와 목록이 어긋난다).
+    expect(card).not.toContain("remainingDays");
+    expect(card).not.toContain("grantedTotal");
+    // 라벨은 단일 소스 — 여기서 새 맵을 만들지 않는다.
+    expect(card).toContain("LEAVE_KIND_LABEL");
+    expect(card).toContain("docStatusLabel");
+  });
+
+  it("🔴 연차 조각이 실패해도 내 정보가 죽지 않는다(이력서를 채우는 화면이다)", () => {
+    const page = read("src/app/(shell)/me/page.tsx");
+    expect(page.replace(/\s+/g, " ")).toContain("getMyLeaveBalance(user.id).catch(() => null)");
+    expect(page.replace(/\s+/g, " ")).toContain(".catch(() => null)");
+    // 학생 계정엔 연차 개념이 없다 — 아예 부르지 않는다.
+    expect(page).toContain('user.systemRole === "student"');
+  });
+
+  it("조정을 바꾸면 본인 화면도 함께 새로 그린다", () => {
+    const actions = read("src/features/leave/server/actions.ts");
+    expect(actions.match(/revalidatePath\("\/me"\)/g)?.length ?? 0).toBe(2); // 추가·삭제 두 갈래
   });
 });
 
