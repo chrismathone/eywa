@@ -97,9 +97,9 @@ export async function createTenantWithMaster(
 
   revalidatePath("/super-admin/tenants");
   revalidatePath("/super-admin");
-  // 비로그인 브랜딩(getPublicBranding)은 "학원이 정확히 1개"일 때만 그 학원 로고·이름을 로그인 화면에
-  // 쓴다 — 두 번째 학원이 생기는 이 순간 판정이 뒤집히므로 캐시를 즉시 비운다(안 비우면 TTL 1시간 동안
-  // 로그인 화면이 첫 학원 브랜드를 계속 보여준다 = 남의 학원 이름 노출).
+  // 비로그인 브랜딩(getPublicBranding)은 학원이 1개면 그 학원, 2개+면 env `PUBLIC_BRAND_TENANT_SLUG`의 학원만 쓴다
+  // (`pickBrandTenantId`) — 두 번째 학원이 생기는 이 순간 판정이 바뀌고 자리 PIN의 지점 목록도 늘어나므로 캐시를
+  // 즉시 비운다(안 비우면 TTL 1시간 동안 로그인 화면이 첫 학원 브랜드를 계속 보여주고 새 지점은 PIN 화면에 안 선다).
   updateTag(PUBLIC_BRANDING_TENANTS_TAG);
   redirect(`/super-admin/tenants/${tenantId}`);
 }
@@ -137,6 +137,8 @@ export async function updateTenant(
   // 탭 제목·인쇄물에 나간다. 설정 캐시가 그 값을 담고 있으니 saveOwnerSection과 같은 규약으로 비운다
   // (경로 revalidate는 태그 캐시를 안 비운다 — 안 하면 최대 300초 옛 이름 노출).
   updateTag(tenantSettingsTag(id));
+  // 지점 선택지(자리 PIN 화면)는 `tenants.name`을 캐시해 두므로 개명도 같은 태그로 즉시 비운다(생성/삭제와 같은 규약).
+  updateTag(PUBLIC_BRANDING_TENANTS_TAG);
   revalidatePath("/", "layout");
   revalidatePath(`/super-admin/tenants/${id}`);
   revalidatePath("/super-admin/tenants");

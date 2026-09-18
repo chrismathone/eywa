@@ -44,8 +44,9 @@ export default async function LoginPage({
  * 대표 사례라 제거. 사진은 public/photos/login-panel.webp (placeholder → 실사 덮어쓰기 계약,
  * docs/photo-generation-prompts.md). LCP라 preload.
  *
- * 브랜드(로고·워드마크·학원명)는 **학원설정에서 읽는다**(getPublicBranding — 로그인 전이라 세션이
- * 없으므로 단일 테넌트일 때만 확정, 아니면 제품 중립 표기로 폴백). /owner에서 값을 바꾸면 이 화면이
+ * 브랜드(로고·워드마크·학원명)는 **학원설정에서 읽는다**(getPublicBranding — 로그인 전이라 세션이 없으므로
+ * **회사 브랜드 학원**(`pickBrandTenantId`: 1개면 그 학원, 2개+면 env `PUBLIC_BRAND_TENANT_SLUG`)만 확정하고 아니면
+ * 제품 중립 표기로 폴백 — URL에 지점이 없는 C안, 2026-09-18). /owner에서 값을 바꾸면 이 화면이
  * 따라온다. 학원명을 코드에 적지 말 것(구판은 "인재원"이 3곳 하드코딩돼 있었다).
  */
 async function BrandPanel() {

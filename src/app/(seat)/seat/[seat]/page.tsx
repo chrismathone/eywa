@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
-import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
+import {
+  brandLabels,
+  getPublicBranding,
+  getPublicBrandingByTenantId,
+  listPublicBranchChoices,
+} from "@/features/owner/server/public-branding";
 import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
 import { applySeatDayChoices, getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
 import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
@@ -72,12 +77,19 @@ export default async function PublicSeatPage({
   const seat = parseSeatKey(seatParam);
   if (!seat) notFound();
 
-  const branding = await getPublicBranding();
+  // 브랜드(머리 줄 표기)와 지점 목록은 서로 독립(B4). 브랜드는 장식이라 없어도 되고(제품 중립 표기), 지점 목록은
+  // 로그인 폼이 어느 지점의 비밀번호로 검증할지를 정한다(결정 C 2026-09-18 — URL에 지점이 없어 화면이 고르게 한다).
+  const [branding, branches, session] = await Promise.all([
+    getPublicBranding(),
+    listPublicBranchChoices(),
+    readSeatPinSession(),
+  ]);
   const labels = brandLabels(branding);
-  const session = await readSeatPinSession();
 
   if (!session || session.seat !== seat) {
-    const blocked = !branding || !resolvePinSigningSecret();
+    // 🔴 브랜드가 없어도 막지 않는다 — 학원이 둘 이상이면 브랜드 학원이 비어 있을 수 있는데(env 미설정) 그건
+    //    지점 태블릿이 닫힐 이유가 아니다. 막는 건 학원이 0개거나 서명 비밀이 없을 때뿐.
+    const blocked = branches.length === 0 || !resolvePinSigningSecret();
     if (blocked) {
       return (
         <main className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
@@ -86,7 +98,14 @@ export default async function PublicSeatPage({
         </main>
       );
     }
-    return <SeatPinForm seat={seat} seatName={SEAT_NAME[seat]} academyLine={labels.academyLine} />;
+    return (
+      <SeatPinForm
+        seat={seat}
+        seatName={SEAT_NAME[seat]}
+        academyLine={labels.academyLine}
+        branches={branches.length > 1 ? branches : undefined}
+      />
+    );
   }
 
   const date = kstToday();
@@ -96,10 +115,13 @@ export default async function PublicSeatPage({
    * 결석도 옮긴 뒤 명단으로 잰다). 🔴 서버 쓰기 게이트(`rosterKeys`)와 **같은 함수**라 화면에 선 학생 = 찍을 수 있는
    * 학생이다(안 얹으면 옮겨 온 학생이 이 태블릿에 안 보여 못 찍는다).
    */
-  const [day, periodChoiceLoad] = await Promise.all([
+  const [day, periodChoiceLoad, seatBranding] = await Promise.all([
     getPublicSeatDay(session.tenantId, seat, date),
     getSeatPeriodChoices(session.tenantId, seat, date),
+    // 통과한 뒤 머리 줄은 회사 브랜드가 아니라 **이 태블릿의 지점**(쿠키의 tenantId) 이름 — 지점이 둘 이상이면 둘이 다르다.
+    getPublicBrandingByTenantId(session.tenantId),
   ]);
+  const seatLabels = brandLabels(seatBranding);
   const rosterByPeriod = applySeatDayChoices(day, periodChoiceLoad, date);
   /**
    * **로그인 화면과 같게 연 자리**(랩실) — 특이사항 읽기·쓰기 · 다음 행선지 · '전체' 보기. 원장 2026-09-10 지시는
@@ -194,7 +216,7 @@ export default async function PublicSeatPage({
   return (
     <div className="flex min-h-screen flex-col gap-3 px-3 pt-4 pb-8 lg:px-6 lg:pb-10">
       <header className="shrink-0">
-        <p className="text-text-dim text-xs font-medium">{labels.academyLine}</p>
+        <p className="text-text-dim text-xs font-medium">{seatLabels.academyLine}</p>
         <h1 className="text-foreground text-xl font-bold tracking-tight">
           {SEAT_NAME[seat]} {SEAT_ROOM[seat]}
         </h1>

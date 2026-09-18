@@ -101,3 +101,42 @@ export function configuredSeatPin(raw: string | null | undefined): string | null
   const v = normalizePin(raw);
   return v.length > 0 ? v : null;
 }
+
+/**
+ * 자리 PIN 화면이 **어느 지점(테넌트)** 의 비밀번호로 검증할지 — 순수 판정.
+ *
+ * URL에 지점이 없다(결정 C, 2026-09-18)라 로그인 전 화면은 지점을 스스로 모른다. 학원이 하나면 그 하나로 확정하고,
+ * 둘 이상이면 화면의 지점 선택값이 목록 안에 있을 때만 그 지점이다.
+ * 🔴 여럿인데 선택이 없거나 목록 밖이면 null — 첫 지점으로 떨어뜨리면 A지점 태블릿이 B지점 명단을 연다.
+ */
+export function resolveSeatPinTenant(tenantIds: readonly string[], chosen: string | null | undefined): string | null {
+  if (tenantIds.length === 0) return null;
+  if (tenantIds.length === 1) return tenantIds[0]!;
+  const want = chosen?.trim();
+  return want && tenantIds.includes(want) ? want : null;
+}
+
+/**
+ * 학원설정 **원본 jsonb**에서 그 자리의 비밀번호만 — 기본값(DEFAULT_SETTINGS의 7099)을 **섞지 않는다**.
+ *
+ * 학원이 둘 이상이면 자리 PIN 화면이 모든 지점을 공개 목록에 세우므로, 아직 PIN을 정하지 않은 새 지점이 공개 저장소에
+ * 적힌 기본 7099로 열리면 안 된다(적대 리뷰 2026-09-18). 그래서 멀티테넌트에선 **명시한 값만** 인정한다 — 학원 1개일 때의
+ * "설정 안 건드려도 배포 즉시 열려야"(2026-08-19)는 그 전제(학원 1개)에서만 그대로다.
+ * 원본이 객체가 아니거나 칸이 없으면 null(= 그 자리 닫힘). 값의 정리는 `configuredSeatPin`이 한다.
+ * 🔴 **저장소 기본값과 같은 값도 "미설정"이다**(`shippedDefault`, 재리뷰 2026-09-18): 운영 탭 폼은 기본값이 병합된
+ *    설정으로 시작하고 `saveOwnerSection`이 섹션을 통째로 upsert하므로, 새 지점에서 과목 하나 넣고 저장만 해도 jsonb에
+ *    `seatPins:{lab:"7099"}`가 **명시값처럼** 적힌다 — 그걸 인정하면 이 가드가 첫 저장에서 무너진다. 그래서 지점이 둘
+ *    이상이면 7099(기본값)는 자리 PIN으로 쓸 수 없다(원장이 다른 값을 정해야 열린다).
+ */
+export function explicitSeatPin(rawSettings: unknown, seat: SeatKey, shippedDefault: string | null | undefined): string | null {
+  if (!rawSettings || typeof rawSettings !== "object") return null;
+  const ops = (rawSettings as { operations?: unknown }).operations;
+  if (!ops || typeof ops !== "object") return null;
+  const pins = (ops as { seatPins?: unknown }).seatPins;
+  if (!pins || typeof pins !== "object") return null;
+  const v = (pins as Record<string, unknown>)[seat];
+  const pin = typeof v === "string" ? configuredSeatPin(v) : null;
+  if (!pin) return null;
+  const def = configuredSeatPin(shippedDefault);
+  return def && pinsMatch(pin, def) ? null : pin;
+}

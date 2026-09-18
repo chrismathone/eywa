@@ -8,7 +8,8 @@ import { WalkScene } from "./walk-scene";
  * ⚠️ eywa **제품** 랜딩(`/`, (marketing))과는 다른 페이지다. 저쪽 관객은 원장(고객사)이고
  *    요금제·"무료로 시작하기"가 있다. 여기는 학원 자신의 홍보면이라 섞지 말 것.
  * ⚠️ 학원명은 하드코딩하지 않고 `getPublicBranding()`으로 읽는다 — 로그인 전이라 세션이 없어
- *    `getTenantSettings()`는 못 쓴다(단일 테넌트일 때만 확정, 아니면 제품 중립 표기로 폴백).
+ *    `getTenantSettings()`는 못 쓴다(**회사 브랜드 학원**만 확정 — 1개면 그 학원, 2개+면 env `PUBLIC_BRAND_TENANT_SLUG`,
+ *    아니면 제품 중립 표기로 폴백. `pickBrandTenantId`, 2026-09-18).
  *
  * TODO(문구): 아래 본문·과목 설명·알림 예시·상담 링크는 아직 확정 전 예시다.
  *   상담 CTA는 이미 있는 QR 공개접수(`/intake/[token]`)로 연결하면 된다 — 토큰 확정 후 배선.

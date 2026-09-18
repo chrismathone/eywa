@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   configuredSeatPin,
+  explicitSeatPin,
   nextPinAttempt,
   normalizePin,
   pinsMatch,
   recordPinFailure,
+  resolveSeatPinTenant,
   SEAT_PIN_RL_GLOBAL_MAX,
   SEAT_PIN_RL_MAX,
   SEAT_PIN_RL_WINDOW_MS,
@@ -111,5 +113,42 @@ describe("시도 제한 — 전체 상한(적대적 리뷰 2026-08-14)", () => {
     const after = nextPinAttempt(w, 2_000, SEAT_PIN_RL_GLOBAL_MAX);
     expect(after.ok).toBe(true);
     expect(after.next.count).toBe(0);
+  });
+});
+
+describe("resolveSeatPinTenant — 지점 판정(URL에 지점 없음, 2026-09-18)", () => {
+  it("학원이 없으면 null · 하나면 선택과 무관하게 그 하나", () => {
+    expect(resolveSeatPinTenant([], "a")).toBeNull();
+    expect(resolveSeatPinTenant(["a"], undefined)).toBe("a");
+    expect(resolveSeatPinTenant(["a"], "zzz")).toBe("a");
+  });
+  it("둘 이상이면 목록 안의 선택값만 — 🔴 비거나 밖이면 첫 지점으로 떨어뜨리지 않는다", () => {
+    expect(resolveSeatPinTenant(["a", "b"], "b")).toBe("b");
+    expect(resolveSeatPinTenant(["a", "b"], " b ")).toBe("b");
+    expect(resolveSeatPinTenant(["a", "b"], undefined)).toBeNull();
+    expect(resolveSeatPinTenant(["a", "b"], "")).toBeNull();
+    expect(resolveSeatPinTenant(["a", "b"], "c")).toBeNull();
+  });
+});
+
+describe("explicitSeatPin — 멀티테넌트에선 명시한 비밀번호만(기본 7099 금지, 적대 리뷰 2026-09-18)", () => {
+  const DEF = "7099";
+  it("원본에 그 자리 값이 있을 때만 · 공백은 닫힘", () => {
+    expect(explicitSeatPin({ operations: { seatPins: { lab: "1234" } } }, "lab", DEF)).toBe("1234");
+    expect(explicitSeatPin({ operations: { seatPins: { lab: "1234" } } }, "jj", DEF)).toBeNull();
+    expect(explicitSeatPin({ operations: { seatPins: { lab: "  " } } }, "lab", DEF)).toBeNull();
+  });
+  it("원본이 없거나 모양이 다르면 null — 기본값으로 떨어지지 않는다", () => {
+    expect(explicitSeatPin(null, "lab", DEF)).toBeNull();
+    expect(explicitSeatPin({}, "lab", DEF)).toBeNull();
+    expect(explicitSeatPin({ operations: null }, "lab", DEF)).toBeNull();
+    expect(explicitSeatPin({ operations: { seatPins: "7099" } }, "lab", DEF)).toBeNull();
+    expect(explicitSeatPin({ operations: { seatPins: { lab: 7099 } } }, "lab", DEF)).toBeNull();
+  });
+  it("🔴 저장소 기본값과 같은 값도 미설정 — 운영 탭 첫 저장이 기본값을 명시값처럼 적어도 열리지 않는다(재리뷰 2026-09-18)", () => {
+    expect(explicitSeatPin({ operations: { seatPins: { lab: "7099", jj: "7099" } } }, "lab", DEF)).toBeNull();
+    expect(explicitSeatPin({ operations: { seatPins: { lab: " 7099 " } } }, "lab", DEF)).toBeNull();
+    // 기본값이 없는 자리(shippedDefault 없음)는 명시값을 그대로 인정한다.
+    expect(explicitSeatPin({ operations: { seatPins: { jj: "7099" } } }, "jj", null)).toBe("7099");
   });
 });
