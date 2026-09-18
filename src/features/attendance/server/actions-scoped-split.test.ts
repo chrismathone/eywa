@@ -276,18 +276,24 @@ describe("setAttendanceCell — 강사 전체 보기의 그날 칸", () => {
     expect(readTables()).toEqual(["attendance_records"]);
   });
 
-  it('"1"(교시마다 기본)도 제 몫 행에만 — JJ 시수는 안 되돌린다', async () => {
+  it('"1"은 제 몫 두 교시의 합계 1로 저장한다', async () => {
     mixedDay();
     await cell({ units: "1", scopeTeacherId: h.CHARLIE });
-    expect(unitsWritten()).toEqual({ "r-1820": null, "r-1720": null });
+    expect(unitsWritten()).toEqual({ "r-1820": 0.5, "r-1720": 0.5 });
+    expect(logOf("attendance_cell")?.metadata).toMatchObject({ prevUnits: 2.7, nextUnits: 1 });
   });
 
-  it("🔴 제 몫 행이 없는 칸(자리 JJ만) — 격자와 같은 문장으로 거절, 아무것도 안 쓴다", async () => {
+  // ⚠️ 2026-09-17(원장 *"내 출석부 상에서 자유롭게 숫자 설정만 하는거야"*)부터 거절이 아니다 — 자리 행은 그대로 두고 제 행을 만든다.
+  it("🔴 제 몫 행이 없는 칸(자리 JJ만) — JJ 행은 그대로, 제 교시 행을 새로 만든다(자리와 함께 도는 날)", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z")];
-    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
+    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
     expect(h.state.updates).toHaveLength(0);
-    expect(h.state.inserts).toHaveLength(0);
+    expect(h.state.inserts).toMatchObject([
+      { slot_start: "17:20", session_units: 2, status: "present" },
+      { slot_start: "18:20", session_units: 2, status: "present" },
+    ]);
+    expect(logOf("attendance_cell")?.metadata).toMatchObject({ created: true, scopeTeacherId: h.CHARLIE });
   });
 
   it("🔴 그 달에 이 반을 안 맡은 강사의 보기 — 거절(몫을 클라가 정하지 못한다)", async () => {
@@ -325,11 +331,20 @@ describe("setAttendanceCell — 강사 전체 보기의 그날 칸", () => {
     expect(readTables()).toEqual(["attendance_records", "class_schedules", "classes"]);
   });
 
-  it("새 칸(행 없음)은 종전대로 새 행 — 스코프 강사 검증은 그대로 한다", async () => {
+  it("새 칸(행 없음) — 혼자 맡는 날(수학형)은 종전대로 그날 전체 한 행 · 자리와 함께 도는 날은 제 교시 행 · 스코프 강사 검증은 그대로", async () => {
+    h.state.classes = [{ id: h.CLASS, teacher_id: h.HOMEROOM }];
+    h.state.schedules = [slot("16:20:00", null), slot("17:15:00", null)];
+    h.state.records = [];
+    expect(await cell({ units: "4", scopeTeacherId: h.HOMEROOM })).toEqual({ ok: true });
+    expect(h.state.inserts.map((r) => [r.slot_start, r.session_units])).toEqual([[null, 4]]);
+    h.state.inserts.length = 0;
     mixedDay();
     h.state.records = [];
     expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
-    expect(h.state.inserts.map((r) => r.session_units)).toEqual([4]);
+    expect(h.state.inserts.map((r) => [r.slot_start, r.session_units])).toEqual([
+      ["17:20", 2],
+      ["18:20", 2],
+    ]);
     h.state.inserts.length = 0;
     expect(await cell({ units: "4", scopeTeacherId: h.STRANGER })).toEqual({ error: SCOPE_NOT_TAUGHT_MESSAGE });
     expect(h.state.inserts).toHaveLength(0);
@@ -341,6 +356,23 @@ describe("setAttendanceRange — 강사 전체 보기의 범위 채우기", () =
     over: Partial<Parameters<typeof setAttendanceRange>[0]> = {},
     cells = [{ studentId: h.S1, classId: h.CLASS, sessionDate: D }],
   ) => setAttendanceRange({ cells, status: "present", units: "4", quiet: true, ...over });
+
+  it("붙여넣은 1도 본인 두 교시 합계 1로 저장한다", async () => {
+    mixedDay();
+    h.state.schedules.push(slot("15:20:00", h.HOMEROOM));
+    h.state.records.push(rec("other", "15:20:00", 1.5, "2026-09-10T08:00:00Z"));
+    expect(await range({ units: "1", scopeTeacherId: h.CHARLIE })).toMatchObject({ ok: true, applied: 1 });
+    expect(unitsWritten()).toEqual({ "r-1820": 0.5, "r-1720": 0.5 });
+    expect(statusWritten()).toEqual(["r-1720", "r-1820"]);
+  });
+
+  it("범위 지우기에서도 다른 선생님 교시는 함께 지우지 않는다", async () => {
+    mixedDay();
+    h.state.schedules.push(slot("15:20:00", h.HOMEROOM));
+    h.state.records.push(rec("other", "15:20:00", 1.5, "2026-09-10T08:00:00Z"));
+    expect(await range({ status: null, scopeTeacherId: h.CHARLIE })).toMatchObject({ ok: true, applied: 1 });
+    expect(h.state.deletes.flatMap((d) => d.ids ?? []).sort()).toEqual(["r-1720", "r-1820"]);
+  });
 
   it("🔴 셀 저장과 같은 규칙 — Charlie 몫 2·2, 자리 JJ 행은 손대지 않는다", async () => {
     mixedDay();
@@ -370,23 +402,31 @@ describe("setAttendanceRange — 강사 전체 보기의 범위 채우기", () =
     expect(readTables()).toEqual(["attendance_records"]);
   });
 
-  it("제 몫 행이 없는 칸만 있으면 거절 — 아무것도 안 쓴다", async () => {
+  it("제 몫 행이 없는 칸(자리 JJ만) — 자리 행은 그대로, 제 행을 새로 만든다(셀 저장과 같은 규칙)", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z")];
-    expect(await range({ scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
+    expect(await range({ scopeTeacherId: h.CHARLIE })).toMatchObject({ ok: true, applied: 1, blocked: 0 });
     expect(h.state.updates).toHaveLength(0);
+    expect(h.state.inserts).toMatchObject([
+      { student_id: h.S1, slot_start: "17:20", session_units: 2, status: "present" },
+      { student_id: h.S1, slot_start: "18:20", session_units: 2, status: "present" },
+    ]);
   });
 
-  it("섞인 범위 — 제 몫 없는 칸만 건너뛰고(blocked) 나머지는 저장, 판정 조회는 요청당 한 번", async () => {
+  it("섞인 범위 — 제 몫 있는 칸은 고치고 제 몫 없는 칸은 새로 만든다, 판정 조회는 요청당 한 번", async () => {
     mixedDay();
     h.state.records = [...h.state.records, rec("s2-jj", "16:20:00", 1, "2026-09-10T09:30:00Z", h.S2)];
     const res = await range({ scopeTeacherId: h.CHARLIE }, [
       { studentId: h.S1, classId: h.CLASS, sessionDate: D },
       { studentId: h.S2, classId: h.CLASS, sessionDate: D },
     ]);
-    expect(res).toMatchObject({ ok: true, applied: 1, blocked: 1 });
+    expect(res).toMatchObject({ ok: true, applied: 2, blocked: 0 });
     expect(unitsWritten()).toEqual({ "r-1820": 2, "r-1720": 2 });
     expect(statusWritten()).toEqual(["r-1720", "r-1820"]);
+    expect(h.state.inserts).toMatchObject([
+      { student_id: h.S2, slot_start: "17:20", session_units: 2 },
+      { student_id: h.S2, slot_start: "18:20", session_units: 2 },
+    ]);
     expect(readTables()).toEqual(["attendance_records", "class_schedules", "classes"]);
   });
 
@@ -509,10 +549,10 @@ describe("🔴 강사 보기 저장은 자리(JJ·랩실) 행을 안 건드린�
     expect(h.state.updates).toEqual([{ patch: { note: "사유" }, ids: ["r-1820"] }]);
   });
 
-  it("메모만 저장 — 그날 행이 자리 행뿐이면 빗금 칸과 같은 문장으로 거절", async () => {
+  it("메모만 저장 — 그날 행이 자리 행뿐이면 메모를 달 제 기록이 없다(자리 행에 달지 않는다)", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T12:00:00Z")];
-    expect(await cell({ note: "사유", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
+    expect(await cell({ note: "사유", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ error: "그날 출결 기록이 없어 메모만 남길 수 없습니다 — 먼저 출결을 입력하세요" });
     expect(h.state.updates).toHaveLength(0);
   });
 
@@ -568,24 +608,25 @@ describe("🔴 강사 보기 저장은 자리(JJ·랩실) 행을 안 건드린�
     expect(h.state.updates).toHaveLength(0);
   });
 
-  it("🔴 다른 선생님 교시 행은 종전대로 상태를 함께 받는다 — 시수는 그대로(원장이 짚은 건 자리뿐)", async () => {
+  it("숫자 수정은 본인 교시만 갱신한다", async () => {
     withOtherTeacher();
     await cell({ units: "4", scopeTeacherId: h.CHARLIE });
-    expect(statusWritten()).toEqual(["r-1520", "r-1720", "r-1820"]);
+    expect(statusWritten()).toEqual(["r-1720", "r-1820"]);
     expect(unitsWritten()).toEqual({ "r-1820": 2, "r-1720": 2 });
   });
 
-  it("다른 선생님 교시 행은 종전대로 함께 지워진다 — 막는 문은 화면(sharedBlock)이다", async () => {
+  it("지우기도 본인 교시만 삭제한다", async () => {
     withOtherTeacher();
     await cell({ status: null, scopeTeacherId: h.CHARLIE });
-    expect(deletedIds()).toEqual(["r-1520", "r-1720", "r-1820"]);
+    expect(deletedIds()).toEqual(["r-1720", "r-1820"]);
   });
 
-  it("제 몫 행이 없는 칸(자리 JJ만)의 지우기 — 격자와 같은 문장으로 거절, 아무것도 안 지운다", async () => {
+  it("제 몫 행이 없는 칸(자리 JJ만)의 지우기 — 지울 제 기록이 없다: 아무것도 안 지우고 성공(빈칸을 지운 것뿐)", async () => {
     mixedDay();
     h.state.records = [rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z")];
-    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.seatOnly });
+    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
     expect(h.state.deletes).toHaveLength(0);
+    expect(logOf("attendance_clear")).toBeUndefined();
   });
 
   it("🔴 반별 보기(스코프 없음)는 종전 그대로 — JJ 행도 상태를 받고, 지우기는 칸 전체", async () => {
@@ -728,11 +769,17 @@ describe("🔴 빗금 칸 입력 — 다른 선생님 교시 행에 상태만 �
     expect(h.state.inserts).toHaveLength(0);
   });
 
-  it("🔴 화면이 빈칸으로 알던 칸(표식 없음)에 남의 교시 기록이 있으면 저장하지 않는다 — 친 시수를 버리고 남의 기록을 덮지 않게", async () => {
-    ghostDay();
-    expect(await cell({ units: "2", scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.stale });
+  // ⚠️ 2026-09-17부터 이 칸은 빈칸이다(빗금이 걷혔다) — 남의 기록은 그대로 두고 제 교시 행을 새로 만든다.
+  it("🔴 표식 없는 칸에 남의 교시 기록만 있으면 — 그 기록은 그대로, 제 교시(17:20·18:20) 행을 새로 만들어 친 3을 나눈다", async () => {
+    ghostDay("병결");
+    expect(await cell({ units: "3", note: "보강", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
     expect(h.state.updates).toHaveLength(0);
-    expect(h.state.inserts).toHaveLength(0);
+    expect(h.state.inserts).toMatchObject([
+      { slot_start: "17:20", session_units: 1.5, status: "present", note: "보강" },
+      { slot_start: "18:20", session_units: 1.5, status: "present", note: "보강" },
+    ]);
+    expect(logOf("attendance_cell")?.metadata).toMatchObject({ created: true, createdSlots: ["17:20", "18:20"] });
+    expect(logOf("attendance_cell")?.metadata).not.toHaveProperty("prevStatus");
   });
 
   it("🔴 빗금으로 알고 보낸 칸에 제 몫 행이 생겼으면 저장하지 않는다 — 제 기록을 덮지 않게", async () => {
@@ -743,9 +790,9 @@ describe("🔴 빗금 칸 입력 — 다른 선생님 교시 행에 상태만 �
     expect(h.state.updates).toHaveLength(0);
   });
 
-  it("🔴 지우기는 막는다 — 남의 기록 삭제는 되돌리기 어렵다(기본값)", async () => {
+  it("🔴 남의 교시 기록뿐인 칸의 지우기 — 남의 기록은 지우지 않는다(지울 제 기록이 없어 조용히 성공)", async () => {
     ghostDay();
-    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPED_REJECT_MESSAGE.clearGhost });
+    expect(await cell({ status: null, scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
     expect(h.state.deletes).toHaveLength(0);
   });
 
@@ -810,33 +857,140 @@ describe("🔴 빗금 칸 입력 — 다른 선생님 교시 행에 상태만 �
     expect(noteWritten()).toEqual({ "r-1520": "대신 입력: 박소선" });
   });
 
-  it("범위 지우기 — 빗금 칸은 건너뛰고, 전부 걸리면 지우기 사유로 거절", async () => {
+  it("범위 지우기 — 남의 교시 기록뿐인 칸은 아무것도 안 지운다(적용 칸으로 센다 · 막힌 칸 안내가 뜨지 않게)", async () => {
     ghostDay();
-    expect(await range({ status: null, scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] })).toEqual({
-      error: SCOPED_REJECT_MESSAGE.clearGhost,
-    });
+    expect(
+      await range({ status: null, scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] }, [
+        { studentId: h.S1, classId: h.CLASS, sessionDate: D },
+      ]),
+    ).toMatchObject({ ok: true, applied: 1, blocked: 0 });
     expect(h.state.deletes).toHaveLength(0);
   });
 
-  it("🔴 범위 — 표식 없이 온 빗금 칸(화면이 오래됨)은 그 칸만 건너뛰고, 전부면 stale 문장 · 로그에 친 시수를 안 싣는다", async () => {
+  it("🔴 범위 — 표식 없는 칸에 남의 교시 기록만 있으면 제 교시 행을 새로 만든다 · 제 몫 칸은 고친다 · 로그에 친 시수", async () => {
     ghostDay();
     h.state.records = [...h.state.records, rec("s2-1720", "17:20:00", 1, "2026-09-10T09:00:00Z", h.S2)];
     const mixed = await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] }, [
       { studentId: h.S1, classId: h.CLASS, sessionDate: D },
       { studentId: h.S2, classId: h.CLASS, sessionDate: D },
     ]);
-    expect(mixed).toMatchObject({ ok: true, applied: 1, blocked: 1 });
+    expect(mixed).toMatchObject({ ok: true, applied: 2, blocked: 0 });
     expect(statusWritten()).toEqual(["s2-1720"]);
+    expect(h.state.inserts).toMatchObject([
+      { student_id: h.S1, slot_start: "17:20", session_units: 2 },
+      { student_id: h.S1, slot_start: "18:20", session_units: 2 },
+    ]);
+    expect(logOf("attendance_range")?.metadata).toMatchObject({ units: 4, createdSlotRows: 2 });
+  });
+});
+
+/**
+ * 🔴 원장 2026-09-17 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만
+ *    하는거야."* · *"수학 수업보고서랑 똑같은거야 … 추가로 보강하면 2 적고 3 적고"* — 강사 출석부의 제 칸은 자유롭게 고치되,
+ *    **그날 교시를 다른 선생님과 나눠 맡는 날**엔 "그날 전체" 행을 만들지 않는다(교시 없는 행은 그날 수업하는 모든 강사 몫으로 읽힌다).
+ */
+describe("🔴 강사 출석부의 새 칸 — 나눠 맡는 날은 제 교시 행으로(원장 2026-09-17)", () => {
+  const OTHER = "77777777-7777-7777-7777-777777777777";
+  const cell = (over: Partial<Parameters<typeof setAttendanceCell>[0]> = {}) =>
+    setAttendanceCell({ studentId: h.S1, classId: h.CLASS, sessionDate: D, status: "present", quiet: true, ...over });
+  const range = (
+    over: Partial<Parameters<typeof setAttendanceRange>[0]> = {},
+    cells = [{ studentId: h.S1, classId: h.CLASS, sessionDate: D }],
+  ) => setAttendanceRange({ cells, status: "present", units: "3", quiet: true, ...over });
+  /** 기록 없는 날 · 15:20 다른 선생님 · 16:20 JJ · 17:20·18:20 Charlie. */
+  function sharedEmptyDay() {
+    mixedDay();
+    h.state.schedules = [...h.state.schedules, slot("15:20:00", OTHER)];
+    h.state.records = [];
+  }
+
+  it("🔴 빈 칸에 3(보강 포함) — 제 교시 두 행에 1.5·1.5, 그날 전체 행은 안 만든다", async () => {
+    sharedEmptyDay();
+    expect(await cell({ units: "3", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.inserts.map((r) => [r.slot_start, r.session_units])).toEqual([
+      ["17:20", 1.5],
+      ["18:20", 1.5],
+    ]);
+  });
+
+  it("숫자 없이 상태만 — 교시마다 기본(null), 칸에 보일 합(2)을 돌려줘 격자 낙관값이 맞는다", async () => {
+    sharedEmptyDay();
+    expect(await cell({ scopeTeacherId: h.CHARLIE })).toEqual({ ok: true, autoUnits: 2 });
+    expect(h.state.inserts.map((r) => r.session_units)).toEqual([null, null]);
+  });
+
+  it("결석 — 시수를 쓰지 않는 상태는 합을 돌려주지 않는다", async () => {
+    sharedEmptyDay();
+    expect(await cell({ status: "absent", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.inserts.map((r) => r.status)).toEqual(["absent", "absent"]);
+  });
+
+  it("🔴 보강 예약처럼 메모와 함께 찍으면 새 교시 행 **전부**에 같은 메모 — 예약 취소의 '예약이 만든 칸' 판정이 선다", async () => {
+    sharedEmptyDay();
+    expect(await cell({ status: "absent", units: "", note: "10/5 보강 예정", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.inserts.map((r) => r.note)).toEqual(["10/5 보강 예정", "10/5 보강 예정"]);
+  });
+
+  it("🔴 새 교시 행 둘에 같은 메모 → 메모만 저장으로 고치면 두 행이 함께 바뀐다(한 행만 고치면 옛 사유가 되살아난다)", async () => {
+    sharedEmptyDay();
+    h.state.records = [
+      { ...rec("n-1820", "18:20:00", null, "2026-09-10T11:00:00Z"), note: "병결" },
+      { ...rec("n-1720", "17:20:00", null, "2026-09-10T11:00:00Z"), note: "병결" },
+    ];
+    expect(await cell({ note: "감기", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.updates).toEqual([{ patch: { note: "감기" }, ids: ["n-1820", "n-1720"] }]);
     h.state.updates.length = 0;
-    expect(
-      await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] }, [
-        { studentId: h.S1, classId: h.CLASS, sessionDate: D },
-      ]),
-    ).toEqual({ error: SCOPED_REJECT_MESSAGE.stale });
+    // 메모가 서로 다르면(교시마다 사유가 다름) 화면이 보여 준 그 행만.
+    h.state.records[1]!.note = "병결(오후)";
+    expect(await cell({ note: "감기", noteOnly: true, scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.updates).toEqual([{ patch: { note: "감기" }, ids: ["n-1820"] }]);
+  });
+
+  it("🔴 범위 채우기(숫자 없이) — 응답이 칸 값을 행 수(2)로 알려 격자 낙관값이 1로 굳지 않는다", async () => {
+    sharedEmptyDay();
+    const res = await range({ units: "", scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] });
+    expect(res).toMatchObject({
+      ok: true,
+      applied: 1,
+      autoUnits: [{ studentId: h.S1, classId: h.CLASS, sessionDate: D, units: 2 }],
+    });
+    expect(h.state.inserts.map((r) => r.session_units)).toEqual([null, null]);
+    expect(logOf("attendance_range")?.metadata).not.toHaveProperty("autoUnits");
+  });
+
+  it("🔴 자리 JJ와 함께 도는 날(다른 선생님 없음)도 제 교시 행 — JJ 문 저장이 그날 전체 행을 덮지 않게", async () => {
+    mixedDay();
+    h.state.records = [{ ...rec("r-jj", "16:20:00", 1, "2026-09-10T09:00:00Z"), recorded_via: "seat" }];
+    expect(await cell({ units: "4", scopeTeacherId: h.CHARLIE })).toEqual({ ok: true });
+    expect(h.state.inserts.map((r) => [r.slot_start, r.session_units])).toEqual([
+      ["17:20", 2],
+      ["18:20", 2],
+    ]);
     expect(h.state.updates).toHaveLength(0);
-    // 빗금 칸만 옮긴 범위 — 시수를 받은 칸이 없으니 친 4를 로그에 안 싣는다.
-    h.state.logs.length = 0;
-    await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] });
-    expect(logOf("attendance_range")?.metadata).not.toHaveProperty("units");
+  });
+
+  it("범위 채우기도 같은 규칙 — 제 교시 두 행", async () => {
+    sharedEmptyDay();
+    expect(await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] })).toMatchObject({ ok: true, applied: 1 });
+    expect(h.state.inserts.map((r) => [r.slot_start, r.session_units])).toEqual([
+      ["17:20", 1.5],
+      ["18:20", 1.5],
+    ]);
+  });
+
+  it("반별 보기(관리자 · 스코프 없음)는 종전 그대로 — 그날 전체 한 행", async () => {
+    sharedEmptyDay();
+    expect(await cell({ units: "3" })).toEqual({ ok: true });
+    expect(h.state.inserts).toMatchObject([{ slot_start: null, session_units: 3 }]);
+  });
+
+  it("🔴 강사 계정이 남의 id로 보기를 바꿔 보내면 저장하지 않는다(셀·범위)", async () => {
+    sharedEmptyDay();
+    const perm = await import("@/lib/auth/perm-matrix");
+    vi.mocked(perm.accessLevelTenant).mockResolvedValueOnce("scoped");
+    expect(await cell({ units: "3", scopeTeacherId: h.CHARLIE })).toEqual({ error: SCOPE_INVALID_MESSAGE });
+    vi.mocked(perm.accessLevelTenant).mockResolvedValueOnce("scoped");
+    expect(await range({ scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] })).toEqual({ error: SCOPE_INVALID_MESSAGE });
+    expect(h.state.inserts).toHaveLength(0);
   });
 });

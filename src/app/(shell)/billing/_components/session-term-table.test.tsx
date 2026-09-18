@@ -549,3 +549,94 @@ describe("반 전원 확정 → '전체 확정 해제' (원장 2026-09-17)", () 
     vi.unstubAllGlobals();
   });
 });
+
+describe("지난 달 확정 기준 미리 채우기 (원장 2026-09-17 '입력칸만 미리 채움')", () => {
+  const suggested = () => {
+    const g = group("수학");
+    Object.assign(g.students[0], { plannedSessions: 13.5, lastMonth: { price: 21250, sessions: 9, last: { sessions: 6, price: 21250, planned: 9 } } });
+    return g;
+  };
+
+  it("미확정 행의 시수·단가 칸을 지난 달 기준으로 채우고 칠한다 — 카드가 근거를 말하고, 저장은 하지 않는다", () => {
+    render(<SessionTermGroups groups={[suggested()]} catalog={DEFAULT_SESSION_PRICES} period="2026-10" />);
+    const sessions = screen.getByLabelText("수학학생 확정 회차") as HTMLInputElement;
+    const price = screen.getByLabelText("수학학생 회당 단가") as HTMLInputElement;
+    expect(sessions.value).toBe("9");
+    expect(price.value).toBe("21250");
+    // 단가 = 지난 달 값을 옮겼다(파랑) · 시수 = 예정과 다르게 채웠다(주황 — 확정 행의 '확정 ≠ 예정'과 같은 뜻).
+    expect(price.className).toContain("bg-blue-soft");
+    expect(price.className).not.toContain("bg-background");
+    expect(sessions.className).toContain("bg-amber-soft");
+    expect(price.getAttribute("data-tip")).toContain("지난 달 6시수 × 21,250원");
+    expect(sessions.getAttribute("data-tip")).toContain("이번 달 예정 13.5시수 → 9시수");
+    expect(sessions.getAttribute("data-tip")).toContain("휴원·결석으로 줄였거나 이번 달 등원 요일을 늘린 학생이면 예정 시수로 고치세요");
+    expect(screen.getByLabelText("수학학생 예상금액")).toHaveTextContent("191,250원");
+    expect(confirmSessionTerm).not.toHaveBeenCalled();
+    expect(confirmSelectedTerms).not.toHaveBeenCalled();
+  });
+
+  it("🔴 비율로 줄인 시수가 섞인 선택 일괄 확정은 한 번 묻는다 — 취소하면 안 보내고, 확인하면 채워진 값 그대로 · 고치면 칠이 사라진다", async () => {
+    const ask = vi.fn(() => false);
+    vi.stubGlobal("confirm", ask);
+    vi.mocked(confirmSelectedTerms).mockResolvedValueOnce({ confirmed: 1, skipped: 0, terms: [] });
+    render(<SessionTermGroups groups={[suggested()]} catalog={DEFAULT_SESSION_PRICES} period="2026-10" />);
+    fireEvent.click(screen.getByLabelText("수학학생 선택"));
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (1)" }));
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("· 수학학생: 예정 13.5 → 9시수"));
+    expect(confirmSelectedTerms).not.toHaveBeenCalled();
+    ask.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (1)" }));
+    await waitFor(() => expect(confirmSelectedTerms).toHaveBeenCalledWith("2026-10", "수학", [{ id: "수학", sessions: 9, unitPrice: 21250, monthly: false }]));
+    fireEvent.change(screen.getByLabelText("수학학생 회당 단가"), { target: { value: "24000" } });
+    expect(screen.getByLabelText("수학학생 회당 단가").className).not.toContain("bg-blue-soft");
+    expect(screen.getByLabelText("수학학생 확정 회차").className).toContain("bg-amber-soft");
+    fireEvent.change(screen.getByLabelText("수학학생 확정 회차"), { target: { value: "13.5" } });
+    expect(screen.getByLabelText("수학학생 확정 회차").className).not.toContain("bg-amber-soft");
+    vi.unstubAllGlobals();
+  });
+
+  it("🔴 개별 확정(행의 확정 버튼)도 같은 확인을 거친다 — 취소하면 안 보낸다", async () => {
+    const ask = vi.fn(() => false);
+    vi.stubGlobal("confirm", ask);
+    render(<SessionTermGroups groups={[suggested()]} catalog={DEFAULT_SESSION_PRICES} period="2026-10" />);
+    const row = screen.getByLabelText("수학학생 확정 회차").closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: "확정" }));
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("· 수학학생: 예정 13.5 → 9시수"));
+    expect(confirmSessionTerm).not.toHaveBeenCalled();
+    ask.mockReturnValue(true);
+    fireEvent.click(within(row).getByRole("button", { name: "확정" }));
+    await waitFor(() => expect(confirmSessionTerm).toHaveBeenCalled());
+    vi.unstubAllGlobals();
+  });
+
+  it("단가만 옮긴 행(시수 = 예정)은 묻지 않고 확정한다", async () => {
+    const ask = vi.fn(() => true);
+    vi.stubGlobal("confirm", ask);
+    vi.mocked(confirmSelectedTerms).mockResolvedValueOnce({ confirmed: 1, skipped: 0, terms: [] });
+    const g = group("수학");
+    Object.assign(g.students[0], { lastMonth: { price: 21250, sessions: null, last: { sessions: 9, price: 21250, planned: 9 } } });
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-10" />);
+    expect(screen.getByLabelText("수학학생 확정 회차").className).not.toContain("bg-amber-soft");
+    fireEvent.click(screen.getByLabelText("수학학생 선택"));
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (1)" }));
+    await waitFor(() => expect(confirmSelectedTerms).toHaveBeenCalledWith("2026-10", "수학", [{ id: "수학", sessions: 9, unitPrice: 21250, monthly: false }]));
+    expect(ask).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("단가 일괄 입력은 단가만 바꾸고 미리 채운 시수(비율)는 그대로 둔다", () => {
+    render(<SessionTermGroups groups={[suggested()]} catalog={DEFAULT_SESSION_PRICES} period="2026-10" />);
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByRole("button", { name: "단가 일괄 입력" }));
+    expect((screen.getByLabelText("수학학생 확정 회차") as HTMLInputElement).value).toBe("9");
+    expect((screen.getByLabelText("수학학생 회당 단가") as HTMLInputElement).value).toBe("24000");
+  });
+
+  it("지난 달 기준이 없으면 종전대로 예정 시수 · 빈 단가 · 칠하지 않음", () => {
+    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-10" />);
+    expect((screen.getByLabelText("수학학생 확정 회차") as HTMLInputElement).value).toBe("9");
+    expect((screen.getByLabelText("수학학생 회당 단가") as HTMLInputElement).value).toBe("");
+    expect(screen.getByLabelText("수학학생 회당 단가").className).not.toContain("bg-blue-soft");
+    expect(screen.getByLabelText("수학학생 확정 회차").className).toContain("bg-background");
+  });
+});

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
-import { kstToday, resolveReportDate } from "@/lib/date-kst";
+import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
 import { commentBody, commentP1Body, commentP2Body, type ReportCommentInput } from "../report-comment";
 import { buildTrendInput, findImpossibleScaleSpans, trendBody } from "../trend-comment";
@@ -41,6 +41,12 @@ import {
 } from "@/features/attendance/server/makeup-pool";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  nextTrendOptOut,
+  readTrendOptOut,
+  TREND_OPTOUT_PREF,
+  trendOptOutKey,
+} from "../trend-optout";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { parseExamScores } from "../exam-info";
@@ -173,7 +179,25 @@ export async function saveLessonReport(
     : input.subject
       ? gateBase.is("class_id", null).eq("subject", input.subject)
       : gateBase.is("class_id", null).is("subject", null);
-  const { data: gateRows } = await gateScoped.limit(1);
+  // '학습 추세 미발송'(원장 2026-09-18) — 본인 계정 ui_prefs에서 이 반·학생이 꺼져 있는지. 게이트 pre-read와
+  // **병렬**(B4)이고, 비울 추세가 있을 때만 읽는다(대부분의 저장은 왕복 0). 읽기 실패는 종전 동작(발송)으로 둔다 —
+  // 화면이 이미 빼서 보내므로 여기는 두 번째 방어선이다.
+  const trendOptOutKeyForSave = input.trendNote ? trendOptOutKey(input.classId, input.studentId) : null;
+  const [{ data: gateRows }, trendOptedOut] = await Promise.all([
+    gateScoped.limit(1),
+    trendOptOutKeyForSave
+      ? createAdminClient()
+          .from("users")
+          .select("ui_prefs")
+          .eq("id", user.id)
+          .eq("tenant_id", user.tenantId)
+          .maybeSingle()
+          .then(
+            ({ data: me }) => readTrendOptOut(me?.ui_prefs).includes(trendOptOutKeyForSave),
+            () => false,
+          )
+      : Promise.resolve(false),
+  ]);
   const priorRow = gateRows?.[0] as
     | { id: string; classnote_status: string | null; notes?: string | null; ment_source?: string | null }
     | undefined;
@@ -216,7 +240,9 @@ export async function saveLessonReport(
         // ⚠️ 갱신 때는 DB 트리거가 **원 작성자를 보존**한다(남이 고쳐도 작성자 화면에서 안 사라지게).
         created_by: user.id,
         notes: input.notes || null,
-        trend_note: input.trendNote || null,
+        // '학습 추세 미발송'(원장 2026-09-18)이면 서버도 한 번 더 비운다 — 화면이 이미 빼서 보내지만, 다른 탭의
+        // 옛 화면(체크 전 상태)이 저장하면 추세가 다시 실린다([[#77]]). 발송(saveAndQueueClassnote)도 이 함수를 지난다.
+        trend_note: trendOptedOut ? null : input.trendNote || null,
         source: "onescreen",
         // 멘트 작성 방식(0214a) — 클라 판정 + 기존 라벨 sticky 합산(ment-source.ts). 컬럼 없으면 통째 생략(#95).
         ...(mentReady
@@ -1152,6 +1178,74 @@ export async function setMyOnescreenFontSize(
     .eq("tenant_id", user.tenantId);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * **학습 추세 미발송** 켜기·끄기(원장 2026-09-18) — 본인 계정 `ui_prefs.onescreen.trendOptOut`에 `반:학생`을 넣고 뺀다.
+ *
+ * 🔴 켜는 순간 **아직 안 나간 내 보고서**의 추세도 비운다 — 사무실 일괄 발송(발송 콘솔)은 원스크린을 거치지 않고
+ *    저장된 행을 그대로 보내서, 체크 전에 저장해 둔 추세가 나간다(체크가 거짓말이 된다).
+ *    범위는 좁게: **내가 쓴 행(created_by)** · 같은 반·학생 · 발송 성공 전 · 최근 14일. 이미 나간 보고서는 못 되돌린다.
+ * ⚠️ 끄면 비운 추세는 **돌아오지 않는다**(행에 남기지 않았다) — 원스크린 작업 초안엔 남아 있어 그날 행은 다시 저장하면 된다.
+ * ⚠️ 형제 설정(글씨 크기·다른 화면)은 보존한다(setMyOnescreenFontSize와 같은 병합 규약).
+ */
+export async function setMyTrendOptOut(input: {
+  classId: string;
+  studentId: string;
+  on: boolean;
+}): Promise<{ ok: boolean; error?: string; cleared?: number }> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const roError = await readonlyTeacherViewError();
+  if (roError) return { ok: false, error: roError };
+  const key = trendOptOutKey(input.classId, input.studentId);
+  const uuid = /^[0-9a-f-]{36}$/i;
+  if (!key || !uuid.test(input.classId) || !uuid.test(input.studentId))
+    return { ok: false, error: "반·학생을 확인할 수 없습니다" };
+
+  const admin = createAdminClient();
+  const { data: row, error: readErr } = await admin
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (readErr) return { ok: false, error: "설정을 불러오지 못했습니다" };
+  const raw =
+    row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
+      ? (row.ui_prefs as Record<string, unknown>)
+      : {};
+  const ns =
+    raw.onescreen && typeof raw.onescreen === "object" && !Array.isArray(raw.onescreen)
+      ? { ...(raw.onescreen as Record<string, unknown>) }
+      : {};
+  const next = nextTrendOptOut(readTrendOptOut(raw), key, input.on);
+  if (next.length === 0) delete ns[TREND_OPTOUT_PREF];
+  else ns[TREND_OPTOUT_PREF] = next;
+  const merged = { ...raw };
+  if (Object.keys(ns).length === 0) delete merged.onescreen;
+  else merged.onescreen = ns;
+  const { error } = await admin
+    .from("users")
+    .update({ ui_prefs: merged })
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId);
+  if (error) return { ok: false, error: "설정을 저장하지 못했습니다" };
+
+  if (!input.on) return { ok: true, cleared: 0 };
+  // 아직 안 나간 내 보고서의 추세 비우기 — RLS 클라이언트(테넌트 격리) + 내 행만.
+  const supabase = await createClient();
+  const { data: cleared } = await supabase
+    .from("lesson_reports")
+    .update({ trend_note: null })
+    .eq("class_id", input.classId)
+    .eq("student_id", input.studentId)
+    .eq("created_by", user.id)
+    .gte("report_date", addDays(kstToday(), -14))
+    .not("trend_note", "is", null)
+    .or("classnote_status.is.null,classnote_status.neq.success")
+    .select("id");
+  return { ok: true, cleared: cleared?.length ?? 0 };
 }
 
 /** 보강(수업외) 학생 수동추가 picker — 같은 학원 재원·휴원 학생 이름검색(퇴원 제외), 최대 20건. */

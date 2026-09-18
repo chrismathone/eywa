@@ -1,0 +1,237 @@
+.rails {
+  --blue: #0000ff;
+  --rail-ink: #0000ff;
+  --rail-tick: color-mix(in srgb, var(--rail-ink) 48%, var(--card));
+  /* 목표진도(2행)는 **붉은색 계열**(원장 2026-09-18 *"수학 mcs에서 목표진도는 붉은색계열로 전부"*).
+     🔴 현재진도(파랑)와 **색으로** 갈린다 — 두 줄이 같은 눈금을 쓰기 때문에, 색이 같으면 어느 줄이
+        사실이고 어느 줄이 계획인지 눈으로 못 가른다.
+     원장 2026-09-18: 현재는 순수 파랑, 목표는 순수 빨강. 채움에는 혼합색을 쓰지 않는다. */
+  --goal-ink: #ff0000;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 55px;
+  gap: 8px 14px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.plot {
+  position: relative;
+  height: 122px;
+  min-width: 0;
+}
+.description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ruler {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  pointer-events: none;
+}
+.guides {
+  stroke: var(--rail-ink);
+  stroke-width: 1px;
+  opacity: 0.16;
+}
+.minorTicks {
+  stroke: var(--rail-tick);
+  stroke-width: 1px;
+}
+.majorTicks {
+  stroke: var(--rail-ink);
+  stroke-width: 1.2px;
+  opacity: 0.55;
+}
+.endTicks {
+  stroke: var(--rail-ink);
+  stroke-width: 1px;
+  opacity: 0.5;
+}
+.track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--blue) 7%, var(--card));
+  border-radius: 99px;
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--blue) 6%, transparent);
+}
+.currentTrack { top: 43px; }
+.targetTrack { top: 77px; height: 3px; }
+.currentFill,
+.targetFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  transition: width 320ms ease;
+}
+.currentFill {
+  width: var(--current-position);
+  background: var(--rail-ink);
+}
+.targetFill {
+  width: var(--target-position);
+  background: var(--goal-ink);
+}
+.currentMarker,
+.targetMarker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  z-index: 1;
+  transition: left 320ms ease;
+}
+.currentMarker {
+  left: var(--current-position);
+  width: 13px;
+  height: 13px;
+  background: var(--rail-ink);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--blue) 18%, transparent), 0 2px 5px color-mix(in srgb, var(--blue) 20%, transparent);
+}
+.currentMarker::before,
+.targetMarker::before {
+  content: "";
+  position: absolute;
+  width: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--blue) 40%, transparent);
+}
+.currentMarker::before { bottom: 11px; height: 10px; }
+.targetMarker {
+  top: 77px;
+  left: var(--target-position);
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 1.5px solid var(--goal-ink);
+  background: var(--card);
+  box-shadow: 0 0 0 2px var(--card);
+  cursor: help;
+}
+.targetMarker::after { content: ""; position: absolute; inset: -8px; }
+.targetMarker:focus-visible { outline: 2px solid var(--goal-ink); outline-offset: 4px; }
+.targetMarker::before { top: 10px; height: 11px; background: var(--goal-ink); }
+.targetMarker:not([data-final])::before { display: none; }
+.rails[data-dense] .targetMarker { width: 3px; height: 9px; border: 0; border-radius: 0; background: var(--goal-ink); box-shadow: none; }
+.goalTooltip {
+  max-width: min(320px, calc(100vw - 24px));
+  border: 1px solid color-mix(in srgb, #ff0000 25%, var(--card));
+  background: var(--card);
+  color: #ff0000;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 10%);
+}
+.goalTooltip p { margin: 2px 0; }
+.goalTooltip small { color: var(--text-dim); font-size: 10px; }
+.goalTooltip > [aria-hidden="true"] { background: var(--card); }
+.annotation {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  height: 26px;
+  gap: 7px;
+  padding: 0 8px 0 0;
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--card));
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--rail-ink);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  z-index: 2;
+  transition: left 320ms ease, transform 320ms ease;
+}
+.currentAnnotation {
+  top: 0;
+  left: var(--current-position);
+  transform: translateX(calc(-1 * var(--current-position)));
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--blue) 5%, transparent);
+}
+.targetAnnotation {
+  top: 96px;
+  left: var(--target-position);
+  transform: translateX(calc(-1 * var(--target-position)));
+  border-color: color-mix(in srgb, var(--goal-ink) 20%, var(--card));
+  color: var(--goal-ink);
+}
+.annotationTag {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px 0 0 4px;
+  background: var(--rail-ink);
+  color: white;
+}
+.targetAnnotation .annotationTag {
+  background: color-mix(in srgb, var(--goal-ink) 9%, var(--card));
+  color: var(--goal-ink);
+  border-right: 1px solid color-mix(in srgb, var(--goal-ink) 16%, var(--card));
+}
+.blockName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 550;
+}
+.values { position: relative; color: var(--rail-ink); }
+.currentValue,
+.targetValue {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+.currentValue { top: 43px; }
+.targetValue { top: 77px; color: var(--goal-ink); }
+.values b { font-size: 16px; font-weight: 650; letter-spacing: -0.04em; }
+.values small { font-size: 10px; font-weight: 450; }
+.targetValue b { font-size: 13px; font-weight: 550; }
+.scale {
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  grid-column: 1;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.scaleTick { position: absolute; transform: translateX(-50%); opacity: 0.55; }
+.goalTick { color: var(--goal-ink); font-weight: 650; opacity: 1; }
+.rails[data-planned="false"] .annotation {
+  border-color: var(--line);
+  color: var(--text-dim);
+  box-shadow: none;
+}
+.rails[data-planned="false"] .annotationTag {
+  background: var(--bg-soft);
+  color: var(--text-dim);
+}
+@container (max-width: 420px) {
+  .fractionTick { display: none; }
+}
+@media (max-width: 720px) {
+  .rails { grid-template-columns: minmax(0, 1fr) 46px; column-gap: 12px; }
+  .values b { font-size: 14px; }
+  .targetValue b { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .currentFill, .targetFill, .currentMarker, .targetMarker,
+  .annotation { transition: none; }
+}

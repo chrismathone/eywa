@@ -6,11 +6,13 @@ import { buildPeriodMatcher } from "@/features/classes/grid-slots";
 import { periodSoloLabel } from "@/features/timetable/lib/periods";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
+  LAB_ROOM_LABEL,
   SPECIAL_SLOT_LABELS,
   parseSeatValue,
   seatSelectValue,
   specialSlotLabel,
 } from "@/features/timetable/lib/teacher-label";
+import { LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS } from "@/features/timetable/lib/lab-separate";
 import { readableTextColor } from "@/lib/color-utils";
 
 type Period = { id: string; startTime: string; endTime: string; label?: string };
@@ -23,7 +25,12 @@ type InitialSlot = {
   classroomId?: string | null;
   /** 저장된 표시 라벨 — 자리(LAB·JJ)면 드롭다운이 그 자리로 열린다. */
   slotTeacherLabel?: string | null;
+  /** LAB '따로 수업(*LAB)' 표식(0271a). */
+  labSeparate?: boolean;
 };
+
+/** 담당 칸 값 중 LAB 자리. 표식 토글은 이 값일 때만 선다. */
+const LAB_SEAT_VALUE = seatSelectValue(LAB_ROOM_LABEL);
 
 /**
  * 읽어주기·목록에 쓰는 교시 이름 — 학원설정 이름 → (내장표면) "N교시" → **이름을 비웠으면 시간대**.
@@ -37,6 +44,9 @@ const periodName = (p: Period) => periodSoloLabel(p);
  */
 const periodCellName = (p: Period) => (typeof p.label === "string" ? p.label.trim() : p.id);
 type Opt = { id: string; name: string };
+/** 담당 선택지 — 강사 퍼스널 색(users.bg_color·text_color, 0054a)을 함께 싣는다. 없으면 반 색으로 칠한다. */
+type TeacherOpt = Opt & { bgColor?: string | null; textColor?: string | null };
+type Fill = { bg: string; text: string };
 
 const DAYS = [
   { key: "mon", label: "월" },
@@ -74,15 +84,20 @@ export function ScheduleGrid({
   allowSeats,
   outsideCount = 0,
   onJumpToOutside,
+  labSeparateEnabled = false,
 }: {
   weekdayPeriods: Period[];
   weekendPeriods: Period[];
   initial: InitialSlot[];
   /** 반 담임(폼에서 lift) — 셀 기본 표시 이름 + 부담임 드롭다운의 "담임" 기본값. */
   teacherId: string | null;
-  teacherOptions: Opt[];
+  teacherOptions: TeacherOpt[];
   classroomOptions: Opt[];
-  /** 반 색(폼 라이브 값) — 선택 셀을 이 색으로 미리보기(시간표와 동일). 없으면 기본 초록. */
+  /**
+   * 반 색(폼 라이브 값) — **자리(LAB·JJ) 칸**과 퍼스널 색이 없는 강사 칸만 이 색으로 칠한다.
+   * 강사 칸은 그 강사의 퍼스널 색(원장 2026-09-18 *"주간 스케줄 색상을 선생님 고유 컬러 색으로
+   * (반색상은 선생님이 아닌 랩실 등에만)"* — 통합뷰 칸과 같은 색). 둘 다 없으면 기본 브랜드색.
+   */
   bgColor?: string | null;
   /**
    * 담당 드롭다운에 **자리(JJ·LAB)** 를 선택지로 넣을지(영어 전용). 자리는 사람이 아니라 방이라
@@ -98,6 +113,12 @@ export function ScheduleGrid({
   outsideCount?: number;
   /** 배지를 눌렀을 때 아래 '시각 직접 입력'으로 데려간다(없으면 배지는 눌리지 않는 표시만). */
   onJumpToOutside?: () => void;
+  /**
+   * LAB 교시 옆 **'따로 수업(*LAB)' 토글**을 세우고 값을 보낼지(원장 2026-09-17). 끄면 토글도 hidden도 없다 —
+   * 서버가 기존 값을 승계한다. 표식을 못 읽었거나(0271a 미적용·조회 실패) 생성 폼이면 끈다(모른 채 "꺼짐"을
+   * 보내면 켜 둔 표식이 저장 한 번에 꺼진다).
+   */
+  labSeparateEnabled?: boolean;
 }) {
   const weekdayById = useMemo(() => new Map(weekdayPeriods.map((p) => [p.id, p])), [weekdayPeriods]);
   const weekendById = useMemo(() => new Map(weekendPeriods.map((p) => [p.id, p])), [weekendPeriods]);
@@ -113,6 +134,7 @@ export function ScheduleGrid({
     const sel = new Set<string>();
     const st: Record<string, string> = {};
     const sc: Record<string, string> = {};
+    const ls: Record<string, boolean> = {};
     for (const s of initial) {
       const id = (isWeekendDay(s.dayOfWeek) ? matchWeekend : matchWeekday)(s);
       if (!id) continue;
@@ -120,18 +142,24 @@ export function ScheduleGrid({
       sel.add(k);
       // 자리(LAB·JJ)는 teacher_id가 비어 있고 라벨에만 있다 — 라벨을 먼저 본다(안 그러면 화면이
       // "담임 (미정)"으로 열리고, 그대로 저장하면 자리 배치가 조용히 지워진다).
-      const seat = specialSlotLabel(s.slotTeacherLabel);
+      // 초안 복원은 자리를 라벨이 아니라 담당 칸 값(`seat:LAB`)으로만 들고 온다 — 둘 다 본다(리뷰 2026-09-17).
+      const seat = specialSlotLabel(s.slotTeacherLabel) ?? parseSeatValue(s.teacherId);
       if (seat) st[k] = seatSelectValue(seat);
       else if (s.teacherId) st[k] = s.teacherId;
       if (s.classroomId) sc[k] = s.classroomId;
+      if (seat === LAB_ROOM_LABEL && s.labSeparate) ls[k] = true;
     }
-    return { sel, st, sc };
+    return { sel, st, sc, ls };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 시 한 번만(이후 사용자 선택 보존)
   }, []);
 
   const [selected, setSelected] = useState<Set<string>>(initState.sel);
   const [slotTeacher, setSlotTeacher] = useState<Record<string, string>>(initState.st);
   const [slotClassroom, setSlotClassroom] = useState<Record<string, string>>(initState.sc);
+  // LAB '따로 수업(*LAB)' 표식 — 칸 키 → 켜짐. LAB이 아닌 칸의 값은 안 남긴다(아래 setTeacher·toggle).
+  const [labSeparate, setLabSeparate] = useState<Record<string, boolean>>(initState.ls);
+  // 토글을 못 여는 폼이면 칸도 평소 LAB으로 그린다(보내지도 않는 값을 켜진 것처럼 보이지 않게).
+  const isLabSeparateCell = (k: string) => labSeparateEnabled && slotTeacher[k] === LAB_SEAT_VALUE && labSeparate[k] === true;
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSeatOptions, setShowSeatOptions] = useState(true);
 
@@ -141,6 +169,26 @@ export function ScheduleGrid({
   const homeTeacherName = teacherNameOf(teacherId);
   const classroomNameOf = (id: string | null | undefined) =>
     id ? (classroomOptions.find((c) => c.id === id)?.name ?? null) : null;
+
+  // 강사 id → 퍼스널 색. 칸마다 find를 돌지 않게 한 번 접는다.
+  const teacherFillById = useMemo(() => {
+    const m = new Map<string, Fill>();
+    for (const t of teacherOptions)
+      if (t.bgColor) m.set(t.id, { bg: t.bgColor, text: t.textColor || readableTextColor(t.bgColor) });
+    return m;
+  }, [teacherOptions]);
+  /**
+   * 선택 칸의 색 — 담당이 **사람**이면 그 강사의 퍼스널 색, **자리(LAB·JJ)**면 반 색.
+   * 퍼스널 색이 없는 강사도 반 색으로 떨어진다(칸이 무색이 되면 선택했는지가 안 보인다). 둘 다 없으면 null.
+   */
+  const cellFill = (k: string): Fill | null => {
+    const override = slotTeacher[k];
+    const isSeat = override ? parseSeatValue(override) !== null : false;
+    const personId = isSeat ? null : (override ?? teacherId);
+    const personal = personId ? teacherFillById.get(personId) : undefined;
+    if (personal) return personal;
+    return bgColor ? { bg: bgColor, text: readableTextColor(bgColor) } : null;
+  };
 
   // 유효 선택(현재 교시표 기준 — 요일 종류별로 그 교시가 존재해야), 요일→교시 순 정렬.
   const activeKeys = useMemo(
@@ -188,16 +236,30 @@ export function ScheduleGrid({
         delete n[k];
         return n;
       });
+      setLabSeparate((prev) => {
+        const n = { ...prev };
+        delete n[k];
+        return n;
+      });
     }
   };
 
-  const setTeacher = (k: string, v: string) =>
+  const setTeacher = (k: string, v: string) => {
     setSlotTeacher((prev) => {
       const n = { ...prev };
       if (v) n[k] = v;
       else delete n[k];
       return n;
     });
+    // LAB을 풀면 표식도 함께 끈다 — 남겨 두면 다시 LAB으로 되돌릴 때 예전 표식이 유령처럼 되살아난다.
+    if (v !== LAB_SEAT_VALUE)
+      setLabSeparate((prev) => {
+        if (!prev[k]) return prev;
+        const n = { ...prev };
+        delete n[k];
+        return n;
+      });
+  };
   const setClassroom = (k: string, v: string) =>
     setSlotClassroom((prev) => {
       const n = { ...prev };
@@ -269,7 +331,7 @@ export function ScheduleGrid({
                     const on = activeSet.has(k);
                     const override = slotTeacher[k];
                     const eff = override ? teacherNameOf(override) : homeTeacherName;
-                    const preview = on && bgColor;
+                    const fill = on ? cellFill(k) : null;
                     return (
                       <td key={d.key} className="border-border border-b border-r p-0 last:border-r-0">
                         <button
@@ -277,18 +339,23 @@ export function ScheduleGrid({
                           aria-pressed={on}
                           aria-label={`${d.label} ${periodName(p)}`}
                           onClick={() => toggle(d.key, p.id)}
-                          style={preview ? { background: bgColor, color: readableTextColor(bgColor) } : undefined}
+                          style={fill ? { background: fill.bg, color: fill.text } : undefined}
                           className={`block h-9 w-full px-0.5 transition ${
                             on
-                              ? preview
+                              ? fill
                                 ? `hover:brightness-95 ${override ? "ring-2 ring-inset ring-purple-700" : ""}`
                                 : `${override ? "bg-purple/85 hover:bg-purple" : "bg-primary/85 hover:bg-primary"} text-primary-foreground`
                               : "hover:bg-muted text-transparent"
                           }`}
                           title={on && override ? `부담임 · ${eff}` : undefined}
                         >
-                          <span className="block truncate text-xs font-bold leading-none">
-                            {on ? (eff ?? "●") : "·"}
+                          {/* leading-tight — `*LAB` 밑줄이 줄 상자 밖으로 나가 truncate(overflow)에 잘리지 않게(leading-none이면 잘린다). */}
+                          <span
+                            className={`block truncate text-xs font-bold leading-tight ${
+                              on && isLabSeparateCell(k) ? LAB_SEPARATE_TEXT_CLASS : ""
+                            }`}
+                          >
+                            {on ? (isLabSeparateCell(k) ? LAB_SEPARATE_LABEL : (eff ?? "●")) : "·"}
                           </span>
                         </button>
                       </td>
@@ -313,6 +380,10 @@ export function ScheduleGrid({
           <input type="hidden" name={`schedule_end_${i}`} value={r.end} />
           <input type="hidden" name={`schedule_teacher_${i}`} value={slotTeacher[r.key] ?? ""} />
           <input type="hidden" name={`schedule_classroom_${i}`} value={slotClassroom[r.key] ?? ""} />
+          {/* 표식은 **켤 수 있는 폼에서만** 보낸다 — 안 보내면 서버가 기존 값을 승계한다(labSeparateEnabled 주석). */}
+          {labSeparateEnabled ? (
+            <input type="hidden" name={`schedule_labsep_${i}`} value={isLabSeparateCell(r.key) ? "1" : "0"} />
+          ) : null}
         </div>
       ))}
 
@@ -374,31 +445,63 @@ export function ScheduleGrid({
               </label>
             ) : null}
           </div>
-          {rows.map((r) => (
-            <div key={r.key} className="flex flex-wrap items-center gap-2">
-              {/* 교시 이름이 길어질 수 있어(예 "EiE 4교시") 고정폭 대신 최소폭 + 줄바꿈 없음. */}
-              <span className="text-foreground min-w-16 shrink-0 whitespace-nowrap text-xs font-medium">
-                {DAY_LABEL[r.day]} {r.name}
-              </span>
-              <SearchableSelect
-                className="w-40"
-                value={slotTeacher[r.key] ?? ""}
-                onValueChange={(v) => setTeacher(r.key, v)}
-                options={teacherSelectOptions}
-                ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강사`}
-              />
-              <SearchableSelect
-                className="w-40"
-                value={slotClassroom[r.key] ?? ""}
-                onValueChange={(v) => setClassroom(r.key, v)}
-                options={classroomSelectOptions}
-                ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강의실`}
-              />
-              {slotClassroom[r.key] ? (
-                <span className="text-text-faint text-xs">{classroomNameOf(slotClassroom[r.key])}</span>
-              ) : null}
-            </div>
-          ))}
+          {rows.map((r) => {
+            const showLabToggle = labSeparateEnabled && slotTeacher[r.key] === LAB_SEAT_VALUE;
+            return (
+              <div key={r.key} className="flex flex-wrap items-center gap-2">
+                {/* 교시 이름이 길어질 수 있어(예 "EiE 4교시") 고정폭 대신 최소폭 + 줄바꿈 없음. */}
+                <span className="text-foreground min-w-16 shrink-0 whitespace-nowrap text-xs font-medium">
+                  {DAY_LABEL[r.day]} {r.name}
+                </span>
+                <SearchableSelect
+                  className="w-40"
+                  value={slotTeacher[r.key] ?? ""}
+                  onValueChange={(v) => setTeacher(r.key, v)}
+                  options={teacherSelectOptions}
+                  ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강사`}
+                />
+                <SearchableSelect
+                  className="w-40"
+                  value={slotClassroom[r.key] ?? ""}
+                  onValueChange={(v) => setClassroom(r.key, v)}
+                  options={classroomSelectOptions}
+                  ariaLabel={`${DAY_LABEL[r.day]} ${r.name} 강의실`}
+                />
+                {/* 강의실 이름 칸은 최소폭을 잡는다 — 뒤에 서는 '따로 수업' 토글이 행마다 같은 자리에 오게. */}
+                {slotClassroom[r.key] || showLabToggle ? (
+                  <span className="text-text-faint min-w-[5.5rem] shrink-0 whitespace-nowrap text-xs">
+                    {classroomNameOf(slotClassroom[r.key])}
+                  </span>
+                ) : null}
+                {/* 랩실 토글은 **줄 맨 끝**(강의실 옆) — 가운데 끼우면 LAB 행만 강의실 칸이 밀려 열이 어긋난다
+                    (원장 2026-09-18). 켜면 시간표 칸이 `*LAB`(밑줄 + 이탤릭)이 된다(원장 2026-09-17). */}
+                {showLabToggle ? (
+                  <button
+                    type="button"
+                    aria-pressed={labSeparate[r.key] === true}
+                    onClick={() => setLabSeparate((prev) => ({ ...prev, [r.key]: !prev[r.key] }))}
+                    aria-label={`${DAY_LABEL[r.day]} ${r.name} 따로 수업(*LAB)`}
+                    className={`inline-flex h-(--control-h) items-center gap-1.5 rounded-lg border px-2 text-xs font-bold transition ${
+                      labSeparate[r.key]
+                        ? "border-blue bg-blue-soft text-blue"
+                        : "border-line text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <span
+                      aria-hidden
+                      className={`relative inline-block h-3.5 w-6 rounded-full transition ${labSeparate[r.key] ? "bg-blue" : "bg-neutral-fill"}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 size-2.5 rounded-full bg-white transition-all ${labSeparate[r.key] ? "left-3" : "left-0.5"}`}
+                      />
+                    </span>
+                    따로 수업
+                    <span className={labSeparate[r.key] ? LAB_SEPARATE_TEXT_CLASS : "opacity-50"}>{LAB_SEPARATE_LABEL}</span>
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

@@ -36,7 +36,7 @@ const ENROLL_OUTCOME_LABEL: Record<string, string> = {
   scheduled: "예약",
   consulted: "상담완료",
   ai_done: "AI 완료",
-  enrolled: "재원생 등록",
+  enrolled: "재원생 등록 완료", // 원장 2026-09-18 — 등록상담 정본과 같은 문자열
   declined: "거절",
   no_show: "노쇼",
 };

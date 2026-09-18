@@ -106,6 +106,8 @@ export type ClassAxisRow = {
   subject: string;
   /** 수업보고서 미발송(0174a) — 출결 파생의 "보고서 없음 = 결석" 규칙을 끄는 데 쓴다. */
   reportOptout: boolean;
+  /** 특강 토글(`classes.is_special`, 0133a) **그대로** — 판정은 이름 폴백까지 보는 `isSpecialLecture()`로. */
+  isSpecial: boolean;
   /** 반 담임(`classes.teacher_id`). */
   teacherId: string | null;
   teacherName: string | null;
@@ -134,7 +136,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     fetchAllPaged<ClassSelectRow>((f, t) =>
       supabase
         .from("classes")
-        .select("id, class_name, subject, report_optout, closed_at, teacher:teacher_id ( id, display_name, status )")
+        .select("id, class_name, subject, report_optout, is_special, closed_at, teacher:teacher_id ( id, display_name, status )")
         .eq("is_active", true)
         .order("class_name")
         .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
@@ -169,6 +171,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
       className: c.class_name as string,
       subject: c.subject as string,
       reportOptout: (c as { report_optout?: boolean | null }).report_optout === true,
+      isSpecial: (c as { is_special?: boolean | null }).is_special === true,
       teacherId: homeroomTeacherId,
       teacherName: teacher?.display_name ?? null,
       // 담임이 퇴직(inactive)이어도 반은 살려 둔다 — 재원생이 다니는 반을 숨기면 출결을 찍을 길이 없다.

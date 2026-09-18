@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { isCurrentSlot, type PriorSlot } from "../schedule-preserve";
+import { lookupLabSeparateIds } from "./lab-separate";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
@@ -26,25 +27,41 @@ export async function loadCurrentSlots(
   supabase: Db,
   classId: string,
   today: string,
-): Promise<{ rows?: PriorSlot[]; error?: string }> {
+): Promise<{
+  rows?: PriorSlot[];
+  error?: string;
+  /**
+   * 0271a '따로 수업(*LAB)' 칸을 읽었는가. false면 호출부는 **insert에서 `lab_separate`를 빼고** 폼 값도
+   * 무시한다 — 칸이 없는 DB에 키를 실으면 delete 뒤 insert 전체가 실패해 그 반의 교시가 사라진다([[#95]]).
+   */
+  labSeparateSupported?: boolean;
+}> {
   // 한 반의 슬롯 = 요일×교시라 수십 행 상한(폼 파서도 80 상한) → 페이징 불필요.
-  const { data, error } = await supabase
-    .from("class_schedules")
-    .select(
-      // teacher_id·classroom_id는 **이력 판정용**(담당·강의실이 바뀌면 옛 값을 마감 행으로 남긴다,
-      // planSlotArchives). 빠뜨리면 변경 감지가 항상 "안 바뀜"이 돼 이력이 조용히 안 쌓인다.
-      "day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label, period_label, merge_group",
-    )
-    .eq("class_id", classId)
-    .or(currentFilter(today))
-    // 결정적 순서 — 무기한·최신 행이 먼저 소비되게(정렬 없는 shift()는 DB 물리순서 의존이라 재현 불가).
-    .order("valid_to", { ascending: false, nullsFirst: true })
-    .order("valid_from", { ascending: false })
-    .order("start_time");
-  if (error) {
+  // 표식은 **따로 fail-soft로** 받는다(lab-separate.ts 주석) — 이 조회에 컬럼을 끼우면 0271a 전엔 저장이 전부 막힌다.
+  const [{ data, error }, labLookup] = await Promise.all([
+    supabase
+      .from("class_schedules")
+      .select(
+        // teacher_id·classroom_id는 **이력 판정용**(담당·강의실이 바뀌면 옛 값을 마감 행으로 남긴다,
+        // planSlotArchives). 빠뜨리면 변경 감지가 항상 "안 바뀜"이 돼 이력이 조용히 안 쌓인다.
+        "id, day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label, period_label, merge_group",
+      )
+      .eq("class_id", classId)
+      .or(currentFilter(today))
+      // 결정적 순서 — 무기한·최신 행이 먼저 소비되게(정렬 없는 shift()는 DB 물리순서 의존이라 재현 불가).
+      .order("valid_to", { ascending: false, nullsFirst: true })
+      .order("valid_from", { ascending: false })
+      .order("start_time"),
+    lookupLabSeparateIds(supabase, { kind: "class", classId }),
+  ]);
+  // 🔴 표식 조회의 **일시 실패**도 멈춘다 — "칸 없음"으로 읽고 진행하면 delete 뒤 재insert가 기본값(false)으로
+  //    그 반의 '따로 수업(*LAB)' 표식을 전부 조용히 끈다(적대적 리뷰 2026-09-17). 칸이 없는 것만 "지원 안 함"이다.
+  if (error || labLookup === "error") {
     return { error: "기존 시간표를 읽지 못해 저장을 중단했습니다. 잠시 후 다시 시도해주세요." };
   }
+  const labIds = labLookup === "missing" ? null : labLookup.ids;
   return {
+    labSeparateSupported: labIds !== null,
     rows: (data ?? [])
       // DB 필터를 한 번 더 코드에서 확인 — 만료 행이 한 줄이라도 섞이면 옛 라벨이 되살아난다.
       .filter((r) => isCurrentSlot(r.valid_to, today))
@@ -60,6 +77,7 @@ export async function loadCurrentSlots(
         slotRoomLabel: r.slot_room_label,
         periodLabel: r.period_label,
         mergeGroup: r.merge_group,
+        ...(labIds ? { labSeparate: labIds.has(String(r.id)) } : {}),
       })),
   };
 }

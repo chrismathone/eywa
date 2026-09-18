@@ -1502,6 +1502,21 @@ export function auditDetail(
     }
     // ── 범위 확대(2026-09-14) — 계획 줄 칸 · 수학 시트 월간 목표 · 자리 JJ 칸(칸을 떠날 때 한 줄) ───────────
     // 칸 이름은 기록 때 한글 스냅샷(fieldLabel)으로 실려 오고, 구분(영역)도 라벨로 바뀌어 온다(raw 키 없음).
+    case "mcs_learning_goal_reset":
+      return join(
+        `학생 ${arr(m.studentIds).length}명 전체 목표 초기화`,
+        m.track === "supplement" ? "수요일 복습" : "정규",
+        str(m.startDate) ? `${m.startDate} 시작분` : null,
+        typeof m.removed === "number" ? `${m.removed}건 삭제` : null,
+      );
+    case "mcs_learning_goal_save":
+      return join(
+        `학생 ${arr(m.studentIds).length}명 전체 목표`,
+        str(m.studyGrade),
+        str(m.startDate) && str(m.endDate) ? `${m.startDate} ~ ${m.endDate}` : null,
+        str(m.startBlock) && str(m.endBlock) ? `${m.startBlock} → ${m.endBlock}` : null,
+        str(m.textbook),
+      );
     case "ecs_plan_cell_edit":
     case "mcs_goal_edit":
     case "seat_jj_mark_edit": {

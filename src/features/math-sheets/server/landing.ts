@@ -67,6 +67,7 @@ export type MathClassCard = {
    */
   shown: number;
   pct: number;
+  learningTrack?: "regular" | "supplement";
 };
 
 export type MathLandingEmptyReason = "no-classes" | "no-scoped-classes" | "no-month-classes";
@@ -150,7 +151,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
   const [classRes, filter, settings] = await Promise.all([
     admin
       .from("classes")
-      .select("id, class_name, teacher_id, is_special")
+      .select("id, class_name, teacher_id, is_special, math_learning_track")
       .eq("tenant_id", tenantId)
       .eq("subject", "math")
       .eq("is_active", true)
@@ -336,6 +337,7 @@ export async function getMathSheetLanding(monthRaw: string | null): Promise<Math
       written: fill.written,
       shown: fill.written + fill.unwritten,
       pct: fill.pct,
+      learningTrack: c.math_learning_track === "supplement" ? "supplement" : "regular",
     });
   }
 

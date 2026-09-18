@@ -41,7 +41,10 @@ import {
 } from "@/features/classes/list-prefs";
 import {
   CLASS_STATUS_DEFAULT,
+  classKindMeta,
   classStatusMeta,
+  KIND_FILTERS,
+  parseClassKind,
   parseClassSort,
   parseClassStatus,
   parseClassView,
@@ -67,6 +70,7 @@ export default async function ClassesPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    kind?: string;
     subject?: string;
     teacher?: string;
     days?: string;
@@ -97,6 +101,8 @@ export default async function ClassesPage({
   const status = parseClassStatus(sp.status);
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
+  // 구분(정규/특강) — 과목과 같은 결의 보기 필터(계정 저장). 선택지가 고정 셋이라 저장값 검증이 따로 필요 없다(파서가 접는다).
+  const kind = parseClassKind(sp.kind ?? prefs.kind);
   const subjectRaw = sp.subject ?? prefs.subject;
   const teacherRaw = sp.teacher ?? prefs.teacher;
   // 요일(다중, 콤마구분) — `days=all`은 파서가 빈 배열로 접는다(전체를 URL에 **명시**하는 값, HeaderDayFilter 주석).
@@ -142,7 +148,7 @@ export default async function ClassesPage({
   }
 
   const [{ rows: classes, total }, stats, [teachers, settings]] = await Promise.all([
-    getClassesPage({ subject, teacherId, days, q, sort, status }, page, PAGE_SIZE),
+    getClassesPage({ kind, subject, teacherId, days, q, sort, status }, page, PAGE_SIZE),
     statsPromise,
     optionsPromise,
   ]);
@@ -165,6 +171,8 @@ export default async function ClassesPage({
   // 저장할 보기 설정 — 🔴 **사용자가 고른 값(URL) 또는 이미 저장된 값**만(선택지 밖 보정은 이 화면 한정, 계정에 안 쓴다).
   // 🔑 저장값과 **같은 파서**를 지난다(`?subject=` 같은 빈 값을 원문 그대로 두면 저장값과 영영 달라 렌더마다 저장한다).
   const current: ClassListPrefs = parseClassListPrefs({
+    // 모르는 값(옛 링크)은 보여 주기만 기본값 — 저장값은 건드리지 않는다(아래 정렬·보기와 같은 규약).
+    kind: sp.kind === undefined || parseClassKind(sp.kind) === sp.kind ? kind : prefs.kind,
     subject: sp.subject ?? prefs.subject,
     teacher: teacherReset ? "all" : (sp.teacher ?? prefs.teacher),
     days,
@@ -182,6 +190,8 @@ export default async function ClassesPage({
     const params = new URLSearchParams();
     const st = patch.status ?? status;
     if (st !== CLASS_STATUS_DEFAULT) params.set("status", st);
+    if (sp.kind !== undefined) params.set("kind", sp.kind);
+    else if (kind !== "all") params.set("kind", kind);
     if (sp.subject !== undefined) params.set("subject", sp.subject);
     else if (subject !== "all") params.set("subject", subject);
     if (teacherReset) params.set("teacher", "all"); // 푼 담임은 링크에서도 전체(옛 필터바의 URL 되돌림과 같은 뜻)
@@ -202,6 +212,16 @@ export default async function ClassesPage({
 
   // 열 머리 필터 한 벌 — 표 보기는 `<th>` 안에, 카드 보기는 격자 위 머리 줄에 **같은 것**이 선다(필터 코드를 두 벌 두지 않는다).
   const head = {
+    kind: (
+      <HeaderFilter
+        paramName="kind"
+        value={kind}
+        options={KIND_FILTERS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }))}
+        axisLabel={sheetT(lang, "cls.col.kind")}
+        allValue="all"
+        explicitAll
+      />
+    ),
     subject: (
       <HeaderFilter paramName="subject" value={subject} options={subjectOptions} axisLabel={sheetT(lang, "cls.filter.subject")} allValue="all" explicitAll />
     ),
@@ -314,7 +334,7 @@ export default async function ClassesPage({
   );
 }
 
-type HeadCells = { subject: React.ReactNode; sort: React.ReactNode; teacher: React.ReactNode; days: React.ReactNode; status: React.ReactNode };
+type HeadCells = { kind: React.ReactNode; subject: React.ReactNode; sort: React.ReactNode; teacher: React.ReactNode; days: React.ReactNode; status: React.ReactNode };
 
 /** 빈 상태 — 설명 문장 없이 제목만(§4). 기본 필터(운영)가 숨긴 것일 수 있어 '전체 상태로 보기' 링크 하나(폐지 42 · 종강 5 실재). */
 function emptyState(
@@ -350,11 +370,14 @@ function DayChips({
   days,
   barClass,
   stale = false,
+  center = false,
   lang,
 }: {
   days: ClassDaySlot[];
   barClass: string;
   lang: SheetLang;
+  /** 표 칸에서 가운데로 — 열 제목(가운데)과 같은 축에 선다. 폰 카드(`phone:`)에선 왼쪽 그대로. */
+  center?: boolean;
   /**
    * 지금 유효하지 않은 배치(운영 기간이 끝났거나 시작 전) — 흐리게 + 이유를 툴팁으로.
    * 🔴 진하게 그리면 "종료일을 넣었는데도 월~금 운영 중"으로 보인다([[#88]], 실측 7반).
@@ -366,7 +389,7 @@ function DayChips({
   const uniform = starts.length === days.length && new Set(starts).size === 1;
   return (
     <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-1"
+      className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${center ? "justify-center phone:justify-start" : ""}`}
       {...(stale ? { title: sheetT(lang, "cls.staleTitle") } : {})}
     >
       {/* 요일 원 = 글자 14(xs 바닥)에 24px — 종전 20px 원은 글자가 12px이었다(v5: 12px 이하 금지). */}
@@ -415,29 +438,37 @@ function TableView({
   empty: React.ReactNode;
   lang: SheetLang;
 }) {
-  const colCount = showTeacher ? 8 : 7;
+  const colCount = showTeacher ? 9 : 8;
   return (
     // 이 메뉴의 최소 창(1100)에 맞춘 고정 열(`table-fixed`)이라 창 안에선 가로 스크롤이 없다. 🔴 폰에서도 `overflow-x-auto` 상자로 싸지
     // 않는다(overflow-y까지 auto가 되어 열 머리 팝업이 잘린다 — 학생목록 주석). 폰(최상위 프레임 <768px)은 `.stack-rows`(globals.css)가
-    // 열 머리를 필터 칩 줄로, 행을 [과목 | 반 이름 | 상태] / [담임 · 강의실 · 요일 · 인원] / 메모 두세 줄 카드로 접는다(2026-09-13 모바일
+    // 열 머리를 필터 칩 줄로, 행을 [구분 · 과목 | 반 이름 | 상태] / [담임 · 강의실 · 요일 · 인원] / 메모 두세 줄 카드로 접는다(2026-09-13 모바일
     // 전수검사 — 그전엔 표 896px가 본문을 가로로 밀어 담임 뒤 열이 전부 화면 밖이었다). 칸의 자리는 `data-cell`이 정한다.
     // ⚠️ `max-md:min-w-[56rem]`은 **창(iframe) 안을 위해 남긴다**(학생목록 주석과 같은 이유 — 창을 768 아래로 스냅하면 종전대로 가로 스크롤).
     <div className="stack-rows bg-card shadow-card rounded-2xl">
       <table className="w-full table-fixed text-sm max-md:min-w-[56rem]">
-        {/* 열 폭 — 최소 창(1050 본문)에서 `상태: 종강 ⌄`(≈112px)가 들어가는 13% · 반 이름 22%(정렬 머리 + 18px 이름). */}
+        {/* 열 폭 — 최소 창(1050 본문)에서 **값이 걸린 열 머리**가 제 칸에 들어가는 폭(실측 2026-09-18): `상태: 종강 ⌄`(≈112px) 13% ·
+            `구분: 특강 ⌄`·`과목: 수학 ⌄`(≈96px) 10%씩(머리 칸 좌우 여백을 `px-1`로 줄여서) — 7%로 두면 34px가 옆 칸으로 넘쳐
+            제목이 값보다 23px 오른쪽에 섰다. 🔴 넘친 머리는 가운데 정렬이 안 먹어(넘치면 왼쪽부터 선다) 이 열의 요청 자체가 깨진다.
+            요일 20%는 요일마다 시각이 다른 두 요일(`월16:20 목17:00`)이 한 줄에 서는 폭 — 그 몫을 메모(7%, 전문은 마우스 오버)에서 냈다. */}
         <colgroup>
-          <col className="w-[8%]" />
-          <col className={showTeacher ? "w-[22%]" : "w-[30%]"} />
-          {showTeacher ? <col className="w-[10%]" /> : null}
           <col className="w-[10%]" />
-          <col className={showTeacher ? "w-[20%]" : "w-[22%]"} />
+          <col className="w-[10%]" />
+          <col className={showTeacher ? "w-[18%]" : "w-[26%]"} />
+          {showTeacher ? <col className="w-[8%]" /> : null}
+          <col className="w-[8%]" />
+          <col className="w-[20%]" />
           <col className="w-[6%]" />
           <col className="w-[13%]" />
-          <col className="w-[11%]" />
+          <col className="w-[7%]" />
         </colgroup>
         <thead className="border-line border-b">
-          {/* 열 제목은 가운데(데이터 표 규약 2026-08-05) — 본문 값은 좌측 그대로. */}
-          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap">
+          {/* 🔴 열 제목과 본문 값은 **같은 축(가운데)**에 선다(원장 2026-09-18 *"행제목과 밑에 내용이 어긋난거 같은데 정렬해주고"*) —
+              08-05 표 규약은 "제목만 가운데, 본문은 왼쪽"이었는데 이 표는 칸이 넓어 제목과 값이 서로 다른 자리에 섰다
+              (반 이름 제목이 값보다 80px 오른쪽). 폰 카드(`.stack-rows`)는 globals.css가 전부 왼쪽으로 되돌린다. */}
+          {/* 앞 두 칸(구분·과목)은 좌우 여백을 줄인다 — `!`로 덮지 말 것(레이어 안 important가 폰 카드의 `padding:0 !important`를 이긴다). */}
+          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap [&>th:nth-child(-n+2)]:px-1">
+            <th scope="col">{head.kind}</th>
             <th scope="col">{head.subject}</th>
             <th scope="col">
               <span className="flex flex-wrap items-center justify-center gap-1">
@@ -470,14 +501,19 @@ function TableView({
           ) : null}
           {classes.map((c) => {
             const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
+            const kind = classKindMeta(c);
             const st = classStatusMeta(c);
             return (
-              <tr key={c.id} className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
+              <tr key={c.id} className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5 [&>td]:text-center">
+                {/* 구분·과목은 둘 다 앞 알약 — 폰 카드에서도 첫 줄 머리에 나란히 선다(`lead`). */}
+                <td data-cell="lead">
+                  <Pill color={kind.color}>{sheetT(lang, kind.key)}</Pill>
+                </td>
                 <td data-cell="lead">
                   <Pill color={meta.color}>{meta.label}</Pill>
                 </td>
                 <td data-cell="primary">
-                  <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="phone:justify-start flex min-w-0 items-center justify-center gap-1.5">
                     {/* 반 이름은 1차 식별자(18px 굵게) — 좁으면 잘리되 전문은 마우스 오버(title). */}
                     <WindowLink
                       href={`/classes/${c.id}`}
@@ -499,13 +535,13 @@ function TableView({
                   <span className="block truncate">{c.classroomName ?? "—"}</span>
                 </td>
                 <td data-empty={c.days.length === 0 ? "true" : undefined}>
-                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} lang={lang} />
+                  <DayChips days={c.days} barClass={SUBJECT_SOLID[meta.color]} stale={c.daysStale} center lang={lang} />
                 </td>
-                <td className="text-foreground num text-right font-bold whitespace-nowrap">
+                <td className="text-foreground num font-bold whitespace-nowrap">
                   {c.studentCount}
                   {sheetT(lang, "cls.unit.people")}
                 </td>
-                <td className="text-center" data-cell="status">
+                <td data-cell="status">
                   <Pill color={st.color}>{sheetT(lang, st.key)}</Pill>
                 </td>
                 <td className="text-text-dim" data-cell="wide" data-empty={c.notes?.trim() ? undefined : "true"}>
@@ -546,6 +582,7 @@ function CardsView({
     <div className="space-y-3">
       {/* 카드 보기엔 표 머리가 없다 — 같은 열 머리 필터를 격자 위 한 줄에 세운다(필터가 보기마다 다른 자리에 있으면 안 된다). */}
       <div className="text-text-dim flex flex-wrap items-center gap-x-4 gap-y-1 px-2 text-sm font-bold">
+        {head.kind}
         {head.subject}
         {head.sort}
         {showTeacher ? head.teacher : null}
@@ -556,6 +593,7 @@ function CardsView({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {classes.map((c) => {
           const meta = { label: subjects.labelOf(c.subject), color: subjects.colorOf(c.subject) };
+          const kind = classKindMeta(c);
           const st = classStatusMeta(c);
           return (
             <WindowLink
@@ -565,6 +603,7 @@ function CardsView({
               className="bg-card shadow-card hover:shadow-card-hover flex flex-col gap-3 rounded-2xl p-5 transition"
             >
               <header className="flex items-center gap-2">
+                <Pill color={kind.color}>{sheetT(lang, kind.key)}</Pill>
                 <Pill color={meta.color}>{meta.label}</Pill>
                 <Pill color={st.color}>{sheetT(lang, st.key)}</Pill>
               </header>

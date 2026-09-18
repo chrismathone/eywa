@@ -89,7 +89,6 @@ function renderGrid(lockBefore: string | null = LOCK_BEFORE) {
       initial={src.initial}
       slotCounts={src.slotCounts}
       notMine={src.notMine}
-      alsoWrites={src.alsoWrites}
       lockBefore={lockBefore}
     >
       <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} lockBefore={lockBefore} />

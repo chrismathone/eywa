@@ -27,7 +27,7 @@ describe("buildGoalRail — Start·Plan·Now·End", () => {
   });
 
   it("계획 = Start~End를 수업일로 등분 · 4/8 지났으면 절반", () => {
-    // Start 470 → End 490(20차시). 8일 중 4일 지남 → Plan 480.
+    // Start 470 → End 490(20블록). 8일 중 4일 지남 → Plan 480.
     const r = buildGoalRail({
       startBefore: 470,
       goalEnd: 490,
@@ -41,10 +41,10 @@ describe("buildGoalRail — Start·Plan·Now·End", () => {
     expect(r.diff).toBe(-2);
     expect(r.status).toBe("behind");
     expect(r.progressPct).toBe(40);
-    expect(railDiffLabel(r)).toBe("2차시 느림");
+    expect(railDiffLabel(r)).toBe("2블록 느림");
   });
 
-  it("🔴 ±1차시는 계획대로 — 한 차시를 두 번에 나눠 하는 건 정상이다", () => {
+  it("🔴 ±1블록는 계획대로 — 한 블록를 두 번에 나눠 하는 건 정상이다", () => {
     expect(RAIL_TOLERANCE).toBe(1);
     const r = buildGoalRail({
       startBefore: 470,
@@ -67,7 +67,7 @@ describe("buildGoalRail — Start·Plan·Now·End", () => {
       today: "2026-08-13",
     });
     expect(r.status).toBe("ahead");
-    expect(railDiffLabel(r)).toBe("5차시 빠름");
+    expect(railDiffLabel(r)).toBe("5블록 빠름");
   });
 
   it("목표에 닿으면 done — 그 뒤로 더 나가도 느리다고 하지 않는다", () => {
@@ -80,7 +80,7 @@ describe("buildGoalRail — Start·Plan·Now·End", () => {
     });
     expect(r.status).toBe("done");
     expect(r.progressPct).toBe(100);
-    expect(railDiffLabel(r)).toBe("목표 도달 (+2차시)");
+    expect(railDiffLabel(r)).toBe("목표 도달 (+2블록)");
   });
 
   it("🔴 아직 수업이 한 번도 안 지났으면 판정하지 않는다(not-started)", () => {
@@ -123,7 +123,7 @@ describe("buildGoalRail — Start·Plan·Now·End", () => {
   });
 
   it("🔴 학년을 건너는 목표도 한 줄로 선다 — 중2 위치에서 중3 목표(트랙을 갈라 '목표 없음'이 되면 안 된다)", () => {
-    // 글로벌 위치라 시작 400(중2) → 목표 420(중3)은 그냥 20차시 구간이다. 4/8일 지남 → 계획 410.
+    // 글로벌 위치라 시작 400(중2) → 목표 420(중3)은 그냥 20블록 구간이다. 4/8일 지남 → 계획 410.
     const r = buildGoalRail({
       startBefore: 400,
       goalEnd: 420,
@@ -186,7 +186,7 @@ describe("railX — 레일 위 좌표", () => {
     expect(railX(r, r.now)).toBe(40);
   });
 
-  it("목표가 없으면 20차시를 가득으로 본다(종전 레일과 같은 눈금)", () => {
+  it("목표가 없으면 20블록를 가득으로 본다(종전 레일과 같은 눈금)", () => {
     const r = buildGoalRail({
       startBefore: 470,
       goalEnd: null,

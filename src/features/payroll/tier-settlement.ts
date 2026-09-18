@@ -5,6 +5,8 @@
 //   정산액 = floor(Σ 행 급여)
 // · 0.911 = 1 − 학원 수수료 8.9% (settlement.ts NET_MULTIPLIER와 동일 상수 — 두 값이 갈리면 안 된다)
 // · 비율 = 강사 × 과정(초등/중등/고등/수능/특강) — users.commission_rates(0130a), 없으면 commission_rate.
+// · 단가 = **회차 확정 단가**(그 달 회차가 전부 확정·시수 기준일 때, 수학 반) → 없으면 수강 티어 단가표
+//   (원장 2026-09-18 *"회차 확정에서 전부 결정하지 않았나?"* — 같은 단가를 두 곳에 따로 적던 것을 회차 확정으로 통일).
 // · floor1(소수 첫째 자리 내림) = 구 출석부 시트·D:\attendance salary.ts와 동일한 라운딩(학원 손해 방지).
 //   ⚠️ Math.round로 바꾸면 시트와 학생당 최대 1원씩 어긋나 합계가 수십 원 틀어진다 — 바꾸지 말 것.
 //
@@ -13,6 +15,12 @@
 
 import { NET_MULTIPLIER } from "./settlement";
 import type { GroupRates, SalaryGroup } from "./salary-group";
+
+/**
+ * 회차 확정 단가로 산정한 줄의 표시 라벨 — 수강 티어가 없거나 그 티어의 단가가 회차 단가와 다를 때.
+ * (명세서 스냅샷 `lines[].tierLabel`에 남는다. 화면엔 그리지 않는다.)
+ */
+export const SESSION_PRICE_LABEL = "회차 확정 단가";
 
 /** 소수 첫째 자리까지 내림 — 시트 급여칸과 같은 라운딩. */
 export function floor1(n: number): number {
@@ -37,15 +45,77 @@ export function tierSalaryGroup(label: string | null | undefined): SalaryGroup |
   return null;
 }
 
+/**
+ * 회차 단가로 **과정**(비율을 고를 축)을 정한다 — 그 단가를 가진 티어들의 과정에서 읽는다.
+ *
+ * 원장 2026-09-18 *"회차 확정에서 전부 결정하지 않았나?"* → 정산 단가를 회차 확정 단가로 통일(수학).
+ * 🔴 **반 이름으로 정하지 말 것** — '개별' 반은 학년이 섞여 있다(실측 2026-09: `고등M 개별 토`에 초등 단가 21,250,
+ *    `초등M 개별 BS1D`에 중등 단가 24,000). 단가가 곧 그 학생의 티어라 단가가 과정을 말한다(시트에서 티어를 고르던 것과 같다).
+ * 🔑 단가표는 **정규 티어와 특강 티어가 같은 금액을 나눠 쓴다**(21,250 = 초등 3T · 초등특강). 그래서 특강 여부는 **반**이 정하고
+ *    (반 과정이 '특강'이면 특강), 나머지는 특강 티어를 뺀 과정이 **하나로 모일 때만** 그 과정이다.
+ *    안 모이면(그 금액이 특강 전용 · 과정 없는 라벨뿐) 반 과정으로 폴백 — 그것도 없으면 null(기본 비율, 없으면 '비율 미설정').
+ */
+export function salaryGroupForPrice(
+  price: number,
+  classGroup: SalaryGroup | null,
+  unitPriceByTier: ReadonlyMap<string, number>,
+): SalaryGroup | null {
+  if (classGroup === "특강") return "특강";
+  const groups = new Set<SalaryGroup>();
+  for (const [label, p] of unitPriceByTier) {
+    if (p !== price) continue;
+    const g = tierSalaryGroup(label);
+    if (g && g !== "특강") groups.add(g);
+  }
+  return groups.size === 1 ? [...groups][0]! : classGroup;
+}
+
+/** 회차 행 한 줄(정산 단가 판정에 필요한 칸만). */
+export type SessionPriceTerm = {
+  confirmed_sessions: number | string | null;
+  unit_price: number | string | null;
+  pricing_mode: string | null;
+  quantity_basis: string | null;
+};
+
+/**
+ * 한 학생×반의 그 달 **회차 확정 단가** — 정산에 쓸 수 있을 때만 숫자, 아니면 null(수강 티어로 폴백).
+ * · 회차 행이 **전부** 확정(`confirmed_sessions`)·단가 있음 — 하나라도 미확정이면 아직 정한 게 아니다.
+ * · **회당 × 시수 기준**만(`per_session` + `attendance_units`) — 월 정액은 월 금액이고, 옛 일수 기준은 단위가 다르다
+ *   (티어 단가는 시수당이라 곱하는 축이 같아야 한다).
+ * · 청구서가 둘이라 단가가 갈리면 모른다(null) — 고르지 않는다.
+ */
+export function sessionPriceOf(terms: readonly SessionPriceTerm[]): number | null {
+  if (terms.length === 0) return null;
+  let price: number | null = null;
+  for (const t of terms) {
+    if (t.confirmed_sessions === null || t.unit_price === null) return null;
+    if ((t.pricing_mode ?? "per_session") !== "per_session") return null;
+    if (t.quantity_basis !== "attendance_units") return null;
+    const p = Number(t.unit_price);
+    if (!Number.isFinite(p) || p <= 0) return null;
+    if (price !== null && price !== p) return null;
+    price = p;
+  }
+  return price;
+}
+
 /** 정산 입력 1행 = (학생 × 반 × 티어)의 그 달 시수 합. */
 export type TierRow = {
   studentId: string;
   studentName: string;
   classId: string;
-  /** 티어 라벨(기록 예외 ?? 수강 티어). null = 미지정 → 그 학생은 산정 제외 + 명단 표시. */
+  /** 티어 라벨(기록 예외 ?? 수강 티어). null = 미지정 → 회차 단가도 없으면 산정 제외 + 명단 표시. */
   tierLabel: string | null;
   /** 출석 시수 합(결석·excused 제외). */
   units: number;
+  /**
+   * **회차 확정 단가**(원, 시수당) — 있으면 이 값이 단가다(원장 2026-09-18: 정산 단가를 회차 확정으로 통일, 수학).
+   * 없으면(null·생략) 종전대로 티어 단가. 조립([`collectTierRows`])이 `sessionPriceOf`로 정하고, 기록 예외 티어 줄엔 안 붙인다.
+   */
+  sessionPrice?: number | null;
+  /** 반의 급여 과정(수동 지정 ?? 반 이름) — 회차 단가로 과정을 정할 때 특강 판정·폴백에만 쓴다. */
+  classGroup?: SalaryGroup | null;
 };
 
 /**
@@ -58,8 +128,10 @@ export type TierSettlementLine = {
   classId: string;
   tierLabel: string;
   units: number;
-  /** 티어 단가(원). */
+  /** 적용 단가(원) — 회차 확정 단가 또는 티어 단가. */
   unitPrice: number;
+  /** 단가 출처 — `session` = 회차 확정 단가(2026-09-18~), `tier` = 수강 티어 단가표. */
+  priceSource: "session" | "tier";
   /** 이 행에 적용된 과정(초등/중등/…) — 비율을 어디서 가져왔는지 밝힌다. */
   group: SalaryGroup | null;
   /** 적용 비율(%). */
@@ -107,6 +179,13 @@ export type TierSettlementResult = {
   missingTierStudents: string[];
   /** 같은 학생들의 id — 화면이 **행 단위로**(이름 칸 배경) 누가 빠졌는지 가리키기 위한 값(동명이인 안전). */
   missingTierStudentIds: string[];
+  /**
+   * 단가(티어) 미지정인 **반·학생 줄** — `${classId}|${studentId}`(출석부 행 키와 같은 모양).
+   * 🔴 단가는 **학생 × 반**마다 따로다(수강 `salary_tier`). 학생 id로만 표시하면 한 반만 비어도 그 학생의
+   *    **모든 반 줄**에 「단가」가 붙는다(원장 2026-09-18 제보 — 표식이 회차 확정의 미확정·미배분보다 훨씬 많았다).
+   *    금액·집계엔 영향 없는 표시용 키다.
+   */
+  missingTierRowKeys: string[];
   /** 단가표에 없는 티어 라벨(오타·미등록). */
   missingPriceTiers: string[];
   /** 비율을 못 정한 과정(그룹 비율·기본 비율 둘 다 없음). */
@@ -140,33 +219,53 @@ export function computeTierSettlement(
   const excludedLines: TierSettlementExcluded[] = [];
   const missingTierStudents = new Set<string>();
   const missingTierStudentIds = new Set<string>();
+  const missingTierRowKeys = new Set<string>();
   const missingPriceTiers = new Set<string>();
   const missingRateGroups = new Set<string>();
 
   for (const row of rows) {
     if (row.units <= 0) continue;
-    if (!row.tierLabel) {
-      missingTierStudents.add(row.studentName);
-      missingTierStudentIds.add(row.studentId);
-      excludedUnits += row.units;
-      excludedLines.push({ ...excludedOf(row), reason: "no-tier", tierLabel: null });
-      continue;
+    // 🔑 단가 출처: 회차 확정 단가가 있으면 그것(원장 2026-09-18 통일), 없으면 수강 티어 단가표(종전).
+    const session = row.sessionPrice != null && row.sessionPrice > 0 ? row.sessionPrice : null;
+    let price: number;
+    let group: SalaryGroup | null;
+    let label: string;
+    if (session !== null) {
+      // 티어가 있고 그 단가가 회차 단가와 **같으면** 종전 줄과 한 글자도 안 다르게(과정·라벨 그대로).
+      // 다르면 회차 단가가 이긴다 — 과정도 그 단가에서 다시 읽는다(티어 라벨의 과정을 남기면 단가와 과정이 어긋난다).
+      const sameTier = !!row.tierLabel && unitPriceByTier.get(row.tierLabel) === session;
+      price = session;
+      group = sameTier
+        ? tierSalaryGroup(row.tierLabel)
+        : salaryGroupForPrice(session, row.classGroup ?? null, unitPriceByTier);
+      label = sameTier ? row.tierLabel! : SESSION_PRICE_LABEL;
+    } else {
+      if (!row.tierLabel) {
+        missingTierStudents.add(row.studentName);
+        missingTierStudentIds.add(row.studentId);
+        missingTierRowKeys.add(`${row.classId}|${row.studentId}`);
+        excludedUnits += row.units;
+        excludedLines.push({ ...excludedOf(row), reason: "no-tier", tierLabel: null });
+        continue;
+      }
+      const tierPrice = unitPriceByTier.get(row.tierLabel);
+      if (tierPrice === undefined || tierPrice <= 0) {
+        missingPriceTiers.add(row.tierLabel);
+        excludedUnits += row.units;
+        excludedLines.push({ ...excludedOf(row), reason: "no-price", tierLabel: row.tierLabel });
+        continue;
+      }
+      price = tierPrice;
+      group = tierSalaryGroup(row.tierLabel);
+      label = row.tierLabel;
     }
-    const price = unitPriceByTier.get(row.tierLabel);
-    if (price === undefined || price <= 0) {
-      missingPriceTiers.add(row.tierLabel);
-      excludedUnits += row.units;
-      excludedLines.push({ ...excludedOf(row), reason: "no-price", tierLabel: row.tierLabel });
-      continue;
-    }
-    const group = tierSalaryGroup(row.tierLabel);
     const rate = group != null && rates.groupRates?.[group] != null
       ? rates.groupRates[group]!
       : rates.defaultRate;
     if (rate === null || rate === undefined) {
-      missingRateGroups.add(group ?? row.tierLabel);
+      missingRateGroups.add(group ?? label);
       excludedUnits += row.units;
-      excludedLines.push({ ...excludedOf(row), reason: "no-rate", tierLabel: row.tierLabel });
+      excludedLines.push({ ...excludedOf(row), reason: "no-rate", tierLabel: label });
       continue;
     }
     const amount = floor1(price * row.units * NET_MULTIPLIER * (rate / 100));
@@ -178,9 +277,10 @@ export function computeTierSettlement(
       studentId: row.studentId,
       studentName: row.studentName,
       classId: row.classId,
-      tierLabel: row.tierLabel,
+      tierLabel: label,
       units: row.units,
       unitPrice: price,
+      priceSource: session !== null ? "session" : "tier",
       group,
       rate,
       gross: price * row.units,
@@ -196,6 +296,7 @@ export function computeTierSettlement(
     unitsTotal,
     missingTierStudents: [...missingTierStudents].sort((a, b) => a.localeCompare(b, "ko")),
     missingTierStudentIds: [...missingTierStudentIds],
+    missingTierRowKeys: [...missingTierRowKeys],
     missingPriceTiers: [...missingPriceTiers].sort((a, b) => a.localeCompare(b, "ko")),
     missingRateGroups: [...missingRateGroups],
     excludedUnits,

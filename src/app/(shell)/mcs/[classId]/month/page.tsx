@@ -4,7 +4,10 @@ import { PageHeader } from "@/components/page-header";
 import { getMathSheetMonth } from "@/features/math-sheets/server/month-queries";
 import { getMathClassOptions } from "@/features/math-sheets/server/landing";
 import { countRosterPhases, rosterExtraParts } from "@/features/math-sheets/lib/roster";
-import { MonthClient } from "@/features/math-sheets/components/month-client";
+import { LearningOverview } from "@/features/math-sheets/components/learning-overview";
+import { getMathLearningData } from "@/features/math-sheets/server/learning-queries";
+import { canResetMathLearningGoals } from "@/features/math-sheets/server/access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 
 export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — eywa" };
 
@@ -21,10 +24,10 @@ export default async function McsMonthPage({
   searchParams,
 }: {
   params: Promise<{ classId: string }>;
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; student?: string; track?: string }>;
 }) {
   const { classId } = await params;
-  const { month } = await searchParams;
+  const { month, student } = await searchParams;
   // 반 전환 드롭다운 목록은 시트와 **독립**이라 나란히 받는다(B4) — 가벼운 목록이지 랜딩 집계가 아니다.
   const [res, options] = await Promise.all([
     getMathSheetMonth(classId, month ?? null),
@@ -46,6 +49,9 @@ export default async function McsMonthPage({
   }
 
   const { data } = res;
+  const learning = await getMathLearningData(classId, data);
+  // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
+  const canResetGoals = await canResetMathLearningGoals(await getCurrentUser());
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
   //    섞여 있다(카드와 **같은 함수**로 센다).
   const counts = countRosterPhases(data.students.map((s) => s.rosterPhase));
@@ -70,12 +76,15 @@ export default async function McsMonthPage({
         />
       </div>
       <div className="min-h-0 flex-1">
-        <MonthClient
+        <LearningOverview
           // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
           // 새 달 화면에 남의 값이 잠깐 비친다.
           key={`${classId}:${data.month}`}
           data={data}
+          learning={learning}
+          initialStudentId={student}
           classOptions={classOptions}
+          canResetGoals={canResetGoals}
         />
       </div>
     </div>

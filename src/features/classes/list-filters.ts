@@ -1,5 +1,7 @@
 import type { PillColor } from "@/components/atoms/pill";
+import { TONE_COLOR } from "@/lib/design/semantic-color";
 import type { ClassSort, ClassStatusFilter } from "./server/queries";
+import { isSpecialLecture } from "./special-lecture";
 
 /**
  * 수업목록 필터 어휘 — 서버 페이지(searchParams·저장값 해석)와 화면 조각이 공유하는 **순수 모듈**(디렉티브 없음).
@@ -50,6 +52,50 @@ export function classStatusMeta(c: { isActive: boolean; closedAt: string | null 
 }
 function keyOf(v: ClassStatusFilter): ClassStatusKey {
   return STATUS_FILTERS.find((o) => o.value === v)?.key ?? "cls.filter.all";
+}
+
+/**
+ * **구분(정규/특강)** — 원장 2026-09-18 *"[특강] [정규] [전체]를 구분할 수 있게 열 하나 더 … 과목 앞에"*.
+ * 시간표 툴바의 `구분: 정규·특강·전체`와 같은 축이다(말도 같다). 다만 기본값이 다르다 — 시간표는 정규(특강을 주간표에서
+ * 걸러 내려고), 수업목록은 **전체**(이 열이 생기기 전 목록이 전부였다; 기본을 바꾸면 특강 반이 조용히 사라진다).
+ * 🔴 "이 반이 특강인가"는 여기서 새로 판정하지 않는다 — [`isSpecialLecture`](src/features/classes/special-lecture.ts)
+ *    (토글 ∪ 이름 폴백) 한 벌을 목록 조회(`getClassesPage`)와 알약이 **같이** 부른다. 따로 적으면 `구분: 특강`으로 거른
+ *    목록에 '정규' 알약이 서는 거짓이 난다.
+ */
+export type ClassKindFilter = "all" | "regular" | "special";
+export type ClassKindKey = "cls.kind.regular" | "cls.kind.special";
+export const CLASS_KIND_DEFAULT: ClassKindFilter = "all";
+// 문구는 사전 한 곳(`cls.kind.*`) — 여기엔 값과 키만(위 상태 표와 같은 규약). '전체'는 열 머리의 allLabel이다.
+export const KIND_FILTERS: { value: Exclude<ClassKindFilter, "all">; key: ClassKindKey }[] = [
+  { value: "regular", key: "cls.kind.regular" },
+  { value: "special", key: "cls.kind.special" },
+];
+
+/** URL·저장값 → 구분(모르는 값은 전체). */
+export function parseClassKind(raw: unknown): ClassKindFilter {
+  return raw === "regular" || raw === "special" ? raw : CLASS_KIND_DEFAULT;
+}
+
+/**
+ * 반 한 줄의 구분 알약 — 특강 = 예외(special tone, 보라) · 정규 = 기본이라 색을 뺀다(inert). 정규에 색을 주면 한 열이
+ * 전부 칠해져 정작 드문 특강이 안 보인다.
+ */
+export function classKindMeta(c: { isSpecial: boolean | null | undefined; className: string | null | undefined }): {
+  kind: Exclude<ClassKindFilter, "all">;
+  key: ClassKindKey;
+  color: PillColor;
+} {
+  return isSpecialLecture({ isSpecial: c.isSpecial, className: c.className })
+    ? { kind: "special", key: "cls.kind.special", color: TONE_COLOR.special }
+    : { kind: "regular", key: "cls.kind.regular", color: TONE_COLOR.inert };
+}
+
+/** 이 반이 지금 구분 필터에 걸리는가 — 목록 조회가 쓰는 판정(알약과 같은 `classKindMeta`). */
+export function matchesClassKind(
+  kind: ClassKindFilter,
+  c: { isSpecial: boolean | null | undefined; className: string | null | undefined },
+): boolean {
+  return kind === "all" || classKindMeta(c).kind === kind;
 }
 
 // 🔴 요일 **글자**는 여기 두지 않는다 — 화면 언어를 타야 해서 `sheetDowLabel(key, lang)`이 단일 소스다

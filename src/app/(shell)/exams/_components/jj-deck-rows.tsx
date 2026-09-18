@@ -12,6 +12,17 @@ import { kstDateTime } from "./jj-shared";
 export type JjDeckTableRow = JjDeckRow & { classNames: string[] };
 
 const NUM = "num text-text-dim px-4 py-2.5 text-right text-xs";
+/** 열 제목 + 정렬 — 아래 본문 칸과 같은 정렬이어야 한다. */
+const HEAD: ReadonlyArray<readonly [string, string]> = [
+  ["학생", "text-left"],
+  ["반", "text-left"],
+  ["인재원 반", "text-left"],
+  ["점수", "text-right"],
+  ["맞은 문항", "text-right"],
+  ["제출", "text-left"],
+  ["걸린 시간", "text-right"],
+  ["결과지", "text-center"],
+];
 
 export function JjDeckRows({ rows }: { rows: JjDeckTableRow[] }) {
   return (
@@ -19,8 +30,9 @@ export function JjDeckRows({ rows }: { rows: JjDeckTableRow[] }) {
       <table className="w-full text-sm [&_td]:whitespace-nowrap [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-l-line-faint">
         <thead className="border-line border-b [&_th]:whitespace-nowrap">
           <tr>
-            {["학생", "반", "인재원 반", "점수", "맞은 문항", "제출", "걸린 시간", "결과지"].map((h) => (
-              <th key={h} className="micro px-4 py-3 text-center">
+            {/* 열 제목과 값은 같은 축(원장 2026-09-18) — 글·날짜는 왼쪽, 숫자는 오른쪽, 결과지 링크는 가운데. */}
+            {HEAD.map(([h, align]) => (
+              <th key={h} className={`micro px-4 py-3 ${align}`}>
                 {h}
               </th>
             ))}

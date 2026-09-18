@@ -35,7 +35,7 @@ import { formatLeaveDays } from "@/features/leave/request-days";
  *    관리자가 조정했을 수 있다).
  */
 
-/** 표 열 — 제목은 가운데, 본문 값은 좌측(데이터 표 규약). 숫자 칸만 우측으로 모아 자릿수를 맞춘다. */
+/** 표 열 — 열 제목과 값은 같은 축(원장 2026-09-18). 글 칸은 가운데, 숫자 칸은 제목까지 우측으로 모아 자릿수를 맞춘다. */
 const NUM_CELL = "num px-2.5 py-2 text-right";
 
 type Props = {
@@ -85,26 +85,26 @@ export function AdjustTable({ rows, tableReady }: Props) {
               <th className="px-2.5 py-2 font-semibold">직급</th>
               <th className="px-2.5 py-2 font-semibold">입사일</th>
               <th className="px-2.5 py-2 font-semibold">연차 구간</th>
-              <th className="px-2.5 py-2 font-semibold">법정 부여</th>
-              <th className="px-2.5 py-2 font-semibold">조정</th>
-              <th className="px-2.5 py-2 font-semibold">총 부여</th>
-              <th className="px-2.5 py-2 font-semibold">사용</th>
-              <th className="px-2.5 py-2 font-semibold">결재중</th>
-              <th className="px-2.5 py-2 font-semibold">잔여</th>
+              <th className="px-2.5 py-2 text-right font-semibold">법정 부여</th>
+              <th className="px-2.5 py-2 text-right font-semibold">조정</th>
+              <th className="px-2.5 py-2 text-right font-semibold">총 부여</th>
+              <th className="px-2.5 py-2 text-right font-semibold">사용</th>
+              <th className="px-2.5 py-2 text-right font-semibold">결재중</th>
+              <th className="px-2.5 py-2 text-right font-semibold">잔여</th>
               <th className="px-2.5 py-2 font-semibold">조정</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((r) => (
               <tr key={r.userId} className="border-line/60 border-b last:border-b-0">
-                <td className="px-2.5 py-2 font-semibold whitespace-nowrap">{r.name}</td>
-                <td className="text-text-dim px-2.5 py-2 whitespace-nowrap">{r.jobTitle ?? "—"}</td>
-                <td className="text-text-dim px-2.5 py-2 whitespace-nowrap">
+                <td className="px-2.5 py-2 text-center font-semibold whitespace-nowrap">{r.name}</td>
+                <td className="text-text-dim px-2.5 py-2 text-center whitespace-nowrap">{r.jobTitle ?? "—"}</td>
+                <td className="text-text-dim px-2.5 py-2 text-center whitespace-nowrap">
                   <span className="num">{r.hireDate ?? "미등록"}</span>
                 </td>
                 {r.period ? (
                   <>
-                    <td className="text-text-dim px-2.5 py-2 text-xs whitespace-nowrap">
+                    <td className="text-text-dim px-2.5 py-2 text-center text-xs whitespace-nowrap">
                       <span className="num">{leavePeriodLabel(r.period)}</span>
                       <span className="ml-1.5">{r.period.label}</span>
                     </td>

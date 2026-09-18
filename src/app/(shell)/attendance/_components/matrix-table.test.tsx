@@ -6,6 +6,7 @@ import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/featu
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
+import { AttendanceScopeProvider } from "./scope-context";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/features/attendance/server/actions", () => ({
@@ -91,6 +92,64 @@ function renderTable() {
   );
 }
 
+describe("마우스 드래그 범위 선택", () => {
+  function renderEditable() {
+    const m = { ...GROUP.matrix, marks: { [S3]: { [DAYS[1]!.date]: "present" as const } } };
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = m.students.map((s) => ({ classId: C, studentId: s.id }));
+    const src = buildGridSource(groups, DAYS, ordered);
+    return render(
+      <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+      </GridProvider>,
+    );
+  }
+
+  it("드래그한 사각형에 복사한 1을 한 번에 붙여넣고, 놓은 뒤에는 선택이 유지된다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    const { container } = renderEditable();
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[5]!, { button: 0 });
+    fireEvent.keyDown(cells[5]!, { key: "c", ctrlKey: true });
+    fireEvent.pointerDown(cells[0]!, { pointerType: "mouse", pointerId: 1, button: 0 });
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(cells[3]!);
+    try {
+      fireEvent.pointerMove(document, { pointerType: "mouse", pointerId: 1, buttons: 1, clientX: 200, clientY: 160 });
+      expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(4);
+      fireEvent.pointerUp(document, { pointerType: "mouse", pointerId: 1 });
+      hit.mockReturnValue(cells[5]!);
+      fireEvent.pointerMove(document, { pointerType: "mouse", pointerId: 1, buttons: 1 });
+      expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(4);
+      fireEvent.keyDown(cells[0]!, { key: "v", ctrlKey: true });
+      await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]).toMatchObject({
+        units: "1", status: "present",
+        cells: [
+          { classId: C, studentId: S1, sessionDate: DAYS[0]!.date },
+          { classId: C, studentId: S1, sessionDate: DAYS[1]!.date },
+          { classId: C, studentId: S2, sessionDate: DAYS[0]!.date },
+          { classId: C, studentId: S2, sessionDate: DAYS[1]!.date },
+        ],
+      });
+      expect(container.querySelector(".cursor-grab")).toBeNull();
+    } finally { hit.mockRestore(); }
+  });
+
+  it("터치 드래그는 선택 영역을 만들지 않고 기본 스크롤에 맡긴다", () => {
+    renderEditable();
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    const hit = vi.spyOn(document, "elementFromPoint").mockReturnValue(cells[3]!);
+    try {
+      fireEvent.pointerDown(cells[0]!, { pointerType: "touch", pointerId: 2, button: 0 });
+      fireEvent.pointerMove(document, { pointerType: "touch", pointerId: 2, buttons: 1 });
+      expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(1);
+    } finally { hit.mockRestore(); }
+  });
+});
+
 describe("학교·학년 오른쪽 반별 청구액", () => {
   it.each([true, false])("반별 정렬=%s에서도 금액·0원·미확정을 구분한다", (showGroups) => {
     const { container } = render(
@@ -98,17 +157,47 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
         groups={[GROUP]} days={DAYS} holidays={{}} showGroups={showGroups}
         ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
         classBilledAmounts={{ [rowKey(C, S1)]: 210000, [rowKey(C, S2)]: 0 }}
+        termSessionsByRow={{ [rowKey(C, S1)]: { units: 8, daysBasis: false } }}
       />,
     );
-    expect(screen.getAllByRole("columnheader").slice(0, 3).map((h) => h.textContent)).toEqual([
-      expect.stringContaining("이름"), "학교·학년", "청구액",
+    // 열 순서(원장 2026-09-17·09-18): 이름 · 학교학년 · 청구액 · 수업 차수 · 등록 차수 · 차이확인 · 날짜… · 출석률
+    expect(screen.getAllByRole("columnheader").slice(0, 6).map((h) => h.textContent)).toEqual([
+      expect.stringContaining("이름"), "학교·학년", "청구액", "수업 차수", "등록 차수", "차이확인",
     ]);
     for (const [name, amount] of [["이도윤", "210,000"], ["박서준", "0"], ["한가온", "미확정"]]) {
       const row = screen.getByText(name!).closest("tr")!;
       expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(amount!);
-      expect(row.children).toHaveLength(DAYS.length + 5);
+      expect(row.children).toHaveLength(DAYS.length + 7);
     }
-    expect(container.querySelector("tfoot td")).toHaveAttribute("colspan", String(DAYS.length + 5));
+    // 등록 차수 = 회차 확정의 확정 시수. 확정 전이면 '미확정'(0을 지어내지 않는다).
+    expect(within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("8");
+    expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
+    // 차이확인 = 수업 차수 − 등록 차수. 🔴 등록 차수가 미확정이면 숫자를 지어내지 않고 `—`.
+    expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[5]).toHaveTextContent("—");
+    // 요약 줄(맨 아래)은 전 열을 덮는다 — 그 위 합계 행(2026-09-18)은 열마다 칸이 선다.
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 7));
+  });
+
+  it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {
+    render(
+      <MatrixTable
+        groups={[GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        classBilledAmounts={{}}
+        termSessionsByRow={{ [rowKey(C, S1)]: { units: 6, daysBasis: true } }}
+      />,
+    );
+    const cell = within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]!;
+    const mark = cell.querySelector("span[data-tip]")!;
+    expect(mark).toBeTruthy();
+    expect(mark.textContent).toContain("6");
+    expect(mark.getAttribute("data-tip")).toContain("일수 기준 확정");
+    expect(mark.className).toContain("text-danger");
+    // 다른 행은 평범한 '미확정'(표식이 번지지 않는다).
+    expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("미확정");
     expect(screen.queryByRole("columnheader", { name: "납입" })).not.toBeInTheDocument();
   });
 });
@@ -166,7 +255,6 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={lockBefore}
       >
         {/* 잠금은 GridProvider와 MatrixTable **둘 다에** 넘긴다(page.tsx와 같은 배선 — matrix-lock.test.tsx 주석). */}
@@ -320,19 +408,23 @@ describe("출석부 표 골격", () => {
     const table = container.querySelector("table")!;
     expect(table.className).toContain("table-fixed");
     const cols = container.querySelectorAll("colgroup col");
-    // 이름·학교·학년(압축 한 열, 2026-08-10) + 날짜 2 + 시수·출석률
-    expect(cols.length).toBe(2 + DAYS.length + 2);
+    // 이름 · 학교·학년(압축 한 열, 2026-08-10) · 수업 차수 + 날짜 2 + 출석률
+    //   (청구액·등록 차수는 금액을 보는 화면에서만 — 이 렌더는 안 넘겼다.)
+    expect(cols.length).toBe(3 + DAYS.length + 1);
     expect((cols[0] as HTMLElement).style.width).toBeTruthy(); // 이름
     expect((cols[1] as HTMLElement).style.width).toBeTruthy(); // 학교·학년
+    expect((cols[2] as HTMLElement).style.width).toBeTruthy(); // 수업 차수
     // 날짜 칸만 폭이 비어 있다 — 남는 가로 폭을 이 칸들이 나눠 갖는다.
-    expect((cols[2] as HTMLElement).style.width).toBe("");
+    expect((cols[3] as HTMLElement).style.width).toBe("");
   });
 
-  it("🔴 마지막 두 열(시수·출석률)은 sticky right 오프셋과 짝이라 폭이 고정이다", () => {
+  it("🔴 오른쪽 고정은 출석률 하나 — 시수를 청구액 옆으로 옮긴 뒤 짝(64px 오프셋)이 사라졌다", () => {
     const { container } = renderTable();
     const cols = container.querySelectorAll("colgroup col");
     expect((cols[cols.length - 1] as HTMLElement).style.width).toBe("64px"); // 출석률
-    expect(container.querySelector("th.sm\\:right-\\[64px\\]")).toBeTruthy(); // 넓은 화면에서 그 폭만큼 띄워 붙는다
+    expect(container.querySelector("th.sm\\:right-0")).toBeTruthy();
+    // 🔴 옛 짝(시수 열)이 되살아나면 두 열이 겹친다.
+    expect(container.querySelector("th.sm\\:right-\\[64px\\]")).toBeNull();
   });
 
   it("등원요일은 이름 **아래 줄**에 온다 — 한 줄에 이으면 이름 열이 그만큼 넓어져야 한다", () => {
@@ -351,26 +443,22 @@ describe("출석부 표 골격", () => {
     expect(screen.getByText("한가온").closest("td")!.children).toHaveLength(1);
   });
 
-  it("🔴 표식만 있고 등원요일이 없어도 아랫줄에 선다 — 첫 줄은 언제나 이름뿐(원장 2026-09-14)", () => {
+  it("🔴 생애주기 표식은 이름 칸에 서지 않는다 — 이름 칸은 이름뿐(원장 2026-09-18: 수강 기간 양옆 회색 날짜 칸으로)", () => {
     renderTable();
     const cell = screen.getByText("박서준").closest("td")!;
-    const lines = [...cell.children];
-    expect(lines).toHaveLength(2);
-    expect(lines[0]!.textContent).toBe("박서준");
-    expect(lines[1]!.textContent).toBe("퇴원");
+    expect(cell.children).toHaveLength(1);
+    expect(cell.textContent).toBe("박서준");
   });
 
-  it("그 달에 나간 학생은 이름 칸에 '퇴원' 표식이 붙는다(아랫줄)", () => {
+  it("🔴 표식을 놓을 회색 칸이 없으면 **그리지 않는다**(원장 2026-09-18 — 이름 옆으로 돌려보내지 않는다)", () => {
+    // 박서준은 7/15 퇴원인데 이 격자엔 7/1·7/2뿐이고 구간도 비어 있어(=회색 칸 없음) 놓을 자리가 없다.
     renderTable();
-    const badge = screen.getByText("퇴원");
-    expect(badge.closest("td")).toBe(screen.getByText("박서준").closest("td"));
-    expect(badge).toHaveAttribute("title", "2026-07-15 퇴원");
+    expect(screen.queryByText("퇴원")).toBeNull();
+    // 배치 규칙 자체는 features/attendance/badge-placement.test.ts가 잠근다.
   });
 
-  it("🔴 표식이 이름을 밀어내지 않는다 — 표식은 아랫줄이라 첫 줄은 이름이 열을 다 쓴다", () => {
+  it("이름은 열을 다 쓰고 넘치면 잘린다(표식이 이름을 밀어내던 시절의 가드)", () => {
     renderTable();
-    // 뱃지가 첫 줄에 있던 동안 이름이 "김…"으로 잘렸다(원장 2026-09-14 "이름이 짤리는건 최악").
-    expect(screen.getByText("퇴원").closest("span")!.className).toContain("shrink-0");
     expect(screen.getByText("박서준").parentElement!.textContent).toBe("박서준");
     expect(screen.getByText("박서준").className).toContain("min-w-0");
   });
@@ -450,9 +538,10 @@ describe("교시 롤업 칸", () => {
       { slot: "12:30:00", status: "present", units: null },
       { slot: "14:10:00", status: "present", units: null },
     ]);
-    // 마지막 두 열 = 시수·출석률. 시수 칸이 2를 말해야 한다.
-    const totals = [...container.querySelectorAll("tbody tr td")].slice(-2);
-    expect(totals[0]!.textContent).toContain("2");
+    // 수업 차수 칸(이름·학교학년 다음)이 2를 말해야 한다 — 마지막 칸은 출석률이다.
+    const row = [...container.querySelectorAll("tbody tr")].find((r) => r.querySelector('[role="gridcell"]'))!;
+    expect([...row.children][2]!.textContent).toContain("2");
+    expect([...row.children].at(-1)!.textContent).toContain("%");
   });
 
   it("교시가 하나면 종전과 같다 — 줄무늬도 '교시' 툴팁도 없다", () => {
@@ -494,7 +583,11 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     );
   }
   const cellOf = (c: HTMLElement) => c.querySelector<HTMLElement>(`[data-cell-key$="${D1}"]`)!;
-  const unitsOf = (c: HTMLElement) => [...c.querySelectorAll("tbody tr td")].slice(-2)[0]!.textContent;
+  // 수업 차수 칸 — 이름·학교학년 **다음**이다(2026-09-17 열 이동). 마지막 칸은 출석률.
+  //  ⚠️ 반 머리행도 tbody에 있어 표 전체 td를 세면 안 된다 — 학생 줄(칸이 있는 행)을 먼저 고른다.
+  const studentRow = (c: HTMLElement) =>
+    [...c.querySelectorAll("tbody tr")].find((r) => r.querySelector('[role="gridcell"]'))!;
+  const unitsOf = (c: HTMLElement) => [...studentRow(c).children][2]!.textContent;
 
   it("🔴 내 교시 1 + 남의 교시 2 = 칸도 행 시수도 **1**(3이 아니다)", () => {
     const { container } = renderScoped(
@@ -588,7 +681,6 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
@@ -596,7 +688,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     );
   }
 
-  it("🔴 섞인 칸의 **단건 Delete는 막는다** — 지우면 남의 교시·JJ 기록까지 함께 사라진다", async () => {
+  it("다른 교시 기록이 있어도 본인 칸은 지울 수 있다", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
     const { container } = renderInGrid(
@@ -609,9 +701,8 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const cell = cellOf(container);
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "Delete" });
-    // 저장(삭제) 액션이 아예 안 나가야 한다 — 나가면 그날 행이 통째로 지워진다(저장에 교시 축이 없다).
-    expect(setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("반별 보기에서 지우세요");
+    expect(setAttendanceCell).toHaveBeenCalledWith(expect.objectContaining({ status: null }));
+    expect(container.textContent).not.toContain("반별 보기에서 지우세요");
   });
 
   it("🔴 막는 빗금 칸(자리뿐)은 숫자를 쳐도 **버퍼가 안 열린다** — 열면 값이 보였다가 확정에서 거절돼 '쳤는데 사라졌다'가 된다", async () => {
@@ -626,7 +717,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(container.textContent).toContain("자리(JJ·랩실) 기록뿐");
   });
 
-  it("섞인 칸에 값을 쓰는 건 막지 않는다 — 대신 사정거리를 알린다", async () => {
+  it("본인 값을 수정할 때 다른 선생님 경고를 띄우지 않는다", async () => {
     const { setAttendanceCell } = await import("@/features/attendance/server/actions");
     vi.mocked(setAttendanceCell).mockClear();
     const { container } = renderInGrid(
@@ -638,10 +729,10 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(cell, { key: "0" }); // 결석
     fireEvent.keyDown(cell, { key: "Enter" });
     expect(setAttendanceCell).toHaveBeenCalledTimes(1);
-    expect(container.textContent).toContain("함께 바뀝니다");
+    expect(container.textContent).not.toContain("함께 바뀝니다");
   });
 
-  it("🔴 **범위 Delete도** 섞인 칸을 지우지 않는다 — 1칸은 거절, 2칸은 실행이면 모순이다", async () => {
+  it("여러 날짜의 본인 칸도 한 번에 지울 수 있다", async () => {
     const actions = await import("@/features/attendance/server/actions");
     vi.mocked(actions.setAttendanceCell).mockClear();
     vi.mocked(actions.setAttendanceRange).mockClear();
@@ -654,9 +745,9 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "ArrowRight", shiftKey: true });
     fireEvent.keyDown(cell, { key: "Delete" });
-    expect(actions.setAttendanceRange).not.toHaveBeenCalled();
+    expect(actions.setAttendanceRange).toHaveBeenCalledWith(expect.objectContaining({ status: null }));
     expect(actions.setAttendanceCell).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("다른 교시 기록이 함께 있어");
+    expect(container.textContent).not.toContain("다른 교시 기록이 함께 있어");
   });
 
   it("🔴 앵커가 빗금이어도 **범위 입력은 죽지 않는다** — 함께 잡은 정상 칸엔 들어가야 한다", async () => {
@@ -675,20 +766,20 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(container.textContent).toContain("건너뛰었습니다");
   });
 
-  it("🔴 팝오버 '지우기'도 **같은 게이트**를 지난다 — 격자만 막으면 여기로 새어 나간다(#77)", () => {
+  it("팝오버에서도 본인 칸 지우기를 제공한다", () => {
     const { container } = renderInGrid(
       [{ slot: "17:20:00", status: "present", units: null }],
       [{ slot: "18:20:00", status: "present", units: null }],
     );
     fireEvent.contextMenu(cellOf(container)); // 우클릭 = 상세 팝오버
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(screen.queryByText("지우기")).toBeNull();
-    expect(container.textContent).toContain("반별 보기에서 지우세요");
+    expect(screen.getByRole("button", { name: "지우기" })).toBeEnabled();
+    expect(container.textContent).not.toContain("반별 보기에서 지우세요");
     // 저장은 열려 있으므로 **사정거리**도 격자와 같은 말로 알려야 한다(닫은 건 지우기 하나뿐).
-    expect(container.textContent).toContain("함께 바뀝니다");
+    expect(container.textContent).not.toContain("함께 바뀝니다");
   });
 
-  it("🔴 범위 Delete가 섞인 칸을 뺐으면 **말해 준다** — 조용히 빠지면 다 지운 줄 안다", async () => {
+  it("범위 지우기는 다른 교시가 있어도 선택한 본인 칸을 모두 보낸다", async () => {
     const actions = await import("@/features/attendance/server/actions");
     vi.mocked(actions.setAttendanceRange).mockClear();
     const D2 = "2026-07-02";
@@ -715,7 +806,6 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
@@ -726,9 +816,8 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     fireEvent.keyDown(first, { key: "ArrowRight", shiftKey: true });
     fireEvent.keyDown(first, { key: "ArrowDown", shiftKey: true });
     fireEvent.keyDown(first, { key: "Delete" });
-    // 섞인 칸 1개는 빠지고 나머지 3칸만 지운다 — 그리고 그 사실을 알린다.
-    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]!.cells).toHaveLength(3);
-    await waitFor(() => expect(container.textContent).toContain("안 지웠습니다"));
+    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]!.cells).toHaveLength(4);
+    await waitFor(() => expect(container.textContent).not.toContain("안 지웠습니다"));
   });
 
   it("세지 않는 교시가 없으면 종전 그대로(빗금 없음)", () => {
@@ -763,7 +852,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(title).not.toContain("함께 바뀝니다");
   });
 
-  it("🔴 섞인 칸의 건수는 자리를 뺀 수 — 다른 선생님 교시 1건 + 자리 1건이면 '1건'", () => {
+  it("본인 기록을 지울 때 다른 교시 건수를 경고하지 않는다", () => {
     const { container } = renderInGrid(
       [{ slot: "17:20:00", status: "present", units: null }],
       [{ slot: "18:20:00", status: "present", units: null }, seatGhost("16:20:00")],
@@ -771,7 +860,7 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     const cell = cellOf(container);
     fireEvent.mouseDown(cell, { button: 0 });
     fireEvent.keyDown(cell, { key: "Delete" });
-    expect(container.textContent).toContain("다른 선생님 교시 기록 1건");
+    expect(container.textContent).not.toContain("다른 선생님 교시 기록 1건");
   });
 
   /**
@@ -798,7 +887,6 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
         initial={src.initial}
         slotCounts={src.slotCounts}
         notMine={src.notMine}
-        alsoWrites={src.alsoWrites}
         lockBefore={null}
       >
         <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
@@ -962,5 +1050,158 @@ describe("세지 않는 교시(자리·남의 교시)", () => {
     expect(setAttendanceCell).toHaveBeenCalledTimes(2); // ①을 되돌리는 저장이 나가지 않는다
     expect(container.textContent).toContain("되돌리기로 돌리지 않습니다");
     expect(own.textContent).toBe("1");
+  });
+});
+
+/**
+ * 🔴 원장 2026-09-17: 낮엔 *"담당하는 날만 표시"*(값은 그 강사 몫만)였고, 저녁에 입력 규칙이 뒤집혔다 —
+ *    *"화요일은 원래 수업이라 이후에 관리자가 수정가능하고, 다른 요일도 보강 등으로 수업할 수 있으니까 숫자 입력가능하게"*.
+ *    그래서 **모든 날짜 칸이 열리고**, `ownDates`는 수업요일 **색**만 정한다(값은 여전히 그 강사 몫 기록만).
+ */
+describe("강사 보기 — 수업요일은 색으로, 입력은 모든 날에(원장 2026-09-17)", () => {
+  const D1 = "2026-07-01"; // 수 — 이 강사가 수업하는 날
+  const D2 = "2026-07-02"; // 목 — 수업하지 않는 날
+  function renderOwnDays(opts: { lockBefore?: string | null } = {}) {
+    const m = matrix([
+      { id: S1, name: "곽경찬", grade: "초6", school: "칠성초", enrolledAt: null, attendDows: [3, 4], spans: [], badges: [] },
+    ]);
+    m.classDows = [3, 4];
+    m.ownDates = [D1];
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    const view = render(
+      <GridProvider
+        rows={src.rows}
+        cols={src.cols}
+        initial={src.initial}
+        slotCounts={src.slotCounts}
+        notMine={src.notMine}
+        lockBefore={opts.lockBefore ?? null}
+      >
+        <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} lockBefore={opts.lockBefore ?? null} />
+      </GridProvider>,
+    );
+    return { ...view, src };
+  }
+  const cellAt = (c: HTMLElement, date: string) => c.querySelector<HTMLElement>(`[data-cell-key$="${date}"]`)!;
+
+  it("🔴 날짜로 잠그지 않는다 — 수업하는 날도, 수업하지 않는 날도 입력이 열린다(보강)", () => {
+    const { src } = renderOwnDays();
+    expect(src.notMine[cellKey(rowKey(C, S1), D2)]).toBeUndefined();
+    expect(src.notMine[cellKey(rowKey(C, S1), D1)]).toBeUndefined();
+  });
+
+  it("🔴 수업하지 않는 날 — 수업요일 색만 빠지고 입력은 된다(보강을 그 칸에 찍는다)", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValue({ ok: true } as never);
+    const { container } = renderOwnDays();
+    const cell = cellAt(container, D2);
+    expect(cell.className).not.toContain("cursor-not-allowed");
+    expect(cell.className).not.toContain("bg-att-classday");
+    expect(cell.style.backgroundImage).toBe(""); // 빗금 없음
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "1" });
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(setAttendanceCell).toHaveBeenCalledWith(expect.objectContaining({ sessionDate: D2 }));
+    // 수업하는 날은 수업요일 색이 남는다(두 날의 차이는 색뿐).
+    expect(cellAt(container, D1).className).toContain("bg-att-classday");
+  });
+
+  it("🔴 수업하는 날 빈칸에 숫자를 치면 강사 렌즈(scopeTeacherId)를 싣고 저장한다 — 서버가 제 교시 행을 만든다", async () => {
+    const { setAttendanceCell } = await import("@/features/attendance/server/actions");
+    vi.mocked(setAttendanceCell).mockClear();
+    vi.mocked(setAttendanceCell).mockResolvedValue({ ok: true } as never);
+    const m = matrix([
+      { id: S1, name: "곽경찬", grade: "초6", school: "칠성초", enrolledAt: null, attendDows: [3, 4], spans: [], badges: [] },
+    ]);
+    m.classDows = [3, 4];
+    m.ownDates = [D1];
+    const groups = [{ ...GROUP, matrix: m }];
+    const ordered = [{ classId: C, studentId: S1 }];
+    const src = buildGridSource(groups, DAYS, ordered);
+    const { container } = render(
+      <AttendanceScopeProvider scope={{ teacherId: "t-me", classIds: [C] }}>
+        <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} slotCounts={src.slotCounts} notMine={src.notMine} lockBefore={null}>
+          <MatrixTable groups={groups} days={DAYS} holidays={{}} showGroups ordered={ordered} />
+        </GridProvider>
+      </AttendanceScopeProvider>,
+    );
+    const cell = cellAt(container, D1);
+    expect(cell.className).not.toContain("cursor-not-allowed");
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "3" });
+    fireEvent.keyDown(cell, { key: "Enter" });
+    expect(setAttendanceCell).toHaveBeenCalledWith(
+      expect.objectContaining({ classId: C, studentId: S1, sessionDate: D1, scopeTeacherId: "t-me" }),
+    );
+  });
+
+  it("7일이 지난 칸은 종전대로 수정 기간 잠금 — 사유도 그 문장 하나다", () => {
+    const { container } = renderOwnDays({ lockBefore: "2026-07-10" });
+    for (const date of [D1, D2]) {
+      const cell = cellAt(container, date);
+      expect(cell.className).toContain("cursor-not-allowed");
+      expect(tipOf(cell)).toContain("7일");
+    }
+  });
+
+  it("머리 줄도 수업하는 날만 수업요일 색 — 반 요일 합집합으로 칠하지 않는다", () => {
+    const { container } = renderOwnDays();
+    const heads = [...container.querySelectorAll("thead th")].filter((th) => /^[12]/.test(th.textContent ?? ""));
+    expect(heads[0]!.className).toContain("bg-att-classday");
+    expect(heads[1]!.className).not.toContain("bg-att-classday");
+  });
+});
+
+describe("합계 행(원장 2026-09-18)", () => {
+  const WITH_MARKS: MatrixGroup = {
+    ...GROUP,
+    unitSuffix: "T",
+    matrix: {
+      ...GROUP.matrix,
+      marks: { [S1]: { "2026-07-01": "present", "2026-07-02": "absent" }, [S2]: { "2026-07-01": "present" } },
+      units: { [S1]: { "2026-07-01": 1.5 } },
+    },
+  };
+  function renderTotals() {
+    return render(
+      <MatrixTable
+        groups={[WITH_MARKS]}
+        days={DAYS}
+        holidays={{}}
+        showGroups={false}
+        ordered={WITH_MARKS.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        classBilledAmounts={{ [rowKey(C, S1)]: 210000, [rowKey(C, S2)]: 90000 }}
+        termSessionsByRow={{ [rowKey(C, S1)]: { units: 8, daysBasis: false }, [rowKey(C, S2)]: { units: 5, daysBasis: true } }}
+      />,
+    );
+  }
+
+  it("'이름'·'학교학년'을 합친 칸에 '합계'라고 적는다(따로 라벨 자리를 찾지 않게)", () => {
+    const { container } = renderTotals();
+    const row = container.querySelector("tfoot tr")!;
+    const first = row.querySelector("td")!;
+    expect(first).toHaveAttribute("colspan", "2");
+    expect(first.textContent).toBe("합계");
+  });
+
+  it("청구액·수업 차수·등록 차수 합 — 🔴 등록 차수 합에서 옛 일수 기준 확정은 뺀다(단위가 다르다)", () => {
+    const { container } = renderTotals();
+    const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
+    expect(cells[1]!.textContent).toBe("300,000"); // 청구액 210,000 + 90,000
+    expect(cells[2]!.textContent).toBe("2.5 T"); // 수업 차수: 1.5(S1 7/1) + 1(S2 7/1)
+    expect(cells[3]!.textContent).toBe("8.0 T"); // 등록 차수: S1 8 · S2는 일수 기준이라 제외
+    expect(cells[4]!.textContent).toBe(""); // 차이확인은 비운다
+  });
+
+  it("날짜별로 그날 시수 합 · 출석률은 학생별 출석률의 **평균**", () => {
+    const { container } = renderTotals();
+    const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
+    expect(cells[5]!.textContent).toBe("2.5"); // 7/1: 1.5 + 1
+    expect(cells[6]!.textContent).toBe(""); // 7/2: 결석만 — 시수 0
+    // S1 = 1/2 = 50% · S2 = 1/1 = 100% → 평균 75%(전체 2/3=67%가 아니다).
+    expect(cells.at(-1)!.textContent).toBe("75%");
   });
 });

@@ -98,6 +98,24 @@ describe("팔레트 대비 — 화이트 캔버스(v4)", () => {
     }
   });
 
+  it("월별 출석부 '차이확인' 솔리드 위 흰 글자가 4.5:1 이상", () => {
+    // 원장 2026-09-18이 보여 준 색 그대로면 4.11(파랑)·4.16(빨강)으로 미달이라 한 단계 진하게 골랐다.
+    // 🔴 원래 색으로 되돌리고 싶으면 이 임계값이 아니라 **흰 글자를 쓸지**를 먼저 다시 정할 것.
+    for (const name of ["att-diff-plus", "att-diff-minus"]) {
+      const r = contrast(rgbOf(token(name)), WHITE);
+      expect(r, `white on --${name} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("월별 출석부 열 틴트 위 본문 글자가 4.5:1 이상", () => {
+    // 청구액(크림)·차수(연파랑) 칸은 `--foreground` 굵은 글씨를 얹는다.
+    const ink = rgbOf(token("foreground"));
+    for (const name of ["att-col-billed", "att-col-sessions"]) {
+      const r = contrast(ink, rgbOf(token(name)));
+      expect(r, `foreground on --${name} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("같은 뜻의 차트 슬롯과 배지 색이 어긋나지 않는다", () => {
     // 차트와 배지가 다른 빨강·다른 초록이면 "이어지는 느낌"이 거기서 끊긴다.
     expect(token("chart-1")).toBe(token("blue"));

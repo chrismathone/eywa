@@ -20,11 +20,13 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
-import { getTeacherMoney } from "@/features/attendance/server/teacher-money";import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
+import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
+import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
 import { classWorkerLabel } from "@/features/attendance/class-worker";
 import { getAttendanceClassBilledAmounts } from "@/features/attendance/server/class-billing";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
+import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { AbsenceIntakeButton } from "./_components/absence-intake-button";
@@ -236,6 +238,8 @@ export default async function AttendancePage({
     loadAttendanceViewPrefs(),
   ]);
   const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
+  // 특강 토글(0133a) — 표식 규칙이 반마다 읽는다. 목록 쪽 타입엔 없어 반 목록 원본에서 되짚는다.
+  const matrixClassById = new Map(base.classes.map((c) => [c.id, c]));
   const subjectMaps = buildSubjectMaps(operations.subjects);
 
   // ── 과목 → 강사 → 반 계층(넓→좁). 위를 고르면 아래 선택지가 좁혀지는 cascade. ──
@@ -375,6 +379,16 @@ export default async function AttendancePage({
   );
   const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
   /**
+   * 강사 계정의 **반별 보기**도 그 강사 출석부다(원장 2026-09-17 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건
+   * 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만 하는거야."*) — 반 하나를 골라도 강사 전체 보기와 **같은 렌즈**
+   * (그 강사가 맡은 교시의 기록만)로 그리고, 저장도 같은 판정을 지난다(`attendanceScope`). 그전엔 반별 보기로 바꾸면
+   * 그 렌즈가 없어 남의 교시 기록(ECS 입력 포함)을 그날 칸 저장으로 덮을 수 있었다.
+   * ⚠️ 입력은 **모든 날짜**에 열려 있다(원장 2026-09-17 저녁 — 보강). 수업요일은 색으로만 갈린다(`ownDates`).
+   * ⚠️ 관리자가 강사 드롭다운으로 고른 반별 보기는 해당 없다(`myTeacherId`는 로그인한 강사 본인뿐 — 관리자는 반 전체).
+   */
+  const classScopeTeacher =
+    mode === "class" && myTeacherId && selectedClass && classTaughtBy(selectedClass, myTeacherId) ? myTeacherId : null;
+  /**
    * **담임이 되기 전 기록**을 그 강사 표에서 뺀다(원장 제보 2026-08-19: *"김주현 선생님이 출결한것도
    * 아닌데 보이는것도 같이 수정해야겠네."*). `classes.teacher_id`는 현재 담임이라 시간 축이 없어서,
    * 인계(8/10·8/14) 이전에 **전임이 넣은** 기록까지 새 담임 출석부에 잡혔다.
@@ -384,7 +398,8 @@ export default async function AttendancePage({
    * 🔴 근거(인수인계·담임 변경 감사로그)가 없으면 `null` → **아무것도 숨기지 않는다**(폴백이 안전벨트).
    * ⚠️ 반별 보기·급여 별지에는 넘기지 않는다 — 반 관점에선 그 기록이 맞고, 돈 축은 담임 그대로다.
    */
-  const homeroomSinceIdx = mode === "teacher" && effectiveTeacher ? await getHomeroomSinceIndex() : null;
+  const homeroomSinceIdx =
+    (mode === "teacher" && effectiveTeacher) || classScopeTeacher ? await getHomeroomSinceIndex() : null;
   const sinceByClass = new Map<string, string | null>(
     teacherClasses.map((c) => [
       c.id,
@@ -441,7 +456,16 @@ export default async function AttendancePage({
     mode === "teacher"
       ? teacherMatrices[0] ?? base
       : effectiveClassId
-        ? await getMonthlyAttendanceMatrix(month, effectiveClassId, viewPrefs.periodMode)
+        ? await getMonthlyAttendanceMatrix(
+            month,
+            effectiveClassId,
+            viewPrefs.periodMode,
+            // 강사 계정이면 그 강사 렌즈(`classScopeTeacher`) — 담임 폴백 반은 담임이 되기 전 날을 뺀다(강사 전체 보기와 같은 규칙).
+            classScopeTeacher,
+            classScopeTeacher && homeroomSinceIdx && teacherRoles.get(effectiveClassId) === "homeroom"
+              ? homeroomSinceOf(homeroomSinceIdx, effectiveClassId, classScopeTeacher)
+              : null,
+          )
         : base;
 
   /**
@@ -475,6 +499,9 @@ export default async function AttendancePage({
           classId: c.id,
           className: classNameFor(c.className, lang),
           subjectLabel: subjectMaps.labelOf(c.subject),
+          // 차수 단위(영어 U · 수학 T) · 특강 여부 — 겸직 강사의 표엔 두 과목 반이 섞여 서므로 **반마다** 정한다.
+          unitSuffix: attendanceUnitSuffix(c.subject, operations.subjects),
+          isSpecial: matrixClassById.get(c.id)?.isSpecial ?? false,
           matrix: teacherMatrices[i]!,
           // 담임이 아닌 반이 왜 여기 있는지 밝힌다 — 라벨이 없으면 "남의 반이 왜 뜨지"가 된다.
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
@@ -492,6 +519,8 @@ export default async function AttendancePage({
               classId: effectiveClassId,
               className: classNameFor(selectedClass.className, lang),
               subjectLabel: subjectMaps.labelOf(selectedClass.subject),
+              unitSuffix: attendanceUnitSuffix(selectedClass.subject, operations.subjects),
+              isSpecial: matrixClassById.get(effectiveClassId)?.isSpecial ?? false,
               matrix,
               ...workerOf(effectiveClassId),
             },
@@ -659,7 +688,9 @@ export default async function AttendancePage({
   const attendanceScope =
     mode === "teacher" && effectiveTeacher
       ? { teacherId: effectiveTeacher, classIds: teacherClasses.map((c) => c.id) }
-      : null;
+      : classScopeTeacher && effectiveClassId
+        ? { teacherId: classScopeTeacher, classIds: [effectiveClassId] }
+        : null;
 
   /**
    * 학생 검색(원장 2026-08-19)이 볼 재료 — **화면에 이미 그려진 값만**(이름·학교·학년 + 붙여 쓴 압축 표기).
@@ -707,13 +738,20 @@ export default async function AttendancePage({
           ) : null,
           // 🔴 같은 반이 반별 보기와 강사 전체 보기에서 **다른 숫자**를 낸다 — 그 사실을 화면이 먼저
           //    말해야 한다(조용히 다르면 "출결이 사라졌다"로 읽힌다). 근거는 교시 귀속(resolveTaughtBy).
-          mode === "teacher" ? (
+          mode === "teacher" || classScopeTeacher ? (
             <p key="scope" className={noticeClass}>
               {sheetT(lang, "att.notice.scope.a")}
               <strong className="text-foreground">{sheetT(lang, "att.notice.scope.b")}</strong>
-              {sheetT(lang, "att.notice.scope.c")}
-              <strong className="text-foreground">{sheetT(lang, "att.notice.scope.d")}</strong>
-              {sheetT(lang, "att.notice.scope.e")}
+              {/* 강사 계정엔 "반 전체는 반별 보기에서"가 거짓이다 — 그 계정의 반별 보기도 같은 렌즈다(`classScopeTeacher`). */}
+              {isTeacherView ? (
+                sheetT(lang, "att.notice.scope.cOwn")
+              ) : (
+                <>
+                  {sheetT(lang, "att.notice.scope.c")}
+                  <strong className="text-foreground">{sheetT(lang, "att.notice.scope.d")}</strong>
+                  {sheetT(lang, "att.notice.scope.e")}
+                </>
+              )}
             </p>
           ) : null,
           // 기록이 하나도 없는 화면은 **왜 비어 있는지**를 말해야 한다 — 빈 표 + "—"만 두면 고장으로 읽힌다.
@@ -721,8 +759,8 @@ export default async function AttendancePage({
           statsCount.recorded === 0 && !allGroups.some((g) => g.matrix.derivedActive) ? (
             <p key="empty" className={noticeClass}>
               {/* ⚠️ 강사 전체 보기는 반이 여럿이라 "이 반"이 거짓말이 된다(적대검증) — 모드에 맞춰 주어를 바꾼다. */}
-              {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 빗금으로
-                  화면에 보이는데 여기서 그냥 "기록이 없다"고 하면 두 문장이 서로를 부정한다. */}
+              {/* ⚠️ 강사 전체 보기의 '없음'은 **선생님 몫 기준**이다 — 남의 교시·자리 기록은 이 보기에 안 보일 뿐
+                  반에는 있을 수 있어(2026-09-17부터 빗금도 없다) 그냥 "기록이 없다"고 하면 반별 보기와 서로를 부정한다. */}
               {sheetT(
                 lang,
                 mode === "teacher" ? "att.notice.empty.teacherPre" : "att.notice.empty.classPre",
@@ -790,7 +828,6 @@ export default async function AttendancePage({
       cols={gridSource.cols}
       initial={gridSource.initial}
       notMine={gridSource.notMine}
-      alsoWrites={gridSource.alsoWrites}
       slotCounts={gridSource.slotCounts}
       lockBefore={lockBefore}
       initialCollapsed={viewPrefs.collapsed}
@@ -962,10 +999,10 @@ export default async function AttendancePage({
               (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
               ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
               기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
-          {mode === "teacher" && allGroups.length > 0 ? (
+          {(mode === "teacher" || classScopeTeacher) && allGroups.length > 0 ? (
             <span
               className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
-              title={sheetT(lang, "att.scopeChip.title")}
+              title={sheetT(lang, isTeacherView ? "att.scopeChip.titleOwn" : "att.scopeChip.title")}
             >
               {sheetT(lang, "att.scopeChip")}
             </span>
@@ -1044,11 +1081,9 @@ export default async function AttendancePage({
               *"휴일 표시 제거"*로 걷어냈다. 휴일은 이제 **셀 색(붉은 계열) + 헤더 빨간 날짜 + 날짜 툴팁**으로
               읽히고, 그 색의 뜻은 이 범례가 말한다(`att.legend.holiday`).
               🔴 휴일 이름 줄을 되살리지 말 것 — 되살리려면 원장 확인이 먼저다.
-              빗금 칩은 강사 전체 보기(`mode === "teacher"`)에서만 — 반별 보기 격자엔 빗금이 안 나온다.
               오늘 칩은 격자에 **오늘 열이 있을 때만**(지난·다음 달엔 남색 머리가 없다) — 표와 같은 `visibleDays`로 판정. */}
           <AttendanceLegend
             lang={lang}
-            showGhost={mode === "teacher"}
             showToday={visibleDays.some((d) => d.isToday)}
           />
           <MatrixTable
@@ -1057,7 +1092,9 @@ export default async function AttendancePage({
             ordered={orderedRows}
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
-            classBilledAmounts={classBilledAmounts}
+            classBilledAmounts={classBilledAmounts.billed}
+            termSessionsByRow={classBilledAmounts.confirmedSessions}
+            priceConfirmedRows={classBilledAmounts.priceConfirmed}
             money={money}
             moneyNote={moneyNote}
             lang={lang}

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { canViewStudentDetail } from "@/features/students/server/read-scope";
 import { createClient } from "@/lib/supabase/server";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -48,10 +48,17 @@ export default async function LessonReportPrintPage({
     .single();
   if (!report) notFound();
   // 강사는 본인 담당 학생 보고서만(비담당 학생 PII 차단). 사무실 역할은 전체 허용.
-  if (user.systemRole === "teacher") {
-    const { studentIds } = await getTeacherScope(user.id);
-    if (!report.student_id || !studentIds.includes(report.student_id)) notFound();
-  }
+  // 🔴 판정은 **원생 상세와 같은 함수**(`canViewStudentDetail` — 담임 ∪ 교시 담당 ∪ 임시 위임, 종료 60일 이내)다
+  //    (2026-09-18, 원생 상세 '진도' 탭에 이 문서 바로가기를 달면서). 종전 `getTeacherScope`는 **담임 반·재원 중**만
+  //    봐서, 진도 탭에서 그 보고서가 보이는 교시 담당 강사(영어는 대부분)가 바로가기를 누르면 404였다([[#77]] —
+  //    한 레코드의 표면은 같은 게이트를 지나야 한다). 새 판정은 종전의 **상위 집합**이라 막히던 사람만 풀린다.
+  //    ⚠️ 학생이 빈 보고서는 종전 규칙 그대로(강사만 막는다) — 사무실 화면의 동작을 바꾸지 않는다.
+  if (
+    report.student_id
+      ? !(await canViewStudentDetail(report.student_id))
+      : user.systemRole === "teacher"
+  )
+    notFound();
 
   const [{ data: student }, settings, trendRows, sendName, jj] = await Promise.all([
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),

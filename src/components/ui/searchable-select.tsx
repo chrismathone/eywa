@@ -43,6 +43,7 @@ export function SearchableSelect({
   onOpenChange,
   valuePrefix,
   prefixOnlyFor,
+  sideColumns,
 }: {
   options: ComboOption[];
   value?: string;
@@ -73,6 +74,14 @@ export function SearchableSelect({
    * 물들이면 요청받지 않은 화면까지 바뀐다. **길고 자주 갈아타는 목록**(반·학생 전환)에서만 켤 것.
    */
   highlightSelected?: boolean;
+  /**
+   * 열 맞춤 줄(`meta`가 있는 옵션)의 **오른쪽 두 열 폭·정렬**을 호출부가 정한다 — `hint` 열 · `meta` 열의 클래스.
+   * 원장 2026-09-18 *"이름 / 과목 / 날짜 이렇게 열맞춤"*: 기본 모양은 금액(숫자·오른쪽)용이라 `meta`가 48px이고
+   * `hint`는 폭이 없어, 과목·날짜 같은 **글자 열**이 들쭉날쭉하거나 잘렸다.
+   * 🔑 주면 ① `hint`가 비어도 빈 칸을 세우고 ② 체크 표시 자리를 **늘 비워 둔다** — 안 그러면 선택된 줄만
+   *    체크 폭만큼 왼쪽으로 밀려 그 줄의 열이 어긋난다. 안 주면 종전 모양 그대로(다른 화면 영향 없음).
+   */
+  sideColumns?: { hint: string; meta: string };
   /**
    * 트리거 라벨 앞에 붙는 축 이름("기간" → `기간: 최근 7일`). 목록 안 항목은 그대로다.
    * 툴바에 드롭다운이 여럿 설 때 고른 값만 남으면 어느 축인지 안 읽힌다('완료'가 후속인지 상태인지) —
@@ -230,7 +239,20 @@ export function SearchableSelect({
                       onClick={() => choose(o.value)}
                       className={`flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${rowTone}`}
                     >
-                      {o.meta !== undefined ? (
+                      {o.meta !== undefined && sideColumns ? (
+                        // 열 맞춤(폭 지정) — 이름(남는 폭) · hint 열 · meta 열. 빈 hint도 칸을 세운다.
+                        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                          <span className="min-w-0 flex-1 truncate" title={o.label}>
+                            {o.label}
+                          </span>
+                          <span className={`text-text-dim shrink-0 truncate text-xs ${sideColumns.hint}`}>
+                            {o.hint ?? ""}
+                          </span>
+                          <span className={`text-text-dim shrink-0 truncate text-xs ${sideColumns.meta}`}>
+                            {o.meta}
+                          </span>
+                        </span>
+                      ) : o.meta !== undefined ? (
                         // 열 맞춤 — 이름(남는 폭) · 금액(숫자 정렬, 오른쪽) · 상세(고정 폭).
                         <span className="flex min-w-0 flex-1 items-baseline gap-2">
                           <span className="min-w-0 flex-1 truncate">{o.label}</span>
@@ -251,6 +273,9 @@ export function SearchableSelect({
                           size={14}
                           className={`size-3.5 shrink-0 ${highlightSelected ? "text-amber" : "text-primary"}`}
                         />
+                      ) : sideColumns && o.meta !== undefined ? (
+                        // 체크 자리를 비워 둔다 — 선택된 줄만 열이 밀리지 않게.
+                        <span aria-hidden className="size-3.5 shrink-0" />
                       ) : null}
                     </button>
                   </li>

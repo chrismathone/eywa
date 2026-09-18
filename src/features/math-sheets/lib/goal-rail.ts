@@ -4,15 +4,15 @@
  * 원장이 가져온 옛 수학 프로그램 초안(2026-09-02, able "반별 진도 현황"·"학생 개별 진도 현황")의 핵심은
  * 그림 하나다 — 과정의 시작(Start)과 끝(End) 사이에 **오늘 계획상 있어야 할 자리(Plan)** 와 **실제로
  * 있는 자리(Now)** 를 함께 찍고, 둘의 차이를 "N블럭 빠름/느림"으로 적는다. 우리 자리에 옮기면
- *  · 과정   = 그 달 **목표 구간**(math_month_goals의 목표 차시가 End, 달이 시작될 때의 위치가 Start)
- *  · 블럭   = 커리큘럼 **차시**(글로벌 위치 1칸 = 차시 1개, curriculum-position.ts)
+ *  · 과정   = 그 달 **목표 구간**(math_month_goals의 목표 블록가 End, 달이 시작될 때의 위치가 Start)
+ *  · 블럭   = 커리큘럼 **블록**(글로벌 위치 1칸 = 블록 1개, curriculum-position.ts)
  *  · Plan   = Start에서 End까지를 **그 달 수업일 수로 등분**해 지난 수업일만큼 나간 자리
  *  · Now    = 이 달 마지막 기록의 위치
  *
  * 🔴 **모르면 판정하지 않는다** — 목표가 없거나(End 없음) 위치가 한 번도 안 잡혔으면(Now 없음) 레일은
  *    회색이고 차이는 적지 않는다. "목표를 안 적었다"가 "느리다"로 둔갑하면 거짓 재촉이다(ECS goal-match와
  *    같은 규약). 아직 수업이 한 번도 안 지난 달도 판정하지 않는다(`not-started`).
- * 🔴 **차이 1차시는 소음이다** — 수학 반은 한 달에 4~9번 도는데 한 차시를 두 번에 나눠 하는 게 정상이라
+ * 🔴 **차이 1블록는 소음이다** — 수학 반은 한 달에 4~9번 도는데 한 블록를 두 번에 나눠 하는 게 정상이라
  *    (progress-stall.ts 실측: 직전과 같은 진도가 학생 절반) ±1은 `on`(계획대로)으로 본다.
  * ⚠️ 위치를 여기서 풀지 않는다 — 커리큘럼 매칭은 **서버가 한 번**(`lesson-position.ts`) 하고 이 파일은 숫자만
  *    받는다(같은 판정을 두 곳에서 하지 않는다). 🔴 트랙(현행·선행)으로 레일을 가르지 않는다 — 위치는 학년 관통
@@ -24,14 +24,14 @@ export type RailTrack = "current" | "ahead";
 export type RailPoint = {
   /** YYYY-MM-DD */
   date: string;
-  /** 커리큘럼 글로벌 위치(그날 가장 뒤 차시). */
+  /** 커리큘럼 글로벌 위치(그날 가장 뒤 블록). */
   position: number;
 };
 
 export type GoalRailInput = {
   /** 달이 시작되기 전 마지막 위치(이 트랙). 없으면 null → 이 달 첫 기록이 Start가 된다. */
   startBefore: number | null;
-  /** 이 달 목표 위치(목표 차시 중 가장 뒤). 없거나 커리큘럼에 못 맞추면 null. */
+  /** 이 달 목표 위치(목표 블록 중 가장 뒤). 없거나 커리큘럼에 못 맞추면 null. */
   goalEnd: number | null;
   /** 이 달 기록 중 위치가 잡힌 날들(오름차순이 아니어도 된다). */
   points: readonly RailPoint[];
@@ -66,9 +66,9 @@ export type GoalRail = {
   plan: number | null;
   /** (Now − Start) / (End − Start), 0~100. 목표가 없으면 null. */
   progressPct: number | null;
-  /** Now − Plan(차시). 양수=빠름 · 음수=느림. 판정 불가면 null. */
+  /** Now − Plan(블록). 양수=빠름 · 음수=느림. 판정 불가면 null. */
   diff: number | null;
-  /** Now − Start(차시) — 목표가 없어도 "이 달 얼마나 움직였나"는 말할 수 있다. */
+  /** Now − Start(블록) — 목표가 없어도 "이 달 얼마나 움직였나"는 말할 수 있다. */
   moved: number | null;
   status: GoalRailStatus;
   elapsedDays: number;
@@ -137,7 +137,7 @@ export function buildGoalRail(input: GoalRailInput): GoalRail {
 
 /**
  * 레일 위 좌표(0~100) — Start=0 · End=100. 목표가 없으면 Start→Now 구간을 통째로 그리기 위해
- * `moved`를 20차시 가득으로 본다(종전 진도 레일과 같은 눈금 — 한 달에 20차시 넘게 나가는 일은 드물다).
+ * `moved`를 20블록 가득으로 본다(종전 진도 레일과 같은 눈금 — 한 달에 20블록 넘게 나가는 일은 드물다).
  */
 export function railX(rail: GoalRail, position: number | null): number | null {
   if (position == null || rail.start == null) return null;
@@ -157,10 +157,10 @@ export const RAIL_STATUS_LABEL: Record<GoalRailStatus, string> = {
   behind: "계획보다 느림",
 };
 
-/** "+3차시 빠름" · "2차시 느림" · "계획대로" — 차이 문구 한 벌. 판정 불가면 null. */
+/** "+3블록 빠름" · "2블록 느림" · "계획대로" — 차이 문구 한 벌. 판정 불가면 null. */
 export function railDiffLabel(rail: GoalRail): string | null {
   if (rail.diff == null) return null;
-  if (rail.status === "done") return rail.diff > 0 ? `목표 도달 (+${rail.diff}차시)` : "목표 도달";
+  if (rail.status === "done") return rail.diff > 0 ? `목표 도달 (+${rail.diff}블록)` : "목표 도달";
   if (rail.status === "on") return "계획대로";
-  return rail.diff > 0 ? `${rail.diff}차시 빠름` : `${Math.abs(rail.diff)}차시 느림`;
+  return rail.diff > 0 ? `${rail.diff}블록 빠름` : `${Math.abs(rail.diff)}블록 느림`;
 }

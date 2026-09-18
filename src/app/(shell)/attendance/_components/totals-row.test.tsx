@@ -123,6 +123,7 @@ const MONEY: TeacherMoney = {
     rowCount: 3,
     missingTierStudents: ["최유나"],
     missingTierStudentIds: [S3],
+    missingTierRowKeys: [rowKey(CB, S3)],
     missingPriceTiers: [],
     excludedUnits: 1,
     tierByStudent: {},
@@ -137,13 +138,21 @@ const MONEY: TeacherMoney = {
   },
 };
 
-function renderSheet(money: TeacherMoney | null = MONEY) {
+function renderSheet(money: TeacherMoney | null = MONEY, priceConfirmedRows?: string[]) {
   const src = buildGridSource(GROUPS, DAYS, ORDERED);
   const view = render(
     <AttendanceSearchProvider rows={SEARCH_ROWS}>
       <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
         <AttendanceSearchToggle />
-        <MatrixTable groups={GROUPS} days={DAYS} holidays={{}} showGroups money={money} ordered={ORDERED} />
+        <MatrixTable
+          groups={GROUPS}
+          days={DAYS}
+          holidays={{}}
+          showGroups
+          money={money}
+          ordered={ORDERED}
+          priceConfirmedRows={priceConfirmedRows}
+        />
       </GridProvider>
     </AttendanceSearchProvider>,
   );
@@ -157,6 +166,16 @@ const type = (input: HTMLInputElement, v: string) => fireEvent.change(input, { t
 const flat = (el: HTMLElement) => el.textContent!.replace(/\s+/g, " ");
 
 describe("하단 합계 줄 — 검색 전에는 종전 표기 그대로", () => {
+  it("학생 행 맨 오른쪽 청구·납입 열은 없다 — 합계 줄의 청구·납입은 그대로(원장 2026-09-17)", () => {
+    const { container } = renderSheet();
+    expect(screen.queryByRole("columnheader", { name: "청구" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "납입" })).toBeNull();
+    // 이름·학교학년 + 날짜 + 시수·출석률 — 금액 칸 없음.
+    expect(screen.getByText("박서준").closest("tr")!.children).toHaveLength(DAYS.length + 4);
+    // 요약 줄(맨 아래)은 전 열을 덮는다 — 그 위 합계 행(2026-09-18)은 열마다 칸이 선다.
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 4));
+    expect(flat(container.querySelector("tfoot")!)).toContain("납입 400,000");
+  });
   it("라벨은 '합계'이고 병기(`/ 전체`)도 칩도 없다", () => {
     const { container } = renderSheet();
     const t = flat(container);
@@ -223,12 +242,14 @@ describe("🔴 검색을 걸면 하단 숫자가 검색 기준으로 바뀐다",
     expect(flat(container)).toContain("정산액 — / 300,000");
   });
 
-  it("반 머리행도 같은 규약 — `검색 1명 · 시수 3 / 4`", () => {
+  it("반 머리행은 '검색 N명'만 — 🔴 반별 시수 표기는 없앴다(원장 2026-09-17)", () => {
     const { container, input } = renderSheet();
     type(input, "이도");
     const t = flat(container);
     expect(t).toContain("검색 1명");
-    expect(t).toContain("시수 3 / 4"); // 가반 = 이도윤 3 + 박서준 1
+    // 🔴 문자열 하나가 아니라 **머리행 전체**를 본다(다른 수로 되살아나도 잡힌다).
+    const head = screen.getAllByText(/가반/)[0]!.closest("tr")!;
+    expect(head.textContent).not.toContain("시수");
   });
 
   it("금액 열이 없는 강사 화면에서도 시수만 같은 규약으로 좁는다", () => {
@@ -248,5 +269,25 @@ describe("검색을 지우면 원래 표기 그대로 돌아온다", () => {
     expect(flat(container)).not.toBe(before);
     type(input, "");
     expect(flat(container)).toBe(before);
+  });
+});
+
+describe("「단가」 표식 ↔ 회차 확정 단가 (원장 2026-09-18)", () => {
+  const badgeOf = (container: HTMLElement) => container.querySelector('[title^="최유나 — "]');
+
+  it("티어가 없고 회차 단가도 확정 전이면 그 줄에 「단가」가 선다", () => {
+    const { container } = renderSheet();
+    expect(badgeOf(container)?.textContent).toBe("단가");
+  });
+
+  it("🔴 회차 확정에서 단가를 확정한 줄은 표식을 뗀다 — 합계 줄 경고(정산에서 빠진 사실)는 그대로", () => {
+    const { container } = renderSheet(MONEY, [rowKey(CB, S3)]);
+    expect(badgeOf(container)).toBeNull();
+    expect(flat(container)).toContain("단가 미지정 1명");
+  });
+
+  it("다른 줄의 확정은 이 줄 표식에 영향이 없다", () => {
+    const { container } = renderSheet(MONEY, [rowKey(CA, S3), rowKey(CB, S1)]);
+    expect(badgeOf(container)?.textContent).toBe("단가");
   });
 });

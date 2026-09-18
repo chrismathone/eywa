@@ -4,6 +4,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { computeTierSettlement } from "@/features/payroll/tier-settlement";
 import { collectTierRows } from "@/features/payroll/server/tier-rows";
 import { parseGroupRates } from "@/features/payroll/salary-group";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import type { ExcludedLineLike, SettlementLineLike } from "@/features/attendance/search-totals";
 
 /**
@@ -42,6 +43,8 @@ export type TierSettlementInfo =
       missingTierStudents: string[];
       /** 미지정 학생 id — 이름 칸 「단가」 라벨 표시용(동명이인 안전). */
       missingTierStudentIds: string[];
+      /** 단가 미지정 **반·학생 줄**(`classId|studentId`) — 「단가」 표식은 이걸로 붙인다(학생 단위로 붙이면 모든 반에 번진다). */
+      missingTierRowKeys: string[];
       missingPriceTiers: string[];
       excludedUnits: number;
       /** 학생별 티어 라벨(여럿이면 " · " join) — 학교·학년 열 아랫줄 표시용(라벨만, 금액 아님). */
@@ -62,6 +65,8 @@ export type TierSettlementInfo =
       status: "hold";
       missingTierStudents: string[];
       missingTierStudentIds: string[];
+      /** 단가 미지정 **반·학생 줄**(`classId|studentId`) — 「단가」 표식은 이걸로 붙인다(학생 단위로 붙이면 모든 반에 번진다). */
+      missingTierRowKeys: string[];
       missingPriceTiers: string[];
       missingRateGroups: string[];
       tierByStudent: Record<string, string>;
@@ -180,6 +185,7 @@ export async function getTeacherMoney(
  * · 시수 = attendance_records **교시별 유효행**(0196a slot_start — 같은 날 두 교시면 두 행 다 센다.
  *   이수진 4명의 "고등 3T 1T + 중등 3T 0.5T 같은 날"이 정확히 이 경로로 살아난다).
  * · 티어 = 기록 예외(attendance_records.salary_tier) ?? 수강(enrollments.salary_tier).
+ * · 단가 = 회차 확정 단가(수학 반, 그 달 회차 전부 확정) ?? 티어 단가표 — 원장 2026-09-18 통일(tier-rows.ts).
  * · 🔴 0199a 스키마가 아직 없거나(선-SQL 배포 안전, [[#95]] expand/contract) 단가표가 비어 있으면
  *   조용히 `unwired` — 기존 화면 문구가 그대로 나온다. 여기서 throw하면 출석부 전체가 죽는다.
  */
@@ -191,7 +197,9 @@ async function computeTierSettlementInfo(
 ): Promise<TierSettlementInfo> {
   try {
     // 행 조립은 공용 모듈이 단일 소스 — 급여명세서(payslip-queries)와 **같은 코드**로 같은 숫자를 낸다.
-    const collected = await collectTierRows(supabase, month, classIds);
+    // 과목 설정은 요청 캐시(페이지가 이미 읽었다) — 회차 단가를 붙일 수학 반 판정 재료.
+    const settings = await getTenantSettings();
+    const collected = await collectTierRows(supabase, month, classIds, undefined, settings.operations.subjects);
     if (!collected) return { status: "unwired" };
 
     const result = computeTierSettlement(collected.rows, collected.priceByTier, rates);
@@ -201,6 +209,7 @@ async function computeTierSettlementInfo(
         status: "hold",
         missingTierStudents: result.missingTierStudents,
         missingTierStudentIds: result.missingTierStudentIds,
+        missingTierRowKeys: result.missingTierRowKeys,
         missingPriceTiers: result.missingPriceTiers,
         missingRateGroups: result.missingRateGroups,
         tierByStudent,
@@ -212,6 +221,7 @@ async function computeTierSettlementInfo(
       rowCount: result.rowCount,
       missingTierStudents: result.missingTierStudents,
       missingTierStudentIds: result.missingTierStudentIds,
+      missingTierRowKeys: result.missingTierRowKeys,
       missingPriceTiers: result.missingPriceTiers,
       excludedUnits: result.excludedUnits,
       tierByStudent,

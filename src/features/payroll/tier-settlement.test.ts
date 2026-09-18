@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { computeTierSettlement, floor1, tierSalaryGroup, type TierRow } from "./tier-settlement";
+import {
+  computeTierSettlement,
+  floor1,
+  salaryGroupForPrice,
+  sessionPriceOf,
+  SESSION_PRICE_LABEL,
+  tierSalaryGroup,
+  type TierRow,
+} from "./tier-settlement";
 
 // 시트 실측 케이스(2026-07, 강사 출석부 3종 대조로 확정 — project_attendance-sheet-to-eywa-payroll-parity).
 // 급여 행 = floor1(단가 × 시수 × 0.911 × 비율%) · 정산액 = floor(Σ행).
@@ -122,6 +130,21 @@ describe("computeTierSettlement — 빠진 값은 0으로 치지 않고 명단�
     expect(r.total).toBe(78_402); // floor1(21,250×9×0.911×0.45)=floor1(78,402.9375)=78,402.9 → 78,402
   });
 
+  it("🔴 미지정은 **반·학생 줄** 단위로 가린다 — 한 반만 비었으면 그 반 줄만(원장 2026-09-18 제보)", () => {
+    // 같은 학생이 두 반: A반은 티어 있음, B반은 미지정 → 「단가」는 B반 줄에만 서야 한다.
+    const r = computeTierSettlement(
+      [
+        row({ studentId: "s", classId: "A", units: 4 }),
+        row({ studentId: "s", classId: "B", tierLabel: null, units: 2 }),
+      ],
+      prices,
+      { groupRates: { 초등: 45 }, defaultRate: null },
+    );
+    expect(r.missingTierRowKeys).toEqual(["B|s"]);
+    // 학생 단위 목록(요약 문구용)은 그대로 — 금액·집계는 불변.
+    expect(r.missingTierStudentIds).toEqual(["s"]);
+  });
+
   it("단가표에 없는 티어·비율 없는 과정도 각각 명단으로", () => {
     const r = computeTierSettlement(
       [
@@ -222,5 +245,108 @@ describe("매출액·행 내역 (0205a 급여명세서 부가)", () => {
       { groupRates: { 초등: 47.5, 중등: 48 }, defaultRate: null },
     );
     expect(r.total! / r.grossTuition).toBeCloseTo(0.4353, 3);
+  });
+});
+
+// ── 회차 확정 단가 통일(원장 2026-09-18 *"회차 확정에서 전부 결정하지 않았나?"*) ──────────────
+describe("sessionPriceOf — 정산에 쓸 회차 단가", () => {
+  const t = (over: Partial<Parameters<typeof sessionPriceOf>[0][number]> = {}) => ({
+    confirmed_sessions: 7,
+    unit_price: 24_000,
+    pricing_mode: "per_session",
+    quantity_basis: "attendance_units",
+    ...over,
+  });
+  it("전부 확정·시수 기준·한 단가면 그 단가(문자열 numeric도)", () => {
+    expect(sessionPriceOf([t()])).toBe(24_000);
+    expect(sessionPriceOf([t({ unit_price: "24000" }), t({ confirmed_sessions: "3.5" })])).toBe(24_000);
+  });
+  it("🔴 하나라도 미확정·단가 없음이면 null — 아직 정한 게 아니다", () => {
+    expect(sessionPriceOf([t(), t({ confirmed_sessions: null })])).toBeNull();
+    expect(sessionPriceOf([t({ unit_price: null })])).toBeNull();
+    expect(sessionPriceOf([])).toBeNull();
+  });
+  it("🔴 월 정액·옛 일수 기준은 단위가 달라 null · 청구서 둘의 단가가 갈리면 null", () => {
+    expect(sessionPriceOf([t({ pricing_mode: "monthly" })])).toBeNull();
+    expect(sessionPriceOf([t({ quantity_basis: "days" })])).toBeNull();
+    expect(sessionPriceOf([t({ quantity_basis: null })])).toBeNull();
+    expect(sessionPriceOf([t(), t({ unit_price: 25_000 })])).toBeNull();
+  });
+});
+
+describe("salaryGroupForPrice — 과정은 단가가 말한다(반 이름 아님)", () => {
+  const table = new Map<string, number>([
+    ["초등 3T", 21_250],
+    ["초등특강", 21_250],
+    ["중등 3T", 24_000],
+    ["중등특강", 24_000],
+    ["고등 2T", 29_250],
+    ["킬러문제", 29_250],
+    ["중등함수특강", 30_000],
+    ["매쓰몽", 30_000],
+  ]);
+  it("🔴 '개별' 반은 학년이 섞인다 — 고등 반의 초등 단가 학생은 초등", () => {
+    expect(salaryGroupForPrice(21_250, "고등", table)).toBe("초등");
+    expect(salaryGroupForPrice(24_000, "초등", table)).toBe("중등");
+  });
+  it("특강은 반이 정한다(같은 금액을 정규·특강 티어가 나눠 쓴다)", () => {
+    expect(salaryGroupForPrice(24_000, "특강", table)).toBe("특강");
+  });
+  it("과정 없는 라벨은 무시 · 특강 전용 금액이나 단가표에 없는 금액이면 반 과정으로 폴백", () => {
+    expect(salaryGroupForPrice(29_250, null, table)).toBe("고등");
+    expect(salaryGroupForPrice(30_000, "중등", table)).toBe("중등");
+    expect(salaryGroupForPrice(99_999, null, table)).toBeNull();
+  });
+});
+
+describe("computeTierSettlement — 회차 확정 단가 줄", () => {
+  const rates = { groupRates: { 초등: 45, 중등: 48, 고등: 47.5 }, defaultRate: null };
+
+  it("🔴 티어가 없어도 회차 단가가 있으면 산정한다 — '단가 미지정'에서 빠진다", () => {
+    const r = computeTierSettlement([row({ tierLabel: null, units: 4, sessionPrice: 24_000 })], prices, rates);
+    // 24,000×4=96,000 ×0.911=87,456 ×0.48=41,978.88 → floor1 41,978.8
+    expect(r.total).toBe(41_978);
+    expect(r.missingTierStudents).toEqual([]);
+    expect(r.missingTierRowKeys).toEqual([]);
+    expect(r.lines[0]).toMatchObject({ unitPrice: 24_000, group: "중등", tierLabel: SESSION_PRICE_LABEL, priceSource: "session" });
+  });
+
+  it("티어 단가와 회차 단가가 같으면 종전 줄과 금액·과정·라벨이 같다", () => {
+    const before = computeTierSettlement([row({ tierLabel: "중등 3T", units: 4 })], prices, rates);
+    const after = computeTierSettlement([row({ tierLabel: "중등 3T", units: 4, sessionPrice: 24_000 })], prices, rates);
+    expect(after.total).toBe(before.total);
+    expect(after.lines[0]).toMatchObject({ ...before.lines[0], priceSource: "session" });
+  });
+
+  it("🔴 둘이 다르면 회차 단가가 이긴다 — 과정도 그 단가에서 다시 읽는다", () => {
+    // 수강 티어 '고등 3T'(27,250)인데 회차는 24,000(중등) — 실측 9월 9줄.
+    const r = computeTierSettlement(
+      [row({ tierLabel: "고등 3T", units: 2, sessionPrice: 24_000, classGroup: "고등" })],
+      prices,
+      rates,
+    );
+    expect(r.lines[0]).toMatchObject({ unitPrice: 24_000, group: "중등", tierLabel: SESSION_PRICE_LABEL });
+    expect(r.total).toBe(Math.floor(floor1(24_000 * 2 * 0.911 * 0.48)));
+  });
+
+  it("회차 단가가 없는 줄은 종전 그대로(티어 없음 = 명단)", () => {
+    const r = computeTierSettlement(
+      [row({ tierLabel: null, sessionPrice: null }), row({ studentId: "s2", tierLabel: "초등 3T", units: 7 })],
+      prices,
+      rates,
+    );
+    expect(r.missingTierRowKeys).toEqual(["c1|s1"]);
+    expect(r.total).toBe(60_980);
+  });
+
+  it("과정 비율이 없으면 회차 줄도 '비율 미설정'으로 빠진다(0 지어내기 금지)", () => {
+    const r = computeTierSettlement(
+      [row({ tierLabel: null, units: 2, sessionPrice: 37_500 })],
+      new Map([["수능", 37_500]]),
+      { groupRates: {}, defaultRate: null },
+    );
+    expect(r.total).toBeNull();
+    expect(r.missingRateGroups).toEqual(["수능"]);
+    expect(r.excludedLines[0]).toMatchObject({ reason: "no-rate", tierLabel: SESSION_PRICE_LABEL });
   });
 });

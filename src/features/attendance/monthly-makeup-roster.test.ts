@@ -84,6 +84,7 @@ describe("배선 — getMonthlyAttendanceMatrix가 순서를 지킨다", () => {
 
   it("⚠️ 명단을 만드는 조회는 무페이징 select가 아니다(B2) — fetchAllPaged", () => {
     const head = fn.slice(0, fn.indexOf("const studentIds = "));
-    expect(head).toMatch(/fetchAllPaged<\{ student_id: string \}>/);
+    // 교시·자리 표식 = 강사 보기가 **이 보기에 보이는 기록**이 있는 방문자만 세우는 재료(2026-09-17 저녁 적대 리뷰).
+    expect(head).toMatch(/fetchAllPaged<\{[\s\S]{0,200}student_id: string;[\s\S]{0,200}slot_start: string \| null;/);
   });
 });

@@ -44,7 +44,9 @@ export function NewcomerTable({ rows, today, canWrite, checksKnown, busy, select
       <td className={styles.stickySchool} title={schoolGradeLabel(row.school, row.grade)}><span className={styles.ellipsis}>{schoolGradeLabel(row.school, row.grade)}</span></td>
       <td className={styles.stickySubject}><span className={styles.subject} title={row.subject ? labelOf(row.subject) : "과목 미정"}>{row.subject ? labelOf(row.subject) : "미정"}</span></td>
       <td className={styles.date}>{shortDate(row.enrolledOn)}</td>
-      <td className={`${styles.date} ${styles.divider}`}>{row.firstClassOn ? <span className={styles.firstClass} title={`첫 수업일 ${row.firstClassOn}`}>
+      {/* 첫 수업 = 날짜·D+n 격자(블록)라 칸 가운데 정렬을 안 따른다 — 행마다 같은 폭(14ch)으로 가운데에 세워 머리('첫 수업',
+          가운데)와 같은 축에 두고, 날짜·D+n 자리는 행끼리 그대로 줄을 맞춘다(원장 2026-09-18). */}
+      <td className={`${styles.date} ${styles.divider}`}>{row.firstClassOn ? <span className={`${styles.firstClass} mx-auto max-w-[14ch]`} title={`첫 수업일 ${row.firstClassOn}`}>
         <time dateTime={row.firstClassOn}>{shortDate(row.firstClassOn)}</time><FirstClassDay date={row.firstClassOn} today={today} />
       </span> : <span className={styles.muted}>날짜 미정</span>}</td>
       {ONBOARDING_ITEMS.map(item => {

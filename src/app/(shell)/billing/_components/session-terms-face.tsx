@@ -27,15 +27,18 @@ export async function SessionTermsFace({
   q,
   page,
   allocation,
+  confirmation,
 }: {
   period?: string;
   subject?: string;
   q?: string;
   page?: string;
   allocation?: string;
+  /** `open` = 미확정만 보기(원장 2026-09-17 *"검색 필터에 '미확정' 보기 추가"*). */
+  confirmation?: string;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
-  const [view, settings] = await Promise.all([getSessionTermsView(p), getTenantSettings()]);
+  const [view, settings] = await Promise.all([getSessionTermsView(p, undefined, { lastMonth: true }), getTenantSettings()]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
@@ -48,8 +51,12 @@ export async function SessionTermsFace({
   const query = (q ?? "").trim();
   const searched = query ? bySubject.filter((r) => matchesTermQuery(r, query)) : bySubject;
   const pendingOnly = allocation === "pending";
+  const openOnly = confirmation === "open";
+  const isOpen = (r: { confirmedSessions: number | null }) => r.confirmedSessions === null;
+  // 두 필터의 괄호 속 건수는 서로를 거르지 않은 수(과목·검색까지만) — 한쪽을 켜도 다른 쪽 건수가 흔들리지 않는다.
   const pendingCount = searched.filter(needsReceiptAllocation).length;
-  const filtered = pendingOnly ? searched.filter(needsReceiptAllocation) : searched;
+  const openCount = searched.filter(isOpen).length;
+  const filtered = searched.filter((r) => (!pendingOnly || needsReceiptAllocation(r)) && (!openOnly || isOpen(r)));
 
   // 반 단위 그룹핑 — 반별 일괄 확정(원장 지시). 학생명 정렬 유지된 채 반으로 묶고, 반 안은 학년·이름 순.
   const groupMap = new Map<string, ClassGroup>();
@@ -82,6 +89,7 @@ export async function SessionTermsFace({
     if (activeSubject) qs.set("subject", activeSubject);
     if (query) qs.set("q", query);
     if (pendingOnly) qs.set("allocation", "pending");
+    if (openOnly) qs.set("confirmation", "open");
     if (n > 1) qs.set("page", String(n));
     return `/billing?${qs.toString()}`;
   };
@@ -106,6 +114,7 @@ export async function SessionTermsFace({
           />
         ) : null}
         <SearchToggle placeholder="이름·반·학교·담임·메모" defaultValue={query} />
+        <FilterSelect paramName="confirmation" value={openOnly ? "open" : ""} options={[{ value: "open", label: `미확정만 보기 (${openCount})` }]} axisLabel="확정" ariaLabel="확정 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <FilterSelect paramName="allocation" value={pendingOnly ? "pending" : ""} options={[{ value: "pending", label: `미배분만 보기 (${pendingCount})` }]} axisLabel="배분" ariaLabel="배분 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <span className="text-text-dim text-sm whitespace-nowrap">
           반 <span className="num">{allGroups.length}</span>개 · 확정{" "}
@@ -126,7 +135,7 @@ export async function SessionTermsFace({
         기존 일수 기준 확정값(확정 시수가 <b>붉은 숫자</b> — 마우스를 올리면 사유)은 해제 후 시수를 확인해 재확정하세요.
         예정 시수는 수강 기간·시간표·휴일로 볼 때마다 다시 계산하지만 확정 시수는 그대로라, 둘이 다르면 확정 시수가{" "}
         <b>주황 숫자</b>로 표시됩니다(수강·시간표가 바뀌었다면 해제 후 재확정). 왼쪽 체크박스로 학생을 고른 뒤 <b>선택 일괄 확정</b>을
-        누르면 각 행에 보이는 시수 × 단가로 한꺼번에 확정합니다. 반 학생이 모두 확정되면 그 자리에 <b>전체 확정 해제</b>가 섭니다(한 명만 해제해도 입력칸으로 돌아옵니다). <b>수납 연결·배분</b>에서는 학생의 여러 반을 수납 항목에 연결하고
+        누르면 각 행에 보이는 시수 × 단가로 한꺼번에 확정합니다. 반 학생이 모두 확정되면 그 자리에 <b>전체 확정 해제</b>가 섭니다(한 명만 해제해도 입력칸으로 돌아옵니다). 지난 달에 확정한 학생은 미확정 칸이 <b>지난 달 기준</b>으로 미리 채워집니다 — 옮긴 단가는 옅은 파랑, 지난 달 비율로 예정보다 줄인 시수는 옅은 주황(선택 일괄 확정 전에 한 번 묻습니다). 저장은 확인 후 확정할 때만. <b>수납 연결·배분</b>에서는 학생의 여러 반을 수납 항목에 연결하고
         <b> 할인 전 청구액</b>을 배분합니다. 학부모 할인은 급여 기준에서 차감하지 않습니다.{" "}
         회차를 비우고 <b>단가 일괄 입력</b>을 누르면 미확정 학생의 단가 입력칸만 채웁니다(저장 전).
         회차와 단가를 모두 입력한 뒤 <b>이 반 일괄 확정</b>을 누르면 입력한 회차 × 단가로 확정됩니다.
@@ -145,7 +154,13 @@ export async function SessionTermsFace({
 
       {filtered.length === 0 ? (
         <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
-          {pendingOnly ? "배분이 필요한 항목이 없습니다." : query ? (
+          {/* 이 달 회차 자체가 없으면 필터 문구보다 '계획 갱신' 안내가 먼저 — "미확정 항목이 없습니다"는 전부 확정된 것처럼 읽힌다(리뷰 2026-09-17). */}
+          {allRows.length === 0 ? (
+            <>
+              이 달의 회차 데이터가 없습니다. 위의 <b>계획 갱신</b>을 누르면 청구서 기준으로 반별 계획 회차가
+              생성됩니다.
+            </>
+          ) : openOnly && pendingOnly ? "미확정이면서 배분이 필요한 항목이 없습니다." : openOnly ? "미확정 항목이 없습니다." : pendingOnly ? "배분이 필요한 항목이 없습니다." : query ? (
             <>“{query}” 검색 결과가 없습니다. 검색어를 조정해 보세요.</>
           ) : (
             <>
@@ -156,8 +171,8 @@ export async function SessionTermsFace({
         </div>
       ) : (
         <>
-          {/* 검색·과목 필터로 한 반의 일부만 보일 때도 반 일괄 확정은 보이는 학생에게만(안 보이는 확정값을 덮지 않게 — 리뷰 2026-09-17). */}
-          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} visibleOnly={pendingOnly || query !== "" || activeSubject !== null} />
+          {/* 검색·과목·미배분·미확정 필터로 한 반의 일부만 보일 때도 반 일괄 확정은 보이는 학생에게만(안 보이는 확정값을 덮지 않게 — 리뷰 2026-09-17). */}
+          <SessionTermGroups key={p} groups={groups} catalog={view.catalog} period={p} visibleOnly={pendingOnly || openOnly || query !== "" || activeSubject !== null} />
           <Pagination page={curPage} totalPages={totalPages} total={allGroups.length} hrefForPage={pageHref} />
         </>
       )}

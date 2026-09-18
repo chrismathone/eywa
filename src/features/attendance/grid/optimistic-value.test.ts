@@ -47,6 +47,10 @@ describe("optimisticGridValue — 저장 전에 칸에 칠할 값(서버 저장 
   it("지우기(null)는 빈 칸", () => {
     expect(optimisticGridValue(null, { s: "present", u: 2 }, 1.5, 1)).toBeNull();
   });
+
+  it.each([1, 2, 3, 4])("%i개 교시에도 명시한 1은 합계 1로 보인다", (slots) => {
+    expect(optimisticGridValue(P("1"), { s: "present", u: 2 }, 3, slots)).toEqual({ s: "present", u: null });
+  });
 });
 
 describe("ghostOptimisticValue — 빗금 칸에 상태만 옮길 때(원장 2026-09-14)", () => {

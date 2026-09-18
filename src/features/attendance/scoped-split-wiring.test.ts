@@ -76,7 +76,9 @@ describe("강사 보기 시수 배분 — 배선", () => {
   it("🔴 메모를 고르는 곳(월간 조회·반별 입력 폼·메모만 저장)은 사유 있는 메모를 대신 입력 줄보다 먼저 본다", () => {
     const queries = stripComments(read("features", "attendance", "server", "queries.ts"));
     expect(queries).toContain("stripProxyMemo(cell.note)");
+    // 남의 교시 메모는 **제 교시 값이 있는 칸에서만** 대체로 보인다(원장 2026-09-17 · 적대 리뷰) — 값 없는 칸엔 안 싣는다.
     expect(queries).toContain("stripProxyMemo(cell.otherNote)");
+    expect(queries).toContain("cell.note ?? (cell.slots.length > 0 ? cell.otherNote : null)");
     expect(queries).toContain("stripProxyMemo(cur.note)");
     expect(bodyOf(actions, "setAttendanceCell").match(/noteTargetRow\(/g)?.length).toBe(2);
   });
@@ -110,7 +112,8 @@ describe("강사 보기 시수 배분 — 배선", () => {
     expect(stripComments(read("app", "(shell)", "attendance", "_components", "attendance-cell.tsx"))).toContain(
       "ghostCellKind(",
     );
-    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("ghostCellKind(");
+    // 강사 보기는 빗금 칸을 더는 안 만든다(원장 2026-09-17 *"담당하는 날만 표시"*) — 조회가 빗금 표시 값을 다시 짓지 않게.
+    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).not.toContain("ghostCellKind(");
   });
 
   it("🔴 빗금 표시 값(g)은 합계·복사 밖 — countCells·copyValueOf가 건너뛴다", () => {
@@ -120,26 +123,32 @@ describe("강사 보기 시수 배분 — 배선", () => {
 
   it("🔴 자리 판정은 축 단일 소스(attendanceSlotShare) — 저장(scope-ownership)과 화면(queries)이 같은 함수", () => {
     expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).toContain("attendanceSlotShare(");
-    expect(stripComments(read("features", "attendance", "server", "queries.ts"))).toContain("attendanceSlotShare(");
     // 축은 몫 판정을 새로 짓지 않는다 — `mine`은 `ownsAttendanceSlot`의 답 그대로다.
     expect(stripComments(read("features", "attendance", "teacher-axis.ts"))).toMatch(
       /attendanceSlotShare[\s\S]{0,400}ownsAttendanceSlot\(input\)/,
     );
   });
 
+  /**
+   * 🔴 원장 2026-09-17 저녁 *"화요일은 원래 수업이라 이후에 관리자가 수정가능하고, 다른 요일도 보강 등으로 수업할 수 있으니까
+   *    숫자 입력가능하게"* — 같은 날 낮의 '수업하지 않는 날 잠금'을 걷었다. **날짜로 막는 판정을 되살리지 말 것**(보강이 막힌다).
+   *    수업요일은 색으로만 갈린다(`ownDates` → matrix-row).
+   */
+  it("🔴 날짜로 입력을 막지 않는다 — 저장 어느 갈래에도 '수업하는 날' 게이트가 없다(원장 2026-09-17 저녁)", () => {
+    const queries = stripComments(read("features", "attendance", "server", "queries.ts"));
+    // 수업요일 색의 근거(ownDates)는 그대로 — 판정은 축 단일 소스.
+    expect(queries).toContain("teachesClassOn(");
+    for (const fn of ["setAttendanceCell", "setAttendanceRange"]) {
+      expect(bodyOf(actions, fn), fn).not.toContain("scopeTeachesOn(");
+    }
+    expect(stripComments(read("features", "attendance", "scope-ownership.ts"))).not.toContain("scopeTeachesOn");
+    expect(stripComments(read("features", "attendance", "scoped-split.ts"))).not.toContain("NOT_OWN_DAY_MESSAGE");
+  });
+
   it("🔴 메모만 저장도 강사 보기를 보낸다 — 자리 행에 사유가 달리지 않게(팝오버가 그 유일한 문)", () => {
     const popover = read("app", "(shell)", "attendance", "_components", "cell-popover.tsx");
     const noteOnly = popover.slice(popover.indexOf("const applyNoteOnly"), popover.indexOf("const apply ="));
     expect(noteOnly).toContain("scopeFieldsFor(scope, classId)");
-  });
-
-  it("🔴 '함께 바뀜' 셈은 자리를 뺀 한 함수(sharedOtherSlots) — 격자·칸이 같은 수를 말한다", () => {
-    for (const rel of [
-      ["app", "(shell)", "attendance", "_components", "matrix-table.tsx"],
-      ["app", "(shell)", "attendance", "_components", "attendance-cell.tsx"],
-    ]) {
-      expect(stripComments(read(...rel)), rel.join("/")).toContain("sharedOtherSlots(");
-    }
   });
 
   it("🔴 저장마다 감사로그(담임 시작일)를 읽지 않는다 — 반응속도 1순위(2026-09-11), 그 칸은 격자가 막는다", () => {

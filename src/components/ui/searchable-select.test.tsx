@@ -32,3 +32,35 @@ describe("SearchableSelect 트리거 접근성 이름", () => {
     expect(trigger.textContent).toContain("수학");
   });
 });
+
+/**
+ * 열 맞춤 폭 지정(`sideColumns`, 원장 2026-09-18 *"이름 / 과목 / 날짜 이렇게 열맞춤"*).
+ * 🔴 두 가지가 깨지면 열이 어긋난다 — 빈 hint가 칸을 안 세우거나, 선택된 줄만 체크 폭만큼 밀리거나.
+ */
+describe("SearchableSelect 열 맞춤(sideColumns)", () => {
+  const ROWS = [
+    { value: "a", label: "고등M 개별 BS4F 토", hint: "수학", meta: "2026-07-04~" },
+    { value: "b", label: "과목 없는 반", hint: "", meta: "2026-09-03~" },
+  ];
+  const cols = { hint: "w-16 text-left", meta: "w-24 text-left" };
+
+  it("빈 hint도 같은 폭의 칸을 세운다 — 안 세우면 그 줄만 날짜 열이 왼쪽으로 붙는다", () => {
+    render(<SearchableSelect options={ROWS} value="a" defaultOpen sideColumns={cols} />);
+    const row = screen.getByText("과목 없는 반").closest("button")!;
+    expect(row.querySelectorAll(".w-16")).toHaveLength(1);
+    expect(row.querySelectorAll(".w-24")).toHaveLength(1);
+  });
+
+  it("선택 안 된 줄도 체크 자리를 비워 둔다 — 선택된 줄만 열이 밀리지 않게", () => {
+    render(<SearchableSelect options={ROWS} value="a" defaultOpen sideColumns={cols} />);
+    const other = screen.getByText("과목 없는 반").closest("button")!;
+    expect(other.querySelector('span[aria-hidden][class~="size-3.5"]')).not.toBeNull();
+  });
+
+  it("안 주면 종전 모양 그대로 — 다른 화면(교재 단가표 등)은 바뀌지 않는다", () => {
+    render(<SearchableSelect options={ROWS} value="a" defaultOpen />);
+    const other = screen.getByText("과목 없는 반").closest("button")!;
+    expect(other.querySelector(".w-12")).not.toBeNull();
+    expect(other.querySelector('span[aria-hidden][class~="size-3.5"]')).toBeNull();
+  });
+});

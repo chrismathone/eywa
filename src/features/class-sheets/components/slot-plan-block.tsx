@@ -58,6 +58,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   onCarried,
   flushHost,
   registerFlush,
+  onConflicts,
 }: {
   classId: string;
   /**
@@ -91,6 +92,12 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
    * ⚠️ 안정 참조로 넘길 것(이 컴포넌트는 `memo`다).
    */
   registerFlush?: (flush: (() => Promise<unknown>) | null) => void;
+  /**
+   * 저장 충돌 수가 바뀔 때마다 알린다(언마운트 때 0) — 블록을 **접어 둘 수 있는** 호스트(자리 출석부 '전체' 보기)만 넘긴다.
+   * 🔴 충돌 표시는 이 블록 안에만 있고 토스트가 없다 — 호스트가 블록을 감춰 두면 저장이 멈춘 걸 아무도 모른다.
+   * ⚠️ 안정 참조로 넘길 것(이 컴포넌트는 `memo`다).
+   */
+  onConflicts?: (count: number) => void;
 }) {
   const t = useSheetT();
   // ① 저널 — 시트와 같은 문서 키(반+주차).
@@ -157,6 +164,12 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
 
   // 툴바가 없는 자리라 상태 표면(충돌·저장 중)을 여기서 그린다 — 충돌이 조용히 사라지면 입력 유실이다.
   const saveIndicator = useSaveIndicator(store);
+  const conflictCount = saveIndicator.conflicts;
+  useEffect(() => {
+    if (!onConflicts) return;
+    onConflicts(conflictCount);
+  }, [onConflicts, conflictCount]);
+  useEffect(() => (onConflicts ? () => onConflicts(0) : undefined), [onConflicts]);
 
   return (
     // onBlur = 계획 칸 감사로그의 "칸을 떠났다" 신호(자손에서 올라온다 — use-sheet-edit-audit.ts).

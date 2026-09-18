@@ -48,6 +48,7 @@ export function ReportPreview({
   subject,
   draft,
   trendDraft,
+  trendHidden = false,
   attachments,
   attachmentUrls,
   trendRows,
@@ -59,6 +60,8 @@ export function ReportPreview({
   subject: Subject;
   draft: string;
   trendDraft?: string;
+  /** '학습 추세 미발송'(원장 2026-09-18) — 저장과 **같은 함수**(buildReportFields)에 실어 미리보기도 추세를 뺀다. */
+  trendHidden?: boolean;
   attachments: { path: string; name: string }[];
   attachmentUrls?: Record<string, string>;
   /** 지난 회차 시험·과제 이력(지연 조회). 아직 안 왔으면 undefined = 그래프만 비고 나머지는 그대로 그린다. */
@@ -85,6 +88,7 @@ export function ReportPreview({
     tests: student.tests,
     draft,
     trendDraft,
+    trendHidden,
     showDailyTest: ctx.showDailyTest,
     showCheckTest: ctx.showCheckTest,
   });

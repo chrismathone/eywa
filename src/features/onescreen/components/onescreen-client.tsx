@@ -28,7 +28,9 @@ import {
   saveOnescreenSession,
   setMyNoticeMode,
   setMyOnescreenFontSize,
+  setMyTrendOptOut,
 } from "../server/actions";
+import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { makeupRowName } from "../makeup-label";
@@ -307,6 +309,7 @@ export function OneScreenClient({
   presenceScope,
   initialView = "card",
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
+  initialTrendOptOut = [],
   initialClassName = null,
   initialStudentId = null,
   noClassesToday = false,
@@ -341,6 +344,8 @@ export function OneScreenClient({
   initialView?: OneScreenView; // URL(?view=)에서 온 초기 뷰 — 날짜 이동(재마운트) 후에도 보던 뷰 유지
   /** 글씨 크기(내 계정, users.ui_prefs.onescreen.fontSize) — 서버 확정값이라 첫 렌더부터 정확(#75 회피). */
   initialFontSize?: OnescreenFontSize;
+  /** '학습 추세 미발송'으로 켠 `반:학생` 키(내 계정 ui_prefs, 원장 2026-09-18) — 글씨 크기와 같은 행에서 온다. */
+  initialTrendOptOut?: string[];
   /**
    * 진입 시 고를 반 이름(`?class=<반 id>`를 서버가 이름으로 해석해 내림) — '오늘 ECS' 카드에서 넘어올 때
    * 그 반에서 시작한다. null = 전체. ⚠️ **id가 아니라 이름**인 건 반 필터 state가 이름 기반이기 때문
@@ -528,6 +533,12 @@ export function OneScreenClient({
   // 자동저장(디바운스) — 최신 state를 타이머 콜백에서 읽기 위한 ref 미러 + 학생별 타이머.
   const studentsRef = useRef(students);
   const reportsRef = useRef(reports);
+  /**
+   * '학습 추세 미발송'(원장 2026-09-18) — `반:학생` 키. 🔴 저장 조립은 비동기 경로(디바운스·발송)에서도 불리므로
+   *    **ref로도** 들고 있는다 — 체크 직후 나간 저장이 옛 closure를 읽으면 끈 추세가 실린다.
+   */
+  const [trendOptOut, setTrendOptOut] = useState<ReadonlySet<string>>(() => new Set(initialTrendOptOut));
+  const trendOptOutRef = useRef(trendOptOut);
   // 영어 템플릿 목록·로딩 여부 미러 — 일괄 자동작성(비동기 루프) 중 목록이 도착해도 다음 행부터 본다.
   const englishTemplatesRef = useRef(englishTemplates);
   const templatesLoadedRef = useRef(templatesLoaded);
@@ -542,6 +553,7 @@ export function OneScreenClient({
     englishTemplatesRef.current = englishTemplates;
     templatesLoadedRef.current = templatesLoaded;
     templateListFailedRef.current = templateListFailed;
+    trendOptOutRef.current = trendOptOut;
   });
   /**
    * 상단 '오늘 출석 미입력' 스트립이 기록한 칸을 이 화면에 반영한다(원장 제보 2026-08-20 —
@@ -1849,6 +1861,49 @@ export function OneScreenClient({
     if (!selected) return;
     setDraftFor(selected.id, subjectName, text);
   }
+  /** 행(학생·과목 이름) → 그 행의 반. 반이 없는 행(수업외 보강)은 null — '학습 추세 미발송' 키가 없다. */
+  function rowClassId(studentId: string, subjectName: string): string | null {
+    return students.find((x) => x.id === studentId)?.subjects.find((su) => su.name === subjectName)?.classId ?? null;
+  }
+  /** 이 행은 학습 추세를 안 보내는가(원장 2026-09-18) — 표·카드가 체크 표시에 쓴다. */
+  function isTrendHiddenFor(studentId: string, subjectName: string): boolean {
+    return isTrendOptedOut(trendOptOut, rowClassId(studentId, subjectName), studentId);
+  }
+  /**
+   * '학습 추세 미발송' 켜고 끄기 — 화면은 **즉시**, 저장은 뒤에서(실패하면 되돌리고 알린다).
+   * 🔴 ref도 이 자리에서 함께 바꾼다 — 체크하자마자 누른 [발송]이 effect 전 옛 값을 읽으면 끈 추세가 나간다.
+   */
+  function toggleTrendHiddenFor(studentId: string, subjectName: string) {
+    if (readonlyView) return;
+    const classId = rowClassId(studentId, subjectName);
+    const key = trendOptOutKey(classId, studentId);
+    if (!classId || !key) return;
+    const on = !trendOptOut.has(key);
+    const flip = (base: ReadonlySet<string>, turnOn: boolean) => {
+      const next = new Set(base);
+      if (turnOn) next.add(key);
+      else next.delete(key);
+      return next;
+    };
+    const next = flip(trendOptOut, on);
+    trendOptOutRef.current = next;
+    setTrendOptOut(next);
+    void setMyTrendOptOut({ classId, studentId, on }).then(
+      (res) => {
+        if (res.ok) return;
+        const back = flip(trendOptOutRef.current, !on);
+        trendOptOutRef.current = back;
+        setTrendOptOut(back);
+        toast.error(res.error ?? t("os.row.trendOptOutFail"));
+      },
+      () => {
+        const back = flip(trendOptOutRef.current, !on);
+        trendOptOutRef.current = back;
+        setTrendOptOut(back);
+        toast.error(t("os.row.trendOptOutFail"));
+      },
+    );
+  }
   // 학습 추세(종합분석) 초안 편집 — 멘트(draft)와 별개 필드(4a).
   function setTrendDraftFor(studentId: string, subjectName: string, text: string) {
     patchReport(studentId, subjectName, (r) => ({ ...r, trendDraft: text }));
@@ -2881,6 +2936,8 @@ export function OneScreenClient({
       tests: rowEval.tests,
       draft,
       trendDraft: existing?.trendDraft,
+      // '학습 추세 미발송'(원장 2026-09-18) — ref로 읽는다(디바운스·발송은 비동기라 closure가 옛 값일 수 있다).
+      trendHidden: isTrendOptedOut(trendOptOutRef.current, su?.classId, student.id),
       showDailyTest,
       showCheckTest,
     });
@@ -3921,6 +3978,8 @@ export function OneScreenClient({
             onHomeworkToday: setHomeworkTodayFor,
             onDraft: setDraftFor,
             onTrend: setTrendDraftFor,
+            trendHidden: isTrendHiddenFor,
+            onTrendHidden: toggleTrendHiddenFor,
             onNote: setNoteFor,
             onMakeup: toggleMakeupFor,
           }}
@@ -4074,6 +4133,10 @@ export function OneScreenClient({
                 }
                 onSubjectDraft={setSubjectDraft}
                 onSubjectTrend={setSubjectTrend}
+                trendOptOut={{
+                  hidden: (subjectName) => isTrendHiddenFor(selected.id, subjectName),
+                  toggle: (subjectName) => toggleTrendHiddenFor(selected.id, subjectName),
+                }}
                 onNote={setNote}
                 onAutoWrite={autoWriteSubject}
                 generatingSubject={genSubject}
@@ -4212,6 +4275,7 @@ export function OneScreenClient({
                       : (previewReport?.draft ?? "")
                   }
                   trendDraft={previewReport?.trendDraft}
+                  trendHidden={isTrendHiddenFor(selected.id, previewSubject.name)}
                   attachments={previewReport?.attachments ?? []}
                   attachmentUrls={attUrls}
                   trendRows={trendRows}

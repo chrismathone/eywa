@@ -1,8 +1,18 @@
 "use client";
 
 import { formatSessionUnits } from "@/features/attendance/session-units";
+import {
+  attendanceUnitsDiff,
+  formatUnitsWithSuffix,
+  type AttendanceUnitSuffix,
+} from "@/features/attendance/unit-suffix";
+import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import { tipProps } from "@/components/hover-tip/tip";
+import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { EMPTY_COUNT, rateDecimal, ratePercent, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import { useRowCount, useRowsCount } from "./grid-context";
+import { useColumnTotals, useRowCount, useRowsCount } from "./grid-context";
+import type { ColumnTotals } from "@/features/attendance/grid/column-totals";
+import { formatMoney } from "@/features/attendance/money-format";
 import { useAttendanceSearch } from "./search-context";
 import { useSheetT } from "@/features/teacher-view/lang-context";
 
@@ -23,22 +33,99 @@ function rateColorOf(rate: number | null): string {
   return rate >= 90 ? "text-green" : rate >= 80 ? "text-amber" : "text-danger";
 }
 
-/** 학생 행 끝의 고정 두 칸(시수·출석률). `<tr>` 안에 그대로 놓인다. */
+/**
+ * '수업 차수' 칸 — 출석부에서 센 시수(소비 상태 칸의 배수 합).
+ * 🔴 오른쪽 sticky가 아니라 **청구액 옆**이다(원장 2026-09-17 *"우측 시수를 청구액 우측으로 이동. 수업 차수로 이름 변경"*).
+ */
+export function RowLessonCountCell({
+  row,
+  fallback,
+  suffix = null,
+}: {
+  row: string;
+  fallback: Counted;
+  /** 단위 한 글자(영어 `U` · 수학 `T`, 원장 2026-09-18). */
+  suffix?: AttendanceUnitSuffix;
+}) {
+  const c = useRowCount(row) ?? fallback;
+  // 여백은 이웃(청구액·등록 차수)과 같은 `px-1 py-1` — 옛 오른쪽 sticky 자리의 `py-2`가 따라왔던 것이다.
+  // 배경(연파랑)은 등록 차수 칸과 같은 토큰 — 두 칸이 한 짝이라는 걸 색이 말한다(원장 2026-09-18).
+  return (
+    <td className="border-line text-foreground num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+      {c.units > 0 ? formatUnitsWithSuffix(c.units, suffix) : "—"}
+    </td>
+  );
+}
+
+/**
+ * '차이확인' 칸 = **수업 차수 − 등록 차수**(원장 2026-09-18) — 양수 파랑 · 음수 빨강 솔리드 + 흰 굵은 글씨.
+ *
+ * 🔴 수업 차수는 **칸을 치면 즉시** 바뀌므로(클라 집계) 차이도 같은 값을 보고 다시 센다 —
+ *    서버 값만 보면 방금 친 칸이 반영 안 된 차이가 남아 "수업 차수는 바뀌었는데 차이는 그대로"가 된다.
+ * 🔴 **뺄 수 없으면 `—`**: 미확정(`null`)이거나 옛 '일수 기준' 확정(단위가 시수가 아니라 출석 일수)이면
+ *    빼는 순간 단위가 다른 두 수의 차가 나온다. 0으로 치면 "전부 초과"라는 거짓 신호가 열 전체에 깔린다.
+ */
+export function RowSessionDiffCell({
+  row,
+  fallback,
+  term,
+  suffix = null,
+  lang = "ko",
+}: {
+  row: string;
+  fallback: Counted;
+  term: AttendanceTermSessions | null;
+  suffix?: AttendanceUnitSuffix;
+  lang?: SheetLang;
+}) {
+  const c = useRowCount(row) ?? fallback;
+  const diff = attendanceUnitsDiff(c.units, term);
+  if (diff === null) {
+    return (
+      <td
+        className="border-line text-text-dim num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap"
+        title={sheetT(lang, term?.daysBasis ? "att.row.diffDaysBasis" : "att.row.diffUnconfirmed")}
+      >
+        —
+      </td>
+    );
+  }
+  // 0 = 계획대로 — 색을 칠하지 않는다(전부 칠하면 색이 신호이길 그만둔다).
+  const fill =
+    diff > 0
+      ? "bg-att-diff-plus text-white"
+      : diff < 0
+        ? "bg-att-diff-minus text-white"
+        : "text-foreground";
+  return (
+    <td className={`border-line num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap ${fill}`}>
+      <span
+        {...tipProps({
+          title: sheetT(lang, "att.row.diffTip"),
+          lines: [
+            `${sheetT(lang, "att.col.lessonCount")} ${formatUnitsWithSuffix(c.units, suffix)}`,
+            `${sheetT(lang, "att.col.termSessions")} ${formatUnitsWithSuffix(term!.units, suffix)}`,
+          ],
+        })}
+      >
+        {diff > 0 ? "+" : ""}
+        {formatUnitsWithSuffix(diff, suffix)}
+      </span>
+    </td>
+  );
+}
+
+/** 맨 오른쪽 출석률 칸(가로 고정). 시수는 위 `RowLessonCountCell`로 옮겼다. */
 export function RowTotalCells({ row, fallback }: { row: string; fallback: Counted }) {
   const live = useRowCount(row);
   const c = live ?? fallback;
   const rate = ratePercent(c);
   return (
-    <>
-      <td className="border-line text-foreground num sm:sticky sm:right-[64px] z-10 w-[40px] min-w-[40px] border-b border-l bg-card px-1.5 py-2 text-right text-xs whitespace-nowrap">
-        {c.units > 0 ? formatSessionUnits(c.units) : "—"}
-      </td>
-      <td
-        className={`border-line num sm:sticky sm:right-0 z-10 w-[64px] min-w-[64px] border-b bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
-      >
-        {rate === null ? "—" : `${rate}%`}
-      </td>
-    </>
+    <td
+      className={`border-line num sm:sticky sm:right-0 z-10 w-[64px] min-w-[64px] border-b border-l bg-card px-2 py-2 text-right text-xs font-bold whitespace-nowrap ${rateColorOf(rate)}`}
+    >
+      {rate === null ? "—" : `${rate}%`}
+    </td>
   );
 }
 
@@ -231,5 +318,110 @@ export function LiveStats({
         valueClass="text-amber"
       />
     </div>
+  );
+}
+
+/**
+ * **합계 행**(원장 2026-09-18) — 열 아래에 맞춘 한 줄: `합계`(이름·학교학년 병합) · 청구액 합 · 수업 차수 합 · 등록 차수 합 ·
+ * 날짜별 시수 합 · 출석률 평균. *"'이름'과 '학교학년' 행을 병합해서 '합계'라고 셀 안에 적으면"*.
+ *
+ * 🔴 **검색을 따른다** — 아래 요약 줄과 같은 규약(좁혀 놓고 전체인 척하지 않는다, [[#89]]): 검색 중이면 라벨이
+ *    `검색 합계`가 되고 숫자는 걸린 행만 센다.
+ * 🔴 시수·출석률은 **입력을 즉시 따라간다**(격자 `useColumnTotals` → `countCells`). 격자가 없으면 서버가 같은 함수로
+ *    만든 `fallback`을 쓴다.
+ * 🔴 등록 차수 합에서 옛 **일수 기준** 확정은 뺀다 — 시수가 아니라 출석 일수라 더하면 단위가 다른 수의 합이 된다.
+ * ⚠️ 차이확인 열은 비운다(원장이 합계를 요청한 열은 청구액·수업 차수·등록 차수다).
+ */
+export function MatrixColumnTotalsRow({
+  rows,
+  days,
+  showClassBilled,
+  showTermSessions,
+  billedByRow,
+  termByRow,
+  suffix = null,
+  fallback,
+  lang = "ko",
+}: {
+  /** 표의 모든 행 키(검색 전). */
+  rows: readonly string[];
+  days: readonly { date: string; placeholder?: boolean }[];
+  showClassBilled: boolean;
+  showTermSessions: boolean;
+  billedByRow?: Record<string, number | null>;
+  termByRow?: Record<string, AttendanceTermSessions | null>;
+  /** 표의 반들이 **한 단위**일 때만(영어만 U · 수학만 T). 섞이면 null — 한 글자로 묶으면 거짓이다. */
+  suffix?: AttendanceUnitSuffix;
+  fallback: ColumnTotals;
+  lang?: SheetLang;
+}) {
+  const search = useAttendanceSearch();
+  const searching = search?.active ?? false;
+  const scope = searching ? rows.filter((r) => search!.matched.has(r)) : rows;
+  const live = useColumnTotals(scope);
+  // 검색 중인데 격자가 없으면(테스트·첫 렌더) 서버 값은 **전체**라 쓸 수 없다 — 비워 둔다.
+  const totals = live ?? (searching ? null : fallback);
+
+  let billed = 0;
+  let billedAny = false;
+  let term = 0;
+  let termAny = false;
+  let daysBasisSkipped = 0;
+  for (const r of scope) {
+    const b = billedByRow?.[r];
+    if (typeof b === "number") {
+      billed += b;
+      billedAny = true;
+    }
+    const t = termByRow?.[r];
+    if (t) {
+      if (t.daysBasis) daysBasisSkipped++;
+      else {
+        term += t.units;
+        termAny = true;
+      }
+    }
+  }
+  const cell = "border-line border-t-2 border-r px-1 py-1.5 text-xs font-bold whitespace-nowrap num";
+  return (
+    <tr className="bg-bg-soft">
+      <td
+        colSpan={2}
+        className="border-line bg-bg-soft sticky left-0 z-10 border-t-2 border-r px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap"
+      >
+        {sheetT(lang, searching ? "att.totals.search" : "att.totals.all")}
+      </td>
+      {showClassBilled ? (
+        <td className={`${cell} bg-att-col-billed text-right`}>{billedAny ? formatMoney(billed) : "—"}</td>
+      ) : null}
+      <td className={`${cell} bg-att-col-sessions text-right`}>
+        {totals ? formatUnitsWithSuffix(totals.units, suffix) : "—"}
+      </td>
+      {showTermSessions ? (
+        <>
+          <td
+            className={`${cell} bg-att-col-sessions text-right`}
+            title={daysBasisSkipped > 0 ? sheetTf(lang, "att.totals.daysBasisSkipped", { n: daysBasisSkipped }) : undefined}
+          >
+            {termAny ? formatUnitsWithSuffix(term, suffix) : "—"}
+          </td>
+          <td className={cell} />
+        </>
+      ) : null}
+      {days.map((d) => {
+        const u = d.placeholder ? undefined : totals?.dayUnits[d.date];
+        return (
+          <td key={d.date} className={`${cell} px-0 text-center`}>
+            {u ? formatUnitsWithSuffix(u, null) : ""}
+          </td>
+        );
+      })}
+      <td
+        className={`border-line bg-bg-soft sticky right-0 z-10 border-t-2 border-l px-2 py-1.5 text-right text-xs font-bold whitespace-nowrap num ${rateColorOf(totals?.rateAvg ?? null)}`}
+        title={sheetT(lang, "att.totals.rateAvgTitle")}
+      >
+        {totals?.rateAvg == null ? "—" : `${totals.rateAvg}%`}
+      </td>
+    </tr>
   );
 }

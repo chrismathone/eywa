@@ -17,7 +17,9 @@ const RULES: { text: string; sub: string }[] = [
 ];
 
 const TD = "border-line border px-2.5 py-2 align-top";
-const TH = "border-line bg-bg-soft text-foreground border px-2.5 py-2 text-center font-bold";
+// 머리도 왼쪽 — 본문이 전부 왼쪽 문장이라 가운데 머리는 값과 다른 자리에 섰다(원장 2026-09-18 *"견적서랑 지출결의서도
+// 맞춰줘"*, 실측 반환금액 124px 어긋남).
+const TH = "border-line bg-bg-soft text-foreground border px-2.5 py-2 text-left font-bold";
 
 export function RefundPolicy() {
   // ⚠️ 통짜 break-inside-avoid 금지: 이 섹션은 한 페이지보다 높아 통째로 다음 장으로 밀리면 1페이지

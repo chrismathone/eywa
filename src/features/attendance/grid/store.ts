@@ -341,6 +341,20 @@ export class GridStore {
   }
 
   /**
+   * 그 행의 (날짜, 값) 쌍 — 합계 행의 **날짜별** 시수(column-totals.ts). `valuesOfRow`와 같은 칸 집합이다.
+   */
+  cellsOfRow(row: string): [string, GridValue][] {
+    const keys = this.rowIndex.get(row);
+    if (!keys) return [];
+    const out: [string, GridValue][] = [];
+    for (const k of keys) {
+      const p = parseCellKey(k);
+      if (p) out.push([p.date, this.valueOf(k)]);
+    }
+    return out;
+  }
+
+  /**
    * 여러 행의 값 — 반 합계·총합·상단 스탯. rows 미지정이면 **기록이 있는 모든 행**.
    * ⚠️ `this.rows`(보이는 행)가 아니다 — 반을 접으면 그 행들이 rows에서 빠지는데, 접기는 **표시**일 뿐
    *    합계를 줄이는 조작이 아니다. rows로 세면 반 하나를 접었다고 총 시수가 줄어 보인다.

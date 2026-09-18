@@ -395,7 +395,7 @@ export default async function StudentsPage({
                 <col className="w-[16%]" />
               </colgroup>
               <thead className="border-line border-b">
-                {/* 열 제목은 가운데(데이터 표 규약 2026-08-05) — 본문 값은 좌측 그대로. */}
+                {/* 열 제목과 값은 같은 축(가운데 — 원장 2026-09-18). 폰 카드(`.stack-rows`)는 globals.css가 전부 왼쪽으로 되돌린다. */}
                 <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:text-center [&>th]:font-bold [&>th]:whitespace-nowrap">
                   <th scope="col">
                     <span className="flex flex-wrap items-center justify-center gap-1">
@@ -503,9 +503,9 @@ export default async function StudentsPage({
                   // 이름 + 학교·학년 압축 라벨("경명여중1")을 **한 줄**에(§11 "한 행 = 이름 + 값") — 두 줄 셀은 행을 키운다.
                   const sg = schoolGradeLabel(s.school, s.grade);
                   return (
-                    <tr key={s.id} data-help="st-row" className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5">
+                    <tr key={s.id} data-help="st-row" className="hover:bg-bg-soft/50 transition-colors [&>td]:px-3 [&>td]:py-2.5 [&>td]:text-center">
                       <td data-cell="primary">
-                        <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="phone:justify-start flex min-w-0 items-center justify-center gap-1.5">
                           {/* 이름은 1차 식별자라 줄지 않는다(§1 "1차 핵심값 ellipsis 금지") — 좁으면 학교·학년(2차)이 먼저 접힌다. */}
                           <WindowLink
                             href={`/students/${s.id}`}
@@ -531,7 +531,7 @@ export default async function StudentsPage({
                         {s.subjects.length === 0 ? (
                           <span className="text-text-faint">—</span>
                         ) : (
-                          <span className="flex flex-wrap gap-1">
+                          <span className="phone:justify-start flex flex-wrap justify-center gap-1">
                             {s.subjects.map((sub) => (
                               <Pill key={sub} color={subjects.colorOf(sub)}>
                                 {subjects.labelOf(sub)}
@@ -547,7 +547,7 @@ export default async function StudentsPage({
                       </td>
                       {/* 🔴 우측 정렬이 아니다 — 전화번호는 **자릿수를 견주는 수가 아니라 식별자**다(합계도 대소도 없다).
                           오른쪽에 붙여 두면 가운데 있는 열 제목과 이 열만 따로 놀고, 번호가 없는 행의 `—`가
-                          표 오른쪽 끝에 홀로 매달린다. 본문 좌측(데이터 표 규약) 그대로 둔다.
+                          표 오른쪽 끝에 홀로 매달린다. 열 제목과 같은 축(가운데 — 원장 2026-09-18)에 둔다.
                           ⚠️ `num`(고정폭 숫자)은 남긴다 — 자릿수가 같아야 번호가 위아래로 줄을 이룬다. */}
                       <td className="text-text-dim num whitespace-nowrap" data-empty={s.parentPhone ? undefined : "true"}>
                         {s.parentPhone ?? "—"}

@@ -5,7 +5,7 @@ import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import type { GridStore } from "@/features/attendance/grid/store";
 import { EMPTY_COUNT, countCells } from "@/features/attendance/grid/totals";
 import { GridProvider, useCellState } from "./grid-context";
-import { LiveStats, LiveUnits, RowTotalCells } from "./live-totals";
+import { LiveStats, LiveUnits, RowLessonCountCell, RowTotalCells } from "./live-totals";
 
 // 배선 검증 — 값이 바뀌면 합계가 **서버 왕복 없이 그 자리에서** 바뀐다.
 // (계산 자체는 grid/totals.test.ts가 잠근다. 여기서 보는 건 구독이 실제로 연결됐는지다.)
@@ -50,6 +50,8 @@ describe("살아 있는 합계", () => {
         <table>
           <tbody>
             <tr>
+              {/* 2026-09-17: 시수(수업 차수) 칸은 청구액 옆으로 옮겼다 — 두 칸이 같은 구독을 쓴다. */}
+              <RowLessonCountCell row={R1} fallback={countCells([{ s: "present", u: null }])} />
               <RowTotalCells row={R1} fallback={countCells([{ s: "present", u: null }])} />
             </tr>
           </tbody>

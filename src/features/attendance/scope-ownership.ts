@@ -15,6 +15,7 @@ import {
   attendanceSlotShare,
   classTeacherIdsInRange,
   classTeacherRole,
+  ownInsertSlotStarts,
   ownsAttendanceSlot,
   type AttendanceSlotShare,
   type AxisSlot,
@@ -63,6 +64,24 @@ export function scopeRoleOf(
 /** 강사 전체 보기가 이 반을 그 강사 표로 그리나(그 달에 담임이거나 교시 담당) — 아니면 스코프 저장은 잘못된 요청. */
 export function scopeTeaches(facts: ScopeClassFacts | undefined, teacherId: string, date: string): boolean {
   return scopeRoleOf(facts, teacherId, date) !== null;
+}
+
+/**
+ * 강사 출석부 칸에 제 몫 기록이 없을 때 **새로 만들 교시** — 화면·저장이 같은 재료로(`ownInsertSlotStarts`).
+ * null = 종전대로 교시 없는 "그날 전체" 한 행. 재료가 없으면 null(호출부가 `scopeShareOf`로 먼저 거른다).
+ */
+export function scopeInsertSlots(
+  facts: ScopeClassFacts | undefined,
+  teacherId: string,
+  date: string,
+): string[] | null {
+  if (!facts) return null;
+  return ownInsertSlotStarts({
+    scopeTeacherId: teacherId,
+    homeroomTeacherId: facts.homeroomTeacherId,
+    slots: facts.slots,
+    date,
+  });
 }
 
 export type ScopeOwner = (classId: string, date: string, row: DayTargetRow) => boolean;
