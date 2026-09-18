@@ -243,6 +243,8 @@ export const AUDIT_ACTIONS = {
   // 칸을 떠날 때 전후 값 한 줄(원장 결정 2026-09-14, `math-sheets/server/goal-audit-actions.ts`). 위 키는 옛 행과
   // '지난 달 목표 가져오기'(한 번 누름) 표시용으로 남는다 — 저장 액션은 더 이상 디바운스마다 남기지 않는다.
   mcs_goal_edit: "수학 시트 학생 월간 목표 수정",
+  // 반의 수업 유형(정규 진도 / 복습 심화) — 화면 문구(`learning-overview.tsx`)와 같은 말로 적는다.
+  mcs_class_learning_track: "수학 시트 반 수업 유형 변경",
 
   // 재고관리(0242a) — 자산 등록/수정/상태 · 대여 시작/반납 · 실사 기록 · 소모품 수량. 상세는 describe.ts.
   inventory_asset_create: "자산 등록",
