@@ -2284,6 +2284,20 @@ export const SHEET_DICT = {
     en: "Learning trend (overall) · empty when there is little record",
   },
   "os.row.trendAria": { ko: "{name} {subject} 학습 추세", en: "{name} {subject} learning trend" },
+  // '학습 추세 미발송'(원장 2026-09-18) — 켜면 학부모 카드의 학습 추세 절이 빈다. 같은 선생님·같은 반에서 계속 유지.
+  "os.row.trendOptOut": { ko: "학습 추세 미발송", en: "Hold trend" },
+  "os.row.trendOptOutTitle": {
+    ko: "체크하면 이 학생의 학습 추세를 학부모에게 보내지 않습니다. 이 반에서는 다음 보고서에도 계속 유지됩니다.",
+    en: "When checked, this student's learning trend is not sent to parents. It stays on for later reports in this class.",
+  },
+  "os.row.trendOptOutFail": {
+    ko: "학습 추세 미발송을 저장하지 못했습니다",
+    en: "Couldn't save the trend setting",
+  },
+  "os.row.trendOptOutOn": {
+    ko: "학습 추세 미발송 — 이 칸은 학부모에게 보내지 않습니다",
+    en: "Trend held — this text is not sent to parents",
+  },
   "os.row.genSentLocked": {
     ko: "이미 발송된 보고서 — 수정할 수 없습니다",
     en: "This report has already been sent — it cannot be edited",

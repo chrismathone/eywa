@@ -82,6 +82,9 @@ export type GridFieldHandlers = {
   onHomeworkToday: (studentId: string, subjectName: string, text: string) => void; // 오늘 과제(0096a)
   onDraft: (studentId: string, subjectName: string, text: string) => void; // 학부모 문구(멘트) 편집
   onTrend: (studentId: string, subjectName: string, text: string) => void; // 학습 추세(종합분석) 편집(4a)
+  /** '학습 추세 미발송'(원장 2026-09-18) — 켜져 있나 · 켜고 끄기. 없으면 체크를 안 그린다(읽기 전용·테스트). */
+  trendHidden?: (studentId: string, subjectName: string) => boolean;
+  onTrendHidden?: (studentId: string, subjectName: string) => void;
   onNote: (studentId: string, subjectName: string, text: string) => void; // 특이사항(강사 메모) — AI 멘트 입력(4c). **행별**.
   onMakeup: (studentId: string, subjectName: string) => void; // 보강 토글
 };
@@ -275,6 +278,8 @@ export function GridBodyRow({
   // 학부모 카드엔 멘트와 기록이 나란히 보이므로 어긋나면 학부모가 두 사실을 동시에 받는다(2026-07-30 감사).
   // 영어 행 = 템플릿 모드(2026-09-10, 카드와 같은 규약) — 2칸 나누기·추세·멘트 불일치 경고를 쓰지 않는다.
   const isEnglishRow = subject.subjectKey === "english";
+  // '학습 추세 미발송'(원장 2026-09-18) — 켜져 있으면 추세 칸을 흐리게 긋는다(학부모에게 안 나간다).
+  const trendHidden = fields.trendHidden?.(student.id, subject.name) ?? false;
   // 영어 행 경고 셋 — 판정은 부모가 넘긴 함수(카드·발송 확인과 같은 english-draft.ts). 없으면(테스트 등) 안 그린다.
   const englishFlags = isEnglishRow ? actions.englishFlagsOf?.(student, subject, rep) : undefined;
   const mentWarnings = isEnglishRow ? [] : checkMentConsistency({
@@ -730,14 +735,36 @@ export function GridBodyRow({
             </div>
           ) : null}
           {isEnglishRow ? null : (
-            <textarea
-              value={rep?.trendDraft ?? ""}
-              onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
-              readOnly={rowLocked}
-              placeholder={mentPlaceholder ?? t("os.row.trendPh")}
-              aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
-              className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px]`}
-            />
+            // 추세 칸 **오른쪽**에 '학습 추세 미발송'(원장 2026-09-18 *"오른쪽에 보기좋은 자리"*).
+            // 🔴 반이 없는 행(수업외 보강)엔 안 그린다 — 키가 '같은 반'이라 성립하지 않는다.
+            <div className="flex items-start gap-2">
+              <textarea
+                value={rep?.trendDraft ?? ""}
+                onChange={(e) => fields.onTrend(student.id, subject.name, e.target.value)}
+                readOnly={rowLocked}
+                placeholder={mentPlaceholder ?? t("os.row.trendPh")}
+                aria-label={tf("os.row.trendAria", { name: student.name, subject: subject.name })}
+                title={trendHidden ? t("os.row.trendOptOutOn") : undefined}
+                className={`${mentBase} ${AUTOSIZE} ${lockedTone || "bg-bg-soft"} min-h-[48px] flex-1 ${
+                  trendHidden ? "text-text-dim line-through decoration-1" : ""
+                }`}
+              />
+              {fields.onTrendHidden && subject.classId ? (
+                <label
+                  className="text-text-dim mt-1.5 inline-flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium whitespace-nowrap"
+                  title={t("os.row.trendOptOutTitle")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={trendHidden}
+                    disabled={gen.readonlyView}
+                    onChange={() => fields.onTrendHidden?.(student.id, subject.name)}
+                    className="accent-primary size-3.5"
+                  />
+                  {t("os.row.trendOptOut")}
+                </label>
+              ) : null}
+            </div>
           )}
         </div>
       </td>

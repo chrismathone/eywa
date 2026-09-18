@@ -131,6 +131,7 @@ export function ReportCard({
   canRemoveMakeup,
   onSubjectDraft,
   onSubjectTrend,
+  trendOptOut,
   onNote,
   onAutoWrite,
   generatingSubject,
@@ -166,6 +167,8 @@ export function ReportCard({
   canRemoveMakeup?: (subjectName: string) => boolean;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
+  /** '학습 추세 미발송'(원장 2026-09-18) — 표와 **같은 상태**(계정 ui_prefs). 없으면 체크를 안 그린다. */
+  trendOptOut?: { hidden: (subjectName: string) => boolean; toggle: (subjectName: string) => void };
   onNote: (text: string) => void; // 특이사항(강사 메모) 편집 — AI 멘트 입력(4c). 학생별.
   onAutoWrite: (subjectName: string) => void;
   generatingSubject?: string | null; // 현재 AI 멘트 생성 중인 과목(버튼 로딩)
@@ -658,12 +661,32 @@ export function ReportCard({
             영어 행은 그리지 않는다 — 추세는 수학 점수 이력에서 나오고, 영어 카드는 템플릿 글만 싣는다. */}
         {isEnglishRow ? null : (
           <div className="flex flex-col gap-1.5">
-            <p className="micro text-text-faint">{t("os.card.trend")}</p>
+            {/* 제목 줄 오른쪽에 '학습 추세 미발송' — 표와 같은 체크(같은 계정 설정). 반 없는 행엔 없다. */}
+            <div className="flex items-center justify-between gap-2">
+              <p className="micro text-text-faint">{t("os.card.trend")}</p>
+              {trendOptOut && subject?.classId ? (
+                <label
+                  className="text-text-dim inline-flex cursor-pointer items-center gap-1 text-xs font-medium whitespace-nowrap"
+                  title={t("os.row.trendOptOutTitle")}
+                >
+                  <input
+                    type="checkbox"
+                    checked={trendOptOut.hidden(subjectName)}
+                    onChange={() => trendOptOut.toggle(subjectName)}
+                    className="accent-primary size-3.5"
+                  />
+                  {t("os.row.trendOptOut")}
+                </label>
+              ) : null}
+            </div>
             <textarea
               value={rep.trendDraft ?? ""}
               onChange={(e) => onSubjectTrend(subjectName, e.target.value)}
               placeholder={t("os.card.trendPh")}
-              className="border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
+              title={trendOptOut?.hidden(subjectName) ? t("os.row.trendOptOutOn") : undefined}
+              className={`border-line focus:border-primary scrollbar-thin min-h-[64px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none ${
+                trendOptOut?.hidden(subjectName) ? "text-text-dim line-through decoration-1" : ""
+              }`}
             />
           </div>
         )}
