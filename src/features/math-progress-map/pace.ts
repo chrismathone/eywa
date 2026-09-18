@@ -11,6 +11,7 @@
 import { diffDays } from "./calendar";
 import type { BookChapter, PaceStatus, PlanVsActual, StudentProgress } from "./model";
 import type { SemanticTone } from "@/lib/design/semantic-color";
+import { learningStatusLabel } from "@/features/math-sheets/lib/learning-plan";
 
 export const PACE_AHEAD_MIN = 7;
 export const PACE_DELAYED_MAX = -7;
@@ -35,6 +36,15 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 export function planVsActual(p: StudentProgress): PlanVsActual {
+  if (p.learningMap) {
+    const { metrics, lessons } = p.learningMap;
+    return { plannedPage: metrics.target, actualPage: metrics.current ?? 0,
+      plannedChapter: lessons.find(lesson => lesson.position === metrics.target)?.label ?? "계획 시작 전",
+      actualChapter: lessons.find(lesson => lesson.position === metrics.current)?.label ?? "진도 확인 필요",
+      pagesPerDay: metrics.requiredPace ?? 0, differenceDays: 0,
+      status: metrics.difference == null || metrics.difference === 0 ? "normal" : metrics.difference > 0 ? "ahead" : "delayed",
+      learningLabel: learningStatusLabel(metrics, "차시") };
+  }
   const { plan, curriculum, asOf } = p;
   const actualPage = curriculum.currentPage;
   const span = plan.targetPage - plan.startPage;
@@ -74,7 +84,8 @@ export const PACE_META: Record<PaceStatus, { glyph: string; tone: SemanticTone; 
 };
 
 /** "↑ 12일 빠름" · "● 계획대로" · "↓ 8일 느림" */
-export function paceLabel(pva: Pick<PlanVsActual, "differenceDays" | "status">): string {
+export function paceLabel(pva: Pick<PlanVsActual, "differenceDays" | "status" | "learningLabel">): string {
+  if (pva.learningLabel) return pva.learningLabel;
   const meta = PACE_META[pva.status];
   if (pva.status === "normal") return `${meta.glyph} ${meta.title}`;
   return `${meta.glyph} ${Math.abs(pva.differenceDays)}일 ${meta.title}`;

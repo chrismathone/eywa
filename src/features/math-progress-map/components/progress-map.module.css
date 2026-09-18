@@ -78,6 +78,8 @@
 .compactLegend { display: grid; grid-template-columns: repeat(3, max-content); gap: 5px 12px; margin-left: auto; padding: 2px 0; }
 .compactLegend > li { white-space: nowrap; font-size: 11px; }
 .mapFrame { width: 80%; }
+.surface[data-learning="true"] { --green: #ff0000; --map-completed-tick: #ff0000; --map-week-completed-fill: #ff0000; --map-completed-ink: #ff0000; --map-progress-fill: #e5e5ff; --map-progress-ink: #0000ff; --map-in-progress-tick: #0000ff; }
+.surface[data-learning="true"] .mapFrame { width: 100%; }
 @media (max-width: 1023px) { .mapFrame { width: 100%; } }
 
 .pickerSelect {

@@ -39,7 +39,7 @@ describe("진도맵 ↔ 프로그레스바 상호 선택", () => {
     const { container } = render(<LinkedLearningMap {...f} initialQuery={query} />);
     expect(container.querySelector('[data-lesson="직각삼각형의 합동"]')).toHaveAttribute("data-selected", "true");
     fireEvent.click(screen.getByRole("button", { name: "연간" }));
-    const dial = screen.getByRole("group", { name: "2026년 차시 진도" });
+    const dial = screen.getByRole("group", { name: /학습 진도맵 — 2026년 ·/ });
     fireEvent.keyDown(within(dial).getAllByRole("button")[0], { key: "Enter" });
     expect(screen.getByRole("button", { name: "분기" })).toHaveAttribute("aria-pressed", "true");
     act(() => {
@@ -48,5 +48,35 @@ describe("진도맵 ↔ 프로그레스바 상호 선택", () => {
     });
     expect(screen.getByLabelText("진도맵 날짜")).toHaveValue("2026-08-27");
     expect(container.querySelector('[data-lesson="직각삼각형의 합동"]')).toHaveAttribute("data-selected", "true");
+  });
+  it("세 지도·월별 타임라인·하단 패널을 모두 복원하고 모드 전환 시 날짜와 차시를 유지한다", () => {
+    const f = learningMapFixture();
+    const { container } = render(<LinkedLearningMap {...f} initialQuery="date=2026-08-27&view=day&lesson=59" />);
+    expect(screen.getByRole("region", { name: "계획 대비 실제" })).toHaveTextContent("62차시");
+    expect(screen.getByRole("region", { name: "입학부터 종강까지" })).toHaveTextContent("지금 학습");
+    for (const name of ["연간 지도", "연속 지도", "단계별 지도"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      expect(screen.getByLabelText("진도맵 날짜")).toHaveValue("2026-08-27");
+      expect(container.querySelector('[data-lesson="직각삼각형의 합동"]')).toHaveAttribute("data-selected", "true");
+      expect(screen.getByLabelText("전체 진도율")).toHaveTextContent("38%59 / 155차시");
+      expect(screen.getByRole("region", { name: "진도 목록" })).toBeInTheDocument();
+      expect(container.textContent).not.toMatch(/p\.\d|\d쪽|\d일 느림/);
+    }
+  });
+  it("연속 지도 이동과 URL 복원이 같은 월·타임라인을 가리킨다", () => {
+    const f = learningMapFixture();
+    const { container } = render(<LinkedLearningMap {...f} initialQuery="date=2026-08-27&view=month&display=continuous" />);
+    const slider = screen.getByRole("slider", { name: "연속 지도 월 선택" });
+    fireEvent.change(slider, { target: { value: 2027 * 12 } });
+    expect(screen.getByLabelText("진도맵 날짜")).toHaveValue("2027-01-01");
+    expect(container.querySelector('[data-continuous-period]')).toHaveAttribute("data-continuous-period", "2027-01");
+    expect(screen.getByLabelText("전체 진도율")).toHaveTextContent("38%");
+    act(() => {
+      window.history.replaceState(null, "", "/mcs/progress-map?date=2026-08-27&view=day&display=full&topic=" + encodeURIComponent("중2:직각삼각형의 합동"));
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByRole("button", { name: "연간 지도" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("진도맵 날짜")).toHaveValue("2026-08-27");
+    expect(screen.getByLabelText("선택한 진도 상세")).toHaveTextContent("직각삼각형의 합동");
   });
 });

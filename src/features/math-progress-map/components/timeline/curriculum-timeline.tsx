@@ -4,6 +4,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import type { WeekView } from "../../derive";
 import { formatMdW, formatRange } from "../../calendar";
+import { periodCount, periodPercent } from "../../learning-dashboard";
+import { dayStatusLabel } from "../../day-schedule";
 import { nextChapterAfter, resolveDay, resolveWeek } from "../../focus";
 import { quarterCurriculumLabel, TIMELINE_STATUS, type CurriculumPeriod } from "../../timeline-data";
 import { useProgressMap } from "../map-state";
@@ -37,7 +39,7 @@ export function CurriculumTimeline({ periods, activeMonth, expandedMonth, onExpa
       if (!months.length) return null;
       const done = months.filter((period) => period.status === "completed").length;
       const current = months.some((period) => period.isActual);
-      return <section key={quarter} className={styles.quarter} data-current={current ? "true" : undefined} data-status={done === months.length ? "completed" : current ? "current" : months.every((month) => !month.isPast) ? "future" : "current"} aria-labelledby={`quarter-${year}-${quarter}`}>
+      return <section key={quarter} className={styles.quarter} data-current={current ? "true" : undefined} data-status={months.every(month => month.status === "no-plan") ? "no-plan" : months.some(month => month.status === "unknown") ? "unknown" : done === months.length ? "completed" : current ? "current" : months.every((month) => !month.isPast) ? "future" : "current"} aria-labelledby={`quarter-${year}-${quarter}`}>
         <header className={styles.quarterHeader}>
           <span className={styles.quarterNode} aria-hidden>{done === months.length ? <EyIcon name="check" size={12} strokeWidth={3} className="inline-block align-middle" /> : current ? "●" : "○"}</span>
           <div className={styles.quarterLabel}><h3 id={`quarter-${year}-${quarter}`}>{quarter}분기</h3><span>{(quarter - 1) * 3 + 1}~{quarter * 3}월</span></div>
@@ -55,6 +57,7 @@ const MonthProgressItem = memo(function MonthProgressItem({ period, active, expa
   registerMonth: (month: number, element: HTMLElement | null) => void;
 }) {
   const status = TIMELINE_STATUS[period.status];
+  const { sourceProgress } = useProgressMap();
   return <article ref={(element) => registerMonth(period.month, element)} className={styles.monthItem}
     data-month={period.month} data-period={period.id} data-viewed={active ? "true" : undefined} data-status={period.status} data-actual-month={period.isActual ? "true" : undefined}
     aria-label={`${period.month}월 ${period.chapter}`}>
@@ -68,9 +71,9 @@ const MonthProgressItem = memo(function MonthProgressItem({ period, active, expa
         <span className={styles.monthTitle}><strong>{period.semester || period.bookName} <span>{period.chapter}</span></strong>
           <span className={styles.subChapter}>{period.subChapter || period.bookName}</span></span>
         <span className={styles.monthProgress}>
-          <span className={styles.unitCount}>{period.totalUnits > 0 ? `${period.completedUnits} / ${period.totalUnits} 학습 항목` : `${period.source.donePages} / ${period.source.plannedPages}쪽`}</span>
+          <span className={styles.unitCount}>{sourceProgress.learningMap ? periodCount(sourceProgress, period.completedUnits, period.totalUnits) : period.totalUnits > 0 ? `${period.completedUnits} / ${period.totalUnits} 학습 항목` : `${period.source.donePages} / ${period.source.plannedPages}쪽`}</span>
           <span className={styles.progressTrack} aria-hidden><i style={{ width: `${period.progress}%` }} /></span>
-          <b>{period.status === "no-plan" ? "—" : `${period.progress}%`}</b>
+          <b>{period.status === "no-plan" ? "—" : periodPercent(sourceProgress, period.progress, period.source.plannedPages)}</b>
         </span>
         <span className={styles.expandIcon} aria-hidden>{expanded ? "⌃" : "›"}</span>
       </button>
@@ -92,7 +95,7 @@ function MonthDetail({ period }: { period: CurriculumPeriod }) {
       <h4>{selectedDay ? "선택한 날짜의 학습 내용" : selectedWeek ? "선택한 주의 학습 내용" : "주차별 학습 내용"}</h4>
       {weeks.map((week) => <WeekDetail key={week.index} period={period} week={week} automaticOpen={selectedWeek?.index === week.index} />)}
     </section>
-    {period.isActual ? <section className={styles.bookDetail} aria-label="현재 교재 정보">
+    {period.isActual && !sourceProgress.learningMap ? <section className={styles.bookDetail} aria-label="현재 교재 정보">
       <h4>현재 교재 정보</h4><strong>{book.bookName}</strong><p>{book.chapter}</p><b>p.{book.currentPage} / {book.totalPages}</b>
       {next ? <div className={styles.nextChapter}><span>다음 단원</span><strong>{next.chapter}</strong></div> : null}
     </section> : null}
@@ -100,7 +103,7 @@ function MonthDetail({ period }: { period: CurriculumPeriod }) {
 }
 
 function WeekDetail({ period, week, automaticOpen }: { period: CurriculumPeriod; week: WeekView; automaticOpen: boolean }) {
-  const { mode, focus, selectDay, selectionRevision: scope } = useProgressMap();
+  const { sourceProgress, mode, focus, selectDay, selectionRevision: scope } = useProgressMap();
   const selectedDate = mode === "day" ? focus.day : null;
   const [expansion, setExpansion] = useState({ scope, open: automaticOpen, includedDate: selectedDate });
   const current = expansion.scope === scope ? expansion : { scope, open: automaticOpen, includedDate: selectedDate };
@@ -114,18 +117,18 @@ function WeekDetail({ period, week, automaticOpen }: { period: CurriculumPeriod;
     <h5><button type="button" className={styles.weekHeader} aria-expanded={open} aria-controls={detailId}
       onClick={() => setExpansion({ ...current, open: !open })}>
       <b>{week.index}주차</b><span>{formatRange(week.start, week.end)}</span>
-      {week.plannedPages > 0 ? <strong>{week.donePages} / {week.plannedPages}쪽 · {week.pct}%</strong> : null}
+      {week.plannedPages > 0 ? <strong>{periodCount(sourceProgress, week.donePages, week.plannedPages)} · {periodPercent(sourceProgress, week.pct, week.plannedPages)}</strong> : null}
       <EyIcon name={open ? "chevronUp" : "chevronDown"} size={14} />
     </button></h5>
     <div id={detailId} hidden={!open}>
       {days.length ? <ul>{days.map((day) => {
         const selected = day.date === selectedDate;
-        const label = day.isToday ? "현재" : day.status === "completed" ? "완료" : day.status === "planned" ? "예정" : day.noClassReason ? "수업 없음" : "진행 중";
+        const label = day.isToday ? "현재" : dayStatusLabel(day);
         return <li key={day.date} data-today={day.isToday ? "true" : undefined} data-selected-day={selected ? "true" : undefined}>
           <button type="button" onClick={() => selectDay(day.date)} aria-current={selected ? "date" : undefined} aria-label={`${formatMdW(day.date)} ${day.record?.subChapter || day.record?.chapter || "기록 없음"} ${label}`}>
             <span className={styles.dayState} data-status={day.isToday ? "current" : day.status}>{day.isToday ? "●" : day.status === "completed" ? <EyIcon name="check" size={12} strokeWidth={3} className="inline-block align-middle" /> : "○"}</span>
             <time>{formatMdW(day.date)}</time><span className={styles.dayTopic}>{day.record?.subChapter || day.record?.chapter || "기록 없음"}</span>
-            <span className={styles.dayPages}>{day.plannedPages ? `p.${day.record!.startPage}–${day.record!.endPage}` : day.noClassReason || "—"}</span>
+            <span className={styles.dayPages}>{day.plannedPages ? sourceProgress.learningMap ? periodCount(sourceProgress, day.donePages, day.plannedPages) : `p.${day.record!.startPage}–${day.record!.endPage}` : day.noClassReason || "—"}</span>
           </button>
         </li>;
       })}</ul> : <p className={styles.emptyDetail}>{noClass ? "수업이 없는 주입니다."

@@ -50,12 +50,13 @@ export function CurriculumTimelineCard() {
   const { layoutRef, navigateMonth, navigatePosition, registerMonth, programmaticScroll, scrollEdges } = useTimelineScrollSpy(currentProgressPosition, setViewedPosition, scopeKey, continuous, {
     onScrollPosition: syncScrolledPosition,
     selectionRevision,
+    requireUserScroll: Boolean(sourceProgress.learningMap),
     detailSelector: mode === "day" ? '[data-selected-day="true"]' : mode === "week" ? '[data-active-week="true"] button' : undefined,
   });
   const title = continuous ? "전체 진도 보기" : `${view.year}년 진도 현황`;
-  return <section className={styles.timelineCard} style={desktopHeight ? { height: desktopHeight } : undefined} aria-label={title}>
+  return <section className={styles.timelineCard} data-learning={sourceProgress.learningMap ? "true" : undefined} style={desktopHeight ? { height: desktopHeight } : undefined} aria-label={title}>
     <header className={styles.timelineCardHeader}>
-      <div><h2>{title}</h2><p>{continuous ? "입학부터 종강까지 이어지는 학습 계획과 기록" : "오른쪽 영역만 스크롤해 월별 진도를 확인하세요."}</p></div>
+      <div><h2>{title}</h2>{sourceProgress.learningMap ? null : <p>{continuous ? "입학부터 종강까지 이어지는 학습 계획과 기록" : "오른쪽 영역만 스크롤해 월별 진도를 확인하세요."}</p>}</div>
       <span>{continuous ? "전체 기간" : VIEW_MODE_LABEL[mode as ViewMode]}</span>
     </header>
     <div className={styles.timelineCardViewport} data-scroll-above={scrollEdges?.above ? "true" : undefined} data-scroll-below={scrollEdges?.below ? "true" : undefined}>
@@ -73,7 +74,10 @@ export function CurriculumTimelineCard() {
             onMonth={(month) => navigatePosition(monthPosition(group.year, month))}
             registerMonth={(month, element) => registerMonth(monthPosition(group.year, month), element)} />
         </section>) : <CurriculumTimeline periods={visible} activeMonth={focus.month} expandedMonth={expandedMonth}
-          onExpand={toggleMonth}
+          onExpand={month => {
+            if (sourceProgress.learningMap && (focus.month !== month || mode === "year" || mode === "quarter")) selectPeriod(view.year, month);
+            else toggleMonth(month);
+          }}
           onMonth={navigateMonth} registerMonth={registerMonth} />}
       </div>
     </div>

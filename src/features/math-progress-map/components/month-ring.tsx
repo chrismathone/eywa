@@ -9,6 +9,7 @@ import { RingOutline } from "./ring-outline";
 import { Segment } from "./segment";
 import { CURRENT_STROKE_WIDTH, FONT, SEGMENT_TEXT } from "./svg-consts";
 import { ClockLabel } from "./clock-label";
+import { periodPercent } from "../learning-dashboard";
 
 const LABEL_R = (RINGS.month[0] + RINGS.month[1]) / 2;
 /** 이보다 좁은 주(달 끝 2~3일짜리)는 글자를 감춘다 — 글자가 칸 밖으로 샌다. */
@@ -19,7 +20,7 @@ const MIN_LABEL_SPAN = 4.2;
  * 주 칸을 누르면 주간 보기로.
  */
 export const MonthRing = memo(function MonthRing({ showYear = false }: { showYear?: boolean }) {
-  const { view, mode, focus, selectWeek, years } = useProgressMap();
+  const { view, progress, mode, focus, selectWeek, years } = useProgressMap();
   const active = ringActive("month", mode);
   return (
     <g>
@@ -44,7 +45,7 @@ export const MonthRing = memo(function MonthRing({ showYear = false }: { showYea
                 strokeWidth={w.isCurrent ? CURRENT_STROKE_WIDTH : light ? 1 : 0}
                 dashed={w.isCurrent}
                 selected={focused}
-                label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · 종강 이후` : `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${w.pct}%`}
+                label={dead ? `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · 종강 이후` : `${showYear ? `${year}년 ` : ""}${m.month}월 ${w.index}주차 · ${STATUS_LABEL[w.status]} · ${periodPercent(progress, w.pct, w.plannedPages)}`}
                 target={{ kind: "week", month: m.month, week: w.index }}
                 onSelect={dead || !years.includes(year) ? undefined : () => selectWeek(m.month, w.index, year)}
               />

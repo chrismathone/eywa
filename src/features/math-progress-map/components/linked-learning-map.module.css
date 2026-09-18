@@ -1,8 +1,44 @@
 .root { --current: #0000ff; --goal: #ff0000; color: var(--text, #171717); font-variant-numeric: tabular-nums; }
+.root { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dashboardGrid, .bottomGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.periodControls { padding-top: 6px; }
+.periodControls .controls { padding: 8px 0 0; }
+.periodControls :global(.toolbar-rail-row) { display: contents; }
+.bottomPanel { padding: 18px; border: 1px solid var(--line, #ddd); border-radius: 14px; background: var(--card, #fff); min-width: 0; }
+.bottomHeading { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
+.bottomHeading h3 { font-size: 16px; font-weight: 700; }
+.bottomHeading > strong { color: var(--current); font-size: 15px; }
+.bottomHeading > span { font-size: 12px; }
+.bottomHeading button { color: var(--goal); cursor: pointer; }
+.comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
+.comparison > button { display: grid; gap: 6px; border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 12px; text-align: left; cursor: pointer; }
+.comparison span { font-size: 12px; }
+.comparison strong { font-size: 13px; }
+.comparison b { color: var(--goal); font-size: 12px; }
+.comparison > button:last-child b { color: var(--current); }
+.comparisonTrack { position: relative; height: 9px; margin: 23px 8px 10px; border-radius: 9px; background: var(--bg-soft, #eee); }
+.comparisonTrack > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--current); }
+.comparisonTrack > button { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 15px; height: 15px; border-radius: 50%; cursor: pointer; }
+.plannedMarker { background: white; border: 2px solid var(--goal); }
+.actualMarker { background: var(--current); border: 2px solid white; box-shadow: 0 0 0 1px var(--current); }
+.comparisonScale { display: flex; justify-content: space-between; font-size: 12px; }
+.comparisonDates { margin-top: 15px; font-size: 12px; color: var(--text-dim, #666); }
+.currentNext { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line, #ddd); font-size: 12px; }
+.currentNext > div { display: grid; align-content: start; gap: 8px; }
+.currentNext button { text-align: left; display: grid; gap: 7px; cursor: pointer; }
+.currentNext strong { font-size: 13px; }
+.currentNext small { font-size: 11px; color: var(--text-dim, #666); }
+.goalList { margin-top: 16px; font-size: 12px; }
+.goalList summary, .lessonList summary { cursor: pointer; font-weight: 600; }
+.goalList button { display: flex; text-align: left; gap: 10px; width: 100%; padding: 10px 0; color: var(--goal); cursor: pointer; }
+.goalList time { white-space: nowrap; }
+.lessonList > summary { font-size: 12px; padding: 14px 20px; }
+@media (max-width: 1023px) { .dashboardGrid, .bottomGrid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .bottomPanel { padding: 14px; } .comparison, .currentNext { gap: 10px; } }
 .header { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding: 16px 20px; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: 12px; }
 .header h2 { font-size: 22px; font-weight: 750; margin: 0; }
 .header h2 span { font-size: 13px; font-weight: 500; margin-left: 10px; }
-.header p, .milestones p { font-size: 12px; color: var(--text-dim, #666); margin: 4px 0 0; }
+.header p { font-size: 12px; color: var(--text-dim, #666); margin: 4px 0 0; }
 .overall, .status { display: grid; gap: 4px; font-size: 12px; }
 .overall { margin-left: auto; color: var(--current); }
 .overall strong { font-size: 28px; line-height: 1; }
@@ -17,41 +53,10 @@
 .controls label { display: flex; gap: 6px; align-items: center; }
 .controls button, .controls select, .controls input, .lessonDetail button { padding: 5px 9px; border: 1px solid var(--line, #ddd); border-radius: 6px; background: var(--card, #fff); cursor: pointer; }
 .controls [aria-pressed="true"] { background: var(--current); color: white; border-color: var(--current); }
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-.dialPanel, .detailPanel { min-width: 0; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: 12px; }
 .panelHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 17px 20px; border-bottom: 1px solid var(--line, #eee); }
-.panelHeading h3, .milestones h3 { font-size: 15px; font-weight: 700; margin: 0; }
+.panelHeading h3 { font-size: 15px; font-weight: 700; margin: 0; }
 .panelHeading > span { font-size: 11px; white-space: nowrap; color: var(--text-dim, #666); }
-.dial { width: 100%; max-height: 680px; display: block; }
-.sector { cursor: pointer; outline: none; }
-.sectorBase { fill: color-mix(in srgb, var(--current) 3%, var(--card, #fff)); stroke: var(--line, #ddd); }
-.sectorTrack, .centerTrack { fill: none; stroke: var(--line, #e5e5e5); stroke-width: 7px; }
-.sectorFill, .centerFill { fill: none; stroke: var(--current); stroke-width: 7px; }
-.sector[data-completed="true"] .sectorFill, .centerFill[data-completed="true"] { stroke: var(--goal); }
-.sector[data-completed="true"] .sectorBase { fill: color-mix(in srgb, var(--goal) 3%, var(--card, #fff)); }
-.sector:focus-visible .sectorBase, .sector:hover .sectorBase { stroke: var(--current); stroke-width: 3px; }
-.sectorLabel { fill: var(--text, #171717); font-size: 29px; font-weight: 700; }
-.sectorRate { fill: var(--current); font-size: 25px; }
-.sector[data-completed="true"] .sectorRate { fill: var(--goal); }
-.centerTitle { fill: var(--text, #171717); font-size: 30px; font-weight: 650; }
-.centerPercent { fill: var(--text, #171717); font-size: 96px; font-weight: 750; }
-.centerCount { fill: var(--text-dim, #666); font-size: 28px; }
-.periodCaption { text-align: center; font-size: 11px; color: var(--text-dim, #666); margin: 0 15px 16px; }
-.periodList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 16px 16px; gap: 7px; }
-.periodList button { display: flex; justify-content: space-between; gap: 6px; padding: 9px; font-size: 11px; border: 1px solid var(--line, #eee); border-radius: 6px; cursor: pointer; }
-.periodList strong { white-space: nowrap; color: var(--current); }
 .lessons { max-height: 565px; overflow-y: auto; }
-.months { max-height: 690px; overflow-y: auto; }
-.months > button { display: flex; gap: 15px; align-items: center; text-align: left; width: 100%; padding: 22px 20px; border-bottom: 1px solid var(--line, #eee); cursor: pointer; }
-.months > button:hover { background: color-mix(in srgb, var(--current) 3%, var(--card, #fff)); }
-.months time { min-width: 36px; font-size: 14px; font-weight: 700; }
-.months strong { display: block; font-size: 12px; font-weight: 600; }
-.months small { display: block; font-size: 10px; color: var(--text-dim, #666); margin-top: 6px; }
-.monthRate { margin-left: auto; min-width: 72px; text-align: right; font-size: 12px; font-weight: 650; color: var(--current); }
-.monthRate i { display: block; margin-top: 8px; height: 4px; background: var(--line, #eee); border-radius: 3px; }
-.monthRate b { display: block; height: 100%; background: var(--current); border-radius: inherit; }
-.monthRate[data-completed="true"] { color: var(--goal); }
-.monthRate[data-completed="true"] b { background: var(--goal); }
 .lessons > button { display: flex; align-items: center; text-align: left; gap: 12px; padding: 13px 20px; width: 100%; border-bottom: 1px solid var(--line, #eee); cursor: pointer; }
 .lessons > button[aria-pressed="true"] { background: color-mix(in srgb, var(--current) 6%, var(--card, #fff)); }
 .lessons strong { display: block; font-size: 12px; font-weight: 600; }
@@ -68,10 +73,8 @@
 .records article { padding: 12px 0; border-bottom: 1px solid var(--line, #eee); }
 .records article button { color: var(--current); text-decoration: underline; margin-right: 10px; cursor: pointer; }
 .records p { color: var(--text-dim, #666); margin: 5px 0; }
-.milestones { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 14px; padding: 18px 20px; border: 1px solid var(--line, #ddd); border-radius: 12px; background: var(--card, #fff); }
-.milestones button { text-align: left; padding: 8px 12px; border-left: 2px solid var(--goal); cursor: pointer; color: var(--goal); }
-.milestones time { display: block; font-size: 10px; margin-bottom: 4px; }
-.milestones strong { font-size: 12px; font-weight: 550; }
 .root button:focus-visible, .root a:focus-visible { outline: 2px solid var(--current); outline-offset: 3px; }
-@media (max-width: 900px) { .header { gap: 14px; } .grid { grid-template-columns: minmax(0, 1fr); } .dial { max-height: 560px; } }
-@media (max-width: 480px) { .header, .rail { padding-left: 12px; padding-right: 12px; } .header h2 { font-size: 19px; } .header h2 span { display: block; margin: 3px 0 0; } .overall { margin-left: auto; } .status { flex: 1; } .back { width: 100%; } .panelHeading { padding: 14px 12px; flex-wrap: wrap; } .periodList { grid-template-columns: minmax(0, 1fr); } .lessons > button { padding: 12px; } .controls { gap: 7px; } .controls button { padding: 5px 8px; } }
+@media (max-width: 900px) { .header { gap: 14px; } }
+@media (max-width: 480px) { .header, .rail { padding-left: 12px; padding-right: 12px; } .header h2 { font-size: 19px; } .header h2 span { display: block; margin: 3px 0 0; } .overall { margin-left: auto; } .status { flex: 1; } .back { width: 100%; } .panelHeading { padding: 14px 12px; flex-wrap: wrap; } .lessons > button { padding: 12px; } .controls { gap: 7px; } .controls button { padding: 5px 8px; } }
+
+.detailPanel { min-width: 0; background: var(--card, #fff); border: 1px solid var(--line, #ddd); border-radius: 12px; }
