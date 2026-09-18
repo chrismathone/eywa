@@ -34,7 +34,7 @@ export default async function McsLandingPage({ searchParams }: { searchParams: P
       <div className={styles.summary}>
         <div className={styles.summaryCount}><span>이번 달 수업</span><strong>{data.cards.length}<small>개 반</small></strong></div>
         <div className={styles.summaryProgress}>
-          <div><span>전체 기록 작성률</span><strong>{pct == null ? "—" : `${pct}%`}</strong></div>
+          <div><span>전체 기록 작성률</span><strong data-complete={pct === 100 || undefined}>{pct == null ? "—" : `${pct}%`}</strong></div>
           {pct != null ? <><Progress value={pct} label="전체 기록 작성률" /><small>{written.toLocaleString()} / {shown.toLocaleString()}건 작성</small></> : <small>아직 작성 대상 기록이 없습니다.</small>}
         </div>
         <div className={styles.summaryAction}>

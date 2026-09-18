@@ -16,7 +16,7 @@ import {
   type LeaveAdjustmentRow,
   type PeriodWindow,
 } from "../balance";
-import { isMissingUsedOnColumn } from "../missing-used-on";
+import { isMissingUsedRangeColumn } from "../missing-used-range";
 // 표 미적용 판정(PGRST205·42P01…)은 전자결재 쪽과 **같은 헬퍼**를 쓴다 — 실패 모양을 두 번 정의하면
 // 한쪽만 새 오류 코드를 배운다. ⚠️ 다만 **문구는 여기서 쓴다**(아래 `describeOverviewError`):
 // 그쪽 문구는 "결재 문서를 볼 권한이 없습니다"라 직원관리 화면에서는 남의 시스템 얘기가 된다.
@@ -61,11 +61,11 @@ export type LeaveOverview = {
   /** 0252a 적용 여부 — false면 화면이 배너를 띄우고 조정 버튼을 잠근다. */
   tableReady: boolean;
   /**
-   * 사용일 칸(0270a) 적용 여부 — false면 조정 창의 **사용일 입력만** 잠근다(일수·사유는 그대로 쓴다).
+   * 사용 기간 칸(0271a) 적용 여부 — false면 조정 창의 **사용 기간 입력만** 잠근다(일수·사유는 그대로).
    * 🔴 `tableReady`와 따로 두는 이유: 컬럼만 없는 창에서 조정 기능 전체를 잠그면, 이미 되는 일까지
    *    못 하게 된다([[#95]] expand/contract는 "덜 되게"가 아니라 "그만큼만 되게"다).
    */
-  usedOnReady: boolean;
+  usedRangeReady: boolean;
   loadError?: LeaveLoadError;
 };
 
@@ -93,8 +93,9 @@ type AdjRaw = {
   reason: string;
   created_at: string;
   created_by: string | null;
-  /** 0270a 미적용 창에서는 아예 안 실려 온다(선택 필드) — 그 창에선 화면도 날짜 자리를 비운다. */
-  used_on?: string | null;
+  /** 0271a 미적용 창에서는 아예 안 실려 온다(선택 필드) — 그 창에선 화면도 날짜 자리를 비운다. */
+  used_start?: string | null;
+  used_end?: string | null;
 };
 
 function num(v: unknown): number {
@@ -141,10 +142,10 @@ const ADJ_COLS = "id, user_id, period_start, period_end, days, reason, created_a
 async function selectAdjustments(
   tenantId: string,
   userIds: string[],
-  withUsedOn: boolean,
+  withRange: boolean,
 ): Promise<AdjRaw[]> {
   const admin = createAdminClient();
-  const cols = withUsedOn ? `${ADJ_COLS}, used_on` : ADJ_COLS;
+  const cols = withRange ? `${ADJ_COLS}, used_start, used_end` : ADJ_COLS;
   return await fetchAllPagedInChunks<AdjRaw>(userIds, async (chunk, from, to) => {
     const { data, error } = await admin
       .from("leave_adjustments")
@@ -158,21 +159,21 @@ async function selectAdjustments(
   });
 }
 
-/** 조정 조회 결과 — 행과 "사용일 칸이 있었나"를 함께 돌려준다(화면이 입력을 잠글 근거). */
-type AdjLoad = { rows: AdjRaw[] | null; usedOnReady: boolean };
+/** 조정 조회 결과 — 행과 "사용 기간 칸이 있었나"를 함께 돌려준다(화면이 입력을 잠글 근거). */
+type AdjLoad = { rows: AdjRaw[] | null; usedRangeReady: boolean };
 
 async function loadAdjustments(tenantId: string, userIds: string[]): Promise<AdjLoad> {
   try {
-    return { rows: await selectAdjustments(tenantId, userIds, true), usedOnReady: true };
+    return { rows: await selectAdjustments(tenantId, userIds, true), usedRangeReady: true };
   } catch (e) {
     // 표 미적용(0252a 전)만 조용히 넘긴다 — 그 밖의 실패는 화면이 알아야 한다.
     if (isMissingRelation({ message: e instanceof Error ? e.message : String(e) })) {
-      return { rows: null, usedOnReady: false };
+      return { rows: null, usedRangeReady: false };
     }
-    // 사용일 칸(0270a)만 없는 창 — 그 칸을 빼고 다시 읽는다([[#95]]). 표는 이미 있어 조정 합계·이력은
+    // 사용 기간 칸(0271a)만 없는 창 — 그 칸을 빼고 다시 읽는다([[#95]]). 표는 이미 있어 조정 합계·이력은
     // 그대로 보여야 하고, 비는 것은 날짜 자리뿐이다.
-    if (isMissingUsedOnColumn(e)) {
-      return { rows: await selectAdjustments(tenantId, userIds, false), usedOnReady: false };
+    if (isMissingUsedRangeColumn(e)) {
+      return { rows: await selectAdjustments(tenantId, userIds, false), usedRangeReady: false };
     }
     throw e;
   }
@@ -184,14 +185,14 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
   try {
     staff = await activeStaff(tenantId);
   } catch (e) {
-    return { rows: [], tableReady: false, usedOnReady: false, loadError: describeOverviewError(e) };
+    return { rows: [], tableReady: false, usedRangeReady: false, loadError: describeOverviewError(e) };
   }
   const ids = staff.map((s) => s.id);
   const admin = createAdminClient();
 
   // 세 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
   let forms: FormRaw[] = [];
-  let adjLoad: AdjLoad = { rows: null, usedOnReady: false };
+  let adjLoad: AdjLoad = { rows: null, usedRangeReady: false };
   let settings: Awaited<ReturnType<typeof getTenantSettings>>;
   try {
     [forms, adjLoad, settings] = await Promise.all([
@@ -213,7 +214,7 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
       getTenantSettings(), // React cache — 레이아웃이 이미 부른 요청이면 왕복 0
     ]);
   } catch (e) {
-    return { rows: [], tableReady: false, usedOnReady: false, loadError: describeOverviewError(e) };
+    return { rows: [], tableReady: false, usedRangeReady: false, loadError: describeOverviewError(e) };
   }
 
   // 아래 판정·반환이 읽는 이름은 그대로 둔다(`tableReady: adjRows !== null`) — 조회 결과를 감싸는
@@ -273,8 +274,9 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
         createdAt: a.created_at,
         // 기록자가 퇴사(inactive)했거나 계정이 지워졌으면 이름을 모른다 — 지어내지 않고 null.
         createdByName: (a.created_by && nameById.get(a.created_by)) || null,
-        // 실제 휴가 사용일(0270a) — 부여 행과 컬럼 미적용 창에서는 null(화면이 날짜 자리를 비운다).
-        usedOn: a.used_on ?? null,
+        // 실제 휴가 사용 기간(0271a) — 부여 행과 칸 미적용 창에서는 null(화면이 그 자리를 비운다).
+        usedStart: a.used_start ?? null,
+        usedEnd: a.used_end ?? null,
       })),
     };
   });
@@ -282,7 +284,7 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
   const order = settings.operations.jobTitles;
   rows.sort((a, b) => compareByJobRank({ name: a.name, jobTitle: a.jobTitle }, { name: b.name, jobTitle: b.jobTitle }, order));
 
-  return { rows, tableReady: adjRows !== null, usedOnReady: adjLoad.usedOnReady };
+  return { rows, tableReady: adjRows !== null, usedRangeReady: adjLoad.usedRangeReady };
 }
 
 /**

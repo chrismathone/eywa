@@ -142,11 +142,11 @@ function allocatedSegments(goal: LearningGoal): { topics: LearningTopic[]; block
   return result;
 }
 
-/** Both the current marker and curriculum ticks use these same rounded block positions. */
+/** Preserve every curriculum endpoint; rounding here would merge distinct lessons. */
 export function learningTopicPositions(goal: LearningGoal): (LearningTopic & { block: number })[] {
   return allocatedSegments(goal).flatMap(({ topics, blocks, offset }) => topics.map((topic, index) => ({
     ...topic,
-    block: Math.round((offset + (index + 1) / topics.length * blocks) * 10) / 10,
+    block: offset + (index + 1) / topics.length * blocks,
   })));
 }
 
@@ -340,7 +340,7 @@ export function buildLearningProgress(
       continue;
     }
     const topic = course[index];
-    current = Math.max(0, Math.min(total, topic.block));
+    current = Math.max(0, Math.min(total, Math.round(topic.block * 10) / 10));
     currentBlock = goal.studyGrade === (goal.endStudyGrade ?? goal.studyGrade) ? topic.lesson : `${topic.grade} · ${topic.lesson}`;
     currentDate = record.date;
     currentRecord = record;

@@ -21,7 +21,8 @@ import {
   MAX_LEAVE_TOTAL,
   roundDays,
 } from "@/features/leave/balance";
-import { formatLeaveDays } from "@/features/leave/request-days";
+import { countLeaveDays, formatLeaveDays } from "@/features/leave/request-days";
+import { usedRangeLabel } from "@/features/leave/used-range";
 
 /**
  * 연차 관리 표(직원관리) — 직원별 부여·조정·사용·잔여를 한 줄로 보고, 그 자리에서 **조정 창**을 연다
@@ -43,13 +44,13 @@ type Props = {
   /** 0252a 미적용이면 조정 버튼을 잠근다(표는 그대로 읽힌다). */
   tableReady: boolean;
   /**
-   * 사용일 칸(0270a)이 있나 — 없으면 **사용일 입력만** 잠근다(일수·사유는 그대로 쓴다).
-   * 🔴 조정 기능 전체를 잠그지 않는다 — 컬럼 하나가 없다고 되는 일까지 막으면 안 된다([[#95]]).
+   * 사용 기간 칸(0271a)이 있나 — 없으면 **기간 입력만** 잠근다(일수·사유는 그대로 쓴다).
+   * 🔴 조정 기능 전체를 잠그지 않는다 — 칸 하나가 없다고 되는 일까지 막으면 안 된다([[#95]]).
    */
-  usedOnReady: boolean;
+  usedRangeReady: boolean;
 };
 
-export function AdjustTable({ rows, tableReady, usedOnReady }: Props) {
+export function AdjustTable({ rows, tableReady, usedRangeReady }: Props) {
   const [query, setQuery] = useState("");
   const [openFor, setOpenFor] = useState<string | null>(null);
 
@@ -173,7 +174,7 @@ export function AdjustTable({ rows, tableReady, usedOnReady }: Props) {
       {target ? (
         <AdjustDialog
           row={target}
-          usedOnReady={usedOnReady}
+          usedRangeReady={usedRangeReady}
           open
           onClose={() => setOpenFor(null)}
         />
@@ -229,12 +230,12 @@ const MODE_META: Record<Mode, { label: string; hint: string; placeholder: string
 
 function AdjustDialog({
   row,
-  usedOnReady,
+  usedRangeReady,
   open,
   onClose,
 }: {
   row: LeaveOverviewRow;
-  usedOnReady: boolean;
+  usedRangeReady: boolean;
   open: boolean;
   onClose: () => void;
 }) {
@@ -246,15 +247,17 @@ function AdjustDialog({
   const [mode, setMode] = useState<Mode>("delta");
   const [days, setDays] = useState("");
   const [reason, setReason] = useState("");
-  const [usedOn, setUsedOn] = useState("");
+  const [usedStart, setUsedStart] = useState("");
+  const [usedEnd, setUsedEnd] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   // 성공하면 창을 닫고 입력을 비운다 — 안 비우면 다음에 그 사람을 다시 열었을 때 지난 값이 남는다
-  // (사용일은 특히 위험하다 — 남은 날짜가 다음 사람 차감에 그대로 붙는다).
+  // (사용 기간은 특히 위험하다 — 남은 날짜가 다음 사람 차감에 그대로 붙는다).
   useResultToast(state, () => {
     setDays("");
     setReason("");
-    setUsedOn("");
+    setUsedStart("");
+    setUsedEnd("");
     onClose();
   });
   useResultToast(delState, () => setConfirmId(null));
@@ -275,12 +278,22 @@ function AdjustDialog({
   // '총 부여를 지정'에 음수를 넣으면 grantedTotal이 0으로 잘려 belowUsed(0 < 0)에 안 걸린다 —
   // 미리보기가 "총 0일"을 정상 결과처럼 보여 주지 않게 여기서 따로 잡는다(적대 리뷰 2026-09-08).
   const negativeTotal = valid && mode === "total" && roundDays(raw) < 0;
-  // 사용일은 **그 구간 안**에서만 — 서버와 같은 판정이고 화면은 미리 알려 주기만 한다([[#77]]).
-  const usedOnBad = !!usedOn && !!row.period && (usedOn < row.period.start || usedOn > row.period.end);
+  // 사용 기간은 **그 구간 안**에서만, 그리고 끝이 시작보다 앞설 수 없다 — 서버와 같은 판정이고
+  // 화면은 미리 알려 주기만 한다([[#77]]). 시작 없이 끝만 적은 것도 막는다(DB 제약과 같은 뜻).
+  const period = row.period;
+  const outsidePeriod =
+    !!period && [usedStart, usedEnd].filter(Boolean).some((d) => d < period.start || d > period.end);
+  const reversed = !!usedStart && !!usedEnd && usedEnd < usedStart;
+  const endWithoutStart = !usedStart && !!usedEnd;
+  const usedRangeBad = outsidePeriod || reversed || endWithoutStart;
+  // 가감 일수와 기간 길이가 맞는지 — **경고만** 한다(반차·반반차가 섞이면 정확히 안 맞는 게 정상이다).
+  // 일수 계산은 휴가 신청과 **같은 순수 함수**(일요일 제외)라 두 화면이 같은 숫자를 말한다.
+  const rangeDays = usedStart && !usedRangeBad ? countLeaveDays(usedStart, usedEnd || usedStart, "annual") : 0;
+  const rangeMismatch = valid && delta < 0 && !!usedStart && !usedRangeBad && rangeDays !== Math.abs(delta);
   // 🔴 제출 차단 조건은 **한 이름**으로 모은다 — 버튼 속성에 길게 늘어놓으면 조건을 더할 때
   //    미리보기만 고치고 버튼을 빼먹는다(2026-09-08 적대 리뷰가 잡은 자리와 같은 함정).
   const blocked =
-    !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedOnBad || !reason.trim();
+    !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedRangeBad || !reason.trim();
 
   return (
     <Dialog open={open} onOpenChange={(v) => (v ? undefined : onClose())}>
@@ -359,34 +372,57 @@ function AdjustDialog({
             />
           </label>
 
-          {/* 실제 휴가 **사용일**(0270a, 원장 2026-09-18) — 선택 입력. 결재 밖에서 쓴 연차를 차감할 때
-              "언제 쓴 건지"를 사유 문장이 아니라 칸으로 남긴다(내 정보 카드가 이 날짜로 줄을 세운다).
+          {/* 실제 휴가 **사용 기간**(0271a, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일
+              이렇게 길게해야지 하루씩만 할수있는게 말이안되자나"*) — 선택 입력이고 하루면 종료일을 비운다.
+              결재 밖에서 쓴 연차를 차감할 때 "언제부터 언제까지 쉬었나"를 사유 문장이 아니라 칸으로 남긴다
+              (내 정보 카드가 이 기간으로 줄을 세운다).
               🔴 min·max로 구간을 가두지만 그게 게이트는 아니다 — 서버가 같은 판정을 한다([[#77]]). */}
-          <label className="block space-y-1">
-            <span className="text-text-dim text-xs font-semibold">
-              휴가 사용일 <span className="text-text-faint font-normal">(선택)</span>
+          <div className="space-y-1">
+            <span className="text-text-dim block text-xs font-semibold">
+              휴가 사용 기간 <span className="text-text-faint font-normal">(선택)</span>
             </span>
-            <input
-              name="usedOn"
-              value={usedOn}
-              onChange={(e) => setUsedOn(e.target.value)}
-              type="date"
-              disabled={!usedOnReady}
-              min={row.period?.start}
-              max={row.period?.end}
-              title={
-                usedOnReady
-                  ? "결재 밖에서 쓴 연차를 차감할 때 그 날짜를 적습니다 — 이월·특별휴가 부여면 비워 두세요"
-                  : "사용일 칸이 아직 준비되지 않았습니다 — 마이그레이션 0270a"
-              }
-              className="border-line bg-card text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none transition disabled:opacity-50"
-            />
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[8.5rem] flex-1 space-y-1">
+                <span className="micro">시작</span>
+                <input
+                  name="usedStart"
+                  value={usedStart}
+                  onChange={(e) => setUsedStart(e.target.value)}
+                  type="date"
+                  disabled={!usedRangeReady}
+                  min={row.period?.start}
+                  max={row.period?.end}
+                  title={
+                    usedRangeReady
+                      ? "결재 밖에서 쓴 연차를 차감할 때 그 기간의 첫날 — 이월·특별휴가 부여면 비워 두세요"
+                      : "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0271a"
+                  }
+                  className="border-line bg-card text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none transition disabled:opacity-50"
+                />
+              </label>
+              <label className="min-w-[8.5rem] flex-1 space-y-1">
+                <span className="micro">종료 (비우면 하루)</span>
+                <input
+                  name="usedEnd"
+                  value={usedEnd}
+                  onChange={(e) => setUsedEnd(e.target.value)}
+                  type="date"
+                  disabled={!usedRangeReady || !usedStart}
+                  min={usedStart || row.period?.start}
+                  max={row.period?.end}
+                  title={
+                    !usedStart ? "시작일을 먼저 고르세요" : "여러 날 쉬었으면 마지막 날을 고릅니다"
+                  }
+                  className="border-line bg-card text-foreground focus:border-primary w-full rounded-lg border px-3 py-2 text-base outline-none transition disabled:opacity-50"
+                />
+              </label>
+            </div>
             <span className="text-text-faint block text-xs break-keep">
-              {usedOnReady
-                ? "차감(−)이 언제 쓴 연차인지 남깁니다 — 본인 '내 정보' 화면에 이 날짜로 표시됩니다. 부여(+)면 비워 두세요."
-                : "마이그레이션 0270a를 적용하면 사용일을 적을 수 있습니다(지금은 일수·사유만 기록됩니다)."}
+              {usedRangeReady
+                ? "차감(−)이 언제 쓴 연차인지 남깁니다 — 본인 '내 정보' 화면에 이 기간으로 표시됩니다. 부여(+)면 비워 두세요."
+                : "마이그레이션 0271a를 적용하면 사용 기간을 적을 수 있습니다(지금은 일수·사유만 기록됩니다)."}
             </span>
-          </label>
+          </div>
 
           {/* 미리보기 — 무엇이 저장되고 총 몇 일이 되는지 누르기 전에 보인다. */}
           <div className="border-line bg-bg-soft/40 rounded-lg border px-3 py-2 text-xs break-keep">
@@ -412,9 +448,13 @@ function AdjustDialog({
                 이미 사용·결재중인 {formatLeaveDays(reserved)}보다 적게 조정할 수 없습니다 (결과{" "}
                 {formatLeaveDays(nextTotal)}).
               </span>
-            ) : usedOnBad ? (
+            ) : endWithoutStart ? (
+              <span className="text-danger">사용 시작일을 먼저 고르세요.</span>
+            ) : reversed ? (
+              <span className="text-danger">사용 종료일이 시작일보다 앞섭니다.</span>
+            ) : outsidePeriod ? (
               <span className="text-danger">
-                사용일이 이 연차 구간(
+                사용 기간이 이 연차 구간(
                 <span className="num">{row.period ? leavePeriodLabel(row.period) : "—"}</span>) 밖입니다 —
                 그 날이 속한 구간에서 조정하세요.
               </span>
@@ -428,6 +468,16 @@ function AdjustDialog({
               </span>
             )}
           </div>
+
+          {/* 일수와 기간이 안 맞으면 **경고만** — 반차·반반차가 섞이면 정확히 안 맞는 게 정상이라
+              막지 않는다(세션 기간 검산 0189a와 같은 결). 일수 계산은 휴가 신청과 같은 순수 함수다. */}
+          {rangeMismatch ? (
+            <p className="border-amber/40 bg-amber-soft text-amber rounded-lg border px-3 py-2 text-xs break-keep">
+              이 기간의 연차 차감일은 <b className="num">{formatLeaveDays(rangeDays)}</b>인데 가감은{" "}
+              <b className="num">{formatSignedDays(delta)}</b>입니다 — 맞는지 확인하세요(반차·반반차면 다를
+              수 있고, 일요일은 세지 않습니다).
+            </p>
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -454,9 +504,9 @@ function AdjustDialog({
                     <span className="text-text-faint ml-2 whitespace-nowrap">
                       {/* 사용일이 있으면 **그 날짜를 앞에** 둔다 — 이 줄에서 사람이 찾는 사실은
                           "언제 쓴 연차인가"이고 적은 날짜는 그다음이다. */}
-                      {a.usedOn ? (
+                      {a.usedStart ? (
                         <>
-                          사용 <span className="num">{a.usedOn}</span>
+                          사용 <span className="num">{usedRangeLabel(a.usedStart, a.usedEnd)}</span>
                           {" · "}
                         </>
                       ) : null}

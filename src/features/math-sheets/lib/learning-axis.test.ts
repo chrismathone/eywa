@@ -1,75 +1,70 @@
-import { describe, expect, it } from "vitest";
-import { learningAxisPosition, learningAxisTicks, learningTopicTicks } from "./learning-axis";
-import { buildLearningProgress, goalMilestones, planLearningGoal } from "./learning-plan";
-import { learningTopics } from "./learning-path";
+﻿import { describe, expect, it } from "vitest";
+import { LEARNING_LESSON_WIDTH, learningCurrentPosition, learningGoalTicks, learningTopicTicks } from "./learning-axis";
+import { buildLearningProgress, planLearningGoal } from "./learning-plan";
+import { topicSegments } from "./learning-path";
 import { flatLessons } from "@/features/onescreen/curriculum";
 
-describe("목표 단계 수직선", () => {
-  it("한 목표는 끝이 1이고 그 안의 실제 진도는 소수다", () => {
-    const stops = [{ blockCount: 24 }];
-    expect(learningAxisPosition(6, stops)).toBe(0.25);
-    expect(learningAxisPosition(24, stops)).toBe(1);
-  });
-  it("서로 다른 분량의 목표도 각각 한 칸을 차지한다", () => {
-    const stops = [24, 72, 96, 120].map(blockCount => ({ blockCount }));
-    expect([24, 72, 96, 120].map(block => learningAxisPosition(block, stops))).toEqual([1, 2, 3, 4]);
-    expect(learningAxisPosition(48, stops)).toBe(1.5);
-  });
-  it("n차 목표를 추가해도 기존 현재 진도의 수직선 값은 유지된다", () => {
-    const stops = [24, 48, 72, 96].map(blockCount => ({ blockCount }));
-    expect(learningAxisPosition(36, stops)).toBe(1.5);
-    expect(learningAxisPosition(36, [...stops, { blockCount: 120 }])).toBe(1.5);
-    expect(learningAxisPosition(150, stops)).toBe(4);
-    expect(learningAxisPosition(-1, stops)).toBe(0);
-  });
-});
+const context = { schedules: [], holidays: {}, spans: {} };
+const goal = planLearningGoal({ studentId: "s", studyGrade: "중1", startBlock: "다각형", endStudyGrade: "중3", endBlock: "이차함수의 최댓값과 최솟값", startDate: "2026-09-01", endDate: "2027-08-31", textbook: null });
+const base = buildLearningProgress(goal, context, [], "2026-09-18");
+const state = { ...base, currentBlock: "수학 다각형", current: 2 };
+const semesterLabels = (ticks: ReturnType<typeof learningTopicTicks>) => topicSegments(ticks).map(topics => `${topics[0].grade}-${topics[0].semester}`);
 
-describe("실제 블록 단위 눈금", () => {
-  it("한 학기는 정확히 12칸이고 목표 끝은 1이다", () => {
-    const ticks = learningAxisTicks([{ blockCount: 12 }]);
-    expect(ticks).toHaveLength(12);
-    expect(ticks[0]).toEqual({ block: 1, position: 1 / 12, goal: false });
-    expect(ticks.at(-1)).toEqual({ block: 12, position: 1, goal: true });
-  });
-  it("1학기·2학기 분량의 목표를 각각 12칸·24칸으로 나눈다", () => {
-    const stops = [{ blockCount: 12 }, { blockCount: 36 }];
-    const ticks = learningAxisTicks(stops);
-    expect(ticks.filter((tick) => tick.position <= 1)).toHaveLength(12);
-    expect(ticks.filter((tick) => tick.position > 1)).toHaveLength(24);
-    expect(ticks[12].position).toBe(1 + 1 / 24);
-    for (const tick of ticks) expect(tick.position).toBe(learningAxisPosition(tick.block, stops));
-  });
-  it("복습 목표는 실제 4블록이며 미설정이면 눈금이 없다", () => {
-    expect(learningAxisTicks([{ blockCount: 4 }])).toHaveLength(4);
-    expect(learningAxisTicks([])).toEqual([]);
-  });
-});
-
-describe("세부 단원 눈금과 현재 위치 일치", () => {
-  const first = planLearningGoal({ studentId: "s", studyGrade: "중2", startBlock: "삼각형의 내심", endBlock: flatLessons("중2").at(-1)!, startDate: "2026-09-01", endDate: "2026-11-30", textbook: null });
-  const goal = planLearningGoal({ ...first, endStudyGrade: "공통수학1", endBlock: flatLessons("공통수학1").at(-1)! }, first);
-
-  it("모든 과정의 모든 단원 위치에 눈금이 있고 블록 눈금 사이도 빠짐없이 표시한다", () => {
-    const stops = goalMilestones(goal);
-    const detail = learningTopicTicks(goal);
-    const positions = new Set([...learningAxisTicks(stops), ...detail].map((tick) => tick.position));
-    expect(detail.length).toBeGreaterThan(0);
-    expect(detail.every((tick) => !Number.isInteger(tick.block))).toBe(true);
-    expect(new Set(detail.map((tick) => tick.block)).size).toBe(detail.length);
-    for (const topic of learningTopics(goal)) {
-      const state = buildLearningProgress(goal, { schedules: [], holidays: {}, spans: {} }, [
-        { date: "2026-08-31", progress: `${topic.grade} · ${topic.lesson}`, textbook: null },
-      ], "2026-09-18");
-      expect(state.current).not.toBeNull();
-      expect(positions.has(learningAxisPosition(state.current!, stops)), `${topic.grade} ${topic.lesson}`).toBe(true);
+describe("차시마다 동일한 간격의 최대 6학기 진도선", () => {
+  it("현재 진도 이전 2학기와 현재부터 4학기만 표시한다", () => {
+    const ticks = learningTopicTicks(goal, state);
+    expect(semesterLabels(ticks)).toEqual(["초6-2", "중1-1", "중1-2", "중2-1", "중2-2", "중3-1"]);
+    expect(learningGoalTicks(goal, ticks)).toHaveLength(6);
+    expect(ticks.map(tick => tick.position)).toEqual(ticks.map((_, index) => index + 1));
+    expect(LEARNING_LESSON_WIDTH).toBeGreaterThanOrEqual(6);
+    for (const topic of ticks) {
+      expect(learningCurrentPosition(goal, { ...state, currentBlock: `${topic.grade} · ${topic.lesson}` }, ticks)).toBe(topic.position);
     }
   });
-  it("목표를 확장해도 이전 단원의 수직선 위치는 바뀌지 않는다", () => {
-    const later = learningTopicTicks(goal);
-    for (const tick of learningTopicTicks(first)) expect(later).toContainEqual(tick);
+  it("현재 진도가 다음 학기로 넘어가면 표시 범위도 한 학기 이동한다", () => {
+    const next = { ...state, currentBlock: "중2 · 유리수와 소수" };
+    const ticks = learningTopicTicks(goal, next);
+    expect(semesterLabels(ticks)).toEqual(["중1-1", "중1-2", "중2-1", "중2-2", "중3-1", "중3-2"]);
+    expect(learningCurrentPosition(goal, next, ticks)).toBe(ticks.find(tick => tick.lesson === "유리수와 소수")?.position);
   });
-  it("수업 횟수로 세는 복습·심화와 단원당 1블록인 옛 목표에는 가짜 단원 눈금을 만들지 않는다", () => {
-    expect(learningTopicTicks({ ...first, track: "supplement" })).toEqual([]);
-    expect(learningTopicTicks({ ...first, blockCount: null, milestones: [] })).toEqual([]);
+  it("학기 목표는 실제 차시 끝에 놓이고 구간을 같은 폭으로 나누지 않는다", () => {
+    const ticks = learningTopicTicks(goal, state);
+    const stops = learningGoalTicks(goal, ticks);
+    let cumulative = 0;
+    for (const [index, semester] of topicSegments(ticks).entries()) {
+      cumulative += semester.length;
+      expect(stops[index].position).toBe(cumulative);
+    }
+    expect(stops[0].position).not.toBe(ticks.length / 6);
+    expect(stops.at(-1)?.endDate).toBe(goal.endDate);
+    expect(stops[0].endDate).toBeNull();
+    expect(stops[0].blockCount).toBeNull();
+  });
+  it("같은 6학기라도 차시 수에 따라 전체 길이가 다르다", () => {
+    const a = learningTopicTicks(goal, state);
+    const b = learningTopicTicks(goal, { ...state, currentBlock: "중2 · 유리수와 소수" });
+    expect(learningGoalTicks(goal, a)).toHaveLength(6);
+    expect(learningGoalTicks(goal, b)).toHaveLength(6);
+    expect(a.length * LEARNING_LESSON_WIDTH).not.toBe(b.length * LEARNING_LESSON_WIDTH);
+  });
+  it("처음 학년과 선택과목의 끝에서는 없는 학기를 만들지 않는다", () => {
+    const early = planLearningGoal({ ...goal, studyGrade: "초1", endStudyGrade: "초1", startBlock: flatLessons("초1")[0], endBlock: flatLessons("초1").at(-1)! });
+    expect(semesterLabels(learningTopicTicks(early))).toEqual(["초1-1", "초1-2", "초2-1", "초2-2"]);
+    const last = planLearningGoal({ ...goal, studyGrade: "기하", endStudyGrade: "기하", startBlock: flatLessons("기하")[0], endBlock: flatLessons("기하").at(-1)! });
+    const ticks = learningTopicTicks(last);
+    expect(learningGoalTicks(last, ticks).length).toBeLessThanOrEqual(6);
+    expect(ticks.at(-1)?.grade).toBe("기하");
+    expect(ticks.some(tick => tick.grade === "대수")).toBe(false);
+  });
+  it("목표를 확장해도 현재 진도가 같으면 표시 구간과 간격은 유지한다", () => {
+    const extended = planLearningGoal({ ...goal, endStudyGrade: "공통수학2", endBlock: flatLessons("공통수학2").at(-1)! }, goal);
+    expect(learningTopicTicks(extended, state)).toEqual(learningTopicTicks(goal, state));
+    expect(learningGoalTicks(extended, learningTopicTicks(extended, state))).toHaveLength(6);
+  });
+  it("보강이나 옛 목표도 차시 간격이 동일하며 횟수로 위치를 추정하지 않는다", () => {
+    for (const variant of [{ ...goal, track: "supplement" as const }, { ...goal, blockCount: null, milestones: [] }]) {
+      expect(learningTopicTicks(variant, state)).toEqual(learningTopicTicks(goal, state));
+      expect(learningCurrentPosition(variant, { ...state, current: 2, currentBlock: "내신대비" })).toBeNull();
+    }
   });
 });
