@@ -221,6 +221,8 @@ export default async function PublicSeatPage({
             markedSlotsByCell: day.markedSlotsByCell,
             busyStartsByClass: day.busyStartsByClass,
             offSlotByCell: day.offSlotByCell,
+            // LAB '따로 수업(*LAB)' 배정 — 서버 명단(`applySeatDayChoices`)·쓰기 게이트와 같은 값(안 넘기면 화면만 두 교시에 세운다).
+            ...(day.defaultSlotsByCell ? { defaultSlotsByCell: day.defaultSlotsByCell } : {}),
           }}
           canMove={false}
           readOnly={false}

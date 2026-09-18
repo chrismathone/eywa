@@ -78,14 +78,35 @@ describe("🔴 과목은 **서버가** 반 id로 읽는다 — 클라가 준 과
     const params = body.slice(body.indexOf("fetchMakeupAbsences("), body.indexOf("): Promise<"));
     expect(params).not.toContain("subject");
     expect(body).toContain("effectiveTeacherScope()");
-    expect(body).toContain("getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects)");
+    expect(body).toContain(
+      "getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects, deadline)",
+    );
+  });
+
+  it("🔴 보강 기한(결석한 달의 다음 달 말일)도 **세션**이 정한다 — 강사뷰만(원장 2026-09-18)", () => {
+    const body = code(action);
+    const params = body.slice(body.indexOf("fetchMakeupAbsences("), body.indexOf("): Promise<"));
+    // 클라가 "기한 없이"를 요청할 수 있으면 강사뷰가 1년치를 다시 연다.
+    expect(params).not.toContain("deadline");
+    expect(body).toContain('const deadline = (await getShellView()) === "teacher";');
+    // 쓰기 문도 같은 판정 — 목록에서 뺀 결석을 '직접 입력'이나 다른 문으로 되살리지 못한다(#77).
+    const gate = code(read("features/attendance/server/makeup-deadline-gate.ts"));
+    expect(gate).toContain('if ((await getShellView()) !== "teacher") return null;');
+    // 🔴 보강을 결석에 잇는 쓰기 문 **셋 다** 같은 함수를 지난다(재리뷰 2026-09-18 — 분리 보강 연결이 빠져 있었다).
+    for (const file of [
+      "features/attendance/server/makeup-note-action.ts",
+      "features/attendance/server/actions.ts",
+      "features/onescreen/server/makeup-register-actions.ts",
+    ]) {
+      expect(code(read(file)), file).toContain("await makeupDeadlineError(");
+    }
   });
 
   it("조회부가 `classes.subject`를 직접 읽어 기준으로 삼는다", () => {
     const body = code(query);
     expect(body).toContain('.from("classes")');
     expect(body).toContain('.select("subject")');
-    expect(body).toContain("buildAbsenceOptions(raw, makeupDate, current, anchorSubject, teacherSubjects)");
+    expect(body).toContain("buildAbsenceOptions(raw, makeupDate, current, anchorSubject, teacherSubjects, { deadline })");
   });
 
   it("🔴 앵커가 있으면 강사 과목 폴백은 **무시된다**(앵커가 더 정확한 기준이다)", () => {

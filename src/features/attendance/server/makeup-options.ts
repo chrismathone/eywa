@@ -44,6 +44,8 @@ export async function getMakeupAbsenceOptions(
    * 🔴 호출부(액션)가 세션에서 읽어 넘긴다 — 클라가 준 문자열은 믿지 않는다(앵커 규칙과 같은 결).
    */
   teacherSubjects?: readonly string[] | null,
+  /** 보강 기한(결석한 달의 다음 달 말일)으로 거를지 — 강사뷰만 참. 호출부(액션)가 **세션**으로 정한다. */
+  deadline = false,
 ): Promise<MakeupAbsenceList> {
   if (!studentId || !/^\d{4}-\d{2}-\d{2}$/.test(makeupDate)) return EMPTY;
   const supabase = await createClient();
@@ -96,7 +98,7 @@ export async function getMakeupAbsenceOptions(
       slotStart: (r.slot_start as string | null) ?? null,
     };
   });
-  const list = buildAbsenceOptions(raw, makeupDate, current, anchorSubject, teacherSubjects);
+  const list = buildAbsenceOptions(raw, makeupDate, current, anchorSubject, teacherSubjects, { deadline });
   // 라벨은 **실제로 거른 기준**을 가리켜야 한다 — 앵커가 없으면 강사 과목이 기준이고, 그게 하나일 때만
   // 이름을 댈 수 있다(둘 이상이면 "이 과목"이라 부를 대상이 없어 라벨을 비운다).
   const labelKey = anchorSubject ?? ((teacherSubjects ?? []).length === 1 ? teacherSubjects![0]! : null);

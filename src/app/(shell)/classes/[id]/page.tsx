@@ -9,6 +9,8 @@ import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
+import { LabSeparateToggle } from "@/features/enrollments/components/lab-separate-toggle";
+import { getClassLabSeparateEnrollmentIds } from "@/features/enrollments/server/lab-separate";
 import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
 import { CancelAssignmentButton } from "@/features/enrollments/components/cancel-assignment-button";
 import { kstToday } from "@/lib/date-kst";
@@ -38,7 +40,7 @@ import { DelegateAction, DelegationBanner } from "./_components/class-delegation
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
 import { ScheduleSummaryView } from "./_components/schedule-summary-view";
-import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
+import { isLabSeparateSlot, LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS } from "@/features/timetable/lib/lab-separate";
 import { slotPhase } from "@/features/classes/schedule-summary";
 import { ClassHistorySection } from "./_components/history-section";
 import { getClassHistory } from "@/features/classes/server/history-queries";
@@ -115,15 +117,24 @@ export default async function ClassDetailPage({
     .sort((a, b) => Number(b.isSubjectMatch) - Number(a.isSubjectMatch));
   const today = todayIso();
   const handoverDue = !!klass.pendingTeacherDate && klass.pendingTeacherDate <= today;
-  // 가져오기가 미뤄 둔 반 자체 변경(담임·강의실·**반 이름**) + 예약된 명단 변동. 둘 다 예약이
-  // 없으면 각각 쿼리 한 번으로 끝난다. 독립이라 병렬(B4).
-  const [scheduledClass, scheduledRoster] = await Promise.all([
+  // '따로 수업(*LAB)' 교시(오늘 유효 + 아직 시작 전) — 아래 시간표 요약과 EiE 토글이 **같은 판정**을 쓴다.
+  //    ⚠️ **지난 배치(만료 행)는 빼지 않는다** — 그건 '지난 배치 N개는 숨김' 숫자의 재료라(아래 요약 주석).
+  const isLiveLabSeparate = (s: (typeof klass.scheduleSlots)[number]) =>
+    isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && slotPhase(s, today) !== "past";
+  const labSeparateSlots = klass.scheduleSlots.filter(isLiveLabSeparate);
+  // EiE 토글(LAB '따로 수업(*LAB)' 학생 배정, 0271b) — **EiE 반이고 *LAB 교시가 있을 때만** 세운다(원장 2026-09-17
+  // *"EiE 수업이 아니면 EiE 토글은 없어도"*). *LAB 교시가 없는 반에선 켜도 아무 일이 없어 거짓 약속이 된다(lab-split.ts).
+  const showLabSeparate = klass.subject === "english" && klass.englishTrack === "eie" && labSeparateSlots.length > 0;
+  // 가져오기가 미뤄 둔 반 자체 변경(담임·강의실·**반 이름**) + 예약된 명단 변동 + EiE 토글의 켠 수강(따로·fail-soft,
+  // null = 모름 → 토글을 안 세운다). 예약이 없으면 각각 쿼리 한 번으로 끝난다. 독립이라 병렬(B4).
+  const [scheduledClass, scheduledRoster, labSeparateIds] = await Promise.all([
     getScheduledClassChanges(klass.id, {
       teacherId: klass.teacherId,
       classroomId: klass.classroomId,
       className: klass.className,
     }),
     getScheduledForClass(klass.id),
+    showLabSeparate ? getClassLabSeparateEnrollmentIds(klass.id) : Promise.resolve(null),
   ]);
   // 위임 가능 판정 = 서버 게이트(requireDelegationWrite)와 **같은 모양**이어야 한다.
   // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
@@ -157,10 +168,7 @@ export default async function ClassDetailPage({
   //    시간표만 산정"*) — 반 전체가 앉는 시간이 아니라서 요일·회차·주 시간·등원 요일 후보에 넣지 않는다.
   //    뺀 회차는 카드 아래에 밝힌다(조용히 숨기지 않는다 — schedule-summary.ts 규약).
   //    ⚠️ **지난 배치(만료 행)는 빼지 않는다** — 그건 '지난 배치 N개는 숨김' 숫자의 재료라, 여기서 빼면 그 수가
-  //    조용히 줄어든다(재리뷰 2026-09-17). 표식을 끄면 켜진 채 마감된 행이 실제로 남는다.
-  const isLiveLabSeparate = (s: (typeof klass.scheduleSlots)[number]) =>
-    isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && slotPhase(s, today) !== "past";
-  const labSeparateSlots = klass.scheduleSlots.filter(isLiveLabSeparate);
+  //    조용히 줄어든다(재리뷰 2026-09-17). 표식을 끄면 켜진 채 마감된 행이 실제로 남는다. 판정 = 위 `isLiveLabSeparate`.
   const schedule = summarizeSchedule(
     klass.scheduleSlots.filter((s) => !isLiveLabSeparate(s)),
     today,
@@ -463,6 +471,24 @@ export default async function ClassDetailPage({
                         <span className="text-chart-1 bg-chart-1/10 border-chart-1/20 rounded-md border px-2 py-0.5 text-xs font-medium">
                           {attendanceBadge(s.attendanceDays)}
                         </span>
+                      ) : null}
+                      {/* EiE 토글 — 요일 다음 자리(원장 2026-09-17 *"요일 / EiE토글 / 수강기간 / 수강 종료"*).
+                          고칠 수 있는 사람(옆 요일 칸과 같은 게이트)은 스위치, 못 고치면 켠 학생에게만 `*LAB` 표식. */}
+                      {labSeparateIds ? (
+                        canEditSchedule ? (
+                          <LabSeparateToggle
+                            enrollmentId={s.enrollmentId}
+                            studentName={s.name}
+                            initialOn={labSeparateIds.has(s.enrollmentId)}
+                          />
+                        ) : labSeparateIds.has(s.enrollmentId) ? (
+                          <span
+                            className={`text-blue bg-blue-soft rounded-md px-2 py-0.5 text-xs font-bold ${LAB_SEPARATE_TEXT_CLASS}`}
+                            title={sheetT(lang, "cls.d.labSepTitle")}
+                          >
+                            {LAB_SEPARATE_LABEL}
+                          </span>
+                        ) : null
                       ) : null}
                       <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
                         {canEditDates ? (

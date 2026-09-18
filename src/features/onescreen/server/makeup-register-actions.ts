@@ -7,6 +7,7 @@ import { isValidYmd, resolveReportDate } from "@/lib/date-kst";
 import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { addMakeupSessionEntries, type MakeupSessionEntry } from "../makeup-session";
 import { changeMakeupSession } from "./makeup-session-store";
+import { makeupDeadlineError } from "@/features/attendance/server/makeup-deadline-gate";
 
 /** 확인 버튼은 이 저장이 끝난 뒤에만 성공한다. 보고서 생성·발송은 하지 않는다. */
 export async function registerMakeupEntries(input: {
@@ -37,6 +38,9 @@ export async function registerMakeupEntries(input: {
     if (entry.absentDate && !isValidYmd(entry.absentDate)) {
       return { ok: false, error: "결석 날짜를 확인해 주세요" };
     }
+    // 보강 기한(결석한 달의 다음 달 말일, 강사뷰) — 결석분 연결 문들과 같은 판정(makeup-deadline-gate.ts).
+    const deadlineError = entry.absentDate ? await makeupDeadlineError(entry.absentDate, input.date) : null;
+    if (deadlineError) return { ok: false, error: deadlineError };
     entries.push({ ...entry, makeupClassId: anchor?.id ?? null, makeupClassName: anchor?.className ?? null });
   }
   return changeMakeupSession(supabase, {
