@@ -36,6 +36,7 @@ export function MatrixRow({
   classLabel,
   tierMissing,
   tierLabel,
+  noLessonZero = false,
   lang = "ko",
 }: {
   /** 화면 언어 — 표가 내려준다(서버 컴포넌트라 훅을 못 쓴다). 안 주면 한국어. */
@@ -68,6 +69,11 @@ export function MatrixRow({
   tierMissing?: boolean;
   /** 이 학생의 단가 티어 라벨(원장 전용 금액 열이 있을 때만) — 학교·학년 열 아랫줄에 표시. */
   tierLabel?: string | null;
+  /**
+   * 그 달 **수업날이 하나도 없어** 청구액·등록 차수를 0으로 적는 줄(원장 2026-09-18) — 판정은 표가 한다(`noLessonZeroView`).
+   * 수업 차수도 `—` 대신 0으로 적고, 등록 차수 0은 지어낸 값이라 차이 칸이 거기서 뺀 숫자로 신호를 내지 않는다.
+   */
+  noLessonZero?: boolean;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -181,7 +187,12 @@ export function MatrixRow({
         </td>
       ) : null}
       {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
-      <RowLessonCountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} suffix={unitSuffix} />
+      <RowLessonCountCell
+        row={rowKey(classId, student.id)}
+        fallback={countMarks(marks, units)}
+        suffix={unitSuffix}
+        zeroAsNumber={noLessonZero}
+      />
       {/* 등록 차수 = 회차 확정의 확정 시수. **확정 전엔 숫자를 안 지어낸다**(미확정으로 적는다).
           🔴 옛 **일수 기준** 확정은 단위가 달라(시수가 아니라 출석 일수) 회차 확정 화면이 붉게 칠하는 값이다
              (원장 2026-09-16). 여기서도 점선 밑줄 + 마우스 오버 카드로 그 사실을 적는다 — 감추지 않는다. */}
@@ -214,6 +225,7 @@ export function MatrixRow({
           row={rowKey(classId, student.id)}
           fallback={countMarks(marks, units)}
           term={termSessions}
+          termSynthetic={noLessonZero}
           suffix={unitSuffix}
           lang={lang}
         />

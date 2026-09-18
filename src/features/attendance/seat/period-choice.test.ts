@@ -428,3 +428,44 @@ describe("고정을 물을 것인가", () => {
     expect(shouldAskSeatPin({ pinnedSlot: null, toSlot: "16:20" })).toBe(true);
   });
 });
+
+describe("LAB '따로 수업(*LAB)' 배정 = 선택이 없을 때의 기본값 (0271b, 원장 2026-09-17·18)", () => {
+  // PL1b 화: 14:20 LAB · 15:40 *LAB. s1 = 켠 학생(*LAB) · s2 = 끈 학생(일반).
+  const rosters = { "14:20": [{ classId: "pl1b", students: [{ id: "s1" }, { id: "s2" }] }], "15:40": [{ classId: "pl1b", students: [{ id: "s1" }, { id: "s2" }] }] };
+  const base = {
+    slotsByClass: { pl1b: ["14:20", "15:40"] },
+    markedSlotsByCell: {} as Record<string, string[]>,
+    defaultSlotsByCell: { "pl1b|s1": ["15:40"], "pl1b|s2": ["14:20"] },
+    blank: <S,>(s: S) => s,
+  };
+  const ids = (out: Record<string, { students: readonly { id: string }[] }[]>, start: string) =>
+    (out[start] ?? []).flatMap((r) => r.students.map((s) => s.id));
+
+  it("선택이 없으면 배정대로 — 켠 학생은 *LAB 교시에만, 끈 학생은 일반 교시에만", () => {
+    const out = applySeatPeriodChoicesByPeriod(rosters, { ...base, choices: {} });
+    expect(ids(out, "14:20")).toEqual(["s2"]);
+    expect(ids(out, "15:40")).toEqual(["s1"]);
+  });
+
+  it("🔴 사람이 옮긴 교시(선택)가 배정을 이긴다 — 켠 학생을 오늘만 14:20으로", () => {
+    const out = applySeatPeriodChoicesByPeriod(rosters, { ...base, choices: { "pl1b|s1": "14:20" } });
+    expect(ids(out, "14:20")).toEqual(["s1", "s2"]);
+    expect(ids(out, "15:40")).toEqual([]);
+  });
+
+  it("🔴 이미 찍힌 기록이 배정을 이긴다 — 끈 학생이 *LAB 교시에서 찍혔으면 그 교시에도 선다", () => {
+    const out = applySeatPeriodChoicesByPeriod(rosters, {
+      ...base,
+      choices: {},
+      markedSlotsByCell: { "pl1b|s2": ["15:40"] },
+    });
+    expect(ids(out, "15:40")).toEqual(["s1", "s2"]);
+  });
+
+  it("배정 재료가 없으면 종전 그대로 — 두 교시 모두에 선다", () => {
+    expect(seatShowsAtPeriod({ chosen: null, slotStart: "15:40", classSlots: ["14:20", "15:40"], markedSlots: [] })).toBe(true);
+    expect(
+      seatShowsAtPeriod({ chosen: null, slotStart: "15:40", classSlots: ["14:20", "15:40"], markedSlots: [], defaultSlots: [] }),
+    ).toBe(true);
+  });
+});

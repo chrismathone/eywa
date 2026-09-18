@@ -59,11 +59,51 @@ export type MakeupAbsenceList = {
   /** 앵커 반과 과목이 달라 목록에서 뺀 후보 수(0 = 아무것도 안 걸렀다). */
   hiddenBySubject: number;
   /**
+   * 보강 기한(결석한 달의 다음 달 말일, `makeupDeadlineOf`)이 지나 뺀 후보 수 — **강사뷰에서만** 거른다.
+   * 없거나 0 = 안 걸렀다(사무실 화면은 1년치를 그대로 본다).
+   */
+  hiddenByDeadline?: number;
+  /**
    * 기준 과목의 **화면 라벨**(학원설정 단일 소스) — 서버가 채운다. 설정에 없는 키면 비운다
    * (raw 키를 화면에 흘리지 않는다).
    */
   subjectLabel?: string;
 };
+
+/**
+ * **보강 기한** = 결석한 달의 **다음 달 말일**(원장 2026-09-18 *"강사뷰 보강 추가할때 1개월 초과된 보강은
+ * 보여주지말것. 월 기준으로. 9월 결석이면 10월 마지막날까지 보강 가능."*).
+ * 🔑 날짜 수(30일)가 아니라 **달**로 센다 — 9/1 결석도 9/30 결석도 10/31까지다. 12월 결석은 이듬해 1/31.
+ * @param absenceDate YYYY-MM-DD(형식이 아니면 빈 문자열 — 판정하지 않는다)
+ */
+export function makeupDeadlineOf(absenceDate: string): string {
+  const m = /^(\d{4})-(\d{2})-\d{2}/.exec(absenceDate);
+  if (!m) return "";
+  // 다음 달 말일 = 다다음 달 0일(월 인덱스는 0부터라 1부터 센 달 번호 + 1이 곧 다다음 달 인덱스다).
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) + 1, 0)).toISOString().slice(0, 10);
+}
+
+/**
+ * 이 결석을 그날(`makeupDate`) 보강으로 메울 수 있나 — 기한 안이면 참.
+ * 🔴 **선보강**(결석일이 보강일보다 뒤 — 시험 직전에 당겨 하는 보강)은 언제나 참이다. 기한은 지난 결석에만 건다.
+ * ⚠️ 형식이 아닌 날짜는 참(모르는 것을 막지 않는다 — 막으면 후보가 조용히 사라진다).
+ */
+export function isWithinMakeupDeadline(absenceDate: string, makeupDate: string): boolean {
+  const deadline = makeupDeadlineOf(absenceDate);
+  if (!deadline || !/^\d{4}-\d{2}-\d{2}$/.test(makeupDate)) return true;
+  return makeupDate <= deadline;
+}
+
+/**
+ * 기한이 지난 결석을 막을 때의 한 문장 — 확인창·서버 쓰기 문이 **같은 문장**을 쓴다(표면마다 딴말 금지).
+ * 예: `보강 기한이 지난 결석입니다 — 5월 결석은 6/30까지 보강할 수 있습니다`
+ */
+export function makeupDeadlineMessage(absenceDate: string): string {
+  const deadline = makeupDeadlineOf(absenceDate);
+  if (!deadline) return "보강 기한이 지난 결석입니다";
+  const [, dm, dd] = deadline.split("-");
+  return `보강 기한이 지난 결석입니다 — ${Number(absenceDate.slice(5, 7))}월 결석은 ${Number(dm)}/${Number(dd)}까지 보강할 수 있습니다`;
+}
 
 /** 결석 칸 메모의 보강 표시 — `absenceMemo()`가 남기는 "7/16 보강 예정 · 보강 완료" 형태. */
 const MADE_UP_RE = /\d{1,2}\/\d{1,2}\s*보강\s*(예정|완료)/;
@@ -127,6 +167,11 @@ export function buildAbsenceOptions(
    * ⚠️ 앵커가 있으면 이 값은 무시된다(앵커가 더 정확한 기준이다 — 그 반의 과목이 곧 답이다).
    */
   teacherSubjects?: readonly string[] | null,
+  /**
+   * 보강 기한으로 거를지(`isWithinMakeupDeadline`) — **강사뷰만** 참(원장 2026-09-18). 사무실 화면은 정정·이월을
+   * 손보는 자리라 1년치를 그대로 본다.
+   */
+  opts?: { deadline?: boolean },
 ): MakeupAbsenceList {
   // 같은 (반,날짜)의 교시별 행을 **접으면서** 교시를 모은다 — 첫 행만 보고 버리면 "어느 수업의
   // 결석인지"가 사라지고, 보강 메모가 뒤 행에만 있는 경우 '보강 완료' 표시도 놓친다.
@@ -167,7 +212,9 @@ export function buildAbsenceOptions(
   const kept = all.filter((f) =>
     anchor ? subjectMatchesAnchor(anchor, f.subject) : subjectMatchesTeacher(teacherSubjects, f.subject),
   );
-  const out: MakeupAbsenceOption[] = kept.map(({ option, slots, madeUp }) => ({
+  // 기한은 과목 필터 **뒤**에 센다 — 두 숫자가 겹치지 않아야 화면 문장이 참이다(한 결석을 두 번 세지 않는다).
+  const live = opts?.deadline ? kept.filter((f) => isWithinMakeupDeadline(f.option.date, makeupDate)) : kept;
+  const out: MakeupAbsenceOption[] = live.map(({ option, slots, madeUp }) => ({
     ...option,
     ...(madeUp ? { alreadyMadeUp: true } : {}),
     ...(slots.size > 0 ? { slots: [...slots].sort() } : {}),
@@ -177,6 +224,7 @@ export function buildAbsenceOptions(
       a.date < b.date ? 1 : a.date > b.date ? -1 : a.className.localeCompare(b.className, "ko"),
     ),
     hiddenBySubject: all.length - kept.length,
+    ...(opts?.deadline ? { hiddenByDeadline: kept.length - live.length } : {}),
   };
 }
 

@@ -3716,6 +3716,12 @@ export const SHEET_DICT = {
   "cls.d.onlyDays": { ko: "{days}만", en: "{days} only" },
   "cls.d.toNow": { ko: "~ 현재", en: "~ now" },
   "cls.d.onHold": { ko: "휴원", en: "On hold" },
+  // EiE 토글 — LAB '따로 수업(*LAB)' 학생 배정(0271b). 글자는 표식 그대로(`*LAB`)라 여기엔 설명만 둔다.
+  "cls.d.labSepAria": { ko: "따로 수업(*LAB) 배정", en: "separate LAB (*LAB) assignment" },
+  "cls.d.labSepTitle": {
+    ko: "따로 수업(*LAB) 배정 — 켜면 LAB실 출석부에서 이 반의 *LAB 교시에만 섭니다(끄면 일반 LAB 교시에만)",
+    en: "Separate LAB (*LAB) — when on, this student appears only in the class's *LAB period on the LAB sheet (off: regular LAB periods only)",
+  },
 
   // ── 시간표 요약 카드 ─────────────────────────────────────────────
   "cls.sch.none": { ko: "등록된 시간표가 없습니다", en: "No timetable has been entered" },

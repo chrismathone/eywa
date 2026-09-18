@@ -16,6 +16,7 @@ import {
   userTaughtClassSet,
 } from "@/features/attendance/live/server/write-policy";
 import { noteMakeupAgainstAbsence } from "./makeup-note-action";
+import { makeupDeadlineError } from "./makeup-deadline-gate";
 import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
 import type { RecordedVia } from "@/features/attendance/live/recorded-via";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -1358,6 +1359,9 @@ export async function linkMakeupToAbsence(input: {
   //    — 선보강). 예전엔 `>=`로 막아 그 경우를 아예 넣을 수 없었다. 같은 날만 막는다 — 그건 결석과 보강이
   //    한 칸에서 만나는 것이라 '분리'가 성립하지 않는다(그 경우는 '합침'이 맞다).
   if (absentDate === makeupDate) return { error: "결석한 날과 보강한 날이 같습니다 — 그때는 '합침'을 쓰세요" };
+  // 보강 기한(결석한 달의 다음 달 말일, 강사뷰) — 메모 연결과 **같은 문**(makeup-deadline-gate.ts). 시수를 얹기 전에 막는다.
+  const deadlineError = await makeupDeadlineError(absentDate, makeupDate);
+  if (deadlineError) return { error: deadlineError };
   // 시수는 클라 값을 그대로 믿지 않는다 — 0·음수는 급여를 깎고, 과한 값은 조용한 과지급이 된다.
   if (!Number.isFinite(addUnits) || addUnits <= 0 || addUnits > 24) return { error: "보강 시수가 올바르지 않습니다" };
 

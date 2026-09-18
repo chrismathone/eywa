@@ -348,3 +348,62 @@ describe("과목 필터 — 왜 비었는지 밝힌다", () => {
     expect(screen.getByText(/과목이 다른 결석 3건은 뺐습니다\(수학 과목 보강\)/)).toBeInTheDocument();
   });
 });
+
+describe("보강 기한(강사뷰) — 결석한 달의 다음 달 말일(원장 2026-09-18)", () => {
+  it("뺀 결석이 있으면 그 수를 밝힌다 — 목록이 비어도 '결석이 없다'고 하지 않는다", () => {
+    setup({ candidates: [], absences: list([], { hiddenByDeadline: 3 }) });
+    expect(screen.getByText(/보강 기한\(결석한 달의 다음 달 말일\)이 지난 결석 3건은 뺐습니다/)).toBeInTheDocument();
+    expect(screen.queryByText(/최근 1년 결석 기록이 없습니다/)).toBeNull();
+  });
+
+  it("🔴 직접 입력으로 기한 지난 결석을 되살리지 못한다 — 선보강(미래 날짜)은 그대로 받는다", async () => {
+    // 보강일 7/31 → 5월 결석은 6/30이 기한.
+    setup({ candidates: [], absences: list([], { hiddenByDeadline: 0 }) });
+    await userEvent.selectOptions(absenceSelect(), "__custom__");
+    const date = screen.getByLabelText("결석 날짜 직접 입력");
+    await userEvent.type(date, "2026-05-20");
+    expect(screen.getByText(/보강 기한이 지난 결석입니다 — 5월 결석은 6\/30까지/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+
+    await userEvent.clear(date);
+    await userEvent.type(date, "2026-08-14");
+    expect(screen.queryByText(/보강 기한이 지난 결석입니다/)).toBeNull();
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeEnabled();
+  });
+
+  it("🔴 목록이 늦게 와도 먼저 넣은 날짜를 다시 본다 — 입력 순간만 보면 로딩 중에 넣은 날짜가 빠져나간다", async () => {
+    const onConfirm = vi.fn();
+    const props = {
+      studentName: "홍길동",
+      candidates: [],
+      sentSubjects: [],
+      makeupDate: TODAY,
+      onConfirm,
+      onCancel: vi.fn(),
+    };
+    // 로딩 중(기한 칸 없음)에 5월 날짜를 넣는다.
+    const { rerender } = render(<MakeupConfirmDialog {...props} absences={list()} />);
+    await userEvent.selectOptions(absenceSelect(), "__custom__");
+    await userEvent.type(screen.getByLabelText("결석 날짜 직접 입력"), "2026-05-20");
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeEnabled();
+    // 목록이 도착했다(강사뷰 — 기한 칸이 생긴다).
+    rerender(<MakeupConfirmDialog {...props} absences={list([], { hiddenByDeadline: 0 })} />);
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+  });
+
+  it("목록을 불러오는 중엔 '직접 입력' 확인을 잠근다 — 기한 판정 재료 없이 보내면 보강만 저장되는 반쪽이 된다", async () => {
+    setup({ candidates: [], absences: list(), absenceLoading: true });
+    await userEvent.selectOptions(absenceSelect(), "__custom__");
+    await userEvent.type(screen.getByLabelText("결석 날짜 직접 입력"), "2026-08-14");
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+    expect(screen.getByText(/결석 기록을 불러오는 중입니다 — 잠시 뒤 확인할 수 있습니다/)).toBeInTheDocument();
+  });
+
+  it("사무실 화면(기한 칸 없음)은 직접 입력을 막지 않는다 — 종전 그대로", async () => {
+    setup({ candidates: [], absences: list() });
+    await userEvent.selectOptions(absenceSelect(), "__custom__");
+    const date = screen.getByLabelText("결석 날짜 직접 입력");
+    await userEvent.type(date, "2026-05-20");
+    expect(date).toHaveValue("2026-05-20");
+  });
+});
