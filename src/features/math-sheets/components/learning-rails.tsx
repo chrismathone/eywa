@@ -1,13 +1,16 @@
 import { useId, type CSSProperties } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { goalMilestones, type LearningGoal, type LearningProgress } from "../lib/learning-plan";
 import { learningAxisLabel, learningAxisPosition } from "../lib/learning-axis";
+import { learningBlockLabel } from "../lib/learning-label";
 import styles from "./learning-rails.module.css";
 
 /** Integer positions are fixed goals; fractional positions show actual progress. */
-export function LearningRails({ progress, goal, recentBlock }: {
+export function LearningRails({ progress, goal, recentBlock, recentGrade }: {
   progress?: LearningProgress;
   goal?: LearningGoal;
   recentBlock?: string | null;
+  recentGrade?: string | null;
 }) {
   const goalDescriptionId = useId();
   const stops = goal ? goalMilestones(goal) : [];
@@ -16,10 +19,11 @@ export function LearningRails({ progress, goal, recentBlock }: {
   const axisCurrent = current == null ? null : learningAxisPosition(current, stops);
   const position = (value: number) => total ? value / total * 100 : 0;
   const currentPosition = position(axisCurrent ?? 0);
-  const currentLabel = progress?.currentBlock ?? recentBlock ?? "진도 기록 확인 필요";
+  const currentBlock = progress?.currentBlock ?? recentBlock;
+  const currentLabel = currentBlock ? learningBlockLabel(currentBlock, goal?.studyGrade ?? recentGrade) : "진도 기록 확인 필요";
   const finalStop = stops.at(-1);
-  const finalLabel = finalStop ? `${finalStop.studyGrade} · ${finalStop.endBlock}` : "전체 목표를 설정해 주세요";
-  const describeStop = (index: number) => `${index + 1}차 목표 · ${stops[index].studyGrade} · ${stops[index].endBlock} · ${stops[index].endDate}`;
+  const finalLabel = finalStop ? learningBlockLabel(finalStop.endBlock, finalStop.studyGrade) : "전체 목표를 설정해 주세요";
+  const describeStop = (index: number) => `${index + 1}차 목표 · ${learningBlockLabel(stops[index].endBlock, stops[index].studyGrade)} · ${stops[index].endDate}`;
   const currentText = axisCurrent == null ? "현재 진도 확인 필요" : `현재 ${learningAxisLabel(axisCurrent)} / 최종 목표 ${total} · ${currentLabel}`;
   const goalText = total ? stops.map((_, index) => describeStop(index)).join("; ") : "전체 목표 미설정";
   const variables = { "--current-position": `${currentPosition}%`, "--target-position": total ? "100%" : "0%" } as CSSProperties;
@@ -34,7 +38,7 @@ export function LearningRails({ progress, goal, recentBlock }: {
       majorTicks += `M${x} 30v8M${x} 83v8`;
       guides += `M${x} 38v45`;
     } else if (tick % minorStep === 0) {
-      minorTicks += `M${x} 32v4M${x} 85v4`;
+      minorTicks += `M${x} 30v6M${x} 85v6`;
     }
   }
   return (
@@ -62,11 +66,23 @@ export function LearningRails({ progress, goal, recentBlock }: {
         </div>
         <div className={`${styles.track} ${styles.targetTrack}`} role="img" aria-label="목표진도" aria-describedby={goalDescriptionId}>
           <span className={styles.targetFill} />
-          {stops.map((_, index) => (
-            <span key={index} className={styles.targetMarker} data-goal-number={index + 1}
-              style={{ left: `${position(index + 1)}%` }} title={describeStop(index)} />
-          ))}
         </div>
+        {stops.map((stop, index) => (
+          <Tooltip key={index}>
+            <TooltipTrigger className={styles.targetMarker} data-goal-number={index + 1}
+              data-final={index === total - 1 || undefined} delay={0}
+              style={{ left: `${position(index + 1)}%` }} aria-label={`${index + 1}차 목표`}
+              aria-describedby={`${goalDescriptionId}-stop-${index}`}
+              onClick={(event) => event.stopPropagation()} />
+            <TooltipContent id={`${goalDescriptionId}-stop-${index}`} role="tooltip" className={styles.goalTooltip} side="top" sideOffset={10}>
+              <div>
+                <strong>{index + 1}차 목표</strong>
+                <p>{learningBlockLabel(stop.endBlock, stop.studyGrade)}</p>
+                <small>완료 예정 · {stop.endDate}</small>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ))}
         <div className={`${styles.annotation} ${styles.targetAnnotation}`} title={`최종 목표 · ${finalLabel}`}>
           <span className={styles.annotationTag}>{total ? `${total}차 목표` : "목표"}</span>
           <span className={styles.blockName}>{finalLabel}</span>
