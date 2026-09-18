@@ -42,4 +42,22 @@ describe("LAB '따로 수업(*LAB)' 배정 배선", () => {
       /defaultSlotsByCell:\s*choiceDay\.defaultSlotsByCell/,
     );
   });
+
+  it("🔴 자리를 가르는 세 표면이 **같은 판정 함수**를 쓴다(원장 2026-09-18 *\"모든 곳에 배선\"*)", () => {
+    // 자리 출석부 · 시간표 격자 명단 · 원생 주간 시간표. 한 곳이라도 제 규칙을 새로 적으면
+    // "출석부엔 있는데 시간표엔 없다"가 된다(같은 아이가 화면마다 다른 교시에 선다).
+    for (const f of [
+      "src/features/attendance/seat/lab-split.ts",
+      "src/features/timetable/lib/lab-separate.ts",
+      "src/features/students/lib/class-slots.ts",
+    ]) {
+      expect(read(f), f).toContain("labSplitSlotShows");
+    }
+    // 원생 주간 시간표 = 격자·텍스트 요약이 **같은 행 목록**을 쓴다(한쪽만 가르면 두 표기가 갈린다).
+    const q = read("src/features/students/server/queries.ts");
+    expect(q).toContain("filterLabSeparateRows(");
+    expect(q).toContain("getStudentLabSeparateEnrollmentIds");
+    // 🔴 재료를 모르면 안 가른다 — 조회 실패가 수업을 지우는 쪽으로 틀리지 않게.
+    expect(q).toMatch(/labSlotIds && labFlaggedEnrollments \? .*: null/);
+  });
 });

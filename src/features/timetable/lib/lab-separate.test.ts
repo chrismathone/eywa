@@ -105,6 +105,14 @@ describe("*LAB 배정 원생 이름 표식 (0271b, 원장 2026-09-18 *\"이름 �
     status: "active" as string,
     ...over,
   });
+  /** PL1b 화요일 실배치 — 14:20 LAB(일반) · 15:00 강사 교시 · 15:40 *LAB. */
+  type T = { classId: string; dayOfWeek: string; slotTeacherLabel: string | null; labSeparate?: true; studentCount?: number; students: ReturnType<typeof st>[] };
+  const slot = (over: Partial<T> & { students: ReturnType<typeof st>[] }): T => ({
+    classId: "pl1b",
+    dayOfWeek: "tue",
+    slotTeacherLabel: null,
+    ...over,
+  });
 
   it("서식 = LAB 칸과 같은 파랑 + 이탤릭(합성 켬) · 밑줄 없음(밑줄은 교시 고정)", () => {
     expect(LAB_SEPARATE_STUDENT_CLASS).toContain("text-blue");
@@ -116,25 +124,65 @@ describe("*LAB 배정 원생 이름 표식 (0271b, 원장 2026-09-18 *\"이름 �
   it("그 주 *LAB 교시가 있는 반의 켠 원생에만 붙는다 — 한 반의 슬롯들은 같은 명단 배열을 공유한다", () => {
     const roster = [st("a"), st("b")];
     const slots = [
-      { classId: "pl1b", students: roster },
-      { classId: "pl1b", labSeparate: true as const, students: roster },
-      { classId: "other", students: [st("c")] },
+      slot({ slotTeacherLabel: "Anna", students: roster }),
+      slot({ slotTeacherLabel: "LAB", labSeparate: true, students: roster }),
+      { classId: "other", dayOfWeek: "tue", slotTeacherLabel: null, students: [st("c")] },
     ];
     const out = applyLabSeparateMarks(slots, new Set(["e-a", "e-c"]));
     expect(out[0]!.students[0]).toMatchObject({ labSeparate: true });
     expect(out[0]!.students[1]).not.toHaveProperty("labSeparate");
-    expect(out[0]!.students).toBe(out[1]!.students); // 참조 공유 유지(RSC 페이로드)
     // *LAB 교시가 없는 반은 켜져 있어도 안 붙인다(뜻을 잃은 배정).
     expect(out[2]!.students[0]).not.toHaveProperty("labSeparate");
     expect(out[2]).toBe(slots[2]);
   });
 
-  it("🔴 퇴원 줄엔 안 붙인다 · 수강 id를 모르면 안 붙인다 · 재료가 없으면 입력 그대로", () => {
-    const slots = [{ classId: "pl1b", labSeparate: true as const, students: [st("a", { status: "withdrawn" }), st("b", { enrollmentId: undefined })] }];
+  it("🔴 자리 칸 명단을 가른다 — *LAB 칸 = 켠 원생만 · 같은 날 일반 LAB = 끈 원생만 · 강사 교시는 그대로", () => {
+    // 원장 2026-09-18: *"*lab 체크가 안된 학생은 *lab이 스케줄에 나오면 안됨. *lab은 *lab이 체크된 학생만 떠야함"*.
+    const roster = [st("a"), st("b")];
+    const slots = [
+      slot({ slotTeacherLabel: "LAB", studentCount: 2, students: roster }), // 14:20 일반 LAB
+      slot({ slotTeacherLabel: "Anna", studentCount: 2, students: roster }), // 15:00 강사 교시
+      slot({ slotTeacherLabel: "LAB", labSeparate: true, studentCount: 2, students: roster }), // 15:40 *LAB
+    ];
+    const out = applyLabSeparateMarks(slots, new Set(["e-a"]));
+    expect(out[0]!.students.map((x) => x.studentId)).toEqual(["s-b"]);
+    expect(out[2]!.students.map((x) => x.studentId)).toEqual(["s-a"]);
+    // 강사 교시는 한 줄도 안 빠진다(배정은 자리를 가르는 것이지 수업에서 빼는 게 아니다).
+    expect(out[1]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+    // 셀 머리 인원도 명단을 따라간다.
+    expect(out[0]!.studentCount).toBe(1);
+    expect(out[2]!.studentCount).toBe(1);
+    expect(out[1]!.studentCount).toBe(2);
+  });
+
+  it("🔴 아무도 안 켰으면 *LAB 칸은 빈다 · 그 날 *LAB이 없는 반은 그대로 · 교시 고정은 배정을 이긴다", () => {
+    const roster = [st("a"), st("b")];
+    const tue = [
+      slot({ slotTeacherLabel: "LAB", students: roster }),
+      slot({ slotTeacherLabel: "LAB", labSeparate: true, students: roster }),
+    ];
+    const none = applyLabSeparateMarks(tue, new Set());
+    expect(none[1]!.students).toEqual([]);
+    expect(none[0]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+    // 월요일엔 *LAB이 없다 — 켠 원생도 그날 LAB에 그대로 선다(그날 수업이 통째로 사라지지 않게).
+    const mon = [slot({ dayOfWeek: "mon", slotTeacherLabel: "LAB", students: roster }), tue[1]!];
+    expect(applyLabSeparateMarks(mon, new Set(["e-a"]))[0]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+    // 교시 고정이 걸린 줄은 가르기에서 뺀다(자리 출석부 우선순위와 같다).
+    const pinned = [st("a"), st("b", { seatPinNote: "화 15:40 고정" })];
+    const out = applyLabSeparateMarks(
+      [slot({ slotTeacherLabel: "LAB", labSeparate: true, students: pinned }), slot({ slotTeacherLabel: "LAB", students: pinned })],
+      new Set(["e-a"]),
+    );
+    expect(out[0]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+  });
+
+  it("🔴 퇴원 줄엔 안 붙인다 · 수강 id를 모르면 안 붙인다 · 재료를 모르면(null) 아무것도 안 한다", () => {
+    const students = [st("a", { status: "withdrawn" }), st("b", { enrollmentId: undefined })];
+    const slots = [slot({ slotTeacherLabel: "Anna", students }), slot({ slotTeacherLabel: "LAB", labSeparate: true, students })];
     const out = applyLabSeparateMarks(slots, new Set(["e-a", "e-b"]));
-    expect(out).toEqual(slots);
+    expect(out[0]!.students).toEqual(students); // 이름 표식 없음
+    // 🔴 null = 모름이라 명단도 안 가른다(조회 실패를 "아무도 안 켰다"로 읽지 않는다).
     expect(applyLabSeparateMarks(slots, null)).toBe(slots);
-    expect(applyLabSeparateMarks(slots, new Set())).toBe(slots);
   });
 
   it("🔴 세 뷰(기본·통합·강사)가 같은 서식 상수를 쓴다", () => {
