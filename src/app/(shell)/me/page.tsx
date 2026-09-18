@@ -19,7 +19,10 @@ import { ResumeSheet } from "../staff/resumes/_components/resume-sheet";
 //    (원장 2026-09-04 *"화면만 갈라서"*) — 가르는 장치는 그 파일의 `PaperText`.
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
+import { getMyLeaveBalance } from "@/features/approvals/server/queries";
+import { getMyLeaveHistory } from "@/features/leave/server/my-history";
 import { AccountCard } from "./_components/account-card";
+import { LeaveCard } from "./_components/leave-card";
 import { ReportNameCard } from "./_components/report-name-card";
 
 // 탭 제목도 화면 언어를 따른다 — 강사가 창을 여럿 열어 두면 제목이 유일한 구분이다.
@@ -38,7 +41,7 @@ export default async function MyPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [resume, me, reportName, resolvedSendName] = await Promise.all([
+  const [resume, me, reportName, resolvedSendName, balance] = await Promise.all([
     getResumeByStaffUser(user.id),
     getStaffById(user.id),
     // 수업보고서 발송용 이름(0217a) — fail-soft: 컬럼 미적용이면 null(빈 칸)이고 페이지는 그대로 산다.
@@ -46,7 +49,18 @@ export default async function MyPage() {
     // 실제 발송이 쓰는 해석기로 "지금 매핑이 걸리는가"까지 확인 — 저장 후 생긴 동명 직원 때문에
     // 조용히 실명 발송으로 돌아간 상태를 카드가 밝힌다([[#89]] 폴백 기능의 침묵 실패 가시화).
     resolveReportAuthorName(user.tenantId, user.displayName),
+    // 연차 잔여(원장 2026-09-18) — 다른 조회와 독립이라 함께 받는다(B4). 학생 계정엔 없는 개념이라
+    // 아예 안 부르고, 실패해도 null로 떨어뜨린다(이력서를 채우는 화면이 연차 한 조각에 죽으면 안 된다).
+    user.systemRole === "student" ? Promise.resolve(null) : getMyLeaveBalance(user.id).catch(() => null),
   ]);
+  // 내역은 구간이 있어야 물어볼 수 있다(입사일 미등록이면 구간 자체가 없다) — 잔여에 의존하는 조회라
+  // 위 Promise.all에 못 넣는다. 여기서도 실패는 null(카드가 "못 불러왔다"를 그대로 적는다).
+  const leaveHistory = balance?.period
+    ? await getMyLeaveHistory(user.id, {
+        start: balance.period.start,
+        end: balance.period.end,
+      }).catch(() => null)
+    : null;
   const placeholder = isImportArtifactEmail(user.email);
 
   // 이력서가 아직 없으면 계정에 있는 정보로 초안을 채워 바로 쓰게 한다(빈 종이보다 시작이 쉽다).
@@ -95,6 +109,9 @@ export default async function MyPage() {
 
       <div className="print:hidden space-y-5">
         <AccountCard email={user.email} isPlaceholder={placeholder} />
+        {/* 연차 — 남은 일수와 "언제 썼는지". 사무실이 적은 조정(이월·특별휴가·정산 차감)도 같은 목록에
+            날짜순으로 선다. 숫자는 결재함·연차 관리 표와 **같은 산식**(balance.ts)이다. */}
+        {balance ? <LeaveCard lang={lang} balance={balance} history={leaveHistory} /> : null}
         {/* 수업보고서 발송용 이름(0217a) — 발송·공유·인쇄에 실명 대신 표시할 이름을 본인이 정한다. */}
         <ReportNameCard
           realName={user.displayName}
