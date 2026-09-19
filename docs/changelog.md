@@ -1,5 +1,18 @@
 # eywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-19 (2) — 데모 시드 영구 제거: `pnpm db:seed`·`scripts/seed.ts`·진도 데모 스크립트 2개
+
+원장(개발팀 부장 경유) *"pnpm db seed는 제거해. 다시는 사용할 수 없게. 필요도 없을 것 같고."*
+
+- 🔴 **왜**: `seed.ts`는 테넌트 데이터를 **먼저 지우고**(출결·청구·수강·학생·반·직원 등 18표를 직접 + FK cascade로 딸린 표) 가짜 데이터를 넣는 구조였고, 그 데모 테넌트가
+  2026-07-01에 운영 테넌트 `injaewon`으로 승격됐다. 지금은 slug(`ijw-demo`)를 못 찾아 멈추지만, 그 한 줄을 `injaewon`으로 "고치는" 순간 운영 DB가 지워진다.
+- 지운 것: `package.json`의 `db:seed` · `scripts/seed.ts` · `scripts/demo-progress-seed.mts`(운영에 '진도데모_*' 학생 5명을 넣음) ·
+  `scripts/demo-progress-cleanup.mts`(그 짝 — 사용자 선택으로 함께). 참조 정리 = README · HANDOFF · CLAUDE.md 결정 로그 · setup-and-ops ·
+  migrations README · gotchas(#22·#31에 기록용 표시) · oneoff 스크립트 주석 둘. 옛 changelog·`CODE_REVIEW_2026-06-18.md`는 날짜 박힌 기록이라 그대로 뒀다.
+- **가드 훅(`.claude/hooks/guard.cjs`) 차단은 남겼다** — git 이력에서 되살려 돌리는 경우를 막는다. 진도 데모 두 스크립트 경로도 차단 목록에 넣었다.
+- ⚠️ **시드가 몰래 하던 일 하나**: `system_role` enum의 `'student'` 값은 SQL 마이그레이션에 없고(`0000`은 7개) 시드가 `ADD VALUE IF NOT EXISTS`로 넣어 왔다.
+  운영 DB엔 이미 있다. 빈 DB를 새로 만들 때만 손으로 한 번 — `supabase/migrations/README.md` §3에 적었다.
+
 ## 2026-09-19 (1) — MCS 색 규칙 한 벌: 실제 진도 = 파랑 · 목표 = 빨강 (진도 시계·범례·월별 타임라인·차시 점까지)
 
 원장 *"우상단 라벨 색상과 실제 시계에서 라벨 색상이 달라서 착각을 줄 수 있을 것 같네. 프로그레스바와 색상 통일하는게 맞는것 같아"* →

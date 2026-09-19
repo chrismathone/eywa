@@ -40,7 +40,6 @@ supabase/migrations/
 ├─ 0000_*.sql, 0001_*.sql, ...  # drizzle-kit generate 결과 (자동)
 ├─ 0001a_*.sql, 0002a_*.sql ... # 손수 작성한 RLS/제약/트리거 (drizzle 무관)
 └─ meta/_journal.json           # drizzle 추적 — 손수 파일은 여기 없음
-scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 ```
 
 ---
@@ -63,7 +62,9 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 3. **손수 RLS/제약/트리거 작성** — `0001a_*.sql` 같은 alpha suffix 파일로
 4. **`pnpm db:migrate`** — drizzle이 자기 파일만 적용
 5. **`node --env-file=.env.local -e "..."`** 식으로 alpha 파일을 raw SQL 실행 (또는 supabase dashboard SQL editor)
-6. **`pnpm db:seed`** — `scripts/seed.ts` 실행. idempotent (테넌트 데이터 전부 삭제 후 재삽입).
+
+> ⚠️ 옛 6단계 `pnpm db:seed`(`scripts/seed.ts`)는 **2026-09-19 영구 제거**했다 — 테넌트 데이터를 전부 지우고 다시 넣는
+> 구조인데 데모 테넌트가 운영 테넌트 `injaewon`으로 승격돼(2026-07-01) 운영 DB를 날릴 수 있었다. 되살리지 말 것.
 
 ## Git 협업 규칙 (⚠️ 여러 세션이 병렬로 작업함)
 
@@ -104,7 +105,7 @@ scripts/seed.ts                 # `pnpm db:seed` — 데모 시드 (idempotent)
 ⚠️ **이 repo는 세션들이 단일 작업 트리(`D:/eywa_refactoring`)를 공유**한다 (`git worktree list` 하면 워크트리 1개뿐). 그래서 격리 없는 동시 *쓰기*는 위험:
 - **같은 파일 동시 편집** → 나중 쓴 쪽이 덮어씀, 상대 세션의 화면은 stale
 - **둘 다 `pnpm dev`** → `.next` 락 충돌·생성파일 손상 (#17/#23 — `routes.d.ts` 깨짐 → `.next` nuke 후 재빌드해야 복구)
-- **둘 다 `db:seed`/마이그레이션** → 같은 Supabase를 상호 wipe (seed가 idempotent-wipe라 더 위험)
+- **둘 다 마이그레이션** → 같은 Supabase(운영 DB)에 동시 적용
 - **둘 다 push** → non-fast-forward 도돌이표 (위 Git 협업 규칙)
 
 ### 병렬이 안전·유용한 경우
@@ -144,13 +145,13 @@ pnpm build       # next build (Turbopack)
 |---|---|---|---|
 | chrismathone@gmail.com | mbplaza2* | master (지점장) | 인재원 지점장. super_admin 아님. **원장용 투어** (12메뉴) |
 | st2000423@gmail.com | qkrthtjs1234@ | master + super_admin | SaaS 총괄 (전체 지점 관리) |
-| teacher@ijw-demo.com | ijwteacher1! | teacher (박지훈) | **강사용 투어** — 선생님 원스크린. seed가 auth 생성 + wipe-safe 보존 |
-| student@ijw-demo.com | ijwstudent1! | student (김서연) | **학생용 투어** — 내 학습 현황 + 데일리 리포트. seed가 auth 생성 + wipe-safe 보존 |
+| teacher@ijw-demo.com | ijwteacher1! | teacher (박지훈) | **강사용 투어** — 선생님 원스크린. 옛 seed가 만든 계정 |
+| student@ijw-demo.com | ijwstudent1! | student (김서연) | **학생용 투어** — 내 학습 현황 + 데일리 리포트. 옛 seed가 만든 계정 |
 
 두 master 모두 ijw-demo academy master지만 **super_admin은 st2000423만**. `display_name`은 김수진 / 석태선.
-데모 강사/학생은 `scripts/seed.ts`의 `ensureDemoAuth`가 idempotent 생성하고, wipe(#32) 직후 `public.users` 행을
-on-conflict로 재upsert한다(강사=박지훈 `TEACHERS[0]`, 학생=김서연). `student`는 `system_role` enum에 없어
-시드가 `ALTER TYPE … ADD VALUE IF NOT EXISTS 'student'`로 멱등 추가 후 사용(#31/#32 회피).
+데모 강사/학생 계정은 옛 `scripts/seed.ts`(2026-09-19 제거)가 만들었다 — 이제 되살리는 스크립트는 없다. 계정이
+필요하면 새로 만들고, 시드를 되살리지 말 것. `student`는 `system_role` enum의 SQL 마이그레이션에 없어 옛 시드가
+`ALTER TYPE … ADD VALUE IF NOT EXISTS 'student'`로 넣어 왔다(빈 DB 셋업 시 수동 — `supabase/migrations/README.md` §3).
 `st2000423`을 teacher 등 다른 role로 되돌리려면 admin API 한 번:
 ```js
 fetch(URL + '/auth/v1/admin/users/fcf735fa-edf7-4095-8fa6-724285a018ed', {
@@ -203,7 +204,7 @@ production 반응속도가 느림. 의심 가는 병목:
     P2 = 시험모듈(`/exams`)·수강종료추적·급여월별표·수강료계산기·교재카탈로그·운영감사로그·레벨테스트 + 카카오 알림톡 머지.
     상세: 위 "진행 상황 › ijw 기능 갭 P2"(2026-06-18). (남은 P3는 #14.)
 12. **데모 시드 갭(P2 신규 테이블)** — `audit_logs`는 mutation 사용 시 자동 채워짐(현재 비어있음). `level_tests`는 비어있음
-    (필요 시 시드). 급여 월별표는 활성직원 39명 중 급여설정 1명뿐이라 거의 0원 — 데모용 급여설정 시드 필요. (⚠️ `db:seed`는 POC 데모 wipe — 금지.)
+    (필요 시 시드). 급여 월별표는 활성직원 39명 중 급여설정 1명뿐이라 거의 0원 — 데모용 급여설정 시드 필요. (⚠️ 운영 테넌트라 시드 스크립트로 채우지 말 것 — `db:seed`는 2026-09-19 제거.)
 13. **P2 브라우저 실검증** — 시험 일괄입력·계산기·단가표·감사로그·레벨테스트는 **로직 레벨만 검증**(타입/테스트/빌드 그린).
     Chrome MCP 재연결 후 웨일에서 실거동 일괄 검증 필요(역할별 메뉴 노출 포함). [[reference_browser-verification-env]]
 14. **ijw 갭 P3(미착수)** — 상담 녹음 AI / QR 공개접수 / 시간표 시뮬레이션 / 엑셀 라운드트립(import) / 지출 결재 +

@@ -61,9 +61,14 @@ pnpm db:migrate
 pnpm db:alphas
 #    (대안) 개별 파일만: Supabase 대시보드 → SQL Editor에 파일 내용 붙여넣기.
 
-# 3) 시드(데모 테넌트)
-pnpm db:seed
+# 3) system_role enum에 'student' 추가 — 아래 ⚠️ 참고
+#    ALTER TYPE system_role ADD VALUE IF NOT EXISTS 'student';
 ```
+
+- ⚠️ **데모 시드(`pnpm db:seed`·`scripts/seed.ts`)는 2026-09-19 영구 제거됐다** — 테넌트 데이터를 먼저 지우는 구조인데
+  데모 테넌트가 운영 테넌트 `injaewon`으로 승격돼(2026-07-01) 운영 DB를 지울 수 있었다. 되살리지 말 것.
+- ⚠️ `system_role`의 `'student'` 값은 **SQL 마이그레이션에 없다**(`0000`의 enum은 7개, drizzle 스냅샷에만 있다) —
+  그동안 옛 `seed.ts`가 `ADD VALUE IF NOT EXISTS`로 넣어 왔다. 운영 DB엔 이미 있고, **빈 DB를 새로 만들 때만** 위 3)을 한 번 실행한다.
 
 ## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-25, +makeedu 0057a·0058a·종강 0059a 적용 2026-06-29)
 
