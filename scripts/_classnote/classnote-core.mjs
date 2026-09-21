@@ -94,6 +94,7 @@ async function dropAdminSession() {
  * 🔴 2026-07-28 원장 절대 규칙: "학부모가 일주일이 지났는데 이전 보고서를 받는 것도 비합리적" —
  * 앱의 classnoteMinDate(classnote-guard.ts)와 같은 창. 워커는 모든 발송이 지나는 최종 관문이라
  * 앱을 우회한 큐잉(직접 DB·재고·복구분)도 여기서 걸린다. **완화 금지.**
+ * 유일한 예외 = 원장이 건마다 지정한 행(0276a, 2026-09-21 — processQueueOnce 위 hasDeadlineExemptColumn).
  */
 export function minDate() {
   const d = new Date();
@@ -378,6 +379,29 @@ const STALE_SWEEP_MS = 60_000;
  */
 const lastStaleSweepAt = new Map();
 
+/**
+ * **원장이 지정한 기한 예외**(0276a `lesson_reports.classnote_deadline_exempt_at`) — 원장 2026-09-21
+ * *"앞으로도 내가 예외로 지정하는건은 기한 지난것도 발송"*. 이 표시가 있는 행은 7일 창(minDate) 밖이어도 클레임한다.
+ * 표시는 사람이 건마다 붙인다(`scripts/_reports/resend-past-deadline.mts` — 감사로그 동반). 7일 규칙 자체는 그대로다.
+ * ⚠️ 컬럼이 없으면(0276a 미적용) 절을 빼고 종전대로 돈다 — zip이 SQL보다 먼저 가도 발송이 멈추지 않게([[#95]]).
+ *    없을 때만 10분마다 다시 묻는다(매 폴 information_schema 조회 금지 — 위 stale 복구 주석과 같은 이유).
+ */
+const EXEMPT_RECHECK_MS = 600_000;
+let exemptColumn = { present: false, checkedAt: 0 };
+async function hasDeadlineExemptColumn(sql) {
+  if (exemptColumn.present) return true;
+  if (Date.now() - exemptColumn.checkedAt < EXEMPT_RECHECK_MS) return false;
+  try {
+    const rows = await sql`select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'lesson_reports'
+        and column_name = 'classnote_deadline_exempt_at' limit 1`;
+    exemptColumn = { present: rows.length > 0, checkedAt: Date.now() };
+  } catch {
+    exemptColumn = { present: false, checkedAt: Date.now() };
+  }
+  return exemptColumn.present;
+}
+
 export async function processQueueOnce(sql, browser, opts) {
   const {
     tenant,
@@ -437,17 +461,27 @@ export async function processQueueOnce(sql, browser, opts) {
   }
 
   // 2) 원자 클레임: queued → processing (FOR UPDATE SKIP LOCKED, tenant 격리)
+  //    7일 창 밖은 원장이 지정한 예외 행만(위 hasDeadlineExemptColumn 주석).
+  const exemptClause = (await hasDeadlineExemptColumn(sql))
+    ? sql`or classnote_deadline_exempt_at is not null`
+    : sql``;
   const claimed = await sql`
     with cte as (
       select id from lesson_reports
-      where tenant_id = ${tenant} and classnote_status='queued' and report_date >= ${md}
+      where tenant_id = ${tenant} and classnote_status='queued' and (report_date >= ${md} ${exemptClause})
         and revoked_at is null
       order by classnote_queued_at nulls first limit ${BATCH}
       for update skip locked
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes`;
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes`
+    .catch((e) => {
+      // 컬럼이 사라졌으면(0276a 되돌림 — 42703 undefined_column) 기억을 지워 다음 폴부터 예외 절 없이 돈다.
+      // 안 지우면 "있다"는 기억 때문에 매 폴 같은 오류로 발송 전체가 멈춘다.
+      if (e?.code === "42703") exemptColumn = { present: false, checkedAt: 0 };
+      throw e;
+    });
   const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);
