@@ -38,6 +38,7 @@ const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
 const S = require("./invoice-stale.cjs");
+const { invoiceStudentMatcher } = require("./invoice-student-matcher.cjs");
 
 const APPLY = process.argv.includes("--apply");
 // 🔴 **제한 모드**(`--only-pairs=<json>`) — 묵은 미납 재대조가 쓴다. 파일은 `["<studentId>|<period>", …]`.
@@ -138,7 +139,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     // 스크랩이 커버한 청구월 — "eywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
     const scrapedPeriods = [...new Set(lines.map((l) => l.period))].sort();
     const [studs, existing, activeRows] = await Promise.all([
-      sql`select id, name, grade, makeedu_id from students where tenant_id = ${tenantId}`,
+      sql`select id, name, grade, makeedu_id, notes from students where tenant_id = ${tenantId}`,
       scrapedPeriods.length
         ? // updated_at = 마지막으로 스크랩에 잡힌 시각(upsert가 값이 같아도 now()를 쓴다) → 부재 지속일 계산 재료.
           sql`select i.id, i.student_id, i.period, i.status, i.amount_total, i.amount_paid, i.amount_discount,
@@ -152,15 +153,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
           where s.tenant_id = ${tenantId} and e.end_date is null and e.on_hold = false`,
     ]);
     const activeStudentIds = new Set(activeRows.map((r) => r.student_id));
-    const byMkid = new Map();
-    for (const s of studs) if (s.makeedu_id) byMkid.set(String(s.makeedu_id), s.id);
-    // 동명+동학년 2명 이상은 모호 → null(오매칭 방지). makeedu_id 우선 → (이름·학년) 폴백.
-    const matchNameGrade = L.tieredMatcher(studs, [
-      (s) => `${L.normalizeName(s.name)}|${s.grade || ""}`,
-      (s) => L.normalizeName(s.name),
-    ]);
-    const resolve = (l) =>
-      (l.mkid && byMkid.get(String(l.mkid))) || matchNameGrade({ name: l.name, grade: l.grade }) || null;
+    const resolve = invoiceStudentMatcher(studs);
 
     // (student_id, period)로 집계
     const inv = new Map();
