@@ -2,7 +2,7 @@ import { enrollmentAttendsOnDay, isEnrollmentEndedOn } from "@/features/enrollme
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import { monthRange } from "@/lib/date-kst";
 import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
-import type { AutoUnitsSchedule } from "./auto-units";
+import { unitsFromMinutes, type AutoUnitsSchedule } from "./auto-units";
 import type { AttendanceTermSessions } from "./class-billing";
 import { axisDowOf, resolveTaughtBy, type AxisSlot } from "./teacher-axis";
 
@@ -23,6 +23,7 @@ export function teacherTermWeights(input: {
   enrollments: readonly TermShareEnrollment[];
   homeroomTeacherId: string | null;
   englishTrack: string | null;
+  className: string;
   holidays: ReadonlySet<string>;
   scopeTeacherId: string;
   homeroomSince?: string | null;
@@ -30,13 +31,11 @@ export function teacherTermWeights(input: {
   const { from, to } = monthRange(input.month);
   const weights: TermShareWeights = new Map();
   // Billing includes seats, but excludes separately displayed *LAB alternatives.
-  const schedules = input.schedules.filter((s) => !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate));
+  const schedules = input.schedules.filter((s) => !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate)
+    && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? ""));
   const allSlots = schedules.map((s) => ({ ...s, slotTeacherLabel: null }));
-  // A bridge class keeps the 40-minute basis on its 60-minute-only weekdays too.
-  const fortyMinuteBasis = input.englishTrack === "eie" || schedules.some((s) => {
-    const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-    return s.validFrom <= to && (!s.validTo || s.validTo >= from) && minutes(s.endTime) - minutes(s.startTime) === 40;
-  });
+  // A shortened Injaewon period does not turn the whole class into a bridge course.
+  const fortyMinuteBasis = input.englishTrack === "eie" || /브릿지|브리지|\bbridge\b/i.test(input.className);
   for (let day = new Date(`${from}T00:00:00Z`); day.toISOString().slice(0, 10) <= to; day.setUTCDate(day.getUTCDate() + 1)) {
     const date = day.toISOString().slice(0, 10);
     if (input.holidays.has(date)) continue;
@@ -44,29 +43,44 @@ export function teacherTermWeights(input: {
     if (!input.enrollments.some((e) => e.startDate <= date && !isEnrollmentEndedOn(e.endDate, date, e.isTransferred)
       && enrollmentAttendsOnDay(e.attendanceDays, dow))) continue;
     const slots = liveSlotMinutesOn(date, allSlots);
+    const lessons: { start: string; minutes: number; owner: string; units: number }[] = [];
     for (const [start, minutes] of slots) {
       if (minutes <= 0) continue;
       const axis = resolveTaughtBy({ homeroomTeacherId: input.homeroomTeacherId, slots: schedules, date, slotStart: start });
       let owner = axis.teacherId ?? "";
       if (axis.source === "homeroom" && owner === input.scopeTeacherId && input.homeroomSince && date < input.homeroomSince) owner = "";
-      const units = fortyMinuteBasis ? minutes / 40 : Math.ceil(minutes / 60);
-      weights.set(owner, (weights.get(owner) ?? 0) + units);
+      const units = unitsFromMinutes(minutes, fortyMinuteBasis ? "eie" : "injaewon") ?? 1;
+      lessons.push({ start, minutes, owner, units });
     }
+    lessons.sort((a, b) => a.start.localeCompare(b.start));
+    // Four contiguous 40-minute teaching blocks: the central teacher teaches two units,
+    // while the before/after groups share one. E.g. bridge A: Kristine .5 / Jane 2 / Florence .5.
+    // Require that exact split pattern; a seat or unrelated four-period timetable is not inferred.
+    const toMinutes = (start: string) => Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5));
+    if (fortyMinuteBasis && lessons.length === 4 && lessons.every((s) => s.minutes === 40 && s.owner)
+      && lessons[1].owner === lessons[2].owner && lessons[0].owner !== lessons[1].owner && lessons[3].owner !== lessons[1].owner
+      && lessons.slice(1).every((s, i) => toMinutes(s.start) - toMinutes(lessons[i].start) === 40)) {
+      lessons[0].units = 0.5;
+      lessons[3].units = 0.5;
+    }
+    for (const { owner, units } of lessons) weights.set(owner, (weights.get(owner) ?? 0) + units);
   }
   return weights;
 }
 
-/** Apportion tenths deterministically so teacher + seat shares sum to the confirmed class total. */
+/** Use the scheduled periods themselves. Never scale them to make a confirmation fit. */
 export function teacherTermSessions(term: AttendanceTermSessions, teacherId: string, weights: TermShareWeights): AttendanceTermSessions {
   if (term.daysBasis) return term;
   const total = [...weights.values()].reduce((sum, n) => sum + n, 0);
-  if (total <= 0 && term.units !== 0) return { ...term, classUnits: term.units, allocationPending: true };
-  const tenths = Math.round(term.units * 10);
-  const parts = [...weights].map(([id, n]) => {
-    const exact = total > 0 ? tenths * n / total : 0;
-    return { id, units: Math.floor(exact), remainder: exact - Math.floor(exact) };
-  }).sort((a, b) => b.remainder - a.remainder || a.id.localeCompare(b.id));
-  const left = tenths - parts.reduce((sum, p) => sum + p.units, 0);
-  for (let i = 0; i < left && i < parts.length; i++) parts[i]!.units++;
-  return { ...term, units: (parts.find((p) => p.id === teacherId)?.units ?? 0) / 10, classUnits: term.units };
+  const pending = () => ({ ...term, classUnits: term.units, allocationPending: true });
+  if (term.units === 0) return { ...term, classUnits: 0 };
+  if (total <= 0) return pending();
+  // A sole owner receives the confirmed registration, even if the billed quantity was adjusted.
+  // With multiple owners, a different total needs actual period attribution, not a ratio.
+  if (weights.size > 1 && Math.abs(total - term.units) > 1e-8) return pending();
+  const units = weights.size === 1 ? (weights.has(teacherId) ? term.units : 0) : weights.get(teacherId) ?? 0;
+  if ([...weights.values(), units].some((n) => !Number.isFinite(n) || Math.abs(n * 2 - Math.round(n * 2)) > 1e-8)) return pending();
+  const halves = units * 2;
+  // Only remove floating-point noise; no rounding of teaching quantities.
+  return { ...term, units: Math.round(halves) / 2, classUnits: term.units };
 }
