@@ -7,8 +7,10 @@
 //     userOverrides:  + 설현(staff full) + 이승엽(staff full) + 김예원(staff full) ← 역할과 무관 개별 허용
 //   (master 원일·박소선은 기본 full이라 손대지 않는다. teacher·viewer·student는 원래 none.)
 //
-//   node scripts/staff-access/narrow-staff-menu.mjs            # 드라이런(변경 없음, 계획 출력)
-//   node scripts/staff-access/narrow-staff-menu.mjs --apply    # 적용(이전 permissions를 로그로 보존)
+//   node scripts/staff-access/narrow-staff-menu.mjs --tenant cs            # 드라이런(변경 없음, 계획 출력)
+//   node scripts/staff-access/narrow-staff-menu.mjs --tenant cs --apply    # 적용(이전 permissions를 로그로 보존)
+// 🔴 --tenant 필수(2026-09-22) — 지점이 둘 이상이라 '첫 설정 행'·전 지점 사용자 목록을 집으면 남의 지점을
+//    고친다. 사용자 이름 매칭도 그 학원 안에서만 한다(_tenant-arg.mjs).
 //
 // ⚠️ 반영 시점: tenant_settings는 서버에서 배포 시점까지 캐시된다(B6 unstable_cache) — 이 스크립트로
 //    DB만 바꾸면 **다음 배포(또는 owner 콘솔 저장의 updateTag)까지 앱에 안 보일 수 있다**(2026-08-03 실측:
@@ -31,9 +33,11 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tenantSlugArg, resolveTenantSettingsRow } from "./_tenant-arg.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APPLY = process.argv.includes("--apply");
+const TENANT_SLUG = tenantSlugArg();
 
 const env = Object.fromEntries(
   readFileSync(join(HERE, "../../.env.local"), "utf-8")
@@ -76,8 +80,13 @@ async function rest(path, init) {
   return body ? JSON.parse(body) : null;
 }
 
-// 1) 대상 사용자 해석 — 정확히 1명씩
-const users = await rest(`users?select=id,display_name,system_role,status&system_role=neq.student&limit=2000`);
+// 0) 대상 학원 + 그 학원의 설정 행
+const { tenant, row } = await resolveTenantSettingsRow(SB, H, TENANT_SLUG);
+
+// 1) 대상 사용자 해석 — 그 학원 안에서 정확히 1명씩
+const users = await rest(
+  `users?select=id,display_name,system_role,status&system_role=neq.student&tenant_id=eq.${tenant.id}&limit=2000`,
+);
 const grants = GRANTEES.map(({ name, role }) => {
   const hits = users.filter((u) => u.display_name === name && u.system_role === role && u.status !== "inactive");
   if (hits.length !== 1) {
@@ -86,9 +95,7 @@ const grants = GRANTEES.map(({ name, role }) => {
   return { userId: hits[0].id, menu: "staff", access: "full", _name: name };
 });
 
-// 2) 현재 설정 로드
-const [row] = await rest(`tenant_settings?select=tenant_id,data`);
-if (!row) throw new Error("tenant_settings 행이 없다");
+// 2) 현재 설정(위 0에서 그 학원 행을 읽었다)
 const perms = row.data?.permissions ?? { overrides: [] };
 const overrides = Array.isArray(perms.overrides) ? perms.overrides : [];
 const userOverrides = Array.isArray(perms.userOverrides) ? perms.userOverrides : [];

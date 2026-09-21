@@ -8,7 +8,7 @@ import { logAction } from "@/features/audit/server/log";
 import { canAccess } from "@/lib/permissions";
 import { humanizeNotionError } from "@/features/staff/notion-tasks";
 import type { ContentLine } from "@/features/staff/notion-tasks";
-import { notionTasksDatabaseId } from "@/lib/notion/client";
+import { notionConfigFor } from "@/lib/notion/client";
 import {
   resolveMonthlyTasks,
   prepareStaffNotionMappingRow,
@@ -25,12 +25,26 @@ import {
   type TaskComment,
 } from "./notion";
 
-// 쓰기 액션 공통 게이트 — 편집(완료/이동/생성)은 직원관리 쓰기 권한(개인 예외 포함)만.
+const NOT_CONFIGURED = "Notion 연동이 설정되지 않았습니다";
+
+// 쓰기 액션 공통 게이트 — 편집(완료/이동/생성)은 직원관리 쓰기 권한(개인 예외 포함) + 이 학원이 Notion 연동 학원일 때만.
+// 🔴 Notion 페이지 id는 브라우저가 보낸 값이다 — 연동 학원 확인 없이 쓰면 다른 학원이 그 워크스페이스 업무를 고친다.
 async function requireEditor(): Promise<{ ok: true } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(actor.systemRole, "staff"))) return { ok: false, error: "편집 권한이 없습니다" };
+  if (!notionConfigFor(actor.tenantId)) return { ok: false, error: NOT_CONFIGURED };
   return { ok: true };
+}
+
+// 읽기 액션 공통 게이트 — 직원관리 열람 권한 + 연동 학원.
+async function requireReader(): Promise<{ ok: true; tenantId: string; displayName: string } | { ok: false; error: string }> {
+  const actor = await getCurrentUser();
+  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
+  const matrix = await getUserPermMatrix();
+  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  if (!notionConfigFor(actor.tenantId)) return { ok: false, error: NOT_CONFIGURED };
+  return { ok: true, tenantId: actor.tenantId, displayName: actor.displayName };
 }
 
 // 클라(월간뷰)에서 호출하는 서버 액션 — 월 이동/매핑. 권한은 tenant-aware 매트릭스로 게이트([[#58]]). RLS가 테넌트 격리.
@@ -45,7 +59,8 @@ export async function getStaffMonthlyTasks(
   const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
   try {
-    return await resolveMonthlyTasks(staffId, month);
+    // 연동 학원이 아니면 resolveMonthlyTasks가 API 호출 없이 'not_configured'를 돌려준다(화면이 그 상태를 그린다).
+    return await resolveMonthlyTasks(staffId, month, actor.tenantId);
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }
@@ -62,6 +77,7 @@ export async function prepareNotionMapping(
   if (!actor) return { ok: false, error: "로그인이 필요합니다" };
   const matrix = await getUserPermMatrix();
   if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  if (!notionConfigFor(actor.tenantId)) return { ok: false, error: NOT_CONFIGURED };
   // 이메일 자동연결은 수동 연결과 **같은 컬럼**(users.notion_user_id)을 말없이 바꾼다 — 바꾸기 전
   // 상태를 먼저 읽어, 비어 있던 사람이 matched로 돌아온 경우에만 남긴다. 이미 연결돼 있던 걸 다시
   // 연 것까지 세면 다이얼로그를 열 때마다 "연결함"이 쌓여 없던 변경을 주장하게 된다.
@@ -105,12 +121,10 @@ export async function prepareNotionMapping(
 export async function getTaskComments(
   pageId: string,
 ): Promise<{ ok: true; comments: TaskComment[] } | { ok: false; error: string }> {
-  const actor = await getCurrentUser();
-  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getUserPermMatrix();
-  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  const gate = await requireReader();
+  if (!gate.ok) return gate;
   try {
-    return { ok: true, comments: await fetchTaskComments(pageId) };
+    return { ok: true, comments: await fetchTaskComments(pageId, gate.tenantId) };
   } catch (e) {
     return { ok: false, error: humanizeNotionError(e instanceof Error ? e.message : String(e)) };
   }
@@ -170,8 +184,10 @@ export async function createStaffTask(
   const title = input.title.trim();
   if (!title) return { ok: false, error: "업무명을 입력하세요" };
   if (!input.due) return { ok: false, error: "마감일을 선택하세요" };
-  const dbId = notionTasksDatabaseId();
-  if (!dbId) return { ok: false, error: "Notion 연동이 설정되지 않았습니다" };
+  const actor = await getCurrentUser();
+  const cfg = notionConfigFor(actor?.tenantId);
+  if (!cfg) return { ok: false, error: NOT_CONFIGURED };
+  const dbId = cfg.dbId;
   const notionId = await resolveStaffNotionId(staffId);
   if (!notionId) return { ok: false, error: "이 직원의 Notion 계정이 연결되지 않아 업무를 만들 수 없습니다" };
   try {
@@ -193,10 +209,8 @@ export async function createStaffTask(
 export async function getTaskContent(
   pageId: string,
 ): Promise<{ ok: true; lines: ContentLine[] } | { ok: false; error: string }> {
-  const actor = await getCurrentUser();
-  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getUserPermMatrix();
-  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  const gate = await requireReader();
+  if (!gate.ok) return gate;
   try {
     return { ok: true, lines: await fetchTaskContent(pageId) };
   } catch (e) {
@@ -209,14 +223,12 @@ export async function addTaskCommentAction(
   pageId: string,
   text: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const actor = await getCurrentUser();
-  if (!actor) return { ok: false, error: "로그인이 필요합니다" };
-  const matrix = await getUserPermMatrix();
-  if (!canAccess(actor.systemRole, "staff", matrix)) return { ok: false, error: "권한이 없습니다" };
+  const gate = await requireReader();
+  if (!gate.ok) return gate;
   const t = text.trim();
   if (!t) return { ok: false, error: "댓글 내용을 입력하세요" };
   try {
-    await addTaskComment(pageId, t.slice(0, 1800), actor.displayName || "직원");
+    await addTaskComment(pageId, t.slice(0, 1800), gate.displayName || "직원");
     // 🔴 댓글 본문은 담지 않는다(내용은 Notion이 갖는다) — 남긴 사실과 길이까지만.
     await logAction({
       action: "notion_task_comment",
@@ -236,6 +248,7 @@ export async function setStaffNotionUserId(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const actor = await getCurrentUser();
   if (!actor || !(await canWriteTenant(actor.systemRole, "staff"))) return { ok: false, error: "권한이 없습니다" };
+  if (!notionConfigFor(actor.tenantId)) return { ok: false, error: NOT_CONFIGURED };
   const nextId = notionUserId?.trim() || null;
   const res = await setStaffNotionUserIdRow(staffId, nextId, actor.tenantId);
   if (res.ok) {

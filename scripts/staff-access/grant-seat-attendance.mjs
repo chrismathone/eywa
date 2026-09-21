@@ -1,8 +1,9 @@
 // 랩실·JJ실 출석부(seat_attendance) — 자리 담당자 개인 예외 부여(원장 지시 2026-08-14
 //   "랩실 아르바이트 선생님이 출결 체크").
-//   드라이런: node scripts/staff-access/grant-seat-attendance.mjs
-//   적용:     node scripts/staff-access/grant-seat-attendance.mjs --apply
-//   회수:     node scripts/staff-access/grant-seat-attendance.mjs --revoke --apply
+//   드라이런: node scripts/staff-access/grant-seat-attendance.mjs --tenant cs
+//   적용:     node scripts/staff-access/grant-seat-attendance.mjs --tenant cs --apply
+//   회수:     node scripts/staff-access/grant-seat-attendance.mjs --tenant cs --revoke --apply
+// 🔴 --tenant 필수(2026-09-22) — 지점이 둘 이상이라 '첫 설정 행'을 집으면 남의 지점 권한을 고친다(_tenant-arg.mjs).
 //
 // 🔴 역할 승격이 아니라 **개인 예외**다. viewer를 teacher/admin으로 올리면 급여·직원명부·담임
 //    드롭다운·알림 수신자에 따라 붙는다(LAB 가짜 강사 사고와 같은 종류).
@@ -12,9 +13,11 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tenantSlugArg, resolveTenantSettingsRow } from "./_tenant-arg.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APPLY = process.argv.includes("--apply");
 const REVOKE = process.argv.includes("--revoke");
+const TENANT_SLUG = tenantSlugArg();
 const env = Object.fromEntries(
   readFileSync(join(HERE, "../../.env.local"), "utf-8").split(/\r?\n/)
     .filter((l) => l.includes("=") && !l.startsWith("#"))
@@ -31,7 +34,7 @@ const H = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.
 const SEAT_STAFF = [{ id: "771473c9-7b6d-49f8-9080-172d0e10bc47", name: "이주희" }];
 const MENU = "seat_attendance";
 
-const [ts] = await (await fetch(`${SB}/rest/v1/tenant_settings?select=tenant_id,data`, { headers: H })).json();
+const { row: ts } = await resolveTenantSettingsRow(SB, H, TENANT_SLUG);
 const perms = ts.data.permissions ?? {};
 const ids = new Set(SEAT_STAFF.map((s) => s.id));
 const cur = (perms.userOverrides ?? []).filter((o) => !(ids.has(o.userId) && o.menu === MENU));

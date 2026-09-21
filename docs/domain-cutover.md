@@ -84,6 +84,9 @@
      버튼이 잠긴 채 풀리지 않는다(화면엔 오류가 안 뜬다). 단서는 그 PC의 워처 로그 `⛔ 이 워처의 지점을 정하지 못해…`(10분에 한 번)뿐이다.
    - Vercel env: `GOOGLE_CALENDAR_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `HR_ROSTER_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`
      (직원명부 구글시트는 침산 것 — 안 넣으면 지점이 둘이 되는 순간 **어느 지점 이력서도 시트에 안 들어간다**) · `PUBLIC_BRAND_TENANT_SLUG=cs` → 재배포
+   - ✅ Vercel env **`NOTION_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`**(2026-09-22 원장이 Production에 넣음 — Notion 업무 연동이 이 지점에서만 열린다.
+     🔴 **지우지 말 것**: 없으면 침산 직원 상세 '월간일정' 탭이 "연동 안 됨"으로 선다(fail-closed)) ·
+     `CONSULT_EXPORT_TENANT_ID`는 운영 env에 **아직 없다**(09-22 이름 확인 — 상담 내보내기가 멈춰 있을 수 있다, 필요하면 침산 id).
    - **AI 사용량 빈칸 채우기를 한 번 더**: `node --env-file=<.env.local> scripts/_oneoff/backfill-ai-usage-tenant.mjs` (드라이런) → `--apply`.
      🔴 **반드시 둘째 지점을 만들기 전에** — 지점이 둘이 되면 빈칸 행이 어느 지점 호출이었는지 되짚을 단서가 없어 스크립트가 멈춘다
      (09-21에 2,794행을 채웠지만, 호출부 배선이 main에 들어가기 전까지 빈칸은 다시 쌓인다).

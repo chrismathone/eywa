@@ -32,14 +32,22 @@ function readToken(): string {
   return t;
 }
 
-/** 업무 DB id(env). 비밀 아님(식별자) — 단일 운영 DB라 env로 관리. */
-export function notionTasksDatabaseId(): string | null {
-  return process.env.NOTION_TASKS_DATABASE_ID?.trim() || null;
-}
-
-/** 토큰 + DB id가 모두 있어야 연동 '설정됨'. Notion API를 호출하지 않는 저렴한 판별. */
-export function isNotionConfigured(): boolean {
-  return !!process.env.NOTION_TOKEN?.trim() && !!notionTasksDatabaseId();
+/**
+ * 이 학원이 Notion 업무 연동을 쓰는가 — 토큰·업무 DB·학원이 **모두** 맞을 때만(인재원 연동 `ijwConfigFor`와 같은 규약).
+ * Notion API를 부르지 않는 저렴한 판별이라 매 요청 불러도 된다.
+ *
+ * 🔴 `NOTION_TENANT_ID`가 없으면 **어느 학원도** 켜지지 않는다(fail-closed). 이 연동은 한 학원의 Notion 워크스페이스
+ *    하나를 가리키는 전역 토큰이라, 지점 조건 없이 켜 두면 다른 학원 원장이 그 워크스페이스의 담당자 목록을 보고
+ *    업무를 읽고·완료하고·댓글을 단다(2026-09-22 발견 — 둘째 지점 `demo`가 생긴 뒤 실제로 열려 있던 경로).
+ *    ⚠️ 배포 전에 Vercel에 `NOTION_TENANT_ID`(침산 id)를 먼저 넣을 것 — 안 넣고 배포하면 침산의 월간일정 탭도
+ *    '연동 설정 안 됨'으로 닫힌다(데이터는 그대로, 환경변수를 넣으면 돌아온다).
+ */
+export function notionConfigFor(tenantId: string | null | undefined): { dbId: string } | null {
+  const token = process.env.NOTION_TOKEN?.trim(); // 배포 env 끝 개행 오염 방지 [[#72]]
+  const dbId = process.env.NOTION_TASKS_DATABASE_ID?.trim();
+  const tenant = process.env.NOTION_TENANT_ID?.trim();
+  if (!token || !dbId || !tenant || !tenantId || tenant !== tenantId) return null;
+  return { dbId };
 }
 
 async function notionFetch(path: string, init: RequestInit): Promise<Record<string, unknown>> {
