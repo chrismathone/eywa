@@ -2,13 +2,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { NAV_LINKS } from "@/data/marketing";
+import { EYWA_SITE_TITLE, EYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
 import { CtaButton } from "./_ui/cta-button";
 import "./_motion/landing.css";
 
 export const metadata = {
-  title: "EYWA — 원장님이 가장 먼저 켜는 학원관리 프로그램",
-  description:
-    "출결·수납·상담·학부모 알림까지, 학원 운영의 모든 흐름을 한 화면에서. 한 번의 출석 체크가 0.4초 만에 학부모·강사·원장·회계로 동시에 흐릅니다. 베타 기간 무료.",
+  title: EYWA_SITE_TITLE,
+  description: EYWA_SITE_DESCRIPTION,
 };
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
