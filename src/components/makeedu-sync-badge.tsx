@@ -2,6 +2,11 @@ import { getMakeeduSyncState, type MakeeduSyncDomain } from "@/features/integrat
 import { EyIcon } from "@/components/icons/eywa-icons";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
+import { canAccess } from "@/lib/permissions";
+import { WindowLink } from "@/components/workspace/window-link";
+import { humanizeMakeeduSyncError } from "@/features/integrations/sync-error";
 
 /**
  * "N분 전" — 상대 시각. 🔴 **언어를 인자로 받는다**(전역 기본값은 한국어라 사무실은 불변).
@@ -37,7 +42,7 @@ function fullSince(iso: string, lang: SheetLang): string {
  * 🔴 옛 '지금 동기화' 버튼은 **없앴다**(원장 2026-09-01: *"지금 동기화 삭제해버려 … 필요없다"*).
  * 동기화는 담당 PC 워처가 스스로 돌고(정방향은 스케줄러, 역방향은 매주 일요일 06:00) 손으로 돌릴 일이
  * 남으면 **연동 면(/owner)의 동기화 카드**가 그 자리다 — 목록 화면마다 같은 버튼을 두면 "눌러야 하나"가
- * 된다. 여기 남는 건 "마지막 동기화 언제였나"라는 **사실 표시**뿐이다.
+ * 된다. 경고는 이 자리에서 펼쳐 읽고, 점검·실행은 연동 면으로 안내한다.
  * ⚠️ 되살릴 땐 이 배지가 아니라 연동 면에서.
  *
  * 🔑 화면 언어는 **여기서 직접 읽는다**(async 서버 컴포넌트라 안전) — 이 배지는 목록 화면 5곳이
@@ -58,8 +63,7 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
     : issue
       ? "text-[color:var(--amber)]"
       : "text-[color:var(--text-faint)]";
-  return (
-    <div className="flex items-center justify-end gap-2">
+  const badge = (
       <span
         className={`inline-flex items-center gap-1 whitespace-nowrap text-xs ${issue || failed ? tone : "text-[color:var(--text-faint)]"}`}
         title={`${sheetTf(lang, "sync.title", { when: fullSince(state.syncedAt, lang) })}${
@@ -74,6 +78,24 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
           : sheetTf(lang, "sync.ago", { when: relativeSince(state.syncedAt, lang) })}
         {issue ? <span className="font-medium">{sheetT(lang, "sync.issue")}</span> : null}
       </span>
-    </div>
   );
+  if (!issue && !failed) return <div className="flex justify-end">{badge}</div>;
+  const [user, matrix] = await Promise.all([getCurrentUser(), getUserPermMatrix()]);
+  const canManage = user != null && canAccess(user.systemRole, "owner", matrix);
+  return <div className="flex justify-end">
+    <details className="group min-w-0 max-w-xl">
+      <summary className="flex cursor-pointer list-none items-center justify-end gap-1 rounded-sm focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+        {badge}
+        <span className={`text-xs underline underline-offset-2 ${tone}`}>{sheetT(lang, "sync.details")}</span>
+        <span className="shrink-0 transition-transform group-open:rotate-180"><EyIcon name="chevronDown" size={12} /></span>
+      </summary>
+      <div className="mt-2 space-y-2 rounded-lg border border-amber/40 bg-amber-soft p-3 text-left text-sm" role="region" aria-label={sheetT(lang, "sync.detailsTitle")}>
+        <p className="font-bold">{sheetT(lang, "sync.detailsTitle")}</p>
+        <p className="break-words" title={state.issue ?? undefined}>{failed ? humanizeMakeeduSyncError(state.issue) || sheetT(lang, "sync.failed") : issue}</p>
+        {domain === "invoices" ? <p className="text-text-dim">{sheetT(lang, "sync.invoiceGuide")}</p> : null}
+        {canManage ? <WindowLink href="/owner?tab=sheets" className="inline-flex font-semibold text-primary underline underline-offset-2">{sheetT(lang, "sync.openSettings")}</WindowLink>
+          : <p className="text-text-dim">{sheetT(lang, "sync.askManager")}</p>}
+      </div>
+    </details>
+  </div>;
 }
