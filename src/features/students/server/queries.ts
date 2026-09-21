@@ -47,6 +47,7 @@ import {
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { canViewStudentDetail } from "./read-scope";
 import { isMergedStudent } from "../merged";
+import { enrollmentTimeline } from "../enrollment-timeline";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { groupSchedule, type ScheduleGroup } from "@/features/classes/schedule-periods";
@@ -1641,6 +1642,7 @@ export type TimelineEvent = {
   kind:
     | "enrollment_start"
     | "enrollment_end"
+    | "enrollment_transfer"
     | "consultation"
     | "memo"
     | "status_change"
@@ -1687,7 +1689,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   ] = await Promise.all([
     supabase
       .from("enrollments")
-      .select(`start_date, end_date, withdrawal_reason, class:class_id ( class_name )`)
+      .select(`id, class_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( class_name, subject )`)
       .eq("student_id", studentId),
     consultQuery,
     supabase
@@ -1711,7 +1713,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     // (전 이력이 필요해지면 status 전이 로그 테이블이 선행돼야 한다.)
     supabase
       .from("students")
-      .select(`enrolled_at, withdrawn_at, withdrawal_metadata`)
+      .select(`enrolled_at, withdrawn_at, withdrawal_metadata, notes`)
       .eq("id", studentId)
       .maybeSingle(),
     // 입학(등록)상담 — 재원 전 첫 접점. 게이트 없으면 아예 조회하지 않는다.
@@ -1725,24 +1727,21 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
 
   const events: TimelineEvent[] = [];
 
-  for (const e of enrollments ?? []) {
+  events.push(...enrollmentTimeline((enrollments ?? []).map((e) => {
     const c = (Array.isArray(e.class) ? e.class[0] : e.class) as
-      | { class_name?: string }
+      | { class_name?: string; subject?: string }
       | undefined;
-    events.push({
-      date: e.start_date,
-      kind: "enrollment_start",
-      title: `${c?.class_name ?? "—"} 수강 시작`,
-    });
-    if (e.end_date) {
-      events.push({
-        date: e.end_date,
-        kind: "enrollment_end",
-        title: `${c?.class_name ?? "—"} 수강 종료`,
-        description: e.withdrawal_reason,
-      });
-    }
-  }
+    return {
+      id: e.id,
+      classId: e.class_id,
+      className: c?.class_name ?? "—",
+      subject: c?.subject ?? null,
+      startDate: e.start_date,
+      endDate: e.end_date,
+      isTransferred: !!e.is_transferred,
+      reason: e.withdrawal_reason,
+    };
+  })));
 
   // category 코드 → 한글. 임포트 데이터엔 audience 값("parent")이 섞여 있어, 매핑 안 되는 코드는 접미사 생략.
   const CONSULT_CATEGORY_LABEL: Record<string, string> = {
@@ -1812,7 +1811,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   if (student?.enrolled_at) {
     events.push({ date: String(student.enrolled_at).slice(0, 10), kind: "status_change", title: "재원 시작" });
   }
-  if (student?.withdrawn_at) {
+  if (student?.withdrawn_at && !isMergedStudent(student.notes)) {
     // 사유는 reasonDisplay — 표준 코드는 한글로, "반 이동" 같은 자유 텍스트는 그대로(reasonLabel은 '기타'로 뭉갠다).
     const md = student.withdrawal_metadata as { reason?: string | null; memo?: string | null } | null;
     events.push({
