@@ -1,11 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
-import { monthRange } from "@/lib/date-kst";
+import { kstToday, monthRange } from "@/lib/date-kst";
 import { lookupLabSeparateIds } from "@/features/classes/server/lab-separate";
 import { toAutoUnitsSchedule } from "../auto-units";
 import { rowKey } from "../grid/model";
-import { teacherTermWeights, type TermShareWeights } from "../teacher-term-share";
+import { teacherFourWeekWeights, teacherTermWeights, type TermShareWeights } from "../teacher-term-share";
 
 export type TeacherTermScope = {
   teacherId: string;
@@ -42,12 +42,17 @@ export async function loadTeacherTermWeights(
   ]);
   if (typeof separate === "string") throw new Error("등록 차수 배분을 위한 LAB 시간표를 확인하지 못했습니다");
   const holidays = new Set(scope.holidays);
+  const today = kstToday();
+  const referenceDate = today < from ? from : today > to ? to : today;
   const result = new Map<string, TermShareWeights>();
   for (const cls of classes) {
     const info = meta.find((c) => c.id === cls.classId);
     const slots = schedules.filter((s) => s.class_id === cls.classId).map((s) => ({ ...toAutoUnitsSchedule(s), teacherId: s.teacher_id, labSeparate: separate.ids.has(s.id) }));
+    const fourWeekWeights = info?.english_track === "eie" ? teacherFourWeekWeights({
+      referenceDate, schedules: slots, homeroomTeacherId: info.teacher_id, className: info.class_name ?? "",
+    }) : null;
     for (const studentId of cls.studentIds) {
-      result.set(rowKey(cls.classId, studentId), teacherTermWeights({
+      result.set(rowKey(cls.classId, studentId), fourWeekWeights ?? teacherTermWeights({
         month, schedules: slots, homeroomTeacherId: info?.teacher_id ?? null, englishTrack: info?.english_track ?? null, className: info?.class_name ?? "",
         holidays, scopeTeacherId: scope.teacherId, homeroomSince: scope.homeroomSinceByClass?.[cls.classId],
         // Hold has no historical start/end. A present-day hold must not erase a confirmed month's shares.

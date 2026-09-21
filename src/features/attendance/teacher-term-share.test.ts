@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { attendanceUnitsDiff } from "./unit-suffix";
-import { teacherTermSessions, teacherTermWeights, type TermShareSchedule } from "./teacher-term-share";
+import { teacherFourWeekWeights, teacherTermSessions, teacherTermWeights, type TermShareSchedule } from "./teacher-term-share";
 
 const slot = (teacherId: string | null, startTime: string, endTime: string, extra: Partial<TermShareSchedule> = {}): TermShareSchedule => ({
   teacherId, startTime, endTime, dayOfWeek: "tue", validFrom: "2026-09-01", validTo: null, slotTeacherLabel: null, ...extra,
@@ -8,6 +8,29 @@ const slot = (teacherId: string | null, startTime: string, endTime: string, extr
 const enrolled = { startDate: "2026-09-01", endDate: null, isTransferred: false, attendanceDays: null };
 const base = { month: "2026-09", enrollments: [enrolled], homeroomTeacherId: "home", englishTrack: "eie", className: "LS4", holidays: new Set<string>(), scopeTeacherId: "home" };
 const term = { units: 15, daysBasis: false };
+
+describe("EiE fixed four-week registration", () => {
+  it("counts every weekday four times across a month boundary and excludes *LAB", () => {
+    const schedules = (["tue", "thu", "fri"] as const).flatMap((dayOfWeek) => [
+      slot("home", "15:00", "15:40", { dayOfWeek }),
+      slot("other", "15:40", "16:20", { dayOfWeek }),
+      slot(null, "16:20", "17:00", { dayOfWeek, slotTeacherLabel: "LAB" }),
+      slot(null, "17:00", "17:40", { dayOfWeek, slotTeacherLabel: "LAB", labSeparate: true }),
+    ]);
+    const weights = teacherFourWeekWeights({ referenceDate: "2026-09-29", schedules, homeroomTeacherId: "home", className: "LS4b" });
+    expect([...weights]).toEqual([["home", 12], ["other", 12], ["", 12]]);
+    expect(teacherTermSessions({ units: 36, daysBasis: false }, "home", weights)).toEqual({ units: 12, daysBasis: false, classUnits: 36 });
+  });
+
+  it("uses the timetable effective on the reference date, excluding past and future owners", () => {
+    const weights = teacherFourWeekWeights({ referenceDate: "2026-09-21", homeroomTeacherId: "home", className: "PL1a", schedules: [
+      slot("past", "15:00", "15:40", { validTo: "2026-09-16" }),
+      slot("current", "15:00", "15:40", { validFrom: "2026-09-17", validTo: "2026-09-22" }),
+      slot("future", "15:00", "15:40", { validFrom: "2026-09-23" }),
+    ] });
+    expect([...weights]).toEqual([["current", 4]]);
+  });
+});
 
 describe("confirmed English registration apportioned by the student's scheduled periods", () => {
   it("gives a teacher two thirds, not the whole class total; seats do not fall back to homeroom", () => {
@@ -22,8 +45,8 @@ describe("confirmed English registration apportioned by the student's scheduled 
     const ownDays = { ...enrolled, attendanceDays: ["fri"] };
     const weights = teacherTermWeights({ ...base, schedules, enrollments: [ownDays, ownDays] });
     expect([...weights]).toEqual([["other", 6]]); // four Fridays × 1.5
-    expect(teacherTermSessions(term, "home", weights).units).toBe(0);
-    expect(teacherTermSessions(term, "other", weights).units).toBe(15);
+    expect(teacherTermSessions({ ...term, units: 6 }, "home", weights).units).toBe(0);
+    expect(teacherTermSessions({ ...term, units: 6 }, "other", weights).units).toBe(6);
   });
 
   it("respects mid-month enrollment, transfer end, schedule history and holidays", () => {
@@ -91,7 +114,7 @@ describe("confirmed English registration apportioned by the student's scheduled 
   it("deduplicates the same start time and leaves an ambiguous teacher unallocated", () => {
     const weights = teacherTermWeights({ ...base, schedules: [slot("home", "14:00", "14:40"), slot("other", "14:00:00", "14:40:00")] });
     expect([...weights]).toEqual([["", 5]]);
-    expect(teacherTermSessions(term, "home", weights).units).toBe(0);
+    expect(teacherTermSessions({ ...term, units: 5 }, "home", weights).units).toBe(0);
   });
 
   it("does not assign pre-homeroom time to the current homeroom teacher", () => {
@@ -108,7 +131,7 @@ describe("confirmed English registration apportioned by the student's scheduled 
     }
   });
 
-  it("regression: 300,000 / 12,500 = 24U is Elsa 14 + Song 3 + JJ 7, despite one 40-minute period", () => {
+  it("hourly 중2 특별 stays Elsa 14 + Song 3 + JJ 7 with one shortened 40-minute period", () => {
     const schedules = [
       slot(null, "19:20", "20:10", { dayOfWeek: "mon", slotTeacherLabel: "JJ" }),
       slot("elsa", "20:20", "21:10", { dayOfWeek: "mon" }),
@@ -126,26 +149,69 @@ describe("confirmed English registration apportioned by the student's scheduled 
     expect(attendanceUnitsDiff(14, shares[0])).toBe(0);
   });
 
+  it("hourly 중2 정규 C is teacher 16 + JJ 8 despite shortened final periods", () => {
+    const schedules = (["tue", "fri"] as const).flatMap((dayOfWeek) => [
+      slot(null, "18:20", "19:20", { dayOfWeek, slotTeacherLabel: "JJ" }),
+      slot("home", "19:20", "20:10", { dayOfWeek }),
+      slot("home", "20:20", "21:00", { dayOfWeek }),
+    ]);
+    const weights = teacherTermWeights({ ...base, englishTrack: "injaewon", className: "중등E_중2 정규 C",
+      schedules, holidays: new Set(["2026-09-24", "2026-09-25", "2026-09-26"]),
+    });
+    expect([...weights]).toEqual([["", 8], ["home", 16]]);
+    expect(teacherTermSessions({ units: 24, daysBasis: false }, "home", weights)).toEqual({ units: 16, daysBasis: false, classUnits: 24 });
+  });
+
   it("keeps an exact teacher + JJ split unchanged by teacher-id sorting", () => {
     const weights = new Map([["teacher-z", 1.5], ["", 1], ["teacher-a", 1.5]]);
     const shares = [...weights.keys()].map((id) => teacherTermSessions({ ...term, units: 4 }, id, weights).units);
     expect(shares).toEqual([1.5, 1, 1.5]);
   });
 
-  it("does not inflate a Tuesday-only registration from 10 to 45 even when the ratio gives exact halves", () => {
+  it("does not invent an owner for excess registration when no homeroom teacher is designated", () => {
     const weights = new Map([["teacher", 5], ["", 5]]);
     for (const id of weights.keys()) {
       expect(teacherTermSessions({ ...term, units: 45 }, id, weights)).toMatchObject({ allocationPending: true, classUnits: 45 });
     }
   });
 
-  it("marks a missing schedule or enrollment as pending; zero stays zero and old day-basis stays flagged", () => {
-    const weights = teacherTermWeights({ ...base, schedules: [] });
+  it("marks a missing schedule and homeroom as pending; zero stays zero and old day-basis stays flagged", () => {
+    const weights = teacherTermWeights({ ...base, homeroomTeacherId: null, schedules: [] });
     const pending = teacherTermSessions(term, "home", weights);
     expect(pending).toMatchObject({ allocationPending: true, classUnits: 15 });
     expect(attendanceUnitsDiff(3, pending)).toBeNull();
     expect(teacherTermSessions({ ...term, units: 0 }, "home", weights)).toEqual({ units: 0, daysBasis: false, classUnits: 0 });
     expect(teacherTermSessions({ ...term, daysBasis: true }, "home", weights)).toEqual({ ...term, daysBasis: true });
     expect(teacherTermWeights({ ...base, enrollments: [], schedules: [slot("home", "14:00", "14:40")] }).size).toBe(0);
+  });
+
+  it("MED is a bridge by its 40-minute timetable, including 20-minute half units", () => {
+    const weights = teacherTermWeights({ ...base, englishTrack: "injaewon", className: "중등E_초5 MED",
+      schedules: [slot("home", "15:00", "15:40"), slot("home", "15:40", "16:00"),
+        slot(null, "16:20", "17:00", { slotTeacherLabel: "JJ" }),
+        slot("other", "15:00", "16:00", { dayOfWeek: "wed" })],
+    });
+    expect([...weights]).toEqual([["home", 7.5], ["", 5], ["other", 7.5]]);
+    expect(teacherTermSessions({ units: 21, daysBasis: false }, "home", weights)).toEqual({ units: 8.5, daysBasis: false, classUnits: 21 });
+  });
+
+  it("assigns the extra 1U to homeroom: confirmed 25 = Jane 16 + JJ 9", () => {
+    const weights = Object.assign(new Map([["jane", 15], ["", 9]]), { homeroomTeacherId: "jane" });
+    const registered = { units: 25, daysBasis: false };
+    expect(teacherTermSessions(registered, "jane", weights)).toEqual({ units: 16, daysBasis: false, classUnits: 25 });
+    expect(teacherTermSessions(registered, "", weights).units).toBe(9);
+    expect(teacherTermSessions(registered, "viewer", weights).units).toBe(0);
+  });
+
+  it("gives the remainder to homeroom even when another teacher owns every scheduled period", () => {
+    const weights = Object.assign(new Map([["other", 6]]), { homeroomTeacherId: "home" });
+    expect(teacherTermSessions(term, "home", weights).units).toBe(9);
+    expect(teacherTermSessions(term, "other", weights).units).toBe(6);
+  });
+
+  it("assigns fully unallocated registration to the designated homeroom teacher", () => {
+    const weights = teacherTermWeights({ ...base, schedules: [] });
+    expect(teacherTermSessions(term, "home", weights)).toEqual({ units: 15, daysBasis: false, classUnits: 15 });
+    expect(teacherTermSessions(term, "other", weights).units).toBe(0);
   });
 });

@@ -5,7 +5,7 @@ import postgres from "postgres";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { teacherTermSessions, teacherTermWeights } from "../../src/features/attendance/teacher-term-share.ts";
+import { teacherFourWeekWeights, teacherTermSessions, teacherTermWeights } from "../../src/features/attendance/teacher-term-share.ts";
 import { monthRange } from "../../src/lib/date-kst.ts";
 
 const { values } = parseArgs({ options: {
@@ -41,6 +41,8 @@ if (values.snapshot) {
 const iso = (v) => v instanceof Date ? v.toISOString().slice(0, 10) : v?.slice(0, 10) ?? null;
 const teachers = new Map(data.teachers.map((t) => [t.id, t.display_name]));
 const holidays = new Set((data.settings?.holidays ?? []).map((h) => h.date));
+const capturedDay = new Date(data.capturedAt).toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+const referenceDate = capturedDay < from ? from : capturedDay > to ? to : capturedDay;
 const rows = [];
 const coverage = [];
 for (const c of data.classes.filter((c) => c.subject === "english")) {
@@ -59,15 +61,19 @@ for (const c of data.classes.filter((c) => c.subject === "english")) {
       units: Math.round(ownTerms.reduce((sum, t) => sum + Number(t.confirmed_sessions), 0) * 10) / 10,
       daysBasis: ownTerms.some((t) => t.pricing_mode !== "monthly" && (t.quantity_basis ?? "days") === "days"),
     };
-    const weights = teacherTermWeights({ month, schedules, holidays, className: c.class_name,
+    const weights = c.english_track === "eie" ? teacherFourWeekWeights({
+      referenceDate, schedules, className: c.class_name, homeroomTeacherId: c.teacher_id,
+    }) : teacherTermWeights({ month, schedules, holidays, className: c.class_name,
       homeroomTeacherId: c.teacher_id, scopeTeacherId: c.teacher_id ?? "", englishTrack: c.english_track,
       enrollments: enrollments.filter((e) => e.student_id === student).map((e) => ({
         startDate: iso(e.start_date), endDate: iso(e.end_date), isTransferred: e.is_transferred, attendanceDays: e.attendance_days,
       })),
     });
-    const shares = [...weights].map(([teacherId, planned]) => {
+    const owners = new Set(weights.keys());
+    if (weights.homeroomTeacherId) owners.add(weights.homeroomTeacherId);
+    const shares = [...owners].map((teacherId) => {
       const allocated = teacherTermSessions(term, teacherId, weights);
-      return { teacherId, teacher: teachers.get(teacherId) ?? "JJ/LAB/미지정", planned,
+      return { teacherId, teacher: teachers.get(teacherId) ?? "JJ/LAB/미지정", planned: weights.get(teacherId) ?? 0,
         units: allocated.allocationPending || allocated.daysBasis ? null : allocated.units };
     });
     const pending = teacherTermSessions(term, c.teacher_id ?? "", weights).allocationPending === true;
@@ -91,8 +97,8 @@ await writeFile(join(out, "report.json"), JSON.stringify({ summary, coverage, ro
 const lines = [`# ${month} 영어 등록 시수 배분 검수`, "", `검수 시각: ${data.capturedAt ?? "snapshot"}`, "",
   `영어 ${summary.englishClasses}개 반 전체를 조회했습니다. 확정 내역이 있는 ${summary.classesWithConfirmations}개 반, 학생·반 ${rows.length}건을 대조했습니다.`,
   `교시 담당 + JJ/LAB/미지정 배분 합계 일치 ${summary.exactRows}건, 배분 확인 ${summary.pendingRows}건(${summary.pendingClasses}개 반), 확정 금액 산식 불일치 ${summary.priceMismatches}건입니다.`, "",
-  "교시 담당이 여럿이면 시간표 환산 합계와 확정 등록이 일치할 때만 교시 시수 그대로 배분합니다. 단독 담당이면 확정 등록 전체를 귀속합니다. 비례 확대·축소하지 않습니다. 합계 일치는 실제 수업 편성의 검증을 뜻하지 않습니다.",
-  "분할 수업·별도 LAB·월중 입퇴원·수동 확정 차이는 별도 검토가 필요합니다. 현재 담임 기준의 시간표 검수이며 담임 인수인계 이전 기간의 귀속은 운영 화면에서 추가 제한될 수 있습니다.",
+  "교시별 시수를 먼저 배분하고 확정 등록에서 남는 시수는 담임에게 배분합니다. 여러 담당자의 시간표 합계보다 확정 등록이 적으면 감액 배분 확인이 필요합니다. 합계 일치는 실제 수업 편성의 검증을 뜻하지 않습니다.",
+  "EiE는 기준일의 주간 시간표 × 4(각 요일 4회, *LAB 제외)이며 반 공통 등록 기준입니다. 그 외 반은 수강 기간·요일과 달력월을 대조합니다. 브릿지/EiE는 40분당 1U, 인재원 일반반은 50분 교시도 60분으로 인정해 1U입니다. 이름에 브릿지가 없어도 40분 교시 편성이면 브릿지로 보되, 50분 교시의 일반반에 섞인 단축 40분 교시는 반 전체를 브릿지로 바꾸지 않습니다. 현재 담임 기준의 시간표 검수이며 담임 인수인계 이전 기간의 귀속은 운영 화면에서 추가 제한될 수 있습니다.",
   "월 정액은 월 단가와 확정액을 대조하고, 회당 과금은 단가 × 확정 시수와 확정액을 대조했습니다. 실납·이월액과 비교하는 검수는 아닙니다. 출결·시수·청구 데이터를 수정하지 않았습니다.", "",
   "| 반 | 확인 건수 | 확정 시수 / 시간표 환산 시수 | 배분 확인 |", "|---|---:|---|---:|"];
 for (const c of coverage.filter((c) => c.confirmedRows).sort((a, b) => a.className.localeCompare(b.className, "ko"))) {
