@@ -4,15 +4,16 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { classInvoiceAmount, type LineItemLike } from "../class-amount";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isEieMonthlyClass, sessionPriceOptions, type SessionPrice, type SessionPricingMode } from "@/features/billing/session-pricing";
-import { effectiveAllocations, receiptLines } from "../receipt-allocation";
+import { invoiceAllocationStates, invoiceLineItems, refundBits, type TermAllocationState } from "../allocation-state";
 import { loadLivePlans, type PlanHistory } from "./live-plans";
 import { mergeHolidays } from "@/features/billing/tuition-calc";
-import { receiptOriginalItems, receiptRefundState, type ReceiptRefundState } from "../receipt-refund";
-import { receiptMatchesClass } from "../receipt-suggestion";
+import type { ReceiptRefundState } from "../receipt-refund";
 import { suggestFromLastMonth, type TermSuggestion } from "../last-month-suggestion";
 import { loadLastMonthBasis, type LastMonthBasis } from "./last-month";
 import { monthRosterKey, termRowState, virtualTermId, type MonthRosterPair, type MonthRosterSource, type TermRowState } from "../month-roster";
 import { loadMonthRoster, type MonthRoster } from "./month-roster";
+import { carryTargetRank, type MoneyCarryIn, type MoneyCarryOut } from "../money-carryover";
+import { loadMoneyCarryIns, loadMoneyCarryLanding, loadMoneyCarryOuts } from "./money-carryover-queries";
 
 /** 회차 확정 면 한 행 — 청구서×반(반마다 단가가 달라 합산 금지). subject는 raw key(라벨은 소비처가 buildSubjectMaps로). */
 export type SessionTermRow = {
@@ -75,6 +76,15 @@ export type SessionTermRow = {
    * 줄 수 차이를 표식으로 밝힌다(감추지 않는다 — 돈이 걸려 있다). 운영 실측 2026-09-18: 0건.
    */
   duplicateInvoice?: boolean;
+  /**
+   * 이 반 실납 중 **다음 달로 넘긴 금액**(0278a, 원장 2026-09-21 '이월'). 유효성(지금도 확정액보다 더 받았나)은 저장값이 아니라
+   * `carryOutValid(row, amount)`로 그때그때 본다 — 배분을 다시 저장하면 달라진다. 분배·표시의 실납은 `netAllocatedAmount(row)`.
+   */
+  carryOut?: MoneyCarryOut | null;
+  /** 지난 달에서 이 반으로 **받은 이월** — 유효성은 보내는 달 행을 같은 판정으로 본 값. `orphan`은 받을 반 줄이 없어 여기 붙인 것. */
+  carryIns?: MoneyCarryIn[];
+  /** 배분액이 환불로 만든 0이다(`invoiceAllocationStates.refundedAllocation`) — 받은 이월을 싣지 않는다. */
+  refundedAllocation?: boolean;
 };
 
 type TermClassEmbed = {
@@ -101,21 +111,16 @@ export type SessionTermsView = {
   /** 청구서 중복으로 한 학생·반이 여러 줄인 행 수(`duplicateInvoice`). */
   duplicateCount: number;
   catalog: SessionPrice[]; // 학원 설정의 공통 회당 단가. 월 금액은 섞지 않는다.
+  /**
+   * 금액 이월 조회가 **실패**했다(0278a 미적용은 실패 아님) — 화면은 이월 없이 그리되 분배 저장은 이 값으로 거절한다
+   * (실패를 '이월 없음'으로 삼키면 두 달 스냅샷에 같은 돈이 두 번/0번 들어간다).
+   */
+  carryFailed?: boolean;
 };
 
 const EMPTY_ROSTER: MonthRoster = { pairs: [], byKey: new Map(), classes: new Map(), windows: new Map() };
 
-/** 청구서 한 장에서 이 반 몫의 환불 상태 — 회차 행·가상 행이 같은 판정을 쓴다. */
-function refundBits(inv: InvoiceRow, lineItems: LineItemLike[], classId: string | null, className: string | null) {
-  const matching = lineItems.flatMap(receiptOriginalItems).filter((line) => receiptMatchesClass(line, { classId, className }));
-  const states = matching.map(receiptRefundState);
-  const fullyRefunded = inv.status === "refunded" || (states.length > 0 && states.every((s) => s === "full"));
-  const refundReview = lineItems.some((line) => receiptRefundState(line) === "partial" || (receiptRefundState(line) === "mixed" && "receiptGroupId" in line));
-  const refundState: ReceiptRefundState = fullyRefunded ? "full" : refundReview ? "partial" : states.some((s) => s !== "none") ? "mixed" : "none";
-  return { fullyRefunded, refundState };
-}
-
-const itemsOf = (inv: InvoiceRow) => (Array.isArray(inv.line_items) ? inv.line_items : []) as LineItemLike[];
+const itemsOf = (inv: InvoiceRow) => invoiceLineItems(inv) as LineItemLike[];
 
 /**
  * 청구월의 회차 확정 목록 + 회당 단가 프리셋. (B2: 전건은 fetchAllPaged / B3: .in은 청크 / B4: 병렬)
@@ -130,6 +135,41 @@ const itemsOf = (inv: InvoiceRow) => (Array.isArray(inv.line_items) ? inv.line_i
  * ⚠️ `invoiceId` 모드(배분 창)는 그 학생의 줄만 세우고 `missing` 가상 행만 더한다(청구서 한 장에 붙이는 일이라 그 밖 상태는 없다).
  *    회차 행 유무는 **그 학생의 이 달 청구서 전부**로 본다 — 중복 청구서의 다른 장에 행이 있으면 여기선 가상 행이 아니다.
  */
+/**
+ * 금액 이월을 행에 붙인다. 받은 이월은 (학생, 받을 반) 줄에 — 그 줄이 이 달에 없으면(반을 그만둠 등) 그 학생의 첫 줄에
+ * `orphan`으로 붙여 **보이게만** 한다(어느 반 몫인지 모르니 실납엔 안 더한다 — 조용히 사라지면 돈이 증발한 것처럼 보인다).
+ */
+function attachMoneyCarry(rows: SessionTermRow[], carryOuts: Map<string, MoneyCarryOut>, carryIns: Map<string, MoneyCarryIn[]>) {
+  if (carryOuts.size === 0 && carryIns.size === 0) return;
+  const byKey = new Map<string, SessionTermRow[]>();
+  for (const r of rows) {
+    if (r.termState === "term" && carryOuts.has(r.id)) r.carryOut = carryOuts.get(r.id)!;
+    if (r.classId) {
+      const key = monthRosterKey(r.studentId, r.classId);
+      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(r);
+    }
+  }
+  // 같은 쌍이 여러 줄(청구서 중복)이면 **한 줄에만** — `carryTargetRank`(받을 수 있는 줄 → 환불 아닌 회차 행 → 가상 행 → 환불 줄) → id 순.
+  // 보낸 달 도착 판정(`carryLanding`)과 같은 규칙이다. 두 줄에 붙이면 두 번 더해지고, 배분 없는 줄에 붙으면 분배에 0으로 빠진다.
+  for (const [key, list] of carryIns) {
+    const target = [...(byKey.get(key) ?? [])].sort((a, b) => carryTargetRank(a) - carryTargetRank(b) || a.id.localeCompare(b.id))[0];
+    if (target && carryTargetRank(target) === 3) {
+      // 받을 줄이 전부 환불 — 받을 곳이 없다. 보이되 더하지 않고 분배 저장을 막는다(보낸 달도 `orphan`으로 본다).
+      target.carryIns = [...(target.carryIns ?? []), ...list.map((c) => ({ ...c, orphan: true, refunded: true }))];
+      continue;
+    }
+    if (target) {
+      target.carryIns = [...(target.carryIns ?? []), ...list];
+      continue;
+    }
+    // 받을 줄이 이 달에 없다 — 그 학생의 다른 줄(청구서 있는 줄 먼저)에 **보이게만** 붙인다(실납엔 안 더한다).
+    const studentId = key.slice(0, key.indexOf("|")); // monthRosterKey = `학생|반`
+    const own = rows.filter((r) => r.studentId === studentId);
+    const fallback = own.find((r) => r.invoiceId !== null) ?? own[0];
+    if (fallback) fallback.carryIns = [...(fallback.carryIns ?? []), ...list.map((c) => ({ ...c, orphan: true }))];
+  }
+}
+
 export async function getSessionTermsView(period: string, invoiceId?: string, options: { lastMonth?: boolean } = {}): Promise<SessionTermsView> {
   const supabase = await createClient();
 
@@ -176,6 +216,11 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
   const studentIds = [...new Set([...liveJudged.map((i) => i.student_id), ...roster.pairs.map((p) => p.studentId)])];
   const holidaysOf = (year: number) => mergeHolidays(year, settings.operations.holidays.map((h) => h.date), true);
 
+  // 금액 이월(0278a) — 회차 행 조회와 나란히 시작한다(B4). 배분 창(invoiceId 모드)은 원본 배분만 다루니 안 읽는다.
+  // fail-soft: 컬럼이 없거나(0278a 미적용) 실패하면 빈 맵 — 이 조회 때문에 면이 죽지 않는다.
+  const carryPromise = invoiceId
+    ? Promise.resolve([{ map: new Map<string, MoneyCarryOut>(), failed: false }, { map: new Map<string, MoneyCarryIn[]>(), failed: false }] as const)
+    : Promise.all([loadMoneyCarryOuts(supabase, period, liveInvoiceIds), loadMoneyCarryIns(supabase, period, new Set(studentIds))]);
   // 회차 행·학생·예정·지난 달 기준은 서로 기다릴 이유가 없다(B4) — 청구서 목록만 있으면 넷 다 시작한다.
   // 지난 달 기준 미리 채우기는 회차 확정 면만 쓴다(검증·배분 창은 안 읽는다 — 왕복 절약).
   const [terms, students, live, lastMonthBasis] = await Promise.all([fetchInChunks<{
@@ -215,16 +260,16 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
     const inv = invoiceById.get(t.invoice_id);
     if (inv && t.class_id) termsPerKey.set(monthRosterKey(inv.student_id, t.class_id), (termsPerKey.get(monthRosterKey(inv.student_id, t.class_id)) ?? 0) + 1);
   }
-  const allocated = new Map<string, number>();
+  // 유효 배분액·재확인·환불 판정은 청구서 한 장 단위 한 함수(`invoiceAllocationStates`) — 금액 이월(받는 달)이 지난 달을 같은 함수로 다시 본다.
+  const allocStates = new Map<string, TermAllocationState>();
   // 연결 없이 0원으로 저장한 반(0269a — 항목 null · 금액 0)도 배분을 저장한 청구서다.
   const invoicesWithAllocations = new Set(terms.filter((term) => term.allocation_line_index != null || term.allocation_amount != null).map((term) => term.invoice_id));
   for (const invoice of liveJudged) {
-    const values = effectiveAllocations(receiptLines(invoice.line_items), terms.filter((term) => term.invoice_id === invoice.id).map((term) => ({
-      id: term.id, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions,
-      lineIndex: term.allocation_line_index ?? null, allocatedAmount: term.allocation_amount == null ? null : Number(term.allocation_amount),
-      source: term.allocation_source, baseAmount: term.allocation_base_amount == null ? null : Number(term.allocation_base_amount),
-    })));
-    for (const [id, amount] of values) allocated.set(id, amount);
+    const invoiceTerms = terms.filter((term) => term.invoice_id === invoice.id).map((term) => {
+      const cls = Array.isArray(term.class) ? term.class[0] : term.class;
+      return { ...term, className: cls?.class_name ?? null };
+    });
+    for (const [id, state] of invoiceAllocationStates(invoice, invoiceTerms)) allocStates.set(id, state);
   }
   // 지난 달 기준 제안 — 회차 행·가상 행(missing) 같은 규칙. 예정을 믿을 수 없는 행(휴원·비활성 반) · 회차 행 중복 · EiE 월 정액은 채우지 않는다(리뷰 2026-09-17).
   const lastMonthFor = (studentId: string, classId: string, subject: string, englishTrack: string | null | undefined): TermSuggestion | null => {
@@ -243,7 +288,8 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
       const className = cls?.class_name ?? null;
       const teacher = Array.isArray(cls?.teacher) ? cls.teacher[0] : cls?.teacher;
       const lineItems = itemsOf(inv);
-      const { fullyRefunded, refundState } = refundBits(inv, lineItems, t.class_id, className);
+      const alloc = allocStates.get(t.id) ?? { allocatedAmount: null, allocationStale: false, ...refundBits(inv, lineItems, t.class_id, className) };
+      const { fullyRefunded, refundState } = alloc;
       const key = t.class_id ? monthRosterKey(inv.student_id, t.class_id) : null;
       const pair = key ? roster.byKey.get(key) : undefined;
       // 예정: 수강 근거가 있으면 live plan(종전), 기록·예약만으로 서는 줄은 없음(null — 그 줄엔 '확정 ≠ 예정'을 칠하지 않는다). 줄 집합 밖 행은 종전 계산 그대로.
@@ -272,8 +318,9 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
         confirmedAt: t.confirmed_at,
         quantityBasis: t.quantity_basis ?? "days",
         refundState,
-        allocatedAmount: fullyRefunded ? 0 : allocated.get(t.id) ?? null,
-        allocationStale: !fullyRefunded && (refundState === "partial" || ((t.allocation_line_index != null || t.allocation_amount != null || (invoicesWithAllocations.has(t.invoice_id) && t.confirmed_sessions !== null)) && !allocated.has(t.id))),
+        allocatedAmount: alloc.allocatedAmount,
+        allocationStale: alloc.allocationStale,
+        refundedAllocation: "refundedAllocation" in alloc ? alloc.refundedAllocation : fullyRefunded,
         allocationLineIndex: t.allocation_line_index ?? null,
         invoiceHasAllocations: invoicesWithAllocations.has(t.invoice_id),
         note: t.note,
@@ -328,6 +375,7 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
       refundState: bits?.refundState ?? "none",
       allocatedAmount: bits?.fullyRefunded ? 0 : null,
       allocationStale: bits ? !bits.fullyRefunded && bits.refundState === "partial" : false,
+      refundedAllocation: bits?.fullyRefunded ?? false,
       allocationLineIndex: null,
       invoiceHasAllocations: inv ? invoicesWithAllocations.has(inv.id) : false,
       note: null,
@@ -343,6 +391,13 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
     .map(virtualRow)
     .filter((r): r is SessionTermRow => r !== null);
 
+  const [carryOuts, carryIns] = await carryPromise;
+  attachMoneyCarry([...termRows, ...virtualRows], carryOuts.map, carryIns.map);
+  // 보낸 이월의 도착 상태(다음 달) — 이월이 있을 때만 한 번 더 읽는다(보통 0건이라 왕복 0).
+  const carried = termRows.flatMap((r) => (r.carryOut?.toClassId ? [{ termId: r.id, studentId: r.studentId, toClassId: r.carryOut.toClassId }] : []));
+  const landing = invoiceId ? { map: new Map(), failed: false } : await loadMoneyCarryLanding(supabase, period, carried);
+  for (const r of termRows) if (r.carryOut && landing.map.has(r.id)) r.carryOut = { ...r.carryOut, landing: landing.map.get(r.id) };
+  const carryFailed = carryOuts.failed || carryIns.failed || landing.failed;
   const rows = [...termRows, ...virtualRows].sort(
     (a, b) =>
       a.studentName.localeCompare(b.studentName, "ko") ||
@@ -361,5 +416,6 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
     noLessonCount: rows.filter((r) => r.noLesson).length,
     duplicateCount: rows.filter((r) => r.duplicateInvoice).length,
     catalog,
+    carryFailed,
   };
 }

@@ -1,9 +1,13 @@
 import { classInvoiceAmount, type LineItemLike } from "@/features/billing/session-terms/class-amount";
 import { effectiveAllocations, receiptLines } from "@/features/billing/session-terms/receipt-allocation";
+import { invoiceAllocationStates } from "@/features/billing/session-terms/allocation-state";
+import { canReceiveCarry, carryInTotal, carryOutValid, type MoneyCarryIn } from "@/features/billing/session-terms/money-carryover";
+import { monthRosterKey } from "@/features/billing/session-terms/month-roster";
 import { round1 } from "./session-units";
 import { rowKey } from "./grid/model";
 
-export type AttendanceInvoice = { id: string; student_id: string; line_items: unknown };
+/** `status`는 선택 — 금액 이월 유효성(전액 환불 판정)에만 쓴다. */
+export type AttendanceInvoice = { id: string; student_id: string; line_items: unknown; status?: string | null };
 export type AttendanceBillingTerm = {
   id: string;
   invoice_id: string;
@@ -81,11 +85,20 @@ export function attendanceNoInvoiceRows(
   return out;
 }
 
-/** 회차 확정의 '이 반 청구액'과 동일: 유효한 배분 우선, 없으면 반 이름 매칭. */
+/** 금액 이월(0278a) — 보낸 이월(회차 행 id → 원) · 받은 이월(`monthRosterKey(학생, 반)` → 목록). 없으면 빈 맵. */
+export type AttendanceMoneyCarry = { outs: ReadonlyMap<string, number>; ins: ReadonlyMap<string, readonly MoneyCarryIn[]> };
+const NO_CARRY: AttendanceMoneyCarry = { outs: new Map(), ins: new Map() };
+
+/**
+ * 회차 확정의 '이 반 청구액'과 동일: 유효한 배분 우선, 없으면 반 이름 매칭.
+ * 배분이 있는 줄은 **금액 이월을 반영한 실납**(배분액 − 유효한 보낸 이월 + 유효한 받은 이월, 회차 확정 면의 `netAllocatedAmount`와 같은 규칙).
+ * 보낸 이월의 유효성은 회차 확정 면과 같은 판정(`invoiceAllocationStates` → `carryOutValid`)으로 본다.
+ */
 export function attendanceClassBilledAmounts(
   classes: readonly AttendanceBillingClass[],
   invoices: readonly AttendanceInvoice[],
   terms: readonly AttendanceBillingTerm[],
+  carry: AttendanceMoneyCarry = NO_CARRY,
 ): Record<string, number> {
   const classById = new Map(classes.map((c) => [c.classId, { ...c, students: new Set(c.studentIds) }]));
   const termsByInvoice = new Map<string, AttendanceBillingTerm[]>();
@@ -95,8 +108,15 @@ export function attendanceClassBilledAmounts(
     termsByInvoice.set(term.invoice_id, rows);
   }
   const out: Record<string, number> = {};
+  const carriedIn = new Set<string>(); // 같은 학생·반이 청구서 여러 장에 있어도 받은 이월은 한 번만.
   for (const invoice of invoices) {
     const invoiceTerms = termsByInvoice.get(invoice.id) ?? [];
+    // 이월 판정 재료(회차 확정 면과 같은 판정) — 이 청구서에 보낸 이월이나 받은 이월이 있을 때만 계산한다.
+    const needsStates = invoiceTerms.some((t) => carry.outs.has(t.id) || (t.class_id !== null && carry.ins.has(monthRosterKey(invoice.student_id, t.class_id))));
+    const states = needsStates
+      ? invoiceAllocationStates({ ...invoice, status: invoice.status ?? null },
+        invoiceTerms.map((t) => ({ ...t, className: t.class_id ? classById.get(t.class_id)?.className ?? null : null })))
+      : null;
     // 같은 청구 항목을 나누는 다른 반까지 검증한 뒤 표시할 반만 고른다.
     const allocated = effectiveAllocations(receiptLines(invoice.line_items), invoiceTerms.map((term) => ({
       id: term.id,
@@ -111,8 +131,21 @@ export function attendanceClassBilledAmounts(
     for (const term of invoiceTerms) {
       const cls = term.class_id ? classById.get(term.class_id) : undefined;
       if (!cls?.students.has(invoice.student_id)) continue;
-      const amount = allocated.get(term.id) ?? classInvoiceAmount(cls.className, lineItems);
+      const base = allocated.get(term.id);
+      let amount = base ?? classInvoiceAmount(cls.className, lineItems);
       if (amount === null) continue;
+      if (base !== undefined) {
+        const sent = carry.outs.get(term.id) ?? 0;
+        const state = states?.get(term.id);
+        if (sent > 0 && state && carryOutValid({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) }, sent)) amount -= sent;
+        const inKey = monthRosterKey(invoice.student_id, cls.classId);
+        // 받은 이월은 받을 수 있는 줄에만(회차 확정 `netAllocatedAmount`와 같은 `canReceiveCarry` — 환불로 만든 0이면 안 싣는다).
+        const receivable = !!state && canReceiveCarry({ ...state, amount: term.amount === null ? null : Number(term.amount), confirmedSessions: term.confirmed_sessions === null ? null : Number(term.confirmed_sessions) });
+        if (!carriedIn.has(inKey) && carry.ins.has(inKey) && receivable) {
+          carriedIn.add(inKey);
+          amount += carryInTotal(carry.ins.get(inKey));
+        }
+      }
       const key = rowKey(cls.classId, invoice.student_id);
       out[key] = (out[key] ?? 0) + amount;
     }

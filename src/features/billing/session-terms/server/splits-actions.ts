@@ -38,6 +38,12 @@ export async function saveTeacherSplits(
   // 현재 회차 검증 뷰(확정·단가·실 회차·담당 강사)에서 분배 행 산출 — 확정 행만(N1).
   const view = await getSessionVerificationView(period);
   if (view.rows.some((row) => row.allocationStale)) return { error: "수납 연결 후 청구액 또는 반 확정금액이 바뀐 학생이 있습니다. 수납 연결·배분을 다시 확인해 주세요" };
+  // 금액 이월(0278a) — 조회가 실패했거나 받을 줄이 없는 이월이 있으면 저장하지 않는다(그 돈은 어느 달에도 분배되지 않거나 두 번 들어간다).
+  if (view.carryFailed) return { error: "금액 이월 정보를 불러오지 못했습니다. 잠시 뒤 다시 저장해 주세요" };
+  if (view.carryBlockedStudents?.length) {
+    const names = view.carryBlockedStudents;
+    return { error: `받을 반이 없는 금액 이월이 있습니다(${names.slice(0, 3).join(", ")}${names.length > 3 ? ` 외 ${names.length - 3}명` : ""}). 보낸 달에서 이월을 취소하거나 받을 반을 다시 골라 주세요` };
+  }
   const rows = computeSplitRows(view.rows);
   const skipped = view.rows.length - rows.length;
 

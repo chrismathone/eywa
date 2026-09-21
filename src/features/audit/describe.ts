@@ -418,6 +418,23 @@ export function auditDetail(
         failed ? `실패 ${failed}명` : null,
       );
     }
+    case "session_term_money_carryover":
+    case "session_term_money_carryover_cancel": {
+      // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).
+      const from = str(m.fromClassName);
+      const before = num(m.amountBefore);
+      if (action === "session_term_money_carryover_cancel") {
+        return join(str(m.period), from ? `${from} 반` : null, `이월 취소${before ? `(${won(before) ?? ""} → ${str(m.toClassNameBefore) ?? "다음 달"})` : ""}`);
+      }
+      const to = str(m.toClassName);
+      return join(
+        str(m.period),
+        from ? `${from} 반` : null,
+        `${won(m.amount) ?? "?"} → ${str(m.toPeriod) ?? "다음 달"}${to ? ` ${to} 반` : ""}`,
+        before ? `종전 ${won(before)}` : null,
+        str(m.note) ? `메모 "${str(m.note)}"` : null,
+      );
+    }
     case "session_term_note": {
       const note = str(m.note);
       const before = str(m.noteBefore);

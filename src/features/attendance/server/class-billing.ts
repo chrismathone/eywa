@@ -4,6 +4,7 @@ import { monthRange } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
+import { loadMoneyCarryIns, loadMoneyCarryOuts } from "@/features/billing/session-terms/server/money-carryover-queries";
 import {
   attendanceClassBilledAmounts,
   attendanceClassConfirmedSessions,
@@ -111,7 +112,7 @@ export async function getAttendanceClassBilledAmounts(
   const invoices = allInvoices.filter((i) => i.status !== "void");
   // 배분 유효성은 청구서 전체 반이 필요하다. 최종 결과는 classes의 학생×반으로만 좁힌다.
   // ⚠️ 회차 행은 살아 있는 청구서 것만 읽는다 — 취소된 청구서의 회차 행은 금액·차수·단가 어디에도 안 실린다.
-  const terms = await fetchAllPagedInChunks<AttendanceBillingTerm>(invoices.map((i) => i.id), (chunk, f, t) =>
+  const termsPromise = fetchAllPagedInChunks<AttendanceBillingTerm>(invoices.map((i) => i.id), (chunk, f, t) =>
     admin.from("invoice_session_terms")
       // `unit_price`(0102a) = 확정 단가 — 「단가」 표식 연동(원장 2026-09-18). 처음부터 있던 컬럼이다.
       // `quantity_basis`(0267a)·`pricing_mode`(0266a) = 확정값의 **단위**(옛 일수 기준 표식).
@@ -120,10 +121,17 @@ export async function getAttendanceClassBilledAmounts(
       .select("id, invoice_id, class_id, amount, confirmed_sessions, unit_price, quantity_basis, pricing_mode, allocation_line_index, allocation_amount, allocation_source, allocation_base_amount")
       .eq("tenant_id", user.tenantId).in("invoice_id", chunk).order("id").range(f, t),
   );
+  // 금액 이월(0278a)은 회차 행과 나란히 읽는다(B4) — fail-soft(0278a 미적용·실패 = 이월 없음, 금액 열은 종전 그대로).
+  const [terms, [carryOuts, carryIns]] = await Promise.all([termsPromise, Promise.all([
+    loadMoneyCarryOuts(admin, month, invoices.map((i) => i.id), user.tenantId),
+    loadMoneyCarryIns(admin, month, new Set(studentIds), user.tenantId),
+  ])]);
   // 두 값은 **같은 조회**에서 나온다 — 청구액(배분 우선)과 등록 차수(확정 시수)가 서로 다른 재료를 보면
   // 한 줄에서 숫자가 어긋난다(원장 2026-09-17 '등록 차수' 열).
+  // 출석부 금액 열은 표시라 실패해도 이월 없이 그린다(분배 저장 거절은 회차 확정·시수 검증 쪽이 한다).
+  const carry = { outs: new Map([...carryOuts.map].map(([id, c]) => [id, c.amount] as const)), ins: carryIns.map };
   return {
-    billed: attendanceClassBilledAmounts(classes, invoices, terms),
+    billed: attendanceClassBilledAmounts(classes, invoices, terms, carry),
     confirmedSessions: attendanceClassConfirmedSessions(classes, invoices, terms),
     priceConfirmed: attendanceClassPriceConfirmedRows(classes, invoices, terms),
     // 상태 판정만 취소분까지 본다 — 허용된 반의 학생 전원에게 키가 선다(청구서가 없으면 `none`).

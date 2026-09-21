@@ -5,6 +5,7 @@ import { getSessionTermsView, type SessionTermRow } from "./queries";
 import { classifyVerification, type VerificationStatus } from "../verification";
 import type { SessionPricingMode } from "../../session-pricing";
 import type { TermRowState } from "../month-roster";
+import { carryBlocksSplits, netAllocatedAmount } from "../money-carryover";
 export type { VerificationStatus } from "../verification";
 
 /**
@@ -45,6 +46,12 @@ export type VerificationRow = {
 export type VerificationView = {
   rows: VerificationRow[];
   counts: Record<VerificationStatus, number> & { total: number };
+  /**
+   * 금액 이월 때문에 **분배를 저장하면 안 되는** 사정(0278a) — 조회 실패(`carryFailed`) · 받을 줄이 없는 이월이 있는 학생.
+   * `saveTeacherSplits`가 이 값으로 거절한다(두 달 스냅샷에 같은 돈이 두 번/0번 들어가지 않게).
+   */
+  carryFailed?: boolean;
+  carryBlockedStudents?: string[];
 };
 
 /**
@@ -109,7 +116,8 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
       plannedSessions: r.plannedSessions,
       unitPrice: r.unitPrice,
       amount: r.amount,
-      allocatedAmount: r.allocatedAmount,
+      // 분배·검증의 실납 = 배분액 − 보낸 이월 + 받은 이월(0278a, 원장 2026-09-21 "수납액 분배에도 반영"). 배분 원본은 회차 확정 면이 들고 있다.
+      allocatedAmount: netAllocatedAmount(r),
       allocationStale: r.allocationStale,
       actualConsumed: actual,
       quantityBasis: r.quantityBasis,
@@ -129,5 +137,6 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
     total: rows.length,
   };
 
-  return { rows, counts };
+  const carryBlockedStudents = [...new Set(withInvoice.filter((r) => carryBlocksSplits(r)).map((r) => r.studentName))];
+  return { rows, counts, carryFailed: view.carryFailed, carryBlockedStudents };
 }

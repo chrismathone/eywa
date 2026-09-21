@@ -17,6 +17,8 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { validSessionQuantity, sessionPricingAmount, type SessionPrice } from "@/features/billing/session-pricing";
 import { tipProps } from "@/components/hover-tip/tip";
 import { TONE_SOFT, TONE_TEXT } from "@/lib/design/semantic-color";
+import { netAllocatedAmount } from "@/features/billing/session-terms/money-carryover";
+import { MoneyCarryButton, MoneyCarryTags } from "./money-carry-cell";
 import { useSessionTermsState } from "./session-terms-state";
 import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
 import { MonthlySessionEditor } from "./monthly-session-editor";
@@ -561,13 +563,17 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
           청구서 중복 → 이름 매칭 참고). 회차 행이 없는 줄(missing)도 배분 버튼은 그대로(저장하는 순간 행이 생긴다). 청구서 없는 줄은 —. */}
       <td className="num text-muted-foreground px-3 py-2 text-right text-xs">
         {locked ? (
-          "—"
+          // 청구서가 없거나 취소된 줄 — 금액은 없지만 받을 반이 없어 여기 붙은 금액 이월은 보인다(조용히 사라지면 안 된다).
+          <span className="inline-flex items-baseline gap-x-2">—<MoneyCarryTags r={r} /></span>
         ) : (
           // 오류 문구(수납 연결 불러오기 실패)만 아래로 꺾인다 — `flex-wrap` + 버튼 쪽 `basis-full`. 평소엔 한 줄.
           <div className="inline-flex flex-wrap items-baseline justify-end gap-x-2">
-            {r.allocatedAmount != null ? <b>{won(r.allocatedAmount)}</b> : <span>{r.classAmount !== null ? won(r.classAmount) : "—"}</span>}
+            {/* 실납 = 배분액 − 보낸 이월 + 받은 이월(0278a) — 분배와 같은 값(`netAllocatedAmount`). 이월 표식이 차이를 말한다. */}
+            {r.allocatedAmount != null ? <b>{won(netAllocatedAmount(r) ?? r.allocatedAmount)}</b> : <span>{r.classAmount !== null ? won(r.classAmount) : "—"}</span>}
             <ReceiptTag r={r} />
+            <MoneyCarryTags r={r} />
             {r.invoiceId !== null ? <ReceiptAllocationButton invoiceId={r.invoiceId} studentName={r.studentName} /> : null}
+            <MoneyCarryButton r={r} />
           </div>
         )}
       </td>

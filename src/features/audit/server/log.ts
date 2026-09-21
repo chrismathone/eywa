@@ -383,6 +383,8 @@ export const AUDIT_ACTIONS = {
   session_term_unconfirm: "청구 회차 확정 해제",
   session_term_unconfirm_class: "청구 회차 반 전체 확정 해제",
   session_term_carryover: "청구 회차 이월",
+  session_term_money_carryover: "청구 회차 금액 이월",
+  session_term_money_carryover_cancel: "청구 회차 금액 이월 취소",
   session_term_note: "청구 회차 메모 수정",
   // 🔴 급여는 **"무슨 일이 있었나"만** 남긴다 — 조정한 항목 이름조차 안 담는다("인센티브를 고쳤다"
   //    만으로도 그 사람 급여 사정이 읽힌다). metadata는 `{userId, period}`뿐이다.

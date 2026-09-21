@@ -33,7 +33,7 @@ const h = vi.hoisted(() => {
       let inIds: string[] | undefined;
       const builder: Record<string, unknown> = {};
       let periodEq: string | undefined;
-      for (const method of ["select", "eq", "neq", "order", "range", "gte", "lte", "or", "not", "is"]) builder[method] = () => builder;
+      for (const method of ["select", "eq", "neq", "order", "range", "gte", "gt", "lte", "or", "not", "is"]) builder[method] = () => builder;
       // 청구 기간(`period`)만은 거른다 — 지난 달 기준 로더가 어느 달을 읽는지 잠그려고. 기간이 없는 행은 그대로 통과(다른 테스트 불변).
       builder.eq = (column: string, value: unknown) => { if (column === "period") periodEq = value as string; return builder; };
       builder.in = (column: string, values: string[]) => { if (column === "id") inIds = values; return builder; };

@@ -26,6 +26,30 @@ function term(overrides: Partial<AttendanceBillingTerm> = {}): AttendanceBilling
 }
 
 describe("출석부 이 반 청구액", () => {
+  it("금액 이월(0278a) — 배분이 있는 줄은 보낸 이월을 빼고 받은 이월을 더한다(회차 확정 실납과 같은 규칙)", () => {
+    // 김지호 모양: 확정 150,000인데 배분 160,000(10,000원 더 받음) → 10,000원을 다음 달로.
+    const paid = { ...line, amount: 160000 };
+    const allocated = term({ allocation_line_index: 0, allocation_amount: 160000, allocation_source: paid, allocation_base_amount: 150000 });
+    const inv = { ...invoice, line_items: [paid] };
+    const carryIn = (amount: number, over: object = {}) => ({ amount, fromPeriod: "2026-08", fromClassName: "고등M 개별 TP4E", note: null, valid: true, ...over });
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 10000]]), ins: new Map() })).toEqual({ [key]: 150000 });
+    // 더 받은 몫보다 큰 이월은 무효 — 빼지 않는다(받는 달도 같은 판정으로 안 더한다).
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 20000]]), ins: new Map() })).toEqual({ [key]: 160000 });
+    // 받은 이월은 (학생|반) 키로 한 번만 — 유효한 것만.
+    const ins = new Map([["s1|c1", [carryIn(5000), carryIn(7000, { valid: false })]]]);
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map(), ins })).toEqual({ [key]: 165000 });
+    // 배분이 없는 줄(이름 매칭 참고값)엔 이월을 싣지 않는다 — 회차 확정 면도 배분 전엔 실납이 없다.
+    expect(attendanceClassBilledAmounts(classes, [invoice], [term()], { outs: new Map(), ins })).toEqual({ [key]: 210000 });
+ 
+    // 받을 줄이 전액 환불이면 싣지 않는다(회차 확정 `canReceiveCarry`와 같은 규칙).
+    const refundedLine = { ...paid, refunds: [{ status: "active", type: "full", amount: 160000 }] };
+    const refundedTerm = term({ allocation_line_index: 0, allocation_amount: 160000, allocation_source: refundedLine, allocation_base_amount: 150000 });
+    expect(attendanceClassBilledAmounts(classes, [{ ...invoice, line_items: [refundedLine] }], [refundedTerm], { outs: new Map(), ins })).toEqual({ [key]: 0 });
+    // 같은 학생·반이 청구서 두 장이어도 받은 이월은 한 번만.
+    const twice = [allocated, { ...allocated, id: "t9", invoice_id: "i9" }];
+    expect(attendanceClassBilledAmounts(classes, [inv, { ...inv, id: "i9" }], twice, { outs: new Map(), ins })[key]).toBe(160000 * 2 + 5000);
+  });
+
   it("같은 학생의 반을 구분하고 회차×단가 대신 해당 반 청구 항목을 표시한다", () => {
     const invoices = [{ ...invoice, line_items: [line, { description: "고등M 개별 토일", amount: 90000 }, { description: "다른 과목", amount: 300000 }] }];
     expect(attendanceClassBilledAmounts(classes, invoices, [term(), term({ id: "t2", class_id: "c2" })])).toEqual({
