@@ -124,17 +124,18 @@ function classTeachers(c: AttendanceMatrix["classes"][number]): { id: string; na
     out.set(c.teacherId, { id: c.teacherId, name: c.teacherName, active: c.teacherActive });
   }
   for (const t of c.slotTeachers) if (!out.has(t.id)) out.set(t.id, t);
+  for (const t of c.historicalTeachers ?? []) if (!out.has(t.id)) out.set(t.id, t);
   return [...out.values()];
 }
 
-/** 이 반이 그 강사의 출석부에 들어가는가(담임이든 교시 담당이든). */
+/** 그 기간에 맡았던 담임·교시 담당 반은 인계 후에도 출석부에 남긴다. */
 function classTaughtBy(c: AttendanceMatrix["classes"][number], teacherId: string): boolean {
   return (
     classTeacherRole({
       homeroomTeacherId: c.teacherId,
       slotTeacherIds: c.slotTeachers.map((t) => t.id),
       teacherId,
-    }) !== null
+    }) !== null || !!c.historicalTeachers?.some((t) => t.id === teacherId)
   );
 }
 
@@ -561,7 +562,9 @@ export default async function AttendancePage({
           // 담임이 아닌 반이 왜 여기 있는지 밝힌다 — 라벨이 없으면 "남의 반이 왜 뜨지"가 된다.
           // ⚠️ 담임인 반엔 안 붙인다(`both` 포함) — 영어는 담임이 자기 반 교시도 맡는 게 보통이라
           //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
-          roleLabel: teacherRoles.get(c.id) === "slot" ? sheetT(lang, "att.role.slot") : null,
+          roleLabel: teacherRoles.get(c.id) === "slot" ? sheetT(lang, "att.role.slot")
+            : c.teacherId !== effectiveTeacher && c.historicalTeachers?.some((t) => t.id === effectiveTeacher)
+              ? lang === "en" ? "Former homeroom" : "이전 담임" : null,
           ...workerOf(c.id),
           // 담임 시작일 — 그 이전 칸이 왜 값에서 빠졌는지 반 머리행에서 밝힌다(빗금만 있으면 "왜 비었지").
           sinceLabel: sinceByClass.get(c.id)

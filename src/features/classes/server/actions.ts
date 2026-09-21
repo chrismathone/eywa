@@ -588,7 +588,7 @@ export async function updateClass(
         // `changed`(항목 이름만)는 옛 형식 — 이미 쌓인 행과 모양이 같아야 하므로 그대로 함께 남긴다.
         changed: changes.map((c) => c.field),
         changes,
-        ...(teacherChanged ? { newTeacherId: input.teacherId } : {}),
+        ...(teacherChanged ? { newTeacherId: input.teacherId, previousTeacherId: before?.teacher_id ?? null, effectiveDate: today } : {}),
       },
     });
   }
@@ -597,6 +597,7 @@ export async function updateClass(
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");
   // redirect 대신 결과 반환 — 클라가 성공 확정 후 동시편집 신호(publish) → 이동(B-2).
+  revalidatePath("/attendance");
   return { ok: true, redirectTo: `/classes/${id}`, nonce: Date.now(), overlaps };
 }
 
@@ -947,11 +948,12 @@ export async function applyHandover(_prev: HandoverState, formData: FormData): P
     action: "class_handover_apply",
     targetType: "class",
     targetLabel: klass.class_name,
-    metadata: { newTeacherId: klass.pending_teacher_id, slotsMoved: slots.moved },
+    metadata: { classId, previousTeacherId: klass.teacher_id, newTeacherId: klass.pending_teacher_id, effectiveDate: kstToday(), slotsMoved: slots.moved },
   });
   revalidatePath(`/classes/${classId}`);
   revalidatePath("/classes");
   revalidatePath("/timetable");
+  revalidatePath("/attendance");
   return { ok: true };
 }
 

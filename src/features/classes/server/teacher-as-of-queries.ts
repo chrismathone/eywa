@@ -2,10 +2,11 @@ import "server-only";
 import { auditScoped, systemAuditScope } from "@/features/audit/server/system-read";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { kstToday } from "@/lib/date-kst";
+import { kstToday, kstDateOf } from "@/lib/date-kst";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   buildHomeroomSinceIndex,
+  buildHomeroomHistoryIndex,
   buildTeacherAsOfIndex,
   buildUniqueClassNameIndex,
   historyWindowStart,
@@ -21,7 +22,7 @@ import {
  * `getHomeroomSinceIndex`). 조회를 두 벌로 짜면 창·매칭 규칙이 갈라진다.
  *
  * 🔴 **`class_handover_apply`는 metadata에 classId를 남기지 않는다**(실측 2026-08-19: 최근 2개월 전건).
- *    그래서 옛 코드처럼 `metadata.classId`만 보면 인계 기록이 **통째로** 버려졌고, "그 주 담임" 복원은
+ *    새 로그는 classId·previousTeacherId도 보존한다(2026-09-22). 옛 코드처럼 `metadata.classId`만 보면 인계 기록이 **통째로** 버려졌고, "그 주 담임" 복원은
  *    사실 등급(①) 없이 보고서 작성자 추정(②)만으로 돌고 있었다. `target_label`(반 이름)로 잇되
  *    **이름이 유일할 때만** 쓴다(resolveTransitionClassId 주석 — 잘못 붙이느니 비운다).
  * ⚠️ React `cache` — 한 요청에서 시간표·출석부가 같이 물어도 왕복 1회.
@@ -45,7 +46,8 @@ const loadTeacherTransitions = cache(
             scope.admin.from("audit_logs").select("metadata, target_label, created_at"),
             scope,
           )
-            .gte("created_at", since)
+            // 배정 이력은 조회 월보다 오래된 시작점도 필요하다. 변경 항목 전체 대신 담임 전이만 읽는다.
+            .not("metadata->>newTeacherId", "is", null)
             .order("created_at")
             .range(from, to) as never;
         },
@@ -84,13 +86,14 @@ const loadTeacherTransitions = cache(
               targetLabel: l.target_label,
               classIdByUniqueName,
             }) ?? "",
-          date: String(l.created_at).slice(0, 10),
+          date: kstDateOf(l.metadata?.effectiveDate) ?? kstDateOf(l.created_at) ?? "",
           teacherId,
+          previousTeacherId: typeof l.metadata?.previousTeacherId === "string" ? l.metadata.previousTeacherId : null,
           teacherName: teacherId ? (nameOf.get(teacherId) ?? null) : null,
         };
       })
       // 담임이 안 바뀐 `class_update`(강의실만 고침 등)는 전이가 아니다 — newTeacherId가 없다.
-      .filter((t) => !!t.classId && !!t.teacherId);
+      .filter((t) => !!t.classId && !!t.teacherId && !!t.date);
 
     return { transitions, since };
   },
@@ -108,6 +111,12 @@ const loadTeacherTransitions = cache(
 export const getHomeroomSinceIndex = cache(async (): Promise<HomeroomSinceIndex> => {
   const { transitions, since } = await loadTeacherTransitions();
   return buildHomeroomSinceIndex(transitions, since);
+});
+
+/** 출석일 당시의 담임 복원. 작성자 추정 없이 적용된 인수인계만 사용한다. */
+export const getHomeroomHistoryIndex = cache(async () => {
+  const { transitions } = await loadTeacherTransitions();
+  return buildHomeroomHistoryIndex(transitions);
 });
 
 /**

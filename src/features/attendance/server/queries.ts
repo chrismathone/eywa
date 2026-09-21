@@ -31,6 +31,7 @@ import { getPeriodWindow } from "@/features/periods/server/queries";
 import type { PeriodWindow } from "@/features/periods/resolve";
 // 출결의 강사 귀속 축 단일 소스(2026-08-18) — 담임만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
+import type { HomeroomPeriod } from "@/features/classes/teacher-as-of";
 // 교시 귀속(누구 몫인가)은 같은 축 모듈이 단일 소스다 — 여기서 규칙을 다시 적지 말 것.
 import {
   attendanceSlotShare,
@@ -568,6 +569,8 @@ export type AttendanceMatrix = {
      * ⚠️ 자리(LAB·JJ)는 사람이 아니라 여기 안 들어온다(teacher_id가 null이라 구조적으로 제외).
      */
     slotTeachers: { id: string; name: string; active: boolean }[];
+    historicalTeachers?: { id: string; name: string; active: boolean }[];
+    homeroomHistory?: HomeroomPeriod[];
   }[];
   selectedClassId: string | null;
   month: string; // "2026-05" — **라벨월**이다. 세션은 이 달을 넘길 수 있다(window.end 참조).
@@ -853,6 +856,8 @@ export async function getMonthlyAttendanceMatrix(
       teacherName: c.teacherName,
       teacherActive: c.teacherActive,
       slotTeachers: c.slotTeachers,
+      historicalTeachers: c.historicalTeachers,
+      homeroomHistory: c.homeroomHistory,
     }));
 
   // 강사가 본인 반이 아닌 classId를 URL로 넘기면 선택 무시(스코프 위반 차단).
@@ -991,6 +996,7 @@ export async function getMonthlyAttendanceMatrix(
     validTo: (s.valid_to as string | null) ?? null,
   }));
   const homeroomTeacherId = classId ? (classes.find((c) => c.id === classId)?.teacherId ?? null) : null;
+  const homeroomHistory = classId ? classes.find((c) => c.id === classId)?.homeroomHistory : undefined;
 
   /**
    * 이 교시가 **이 표의 주인 몫인가** — 규칙·근거는 축 단일 소스 `ownsAttendanceSlot` 주석.
@@ -1004,6 +1010,7 @@ export async function getMonthlyAttendanceMatrix(
   ) => ({
     scopeTeacherId,
     homeroomTeacherId,
+    homeroomHistory,
     slots: axisSlots,
     date,
     slotStart,
@@ -1035,6 +1042,7 @@ export async function getMonthlyAttendanceMatrix(
               teachesClassOn({
                 scopeTeacherId,
                 homeroomTeacherId,
+                homeroomHistory,
                 slots: axisSlots,
                 date: d.date,
                 homeroomSince: scopeSince,
@@ -1455,7 +1463,7 @@ export async function getMonthlyAttendanceMatrix(
       // 🔴 담임 이전 칸은 이 표의 값이 아니다 — **파생은 `ownsSlot`을 안 탄다**. 수기 기록만 빗금으로
       //    빼고 여기를 안 막으면, 그 날짜가 보고서 파생 '출석'으로 **되살아난다**(JJ2A는 8/3~8/10에
       //    전임이 쓴 보고서가 14건 있어 실제로 그렇게 된다).
-      .filter((d) => !scopeSince || d.date >= scopeSince)
+      .filter((d) => homeroomHistory?.length || !scopeSince || d.date >= scopeSince)
       // 🔴 **파생만은 그 강사가 수업하는 날에만** 메운다 — 파생은 `ownsSlot`을 안 타므로(수기 기록이 아니라 보고서에서 도출) 안 막으면
       //    안 가르치는 요일이 남의 보고서로 '출석'·'결석'처럼 되살아난다. 입력은 그 날도 열려 있다(사람이 친 값은 위 기록 갈래).
       .filter((d) => !ownDateSet || ownDateSet.has(d.date));

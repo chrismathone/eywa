@@ -22,6 +22,7 @@ const h = vi.hoisted(() => {
     records: [] as Record<string, unknown>[],
     reservations: [] as Record<string, unknown>[],
     students: [] as Record<string, unknown>[],
+    homeroomHistory: [] as { teacherId: string; from: string | null; to: string | null }[],
   };
   /** PostgREST 빌더 흉내 — 표마다 정해진 행을 돌려준다(필터는 픽스처가 이미 좁혀 놓았다). */
   const client = {
@@ -63,6 +64,7 @@ vi.mock("./teacher-axis-queries", () => ({
       teacherName: "담임",
       teacherActive: true,
       slotTeachers: [],
+      homeroomHistory: h.state.homeroomHistory,
     },
   ]),
 }));
@@ -142,6 +144,7 @@ beforeEach(() => {
   h.state.records = [];
   h.state.reservations = [];
   h.state.students = [];
+  h.state.homeroomHistory = [];
 });
 
 /** Charlie(교시 담당) 보기로 그 달 매트릭스를 그린다. */
@@ -165,6 +168,25 @@ const WED_HOMEROOM = {
 const THU_HOMEROOM = { ...WED_HOMEROOM, day_of_week: "thu", start_time: "15:20:00", end_time: "16:10:00" };
 
 describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업한 날·교시만(원장 2026-09-17)", () => {
+  it("담임을 변경해도 이전 담임의 일별 출결 값·메모·시수는 당시 날짜에 남는다", async () => {
+    h.state.homeroomHistory = [
+      { teacherId: h.CHARLIE, from: "2026-08-10", to: "2026-09-11" },
+      { teacherId: h.HOMEROOM, from: "2026-09-11", to: null },
+    ];
+    h.state.schedules = [{ ...WED_HOMEROOM, day_of_week: "thu", teacher_id: null }];
+    h.state.records = [
+      rec("old", null, { session_units: 1.5, note: "인계 전 수업" }),
+      rec("new", null, { session_date: FRI, session_units: 1, note: "인계 후 수업" }),
+    ];
+    const old = await matrixForCharlie();
+    const current = await matrixForHomeroom("2026-09-11");
+    expect(old.marks[h.S1]?.[D]).toBe("present");
+    expect(old.units[h.S1]?.[D]).toBe(1.5);
+    expect(old.notes[h.S1]?.[D]).toBe("인계 전 수업");
+    expect(old.marks[h.S1]?.[FRI]).toBeUndefined();
+    expect(current.marks[h.S1]?.[D]).toBeUndefined();
+    expect(current.marks[h.S1]?.[FRI]).toBe("present");
+  });
   it("🔴 수업하는 날 — 제 교시 값만 싣고 자리(JJ) 기록은 값·빗금 어디에도 없다", async () => {
     h.state.records = [rec("r-1720", "17:20:00", { note: "내 메모" }), rec("r-jj", "16:20:00", { note: "JJ 메모" })];
     const m = await matrixForCharlie();

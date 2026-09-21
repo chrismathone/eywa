@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { classTeacherIdsInRange, slotOverlapsRange, type AxisSlot } from "../teacher-axis";
+import { getHomeroomHistoryIndex } from "@/features/classes/server/teacher-as-of-queries";
+import { homeroomTeachersInRange, type HomeroomPeriod } from "@/features/classes/teacher-as-of";
 
 /**
  * 강사 귀속 축(`teacher-axis.ts`)의 **조회 쪽** — 순수 판정에 필요한 재료만 읽어 온다.
@@ -114,7 +116,10 @@ export type ClassAxisRow = {
   teacherActive: boolean;
   /** 그 달 교시 담당(담임과 겹칠 수 있다). 자리(LAB·JJ)는 사람이 아니라 안 들어온다. */
   slotTeachers: AxisTeacher[];
-  /** 담임 ∪ 교시 담당 — "이 반이 누구 출석부에 보이나"의 정답. */
+  /** 조회 기간에 담임이었던 이전 강사. 현재 수업 편집 권한을 부여하는 목록은 아니다. */
+  historicalTeachers: AxisTeacher[];
+  homeroomHistory: HomeroomPeriod[];
+  /** 현재 담임 ∪ 기간 내 이전 담임 ∪ 교시 담당 — 출석부 조회 범위. */
   taughtBy: string[];
 };
 
@@ -128,11 +133,11 @@ export type ClassAxisRow = {
  */
 export const loadClassAxisRows = cache(async (from: string, to: string): Promise<ClassAxisRow[]> => {
   const supabase = await createClient();
-  // 반 목록과 교시 배선은 서로 독립이라 병렬(B4).
+  // 반 목록·교시 배선·담임 이력은 서로 독립이라 병렬(B4).
   // 🔴 이 목록은 **강사 스코프의 whitelist**로 쓰인다(taughtBy로 좁힌다) → bare select 금지, 페이지네이션(B2).
   //    지금은 활성 반 110행이라 한 장에 들어오지만, 1000행을 넘기면 PostgREST가 **에러 없이 잘라** 그 강사의
   //    반이 조용히 사라진다. 잘림이 곧 "내 반이 없다"가 되는 자리라 상한을 두지 않는다.
-  const [classRows, slotAxis] = await Promise.all([
+  const [classRows, slotAxis, historyIndex] = await Promise.all([
     fetchAllPaged<ClassSelectRow>((f, t) =>
       supabase
         .from("classes")
@@ -143,6 +148,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
         .range(f, t),
     ),
     loadSlotAxisByClass(from, to),
+    getHomeroomHistoryIndex(),
   ]);
 
   // 🔴 **종강한 반은 그 뒤 기간에서 뺀다** (원장 제보 2026-09-10: *"0명인 학생 반은 왜 뜨는거야?
@@ -155,9 +161,10 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
 
   // 교시 담당으로만 등장하는 사람(담임 반이 0개인 강사)도 이름이 필요하다 — 한 번에 조회.
   const axisNames = await loadAxisTeacherNames([
-    ...new Set(
-      [...slotAxis.values()].flatMap((slots) => slots.map((s) => s.teacherId).filter((v): v is string => !!v)),
-    ),
+    ...new Set([
+      ...[...slotAxis.values()].flatMap((slots) => slots.map((s) => s.teacherId).filter((v): v is string => !!v)),
+      ...liveRows.flatMap((c) => homeroomTeachersInRange(historyIndex.get(c.id) ?? [], from, to)),
+    ]),
   ]);
 
   return liveRows.map((c) => {
@@ -166,6 +173,8 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
       | undefined;
     const homeroomTeacherId = teacher?.id ?? null;
     const slots = slotAxis.get(c.id as string) ?? [];
+    const homeroomHistory = historyIndex.get(c.id) ?? [];
+    const historicalIds = homeroomTeachersInRange(homeroomHistory, from, to);
     return {
       id: c.id as string,
       className: c.class_name as string,
@@ -176,10 +185,12 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
       teacherName: teacher?.display_name ?? null,
       // 담임이 퇴직(inactive)이어도 반은 살려 둔다 — 재원생이 다니는 반을 숨기면 출결을 찍을 길이 없다.
       teacherActive: teacher ? teacher.status !== "inactive" : true,
+      homeroomHistory,
+      historicalTeachers: historicalIds.filter((id) => id !== homeroomTeacherId).map((id) => axisNames.get(id)).filter((t): t is AxisTeacher => !!t),
       slotTeachers: classTeacherIdsInRange({ homeroomTeacherId: null, slots, from, to })
         .map((id) => axisNames.get(id))
         .filter((t): t is AxisTeacher => !!t),
-      taughtBy: classTeacherIdsInRange({ homeroomTeacherId, slots, from, to }),
+      taughtBy: [...new Set([...classTeacherIdsInRange({ homeroomTeacherId, slots, from, to }), ...historicalIds])],
     };
   });
 });
