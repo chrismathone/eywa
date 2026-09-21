@@ -418,6 +418,14 @@ export function auditDetail(
         failed ? `실패 ${failed}명` : null,
       );
     }
+    case "session_term_receipt_allocate_free": {
+      // 자유 배분(0279a) — 수업 청구액 중 얼마를 몇 반에 나눴나(받은 돈보다 많이 줄 수 없다 · 덜 준 건 남은 금액으로).
+      const total = num(m.tuitionTotal);
+      const sum = num(m.allocatedTotal);
+      // 0원으로 실은 확정 반은 세지 않는다 — "몇 반에 나눴나"는 금액을 받은 반 수다.
+      const n = arr(m.allocations).filter((a) => (num((a as { amount?: unknown })?.amount) ?? 0) > 0).length;
+      return join(str(m.period), total !== null && sum !== null ? `수업 청구액 ${won(total)} 중 ${won(sum)} 배분${total > sum ? `(남김 ${won(total - sum)})` : ""}` : null, n ? `${n}개 반` : null);
+    }
     case "session_term_money_carryover":
     case "session_term_money_carryover_cancel": {
       // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).

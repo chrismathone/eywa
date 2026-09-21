@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptAllocationSaveRows, receiptLines, receiptRemainder, type AllocationTerm } from "./receipt-allocation";
+import { connectReceiptTerm, distributeLinkedReceipt, distributeReceipt, effectiveAllocations, receiptAllocationSaveRows, receiptLines, receiptRemainder, tuitionTotal, type AllocationTerm } from "./receipt-allocation";
 import { computeSplitRows } from "./splits";
 import { aggregateTeacherAllocations } from "./allocation";
 
@@ -83,9 +83,11 @@ describe("연결할 수납 항목이 없는 확정 반 = 0원 (원장 2026-09-17
     expect(effectiveAllocations(receiptLines(withBook), [zero]).get("ls4b")).toBe(0);
     expect(effectiveAllocations(receiptLines(bill), [{ ...zero, amount: 300000 }]).has("ls4b")).toBe(false);
     expect(effectiveAllocations(receiptLines(bill), [{ ...zero, confirmedSessions: null, amount: null }]).has("ls4b")).toBe(false);
-    // 배분을 지운 행(금액 null)·양수는 이 갈래가 아니다.
+    // 배분을 지운 행(금액 null)은 이 갈래가 아니다.
     expect(effectiveAllocations(receiptLines(bill), [{ ...zero, allocatedAmount: null }]).has("ls4b")).toBe(false);
-    expect(effectiveAllocations(receiptLines(bill), [{ ...zero, allocatedAmount: 5 }]).has("ls4b")).toBe(false);
+    // 연결 행 없이 양수만 있는 청구서는 이제 **자유 배분**(0279a, 원장 2026-09-21)이다 — 항목·확정금액이 그대로이고
+    // 합계가 수업 청구액 이하면 유효(종전엔 이 모양을 0269a가 저장하지 못해 무효로 봤다).
+    expect(effectiveAllocations(receiptLines(bill), [{ ...zero, allocatedAmount: 5 }]).get("ls4b")).toBe(5);
   });
 
   it("저장 행: 하나라도 연결했을 때만 연결 안 한 확정 반을 0원으로 보낸다 · 미확정은 보내지 않는다", () => {
@@ -100,5 +102,37 @@ describe("연결할 수납 항목이 없는 확정 반 = 0원 (원장 2026-09-17
     ]);
     // 아무것도 연결하지 않으면 종전대로 빈 저장(= 기존 배분 해제).
     expect(receiptAllocationSaveRows(terms, { a: { line: "", amount: "" }, b: { line: "", amount: "" }, c: { line: "", amount: "" } })).toEqual([]);
+  });
+});
+
+describe("자유 배분(0279a) — 수납 항목에 하나도 연결하지 않고 금액만", () => {
+  const tuition = { kind: "수업", description: "수학 수강료", amount: 169375 };
+  const book = { kind: "교재", description: "교재", amount: 12000 };
+  const lines = receiptLines([tuition, book]);
+  const snapshot = [tuition, book];
+  const free = (id: string, amount: number, base: number, over: Partial<Parameters<typeof effectiveAllocations>[1][number]> = {}) => ({
+    id, amount: base, confirmedSessions: 3, lineIndex: null, allocatedAmount: amount, source: snapshot, baseAmount: base, ...over,
+  });
+  it("합계가 수업 청구액 이하이고 항목·확정금액이 그대로면 유효 — 교재는 상한에 안 들어간다", () => {
+    const out = effectiveAllocations(lines, [free("a", 63750, 63750), free("b", 105625, 95625, { baseAmount: 95625, amount: 95625 })]);
+    expect(out.get("a")).toBe(63750);
+    expect(out.get("b")).toBe(105625);
+    expect(tuitionTotal(lines)).toBe(169375);
+  });
+  it("덜 준 것은 유효(남은 금액은 분배 안 됨) · 넘으면 전부 무효", () => {
+    expect(effectiveAllocations(lines, [free("a", 60000, 63750)]).get("a")).toBe(60000);
+    const over = effectiveAllocations(lines, [free("a", 100000, 63750), free("b", 100000, 95625)]);
+    expect(over.has("a")).toBe(false);
+    expect(over.has("b")).toBe(false);
+  });
+  it("청구 항목이 바뀌거나 확정금액이 바뀌면 무효(배분 재확인)", () => {
+    expect(effectiveAllocations(receiptLines([{ ...tuition, amount: 170000 }, book]), [free("a", 60000, 63750)]).has("a")).toBe(false);
+    expect(effectiveAllocations(lines, [free("a", 60000, 63750, { amount: 70000 })]).has("a")).toBe(false);
+  });
+  it("연결 행이 하나라도 있는 청구서는 자유 배분으로 읽지 않는다(항목별 배분 그대로)", () => {
+    const linked = { id: "l", amount: 169375, confirmedSessions: 3, lineIndex: 0, allocatedAmount: 169375, source: tuition, baseAmount: 169375 };
+    const out = effectiveAllocations(lines, [linked, free("a", 5000, 63750)]);
+    expect(out.get("l")).toBe(169375);
+    expect(out.has("a")).toBe(false);
   });
 });

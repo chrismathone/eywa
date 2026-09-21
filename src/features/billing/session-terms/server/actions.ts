@@ -127,12 +127,12 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   // 기존 term 로드(확정 보존·stale 판단) + 그 달 줄 집합(출석부와 같은 규칙) — 줄 집합 안의 행은 계획에 없어도 지우지 않는다.
   const invoiceIds = invoices.map((i) => i.id);
   const [existing, roster] = await Promise.all([
-    fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; planned_sessions: number | null; confirmed_sessions: number | null; allocation_line_index: number | null; note: string | null }>(
+    fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; planned_sessions: number | null; confirmed_sessions: number | null; allocation_line_index: number | null; allocation_amount: number | string | null; note: string | null }>(
       invoiceIds,
       (chunk, from, to) =>
         supabase
           .from("invoice_session_terms")
-          .select("id, invoice_id, class_id, planned_sessions, confirmed_sessions, allocation_line_index, note")
+          .select("id, invoice_id, class_id, planned_sessions, confirmed_sessions, allocation_line_index, allocation_amount, note")
           .in("invoice_id", chunk)
           .order("id")
           .range(from, to),
@@ -170,7 +170,9 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     // 🔴 메모는 삭제를 막지 않는다 — 메모 하나로 남긴 행은 계획 0·미확정으로 영영 남아 '확정 N/M'·미배분 수·시수 검증
     //    미확정 수를 부풀린다(적대적 리뷰 2026-09-17). 대신 지운 메모 원문을 아래 감사로그에 남긴다.
     // 🔴 줄 집합(출석부) 안의 행은 계획 키에 없어도 남긴다 — 그 달 기록이 있는 한 출석부엔 그 줄이 서 있다(두 화면의 줄 수가 같아야 한다).
-    if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && !rosterPairOf(t) && t.confirmed_sessions === null && t.allocation_line_index == null) staleUnconfirmed.push(t.id);
+    // 🔴 자유 배분(0279a)은 항목 칸이 비어 있어도 금액이 있다 — **양수 금액**까지 없어야 '배분 없음'이다(안 보면 관리자가 준 돈이 조용히 사라진다).
+    //    0원 줄(항목별 '연결 안 함'을 확정 해제한 것)은 지운다 — 남기면 재확인이 떠 그 달 분배 저장을 막고, 지워도 묶음 합계는 그대로다.
+    if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && !rosterPairOf(t) && t.confirmed_sessions === null && t.allocation_line_index == null && Number(t.allocation_amount ?? 0) === 0) staleUnconfirmed.push(t.id);
   }
 
   // upsert는 계획 필드만 — onConflict 대상 컬럼 목록에 confirmed_*를 넣지 않아 기존 확정이 보존된다.
@@ -181,7 +183,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     if (error) return { error: `계획 저장 실패: ${error.message}` };
   }
   for (let i = 0; i < staleUnconfirmed.length; i += 200) {
-    const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200)).is("confirmed_sessions", null).is("allocation_line_index", null);
+    const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200)).is("confirmed_sessions", null).is("allocation_line_index", null).or("allocation_amount.is.null,allocation_amount.eq.0");
     if (error) return { error: `정리 실패: ${error.message}` };
   }
 

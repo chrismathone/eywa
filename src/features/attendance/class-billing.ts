@@ -128,11 +128,14 @@ export function attendanceClassBilledAmounts(
       baseAmount: term.allocation_base_amount == null ? null : Number(term.allocation_base_amount),
     })));
     const lineItems = (Array.isArray(invoice.line_items) ? invoice.line_items : []) as LineItemLike[];
+    // 🔴 유효한 자유 배분(0279a — 연결 없이 금액)이 있는 청구서는 금액을 안 받은 반을 반 이름 매칭으로 채우지 않는다(0) — 채우면
+    //    관리자가 수업 청구액을 전부 한 반에 줬을 때 다른 반에 청구액이 또 떠 합계가 받은 돈을 넘는다(적대 리뷰 2026-09-21).
+    const freeActive = invoiceTerms.some((t) => t.allocation_line_index == null && Number(t.allocation_amount ?? 0) > 0 && allocated.has(t.id));
     for (const term of invoiceTerms) {
       const cls = term.class_id ? classById.get(term.class_id) : undefined;
       if (!cls?.students.has(invoice.student_id)) continue;
       const base = allocated.get(term.id);
-      let amount = base ?? classInvoiceAmount(cls.className, lineItems);
+      let amount = base ?? (freeActive ? 0 : classInvoiceAmount(cls.className, lineItems));
       if (amount === null) continue;
       if (base !== undefined) {
         const sent = carry.outs.get(term.id) ?? 0;

@@ -65,6 +65,21 @@ describe("출석부 이 반 청구액", () => {
     expect(attendanceClassBilledAmounts([classes[0]!], [invoice], terms)).toEqual({ [key]: 150000 });
   });
 
+  it("🔴 유효한 자유 배분(0279a)이 있으면 금액을 안 받은 반을 이름 매칭으로 채우지 않는다 — 합계가 청구액을 넘지 않게", () => {
+    const weekend = { description: "고등M 개별 토일", amount: 90000 };
+    const items = [line, weekend];
+    const freeInvoice = { ...invoice, line_items: items };
+    const terms = [
+      // 관리자가 수업 청구액 300,000원을 전부 TP4E에 줬다(항목 연결 없음 · 저장 때 청구 항목 전체 스냅샷).
+      term({ allocation_amount: 300000, allocation_source: items, allocation_base_amount: 150000 }),
+      // 토일 반은 미확정이라 0원으로 두면 저장하지 않는다(행은 배분 없음).
+      term({ id: "t2", class_id: "c2", amount: null, confirmed_sessions: null }),
+    ];
+    expect(attendanceClassBilledAmounts(classes, [freeInvoice], terms)).toEqual({ [key]: 300000, [rowKey("c2", "s1")]: 0 });
+    // 자유 배분이 없던 때는 종전대로 이름 매칭(토일 90,000원).
+    expect(attendanceClassBilledAmounts(classes, [freeInvoice], [term({ id: "t2", class_id: "c2", amount: null, confirmed_sessions: null })])).toEqual({ [rowKey("c2", "s1")]: 90000 });
+  });
+
   it("동기화로 무효가 된 배분은 회차 확정처럼 이름 매칭으로 돌아간다", () => {
     const stale = term({ allocation_line_index: 0, allocation_amount: 210000, allocation_source: { ...line, amount: 220000 }, allocation_base_amount: 150000 });
     expect(attendanceClassBilledAmounts(classes, [invoice], [stale])).toEqual({ [key]: 210000 });

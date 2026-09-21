@@ -52,6 +52,8 @@ export type SessionTermRow = {
   allocatedAmount?: number | null;
   allocationStale?: boolean;
   allocationLineIndex?: number | null;
+  /** 저장된 배분액 원값(유효 판정 **전**) — 자유 배분이 무효가 됐을 때 창이 빈칸 대신 그 값을 보여 주려고(0279a). 가상 행은 없음. */
+  savedAllocationAmount?: number | null;
   invoiceHasAllocations?: boolean;
   refundState?: ReceiptRefundState;
   /** 회차 확정 표의 메모(특이사항) — 0102a부터 있던 칸. 쓰기는 `updateSessionTermNote` 한 곳. */
@@ -271,6 +273,10 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
     });
     for (const [id, state] of invoiceAllocationStates(invoice, invoiceTerms)) allocStates.set(id, state);
   }
+  // 유효한 자유 배분이 있는 청구서(0279a) — 금액을 안 받은 반을 반 이름 매칭 참고값으로 채우지 않는다(출석부 금액 열 `freeActive`와 같은 판정 —
+  // 채우면 두 화면이 같은 반을 0원 / 'N원 참고'로 다르게 말한다).
+  const freeActiveInvoices = new Set(terms.filter((term) => term.allocation_line_index == null && Number(term.allocation_amount ?? 0) > 0
+    && (allocStates.get(term.id)?.allocatedAmount ?? 0) > 0).map((term) => term.invoice_id));
   // 지난 달 기준 제안 — 회차 행·가상 행(missing) 같은 규칙. 예정을 믿을 수 없는 행(휴원·비활성 반) · 회차 행 중복 · EiE 월 정액은 채우지 않는다(리뷰 2026-09-17).
   const lastMonthFor = (studentId: string, classId: string, subject: string, englishTrack: string | null | undefined): TermSuggestion | null => {
     const key = monthRosterKey(studentId, classId);
@@ -322,9 +328,10 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
         allocationStale: alloc.allocationStale,
         refundedAllocation: "refundedAllocation" in alloc ? alloc.refundedAllocation : fullyRefunded,
         allocationLineIndex: t.allocation_line_index ?? null,
+        savedAllocationAmount: t.allocation_amount == null ? null : Number(t.allocation_amount),
         invoiceHasAllocations: invoicesWithAllocations.has(t.invoice_id),
         note: t.note,
-        classAmount: fullyRefunded ? 0 : className ? classInvoiceAmount(className, lineItems) : null,
+        classAmount: fullyRefunded ? 0 : freeActiveInvoices.has(t.invoice_id) ? null : className ? classInvoiceAmount(className, lineItems) : null,
         termState: "term",
         noLesson: t.class_id !== null && !pair,
         recordedUnits: pair?.recordedUnits ?? null,
@@ -379,7 +386,7 @@ export async function getSessionTermsView(period: string, invoiceId?: string, op
       allocationLineIndex: null,
       invoiceHasAllocations: inv ? invoicesWithAllocations.has(inv.id) : false,
       note: null,
-      classAmount: bits ? (bits.fullyRefunded ? 0 : classInvoiceAmount(cls.className, lineItems)) : null,
+      classAmount: bits ? (bits.fullyRefunded ? 0 : inv && freeActiveInvoices.has(inv.id) ? null : classInvoiceAmount(cls.className, lineItems)) : null,
       termState,
       noLesson: false,
       recordedUnits: pair.recordedUnits,

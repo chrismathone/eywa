@@ -151,7 +151,7 @@ export async function SessionVerificationFace({
         에서 조정하세요. (청구월은 달력월 기준으로 근사합니다.)
       </FaceNote>
 
-      {view.rows.some((row) => row.allocationStale) ? <p role="alert" className="text-amber rounded-lg border border-amber/30 p-3 text-sm">수납 배분을 다시 확인할 학생이 있습니다. 회차 확정의 ‘수납 연결·배분’에서 확인한 후 분배를 저장하세요. { [...new Set(view.rows.filter((row) => row.allocationStale).map((row) => row.studentName))].join(", ") }</p> : null}
+      {view.rows.some((row) => row.allocationStale) ? <p role="alert" className="text-amber rounded-lg border border-amber/30 p-3 text-sm">수납 배분을 다시 확인할 학생이 있습니다. 회차 확정의 ‘수납 연결·배분’에서 확인한 후 분배를 저장하세요. { [...new Set(view.rows.filter((row) => row.allocationStale).map((row) => row.studentName))].join(", ") }{ view.rows.some((row) => row.allocationStale && row.freeAllocationSaved) ? ` — 그중 ${[...new Set(view.rows.filter((row) => row.allocationStale && row.freeAllocationSaved).map((row) => row.studentName))].join(", ")}은(는) 관리자가 자유 배분으로 저장한 청구서라 관리자만 고칠 수 있습니다.` : "" }</p> : null}
 
       {noAttendanceYet ? (
         <div className="rounded-2xl border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
