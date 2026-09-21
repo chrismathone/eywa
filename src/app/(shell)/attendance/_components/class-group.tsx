@@ -7,6 +7,7 @@ import { useGridCollapse } from "./grid-context";
 import { useClassMatched, useSearchActive } from "./search-context";
 // 라벨은 사전 키로 다다 — 두 버튼(화살표·칩)이 같은 판정과 같은 낟말을 쓴다.
 import { useSheetT } from "@/features/teacher-view/lang-context";
+import { AttendanceColSpan } from "./columns";
 
 function useCollapse() {
   const optional = useOptionalCollapse();
@@ -51,7 +52,7 @@ export function ClassGroupBody({
   return (
     <tbody>
       <tr className="bg-bg-soft">
-        <td colSpan={colSpan} className="border-line border-y p-0">
+        <AttendanceColSpan colSpan={colSpan} className="border-line border-y p-0">
           {/* 가로 스크롤 중에도 반 이름이 보이도록 sticky left(구 출석부 그룹 헤더 관행). */}
           <button
             type="button"
@@ -65,7 +66,7 @@ export function ClassGroupBody({
             />
             {summary}
           </button>
-        </td>
+        </AttendanceColSpan>
       </tr>
       {collapsed ? null : children}
     </tbody>

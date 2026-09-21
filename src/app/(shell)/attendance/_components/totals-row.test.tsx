@@ -170,10 +170,10 @@ describe("하단 합계 줄 — 검색 전에는 종전 표기 그대로", () =>
     const { container } = renderSheet();
     expect(screen.queryByRole("columnheader", { name: "청구" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "납입" })).toBeNull();
-    // 이름·학교학년 + 날짜 + 시수·출석률 — 금액 칸 없음.
-    expect(screen.getByText("박서준").closest("tr")!.children).toHaveLength(DAYS.length + 4);
+    // 이름·학교학년 + 날짜 + 수업 차수 — 금액 칸 없음(출석률 열은 2026-09-21 504505fc가 뺐다).
+    expect(screen.getByText("박서준").closest("tr")!.children).toHaveLength(DAYS.length + 3);
     // 요약 줄(맨 아래)은 전 열을 덮는다 — 그 위 합계 행(2026-09-18)은 열마다 칸이 선다.
-    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 4));
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 3));
     expect(flat(container.querySelector("tfoot")!)).toContain("납입 400,000");
   });
   it("라벨은 '합계'이고 병기(`/ 전체`)도 칩도 없다", () => {

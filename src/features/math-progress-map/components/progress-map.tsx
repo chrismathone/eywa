@@ -29,7 +29,7 @@ type Hover = { scope: string; target: HoverTarget; x: number; y: number; flip: b
 const NARROW_PX = 560;
 
 /**
- * 원형 진도맵 — 바깥부터 분기 → 연간(달) → 월간(주) → 주간(날 눈금) → 일간(초점 주 7일) → 가운데(현재 위치).
+ * 원형 진도맵 — 바깥부터 분기 → 연간(달) → 월간(주) → 주간(수업 눈금) → 일간(초점 주의 수업일) → 가운데(현재 위치).
  * SVG `path`로 그리고(CSS로 원을 겹치지 않는다), 크기는 컨테이너 폭을 따른다(viewBox).
  *
  * 툴팁 좌표는 **이 컨테이너 기준**이다 — 마우스 오버 상태는 여기 지역 상태라 링(칸 400개)은 다시 그리지 않는다
@@ -95,11 +95,12 @@ export function ProgressMap({ navy = false, controls }: { navy?: boolean; contro
 
 export const MapDrawing = memo(function MapDrawing({ center }: { center?: ReactNode }) {
   const { progress, view } = useProgressMap();
+  const percent = progress.learningMap ? progress.learningMap.metrics.percent : view.pct;
   return (
     <div
       className={styles.dial}
       role="group"
-      aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 ${progress.estimated ? "예상 진도" : knownProgress(progress) ? `진도율 ${view.pct}%` : "진도 확인 필요"}`}
+      aria-label={`${progress.studentName} 학습 진도맵 — ${view.year}년 ${progress.estimated ? "예상 진도" : knownProgress(progress) ? `${progress.learningMap ? "전체 목표 " : ""}진도율 ${percent}%` : "진도 확인 필요"}`}
     >
       <DialLayer name="guides"><DialGuides full /></DialLayer>
       <DialLayer name="quarters"><QuarterRing /></DialLayer>

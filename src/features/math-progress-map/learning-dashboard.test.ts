@@ -6,8 +6,26 @@ import { buildYearView, donePagesOf, plannedPagesOf } from "./derive";
 import { progressForYear } from "./years";
 import { curriculumPeriods } from "./timeline-data";
 import { paceLabel, planVsActual } from "./pace";
+import { dayOf, focusOfDate } from "./focus";
 
 describe("기존 전체 진도맵의 실데이터 배선", () => {
+  it("세 지도가 실제 반별 수업일을 공유하며 과거 진도는 발송 보고서의 수업일에만 그린다", () => {
+    const f = learningMapFixture();
+    const map = buildLearningMap(f.goal, f.progress);
+    const data = buildLearningDashboard(f.student, f.goal, f.progress, f.records, map, f.context);
+    const view = buildYearView(data);
+    expect(dayOf(view, focusOfDate("2026-09-15"))).toMatchObject({ noClassReason: "수업 없는 날", isClassDay: false });
+    expect(dayOf(view, focusOfDate("2026-09-17"))).toMatchObject({ noClassReason: null, isClassDay: true });
+    expect(dayOf(view, focusOfDate("2026-09-24"))).toMatchObject({ noClassReason: "휴일", isClassDay: false });
+    const past = view.months.flatMap(month => month.weeks.flatMap(week => week.days)).filter(day => day.donePages > 0);
+    expect(past.every(day => f.records.some(record => record.date === day.date))).toBe(true);
+    const nextYear = progressForYear(data, 2027);
+    expect(nextYear.calendar?.classDates?.every(date => date.startsWith("2027-"))).toBe(true);
+    expect(nextYear.calendar?.classDates?.length).toBeGreaterThan(0);
+    const makeup = { date: "2026-09-19", progress: "보강", textbook: null };
+    const withMakeup = buildLearningDashboard(f.student, f.goal, f.progress, [...f.records, makeup], map, f.context);
+    expect(dayOf(buildYearView(withMakeup), focusOfDate(makeup.date))).toMatchObject({ noClassReason: null, isClassDay: true });
+  });
   it("일·주·월·분기·연간 합계와 타임라인이 차시 원장의 동일한 분자·분모를 쓴다", () => {
     const f = learningMapFixture();
     const map = buildLearningMap(f.goal, f.progress);

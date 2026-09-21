@@ -25,9 +25,11 @@ import { ECS_TEACHER_ALL, normalizeEcsTeacher } from "../landing-teacher";
 import {
   DEFAULT_ECS_ENGLISH_TRACK,
   DEFAULT_ECS_MONTH_DISPLAY,
+  DEFAULT_ECS_MONTH_PERIOD,
   DEFAULT_ECS_MONTH_VIEW,
   DEFAULT_ECS_SHOW_SELF_STUDY,
   normalizeCollapsedRosterGroups,
+  normalizeEcsMonthPeriod,
   normalizeEcsMonthView,
   type EcsMonthDisplay,
   type EcsMonthView,
@@ -951,6 +953,16 @@ export async function setMyEcsTeacher(value: string): Promise<{ ok: boolean; err
 export async function setMyEcsMonthView(view: string): Promise<{ ok: boolean; error?: string }> {
   if (normalizeEcsMonthView(view) !== view) return { ok: false, error: "잘못된 값입니다" };
   return patchMyEcsPrefs({ monthView: view === DEFAULT_ECS_MONTH_VIEW ? undefined : view });
+}
+
+/**
+ * EiE 월간 계획서의 **기간 축**(달력월 / 세션)을 계정에 저장 — `users.ui_prefs.ecs.monthPeriod`.
+ * ⚠️ 표시 렌즈라 게이트가 필요 없다(자기 계정의 보기 설정만 바꾼다). 기본값과 같으면 키를 지운다.
+ */
+export async function setMyEcsMonthPeriod(period: string): Promise<{ ok: boolean; error?: string }> {
+  const safe = normalizeEcsMonthPeriod(period);
+  if (!safe) return { ok: false, error: "잘못된 값입니다" };
+  return patchMyEcsPrefs({ monthPeriod: safe === DEFAULT_ECS_MONTH_PERIOD ? undefined : safe });
 }
 
 /**

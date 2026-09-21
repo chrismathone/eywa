@@ -110,9 +110,14 @@ describe("copyValueOf", () => {
     expect(copyValueOf({ s: "absent", u: null, g: true })).toBeNull();
   });
 
-  it("🔴 지각·조퇴·보강은 숫자로 복사하지 않는다 — 붙여넣으면 상태가 조용히 '출석'으로 바뀐다", () => {
+  it("지각·조퇴·보강의 상태와 시수를 함께 복사한다", () => {
     for (const st of ["late", "early_leave", "makeup"]) {
-      expect(copyValueOf({ s: st, u: null }), st).toBeNull();
+      expect(copyValueOf({ s: st, u: null }), st).toEqual({ status: st, units: "1" });
+      expect(copyValueOf({ s: st, u: 1.5 }), st).toEqual({ status: st, units: "1.5" });
     }
+  });
+
+  it("공결을 결석으로 바꾸지 않고 복사한다", () => {
+    expect(copyValueOf({ s: "excused", u: null })).toEqual({ status: "excused", units: "" });
   });
 });

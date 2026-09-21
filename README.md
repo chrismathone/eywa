@@ -84,4 +84,4 @@ tests/
 
 12개 메뉴 + ijw 패리티 + Admin/super-admin + 멀티윈도우 워크스페이스 + 수납관리 책갈피(교재/지출)까지 구현 완료.
 현재 작업 상태·다음 할 일은 [`HANDOFF.md`](HANDOFF.md), 진행 이력은 [`CLAUDE.md`](CLAUDE.md) "진행 상황" 참고.
-(⚠️ 데모 테넌트는 ijw POC 임포트본이라 `pnpm db:seed` 실행 금지 — HANDOFF.md 참고.)
+(⚠️ 테넌트 `injaewon`은 운영 실데이터다. 데모 시드(`pnpm db:seed`)는 운영 DB를 지울 수 있어 2026-09-19 영구 제거했다.)

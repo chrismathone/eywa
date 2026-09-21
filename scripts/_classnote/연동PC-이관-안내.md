@@ -54,9 +54,10 @@ CLASSNOTE_UPLOAD_PW=<ClassNote 로그인 비밀번호>
 CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094
 
 # 보고서 스크린샷/공유 링크는 공개 /r 페이지를 캡처 — 연동 PC엔 로컬 앱이 없으므로
-# 배포된 공개 주소로 지정(예시. 실제 운영 도메인으로).
-CLASSNOTE_SCREENSHOT_BASE=https://eywa-alpha.vercel.app
-CLASSNOTE_SHARE_BASE=https://eywa-alpha.vercel.app
+# 배포된 공개 주소로 지정. 2026-09-21부터 운영 도메인 = www.aywa.co.kr
+# (이미 설치된 PC는 `발송PC-새도메인.bat` 더블클릭 한 번이면 이 두 줄을 바꾸고 워커를 다시 띄운다).
+CLASSNOTE_SCREENSHOT_BASE=https://www.aywa.co.kr
+CLASSNOTE_SHARE_BASE=https://www.aywa.co.kr
 
 # ⚠️ 파일 첨부(pdf·엑셀·hwp 등)를 쓰면 **필수**. 워커가 이 헤더로 eywa 내부 엔드포인트에서 첨부 원본을
 # 받아 ClassNote에 올린다 — 없으면 401 → "파일 첨부 업로드 실패(전건)"으로 그 보고서 발송 자체가 실패한다.

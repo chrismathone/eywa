@@ -4,6 +4,27 @@
 결정(같은 날, CLAUDE.md 결정 로그): **하나의 DB** · **URL에 지점 없음(C안)** — 그래서 도메인은 **하나**만 붙이면 되고
 지점마다 서브도메인·와일드카드 DNS는 필요 없다. 코드는 전부 env로 켜지게 준비돼 있다(아래 "이미 준비된 것").
 
+## ✅ 2026-09-21 실제로 한 것 — 도메인 `aywa.co.kr` / `www.aywa.co.kr`, 기준 주소 = **`https://www.aywa.co.kr`**
+원장 *"우리 도메인은 aywa.co.kr / www.aywa.co.kr 로 결정되고 구매하고 적용되어있음"* · *"수업보고서로 발송되는 보고서 링크 주소도
+새 도메인에 맞게. 이전건 괜찮고 앞으로 발송하는."* · *"기존 침산(cs)지점은 아무런 이상이 없어야함."*
+- **원장이 이미 해 둔 것(1번)**: 두 도메인을 eywa 프로젝트에 붙임(네임서버는 등록업체 그대로, 레코드로 연결) + **Vercel 도메인 설정에서
+  `eywa-alpha.vercel.app` → `https://www.aywa.co.kr` 307 전환**. 그래서 이미 나간 링크(`eywa-alpha…/r/…`)는 새 도메인으로 열린다(원장 확인).
+  ⚠️ 이 전환은 Vercel 엣지 설정이라 **`/api/*`까지 넘긴다**(아래 2번의 "`/api` 제외" 코드 리다이렉트와 다르다) — 그래서
+  외부가 옛 주소로 부르는 콜백은 새 주소로 옮겨야 한다(전사 웹훅은 `NEXT_PUBLIC_APP_URL`을 따라가므로 아래 env로 해결).
+  🔴 `LEGACY_REDIRECT_HOSTS`는 **넣지 않았다** — 엣지가 먼저 전환하므로 코드 리다이렉트는 닿지 않는다(넣어도 무해하지만 쓸모없다).
+- **기준 주소를 `www`로 잡은 이유** = 옛 별칭의 전환 대상이 `www`다. ⚠️ `aywa.co.kr`(www 없음)도 전환 없이 앱을 그대로 띄운다 —
+  로그인 쿠키는 호스트 단위라 두 주소로 들어오면 **로그인이 따로** 논다. 원장이 Vercel Domains에서 `aywa.co.kr` → `www.aywa.co.kr`
+  리다이렉트를 걸면 깔끔하다(원장 결정 · 코드 무관).
+- **Vercel env(Production)**: `NEXT_PUBLIC_APP_URL=https://www.aywa.co.kr`(앱 안 공유 링크 표시·자산 QR·전사 콜백) +
+  0번의 침산 고정 셋 `GOOGLE_CALENDAR_TENANT_ID`·`HR_ROSTER_TENANT_ID`·`PUBLIC_BRAND_TENANT_SLUG=cs`(학원 1개인 지금은 동작 불변).
+- **ClassNote 보고서 링크**: 게시글 본문의 링크는 연동 PC `.env.local`의 `CLASSNOTE_SHARE_BASE`가 정한다 → 연동 PC에서
+  **`scripts\_classnote\발송PC-새도메인.bat`** 더블클릭(= `set-share-domain.ps1`: 링크·스크린샷 주소 두 줄을 `www.aywa.co.kr`로 +
+  `CLASSNOTE_TENANT_ID`·`MAKEEDU_TENANT_ID`를 없을 때만 침산으로 + 두 워커 재시작, 백업 남김·멱등). 코드 기본값도 같은 값
+  (`share-bases.mjs` `CURRENT_SHARE_BASE` 단일 소스). 🔴 게시 전 중복 확인은 **같은 토큰의 옛·새 주소 글을 다 알아본다**
+  (`shareUrlVariants`) — 재시작 순간 옛 주소로 올라간 건이 새 주소로 한 번 더 올라가지 않게. 회수도 두 주소를 다 대 본다.
+- ⏳ 남은 것: 4번(Supabase Auth Site URL — 비밀번호 재설정 메일 링크) · 5번의 기기 다시 잇기(직원·태블릿·키오스크·폰 알림은
+  원장이 전환을 건 순간부터 이미 새 주소로 넘어가 있다 = 한 번씩 다시 로그인/PIN/등록) · 6번 문서 값.
+
 ## 이미 준비된 것 (코드, 구매 전에 끝남)
 - **옛 호스트 → 새 도메인 308**(경로·쿼리 보존, `/api/*` 제외) — [`src/lib/config/legacy-redirects.ts`](../src/lib/config/legacy-redirects.ts) → `next.config.ts redirects()`.
   env `LEGACY_REDIRECT_HOSTS`가 비면 0개라 지금은 아무 일도 없다.

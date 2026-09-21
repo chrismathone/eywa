@@ -5,7 +5,7 @@ import { useSubjectMaps } from "@/features/owner/operations-context";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { RINGS, strokeArcPath } from "../geometry";
 import { PACE_META, paceLabel } from "../pace";
-import { HAIRLINE } from "../palette";
+import { ACTUAL_STROKE, HAIRLINE } from "../palette";
 import { periodCount, periodPercent } from "../learning-dashboard";
 import { CX, CY } from "./svg-consts";
 import { useProgressMap } from "./map-state";
@@ -21,7 +21,7 @@ const TONE_VAR: Record<string, string> = { green: "var(--green)", primary: "var(
  * 바깥 가는 호가 연간 진도율을 다시 한 번 그린다(숫자와 그림이 같은 값).
  */
 export const CurrentPosition = memo(function CurrentPosition({ viewed = false }: { viewed?: boolean }) {
-  const { view, progress, sourceProgress, focus, pace, display } = useProgressMap();
+  const { view, progress, sourceProgress, focus, pace } = useProgressMap();
   const subjectLabel = useSubjectMaps().labelOf("math");
   const c = progress.curriculum;
   const otherYear = view.year !== sourceProgress.year;
@@ -38,11 +38,11 @@ export const CurrentPosition = memo(function CurrentPosition({ viewed = false }:
     return <g className="pointer-events-none select-none" data-clock-center={viewed ? "" : undefined} data-learning-center>
       <circle cx={CX} cy={CY} r={RINGS.center} fill="var(--card)" stroke={HAIRLINE} />
       <circle cx={CX} cy={CY} r={ARC_R} fill="none" stroke="var(--bg-soft)" strokeWidth={ARC_W} />
-      {view.pct > 0 ? <path d={strokeArcPath(ARC_R, 0, view.pct * 3.6)} fill="none" stroke={view.pct === 100 ? "var(--goal)" : "var(--current)"} strokeWidth={ARC_W} /> : null}
+      {metrics.percent != null && metrics.percent > 0 ? <path d={strokeArcPath(ARC_R, 0, metrics.percent * 3.6)} fill="none" stroke={ACTUAL_STROKE} strokeWidth={ARC_W} /> : null}
       <g textAnchor="middle" dominantBaseline="central" fill="var(--foreground)">
-        <text x={CX} y={CY - 88} fontSize={20}>{display === "continuous" ? "연속 12개월" : `${view.year}년 진도`}</text>
-        <text x={CX} y={CY - 40} fontSize={68} fontWeight={700}>{periodPercent(progress, view.pct, view.plannedPages)}</text>
-        <text x={CX} y={CY + 5} fontSize={19}>{periodCount(progress, view.donePages, view.plannedPages)}</text>
+        <text x={CX} y={CY - 88} fontSize={20}>MCS 전체 목표</text>
+        <text x={CX} y={CY - 40} fontSize={68} fontWeight={700}>{periodPercent(progress, metrics.percent ?? 0, metrics.total)}</text>
+        <text x={CX} y={CY + 5} fontSize={19}>{periodCount(progress, metrics.current ?? 0, metrics.total)}</text>
         <text x={CX} y={CY + 43} fontSize={18}>{current?.label.split(",")[0] ?? "현재 진도"}</text>
         <text x={CX} y={CY + 69} fontSize={19} textLength={caption.length > 13 ? 235 : undefined} lengthAdjust="spacingAndGlyphs">{caption}</text>
         <text x={CX} y={CY + 101} fontSize={17}>{paceLabel(pace)}</text>

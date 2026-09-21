@@ -736,6 +736,27 @@ export const SHEET_DICT = {
     en: "Shows what was actually written in that day's weekly sheet under each plan. The signal counts (not written, different book) do not follow this toggle",
   },
   "month.print": { ko: "인쇄", en: "Print" },
+  // 기간 축(EiE 계획서만, 2026-09-21 원장 *"세션으로 뷰가 보일 수 있게 월/세션 전환"*).
+  // 월·세션 라벨은 출석부 날짜축(`att.period.*`)과 같은 말이다 — 같은 뜻을 두 표기로 부르지 않는다.
+  "month.period.aria": { ko: "기간 단위", en: "Period unit" },
+  "month.period.month": { ko: "월", en: "Month" },
+  "month.period.session": { ko: "세션", en: "Session" },
+  "month.period.month.title": {
+    ko: "달력 한 달(1일~말일)로 봅니다",
+    en: "Show the calendar month (1st to the last day)",
+  },
+  "month.period.session.title": {
+    ko: "학원 세션 기간(학원설정 운영 기간)으로 봅니다 — 다음 달 초까지 이어질 수 있습니다",
+    en: "Show the academy session (from the academy settings) — it can run into the next month",
+  },
+  "month.period.noSession": { ko: "세션 미정 · 달력월", en: "No session · by month" },
+  "month.period.noSession.title": {
+    ko: "이 달의 세션 기간이 학원설정에 없어 달력 한 달로 보여 줍니다",
+    en: "This month has no session in the academy settings, so the calendar month is shown",
+  },
+  "month.prevSession": { ko: "이전 세션", en: "Previous session" },
+  "month.nextSession": { ko: "다음 세션", en: "Next session" },
+  "month.currentSession": { ko: "눌러서 이번 세션으로", en: "Click for this session" },
 
   // ── 교재 배정(0266a·0268a) — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 순서대로 들어간다.
   //    🔴 이 화면은 원어민 강사도 연다(담당 슬롯이 있으면 canEdit) — 한국어 리터럴을 파일에 적지 말 것.
@@ -1461,12 +1482,31 @@ export const SHEET_DICT = {
     en: "The student's school and grade (shown compact; hover a value for the full text).",
   },
   // 이 반 몫 청구액. 학생 총액 '청구·납입' 열은 2026-09-17 원장 지시로 없앴다(합계 줄의 청구·납입은 `att.totals.*`).
+  "att.col.unitPrice": { ko: "단가", en: "Price" },
+  "att.col.unitPriceTitle": {
+    ko: "회차 확정에 저장된 단가 및 월 수강료입니다. 서로 다른 확정 단가가 있으면 각각 표시합니다.",
+    en: "Saved confirmed unit prices or monthly tuition. Different confirmed prices are listed separately.",
+  },
+  "att.row.confirmedPrice": { ko: "{price}", en: "{price}" },
+  "att.row.monthlyPrice": { ko: "월 {price}", en: "{price}/mo" },
   "att.col.classBilled": { ko: "청구액", en: "Billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
     en: "This class's billed amount (KRW) for the selected month, from session confirmation allocations or class-name matching",
   },
   "att.row.billingUnconfirmed": { ko: "미확정", en: "Pending" },
+  /* 회차 행이 없는 줄의 두 갈래(원장 2026-09-18 선택): 청구서가 **있으면** '미확정'(회차 확정에서 만들 수 있다), 청구서가 없거나
+     취소됐으면 `—`(만들 곳이 없다) + 이유 카드. 회차 확정 화면의 '청구서 없음'·'청구서 취소'(`TERM_STATE_LABEL`)와 같은 줄이다.
+     ⚠️ `—`는 두 언어가 같은 글자다(기호) — 뜻은 툴팁이 편다. */
+  "att.row.noInvoice": { ko: "—", en: "—" },
+  "att.row.noInvoiceTip": {
+    ko: "이 달 청구서가 없습니다 — 회차 확정 화면에도 '청구서 없음'으로 서고 확정·배분은 잠깁니다.",
+    en: "No bill this month — session confirmation lists this row as 'no bill' and confirming or allocating is locked.",
+  },
+  "att.row.invoiceVoidTip": {
+    ko: "이 달 청구서가 취소(void)됐습니다 — 확정·배분할 수납이 없습니다.",
+    en: "This month's bill was voided — there is no payment to confirm or allocate.",
+  },
   // 월별 출석부 열(원장 2026-09-17) — 출석부에서 센 '수업 차수'와 회차 확정에서 확정한 '등록 차수'를 나란히.
   // ⚠️ 영어 라벨은 **열 폭 안에 들어가는 한 낱말**이다(가드 `name-wiring.test.ts`) — 뜻은 `*Title` 툴팁이 편다.
   "att.col.lessonCount": { ko: "수업 차수", en: "Attended" },
@@ -1476,9 +1516,42 @@ export const SHEET_DICT = {
   },
   // 🔴 `Enrolled`는 원생 상태 '재원'이 쓴다(stu.filter.status.enrolled·cls.card.enrolled) — 등록 차수는 `Reg.`(뜻은 툴팁).
   "att.col.termSessions": { ko: "등록 차수", en: "Reg." },
+  "att.col.actualAmount": { ko: "실수업액", en: "Earned" },
+  "att.col.actualSalary": { ko: "실급여", en: "Net pay" },
+  "att.col.actualSalaryTitle": {
+    ko: "시수 × 단가 × 0.911 × 적용 비율의 합 — 실수업액이 청구액보다 많은 줄은 청구액으로 계산(여럿이 나눠 맡는 반은 이 선생님 몫)",
+    en: "Sum of units × unit price × 0.911 × assigned rate — rows above the bill use the billed amount (this teacher's share on shared classes)",
+  },
+  "att.row.actualSalaryRate": { ko: "시수 × 단가 × 0.911 × {rate}%", en: "Units × unit price × 0.911 × {rate}%" },
+  // 실수업액이 청구액보다 크면 청구액으로 계산한다(원장 2026-09-21 "받은 돈보다 많은 돈을 지급하면 안되기 때문").
+  "att.row.actualSalaryRateCapped": {
+    ko: "청구액 × 0.911 × {rate}% — 실수업액이 청구액보다 많아 청구액으로 계산(여럿이 나눠 맡는 반은 청구액 중 이 선생님 몫)",
+    en: "Billed amount × 0.911 × {rate}% — lessons exceed the bill, so the bill is used (this teacher's share on shared classes)",
+  },
+  "att.row.actualSalaryUnavailable": { ko: "단가·정규/특강의 학년별 비율을 확인해 주세요", en: "Check the unit price and grade-level rate for regular/special lessons" },
+  "att.col.actualAmountTitle": { ko: "확정 단가 × 수업 차수", en: "Confirmed unit price × attended units" },
+  "att.row.actualAmountUnavailable": { ko: "회당 단가가 확정된 경우 계산합니다. 월 정액·일수 기준·복수 단가는 계산하지 않습니다.", en: "Requires one confirmed per-unit price. Monthly fees, day-based prices and multiple prices cannot be multiplied by lesson units." },
+  "att.columns.toggle": { ko: "보기 옵션", en: "View options" },
+  "att.columns.all": { ko: "모두 표시", en: "Show all columns" },
+  // 실급여 열 토글(원장 2026-09-21) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
+  "att.actualSalary.toggle": { ko: "실급여 보이기", en: "Show net pay" },
+  "att.actualSalary.saveFailed": { ko: "실급여 보이기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the net pay setting. Please try again." },
+  "att.actualSalary.toggleTitle": {
+    ko: "체크하면 이 선생님 출석부에 실급여 열이 섭니다. 설정은 계정에 저장됩니다.",
+    en: "Adds a net pay column to this teacher's sheet. Saved to your account.",
+  },
   "att.col.termSessionsTitle": {
-    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다.",
-    en: "Sessions confirmed in billing. Shown as unconfirmed until then.",
+    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 영어는 교시 담당별로 배분하며 EiE는 각 요일 4회 기준입니다. 배분 후 남는 시수는 담임에게 배분합니다. 확정 전에는 '미확정', 그 달 청구서가 없거나 취소됐으면 '—'로 보입니다.",
+    en: "Sessions confirmed in billing, allocated by scheduled teacher. EiE counts each weekday four times. Remaining units go to the homeroom teacher. Unconfirmed until billing confirmation; '—' if the bill is missing or voided.",
+  },
+  "att.row.teacherShare": {
+    ko: "반 전체 등록 {total} 중 이 선생님 담당 {own} · 교시별 배분 후 남는 시수는 담임에게 배분",
+    en: "Teacher's share: {own} of {total} registered for the class. Remaining units after scheduled allocation go to homeroom.",
+  },
+  "att.row.allocationPending": { ko: "배분 확인", en: "Check share" },
+  "att.row.allocationPendingTip": {
+    ko: "확정 등록 시수가 교시별 배분 합계보다 적거나, 남는 시수를 받을 담임이 지정되지 않아 배분을 확인해야 합니다.",
+    en: "Check the allocation: confirmed registration is below the scheduled total, or no homeroom teacher is designated to receive the remaining units.",
   },
   // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
   "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },
@@ -1520,6 +1593,21 @@ export const SHEET_DICT = {
   // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
   "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
   "att.legend": { ko: "범례", en: "Legend" },
+  "att.units.guide": { ko: "시수 기준", en: "Lesson units" },
+  "att.units.math": {
+    ko: "수학: 1시간 수업 = 0.5, 2시간 수업 = 1, 3시간 수업 = 1.5",
+    en: "Math: 1 hour = 0.5, 2 hours = 1, 3 hours = 1.5",
+  },
+  "att.units.eie": {
+    ko: "브릿지(40분 교시 기준) 및 EiE: 40분 수업 = 1, 60분 수업 = 1.5",
+    en: "Bridge (40-minute periods) & EiE: 40 minutes = 1, 60 minutes = 1.5",
+  },
+  "att.units.injaewon": {
+    ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3 (50분 교시도 1시간)",
+    en: "Injaewon: 1 hour = 1, 2 hours = 2, 3 hours = 3 (a 50-minute period counts as 1 hour)",
+  },
+  "att.range.title": { ko: "선택한 {n}칸 출결·색상", en: "Attendance & color for {n} cells" },
+  "att.range.keepUnits": { ko: "각 셀의 기존 시수는 유지합니다.", en: "Each cell keeps its existing units." },
   "att.legend.classDay": { ko: "등원요일", en: "Class day" },
   /* 🔴 2026-09-14: 범례가 **격자에 실제로 나오는 칠을 전부** 세운다(원장 *"이런 미등원도 범례 추가"* →
      캡처를 더 보내며 *"이런것들"*). 그전엔 등원요일·주말 둘뿐이라 회색(미등원)·빗금(남의 교시)·
@@ -3140,8 +3228,36 @@ export const SHEET_DICT = {
   },
   "os.c.makeupAddedUnits": { ko: "{name} (보강) 추가됨 — 수업타임 {units}", en: "{name} (makeup) added — class units {units}" },
   "os.c.makeupAddedNoAnchor": {
-    ko: "{name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).",
-    en: "{name} (makeup) added — the class filter is on 'All', so nothing was written to the attendance sheet (pick a class and it is recorded too).",
+    ko: "{name} (보강) 추가됨 — 기록할 반이 정해지지 않아 출결에는 남기지 않았습니다(반 필터로 반 하나를 고르면 함께 기록됩니다).",
+    en: "{name} (makeup) added — no class was set, so nothing was written to the attendance sheet (pick one class in the filter and it is recorded too).",
+  },
+  "os.c.makeupAddedNoHost": {
+    ko: "{name} (보강) 추가됨 — '반 없이'라 지금은 출결을 적지 않았습니다(보고서를 저장할 때 선생님 반에 이 학생 칸이 없으면 보강 반에 기록됩니다).",
+    en: "{name} (makeup) added — 'No class' was picked, so nothing was written now (when the report is saved, it goes to the makeup class unless your class already has this student that day).",
+  },
+  "os.c.makeupCandidateChanged": {
+    ko: "창을 연 사이 {target} 출결이 바뀌었습니다 — 보강을 다시 추가해 주세요",
+    en: "{target} attendance changed while the window was open — add the makeup again",
+  },
+  "os.c.makeupShownUnder": {
+    ko: "새로고침하면 이 보강은 시수를 얹은 {target} 반 아래에 보입니다.",
+    en: "After refreshing, this makeup appears under {target}, where the units were added.",
+  },
+  "os.c.makeupShownUnderAll": {
+    ko: "새로고침하면 이 보강은 {target} 반으로 옮겨 가는데, 그 반은 오늘 수업 칩에 없어 '전체'에서 보입니다.",
+    en: "After refreshing, this makeup moves to {target}, which has no class chip today — find it under 'All'.",
+  },
+  "os.c.removeMakeupRegularLine": {
+    ko: "저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 삭제됩니다. {cls} 정규 칸에 얹은 보강 시수·메모는 남으니 필요하면 출석부에서 고쳐 주세요.",
+    en: "The saved makeup report and the progress recorded for that lesson are deleted. The makeup units and notes added to the {cls} regular cell stay — fix them in the attendance sheet if needed.",
+  },
+  "os.c.makeupHostGone": {
+    ko: "수업 목록이 바뀌었습니다 — 기록할 수업을 다시 골라 주세요",
+    en: "The class list changed — pick the class again",
+  },
+  "os.c.makeupRowExistsNoChange": {
+    ko: "이미 보강 행이 있어 이번 선택(수업·시수·결석분)은 반영하지 않았습니다 — 바꾸려면 보강 빼기 후 다시 추가해 주세요",
+    en: "A makeup row already exists, so this choice (class, units, absence) was not applied — remove the makeup and add it again to change it",
   },
   "os.c.cardNotFound": {
     ko: "학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요",
@@ -3602,6 +3718,11 @@ export const SHEET_DICT = {
   "sync.failed": { ko: "동기화 실패", en: "Sync failed" },
   "sync.ago": { ko: "동기화 {when}", en: "Synced {when}" },
   "sync.issue": { ko: "· 확인 필요", en: "· needs a look" },
+  "sync.details": { ko: "상세 확인", en: "View details" },
+  "sync.detailsTitle": { ko: "동기화 확인 사항", en: "Sync issues" },
+  "sync.openSettings": { ko: "학원 설정 → 연동에서 확인", en: "Open Academy settings → Integrations" },
+  "sync.askManager": { ko: "관리자에게 학원 설정 → 연동에서 확인을 요청하세요.", en: "Ask an administrator to check Academy settings → Integrations." },
+  "sync.invoiceGuide": { ko: "학생 미매칭은 이름·학년·중복 원생을 확인해야 합니다. 이 문제로 가져오지 못한 수납은 ‘마지막 동기화에 없던 청구’ 목록에 포함되지 않습니다.", en: "For unmatched students, check names, grades and duplicate records. Payments that could not be imported are not included in the list of previously saved invoices missing from the latest sync." },
   "sync.title": { ko: "makeedu 동기화: {when}", en: "makeedu sync: {when}" },
   "sync.titleRows": { ko: " · 신규 {n}건", en: " · {n} new" },
   "sync.titleIssue": { ko: "\n확인 필요: {issue}", en: "\nNeeds a look: {issue}" },

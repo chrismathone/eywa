@@ -6,6 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { normalizeTermNote, TERM_NOTE_MAX } from "../term-note";
+import { isVirtualTermId } from "../month-roster";
 
 /**
  * 회차 확정 표의 메모(특이사항) 저장 — 원장 2026-09-17 *"메모(특이사항) … 없는 건 추가"*.
@@ -20,6 +21,8 @@ export async function updateSessionTermNote(id: string, raw: string): Promise<{ 
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
   if (!id) return { error: "대상이 없습니다" };
+  // 회차 행이 없는 줄(가상 id) — 메모를 적을 행이 아직 없다(화면도 그 칸을 잠근다). uuid 열에 그대로 보내지 않는다.
+  if (isVirtualTermId(id)) return { error: "아직 회차 행이 없는 줄입니다 — 시수를 확정하거나 수납을 배분하면 메모를 적을 수 있습니다" };
   const note = normalizeTermNote(raw);
   if (note !== null && note.length > TERM_NOTE_MAX) return { error: `메모는 ${TERM_NOTE_MAX}자까지 적을 수 있습니다` };
 

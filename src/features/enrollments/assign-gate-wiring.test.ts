@@ -51,3 +51,30 @@ describe("반 이동이 휴원 표식을 승계한다(0228a)", () => {
     expect(old).not.toContain("on_hold");
   });
 });
+
+describe("단체 배정도 같은 게이트를 지난다(원장 2026-09-18)", () => {
+  const actions = read("src/features/enrollments/server/actions.ts");
+  const bulk = read("src/features/enrollments/server/bulk-assign-actions.ts");
+
+  it("권한·재원생 판정을 한 명 배정과 같게 — 판정이 insert 앞에 있다", () => {
+    expect(bulk).toContain('canManageTenant(user.systemRole, "classes")');
+    expect(bulk).toContain('canManageTenant(user.systemRole, "students")');
+    const gate = bulk.indexOf("enrollmentAssignBlockReason(statusOf.get(studentId)");
+    const insert = bulk.indexOf('.from("enrollments")\n      .insert(');
+    expect(gate).toBeGreaterThan(-1);
+    expect(insert).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(insert);
+  });
+
+  it("학생 상태는 청크로 읽는다(B3) · 등원 요일·겹침 안내는 한 명 배정과 같은 도우미", () => {
+    expect(bulk).toContain("fetchInChunks(studentIds");
+    expect(bulk).toContain("normalizeAttendanceDays(supabase, classId, pickedDays)");
+    expect(bulk).toContain("describeOverlapConflict(supabase, studentId, classId, startDate, endDate)");
+    expect(actions).toContain('from "./assign-helpers"');
+  });
+
+  it("들어간 학생마다 감사로그 — 한 명 배정과 같은 키", () => {
+    expect(bulk).toContain('action: "enrollment_assign"');
+    expect(bulk).toContain("done.map((r) =>\n        logAction(");
+  });
+});

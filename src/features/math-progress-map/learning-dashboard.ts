@@ -1,4 +1,5 @@
-import type { LearningGoal, LearningProgress, LearningRecord } from "@/features/math-sheets/lib/learning-plan";
+import type { LearningContext, LearningGoal, LearningProgress, LearningRecord } from "@/features/math-sheets/lib/learning-plan";
+import { learningClassDates } from "@/features/math-sheets/lib/learning-class-dates";
 import type { LearningMap, LearningMapLesson } from "./learning-map";
 import type { DailyProgress, ProgressYear, RoadmapStep, StudentProgress } from "./model";
 import { MATH_CURRICULUM } from "@/features/onescreen/curriculum";
@@ -10,7 +11,7 @@ export const unitOfLesson = (lesson: LearningMapLesson) => units.get(`${lesson.g
 
 /** Adapt the canonical lesson ledger to all three existing maps. Never synthesize pages or teaching days. */
 export function buildLearningDashboard(student: { studentId: string; name: string; grade: string | null },
-  goal: LearningGoal, progress: LearningProgress, records: LearningRecord[], map: LearningMap): StudentProgress {
+  goal: LearningGoal, progress: LearningProgress, records: LearningRecord[], map: LearningMap, context?: LearningContext): StudentProgress {
   const byDate = new Map<string, LearningMapLesson[]>();
   for (const lesson of map.lessons) {
     if (!lesson.inGoal || !lesson.calendarDate) continue;
@@ -34,7 +35,9 @@ export function buildLearningDashboard(student: { studentId: string; name: strin
   const year = Number(map.referenceDate.slice(0, 4));
   const years: ProgressYear[] = map.years.map(year => {
     const dailyProgress = daily.filter(day => day.date.startsWith(`${year}-`));
-    return { year, dailyProgress, yearPlan: Array.from({ length: 12 }, (_, i) => i + 1).flatMap(month => {
+    const calendar = context ? { daysOff: context.holidays,
+      classDates: context.schedules.length ? learningClassDates(student.studentId, context, `${year}-01-01`, `${year}-12-31`) : undefined } : undefined;
+    return { year, dailyProgress, calendar, yearPlan: Array.from({ length: 12 }, (_, i) => i + 1).flatMap(month => {
       const prefix = `${year}-${String(month).padStart(2, "0")}`;
       const lessons = map.lessons.filter(lesson => lesson.inGoal && lesson.calendarDate?.startsWith(prefix));
       if (!lessons.length) return [];

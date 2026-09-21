@@ -1,0 +1,27 @@
+{
+  "referencePalette": {
+    "week": "#174481",
+    "dayCompleted": "#cfe4d9",
+    "quarters": [
+      "#5f89da",
+      "#4a9972",
+      "#b38147",
+      "#917cd6"
+    ],
+    "center": "#0d7743"
+  },
+  "visibleWeekdays": [
+    "2026-09-14",
+    "2026-09-17"
+  ],
+  "withMakeup": [
+    "2026-09-14",
+    "2026-09-17",
+    "2026-09-19"
+  ],
+  "makeupReversible": true,
+  "actualCountUnchanged": 21,
+  "goalCountUnchanged": 35,
+  "mobileOverflow": 0,
+  "errors": []
+}

@@ -43,9 +43,9 @@ export function formatUnitsWithSuffix(units: number, suffix: AttendanceUnitSuffi
  */
 export function attendanceUnitsDiff(
   attended: number,
-  term: { units: number; daysBasis?: boolean } | null | undefined,
+  term: { units: number; daysBasis?: boolean; allocationPending?: boolean } | null | undefined,
 ): number | null {
-  if (!term || term.daysBasis) return null;
+  if (!term || term.daysBasis || term.allocationPending) return null;
   // 0.1 단위 값들이라 부동소수 꼬리(4.699999…)를 자른다.
   return Math.round((attended - term.units) * 10) / 10;
 }

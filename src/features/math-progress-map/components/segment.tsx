@@ -26,6 +26,7 @@ export function Segment({
   target,
   onSelect,
   focusable = true,
+  disabled = false,
   className = "",
 }: {
   d: string;
@@ -41,12 +42,13 @@ export function Segment({
   onSelect?: () => void;
   /** Tab 정지 여부 — 하루 눈금 ≈250개는 클릭·마우스 오버만 받고 Tab 순서에선 뺀다(같은 날은 일간 링·상세 목록에서 고른다). */
   focusable?: boolean;
+  disabled?: boolean;
   className?: string;
 }) {
   const hover = useContext(HoverCtx);
   if (!d) return null;
   const onKey = (e: KeyboardEvent<SVGPathElement>) => {
-    if (!onSelect) return;
+    if (disabled || !onSelect) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onSelect();
@@ -64,18 +66,19 @@ export function Segment({
         strokeWidth={selected ? SELECTION_STROKE_WIDTH : strokeWidth}
         strokeDasharray={!selected && dashed ? "6 4" : undefined}
         strokeLinejoin="round"
-        role={onSelect ? "button" : undefined}
-        tabIndex={onSelect ? (focusable ? 0 : -1) : undefined}
+        role={!disabled && onSelect ? "button" : undefined}
+        tabIndex={!disabled && onSelect ? (focusable ? 0 : -1) : undefined}
         aria-label={label}
-        aria-pressed={onSelect ? selected : undefined}
-        className={`outline-none transition-[fill,opacity] duration-200 motion-reduce:transition-none hover:brightness-110 focus-visible:stroke-primary focus-visible:[stroke-width:3] ${
-          onSelect ? "pointer-events-auto cursor-pointer" : ""
+        aria-disabled={disabled || undefined}
+        aria-pressed={!disabled && onSelect ? selected : undefined}
+        className={`outline-none transition-[fill,opacity] duration-200 motion-reduce:transition-none ${disabled ? "pointer-events-none" : "hover:brightness-110 focus-visible:stroke-primary focus-visible:[stroke-width:3]"} ${
+          !disabled && onSelect ? "pointer-events-auto cursor-pointer" : ""
         } ${className}`}
-        onClick={onSelect}
-        onKeyDown={onKey}
-        onPointerEnter={(e) => hover(target, e)}
-        onPointerMove={(e) => hover(target, e)}
-        onPointerLeave={() => hover(null)}
+        onClick={disabled ? undefined : onSelect}
+        onKeyDown={disabled ? undefined : onKey}
+        onPointerEnter={disabled ? undefined : (e) => hover(target, e)}
+        onPointerMove={disabled ? undefined : (e) => hover(target, e)}
+        onPointerLeave={disabled ? undefined : () => hover(null)}
       />
     </>
   );

@@ -31,8 +31,18 @@ export function normalizeMonth(raw: string | null | undefined, fallbackMonth: st
 /** 그 달의 모든 날짜(YYYY-MM-DD, 오름차순). */
 export function monthDates(month: string): string[] {
   const { from, to } = monthRange(month);
+  return rangeDates(from, to);
+}
+
+/**
+ * 기간(양끝 포함)의 모든 날짜 — **세션 창**(0189a, 라벨월을 넘어갈 수 있다)도 같은 함수로 편다.
+ * ⚠️ 깨진 입력(시작 > 끝·모양 아님)은 빈 배열 — 무한 루프 대신 "그릴 날 없음"으로 떨어진다.
+ *    세션이 아무리 길어도 두 달을 넘지 않으므로 400일 상한은 안전장치일 뿐이다.
+ */
+export function rangeDates(from: string, to: string): string[] {
   const out: string[] = [];
-  for (let d = from; d <= to; d = shiftDays(d, 1)) out.push(d);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return out;
+  for (let d = from, guard = 0; d <= to && guard < 400; d = shiftDays(d, 1), guard++) out.push(d);
   return out;
 }
 
@@ -50,8 +60,20 @@ export type MonthWeek = {
  * 옆 달 날짜까지 그리면 "지난달 계획"이 이 달 화면에 섞인다.
  */
 export function monthWeeks(month: string): MonthWeek[] {
+  return weeksOfDates(monthDates(month));
+}
+
+/**
+ * 기간을 덮는 주 목록 — `monthWeeks`의 일반형. 세션 창(9/1~9/30 · 10/1~11/2)도 같은 규칙으로 주를 세운다:
+ * 각 주는 **창 안의 날짜만** 담고, 창 밖 날짜는 빈 칸이다(옆 세션 계획이 이 문서에 섞이지 않게).
+ */
+export function rangeWeeks(from: string, to: string): MonthWeek[] {
+  return weeksOfDates(rangeDates(from, to));
+}
+
+function weeksOfDates(dates: readonly string[]): MonthWeek[] {
   const byMonday = new Map<string, string[]>();
-  for (const date of monthDates(month)) {
+  for (const date of dates) {
     const monday = mondayOf(date);
     const list = byMonday.get(monday);
     if (list) list.push(date);
@@ -74,13 +96,15 @@ export function activeDowsOf(dates: Iterable<string>): DowKey[] {
 }
 
 /**
- * 주 행 × 요일 열 격자에서 한 칸의 날짜. 그 달 밖이면 `null`(빈 칸으로 그린다).
- * 🔴 `dates`에서 찾는 게 아니라 **월요일 + 요일 오프셋**으로 계산한다 — 수업이 없는 날도 칸은
- *    있어야 열이 어긋나지 않는다(그 칸은 "수업 없음"으로 그린다).
+ * 주 행 × 요일 열 격자에서 한 칸의 날짜. 보는 기간(달 또는 세션 창) 밖이면 `null`(빈 칸으로 그린다).
+ * 🔴 **월요일 + 요일 오프셋**으로 계산한다 — 수업이 없는 날도 칸은 있어야 열이 어긋나지 않는다
+ *    (그 칸은 "수업 없음"으로 그린다).
+ * 🔑 기간 안인지는 **그 주가 담은 날짜**로 본다(`monthWeeks`·`rangeWeeks`가 기간 안의 날만 담는다) —
+ *    달(`YYYY-MM`) 접두로 보면 달을 넘는 세션 창(10/1~11/2)의 11/2가 빈 칸이 된다(2026-09-21).
  */
-export function cellDateOf(week: MonthWeek, dow: DowKey, month: string): string | null {
+export function cellDateOf(week: MonthWeek, dow: DowKey): string | null {
   const offset = DOW_ORDER.indexOf(dow);
   if (offset < 0) return null;
   const date = shiftDays(week.monday, offset);
-  return date.slice(0, 7) === month ? date : null;
+  return week.dates.includes(date) ? date : null;
 }

@@ -15,7 +15,10 @@ export function learningMapFixture() {
     { date: "2026-09-14", progress: "중2 · 내신대비", textbook: "내신 교재", homework: "오답 정리" },
   ];
   const progress = buildLearningProgress(goal, context, records, "2026-09-18");
-  progress.history = buildLearningHistory(goal, progress, records, "2025-01-01", "2026-09-18");
+  // 화면 테스트는 긴 구간(현재 학기 두 학기 앞부터 155차시)을 쓴다 — 시작 차시를 모르는 상태(start: null)로 둔다.
+  // 🔴 실제 규칙은 "등록 이후 첫 기록부터"다(원장 2026-09-21) — 이 학생이면 이등변삼각형의 성질부터 98차시.
+  //    그 규칙은 learning-history.test와 learning-map.test '오래 다닌 학생도 첫 기록에서' 테스트가 따로 잠근다.
+  progress.history = { ...buildLearningHistory(goal, progress, records, "2025-01-01", "2026-09-18"), start: null };
   return { goal, progress, context, records,
     student: { studentId: goal.studentId, name: "검증 학생", grade: "중2", school: "학교" },
     classId: "00000000-0000-0000-0000-000000000002", className: "검증 반", month: "2026-09" };

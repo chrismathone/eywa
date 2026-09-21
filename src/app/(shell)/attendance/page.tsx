@@ -23,7 +23,14 @@ import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMa
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
 import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worker-queries";
 import { classWorkerLabel } from "@/features/attendance/class-worker";
-import { getAttendanceClassBilledAmounts } from "@/features/attendance/server/class-billing";
+import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling } from "@/features/attendance/server/class-billing";
+import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
+import { canShowAttendanceActualAmount } from "@/features/attendance/server/actual-amount-access";
+import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
+import { SalaryRatesButton } from "./_components/salary-rates-button";
+import { ActualSalaryToggle } from "./_components/actual-salary-toggle";
+import { UnitsMasterButton } from "./_components/units-master-button";
+import { canViewUnitsMaster } from "@/features/attendance/server/units-master";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
@@ -477,17 +484,65 @@ export default async function AttendancePage({
   const workerClassIds = (
     mode === "teacher" ? teacherClasses.map((c) => c.id) : effectiveClassId ? [effectiveClassId] : []
   ).filter(Boolean);
-  const [workers, classBilledAmounts] = await Promise.all([
+  /**
+   * 청구 조회에 넘기는 **담당 반**의 학생×반 — 청구액·등록 차수·「단가」·청구서 상태가 **같은 목록**에서 나온다.
+   * 보강 묶음(`makeupGroup`, 아래)의 줄은 따로 읽어 합친다(`loadMakeupPool` → `billingRoster`).
+   */
+  const homeBillingRoster =
+    mode === "teacher"
+      ? teacherClasses.map((c, i) => ({ classId: c.id, studentIds: teacherMatrices[i]!.students.map((s) => s.id) }))
+      : effectiveClassId
+        ? [{ classId: effectiveClassId, studentIds: matrix.students.map((s) => s.id) }]
+        : [];
+  /**
+   * 보이지 않는 '보강' 반 — 찾기 → 명단(격자) → 그 명단의 청구 판정을 **한 사슬**로 묶어 담당 반 조회와 **나란히** 돌린다(B4).
+   * 🔑 보강 반의 청구는 명단이 정해진 뒤에야 물을 수 있어 **두 번째 조회**다. 담당 반 청구 조회를 이 사슬 뒤로 미루지 않으려고
+   *    따로 뒀다(출석부는 강사 전원이 매일 여는 화면이다).
+   * 🔑 청구 판정을 받는 이유(2026-09-18): 회차 확정 화면은 보강 반 줄도 세우고 확정·'청구서 없음'까지 판정한다(`loadMonthRoster`).
+   *    여기서 빼 두면 그 줄은 확정한 뒤에도 '미확정', 청구서가 없어도 `—`가 아니라 '미확정'으로 남았다.
+   * ⚠️ 반별 보기·보강 반이 없는 강사·명단이 빈 보강 반은 청구 조회를 **하지 않는다**(종전과 같은 왕복 수).
+   * 🔴 `allowClassIds`엔 **여기서 스스로 푼** id(`findMakeupPoolClass(user.tenantId, effectiveTeacher)`)만 넘긴다 — 쿼리 문자열·폼 값
+   *    같은 클라 입력으로 채우지 말 것(강사 축 밖 반의 청구액을 읽는 뒷문이 된다). 서버도 보강 반인지 DB로 다시 확인한다.
+   * 묶음을 그리는 규약은 아래 `makeupGroup` 주석.
+   */
+  const loadMakeupPool = async () => {
+    const makeupPoolClassId =
+      mode === "teacher" && effectiveTeacher ? await findMakeupPoolClass(user.tenantId, effectiveTeacher) : null;
+    const poolMatrix = makeupPoolClassId
+      ? await getMonthlyAttendanceMatrix(month, makeupPoolClassId, "month", null, null, makeupPoolClassId)
+      : null;
+    if (!makeupPoolClassId || !poolMatrix || poolMatrix.students.length === 0) {
+      return { classId: makeupPoolClassId, matrix: poolMatrix, roster: null, billing: null };
+    }
+    const roster = { classId: makeupPoolClassId, studentIds: poolMatrix.students.map((s) => s.id) };
+    const billing = await getAttendanceClassBilledAmounts(month, [roster], { allowClassIds: [makeupPoolClassId] });
+    return { classId: makeupPoolClassId, matrix: poolMatrix, roster, billing };
+  };
+  const [workers, homeBilling, makeupPool, showActualAmount, salaryConfig] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
-    getAttendanceClassBilledAmounts(
-      month,
-      mode === "teacher"
-        ? teacherClasses.map((c, i) => ({ classId: c.id, studentIds: teacherMatrices[i]!.students.map((s) => s.id) }))
-        : effectiveClassId
-          ? [{ classId: effectiveClassId, studentIds: matrix.students.map((s) => s.id) }]
-          : [],
-    ),
+    getAttendanceClassBilledAmounts(month, homeBillingRoster, {
+      teacherScope: (mode === "teacher" ? effectiveTeacher : classScopeTeacher) ? {
+        teacherId: (mode === "teacher" ? effectiveTeacher : classScopeTeacher)!,
+        classIds: classesForSubject.filter((c) => attendanceUnitSuffix(c.subject, operations.subjects) === "U").map((c) => c.id),
+        holidays: Object.keys(buildHolidayMap(operations.holidays)),
+        homeroomSinceByClass: mode === "teacher" ? Object.fromEntries(sinceByClass) : effectiveClassId && classScopeTeacher && homeroomSinceIdx
+          ? { [effectiveClassId]: homeroomSinceOf(homeroomSinceIdx, effectiveClassId, classScopeTeacher) } : {},
+      } : undefined,
+    }),
+    loadMakeupPool(),
+    canShowAttendanceActualAmount(mode === "teacher" ? effectiveTeacher : classScopeTeacher ?? classesForSubject.find((c) => c.id === effectiveClassId)?.teacherId ?? null),
+    getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : null),
   ]);
+  /** 청구 판정을 받은 **모든** 학생×반(담당 반 + 명단이 있는 보강 반) — `—` 줄 판정과 표의 청구 칸이 같은 목록·같은 판정을 본다. */
+  const billingRoster = makeupPool.roster ? [...homeBillingRoster, makeupPool.roster] : homeBillingRoster;
+  const classBilledAmounts = makeupPool.billing
+    ? mergeAttendanceClassBilling(homeBilling, makeupPool.billing)
+    : homeBilling;
+  /**
+   * '미확정' 대신 `—`로 적을 줄 — 그 달 청구서가 없거나 취소된 학생의 줄(원장 2026-09-18 선택). 청구서는 있는데 회차 행만 없는
+   * 줄은 종전 '미확정'(회차 확정에서 만들 수 있다). 판정 = 순수 `attendanceNoInvoiceRows`(회차 확정 화면과 같은 갈래).
+   */
+  const noInvoiceRows = attendanceNoInvoiceRows(billingRoster, classBilledAmounts.invoiceStateByStudent);
   const workerOf = (classId: string) => {
     const w = workers.get(classId) ?? null;
     return { workerLabel: classWorkerLabel(w, lang), workerSource: w?.source ?? null };
@@ -537,24 +592,19 @@ export default async function AttendancePage({
    *    "어디에도 안 보이게" 하는 장치다. 출석부만 이렇게 **일부러** 불러온다.
    * ⚠️ 보강을 한 적 없는 강사는 반 자체가 없어(lazy 생성) 묶음도 안 선다 — 정상이다.
    * ⚠️ 반별 보기(mode !== "teacher")엔 안 붙인다. 그 화면은 고른 반의 책이라 남의 보강이 낄 자리가 아니다.
+   * 🔗 조회(반 찾기·명단·청구 판정)는 위 `loadMakeupPool`이 담당 반 청구 조회와 나란히 한다 — 청구액·등록 차수·`—` 줄도
+   *    담당 반과 같은 판정을 받는다(2026-09-18, 회차 확정 화면이 이 줄을 확정·'청구서 없음'으로 판정하므로).
    */
-  const makeupPoolClassId =
-    mode === "teacher" && effectiveTeacher
-      ? await findMakeupPoolClass(user.tenantId, effectiveTeacher)
-      : null;
-  const makeupPoolMatrix = makeupPoolClassId
-    ? await getMonthlyAttendanceMatrix(month, makeupPoolClassId, "month", null, null, makeupPoolClassId)
-    : null;
   const makeupGroup: MatrixGroup | null =
-    makeupPoolMatrix && makeupPoolMatrix.students.length > 0
+    makeupPool.classId && makeupPool.matrix && makeupPool.matrix.students.length > 0
       ? {
-          classId: makeupPoolClassId!,
+          classId: makeupPool.classId,
           // 🔴 이 묶음 이름은 반 이름이 아니라 **출결 상태 '보강'과 같은 낱말**이다 —
           //    그래서 반 이름 표기표가 아니라 출결 라벨 단일 소스를 읽는다(두 화면이 같은 말을 쓴다).
           className: attendanceLabelOf("makeup", lang) ?? MAKEUP_POOL_PREFIX,
           // 과목 라벨은 비운다 — 이 묶음은 한 과목이 아니다(그 강사가 한 보강 전부가 여기 모인다).
           subjectLabel: "",
-          matrix: makeupPoolMatrix,
+          matrix: makeupPool.matrix,
         }
       : null;
 
@@ -666,6 +716,40 @@ export default async function AttendancePage({
   // 결석 통보 접수(2026-08-19) — 남의 반 칸까지 한 번에 만드는 조작이라 **사무실(full)만**.
   // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.
   const canIntakeAbsence = await canManageTenant(user.systemRole, "attendance");
+  /**
+   * 🔴 상단은 **툴바 한 줄 + 표 위 한 줄**이다(원장 2026-09-21 *"상단에 굳이 2열로 두지말고 하나의 열로 공간 확보"*).
+   * 실측(1,990px 창): 툴바 왼쪽 묶음 1,453px + 오른쪽 묶음 854px가 한 줄(1,968px)을 넘어 오른쪽이 통째로 둘째 줄로
+   * 떨어졌다. 그래서 **표가 서 있을 때는** 도구(결석 통보 접수·급여명세서)와 칸 안내(`칸 = 이 선생님 교시`)를 표 위
+   * 줄(범례·보기 옵션 줄)로 내린다 — 툴바에는 이동·필터와 살아 있는 합계만 남는다(1,908px).
+   * ⚠️ 표가 없을 때(허브·빈 반)는 표 위 줄 자체가 없으므로 종전대로 툴바에 둔다(버튼이 사라지면 안 된다).
+   */
+  const gridShown = allGroups.length > 0 && totalStudents > 0;
+  // 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼.
+  // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
+  // 면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만.
+  const sheetTools =
+    canIntakeAbsence || (canOpenPayslip && effectiveTeacher) ? (
+      <>
+        {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
+        {canOpenPayslip && effectiveTeacher ? (
+          <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
+        ) : null}
+      </>
+    ) : null;
+  // 🔴 이 칸 안내는 **접히면 안 된다** — 강사 전체 보기는 칸 숫자를 그 선생님 교시로 좁혀 그리므로
+  // (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
+  // ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. '안내'는 `<details>`라
+  // 기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다.
+  // 표가 서면 범례 줄 맨 앞(칸의 뜻을 말하는 자리라 범례와 같은 줄이 맞다), 아니면 툴바.
+  const scopeChip =
+    (mode === "teacher" || classScopeTeacher) && allGroups.length > 0 ? (
+      <span
+        className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
+        title={sheetT(lang, isTeacherView ? "att.scopeChip.titleOwn" : "att.scopeChip.title")}
+      >
+        {sheetT(lang, "att.scopeChip")}
+      </span>
+    ) : null;
 
   /**
    * 허브(강사 미선택)로 열렸는데 **씨앗이 이미 있으면** 첫 렌더에 결과까지 준다 — 입력칸에 이름만
@@ -682,7 +766,7 @@ export default async function AttendancePage({
   /**
    * 강사 전체 보기의 주인 — 저장이 **그 강사 몫 교시에만** 시수를 나누게 서버에 알린다(원장 제보 2026-09-11:
    * *"새로고침하면 강제로 어떤 숫자로 롤백"*). 칸 값이 `effectiveTeacher` 스코프로 계산된 반(`teacherMatrices`)만
-   * 싣는다 — 보강 묶음(`makeupPoolMatrix`)은 스코프 없이 그려지므로 넣지 않는다(화면과 저장이 같은 판정을 쓰게).
+   * 싣는다 — 보강 묶음(`makeupPool.matrix`)은 스코프 없이 그려지므로 넣지 않는다(화면과 저장이 같은 판정을 쓰게).
    * ⚠️ 클라가 보내는 건 "어느 보기인가"뿐이다 — 몫은 서버가 DB로 다시 판정한다(#77).
    */
   const attendanceScope =
@@ -988,25 +1072,9 @@ export default async function AttendancePage({
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-3 [&>button]:shrink-0">
-          {/* 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼. */}
-          {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
-          {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
-              면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만. */}
-          {canOpenPayslip && effectiveTeacher ? (
-            <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
-          ) : null}
-          {/* 🔴 이 한 줄은 **접히면 안 된다** — 강사 전체 보기는 칸 숫자를 그 선생님 교시로 좁혀 그리므로
-              (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
-              ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
-              기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
-          {(mode === "teacher" || classScopeTeacher) && allGroups.length > 0 ? (
-            <span
-              className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
-              title={sheetT(lang, isTeacherView ? "att.scopeChip.titleOwn" : "att.scopeChip.title")}
-            >
-              {sheetT(lang, "att.scopeChip")}
-            </span>
-          ) : null}
+          {/* 도구·칸 안내 — 표가 서 있으면 표 위 줄로 내려간다(위 `gridShown` 주석). */}
+          {!gridShown ? sheetTools : null}
+          {!gridShown ? scopeChip : null}
           {allGroups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (
             // `<details>`라 클라 JS가 없다. 패널은 absolute라 열려도 격자를 밀어내지 않는다(높이 0 유지).
@@ -1082,10 +1150,6 @@ export default async function AttendancePage({
               읽히고, 그 색의 뜻은 이 범례가 말한다(`att.legend.holiday`).
               🔴 휴일 이름 줄을 되살리지 말 것 — 되살리려면 원장 확인이 먼저다.
               오늘 칩은 격자에 **오늘 열이 있을 때만**(지난·다음 달엔 남색 머리가 없다) — 표와 같은 `visibleDays`로 판정. */}
-          <AttendanceLegend
-            lang={lang}
-            showToday={visibleDays.some((d) => d.isToday)}
-          />
           <MatrixTable
             groups={allGroups}
             days={visibleDays}
@@ -1093,8 +1157,35 @@ export default async function AttendancePage({
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
             classBilledAmounts={classBilledAmounts.billed}
+            showActualAmount={showActualAmount}
+            // 🔴 실급여 열은 **'실급여 보이기'를 켰을 때만**(원장 2026-09-21) — 꺼 두면 급여 값을 아예 싣지 않는다
+            //    (화면에서 감추는 게 아니라 서버가 안 보낸다). 권한 판정(salaryConfig)은 종전 그대로.
+            salaryRates={viewPrefs.showActualSalary ? salaryConfig?.rates : undefined}
+            salaryView={!!salaryConfig}
+            optionsLeading={
+              <>
+                {scopeChip}
+                <AttendanceLegend
+                  lang={lang}
+                  showToday={visibleDays.some((d) => d.isToday)}
+                  showMathUnits={allGroups.some((g) => g.unitSuffix === "T")}
+                  showEnglishUnits={allGroups.some((g) => g.unitSuffix === "U")}
+                />
+              </>
+            }
+            optionsTools={sheetTools}
+            optionsExtra={salaryConfig ? <>
+              <SalaryRatesButton teacherId={salaryConfig.teacherId} month={month}
+                teacherName={allTeacherOptions.find((t) => t.value === salaryConfig.teacherId)?.label ?? ""}
+                rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} />
+              {/* '실급여 보이기'(원장 2026-09-21 *"관리자 출석부 우측에 토글"*) — 열이 설 수 있는 보기(관리자 +
+                  프리랜서 강사 전체 보기)에서만. 켜고 끄는 건 계정 귀속 설정이다. */}
+              {showActualAmount ? <ActualSalaryToggle checked={viewPrefs.showActualSalary} /> : null}
+            </> : undefined}
             termSessionsByRow={classBilledAmounts.confirmedSessions}
+            confirmedPricesByRow={classBilledAmounts.confirmedPrices}
             priceConfirmedRows={classBilledAmounts.priceConfirmed}
+            noInvoiceRows={noInvoiceRows}
             money={money}
             moneyNote={moneyNote}
             lang={lang}
@@ -1104,6 +1195,9 @@ export default async function AttendancePage({
           />
         </div>
       )}
+      {canViewUnitsMaster(user.systemRole, myTeacherId) && (effectiveSubject === "english"
+        || (!effectiveSubject && (selectedClass?.subject === "english" || (teacherClasses.length > 0 && teacherClasses.every((c) => c.subject === "english")))))
+        ? <UnitsMasterButton month={month} /> : null}
       </div>
     </GridProvider>
     </AttendanceScopeProvider>

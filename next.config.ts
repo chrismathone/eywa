@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
       LEGACY_REDIRECT_HOSTS: process.env.LEGACY_REDIRECT_HOSTS,
     });
   },
+  // Keep Next 16.2's default HTML-only crawlers and add Kakao: its preview must find OG tags in <head>.
+  htmlLimitedBots: /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|kakaotalk|kakaoscrap/i,
   // dev 전용 — Next 16은 localhost 외 출처의 dev 리소스(/_next/webpack-hmr 등)를 기본 차단한다. 폰·태블릿에서
   // LAN IP로 접속하면 HMR 소켓 핸드셰이크가 막히고 **하이드레이션이 끝나지 않아 버튼 onClick이 통째로 죽는다**
   // (네이티브 select만 살아 "클릭이 안 됨"처럼 보임 — 2026-07-15 QR 접수 폼 실측). 프로덕션엔 HMR이 없어 무관.

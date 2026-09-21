@@ -22,7 +22,7 @@ export const MapPeriodPicker = memo(function MapPeriodPicker() {
           value={week.index} data-selected={focus.week !== null ? "true" : undefined}
           onChange={(event) => selectWeek(month.month, Number(event.target.value))}>
           {month.weeks.map((w) => (
-            <option key={w.index} value={w.index}>
+            <option key={w.index} value={w.index} disabled={w.inactive}>
               {w.index}주 · {w.start === w.end ? formatMd(w.start) : formatRange(w.start, w.end)}
             </option>
           ))}
@@ -34,7 +34,7 @@ export const MapPeriodPicker = memo(function MapPeriodPicker() {
           value={focus.day ?? ""} data-selected={focus.day ? "true" : undefined}
           onChange={(event) => selectDay(event.target.value)}>
           <option value="" disabled>날짜 선택</option>
-          {week.days.map((day) => <option key={day.date} value={day.date}>{formatMdW(day.date)}</option>)}
+          {week.days.map((day) => <option key={day.date} value={day.date} disabled={day.inactive}>{formatMdW(day.date)}</option>)}
         </select>
       </label>
     </div>

@@ -13,6 +13,7 @@ import {
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
+import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
 
 /**
  * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
@@ -27,7 +28,8 @@ import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-
  * 롤백이 필요하면 이 커밋을 되돌린다 — env로 되살리는 길은 의도적으로 남기지 않는다.
  */
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
-export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || "https://eywa-alpha.vercel.app"; // 게시글 상단 공유 링크(/r) 공개 도메인
+// 게시글 상단 공유 링크(/r) 공개 도메인 — env가 없으면 지금 도메인(share-bases.mjs 단일 소스, 회수와 같은 값).
+export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || CURRENT_SHARE_BASE;
 // 작성자 이름이 빈 글의 작성자 표기 — 워커는 PC(=지점)마다 하나라 env로 지점별 값을 준다. 기본값은 종전 그대로(침산 무변화).
 export const DEFAULT_AUTHOR_NAME = process.env.CLASSNOTE_AUTHOR_NAME?.trim() || "인재원 학원";
 export const BATCH = 2;
@@ -96,6 +98,7 @@ async function dropAdminSession() {
  * 🔴 2026-07-28 원장 절대 규칙: "학부모가 일주일이 지났는데 이전 보고서를 받는 것도 비합리적" —
  * 앱의 classnoteMinDate(classnote-guard.ts)와 같은 창. 워커는 모든 발송이 지나는 최종 관문이라
  * 앱을 우회한 큐잉(직접 DB·재고·복구분)도 여기서 걸린다. **완화 금지.**
+ * 유일한 예외 = 원장이 건마다 지정한 행(0276a, 2026-09-21 — processQueueOnce 위 hasDeadlineExemptColumn).
  */
 export function minDate() {
   const d = new Date();
@@ -314,9 +317,13 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   // → 부분 성공은 `partial:true`로 표시해 호출자가 **재시도 없이 failed로 고정**하게 한다(적대 검증 2026-07-29 P2).
   let posted = 0;
   const partialFail = (error) => ({ ok: false, partial: posted > 0, error });
+  // ⓐ의 후보 = 이 링크 + **같은 토큰의 옛·새 주소 표기**(share-bases.mjs) — 연동 PC 주소를 바꾸는 날 재시작 순간 게시 중이던
+  // 건이 옛 주소로 이미 올라가 있으면 새 주소로만 찾다가 못 알아보고 한 번 더 올린다(2026-09-21 도메인 이전). ⓑⓒ는 방금
+  // 올린 이 글 자체의 확인이라 링크 그대로.
+  const dedupContents = shareUrlVariants(shareUrl, process.env.CLASSNOTE_SHARE_BASE, process.env.CLASSNOTE_LEGACY_SHARE_BASES);
   for (const { child, enrollment } of enrolled) {
     if (dedupOn) {
-      const pre = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
+      const pre = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: dedupContents });
       if (!pre.ok) return partialFail("게시 전 중복 확인 실패(ClassNote 조회 불가) — 안전상 보류");
       if (pre.id) {
         log(`  · ${studentName}: 이미 게시됨(report ${pre.id}, 원아 ${child.id}) — 재게시 생략(멱등)`);
@@ -380,6 +387,29 @@ const STALE_SWEEP_MS = 60_000;
  */
 const lastStaleSweepAt = new Map();
 
+/**
+ * **원장이 지정한 기한 예외**(0276a `lesson_reports.classnote_deadline_exempt_at`) — 원장 2026-09-21
+ * *"앞으로도 내가 예외로 지정하는건은 기한 지난것도 발송"*. 이 표시가 있는 행은 7일 창(minDate) 밖이어도 클레임한다.
+ * 표시는 사람이 건마다 붙인다(`scripts/_reports/resend-past-deadline.mts` — 감사로그 동반). 7일 규칙 자체는 그대로다.
+ * ⚠️ 컬럼이 없으면(0276a 미적용) 절을 빼고 종전대로 돈다 — zip이 SQL보다 먼저 가도 발송이 멈추지 않게([[#95]]).
+ *    없을 때만 10분마다 다시 묻는다(매 폴 information_schema 조회 금지 — 위 stale 복구 주석과 같은 이유).
+ */
+const EXEMPT_RECHECK_MS = 600_000;
+let exemptColumn = { present: false, checkedAt: 0 };
+async function hasDeadlineExemptColumn(sql) {
+  if (exemptColumn.present) return true;
+  if (Date.now() - exemptColumn.checkedAt < EXEMPT_RECHECK_MS) return false;
+  try {
+    const rows = await sql`select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'lesson_reports'
+        and column_name = 'classnote_deadline_exempt_at' limit 1`;
+    exemptColumn = { present: rows.length > 0, checkedAt: Date.now() };
+  } catch {
+    exemptColumn = { present: false, checkedAt: Date.now() };
+  }
+  return exemptColumn.present;
+}
+
 export async function processQueueOnce(sql, browser, opts) {
   const {
     tenant,
@@ -439,17 +469,27 @@ export async function processQueueOnce(sql, browser, opts) {
   }
 
   // 2) 원자 클레임: queued → processing (FOR UPDATE SKIP LOCKED, tenant 격리)
+  //    7일 창 밖은 원장이 지정한 예외 행만(위 hasDeadlineExemptColumn 주석).
+  const exemptClause = (await hasDeadlineExemptColumn(sql))
+    ? sql`or classnote_deadline_exempt_at is not null`
+    : sql``;
   const claimed = await sql`
     with cte as (
       select id from lesson_reports
-      where tenant_id = ${tenant} and classnote_status='queued' and report_date >= ${md}
+      where tenant_id = ${tenant} and classnote_status='queued' and (report_date >= ${md} ${exemptClause})
         and revoked_at is null
       order by classnote_queued_at nulls first limit ${BATCH}
       for update skip locked
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes`;
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes`
+    .catch((e) => {
+      // 컬럼이 사라졌으면(0276a 되돌림 — 42703 undefined_column) 기억을 지워 다음 폴부터 예외 절 없이 돈다.
+      // 안 지우면 "있다"는 기억 때문에 매 폴 같은 오류로 발송 전체가 멈춘다.
+      if (e?.code === "42703") exemptColumn = { present: false, checkedAt: 0 };
+      throw e;
+    });
   const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
   if (!claimed.length) return summary;
   log(`[worker] 클레임 ${claimed.length}건`);

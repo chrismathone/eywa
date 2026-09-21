@@ -23,7 +23,7 @@ function tint(token: string, pct: number): string {
 }
 
 function quarterTint(q: number, token: string, pct: number): string {
-  return `color-mix(in srgb, var(--map-quarter-${q}, var(${token})) ${pct}%, var(--map-tint-base, white))`;
+  return `var(--map-quarter-${q}-fill, color-mix(in srgb, var(--map-quarter-${q}, var(${token})) ${pct}%, var(--map-tint-base, white)))`;
 }
 
 export const QUARTER_TINT: Record<1 | 2 | 3 | 4, QuarterTint> = {
@@ -46,7 +46,7 @@ export function displayStatusOf(status: ProgressStatus | null, date: string, asO
 }
 
 /**
- * **종강 뒤 칸** — 학습 상태가 아니라 "여기부터는 수업이 없다"는 뜻이라 상태색 어느 것도 쓰지 않는다
+ * **첫 등원 이전·종강 이후 칸** — 학습 상태가 아니라 수강기간 밖이므로 상태색 어느 것도 쓰지 않는다
  * (`no-plan`(흰 칸)과도 다르다 — 그건 수업 기간 안의 빈 달이다). 원장 2026-09-16.
  */
 export const AFTER_END_FILL = tint("--neutral-fill", 8);
@@ -55,7 +55,7 @@ export const AFTER_END_OPACITY = 0.4;
 
 export const STATUS_FILL: Record<DisplayStatus, string> = {
   unknown: "var(--bg-soft)",
-  completed: tint("--green", 20),
+  completed: `var(--map-completed-fill, ${tint("--green", 20)})`,
   "in-progress": `var(--map-progress-fill, ${tint("--chart-3", 30)})`,
   missed: tint("--neutral-fill", 42),
   planned: "var(--bg-soft)",
@@ -126,6 +126,10 @@ export const HAIRLINE = "var(--line)";
 
 /** 날짜 표식은 학습 상태와 별개다. 선택된 공휴일은 선택 배경에 맞춰 붉은 글자의 대비를 확보한다. */
 export const HOLIDAY_INK = "var(--danger)";
+/** 완료 칸 위 공휴일 글자 — MCS는 완료가 진한 파랑 채움이라 흰 글자(progress-map.module.css), 그 밖은 빨강 그대로. */
+export const HOLIDAY_COMPLETED_INK = "var(--map-holiday-completed-ink, var(--danger))";
+/** 실제 진도의 선·호(가운데 진도 호·드릴 칸 테두리) — MCS는 막대의 파랑, 그 밖은 기존 초록. */
+export const ACTUAL_STROKE = "var(--map-actual, var(--green))";
 export const HOLIDAY_SELECTED_INK = "var(--map-holiday-selected-ink, color-mix(in srgb, var(--danger) 28%, white))";
 export const HOLIDAY_FILL = tint("--danger", 7);
 export const HOLIDAY_TICK_FILL = tint("--danger", 42);

@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { MathProgressDashboard } from "@/features/math-progress-map/components/math-progress-dashboard";
 import { buildSampleProgress } from "@/features/math-progress-map/sample";
 import { canPreviewProgressMap } from "@/features/math-progress-map/server/access";
 import { requireAccess } from "@/lib/auth/require-access";
-import { EmbedLink } from "@/components/embed-link";
 import { getStudentLearningMap } from "@/features/math-progress-map/server/learning-map-query";
-import { LinkedLearningMap } from "@/features/math-progress-map/components/linked-learning-map";
 import { learningSheetHref } from "@/features/math-progress-map/learning-map";
 
 export const metadata: Metadata = { title: "수학 학습 진도맵 — eywa" };
@@ -24,15 +22,12 @@ export default async function ProgressMapPage({ searchParams }: {
       || !uuid.test(params.classId) || !uuid.test(params.student)) notFound();
     const result = await getStudentLearningMap(params.classId, params.student, typeof params.month === "string" ? params.month : null);
     if (result.status === "not-found") notFound();
-    if (result.status !== "ok") return <div className="space-y-4 p-6">
-      <PageHeader title={`${result.student.name} 학습 진도맵`} />
-      <p role="status">{result.status === "failed" ? "목표 또는 발송 보고서를 불러오지 못했습니다. 다시 새로고침해 주세요." : "MCS에서 전체 학습 목표를 설정해 주세요."}</p>
-      <EmbedLink href={learningSheetHref(result.classId, result.student.studentId, result.month)}>MCS로 돌아가기</EmbedLink>
-    </div>;
-    const initialQuery = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === "string")).toString();
-    const sourceKey = JSON.stringify([result.classId, result.student.studentId, result.month, result.goal,
-      result.progress.referenceDate, result.progress.currentBlock, result.progress.history?.start]);
-    return <LinkedLearningMap key={sourceKey} {...result} initialQuery={initialQuery} />;
+    // 기존 북마크도 학생 전환·목표 편집이 있는 집중 보기로 합친다.
+    const selection = new URLSearchParams();
+    for (const key of ["date", "view", "display", "topic", "lesson", "undated", "embed"]) {
+      if (typeof params[key] === "string") selection.set(key, params[key]);
+    }
+    redirect(`${learningSheetHref(result.classId, result.student.studentId, result.month)}${selection.size ? `&${selection}` : ""}`);
   }
   if (!(await canPreviewProgressMap())) notFound();
   const progress = buildSampleProgress();

@@ -296,8 +296,10 @@ export async function saveLessonReport(
    * 되어야지"* · *"실제로 수업을 했는데 출석부에 시수가 없으면 이상하지"*).
    *
    * 🔴 **반 없는 보강만**이다(`makeup && !classId`). 반이 붙은 보고서는 그 반 출석부에 이미 칸이 있다.
-   * 🔴 어느 반에서 했는지는 **묻지 않는다**(원장: *"반 보강이 아니니까"*) — 그 강사의 **보이지 않는
-   *    '보강' 반**([`makeup-pool.ts`](@/features/classes/makeup-pool))에 앉힌다. 그래야 시수 주인이 생긴다.
+   * 🔴 ~~어느 반에서 했는지는 묻지 않는다~~ → **2026-09-21 원장이 뒤집었다**(*"보강 추가시에 '수업'을 선택할 수 있어야겠어.
+   *    그냥 보강으로 추가되니까 출석부에 행만 자꾸 생기네"*): 확인창이 수업을 묻고 그 반이 `makeupClassId`로 온다 — 그 반에 칸이
+   *    이미 서 있으면 여기서 아무것도 안 만든다. '반 없이'를 고르면 종전대로 그 강사의 **보이지 않는 '보강' 반**
+   *    ([`makeup-pool.ts`](@/features/classes/makeup-pool))에 앉힌다. 그래야 시수 주인이 생긴다.
    * 🔴 **귀속은 저장자가 아니라 보고서의 소유자**(저장된 행의 `created_by` → `teacher_name`, 규칙은
    *    `pickMakeupOwner`). 사무실이 강사 대신 저장하면 저장자로 귀속했을 때 보강 반이 사무실 계정 앞으로
    *    생겨 그 강사 출석부엔 안 뜬다(2026-09-02 점검 — 실측 0건이라 예방). 소유자를 계정으로 못 풀면
@@ -320,6 +322,8 @@ export async function saveLessonReport(
           studentId: input.studentId,
           subject: input.subject || LEGACY_REPORT_SUBJECT,
           date: reportDate,
+          // 확인창에서 고른 수업(또는 반 필터) — 그 반에 칸이 이미 서 있으면 보강 반을 만들지 않는다(시수 두 번 방지).
+          makeupClassId: input.makeupClassId ?? null,
         });
       }
     } catch {

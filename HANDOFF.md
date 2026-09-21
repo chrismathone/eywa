@@ -17,8 +17,8 @@
 > 단위·영어 교시)을 학원설정 "과목 운영" 탭으로 배선**(과목별 평일 교시 = ENGLISH_PERIODS KNOWN_EXCEPTION 해소),
 > **(3) 운영 과목 삭제 = "다른 과목에 흡수"**(전 저장 표면 이동 + 0077a 원자 RPC)까지 구현·검증하고 **main에 반영·배포
 > 완료**(Vercel success)했다. 전 게이트 그린(typecheck·lint 0 / **test 703** / build) + 시트 패리티 diff 0 + 적대
-> 리뷰(병합 교차 CONFIRMED 4건 수정). ⚠️ **데모는 `scripts/seed.ts`가 아니라 ijw POC 임포트본**(학생 ~564) →
-> **`pnpm db:seed` 절대 금지**(전체 wipe). 시작 전 `HANDOFF.md` + `ENGLISH_SYNC_HANDOFF.md` + `CLAUDE.md`
+> 리뷰(병합 교차 CONFIRMED 4건 수정). ⚠️ **테넌트 `injaewon`은 운영 실데이터**(ijw 이관본) —
+> 데모 시드(`pnpm db:seed`)는 운영 DB를 지울 수 있어 **2026-09-19 영구 제거**했다. 시작 전 `HANDOFF.md` + `ENGLISH_SYNC_HANDOFF.md` + `CLAUDE.md`
 > ("디자인 시스템", "막혔던 점들", "AI 모델 정책", "Git 협업 규칙")를 읽어라. `.env.local` 필요(§2).
 
 ---
@@ -81,7 +81,8 @@ node --env-file=.env.local scripts/_english_sync/verify-sheet-parity.cjs   # 영
 - 드리즐 번호본은 `db:migrate`, RLS/트리거/RPC 등 **손수 alpha(`000Na_*`)** 는 개별 적용(README §4·§5).
 - **이번 세션 신규: `0077a_absorb_subject_rpc.sql`**(과목 흡수 RPC `absorb_subject_key`) — **프로덕션 DB 적용됨**
   (함수 생성만, main 코드가 호출). 신규 DB 셋업 시 `supabase/migrations/README.md`의 alpha 전체 목록대로 적용.
-- ⚠️ **`pnpm db:seed` 금지** — 데모는 ijw POC 임포트본(전체 wipe하면 실데이터 소실).
+- ⚠️ 데모 시드(`pnpm db:seed`·`scripts/seed.ts`)는 **2026-09-19 영구 제거** — 테넌트 데이터를 먼저 지우는 구조라
+  운영 DB를 날릴 수 있었다. 되살리지 말 것.
 
 ---
 

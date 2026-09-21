@@ -35,6 +35,7 @@ import {
   mpValueCellStyle,
 } from "@/features/class-sheets/lib/month-plan-sheet-style";
 import { mpFitTitle, mpTitleBoxPx } from "@/features/class-sheets/lib/month-plan-title-fit";
+import { mpPrintValueHeight } from "@/features/class-sheets/lib/month-plan-print-fit";
 import type { DowKey } from "@/features/class-sheets/lib/week";
 import { defaultMonthPlanFooter, monthPlanLines } from "@/features/owner/month-plan-texts";
 import type { MonthPlanPrintData } from "@/features/class-sheets/server/month-plan-print";
@@ -102,6 +103,8 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
   }
 
   const bodyFont = { fontFamily: MP_SHEET_FONT.body, fontSize: MP_SHEET_SIZE.body } as const;
+  // 값 칸 높이 — 인쇄 껍데기(`MpFitToPage`)가 세로 A4의 남는 높이를 나눠 주면 그 값, 아니면 시트 기본 140px.
+  const valueHeight = mpPrintValueHeight(MP_SHEET_PX.value);
   // 머리말과 표의 오른쪽 끝을 맞춘다 — 머리말은 flex라 안 박으면 종이 폭을 다 먹는다.
   const dataColumnCount = Object.values(columnsByDow).reduce((n, c) => n + c.length, 0);
   const docWidth = mpDocWidth(dataColumnCount);
@@ -111,8 +114,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
 
   return (
     <article style={{ color: "#000", background: MP_SHEET_COLOR.paper }}>
-      {/* @page 가로 A4 — 요일 3개 × 최대 4열이 세로 폭에 안 들어간다. */}
-      <style>{"@page { size: A4 landscape; margin: 10mm; }"}</style>
+      {/* ⚠️ `@page`(세로 A4·여백)는 여기 없다 — 한 장에 맞추는 껍데기(`MpFitToPage`) 한 곳이 선언한다. */}
       {/* 🔴 문서 **바깥 테두리만 굵다**(시트 3px) — 안쪽 격자는 전부 1px이다. */}
       <div className="w-fit" style={{ border: MP_SHEET_OUTER }}>
 
@@ -225,7 +227,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
                 Date
               </th>
               {dows.map((dow) => {
-                const date = cellDateOf(week, dow, month.month);
+                const date = cellDateOf(week, dow);
                 const kind = kindOf(date);
                 return (
                   <td
@@ -243,7 +245,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
               <th style={mpBandCellStyle("week")}>Week {week.index}</th>
               {dows.flatMap((dow) => {
                 const cols = columnsByDow[dow];
-                const date = cellDateOf(week, dow, month.month);
+                const date = cellDateOf(week, dow);
                 const kind = kindOf(date);
                 // 🔴 휴강 날은 라벨 대신 **`휴강 · 추석`**을 한 칸으로 적는다 — In-class/Homework 라벨이
                 //    회색 빈 칸 위에 서 있으면 "안 적은 평일"로 읽힌다.
@@ -268,13 +270,14 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
                 ));
               })}
             </tr>
-            <tr style={{ height: MP_SHEET_PX.value }}>
+            {/* `data-mp-value-row` = 맞춤 껍데기가 남는 높이를 나눌 줄 수를 센다(주 수). */}
+            <tr data-mp-value-row="" style={{ height: valueHeight }}>
               <th style={mpBandCellStyle("week")} />
               {/* ⚠️ 값 줄은 **언제나 열마다 한 칸**이다 — 계획(MP) 화면이 그렇고, 합치면 격자선이
                   사라져 같은 달이 두 문서에서 다른 모양이 된다. */}
               {dows.flatMap((dow) => {
                 const cols = columnsByDow[dow];
-                const date = cellDateOf(week, dow, month.month);
+                const date = cellDateOf(week, dow);
                 const kind = kindOf(date);
                 return cols.map((col) => (
                   <td
@@ -283,7 +286,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
                     style={{
                       ...(kind === "off" ? mpOffValueCellStyle() : mpValueCellStyle(col)),
                       ...(kind === "none" ? { backgroundColor: MP_SHEET_COLOR.paper } : null),
-                      height: MP_SHEET_PX.value,
+                      height: valueHeight,
                       padding: "2px 3px",
                     }}
                   >

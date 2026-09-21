@@ -48,7 +48,7 @@ describe("실제 진도맵과 MCS 공통 차시 원장", () => {
   it("같은 차시 반복·여러 보고서와 내신대비는 차시 수를 부풀리지 않는다", () => {
     const { goal, context, records, progress } = learningMapFixture();
     const duplicate = buildLearningProgress(goal, context, [...records, ...records], "2026-09-18");
-    duplicate.history = buildLearningHistory(goal, duplicate, [...records, ...records], "2025-01-01", "2026-09-18");
+    duplicate.history = { ...buildLearningHistory(goal, duplicate, [...records, ...records], "2025-01-01", "2026-09-18"), start: null };
     expect(buildLearningMap(goal, duplicate)).toEqual(buildLearningMap(goal, progress));
     expect(duplicate.currentDate).toBe("2026-08-27");
     expect(duplicate.latestRecord?.date).toBe("2026-09-14");
@@ -68,14 +68,32 @@ describe("실제 진도맵과 MCS 공통 차시 원장", () => {
     expect(map.metrics).toMatchObject({ current: 2, total: 98 });
     expect(map.lessons).toHaveLength(98);
   });
-  it("일정 누락은 일정 미확정으로 남고 보고서 날짜로 대체되지 않는다", () => {
+  it("오래 다닌 학생도 첫 기록에서 선을 자른다 — 기록 없는 앞 두 학기를 칠하지 않는다(원장 2026-09-21)", () => {
+    // 2025-01 등록 · 첫 보고서 2026-07-02. 예전엔 시작을 '모름'으로 두어 중1 2학기부터 155차시(59 도달)로 그렸다.
+    const { goal, progress, records } = learningMapFixture();
+    progress.history = buildLearningHistory(goal, progress, records, "2025-01-01", "2026-09-18");
+    const map = buildLearningMap(goal, progress);
+    expect(progress.history.start).toEqual({ grade: "중2", lesson: "이등변삼각형의 성질" });
+    expect(map.lessons[0].lesson).toBe("이등변삼각형의 성질");
+    expect(map.metrics).toMatchObject({ current: 2, total: 98 });
+    expect(map.lessons.filter(lesson => lesson.reached)).toHaveLength(2);
+  });
+  it("일정 누락 시 계획일은 미확정으로 남고 실제 보고서 수업일은 유지한다", () => {
     const { goal, progress } = learningMapFixture();
     const map = buildLearningMap(goal, { ...progress, days: [], status: "no-schedule" });
     const known = map.lessons.find(lesson => lesson.lesson === "직각삼각형의 합동")!;
     expect(known.date).toBe("2026-08-27");
     expect(known.plannedDate).toBeNull();
-    expect(known.calendarDate).toBeNull();
+    expect(known.calendarDate).toBe("2026-08-27");
     expect(map.metrics.status).toBe("no-schedule");
+  });
+  it("완료한 진도를 미래 계획일로 그리지 않고 확인된 수업일에만 놓는다", () => {
+    const f = learningMapFixture();
+    const map = buildLearningMap(f.goal, f.progress);
+    const dates = new Set(f.records.map(record => record.date));
+    for (const lesson of map.lessons.filter(lesson => lesson.reached && lesson.calendarDate)) expect(dates.has(lesson.calendarDate!)).toBe(true);
+    expect(map.lessons.find(lesson => lesson.position === map.metrics.current)?.calendarDate).toBe(f.progress.currentDate);
+    expect(map.lessons.filter(lesson => lesson.reached && !lesson.date).every(lesson => lesson.calendarDate === null)).toBe(true);
   });
   it("목표 날짜 배분은 실제 수업일과 공휴일·수강 종료 조건을 따른다", () => {
     const { goal, progress } = learningMapFixture();

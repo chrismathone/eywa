@@ -1,15 +1,21 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
-import { getSessionTermsView } from "./queries";
+import { getSessionTermsView, type SessionTermRow } from "./queries";
 import { classifyVerification, type VerificationStatus } from "../verification";
 import type { SessionPricingMode } from "../../session-pricing";
+import type { TermRowState } from "../month-roster";
+import { carryBlocksSplits, netAllocatedAmount } from "../money-carryover";
+import { freeSavedInvoiceIds } from "../free-allocation";
 export type { VerificationStatus } from "../verification";
 
 /**
  * 회차 검증 한 행 — 회차 확정(청구값) × **실 소비 회차** 대조(read-only). subject는 raw key(라벨은 소비처가 buildSubjectMaps로).
  *
  * 0267a부터 새 확정은 출석부 시수 합. 기존 확정은 저장한 quantity_basis의 일수 기준을 유지한다.
+ * 회차 행이 없는 줄(`termState: "missing"`, 출석부엔 있는데 행이 없는 학생)도 미확정 행으로 선다 — 실 소비는 줄 집합이 센
+ * 그 달 시수(`recordedUnits`)다(RPC 0267a는 회차 행 기준이라 그 줄이 없다).
+ * ⚠️ 청구서가 없거나 취소된 줄은 여기 없다 — 확정·분배할 청구서가 없어 대조할 것이 없다(회차 확정 면에만 '청구서 없음'으로 선다).
  */
 export type VerificationRow = {
   pricingMode: SessionPricingMode;
@@ -34,11 +40,21 @@ export type VerificationRow = {
   note: string | null;
   allocatedAmount?: number | null;
   allocationStale?: boolean;
+  /** 이 청구서는 관리자가 자유 배분으로 저장했다(0279a) — 재확인이 떠도 **관리자만** 풀 수 있다(다른 사람의 항목별 저장은 잠겨 있다). */
+  freeAllocationSaved?: boolean;
+  /** 줄의 회차 상태 — `missing`이면 회차 행이 아직 없는 줄(확정하는 순간 만들어진다). */
+  termState: TermRowState;
 };
 
 export type VerificationView = {
   rows: VerificationRow[];
   counts: Record<VerificationStatus, number> & { total: number };
+  /**
+   * 금액 이월 때문에 **분배를 저장하면 안 되는** 사정(0278a) — 조회 실패(`carryFailed`) · 받을 줄이 없는 이월이 있는 학생.
+   * `saveTeacherSplits`가 이 값으로 거절한다(두 달 스냅샷에 같은 돈이 두 번/0번 들어가지 않게).
+   */
+  carryFailed?: boolean;
+  carryBlockedStudents?: string[];
 };
 
 /**
@@ -81,8 +97,12 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
     attendance.map((a) => [`${a.invoice_id}:${a.class_id}`, Number(a.consumed) || 0]),
   );
 
-  const rows: VerificationRow[] = view.rows.map((r) => {
-    const actual = r.classId ? (consumedByKey.get(`${r.invoiceId}:${r.classId}`) ?? 0) : 0;
+  // 청구서가 있는 줄만(회차 행 + `missing` 가상 행) — 분배 저장(`computeSplitRows`)이 invoice×class를 키로 쓴다.
+  const withInvoice = view.rows.filter((r): r is SessionTermRow & { invoiceId: string } => r.invoiceId !== null);
+  const freeInvoices = freeSavedInvoiceIds(view.rows);
+  const rows: VerificationRow[] = withInvoice.map((r) => {
+    // 가상 행은 RPC 결과에 없다(회차 행 기준) — 줄 집합이 센 그 달 시수가 실 소비.
+    const actual = r.termState !== "term" ? (r.recordedUnits ?? 0) : r.classId ? (consumedByKey.get(`${r.invoiceId}:${r.classId}`) ?? 0) : 0;
     const { status, diff } = classifyVerification(r.confirmedSessions, actual, r.pricingMode);
     const teacher = r.classId ? (teacherByClassId.get(r.classId) ?? null) : null;
     return {
@@ -100,13 +120,16 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
       plannedSessions: r.plannedSessions,
       unitPrice: r.unitPrice,
       amount: r.amount,
-      allocatedAmount: r.allocatedAmount,
+      // 분배·검증의 실납 = 배분액 − 보낸 이월 + 받은 이월(0278a, 원장 2026-09-21 "수납액 분배에도 반영"). 배분 원본은 회차 확정 면이 들고 있다.
+      allocatedAmount: netAllocatedAmount(r),
       allocationStale: r.allocationStale,
+      freeAllocationSaved: freeInvoices.has(r.invoiceId),
       actualConsumed: actual,
       quantityBasis: r.quantityBasis,
       status,
       diff,
       note: r.note,
+      termState: r.termState,
     };
   });
 
@@ -119,5 +142,6 @@ export async function getSessionVerificationView(period: string): Promise<Verifi
     total: rows.length,
   };
 
-  return { rows, counts };
+  const carryBlockedStudents = [...new Set(withInvoice.filter((r) => carryBlocksSplits(r)).map((r) => r.studentName))];
+  return { rows, counts, carryFailed: view.carryFailed, carryBlockedStudents };
 }

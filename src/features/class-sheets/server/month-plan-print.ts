@@ -26,8 +26,11 @@ export type MonthPlanPrintResult = { ok: true; data: MonthPlanPrintData } | { ok
 export async function getMonthPlanPrint(
   classId: string,
   monthRaw: string | null,
+  /** 기간 축(`month`|`session`) — 화면이 보던 축을 주소로 실어 온다(없으면 계정 저장값, 화면과 같은 규칙). */
+  periodRaw: unknown = null,
 ): Promise<MonthPlanPrintResult> {
-  const res = await getClassSheetMonth(classId, monthRaw);
+  // 🔴 화면과 **같은 조회**(같은 게이트·같은 기간 해석) — 인쇄만 따로 창을 정하면 화면과 종이가 다른 날짜를 담는다.
+  const res = await getClassSheetMonth(classId, monthRaw, { period: periodRaw });
   if (!res.ok) return { ok: false, error: res.error };
   if (!res.data.isEie) return { ok: false, error: "월간 계획서는 EiE 반에서만 사용합니다" };
 

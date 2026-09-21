@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_ECS_MONTH_PERIOD,
   DEFAULT_ECS_SHOW_SELF_STUDY,
+  normalizeEcsMonthPeriod,
+  readEcsMonthPeriod,
   readEcsCollapsedRosterGroups,
   readEcsEnglishTrack,
   readEcsShowSelfStudy,
@@ -128,5 +131,26 @@ describe("readEcsTeacher — 담임 보기 필터(계정 귀속)", () => {
 
   it("다른 화면 네임스페이스 값은 훔쳐 읽지 않는다", () => {
     expect(readEcsTeacher({ onescreen: { teacher: TEACHER_ID } })).toBe("all");
+  });
+});
+
+describe("readEcsMonthPeriod — EiE 계획서 기간 축(월/세션, 2026-09-21)", () => {
+  it("기본은 세션(출석부 날짜축과 같은 기본)", () => {
+    expect(DEFAULT_ECS_MONTH_PERIOD).toBe("session");
+    expect(readEcsMonthPeriod(undefined)).toBe("session");
+    expect(readEcsMonthPeriod({ ecs: {} })).toBe("session");
+  });
+
+  it("저장된 값은 그대로, 깨진 값은 기본", () => {
+    expect(readEcsMonthPeriod({ ecs: { monthPeriod: "month" } })).toBe("month");
+    expect(readEcsMonthPeriod({ ecs: { monthPeriod: "session" } })).toBe("session");
+    expect(readEcsMonthPeriod({ ecs: { monthPeriod: "week" } })).toBe("session");
+  });
+
+  it("주소 값은 모양이 맞을 때만 — 배열·모르는 값은 null(저장값으로 떨어진다)", () => {
+    expect(normalizeEcsMonthPeriod("month")).toBe("month");
+    expect(normalizeEcsMonthPeriod(["month", "session"])).toBeNull();
+    expect(normalizeEcsMonthPeriod("Month")).toBeNull();
+    expect(normalizeEcsMonthPeriod(undefined)).toBeNull();
   });
 });

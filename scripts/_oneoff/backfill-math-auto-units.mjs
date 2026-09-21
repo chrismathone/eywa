@@ -21,7 +21,7 @@
  *    (둘 다 null). 앱(자동 시수) 배포 **뒤** 강사가 친 1을 덮지 않게 배포 시각을 넘긴다(배포 전 적용이면 지금 시각).
  *    없으면 쓰기 전에 멈춘다(적대 리뷰 2026-09-11 — 선택 옵션이던 때 사용법대로 돌리면 그 칸들이 1.5·2가 됐다).
  * 🔴 **멱등** — UPDATE는 `session_units IS NULL`·교시 없음·대상 상태인 행만 건드린다(두 번째 실행은 0건).
- * 🔴 테넌트 cs(침산, 옛 slug injaewon) = 프로덕션 실데이터. `db:seed` 금지.
+ * 🔴 테넌트 cs(침산, 옛 slug injaewon) = 프로덕션 실데이터.
  * ⚠️ 판정은 `math-auto-units-rules.mjs`(앱 TS 규칙의 사본 — `auto-units-parity.test.ts`가 두 벌을 잠그고,
  *    칸 판정·보강 제외·적용 전제는 `auto-units-backfill.test.ts`가 잠근다).
  *

@@ -378,8 +378,8 @@ eywa 쪽 특례는 같은 날 전부 걷어냈다.)
 | `DATABASE_URL` | 큐 직결(RLS 우회) | 필수. **tenant 격리 필터 필수**(코어가 강제) |
 | `CLASSNOTE_UPLOAD_ID/PW` | ClassNote 로그인 | `--post` 시 필수. Cloud Run payload로 전달 |
 | `CLASSNOTE_TENANT_ID` | 오발송 방지 | 테넌트 2개+면 필수(1개면 자동) |
-| `CLASSNOTE_SCREENSHOT_BASE` | /r 캡처 도메인 | 연동 PC는 공개 도메인 필수(`https://eywa-alpha.vercel.app`) |
-| `CLASSNOTE_SHARE_BASE` | 게시글 상단 /r 링크 도메인 | 오타 나면 **죽은 링크가 조용히 게시**되므로 주의. 회수 워커도 같은 값을 읽는다(2026-09-21 — 그전엔 코드 리터럴) |
+| `CLASSNOTE_SCREENSHOT_BASE` | /r 캡처 도메인 | 연동 PC는 공개 도메인 필수(`https://www.aywa.co.kr`, 2026-09-21~) |
+| `CLASSNOTE_SHARE_BASE` | 게시글 상단 /r 링크 도메인 | 오타 나면 **죽은 링크가 조용히 게시**되므로 주의. 회수 워커도 같은 값을 읽는다(2026-09-21 — 그전엔 코드 리터럴). 지금 값 `https://www.aywa.co.kr`(없으면 이 값 — `CURRENT_SHARE_BASE`) · 바꾸는 법 = `발송PC-새도메인.bat` |
 | `CLASSNOTE_LEGACY_SHARE_BASES` | 회수가 대 볼 **옛** /r 주소(쉼표 구분) | 선택. 기본값에 `https://eywa-alpha.vercel.app` 포함 — 도메인을 옮겨도 이전 전 글을 회수할 수 있다(`share-bases.mjs`) |
 | `CLASSNOTE_AUTHOR_NAME` | 작성자 이름이 빈 글의 작성자 표기 | 선택. 기본 `인재원 학원`. 워커는 PC(=지점)마다 하나라 다른 지점 워커는 그 지점 이름으로 |
 | `CLASSNOTE_INTERNAL_SECRET` | 워커 캡처를 조회수에서 제외 | 앱(Vercel)과 동일값 페어링 필요. 미설정=조회수 +1뿐 |

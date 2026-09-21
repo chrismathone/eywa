@@ -33,6 +33,7 @@ import { scopeFieldsFor, useAttendanceScope } from "./scope-context";
 import { CellPopover, type PopoverAnchor } from "./cell-popover";
 import { MakeupReserveDialog } from "./makeup-reserve-dialog";
 import { GhostTransferPopover } from "./ghost-popover";
+import { RangeStatusPopover } from "./range-status-popover";
 // 화면 언어 — 상태 표기는 `statusTextOf`(한글 맵 옆)가 단일 소스, 나머지 문구는 사전.
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
@@ -181,6 +182,7 @@ export function AttendanceCell({
     if (memo.text !== null && (memo.text === (note ?? "") || (settled && memo.text === (seenNote ?? "")))) setMemo(NO_MEMO);
   }
   const [popover, setPopover] = useState<PopoverAnchor | null>(null);
+  const [rangeKeys, setRangeKeys] = useState<Set<string> | null>(null);
   // 보강 예약 창 — 팝오버가 닫히면서 여니 상태는 칸이 쥔다(팝오버는 닫히면 언마운트된다).
   const [reserveOpen, setReserveOpen] = useState(false);
   const scope = useAttendanceScope();
@@ -300,6 +302,8 @@ export function AttendanceCell({
 
   const openPopoverAt = (el: HTMLElement | null) => {
     if (!el) return;
+    const selected = ctx?.store.selected;
+    setRangeKeys(selected && selected.size > 1 && selected.has(key) ? new Set(selected) : null);
     const r = el.getBoundingClientRect();
     const vh = typeof window !== "undefined" ? window.innerHeight : 9999;
     // 아래 공간이 팝오버 높이(~300px)보다 좁으면 위로 뒤집는다 — 마지막 행에서 저장 버튼이 화면 밖으로 안 나가게.
@@ -345,7 +349,7 @@ export function AttendanceCell({
         // ⚠️ 이 칸 **안의 입력칸**이 포커스를 받아도 여기로 버블한다 — 이미 활성이면 손대지 않는다
         //    (안 그러면 타이핑을 시작하는 순간 버퍼가 확정돼 버린다).
         onFocus={() => {
-          if (!state.active) ctx?.selectCell(row, sessionDate, false);
+          if (!state.active && !ctx?.store.selected.has(key)) ctx?.selectCell(row, sessionDate, false);
         }}
         onKeyDown={(e) => {
           if (e.key === " " && !editing) {
@@ -461,7 +465,14 @@ export function AttendanceCell({
         ) : null}
       </div>
 
-      {popover && transfer && !locked && ctx ? (
+      {popover && rangeKeys && ctx ? (
+        <RangeStatusPopover
+          count={rangeKeys.size}
+          anchor={popover}
+          onPick={(nextStatus) => ctx.setRangeStatus(rangeKeys, nextStatus)}
+          onClose={() => setPopover(null)}
+        />
+      ) : popover && transfer && !locked && ctx ? (
         // 빗금 칸 — 상태만 고른다(시수·메모·지우기 없음). 저장은 격자와 같은 문(`transferGhost` → writeOne).
         <GhostTransferPopover
           status={ghostValue?.s ?? null}

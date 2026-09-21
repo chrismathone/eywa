@@ -11,6 +11,7 @@ import { updateMonthlyTermSessions } from "@/features/billing/session-terms/serv
 import { updateSessionTermNote } from "@/features/billing/session-terms/server/note-actions";
 import { confirmSelectedTerms } from "@/features/billing/session-terms/server/selected-confirm-actions";
 import { unconfirmClassTerms } from "@/features/billing/session-terms/server/class-unconfirm-actions";
+import { NO_LESSON_LABEL, TERM_STATE_LABEL } from "@/features/billing/session-terms/month-roster";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn(), saved: null as null | ((message: RecordSavedMessage) => void) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
@@ -34,7 +35,7 @@ const group = (subjectLabel: string, monthlyPrice: number | null = null): ClassG
     id: subjectLabel, invoiceId: "invoice", studentId: subjectLabel, studentName: `${subjectLabel}학생`, studentGrade: "중1",
     subject: subjectLabel === "수학" ? "math" : "english", subjectLabel,
     classId: subjectLabel, className: `${subjectLabel}반`, monthlyPrice, pricingMode: "per_session",
-    plannedSessions: 9, confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null, note: null, classAmount: null,
+    plannedSessions: 9, confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null, note: null, classAmount: null, termState: "term",
   }],
 });
 
@@ -175,7 +176,8 @@ describe("회차 단가 선택", () => {
     render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     fireEvent.change(screen.getByLabelText("수학학생 회당 단가"), { target: { value: "24000" } });
     fireEvent.click(screen.getByRole("button", { name: "확정" }));
-    expect(await screen.findByRole("button", { name: "해제" })).toBeEnabled();
+    // 확정값 반영(버튼이 '해제'로 바뀜)은 요청이 끝나기 직전에 먼저 그려진다 — 잠김이 풀릴 때까지 기다린다.
+    await waitFor(() => expect(screen.getByRole("button", { name: "해제" })).toBeEnabled());
     expect(screen.getByTestId("confirmed-count")).toHaveTextContent("1");
     expect(screen.getByText("216,000원")).toBeInTheDocument();
     expect(h.refresh).not.toHaveBeenCalled();
@@ -638,5 +640,287 @@ describe("지난 달 확정 기준 미리 채우기 (원장 2026-09-17 '입력�
     expect((screen.getByLabelText("수학학생 회당 단가") as HTMLInputElement).value).toBe("");
     expect(screen.getByLabelText("수학학생 회당 단가").className).not.toContain("bg-blue-soft");
     expect(screen.getByLabelText("수학학생 확정 회차").className).toContain("bg-background");
+  });
+});
+
+describe("회차 행이 없는 줄(출석부 줄에 맞춤, 원장 2026-09-18)", () => {
+  const VID = "v:11111111-1111-4111-8111-111111111111:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const withRows = (): ClassGroup => {
+    const g = group("수학");
+    const base = g.students[0];
+    g.students = [
+      base,
+      { ...base, id: VID, studentId: "s-visit", studentName: "보강생", termState: "missing", plannedSessions: null, recordedUnits: 1.5, rosterSources: ["recorded"] },
+      { ...base, id: "v:nobill:수학", studentId: "s-nobill", studentName: "무청구", invoiceId: null, termState: "no_invoice" },
+      { ...base, id: "v:void:수학", studentId: "s-void", studentName: "취소생", invoiceId: null, termState: "void_invoice" },
+    ];
+    return g;
+  };
+
+  it("회차 없음 줄은 확정할 수 있고 '실 N'·'회차 없음'이 한글로 선다 — 청구서 없음·취소 줄은 체크·확정·배분이 잠긴다", () => {
+    render(<SessionTermGroups groups={[withRows()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByText("실 1.5")).toBeInTheDocument();
+    expect(screen.getByText("회차 없음")).toBeInTheDocument();
+    expect(screen.getByLabelText("보강생 선택")).toBeEnabled();
+    expect(screen.getByText("청구서 없음")).toBeInTheDocument();
+    expect(screen.getByText("청구서 취소")).toBeInTheDocument();
+    expect(screen.getByLabelText("무청구 선택")).toBeDisabled();
+    expect(screen.getByLabelText("취소생 선택")).toBeDisabled();
+    expect(screen.queryByLabelText("무청구 확정 회차")).not.toBeInTheDocument();
+    // 확정 버튼 = 원래 줄 + 회차 없음 줄 둘뿐. raw 코드는 DOM에 없다.
+    expect(screen.getAllByRole("button", { name: "확정" })).toHaveLength(2);
+    expect(document.body.textContent).not.toMatch(/no_invoice|void_invoice|missing/);
+  });
+
+  it("밴드 '확정 n/N'의 분모는 확정할 수 있는 줄이고 잠긴 줄은 '청구서 없음 k'로 따로 적는다", () => {
+    render(<SessionTermGroups groups={[withRows()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByText("0/2")).toBeInTheDocument();
+    expect(screen.getByText(/청구서 없음 2/)).toBeInTheDocument();
+  });
+
+  it("가상 줄 확정은 청구월을 함께 보내고 성공하면 새로고침해 실 행으로 갈아끼운다", async () => {
+    vi.mocked(confirmSessionTerm).mockResolvedValueOnce({ ok: true, created: 1, terms: [{ id: "real", confirmedSessions: 1.5, unitPrice: 24000, amount: 36000, pricingMode: "per_session", confirmedAt: "2026-09-18" }] });
+    render(<SessionTermGroups groups={[withRows()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("보강생 확정 회차"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("보강생 회당 단가"), { target: { value: "24000" } });
+    const buttons = screen.getAllByRole("button", { name: "확정" });
+    await act(async () => fireEvent.click(buttons[1]));
+    await waitFor(() => expect(confirmSessionTerm).toHaveBeenCalled());
+    const sent = vi.mocked(confirmSessionTerm).mock.calls[0][1] as FormData;
+    expect(sent.get("id")).toBe(VID);
+    expect(sent.get("period")).toBe("2026-09");
+    await waitFor(() => expect(h.refresh).toHaveBeenCalled());
+    // 새 데이터가 올 때까지 그 줄은 잠긴다(다시 누르지 않게).
+    const row = screen.getByText("보강생").closest("tr")!;
+    expect(within(row).getByRole("button", { name: "확정 중…" })).toBeDisabled();
+    expect(screen.getByLabelText("보강생 회당 단가")).toBeDisabled();
+  });
+});
+
+describe("반 일괄 대상·가상 줄 전환·실납 표식 (적대적 리뷰 2026-09-18)", () => {
+  const VID = "v:11111111-1111-4111-8111-111111111111:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const VID_PLANNED = "v:22222222-2222-4222-8222-222222222222:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const VID_RESERVED = "v:33333333-3333-4333-8333-333333333333:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  type Student = ClassGroup["students"][number];
+  const released = (id: string) => ({ id, confirmedSessions: null, unitPrice: null, amount: null, pricingMode: "per_session" as const, confirmedAt: null });
+  /** 반 하나 = 원래 줄(수학학생) + 보강 방문(예정 없음, 가상) + 청구서 없음 줄. */
+  const withVisitor = (): ClassGroup => {
+    const g = group("수학");
+    const base = g.students[0];
+    g.students = [
+      base,
+      { ...base, id: VID, studentId: "s-visit", studentName: "보강생", termState: "missing", plannedSessions: null, recordedUnits: 1.5, rosterSources: ["recorded"] },
+      { ...base, id: "v:nobill:수학", studentId: "s-nobill", studentName: "무청구", invoiceId: null, termState: "no_invoice" },
+    ];
+    return g;
+  };
+  const replaceStudent = (g: ClassGroup, name: string, patch: Partial<Student>) => {
+    g.students = g.students.map((s) => (s.studentName === name ? { ...s, ...patch } : s));
+    return g;
+  };
+  const rowOf = (name: string) => screen.getByText(name).closest("tr")!;
+
+  it("F: 반 일괄 대상(예정 있는 줄)이 전부 확정이면 예정 없는 줄이 미확정이어도 '전체 확정 해제' — 반 일괄 폼은 없고 해제는 확정된 실 행만", async () => {
+    const ask = vi.fn(() => true);
+    vi.stubGlobal("confirm", ask);
+    vi.mocked(unconfirmClassTerms).mockResolvedValueOnce({ unconfirmed: 2, skipped: 0, failedIds: [], terms: [released("수학"), released("plan0")] });
+    const g = withVisitor();
+    Object.assign(g.students[0], { confirmedSessions: 9, unitPrice: 24000, amount: 216000, confirmedAt: "2026-09-17" });
+    // 월초에 끝난 수강(예정 0) — 개별로 확정해 둔 실 행.
+    g.students.push({ ...g.students[0], id: "plan0", studentId: "s-plan0", studentName: "월초종료", plannedSessions: 0, confirmedSessions: 1, amount: 24000 });
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByRole("button", { name: "전체 확정 해제" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "단가 일괄 입력" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "이 반 일괄 확정" })).toBeNull();
+    expect(screen.queryByLabelText("수학반 회당 단가")).toBeNull();
+    // 밴드 '확정 n/N' — 분모는 확정할 수 있는 줄 전부(예정 없는 줄 포함), 다 끝나지 않았으니 앰버.
+    expect(screen.getByText("2/3").className).toContain("text-amber");
+    // 예정 없는 줄은 행의 '확정'으로 개별 확정한다.
+    expect(within(rowOf("보강생")).getByRole("button", { name: "확정" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "전체 확정 해제" }));
+    expect(ask).toHaveBeenCalledWith(expect.stringContaining("수학반 2명의 확정을 모두 해제할까요?"));
+    await waitFor(() => expect(unconfirmClassTerms).toHaveBeenCalledWith("2026-09", "수학", ["수학", "plan0"]));
+    vi.unstubAllGlobals();
+  });
+
+  it("F: 반 일괄 대상이 하나라도 미확정이면 종전대로 입력칸·일괄 버튼", () => {
+    render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByRole("button", { name: "단가 일괄 입력" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "전체 확정 해제" })).toBeNull();
+  });
+
+  it("G: 확정할 줄이 없는 반(청구서 없음·취소뿐)엔 일괄 입력·확정 자체가 없고 '0/0'은 무채색", () => {
+    const g = group("수학");
+    const base = g.students[0];
+    g.students = [
+      { ...base, id: "v:nobill:수학", studentId: "s-nobill", studentName: "무청구", invoiceId: null, termState: "no_invoice" },
+      { ...base, id: "v:void:수학", studentId: "s-void", studentName: "취소생", invoiceId: null, termState: "void_invoice" },
+    ];
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.queryByRole("button", { name: "단가 일괄 입력" })).toBeNull();
+    expect(screen.queryByLabelText("수학반 회당 단가")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^선택 일괄 확정/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "전체 확정 해제" })).toBeNull();
+    const count = screen.getByText("0/0");
+    expect(count.className).toContain("text-text-dim");
+    expect(count.className).not.toContain("text-amber");
+  });
+
+  it("H: 예정 칸은 한 줄 짧은 표기(실 N · 예약, text-xs) — '출석부에 없음'은 예정 숫자를 가리지 않고 실납 칸 꼬리표로", () => {
+    const g = group("수학");
+    const base = g.students[0];
+    g.students = [
+      { ...base, id: "nolesson", studentId: "s-nl", studentName: "종강생", noLesson: true },
+      { ...base, id: VID, studentId: "s-visit", studentName: "보강생", termState: "missing", plannedSessions: null, recordedUnits: 1.5, rosterSources: ["recorded"] },
+      { ...base, id: VID_RESERVED, studentId: "s-rsv", studentName: "예약생", termState: "missing", plannedSessions: null, recordedUnits: null, rosterSources: ["reserved"] },
+    ];
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    // 종강생: 예정 칸은 계획 숫자 그대로, 표식은 실납 칸.
+    expect(rowOf("종강생").children[4]!.textContent).toBe("9");
+    const nl = within(rowOf("종강생")).getByText(NO_LESSON_LABEL.label);
+    expect(nl.getAttribute("data-tip")).toContain(NO_LESSON_LABEL.tip);
+    const cases: [string, string, string][] = [
+      ["보강생", "실 1.5", "출석부에 찍힌 시수 1.5시수"],
+      ["예약생", "예약", "보강 예약만 있고"],
+    ];
+    for (const [name, text, tip] of cases) {
+      // 다섯째 칸(선택·이름·학교학년·담임 다음) = 예정 시수.
+      const mark = rowOf(name).children[4]!.querySelector("span")!;
+      expect(mark.textContent).toBe(text);
+      expect(mark.className).toContain("text-xs");
+      expect(mark.getAttribute("data-tip")).toContain(tip);
+    }
+    expect(document.body.textContent).not.toContain("실제 1.5시수");
+  });
+
+  it("반 일괄 안내('예정이 없는 N명 빠짐')는 반이 '전체 확정 해제'로 바뀌어도 남는다", async () => {
+    vi.mocked(confirmClassTerms).mockResolvedValueOnce({ confirmed: 1, skippedUnplanned: 1, terms: [{ id: "수학", confirmedSessions: 9, unitPrice: 24000, amount: 216000, pricingMode: "per_session", confirmedAt: "2026-09-18" }] });
+    render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("수학반 반 회차"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "이 반 일괄 확정" })));
+    await waitFor(() => expect(screen.getByRole("button", { name: "전체 확정 해제" })).toBeInTheDocument());
+    expect(screen.getByText(/예정이 없는 1명\(보강 방문 등\)은 반 일괄에서 빠졌습니다/)).toBeInTheDocument();
+  });
+
+  it("'회차 없음' 알약 카드는 옆 금액이 이름 매칭 참고값이라는 사실을 함께 말한다", () => {
+    const g = withVisitor();
+    g.students = g.students.map((s) => (s.studentName === "보강생" ? { ...s, classAmount: 148750 } : s));
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const pill = within(rowOf("보강생")).getByText("회차 없음");
+    expect(pill.getAttribute("data-tip")).toContain("이름 매칭 참고값");
+  });
+
+  it("I: 가상 줄이 실 행으로 바뀌어도(새로고침) 입력칸 초안·체크가 같은 학생·반의 새 줄로 옮겨 간다", () => {
+    const { rerender } = render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("보강생 확정 회차"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("보강생 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByLabelText("보강생 선택"));
+    // 배분 저장 → 새로고침: 같은 학생·반이 회차 행(실 id, 미확정)으로 돌아온다.
+    rerender(<SessionTermGroups groups={[replaceStudent(withVisitor(), "보강생", { id: "real-visit", termState: "term" })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.getByLabelText("보강생 회당 단가")).toHaveValue("24000");
+    expect(screen.getByLabelText("보강생 확정 회차")).toHaveValue(1.5);
+    expect(screen.getByLabelText("보강생 선택")).toBeChecked();
+    expect(screen.getByLabelText("보강생 예상금액")).toHaveTextContent("36,000원");
+  });
+
+  it("I: 같은 학생·반의 새 줄이 둘(청구서 중복)이면 어느 쪽인지 몰라 옮기지 않는다", () => {
+    const { rerender } = render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("보강생 회당 단가"), { target: { value: "24000" } });
+    const next = replaceStudent(withVisitor(), "보강생", { id: "real-a", termState: "term", duplicateInvoice: true });
+    next.students.push({ ...next.students.find((s) => s.id === "real-a")!, id: "real-b", invoiceId: "invoice-2" });
+    rerender(<SessionTermGroups groups={[next]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    for (const input of screen.getAllByLabelText("보강생 회당 단가")) expect(input).toHaveValue("");
+  });
+
+  it("J: 선택 일괄 확정이 가상 줄을 실 행으로 바꾸면 새 데이터가 올 때까지 그 줄만 잠근다 — 새 데이터가 오면 풀린다", async () => {
+    vi.mocked(confirmSelectedTerms).mockResolvedValueOnce({ confirmed: 1, skipped: 0, created: 1, materialized: 1, terms: [{ id: "real-visit", confirmedSessions: 1.5, unitPrice: 24000, amount: 36000, pricingMode: "per_session", confirmedAt: "2026-09-18", quantityBasis: "attendance_units" }] });
+    const { rerender } = render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("보강생 확정 회차"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("보강생 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByLabelText("보강생 선택"));
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (1)" }));
+    await waitFor(() => expect(confirmSelectedTerms).toHaveBeenCalledWith("2026-09", "수학", [{ id: VID, sessions: 1.5, unitPrice: 24000, monthly: false }]));
+    await waitFor(() => expect(h.refresh).toHaveBeenCalledOnce());
+    expect(await within(rowOf("보강생")).findByRole("button", { name: "확정 중…" })).toBeDisabled();
+    expect(screen.getByLabelText("보강생 회당 단가")).toBeDisabled();
+    expect(screen.getByLabelText("보강생 확정 회차")).toBeDisabled();
+    expect(screen.getByLabelText("보강생 선택")).toBeDisabled();
+    // 다른 줄은 잠기지 않는다.
+    expect(within(rowOf("수학학생")).getByRole("button", { name: "확정" })).toBeEnabled();
+    const fresh = replaceStudent(withVisitor(), "보강생", { id: "real-visit", termState: "term", confirmedSessions: 1.5, unitPrice: 24000, amount: 36000, confirmedAt: "2026-09-18" });
+    rerender(<SessionTermGroups groups={[fresh]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(within(rowOf("보강생")).getByRole("button", { name: "해제" })).toBeEnabled();
+  });
+
+  it("J: 선택 일괄 확정이 통째로 거절되면(실 행이 된 줄 없음) 잠그지도 새로 읽지도 않고 체크를 남긴다", async () => {
+    vi.mocked(confirmSelectedTerms).mockResolvedValueOnce({ error: "수납 관리 권한이 없습니다" });
+    render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("보강생 확정 회차"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("보강생 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByLabelText("보강생 선택"));
+    fireEvent.click(screen.getByRole("button", { name: "선택 일괄 확정 (1)" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("수납 관리 권한이 없습니다");
+    expect(h.refresh).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("보강생 선택")).toBeChecked();
+    expect(within(rowOf("보강생")).getByRole("button", { name: "확정" })).toBeEnabled();
+  });
+
+  it("J: 반 일괄이 가상 줄을 실 행으로 바꾸면 반 일괄 대상 가상 줄만 잠그고 새로 읽는다 · 예정 없는 줄이 빠진 사실을 알린다", async () => {
+    vi.mocked(confirmClassTerms).mockResolvedValueOnce({ confirmed: 2, created: 1, materialized: 1, skippedUnplanned: 1, terms: [{ id: "수학", confirmedSessions: 9, unitPrice: 24000, amount: 216000, pricingMode: "per_session", confirmedAt: "2026-09-18" }] });
+    const g = withVisitor();
+    // 수강 중인데 회차 행이 없던 학생 — 예정이 있어 반 일괄 대상이다.
+    g.students.push({ ...g.students[0], id: VID_PLANNED, studentId: "s-new", studentName: "신입생", termState: "missing" });
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("수학반 반 회차"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByRole("button", { name: "이 반 일괄 확정" }));
+    expect(await screen.findByText("예정이 없는 1명(보강 방문 등)은 반 일괄에서 빠졌습니다 — 실제 시수를 보고 개별로 확정하세요")).toBeInTheDocument();
+    expect(h.refresh).toHaveBeenCalledOnce();
+    expect(within(rowOf("신입생")).getByRole("button", { name: "확정 중…" })).toBeDisabled();
+    // 예정 없는 보강 방문 줄은 반 일괄 대상이 아니라 잠그지 않는다(개별로 확정한다).
+    expect(within(rowOf("보강생")).getByRole("button", { name: "확정" })).toBeEnabled();
+  });
+
+  it("J: 반 일괄이 실 행을 만들지 않았으면(가상 줄이 섞여 있어도) 새로 읽지 않는다", async () => {
+    vi.mocked(confirmClassTerms).mockResolvedValueOnce({ confirmed: 1, skippedUnplanned: 1, terms: [{ id: "수학", confirmedSessions: 9, unitPrice: 24000, amount: 216000, pricingMode: "per_session", confirmedAt: "2026-09-18" }] });
+    render(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.change(screen.getByLabelText("수학반 반 회차"), { target: { value: "9" } });
+    fireEvent.change(screen.getByLabelText("수학반 회당 단가"), { target: { value: "24000" } });
+    fireEvent.click(screen.getByRole("button", { name: "이 반 일괄 확정" }));
+    expect(await within(rowOf("수학학생")).findByRole("button", { name: "해제" })).toBeEnabled();
+    expect(h.refresh).not.toHaveBeenCalled();
+    expect(within(rowOf("보강생")).getByRole("button", { name: "확정" })).toBeEnabled();
+  });
+
+  it("K: 회차 없음 줄도 배분 표식(배분 완료·재확인 필요)을 보이고 '회차 없음' 설명은 그 카드로 — 표식이 없을 때만 알약", () => {
+    const cell = () => within(rowOf("보강생")).getByRole("button", { name: "수납 연결·배분" }).closest("td")!;
+    const { rerender } = render(<SessionTermGroups groups={[replaceStudent(withVisitor(), "보강생", { allocatedAmount: 36000 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const done = within(cell()).getByText("배분 완료");
+    expect(done.getAttribute("data-tip")).toContain(TERM_STATE_LABEL.missing.tip);
+    expect(within(cell()).queryByText(TERM_STATE_LABEL.missing.label)).toBeNull();
+    rerender(<SessionTermGroups groups={[replaceStudent(withVisitor(), "보강생", { allocationStale: true, classAmount: 36000 })]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const stale = within(cell()).getByText("배분 재확인 필요");
+    expect(stale.getAttribute("data-tip")).toContain(TERM_STATE_LABEL.missing.tip);
+    expect(stale.getAttribute("data-tip")).toContain("이름 매칭 참고값");
+    expect(within(cell()).queryByText(TERM_STATE_LABEL.missing.label)).toBeNull();
+    rerender(<SessionTermGroups groups={[withVisitor()]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(within(cell()).getByText(TERM_STATE_LABEL.missing.label).getAttribute("data-tip")).toContain(TERM_STATE_LABEL.missing.tip);
+  });
+
+  it("K: 청구서 중복 줄은 다른 표식이 없을 때 주의 알약 + 카드('이름 매칭 참고' 자리) — 배분 표식이 있으면 그 카드로", () => {
+    const g = group("수학");
+    Object.assign(g.students[0], { duplicateInvoice: true, classAmount: 148750 });
+    const { rerender } = render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    const pill = screen.getByText("청구서 중복");
+    expect(pill.className).toContain("bg-amber-soft");
+    expect(pill.getAttribute("data-tip")).toContain("청구서 2장 이상");
+    expect(pill.getAttribute("data-tip")).toContain("이름 매칭 참고값");
+    expect(screen.queryByText("이름 매칭 참고")).toBeNull();
+    const allocated = group("수학");
+    Object.assign(allocated.students[0], { duplicateInvoice: true, allocatedAmount: 148750 });
+    rerender(<SessionTermGroups groups={[allocated]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.queryByText("청구서 중복")).toBeNull();
+    expect(screen.getByText("배분 완료").getAttribute("data-tip")).toContain("청구서 2장 이상");
   });
 });

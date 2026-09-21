@@ -82,6 +82,8 @@ export interface ProgressYear {
 
 /** 학생의 수업 일정. 공휴일 색 표시와 실제 수업 유무는 별개다. */
 export interface ProgressCalendar {
+  /** 날짜별 시간표 이력과 학생 수강기간을 반영한 수업일. 미설정은 일정 미확인이다. */
+  classDates?: string[];
   /** 0=일 ~ 6=토. 미설정이면 기록 없는 날을 비수업일로 추정하지 않는다. */
   classWeekdays?: number[];
   /** 날짜 → 휴강 사유. 실데이터는 학원설정 휴원일과 학생별 휴강 일정을 접어 전달한다. */

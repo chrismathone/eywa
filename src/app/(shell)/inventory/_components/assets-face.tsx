@@ -7,7 +7,7 @@ import { PrintWindowButton } from "@/components/workspace/print-window";
 import { assetFilterChips, filterAssets, type AssetFilterKey } from "@/features/inventory/filter";
 import { saveInventoryPrefs } from "@/features/inventory/server/prefs";
 import { needsAction } from "@/features/inventory/status";
-import { holderEditBlockReason, loanMismatchMap } from "@/features/inventory/loan-link";
+import { holderEditBlockReason, loanMismatchMap, openLoanOf } from "@/features/inventory/loan-link";
 import type { InventoryAsset, InventoryLoan } from "@/features/inventory/types";
 import { assetColumns } from "./asset-columns";
 import { AssetDialog } from "./asset-dialog";
@@ -16,6 +16,7 @@ import { ExcelDialog } from "./excel-dialog";
 import { HolderDialog } from "./holder-dialog";
 import { ListToolbar } from "./list-toolbar";
 import { QrDialog } from "./qr-dialog";
+import { ReturnDialog } from "./return-dialog";
 import { SortableTable } from "./sortable-table";
 import { StatusDialog } from "./status-dialog";
 import { useSort } from "./use-sort";
@@ -26,6 +27,8 @@ type Dialog =
   | { kind: "status"; asset: InventoryAsset }
   | { kind: "holder"; asset: InventoryAsset; blockedReason: string | null }
   | { kind: "qr"; asset: InventoryAsset }
+  /** 자산 표에서 상태를 바꾸거나 사용자를 비워 들어온 반납(원장 2026-09-18) — `nextStatus`가 있으면 그 상태로. */
+  | { kind: "return"; loan: InventoryLoan; nextStatus: string | null }
   | { kind: "excel" }
   | null;
 
@@ -105,6 +108,8 @@ export function AssetsFace({
   );
   const existingCodes = useMemo(() => assets.map((a) => a.assetCode), [assets]);
   const close = () => setDialog(null);
+  // 열린 대여 — 조회 실패(loans=null)면 모른다 → 종전 흐름(서버가 "반납 먼저"로 거절)으로 둔다.
+  const openLoanFor = (asset: InventoryAsset) => (loans ? openLoanOf(loansByAsset.get(asset.id) ?? []) : null);
 
   return (
     <section className="flex flex-col gap-2">
@@ -165,13 +170,24 @@ export function AssetsFace({
           asset={dialog.asset}
           today={today}
           mismatch={mismatches.get(dialog.asset.id) ?? null}
+          openLoan={openLoanFor(dialog.asset)}
+          onReturn={(loan, nextStatus) => setDialog({ kind: "return", loan, nextStatus })}
           onClose={close}
         />
       ) : null}
       {dialog?.kind === "holder" ? (
-        <HolderDialog asset={dialog.asset} blockedReason={dialog.blockedReason} onClose={close} />
+        <HolderDialog
+          asset={dialog.asset}
+          blockedReason={dialog.blockedReason}
+          openLoan={openLoanFor(dialog.asset)}
+          onReturn={(loan) => setDialog({ kind: "return", loan, nextStatus: null })}
+          onClose={close}
+        />
       ) : null}
       {dialog?.kind === "qr" ? <QrDialog asset={dialog.asset} onClose={close} /> : null}
+      {dialog?.kind === "return" ? (
+        <ReturnDialog loan={dialog.loan} today={today} nextStatus={dialog.nextStatus} onClose={close} />
+      ) : null}
       {dialog?.kind === "excel" ? <ExcelDialog onClose={close} /> : null}
     </section>
   );

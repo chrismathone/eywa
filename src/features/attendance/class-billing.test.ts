@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   attendanceClassBilledAmounts,
   attendanceClassConfirmedSessions,
+  attendanceClassConfirmedPrices,
   attendanceClassPriceConfirmedRows,
+  attendanceInvoiceStateByStudent,
+  attendanceNoInvoiceRows,
   type AttendanceBillingTerm,
 } from "./class-billing";
 import { rowKey } from "./grid/model";
@@ -23,7 +26,64 @@ function term(overrides: Partial<AttendanceBillingTerm> = {}): AttendanceBilling
   };
 }
 
+describe("출석부 확정 단가", () => {
+  it("저장된 단가만 사용하고 청구액÷시수로 역산하지 않는다", () => {
+    expect(attendanceClassConfirmedPrices(classes, [invoice], [term({ unit_price: 25000 })])).toEqual({
+      [key]: [{ unitPrice: 25000, monthly: false, daysBasis: false }],
+    });
+    expect(attendanceClassConfirmedPrices(classes, [invoice], [term({ unit_price: 0, confirmed_sessions: 0 })])[key]?.[0]?.unitPrice).toBe(0);
+  });
+
+  it("월 정액과 옛 일수 단가를 구분하고 서로 다른 단가를 합산하지 않는다", () => {
+    const prices = attendanceClassConfirmedPrices(classes, [invoice], [
+      term({ unit_price: 25000 }), term({ id: "duplicate", unit_price: 25000 }),
+      term({ id: "monthly", unit_price: 250000, pricing_mode: "monthly", quantity_basis: null }),
+      term({ id: "legacy", unit_price: 25000, quantity_basis: "days" }),
+    ]);
+    expect(prices[key]).toEqual([
+      { unitPrice: 25000, monthly: false, daysBasis: false },
+      { unitPrice: 250000, monthly: true, daysBasis: false },
+      { unitPrice: 25000, monthly: false, daysBasis: true },
+    ]);
+  });
+
+  it("일부만 확정된 줄과 허용되지 않은 반·학생·청구서는 노출하지 않는다", () => {
+    for (const pending of [term(), term({ unit_price: 25000, confirmed_sessions: null })]) {
+      expect(attendanceClassConfirmedPrices(classes, [invoice], [term({ unit_price: 25000 }), pending])).toEqual({});
+    }
+    expect(attendanceClassConfirmedPrices([classes[0]!], [invoice], [
+      term({ unit_price: 25000, class_id: "c2" }),
+      term({ unit_price: 25000, invoice_id: "missing" }),
+    ])).toEqual({});
+    expect(attendanceClassConfirmedPrices(classes, [{ ...invoice, student_id: "outsider" }], [term({ unit_price: 25000 })])).toEqual({});
+  });
+});
+
 describe("출석부 이 반 청구액", () => {
+  it("금액 이월(0278a) — 배분이 있는 줄은 보낸 이월을 빼고 받은 이월을 더한다(회차 확정 실납과 같은 규칙)", () => {
+    // 김지호 모양: 확정 150,000인데 배분 160,000(10,000원 더 받음) → 10,000원을 다음 달로.
+    const paid = { ...line, amount: 160000 };
+    const allocated = term({ allocation_line_index: 0, allocation_amount: 160000, allocation_source: paid, allocation_base_amount: 150000 });
+    const inv = { ...invoice, line_items: [paid] };
+    const carryIn = (amount: number, over: object = {}) => ({ amount, fromPeriod: "2026-08", fromClassName: "고등M 개별 TP4E", note: null, valid: true, ...over });
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 10000]]), ins: new Map() })).toEqual({ [key]: 150000 });
+    // 더 받은 몫보다 큰 이월은 무효 — 빼지 않는다(받는 달도 같은 판정으로 안 더한다).
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map([["t1", 20000]]), ins: new Map() })).toEqual({ [key]: 160000 });
+    // 받은 이월은 (학생|반) 키로 한 번만 — 유효한 것만.
+    const ins = new Map([["s1|c1", [carryIn(5000), carryIn(7000, { valid: false })]]]);
+    expect(attendanceClassBilledAmounts(classes, [inv], [allocated], { outs: new Map(), ins })).toEqual({ [key]: 165000 });
+    // 배분이 없는 줄(이름 매칭 참고값)엔 이월을 싣지 않는다 — 회차 확정 면도 배분 전엔 실납이 없다.
+    expect(attendanceClassBilledAmounts(classes, [invoice], [term()], { outs: new Map(), ins })).toEqual({ [key]: 210000 });
+ 
+    // 받을 줄이 전액 환불이면 싣지 않는다(회차 확정 `canReceiveCarry`와 같은 규칙).
+    const refundedLine = { ...paid, refunds: [{ status: "active", type: "full", amount: 160000 }] };
+    const refundedTerm = term({ allocation_line_index: 0, allocation_amount: 160000, allocation_source: refundedLine, allocation_base_amount: 150000 });
+    expect(attendanceClassBilledAmounts(classes, [{ ...invoice, line_items: [refundedLine] }], [refundedTerm], { outs: new Map(), ins })).toEqual({ [key]: 0 });
+    // 같은 학생·반이 청구서 두 장이어도 받은 이월은 한 번만.
+    const twice = [allocated, { ...allocated, id: "t9", invoice_id: "i9" }];
+    expect(attendanceClassBilledAmounts(classes, [inv, { ...inv, id: "i9" }], twice, { outs: new Map(), ins })[key]).toBe(160000 * 2 + 5000);
+  });
+
   it("같은 학생의 반을 구분하고 회차×단가 대신 해당 반 청구 항목을 표시한다", () => {
     const invoices = [{ ...invoice, line_items: [line, { description: "고등M 개별 토일", amount: 90000 }, { description: "다른 과목", amount: 300000 }] }];
     expect(attendanceClassBilledAmounts(classes, invoices, [term(), term({ id: "t2", class_id: "c2" })])).toEqual({
@@ -37,6 +97,21 @@ describe("출석부 이 반 청구액", () => {
       term({ id: "t2", class_id: "c2", amount: 60000, allocation_line_index: 0, allocation_amount: 60000, allocation_source: line, allocation_base_amount: 60000 }),
     ];
     expect(attendanceClassBilledAmounts([classes[0]!], [invoice], terms)).toEqual({ [key]: 150000 });
+  });
+
+  it("🔴 유효한 자유 배분(0279a)이 있으면 금액을 안 받은 반을 이름 매칭으로 채우지 않는다 — 합계가 청구액을 넘지 않게", () => {
+    const weekend = { description: "고등M 개별 토일", amount: 90000 };
+    const items = [line, weekend];
+    const freeInvoice = { ...invoice, line_items: items };
+    const terms = [
+      // 관리자가 수업 청구액 300,000원을 전부 TP4E에 줬다(항목 연결 없음 · 저장 때 청구 항목 전체 스냅샷).
+      term({ allocation_amount: 300000, allocation_source: items, allocation_base_amount: 150000 }),
+      // 토일 반은 미확정이라 0원으로 두면 저장하지 않는다(행은 배분 없음).
+      term({ id: "t2", class_id: "c2", amount: null, confirmed_sessions: null }),
+    ];
+    expect(attendanceClassBilledAmounts(classes, [freeInvoice], terms)).toEqual({ [key]: 300000, [rowKey("c2", "s1")]: 0 });
+    // 자유 배분이 없던 때는 종전대로 이름 매칭(토일 90,000원).
+    expect(attendanceClassBilledAmounts(classes, [freeInvoice], [term({ id: "t2", class_id: "c2", amount: null, confirmed_sessions: null })])).toEqual({ [rowKey("c2", "s1")]: 90000 });
   });
 
   it("동기화로 무효가 된 배분은 회차 확정처럼 이름 매칭으로 돌아간다", () => {
@@ -137,5 +212,43 @@ describe("「단가」 표식 연동 — 회차 확정에서 단가까지 확정
     expect(attendanceClassPriceConfirmedRows([classes[1]!], [invoice], [term({ unit_price: 30000 })])).toEqual([]);
     expect(attendanceClassPriceConfirmedRows(classes, [invoice], [term({ class_id: null, unit_price: 30000 })])).toEqual([]);
     expect(attendanceClassPriceConfirmedRows(classes, [], [term({ unit_price: 30000 })])).toEqual([]);
+  });
+});
+
+/**
+ * 회차 행이 없는 줄의 두 갈래(원장 2026-09-18 선택) — 청구서가 있으면 '미확정'(회차 확정에서 만들 수 있다), 없거나 취소됐으면
+ * `—`(만들 곳이 없다). 회차 확정 화면의 `termRowState`(`missing` / `no_invoice` / `void_invoice`)와 같은 줄이어야 한다.
+ */
+describe("학생별 청구서 상태 · '—'로 적을 줄 (2026-09-18)", () => {
+  it("살아 있는 청구서가 하나라도 있으면 ok · 취소뿐이면 void · 없으면 none — 물어본 학생 전원에게 키가 선다", () => {
+    expect(
+      attendanceInvoiceStateByStudent(
+        ["s1", "s2", "s3", "s4"],
+        [
+          { student_id: "s1", status: "issued" },
+          { student_id: "s2", status: "void" },
+          // s4 = 취소 + 재발행: 순서와 무관하게 ok(살아 있는 게 하나라도 있다).
+          { student_id: "s4", status: "void" },
+          { student_id: "s4", status: "paid" },
+          { student_id: "outsider", status: "issued" },
+        ],
+      ),
+    ).toEqual({ s1: "ok", s2: "void", s3: "none", s4: "ok" });
+  });
+
+  it("🔴 청구서 상태가 null이어도 취소는 아니다 — void 글자 그대로만 취소", () => {
+    expect(attendanceInvoiceStateByStudent(["s1"], [{ student_id: "s1", status: null }])).toEqual({ s1: "ok" });
+  });
+
+  it("`—` 줄 = 상태가 none·void인 학생의 **모든 반 줄** — ok·모름(키 없음)은 넣지 않는다", () => {
+    const rows = attendanceNoInvoiceRows(classes, { s1: "none", s2: "void" });
+    expect([...rows]).toEqual([
+      [rowKey("c1", "s1"), "none"],
+      [rowKey("c1", "s2"), "void"],
+      [rowKey("c2", "s1"), "none"],
+    ]);
+    expect(attendanceNoInvoiceRows(classes, { s1: "ok" }).size).toBe(0);
+    // 🔴 상태 맵에 없는 학생(출석부가 안 물어본 반)은 '청구서 없음'으로 읽지 않는다 — 종전 '미확정' 그대로.
+    expect(attendanceNoInvoiceRows(classes, {}).size).toBe(0);
   });
 });

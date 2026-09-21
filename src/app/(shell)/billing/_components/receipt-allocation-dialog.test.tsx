@@ -1,17 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ReceiptAllocationButton } from "./receipt-allocation-dialog";
-import { getReceiptAllocation, mergeReceiptItems, saveReceiptAllocation, type ReceiptAllocationView } from "@/features/billing/session-terms/server/receipt-allocation-actions";
+import { getReceiptAllocation, mergeReceiptItems, saveFreeReceiptAllocation, saveReceiptAllocation, type ReceiptAllocationView } from "@/features/billing/session-terms/server/receipt-allocation-actions";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh }) }));
 vi.mock("@/lib/realtime/record-channel", () => ({ publishRecordSaved: vi.fn() }));
-vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn(), mergeReceiptItems: vi.fn() }));
+vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn(), saveFreeReceiptAllocation: vi.fn(), mergeReceiptItems: vi.fn() }));
 
 const source = [{ kind: "수업", description: "통합 수강료", amount: 300000, discount: 20000, paid: 280000 }];
 function view(): ReceiptAllocationView {
   return { source, lines: [{ index: 0, kind: "수업", description: "통합 수강료", amount: 300000, source: source[0] }], terms: [1, 2].map((i) => ({
-    id: `term${i}`, invoiceId: "invoice", studentId: "student", studentName: "학생", studentGrade: "중1", subject: "math", classId: `class${i}`, className: `수학${i}반`, monthlyPrice: null, pricingMode: "per_session", plannedSessions: 4, confirmedSessions: 4, unitPrice: 25000 * i, amount: 100000 * i, confirmedAt: "2026-09-16", note: null, classAmount: null,
+    id: `term${i}`, invoiceId: "invoice", studentId: "student", studentName: "학생", studentGrade: "중1", subject: "math", classId: `class${i}`, className: `수학${i}반`, monthlyPrice: null, pricingMode: "per_session", plannedSessions: 4, confirmedSessions: 4, unitPrice: 25000 * i, amount: 100000 * i, confirmedAt: "2026-09-16", note: null, classAmount: null, termState: "term" as const,
   })) };
 }
 async function open(data = view()) {
@@ -208,5 +208,89 @@ describe("수납 연결·배분", () => {
     expect(await screen.findByText("수납 내역이 변경되었습니다")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(h.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("회차 행이 없는 반(출석부 줄에 맞춤, 원장 2026-09-18)", () => {
+  it("'회차 없음' 반은 한글 표식 + 저장하면 행이 생긴다는 안내가 서고, 연결하면 가상 id 그대로 서버에 보낸다(서버가 만든다)", async () => {
+    const data = view();
+    const VID = "v:11111111-1111-4111-8111-111111111111:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    Object.assign(data.terms[1], { id: VID, termState: "missing", confirmedSessions: null, unitPrice: null, amount: null, confirmedAt: null });
+    vi.mocked(saveReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    await open(data);
+    expect(screen.getByText("회차 없음")).toBeInTheDocument();
+    expect(screen.getByText(/배분을 저장하는 순간 회차 행이 만들어집니다/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("수학1반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학1반 배분금액"), { target: { value: "150000" } });
+    fireEvent.change(screen.getByLabelText("수학2반 수납 항목"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("수학2반 배분금액"), { target: { value: "150000" } });
+    fireEvent.click(screen.getByRole("button", { name: "배분 저장" }));
+    await waitFor(() => expect(saveReceiptAllocation).toHaveBeenCalled());
+    const rows = vi.mocked(saveReceiptAllocation).mock.calls[0][2];
+    expect(rows.map((r) => r.termId).sort()).toEqual(["term1", VID].sort());
+  });
+});
+
+describe("자유 배분(관리자 이상 — 원장 2026-09-21 '총 금액은 변하지 않는선에서 출결행에 다 분배')", () => {
+  it("관리자가 아니면 전환이 없다", async () => {
+    await open();
+    expect(screen.queryByRole("radio", { name: "자유 배분(관리자)" })).not.toBeInTheDocument();
+  });
+  it("관리자는 자유 배분으로 바꾸면 자동 배분 값으로 시작하고, 청구액을 넘기면 저장이 막힌다", async () => {
+    const data = { ...view(), canFree: true, tuitionTotal: 300000 };
+    data.suggestions = [{ lineIndex: 0, kind: "match" as const, reason: "비율", rows: [{ termId: "term1", amount: 100000 }, { termId: "term2", amount: 200000 }] }];
+    await open(data);
+    fireEvent.click(screen.getByRole("radio", { name: "자유 배분(관리자)" }));
+    expect(screen.getByLabelText("수학1반 자유 배분금액")).toHaveValue(100000);
+    expect(screen.getByLabelText("수학2반 자유 배분금액")).toHaveValue(200000);
+    fireEvent.change(screen.getByLabelText("수학1반 자유 배분금액"), { target: { value: "150000" } });
+    expect(screen.getByRole("button", { name: "자유 배분 저장" })).toBeDisabled();
+    expect(screen.getByText(/수업 청구액 300,000원보다 많이 나눌 수 없습니다/)).toBeInTheDocument();
+  });
+  it("덜 나누는 것은 괜찮다 — 저장은 확정값을 함께 실어 자유 배분 액션으로 간다", async () => {
+    vi.mocked(saveFreeReceiptAllocation).mockResolvedValueOnce({ ok: true });
+    const data = { ...view(), canFree: true, tuitionTotal: 300000 };
+    await open(data);
+    fireEvent.click(screen.getByRole("radio", { name: "자유 배분(관리자)" }));
+    fireEvent.change(screen.getByLabelText("수학1반 자유 배분금액"), { target: { value: "90000" } });
+    fireEvent.change(screen.getByLabelText("수학2반 자유 배분금액"), { target: { value: "200000" } });
+    expect(screen.getByText(/10,000원은 어느 반에도 나누지 않고 남깁니다/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "자유 배분 저장" }));
+    await waitFor(() => expect(saveFreeReceiptAllocation).toHaveBeenCalledWith("invoice", source, [
+      { termId: "term1", amount: 90000, confirmedAt: "2026-09-16", baseAmount: 100000 },
+      { termId: "term2", amount: 200000, confirmedAt: "2026-09-16", baseAmount: 200000 },
+    ]));
+    expect(saveReceiptAllocation).not.toHaveBeenCalled();
+  });
+  it("이미 자유 배분으로 저장한 청구서는 그 화면·그 값으로 열린다", async () => {
+    const data = { ...view(), canFree: true, freeSaved: true, tuitionTotal: 300000 };
+    Object.assign(data.terms[0], { allocatedAmount: 120000, savedAllocationAmount: 120000, invoiceHasAllocations: true });
+    Object.assign(data.terms[1], { allocatedAmount: 150000, savedAllocationAmount: 150000, invoiceHasAllocations: true });
+    await open(data);
+    expect(screen.getByRole("radio", { name: "자유 배분(관리자)" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByLabelText("수학1반 자유 배분금액")).toHaveValue(120000);
+    expect(screen.getByLabelText("수학2반 자유 배분금액")).toHaveValue(150000);
+  });
+  it("🔴 항목별로 갔다 돌아와도 저장한 자유 배분 값으로 연다(자동 초안으로 바꿔치지 않는다)", async () => {
+    const data = { ...view(), canFree: true, freeSaved: true, tuitionTotal: 300000 };
+    Object.assign(data.terms[0], { allocatedAmount: 120000, savedAllocationAmount: 120000, invoiceHasAllocations: true });
+    Object.assign(data.terms[1], { allocatedAmount: 150000, savedAllocationAmount: 150000, invoiceHasAllocations: true });
+    await open(data);
+    fireEvent.click(screen.getByRole("radio", { name: "항목별 배분" }));
+    fireEvent.click(screen.getByRole("radio", { name: "자유 배분(관리자)" }));
+    expect(screen.getByLabelText("수학1반 자유 배분금액")).toHaveValue(120000);
+  });
+  it("🔴 무효가 된 자유 배분은 그 사실을 알리고 저장했던 금액으로 채운다", async () => {
+    const data = { ...view(), canFree: true, freeSaved: true, tuitionTotal: 300000 };
+    Object.assign(data.terms[0], { allocatedAmount: null, allocationStale: true, savedAllocationAmount: 120000, invoiceHasAllocations: true });
+    Object.assign(data.terms[1], { allocatedAmount: null, allocationStale: true, savedAllocationAmount: 150000, invoiceHasAllocations: true });
+    await open(data);
+    expect(screen.getByText(/저장한 자유 배분을 지금은 쓰지 않습니다/)).toBeInTheDocument();
+    expect(screen.getByLabelText("수학1반 자유 배분금액")).toHaveValue(120000);
+  });
+  it("🔴 관리자가 아닌 사람이 자유 배분 청구서를 열면 관리자만 바꿀 수 있다고 알리고 항목별 저장을 잠근다", async () => {
+    await open({ ...view(), freeSaved: true });
+    expect(screen.getByText(/관리자가 자유 배분으로 저장한 청구서입니다 — 관리자만 바꿀 수 있습니다/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "배분 저장" })).toBeDisabled();
   });
 });

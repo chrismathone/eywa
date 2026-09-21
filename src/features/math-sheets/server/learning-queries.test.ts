@@ -63,6 +63,16 @@ beforeEach(() => {
 });
 
 describe("반별 수업 유형의 계획 조회", () => {
+  it("집중 보기의 전체 보고서는 30건 제한 없이 과거 기록을 보존한다", async () => {
+    reportRows = Array.from({ length: 40 }, (_, index) => ({ student_id: studentId,
+      report_date: new Date(Date.UTC(2026, 6, 1 + index)).toISOString().slice(0, 10), progress: topics[0], textbook: null }));
+    const recent = await getMathLearningData("class", monthData);
+    const all = await getMathLearningData("class", monthData, { allRecords: true });
+    expect(recent.records[studentId]).toHaveLength(30);
+    expect(all.records[studentId]).toHaveLength(40);
+    expect(all.records[studentId].at(-1)?.date).toBe("2026-07-01");
+    expect(all.progress[studentId]).toEqual(recent.progress[studentId]);
+  });
   it("반의 정규 목표만 읽고 수요일을 포함한 발송 보고서를 반영한다", async () => {
     const data = await getMathLearningData("class", monthData);
     expect(data.status).toBe("ok");

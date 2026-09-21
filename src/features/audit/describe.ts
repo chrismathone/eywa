@@ -33,6 +33,7 @@ import {
 } from "@/features/billing/textbook-audit";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { assetStatusLabel } from "@/features/inventory/status";
+import { loanStatusLabel } from "@/features/inventory/loan-status";
 import { assetCategoryLabel } from "@/features/inventory/category";
 import { auditResultLabel } from "@/features/inventory/audit-result";
 import { OUTCOME_PILL } from "@/features/enrollment/outcome-meta";
@@ -323,6 +324,14 @@ export function auditTargetName(metadata: Meta | null, nameOf: AuditNameOf): str
   );
 }
 
+/** 회차 행이 만들어진 계기(`term-materialize.ts` `MaterializeReason`) → 한글. 🔴 모르는 값은 null — 영문을 흘리지 않는다. */
+const MATERIALIZE_REASON_KO: Record<string, string> = {
+  confirm: "개별 확정",
+  confirm_selected: "선택 일괄 확정",
+  confirm_class: "반 일괄 확정",
+  allocate: "수납 배분",
+};
+
 /**
  * 감사로그 1건의 metadata를 한글 상세 문장으로. null = 표기할 상세 없음("—").
  * 모르는 액션은 uuid를 걸러낸 키값 나열 폴백(원문 JSON은 뷰어가 title 툴팁으로 보존).
@@ -334,6 +343,18 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    case "session_term_create": {
+      // 출석부 줄에 맞춰 생긴 회차 행 — 어느 달·어느 반·어느 저장이 만들었나·예정 시수(기록만 있는 줄은 예정이 없다).
+      const reason = str(m.reason);
+      const cls = ctx.nameOf(m.classId);
+      const planned = num(m.plannedSessions);
+      return join(
+        str(m.period),
+        cls ? `${cls} 반` : null,
+        reason && MATERIALIZE_REASON_KO[reason] ? `${MATERIALIZE_REASON_KO[reason]} 때 생성` : null,
+        planned === null ? "예정 없음(기록만)" : `예정 ${planned}시수`,
+      );
+    }
     case "session_term_monthly_units": {
       const sessions = num(m.sessions);
       const amount = won(m.amountPreserved);
@@ -395,6 +416,31 @@ export function auditDetail(
         comboText ? `해제 전 ${comboText}${combos.size > 3 ? ` 외 ${combos.size - 3}가지` : ""}` : null,
         skipped ? `건너뜀 ${skipped}명` : null,
         failed ? `실패 ${failed}명` : null,
+      );
+    }
+    case "session_term_receipt_allocate_free": {
+      // 자유 배분(0279a) — 수업 청구액 중 얼마를 몇 반에 나눴나(받은 돈보다 많이 줄 수 없다 · 덜 준 건 남은 금액으로).
+      const total = num(m.tuitionTotal);
+      const sum = num(m.allocatedTotal);
+      // 0원으로 실은 확정 반은 세지 않는다 — "몇 반에 나눴나"는 금액을 받은 반 수다.
+      const n = arr(m.allocations).filter((a) => (num((a as { amount?: unknown })?.amount) ?? 0) > 0).length;
+      return join(str(m.period), total !== null && sum !== null ? `수업 청구액 ${won(total)} 중 ${won(sum)} 배분${total > sum ? `(남김 ${won(total - sum)})` : ""}` : null, n ? `${n}개 반` : null);
+    }
+    case "session_term_money_carryover":
+    case "session_term_money_carryover_cancel": {
+      // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).
+      const from = str(m.fromClassName);
+      const before = num(m.amountBefore);
+      if (action === "session_term_money_carryover_cancel") {
+        return join(str(m.period), from ? `${from} 반` : null, `이월 취소${before ? `(${won(before) ?? ""} → ${str(m.toClassNameBefore) ?? "다음 달"})` : ""}`);
+      }
+      const to = str(m.toClassName);
+      return join(
+        str(m.period),
+        from ? `${from} 반` : null,
+        `${won(m.amount) ?? "?"} → ${str(m.toPeriod) ?? "다음 달"}${to ? ` ${to} 반` : ""}`,
+        before ? `종전 ${won(before)}` : null,
+        str(m.note) ? `메모 "${str(m.note)}"` : null,
       );
     }
     case "session_term_note": {
@@ -1104,7 +1150,12 @@ export function auditDetail(
       const who = str(m.borrowerName);
       const on = str(m.returnedOn);
       const restored = assetStatusLabel(str(m.restoredStatus));
-      return join(code ? `「${code}」` : null, who ? `${who} 반납` : "반납", on, restored ? `${restored}으로 되돌림` : null);
+      // 자산 표에서 상태를 골라 반납했으면 '바꿈'(원장 2026-09-18) — 대여 전 상태로 돌린 것과 다른 일이다.
+      const verb = str(m.chosenStatus) ? "바꿈" : "되돌림";
+      // 분실·확인필요를 골랐으면 대여 기록이 '회수불가'·'확인필요'로 남는다 — 그땐 '반납'이라 부르지 않는다.
+      const what = loanStatusLabel(str(m.loanStatus) ?? "returned");
+      const closed = str(m.loanStatus) && str(m.loanStatus) !== "returned" ? what : "반납";
+      return join(code ? `「${code}」` : null, who ? `${who} ${closed}` : closed, on, restored ? `${restored}으로 ${verb}` : null);
     }
     case "inventory_audit": {
       const code = str(m.assetCode);
