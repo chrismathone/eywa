@@ -185,8 +185,15 @@ export async function ensureMakeupAttendanceForReport(input: {
   date: string;
   /** 확인창에서 고른 시수(원스크린 경로) — 없으면 기본 1(컬럼을 비워 둔다). */
   units?: number | null;
+  /**
+   * 보강 보고서의 앵커 반(`makeup_class_id`) — 원스크린 확인창에서 **고른 수업**(원장 2026-09-21)이거나 반 필터다.
+   * 그 반에 그날 칸이 이미 있으면(확인창이 `persistAnchorMakeup`으로 먼저 적는다) 보강 반을 만들지 않는다 —
+   * 그 반의 담임이 이 강사가 아니어도(교시 담당·위임) 같은 수업이다. 안 보면 시수가 두 번 선다.
+   */
+  makeupClassId?: string | null;
 }): Promise<{ ok: boolean; classId?: string }> {
   const admin = createAdminClient();
+
 
   // ② **그 강사가 그 학생을 그날 이미 찍었으면** 만들지 않는다 — 같은 수업을 두 번 세지 않기 위해서다.
   //
@@ -218,6 +225,24 @@ export async function ensureMakeupAttendanceForReport(input: {
     return row?.teacher_id === input.teacherId;
   });
   if (alreadyByThisTeacher) return { ok: true }; // 그 강사가 이미 찍었다 — 그대로 둔다.
+
+  // ②-b 확인창에서 **고른 수업**(또는 반 필터 앵커)에 그날 칸이 이미 섰으면 만들지 않는다(원장 2026-09-21 — 수업 선택).
+  //    그 반 담임이 이 강사가 아닐 수 있어(교시 담당·위임) 위 판정이 못 잡는다 — 안 보면 시수가 두 번 선다.
+  if (input.makeupClassId) {
+    const { data: hosted, error: hostErr } = await admin
+      .from("attendance_records")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("class_id", input.makeupClassId)
+      .eq("student_id", input.studentId)
+      .eq("session_date", input.date)
+      .limit(1);
+    if (hostErr) {
+      console.error("[makeup-pool] 앵커 반 출결 조회 실패", hostErr.message);
+      return { ok: false };
+    }
+    if ((hosted ?? []).length > 0) return { ok: true, classId: input.makeupClassId }; // 고른 수업에 이미 섰다.
+  }
 
   /**
    * 🔴 그날 **보강 예약**(0264a)이 있으면 풀 반이 아니라 **예약의 반(원반)** 칸에 앉힌다 — 예약된 학생은 그 반에 오기로 한

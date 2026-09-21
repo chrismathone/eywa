@@ -25,6 +25,7 @@ import {
   type MakeupAbsenceList,
 } from "../makeup-options";
 import type { MakeupSlotOption } from "../makeup-slot";
+import { HOST_NONE, type MakeupHostClass } from "../makeup-host";
 
 /**
  * 강사의 선택.
@@ -45,6 +46,11 @@ export type MakeupConfirmChoice = {
    * (원스크린·반별 출석부의 축).
    */
   slotStart?: string;
+  /**
+   * 보강을 **기록할 수업(반)** — 창이 물었을 때만 온다(원장 2026-09-21 *"보강 추가시에 '수업'을 선택할 수 있어야겠어"*).
+   * `null` = '반 없이'(보이지 않는 보강 반) · `undefined` = 묻지 않은 화면(호출부의 종전 앵커 그대로).
+   */
+  hostClassId?: string | null;
 };
 
 /**
@@ -73,6 +79,8 @@ export function MakeupConfirmDialog({
   absenceLoading,
   slotOptions,
   defaultUnits,
+  hostClasses,
+  defaultHostClassId = null,
   pending = false,
   onConfirm,
   onCancel,
@@ -98,6 +106,13 @@ export function MakeupConfirmDialog({
   slotOptions?: readonly MakeupSlotOption[];
   /** 정규 수업이 없을 때의 시수 기본값(보통 1). */
   defaultUnits?: number;
+  /**
+   * 보강을 기록할 수업 후보 — **넘긴 화면만**(원스크린의 반 없는 보강) 묻는다. 합칠 정규 수업이 있으면(`candidates`) 묻지 않는다
+   * (그 수업에 기록된다). `failed`면 묻지 않는다(호출부가 보던 반 필터 기준으로 기록한다).
+   */
+  hostClasses?: { options: readonly MakeupHostClass[]; loading?: boolean; failed?: boolean };
+  /** 처음 고른 채로 여는 반(`defaultHostClassId` — 추측하지 않는다, null이면 고르기 전엔 확인이 막힌다). */
+  defaultHostClassId?: string | null;
   pending?: boolean;
   onConfirm: (choice: MakeupConfirmChoice) => void;
   onCancel: () => void;
@@ -129,6 +144,8 @@ export function MakeupConfirmDialog({
   const [slotPick, setSlotPick] = useState<string | null>(
     slotOptions && slotOptions.length === 1 ? (slotOptions[0]?.start ?? null) : null,
   );
+  /** 보강을 기록할 수업 — 강사가 고른 값이 이긴다. 목록이 늦게 와도 기본값은 매 렌더 부모 값으로 본다(effect setState 금지). */
+  const [hostPick, setHostPick] = useState<string | null>(null);
 
   const chosen = candidates.find((c) => c.name === pick) ?? null;
   const baseUnits = chosen?.attendanceUnits ?? defaultUnits ?? 1;
@@ -164,8 +181,24 @@ export function MakeupConfirmDialog({
   const customWaiting = asksAbsence && absencePick === PICK_CUSTOM && !!absenceLoading;
   /** 교시를 물어야 하는 화면인데 아직 안 골랐다 — 첫 교시로 조용히 밀어 넣지 않는다. */
   const slotUnpicked = !!slotOptions && slotOptions.length > 0 && !slotPick;
+  const hostFailed = !!hostClasses?.failed;
+  /**
+   * 수업을 묻는 화면인가 — 합칠 정규 수업이 없는 보강만(있으면 그 수업에 기록된다).
+   * 🔴 목록을 못 불러왔으면 **묻지 않는다** — `hostClassId`를 안 실어 호출부가 종전 앵커(보던 반 필터)를 쓴다. '반 없이'로 떨어뜨리면
+   *    필터를 켜고 추가한 보강까지 보강 반으로 가서 원장이 겪은 그 줄이 다시 선다(적대 리뷰 2026-09-21).
+   */
+  const asksHost = !!hostClasses && !canMerge && !hostFailed;
+  const hostOptions = hostClasses?.options ?? [];
+  // 🔴 고른 값은 **지금 후보 안에 있을 때만** 쓴다 — 창이 열린 사이 후보가 바뀌면(그 반에 정규 행이 생김) 사라진 반이 그대로 나간다.
+  const inOptions = (v: string | null | undefined) => !!v && hostOptions.some((o) => o.classId === v);
+  const hostValue = hostPick === HOST_NONE || inOptions(hostPick) ? hostPick : inOptions(defaultHostClassId) ? defaultHostClassId! : null;
+  const hostChosen = hostOptions.find((o) => o.classId === hostValue) ?? null;
+  const hostLoading = asksHost && !!hostClasses?.loading && !hostPick;
+  const hostUnpicked = asksHost && !hostValue;
+  /** 요약 문장의 '어디에 기록하나' — 수업을 물었으면 고른 반 이름을 밝힌다. */
+  const recordWhere = !asksHost ? "출석부에 보강으로 기록합니다. " : hostChosen ? `출석부 ${hostChosen.className} 반에 보강으로 기록합니다. ` : "지금은 출결을 적지 않습니다(보고서를 저장할 때 반영). ";
   const blocked =
-    (canMerge && !chosen) || addUnits === null || customEmpty || customExpired || customWaiting || slotUnpicked;
+    (canMerge && !chosen) || addUnits === null || customEmpty || customExpired || customWaiting || slotUnpicked || hostLoading || hostUnpicked;
 
   // 🔴 **portal로 body에 붙인다** — ECS 오늘 보드는 카드가 `zoom` 래퍼(글씨 크게) 안이라, 그 안에서
   //    `position:fixed`를 쓰면 좌표가 배율만큼 곱해져 모달이 화면 밖으로 밀린다([[#98]] 사촌 함정).
@@ -277,6 +310,47 @@ export function MakeupConfirmDialog({
           </p>
         ) : null}
 
+        {/* ⓐ 어느 수업에 기록하나 — 합칠 정규 수업이 없는 보강만(원장 2026-09-21). 학생이 다니는 반이 맨 앞 —
+            그 반에 기록하면 출석부에 새 줄이 안 생긴다. '반 없이'는 지금 출결을 안 적고, 보고서 저장 때 그 강사 반에 칸이 없으면
+            보이지 않는 '보강' 반에 선다(makeup-pool.ts — 칸이 이미 있으면 안 만든다). */}
+        {asksHost ? (
+          <div className="mt-3" role="radiogroup" aria-label="보강 기록 수업 선택">
+            <p className="text-text-faint mb-1.5 text-xs">어느 수업에 기록할까요?</p>
+            {hostClasses?.loading && hostOptions.length === 0 ? (
+              <p className="text-text-faint text-xs">수업 목록을 불러오는 중…</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {[...hostOptions.map((o) => ({ v: o.classId, label: o.className, sub: o.enrolled ? "다니는 반" : null })), { v: HOST_NONE, label: "반 없이", sub: "보강 반" }].map((o) => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    role="radio"
+                    aria-checked={hostValue === o.v}
+                    onClick={() => setHostPick(o.v)}
+                    className={
+                      hostValue === o.v
+                        ? "border-primary bg-primary-soft text-primary rounded-lg border px-2.5 py-1.5 text-xs font-bold"
+                        : "border-line text-text-dim hover:bg-bg-soft rounded-lg border px-2.5 py-1.5 text-xs font-bold"
+                    }
+                  >
+                    {o.label}
+                    {o.sub ? <span className="ml-1 font-medium opacity-80">· {o.sub}</span> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+            {hostValue === HOST_NONE ? (
+              <p className="text-text-faint mt-1.5 text-xs leading-snug">지금은 출결을 적지 않습니다. 보고서를 저장할 때 선생님 반에 이 학생 칸이 없으면 보이지 않는 &apos;보강&apos; 반에 기록됩니다.</p>
+            ) : hostChosen && !hostChosen.enrolled ? (
+              <p className="text-text-faint mt-1.5 text-xs leading-snug">이 학생이 다니는 반이 아니라 그 반 출석부에 보강 줄이 하나 생깁니다.</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {hostClasses && !canMerge && hostFailed ? (
+          <p className="text-amber mt-3 text-xs leading-snug">수업 목록을 불러오지 못해 보고 있던 반 필터 기준으로 기록합니다.</p>
+        ) : null}
+
         {/* ① 며칠자 결석분인가 — **목록에서 고른다**(반 이동 전 옛 반 결석 포함). */}
         {asksAbsence ? (
           <div className="mt-3">
@@ -378,13 +452,17 @@ export function MakeupConfirmDialog({
               ? "기한 안의 결석을 고르거나, 결석분이 아니면 '결석분 아님'을 고르세요."
             : customWaiting
               ? "결석 기록을 불러오는 중입니다 — 잠시 뒤 확인할 수 있습니다."
+            : hostLoading
+              ? "수업 목록을 불러오는 중입니다 — 잠시 뒤 확인할 수 있습니다."
+            : hostUnpicked
+              ? "보강을 기록할 수업을 고르세요(반과 무관한 보강이면 '반 없이')."
             : addUnits === null
               ? "보강 시수는 0보다 큰 숫자로 적어 주세요(0.5 = 1시간)."
               : mode === "merge" && chosen
                 ? `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosen.name} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${(chosen.attendanceUnits ?? 1) + addUnits}.`
                 : !absentDate
-                  ? `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : "출석부에 보강으로 기록합니다. "}결석분 연결은 없고(추가 보강), ${shortDate(makeupDate)} 보강 수업타임은 ${addUnits}.`
-                  : `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : "출석부에 보강으로 기록합니다. "}출석부는 ${shortDate(absentDate)}${selectedOption ? ` ${selectedOption.className}` : ""} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸 보강 수업타임은 ${addUnits}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
+                  ? `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : recordWhere}결석분 연결은 없고(추가 보강), ${shortDate(makeupDate)} 보강 수업타임은 ${addUnits}.`
+                  : `${canMerge ? "보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. " : recordWhere}출석부는 ${shortDate(absentDate)}${selectedOption ? ` ${selectedOption.className}` : ""} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸 보강 수업타임은 ${addUnits}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
         </p>
         {mode === "merge" && chosen && (sentSubjects ?? []).includes(chosen.name) ? (
           <p className="text-amber mt-1.5 text-xs leading-relaxed">
@@ -409,6 +487,7 @@ export function MakeupConfirmDialog({
                 ...(mode === "separate" && absentDate ? { absentDate } : {}),
                 ...(mode === "separate" && absentClassId ? { absentClassId } : {}),
                 ...(slotPick ? { slotStart: slotPick } : {}),
+                ...(asksHost ? { hostClassId: hostValue === HOST_NONE ? null : hostValue } : {}),
               })
             }
           >

@@ -8,8 +8,11 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherScope, getShellView } from "@/lib/auth/view-mode";
+import { createClient } from "@/lib/supabase/server";
+import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { getMakeupAbsenceOptions } from "./makeup-options";
 import type { MakeupAbsenceList } from "../makeup-options";
+import { orderHostClasses, type MakeupHostClass } from "../makeup-host";
 
 /** 권한이 없거나 못 불렀을 때 — 확인창은 이걸 받아 '직접 입력'으로 폴백한다. */
 const EMPTY: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
@@ -39,4 +42,35 @@ export async function fetchMakeupAbsences(
   //    보강은 보여주지말것"*) — 셸과 같은 판정(실 강사 + 겸직의 강사뷰). 사무실 화면은 1년치 그대로. 클라 값은 안 믿는다.
   const deadline = (await getShellView()) === "teacher";
   return getMakeupAbsenceOptions(studentId, makeupDate, anchorClassId ?? null, teacherSubjects, deadline);
+}
+
+/**
+ * 보강을 기록할 수 있는 **수업(반) 후보** — 원장 2026-09-21 *"보강 추가시에 '수업'을 선택할 수 있어야겠어"*.
+ * 🔴 **보강 등록 문(`registerMakeupEntries`)과 같은 판정**(#77 — 보여 놓고 실패하면 안 된다): 그날 담당 반(`getTeachingClasses` —
+ *    담임 ∪ 위임, 활성)이고, `subjects`를 주면 그 과목의 반만. 등록 문이 과목까지 맞춰 보기 때문이다.
+ * 학생이 그날 다니는 반(휴원 제외)이 맨 앞(`orderHostClasses`). '반 없이'는 창이 따로 둔다.
+ * ⚠️ 실패는 `failed: true` — 창은 그때 묻지 않고 종전 앵커(보던 반 필터)로 기록한다(보강 추가 자체가 막히면 더 나쁘다).
+ */
+export async function fetchMakeupHostClasses(studentId: string, makeupDate: string, subjects?: readonly string[]): Promise<{ options: MakeupHostClass[]; failed?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user || !(await canWriteTenant(user.systemRole, "attendance"))) return { options: [], failed: true };
+  if (typeof studentId !== "string" || !studentId || !/^\d{4}-\d{2}-\d{2}$/.test(makeupDate)) return { options: [], failed: true };
+  try {
+    const supabase = await createClient();
+    const [classes, enrollments] = await Promise.all([
+      getTeachingClasses(supabase, user.id, makeupDate),
+      supabase.from("enrollments").select("class_id").eq("student_id", studentId).eq("on_hold", false)
+        .or(`start_date.is.null,start_date.lte.${makeupDate}`)
+        .or(`end_date.is.null,end_date.gte.${makeupDate}`),
+    ]);
+    if (enrollments.error) throw new Error(enrollments.error.message);
+    const enrolled = new Set(((enrollments.data ?? []) as { class_id: string }[]).map((e) => e.class_id));
+    const wanted = subjects?.length ? new Set(subjects) : null;
+    return { options: orderHostClasses(classes.filter((c) => !wanted || wanted.has(c.subject)).map((c) => ({
+      classId: c.id, className: c.className, subject: c.subject, enrolled: enrolled.has(c.id),
+    }))) };
+  } catch (e) {
+    console.error("[makeup-host] 반 후보 조회 실패", e instanceof Error ? e.message : e);
+    return { options: [], failed: true };
+  }
 }

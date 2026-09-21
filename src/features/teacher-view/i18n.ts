@@ -3173,8 +3173,20 @@ export const SHEET_DICT = {
   },
   "os.c.makeupAddedUnits": { ko: "{name} (보강) 추가됨 — 수업타임 {units}", en: "{name} (makeup) added — class units {units}" },
   "os.c.makeupAddedNoAnchor": {
-    ko: "{name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).",
-    en: "{name} (makeup) added — the class filter is on 'All', so nothing was written to the attendance sheet (pick a class and it is recorded too).",
+    ko: "{name} (보강) 추가됨 — 기록할 반이 정해지지 않아 출결에는 남기지 않았습니다(반 필터로 반 하나를 고르면 함께 기록됩니다).",
+    en: "{name} (makeup) added — no class was set, so nothing was written to the attendance sheet (pick one class in the filter and it is recorded too).",
+  },
+  "os.c.makeupAddedNoHost": {
+    ko: "{name} (보강) 추가됨 — '반 없이'라 지금은 출결을 적지 않았습니다(보고서를 저장할 때 선생님 반에 이 학생 칸이 없으면 보강 반에 기록됩니다).",
+    en: "{name} (makeup) added — 'No class' was picked, so nothing was written now (when the report is saved, it goes to the makeup class unless your class already has this student that day).",
+  },
+  "os.c.makeupHostGone": {
+    ko: "수업 목록이 바뀌었습니다 — 기록할 수업을 다시 골라 주세요",
+    en: "The class list changed — pick the class again",
+  },
+  "os.c.makeupRowExistsNoChange": {
+    ko: "이미 보강 행이 있어 이번 선택(수업·시수·결석분)은 반영하지 않았습니다 — 바꾸려면 보강 빼기 후 다시 추가해 주세요",
+    en: "A makeup row already exists, so this choice (class, units, absence) was not applied — remove the makeup and add it again to change it",
   },
   "os.c.cardNotFound": {
     ko: "학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요",

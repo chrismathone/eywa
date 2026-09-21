@@ -205,7 +205,8 @@ import {
   MakeupConfirmDialog,
   type MakeupConfirmChoice,
 } from "@/features/attendance/components/makeup-confirm-dialog";
-import { fetchMakeupAbsences } from "@/features/attendance/server/makeup-actions";
+import { fetchMakeupAbsences, fetchMakeupHostClasses } from "@/features/attendance/server/makeup-actions";
+import { defaultHostClassId, type MakeupHostClass } from "@/features/attendance/makeup-host";
 import { noteMakeupAgainstAbsence } from "@/features/attendance/server/makeup-note-action";
 import type { MakeupAbsenceList } from "@/features/attendance/makeup-options";
 import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
@@ -455,6 +456,11 @@ export function OneScreenClient({
     absences: MakeupAbsenceList;
     /** 아직 불러오는 중 — 도착 전에 "결석 기록이 없습니다"라고 단언하지 않게. */
     absencesLoading: boolean;
+    /**
+     * 보강을 기록할 수업 후보(원장 2026-09-21 *"보강 추가시에 '수업'을 선택할 수 있어야겠어"*) — 합칠 정규 수업이 없는
+     * 보강에서만 싣는다. 없으면 창이 묻지 않는다(종전 앵커 그대로).
+     */
+    hostClasses?: { options: MakeupHostClass[]; loading: boolean; failed?: boolean };
   } | null>(null);
   /**
    * 결석 조회 응답 순서 가드(옆 두 화면 `input-form`·`makeup-add-flow`와 같은 규약).
@@ -463,6 +469,8 @@ export function OneScreenClient({
    *    같아서 안 보이던 레이스다).
    */
   const absenceSeq = useRef(0);
+  /** 수업 후보 조회 응답 순서 가드 — 결석 조회와 같은 규약(늦게 온 옛 응답이 새 창을 덮지 않게). */
+  const hostSeq = useRef(0);
   const [reports, setReports] = useState<ReportsState>(() => initReports(initial));
   const [genSubject, setGenSubject] = useState<string | null>(null); // AI 멘트 생성 중인 과목(카드 버튼 로딩)
   const [genKey, setGenKey] = useState<string | null>(null); // 표 행별 자동작성 로딩 키(studentId::과목)
@@ -1080,8 +1088,10 @@ export function OneScreenClient({
         isNew: true,
         absences: EMPTY_ABSENCES,
         absencesLoading: true,
+        hostClasses: { options: [], loading: true },
       });
       void loadAbsences(studentId, anchorId);
+      void loadHostClasses(studentId, mk.subjects);
       return;
     }
     // 🔴 **자동으로 합치지 않는다 — 묻는다**(원장 2026-08-06: *"선생님들이 헷갈린대"*).
@@ -1133,6 +1143,13 @@ export function OneScreenClient({
     }
     // 합칠 정규 행이 없다(그날 결석·다른 강사 과목 등) → **그래도 묻는다**. 결석 보강이 바로 이 경로라
     // 예전엔 가장 흔한 보강에서 결석분·시수를 물을 자리가 없었다(원장 2026-08-19).
+    // 🔴 단 **더할 보강 행이 없으면**(같은 학생을 다시 추가) 창을 열지 않는다 — 열면 수업·시수·결석분을 고르게 해 놓고
+    //    하나도 반영하지 못한다(적대 리뷰 2026-09-21). 반을 바꾸려면 보강 빼기 → 다시 추가.
+    if (pendingMakeupRows(existing, mk).length === 0) {
+      setSelId(existing.id);
+      toast.message(t("os.c.makeupRowExists"));
+      return;
+    }
     setMakeupAsk({
       studentId,
       studentName: existing.name,
@@ -1142,8 +1159,32 @@ export function OneScreenClient({
       isNew: false,
       absences: EMPTY_ABSENCES,
       absencesLoading: true,
+      hostClasses: { options: [], loading: true },
     });
     void loadAbsences(studentId, anchorId);
+    void loadHostClasses(studentId, mk.subjects);
+  }
+  /**
+   * 창에 보일 수업 후보 — 그 학생이 **오늘 이 화면에 정규 행이 있는 반은 뺀다**: 그 반은 정규 칸이 이미 있어
+   * `persistAnchorMakeup`이 보강을 안 적는다(합칠 수 없는 결석 등) — 보이면 "그 반에 기록합니다"가 지킬 수 없는 약속이 된다.
+   */
+  function hostChoicesOf(ask: NonNullable<typeof makeupAsk>) {
+    if (!ask.hostClasses) return undefined;
+    const regular = new Set(students.find((s) => s.id === ask.studentId)?.subjects.filter((su) => !su.makeup && su.classId).map((su) => su.classId) ?? []);
+    return { ...ask.hostClasses, options: ask.hostClasses.options.filter((o) => !regular.has(o.classId)) };
+  }
+  /** 보강을 기록할 수업 후보를 뒤늦게 채운다 — 창은 먼저 열고 목록만 갈아 끼운다(결석 조회와 같은 모양). */
+  async function loadHostClasses(studentId: string, rows: readonly Subject[]) {
+    const mine = ++hostSeq.current;
+    // 후보는 보강 행 과목의 반만(등록 문이 과목까지 맞춰 본다) — 과목 키를 모르면 거르지 않는다.
+    const subjects = [...new Set(rows.map((su) => su.subjectKey).filter((k): k is string => !!k))];
+    const res = await fetchMakeupHostClasses(studentId, activeDate, subjects).catch(() => ({ options: [], failed: true }));
+    if (mine !== hostSeq.current) return;
+    setMakeupAsk((prev) =>
+      prev && prev.studentId === studentId && prev.hostClasses
+        ? { ...prev, hostClasses: { options: res.options, loading: false, failed: res.failed } }
+        : prev,
+    );
   }
   /**
    * 결석 후보(이전 반 포함)를 뒤늦게 채운다 — 창은 먼저 열고 목록만 도착하면 갈아 끼운다.
@@ -1216,8 +1257,47 @@ export function OneScreenClient({
    * ⚠️ 학생은 **id로 다시 찾는다** — 다이얼로그가 열려 있는 동안 실시간 갱신이 카드를 바꿨을 수 있다.
    */
   async function resolveMakeupAsk(choice: MakeupConfirmChoice) {
-    const ask = makeupAsk;
-    if (!ask || makeupSaving) return;
+    const asked = makeupAsk;
+    if (!asked || makeupSaving) return;
+    // 창에서 **수업을 골랐으면** 그 반이 앵커다(원장 2026-09-21) — 보고서의 `makeup_class_id`와 출결 칸이 모두 그 반을 본다.
+    // `null` = '반 없이'(보이지 않는 보강 반 — 종전 동작). 묻지 않았으면(`undefined`) 반 필터 앵커 그대로.
+    // 🔴 고른 반과 **과목이 같은 행만** 남긴다 — 다른 과목 행까지 그 반에 묶으면 등록 문이 통째로 거절한다(적대 리뷰 2026-09-21).
+    // ⚠️ 카드 표시 이름(`makeupClassName`)은 보고 있던 반 필터가 있으면 그대로(바꾸면 추가한 카드가 그 자리에서 사라진다),
+    //    '전체'였으면 고른 반 이름(새로고침 뒤 그 반 칩 아래로 옮겨 가 보이는 것과 같게).
+    // 🔴 고른 반은 **지금 창에 보이는 후보**에서 찾는다 — 창이 열린 사이 그 반에 정규 행이 생기면 후보에서 빠지는데,
+    //    거르기 전 목록에서 찾으면 요약 문장('보강 반에 기록')과 다른 반으로 나간다(적대 리뷰 2026-09-21).
+    const host = choice.hostClassId === undefined || choice.hostClassId === null
+      ? null
+      : hostChoicesOf(asked)?.options.find((o) => o.classId === choice.hostClassId) ?? null;
+    if (typeof choice.hostClassId === "string" && !host) {
+      toast.error(t("os.c.makeupHostGone"));
+      return;
+    }
+    // 반 필터가 '전체'였나 — 그때만 카드 이름을 고른 반으로 바꾼다(서버가 tag를 늘 "보강"으로 채워 tag로는 가를 수 없다).
+    const filterAll = !asked.mk.subjects.some((su) => su.makeupClassName);
+    const ask = choice.hostClassId === undefined
+      ? asked
+      : {
+          ...asked,
+          mk: {
+            ...asked.mk,
+            ...(host && filterAll ? { tag: host.className, className: host.className } : {}),
+            subjects: asked.mk.subjects
+              .filter((su) => !host || !su.subjectKey || su.subjectKey === host.subject)
+              .map((su) => ({ ...su, makeupClassId: choice.hostClassId ?? null, makeupClassName: su.makeupClassName ?? host?.className ?? null })),
+          },
+        };
+    // 🔴 더할 보강 행이 없으면 **등록하기 전에** 멈춘다 — 등록이 먼저 돌면 고른 수업·시수가 세션에 적히는데 카드 행은
+    //    옛 앵커 그대로라, 새로고침 뒤 카드가 칸 없는 반을 가리키고 보고서 저장 때 보강 반 칸이 하나 더 선다(적대 리뷰 2026-09-21).
+    //    목록에 없던 학생(isNew)이라도 창이 열린 사이 카드가 들어왔을 수 있어 id로 다시 찾는다.
+    const cardNow = studentsRef.current.find((s) => s.id === ask.studentId);
+    const separateSubject = choice.candidate && choice.mode === "separate" ? choice.candidate.subjectKey : undefined;
+    if (cardNow && (!choice.candidate || separateSubject) && pendingMakeupRows(cardNow, ask.mk, separateSubject).length === 0) {
+      setMakeupAsk(null);
+      setSelId(cardNow.id);
+      toast.message(t("os.c.makeupRowExistsNoChange"));
+      return;
+    }
     if (choice.mode === "separate") {
       const existing = studentsRef.current.find(s => s.id === ask.studentId);
       const attended = new Set(existing?.subjects.filter(su => !su.makeup).map(su => su.subjectKey));
@@ -1246,7 +1326,11 @@ export function OneScreenClient({
     }
     setMakeupAsk(null);
     const anchorIdNew = ask.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null;
-    if (ask.isNew) {
+    // '반 없이'를 골랐는가 — 앵커가 없는 이유가 반 필터가 아니라 강사의 선택이라 문구가 다르다.
+    const noAnchorToast = choice.hostClassId === null ? "os.c.makeupAddedNoHost" : "os.c.makeupAddedNoAnchor";
+    // 목록에 없던 학생이라도 창이 열린 사이 카드가 실시간으로 들어왔으면 **기존 카드 경로**로 보낸다 — 새 카드 경로로 가면
+    // 그 카드의 앵커 칸과 고른 반 칸이 둘 다 선다(적대 리뷰 2026-09-21).
+    if (ask.isNew && !studentsRef.current.some((s) => s.id === ask.studentId)) {
       // 목록에 없던 학생 — 확인을 받았으니 이제 카드를 만든다(취소했으면 여기 안 온다).
       const mk = ask.mk;
       setStudents((prev) => (prev.some((s) => s.id === mk.id) ? prev : [...prev, mk]));
@@ -1260,7 +1344,7 @@ export function OneScreenClient({
         toast.success(
           anchorIdNew
             ? tf("os.c.makeupAddedUnits", { name: mk.name, units: choice.addUnits })
-            : tf("os.c.makeupAddedNoAnchor", { name: mk.name }),
+            : tf(noAnchorToast, { name: mk.name }),
         );
       }
       return;
@@ -1272,7 +1356,9 @@ export function OneScreenClient({
     }
     if (!choice.candidate) {
       // 합칠 정규 행이 없는 보강(그날 결석·다른 강사 과목) — 보강 행만 만들고 시수·결석분은 앵커 반에 적는다.
-      addSeparateMakeupRows(existing, ask.mk);
+      // 🔴 이미 보강 행이 있으면(같은 학생을 다시 추가) **여기서 멈춘다** — 계속 가면 고른 반에 칸이 하나 더 서서 시수가 두 번 잡히고,
+      //    카드 행의 앵커는 옛 값이라 보강 빼기가 그 칸을 못 지운다(적대 리뷰 2026-09-21). 반을 바꾸려면 보강 빼기 → 다시 추가.
+      if (!addSeparateMakeupRows(existing, ask.mk)) return;
       persistAnchorMakeup(
         existing.id,
         anchorIdNew,
@@ -1285,7 +1371,7 @@ export function OneScreenClient({
         toast.success(
           anchorIdNew
             ? tf("os.c.makeupAddedUnits", { name: existing.name, units: choice.addUnits })
-            : tf("os.c.makeupAddedNoAnchor", { name: existing.name }),
+            : tf(noAnchorToast, { name: existing.name }),
         );
       }
       return;
@@ -1469,16 +1555,11 @@ export function OneScreenClient({
    * 분리 — 종전(2026-08-05 이전)대로 별도 "(보강)" 행. 정규와 별개 보고서라 발송도 따로 나간다.
    * @returns 행이 실제로 늘었는가 — 호출부가 이 값으로 결석분 연결(시수 +1)을 걸지 판단한다.
    */
-  function addSeparateMakeupRows(
-    existing: OneScreenStudent,
-    mk: OneScreenStudent,
-    silent = false,
-    /** 지정하면 **그 과목 행만** 만든다(다이얼로그에서 강사가 고른 수업). 미지정=종전대로 전 과목 후보. */
-    onlySubjectKey?: string,
-  ): boolean {
-    const studentId = existing.id;
-    // 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
-    const used = new Set(existing.subjects.map((su) => su.name));
+  /**
+   * 이 카드에 **더할 보강 행**(이름 붙이기 전) — `addSeparateMakeupRows`와 창을 열기/등록하기 전 멈춤이 같은 판정을 쓴다.
+   * 비어 있으면 같은 과목 보강 행이 이미 있다는 뜻이다.
+   */
+  function pendingMakeupRows(existing: OneScreenStudent, mk: OneScreenStudent, onlySubjectKey?: string): Subject[] {
     // mk.subjects는 강사의 **모든 담당 과목**이라, 그대로 병합하면 math만 듣는 학생 카드에 '영어 (보강)' 잡행까지
     // 붙는다(2026-07-24 적대검수). 학생이 실제 수강하는 과목(정규+특강 행)으로 좁히되, 겹치는 과목이 하나도 없으면
     // (학생이 안 듣는 과목의 순수 추가보강) 종전대로 전체를 후보로 둔다.
@@ -1489,9 +1570,20 @@ export function OneScreenClient({
       : attendedRows.length
         ? attendedRows
         : mk.subjects;
-    const makeupRows = source
-      // 같은 과목 보강 행이 이미 있으면 중복 추가 안 함.
-      .filter((su) => !existing.subjects.some((ex) => ex.makeup && !ex.classId && ex.subjectKey === su.subjectKey))
+    // 같은 과목 보강 행이 이미 있으면 중복 추가 안 함.
+    return source.filter((su) => !existing.subjects.some((ex) => ex.makeup && !ex.classId && ex.subjectKey === su.subjectKey));
+  }
+  function addSeparateMakeupRows(
+    existing: OneScreenStudent,
+    mk: OneScreenStudent,
+    silent = false,
+    /** 지정하면 **그 과목 행만** 만든다(다이얼로그에서 강사가 고른 수업). 미지정=종전대로 전 과목 후보. */
+    onlySubjectKey?: string,
+  ): boolean {
+    const studentId = existing.id;
+    // 이름 유일화(reports 키 충돌 방지)로 초안 덮어쓰기 차단.
+    const used = new Set(existing.subjects.map((su) => su.name));
+    const makeupRows = pendingMakeupRows(existing, mk, onlySubjectKey)
       .map((su) => {
         let name = makeupRowName(su.name);
         let n = 2;
@@ -4320,6 +4412,11 @@ export function OneScreenClient({
           absences={makeupAsk.absences}
           absenceLoading={makeupAsk.absencesLoading}
           makeupDate={activeDate}
+          hostClasses={hostChoicesOf(makeupAsk)}
+          defaultHostClassId={defaultHostClassId(
+            hostChoicesOf(makeupAsk)?.options ?? [],
+            makeupAsk.mk.subjects.find((su) => su.makeupClassId)?.makeupClassId ?? null,
+          )}
           pending={makeupSaving}
           onConfirm={resolveMakeupAsk}
           onCancel={() => { if (!makeupSaving) setMakeupAsk(null); }}
