@@ -131,14 +131,14 @@ describe("confirmed English registration apportioned by the student's scheduled 
     }
   });
 
-  it("300,000 / 12,500 = 24U is Elsa 14 + Song 3 + JJ 7 for hourly classes", () => {
+  it("hourly 중2 특별 stays Elsa 14 + Song 3 + JJ 7 with one shortened 40-minute period", () => {
     const schedules = [
       slot(null, "19:20", "20:10", { dayOfWeek: "mon", slotTeacherLabel: "JJ" }),
       slot("elsa", "20:20", "21:10", { dayOfWeek: "mon" }),
       slot("elsa", "19:20", "20:10", { dayOfWeek: "wed" }),
       slot("elsa", "20:20", "21:10", { dayOfWeek: "wed" }),
       slot(null, "19:20", "20:10", { dayOfWeek: "thu", slotTeacherLabel: "JJ" }),
-      slot("song", "20:20", "21:10", { dayOfWeek: "thu" }),
+      slot("song", "20:20", "21:00", { dayOfWeek: "thu" }),
     ];
     const weights = teacherTermWeights({ ...base, englishTrack: "injaewon", className: "중고E_중2 특별", schedules, holidays: new Set(["2026-09-24", "2026-09-25", "2026-09-26"]) });
     const registered = { units: 300000 / 12500, daysBasis: false };
@@ -147,6 +147,19 @@ describe("confirmed English registration apportioned by the student's scheduled 
     expect(shares.every((s) => !s.allocationPending)).toBe(true);
     expect(shares.reduce((sum, s) => sum + s.units * 12500, 0)).toBe(300000);
     expect(attendanceUnitsDiff(14, shares[0])).toBe(0);
+  });
+
+  it("hourly 중2 정규 C is teacher 16 + JJ 8 despite shortened final periods", () => {
+    const schedules = (["tue", "fri"] as const).flatMap((dayOfWeek) => [
+      slot(null, "18:20", "19:20", { dayOfWeek, slotTeacherLabel: "JJ" }),
+      slot("home", "19:20", "20:10", { dayOfWeek }),
+      slot("home", "20:20", "21:00", { dayOfWeek }),
+    ]);
+    const weights = teacherTermWeights({ ...base, englishTrack: "injaewon", className: "중등E_중2 정규 C",
+      schedules, holidays: new Set(["2026-09-24", "2026-09-25", "2026-09-26"]),
+    });
+    expect([...weights]).toEqual([["", 8], ["home", 16]]);
+    expect(teacherTermSessions({ units: 24, daysBasis: false }, "home", weights)).toEqual({ units: 16, daysBasis: false, classUnits: 24 });
   });
 
   it("keeps an exact teacher + JJ split unchanged by teacher-id sorting", () => {

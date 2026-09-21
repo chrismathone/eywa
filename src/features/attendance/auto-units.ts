@@ -63,7 +63,7 @@ export type AutoUnitsSchedule = {
   labSeparate?: boolean;
 };
 
-/** A 40-minute period on any weekday makes the active English timetable a bridge course. */
+/** Bridge/EiE uses 40-minute units; ordinary 50-minute periods count as hourly lessons. */
 export function usesFortyMinuteEnglishUnits(
   date: string,
   schedules: readonly AutoUnitsSchedule[],
@@ -72,9 +72,13 @@ export function usesFortyMinuteEnglishUnits(
 ): boolean {
   if (englishTrack === "eie" || /브릿지|브리지|\bbridge\b/i.test(className)) return true;
   const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-  return schedules.some((s) => s.validFrom <= date && (!s.validTo || s.validTo >= date)
-    && !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? "")
-    && minutes(s.endTime) - minutes(s.startTime) === 40);
+  const durations = schedules.filter((s) => s.validFrom <= date && (!s.validTo || s.validTo >= date)
+    && !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? ""))
+    .map((s) => minutes(s.endTime) - minutes(s.startTime));
+  // Injaewon hourly classes use 50-minute teaching periods. A shortened period in
+  // that timetable (e.g. 20:20–21:00) must not reclassify the whole class as bridge.
+  if (durations.some((duration) => duration >= 50 && duration < 60)) return false;
+  return durations.includes(40);
 }
 
 /** DB 행(snake) → 판정 모양. 서버 헬퍼·월별 출석부·원스크린 로스터가 **같은 변환**을 쓴다. */
@@ -108,10 +112,13 @@ export function autoUnitsOn(
   track: AutoUnitsTrack = "math",
   className = "",
 ): number | null {
-  let total = 0;
-  for (const m of liveSlotMinutesOn(date, schedules).values()) total += m;
+  const periods = [...liveSlotMinutesOn(date, schedules).values()].filter((minutes) => minutes > 0);
+  if (!periods.length) return null;
   const basis = track !== "math" && usesFortyMinuteEnglishUnits(date, schedules, track, className) ? "eie" : track;
-  return unitsFromMinutes(total, basis);
+  if (basis === "math") return unitsFromMinutes(periods.reduce((sum, minutes) => sum + minutes, 0), basis);
+  // Normalize each English period before adding: six 50-minute hourly lessons = 6U.
+  const total = Math.min(MAX_SESSION_UNITS, periods.reduce((sum, minutes) => sum + (unitsFromMinutes(minutes, basis) ?? 1), 0));
+  return total === 1 ? null : total;
 }
 
 /**

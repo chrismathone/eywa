@@ -1599,12 +1599,12 @@ export const SHEET_DICT = {
     en: "Math: 1 hour = 0.5, 2 hours = 1, 3 hours = 1.5",
   },
   "att.units.eie": {
-    ko: "브릿지(40분 수업이 있는 반) 및 EiE: 40분 수업 = 1, 60분 수업 = 1.5",
-    en: "Bridge (classes with 40-minute lessons) & EiE: 40 minutes = 1, 60 minutes = 1.5",
+    ko: "브릿지(40분 교시 기준) 및 EiE: 40분 수업 = 1, 60분 수업 = 1.5",
+    en: "Bridge (40-minute periods) & EiE: 40 minutes = 1, 60 minutes = 1.5",
   },
   "att.units.injaewon": {
-    ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3",
-    en: "Injaewon: 1 hour = 1, 2 hours = 2, 3 hours = 3",
+    ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3 (50분 교시도 1시간)",
+    en: "Injaewon: 1 hour = 1, 2 hours = 2, 3 hours = 3 (a 50-minute period counts as 1 hour)",
   },
   "att.range.title": { ko: "선택한 {n}칸 출결·색상", en: "Attendance & color for {n} cells" },
   "att.range.keepUnits": { ko: "각 셀의 기존 시수는 유지합니다.", en: "Each cell keeps its existing units." },

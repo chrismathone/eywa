@@ -15,10 +15,23 @@ describe("영어 트랙 시수", () => {
   });
 
   it("인재원은 60분당 1시수다(수학의 0.5와 구분)", () => {
+    expect(unitsFromMinutes(50, "injaewon")).toBeNull();
     expect(unitsFromMinutes(60, "injaewon")).toBeNull();
     expect(unitsFromMinutes(120, "injaewon")).toBe(2);
     expect(unitsFromMinutes(180, "injaewon")).toBe(3);
     expect(unitsFromMinutes(60, "math")).toBe(0.5);
+  });
+
+  it("50분 교시를 쓰는 인재원 반은 단축 40분 교시가 섞여도 시간 단위다", () => {
+    const schedules = [lesson({ startTime: "19:20", endTime: "20:10" }),
+      lesson({ startTime: "20:20", endTime: "21:00" })];
+    expect(usesFortyMinuteEnglishUnits("2026-09-08", schedules, "injaewon", "중등E_중2 정규 C")).toBe(false);
+    expect(autoUnitsOn("2026-09-08", schedules, "injaewon")).toBe(2);
+  });
+
+  it("각 50분 교시를 60분으로 인정한 뒤 합산한다", () => {
+    const schedules = Array.from({ length: 6 }, (_, index) => lesson({ startTime: `${14 + index}:00`, endTime: `${14 + index}:50` }));
+    expect(autoUnitsOn("2026-09-08", schedules, "injaewon")).toBe(6);
   });
 
   it("반 이름에 브릿지가 없어도 다른 요일의 40분 수업이 있으면 60분은 1.5U다", () => {

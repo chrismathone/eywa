@@ -60,12 +60,12 @@ describe("강사 출석부 청구액 조회 범위", () => {
     }
   });
 
-  it("시간 단위 인재원 교시는 JJ를 포함해 배분한다", async () => {
+  it("인재원 50분 교시는 1U이며 단축 40분 교시가 섞여도 JJ를 포함해 24U를 배분한다", async () => {
     mocks.tables.classes = [{ id: "c1", class_name: "중고E_중2 특별", teacher_id: "elsa", english_track: "injaewon" }];
     const slots = [
       ["mon", "19:20", "20:10", null, "JJ"], ["mon", "20:20", "21:10", "elsa", null],
       ["wed", "19:20", "20:10", "elsa", null], ["wed", "20:20", "21:10", "elsa", null],
-      ["thu", "19:20", "20:10", null, "JJ"], ["thu", "20:20", "21:10", "song", null],
+      ["thu", "19:20", "20:10", null, "JJ"], ["thu", "20:20", "21:00", "song", null],
     ];
     mocks.tables.class_schedules = slots.map(([day, start, end, teacher, label], i) => ({
       id: `slot-${i}`, class_id: "c1", day_of_week: day, start_time: start, end_time: end,
