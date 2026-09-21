@@ -202,7 +202,7 @@ export function attendanceClassConfirmedPrices(
 }
 
 /** 확정 당시 단위 — 회차 확정 화면과 **같은 폴백**(null이면 옛 일수 기준). 월 정액은 이 축이 없다. */
-function isDaysBasisTerm(term: AttendanceBillingTerm): boolean {
+function isDaysBasisTerm(term: Pick<AttendanceBillingTerm, "pricing_mode" | "quantity_basis">): boolean {
   if (term.pricing_mode === "monthly") return false;
   return (term.quantity_basis ?? "days") === "days";
 }
@@ -220,8 +220,8 @@ function isDaysBasisTerm(term: AttendanceBillingTerm): boolean {
  */
 export function attendanceClassConfirmedSessions(
   classes: readonly AttendanceBillingClass[],
-  invoices: readonly AttendanceInvoice[],
-  terms: readonly AttendanceBillingTerm[],
+  invoices: readonly Pick<AttendanceInvoice, "id" | "student_id">[],
+  terms: readonly Pick<AttendanceBillingTerm, "invoice_id" | "class_id" | "confirmed_sessions" | "pricing_mode" | "quantity_basis">[],
 ): Record<string, AttendanceTermSessions> {
   const classById = new Map(classes.map((c) => [c.classId, { ...c, students: new Set(c.studentIds) }]));
   const studentByInvoice = new Map(invoices.map((i) => [i.id, i.student_id]));

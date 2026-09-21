@@ -17,6 +17,34 @@ export type TermShareEnrollment = {
 /** Empty owner = seat / unassigned time, which must not become the homeroom teacher's share. */
 export type TermShareWeights = Map<string, number> & { homeroomTeacherId?: string | null };
 
+/** Shared daily plan for registration allocation and the student units master. */
+export function teacherLessonsOn(input: {
+  date: string; schedules: readonly TermShareSchedule[]; homeroomTeacherId: string | null;
+  englishTrack: string | null; className: string;
+  scopeTeacherId?: string; homeroomSince?: string | null;
+}) {
+  const { date } = input;
+  const schedules = input.schedules.filter((s) => !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate)
+    && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? ""));
+  const fortyMinuteBasis = usesFortyMinuteEnglishUnits(date, schedules, input.englishTrack, input.className);
+  const slots = liveSlotMinutesOn(date, schedules.map((s) => ({ ...s, slotTeacherLabel: null })));
+  const lessons = [...slots].filter(([, minutes]) => minutes > 0).map(([start, minutes]) => {
+    const axis = resolveTaughtBy({ homeroomTeacherId: input.homeroomTeacherId, slots: schedules, date, slotStart: start });
+    let owner = axis.teacherId ?? "";
+    if (axis.source === "homeroom" && owner === input.scopeTeacherId && input.homeroomSince && date < input.homeroomSince) owner = "";
+    return { start, minutes, owner, source: axis.source,
+      units: unitsFromMinutes(minutes, fortyMinuteBasis ? "eie" : "injaewon") ?? 1 };
+  }).sort((a, b) => a.start.localeCompare(b.start));
+  const toMinutes = (start: string) => Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5));
+  if (fortyMinuteBasis && lessons.length === 4 && lessons.every((s) => s.minutes === 40 && s.owner)
+    && lessons[1].owner === lessons[2].owner && lessons[0].owner !== lessons[1].owner && lessons[3].owner !== lessons[1].owner
+    && lessons.slice(1).every((s, i) => toMinutes(s.start) - toMinutes(lessons[i].start) === 40)) {
+    lessons[0].units = 0.5;
+    lessons[3].units = 0.5;
+  }
+  return lessons;
+}
+
 /** Planned teaching shares, independent of the student's checked attendance and manual units. */
 export function teacherTermWeights(input: {
   month: string;
@@ -33,40 +61,15 @@ export function teacherTermWeights(input: {
   const { from, to } = input.window ?? monthRange(input.month);
   const weights: TermShareWeights = new Map();
   weights.homeroomTeacherId = input.homeroomTeacherId;
-  // Billing includes seats, but excludes separately displayed *LAB alternatives.
-  const schedules = input.schedules.filter((s) => !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate)
-    && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? ""));
-  const allSlots = schedules.map((s) => ({ ...s, slotTeacherLabel: null }));
   for (let day = new Date(`${from}T00:00:00Z`); day.toISOString().slice(0, 10) <= to; day.setUTCDate(day.getUTCDate() + 1)) {
     const date = day.toISOString().slice(0, 10);
     if (input.holidays.has(date)) continue;
     const dow = axisDowOf(date)!;
     if (!input.enrollments.some((e) => e.startDate <= date && !isEnrollmentEndedOn(e.endDate, date, e.isTransferred)
       && enrollmentAttendsOnDay(e.attendanceDays, dow))) continue;
-    // Course basis applies across weekdays; a bridge name is not required when a 40-minute period exists.
-    const fortyMinuteBasis = usesFortyMinuteEnglishUnits(date, schedules, input.englishTrack, input.className);
-    const slots = liveSlotMinutesOn(date, allSlots);
-    const lessons: { start: string; minutes: number; owner: string; units: number }[] = [];
-    for (const [start, minutes] of slots) {
-      if (minutes <= 0) continue;
-      const axis = resolveTaughtBy({ homeroomTeacherId: input.homeroomTeacherId, slots: schedules, date, slotStart: start });
-      let owner = axis.teacherId ?? "";
-      if (axis.source === "homeroom" && owner === input.scopeTeacherId && input.homeroomSince && date < input.homeroomSince) owner = "";
-      const units = unitsFromMinutes(minutes, fortyMinuteBasis ? "eie" : "injaewon") ?? 1;
-      lessons.push({ start, minutes, owner, units });
+    for (const lesson of teacherLessonsOn({ ...input, date })) {
+      weights.set(lesson.owner, (weights.get(lesson.owner) ?? 0) + lesson.units);
     }
-    lessons.sort((a, b) => a.start.localeCompare(b.start));
-    // Four contiguous 40-minute teaching blocks: the central teacher teaches two units,
-    // while the before/after groups share one. E.g. bridge A: Kristine .5 / Jane 2 / Florence .5.
-    // Require that exact split pattern; a seat or unrelated four-period timetable is not inferred.
-    const toMinutes = (start: string) => Number(start.slice(0, 2)) * 60 + Number(start.slice(3, 5));
-    if (fortyMinuteBasis && lessons.length === 4 && lessons.every((s) => s.minutes === 40 && s.owner)
-      && lessons[1].owner === lessons[2].owner && lessons[0].owner !== lessons[1].owner && lessons[3].owner !== lessons[1].owner
-      && lessons.slice(1).every((s, i) => toMinutes(s.start) - toMinutes(lessons[i].start) === 40)) {
-      lessons[0].units = 0.5;
-      lessons[3].units = 0.5;
-    }
-    for (const { owner, units } of lessons) weights.set(owner, (weights.get(owner) ?? 0) + units);
   }
   return weights;
 }

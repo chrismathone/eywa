@@ -29,6 +29,8 @@ import { canShowAttendanceActualAmount } from "@/features/attendance/server/actu
 import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { SalaryRatesButton } from "./_components/salary-rates-button";
 import { ActualSalaryToggle } from "./_components/actual-salary-toggle";
+import { UnitsMasterButton } from "./_components/units-master-button";
+import { canViewUnitsMaster } from "@/features/attendance/server/units-master";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
@@ -1193,6 +1195,9 @@ export default async function AttendancePage({
           />
         </div>
       )}
+      {canViewUnitsMaster(user.systemRole, myTeacherId) && (effectiveSubject === "english"
+        || (!effectiveSubject && (selectedClass?.subject === "english" || (teacherClasses.length > 0 && teacherClasses.every((c) => c.subject === "english")))))
+        ? <UnitsMasterButton month={month} /> : null}
       </div>
     </GridProvider>
     </AttendanceScopeProvider>
