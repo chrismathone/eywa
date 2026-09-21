@@ -28,6 +28,7 @@ import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
 import { canShowAttendanceActualAmount } from "@/features/attendance/server/actual-amount-access";
 import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
 import { SalaryRatesButton } from "./_components/salary-rates-button";
+import { ActualSalaryToggle } from "./_components/actual-salary-toggle";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
@@ -713,6 +714,40 @@ export default async function AttendancePage({
   // 결석 통보 접수(2026-08-19) — 남의 반 칸까지 한 번에 만드는 조작이라 **사무실(full)만**.
   // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.
   const canIntakeAbsence = await canManageTenant(user.systemRole, "attendance");
+  /**
+   * 🔴 상단은 **툴바 한 줄 + 표 위 한 줄**이다(원장 2026-09-21 *"상단에 굳이 2열로 두지말고 하나의 열로 공간 확보"*).
+   * 실측(1,990px 창): 툴바 왼쪽 묶음 1,453px + 오른쪽 묶음 854px가 한 줄(1,968px)을 넘어 오른쪽이 통째로 둘째 줄로
+   * 떨어졌다. 그래서 **표가 서 있을 때는** 도구(결석 통보 접수·급여명세서)와 칸 안내(`칸 = 이 선생님 교시`)를 표 위
+   * 줄(범례·보기 옵션 줄)로 내린다 — 툴바에는 이동·필터와 살아 있는 합계만 남는다(1,908px).
+   * ⚠️ 표가 없을 때(허브·빈 반)는 표 위 줄 자체가 없으므로 종전대로 툴바에 둔다(버튼이 사라지면 안 된다).
+   */
+  const gridShown = allGroups.length > 0 && totalStudents > 0;
+  // 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼.
+  // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
+  // 면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만.
+  const sheetTools =
+    canIntakeAbsence || (canOpenPayslip && effectiveTeacher) ? (
+      <>
+        {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
+        {canOpenPayslip && effectiveTeacher ? (
+          <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
+        ) : null}
+      </>
+    ) : null;
+  // 🔴 이 칸 안내는 **접히면 안 된다** — 강사 전체 보기는 칸 숫자를 그 선생님 교시로 좁혀 그리므로
+  // (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
+  // ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. '안내'는 `<details>`라
+  // 기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다.
+  // 표가 서면 범례 줄 맨 앞(칸의 뜻을 말하는 자리라 범례와 같은 줄이 맞다), 아니면 툴바.
+  const scopeChip =
+    (mode === "teacher" || classScopeTeacher) && allGroups.length > 0 ? (
+      <span
+        className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
+        title={sheetT(lang, isTeacherView ? "att.scopeChip.titleOwn" : "att.scopeChip.title")}
+      >
+        {sheetT(lang, "att.scopeChip")}
+      </span>
+    ) : null;
 
   /**
    * 허브(강사 미선택)로 열렸는데 **씨앗이 이미 있으면** 첫 렌더에 결과까지 준다 — 입력칸에 이름만
@@ -1035,25 +1070,9 @@ export default async function AttendancePage({
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-3 [&>button]:shrink-0">
-          {/* 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼. */}
-          {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
-          {/* 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
-              면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만. */}
-          {canOpenPayslip && effectiveTeacher ? (
-            <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
-          ) : null}
-          {/* 🔴 이 한 줄은 **접히면 안 된다** — 강사 전체 보기는 칸 숫자를 그 선생님 교시로 좁혀 그리므로
-              (한 달 시수가 서너 배 줄어드는 강사가 여럿이다) 같은 반이 반별 보기와 다른 숫자를 낸다.
-              ⚠️ 주석에 실측 숫자를 박지 말 것 — 라이브 데이터라 며칠 만에 늙는다. 아래 '안내'는 `<details>`라
-              기본 화면에선 안 보인다(적대적 리뷰 2026-08-18). 사유 전문은 툴팁·안내가 잇는다. */}
-          {(mode === "teacher" || classScopeTeacher) && allGroups.length > 0 ? (
-            <span
-              className="border-line text-text-dim shrink-0 rounded-full border px-2.5 py-0.5 text-xs whitespace-nowrap"
-              title={sheetT(lang, isTeacherView ? "att.scopeChip.titleOwn" : "att.scopeChip.title")}
-            >
-              {sheetT(lang, "att.scopeChip")}
-            </span>
-          ) : null}
+          {/* 도구·칸 안내 — 표가 서 있으면 표 위 줄로 내려간다(위 `gridShown` 주석). */}
+          {!gridShown ? sheetTools : null}
+          {!gridShown ? scopeChip : null}
           {allGroups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (
             // `<details>`라 클라 JS가 없다. 패널은 absolute라 열려도 격자를 밀어내지 않는다(높이 0 유지).
@@ -1129,12 +1148,6 @@ export default async function AttendancePage({
               읽히고, 그 색의 뜻은 이 범례가 말한다(`att.legend.holiday`).
               🔴 휴일 이름 줄을 되살리지 말 것 — 되살리려면 원장 확인이 먼저다.
               오늘 칩은 격자에 **오늘 열이 있을 때만**(지난·다음 달엔 남색 머리가 없다) — 표와 같은 `visibleDays`로 판정. */}
-          <AttendanceLegend
-            lang={lang}
-            showToday={visibleDays.some((d) => d.isToday)}
-            showMathUnits={allGroups.some((g) => g.unitSuffix === "T")}
-            showEnglishUnits={allGroups.some((g) => g.unitSuffix === "U")}
-          />
           <MatrixTable
             groups={allGroups}
             days={visibleDays}
@@ -1143,10 +1156,30 @@ export default async function AttendancePage({
             showGroups={showGroups}
             classBilledAmounts={classBilledAmounts.billed}
             showActualAmount={showActualAmount}
-            salaryRates={salaryConfig?.rates}
-            optionsExtra={salaryConfig ? <SalaryRatesButton teacherId={salaryConfig.teacherId} month={month}
-              teacherName={allTeacherOptions.find((t) => t.value === salaryConfig.teacherId)?.label ?? ""}
-              rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} /> : undefined}
+            // 🔴 실급여 열은 **'실급여 보이기'를 켰을 때만**(원장 2026-09-21) — 꺼 두면 급여 값을 아예 싣지 않는다
+            //    (화면에서 감추는 게 아니라 서버가 안 보낸다). 권한 판정(salaryConfig)은 종전 그대로.
+            salaryRates={viewPrefs.showActualSalary ? salaryConfig?.rates : undefined}
+            salaryView={!!salaryConfig}
+            optionsLeading={
+              <>
+                {scopeChip}
+                <AttendanceLegend
+                  lang={lang}
+                  showToday={visibleDays.some((d) => d.isToday)}
+                  showMathUnits={allGroups.some((g) => g.unitSuffix === "T")}
+                  showEnglishUnits={allGroups.some((g) => g.unitSuffix === "U")}
+                />
+              </>
+            }
+            optionsTools={sheetTools}
+            optionsExtra={salaryConfig ? <>
+              <SalaryRatesButton teacherId={salaryConfig.teacherId} month={month}
+                teacherName={allTeacherOptions.find((t) => t.value === salaryConfig.teacherId)?.label ?? ""}
+                rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} />
+              {/* '실급여 보이기'(원장 2026-09-21 *"관리자 출석부 우측에 토글"*) — 열이 설 수 있는 보기(관리자 +
+                  프리랜서 강사 전체 보기)에서만. 켜고 끄는 건 계정 귀속 설정이다. */}
+              {showActualAmount ? <ActualSalaryToggle checked={viewPrefs.showActualSalary} /> : null}
+            </> : undefined}
             termSessionsByRow={classBilledAmounts.confirmedSessions}
             confirmedPricesByRow={classBilledAmounts.confirmedPrices}
             priceConfirmedRows={classBilledAmounts.priceConfirmed}

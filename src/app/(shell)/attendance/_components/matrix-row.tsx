@@ -8,6 +8,7 @@ import { BADGE_BASE, BADGE_TONE, notMineCell } from "@/features/attendance/cell-
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
+import { salaryBilledCap } from "@/features/attendance/salary-rates";
 import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
@@ -212,7 +213,7 @@ export function MatrixRow({
         </td>
       ) : null}
       {showActualAmount ? <RowActualAmountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} lang={lang} /> : null}
-      {actualSalaryRate !== undefined ? <RowActualSalaryCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} rate={actualSalaryRate} lang={lang} /> : null}
+      {actualSalaryRate !== undefined ? <RowActualSalaryCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} rate={actualSalaryRate} billed={salaryBilledCap(classBilled, termSessions)} lang={lang} /> : null}
       {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
       <RowLessonCountCell
         row={rowKey(classId, student.id)}

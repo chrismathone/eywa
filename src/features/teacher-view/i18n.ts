@@ -1518,13 +1518,28 @@ export const SHEET_DICT = {
   "att.col.termSessions": { ko: "등록 차수", en: "Reg." },
   "att.col.actualAmount": { ko: "실수업액", en: "Earned" },
   "att.col.actualSalary": { ko: "실급여", en: "Net pay" },
-  "att.col.actualSalaryTitle": { ko: "시수 × 단가 × 0.911 × 적용 비율의 합", en: "Sum of units × unit price × 0.911 × assigned rate" },
+  "att.col.actualSalaryTitle": {
+    ko: "시수 × 단가 × 0.911 × 적용 비율의 합 — 실수업액이 청구액보다 많은 줄은 청구액으로 계산(여럿이 나눠 맡는 반은 이 선생님 몫)",
+    en: "Sum of units × unit price × 0.911 × assigned rate — rows above the bill use the billed amount (this teacher's share on shared classes)",
+  },
   "att.row.actualSalaryRate": { ko: "시수 × 단가 × 0.911 × {rate}%", en: "Units × unit price × 0.911 × {rate}%" },
+  // 실수업액이 청구액보다 크면 청구액으로 계산한다(원장 2026-09-21 "받은 돈보다 많은 돈을 지급하면 안되기 때문").
+  "att.row.actualSalaryRateCapped": {
+    ko: "청구액 × 0.911 × {rate}% — 실수업액이 청구액보다 많아 청구액으로 계산(여럿이 나눠 맡는 반은 청구액 중 이 선생님 몫)",
+    en: "Billed amount × 0.911 × {rate}% — lessons exceed the bill, so the bill is used (this teacher's share on shared classes)",
+  },
   "att.row.actualSalaryUnavailable": { ko: "단가·정규/특강의 학년별 비율을 확인해 주세요", en: "Check the unit price and grade-level rate for regular/special lessons" },
   "att.col.actualAmountTitle": { ko: "확정 단가 × 수업 차수", en: "Confirmed unit price × attended units" },
   "att.row.actualAmountUnavailable": { ko: "회당 단가가 확정된 경우 계산합니다. 월 정액·일수 기준·복수 단가는 계산하지 않습니다.", en: "Requires one confirmed per-unit price. Monthly fees, day-based prices and multiple prices cannot be multiplied by lesson units." },
   "att.columns.toggle": { ko: "보기 옵션", en: "View options" },
   "att.columns.all": { ko: "모두 표시", en: "Show all columns" },
+  // 실급여 열 토글(원장 2026-09-21) — 관리자가 프리랜서 강사 전체 보기를 볼 때만 선다.
+  "att.actualSalary.toggle": { ko: "실급여 보이기", en: "Show net pay" },
+  "att.actualSalary.saveFailed": { ko: "실급여 보이기 설정을 저장하지 못했습니다. 다시 눌러 주세요.", en: "Couldn't save the net pay setting. Please try again." },
+  "att.actualSalary.toggleTitle": {
+    ko: "체크하면 이 선생님 출석부에 실급여 열이 섭니다. 설정은 계정에 저장됩니다.",
+    en: "Adds a net pay column to this teacher's sheet. Saved to your account.",
+  },
   "att.col.termSessionsTitle": {
     ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 영어 강사 보기에서는 학생의 등원 요일·수강 기간과 교시 담당 비율로 나눈 선생님 몫입니다. 확정 전에는 '미확정', 그 달 청구서가 없거나 취소됐으면 '—'로 보입니다.",
     en: "Sessions confirmed in billing. English teacher views show the teacher's share based on the student's enrollment dates, attendance days and scheduled periods. Unconfirmed until billing confirmation; '—' if the bill is missing or voided.",

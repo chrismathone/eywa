@@ -8,7 +8,7 @@ import {
 } from "@/features/attendance/unit-suffix";
 import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { actualLessonAmount } from "@/features/attendance/actual-amount";
-import { actualLessonSalary } from "@/features/attendance/salary-rates";
+import { actualLessonSalary, actualSalaryBase, salaryBilledCap } from "@/features/attendance/salary-rates";
 import { AttendanceColSpan } from "./columns";
 import { tipProps } from "@/components/hover-tip/tip";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
@@ -77,27 +77,36 @@ export function RowActualAmountCell({ row, fallback, prices, lang }: {
   </td>;
 }
 
-export function RowActualSalaryCell({ row, fallback, prices, rate, lang }: {
-  row: string; fallback: Counted; prices: readonly AttendanceConfirmedPrice[] | null | undefined; rate: number | null; lang: SheetLang;
+export function RowActualSalaryCell({ row, fallback, prices, rate, billed, lang }: {
+  row: string; fallback: Counted; prices: readonly AttendanceConfirmedPrice[] | null | undefined; rate: number | null;
+  /** 이 줄의 실급여 상한 = 이 선생님 몫의 청구액(`salaryBilledCap`). 모르면 undefined(상한 없음). */
+  billed?: number | null;
+  lang: SheetLang;
 }) {
   const count = useRowCount(row) ?? fallback;
-  const amount = actualLessonSalary(prices, count.units, rate);
+  const amount = actualLessonSalary(prices, count.units, rate, billed);
+  const capped = amount !== null && actualSalaryBase(prices, count.units, billed)?.capped === true;
   return <td data-att-column="actualSalary" className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap"
-    title={amount === null ? sheetT(lang, "att.row.actualSalaryUnavailable") : sheetTf(lang, "att.row.actualSalaryRate", { rate: rate! })}>
+    title={amount === null ? sheetT(lang, "att.row.actualSalaryUnavailable")
+      : sheetTf(lang, capped ? "att.row.actualSalaryRateCapped" : "att.row.actualSalaryRate", { rate: rate! })}>
     {amount === null ? "—" : formatMoney(amount)}
   </td>;
 }
 
-function ActualAmountTotalCell({ rows, prices, fallback, lang, rates }: {
+function ActualAmountTotalCell({ rows, prices, fallback, lang, rates, billed, terms }: {
   rows: readonly string[]; prices?: Record<string, AttendanceConfirmedPrice[]>; fallback?: Record<string, Counted>; lang: SheetLang;
   rates?: Record<string, number | null>;
+  /** 줄별 청구액 — 실급여 합계도 줄마다 청구액으로 깎은 값을 더한다(칸과 합계가 같은 식). */
+  billed?: Record<string, number | null>;
+  /** 줄별 등록 차수 — 나눠 맡는 줄은 청구액을 제 몫만큼으로 깎는다(`salaryBilledCap`, 줄 칸과 같은 재료). */
+  terms?: Record<string, AttendanceTermSessions | null>;
 }) {
   const live = useRowCounts(rows);
   let total = 0;
   let any = false;
   for (const row of rows) {
     const count = live?.[row] ?? fallback?.[row];
-    const amount = count ? rates ? actualLessonSalary(prices?.[row], count.units, rates[row]) : actualLessonAmount(prices?.[row], count.units) : null;
+    const amount = count ? rates ? actualLessonSalary(prices?.[row], count.units, rates[row], salaryBilledCap(billed?.[row], terms?.[row])) : actualLessonAmount(prices?.[row], count.units) : null;
     if (amount !== null) { total += amount; any = true; }
   }
   return <td data-att-column={rates ? "actualSalary" : "actualAmount"} className="border-line num bg-att-col-billed border-t-2 border-r px-1 py-1.5 text-right text-xs font-bold whitespace-nowrap"
@@ -493,7 +502,7 @@ export function MatrixColumnTotalsRow({
         </div>
       </AttendanceColSpan>
       {showActualAmount ? <ActualAmountTotalCell rows={scope} prices={pricesByRow} fallback={countsByRow} lang={lang} /> : null}
-      {salaryRatesByRow ? <ActualAmountTotalCell rows={scope} prices={pricesByRow} fallback={countsByRow} lang={lang} rates={salaryRatesByRow} /> : null}
+      {salaryRatesByRow ? <ActualAmountTotalCell rows={scope} prices={pricesByRow} fallback={countsByRow} lang={lang} rates={salaryRatesByRow} billed={billedByRow} terms={termByRow} /> : null}
       <td data-att-column="units" className={`${cell} bg-att-col-sessions text-right`}>
         {totals ? formatUnitsWithSuffix(totals.units, suffix) : "—"}
       </td>

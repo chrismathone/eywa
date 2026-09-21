@@ -218,7 +218,10 @@ export function MatrixTable({
   confirmedPricesByRow,
   showActualAmount = false,
   salaryRates,
+  salaryView = false,
   optionsExtra,
+  optionsLeading,
+  optionsTools,
   priceConfirmedRows,
   noInvoiceRows,
   money,
@@ -241,9 +244,19 @@ export function MatrixTable({
   confirmedPricesByRow?: Record<string, AttendanceConfirmedPrice[]>;
   /** Server-authorized: freelance teacher views only. */
   showActualAmount?: boolean;
-  /** Supplied only to the authorized administrator's teacher view. */
+  /** Supplied only to the authorized administrator's teacher view — **and only while '실급여 보이기' is on**. */
   salaryRates?: AttendanceSalaryRates;
+  /**
+   * 실급여가 **설 수 있는** 보기(관리자 + 프리랜서 강사 전체 보기, 토글과 무관). 이 보기에선 옛 '정산액'(티어)을
+   * 안 그린다 — 토글을 끄면 실급여 열만 빠지고 급여 숫자는 **하나도** 안 보여야 한다(리뷰 2026-09-21: 끄면 정산액이
+   * 대신 떠 "끄기"가 급여를 감추는 게 아니라 다른 급여로 바꾸는 꼴이었다).
+   */
+  salaryView?: boolean;
   optionsExtra?: ReactNode;
+  /** 표 위 줄 왼쪽 — 범례(서버 노드). */
+  optionsLeading?: ReactNode;
+  /** 표 위 줄 오른쪽 맨 앞 — 결석 통보 접수·급여명세서. */
+  optionsTools?: ReactNode;
   /**
    * 학생×반별 **등록 차수** — 회차 확정에서 확정한 시수(원장 2026-09-17). 청구액과 **같은 조회**에서 온다.
    * 키가 없으면 '미확정'(0을 지어내지 않는다). `daysBasis`면 그 숫자는 시수가 아니라 옛 **출석 일수**다.
@@ -404,7 +417,7 @@ export function MatrixTable({
   return (
     // 격자가 **화면의 유일한 세로 스크롤**이다(scrollY) — 그래야 `thead sticky top-0`이 실제로 붙고
     // 스크롤바도 하나만 생긴다. 높이는 부모(page.tsx의 `min-h-0 flex-1`)가 정해 준다 — 상수·vh 계산 없음.
-    <AttendanceColumns columns={optionalColumns} minWidth={tableMinWidth} dayCount={days.length} dayMinWidth={COL_W.day} lang={lang} extra={optionsExtra}>
+    <AttendanceColumns columns={optionalColumns} minWidth={tableMinWidth} dayCount={days.length} dayMinWidth={COL_W.day} lang={lang} extra={optionsExtra} leading={optionsLeading} tools={optionsTools}>
     <DragScrollArea pan={false} scrollY className="bg-card shadow-card h-full rounded-2xl">
       <table className="table-fixed border-collapse text-sm" style={{ width: "calc(var(--att-full-width) - var(--att-hidden-width))", minWidth: `calc(${tableMinWidth}px - var(--att-hidden-width))` }}>
         {/* 열 폭의 단일 소스 — 셀의 `w-*`가 아니라 여기가 정한다(table-fixed). 접기와 무관하게 불변. */}
@@ -425,9 +438,10 @@ export function MatrixTable({
         <thead>
           {/* 높이 고정 — 칸의 scroll-margin-top과 짝을 이룬다(cell-display.ts `HEAD_ROW_H` 주석). */}
           <tr className={HEAD_ROW_H}>
-            {/* 이름 열 머리는 본문 이름(왼쪽, flex)과 같은 축 — 칸 가운데에 머리만 서면 이름과 다른 자리에 선다(원장 2026-09-18). */}
+            {/* 🔴 제목행은 **전부 가운데**(원장 2026-09-21 *"제목행 가운데정렬"*) — 2026-09-18의 "머리는 본문 값과 같은 축"
+                (이름 왼쪽·금액 오른쪽)을 이 표에서 뒤집었다. 본문 값 정렬은 그대로다. */}
             <th
-              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-left whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-center whitespace-nowrap`}
             >
               {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
               {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
@@ -443,7 +457,7 @@ export function MatrixTable({
             {showPrice ? (
               <th
                 data-att-column="unitPrice"
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.unitPriceTitle")}
               >
                 <span className="micro font-bold">{t("att.col.unitPrice")}</span>
@@ -452,19 +466,19 @@ export function MatrixTable({
             {showClassBilled ? (
               <th
                 data-att-column="classBilled"
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.classBilledTitle")}
               >
                 <span className="micro font-bold">{t("att.col.classBilled")}</span>
               </th>
             ) : null}
             {showActualAmount ? <th data-att-column="actualAmount"
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
               title={t("att.col.actualAmountTitle")}>
               <span className="micro font-bold">{t("att.col.actualAmount")}</span>
             </th> : null}
             {showActualSalary ? <th data-att-column="actualSalary"
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
               title={t("att.col.actualSalaryTitle")}>
               <span className="micro font-bold">{t("att.col.actualSalary")}</span>
             </th> : null}
@@ -473,7 +487,7 @@ export function MatrixTable({
             <th
               data-help="att-lesson-count"
               data-att-column="units"
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
               title={t("att.col.lessonCountTitle")}
             >
               <span className="micro font-bold">{t("att.col.lessonCount")}</span>
@@ -481,7 +495,7 @@ export function MatrixTable({
             {showTermSessions ? (
               <th
                 data-att-column="termSessions"
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.termSessionsTitle")}
               >
                 <span className="micro font-bold">{t("att.col.termSessions")}</span>
@@ -710,7 +724,7 @@ export function MatrixTable({
                   fallback={totalCount}
                   countByRow={countByRow}
                   money={money}
-                  showLegacySettlement={!showActualSalary}
+                  showLegacySettlement={!(showActualAmount && (salaryView || showActualSalary))}
                   moneyNote={moneyNote}
                   trailing={<ControlGuide countByRow={countByRow} fallback={totalCount} lang={lang} />}
                 />

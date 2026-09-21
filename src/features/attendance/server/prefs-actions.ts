@@ -105,6 +105,16 @@ export async function saveAttendanceHideRetired(
 }
 
 /**
+ * 실급여 열 표시만 저장 — 다른 보기 설정은 건드리지 않는다.
+ * ⚠️ 보기 렌즈다 — 열이 실제로 서는지는 서버 권한(관리자 + 프리랜서 강사 전체 보기)이 따로 정한다.
+ */
+export async function saveAttendanceShowActualSalary(
+  show: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  return mergeAttendancePrefs((prev) => ({ ...prev, showActualSalary: show === true }));
+}
+
+/**
  * `ui_prefs.attendance`를 **필드 단위로** 갱신 — 읽고 → 고칠 필드만 바꿔 → 되쓴다.
  * ⚠️ 형제 키(ecs·timetable·onescreen…)는 물론 **같은 attendance 안의 다른 필드도** 보존한다.
  *    화면마다 통째로 덮으면 마지막에 저장한 쪽이 나머지를 되돌린다.

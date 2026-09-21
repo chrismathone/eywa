@@ -28,7 +28,8 @@ const MIXED_SAMPLE = cellDisplay("present", 1, {
 });
 
 /**
- * 월별 출석부 **범례** — 격자 **위** 한 줄(원장 2026-09-14 *"범례 가장 위로"*).
+ * 월별 출석부 **범례** — 격자 **위** 한 줄(원장 2026-09-14 *"범례 가장 위로"*). 2026-09-21부터 시수 기준까지
+ * 같은 줄이고 '보기 옵션'·도구 버튼이 그 오른쪽에 선다(matrix-table `leading`).
  *
  * 🔴 왜 표 위인가: 그전엔 표 맨 아래(`<tfoot>`)에 있어 수십 행을 끝까지 내려야 보였다 — 칸 색을 읽으려는
  *    사람이 정작 칸을 볼 때는 범례가 화면 밖이었다. 표 위 한 줄은 스크롤과 무관하게 격자 바로 위에 선다.
@@ -63,10 +64,14 @@ export function AttendanceLegend({
   showEnglishUnits?: boolean;
 }) {
   const t = (key: Parameters<typeof sheetT>[1]) => sheetT(lang, key);
+  // 🔴 **한 줄**(원장 2026-09-21 *"상단에 굳이 2열로 두지말고 하나의 열로 공간 확보"*) — 시수 기준과 범례를
+  //    같은 줄에 잇고, 이 줄은 표 위 '보기 옵션' 줄의 왼쪽에 들어간다(matrix-table `leading`). 좁은 창에선
+  //    낱말 단위로 접힌다(`flex-wrap`, 한 항목 안은 안 끊긴다).
   return (
-    <>
+    // 간격 8px — 12px면 1,990px 창에서 이 줄 + 오른쪽 도구가 14px 넘쳐 도구가 둘째 줄로 떨어졌다(실측).
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs [&_*]:whitespace-nowrap">
     {showMathUnits || showEnglishUnits ? (
-      <div className="text-text-dim flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 px-1 pb-1.5 text-xs leading-relaxed">
+      <span className="text-text-dim inline-flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-foreground font-semibold">{t("att.units.guide")}</span>
         {showMathUnits ? <span>{t("att.units.math")}</span> : null}
         {showEnglishUnits ? (
@@ -75,9 +80,9 @@ export function AttendanceLegend({
             <span>{t("att.units.injaewon")}</span>
           </>
         ) : null}
-      </div>
+      </span>
     ) : null}
-    <div className="flex shrink-0 items-center gap-x-3 overflow-x-auto px-1 pb-1.5 text-xs [&_*]:whitespace-nowrap">
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="micro shrink-0">{t("att.legend")}</span>
       {STATUSES.map((s) => {
         const chip = cellDisplay(s, null);
@@ -121,7 +126,7 @@ export function AttendanceLegend({
           {t("att.legend.today")}
         </span>
       ) : null}
+    </span>
     </div>
-    </>
   );
 }

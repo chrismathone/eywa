@@ -44,7 +44,7 @@ export function SalaryRatesButton({ teacherId, teacherName, month, rates, classe
     <Dialog open={open} onOpenChange={(value) => { if (!pending) setOpen(value); }}>
       <DialogContent className="z-[90] sm:max-w-lg">
         <DialogTitle>{teacherName} · 급여 비율</DialogTitle>
-        <DialogDescription>실급여 = 시수 × 단가 × 0.911 × 비율. 학생 학년에 맞는 정규·특강 비율을 적용합니다.</DialogDescription>
+        <DialogDescription>실급여 = 시수 × 단가 × 0.911 × 비율(시수 × 단가가 청구액보다 많으면 청구액으로 계산 — 여럿이 나눠 맡는 반은 청구액 중 이 선생님 몫). 학생 학년에 맞는 정규·특강 비율을 적용합니다.</DialogDescription>
         <form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }}>
           <table className="w-full text-sm">
             <thead><tr><th className="text-left">수업 구분</th>{ATTENDANCE_RATE_LEVELS.map((level) => <th key={level}>{level}</th>)}</tr></thead>
