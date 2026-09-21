@@ -160,7 +160,13 @@ export function attendanceClassBilledAmounts(
  * 학생×반 등록 차수 한 칸 — 값과 **그 값의 단위**.
  * 🔴 `daysBasis`는 "이 숫자는 시수가 아니라 **출석 일수**"라는 뜻이다(회차 확정이 붉게 칠하는 그 값).
  */
-export type AttendanceTermSessions = { units: number; daysBasis: boolean };
+export type AttendanceTermSessions = {
+  units: number;
+  daysBasis: boolean;
+  /** Full class confirmation, before the teacher's scheduled share is applied. */
+  classUnits?: number;
+  allocationPending?: boolean;
+};
 
 /** 회차 확정에 저장된 단가. 월 정액은 회당 단가와 구분하고, 서로 다른 단가는 더하지 않는다. */
 export type AttendanceConfirmedPrice = { unitPrice: number; monthly: boolean; daysBasis: boolean };

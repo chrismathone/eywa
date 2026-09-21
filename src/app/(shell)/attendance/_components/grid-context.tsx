@@ -111,6 +111,15 @@ export function useRowCount(row: string): Counted | null {
   return store ? countCells(store.valuesOfRow(row)) : null;
 }
 
+/** Per-row totals for a weighted amount sum; subscribes once for the entire footer. */
+export function useRowCounts(rows: readonly string[]): Record<string, Counted> | null {
+  const store = useContext(GridCtx)?.store;
+  const subscribe = useCallback((cb: () => void) => store ? store.subscribeValues(cb) : () => {}, [store]);
+  const get = useCallback(() => store?.getValueVersion() ?? 0, [store]);
+  useSyncExternalStore(subscribe, get, () => 0);
+  return store ? Object.fromEntries(rows.map((row) => [row, countCells(store.valuesOfRow(row))])) : null;
+}
+
 /** 반 접기 상태 — 반 머리행·전체 토글이 쓴다. 격자가 없으면 null. */
 export function useGridCollapse(): Pick<Ctx, "collapsed" | "toggleCollapsed" | "setAllCollapsed"> | null {
   return useContext(GridCtx);

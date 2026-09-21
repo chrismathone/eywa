@@ -32,7 +32,7 @@ beforeEach(() => {
       : [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: null, confirmed_sessions: null, allocation_line_index: null }]);
     const error = mocks.errors[table] ?? null;
     const builder: Record<string, unknown> = {};
-    for (const method of ["select", "eq", "neq", "in", "order", "range"]) {
+    for (const method of ["select", "eq", "neq", "in", "order", "range", "lte", "or"]) {
       builder[method] = (...args: unknown[]) => { query.calls.push([method, args]); return builder; };
     }
     builder.then = (resolve: (result: unknown) => unknown) => Promise.resolve(resolve(error ? { data: null, error } : { data, error: null }));
@@ -41,6 +41,38 @@ beforeEach(() => {
 });
 
 describe("강사 출석부 청구액 조회 범위", () => {
+  it("영어 강사 보기만 등록 차수를 교시 담당별로 배분하고 청구액·단가는 유지한다", async () => {
+    mocks.tables.classes = [{ id: "c1", teacher_id: "home", english_track: "eie" }];
+    mocks.tables.class_schedules = [
+      { class_id: "c1", day_of_week: "tue", start_time: "14:00", end_time: "14:40", teacher_id: "home", slot_teacher_label: null, valid_from: "2026-09-01", valid_to: null },
+      { class_id: "c1", day_of_week: "tue", start_time: "14:40", end_time: "15:20", teacher_id: "other", slot_teacher_label: null, valid_from: "2026-09-01", valid_to: null },
+    ];
+    mocks.tables.enrollments = [{ class_id: "c1", student_id: "s1", start_date: "2026-09-01", end_date: null, is_transferred: false, attendance_days: ["tue"] }];
+    mocks.tables.invoice_session_terms = [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: 210000, confirmed_sessions: 9, unit_price: 25000, quantity_basis: "attendance_units", pricing_mode: "per_session", allocation_line_index: null }];
+    const roster = [{ classId: "c1", studentIds: ["s1"] }, { classId: "forbidden", studentIds: ["other-student"] }];
+    const full = await getAttendanceClassBilledAmounts("2026-09", roster);
+    expect(mocks.queries.some((q) => q.table === "class_schedules")).toBe(false);
+    const scoped = await getAttendanceClassBilledAmounts("2026-09", roster, {
+      teacherScope: { teacherId: "other", classIds: ["c1", "forbidden"], holidays: [] },
+    });
+    expect(scoped.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 4.5, daysBasis: false, classUnits: 9 });
+    expect(full.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 9, daysBasis: false });
+    expect(scoped.billed).toEqual(full.billed);
+    expect(scoped.confirmedPrices).toEqual(full.confirmedPrices);
+    for (const q of mocks.queries.filter((q) => q.table === "class_schedules" || q.table === "enrollments")) {
+      expect(q.calls).toContainEqual(["eq", ["tenant_id", "tenant-1"]]);
+      expect(q.calls).toContainEqual(["in", ["class_id", ["c1"]]]);
+      expect(q.calls.some(([m]) => m === "range")).toBe(true);
+    }
+  });
+
+  it("교시 조회 실패를 반 전체 등록 차수로 대체하지 않는다", async () => {
+    mocks.errors.class_schedules = { message: "schedule unavailable" };
+    await expect(getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }], {
+      teacherScope: { teacherId: "home", classIds: ["c1"], holidays: [] },
+    })).rejects.toThrow("schedule unavailable");
+  });
+
   it("강사도 허용된 반의 매칭 금액을 읽으며 월·테넌트·학생으로 한정한다 — 금액은 void 제외 청구서로만", async () => {
     const { billed: result } = await getAttendanceClassBilledAmounts("2026-09", [
       { classId: "c1", studentIds: ["s1", "s2"] }, { classId: "forbidden", studentIds: ["other"] },
