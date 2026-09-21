@@ -1015,7 +1015,10 @@ export function OneScreenClient({
     const res = await setMyOnescreenFontSize(size);
     if (!res.ok) toast.error(t("os.c.fontSizeFail"));
   }
-  /** 보강을 그 수업 출석부에 남긴다 — ECS·출석부 명단이 같은 학생을 보게. 이미 그 반 수강이면 건너뛴다. */
+  /**
+   * 보강을 그 수업 출석부에 남긴다 — ECS·출석부 명단이 같은 학생을 보게. 이미 그 반 수강이면 건너뛴다.
+   * 🔴 **합칠 정규 수업이 없는 보강에만** 부른다 — 후보가 있으면 시수는 고른 정규 수업 칸에 얹힌다(합침·분리 둘 다).
+   */
   function persistAnchorMakeup(
     studentId: string,
     classId: string | null,
@@ -1221,18 +1224,23 @@ export function OneScreenClient({
       toast.error(blocked);
       return;
     }
-    // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 *"경고하고 확인하면 삭제"*).
+    // 🔴 앵커가 이 학생의 **정규 반**이면 출결은 지우지 않는다(classId null) — 합칠 후보가 있던 '분리' 보강은 시수를 그 정규 칸에
+    //    얹었고 보강 칸을 따로 만들지 않았다. 넘기면 누가 그 정규 칸을 '보강'으로 바꿔 둔 경우 정규 칸이 통째로 지워진다(적대 리뷰 2026-09-21).
+    const anchorIsRegular = !!su.makeupClassId && student.subjects.some((x) => !x.makeup && x.classId === su.makeupClassId);
+    // 경고는 **무엇이 사라지는지 그대로** 적는다(원장 *"경고하고 확인하면 삭제"*) — 정규 반 앵커면 출결은 안 지우고 남는 것을 밝힌다.
     const lines = [
       tf("os.c.removeMakeupTitle", { name: student.name }),
       "",
-      t("os.c.removeMakeupLine1"),
+      anchorIsRegular
+        ? tf("os.c.removeMakeupRegularLine", { cls: todayClasses.find((c) => c.id === su.makeupClassId)?.name ?? su.name })
+        : t("os.c.removeMakeupLine1"),
       t("os.c.removeMakeupLine2"),
     ];
     if (!window.confirm(lines.join("\n"))) return;
     const res = await removeMakeupEntry({
       studentId: student.id,
       date: activeDate,
-      classId: su.makeupClassId ?? null,
+      classId: anchorIsRegular ? null : su.makeupClassId ?? null,
       subject: su.subjectKey ?? null,
     });
     if (!res.ok) {
@@ -1256,9 +1264,26 @@ export function OneScreenClient({
    * 다이얼로그 응답 처리 — 고른 대로만 한다. 취소는 아무것도 하지 않는다(보강 행도 안 생긴다).
    * ⚠️ 학생은 **id로 다시 찾는다** — 다이얼로그가 열려 있는 동안 실시간 갱신이 카드를 바꿨을 수 있다.
    */
-  async function resolveMakeupAsk(choice: MakeupConfirmChoice) {
+  async function resolveMakeupAsk(picked: MakeupConfirmChoice) {
     const asked = makeupAsk;
     if (!asked || makeupSaving) return;
+    // 🔴 합칠 후보는 **창을 연 순간의 스냅샷**이다 — 그 사이 이 화면이 알게 된 변화(같은 문서 방송·자기 응답의 conflict 되돌리기)로
+    //    그 칸이 결석 등이 됐는데 옛 상태로 되쓰면 결석이 출석으로 뒤집히고 옛 시수에 더해진다(적대 리뷰 2026-09-21).
+    //    확인하는 순간의 카드로 같은 판정(`planMakeupMerge`)을 다시 돌려, 더는 합칠 수 없으면 멈추고 지금 값으로 이어 간다.
+    //    ⚠️ **다른 기기의 변화는 못 본다**(카드는 실시간 구독이 없다) — 그 방어는 서버가 쓰기 때 상태를 다시 보는 것이다(미착수).
+    let choice = picked;
+    if (picked.candidate) {
+      const was = picked.candidate;
+      const card = studentsRef.current.find((s) => s.id === asked.studentId);
+      const plan = card ? planMakeupMerge(card.subjects, new Set([was.subjectKey])) : null;
+      const fresh = plan?.kind === "ask" ? plan.candidates.find((c) => c.name === was.name && c.classId === was.classId) : undefined;
+      if (!fresh) {
+        setMakeupAsk(null);
+        toast.error(tf("os.c.makeupCandidateChanged", { target: was.name }));
+        return;
+      }
+      choice = { ...picked, candidate: fresh };
+    }
     // 창에서 **수업을 골랐으면** 그 반이 앵커다(원장 2026-09-21) — 보고서의 `makeup_class_id`와 출결 칸이 모두 그 반을 본다.
     // `null` = '반 없이'(보이지 않는 보강 반 — 종전 동작). 묻지 않았으면(`undefined`) 반 필터 앵커 그대로.
     // 🔴 고른 반과 **과목이 같은 행만** 남긴다 — 다른 과목 행까지 그 반에 묶으면 등록 문이 통째로 거절한다(적대 리뷰 2026-09-21).
@@ -1275,7 +1300,7 @@ export function OneScreenClient({
     }
     // 반 필터가 '전체'였나 — 그때만 카드 이름을 고른 반으로 바꾼다(서버가 tag를 늘 "보강"으로 채워 tag로는 가를 수 없다).
     const filterAll = !asked.mk.subjects.some((su) => su.makeupClassName);
-    const ask = choice.hostClassId === undefined
+    const hosted = choice.hostClassId === undefined
       ? asked
       : {
           ...asked,
@@ -1287,6 +1312,19 @@ export function OneScreenClient({
               .map((su) => ({ ...su, makeupClassId: choice.hostClassId ?? null, makeupClassName: su.makeupClassName ?? host?.className ?? null })),
           },
         };
+    // 🔴 합칠 후보가 있는 보강을 **분리**하면 보강 줄의 앵커도 고른 정규 수업(후보) 반이다 — 시수가 그 반 칸에 얹히므로(아래),
+    //    보고서 저장 훅이 그 반 칸을 보고 보강 반을 또 만들지 않는다(위임 반이면 담임 판정이 못 잡는다). 표시 이름은 그대로 둔다
+    //    (바꾸면 추가한 카드가 보던 반 필터에서 그 자리에서 사라진다 — 새로고침 뒤엔 후보 반 칩 아래에 선다).
+    const target = choice.candidate && choice.mode === "separate" ? choice.candidate : null;
+    // 보던 반 필터가 후보 반과 다르면 새로고침 뒤 카드가 후보 반 칩 아래로 옮겨 간다 — 조용히 옮기지 않고 알린다.
+    // ⚠️ 판정은 **이름**으로 — 반 필터가 이름 축이라(grid.ts) 동명 반 필터(앵커 id 없음)에선 옮겨 가지 않는다.
+    const targetClassName = target ? todayClasses.find((c) => c.id === target.classId)?.name ?? null : null;
+    const movedTo = target && targetClassName && hosted.mk.subjects.some((su) => su.subjectKey === target.subjectKey && !!su.makeupClassName && su.makeupClassName !== targetClassName)
+      ? targetClassName
+      : null;
+    const ask = target
+      ? { ...hosted, mk: { ...hosted.mk, subjects: hosted.mk.subjects.map((su) => (su.subjectKey === target.subjectKey ? { ...su, makeupClassId: target.classId } : su)) } }
+      : hosted;
     // 🔴 더할 보강 행이 없으면 **등록하기 전에** 멈춘다 — 등록이 먼저 돌면 고른 수업·시수가 세션에 적히는데 카드 행은
     //    옛 앵커 그대로라, 새로고침 뒤 카드가 칸 없는 반을 가리키고 보고서 저장 때 보강 반 칸이 하나 더 선다(적대 리뷰 2026-09-21).
     //    목록에 없던 학생(isNew)이라도 창이 열린 사이 카드가 들어왔을 수 있어 id로 다시 찾는다.
@@ -1376,9 +1414,9 @@ export function OneScreenClient({
       }
       return;
     }
-    const anchorId = anchorIdNew;
-    const enrolledInAnchor = existing.subjects.some((su) => su.classId === anchorId && !su.makeup);
-    persistAnchorMakeup(existing.id, anchorId, enrolledInAnchor);
+    // 🔴 합칠 후보가 있는 보강은 **보던 반 필터에 보강 칸을 따로 적지 않는다** — 시수는 고른 정규 수업 칸에만 얹힌다(합침·분리 둘 다).
+    //    예전엔 여기서 `persistAnchorMakeup`을 불러, 보던 반(X)이 후보 반(Y)과 다르면 **한 번의 보강이 두 반에** 잡혔다
+    //    (X 보강 1 + Y +시수 — 실측 2026-08-29 정민성 · 2026-09-17 안서준, 원장 *"출석부에 행만 자꾸 생기네"*).
     if (choice.mode === "separate") {
       // 🔴 **고른 과목의 보강 행만** 만든다. 안 좁히면 그 강사가 가르치는 학생의 다른 과목까지 "(보강)" 행이
       //    딸려 붙어(예: 영어가 오늘 결석이라 후보엔 없어도 행은 생겼다) 보고서가 2건이 아니라 3건 나간다 —
@@ -1387,9 +1425,10 @@ export function OneScreenClient({
         // 🔴 결석일은 **선택**이다(원장 2026-08-07 *"오늘 날짜에 추가 보강할 수도 있잖아"*). 없으면
         //    결석분 연결 없이 시수만 얹는다. 예전엔 이 분기가 없어 날짜가 비면 **조용히 '합침'으로**
         //    떨어졌다 — 강사는 '분리'를 골랐는데 보고서가 1건만 나가는, 화면과 다른 결과였다.
+        const note = movedTo ? tf("os.c.makeupShownUnder", { target: movedTo }) : undefined;
         if (choice.absentDate)
-          void linkMakeupAbsence(existing, choice.candidate!, choice.absentDate, choice.addUnits, choice.absentClassId);
-        else void addMakeupUnitsOnly(existing, choice.candidate!, choice.addUnits);
+          void linkMakeupAbsence(existing, choice.candidate!, choice.absentDate, choice.addUnits, choice.absentClassId, note);
+        else void addMakeupUnitsOnly(existing, choice.candidate!, choice.addUnits, note);
       }
       return;
     }
@@ -1447,7 +1486,10 @@ export function OneScreenClient({
     absentDate: string,
     addUnits: number,
     absentClassId?: string,
+    /** 성공 안내 끝에 붙일 한 줄(새로고침 뒤 카드가 옮겨 가는 반 등) — 실패하면 안 붙는다. */
+    note?: string,
   ) {
+    const withNote = (msg: string) => (note ? `${msg} ${note}` : msg);
     const res = await linkMakeupToAbsence({
       studentId: existing.id,
       classId: target.classId,
@@ -1467,11 +1509,11 @@ export function OneScreenClient({
       units: res.units === 1 ? null : res.units,
     });
     if (res.alreadyLinked) {
-      toast.message(tf("os.c.makeupAlreadyLinked", { date: shortDate(absentDate) }));
+      toast.message(withNote(tf("os.c.makeupAlreadyLinked", { date: shortDate(absentDate) })));
       return;
     }
     // ⚠️ 결석 기록이 없던 날이면 메모를 안 남긴다 — 조용히 넘기지 말고 그 사실을 밝힌다.
-    toast.success(
+    toast.success(withNote(
       res.absenceNoted
         ? tf("os.c.makeupNoted2", {
             name: existing.name,
@@ -1493,7 +1535,7 @@ export function OneScreenClient({
               target: target.name,
               units: res.units,
               date: shortDate(absentDate),
-            }),
+            })),
       { duration: 8000 },
     );
   }
@@ -1503,7 +1545,7 @@ export function OneScreenClient({
    * ⚠️ 정규 행에 `makeup: true`를 켜지 않는다 — 그건 '합침'(제목 "(정규+보강)", 보고서 1건)의 표시다.
    *    분리는 보고서가 2건이므로 정규 행은 정규 그대로 둔다.
    */
-  function addMakeupUnitsOnly(existing: OneScreenStudent, target: MergeCandidate, addUnits: number) {
+  function addMakeupUnitsOnly(existing: OneScreenStudent, target: MergeCandidate, addUnits: number, note?: string) {
     const units = (target.attendanceUnits ?? 1) + addUnits;
     void setAttendanceFor(
       existing.id,
@@ -1513,10 +1555,8 @@ export function OneScreenClient({
       { overwrite: true }, // 보강 시수 합산은 성공 안내를 이미 띄웠다 — conflict no-op이면 안내가 거짓이 된다
     );
     setSelId(existing.id);
-    toast.success(
-      tf("os.c.makeupExtra", { name: existing.name, target: target.name, units }),
-      { duration: 8000 },
-    );
+    const msg = tf("os.c.makeupExtra", { name: existing.name, target: target.name, units });
+    toast.success(note ? `${msg} ${note}` : msg, { duration: 8000 });
   }
 
   function mergeMakeupIntoRegular(

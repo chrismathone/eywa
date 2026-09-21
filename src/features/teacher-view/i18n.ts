@@ -3187,6 +3187,18 @@ export const SHEET_DICT = {
     ko: "{name} (보강) 추가됨 — '반 없이'라 지금은 출결을 적지 않았습니다(보고서를 저장할 때 선생님 반에 이 학생 칸이 없으면 보강 반에 기록됩니다).",
     en: "{name} (makeup) added — 'No class' was picked, so nothing was written now (when the report is saved, it goes to the makeup class unless your class already has this student that day).",
   },
+  "os.c.makeupCandidateChanged": {
+    ko: "창을 연 사이 {target} 출결이 바뀌었습니다 — 보강을 다시 추가해 주세요",
+    en: "{target} attendance changed while the window was open — add the makeup again",
+  },
+  "os.c.makeupShownUnder": {
+    ko: "새로고침하면 이 보강은 시수를 얹은 {target} 반 아래에 보입니다.",
+    en: "After refreshing, this makeup appears under {target}, where the units were added.",
+  },
+  "os.c.removeMakeupRegularLine": {
+    ko: "저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 삭제됩니다. {cls} 정규 칸에 얹은 보강 시수·메모는 남으니 필요하면 출석부에서 고쳐 주세요.",
+    en: "The saved makeup report and the progress recorded for that lesson are deleted. The makeup units and notes added to the {cls} regular cell stay — fix them in the attendance sheet if needed.",
+  },
   "os.c.makeupHostGone": {
     ko: "수업 목록이 바뀌었습니다 — 기록할 수업을 다시 골라 주세요",
     en: "The class list changed — pick the class again",
