@@ -25,6 +25,7 @@ import {
   type StaffResumeData,
 } from "../resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "./resume-access";
+import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { appendResumeToRoster } from "./resume-roster-sheet";
 
 // 직원 이력서(웹 작성 폼) 변경 액션 — 게이트 2단: ① 역할(canWriteTenant("staff") = 사무실)
@@ -240,7 +241,8 @@ async function registerStaffFromResume(
     app_metadata: { tenant_id: actor.tenantId, system_role: role },
   });
   if (authErr || !authData?.user) {
-    return { warning: `이력서는 저장됐지만 계정 생성에 실패했습니다 — ${authErr?.message ?? "unknown"}` };
+    const why = isEmailTakenAuthError(authErr) ? EMAIL_TAKEN_MESSAGE : (authErr?.message ?? "unknown");
+    return { warning: `이력서는 저장됐지만 계정 생성에 실패했습니다 — ${why}` };
   }
   const { error: dbErr } = await admin
     .from("users")

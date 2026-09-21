@@ -18,6 +18,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { createClient } from "@/lib/supabase/server";
 import { canEditLoginEmail, EMAIL_RE } from "@/features/staff/email";
+import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
+import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
@@ -133,6 +135,13 @@ export async function createStaff(
     app_metadata: { tenant_id: actor.tenantId, system_role: newRole },
   });
   if (authErr || !authData?.user) {
+    // 지점 안 중복은 위(0)에서 걸렀다 — 여기까지 온 "이미 있는 이메일"은 대개 **이 지점 밖 계정**(다른 지점 직원 · super-admin)이다
+    //   (드물게 이 지점의 고아 Auth 계정 — 롤백 중 deleteUser가 실패한 경우 — 일 수도 있다).
+    //   로그인 이메일은 Auth가 전 지점을 통틀어 하나로 막는다(그래서 계정이 곧 지점이다). 이메일 칸 아래에 안내한다.
+    //   폼이 길고 저장 바는 아래에 붙어 있다 — 칸 아래 안내만 두면 "눌렀는데 무반응"으로 읽히므로 하단 오류도 함께 세운다.
+    if (isEmailTakenAuthError(authErr)) {
+      return { fieldErrors: { email: EMAIL_TAKEN_MESSAGE }, error: "이메일을 확인해 주세요" };
+    }
     return { error: `Auth 계정 생성 실패: ${authErr?.message ?? "unknown"}` };
   }
 
@@ -286,6 +295,10 @@ export async function updateStaff(
       .maybeSingle();
     if (dup) {
       return { fieldErrors: { email: "이미 이 이메일로 등록된 직원이 있습니다" } };
+    }
+    // 다른 지점 계정이 쓰는 이메일(위 검사는 제 지점만) — Auth의 변경 경로는 중복을 500으로만 답한다. 쓰기 전에 막는다.
+    if (await isLoginEmailTakenElsewhere(admin, input.email, id)) {
+      return { fieldErrors: { email: EMAIL_TAKEN_MESSAGE } };
     }
     // auth 계정이 있으면 로그인 이메일(auth.users) 자체를 변경 — public.users만 바꾸면 미러 트리거
     // (0075a: email = excluded.email)가 다음 auth 갱신 때 옛 이메일로 되덮는다. 트리거가 public도 동기.

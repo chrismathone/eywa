@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { EMAIL_RE } from "@/features/staff/email";
+import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
+import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { REPORT_NAME_MAX } from "@/features/onescreen/report-author-name";
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 
@@ -41,6 +43,8 @@ export async function updateMyEmail(_prev: MeAccountState, formData: FormData): 
     .neq("id", user.id)
     .maybeSingle();
   if (dup) return { error: "이미 다른 직원이 쓰고 있는 이메일입니다" };
+  // 다른 지점 계정 — 위 검사는 제 지점만 본다. Auth는 변경 경로에서 중복을 500으로만 답해 원인을 말해 주지 않는다.
+  if (await isLoginEmailTakenElsewhere(admin, email, user.id)) return { error: EMAIL_TAKEN_MESSAGE };
 
   const { error: authErr } = await admin.auth.admin.updateUserById(user.id, {
     email,
@@ -48,8 +52,8 @@ export async function updateMyEmail(_prev: MeAccountState, formData: FormData): 
     app_metadata: { tenant_id: user.tenantId, system_role: user.systemRole },
   });
   if (authErr) {
-    const dup = /already|exists|registered/i.test(authErr.message);
-    return { error: dup ? "이미 사용 중인 이메일입니다" : `이메일 변경 실패 — ${authErr.message}` };
+    const dup = isEmailTakenAuthError(authErr);
+    return { error: dup ? EMAIL_TAKEN_MESSAGE : `이메일 변경 실패 — ${authErr.message}` };
   }
   const { error: dbErr } = await admin.from("users").update({ email }).eq("id", user.id);
   if (dbErr) {

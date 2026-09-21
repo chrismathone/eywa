@@ -4,6 +4,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { logSuperAdminAction } from "./audit";
@@ -78,6 +79,7 @@ export async function createTenantWithMaster(
     // rollback tenant — insert~delete 사이에 단일 테넌트 판정이 캐시됐을 수 있어 롤백 후에도 비운다.
     await admin.from("tenants").delete().eq("id", tenantId);
     updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+    if (isEmailTakenAuthError(authErr)) return { error: `master 계정 생성 실패 — ${EMAIL_TAKEN_MESSAGE}` };
     return { error: `master 계정 생성 실패: ${authErr.message}` };
   }
 
@@ -176,6 +178,13 @@ export async function changeUserRole(
   if (!userId || !role || !tenantId) return { error: "필수 값 누락" };
 
   const admin = createAdminClient();
+  // 🔴 계정 = 지점 1:1 — 폼이 보낸 tenantId를 그대로 app_metadata에 쓰면 `users.tenant_id`와 갈릴 수 있다(로그인은 B 지점 RLS,
+  //    직원 행은 A 지점). 계정의 실제 지점과 같을 때만 진행한다. 지점을 옮기는 기능이 아니다(옮기기 = 새 지점에 계정 하나 더).
+  const { data: owner, error: ownerErr } = await admin.from("users").select("tenant_id").eq("id", userId).maybeSingle();
+  if (ownerErr || !owner?.tenant_id) return { error: "대상 계정을 찾을 수 없습니다" };
+  if (String(owner.tenant_id) !== tenantId) {
+    return { error: "계정의 지점과 요청한 지점이 다릅니다 — 화면을 새로고침한 뒤 다시 시도하세요" };
+  }
   // app_metadata 갱신 (RLS auth_tenant_id는 tenant_id, academy 권한은 system_role)
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     app_metadata: { system_role: role, tenant_id: tenantId },
