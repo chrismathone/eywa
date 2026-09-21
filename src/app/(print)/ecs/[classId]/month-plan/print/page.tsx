@@ -14,8 +14,8 @@ export const metadata: Metadata = { title: "월간 계획서 인쇄 — eywa" };
  *    "미작성 3일" 같은 내부 신호가 실리면 안 된다. 이 라우트는 계획 칸과 날짜만 그린다.
  * 🔴 게이트는 화면과 같은 함수 + **EiE 재확인**(`getMonthPlanPrint`) — 인쇄는 별도 주소라
  *    화면에서 탭을 감춘 것만으로는 안 막힌다(#77).
- * 🔑 한 장에 맞추는 규칙(배율·방향)은 [`MpFitToPage`](./fit-to-page.tsx) — 문서를 같은 비율로 줄이고,
- *    방향은 더 크게 찍히는 쪽(주 5일 반 = 가로 · 주 3일 반 = 세로)을 문서마다 고른다.
+ * 🔑 한 장에 맞추는 규칙은 [`MpFitToPage`](./fit-to-page.tsx) — **A4 세로 고정**(원장 2026-09-21 *"세로 사이즈에
+ *    맞도록"*), 문서를 같은 비율로 줄여 폭을 맞추고 남는 세로 높이는 계획 칸이 나눠 가진다.
  * 🔑 기간 축(`period`)은 화면이 보던 축을 주소로 실어 온다 — 세션으로 보던 계획서는 세션 창으로 찍힌다.
  */
 export default async function EcsMonthPlanPrintPage({
