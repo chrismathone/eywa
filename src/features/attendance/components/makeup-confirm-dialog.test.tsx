@@ -128,6 +128,69 @@ describe("🔴 정규 수업이 없어도 창은 뜬다 — 보강의 대다수�
   });
 });
 
+describe("⑦ 보강을 기록할 수업을 고른다(원장 2026-09-21 — '반 없이'만 되던 보강이 출석부에 줄을 늘렸다)", () => {
+  const hosts = [
+    { classId: "own", className: "중등M 초6 TP2Q", subject: "math", enrolled: true },
+    { classId: "mine", className: "중등M 중1 MS2R", subject: "math", enrolled: false },
+  ];
+  it("정규 수업이 없는 보강에서만 묻고, 기본값이 있으면 그 반으로 확인한다", async () => {
+    const { onConfirm } = setup({ candidates: [], hostClasses: { options: hosts }, defaultHostClassId: "own" });
+    expect(screen.getByRole("radiogroup", { name: "보강 기록 수업 선택" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /중등M 초6 TP2Q · 다니는 반/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText(/출석부 중등M 초6 TP2Q 반에 보강으로 기록합니다/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ mode: "separate", candidate: null, hostClassId: "own" }));
+  });
+  it("기본값이 없으면 고르기 전엔 확인이 막힌다 — '반 없이'로 조용히 떨어지지 않는다", async () => {
+    const { onConfirm } = setup({ candidates: [], hostClasses: { options: hosts }, defaultHostClassId: null });
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+    expect(screen.getByText(/보강을 기록할 수업을 고르세요/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /반 없이/ }));
+    expect(screen.getByText(/보고서를 저장할 때 선생님 반에 이 학생 칸이 없으면/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ hostClassId: null }));
+  });
+  it("학생이 다니지 않는 반을 고르면 그 반에 줄이 하나 생긴다고 밝힌다", async () => {
+    setup({ candidates: [], hostClasses: { options: hosts }, defaultHostClassId: "own" });
+    await userEvent.click(screen.getByRole("radio", { name: /중등M 중1 MS2R/ }));
+    expect(screen.getByText(/다니는 반이 아니라 그 반 출석부에 보강 줄이 하나 생깁니다/)).toBeInTheDocument();
+  });
+  it("🔴 창이 열린 사이 고른 반이 후보에서 빠지면 그 반을 내보내지 않는다 — 요약 문장과 다른 반으로 나가지 않게", async () => {
+    const onConfirm = vi.fn();
+    const props = { studentName: "홍길동", candidates: [], sentSubjects: [], makeupDate: TODAY, absences: list([absence()]), onConfirm, onCancel: vi.fn() };
+    const { rerender } = render(<MakeupConfirmDialog {...props} hostClasses={{ options: hosts }} defaultHostClassId={null} />);
+    await userEvent.click(screen.getByRole("radio", { name: /중등M 중1 MS2R/ }));
+    // 그 반에 오늘 정규 행이 생겨 후보에서 빠졌다.
+    rerender(<MakeupConfirmDialog {...props} hostClasses={{ options: [hosts[0]!] }} defaultHostClassId={null} />);
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+  it("목록을 불러오는 중엔 확인을 막는다", () => {
+    setup({ candidates: [], hostClasses: { options: [], loading: true } });
+    expect(screen.getByRole("button", { name: "보강 추가" })).toBeDisabled();
+    expect(screen.getByText("수업 목록을 불러오는 중…")).toBeInTheDocument();
+  });
+  it("수업 목록 실패 — 묻지 않고 종전 앵커(보던 반 필터)로 기록한다: hostClassId를 안 싣는다('반 없이'로 떨어뜨리지 않는다)", async () => {
+    const { onConfirm } = setup({ candidates: [], hostClasses: { options: [], failed: true } });
+    expect(screen.getByText(/수업 목록을 불러오지 못해 보고 있던 반 필터 기준으로 기록합니다/)).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "보강 기록 수업 선택" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+    expect(onConfirm).toHaveBeenCalledWith({ mode: "separate", candidate: null, addUnits: 1 });
+  });
+  it("합칠 정규 수업이 있으면 묻지 않는다(그 수업에 기록된다) — hostClassId도 안 싣는다", async () => {
+    const { onConfirm } = setup({ hostClasses: { options: hosts }, defaultHostClassId: "own" });
+    expect(screen.queryByRole("radiogroup", { name: "보강 기록 수업 선택" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.not.objectContaining({ hostClassId: expect.anything() }));
+  });
+  it("후보를 안 넘긴 화면(ECS·반별 출석부)은 종전 그대로 — 묻지 않고 hostClassId도 없다", async () => {
+    const { onConfirm } = setup({ candidates: [] });
+    expect(screen.queryByRole("radiogroup", { name: "보강 기록 수업 선택" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+    expect(onConfirm).toHaveBeenCalledWith({ mode: "separate", candidate: null, addUnits: 1 });
+  });
+});
+
 describe("결석분 — 목록에서 고른다(이월 보강)", () => {
   it("기본은 '결석분 아님'이라 그대로 확인하면 연결이 없다", async () => {
     const { onConfirm } = setup();
