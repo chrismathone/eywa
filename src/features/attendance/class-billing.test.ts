@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attendanceClassBilledAmounts,
   attendanceClassConfirmedSessions,
+  attendanceClassConfirmedPrices,
   attendanceClassPriceConfirmedRows,
   attendanceInvoiceStateByStudent,
   attendanceNoInvoiceRows,
@@ -24,6 +25,39 @@ function term(overrides: Partial<AttendanceBillingTerm> = {}): AttendanceBilling
     ...overrides,
   };
 }
+
+describe("출석부 확정 단가", () => {
+  it("저장된 단가만 사용하고 청구액÷시수로 역산하지 않는다", () => {
+    expect(attendanceClassConfirmedPrices(classes, [invoice], [term({ unit_price: 25000 })])).toEqual({
+      [key]: [{ unitPrice: 25000, monthly: false, daysBasis: false }],
+    });
+    expect(attendanceClassConfirmedPrices(classes, [invoice], [term({ unit_price: 0, confirmed_sessions: 0 })])[key]?.[0]?.unitPrice).toBe(0);
+  });
+
+  it("월 정액과 옛 일수 단가를 구분하고 서로 다른 단가를 합산하지 않는다", () => {
+    const prices = attendanceClassConfirmedPrices(classes, [invoice], [
+      term({ unit_price: 25000 }), term({ id: "duplicate", unit_price: 25000 }),
+      term({ id: "monthly", unit_price: 250000, pricing_mode: "monthly", quantity_basis: null }),
+      term({ id: "legacy", unit_price: 25000, quantity_basis: "days" }),
+    ]);
+    expect(prices[key]).toEqual([
+      { unitPrice: 25000, monthly: false, daysBasis: false },
+      { unitPrice: 250000, monthly: true, daysBasis: false },
+      { unitPrice: 25000, monthly: false, daysBasis: true },
+    ]);
+  });
+
+  it("일부만 확정된 줄과 허용되지 않은 반·학생·청구서는 노출하지 않는다", () => {
+    for (const pending of [term(), term({ unit_price: 25000, confirmed_sessions: null })]) {
+      expect(attendanceClassConfirmedPrices(classes, [invoice], [term({ unit_price: 25000 }), pending])).toEqual({});
+    }
+    expect(attendanceClassConfirmedPrices([classes[0]!], [invoice], [
+      term({ unit_price: 25000, class_id: "c2" }),
+      term({ unit_price: 25000, invoice_id: "missing" }),
+    ])).toEqual({});
+    expect(attendanceClassConfirmedPrices(classes, [{ ...invoice, student_id: "outsider" }], [term({ unit_price: 25000 })])).toEqual({});
+  });
+});
 
 describe("출석부 이 반 청구액", () => {
   it("같은 학생의 반을 구분하고 회차×단가 대신 해당 반 청구 항목을 표시한다", () => {

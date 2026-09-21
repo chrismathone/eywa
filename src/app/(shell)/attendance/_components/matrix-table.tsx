@@ -12,7 +12,7 @@ import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import type { AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { suppressedTransferRows, transferRowKey } from "@/features/attendance/transfer-badge";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import type { AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
 import { LiveRecords, MatrixColumnTotalsRow } from "./live-totals";
@@ -78,7 +78,7 @@ const HEAD_CORNER_Z = "z-[60]";
 //    🔴 짧게 고를 땐 **다른 뜻이 이미 쓰는 영어**를 피할 것(`School`·`Enrolled`로 한 번 lang-wiring 가드를 깼다).
 //    `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨 길이를 잠근다.
 //    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것.
-const COL_W = { name: 96, school: 72, classBilled: 76, units: 76, termSessions: 76, diff: 64, rate: 64, day: 28 } as const;
+const COL_W = { name: 96, school: 72, unitPrice: 96, classBilled: 76, units: 76, termSessions: 76, diff: 64, rate: 64, day: 24 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -213,6 +213,7 @@ export function MatrixTable({
   showGroups,
   classBilledAmounts,
   termSessionsByRow,
+  confirmedPricesByRow,
   priceConfirmedRows,
   noInvoiceRows,
   money,
@@ -231,6 +232,8 @@ export function MatrixTable({
   showGroups: boolean;
   /** 학생×반별 청구액(회차 확정과 동일). 빈 객체도 열을 표시하고 미매칭은 '미확정'. */
   classBilledAmounts?: Record<string, number>;
+  /** 회차 확정에 저장된 단가·월 수강료. undefined면 열을 생략한다. */
+  confirmedPricesByRow?: Record<string, AttendanceConfirmedPrice[]>;
   /**
    * 학생×반별 **등록 차수** — 회차 확정에서 확정한 시수(원장 2026-09-17). 청구액과 **같은 조회**에서 온다.
    * 키가 없으면 '미확정'(0을 지어내지 않는다). `daysBasis`면 그 숫자는 시수가 아니라 옛 **출석 일수**다.
@@ -279,6 +282,7 @@ export function MatrixTable({
         ),
       )
     : null;
+  const showPrice = confirmedPricesByRow !== undefined;
   const showClassBilled = classBilledAmounts !== undefined;
   // 🔴 열의 유무는 **제 데이터**가 정한다 — 청구액에 묶어 두면 등록 차수를 안 받은 호출부에서 열만 서고
   //    전 행이 '미확정'이 된다("확정을 안 했다"는 거짓 사실). 지금 두 값은 같은 조회에서 함께 온다.
@@ -308,7 +312,7 @@ export function MatrixTable({
   const billedView = noLesson.billed;
   const termView = noLesson.term;
   // 이름·학교·수업 차수·출석률(4) + 날짜 + 청구액 + 등록 차수·차이확인(둘은 한 짝).
-  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (showTermSessions ? 2 : 0);
+  const colSpan = days.length + 4 + (showPrice ? 1 : 0) + (showClassBilled ? 1 : 0) + (showTermSessions ? 2 : 0);
   // 단가(티어) 미지정으로 정산에서 빠진 **반·학생 줄** — 「단가」 표식(합계 뱃지만으론 못 찾는다).
   // 🔴 학생 id가 아니라 **줄**(`classId|studentId`)로 가린다(원장 2026-09-18 제보) — 단가는 학생 × 반마다 따로라
   //    학생 id로 가리면 한 반만 비어도 그 학생의 모든 반 줄에 「단가」가 붙었다(표식이 실제보다 훨씬 많았다).
@@ -366,6 +370,7 @@ export function MatrixTable({
   const tableMinWidth =
     COL_W.name +
     COL_W.school +
+    (showPrice ? COL_W.unitPrice : 0) +
     (showClassBilled ? COL_W.classBilled : 0) +
     COL_W.units +
     (showTermSessions ? COL_W.termSessions + COL_W.diff : 0) +
@@ -382,6 +387,7 @@ export function MatrixTable({
         <colgroup>
           <col style={{ width: COL_W.name }} />
           <col style={{ width: COL_W.school }} />
+          {showPrice ? <col style={{ width: COL_W.unitPrice }} /> : null}
           {showClassBilled ? <col style={{ width: COL_W.classBilled }} /> : null}
           <col style={{ width: COL_W.units }} />
           {showTermSessions ? <col style={{ width: COL_W.termSessions }} /> : null}
@@ -408,6 +414,14 @@ export function MatrixTable({
             >
               <span className="micro font-bold">{t("att.col.schoolGrade")}</span>
             </th>
+            {showPrice ? (
+              <th
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+                title={t("att.col.unitPriceTitle")}
+              >
+                <span className="micro font-bold">{t("att.col.unitPrice")}</span>
+              </th>
+            ) : null}
             {showClassBilled ? (
               <th
                 className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
@@ -450,7 +464,7 @@ export function MatrixTable({
                 return (
                   <th
                     key={d.date}
-                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[28px] border-r`}
+                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[24px] border-r`}
                     aria-hidden
                   />
                 );
@@ -487,7 +501,7 @@ export function MatrixTable({
                 <th
                   key={d.date}
                   title={holiday ?? undefined}
-                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[28px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
+                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[24px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
@@ -519,6 +533,7 @@ export function MatrixTable({
                     matrix={g.matrix}
                     days={days}
                     holidays={holidays}
+                    confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
@@ -546,6 +561,7 @@ export function MatrixTable({
                 matrix={g.matrix}
                 days={days}
                 holidays={holidays}
+                confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
@@ -632,7 +648,9 @@ export function MatrixTable({
           <MatrixColumnTotalsRow
             rows={groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)))}
             days={days}
+            showPrice={showPrice}
             showClassBilled={showClassBilled}
+            billedColumnWidth={COL_W.classBilled}
             showTermSessions={showTermSessions}
             billedByRow={billedView}
             termByRow={termView}

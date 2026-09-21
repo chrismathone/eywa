@@ -13,9 +13,8 @@
 //    자동값이 덮으면 "입력된 숫자가 입력되도록"(원장 2026-09-01)이 깨진다.
 // ⚠️ 9월분 소급 보정은 `scripts/_oneoff/backfill-math-auto-units.mjs`(드라이런 기본) — 규칙은
 //    `math-auto-units-rules.mjs`가 같은 식을 들고 있고 패리티 테스트가 두 벌이 갈리지 않게 잠근다.
-// ⚠️ 영어는 대상이 아니다(원장 2026-08-10 ECS *"다 1로 처리"* — sheet-client.tsx). 과목 키를 코드에 적는 건
-//    운영 enum 하드코딩 금지의 예외다 — 화면 라벨·선택지가 아니라 **저장 규칙**이고 같은 선례가 있다
-//    (`slot-axis.ts` PER_SLOT_SUBJECTS · `derive-from-reports.ts` DERIVED_ATTENDANCE_SUBJECTS).
+// 영어는 english_track을 넘기는 경로에서만 환산한다. 2026-09-21 정정: 인재원은 60분당 1,
+// EiE는 40분당 1이다. 수학의 60분당 0.5와 구분한다.
 
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import type { DowKey } from "@/features/class-sheets/lib/week";
@@ -31,7 +30,8 @@ export function isAutoUnitsSubject(subject: string | null | undefined): boolean 
 }
 
 /**
- * 그날 수업 **분** → 시수 = **ceil(분 ÷ 60) ÷ 2** = 교시 하나당 0.5.
+ * 수학 기본값: 그날 수업 **분** → 시수 = **ceil(분 ÷ 60) ÷ 2** = 교시 하나당 0.5.
+ * 영어 트랙을 지정하면 EiE는 40분당 1, 인재원은 60분당 1로 환산한다.
  * 55분 → 0.5 · 110·115·120(2교시) → 1 · 165(3교시) → 1.5 · 180(3시간) → 1.5 · 240 → 2.
  *
  * 🔴 **올림이다 — 55분 수업도 한 시간으로 센다**(원장 2026-09-14: *"55분 수업이여도 1시간으로 생각해야해.
@@ -47,7 +47,7 @@ export function unitsFromMinutes(minutes: number, track: AutoUnitsTrack = "math"
   const units =
     track === "eie"
       ? Math.min(MAX_SESSION_UNITS, Math.round((minutes / 40) * 2) / 2)
-      : Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / 2);
+      : Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / (track === "injaewon" ? 1 : 2));
   return units === 1 ? null : units;
 }
 

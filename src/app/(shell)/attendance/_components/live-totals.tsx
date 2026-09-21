@@ -363,6 +363,8 @@ export function MatrixColumnTotalsRow({
   rows,
   days,
   showClassBilled,
+  showPrice = false,
+  billedColumnWidth = 76,
   showTermSessions,
   billedByRow,
   termByRow,
@@ -374,6 +376,9 @@ export function MatrixColumnTotalsRow({
   rows: readonly string[];
   days: readonly { date: string; placeholder?: boolean }[];
   showClassBilled: boolean;
+  showPrice?: boolean;
+  /** 학생 행의 청구액 폭. 합계가 길면 왼쪽 라벨 공간에서 필요한 만큼만 더 쓴다. */
+  billedColumnWidth?: number;
   showTermSessions: boolean;
   billedByRow?: Record<string, number | null>;
   termByRow?: Record<string, AttendanceTermSessions | null>;
@@ -413,14 +418,24 @@ export function MatrixColumnTotalsRow({
   return (
     <tr className="bg-bg-soft">
       <td
-        colSpan={2}
-        className="border-line bg-bg-soft sticky left-0 z-10 border-t-2 border-r px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap"
+        colSpan={2 + (showPrice ? 1 : 0) + (showClassBilled ? 1 : 0)}
+        className="border-line bg-bg-soft z-10 border-t-2 border-r p-0 text-xs font-bold whitespace-nowrap sm:sticky sm:left-0"
       >
-        {sheetT(lang, searching ? "att.totals.search" : "att.totals.all")}
+        {/* 합계 행 안에서만 경계를 옮긴다. colgroup을 바꾸면 위 학생들의 학교 열까지 줄어든다. */}
+        <div className="flex items-stretch">
+          <span className="min-w-0 flex-1 px-2 py-1.5 text-center">
+            {sheetT(lang, searching ? "att.totals.search" : "att.totals.all")}
+          </span>
+          {showClassBilled ? (
+            <span
+              className="border-line bg-att-col-billed shrink-0 border-l px-1 py-1.5 text-right num"
+              style={{ minWidth: billedColumnWidth }}
+            >
+              {billedAny ? formatMoney(billed) : "—"}
+            </span>
+          ) : null}
+        </div>
       </td>
-      {showClassBilled ? (
-        <td className={`${cell} bg-att-col-billed text-right`}>{billedAny ? formatMoney(billed) : "—"}</td>
-      ) : null}
       <td className={`${cell} bg-att-col-sessions text-right`}>
         {totals ? formatUnitsWithSuffix(totals.units, suffix) : "—"}
       </td>

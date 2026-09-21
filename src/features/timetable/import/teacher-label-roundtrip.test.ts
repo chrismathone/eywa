@@ -27,7 +27,7 @@ const MODEL = "src/features/timetable/lib/teacher-grid-model.ts";
 describe("export — 시트 강사 밴드는 해석된 표기 이름이다", () => {
   it("슬롯 라벨이 resolveTeacherLabel을 통과해 나간다", () => {
     // 이 줄이 곧 "시트엔 한글 이름이 적힌다"의 근거다. 바뀌면 아래 import 대칭도 함께 손봐야 한다.
-    expect(read(QUERIES)).toMatch(/slotTeacherLabel: resolveTeacherLabel\(/);
+    expect(read(QUERIES)).toMatch(/slotTeacherLabel: resolveSlotTeacherLabel\(/);
   });
 
   it("강사 열 이름 = slotTeacherLabel ?? teacherName (teacherOf 단일 소스)", () => {

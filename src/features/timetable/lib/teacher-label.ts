@@ -171,6 +171,16 @@ export function resolveTeacherLabel(
   return map?.[raw] ?? raw;
 }
 
+/** 자리 라벨을 보존하고, 사람 교시는 저장된 담당자 FK를 예전 시트 라벨보다 우선한다. */
+export function resolveSlotTeacherLabel(
+  label: string | null | undefined,
+  teacher: { display_name?: string | null } | { display_name?: string | null }[] | null | undefined,
+  map?: TeacherLabelMap,
+): string | null {
+  const assigned = Array.isArray(teacher) ? teacher[0] : teacher;
+  return resolveTeacherLabel(specialSlotLabel(label) ?? (assigned?.display_name?.trim() || label?.trim() || null), map);
+}
+
 /** 라벨 배열을 해석 + 중복 제거(해석 결과가 겹치면 한 열로 합친다 — 이주희·LAB → LAB 1열, JJ는 별도 열). */
 export function resolveTeacherLabels(
   labels: readonly (string | null | undefined)[],
