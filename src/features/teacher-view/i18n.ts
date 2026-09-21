@@ -1550,8 +1550,8 @@ export const SHEET_DICT = {
   },
   "att.row.allocationPending": { ko: "배분 확인", en: "Check share" },
   "att.row.allocationPendingTip": {
-    ko: "확정 등록 차수는 있으나 교시별 배분에 필요한 수강 기간·시간표를 확인할 수 없습니다.",
-    en: "Registration is confirmed, but enrollment or schedule information needed to allocate the teacher's share is unavailable.",
+    ko: "확정 등록 시수와 수강 기간·시간표를 대조해 교시 담당별 배분을 확인해야 합니다. 합계를 맞추기 위해 교시 시수를 비례해서 늘리거나 줄이지 않습니다.",
+    en: "Check the confirmed registration against enrollment dates and scheduled teachers. Teaching units are not scaled up or down to force the totals to match.",
   },
   // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
   "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },
@@ -3242,6 +3242,10 @@ export const SHEET_DICT = {
   "os.c.makeupShownUnder": {
     ko: "새로고침하면 이 보강은 시수를 얹은 {target} 반 아래에 보입니다.",
     en: "After refreshing, this makeup appears under {target}, where the units were added.",
+  },
+  "os.c.makeupShownUnderAll": {
+    ko: "새로고침하면 이 보강은 {target} 반으로 옮겨 가는데, 그 반은 오늘 수업 칩에 없어 '전체'에서 보입니다.",
+    en: "After refreshing, this makeup moves to {target}, which has no class chip today — find it under 'All'.",
   },
   "os.c.removeMakeupRegularLine": {
     ko: "저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 삭제됩니다. {cls} 정규 칸에 얹은 보강 시수·메모는 남으니 필요하면 출석부에서 고쳐 주세요.",
