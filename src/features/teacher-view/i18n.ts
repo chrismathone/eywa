@@ -1541,17 +1541,17 @@ export const SHEET_DICT = {
     en: "Adds a net pay column to this teacher's sheet. Saved to your account.",
   },
   "att.col.termSessionsTitle": {
-    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 영어 강사 보기에서는 학생의 등원 요일·수강 기간과 교시 담당 비율로 나눈 선생님 몫입니다. 확정 전에는 '미확정', 그 달 청구서가 없거나 취소됐으면 '—'로 보입니다.",
-    en: "Sessions confirmed in billing. English teacher views show the teacher's share based on the student's enrollment dates, attendance days and scheduled periods. Unconfirmed until billing confirmation; '—' if the bill is missing or voided.",
+    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 영어는 교시 담당별로 배분하며 EiE는 각 요일 4회 기준입니다. 배분 후 남는 시수는 담임에게 배분합니다. 확정 전에는 '미확정', 그 달 청구서가 없거나 취소됐으면 '—'로 보입니다.",
+    en: "Sessions confirmed in billing, allocated by scheduled teacher. EiE counts each weekday four times. Remaining units go to the homeroom teacher. Unconfirmed until billing confirmation; '—' if the bill is missing or voided.",
   },
   "att.row.teacherShare": {
-    ko: "반 전체 등록 {total} 중 이 선생님 담당 {own} · 등원 요일·수강 기간·교시별 시수 기준",
-    en: "Teacher's share: {own} of {total} registered for the class, based on enrollment dates, attendance days and scheduled lesson units.",
+    ko: "반 전체 등록 {total} 중 이 선생님 담당 {own} · 교시별 배분 후 남는 시수는 담임에게 배분",
+    en: "Teacher's share: {own} of {total} registered for the class. Remaining units after scheduled allocation go to homeroom.",
   },
   "att.row.allocationPending": { ko: "배분 확인", en: "Check share" },
   "att.row.allocationPendingTip": {
-    ko: "확정 등록 시수와 수강 기간·시간표를 대조해 교시 담당별 배분을 확인해야 합니다. 합계를 맞추기 위해 교시 시수를 비례해서 늘리거나 줄이지 않습니다.",
-    en: "Check the confirmed registration against enrollment dates and scheduled teachers. Teaching units are not scaled up or down to force the totals to match.",
+    ko: "확정 등록 시수가 교시별 배분 합계보다 적거나, 남는 시수를 받을 담임이 지정되지 않아 배분을 확인해야 합니다.",
+    en: "Check the allocation: confirmed registration is below the scheduled total, or no homeroom teacher is designated to receive the remaining units.",
   },
   // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
   "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },
@@ -1599,8 +1599,8 @@ export const SHEET_DICT = {
     en: "Math: 1 hour = 0.5, 2 hours = 1, 3 hours = 1.5",
   },
   "att.units.eie": {
-    ko: "브릿지 및 EiE 수업: 40분 수업 = 1, 60분 수업 = 1.5",
-    en: "Bridge & EiE: 40 minutes = 1, 60 minutes = 1.5",
+    ko: "브릿지(40분 수업이 있는 반) 및 EiE: 40분 수업 = 1, 60분 수업 = 1.5",
+    en: "Bridge (classes with 40-minute lessons) & EiE: 40 minutes = 1, 60 minutes = 1.5",
   },
   "att.units.injaewon": {
     ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3",

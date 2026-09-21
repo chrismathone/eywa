@@ -18,6 +18,7 @@
 
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import type { DowKey } from "@/features/class-sheets/lib/week";
+import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
 import { COUNTABLE_STATUSES, MAX_SESSION_UNITS, isDefaultUnitsRaw } from "./session-units";
 
 /** 수업 길이로 시수를 자동으로 채우는 과목 키. 새 과목을 넣기 전에 원장 확인(돈 규칙이다). */
@@ -59,7 +60,22 @@ export type AutoUnitsSchedule = {
   validFrom: string;
   validTo: string | null;
   slotTeacherLabel: string | null;
+  labSeparate?: boolean;
 };
+
+/** A 40-minute period on any weekday makes the active English timetable a bridge course. */
+export function usesFortyMinuteEnglishUnits(
+  date: string,
+  schedules: readonly AutoUnitsSchedule[],
+  englishTrack: string | null,
+  className = "",
+): boolean {
+  if (englishTrack === "eie" || /브릿지|브리지|\bbridge\b/i.test(className)) return true;
+  const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  return schedules.some((s) => s.validFrom <= date && (!s.validTo || s.validTo >= date)
+    && !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? "")
+    && minutes(s.endTime) - minutes(s.startTime) === 40);
+}
 
 /** DB 행(snake) → 판정 모양. 서버 헬퍼·월별 출석부·원스크린 로스터가 **같은 변환**을 쓴다. */
 export function toAutoUnitsSchedule(row: {
@@ -69,6 +85,7 @@ export function toAutoUnitsSchedule(row: {
   valid_from: string;
   valid_to: string | null;
   slot_teacher_label: string | null;
+  lab_separate?: boolean;
 }): AutoUnitsSchedule {
   return {
     dayOfWeek: row.day_of_week as DowKey,
@@ -77,6 +94,7 @@ export function toAutoUnitsSchedule(row: {
     validFrom: row.valid_from,
     validTo: row.valid_to ?? null,
     slotTeacherLabel: row.slot_teacher_label ?? null,
+    ...(row.lab_separate === undefined ? {} : { labSeparate: row.lab_separate }),
   };
 }
 
@@ -88,10 +106,12 @@ export function autoUnitsOn(
   date: string,
   schedules: readonly AutoUnitsSchedule[],
   track: AutoUnitsTrack = "math",
+  className = "",
 ): number | null {
   let total = 0;
   for (const m of liveSlotMinutesOn(date, schedules).values()) total += m;
-  return unitsFromMinutes(total, track);
+  const basis = track !== "math" && usesFortyMinuteEnglishUnits(date, schedules, track, className) ? "eie" : track;
+  return unitsFromMinutes(total, basis);
 }
 
 /**
@@ -155,6 +175,7 @@ export function planAutoUnits(
   subjectOf: ReadonlyMap<string, string | null>,
   schedulesOf: ReadonlyMap<string, readonly AutoUnitsSchedule[]>,
   trackOf: ReadonlyMap<string, AutoUnitsTrack | null> = new Map(),
+  classNameOf: ReadonlyMap<string, string> = new Map(),
 ): Map<string, number> {
   const out = new Map<string, number>();
   for (const c of cells) {
@@ -162,7 +183,7 @@ export function planAutoUnits(
     if (out.has(key)) continue;
     const track = trackOf.get(c.classId) ?? null;
     if (!isAutoUnitsSubject(subjectOf.get(c.classId)) && !track) continue;
-    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math");
+    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math", classNameOf.get(c.classId));
     if (units !== null) out.set(key, units);
   }
   return out;

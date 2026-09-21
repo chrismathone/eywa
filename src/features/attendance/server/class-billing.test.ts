@@ -41,12 +41,31 @@ beforeEach(() => {
 });
 
 describe("강사 출석부 청구액 조회 범위", () => {
-  it("40분으로 단축된 인재원 교시도 반 전체를 브릿지로 바꾸지 않고 JJ를 포함해 배분한다", async () => {
+  it("확정 시수에서 남는 1U는 조회 중인 강사가 아니라 반 담임에게 배분한다", async () => {
+    mocks.visible.mockResolvedValue([{ id: "c1", className: "중등E 정규" }]);
+    mocks.tables.invoices = [{ id: "i1", student_id: "s1", status: "issued", line_items: [{ description: "중등E 정규", amount: 132000 }] }];
+    mocks.tables.classes = [{ id: "c1", class_name: "중등E 정규", teacher_id: "home", english_track: "injaewon" }];
+    mocks.tables.class_schedules = [
+      { class_id: "c1", day_of_week: "tue", start_time: "19:00", end_time: "20:00", teacher_id: "home", slot_teacher_label: null, valid_from: "2026-09-01", valid_to: null },
+      { class_id: "c1", day_of_week: "tue", start_time: "20:00", end_time: "21:00", teacher_id: null, slot_teacher_label: "JJ", valid_from: "2026-09-01", valid_to: null },
+    ];
+    mocks.tables.enrollments = [{ class_id: "c1", student_id: "s1", start_date: "2026-09-01", end_date: null, is_transferred: false, attendance_days: [] }];
+    mocks.tables.invoice_session_terms = [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: 132000, confirmed_sessions: 11, unit_price: 12000, quantity_basis: "attendance_units", pricing_mode: "per_session" }];
+    for (const [teacherId, expected] of [["home", 6], ["other", 0]] as const) {
+      const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }], {
+        teacherScope: { teacherId, classIds: ["c1"], holidays: [] },
+      });
+      expect(result.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: expected, daysBasis: false, classUnits: 11 });
+      expect(result.billed[rowKey("c1", "s1")]).toBe(132000);
+    }
+  });
+
+  it("시간 단위 인재원 교시는 JJ를 포함해 배분한다", async () => {
     mocks.tables.classes = [{ id: "c1", class_name: "중고E_중2 특별", teacher_id: "elsa", english_track: "injaewon" }];
     const slots = [
       ["mon", "19:20", "20:10", null, "JJ"], ["mon", "20:20", "21:10", "elsa", null],
       ["wed", "19:20", "20:10", "elsa", null], ["wed", "20:20", "21:10", "elsa", null],
-      ["thu", "19:20", "20:10", null, "JJ"], ["thu", "20:20", "21:00", "song", null],
+      ["thu", "19:20", "20:10", null, "JJ"], ["thu", "20:20", "21:10", "song", null],
     ];
     mocks.tables.class_schedules = slots.map(([day, start, end, teacher, label], i) => ({
       id: `slot-${i}`, class_id: "c1", day_of_week: day, start_time: start, end_time: end,
@@ -70,15 +89,15 @@ describe("강사 출석부 청구액 조회 범위", () => {
       { class_id: "c1", day_of_week: "tue", start_time: "14:40", end_time: "15:20", teacher_id: "other", slot_teacher_label: null, valid_from: "2026-09-01", valid_to: null },
     ];
     mocks.tables.enrollments = [{ class_id: "c1", student_id: "s1", start_date: "2026-09-01", end_date: null, is_transferred: false, attendance_days: ["tue"] }];
-    mocks.tables.invoice_session_terms = [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: 250000, confirmed_sessions: 10, unit_price: 25000, quantity_basis: "attendance_units", pricing_mode: "per_session", allocation_line_index: null }];
+    mocks.tables.invoice_session_terms = [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: 250000, confirmed_sessions: 8, unit_price: 250000, quantity_basis: "attendance_units", pricing_mode: "monthly", allocation_line_index: null }];
     const roster = [{ classId: "c1", studentIds: ["s1"] }, { classId: "forbidden", studentIds: ["other-student"] }];
     const full = await getAttendanceClassBilledAmounts("2026-09", roster);
     expect(mocks.queries.some((q) => q.table === "class_schedules")).toBe(false);
     const scoped = await getAttendanceClassBilledAmounts("2026-09", roster, {
       teacherScope: { teacherId: "other", classIds: ["c1", "forbidden"], holidays: [] },
     });
-    expect(scoped.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 5, daysBasis: false, classUnits: 10 });
-    expect(full.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 10, daysBasis: false });
+    expect(scoped.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 4, daysBasis: false, classUnits: 8 });
+    expect(full.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 8, daysBasis: false });
     expect(scoped.billed).toEqual(full.billed);
     expect(scoped.confirmedPrices).toEqual(full.confirmedPrices);
     for (const q of mocks.queries.filter((q) => q.table === "class_schedules" || q.table === "enrollments")) {
