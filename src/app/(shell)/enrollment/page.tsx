@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { QrCode } from "@/components/icons/eywa-icon-compat";
+import { QrCode } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -40,7 +40,7 @@ import { parseBoardStage } from "@/features/enrollment/board-stages";
 import { EnrollmentTable } from "./_components/enrollment-table";
 import { IntakeQrSection } from "./_components/intake-qr-section";
 
-export const metadata = { title: "콜&상담 — eywa" };
+export const metadata = { title: "콜&상담 — aywa" };
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;

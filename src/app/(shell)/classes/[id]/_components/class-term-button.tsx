@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { CalendarCheck, RotateCcw } from "@/components/icons/eywa-icon-compat";
+import { CalendarCheck, RotateCcw } from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { endClassTerm, reopenClassTerm, type ClassTermState } from "@/features/classes/server/actions";

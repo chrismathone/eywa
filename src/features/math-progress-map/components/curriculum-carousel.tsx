@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import type { RoadmapStep } from "../model";
 import { formatYearMonth, monthKey, stepContains } from "../years";

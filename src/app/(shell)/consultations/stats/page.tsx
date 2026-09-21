@@ -1,7 +1,7 @@
 import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
 import { relativeTimeKo } from "@/lib/relative-time";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/features/consultations/server/queries";
 import { StatsCharts } from "./_charts";
 
-export const metadata = { title: "상담 통계 — eywa" };
+export const metadata = { title: "상담 통계 — aywa" };
 
 export default async function ConsultationStatsPage() {
   await requireAccess("consultations");

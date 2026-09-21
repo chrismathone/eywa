@@ -33,7 +33,7 @@ export function quarterCurriculumLabel(periods: readonly CurriculumPeriod[]): st
 
 /**
  * 🔴 `completed.symbol`("✓")은 **화면에 안 쓴다** — 그리는 자리(`curriculum-timeline.tsx`)가 완료일 때만
- * `EyIcon name="check"`로 갈아탄다. 아이콘 가드(`eywa-icon-mapping.test.ts`)는 **`.tsx`만 읽어** 이 글자를
+ * `EyIcon name="check"`로 갈아탄다. 아이콘 가드(`aywa-icon-mapping.test.ts`)는 **`.tsx`만 읽어** 이 글자를
  * 못 본다 — 여기 값을 그대로 그리도록 되돌리면 raw ✓가 살아나는데 **가드는 초록이다**(같은 되돌림이
  * 2026-09-15·09-16 두 번 있었다). 이 상수를 손볼 땐 그 자리도 함께 볼 것.
  */

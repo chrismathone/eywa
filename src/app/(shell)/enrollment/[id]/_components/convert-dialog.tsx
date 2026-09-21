@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BookOpen, Loader2, UserPlus, X } from "@/components/icons/eywa-icon-compat";
+import { BookOpen, Loader2, UserPlus, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";

@@ -43,7 +43,7 @@ const STALE_MAX_UNMATCHED_RATIO = 0.05;
 const STATUS_KO = { unpaid: "미수", partial: "부분납", paid: "완납", refunded: "환불", void: "무효" };
 
 // ⚠️⚠️ 2026-07-30(2차) 5번째 가드 — **makeedu 퇴원 목록**(scrape.cjs --list=withdrawn, 실측 4,427행).
-// 위 4중 가드는 전부 **eywa가 가진 정황**뿐이다(활성 수강이 없다·며칠째 안 보인다). 그런데 그날 부재 18건을
+// 위 4중 가드는 전부 **aywa가 가진 정황**뿐이다(활성 수강이 없다·며칠째 안 보인다). 그런데 그날 부재 18건을
 // 실제로 뜯어보니 13명이 **재원생**이었고, 그중 둘은 06:00엔 있다가 18:00에 사라졌다 — 12시간 만의 이탈은
 // '삭제'가 아니라 **다른 청구월로 옮겨졌거나 수납 처리된 것**에 가깝다. 정황만으로는 이 둘을 못 가른다.
 // 퇴원 목록은 **makeedu가 직접 "이 원생은 퇴원"이라고 말하는 유일한 증거**라, 판정을 추측에서 사실로 바꾼다.
@@ -53,7 +53,7 @@ const STATUS_KO = { unpaid: "미수", partial: "부분납", paid: "완납", refu
 //       그래서 makeedu_id가 없는 학생은 통과시키지 않는다(안전한 쪽으로 실패).
 
 // makeedu 임포트 라인 판별: 현행 스키마는 paid/unpaid 필드 보유, 07-01 옛 additive 스키마는 {kind,description,amount}뿐이나
-// kind가 한글 구분(수업/교재/차량비…)이다. eywa 수동 청구(createInvoice)는 kind가 영문 카테고리(tuition/material…) + paid 없음.
+// kind가 한글 구분(수업/교재/차량비…)이다. aywa 수동 청구(createInvoice)는 kind가 영문 카테고리(tuition/material…) + paid 없음.
 // (실측: 2026-07 stale 25건 중 07-01산(産) 구스키마가 다수 — paid만 보면 전부 수동으로 오분류돼 영구 보류된다.)
 function isMakeeduShape(lineItems) {
   const li = Array.isArray(lineItems) ? lineItems : [];
@@ -66,12 +66,12 @@ const remainWon = (e) =>
   Math.max(0, Number(e.amount_total) - Number(e.amount_paid) - Number(e.amount_discount || 0));
 
 /**
- * eywa에만 남은 (학생,월) 분류. existing = 스크랩 커버 월의 eywa 인보이스(+학생 join, void 제외).
+ * aywa에만 남은 (학생,월) 분류. existing = 스크랩 커버 월의 aywa 인보이스(+학생 join, void 제외).
  * - voidable:      makeedu형 + 미완납 + **{@link STALE_MIN_ABSENT_DAYS}일 이상 연속 부재 + 활성 수강 없음**
  *                  → --void-stale 시 무효 전환 대상(유령 미수 해소)
  * - settled:       완납/환불 — 돈 받은 기록이라 항상 보존(리포트만)
  * - holdUnmatched: 같은 이름이 미매칭 라인에 있음 — makeedu엔 있는데 학생 매칭이 실패했을 수 있어 보류
- * - holdManual:    라인 형태가 수동 청구(paid 필드 없음) — makeedu에 원래 없는 eywa 자체 청구라 보류
+ * - holdManual:    라인 형태가 수동 청구(paid 필드 없음) — makeedu에 원래 없는 aywa 자체 청구라 보류
  * - holdRecent:    부재 지속일 < STALE_MIN_ABSENT_DAYS — "한 번 못 잡힌 것"일 수 있어 보류
  * - holdActive:    그 학생에게 활성 수강이 있음 — 수업을 다니는 학생의 청구 삭제는 전제가 약해 보류
  * - holdNotWithdrawn: makeedu **퇴원 목록에 없다** — 삭제가 아니라 다른 청구월 이동일 수 있어 보류
@@ -162,7 +162,7 @@ const fmtRow = (e) =>
 // 콘솔 요약(연동 PC 로그·수동 dry-run에서 사람이 바로 읽는 용도). 반환값 = 무효 대상 잔액 합계.
 function printIssues({ stale, unmatchedLines }) {
   if (unmatchedLines.length) {
-    console.log(`\n⚠️ 학생 미매칭 라인 ${unmatchedLines.length}건 — eywa 학생의 makeedu_id 누락 또는 동명 모호(학생 연결 후 다음 동기화에 자동 반영):`);
+    console.log(`\n⚠️ 학생 미매칭 라인 ${unmatchedLines.length}건 — aywa 학생의 makeedu_id 누락 또는 동명 모호(학생 연결 후 다음 동기화에 자동 반영):`);
     for (const u of unmatchedLines.slice(0, 15))
       console.log(`  - ${u.name}(${u.grade || "?"}) ${u.period} ${u.kind}/${u.item} 청구${won(u.total)} 미납${won(u.unpaid)}`);
     if (unmatchedLines.length > 15) console.log(`  … 외 ${unmatchedLines.length - 15}건(리포트 파일에 전체)`);
@@ -175,7 +175,7 @@ function printIssues({ stale, unmatchedLines }) {
   }
   if (stale.settled.length) console.log(`ℹ️ makeedu 부재지만 완납/환불 ${stale.settled.length}건 — 수납 기록 보존(리포트만).`);
   if (stale.holdUnmatched.length) console.log(`ℹ️ 보류(미매칭 의심) ${stale.holdUnmatched.length}건 — 같은 이름이 미매칭 라인에 있어 판단 유보.`);
-  if (stale.holdManual.length) console.log(`ℹ️ 보류(수동 청구 추정) ${stale.holdManual.length}건 — eywa에서 직접 만든 청구로 보임.`);
+  if (stale.holdManual.length) console.log(`ℹ️ 보류(수동 청구 추정) ${stale.holdManual.length}건 — aywa에서 직접 만든 청구로 보임.`);
   if (stale.holdRecent.length) {
     const r = stale.holdRecent.reduce((s2, e) => s2 + remainWon(e), 0);
     console.log(`ℹ️ 보류(부재 ${STALE_MIN_ABSENT_DAYS}일 미만) ${stale.holdRecent.length}건 · 잔액 ${won(r)} — 한 번 못 잡힌 것일 수 있어 유보:`);
@@ -249,7 +249,7 @@ function issueSummary({ stale, unmatchedLines, voidStale, voided, reconcile, tru
 //    화면 배지는 2주 내내 초록불이었다 — 맞는지 아무도 확인하지 않았기 때문이다.
 //    "완벽하게 일치"를 말하려면 먼저 **측정 가능한 정의**가 있어야 한다. 그게 아래 3지점 대조다.
 //      ① scraped    makeedu 라인 원본 합 (학생 매칭에 성공한 라인만)
-//      ② aggregated eywa가 (학생×월) 1행으로 집계한 합
+//      ② aggregated aywa가 (학생×월) 1행으로 집계한 합
 //      ③ stored     저장 후 DB에서 되읽은 합
 //    ①≠② = 집계 버그 · ②≠③ = 저장 버그. **허용 오차는 0원**이다(돈이라 반올림 여지를 두지 않는다).
 // ⚠️ 건수는 ②↔③만 비교한다 — ①은 라인 수라 집계 건수와 다른 게 정상이다.
@@ -298,7 +298,7 @@ function reconcilePeriods({ scraped, aggregated, stored }) {
 const FIELD_KO = { total: "청구", discount: "할인", paid: "수납", points: "적립" };
 
 /**
- * 🔑 **외부 대조** — makeedu가 스스로 말하는 합계(화면 '결과 합계')와 eywa 저장분을 맞춘다.
+ * 🔑 **외부 대조** — makeedu가 스스로 말하는 합계(화면 '결과 합계')와 aywa 저장분을 맞춘다.
  *
  * 층 2(라인→집계→저장)는 **우리끼리 일관됨**만 증명한다. 여기서 비로소 **"makeedu와 같다"**가 증명된다.
  * 그리고 그게 증명되면 **"부재"가 추측이 아니라 사실**이 된다 — 삭제 판정의 가드들은 전부
@@ -306,14 +306,14 @@ const FIELD_KO = { total: "청구", discount: "할인", paid: "수납", points: 
  *
  * ⚠️ makeedu 합계는 **조회 범위 전체 합**이라 월별로 못 쪼갠다 → 범위 총합 1건으로 비교한다.
  * ⚠️ 합계 표시가 꺼져 있으면(`reported=null`) **검증하지 않은 것**으로 둔다(모르면 안다고 하지 않는다).
- * ⚠️ eywa 쪽(`stored`)은 **저장분 + 미매칭 라인**이어야 한다. 이 대조가 묻는 건 "스크랩이 완전한가"이지
+ * ⚠️ aywa 쪽(`stored`)은 **저장분 + 미매칭 라인**이어야 한다. 이 대조가 묻는 건 "스크랩이 완전한가"이지
  *    "저장이 됐는가"가 아니다(그건 층 2가 본다). 미매칭을 빼고 비교하면 매칭이 나쁠수록 대조가 실패해
  *    검증이 영영 안 선다 — 매칭 품질은 `unmatchedRatio`가 따로 본다.
  * ⚠️ 미납은 **라인 합**으로 넘겨야 한다. `total-discount-paid`로 재계산하면 (학생×월) 단위 clamp 때문에
  *    라인 합과 어긋난다(2026-07-31 실측: 미납 191,250원 차이가 전부 이것이었다).
  *
  * @param reported makeedu 합계 {lines,total,discount,points,paid,unpaid} 또는 null
- * @param stored   eywa가 저장한 **스크랩 매칭분** 합계(같은 필드)
+ * @param stored   aywa가 저장한 **스크랩 매칭분** 합계(같은 필드)
  * @param scrapedLines 실제 수집한 라인 수(makeedu가 말한 lines와 같아야 한다)
  */
 function reconcileExternal({ reported, stored, scrapedLines }) {

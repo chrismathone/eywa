@@ -2,7 +2,7 @@
 //  · 슬롯 유효성: 각 날짜에 valid_from ≤ date ≤ valid_to 인 스케줄만 "그 날 수업"이다(주 대표일 1회 판정 금지
 //    — 주중 시간표 변경 주에 옛/새 스케줄이 같은 주에 걸친다).
 //  · 로스터: 날짜별 isEnrollmentActiveOn(입퇴반·반이동 반열림 규약) + 분리등원(attendance_days) +
-//    students.withdrawn_at. 단 attendance_days/on_hold는 이력이 없어 **현재값 기준**(비보장 명시 — eywa 전
+//    students.withdrawn_at. 단 attendance_days/on_hold는 이력이 없어 **현재값 기준**(비보장 명시 — aywa 전
 //    화면과 동일 한계).
 //  · 퇴원 유예: 수강이 끝난 학생은 **그 주 기준 30일**까지 endedOn을 달고 로스터에 남는다(하단 '퇴원'
 //    섹션 — 시간표 셀과 같은 창). 반이동 전출(is_transferred)은 새 반에서 보이므로 옛 반엔 안 남긴다.

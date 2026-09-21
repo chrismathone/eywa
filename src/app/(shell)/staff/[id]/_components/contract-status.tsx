@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useActionState } from "react";
 import { toast } from "sonner";
-import { CalendarClock, Loader2, Plus, X } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock, Loader2, Plus, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { extendStaffContract, type ContractActionState } from "@/features/staff/server/contract-actions";

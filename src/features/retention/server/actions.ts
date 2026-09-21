@@ -9,8 +9,8 @@ import { logAction } from "@/features/audit/server/log";
 export type LogActionState = { ok?: boolean; error?: string } | undefined;
 
 /**
- * 이탈 방어 조치 기록 → eywa 학생상담(student_consultations)에 적재.
- * 부원장의 "조치 타임라인"을 별도 테이블 없이 eywa 상담 기록과 한 몸으로 만든다.
+ * 이탈 방어 조치 기록 → aywa 학생상담(student_consultations)에 적재.
+ * 부원장의 "조치 타임라인"을 별도 테이블 없이 aywa 상담 기록과 한 몸으로 만든다.
  * follow_up_date를 주면 그게 곧 다음 연락 예정일(브리핑·캘린더 연동).
  */
 export async function logRetentionAction(

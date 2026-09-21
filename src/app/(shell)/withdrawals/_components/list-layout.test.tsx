@@ -52,7 +52,7 @@ describe("창 높이에 맞춘 명단 행 수", () => {
       container: main,
     });
     const [href, options] = navigation.replace.mock.calls[0];
-    const params = new URL(href, "https://eywa.test").searchParams;
+    const params = new URL(href, "https://aywa.test").searchParams;
     expect(params.get("size")).toBe("13");
     expect(params.has("page")).toBe(false);
     expect(params.get("reason")).toBe("move");
@@ -77,13 +77,13 @@ describe("창 높이에 맞춘 명단 행 수", () => {
       paddingBottom: `${PAD_BOTTOM}px`,
     } as CSSStyleDeclaration);
     render(<WithdrawalListLayout size={5} total={19}>{fixture}</WithdrawalListLayout>, { container: main });
-    expect(new URL(navigation.replace.mock.calls[0][0], "https://eywa.test").searchParams.get("size")).toBe("8");
+    expect(new URL(navigation.replace.mock.calls[0][0], "https://aywa.test").searchParams.get("size")).toBe("8");
   });
 
   it("🔴 최소 창에서도 하한(5행) 아래로 떨어지지 않는다 — 1행 목록은 쪽 넘김을 무의미하게 만든다", () => {
     // 창이 목록 위 높이(300)보다 조금 큰 정도 = 남는 자리가 한 행도 안 된다.
     Object.defineProperty(main, "clientHeight", { value: 420, configurable: true });
     render(<WithdrawalListLayout size={8} total={99}>{fixture}</WithdrawalListLayout>, { container: main });
-    expect(new URL(navigation.replace.mock.calls[0][0], "https://eywa.test").searchParams.get("size")).toBe("5");
+    expect(new URL(navigation.replace.mock.calls[0][0], "https://aywa.test").searchParams.get("size")).toBe("5");
   });
 });

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { FileText, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { FileText, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { updateMeetingNotepad, type UpdateNotepadState } from "@/features/meetings/server/actions";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import { useStateDraft } from "@/components/forms/use-state-draft";

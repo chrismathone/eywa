@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { MessageSquare, Mic, Pencil, Pin, Sparkles } from "@/components/icons/eywa-icon-compat";
+import { MessageSquare, Mic, Pencil, Pin, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { BackLink } from "@/components/back-link";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -18,7 +18,7 @@ import { ConsultationDeleteButton } from "../_components/consultation-delete-but
 import { FollowUpToggle } from "../_components/follow-up-toggle";
 import { AUDIENCE_LABEL, CATEGORY_META, URGENCY_META } from "../_components/consultation-meta";
 
-export const metadata = { title: "상담 상세 — eywa" };
+export const metadata = { title: "상담 상세 — aywa" };
 
 /**
  * 학생상담 상세(읽기) — 다른 엔티티(등록상담·학생·반·회의록)와 동일하게 "클릭=보기, 수정=버튼"으로 통일.

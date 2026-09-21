@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { useWindowStore, instanceLabel, type Win } from "./window-store";
 import { useCloseWindow } from "./use-close-window";
 import { usePointerDrag } from "./use-pointer-drag";

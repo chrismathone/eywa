@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * eywa 학생 ↔ 인재원 학생 **짝 잇기·끊기**(students.ijw_student_id, 0259a).
+ * aywa 학생 ↔ 인재원 학생 **짝 잇기·끊기**(students.ijw_student_id, 0259a).
  *
  * 🔴 게이트 = 학생 기록 관리(students **full**) — 학생 행을 바꾸는 일이라 강사(scoped)는 막는다
  *    (canManageStudentRecords와 같은 판정, 원장 2026-08-18 "강사는 열람 전용"). 감사로그를 남긴다.

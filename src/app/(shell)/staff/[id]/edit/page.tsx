@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, Wallet } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays, Wallet } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -12,7 +12,7 @@ import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
 import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
-export const metadata = { title: "근무 설정 — eywa" };
+export const metadata = { title: "근무 설정 — aywa" };
 
 export default async function EditStaffPage({
   params,

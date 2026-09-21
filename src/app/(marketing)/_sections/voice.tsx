@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { TESTIMONIAL } from "@/data/marketing";
 import { Reveal } from "../_motion/reveal";
 import { EditorialPhoto } from "../_ui/photo";
@@ -32,7 +32,7 @@ export function VoiceSection() {
         <div className="bg-card border-line overflow-hidden rounded-[16px] border shadow-[0_1px_2px_rgba(29,29,31,0.04),0_20px_48px_-26px_rgba(29,29,31,0.18)]">
           <EditorialPhoto
             src={directorDeskImg}
-            alt="아침 햇살이 드는 원장실 책상 위 노트북에 띄운 Eywa 운영실"
+            alt="아침 햇살이 드는 원장실 책상 위 노트북에 띄운 Aywa 운영실"
             aspect="aspect-[16/10]"
             bare
             sizes="(min-width: 1024px) 420px, 90vw"

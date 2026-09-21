@@ -13,7 +13,7 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
 import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { SHEET_BOX_FRAME } from "../ui-box";
 import type { ClassSheetMonthData } from "../server/month-queries";
 

@@ -10,9 +10,9 @@ import { useWindowStore, windowId } from "./window-store";
 import { deepLinkWindow, useDeepLinkWindow } from "./deep-link-window";
 
 /** `/students/<id>` 같은 상세 라우트가 자기 metadata로 다는 제목. */
-const DETAIL_TITLE = "학생 상세 — eywa";
+const DETAIL_TITLE = "학생 상세 — aywa";
 /** 라우트가 제목을 안 달았을 때 남는 루트 레이아웃 기본값. */
-const APP_DEFAULT_TITLE = "eywa — 인재원 학원관리";
+const APP_DEFAULT_TITLE = "aywa — 인재원 학원관리";
 
 describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 열까", () => {
   it("🔴 상세 라우트는 경로 기반 창 + 문서 제목(원장 제보 2026-09-01, /students/<id>가 빈 바탕이었다)", () => {
@@ -23,26 +23,26 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
   });
 
   it("메뉴 루트는 사이드바와 **같은 id·같은 제목**(진입 경로가 달라도 창은 한 벌)", () => {
-    expect(deepLinkWindow("/students", "원생목록 — eywa")).toEqual({
+    expect(deepLinkWindow("/students", "원생목록 — aywa")).toEqual({
       id: "students",
       title: "원생목록",
     });
   });
 
   it("대시보드는 창으로 복제하지 않고 하위 공지 화면만 창으로 연다", () => {
-    expect(deepLinkWindow("/dashboard", "대시보드 — eywa")).toBeNull();
-    expect(deepLinkWindow("/menu", "업무 선택 — eywa")).toBeNull();
-    expect(deepLinkWindow("/dashboard/announcements", "학원 공지 — eywa")).toEqual({ id: "dashboard/announcements", title: "학원 공지" });
+    expect(deepLinkWindow("/dashboard", "대시보드 — aywa")).toBeNull();
+    expect(deepLinkWindow("/menu", "업무 선택 — aywa")).toBeNull();
+    expect(deepLinkWindow("/dashboard/announcements", "학원 공지 — aywa")).toEqual({ id: "dashboard/announcements", title: "학원 공지" });
   });
 
   it("메뉴에 없는 라우트도 창으로 연다(안 열면 그 주소는 빈 바탕)", () => {
     // 하부탭 전용 /mcs는 findNavItem에 없지만 windowIdForHref가 하부탭 목록에서 풀어 메뉴 판이 여는
     // 창(windowId("route","mcs"))과 한 벌로 합쳐진다.
-    expect(deepLinkWindow("/mcs", "수학 강사 시트 — eywa")).toEqual({
+    expect(deepLinkWindow("/mcs", "수학 강사 시트 — aywa")).toEqual({
       id: "mcs",
       title: "수학 강사 시트",
     });
-    expect(deepLinkWindow("/kiosk-settings", "키오스크 설정 — eywa")?.id).toBe("kiosk-settings");
+    expect(deepLinkWindow("/kiosk-settings", "키오스크 설정 — aywa")?.id).toBe("kiosk-settings");
   });
 
   it("라우트가 제목을 안 달았으면(루트 기본값) 문서 제목을 믿지 않고 메뉴 라벨로", () => {
@@ -57,13 +57,13 @@ describe("deepLinkWindow — 주소로 들어온 라우트를 어떤 창으로 �
   });
 
   it("쿼리·해시는 창 id에서 떨어진다(같은 화면의 필터 차이로 창이 갈리지 않게)", () => {
-    expect(deepLinkWindow("/billing?tab=expenses", "수납관리 — eywa")?.id).toBe("billing");
-    expect(deepLinkWindow("/", "eywa")).toBeNull();
+    expect(deepLinkWindow("/billing?tab=expenses", "수납관리 — aywa")?.id).toBe("billing");
+    expect(deepLinkWindow("/", "aywa")).toBeNull();
   });
 
   it("🔴 프로토콜 상대 경로는 안 연다 — iframe에 실리면 창틀 안에 남의 사이트가 뜬다", () => {
-    expect(deepLinkWindow("//evil.example.com", "무언가 — eywa")).toBeNull();
-    expect(deepLinkWindow("/\\evil.example.com", "무언가 — eywa")).toBeNull();
+    expect(deepLinkWindow("//evil.example.com", "무언가 — aywa")).toBeNull();
+    expect(deepLinkWindow("/\\evil.example.com", "무언가 — aywa")).toBeNull();
   });
 });
 

@@ -5,7 +5,7 @@
 //   [연 누적] 누적수업인원 · 월 평균 수업인원
 //
 // 원본 시트는 이 값들을 강사별 출석부 시트에서 IMPORTRANGE로 끌어왔다(사람이 채우는 칸).
-// eywa는 수강(enrollments) + 학생 상태에서 직접 낸다 — 사람이 안 채워도 되고, 틀릴 일도 없다.
+// aywa는 수강(enrollments) + 학생 상태에서 직접 낸다 — 사람이 안 채워도 되고, 틀릴 일도 없다.
 
 /** 수강 1구간. endDate=null = 아직 재원. */
 export type EnrollSpanRow = {

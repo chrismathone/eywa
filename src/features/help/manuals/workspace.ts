@@ -8,7 +8,7 @@ export const workspace: HelpManual = {
   group: "창",
   layout: "workspace",
   summary:
-    "Eywa는 메뉴를 누르면 창이 열립니다. 여러 화면을 동시에 띄워 두고, 가장자리로 끌면 나란히 볼 수 있어요. 이 설명서의 노란 숫자 버튼을 누르면 아래 설명이 따라갑니다.",
+    "Aywa는 메뉴를 누르면 창이 열립니다. 여러 화면을 동시에 띄워 두고, 가장자리로 끌면 나란히 볼 수 있어요. 이 설명서의 노란 숫자 버튼을 누르면 아래 설명이 따라갑니다.",
   related: ["help", "dashboard"],
   callouts: [
     {

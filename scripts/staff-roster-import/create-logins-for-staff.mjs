@@ -4,7 +4,7 @@
 //   node scripts/staff-roster-import/create-logins-for-staff.mjs --apply    # 적용
 //   (옵션) --include-inactive : 퇴사 직원까지 포함(기본은 재직만)
 //
-// eywa는 **직원 행 id = 로그인 계정 id**가 같아야 한다(미러 트리거 구조). 그런데 시트/POC 이관 행은
+// aywa는 **직원 행 id = 로그인 계정 id**가 같아야 한다(미러 트리거 구조). 그런데 시트/POC 이관 행은
 // 계정 없이 만들어져 id가 따로 논다 → 계정을 만들면 행이 하나 더 생긴다. 그래서 이 스크립트는
 //   ① 이니셜 주소로 auth 계정 생성(초기 비밀번호 eywa123) → 미러 트리거가 새 users 행 생성
 //   ② 옛 행의 정보 전부를 새 행으로 복사

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Check, Loader2, Plus, Printer, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Check, Loader2, Plus, Printer, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";

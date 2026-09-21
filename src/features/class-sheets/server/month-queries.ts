@@ -320,7 +320,7 @@ export async function getClassSheetMonth(
       .eq("class_id", classId)
       .eq("month", monthBounds.from)
       .maybeSingle(),
-    // 등록 강의실(id→이름) — 라벨을 eywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
+    // 등록 강의실(id→이름) — 라벨을 aywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
     admin.from("classrooms").select("id, name").eq("tenant_id", access.tenantId),
     // 강사 라벨 해석기(닉네임 `Song` → 표시 이름 `송지혜`) — 주간 시트·시간표 3뷰와 **같은 함수**.
     getTeacherLabelMap({ supabase: admin, tenantId: access.tenantId }),

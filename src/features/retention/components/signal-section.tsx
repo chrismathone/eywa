@@ -1,4 +1,4 @@
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
+import type { LucideIcon } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 
 export type SignalRow = {

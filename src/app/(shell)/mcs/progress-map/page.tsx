@@ -8,7 +8,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentLearningMap } from "@/features/math-progress-map/server/learning-map-query";
 import { learningSheetHref } from "@/features/math-progress-map/learning-map";
 
-export const metadata: Metadata = { title: "수학 학습 진도맵 — eywa" };
+export const metadata: Metadata = { title: "수학 학습 진도맵 — aywa" };
 
 /** Real maps share the MCS class gate and roster. The unbound design preview keeps its admin gate. */
 export default async function ProgressMapPage({ searchParams }: {

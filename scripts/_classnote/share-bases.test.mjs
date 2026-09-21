@@ -20,19 +20,19 @@ describe("recallShareBases — 회수는 지금 주소와 옛 주소를 전부 �
   });
 
   it("다른 주소로 또 옮겨도 지금·첫 주소가 후보에 남는다", () => {
-    expect(recallShareBases("https://eywa.kr", undefined)).toEqual([
-      "https://eywa.kr",
+    expect(recallShareBases("https://aywa.kr", undefined)).toEqual([
+      "https://aywa.kr",
       CURRENT_SHARE_BASE,
       FIRST_SHARE_BASE,
     ]);
   });
 
   it("옛 주소를 env로 더 줄 수 있다 · 원문 표기와 정리한 표기 둘 다 · 중복·빈 칸은 정리된다", () => {
-    expect(recallShareBases("https://eywa.kr", " https://old.example.com/ , ,https://EYWA.kr")).toEqual([
-      "https://eywa.kr",
+    expect(recallShareBases("https://aywa.kr", " https://old.example.com/ , ,https://AYWA.kr")).toEqual([
+      "https://aywa.kr",
       "https://old.example.com/",
       "https://old.example.com",
-      "https://EYWA.kr",
+      "https://AYWA.kr",
       CURRENT_SHARE_BASE,
       FIRST_SHARE_BASE,
     ]);
@@ -47,16 +47,16 @@ describe("recallShareBases — 회수는 지금 주소와 옛 주소를 전부 �
   });
 
   it("🔴 지금 주소는 env 원문 표기도 후보에 넣는다 — 발송 워커가 env를 가공 없이 본문에 쓰기 때문", () => {
-    expect(recallShareBases("https://Eywa.kr/", undefined)).toEqual([
-      "https://Eywa.kr/",
-      "https://eywa.kr",
+    expect(recallShareBases("https://Aywa.kr/", undefined)).toEqual([
+      "https://Aywa.kr/",
+      "https://aywa.kr",
       CURRENT_SHARE_BASE,
       FIRST_SHARE_BASE,
     ]);
   });
 
   it("주소가 아닌 값은 버린다(본문 비교에 쓰레기 후보를 넣지 않는다)", () => {
-    expect(normalizeShareBase("eywa.kr")).toBeNull();
+    expect(normalizeShareBase("aywa.kr")).toBeNull();
     expect(normalizeShareBase("javascript:alert(1)")).toBeNull();
     expect(normalizeShareBase("")).toBeNull();
     expect(recallShareBases("not-a-url", "ftp://x")).toEqual([CURRENT_SHARE_BASE, FIRST_SHARE_BASE]);
@@ -81,7 +81,7 @@ describe("shareUrlVariants — 게시 전 중복 확인은 같은 토큰의 옛�
   });
 
   it("토큰이 다른 글은 후보가 아니다 — 모든 후보가 같은 토큰으로 끝난다", () => {
-    for (const v of shareUrlVariants(`https://eywa.kr/r/${TOKEN}`, "https://eywa.kr", "https://old.example.com")) {
+    for (const v of shareUrlVariants(`https://aywa.kr/r/${TOKEN}`, "https://aywa.kr", "https://old.example.com")) {
       expect(v.endsWith(`/r/${TOKEN}`)).toBe(true);
     }
   });

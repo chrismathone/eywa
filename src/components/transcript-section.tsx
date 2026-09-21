@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { ChevronDown } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { breakIntoSentences } from "@/lib/text/split-sentences";
 
 /** 화자 발화 — 구조적 최소 타입(meetings SpeakerUtterance·enrollment speaker_labels 둘 다 만족). */

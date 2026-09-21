@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildReadUpdates, extractReadToken, summarizeReadScan } from "./classnote-read-core.mjs";
 
 const EDU = "3f2b1a5c-1111-4222-8333-444455556666";
-const EYWA = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const AYWA = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
 const row = (over = {}) => ({
   is_sent_from_center: true,
@@ -19,13 +19,13 @@ describe("extractReadToken", () => {
     });
   });
 
-  it("eywa 공개 링크(/r/{token})는 eywa 종류로 뽑는다(도메인 무관)", () => {
-    expect(extractReadToken(`보고서 https://eywa-alpha.vercel.app/r/${EYWA}`)).toEqual({ kind: "eywa", token: EYWA });
-    expect(extractReadToken(`http://localhost:3100/r/${EYWA}`)).toEqual({ kind: "eywa", token: EYWA });
+  it("aywa 공개 링크(/r/{token})는 aywa 종류로 뽑는다(도메인 무관)", () => {
+    expect(extractReadToken(`보고서 https://eywa-alpha.vercel.app/r/${AYWA}`)).toEqual({ kind: "aywa", token: AYWA });
+    expect(extractReadToken(`http://localhost:3100/r/${AYWA}`)).toEqual({ kind: "aywa", token: AYWA });
   });
 
   it("둘 다 있으면 edutrix 우선(현 발송 주체)", () => {
-    const both = `https://edutrix.vercel.app/share/${EDU} 와 https://x.com/r/${EYWA}`;
+    const both = `https://edutrix.vercel.app/share/${EDU} 와 https://x.com/r/${AYWA}`;
     expect(extractReadToken(both)).toEqual({ kind: "edutrix", token: EDU });
   });
 
@@ -60,12 +60,12 @@ describe("buildReadUpdates", () => {
     expect(out[0].readAt).toBe("2026-07-18T03:00:00Z");
   });
 
-  it("edutrix·eywa 토큰은 별개 후보로 유지(각기 다른 컬럼에 조인)", () => {
+  it("edutrix·aywa 토큰은 별개 후보로 유지(각기 다른 컬럼에 조인)", () => {
     const out = buildReadUpdates([
       row(),
-      row({ content: `https://eywa-alpha.vercel.app/r/${EYWA}` }),
+      row({ content: `https://eywa-alpha.vercel.app/r/${AYWA}` }),
     ]);
-    expect(out.map((o) => o.kind).sort()).toEqual(["edutrix", "eywa"]);
+    expect(out.map((o) => o.kind).sort()).toEqual(["aywa", "edutrix"]);
   });
 
   it("빈 입력·null 안전", () => {

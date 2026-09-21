@@ -4,7 +4,7 @@
  * 16:02 시그니처를 절정으로 삼는 올라이트 에디토리얼 내러티브.
  * 운영 DB와 무관한 정적 마케팅 콘텐츠. 숫자는 데모 페르소나(인재원 248명)와 정합.
  */
-import type { EywaIconName } from "@/components/icons/eywa-icons";
+import type { AywaIconName } from "@/components/icons/aywa-icons";
 
 export const NAV_LINKS = [
   { label: "흐름", href: "#signature" },
@@ -64,13 +64,13 @@ export const ROI_FOOTNOTE =
 export const MENU_INDEX: {
   no: string;
   name: string;
-  icon: EywaIconName;
+  icon: AywaIconName;
   desc: string;
   time?: string;
   group: string;
   core?: boolean;
 }[] = [
-  { no: "01", name: "오늘", icon: "layoutGrid", desc: "Eywa가 정리한 오늘", time: "08:30", group: "홈", core: true },
+  { no: "01", name: "오늘", icon: "layoutGrid", desc: "Aywa가 정리한 오늘", time: "08:30", group: "홈", core: true },
   { no: "02", name: "시간표", icon: "calendar", desc: "강사·교시·학생을 한 장에", time: "09:00", group: "수업" },
   { no: "03", name: "출석부", icon: "clipboardCheck", desc: "학생 × 한 달, 매트릭스로", time: "16:02", group: "수업", core: true },
   { no: "04", name: "수업목록", icon: "book", desc: "반·과목·강사를 한 곳에", time: "10:00", group: "수업" },

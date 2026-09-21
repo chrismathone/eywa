@@ -1,7 +1,7 @@
 /**
- * eywa 반 로스터 ↔ ClassNote 반 보드 원아 대조 — 순수 함수(Vitest).
+ * aywa 반 로스터 ↔ ClassNote 반 보드 원아 대조 — 순수 함수(Vitest).
  *
- * 왜: 영어는 학생 1인 보드가 아니라 **반 보드**로 운영된다. 그래서 eywa에서 반을 옮기거나 신입이
+ * 왜: 영어는 학생 1인 보드가 아니라 **반 보드**로 운영된다. 그래서 aywa에서 반을 옮기거나 신입이
  * 들어와도 ClassNote 보드는 따라오지 않고, 그 학생은 **발송이 조용히 실패**한다. 2026-07-23 실측
  * 학생-반 248건 중 30건(12%)이 그 상태였다. 반 이동·신입·퇴원 때마다 재발하므로 상시 점검이 필요하다.
  *
@@ -16,9 +16,9 @@
 export type BoardMember = { childId: number; childName: string; birthYear: number | null };
 /** ClassNote 반 보드 1개 + 원아. */
 export type BoardSnapshot = { boardId: number; boardName: string; members: BoardMember[] };
-/** eywa 재원생 1명 — 유효이름(classnote_name || name) + 학년(생년 대조용). */
+/** aywa 재원생 1명 — 유효이름(classnote_name || name) + 학년(생년 대조용). */
 export type RosterStudent = { studentId: string; name: string; grade: string | null };
-/** eywa 반 1개 + 재원 로스터. */
+/** aywa 반 1개 + 재원 로스터. */
 export type ClassRoster = { classId: string; className: string; teacher: string | null; students: RosterStudent[] };
 /** 저장된 고정 연결(0145a). */
 export type ChildLink = { studentId: string; boardId: number; childId: number; childNameAtLink: string };
@@ -35,7 +35,7 @@ const GRADE_AGE_OFFSET: Record<string, number> = {
 /** 조기입학·유급·학부모 오입력(자기 생일을 1년 틀리게 넣은 실측 사례)을 흡수. */
 export const BIRTH_YEAR_TOLERANCE = 1;
 
-/** eywa 학년 → 기대 출생연도. 모르는 학년이면 null(= 대조 불가 = 연결 금지). */
+/** aywa 학년 → 기대 출생연도. 모르는 학년이면 null(= 대조 불가 = 연결 금지). */
 export function expectedBirthYear(grade: string | null | undefined, schoolYear: number): number | null {
   const off = GRADE_AGE_OFFSET[String(grade ?? "").trim()];
   if (off == null) return null;
@@ -163,7 +163,7 @@ export type ClassCheck = {
    */
   status: "ok" | "issues" | "empty_board" | "no_board" | "dup_board";
   students: StudentVerdict[];
-  /** 보드엔 있는데 eywa 이 반 수강이 아닌 원아 — 퇴원·타반·형제 계정일 수 있다. 강사가 반 보드에 직접 쓴 글은 **이들에게도 간다.** */
+  /** 보드엔 있는데 aywa 이 반 수강이 아닌 원아 — 퇴원·타반·형제 계정일 수 있다. 강사가 반 보드에 직접 쓴 글은 **이들에게도 간다.** */
   extras: string[];
   problems: number;
 };

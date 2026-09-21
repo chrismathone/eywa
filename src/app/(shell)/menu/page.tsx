@@ -4,7 +4,7 @@ import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { canAccess } from "@/lib/permissions";
 import { landingPath } from "@/lib/auth/teacher-home";
 
-export const metadata = { title: "업무 선택 — eywa" };
+export const metadata = { title: "업무 선택 — aywa" };
 
 /** 이전 메뉴 주소는 대시보드로 연결한다. 접근 제한 계정의 안전한 착지점은 유지한다. */
 export default async function MenuPage() {

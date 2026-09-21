@@ -7,7 +7,7 @@ import { getStaffResumeById } from "@/features/staff/server/resume-queries";
 import { canViewResume } from "@/features/staff/server/resume-access";
 import { ResumeSheet } from "../_components/resume-sheet";
 
-export const metadata = { title: "직원 이력서 — eywa" };
+export const metadata = { title: "직원 이력서 — aywa" };
 
 export default async function ResumeViewPage({
   params,

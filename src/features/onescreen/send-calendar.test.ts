@@ -42,7 +42,7 @@ describe("summarizeSendDays", () => {
   const rows: SendStatRow[] = [
     { reportDay: "2026-07-06", statusKey: "success", sendable: false, cnt: 4 }, // 이관분(edutrix가 발송)
     { reportDay: "2026-07-06", statusKey: "", sendable: false, cnt: 2 }, // 이관분·미발송(지금 못 보냄)
-    { reportDay: "2026-07-06", statusKey: "", sendable: true, cnt: 1 }, // eywa 네이티브 미발송(보낼 수 있음)
+    { reportDay: "2026-07-06", statusKey: "", sendable: true, cnt: 1 }, // aywa 네이티브 미발송(보낼 수 있음)
     { reportDay: "2026-07-07", statusKey: "success", sendable: true, cnt: 3 },
   ];
 

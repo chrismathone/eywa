@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Pill } from "@/components/atoms/pill";
 import { roleMeta, staffStatusMeta } from "@/features/staff/status-labels";
-import { Paperclip } from "@/components/icons/eywa-icon-compat";
+import { Paperclip } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 import { useSubjectMaps } from "@/features/owner/operations-context";

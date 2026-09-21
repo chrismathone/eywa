@@ -9,7 +9,7 @@
  *   node --env-file=.env.local scripts/_classnote/process-parent-comments.mjs --apply  # 실제 알림 insert + 스냅샷 갱신
  *
  * ⚠️ **읽기 전용 기능**이다 — ClassNote에는 어떤 경우에도 쓰지 않는다(학부모에게 나가는 경로 없음).
- * --apply가 건드리는 것은 eywa DB의 notifications(강사 벨) + classnote_feed_state(댓글 수 스냅샷)뿐.
+ * --apply가 건드리는 것은 aywa DB의 notifications(강사 벨) + classnote_feed_state(댓글 수 스냅샷)뿐.
  *
  * ⚠️ **데몬이 도는 중에 --apply를 같이 돌리지 말 것.** 코어가 트랜잭션 안에서 스냅샷 갱신 시각을 다시 확인해
  * 중복 알림은 막지만(그 폴은 통째로 포기), 무의미하게 서로를 취소시킨다.

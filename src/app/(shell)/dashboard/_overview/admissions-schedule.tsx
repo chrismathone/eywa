@@ -3,7 +3,7 @@
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import { dashboardDate } from "@/features/dashboard/overview/display";
 import { WindowLink } from "@/components/workspace/window-link";
-import { ExternalLink } from "@/components/icons/eywa-icon-compat";
+import { ExternalLink } from "@/components/icons/aywa-icon-compat";
 import s from "./overview.module.css";
 
 /**

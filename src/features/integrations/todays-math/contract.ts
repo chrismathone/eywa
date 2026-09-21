@@ -9,7 +9,7 @@ import "server-only";
  *
  * 계약 SSOT 는 testautocreator 쪽 `docs/planning/tracks/plan-eywa-link.md`.
  * 여기 있는 것은 DB 를 안 만지는 부분 전부다(인증 비교·커서·응답 모양) —
- * eywa 컨벤션대로 순수 로직만 단위 테스트로 잠근다.
+ * aywa 컨벤션대로 순수 로직만 단위 테스트로 잠근다.
  *
  * ## 인증·키
  *

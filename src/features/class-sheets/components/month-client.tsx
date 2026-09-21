@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { shiftMonth } from "@/lib/date-kst";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { PeriodNav } from "@/components/period-nav";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { offGoalCountByDate } from "../lib/goal-match";

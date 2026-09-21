@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Trash2 } from "@/components/icons/aywa-icon-compat";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { deleteEnrollment } from "@/features/enrollments/server/actions";

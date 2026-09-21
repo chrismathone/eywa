@@ -7,7 +7,7 @@ import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guar
 import { SectionForm, SettingsCard } from "./section-form";
 import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
  * '표시 항목' 토글 중 부연이 필요한 것만. showAttachments는 사진과 파일(pdf·엑셀·hwp·오디오)을 **한 스위치로

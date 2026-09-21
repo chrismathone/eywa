@@ -188,7 +188,7 @@ const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
 
 /**
  * 리포트를 **내부 API로 게시**(2026-07-29부터 **모든** 리포트의 유일 경로) — 스샷=`attached_images` + 파일=`attached_files` 한 POST.
- * ① 스샷 buffer → kage(`img`) ② eywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
+ * ① 스샷 buffer → kage(`img`) ② aywa 내부 엔드포인트로 파일 signed URL → fetch → kage(`etc`) ③ board→child→enrollment
  * 해석 후 postClassnoteReport(이중 계정이면 전원). 반환 { ok, error? }. 리버스엔지니어링·학원이 POC 검증(2026-07-16).
  * ⚠️ 이미지 첨부(교재 등)는 **개별 부착하지 않는다**(2026-07-22 방향 B 확정) — /r 스샷 하단에 크게 실려 세로로
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
@@ -227,9 +227,9 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   // 화면이 "실패인데 사유 없음"으로 보이면 이번에 고친 것이 무의미해진다.
   if (!attachedImages.length) return { ok: false, error: imgKage.reason || "보고서 이미지 업로드 실패 — 원인을 알 수 없습니다. 워커 로그를 확인하세요" };
 
-  // 2) eywa 내부 엔드포인트 → 파일 signed URL → fetch(바이트) → kage(doc input) → attached_files
+  // 2) aywa 내부 엔드포인트 → 파일 signed URL → fetch(바이트) → kage(doc input) → attached_files
   // ⚠️ 실패 원인을 **단계별로 구분해 error에 담는다**(2026-07-21). 이전엔 세 단계(목록조회·다운로드·kage)가
-  // 전부 "파일 첨부 업로드 실패(전건) — eywa 엔드포인트/스토리지 확인" 한 줄로 뭉개져, 원인을 보려면 연동 PC의
+  // 전부 "파일 첨부 업로드 실패(전건) — aywa 엔드포인트/스토리지 확인" 한 줄로 뭉개져, 원인을 보려면 연동 PC의
   // watch.log를 사람이 열어야 했다(그 PC에 CLASSNOTE_OUT 폴더가 없으면 로그 파일 자체가 없어 추적 불가).
   // error는 DB(lesson_reports.classnote_error)에 남아 발송 콘솔·원격에서 그대로 읽힌다 = 물리 접근 불필요.
   // 무첨부 리포트(local 게시 모드의 기본 케이스, 2026-07-28)는 이 블록을 통째로 건너뛴다(스샷만 게시).
@@ -606,7 +606,7 @@ export async function processQueueOnce(sql, browser, opts) {
 
     // ⛔ 프리플라이트 보드 안전 게이트(실게시 모드만) — **스크린샷·게시 전에** 판정(불필요한 캡처 회피).
     // 한 보드에 서로 다른 2가족+가 연결돼 있으면 이 학생 보고서가 남의 가족에게도 게시된다(실제 사고: 2026-07-15
-    // `(수학)박서준`에 초6·중3 두 가족 동거 — 초6 보고서가 중3 집에 노출). eywa DB엔 보드 멤버십이 없어
+    // `(수학)박서준`에 초6·중3 두 가족 동거 — 초6 보고서가 중3 집에 노출). aywa DB엔 보드 멤버십이 없어
     // **여기(ClassNote 조회 가능한 워커)가 유일한 차단 지점**. 판정=board-safety.mjs 순수함수(공지 워커와 공용).
     if (post) {
       // 1차 = 보드 존재/중복 + 예외 등재 확인(보드 조회 캐시만 사용, 추가 요청 0).
@@ -630,7 +630,7 @@ export async function processQueueOnce(sql, browser, opts) {
               reason: `동명이인이 있는 이름이라 원아 확인이 필요한데 클래스노트 조회에 실패해 보류합니다(${className})`,
             };
         if (!verdict.ok && amb.siblings.length)
-          verdict.reason = `${verdict.reason} (eywa 동명: ${amb.siblings.join(", ")}${amb.sameName > 1 ? ` · 같은 이름 ${amb.sameName}명` : ""})`;
+          verdict.reason = `${verdict.reason} (aywa 동명: ${amb.siblings.join(", ")}${amb.sameName > 1 ? ` · 같은 이름 ${amb.sameName}명` : ""})`;
       }
       if (!verdict.ok) {
         await sql`update lesson_reports set classnote_status='blocked_shared',

@@ -2,8 +2,8 @@ import { isClassnoteSubjectEnabled } from "@/features/onescreen/classnote-guard"
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 
 /**
- * 반 공지 타깃 해석(순수) — eywa 반에서 고른 학생들을 ClassNote **학생별 개별 보드**로 매핑.
- * Edutrix NoticeWriteModal 패턴 계승: 반 구조는 eywa에 살고, ClassNote 1인 1반은 배달 레일
+ * 반 공지 타깃 해석(순수) — aywa 반에서 고른 학생들을 ClassNote **학생별 개별 보드**로 매핑.
+ * Edutrix NoticeWriteModal 패턴 계승: 반 구조는 aywa에 살고, ClassNote 1인 1반은 배달 레일
  * (docs/classnote-integration.md §3 "왜 학생 1명=반 1개인가"). 보드명 = `(과목라벨)유효이름`,
  * 유효이름 = classnote_name(오버라이드) ?? name — 발송 워커 boardClassName과 동일 규약.
  */

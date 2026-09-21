@@ -3,7 +3,7 @@ import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
 import { useEffect, useState, useTransition } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDown, ExternalLink, FileSpreadsheet, Loader2, Sheet, Upload } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ExternalLink, FileSpreadsheet, Loader2, Sheet, Upload } from "@/components/icons/aywa-icon-compat";
 import { TimetableImportDialog } from "./import-dialog";
 import { EnglishImportDialog } from "./english-import-dialog";
 import {

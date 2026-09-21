@@ -1,7 +1,7 @@
 "use client";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { confirmSelectedTerms, type SelectedTermInput } from "@/features/billing/session-terms/server/selected-confirm-actions";
 import { validSessionQuantity } from "@/features/billing/session-pricing";
 import { isUntouchedScaledSessions } from "@/features/billing/session-terms/last-month-suggestion";

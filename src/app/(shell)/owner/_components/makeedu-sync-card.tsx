@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Loader2, RefreshCw } from "@/components/icons/eywa-icon-compat";
+import { Loader2, RefreshCw } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   setMakeeduSyncEnabled,

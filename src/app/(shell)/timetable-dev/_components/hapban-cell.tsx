@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { buildHapbanRoster, type HapbanMemberClass } from "@/features/timetable/lib/hapban";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";

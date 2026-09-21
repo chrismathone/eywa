@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 
-import { EyIcon } from "@/components/icons/eywa-icons"
+import { EyIcon } from "@/components/icons/aywa-icons"
 import { cn } from "@/lib/utils"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {

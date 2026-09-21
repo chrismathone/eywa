@@ -90,44 +90,44 @@ function extractTeacher(className) {
     }
     console.log("chosen edutrix student:", best);
 
-    // eywa candidates
-    const eywa = await sql`
+    // aywa candidates
+    const aywa = await sql`
       select id, name, school, grade, status, edutrix_student_id, makeedu_id
       from students
       where tenant_id = ${TENANT}
         and replace(name, ' ', '') = ${t.preferName.replace(/\s+/g, "")}
     `;
-    console.log("eywa candidates:", eywa);
+    console.log("aywa candidates:", aywa);
 
-    let eywaTarget = eywa.find((s) => s.school === t.school && s.grade === t.grade);
-    if (!eywaTarget) eywaTarget = eywa.find((s) => s.status === "enrolled");
-    if (!eywaTarget) eywaTarget = eywa[0];
-    console.log("chosen eywa:", eywaTarget);
+    let aywaTarget = aywa.find((s) => s.school === t.school && s.grade === t.grade);
+    if (!aywaTarget) aywaTarget = aywa.find((s) => s.status === "enrolled");
+    if (!aywaTarget) aywaTarget = aywa[0];
+    console.log("chosen aywa:", aywaTarget);
 
-    if (!best || !eywaTarget) {
-      console.log("SKIP — missing best or eywa");
+    if (!best || !aywaTarget) {
+      console.log("SKIP — missing best or aywa");
       continue;
     }
 
-    // conflict: another eywa already has this edutrix id?
+    // conflict: another aywa already has this edutrix id?
     const clash = await sql`
       select id, name, edutrix_student_id from students
       where tenant_id = ${TENANT}
         and edutrix_student_id = ${best.id}
-        and id <> ${eywaTarget.id}
+        and id <> ${aywaTarget.id}
     `;
     console.log("clash if any:", clash);
 
     // current mapping on target
-    console.log("current target mapping:", eywaTarget.edutrix_student_id);
+    console.log("current target mapping:", aywaTarget.edutrix_student_id);
 
     if (!APPLY) {
-      console.log("[dry] would set", eywaTarget.name, "→", best.id, best.name);
+      console.log("[dry] would set", aywaTarget.name, "→", best.id, best.name);
       continue;
     }
 
     // clear wrong mapping on target if points to different edu id with fewer/zero reports?
-    // Always set to best.id. If another eywa had best.id, clear them first.
+    // Always set to best.id. If another aywa had best.id, clear them first.
     if (clash.length) {
       for (const c of clash) {
         await sql`update students set edutrix_student_id = null where id = ${c.id}`;
@@ -138,9 +138,9 @@ function extractTeacher(className) {
     await sql`
       update students
       set edutrix_student_id = ${best.id}, updated_at = now()
-      where id = ${eywaTarget.id} and tenant_id = ${TENANT}
+      where id = ${aywaTarget.id} and tenant_id = ${TENANT}
     `;
-    console.log("mapped", eywaTarget.id, "→", best.id);
+    console.log("mapped", aywaTarget.id, "→", best.id);
 
     // pull recent reports
     const { data: reps } = await edu
@@ -152,7 +152,7 @@ function extractTeacher(className) {
 
     const existing = await sql`
       select edutrix_report_id from lesson_reports
-      where tenant_id = ${TENANT} and student_id = ${eywaTarget.id}
+      where tenant_id = ${TENANT} and student_id = ${aywaTarget.id}
         and source = 'edutrix_import' and edutrix_report_id is not null
     `;
     const seen = new Set(existing.map((r) => r.edutrix_report_id));
@@ -163,7 +163,7 @@ function extractTeacher(className) {
       const cname = Array.isArray(c) ? c[0]?.name : c?.name;
       rows.push({
         tenant_id: TENANT,
-        student_id: eywaTarget.id,
+        student_id: aywaTarget.id,
         report_date: rep.date,
         progress: rep.progress || null,
         exam_info: rep.exam_info || null,
@@ -198,7 +198,7 @@ function extractTeacher(className) {
       select id, name, edutrix_student_id from students
       where tenant_id = ${TENANT} and edutrix_student_id = ${eduS.id}
     `;
-    console.log(t.preferName, "edu", eduS.id.slice(0, 8), "→ eywa", ey);
+    console.log(t.preferName, "edu", eduS.id.slice(0, 8), "→ aywa", ey);
   }
 
   await sql.end();

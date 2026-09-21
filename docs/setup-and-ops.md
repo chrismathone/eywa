@@ -1,4 +1,4 @@
-# eywa — 셋업 · 운영 · 데이터 (Tier 1)
+# aywa — 셋업 · 운영 · 데이터 (Tier 1)
 
 > CLAUDE.md에서 분리된 **Tier 1 참조 문서**. 기술스택·폴더구조·마이그레이션·git 협업·검증 게이트·데모 계정·남은 작업. 셋업/배포/이관 때 참조.
 
@@ -68,8 +68,8 @@ supabase/migrations/
 
 ## Git 협업 규칙 (⚠️ 여러 세션이 병렬로 작업함)
 
-### ⚠️⚠️ eywa는 이제 실제 가동 중 — main 직접 커밋·push 금지, dev 검증 후 반영 (2026-07-01, 사용자 지시)
-**eywa가 실운영 중이므로 변경을 main에 바로 커밋·push하지 않는다.** 반드시 **dev(로컬/워크트리)에서 검증을 끝낸
+### ⚠️⚠️ aywa는 이제 실제 가동 중 — main 직접 커밋·push 금지, dev 검증 후 반영 (2026-07-01, 사용자 지시)
+**aywa가 실운영 중이므로 변경을 main에 바로 커밋·push하지 않는다.** 반드시 **dev(로컬/워크트리)에서 검증을 끝낸
 뒤에만** main에 반영한다. 흐름:
 1. **작업·검증은 브랜치/워크트리에서** — 기능 구현 후 게이트(typecheck/lint/test/build) + 실동작(dev 서버·브라우저) 검증까지 완료.
 2. **main 반영은 명시적 승인 후에만** — 사용자가 "반영/머지/push해라"라고 확인하기 전까지 **main으로 커밋·push하지 않는다.**
@@ -116,7 +116,7 @@ supabase/migrations/
 
 ### 진짜 병렬 코딩은 worktree로 격리
 ```bash
-git worktree add ../eywa-billing -b feat/billing   # 별도 디렉터리 + 별도 브랜치
+git worktree add ../aywa-billing -b feat/billing   # 별도 디렉터리 + 별도 브랜치
 PORT=3101 pnpm dev                                  # dev 서버는 포트 분리 (3100과 다르게)
 ```
 세션마다 자기 worktree(= 자기 `.next`·자기 파일)를 열면 파일·빌드 충돌이 원천 차단되고, 끝나면 브랜치를 merge.

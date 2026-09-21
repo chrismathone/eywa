@@ -60,7 +60,7 @@ export type InvoiceFilters = {
 };
 
 // line_items jsonb는 소스마다 형태가 다르다: 구 makeedu 동기화는 {name,amount}(description 없음),
-// eywa 폼/POC는 {kind,description,amount}, 2026-07-08 재적재 이후는 항목별 상세 11-key. description을
+// aywa 폼/POC는 {kind,description,amount}, 2026-07-08 재적재 이후는 항목별 상세 11-key. description을
 // 단일 소스로 정규화(name→description)해 검색 필터가 `undefined.toLowerCase()`로 터지지 않게 하고,
 // ⚠️ 항목별 상세(할인/실납/미납/결제 등)는 **있으면 통과**시킨다 — 미지 키 무언 드랍은 라인 단위 표를
 // 조용히 비우는 write-only-orphan(2026-07-13 머지 검증에서 실측한 사고 — 타입만 확장되고 여기서 잘렸음).

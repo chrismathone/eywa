@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { periodNotice } from "@/features/classes/period-notice";
 
 // ⚠️ 라운드는 **형제 기준**(같은 폼의 반 이름·과목·강사 입력이 전부 rounded-md) — 한 폼 안에서 이 두 칸만

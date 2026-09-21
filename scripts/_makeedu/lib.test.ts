@@ -146,7 +146,7 @@ describe("billingMonthRange — 스크랩할 청구월 범위", () => {
 // 강윤서·박수빈·김나율A·김경진이 실제로 그렇게 무효 처리됐다(makeedu엔 멀쩡히 있는데도).
 // ─────────────────────────────────────────────────────────────────────────────
 describe("normalizeName — 상태 접미사", () => {
-  it("makeedu의 상태 접미사를 벗겨 eywa 이름과 매칭된다", () => {
+  it("makeedu의 상태 접미사를 벗겨 aywa 이름과 매칭된다", () => {
     expect(L.normalizeName("강윤서(퇴)")).toBe(L.normalizeName("강윤서"));
     expect(L.normalizeName("박수빈(퇴)")).toBe("박수빈");
     for (const suf of ["(퇴)", "(퇴원)", "(휴)", "(휴원)", "(졸)", "(졸업)"])
@@ -157,7 +157,7 @@ describe("normalizeName — 상태 접미사", () => {
     expect(L.normalizeName("김나율A(퇴) ")).toBe("김나율a");
   });
 
-  // ⚠️ 괄호를 통째로 벗기면 eywa의 실제 이름(`박소선 (테스트)`)이 다른 사람과 충돌한다.
+  // ⚠️ 괄호를 통째로 벗기면 aywa의 실제 이름(`박소선 (테스트)`)이 다른 사람과 충돌한다.
   it("상태 표시가 아닌 괄호는 **건드리지 않는다**(충돌 방지)", () => {
     expect(L.normalizeName("박소선 (테스트)")).toBe("박소선(테스트)");
     expect(L.normalizeName("원일(테스트)")).toBe("원일(테스트)");

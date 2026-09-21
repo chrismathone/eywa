@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { CheckCircle2 } from "@/components/icons/eywa-icon-compat";
+import { CheckCircle2 } from "@/components/icons/aywa-icon-compat";
 import { ResumeSheet } from "@/app/(shell)/staff/resumes/_components/resume-sheet";
 import { submitPublicStaffIntake } from "@/features/staff/server/public-intake-actions";
 import type { StaffResumeData } from "@/features/staff/resume";

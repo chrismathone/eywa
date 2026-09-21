@@ -6,7 +6,7 @@ import type { ExistingContext, ParsedStructure, SheetGrid } from "./types";
 
 const parsed = parseTeacherGrid(fixtureJson as unknown as SheetGrid);
 
-// 구버전 eywa를 흉내낸 "일부만 존재" 컨텍스트 — 시트가 진실원본, 나머지는 신규 대상이 되어야 한다.
+// 구버전 aywa를 흉내낸 "일부만 존재" 컨텍스트 — 시트가 진실원본, 나머지는 신규 대상이 되어야 한다.
 const ctx: ExistingContext = {
   classes: [
     { id: "c1", className: "중등E_중2 심화", subject: "english", teacherId: null, classroomId: null },

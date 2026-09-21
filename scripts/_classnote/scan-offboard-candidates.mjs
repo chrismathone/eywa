@@ -1,7 +1,7 @@
 /**
- * scripts/_classnote/scan-offboard-candidates.mjs — eywa 퇴원생의 ClassNote **퇴원처리 후보 스캔**. **READ-ONLY**.
+ * scripts/_classnote/scan-offboard-candidates.mjs — aywa 퇴원생의 ClassNote **퇴원처리 후보 스캔**. **READ-ONLY**.
  *
- * 아무것도 변경하지 않는다(ClassNote는 GET만, eywa DB는 select만). 쓰기 경로는 이 스캔이 실데이터에서
+ * 아무것도 변경하지 않는다(ClassNote는 GET만, aywa DB는 select만). 쓰기 경로는 이 스캔이 실데이터에서
  * "재원생 오탐 0"을 증명한 뒤 **별도 승인**으로 만든다 — 순서를 뒤집으면 첫 실행이 첫 실험이 된다.
  *
  * 판정은 전부 [offboard-safety.mjs](./offboard-safety.mjs)(순수)가 한다. 이 파일의 책임은 **사실 수집**과
@@ -65,7 +65,7 @@ const page = await browser.newPage();
 try {
   const tenant = await resolveTenant(sql);
 
-  // ── eywa 사실 ─────────────────────────────────────────────────────────────
+  // ── aywa 사실 ─────────────────────────────────────────────────────────────
   const students = await sql`
     select s.id, s.name, s.classnote_name, s.status, s.grade, s.parent_phone, s.student_phone,
            to_char(s.withdrawn_at, 'YYYY-MM-DD') as withdrawn_at
@@ -262,7 +262,7 @@ try {
             inboundNameHit: eff ? inboundText.some((t) => t.includes(normBoard(eff))) : false,
           }
         : {},
-      // 전화 대조 — ClassNote 보호자 연락처 ↔ eywa parent/student phone. 한쪽이라도 없으면 checked=false(보류).
+      // 전화 대조 — ClassNote 보호자 연락처 ↔ aywa parent/student phone. 한쪽이라도 없으면 checked=false(보류).
       phone: (() => {
         const cn = phoneByChild.get(c.id);
         if (!s || !cn) return { checked: false, match: null };
@@ -355,7 +355,7 @@ try {
       for (const r of candidates) {
         const s = r.student;
         console.log(
-          `   · ${r.child.name}(원아 ${r.child.id}) ← eywa ${s?.name}/${s?.grade}/퇴원 ${s?.withdrawn_at} · ` +
+          `   · ${r.child.name}(원아 ${r.child.id}) ← aywa ${s?.name}/${s?.grade}/퇴원 ${s?.withdrawn_at} · ` +
             `보드 ${r.v.snapshot.boardNames.join(", ") || "없음"} · 복구연락처 ${r.v.snapshot.parentName ?? r.v.snapshot.parentUsername}`,
         );
       }
@@ -384,7 +384,7 @@ try {
   if (violations.length) {
     for (const id of violations) {
       const r = candidates.find((x) => x.student?.id === id);
-      fail(`재원생이 후보에 섞였습니다 — eywa ${r?.student?.name}(${id}) / 원아 ${r?.child?.name}(${r?.child?.id})`);
+      fail(`재원생이 후보에 섞였습니다 — aywa ${r?.student?.name}(${id}) / 원아 ${r?.child?.name}(${r?.child?.id})`);
     }
   }
   const incomplete = candidates.filter((r) => !r.v.factsComplete);
@@ -423,7 +423,7 @@ try {
   if (!JSON_OUT) {
     console.log(`\n════ 블록 2. 보드 감사 (단위: 보드 — 원아 수와 직접 비교 금지) ════`);
     console.log(`  전체 ${boards.length} · 학생모드 ${studentBoards.length} · 정상(수강중) ${bActive}`);
-    console.log(`  퇴원 학생 보드 ${bWithdrawn} · 과목이탈 보드 ${bDropped} · eywa 미매칭 ${bNoMatch} · 공유(가족2+) ${sharedBoards.length}`);
+    console.log(`  퇴원 학생 보드 ${bWithdrawn} · 과목이탈 보드 ${bDropped} · aywa 미매칭 ${bNoMatch} · 공유(가족2+) ${sharedBoards.length}`);
     console.log(`  ⚠️ 연결 가족 수 미확인 ${unknownMembers.length}${unknownMembers.length ? " — ClassNote API 변경 의심(해당 보드는 전부 보류)" : " ✅"}`);
     console.log(`  후보 원아에 연결된 보드 수 ${candidateBoardCount}`);
   }

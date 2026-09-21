@@ -3,8 +3,8 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import { Calculator, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Calculator, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { submitAction } from "@/components/forms/submit-action";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";

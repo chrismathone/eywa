@@ -11,7 +11,7 @@ import {
 
 // 실측 보드 모양(2026-07-15). children(연결 계정 수)은 이제 판정에 안 쓴다 — 매핑 검증으로 대체됐다.
 const boards = [
-  { id: 1, name: "(수학)박서준", children: 1 }, // eywa 박서준(초6) + 박서준C(중3) 존재 = 모호
+  { id: 1, name: "(수학)박서준", children: 1 }, // aywa 박서준(초6) + 박서준C(중3) 존재 = 모호
   { id: 2, name: "(수학)안은지", children: 2 }, // 같은 학생 다계정(영어·수학 따로 가입 등) = 비모호
   { id: 4, name: "(수학)강민준", children: 1 },
   { id: 5, name: "(수학)김공유", children: 0 },
@@ -91,7 +91,7 @@ describe("boardNameAmbiguity — 이 보드명이 여러 학생을 가리키나"
   });
 });
 
-describe("evaluateBoardMapping — 원아 생일 ↔ eywa 학년", () => {
+describe("evaluateBoardMapping — 원아 생일 ↔ aywa 학년", () => {
   it("⭐ 실측 재현: (수학)박서준 초6 + 원아 2014-09-24 → 통과", () => {
     const v = evaluateBoardMapping({ grade: "초6", children: [{ name: "박서준", date_birth: "2014-09-24" }], schoolYear: SY });
     expect(v.ok).toBe(true);
@@ -129,7 +129,7 @@ describe("evaluateBoardMapping — 원아 생일 ↔ eywa 학년", () => {
     );
   });
 
-  it("eywa 학년이 없으면 차단 — 대조 기준이 없다", () => {
+  it("aywa 학년이 없으면 차단 — 대조 기준이 없다", () => {
     expect(evaluateBoardMapping({ grade: null, children: [{ date_birth: "2014-01-01" }], schoolYear: SY }).code).toBe(
       "mapping_unknown",
     );
@@ -242,7 +242,7 @@ describe("acceptBoardMembers — 이름 매칭이 실패했을 때의 폴백", (
     expect(v.code).toBe("mapping_unknown");
   });
 
-  it("🔴 eywa 학년이 없어도 거부 — 대조 기준이 없으면 통과시키지 않는다", () => {
+  it("🔴 aywa 학년이 없어도 거부 — 대조 기준이 없으면 통과시키지 않는다", () => {
     const v = acceptBoardMembers({ members: [{ name: "서연", date_birth: "2015-03-18" }], grade: null, schoolYear: SY });
     expect(v.ok).toBe(false);
     expect(v.code).toBe("mapping_unknown");

@@ -1,4 +1,4 @@
-// 전 12메뉴 dry-run: ijw export JSON → eywa Supabase(일회용 테넌트)로 transform→load→리포트→정리.
+// 전 12메뉴 dry-run: ijw export JSON → aywa Supabase(일회용 테넌트)로 transform→load→리포트→정리.
 // 정제: 날짜 정규화 / 학생 활성-중복 스킵 / 수강 기간겹침 그리디 스킵 / 수납 2026-03+ 월별 집계.
 // 12메뉴 매핑 외 컬렉션(캘린더·간트·자료실·지출·셔틀·makeEdu로그·교재·알림 등)은 가져오지 않음.
 import postgres from "postgres";
@@ -13,7 +13,7 @@ import {
 
 const BILLING_SINCE = "2026-03"; // 수납: 이 월(YYYY-MM) 이후만
 
-// 상담 과목 코드(소스 english/math…) → eywa 한글 라벨
+// 상담 과목 코드(소스 english/math…) → aywa 한글 라벨
 const CONSULT_SUBJECT: Record<string, string> = { english: "영어", math: "수학", korean: "국어", science: "과학" };
 const mapConsultSubject = (s?: string): string | null =>
   s && String(s).trim() ? (CONSULT_SUBJECT[String(s).trim().toLowerCase()] ?? String(s).trim()) : null;
@@ -22,16 +22,16 @@ const addDays = (iso: string, n: number): string => {
   d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 };
-// 등록상담 과목 라벨(영어/수학…) → eywa 과목 키(english/math…). subject_details 키도 동일.
+// 등록상담 과목 라벨(영어/수학…) → aywa 과목 키(english/math…). subject_details 키도 동일.
 const SUBJECT_LABEL_TO_KEY: Record<string, string> = { "영어": "english", "수학": "math", "국어": "korean", "과학": "science" };
 const consultSubjectKey = (s?: string): string | null => (s && SUBJECT_LABEL_TO_KEY[String(s).trim()]) || null;
 // ijw 등록상담 status가 등록상태 enum에 맞으면 registration_status로(그 외는 outcome만 파생).
 const REG_STATUSES = new Set(["상담전", "이번달 등록예정", "추후 등록예정", "등록완료", "미등록"]);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const asBool = (v: any): boolean => v === true || v === "true";
-// ijw 결제수단 코드(C=카드·B=계좌이체·선택=미지정) → eywa payment_method.
+// ijw 결제수단 코드(C=카드·B=계좌이체·선택=미지정) → aywa payment_method.
 const PAY_CODE: Record<string, string> = { C: "card", B: "transfer" };
-// ijw 과목별 상담 오브젝트({math,english,korean,science,etc}Consultation) → eywa subject_details jsonb(과목키별).
+// ijw 과목별 상담 오브젝트({math,english,korean,science,etc}Consultation) → aywa subject_details jsonb(과목키별).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildSubjectDetails(k: any): Record<string, unknown> | null {
   const sd: Record<string, unknown> = {};
@@ -159,7 +159,7 @@ async function main() {
       // 되살리면 옛 반이 안 닫혀 시간표에 유령으로 남는다(강사 간 학생 중복). 종료로 취급하되,
       // GiST daterange(start,end,'[)')는 end<start면 throw하므로 end_date=start(빈 구간=활성 아님)로 닫는다.
       const end = end0 && end0 < start ? start : end0;
-      // 분리등원(요일 한글 → eywa day 코드) + 전입 플래그 보존.
+      // 분리등원(요일 한글 → aywa day 코드) + 전입 플래그 보존.
       const attDays = Array.isArray(e.attendanceDays) ? e.attendanceDays.map((d: string) => DAY_MAP[d] ?? d) : [];
       cands.push({ st: studentIds.get(st.id), cls: classIds.get(e.classId), start, end, onHold: e.onHold ?? false, reason: e.cancelReason ?? null, isTransferred: e.isTransferred ?? false, attendanceDays: attDays });
     }

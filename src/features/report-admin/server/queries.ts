@@ -392,12 +392,12 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
 // 강사 행 + 과목 태그(반 담당·슬롯 라벨 기준) — 카드의 [전체/과목] 분류 칩 소스.
 /**
  * `source` — 이 행의 작성률이 **어디서 왔는가**.
- *  `eywa`      = lesson_reports(수학). 일자별·오늘까지 정밀 집계.
+ *  `aywa`      = lesson_reports(수학). 일자별·오늘까지 정밀 집계.
  *  `classnote` = ClassNote 반 알림장(영어). 반 단위라 **주간만** 집계하고 일자·오늘은 없다.
  * ⚠️ 화면이 이걸 안 보면 영어 행의 빈 '오늘' 칸을 "수업 없음"으로 렌더해 **거짓말**이 된다
  *    (수업은 있고 일간 집계만 없는 것).
  */
-export type TeacherRateRow = TeacherRate & { subjects: string[]; source: "eywa" | "classnote" };
+export type TeacherRateRow = TeacherRate & { subjects: string[]; source: "aywa" | "classnote" };
 export type WritingRatesView = {
   dates: string[];
   rates: TeacherRateRow[];
@@ -419,7 +419,7 @@ function monthDates(month: string): string[] {
  * RLS 테넌트 스코프. edutrix WeeklyTeacherSummary 이식(session snapshot 대신 스케줄+출결로 대상 산출).
  */
 /**
- * 영어 강사별 작성률 — **소스가 다르다.** 영어 강사는 eywa가 아니라 ClassNote에 직접 알림장을 쓰므로
+ * 영어 강사별 작성률 — **소스가 다르다.** 영어 강사는 aywa가 아니라 ClassNote에 직접 알림장을 쓰므로
  * `lesson_reports`엔 0건으로 잡힌다(빼는 게 아니라 다른 소스로 세야 하는 문제, 2026-07-23 원장 확인).
  * 워커가 적재한 `classnote_class_posts`(0140a)를 반 시간표와 맞춰 센다.
  *
@@ -615,7 +615,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   /**
    * ClassNote로 재는 과목은 이 경로(lesson_reports)에서 **분모에 넣지 않는다.**
    *
-   * 영어 강사는 eywa가 아니라 ClassNote에 직접 쓰므로 lesson_reports가 늘 0건이다. 그대로 두면
+   * 영어 강사는 aywa가 아니라 ClassNote에 직접 쓰므로 lesson_reports가 늘 0건이다. 그대로 두면
    * ① `김태건 0% (0/201)`처럼 **거짓 0%**가 뜨고 ② 아래 getEnglishTeacherRates가 만든 진짜 행과
    * **같은 강사가 두 줄**로 나온다(2026-07-23 원장 제보 — 실제로 그렇게 보였다).
    * 두 경로를 과목으로 갈라 겹치지 않게 한다: 여기 = 영어 외, 저기 = 영어.
@@ -697,7 +697,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     if (s.status !== "upcoming") continue;
     // ⚠️ 여기도 과목으로 갈라야 한다 — 이 한 줄이 빠져서 영어 강사가 **두 줄**로 나왔다(2026-07-23 원장 제보).
     // 분모(started)·주간(weekly)은 걸렀는데 '수업 예정'만 안 걸러, 오늘 수업이 남은 영어 강사가
-    // `김태건 14:20 수업 예정 (주간 ·)`이라는 **빈 eywa 행**을 하나 더 만들었다(rates는 강사 이름 집합으로
+    // `김태건 14:20 수업 예정 (주간 ·)`이라는 **빈 aywa 행**을 하나 더 만들었다(rates는 강사 이름 집합으로
     // 행을 만들므로, pending만 있어도 행이 생긴다). 영어의 진실은 아래 ClassNote 행 하나뿐이다.
     if (!countedHere(s)) continue;
     // '수업 예정'도 위임을 따른다 — 분모(started)만 옮기고 여기를 빼먹으면 결근한 담임에게 "수업 예정"이 남는다.
@@ -862,7 +862,7 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   ).map((r) => ({
     ...r,
     subjects: [...(subjectsOfTeacher.get(r.teacher) ?? [])],
-    source: "eywa" as const,
+    source: "aywa" as const,
   }));
   // 영어는 강사가 ClassNote에 직접 써서 lesson_reports에 안 남는다 — 워커가 적재한
   // classnote_class_posts(0140a)로 따로 계산해 **같은 표에 합친다**(과목 칩이 그대로 걸러 준다).

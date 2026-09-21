@@ -1,8 +1,8 @@
 /**
- * scripts/_makeedu/push-consultations.cjs — 역동기화(eywa→makeedu) writer.
+ * scripts/_makeedu/push-consultations.cjs — 역동기화(aywa→makeedu) writer.
  *
  * QR 공개접수 상담(enrollment_consultations.from_public_intake)을 makeedu 예비상담 등록 폼
- * (/counsel/counselList_regist.do?callpage=res)에 제출한다. eywa가 원본이라 makeedu에 없는 것을
+ * (/counsel/counselList_regist.do?callpage=res)에 제출한다. aywa가 원본이라 makeedu에 없는 것을
  * 사무실이 손으로 재입력하던 것을 자동화 — 단, **자동 아님**: 사무실이 "makeedu로 보내기" 버튼으로
  * 건별 큐잉하면(makeedu_push_requests) 동기화 PC 워처가 이 스크립트를 실행한다(makeedu 신뢰 IP 필요).
  *
@@ -37,13 +37,13 @@ const fetchConsultations = (sql, ids, tenantId) => sql`
     left join students s on s.id = ec.student_id
    where ec.id in ${sql(ids)} and ec.tenant_id = ${tenantId}`;
 
-// eywa 학년 라벨 → makeedu preGrade 코드(정찰 확정). 없으면 99(일반).
+// aywa 학년 라벨 → makeedu preGrade 코드(정찰 확정). 없으면 99(일반).
 const GRADE_MAP = {
   유치원: "01", 초1: "11", 초2: "12", 초3: "13", 초4: "14", 초5: "15", 초6: "16",
   중1: "21", 중2: "22", 중3: "23", 고1: "31", 고2: "32", 고3: "33",
 };
 const gradeCode = (label) => GRADE_MAP[(label || "").trim()] || "99";
-// eywa parent_relation → makeedu prePKind(M=모/F=부/E=기타).
+// aywa parent_relation → makeedu prePKind(M=모/F=부/E=기타).
 const relationCode = (rel) => (rel === "모" ? "M" : rel === "부" ? "F" : "E");
 // 과목 키 → 한글 라벨(노트 표기용). 미매핑은 원문.
 const SUBJECT_LABEL = { math: "수학", english: "영어", korean: "국어", science: "과학" };
@@ -81,7 +81,7 @@ const counselYmd = (c) => kstYmd(c.consulted_at) || kstYmd(c.created_at) || KST_
 
 // makeedu 상담 노트(HTML) — parent_request + 메타데이터를 사람이 읽기 좋게.
 function buildNoteHtml(c) {
-  // 제목이 "[eywa 온라인 접수]" 고정 라벨이라 본문엔 중복 헤더 없이 메타부터.
+  // 제목이 "[aywa 온라인 접수]" 고정 라벨이라 본문엔 중복 헤더 없이 메타부터.
   const lines = [];
   if (c.consultation_path) lines.push(`<p>상담 경로: ${esc(c.consultation_path)}</p>`);
   if (c.subject) lines.push(`<p>희망 과목: ${esc(SUBJECT_LABEL[c.subject] || c.subject)}</p>`);
@@ -161,7 +161,7 @@ async function fillForm(page, c) {
   await setVal("preHpNo", phone(c.student_phone));
   await setVal("counselYmd", counselYmd(c));
   // 제목 = 고정 라벨(사용자 지정) — 학생명은 목록의 원생명 컬럼에 이미 뜬다.
-  await setVal("title", "[eywa 온라인 접수]");
+  await setVal("title", "[aywa 온라인 접수]");
   await setVal("contents", buildNoteHtml(c));
   await setVal("contentsText", buildNoteText(c));
   // 되읽기(검증) — 실제 폼에 어떤 값이 들어갔는지.
@@ -288,7 +288,7 @@ async function captureCounselSeq(page, c) {
         const res = await submit(page);
         if (!res.ok) throw new Error(`makeedu 거부: ${res.data}`);
         const seq = await captureCounselSeq(page, c);
-        // eywa 갱신: 멱등 플래그 + (잡히면)counselSeq → makeedu_id.
+        // aywa 갱신: 멱등 플래그 + (잡히면)counselSeq → makeedu_id.
         await sql`
           update enrollment_consultations
           set makeedu_pushed_at = now(), makeedu_id = coalesce(makeedu_id, ${seq})

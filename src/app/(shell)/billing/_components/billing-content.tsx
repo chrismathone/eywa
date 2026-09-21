@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { BigStat } from "@/components/atoms/big-stat";

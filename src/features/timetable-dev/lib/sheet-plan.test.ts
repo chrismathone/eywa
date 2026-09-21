@@ -109,7 +109,7 @@ describe("parseSheetUrl — 원장이 붙여넣는 주소", () => {
 describe("detectGridLayout — 탭 구조 판별", () => {
   const grid = (cells: string[][]): SheetGrid => ({ cells, merges: [] });
 
-  it("2행이 요일이면 eywa export 탭", () => {
+  it("2행이 요일이면 aywa export 탭", () => {
     expect(
       detectGridLayout(
         grid([
@@ -118,7 +118,7 @@ describe("detectGridLayout — 탭 구조 판별", () => {
           ["14:20", "LT2", ""],
         ]),
       ),
-    ).toBe("eywa");
+    ).toBe("aywa");
   });
 
   it("4행이 요일이면 손으로 만든 마스터 탭", () => {
@@ -198,7 +198,7 @@ describe("buildPlanSheetImport — 시트 슬롯 → 계획 칸", () => {
     expect(unresolved.rows[0]!.input).toMatchObject({ teacherId: null, slotTeacherLabel: "Dom" });
   });
 
-  it("🔴 eywa에 없는 반은 담지 않고 이유와 함께 돌려준다(유령 반을 만들지 않는다)", () => {
+  it("🔴 aywa에 없는 반은 담지 않고 이유와 함께 돌려준다(유령 반을 만들지 않는다)", () => {
     const p = buildPlanSheetImport(
       [slot(), slot({ className: "TEVO", classId: null }), slot({ className: "TEVO", classId: null, day: "tue" })],
       [],
@@ -206,7 +206,7 @@ describe("buildPlanSheetImport — 시트 슬롯 → 계획 칸", () => {
     expect(p.counts.add).toBe(1);
     expect(p.counts.skipped).toBe(2);
     expect(p.skipped[0]).toMatchObject({ className: "TEVO", count: 2 });
-    expect(p.skipped[0]!.reason).toContain("eywa에 없는 반");
+    expect(p.skipped[0]!.reason).toContain("aywa에 없는 반");
   });
 
   it("종료 시각이 없거나 뒤집힌 칸은 담지 않는다(DB가 NOT NULL·순서를 요구한다)", () => {

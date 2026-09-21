@@ -1,14 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { NAV_LINKS } from "@/data/marketing";
-import { EYWA_SITE_TITLE, EYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
+import { AYWA_SITE_TITLE, AYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
 import { CtaButton } from "./_ui/cta-button";
 import "./_motion/landing.css";
 
 export const metadata = {
-  title: EYWA_SITE_TITLE,
-  description: EYWA_SITE_DESCRIPTION,
+  title: AYWA_SITE_TITLE,
+  description: AYWA_SITE_DESCRIPTION,
 };
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
@@ -28,7 +28,7 @@ function MarketingNav() {
           <span className="bg-ink flex size-8 items-center justify-center rounded-[9px]">
             <EyIcon name="building" size={17} className="text-white" />
           </span>
-          <span className="text-[19px] font-extrabold tracking-[-0.02em]">EYWA</span>
+          <span className="text-[19px] font-extrabold tracking-[-0.02em]">AYWA</span>
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex" aria-label="주요 메뉴">

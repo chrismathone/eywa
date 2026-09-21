@@ -94,7 +94,7 @@ function schoolCore(v) {
 const normText = (s) => (s || "").replace(/\s+/g, "").slice(0, 60);
 const phoneDigits = (v) => ((L.txt(v) || "").replace(/[^0-9]/g, "") || null);
 
-// makeedu 상담구분 → eywa category(코드 고정 enum — 운영 enum 아님).
+// makeedu 상담구분 → aywa category(코드 고정 enum — 운영 enum 아님).
 function mapCategory(v) {
   const s = L.txt(v) || "";
   if (/학습|성적|학업/.test(s)) return "academic";

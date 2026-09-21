@@ -3,7 +3,7 @@ import {
   Clock,
   CircleDollarSign,
   Receipt,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { FilterSelect } from "@/components/filter-select";

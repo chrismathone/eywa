@@ -1,6 +1,6 @@
 /**
  * 시험 결과 창의 **학생별 결과 표** — 점수 높은 순(인재원 순서 그대로). 서버 컴포넌트.
- * 학생 이름 → 학생 상세 성적 탭 · '결과지' → 그 응시 한 장(`/exams/jj/attempt/{attemptId}`) · 반 = 지금 다니는 eywa 영어 반.
+ * 학생 이름 → 학생 상세 성적 탭 · '결과지' → 그 응시 한 장(`/exams/jj/attempt/{attemptId}`) · 반 = 지금 다니는 aywa 영어 반.
  * 짝이 없는 행엔 '연결 필요'(짝 잇기는 JJ실 아래 구역에서 관리자가 한다).
  */
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
@@ -43,18 +43,18 @@ export function JjDeckRows({ rows }: { rows: JjDeckTableRow[] }) {
             <tr key={r.attemptId} className="hover:bg-bg-soft/50">
               <td className="px-4 py-2.5">
                 <span className="flex items-center gap-1.5 whitespace-nowrap">
-                  {r.eywa ? (
+                  {r.aywa ? (
                     <WindowLink
-                      href={`/students/${r.eywa.studentId}?tab=grades`}
-                      title={r.eywa.name}
+                      href={`/students/${r.aywa.studentId}?tab=grades`}
+                      title={r.aywa.name}
                       className="text-foreground text-sm font-bold hover:underline"
                     >
-                      {r.eywa.name}
+                      {r.aywa.name}
                     </WindowLink>
                   ) : (
                     <span className="text-foreground text-sm font-bold">{r.name || r.ijwId}</span>
                   )}
-                  {!r.eywa ? (
+                  {!r.aywa ? (
                     <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-1.5 py-px text-xs font-bold">
                       연결 필요
                     </span>

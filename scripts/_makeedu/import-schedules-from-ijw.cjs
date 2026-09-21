@@ -2,7 +2,7 @@
  * scripts/_makeedu/import-schedules-from-ijw.cjs — 수업 요일·시각을 ijw-calander에서 이식.
  *
  * makeedu는 요일·시각 입력이 부정확 → 정확한 스케줄은 ijw에 있다. 단 ijw 반 이름(코드 "PJ2")이 makeedu 이름
- * ("[EiE] Pre Junior 6")과 달라 이름매칭 불가(6/134). 대신 **학생 명단 겹침**으로 ijw반↔makeedu(eywa)반을 연결한다
+ * ("[EiE] Pre Junior 6")과 달라 이름매칭 불가(6/134). 대신 **학생 명단 겹침**으로 ijw반↔makeedu(aywa)반을 연결한다
  * (같은 학생들 = 같은 반). 학생은 이미 매칭돼 있음. 매칭된 반에 ijw schedule(요일+교시→시각)을 class_schedules로 적재.
  *
  *   node --env-file=.env.local scripts/_makeedu/import-schedules-from-ijw.cjs          # dry(매칭률·표본)
@@ -78,17 +78,17 @@ const subjCompat = (a, b) => a === b || ([ "math", "subject_1" ].includes(a) && 
       m2.set(`${n}|${s.grade || ""}`, s.id);
       m1.set(n, m1.has(n) ? null : s.id);
     }
-    // ijwKey → eywa student id
-    const ijwToEywa = (k) => {
+    // ijwKey → aywa student id
+    const ijwToAywa = (k) => {
       const [n, g, sc] = k.split("|");
       return m3.get(`${n}|${g}|${sc}`) || m2.get(`${n}|${g}`) || m1.get(n) || null;
     };
-    // ijw 반 로스터(eywa id 집합) + 스케줄
+    // ijw 반 로스터(aywa id 집합) + 스케줄
     for (const c of ijwC.values()) {
-      c.eRoster = new Set([...c.roster].map(ijwToEywa).filter(Boolean));
+      c.eRoster = new Set([...c.roster].map(ijwToAywa).filter(Boolean));
     }
 
-    // eywa makeedu 반 + 로스터
+    // aywa makeedu 반 + 로스터
     const eClasses = await sql`select id, class_name, subject from classes where tenant_id = ${tenantId}`;
     const enrs = await sql`select class_id, student_id from enrollments where tenant_id = ${tenantId}`;
     const eRoster = new Map();
@@ -97,7 +97,7 @@ const subjCompat = (a, b) => a === b || ([ "math", "subject_1" ].includes(a) && 
       eRoster.get(e.class_id).add(e.student_id);
     }
 
-    // 매칭: eywa 반 → 최대 명단 겹침 ijw 반(과목 호환)
+    // 매칭: aywa 반 → 최대 명단 겹침 ijw 반(과목 호환)
     const links = [];
     let noRoster = 0, noMatch = 0;
     for (const ec of eClasses) {
@@ -118,10 +118,10 @@ const subjCompat = (a, b) => a === b || ([ "math", "subject_1" ].includes(a) && 
         links.push({ ec, ic: best, inter: bestInter, ratio: ratio.toFixed(2), eSize: er.size, iSize: best.eRoster.size });
       } else noMatch++;
     }
-    console.log(`eywa 반 ${eClasses.length}: 매칭 ${links.length} / 로스터無 ${noRoster} / 매칭실패 ${noMatch}`);
+    console.log(`aywa 반 ${eClasses.length}: 매칭 ${links.length} / 로스터無 ${noRoster} / 매칭실패 ${noMatch}`);
     const strong = links.filter((l) => l.ratio >= 0.8).length;
     console.log(`  신뢰도: ratio>=0.8 ${strong}, 0.6~0.8 ${links.length - strong}`);
-    console.log("매칭 표본(eywa ↔ ijw, 겹침/eywa명단):");
+    console.log("매칭 표본(aywa ↔ ijw, 겹침/aywa명단):");
     for (const l of links.slice(0, 18)) console.log(`  · ${l.ec.class_name}  ↔  ${l.ic.className}  (${l.inter}/${l.eSize}, r=${l.ratio})`);
 
     // 매칭된 반의 class_schedules 행 생성
@@ -138,7 +138,7 @@ const subjCompat = (a, b) => a === b || ([ "math", "subject_1" ].includes(a) && 
       }
     }
     console.log(`class_schedules rows: ${rows.length} (매칭반당 평균 ${(rows.length / Math.max(1, links.length)).toFixed(1)})`);
-    console.log("sample link:", links[0] ? JSON.stringify({ eywa: links[0].ec.class_name, ijw: links[0].ic.className, inter: links[0].inter, sched: rows.filter(r => r.class_id === links[0].ec.id).map(r => r.day + " " + r.start) }) : "none");
+    console.log("sample link:", links[0] ? JSON.stringify({ aywa: links[0].ec.class_name, ijw: links[0].ic.className, inter: links[0].inter, sched: rows.filter(r => r.class_id === links[0].ec.id).map(r => r.day + " " + r.start) }) : "none");
 
     if (!APPLY) { console.log("\n[DRY] --apply 없이 종료."); return; }
     // 기존 class_schedules 비우고(멱등) 적재

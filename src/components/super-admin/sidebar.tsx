@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 
-type NavItem = { href: string; label: string; icon: EywaIconName };
+type NavItem = { href: string; label: string; icon: AywaIconName };
 
 const NAV: NavItem[] = [
   { href: "/super-admin", label: "대시보드", icon: "layoutGrid" },
@@ -30,7 +30,7 @@ export function SuperAdminSidebar({
           <span className="bg-gold flex size-7 items-center justify-center rounded-[5px]">
             <EyIcon name="building" size={14} strokeWidth={1.8} className="text-ink" />
           </span>
-          <span className="text-base font-bold tracking-tight">EYWA</span>
+          <span className="text-base font-bold tracking-tight">AYWA</span>
         </Link>
         <p className="text-gold/90 mt-1 font-mono text-xs tracking-[1.2px] uppercase">
           Super Admin

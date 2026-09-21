@@ -1,7 +1,7 @@
 /**
- * scripts/_makeedu/import-shuttle.cjs — makeedu 노랑버스 → eywa 셔틀(0225a) 이관.
+ * scripts/_makeedu/import-shuttle.cjs — makeedu 노랑버스 → aywa 셔틀(0225a) 이관.
  *
- * 원장 2026-08-19 지시로 makeedu 셔틀을 eywa로 가져온다. 범위는 **현재 편성 + 정류장 통합**
+ * 원장 2026-08-19 지시로 makeedu 셔틀을 aywa로 가져온다. 범위는 **현재 편성 + 정류장 통합**
  * (과거 탑승 이력은 안 가져온다 — 원장 선택).
  *
  * 🔑 이 스크립트의 진짜 일은 복사가 아니라 **정류장 통합**이다. makeedu는 행선지가 노선마다 자유

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { JjExamSheet } from "@/features/ijw/components/jj-exam-sheet";
 import { JjStudySheet } from "@/features/ijw/components/jj-study-sheet";
 import { slotAvailability, type JjReportSnapshot } from "@/features/ijw/snapshot";

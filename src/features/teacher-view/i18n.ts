@@ -347,8 +347,8 @@ export const SHEET_DICT = {
   //    설명 조각을 JSX에서 붙여 놔 공백이 없었다. 뜻은 한 글자도 안 바꿨다.
   "banner.notify.title": { ko: "컴퓨터 알림을 켜주세요.", en: "Turn on desktop notifications." },
   "banner.notify.body": {
-    ko: "학부모가 클래스노트에 새 글을 올리면 eywa 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
-    en: "When a parent posts on ClassNote, you'll be notified right away even if eywa isn't open. (If the browser asks, choose “Allow”.)",
+    ko: "학부모가 클래스노트에 새 글을 올리면 aywa 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
+    en: "When a parent posts on ClassNote, you'll be notified right away even if aywa isn't open. (If the browser asks, choose “Allow”.)",
   },
   "banner.notify.enable": { ko: "켜기", en: "Turn on" },
   "banner.notify.later": { ko: "나중에", en: "Later" },

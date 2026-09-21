@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import {
   EFFECTIVE_DATE_MAX_DAYS,
   effectiveDateLabel,

@@ -1,5 +1,5 @@
 /**
- * scripts/_classnote/classnote-childmap-core.mjs — ClassNote 원아 ID를 eywa 학생에 붙인다(0184a).
+ * scripts/_classnote/classnote-childmap-core.mjs — ClassNote 원아 ID를 aywa 학생에 붙인다(0184a).
  *
  * 이게 있어야 **영어(그룹반) 학부모 연락도** 학생을 특정할 수 있다 — 그룹반 보드명(`[EIE] Let's Speak 6 …`)엔
  * 학생이 없지만 피드 행의 `child`(원아 id)는 **전 보드 100%** 채워진다(2026-08-06 실측 43/43).
@@ -11,7 +11,7 @@
  *    ⚠️ 로그에도 전화를 찍지 말 것(미확정 사유는 "전화 대조 실패"처럼 값 없이 남긴다).
  *
  * ⚠️ **읽기 전용 API**(GET)만 쓴다 — ClassNote엔 아무것도 쓰지 않는다.
- * ⚠️ 쓰기는 eywa `classnote_child_links` 뿐이고, `--apply` 없이는 그것도 안 한다(dry-run 기본).
+ * ⚠️ 쓰기는 aywa `classnote_child_links` 뿐이고, `--apply` 없이는 그것도 안 한다(dry-run 기본).
  */
 import { fetchCenterId, loginClassnote } from "./classnote-admin-core.mjs";
 import { kstSchoolYear } from "./board-safety.mjs";

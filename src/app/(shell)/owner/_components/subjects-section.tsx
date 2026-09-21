@@ -6,8 +6,8 @@
 // operations(여기선 subjects만 편집, 나머지는 initial 통과). 동시편집 가드 scope도 동일해 두 면 커버.
 // 과목별 편집기는 native <details>(기본 접힘 + 요약 배지) — 과목 수만큼 빈 풀폭 카드가 늘어지는 것 방지.
 import { useEffect, useRef, useState } from "react";
-import { Plus, X } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Plus, X } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import {
   DEFAULT_TEACHER_VIEW_PX_PER_MIN,
   SUBJECT_COLORS,

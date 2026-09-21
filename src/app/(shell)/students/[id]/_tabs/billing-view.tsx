@@ -3,7 +3,7 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { kstYear } from "@/lib/date-kst";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { invoiceOutstanding, paymentRateOf } from "@/features/billing/calc";
 import {
@@ -20,7 +20,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   exam: "시험",
   other: "기타",
 };
-// eywa invoiceStatus → 배지(라벨·색) = [status-color.ts](src/features/billing/status-color.ts) 단일 소스.
+// aywa invoiceStatus → 배지(라벨·색) = [status-color.ts](src/features/billing/status-color.ts) 단일 소스.
 // ⚠️ 이 화면은 종전에 **자기 자신과 모순**이었다 — 표 배지는 '미납'을 빨강, 아래 요약 카드와 경고 배너는
 //    같은 '미납'을 앰버로 그렸다(스크롤 한 번에 두 색). 셋 다 같은 상수를 쓰게 고쳤다.
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = Object.fromEntries(

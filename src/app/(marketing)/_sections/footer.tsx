@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /** 푸터 — 클로징(다크 네이비)에서 이어지는 다크 테일. */
 export function FooterSection() {
@@ -12,7 +12,7 @@ export function FooterSection() {
               <span className="border-[var(--deep-line)] flex size-8 items-center justify-center rounded-[9px] border bg-[var(--deep-2)]">
                 <EyIcon name="building" size={16} className="text-[var(--azure)]" />
               </span>
-              <span className="text-[var(--deep-text)] text-[18px] font-extrabold tracking-[-0.02em]">EYWA</span>
+              <span className="text-[var(--deep-text)] text-[18px] font-extrabold tracking-[-0.02em]">AYWA</span>
             </div>
             <p className="text-[var(--deep-dim)] mt-3 max-w-[20rem] text-[13px] leading-relaxed">
               학원의 모든 흐름을, 한 화면에.
@@ -28,7 +28,7 @@ export function FooterSection() {
         </div>
 
         <div className="border-[var(--deep-line)] mt-10 flex flex-wrap items-center justify-between gap-3 border-t pt-6">
-          <p className="text-[var(--deep-dim)] text-[12px]">© 2026 EYWA · 인재원 학원관리</p>
+          <p className="text-[var(--deep-dim)] text-[12px]">© 2026 AYWA · 인재원 학원관리</p>
           <p className="text-[var(--deep-dim)] font-mono text-[11px] tracking-[0.08em]">made for 원장님 · since 2026</p>
         </div>
       </div>

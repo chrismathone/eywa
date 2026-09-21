@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { EmbedLink } from "@/components/embed-link";
 import { PeriodNav } from "@/components/period-nav";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { ChevronDown, ChevronRight, Search } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronRight, Search } from "@/components/icons/aywa-icon-compat";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON, TOOLBAR_SEARCH_BOX, TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import type { MasterClass, MasterStatus, MasterStudent, UnitsMaster } from "@/features/attendance/units-master";

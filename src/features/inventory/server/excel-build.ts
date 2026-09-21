@@ -31,7 +31,7 @@ export async function buildInventoryWorkbook(
 ): Promise<ExcelJS.Workbook> {
   const cats = buildCategoryMaps(categories);
   const wb = new ExcelJS.Workbook();
-  wb.creator = "eywa";
+  wb.creator = "aywa";
   wb.created = new Date();
 
   const ws = wb.addWorksheet(ASSET_SHEET_NAME);

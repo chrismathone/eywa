@@ -6,10 +6,10 @@
  *
  * 실행:
  *   node --env-file=.env.local scripts/_classnote/sync-classnote-reads.mjs           # 점검(기본) — DB 안 건드림
- *   node --env-file=.env.local scripts/_classnote/sync-classnote-reads.mjs --apply   # eywa classnote_read_at 갱신
+ *   node --env-file=.env.local scripts/_classnote/sync-classnote-reads.mjs --apply   # aywa classnote_read_at 갱신
  *   node --env-file=.env.local scripts/_classnote/sync-classnote-reads.mjs --apply --days 30
  *
- * ⚠️ **ClassNote에는 아무것도 쓰지 않는다**(피드 GET만). --apply가 건드리는 것은 eywa DB의
+ * ⚠️ **ClassNote에는 아무것도 쓰지 않는다**(피드 GET만). --apply가 건드리는 것은 aywa DB의
  *    lesson_reports.classnote_read_at뿐(이미 값이 있는 행은 갱신하지 않음).
  * ⚠️ `/api/v1/reports/{id}/read/`(POST 추정)는 절대 호출하지 않는다 — 학원 계정이 읽음 표시를 남길 위험.
  */
@@ -41,7 +41,7 @@ async function main() {
 
     // 반영 결과 확인 — 창 안 발송분의 읽음 채움률(운영 점검용).
     //
-    // 🔴 매칭 키는 **두 종류**다: 이관분은 `edutrix_share_token`, eywa 자체 발송분은 `share_token`.
+    // 🔴 매칭 키는 **두 종류**다: 이관분은 `edutrix_share_token`, aywa 자체 발송분은 `share_token`.
     // 예전엔 `edutrix_share_token`만 세어 0이면 경고했는데, Edutrix 소등(2026-07-29) 이후 창 안에는
     // native 발송분만 남아 그 값이 **영구히 0**이 된다 → 정상 상태에서 매 실행 경고가 뜨는 오경보가 된다.
     // (읽음 매칭 자체는 classnote-read-core가 두 컬럼을 OR로 조인하므로 아무 문제 없다.)

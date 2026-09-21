@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CircleStop, History, Mic, Upload, X } from "@/components/icons/eywa-icon-compat";
+import { CircleStop, History, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
 import {
   checkRecovery,
   clearRecovery,

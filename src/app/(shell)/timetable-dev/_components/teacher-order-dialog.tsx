@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Loader2, Users, X } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, Loader2, Users, X } from "@/components/icons/aywa-icon-compat";
 import { saveTeacherViewOrder } from "@/features/owner/server/subject-actions";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 

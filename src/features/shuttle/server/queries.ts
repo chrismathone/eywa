@@ -490,7 +490,7 @@ export type StopCoords = { lat: number | null; lng: number | null; radiusM: numb
 /**
  * 정류장 좌표 — 🔴 **기존 정류장 select에 컬럼을 끼워 넣지 않고 따로 받는다**([[#95]]).
  *
- * eywa는 SQL을 원장이 손으로 실행하므로 배포와 적용 사이에 **항상 간격**이 있다. `getShuttleBoard`의
+ * aywa는 SQL을 원장이 손으로 실행하므로 배포와 적용 사이에 **항상 간격**이 있다. `getShuttleBoard`의
  * select에 `lat`을 넣었다가 컬럼이 아직 없으면 PostgREST 400 → 그 함수는 규약대로 빈 보드를 돌려주고
  * → **셔틀 편성 화면이 통째로 빈다**. 좌표는 부가 정보라 그 대가를 치를 이유가 없다: 따로 받고,
  * 실패하면 좌표만 조용히 없는 것으로 둔다.

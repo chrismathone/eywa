@@ -35,7 +35,7 @@ export function readSearchSeed(raw: string | undefined | null): string {
  * 순수 함수라 Vitest가 그대로 검사한다.
  */
 export function urlWithSearchSeed(href: string, value: string): string | null {
-  const url = new URL(href, "http://eywa.local");
+  const url = new URL(href, "http://aywa.local");
   const next = readSearchSeed(value);
   if (next === (url.searchParams.get(SEARCH_SEED_PARAM) ?? "")) return null;
   if (next) url.searchParams.set(SEARCH_SEED_PARAM, next);

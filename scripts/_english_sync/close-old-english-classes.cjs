@@ -1,6 +1,6 @@
 // 옛 영어 반 19개 정리 — 시트(7월)에 없고 열린 수강 0인 반.
 //
-// ⚠️ 핸드오프 원문은 "is_active=false + closed_at"이나 eywa 의미론(CLAUDE.md 수업 종강 섹션)상:
+// ⚠️ 핸드오프 원문은 "is_active=false + closed_at"이나 aywa 의미론(CLAUDE.md 수업 종강 섹션)상:
 //   - 폐지(is_active=false) = 잘못 만든 반 완전 제거 → 타임머신(과거 주)에서도 숨김
 //   - 종강(closed_at, is_active 유지) = 정상 운영 종료 → 종강일 이전 주엔 수강이력 표시
 // 이 19개 중 18개는 실제 수강 이력(3~10건)이 있는 정상 반 → **종강(closed_at='2026-07-02')**.

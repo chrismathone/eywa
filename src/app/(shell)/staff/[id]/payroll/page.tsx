@@ -10,7 +10,7 @@ import {
 import { PayrollClient } from "./_client";
 import { kstMonth } from "@/lib/date-kst";
 
-export const metadata = { title: "강사 정산 — eywa" };
+export const metadata = { title: "강사 정산 — aywa" };
 
 export default async function StaffPayrollPage({
   params,

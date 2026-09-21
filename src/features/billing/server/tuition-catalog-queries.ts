@@ -4,7 +4,7 @@ import { normalizePricingMode, PMODE_UNSET } from "@/features/billing/tuition-ca
 import type { TuitionCatalogRow, TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 
 // 수강료 단가표 DB 쿼리(server-only) — 과목 단가 + 기타 항목 + 할인 프리셋 통합 레지스트리(category로 구분).
-// ijw 수강료 계산기 "설정"의 수강료 단가표를 eywa 한 테이블로 이식. textbook-catalog-queries 패턴 미러.
+// ijw 수강료 계산기 "설정"의 수강료 단가표를 aywa 한 테이블로 이식. textbook-catalog-queries 패턴 미러.
 // 공유 상수·타입은 ../tuition-catalog.ts(클라이언트도 import 가능).
 export type { TuitionCatalogRow, TuitionCatalogOption };
 export { TUITION_CATEGORIES, DISCOUNT_CATEGORY } from "@/features/billing/tuition-catalog";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DAY_LABEL_KO, DAY_ORDER } from "@/features/classes/overlap";
 import { seatSelectValue, specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 

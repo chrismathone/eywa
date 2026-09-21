@@ -1,7 +1,7 @@
 "use client";
 
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { studentStatusMeta } from "@/features/students/status-labels";

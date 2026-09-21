@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, X } from "@/components/icons/eywa-icon-compat";
+import { Printer, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 
 // 회의록 인쇄 액션바 — 인쇄/닫기 + "전사 생략" 토글. 전사는 길어 본문(AI 8섹션)만 인쇄하고 싶을 때.

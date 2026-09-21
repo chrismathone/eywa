@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { AppProviders } from "@/lib/providers/app-providers";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
-import { EYWA_SHARE_METADATA, EYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
+import { AYWA_SHARE_METADATA, AYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
 import { pretendard } from "./fonts";
 import "./globals.css";
 
@@ -28,14 +28,14 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const { academyName } = brandLabels(await getPublicBranding());
   return {
-    ...EYWA_SHARE_METADATA,
-    title: academyName ? `eywa — ${academyName} 학원관리` : "eywa",
-    description: EYWA_SITE_DESCRIPTION,
+    ...AYWA_SHARE_METADATA,
+    title: academyName ? `aywa — ${academyName} 학원관리` : "aywa",
+    description: AYWA_SITE_DESCRIPTION,
     // 휴대폰 푸시(0188a) 전제 — **iOS는 홈 화면에 추가된 앱에만 푸시를 준다**(16.4+). 그 "추가"가
     // 성립하려면 manifest(display:standalone)와 apple-touch-icon이 있어야 한다. 안드로이드는 manifest
     // 없이도 푸시가 오지만, 같은 파일이 홈 화면 아이콘·이름을 함께 챙긴다.
     manifest: "/manifest.json",
-    appleWebApp: { capable: true, title: academyName ? `${academyName} eywa` : "eywa", statusBarStyle: "default" },
+    appleWebApp: { capable: true, title: academyName ? `${academyName} aywa` : "aywa", statusBarStyle: "default" },
     icons: { icon: "/eywa-mark.png", apple: "/eywa-mark.png" },
   };
 }

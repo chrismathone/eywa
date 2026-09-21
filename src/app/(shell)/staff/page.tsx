@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Users, Wallet, CalendarClock } from "@/components/icons/eywa-icon-compat";
+import { Users, Wallet, CalendarClock } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
@@ -52,7 +52,7 @@ import { StaffTable } from "./_components/staff-table";
 import { StaffRememberPrefs, StaffViewPrefsProvider } from "./_components/staff-view-prefs";
 import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
-export const metadata = { title: "직원관리 — eywa" };
+export const metadata = { title: "직원관리 — aywa" };
 
 /** 페이지 번호 나열(1 … 현재±2 … 끝) — 눈에 띄는 번호형 페이저용. null = 말줄임. */
 function pageNumbers(page: number, totalPages: number): (number | null)[] {

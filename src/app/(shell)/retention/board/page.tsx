@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { AlertTriangle, AlertCircle, ShieldCheck, TrendingDown } from "@/components/icons/eywa-icon-compat";
+import type { LucideIcon } from "@/components/icons/aywa-icon-compat";
+import { AlertTriangle, AlertCircle, ShieldCheck, TrendingDown } from "@/components/icons/aywa-icon-compat";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchForm } from "@/components/search-form";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -21,7 +21,7 @@ import {
 import { Pagination } from "@/components/pagination";
 import { formatWonShort } from "@/features/retention/format";
 
-export const metadata = { title: "리텐션 보드 — eywa" };
+export const metadata = { title: "리텐션 보드 — aywa" };
 
 const PAGE_SIZE = 50;
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill } from "@/components/atoms/pill";
@@ -10,7 +10,7 @@ import { UpdateTenantForm } from "./_update-form";
 import { LicenseSection } from "./_license-section";
 import { UserActions } from "./_user-actions";
 
-export const metadata = { title: "Super Admin · 학원 상세 — eywa" };
+export const metadata = { title: "Super Admin · 학원 상세 — aywa" };
 
 const USERS_PAGE_SIZE = 50;
 

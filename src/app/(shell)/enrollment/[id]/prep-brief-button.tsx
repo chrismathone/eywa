@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, RefreshCw, Sparkles } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, RefreshCw, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { generatePrepBrief, type PrepBriefState } from "@/features/enrollment/server/prep-actions";
 

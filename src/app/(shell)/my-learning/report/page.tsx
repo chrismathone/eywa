@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
 import { DEMO_STUDENT } from "@/features/my-learning/data";
 import { findSession } from "@/features/my-learning/history";
 import { DailyReportView } from "@/features/my-learning/components/daily-report-view";
 
-export const metadata = { title: "데일리 리포트 — eywa" };
+export const metadata = { title: "데일리 리포트 — aywa" };
 
 /**
  * 학생 데일리 리포트 — `?date=<M/D>`로 특정 세션. 없으면 최신(6/1).

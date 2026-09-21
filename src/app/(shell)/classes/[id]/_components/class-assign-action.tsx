@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UserPlus } from "@/components/icons/eywa-icon-compat";
+import { UserPlus } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   EnrollmentAssignDialog,

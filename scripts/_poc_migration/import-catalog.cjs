@@ -1,4 +1,4 @@
-// ijw-calander data/textbookCatalog.ts → eywa textbook_catalog (데모 테넌트 ijw-demo).
+// ijw-calander data/textbookCatalog.ts → aywa textbook_catalog (데모 테넌트 ijw-demo).
 // 멱등: 테넌트 카탈로그 행 wipe 후 재삽입. 사용: node scripts/_poc_migration/import-catalog.cjs [--apply]
 // (소스는 ijw 코드 데이터 파일이라 Firestore export가 아닌 D:/ijw-calander 경로에서 직접 파싱.)
 const fs = require("fs");

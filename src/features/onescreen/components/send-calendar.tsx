@@ -4,7 +4,7 @@
 // 숫자는 0127a group-by RPC 집계(B2), 버킷 판정은 순수 함수(send-calendar.ts), 날짜 상세는 기존
 // HistoryBoard를 `date` 모드로 재사용한다(목록 렌더를 두 벌 만들지 않는다).
 import { useEffect, useRef, useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import {
   defaultSelectedDay,
   monthGrid,

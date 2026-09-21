@@ -15,7 +15,7 @@ import { invoiceOutstanding } from "@/features/billing/calc";
 import { overdueLinesOnly } from "@/features/billing/sync-window";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
 // 구분(수납 분류) = makeedu 고정 taxonomy(과목 enum 아님) → 여기 라벨/색 하드코딩 허용.
@@ -26,7 +26,7 @@ const KIND_STYLE: Record<string, string> = {
   기타: "text-text-dim bg-bg-soft",
   원복: "text-text-dim bg-bg-soft",
 };
-// 레거시 영문 kind(재적재 이전 eywa 폼·구 임포터 산: tuition/material/exam/other) → 한글 표시(raw 코드 노출 금지).
+// 레거시 영문 kind(재적재 이전 aywa 폼·구 임포터 산: tuition/material/exam/other) → 한글 표시(raw 코드 노출 금지).
 const KIND_LEGACY_LABEL: Record<string, string> = {
   tuition: "수업",
   material: "교재",
@@ -108,7 +108,7 @@ function SortHeader({
 }
 
 // InvoiceRow(집계) → 라인 단위 행 목록. 구데이터(항목 상세 없음)는 인보이스 값으로 1행 폴백.
-// ⚠️ 라인은 있는데 상세 키(paid/unpaid)가 전무한 구형 3-key 인보이스(재적재 이전·eywa 폼 산)는
+// ⚠️ 라인은 있는데 상세 키(paid/unpaid)가 전무한 구형 3-key 인보이스(재적재 이전·aywa 폼 산)는
 // 라인별 미납을 알 수 없다 — 그대로 두면 `unpaid ?? 0`이 전부 '완납'으로 렌더(실측 미납 28건 ₩7.3M 은폐).
 // → 항목명·금액은 살리고 **첫 라인에만 인보이스 값(할인/실납/미납 등)을 합성**, 나머지는 미상(—) 처리.
 function toLines(r: InvoiceRow): InvoiceLineItem[] {
@@ -364,7 +364,7 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                     )}
                   </td>
                   <td className="text-text-dim num px-3 py-2.5 text-xs">{first ? r.period : ""}</td>
-                  {/* 청구일 — makeedu 라인엔 dueDay가 있고, eywa 수동 청구서엔 없다(billed_at에만 저장).
+                  {/* 청구일 — makeedu 라인엔 dueDay가 있고, aywa 수동 청구서엔 없다(billed_at에만 저장).
                       폴백이 없던 시절엔 사용자가 다이얼로그에서 청구일을 입력해도 항상 '—'로 떠서
                       "저장은 됐는데 아무도 안 읽는" write-only-orphan이었다. */}
                   <td className="text-text-dim num px-3 py-2.5 text-center text-xs">

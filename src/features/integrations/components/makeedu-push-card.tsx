@@ -2,8 +2,8 @@
 import { tipProps } from "@/components/hover-tip/tip";
 
 import { useState, useTransition } from "react";
-import { Loader2, Send } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Loader2, Send } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { enqueueConsultationPush } from "@/features/integrations/server/actions";
@@ -12,7 +12,7 @@ import { outcomePill } from "@/features/enrollment/outcome-meta";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 /**
- * 역동기화(eywa→makeedu) 카드 — QR 공개접수로 들어온 신규 상담 중 makeedu에 아직 없는 것을
+ * 역동기화(aywa→makeedu) 카드 — QR 공개접수로 들어온 신규 상담 중 makeedu에 아직 없는 것을
  * 골라 "makeedu로 보내기"로 큐잉. 실제 등록은 동기화 PC 워처가 신뢰 IP에서 수행(~1-2분).
  * 소비처 2곳: owner 연동 면(항상 표시, 빈 상태 포함) + 등록상담 화면(후보 있을 때만 — 부모가 판단).
  * 서버 액션 게이트 = `integrations` 권한 키(기본 master/admin/manager) — 부모도 같은 키로 노출 판단.

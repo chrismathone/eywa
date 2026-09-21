@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { subjectTone, toneSolidClass, toneTextClass } from "../data";
 import { displayLessons, resolveStudyGrade } from "../curriculum";
 import { ProgressModePills } from "./progress-mode-pills";

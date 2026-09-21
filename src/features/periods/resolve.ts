@@ -1,6 +1,6 @@
 // 세션 기간(운영 기간) 해석 — 순수 함수(Vitest 강제). UI·DB 비의존.
 //
-// ⚠️ 이름: eywa엔 'session'이 이미 둘 있다 — **시수**(session_units, 출석 한 칸의 배수)와
+// ⚠️ 이름: aywa엔 'session'이 이미 둘 있다 — **시수**(session_units, 출석 한 칸의 배수)와
 //    **회차**(planned/confirmed_sessions, 청구 N회). 이 모듈이 다루는 것은 셋째인 **기간**이라
 //    식별자에 맨몸 `session`을 쓰지 않는다(PeriodDef/PeriodWindow). 화면 라벨만 "세션".
 //

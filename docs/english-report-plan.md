@@ -29,8 +29,8 @@
 | | 수학 | 영어 |
 |---|---|---|
 | ClassNote 알림장 (7/21~7/29) | 663건 / 원아 197명 | **847건 / 원아 233명** |
-| 발신 | eywa 자동 발송 | **강사가 ClassNote에 직접 타이핑** |
-| eywa `lesson_reports` | 최근 30일 681건 | **전 기간 0건** |
+| 발신 | aywa 자동 발송 | **강사가 ClassNote에 직접 타이핑** |
+| aywa `lesson_reports` | 최근 30일 681건 | **전 기간 0건** |
 | 활성 수강 | 202명 | 249명 |
 
 - 강사 9명 서식이 제각각. 고유 본문 400여 개를 패턴 검사한 필드 포함률:
@@ -172,7 +172,7 @@ ECS에 **없는 것**: 과제 기한, 다음 평가 공지 — 실데이터를 �
   단순 배열 추가로는 **pinned 다계정 학생의 전 계정을 못 담는다**. → **multi-pin**(학생·보드당 여러 child 허용)으로 확정.
 - **큐 API는 report ID만 받는다.** 서버가 파생: `report.class_id → 그 반 → 유일 board → 모든 child`.
 - board와 member는 **동일 snapshot generation** + **허용 age 이내**여야 한다.
-- **eywa 활성 수강 + ClassNote live enrollment 둘 다** 검증. `fetchBoardChildren`은 멤버만 주므로
+- **aywa 활성 수강 + ClassNote live enrollment 둘 다** 검증. `fetchBoardChildren`은 멤버만 주므로
   ([classnote-admin-core.mjs#L262](../scripts/_classnote/classnote-admin-core.mjs#L262)) child마다 `fetchChildDetail`로
   `belong_to_class === boardId && !removed_child` 확인([#L445](../scripts/_classnote/classnote-admin-core.mjs#L445)).
 - ⚠️ 현재 pin 검증은 **보고서의 정확한 class_id가 아니라 학생의 다른 활성 반으로도 통과**한다

@@ -20,7 +20,7 @@ import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/featur
 
 export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }) {
   const seat = parseAnySeatKey((await params).seat);
-  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 인쇄 — eywa` };
+  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 인쇄 — aywa` };
 }
 
 export default async function SeatMonthlyPrintPage({

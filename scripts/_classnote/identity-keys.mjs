@@ -1,5 +1,5 @@
 /**
- * scripts/_classnote/identity-keys.mjs — eywa 학생 ↔ ClassNote 원아 **이름 매칭 키**(순수, 의존성 0).
+ * scripts/_classnote/identity-keys.mjs — aywa 학생 ↔ ClassNote 원아 **이름 매칭 키**(순수, 의존성 0).
  *
  * 왜 별도 모듈인가: `childKeys`는 원래 [classnote-admin-core.mjs]에 있었는데 그 파일은 **@playwright/test를
  * import**한다. 순수 판정 모듈(offboard-safety.mjs)이 거기서 가져오면 "순수 유지" 원칙이 깨지고 테스트가
@@ -11,7 +11,7 @@
  */
 import { normBoard } from "./board-safety.mjs";
 
-/** eywa 유효이름의 동명이인 접미사(0088a 관례) — 학부모는 ClassNote 가입 시 이 알파벳을 안 붙인다. */
+/** aywa 유효이름의 동명이인 접미사(0088a 관례) — 학부모는 ClassNote 가입 시 이 알파벳을 안 붙인다. */
 const SUFFIX_RE = /^(.*[가-힣].*)([A-G])$/;
 
 /** ClassNote 원아 표시명 → 매칭 키 집합(원문·알파벳 제거·영문닉(한글)의 괄호 한글).
@@ -19,7 +19,7 @@ const SUFFIX_RE = /^(.*[가-힣].*)([A-G])$/;
  *  한글(별명) 표기에서 별명을 이름 키로 승격시키면 다른 학생과 오매칭 연료가 된다.
  *
  *  ⚠️ **공백을 그대로 남긴다**(정규화하지 않음) — `planChildMatches`가 "원문 키 그대로"를 전제로
- *  eywa 이름과 비교하므로 여기서 공백을 지우면 기존 소비처가 조용히 깨진다. 정규화가 필요한 쪽은
+ *  aywa 이름과 비교하므로 여기서 공백을 지우면 기존 소비처가 조용히 깨진다. 정규화가 필요한 쪽은
  *  아래 `childIdentityKeys`/`studentIdentityKeys`를 쓴다. */
 export function childKeys(name) {
   const keys = new Set();
@@ -44,9 +44,9 @@ export function childIdentityKeys(name) {
 }
 
 /**
- * eywa 학생 → 매칭 키 집합. 유효이름(`classnote_name || name`) 원문 + **A–G 접미사를 뗀 base** + 라틴 제거본.
+ * aywa 학생 → 매칭 키 집합. 유효이름(`classnote_name || name`) 원문 + **A–G 접미사를 뗀 base** + 라틴 제거본.
  *
- * 접미사 base가 핵심이다: eywa는 동명이인을 `박서준`/`박서준C`로 구분하지만 **학부모는 가입할 때
+ * 접미사 base가 핵심이다: aywa는 동명이인을 `박서준`/`박서준C`로 구분하지만 **학부모는 가입할 때
  * 알파벳을 안 붙인다**(그냥 "박서준"). 그래서 두 학생이 **같은 원아 "박서준"의 후보**가 되고,
  * 호출부의 카디널리티 검사(후보가 정확히 1명)가 그 모호성을 잡는다.
  * ⚠️ `boardNameAmbiguity`는 이 방향성이 한쪽(`박서준`→`박서준C`)만 성립해서 offboard 판정엔 못 쓴다.

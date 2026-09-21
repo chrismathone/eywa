@@ -1,4 +1,4 @@
-import { ScrollText } from "@/components/icons/eywa-icon-compat";
+import { ScrollText } from "@/components/icons/aywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { FilterSelect } from "@/components/filter-select";

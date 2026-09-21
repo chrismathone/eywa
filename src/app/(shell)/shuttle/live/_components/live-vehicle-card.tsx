@@ -1,7 +1,7 @@
 "use client";
 
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { kstTimeOf } from "@/lib/date-kst";
 import { cn } from "@/lib/utils";

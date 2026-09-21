@@ -15,7 +15,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { endSingleEnrollment, holdSingleEnrollment } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 import type { StudentBusyWindow } from "@/features/timetable/lib/student-busy";

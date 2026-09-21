@@ -7,7 +7,7 @@ import {
   PAGER_STEP_DISABLED,
   PAGER_STEP_ENABLED,
 } from "@/components/pagination";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { ClassHistoryEntry, ClassHistorySource } from "@/features/classes/history";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";

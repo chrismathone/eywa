@@ -12,7 +12,7 @@
  * 같은 이름 목록이 화면마다 다른 순서로 나온다.
  */
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { ariaSort, sortIndicator, toggleSort, type SortState } from "@/lib/table/sort";
 
 export function SortableTh<K extends string>({

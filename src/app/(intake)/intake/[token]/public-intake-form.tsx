@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { HABIT_ITEMS } from "@/features/enrollment/intake-checklist";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { isPreschoolGrade } from "@/lib/format/school-grade";
 import {
   submitPublicIntake,

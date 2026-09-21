@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Check, ChevronDown, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
+import { Check, ChevronDown, Loader2, Pencil, X } from "@/components/icons/aywa-icon-compat";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import type { MeetingReportSection } from "@/features/meetings/server/queries";
@@ -10,10 +10,10 @@ import { MEETING_REPORT_SECTION_LABEL } from "@/features/meetings/report-section
 import { RichText } from "@/components/rich-text";
 import { useEditPresence } from "@/features/presence/edit-presence";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 
 /**
- * 회의별 AI 보고서 — Eywa 아이콘 라벨 + 섹션별 접기/펼치기 + **섹션 인라인 수정**(staff가 인쇄/공유 전 AI 오류 교정).
+ * 회의별 AI 보고서 — Aywa 아이콘 라벨 + 섹션별 접기/펼치기 + **섹션 인라인 수정**(staff가 인쇄/공유 전 AI 오류 교정).
  * 수정 시 해당 섹션만 ai_report jsonb에 머지 + 마지막 수정자·시각 기록(updateMeetingReportSection).
  * 본문은 RichText로 렌더(나열형은 불릿화). 라이브 AI 호출 없음.
  */
@@ -22,7 +22,7 @@ type SectionKey = Exclude<keyof MeetingReportSection, "meetingType">;
 
 // 라벨(말)은 여기서 정하지 않는다 — 감사로그 상세도 같은 어휘를 써야 해서 단일 소스는
 // [report-sections.ts](src/features/meetings/report-sections.ts)다. 여기는 그 라벨에 아이콘·불릿 여부만 붙인다.
-const SECTIONS: { key: SectionKey; label: string; icon: EywaIconName; list?: boolean }[] = [
+const SECTIONS: { key: SectionKey; label: string; icon: AywaIconName; list?: boolean }[] = [
   { key: "summary", label: MEETING_REPORT_SECTION_LABEL.summary, icon: "report" },
   { key: "agendaDiscussion", label: MEETING_REPORT_SECTION_LABEL.agendaDiscussion, icon: "note", list: true },
   { key: "decisions", label: MEETING_REPORT_SECTION_LABEL.decisions, icon: "clipboardCheck", list: true },

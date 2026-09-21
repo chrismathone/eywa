@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Pill } from "@/components/atoms/pill";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookMarked, Check, ChevronUp, Download, Loader2, Save, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { BookMarked, Check, ChevronUp, Download, Loader2, Save, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import {
   MAX_GROUP_PRESETS,
   loadPreset,

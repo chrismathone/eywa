@@ -1,9 +1,9 @@
 /*
- * backfill-attendance-days.cjs — ijw 익스포트의 '분리등원'(월목 반의 월-only 학생) 요일을 eywa로 백필.
+ * backfill-attendance-days.cjs — ijw 익스포트의 '분리등원'(월목 반의 월-only 학생) 요일을 aywa로 백필.
  *
  * ijw: students[].enrollments[].attendanceDays (한글 요일 sparse 배열, 빈값=전 요일 등원).
  *   같은 (학생,반)에 요일별 복수 enrollment가 있을 수 있어(예: 권영준 고등M TP4E = ['화']+['금']) → 요일 합집합.
- * eywa: enrollments.attendance_days text[] (요일 enum, 빈 배열=전 요일). schema.ts.
+ * aywa: enrollments.attendance_days text[] (요일 enum, 빈 배열=전 요일). schema.ts.
  *   → (학생,반)당 단일 enrollment로 정규화되어 있으므로, 합집합을 그 반 스케줄 요일과 교집합해 넣는다.
  *   합집합이 그 반 전 스케줄 요일을 덮으면(=분리등원 아님) 스킵(sparse 유지, 재스케줄에 강건).
  *
@@ -43,11 +43,11 @@ const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
     const tenantRow = await sql`select tenant_id from classes group by tenant_id order by count(*) desc limit 1`;
     const tenantId = tenantRow[0].tenant_id;
 
-    // eywa 반 (className|||subject → id)
+    // aywa 반 (className|||subject → id)
     const eClasses = await sql`select id, class_name, subject from classes where tenant_id=${tenantId}`;
     const classByKey = new Map(eClasses.map((c) => [`${c.class_name}|||${c.subject}`, c.id]));
 
-    // eywa 반별 스케줄 요일 집합
+    // aywa 반별 스케줄 요일 집합
     const scheds = await sql`select class_id, day_of_week from class_schedules where tenant_id=${tenantId}`;
     const daysByClass = new Map();
     for (const s of scheds) {
@@ -56,7 +56,7 @@ const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
       daysByClass.set(s.class_id, set);
     }
 
-    // eywa 학생 (name → rows)
+    // aywa 학생 (name → rows)
     const eStudents = await sql`select id, name, school, grade from students where tenant_id=${tenantId}`;
     const studByName = new Map();
     for (const s of eStudents) {
@@ -65,7 +65,7 @@ const setEq = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
       studByName.set(s.name, list);
     }
 
-    // eywa 활성 enrollment (student_id|class_id → enrollment id)
+    // aywa 활성 enrollment (student_id|class_id → enrollment id)
     const enr = await sql`select id, student_id, class_id from enrollments where tenant_id=${tenantId} and end_date is null`;
     const enrByPair = new Map();
     for (const e of enr) enrByPair.set(`${e.student_id}|${e.class_id}`, e.id);

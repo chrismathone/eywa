@@ -5,7 +5,7 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../_components/student-form";
 
-export const metadata = { title: "학생 등록 — eywa" };
+export const metadata = { title: "학생 등록 — aywa" };
 
 export default async function NewStudentPage() {
   const user = await requireAccess("students");

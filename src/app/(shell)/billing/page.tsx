@@ -70,7 +70,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
                 : tab === "payroll"
                   ? " · 강사 정산"
                   : "";
-  return { title: `수납관리${suffix} — eywa` };
+  return { title: `수납관리${suffix} — aywa` };
 }
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Sp> }) {

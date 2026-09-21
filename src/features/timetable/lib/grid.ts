@@ -1,5 +1,5 @@
 // 시간표 기본뷰 그리드 — 요일 그룹 순서 + 같은 반 인접 요일 가로 병합(colSpan) 계산. 순수 함수.
-// ijw `Math/utils/gridUtils.ts`의 isSameClassNameSet 개념 이식. eywa는 같은 classId의 월·목 슬롯이
+// ijw `Math/utils/gridUtils.ts`의 isSameClassNameSet 개념 이식. aywa는 같은 classId의 월·목 슬롯이
 // 동일 students라 classId 집합 키로 병합한다(동명 다른 반 오병합 방지).
 import type { DayOfWeek } from "./periods";
 

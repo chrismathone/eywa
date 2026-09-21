@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { StatusDialog, type OpenEnrollment } from "./status-dialog";
 

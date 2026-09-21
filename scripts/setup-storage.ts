@@ -1,5 +1,5 @@
 /**
- * Idempotent setup of Supabase Storage buckets for eywa.
+ * Idempotent setup of Supabase Storage buckets for aywa.
  *
  * Run: pnpm tsx scripts/setup-storage.ts
  */

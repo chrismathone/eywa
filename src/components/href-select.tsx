@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Popover } from "@base-ui/react/popover";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * eywa 프로덕션 안전 가드 (PreToolUse hook, matcher=Bash)
+ * aywa 프로덕션 안전 가드 (PreToolUse hook, matcher=Bash)
  * 되돌릴 수 없는/위험한 Bash 명령을 하드 차단한다.
  *   1) main/master 대상 git push        2) force push (--force / -f)
  *   3) db:seed / seed 스크립트(데이터 wipe — 2026-09-19 제거, 재실행 방지로 차단 유지)  4) 파괴적 SQL(DROP/TRUNCATE/무-WHERE DELETE)·wipe-tenant
@@ -24,7 +24,7 @@ function readStdin() {
 
 function block(reason) {
   process.stderr.write(
-    "\n⛔ eywa 안전 가드가 이 명령을 차단했습니다.\n" +
+    "\n⛔ aywa 안전 가드가 이 명령을 차단했습니다.\n" +
       reason +
       "\n\n정말 실행해야 한다면(원장 승인 시): 명령 끝에  # ALLOW_DANGER  를 붙이세요.\n" +
       "예)  git push origin main   # ALLOW_DANGER\n"

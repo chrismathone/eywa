@@ -16,7 +16,7 @@ export const TODAY = "2026년 6월 1일 (월)";
 /** 학년 필터 칩 (수학 강사가 맡는 학년) */
 export const CLASS_TAGS = ["전체", "초3", "초4", "초5", "초6", "중1", "중2", "중3"] as const;
 
-// ───────────────────────── 과목 색 (eywa 토큰 매핑) ─────────────────────────
+// ───────────────────────── 과목 색 (aywa 토큰 매핑) ─────────────────────────
 //   수학=primary(forest) · 영어=blue · 국어=rose · 과학=purple · 사회=gold · 기타=neutral
 
 export function subjectTone(name: string): { key: string; tone: SubjectTone } {

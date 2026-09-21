@@ -1,4 +1,4 @@
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 
 /**
  * 탭·메뉴 아이콘 = **그림 파일**(원장 2026-09-08: *"이미지로 생성했으면 개성있고 특색있는 '이미지' 스타일이여야하잖아
@@ -12,7 +12,7 @@ import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
  * 지표 칩**(`<BigStat icon=…>`)까지 넓혔다 — 같은 이름(`users`·`listChecks`)이 사이드바에선 스티커, 지표 칩에선
  * 선화로 보여 "이건 아직 미제작이냐"는 물음이 나왔던 자리다.
  * 🔴 **조작(操作) 자리는 그대로 선화**다 — 버튼 안 보조 아이콘·툴바 글리프·입력 안 아이콘·상태 배너는
- *    [`EyIcon`](./eywa-icons.tsx). 저장 버튼까지 알록달록한 스티커가 되면 위계가 무너진다(그 판단은 불변).
+ *    [`EyIcon`](./aywa-icons.tsx). 저장 버튼까지 알록달록한 스티커가 되면 위계가 무너진다(그 판단은 불변).
  * 🔑 가르는 기준은 크기가 아니라 **역할**이다: "무엇에 대한 화면·수치인가"를 가리키면 스티커, "누르면 무슨 일이
  *    일어나는가"를 가리키면 선화.
  *
@@ -45,7 +45,7 @@ export function MenuGlyph({
   size = 18,
   className,
 }: {
-  name: EywaIconName;
+  name: AywaIconName;
   size?: number;
   className?: string;
 }) {

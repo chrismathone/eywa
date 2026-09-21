@@ -66,7 +66,7 @@ function fmt(iso: string | null): string {
 // 면마다 문서 제목을 달리해 창 타이틀바가 "학원 설정 · 운영 체계"로 라이브 갱신(route-window 관찰).
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const tab = resolveTab(await searchParams);
-  return { title: `학원 설정 · ${TAB_LABEL[tab]} — eywa` };
+  return { title: `학원 설정 · ${TAB_LABEL[tab]} — aywa` };
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {

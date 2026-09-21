@@ -1,6 +1,6 @@
 import { tipProps } from "@/components/hover-tip/tip";
 import Link from "next/link";
-import { BookOpen, Users, UserCheck, SearchX } from "@/components/icons/eywa-icon-compat";
+import { BookOpen, Users, UserCheck, SearchX } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 
@@ -58,7 +58,7 @@ import { ClassroomAssignButton } from "./_components/classroom-assign-dialog";
 import { HeaderDayFilter } from "./_components/header-day-filter";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "cls.title")} — eywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.title")} — aywa` };
 }
 
 const PAGE_SIZE = 50;

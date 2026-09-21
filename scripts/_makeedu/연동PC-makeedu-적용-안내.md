@@ -43,8 +43,8 @@ node --env-file=.env.local scripts/_makeedu/import-invoices.cjs
 | 파일 | 변화 |
 |---|---|
 | `scripts/_makeedu/scrape.cjs` | **퇴원생 목록 추가** — `--list=withdrawn` (`/member/student/stopList.do`, 실측 4,427행) |
-| `scripts/_makeedu/compare-withdrawal-dates.mjs` | **신규** — makeedu 퇴원일 ↔ eywa `withdrawn_at` 이중 대조(기본 dry-run) |
-| `scripts/_makeedu/check-session.mjs` | **신규** — makeedu 접속 헬스체크 → 실패 시 **eywa 알림**(원장) |
+| `scripts/_makeedu/compare-withdrawal-dates.mjs` | **신규** — makeedu 퇴원일 ↔ aywa `withdrawn_at` 이중 대조(기본 dry-run) |
+| `scripts/_makeedu/check-session.mjs` | **신규** — makeedu 접속 헬스체크 → 실패 시 **aywa 알림**(원장) |
 | `scripts/_makeedu/run-health-check.ps1` | **신규** — 위 헬스체크의 작업 스케줄러 래퍼(로그 기록) |
 | `scripts/_makeedu/setup-sync-pc.ps1` | 헬스체크 작업(`eywa-makeedu-health`, 매일 08:30) **등록/해제/상태**에 포함 |
 | `scripts/_makeedu/sync-all.cjs` | 정기 스크랩에 **`withdrawn` 추가** — 아래 삭제 판정 5번째 가드의 재료 |
@@ -54,7 +54,7 @@ node --env-file=.env.local scripts/_makeedu/import-invoices.cjs
 ## 🔑 makeedu 합계와 직접 대조 (2026-07-31 5차) — **화면 '결과 합계'를 켜 두세요**
 
 makeedu 상세수납 설정에서 **'결과 합계' 표시를 켜면**, 스크래퍼가 그 줄을 함께 읽어
-**makeedu가 스스로 말하는 총액**과 eywa를 원 단위로 맞춥니다.
+**makeedu가 스스로 말하는 총액**과 aywa를 원 단위로 맞춥니다.
 
 지금까지의 대조는 `라인 → 집계 → 저장` **내부 3지점**이라 "우리끼리 일관됨"만 증명했습니다.
 여기서 비로소 **"makeedu와 같다"** 가 증명됩니다.
@@ -109,7 +109,7 @@ makeedu 상세수납 설정에서 **'결과 합계' 표시를 켜면**, 스크�
 
 ## 🔴 수납 삭제 반영이 달라진다 (2026-07-30 2차)
 
-지금까지 "makeedu에서 사라진 청구"의 판정 근거는 **전부 eywa가 가진 정황**이었다 — 활성 수강이 없다,
+지금까지 "makeedu에서 사라진 청구"의 판정 근거는 **전부 aywa가 가진 정황**이었다 — 활성 수강이 없다,
 며칠째 안 보인다. 그런데 그날 부재 18건을 실제로 뜯어보니 **13건이 재원생**이었고 2건은 06:00엔 있다가
 18:00에 사라졌다. 12시간 만의 이탈은 '삭제'보다 **다른 청구월로 옮겨졌거나 수납 처리된 것**에 가깝다.
 정황만으로는 이 둘을 못 가른다.
@@ -128,7 +128,7 @@ makeedu 상세수납 설정에서 **'결과 합계' 표시를 켜면**, 스크�
 동기화는 지금까지 **넣고 끝**이었다. 그래서 2026-07이 07-16에 통째로 멈춘 뒤에도 화면 배지는 2주 내내
 초록불이었다 — 맞는지 아무도 확인하지 않았기 때문이다. 이제 매 실행이 월별로 검산한다:
 
-`makeedu 라인 합` → `eywa 집계 합` → `저장 후 DB 합` — **허용 오차 0원.**
+`makeedu 라인 합` → `aywa 집계 합` → `저장 후 DB 합` — **허용 오차 0원.**
 
 1원이라도 어긋나면 `makeedu_sync_state.error`에 실려 화면 동기화 배지가 **amber '확인 필요'** 로 바뀐다.
 연동 PC 로그에도 월별 표(`✅/🔴`)가 찍힌다.

@@ -19,7 +19,7 @@ import {
 } from "@/features/report-admin/report-filters";
 import { MENT_SOURCE_LABEL, MENT_SOURCE_SHORT, parseMentSource } from "@/features/onescreen/ment-source";
 import { monthLabel, monthOf, monthRange, shiftMonth } from "@/lib/date-kst";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { SortableTh } from "@/components/table/sortable-th";
 import type { SortState } from "@/lib/table/sort";
 import type { ReportFilterOptions } from "@/features/report-admin/server/queries";
@@ -37,7 +37,7 @@ function hhmmKst(iso: string | null): string {
   }).format(new Date(iso));
 }
 
-/** 발송 상태 표시 — eywa 발송이력(classnote_status) 우선, 없으면 이관(edutrix)/미발송 구분. */
+/** 발송 상태 표시 — aywa 발송이력(classnote_status) 우선, 없으면 이관(edutrix)/미발송 구분. */
 /** 읽음 툴팁용 KST 일시("7월 18일 13:01"). */
 function readAtLabel(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", {
@@ -70,7 +70,7 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
   if (source === "edutrix_import")
     return (
       <>
-        <span className="text-text-faint text-xs" title="edutrix에서 이관된 기록(eywa 발송 아님)">이관</span>
+        <span className="text-text-faint text-xs" title="edutrix에서 이관된 기록(aywa 발송 아님)">이관</span>
         {read}
       </>
     );

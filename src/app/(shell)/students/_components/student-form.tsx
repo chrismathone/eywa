@@ -7,7 +7,7 @@ import {
   AlertCircle,
   Loader2,
   Save,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createStudent,

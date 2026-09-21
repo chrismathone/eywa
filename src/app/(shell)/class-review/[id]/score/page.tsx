@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getClassReview, getReviewViewer, myScoreSlot } from "@/features/class-review/server/queries";
 import { ScorePanel } from "../../_components/score-panel";
 
-export const metadata = { title: "수업 평가 채점 — eywa" };
+export const metadata = { title: "수업 평가 채점 — aywa" };
 
 /**
  * 채점 전용 페이지(원장 지시 2026-08-04) — 상세(보기)와 분리. 자격자만 진입(아니면 상세로 돌려보냄).

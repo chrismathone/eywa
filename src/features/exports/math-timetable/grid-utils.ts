@@ -1,4 +1,4 @@
-// ijw-calander gridUtils.ts 충실 이식(vendored). 로직 무변경. import만 eywa-로컬로.
+// ijw-calander gridUtils.ts 충실 이식(vendored). 로직 무변경. import만 aywa 로컬로.
 //
 // ⚠️ 여기 있던 `SUBJECT_THEMES`/`getSubjectTheme`(과목 한글명 → 색 하드코딩 맵)은 삭제했다(2026-07-17
 // 적대 감사). 어디서도 import하지 않는 죽은 코드였고, 운영 enum(과목 라벨·색)을 코드에 박는 것은

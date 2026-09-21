@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/eywa-icon-compat";
+import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/aywa-icon-compat";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
@@ -17,7 +17,7 @@ import { ConsultationTracker } from "../_components/consultation-tracker";
 import { ReactivateButton } from "../_components/reactivate-button";
 import { WithdrawalReasonCard } from "../_components/reason-card";
 
-export const metadata = { title: "퇴원 상세 — eywa" };
+export const metadata = { title: "퇴원 상세 — aywa" };
 
 export default async function WithdrawalDetailPage({
   params,

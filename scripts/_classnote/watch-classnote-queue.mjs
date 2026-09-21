@@ -67,7 +67,7 @@ function maybeRotateLog(nowMs) {
 const HOSTNAME = os.hostname();
 const STARTED_AT = new Date().toISOString(); // 이 데몬 프로세스 시작 시각(재시작 감지)
 
-// 최근 경고/오류 몇 줄 — 하트비트에 실어 **eywa 화면에서 바로 본다**(연동 PC 파일을 열 수 없을 때의 생명줄).
+// 최근 경고/오류 몇 줄 — 하트비트에 실어 **aywa 화면에서 바로 본다**(연동 PC 파일을 열 수 없을 때의 생명줄).
 // ⚠️ 로그 파일이 안 써지던 사고(2026-07-21) 재발 시에도 원인이 웹에 남게 하는 안전망.
 const RECENT_MAX = 5;
 const recentIssues = [];
@@ -248,7 +248,7 @@ async function main() {
         noteResult("provision", pres);
       }
       // 3.5) 원아 ID 매핑(0184a, 읽기 전용 GET) — 학부모 연락에서 **그룹반(영어) 학생까지** 특정하려면 선행돼야 한다.
-      //      KST 하루 1회 가드 내장. ⚠️ `--post`와 무관하게 돈다 — ClassNote에 쓰지 않고 eywa 한 컬럼만 채우는
+      //      KST 하루 1회 가드 내장. ⚠️ `--post`와 무관하게 돈다 — ClassNote에 쓰지 않고 aywa 한 컬럼만 채우는
       //      사실 데이터라(프로비저닝 스냅샷·읽음 동기화와 같은 취지), 발송이 꺼져 있어도 매핑은 최신이어야 한다.
       const mres = await syncChildMapOnce(db(), b, { tenant, apply: true, log }).catch((e) => {
         log(`[원아매핑] 오류(내일 재시도): ${e.message}`);
@@ -256,7 +256,7 @@ async function main() {
         return { ran: false };
       });
       if (mres.ran) noteResult("childmap", { ...mres, samples: undefined });
-      // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
+      // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
       //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
       const fres = await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
@@ -264,7 +264,7 @@ async function main() {
         return { ran: false };
       });
       if (fres.ran) noteResult("posts", fres);
-      // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 eywa 알림. 10분 가드 내장.
+      // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 10분 가드 내장.
       //    ⚠️ 4)와 별 폴러인 이유 = 감지 방식이 다르다(글=워터마크 1페이지 / 댓글=감시 창 전체 재조회).
       //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
       const cres = await pollParentCommentsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
@@ -273,7 +273,7 @@ async function main() {
         return { ran: false };
       });
       if (cres.ran) noteResult("comments", cres);
-      // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → eywa lesson_reports.classnote_read_at.
+      // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.
       const rres = await pollReportReadsOnce(db(), b, { tenant, log }).catch((e) => {
@@ -282,7 +282,7 @@ async function main() {
         return { ran: false };
       });
       if (rres.ran) noteResult("reads", rres);
-      // 7) 반 보드 구성 스냅샷(0142a, 읽기 전용 GET) — eywa 반 ↔ ClassNote 반 보드 대조용 원본.
+      // 7) 반 보드 구성 스냅샷(0142a, 읽기 전용 GET) — aywa 반 ↔ ClassNote 반 보드 대조용 원본.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(구성은 사실 데이터).
       //    KST 05시 이후 하루 1회. 영어는 반 보드로 운영돼 학생 배정이 어긋나면 발송이 조용히 실패한다.
       const bres = await snapshotBoardRosterOnce(db(), b, { tenant, log }).catch((e) => {

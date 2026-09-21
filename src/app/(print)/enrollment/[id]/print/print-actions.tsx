@@ -1,6 +1,6 @@
 "use client";
 
-import { Printer, X } from "@/components/icons/eywa-icon-compat";
+import { Printer, X } from "@/components/icons/aywa-icon-compat";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 

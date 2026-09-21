@@ -149,7 +149,7 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
 
   it("선두 '*'(보강 표식)는 반명에서 떼고 starred로만 남긴다 — 안 그러면 기존 반과 매칭 실패", () => {
     // 2026-07-22 실측: 마스터 시트 7/9~ 탭의 *MEC1-3·*JP1·*LT4가 반명에 별표를 달고 나와
-    // 기존 반(MEC1-3 등)에 매칭되지 못하고 "eywa에 없는 반"으로 통째 제외됐다.
+    // 기존 반(MEC1-3 등)에 매칭되지 못하고 "aywa에 없는 반"으로 통째 제외됐다.
     expect(parsed.slots.some((s) => s.className.startsWith("*"))).toBe(false);
     const grid = {
       cells: [
@@ -180,7 +180,7 @@ describe("parseTeacherGrid — 실 강사별 그리드", () => {
       merges: [],
     };
 
-    it("fills 없으면 색 판정을 건너뛴다(기존 동작·eywa export 경로 보존)", () => {
+    it("fills 없으면 색 판정을 건너뛴다(기존 동작·aywa export 경로 보존)", () => {
       const p = parseTeacherGrid(base as unknown as SheetGrid);
       expect(p.slots.map((s) => s.className).sort()).toEqual(["DP6", "TEVO"]);
     });

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { normalizeHomeworkPages } from "../homework-pages";

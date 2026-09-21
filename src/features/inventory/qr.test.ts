@@ -3,7 +3,7 @@ import { assetDetailPath, assetQrTarget, numberAssets, parseNoRanges, qrImageSrc
 
 describe("자산 QR 규약", () => {
   it("QR 내용 = 상세 화면 절대 주소(자산ID만 담는다 — 상태는 찍을 때 화면이 보여 준다)", () => {
-    expect(assetQrTarget("https://eywa.example.com/", "nb-002")).toBe("https://eywa.example.com/inventory/asset/NB-002");
+    expect(assetQrTarget("https://aywa.example.com/", "nb-002")).toBe("https://aywa.example.com/inventory/asset/NB-002");
     expect(assetDetailPath("DT-001")).toBe("/inventory/asset/DT-001");
   });
   it("이미지는 라우트가 그 자리에서 그린다 — 새 자산도 자동", () => {

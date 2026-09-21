@@ -15,7 +15,7 @@ import { MakeeduSyncCard } from "./makeedu-sync-card";
 import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { EmbedLink } from "@/components/embed-link";
 import { humanizeMakeeduSyncError } from "@/features/integrations/sync-error";
 

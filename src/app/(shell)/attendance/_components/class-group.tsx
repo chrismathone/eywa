@@ -1,7 +1,7 @@
 "use client";
 
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
-import { ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { useOptionalCollapse } from "./collapse-source";
 import { useGridCollapse } from "./grid-context";
 import { useClassMatched, useSearchActive } from "./search-context";

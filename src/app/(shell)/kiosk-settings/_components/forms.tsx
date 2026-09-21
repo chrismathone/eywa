@@ -11,7 +11,7 @@ import {
   type KioskActionState,
 } from "@/features/attendance/kiosk/server/actions";
 import type { KakaoChannelStatus } from "@/features/attendance/kiosk/server/queries";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 function Notice({ state }: { state: KioskActionState }) {
   if (!state) return null;

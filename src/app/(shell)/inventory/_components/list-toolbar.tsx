@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Toolbar } from "@/components/toolbar";
 import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
 

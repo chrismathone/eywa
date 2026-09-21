@@ -7,7 +7,7 @@ import { groupMathCardsByTeacher, splitLandingByTrack } from "@/features/math-sh
 import { canPreviewProgressMap } from "@/features/math-progress-map/server/access";
 import styles from "./landing.module.css";
 
-export const metadata: Metadata = { title: "수학 강사 시트 — eywa" };
+export const metadata: Metadata = { title: "수학 강사 시트 — aywa" };
 const EMPTY_TEXT: Record<string, string> = {
   "no-classes": "활성 수학 반이 없습니다.",
   "no-scoped-classes": "담당하는 수학 반이 없습니다.",

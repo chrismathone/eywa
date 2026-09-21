@@ -3,7 +3,7 @@
 > 원장 지시(2026-09-08): *"다음에 어떤 이미지 생성 모델이든 같은 시리즈의 아이콘을 생성할 수 있도록
 > 아이콘 생성 관련한 일관성있는 문서를 만들어두고."*
 
-eywa의 **탭·내부 탭 아이콘은 손으로 그린 SVG가 아니라 이미지 생성물(PNG)** 이다. 화풍은 원장이
+aywa의 **탭·내부 탭 아이콘은 손으로 그린 SVG가 아니라 이미지 생성물(PNG)** 이다. 화풍은 원장이
 시안 네 갈래(이모지 · 스티커 · 말랑3D · grok 3D) 중에서 고른 **B 스티커**로 확정됐다.
 🔴 **다시 선화 글리프로 되돌리지 말 것** — 그 이유로 한 번 반려됐다.
 
@@ -154,8 +154,8 @@ node scripts/_icons/wire-names.mjs .
 
 | 곳 | 파일 | 없으면 |
 |---|---|---|
-| 카탈로그 | `eywa-icons.tsx` `EYWA_ICON_CATALOG` | `EywaIconName` 타입에 없어 타입 에러 |
-| 선화 글리프 | `eywa-icons.tsx` 글리프 맵 | 그림이 없을 때 폴백이 빈 칸 |
+| 카탈로그 | `aywa-icons.tsx` `AYWA_ICON_CATALOG` | `AywaIconName` 타입에 없어 타입 에러 |
+| 선화 글리프 | `aywa-icons.tsx` 글리프 맵 | 그림이 없을 때 폴백이 빈 칸 |
 | 그림 | `public/icons/<name>.png` | 가드 실패(그리고 선화로 폴백) |
 | 소비처 | `MENU_ICON` 또는 `menu-hub.ts`의 `icon:` | 고아 파일로 가드 실패 |
 

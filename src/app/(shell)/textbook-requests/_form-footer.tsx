@@ -4,8 +4,8 @@
 // ⚠️ '이미지 저장 및 기록'(submit)만 요청서 PNG를 자동 저장한다. '클래스노트 발송'은 기록만 하고
 //    발송창을 여는 별도 경로 — 원장 요청("발송을 저장에 묶지 말 것")대로 두 동작을 분리해 둔 것.
 
-import { Eraser, Save } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Eraser, Save } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import type { TextbookState } from "@/features/billing/server/textbook-actions";
 

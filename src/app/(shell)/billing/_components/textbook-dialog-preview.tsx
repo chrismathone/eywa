@@ -3,7 +3,7 @@
 // 교재신청 다이얼로그 우측 — 강사뷰와 동일한 실시간 요청서 미리보기(타이핑 즉시 종이 서식에 반영).
 
 import { useEffect, useRef, useState } from "react";
-import { Eye } from "@/components/icons/eywa-icon-compat";
+import { Eye } from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import { TextbookRequestCardBody } from "@/app/(print)/textbook/[id]/print/textbook-request-card-body";

@@ -14,11 +14,11 @@ import { BarList, EmptyNote, SheetFrame, SheetSection, WordTable } from "./jj-sh
 import { StudyExamList, StudyHero, StudyKpiTiles } from "./jj-study-parts";
 
 /**
- * 인재원 **학습 분석지** — eywa식 재설계(사용자 2026-09-11 *"anki 한장짜리 학습분석지 … 재디자인 설계해서 eywa식"*).
+ * 인재원 **학습 분석지** — aywa식 재설계(사용자 2026-09-11 *"anki 한장짜리 학습분석지 … 재디자인 설계해서 aywa식"*).
  *
  * 정보 구조는 인재원 원본(renderStudy)과 같다: 종합 정답률 → 핵심 지표 네 칸(학습 시간·학습한 날·새로 익힌 단어·
  * 장기기억 단어) → 일별 학습량(평균선·최고치) → 단어장별·품사별 → 자주 틀리는 단어 · 기간 중 시험.
- * 그림은 eywa 문법(팔레트 v4·BigStat 톤·소프트 패널)이고, A4 한 장이 아니라 **폰에서 읽는 세로 카드**다.
+ * 그림은 aywa 문법(팔레트 v4·BigStat 톤·소프트 패널)이고, A4 한 장이 아니라 **폰에서 읽는 세로 카드**다.
  *
  * - `layout="card"` — 학부모 카드(/r·PDF·ClassNote 캡처, 512px 열). 목록을 짧게 접는다(단어장·품사 5줄, 틀린 단어 5, 시험 3).
  * - `layout="wide"` — 학생 상세 성적 탭. 틀 폭(@container)이 넓으면 두 단 · 점수 추이 선 · 목록을 길게.

@@ -35,7 +35,7 @@ export async function buildInvoicesWorkbook(
   period: string,
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "eywa";
+  wb.creator = "aywa";
   wb.created = new Date();
   const sheet = wb.addWorksheet(`${period} 수납`);
 

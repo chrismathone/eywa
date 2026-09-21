@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -27,7 +27,7 @@ import { ReportNameCard } from "./_components/report-name-card";
 
 // 탭 제목도 화면 언어를 따른다 — 강사가 창을 여럿 열어 두면 제목이 유일한 구분이다.
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "me.eyebrow")} — eywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "me.eyebrow")} — aywa` };
 }
 
 /**

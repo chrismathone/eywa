@@ -5,7 +5,7 @@
 // ensureSaved()로 행을 보장한다(부모가 강사/admin에 맞는 저장 액션을 넘김). 서버 게이트가 최종 인가·검증.
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import { isImageAttachment } from "../attachment-utils";

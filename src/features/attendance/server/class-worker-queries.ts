@@ -34,7 +34,7 @@ export async function getMonthlyClassWorkers(
   ).catch(() => []);
   tally(reports.map((r) => ({ classId: r.class_id, name: r.teacher_name })), "report", out);
 
-  // 보고서가 없는 반만 출결로 — 영어가 여기 해당한다(보고서를 eywa에 안 쓴다).
+  // 보고서가 없는 반만 출결로 — 영어가 여기 해당한다(보고서를 aywa에 안 쓴다).
   const rest = classIds.filter((id) => !out.has(id));
   if (rest.length === 0) return out;
   const marks = await fetchInChunks<{ class_id: string; recorded_by: string | null }>([...rest], (chunk) =>

@@ -1,5 +1,5 @@
 import { BigStat, type BigStatTone } from "@/components/atoms/big-stat";
-import type { EywaIconName } from "@/components/icons/eywa-icons";
+import type { AywaIconName } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import {
@@ -19,7 +19,7 @@ import {
  *
  * 색은 고르지 않는다 — `PLAN_DIFF_TONE`(뜻) → `TONE_COLOR`(의미색 캐논)만 거친다.
  */
-const KIND_ICON: Record<PlanDiffKind, EywaIconName> = {
+const KIND_ICON: Record<PlanDiffKind, AywaIconName> = {
   added: "plus",
   removed: "trash",
   changed: "edit",

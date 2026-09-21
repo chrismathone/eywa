@@ -27,7 +27,7 @@ def material(name, color):
     shader.inputs["Roughness"].default_value = .38
     return value
 
-navy = material("EYWA navy", (.035, .115, .27))
+navy = material("AYWA navy", (.035, .115, .27))
 yellow = material("Sticker yellow", (1, .64, .075))
 paper = material("Warm paper", (.95, .95, .89))
 mint = material("Attendance green", (.10, .57, .40))

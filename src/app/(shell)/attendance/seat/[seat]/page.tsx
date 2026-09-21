@@ -44,7 +44,7 @@ import { SeatJjAllDay } from "./_components/seat-jj-all-day";
 import { applySeatDayChoices, getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
 import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 
-export const metadata: Metadata = { title: "랩실·JJ실 출석부 — eywa" };
+export const metadata: Metadata = { title: "랩실·JJ실 출석부 — aywa" };
 
 /** KST 지금 "HH:MM" — 기본으로 열 교시를 고르는 데만 쓴다(순수 규칙은 pickPeriodIndex). */
 function kstNowHm(): string {

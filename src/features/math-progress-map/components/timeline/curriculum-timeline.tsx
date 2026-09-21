@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { WeekView } from "../../derive";
 import { formatMdW, formatRange } from "../../calendar";
 import { periodCount, periodPercent } from "../../learning-dashboard";

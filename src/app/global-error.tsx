@@ -47,7 +47,7 @@ export default function GlobalError({
             boxShadow: "0 0 0 1px rgba(29,29,31,0.14)",
           }}
         >
-          <p style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>eywa를 여는 데 문제가 생겼습니다</p>
+          <p style={{ fontWeight: 700, fontSize: 16, margin: 0 }}>aywa를 여는 데 문제가 생겼습니다</p>
           <p style={{ marginTop: 8, fontSize: 14, color: "#121212" }}>
             잠시 뒤 다시 시도해 주세요. 계속 같은 화면이면 원장님께 알려 주세요.
           </p>

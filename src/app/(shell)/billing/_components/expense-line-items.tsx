@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Copy, Plus, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { CURRENCIES, formatMoney, moneyStep, roundMoney } from "@/features/billing/currencies";
 
 // 지출결의서 라인아이템 편집기 — ijw 패리티(용도/거래처/사용내역/수량/금액/부가세).

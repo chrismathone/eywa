@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "@/components/icons/aywa-icon-compat";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
@@ -53,7 +53,7 @@ import { ijwConfigFor } from "@/features/ijw/server/client";
 import { JjClassLink } from "@/app/(shell)/exams/_components/jj-class-link";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")} — eywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")} — aywa` };
 }
 
 function todayIso(): string {

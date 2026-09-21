@@ -1,6 +1,6 @@
 import { ParamLink } from "./_components/param-link";
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/eywa-icon-compat";
+import type { LucideIcon } from "@/components/icons/aywa-icon-compat";
+import { Columns3, DoorOpen, Layers, LayoutGrid, Users } from "@/components/icons/aywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { Toolbar } from "@/components/toolbar";
 import {
@@ -98,7 +98,7 @@ import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
 import { buildTeacherComparator } from "@/features/timetable/lib/english-teacher-sheet";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 
-export const metadata = { title: "시간표(개발중) — eywa" };
+export const metadata = { title: "시간표(개발중) — aywa" };
 
 type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 // 전부 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).
@@ -212,7 +212,7 @@ export default async function TimetablePage({
     paramView === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
     // 월 목록(어떤 달을 만들어 뒀나) + 이 달의 계획 칸 — 서로 독립이라 같은 자리에서 병렬로(B4).
     // 게이트를 통과했을 때만 부른다(위 planAccess 주석 — 실패 시 throw라 페이지가 통째로 죽는다).
-    // 🔴 **표가 아직 없어도 화면이 죽으면 안 된다** — eywa는 SQL을 원장이 손으로 실행하므로 배포와 적용
+    // 🔴 **표가 아직 없어도 화면이 죽으면 안 된다** — aywa는 SQL을 원장이 손으로 실행하므로 배포와 적용
     //    사이에 항상 간격이 있다([[#95]]: 컬럼 하나를 적용 전에 배포해 강사 전원 원스크린이 먹통이 된 전례).
     //    그래서 조회 실패를 **삼키지 않고** 사유를 배너로 올린다(빈 계획으로 위장하지 않는다, #89).
     planAccess.ok

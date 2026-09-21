@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { BarSegment } from "@/features/dashboard/onescreen/tile-bar";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { TileTone } from "@/features/dashboard/onescreen/kpi";
 import { SKINS, type SkinClasses } from "./skin";
 

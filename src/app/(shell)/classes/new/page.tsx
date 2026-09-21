@@ -8,7 +8,7 @@ import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
 import { ClassForm } from "../_components/class-form";
 
-export const metadata = { title: "새 반 — eywa" };
+export const metadata = { title: "새 반 — aywa" };
 
 export default async function NewClassPage() {
   await requireAccess("classes");

@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState, useTransition } f
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { weekdayIndexOf } from "@/lib/date-kst";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";

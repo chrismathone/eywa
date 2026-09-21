@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { drillLevel } from "../drilldown";
 import type { MapDisplay } from "../model";

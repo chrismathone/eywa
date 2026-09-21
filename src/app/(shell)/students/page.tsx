@@ -1,4 +1,4 @@
-import { Users } from "@/components/icons/eywa-icon-compat";
+import { Users } from "@/components/icons/aywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
@@ -51,7 +51,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { NewStudentTrigger } from "./_components/new-student-trigger";
 import { StudentsMoreMenu } from "./_components/students-more-menu";
 import { RememberPrefs } from "@/components/remember-prefs";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { isValidYmd } from "@/lib/date-kst";
 import { parseProgram, programLabel, type Program } from "@/features/students/program";
 // 운영실 KPI ↗ 집합 — 엑셀 파일 라우트와 **같은 함수**(파일 행 = 목록 행).
@@ -59,7 +59,7 @@ import { restrictIdsFor } from "@/features/students/server/restrict-ids";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")} — eywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")} — aywa` };
 }
 
 // 상태 — 디폴트(재원)는 파라미터가 없을 때다. "전체"는 명시적 status=all로만(HeaderFilter의 allValue=enrolled가 지운다).

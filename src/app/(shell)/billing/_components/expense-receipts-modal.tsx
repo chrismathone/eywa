@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, Loader2, Trash2, Upload, X } from "@/components/icons/eywa-icon-compat";
+import { ExternalLink, FileText, Loader2, Trash2, Upload, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";

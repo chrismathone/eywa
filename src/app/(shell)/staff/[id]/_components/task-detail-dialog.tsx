@@ -1,11 +1,11 @@
 "use client";
 
 // 태스크 상세 — 본문(Notion 블록) + 댓글(읽기/작성). 그리드/리스트에서 업무 클릭 시. 본문·댓글은 열 때 지연 로드.
-// eywa에서 남긴 댓글은 서버가 "[eywa · 이름]" 접두를 붙여 출처 보존(API 댓글은 Notion에서 통합=봇으로 표기되므로).
+// aywa에서 남긴 댓글은 서버가 "[aywa · 이름]" 접두를 붙여 출처 보존(API 댓글은 Notion에서 통합=봇으로 표기되므로).
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Check, ExternalLink, RotateCcw } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Check, ExternalLink, RotateCcw } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";

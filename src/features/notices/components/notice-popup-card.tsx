@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 
 import { createPortal } from "react-dom";
 // 강사뷰 화면 언어(2026-09-03) — 껍데기 글자만. 제목·본문은 0249a 번역 캐시가 맡는다.
 import { useSheetT } from "@/features/teacher-view/lang-context";
-import { X } from "@/components/icons/eywa-icon-compat";
+import { X } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { DismissMode } from "../dismiss";
 import { dismissNoticePopup, undismissNoticePopup } from "../server/dismiss-actions";

@@ -5,7 +5,7 @@ import { getMeetingById, type MeetingReportSection } from "@/features/meetings/s
 import { RichText } from "@/components/rich-text";
 import { MeetingPrintActions } from "./meeting-print-actions";
 
-export const metadata = { title: "회의록 인쇄 — eywa" };
+export const metadata = { title: "회의록 인쇄 — aywa" };
 
 // list=나열형(불릿). 화면 분석탭(ai-report.tsx)과 동일 — Solar가 줄바꿈 안 줘도 RichText가 불릿화.
 const REPORT_SECTIONS: { key: keyof MeetingReportSection; label: string; list?: boolean }[] = [
@@ -94,7 +94,7 @@ export default async function MeetingPrintPage({
       ) : null}
 
       <footer className="mt-10 border-t border-gray-300 pt-3 text-center text-[10px] text-gray-500">
-        eywa · 인쇄 일시 {new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
+        aywa · 인쇄 일시 {new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
       </footer>
     </main>
   );

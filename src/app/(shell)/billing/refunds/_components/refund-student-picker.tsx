@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { AlertCircle, Loader2, Sparkles } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { applyFormValues, readFormValues } from "@/lib/form-draft";
 import {

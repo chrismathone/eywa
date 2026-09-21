@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Users } from "@/components/icons/eywa-icon-compat";
+import { Users } from "@/components/icons/aywa-icon-compat";
 import { PeriodNav } from "@/components/period-nav";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { HrefSelect } from "@/components/href-select";
@@ -79,7 +79,7 @@ import { periodWindowLabel } from "@/features/periods/window-label";
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "att.title")} — eywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "att.title")} — aywa` };
 }
 
 function currentMonthKey(): string {
@@ -478,7 +478,7 @@ export default async function AttendancePage({
   /**
    * 반 머리행 끝의 **"누가 수업했나"** — 담임이 아니라 그 달 실제 담당(원장 2026-09-07).
    * 실측 근거: 수학은 그 달 보고서 작성자가 반마다 1명(9월 55/55·7월 58/58·8월 60중 1개만 2명)이라
-   * 사실상 확정이고, 영어는 보고서를 eywa에 안 써서 출결 기록자로 떨어진다(반마다 2~4명 → `외 N명`).
+   * 사실상 확정이고, 영어는 보고서를 aywa에 안 써서 출결 기록자로 떨어진다(반마다 2~4명 → `외 N명`).
    * ⚠️ 근거가 없는 반(그 달 보고서·출결이 둘 다 없음)은 **안 적는다** — 실측 9월 수학 활성 반 22개.
    */
   const workerClassIds = (

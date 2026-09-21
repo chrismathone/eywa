@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronUp, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { isLevelClassName, type LevelChange } from "@/features/timetable/lib/level";
 import { changeClassLevel } from "@/features/timetable/server/actions";

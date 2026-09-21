@@ -14,7 +14,7 @@ describe("parseExamPercent", () => {
     expect(parseExamPercent("10/10")).toBe(100);
     expect(parseExamPercent("3 / 6")).toBe(50);
   });
-  it("N문제 중 M개 → 백분율(eywa 분리필드)", () => {
+  it("N문제 중 M개 → 백분율(aywa 분리필드)", () => {
     expect(parseExamPercent("20문제 중 18개")).toBe(90);
     expect(parseExamPercent("20문제 중 19개")).toBe(95);
   });

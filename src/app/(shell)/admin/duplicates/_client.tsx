@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { GitMerge, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { GitMerge, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";

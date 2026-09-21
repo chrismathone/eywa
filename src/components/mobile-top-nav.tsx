@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { NAV_GROUPS, findNavItem, type NavItem } from "@/lib/navigation";
@@ -34,7 +34,7 @@ export function MobileTopNav({
   systemRole,
   email,
   className,
-  brand = "EYWA",
+  brand = "AYWA",
   logoSrc,
   permMatrix,
   menuLayout,

@@ -189,8 +189,8 @@ export async function resolveMonthlyTasks(
 
 export type TaskComment = { id: string; author: string; time: string | null; text: string };
 
-/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. eywa가 남긴 댓글(봇 명의)은
- *  본문 패턴을 파싱해 "이름 (eywa)"로 표시하고 표기용 접두는 본문에서 제거. 못 찾으면 "Notion" 폴백. */
+/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. aywa가 남긴 댓글(봇 명의)은
+ *  본문 패턴을 파싱해 "이름 (aywa)"로 표시하고 표기용 접두는 본문에서 제거. 못 찾으면 "Notion" 폴백. */
 export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> {
   const [comments, people] = await Promise.all([
     listCommentsAll(pageId),
@@ -203,9 +203,9 @@ export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> 
       .map((t) => t.plain_text ?? "")
       .join("")
       .trim();
-    const m = EYWA_COMMENT_RE.exec(text) ?? EYWA_COMMENT_LEGACY_RE.exec(text);
+    const m = AYWA_COMMENT_RE.exec(text) ?? AYWA_COMMENT_LEGACY_RE.exec(text);
     if (m) {
-      author = `${m[1]} (eywa)`;
+      author = `${m[1]} (aywa)`;
       text = (m[2] ?? "").trim();
     }
     return { id: c.id, author, time: c.created_time ?? null, text };
@@ -213,19 +213,20 @@ export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> 
 }
 
 /**
- * 태스크에 댓글 추가 — ⚠️ Notion API 한계로 작성자 명의는 항상 통합(봇). 대신 **굵은 이름 + " — eywa에서 작성"**
- * 서식으로 실작성자를 표기(Notion에서 읽기 좋게). eywa 화면은 이 패턴을 파싱해 작성자로 표시.
+ * 태스크에 댓글 추가 — ⚠️ Notion API 한계로 작성자 명의는 항상 통합(봇). 대신 **굵은 이름 + " — aywa에서 작성"**
+ * 서식으로 실작성자를 표기(Notion에서 읽기 좋게). aywa 화면은 이 패턴을 파싱해 작성자로 표시.
  */
 export async function addTaskComment(pageId: string, text: string, authorName: string): Promise<void> {
   await createComment(pageId, [
     { text: { content: authorName.slice(0, 40) }, annotations: { bold: true } },
-    { text: { content: ` — eywa에서 작성\n${text.slice(0, 1800)}` } },
+    { text: { content: ` — aywa에서 작성\n${text.slice(0, 1800)}` } },
   ]);
 }
 
-// eywa가 남긴 댓글의 작성자 파싱(신형: "이름 — eywa에서 작성\n본문" / 구형: "[eywa · 이름] 본문").
-const EYWA_COMMENT_RE = /^(.{1,40}?) — eywa에서 작성\n?([\s\S]*)$/;
-const EYWA_COMMENT_LEGACY_RE = /^\[eywa · (.{1,40}?)\] ?([\s\S]*)$/;
+// aywa가 남긴 댓글의 작성자 파싱(신형: "이름 — aywa에서 작성\n본문" / 구형: "[aywa · 이름] 본문").
+// 🔴 옛 이름(eywa) 시절 댓글이 Notion에 그대로 남아 있다 — 두 이름을 다 받는다(2026-09-21 개명).
+const AYWA_COMMENT_RE = /^(.{1,40}?) — [ae]ywa에서 작성\n?([\s\S]*)$/;
+const AYWA_COMMENT_LEGACY_RE = /^\[[ae]ywa · (.{1,40}?)\] ?([\s\S]*)$/;
 
 /** 업무 본문(Notion 블록) → 표시 라인. 상세창이 열릴 때만 지연 호출(첫 페인트 밖). */
 export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
@@ -233,7 +234,7 @@ export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
   return notionBlocksToLines(blocks);
 }
 
-// === 쓰기(eywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canWriteTenant staff). ===
+// === 쓰기(aywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canWriteTenant staff). ===
 
 /** 업무완료 체크박스 토글 → Notion 반영. */
 export async function setTaskDoneRow(pageId: string, done: boolean): Promise<void> {

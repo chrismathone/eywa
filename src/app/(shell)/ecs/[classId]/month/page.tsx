@@ -11,7 +11,7 @@ import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-g
 import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
 import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 
-export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — eywa" };
+export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — aywa" };
 
 /**
  * ECS **월간 뷰** — 반 1개 × 달 1개(달력 ↔ 진도표).

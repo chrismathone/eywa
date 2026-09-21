@@ -1,7 +1,7 @@
 /*
- * backfill-english-slots.cjs — ijw 익스포트의 셀 단위 영어 시간표 데이터를 eywa로 백필.
+ * backfill-english-slots.cjs — ijw 익스포트의 셀 단위 영어 시간표 데이터를 aywa로 백필.
  *
- * eywa POC 임포트가 평면화해 버린 ijw의 풍부한 데이터를 복원한다(영어 통합뷰 미니그리드용):
+ * aywa POC 임포트가 평면화해 버린 ijw의 풍부한 데이터를 복원한다(영어 통합뷰 미니그리드용):
  *  - class_schedules.slot_teacher_label  ← ijw classes.slotTeachers["{요일}-{교시}"]  (영문닉네임·한글·"LAB")
  *  - class_schedules.slot_room_label     ← ijw classes.slotRooms["{요일}-{교시}"]      ("LAB실"·"본원302")
  *  - classes.bg_color / text_color       ← ijw classes.bgColor / textColor             (#RRGGBB)
@@ -57,7 +57,7 @@ const hm5 = (t) => String(t).slice(0, 5);
   const updates = []; // {sql, params} 형태 대신 함수 큐
 
   try {
-    // 1) eywa 반 + 스케줄 + 학생 적재(테넌트 단일).
+    // 1) aywa 반 + 스케줄 + 학생 적재(테넌트 단일).
     const tenantRow = await sql`select tenant_id from classes group by tenant_id order by count(*) desc limit 1`;
     const tenantId = tenantRow[0].tenant_id;
     const eClasses = await sql`select id, class_name, subject from classes where tenant_id=${tenantId}`;
@@ -76,7 +76,7 @@ const hm5 = (t) => String(t).slice(0, 5);
     // 2) 반별 백필.
     for (const c of ijwClasses) {
       const className = c.className;
-      // ijw highmath → eywa subject_1 (2026-06-19 통일). 그 외는 그대로.
+      // ijw highmath → aywa subject_1 (2026-06-19 통일). 그 외는 그대로.
       const subject = c.subject === "highmath" ? "subject_1" : (c.subject ?? "other");
       if (!className) continue;
       const classId = classByKey.get(`${className}|||${subject}`);

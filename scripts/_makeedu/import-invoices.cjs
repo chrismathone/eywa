@@ -1,9 +1,9 @@
 /**
- * scripts/_makeedu/import-invoices.cjs — makeedu 상세수납(라인) → eywa `invoices`.
- * makeedu는 (학생×월×항목) 라인 단위 → eywa는 (학생×월) 1행으로 **집계**(line_items jsonb, 항목별 kind=구분 보존).
+ * scripts/_makeedu/import-invoices.cjs — makeedu 상세수납(라인) → aywa `invoices`.
+ * makeedu는 (학생×월×항목) 라인 단위 → aywa는 (학생×월) 1행으로 **집계**(line_items jsonb, 항목별 kind=구분 보존).
  *
  * ⚠️ 2026-07-08 재작성 — additive(건너뛰기) → **upsert(makeedu 우선)**. 배경: additive는 월 중 추가된 교재/특강
- * 청구가 기존 인보이스에 반영 안 돼 eywa 수납이 makeedu보다 적게 표시됐다(2026-07 교재 11건 중 10건 누락 실측).
+ * 청구가 기존 인보이스에 반영 안 돼 aywa 수납이 makeedu보다 적게 표시됐다(2026-07 교재 11건 중 10건 누락 실측).
  * 이제 매 sync가 현재 스크랩(현재 청구월 슬라이스)으로 그 달 인보이스를 **재집계·덮어쓰기**해 항상 makeedu와 일치.
  * (과거 전 기간 1회 정합은 replace-invoices-from-excel.cjs로 이미 수행.)
  * 함께 고친 잠재버그: line_items 스키마({kind,description,amount})·sql.json 바인딩(문자열 스칼라 저장 방지)·
@@ -11,8 +11,8 @@
  *
  * ⚠️ 2026-07-13 구조적 사각 2건 보완(머지 적대 리뷰 I4 — 분류·리포트는 invoice-stale.cjs):
  * ① 삭제 미반영 — upsert는 스크랩에 있는 (학생,월)만 만지므로, makeedu에서 그 달 라인이 전부 삭제된 학생의
- *   eywa 인보이스가 영구 stale(유령 미수)로 남았다(2026-07 실측 36건·미완납 잔액 ₩7.6M). 이제 스크랩이 커버한
- *   청구월에서 eywa에만 남은 행을 감지해 **기본은 리포트만**, `--void-stale`(또는 env MAKEEDU_VOID_STALE=true)
+ *   aywa 인보이스가 영구 stale(유령 미수)로 남았다(2026-07 실측 36건·미완납 잔액 ₩7.6M). 이제 스크랩이 커버한
+ *   청구월에서 aywa에만 남은 행을 감지해 **기본은 리포트만**, `--void-stale`(또는 env MAKEEDU_VOID_STALE=true)
  *   + --apply일 때만 **미완납(unpaid/partial)을 status='void'**로 전환(notes 앞에 한글 마커 = 근거·직전 상태 보존).
  *   완납/환불(수납 기록 보존)·수동 청구 추정(라인에 paid 필드 없음)·미매칭 의심(같은 이름이 미매칭 라인에 존재)·
  *   커버리지 80% 미만 월(부분 스크랩 의심)은 **항상 보류**(오탐-void 방지). void 행은 미수 집계 제외(billing/calc.ts),
@@ -23,7 +23,7 @@
  *   makeedu_sync_state.error에 요약 기록(성공이어도 이슈 추적 가능. 위험군 = students.makeedu_id 누락 학생뿐).
  *
  * ⚠️ 2026-07-30(2차) 두 가지 추가:
- * ③ 삭제 판정 **5번째 가드 = makeedu 퇴원 목록**(withdrawn.json). 기존 4중 가드는 전부 eywa가 가진 정황
+ * ③ 삭제 판정 **5번째 가드 = makeedu 퇴원 목록**(withdrawn.json). 기존 4중 가드는 전부 aywa가 가진 정황
  *   (활성 수강 없음·며칠째 부재)뿐이라, "삭제됐다"와 "다른 청구월로 옮겨졌다"를 구분하지 못했다(실측: 부재 18건 중
  *   13건이 재원생, 2건은 12시간 만에 이탈). 퇴원 목록은 makeedu가 직접 퇴원이라고 말하는 유일한 증거다.
  *   파일이 없으면 가드만 꺼진 채 진행(무중단) — 꺼졌다는 사실은 로그·리포트·sync_state에 남긴다.
@@ -62,7 +62,7 @@ const ALLOW_BULK_VOID =
 const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".makeedu-tmp");
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 const ym = (v) => { const s = L.txt(v) || ""; const m = s.match(/(\d{4})[.\-/]?(\d{2})/); return m ? `${m[1]}-${m[2]}` : null; };
-// makeedu 구분 → eywa category(대표 분류). 라인별 상세는 line_items.kind에 보존.
+// makeedu 구분 → aywa category(대표 분류). 라인별 상세는 line_items.kind에 보존.
 const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", 기타: "other", 원복: "other" };
 
 (async () => {
@@ -136,7 +136,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       process.exitCode = 1;
       return;
     }
-    // 스크랩이 커버한 청구월 — "eywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
+    // 스크랩이 커버한 청구월 — "aywa에만 남은 행" 판정은 이 범위 안에서만(과거 월은 스크랩 밖 = 판정 불가).
     const scrapedPeriods = [...new Set(lines.map((l) => l.period))].sort();
     const [studs, existing, activeRows] = await Promise.all([
       sql`select id, name, grade, makeedu_id, notes from students where tenant_id = ${tenantId}`,
@@ -205,14 +205,14 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     console.log("status dist:", invoices.reduce((x, i) => ((x[i.status] = (x[i.status] || 0) + 1), x), {}));
 
     // 🔑 외부 대조를 **먼저** 한다 — 그 결과(scrapeVerified)가 삭제 판정의 강도를 정하기 때문이다.
-    // eywa 쪽은 "스크랩에 나타난 (학생,월)"의 저장 전 집계를 쓴다(저장 후 재조회는 층 2가 따로 검산).
+    // aywa 쪽은 "스크랩에 나타난 (학생,월)"의 저장 전 집계를 쓴다(저장 후 재조회는 층 2가 따로 검산).
     // ⚠️ 두 가지를 맞춰야 makeedu와 같은 잣대가 된다:
     //  ① **미납은 라인 합 그대로**(`i.unpaid`) — `total-discount-paid`로 재계산하면 (학생×월) 단위로
     //     음수가 0으로 clamp되어 라인 합과 어긋난다(2026-07-31: 미납 +191,250원 차이의 정체).
     //  ② **미매칭 라인도 더한다** — 이 대조의 목적은 "스크랩이 완전한가"이지 "저장이 됐는가"가 아니다.
     //     매칭 실패로 저장 안 된 라인을 빼고 비교하면, 매칭이 나쁠수록 대조가 실패해 검증이 영영 안 선다
     //     (매칭 실패는 이미 별도 신호 `unmatchedRatio`가 담당한다).
-    const eywaSide = invoices.reduce(
+    const aywaSide = invoices.reduce(
       (a, i) => {
         a.total += i.total; a.discount += i.discount; a.paid += i.paid; a.points += i.point;
         a.unpaid += i.unpaid;
@@ -221,12 +221,12 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
       { total: 0, discount: 0, paid: 0, points: 0, unpaid: 0 },
     );
     for (const u of unmatchedLines) {
-      eywaSide.total += u.total || 0; eywaSide.discount += u.discount || 0;
-      eywaSide.points += u.point || 0; eywaSide.paid += u.paid || 0; eywaSide.unpaid += u.unpaid || 0;
+      aywaSide.total += u.total || 0; aywaSide.discount += u.discount || 0;
+      aywaSide.points += u.point || 0; aywaSide.paid += u.paid || 0; aywaSide.unpaid += u.unpaid || 0;
     }
     const external = S.reconcileExternal({
       reported: data.reportedSummary || null,
-      stored: eywaSide,
+      stored: aywaSide,
       scrapedLines: lines.length,
     });
     console.log(`외부 대조: ${S.externalSummary(external)}`);
@@ -246,7 +246,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
         : "→ 스크랩 미검증: 삭제 판정은 보수적으로(정황 가드 유지) 진행합니다.",
     );
 
-    // (a) 삭제 미반영 감지 — 스크랩 커버 월에서 eywa에만 남은 (학생,월) 분류(무효 후보/보존/보류).
+    // (a) 삭제 미반영 감지 — 스크랩 커버 월에서 aywa에만 남은 (학생,월) 분류(무효 후보/보존/보류).
     const stale = S.classifyStale({
       existing,
       scrapedKeys: new Set(inv.keys()),
@@ -327,7 +327,7 @@ const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", �
     // ── 층 2: 대조 — 저장 결과를 **되읽어** makeedu 원본과 맞는지 스스로 검산한다(허용 오차 0원) ──
     // 지금까지 동기화는 "넣고 끝"이라 틀려도 배지가 초록불이었다. 여기서 어긋나면 sync_state.error에
     // 실려 화면 배지가 amber '확인 필요'로 바뀐다 — 사람이 모르고 지나가는 경로를 없앤다.
-    // ⚠️ 스크랩에 나타난 (학생,월)만 비교한다 — eywa 자체 수동 청구는 makeedu에 없는 게 정상이라 대조 대상이 아니다.
+    // ⚠️ 스크랩에 나타난 (학생,월)만 비교한다 — aywa 자체 수동 청구는 makeedu에 없는 게 정상이라 대조 대상이 아니다.
     // 🔴 제한 모드(--only-pairs)에서는 **이번에 저장한 (학생,월)만** 비교한다. 안 그러면 그 달 전체 라인과
     //    한두 건만 저장한 결과를 맞대어 늘 🔴가 뜬다(2026-08-31 첫 반영에서 실제로 거짓 경보가 다섯 달 전부).
     //    범위를 맞추면 이 대조는 제한 모드에서도 진짜 검산이 된다 — "내가 저장한 그 행이 makeedu와 같은가".

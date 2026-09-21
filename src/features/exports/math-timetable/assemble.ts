@@ -1,5 +1,5 @@
 /**
- * eywa Supabase 데이터 → ijw 수학 익스포터 입력 계약 어댑터.
+ * aywa Supabase 데이터 → ijw 수학 익스포터 입력 계약 어댑터.
  *
  * `getWeeklyScheduleWithStudents()` 결과(ScheduleSlotWithStudents[])를 ijw `exportMathTimetableToExcel`이
  * 기대하는 `ExportTimetableParams` 모양으로 변환한다. 익스포터는 verbatim 이식이라 출력이 ijw와 동일하려면
@@ -95,7 +95,7 @@ export type AssembleOpts = {
   onSkippedSlots?: (count: number) => void;
 };
 
-/** eywa StudentLine → 익스포터 studentList 항목(상태/날짜/등원요일 전부 포함, any로 소비됨). */
+/** aywa StudentLine → 익스포터 studentList 항목(상태/날짜/등원요일 전부 포함, any로 소비됨). */
 function toStudent(s: StudentLine): TimetableStudent {
   return {
     id: s.studentId,
@@ -106,7 +106,7 @@ function toStudent(s: StudentLine): TimetableStudent {
     attendanceDays: (s.attendanceDays ?? []).map((d) => DOW_KO[d] ?? d).filter(Boolean),
     onHold: s.status === "hold",
     withdrawalDate: s.status === "withdrawn" ? (s.endDate ?? undefined) : undefined,
-    // eywa 퇴원 목록은 이미 is_transferred 제외(queries.ts) → 항상 false(퇴원 섹션에 표시되도록).
+    // aywa 퇴원 목록은 이미 is_transferred 제외(queries.ts) → 항상 false(퇴원 섹션에 표시되도록).
     isTransferred: false,
     isTransferredIn: s.isTransferredIn === true,
     // 30/60일 신입색·정렬 가중치. 재원/대기만 enrollmentDate 보유(퇴원은 무관).

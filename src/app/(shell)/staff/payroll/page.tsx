@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Wallet, CheckCircle2, Clock } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, Wallet, CheckCircle2, Clock } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { BackLink } from "@/components/back-link";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -23,7 +23,7 @@ import {
   type PayrollOverviewRow,
 } from "@/features/payroll/server/queries";
 
-export const metadata = { title: "월별 급여 — eywa" };
+export const metadata = { title: "월별 급여 — aywa" };
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 

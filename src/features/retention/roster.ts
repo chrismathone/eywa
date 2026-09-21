@@ -1,4 +1,4 @@
-// 명단 집계 — 순수(서버 전용 아님). eywa 원시 행 → 학생별 신호 → 위험 점수.
+// 명단 집계 — 순수(서버 전용 아님). aywa 원시 행 → 학생별 신호 → 위험 점수.
 // queries.ts(서버)가 Supabase에서 받은 행을 이 함수에 넘긴다. fixtures/테스트도 동일 함수 사용.
 import {
   scoreStudent,
@@ -30,7 +30,7 @@ function pct(score: number | null, max: number | null): number | null {
   if (score == null || max == null || Number(max) <= 0) return null;
   return (Number(score) / Number(max)) * 100;
 }
-// === eywa 원시 행 형태(Supabase select 결과와 동일, snake_case) ===
+// === aywa 원시 행 형태(Supabase select 결과와 동일, snake_case) ===
 export type RawStudentRow = {
   id: string;
   name: string;

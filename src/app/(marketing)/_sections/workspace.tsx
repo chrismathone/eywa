@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Reveal } from "../_motion/reveal";
 import { MockWorkspace } from "../_ui/mock-workspace";
 import { Eyebrow } from "../_ui/eyebrow";

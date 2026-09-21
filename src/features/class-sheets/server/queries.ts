@@ -233,7 +233,7 @@ export async function getClassSheetWeek(
       .select(
         // ⚠️ `classroom_id`(FK)를 **함께** 읽는다 — 라벨(`slot_room_label`)은 시트가 적은 대로라
         //    같은 방이 `305`·`본원305` 두 표기로 들어 있다(실측 2026-09-04: 유효 슬롯 209건이
-        //    접두 없는 표기). eywa 기준은 **등록된 강의실 이름**이라 FK가 먼저다.
+        //    접두 없는 표기). aywa 기준은 **등록된 강의실 이름**이라 FK가 먼저다.
         "day_of_week, start_time, end_time, valid_from, valid_to, teacher_id, classroom_id, slot_teacher_label, slot_room_label",
       )
       .eq("tenant_id", tenantId)
@@ -310,7 +310,7 @@ export async function getClassSheetWeek(
     // 교시 체크(Shouting, 0230a). ⚠️ **에러를 일부러 삼킨다**(아래 에러 게이트 목록에도 안 넣는다) —
     // 마이그레이션보다 앱이 먼저 배포되면 표가 없어 400이 나는데, 그때 시트 전체가 안 열리면 안 된다([[#95]]).
     // 표가 생긴 뒤엔 정상 조회된다. 체크가 잠깐 안 보이는 것과 반 시트가 통째로 죽는 것은 급이 다르다.
-    // 등록된 강의실(id→이름) — 라벨을 eywa 기준 이름으로 맞추는 근거. 보관된 방도 포함해서 읽는다
+    // 등록된 강의실(id→이름) — 라벨을 aywa 기준 이름으로 맞추는 근거. 보관된 방도 포함해서 읽는다
     // (지난 주 시트가 그 방을 가리킬 수 있고, 이름을 못 찾으면 라벨이 그대로 나온다).
     admin.from("classrooms").select("id, name").eq("tenant_id", tenantId),
     admin

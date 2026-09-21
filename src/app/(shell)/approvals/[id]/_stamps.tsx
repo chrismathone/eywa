@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { TurnChip } from "./_decide-panel";
 import type { ApprovalDocRow, ApprovalStepCell } from "@/features/approvals/server/queries";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";

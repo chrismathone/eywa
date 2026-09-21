@@ -20,9 +20,9 @@ const M: JjMembership = {
   ]),
 };
 
-type Row = { eywa: { studentId: string; name: string } | null; ijwId: string; score: number };
+type Row = { aywa: { studentId: string; name: string } | null; ijwId: string; score: number };
 const row = (ijwId: string, studentId: string | null, name: string, score = 50): Row => ({
-  eywa: studentId ? { studentId, name } : null,
+  aywa: studentId ? { studentId, name } : null,
   ijwId,
   score,
 });
@@ -32,7 +32,7 @@ const ROWS: Row[] = [
   row("x1", "s1", "가온", 80),
   row("xz", null, "zz", 40),
 ];
-const nameOf = (r: Row) => r.eywa?.name ?? r.ijwId;
+const nameOf = (r: Row) => r.aywa?.name ?? r.ijwId;
 
 describe("groupRowsByClass", () => {
   it("반(이름순) → 영어 반 없음 → 연결 필요 · 두 반 학생은 두 반 모두에", () => {

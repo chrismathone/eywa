@@ -7,7 +7,7 @@
  * 받는 곳: 학교알리미(schoolinfo.go.kr) → 공시정보 → 학년별·학급별 학생수 → 시도교육청·학교급별 CSV.
  * ⚠️ 공공데이터포털 15106331은 **링크형**이라 파일이 없다(원본 사이트로 넘길 뿐).
  *
- * 실행(eywa 루트에서):
+ * 실행(aywa 루트에서):
  *   node --env-file=.env.local scripts/_poc_migration/import-school-enrollment.cjs --dir "C:/Users/user/Downloads"
  *   node --env-file=.env.local scripts/_poc_migration/import-school-enrollment.cjs --dir "..." --apply
  *

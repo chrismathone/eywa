@@ -7,7 +7,7 @@
 
 ## 1. 문제
 
-eywa가 매달 쓰는 외부 서비스 비용(Vercel·Supabase·AI·전사 API)이 **어디에도 기록되지 않는다.** 두 가지가 문제:
+aywa가 매달 쓰는 외부 서비스 비용(Vercel·Supabase·AI·전사 API)이 **어디에도 기록되지 않는다.** 두 가지가 문제:
 
 1. **선불 키가 소진되면 예고 없이 기능이 죽는다.** 전사(AssemblyAI) 크레딧이 0이 되면 회의록·등록상담·재원생 상담 분석이 전부 멈춘다. 지금은 터지고 나서야 안다.
 2. **후불 요금이 조용히 커진다.** Vercel은 자동결제라 멈추진 않지만, 대역폭이 튀면 그대로 청구된다.
@@ -37,7 +37,7 @@ AI 호출 내역(`ai_usage_logs`, 30일): daily_briefing 24회 · assistant_chat
 
 ### 3-1. 배치 = super-admin, 학원설정 아님
 
-인프라 요금은 학원 데이터가 아니라 **eywa 플랫폼 운영비**다. `/owner`(학원설정)는 `tenant_settings`에 저장되는 테넌트 단위라, 여기 넣으면 멀티테넌트가 됐을 때 **다른 학원 원장이 우리 청구서를 보게 된다.**
+인프라 요금은 학원 데이터가 아니라 **aywa 플랫폼 운영비**다. `/owner`(학원설정)는 `tenant_settings`에 저장되는 테넌트 단위라, 여기 넣으면 멀티테넌트가 됐을 때 **다른 학원 원장이 우리 청구서를 보게 된다.**
 
 실측: `super_admins` = `st2000423` 1명, `tenants` = 1개(injaewon). 즉 지금은 super-admin에 둬도 접근성 차이가 0이고, 멀티테넌트가 되는 순간 저절로 올바르게 격리된다. 이미 `(super-admin)/super-admin/` 라우트 그룹과 SaaS 대시보드가 있으니 그 옆에 붙이면 된다.
 
@@ -58,7 +58,7 @@ AI 호출 내역(`ai_usage_logs`, 30일): daily_briefing 24회 · assistant_chat
 
 ### 3-3. 잔액은 하이브리드 (API + 수동 기록)
 
-잔액 API가 있는 건 **DeepSeek 하나뿐**이다. 그래서 기본 경로는 **"충전 기록 수동 입력 → eywa가 실사용을 차감"**:
+잔액 API가 있는 건 **DeepSeek 하나뿐**이다. 그래서 기본 경로는 **"충전 기록 수동 입력 → aywa가 실사용을 차감"**:
 
 ```
 잔액 = (가장 최근 observed 금액) + (그 이후 topup 합) − (그 이후 실사용 소비)
@@ -156,7 +156,7 @@ unique (vendor_key, event_type, bucket)
 
 ### Vercel 예산 웹훅 (자동결제 감시)
 
-Vercel은 후불 자동결제라 예산 도달을 이메일로만 알린다. 웹훅으로 받으면 eywa 안에서 처리할 수 있다.
+Vercel은 후불 자동결제라 예산 도달을 이메일로만 알린다. 웹훅으로 받으면 aywa 안에서 처리할 수 있다.
 
 - 발화 시점: spend amount의 **50% / 75% / 100%** 도달 시 + 결제 주기 종료 시
 - 페이로드: `{budgetAmount, currentSpend, teamId, thresholdPercent}` / `{teamId, type: "endOfBillingCycle"}`
@@ -183,7 +183,7 @@ Vercel은 후불 자동결제라 예산 도달을 이메일로만 알린다. 웹
 
 ## 7. 보안 주의
 
-**Anthropic Admin 키(`sk-ant-admin…`)와 Supabase PAT는 조직 전체 권한**을 가진 자격증명이다. eywa DB에 넣지 말고 Vercel 환경변수로만 두고, 가능한 provider는 읽기 전용 스코프를 쓸 것. DeepSeek 잔액 조회는 일반 키로 되니 그건 문제없다.
+**Anthropic Admin 키(`sk-ant-admin…`)와 Supabase PAT는 조직 전체 권한**을 가진 자격증명이다. aywa DB에 넣지 말고 Vercel 환경변수로만 두고, 가능한 provider는 읽기 전용 스코프를 쓸 것. DeepSeek 잔액 조회는 일반 키로 되니 그건 문제없다.
 
 ## 8. 코드 위치
 

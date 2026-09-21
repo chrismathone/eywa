@@ -21,7 +21,7 @@ describe("미작성 보고서 신호가 과목 축을 지난다", () => {
 
   it("축은 학원설정 report.classnoteSubjects다(코드에 과목명을 박지 않는다)", () => {
     expect(signals).toMatch(/st\.report\.classnoteSubjects \?\? null/);
-    // 🔴 'english'를 코드에 박으면 영어를 eywa로 옮길 때 이 파일을 고쳐야 한다 — 설정으로만 정한다.
+    // 🔴 'english'를 코드에 박으면 영어를 aywa로 옮길 때 이 파일을 고쳐야 한다 — 설정으로만 정한다.
     expect(rule).not.toContain('"english"');
     expect(signals).not.toMatch(/isReportTrackedSubject\([^)]*"english"/);
   });

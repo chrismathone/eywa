@@ -1,5 +1,5 @@
 /**
- * 수업보고서 **회수** 워커 — eywa가 `recall_requested`로 표시한 보고서의 ClassNote 학부모 게시글을 삭제한다.
+ * 수업보고서 **회수** 워커 — aywa가 `recall_requested`로 표시한 보고서의 ClassNote 학부모 게시글을 삭제한다.
  *
  * 왜 워커인가: ClassNote 삭제는 로그인 세션이 필요해 Vercel에선 불가(발송·반 공지 회수와 같은 구조).
  * 앱은 `classnote_status='recall_requested'` + `revoked_at`(링크 즉시 차단)까지만 하고, 실제 글 삭제는 여기서.

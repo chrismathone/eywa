@@ -1,24 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MENU_KEYS } from "@/lib/permissions";
-import { Loader2, Trash2 } from "./eywa-icon-compat";
-import { EYWA_ICON_CATALOG, EyIcon, MENU_ICON } from "./eywa-icons";
+import { Loader2, Trash2 } from "./aywa-icon-compat";
+import { AYWA_ICON_CATALOG, EyIcon, MENU_ICON } from "./aywa-icons";
 
-describe("Eywa icon system", () => {
+describe("Aywa icon system", () => {
   it("renders every catalog entry as an accessible labelled image", () => {
     render(
       <>
-        {EYWA_ICON_CATALOG.map((icon) => (
+        {AYWA_ICON_CATALOG.map((icon) => (
           <EyIcon key={icon.name} name={icon.name} aria-label={icon.label} />
         ))}
       </>,
     );
 
     const icons = screen.getAllByRole("img");
-    expect(icons).toHaveLength(EYWA_ICON_CATALOG.length);
-    for (const icon of EYWA_ICON_CATALOG) {
+    expect(icons).toHaveLength(AYWA_ICON_CATALOG.length);
+    for (const icon of AYWA_ICON_CATALOG) {
       const svg = screen.getByLabelText(icon.label);
-      expect(svg.getAttribute("data-eywa-icon")).toBe(icon.name);
+      expect(svg.getAttribute("data-aywa-icon")).toBe(icon.name);
       expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
     }
   });
@@ -31,8 +31,8 @@ describe("Eywa icon system", () => {
     expect(svg?.getAttribute("focusable")).toBe("false");
   });
 
-  it("assigns a registered Eywa icon to every menu key", () => {
-    const registeredNames = new Set(EYWA_ICON_CATALOG.map((icon) => icon.name));
+  it("assigns a registered Aywa icon to every menu key", () => {
+    const registeredNames = new Set(AYWA_ICON_CATALOG.map((icon) => icon.name));
 
     expect(Object.keys(MENU_ICON)).toHaveLength(MENU_KEYS.length);
     for (const menuKey of MENU_KEYS) {
@@ -40,7 +40,7 @@ describe("Eywa icon system", () => {
     }
   });
 
-  it("keeps the legacy component contract while rendering Eywa glyphs", () => {
+  it("keeps the legacy component contract while rendering Aywa glyphs", () => {
     const { container } = render(
       <>
         <Trash2 aria-label="삭제 아이콘" size={16} className="size-4" />
@@ -49,9 +49,9 @@ describe("Eywa icon system", () => {
     );
 
     const [trash, loader] = Array.from(container.querySelectorAll("svg"));
-    expect(trash.getAttribute("data-eywa-icon")).toBe("trash");
+    expect(trash.getAttribute("data-aywa-icon")).toBe("trash");
     expect(trash.getAttribute("width")).toBe("16");
-    expect(loader.getAttribute("data-eywa-icon")).toBe("loader");
+    expect(loader.getAttribute("data-aywa-icon")).toBe("loader");
     expect(loader.getAttribute("stroke-width")).toBe("4");
   });
 });

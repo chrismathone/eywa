@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { EyIcon, MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Button } from "@/components/ui/button";
 import { switchToAdminView } from "@/features/shell/view-actions";
@@ -31,7 +31,7 @@ import type { SheetDictKey } from "@/features/teacher-view/i18n";
 // 🔴 라벨은 **사전 키**다(한국어 원문은 [i18n.ts](@/features/teacher-view/i18n) 한 곳) — 여기에 문자열을
 //    다시 적으면 한/영이 갈린다. 키는 `menu.item.<menuKey>`가 원칙이고, 같은 menuKey를 두 줄이 쓰는
 //    출결 모드만 `menu.item.attendanceQuick`으로 구분한다.
-const LINKS: { href: string; labelKey: SheetDictKey; icon: EywaIconName; menu: MenuKey }[] = [
+const LINKS: { href: string; labelKey: SheetDictKey; icon: AywaIconName; menu: MenuKey }[] = [
   // 출결 모드(2026-08-20) — 내 반 오늘 출결만 터치 몇 번으로. 원장 지시: 원스크린 상단 바에만 두니
   //   *"완전 안보인다"* → 강사의 주 진입로인 이 드롭다운에도 올린다(홈 바로 아래).
   //   ⚠️ 권한 키는 출석부와 같은 `attendance` — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS 누락으로 잠긴다.

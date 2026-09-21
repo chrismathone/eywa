@@ -1,4 +1,4 @@
-import { FileText } from "@/components/icons/eywa-icon-compat";
+import { FileText } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { SearchToggle } from "@/components/search-toggle";
 import { Pagination } from "@/components/pagination";

@@ -12,7 +12,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MENU_ICON } from "@/components/icons/eywa-icons";
+import { MENU_ICON } from "@/components/icons/aywa-icons";
 import { MENU_ACCESS, MENU_KEYS, MENU_LABEL, canAccess, canWrite, menuKeyForPath } from "@/lib/permissions";
 import { NAV_GROUPS, SUBTABS_BY_MENU } from "@/lib/navigation";
 import { routeWindowSize } from "@/components/workspace/window-geometry";

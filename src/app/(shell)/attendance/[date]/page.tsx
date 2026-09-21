@@ -2,7 +2,7 @@ import Link from "next/link";
 // 🔴 날짜 라벨은 **KST 단일 소스**(date-kst) — 화면마다 `Intl.DateTimeFormat`을 만들면
 //    `timeZone`을 빠뜨린 곳이 런타임 시간대(서버=UTC)로 포맷된다.
 import { formatKoreanDateLong } from "@/lib/date-kst";
-import { CheckCircle2, ChevronRight, ClipboardCheck, Pencil } from "@/components/icons/eywa-icon-compat";
+import { CheckCircle2, ChevronRight, ClipboardCheck, Pencil } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -23,7 +23,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isValidYmd } from "@/lib/date-kst";
 import { AbsentStudentsView } from "./_components/absent-students-view";
 
-export const metadata = { title: "출석부 — eywa" };
+export const metadata = { title: "출석부 — aywa" };
 
 const STATUS_LABEL: Record<string, string> = {
   present: "출석",

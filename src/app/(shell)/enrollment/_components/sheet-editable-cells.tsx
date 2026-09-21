@@ -6,7 +6,7 @@ import { useRef, useState, useTransition, type KeyboardEvent, type ReactNode } f
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Pill } from "@/components/atoms/pill";
-import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import {
   BOARD_STAGE_OPTIONS,

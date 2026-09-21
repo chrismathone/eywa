@@ -1,6 +1,6 @@
 // 교시(periodId) ↔ 절대시각 변환 + 요일 한글↔enum 변환 — 순수 함수.
-// ijw `components/Timetable/constants.ts`의 PERIOD_INFO를 eywa로 이식.
-// eywa는 DB에 절대시각(start_time/end_time)만 저장하므로, 이 변환은 엑셀 import 어댑터(Phase 3)가
+// ijw `components/Timetable/constants.ts`의 PERIOD_INFO를 aywa로 이식.
+// aywa는 DB에 절대시각(start_time/end_time)만 저장하므로, 이 변환은 엑셀 import 어댑터(Phase 3)가
 // periodId→시각으로 1회 적용하는 데 쓰인다. periodLabel은 표시 전용.
 //
 // 평일: 과목별 교시표. math/highmath/science/korean = 8교시 55분(동일), english = 11교시.

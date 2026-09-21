@@ -3,8 +3,8 @@
  * 출처: D:\ijw-calander\components\Timetable\constants.ts (verbatim 발췌).
  *
  * ⚠️ KNOWN_EXCEPTION: 이는 ijw 구글시트 호환을 위한 **내보내기 포맷 상수**(화면 운영 enum 아님)다.
- * 인재원 교시 시각이 eywa defaults.ts(weekdayPeriods/weekendPeriods)와 일치해 출력이 맞는다.
- * eywa 단독 writer 전환 시 설정 도출로 reconcile(후속). CLAUDE.md "운영 enum 하드코딩 금지" 대상 아님.
+ * 인재원 교시 시각이 aywa defaults.ts(weekdayPeriods/weekendPeriods)와 일치해 출력이 맞는다.
+ * aywa 단독 writer 전환 시 설정 도출로 reconcile(후속). CLAUDE.md "운영 enum 하드코딩 금지" 대상 아님.
  */
 
 // 주말용 레거시 교시 시간 (수학 시간표 호환용)

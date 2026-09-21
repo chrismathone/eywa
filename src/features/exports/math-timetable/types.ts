@@ -1,6 +1,6 @@
 /**
  * ijw 수학 시간표 익스포터 입력 계약 타입 — D:\ijw-calander\types\{timetable,student}.ts 발췌.
- * eywa 어댑터(assemble.ts)가 이 모양으로 Supabase 데이터를 변환해 exporter.ts에 넘긴다.
+ * aywa 어댑터(assemble.ts)가 이 모양으로 Supabase 데이터를 변환해 exporter.ts에 넘긴다.
  */
 
 /** studentList 항목 — 익스포터가 상태/날짜/등원요일을 직접 읽는다(셀 분류·색·정렬). */

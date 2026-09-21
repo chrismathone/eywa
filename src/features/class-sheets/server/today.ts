@@ -34,7 +34,7 @@ import { dowKeyOf, normalizeSlotTime, YMD_RE } from "../lib/week";
 import { readEcsTodayOrder, readEcsShowSelfStudy } from "../view-prefs";
 import { viewAsTeacher } from "@/lib/auth/view-mode";
 import { DEFAULT_ECS_FONT_SIZE, readEcsFontSize, type EcsFontSize } from "../font-size";
-// 영어 알림장은 eywa가 아니라 ClassNote 반 보드에 직접 올라간다(2026-08-11 전수 검사: 35일 5,680건 중
+// 영어 알림장은 aywa가 아니라 ClassNote 반 보드에 직접 올라간다(2026-08-11 전수 검사: 35일 5,680건 중
 // 영어 lesson_reports 0건). "이 날짜에 알림장이 나갔나"의 진실은 워커가 적재하는 classnote_class_posts
 // (0140a)이고, 반↔보드 매칭은 작성률 화면과 **같은 키**(classKey/boardKey)를 쓴다 — 따로 만들면 갈린다.
 import { boardKey, classKey } from "@/features/report-admin/english-writing";
@@ -157,7 +157,7 @@ export type TodayClassCard = {
   delegated: boolean;
   /**
    * ClassNote 반 보드에 **이 날짜** 알림장이 올라왔는가(0140a classnote_class_posts, 워커 30분 주기 적재).
-   * 영어 보고서는 eywa 밖(ClassNote 직접 게시)이라 lesson_reports 기반 '보고서' 배지만으로는 영어 강사의
+   * 영어 보고서는 aywa 밖(ClassNote 직접 게시)이라 lesson_reports 기반 '보고서' 배지만으로는 영어 강사의
    * 실제 마감이 안 보인다 — 이 값이 그 현실을 배지로 잇는다.
    *
    * 3상인 이유(적대 리뷰 2026-08-11): ① 보드가 아예 없는 반(실측 2개)에 '미게시' 앰버를 달면 **지울 수

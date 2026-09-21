@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
-import { AlertCircle, Loader2, Pencil, Plus, Save, X } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2, Pencil, Plus, Save, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createExam,
@@ -167,7 +167,7 @@ function Dialog({
             </Field>
           </div>
 
-          {/* 시험 범위(scope) — 전체 / 학년 / 반. ijw ExamScope 이식(school·subject는 eywa 스키마 밖이라 제외). */}
+          {/* 시험 범위(scope) — 전체 / 학년 / 반. ijw ExamScope 이식(school·subject는 aywa 스키마 밖이라 제외). */}
           <Field label="시험 범위">
             <input type="hidden" name="scopeType" value={scopeType} />
             <input type="hidden" name="scopeClassIds" value={[...classIds].join(",")} />

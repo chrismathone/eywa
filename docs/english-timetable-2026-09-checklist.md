@@ -49,11 +49,11 @@
 - 영어를 실제로 그만두는 것이면 학생 상세에서 개별 처리가 안전
 
 ### 3. ClassNote 보드 이름 5개 — **안 바꾼다** (마감)
-영어 **작성률**은 eywa `lesson_reports`가 아니라 **ClassNote 반 보드 글**로 센다(영어 강사는 ClassNote에
+영어 **작성률**은 aywa `lesson_reports`가 아니라 **ClassNote 반 보드 글**로 센다(영어 강사는 ClassNote에
 직접 쓴다). 그런데 보드는 **이름으로** 반과 짝지어져 있어서, 9/1 개명 뒤 5개가 짝을 잃는다 —
 실측 매칭 **오늘 40/44 → 9/1 35/44**.
 
-| eywa 반 | 9/1 이름 | ClassNote 보드 |
+| aywa 반 | 9/1 이름 | ClassNote 보드 |
 |---|---|---|
 | DP6 | PL1a | Dr Phonics 6 |
 | LS6 | LE1 | Let's Speak 6 |

@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/import-classes.cjs — makeedu 수업목록 → eywa `classes` **additive(ijw 정본)**.
+ * scripts/_makeedu/import-classes.cjs — makeedu 수업목록 → aywa `classes` **additive(ijw 정본)**.
  * ⚠️ ijw 반이 정본(반 색상·스케줄·담임 보유). makeedu-only 반은 생성하지 않고, 이름이 정확히 일치하는
  *    ijw 반에만 `makeedu_lesson_id`를 백필(미설정인 경우만). ijw 코드명 vs makeedu 풀네임이라 대부분 미일치(정상).
  * 입력: $MAKEEDU_OUT(기본 <repo>/.makeedu-tmp)/classes.json (scrape.cjs 산출, rows=[헤더→셀]).
@@ -55,7 +55,7 @@ function splitTeacher(s) {
       is_active: L.txt(r[ci.status]) !== "종강",
     });
   }
-  // eywa classes 유니크 (tenant, class_name, subject) — makeedu는 동명 반(섹션) 복수 허용 → (이름,과목) dedup(첫 행 유지).
+  // aywa classes 유니크 (tenant, class_name, subject) — makeedu는 동명 반(섹션) 복수 허용 → (이름,과목) dedup(첫 행 유지).
   // 학생 '수업' 컬럼도 이름만이라 섹션 구분 불가 → 이름 기준 단일 반이 매칭에 맞다.
   const seenNS = new Set();
   const rows = [];

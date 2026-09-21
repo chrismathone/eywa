@@ -5,7 +5,7 @@
 //
 // 🔴 값 판단은 서버(planMerge)만 한다. 이 컴포넌트는 계획을 그리고 **행 id만** 돌려보낸다.
 import { useEffect, useState, useTransition } from "react";
-import { AlertCircle, ArrowRight, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, ArrowRight, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";

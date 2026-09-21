@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { CalendarClock, GraduationCap, MessagesSquare, UserX } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock, GraduationCap, MessagesSquare, UserX } from "@/components/icons/aywa-icon-compat";
 import { cn } from "@/lib/utils";
 import { ColumnCards } from "./column-cards";
 import type { ConsultationListRow } from "@/features/enrollment/server/queries";

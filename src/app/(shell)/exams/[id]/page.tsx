@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { BookOpen } from "@/components/icons/eywa-icon-compat";
+import { BookOpen } from "@/components/icons/aywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";

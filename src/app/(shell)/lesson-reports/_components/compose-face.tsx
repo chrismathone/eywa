@@ -14,7 +14,7 @@ import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
 import { generateReportComment } from "@/features/onescreen/server/actions";
 import { ReportAttachments } from "@/features/onescreen/components/report-attachments";

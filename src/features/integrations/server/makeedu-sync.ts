@@ -10,7 +10,7 @@ function studentMakeeduIdOf(row: { student?: unknown }): string | null {
   return ((s as { makeedu_id?: string | null } | null | undefined)?.makeedu_id ?? null) || null;
 }
 
-// makeedu → eywa 동기화 도메인(0058a makeedu_sync_state.domain).
+// makeedu → aywa 동기화 도메인(0058a makeedu_sync_state.domain).
 export type MakeeduSyncDomain =
   | "students"
   | "classes"
@@ -234,7 +234,7 @@ export type MakeeduAutoSyncStatus = {
   lastSyncedAt: string | null;
 };
 
-// ───────── 역동기화(eywa→makeedu) — QR 공개접수 상담 푸시 ─────────
+// ───────── 역동기화(aywa→makeedu) — QR 공개접수 상담 푸시 ─────────
 
 export type UnpushedIntakeConsultation = {
   id: string;

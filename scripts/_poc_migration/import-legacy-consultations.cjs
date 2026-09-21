@@ -1,13 +1,13 @@
 /**
- * 옛 콜앤상담 구글시트(xlsx) → eywa enrollment_consultations 이관. (2026-08-04, 0177a와 짝)
+ * 옛 콜앤상담 구글시트(xlsx) → aywa enrollment_consultations 이관. (2026-08-04, 0177a와 짝)
  *
- * 배경: 콜앤상담 기록이 워크북 2개 + 구글폼 + 노션에 흩어져 있었고, eywa는 2024-06~2025-09가 통째로
+ * 배경: 콜앤상담 기록이 워크북 2개 + 구글폼 + 노션에 흩어져 있었고, aywa는 2024-06~2025-09가 통째로
  * 비어 있었다(makeedu 이관분이 2024-05에서 끊김). 목적은 "이달 상담 몇 건 / 작년 대비" 지표라
  * 지표에 쓰이는 필드만 가져온다(신규콜 1주·4주·출석·셔틀비·교재비 등은 소비처가 없어 일부러 제외).
  *
  * ⚠️ 데이터 파일은 리포에 안 넣는다(학생 이름·전화번호 = PII). xlsx 경로를 인자로 준다.
  *
- * 실행(eywa 루트에서):
+ * 실행(aywa 루트에서):
  *   node --env-file=.env.local scripts/_poc_migration/import-legacy-consultations.cjs --xlsx "D:/tmp/s1.xlsx,D:/tmp/s2.xlsx"
  *   node --env-file=.env.local scripts/_poc_migration/import-legacy-consultations.cjs --xlsx "..." --apply
  *
@@ -429,7 +429,7 @@ async function main() {
       if (t.length >= 8 && exNamePhone.has(`${nName(r.name)}|${t}`)) { skip.namePhone++; return false; }
       return true;
     });
-    console.log(`eywa 기존 ${existing.length}행 대조 → 건너뜀 ${skip.key}(이관済) + ${skip.monthName}(같은달·같은이름) + ${skip.namePhone}(이름+전화)`);
+    console.log(`aywa 기존 ${existing.length}행 대조 → 건너뜀 ${skip.key}(이관済) + ${skip.monthName}(같은달·같은이름) + ${skip.namePhone}(이름+전화)`);
     console.log(`▶ 이관 대상 ${fresh.length}행\n`);
 
     const rows = fresh.map((r) => {

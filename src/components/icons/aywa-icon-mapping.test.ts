@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { EYWA_ICON_COMPAT_MAP } from "./eywa-icon-compat";
-import { EYWA_ICON_CATALOG, MENU_ICON } from "./eywa-icons";
+import { AYWA_ICON_COMPAT_MAP } from "./aywa-icon-compat";
+import { AYWA_ICON_CATALOG, MENU_ICON } from "./aywa-icons";
 
-const COMPAT_MODULE = "@/components/icons/eywa-icon-compat";
+const COMPAT_MODULE = "@/components/icons/aywa-icon-compat";
 const FORBIDDEN_NATURE_ICONS = new Set([
   "tree",
   "leaf",
@@ -190,18 +190,18 @@ function inlineSvgFiles(): string[] {
     // (2026-09-15: 진도맵 `map-state.test.tsx`가 걸려 main이 빨갰다).
     // 이름 규칙 셋을 다 본다 — `.test.`만 빼면 다음에 `.spec.`이나 `__tests__/`로 들어온 픽스처에 또 빨개진다.
     .filter((file) => !/(\.(test|spec|stories)\.|[\\/]__tests__[\\/])/.test(file))
-    .filter((file) => path.basename(file) !== "eywa-icons.tsx")
+    .filter((file) => path.basename(file) !== "aywa-icons.tsx")
     .filter((file) => fs.readFileSync(file, "utf8").includes("<svg"))
     .map((file) => path.relative(process.cwd(), file).replaceAll("\\", "/"))
     .sort();
 }
 
-describe("Eywa icon compatibility mapping", () => {
+describe("Aywa icon compatibility mapping", () => {
   it(
     "maps every compatibility import exactly once without unused aliases",
     () => {
       const imported = importedCompatIcons();
-      const mapped = new Set(Object.keys(EYWA_ICON_COMPAT_MAP));
+      const mapped = new Set(Object.keys(AYWA_ICON_COMPAT_MAP));
 
       expect(mapped).toEqual(imported);
       // 절대 개수 트립와이어(위 toEqual과 별개로 대량 유실을 잡는다). 별칭을 의도적으로 늘리거나
@@ -215,17 +215,17 @@ describe("Eywa icon compatibility mapping", () => {
     60_000,
   );
 
-  it("maps every compatibility name to a registered Eywa glyph", () => {
-    const registered = new Set(EYWA_ICON_CATALOG.map((icon) => icon.name));
+  it("maps every compatibility name to a registered Aywa glyph", () => {
+    const registered = new Set(AYWA_ICON_CATALOG.map((icon) => icon.name));
 
-    for (const target of Object.values(EYWA_ICON_COMPAT_MAP)) {
+    for (const target of Object.values(AYWA_ICON_COMPAT_MAP)) {
       expect(registered.has(target)).toBe(true);
     }
   });
 
   it("does not register or map botanical metaphors", () => {
-    const registered = EYWA_ICON_CATALOG.map((icon) => icon.name);
-    const compatTargets = Object.values(EYWA_ICON_COMPAT_MAP);
+    const registered = AYWA_ICON_CATALOG.map((icon) => icon.name);
+    const compatTargets = Object.values(AYWA_ICON_COMPAT_MAP);
     const menuTargets = Object.values(MENU_ICON);
 
     expect(registered.filter((name) => FORBIDDEN_NATURE_ICONS.has(name))).toEqual([]);

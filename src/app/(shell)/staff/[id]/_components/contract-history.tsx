@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useActionState } from "react";
 import { toast } from "sonner";
-import { Loader2, Pencil, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Pencil, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   deleteStaffContract,

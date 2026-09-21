@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImageDown, Loader2, Printer, X } from "@/components/icons/eywa-icon-compat";
+import { ImageDown, Loader2, Printer, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import type { TextbookOrderDetail } from "@/features/billing/server/textbook-queries";

@@ -6,7 +6,7 @@ import { getStudentById } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../../_components/student-form";
 
-export const metadata = { title: "학생 수정 — eywa" };
+export const metadata = { title: "학생 수정 — aywa" };
 
 export default async function EditStudentPage({
   params,

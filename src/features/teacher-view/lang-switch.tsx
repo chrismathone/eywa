@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { SHEET_LANGS, SHEET_LANG_LABEL, sheetT, type SheetLang } from "./i18n";
 import { useSheetLang } from "./lang-context";
 import { setMyTeacherLang } from "./server/actions";

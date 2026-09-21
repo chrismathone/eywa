@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useRouter } from "next/navigation";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Toolbar } from "@/components/toolbar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -227,7 +227,7 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
 }
 
 function Metric({ icon, label, value, unit, note, tone = "blue", help, onClick, active, disabled }: {
-  icon: EywaIconName; label: string; value: string; unit: string; note: string; tone?: string; help?: string;
+  icon: AywaIconName; label: string; value: string; unit: string; note: string; tone?: string; help?: string;
   onClick?: () => void; active?: boolean; disabled?: boolean;
 }) {
   const content = <><span className={styles.metricIcon}><EyIcon name={icon} size={21} /></span><div><span className={styles.metricLabel}>{label}</span><div className={styles.metricValue}>{value}<small>{unit}</small></div></div><span className={styles.metricNote}>{note}</span></>;

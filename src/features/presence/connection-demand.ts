@@ -1,7 +1,7 @@
 /**
  * presence Realtime 채널의 **연결 수요(demand) 카운터** — 순수 로직(Vitest).
  *
- * 배경(2026-07-29 성능 감사): `EditPresenceProvider`가 마운트되자마자 무조건 채널을 열었다. eywa는
+ * 배경(2026-07-29 성능 감사): `EditPresenceProvider`가 마운트되자마자 무조건 채널을 열었다. aywa는
  * 메뉴=창=독립 iframe document라 **창을 열 때마다 WebSocket이 하나씩** 늘었고, 그 창이 presence를
  * 전혀 안 쓰는 화면(시간표·출석부·수납 등)이어도 마찬가지였다.
  *

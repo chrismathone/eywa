@@ -65,7 +65,7 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             hint="사이드바 로고 텍스트"
             value={p.logoText}
             onChange={(v) => set({ logoText: v })}
-            placeholder="EYWA"
+            placeholder="AYWA"
           />
           <ColorField
             label="브랜드 색상"

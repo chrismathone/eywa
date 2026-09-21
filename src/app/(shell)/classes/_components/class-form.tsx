@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createClass,

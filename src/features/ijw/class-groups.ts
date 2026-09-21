@@ -1,8 +1,8 @@
 /**
- * 인재원 자료를 **eywa 반**으로 묶는 순수 판정(Vitest로 잠금) — 학생별·반별을 한 화면에서 오가게(사용자 2026-09-11:
+ * 인재원 자료를 **aywa 반**으로 묶는 순수 판정(Vitest로 잠금) — 학생별·반별을 한 화면에서 오가게(사용자 2026-09-11:
  * *"이게 학생별 반별 이렇게 있자나 유기적으로 잘 사용할 수 있도록 해주고"*).
  *
- * 🔑 반은 **인재원 반 이름(className)이 아니라 eywa 반**이다 — 인재원 반은 eywa 반과 1:1이 아니다(테스터 그룹·A반 등).
+ * 🔑 반은 **인재원 반 이름(className)이 아니라 aywa 반**이다 — 인재원 반은 aywa 반과 1:1이 아니다(테스터 그룹·A반 등).
  *    그래서 짝이 걸린 학생의 **지금 다니는 영어 반**(수강)으로 묶는다. 재료 조회는 server/queries.ts `loadJjMembership`.
  * 🔴 한 학생이 영어 반 둘을 다니면 **두 반 모두에** 선다(반마다 그 반 아이들의 합계라서) — 화면이 그 사실을 적는다.
  * ⚠️ 짝은 있는데 지금 영어 반이 없으면 '영어 반 없음', 짝이 없으면 '연결 필요'(관리자만) — 뭉쳐서 사라지지 않게.
@@ -14,21 +14,21 @@ export type JjClassRef = { id: string; name: string; track: JjTrack };
 export type JjMembership = {
   /** 지금 도는 영어 반(이름순). */
   classes: readonly JjClassRef[];
-  /** eywa 학생 id → 지금 다니는 영어 반 id들. */
+  /** aywa 학생 id → 지금 다니는 영어 반 id들. */
   classIdsByStudent: ReadonlyMap<string, readonly string[]>;
 };
 
 export type JjGroupKind = "class" | "none" | "unlinked";
 export type JjGroup<Row> = { key: string; kind: JjGroupKind; classRef: JjClassRef | null; rows: Row[] };
 
-type LinkedRow = { eywa: { studentId: string; name: string } | null };
+type LinkedRow = { aywa: { studentId: string; name: string } | null };
 
 const byKo = (a: string, b: string) => a.localeCompare(b, "ko");
 
-/** 이 행의 eywa 영어 반(반 이름순). 짝이 없으면 빈 배열. */
+/** 이 행의 aywa 영어 반(반 이름순). 짝이 없으면 빈 배열. */
 export function classRefsOfRow(row: LinkedRow, m: JjMembership): JjClassRef[] {
-  if (!row.eywa) return [];
-  const ids = new Set(m.classIdsByStudent.get(row.eywa.studentId) ?? []);
+  if (!row.aywa) return [];
+  const ids = new Set(m.classIdsByStudent.get(row.aywa.studentId) ?? []);
   return m.classes.filter((c) => ids.has(c.id));
 }
 
@@ -53,7 +53,7 @@ export function groupRowsByClass<Row extends LinkedRow>(
   const none: Row[] = [];
   const unlinked: Row[] = [];
   for (const r of rows) {
-    if (!r.eywa) {
+    if (!r.aywa) {
       if (opts.includeUnlinked) unlinked.push(r);
       continue;
     }
@@ -75,10 +75,10 @@ export function hasMultiClassStudent(groups: readonly JjGroup<LinkedRow>[]): boo
   for (const g of groups) {
     if (g.kind !== "class") continue;
     for (const r of g.rows) {
-      if (!r.eywa) continue;
-      if (seen.has(r.eywa.studentId)) return true;
+      if (!r.aywa) continue;
+      if (seen.has(r.aywa.studentId)) return true;
     }
-    for (const r of g.rows) if (r.eywa) seen.add(r.eywa.studentId);
+    for (const r of g.rows) if (r.aywa) seen.add(r.aywa.studentId);
   }
   return false;
 }

@@ -5,7 +5,7 @@ import { getMonthPlanPrint } from "@/features/class-sheets/server/month-plan-pri
 import { MonthPlanPaper } from "./month-plan-paper";
 import { MpFitToPage } from "./fit-to-page";
 
-export const metadata: Metadata = { title: "월간 계획서 인쇄 — eywa" };
+export const metadata: Metadata = { title: "월간 계획서 인쇄 — aywa" };
 
 /**
  * EiE **월간 계획서(MP)** 인쇄 — 학부모 배포용 **A4 한 장**(원장 2026-09-21 *"한페이지에 딱 들어오게"*).

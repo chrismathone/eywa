@@ -14,7 +14,7 @@ import { JJ_SCOPE_FAILED, JjFailBanner } from "../../../_components/jj-shared";
  *    (getJjAttempt). 남의 학생·없는 응시는 같은 404(주소를 직접 쳐도 같은 답, #77).
  * ⚠️ 인재원 호출(최대 8초)이 창 첫 페인트를 막지 않게 loading.tsx가 먼저 선다(B7).
  */
-export const metadata = { title: "JJ실 시험 결과지 — eywa" };
+export const metadata = { title: "JJ실 시험 결과지 — aywa" };
 
 export default async function JjAttemptPage({ params }: { params: Promise<{ attemptId: string }> }) {
   const user = await requireAccess("exams");
@@ -26,17 +26,17 @@ export default async function JjAttemptPage({ params }: { params: Promise<{ atte
   const res = await getJjAttempt(viewer, attemptId);
   if (res.state === "missing") notFound();
   if (res.state === "error") return <JjFailBanner message={res.failure.message} detail={res.failure.detail} />;
-  const { exam, eywa } = res;
+  const { exam, aywa } = res;
   return (
     <div className="space-y-4">
       <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-        {eywa ? (
+        {aywa ? (
           <WindowLink
-            href={`/students/${eywa.studentId}?tab=grades`}
-            title={eywa.name}
+            href={`/students/${aywa.studentId}?tab=grades`}
+            title={aywa.name}
             className="text-primary font-bold hover:underline"
           >
-            {eywa.name} 학생 상세
+            {aywa.name} 학생 상세
           </WindowLink>
         ) : (
           <span className="text-foreground font-bold">{exam.student.name || exam.student.id}</span>

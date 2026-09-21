@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowRight, Check, Loader2, Minus, Plus, RotateCcw, Sheet, UserMinus, UserPlus, X } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, ArrowRight, Check, Loader2, Minus, Plus, RotateCcw, Sheet, UserMinus, UserPlus, X } from "@/components/icons/aywa-icon-compat";
 import {
   applyStructureImport,
   previewStructureImport,

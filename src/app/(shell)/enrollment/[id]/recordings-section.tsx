@@ -1,4 +1,4 @@
-import { Loader2, Mic } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Mic } from "@/components/icons/aywa-icon-compat";
 import { TranscriptSection } from "@/components/transcript-section";
 import { sanitizeErrorText } from "@/lib/text/sanitize-error";
 import type { ConsultationRecordingRow } from "@/features/enrollment/server/queries";

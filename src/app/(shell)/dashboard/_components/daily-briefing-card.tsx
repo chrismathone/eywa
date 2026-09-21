@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { DailyBriefingRow } from "@/features/dashboard/server/briefing";
 import { buildFallbackTeamReport, type TeamReport } from "@/features/dashboard/briefing-team-report";

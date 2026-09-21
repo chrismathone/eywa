@@ -1,7 +1,7 @@
 /**
  * 인재원 학습 프로그램(MemoType, D:\anki-main) **읽기 API 계약** — 순수 모듈(Vitest로 잠금).
  *
- * 사용자 2026-09-10: 영어 단어시험·평소 학습 데이터는 인재원이 갖고 있고 eywa는 **필요할 때 요청**한다(pull).
+ * 사용자 2026-09-10: 영어 단어시험·평소 학습 데이터는 인재원이 갖고 있고 aywa는 **필요할 때 요청**한다(pull).
  * 설명서 = `D:\anki-main\memotype\docs\EYWA-API.md`(v1). 여기엔 DB를 안 만지는 부분만 둔다 — 응답 모양 검사,
  * 한글 표기 도우미, 오류 문구. 서버 호출은 `server/client.ts`, 기간 정리는 `range.ts`.
  *
@@ -138,7 +138,7 @@ export type IjwDeckResult = z.infer<typeof DeckResult>;
 export type IjwStudySummaryRow = z.infer<typeof StudySummaryRow>;
 export type IjwDay = z.infer<typeof IJW_SCHEMAS.day>;
 
-/** 호출 실패의 종류 — 화면 문구가 원인을 단정하지 않도록 나눈다(eywa 설정 없음 ≠ 인재원 설정 없음 ≠ 서버 꺼짐 ≠ 키 틀림). */
+/** 호출 실패의 종류 — 화면 문구가 원인을 단정하지 않도록 나눈다(aywa 설정 없음 ≠ 인재원 설정 없음 ≠ 서버 꺼짐 ≠ 키 틀림). */
 export type IjwFailKind =
   | "not_configured"
   | "remote_not_configured"
@@ -159,11 +159,11 @@ export const IJW_FAIL_TEXT: Record<IjwFailKind, string> = {
   unreachable: "인재원 서버에 연결하지 못했습니다. 잠시 후 다시 열어 주세요.",
   bad_response: "인재원 응답을 읽지 못했습니다(형식이 바뀌었을 수 있습니다).",
   server: "인재원 서버에서 오류가 났습니다. 잠시 후 다시 열어 주세요.",
-  local: "eywa에서 학생 연결 정보를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.",
+  local: "aywa에서 학생 연결 정보를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.",
 };
 
 /**
- * HTTP 상태 → 실패 종류(설명서 ②). 🔴 503을 무조건 '설정 안 됨'으로 읽지 않는다 — eywa 쪽 설정이 없을 때와
+ * HTTP 상태 → 실패 종류(설명서 ②). 🔴 503을 무조건 '설정 안 됨'으로 읽지 않는다 — aywa 쪽 설정이 없을 때와
  * 같은 문장이 떠 어느 쪽을 고쳐야 할지 몰랐다. 인재원이 "키 미설정"이라고 말할 때만 인재원 쪽 설정으로 본다.
  */
 export function failKindOfStatus(status: number, bodyError = ""): IjwFailKind {

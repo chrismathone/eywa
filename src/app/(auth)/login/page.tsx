@@ -1,10 +1,10 @@
 import Image from "next/image";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { LoginForm } from "./login-form";
 
-export const metadata = { title: "로그인 — eywa" };
+export const metadata = { title: "로그인 — aywa" };
 
 export default async function LoginPage({
   searchParams,

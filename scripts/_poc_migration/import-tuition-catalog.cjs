@@ -1,4 +1,4 @@
-// ijw 수강료 계산기 "설정" 단가표 → eywa tuition_catalog 데모 이식.
+// ijw 수강료 계산기 "설정" 단가표 → aywa tuition_catalog 데모 이식.
 // 출처: D:/ijw-calander/constants/tuitionCourses.ts(43) + tuitionExtras.ts(기타 4·할인 3).
 // 멱등: 테넌트 기존 tuition_catalog 행 삭제 후 재삽입. 사용: node scripts/_poc_migration/import-tuition-catalog.cjs [--apply]
 const fs = require("fs");

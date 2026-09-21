@@ -5,7 +5,7 @@
  * 처리한 건은 지우지 않고 아래로(#105).
  */
 import { useState, type ReactNode } from "react";
-import { CheckCircle2 } from "@/components/icons/eywa-icon-compat";
+import { CheckCircle2 } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { EmbedAnchor } from "@/components/embed-link";
 import { useSubjectMaps } from "@/features/owner/operations-context";

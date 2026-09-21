@@ -1,7 +1,7 @@
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { NewTenantForm } from "./_form";
 
-export const metadata = { title: "Super Admin · 신규 학원 발급 — eywa" };
+export const metadata = { title: "Super Admin · 신규 학원 발급 — aywa" };
 
 export default function NewTenantPage() {
   return (

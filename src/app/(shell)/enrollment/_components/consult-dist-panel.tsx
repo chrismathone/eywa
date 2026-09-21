@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { SchoolBar } from "@/features/enrollment/consultation-dist";
 import {
   SCHOOL_KINDS,

@@ -18,7 +18,7 @@ export type AttendanceRecordLike = {
   note: string | null;
   slotStart: string | null;
   seatLabel: string | null;
-  /** 그날 그 반 수업보고서를 쓴 사람(담임 아님). 없으면 안 적는다 — 영어는 eywa에 보고서를 안 쓴다. */
+  /** 그날 그 반 수업보고서를 쓴 사람(담임 아님). 없으면 안 적는다 — 영어는 aywa에 보고서를 안 쓴다. */
   reporter?: string | null;
 };
 

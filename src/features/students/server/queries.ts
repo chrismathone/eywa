@@ -1083,7 +1083,7 @@ export type StudentBillingRow = {
   dueDate: string | null;
   paidAt: string | null;
   notes: string | null;
-  // makeedu는 (학생×월×항목) 라인 단위지만 eywa는 (학생×월) 1행으로 집계 → 항목 내역은 line_items에 보존.
+  // makeedu는 (학생×월×항목) 라인 단위지만 aywa는 (학생×월) 1행으로 집계 → 항목 내역은 line_items에 보존.
   // 화면에서 "수업료" 대신 실제 항목명(강의명 등)을 펼쳐 보여주기 위해 함께 반환.
   lineItems: StudentBillingLineItem[];
 };
@@ -1552,7 +1552,7 @@ export type StudentAttendanceFull = {
   /**
    * 그날 그 반의 **수업보고서를 쓴 사람**(원장 2026-09-07 *"출결 뒤에 보고서 발송자"* · *"수학의 경우"*).
    * 🔴 담임이 아니다 — 월별 출석부 담당자 라벨과 **같은 축**(보고서 작성자)이다.
-   * 🔴 **반이 적힌 보고서만** 읽는다(`class_id`) — 영어는 eywa에 보고서를 안 써서 자연히 빈다.
+   * 🔴 **반이 적힌 보고서만** 읽는다(`class_id`) — 영어는 aywa에 보고서를 안 써서 자연히 빈다.
    *    edutrix 이관분은 반이 비어 있어(17,806건) 여기서도 빈다: 날짜만 보고 아무 행에나 붙이면
    *    수학 강사 이름이 영어 칸에 앉는다. 그 구간은 반 백필로 채우는 것이 정공법이다.
    */

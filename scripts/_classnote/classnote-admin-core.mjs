@@ -21,7 +21,7 @@ export function norm(s) {
   return (s || "").replace(/\s/g, "");
 }
 
-/** eywa 과목 키 그룹 → ClassNote 보드 prefix. 발송 화이트리스트(classnote-guard)와 동일 매핑. */
+/** aywa 과목 키 그룹 → ClassNote 보드 prefix. 발송 화이트리스트(classnote-guard)와 동일 매핑. */
 export const BOARD_GROUPS = {
   math: { label: "수학", prefix: "(수학)", subjectKeys: ["math", "subject_1"] },
   english: { label: "영어", prefix: "(영어)", subjectKeys: ["english"] },

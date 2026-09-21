@@ -41,7 +41,7 @@ export type MakeupRemovePlan = {
  * - `deleteIds` = 나머지(미발송·발송 실패·회수 완료) → 행 삭제.
  *
  * ⚠️ `success`인데 공유 토큰이 없는 행도 **발송분**이다(자동 회수만 불가) — 지우면 학부모 게시판에
- *    글이 남고 eywa엔 흔적이 0이 된다.
+ *    글이 남고 aywa엔 흔적이 0이 된다.
  */
 export function planMakeupRemoval(rows: MakeupReportRef[]): MakeupRemovePlan {
   const plan: MakeupRemovePlan = { deleteIds: [], sentIds: [], busyIds: [] };

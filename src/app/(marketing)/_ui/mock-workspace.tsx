@@ -13,8 +13,8 @@ import {
   Users,
   Wallet,
   X,
-} from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+} from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { CSSProperties, ReactNode } from "react";
 
 /**

@@ -1,6 +1,6 @@
 // 영어 레벨 파싱 + 레벨업/레벨다운 — 순수 함수. ijw `englishUtils.ts`에서 이식.
 // 레벨은 반이름 문자열에만 인코딩된다(예 "DP3", "RTT6a"): 약어 + 숫자 + 선택 접미사.
-// eywa는 별도 레벨 컬럼 없이 className으로만 판정 → 레벨업 = className UPDATE 1건.
+// aywa는 별도 레벨 컬럼 없이 className으로만 판정 → 레벨업 = className UPDATE 1건.
 
 export interface ParsedClassName {
   levelAbbr: string;

@@ -23,7 +23,7 @@ import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "수업보고서 — eywa" };
+export const metadata = { title: "수업보고서 — aywa" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다 — 직접발송 면의 자동작성

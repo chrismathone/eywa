@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { CalendarDays, Pencil, Wallet } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays, Pencil, Wallet } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -21,7 +21,7 @@ import { ClassesTab } from "./_tabs/classes-tab";
 import { ActivityLogTab } from "./_tabs/activity-log-tab";
 import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
 
-export const metadata = { title: "직원 상세 — eywa" };
+export const metadata = { title: "직원 상세 — aywa" };
 
 
 export default async function StaffDetailPage({

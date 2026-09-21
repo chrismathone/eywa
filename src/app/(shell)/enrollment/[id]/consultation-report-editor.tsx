@@ -10,7 +10,7 @@ import {
   Pencil,
   RefreshCw,
   X,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import type { ConsultationAudioReport } from "@/features/enrollment/server/queries";
 import {
   regenerateConsultationAnalysis,
@@ -21,7 +21,7 @@ import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { ConversationFlowTree } from "./conversation-flow-tree";
 import { formatCreatedAt } from "@/lib/utils";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 
@@ -32,7 +32,7 @@ import { DraftBanner } from "@/components/forms/draft-banner";
 
 type TextKey = Exclude<keyof ConsultationAudioReport, "extracted" | "conversationFlow">;
 
-const SECTIONS: { key: TextKey; label: string; icon: EywaIconName; list?: boolean }[] = [
+const SECTIONS: { key: TextKey; label: string; icon: AywaIconName; list?: boolean }[] = [
   { key: "consultationType", label: "상담 성격", icon: "messages" },
   { key: "summary", label: "상담 요약", icon: "report" },
   { key: "familyBackground", label: "가정 배경/개인 맥락", icon: "home" },

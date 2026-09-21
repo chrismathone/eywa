@@ -19,7 +19,7 @@ const rest = async (p, init) => {
   return b ? JSON.parse(b) : null;
 };
 
-const EMAIL = "test.contract@eywa.local";
+const EMAIL = "test.contract@aywa.local";
 const [u] = await rest(`users?select=id,tenant_id,display_name&email=eq.${EMAIL}`);
 if (!u) { console.log("테스트 계정 없음 — 정리할 것 없음"); process.exit(0); }
 const docs = await rest(`academy_documents?select=id,file_path&staff_user_id=eq.${u.id}`);

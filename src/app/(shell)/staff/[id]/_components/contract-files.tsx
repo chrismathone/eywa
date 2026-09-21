@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Download, Loader2, Paperclip, Trash2, Upload } from "@/components/icons/eywa-icon-compat";
+import { Download, Loader2, Paperclip, Trash2, Upload } from "@/components/icons/aywa-icon-compat";
 import { saveFileAs } from "@/lib/http/download-file";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { issueContractPdfTicket } from "@/features/staff/server/contract-extract-actions";

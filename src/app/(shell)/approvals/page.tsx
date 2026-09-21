@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { FaceTabs, type Face } from "@/components/face-tabs";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { formatSignedDays } from "@/features/leave/balance";
 import { getApprovalBoxes, getMyLeaveBalance, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
 import { DocList } from "./_components/doc-list";
 
-export const metadata = { title: "전자결재 — eywa" };
+export const metadata = { title: "전자결재 — aywa" };
 
 /**
  * 전자결재 결재함 — 원장 지시 2026-08-14: *"하이웍스 기준으로 디자인 및 기능 따서 우리 디자인에 맞게."*

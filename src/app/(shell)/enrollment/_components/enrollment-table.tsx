@@ -1,7 +1,7 @@
 "use client";
 
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
 import { RelativeTime } from "@/components/relative-time";
 import { buttonVariants } from "@/components/ui/button";

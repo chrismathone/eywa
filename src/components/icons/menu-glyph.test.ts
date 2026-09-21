@@ -40,7 +40,7 @@ describe("탭 아이콘 그림 파일", () => {
 const PENDING_GLYPH = new Set<string>(["bookText"]);
 
   it("메뉴가 쓰는 아이콘 이름은 전부 그림이 있다 — MENU_ICON + 허브 면 override", () => {
-    const icons = readFileSync(join(SRC, "components", "icons", "eywa-icons.tsx"), "utf8");
+    const icons = readFileSync(join(SRC, "components", "icons", "aywa-icons.tsx"), "utf8");
     const menuBlock = icons.slice(
       icons.indexOf("export const MENU_ICON"),
       icons.indexOf("} as const satisfies Record<MenuKey"),
@@ -64,7 +64,7 @@ const PENDING_GLYPH = new Set<string>(["bookText"]);
   });
 
   it("서로 다른 메뉴가 같은 그림을 쓰지 않는다", () => {
-    const icons = readFileSync(join(SRC, "components", "icons", "eywa-icons.tsx"), "utf8");
+    const icons = readFileSync(join(SRC, "components", "icons", "aywa-icons.tsx"), "utf8");
     const menuBlock = icons.slice(
       icons.indexOf("export const MENU_ICON"),
       icons.indexOf("} as const satisfies Record<MenuKey"),

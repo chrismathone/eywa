@@ -72,7 +72,7 @@ export async function previewStudentImport(formData: FormData): Promise<StudentI
       if (f) fieldByCol.set(col, f);
     });
     if (![...fieldByCol.values()].includes("name")) {
-      return { error: "'이름' 열을 찾을 수 없습니다 (eywa 내보내기 형식인지 확인하세요)" };
+      return { error: "'이름' 열을 찾을 수 없습니다 (aywa 내보내기 형식인지 확인하세요)" };
     }
 
     const parsed: ParsedRow[] = [];

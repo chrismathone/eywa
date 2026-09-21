@@ -1,4 +1,4 @@
-// Read-only audit: Edutrix report student names vs eywa students (exact-name match used by import/cron).
+// Read-only audit: Edutrix report student names vs aywa students (exact-name match used by import/cron).
 // Usage: node --env-file=.env.local scripts/_oneoff/audit-edutrix-student-match.cjs
 // Does NOT mutate DB.
 const { createClient } = require("@supabase/supabase-js");
@@ -59,7 +59,7 @@ const PAGE = 1000;
     if (data.length < PAGE) break;
   }
 
-  const eywa = await sql`
+  const aywa = await sql`
     select id, name, school, grade, status, name_normalized
     from students
     where tenant_id = ${TENANT}
@@ -67,7 +67,7 @@ const PAGE = 1000;
 
   const byName = new Map();
   const byNorm = new Map();
-  for (const s of eywa) {
+  for (const s of aywa) {
     if (!byName.has(s.name)) byName.set(s.name, []);
     byName.get(s.name).push(s);
     const n = (s.name_normalized || s.name.replace(/\s+/g, "")).toLowerCase();
@@ -87,7 +87,7 @@ const PAGE = 1000;
     else if (hits.length === 0) {
       const n = name.replace(/\s+/g, "").toLowerCase();
       const nh = byNorm.get(n) || [];
-      if (nh.length === 1) normOnly.push({ name, eywaName: nh[0].name, school: nh[0].school, grade: nh[0].grade });
+      if (nh.length === 1) normOnly.push({ name, aywaName: nh[0].name, school: nh[0].school, grade: nh[0].grade });
       else exact0.push({ name, reason: nh.length > 1 ? "norm-many" : "none", n: nh.length });
     } else {
       exactMany.push({
@@ -142,13 +142,13 @@ const PAGE = 1000;
   console.log("\n=== MATCH KEY (code) ===");
   console.log("import-lesson-reports.cjs + /api/cron/edutrix-sync");
   console.log("key = EXACT students.name string only (no school/grade/phone/edutrix_id)");
-  console.log("if 2+ eywa share name → report is COPIED to EVERY matching student_id (fan-out)");
+  console.log("if 2+ aywa share name → report is COPIED to EVERY matching student_id (fan-out)");
 
   console.log("\n=== COUNTS ===");
   console.log("edutrix distinct names with reports:", eduNames.length);
   console.log("edutrix report rows (name incidences):", [...eduNameCount.values()].reduce((a, b) => a + b, 0));
   console.log("edutrix students table rows:", eduStudentsAll.length);
-  console.log("eywa students (tenant):", eywa.length);
+  console.log("aywa students (tenant):", aywa.length);
   console.log("lesson_reports:", lrStats[0]);
 
   console.log("\n=== EXACT NAME MATCH (edutrix names that appear in reports) ===");
@@ -170,7 +170,7 @@ const PAGE = 1000;
     normOnly.slice(0, 20).forEach((x) => console.log(JSON.stringify({ ...x, reports: eduNameCount.get(x.name) })));
   }
 
-  console.log("\n--- AMBIGUOUS (edutrix name → 2+ eywa) ---");
+  console.log("\n--- AMBIGUOUS (edutrix name → 2+ aywa) ---");
   exactMany
     .sort((a, b) => b.count - a.count)
     .forEach((x) => {
@@ -178,7 +178,7 @@ const PAGE = 1000;
         JSON.stringify({
           name: x.name,
           edutrixReports: eduNameCount.get(x.name),
-          eywaCount: x.count,
+          aywaCount: x.count,
           students: x.students,
           eduClasses: [...(eduNameClasses.get(x.name) || [])].slice(0, 6),
         }),
@@ -211,10 +211,10 @@ const PAGE = 1000;
       .forEach(([n, c]) => console.log(JSON.stringify({ name: n, count: c })));
   }
 
-  // eywa enrolled name collisions overall
-  const eywaDup = [...byName.entries()].filter(([, arr]) => arr.length > 1);
-  const eywaDupEnrolled = eywaDup.filter(([, arr]) => arr.some((s) => s.status === "enrolled"));
-  console.log("\neywa names with 2+ students:", eywaDup.length, "(with ≥1 enrolled:", eywaDupEnrolled.length + ")");
+  // aywa enrolled name collisions overall
+  const aywaDup = [...byName.entries()].filter(([, arr]) => arr.length > 1);
+  const aywaDupEnrolled = aywaDup.filter(([, arr]) => arr.some((s) => s.status === "enrolled"));
+  console.log("\naywa names with 2+ students:", aywaDup.length, "(with ≥1 enrolled:", aywaDupEnrolled.length + ")");
 
   await sql.end();
 })().catch((e) => {

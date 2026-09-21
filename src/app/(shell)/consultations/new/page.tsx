@@ -6,7 +6,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { ConsultationForm } from "../_components/consultation-form";
 import { AudioConsultationForm } from "../_components/audio-consultation-form";
 
-export const metadata = { title: "새 원생상담 — eywa" };
+export const metadata = { title: "새 원생상담 — aywa" };
 
 export default async function NewConsultationPage({
   searchParams,

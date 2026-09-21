@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "@/components/icons/eywa-icon-compat";
+import { Sparkles } from "@/components/icons/aywa-icon-compat";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { generateRecapSummary } from "@/features/attendance/recap/server/actions";
 import { getRecapStatus } from "@/features/attendance/recap/server/poll-actions";

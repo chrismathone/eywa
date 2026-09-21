@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "@/components/icons/eywa-icon-compat";
+import { RefreshCw } from "@/components/icons/aywa-icon-compat";
 import { getLiveRecordedCount } from "@/features/attendance/live/server/poll-actions";
 
 const POLL_MS = 20_000;

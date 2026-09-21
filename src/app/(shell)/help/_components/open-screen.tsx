@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { WindowLink, windowIdForHref } from "@/components/workspace/window-link";

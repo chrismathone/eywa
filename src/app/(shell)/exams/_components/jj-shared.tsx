@@ -29,7 +29,7 @@ export function JjLinkColumnNotice({ teacher = false }: { teacher?: boolean }) {
     <p className="border-line bg-bg-soft/60 text-text-dim rounded-2xl border px-4 py-2.5 text-xs">
       {teacher
         ? "학생 짝 칸이 아직 준비되지 않아(DB 적용 전) 담당 학생을 가려낼 수 없습니다 — 적용되면 담당 학생의 기록이 보입니다."
-        : "학생 짝 칸이 아직 준비되지 않았습니다(DB 적용 전). eywa 학생과 연결하지 않고 인재원 이름으로만 보여 줍니다."}
+        : "학생 짝 칸이 아직 준비되지 않았습니다(DB 적용 전). aywa 학생과 연결하지 않고 인재원 이름으로만 보여 줍니다."}
     </p>
   );
 }

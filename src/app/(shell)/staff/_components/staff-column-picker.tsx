@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Check, X } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronUp, Check, X } from "@/components/icons/aywa-icon-compat";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { LABEL_OF, moveColumn, normalizeOrder, STAFF_COLUMNS, type StaffColumnKey } from "@/features/staff/columns";
 import { useStaffViewPrefs } from "./staff-view-prefs";

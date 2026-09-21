@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Pencil, Plus, Trash2 } from "@/components/icons/aywa-icon-compat";
 import {
   createClassroom,
   updateClassroom,

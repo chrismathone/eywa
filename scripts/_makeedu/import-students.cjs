@@ -1,7 +1,7 @@
 /**
  * scripts/_makeedu/import-students.cjs
  *
- * makeedu 원생목록 엑셀(47컬럼) → eywa `students` **additive 동기화**(makeedu_id 외부키, 0057a).
+ * makeedu 원생목록 엑셀(47컬럼) → aywa `students` **additive 동기화**(makeedu_id 외부키, 0057a).
  * ⚠️ ijw 베이스가 정본. makeedu 학생을 (이름+학교+학년)로 ijw 학생에 매칭 → 매칭되면 makeedu_id만
  *    백필(ijw 값 절대 덮어쓰지 않음), ijw에 없는 학생만 신규 추가. dry-run도 DB를 읽어 매칭 건수를 측정.
  *
@@ -257,10 +257,10 @@ function filterRows(rows) {
       }
       toInsert.push(r);
     }
-    console.log(`\n[additive] eywa 기존 학생 ${existing.length} | makeedu(필터후) ${rows.length}`);
+    console.log(`\n[additive] aywa 기존 학생 ${existing.length} | makeedu(필터후) ${rows.length}`);
     console.log(`  이미 연결됨(재실행): ${alreadyLinked}`);
-    console.log(`  eywa 매칭 → makeedu_id 백필: ${toLink.length}`);
-    console.log(`  eywa에 없음 → 신규 추가: ${toInsert.length}`);
+    console.log(`  aywa 매칭 → makeedu_id 백필: ${toLink.length}`);
+    console.log(`  aywa에 없음 → 신규 추가: ${toInsert.length}`);
     if (skippedDup) console.log(`  활성 동일 자연키 존재(모호 미연결) → 스킵: ${skippedDup}`);
     if (toInsert.length) {
       const bySt = toInsert.reduce((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {});

@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import { SearchX } from "@/components/icons/eywa-icon-compat";
+import { SearchX } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EmbedAnchor, EmbedHiddenInput } from "@/components/embed-link";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import {
   TOOLBAR_SEARCH_BOX,
   TOOLBAR_SEG_BOX,
@@ -31,7 +31,7 @@ import { JjLinkSection } from "./_components/jj-link-section";
 import { JjSkeleton } from "./_components/jj-shared";
 import { JjStudyView } from "./_components/jj-study-view";
 
-export const metadata = { title: "성적관리 — eywa" };
+export const metadata = { title: "성적관리 — aywa" };
 
 const PAGE_SIZE = 50;
 
@@ -45,7 +45,7 @@ const TYPE_FILTERS = [
 
 /**
  * 영어 전용 보기 2개(사용자 2026-09-10) — 인재원 학습 프로그램(MemoType)의 **JJ실 학습**과 **단어시험**.
- * 기존 시험 표(exams·student_grades)와 데이터가 다르다: eywa에 저장하지 않고 매번 인재원에 묻는다(pull).
+ * 기존 시험 표(exams·student_grades)와 데이터가 다르다: aywa에 저장하지 않고 매번 인재원에 묻는다(pull).
  * 그래서 '유형' 칩에 나란히 두되 **영어일 때만** 보이고, 고르면 표 대신 JJ 화면을 그린다.
  * ⚠️ 연동이 설정된 학원(IJW_TENANT_ID)에서만 칩이 뜬다 — 다른 학원엔 "설정 안 됨"만 뜨는 빈 칩이 생기지 않게.
  * ⚠️ 강사는 담당(세 갈래 — 담임·교시 담당·위임) 반에 영어가 있을 때만(viewer.hasEnglish) — 수학만 맡은 강사에게
@@ -86,7 +86,7 @@ export default async function ExamsPage({
   const q = one(sp.q);
   const from = one(sp.from);
   const to = one(sp.to);
-  // JJ 반 칩(eywa 영어 반 id, 2026-09-11) — JJ 보기에서만 쓴다. 담당 밖·모르는 반이면 보기 쪽이 무시하고 그 사실을 적는다.
+  // JJ 반 칩(aywa 영어 반 id, 2026-09-11) — JJ 보기에서만 쓴다. 담당 밖·모르는 반이면 보기 쪽이 무시하고 그 사실을 적는다.
   const jjClass = one(sp.jjClass);
   const page = Math.max(1, Number(sp.page) || 1);
   // 플로팅 창(iframe) 안이면 주소 빌더가 embed=1을 싣는다(페이지·JJ 반 칩 — 학원 설정 감사로그 면과 같은 규칙).
@@ -267,7 +267,7 @@ export default async function ExamsPage({
       {jjMode && viewer && jjRange ? (
         <div className="space-y-4">
           {/* 인재원 호출(0.1~1초)이 첫 페인트를 막지 않게 스켈레톤을 먼저 흘린다(B7). */}
-          {/* 반 칩(eywa 영어 반)은 보기 안에 선다 — 반 목록 조회가 페이지 첫 페인트를 막지 않게(B7). */}
+          {/* 반 칩(aywa 영어 반)은 보기 안에 선다 — 반 목록 조회가 페이지 첫 페인트를 막지 않게(B7). */}
           <Suspense key={`${jjMode}:${jjRange.from}:${jjRange.to}:${jjClass}`} fallback={<JjSkeleton />}>
             {jjMode === "jj" ? (
               <JjStudyView

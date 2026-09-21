@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { XCircle } from "@/components/icons/eywa-icon-compat";
+import { XCircle } from "@/components/icons/aywa-icon-compat";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { deleteEnrollment } from "../server/actions";

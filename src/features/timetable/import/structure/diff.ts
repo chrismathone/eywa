@@ -121,7 +121,7 @@ export function computeStructureDiff(match: MatchResult, existing: ExistingSched
 
   // 5. 경고.
   for (const n of [...newClasses].sort((a, b) => a.localeCompare(b, "ko")))
-    warnings.push(`반 "${n}"은 eywa에 없음 — 생성이 필요해 적용에서 제외됩니다.`);
+    warnings.push(`반 "${n}"은 aywa에 없음 — 생성이 필요해 적용에서 제외됩니다.`);
   // 합반(같은 반·요일·시각에 강사 복수) — v1은 단일 강사 행만 정합. 첫 강사로 기입되고 나머지는 미연결(경고).
   for (const t of targetByKey.values()) {
     if (t.teachers.length > 1)

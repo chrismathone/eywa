@@ -17,7 +17,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { GripVertical } from "@/components/icons/eywa-icon-compat";
+import { GripVertical } from "@/components/icons/aywa-icon-compat";
 import { toast } from "sonner";
 import { setMyEcsLandingOrder } from "@/features/class-sheets/server/actions";
 import { useSheetT } from "@/features/teacher-view/lang-context";

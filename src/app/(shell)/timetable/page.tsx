@@ -1,6 +1,6 @@
 import { ParamLink } from "./_components/param-link";
 import { ParamSelect } from "./_components/param-select";
-import { Layers } from "@/components/icons/eywa-icon-compat";
+import { Layers } from "@/components/icons/aywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { Toolbar, ToolbarRow } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
@@ -117,7 +117,7 @@ import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
 import { buildTeacherComparator } from "@/features/timetable/lib/english-teacher-sheet";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 
-export const metadata = { title: "시간표 — eywa" };
+export const metadata = { title: "시간표 — aywa" };
 
 type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 // 전부 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).

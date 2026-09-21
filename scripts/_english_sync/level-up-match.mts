@@ -1,5 +1,5 @@
 /**
- * 영어 반 **레벨업 짝짓기** — `통합영어시간표(8월)` 명단 ↔ eywa 옛 반 수강생 **이름 겹침**으로 짝을 찾는다.
+ * 영어 반 **레벨업 짝짓기** — `통합영어시간표(8월)` 명단 ↔ aywa 옛 반 수강생 **이름 겹침**으로 짝을 찾는다.
  *
  * 왜 이름 규칙으로 안 하나: 레벨 사다리가 트랙을 넘나든다(시트 머리글 = Phonics → Pre Let's → Ready To
  * Talk → Let's Talk → Ready to Speak → Let's Speak → Let's Express → **Kopi Wang → Pre Junior** →
@@ -73,7 +73,7 @@ for (const b of uniq) {
   rosters.set(b.name, list);
 }
 
-// ── eywa 옛 반 수강생 ────────────────────────────────────────────────────────
+// ── aywa 옛 반 수강생 ────────────────────────────────────────────────────────
 const sql = postgres(process.env.DATABASE_URL!, { ssl: "require", max: 1 });
 const rows = await sql<{ class_name: string; slots: number; student: string; school: string | null; grade: string | null }[]>`
   select c.class_name,
@@ -86,19 +86,19 @@ const rows = await sql<{ class_name: string; slots: number; student: string; sch
    order by c.class_name, s.name`;
 await sql.end();
 
-const eywa = new Map<string, { names: Set<string>; slots: number }>();
+const aywa = new Map<string, { names: Set<string>; slots: number }>();
 for (const r of rows) {
-  const e = eywa.get(r.class_name) ?? { names: new Set<string>(), slots: r.slots };
+  const e = aywa.get(r.class_name) ?? { names: new Set<string>(), slots: r.slots };
   e.names.add(r.student.replace(/\s+/g, ""));
-  eywa.set(r.class_name, e);
+  aywa.set(r.class_name, e);
 }
 
 // ── 짝짓기 ───────────────────────────────────────────────────────────────────
-const orphan = [...eywa.entries()].filter(([, v]) => v.slots === 0); // 슬롯 0 = 이번에 이름이 바뀐 반
-const fresh = [...rosters.keys()].filter((n) => !eywa.has(n) || eywa.get(n)!.names.size === 0);
+const orphan = [...aywa.entries()].filter(([, v]) => v.slots === 0); // 슬롯 0 = 이번에 이름이 바뀐 반
+const fresh = [...rosters.keys()].filter((n) => !aywa.has(n) || aywa.get(n)!.names.size === 0);
 
 console.log(`시트 반 블록 ${uniq.length}개 · 명단 있는 반 ${[...rosters.values()].filter((l) => l.length).length}개`);
-console.log(`eywa 슬롯 0인 반(=이름이 바뀐 후보) ${orphan.length}개 · 시트에만 있는 새 이름 ${fresh.length}개\n`);
+console.log(`aywa 슬롯 0인 반(=이름이 바뀐 후보) ${orphan.length}개 · 시트에만 있는 새 이름 ${fresh.length}개\n`);
 
 const key = (s: string) => s.replace(/\s+/g, "");
 console.log("옛 반 → 새 반 후보 (명단 겹침순)");

@@ -9,7 +9,7 @@
  */
 import { useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { isImageAttachment } from "../attachment-utils";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 

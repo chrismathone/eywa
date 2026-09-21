@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Loader2, Pencil, Plus, Save, Trash2, Users, X } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2, Pencil, Plus, Save, Trash2, Users, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import {

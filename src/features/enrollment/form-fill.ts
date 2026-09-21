@@ -1,5 +1,5 @@
 // 등록상담 녹음 분석 → 폼 자동입력 매핑 (순수 함수, ⚠️ server-only 금지 [[#61]] — Vitest 대상).
-// ijw processRegistrationRecording의 "폼 필드 추출 → ConsultationRecord 자동 채우기"를 eywa 컬럼에 이식.
+// ijw processRegistrationRecording의 "폼 필드 추출 → ConsultationRecord 자동 채우기"를 aywa 컬럼에 이식.
 // 핵심 규칙: 비어있는 필드만 채운다(상담사 수기 입력을 절대 덮어쓰지 않음).
 import { canonicalSchoolName } from "@/features/schools/school-name";
 import {

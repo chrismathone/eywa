@@ -13,7 +13,7 @@ import { getMonthlyAttendanceMatrix } from "@/features/attendance/server/queries
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettings } from "@/features/owner/server/queries";
 
-export const metadata = { title: "급여명세서 — eywa" };
+export const metadata = { title: "급여명세서 — aywa" };
 
 /**
  * 급여명세서(프리랜서 강의용역수수료 명세서) A4 — **원장 전용**.

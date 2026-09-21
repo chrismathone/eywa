@@ -1,11 +1,11 @@
 /*
- * backfill-teacher-colors.cjs — ijw 익스포트의 강사 퍼스널 색(staff.bgColor/textColor)을 eywa users로 백필.
+ * backfill-teacher-colors.cjs — ijw 익스포트의 강사 퍼스널 색(staff.bgColor/textColor)을 aywa users로 백필.
  *
  * 기존 backfill-english-slots.cjs는 classes(반색)만 건드리고 users(강사색)는 안 건드렸다 → 시간표
  * 익스포터(Excel/시트)가 users.bg_color 없으면 해시색 폴백(계획서 "분기점"). 이 스크립트가 그 갭을 메운다.
  *  - users.bg_color / text_color  ← ijw staff.bgColor / textColor  (#RRGGBB)
  *
- * 매칭(자연키): ijw staff.name == eywa users.display_name (전수확인: 색상 보유 42명 → 42/42 매칭, 불일치 0).
+ * 매칭(자연키): ijw staff.name == aywa users.display_name (전수확인: 색상 보유 42명 → 42/42 매칭, 불일치 0).
  * 멱등(UPDATE). 기본 DRY-RUN(통계만), `--apply`로 실제 반영.
  *   node --env-file=.env.local scripts/_poc_migration/backfill-teacher-colors.cjs [--apply]
  */

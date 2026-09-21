@@ -204,7 +204,7 @@ export async function getTaskContent(
   }
 }
 
-/** 태스크에 댓글 작성 — 직원관리 열람 권한. eywa 작성자명이 접두로 붙어 출처 보존. */
+/** 태스크에 댓글 작성 — 직원관리 열람 권한. aywa 작성자명이 접두로 붙어 출처 보존. */
 export async function addTaskCommentAction(
   pageId: string,
   text: string,

@@ -18,7 +18,7 @@ $bD = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(18,1
 $bG = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(120,120,126))
 $bN = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(21,62,117))
 $bS = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(245,245,247))
-$g.DrawString("eywa tab icons - FINAL ($($files.Count) files)", $fT, $bD, 14, 12)
+$g.DrawString("aywa tab icons - FINAL ($($files.Count) files)", $fT, $bD, 14, 12)
 $g.DrawString("per cell: large 84px  |  navy pill 18px (active tab)  |  soft 18px (idle)  |  hub 38px", $fC, $bG, 14, 34)
 for ($i = 0; $i -lt $files.Count; $i++) {
   $r = [Math]::Floor($i / $cols); $c = $i % $cols

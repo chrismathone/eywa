@@ -28,7 +28,7 @@ import { settingsToPeriodsConfig, weekdayFullPeriodMinutes } from "@/features/ti
 import { kstToday } from "@/lib/date-kst";
 
 /**
- * 사전 브리프의 **사실 스냅샷 수집** — 상담 1건 기준으로 eywa DB에서 상담자가 알아야 할 것을 전부 모은다.
+ * 사전 브리프의 **사실 스냅샷 수집** — 상담 1건 기준으로 aywa DB에서 상담자가 알아야 할 것을 전부 모은다.
  * (접수 폼 + 개설 반·정원·시간·강사 + 수강료 단가표 + 교재 + 같은 학교/학년 재원생 집계 + 형제자매 후보
  *  + 같은 학생의 이전 접수 + 학원 정책).
  *

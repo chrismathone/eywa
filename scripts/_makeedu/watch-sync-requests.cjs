@@ -206,7 +206,7 @@ async function heartbeat() {
       // 2) 주간 자동 역동기화 적재 — 일요일 06:00(KST) 버킷이 열렸으면 큐에 넣는다(주 1회).
       //    제출은 새 경로가 아니라 바로 아래 3)이 그대로 한다.
       await weeklyPush();
-      // 3) 역동기화 푸시 요청(eywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
+      // 3) 역동기화 푸시 요청(aywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
         await beat();

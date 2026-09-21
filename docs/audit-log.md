@@ -42,7 +42,7 @@ attendance_notifications(3) · SUBJECT_TABS(등록상담 과목탭, 4) · class 
 ### dead code (2026-06-24 — 대부분 제거 완료)
 | 항목 | 근거 | 처리 |
 |---|---|---|
-| ~~미사용 shadcn ui: `tabs`·`checkbox`·`badge`·`card`·`table`~~ | importers=0 | ✅ **제거**(5파일 삭제, eywa는 FaceTabs·Pill·커스텀 사용) |
+| ~~미사용 shadcn ui: `tabs`·`checkbox`·`badge`·`card`·`table`~~ | importers=0 | ✅ **제거**(5파일 삭제, aywa는 FaceTabs·Pill·커스텀 사용) |
 | ~~dead 컴포넌트 `StudentQuickPanel`·`StudentQuickPopover`~~ | import 0 | ✅ **제거**(2파일 삭제). CLAUDE.md stale 메모도 정정 |
 | ~~dead 액션 `endEnrollment`(`enrollments/server/actions.ts`)~~ | 호출처 0 | ✅ **제거** — `endSingleEnrollment`의 중복 leftover(수강종료 기능은 정상) |
 | `recomputePrimaryTeacher`(`students/server/actions.ts:543`) | 호출처 0 | ⏳ **유지** — 담임 재계산 유틸(유용·미배선). 데모는 `fix-primary-teacher.cjs`로 대체. 향후 /admin 배선 후보(삭제 아님) |

@@ -1,5 +1,5 @@
 /**
- * Eywa icon system — product objects and familiar interface actions.
+ * Aywa icon system — product objects and familiar interface actions.
  *
  * 사용: `<EyIcon name="calendar" size={18} />`.
  * 모든 아이콘은 viewBox 24×24, currentColor, stroke 1.6, round cap/join.
@@ -8,7 +8,7 @@
 import type { SVGProps } from "react";
 import type { MenuKey } from "@/lib/permissions";
 
-export const EYWA_ICON_SIZES = {
+export const AYWA_ICON_SIZES = {
   xs: 12,
   sm: 16,
   md: 20,
@@ -16,17 +16,17 @@ export const EYWA_ICON_SIZES = {
   xl: 32,
 } as const;
 
-export type EywaIconFamily = "product" | "interface";
+export type AywaIconFamily = "product" | "interface";
 
-type EywaIconDefinition = {
+type AywaIconDefinition = {
   name: string;
   label: string;
-  family: EywaIconFamily;
+  family: AywaIconFamily;
   meaning: string;
 };
 
 /** 아이콘 갤러리·문서가 함께 읽는 단일 카탈로그. 새 아이콘은 렌더러와 여기에 같이 등록한다. */
-export const EYWA_ICON_CATALOG = [
+export const AYWA_ICON_CATALOG = [
   { name: "screen", label: "화면", family: "product", meaning: "한 화면에서 마감하는 수업" },
   { name: "report", label: "보고서", family: "product", meaning: "정리되어 전달되는 기록" },
   { name: "exam", label: "시험지", family: "product", meaning: "평가와 확인된 결과" },
@@ -183,9 +183,9 @@ export const EYWA_ICON_CATALOG = [
   { name: "wrench", label: "도구", family: "interface", meaning: "유지보수와 세부 조정" },
   { name: "panelTop", label: "상단 패널", family: "interface", meaning: "위쪽 영역이 나뉜 레이아웃" },
   { name: "tags", label: "여러 태그", family: "interface", meaning: "복수 분류와 라벨 묶음" },
-] as const satisfies readonly EywaIconDefinition[];
+] as const satisfies readonly AywaIconDefinition[];
 
-export type EywaIconName = (typeof EYWA_ICON_CATALOG)[number]["name"];
+export type AywaIconName = (typeof AYWA_ICON_CATALOG)[number]["name"];
 
 /** 반복되는 보편 조작을 위한 정적 SVG 조각. 공통 viewBox와 선 규칙은 EyIcon이 적용한다. */
 const EXTENDED_ICON_GLYPHS = {
@@ -967,12 +967,12 @@ const EXTENDED_ICON_GLYPHS = {
 
 type ExtendedIconName = keyof typeof EXTENDED_ICON_GLYPHS;
 
-function isExtendedIconName(name: EywaIconName): name is ExtendedIconName {
+function isExtendedIconName(name: AywaIconName): name is ExtendedIconName {
   return Object.prototype.hasOwnProperty.call(EXTENDED_ICON_GLYPHS, name);
 }
 
-export type EywaIconProps = {
-  name: EywaIconName;
+export type AywaIconProps = {
+  name: AywaIconName;
   size?: number;
   strokeWidth?: number;
   className?: string;
@@ -984,10 +984,10 @@ export function EyIcon({
   strokeWidth = 1.8,
   className,
   ...rest
-}: EywaIconProps) {
+}: AywaIconProps) {
   // 장식 아이콘은 기본 aria-hidden(텍스트가 의미를 전달). aria-label을 주면 노출.
   const labelled = rest["aria-label"] != null || rest["aria-labelledby"] != null;
-  const common: SVGProps<SVGSVGElement> & { "data-eywa-icon": EywaIconName } = {
+  const common: SVGProps<SVGSVGElement> & { "data-aywa-icon": AywaIconName } = {
     width: size,
     height: size,
     viewBox: "0 0 24 24",
@@ -997,7 +997,7 @@ export function EyIcon({
     strokeLinecap: "round",
     strokeLinejoin: "round",
     focusable: "false",
-    "data-eywa-icon": name,
+    "data-aywa-icon": name,
     className,
     ...rest,
     role: labelled ? (rest.role ?? "img") : rest.role,
@@ -1288,4 +1288,4 @@ export const MENU_ICON = {
   teacher_onescreen: "screen",
   my_learning: "graduationCap",
   kiosk_settings: "tablet",
-} as const satisfies Record<MenuKey, EywaIconName>;
+} as const satisfies Record<MenuKey, AywaIconName>;

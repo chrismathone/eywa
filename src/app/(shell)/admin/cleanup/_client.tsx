@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState, useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { CheckCircle2, Loader2, Trash2, UserMinus, Wrench } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { CheckCircle2, Loader2, Trash2, UserMinus, Wrench } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   closeOrphanEnrollments,

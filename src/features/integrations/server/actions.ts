@@ -426,7 +426,7 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
 export type PushState = { error?: string; ok?: boolean; message?: string } | undefined;
 
 /**
- * 역동기화(eywa→makeedu) — 선택한 QR 공개접수 상담을 makeedu 예비상담 등록 큐(makeedu_push_requests)에 넣는다.
+ * 역동기화(aywa→makeedu) — 선택한 QR 공개접수 상담을 makeedu 예비상담 등록 큐(makeedu_push_requests)에 넣는다.
  * 게이트 = `integrations` 권한 키(canWriteTenant — 기본 master/admin/manager, 역할·권한 면에서 조정 가능).
  * 실제 makeedu 쓰기는 동기화 PC 워처(watch-sync-requests.cjs → push-consultations.cjs)가 신뢰 IP에서 수행.
  * 멱등: 이미 pending/running 요청이 있거나 이미 푸시된(makeedu_id/makeedu_pushed_at) 상담은 큐잉하지 않는다.

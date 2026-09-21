@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Plus, Trash2 } from "@/components/icons/aywa-icon-compat";
 import type { AccountSetting, AccountTargetKey, BillingSettings } from "@/features/owner/settings-types";
 import { ACCOUNT_TARGETS } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";

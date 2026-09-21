@@ -1,5 +1,5 @@
 /**
- * 시험 결과 창의 **반별 결과** — 반(eywa 영어 반)마다 응시·평균·최고·최저(2026-09-11 "학생별 반별 유기적으로").
+ * 시험 결과 창의 **반별 결과** — 반(aywa 영어 반)마다 응시·평균·최고·최저(2026-09-11 "학생별 반별 유기적으로").
  * 인재원과 같은 반올림(summarizeScores). 반 이름을 누르면 같은 창이 그 반만 보여 준다. 서버 컴포넌트.
  */
 import { Pill } from "@/components/atoms/pill";
@@ -10,7 +10,7 @@ import type { JjTrack } from "@/features/ijw/class-groups";
 
 export type JjDeckBreakdownItem = {
   key: string;
-  /** eywa 반 id — 없으면 '영어 반 없음'·'연결 필요' 줄. */
+  /** aywa 반 id — 없으면 '영어 반 없음'·'연결 필요' 줄. */
   classId: string | null;
   label: string;
   track: JjTrack;

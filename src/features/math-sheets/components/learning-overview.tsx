@@ -12,7 +12,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { HrefSelect } from "@/components/href-select";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { shiftMonth } from "@/lib/date-kst";
 import type {
   MathSheetMonthData,

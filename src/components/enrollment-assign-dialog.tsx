@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2, UserPlus, X } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, Loader2, UserPlus, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { conflictToast } from "@/lib/ui/conflict-toast";

@@ -209,7 +209,7 @@ export function PayslipDocument({ data }: { data: PayslipData }) {
               예전엔 '소득세 3.3%' 한 줄로 합쳐 놨는데, 그 안에 **지방세가 섞여 있어** 라벨이 사실과 달랐다.
               ⚠️ 계산은 손대지 않는다 — `withholding`(3.3%)이 진실이고 `incomeTax`+`localTax`가 그 분해다
               (payslip.ts: localTax = withholding − incomeTax라 **합이 절대 어긋나지 않는다**).
-              ⚠️ 지급 항목은 3개뿐이라(시트의 '기타 지급'은 eywa에 없다) 아래 한 줄의 좌·우가 비어 있다 —
+              ⚠️ 지급 항목은 3개뿐이라(시트의 '기타 지급'은 aywa에 없다) 아래 한 줄의 좌·우가 비어 있다 —
                  빈 칸을 채우려고 **없는 항목을 만들지 말 것**(값이 영영 'ㅡ'인 칸은 거짓 약속이다). */}
           <tr>
             <Cell label="수업료 총액" mono>

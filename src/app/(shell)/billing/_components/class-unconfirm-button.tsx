@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { unconfirmClassTerms } from "@/features/billing/session-terms/server/class-unconfirm-actions";
 import { isVirtualTermId } from "@/features/billing/session-terms/month-roster";
 import type { SessionTermRow } from "@/features/billing/session-terms/server/queries";

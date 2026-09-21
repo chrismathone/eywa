@@ -4,7 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";

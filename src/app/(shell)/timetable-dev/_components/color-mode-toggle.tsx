@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { Palette } from "@/components/icons/eywa-icon-compat";
+import { Palette } from "@/components/icons/aywa-icon-compat";
 import { usePrefs, type TimetableColorMode } from "@/components/workspace/use-prefs";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 

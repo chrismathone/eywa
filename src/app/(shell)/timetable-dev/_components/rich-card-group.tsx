@@ -1,7 +1,7 @@
 "use client";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { GripVertical } from "@/components/icons/eywa-icon-compat";
+import { GripVertical } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";

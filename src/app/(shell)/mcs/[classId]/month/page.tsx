@@ -9,7 +9,7 @@ import { getMathLearningData } from "@/features/math-sheets/server/learning-quer
 import { canResetMathLearningGoals } from "@/features/math-sheets/server/access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
-export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — eywa" };
+export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — aywa" };
 
 /**
  * MCS **월간 뷰** — 반 1개 × 달 1개(진도표 ↔ 진도 레일).

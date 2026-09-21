@@ -1,4 +1,4 @@
-import { RefreshCw } from "@/components/icons/eywa-icon-compat";
+import { RefreshCw } from "@/components/icons/aywa-icon-compat";
 
 /**
  * 목록 행에서 "이 항목은 **지난 동기화가 새로 추가**했다"를 표시하는 소형 배지.

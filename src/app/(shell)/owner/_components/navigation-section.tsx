@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { HUB_GROUPS, SUPPORT_GROUPS, type HubDest, type HubGroup } from "@/lib/menu-hub";
 import {

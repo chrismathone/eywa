@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { History, Loader2, Mic, Square, Upload } from "@/components/icons/eywa-icon-compat";
+import { History, Loader2, Mic, Square, Upload } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { FilePickerButton } from "@/components/ui/file-picker-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";

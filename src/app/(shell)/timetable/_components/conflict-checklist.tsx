@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, Check } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { AlertTriangle, Check } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import {
   blocksApply,
   conflictChecklist,

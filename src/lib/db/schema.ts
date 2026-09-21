@@ -2004,7 +2004,7 @@ export const attendanceNotifications = pgTable(
 );
 
 // === kakao_channels (학원별 카카오 발신프로필 + 승인 템플릿 — 실발송 식별자) ===
-// operator(EYWA) 단일 계정의 전역 키(solapi.ts)로 발송하되, 학원 식별은 여기 저장한 pfId(발신프로필
+// operator(AYWA) 단일 계정의 전역 키(solapi.ts)로 발송하되, 학원 식별은 여기 저장한 pfId(발신프로필
 // 키)+승인 템플릿 ID로 한다. 이들은 비밀키가 아닌 식별자라 평문 저장(암호화 불필요). 테넌트당 1행.
 export const kakaoChannels = pgTable(
   "kakao_channels",

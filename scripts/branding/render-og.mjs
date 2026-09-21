@@ -12,10 +12,10 @@ try {
     await document.fonts.ready;
     await Promise.all([...document.images].map((img) => img.decode()));
   });
-  const output = new URL('../../public/og/eywa-v1.png', import.meta.url);
+  const output = new URL('../../public/og/aywa-v1.png', import.meta.url);
   await mkdir(new URL('../../public/og/', import.meta.url), { recursive: true });
   await page.screenshot({ path: fileURLToPath(output), type: 'png' });
-  console.log('Rendered public/og/eywa-v1.png (1200 × 630)');
+  console.log('Rendered public/og/aywa-v1.png (1200 × 630)');
 } finally {
   await browser.close();
 }

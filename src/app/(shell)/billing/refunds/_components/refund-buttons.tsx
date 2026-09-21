@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Printer, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Printer, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { canonicalSchoolName, isSchoolLikeKey, normalizeSchoolName } from "./school-name";
 
-// 아래 이름은 전부 **실제 값**이다 — 왼쪽은 학교알리미 2026 공시(대구), 오른쪽은 eywa 학생 입력값.
+// 아래 이름은 전부 **실제 값**이다 — 왼쪽은 학교알리미 2026 공시(대구), 오른쪽은 aywa 학생 입력값.
 // 지어낸 예시로 테스트하면 실데이터에서 어떻게 깨지는지 영영 모른다.
 describe("normalizeSchoolName — 두 소스를 같은 키로", () => {
   it("공시명과 입력값이 같은 키가 된다", () => {
@@ -30,7 +30,7 @@ describe("normalizeSchoolName — 두 소스를 같은 키로", () => {
   });
 
   it("⚠️ 지역 접두를 지워 같은 학교의 두 표기를 합친다", () => {
-    // eywa에 "일중"(15명)과 "대구일중"(24명)이 따로 들어가 있어 점유율이 1.5%/2.5%로 쪼개졌었다.
+    // aywa에 "일중"(15명)과 "대구일중"(24명)이 따로 들어가 있어 점유율이 1.5%/2.5%로 쪼개졌었다.
     expect(normalizeSchoolName("대구일중")).toBe("일중");
     expect(normalizeSchoolName("일중")).toBe("일중");
     expect(normalizeSchoolName("대구일중학교")).toBe("일중");

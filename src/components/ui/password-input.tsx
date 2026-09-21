@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 

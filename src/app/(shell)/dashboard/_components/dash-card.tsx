@@ -4,7 +4,7 @@
  */
 import { useId, type ReactNode } from "react";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 export function DashCard({
   title,

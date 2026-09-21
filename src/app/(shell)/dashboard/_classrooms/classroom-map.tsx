@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { buildSceneLayout, FLOOR_HALL_WIDTH, MAP_COLORS, roomMapState, type SceneLayout } from "@/features/dashboard/classroom-preview/scene-layout";
 import type { Classroom } from "@/features/dashboard/classroom-preview/model";
 import type { RoomSeating } from "@/features/dashboard/classroom-preview/seating";

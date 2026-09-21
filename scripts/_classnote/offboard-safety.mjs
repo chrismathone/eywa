@@ -24,7 +24,7 @@ import { expectedBirthYear } from "./board-safety.mjs";
  * (자동화 불가) 앞으로의 모든 ClassNote 발송 검증 수단을 잃는다.
  *
  * ⚠️ **우연한 제외에 기대지 말 것**: 실측상 `학원이`는 지금 '전화 불일치'로만 걸러지고 있어서,
- * eywa에 전화를 채워 넣는 순간 **삭제 후보로 올라온다**. 그래서 최우선 순위의 명시적 가드로 못박는다.
+ * aywa에 전화를 채워 넣는 순간 **삭제 후보로 올라온다**. 그래서 최우선 순위의 명시적 가드로 못박는다.
  */
 export const PROTECTED_STUDENT_NAMES = ["학원이", "학원삼", "학원사", "학원오"];
 
@@ -116,7 +116,7 @@ export function normalizePhone(v) {
   return t.length >= 9 ? t.slice(-11) : "";
 }
 
-/** 두 전화 목록에 공통 번호가 있나(eywa parent_phone·student_phone ↔ ClassNote carer 연락처). */
+/** 두 전화 목록에 공통 번호가 있나(aywa parent_phone·student_phone ↔ ClassNote carer 연락처). */
 export function phoneMatches(a, b) {
   const A = new Set((a ?? []).map(normalizePhone).filter(Boolean));
   const B = (b ?? []).map(normalizePhone).filter(Boolean);
@@ -135,10 +135,10 @@ export const GUARDS = [
   { code: "protected_account", action: "exclude" }, //  🔴 실발송 테스트 계정 등 절대 보호(최우선)
   { code: "enrolled", action: "exclude" }, //           정상: 재원이거나 그 과목을 계속 다님(과목 이탈 포함)
   { code: "system_withdrawal", action: "exclude" }, //  🔴 시스템 일괄 퇴원일(장부 날짜) — 실제 퇴원 신호 아님
-  { code: "no_eywa_match", action: "exclude" }, //      eywa에 대응 학생 없음(테스트·퇴사강사 보드 등)
-  { code: "ambiguous_forward", action: "exclude" }, //  이 원아에 eywa 학생이 2명+ 걸림
+  { code: "no_eywa_match", action: "exclude" }, //      aywa에 대응 학생 없음(테스트·퇴사강사 보드 등)
+  { code: "ambiguous_forward", action: "exclude" }, //  이 원아에 aywa 학생이 2명+ 걸림
   { code: "ambiguous_reverse", action: "exclude" }, //  그 학생에 원아가 2명+ 걸림
-  { code: "phone_mismatch", action: "exclude" }, //     ClassNote 보호자 연락처가 eywa 전화와 불일치(= 다른 집)
+  { code: "phone_mismatch", action: "exclude" }, //     ClassNote 보호자 연락처가 aywa 전화와 불일치(= 다른 집)
   { code: "identity_unknown", action: "exclude" }, //   생년·학년 없음/불일치, 원아 상세 조회 실패
   { code: "erp_link_unknown", action: "exclude" }, //   명부엔 활성인데 같은 이름 ERP 행에 out_date(상태 모순)
   { code: "foreign_board", action: "exclude" }, //      남의 개인 보드에 소속(잔존 가족 의심)
@@ -151,7 +151,7 @@ export const GUARDS = [
   // ── hold ──────────────────────────────────────────────────────────────────
   { code: "recent_billing", action: "hold" }, //        🔴 퇴원 이후의 청구·납부가 있음(= 실제로는 다니는 중일 수 있음)
   { code: "withdrawal_inconsistent", action: "hold" }, // 🔴 퇴원일보다 수강 종료일이 나중(데이터 모순)
-  { code: "grace", action: "hold" }, //                 eywa 퇴원일 유예 미경과(시간이 지나면 자동 해소)
+  { code: "grace", action: "hold" }, //                 aywa 퇴원일 유예 미경과(시간이 지나면 자동 해소)
   { code: "recent_posts", action: "hold" }, //          ClassNote 보드에 최근 게시물이 있음(원장 기준 1.5개월)
   { code: "recent_any_post", action: "hold" }, //       ⭐ 그 학생의 **어떤 보드든** 최근 7일 내 게시물(원장 백스톱)
   { code: "recent_activity", action: "hold" }, //       최근 발송·재등록·학부모 활동 신호
@@ -171,7 +171,7 @@ const ACTION_RANK = { exclude: 3, hold: 2, offboard: 1 };
  *
  * @param {object} facts
  * @param {{id?:number, name?:string, birth?:string|null, parentId?:number|null, parentName?:string|null, parentUsername?:string|null}} facts.child
- * @param {number} facts.matchedStudentCount  이 원아에 매칭된 eywa 학생 **행 수**(퇴원·예비 포함 전 학생 우주)
+ * @param {number} facts.matchedStudentCount  이 원아에 매칭된 aywa 학생 **행 수**(퇴원·예비 포함 전 학생 우주)
  * @param {number} facts.reverseMatchCount    그 학생에 매칭된 원아 **행 수**
  * @param {null|{id:string, name:string, grade:string|null, status:string, activeSubjects:string[], withdrawnAt:string|null}} facts.student
  * @param {{status:"ok"|"failed"|"not_collected", enrollments?:Array<{belong_to_class:number, removed_child?:boolean, class_name?:string, isStudentBoard?:boolean}>}} facts.childDetail
@@ -226,11 +226,11 @@ export function evaluateOffboardCandidate(facts) {
     skip("no_eywa_match");
     skip("ambiguous_forward");
   } else {
-    set("no_eywa_match", matchedStudentCount === 0, "eywa에 대응하는 학생이 없습니다(테스트 계정·퇴사 강사·외부 보드일 수 있습니다)");
+    set("no_eywa_match", matchedStudentCount === 0, "aywa에 대응하는 학생이 없습니다(테스트 계정·퇴사 강사·외부 보드일 수 있습니다)");
     set(
       "ambiguous_forward",
       matchedStudentCount > 1,
-      `이 원아에 eywa 학생 ${matchedStudentCount}명이 걸립니다 — 누구인지 확정할 수 없습니다(동명이인·접미사)`,
+      `이 원아에 aywa 학생 ${matchedStudentCount}명이 걸립니다 — 누구인지 확정할 수 없습니다(동명이인·접미사)`,
     );
   }
   if (typeof reverseMatchCount !== "number") skip("ambiguous_reverse");
@@ -252,8 +252,8 @@ export function evaluateOffboardCandidate(facts) {
       "enrolled",
       !isWithdrawn || active.length > 0,
       !isWithdrawn
-        ? `eywa 학생 상태가 '퇴원'이 아닙니다(${student.status})`
-        : `eywa에선 퇴원인데 살아 있는 수강이 있습니다(${active.join(", ")}) — 명부에서 내리면 그 과목 보드까지 끊깁니다`,
+        ? `aywa 학생 상태가 '퇴원'이 아닙니다(${student.status})`
+        : `aywa에선 퇴원인데 살아 있는 수강이 있습니다(${active.join(", ")}) — 명부에서 내리면 그 과목 보드까지 끊깁니다`,
     );
   }
 
@@ -263,7 +263,7 @@ export function evaluateOffboardCandidate(facts) {
   // 경우까지 갈라준다. 불일치면 다른 집이므로 즉시 제외.
   // ⚠️ 값을 로그·DB·AI에 남기지 말 것 — 이 엔드포인트엔 알레르기·병력·주소까지 함께 실려 있다(대조에만 사용).
   if (!phone || phone.checked !== true) skip("phone_mismatch");
-  else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 eywa에 등록된 전화와 다릅니다 — 다른 집일 수 있습니다");
+  else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 aywa에 등록된 전화와 다릅니다 — 다른 집일 수 있습니다");
 
   // ── 🔴 시스템 일괄 퇴원 — 장부 날짜라 자동 대상에서 뺀다(원장 지시) ──────────────
   if (!student) skip("system_withdrawal");
@@ -282,13 +282,13 @@ export function evaluateOffboardCandidate(facts) {
   } else {
     const want = expectedBirthYear(student.grade, schoolYear);
     const got = Number(String(child.birth ?? "").slice(0, 4));
-    if (want == null) set("identity_unknown", true, `eywa 학년(${student.grade ?? "없음"})을 알 수 없어 이 원아가 그 학생인지 확인할 수 없습니다`);
+    if (want == null) set("identity_unknown", true, `aywa 학년(${student.grade ?? "없음"})을 알 수 없어 이 원아가 그 학생인지 확인할 수 없습니다`);
     else if (!Number.isFinite(got) || got < 1900) set("identity_unknown", true, "원아 생년월일이 없어 이 원아가 그 학생인지 확인할 수 없습니다");
     else
       set(
         "identity_unknown",
         Math.abs(got - want) > BIRTH_YEAR_TOLERANCE,
-        `생년 불일치 — eywa ${student.grade}(${want}년생 기대)인데 원아는 ${got}년생입니다(다른 아이일 수 있습니다)`,
+        `생년 불일치 — aywa ${student.grade}(${want}년생 기대)인데 원아는 ${got}년생입니다(다른 아이일 수 있습니다)`,
       );
   }
 
@@ -434,7 +434,7 @@ export function evaluateOffboardCandidate(facts) {
 
   // ── 🔴 돈의 흔적 — 가장 강한 "실제로 다닌다" 신호 (원장 2026-07-30) ─────────────
   // 원장: *"메이크에듀가 실제 퇴원날짜와 일치할 확률이 높음. 실제 결제랑 환불을 진행하므로."*
-  // 같은 논리를 eywa 청구에 적용한다. **퇴원일 이후의 청구·납부는 퇴원과 모순**이다 —
+  // 같은 논리를 aywa 청구에 적용한다. **퇴원일 이후의 청구·납부는 퇴원과 모순**이다 —
   // 실측으로 잡았다: 배한빈(퇴원 2026-04-06)에게 **2026-07 청구 + 06-30 납부**가 있었다.
   // 다른 모든 가드(활성수강 0·보고서 없음·무게시)를 통과했는데 돈만이 그가 살아있다고 말했다.
   if (!billing) skip("recent_billing");
@@ -517,8 +517,8 @@ export const RELEASE_GUARDS = [
   //    활발히 수강 중인 학생 33건이 "전화 불일치"로 헤드라인이 잡혀(실측) 원장이 엉뚱한 걸 확인하게 된다.
   //    (Op B에서 `enrolled`를 1순위로 둔 것과 같은 원칙.)
   { code: "subject_active", action: "exclude" }, //    그 과목을 아직 수강 중 = 살아있는 보드
-  { code: "no_eywa_match", action: "exclude" }, //     보드명 ↔ eywa 학생 매칭 실패(테스트·퇴사강사 보드)
-  { code: "ambiguous", action: "exclude" }, //         보드명에 eywa 학생 2명+ (전화로도 안 갈림)
+  { code: "no_eywa_match", action: "exclude" }, //     보드명 ↔ aywa 학생 매칭 실패(테스트·퇴사강사 보드)
+  { code: "ambiguous", action: "exclude" }, //         보드명에 aywa 학생 2명+ (전화로도 안 갈림)
   { code: "phone_mismatch", action: "exclude" }, //    보호자 연락처 불일치 = 다른 집
   { code: "shared_board", action: "exclude" }, //      가족 2+ = 남의 집까지 끊긴다
   { code: "members_unknown", action: "exclude" }, //   연결 가족 수 미확인(API 변경 의심)
@@ -533,7 +533,7 @@ export const RELEASE_GUARDS = [
  *
  * @param {object} p
  * @param {{id:number,name:string,children:number|null}} p.board
- * @param {number} p.matchedStudentCount  보드 base 이름 ↔ eywa 학생 **정확 일치** 수(전화 대조로 좁힌 뒤)
+ * @param {number} p.matchedStudentCount  보드 base 이름 ↔ aywa 학생 **정확 일치** 수(전화 대조로 좁힌 뒤)
  * @param {null|{id:string,name:string,status:string,subjectActive:boolean,allSubjectsEnded:boolean}} p.student
  * @param {null|{checked:boolean, match:boolean|null}} p.phone
  * @param {null|{complete:boolean, count:number, lastPostAt:string|null}} p.posts
@@ -571,12 +571,12 @@ export function evaluateBoardRelease({
     skip("no_eywa_match");
     skip("ambiguous");
   } else {
-    set("no_eywa_match", matchedStudentCount === 0, "eywa에 대응하는 학생이 없습니다(테스트·퇴사 강사·외부 보드일 수 있습니다)");
-    set("ambiguous", matchedStudentCount > 1, `보드명에 eywa 학생 ${matchedStudentCount}명이 걸립니다 — 전화로도 갈리지 않아 확정할 수 없습니다`);
+    set("no_eywa_match", matchedStudentCount === 0, "aywa에 대응하는 학생이 없습니다(테스트·퇴사 강사·외부 보드일 수 있습니다)");
+    set("ambiguous", matchedStudentCount > 1, `보드명에 aywa 학생 ${matchedStudentCount}명이 걸립니다 — 전화로도 갈리지 않아 확정할 수 없습니다`);
   }
 
   if (!phone || phone.checked !== true) skip("phone_mismatch");
-  else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 eywa 전화와 다릅니다 — 다른 집일 수 있습니다");
+  else set("phone_mismatch", phone.match === false, "ClassNote 보호자 연락처가 aywa 전화와 다릅니다 — 다른 집일 수 있습니다");
 
   if (!student) skip("subject_active");
   else set("subject_active", student.subjectActive === true, "이 학생이 그 과목을 아직 수강 중입니다 — 살아있는 보드입니다");
@@ -648,7 +648,7 @@ export function evaluateBoardRelease({
     reason,
     // 명부 퇴원처리(Operation B) 대상 힌트. 세 조건을 **모두** 만족해야 한다:
     //  ① 전과목 퇴원(일부 과목만 그만둔 학생은 false — 다른 수업 배정이 살아 있어야 한다)
-    //  ② eywa 퇴원 후 유예 경과 — ⚠️ **보드 삭제와 자격이 다르다.** 게시물 없는 빈 보드를 지우는 건 20일차라도
+    //  ② aywa 퇴원 후 유예 경과 — ⚠️ **보드 삭제와 자격이 다르다.** 게시물 없는 빈 보드를 지우는 건 20일차라도
     //     무해하다(재등록하면 프로비저닝이 다시 만든다). 그러나 **명부에서 내리는 건 비가역**이고(복구 =
     //     학부모 재초대+재가입) 실측 재등록 31건이 **전부 30일 내**였다. 그래서 퇴원처리에만 유예를 요구한다.
     //     이걸 빼면 "2026-07-10 대량 퇴원(20일차)"이 그대로 퇴원처리 대상으로 뜬다(실제로 그렇게 나왔다).

@@ -4,7 +4,7 @@ import { formatWorkerLogLine, formatWorkerLogLines, isWorkerLogStale, workerLogA
 // 실제 발송 PC 로그(2026-07-21 하트비트로 올라온 원문). ANSI 제어문자 포함.
 const ESC = String.fromCharCode(27);
 const REAL_FEED = `[2026-07-21T05:54:22.881Z] [feed] 오류(다음 폴에서 재시도): page.goto: Timeout 60000ms exceeded.\nCall log:\n${ESC}[2m  - navigating to "https://www.classnote.com/login", waiting until "domcontentloaded"${ESC}[22m`;
-const REAL_READ = "[2026-07-21T05:54:38.606Z] [읽음] ⚠️ 후보 576건이 eywa 행과 매칭되지 않음 — edutrix_share_token 임포트 여부 확인 필요";
+const REAL_READ = "[2026-07-21T05:54:38.606Z] [읽음] ⚠️ 후보 576건이 aywa 행과 매칭되지 않음 — edutrix_share_token 임포트 여부 확인 필요";
 
 describe("formatWorkerLogLine", () => {
   it("실제 로그: ANSI 제거 + KST 시각 + 한글 요약", () => {

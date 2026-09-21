@@ -1,13 +1,13 @@
 /**
  * scripts/_classnote/scan-english-posts.mjs — 영어 강사 ClassNote 발송분 **전수 검사(읽기 전용)**.
  *
- * 왜: 영어는 수학과 달리 eywa 발송 레일을 안 탄다 — 강사가 ClassNote 반 보드에 직접 쓴다
- * (english-report-plan.md 실측: 8일간 847건인데 eywa `lesson_reports` 영어는 0건). 그래서 영어 발송
- * 실태는 eywa DB 어디에도 없고, **피드를 직접 훑어야만** 강사별·반별로 무엇이 나갔는지 보인다.
+ * 왜: 영어는 수학과 달리 aywa 발송 레일을 안 탄다 — 강사가 ClassNote 반 보드에 직접 쓴다
+ * (english-report-plan.md 실측: 8일간 847건인데 aywa `lesson_reports` 영어는 0건). 그래서 영어 발송
+ * 실태는 aywa DB 어디에도 없고, **피드를 직접 훑어야만** 강사별·반별로 무엇이 나갔는지 보인다.
  *
  * ⚠️ **GET 전용** — ClassNote에 아무것도 쓰지 않는다(발송·수정·읽음 호출 금지, 특히
  *    `/api/v1/reports/{id}/read/`는 POST 추정이라 절대 호출 금지 — classnote-read-core.mjs 주석).
- *    eywa DB도 SELECT만. 몇 번을 돌려도 어떤 상태도 바뀌지 않는다.
+ *    aywa DB도 SELECT만. 몇 번을 돌려도 어떤 상태도 바뀌지 않는다.
  *
  * 실행(연동 PC가 아니어도 됨 — 조회는 어디서든 가능):
  *   node --env-file=.env.local scripts/_classnote/scan-english-posts.mjs [--days=35] [--out=경로.json]
@@ -159,7 +159,7 @@ async function main() {
       byBoard.set(board, b);
     }
 
-    // ── eywa 쪽 대조 재료(SELECT만) ────────────────────────────────────────────
+    // ── aywa 쪽 대조 재료(SELECT만) ────────────────────────────────────────────
     const [engClasses, engReports, longPosts] = await Promise.all([
       sql`
         select c.id, c.class_name, u.display_name as teacher, c.english_track,
@@ -218,8 +218,8 @@ async function main() {
         `${b.bucket.padEnd(6)} ${b.board} — ${b.posts}건/${b.days}일 · 원아 ${b.children} · 마지막 ${b.last} · 읽음 ${b.readRate}% · 작성자 ${b.authors.join(",")}`,
       );
     }
-    console.log(`\n=== eywa 대조 ===`);
-    console.log(`영어 활성 반 ${engClasses.length}개 · eywa lesson_reports 영어 ${engReports[0].n}건(전 기간)`);
+    console.log(`\n=== aywa 대조 ===`);
+    console.log(`영어 활성 반 ${engClasses.length}개 · aywa lesson_reports 영어 ${engReports[0].n}건(전 기간)`);
     console.log(`classnote_class_posts 누적 보드 ${longPosts.length}개`);
 
     if (OUT) {
@@ -239,7 +239,7 @@ async function main() {
             authors,
             boards,
             engClasses,
-            engReportsInEywa: engReports[0].n,
+            engReportsInAywa: engReports[0].n,
             longPosts,
           },
           (_k, v) => (v instanceof Set ? [...v] : v),

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 
 import { Fragment, useActionState, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, RefreshCw } from "@/components/icons/eywa-icon-compat";
+import { Loader2, RefreshCw } from "@/components/icons/aywa-icon-compat";
 import {
   confirmSessionTerm,
   unconfirmSessionTerm,

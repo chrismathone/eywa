@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { KeyRound, Mail, ShieldCheck, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { KeyRound, Mail, ShieldCheck, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { EmailIdField } from "@/components/forms/email-id-field";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";

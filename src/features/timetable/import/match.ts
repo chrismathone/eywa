@@ -1,5 +1,5 @@
 // 학생/반 매칭 — 순수 함수. 이름·학교·학년으로 학생 id를, 반이름으로 반 id를 해석.
-// ijw excelImport.ts의 matchStudent를 eywa 정규화 모델로 이식(테넌트 RLS 하 서버에서 호출).
+// ijw excelImport.ts의 matchStudent를 aywa 정규화 모델로 이식(테넌트 RLS 하 서버에서 호출).
 
 import type { ClassRef, StudentRef } from "./types";
 

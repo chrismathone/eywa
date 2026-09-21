@@ -1,5 +1,5 @@
 import { getMakeeduSyncState, type MakeeduSyncDomain } from "@/features/integrations/server/makeedu-sync";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { getCurrentUser } from "@/lib/auth/current-user";

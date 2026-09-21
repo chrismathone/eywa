@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Download, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { downloadDocument } from "@/features/documents/open-file";
 

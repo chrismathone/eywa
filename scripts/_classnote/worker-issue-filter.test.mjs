@@ -20,7 +20,7 @@ describe("isWorkerIssueLine", () => {
   });
 
   it("⚠ 는 무조건 문제", () => {
-    expect(isWorkerIssueLine("[읽음] ⚠️ 후보 578건이 eywa 행과 매칭되지 않음")).toBe(true);
+    expect(isWorkerIssueLine("[읽음] ⚠️ 후보 578건이 aywa 행과 매칭되지 않음")).toBe(true);
   });
 
   it("영문 error/exception도 문제", () => {
@@ -30,7 +30,7 @@ describe("isWorkerIssueLine", () => {
 
   it("평범한 진행 로그는 통과", () => {
     expect(isWorkerIssueLine("데몬 시작 — mode=POST(실게시) host=학원동기화-PC")).toBe(false);
-    expect(isWorkerIssueLine("[읽음] 새로 반영할 읽음 없음 — 후보 578건 중 eywa 대응 308행은 이미 반영됨(정상)")).toBe(false);
+    expect(isWorkerIssueLine("[읽음] 새로 반영할 읽음 없음 — 후보 578건 중 aywa 대응 308행은 이미 반영됨(정상)")).toBe(false);
     expect(isWorkerIssueLine("[읽음] edutrix 매칭 갱신 1건")).toBe(false);
   });
 

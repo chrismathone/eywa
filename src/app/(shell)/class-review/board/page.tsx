@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -9,7 +9,7 @@ import { getReviewPrivileges, listClassReviews } from "@/features/class-review/s
 import { gradeOf } from "@/features/class-review/checklist";
 import { BoardTable, type BoardGroup } from "../_components/board-table";
 
-export const metadata = { title: "수업 평가 종합 — eywa" };
+export const metadata = { title: "수업 평가 종합 — aywa" };
 
 /**
  * 종합 보기(원장 지시 2026-08-05) — "여러 결과지의 등급·점수를 한 화면에서".

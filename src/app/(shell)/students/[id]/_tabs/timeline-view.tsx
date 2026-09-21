@@ -2,7 +2,7 @@
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { TimelineEvent } from "@/features/students/server/queries";
 

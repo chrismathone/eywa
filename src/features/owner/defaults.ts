@@ -120,7 +120,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     address: "",
     bizRegNo: "",
     branchLabel: "",
-    logoText: "EYWA",
+    logoText: "AYWA",
     brandColor: "#153e75", // --primary 인재원 네이비 — color-utils DEFAULT_BRAND_COLOR와 동일
     logoUrl: "",
     sealUrl: "",

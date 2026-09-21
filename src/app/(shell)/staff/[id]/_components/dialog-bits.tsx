@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, X } from "@/components/icons/eywa-icon-compat";
+import { Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 
 /** 계정 관리 소형 다이얼로그 공통 골격 — account-actions·deactivate-button 공용. */

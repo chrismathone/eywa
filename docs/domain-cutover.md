@@ -7,7 +7,7 @@
 ## ✅ 2026-09-21 실제로 한 것 — 도메인 `aywa.co.kr` / `www.aywa.co.kr`, 기준 주소 = **`https://www.aywa.co.kr`**
 원장 *"우리 도메인은 aywa.co.kr / www.aywa.co.kr 로 결정되고 구매하고 적용되어있음"* · *"수업보고서로 발송되는 보고서 링크 주소도
 새 도메인에 맞게. 이전건 괜찮고 앞으로 발송하는."* · *"기존 침산(cs)지점은 아무런 이상이 없어야함."*
-- **원장이 이미 해 둔 것(1번)**: 두 도메인을 eywa 프로젝트에 붙임(네임서버는 등록업체 그대로, 레코드로 연결) + **Vercel 도메인 설정에서
+- **원장이 이미 해 둔 것(1번)**: 두 도메인을 Vercel 프로젝트(`eywa`)에 붙임(네임서버는 등록업체 그대로, 레코드로 연결) + **Vercel 도메인 설정에서
   `eywa-alpha.vercel.app` → `https://www.aywa.co.kr` 307 전환**. 그래서 이미 나간 링크(`eywa-alpha…/r/…`)는 새 도메인으로 열린다(원장 확인).
   ⚠️ 이 전환은 Vercel 엣지 설정이라 **`/api/*`까지 넘긴다**(아래 2번의 "`/api` 제외" 코드 리다이렉트와 다르다) — 그래서
   외부가 옛 주소로 부르는 콜백은 새 주소로 옮겨야 한다(전사 웹훅은 `NEXT_PUBLIC_APP_URL`을 따라가므로 아래 env로 해결).
@@ -36,18 +36,18 @@
 - **비로그인 화면의 브랜드**는 `getPublicBranding`(학원 1개면 자동, 2개+면 `PUBLIC_BRAND_TENANT_SLUG`) — 호스트를 안 본다.
 - **자리 PIN**은 학원이 둘 이상이면 화면에서 지점을 고른다(호스트 무관).
 
-## 구매한 날 — 순서대로 (예: 새 도메인 `eywa.kr`)
-1. **Vercel → Project → Settings → Domains**에 `eywa.kr` 추가(+ 원하면 `www.eywa.kr`을 `eywa.kr`로 리다이렉트 설정).
+## 구매한 날 — 순서대로 (예: 새 도메인 `aywa.kr`)
+1. **Vercel → Project → Settings → Domains**에 `aywa.kr` 추가(+ 원하면 `www.aywa.kr`을 `aywa.kr`로 리다이렉트 설정).
    DNS는 Vercel이 알려 주는 A/CNAME을 도메인 등록업체에 넣는다. TLS는 자동.
-   ⚠️ 와일드카드(`*.eywa.kr`)는 **넣지 않는다**(C안 — 지점은 URL에 없다).
+   ⚠️ 와일드카드(`*.aywa.kr`)는 **넣지 않는다**(C안 — 지점은 URL에 없다).
 2. **Vercel env(Production)** 바꾸기 — 🔴 값을 바꿔도 **돌고 있는 배포본은 안 바뀐다**(배포 시점 스냅샷). 바꾼 뒤 3번 재배포.
-   - `NEXT_PUBLIC_APP_URL=https://eywa.kr`
+   - `NEXT_PUBLIC_APP_URL=https://aywa.kr`
    - `LEGACY_REDIRECT_HOSTS=eywa-alpha.vercel.app`
    - (지점이 둘 이상이면) `PUBLIC_BRAND_TENANT_SLUG=cs`(침산 — 옛 slug `injaewon`은 09-18에 개명됐다)
 3. **재배포**(main에 빈 커밋을 올리거나 Vercel "Redeploy") → 배포 success 뒤 확인:
-   - `https://eywa.kr/login` 로고·학원명 · `https://eywa-alpha.vercel.app/inventory/asset/MN-001` → `https://eywa.kr/inventory/asset/MN-001` 308
+   - `https://aywa.kr/login` 로고·학원명 · `https://eywa-alpha.vercel.app/inventory/asset/MN-001` → `https://aywa.kr/inventory/asset/MN-001` 308
    - `https://eywa-alpha.vercel.app/api/webhooks/assemblyai`는 **308이 아니어야** 한다(옛 호스트에서 그대로 처리).
-4. **Supabase → Authentication → URL Configuration**: Site URL = `https://eywa.kr`, Redirect URLs에 `https://eywa.kr/**` 추가
+4. **Supabase → Authentication → URL Configuration**: Site URL = `https://aywa.kr`, Redirect URLs에 `https://aywa.kr/**` 추가
    (지금 로그인은 비밀번호뿐이라 OAuth 콜백은 없지만, 비밀번호 재설정 메일 링크가 Site URL을 쓴다).
 5. **기기·사람 다시 잇기**(전부 호스트 단위라 저절로 안 넘어간다):
    - 직원: 새 주소로 다시 로그인(쿠키는 호스트 단위) · 북마크 교체.
@@ -56,8 +56,8 @@
    - **휴대폰 웹푸시**(셔틀 체크 계정): 구독이 오리진 단위 → 새 주소에서 '켜기' 다시(iOS는 홈 화면 앱을 **새 주소로 다시 추가**).
    - **연동 PC 워커**(`C:\eywa-sync-pc` — makeedu·ClassNote): DB 직결이라 host 무관하지만 **ClassNote 워커가 학부모 게시글에
      박는 `/r` 공유 링크와 캡처 주소는 env**다 — 그 PC의 **`.env.local`**(워커·워처는 전부 `node --env-file=.env.local`로 뜬다 —
-     `.env`는 아무도 안 읽는다)에서 `CLASSNOTE_SHARE_BASE=https://eywa.kr` ·
-     `CLASSNOTE_SCREENSHOT_BASE=https://eywa.kr` 둘 다 바꾼다(`scripts/_classnote/classnote-core.mjs:29-30` ·
+     `.env`는 아무도 안 읽는다)에서 `CLASSNOTE_SHARE_BASE=https://aywa.kr` ·
+     `CLASSNOTE_SCREENSHOT_BASE=https://aywa.kr` 둘 다 바꾼다(`scripts/_classnote/classnote-core.mjs:29-30` ·
      `classnote-inbox-store.mjs:91`가 읽는다. 안 바꾸면 새 게시글이 계속 옛 호스트 링크를 실어 학부모 클릭·캡처마다 308로 한 번 튕긴다).
      바꾼 뒤 **`scripts/_classnote/setup-classnote-pc.ps1`을 다시 실행**한다(돌고 있는 데몬은 옛 env를 든 채라 — 스크립트가 옛 인스턴스를 내리고 새 env로 재시작).
      **회수는 옛 주소 글도 찾는다** — 회수 워커가 지금 주소 + 옛 주소(`CLASSNOTE_LEGACY_SHARE_BASES`, 기본값에 `eywa-alpha` 포함)를

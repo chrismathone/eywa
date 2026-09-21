@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Loader2, Power, QrCode, RefreshCw, X } from "@/components/icons/eywa-icon-compat";
+import { Copy, Loader2, Power, QrCode, RefreshCw, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import type { StaffQrView } from "@/features/staff/intake-view";
 import {

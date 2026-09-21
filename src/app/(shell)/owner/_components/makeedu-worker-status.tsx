@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { checkMakeeduSyncWorkers } from "@/features/integrations/server/actions";
 import type { MakeeduWorker } from "@/features/integrations/server/makeedu-sync";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
  * 동기화 담당 PC 상태(0073a 심장박동) — 연동 면. 어느 PC가 makeedu 동기화를 실행하는지 + 온라인/오프라인.

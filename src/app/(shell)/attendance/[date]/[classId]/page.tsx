@@ -16,7 +16,7 @@ import { attendanceLockMessage, isWithinAttendanceEditWindow } from "@/features/
 import { getAutoUnitsForClassDay } from "@/features/attendance/server/auto-units";
 import { AttendanceInputForm } from "./input-form";
 
-export const metadata = { title: "출석 입력 — eywa" };
+export const metadata = { title: "출석 입력 — aywa" };
 
 export default async function AttendanceInputPage({
   params,

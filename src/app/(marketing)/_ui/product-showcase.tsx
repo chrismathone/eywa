@@ -1,15 +1,15 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CountUp } from "../_motion/count-up";
 import { BrowserFrame } from "./browser-frame";
 
 /**
- * ProductShowcase — 실제 앱(운영실)을 eywa 창 프레임에 담은 히어로 쇼케이스.
+ * ProductShowcase — 실제 앱(운영실)을 aywa 창 프레임에 담은 히어로 쇼케이스.
  * 제품을 크게·깊이 있게·플로팅 카드와 함께. 실제 제품의 창 크롬을 그대로 재현한다.
  */
 export function ProductShowcase() {
   return (
     <div className="relative">
-      <BrowserFrame title="오늘 · 운영실" url="eywa.app/dashboard">
+      <BrowserFrame title="오늘 · 운영실" url="aywa.co.kr/dashboard">
         {/* 대시보드 본문 */}
         <div className="p-5">
           <div className="flex items-center justify-between">

@@ -1,5 +1,5 @@
-// eywa가 export한 강사별영어시간표 탭(SheetGrid) → 정규화 배치 슬롯(ParsedStructureSlot[]) 순수 파서.
-// ⚠️ 구 parse-grid.ts(원본 손시트 구조)와 별개 — 이건 eywa export(appendTeacherGridSheet) 구조 전용.
+// aywa가 export한 강사별영어시간표 탭(SheetGrid) → 정규화 배치 슬롯(ParsedStructureSlot[]) 순수 파서.
+// ⚠️ 구 parse-grid.ts(원본 손시트 구조)와 별개 — 이건 aywa export(appendTeacherGridSheet) 구조 전용.
 // export 구조(teacher-grid-sheet.ts):
 //   · row0(0-based): 강사 라벨(강사 열들 위로 가로 병합). col0 = "시각"(코너, rows0~1 병합).
 //   · row1(0-based): 요일 헤더 "월 7/6"(레인 위로 가로 병합).
@@ -36,7 +36,7 @@ function minToHM(min: number): string {
   return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
-export function parseEywaTeacherGrid(grid: SheetGrid): ParsedStructure {
+export function parseAywaTeacherGrid(grid: SheetGrid): ParsedStructure {
   const warnings: string[] = [];
   const rowCount = grid.cells.length;
   const maxCol = Math.max(0, ...grid.cells.map((r) => r.length));
@@ -141,7 +141,7 @@ export function parseEywaTeacherGrid(grid: SheetGrid): ParsedStructure {
     }
   }
 
-  // blocks는 항상 빈 배열 — eywa export 격자는 **수업만** 그린다(비수업 블록은 마스터 시트 문법이고,
+  // blocks는 항상 빈 배열 — aywa export 격자는 **수업만** 그린다(비수업 블록은 마스터 시트 문법이고,
   // 여기로 왕복시키면 export→import에서 사라지거나 반으로 오인된다). 마스터 파서(parse-grid)만 채운다.
   return { tabName: grid.tabName, teachers, slots, blocks: [], warnings };
 }

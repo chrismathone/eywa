@@ -80,7 +80,7 @@ describe("badge / title", () => {
   });
 
   it("🔴 보고서 작성자는 맨 뒤에 붙는다 — 없으면 한 글자도 안 늘어난다(2026-09-07)", () => {
-    // 원장 *"출결 뒤에 보고서 발송자"* · *"수학의 경우"* — 영어는 eywa에 보고서를 안 써서
+    // 원장 *"출결 뒤에 보고서 발송자"* · *"수학의 경우"* — 영어는 aywa에 보고서를 안 써서
     // reporter가 늘 비고, 그때 배지가 종전과 **완전히 같아야** 한다(빈 자리·구분자 금지).
     expect(attendanceBadgeText(rec({ reporter: "유형숙" }))).toBe("출석 중등수학A 16:20 유형숙");
     expect(attendanceBadgeText(rec({ reporter: null }))).toBe("출석 중등수학A 16:20");

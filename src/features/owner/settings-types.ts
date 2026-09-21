@@ -191,7 +191,7 @@ export const profileSchema = z.object({
   address: z.string().max(200),
   bizRegNo: z.string().max(20), // 사업자등록번호 — 인쇄물·청구 헤더 법정 표기
   branchLabel: z.string().max(40), // "강남" 같은 지점 표기(헤더 부제)
-  logoText: z.string().max(12), // 사이드바 워드마크(기본 "EYWA")
+  logoText: z.string().max(12), // 사이드바 워드마크(기본 "AYWA")
   brandColor: z.string().max(24),
   logoUrl: z.string().max(400), // 로고 이미지 URL(호스팅 주소). 인쇄물 머리글. 파일 업로드 UI는 후속.
   sealUrl: z.string().max(400), // 직인/도장 이미지 URL. 인쇄물 하단.

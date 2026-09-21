@@ -6,7 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 
 /**
  * 리치 텍스트 에디터 본체(TipTap) — **표를 쓸 수 있는 사유/본문 입력**.
@@ -44,7 +44,7 @@ function ToolButton({
   active?: boolean;
   disabled?: boolean;
   label: string;
-  icon?: EywaIconName;
+  icon?: AywaIconName;
   text?: string;
   }) {
   return (

@@ -1,15 +1,15 @@
 import { describe, it, expect } from "vitest";
-import fixture from "./fixtures/eywa-teacher-grid.sample.json";
-import { parseEywaTeacherGrid } from "./parse-eywa-grid";
+import fixture from "./fixtures/aywa-teacher-grid.sample.json";
+import { parseAywaTeacherGrid } from "./parse-aywa-grid";
 import type { SheetGrid } from "./types";
 
-// fixture = 1-rxc의 현 eywa export 강사별영어시간표 탭 스냅샷(includeGridData, 48행×84열·병합 331).
+// fixture = 1-rxc의 현 aywa export 강사별영어시간표 탭 스냅샷(includeGridData, 48행×84열·병합 331).
 // ⚠️ 구 parse-grid.ts용 fixture(원본 손시트)와 별개. export 구조 바뀌면 새로 뜰 것.
 const grid = fixture as SheetGrid;
-const parsed = parseEywaTeacherGrid(grid);
+const parsed = parseAywaTeacherGrid(grid);
 const DAYS = new Set(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
 
-describe("parseEywaTeacherGrid — eywa export 강사별 구조 파싱", () => {
+describe("parseAywaTeacherGrid — aywa export 강사별 구조 파싱", () => {
   it("강사 블록 = row0 라벨(정제된 slot_teacher_label). 12명, 예비 없음", () => {
     expect(parsed.teachers.map((t) => t.name)).toEqual([
       "Jane", "Hannah", "Elsa", "Charlie", "부원장", "Dom",

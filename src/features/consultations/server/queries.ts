@@ -471,7 +471,7 @@ export async function getStudentsNeedingConsultation(
 /**
  * 강사 본인이 작성한 상담(category·consulted_at만) — 카테고리 분포·월별 추세가 공유한다.
  * RPC(`consultation_category_counts`/`consultation_monthly_trend`)는 **상담자 인자가 없어** 강사 경로에
- * 못 쓴다. RPC에 인자를 추가하려면 마이그레이션이 필요한데, eywa는 SQL을 손으로 적용하므로 앱을 먼저
+ * 못 쓴다. RPC에 인자를 추가하려면 마이그레이션이 필요한데, aywa는 SQL을 손으로 적용하므로 앱을 먼저
  * 배포하면 그 화면이 죽는다(#95) → 강사 경로만 앱에서 집계한다.
  * ⚠️ 본인 것만이라 행 수가 작다(실측 110건). 그래도 bare select 금지 규약대로 `fetchAllPaged`(#54).
  * React cache로 요청당 1회 — 두 함수가 같은 데이터를 두 번 읽지 않는다.

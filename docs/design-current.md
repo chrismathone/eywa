@@ -1,4 +1,4 @@
-# eywa 현재 화면 기준
+# aywa 현재 화면 기준
 
 2026-09-10 전체 디자인 검수 후 적용 기준. 이전 선택의 내력과 세부 업무 제약은 [design-conventions.md](design-conventions.md)에 보존한다. 시각 수치가 충돌하면 이 문서와 `globals.css`의 현재 토큰을 따른다.
 

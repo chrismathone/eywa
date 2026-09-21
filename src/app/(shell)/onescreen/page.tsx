@@ -11,7 +11,7 @@ import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 
-export const metadata = { title: "선생님 원스크린 — eywa" };
+export const metadata = { title: "선생님 원스크린 — aywa" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다(등록상담 상세 선례). 기본값은 15초라

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarOff, Settings2 } from "@/components/icons/eywa-icon-compat";
+import { CalendarOff, Settings2 } from "@/components/icons/aywa-icon-compat";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { FilterSelect } from "@/components/filter-select";
 import { PeriodNav } from "@/components/period-nav";

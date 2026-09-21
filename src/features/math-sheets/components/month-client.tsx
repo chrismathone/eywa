@@ -6,7 +6,7 @@ import { SHEET_BAR, sheetPill } from "@/features/class-sheets/chrome";
 import { SheetBarDivider, SheetClassPicker } from "@/features/class-sheets/components/sheet-chrome";
 
 import { shiftMonth } from "@/lib/date-kst";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
 import { withEmbed } from "@/components/workspace/embed-context";

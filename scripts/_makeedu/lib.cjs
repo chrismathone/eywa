@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/lib.cjs — makeedu → eywa 동기화 공유 유틸 (CommonJS).
+ * scripts/_makeedu/lib.cjs — makeedu → aywa 동기화 공유 유틸 (CommonJS).
  * 임포터(import-*.cjs)와 향후 Phase 2 크롤러가 공유. 순수 변환 + 작은 DB 헬퍼.
  */
 
@@ -48,13 +48,13 @@ function gender(v) {
   return null;
 }
 
-// eywa name_normalized 생성 규칙(0001a): lower(regexp_replace(name,'\s+','','g'))
+// aywa name_normalized 생성 규칙(0001a): lower(regexp_replace(name,'\s+','','g'))
 // 🔴🔴 makeedu는 목록에서 **원생 상태를 이름 뒤 괄호로 표시**한다 — `강윤서(퇴)` · `박수빈(퇴)`.
 // 재원생만 보던 시절엔 이 접미사를 볼 일이 없었는데, 원생상태를 '전체'로 바꾼 순간 나타났고
-// **eywa의 `강윤서`와 매칭이 깨졌다**(2026-07-31 실측: 3,459라인 중 350건 미매칭 = 10%).
+// **aywa의 `강윤서`와 매칭이 깨졌다**(2026-07-31 실측: 3,459라인 중 350건 미매칭 = 10%).
 // 매칭이 깨지면 그 학생의 청구가 "makeedu에 없다"로 읽혀 **삭제 후보가 된다** — 실제로 강윤서·박수빈·
 // 김나율A·김경진의 청구가 그렇게 무효 처리됐다(makeedu엔 멀쩡히 있는데도).
-// ⚠️ **괄호를 통째로 벗기면 안 된다** — eywa에 `박소선 (테스트)`·`원일(테스트)` 같은 실제 이름이 있어
+// ⚠️ **괄호를 통째로 벗기면 안 된다** — aywa에 `박소선 (테스트)`·`원일(테스트)` 같은 실제 이름이 있어
 //    벗기면 다른 사람과 충돌한다. **상태 표시로 알려진 것만** 지운다(allowlist).
 const NAME_STATUS_SUFFIX = /\((?:퇴|퇴원|휴|휴원|졸|졸업)\)\s*$/;
 
@@ -79,7 +79,7 @@ function parseAmount(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-// makeedu 학년 → eywa gradeLevels(초1~고3 1:1 일치). 유치원 등 미대응은 원문 보존(필터에서만 누락).
+// makeedu 학년 → aywa gradeLevels(초1~고3 1:1 일치). 유치원 등 미대응은 원문 보존(필터에서만 누락).
 function gradeNorm(v) {
   return txt(v);
 }
@@ -99,7 +99,7 @@ function isNonClass(name) {
   return NONCLASS_RE.test(s);
 }
 
-// makeedu 수업명(+담임) → eywa operations.subjects 키.
+// makeedu 수업명(+담임) → aywa operations.subjects 키.
 // 인재원 subjects = math / subject_1(수학심화) / english / science / korean.
 // makeedu 접두/토큰: [EiE]·중등E·고등E·초등E=영어 / [강아]·중등M·고등M·초등M·…반=수학(강의하는아이들) / [과학]=과학 / 국어=국어.
 function subjectFromName(name, teacher) {
@@ -112,7 +112,7 @@ function subjectFromName(name, teacher) {
   return "math";
 }
 
-// makeedu 결제수단 → eywa payment_method(card/transfer/cash/other). 원문은 호출부가 별도 보존 가능.
+// makeedu 결제수단 → aywa payment_method(card/transfer/cash/other). 원문은 호출부가 별도 보존 가능.
 function paymentMethod(v) {
   const s = txt(v) || "";
   if (/카드|card/i.test(s)) return "card";
@@ -147,7 +147,7 @@ function tieredMatcher(ijwRows, keyFns) {
 }
 
 /**
- * 역동기화(eywa→makeedu) 푸시 대상 판정 — **앱과 같은 규칙**을 CJS 쪽에서 한 벌로 갖는다.
+ * 역동기화(aywa→makeedu) 푸시 대상 판정 — **앱과 같은 규칙**을 CJS 쪽에서 한 벌로 갖는다.
  * 앱 단일 소스 = src/features/integrations/push-eligibility.ts (`isPushableConsultation`).
  *
  * - enrolled 아님 → 보낼 수 있다.

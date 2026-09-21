@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import {
   sendOnescreenNotice,
