@@ -357,6 +357,18 @@ describe("setAttendanceRange — 강사 전체 보기의 범위 채우기", () =
     cells = [{ studentId: h.S1, classId: h.CLASS, sessionDate: D }],
   ) => setAttendanceRange({ cells, status: "present", units: "4", quiet: true, ...over });
 
+  it.each(["late", "early_leave", "makeup", "absent"] as const)("범위 색상 %s 지정은 교시 시수를 유지하고 저장된 합계를 반환한다", async (status) => {
+    mixedDay();
+    h.state.records = h.state.records.map((r) => ({ ...r, status: "absent" }));
+    const result = await range({ status, units: undefined, scopeTeacherId: h.CHARLIE });
+    expect(unitsWritten()).toEqual({});
+    expect(statusWritten()).toEqual(["r-1720", "r-1820"]);
+    expect(result).toMatchObject({
+      ok: true, applied: 1,
+      autoUnits: [{ studentId: h.S1, classId: h.CLASS, sessionDate: D, units: status === "absent" ? null : 2.7 }],
+    });
+  });
+
   it("붙여넣은 1도 본인 두 교시 합계 1로 저장한다", async () => {
     mixedDay();
     h.state.schedules.push(slot("15:20:00", h.HOMEROOM));

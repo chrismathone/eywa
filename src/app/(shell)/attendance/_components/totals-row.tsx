@@ -41,6 +41,7 @@ export function MatrixTotalsSummary({
   countByRow,
   money,
   moneyNote,
+  showLegacySettlement = true,
   trailing,
 }: {
   /** 표에 담긴 반 수(전체). */
@@ -52,6 +53,7 @@ export function MatrixTotalsSummary({
   /** 원장 전용 금액. null이면 금액 부분을 통째로 안 그린다. */
   money?: TeacherMoney | null;
   moneyNote?: string | null;
+  showLegacySettlement?: boolean;
   /**
    * 합계 **뒤에 이어 붙이는** 한 조각(조작 안내, 원장 2026-09-14 *"2행은 1행 우측 끝으로 간략하게"*).
    * 🔴 이 덩어리(`sticky left-0 flex-wrap`) **안에** 둬야 한다 — 밖에서 `sticky right-0`로 따로 세웠더니
@@ -139,7 +141,7 @@ export function MatrixTotalsSummary({
           ) : null}
           {/* 강사 몫(정산액) — 1순위는 티어 단가(0199a, 시트 산식 Σ floor1(단가×시수×0.911×비율)).
               티어 미배선이면 종전 안내(회차 확정/배분율)로 폴백. 없으면 0을 지어내지 않는다. */}
-          {tier?.status === "ready" ? (
+          {!showLegacySettlement ? null : tier?.status === "ready" ? (
             <span className="text-foreground num text-xs font-bold">
               {tf("att.totals.pay", {
                 amount: formatMoney(scopedTier ? scopedTier.total : tier.total),

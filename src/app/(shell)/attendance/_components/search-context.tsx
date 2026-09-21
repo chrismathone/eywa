@@ -1,4 +1,5 @@
 "use client";
+import { AttendanceColSpan } from "./columns";
 
 /**
  * 월별 출석부 **학생 검색** 상태 — 툴바(입력)와 표(행 숨김)와 격자(좌표)가 같은 값을 본다.
@@ -212,7 +213,7 @@ export function SearchEmptyRow({ colSpan, where }: { colSpan: number; where: str
   return (
     <tbody>
       <tr>
-        <td colSpan={colSpan} className="border-line border-b px-4 py-6">
+        <AttendanceColSpan colSpan={colSpan} className="border-line border-b px-4 py-6">
           <div className="sticky left-0 flex w-fit items-center gap-2">
             <span className="text-foreground text-sm font-bold">
               {emptySearchMessage(ctx.query, where, lang)}
@@ -225,7 +226,7 @@ export function SearchEmptyRow({ colSpan, where }: { colSpan: number; where: str
               {t("att.search.clear")}
             </button>
           </div>
-        </td>
+        </AttendanceColSpan>
       </tr>
     </tbody>
   );
