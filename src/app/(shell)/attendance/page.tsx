@@ -1128,6 +1128,7 @@ export default async function AttendancePage({
             showGroups={showGroups}
             classBilledAmounts={classBilledAmounts.billed}
             termSessionsByRow={classBilledAmounts.confirmedSessions}
+            confirmedPricesByRow={classBilledAmounts.confirmedPrices}
             priceConfirmedRows={classBilledAmounts.priceConfirmed}
             noInvoiceRows={noInvoiceRows}
             money={money}

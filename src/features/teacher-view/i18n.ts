@@ -1461,6 +1461,13 @@ export const SHEET_DICT = {
     en: "The student's school and grade (shown compact; hover a value for the full text).",
   },
   // 이 반 몫 청구액. 학생 총액 '청구·납입' 열은 2026-09-17 원장 지시로 없앴다(합계 줄의 청구·납입은 `att.totals.*`).
+  "att.col.unitPrice": { ko: "단가", en: "Price" },
+  "att.col.unitPriceTitle": {
+    ko: "회차 확정에 저장된 단가 및 월 수강료입니다. 서로 다른 확정 단가가 있으면 각각 표시합니다.",
+    en: "Saved confirmed unit prices or monthly tuition. Different confirmed prices are listed separately.",
+  },
+  "att.row.confirmedPrice": { ko: "{price}원", en: "₩{price}" },
+  "att.row.monthlyPrice": { ko: "월 {price}원", en: "₩{price}/mo" },
   "att.col.classBilled": { ko: "청구액", en: "Billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",

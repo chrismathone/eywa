@@ -9,9 +9,10 @@ describe("영어 트랙 시수", () => {
     expect(unitsFromMinutes(120, "eie")).toBe(3);
   });
 
-  it("인재원은 60분당 0.5시수를 유지한다", () => {
-    expect(unitsFromMinutes(60, "injaewon")).toBe(0.5);
-    expect(unitsFromMinutes(120, "injaewon")).toBeNull();
-    expect(unitsFromMinutes(180, "injaewon")).toBe(1.5);
+  it("인재원은 60분당 1시수다(수학의 0.5와 구분)", () => {
+    expect(unitsFromMinutes(60, "injaewon")).toBeNull();
+    expect(unitsFromMinutes(120, "injaewon")).toBe(2);
+    expect(unitsFromMinutes(180, "injaewon")).toBe(3);
+    expect(unitsFromMinutes(60, "math")).toBe(0.5);
   });
 });
