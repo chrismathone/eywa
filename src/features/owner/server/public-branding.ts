@@ -94,11 +94,10 @@ export async function getPublicBranding(): Promise<PublicBranding | null> {
  */
 export async function getPublicBrandingByTenantId(
   tenantId: string,
-): Promise<(PublicBranding & { raw: unknown }) | null> {
+): Promise<PublicBranding | null> {
   try {
     const raw = await loadTenantSettingsRaw(tenantId);
-    // `raw`(원본 jsonb, 기본값 미병합)도 함께 — 자리 PIN이 멀티테넌트에서 "명시한 값만" 볼 때 쓴다(`explicitSeatPin`).
-    return { tenantId, settings: resolveSettings(raw.data, { name: raw.name }), raw: raw.data };
+    return { tenantId, settings: resolveSettings(raw.data, { name: raw.name }) };
   } catch (e) {
     console.error("[owner/public-branding] 지점 브랜딩 조회 실패 — 제품 중립 표기로 폴백", e);
     return null;

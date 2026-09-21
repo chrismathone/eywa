@@ -1,9 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { DEFAULT_SETTINGS } from "@/features/owner/defaults";
 import { getPublicBrandingByTenantId, listPublicBranchChoices } from "@/features/owner/server/public-branding";
-import { configuredSeatPin, explicitSeatPin, pinsMatch, resolveSeatPinTenant } from "../pin";
+import { configuredSeatPin, pinsMatch, resolveSeatPinTenant } from "../pin";
 import { parseSeatKey } from "../seat";
 import {
   delayAfterPinFail,
@@ -29,10 +28,10 @@ const UNAVAILABLE = "지금은 이 화면을 쓸 수 없습니다. 관리자에�
  *    한도가 다 찬 뒤에도 요청마다 DB 조회가 나가 제한기가 DB 부하를 못 막는다. 조회는 `loadTenantSettingsRaw`
  *    태그 캐시(`getPublicBrandingByTenantId`)라 종전(`getPublicBranding` 캐시 히트)과 같은 비용이고, 순간 장애 땐 캐시된
  *    진짜 값이 서빙된다.
- * 🔴 학원이 **둘 이상이면 명시한 PIN만**(`explicitSeatPin` — 원본 jsonb, 기본 7099 안 섞음 · **기본값과 같은 값도 미설정**):
- *    모든 지점이 공개 목록에 서므로 아직 PIN을 안 정한 새 지점이 저장소에 적힌 기본값으로 열리면 안 된다(운영 탭 첫 저장이
- *    기본값을 명시값처럼 적는다 — 재리뷰 2026-09-18). 학원 1개면 종전(2026-08-19 "설정 안 건드려도 배포 즉시 열려야")
- *    그대로 기본값을 쓴다.
+ * 🔑 비밀번호 = 고른 지점의 학원설정 값(저장이 없으면 기본 **0000**) — 학원이 하나든 여럿이든 같은 규칙이다
+ *    (원장 2026-09-22 *"새로운 지점들은 기본 비밀번호 0000으로. 세팅되게."*). 새 지점은 0000으로 바로 열리고, 지점장이
+ *    학원설정 → 운영 → '자리 출석부 비밀번호'에서 바꾼다. ⚠️ 종전(2026-09-18)엔 여럿이면 저장소 기본값과 같은 값을 안 받았다
+ *    (`explicitSeatPin` — 안 바꾼 지점이 공개된 기본값으로 열리지 않게). 원장 지시로 폐기했다 — 되살리면 새 지점의 0000이 막힌다.
  * ⚠️ 시도 제한 키는 지점을 **안 섞는다**(IP 단위 그대로) — 지점마다 따로 세면 지점을 갈아타며 4자리를 N배로
  *    시도할 수 있다. 전역 창(`GLOBAL_KEY`)도 그대로다.
  */
@@ -68,9 +67,7 @@ export async function submitSeatPin(
   //    비어 있으면 그 자리만 닫힌다(다른 자리는 그대로 열려 있다).
   const branding = await getPublicBrandingByTenantId(tenantId);
   if (!branding) return { error: UNAVAILABLE };
-  const expected = multi
-    ? explicitSeatPin(branding.raw, seat, DEFAULT_SETTINGS.operations.seatPins[seat])
-    : configuredSeatPin(branding.settings.operations.seatPins[seat]);
+  const expected = configuredSeatPin(branding.settings.operations.seatPins[seat]);
   if (!expected) return { error: UNAVAILABLE };
 
   const pin = String(formData.get("pin") ?? "");

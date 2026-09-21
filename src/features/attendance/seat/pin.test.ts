@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   configuredSeatPin,
-  explicitSeatPin,
   nextPinAttempt,
   normalizePin,
   pinsMatch,
@@ -131,24 +130,3 @@ describe("resolveSeatPinTenant — 지점 판정(URL에 지점 없음, 2026-09-1
   });
 });
 
-describe("explicitSeatPin — 멀티테넌트에선 명시한 비밀번호만(기본 7099 금지, 적대 리뷰 2026-09-18)", () => {
-  const DEF = "7099";
-  it("원본에 그 자리 값이 있을 때만 · 공백은 닫힘", () => {
-    expect(explicitSeatPin({ operations: { seatPins: { lab: "1234" } } }, "lab", DEF)).toBe("1234");
-    expect(explicitSeatPin({ operations: { seatPins: { lab: "1234" } } }, "jj", DEF)).toBeNull();
-    expect(explicitSeatPin({ operations: { seatPins: { lab: "  " } } }, "lab", DEF)).toBeNull();
-  });
-  it("원본이 없거나 모양이 다르면 null — 기본값으로 떨어지지 않는다", () => {
-    expect(explicitSeatPin(null, "lab", DEF)).toBeNull();
-    expect(explicitSeatPin({}, "lab", DEF)).toBeNull();
-    expect(explicitSeatPin({ operations: null }, "lab", DEF)).toBeNull();
-    expect(explicitSeatPin({ operations: { seatPins: "7099" } }, "lab", DEF)).toBeNull();
-    expect(explicitSeatPin({ operations: { seatPins: { lab: 7099 } } }, "lab", DEF)).toBeNull();
-  });
-  it("🔴 저장소 기본값과 같은 값도 미설정 — 운영 탭 첫 저장이 기본값을 명시값처럼 적어도 열리지 않는다(재리뷰 2026-09-18)", () => {
-    expect(explicitSeatPin({ operations: { seatPins: { lab: "7099", jj: "7099" } } }, "lab", DEF)).toBeNull();
-    expect(explicitSeatPin({ operations: { seatPins: { lab: " 7099 " } } }, "lab", DEF)).toBeNull();
-    // 기본값이 없는 자리(shippedDefault 없음)는 명시값을 그대로 인정한다.
-    expect(explicitSeatPin({ operations: { seatPins: { jj: "7099" } } }, "jj", null)).toBe("7099");
-  });
-});
