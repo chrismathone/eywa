@@ -14,6 +14,18 @@ describe("보강 기록 수업 선택 배선", () => {
     expect(client).toMatch(/makeupClassId: choice\.hostClassId \?\? null/);
   });
 
+  it("🔴 합칠 정규 수업이 있는 보강도 수업 후보를 불러 창에 넘긴다 — 다니는 다른 반에 기록할 수 있게(원장 2026-09-21 '항상 다른 수업을 고를 수 있게')", () => {
+    const client = read("src/features/onescreen/components/onescreen-client.tsx");
+    const at = client.indexOf('if (plan.kind === "ask") {');
+    const block = client.slice(at, client.indexOf("return;", at));
+    expect(block).toContain("hostClasses: { options: [], loading: true }");
+    // 후보 반은 합칠 정규 수업의 과목으로 좁힌다(두 과목 강사가 '전체'에서 추가하면 결석 목록 과목과 반 후보 과목이 갈린다).
+    expect(block).toContain("void loadHostClasses(studentId, candSubjects.length ? candSubjects : mk.subjects);");
+    // 이미 보강 행이 있으면 합침도 멈춘다(다른 반으로 만든 보강 행 + 다시 추가해 합침 = 두 번) — 멈춤 판정에 합침/분리 조건이 없어야 한다.
+    expect(client).toContain("const stopSubject = choice.candidate ? choice.candidate.subjectKey : undefined;");
+    expect(client).toContain("pendingMakeupRows(cardNow, ask.mk, stopSubject).length === 0");
+  });
+
   it("보고서 저장 훅은 고른 수업을 받아, 그 반에 칸이 이미 있으면 보강 반을 만들지 않는다(시수 두 번 방지)", () => {
     expect(read("src/features/onescreen/server/actions.ts")).toMatch(/makeupClassId: input\.makeupClassId \?\? null/);
     const pool = read("src/features/attendance/server/makeup-pool.ts");

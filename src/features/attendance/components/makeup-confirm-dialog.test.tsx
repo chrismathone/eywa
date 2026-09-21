@@ -177,11 +177,62 @@ describe("⑦ 보강을 기록할 수업을 고른다(원장 2026-09-21 — '반
     await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
     expect(onConfirm).toHaveBeenCalledWith({ mode: "separate", candidate: null, addUnits: 1 });
   });
-  it("합칠 정규 수업이 있으면 묻지 않는다(그 수업에 기록된다) — hostClassId도 안 싣는다", async () => {
-    const { onConfirm } = setup({ hostClasses: { options: hosts }, defaultHostClassId: "own" });
+  it("🔴 정규 수업이 있어도 묻는다 — 오늘 정규 수업이 맨 앞·처음 선택이고, 그대로 합치면 hostClassId를 안 싣는다(원장 2026-09-21 '항상 다른 수업을 고를 수 있게')", async () => {
+    const { onConfirm } = setup({ candidates: [cand({ className: "고등M 중2 PS3A" })], hostClasses: { options: hosts }, defaultHostClassId: "own" });
+    expect(screen.getByRole("radiogroup", { name: "보강 기록 수업 선택" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /고등M 중2 PS3A · 오늘 정규/ })).toHaveAttribute("aria-checked", "true");
+    // 반 필터 기본값(own)은 정규 수업이 있으면 처음 선택이 아니다.
+    expect(screen.getByRole("radio", { name: /중등M 초6 TP2Q/ })).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ mode: "merge", candidate: expect.objectContaining({ classId: "c1" }) }));
+    // ⚠️ `not.objectContaining({ hostClassId: expect.anything() })`는 null을 못 잡는다('반 없이'가 잘못 실려도 통과) — 키 자체가 없어야 한다.
+    expect(onConfirm.mock.calls[0]![0]).not.toHaveProperty("hostClassId");
+  });
+  it("🔴 정규 수업이 있으면 '반 없이'는 없다 — 그 정규 칸 때문에 보강 반이 안 생겨 시수가 아무 데도 안 선다(적대 리뷰 2026-09-21)", () => {
+    setup({ candidates: [cand({ className: "고등M 중2 PS3A" })], hostClasses: { options: hosts } });
+    expect(screen.queryByRole("radio", { name: /반 없이/ })).not.toBeInTheDocument();
+  });
+  it("오늘 정규 수업의 반이 후보 목록에도 있으면 한 번만 선다('오늘 정규' 칩)", () => {
+    setup({ candidates: [cand({ classId: "own", className: "중등M 초6 TP2Q" })], hostClasses: { options: hosts } });
+    expect(screen.getAllByRole("radio", { name: /중등M 초6 TP2Q/ })).toHaveLength(1);
+  });
+  it("🔴 정규 수업이 있는데 다른 반을 고르면 합침은 사라지고 그 반에 보강으로 기록한다(candidate null · hostClassId)", async () => {
+    const { onConfirm } = setup({ candidates: [cand({ className: "고등M 중2 PS3A" })], hostClasses: { options: hosts } });
+    await userEvent.click(screen.getByRole("radio", { name: /중등M 초6 TP2Q · 다니는 반/ }));
+    expect(screen.queryByRole("radiogroup", { name: "보강 보고서 처리 방식" })).not.toBeInTheDocument();
+    expect(screen.getByText(/오늘 정규 보고서와 따로 보강 보고서가 나갑니다. 출석부 중등M 초6 TP2Q 반에 보강으로 기록합니다/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ mode: "separate", candidate: null, hostClassId: "own" }));
+  });
+  it("정규 수업을 다시 고르면 합침/분리가 돌아오고, 분리 요약에 시수를 얹을 반 이름이 선다", async () => {
+    setup({ candidates: [cand({ className: "고등M 중2 PS3A" })], hostClasses: { options: hosts } });
+    await userEvent.click(screen.getByRole("radio", { name: /중등M 초6 TP2Q/ }));
+    await userEvent.click(screen.getByRole("radio", { name: /고등M 중2 PS3A · 오늘 정규/ }));
+    await pickSeparate();
+    expect(screen.getByText(/보강 시수는 고등M 중2 PS3A 칸에 얹습니다/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "분리해서 발송" })).toBeEnabled();
+  });
+  it("정규 수업을 골랐으면 다른 수업 목록을 기다리지 않는다(불러오는 중이어도 확인 가능)", () => {
+    setup({ candidates: [cand()], hostClasses: { options: [], loading: true } });
+    expect(screen.getByText("다른 수업을 불러오는 중…")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "합쳐서 발송" })).toBeEnabled();
+  });
+  it("정규 수업이 둘이면 고르기 전엔 막힌다 — 추측하지 않는다(결석 선택란이 떴다 사라지지 않게 정규 쪽으로 둔다)", () => {
+    setup({ candidates: [cand(), cand({ name: "수학 · 특강", classId: "c2" })], hostClasses: { options: hosts } });
+    expect(screen.getByText(/보강을 기록할 수업을 고르세요/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "합쳐서 발송" })).toBeDisabled();
+    expect(screen.queryByLabelText("며칠자 결석분 보강인가요?")).not.toBeInTheDocument();
+  });
+  it("정규 수업이 둘이고 목록을 불러오는 중이면 '불러오는 중'이 아니라 '고르세요'라고 한다(정규 칩은 바로 누를 수 있다)", () => {
+    setup({ candidates: [cand(), cand({ name: "수학 · 특강", classId: "c2" })], hostClasses: { options: [], loading: true } });
+    expect(screen.getByText(/보강을 기록할 수업을 고르세요\./)).toBeInTheDocument();
+    expect(screen.queryByText(/수업 목록을 불러오는 중입니다/)).not.toBeInTheDocument();
+  });
+  it("정규 수업이 있고 수업 목록이 실패하면 종전대로(묻지 않고 정규 수업에 기록 — hostClassId 없음)", async () => {
+    const { onConfirm } = setup({ hostClasses: { options: [], failed: true } });
     expect(screen.queryByRole("radiogroup", { name: "보강 기록 수업 선택" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
-    expect(onConfirm).toHaveBeenCalledWith(expect.not.objectContaining({ hostClassId: expect.anything() }));
+    expect(onConfirm.mock.calls[0]![0]).not.toHaveProperty("hostClassId");
   });
   it("후보를 안 넘긴 화면(ECS·반별 출석부)은 종전 그대로 — 묻지 않고 hostClassId도 없다", async () => {
     const { onConfirm } = setup({ candidates: [] });

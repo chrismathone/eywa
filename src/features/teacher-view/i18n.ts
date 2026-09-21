@@ -3228,6 +3228,10 @@ export const SHEET_DICT = {
     ko: "새로고침하면 이 보강은 시수를 얹은 {target} 반 아래에 보입니다.",
     en: "After refreshing, this makeup appears under {target}, where the units were added.",
   },
+  "os.c.makeupShownUnderAll": {
+    ko: "새로고침하면 이 보강은 {target} 반으로 옮겨 가는데, 그 반은 오늘 수업 칩에 없어 '전체'에서 보입니다.",
+    en: "After refreshing, this makeup moves to {target}, which has no class chip today — find it under 'All'.",
+  },
   "os.c.removeMakeupRegularLine": {
     ko: "저장된 보강 수업보고서·그 수업으로 올라간 진도 기록이 삭제됩니다. {cls} 정규 칸에 얹은 보강 시수·메모는 남으니 필요하면 출석부에서 고쳐 주세요.",
     en: "The saved makeup report and the progress recorded for that lesson are deleted. The makeup units and notes added to the {cls} regular cell stay — fix them in the attendance sheet if needed.",

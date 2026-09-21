@@ -25,6 +25,8 @@ export type MergeCandidate = {
   subjectKey: string;
   attendanceRaw: string | null;
   attendanceUnits: number | null;
+  /** 반 이름 — **표시 전용**(확인창 선택지·요약 문장). 판정은 `classId`로만 한다. 호출부가 채우고, 없으면 행 이름(`name`)을 쓴다. */
+  className?: string | null;
 };
 
 /**
