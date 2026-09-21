@@ -5,7 +5,8 @@
 //    '반 없이'(보이지 않는 보강 반, 0241a)는 선택지로 **남긴다** — 정말 반과 무관한 보강도 있다.
 // 🔴 선택지는 **보강 등록 문(`registerMakeupEntries`)이 받는 반**만 — 그날 담당 반(담임 ∪ 위임, 활성) 중 보강 행과 과목이 같은 반.
 //    받지 않을 반을 보이면 고른 뒤 '담당 과목과 보강 수업을 확인해 주세요'로 실패한다(적대 리뷰 2026-09-21).
-// 🔴 학생이 **다니는 반을 맨 앞**에 — 그 반에 기록하면 출석부에 새 줄이 안 생긴다(원장이 겪은 문제의 답).
+// 🔴 창에 세우는 반은 **학생이 다니는 반만**(`hostChoicesFor`, 원장 2026-09-21 *"해당 학생의 소속 수업만 띄워"*) — 그 반에 기록하면
+//    출석부에 새 줄이 안 생긴다(원장이 겪은 문제의 답). 선생님의 다른 반까지 세웠더니 열 개가 넘게 늘어섰다.
 
 export type MakeupHostClass = {
   classId: string;
@@ -19,9 +20,20 @@ export type MakeupHostClass = {
 /** '반 없이'(보강 반에 기록) 선택 값 — 반 id와 섞이지 않는 토큰. */
 export const HOST_NONE = "__makeup_pool__";
 
-/** 다니는 반 먼저, 그다음 이름순. */
+/** 다니는 반 먼저, 그다음 이름순(창은 `hostChoicesFor`로 다니는 반만 세운다 — 서버 목록 자체의 순서). */
 export function orderHostClasses(list: readonly MakeupHostClass[]): MakeupHostClass[] {
   return [...list].sort((a, b) => Number(b.enrolled) - Number(a.enrolled) || a.className.localeCompare(b.className, "ko"));
+}
+
+/**
+ * 창에 세울 수업 후보 — 🔴 **학생이 다니는 반만**(원장 2026-09-21 *"해당 학생의 소속 수업만 띄워"*). 다니지 않는 반에 기록하면 그 반
+ * 출석부에 방문 줄이 새로 서서, 이 선택지를 만든 이유(출석부 줄을 늘리지 않아 수납 분리가 쉽게)와 거꾸로 간다.
+ * 오늘 정규 행이 있는 반(`regularClassIds`)도 뺀다 — 그 반은 '오늘 정규' 항목으로 서고, 정규 칸이 이미 있어 보강을 따로 적지 않는다.
+ * 🔑 원스크린(`hostChoicesOf` — 기본값도 이 목록으로 판정)과 확인창이 **같은 함수**를 쓴다.
+ */
+export function hostChoicesFor(options: readonly MakeupHostClass[], regularClassIds: Iterable<string>): MakeupHostClass[] {
+  const regular = new Set(regularClassIds);
+  return options.filter((o) => o.enrolled && !regular.has(o.classId));
 }
 
 /**

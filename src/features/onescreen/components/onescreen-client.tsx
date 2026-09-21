@@ -206,7 +206,7 @@ import {
   type MakeupConfirmChoice,
 } from "@/features/attendance/components/makeup-confirm-dialog";
 import { fetchMakeupAbsences, fetchMakeupHostClasses } from "@/features/attendance/server/makeup-actions";
-import { defaultHostClassId, type MakeupHostClass } from "@/features/attendance/makeup-host";
+import { defaultHostClassId, hostChoicesFor, type MakeupHostClass } from "@/features/attendance/makeup-host";
 import { noteMakeupAgainstAbsence } from "@/features/attendance/server/makeup-note-action";
 import type { MakeupAbsenceList } from "@/features/attendance/makeup-options";
 import { mergeStatusOf, planMakeupMerge, type MergeCandidate } from "../makeup-merge-plan";
@@ -1177,13 +1177,19 @@ export function OneScreenClient({
     void loadHostClasses(studentId, mk.subjects);
   }
   /**
-   * 창에 보일 수업 후보 — 그 학생이 **오늘 이 화면에 정규 행이 있는 반은 뺀다**: 그 반은 정규 칸이 이미 있어
-   * `persistAnchorMakeup`이 보강을 안 적는다(합칠 수 없는 결석 등) — 보이면 "그 반에 기록합니다"가 지킬 수 없는 약속이 된다.
+   * 창에 보일 수업 후보 — 🔴 **그 학생이 다니는 반만**(원장 2026-09-21 *"해당 학생의 소속 수업만 띄워"*) · 그 학생이 **오늘 이 화면에
+   * 정규 행이 있는 반은 뺀다**: 그 반은 정규 칸이 이미 있어 `persistAnchorMakeup`이 보강을 안 적는다(합칠 수 없는 결석 등) — 보이면
+   * "그 반에 기록합니다"가 지킬 수 없는 약속이 된다. 판정은 [`hostChoicesFor`] 한 곳(확인창도 같은 함수 · 기본값도 이 목록으로 본다).
    */
   function hostChoicesOf(ask: NonNullable<typeof makeupAsk>) {
     if (!ask.hostClasses) return undefined;
-    const regular = new Set(students.find((s) => s.id === ask.studentId)?.subjects.filter((su) => !su.makeup && su.classId).map((su) => su.classId) ?? []);
-    return { ...ask.hostClasses, options: ask.hostClasses.options.filter((o) => !regular.has(o.classId)) };
+    const rows = students.find((s) => s.id === ask.studentId)?.subjects.filter((su) => !su.makeup && su.classId) ?? [];
+    const regular = rows.map((su) => su.classId!);
+    // 담임 반에 정규 칸이 있으면(합칠 수 없는 칸 포함) 확인창이 '반 없이'를 세우지 않는다 — 보고서 저장 훅이 보강 반을 안 만들어 시수가 아무 데도
+    // 안 선다. 🔴 훅과 같은 **담임** 축이다: 위임받은 반의 칸은 훅이 못 본다(그 반 담임은 원래 담임이라 보강 반이 선다 — 막으면 되던 보강이 막힌다,
+    // 재리뷰 2026-09-21). 오늘 반 목록에 없는 반은 담임 반으로 친다(모르면 막는 쪽 — 시수가 사라지는 것보다 낫다).
+    const ownRegular = rows.some((su) => !todayClasses.find((c) => c.id === su.classId)?.delegated);
+    return { ...ask.hostClasses, options: hostChoicesFor(ask.hostClasses.options, regular), regularToday: ownRegular };
   }
   /** 보강을 기록할 수업 후보를 뒤늦게 채운다 — 창은 먼저 열고 목록만 갈아 끼운다(결석 조회와 같은 모양). */
   async function loadHostClasses(studentId: string, rows: readonly Subject[]) {

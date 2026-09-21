@@ -12,6 +12,9 @@ describe("보강 기록 수업 선택 배선", () => {
     expect(client).toMatch(/defaultHostClassId=\{defaultHostClassId\(/);
     expect(client).toContain("fetchMakeupHostClasses(studentId, activeDate, subjects)");
     expect(client).toMatch(/makeupClassId: choice\.hostClassId \?\? null/);
+    // '반 없이'를 막는 정규 칸 판정은 보고서 저장 훅과 같은 **담임** 축 — 위임 반의 칸은 뺀다(훅이 못 봐 보강 반이 선다, 재리뷰 2026-09-21).
+    expect(client).toContain("const ownRegular = rows.some((su) => !todayClasses.find((c) => c.id === su.classId)?.delegated);");
+    expect(client).toContain("regularToday: ownRegular");
   });
 
   it("🔴 합칠 정규 수업이 있는 보강도 수업 후보를 불러 창에 넘긴다 — 다니는 다른 반에 기록할 수 있게(원장 2026-09-21 '항상 다른 수업을 고를 수 있게')", () => {
