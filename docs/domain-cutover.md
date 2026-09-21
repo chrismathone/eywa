@@ -12,9 +12,8 @@
   ⚠️ 이 전환은 Vercel 엣지 설정이라 **`/api/*`까지 넘긴다**(아래 2번의 "`/api` 제외" 코드 리다이렉트와 다르다) — 그래서
   외부가 옛 주소로 부르는 콜백은 새 주소로 옮겨야 한다(전사 웹훅은 `NEXT_PUBLIC_APP_URL`을 따라가므로 아래 env로 해결).
   🔴 `LEGACY_REDIRECT_HOSTS`는 **넣지 않았다** — 엣지가 먼저 전환하므로 코드 리다이렉트는 닿지 않는다(넣어도 무해하지만 쓸모없다).
-- **기준 주소를 `www`로 잡은 이유** = 옛 별칭의 전환 대상이 `www`다. ⚠️ `aywa.co.kr`(www 없음)도 전환 없이 앱을 그대로 띄운다 —
-  로그인 쿠키는 호스트 단위라 두 주소로 들어오면 **로그인이 따로** 논다. 원장이 Vercel Domains에서 `aywa.co.kr` → `www.aywa.co.kr`
-  리다이렉트를 걸면 깔끔하다(원장 결정 · 코드 무관).
+- **기준 주소를 `www`로 잡은 이유** = 옛 별칭의 전환 대상이 `www`다. ✅ 2026-09-22 원장이 Vercel Domains에서 `aywa.co.kr` →
+  `www.aywa.co.kr` 307도 걸었다(실측: `aywa.co.kr/…`·`eywa-alpha.vercel.app/…` 둘 다 경로째 www로) — 이제 로그인 쿠키가 갈리지 않는다.
 - **Vercel env(Production)**: `NEXT_PUBLIC_APP_URL=https://www.aywa.co.kr`(앱 안 공유 링크 표시·자산 QR·전사 콜백) +
   0번의 침산 고정 셋 `GOOGLE_CALENDAR_TENANT_ID`·`HR_ROSTER_TENANT_ID`·`PUBLIC_BRAND_TENANT_SLUG=cs`(학원 1개인 지금은 동작 불변).
 - **ClassNote 보고서 링크**: 게시글 본문의 링크는 연동 PC `.env.local`의 `CLASSNOTE_SHARE_BASE`가 정한다 → 연동 PC에서
@@ -22,8 +21,12 @@
   `CLASSNOTE_TENANT_ID`·`MAKEEDU_TENANT_ID`를 없을 때만 침산으로 + 두 워커 재시작, 백업 남김·멱등). 코드 기본값도 같은 값
   (`share-bases.mjs` `CURRENT_SHARE_BASE` 단일 소스). 🔴 게시 전 중복 확인은 **같은 토큰의 옛·새 주소 글을 다 알아본다**
   (`shareUrlVariants`) — 재시작 순간 옛 주소로 올라간 건이 새 주소로 한 번 더 올라가지 않게. 회수도 두 주소를 다 대 본다.
-- ⏳ 남은 것: 4번(Supabase Auth Site URL — 비밀번호 재설정 메일 링크) · 5번의 기기 다시 잇기(직원·태블릿·키오스크·폰 알림은
-  원장이 전환을 건 순간부터 이미 새 주소로 넘어가 있다 = 한 번씩 다시 로그인/PIN/등록) · 6번 문서 값.
+- ✅ 2026-09-22: 연동 PC zip 두 개 + `발송PC-새도메인.bat` 적용(두 워커 tenant_id=침산으로 00:04 재기동 — `classnote_workers`·
+  `makeedu_sync_workers` 실측) · 4번 Supabase Auth Site URL = `https://www.aywa.co.kr`(원장 적용) · 6번 문서 값(env 예시·배포 표·
+  ClassNote env 표). 5번 기기 다시 잇기는 **사람 몫으로 남는다** — 직원·태블릿·키오스크·폰 알림은 옛 주소 쿠키라 새 주소에서
+  한 번씩 다시 로그인/PIN/기기 등록/'켜기'(iOS는 홈 화면 앱 다시 추가).
+- ✅ 2026-09-22 **둘째 지점 `demo`(인재원 데모) 개통** — 아래 "지점을 하나 더 만드는 날" 0~1번을 이 순서로 밟았다(자리 PIN 기본값 0000 전환 포함,
+  changelog 2026-09-22 (1)). 태블릿 비밀번호 화면에 지점 선택 칸이 생긴다(침산 태블릿은 처음 한 번 "침산"을 고른다).
 
 ## 이미 준비된 것 (코드, 구매 전에 끝남)
 - **옛 호스트 → 새 도메인 308**(경로·쿼리 보존, `/api/*` 제외) — [`src/lib/config/legacy-redirects.ts`](../src/lib/config/legacy-redirects.ts) → `next.config.ts redirects()`.
