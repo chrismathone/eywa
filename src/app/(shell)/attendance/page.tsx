@@ -25,6 +25,9 @@ import { getMonthlyClassWorkers } from "@/features/attendance/server/class-worke
 import { classWorkerLabel } from "@/features/attendance/class-worker";
 import { getAttendanceClassBilledAmounts, mergeAttendanceClassBilling } from "@/features/attendance/server/class-billing";
 import { attendanceNoInvoiceRows } from "@/features/attendance/class-billing";
+import { canShowAttendanceActualAmount } from "@/features/attendance/server/actual-amount-access";
+import { getAttendanceSalaryRates } from "@/features/attendance/server/salary-rates";
+import { SalaryRatesButton } from "./_components/salary-rates-button";
 
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
@@ -512,10 +515,20 @@ export default async function AttendancePage({
     const billing = await getAttendanceClassBilledAmounts(month, [roster], { allowClassIds: [makeupPoolClassId] });
     return { classId: makeupPoolClassId, matrix: poolMatrix, roster, billing };
   };
-  const [workers, homeBilling, makeupPool] = await Promise.all([
+  const [workers, homeBilling, makeupPool, showActualAmount, salaryConfig] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
-    getAttendanceClassBilledAmounts(month, homeBillingRoster),
+    getAttendanceClassBilledAmounts(month, homeBillingRoster, {
+      teacherScope: (mode === "teacher" ? effectiveTeacher : classScopeTeacher) ? {
+        teacherId: (mode === "teacher" ? effectiveTeacher : classScopeTeacher)!,
+        classIds: classesForSubject.filter((c) => attendanceUnitSuffix(c.subject, operations.subjects) === "U").map((c) => c.id),
+        holidays: Object.keys(buildHolidayMap(operations.holidays)),
+        homeroomSinceByClass: mode === "teacher" ? Object.fromEntries(sinceByClass) : effectiveClassId && classScopeTeacher && homeroomSinceIdx
+          ? { [effectiveClassId]: homeroomSinceOf(homeroomSinceIdx, effectiveClassId, classScopeTeacher) } : {},
+      } : undefined,
+    }),
     loadMakeupPool(),
+    canShowAttendanceActualAmount(mode === "teacher" ? effectiveTeacher : classScopeTeacher ?? classesForSubject.find((c) => c.id === effectiveClassId)?.teacherId ?? null),
+    getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : null),
   ]);
   /** 청구 판정을 받은 **모든** 학생×반(담당 반 + 명단이 있는 보강 반) — `—` 줄 판정과 표의 청구 칸이 같은 목록·같은 판정을 본다. */
   const billingRoster = makeupPool.roster ? [...homeBillingRoster, makeupPool.roster] : homeBillingRoster;
@@ -1119,6 +1132,8 @@ export default async function AttendancePage({
           <AttendanceLegend
             lang={lang}
             showToday={visibleDays.some((d) => d.isToday)}
+            showMathUnits={allGroups.some((g) => g.unitSuffix === "T")}
+            showEnglishUnits={allGroups.some((g) => g.unitSuffix === "U")}
           />
           <MatrixTable
             groups={allGroups}
@@ -1127,6 +1142,11 @@ export default async function AttendancePage({
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
             classBilledAmounts={classBilledAmounts.billed}
+            showActualAmount={showActualAmount}
+            salaryRates={salaryConfig?.rates}
+            optionsExtra={salaryConfig ? <SalaryRatesButton teacherId={salaryConfig.teacherId} month={month}
+              teacherName={allTeacherOptions.find((t) => t.value === salaryConfig.teacherId)?.label ?? ""}
+              rates={salaryConfig.rates} classes={teacherClasses.map((c) => ({ id: c.id, name: c.className }))} /> : undefined}
             termSessionsByRow={classBilledAmounts.confirmedSessions}
             confirmedPricesByRow={classBilledAmounts.confirmedPrices}
             priceConfirmedRows={classBilledAmounts.priceConfirmed}

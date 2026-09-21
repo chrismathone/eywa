@@ -4,6 +4,8 @@ import { monthRange } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
+import { loadTeacherTermWeights, type TeacherTermScope } from "./teacher-term-share";
+import { teacherTermSessions } from "../teacher-term-share";
 import { loadMoneyCarryIns, loadMoneyCarryOuts } from "@/features/billing/session-terms/server/money-carryover-queries";
 import {
   attendanceClassBilledAmounts,
@@ -50,7 +52,7 @@ export type AttendanceClassBilling = {
  *    강사가 아무 비활성 반의 청구액을 읽는 뒷문이 된다.
  * 🔴 이중 방어 — DB에서 **이 테넌트의 보강 반**(`is_makeup_pool`)인지 다시 확인된 id만 받는다(반 이름 원문도 그 조회에서 읽는다).
  */
-export type AttendanceClassBillingOptions = { allowClassIds?: readonly string[] };
+export type AttendanceClassBillingOptions = { allowClassIds?: readonly string[]; teacherScope?: TeacherTermScope };
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -106,11 +108,13 @@ export async function getAttendanceClassBilledAmounts(
   // invoices의 원문은 강사 RLS로 차단되어 있다. 인증·반 스코프 검증 후 테넌트/학생/월로 한정한다.
   // 🔴 **void 포함**으로 읽는다(2026-09-18) — 청구서가 "없다"와 "취소됐다"를 가르려면 취소분을 봐야 한다(`neq status void`로
   //    걸러 읽으면 둘 다 빈 결과라 못 가른다). 금액·등록 차수·「단가」는 아래에서 **취소분을 뺀** 청구서로만 센다(종전 그대로).
-  const allInvoices = await fetchAllPagedInChunks<AttendanceInvoice & { status: string | null }>(studentIds, (chunk, f, t) =>
+  const [allInvoices, weights] = await Promise.all([fetchAllPagedInChunks<AttendanceInvoice & { status: string | null }>(studentIds, (chunk, f, t) =>
     admin.from("invoices").select("id, student_id, line_items, status")
       .eq("tenant_id", user.tenantId).eq("period", month)
       .in("student_id", chunk).order("id").range(f, t),
-  );
+  ), options.teacherScope
+    ? loadTeacherTermWeights(admin, user.tenantId, month, classes, options.teacherScope)
+    : Promise.resolve(new Map())]);
   const invoices = allInvoices.filter((i) => i.status !== "void");
   // 배분 유효성은 청구서 전체 반이 필요하다. 최종 결과는 classes의 학생×반으로만 좁힌다.
   // ⚠️ 회차 행은 살아 있는 청구서 것만 읽는다 — 취소된 청구서의 회차 행은 금액·차수·단가 어디에도 안 실린다.
@@ -133,9 +137,15 @@ export async function getAttendanceClassBilledAmounts(
   // 출석부 금액 열은 표시라 실패해도 이월 없이 그린다(분배 저장 거절은 회차 확정·시수 검증 쪽이 한다).
   const carry = { outs: new Map([...carryOuts.map].map(([id, c]) => [id, c.amount] as const)), ins: carryIns.map };
   const confirmedPrices = attendanceClassConfirmedPrices(classes, invoices, terms);
+  const confirmedSessions = attendanceClassConfirmedSessions(classes, invoices, terms);
+  if (options.teacherScope) {
+    for (const [key, share] of weights) {
+      if (confirmedSessions[key]) confirmedSessions[key] = teacherTermSessions(confirmedSessions[key], options.teacherScope.teacherId, share);
+    }
+  }
   return {
     billed: attendanceClassBilledAmounts(classes, invoices, terms, carry),
-    confirmedSessions: attendanceClassConfirmedSessions(classes, invoices, terms),
+    confirmedSessions,
     confirmedPrices,
     priceConfirmed: Object.keys(confirmedPrices),
     // 상태 판정만 취소분까지 본다 — 허용된 반의 학생 전원에게 키가 선다(청구서가 없으면 `none`).

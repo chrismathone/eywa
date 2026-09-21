@@ -1487,8 +1487,8 @@ export const SHEET_DICT = {
     ko: "회차 확정에 저장된 단가 및 월 수강료입니다. 서로 다른 확정 단가가 있으면 각각 표시합니다.",
     en: "Saved confirmed unit prices or monthly tuition. Different confirmed prices are listed separately.",
   },
-  "att.row.confirmedPrice": { ko: "{price}원", en: "₩{price}" },
-  "att.row.monthlyPrice": { ko: "월 {price}원", en: "₩{price}/mo" },
+  "att.row.confirmedPrice": { ko: "{price}", en: "{price}" },
+  "att.row.monthlyPrice": { ko: "월 {price}", en: "{price}/mo" },
   "att.col.classBilled": { ko: "청구액", en: "Billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
@@ -1516,9 +1516,27 @@ export const SHEET_DICT = {
   },
   // 🔴 `Enrolled`는 원생 상태 '재원'이 쓴다(stu.filter.status.enrolled·cls.card.enrolled) — 등록 차수는 `Reg.`(뜻은 툴팁).
   "att.col.termSessions": { ko: "등록 차수", en: "Reg." },
+  "att.col.actualAmount": { ko: "실수업액", en: "Earned" },
+  "att.col.actualSalary": { ko: "실급여", en: "Net pay" },
+  "att.col.actualSalaryTitle": { ko: "시수 × 단가 × 0.911 × 적용 비율의 합", en: "Sum of units × unit price × 0.911 × assigned rate" },
+  "att.row.actualSalaryRate": { ko: "시수 × 단가 × 0.911 × {rate}%", en: "Units × unit price × 0.911 × {rate}%" },
+  "att.row.actualSalaryUnavailable": { ko: "단가·정규/특강의 학년별 비율을 확인해 주세요", en: "Check the unit price and grade-level rate for regular/special lessons" },
+  "att.col.actualAmountTitle": { ko: "확정 단가 × 수업 차수", en: "Confirmed unit price × attended units" },
+  "att.row.actualAmountUnavailable": { ko: "회당 단가가 확정된 경우 계산합니다. 월 정액·일수 기준·복수 단가는 계산하지 않습니다.", en: "Requires one confirmed per-unit price. Monthly fees, day-based prices and multiple prices cannot be multiplied by lesson units." },
+  "att.columns.toggle": { ko: "보기 옵션", en: "View options" },
+  "att.columns.all": { ko: "모두 표시", en: "Show all columns" },
   "att.col.termSessionsTitle": {
-    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 확정 전에는 '미확정'으로 보입니다. 그 달 청구서가 없으면(또는 취소됐으면) '—'로 보입니다.",
-    en: "Sessions confirmed in billing. Shown as unconfirmed until then, or as '—' when there is no bill this month (or it was voided).",
+    ko: "수납관리 '회차 확정'에서 확정한 시수입니다. 영어 강사 보기에서는 학생의 등원 요일·수강 기간과 교시 담당 비율로 나눈 선생님 몫입니다. 확정 전에는 '미확정', 그 달 청구서가 없거나 취소됐으면 '—'로 보입니다.",
+    en: "Sessions confirmed in billing. English teacher views show the teacher's share based on the student's enrollment dates, attendance days and scheduled periods. Unconfirmed until billing confirmation; '—' if the bill is missing or voided.",
+  },
+  "att.row.teacherShare": {
+    ko: "반 전체 등록 {total} 중 이 선생님 담당 {own} · 등원 요일·수강 기간·교시별 시수 기준",
+    en: "Teacher's share: {own} of {total} registered for the class, based on enrollment dates, attendance days and scheduled lesson units.",
+  },
+  "att.row.allocationPending": { ko: "배분 확인", en: "Check share" },
+  "att.row.allocationPendingTip": {
+    ko: "확정 등록 차수는 있으나 교시별 배분에 필요한 수강 기간·시간표를 확인할 수 없습니다.",
+    en: "Registration is confirmed, but enrollment or schedule information needed to allocate the teacher's share is unavailable.",
   },
   // 옛 일수 기준 확정 — 회차 확정 화면이 붉은 숫자 + 카드로 적는 그 사실(원장 2026-09-16).
   "att.row.daysBasis": { ko: "일수 기준 확정", en: "Day-count basis" },
@@ -1560,6 +1578,21 @@ export const SHEET_DICT = {
   // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
   "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
   "att.legend": { ko: "범례", en: "Legend" },
+  "att.units.guide": { ko: "시수 기준", en: "Lesson units" },
+  "att.units.math": {
+    ko: "수학: 1시간 수업 = 0.5, 2시간 수업 = 1, 3시간 수업 = 1.5",
+    en: "Math: 1 hour = 0.5, 2 hours = 1, 3 hours = 1.5",
+  },
+  "att.units.eie": {
+    ko: "브릿지 및 EiE 수업: 40분 수업 = 1, 60분 수업 = 1.5",
+    en: "Bridge & EiE: 40 minutes = 1, 60 minutes = 1.5",
+  },
+  "att.units.injaewon": {
+    ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3",
+    en: "Injaewon: 1 hour = 1, 2 hours = 2, 3 hours = 3",
+  },
+  "att.range.title": { ko: "선택한 {n}칸 출결·색상", en: "Attendance & color for {n} cells" },
+  "att.range.keepUnits": { ko: "각 셀의 기존 시수는 유지합니다.", en: "Each cell keeps its existing units." },
   "att.legend.classDay": { ko: "등원요일", en: "Class day" },
   /* 🔴 2026-09-14: 범례가 **격자에 실제로 나오는 칠을 전부** 세운다(원장 *"이런 미등원도 범례 추가"* →
      캡처를 더 보내며 *"이런것들"*). 그전엔 등원요일·주말 둘뿐이라 회색(미등원)·빗금(남의 교시)·

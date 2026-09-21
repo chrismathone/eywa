@@ -3,7 +3,7 @@ import { tipRow, tipText } from "@/components/hover-tip/tip";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import type { AttendanceInvoiceGap } from "@/features/attendance/class-billing";
-import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import { ghostCellKind, ghostGridValue, rollupDay, STATUS_TONE, type SlotMark } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
@@ -107,8 +107,8 @@ function renderTable() {
 }
 
 describe("마우스 드래그 범위 선택", () => {
-  function renderEditable() {
-    const m = { ...GROUP.matrix, marks: { [S3]: { [DAYS[1]!.date]: "present" as const } } };
+  function renderEditable(over: Partial<AttendanceMatrix> = {}) {
+    const m = { ...GROUP.matrix, marks: { [S3]: { [DAYS[1]!.date]: "present" as const } }, ...over };
     const groups = [{ ...GROUP, matrix: m }];
     const ordered = m.students.map((s) => ({ classId: C, studentId: s.id }));
     const src = buildGridSource(groups, DAYS, ordered);
@@ -162,6 +162,55 @@ describe("마우스 드래그 범위 선택", () => {
       expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(1);
     } finally { hit.mockRestore(); }
   });
+
+  it.each(["late", "early_leave", "makeup", "excused"] as const)("%s 셀은 색상과 시수를 함께 범위에 붙여넣는다", async (status) => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    renderEditable({
+      marks: { [S3]: { [DAYS[1]!.date]: status } },
+      units: { [S3]: { [DAYS[1]!.date]: 1.5 } },
+    });
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[5]!, { button: 0 });
+    fireEvent.keyDown(cells[5]!, { key: "c", ctrlKey: true });
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    fireEvent.mouseDown(cells[3]!, { button: 0, shiftKey: true });
+    fireEvent.keyDown(cells[0]!, { key: "v", ctrlKey: true });
+    await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]).toMatchObject({ status, units: status === "excused" ? "" : "1.5" });
+    for (const cell of cells.slice(0, 4)) expect(cell).toHaveClass(...STATUS_TONE[status].split(" "));
+  });
+
+  it("선택 범위 우클릭은 선택을 유지하고 다른 시수의 셀들을 한 번에 색칠하며, 한 번에 되돌린다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    renderEditable({
+      marks: { [S1]: { [DAYS[0]!.date]: "present", [DAYS[1]!.date]: "makeup" } },
+      units: { [S1]: { [DAYS[0]!.date]: 0.5, [DAYS[1]!.date]: 2 } },
+    });
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    fireEvent.mouseDown(cells[1]!, { button: 0, shiftKey: true });
+    fireEvent.mouseDown(cells[1]!, { button: 2 });
+    fireEvent.focus(cells[1]!);
+    fireEvent.contextMenu(cells[1]!);
+    const dialog = screen.getByRole("dialog", { name: "선택한 2칸 출결·색상" });
+    expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(2);
+    fireEvent.click(within(dialog).getByRole("button", { name: "지각" }));
+    await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1));
+    const input = vi.mocked(actions.setAttendanceRange).mock.calls[0]![0];
+    expect(input.status).toBe("late");
+    expect(input.cells).toHaveLength(2);
+    expect(input).not.toHaveProperty("units");
+    expect(cells[0]).toHaveTextContent("0.5");
+    expect(cells[1]).toHaveTextContent("2");
+    for (const cell of cells.slice(0, 2)) expect(cell).toHaveClass(...STATUS_TONE.late.split(" "));
+    fireEvent.keyDown(cells[0]!, { key: "z", ctrlKey: true });
+    await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(3));
+    expect(cells[0]).toHaveClass(...STATUS_TONE.present.split(" "));
+    expect(cells[1]).toHaveClass(...STATUS_TONE.makeup.split(" "));
+    for (const [restore] of vi.mocked(actions.setAttendanceRange).mock.calls.slice(1)) expect(restore).not.toHaveProperty("units");
+  });
 });
 
 describe("학교·학년 오른쪽 반별 청구액", () => {
@@ -178,11 +227,11 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
       />,
     );
     expect(screen.getAllByRole("columnheader").slice(1, 4).map((h) => h.textContent)).toEqual(["학교·학년", "단가", "청구액"]);
-    for (const [name, price] of [["이도윤", "25,000원"], ["박서준", "월 250,000원"], ["한가온", "미확정"]]) {
-      expect(within(screen.getByText(name!).closest("tr")!).getAllByRole("cell")[2]).toHaveTextContent(price!);
+    for (const [name, price] of [["이도윤", "25,000"], ["박서준", "월 250,000"], ["한가온", "미확정"]]) {
+      expect(within(screen.getByText(name!).closest("tr")!).getAllByRole("cell")[2]!.textContent).toBe(price!);
     }
     expect(container.querySelector("tfoot tr:first-child td")).toHaveAttribute("colspan", "4");
-    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 6));
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 5));
   });
 
   it.each([true, false])("반별 정렬=%s에서도 금액·0원·미확정을 구분한다", (showGroups) => {
@@ -201,7 +250,7 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     for (const [name, amount] of [["이도윤", "210,000"], ["박서준", "0"], ["한가온", "미확정"]]) {
       const row = screen.getByText(name!).closest("tr")!;
       expect(within(row).getAllByRole("cell")[2]).toHaveTextContent(amount!);
-      expect(row.children).toHaveLength(DAYS.length + 7);
+      expect(row.children).toHaveLength(DAYS.length + 6);
     }
     // 등록 차수 = 회차 확정의 확정 시수. 확정 전이면 '미확정'(0을 지어내지 않는다).
     expect(within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]).toHaveTextContent("8");
@@ -209,7 +258,22 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     // 차이확인 = 수업 차수 − 등록 차수. 🔴 등록 차수가 미확정이면 숫자를 지어내지 않고 `—`.
     expect(within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[5]).toHaveTextContent("—");
     // 요약 줄(맨 아래)은 전 열을 덮는다 — 그 위 합계 행(2026-09-18)은 열마다 칸이 선다.
-    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 7));
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 6));
+  });
+
+  it("교시 담당 몫과 반 전체 확정값을 구분하고 배분 미확인 값은 차이·합계에서 뺀다", () => {
+    const { container } = render(<MatrixTable groups={[LESSON_GROUP]} days={DAYS} holidays={{}} showGroups={true} ordered={[]}
+      classBilledAmounts={{}} termSessionsByRow={{
+        [rowKey(C, S1)]: { units: 4.5, daysBasis: false, classUnits: 9 },
+        [rowKey(C, S2)]: { units: 21, daysBasis: false, classUnits: 21, allocationPending: true },
+      }} />);
+    const first = within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell");
+    expect(first[4]).toHaveTextContent("4.5");
+    expect(first[4]!.querySelector("span[title]")!.getAttribute("title")).toContain("반 전체 등록 9");
+    const second = within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell");
+    expect(second[4]).toHaveTextContent("배분 확인");
+    expect(second[5]).toHaveTextContent("—");
+    expect(container.querySelector("tfoot tr:first-child td:nth-child(3)")).toHaveTextContent("4.5");
   });
 
   it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {
@@ -539,6 +603,66 @@ describe("팝오버 저장 실패 — 파생 칸 되돌리기", () => {
 });
 
 describe("출석부 표 골격", () => {
+  it("보기 옵션에서 이름·날짜는 남기고, 숨긴 열 폭만 빼며 합쳐진 셀도 맞춘다", () => {
+    const { container } = renderTable();
+    expect(screen.queryByRole("dialog", { name: "보기 옵션" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "보기 옵션" }));
+    const menu = screen.getByRole("dialog", { name: "보기 옵션" });
+    expect(within(menu).queryByRole("checkbox", { name: "이름" })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("checkbox", { name: "날짜" })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("checkbox", { name: "실급여" })).not.toBeInTheDocument();
+    const root = container.querySelector("[data-att-columns]") as HTMLElement;
+    const dayWidth = root.style.getPropertyValue("--att-day-width");
+    const fullWidth = root.style.getPropertyValue("--att-full-width");
+    const initialSpan = Number(container.querySelector("tbody td[colspan]")!.getAttribute("colspan"));
+    fireEvent.click(within(menu).getByRole("checkbox", { name: "학교·학년" }));
+    expect(root.style.getPropertyValue("--att-hidden-width")).toBe("72px");
+    expect(root.style.getPropertyValue("--att-day-width")).toBe(dayWidth);
+    expect(root.style.getPropertyValue("--att-full-width")).toBe(fullWidth);
+    expect(screen.queryByRole("columnheader", { name: "학교·학년" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "이름" })).toBeInTheDocument();
+    expect(container.querySelector("tbody td[colspan]")).toHaveAttribute("colspan", String(initialSpan - 1));
+    fireEvent.click(within(menu).getByRole("button", { name: "모두 표시" }));
+    expect(root.style.getPropertyValue("--att-hidden-width")).toBe("0px");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "보기 옵션" })).not.toBeInTheDocument();
+  });
+
+  it("실수업액·관리자 실급여와 합계가 시수 편집을 즉시 따라가며 비율을 적용한다", async () => {
+    const group = { ...LESSON_GROUP, matrix: { ...LESSON_GROUP.matrix, marks: { [S1]: { [DAYS[0]!.date]: "present" as const } }, units: { [S1]: { [DAYS[0]!.date]: 2 } } } };
+    const ordered = group.matrix.students.map((s) => ({ classId: C, studentId: s.id }));
+    const src = buildGridSource([group], DAYS, ordered);
+    const { container } = render(<GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
+      <MatrixTable groups={[group]} days={DAYS} holidays={{}} showGroups ordered={ordered} showActualAmount
+        salaryRates={{ regular: { 고등: 50 }, special: { 고등: 60 }, classes: {} }}
+        confirmedPricesByRow={{ [rowKey(C, S1)]: [{ unitPrice: 25000, monthly: false, daysBasis: false }] }}
+        classBilledAmounts={{ [rowKey(C, S1)]: 200000 }} />
+    </GridProvider>);
+    const row = screen.getByText("이도윤").closest("tr")!;
+    expect(row.querySelector('[data-att-column="actualAmount"]')).toHaveTextContent("50,000");
+    expect(row.querySelector('[data-att-column="actualSalary"]')).toHaveTextContent("22,775");
+    expect(container.querySelector('tfoot [data-att-column="actualSalary"]')).toHaveTextContent("22,775");
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers.slice(3, 6)).toEqual(["청구액", "실수업액", "실급여"]);
+    const cell = within(row).getAllByRole("gridcell")[0]!;
+    fireEvent.mouseDown(cell, { button: 0 });
+    fireEvent.keyDown(cell, { key: "3" });
+    fireEvent.keyDown(cell, { key: "Enter" });
+    await waitFor(() => expect(row.querySelector('[data-att-column="actualAmount"]')).toHaveTextContent("75,000"));
+    expect(row.querySelector('[data-att-column="actualSalary"]')).toHaveTextContent("34,162.5");
+    expect(container.querySelector('tfoot [data-att-column="actualSalary"]')).toHaveTextContent("34,162");
+  });
+
+  it("프리랜서 강사 화면은 실수업액만 받고 실급여와 비율을 그리지 않는다", () => {
+    render(<MatrixTable groups={[LESSON_GROUP]} days={DAYS} holidays={{}} showGroups ordered={[]} showActualAmount
+      confirmedPricesByRow={{}} classBilledAmounts={{}} />);
+    expect(screen.getByRole("columnheader", { name: "실수업액" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "실급여" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "보기 옵션" }));
+    expect(screen.queryByRole("checkbox", { name: "실급여" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "비율 설정" })).not.toBeInTheDocument();
+  });
+
   // 🔴 열 폭이 내용에서 나오면 반을 접을 때마다(긴 학교 이름이 사라질 때마다) 표가 출렁인다.
   //    폭의 단일 소스는 colgroup이고, 표는 table-fixed여야 그 값이 실제로 쓰인다.
   it("🔴 열 폭은 colgroup이 정한다 — 내용이 아니라(table-fixed)", () => {
@@ -548,19 +672,21 @@ describe("출석부 표 골격", () => {
     const cols = container.querySelectorAll("colgroup col");
     // 이름 · 학교·학년(압축 한 열, 2026-08-10) · 수업 차수 + 날짜 2 + 출석률
     //   (청구액·등록 차수는 금액을 보는 화면에서만 — 이 렌더는 안 넘겼다.)
-    expect(cols.length).toBe(3 + DAYS.length + 1);
+    expect(cols.length).toBe(3 + DAYS.length);
     expect((cols[0] as HTMLElement).style.width).toBeTruthy(); // 이름
     expect((cols[1] as HTMLElement).style.width).toBeTruthy(); // 학교·학년
     expect((cols[2] as HTMLElement).style.width).toBeTruthy(); // 수업 차수
-    // 날짜 칸만 폭이 비어 있다 — 남는 가로 폭을 이 칸들이 나눠 갖는다.
-    expect((cols[3] as HTMLElement).style.width).toBe("");
+    // 날짜 폭은 전체 열을 켰을 때 계산한 폭을 유지한다.
+    expect(cols[3]).toHaveAttribute("data-att-day", DAYS[0]!.date);
+    expect((container.querySelector("[data-att-columns]") as HTMLElement).style.getPropertyValue("--att-day-width")).toBe("22px");
   });
 
-  it("🔴 오른쪽 고정은 출석률 하나 — 시수를 청구액 옆으로 옮긴 뒤 짝(64px 오프셋)이 사라졌다", () => {
+  it("최우측 출석률 열을 제거하고 날짜 열에서 끝난다", () => {
     const { container } = renderTable();
     const cols = container.querySelectorAll("colgroup col");
-    expect((cols[cols.length - 1] as HTMLElement).style.width).toBe("64px"); // 출석률
-    expect(container.querySelector("th.sm\\:right-0")).toBeTruthy();
+    expect(cols[cols.length - 1]).toHaveAttribute("data-att-day", DAYS.at(-1)!.date);
+    expect(screen.queryByRole("columnheader", { name: "출석률" })).not.toBeInTheDocument();
+    expect(container.querySelector("th.sm\\:right-0")).toBeNull();
     // 🔴 옛 짝(시수 열)이 되살아나면 두 열이 겹친다.
     expect(container.querySelector("th.sm\\:right-\\[64px\\]")).toBeNull();
   });
@@ -679,7 +805,7 @@ describe("교시 롤업 칸", () => {
     // 수업 차수 칸(이름·학교학년 다음)이 2를 말해야 한다 — 마지막 칸은 출석률이다.
     const row = [...container.querySelectorAll("tbody tr")].find((r) => r.querySelector('[role="gridcell"]'))!;
     expect([...row.children][2]!.textContent).toContain("2");
-    expect([...row.children].at(-1)!.textContent).toContain("%");
+    expect([...row.children].at(-1)!.querySelector('[role="gridcell"]')).toBeTruthy();
   });
 
   it("교시가 하나면 종전과 같다 — 줄무늬도 '교시' 툴팁도 없다", () => {
@@ -1334,12 +1460,11 @@ describe("합계 행(원장 2026-09-18)", () => {
     expect(cells[3]!.textContent).toBe(""); // 차이확인은 비운다
   });
 
-  it("날짜별로 그날 시수 합 · 출석률은 학생별 출석률의 **평균**", () => {
+  it("합계도 마지막 날짜 열에서 끝나고 출석률은 표시하지 않는다", () => {
     const { container } = renderTotals();
     const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
     expect(cells[4]!.textContent).toBe("2.5"); // 7/1: 1.5 + 1
     expect(cells[5]!.textContent).toBe(""); // 7/2: 결석만 — 시수 0
-    // S1 = 1/2 = 50% · S2 = 1/1 = 100% → 평균 75%(전체 2/3=67%가 아니다).
-    expect(cells.at(-1)!.textContent).toBe("75%");
+    expect(cells).toHaveLength(6);
   });
 });
