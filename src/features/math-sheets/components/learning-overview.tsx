@@ -411,7 +411,7 @@ export function LearningOverview({
                           <Status student={s} progress={summary} />
                           <p className={styles.meta}>
                             {summary
-                              ? `기준일 계획 ${summary.target}차시`
+                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${summary.target}차시`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
