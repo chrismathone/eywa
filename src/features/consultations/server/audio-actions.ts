@@ -157,6 +157,7 @@ export async function runStudentConsultationAnalysis(
       consultedAt: row.consulted_at as string | null,
       audience: row.audience as string | null,
       category: row.category as string | null,
+      tenantId: user.tenantId,
     });
     const { error: updErr } = await supabase
       .from("student_consultations")

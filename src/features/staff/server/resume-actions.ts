@@ -442,7 +442,7 @@ export async function saveStaffResume(
   if (error || !row) return { error: humanizeDbError(error?.message, "저장"), detail: error?.message };
   // 신규 작성만 "신규 직원명부" 구글시트에 한 행 기입(수정 저장은 재기입하지 않음 — 중복 행 방지).
   // 실패해도 이력서 저장은 유효 — 경고 토스트만(시트 공유·env 미설정 등은 운영자가 조치).
-  const roster = await appendResumeToRoster(data);
+  const roster = await appendResumeToRoster(data, gate.user.tenantId);
   // 원샷 직원 등록(옵션) — 시트 기입과 독립인 부가 효과. 실패해도 이력서 저장은 유효.
   // 기존 직원 연결 모드에선 계정이 이미 있으므로 등록을 시도하지 않는다.
   const account =

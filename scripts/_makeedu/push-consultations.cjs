@@ -30,11 +30,12 @@ const REGIST_URL = "/counsel/counselList_regist.do?callpage=res";
 
 // 상담 + **연결 학생의 makeedu_id**(= makeedu 원생목록 등록 여부). enrolled 가드가 이 값을 본다 —
 // 등록완료라도 학생이 makeedu에 없으면 예비상담으로 보내야 한다(2026-07-21 권도현 케이스).
-const fetchConsultations = (sql, ids) => sql`
+// 🔴 **이 워커의 지점 것만** — id만으로 읽으면 다른 지점 상담(학생·보호자 연락처)이 이 지점 makeedu 계정에 제출된다(감사 2026-09-21).
+const fetchConsultations = (sql, ids, tenantId) => sql`
   select ec.*, s.makeedu_id as student_makeedu_id
     from enrollment_consultations ec
     left join students s on s.id = ec.student_id
-   where ec.id in ${sql(ids)}`;
+   where ec.id in ${sql(ids)} and ec.tenant_id = ${tenantId}`;
 
 // eywa 학년 라벨 → makeedu preGrade 코드(정찰 확정). 없으면 99(일반).
 const GRADE_MAP = {
@@ -225,19 +226,21 @@ async function captureCounselSeq(page, c) {
   const results = [];
   let browser;
   try {
-    // 대상 결정: --ids 지정 시 그 상담들(요청 무관, 검증용) / 아니면 pending push_requests.
+    // 이 워커가 맡은 지점(env MAKEEDU_TENANT_ID → 없으면 학원이 정확히 1개일 때만). 못 풀면 throw = 아무것도 안 집는다.
+    const tenantId = await L.resolveTenantId(sql);
+    // 대상 결정: --ids 지정 시 그 상담들(요청 무관, 검증용) / 아니면 **이 지점의** pending push_requests.
     let targets; // [{ requestId|null, consultation }]
     if (IDS) {
       const ids = IDS.split(",").map((s) => s.trim()).filter(Boolean);
-      const rows = await fetchConsultations(sql, ids);
+      const rows = await fetchConsultations(sql, ids, tenantId);
       targets = rows.map((c) => ({ requestId: null, consultation: c }));
     } else {
       const reqs = await sql`
         update makeedu_push_requests set status = 'running', started_at = now()
-        where status = 'pending' returning id, consultation_id`;
+        where status = 'pending' and tenant_id = ${tenantId} returning id, consultation_id`;
       if (reqs.length === 0) { console.log("pending 푸시 요청 없음."); return; }
       const cids = reqs.map((r) => r.consultation_id);
-      const rows = await fetchConsultations(sql, cids);
+      const rows = await fetchConsultations(sql, cids, tenantId);
       const byId = new Map(rows.map((c) => [c.id, c]));
       targets = reqs.map((r) => ({ requestId: r.id, consultation: byId.get(r.consultation_id) }));
     }
@@ -289,7 +292,7 @@ async function captureCounselSeq(page, c) {
         await sql`
           update enrollment_consultations
           set makeedu_pushed_at = now(), makeedu_id = coalesce(makeedu_id, ${seq})
-          where id = ${c.id}`;
+          where id = ${c.id} and tenant_id = ${tenantId}`;
         if (requestId) await finish(sql, requestId, "done", seq, null);
         console.log(`✅ ${label} — makeedu 등록 완료${seq ? ` (counselSeq ${seq})` : " (seq 미회수 — 다음 읽기 동기화가 백필)"}`);
         results.push({ label, ok: true, seq });

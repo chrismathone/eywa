@@ -1074,7 +1074,7 @@ ${style}` : body) });
       maxTokens: 1000,
       keyName: "default",
       tier: "fast",
-      meta: { feature: "classnote_ment" },
+      meta: { feature: "classnote_ment", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
     const pick = (k: string) => (data[k] ?? "").trim();

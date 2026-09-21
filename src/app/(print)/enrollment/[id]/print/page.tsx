@@ -10,6 +10,7 @@ import {
 import { RichText } from "@/components/rich-text";
 import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { PrintActions } from "./print-actions";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 export const metadata = { title: "신입생 인수인계서 — eywa" };
 
@@ -34,7 +35,7 @@ export default async function EnrollmentPrintPage({
 
   // 학원 연락처·정책 — owner 설정에서(값 있을 때만 인쇄물에 노출). 인수인계서는 학부모 전달용 1부 포함.
   const profile = settings.profile;
-  const academyName = profile.name || "인재원";
+  const academyName = profile.name || NEUTRAL_ACADEMY_NAME;
   // 로고/직인 — GCS 비공개 path면 signed URL로 resolve(외부 URL은 그대로).
   const [logoSrc, sealSrc] = await Promise.all([
     resolveBrandingSrc(profile.logoUrl, user.tenantId),

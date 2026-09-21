@@ -102,6 +102,14 @@ const DEFAULT_CONSULTATION_TEMPLATES = [
   },
 ];
 
+/**
+ * 학원 이름을 **끝내 못 읽었을 때** 서류·학부모 화면에 적는 중립 표기.
+ * `profile.name`은 비어 있으면 `tenants.name`으로 채워지므로(resolve.ts) 여기까지 오는 것은 두 조회가 모두 실패한 경우뿐이다.
+ * 🔴 특정 학원 이름을 폴백으로 박지 말 것 — 지점이 둘 이상이면 다른 지점의 학부모 화면(`/r`)·인쇄물에 남의 학원 이름이 찍힌다
+ *    (종전 폴백이 "인재원"이었다 — 감사 2026-09-21).
+ */
+export const NEUTRAL_ACADEMY_NAME = "학원";
+
 export const DEFAULT_SETTINGS: TenantSettings = {
   version: 1,
   profile: {

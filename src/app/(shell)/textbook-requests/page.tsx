@@ -12,6 +12,7 @@ import {
   getTextbookOrdersPage,
 } from "@/features/billing/server/textbook-queries";
 import { TextbookRequestClient } from "./_client";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 /**
  * 교재 요청 — 강사 미니셸 '내 메뉴' 진입(강사 스코프). 강사는 본인 담당 학생 교재를 요청하고
@@ -63,7 +64,7 @@ export default async function TextbookRequestsPage({
       students={students}
       catalog={catalog}
       isTeacher={isTeacher}
-      academyName={settings.profile.name || "인재원"}
+      academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
       logoUrl={logoUrl}
       account={accountForTarget(settings.billing, "textbook")}
       requesterName={user.displayName}

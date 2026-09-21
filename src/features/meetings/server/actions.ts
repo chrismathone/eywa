@@ -610,6 +610,7 @@ export async function regenerateMeetingAnalysis(
         heldAt,
         attendees,
         notepad,
+        tenantId: user.tenantId,
       });
       await admin
         .from("meeting_minutes")

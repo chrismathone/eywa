@@ -174,7 +174,7 @@ export async function POST(req: Request) {
   const { data: sc } = await admin
     .from("student_consultations")
     .select(
-      "id, processing_status, consulted_at, audience, category, student:student_id ( name, grade, school )",
+      "id, tenant_id, processing_status, consulted_at, audience, category, student:student_id ( name, grade, school )",
     )
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
@@ -283,6 +283,7 @@ async function handleMeeting(
       heldAt,
       attendees,
       notepad: meeting.content,
+      tenantId: meeting.tenant_id,
     });
     report = result.report;
     speakerRoles = result.speakerRoles;
@@ -630,7 +631,7 @@ async function analyzeConsultationAndPersist(
   const [analysisRes, extractRes] = await Promise.allSettled([
     generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
       maxTokens: 8192,
-      meta: { feature: "enrollment_analysis" },
+      meta: { feature: "enrollment_analysis", tenantId: consult.tenant_id },
       // 전사 분석 기본 = DeepSeek v4-pro(2026-07-16). 재분석(runConsultationAnalysis)과 동일 라우팅. 키 없으면 폴백.
       provider: "deepseek",
       prompt: [
@@ -719,6 +720,7 @@ async function analyzeConsultationAndPersist(
       studentName: consult.prospect_name,
       grade: consult.prospect_grade,
       school: consult.prospect_school,
+      tenantId: consult.tenant_id,
     }),
   ]);
 
@@ -894,6 +896,7 @@ async function handleStudentConsultation(
   transcriptId: string,
   sc: {
     id: string;
+    tenant_id: string | null;
     consulted_at: string | null;
     audience: string | null;
     category: string | null;
@@ -966,6 +969,7 @@ async function handleStudentConsultation(
       consultedAt: sc.consulted_at,
       audience: sc.audience,
       category: sc.category,
+      tenantId: sc.tenant_id,
     });
     await runWrite(
       "studentConsultation.completed",

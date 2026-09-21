@@ -7,6 +7,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getTextbookOrderById } from "@/features/billing/server/textbook-queries";
 import { TextbookRequestCard } from "./textbook-request-card";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 export const metadata = { title: "교재 요청서 — eywa" };
 
@@ -38,7 +39,7 @@ export default async function TextbookPrintPage({
   return (
     <TextbookRequestCard
       order={order}
-      academyName={settings.profile.name || "인재원"}
+      academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
       logoUrl={logoUrl}
       account={accountForTarget(settings.billing, "textbook")}
       embedded={embedded}

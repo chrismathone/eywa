@@ -28,6 +28,7 @@ import {
   resolveBoardChildEnrollments,
   CLASSNOTE_BASE,
 } from "./classnote-admin-core.mjs";
+import { recallShareBases } from "./share-bases.mjs";
 import { boardClassName, subjectLabel } from "./classnote-core.mjs";
 
 /** 클레임 배치 — 회수는 드문 동작이라 작게(한 폴에 5건). */
@@ -70,7 +71,7 @@ async function deleteReport(page, id) {
  * 회수 1건 — 보드·원아 해석 → 본문 완전 일치로 글 찾기 → 대조 → 삭제.
  * 반환 `{ ok, note, deletedIds }`. ok=false면 호출부가 `recall_failed` + note를 기록한다(한글 사유).
  */
-async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrl, log }) {
+async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log }) {
   if (!subjectLabel(subject))
     return { ok: false, note: `보드 매핑이 없는 과목이라 회수 대상을 찾을 수 없습니다`, deletedIds: [] };
   const className = boardClassName(subject, studentName);
@@ -86,33 +87,46 @@ async function recallOne(page, centerId, boards, children, { studentName, subjec
   let verifyFailed = 0;
   for (const { child } of enrolled) {
     // strict 일치 — content가 곧 공유 링크다(수업보고서 게시 본문 = shareUrl).
-    const hit = await findChildReportId(page, centerId, { cls: board.id, child: child.id, content: shareUrl });
-    if (!hit.ok) {
-      // 조회 실패 = **확인 불가**. '없음'으로 뭉개면 "지웠다"고 거짓 보고하게 된다 → 실패로 남겨 재시도.
-      verifyFailed++;
-      continue;
+    // 🔴 주소 후보를 **전부** 대 본다(share-bases.mjs) — 글은 올린 때의 주소로 박혀 있어서, 도메인 이전 뒤 한 주소만 보면
+    //    이전 전(또는 후) 글을 못 찾고 아래 '이미 없습니다'로 **거짓 성공**한다. 매칭은 여전히 글자까지 같은 본문뿐이다.
+    // 한 원아에 두 주소의 글이 **둘 다** 있을 수 있다(도메인 이전 전에 올리고 이전 뒤 다시 보낸 경우) → 첫 적중에서 멈추지 않고
+    // 적중을 전부 모은다. 🔴 후보 중 하나라도 조회에 실패했으면, 다른 후보에서 글을 찾아 지웠더라도 **성공으로 닫지 않는다**
+    //    (실패한 주소의 글이 남아 있을 수 있다 = 확인 불가. 재시도에서 이미 지운 글은 404 = 목표 달성으로 넘어간다).
+    const hitIds = [];
+    let lookupFailed = false;
+    for (const shareUrl of shareUrls) {
+      const h = await findChildReportId(page, centerId, { cls: board.id, child: child.id, content: shareUrl });
+      if (!h.ok) {
+        lookupFailed = true;
+        continue;
+      }
+      if (h.id != null && !hitIds.includes(h.id)) hitIds.push(h.id);
     }
-    if (hit.id == null) continue; // 이 원아에겐 그 글이 없음(정상 — 다른 계정에만 붙어 있을 수 있다)
-    found++;
+    // 조회 실패 = **확인 불가**. '없음'으로 뭉개면 "지웠다"고 거짓 보고하게 된다 → 실패로 남겨 재시도.
+    if (lookupFailed) verifyFailed++;
+    // 적중이 없고 실패도 없었으면 이 원아에겐 그 글이 없음(정상 — 다른 계정에만 붙어 있을 수 있다).
+    for (const hitId of hitIds) {
+      found++;
 
-    // 삭제 직전 대조 — 엉뚱한 id로 남 글을 지우지 않는다(notice-core revokeNotice와 같은 방어).
-    const chk = await getReport(page, hit.id).catch(() => ({ status: 0 }));
-    if (chk.status === 404) {
-      deletedIds.push(hit.id); // 이미 없음 = 목표 달성
-      continue;
-    }
-    if (chk.status !== 200 || String(chk.cls) !== String(board.id) || String(chk.child) !== String(child.id)) {
-      verifyFailed++;
-      log?.(`  · 대조 불일치(${chk.status}) — 삭제하지 않음 (report ${hit.id})`);
-      continue;
-    }
-    const del = await deleteReport(page, hit.id).catch(() => ({ status: 0 }));
-    if (del.status >= 200 && del.status < 300) {
-      deletedIds.push(hit.id);
-      log?.(`  · 게시글 삭제 완료 (report ${hit.id})`);
-    } else {
-      verifyFailed++;
-      log?.(`  · 삭제 실패(HTTP ${del.status}) (report ${hit.id})`);
+      // 삭제 직전 대조 — 엉뚱한 id로 남 글을 지우지 않는다(notice-core revokeNotice와 같은 방어).
+      const chk = await getReport(page, hitId).catch(() => ({ status: 0 }));
+      if (chk.status === 404) {
+        deletedIds.push(hitId); // 이미 없음 = 목표 달성
+        continue;
+      }
+      if (chk.status !== 200 || String(chk.cls) !== String(board.id) || String(chk.child) !== String(child.id)) {
+        verifyFailed++;
+        log?.(`  · 대조 불일치(${chk.status}) — 삭제하지 않음 (report ${hitId})`);
+        continue;
+      }
+      const del = await deleteReport(page, hitId).catch(() => ({ status: 0 }));
+      if (del.status >= 200 && del.status < 300) {
+        deletedIds.push(hitId);
+        log?.(`  · 게시글 삭제 완료 (report ${hitId})`);
+      } else {
+        verifyFailed++;
+        log?.(`  · 삭제 실패(HTTP ${del.status}) (report ${hitId})`);
+      }
     }
   }
 
@@ -129,7 +143,13 @@ async function recallOne(page, centerId, boards, children, { studentName, subjec
  * `post=false`(dry-run)면 대상 건수만 로그하고 **아무것도 지우지 않는다**.
  */
 export async function processRecallsOnce(sql, browser, opts) {
-  const { tenant, post = false, shareBase = "https://eywa-alpha.vercel.app", log = console.log } = opts;
+  const {
+    tenant,
+    post = false,
+    // 지금 주소(CLASSNOTE_SHARE_BASE) + 옛 주소들 — 발송 워커와 같은 env를 읽는다(종전엔 코드 리터럴이라 env를 안 따라왔다).
+    shareBases = recallShareBases(process.env.CLASSNOTE_SHARE_BASE, process.env.CLASSNOTE_LEGACY_SHARE_BASES),
+    log = console.log,
+  } = opts;
 
   // stale 복구 — 죽은 폴이 잡아둔 행을 되돌린다(tenant 격리).
   const stale = await sql`update lesson_reports set classnote_status='recall_requested'
@@ -186,13 +206,13 @@ export async function processRecallsOnce(sql, browser, opts) {
         summary.failed++;
         continue;
       }
-      const shareUrl = `${shareBase}/r/${r.share_token}`;
-      log(`[recall] ${studentName} ${r.report_date} — ${shareUrl}`);
+      const shareUrls = shareBases.map((b) => `${b}/r/${r.share_token}`);
+      log(`[recall] ${studentName} ${r.report_date} — ${shareUrls.join(" | ")}`);
 
       const res = await recallOne(page, centerId, boards, children, {
         studentName,
         subject: r.subject,
-        shareUrl,
+        shareUrls,
         log,
       }).catch((e) => ({ ok: false, note: `회수 중 오류: ${String(e?.message ?? e).slice(0, 120)}`, deletedIds: [] }));
 

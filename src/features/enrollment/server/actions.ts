@@ -1153,7 +1153,9 @@ export async function regenerateConsultationAnalysis(
   after(async () => {
     const bg = createAdminClient();
     try {
-      const { data: report, model } = await runConsultationAnalysis(ctx, formatted, multi);
+      const { data: report, model } = await runConsultationAnalysis(ctx, formatted, multi, undefined, {
+        tenantId: user.tenantId,
+      });
       const { speakerRoles, ...sections } = report;
       const now = new Date().toISOString();
       await bg

@@ -82,7 +82,7 @@ export async function GET(req: Request) {
     const ids = [...new Set(rows.map((r) => r.student_id))];
     const [studRes, staffNames] = await Promise.all([
       ids.length
-        ? admin.from("students").select("id, name, parent_name").in("id", ids) // limit≤200이라 단일 .in 허용
+        ? admin.from("students").select("id, name, parent_name").eq("tenant_id", tenantId).in("id", ids) // limit≤200이라 단일 .in 허용
         : Promise.resolve({ data: [], error: null }),
       loadStaffNames(admin, tenantId),
     ]);

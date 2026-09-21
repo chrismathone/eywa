@@ -1,4 +1,5 @@
 import "server-only";
+import { batchesByTenant } from "../batch-by-tenant";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateJSON } from "@/lib/ai/generate";
 import { kstToday } from "@/lib/date-kst";
@@ -79,8 +80,9 @@ export async function classifyPendingParentMessages(): Promise<ClassifyOutcome> 
   );
   const nameOf = new Map((students ?? []).map((s) => [s.id as string, (s.name as string) ?? ""]));
 
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
+  // 🔴 배치는 **지점별로** 끊는다 — 이 조회는 admin이라 전 지점의 미분류 글을 함께 받는다. 그대로 자르면 프롬프트 한 장에
+  //    두 지점의 학부모 글이 섞이고 사용량이 첫 행의 지점으로만 찍힌다(감사 2026-09-21).
+  for (const batch of batchesByTenant(rows, BATCH)) {
     let parsed: ModelResult | null = null;
     let model = "";
     try {

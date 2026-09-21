@@ -278,7 +278,7 @@ export async function testPrompt(
       prompt,
       maxTokens: 700,
       keyName: "default",
-      meta: { feature: "ment_prompt_preview" },
+      meta: { feature: "ment_prompt_preview", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
     const out = ((key === "comment" ? data.comment : data.trend) ?? "").trim();

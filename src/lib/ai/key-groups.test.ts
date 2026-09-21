@@ -243,6 +243,12 @@ function prop(obj: ts.ObjectLiteralExpression, name: string): ts.Expression | un
   return undefined;
 }
 const literal = (e?: ts.Expression) => (e && ts.isStringLiteralLike(e) ? e.text : undefined);
+/** 속성이 **있는가**만 — `{ tenantId }` 줄임 표기까지 센다(값이 무엇인지는 보지 않는다). */
+function hasProp(obj: ts.ObjectLiteralExpression, name: string): boolean {
+  return obj.properties.some(
+    (p) => (ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) && p.name.getText().replace(/['"]/g, "") === name,
+  );
+}
 
 /**
  * src 전체의 `generateJSON` 호출부 — feature와 keyName을 **코드에서** 읽는다(손으로 적은 복사본 금지).
@@ -252,9 +258,11 @@ const literal = (e?: ts.Expression) => (e && ts.isStringLiteralLike(e) ? e.text 
  * 손으로 만든 괄호 세기는 주석·정규식·따옴표에 계속 걸린다. `meta`는 타입에서도 optional이라 컴파일러도 안 막는다 —
  * 안 넘긴 호출은 조용히 기본 키로 불리고 `ai_usage_logs.feature`에 `"unknown"`으로 쌓인다.
  */
-function aiCallSites(): { sites: CallSite[]; missing: string[] } {
+function aiCallSites(): { sites: CallSite[]; missing: string[]; noTenant: string[] } {
   const sites: CallSite[] = [];
   const missing: string[] = [];
+  // `meta.tenantId`를 안 넘긴 호출부 — `ai_usage_logs.tenant_id`가 null로 쌓여 지점이 둘 이상이면 어느 지점 비용인지 못 가른다.
+  const noTenant: string[] = [];
   for (const file of walk(join(process.cwd(), "src"))) {
     if (file.includes(join("src", "lib", "ai"))) continue; // 진입점 자신
     const src = readFileSync(file, "utf8");
@@ -272,6 +280,7 @@ function aiCallSites(): { sites: CallSite[]; missing: string[] } {
         } else {
           const meta = prop(arg, "meta");
           const feature = meta && ts.isObjectLiteralExpression(meta) ? literal(prop(meta, "feature")) : undefined;
+          if (meta && ts.isObjectLiteralExpression(meta) && !hasProp(meta, "tenantId")) noTenant.push(at);
           if (!feature) missing.push(`${at} (meta.feature 없음)`);
           else {
             // keyName을 아예 안 넘기면 generateJSON의 선언 기본값 "default" · 리터럴이면 그 값 ·
@@ -288,7 +297,7 @@ function aiCallSites(): { sites: CallSite[]; missing: string[] } {
     };
     visit(source);
   }
-  return { sites, missing };
+  return { sites, missing, noTenant };
 }
 
 describe("가드 — 모든 AI 호출부는 키 그룹이 있다", () => {
@@ -299,6 +308,11 @@ describe("가드 — 모든 AI 호출부는 키 그룹이 있다", () => {
   });
   it("🔴 모든 generateJSON 호출이 meta.feature를 넘긴다(안 넘기면 기본 키 + feature='unknown')", () => {
     expect(callSites().missing).toEqual([]);
+  });
+  it("🔴 모든 generateJSON 호출이 meta.tenantId를 넘긴다(안 넘기면 사용량이 지점 없이 쌓인다 — 원장 2026-09-21 'AI도 지점 분리')", () => {
+    // 실측 2026-09-21: ai_usage_logs 3,499행 중 2,794행이 지점 빈칸이었다(호출부 8곳이 안 넘겼다).
+    // 세션이 없는 경로(웹훅·크론·after)는 행의 tenant_id를, 서버 액션은 user.tenantId를 넘긴다.
+    expect(callSites().noTenant).toEqual([]);
   });
   it("🔴 새 AI 기능이 그룹 표에 빠지면 여기서 빨개진다(빠지면 기본 키로 불려 사용량이 안 갈린다)", () => {
     expect([...features].filter((f) => !(f in FEATURE_KEY_GROUP))).toEqual([]);

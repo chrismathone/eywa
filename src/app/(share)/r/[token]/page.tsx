@@ -13,6 +13,7 @@ import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { ClosedReportScreen } from "./_closed";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 // 학생 PII 문서 — 검색엔진 색인 차단(링크 유출 시에도 인덱싱 방지).
 export const metadata = { title: "수업 보고서", robots: { index: false, follow: false } };
@@ -88,7 +89,7 @@ export default async function PublicLessonReportPage({
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
-  const academyName = settings.profile.name || "인재원";
+  const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
   const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭): 로고/학원명/제목/필드 토글/바닥글
   // 로고 해석은 GCS signed URL 등 외부 의존 — 실패해도 페이지는 로고 없이 렌더(학부모 링크가 깨지지 않게).
   const logoSrc = settings.profile.logoUrl

@@ -64,6 +64,12 @@ export type MeetingAnalysisContext = {
    * 메모만 있고 전사가 없으면 메모만으로 정리한다. 전사만일 땐(메모 없음) 프롬프트가 기존과 바이트 동일.
    */
   notepad?: string | null;
+  /**
+   * usage 귀속 전용(`ai_usage_logs.tenant_id`) — 프롬프트엔 안 들어간다. 지점이 둘 이상이면 비용을 지점별로 가르는 유일한 단서.
+   * 🔴 **필수**다(모르면 null을 **명시**) — optional로 두면 새 호출부가 빼먹어도 컴파일·가드가 둘 다 초록인 채 빈칸이 쌓인다
+   *    (가드는 generateJSON의 meta에 속성이 **있는지**만 본다 · 적대 리뷰 2026-09-21).
+   */
+  tenantId: string | null;
 };
 
 /**
@@ -97,7 +103,7 @@ export async function analyzeMeeting(
     MeetingReport & { speakerRoles?: Record<string, string> }
   >({
     maxTokens: 8192,
-    meta: { feature: "meeting_analysis" },
+    meta: { feature: "meeting_analysis", tenantId: ctx.tenantId },
     provider,
     prompt: [
       // 전사만(메모 없음)일 땐 기존과 바이트 동일한 인트로 — 기존 품질 회귀 방지.

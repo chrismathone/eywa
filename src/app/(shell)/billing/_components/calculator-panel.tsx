@@ -19,6 +19,7 @@ import { TuitionCalculator } from "./tuition-calculator";
 import { TuitionPricesPanel } from "./tuition-prices-panel";
 import { CatalogPanel } from "./catalog-panel";
 import { SavedQuotesPanel } from "./saved-quotes-panel";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 type Sp = Record<string, string | undefined>;
 type CalcSub = "calculator" | "prices" | "catalog" | "holidays" | "quotes";
@@ -80,7 +81,7 @@ async function CalculatorTab({ qid }: { qid?: string }) {
   const logoSrc = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
   return (
     <TuitionCalculator
-      academyName={settings.profile.name || "인재원"}
+      academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
       logoSrc={logoSrc}
       defaultPeriod={currentPeriod()}
       defaultAccount={accountForTarget(settings.billing, "quote")}

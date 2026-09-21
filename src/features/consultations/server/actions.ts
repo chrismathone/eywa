@@ -111,7 +111,7 @@ export async function runStudentCareAnalysis(
     const { data, model } = await generateJSON<CareAnalysisShape>({
       keyName: "consultations",
       maxTokens: 2048,
-      meta: { feature: "student_care" },
+      meta: { feature: "student_care", tenantId: user.tenantId },
       prompt: [
         "재원생 한 명의 케어 종합 분석을 JSON으로만 답해주세요.",
         "",

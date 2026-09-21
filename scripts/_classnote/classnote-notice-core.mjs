@@ -16,7 +16,7 @@
  *
  * 안전장치: 실게시·회수는 --post + classnoteSendEnabled(킬스위치) 확인. 타깃별 실패는 그 타깃만 기록(results).
  */
-import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE } from "./classnote-core.mjs";
+import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE, DEFAULT_AUTHOR_NAME } from "./classnote-core.mjs";
 import {
   CLASSNOTE_BASE,
   dismissHonorificDialog,
@@ -449,7 +449,7 @@ export async function processNoticesOnce(
   browser,
   // base = eywa 앱 주소(첨부 signed URL을 받는 내부 라우트). 보고서 경로와 같은 env(CLASSNOTE_SCREENSHOT_BASE)를 쓴다
   // — 연동 PC는 공개 도메인이어야 한다(localhost면 첨부 조회가 실패하고 그 사유가 results에 남는다).
-  { tenant, post, log = console.log, authorName = "인재원 학원", base = DEFAULT_BASE },
+  { tenant, post, log = console.log, authorName = DEFAULT_AUTHOR_NAME, base = DEFAULT_BASE },
 ) {
   // stale 복구 — 크래시로 갇힌 처리중 상태
   await sql`update classnote_notices set status='queued', processing_at=null

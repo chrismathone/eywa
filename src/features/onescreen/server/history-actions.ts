@@ -53,9 +53,14 @@ export async function getMyPastReports(input?: {
   const teacherName = (viewAs ? viewAs.displayName : user.displayName)?.trim();
   if (!teacherName) return { ok: false, error: "강사 이름이 없습니다" };
 
-  // 과목 opt-in·발송 기한 = 월간 달력(calendar-actions)과 동일 소스 — sendable 판정 재료(#77 게이트 단일화).
+  // 과목 opt-in·발송 기한·**발송 스위치** = 월간 달력(calendar-actions)과 동일 소스 — sendable 판정 재료(#77 게이트 단일화).
+  // 🔴 같은 화면의 두 숫자(달력의 'N건' ↔ 이 목록)라 한쪽만 고치면 갈린다 — 조건을 바꾸면 두 파일을 함께.
   const [supabase, settings] = await Promise.all([createClient(), getTenantSettings()]);
   const subjectsGate = settings.report.classnoteSubjects ?? null;
+  // 🔴 ClassNote를 **안 쓰는 지점**(발송 스위치 OFF = 새 지점의 기본값)은 보낼 수 있는 보고서가 없다 — 과목 게이트가 비어 있으면
+  //    아래 식이 '전부 보낼 수 있음'으로 열려서(fail-open), 카톡으로 링크를 보내는 지점의 강사에게 전건 '보낼 수 있음'이 떴다
+  //    (감사 2026-09-21). 실제 발송 게이트(onescreen/server/actions.ts)와 같은 스위치를 먼저 본다(#77).
+  const sendSwitchOn = settings.report.classnoteSendEnabled === true;
   const minDate = classnoteMinDate();
   let q = supabase
     .from("lesson_reports")
@@ -117,6 +122,7 @@ export async function getMyPastReports(input?: {
         // 0128a RPC의 sendable 4조건을 행 단위로 동일 재현(이관분·취소·과목 밖·기한 초과 = false).
         // ⚠️ RPC와 동일하게 subject null은 과목 게이트가 설정돼 있으면 false(`= any()`의 null 의미 보존).
         sendable:
+          sendSwitchOn &&
           ((r.source as string | null) ?? "") !== "edutrix_import" &&
           r.revoked_at == null &&
           (!subjectsGate || subjectsGate.length === 0 || (r.subject != null && subjectsGate.includes(r.subject as string))) &&

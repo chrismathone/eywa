@@ -28,6 +28,8 @@ import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-
  */
 export const DEFAULT_BASE = process.env.CLASSNOTE_SCREENSHOT_BASE || "http://localhost:3113"; // 스크린샷용(로컬 dev 가능)
 export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || "https://eywa-alpha.vercel.app"; // 게시글 상단 공유 링크(/r) 공개 도메인
+// 작성자 이름이 빈 글의 작성자 표기 — 워커는 PC(=지점)마다 하나라 env로 지점별 값을 준다. 기본값은 종전 그대로(침산 무변화).
+export const DEFAULT_AUTHOR_NAME = process.env.CLASSNOTE_AUTHOR_NAME?.trim() || "인재원 학원";
 export const BATCH = 2;
 export const STALE_MIN = 10;
 // /r이 이 secret 헤더를 보면 조회로그(share_link_views)를 안 남김 — 워커 스크린샷을 "학부모 열람"으로 오집계 방지(P2a).
@@ -324,7 +326,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     }
     const res = await postClassnoteReport(adminPage, {
       cls: boardId, child: child.id, enrollment: enrollment.id, content: shareUrl,
-      dateWritten: report.report_date, authorName: report.teacher_name || "인재원 학원",
+      dateWritten: report.report_date, authorName: report.teacher_name || DEFAULT_AUTHOR_NAME,
       attachedImages, attachedFiles,
     });
     // 실패 사유는 **응답 본문까지** 남긴다(2026-07-27) — status만 적으면 왜 거부됐는지 영영 모른다.

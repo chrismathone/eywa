@@ -358,6 +358,27 @@ export async function triggerMakeeduSyncNow(): Promise<TriggerSyncState> {
 }
 
 /**
+ * 이 지점에 makeedu 연동 PC(워처)가 **붙은 적이 있는가** — 워처가 매 폴마다 `makeedu_sync_workers`에 (지점, PC 이름)으로 심장박동을 남긴다.
+ * 원장 2026-09-21 "워커도 지점 분리 — 다른 지점은 안 쓸 수도 있다": 워처는 **제 지점 요청만** 집으므로(같은 날 수정), 연동 PC가 없는
+ * 지점이 큐에 넣은 요청은 아무도 안 집어 영영 '대기'로 남고 화면은 계속 '동기화 PC가 곧 실행합니다'라고 말한다. 그래서 넣기 전에 본다.
+ * true/false = 확인됨 · null = 조회 실패(모르면 막지 않는다 — 종전 동작).
+ */
+async function hasMakeeduWorker(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+): Promise<boolean | null> {
+  const { count, error } = await admin
+    .from("makeedu_sync_workers")
+    .select("hostname", { count: "exact", head: true })
+    .eq("tenant_id", tenantId);
+  if (error) return null;
+  return (count ?? 0) > 0;
+}
+const NO_MAKEEDU_WORKER_MSG =
+  "이 지점엔 makeedu 연동 PC가 연결돼 있지 않아 요청을 보내지 않았습니다 — 요청을 받아 실행할 PC가 없습니다. " +
+  "(makeedu를 쓰지 않는 지점이면 이 기능은 필요 없습니다)";
+
+/**
  * Vercel(서버리스) 경로: makeedu_sync_requests에 pending 요청을 남긴다(admin client — integrations 쓰기
  * 게이트는 호출부에서 이미 통과). 동기화 PC의 워처가 15초 내 감지해 sync-all을 실행하고 done/error로 마감한다.
  * 이미 pending/running 요청이 있으면 중복 insert 없이 그 사실만 알린다(연타 = 동기화 1회).
@@ -383,6 +404,8 @@ async function enqueueSyncRequest(tenantId: string, userId: string): Promise<Tri
         lock: await getMakeeduSyncLock(),
       };
     }
+
+    if ((await hasMakeeduWorker(admin, tenantId)) === false) return { error: NO_MAKEEDU_WORKER_MSG };
 
     const { error: insErr } = await admin
       .from("makeedu_sync_requests")
@@ -451,6 +474,9 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   const busy = new Set((inflight ?? []).map((r) => r.consultation_id as string));
   const toQueue = validIds.filter((id) => !busy.has(id));
   if (toQueue.length === 0) return { ok: true, message: "선택한 상담은 이미 전송 대기 중입니다." };
+
+  // 연동 PC가 없는 지점의 요청은 아무도 안 집는다(워처는 제 지점 것만) — 학생·상담을 '보냈다'고 말하기 전에 막는다.
+  if ((await hasMakeeduWorker(admin, user.tenantId)) === false) return { error: NO_MAKEEDU_WORKER_MSG };
 
   const { error: insErr } = await admin.from("makeedu_push_requests").insert(
     toQueue.map((cid) => ({ tenant_id: user.tenantId, consultation_id: cid, requested_by: user.id })),

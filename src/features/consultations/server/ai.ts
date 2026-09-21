@@ -25,6 +25,12 @@ export type StudentConsultationContext = {
   consultedAt: string | null;
   audience: string | null; // parent / student / both
   category: string | null;
+  /**
+   * usage 귀속 전용(`ai_usage_logs.tenant_id`) — 프롬프트엔 안 들어간다. 지점이 둘 이상이면 비용을 지점별로 가르는 유일한 단서.
+   * 🔴 **필수**다(모르면 null을 **명시**) — optional로 두면 새 호출부가 빼먹어도 컴파일·가드가 둘 다 초록인 채 빈칸이 쌓인다
+   *    (가드는 generateJSON의 meta에 속성이 **있는지**만 본다 · 적대 리뷰 2026-09-21).
+   */
+  tenantId: string | null;
 };
 
 const AUDIENCE_LABEL: Record<string, string> = {
@@ -48,7 +54,7 @@ export async function analyzeStudentConsultation(
     keyName: "consultations",
     provider,
     maxTokens: 4096,
-    meta: { feature: "consultation_analysis" },
+    meta: { feature: "consultation_analysis", tenantId: ctx.tenantId },
     prompt: [
       "다음은 학원 재원생 상담 내용(녹음 전사 또는 상담 메모)입니다. 재원생 케어 관점에서 분석해 JSON으로만 답해주세요.",
       "",

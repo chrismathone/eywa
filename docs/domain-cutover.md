@@ -36,6 +36,8 @@
      `CLASSNOTE_SCREENSHOT_BASE=https://eywa.kr` 둘 다 바꾼다(`scripts/_classnote/classnote-core.mjs:29-30` ·
      `classnote-inbox-store.mjs:91`가 읽는다. 안 바꾸면 새 게시글이 계속 옛 호스트 링크를 실어 학부모 클릭·캡처마다 308로 한 번 튕긴다).
      바꾼 뒤 **`scripts/_classnote/setup-classnote-pc.ps1`을 다시 실행**한다(돌고 있는 데몬은 옛 env를 든 채라 — 스크립트가 옛 인스턴스를 내리고 새 env로 재시작).
+     **회수는 옛 주소 글도 찾는다** — 회수 워커가 지금 주소 + 옛 주소(`CLASSNOTE_LEGACY_SHARE_BASES`, 기본값에 `eywa-alpha` 포함)를
+     전부 대 보므로(`scripts/_classnote/share-bases.mjs`) 이전 전에 올린 글도 그대로 회수된다. 도메인을 **두 번째로** 옮길 때만 그 env에 직전 주소를 넣는다.
      코드 기본값 `DEFAULT_SHARE_BASE`(`classnote-core.mjs:30`, 지금 `eywa-alpha`)도 새 주소로 고쳐 zip으로 이관
      (`docs/classnote-integration.md` env 표의 예시 값도 함께).
 6. **문서 값 정리**: `docs/setup-and-ops.md`의 배포 표(alias `eywa-alpha.vercel.app`) · `.env.local.example`의 `NEXT_PUBLIC_APP_URL` 예시.
@@ -54,10 +56,22 @@
    - 연동 PC(`C:\eywa-sync-pc`) **`.env.local`**(`.env`가 아니다 — 워커·워처 전부 `--env-file=.env.local`):
      `CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `MAKEEDU_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`
      → **`setup-classnote-pc.ps1`·`setup-sync-pc.ps1` 재실행**(돌고 있는 데몬·워처는 옛 env를 든 채 — 스크립트가 옛 인스턴스를 내리고 새 env로 재시작. ClassNote 워처는 테넌트를 연결당 한 번만 푼다)
-   - Vercel env: `GOOGLE_CALENDAR_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `PUBLIC_BRAND_TENANT_SLUG=cs` → 재배포
+     ⚠️ **이걸 빼먹은 채 둘째 지점을 만들면**: makeedu 워처가 제 지점을 못 정해 **아무 요청도 안 집는다** → 웹의 '지금 동기화'는 계속 '대기'로 보이고
+     버튼이 잠긴 채 풀리지 않는다(화면엔 오류가 안 뜬다). 단서는 그 PC의 워처 로그 `⛔ 이 워처의 지점을 정하지 못해…`(10분에 한 번)뿐이다.
+   - Vercel env: `GOOGLE_CALENDAR_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094` · `HR_ROSTER_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094`
+     (직원명부 구글시트는 침산 것 — 안 넣으면 지점이 둘이 되는 순간 **어느 지점 이력서도 시트에 안 들어간다**) · `PUBLIC_BRAND_TENANT_SLUG=cs` → 재배포
+   - **AI 사용량 빈칸 채우기를 한 번 더**: `node --env-file=<.env.local> scripts/_oneoff/backfill-ai-usage-tenant.mjs` (드라이런) → `--apply`.
+     🔴 **반드시 둘째 지점을 만들기 전에** — 지점이 둘이 되면 빈칸 행이 어느 지점 호출이었는지 되짚을 단서가 없어 스크립트가 멈춘다
+     (09-21에 2,794행을 채웠지만, 호출부 배선이 main에 들어가기 전까지 빈칸은 다시 쌓인다).
 1. super-admin → 학원 추가(slug는 영문 소문자 2~40자, 지점 약어 — **한 번 정하면 안 바꾼다**, 지금도 수정 폼에 slug가 없다).
 2. (0번에서 이미) `PUBLIC_BRAND_TENANT_SLUG=cs` = 로그인 화면·탭 제목의 회사 브랜드는 침산 것.
 3. 자리 PIN 화면에 지점 선택이 뜨는지 · 새 지점 학원설정에서 `seatPins`를 정했는지 확인.
+3-1. **새 지점이 ClassNote·makeedu를 안 쓰는 경우**(원장 2026-09-21 *"다른 지점은 카톡으로 링크를 보낼 수도"*): 아무것도 안 해도 된다 —
+   새 지점은 ClassNote 발송이 꺼진 채 태어나고(`classnoteSendEnabled=false`), 원스크린은 "저장 + 링크 복사"로 돈다(그 링크를 카톡으로 보낸다).
+   워커 PC도 필요 없다(워커는 제 지점 큐만 집고, 앱은 연동 PC가 없는 지점의 makeedu 요청을 큐에 넣지 않는다).
+   ⚠️ 알려진 한계: 카톡으로 보낸 보고서엔 "보냈다" 기록이 없어 사무실 미발송 목록에 남는다(기록 컬럼 신설 = 원장 결정 · CLAUDE.md 결정 로그).
+   새 지점도 ClassNote를 **쓴다면**: 그 지점용 워커 PC(또는 폴더)를 따로 — `.env.local`에 `CLASSNOTE_TENANT_ID`·`CLASSNOTE_UPLOAD_ID/PW`·
+   `CLASSNOTE_AUTHOR_NAME`(작성자명 폴백)·`CLASSNOTE_OUT`(로컬 마커·로그 폴더 — 한 PC에 두 워커면 반드시 갈라야 한다)을 그 지점 값으로.
 4. 직원은 **지점마다 계정 하나**(codex 권고 — `users.tenant_id`는 1:1, 옮길 때 값을 바꾸지 말 것).
 5. 알려진 한계(원장 결정 필요): 자산 QR `/inventory/asset/<code>`는 자산ID가 **전 지점에서 유일할 때만** 열린다 —
    지점별 자산ID 접두를 달리하거나(`B-MN-001`) 새 라벨에 지점을 싣는다. · 인재원 API·오늘의수학·상담 내보내기는
