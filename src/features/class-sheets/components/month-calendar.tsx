@@ -96,7 +96,7 @@ export function MonthCalendar({
             {t("month.weekUnit")}
           </div>
           {dows.map((dow) => {
-            const date = cellDateOf(week, dow, data.month);
+            const date = cellDateOf(week, dow);
             if (!date) {
               return <div key={dow} className="border-line rounded-[10px] border border-dashed bg-[#fafbfc]" />;
             }

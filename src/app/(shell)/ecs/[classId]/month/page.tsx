@@ -27,12 +27,19 @@ export default async function EcsMonthPage({
   params: Promise<{ classId: string }>;
   // ⚠️ 값은 `string | string[]`이다(`?view=cal&view=rail`이면 배열) — 아래 판정은 문자열 일치라
   //    배열이 와도 안전하게 저장값으로 떨어진다. 타입을 좁게 적어 두면 나중에 `.trim()` 한 줄에 터진다.
-  searchParams: Promise<{ month?: string; view?: string | string[]; week?: string | string[] }>;
+  searchParams: Promise<{
+    month?: string;
+    view?: string | string[];
+    week?: string | string[];
+    /** 기간 축(`month`|`session`, EiE만) — 이번 방문만 따른다. 모양이 아니면 계정 저장값(조회 안에서 판정). */
+    period?: string | string[];
+  }>;
 }) {
   const { classId } = await params;
-  const { month, view, week } = await searchParams;
+  const { month, view, week, period } = await searchParams;
   const [res, landing, textbookOptions] = await Promise.all([
-    getClassSheetMonth(classId, month ?? null),
+    // `week`도 넘긴다 — 세션 축이면 '왔던 주'가 든 세션을 연다(주소의 달은 달력 기준이라 경계에서 틀린다).
+    getClassSheetMonth(classId, month ?? null, { period, week }),
     getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
     // '그 날 고치기' 창이 주간 시트와 같은 계획 표를 쓴다 — 제안 목록도 같이 내려준다(B4: 같은 묶음).
     loadEcsTextbookOptions(),
@@ -106,7 +113,9 @@ export default async function EcsMonthPage({
             // 🔴 보기(`view`)는 key에 **넣지 않는다** — 화면 안에서 보기를 바꾸면 주소만 조용히 따라
             //    고치는데(month-client `chooseView`), key에 넣으면 그 다음 `router.refresh()`가 이 껍데기를
             //    통째로 다시 마운트해 **열려 있던 '그 날 고치기' 창이 사라진다**.
-            key={`${classId}:${res.data.month}`}
+            // 🔑 **기간(창)도 key에 넣는다** — 월↔세션 전환은 같은 달이라도 칸이 달라지는데(10월 세션엔 11/2가
+            //    있다), 계획 편집 훅은 마운트당 한 번 시드라 key가 같으면 옛 창의 칸을 그대로 들고 있다.
+            key={`${classId}:${res.data.month}:${res.data.period.start}~${res.data.period.end}`}
             data={res.data}
             mpChrome={mpChrome}
             classOptions={classOptions}

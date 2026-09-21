@@ -736,6 +736,27 @@ export const SHEET_DICT = {
     en: "Shows what was actually written in that day's weekly sheet under each plan. The signal counts (not written, different book) do not follow this toggle",
   },
   "month.print": { ko: "인쇄", en: "Print" },
+  // 기간 축(EiE 계획서만, 2026-09-21 원장 *"세션으로 뷰가 보일 수 있게 월/세션 전환"*).
+  // 월·세션 라벨은 출석부 날짜축(`att.period.*`)과 같은 말이다 — 같은 뜻을 두 표기로 부르지 않는다.
+  "month.period.aria": { ko: "기간 단위", en: "Period unit" },
+  "month.period.month": { ko: "월", en: "Month" },
+  "month.period.session": { ko: "세션", en: "Session" },
+  "month.period.month.title": {
+    ko: "달력 한 달(1일~말일)로 봅니다",
+    en: "Show the calendar month (1st to the last day)",
+  },
+  "month.period.session.title": {
+    ko: "학원 세션 기간(학원설정 운영 기간)으로 봅니다 — 다음 달 초까지 이어질 수 있습니다",
+    en: "Show the academy session (from the academy settings) — it can run into the next month",
+  },
+  "month.period.noSession": { ko: "세션 미정 · 달력월", en: "No session · by month" },
+  "month.period.noSession.title": {
+    ko: "이 달의 세션 기간이 학원설정에 없어 달력 한 달로 보여 줍니다",
+    en: "This month has no session in the academy settings, so the calendar month is shown",
+  },
+  "month.prevSession": { ko: "이전 세션", en: "Previous session" },
+  "month.nextSession": { ko: "다음 세션", en: "Next session" },
+  "month.currentSession": { ko: "눌러서 이번 세션으로", en: "Click for this session" },
 
   // ── 교재 배정(0266a·0268a) — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 순서대로 들어간다.
   //    🔴 이 화면은 원어민 강사도 연다(담당 슬롯이 있으면 canEdit) — 한국어 리터럴을 파일에 적지 말 것.

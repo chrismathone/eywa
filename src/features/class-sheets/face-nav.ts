@@ -51,10 +51,21 @@ export function weekForMonth(input: {
   weeks: readonly FaceWeek[];
   /** 그 날짜에 이 반 수업이 있나. */
   hasClassOn: (date: string) => boolean;
+  /**
+   * **세션 창**으로 보고 있으면 그 창(양끝 포함) — 달을 넘는 세션(10/1~11/2)에서 ①·②를 달이 아니라
+   * 창으로 판정한다(2026-09-21). ①은 "왔던 주가 이 창의 주 목록에 있나", ②는 "오늘이 창 안인가".
+   * 없으면 종전 달 규칙 그대로다.
+   */
+  range?: { start: string; end: string };
 }): string | null {
-  const { month, today, fromWeek, weeks, hasClassOn } = input;
-  if (fromWeek && monthOfWeek(fromWeek) === month) return mondayOf(fromWeek);
-  if (monthOf(today) === month) return mondayOf(today);
+  const { month, today, fromWeek, weeks, hasClassOn, range } = input;
+  if (range) {
+    if (fromWeek && weeks.some((w) => w.monday === mondayOf(fromWeek))) return mondayOf(fromWeek);
+    if (today >= range.start && today <= range.end) return mondayOf(today);
+  } else {
+    if (fromWeek && monthOfWeek(fromWeek) === month) return mondayOf(fromWeek);
+    if (monthOf(today) === month) return mondayOf(today);
+  }
   return weeks.find((w) => w.dates.some(hasClassOn))?.monday ?? weeks[0]?.monday ?? null;
 }
 
