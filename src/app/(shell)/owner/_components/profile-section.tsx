@@ -17,7 +17,7 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
       <div className="grid items-start gap-4 xl:grid-cols-2">
       <SettingsCard title="학원 정보" description="청구서·알림·인쇄물에 쓰이는 학원 기본 정보입니다.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <TextField label="학원 이름" value={p.name} onChange={(v) => set({ name: v })} placeholder="인재원수학" />
+          <TextField label="학원 이름" value={p.name} onChange={(v) => set({ name: v })} placeholder="예: 한빛학원" />
           <TextField
             label="지점 표기"
             hint="헤더 부제"
@@ -29,7 +29,7 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             label="대표자명"
             value={p.representativeName}
             onChange={(v) => set({ representativeName: v })}
-            placeholder="김수진"
+            placeholder="예: 홍길동"
           />
           <TextField label="대표 전화" value={p.phone} onChange={(v) => set({ phone: v })} placeholder="02-000-0000" />
           <TextField label="대표 이메일" value={p.email} onChange={(v) => set({ email: v })} />
@@ -46,14 +46,14 @@ export function ProfileSection({ initial }: { initial: ProfileSettings }) {
             hint="급여명세서 머리글 · 비우면 학원명"
             value={p.legalName}
             onChange={(v) => set({ legalName: v })}
-            placeholder="(주) 곰돌이 (강의하는아이들인재원)"
+            placeholder="예: (주) 한빛에듀"
           />
           <TextField
             label="급여명세서 담당자"
             hint="명세서 서명란 '담당' 칸 · 여러 명이면 쉼표"
             value={p.payslipSigners}
             onChange={(v) => set({ payslipSigners: v })}
-            placeholder="박소선, 백은미"
+            placeholder="예: 홍길동, 김철수"
           />
         </div>
       </SettingsCard>

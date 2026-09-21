@@ -18,6 +18,7 @@ import {
   type SkillAreaSetting,
   type SubjectSetting,
 } from "@/features/owner/settings-types";
+import { SUBJECT_COLOR_LABEL } from "@/features/owner/subject-color-label";
 import { DEFAULT_MONTH_PLAN_TEXTS } from "@/features/owner/month-plan-texts";
 import { DEFAULT_ENGLISH_SKILL_AREAS, skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
@@ -658,7 +659,7 @@ function SkillAreaListEditor({
                 <option value="">자동</option>
                 {SUBJECT_COLORS.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {SUBJECT_COLOR_LABEL[c]}
                   </option>
                 ))}
               </select>

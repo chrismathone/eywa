@@ -18,6 +18,9 @@ import { ExamDeleteButton } from "../_components/exam-delete-button";
 
 const TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
 
+// 제목이 없으면 루트 기본값(로그인 전 '브랜드 학원' 이름)으로 떨어져 다른 지점에서도 그 학원 이름이 탭에 뜬다.
+export const metadata = { title: "시험 — aywa" };
+
 export default async function ExamDetailPage({
   params,
   searchParams,

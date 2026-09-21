@@ -163,7 +163,7 @@ export const TEMPLATE_SUBJECT = "english";
  * `작성자`는 창이 지금 사용자 이름으로 바꿔 끼운다. 그림 칸은 자리 표식 그대로(미리보기가 자리 상자로 그린다).
  */
 export const TEMPLATE_PREVIEW_SAMPLE: Readonly<Record<TemplateTokenKey, string>> = {
-  학생: "공서연",
+  학생: "홍길동",
   작성자: "담당 선생님",
   인사말: "(AI가 오늘 수업 분위기를 한두 문장으로 씁니다)",
   진도: "Unit 1~3 핵심 내용 전체 리뷰",

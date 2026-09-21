@@ -302,7 +302,7 @@ export function StaffForm({
             id="englishName"
             name="englishName"
             defaultValue={v.englishName ?? ""}
-            placeholder="예: Jane, Charlie, Sam"
+            placeholder="예: Emma"
             className={inputClass}
           />
           <p className="text-muted-foreground mt-1 text-xs">

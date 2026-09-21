@@ -1152,7 +1152,9 @@ export default async function TimetablePage({
           showIssues={viewPrefs.roomIssues ?? true}
         />
       ) : slots.length === 0 ? (
-        <div className="mx-auto max-w-xl py-4">
+        // 🔴 `w-full` 필수 — 바깥 틀이 세로 flex라 `mx-auto`만 두면 이 상자가 내용 폭으로 줄고, 사진 카드는
+        //    내용이 전부 absolute라 폭 0이 된다(빈 안내가 DOM엔 있는데 화면에 안 보였다 — 2026-09-22 빈 지점 점검).
+        <div className="mx-auto w-full max-w-xl py-4">
           {/* 특강 화면의 빈 상태는 "과목이 없다"가 아니라 "특강이 없다" — 원인이 다르면 문구도 달라야 한다. */}
           <PhotoCard
             src="/photos/timetable-empty.webp"

@@ -28,7 +28,7 @@ export default async function NewStaffPage() {
         <p className="eyebrow">직원 등록</p>
         <h1 className="font-bold tracking-tight text-foreground text-2xl">새 직원 추가</h1>
         <p className="text-muted-foreground text-sm">
-          Supabase Auth 계정이 자동 생성됩니다. 임시 비밀번호는 직원에게 직접 안내하고 첫 로그인 후 변경하도록 요청하세요.
+          로그인 계정이 함께 만들어집니다. 임시 비밀번호는 직원에게 직접 안내하고 첫 로그인 후 변경하도록 요청하세요.
         </p>
       </header>
 

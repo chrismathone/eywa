@@ -16,6 +16,8 @@ import {
 
 // 원장(master) 전용 키오스크 설정. 사이드바 미노출 — 직접 URL + requireAccess 가드.
 export const dynamic = "force-dynamic";
+// 제목이 없으면 루트 기본값(로그인 전 '브랜드 학원' 이름)으로 떨어져 다른 지점에서도 그 학원 이름이 탭에 뜬다.
+export const metadata = { title: "출석 키오스크 설정 — aywa" };
 
 function fmt(iso: string | null): string {
   if (!iso) return "—";

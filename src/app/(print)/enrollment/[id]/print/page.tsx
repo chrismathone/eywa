@@ -31,7 +31,11 @@ export default async function EnrollmentPrintPage({
     getTenantSettings(),
   ]);
   if (!consult || !consult.aiAnalysis) notFound();
-  const printHeader = settings.notifications.printHeader || "aywa · 인재원 학원관리";
+  // 머리글 폴백 = 그 학원 이름. 옛 폴백은 "aywa · 인재원 학원관리" 고정이라 다른 지점 인쇄물에도 인재원이 찍혔다.
+  // 침산은 학원 이름이 '인재원'이라 같은 글자가 나온다(2026-09-22 확인).
+  const printHeader =
+    settings.notifications.printHeader ||
+    (settings.profile.name ? `aywa · ${settings.profile.name} 학원관리` : "aywa");
 
   // 학원 연락처·정책 — owner 설정에서(값 있을 때만 인쇄물에 노출). 인수인계서는 학부모 전달용 1부 포함.
   const profile = settings.profile;

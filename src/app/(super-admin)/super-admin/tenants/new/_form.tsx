@@ -15,11 +15,11 @@ export function NewTenantForm() {
       <Field
         name="slug"
         label="학원 slug"
-        placeholder="cs"
-        hint="영문 소문자·숫자·하이픈 2~40자(지점 약어, 예: cs=침산). 한 번 정하면 바꾸지 않는다."
+        placeholder="예: hanbit"
+        hint="영문 소문자·숫자·하이픈 2~40자(학원·지점 약어). 한 번 정하면 바꾸지 않는다."
         error={fe.slug}
       />
-      <Field name="name" label="학원 이름" placeholder="인재원" error={fe.name} />
+      <Field name="name" label="학원 이름" placeholder="예: 한빛학원" error={fe.name} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field
           name="masterEmail"
