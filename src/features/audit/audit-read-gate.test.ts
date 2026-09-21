@@ -59,7 +59,7 @@ describe("감사로그 게이트 배선 — 한쪽만 고치면 화면과 정책
   it("🔴 /owner 면 목록과 본문이 **같은 판정**(canReadAudit)을 통과한다", () => {
     const src = read("src/app/(shell)/owner/page.tsx");
     // 면 목록에서 감사로그를 거른다.
-    expect(src, "면 목록이 권한을 안 본다").toMatch(/facesFor\(canReadAudit\)/);
+    expect(src, "면 목록이 권한을 안 본다").toMatch(/facesFor\(canReadAudit[,)]/); // 둘째 인자 = 설정 '기능' 면(일반판만, 2026-09-22)
     // 주소를 직접 쳐도 조회가 안 돈다 — 감추기만 하면 그건 게이트가 아니다([[#77]]).
     expect(src.replace(/\s+/g, " "), "본문이 권한 없이 AuditFace를 그린다").toMatch(
       /tab === "audit" \? \( canReadAudit \? \( <AuditFace/,

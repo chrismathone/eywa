@@ -31,6 +31,7 @@ export function QuoteDocument({
   discounts,
   holidays,
   createdLabel,
+  showHouseRules = true,
 }: {
   academyName: string;
   logoSrc?: string | null;
@@ -48,6 +49,8 @@ export function QuoteDocument({
   discounts: QuoteDiscount[];
   holidays: string[];
   createdLabel: string;
+  /** 첫 학원의 '학원 수칙'을 싣는가(RefundPolicy) — 새 학원은 끈다. */
+  showHouseRules?: boolean;
 }) {
   const lines = splitCoursesByMonth(courses, student.startDate, student.endDate, holidays);
   const totals = quoteTotal(courses, extras, discounts);
@@ -203,7 +206,7 @@ export function QuoteDocument({
         </div>
       </div>
 
-      <RefundPolicy />
+      <RefundPolicy showHouseRules={showHouseRules} />
     </div>
   );
 }

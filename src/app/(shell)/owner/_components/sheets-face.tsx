@@ -34,24 +34,41 @@ export async function SheetsFace({
   subjects,
   page = 1,
   isEmbed = false,
+  makeeduOn = true,
+  sheetsOn = true,
 }: {
   /** 과목 라벨 소스(operations.subjects) — 시트 세팅 카드 제목용(하드코딩 금지). */
   subjects: Parameters<typeof buildSubjectMaps>[0];
   page?: number;
   isEmbed?: boolean;
+  /** makeedu 연동 모듈 — 꺼진 학원(새 학원 기본)은 동기화·역동기화 카드를 세우지 않고 조회도 안 한다(2026-09-22 방향 B). */
+  makeeduOn?: boolean;
+  /** 구글 시트 시간표 연동 모듈 — 꺼지면 시트 내보내기 절을 세우지 않는다. 침산은 둘 다 켜져 있다. */
+  sheetsOn?: boolean;
 }) {
   // 서버 렌더 시각 — 워처 온라인/상대시각 판정용(RSC는 요청당 1회 실행이라 안정).
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const nowMs = Date.now();
   // 독립 조회 → 병렬(B4). 시트 상태는 지원 과목(math·english)마다 별도 provider 행.
+  // 꺼진 연동은 조회도 하지 않는다 — 그 학원엔 없는 연동이다.
+  if (!makeeduOn && !sheetsOn) {
+    return (
+      <div className="bg-card shadow-card w-full rounded-2xl p-6">
+        <p className="text-foreground text-sm font-bold">이 학원은 외부 연동을 쓰지 않습니다</p>
+        <p className="text-text-dim mt-1 text-sm">
+          makeedu 동기화·구글 시트 시간표 연동은 학원 설정의 &lsquo;기능&rsquo; 면에서 켤 수 있습니다.
+        </p>
+      </div>
+    );
+  }
   const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, workers, syncLock, invoiceSync] = await Promise.all([
-    Promise.all(SHEET_EXPORT_SUBJECTS.map((s) => getGoogleSheetsStatus(s))),
-    getMakeeduAutoSyncStatus(),
-    getMakeeduSyncRuns(page, RUNS_PAGE_SIZE),
-    getUnpushedIntakeConsultations(),
-    getMakeeduSyncWorkers(nowMs),
-    getMakeeduSyncLock(),
-    getMakeeduSyncState("invoices"),
+    sheetsOn ? Promise.all(SHEET_EXPORT_SUBJECTS.map((s) => getGoogleSheetsStatus(s))) : Promise.resolve([]),
+    makeeduOn ? getMakeeduAutoSyncStatus() : Promise.resolve(null),
+    makeeduOn ? getMakeeduSyncRuns(page, RUNS_PAGE_SIZE) : Promise.resolve({ runs: [], total: 0 }),
+    makeeduOn ? getUnpushedIntakeConsultations() : Promise.resolve([]),
+    makeeduOn ? getMakeeduSyncWorkers(nowMs) : Promise.resolve([]),
+    makeeduOn ? getMakeeduSyncLock() : Promise.resolve({ busyUntil: null, running: false }),
+    makeeduOn ? getMakeeduSyncState("invoices") : Promise.resolve(null),
   ]);
   const subjectMaps = buildSubjectMaps(subjects);
   const saEmail = getServiceAccountEmail();
@@ -76,18 +93,23 @@ export async function SheetsFace({
         </> : <p className="text-sm">아래의 동기화 담당 PC 상태와 최근 실행 이력을 확인하세요.</p>}
       </section> : null}
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
-      <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} />
-      <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />
-      <MakeeduSyncRunsList
-        runs={runsPage.runs}
-        page={page}
-        totalPages={runsTotalPages}
-        total={runsPage.total}
-        hrefForPage={runsHref}
-      />
-      {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
-      <MakeeduPushCard candidates={pushCandidates} />
+      {makeeduOn && makeeduStatus ? (
+        <>
+          <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} />
+          <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />
+          <MakeeduSyncRunsList
+            runs={runsPage.runs}
+            page={page}
+            totalPages={runsTotalPages}
+            total={runsPage.total}
+            hrefForPage={runsHref}
+          />
+          {/* 역동기화 — QR 접수 상담을 makeedu로 보내기(항상 표시, 후보 0건이면 빈 상태로 발견성 유지) */}
+          <MakeeduPushCard candidates={pushCandidates} />
+        </>
+      ) : null}
 
+      {sheetsOn ? (
       <div className="space-y-5">
       <header className="border-border border-b pb-3">
         <p className="eyebrow">관리 · 외부 연동</p>
@@ -144,6 +166,7 @@ export async function SheetsFace({
         </div>
       </div>
       </div>
+      ) : null}
     </div>
   );
 }

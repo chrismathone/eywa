@@ -6,7 +6,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
-import { PROGRAMS, programLabel, type ProgramSubject } from "@/features/students/program";
+import { programLabel, visiblePrograms, type ProgramSubject } from "@/features/students/program";
 import { dashboardProgramColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { CountList, NameCell, PopupEmpty, PopupTotal, Tag, monthDay } from "./kpi-popup-parts";
 import s from "./overview.module.css";
@@ -16,10 +16,13 @@ export function StudentsPopup({
   data,
   subjects,
   canOpen,
+  eieOn = true,
 }: {
   data: OverviewData["students"] | null | undefined;
   subjects: ProgramSubject[];
   canOpen: boolean;
+  /** EiE 구분을 쓰는 학원인가(스냅샷 `eie`). 끄면 'EiE' 줄을 빼고 '인재원 영어'를 그 학원 영어 과목 이름으로. */
+  eieOn?: boolean;
 }) {
   if (!data) return <PopupEmpty>재원생 정보를 불러오지 못했습니다.</PopupEmpty>;
   const { programs } = data;
@@ -28,9 +31,9 @@ export function StudentsPopup({
       <PopupTotal label="재원생" value={data.enrolled} unit="명" />
       <CountList
         rows={[
-          ...PROGRAMS.map((program) => ({
+          ...visiblePrograms(eieOn).map((program) => ({
             key: program,
-            label: programLabel(program, subjects),
+            label: programLabel(program, subjects, eieOn),
             value: programs[program],
             color: dashboardProgramColor(program),
             href: canOpen && programs[program] > 0 ? studentsEnrolledHref(program) : null,
@@ -54,11 +57,13 @@ export function WithdrawalsPopup({
   subjects,
   canFilter,
   canOpenStudent,
+  eieOn = true,
 }: {
   data: OverviewData["withdrawals"] | null | undefined;
   subjects: ProgramSubject[];
   canFilter: boolean;
   canOpenStudent: boolean;
+  eieOn?: boolean;
 }) {
   if (!data) return <PopupEmpty>퇴원 정보를 불러오지 못했습니다.</PopupEmpty>;
   const counts = countWithdrawalPrograms(data.rows);
@@ -67,9 +72,9 @@ export function WithdrawalsPopup({
       <PopupTotal label={`${Number(data.month.slice(5))}월 퇴원생`} value={counts.total} unit="명" />
       <CountList
         rows={[
-          ...PROGRAMS.map((program) => ({
+          ...visiblePrograms(eieOn).map((program) => ({
             key: program,
-            label: programLabel(program, subjects),
+            label: programLabel(program, subjects, eieOn),
             value: counts[program],
             color: dashboardProgramColor(program),
             href: canFilter && counts[program] > 0 ? withdrawalsMonthHref(data.month, program) : null,
@@ -91,7 +96,7 @@ export function WithdrawalsPopup({
                 {row.name}
               </NameCell>
               <span className={s.kpiListMeta} style={row.program ? { color: dashboardProgramColor(row.program) } : undefined}>
-                {[row.schoolGrade, row.program ? programLabel(row.program, subjects) : null]
+                {[row.schoolGrade, row.program ? programLabel(row.program, subjects, eieOn) : null]
                   .filter(Boolean)
                   .join(" · ")}
               </span>

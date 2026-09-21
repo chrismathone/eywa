@@ -30,6 +30,7 @@ import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-lin
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { effectiveAttendanceRecords } from "../effective-records";
 import { isAutoUnitsSubject } from "../auto-units";
+import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 import {
   completesReservation,
   contiguousPeriodRange,
@@ -82,7 +83,7 @@ export async function getMakeupPeriodOptions(classId: string, date: string): Pro
     options,
     subjectLabel,
     weekend: options.length > 0 && isWeekend(date),
-    autoUnits: isAutoUnitsSubject(subject),
+    autoUnits: isAutoUnitsSubject(subject) && (await getLessonProfile()).autoUnits,
   };
 }
 

@@ -4,6 +4,8 @@ import { canAccess, type MenuKey } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "./current-user";
 import { getUserPermMatrix } from "./perm-matrix";
 import { landingPath } from "./teacher-home";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled, moduleOfMenuKey } from "@/lib/modules";
 
 /**
  * Server-side permissions guard. Drop into the top of any page server
@@ -24,6 +26,12 @@ export async function requireAccess(menu: MenuKey): Promise<CurrentUser> {
   // (강사가 /dashboard 등 강제 URL 진입 시 owner 대시보드 대신 자기 홈으로.) 강사/학생 홈은 ROLE_LOCKED라 루프 없음.
   // ⚠️ 비용은 **거부 경로에서만** 든다 — 통과하면 landingPath를 부르지 않는다(happy path 쿼리 0).
   if (!canAccess(user.systemRole, menu, matrix)) {
+    // 거부 이유가 "이 학원에서 끈 기능(모듈)"이면 말없이 홈으로 보내지 않고 알린다(/unavailable).
+    // 침산은 꺼진 모듈이 없어 이 갈래를 타지 않는다(오늘과 같다).
+    const mod = moduleOfMenuKey(menu);
+    if (mod && !isModuleEnabled((await getTenantSettings()).modules.disabled, mod)) {
+      redirect(`/unavailable?feature=${mod}`);
+    }
     redirect(await landingPath(user.systemRole, matrix));
   }
   return user;

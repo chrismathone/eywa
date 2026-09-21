@@ -49,6 +49,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { teacherProcessing, type ProcessingRecord, type TeacherProcessing } from "../teacher-processing";
 import { autoUnitsByDate, isAutoUnitsSubject, toAutoUnitsSchedule } from "../auto-units";
+import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 // 보강 예약(0264a) — 그 달 이 반에 예약된 보강 칸 + 예약된 학생을 명단에 합친다. 조회는 fail-soft(표 없음 = 예약 없음).
 import {
   getClassReservationsInRange,
@@ -1532,7 +1533,8 @@ export async function getMonthlyAttendanceMatrix(
     derived,
     derivedActive,
     // 수학 자동 시수 — 빈 칸 기본값(보이는 기본값 = 저장될 값). 판정은 서버 쓰기와 같은 함수(auto-units.ts).
-    ...(isAutoUnitsSubject(selectedSubject)
+    // 새 학원(일반판)은 자동 시수가 없다 — 저장(resolveAutoUnits)과 같은 프로필을 본다(보이는 기본값 = 저장될 값).
+    ...(isAutoUnitsSubject(selectedSubject) && (await getLessonProfile()).autoUnits
       ? { autoUnits: autoUnitsByDate(days.map((d) => d.date), (schedules ?? []).map(toAutoUnitsSchedule)) }
       : {}),
     // 보강 예약 칸(0264a) — 있을 때만 싣는다(강사 전체 보기는 반마다 매트릭스라 빈 객체도 곱이 된다).

@@ -17,7 +17,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
-import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
 import {
   USABLE_SEAT_KEYS,
@@ -92,7 +92,7 @@ export default async function SeatAttendancePage({
   // 토글 담당은 메뉴 권한 없이 그 자리만 연다. 없으면 기존 seat_attendance 게이트.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!dutyAllowsSeat(await getSeatDuties(user.id), seat)) await requireAccess("seat_attendance");
+  if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : today;

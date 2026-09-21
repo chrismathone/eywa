@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getPublicBrandingByTenantId, listPublicBranchChoices } from "@/features/owner/server/public-branding";
 import { configuredSeatPin, pinsMatch, resolveSeatPinTenant } from "../pin";
 import { parseSeatKey } from "../seat";
+import { isModuleEnabled } from "@/lib/modules";
 import {
   delayAfterPinFail,
   markPinFailure,
@@ -67,6 +68,9 @@ export async function submitSeatPin(
   //    비어 있으면 그 자리만 닫힌다(다른 자리는 그대로 열려 있다).
   const branding = await getPublicBrandingByTenantId(tenantId);
   if (!branding) return { error: UNAVAILABLE };
+  // 자습실(자리) 모듈이 꺼진 지점엔 공개 자리 화면이 없다 — PIN이 기본값(0000)이어도 문을 열지 않는다(2026-09-22 방향 B).
+  // 침산은 모듈이 켜져 있어 종전과 같다.
+  if (!isModuleEnabled(branding.settings.modules.disabled, "seat_attendance")) return { error: UNAVAILABLE };
   const expected = configuredSeatPin(branding.settings.operations.seatPins[seat]);
   if (!expected) return { error: UNAVAILABLE };
 

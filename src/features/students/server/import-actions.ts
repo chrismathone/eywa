@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { canonicalSchoolName } from "@/features/schools/school-name";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { resolveUniqueStudentNameFor } from "./unique-name";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
@@ -58,6 +59,8 @@ export async function previewStudentImport(formData: FormData): Promise<StudentI
   if (error || !user) return { error };
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "파일을 선택해주세요" };
+  // 학교명 저장 별칭은 학원설정 값(침산 = 일중→대구일중, 새 학원 = 없음) — 미리보기와 저장이 같은 규칙을 쓴다.
+  const schoolAliases = (await getTenantSettings()).operations.schoolSaveAliases;
 
   try {
     const wb = new ExcelJS.Workbook();
@@ -87,7 +90,7 @@ export async function previewStudentImport(formData: FormData): Promise<StudentI
         name: f.name ?? "",
         grade: f.grade || null,
         // 🔴 미리보기 단계에서 정규화해야 중복 판정(자연키)이 실제 저장값과 같은 기준이 된다.
-        school: canonicalSchoolName(f.school),
+        school: canonicalSchoolName(f.school, schoolAliases),
         status: normalizeStatus(f.status),
         parentPhone: f.parentPhone || null,
         studentPhone: f.studentPhone || null,
@@ -138,6 +141,7 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
   const { user, error } = await requireStudentWrite();
   if (error || !user) return { error };
   if (!Array.isArray(rows) || rows.length === 0) return { error: "등록할 학생이 없습니다" };
+  const schoolAliases = (await getTenantSettings()).operations.schoolSaveAliases;
 
   const supabase = await createClient();
   let inserted = 0;
@@ -158,7 +162,7 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
     const { error: insErr } = await supabase.from("students").insert({
       tenant_id: user.tenantId,
       name: uniqueName.name,
-      school: canonicalSchoolName(r.school),
+      school: canonicalSchoolName(r.school, schoolAliases),
       grade: r.grade?.trim() || null,
       status: normalizeStatus(r.status),
       parent_phone: normalizePhone(r.parentPhone),

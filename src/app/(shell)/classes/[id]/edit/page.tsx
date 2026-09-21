@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { isModuleEnabled } from "@/lib/modules";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
@@ -101,6 +102,7 @@ export default async function EditClassPage({
         classroomOptions={classrooms}
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}
+        showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
       />
     </div>
   );

@@ -8,6 +8,8 @@ import { isLayoutHideLocked } from "./menu-layout";
 // 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
+import { MODULE_IDS } from "@/lib/modules";
+import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -227,6 +229,17 @@ export const operationsSchema = z
      */
     jobTitlesByDepartment: z.record(z.string(), z.array(z.string().min(1).max(24)).max(40)),
     gradeLevels: z.array(z.string().min(1).max(24)).max(60),
+    // 교시 방식 — "chinsan"(첫 학원: 영어가 아닌 과목은 두 교시를 한 교시로 묶고 1-1·1-2, 영어는 내장 11교시 폴백) /
+    // "plain"(새 학원: 모든 과목이 교시마다 한 줄). 소비처 = settingsToPeriodsConfig(periods.ts). 2026-09-22 방향 B.
+    // 🔴 기본값("chinsan")을 두는 이유: 배포 순간 열려 있던 옛 화면이 이 칸 없이 저장해도 거절하지 않는다(침산 보호).
+    periodStyle: z.enum(["chinsan", "plain"]).default("chinsan"),
+    // 학교명 저장 별칭(`일중` → `대구일중`) — 저장 경로가 canonicalSchoolName에 넘긴다. 침산 기본값은 한 줄, 새 학원은 빈 목록.
+    // 배열 그릇인 이유: deepMerge가 record의 새 키를 떨어뜨린다(navigation과 같은 이유).
+    // 기본값 = 침산 목록(옛 화면이 칸 없이 저장한 경우 — 저장 액션이 침산 기본값과 같은 값은 행에 안 남긴다).
+    schoolSaveAliases: z
+      .array(z.object({ from: z.string().trim().min(1).max(40), to: z.string().trim().min(1).max(60) }))
+      .max(50)
+      .default(() => CHINSAN_SCHOOL_SAVE_ALIASES.map((a) => ({ ...a }))),
     weekdayPeriods: z.array(periodTimeSchema).max(20),
     weekendPeriods: z.array(periodTimeSchema).max(20),
     terms: z.array(termSchema).max(20),
@@ -520,8 +533,26 @@ export const navigationSchema = z
   });
 export type NavigationSettings = z.infer<typeof navigationSchema>;
 
+/**
+ * 기능 켜기·끄기 — **끈 모듈만** 담는다(비면 전부 켜짐). 모듈 정의·게이트는 `lib/modules.ts`.
+ * 배열 그릇인 이유는 navigation과 같다(deepMerge가 base 키만 돌아 record 새 키가 탈락한다 — 배열은 통째 교체).
+ */
+export const modulesSchema = z.object({
+  disabled: z.array(z.enum(MODULE_IDS)).max(MODULE_IDS.length),
+});
+export type ModulesSettings = z.infer<typeof modulesSchema>;
+
+/**
+ * 학원 출발점(프리셋) — `chinsan` = 첫 학원(인재원 침산)의 운영 방식 그대로 / `generic` = 새로 여는 학원의 중립 기본값.
+ * 원장 2026-09-22: *"'침산'은 그대로 두고 나머지 모든 지점, 새로 시작하는 지점 포함 … 일반화"* (방향 B).
+ * 판정·기본값은 `preset.ts` 한 곳이고, 🔴 다른 코드는 이 값을 직접 읽지 않는다(풀린 설정·모듈·수업 규칙만 본다).
+ */
+export const TENANT_PRESETS = ["chinsan", "generic"] as const;
+export type TenantPreset = (typeof TENANT_PRESETS)[number];
+
 export const tenantSettingsSchema = z.object({
   version: z.literal(1),
+  preset: z.enum(TENANT_PRESETS),
   profile: profileSchema,
   operations: operationsSchema,
   billing: billingSchema,
@@ -530,6 +561,7 @@ export const tenantSettingsSchema = z.object({
   report: reportSchema,
   permissions: permissionsSchema,
   navigation: navigationSchema,
+  modules: modulesSchema,
 });
 export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
 
@@ -543,6 +575,7 @@ export const SECTION_SCHEMAS = {
   report: reportSchema,
   permissions: permissionsSchema,
   navigation: navigationSchema,
+  modules: modulesSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;
 
@@ -556,4 +589,5 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   report: "보고서",
   permissions: "역할별 메뉴 권한",
   navigation: "사이드바(왼쪽 탭) 표시",
+  modules: "기능 켜기·끄기",
 };

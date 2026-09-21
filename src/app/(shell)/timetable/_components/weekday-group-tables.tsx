@@ -3,6 +3,7 @@ import { sortTeachersByOrder, teacherGroupKey, type TeacherOrderByGroup } from "
 import { TeacherHeadCell } from "./teacher-head-cell";
 import type { ScheduleSlotWithStudents } from "@/features/timetable/server/queries";
 import {
+  isPerPeriodSubject,
   periodListLabel,
   subjectWeekdayPeriods,
   subjectWeekendPeriods,
@@ -372,7 +373,7 @@ function GroupTable({
   // 어긋남"). 개별 교시로 두면 computeBlocks가 **실제 연속 교시만** rowSpan 병합(엑셀 셀병합, ijw getConsecutiveSpan
   // 대응) → 5·6·7교시 수업은 3칸 병합하고 8교시(4-2)는 별도. 교시 축은 라벨 컬럼이 그룹(3교시/4교시)을 2행
   // rowSpan으로 묶어 표시(아래 tbody) — 축은 8개로 안 늘어남. 수학계열만 그룹 라벨(영어는 개별 교시라 무관).
-  const isMathFamily = !weekend && subject !== "english";
+  const isMathFamily = !weekend && !isPerPeriodSubject(subject, config);
   // 이 표의 식별자 — 교시 행 목록은 표마다 다르다(평일 14:30~ / 주말 09:00~). 반 블록 배치 계산이 쓴다.
   const gridId = weekend ? "we" : "wd";
   const hm5 = (t: string) => t.slice(0, 5);

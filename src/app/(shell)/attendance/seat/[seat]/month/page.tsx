@@ -11,7 +11,7 @@ import { kstMonth } from "@/lib/date-kst";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
-import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatMonthly } from "@/features/attendance/seat/server/monthly-queries";
 import { loadSeatMonthlyPrefs } from "@/features/attendance/seat/server/monthly-prefs";
 import { parseAnySeatKey, parseUsableSeatKey, SEAT_NAME, SEAT_ROOM } from "@/features/attendance/seat/seat";
@@ -75,7 +75,7 @@ export default async function SeatMonthlyPage({
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!dutyAllowsSeat(await getSeatDuties(user.id), seat)) await requireAccess("seat_attendance");
+  if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? "") ? monthParam! : kstMonth();
   const [view, prefs, settings] = await Promise.all([

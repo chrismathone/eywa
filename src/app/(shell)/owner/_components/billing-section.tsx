@@ -11,7 +11,14 @@ const EMPTY_ACCOUNT: AccountSetting = { label: "", bank: "", holder: "", number:
 
 // ⚠️ taxMode·defaultMethod는 소비처가 없어(세액 계산 미구현·invoices에 결제수단 컬럼 없음) v1에서 입력 숨김.
 // 상태·스키마·저장은 보존 — 소비처가 생기면 입력만 복원하면 됨. (CLAUDE.md "학원 설정" orphan 인벤토리 참고)
-export function BillingSection({ initial }: { initial: BillingSettings }) {
+export function BillingSection({
+  initial,
+  showEie = true,
+}: {
+  initial: BillingSettings;
+  /** EiE 월 수강료 카드 — EiE 모듈이 꺼진 학원(새 학원 기본)은 안 보인다. 값은 state에 남아 그대로 저장된다. */
+  showEie?: boolean;
+}) {
   const [b, setB] = useState<BillingSettings>(initial);
   const set = (patch: Partial<BillingSettings>) => setB((prev) => ({ ...prev, ...patch }));
 
@@ -86,11 +93,13 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
         </div>
       </SettingsCard>
 
-      <SettingsCard title="EiE 월 수강료" description="회차를 곱하지 않는 월 고정 금액입니다. 월 금액 확정 후 기존 공통 수수료와 배분율로 강사 정산에 반영되며, 수강료 계산기의 EiE 항목에도 적용됩니다.">
-        <div className="max-w-xs">
-          <NumberField label="EiE 월 고정 금액" hint="원" value={b.eieMonthlyPrice} min={1} max={1_000_000_000} onChange={(eieMonthlyPrice) => set({ eieMonthlyPrice })} />
-        </div>
-      </SettingsCard>
+      {showEie ? (
+        <SettingsCard title="EiE 월 수강료" description="회차를 곱하지 않는 월 고정 금액입니다. 월 금액 확정 후 기존 공통 수수료와 배분율로 강사 정산에 반영되며, 수강료 계산기의 EiE 항목에도 적용됩니다.">
+          <div className="max-w-xs">
+            <NumberField label="EiE 월 고정 금액" hint="원" value={b.eieMonthlyPrice} min={1} max={1_000_000_000} onChange={(eieMonthlyPrice) => set({ eieMonthlyPrice })} />
+          </div>
+        </SettingsCard>
+      ) : null}
 
       <SettingsCard title="청구 기본값" description="청구서 생성·수강료 계산기의 기본값으로 쓰입니다.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -153,7 +162,7 @@ export function BillingSection({ initial }: { initial: BillingSettings }) {
                   />
                   <TextField
                     label="예금주"
-                    placeholder="예: 인재원"
+                    placeholder="예: 홍길동"
                     value={a.holder}
                     onChange={(v) => patchAccount(i, { holder: v })}
                   />

@@ -1,4 +1,5 @@
 import { ParamLink } from "./_components/param-link";
+import { isModuleEnabled } from "@/lib/modules";
 import { ParamSelect } from "./_components/param-select";
 import { Layers } from "@/components/icons/aywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
@@ -274,7 +275,9 @@ export default async function TimetablePage({
   // 🔴 **영어에만 있는 축이다** — 다른 과목 반은 english_track이 항상 null이라 'eie'를 걸면 화면이 통째로
   //    빈다. 그래서 칩도 안 띄우고 값도 'all'로 못박는다(과목 칩으로 옮겨가도 필터가 따라붙지 않는다).
   // 우선순위 = URL 파라미터(공유 링크 존중) → 계정(0146a) → 전체. 저장은 TimetableViewPrefsSync.
-  const trackApplies = subject === "english";
+  // 🔴 EiE 모듈이 꺼진 학원(새 학원 기본)엔 이 축 자체가 없다 — 칩을 안 띄우고 'all'로 못박는다(2026-09-22 방향 B).
+  //    침산은 켜져 있어 종전과 같다.
+  const trackApplies = subject === "english" && isModuleEnabled(settings.modules.disabled, "eie");
   const englishTrack: EnglishTrackFilter = !trackApplies
     ? "all"
     : etrackRaw !== undefined

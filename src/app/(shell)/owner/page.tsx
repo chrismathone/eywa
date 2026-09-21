@@ -17,6 +17,9 @@ import { NotificationsSection } from "./_components/notifications-section";
 import { ConsultationsSection } from "./_components/consultations-section";
 import { PermissionsSection } from "./_components/permissions-section";
 import { NavigationSection } from "./_components/navigation-section";
+import { ModulesSection } from "./_components/modules-section";
+import { isGenericTenant } from "@/features/owner/preset";
+import { isModuleEnabled } from "@/lib/modules";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
@@ -36,13 +39,27 @@ const TAB_LABEL = Object.fromEntries(OWNER_TABS.map((t) => [t.key, t.label])) as
  *    **에러 없이 늘 빈 목록**이 뜬다(조용한 거짓말). 자물쇠는 RLS고([[#77]]) 여기서 감추는 건 그 사실을
  *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
  */
-function facesFor(canReadAudit: boolean): Face[] {
-  return OWNER_TABS.filter((t) => t.key !== "audit" || canReadAudit).map((t) => ({
+function facesFor(canReadAudit: boolean, showModules: boolean): Face[] {
+  const faces: Face[] = OWNER_TABS.filter((t) => t.key !== "audit" || canReadAudit).map((t) => ({
     key: t.key,
     label: t.label,
     href: t.href,
     group: t.group,
   }));
+  // '기능'(모듈 켜기·끄기) 면은 **새 학원(일반판)에만** 선다 — 침산 설정 화면은 이 작업 전과 같아야 한다(원장 2026-09-22).
+  // OWNER_TABS(사이드바·메뉴 판이 파생하는 단일 소스)에 넣지 않은 이유도 같다 — 넣으면 침산 메뉴 판에 버튼이 생긴다.
+  if (showModules) {
+    const at = faces.findIndex((f) => f.key === "navigation");
+    faces.splice(at + 1, 0, { key: "modules", label: MODULES_TAB_LABEL, href: "/owner?tab=modules", group: "설정" });
+  }
+  return faces;
+}
+
+const MODULES_TAB_LABEL = "기능";
+
+/** 요청한 면 + 학원 설정 → 실제로 보일 면. '기능' 면은 일반판 학원에서만 열리고, 침산에선 기본 면(프로필)으로 떨어진다. */
+function effectiveTab(sp: Sp, settings: { preset: "chinsan" | "generic" }): OwnerTab | "modules" {
+  return sp.tab === "modules" && isGenericTenant(settings) ? "modules" : resolveTab(sp);
 }
 
 function resolveTab(sp: Sp): OwnerTab {
@@ -65,8 +82,10 @@ function fmt(iso: string | null): string {
 
 // 면마다 문서 제목을 달리해 창 타이틀바가 "학원 설정 · 운영 체계"로 라이브 갱신(route-window 관찰).
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
-  const tab = resolveTab(await searchParams);
-  return { title: `학원 설정 · ${TAB_LABEL[tab]} — aywa` };
+  const sp = await searchParams;
+  // '기능' 면 판정에만 설정이 필요하다 — 그 외엔 종전처럼 조회 없이(요청 캐시라 본문과 같은 조회를 나눠 쓴다).
+  const tab = sp.tab === "modules" ? effectiveTab(sp, await getTenantSettings()) : resolveTab(sp);
+  return { title: `학원 설정 · ${tab === "modules" ? MODULES_TAB_LABEL : TAB_LABEL[tab]} — aywa` };
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {
@@ -86,8 +105,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   if (sp.tab === "ai_ment") redirect("/lesson-reports?tab=ai_ment");
   // 세션 기간 면은 과목 운영 안으로 들어갔다(2026-08-07 원장 지시) — 옛 북마크가 프로필로 떨어지지 않게.
   if (sp.tab === "sessions") redirect("/owner?tab=subjects");
-  const tab = resolveTab(sp);
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
+  const tab = effectiveTab(sp, settings);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
@@ -121,7 +140,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         actions={<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
       />
 
-      <FaceTabs faces={facesFor(canReadAudit)} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+      <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
 
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (
@@ -136,7 +155,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           holidays={settings.operations.holidays.map((h) => h.date)}
         />
       ) : null}
-      {tab === "billing" ? <BillingSection initial={settings.billing} /> : null}
+      {tab === "billing" ? (
+        <BillingSection initial={settings.billing} showEie={isModuleEnabled(settings.modules.disabled, "eie")} />
+      ) : null}
       {tab === "notifications" ? <NotificationsSection initial={settings.notifications} /> : null}
       {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}
       {tab === "permissions" ? (
@@ -155,6 +176,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {/* 왼쪽 탭 — 보기 설정이라 **권한(master 전용)과 달리 위임 계정도 편집**한다(saveOwnerSection이 owner 쓰기로 게이트).
           권한을 대체하지 않기 때문에 여기서 켜도 못 보던 화면이 열리지 않는다. */}
       {tab === "navigation" ? <NavigationSection initial={settings.navigation} /> : null}
+      {tab === "modules" ? <ModulesSection initial={settings.modules} /> : null}
       {tab === "popups" ? <PopupsFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">
@@ -179,7 +201,13 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         )
       ) : null}
       {tab === "sheets" ? (
-        <SheetsFace subjects={settings.operations.subjects} page={page} isEmbed={isEmbed} />
+        <SheetsFace
+          subjects={settings.operations.subjects}
+          page={page}
+          isEmbed={isEmbed}
+          makeeduOn={isModuleEnabled(settings.modules.disabled, "makeedu")}
+          sheetsOn={isModuleEnabled(settings.modules.disabled, "sheet_sync")}
+        />
       ) : null}
     </div>
   );

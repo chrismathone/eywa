@@ -11,6 +11,7 @@ import { logAction } from "@/features/audit/server/log";
 import { diffSettingsSection } from "../settings-diff";
 import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey } from "../settings-types";
+import { prepareSectionForSave, presetOfStored } from "../preset";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
@@ -90,14 +91,28 @@ export async function saveOwnerSection(
 
   const supabase = await createClient();
   // 기존 문서 읽어 섹션만 교체(다른 섹션 보존). RLS로 자기 테넌트만.
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from("tenant_settings")
     .select("data")
     .eq("tenant_id", actor.tenantId)
     .maybeSingle();
+  // 🔴 못 읽었으면 저장하지 않는다 — 빈 문서 위에 이 섹션만 얹으면 다른 섹션이 전부 지워진다(적대 리뷰 2026-09-22).
+  if (readError) {
+    console.error("[owner/actions] tenant_settings 조회 오류 — 저장 중단", readError);
+    return { error: "설정을 불러오지 못해 저장하지 않았습니다. 잠시 뒤 다시 시도하세요." };
+  }
 
+  const preset = presetOfStored(existing?.data ?? null);
+  // '기능 켜기·끄기'는 새 학원(일반판)에만 있는 설정이다 — 침산은 화면에서 감출 뿐 아니라 서버도 받지 않는다([[#77]]).
+  // (받으면 owner 쓰기를 위임받은 사람이 요청을 만들어 침산 모듈을 끌 수 있고, 침산엔 되돌릴 화면이 없다.)
+  if (section === "modules" && preset !== "generic") {
+    return { error: "이 학원은 기능 켜기·끄기를 쓰지 않습니다" };
+  }
   const base = (existing?.data as Record<string, unknown> | null) ?? {};
-  const nextData = { ...base, version: 1, [section]: result.data };
+  const sectionData = prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
+  const nextData: Record<string, unknown> = { ...base, version: 1, [section]: sectionData };
+  // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.
+  if (preset === "generic") nextData.preset = "generic";
 
   const { error } = await supabase.from("tenant_settings").upsert(
     {
@@ -112,7 +127,7 @@ export async function saveOwnerSection(
 
   // 🔴 **무엇이 바뀌었는지**를 함께 남긴다(원장 점검 2026-08-27) — 종전엔 `{section}`뿐이라
   //    "누가 언제 운영 체계를 저장했다"만 남고 되짚을 근거가 없었다. 비밀값·미등록 필드는 실리지 않는다.
-  const diff = diffSettingsSection(section, (base as Record<string, unknown>)[section], result.data);
+  const diff = diffSettingsSection(section, (base as Record<string, unknown>)[section], sectionData);
   await logAction({
     action: "owner_settings_update",
     targetType: "tenant_settings",

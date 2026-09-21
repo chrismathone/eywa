@@ -4,8 +4,9 @@ import { accountForTarget } from "./settings-types";
 import { DEFAULT_SETTINGS } from "./defaults";
 
 describe("resolveSettings", () => {
-  it("저장값 없으면 DEFAULT + name은 테넌트명으로 폴백", () => {
-    const r = resolveSettings(null, { name: "인재원수학" });
+  it("저장 행이 비어 있으면(침산) DEFAULT + name은 테넌트명으로 폴백", () => {
+    // 일반판은 `preset: "generic"` 표식이 있는 행만이다(preset.test.ts) — 행이 없거나 비어 있으면 침산 기본값.
+    const r = resolveSettings({}, { name: "인재원수학" });
     expect(r.profile.name).toBe("인재원수학");
     expect(r.operations.subjects).toEqual(DEFAULT_SETTINGS.operations.subjects);
     expect(r.billing.dueDay).toBe(DEFAULT_SETTINGS.billing.dueDay);

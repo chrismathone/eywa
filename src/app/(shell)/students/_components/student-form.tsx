@@ -97,10 +97,16 @@ export function StudentForm({
   initialValue,
   gradeLevels,
   scope,
+  showClassnoteName = true,
 }: {
   mode: Mode;
   initialValue?: StudentFormValue;
   gradeLevels?: string[];
+  /**
+   * 'ClassNote 이름' 칸을 보일지 — ClassNote 모듈이 꺼진 학원(새 학원 기본)은 안 보인다(2026-09-22 방향 B).
+   * 🔴 숨겨도 **저장값은 hidden으로 그대로 싣는다** — 칸이 없으면 서버가 빈 값을 받아 기존 이름을 지운다.
+   */
+  showClassnoteName?: boolean;
   /** 동시 편집 가드 스코프(예: `student:123`). 수정 모드에서만 전달 — 다른 창 저장 시 경고. */
   scope?: string;
 }) {
@@ -238,19 +244,23 @@ export function StudentForm({
               ))}
             </select>
           </Field>
-          <Field
-            label="ClassNote 이름"
-            htmlFor="classnoteName"
-            hint="동명이인 구분용 — 비우면 학생 이름 사용"
-          >
-            <input
-              id="classnoteName"
-              name="classnoteName"
-              defaultValue={v.classnoteName ?? ""}
-              className={inputClass}
-              placeholder="예: 김서윤(중2)"
-            />
-          </Field>
+          {showClassnoteName ? (
+            <Field
+              label="ClassNote 이름"
+              htmlFor="classnoteName"
+              hint="동명이인 구분용 — 비우면 학생 이름 사용"
+            >
+              <input
+                id="classnoteName"
+                name="classnoteName"
+                defaultValue={v.classnoteName ?? ""}
+                className={inputClass}
+                placeholder="예: 김서윤(중2)"
+              />
+            </Field>
+          ) : (
+            <input type="hidden" name="classnoteName" value={v.classnoteName ?? ""} />
+          )}
           <Field label="영문 이름" htmlFor="englishName">
             <input
               id="englishName"

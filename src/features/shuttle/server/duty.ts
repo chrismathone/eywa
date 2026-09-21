@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 
 /**
  * 직원 '셔틀 담당' 토글(0227a `users.shuttle_duty`) — 역할을 올리지 않고 셔틀만 여는 개인 표식.
@@ -24,6 +25,8 @@ import { reportError } from "@/lib/observability/report-error";
  *    잘못 여는 손해보다 작다.
  */
 export const getShuttleDuty = cache(async (userId: string, tenantId: string): Promise<boolean> => {
+  // 셔틀 모듈이 꺼진 학원은 토글이 있어도 담당이 아니다(착지·열람 우회 차단 — 2026-09-22 방향 B). 침산은 켜져 있다.
+  if (!(await isModuleOnForTenant(tenantId, "shuttle"))) return false;
   try {
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -50,6 +53,8 @@ export const getShuttleDuty = cache(async (userId: string, tenantId: string): Pr
  */
 export const hasShuttleRecordDuty = cache(
   async (userId: string, tenantId: string): Promise<boolean> => {
+    // 기록 자격도 같다 — 셔틀 모듈이 꺼진 학원엔 등하원 기록이 없다.
+    if (!(await isModuleOnForTenant(tenantId, "shuttle"))) return false;
     try {
       const admin = createAdminClient();
       const { data, error } = await admin

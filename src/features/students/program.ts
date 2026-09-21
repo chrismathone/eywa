@@ -74,9 +74,17 @@ export function parseProgram(raw: unknown): Program | null {
 }
 
 /** 표시 라벨 — raw 코드('eie') 노출 금지. 수학은 학원설정의 `math` 라벨을 따른다. */
-export function programLabel(program: Program, subjects: readonly ProgramSubject[]): string {
+export function programLabel(program: Program, subjects: readonly ProgramSubject[], eieOn = true): string {
   if (program === "math") return subjects.find((s) => s.key === MATH_KEY)?.label ?? "수학";
+  // EiE 구분을 쓰지 않는 학원(EiE 모듈 꺼짐 — 새 학원 기본)에선 영어 반이 전부 이 갈래('EiE가 아닌 전부')라
+  // '인재원 영어'라는 남의 프로그램 이름 대신 그 학원의 영어 과목 이름을 쓴다(2026-09-22 방향 B). 침산은 켜져 있다.
+  if (!eieOn && program === "injaewon") return subjects.find((s) => s.key === ENGLISH_KEY)?.label ?? "영어";
   return ENGLISH_TRACK_LABEL[program];
+}
+
+/** 화면에 세울 프로그램 — EiE 구분을 쓰지 않는 학원은 늘 0인 'EiE' 줄을 뺀다. 침산(켜짐)은 PROGRAMS 그대로. */
+export function visiblePrograms(eieOn = true): readonly Program[] {
+  return eieOn ? PROGRAMS : PROGRAMS.filter((p) => p !== "eie");
 }
 
 /** 클라에 내려온 `key → 라벨` 표를 ProgramSubject 목록으로(라벨 조회용). */

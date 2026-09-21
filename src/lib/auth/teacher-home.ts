@@ -13,7 +13,7 @@ import {
 } from "./teacher-home-rule";
 import { getCurrentUser } from "./current-user";
 import { landingPathFromDuties } from "@/features/attendance/seat/duty";
-import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { SHUTTLE_TODAY_PATH } from "@/features/shuttle/faces";
 import { getShuttleDuty } from "@/features/shuttle/server/duty";
 
@@ -83,7 +83,7 @@ export async function landingPath(role: SystemRole, matrix?: AccessMatrix): Prom
   // 자리 출석부 담당 토글 — 강사 홈보다 앞선다(원장: 로그인하면 그 출석부로).
   const user = await getCurrentUser();
   if (user) {
-    const seatHome = landingPathFromDuties(await getSeatDuties(user.id));
+    const seatHome = landingPathFromDuties(await getActiveSeatDuties(user.id, user.tenantId));
     if (seatHome) return seatHome;
     // 셔틀 담당 토글(0227a) — 같은 결. 차에 타기 전 폰으로 여는 화면이 곧 홈이다.
     // 🔴 여기로 보내는 이상 /shuttle/today는 **메뉴 권한이 없어도 열려야 한다**(그 페이지의 duty 우회) —

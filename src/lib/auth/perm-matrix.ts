@@ -16,6 +16,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { approvalMenuOverridesFor } from "@/features/approvals/access";
+import { capDisabledModules } from "@/lib/modules";
 // ⚠️ view-mode.ts가 아니라 view-as.ts에서 — view-mode는 teacher-scope·delegation을 물고 있어 순환 위험.
 import { isReadonlyTeacherView } from "@/lib/auth/view-as";
 
@@ -39,11 +40,14 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
   try {
     const settings = await getTenantSettings();
     const overrides = settings.permissions.overrides;
+    // 🔴 꺼진 모듈(기능 묶음)은 **맨 끝에서** 전원 none — super_admin 병합으로도 안 열린다(그 학원엔 없는 기능이다).
+    //    침산은 꺼진 모듈이 없어 capDisabledModules가 받은 매트릭스를 그대로 돌려준다(오늘과 같다).
+    const disabled = settings.modules.disabled;
     if (overrides.length > 0 && (await isCurrentUserSuperAdmin())) {
       // 잠금은 무시(기본값이 살아남고), 부여는 보존(원장이 연 셀은 그대로) — mergeMostPermissive 주석 참조.
-      return mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides));
+      return capDisabledModules(mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides)), disabled);
     }
-    return resolveMatrix(overrides);
+    return capDisabledModules(resolveMatrix(overrides), disabled);
   } catch (e) {
     // ⚠️ fail-open(코드 기본값 복귀) = revoke override가 일시 무효화되는 방향 — 의도적·최종 결정이다.
     // 이유: fail-closed(차단)는 설정 조회 장애 시 master까지 /owner에 못 들어가 **복구 불능 락아웃**이 된다
@@ -82,8 +86,10 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const applied = applyUserOverrides(base, user.id, user.systemRole, userOverrides);
     // super_admin도 **부여는 받는다**(예전엔 base로 되돌려 개인 예외가 통째로 날아갔다 — 2026-08-13
     // 수업 평가 실종의 절반). 개인 예외로 잠그는(낮추는) 것만 무시하려고 높은 쪽을 취한다.
-    if (isSuperAdmin) return mergeMostPermissive(base, applied);
-    return applied;
+    // 🔴 개인 예외가 꺼진 모듈 메뉴를 다시 열 수 있으니 한 번 더 누른다(base는 이미 눌려 있다).
+    const disabled = settings.modules.disabled;
+    if (isSuperAdmin) return capDisabledModules(mergeMostPermissive(base, applied), disabled);
+    return capDisabledModules(applied, disabled);
   } catch (e) {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
     return base;

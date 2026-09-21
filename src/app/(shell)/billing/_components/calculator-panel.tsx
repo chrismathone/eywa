@@ -12,6 +12,8 @@ import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
 import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isGenericTenant } from "@/features/owner/preset";
+import { isModuleEnabled } from "@/lib/modules";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
@@ -86,9 +88,15 @@ async function CalculatorTab({ qid }: { qid?: string }) {
       defaultPeriod={currentPeriod()}
       defaultAccount={accountForTarget(settings.billing, "quote")}
       holidays={settings.operations.holidays.map((h) => h.date)}
-      catalog={withEieMonthlyTuition(catalog, settings.billing.eieMonthlyPrice)}
+      // EiE 월정액 항목은 EiE 구분을 쓰는 학원만(새 학원 기본은 꺼짐). 침산은 종전과 같다.
+      catalog={
+        isModuleEnabled(settings.modules.disabled, "eie")
+          ? withEieMonthlyTuition(catalog, settings.billing.eieMonthlyPrice)
+          : catalog
+      }
       textbooks={textbooks}
       initial={initial ?? undefined}
+      showHouseRules={!isGenericTenant(settings)}
     />
   );
 }

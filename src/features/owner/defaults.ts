@@ -1,11 +1,15 @@
-// DEFAULT_SETTINGS — 설정값이 없을 때의 폴백 = 현재 코드에 하드코딩된 값들.
-// 저장된 행이 없거나 일부 키가 비면 이 값으로 채워 "오늘과 동일한 동작"을 보장(resolve.ts).
+// DEFAULT_SETTINGS — **침산 프리셋**의 기본값 = 첫 학원(인재원 침산)이 쓰던 코드 하드코딩 값들.
+// 침산처럼 설정 행이 이미 있는 학원은 비어 있는 키를 이 값으로 채워 "오늘과 동일한 동작"을 보장한다(resolve.ts).
+// 🔴 새 학원은 이 값을 받지 않는다 — 설정 행에 `preset: "generic"`이 있으면 GENERIC_SETTINGS(generic-defaults.ts)가
+//    바탕이다(원장 2026-09-22 방향 B: 침산은 그대로, 새 지점만 일반화). 그러니 여기 값을 "중립"으로 바꾸지 말 것 —
+//    침산이 이 값에 기대는 칸(회당 단가·EiE 월 수강료·영어 교시 폴백 등)이 조용히 바뀐다.
 // profile.name은 여기서 비우고 resolver가 tenants.name으로 채운다(테넌트별 실제 학원명).
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
 import { DEFAULT_TEACHER_VIEW_LINES } from "@/features/timetable/lib/ten-minute-grid";
 import { DEFAULT_MONTH_PLAN_TEXTS } from "./month-plan-texts";
 import type { TenantSettings } from "./settings-types";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
+import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 
 // 평일 표준 교시(8교시·55분) — periods.ts MATH_PERIODS 이식.
 const WEEKDAY_PERIODS = [
@@ -112,6 +116,7 @@ export const NEUTRAL_ACADEMY_NAME = "학원";
 
 export const DEFAULT_SETTINGS: TenantSettings = {
   version: 1,
+  preset: "chinsan",
   profile: {
     name: "", // resolver가 tenants.name으로 채움
     representativeName: "",
@@ -176,6 +181,10 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     },
     // 미취학(6세·7세)이 맨 앞 — 7세반 문의가 들어온다(원장 2026-08-18). 학년 흐름 순서가 곧 표시·정렬 순서다.
     gradeLevels: ["6세", "7세", "초1", "초2", "초3", "초4", "초5", "초6", "중1", "중2", "중3", "고1", "고2", "고3"],
+    // 교시 방식 — 침산 방식(두 교시 묶음·영어 내장 교시). 새 학원은 generic-defaults.ts에서 "plain".
+    periodStyle: "chinsan",
+    // 학교명 저장 별칭 — 원장 확정(2026-09-01 *"일중 -> 대구일중"*). 새 학원은 generic-defaults.ts에서 빈 목록.
+    schoolSaveAliases: CHINSAN_SCHOOL_SAVE_ALIASES.map((a) => ({ ...a })),
     weekdayPeriods: WEEKDAY_PERIODS,
     weekendPeriods: WEEKEND_PERIODS,
     terms: [],
@@ -241,4 +250,6 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   // 기본 목록을 여기 복제하지 말 것: 복제하면 메뉴를 새로 만들 때마다 두 곳을 고쳐야 하고,
   // 한쪽을 잊으면 새 메뉴가 조용히 안 보인다(이 기능이 애초에 풀려던 문제 그 자체).
   navigation: { menus: [] },
+  // 기능 켜기·끄기도 sparse — 침산 프리셋은 **아무것도 끄지 않는다**(오늘과 같다). 일반판은 generic-defaults.ts.
+  modules: { disabled: [] },
 };

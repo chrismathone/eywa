@@ -21,6 +21,7 @@ import { NoticeFace } from "./_components/notice-face";
 import { BoardRosterCard } from "./_components/board-roster-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
+import { isModuleEnabled } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — aywa" };
@@ -40,8 +41,12 @@ type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "re
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
 // 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
-function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean): Tab {
+// ClassNote 발송 PC에 기대는 면 — ClassNote 모듈이 꺼진 학원(새 학원 기본)에선 세우지 않는다(2026-09-22 방향 B).
+const CLASSNOTE_TABS: ReadonlySet<Tab> = new Set<Tab>(["boards", "notice", "compose", "recall"]);
+
+function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean): Tab {
   const t = sp.tab;
+  if (!classnoteOn && t && CLASSNOTE_TABS.has(t as Tab)) return "writing";
   if (t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
   // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
   // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
@@ -62,7 +67,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     canWriteTenant(viewer.systemRole, "lesson_reports"), // 목록 탭 관리자 발송 열 노출(viewer는 열람만)
   ]);
   const sp = await searchParams;
-  const tab = resolveTab(sp, canOwner, canSendReports);
+  // ClassNote 모듈 — 꺼진 학원은 발송 콘솔(큐·반 구성·반 공지·직접 발송·회수)을 세우지 않는다. 침산은 켜져 있어 종전과 같다.
+  // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
+  const classnoteOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "classnote");
+  const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn);
   const isSettings = tab === "report" || tab === "ai_ment";
 
   const FACES: Face[] = [
@@ -76,16 +84,18 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
           { key: "recall", label: "회수", href: "/lesson-reports?tab=recall", group: "관리" },
         ] as Face[])
       : []),
+  ].filter((f) => classnoteOn || !CLASSNOTE_TABS.has(f.key as Tab));
+  FACES.push(
     ...(canOwner
       ? ([
           { key: "report", label: "보고서 설정", href: "/lesson-reports?tab=report", group: "설정" },
           { key: "ai_ment", label: "AI 멘트", href: "/lesson-reports?tab=ai_ment", group: "설정" },
         ] as Face[])
       : []),
-  ];
+  );
 
   // 큐는 관리 탭 공통(발송 오버사이트). 설정 탭에선 미표시(부하 0). 나머지는 활성 탭만.
-  const queueP = isSettings ? Promise.resolve(null) : getClassnoteQueue(3);
+  const queueP = isSettings || !classnoteOn ? Promise.resolve(null) : getClassnoteQueue(3);
   const tabP =
     tab === "writing"
       ? // 범위 = 기본 이번 주, `?rmonth=YYYY-MM`이면 그 달(월간 매트릭스). 파라미터 하나로 같은 쿼리를 재사용.
@@ -146,12 +156,16 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     <div className="mx-auto w-full max-w-7xl space-y-3">
       {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행으로 접힌다(제목은 창 타이틀바). */}
       <PageHeader
-        eyebrow="발송 관리"
+        eyebrow={classnoteOn ? "발송 관리" : "보고서 관리"}
         title="수업보고서"
-        description="발송 현황과 보고서 작성률을 확인합니다. 강사 작성은 원스크린에서 진행합니다."
+        description={
+          classnoteOn
+            ? "발송 현황과 보고서 작성률을 확인합니다. 강사 작성은 원스크린에서 진행합니다."
+            : "보고서 작성률과 목록을 확인합니다. 강사 작성은 원스크린에서 진행하고, 학부모에게는 보고서 링크를 보냅니다."
+        }
       />
 
-      {!isSettings ? (
+      {!isSettings && classnoteOn ? (
         queue ? (
           <ClassnoteQueueCard view={queue} />
         ) : (

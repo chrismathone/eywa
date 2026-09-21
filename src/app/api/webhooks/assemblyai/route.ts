@@ -10,6 +10,8 @@ import {
   type MeetingReport,
 } from "@/features/meetings/server/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { reportError } from "@/lib/observability/report-error";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
 import { extractConsultationForm } from "@/features/enrollment/server/form-extract";
@@ -873,9 +875,14 @@ async function analyzeConsultationAndPersist(
       subjectDetails: cur?.subject_details,
     };
     // 후보정 하네스에 전사·학생명 전달 → 환각 고유명사·학생이름 echo 차단(약한 모델 방어).
+    // 학교명 저장 별칭은 그 상담 학원의 설정 값(침산 = 일중→대구일중, 새 학원 = 없음). 조회 자체가 던지면
+    // 이 작업 전과 같은 별칭(침산 목록)으로 — 웹훅을 멈출 이유가 아니고, 침산은 실패해도 종전과 같아야 한다.
+    const schoolAliases = await getTenantSettingsByTenantId(consult.tenant_id)
+      .then((s) => s.operations.schoolSaveAliases)
+      .catch(() => CHINSAN_SCHOOL_SAVE_ALIASES);
     Object.assign(
       patch,
-      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted }),
+      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted, schoolAliases }),
     );
   }
 

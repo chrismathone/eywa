@@ -67,6 +67,19 @@ export async function createTenantWithMaster(
   }
   const tenantId = tenantRow.id as string;
 
+  // 1-1) 새 학원 = 일반판 프리셋(원장 2026-09-22 방향 B). 🔴 일반판은 **이 표식이 있어야만** 켜진다(preset.ts —
+  //      표식 없는 학원은 침산 규칙으로 돈다). 그래서 표식을 못 남기면 학원 생성 자체를 되돌린다(조용히 침산 규칙을 받은
+  //      새 학원이 생기지 않게). 값은 표식뿐 — 기본값 문서를 복사하지 않는다(일반판 기본값이 나아지면 손대지 않은 칸은 따라오게).
+  //      계정보다 먼저 쓰는 이유: 여기서 실패하면 되돌릴 것이 학원 행 하나뿐이다(설정 행은 학원 삭제에 함께 지워진다 — FK cascade).
+  const { error: settingsErr } = await admin
+    .from("tenant_settings")
+    .insert({ tenant_id: tenantId, data: { version: 1, preset: "generic" } });
+  if (settingsErr) {
+    await admin.from("tenants").delete().eq("id", tenantId);
+    updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+    return { error: `학원 설정 생성 실패: ${settingsErr.message}` };
+  }
+
   // 2) auth.users 생성
   const { error: authErr } = await admin.auth.admin.createUser({
     email: masterEmail,

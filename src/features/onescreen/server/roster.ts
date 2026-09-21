@@ -33,6 +33,7 @@ import { makeupStudentIds } from "@/features/attendance/input-roster";
 // 보강 예약(0264a) — 그날 내 반에 예약된 학생을 보강 행으로 미리 세운다. 별도 함수·fail-soft(hot path 보호, #95).
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
 import { autoUnitsOn, isAutoUnitsSubject, toAutoUnitsSchedule } from "@/features/attendance/auto-units";
+import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { carryProgress } from "../progress-status";
 import {
@@ -475,8 +476,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       list.push(toAutoUnitsSchedule(s));
       schedsByClass.set(s.class_id, list);
     }
+    // 새 학원(일반판)은 자동 시수가 없다 — 저장(resolveAutoUnits)과 같은 프로필(요청 캐시). 침산은 종전과 같다.
+    const autoUnitsOnForTenant = (await getLessonProfile()).autoUnits;
     for (const c of allClasses) {
-      if (!isAutoUnitsSubject(c.subject)) continue;
+      if (!autoUnitsOnForTenant || !isAutoUnitsSubject(c.subject)) continue;
       const u = autoUnitsOn(targetDate, schedsByClass.get(c.id) ?? []);
       if (u !== null) autoUnitsByClass.set(c.id, u);
     }

@@ -18,6 +18,7 @@ import { computeRetentionRoster } from "@/features/retention/server/queries";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { canAccess, resolveMatrix } from "@/lib/permissions";
+import { capDisabledModules, isModuleEnabled } from "@/lib/modules";
 import { summarizeRoster } from "@/features/retention/roster";
 import { addIsoDateDays } from "@/features/consultations/follow-up-urgency";
 import { getTodayActionSignals, type DashboardSignalsDb } from "./action-signals";
@@ -94,9 +95,13 @@ export async function generateDailyBriefing(
     // 조회 실패 시 라벨 리졸버가 없으면 과목 분해를 생략한다(raw 키를 화면에 흘리는 것보다 낫다).
     const settings = await getTenantSettingsByTenantId(tenantId).catch(() => null);
     const subjectLabel = settings ? buildSubjectMaps(settings.operations.subjects).labelOf : undefined;
+    // 꺼진 모듈(기능 묶음)은 권한 매트릭스와 같은 자리에서 누른다 — 화면에 없는 기능의 데이터를 브리핑이 실어 보내지 않게.
+    // 침산은 꺼진 모듈이 없어 종전 판정과 같다.
     const retentionEnabled = settings
-      ? canAccess("master", "retention", resolveMatrix(settings.permissions.overrides))
+      ? canAccess("master", "retention", capDisabledModules(resolveMatrix(settings.permissions.overrides), settings.modules.disabled))
       : true; // 설정 조회 실패는 기존 동작 유지(fail-open — perm-matrix.ts와 같은 취지)
+    // 신규생 체크리스트 지연 신호도 같다 — 신규생 관리 모듈이 꺼진 학원엔 재촉할 화면이 없다.
+    const newcomersEnabled = settings ? isModuleEnabled(settings.modules.disabled, "newcomers") : true;
     // retention은 앱 최중량 읽기 — 실패해도 브리핑 본체는 살린다(B7 준수: 라이브가 아니라 cron에서만 계산).
     // B4: 아래 신호 배치와 독립 조회라 직렬 await 금지 — 같은 Promise.all에 편입(cron 120s·regen 60s 예산 절약).
     const retentionPromise = (retentionEnabled
@@ -149,7 +154,7 @@ export async function generateDailyBriefing(
       //    briefing-digest가 payload에서 어차피 비우므로 조회 자체를 건너뛴다(헛도는 왕복 2회 제거).
       //    attendanceNow=false — 어제 재생분은 아래 '어제 미기록'과 같은 날짜·같은 쿼리라 두 번 돌 뿐이다.
       getTodayActionSignals(
-        { timetable: false, attendanceNow: false },
+        { timetable: false, attendanceNow: false, newcomers: newcomersEnabled },
         { db, asOf: { date: yesterday, nowMinutes: 1440 } },
       ),
       // 오늘: 어제 미기록 반·오늘 휴가·승인 대기만(나머지 도메인은 어제 수집분과 중복이라 스킵).

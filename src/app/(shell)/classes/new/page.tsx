@@ -1,4 +1,5 @@
 import { BackLink } from "@/components/back-link";
+import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
@@ -40,6 +41,7 @@ export default async function NewClassPage() {
         classroomOptions={classrooms}
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}
+        showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
       />
     </div>
   );

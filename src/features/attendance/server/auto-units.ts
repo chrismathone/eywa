@@ -12,6 +12,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
+import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 import {
   autoUnitsKey,
   planAutoUnits,
@@ -44,6 +45,8 @@ export async function resolveAutoUnits(
 ): Promise<Map<string, number>> {
   const valid = cells.filter((c) => !!c.classId && YMD.test(c.date));
   if (valid.length === 0) return new Map();
+  // 새 학원(일반판)은 자동 시수가 없다 — 새 칸은 기본값(1). 침산 프로필은 켜져 있어 종전과 같다(lesson-profile.ts).
+  if (!(await getLessonProfile(opts.tenantId)).autoUnits) return new Map();
   const classIds = [...new Set(valid.map((c) => c.classId))];
   const dates = [...new Set(valid.map((c) => c.date))].sort();
   const from = dates[0]!;

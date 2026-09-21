@@ -1,7 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { loadTenantSettingsRaw } from "./queries";
+import { loadTenantSettingsRaw, storedForResolve } from "./queries";
 import { resolveSettings } from "../resolve";
 import { branchChoices, pickBrandTenantId, type PublicTenantRow } from "../brand-tenant";
 import type { TenantSettings } from "../settings-types";
@@ -79,7 +79,7 @@ export async function getPublicBranding(): Promise<PublicBranding | null> {
     const tenantId = pickBrandTenantId(rows, process.env.PUBLIC_BRAND_TENANT_SLUG);
     if (!tenantId) return null;
     const raw = await loadTenantSettingsRaw(tenantId);
-    return { tenantId, settings: resolveSettings(raw.data, { name: raw.name }) };
+    return { tenantId, settings: resolveSettings(storedForResolve(raw), { name: raw.name }) };
   } catch (e) {
     console.error("[owner/public-branding] 브랜딩 조회 실패 — 제품 중립 표기로 폴백", e);
     return null;
@@ -97,7 +97,7 @@ export async function getPublicBrandingByTenantId(
 ): Promise<PublicBranding | null> {
   try {
     const raw = await loadTenantSettingsRaw(tenantId);
-    return { tenantId, settings: resolveSettings(raw.data, { name: raw.name }) };
+    return { tenantId, settings: resolveSettings(storedForResolve(raw), { name: raw.name }) };
   } catch (e) {
     console.error("[owner/public-branding] 지점 브랜딩 조회 실패 — 제품 중립 표기로 폴백", e);
     return null;

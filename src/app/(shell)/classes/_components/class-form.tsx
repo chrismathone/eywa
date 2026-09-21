@@ -116,6 +116,7 @@ export function ClassForm({
   periodsConfig,
   scope,
   today,
+  showEnglishTrack = true,
 }: {
   mode: "create" | "edit";
   defaults?: ClassFormDefaults;
@@ -129,6 +130,11 @@ export function ClassForm({
   scope?: string;
   /** KST 오늘(`YYYY-MM-DD`) — 운영 기간 고지 계산용. **서버가 넘긴다**([[#108]] 하이드레이션). */
   today: string;
+  /**
+   * 영어 프로그램 구분(EiE / 인재원 영어) 칸을 보일지 — EiE 모듈이 꺼진 학원(새 학원 기본)은 안 보인다(2026-09-22 방향 B).
+   * 안 그리면 폼에 `englishTrack`이 없어 서버가 새 반은 미분류(null)로 두고, 수정은 기존 값을 건드리지 않는다.
+   */
+  showEnglishTrack?: boolean;
 }) {
   const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
   const action = mode === "create" ? createClass : updateClass;
@@ -407,7 +413,7 @@ export function ClassForm({
         {...(fieldErrs.validTo ? { validToError: fieldErrs.validTo } : {})}
       />
 
-      {subject === "english" ? (
+      {subject === "english" && showEnglishTrack ? (
         <ClassEnglishTrackField value={englishTrack} onChange={setEnglishTrack} />
       ) : null}
 

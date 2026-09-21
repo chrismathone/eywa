@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { isValidYm, kstDateOf, kstMonth, kstToday, monthLabel, shiftMonth } from "@/lib/date-kst";
 import { inWithdrawalWindow, withdrawalMonthWindow, withdrawalProgram } from "@/features/withdrawals/window";
-import { PROGRAMS, parseProgram, programLabel, type Program } from "@/features/students/program";
+import { parseProgram, programLabel, visiblePrograms, type Program } from "@/features/students/program";
+import { isModuleEnabled } from "@/lib/modules";
 import {
   UserMinus,
   CalendarClock,
@@ -364,7 +365,10 @@ export default async function WithdrawalsPage({
         <FilterSelect
           paramName="program"
           value={program ?? ""}
-          options={PROGRAMS.map((p) => ({ value: p, label: programLabel(p, settings.operations.subjects) }))}
+          options={visiblePrograms(isModuleEnabled(settings.modules.disabled, "eie")).map((p) => ({
+            value: p,
+            label: programLabel(p, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")),
+          }))}
           axisLabel="프로그램"
           ariaLabel="프로그램 필터"
           {...SELECT_PROPS}

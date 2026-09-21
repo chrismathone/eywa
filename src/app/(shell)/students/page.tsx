@@ -1,4 +1,5 @@
 import { Users } from "@/components/icons/aywa-icon-compat";
+import { isModuleEnabled } from "@/lib/modules";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination } from "@/components/pagination";
@@ -324,7 +325,7 @@ export default async function StudentsPage({
           {/* 운영실 KPI ↗가 건 집합 — 칩을 누르면 그 조건만 푼다(나머지 필터는 그대로). */}
           {program ? (
             <ToolbarChip active href={listParams({ program: null, leave: true })}>
-              {sheetT(lang, "stu.filter.program")}: {programLabel(program, settings.operations.subjects)}
+              {sheetT(lang, "stu.filter.program")}: {programLabel(program, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie"))}
               <EyIcon name="close" size={12} aria-hidden />
             </ToolbarChip>
           ) : null}
