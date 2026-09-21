@@ -3,29 +3,31 @@ import { headers } from "next/headers";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { getMonthPlanPrint } from "@/features/class-sheets/server/month-plan-print";
 import { MonthPlanPaper } from "./month-plan-paper";
+import { MpFitToPage } from "./fit-to-page";
 
 export const metadata: Metadata = { title: "월간 계획서 인쇄 — eywa" };
 
 /**
- * EiE **월간 계획서(MP)** 인쇄 — 학부모 배포용 A4 한 장(가로).
+ * EiE **월간 계획서(MP)** 인쇄 — 학부모 배포용 **A4 한 장**(원장 2026-09-21 *"한페이지에 딱 들어오게"*).
  *
  * 🔴 **대조·경고·작성률은 이 문서에 없다**(원장 2026-09-01 브리프) — 학부모가 받는 종이에
  *    "미작성 3일" 같은 내부 신호가 실리면 안 된다. 이 라우트는 계획 칸과 날짜만 그린다.
  * 🔴 게이트는 화면과 같은 함수 + **EiE 재확인**(`getMonthPlanPrint`) — 인쇄는 별도 주소라
  *    화면에서 탭을 감춘 것만으로는 안 막힌다(#77).
- * ⚠️ 가로 A4다 — 요일 3개 × 최대 4열이면 세로 190mm에 한 칸이 16mm도 안 돼 진도가 잘린다
- *    (자리 월간 출석부 별지와 같은 판단).
+ * 🔑 한 장에 맞추는 규칙(배율·방향)은 [`MpFitToPage`](./fit-to-page.tsx) — 문서를 같은 비율로 줄이고,
+ *    방향은 더 크게 찍히는 쪽(주 5일 반 = 가로 · 주 3일 반 = 세로)을 문서마다 고른다.
+ * 🔑 기간 축(`period`)은 화면이 보던 축을 주소로 실어 온다 — 세션으로 보던 계획서는 세션 창으로 찍힌다.
  */
 export default async function EcsMonthPlanPrintPage({
   params,
   searchParams,
 }: {
   params: Promise<{ classId: string }>;
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; period?: string | string[] }>;
 }) {
   const { classId } = await params;
-  const { month } = await searchParams;
-  const res = await getMonthPlanPrint(classId, month ?? null);
+  const { month, period } = await searchParams;
+  const res = await getMonthPlanPrint(classId, month ?? null, period ?? null);
   const embedded = (await headers()).get("x-embed") === "1";
 
   if (!res.ok) {
@@ -40,11 +42,14 @@ export default async function EcsMonthPlanPrintPage({
   }
 
   return (
-    <div className="mx-auto max-w-[277mm] px-8 pt-6 pb-10">
+    // ⚠️ 인쇄에선 바깥 여백을 0으로 — 여백은 `@page`가 한 번만 준다(두 번 주면 한 장에 안 들어간다).
+    <div className="mx-auto max-w-[277mm] px-8 pt-6 pb-10 print:max-w-none print:p-0">
       <div className="print:hidden">
         <PrintActions embedded={embedded} />
       </div>
-      <MonthPlanPaper data={res.data} />
+      <MpFitToPage>
+        <MonthPlanPaper data={res.data} />
+      </MpFitToPage>
     </div>
   );
 }

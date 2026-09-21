@@ -6,6 +6,7 @@ import {
   isSpecialSlotLabel,
   resolveTeacherLabel,
   resolveTeacherLabels,
+  resolveSlotTeacherLabel,
 } from "./teacher-label";
 
 /** 실데이터(injaewon) 표본 — Zoe는 실제로 두 퇴사자가 나눠 쓴다. */
@@ -20,6 +21,20 @@ const USERS = [
   { displayName: "박나연(Jenny)", englishName: "Zoe", active: false },
   { displayName: "강보경", englishName: "Sarah", active: false },
 ];
+
+describe("저장된 교시 담당자 표시", () => {
+  const map = buildTeacherLabelMap(USERS);
+  it("라벨 없는 담당자 변경과 오래된 사람 라벨 모두 FK를 따른다", () => {
+    expect(resolveSlotTeacherLabel(null, { display_name: "추민아" }, map)).toBe("추민아");
+    expect(resolveSlotTeacherLabel("Hannah", [{ display_name: "추민아" }], map)).toBe("추민아");
+  });
+  it("JJ·LAB 자리는 사람 이름으로 바꾸지 않고, FK 없는 시트 라벨도 유지한다", () => {
+    expect(resolveSlotTeacherLabel("JJ", { display_name: "추민아" }, map)).toBe("JJ");
+    expect(resolveSlotTeacherLabel("LAB", null, map)).toBe("LAB");
+    expect(resolveSlotTeacherLabel("Jane", null, map)).toBe("추민아");
+    expect(resolveSlotTeacherLabel(null, null, map)).toBeNull();
+  });
+});
 
 describe("buildTeacherLabelMap", () => {
   const map = buildTeacherLabelMap(USERS);

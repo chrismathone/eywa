@@ -162,6 +162,39 @@ export function attendanceClassBilledAmounts(
  */
 export type AttendanceTermSessions = { units: number; daysBasis: boolean };
 
+/** 회차 확정에 저장된 단가. 월 정액은 회당 단가와 구분하고, 서로 다른 단가는 더하지 않는다. */
+export type AttendanceConfirmedPrice = { unitPrice: number; monthly: boolean; daysBasis: boolean };
+
+export function attendanceClassConfirmedPrices(
+  classes: readonly AttendanceBillingClass[],
+  invoices: readonly AttendanceInvoice[],
+  terms: readonly AttendanceBillingTerm[],
+): Record<string, AttendanceConfirmedPrice[]> {
+  const classById = new Map(classes.map((c) => [c.classId, new Set(c.studentIds)]));
+  const studentByInvoice = new Map(invoices.map((i) => [i.id, i.student_id]));
+  const out: Record<string, AttendanceConfirmedPrice[]> = {};
+  const pending = new Set<string>();
+  for (const term of terms) {
+    if (!term.class_id) continue;
+    const studentId = studentByInvoice.get(term.invoice_id);
+    if (!studentId || !classById.get(term.class_id)?.has(studentId)) continue;
+    const key = rowKey(term.class_id, studentId);
+    const unitPrice = Number(term.unit_price);
+    if (term.confirmed_sessions == null || term.unit_price == null || !Number.isFinite(unitPrice) || unitPrice < 0) {
+      pending.add(key);
+      continue;
+    }
+    const price = { unitPrice, monthly: term.pricing_mode === "monthly", daysBasis: isDaysBasisTerm(term) };
+    const prices = out[key] ??= [];
+    if (!prices.some((p) => p.unitPrice === price.unitPrice && p.monthly === price.monthly && p.daysBasis === price.daysBasis)) {
+      prices.push(price);
+    }
+  }
+  // 일부 회차만 확정됐다면 전체가 확정된 것처럼 보이지 않게 한다.
+  for (const key of pending) delete out[key];
+  return out;
+}
+
 /** 확정 당시 단위 — 회차 확정 화면과 **같은 폴백**(null이면 옛 일수 기준). 월 정액은 이 축이 없다. */
 function isDaysBasisTerm(term: AttendanceBillingTerm): boolean {
   if (term.pricing_mode === "monthly") return false;
@@ -220,16 +253,5 @@ export function attendanceClassPriceConfirmedRows(
   invoices: readonly AttendanceInvoice[],
   terms: readonly AttendanceBillingTerm[],
 ): string[] {
-  const classById = new Map(classes.map((c) => [c.classId, new Set(c.studentIds)]));
-  const studentByInvoice = new Map(invoices.map((i) => [i.id, i.student_id]));
-  const state = new Map<string, boolean>();
-  for (const term of terms) {
-    if (!term.class_id) continue;
-    const studentId = studentByInvoice.get(term.invoice_id);
-    if (!studentId || !classById.get(term.class_id)?.has(studentId)) continue;
-    const key = rowKey(term.class_id, studentId);
-    const priced = term.confirmed_sessions !== null && term.unit_price != null;
-    state.set(key, (state.get(key) ?? true) && priced);
-  }
-  return [...state].filter(([, ok]) => ok).map(([key]) => key);
+  return Object.keys(attendanceClassConfirmedPrices(classes, invoices, terms));
 }

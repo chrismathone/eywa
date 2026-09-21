@@ -456,6 +456,8 @@ describe("🔴 월간 뷰는 사전만 본다 — 화면 파일에 한글 리터
     "month-memo.tsx",
     "month-plan-bar.tsx",
     "month-plan-view.tsx",
+    // 기간 축 `월 | 세션`(2026-09-21) — EiE 반을 맡은 원어민 강사도 본다.
+    "month-period-switch.tsx",
     // 교재 배정 창(0266a·0268a) — 월간 툴바에서 열리고, 담당 슬롯이 있는 **원어민 강사도 연다**.
     "textbook-fill-dialog.tsx",
   ];

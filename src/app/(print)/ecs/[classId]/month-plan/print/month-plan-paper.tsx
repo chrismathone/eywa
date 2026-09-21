@@ -111,8 +111,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
 
   return (
     <article style={{ color: "#000", background: MP_SHEET_COLOR.paper }}>
-      {/* @page 가로 A4 — 요일 3개 × 최대 4열이 세로 폭에 안 들어간다. */}
-      <style>{"@page { size: A4 landscape; margin: 10mm; }"}</style>
+      {/* ⚠️ `@page`(방향·여백)는 여기 없다 — 문서마다 방향이 달라 한 장에 맞추는 껍데기(`MpFitToPage`)가 정한다. */}
       {/* 🔴 문서 **바깥 테두리만 굵다**(시트 3px) — 안쪽 격자는 전부 1px이다. */}
       <div className="w-fit" style={{ border: MP_SHEET_OUTER }}>
 
@@ -225,7 +224,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
                 Date
               </th>
               {dows.map((dow) => {
-                const date = cellDateOf(week, dow, month.month);
+                const date = cellDateOf(week, dow);
                 const kind = kindOf(date);
                 return (
                   <td
@@ -243,7 +242,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
               <th style={mpBandCellStyle("week")}>Week {week.index}</th>
               {dows.flatMap((dow) => {
                 const cols = columnsByDow[dow];
-                const date = cellDateOf(week, dow, month.month);
+                const date = cellDateOf(week, dow);
                 const kind = kindOf(date);
                 // 🔴 휴강 날은 라벨 대신 **`휴강 · 추석`**을 한 칸으로 적는다 — In-class/Homework 라벨이
                 //    회색 빈 칸 위에 서 있으면 "안 적은 평일"로 읽힌다.
@@ -274,7 +273,7 @@ export function MonthPlanPaper({ data }: { data: MonthPlanPrintData }) {
                   사라져 같은 달이 두 문서에서 다른 모양이 된다. */}
               {dows.flatMap((dow) => {
                 const cols = columnsByDow[dow];
-                const date = cellDateOf(week, dow, month.month);
+                const date = cellDateOf(week, dow);
                 const kind = kindOf(date);
                 return cols.map((col) => (
                   <td

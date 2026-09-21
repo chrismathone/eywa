@@ -8,12 +8,13 @@ import { loadMoneyCarryIns, loadMoneyCarryOuts } from "@/features/billing/sessio
 import {
   attendanceClassBilledAmounts,
   attendanceClassConfirmedSessions,
-  attendanceClassPriceConfirmedRows,
+  attendanceClassConfirmedPrices,
   attendanceInvoiceStateByStudent,
   type AttendanceBillingTerm,
   type AttendanceInvoice,
   type AttendanceInvoiceState,
   type AttendanceTermSessions,
+  type AttendanceConfirmedPrice,
 } from "../class-billing";
 
 /**
@@ -21,11 +22,12 @@ import {
  * 🔴 **매번 새로 만든다** — 모듈 전역 하나를 돌려주면 호출부가 그 객체에 쓰는 순간 요청·테넌트를 넘어 샌다.
  * ⚠️ `invoiceStateByStudent`도 빈 맵이다 — 판정을 안 했으면 '청구서 없음'(`—`)이 아니라 종전 '미확정'이다.
  */
-const empty = (): AttendanceClassBilling => ({ billed: {}, confirmedSessions: {}, priceConfirmed: [], invoiceStateByStudent: {} });
+const empty = (): AttendanceClassBilling => ({ billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {} });
 
 export type AttendanceClassBilling = {
   billed: Record<string, number>;
   confirmedSessions: Record<string, AttendanceTermSessions>;
+  confirmedPrices: Record<string, AttendanceConfirmedPrice[]>;
   /** 회차 확정에서 단가까지 확정된 학생×반 줄 — 「단가」 표식을 뗀다(표시 전용, 정산액 불변). */
   priceConfirmed: string[];
   /**
@@ -130,10 +132,12 @@ export async function getAttendanceClassBilledAmounts(
   // 한 줄에서 숫자가 어긋난다(원장 2026-09-17 '등록 차수' 열).
   // 출석부 금액 열은 표시라 실패해도 이월 없이 그린다(분배 저장 거절은 회차 확정·시수 검증 쪽이 한다).
   const carry = { outs: new Map([...carryOuts.map].map(([id, c]) => [id, c.amount] as const)), ins: carryIns.map };
+  const confirmedPrices = attendanceClassConfirmedPrices(classes, invoices, terms);
   return {
     billed: attendanceClassBilledAmounts(classes, invoices, terms, carry),
     confirmedSessions: attendanceClassConfirmedSessions(classes, invoices, terms),
-    priceConfirmed: attendanceClassPriceConfirmedRows(classes, invoices, terms),
+    confirmedPrices,
+    priceConfirmed: Object.keys(confirmedPrices),
     // 상태 판정만 취소분까지 본다 — 허용된 반의 학생 전원에게 키가 선다(청구서가 없으면 `none`).
     invoiceStateByStudent: attendanceInvoiceStateByStudent(studentIds, allInvoices),
   };
@@ -156,6 +160,7 @@ export function mergeAttendanceClassBilling(...parts: readonly AttendanceClassBi
   for (const part of parts) {
     Object.assign(out.billed, part.billed);
     Object.assign(out.confirmedSessions, part.confirmedSessions);
+    Object.assign(out.confirmedPrices, part.confirmedPrices);
     for (const key of part.priceConfirmed) priced.add(key);
     for (const [studentId, state] of Object.entries(part.invoiceStateByStudent)) {
       const prev = out.invoiceStateByStudent[studentId];

@@ -9,7 +9,7 @@ import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
 import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
-import type { AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
 import { placeLifecycleBadges } from "@/features/attendance/badge-placement";
 import { attendanceNameTone } from "@/features/attendance/name-tone";
@@ -29,6 +29,7 @@ export function MatrixRow({
   days,
   holidays,
   classBilled,
+  confirmedPrices,
   termSessions,
   unitSuffix = null,
   noTransferBadge = false,
@@ -52,6 +53,7 @@ export function MatrixRow({
   holidays: Record<string, string>;
   /** undefined = 열 없음, null = 미확정, 0 = 매칭된 0원. */
   classBilled?: number | null;
+  confirmedPrices?: readonly AttendanceConfirmedPrice[] | null;
   /**
    * 회차 확정에서 **확정한 시수**(등록 차수) — undefined면 열 자체가 없다, null이면 미확정.
    * 원장 2026-09-17 *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로 보여줄것"*.
@@ -187,6 +189,19 @@ export function MatrixRow({
       {/* 청구액 = 크림 · 수업/등록 차수 = 연파랑(원장 2026-09-18 색 지정, `--att-col-*`).
           🔴 행 hover(`hover:bg-bg-soft/40`)는 이 칸들에선 안 비친다 — 열 색이 이기는 게 맞다(열을 보라고 칠한 색이다). */}
       {/* 값이 없는 칸 = '미확정'(청구서는 있어 회차 확정에서 만들 수 있다) 또는 `—`(청구서가 없거나 취소 — 만들 곳이 없다, 2026-09-18). */}
+      {confirmedPrices !== undefined ? (
+        <td className="border-line num border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+          {confirmedPrices?.length ? confirmedPrices.map((price, index) => (
+            <span
+              key={index}
+              className={`block ${price.daysBasis ? "text-danger underline decoration-dotted underline-offset-4" : ""}`}
+              title={sheetT(lang, price.daysBasis ? "att.row.daysBasisWhat" : "att.col.unitPriceTitle")}
+            >
+              {sheetTf(lang, price.monthly ? "att.row.monthlyPrice" : "att.row.confirmedPrice", { price: formatMoney(price.unitPrice) })}
+            </span>
+          )) : <UnconfirmedMark noInvoice={noInvoice} lang={lang} />}
+        </td>
+      ) : null}
       {classBilled !== undefined ? (
         <td className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
           {classBilled === null ? <UnconfirmedMark noInvoice={noInvoice} lang={lang} /> : formatMoney(classBilled)}
@@ -240,7 +255,7 @@ export function MatrixRow({
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
         if (d.placeholder) {
-          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[28px] border-b border-r" aria-hidden />;
+          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[24px] border-b border-r" aria-hidden />;
         }
         const holiday = holidays[d.date];
         // 그 날 이 반 소속이 아니었나 — 8월 5일에 그만둔 학생의 나머지 26칸을 "수업하는 날"로
@@ -264,7 +279,7 @@ export function MatrixRow({
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
         // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
         return (
-          <td key={d.date} className="border-line relative min-w-[28px] border-b border-r p-0 text-center align-middle">
+          <td key={d.date} className="border-line relative min-w-[24px] border-b border-r p-0 text-center align-middle">
             <AttendanceCell
               studentId={student.id}
               classId={classId}

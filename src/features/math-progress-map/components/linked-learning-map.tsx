@@ -46,7 +46,7 @@ export function LinkedLearningMap({ student, classId, className, month, goal, pr
     <header className={styles.header}>
       <div><h2>{student.name} <span>학습 진도맵</span></h2><p>{student.school} {student.grade} · {className}{goal.textbook ? ` · ${goal.textbook}` : ""}</p></div>
       <div className={styles.overall} aria-label="전체 진도율"><span>전체 진도</span><strong>{metrics.percent == null ? "—" : `${metrics.percent}%`}</strong><span>{metrics.current ?? "—"} / {metrics.total}차시</span></div>
-      <div className={styles.status}><strong>{learningStatusLabel(metrics, "차시")}</strong><span>기준일 계획 {metrics.target}차시</span></div>
+      <div className={styles.status}><strong>{learningStatusLabel(metrics, "차시")}</strong><span>{metrics.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${metrics.target}차시`}</span></div>
       <div className={styles.status}><strong>수업당 {metrics.requiredPace == null ? "—" : `${metrics.requiredPace.toFixed(1)}차시`}</strong><span>남은 수업 {metrics.remainingDays}회</span></div>
       {headerActions}
       {!embedded ? <EmbedLink href={learningSheetHref(classId, student.studentId, month)} className={styles.back}>MCS로 돌아가기</EmbedLink> : null}

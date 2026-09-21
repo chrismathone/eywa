@@ -736,6 +736,27 @@ export const SHEET_DICT = {
     en: "Shows what was actually written in that day's weekly sheet under each plan. The signal counts (not written, different book) do not follow this toggle",
   },
   "month.print": { ko: "인쇄", en: "Print" },
+  // 기간 축(EiE 계획서만, 2026-09-21 원장 *"세션으로 뷰가 보일 수 있게 월/세션 전환"*).
+  // 월·세션 라벨은 출석부 날짜축(`att.period.*`)과 같은 말이다 — 같은 뜻을 두 표기로 부르지 않는다.
+  "month.period.aria": { ko: "기간 단위", en: "Period unit" },
+  "month.period.month": { ko: "월", en: "Month" },
+  "month.period.session": { ko: "세션", en: "Session" },
+  "month.period.month.title": {
+    ko: "달력 한 달(1일~말일)로 봅니다",
+    en: "Show the calendar month (1st to the last day)",
+  },
+  "month.period.session.title": {
+    ko: "학원 세션 기간(학원설정 운영 기간)으로 봅니다 — 다음 달 초까지 이어질 수 있습니다",
+    en: "Show the academy session (from the academy settings) — it can run into the next month",
+  },
+  "month.period.noSession": { ko: "세션 미정 · 달력월", en: "No session · by month" },
+  "month.period.noSession.title": {
+    ko: "이 달의 세션 기간이 학원설정에 없어 달력 한 달로 보여 줍니다",
+    en: "This month has no session in the academy settings, so the calendar month is shown",
+  },
+  "month.prevSession": { ko: "이전 세션", en: "Previous session" },
+  "month.nextSession": { ko: "다음 세션", en: "Next session" },
+  "month.currentSession": { ko: "눌러서 이번 세션으로", en: "Click for this session" },
 
   // ── 교재 배정(0266a·0268a) — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 순서대로 들어간다.
   //    🔴 이 화면은 원어민 강사도 연다(담당 슬롯이 있으면 canEdit) — 한국어 리터럴을 파일에 적지 말 것.
@@ -1461,6 +1482,13 @@ export const SHEET_DICT = {
     en: "The student's school and grade (shown compact; hover a value for the full text).",
   },
   // 이 반 몫 청구액. 학생 총액 '청구·납입' 열은 2026-09-17 원장 지시로 없앴다(합계 줄의 청구·납입은 `att.totals.*`).
+  "att.col.unitPrice": { ko: "단가", en: "Price" },
+  "att.col.unitPriceTitle": {
+    ko: "회차 확정에 저장된 단가 및 월 수강료입니다. 서로 다른 확정 단가가 있으면 각각 표시합니다.",
+    en: "Saved confirmed unit prices or monthly tuition. Different confirmed prices are listed separately.",
+  },
+  "att.row.confirmedPrice": { ko: "{price}원", en: "₩{price}" },
+  "att.row.monthlyPrice": { ko: "월 {price}원", en: "₩{price}/mo" },
   "att.col.classBilled": { ko: "청구액", en: "Billed" },
   "att.col.classBilledTitle": {
     ko: "선택한 월의 이 반 청구액(원) — 회차 확정의 청구액 배분 또는 반 이름 매칭 금액",
@@ -3152,8 +3180,20 @@ export const SHEET_DICT = {
   },
   "os.c.makeupAddedUnits": { ko: "{name} (보강) 추가됨 — 수업타임 {units}", en: "{name} (makeup) added — class units {units}" },
   "os.c.makeupAddedNoAnchor": {
-    ko: "{name} (보강) 추가됨 — 반 필터가 '전체'라 출결에는 남기지 않았습니다(반을 고르면 함께 기록됩니다).",
-    en: "{name} (makeup) added — the class filter is on 'All', so nothing was written to the attendance sheet (pick a class and it is recorded too).",
+    ko: "{name} (보강) 추가됨 — 기록할 반이 정해지지 않아 출결에는 남기지 않았습니다(반 필터로 반 하나를 고르면 함께 기록됩니다).",
+    en: "{name} (makeup) added — no class was set, so nothing was written to the attendance sheet (pick one class in the filter and it is recorded too).",
+  },
+  "os.c.makeupAddedNoHost": {
+    ko: "{name} (보강) 추가됨 — '반 없이'라 지금은 출결을 적지 않았습니다(보고서를 저장할 때 선생님 반에 이 학생 칸이 없으면 보강 반에 기록됩니다).",
+    en: "{name} (makeup) added — 'No class' was picked, so nothing was written now (when the report is saved, it goes to the makeup class unless your class already has this student that day).",
+  },
+  "os.c.makeupHostGone": {
+    ko: "수업 목록이 바뀌었습니다 — 기록할 수업을 다시 골라 주세요",
+    en: "The class list changed — pick the class again",
+  },
+  "os.c.makeupRowExistsNoChange": {
+    ko: "이미 보강 행이 있어 이번 선택(수업·시수·결석분)은 반영하지 않았습니다 — 바꾸려면 보강 빼기 후 다시 추가해 주세요",
+    en: "A makeup row already exists, so this choice (class, units, absence) was not applied — remove the makeup and add it again to change it",
   },
   "os.c.cardNotFound": {
     ko: "학생 카드를 찾지 못했습니다 — 새로고침 후 다시 시도해 주세요",
@@ -3614,6 +3654,11 @@ export const SHEET_DICT = {
   "sync.failed": { ko: "동기화 실패", en: "Sync failed" },
   "sync.ago": { ko: "동기화 {when}", en: "Synced {when}" },
   "sync.issue": { ko: "· 확인 필요", en: "· needs a look" },
+  "sync.details": { ko: "상세 확인", en: "View details" },
+  "sync.detailsTitle": { ko: "동기화 확인 사항", en: "Sync issues" },
+  "sync.openSettings": { ko: "학원 설정 → 연동에서 확인", en: "Open Academy settings → Integrations" },
+  "sync.askManager": { ko: "관리자에게 학원 설정 → 연동에서 확인을 요청하세요.", en: "Ask an administrator to check Academy settings → Integrations." },
+  "sync.invoiceGuide": { ko: "학생 미매칭은 이름·학년·중복 원생을 확인해야 합니다. 이 문제로 가져오지 못한 수납은 ‘마지막 동기화에 없던 청구’ 목록에 포함되지 않습니다.", en: "For unmatched students, check names, grades and duplicate records. Payments that could not be imported are not included in the list of previously saved invoices missing from the latest sync." },
   "sync.title": { ko: "makeedu 동기화: {when}", en: "makeedu sync: {when}" },
   "sync.titleRows": { ko: " · 신규 {n}건", en: " · {n} new" },
   "sync.titleIssue": { ko: "\n확인 필요: {issue}", en: "\nNeeds a look: {issue}" },

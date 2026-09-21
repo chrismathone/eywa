@@ -45,6 +45,8 @@ const TABLE_MISSING_MSG =
   "연차 조정 표가 아직 준비되지 않았습니다 — 마이그레이션 0252a를 적용하면 바로 쓸 수 있습니다";
 const USED_RANGE_MISSING_MSG =
   "사용 기간 칸이 아직 준비되지 않았습니다 — 마이그레이션 0270b를 적용하면 쓸 수 있습니다(기간을 비우면 지금도 저장됩니다)";
+const REASON_REQUIRED_MSG =
+  "사유 없이 저장하려면 마이그레이션 0277a가 필요합니다 — 그전까지는 사유를 적어 주세요";
 
 async function requireAdjuster() {
   const user = await getCurrentUser();
@@ -114,8 +116,10 @@ export async function addLeaveAdjustment(
   const userId = String(formData.get("userId") ?? "").trim();
   if (!UUID_RE.test(userId)) return { error: "대상 직원을 선택하세요" };
 
+  // 사유는 **선택**이다(원장 2026-09-21: *"연차관리에 사유없어도 조정기록 되게해줘"*). 0252a는 필수로
+  // 잠가 뒀었지만 — 적을 말이 없어 조정을 못 하는 쪽이 더 나쁘다는 판단 — 칸은 두고 비울 수 있게만 했다.
+  // 🔑 빈 값은 null이 아니라 **빈 문자열**로 저장한다(0277a 주석: "없음"이 두 가지가 되면 표시가 갈린다).
   const reason = String(formData.get("reason") ?? "").trim();
-  if (!reason) return { error: "조정 사유를 적어 주세요 — 나중에 누구도 이유를 되찾지 못합니다" };
   if (reason.length > MAX_REASON) return { error: `사유는 ${MAX_REASON}자를 넘을 수 없습니다` };
 
   // 실제 휴가 **사용 기간**(0270b, 원장 2026-09-18: *"가감일수가 1일 이상이면 사용일 종료일 이렇게
@@ -221,6 +225,10 @@ export async function addLeaveAdjustment(
     if (isMissingRelation(error)) return { error: TABLE_MISSING_MSG };
     // 기간을 **적었을 때만** 이 문구 — 무엇을 하면 지금 저장되는지(비우기)까지 함께 말한다.
     if (usedStart && isMissingUsedRangeColumn(error)) return { error: USED_RANGE_MISSING_MSG };
+    // 0277a 미적용 창 — 빈 사유를 DB가 아직 막는다(23514). 영문 제약 이름 대신 할 일을 한글로 말한다.
+    if (!reason && /leave_adjustments_reason_present/.test(error.message ?? "")) {
+      return { error: REASON_REQUIRED_MSG };
+    }
     return { error: `저장 실패 — ${error.message}` };
   }
 

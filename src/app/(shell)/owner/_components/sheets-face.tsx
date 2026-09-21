@@ -7,6 +7,7 @@ import {
   getUnpushedIntakeConsultations,
   getMakeeduSyncWorkers,
   getMakeeduSyncLock,
+  getMakeeduSyncState,
 } from "@/features/integrations/server/makeedu-sync";
 import { getServiceAccountEmail } from "@/features/integrations/google-sheets";
 import { SubjectSheetCard } from "./subject-sheet-card";
@@ -15,6 +16,8 @@ import { MakeeduWorkerStatus } from "./makeedu-worker-status";
 import { MakeeduSyncRunsList } from "./makeedu-sync-runs";
 import { MakeeduPushCard } from "@/features/integrations/components/makeedu-push-card";
 import { EyIcon } from "@/components/icons/eywa-icons";
+import { EmbedLink } from "@/components/embed-link";
+import { humanizeMakeeduSyncError } from "@/features/integrations/sync-error";
 
 /**
  * 연동 면 (owner ?tab=sheets) — 구글 시트 내보내기 단일 홈.
@@ -41,13 +44,14 @@ export async function SheetsFace({
   // eslint-disable-next-line react-hooks/purity -- server component renders once per request
   const nowMs = Date.now();
   // 독립 조회 → 병렬(B4). 시트 상태는 지원 과목(math·english)마다 별도 provider 행.
-  const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, workers, syncLock] = await Promise.all([
+  const [sheetStatuses, makeeduStatus, runsPage, pushCandidates, workers, syncLock, invoiceSync] = await Promise.all([
     Promise.all(SHEET_EXPORT_SUBJECTS.map((s) => getGoogleSheetsStatus(s))),
     getMakeeduAutoSyncStatus(),
     getMakeeduSyncRuns(page, RUNS_PAGE_SIZE),
     getUnpushedIntakeConsultations(),
     getMakeeduSyncWorkers(nowMs),
     getMakeeduSyncLock(),
+    getMakeeduSyncState("invoices"),
   ]);
   const subjectMaps = buildSubjectMaps(subjects);
   const saEmail = getServiceAccountEmail();
@@ -61,6 +65,16 @@ export async function SheetsFace({
   };
   return (
     <div className="w-full space-y-8">
+      {invoiceSync && (invoiceSync.issue || invoiceSync.status !== "ok") ? <section className="space-y-2 rounded-lg border border-amber/40 bg-amber-soft p-4" aria-label="수납 동기화 확인 사항">
+        <h2 className="text-base font-bold">수납 동기화 확인 사항</h2>
+        <p className="text-text-dim text-xs">{new Date(invoiceSync.syncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} 기준</p>
+        <p className="break-words text-sm" title={invoiceSync.issue ?? undefined}>{invoiceSync.status === "ok" ? invoiceSync.issue : humanizeMakeeduSyncError(invoiceSync.issue) || "수납 동기화 실패"}</p>
+        {invoiceSync.issue?.includes("미매칭") ? <>
+          <p className="text-sm">학생 미매칭은 원생의 이름·학년·중복 등록을 확인해야 합니다. 가져오지 못한 수납은 수납 화면의 ‘마지막 동기화에 없던 청구’ 목록에 표시되지 않습니다.</p>
+          <EmbedLink href="/owner?tab=data" className="inline-flex text-sm font-semibold text-primary underline underline-offset-2">데이터 정리에서 중복 원생 확인</EmbedLink>
+          <p className="text-text-dim text-xs">미매칭 대상의 상세 내역은 동기화 담당 PC의 .makeedu-tmp/import-invoices-report.json에서 확인할 수 있습니다.</p>
+        </> : <p className="text-sm">아래의 동기화 담당 PC 상태와 최근 실행 이력을 확인하세요.</p>}
+      </section> : null}
       {/* makeedu 자동 동기화 — 외부 연동 면 상단: 토글/버튼 카드 + 담당 PC 상태(0073a) + 최근 실행 이력(0070a) */}
       <MakeeduSyncCard status={makeeduStatus} initialLock={syncLock} />
       <MakeeduWorkerStatus workers={workers} nowMs={nowMs} />

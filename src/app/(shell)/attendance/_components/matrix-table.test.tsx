@@ -165,6 +165,26 @@ describe("마우스 드래그 범위 선택", () => {
 });
 
 describe("학교·학년 오른쪽 반별 청구액", () => {
+  it.each([true, false])("반별 정렬=%s에서 청구액 앞에 확정 단가·월 수강료·미확정을 표시한다", (showGroups) => {
+    const { container } = render(
+      <MatrixTable
+        groups={[LESSON_GROUP]} days={DAYS} holidays={{}} showGroups={showGroups}
+        ordered={LESSON_GROUP.matrix.students.map((s) => ({ classId: C, studentId: s.id }))}
+        classBilledAmounts={{ [rowKey(C, S1)]: 210000 }}
+        confirmedPricesByRow={{
+          [rowKey(C, S1)]: [{ unitPrice: 25000, monthly: false, daysBasis: false }],
+          [rowKey(C, S2)]: [{ unitPrice: 250000, monthly: true, daysBasis: false }],
+        }}
+      />,
+    );
+    expect(screen.getAllByRole("columnheader").slice(1, 4).map((h) => h.textContent)).toEqual(["학교·학년", "단가", "청구액"]);
+    for (const [name, price] of [["이도윤", "25,000원"], ["박서준", "월 250,000원"], ["한가온", "미확정"]]) {
+      expect(within(screen.getByText(name!).closest("tr")!).getAllByRole("cell")[2]).toHaveTextContent(price!);
+    }
+    expect(container.querySelector("tfoot tr:first-child td")).toHaveAttribute("colspan", "4");
+    expect(container.querySelector("tfoot tr:last-child td")).toHaveAttribute("colspan", String(DAYS.length + 6));
+  });
+
   it.each([true, false])("반별 정렬=%s에서도 금액·0원·미확정을 구분한다", (showGroups) => {
     const { container } = render(
       <MatrixTable
@@ -315,8 +335,8 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     );
     // 합계 행 = tfoot 첫 줄 — [합계] · 청구액 · 수업 차수 · 등록 차수 · 차이…
     const totals = container.querySelector("tfoot tr")!.querySelectorAll("td");
-    expect(totals[1]).toHaveTextContent(/^0$/);
-    expect(totals[3]).toHaveTextContent("0.0");
+    expect(totals[0]!.querySelector(".bg-att-col-billed")).toHaveTextContent(/^0$/);
+    expect(totals[2]).toHaveTextContent("0.0");
   });
 });
 
@@ -1297,28 +1317,28 @@ describe("합계 행(원장 2026-09-18)", () => {
     );
   }
 
-  it("'이름'·'학교학년'을 합친 칸에 '합계'라고 적는다(따로 라벨 자리를 찾지 않게)", () => {
+  it("합계 라벨과 청구액이 앞 세 열 안에서 공간을 나눠 쓴다", () => {
     const { container } = renderTotals();
     const row = container.querySelector("tfoot tr")!;
     const first = row.querySelector("td")!;
-    expect(first).toHaveAttribute("colspan", "2");
-    expect(first.textContent).toBe("합계");
+    expect(first).toHaveAttribute("colspan", "3");
+    expect(first.querySelector("span")!.textContent).toBe("합계");
   });
 
   it("청구액·수업 차수·등록 차수 합 — 🔴 등록 차수 합에서 옛 일수 기준 확정은 뺀다(단위가 다르다)", () => {
     const { container } = renderTotals();
     const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
-    expect(cells[1]!.textContent).toBe("300,000"); // 청구액 210,000 + 90,000
-    expect(cells[2]!.textContent).toBe("2.5 T"); // 수업 차수: 1.5(S1 7/1) + 1(S2 7/1)
-    expect(cells[3]!.textContent).toBe("8.0 T"); // 등록 차수: S1 8 · S2는 일수 기준이라 제외
-    expect(cells[4]!.textContent).toBe(""); // 차이확인은 비운다
+    expect(cells[0]!.querySelector(".bg-att-col-billed")!.textContent).toBe("300,000"); // 청구액 210,000 + 90,000
+    expect(cells[1]!.textContent).toBe("2.5 T"); // 수업 차수: 1.5(S1 7/1) + 1(S2 7/1)
+    expect(cells[2]!.textContent).toBe("8.0 T"); // 등록 차수: S1 8 · S2는 일수 기준이라 제외
+    expect(cells[3]!.textContent).toBe(""); // 차이확인은 비운다
   });
 
   it("날짜별로 그날 시수 합 · 출석률은 학생별 출석률의 **평균**", () => {
     const { container } = renderTotals();
     const cells = [...container.querySelector("tfoot tr")!.querySelectorAll("td")];
-    expect(cells[5]!.textContent).toBe("2.5"); // 7/1: 1.5 + 1
-    expect(cells[6]!.textContent).toBe(""); // 7/2: 결석만 — 시수 0
+    expect(cells[4]!.textContent).toBe("2.5"); // 7/1: 1.5 + 1
+    expect(cells[5]!.textContent).toBe(""); // 7/2: 결석만 — 시수 0
     // S1 = 1/2 = 50% · S2 = 1/1 = 100% → 평균 75%(전체 2/3=67%가 아니다).
     expect(cells.at(-1)!.textContent).toBe("75%");
   });

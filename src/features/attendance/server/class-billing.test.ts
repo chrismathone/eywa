@@ -73,7 +73,7 @@ describe("강사 출석부 청구액 조회 범위", () => {
 
   it("허용된 반이 없으면 청구서를 조회하지 않는다", async () => {
     expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "forbidden", studentIds: ["s1"] }])).toEqual({
-      billed: {}, confirmedSessions: {}, priceConfirmed: [], invoiceStateByStudent: {},
+      billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {},
     });
     expect(mocks.from).not.toHaveBeenCalled();
   });
@@ -116,6 +116,7 @@ describe("허용 반(allowClassIds) — 출석부 보강 묶음", () => {
     expect(result.billed).toEqual({ [rowKey("pool", "s1")]: 45000 });
     expect(result.confirmedSessions).toEqual({ [rowKey("pool", "s1")]: { units: 2, daysBasis: false } });
     expect(result.priceConfirmed).toEqual([rowKey("pool", "s1")]);
+    expect(result.confirmedPrices).toEqual({ [rowKey("pool", "s1")]: [{ unitPrice: 22500, monthly: false, daysBasis: false }] });
     expect(result.invoiceStateByStudent).toEqual({ s1: "ok", s2: "void", s3: "none" });
     // 보강 반만 묻는 호출은 강사 축을 볼 필요가 없다(담당 반 조회와 나란히 도는 두 번째 조회라 왕복을 줄인다).
     expect(mocks.visible).not.toHaveBeenCalled();
@@ -147,7 +148,7 @@ describe("허용 반(allowClassIds) — 출석부 보강 묶음", () => {
     const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "other", studentIds: ["s1"] }], {
       allowClassIds: ["other"],
     });
-    expect(result).toEqual({ billed: {}, confirmedSessions: {}, priceConfirmed: [], invoiceStateByStudent: {} });
+    expect(result).toEqual({ billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {} });
     expect(mocks.queries.some((q) => q.table === "invoices")).toBe(false);
   });
 
@@ -172,12 +173,14 @@ describe("청구 판정 합치기(mergeAttendanceClassBilling)", () => {
       {
         billed: { [rowKey("c1", "s1")]: 210000 },
         confirmedSessions: { [rowKey("c1", "s1")]: { units: 8, daysBasis: false } },
+        confirmedPrices: {},
         priceConfirmed: [rowKey("c1", "s1")],
         invoiceStateByStudent: { s1: "ok", s2: "none" },
       },
       {
         billed: { [rowKey("pool", "s1")]: 45000 },
         confirmedSessions: { [rowKey("pool", "s1")]: { units: 2, daysBasis: false } },
+        confirmedPrices: {},
         priceConfirmed: [rowKey("pool", "s1"), rowKey("c1", "s1")],
         invoiceStateByStudent: { s1: "ok", s3: "void" },
       },
@@ -193,7 +196,7 @@ describe("청구 판정 합치기(mergeAttendanceClassBilling)", () => {
 
   it("같은 줄이 두 벌에 있으면 더하지 않는다(같은 청구서를 두 번 읽은 같은 사실) · 학생 상태가 갈리면 살아 있는 쪽", () => {
     const key = rowKey("c1", "s1");
-    const base = { confirmedSessions: {}, priceConfirmed: [] };
+    const base = { confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [] };
     const merged = mergeAttendanceClassBilling(
       { ...base, billed: { [key]: 1000 }, invoiceStateByStudent: { s1: "none", s2: "ok" } },
       { ...base, billed: { [key]: 1000 }, invoiceStateByStudent: { s1: "ok", s2: "void" } },

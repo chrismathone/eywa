@@ -94,7 +94,7 @@ describe("게이트 배선", () => {
     // 음수 총 부여도 화면이 먼저 막는다(grantedTotal이 0으로 잘려 하한 검사에 안 걸린다).
     // 차단 조건은 **한 이름**으로 모아 둔다 — 버튼 속성에 늘어놓으면 조건이 늘 때 한쪽만 고치게 된다.
     expect(ui.replace(/\s+/g, " ")).toContain(
-      "const blocked = !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedRangeBad || !reason.trim();",
+      "const blocked = !valid || !quarterOk || negativeTotal || delta === 0 || belowUsed || overCap || usedRangeBad;",
     );
     // 🔴 일수-기간 불일치는 **경고만**이라 차단 조건에 들어가면 안 된다(반차·반반차면 원래 안 맞는다).
     expect(ui.replace(/\s+/g, " ")).not.toContain("rangeMismatch ||");
@@ -198,6 +198,44 @@ describe("조정의 휴가 사용 기간(0270b, 원장 2026-09-18)", () => {
     }
     // 일수 계산도 휴가 신청과 같은 함수(일요일 제외)라 두 화면이 같은 숫자를 말한다.
     expect(read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx")).toContain("countLeaveDays(");
+  });
+});
+
+describe("사유는 선택(원장 2026-09-21)", () => {
+  it("🔴 서버가 사유를 요구하지 않는다 — 길이만 본다", () => {
+    const actions = read("src/features/leave/server/actions.ts");
+    expect(actions).not.toContain("if (!reason) return");
+    expect(actions).toContain("reason.length > MAX_REASON");
+  });
+
+  it("DB 제약도 함께 푼다 — 화면만 열면 저장에서 막힌다([[#77]]의 뒤집힌 꼴)", () => {
+    const sql = read("supabase/migrations/0277a_leave_adjustment_reason_optional.sql");
+    expect(sql).toContain("drop constraint if exists leave_adjustments_reason_present");
+    // 적용 전 창에서는 그 거절을 한글로 옮긴다(영문 제약 이름을 화면에 내보내지 않는다).
+    const actions = read("src/features/leave/server/actions.ts");
+    expect(actions).toContain("leave_adjustments_reason_present");
+    expect(actions).toContain("REASON_REQUIRED_MSG");
+  });
+});
+
+describe("종료일 상한·자동 채움(원장 2026-09-21)", () => {
+  it("상한은 순수 함수 하나에서 온다 — 화면이 날짜를 직접 더하지 않는다", () => {
+    const ui = read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx");
+    expect(ui).toContain("maxUsedEnd(");
+    expect(ui).toContain("max={endMax}");
+    // 날짜 산술을 화면에서 새로 만들면 말일·윤년이 자리마다 갈린다(addDays·maxUsedEnd가 정본).
+    expect(ui).not.toContain("new Date(Date.UTC");
+  });
+
+  it("하루짜리면 종료일을 시작일로 자동 — 시작·일수 어느 쪽을 고쳐도 같게", () => {
+    const ui = read("src/app/(shell)/staff/annual-leave/_adjust-table.tsx").replace(/\s+/g, " ");
+    expect(ui).toContain("function pickStart(v: string)");
+    expect(ui).toContain("function pickDays(v: string)");
+    expect(ui).toContain("if (neededDays <= 1) { setUsedEnd(v); return; }");
+    expect(ui).toContain("if (need <= 1) { setUsedEnd(usedStart); return; }");
+    // 두 칸 **모두** 손잡이를 지난다 — 하나만 배선하면 반대 순서로 입력할 때 안 맞는다.
+    expect(ui).toContain("onChange={(e) => pickStart(e.target.value)}");
+    expect(ui).toContain("onChange={(e) => pickDays(e.target.value)}");
   });
 });
 

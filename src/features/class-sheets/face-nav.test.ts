@@ -116,3 +116,32 @@ describe("readFromWeek — 주소가 들고 온 '왔던 주'", () => {
     }
   });
 });
+
+describe("weekForMonth — 세션 창(range)은 달이 아니라 창으로 본다", () => {
+  // 10월 세션 = 10/1~11/2(실데이터). 11/2는 달력으로 11월이지만 이 창 안이다.
+  const weeks = [
+    { monday: "2026-09-28", dates: ["2026-10-01", "2026-10-02"] },
+    { monday: "2026-10-05", dates: ["2026-10-05"] },
+    { monday: "2026-11-02", dates: ["2026-11-02"] },
+  ];
+  const range = { start: "2026-10-01", end: "2026-11-02" };
+  const hasAll = () => true;
+
+  it("오늘이 창 안이면 오늘 주 — 달이 달라도(11/2)", () => {
+    expect(weekForMonth({ month: "2026-10", today: "2026-11-02", fromWeek: null, weeks, hasClassOn: hasAll, range })).toBe(
+      "2026-11-02",
+    );
+  });
+
+  it("왔던 주가 창의 주 목록에 있으면 그 주", () => {
+    expect(
+      weekForMonth({ month: "2026-10", today: "2026-12-01", fromWeek: "2026-09-28", weeks, hasClassOn: hasAll, range }),
+    ).toBe("2026-09-28");
+  });
+
+  it("오늘이 창 밖이면 수업 있는 첫 주", () => {
+    expect(weekForMonth({ month: "2026-10", today: "2026-11-03", fromWeek: null, weeks, hasClassOn: hasAll, range })).toBe(
+      "2026-09-28",
+    );
+  });
+});

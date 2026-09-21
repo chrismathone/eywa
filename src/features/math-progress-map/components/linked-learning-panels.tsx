@@ -15,16 +15,18 @@ export function LinkedPlanVsActual({ onLesson }: { onLesson: OpenLesson }) {
   const { metrics, lessons } = sourceProgress.learningMap!;
   const planned = lessons.find(lesson => lesson.position === metrics.target);
   const actual = lessons.find(lesson => lesson.position === metrics.current);
+  // 레일은 등록 이후 첫 기록부터라 계획 위치가 그보다 앞일 수 있다 — 그때는 '계획 시작 전'이 아니고, 0차시 숫자·0% 마커도 거짓이다.
+  const planBeforeRail = metrics.targetBeforeRail;
   const pct = (position: number) => `${Math.min(100, Math.max(0, position / Math.max(1, metrics.total) * 100))}%`;
   return <section className={styles.bottomPanel} aria-label="계획 대비 실제">
     <div className={styles.bottomHeading}><h3>계획 대비 실제</h3><strong>{learningStatusLabel(metrics, "차시")}</strong></div>
     <div className={styles.comparison}>
-      <button disabled={!planned} onClick={() => planned && onLesson(planned)}><span>계획 위치</span><strong>{planned?.label ?? "계획 시작 전"}</strong><b>{metrics.target}차시</b></button>
+      <button disabled={!planned} onClick={() => planned && onLesson(planned)}><span>계획 위치</span><strong>{planned?.label ?? (planBeforeRail ? "첫 기록보다 앞" : "계획 시작 전")}</strong><b>{planBeforeRail ? "—" : `${metrics.target}차시`}</b></button>
       <button disabled={!actual} onClick={() => actual && onLesson(actual, actual.date)}><span>실제 위치</span><strong>{actual?.label ?? "진도 확인 필요"}</strong><b>{metrics.current ?? "—"}차시</b></button>
     </div>
     <div className={styles.comparisonTrack}>
       <span style={{ width: pct(metrics.current ?? 0) }} />
-      <button className={styles.plannedMarker} style={{ left: pct(metrics.target) }} aria-label={`계획 위치 ${metrics.target}차시`} disabled={!planned} onClick={() => planned && onLesson(planned)} />
+      {planBeforeRail ? null : <button className={styles.plannedMarker} style={{ left: pct(metrics.target) }} aria-label={`계획 위치 ${metrics.target}차시`} disabled={!planned} onClick={() => planned && onLesson(planned)} />}
       {actual ? <button className={styles.actualMarker} style={{ left: pct(actual.position) }} aria-label={`실제 위치 ${actual.position}차시`} onClick={() => onLesson(actual, actual.date)} /> : null}
     </div>
     <div className={styles.comparisonScale}><span>0차시</span><span>전체 목표 {metrics.total}차시</span></div>
