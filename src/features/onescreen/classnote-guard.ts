@@ -8,6 +8,8 @@ import { kstMinutesOfDay, kstToday } from "@/lib/date-kst";
  *    "학부모가 일주일이 지났는데 이전 보고서를 받는 것도 비합리적" — 이날 이관분 대량 발송에서
  *    2주 전 보고서까지 나가는 사고 후 확정. 모든 소비처(큐잉·발송 콘솔·재발송·달력 sendable·
  *    미발송 재촉 이벤트)가 이 함수 하나를 지나므로 여기만이 규칙의 자리다. **완화 금지.**
+ * 🔑 예외는 하나 — 원장이 **건마다** 지정한 보고서(2026-09-21, 0276a `classnote_deadline_exempt_at`)는 워커가 창 밖에서도
+ *    집는다. 지정은 `scripts/_reports/resend-past-deadline.mts`만 하고 앱 화면·발송 콘솔은 이 함수 그대로다.
  */
 
 const ALLOW_WINDOW_DAYS = 7; // 오늘 포함 7일(= 오늘-6일까지 허용). 7/28 기준 7/22~7/28 발송 가능.
