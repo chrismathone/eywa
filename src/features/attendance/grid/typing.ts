@@ -7,6 +7,7 @@
 //    ⚠️ 숫자에 지각·조퇴를 끼워 넣지 말 것(예 "2=지각") — 그 숫자는 시수로 급여에 흘러간다.
 
 import { isDefaultUnitsRaw, MAX_SESSION_UNITS, parseSessionUnits } from "../session-units";
+import type { AttendanceMark } from "../cell-display";
 
 /** 버퍼 최대 길이 — "12.5"(4자)까지. 더 길면 시수 상한을 넘어 어차피 거절된다. */
 const MAX_BUFFER = 4;
@@ -32,7 +33,7 @@ export function backspace(buf: string): string | null {
 }
 
 /** 타이핑 결과 → 저장할 값. `units`는 서버 액션이 받는 raw 문자열(""=기본 1). */
-export type TypedValue = { status: "present" | "absent"; units: string };
+export type TypedValue = { status: AttendanceMark; units: string };
 
 /**
  * 버퍼를 확정 값으로. 확정할 수 없으면 null(아무 일도 일어나지 않는다 — 값을 지어내지 않는다).
@@ -79,7 +80,9 @@ export type CellValue = { s: string; u: number | null; g?: true } | null;
 export function copyValueOf(v: CellValue): TypedValue | null {
   // 빗금 칸의 표시 값(`g`)은 이 표의 값이 아니다 — 복사·채우기 씨앗으로 쓰면 남의 교시 값이 내 칸에 붙는다(빈 칸과 같다).
   if (!v || v.g) return null;
-  if (v.s === "absent" || v.s === "excused") return { status: "absent", units: "" };
-  if (v.s !== "present") return null; // 지각·조퇴·보강은 숫자로 복사되지 않는다(상태가 사라진다)
-  return { status: "present", units: String(v.u ?? 1) };
+  if (v.s === "absent" || v.s === "excused") return { status: v.s, units: "" };
+  if (v.s === "present" || v.s === "late" || v.s === "early_leave" || v.s === "makeup") {
+    return { status: v.s, units: String(v.u ?? 1) };
+  }
+  return null;
 }

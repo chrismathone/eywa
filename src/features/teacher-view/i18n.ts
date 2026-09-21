@@ -1560,6 +1560,21 @@ export const SHEET_DICT = {
   // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
   "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
   "att.legend": { ko: "범례", en: "Legend" },
+  "att.units.guide": { ko: "시수 기준", en: "Lesson units" },
+  "att.units.math": {
+    ko: "수학: 1시간 수업 = 0.5, 2시간 수업 = 1, 3시간 수업 = 1.5",
+    en: "Math: 1 hour = 0.5, 2 hours = 1, 3 hours = 1.5",
+  },
+  "att.units.eie": {
+    ko: "브릿지 및 EiE 수업: 40분 수업 = 1, 60분 수업 = 1.5",
+    en: "Bridge & EiE: 40 minutes = 1, 60 minutes = 1.5",
+  },
+  "att.units.injaewon": {
+    ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3",
+    en: "Injaewon: 1 hour = 1, 2 hours = 2, 3 hours = 3",
+  },
+  "att.range.title": { ko: "선택한 {n}칸 출결·색상", en: "Attendance & color for {n} cells" },
+  "att.range.keepUnits": { ko: "각 셀의 기존 시수는 유지합니다.", en: "Each cell keeps its existing units." },
   "att.legend.classDay": { ko: "등원요일", en: "Class day" },
   /* 🔴 2026-09-14: 범례가 **격자에 실제로 나오는 칠을 전부** 세운다(원장 *"이런 미등원도 범례 추가"* →
      캡처를 더 보내며 *"이런것들"*). 그전엔 등원요일·주말 둘뿐이라 회색(미등원)·빗금(남의 교시)·

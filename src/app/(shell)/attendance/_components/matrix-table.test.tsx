@@ -3,7 +3,7 @@ import { tipRow, tipText } from "@/components/hover-tip/tip";
 import { describe, expect, it, vi } from "vitest";
 import type { AttendanceMatrix } from "@/features/attendance/server/queries";
 import type { AttendanceInvoiceGap } from "@/features/attendance/class-billing";
-import { ghostCellKind, ghostGridValue, rollupDay, type SlotMark } from "@/features/attendance/cell-display";
+import { ghostCellKind, ghostGridValue, rollupDay, STATUS_TONE, type SlotMark } from "@/features/attendance/cell-display";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./matrix-table";
 import { GridProvider } from "./grid-context";
@@ -107,8 +107,8 @@ function renderTable() {
 }
 
 describe("마우스 드래그 범위 선택", () => {
-  function renderEditable() {
-    const m = { ...GROUP.matrix, marks: { [S3]: { [DAYS[1]!.date]: "present" as const } } };
+  function renderEditable(over: Partial<AttendanceMatrix> = {}) {
+    const m = { ...GROUP.matrix, marks: { [S3]: { [DAYS[1]!.date]: "present" as const } }, ...over };
     const groups = [{ ...GROUP, matrix: m }];
     const ordered = m.students.map((s) => ({ classId: C, studentId: s.id }));
     const src = buildGridSource(groups, DAYS, ordered);
@@ -161,6 +161,55 @@ describe("마우스 드래그 범위 선택", () => {
       fireEvent.pointerMove(document, { pointerType: "touch", pointerId: 2, buttons: 1 });
       expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(1);
     } finally { hit.mockRestore(); }
+  });
+
+  it.each(["late", "early_leave", "makeup", "excused"] as const)("%s 셀은 색상과 시수를 함께 범위에 붙여넣는다", async (status) => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    renderEditable({
+      marks: { [S3]: { [DAYS[1]!.date]: status } },
+      units: { [S3]: { [DAYS[1]!.date]: 1.5 } },
+    });
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[5]!, { button: 0 });
+    fireEvent.keyDown(cells[5]!, { key: "c", ctrlKey: true });
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    fireEvent.mouseDown(cells[3]!, { button: 0, shiftKey: true });
+    fireEvent.keyDown(cells[0]!, { key: "v", ctrlKey: true });
+    await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(actions.setAttendanceRange).mock.calls[0]![0]).toMatchObject({ status, units: status === "excused" ? "" : "1.5" });
+    for (const cell of cells.slice(0, 4)) expect(cell).toHaveClass(...STATUS_TONE[status].split(" "));
+  });
+
+  it("선택 범위 우클릭은 선택을 유지하고 다른 시수의 셀들을 한 번에 색칠하며, 한 번에 되돌린다", async () => {
+    const actions = await import("@/features/attendance/server/actions");
+    vi.mocked(actions.setAttendanceRange).mockClear();
+    renderEditable({
+      marks: { [S1]: { [DAYS[0]!.date]: "present", [DAYS[1]!.date]: "makeup" } },
+      units: { [S1]: { [DAYS[0]!.date]: 0.5, [DAYS[1]!.date]: 2 } },
+    });
+    const cells = screen.getAllByRole("gridcell");
+    fireEvent.mouseDown(cells[0]!, { button: 0 });
+    fireEvent.mouseDown(cells[1]!, { button: 0, shiftKey: true });
+    fireEvent.mouseDown(cells[1]!, { button: 2 });
+    fireEvent.focus(cells[1]!);
+    fireEvent.contextMenu(cells[1]!);
+    const dialog = screen.getByRole("dialog", { name: "선택한 2칸 출결·색상" });
+    expect(screen.getAllByRole("gridcell", { selected: true })).toHaveLength(2);
+    fireEvent.click(within(dialog).getByRole("button", { name: "지각" }));
+    await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(1));
+    const input = vi.mocked(actions.setAttendanceRange).mock.calls[0]![0];
+    expect(input.status).toBe("late");
+    expect(input.cells).toHaveLength(2);
+    expect(input).not.toHaveProperty("units");
+    expect(cells[0]).toHaveTextContent("0.5");
+    expect(cells[1]).toHaveTextContent("2");
+    for (const cell of cells.slice(0, 2)) expect(cell).toHaveClass(...STATUS_TONE.late.split(" "));
+    fireEvent.keyDown(cells[0]!, { key: "z", ctrlKey: true });
+    await waitFor(() => expect(actions.setAttendanceRange).toHaveBeenCalledTimes(3));
+    expect(cells[0]).toHaveClass(...STATUS_TONE.present.split(" "));
+    expect(cells[1]).toHaveClass(...STATUS_TONE.makeup.split(" "));
+    for (const [restore] of vi.mocked(actions.setAttendanceRange).mock.calls.slice(1)) expect(restore).not.toHaveProperty("units");
   });
 });
 

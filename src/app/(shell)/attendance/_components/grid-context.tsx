@@ -17,11 +17,12 @@ import { cellKey, classIdOfRow, parseCellKey, rowKey } from "@/features/attendan
 import { GridStore, type CellState, type GridValue } from "@/features/attendance/grid/store";
 import { countCells, type Counted } from "@/features/attendance/grid/totals";
 import { columnTotals, type ColumnTotals } from "@/features/attendance/grid/column-totals";
-import { NOT_MINE_MESSAGE, type NotMineReason } from "@/features/attendance/cell-display";
+import { NOT_MINE_MESSAGE, type AttendanceMark, type NotMineReason } from "@/features/attendance/cell-display";
 import { lockedMessage } from "@/features/attendance/lock-message";
 import {
   ghostOptimisticValue,
   optimisticGridValue,
+  isRecordless,
   type OptimisticInput,
 } from "@/features/attendance/grid/optimistic-value";
 import { appendChar, backspace, commitBuffer, copyValueOf, type TypedValue } from "@/features/attendance/grid/typing";
@@ -61,6 +62,7 @@ type Ctx = {
   /** 칸 선택 — 타이핑 중이던 버퍼를 **먼저 확정한다**(클릭 한 번에 입력이 사라지지 않게). */
   selectCell: (row: string, col: string, extend: boolean) => void;
   startSelection: (pointerId: number) => void;
+  setRangeStatus: (keys: Set<string>, status: AttendanceMark) => void;
   startFill: () => void;
   /**
    * 빗금 칸에 상태를 옮긴다(원장 2026-09-14 *"그 날의 해당 담당 출석으로 전부 이전"*) — 빗금 칸 팝오버가 격자 타이핑과
@@ -74,7 +76,7 @@ type Ctx = {
  * (옛 상태가 교시마다 달랐을 수 있어 한 상태로 되쓰면 남의 기록을 틀리게 만든다, 원장 2026-09-14 빗금 칸 입력).
  * 🔴 칸이 0개인 묶음도 스택에 올린다 — 안 올리면 Ctrl+Z가 그 앞의 엉뚱한 작업을 되돌린다(적대 리뷰 2026-09-14).
  */
-type UndoGroup = { cells: { key: string; prev: GridValue }[]; ghost?: number };
+type UndoGroup = { cells: { key: string; prev: GridValue }[]; ghost?: number; preserveUnits?: boolean };
 
 const GridCtx = createContext<Ctx | null>(null);
 
@@ -443,7 +445,8 @@ export function GridProvider({
 
   /** 여러 칸에 같은 값 — 드래그 채우기·Ctrl+Enter·범위 Delete·범위 붙여넣기. */
   const writeMany = useCallback(
-    (keys: Set<string>, val: TypedValue | null) => {
+    (keys: Set<string>, val: TypedValue | null, options: { preserveUnits?: boolean; recordUndo?: boolean } = {}) => {
+      const preserveUnits = options.preserveUnits === true;
       setError(null); // 위 writeOne과 같은 이유 — 지난 실패가 이번 안내를 삼키지 않게.
       const all = [...keys].map(parseCellKey).filter((p): p is NonNullable<typeof p> => !!p);
       const unlocked = all.filter((p) => !isLocked(p.date));
@@ -468,7 +471,7 @@ export function GridProvider({
         }
         return;
       }
-      if (targets.length === 1) {
+      if (targets.length === 1 && !preserveUnits) {
         writeOne(cellKey(targets[0]!.row, targets[0]!.date), val);
         if (skipNote.length > 0) {
           setError(tf("att.grid.skip.tail", { list: skipNote.join(" · ") }));
@@ -483,15 +486,22 @@ export function GridProvider({
       const undoable = prevs.filter(([, prev]) => !prev?.g);
       const ghostKeys = new Set(prevs.filter(([, prev]) => prev?.g).map(([k]) => k));
       // 빗금 칸뿐인 작업도 묶음을 올린다 — 안 올리면 Ctrl+Z가 그 앞의 엉뚱한 작업을 되돌린다(UndoGroup 주석).
-      undoRef.current.push({
-        cells: undoable.map(([key, prev]) => ({ key, prev })),
-        ...(ghostKeys.size > 0 ? { ghost: ghostKeys.size } : {}),
-      });
-      if (undoRef.current.length > 50) undoRef.current.shift();
+      if (options.recordUndo !== false) {
+        undoRef.current.push({
+          cells: undoable.map(([key, prev]) => ({ key, prev })),
+          ...(ghostKeys.size > 0 ? { ghost: ghostKeys.size } : {}),
+          ...(preserveUnits ? { preserveUnits: true } : {}),
+        });
+        if (undoRef.current.length > 50) undoRef.current.shift();
+      }
       // 칸마다 **지금 값**을 보고 낙관값을 만든다 — 빈 칸만 수학 자동 시수를 받는다(toValue 주석).
       // 빗금 칸은 상태만 옮긴 표시 전용 값이다(pushCell 주석).
       const shownList = prevs.map(
-        ([k, p]) => [k, p?.g && val ? ghostOptimisticValue(p, val.status) : toValue(k, val, p)] as [string, GridValue],
+        ([k, p]) => [k,
+          p?.g && val ? ghostOptimisticValue(p, val.status)
+            : preserveUnits && val && p && !isRecordless(p) ? { s: val.status, u: p.u }
+              : toValue(k, val, p),
+        ] as [string, GridValue],
       );
       store.setLocal(shownList);
       void setAttendanceRange({
@@ -503,7 +513,7 @@ export function GridProvider({
           ...(ghostKeys.has(cellKey(t.row, t.date)) ? { ghost: true } : {}),
         })),
         status: (val?.status ?? null) as never,
-        ...(val ? { units: val.units } : {}),
+        ...(val && !preserveUnits ? { units: val.units } : {}),
         // 단건과 같은 이유 — 범위 안의 스코프 반만 알린다(보강 묶음 칸은 반별 규칙).
         ...rangeScopeFields(scope, targets.map((t) => t.classId)),
         quiet: true,
@@ -680,6 +690,10 @@ export function GridProvider({
         }
         // 한 그룹(= 한 번의 입력·채우기)을 통째로 되돌린다. 값이 칸마다 달라 범위 액션을 못 쓰므로 칸별로 되쓴다.
         for (const { key: k, prev } of restorable) {
+          if (group.preserveUnits) {
+            writeMany(new Set([k]), prev ? { status: prev.s as AttendanceMark, units: "" } : null, { preserveUnits: true, recordUndo: false });
+            continue;
+          }
           // 🔴 되돌리는 값은 **명시**로(null → "1") — ""(기본)로 보내면 지운 칸을 되살릴 때 서버가 수학 자동
           //    시수를 넣어 원래 값(1)과 달라진다(auto-units.ts). "1"은 저장값 null이라 옛 기록 그대로다.
           // 세 번째 인자 = 실패하면 되칠할 값 = **지금** 값이다(되살리려던 값을 칠하면 서버와 영영 안 같아져 새로고침 전까지 남는다).
@@ -811,11 +825,12 @@ export function GridProvider({
       },
       startFill,
       startSelection,
+      setRangeStatus: (keys, status) => writeMany(keys, { status, units: "" }, { preserveUnits: true }),
       autoUnitsOf,
       toValue,
       transferGhost: (key: string, status: string) => writeOne(key, { status, units: "" }),
     }),
-    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, startSelection, autoUnitsOf, toValue, writeOne],
+    [store, collapsed, toggleCollapsed, setAllCollapsed, isLocked, lockNoteOf, commit, startFill, startSelection, autoUnitsOf, toValue, writeOne, writeMany],
   );
 
   return (

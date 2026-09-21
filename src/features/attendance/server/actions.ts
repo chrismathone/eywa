@@ -2558,10 +2558,20 @@ export async function setAttendanceRange(input: {
     blocked: cells.length - allowed.length,
     // 빗금 칸 입력으로 상태만 옮긴 칸 — 격자가 칠한 값의 성격을 서버와 맞춘다(grid-context writeMany).
     ...(transferCells.size > 0 ? { ghostCells: allowed.filter((c) => transferCells.has(cellKeyOf(c))) } : {}),
-    // 숫자 안 고른 채우기로 **새로 만든** 칸의 실제 시수 — 격자가 낙관값을 기록에 맞춘다(auto-units.ts).
-    ...(rangeWantsAuto
+    // 상태만 바꾼 기존 칸도 실제 합계를 돌려준다. 결석 칸의 숨겨진 시수는 화면 값(0)으로 알 수 없다.
+    ...(!unitsProvided || rangeWantsAuto
       ? {
-          autoUnits: inserts.flatMap((c) => {
+          autoUnits: [
+            ...(!unitsProvided ? allowed.flatMap((c) => {
+              const key = cellKeyOf(c);
+              const ids = writeIdsOf.get(key);
+              if (!ids?.length || transferCells.has(key)) return [];
+              const total = COUNTABLE_STATUSES.has(status)
+                ? round1(ids.reduce((sum, id) => sum + (rowFactsById.get(id)?.units ?? 1), 0))
+                : 0;
+              return [{ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate, units: total === 0 || total === 1 ? null : total }];
+            }) : []),
+            ...(rangeWantsAuto ? inserts.flatMap((c) => {
             // 🔴 제 교시로 새로 만든 칸 — 교시마다 기본(1)이라 칸 값은 행 수다(1은 null로 접는다). 그날 전체 한 행 기준
             //    `rangeUnitsOf`로 답하면 격자가 1로 굳어 새로고침 전까지 합계가 틀린다(적대 리뷰 2026-09-17).
             const n = slotRowsByCell.get(cellKeyOf(c));
@@ -2573,7 +2583,8 @@ export async function setAttendanceRange(input: {
             return ins.auto === undefined
               ? []
               : [{ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate, units: ins.units }];
-          }),
+            }) : []),
+          ],
         }
       : {}),
   };

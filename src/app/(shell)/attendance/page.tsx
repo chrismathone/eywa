@@ -1119,6 +1119,8 @@ export default async function AttendancePage({
           <AttendanceLegend
             lang={lang}
             showToday={visibleDays.some((d) => d.isToday)}
+            showMathUnits={allGroups.some((g) => g.unitSuffix === "T")}
+            showEnglishUnits={allGroups.some((g) => g.unitSuffix === "U")}
           />
           <MatrixTable
             groups={allGroups}

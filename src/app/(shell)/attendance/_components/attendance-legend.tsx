@@ -50,6 +50,8 @@ const MIXED_SAMPLE = cellDisplay("present", 1, {
 export function AttendanceLegend({
   lang = "ko",
   showToday,
+  showMathUnits = false,
+  showEnglishUnits = false,
 }: {
   lang?: SheetLang;
   /**
@@ -57,9 +59,24 @@ export function AttendanceLegend({
    * 판정은 표와 같은 날짜 목록(`days[].isToday`)으로 페이지가 한다.
    */
   showToday: boolean;
+  showMathUnits?: boolean;
+  showEnglishUnits?: boolean;
 }) {
   const t = (key: Parameters<typeof sheetT>[1]) => sheetT(lang, key);
   return (
+    <>
+    {showMathUnits || showEnglishUnits ? (
+      <div className="text-text-dim flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 px-1 pb-1.5 text-xs leading-relaxed">
+        <span className="text-foreground font-semibold">{t("att.units.guide")}</span>
+        {showMathUnits ? <span>{t("att.units.math")}</span> : null}
+        {showEnglishUnits ? (
+          <>
+            <span>{t("att.units.eie")}</span>
+            <span>{t("att.units.injaewon")}</span>
+          </>
+        ) : null}
+      </div>
+    ) : null}
     <div className="flex shrink-0 items-center gap-x-3 overflow-x-auto px-1 pb-1.5 text-xs [&_*]:whitespace-nowrap">
       <span className="micro shrink-0">{t("att.legend")}</span>
       {STATUSES.map((s) => {
@@ -105,5 +122,6 @@ export function AttendanceLegend({
         </span>
       ) : null}
     </div>
+    </>
   );
 }
