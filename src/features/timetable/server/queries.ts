@@ -33,8 +33,8 @@ import type { TeacherColorMap } from "../lib/class-grid";
 import {
   buildTeacherLabelMap,
   buildTeacherNicknameMap,
-  specialSlotLabel,
   resolveTeacherLabel,
+  resolveSlotTeacherLabel,
   type TeacherLabelMap,
   type TeacherNicknameMap,
 } from "../lib/teacher-label";
@@ -116,7 +116,7 @@ export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColor
 
 /**
  * 과목별 강사뷰 강사 라벨(distinct) — owner 과목 운영 '가로줄 제외 강사' 칩 선택지.
- * 라벨 = slot_teacher_label ?? 담임 display_name(teacher-grid의 teacherOf와 동일 규약).
+ * 라벨 = 자리 → 교시 담당자 FK → 시트 라벨 → 담임(teacher-grid의 teacherOf와 같은 표시값).
  * 활성 반만. RLS 테넌트 격리. distinct/whitelist 용도라 fetchAllPaged(1000행 절단 방지, B2).
  */
 export async function getTeacherLabelsBySubject(): Promise<Record<string, string[]>> {
@@ -125,12 +125,13 @@ export async function getTeacherLabelsBySubject(): Promise<Record<string, string
   const labelMap = await getTeacherLabelMap();
   const rows = await fetchAllPaged<{
     slot_teacher_label: string | null;
+    slotTeacher?: { display_name?: string } | { display_name?: string }[] | null;
     class: unknown;
   }>((from, to) =>
     supabase
       .from("class_schedules")
       .select(
-        `slot_teacher_label, class:class_id!inner ( subject, is_active, teacher:teacher_id ( display_name ) )`,
+        `slot_teacher_label, slotTeacher:teacher_id ( display_name ), class:class_id!inner ( subject, is_active, teacher:teacher_id ( display_name ) )`,
       )
       .eq("class.is_active", true)
       .range(from, to),
@@ -143,7 +144,8 @@ export async function getTeacherLabelsBySubject(): Promise<Record<string, string
     if (!klass?.subject) continue;
     const tField = klass.teacher;
     const teacher = (Array.isArray(tField) ? tField[0] : tField) as { display_name?: string } | undefined;
-    const label = resolveTeacherLabel(r.slot_teacher_label ?? teacher?.display_name ?? null, labelMap);
+    const label = resolveSlotTeacherLabel(r.slot_teacher_label, r.slotTeacher, labelMap)
+      ?? resolveTeacherLabel(teacher?.display_name ?? null, labelMap);
     if (!label) continue;
     (bySubject.get(klass.subject) ?? bySubject.set(klass.subject, new Set()).get(klass.subject)!).add(label);
   }
@@ -226,6 +228,7 @@ type SlotRow = {
   end_time: string;
   class_id: string;
   slot_teacher_label: string | null;
+  slotTeacher?: { display_name?: string } | { display_name?: string }[] | null;
   slot_room_label: string | null;
   classroom_id: string | null;
   class?: SlotClassRef | SlotClassRef[];
@@ -273,7 +276,7 @@ async function fetchSlots(
         .from("class_schedules")
         .select(
           `id, day_of_week, start_time, end_time, class_id, slot_teacher_label, slot_room_label, classroom_id,
-       valid_from, valid_to,
+       valid_from, valid_to, slotTeacher:teacher_id ( display_name ),
        class:class_id!inner (
          id, class_name, subject, bg_color, text_color, is_active, closed_at, is_special, english_track,
          pending_teacher_id, pending_teacher_date, classroom_id,
@@ -414,7 +417,7 @@ async function fetchSlots(
       })(),
       classroomName: room?.name ?? null,
       studentCount: counts.get(r.class_id) ?? 0,
-      slotTeacherLabel: resolveTeacherLabel((r.slot_teacher_label as string | null) ?? null, labelMap),
+      slotTeacherLabel: resolveSlotTeacherLabel(r.slot_teacher_label, r.slotTeacher, labelMap),
       // 켜진 교시에만 싣는다(시간표 페이로드는 전원이 매일 받는다 — 모든 슬롯에 false를 얹지 않는다).
       ...(isLabSeparateSlot((r.slot_teacher_label as string | null) ?? null, labSeparateIds?.has(String(r.id)))
         ? { labSeparate: true as const }
@@ -1128,8 +1131,7 @@ export async function getTodaySchedule(options?: { includeStudentIds?: boolean }
         startTime: r.start_time,
         endTime: r.end_time,
         // 현재 수업은 반 담임·기본 교실보다 해당 교시의 담당·교실을 우선한다.
-        teacherName: (Array.isArray(r.slotTeacher) ? r.slotTeacher[0] : r.slotTeacher)?.display_name
-          ?? specialSlotLabel(r.slot_teacher_label)
+        teacherName: resolveSlotTeacherLabel(r.slot_teacher_label, r.slotTeacher)
           ?? teacher?.display_name ?? null,
         classroomName: (Array.isArray(r.slotRoom) ? r.slotRoom[0] : r.slotRoom)?.name
           ?? r.slot_room_label ?? room?.name ?? null,
@@ -1137,7 +1139,7 @@ export async function getTodaySchedule(options?: { includeStudentIds?: boolean }
         ...(options?.includeStudentIds ? { studentIds: [...(studentsByClass.get(r.class_id) ?? [])].sort() } : {}),
         // 슬롯 강사 라벨 — 작성률(getWeeklyWritingRates)이 반 담당 없는 반의 귀속 폴백으로 사용.
         // 색·인수인계는 대시보드 오늘 일정 미사용 — 타입 충족용 null 유지.
-        slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
+        slotTeacherLabel: resolveSlotTeacherLabel(r.slot_teacher_label, r.slotTeacher),
         slotRoomLabel: (r.slot_room_label as string | null) ?? null,
         slotRoomId: (r.classroom_id as string | null) ?? null,
         classRoomId: klass?.classroom_id ?? null,
