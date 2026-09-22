@@ -27,6 +27,13 @@ import { hhmm, type SeatKey } from "./seat";
 export const JJ_MARK_FIELDS = ["attitude", "listeningLevel", "memorizedWords", "progressNote"] as const;
 export type JjMarkField = (typeof JJ_MARK_FIELDS)[number];
 
+/**
+ * `class_sheet_student_marks`의 유니크 축 — upsert 충돌 대상.
+ * 🔑 이 칸을 쓰는 문이 셋이다(자리 출석부 손입력 · 영어 시트 · 인재원 단어수 자동 채우기). 문자열을 저마다
+ *    적어 두면 한 곳만 축이 어긋나도 **같은 칸이 두 행**으로 갈린다 — 한 곳에서 가져다 쓴다.
+ */
+export const JJ_MARK_ON_CONFLICT = "tenant_id,class_id,student_id,mark_date,slot_start";
+
 /** 칸 → `class_sheet_student_marks` 컬럼. 영어 시트(`upsertStudentMark`)와 **같은 행·같은 컬럼**이다. */
 export const JJ_MARK_COLUMN: Record<JjMarkField, string> = {
   attitude: "status",

@@ -1582,6 +1582,18 @@ export function auditDetail(
         str(m.startBlock) && str(m.endBlock) ? `${m.startBlock} → ${m.endBlock}` : null,
         str(m.textbook),
       );
+    // 인재원에서 단어수를 당겨 온 한 번(수동 버튼) — 칸마다 남기지 않고 **누른 한 번**을 한 줄로.
+    case "seat_jj_memorized_pull": {
+      const filled = num(m.filled) ?? 0;
+      const kept = num(m.kept) ?? 0;
+      const unlinked = num(m.unlinked) ?? 0;
+      return join(
+        str(m.date),
+        `누적 암기 단어수 ${filled}칸 채움`,
+        kept ? `${kept}칸은 이미 적혀 있어 그대로` : null,
+        unlinked ? `인재원 짝 없음 ${unlinked}칸` : null,
+      );
+    }
     case "ecs_plan_cell_edit":
     case "mcs_goal_edit":
     case "seat_jj_mark_edit": {

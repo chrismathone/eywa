@@ -60,6 +60,23 @@ export const loadLinkIndex = cache(async (tenantId: string): Promise<LinkIndex> 
   }
 });
 
+/**
+ * 이 학생에 짝이 걸려 있나 — **탭을 내놓을지** 정할 때만 쓰는 가벼운 판정(인재원을 부르지 않는다).
+ * 🔴 실패·칸 없음(0259a 전)은 전부 false다 — 모르면 탭을 안 내놓는다(빈 탭보다 없는 편이 정직하다).
+ */
+export const hasIjwLink = cache(async (tenantId: string, studentId: string): Promise<boolean> => {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("students")
+    .select("ijw_student_id")
+    .eq("tenant_id", tenantId)
+    .eq("id", studentId)
+    .maybeSingle();
+  if (error || !data) return false;
+  const id = (data as { ijw_student_id?: unknown }).ijw_student_id;
+  return typeof id === "string" && id.trim() !== "";
+});
+
 export type PoolStudent = { id: string; name: string; school: string | null; grade: string | null; classNames: string[] };
 
 /**
