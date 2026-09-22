@@ -101,6 +101,7 @@ import {
   upcomingAdmissionsEvents,
 } from "./display";
 import { monthAheadWindow } from "./upcoming-window";
+import { consultProgress } from "./consultation-progress-server";
 import { staffComposition } from "./staff-subjects";
 import {
   distribution,
@@ -527,8 +528,14 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     allowed.includes("withdrawals") || allowed.includes("students")
       ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today)
       : Promise.resolve([] as WindowWithdrawal[]);
+  // 최근 60일 콜&상담 — 일정 카드(일정↔상담 연결)와 '상담 진행' 카드가 **같은 한 번의 조회**를 쓴다(두 카드가 같은 상담 집합을
+  // 보고, 30초 갱신마다 같은 표를 두 번 읽지 않게). 실패 처리는 영역마다 다르다: 일정 카드는 링크만 빼고 살고, 상담 진행은 실패를 알린다.
+  const consultationSince = shiftDate(today, -CONSULTATION_LINK_WINDOW_DAYS);
+  const consultationRows = allowed.includes("enrollment")
+    ? admissionsConsultationCandidates(consultationSince)
+    : null;
   // 공유 약속이 영역보다 먼저 거절돼도 '처리 안 된 거절'로 새지 않게 — 각 영역은 자기 try/catch에서 다시 받는다.
-  for (const shared of [teacherIdPromise, scopePromise, withdrawalRows]) void shared.catch(() => undefined);
+  for (const shared of [teacherIdPromise, scopePromise, withdrawalRows, consultationRows]) void shared?.catch(() => undefined);
   const history = allowed.includes("attendance")
     ? attendanceHistory(today)
     : null;
@@ -659,12 +666,11 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     // 창 = **오늘부터 한 달**(원장 2026-09-16 *"오늘 기준으로 1달 이내로"*, 그전엔 7일) — `monthAheadWindow` 한 함수를
     // 패널 머리·빈 문구(화면)와 '보강예정' 카드가 함께 쓴다. 일정 조회·첫 수업 연결 후보가 모두 이 `end`를 쓴다.
     const { end } = monthAheadWindow(today);
-    // 콜&상담 연결 후보(원장 2026-09-13)는 일정 조회와 독립이라 먼저 띄운다(B4) — 저장하지 않고 갱신마다 다시 맞추므로 일정이 먼저
-    // 있고 상담이 나중에 생겨도 다음 갱신에 붙는다. 실패해도 빈 목록(링크만 없다) · 최근 60일 수십 건이라 일정이 없는 날도 부담이 없다.
-    const consultationSince = shiftDate(today, -CONSULTATION_LINK_WINDOW_DAYS);
+    // 콜&상담 연결 후보(원장 2026-09-13)는 일정 조회와 독립이라 먼저 띄운 공유 조회(`consultationRows`)를 받는다(B4) — 저장하지 않고
+    // 갱신마다 다시 맞추므로 일정이 먼저 있고 상담이 나중에 생겨도 다음 갱신에 붙는다. 실패해도 빈 목록(링크만 없다).
     const consultationsPromise: Promise<Awaited<ReturnType<typeof admissionsConsultationCandidates>>> =
-      allowed.includes("enrollment")
-        ? admissionsConsultationCandidates(consultationSince).catch((error) => {
+      consultationRows
+        ? consultationRows.catch((error) => {
             reportError(error, { scope: "dashboard.admissions-consultation-links" });
             return [];
           })
@@ -740,6 +746,24 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
         matchedConsultation,
       };
     });
+  });
+  // '상담 진행'(원장 2026-09-22) — 콜&상담 단계별 인원 + 멈춘 상담 + 줄마다 단계 칩. 판정은 consultation-progress.ts 한 벌이고
+  // 단계는 칸반과 같은 stageOfCard다. 입테는 캘린더를 읽을 수 있을 때만(못 읽으면 '모름' — 0으로 적지 않는다).
+  add("consultProgress", ["enrollment"], async () => {
+    const { end } = monthAheadWindow(today);
+    const [rows, calendar, progressSettings] = await Promise.all([
+      consultationRows!,
+      // 일정을 못 읽어도 카드는 산다 — 입테만 '모름'이 된다(단계별 인원·멈춘 상담의 상담 쪽 판정은 그대로).
+      allowed.includes("calendar")
+        ? getDateRangeEvents(consultationSince, end).catch((error) => {
+            reportError(error, { scope: "dashboard.consult-progress-calendar" });
+            return null;
+          })
+        : Promise.resolve(null),
+      settingsPromise,
+    ]);
+    const notNames = Object.values(subjectLabelRecord(progressSettings.operations.subjects));
+    return consultProgress(rows, calendar?.ready ? calendar.events : null, notNames, consultationSince, today);
   });
   add("englishSheet", ["ecs"], async () => {
     const result = await getSheetLanding(null);

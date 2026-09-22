@@ -6,6 +6,7 @@ import type { OverviewData } from "@/features/dashboard/overview/model";
 import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { ABSENT_STATUS_LABEL } from "@/features/dashboard/absent-students";
 import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
+import { ConsultStageChip } from "./consult-progress";
 import s from "./overview.module.css";
 
 /** 신규문의 팝업 — 오늘 접수(시각 · 이름). */
@@ -34,6 +35,7 @@ export function IntakePopup({
               >
                 {row.name}
               </NameCell>
+              <ConsultStageChip id={row.id} />
             </li>
           ))}
         </ul>
@@ -132,6 +134,7 @@ export function LevelTestPopup({ events }: { events: OverviewData["calendar"] | 
                   {event.displayTitle ?? event.title}
                 </span>
               )}
+              <ConsultStageChip id={event.matchedConsultation?.id} />
             </li>
           ))}
         </ul>

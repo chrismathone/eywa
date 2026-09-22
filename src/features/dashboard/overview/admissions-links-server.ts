@@ -13,6 +13,17 @@ import {
 import type { AdmissionsConsultationCandidate } from "./admissions-consultation-link";
 
 /**
+ * 일정 연결 후보 + 진행 판정 재료(outcome·과목) — 운영실 일정 카드와 '상담 진행' 카드가 **같은 한 번의 조회**를 나눠 쓴다
+ * (갱신 30초마다 같은 표를 두 번 읽지 않게, 두 카드가 같은 상담 집합을 보게).
+ */
+export type ConsultationRow = AdmissionsConsultationCandidate & {
+  /** outcome 원값 — 화면에 그대로 내보내지 않는다(칸반 단계 판정 재료). */
+  outcome: string;
+  /** 상담 과목 키(학원설정) 또는 옛 자유 텍스트 — 배정 판정에서 반 과목과 글자 그대로 비교(칸반과 같다). */
+  subject: string | null;
+};
+
+/**
  * 동명이인 가족 — 접미사 뗀 이름마다 그 이름을 쓰는 **재원·대기(퇴원 아님)** 원생들의 학교·학년 키. 일정 제목에 걸린 이름만 넘어온다(보통 몇 개).
  * 60일 창 안 상담이 한 명뿐이어도 원생 표엔 같은 이름이 더 있을 수 있다 — 매처가 그때 직접 증거를 요구한다(규칙 6).
  */
@@ -47,7 +58,7 @@ export async function homonymFamilies(
  */
 export async function admissionsConsultationCandidates(
   sinceDate: string,
-): Promise<AdmissionsConsultationCandidate[]> {
+): Promise<ConsultationRow[]> {
   const db = await createClient();
   const { startIso } = kstDayBounds(sinceDate);
   type Student = { name: string };
@@ -59,13 +70,15 @@ export async function admissionsConsultationCandidates(
     parent_phone: string | null;
     student_id: string | null;
     consulted_at: string;
+    outcome: string;
+    subject: string | null;
     student: Student | Student[] | null;
   };
   const rows = await fetchAllPaged<Row>((from, to) =>
     db
       .from("enrollment_consultations")
       .select(
-        "id,prospect_name,prospect_school,prospect_grade,parent_phone,student_id,consulted_at,student:students!enrollment_consultations_student_id_students_id_fk(name)",
+        "id,prospect_name,prospect_school,prospect_grade,parent_phone,student_id,consulted_at,outcome,subject,student:students!enrollment_consultations_student_id_students_id_fk(name)",
       )
       .gte("consulted_at", startIso)
       .order("id")
@@ -87,6 +100,8 @@ export async function admissionsConsultationCandidates(
         studentId: row.student_id,
         studentName: student?.name ?? null,
         consultedOn,
+        outcome: row.outcome,
+        subject: row.subject || null,
       },
     ];
   });

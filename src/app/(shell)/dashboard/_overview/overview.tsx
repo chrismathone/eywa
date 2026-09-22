@@ -23,6 +23,7 @@ import { KpiStrip } from "./kpi-strip";
 import { GradeSplitChart } from "./grade-split";
 import { LevelSplitChart } from "./level-split";
 import { AdmissionsComparison } from "./admissions-comparison";
+import { ConsultChipsProvider, ConsultProgressBody } from "./consult-progress";
 import { StudentSubjectBars, StudentSubjectLegend } from "./student-subject-bars";
 import {
   Bars,
@@ -215,6 +216,8 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
     : null;
 
   return (
+    // 콜&상담 진행 칩(원장 2026-09-22) — 신규문의·금일입테 팝업과 입학 일정 줄이 상담 id로 같은 표를 읽는다.
+    <ConsultChipsProvider chips={v.consultProgress?.data?.chips ?? null}>
     <div className={appearance.dashboard}>
     <div className={s.root} data-overview="root">
       <div className={s.board} data-overview="board">
@@ -640,6 +643,18 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             sections={[v.admissions]}
           >
             {admissions && <AdmissionsComparison stats={admissions} today={snapshot.today} />}
+          </Panel>
+          <Panel
+            title="상담 진행"
+            note={
+              v.consultProgress?.data
+                ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
+                : "상담일 기준 최근 30일 · 접수 → 수업 시작"
+            }
+            href="/enrollment"
+            sections={[v.consultProgress]}
+          >
+            {v.consultProgress?.data && <ConsultProgressBody data={v.consultProgress.data} subjects={snapshot.subjects} />}
           </Panel>
           <Panel
             title="최근 14일 등원율"
@@ -1190,5 +1205,6 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
       </div>
     </div>
     </div>
+    </ConsultChipsProvider>
   );
 }

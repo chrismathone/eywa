@@ -142,6 +142,11 @@ export type OverviewData = {
     /** 이 일정의 콜&상담(이름·날짜·번호·학교로 한 건 확정될 때만) — 콜&상담 열람 권한이 있을 때만 싣는다. */
     matchedConsultation?: { id: string; name: string } | null;
   }[];
+  /**
+   * '상담 진행'(원장 2026-09-22) — 콜&상담 단계별 인원(상담일 기준 최근 30일) · 멈춘 상담(60일) · 상담 id → 지금 단계 칩.
+   * 판정은 `consultation-progress.ts` 한 벌(단계 = 칸반과 같은 `stageOfCard`).
+   */
+  consultProgress: import("./consultation-progress").ConsultProgressData;
   englishSheet: {
     period: string;
     classes: number;
