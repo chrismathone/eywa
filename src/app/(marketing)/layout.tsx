@@ -1,60 +1,33 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import Link from "next/link";
+import { PublicBrand } from "@/components/public-site/public-brand";
 import { NAV_LINKS } from "@/data/marketing";
-import { AYWA_SITE_TITLE, AYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
-import { CtaButton } from "./_ui/cta-button";
-import "./_motion/landing.css";
+import { AYWA_SITE_DESCRIPTION, AYWA_SITE_TITLE } from "@/lib/config/site-metadata";
+import styles from "@/components/public-site/public-site.module.css";
 
-export const metadata = {
-  title: AYWA_SITE_TITLE,
-  description: AYWA_SITE_DESCRIPTION,
-};
+export const metadata = { title: AYWA_SITE_TITLE, description: AYWA_SITE_DESCRIPTION };
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="ey-landing bg-background text-foreground min-h-screen">
-      <MarketingNav />
-      <main>{children}</main>
-    </div>
-  );
-}
-
-function MarketingNav() {
-  return (
-    <header className="border-line bg-background/80 sticky top-0 z-40 border-b backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between px-6 sm:px-10 lg:px-16">
-        <Link href="/" className="flex items-center gap-2.5">
-          <span className="bg-ink flex size-8 items-center justify-center rounded-[9px]">
-            <EyIcon name="building" size={17} className="text-white" />
-          </span>
-          <span className="text-[19px] font-extrabold tracking-[-0.02em]">AYWA</span>
-        </Link>
-
-        <nav className="hidden items-center gap-7 md:flex" aria-label="주요 메뉴">
-          {NAV_LINKS.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-text-dim hover:text-foreground text-[13.5px] font-semibold transition-colors"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-text-dim hover:text-foreground hidden text-[13.5px] font-semibold transition-colors md:inline"
-          >
-            로그인
-          </Link>
-          <CtaButton href="/login" size="sm">
-            무료로 시작
-          </CtaButton>
+    <div className={styles.site}>
+      <a href="#main-content" className={styles.skipLink}>본문으로 이동</a>
+      <header className={styles.header}>
+        <div className={styles.headerInner}>
+          <PublicBrand />
+          <nav className={styles.navigation} aria-label="주요 메뉴">
+            {NAV_LINKS.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
+          </nav>
+          <Link href="/login" className={styles.headerLogin}>로그인</Link>
         </div>
-      </div>
-    </header>
+      </header>
+      <main id="main-content">{children}</main>
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          <PublicBrand />
+          <p>학원의 하루를 연결하는 업무 공간</p>
+          <span>© AYWA</span>
+        </div>
+      </footer>
+    </div>
   );
 }
