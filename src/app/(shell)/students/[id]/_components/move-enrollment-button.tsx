@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
@@ -12,11 +13,33 @@ import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-ch
 import type { AssignDialogClass, AssignDialogStudent } from "@/components/enrollment-assign-dialog";
 import { conflictToast } from "@/lib/ui/conflict-toast";
 import { kstToday } from "@/lib/date-kst";
+import { useBulkTransfer } from "@/components/use-bulk-transfer";
+import { EnrollmentTransferPicker } from "@/components/enrollment-transfer-picker";
+import { isTransferDate, TRANSFER_UNKNOWN } from "@/features/enrollments/bulk-transfer";
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_LABEL: Record<string, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
 };
+
+type MoveEnrollmentProps = {
+  enrollmentId: string;
+  student: AssignDialogStudent;
+  currentClassName: string;
+  currentClassId?: string;
+  currentSubject?: string;
+  classes: AssignDialogClass[];
+};
+const OpenMoveContext = createContext<((props: MoveEnrollmentProps) => void) | null>(null);
+
+/** 부분 성공으로 출발 수강 행이 사라져도 결과/재시도 창은 유지한다. */
+export function MoveEnrollmentProvider({ children }: { children: ReactNode }) {
+  const [active, setActive] = useState<MoveEnrollmentProps | null>(null);
+  return <OpenMoveContext.Provider value={setActive}>
+    {children}
+    {active ? createPortal(<MoveDialog {...active} onClose={() => setActive(null)} />, document.body) : null}
+  </OpenMoveContext.Provider>;
+}
 
 /** "YYYY-MM-DD" + n일 (UTC 산술 — TZ 드리프트 없음). */
 function addDays(ymd: string, n: number): string {
@@ -37,29 +60,23 @@ export function MoveEnrollmentButton({
   currentClassId,
   currentSubject,
   classes,
-}: {
-  enrollmentId: string;
-  student: AssignDialogStudent;
-  currentClassName: string;
-  /** 지금 반 자신은 이동 후보에서 뺀다(같은 반 이동 = GiST 거부만 만난다). */
-  currentClassId?: string;
-  /** 이동 후보를 **같은 과목 반만**으로 거른다(원장 2026-08-18: 다른 과목이 섞여 나옴). 없으면 전 과목. */
-  currentSubject?: string;
-  classes: AssignDialogClass[];
-}) {
+}: MoveEnrollmentProps) {
   const [open, setOpen] = useState(false);
+  const openDialog = useContext(OpenMoveContext);
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => openDialog
+          ? openDialog({ enrollmentId, student, currentClassName, currentClassId, currentSubject, classes })
+          : setOpen(true)}
         title="다른 반으로 이동 (옛 반 전출 + 새 반 전입)"
         className="text-text-dim hover:text-blue hover:border-blue/30 hover:bg-blue/10 inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-xs whitespace-nowrap transition"
       >
         <ArrowRightLeft className="size-3" />
         반 이동
       </button>
-      {open ? (
+      {open ? createPortal(
         <MoveDialog
           enrollmentId={enrollmentId}
           student={student}
@@ -68,7 +85,7 @@ export function MoveEnrollmentButton({
           currentSubject={currentSubject}
           classes={classes}
           onClose={() => setOpen(false)}
-        />
+        />, document.body,
       ) : null}
     </>
   );
@@ -112,6 +129,9 @@ function MoveDialog({
   const [attending, setAttending] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const transfer = useBulkTransfer(enrollmentId, eff, onClose);
+  const saving = busy || transfer.pending;
+  const submitting = useRef(false);
 
   const target = classes.find((c) => c.id === targetId);
   const targetDays = target?.days ?? [];
@@ -131,15 +151,18 @@ function MoveDialog({
     });
 
   const submit = async () => {
+    if (submitting.current) return;
+    if (transfer.on) { await transfer.run(targetId, attending); return; }
     if (!targetId) {
       setError("이동할 반을 선택하세요");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(eff)) {
+    if (!isTransferDate(eff) || eff < kstToday()) {
       setError("적용일을 선택하세요");
       return;
     }
     setBusy(true);
+    submitting.current = true;
     setError(null);
     try {
       const res = await moveEnrollmentsBatch(
@@ -152,11 +175,11 @@ function MoveDialog({
         return;
       }
       const r0 = res.results?.[0];
-      if (r0 && !r0.ok) {
+      if (res.results?.length !== 1 || r0?.enrollmentId !== enrollmentId || !r0.ok) {
         // GiST 시간겹침 등 — RPC의 sqlerrm을 친절히 감싼다.
-        const msg = /overlap|exclusion|23P01/i.test(r0.error ?? "")
+        const msg = /overlap|exclusion|23P01/i.test(r0?.error ?? "")
           ? "대상 반과 수강 기간이 겹칩니다. 적용일이나 반을 확인해 주세요."
-          : (r0.error ?? "이동에 실패했습니다");
+          : (r0?.error ?? TRANSFER_UNKNOWN);
         setError(msg);
         conflictToast(msg);
         return;
@@ -169,20 +192,21 @@ function MoveDialog({
       setError(msg);
       conflictToast(msg);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="bg-background border-border w-full max-w-md rounded-2xl border p-6 shadow-lg">
+      <div role="dialog" aria-modal="true" aria-label="반 이동" className="bg-background border-border max-h-full w-full max-w-md overflow-y-auto whitespace-normal rounded-2xl border p-6 shadow-lg">
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">반 이동</p>
             <h2 className="text-foreground mt-1 text-lg font-bold">
-              {student.name || "학생"}
+              {transfer.on ? `선택한 ${transfer.ids.length}명` : student.name || "학생"}
               <span className="text-muted-foreground ml-2 text-xs font-normal">
-                {student.grade ?? ""}
+                {transfer.on ? "단체 반 이동" : student.grade ?? ""}
               </span>
             </h2>
             <p className="text-muted-foreground text-xs">
@@ -192,6 +216,7 @@ function MoveDialog({
           <button
             type="button"
             onClick={onClose}
+            disabled={saving}
             className="text-muted-foreground hover:text-foreground"
             aria-label="닫기"
           >
@@ -199,7 +224,7 @@ function MoveDialog({
           </button>
         </header>
 
-        <div className="space-y-3">
+        <fieldset disabled={saving} className="min-w-0 space-y-3">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <label className="text-foreground block text-sm font-medium">이동할 반</label>
@@ -289,18 +314,19 @@ function MoveDialog({
             </div>
           ) : null}
 
-          {error ? <p className="text-danger text-sm">{error}</p> : null}
+          <EnrollmentTransferPicker transfer={transfer} />
+          {error && !transfer.on ? <p className="text-danger text-sm">{error}</p> : null}
 
           <footer className="flex items-center justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
               취소
             </Button>
-            <Button type="button" onClick={submit} disabled={busy || !targetId}>
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowRightLeft className="size-4" />}
-              반 이동
+            <Button type="button" onClick={submit} disabled={saving || !targetId || (transfer.on && (transfer.loading || transfer.uncertain || transfer.ids.length === 0 || transfer.invalidSelection))}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : <ArrowRightLeft className="size-4" />}
+              {transfer.on ? `${transfer.ids.length}명 반 이동` : "반 이동"}
             </Button>
           </footer>
-        </div>
+        </fieldset>
       </div>
     </div>
   );

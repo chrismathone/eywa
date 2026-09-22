@@ -15,6 +15,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { enrollmentAssignBlockReason } from "../eligibility";
+import { BULK_TRANSFER_MAX, isTransferDate, type TransferSnapshot } from "../bulk-transfer";
 import { enrollmentDeleteBlockReason, type EnrollmentRecordCounts } from "../deletable";
 import {
   applyDateEdit,
@@ -152,6 +153,8 @@ export type BatchMoveInput = {
   startDate?: string;
   /** 목적지 등원 요일(분리등원) — 요일 존 드롭=[그 요일], 공통 존=[](전 요일). 비면 전 요일 등원. */
   attendanceDays?: string[];
+  /** 같은 출발 반 단체 이동에서 조회 당시 수강 상태. DB 잠금 안에서 비교한다. */
+  expected?: TransferSnapshot;
 };
 export type BatchMoveResult = {
   enrollmentId: string;
@@ -172,6 +175,8 @@ export async function moveEnrollmentsBatch(
   moves: BatchMoveInput[],
   /** 적용일(YYYY-MM-DD) — 미래 주 편집 시 그 주 월요일. 미지정/오늘이면 즉시 이동. (Phase B 주간 이동) */
   effectiveDate?: string,
+  /** 지정하면 단체 이동 전용 RPC로 출발 반·스냅샷·중복 이동을 검증한다. */
+  sourceClassId?: string,
 ): Promise<MoveEnrollmentsBatchState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
@@ -181,6 +186,18 @@ export async function moveEnrollmentsBatch(
   }
   if (!Array.isArray(moves) || moves.length === 0) return { results: [] };
 
+  if (sourceClassId !== undefined) {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(sourceClassId) || moves.length > BULK_TRANSFER_MAX ||
+      new Set(moves.map((m) => m.enrollmentId)).size !== moves.length ||
+      new Set(moves.map((m) => m.newClassId)).size !== 1 ||
+      moves.some((m) => !uuid.test(m.enrollmentId) || !uuid.test(m.newClassId) ||
+        m.newClassId === sourceClassId || !m.expected || m.startDate !== undefined)) {
+      return { error: "출발 반과 이동할 학생을 다시 확인해 주세요" };
+    }
+    if (!effectiveDate || !isTransferDate(effectiveDate)) return { error: "올바른 이동일을 선택해 주세요" };
+  }
+
   const eff =
     effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ? effectiveDate : null;
   // ⚠️ 과거 적용일 거부 — RPC는 이 값을 **옛 수강의 end_date와 새 수강의 start_date에 그대로** 쓰므로,
@@ -188,16 +205,20 @@ export async function moveEnrollmentsBatch(
   // 게이트가 아니다(#77 — 화면에서만 잠근 것은 잠근 게 아니다). 2026-07-17 적대 감사 F6.
   if (eff && eff < kstToday()) return { error: "적용일은 오늘 이후여야 합니다" };
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("move_enrollments_batch", {
+  const payload = {
     p_moves: moves.map((m) => ({
       enrollmentId: m.enrollmentId,
       newClassId: m.newClassId,
       startDate: m.startDate ?? null,
       // 유효 요일코드만(mon..sun) 요일순 — 목적지 반 스케줄 밖 요일은 표시가 알아서 걸러지므로 서버 정규화는 최소.
       attendanceDays: DAY_ORDER.filter((d) => (m.attendanceDays ?? []).includes(d)),
+      ...(sourceClassId !== undefined ? { expected: m.expected } : {}),
     })),
     p_effective_date: eff,
-  });
+  };
+  const { data, error } = sourceClassId !== undefined
+    ? await supabase.rpc("move_class_enrollments_batch", { ...payload, p_source_class_id: sourceClassId })
+    : await supabase.rpc("move_enrollments_batch", payload);
 
   if (error) return { error: toKoreanDbError(error, "반 이동을 저장하지 못했습니다") };
 
@@ -244,6 +265,10 @@ export async function moveEnrollmentsBatch(
   }
 
   revalidatePath("/timetable");
+  if (sourceClassId !== undefined) {
+    revalidatePath("/classes");
+    revalidatePath("/students", "layout");
+  }
   return { results };
 }
 

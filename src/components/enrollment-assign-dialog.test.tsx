@@ -11,6 +11,7 @@ const moveBatch = vi.fn();
 const createEnrollment = vi.fn();
 const listMovable = vi.fn();
 const createBulk = vi.fn();
+const listClassCandidates = vi.fn();
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/features/owner/operations-context", () => ({
@@ -26,6 +27,7 @@ vi.mock("@/features/enrollments/server/actions", () => ({
 }));
 vi.mock("@/features/enrollments/server/movable-actions", () => ({
   listMovableEnrollments: (...a: unknown[]) => listMovable(...a),
+  listClassTransferCandidates: (...a: unknown[]) => listClassCandidates(...a),
 }));
 vi.mock("@/features/enrollments/server/bulk-assign-actions", () => ({
   createEnrollmentsBulk: (...a: unknown[]) => createBulk(...a),
@@ -69,6 +71,41 @@ beforeEach(() => {
 });
 
 describe("수강 배정 창의 '반이동' 토글", () => {
+  it("기존 반이동에서 같은 반 학생을 여러 명 고르고, 이동 중에는 닫기와 입력을 잠근다", async () => {
+    const user = userEvent.setup();
+    const snapshot = { studentId: "s-1", startDate: "2026-03-01", endDate: null, onHold: false, isTransferred: false, attendanceDays: [] };
+    listClassCandidates.mockResolvedValue({ ok: true, classId: "c-old", className: "출발 반", items: [
+      { id: "e-old", name: "김담희", grade: "고1", snapshot },
+      { id: "e-two", name: "박둘째", grade: "고1", snapshot: { ...snapshot, studentId: "s-2" } },
+      { id: "e-moved", name: "이예약", grade: "고1", snapshot: { ...snapshot, studentId: "s-3", isTransferred: true } },
+    ] });
+    let resolve!: (value: unknown) => void;
+    moveBatch.mockReturnValue(new Promise((r) => { resolve = r; }));
+    const view = open();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await user.click(screen.getByText("반 선택..."));
+    await user.click(screen.getByText("고등M 고1 BS4F 수"));
+    await user.click(await screen.findByRole("button", { name: "단체 반 이동" }));
+    expect(await screen.findByRole("checkbox", { name: /이예약/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "보이는 2명 모두 선택" }));
+    await user.click(screen.getByRole("button", { name: "2명 반 이동" }));
+    await waitFor(() => expect(moveBatch).toHaveBeenCalledOnce());
+    expect(moveBatch.mock.calls[0][0].map((m: { enrollmentId: string }) => m.enrollmentId)).toEqual(["e-old", "e-two"]);
+    expect(moveBatch.mock.calls[0][2]).toBe("c-old");
+    expect(screen.getByRole("button", { name: "닫기" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "취소" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "반이동" })).toBeDisabled();
+    resolve({ results: [{ enrollmentId: "e-old", ok: true }, { enrollmentId: "e-two", ok: false, error: "overlap" }] });
+    await screen.findByText(/1명 이동 완료/);
+    // 이동한 학생의 새 목적지가 배경의 '배정 후보'에서 빠지는 RSC 갱신을 재현한다.
+    view.rerender(<EnrollmentAssignDialog open onClose={() => {}} mode="add-class-to-student" student={STUDENT} classes={[]} />);
+    expect(screen.getByRole("button", { name: "고등M 고1 BS4F 수" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "목" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "1명 반 이동" })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: /김담희/ })).toBeDisabled();
+    expect(createEnrollment).not.toHaveBeenCalled();
+  });
+
   it("평소엔 꺼져 있고 시작일·종료일이 보인다(종전 배정 그대로)", () => {
     open();
     expect(screen.getByRole("button", { name: "반이동" })).toHaveAttribute("aria-pressed", "false");
