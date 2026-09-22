@@ -45,7 +45,7 @@ function toHit(
 
 type LatLng = { getLat(): number; getLng(): number };
 type KakaoMap = { setCenter(p: LatLng): void };
-type KakaoMarker = { setPosition(p: LatLng): void };
+type KakaoMarker = { setPosition(p: LatLng): void; getPosition(): LatLng };
 type KakaoCircle = { setPosition(p: LatLng): void; setRadius(r: number): void };
 /** 카카오가 돌려주는 주소 한 덩이 — 도로명/지번 어느 쪽도 없을 수 있다(그래서 전부 optional). */
 type KakaoAddressPart = { address_name?: string };
@@ -94,7 +94,7 @@ type KakaoMaps = {
   load(cb: () => void): void;
   LatLng: new (lat: number, lng: number) => LatLng;
   Map: new (el: HTMLElement, opts: { center: LatLng; level: number }) => KakaoMap;
-  Marker: new (opts: { position: LatLng; map: KakaoMap }) => KakaoMarker;
+  Marker: new (opts: { position: LatLng; map: KakaoMap; draggable?: boolean }) => KakaoMarker;
   Circle: new (opts: {
     center: LatLng;
     radius: number;
@@ -107,6 +107,8 @@ type KakaoMaps = {
   }) => KakaoCircle;
   event: {
     addListener(target: KakaoMap, type: string, handler: (e: { latLng: LatLng }) => void): void;
+    /** 마커 이벤트(`dragend`)는 좌표를 **인자로 주지 않는다** — 핸들러가 마커에서 직접 읽는다. */
+    addListener(target: KakaoMarker, type: "dragend", handler: () => void): void;
   };
   services?: {
     Geocoder: new () => Geocoder;
@@ -190,7 +192,10 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
         if (disposed || !boxRef.current) return;
         const center = new maps.LatLng(lat ?? FALLBACK_CENTER.lat, lng ?? FALLBACK_CENTER.lng);
         const map = new maps.Map(boxRef.current, { center, level: 4 });
-        const marker = new maps.Marker({ position: center, map });
+        // 📍 **핀을 끌어서 옮길 수 있다**(원장 2026-09-04 *"핀을 옮겨서 거기 위치로 찍을수있자나"*).
+        // 지도를 눌러 찍는 것과 **같은 일**이라 처리도 같은 함수(`pick`)를 탄다 — 두 경로가 갈리면
+        // 한쪽만 주소가 채워지는 식으로 어긋난다.
+        const marker = new maps.Marker({ position: center, map, draggable: true });
         const circle = new maps.Circle({
           center,
           radius: radiusM,
@@ -212,11 +217,12 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
           setSearchable(true);
         }
 
-        maps.event.addListener(map, "click", (e) => {
-          const nextLat = e.latLng.getLat();
-          const nextLng = e.latLng.getLng();
-          marker.setPosition(e.latLng);
-          circle.setPosition(e.latLng);
+        /** 좌표 하나를 고르는 **단일 경로** — 지도 클릭도, 핀 끌기도 여기로 모인다. */
+        const pick = (at: LatLng) => {
+          const nextLat = at.getLat();
+          const nextLng = at.getLng();
+          marker.setPosition(at);
+          circle.setPosition(at);
           const geocoder = geocoderRef.current;
           if (!geocoder) {
             onPickRef.current({ lat: nextLat, lng: nextLng, address: null });
@@ -232,7 +238,11 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
                 : null;
             onPickRef.current({ lat: nextLat, lng: nextLng, address: found });
           });
-        });
+        };
+
+        maps.event.addListener(map, "click", (e) => pick(e.latLng));
+        // ⚠️ `dragend`는 좌표를 안 넘겨준다 — 놓인 자리는 **마커에서 읽는다**.
+        maps.event.addListener(marker, "dragend", () => pick(marker.getPosition()));
 
         setStatus("ready");
       })
@@ -339,10 +349,11 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
           지도를 불러오지 못했습니다 — 아래에서 위도·경도를 직접 입력하세요.
         </p>
       )}
+      {/* 문구는 셔틀 세션의 새 흐름(핀 끌기), 글자 크기는 v5 규약(`text-[Npx]` 금지)을 따른다. */}
       {status === "ready" && (
         <p className="text-text-faint text-xs">
-          {searchable ? "위에서 이름으로 찾거나, " : ""}지도를 누르면 그 자리가 정류장 위치가 됩니다.
-          원은 도착 반경입니다.
+          {searchable ? "위에서 이름으로 찾거나, " : ""}지도를 누르거나 <b>핀을 끌어</b> 자리를
+          잡으세요. 원은 도착 반경입니다.
         </p>
       )}
     </div>

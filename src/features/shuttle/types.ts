@@ -54,7 +54,8 @@ export function isBoardingStatus(v: unknown): v is BoardingStatus {
 export type RideExceptionKind = "skip" | "add";
 export const RIDE_EXCEPTION_LABEL: Record<RideExceptionKind, string> = {
   skip: "오늘 안 탐",
-  add: "오늘만 탑승",
+  // 원장 2026-09-04 — 화면에 쓰는 말을 "오늘만 승하차"로 통일(승차·하차 둘 다 고를 수 있다).
+  add: "오늘만 승하차",
 };
 export function isRideExceptionKind(v: unknown): v is RideExceptionKind {
   return v === "skip" || v === "add";

@@ -169,7 +169,7 @@ export function RideExceptionDialog({
       <div className="bg-card flex max-h-[88vh] w-full max-w-xl flex-col gap-3 rounded-2xl p-3 shadow-xl sm:p-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-foreground text-base font-bold">
-            일회성 탑승 변경
+            오늘만 승하차
             <span className="text-text-faint ml-1.5 text-xs font-normal">
               {formatKoreanDate(date)}
             </span>
@@ -188,7 +188,7 @@ export function RideExceptionDialog({
           <p className="border-line text-text-dim rounded-xl border border-dashed px-3 py-2 text-xs">
             {past
               ? "지난 날짜라 읽기만 합니다 — 그날의 기록입니다."
-              : "셔틀 일회성 변경 표가 아직 준비되지 않았습니다 — 마이그레이션 0229a를 적용하면 바로 쓸 수 있습니다."}
+              : "셔틀 오늘만 승하차 표가 아직 준비되지 않았습니다 — 마이그레이션 0229a를 적용하면 바로 쓸 수 있습니다."}
           </p>
         )}
 
