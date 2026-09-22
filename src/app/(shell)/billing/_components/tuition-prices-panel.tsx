@@ -83,53 +83,52 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
         </Link>
       ) : null}
 
-      {/* 필터(지시서 §10): 옛 `micro` 소라벨 + 칩 세 묶음(분류·단가 종류·상태) + 상시 검색창 → 라벨 셋 + 검색 토글. */}
-      <div className="flex flex-wrap items-center gap-2 px-1">
-        <FilterSelect
-          paramName="cat"
-          value={category === "all" ? "" : category}
-          options={CATEGORY_OPTIONS}
-          axisLabel="분류"
-          ariaLabel="분류 필터"
-          clearParams={RESET_PAGE}
-          className="w-auto"
-          triggerClassName={TOOLBAR_SELECT}
-        />
-        <FilterSelect
-          paramName="cpmode"
-          value={pmode === "all" ? "" : pmode}
-          options={PMODE_OPTIONS}
-          axisLabel="단가 종류"
-          ariaLabel="단가 종류 필터"
-          clearParams={RESET_PAGE}
-          className="w-auto"
-          triggerClassName={TOOLBAR_SELECT}
-        />
-        <FilterSelect
-          paramName="cactive"
-          value={active === "all" ? "" : active}
-          options={ACTIVE_OPTIONS}
-          axisLabel="상태"
-          ariaLabel="사용 상태 필터"
-          clearParams={RESET_PAGE}
-          className="w-auto"
-          triggerClassName={TOOLBAR_SELECT}
-        />
-        <SearchToggle placeholder="항목명·분류" defaultValue={q} resetParams={RESET_PAGE} />
-      </div>
-
-      {/* 건수 줄과 '항목 추가' 버튼이 각자 한 행씩 쓰고 있었다(원장 2026-08-07) → 표 툴바 한 행으로 합친다. */}
+      {/* 건수 줄과 '항목 추가' 버튼이 각자 한 행씩 쓰고 있었다(원장 2026-08-07) → 표 툴바 한 행으로 합친다.
+          필터(지시서 §10 — 라벨 셋 + 검색 토글)도 같은 행으로(원장 2026-09-22 *"넓은 화면까지 2행일 필요가 없어보임"*). */}
       <TuitionPricesTable
         rows={rows}
         summary={
-          <p className="text-text-dim text-sm">
-            단가 <span className="num text-foreground font-bold">{total}</span>개
-            {totalPages > 1 ? (
-              <span className="num ml-1.5">
-                · {page}/{totalPages}
-              </span>
-            ) : null}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterSelect
+              paramName="cat"
+              value={category === "all" ? "" : category}
+              options={CATEGORY_OPTIONS}
+              axisLabel="분류"
+              ariaLabel="분류 필터"
+              clearParams={RESET_PAGE}
+              className="w-auto"
+              triggerClassName={TOOLBAR_SELECT}
+            />
+            <FilterSelect
+              paramName="cpmode"
+              value={pmode === "all" ? "" : pmode}
+              options={PMODE_OPTIONS}
+              axisLabel="단가 종류"
+              ariaLabel="단가 종류 필터"
+              clearParams={RESET_PAGE}
+              className="w-auto"
+              triggerClassName={TOOLBAR_SELECT}
+            />
+            <FilterSelect
+              paramName="cactive"
+              value={active === "all" ? "" : active}
+              options={ACTIVE_OPTIONS}
+              axisLabel="상태"
+              ariaLabel="사용 상태 필터"
+              clearParams={RESET_PAGE}
+              className="w-auto"
+              triggerClassName={TOOLBAR_SELECT}
+            />
+            <SearchToggle placeholder="항목명·분류" defaultValue={q} resetParams={RESET_PAGE} />
+            <p className="text-text-dim ml-1 text-sm whitespace-nowrap">
+              단가 <span className="num text-foreground font-bold">{total}</span>개
+              {totalPages > 1 ? (
+                <span className="num ml-1.5">
+                  · {page}/{totalPages}
+                </span>
+              ) : null}
+            </p>
+          </div>
         }
       />
       {totalPages > 1 ? (

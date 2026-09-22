@@ -187,7 +187,9 @@ export default async function ExamsPage({
       {/* ⚠️ 칩·초기화는 `<Link>`가 아니라 하드 이동(`EmbedAnchor`)이다 — 아래 검색 폼 입력은 `defaultValue`(비제어)라
           소프트 이동이면 **옛 검색어·기간이 칸에 남아** '검색' 한 번에 도로 실린다(JJ ↔ 일반 전환 때 기간을 버리는
           2026-09-10 수리가 그 순간 무너진다). embed는 `EmbedAnchor`가 창 안이면 싣는다. */}
-      <div className="flex flex-col gap-2 px-1 py-1">
+      {/* 한 줄로 감는다(원장 2026-09-22 *"넓은 화면까지 2행일 필요가 없어보임"*) — 종전엔 과목·유형 / 검색 폼 / 결과 세 줄이
+          세로로 쌓여 넓은 창에서 줄마다 대부분 비어 있었다. 좁아지면 덩어리째 다음 줄로 감긴다. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 py-1">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-1.5">
             <span className="micro shrink-0">과목</span>
@@ -262,6 +264,20 @@ export default async function ExamsPage({
             </EmbedAnchor>
           ) : null}
         </form>
+        {/* 결과 수 + 새 시험 — 목록 보기에서만(JJ 보기는 자기 기간 줄을 표 위에 세운다). */}
+        {jjMode && viewer && jjRange ? null : (
+          <div className="ml-auto flex items-center gap-3">
+            <p className="micro whitespace-nowrap">
+              결과 <span className="text-foreground font-bold">{total}</span>개
+              {totalPages > 1 ? (
+                <span className="text-text-faint ml-2 normal-case">
+                  · {page}/{totalPages} 페이지
+                </span>
+              ) : null}
+            </p>
+            <CreateExamTrigger classOptions={classOptions} />
+          </div>
+        )}
       </div>
 
       {jjMode && viewer && jjRange ? (
@@ -298,18 +314,6 @@ export default async function ExamsPage({
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between">
-            <p className="micro">
-              결과 <span className="text-foreground font-bold">{total}</span>개
-              {totalPages > 1 ? (
-                <span className="text-text-faint ml-2 normal-case">
-                  · {page}/{totalPages} 페이지
-                </span>
-              ) : null}
-            </p>
-            <CreateExamTrigger classOptions={classOptions} />
-          </div>
-
           {total === 0 ? (
             <EmptyState
               compact
