@@ -65,12 +65,6 @@ const APPROVED_INLINE_SVG = [
   // 차트 눈금이지 아이콘이 아니다(sparkline과 같은 성격). 레일을 만든 커밋이 이 목록을 안 고쳐
   // 가드가 하루 동안 빨간 채였다 — 새 인라인 SVG는 **같은 커밋에서** 여기에 적을 것.
   "src/features/math-sheets/components/learning-rails.tsx",
-  // 2026-09-22 공개 랜딩 '모형 속 작업 공간'의 **연결선**(모형 점 → 창 제목줄로 꺾어 가는 계단 경로 +
-  // 흰 테두리, aria-hidden) — 도면이지 아이콘이 아니다(classroom-map과 같은 성격).
-  "src/app/(marketing)/_desk/desk-parts.tsx",
-  // 2026-09-22 공개 화면(랜딩 머리·로그인)의 **브랜드 표식**(등각 건물 도형 하나, aria-hidden) —
-  // 로고지 UI 아이콘이 아니다. 앱 셸 밖 공개 화면에서만 쓴다.
-  "src/components/public-site/brand-mark.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

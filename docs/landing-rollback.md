@@ -7,7 +7,8 @@
 |---|---|---|
 | **(A) 어제까지 운영하던 판** | 어두운 네이비 히어로·제품 쇼케이스 랜딩 + 사진 패널 로그인 | `4ec22cae9abdc91e0852bcdcbefddb3ffcdf335e` (2026-09-22 16:00, 재설계 직전 main) |
 | **(B) 오늘 낮 판** | 흰 면·초록 톤 '학원 도입' 랜딩 + 두 칸 로그인 | `ee7cc124` (3+5 병합 시점의 origin/main) |
-| **(C) 지금 판** | 모형 속 작업 공간(섞기 3+5) + 같은 톤 로그인 | 이 문서를 담은 커밋 |
+| **(C) 지금 판** | 애플식 긴 스크롤 랜딩 + 오늘 낮 판 구성·네이비 로그인(무음 영상) | 이 문서를 담은 커밋 |
+| (참고) 3+5 판 | 모형 속 작업 공간(섞기 3+5) — main에 **올라간 적 없다**(원장이 스크롤 시안으로 바꿈) | `a1277366`(브랜치 커밋, 병합으로 main 이력에 남는다) |
 
 > ⚠️ (B)는 **병합 시점의 origin/main**(2026-09-22 19:45, `ee7cc124`)이다. 그날 낮의 `8247b4a1`과 공개 화면 파일이
 > **한 글자도 다르지 않다**(그 사이 커밋은 성적·서류·셔틀·운영실만 건드렸다 — `git diff 8247b4a1...ee7cc124 -- "src/app/(marketing)" …` 가 빈 결과).
@@ -15,11 +16,11 @@
 
 ## 판마다 어떤 파일이 그 판을 이루나
 
-- `src/app/(marketing)/**` — 랜딩 페이지·레이아웃·섹션. (C)는 여기에 `_desk/**`(모형 작업 공간)·`_parts/**`·`landing.css`가 있다.
+- `src/app/(marketing)/**` — 랜딩 페이지·레이아웃·섹션. (C)는 여기에 `_scroll/**`(장면별 컴포넌트·CSS 5벌·스크롤 연출 `landing-motion.tsx`)가 있다.
 - `src/app/(auth)/login/**` — 로그인 페이지·폼. (A)는 `page.tsx`·`login-form.tsx`·`actions.ts`이고 (B)·(C)엔 `login-form.test.tsx`가 더 있다.
 - `src/components/public-site/**` — (B)에서 생긴 공개 화면 모듈(로그인 CSS·브랜드). (A)엔 **없다**.
 - `src/data/marketing.ts` — 랜딩 카피. 판마다 내용이 전혀 다르다.
-- 자산: (A)·(B)는 `public/photos/login-panel.webp`(+`src/app/(marketing)/_img/*.webp`), (C)는 `public/landing/*.webp`(모형·층 크롭)와 로그인 패널 **영상** `public/photos/login-panel.mp4`·포스터 `login-panel-poster.webp`(2026-09-22 원장 *"이미지 대신에 이 영상 사용"* — 옛 `login-panel.webp`는 (C)에서 지웠다. (A)·(B)로 되돌리는 checkout이 되살린다).
+- 자산: (A)·(B)는 `public/photos/login-panel.webp`(+`src/app/(marketing)/_img/*.webp`), (C)는 `public/landing/scroll-*.webp`(사진 5장)와 로그인 패널 **영상** `public/photos/login-panel.mp4`·포스터 `login-panel-poster.webp`(2026-09-22 원장 *"이미지 대신에 이 영상 사용"* — 옛 `login-panel.webp`는 (C)에서 지웠다. (A)·(B)로 되돌리는 checkout이 되살린다).
 - (A)만 쓰는 것: `src/app/(marketing)/_motion/landing.css`·`_sections/**`·`_ui/**`(그 판 안에 들어 있다).
 
 ## 되돌리는 명령
@@ -48,10 +49,10 @@ git checkout $B -- "src/app/(marketing)" "src/app/(auth)/login" src/components/p
 
 ### 지금 판(C)이 새로 만든 것 — 되돌릴 때 지우는 것
 
-- `src/app/(marketing)/_desk/**` (모형 작업 공간: 예시 데이터·창 관리·좌표·창 내용·CSS)
-- `src/app/(marketing)/_parts/**`, `src/app/(marketing)/landing.css`
-- `src/components/public-site/brand-mark.tsx`, `src/components/public-site/fonts.ts`
-- `public/landing/academy-model.webp`, `public/landing/floor-{1,2,3}.webp`
+- `src/app/(marketing)/_scroll/**` (히어로·대시보드 목업·장면 A~C·메뉴 격자·화면 스트립·문의 띠·연출·CSS)
+- `public/landing/scroll-{hero,office,class,teacher,shuttle}.webp`
+- (3+5 판이 만들었던 `_desk/**`·`_parts/**`·`landing.css`·`public-site/brand-mark.tsx`·`fonts.ts`·`public/landing/{academy-model,floor-*}.webp`는
+  (C)에서 이미 지웠다 — 3+5를 다시 보려면 `git checkout a1277366 -- "src/app/(marketing)" src/components/public-site public/landing src/data/marketing.ts`.)
 - (`src/components/public-site/public-site.module.css`는 (B)에서 온 파일을 고친 것이라 checkout으로 그 판 모습이 그대로 돌아온다.)
 
 ## 실제로 해 본 결과 (2026-09-22, 임시 워크트리에서 명령을 그대로 적용)
