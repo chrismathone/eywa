@@ -518,6 +518,15 @@ export const SHEET_DICT = {
   "plan.term.regular": { ko: "평시", en: "Regular" },
   "plan.term.exam": { ko: "내신", en: "Exam prep" },
   "plan.addRow": { ko: "+ 줄 추가", en: "+ Add row" },
+  // 월간계획 가져오기(원장 2026-09-22) — 배정이 만든 계획을 **이 칸**에 옮긴다. 빈 칸만 채운다.
+  "plan.fromPlan": { ko: "월간계획 가져오기", en: "Import plan" },
+  "plan.fromPlan.title": {
+    ko: "이 교시에 오기로 된 월간계획(교재·차수)을 이 칸에 넣습니다 — 빈 칸만 채우고, 넣은 뒤 고쳐 쓸 수 있습니다",
+    en: "Brings this period’s planned lesson (book and lesson no.) into this cell — empty cells only; edit it afterwards",
+  },
+  "plan.fromPlan.none": { ko: "이 교시엔 가져올 월간계획이 없습니다", en: "No monthly plan for this period" },
+  "plan.fromPlan.done": { ko: "월간계획을 가져왔습니다 — 실제와 다르면 고쳐 주세요", en: "Imported the plan — edit it if the lesson went differently" },
+  "plan.fromPlan.filled": { ko: "빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)", en: "Nothing to fill — written cells are never overwritten" },
   "plan.copy": { ko: "내용 복사 (지난 수업)", en: "Copy from previous lesson" },
   "plan.copy.title": {
     ko: "지난 수업에서 {term} 계획을 가져옵니다 — 강사 수업은 같은 요일·같은 교시, JJ 교시는 같은 교시의 지난 수업이 원본입니다(요일마다 교재가 달라서). 이미 쓴 칸은 그대로 두고 빈 칸만 채웁니다. JJ 교시는 학생별 듣기 레벨·누적 암기 단어수도 지난 기록에서 채웁니다(출결·태도는 복사하지 않습니다)",
@@ -746,8 +755,8 @@ export const SHEET_DICT = {
   },
   "fill.title": { ko: "교재 배정 — {class}", en: "Assign a textbook — {class}" },
   "fill.desc": {
-    ko: "교시를 고르고 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 들어갑니다. 연휴는 건너뛰고, 이미 적혀 있는 칸은 그대로 둡니다.",
-    en: "Pick periods and a book; each lesson lands on that time slot, class day by class day. Holidays are skipped and cells that already have text are left alone.",
+    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 **월간계획**에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 가져오기]를 누를 때만 채워집니다.",
+    en: "Pick periods and a book and the lessons line up on the **monthly plan**, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
   },
   "fill.slots": { ko: "교시 — 고른 시각에 차수가 들어갑니다", en: "Periods — lessons go into the times you pick" },
   "fill.slots.oneTeacher": {
@@ -778,12 +787,12 @@ export const SHEET_DICT = {
   "fill.term.regular": { ko: "평시", en: "Regular" },
   "fill.term.exam": { ko: "내신", en: "Exam" },
   "fill.need": { ko: "교시와 교재를 고르면 바로 계산됩니다", en: "Pick a period and a book to see what will be filled" },
-  "fill.none": { ko: "기입할 칸이 없습니다 — 고른 교시에 남은 수업일이 없거나 이미 다 적혀 있습니다", en: "Nothing to fill — no class days left at those periods, or the cells are already written" },
+  "fill.none": { ko: "배정할 칸이 없습니다 — 고른 교시에 남은 수업일이 없습니다", en: "Nothing to assign — no class days left at those periods" },
   "fill.preview.busy": { ko: "계산 중…", en: "Working…" },
-  "fill.apply": { ko: "기입", en: "Fill" },
-  "fill.applyN": { ko: "{n}칸 기입", en: "Fill {n} cells" },
+  "fill.apply": { ko: "배정", en: "Assign" },
+  "fill.applyN": { ko: "{n}칸 배정", en: "Assign {n} cells" },
   "fill.loading": { ko: "불러오는 중…", en: "Loading…" },
-  "fill.count": { ko: "기입", en: "To fill" },
+  "fill.count": { ko: "계획에 설 칸", en: "Cells planned" },
   "fill.noProgress": { ko: "진도 아직 없음", en: "Progress not set yet" },
   "fill.noProgress.title": {
     ko: "그 차수엔 교재·페이지/시간만 들어갑니다 — 진도·과제는 나중에 시트에서 적으면 됩니다.",
@@ -810,8 +819,11 @@ export const SHEET_DICT = {
   "fill.out.full.title": { ko: "그 교시에 계획 줄이 이미 20개입니다", en: "That period already has 20 plan rows" },
   "fill.out.past": { ko: "지난 날짜", en: "Past date" },
   "fill.out.past.title": { ko: "이미 지난 수업엔 소급해 넣지 않습니다", en: "Past lessons are never back-filled" },
-  "fill.done.none": { ko: "기입할 칸이 없었습니다", en: "Nothing to fill" },
-  "fill.done": { ko: "기입 완료 — 새 줄 {added}칸 · 빈 칸 채움 {filled}칸", en: "Filled — {added} new, {filled} blanks" },
+  "fill.done.none": { ko: "배정할 칸이 없었습니다", en: "Nothing to assign" },
+  "fill.done": {
+    ko: "월간계획에 {n}칸 배정했습니다 — 실제엔 시트에서 [월간계획 가져오기]로 넣습니다",
+    en: "Assigned {n} cells to the monthly plan — bring them into the sheet with [Import plan]",
+  },
   "fill.done.skipped": { ko: "이미 적혀 있어 그대로 둠 {n}칸", en: "{n} already written" },
   "fill.done.truncated": { ko: "줄 상한(20)으로 못 넣음 {n}칸", en: "{n} skipped (20-row cap)" },
   "fill.err.generic": { ko: "처리하지 못했습니다", en: "Could not complete" },
@@ -858,6 +870,9 @@ export const SHEET_DICT = {
   },
   "month.cell.edit": { ko: "누르면 이 날 계획을 여기서 고칩니다", en: "Click to edit this day's plan here" },
   "month.cell.view": { ko: "누르면 이 날 계획을 여기서 봅니다", en: "Click to see this day's plan here" },
+  // 월간계획(교재 배정에서 계산) — 아직 안 쓴 칸에만 무채색으로 뜨는 표식.
+  "month.plannedTag": { ko: "계획", en: "Plan" },
+  "month.plannedNo": { ko: "{n}차수", en: "lesson {n}" },
   "month.unwritten": { ko: "미작성", en: "Not written" },
   "month.unwrittenN": { ko: "미작성 {n}", en: "Not written {n}" },
   "month.allWritten.title": {

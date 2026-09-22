@@ -223,6 +223,8 @@ function DayCell({
       {shown.map((slot) => {
         const lines = data.linesBySlot[slotKey(date, slot.slotStart)] ?? [];
         const seat = slot.seat !== null;
+        // 월간계획(교재 배정에서 계산) — 아직 실제가 없는 칸에만 쓴다(아래).
+        const planned = data.plannedBySlot[slotKey(date, slot.slotStart)] ?? [];
         return (
           <div key={slot.slotStart} className="border-line-faint grid grid-cols-[46px_minmax(0,1fr)] gap-1.5 border-t border-dashed pt-1 first:border-0 first:pt-0">
             <span
@@ -235,15 +237,32 @@ function DayCell({
             </span>
             <div className="flex min-w-0 flex-col gap-0.5">
               {lines.length === 0 ? (
-                // 🔴 휴일엔 '미작성'이라 부르지 않는다 — 안 쓴 게 아니라 쓸 의무가 없던 것이다(앰버=재촉).
-                <span
-                  className={`self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold ${
-                    holiday ? "border-line-strong text-text-faint" : "border-amber/45 text-amber"
-                  }`}
-                >
-                  {t(holiday ? "month.noPlan" : "month.unwritten")} ·{" "}
-                  {teacherNameFor(slot.teacherLabel, teacherNames, lang) ?? t("month.noTeacher")}
-                </span>
+                <>
+                  {/* 🔴 휴일엔 '미작성'이라 부르지 않는다 — 안 쓴 게 아니라 쓸 의무가 없던 것이다(앰버=재촉). */}
+                  <span
+                    className={`self-start rounded border border-dashed px-1.5 text-xs leading-4 font-bold ${
+                      holiday ? "border-line-strong text-text-faint" : "border-amber/45 text-amber"
+                    }`}
+                  >
+                    {t(holiday ? "month.noPlan" : "month.unwritten")} ·{" "}
+                    {teacherNameFor(slot.teacherLabel, teacherNames, lang) ?? t("month.noTeacher")}
+                  </span>
+                  {/* 🔴 **월간계획은 실제가 아니다**(원장 2026-09-22) — 아직 안 쓴 칸에만, 무채색으로,
+                      `계획` 표식을 달아 보여 준다. 실제가 한 줄이라도 있으면 안 그린다(이미 한 수업이다).
+                      강사는 시트에서 [월간계획 가져오기]로 이걸 옮긴 뒤 고쳐 쓴다. */}
+                  {planned.map((p, i) => (
+                    <div key={`${p.skillArea}|${p.lessonNo}|${i}`} className="text-text-faint flex min-w-0 gap-1 text-xs">
+                      <span className="border-line-strong shrink-0 rounded border border-dashed px-1 font-bold">
+                        {t("month.plannedTag")}
+                      </span>
+                      <span className="min-w-0 truncate">
+                        <span className="font-bold">{p.title}</span>
+                        <span className="num"> {tf("month.plannedNo", { n: p.lessonNo })}</span>
+                        {p.progress ? <span> · {p.progress}</span> : null}
+                      </span>
+                    </div>
+                  ))}
+                </>
               ) : (
                 lines.map((line) => {
                   const off = isOffGoalLine({ ...line, seat }, goals);

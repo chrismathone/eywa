@@ -37,6 +37,7 @@ import type { MpCell, MpColKind } from "../lib/month-plan";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
 import type { PlanLineDTO } from "./actions";
+import { getClassPlannedLines, type PlannedLine } from "@/features/textbooks/server/month-plan";
 import { requireEcsClassAccess } from "./access";
 import type { DowKey } from "../lib/week";
 
@@ -66,6 +67,12 @@ export type ClassSheetMonthData = {
   slotsByDate: Record<string, MonthSlot[]>;
   /** `YYYY-MM-DD|HH:MM` → 그 교시의 계획 줄(line_no 순). */
   linesBySlot: Record<string, MonthPlanLine[]>;
+  /**
+   * **월간계획**(교재 배정에서 계산) — `"날짜|교시"` → 그 칸에 오기로 된 차수(원장 2026-09-22).
+   * 🔴 **실제가 아니다.** 실제는 위 `linesBySlot` 하나뿐이고, 계획이 거기 들어가는 길은 시트의
+   *    [월간계획 가져오기]뿐이다. 그래서 달력은 둘을 **다른 자리에 다른 색**으로 그린다.
+   */
+  plannedBySlot: Record<string, PlannedLine[]>;
   /** 계획 줄 전체(평면) — 경고 판정·목표 대조가 날짜를 넘나들며 쓴다. */
   lines: MonthPlanLine[];
   /** `YYYY-MM-DD|HH:MM` → 교시 라벨(표시 전용, 학원설정이 단일 소스). */
@@ -130,7 +137,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
   const isEie = access.englishTrack === "eie";
 
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes, roomsRes, labelMap] =
+  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes, roomsRes, labelMap, plannedRes] =
     await Promise.all([
     admin
       .from("class_schedules")
@@ -200,6 +207,15 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
     admin.from("classrooms").select("id, name").eq("tenant_id", access.tenantId),
     // 강사 라벨 해석기(닉네임 `Song` → 표시 이름 `송지혜`) — 주간 시트·시간표 3뷰와 **같은 함수**.
     getTeacherLabelMap({ supabase: admin, tenantId: access.tenantId }),
+    // 월간계획(교재 배정에서 계산) — 🔴 **절대 throw하지 않는다**(그 안에서 상태로 접는다, [[#95]]).
+    //    0266a/0268a 미적용이거나 배정이 0건이면 빈 계획으로 돌고 달력은 그대로 뜬다.
+    getClassPlannedLines({
+      tenantId: access.tenantId,
+      subject: access.subject,
+      classId,
+      from,
+      to,
+    }),
   ]);
 
   if (scheduleRes.error) return { ok: false, error: "시간표를 불러오지 못했습니다" };
@@ -385,6 +401,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       weeks: monthWeeks(month),
       slotsByDate,
       linesBySlot,
+      plannedBySlot: plannedRes.byCell,
       lines,
       periodLabelBySlot,
       goals,

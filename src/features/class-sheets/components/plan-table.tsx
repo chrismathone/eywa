@@ -92,6 +92,20 @@ export function PlanTable({
                   {sheetT(lang, "plan.copy")}
                 </button>
               ) : null}
+              {/* 월간계획 가져오기(원장 2026-09-22) — 교재 배정이 만든 계획을 이 칸에 옮긴다.
+                  🔴 **평시 구획에만** 둔다 — 배정은 평시 축으로만 걸리고(내신은 사람이 따로 적는 자리라),
+                     내신 칩 옆에도 세우면 눌러도 늘 "가져올 계획이 없습니다"가 된다.
+                  ⚠️ 문이 기능을 안 내면(공개 자리 PIN) 핸들러가 `undefined`라 버튼이 아예 안 선다. */}
+              {canEdit && term.key === "regular" && handlers.importPlan ? (
+                <button
+                  type="button"
+                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
+                  title={sheetT(lang, "plan.fromPlan.title")}
+                  onClick={() => handlers.importPlan?.(date, slotStart)}
+                >
+                  {sheetT(lang, "plan.fromPlan")}
+                </button>
+              ) : null}
             </div>
             {rows.length > 0 ? (
               // 고정 열은 요일 열 다이어트(2026-08-17, today-columns TODAY_PLAN_W 540→436)와 함께 줄였다

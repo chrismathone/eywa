@@ -213,3 +213,44 @@ describe("교재 배정 — 한 배정엔 한 담당만", () => {
     expect(plan).toContain("canonicalSlotTeacherLabel");
   });
 });
+
+/**
+ * 🔴 **월간계획과 실제는 다른 물건이다** — 원장 2026-09-22(*"영어강사시트 실제(강사가 실제나간 진도)와
+ *    월간계획 이렇게 나눠서 쓰고싶음 … 월간계획에서 교재배정을 해놓고 그걸 각자 월간계획에서 가저오기 해서
+ *    실제수업에서 변동사항이 있으면 변경 후 사용"*).
+ *    계획은 **배정에서 계산**하고(표 신설 없음), 실제로 들어가는 길은 [가져오기] 하나뿐이다.
+ */
+describe("교재 배정 — 계획과 실제를 가른다", () => {
+  const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
+  const monthPlan = read("src", "features", "textbooks", "server", "month-plan.ts");
+
+  it("🔴 배정은 실제 칸에 한 줄도 쓰지 않는다 — 기입 RPC를 부르지 않는다", () => {
+    const body = plan.slice(plan.indexOf("export async function applyTextbookFill"), plan.indexOf("// ── 가져오기"));
+    // ⚠️ **호출만** 본다 — 왜 그런가를 적은 주석에도 그 이름이 나온다(가드가 설명을 결과로 오인하면 안 된다).
+    expect(body).not.toContain("await applyLoaded(");
+    expect(body).not.toContain(`rpc("ecs_apply_textbook_lessons"`);
+    // 대신 배정을 저장한다(그게 곧 월간계획이다).
+    expect(body).toContain("saveClassTextbookPlan");
+  });
+
+  it("🔴 월간계획은 **저장하지 않는다** — 배정에서 계산하는 읽기 전용이다", () => {
+    for (const write of [".insert(", ".update(", ".upsert(", ".delete("]) {
+      expect(monthPlan).not.toContain(write);
+    }
+    // 배분 규칙은 순수 함수 한 곳을 그대로 탄다(미리보기·계획·가져오기가 같은 답을 내야 한다).
+    expect(monthPlan).toContain("buildLessonSchedule");
+  });
+
+  it("계획이 실제로 들어가는 길은 [가져오기] 하나뿐이다", () => {
+    expect(plan).toContain("export async function importPlannedSlot");
+    const api = read("src", "features", "class-sheets", "components", "plan-api.ts");
+    expect(api).toContain("importPlannedSlot");
+    const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
+    expect(table).toContain("plan.fromPlan");
+  });
+
+  it("🔴 시트가 못 읽어도 죽지 않는다 — 0266a 미적용이면 빈 계획으로 돈다", () => {
+    expect(monthPlan).toContain("missing-table");
+    expect(monthPlan).not.toContain("throw ");
+  });
+});

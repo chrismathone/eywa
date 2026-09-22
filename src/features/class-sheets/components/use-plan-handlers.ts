@@ -42,6 +42,8 @@ export type PlanHandlers = {
     skillArea: string,
   ) => void;
   copySlot: (planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
+  /** 월간계획 가져오기 — 문이 그 기능을 안 내면 **없다**(표가 버튼을 안 그린다). */
+  importPlan?: (planDate: string, slotStart: string) => void;
   removeLine: (lineId: string, planDate: string, slotStart: string) => void;
   moveLineTerm: (
     lineId: string,
@@ -151,6 +153,37 @@ export function usePlanHandlers({
           });
         });
       },
+      /**
+       * **월간계획 가져오기**(원장 2026-09-22) — 그 칸에 오기로 된 계획을 실제 줄로 옮긴다.
+       *
+       * 🔑 '내용 복사'와 **같은 계약**이다: ① 반영 전 flush(안 하면 방금 친 글자가 되돌아간다)
+       *    ② 서버가 canonical 줄을 돌려주고 ③ 화면이 그걸 그대로 갈아끼우며 CAS 시드도 다시 심는다.
+       * ⚠️ 문이 이 기능을 안 내면(공개 자리 PIN) 핸들러 자체가 `undefined`라 표가 버튼을 안 그린다.
+       */
+      importPlan: api.importPlan
+        ? (planDate, slotStart) => {
+            const call = api.importPlan;
+            if (!call) return;
+            void Promise.all([store.flush(), flushHost?.() ?? Promise.resolve()]).then(([flushed]) => {
+              if (!flushed.ok) {
+                const go = window.confirm(
+                  "아직 저장이 확정되지 않은 입력(또는 충돌)이 있습니다. 그래도 월간계획을 가져올까요? (입력을 잃을 수 있습니다)",
+                );
+                if (!go) return;
+              }
+              void call({ classId, planDate, slotStart }).then((r) => {
+                if (!r.ok) return toast.error(r.error);
+                onSlotLines(planDate, slotStart, r.lines);
+                seedPlanLines(store, r.lines);
+                // 🔴 "가져왔다"고만 말하지 않는다 — 빈 칸이 없어 아무것도 안 바뀐 경우가 흔하다
+                //    (덮어쓰기가 없어서 안전한 대신, 조용히 성공한 척하면 사람이 계속 누른다).
+                const touched = r.result.added + r.result.filled;
+                if (touched === 0) toast.info("빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)");
+                else toast.success(`월간계획에서 ${touched}칸 채움 — 실제와 다르면 고쳐 주세요`);
+              });
+            });
+          }
+        : undefined,
       removeLine: (lineId, planDate, slotStart) => {
         void api.deleteLine({ classId, planDate, slotStart }, { lineId }).then((r) => {
           if (!r.ok) return toast.error(r.error);
