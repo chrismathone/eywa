@@ -131,11 +131,23 @@ export function buildLessonSchedule(input: {
   axis: SlotAxis;
   /** 고른 교시(`"mon|17:20"`). 있으면 축 대신 이걸로 거른다 — 위 `slotsOfPicks` 주석. */
   slotPicks?: readonly string[] | null;
+  /**
+   * 사람이 **회차를 미루거나 당긴** 칸 — `"YYYY-MM-DD|HH:MM"` → `skip` | `advance`(0282a).
+   *
+   * 🔴 원장 2026-09-22: *"수업 회차를 한주 미루거나 당기거나 … 미루면 차수 무시하고 수업내용 기입해서"*.
+   *    · `skip`    = 그 칸은 **차수 없이** 지나간다(뒤가 한 칸 밀린다) — 그 칸 계획이 비므로 자유 기입.
+   *    · `advance` = 그 칸에서 차수 하나를 **버린다**(뒤가 한 칸 당겨진다).
+   * 🔑 `skip`은 **휴일과 같은 규칙**이다 — 다른 점은 휴일이 날짜 전체고 이건 교시 한 칸이라는 것뿐.
+   * ⚠️ `skip`은 `skippedHolidays`에 **안 담는다** — 그건 "연휴 때문에 밀렸다"는 다른 사실이고,
+   *    화면이 둘을 같은 줄로 세면 사람이 안 한 결정을 한 것처럼 읽힌다.
+   */
+  shifts?: Readonly<Record<string, "skip" | "advance">> | null;
   pace: LessonPace;
   /** 훑을 날 수(기본 = 상한). 테스트·짧은 미리보기에서 줄여 쓴다. */
   lookaheadDays?: number;
 }): LessonSchedule {
   const { startDate, lessonNos, schedules, holidays, axis, pace } = input;
+  const shifts = input.shifts ?? null;
   const picked = input.slotPicks && input.slotPicks.length > 0 ? new Set(input.slotPicks) : null;
   const dates = lookaheadDates(startDate, input.lookaheadDays ?? MAX_LOOKAHEAD_DAYS);
   const slotsByDate = slotsByDateOf(dates, schedules);
@@ -158,9 +170,18 @@ export function buildLessonSchedule(input: {
       continue;
     }
 
+    // 🔑 미루기·당기기는 **칸마다** 본다(위 `shifts`) — `pace:"day"`에서도 그 날 칸이 저마다 다를 수 있다.
+    const shiftOf = (slotStart: string) => shifts?.[`${date}|${slotStart}`] ?? null;
+
     if (pace === "day") {
+      // 하루 1차수라도 **미룬 칸엔 안 넣는다** — 그 칸은 사람이 자유로 적는 자리다.
+      const live = daySlots.filter((slot) => shiftOf(slot.slotStart) !== "skip");
+      if (live.length === 0) continue; // 그 날이 통째로 미뤄졌다 — 차수를 안 쓴다.
+      // 당기기가 하나라도 있으면 차수 하나를 버리고 다음 것부터(그 날 한 번만 — 단위가 '하루'다).
+      if (live.some((slot) => shiftOf(slot.slotStart) === "advance")) cursor += 1;
+      if (cursor >= lessonNos.length) break;
       const lessonNo = lessonNos[cursor]!;
-      for (const slot of daySlots) targets.push({ lessonNo, date, slotStart: slot.slotStart });
+      for (const slot of live) targets.push({ lessonNo, date, slotStart: slot.slotStart });
       cursor += 1;
       lastDate = date;
       continue;
@@ -168,6 +189,14 @@ export function buildLessonSchedule(input: {
 
     for (const slot of daySlots) {
       if (cursor >= lessonNos.length) break;
+      const shift = shiftOf(slot.slotStart);
+      // 미루기 — 이 칸은 비우고 차수도 **안 쓴다**(다음 수업일로 그대로 넘어간다).
+      if (shift === "skip") continue;
+      // 당기기 — 이 칸에 올 차수를 버리고 **다음 차수**를 넣는다.
+      if (shift === "advance") {
+        cursor += 1;
+        if (cursor >= lessonNos.length) break;
+      }
       targets.push({ lessonNo: lessonNos[cursor]!, date, slotStart: slot.slotStart });
       cursor += 1;
       lastDate = date;

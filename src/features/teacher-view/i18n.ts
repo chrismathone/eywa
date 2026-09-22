@@ -892,6 +892,23 @@ export const SHEET_DICT = {
   "month.cell.edit": { ko: "누르면 이 날 계획을 여기서 고칩니다", en: "Click to edit this day's plan here" },
   "month.cell.view": { ko: "누르면 이 날 계획을 여기서 봅니다", en: "Click to see this day's plan here" },
   // 월간계획(교재 배정에서 계산) — 아직 안 쓴 칸에만 무채색으로 뜨는 표식.
+  // 회차 미루기·당기기(0282a, 원장 2026-09-22) — 계획 축의 결정이라 달력 칸에 단다.
+  "month.shift.skip.done": {
+    ko: "이 회차를 미뤘습니다 — 이 칸은 계획 없이 직접 적고, 다음 수업일부터 차수가 이어집니다",
+    en: "Pushed — write this cell yourself; the lesson sequence resumes next class day",
+  },
+  "month.shift.advance.done": { ko: "이 회차를 당겼습니다 — 이 칸엔 다음 차수가 옵니다", en: "Pulled — the next lesson lands here" },
+  "month.shift.clear.done": { ko: "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다", en: "Cleared — the original lesson order is back" },
+  "month.shift.skip": { ko: "미룸", en: "Push" },
+  "month.shift.skip.title": {
+    ko: "이 회차를 한 칸 미룹니다 — 이 칸은 차수 없이 비고(수업 내용을 직접 적으세요), 다음 수업일부터 차수가 이어집니다. 다시 누르면 되돌립니다.",
+    en: "Pushes this lesson one slot later — this cell gets no lesson number (write what you actually did) and the sequence resumes next class day. Press again to undo.",
+  },
+  "month.shift.advance": { ko: "당김", en: "Pull" },
+  "month.shift.advance.title": {
+    ko: "이 회차를 한 칸 당깁니다 — 이 칸엔 다음 차수가 옵니다. 다시 누르면 되돌립니다.",
+    en: "Pulls this lesson one slot earlier — the next lesson number lands here. Press again to undo.",
+  },
   "month.plannedTag": { ko: "계획", en: "Plan" },
   "month.plannedNo": { ko: "{n}차수", en: "lesson {n}" },
   "month.unwritten": { ko: "미작성", en: "Not written" },

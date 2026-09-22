@@ -45,6 +45,7 @@ export function MonthCalendar({
   goals,
   display,
   onOpenDay,
+  onShift,
 }: {
   data: ClassSheetMonthData;
   /** 담임 월간 목표(경고 기준). */
@@ -52,6 +53,10 @@ export function MonthCalendar({
   display: { homework: boolean; seat: boolean };
   /** 칸 클릭 — 그 날 계획을 이 화면에서 연다. */
   onOpenDay: (date: string) => void;
+  /**
+   * 회차 미루기·당기기(0282a). **없으면 버튼이 안 뜬다** — 누를 수 없는 버튼을 세우지 않는다.
+   */
+  onShift?: (date: string, slotStart: string, kind: "skip" | "advance" | null) => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -109,6 +114,7 @@ export function MonthCalendar({
                 display={display}
                 skillAreas={data.skillAreas}
                 onOpenDay={onOpenDay}
+                onShift={onShift}
               />
             );
           })}
@@ -125,6 +131,7 @@ function DayCell({
   display,
   skillAreas,
   onOpenDay,
+  onShift,
 }: {
   date: string;
   data: ClassSheetMonthData;
@@ -132,6 +139,8 @@ function DayCell({
   display: { homework: boolean; seat: boolean };
   skillAreas: SkillAreaSetting[];
   onOpenDay: (date: string) => void;
+  /** 회차 미루기·당기기(0282a) — 없으면 버튼이 안 뜬다. */
+  onShift?: (date: string, slotStart: string, kind: "skip" | "advance" | null) => void;
 }) {
   const t = useSheetT();
   const tf = useSheetTf();
@@ -224,7 +233,10 @@ function DayCell({
         const lines = data.linesBySlot[slotKey(date, slot.slotStart)] ?? [];
         const seat = slot.seat !== null;
         // 월간계획(교재 배정에서 계산) — 아직 실제가 없는 칸에만 쓴다(아래).
-        const planned = data.plannedBySlot[slotKey(date, slot.slotStart)] ?? [];
+        const cellKey = slotKey(date, slot.slotStart);
+        const planned = data.plannedBySlot[cellKey] ?? [];
+        // 회차 미루기·당기기(0282a) — 표식이 걸린 칸은 계획이 비거나(미루기) 다음 차수가 온다(당기기).
+        const shift = data.shiftBySlot[cellKey] ?? null;
         return (
           <div key={slot.slotStart} className="border-line-faint grid grid-cols-[46px_minmax(0,1fr)] gap-1.5 border-t border-dashed pt-1 first:border-0 first:pt-0">
             <span
@@ -250,6 +262,33 @@ function DayCell({
                   {/* 🔴 **월간계획은 실제가 아니다**(원장 2026-09-22) — 아직 안 쓴 칸에만, 무채색으로,
                       `계획` 표식을 달아 보여 준다. 실제가 한 줄이라도 있으면 안 그린다(이미 한 수업이다).
                       강사는 시트에서 [월간계획 가져오기]로 이걸 옮긴 뒤 고쳐 쓴다. */}
+                  {/* 🔴 **회차 미루기·당기기**(원장 2026-09-22 *"수업 회차를 한주 미루거나 당기거나 …
+                      미루면 차수 무시하고 수업내용 기입해서"*) — 계획이 파생값이라 이 표식 한 줄이 앞으로를
+                      통째로 바꾼다. **실제 줄은 안 건드린다**(이미 적은 진도는 그대로) → 눌러도 잃을 게 없고
+                      같은 버튼으로 되돌린다. ⚠️ 지난 날짜엔 안 세운다(앞으로의 차수를 정하는 결정이다). */}
+                  {onShift && data.canEdit && date >= data.today ? (
+                    <div className="flex flex-wrap gap-1">
+                      {(["skip", "advance"] as const).map((kind) => {
+                        const on = shift === kind;
+                        return (
+                          <button
+                            key={kind}
+                            type="button"
+                            aria-pressed={on}
+                            title={t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
+                            onClick={() => onShift(date, slot.slotStart, on ? null : kind)}
+                            className={`cursor-pointer rounded-full border px-1.5 text-xs font-bold ${
+                              on
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-line text-text-faint hover:border-primary hover:text-foreground"
+                            }`}
+                          >
+                            {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   {planned.map((p, i) => (
                     <div key={`${p.skillArea}|${p.lessonNo}|${i}`} className="text-text-faint flex min-w-0 gap-1 text-xs">
                       <span className="border-line-strong shrink-0 rounded border border-dashed px-1 font-bold">

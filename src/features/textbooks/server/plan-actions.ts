@@ -956,3 +956,71 @@ export async function importPlannedSlot(input: {
   revalidatePath("/ecs");
   return { ok: true, result: total, lines: ((fresh ?? []) as Record<string, unknown>[]).map(planLineFromRow) };
 }
+
+// ── 회차 미루기·당기기 — 그 칸에서 차수를 어떻게 할지 ─────────────────────────
+
+export type LessonShiftKind = "skip" | "advance";
+export type LessonShiftResult =
+  | { ok: true; kind: LessonShiftKind | null }
+  | { ok: false; error: string };
+
+/**
+ * **한 주 미루기 / 당기기**(0282a) — 그 (반, 날짜, 교시)에서 차수를 건너뛸지(`skip`) 버릴지(`advance`).
+ *
+ * 🔴 원장 2026-09-22: *"실제 에서는 수업 회차를 한주 미루거나 당기거나 할수있게 … 미루면 차수 무시하고
+ *    수업내용 기입해서 쓸수있게"*. `skip`을 걸면 그 칸 **계획이 비므로** 강사가 실제 내용을 자유로 적고,
+ *    그 뒤 차수는 한 칸씩 밀린다(휴일과 같은 규칙 — `buildLessonSchedule`).
+ * 🔴 **실제 계획 줄은 한 줄도 안 바꾼다** — 이미 적어 둔 진도는 그대로 남고, 바뀌는 건 "앞으로 어느 칸에
+ *    몇 차수가 오는가"뿐이다. 그래서 눌러도 잃을 게 없고 다시 눌러 되돌릴 수 있다.
+ * 🔑 **토글**이다 — 같은 종류를 다시 누르면 표식을 지운다(그 칸이 원래대로 돌아온다).
+ */
+export async function setLessonShift(input: {
+  classId: string;
+  date: string;
+  slotStart: string;
+  /** null이면 표식을 지운다(원래대로). */
+  kind: LessonShiftKind | null;
+}): Promise<LessonShiftResult> {
+  const gate = await requireEcsClassAccess(input.classId, { write: true });
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (!YMD_RE.test(input.date)) return { ok: false, error: "날짜가 올바르지 않습니다" };
+  const slot = String(input.slotStart).slice(0, 5);
+  if (!/^[0-2]\d:[0-5]\d$/.test(slot)) return { ok: false, error: "교시가 올바르지 않습니다" };
+  const kind = input.kind === "skip" || input.kind === "advance" ? input.kind : null;
+
+  const admin = createAdminClient();
+  const where = { tenant_id: gate.access.tenantId, class_id: input.classId, plan_date: input.date, slot_start: slot };
+
+  const { error } = kind
+    ? // 🔴 일반 유니크(부분 술어 없음, [[#113]])라 이 축으로 추론된다 — 토글이 같은 칸을 갈아끼운다.
+      await admin
+        .from("class_lesson_shifts")
+        .upsert({ ...where, kind, created_by: gate.access.user.id, updated_at: new Date().toISOString() }, {
+          onConflict: "tenant_id,class_id,plan_date,slot_start",
+        })
+    : await admin
+        .from("class_lesson_shifts")
+        .delete()
+        .eq("tenant_id", where.tenant_id)
+        .eq("class_id", where.class_id)
+        .eq("plan_date", where.plan_date)
+        .eq("slot_start", where.slot_start);
+
+  if (error) {
+    // 0282a 미적용 — 원인을 단정하지 않고 무엇이 필요한지 말한다([[#95]]).
+    if (isMissingTextbookTable(error)) {
+      return { ok: false, error: "회차 미루기는 마이그레이션 0282a가 필요합니다 — 적용한 뒤 다시 시도해 주세요" };
+    }
+    return { ok: false, error: friendlyTextbookError(error, "회차를 바꾸지 못했습니다") };
+  }
+
+  await logAction({
+    action: "textbook_lesson_shift",
+    targetType: "class",
+    targetLabel: gate.access.className,
+    metadata: { date: input.date, slot, kind },
+  });
+  // 계획은 파생값이라 이 한 줄이 그 반의 앞으로 전부를 바꾼다([[#102]] 계열 — `"layout"` 필수).
+  revalidatePath(`/ecs/${input.classId}`, "layout");
+  return { ok: true, kind };
+}
