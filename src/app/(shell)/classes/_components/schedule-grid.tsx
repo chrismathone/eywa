@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronUp } from "@/components/icons/aywa-icon-compat";
 import { buildPeriodMatcher } from "@/features/classes/grid-slots";
 import { periodSoloLabel } from "@/features/timetable/lib/periods";
 import { SearchableSelect } from "@/components/ui/searchable-select";

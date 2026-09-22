@@ -127,11 +127,11 @@ async function computeFreshFromFile(file: File): Promise<{ error: string } | { d
   await wb.xlsx.load(await file.arrayBuffer());
   const parsed = parseEditSheet(wb);
   if (parsed.length === 0) {
-    return { error: "'수강편집' 시트를 찾을 수 없습니다 (eywa에서 내보낸 엑셀인지 확인)" };
+    return { error: "'수강편집' 시트를 찾을 수 없습니다 (aywa에서 내보낸 엑셀인지 확인)" };
   }
   const ctx = await loadContext();
   // stale-drift 보호(파일 경로) — 시트 경로가 `last_synced_at`을 쓰듯, 파일은 **워크북 생성 시각**을 쓴다.
-  // eywa 익스포터가 `wb.created`를 찍으므로 그 이후 시작된 수강은 이 파일이 알 수 없는 신규 →
+  // aywa 익스포터가 `wb.created`를 찍으므로 그 이후 시작된 수강은 이 파일이 알 수 없는 신규 →
   // 삭제 후보에서 제외한다. 옛 코드는 이 인자를 안 넘겨(보호 0) 오래된 파일을 다시 올리면 그 사이
   // 새로 만들어진 수강이 '시트에 없음' = 종료 대상이 됐다(적대 감사 F5).
   // 엑셀에서 재저장돼 created가 늦춰져도 **보호 범위가 넓어지는** 안전한 방향이라 폴백이 위험하지 않다.

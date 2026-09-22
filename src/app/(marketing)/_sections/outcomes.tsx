@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DAY_NUMBERS, ROI_FOOTNOTE, ROI_PAYOFF, ROI_STEPS } from "@/data/marketing";
 import { CountUp } from "../_motion/count-up";
 import { Reveal } from "../_motion/reveal";

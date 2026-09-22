@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, X } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, X } from "@/components/icons/aywa-icon-compat";
 
 // 데이터베이스(서식 저장소) 다이얼로그 공통 부품 — 업로드·새 문서·링크·분류 관리가 같은 껍데기를 쓴다.
 // (조건부 마운트 전제: 닫히면 언마운트돼 내부 state가 리셋된다 — 항상 마운트 다이얼로그의 #67 함정 회피.)

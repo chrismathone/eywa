@@ -1,4 +1,4 @@
-/* eslint-disable -- ijw-calander excelExport.ts 충실 이식(vendored). 로직 무변경 = 출력 동일이 목표라 스타일/any 룰 비적용. import만 eywa-로컬로 조정. */
+/* eslint-disable -- ijw-calander excelExport.ts 충실 이식(vendored). 로직 무변경 = 출력 동일이 목표라 스타일/any 룰 비적용. import만 aywa 로컬로 조정. */
 import type { TimetableClass, Teacher, UnifiedStudent } from './types';
 import { kstTimeOf, kstToday } from "@/lib/date-kst";
 import {

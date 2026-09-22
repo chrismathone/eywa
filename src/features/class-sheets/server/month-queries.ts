@@ -17,7 +17,12 @@ import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { dowKeyOf } from "../lib/week";
-import { monthDates, monthWeeks, normalizeMonth, activeDowsOf, type MonthWeek } from "../lib/month";
+import { normalizeMonth, activeDowsOf, rangeDates, rangeWeeks, type MonthWeek } from "../lib/month";
+// 세션 기간(0189a) — 해석은 `resolvePeriodWindow` 한 곳(폴백 분기를 여기 두지 않는다).
+import { getPeriodDefsForYears } from "@/features/periods/server/queries";
+import { resolvePeriodWindow, type PeriodDef } from "@/features/periods/resolve";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
 import {
   monthFillStats,
   slotKey,
@@ -28,12 +33,15 @@ import {
 import type { MonthGoalMap } from "../lib/goal-match";
 import {
   clampEcsMonthView,
+  normalizeEcsMonthPeriod,
   readEcsMonthDisplay,
+  readEcsMonthPeriod,
   readEcsMonthView,
   type EcsMonthDisplay,
+  type EcsMonthPeriod,
   type EcsMonthView,
 } from "../view-prefs";
-import type { MpCell, MpColKind } from "../lib/month-plan";
+import { mpFooterDate, type MpCell, type MpColKind } from "../lib/month-plan";
 import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
 import type { PlanLineDTO } from "./actions";
@@ -58,11 +66,26 @@ export type ClassSheetMonthData = {
   teacherId: string | null;
   /** 담임 표시 이름 — 상단 반 표기 오른쪽(`SheetClassPicker teacherName`). 담임 없음·조회 실패면 null. */
   teacherName: string | null;
+  /** 라벨월 `YYYY-MM` — 세션으로 봐도 **라벨**은 달이다(9월 세션 = `2026-09`). 목표·메모·꼬리말의 키. */
   month: string;
   monthLabel: string;
   today: string;
-  /** 이 달에 배정이 있는 요일만(열의 정체) — 없으면 빈 배열. */
+  /**
+   * 이 화면이 그린 **기간** — 달력월 또는 세션 창(원장 2026-09-21 *"세션으로 뷰가 보일 수 있게 월/세션 전환"*).
+   * `weeks`·`slotsByDate`·계획 줄·MP 칸·휴일이 전부 이 창으로 잘린다(목표·메모는 라벨월 그대로).
+   * ⚠️ `mode`는 고른 축, `kind`는 실제로 그린 창이다 — 세션을 골랐어도 그 달 세션이 정의돼 있지 않으면
+   *    `kind: "month"`(달력월 폴백)이고, 화면은 그 사실을 말한다(조용히 달력월로 보여 주지 않는다).
+   */
+  period: { mode: EcsMonthPeriod; kind: "session" | "month"; start: string; end: string };
+  /**
+   * 오늘이 속한 라벨월 — '이번 달/이번 세션으로' 링크와 과거·미래 배지의 기준.
+   * 🔑 세션 축이면 **오늘이 든 세션**의 라벨이다(11/2는 10월 세션 — 달력으로 11월이라 부르면 오늘이 없는
+   *    11월 세션(11/3~)을 연다).
+   */
+  currentMonth: string;
+  /** 이 기간에 배정이 있는 요일만(열의 정체) — 없으면 빈 배열. */
   dows: DowKey[];
+  /** 기간을 덮는 주(월요일 시작) — 각 주는 **기간 안의 날짜만** 담는다(`rangeWeeks`). */
   weeks: MonthWeek[];
   slotsByDate: Record<string, MonthSlot[]>;
   /** `YYYY-MM-DD|HH:MM` → 그 교시의 계획 줄(line_no 순). */
@@ -123,21 +146,121 @@ export type MonthMemoStatus = "ok" | "missing-table" | "failed";
 
 export type MonthResult = { ok: true; data: ClassSheetMonthData } | { ok: false; error: string };
 
-export async function getClassSheetMonth(classId: string, monthRaw: string | null): Promise<MonthResult> {
-  const gate = await requireEcsClassAccess(classId);
+/**
+ * 내 보기 설정(`users.ui_prefs`) — **기간 축을 고르려면 조회 범위를 정하기 전에** 알아야 해서 게이트와
+ * 나란히 먼저 읽는다(B4 — 게이트도 왕복이라 지연이 늘지 않는다). 자기 행만 읽는다.
+ * ⚠️ admin은 RLS 우회라 `tenant_id`를 함께 건다([[#104]]).
+ */
+async function loadMyUiPrefs(): Promise<unknown> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const { data } = await createAdminClient()
+    .from("users")
+    .select("ui_prefs")
+    .eq("id", user.id)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  return data?.ui_prefs ?? null;
+}
+
+export async function getClassSheetMonth(
+  classId: string,
+  monthRaw: string | null,
+  opts: {
+    /** 주소의 기간 축(`month`|`session`) — 이번 방문만 따른다. 없거나 모양이 아니면 계정 저장값. */
+    period?: unknown;
+    /** 주소의 "왔던 주"(주간 시트·반 목록에서 들어올 때) — 세션 축이면 이 주가 든 세션을 연다(아래). */
+    week?: unknown;
+  } = {},
+): Promise<MonthResult> {
+  const today = kstToday();
+  // 주소에 달이 없으면(또는 모양이 아니면) 아래에서 **오늘이 든 기간**으로 정한다 — 축을 알아야 정해진다.
+  const explicitMonth = monthRaw ? normalizeMonth(monthRaw, "") : "";
+  const yearOf = (d: string) => Number(d.slice(0, 4));
+  // ⚠️ 오늘 ±1년 밖의 주는 버린다 — 손으로 고친 주소(`week=9999-01-01`)가 그 해 세션 조회를 매번 새로 만들지 않게.
+  const weekRaw =
+    typeof opts.week === "string" && /^\d{4}-\d{2}-\d{2}$/.test(opts.week) ? mondayOf(opts.week) : null;
+  const fromWeek = weekRaw && Math.abs(yearOf(weekRaw) - yearOf(today)) <= 1 ? weekRaw : null;
+  // 세션 정의는 테넌트 캐시(B6)라 싸다. 후보 해 = 보는 달·오늘·왔던 주의 해 **와 그 전해**(1월에 12월 세션이
+  // 이어질 수 있다). ⚠️ 오늘 해를 빼면 다른 해를 볼 때 '오늘이 든 세션'을 못 찾아 배지·'이번 세션으로'가 틀어진다.
+  const years = [explicitMonth || kstMonth(), today, fromWeek ?? today].flatMap((d) => [yearOf(d) - 1, yearOf(d)]);
+  const [gate, uiPrefs, periodDefs] = await Promise.all([
+    requireEcsClassAccess(classId),
+    loadMyUiPrefs(),
+    getPeriodDefsForYears(years),
+  ]);
   if (!gate.ok) return { ok: false, error: gate.error };
   const access = gate.access;
 
-  const today = kstToday();
-  const month = normalizeMonth(monthRaw, kstMonth());
-  const { from, to } = monthRange(month);
   const admin = createAdminClient();
   // 🔴 계획(MP)은 **EiE 반에만** 있다(원장 2026-09-01) — 판정은 `english_track` 컬럼 하나고 게이트가
   //    이미 읽어 왔다. EiE가 아니면 조회 자체를 안 한다(쓸데없는 왕복 0 + 화면에 탭도 안 선다).
   const isEie = access.englishTrack === "eie";
 
+  /**
+   * 기간 축 — **EiE 반에서만** 세션을 쓴다(원장 2026-09-21). 인재원 영어의 달력·진도표는 월간 목표·메모가
+   * 달 단위라 창을 넓히면 목표 밖 날짜가 섞이므로 언제나 달력월이다.
+   * 🔴 창은 `resolvePeriodWindow` **한 곳**에서 정한다(반 예외 → 과목 기본 → 달력월 폴백) — 여기서 따로
+   *    폴백하지 않는다. 출석부 날짜축과 같은 함수·같은 행이다.
+   */
+  const periodMode: EcsMonthPeriod = isEie
+    ? (normalizeEcsMonthPeriod(opts.period) ?? readEcsMonthPeriod(uiPrefs))
+    : "month";
+  /**
+   * 그 날짜가 든 세션의 **라벨월** — 창을 정하는 `resolvePeriodWindow`로 **거꾸로 확인**한 것만 돌려준다.
+   * 🔑 이렇게 하는 이유: 반 예외 세션이 있으면 "날짜가 든 행"과 "그 라벨월이 실제로 여는 창"이 다를 수 있다
+   *    (과목 기본 10/1~11/2 · 반 예외 10/5~11/4에서 10/2 → 과목 기본의 10월을 찾았는데 창은 반 예외라 10/2가 없다).
+   *    같은 함수로 확인하면 "오늘이 든 세션"이라며 오늘이 없는 창을 여는 일이 없다. 반 예외를 먼저 본다.
+   */
+  const sessionLabelFor = (date: string): string | null => {
+    const hits = periodDefs
+      .filter((d: PeriodDef) => d.subjectKey === access.subject && d.startDate <= date && date <= d.endDate)
+      .filter((d) => d.classId === null || d.classId === classId)
+      .sort((a, b) => (a.classId === b.classId ? 0 : a.classId ? -1 : 1));
+    for (const d of hits) {
+      const label = `${d.labelYear}-${String(d.labelMonth).padStart(2, "0")}`;
+      const w = resolvePeriodWindow({ period: label, subjectKey: access.subject, classId, defs: periodDefs });
+      if (w.kind === "session" && w.start <= date && date <= w.end) return label;
+    }
+    return null;
+  };
+  const currentMonth = (periodMode === "session" ? sessionLabelFor(today) : null) ?? kstMonth();
+  /**
+   * 주간 시트·반 목록의 '달력' 링크는 `month=`를 **달력으로**(그 주 목요일의 달) 적어 보낸다 — 세션 축에선
+   * 그게 틀린다: 오늘(11/2)이 든 주는 목요일이 11월이라 **오늘이 없는 11월 세션(11/3~)**이 열리고, 3/6~4/2 세션의
+   * 3/30 주는 4월로 가서 그 주 월~목이 빈 칸이 된다(적대적 리뷰 2026-09-21). 그래서 세션 축이면 **그 주가 든 세션**을
+   * 연다 — 그 주에 오늘이 있으면 오늘, 없으면 목요일(주의 과반, `monthOfWeek`와 같은 결)이 든 세션.
+   * ⚠️ 못 찾으면(정의 없음) 주소의 달 그대로 — 거기서 다시 달력월로 폴백한다.
+   */
+  // 후보 순서: 오늘(그 주 안일 때만) → 목요일. 세션 사이 빈 날에 오늘이 걸려도 목요일로 한 번 더 찾는다.
+  const weekAnchors = fromWeek
+    ? [
+        ...(today >= fromWeek && today <= shiftDays(fromWeek, 6) ? [today] : []),
+        shiftDays(fromWeek, 3),
+      ]
+    : [];
+  const weekMonth =
+    periodMode === "session"
+      ? (weekAnchors.map(sessionLabelFor).find((l): l is string => Boolean(l)) ?? "")
+      : "";
+  const month = weekMonth || explicitMonth || currentMonth;
+  const monthBounds = monthRange(month);
+  const window = resolvePeriodWindow({
+    period: month,
+    subjectKey: access.subject,
+    classId,
+    defs: periodDefs,
+    mode: periodMode,
+    todayIso: today,
+  });
+  // 그리는 기간. ⚠️ 목표·메모·꼬리말은 **라벨월**(`monthBounds.from`)이 키다 — 창으로 바꾸면 세션이
+  //    달 중간에 시작하는 달(3/6~)에 목표·메모가 통째로 안 보인다.
+  const from = window.start || monthBounds.from;
+  const to = window.end || monthBounds.to;
+  const footerDate = mpFooterDate(month);
+
   // 독립 조회는 병렬(B4). 계획 줄만 페이지네이션 — 20줄 × 40교시면 이론상 1,000행에 닿는다(B2).
-  const [scheduleRes, lineRows, goalRes, settings, prefsRes, mpRes, teacherRes, memoRes, roomsRes, labelMap, plannedRes] =
+  const [scheduleRes, lineRows, goalRes, settings, mpRes, teacherRes, memoRes, roomsRes, labelMap, plannedRes] =
     await Promise.all([
     admin
       .from("class_schedules")
@@ -172,19 +295,20 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       .eq("tenant_id", access.tenantId)
       .eq("class_id", classId)
       .eq("scope", "month")
-      .eq("period_start", from),
+      .eq("period_start", monthBounds.from),
     getTenantSettings(),
-    admin.from("users").select("ui_prefs").eq("id", access.user.id).eq("tenant_id", access.tenantId).maybeSingle(),
     // 0239a. 한 반 한 달이 수업일 ~13일 × 칸 5종이라 페이지네이션 불요(B2 상한 근처에도 못 간다).
     // ⚠️ admin은 RLS 우회라 `tenant_id` 필터가 필수다([[#104]]).
+    // 🔑 범위 = 기간 ∪ 라벨월 — 꼬리말은 라벨월 1일에 앉는데(0240a) 세션이 그 날보다 늦게 시작할 수 있다
+    //    (11월 세션 = 11/3~). 아래에서 기간 밖 칸은 버리고 이 달 꼬리말만 남긴다.
     isEie
       ? admin
           .from("class_month_plan_cells")
           .select("plan_date, col_kind, body")
           .eq("tenant_id", access.tenantId)
           .eq("class_id", classId)
-          .gte("plan_date", from)
-          .lte("plan_date", to)
+          .gte("plan_date", from < monthBounds.from ? from : monthBounds.from)
+          .lte("plan_date", to > monthBounds.to ? to : monthBounds.to)
       : Promise.resolve(null),
     // 담임 이름 — 상단 반 표기 오른쪽에 이름만(원장 2026-09-02 *"ecs도 마찬가지"*). 담임 없는 반은 조회도 없다.
     access.teacherId
@@ -201,9 +325,9 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       .select("body")
       .eq("tenant_id", access.tenantId)
       .eq("class_id", classId)
-      .eq("month", from)
+      .eq("month", monthBounds.from)
       .maybeSingle(),
-    // 등록 강의실(id→이름) — 라벨을 eywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
+    // 등록 강의실(id→이름) — 라벨을 aywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
     admin.from("classrooms").select("id, name").eq("tenant_id", access.tenantId),
     // 강사 라벨 해석기(닉네임 `Song` → 표시 이름 `송지혜`) — 주간 시트·시간표 3뷰와 **같은 함수**.
     getTeacherLabelMap({ supabase: admin, tenantId: access.tenantId }),
@@ -252,11 +376,16 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       : "failed";
   const memoBody = typeof memoRes?.data?.body === "string" ? memoRes.data.body : "";
 
-  const mpCells: MpCell[] = (mpRes?.data ?? []).map((r) => ({
-    planDate: String(r.plan_date).slice(0, 10),
-    colKind: String(r.col_kind) as MpColKind,
-    body: typeof r.body === "string" ? r.body : "",
-  }));
+  const mpCells: MpCell[] = (mpRes?.data ?? [])
+    .map((r) => ({
+      planDate: String(r.plan_date).slice(0, 10),
+      colKind: String(r.col_kind) as MpColKind,
+      body: typeof r.body === "string" ? r.body : "",
+    }))
+    // 기간 밖 칸은 이 문서에 섞지 않는다 — 꼬리말만 예외로 **이 라벨월의 것**을 남긴다(옆 달 꼬리말은 버린다).
+    .filter((c) =>
+      c.colKind === "footer" ? c.planDate === footerDate : c.planDate >= from && c.planDate <= to,
+    );
 
   const roomRows = (roomsRes.data ?? []) as { id: string; name: string }[];
   const roomNameById = new Map(roomRows.map((r) => [r.id, r.name]));
@@ -314,7 +443,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
     ),
   }));
 
-  const dates = monthDates(month);
+  const dates = rangeDates(from, to);
   const slotsByDate = slotsByDateOf(dates, scheduleRows);
   const seatByKey = new Map<string, boolean>();
   for (const [date, slots] of Object.entries(slotsByDate)) {
@@ -379,7 +508,7 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
 
   const hasLines = (date: string, slotStart: string) => (linesBySlot[slotKey(date, slotStart)]?.length ?? 0) > 0;
 
-  // 이 달 범위로 좁힌 휴일 — 전 연도를 클라로 내려보낼 이유가 없다(설정엔 2027년까지 들어 있다).
+  // 이 기간으로 좁힌 휴일 — 전 연도를 클라로 내려보낼 이유가 없다(설정엔 2027년까지 들어 있다).
   const holidays: Record<string, string> = {};
   for (const [date, name] of Object.entries(buildHolidayMap(settings.operations.holidays))) {
     if (date >= from && date <= to) holidays[date] = name;
@@ -397,8 +526,10 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       month,
       monthLabel: monthLabel(month),
       today,
+      period: { mode: periodMode, kind: window.kind, start: from, end: to },
+      currentMonth,
       dows: activeDowsOf(Object.keys(slotsByDate)),
-      weeks: monthWeeks(month),
+      weeks: rangeWeeks(from, to),
       slotsByDate,
       linesBySlot,
       plannedBySlot: plannedRes.byCell,
@@ -411,11 +542,11 @@ export async function getClassSheetMonth(classId: string, monthRaw: string | nul
       holidays,
       // 🔴 계정에 저장된 보기가 `mp`인데 인재원 영어 반을 열면 **달력으로 떨어뜨린다** — 저장값을
       //    그대로 믿으면 없는 보기가 빈 화면으로 선다(주소 `?view=mp`도 page.tsx에서 같은 함수를 탄다).
-      view: clampEcsMonthView(readEcsMonthView(prefsRes.data?.ui_prefs), isEie),
+      view: clampEcsMonthView(readEcsMonthView(uiPrefs), isEie),
       display: {
-        cal: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "cal"),
-        rail: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "rail"),
-        mp: readEcsMonthDisplay(prefsRes.data?.ui_prefs, "mp"),
+        cal: readEcsMonthDisplay(uiPrefs, "cal"),
+        rail: readEcsMonthDisplay(uiPrefs, "rail"),
+        mp: readEcsMonthDisplay(uiPrefs, "mp"),
       },
       isEie,
       mp: { cells: mpCells, status: mpStatus },

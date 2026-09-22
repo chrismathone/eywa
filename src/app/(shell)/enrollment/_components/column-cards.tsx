@@ -25,7 +25,7 @@ import {
   type BoardStageKey,
   type CardMark,
 } from "@/features/enrollment/board-stages";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -375,7 +375,7 @@ function ConsultationCard({
  *
  * 🎙 **녹음 = 마이크 아이콘 하나**(원장 지시는 "녹음기 이모지"였다). 이모지 대신 디자인 시스템의
  *    `mic` 글리프를 쓴다 — 아이콘 자리에 이모지를 넣는 것은 전역 가드가 막는 규칙이라
- *    (`eywa-icon-mapping.test.ts`) 이모지를 넣으면 다음 사람이 다시 걷어낸다. 지시의 핵심인
+ *    (`aywa-icon-mapping.test.ts`) 이모지를 넣으면 다음 사람이 다시 걷어낸다. 지시의 핵심인
  *    **"녹음기 + AI 두 개를 달지 말 것"**은 그대로다 — 녹음이 있으면 이 표식 하나뿐이다.
  *
  * ⚠️ 어느 모양이든 **24px(오른쪽 층의 위 칸) 안에** 들어가야 한다 — 넘치면 그 카드만 키가 커져 "카드 크기

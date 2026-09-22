@@ -12,7 +12,7 @@
  * 달력 트리거였다(라벨을 `PeriodNav`가 가져가면서 달력만 여는 버튼으로 분리됐다).
  */
 import { useRef } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CONTROL_SQUARE } from "@/components/ui/control-scale";
 
 export function DatePickerButton({

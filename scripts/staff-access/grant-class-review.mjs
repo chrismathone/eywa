@@ -1,7 +1,8 @@
 // 수업 평가 체크리스트(class_review) 접근 개방 — 테스트 단계 명단 관리(원장 지시).
-//   node scripts/staff-access/grant-class-review.mjs            # 드라이런(현재↔목표 비교만)
-//   node scripts/staff-access/grant-class-review.mjs --apply     # 적용
-//   node scripts/staff-access/grant-class-review.mjs --revoke --apply  # 아래 명단 전부 회수(코드 기본값=전원 차단으로 복귀)
+//   node scripts/staff-access/grant-class-review.mjs --tenant cs            # 드라이런(현재↔목표 비교만)
+//   node scripts/staff-access/grant-class-review.mjs --tenant cs --apply     # 적용
+//   node scripts/staff-access/grant-class-review.mjs --tenant cs --revoke --apply  # 아래 명단 전부 회수(코드 기본값=전원 차단으로 복귀)
+// 🔴 --tenant 필수(2026-09-22) — 지점이 둘 이상이라 '첫 설정 행'을 집으면 남의 지점 권한을 고친다(_tenant-arg.mjs).
 //
 // 코드 기본값(permissions.ts MENU_ACCESS.class_review)은 **전 역할 none** — 테스트 단계라 일부러 닫아 뒀다.
 // 그래서 개방은 전부 tenant_settings 데이터로만 한다(배포 불필요):
@@ -17,10 +18,12 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tenantSlugArg, resolveTenantSettingsRow } from "./_tenant-arg.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APPLY = process.argv.includes("--apply");
 const REVOKE = process.argv.includes("--revoke");
+const TENANT_SLUG = tenantSlugArg();
 const MENU = "class_review";
 
 /** 개인 예외 대상 — 이름은 감사로그·출력용, 판정은 id. */
@@ -67,7 +70,7 @@ const H = {
   "Content-Type": "application/json",
 };
 
-const [ts] = await (await fetch(`${SB}/rest/v1/tenant_settings?select=tenant_id,data`, { headers: H })).json();
+const { row: ts } = await resolveTenantSettingsRow(SB, H, TENANT_SLUG);
 const perms = ts.data.permissions ?? {};
 
 // class_review 행만 걷어내고 다시 쌓는다 — 다른 메뉴 override는 절대 건드리지 않는다.

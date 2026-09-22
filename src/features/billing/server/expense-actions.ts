@@ -342,7 +342,7 @@ export async function deleteExpense(_prev: ExpenseState, formData: FormData): Pr
 
 // 결재 단계 토글(작성/원장/대표/집행자) — ijw approvalChecks 패리티. 기존 jsonb를 읽어 merge 후 갱신하고,
 // approval_status는 (원장 && 대표) 결재 시 approved로 파생(문서 결재완료 배지·요약 일관). 권한은 페이지의
-// requireAccess("billing")가 이미 게이트(eywa엔 expenseRole 개념 없음 → billing 쓰기 가능자면 토글 가능).
+// requireAccess("billing")가 이미 게이트(aywa엔 expenseRole 개념 없음 → billing 쓰기 가능자면 토글 가능).
 export async function toggleExpenseApproval(
   _prev: ExpenseState,
   formData: FormData,

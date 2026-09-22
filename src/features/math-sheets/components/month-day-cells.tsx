@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CELL_STATE_LABEL, type MathCellState } from "../lib/cell-state";
 import { TEST_KIND_LABEL, TEST_KIND_TITLE, testCountLabel, testScoresOf } from "../lib/test-score";
 import type { MathSheetMonthData, MathStudentRow } from "../server/month-queries";

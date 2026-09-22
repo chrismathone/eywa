@@ -26,7 +26,7 @@ describe("isReportTrackedSubject", () => {
     expect(isReportTrackedSubject(" math ", [" math "])).toBe(true);
   });
 
-  it("여러 과목을 켜면 둘 다 센다(영어를 eywa로 옮길 때의 경로)", () => {
+  it("여러 과목을 켜면 둘 다 센다(영어를 aywa로 옮길 때의 경로)", () => {
     expect(isReportTrackedSubject("english", ["math", "english"])).toBe(true);
   });
 });

@@ -8,15 +8,16 @@ import { BADGE_BASE, BADGE_TONE, notMineCell } from "@/features/attendance/cell-
 import { countMarks } from "@/features/attendance/grid/totals";
 import { rowKey } from "@/features/attendance/grid/model";
 import { formatMoney } from "@/features/attendance/money-format";
+import { salaryBilledCap } from "@/features/attendance/salary-rates";
 import { formatUnitsWithSuffix, type AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
-import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { tipProps } from "@/components/hover-tip/tip";
 import { placeLifecycleBadges } from "@/features/attendance/badge-placement";
 import { attendanceNameTone } from "@/features/attendance/name-tone";
 import { VIVID_STUDENT_TONE_STICKY } from "@/features/timetable/lib/student-tone";
 import { kstToday } from "@/lib/date-kst";
 import { AttendanceCell } from "./attendance-cell";
-import { RowLessonCountCell, RowSessionDiffCell, RowTotalCells } from "./live-totals";
+import { RowActualAmountCell, RowActualSalaryCell, RowLessonCountCell, RowSessionDiffCell } from "./live-totals";
 
 /**
  * 출석부 매트릭스의 학생 행 하나 — 반별 보기와 강사 전체 보기가 **같은 행 컴포넌트**를 쓴다.
@@ -29,6 +30,9 @@ export function MatrixRow({
   days,
   holidays,
   classBilled,
+  confirmedPrices,
+  showActualAmount = false,
+  actualSalaryRate,
   termSessions,
   unitSuffix = null,
   noTransferBadge = false,
@@ -37,10 +41,13 @@ export function MatrixRow({
   tierMissing,
   tierLabel,
   noLessonZero = false,
+  noInvoice = null,
   lang = "ko",
 }: {
   /** 화면 언어 — 표가 내려준다(서버 컴포넌트라 훅을 못 쓴다). 안 주면 한국어. */
   lang?: SheetLang;
+  showActualAmount?: boolean;
+  actualSalaryRate?: number | null;
   student: MatrixStudent;
   /** 이 행이 속한 반 — 셀 저장 대상. 강사 전체 보기에선 행마다 다르다. */
   classId: string;
@@ -51,6 +58,7 @@ export function MatrixRow({
   holidays: Record<string, string>;
   /** undefined = 열 없음, null = 미확정, 0 = 매칭된 0원. */
   classBilled?: number | null;
+  confirmedPrices?: readonly AttendanceConfirmedPrice[] | null;
   /**
    * 회차 확정에서 **확정한 시수**(등록 차수) — undefined면 열 자체가 없다, null이면 미확정.
    * 원장 2026-09-17 *"그 옆에 등록 차수 열 추가하고. 그걸 회차 확정에서 확정된 시수로 보여줄것"*.
@@ -74,6 +82,12 @@ export function MatrixRow({
    * 수업 차수도 `—` 대신 0으로 적고, 등록 차수 0은 지어낸 값이라 차이 칸이 거기서 뺀 숫자로 신호를 내지 않는다.
    */
   noLessonZero?: boolean;
+  /**
+   * 그 달 **청구서가 없거나(`none`) 취소된(`void`)** 학생의 줄(원장 2026-09-18 선택 = `—`) — 회차 행이 없어도 만들 곳이 없어
+   * 청구액·등록 차수·차이확인을 '미확정' 대신 `—`로 적고 이유는 마우스 오버 카드에. 청구서가 있는데 회차 행만 없으면 null(종전
+   * '미확정' — 회차 확정에서 만들 수 있다). 판정은 표가 한다(`noInvoiceRows`). ⚠️ 수업날 없는 줄의 0이 이긴다(값이 null이 아니라 안 탄다).
+   */
+  noInvoice?: AttendanceInvoiceGap | null;
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
@@ -160,7 +174,7 @@ export function MatrixRow({
       </td>
       {/* 학교·학년 = 표시 표준 압축("경명여중2", school-grade.ts) — 두 열로 나누던 것을 합쳐 날짜 칸에
           폭을 돌려준다(원장 2026-08-10). 원문(학교·학년 따로)은 title에 남긴다. */}
-      <td className="border-line text-foreground border-b border-r px-1 py-1 text-xs font-bold">
+      <td data-att-column="school" className="border-line text-foreground border-b border-r px-1 py-1 text-xs font-bold">
         <span
           className="block truncate"
           title={[student.school, student.grade].filter(Boolean).join(" · ") || undefined}
@@ -179,13 +193,27 @@ export function MatrixRow({
       </td>
       {/* 청구액 = 크림 · 수업/등록 차수 = 연파랑(원장 2026-09-18 색 지정, `--att-col-*`).
           🔴 행 hover(`hover:bg-bg-soft/40`)는 이 칸들에선 안 비친다 — 열 색이 이기는 게 맞다(열을 보라고 칠한 색이다). */}
-      {classBilled !== undefined ? (
-        <td className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
-          {classBilled === null ? (
-            <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
-          ) : formatMoney(classBilled)}
+      {/* 값이 없는 칸 = '미확정'(청구서는 있어 회차 확정에서 만들 수 있다) 또는 `—`(청구서가 없거나 취소 — 만들 곳이 없다, 2026-09-18). */}
+      {confirmedPrices !== undefined ? (
+        <td data-att-column="unitPrice" className="border-line num border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+          {confirmedPrices?.length ? confirmedPrices.map((price, index) => (
+            <span
+              key={index}
+              className={`block ${price.daysBasis ? "text-danger underline decoration-dotted underline-offset-4" : ""}`}
+              title={sheetT(lang, price.daysBasis ? "att.row.daysBasisWhat" : "att.col.unitPriceTitle")}
+            >
+              {sheetTf(lang, price.monthly ? "att.row.monthlyPrice" : "att.row.confirmedPrice", { price: formatMoney(price.unitPrice) })}
+            </span>
+          )) : <UnconfirmedMark noInvoice={noInvoice} lang={lang} />}
         </td>
       ) : null}
+      {classBilled !== undefined ? (
+        <td data-att-column="classBilled" className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+          {classBilled === null ? <UnconfirmedMark noInvoice={noInvoice} lang={lang} /> : formatMoney(classBilled)}
+        </td>
+      ) : null}
+      {showActualAmount ? <RowActualAmountCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} lang={lang} /> : null}
+      {actualSalaryRate !== undefined ? <RowActualSalaryCell row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} prices={confirmedPrices} rate={actualSalaryRate} billed={salaryBilledCap(classBilled, termSessions)} lang={lang} /> : null}
       {/* 수업 차수(출석부에서 센 시수) — 청구액 바로 옆(원장 2026-09-17). */}
       <RowLessonCountCell
         row={rowKey(classId, student.id)}
@@ -197,9 +225,11 @@ export function MatrixRow({
           🔴 옛 **일수 기준** 확정은 단위가 달라(시수가 아니라 출석 일수) 회차 확정 화면이 붉게 칠하는 값이다
              (원장 2026-09-16). 여기서도 점선 밑줄 + 마우스 오버 카드로 그 사실을 적는다 — 감추지 않는다. */}
       {termSessions !== undefined ? (
-        <td className="border-line num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+        <td data-att-column="termSessions" className="border-line num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
           {termSessions === null ? (
-            <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>
+            <UnconfirmedMark noInvoice={noInvoice} lang={lang} />
+          ) : termSessions.allocationPending ? (
+            <span className="text-text-dim" title={sheetT(lang, "att.row.allocationPendingTip")}>{sheetT(lang, "att.row.allocationPending")}</span>
           ) : termSessions.daysBasis ? (
             <span
               className="text-danger cursor-help underline decoration-dotted underline-offset-4"
@@ -212,7 +242,12 @@ export function MatrixRow({
               <span className="sr-only"> · {sheetT(lang, "att.row.daysBasis")}</span>
             </span>
           ) : (
-            formatUnitsWithSuffix(termSessions.units, unitSuffix)
+            <span title={termSessions.classUnits !== undefined ? sheetTf(lang, "att.row.teacherShare", {
+              total: formatUnitsWithSuffix(termSessions.classUnits, unitSuffix),
+              own: formatUnitsWithSuffix(termSessions.units, unitSuffix),
+            }) : undefined}>
+              {formatUnitsWithSuffix(termSessions.units, unitSuffix)}
+            </span>
           )}
         </td>
       ) : null}
@@ -226,6 +261,7 @@ export function MatrixRow({
           fallback={countMarks(marks, units)}
           term={termSessions}
           termSynthetic={noLessonZero}
+          noInvoice={noInvoice}
           suffix={unitSuffix}
           lang={lang}
         />
@@ -233,7 +269,7 @@ export function MatrixRow({
       {days.map((d) => {
         // 그 달에 없는 날(placeholder) — 빈 칸(입력 불가). 폭은 다른 칸과 동일(min-w)로 고정.
         if (d.placeholder) {
-          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[28px] border-b border-r" aria-hidden />;
+          return <td key={d.date} className="border-line bg-bg-soft/20 min-w-[22px] border-b border-r" aria-hidden />;
         }
         const holiday = holidays[d.date];
         // 그 날 이 반 소속이 아니었나 — 8월 5일에 그만둔 학생의 나머지 26칸을 "수업하는 날"로
@@ -257,7 +293,7 @@ export function MatrixRow({
         // 배경(음영·틴트)은 셀을 꽉 채우는 AttendanceCell 버튼이 그린다 — td는 relative 무대만
         // 제공한다(고정 크기 칩에 배경을 주면 셀을 못 채운다, gotcha #66).
         return (
-          <td key={d.date} className="border-line relative min-w-[28px] border-b border-r p-0 text-center align-middle">
+          <td key={d.date} className="border-line relative min-w-[22px] border-b border-r p-0 text-center align-middle">
             <AttendanceCell
               studentId={student.id}
               classId={classId}
@@ -320,8 +356,23 @@ export function MatrixRow({
           </td>
         );
       })}
-      {/* 시수·출석률은 **입력을 즉시 따라간다**(클라 집계) — 서버 값은 첫 렌더 폴백. */}
-      <RowTotalCells row={rowKey(classId, student.id)} fallback={countMarks(marks, units)} />
     </tr>
+  );
+}
+
+/**
+ * 청구액·등록 차수 칸의 **값 없음** 표기 — 청구서가 있으면 '미확정'(회차 확정에서 확정할 수 있다), 없거나 취소됐으면 `—` + 이유 카드
+ * (원장 2026-09-18 선택). 두 칸이 같은 조각을 써야 한 줄에서 한 칸은 '미확정', 한 칸은 `—`가 되지 않는다.
+ * 🔴 문구는 전부 사전(`att.row.*`) — 이 파일엔 한글 리터럴이 없다(`name-wiring` 가드).
+ */
+function UnconfirmedMark({ noInvoice, lang }: { noInvoice: AttendanceInvoiceGap | null; lang: SheetLang }) {
+  if (!noInvoice) return <span className="text-text-dim">{sheetT(lang, "att.row.billingUnconfirmed")}</span>;
+  return (
+    <span
+      className="text-text-dim cursor-help"
+      {...tipProps(sheetT(lang, noInvoice === "void" ? "att.row.invoiceVoidTip" : "att.row.noInvoiceTip"))}
+    >
+      {sheetT(lang, "att.row.noInvoice")}
+    </span>
   );
 }

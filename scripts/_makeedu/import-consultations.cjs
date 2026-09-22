@@ -3,7 +3,7 @@
  *    저장한다(상담 본문 누락 + No≠counselSeq). 상담 동기화는 **sync-consultations.cjs**(counselSeq + 상세 본문)를 쓸 것.
  *    (참고용으로 남김 — 재실행 금지: 내용을 제목으로 덮어쓰고 makeedu_id가 어긋난다.)
  *
- * scripts/_makeedu/import-consultations.cjs — makeedu 상담내역(재원생) → eywa `student_consultations` (makeedu_id 멱등, 0057a).
+ * scripts/_makeedu/import-consultations.cjs — makeedu 상담내역(재원생) → aywa `student_consultations` (makeedu_id 멱등, 0057a).
  * student_id(NN) 필수 → 학생 매칭(makeedu_id 임포트 후 (이름·학교·학년)) 실패 행은 스킵+로그. counselor=users 매칭.
  * 입력: $MAKEEDU_OUT/consultations.json (전체 이력 5000 — 412 재원생 매칭분만 적재).
  *   node --env-file=.env.local scripts/_makeedu/import-consultations.cjs [--apply]

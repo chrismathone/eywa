@@ -14,7 +14,7 @@ import {
 } from "@/features/documents/categories";
 import { DocumentDetailClient } from "./_components/document-detail-client";
 
-export const metadata = { title: "문서 상세 — eywa" };
+export const metadata = { title: "문서 상세 — aywa" };
 
 export default async function DocumentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireAccess("documents");

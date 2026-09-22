@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { Filter, RotateCcw } from "@/components/icons/eywa-icon-compat";
+import { Filter, RotateCcw } from "@/components/icons/aywa-icon-compat";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import {

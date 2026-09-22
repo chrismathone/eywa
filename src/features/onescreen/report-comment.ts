@@ -1,6 +1,6 @@
 /**
  * 선생님 원스크린 — AI 학부모 멘트 프롬프트(순수 함수).
- * edutrix aiActions(generateDailyNotice/P1·P2)의 환각방지 가드·few-shot을 이식해, eywa generateJSON
+ * edutrix aiActions(generateDailyNotice/P1·P2)의 환각방지 가드·few-shot을 이식해, aywa generateJSON
  * (Upstage Solar 기본, JSON mode)에 맞춰 `{comment}` 한 단락을 생성한다. 라이브 AI 호출 없음(빌더만).
  * 실 AI 호출은 server/actions.ts의 generateReportComment, 실패 시 report.ts buildSubjectReport로 폴백.
  * CLAUDE.md 원칙: 계산/프롬프트 조립은 순수 함수 + Vitest.

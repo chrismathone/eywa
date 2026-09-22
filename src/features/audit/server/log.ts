@@ -90,6 +90,7 @@ export const AUDIT_ACTIONS = {
   class_handover_schedule: "담임 인수인계 예약",
   class_handover_cancel: "담임 인수인계 취소",
   class_update: "반 정보 수정",
+  class_period_enrollments: "운영 기간에 맞춰 수강 종료일 조정",
   class_schedule_move: "반 배치 이동(시간표)",
   class_handover_apply: "담임 인수인계 적용",
   class_handover_bulk: "담임 일괄 인계(퇴사)",
@@ -374,14 +375,20 @@ export const AUDIT_ACTIONS = {
   refund_request_delete: "환불 요청서 삭제",
   textbook_notice_send: "교재 요청서 학부모 발송",
   session_terms_refresh: "청구 회차 계획 갱신",
+  // 출석부 줄인데 회차 행이 없던 학생 — 확정·배분을 저장하는 순간 행이 생긴다(`term-materialize.ts`, 원장 2026-09-18).
+  session_term_create: "청구 회차 행 생성(출석부 줄에 맞춤)",
   session_term_confirm_class: "청구 회차 반 일괄 확정",
   session_term_confirm: "청구 회차 확정",
   session_term_confirm_selected: "청구 회차 선택 일괄 확정",
   session_term_monthly_units: "월 정액 수업 시수 수정",
   session_term_receipt_allocate: "수납 청구액 반별 배분",
+  session_term_receipt_allocate_free: "수납 자유 배분(관리자)",
   session_term_unconfirm: "청구 회차 확정 해제",
+  session_term_delete: "청구 회차 삭제",
   session_term_unconfirm_class: "청구 회차 반 전체 확정 해제",
   session_term_carryover: "청구 회차 이월",
+  session_term_money_carryover: "청구 회차 금액 이월",
+  session_term_money_carryover_cancel: "청구 회차 금액 이월 취소",
   session_term_note: "청구 회차 메모 수정",
   // 🔴 급여는 **"무슨 일이 있었나"만** 남긴다 — 조정한 항목 이름조차 안 담는다("인센티브를 고쳤다"
   //    만으로도 그 사람 급여 사정이 읽힌다). metadata는 `{userId, period}`뿐이다.

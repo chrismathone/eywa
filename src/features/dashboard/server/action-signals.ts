@@ -272,7 +272,7 @@ async function unrecordedClassesSignal(
  * 오늘 미작성 보고서 신호.
  * 시작된 활성 수업의 기준일 유효 수강생을 학생×과목으로 만들고, 그 과목 반이 전부 결석인 학생은 제외한다.
  * lesson_reports에는 class_id가 없으므로 같은 과목 여러 반은 한 대상으로 합친다.
- * ⚠️ **eywa에 보고서를 쓰는 과목만** 센다(report-subjects.ts) — 영어는 ClassNote에 직접 쓰므로
+ * ⚠️ **aywa에 보고서를 쓰는 과목만** 센다(report-subjects.ts) — 영어는 ClassNote에 직접 쓰므로
  *    여기선 늘 0건이라, 세면 신호가 아니라 소음이 된다.
  */
 /**
@@ -498,7 +498,7 @@ async function unwrittenReportsSignal(
     //    **완전히 별도 경로**라, 여기를 빼먹으면 표에선 사라진 반을 대시보드·일일 브리핑이 계속 재촉해
     //    두 화면이 서로 다른 말을 한다(2026-07-22 재발 패턴).
     if (!klass?.subject || (klass.closed_at && klass.closed_at < today) || klass.report_optout) continue;
-    // 🔴 eywa에 보고서를 쓰지 않는 과목은 세지 않는다(원장 2026-08-29 "영어보고서는 운영실에서 제외").
+    // 🔴 aywa에 보고서를 쓰지 않는 과목은 세지 않는다(원장 2026-08-29 "영어보고서는 운영실에서 제외").
     //    영어 강사는 ClassNote에 직접 쓰므로 lesson_reports가 늘 0건 — 세면 매일 140명이 '미작성'으로
     //    잡혀 진짜 미작성(수학 32명)이 그 안에 묻힌다. 축은 학원설정(report.classnoteSubjects).
     if (!isReportTrackedSubject(klass.subject, trackedSubjects)) continue;

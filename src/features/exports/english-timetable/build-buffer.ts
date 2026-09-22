@@ -83,7 +83,7 @@ export async function buildEnglishTimetableBuffer(opts?: {
 
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "eywa";
+  wb.creator = "aywa";
   wb.created = new Date();
 
   // 강사뷰 모델 = 강사별 탭 + 통합 미니그리드 조회수식이 공유(같은 열/행 배치를 가리켜야 정합).

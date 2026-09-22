@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/sync-consultations-incremental.cjs — 재원생 상담 **증분** 동기화 (makeedu → eywa).
+ * scripts/_makeedu/sync-consultations-incremental.cjs — 재원생 상담 **증분** 동기화 (makeedu → aywa).
  *
  * 초기 대량은 엑셀 부트스트랩(import-consultations-excel.cjs, 반드시 --skip-same-day)이 담당하고,
  * 이 스크립트는 매 동기화마다 **최근 창(기본 7일)만** 목록을 걷어 신규 상담만 상세 fetch해 적재한다.
@@ -14,7 +14,7 @@
  *      같은날 행 전부 다른 seq → 신규(같은 날 2번째 상담) / 같은날 없음 → 신규
  *
  * 안전장치: 서킷브레이커(신규>200 abort, --allow-large 우회) · insert는 ON CONFLICT DO NOTHING(동시 실행
- * 레이스 무해, **DO UPDATE 금지** — eywa에서 수정한 상담을 재동기화가 덮지 않게 insert-only) ·
+ * 레이스 무해, **DO UPDATE 금지** — aywa에서 수정한 상담을 재동기화가 덮지 않게 insert-only) ·
  * 전체 데드라인 5분(Playwright 행 걸림이 워처를 블록하지 않게) · summary 포맷은 엑셀 임포터와 동일
  * (`제목\n\n본문`) — strict key 정합.
  *
@@ -181,9 +181,9 @@ function EXTRACT_DETAIL() {
              to_char(consulted_at at time zone 'Asia/Seoul', 'YYYY-MM-DD') as d, summary
       from student_consultations where tenant_id = ${tenantId}`;
     const knownSeq = new Set(existing.filter((e) => e.makeedu_id).map((e) => String(e.makeedu_id)));
-    // ⚠️ eywa가 makeedu로 역푸시한 예비상담(등록상담)의 counselSeq도 스킵 — 재원생 상담으로 되돌아오면 안 된다
+    // ⚠️ aywa가 makeedu로 역푸시한 예비상담(등록상담)의 counselSeq도 스킵 — 재원생 상담으로 되돌아오면 안 된다
     // (라운드트립 방지: push-consultations는 seq를 enrollment_consultations.makeedu_id에 기록. makeedu kind 분류에
-    //  의존하지 않는 결정적 가드). '[eywa 온라인 접수]' 제목 가드(아래 c2)와 2중 방어.
+    //  의존하지 않는 결정적 가드). '[aywa 온라인 접수]' 제목 가드(아래 c2)와 2중 방어.
     for (const e of await sql`
       select makeedu_id from enrollment_consultations
       where tenant_id = ${tenantId} and makeedu_id is not null`) {
@@ -256,7 +256,7 @@ function EXTRACT_DETAIL() {
     console.log(`목록: ${listRows.length}행 (${pagesWalked}페이지)`);
 
     // ── 행 분기 a~e ──
-    const stats = { list: listRows.length, beforeCutoff: 0, prospectKind: 0, prospectTemplate: 0, eywaOnline: 0, knownSeq: 0, noStudent: 0, unknownKind: 0 };
+    const stats = { list: listRows.length, beforeCutoff: 0, prospectKind: 0, prospectTemplate: 0, aywaOnline: 0, knownSeq: 0, noStudent: 0, unknownKind: 0 };
     const candidates = [];
     const noStudentSamples = [];
     for (const r of listRows) {
@@ -265,7 +265,8 @@ function EXTRACT_DETAIL() {
       if (/예비/.test(r.kind || "")) { stats.prospectKind++; continue; } // b — '예비' 포함만 스킵(퇴원 등 보존)
       if (r.kind && r.kind !== "재원생") stats.unknownKind++; // 미지 구분은 통과하되 보고
       if (/예비원생 상담/.test((r.title || "").slice(0, 30))) { stats.prospectTemplate++; continue; } // c
-      if (/^\[eywa 온라인 접수\]/.test((r.title || "").trimStart())) { stats.eywaOnline++; continue; } // c2 — eywa 역푸시 접수 라벨(재유입 차단)
+      // c2 — aywa 역푸시 접수 라벨(재유입 차단). 🔴 개명(2026-09-21) 전에 보낸 건은 makeedu에 '[eywa 온라인 접수]'로 남아 있다 — 둘 다 막는다.
+      if (/^\[[ae]ywa 온라인 접수\]/.test((r.title || "").trimStart())) { stats.aywaOnline++; continue; }
       if (knownSeq.has(String(r.seq))) { stats.knownSeq++; continue; } // d (등록상담 seq 포함 = 역푸시 예비상담도 스킵)
       const rec = { name: r.name, grade: L.gradeNorm(r.grade), schoolCore: schoolCore(r.school), parentPhoneD: phoneDigits(r.pphone) };
       const studentId = matchActive(rec) || matchAll(rec); // e

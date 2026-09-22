@@ -1,14 +1,14 @@
 /**
  * scripts/_oneoff/backfill-edutrix-report-class.mjs — **edutrix 이관 수업보고서에 반(class_id)을 되살린다.**
  *
- * 배경(2026-09-07): eywa의 `lesson_reports` 17,806건이 edutrix 이관분인데 **전건 `class_id`가 비어 있다**
+ * 배경(2026-09-07): aywa의 `lesson_reports` 17,806건이 edutrix 이관분인데 **전건 `class_id`가 비어 있다**
  * (이관이 학생·날짜·강사명만 가져왔다). 반이 없으면 그 보고서는 "누가 이 반을 가르쳤나"를 못 말해서
  * ① 월별 출석부 반 머리행의 담당자 라벨이 2026-07 이전엔 통째로 비고 ② `teacher-as-of`의 '그 달 보고서
  * 작성자' 추정 갈래가 근거 0이 되고 ③ MCS 지난 달 진도표가 빈다.
  *
  * 🔴 **원본에서 다시 읽는 길은 없다** — edutrix Supabase 프로젝트는 삭제됐다(2026-09-07 실측:
  *    `xihggqwpyekbszizxyoh.supabase.co`가 공개 DNS 8.8.8.8에서 NXDOMAIN). 원본 `reports.classes(name)`가
- *    있었지만 이제 못 읽는다. 그래서 **eywa 안의 사실(출결)로 역추적**하는 이 방법만 남았다.
+ *    있었지만 이제 못 읽는다. 그래서 **aywa 안의 사실(출결)로 역추적**하는 이 방법만 남았다.
  *
  * 규칙(보수적 — 애매하면 안 적는다):
  *   ① (학생, 보고서 날짜)로 그날의 **출결 행**을 찾는다. 출결은 반을 반드시 들고 있다.
@@ -22,7 +22,7 @@
  *      반이 비어 있는 동안엔 unit_key가 null이라 같은 날 몇 건이든 공존했는데, 반을 채우는 순간
  *      그 값이 반 id가 되어 **같은 칸끼리 부딪힌다**. 2026-09-07 실측: 드라이런은 통과했는데 --apply가
  *      500행 뒤 23505로 멈췄다([[#120]]이 경고한 "제약이 걸린 쓰기는 실제로 실행해 봐야 안다").
- *      부딪히는 짝은 둘 — 우리 후보끼리(같은 날 같은 학생 이관 보고서 2건) / 이미 있는 eywa 보고서.
+ *      부딪히는 짝은 둘 — 우리 후보끼리(같은 날 같은 학생 이관 보고서 2건) / 이미 있는 aywa 보고서.
  *
  * ⚠️ **되살릴 수 없는 구간이 있다** — 출결이 2026-02-02부터라 그 이전(2025-11~2026-01, 4,446건)은 대조할
  *    사실이 아예 없다. 원장 결정(2026-09-07) *"살릴 수 있는 부분부터"* · *"살릴 수 없는 부분은 그냥 'ㅡ'로
@@ -92,7 +92,7 @@ async function main() {
 
     /**
      * 규칙 ⑥ — 이미 찬 칸을 비켜 간다. 두 겹:
-     *   ① DB에 이미 있는 (학생, 날짜, 반) 보고서 — 이관분이든 eywa 것이든.
+     *   ① DB에 이미 있는 (학생, 날짜, 반) 보고서 — 이관분이든 aywa 것이든.
      *   ② 후보끼리 같은 칸을 노리는 경우 — 먼저 온 것(id 순)만 남긴다.
      * 🔴 여기서 안 거르면 --apply가 23505로 죽는다(드라이런만 보고 믿으면 안 되는 자리).
      */
@@ -174,7 +174,7 @@ async function main() {
       monthRows.map((r) => ({ 달: r.ym, 대상: r.target, 채움: byMonth.get(r.ym) ?? 0, 남김: r.target - (byMonth.get(r.ym) ?? 0) })),
     );
 
-    // 정합성 — 추론이 옳다면 (반, 달)마다 작성자가 한 명이어야 한다(eywa 자체 보고서에서 확인된 성질).
+    // 정합성 — 추론이 옳다면 (반, 달)마다 작성자가 한 명이어야 한다(aywa 자체 보고서에서 확인된 성질).
     const perClassMonth = new Map();
     for (const r of fillable) {
       if (!r.teacher_name) continue;
@@ -185,7 +185,7 @@ async function main() {
     const spread = new Map();
     for (const s of perClassMonth.values()) spread.set(s.size, (spread.get(s.size) ?? 0) + 1);
     console.log("\n-- 정합성: (반, 달)마다 보고서 작성자 수 --");
-    console.log("   (추론이 옳다면 대부분 1명이어야 한다 — eywa 자체 보고서가 그렇다)");
+    console.log("   (추론이 옳다면 대부분 1명이어야 한다 — aywa 자체 보고서가 그렇다)");
     console.table([...spread].sort((a, b) => a[0] - b[0]).map(([writers, n]) => ({ 작성자수: writers, "반·달": n })));
 
     if (VERBOSE) {

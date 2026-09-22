@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { isModuleEnabled } from "@/lib/modules";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
@@ -11,33 +12,12 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { isCurrentSlot } from "@/features/classes/schedule-preserve";
+// 운영 기간 압축은 반 정보 표시와 **같은 함수**(class-period.ts) — 폼과 반 정보가 다른 날짜를 말하지 않게.
+import { commonPeriod } from "@/features/classes/class-period";
 import { kstToday } from "@/lib/date-kst";
 import { ClassForm } from "../../_components/class-form";
 
-export const metadata = { title: "반 수정 — eywa" };
-
-/**
- * 슬롯들의 운영 기간 → 폼 한 쌍으로 압축.
- * ⚠️ 시작일·종료일 **둘 다** 갈릴 수 있고, 갈리면 **칸을 비운다**. 폼은 항상 `periodProvided=1`을
- *    보내므로 값을 채워 보내면 그 한 값이 전 교시에 적용된다 — 예전엔 시작일을 말없이 최솟값으로
- *    평탄화해, 7/3부터 시작한 교시가 3/1부터 있었던 것으로 소급됐다(타임머신 과거 주가 거짓이 된다).
- *    비워 보내면 서버(`preserveScheduleFields`)가 교시별 기존값을 그대로 보존한다.
- */
-function commonPeriod(slots: { validFrom: string | null; validTo: string | null }[]): {
-  validFrom: string | null;
-  validTo: string | null;
-  mixed: "from" | "to" | "both" | null;
-} {
-  const froms = [...new Set(slots.map((s) => s.validFrom ?? ""))];
-  const tos = [...new Set(slots.map((s) => s.validTo ?? ""))];
-  const fromMixed = froms.length > 1;
-  const toMixed = tos.length > 1;
-  return {
-    validFrom: fromMixed ? null : (froms[0] || null),
-    validTo: toMixed ? null : (tos[0] || null),
-    mixed: fromMixed && toMixed ? "both" : fromMixed ? "from" : toMixed ? "to" : null,
-  };
-}
+export const metadata = { title: "반 수정 — aywa" };
 
 export default async function EditClassPage({
   params,
@@ -122,6 +102,7 @@ export default async function EditClassPage({
         classroomOptions={classrooms}
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}
+        showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
       />
     </div>
   );

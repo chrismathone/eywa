@@ -9,7 +9,7 @@
 //  · `date` 지정 = 그 하루만(월간 달력에서 날짜를 눌렀을 때의 상세 패널)
 import { useEffect, useState } from "react";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { getMyPastReports, type PastReportRow } from "../server/history-actions";
 import { isShareExpired } from "../share-expiry";
 import { classnoteBadge } from "./report-card";

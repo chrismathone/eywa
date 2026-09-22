@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { createClient } from "@/lib/supabase/client";
 
 /**

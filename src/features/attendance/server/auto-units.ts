@@ -12,6 +12,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
+import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 import {
   autoUnitsKey,
   planAutoUnits,
@@ -30,6 +31,7 @@ type ScheduleRow = {
   valid_from: string;
   valid_to: string | null;
   slot_teacher_label: string | null;
+  lab_separate?: boolean;
 };
 
 /**
@@ -43,20 +45,22 @@ export async function resolveAutoUnits(
 ): Promise<Map<string, number>> {
   const valid = cells.filter((c) => !!c.classId && YMD.test(c.date));
   if (valid.length === 0) return new Map();
+  // 새 학원(일반판)은 자동 시수가 없다 — 새 칸은 기본값(1). 침산 프로필은 켜져 있어 종전과 같다(lesson-profile.ts).
+  if (!(await getLessonProfile(opts.tenantId)).autoUnits) return new Map();
   const classIds = [...new Set(valid.map((c) => c.classId))];
   const dates = [...new Set(valid.map((c) => c.date))].sort();
   const from = dates[0]!;
   const to = dates[dates.length - 1]!;
   try {
     const [classes, schedules] = await Promise.all([
-      fetchInChunks<{ id: string; subject: string | null; english_track: string | null }>(classIds, (chunk) => {
-        const q = client.from("classes").select("id, subject, english_track").in("id", chunk);
+      fetchInChunks<{ id: string; subject: string | null; english_track: string | null; class_name: string }>(classIds, (chunk) => {
+        const q = client.from("classes").select("id, subject, english_track, class_name").in("id", chunk);
         return opts.tenantId ? q.eq("tenant_id", opts.tenantId) : q;
       }),
       fetchAllPagedInChunks<ScheduleRow>(classIds, (chunk, f, t) => {
         const q = client
           .from("class_schedules")
-          .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label")
+          .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, lab_separate")
           .in("class_id", chunk)
           .lte("valid_from", to)
           .or(`valid_to.is.null,valid_to.gte.${from}`);
@@ -75,7 +79,7 @@ export async function resolveAutoUnits(
       list.push(toAutoUnitsSchedule(r));
       schedulesOf.set(r.class_id, list);
     }
-    return planAutoUnits(valid, subjectOf, schedulesOf, trackOf);
+    return planAutoUnits(valid, subjectOf, schedulesOf, trackOf, new Map(classes.map((c) => [c.id, c.class_name])));
   } catch (e) {
     console.error("[auto-units] 수업 길이 조회 실패 — 자동 시수 없이 저장합니다:", e);
     return new Map();

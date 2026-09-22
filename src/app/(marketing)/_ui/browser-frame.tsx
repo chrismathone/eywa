@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
-import { Minus, Square, X } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Minus, Square, X } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
  * BrowserFrame — 제품 화면을 담는 공통 프레임 (히어로·기능 목업 공용).
- * 맥 브라우저 크롬이 아니라 **eywa 플로팅 창 크롬**(실제 제품의 창 시스템)을 재현:
+ * 맥 브라우저 크롬이 아니라 **aywa 플로팅 창 크롬**(실제 제품의 창 시스템)을 재현:
  * 타이틀바(bg-soft) + 창 제목 + Minus/Square/X 컨트롤. "현재 제품 그대로"가 컨셉.
  */
 export function BrowserFrame({

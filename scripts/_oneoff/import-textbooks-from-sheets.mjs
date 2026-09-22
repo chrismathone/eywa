@@ -11,7 +11,7 @@
  * 🔴 **이름을 고치거나 합치지 않는다** — `그래머인사이드 3`·`그래머인사이드3`은 두 행으로 들어간다.
  *    비슷한 이름은 경고 목록으로만 뽑는다(병합은 사람이 화면에서 폐지→흡수로).
  * 🔴 **차수는 만들지 않는다**(`session_count = 0`) — 차수별 진도·과제는 사람이 적는다.
- * 🔴 테넌트 `injaewon`은 **프로덕션 실데이터**다 — 드라이런은 완전한 읽기 전용, `--apply`는 INSERT만.
+ * 🔴 테넌트 `cs`(침산, 옛 slug injaewon)는 **프로덕션 실데이터**다 — 드라이런은 완전한 읽기 전용, `--apply`는 INSERT만.
  * ⚠️ 0266a가 아직 안 걸려 있으면 `--apply`는 멈추고, 드라이런은 "이미 있는 행 = 0"으로 계획만 보여 준다([[#95]]).
  * ⚠️ `class_sheet_plan_lines`는 1,000행을 넘으므로 반드시 페이지네이션한다(PostgREST 조용한 절단, B2).
  *
@@ -19,7 +19,7 @@
  *   node scripts/_oneoff/import-textbooks-from-sheets.mjs                 # 드라이런
  *   node scripts/_oneoff/import-textbooks-from-sheets.mjs --min=5         # 5회 이상 쓰인 교재만
  *   node scripts/_oneoff/import-textbooks-from-sheets.mjs --apply         # 실제 INSERT
- *   옵션: --tenant=<slug> (기본 injaewon) · --min=N (기본 3)
+ *   옵션: --tenant=<slug> (기본 cs = 침산) · --min=N (기본 3)
  * env: NEXT_PUBLIC_SUPABASE_URL · SUPABASE_SERVICE_ROLE_KEY (.env.local 또는 --env-file)
  */
 import { readFileSync } from "node:fs";
@@ -30,7 +30,7 @@ import { aggregatePlanLines, planImport, SUBJECT } from "./import-textbooks-from
 const APPLY = process.argv.includes("--apply");
 const arg = (name, fallback) =>
   (process.argv.find((a) => a.startsWith(`--${name}=`)) ?? `--${name}=${fallback}`).slice(name.length + 3);
-const tenantSlug = arg("tenant", "injaewon");
+const tenantSlug = arg("tenant", "cs"); // 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 const MIN_COUNT = Math.max(1, Number(arg("min", "3")) || 3);
 
 const HERE = dirname(fileURLToPath(import.meta.url));

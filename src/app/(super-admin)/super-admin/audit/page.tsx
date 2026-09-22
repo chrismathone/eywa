@@ -4,7 +4,7 @@ import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";
 import { getAuditLogsPage } from "@/features/super-admin/server/audit";
 
-export const metadata = { title: "Super Admin · 감사 로그 — eywa" };
+export const metadata = { title: "Super Admin · 감사 로그 — aywa" };
 
 const PAGE_SIZE = 50;
 

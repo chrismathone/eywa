@@ -45,6 +45,8 @@ export type WeekGridRow = {
     teacherName?: string | null;
     /** 자리(LAB·JJ) 교시면 그 이름 — 사람이 아니라 방이라 화면이 다르게 그린다. */
     seat?: string | null;
+    /** 그 자리가 '따로 수업(*LAB)' 교시인가(0271a). */
+    labSeparate?: true;
   }[];
 };
 
@@ -67,6 +69,8 @@ export type PeriodCell = {
   room: string | null;
   /** 자리(LAB·JJ) 교시면 그 이름 — 담당 자리에 사람 이름 대신 방을 적는다. */
   seat: string | null;
+  /** 그 자리가 '따로 수업(*LAB)' 교시인가(0271a) — 칸이 `LAB` 대신 `*LAB`으로 선다. */
+  labSeparate?: true;
   /** 그 칸 수업의 실제 시각 `HH:MM` — 세로 병합이 '시간이 이어지나'를 본다. 종료 미상이면 null. */
   startTime: string;
   endTime: string | null;
@@ -157,6 +161,7 @@ export function buildSubjectPeriodGrid(
         subject: r.subject,
         room: s.room ?? null,
         seat: s.seat ?? null,
+        ...(s.labSeparate === true ? { labSeparate: true as const } : {}),
         startTime: hm5(s.startTime),
         // 종료를 안 실은 슬롯은 짝지은 교시의 끝으로(교시표에 없는 시각이면 모른다 = 잇지 않는다).
         endTime: s.endTime ? hm5(s.endTime) : pid ? (periodEnd.get(pid) ?? null) : null,

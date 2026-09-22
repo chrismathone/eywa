@@ -1,21 +1,34 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { MathProgressDashboard } from "@/features/math-progress-map/components/math-progress-dashboard";
 import { buildSampleProgress } from "@/features/math-progress-map/sample";
 import { canPreviewProgressMap } from "@/features/math-progress-map/server/access";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getStudentLearningMap } from "@/features/math-progress-map/server/learning-map-query";
+import { learningSheetHref } from "@/features/math-progress-map/learning-map";
 
-export const metadata: Metadata = { title: "수학 학습 진도맵 — eywa" };
+export const metadata: Metadata = { title: "수학 학습 진도맵 — aywa" };
 
-/**
- * 수학 학습 진도맵(시안) — **숨은 기능**(원장 2026-09-14). 공개 범위는 2026-09-16에 **관리자 이상**으로 넓혔다
- * (*"진도맵 시안을 모든 관리자이상에게 공개"* — 그전엔 계정 하나). 사이드바·메뉴·팰릿에 없고, MCS 랜딩 머리의 링크와 직접 주소로만 열린다.
- * 게이트 둘: ① 수학 강사 시트 권한(`mcs`) ② 공개 범위(`canPreviewProgressMap`, super_admin 통과) — 밖은 404.
- * 데이터는 아직 **샘플**(김민준, 2026-09-16 기준)이다 — 실데이터 어댑터는 후속.
- */
-export default async function ProgressMapPage() {
+/** Real maps share the MCS class gate and roster. The unbound design preview keeps its admin gate. */
+export default async function ProgressMapPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await requireAccess("mcs");
+  const params = await searchParams;
+  if (params.classId !== undefined || params.student !== undefined) {
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof params.classId !== "string" || typeof params.student !== "string"
+      || !uuid.test(params.classId) || !uuid.test(params.student)) notFound();
+    const result = await getStudentLearningMap(params.classId, params.student, typeof params.month === "string" ? params.month : null);
+    if (result.status === "not-found") notFound();
+    // 기존 북마크도 학생 전환·목표 편집이 있는 집중 보기로 합친다.
+    const selection = new URLSearchParams();
+    for (const key of ["date", "view", "display", "topic", "lesson", "undated", "embed"]) {
+      if (typeof params[key] === "string") selection.set(key, params[key]);
+    }
+    redirect(`${learningSheetHref(result.classId, result.student.studentId, result.month)}${selection.size ? `&${selection}` : ""}`);
+  }
   if (!(await canPreviewProgressMap())) notFound();
   const progress = buildSampleProgress();
   return (

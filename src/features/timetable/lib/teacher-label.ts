@@ -131,7 +131,7 @@ export function parseSeatValue(value: string | null | undefined): SpecialSlotLab
  *
  * 원장 지시 2026-08-04(불변): *"이주희 = 랩이 아니라 그냥 LAB으로 해. 이주희는 그냥 아르바이트생.
  * 이건 앞으로도 쭉. 아르바이트생인 이주희가 그만두면 다른 사람이 랩실 이어야하기 때문."*
- * → 마스터 시트가 담당자 이름으로 블록을 그려도 eywa엔 `LAB`으로 들어간다. **자리가 사람보다 오래 간다.**
+ * → 마스터 시트가 담당자 이름으로 블록을 그려도 aywa엔 `LAB`으로 들어간다. **자리가 사람보다 오래 간다.**
  *
  * ⚠️ 이건 **앞으로 쓰는 값**에만 적용한다 — 기존 행의 `slot_teacher_label`을 UPDATE하지 말 것(위 📌).
  *   컷오버가 옛 행을 마감하고 새 행을 넣으므로 이력은 원문대로 남고 지금부터가 `LAB`이 된다.
@@ -169,6 +169,16 @@ export function resolveTeacherLabel(
     if (named) return named;
   }
   return map?.[raw] ?? raw;
+}
+
+/** 자리 라벨을 보존하고, 사람 교시는 저장된 담당자 FK를 예전 시트 라벨보다 우선한다. */
+export function resolveSlotTeacherLabel(
+  label: string | null | undefined,
+  teacher: { display_name?: string | null } | { display_name?: string | null }[] | null | undefined,
+  map?: TeacherLabelMap,
+): string | null {
+  const assigned = Array.isArray(teacher) ? teacher[0] : teacher;
+  return resolveTeacherLabel(specialSlotLabel(label) ?? (assigned?.display_name?.trim() || label?.trim() || null), map);
 }
 
 /** 라벨 배열을 해석 + 중복 제거(해석 결과가 겹치면 한 열로 합친다 — 이주희·LAB → LAB 1열, JJ는 별도 열). */

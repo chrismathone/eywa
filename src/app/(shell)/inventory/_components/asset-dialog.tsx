@@ -91,7 +91,7 @@ export function AssetDialog({
           <input name="serialNo" defaultValue={asset?.serialNo ?? ""} maxLength={120} className={`${FIELD} font-mono`} />
         </Field>
         <Field label="입고일"><input type="date" name="acquiredOn" defaultValue={asset?.acquiredOn ?? ""} max={today} className={FIELD} /></Field>
-        <Field label="현위치"><input name="location" defaultValue={asset?.location ?? ""} maxLength={120} placeholder="예: 3층LAB(305)" className={FIELD} /></Field>
+        <Field label="현위치"><input name="location" defaultValue={asset?.location ?? ""} maxLength={120} placeholder="예: 3층 자습실" className={FIELD} /></Field>
         {mode === "create" ? (
           <Field label="상태" hint="대여중은 여기서 고르지 않습니다 — 등록 뒤 '대여'로.">
             <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} className={SELECT}>

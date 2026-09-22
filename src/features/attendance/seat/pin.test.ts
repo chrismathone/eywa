@@ -5,6 +5,7 @@ import {
   normalizePin,
   pinsMatch,
   recordPinFailure,
+  resolveSeatPinTenant,
   SEAT_PIN_RL_GLOBAL_MAX,
   SEAT_PIN_RL_MAX,
   SEAT_PIN_RL_WINDOW_MS,
@@ -113,3 +114,19 @@ describe("시도 제한 — 전체 상한(적대적 리뷰 2026-08-14)", () => {
     expect(after.next.count).toBe(0);
   });
 });
+
+describe("resolveSeatPinTenant — 지점 판정(URL에 지점 없음, 2026-09-18)", () => {
+  it("학원이 없으면 null · 하나면 선택과 무관하게 그 하나", () => {
+    expect(resolveSeatPinTenant([], "a")).toBeNull();
+    expect(resolveSeatPinTenant(["a"], undefined)).toBe("a");
+    expect(resolveSeatPinTenant(["a"], "zzz")).toBe("a");
+  });
+  it("둘 이상이면 목록 안의 선택값만 — 🔴 비거나 밖이면 첫 지점으로 떨어뜨리지 않는다", () => {
+    expect(resolveSeatPinTenant(["a", "b"], "b")).toBe("b");
+    expect(resolveSeatPinTenant(["a", "b"], " b ")).toBe("b");
+    expect(resolveSeatPinTenant(["a", "b"], undefined)).toBeNull();
+    expect(resolveSeatPinTenant(["a", "b"], "")).toBeNull();
+    expect(resolveSeatPinTenant(["a", "b"], "c")).toBeNull();
+  });
+});
+

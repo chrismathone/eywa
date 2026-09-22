@@ -226,14 +226,17 @@ describe("전체 목표에서 수업일별 블록 배분", () => {
     expect(p.percent).toBeNull();
     expect(p.requiredPace).toBeNull();
   });
-  it("미래 기록과 목표 시작 전 기록은 현재 진도에 반영하지 않는다", () => {
+  it("목표 시작 전 마지막 진도를 이어받고 미래 기록은 반영하지 않는다", () => {
     const p = buildLearningProgress(
       goal,
       context,
       [record("2026-07-31", 10), record("2026-08-20", 15)],
       "2026-08-13",
     );
-    expect(p.current).toBeNull();
+    expect(p.current).toBe(11);
+    expect(p.currentDate).toBe("2026-07-31");
+    expect(p.latestRecord?.date).toBe("2026-07-31");
+    expect(p.currentIsLatest).toBe(true);
   });
   it("같은 날은 가장 뒤 블록, 날짜 간에는 가장 최근 위치를 쓴다", () => {
     const p = buildLearningProgress(
@@ -264,7 +267,35 @@ describe("전체 목표에서 수업일별 블록 배분", () => {
     );
     expect(p.current).toBe(13);
     expect(p.currentDate).toBe("2026-08-06");
+    expect(p.latestRecord?.progress).toBe("모의고사");
+    expect(p.currentIsLatest).toBe(false);
     expect(p.status).toBe("ahead");
+  });
+  it("같은 수업일에는 늦게 발송된 보고서가 현재 진도이고 늦게 보낸 과거 수업이 덮지 않는다", () => {
+    const newer = { ...record("2026-08-13", 5), sentAt: "2026-08-14T11:00:00Z" };
+    const p = buildLearningProgress(goal, context, [
+      newer,
+      { ...record("2026-08-13", 12), sentAt: "2026-08-14T10:00:00Z" },
+      { ...record("2026-08-06", 19), sentAt: "2026-08-15T10:00:00Z" },
+    ], "2026-08-15");
+    expect(p.current).toBe(6);
+    expect(p.latestRecord).toEqual(newer);
+    expect(p.currentIsLatest).toBe(true);
+  });
+  it("같은 날 뒤늦게 발송한 내신대비도 마지막 단원과 구별한다", () => {
+    const p = buildLearningProgress(goal, context, [
+      { ...record("2026-08-13", 5), sentAt: "2026-08-14T10:00:00Z" },
+      { ...record("2026-08-13", 0), progress: "수학 내신대비", sentAt: "2026-08-14T11:00:00Z" },
+    ], "2026-08-15");
+    expect(p.current).toBe(6);
+    expect(p.currentIsLatest).toBe(false);
+    expect(p.latestRecord?.progress).toBe("수학 내신대비");
+  });
+  it("알려진 단원이 전혀 없으면 최신 발송 내용만 표시하고 블록을 추정하지 않는다", () => {
+    const p = buildLearningProgress(goal, context, [{ ...record("2026-08-13", 0), progress: "수학 내신대비" }], "2026-08-15");
+    expect(p.current).toBeNull();
+    expect(p.latestRecord?.progress).toBe("수학 내신대비");
+    expect(p.status).toBe("no-data");
   });
   it("범위 이전은 0블록, 범위 이후는 전체 목표 완료로 제한한다", () => {
     const partial = { ...goal, startBlock: blocks[5], endBlock: blocks[9] };

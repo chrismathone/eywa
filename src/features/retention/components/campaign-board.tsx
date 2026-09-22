@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { campaignAdd, campaignSetStatus, campaignRemove, type CampaignResult } from "../server/actions";
 import type { CampaignBoard as Board, CampaignStatus } from "../server/campaign-queries";
 

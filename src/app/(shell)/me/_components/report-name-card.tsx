@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { REPORT_NAME_MAX } from "@/features/onescreen/report-author-name";
 // 강사 미니셸이면 화면 언어를 따른다 — 관리자 풀셸에는 provider가 없어 한국어 그대로다.

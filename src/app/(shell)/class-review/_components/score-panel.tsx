@@ -4,7 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   computeTotals,

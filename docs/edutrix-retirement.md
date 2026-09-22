@@ -13,23 +13,23 @@
 | **edutrix Supabase** (`xihggqwpyekbszizxyoh`) | **일시정지** | `HTTP 540` — 며칠 관망 후 Delete 예정 |
 | Vercel env | `EDUTRIX_SUPABASE_URL/ANON_KEY/TENANT_ID`·`GEMINI_API_KEY`·`FIREBASE_SERVICE_ACCOUNT_KEY` 제거 | 3환경 잔여 0 · 재배포 후 헬스체크 5종 통과 |
 
-세대 계보: **classreport-web(1세대) → edutrix(2세대) → eywa(현재)**. 1·2세대 데이터는 계승·이관됐다
+세대 계보: **classreport-web(1세대) → edutrix(2세대) → aywa(현재)**. 1·2세대 데이터는 계승·이관됐다
 (1세대 문서 `김효우 2026-01-20`이 edutrix에도 동일 존재함을 대조 확인).
 
 ## 2. 무엇이 남았나 (복구·조회 가능)
 
 | 자산 | 위치 | 규모 |
 |---|---|---|
-| 보고서 운영 데이터 | eywa `lesson_reports` (`source='edutrix_import'`) | **17,814건** |
+| 보고서 운영 데이터 | aywa `lesson_reports` (`source='edutrix_import'`) | **17,814건** |
 | 읽음 매칭 키 | `lesson_reports.edutrix_share_token` | **917건** — 옛 발송분 읽음 추적이 여기 달림 |
-| 원본 raw 아카이브 | eywa `edutrix_archive` (0095a, service_role 전용) | **30테이블 · 28,000+행** |
+| 원본 raw 아카이브 | aywa `edutrix_archive` (0095a, service_role 전용) | **30테이블 · 28,000+행** |
 | 원본 로컬 사본 | `data/edutrix-archive/*.jsonl` (gitignored) | 33파일 · 35MB |
 | 미디어 | Supabase Storage 6버킷 | 참조 97개 전량(실측 200 확인) |
 | Cloud Run 함수 원본 | `D:\edutrix\functions\index.js` (로컬) | 이제 미사용이나 보관 |
 
-⚠️ **eywa 코드가 아직 읽는 것**(지우지 말 것): `source='edutrix_import'` · `edutrix_report_id` ·
+⚠️ **aywa 코드가 아직 읽는 것**(지우지 말 것): `source='edutrix_import'` · `edutrix_report_id` ·
 `edutrix_share_token` · `students.edutrix_student_id`. 보고서 목록 '이관' 라벨, 이관분 재발송 차단 가드,
-roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eywa DB만** 읽으므로 원본 소등과 무관하다.
+roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **aywa DB만** 읽으므로 원본 소등과 무관하다.
 
 ## 3. 의도적으로 버린 것
 
@@ -37,7 +37,7 @@ roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eyw
   이미지 본문은 각 플랫폼에 박제돼 있어 글 자체는 남는다(원장 승인).
 - **GCS 고아 123개** — 회의녹음 35(1,157MB)·등록상담 27(216MB)·영수증 원본 58·상담녹음 3.
   DB가 참조하지 않는 것들(삭제된 회의, 이름 규칙 변경 전 원본). ⚠️ 아래 교훈① 때문에 백업을 못 떴다.
-- **MakeEdu 자동제출** — 누계 8,010건(2026-03-25~07-28). 강사가 eywa로 옮긴 07-28부터 이미 0건이라
+- **MakeEdu 자동제출** — 누계 8,010건(2026-03-25~07-28). 강사가 aywa로 옮긴 07-28부터 이미 0건이라
   실질 손실 없음(원장 결정: 이식하지 않음).
 - **classreport-web 랭킹 스냅샷** — 1세대 전용 기능(원장 결정: 불요).
 
@@ -48,7 +48,7 @@ roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eyw
 2. **폴백은 소등 전에 코드에서 없앤다.** Cloud Run 폴백을 07-29 오전에 제거했는데, 그날 오후 Spark 전환으로
    그 함수가 죽었다. 제거 전이었다면 워커 env 한 줄 유실만으로 발송이 전멸했을 상황이었다.
    env 스위치로 남긴 폴백은 "언젠가 조용히 되살아나는 지뢰"다.
-3. **원본을 끄기 전에 소비 코드를 먼저 지운다.** eywa에서 원본을 읽는 경로(크론·미매핑 탭)를 먼저 제거하고
+3. **원본을 끄기 전에 소비 코드를 먼저 지운다.** aywa에서 원본을 읽는 경로(크론·미매핑 탭)를 먼저 제거하고
    배포한 뒤 Supabase를 정지했더니 아무것도 깨지지 않았다. 반대 순서였으면 500이 났다.
 4. **"안 쓰는 것 같다"는 데이터로 확인한다.** MakeEdu는 "이미 이틀째 0건", Gemini는 "SDK 미설치·키 무효",
    랭킹은 "1세대 전용"임을 각각 실측으로 확인한 뒤에 버렸다.
@@ -98,4 +98,4 @@ roster-signals, **ClassNote 읽음 매칭**이 여기 의존한다. 전부 **eyw
 | 발송 워커 | 하트비트 정상 · 당일 발송 16건 · 최근 실패 0 |
 | edutrix Supabase | 연결 불가(정지 유지) |
 
-소등 이후 **eywa 단독 운영에서 회귀 0**. 이 표가 다음 점검의 기준선이다.
+소등 이후 **aywa 단독 운영에서 회귀 0**. 이 표가 다음 점검의 기준선이다.

@@ -22,6 +22,35 @@ alpha는 건드리지 않는다 → alpha는 사람이 직접 돌려야 한다.
 `create index if not exists`, `drop policy if exists … create policy`, `drop trigger if exists … create trigger`.
 → 이미 적용된 DB에 다시 돌려도 에러 없이 no-op. (그래도 **번호 순서대로** 돌릴 것 — 뒤 파일이 앞 객체에 의존.)
 
+## 2-1. 🔴 번호는 **겹치면 안 된다** — 같은 번호를 두 작업이 쓰면 "이거 돌렸나"를 아무도 못 센다
+
+새 alpha 파일의 번호 = **지금 폴더의 최대 번호 + 1**(`ls supabase/migrations | sort | tail -3`으로 확인하고 짓는다).
+접미사 `a`·`b`·`c`는 **같은 작업의 연속 단계**를 뜻한다(예: `0271a` 칸 추가 → `0271b` 그 칸 후속). 다른 작업에 붙이지 말 것.
+
+⚠️ 세션 여럿이 같은 날 병렬로 만들면 같은 번호를 각자 고른다 — **머지 전에 `ls`로 겹치는지 한 번 본다.**
+
+### 2026-09-18 정리 — 겹친 번호 둘(`0270a`·`0271a`)에 걸린 파일 셋을 옮겼다(내용·적용 상태 불변, **파일 이름만**)
+
+| 옛 이름 | 새 이름 | 당시 DB |
+|---|---|---|
+| `0270a_math_learning_goals.sql` | **`0269b_math_learning_goals.sql`** | 적용됨 |
+| `0271a_math_learning_track_goals.sql` | **`0269c_math_learning_track_goals.sql`** | 적용됨 |
+| `0271a_leave_adjustment_used_range.sql` | **`0270b_leave_adjustment_used_range.sql`** | **미적용**(이 이름으로 돌리면 된다) |
+
+`0270a`(연차 사용일)·`0271a`/`0271b`(LAB \*LAB 표식)·`0272a`·`0273a`(수학 진도 후속)는 **이름 그대로**다.
+🔑 math 두 개를 `0269b`·`0269c`로 **앞으로** 옮긴 것은 순서 때문이다 — `0272a`·`0273a`가 그 표를 고치므로 뒤로 밀면 순서가 뒤집힌다.
+이미 적용한 DB는 **다시 돌릴 필요가 없다**(이름만 바뀌었다).
+
+### 옛 겹침 24개는 **일부러 그대로 둔다**(2026-09-18 확인)
+
+`0081a`~`0088a`(8) · `0111a` · `0113a` · `0116a` · `0117a`(파일 3개) · `0118a` · `0134a` · `0147a`~`0149a`(3) · `0152a` ·
+`0209a` · `0210a` · `0212a` · `0224a` · `0227a` · `0266a` — 번호 하나에 파일이 둘(또는 셋)씩 있다.
+전부 DB에 적용된 것들이고(가장 최근 `0266a` 둘도 확인), 이 번호들은 CLAUDE.md·docs·코드 주석에 **번호로** 530번 넘게 인용돼 있어 이름을 옮기면 그 인용이 전부 틀린 곳을 가리킨다.
+
+- `pnpm db:alphas`는 파일 이름을 기록하지 않고 **사전순으로 전부 다시 돌린다**(멱등) — 겹친 번호 안에서는 이름 뒷부분 사전순으로 돈다.
+- 이 번호들을 글로 가리킬 땐 **파일 이름까지** 적는다(`0209a`만 쓰면 자리 담당인지 ECS 복사인지 모른다).
+- 🔴 **새 겹침을 만들지 말 것** — 위 2-1 규칙(최대 번호 + 1)을 지키면 이 목록은 더 늘지 않는다.
+
 ## 3. 신규/빈 DB 셋업 순서
 
 ```bash
@@ -32,9 +61,14 @@ pnpm db:migrate
 pnpm db:alphas
 #    (대안) 개별 파일만: Supabase 대시보드 → SQL Editor에 파일 내용 붙여넣기.
 
-# 3) 시드(데모 테넌트)
-pnpm db:seed
+# 3) system_role enum에 'student' 추가 — 아래 ⚠️ 참고
+#    ALTER TYPE system_role ADD VALUE IF NOT EXISTS 'student';
 ```
+
+- ⚠️ **데모 시드(`pnpm db:seed`·`scripts/seed.ts`)는 2026-09-19 영구 제거됐다** — 테넌트 데이터를 먼저 지우는 구조인데
+  데모 테넌트가 운영 테넌트 `injaewon`으로 승격돼(2026-07-01) 운영 DB를 지울 수 있었다. 되살리지 말 것.
+- ⚠️ `system_role`의 `'student'` 값은 **SQL 마이그레이션에 없다**(`0000`의 enum은 7개, drizzle 스냅샷에만 있다) —
+  그동안 옛 `seed.ts`가 `ADD VALUE IF NOT EXISTS`로 넣어 왔다. 운영 DB엔 이미 있고, **빈 DB를 새로 만들 때만** 위 3)을 한 번 실행한다.
 
 ## 4. 현재 공유 DB 적용 상태 (검증: 2026-06-25, +makeedu 0057a·0058a·종강 0059a 적용 2026-06-29)
 
@@ -172,9 +206,9 @@ pnpm db:seed
 
 | `0268a_class_textbook_plan_slots` | **반 교재 배정에 고른 교시 목록** — `class_textbook_plans.slot_starts text[]`(`"HH:MM"`). 0266a는 교시를 **축**(정규/JJ)으로 뭉뚱그렸는데 사람이 고르는 건 **시각**이고(원장 2026-09-16 *"16시 수업 클릭 17시 수업 클릭"*), 같은 반 같은 시각이라도 자리·수업이 섞여 축으론 "이 두 칸만"을 표현할 수 없었다. 값이 있으면 그 시각만 차수를 태운다. 🔴 `slot_axis`는 **안 지운다**(옛 배정·적용 전 코드가 그걸로 읽는다 — expand/contract). 🔴 시각은 `time[]`이 아니라 **`text[]`** — 앱·RPC·화면이 내내 `"HH:MM"` 5자로 슬롯을 가리킨다(`time`이면 PostgREST가 `16:20:00`을 줘 한 글자 차이로 어긋난다). CHECK는 **개수만**(1~12, `coalesce(array_length…,0)` — 안 감싸면 빈 배열이 NULL 비교로 통과한다); 형식은 쓰기 경로가 하나뿐이라(쓰기 정책 0개) 앱이 지킨다. ⚠️ 적용 전에도 조회는 **폴백**으로 살고(그 배정은 옛 축), 교시를 고른 **저장만** 한글로 거절한다 — 조용히 축으로 떨어뜨리면 고르지도 않은 교시에 차수가 깔린다([[#95]]). |
 
-| `0270a_math_learning_goals` | **수학 시트 전체 목표** — 학생·반별 학습 과정, 시작·완료 블록, 목표 기간, 교재. 월·주·일 목표는 반 시간표·휴강일·수강 기간·분리 등원 요일로 계산한다. 실제 진도는 기존 `lesson_reports`를 읽는다. 기존 월 목표는 보존한다. 테넌트 복합 FK, RLS 정책 0개 + 직접 읽기/쓰기 revoke, service_role 전용, 앱 `requireMcsClassAccess` 게이트. 테이블이 없는 환경은 저장을 막고 기존 기록을 표시한다. 2026-09-17 연결 DB 적용 및 권한 검증 완료. |
+| `0269b_math_learning_goals` | **수학 시트 전체 목표** — 학생·반별 학습 과정, 시작·완료 블록, 목표 기간, 교재. 월·주·일 목표는 반 시간표·휴강일·수강 기간·분리 등원 요일로 계산한다. 실제 진도는 기존 `lesson_reports`를 읽는다. 기존 월 목표는 보존한다. 테넌트 복합 FK, RLS 정책 0개 + 직접 읽기/쓰기 revoke, service_role 전용, 앱 `requireMcsClassAccess` 게이트. 테이블이 없는 환경은 저장을 막고 기존 기록을 표시한다. 2026-09-17 연결 DB 적용 및 권한 검증 완료. |
 
-| `0271a_math_learning_track_goals` | **정규 24블록·수요일 복습 4블록 계획** — 학생·반·수업 구분·시작 월별로 저장해 두 목표와 월별 이력을 분리한다. 정규 3개월·24블록, 보조 한 달·4블록을 DB CHECK로 검증한다. 새 정규 계획이 있는 기간에는 0270a보다 우선하며 기존 표는 보존한다. 테넌트 복합 FK, RLS + 직접 읽기/쓰기 revoke, service_role 전용. 2026-09-17 연결 DB 적용. |
+| `0269c_math_learning_track_goals` | **정규 24블록·수요일 복습 4블록 계획** — 학생·반·수업 구분·시작 월별로 저장해 두 목표와 월별 이력을 분리한다. 정규 3개월·24블록, 보조 한 달·4블록을 DB CHECK로 검증한다. 새 정규 계획이 있는 기간에는 0269b보다 우선하며 기존 표는 보존한다. 테넌트 복합 FK, RLS + 직접 읽기/쓰기 revoke, service_role 전용. 2026-09-17 연결 DB 적용. |
 | `0273a_math_learning_twelve_blocks` | **정규 한 학기 12블록·월 4블록** — 새 계획의 저장을 허용하면서 이전 24블록 행과도 호환되는 CHECK로 변경한다. 앱은 이전 목표를 조회·확장할 때 블록 단위를 환산하고 단원·완료일·수정 버전을 보존한다. 기존 데이터 변경 없음. 2026-09-18 연결 DB 적용 및 신·구 계획/잘못된 기간 검증 완료. |
 | `0271a_class_schedules_lab_separate` | **LAB 교시 '따로 수업(*LAB)' 표식** — `class_schedules.lab_separate boolean not null default false`. 원장 2026-09-17 *"랩실 옆에 토글키를 두고 토글하게 되면 LAB -> *LAB 밑줄 + 이탤릭체"*(따로 수업듣는 학생 분리). 🔴 라벨을 `*LAB`으로 바꾸지 않고 칸을 새로 둔 이유: LAB 판정(`specialSlotLabel`) 소비처가 시수(돈)·출결·자리 출석부·가져오기·SQL까지 수십 곳이라 라벨을 바꾸면 LAB이 '사람'이 된다. 🔴 LAB 전용 CHECK는 **안 건다**(가져오기 RPC가 라벨만 바꾸는 경로에서 제약에 걸려 가져오기 전체가 실패한다 — 앱이 LAB일 때만 읽는다). ⚠️ 1단계는 **표시만**(명단·출결·시수는 안 본다). ⚠️ 앱은 기존 `class_schedules` 조회에 이 칸을 **끼우지 않고** 켜진 행 id만 따로 fail-soft로 읽는다(`loadLabSeparateIds`) — 적용 전에도 시간표·반 수정이 산다([[#95]]). |
 | `0271b_lab_separate_nullable_and_enrollment_flag` | **0271a 후속** — ① `class_schedules.lab_separate` **not null 해제**: 옛 영어 시간표 가져오기 되돌리기(`rollback_english_structure`)가 `jsonb_populate_record`로 칸 없던 스냅샷을 되살리면 NULL이 들어가 되돌리기 전체가 실패한다(적대적 리뷰 2026-09-17). 앱은 `.eq(true)`로만 읽고 쓸 땐 늘 명시하므로 NULL = 꺼짐. ② `enrollments.lab_separate boolean default false`(**nullable**, 같은 이유) — EiE 반 학생 줄 '*LAB 교시 배정'(원장 2026-09-17: 켠 학생은 LAB실 출석부의 *LAB 교시에만, 즉시 적용). ③ `notify pgrst, 'reload schema'`. |

@@ -11,7 +11,7 @@ import { kstMonth } from "@/lib/date-kst";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
-import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatMonthly } from "@/features/attendance/seat/server/monthly-queries";
 import { loadSeatMonthlyPrefs } from "@/features/attendance/seat/server/monthly-prefs";
 import { parseAnySeatKey, parseUsableSeatKey, SEAT_NAME, SEAT_ROOM } from "@/features/attendance/seat/seat";
@@ -24,7 +24,7 @@ import { MonthlyPrintButton } from "./_components/print-button";
 /** 탭 제목은 자리 이름을 따라간다 — 같은 화면이 랩실·JJ실 둘 다를 연다. */
 export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }): Promise<Metadata> {
   const seat = parseAnySeatKey((await params).seat);
-  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 — eywa` };
+  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 — aywa` };
 }
 
 function shiftMonth(month: string, delta: number): string {
@@ -75,7 +75,7 @@ export default async function SeatMonthlyPage({
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!dutyAllowsSeat(await getSeatDuties(user.id), seat)) await requireAccess("seat_attendance");
+  if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? "") ? monthParam! : kstMonth();
   const [view, prefs, settings] = await Promise.all([

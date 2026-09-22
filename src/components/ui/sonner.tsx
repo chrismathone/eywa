@@ -1,7 +1,7 @@
 "use client"
 
 import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { EyIcon } from "@/components/icons/eywa-icons"
+import { EyIcon } from "@/components/icons/aywa-icons"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   return (

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -19,7 +19,7 @@ import { LiveDatePicker } from "./_components/live-date-picker";
 import { LiveRefresher } from "./_components/live-refresher";
 import { AbsenceIntakeButton } from "../_components/absence-intake-button";
 
-export const metadata = { title: "오늘 출결 — eywa" };
+export const metadata = { title: "오늘 출결 — aywa" };
 
 /**
  * 오늘 출결 — 좌석표(기본) + 데스크 확인 큐. 강사별 현황 보드는 폐기(좌석표가 시야가 낫다).

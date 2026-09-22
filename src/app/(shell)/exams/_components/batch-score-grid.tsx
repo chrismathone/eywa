@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { batchSaveScores, type ExamActionState } from "@/features/exams/server/actions";
 import { examStats, rankByScore } from "@/features/exams/calc";

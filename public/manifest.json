@@ -1,6 +1,6 @@
 {
-  "name": "eywa 학원 관리",
-  "short_name": "eywa",
+  "name": "aywa 학원 관리",
+  "short_name": "aywa",
   "description": "학원 운영 화면 — 출결·시간표·수납",
   "start_url": "/",
   "scope": "/",

@@ -6,7 +6,7 @@
  * + **"9월분만 보정"**: 드라이런으로 바뀔 칸 목록을 먼저 보여 주고 **승인 후 적용**.
  *
  * 대상(전부 만족해야 한다):
- *   · 테넌트(기본 injaewon) · 과목 = 자동 대상(수학) 반(특강 포함)
+ *   · 테넌트(기본 cs = 침산) · 과목 = 자동 대상(수학) 반(특강 포함)
  *   · 2026-09-01 ≤ session_date ≤ min(--to 또는 KST 오늘, 2026-09-30)
  *   · 그 칸(학생·반·날짜)의 **유효 행**(교시별 최신 1건 — 0198a distinct-on 규약)이 교시 없는 "그날 전체" 행
  *   · 소비 상태(출석·지각·조퇴) · session_units IS NULL(=1) · 자리 시수 행(seat_label) 아님
@@ -21,7 +21,7 @@
  *    (둘 다 null). 앱(자동 시수) 배포 **뒤** 강사가 친 1을 덮지 않게 배포 시각을 넘긴다(배포 전 적용이면 지금 시각).
  *    없으면 쓰기 전에 멈춘다(적대 리뷰 2026-09-11 — 선택 옵션이던 때 사용법대로 돌리면 그 칸들이 1.5·2가 됐다).
  * 🔴 **멱등** — UPDATE는 `session_units IS NULL`·교시 없음·대상 상태인 행만 건드린다(두 번째 실행은 0건).
- * 🔴 테넌트 injaewon = 프로덕션 실데이터. `db:seed` 금지.
+ * 🔴 테넌트 cs(침산, 옛 slug injaewon) = 프로덕션 실데이터.
  * ⚠️ 판정은 `math-auto-units-rules.mjs`(앱 TS 규칙의 사본 — `auto-units-parity.test.ts`가 두 벌을 잠그고,
  *    칸 판정·보강 제외·적용 전제는 `auto-units-backfill.test.ts`가 잠근다).
  *
@@ -29,7 +29,7 @@
  *   node --env-file=D:/eywa_refactoring/.env.local scripts/_oneoff/backfill-math-auto-units.mjs            # 드라이런
  *   node --env-file=D:/eywa_refactoring/.env.local scripts/_oneoff/backfill-math-auto-units.mjs \
  *        --apply --recorded-before=2026-09-11T18:00:00+09:00                                               # 적용
- *   옵션: --tenant=<slug>(기본 injaewon) · --to=YYYY-MM-DD · --recorded-before=<ISO 시각> · --include-makeup
+ *   옵션: --tenant=<slug>(기본 cs) · --to=YYYY-MM-DD · --recorded-before=<ISO 시각> · --include-makeup
  * env: DATABASE_URL
  */
 import postgres from "postgres";
@@ -49,7 +49,7 @@ const arg = (name, def) => {
   return hit ? hit.slice(name.length + 3) : def;
 };
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
-const tenantSlug = arg("tenant", "injaewon");
+const tenantSlug = arg("tenant", "cs"); // 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 const FROM = "2026-09-01";
 const SEPT_END = "2026-09-30";
 const kstToday = new Intl.DateTimeFormat("en-CA", {

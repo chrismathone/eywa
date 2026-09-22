@@ -1,12 +1,12 @@
 /**
  * 영어 작성률 순수 계산 — ClassNote 반 보드 기준.
  *
- * 왜 별도인가: 영어 강사는 eywa/Edutrix가 아니라 **ClassNote에 직접** 알림장을 쓴다.
+ * 왜 별도인가: 영어 강사는 aywa/Edutrix가 아니라 **ClassNote에 직접** 알림장을 쓴다.
  * 그래서 `lesson_reports` 기반 작성률(수학)엔 영어가 0건으로 잡힌다 — 빼는 게 아니라
  * **다른 소스로 세야** 하는 문제다. 소스는 워커가 적재하는 `classnote_class_posts`(0140a).
  *
  * 셈법:
- *   분모 = 그 반의 **수업일 수** = eywa 시간표 요일 ∩ 기간 − 공휴일
+ *   분모 = 그 반의 **수업일 수** = aywa 시간표 요일 ∩ 기간 − 공휴일
  *   분자 = 그 반 보드에 **글이 올라온 서로 다른 날 수**
  * 영어 보드는 반 단위(수학은 학생 단위)라 "하루 1건"이 정상 → 건수가 아니라 **날짜**로 센다.
  *
@@ -19,7 +19,7 @@ export type Dow = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 const DOW_ORDER: Dow[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const DOW_LABEL = ["일", "월", "화", "수", "목", "금", "토"];
 
-/** eywa 영어 반 1개 — 시간표에서 뽑은 요일 집합과 담당. */
+/** aywa 영어 반 1개 — 시간표에서 뽑은 요일 집합과 담당. */
 export type EnglishClassInput = {
   classId: string;
   className: string;
@@ -66,8 +66,8 @@ export function sessionDates(from: string, to: string, holidays: ReadonlySet<str
 /**
  * 반 이름 ↔ 보드 이름 비교키.
  *
- * eywa `중등E_초등 브릿지 C2` ↔ ClassNote `Hannah 초등 브릿지C2 (월화목)`
- * eywa `LS2a`               ↔ ClassNote `[EIE] Let's Speak 2a (화목금 …)`
+ * aywa `중등E_초등 브릿지 C2` ↔ ClassNote `Hannah 초등 브릿지C2 (월화목)`
+ * aywa `LS2a`               ↔ ClassNote `[EIE] Let's Speak 2a (화목금 …)`
  * 부서 접두어·강사 닉네임·요일/시각 꼬리를 떼고 공백·기호를 지운 뒤 비교한다.
  */
 const EIE_ABBR: Record<string, string> = {

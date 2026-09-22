@@ -181,7 +181,7 @@ describe("신원 카디널리티 — 접미사 양방향·같은 학년 동명�
 
 describe("신원 대조(생년 ↔ 학년) — 모르면 제외", () => {
   it("⭐ 퇴원 동명이인 잔존(고2 재원 학생 보드에 붙은 중1 가족 형태) = 생년 불일치로 제외", () => {
-    // 김서윤·김채은 실사례 모양: eywa는 고2(2009년생 기대)인데 원아는 2013년생.
+    // 김서윤·김채은 실사례 모양: aywa는 고2(2009년생 기대)인데 원아는 2013년생.
     const v = evaluateOffboardCandidate(
       facts({ student: { ...facts().student, grade: "고2" }, child: { ...facts().child, birth: "2013-04-04" } }),
     );

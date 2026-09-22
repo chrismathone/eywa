@@ -1,5 +1,5 @@
-import { Sparkles } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Sparkles } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { formatCreatedAt } from "@/lib/utils";
 import { kstToday } from "@/lib/date-kst";
 import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";

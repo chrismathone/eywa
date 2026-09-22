@@ -2,7 +2,7 @@
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { TimelineEvent } from "@/features/students/server/queries";
 
@@ -12,6 +12,7 @@ const KIND_META: Record<
 > = {
   enrollment_start: { label: "수강 시작", color: "bg-chart-2 text-chart-2" },
   enrollment_end: { label: "수강 종료", color: "bg-chart-4 text-chart-4" },
+  enrollment_transfer: { label: "반이동", color: "bg-chart-1 text-chart-1" },
   consultation: { label: "상담", color: "bg-chart-1 text-chart-1" },
   memo: { label: "메모", color: "bg-chart-3 text-chart-3" },
   status_change: { label: "상태 변경", color: "bg-chart-5 text-chart-5" },

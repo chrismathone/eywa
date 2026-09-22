@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { Pill } from "@/components/atoms/pill";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { sanitizeRichHtml } from "@/lib/html/sanitize";
@@ -19,7 +19,7 @@ import { CommentDeleteForm, CommentForm } from "./_comments";
 import { DecidePanel, DeferredConfirmPanel, WithdrawPanel } from "./_decide-panel";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
-export const metadata = { title: "결재 문서 — eywa" };
+export const metadata = { title: "결재 문서 — aywa" };
 
 // ── 결재 이력 타임라인(하이웍스 '문서 진행 이력' 대응) ─────────────────────────
 // 기안 → 처리된 단계(승인/반려 + 의견) → 종결(또는 "현재 N차 차례"). 결재 의견은 여기로 흡수한다

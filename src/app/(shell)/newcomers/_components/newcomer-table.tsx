@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";

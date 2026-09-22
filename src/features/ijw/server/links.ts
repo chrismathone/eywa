@@ -1,9 +1,9 @@
 import "server-only";
 
 /**
- * 인재원 짝 — eywa 쪽 조회(짝 색인 · 후보 모집단 · 학원 전체 이름 인원)와 **짝 제안**.
+ * 인재원 짝 — aywa 쪽 조회(짝 색인 · 후보 모집단 · 학원 전체 이름 인원)와 **짝 제안**.
  *
- * 🔑 eywa에 저장하는 것은 짝 하나(students.ijw_student_id, 0259a)뿐이다 — 숫자는 매번 인재원에 묻는다.
+ * 🔑 aywa에 저장하는 것은 짝 하나(students.ijw_student_id, 0259a)뿐이다 — 숫자는 매번 인재원에 묻는다.
  * 🔴 조회 실패는 던지지 않고 **실패로 돌려준다** — 이 구역들은 성적관리·학생 상세의 곁가지라, DB가 한 번
  *    삐끗했다고 화면 전체가 오류 화면으로 바뀌면 안 된다(적대 리뷰 2026-09-10).
  * ⚠️ 0259a가 아직 적용되지 않았으면 짝 칸이 없다 — "짝 칸 준비 전"으로 알린다([[#95]]).
@@ -19,10 +19,10 @@ import { isMissingIjwColumn } from "../db-errors";
 import { countNameKeys, suggestLinks, type LinkSuggestion } from "../match";
 import { IJW_PATHS, ijwGet, type IjwFailure } from "./client";
 
-export type EywaLink = { studentId: string; name: string; school: string | null; grade: string | null };
-export type LinkIndex = { byIjw: Map<string, EywaLink>; columnMissing: boolean; failure: IjwFailure | null };
+export type AywaLink = { studentId: string; name: string; school: string | null; grade: string | null };
+export type LinkIndex = { byIjw: Map<string, AywaLink>; columnMissing: boolean; failure: IjwFailure | null };
 
-/** eywa 쪽 조회 실패 → 화면용 실패(원문은 detail 툴팁으로만). 보고는 여기서 한 번. */
+/** aywa 쪽 조회 실패 → 화면용 실패(원문은 detail 툴팁으로만). 보고는 여기서 한 번. */
 export function localFailure(e: unknown, step: string): IjwFailure {
   reportError(e, { scope: "ijw", step });
   const raw = e instanceof Error ? e.message : String(e);
@@ -37,7 +37,7 @@ function asDbError(e: unknown): { code?: string; message?: string } {
   };
 }
 
-/** ijwId → eywa 학생. 요청당 한 번(JJ실은 표와 짝 잇기 구역이 함께 부른다). */
+/** ijwId → aywa 학생. 요청당 한 번(JJ실은 표와 짝 잇기 구역이 함께 부른다). */
 export const loadLinkIndex = cache(async (tenantId: string): Promise<LinkIndex> => {
   const admin = createAdminClient();
   try {
@@ -51,7 +51,7 @@ export const loadLinkIndex = cache(async (tenantId: string): Promise<LinkIndex> 
           .order("id")
           .range(from, to),
     );
-    const byIjw = new Map<string, EywaLink>();
+    const byIjw = new Map<string, AywaLink>();
     for (const r of rows) byIjw.set(r.ijw_student_id, { studentId: r.id, name: r.name, school: r.school, grade: r.grade });
     return { byIjw, columnMissing: false, failure: null };
   } catch (e) {
@@ -64,7 +64,7 @@ export type PoolStudent = { id: string; name: string; school: string | null; gra
 
 /**
  * 짝 후보 모집단 = **지금 영어 반을 다니는** 재원·휴원 학생(인재원은 영어 학습 프로그램이다) + 그 영어 반 이름.
- * 반 이름은 인재원 반 이름과 대조해 후보 근거로 쓴다(인재원 반 = eywa 반 이름인 경우가 있다).
+ * 반 이름은 인재원 반 이름과 대조해 후보 근거로 쓴다(인재원 반 = aywa 반 이름인 경우가 있다).
  * ⚠️ `english`는 과목 표준 키(코드 특수동작 허용 범위). 모든 조회에 tenant_id를 건다(admin 우회).
  */
 async function loadEnglishPool(tenantId: string): Promise<PoolStudent[]> {
@@ -128,7 +128,7 @@ export type LinkSuggestions =
   | IjwFailure;
 
 /**
- * 짝 제안(관리자 전용 화면·'한 번에 연결' 서버 재계산) — 인재원 학생 목록 × 짝 없는 eywa 영어 학생.
+ * 짝 제안(관리자 전용 화면·'한 번에 연결' 서버 재계산) — 인재원 학생 목록 × 짝 없는 aywa 영어 학생.
  * `pool`은 후보에 없을 때 사람이 직접 찾아 고르는 목록(짝 없는 학생만).
  */
 export async function getIjwLinkSuggestions(tenantId: string): Promise<LinkSuggestions> {
@@ -142,13 +142,13 @@ export async function getIjwLinkSuggestions(tenantId: string): Promise<LinkSugge
   if (!res.ok) return res;
   if (links.failure) return links.failure;
   if (!Array.isArray(local)) return local;
-  const [pool, eywaNameCounts] = local;
-  const linkedIds = new Map<string, string>(); // eywa 학생 id → 걸린 ijwId
+  const [pool, aywaNameCounts] = local;
+  const linkedIds = new Map<string, string>(); // aywa 학생 id → 걸린 ijwId
   for (const [ijwId, l] of links.byIjw) linkedIds.set(l.studentId, ijwId);
   const suggestions = suggestLinks(
     res.data.students,
     pool.map((s) => ({ ...s, ijwId: linkedIds.get(s.id) ?? null })),
-    { eywaNameCounts },
+    { aywaNameCounts },
   ).filter((s) => !links.byIjw.has(s.ijw.ijwId));
   return {
     ok: true,

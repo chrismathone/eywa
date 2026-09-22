@@ -5,7 +5,7 @@ import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-import { CircleStop, History, Loader2, Mic, Upload, X } from "@/components/icons/eywa-icon-compat";
+import { CircleStop, History, Loader2, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   checkRecovery,

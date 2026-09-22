@@ -30,7 +30,7 @@ function setup() {
 }
 
 describe("툴바 주차·날짜 선택", () => {
-  it("하루짜리 첫 주로 다시 이동하고 수업 없는 일요일도 선택한다", () => {
+  it("하루짜리 첫 주의 비수업일은 날짜 선택기로 조회하되 시계 요일 칸을 만들지 않는다", () => {
     const { map, week, day } = setup();
     fireEvent.click(map.getByRole("button", { name: /^3월 ·/ }));
     fireEvent.change(week(), { target: { value: "2" } });
@@ -38,18 +38,19 @@ describe("툴바 주차·날짜 선택", () => {
     expect(map.getByRole("button", { name: /^3월 1주차 ·/ })).toHaveAttribute("aria-pressed", "true");
     expect(within(day()).getAllByRole("option")).toHaveLength(2);
     fireEvent.change(day(), { target: { value: "2026-03-01" } });
-    expect(map.getByRole("button", { name: /^3\/1 \(일\) ·/ })).toHaveAttribute("aria-pressed", "true");
+    expect(day()).toHaveValue("2026-03-01");
+    expect(map.queryByRole("button", { name: /^3\/1 \(일\) ·/ })).not.toBeInTheDocument();
   });
 
   it("지도에서 고른 날짜를 표시하고 주가 바뀌면 날짜 선택을 비운다", () => {
     const { map, week, day } = setup();
     fireEvent.click(map.getByRole("button", { name: /^3월 2주차 ·/ }));
     expect(week()).toHaveValue("2");
-    fireEvent.click(map.getByRole("button", { name: /^3\/2 \(월\) ·/ }));
-    expect(day()).toHaveValue("2026-03-02");
+    fireEvent.click(map.getByRole("button", { name: /^3\/3 \(화\) ·/ }));
+    expect(day()).toHaveValue("2026-03-03");
     fireEvent.change(week(), { target: { value: "3" } });
     expect(day()).toHaveValue("");
-    expect(within(day()).queryByRole("option", { name: "3/2 (월)" })).not.toBeInTheDocument();
+    expect(within(day()).queryByRole("option", { name: "3/3 (화)" })).not.toBeInTheDocument();
   });
 
   it("하루짜리 마지막 6주차도 빠짐없이 선택한다", () => {

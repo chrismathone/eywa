@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Loader2, X } from "@/components/icons/eywa-icon-compat";
+import { LogOut, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { endChoices, type EndChoice } from "../end-choices";
 import { endSingleEnrollment } from "@/features/students/server/actions";

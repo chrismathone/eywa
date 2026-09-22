@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Minus, Plus } from "@/components/icons/eywa-icon-compat";
+import { Minus, Plus } from "@/components/icons/aywa-icon-compat";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { TABLE_SCALE_MAX, TABLE_SCALE_MIN, TABLE_SCALE_STEP } from "@/features/staff/list-prefs";
 import { useStaffViewPrefs } from "./staff-view-prefs";

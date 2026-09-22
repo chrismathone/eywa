@@ -9,7 +9,7 @@
  *    `key`로 열 때마다 새 인스턴스를 만들어 이전 입력이 남지 않게 한다.
  */
 import { useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { AbsenceIntakeDialog } from "./absence-intake-dialog";
 

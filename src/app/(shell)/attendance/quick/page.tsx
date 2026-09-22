@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
 import { formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { getLiveBoard } from "@/features/attendance/live/server/queries";
@@ -12,7 +12,7 @@ import { sheetDateLabel, sheetT, sheetTf, type SheetLang } from "@/features/teac
 import { QuickBoard } from "@/features/attendance/quick/components/quick-board";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "quick.title")} — eywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "quick.title")} — aywa` };
 }
 
 /**

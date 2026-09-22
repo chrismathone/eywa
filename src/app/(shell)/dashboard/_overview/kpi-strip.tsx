@@ -16,7 +16,7 @@ import {
   withdrawalsMonthHref,
 } from "@/features/dashboard/overview/kpi-links";
 import { countWithdrawalPrograms } from "@/features/withdrawals/window";
-import { PROGRAMS, programLabel, programSubjectsOf, type Program } from "@/features/students/program";
+import { programLabel, programSubjectsOf, visiblePrograms, type Program } from "@/features/students/program";
 import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
@@ -54,8 +54,10 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const today = snapshot.today;
   const can = (menu: MenuKey) => snapshot.allowed.includes(menu);
   const subjects = programSubjectsOf(snapshot.subjects);
+  // EiE 구분을 쓰지 않는 학원(새 학원 기본)은 'EiE' 줄을 빼고 영어를 그 학원 과목 이름으로 — 침산은 종전 문자열 그대로.
+  const eieOn = snapshot.eie !== false;
   const programLine = (counts: Record<Program, number>) =>
-    PROGRAMS.map((program) => `${programLabel(program, subjects)} ${number(counts[program])}`).join(" · ");
+    visiblePrograms(eieOn).map((program) => `${programLabel(program, subjects, eieOn)} ${number(counts[program])}`).join(" · ");
 
   const student = v.students?.data;
   const withdrawals = v.withdrawals?.data;
@@ -95,7 +97,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
           popupTitle="재원생 프로그램별 인원"
           jump={can("students") ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : null}
         >
-          <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} />
+          <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} eieOn={eieOn} />
         </KpiCard>
       )}
       {v.withdrawals && (
@@ -119,6 +121,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
             subjects={subjects}
             canFilter={can("withdrawals")}
             canOpenStudent={can("students")}
+            eieOn={eieOn}
           />
         </KpiCard>
       )}

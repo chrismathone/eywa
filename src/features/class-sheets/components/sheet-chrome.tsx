@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
@@ -48,7 +48,7 @@ function PillGlyph({
   hint,
   children,
 }: {
-  icon: EywaIconName;
+  icon: AywaIconName;
   /** 접혔을 때의 툴팁 — `WindowLink`의 `title`은 **창 제목**이라 툴팁으로 안 쓰인다. */
   hint: string;
   children: string;

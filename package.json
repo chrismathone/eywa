@@ -18,7 +18,6 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx scripts/seed.ts",
     "db:alphas": "tsx scripts/apply-all-alphas.ts",
     "test:rls": "vitest run --config vitest.integration.config.ts"
   },

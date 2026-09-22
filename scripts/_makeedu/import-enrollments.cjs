@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/import-enrollments.cjs — 학생 엑셀 '수업' 컬럼 → eywa `enrollments` (자연키 student_id+class_id).
+ * scripts/_makeedu/import-enrollments.cjs — 학생 엑셀 '수업' 컬럼 → aywa `enrollments` (자연키 student_id+class_id).
  * 원생목록 엑셀의 '수업' 셀(반 + 교재/기타 혼재)을 분해해 **임포트된 classes 이름과 일치하는 토큰만** 수강으로 매핑
  * (교재/기타 라인은 일치 반이 없어 자연 제외). 학생=makeedu_id, 반=class_name 정규화 일치.
  * ⚠️ classes·students(makeedu) 임포트 후 실행. 입력: Downloads 최신 원생목록*.xlsx + DB.

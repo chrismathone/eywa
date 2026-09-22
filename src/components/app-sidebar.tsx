@@ -9,10 +9,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { PanelLeftClose, PanelLeftOpen } from "@/components/icons/eywa-icon-compat";
+import { PanelLeftClose, PanelLeftOpen } from "@/components/icons/aywa-icon-compat";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { findNavItem, navItemByKey, navPresentation, type NavItem } from "@/lib/navigation";
 import { type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
@@ -119,7 +119,7 @@ export function AppSidebar({
   displayName,
   jobTitle,
   className,
-  logoText = "EYWA",
+  logoText = "AYWA",
   logoSrc,
   permMatrix,
   canTeacherView = false,

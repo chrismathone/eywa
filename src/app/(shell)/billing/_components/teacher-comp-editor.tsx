@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, Loader2, Pencil } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, Pencil } from "@/components/icons/aywa-icon-compat";
 import { saveTeacherComp, type SaveCompState } from "@/features/payroll/server/comp-actions";
 import type { SalaryType } from "@/features/payroll/settlement";
 import { SALARY_GROUPS, type GroupRates } from "@/features/payroll/salary-group";

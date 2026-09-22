@@ -4,8 +4,9 @@ import { accountForTarget } from "./settings-types";
 import { DEFAULT_SETTINGS } from "./defaults";
 
 describe("resolveSettings", () => {
-  it("저장값 없으면 DEFAULT + name은 테넌트명으로 폴백", () => {
-    const r = resolveSettings(null, { name: "인재원수학" });
+  it("저장 행이 비어 있으면(침산) DEFAULT + name은 테넌트명으로 폴백", () => {
+    // 일반판은 `preset: "generic"` 표식이 있는 행만이다(preset.test.ts) — 행이 없거나 비어 있으면 침산 기본값.
+    const r = resolveSettings({}, { name: "인재원수학" });
     expect(r.profile.name).toBe("인재원수학");
     expect(r.operations.subjects).toEqual(DEFAULT_SETTINGS.operations.subjects);
     expect(r.billing.dueDay).toBe(DEFAULT_SETTINGS.billing.dueDay);
@@ -26,11 +27,15 @@ describe("resolveSettings", () => {
     expect(r.operations.weekdayPeriods).toEqual(DEFAULT_SETTINGS.operations.weekdayPeriods);
   });
 
-  it("자리 출석부 PIN은 저장 없으면 랩실·JJ실 모두 기본 7099", () => {
+  it("자리 출석부 PIN은 저장 없으면 랩실·JJ실 모두 기본 0000(새 지점 — 원장 2026-09-22)", () => {
     // 원장 2026-08-19: 설정을 건드리지 않아도 /seat/jj가 배포 즉시 열려야 한다.
     const r = resolveSettings(null, { name: "X" });
-    expect(r.operations.seatPins.lab).toBe("7099");
-    expect(r.operations.seatPins.jj).toBe("7099");
+    expect(r.operations.seatPins.lab).toBe("0000");
+    expect(r.operations.seatPins.jj).toBe("0000");
+    // 🔴 침산처럼 7099를 **저장해 둔** 지점은 기본값이 바뀌어도 7099 그대로다(태블릿 비밀번호가 조용히 바뀌지 않는다).
+    const cs = resolveSettings({ operations: { seatPins: { lab: "7099", jj: "7099" } } }, { name: "X" });
+    expect(cs.operations.seatPins.lab).toBe("7099");
+    expect(cs.operations.seatPins.jj).toBe("7099");
     const r2 = resolveSettings({ operations: { seatPins: { lab: "1234", jj: "5678" } } }, { name: "X" });
     expect(r2.operations.seatPins.lab).toBe("1234");
     expect(r2.operations.seatPins.jj).toBe("5678");
@@ -43,7 +48,7 @@ describe("resolveSettings", () => {
     expect(r.operations.seatPins.jj).toBe("");
     // 옛 저장 행(자리 PIN 키 자체가 없던 시절)은 기본값으로 채워진다 — 배포 스큐에 문이 안 닫힌다.
     const legacy = resolveSettings({ operations: { seatPins: { lab: "1111" } } }, { name: "X" });
-    expect(legacy.operations.seatPins.jj).toBe("7099");
+    expect(legacy.operations.seatPins.jj).toBe("0000");
   });
 
   it("중첩 객체는 일부 키만 덮어쓰고 나머지는 기본값", () => {

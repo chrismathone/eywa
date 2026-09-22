@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { saveTeacherSplits, type SaveSplitsState } from "@/features/billing/session-terms/server/splits-actions";
 import type { SplitsSnapshotStatus } from "@/features/billing/session-terms/server/splits-queries";
 import type { SplitTotals } from "@/features/billing/session-terms/splits";

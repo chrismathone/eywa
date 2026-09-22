@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
-import { Copy, Loader2, Power, QrCode, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { Copy, Loader2, Power, QrCode, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createIntakeToken,

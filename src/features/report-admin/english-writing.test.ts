@@ -9,7 +9,7 @@ import {
   type EnglishClassInput,
 } from "./english-writing";
 
-describe("classKey ↔ boardKey — eywa 반 이름과 ClassNote 보드를 같은 키로", () => {
+describe("classKey ↔ boardKey — aywa 반 이름과 ClassNote 보드를 같은 키로", () => {
   it("부서 접두어와 강사 닉네임·요일 꼬리를 떼면 일치한다", () => {
     expect(classKey("중등E_초등 브릿지 C2")).toBe(boardKey("Hannah 초등 브릿지C2 (월화목)"));
     expect(classKey("중등E_중1 정규 A")).toBe(boardKey("Jane 중1 정규A (화수금)"));

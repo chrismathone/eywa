@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";

@@ -1,4 +1,5 @@
 import "server-only";
+import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -782,6 +783,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     requestedAt,
     allowed,
     subjects: subjectLabelRecord(settings.operations.subjects),
+    ...(isModuleEnabled(settings.modules.disabled, "eie") ? {} : { eie: false as const }),
     // 🔑 **복사해서** 돌려준다 — 마감 뒤 늦게 끝난 조회가 직렬화 도중 같은 객체를 고치면 한 렌더 안에서
     //    카드가 실패 → 성공으로 뒤집힌다(그 결과는 이미 화면에 못 실린다).
     sections: { ...sections },

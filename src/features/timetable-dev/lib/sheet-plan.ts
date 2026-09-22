@@ -6,7 +6,7 @@
  * 계획 층은 그 표에 한 행도 쓰면 안 되므로(0232a·isolation.test.ts) 시트→계획 변환을 여기서 **따로** 만든다.
  * 파서·매처(`import/structure/*`)는 순수 함수라 그대로 재사용한다(수정 없음).
  *
- * 🔴 **계획에 담는 것은 eywa에 이미 있는 반뿐이다.** 시트에는 메모 칸("<-"·"5.5"·"TEVO")과 신설 반이 섞여
+ * 🔴 **계획에 담는 것은 aywa에 이미 있는 반뿐이다.** 시트에는 메모 칸("<-"·"5.5"·"TEVO")과 신설 반이 섞여
  *    있고 둘 다 "DB에 없는 이름"이라 구분할 수가 없다(색 신호가 없는 읽기 경로다). 반을 새로 만들지 않고
  *    **매칭된 반만** 담고 나머지는 `skipped`로 사람에게 보여 준다 — 계획 화면이 유령 반을 그리지 않는다.
  *
@@ -79,12 +79,12 @@ function dayHeaderCount(grid: SheetGrid, row: number): number {
 /**
  * 탭 구조 판별 — 요일 헤더가 몇 행에 있는지로 가른다.
  *   · `master`(손으로 만든 마스터 시트, parse-grid): 1행 블록번호 · 2행 강사명 · **4행 요일**
- *   · `eywa`(eywa가 export한 강사별 탭, parse-eywa-grid): 1행 강사 · **2행 요일**
+ *   · `aywa`(aywa가 export한 강사별 탭, parse-aywa-grid): 1행 강사 · **2행 요일**
  * 사람이 고르게 하지 않는 이유 = 원장이 붙여넣는 건 주소 하나뿐이라, 여기서 못 가리면 "왜 0건이지"가 된다.
  * ⚠️ 동수·둘 다 0이면 `master`로 본다 — 미래 달 탭은 사람이 손으로 만든 마스터 구조이기 때문.
  */
-export function detectGridLayout(grid: SheetGrid): "master" | "eywa" {
-  return dayHeaderCount(grid, 1) > dayHeaderCount(grid, 3) ? "eywa" : "master";
+export function detectGridLayout(grid: SheetGrid): "master" | "aywa" {
+  return dayHeaderCount(grid, 1) > dayHeaderCount(grid, 3) ? "aywa" : "master";
 }
 
 // ── ③ 파싱·매칭 결과 → 계획 칸 ────────────────────────────────────────────────
@@ -121,7 +121,7 @@ export type PlanSheetImportPlan = {
   hash: string;
 };
 
-const SKIP_NO_CLASS = "eywa에 없는 반이라 계획에 담지 않았습니다(반을 먼저 만들어 주세요)";
+const SKIP_NO_CLASS = "aywa에 없는 반이라 계획에 담지 않았습니다(반을 먼저 만들어 주세요)";
 const SKIP_NO_END = "종료 시각을 읽지 못했습니다";
 const SKIP_BAD_DAY = "요일을 읽지 못했습니다";
 const SKIP_BAD_TIME = "시각 형식이 올바르지 않습니다";

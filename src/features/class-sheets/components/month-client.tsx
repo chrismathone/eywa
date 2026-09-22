@@ -4,24 +4,25 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { shiftMonth } from "@/lib/date-kst";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { PeriodNav } from "@/components/period-nav";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { offGoalCountByDate } from "../lib/goal-match";
-import { setMyEcsMonthDisplay, setMyEcsMonthView } from "../server/actions";
+import { setMyEcsMonthDisplay, setMyEcsMonthPeriod, setMyEcsMonthView } from "../server/actions";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetMonthLabel } from "@/features/teacher-view/i18n";
 import { classNameFor } from "@/features/teacher-view/class-name";
 import { SHEET_BAR, sheetFacesFor, sheetPill } from "../chrome";
 import { hasClassOnDate, weekForMonth } from "../face-nav";
 import { SheetBarDivider, SheetClassPicker, SheetFaceSwitch } from "./sheet-chrome";
-import type { EcsMonthDisplay, EcsMonthView } from "../view-prefs";
+import type { EcsMonthDisplay, EcsMonthPeriod, EcsMonthView } from "../view-prefs";
 import type { ClassSheetMonthData } from "../server/month-queries";
 import { MonthCalendar } from "./month-calendar";
 import { MonthDayEditor } from "./month-day-editor";
 import { MonthGoalStrip } from "./month-goal-strip";
 import { MonthMemo } from "./month-memo";
 import { MonthPlanBar } from "./month-plan-bar";
+import { MonthPeriodSwitch } from "./month-period-switch";
 import { TextbookFillDialog } from "./textbook-fill-dialog";
 import { MonthPlanView, type MonthPlanChromeProps } from "./month-plan-view";
 import { MonthRail } from "./month-rail";
@@ -101,9 +102,16 @@ export function MonthClient({
    * ⚠️ 계정 기본값은 이 화면에서 보기를 고를 때만 바뀐다(`setMyEcsMonthView`) — URL은 이번 방문의
    *    요청일 뿐이라 다음에 목록에서 열면 마지막으로 **여기서** 고른 보기로 열린다.
    */
-  const hrefFor = (month: string, v: EcsMonthView = view) =>
-    `/ecs/${data.classId}/month?month=${month}&view=${v}`;
-  const thisMonth = data.today.slice(0, 7);
+  /**
+   * 🔑 EiE면 **기간 축**(`period=`)도 함께 든다 — 세션으로 보다가 달을 넘기면 다음 세션이어야 한다
+   *    (안 실으면 계정 저장값을 따르므로 대개 같지만, 방금 누른 전환의 저장이 아직 안 끝났으면 되돌아간다).
+   * ⚠️ 인재원 영어엔 싣지 않는다 — 서버가 어차피 무시하는 값이 주소에 남으면 뜻이 흐려진다.
+   */
+  const hrefFor = (month: string, v: EcsMonthView = view, p: EcsMonthPeriod = data.period.mode) =>
+    `/ecs/${data.classId}/month?month=${month}&view=${v}${data.isEie ? `&period=${p}` : ""}`;
+  // 오늘이 든 라벨월 — 세션 축이면 **오늘이 든 세션**이다(서버가 정한 값, 11/2는 10월 세션).
+  const thisMonth = data.currentMonth;
+  const bySession = data.period.kind === "session";
   /**
    * '주간'으로 갈 때 여는 주 — 규칙과 근거는 [face-nav](../face-nav.ts) 한 곳(순수·Vitest).
    * 🔴 `/ecs/{반}`으로 그냥 보내면 8월을 훑다가 이번 주로 튄다 — 원장이 지운 "칸 클릭 → 그 주" 이동을
@@ -115,6 +123,8 @@ export function MonthClient({
     fromWeek,
     weeks: data.weeks,
     hasClassOn: (d) => hasClassOnDate(data.slotsByDate, d),
+    // 세션 창은 달을 넘는다 — '오늘이 이 기간인가'·'왔던 주가 이 기간인가'를 달이 아니라 창으로 본다.
+    range: bySession ? { start: data.period.start, end: data.period.end } : undefined,
   });
   const weekHref = `/ecs/${data.classId}${weekMonday ? `?week=${weekMonday}` : ""}`;
 
@@ -155,8 +165,11 @@ export function MonthClient({
   const openPrintWindow = usePrintWindow();
   // 창 id는 `print/<type>/<recordId>` 규약 — 반·달마다 다른 창이라 두 달을 나란히 열어 비교할 수 있다.
   const printOpts = {
-    id: `print/ecs-mp/${data.classId}-${data.month}`,
-    href: `/ecs/${data.classId}/month-plan/print?month=${data.month}`,
+    // 🔑 기간 축까지 창 id에 넣는다 — 같은 달을 월·세션으로 따로 찍을 수 있고, 축을 바꾼 뒤 누른 인쇄가
+    //    옛 축으로 열려 있던 창을 그대로 앞으로 가져오지 않는다.
+    id: `print/ecs-mp/${data.classId}-${data.month}-${data.period.mode}`,
+    // 🔴 화면이 보던 축을 싣는다 — 안 실으면 인쇄가 계정 저장값으로 창을 다시 정해 화면과 다른 날짜를 찍을 수 있다.
+    href: `/ecs/${data.classId}/month-plan/print?month=${data.month}&period=${data.period.mode}`,
     // 창 **제목**(강사가 보는 크롬)이라 언어를 따른다 — 인쇄물 본문은 학부모 서식이라 한국어 그대로다.
     title: tf("month.printDocTitle", { class: shownClassName, month: shownMonthLabel }),
   };
@@ -176,6 +189,18 @@ export function MonthClient({
     const url = new URL(window.location.href);
     url.searchParams.set("view", next);
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  /**
+   * 기간 축 전환(EiE만) — **창이 서버에서 다시 정해져야** 해서(`resolvePeriodWindow`) 보기 전환과 달리
+   * 이동이다. 편집 큐를 먼저 비운다(`navigate`). 계정 저장은 기다리지 않는다 — 이번 이동은 주소가 이긴다.
+   */
+  const choosePeriod = (next: EcsMonthPeriod) => {
+    if (next === data.period.mode) return;
+    void setMyEcsMonthPeriod(next);
+    // 🔑 '왔던 주'를 함께 든다 — 주간 시트에서 달력월로 들어와 세션으로 바꾸면 서버가 **그 주가 든 세션**을
+    //    열어야 한다(안 실으면 주소의 달(목요일 기준)로 가서 11/2에 오늘이 없는 11월 세션이 열린다).
+    void navigate(`${hrefFor(data.month, view, next)}${fromWeek ? `&week=${fromWeek}` : ""}`);
   };
 
   const toggle = (key: keyof EcsMonthDisplay) => {
@@ -221,7 +246,9 @@ export function MonthClient({
           // 주간 시트와 같은 규약 — '목록'은 **주간 면**으로 돌아간다. 어느 주로 갈지는 '주간' 전환
           // 버튼과 **같은 판정**(`weekForMonth`)을 재사용한다(두 벌로 적으면 서로 다른 주로 간다).
           listHref={`/ecs?view=week&week=${weekMonday}`}
-          hrefForClass={(id) => `/ecs/${id}/month?month=${data.month}&view=${view}`}
+          hrefForClass={(id) =>
+            `/ecs/${id}/month?month=${data.month}&view=${view}${data.isEie ? `&period=${data.period.mode}` : ""}`
+          }
         />
         <SheetBarDivider />
         <PeriodNav
@@ -230,12 +257,14 @@ export function MonthClient({
           nextHref={hrefFor(shiftMonth(data.month, 1))}
           currentHref={hrefFor(thisMonth)}
           relation={data.month === thisMonth ? "current" : data.month < thisMonth ? "past" : "future"}
-          prevAriaLabel={t("month.prev")}
-          nextAriaLabel={t("month.next")}
-          currentTitle={t("month.current")}
+          prevAriaLabel={t(bySession ? "month.prevSession" : "month.prev")}
+          nextAriaLabel={t(bySession ? "month.nextSession" : "month.next")}
+          currentTitle={t(bySession ? "month.currentSession" : "month.current")}
           labelWidth={116}
           onNavigate={navigate}
         />
+        {/* 🔴 기간 축은 **EiE 계획서에만** 선다 — 서버도 EiE가 아니면 이 값을 무시한다(달력월 고정). */}
+        {data.isEie ? <MonthPeriodSwitch period={data.period} onSelect={choosePeriod} /> : null}
         {/* 주간 | 달력 | 진도표 (+ EiE면 계획(MP)) — 주간 시트와 **같은 칸**, 같은 자리(기간 네비 옆). */}
         <SheetFaceSwitch
           current={view}

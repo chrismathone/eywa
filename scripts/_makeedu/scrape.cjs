@@ -40,8 +40,8 @@ const LISTS = {
   // ⚠️ 재원생 목록 URL은 최초 실행에서 확인할 것. students.json이 0행이면 URL이 틀린 것 →
   //    MAKEEDU_STUDENTS_URL 환경변수로 정확한 경로를 덮어쓴다(코드 변경 없이 교정).
   students: { url: process.env.MAKEEDU_STUDENTS_URL || "/member/student/list.do" },
-  // 퇴원생 관리(원장 확인 2026-07-30). makeedu는 실제 결제·환불을 처리하므로 **퇴원일이 eywa보다 정확**하다 —
-  // eywa의 2026-07-10 일괄분(장부 날짜)을 교정·검증하는 근거로 쓴다(compare-withdrawal-dates.mjs).
+  // 퇴원생 관리(원장 확인 2026-07-30). makeedu는 실제 결제·환불을 처리하므로 **퇴원일이 aywa보다 정확**하다 —
+  // aywa의 2026-07-10 일괄분(장부 날짜)을 교정·검증하는 근거로 쓴다(compare-withdrawal-dates.mjs).
   withdrawn: { url: process.env.MAKEEDU_WITHDRAWN_URL || "/member/student/stopList.do" },
 };
 
@@ -56,7 +56,7 @@ const { extractTable: EXTRACT } = require("./extract-table.cjs");
  * 즉 **PC마다·브라우저마다 다르고**, Playwright는 매 실행 새 컨텍스트라 **항상 꺼진 채 시작**한다.
  * 사람이 자기 Chrome에서 켜 놔도 연동 PC 스크랩엔 아무 영향이 없다 → 스크래퍼가 스스로 심어야 한다.
  *
- * - `item_totalSum=Y` : 화면 하단 '결과 합계' 행. **외부 대조(makeedu 합계 ↔ eywa)의 전제**다.
+ * - `item_totalSum=Y` : 화면 하단 '결과 합계' 행. **외부 대조(makeedu 합계 ↔ aywa)의 전제**다.
  *   이게 없으면 검증이 안 서고, 검증이 없으면 삭제 판정이 보수 모드로 떨어져 유령이 쌓인다.
  * - `listSize=500`    : 페이지 크기. 셀렉트를 클릭해 바꾸면 **리로드가 한 번 더** 일어나 검색 조건과 서로를 흔든다
  *   (2026-07-31 수확 실패의 한 원인). 쿠키로 미리 정하면 그 상호작용 자체가 사라진다.

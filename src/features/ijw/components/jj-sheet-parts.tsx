@@ -6,7 +6,7 @@ import { comma, type BarRow, type BarTone } from "../sheet-model";
  *
  * ⚠️ 훅·"use client"·서버 전용 모듈을 들이지 말 것 — 같은 조각을 학부모 카드(/r·PDF·ClassNote 캡처, 서버)와
  *    원스크린 미리보기(클라이언트)가 함께 그린다.
- * eywa 문법(팔레트 v4): 면 = 화이트, 구분 = 헤어라인, 색 = 뜻 — 막대는 학원색 한 색, 60% 미만만 빨강(critical).
+ * aywa 문법(팔레트 v4): 면 = 화이트, 구분 = 헤어라인, 색 = 뜻 — 막대는 학원색 한 색, 60% 미만만 빨강(critical).
  * 🔑 틀은 `@container` — 두 단 배치는 창 폭이 아니라 **이 틀의 폭**을 본다(학부모 카드 512px에선 저절로 한 단).
  */
 

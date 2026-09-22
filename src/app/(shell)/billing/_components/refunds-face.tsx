@@ -1,4 +1,4 @@
-import { Plus, ReceiptText } from "@/components/icons/eywa-icon-compat";
+import { Plus, ReceiptText } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";

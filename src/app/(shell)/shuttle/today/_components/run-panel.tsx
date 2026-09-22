@@ -1,7 +1,7 @@
 "use client";
 
 import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { TONE_COLOR } from "@/lib/design/semantic-color";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_ROW } from "@/features/shuttle/control-size";
@@ -112,7 +112,7 @@ export function RunPanel({
               <span className="text-text-faint text-xs font-bold">오늘 탑승 없음</span>
             )}
             {/* ⚠️ 접기 표시를 ▲/▼ **문자**로 쓰지 말 것 — 아이콘 자리에 글리프를 세우는 건
-                가드 테스트(eywa-icon-mapping)가 막는다. 폰트·플랫폼마다 크기가 널뛴다. */}
+                가드 테스트(aywa-icon-mapping)가 막는다. 폰트·플랫폼마다 크기가 널뛴다. */}
             <EyIcon name={open ? "chevronUp" : "chevronDown"} size={14} className="text-text-faint" />
           </span>
         </button>

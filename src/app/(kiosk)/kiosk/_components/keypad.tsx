@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 // 무인 키오스크 숫자패드 — 출석번호(4~5자리) 셀프입력 → 체크인 API → 등/하원 결과 + 발송 시뮬 배너.
 // 자동제출 대신 '확인' 버튼(4자리/5자리 공존 시 prefix 모호성 회피). 결과 후 자동 리셋.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";

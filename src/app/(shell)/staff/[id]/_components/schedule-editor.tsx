@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, Loader2, Plus, X } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, Plus, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { updateWorkSchedule } from "@/features/staff/server/account-actions";
 import type { WorkSchedule } from "@/features/staff/work-schedule";

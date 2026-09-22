@@ -11,7 +11,7 @@ import {
 } from "@/features/integrations/google-sheets";
 import { getGoogleSheetsStatus } from "@/features/integrations/server/queries";
 import { matchStructure } from "@/features/timetable/import/structure/match";
-import { parseEywaTeacherGrid } from "@/features/timetable/import/structure/parse-eywa-grid";
+import { parseAywaTeacherGrid } from "@/features/timetable/import/structure/parse-aywa-grid";
 import { parseTeacherGrid } from "@/features/timetable/import/structure/parse-grid";
 import type { ExistingContext, SheetGrid } from "@/features/timetable/import/structure/types";
 import { isPlanMonth, planMonthLabel } from "../types";
@@ -78,8 +78,8 @@ export type PlanSheetPreviewResult =
       ok: true;
       spreadsheetId: string;
       tabName: string;
-      /** 어느 구조로 읽었는지(손시트/eywa export) — 0건일 때 원인을 짚을 유일한 단서. */
-      layout: "master" | "eywa";
+      /** 어느 구조로 읽었는지(손시트/aywa export) — 0건일 때 원인을 짚을 유일한 단서. */
+      layout: "master" | "aywa";
       plan: PlanSheetImportPlan;
       serviceAccountEmail: string | null;
     }
@@ -126,7 +126,7 @@ function fail(error: string, detail?: string): PlanSheetFailure {
 
 /**
  * 문서 id를 정한다 — 사람이 준 주소가 **항상 이긴다**. 없을 때만 연동 설정(영어 → 수학 순)에서 찾는다.
- * ⚠️ 연동의 `sync_enabled`(시트 내보내기 토글)는 보지 않는다 — 그 토글은 eywa가 시트를 **덮어쓰는**
+ * ⚠️ 연동의 `sync_enabled`(시트 내보내기 토글)는 보지 않는다 — 그 토글은 aywa가 시트를 **덮어쓰는**
  *    경로를 여닫는 스위치고, 여기는 시트를 **읽기만** 한다(꺼져 있다고 못 읽을 이유가 없다).
  */
 async function resolveSpreadsheetId(
@@ -195,7 +195,7 @@ export async function listPlanImportTabs(source?: string): Promise<PlanSheetTabs
 type Computed = {
   spreadsheetId: string;
   tabName: string;
-  layout: "master" | "eywa";
+  layout: "master" | "aywa";
   plan: PlanSheetImportPlan;
   tenantId: string;
 };
@@ -236,7 +236,7 @@ async function computePlan(
   }
 
   const layout = detectGridLayout(grid);
-  const parsed = layout === "eywa" ? parseEywaTeacherGrid(grid) : parseTeacherGrid(grid);
+  const parsed = layout === "aywa" ? parseAywaTeacherGrid(grid) : parseTeacherGrid(grid);
   if (parsed.slots.length === 0)
     return fail(
       `'${tabName}' 탭에서 수업 칸을 하나도 읽지 못했습니다 — 강사별 시간표 탭이 맞는지 확인해 주세요.`,

@@ -21,7 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { getEcsDayPlan, type EcsDayPlan } from "../server/day-plan";
 import { slotKey } from "../lib/month-assemble";

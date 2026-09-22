@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircle, ArrowRight } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, ArrowRight } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";

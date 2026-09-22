@@ -249,7 +249,7 @@ export async function OneScreenDashboard({
   // 🔴 수납은 넣지 않는다 — 같은 화면의 수납 타일이 이미 미납 건수를 말한다(§2 같은 값 두 번 금지).
   const churnTop = (briefingRow?.payload?.spotlights ?? []).find((s) => s.action);
   /**
-   * 숙제·학부모 확인의 재료(`lesson_reports`)는 **eywa에 보고서를 쓰는 과목만**이다 — 현 운영상 수학이고
+   * 숙제·학부모 확인의 재료(`lesson_reports`)는 **aywa에 보고서를 쓰는 과목만**이다 — 현 운영상 수학이고
    * 영어는 ClassNote에 직접 쓴다(영어 0건). 🔴 그래서 라벨에 과목 축이 보여야 한다 — 안 그러면 원장이
    * 학원 전체로 읽는다. 축은 학원설정에서 오고 라벨은 `buildSubjectMaps`(운영 enum 단일 소스)가 만든다.
    */

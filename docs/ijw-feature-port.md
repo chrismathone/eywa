@@ -1,7 +1,7 @@
-# ijw → eywa 기능 이식 진행/핸드오프
+# ijw → aywa 기능 이식 진행/핸드오프
 
-> **목적:** ijw-calander(학원 SaaS 원본)의 기능을 eywa로 **"자연스럽게 이전한 느낌"** 이 되도록 완전 이식.
-> 디자인 복제가 아니라 **ijw가 하던 동작이 eywa에서 그대로 되게** 하는 게 목표.
+> **목적:** ijw-calander(학원 SaaS 원본)의 기능을 aywa로 **"자연스럽게 이전한 느낌"** 이 되도록 완전 이식.
+> 디자인 복제가 아니라 **ijw가 하던 동작이 aywa에서 그대로 되게** 하는 게 목표.
 > 다른 컴퓨터/세션에서 이어갈 수 있도록 repo에 기록(이 문서가 진실 — `.claude/plans`·memory는 기기 로컬).
 > 최종 갱신: 2026-06-18.
 
@@ -33,7 +33,7 @@
   반=열 카드: ijw 헤더색(`bg_color`) 수업명 + 담임 + **요일별 강의실**(`월수 본원304 / 목 LAB실`) + **요일×교시 미니그리드**(셀마다
   강사약칭·**강사 저장색**(ijw `users.bg_color`; 영문닉네임은 `users.english_name`으로 해결, 미해결만 `teacherColor` 해시 폴백) / LAB=파란배지) +
   **재원/대기/퇴원**(신입 빨강·전입 초록, 영문이름 `이름 (English)`). 읽기전용. 순수함수 `lib/class-grid.ts`
-  의 `buildRichCardGroups`/`teacherColor`(+test 6). ⚠️ **데이터 백필 필수**: eywa 데모가 평면(슬롯별 강사/강의실/영문이름 0)이라
+  의 `buildRichCardGroups`/`teacherColor`(+test 6). ⚠️ **데이터 백필 필수**: aywa 데모가 평면(슬롯별 강사/강의실/영문이름 0)이라
   `scripts/_poc_migration/backfill-english-slots.cjs`(멱등)로 ijw 익스포트의 slotTeachers·slotRooms·bgColor·englishName을 적재
   (slot강사 183·강의실 84·LAB 65셀·반색 52·영문 29). 스키마 0041a(`class_schedules.slot_teacher_label/slot_room_label`).
   **(2026-06-26) 강사 퍼스널 색 이식**: ijw `staff`(42명 전원 bgColor/textColor)를 `backfill-teacher-colors.cjs`(멱등)로 `users.bg_color`/

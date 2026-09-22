@@ -10,8 +10,9 @@ import {
 import { RichText } from "@/components/rich-text";
 import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { PrintActions } from "./print-actions";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
-export const metadata = { title: "신입생 인수인계서 — eywa" };
+export const metadata = { title: "신입생 인수인계서 — aywa" };
 
 // 과목 라벨은 print_payload 스냅샷에 이미 한글로 동결돼 있어 별도 맵이 필요 없다(과목 하드코딩 금지).
 // 향후 라벨이 필요하면 buildSubjectMaps(getTenantSettings).labelOf로 읽을 것.
@@ -30,11 +31,15 @@ export default async function EnrollmentPrintPage({
     getTenantSettings(),
   ]);
   if (!consult || !consult.aiAnalysis) notFound();
-  const printHeader = settings.notifications.printHeader || "eywa · 인재원 학원관리";
+  // 머리글 폴백 = 그 학원 이름. 옛 폴백은 "aywa · 인재원 학원관리" 고정이라 다른 지점 인쇄물에도 인재원이 찍혔다.
+  // 침산은 학원 이름이 '인재원'이라 같은 글자가 나온다(2026-09-22 확인).
+  const printHeader =
+    settings.notifications.printHeader ||
+    (settings.profile.name ? `aywa · ${settings.profile.name} 학원관리` : "aywa");
 
   // 학원 연락처·정책 — owner 설정에서(값 있을 때만 인쇄물에 노출). 인수인계서는 학부모 전달용 1부 포함.
   const profile = settings.profile;
-  const academyName = profile.name || "인재원";
+  const academyName = profile.name || NEUTRAL_ACADEMY_NAME;
   // 로고/직인 — GCS 비공개 path면 signed URL로 resolve(외부 URL은 그대로).
   const [logoSrc, sealSrc] = await Promise.all([
     resolveBrandingSrc(profile.logoUrl, user.tenantId),

@@ -8,7 +8,7 @@ import {
 } from "@/components/toolbar-controls";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays, List } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, CalendarDays, List } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import type { StudentAttendanceFull } from "@/features/students/server/queries";

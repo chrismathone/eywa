@@ -6,11 +6,14 @@ import {
   formatUnitsWithSuffix,
   type AttendanceUnitSuffix,
 } from "@/features/attendance/unit-suffix";
-import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
+import { actualLessonAmount } from "@/features/attendance/actual-amount";
+import { actualLessonSalary, actualSalaryBase, salaryBilledCap } from "@/features/attendance/salary-rates";
+import { AttendanceColSpan } from "./columns";
 import { tipProps } from "@/components/hover-tip/tip";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { EMPTY_COUNT, rateDecimal, ratePercent, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import { useColumnTotals, useRowCount, useRowsCount } from "./grid-context";
+import { useColumnTotals, useRowCount, useRowCounts, useRowsCount } from "./grid-context";
 import type { ColumnTotals } from "@/features/attendance/grid/column-totals";
 import { formatMoney } from "@/features/attendance/money-format";
 import { useAttendanceSearch } from "./search-context";
@@ -57,10 +60,59 @@ export function RowLessonCountCell({
   // 여백은 이웃(청구액·등록 차수)과 같은 `px-1 py-1` — 옛 오른쪽 sticky 자리의 `py-2`가 따라왔던 것이다.
   // 배경(연파랑)은 등록 차수 칸과 같은 토큰 — 두 칸이 한 짝이라는 걸 색이 말한다(원장 2026-09-18).
   return (
-    <td className="border-line text-foreground num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
+    <td data-att-column="units" className="border-line text-foreground num bg-att-col-sessions border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap">
       {c.units > 0 || zeroAsNumber ? formatUnitsWithSuffix(c.units, suffix) : "—"}
     </td>
   );
+}
+
+export function RowActualAmountCell({ row, fallback, prices, lang }: {
+  row: string; fallback: Counted; prices: readonly AttendanceConfirmedPrice[] | null | undefined; lang: SheetLang;
+}) {
+  const count = useRowCount(row) ?? fallback;
+  const amount = actualLessonAmount(prices, count.units);
+  return <td data-att-column="actualAmount" className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap"
+    title={sheetT(lang, amount === null ? "att.row.actualAmountUnavailable" : "att.col.actualAmountTitle")}>
+    {amount === null ? "—" : formatMoney(amount)}
+  </td>;
+}
+
+export function RowActualSalaryCell({ row, fallback, prices, rate, billed, lang }: {
+  row: string; fallback: Counted; prices: readonly AttendanceConfirmedPrice[] | null | undefined; rate: number | null;
+  /** 이 줄의 실급여 상한 = 이 선생님 몫의 청구액(`salaryBilledCap`). 모르면 undefined(상한 없음). */
+  billed?: number | null;
+  lang: SheetLang;
+}) {
+  const count = useRowCount(row) ?? fallback;
+  const amount = actualLessonSalary(prices, count.units, rate, billed);
+  const capped = amount !== null && actualSalaryBase(prices, count.units, billed)?.capped === true;
+  return <td data-att-column="actualSalary" className="border-line num bg-att-col-billed border-b border-r px-1 py-1 text-right text-xs font-bold whitespace-nowrap"
+    title={amount === null ? sheetT(lang, "att.row.actualSalaryUnavailable")
+      : sheetTf(lang, capped ? "att.row.actualSalaryRateCapped" : "att.row.actualSalaryRate", { rate: rate! })}>
+    {amount === null ? "—" : formatMoney(amount)}
+  </td>;
+}
+
+function ActualAmountTotalCell({ rows, prices, fallback, lang, rates, billed, terms }: {
+  rows: readonly string[]; prices?: Record<string, AttendanceConfirmedPrice[]>; fallback?: Record<string, Counted>; lang: SheetLang;
+  rates?: Record<string, number | null>;
+  /** 줄별 청구액 — 실급여 합계도 줄마다 청구액으로 깎은 값을 더한다(칸과 합계가 같은 식). */
+  billed?: Record<string, number | null>;
+  /** 줄별 등록 차수 — 나눠 맡는 줄은 청구액을 제 몫만큼으로 깎는다(`salaryBilledCap`, 줄 칸과 같은 재료). */
+  terms?: Record<string, AttendanceTermSessions | null>;
+}) {
+  const live = useRowCounts(rows);
+  let total = 0;
+  let any = false;
+  for (const row of rows) {
+    const count = live?.[row] ?? fallback?.[row];
+    const amount = count ? rates ? actualLessonSalary(prices?.[row], count.units, rates[row], salaryBilledCap(billed?.[row], terms?.[row])) : actualLessonAmount(prices?.[row], count.units) : null;
+    if (amount !== null) { total += amount; any = true; }
+  }
+  return <td data-att-column={rates ? "actualSalary" : "actualAmount"} className="border-line num bg-att-col-billed border-t-2 border-r px-1 py-1.5 text-right text-xs font-bold whitespace-nowrap"
+    title={sheetT(lang, rates ? "att.col.actualSalaryTitle" : "att.col.actualAmountTitle")}>
+    {any ? formatMoney(rates ? Math.floor(total) : total) : "—"}
+  </td>;
 }
 
 /**
@@ -78,6 +130,7 @@ export function RowSessionDiffCell({
   suffix = null,
   lang = "ko",
   termSynthetic = false,
+  noInvoice = null,
 }: {
   row: string;
   fallback: Counted;
@@ -89,15 +142,31 @@ export function RowSessionDiffCell({
    * 없는 줄이 아니므로, 그 0에서 뺀 `+1.0` 같은 신호를 내지 않고 미확정(`—`)으로 돌아간다(새로고침 뒤 서버 값과 같은 모양).
    */
   termSynthetic?: boolean;
+  /**
+   * 그 달 청구서가 없거나(`none`) 취소된(`void`) 학생의 줄(2026-09-18) — 등록 차수가 `—`인 이유가 '아직 확정 전'이 아니라
+   * '확정할 곳이 없다'라, `—`의 툴팁을 그 문구로 바꾼다. 청구서가 있으면 null(종전 문구).
+   */
+  noInvoice?: AttendanceInvoiceGap | null;
 }) {
   const c = useRowCount(row) ?? fallback;
   const term = termSynthetic && c.units > 0 ? null : termIn;
   const diff = attendanceUnitsDiff(c.units, term);
   if (diff === null) {
+    // 옛 일수 기준 확정이면 회차 행이 있다(= 청구서가 있다) — 그 문구가 먼저. 청구서 없음은 회차 행이 없는 줄에만 선다.
+    const why = term?.allocationPending
+      ? "att.row.allocationPendingTip"
+      : term?.daysBasis
+      ? "att.row.diffDaysBasis"
+      : noInvoice === "void"
+        ? "att.row.invoiceVoidTip"
+        : noInvoice === "none"
+          ? "att.row.noInvoiceTip"
+          : "att.row.diffUnconfirmed";
     return (
       <td
+        data-att-column="diff"
         className="border-line text-text-dim num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap"
-        title={sheetT(lang, term?.daysBasis ? "att.row.diffDaysBasis" : "att.row.diffUnconfirmed")}
+        title={sheetT(lang, why)}
       >
         —
       </td>
@@ -111,7 +180,7 @@ export function RowSessionDiffCell({
         ? "bg-att-diff-minus text-white"
         : "text-foreground";
   return (
-    <td className={`border-line num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap ${fill}`}>
+    <td data-att-column="diff" className={`border-line num border-b border-r px-1 py-1 text-center text-xs font-bold whitespace-nowrap ${fill}`}>
       <span
         {...tipProps({
           title: sheetT(lang, "att.row.diffTip"),
@@ -349,6 +418,12 @@ export function MatrixColumnTotalsRow({
   rows,
   days,
   showClassBilled,
+  showPrice = false,
+  showActualAmount = false,
+  pricesByRow,
+  countsByRow,
+  salaryRatesByRow,
+  billedColumnWidth = 76,
   showTermSessions,
   billedByRow,
   termByRow,
@@ -360,6 +435,13 @@ export function MatrixColumnTotalsRow({
   rows: readonly string[];
   days: readonly { date: string; placeholder?: boolean }[];
   showClassBilled: boolean;
+  showPrice?: boolean;
+  showActualAmount?: boolean;
+  pricesByRow?: Record<string, AttendanceConfirmedPrice[]>;
+  countsByRow?: Record<string, Counted>;
+  salaryRatesByRow?: Record<string, number | null>;
+  /** 학생 행의 청구액 폭. 합계가 길면 왼쪽 라벨 공간에서 필요한 만큼만 더 쓴다. */
+  billedColumnWidth?: number;
   showTermSessions: boolean;
   billedByRow?: Record<string, number | null>;
   termByRow?: Record<string, AttendanceTermSessions | null>;
@@ -389,7 +471,7 @@ export function MatrixColumnTotalsRow({
     const t = termByRow?.[r];
     if (t) {
       if (t.daysBasis) daysBasisSkipped++;
-      else {
+      else if (!t.allocationPending) {
         term += t.units;
         termAny = true;
       }
@@ -398,27 +480,42 @@ export function MatrixColumnTotalsRow({
   const cell = "border-line border-t-2 border-r px-1 py-1.5 text-xs font-bold whitespace-nowrap num";
   return (
     <tr className="bg-bg-soft">
-      <td
-        colSpan={2}
-        className="border-line bg-bg-soft sticky left-0 z-10 border-t-2 border-r px-2 py-1.5 text-center text-xs font-bold whitespace-nowrap"
+      <AttendanceColSpan
+        colSpan={2 + (showPrice ? 1 : 0) + (showClassBilled ? 1 : 0)}
+        columns={["school", ...(showPrice ? ["unitPrice" as const] : []), ...(showClassBilled ? ["classBilled" as const] : [])]}
+        className="border-line bg-bg-soft z-10 border-t-2 border-r p-0 text-xs font-bold whitespace-nowrap sm:sticky sm:left-0"
       >
-        {sheetT(lang, searching ? "att.totals.search" : "att.totals.all")}
-      </td>
-      {showClassBilled ? (
-        <td className={`${cell} bg-att-col-billed text-right`}>{billedAny ? formatMoney(billed) : "—"}</td>
-      ) : null}
-      <td className={`${cell} bg-att-col-sessions text-right`}>
+        {/* 합계 행 안에서만 경계를 옮긴다. colgroup을 바꾸면 위 학생들의 학교 열까지 줄어든다. */}
+        <div className="flex items-stretch">
+          <span className="min-w-0 flex-1 px-2 py-1.5 text-center">
+            {sheetT(lang, searching ? "att.totals.search" : "att.totals.all")}
+          </span>
+          {showClassBilled ? (
+            <span
+              data-att-column="classBilled"
+              className="border-line bg-att-col-billed shrink-0 border-l px-1 py-1.5 text-right num"
+              style={{ minWidth: billedColumnWidth }}
+            >
+              {billedAny ? formatMoney(billed) : "—"}
+            </span>
+          ) : null}
+        </div>
+      </AttendanceColSpan>
+      {showActualAmount ? <ActualAmountTotalCell rows={scope} prices={pricesByRow} fallback={countsByRow} lang={lang} /> : null}
+      {salaryRatesByRow ? <ActualAmountTotalCell rows={scope} prices={pricesByRow} fallback={countsByRow} lang={lang} rates={salaryRatesByRow} billed={billedByRow} terms={termByRow} /> : null}
+      <td data-att-column="units" className={`${cell} bg-att-col-sessions text-right`}>
         {totals ? formatUnitsWithSuffix(totals.units, suffix) : "—"}
       </td>
       {showTermSessions ? (
         <>
           <td
+            data-att-column="termSessions"
             className={`${cell} bg-att-col-sessions text-right`}
             title={daysBasisSkipped > 0 ? sheetTf(lang, "att.totals.daysBasisSkipped", { n: daysBasisSkipped }) : undefined}
           >
             {termAny ? formatUnitsWithSuffix(term, suffix) : "—"}
           </td>
-          <td className={cell} />
+          <td data-att-column="diff" className={cell} />
         </>
       ) : null}
       {days.map((d) => {
@@ -429,12 +526,6 @@ export function MatrixColumnTotalsRow({
           </td>
         );
       })}
-      <td
-        className={`border-line bg-bg-soft sticky right-0 z-10 border-t-2 border-l px-2 py-1.5 text-right text-xs font-bold whitespace-nowrap num ${rateColorOf(totals?.rateAvg ?? null)}`}
-        title={sheetT(lang, "att.totals.rateAvgTitle")}
-      >
-        {totals?.rateAvg == null ? "—" : `${totals.rateAvg}%`}
-      </td>
     </tr>
   );
 }

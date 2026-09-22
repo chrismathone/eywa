@@ -18,7 +18,7 @@ export function HelpPills({
           type="button"
           data-help-pill={p.key}
           aria-current={p.key === focusKey ? "true" : undefined}
-          aria-describedby={p.key === focusKey ? "eywa-help-caption" : undefined}
+          aria-describedby={p.key === focusKey ? "aywa-help-caption" : undefined}
           className={`${s.pill} text-xs tabular-nums`}
           style={{
             left: p.pill.x,

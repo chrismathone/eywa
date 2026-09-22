@@ -10,7 +10,7 @@ export type ReportListRow = {
   subject: string | null;
   /**
    * 반 이름(0134a `class_id` → `classes.class_name` 임베드). **내부 표시 전용** — 학부모 화면엔 반이 나오지 않는다(0134a).
-   * ⚠️ 대부분 null이다: class_id는 0134a(2026-07-22) 이후 **eywa가 직접 쓴 보고서**에만 붙고, edutrix 이관분은
+   * ⚠️ 대부분 null이다: class_id는 0134a(2026-07-22) 이후 **aywa가 직접 쓴 보고서**에만 붙고, edutrix 이관분은
    * `subject`가 전부 NULL이라 반 추정(resolveReportClassId)이 구조적으로 불가하다(실측 2026-07: 1,520건 중 71건).
    * 그래서 목록은 없으면 "—"로 두고, 반 정렬 시 null을 뒤로 보낸다(반 있는 건이 위로 모임).
    */
@@ -31,7 +31,7 @@ export type ReportListRow = {
   classnoteStatus: string | null;
   teacherName: string | null;
   shareToken: string | null;
-  source: string | null; // edutrix_import=이관분(발송 아님) · onescreen=eywa 네이티브
+  source: string | null; // edutrix_import=이관분(발송 아님) · onescreen=aywa 네이티브
   /**
    * 학부모 읽음 시각(classnote_read_at, 0122a — 연동 PC 워커가 ClassNote 피드에서 동기화).
    * ⚠️ null = "안 읽음"이 **아니다** — 매칭 키(edutrix_share_token) 없는 행은 동기화 자체가 안 된다.

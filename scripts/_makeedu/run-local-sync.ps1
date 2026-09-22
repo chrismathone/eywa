@@ -1,4 +1,4 @@
-# run-local-sync.ps1 — Windows 작업 스케줄러용 makeedu→eywa 로컬 동기화 래퍼.
+# run-local-sync.ps1 — Windows 작업 스케줄러용 makeedu→aywa 로컬 동기화 래퍼.
 #
 # 왜 로컬인가: makeedu가 세션/로그인을 "신뢰 IP(집)"에 묶어 GitHub 데이터센터 IP를 거부한다.
 # 집 IP에선 헤드리스 새 로그인이 CAPTCHA 없이 통과하므로(검증됨), 세션 캡처 없이 매 실행 새로 로그인한다.

@@ -16,16 +16,18 @@ type ScrollOptions = {
   onScrollPosition?: (position: number) => void;
   selectionRevision?: number;
   detailSelector?: string;
+  requireUserScroll?: boolean;
 };
 
 export function useTimelineScrollSpy(position: number, onPosition: (position: number) => void, scopeKey: string, continuous = false, options: ScrollOptions = {}) {
-  const { onScrollPosition = onPosition, selectionRevision = 0, detailSelector } = options;
+  const { onScrollPosition = onPosition, selectionRevision = 0, detailSelector, requireUserScroll = false } = options;
   const layoutRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const monthRefs = useRef(new Map<number, HTMLElement>());
   const latest = useRef({ position, onPosition, onScrollPosition, detailSelector });
   useLayoutEffect(() => { latest.current = { position, onPosition, onScrollPosition, detailSelector }; }, [position, onPosition, onScrollPosition, detailSelector]);
   const lock = useRef(true);
+  const userScrolling = useRef(false);
   const spyPosition = useRef<number | null>(null);
   const jumpRef = useRef<((smooth: boolean) => void) | null>(null);
   const [programmaticScroll, setProgrammaticScroll] = useState(false);
@@ -34,6 +36,7 @@ export function useTimelineScrollSpy(position: number, onPosition: (position: nu
   useLayoutEffect(() => {
     lock.current = true;
     spyPosition.current = null;
+    userScrolling.current = false;
   }, [selectionRevision]);
   const registerMonth = useCallback((month: number, element: HTMLElement | null) => {
     if (element) monthRefs.current.set(month, element);
@@ -74,7 +77,7 @@ export function useTimelineScrollSpy(position: number, onPosition: (position: nu
       const above = maxScroll > 1 && host.scrollTop > 1;
       const below = maxScroll > 1 && maxScroll - host.scrollTop > 1;
       setScrollEdges((previous) => previous.above === above && previous.below === below ? previous : { above, below });
-      if (lock.current) return;
+      if (lock.current || requireUserScroll && !userScrolling.current) return;
       if (box.bottom < area.top || box.top > area.top + area.height) return;
       const current = periodAt(latest.current.position);
       const bounds = [...monthRefs.current].map(([month, element]) => {
@@ -95,6 +98,8 @@ export function useTimelineScrollSpy(position: number, onPosition: (position: nu
     const interrupt = (event: Event) => {
       if (sidebarRef.current?.contains(event.target as Node)) return;
       if (event instanceof KeyboardEvent && !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) return;
+      if (requireUserScroll && event.type === "pointerdown" && (event.target as Element)?.closest("button, a, input, select")) return;
+      userScrolling.current = true;
       cancelAnimationFrame(settleFrame);
       if (lock.current) host.scrollTo({ top: host.scrollTop, behavior: "instant" });
       unlock();
@@ -105,6 +110,7 @@ export function useTimelineScrollSpy(position: number, onPosition: (position: nu
       const element = monthRefs.current.get(month);
       if (!element) { unlock(); return; }
       lock.current = true;
+      userScrolling.current = false;
       setProgrammaticScroll(true);
       cancelAnimationFrame(settleFrame);
       const area = viewport();
@@ -140,7 +146,8 @@ export function useTimelineScrollSpy(position: number, onPosition: (position: nu
     eventHost.addEventListener("pointerdown", interrupt, { passive: true });
     eventHost.addEventListener("touchstart", interrupt, { passive: true });
     eventHost.addEventListener("keydown", interrupt);
-    window.addEventListener("resize", schedule);
+    const onResize = () => { if (requireUserScroll) userScrolling.current = false; schedule(); };
+    window.addEventListener("resize", onResize);
     schedule();
     jumpRef.current(false);
     return () => {
@@ -152,10 +159,10 @@ export function useTimelineScrollSpy(position: number, onPosition: (position: nu
       eventHost.removeEventListener("pointerdown", interrupt);
       eventHost.removeEventListener("touchstart", interrupt);
       eventHost.removeEventListener("keydown", interrupt);
-      window.removeEventListener("resize", schedule);
+      window.removeEventListener("resize", onResize);
       jumpRef.current = null;
     };
-  }, [scopeKey, continuous]);
+  }, [scopeKey, continuous, requireUserScroll]);
 
   useEffect(() => {
     if (spyPosition.current === position) return;

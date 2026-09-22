@@ -251,22 +251,32 @@ describe("⑫ 메모는 입력하는 동안 자동 저장(그날 그 교시 기�
   });
 });
 
-describe("⑦ JJ실 카드는 속살까지 줄맞춤(`grid-rows-subgrid`)", () => {
-  it("부모가 행 셋을 못박고 카드가 그 행을 물려받는다", () => {
-    expect(jj).toContain("grid grid-rows-[auto_auto_auto]");
-    expect(jj).toContain("row-span-3 grid min-w-0 grid-rows-subgrid");
+describe("⑦ JJ실 카드는 속살까지 줄맞춤(`grid-rows-subgrid`) — 접기가 없는 보기에서", () => {
+  it("계획이 늘 펼쳐진 보기(교시 하나·공개 PIN)는 부모가 행 셋을 못박고 카드가 그 행을 물려받는다", () => {
+    expect(jj).toContain('grid gap-3 overflow-x-auto ${props.planFold ? "items-start" : "grid-rows-[auto_auto_auto]"}');
+    // 접는 배치는 subgrid가 물려주던 12px 간격을 `gap-3`으로 직접 준다 · `min-w-0`는 두 배치 공통(격자 열이 내용 폭으로 터지지 않게).
+    expect(jj).toContain('planFold ? "flex flex-col gap-3" : "row-span-3 grid grid-rows-subgrid"');
+    expect(jj).toContain("border-line min-w-0 overflow-hidden rounded-2xl border");
   });
-  it("`items-start`를 쓰지 않는다 — 카드가 내용 높이로 줄면 줄맞춤이 죽는다", () => {
-    expect(jj).not.toContain("items-start");
+  it("🔴 `items-start`는 **접는 보기에서만**(원장 2026-09-18 반별 접기) — 계획이 늘 펼쳐진 보기에 쓰면 줄맞춤이 죽는다", () => {
+    // 접기가 없으면 subgrid 쪽으로 떨어지는지: 두 분기가 **같은 삼항**에 묶여 있어야 한다(한쪽만 바꾸면 갈린다).
+    expect(jj.match(/items-start/g) ?? []).toHaveLength(1);
+    expect(jj).not.toMatch(/className="[^"]*items-start/);
   });
-  it("계획 구획이 없는 카드도 그 행을 차지한다(빈 자리)", () => {
+  it("줄맞춤 배치에선 계획 구획이 없는 카드도 그 행을 차지한다(빈 자리) — 접는 배치엔 행이 없어 자리를 안 만든다", () => {
     const block = jj.slice(jj.indexOf("{planBlock ? ("));
-    expect(block.slice(0, 900)).toContain("<div />");
+    expect(block).toContain(") : planFold ? null : (");
+    expect(block.slice(0, 2400)).toContain("<div />");
   });
-  it("🔴 접힌 계획도 그 행을 차지한다 — 바깥 div는 남기고 안쪽만 감춘다('전체' 보기, 2026-09-18)", () => {
+  it("🔴 접힌 계획은 **감추기만** — 한 번 올린 블록은 내리지 않는다('전체' 보기, 2026-09-18)", () => {
     const block = jj.slice(jj.indexOf("{planBlock ? ("));
-    expect(block.slice(0, 900)).toContain('<div className="min-w-0">');
-    expect(block.slice(0, 900)).toContain("<div hidden={!planFold.open}>");
+    expect(block.slice(0, 2400)).toContain("{planFold.mountedOf(classId) ? <div hidden={!planOpen}>{planBlock}</div> : null}");
+  });
+  it("🔴 반별 접기 줄은 카드 머리가 아니라 계획 자리에 · 접근 이름에 반 이름(재리뷰 2026-09-18)", () => {
+    const header = jj.slice(jj.indexOf("<header"), jj.indexOf("</header>"));
+    expect(header).not.toContain("planFold");
+    expect(jj).toContain("aria-label={`${r.className} 수업계획 ${planOpen ? \"접기\" : \"펼치기\"}${");
+    expect(jj).toContain("!planOpen && planConflictN > 0 ? ` · 저장 충돌 ${planConflictN}건` : \"\"");
   });
 });
 
@@ -297,7 +307,7 @@ describe("⑨ '전체' 보기 — 하루를 한 번에, 조회는 안 늘린다"
   });
 });
 
-describe("⑩ JJ실 '전체' 보기 — 원장 2026-09-18 \"펼치기\"(수업계획은 교시마다 접은 채)", () => {
+describe("⑩ JJ실 '전체' 보기 — 원장 2026-09-18 \"펼치기\"(수업계획은 반마다 접은 채)", () => {
   it("JJ 칸·계획은 **하루치 한 번씩** 읽는다 — 교시마다 부르지 않는다(B6)", () => {
     expect(shellPage).toContain("attachJjMarksForPeriods(rosterByPeriod, user.tenantId, date)");
     expect(shellPage).toContain("loadSeatJjPlansForPeriods(");
@@ -323,9 +333,17 @@ describe("⑩ JJ실 '전체' 보기 — 원장 2026-09-18 \"펼치기\"(수업�
     // 교시 판이 줄어들면 교시들이 화면 높이를 나눠 가지며 잘린다(랩실 2026-09-10 제보와 같은 자리).
     expect(jjAllDay).toContain('className="shrink-0"');
   });
-  it("🔴 접힘은 보드마다 · 한 번 펼친 블록은 접어도 내리지 않는다", () => {
-    expect(board).toContain("useState(!foldPlans)");
-    expect(board).toContain("setPlanMounted(true);");
-    expect(board).not.toContain("setPlanMounted(false)");
+  it("🔴 접힘은 보드마다 · **반마다** 따로 · 한 번 펼친 블록은 접어도 내리지 않는다", () => {
+    // 반 id → 접힘(원장 2026-09-18 "각각의 수업이 펼치기 접기가 되어야함") — 교시 한 덩어리 불리언으로 되돌아가지 말 것.
+    expect(board).toContain("const [planOpenBy, setPlanOpenBy] = useState<Record<string, boolean>>({})");
+    expect(board).toContain("const [planMountedBy, setPlanMountedBy] = useState<Record<string, boolean>>({})");
+    expect(board).toContain("(m) => (m[classId] ? m : { ...m, [classId]: true })");
+    // 내리는 짝이 없다 — `setPlanMountedBy(`를 부르는 곳은 올리는 한 줄뿐(초기화·delete 같은 다른 모양의 내림도 여기서 걸린다).
+    expect(board.match(/setPlanMountedBy\(/g) ?? []).toHaveLength(1);
+    // '모두' 버튼은 일괄 동작이라 aria-expanded를 달지 않는다(일부만 열리면 그 값이 거짓).
+    expect(board).not.toContain("aria-expanded={allPlansOpen}");
+    // 카드 머리의 반별 버튼은 제 반 충돌만 적는다.
+    expect(jj).toContain("planFold.conflictsOf(classId)");
+    expect(jj).toContain("planFold.toggle(classId)");
   });
 });

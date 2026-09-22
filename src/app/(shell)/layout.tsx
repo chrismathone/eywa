@@ -8,7 +8,7 @@ import { UserMenu } from "@/components/user-menu";
 import { TeacherMenu } from "@/components/teacher-menu";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { NotifyPermissionBanner } from "@/features/notifications/components/notify-permission-banner";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -45,6 +45,7 @@ import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
+import { menuLayoutWithModules } from "@/lib/modules";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -60,6 +61,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const settings = await getTenantSettings();
   // 브랜드 색을 --primary 등 CSS 변수로 주입(기본색이면 undefined → 주입 생략). 모든 셸 분기에 적용.
   const brandStyle = brandColorVars(settings.profile.brandColor) ?? undefined;
+  // 왼쪽 탭 보기 설정 + 꺼진 기능(모듈)의 면 입구 — 사이드바·휴대폰 메뉴·메뉴 판이 같은 목록을 본다.
+  // 꺼진 면이 없으면 settings.navigation.menus 그대로(침산 = 오늘과 같은 값).
+  const menuLayout = menuLayoutWithModules(settings.navigation.menus, settings.modules.disabled);
 
   // Stage Manager 임베드(?embed=1 → proxy가 x-embed 주입): 사이드바·헤더·캔버스·팰릿 전부
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
@@ -125,7 +129,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 1회 fetch(테넌트별 unstable_cache·역할 audience 필터). 대부분 0건이라 비용 거의 없음.
   const popups = await getActivePopups(user.systemRole, user.tenantId, user.id);
 
-  const brand = settings.profile.logoText || "EYWA";
+  const brand = settings.profile.logoText || "AYWA";
   const academyLine =
     [settings.profile.name, settings.profile.branchLabel].filter(Boolean).join(" · ") || brand;
   // 학원 로고 이미지(GCS 비공개 path는 signed URL, 외부 http URL은 그대로). 셸 크롬(사이드바·미니셸·모바일내비)에
@@ -352,14 +356,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           canOtherTeacherView={canOtherTeacherView}
           isSuperAdmin={isSuperAdmin}
           frequentKeys={frequentKeys}
-          menuLayout={settings.navigation.menus}
+          menuLayout={menuLayout}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={settings.navigation.menus} className="lg:pointer-fine:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
@@ -395,7 +399,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           permMatrix={permMatrix}
           canTeacherView={canTeacherView}
           isSuperAdmin={isSuperAdmin}
-          menuLayout={settings.navigation.menus}
+          menuLayout={menuLayout}
         />
       </HideInFrame>
 

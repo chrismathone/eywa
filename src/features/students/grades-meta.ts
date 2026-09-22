@@ -4,7 +4,7 @@ import type { PillColor } from "@/components/atoms/pill";
 import { kstMonth } from "@/lib/date-kst";
 
 // ── 성적 코멘트 카테고리(도메인 메타 — 운영 enum 아님, 하드코딩 허용) ─────────
-// ijw GradeComment 카테고리 이식. 이모지 대신 eywa Pill 색으로 톤 구분(이름앞 아바타·이모지 지양).
+// ijw GradeComment 카테고리 이식. 이모지 대신 aywa Pill 색으로 톤 구분(이름앞 아바타·이모지 지양).
 export type CommentCategory = "strength" | "improvement" | "effort" | "potential" | "general";
 
 export const COMMENT_CATEGORIES: { key: CommentCategory; label: string; color: PillColor }[] = [

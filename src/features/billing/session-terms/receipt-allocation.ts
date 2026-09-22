@@ -98,6 +98,11 @@ export function receiptAllocationSaveRows<T extends { id: string; amount: number
   ];
 }
 
+/** 수업 청구액 합계(급여 기준 — 할인 전·환불 반영) — 자유 배분의 상한('받은 돈보다 더 줄 수 없다'). */
+export function tuitionTotal(lines: readonly ReceiptLine[]): number {
+  return lines.reduce((sum, line) => sum + (isTuitionReceipt(line.source) ? Math.max(0, line.amount) : 0), 0);
+}
+
 /** 동기화·재확정으로 근거가 바뀌거나 그룹 합계가 깨졌으면 급여에서 사용하지 않는다. */
 export function effectiveAllocations(lines: ReceiptLine[], terms: AllocationTerm[]): Map<string, number> {
   const groups = new Map<number, AllocationTerm[]>();
@@ -126,6 +131,16 @@ export function effectiveAllocations(lines: ReceiptLine[], terms: AllocationTerm
     if (term.lineIndex !== null || term.allocatedAmount !== 0 || term.confirmedSessions === null || term.amount === null) continue;
     if (term.baseAmount !== term.amount || !sameTuitionLines(term.source, lines)) continue;
     out.set(term.id, 0);
+  }
+  // 자유 배분(0279a, 관리자 이상 — 원장 2026-09-21) — 수납 항목에 **하나도 연결하지 않고** 금액만 둔 청구서. 0원 행은 위에서 본다.
+  // 금액 행은 확정금액·청구 항목이 저장 때 그대로이고, 합계가 수업 청구액 이하일 때만(받은 돈보다 더 줄 수 없다 · 덜 주는 건 괜찮다).
+  if (!terms.some((term) => term.lineIndex !== null)) {
+    const free = terms.filter((term) => term.lineIndex === null && term.allocatedAmount !== null && term.allocatedAmount > 0);
+    const intact = free.every((term) => Number.isSafeInteger(term.allocatedAmount) && !(term.confirmedSessions === null && term.amount !== null)
+      && term.baseAmount === term.amount && sameTuitionLines(term.source, lines));
+    if (free.length && intact && free.reduce((sum, term) => sum + term.allocatedAmount!, 0) <= tuitionTotal(lines)) {
+      for (const term of free) out.set(term.id, term.allocatedAmount!);
+    }
   }
   return out;
 }

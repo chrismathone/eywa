@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { displayLessons } from "../curriculum";
 import type { Subject } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";

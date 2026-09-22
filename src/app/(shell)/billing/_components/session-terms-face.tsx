@@ -13,8 +13,15 @@ import Link from "next/link";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 import { needsReceiptAllocation } from "@/features/billing/session-terms/tuition-receipt";
 import { matchesTermQuery } from "@/features/billing/session-terms/term-search";
+import { canMaterializeTerm, NO_LESSON_LABEL, type TermRowState } from "@/features/billing/session-terms/month-roster";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
+
+/**
+ * 확정할 수 있는 줄 — 회차 행이 있거나(`term`), 청구서가 있어 확정하는 순간 행을 만들 수 있는 줄(`missing`). 청구서가 없거나 취소된
+ * 줄은 확정할 수 없어 '미확정'이 아니다(출석부가 '—'로 적는 줄과 같은 집합, 원장 2026-09-18). 표(`session-term-table.tsx`)와 같은 판정.
+ */
+const confirmableRow = (r: { termState: TermRowState }) => r.termState === "term" || canMaterializeTerm(r.termState);
 
 /**
  * 회차 확정 면 — 청구=N회 키스톤(docs/per-session-billing-plan.md).
@@ -52,11 +59,21 @@ export async function SessionTermsFace({
   const searched = query ? bySubject.filter((r) => matchesTermQuery(r, query)) : bySubject;
   const pendingOnly = allocation === "pending";
   const openOnly = confirmation === "open";
-  const isOpen = (r: { confirmedSessions: number | null }) => r.confirmedSessions === null;
+  // 미확정 = 확정할 수 있는 줄 중 아직 안 한 줄 · 미배분 = 배분할 수납이 있는 줄 중 아직 안 한 줄(청구서 없음·취소는 둘 다 아니다).
+  const isOpen = (r: { confirmedSessions: number | null; termState: TermRowState }) => r.confirmedSessions === null && confirmableRow(r);
+  const isPending = (r: Parameters<typeof needsReceiptAllocation>[0] & { termState: TermRowState }) => confirmableRow(r) && needsReceiptAllocation(r);
   // 두 필터의 괄호 속 건수는 서로를 거르지 않은 수(과목·검색까지만) — 한쪽을 켜도 다른 쪽 건수가 흔들리지 않는다.
-  const pendingCount = searched.filter(needsReceiptAllocation).length;
+  const pendingCount = searched.filter(isPending).length;
   const openCount = searched.filter(isOpen).length;
-  const filtered = searched.filter((r) => (!pendingOnly || needsReceiptAllocation(r)) && (!openOnly || isOpen(r)));
+  const filtered = searched.filter((r) => (!pendingOnly || isPending(r)) && (!openOnly || isOpen(r)));
+  // 머리 줄 카운트(원장 2026-09-18) — 확정 분모는 확정 가능한 줄, 그 뒤에 줄 상태별 수(0이면 생략).
+  const confirmableCount = filtered.filter(confirmableRow).length;
+  const missingCount = filtered.filter((r) => r.termState === "missing").length;
+  const noInvoiceCount = filtered.filter((r) => r.termState === "no_invoice").length;
+  const voidInvoiceCount = filtered.filter((r) => r.termState === "void_invoice").length;
+  const noLessonCount = filtered.filter((r) => r.noLesson).length;
+  // 같은 학생·반이 이 달 살아 있는 청구서 여러 장에 있어 줄이 여럿인 행(`duplicateInvoice`) — 출석부(1줄)와 줄 수가 다른 이유를 밝힌다.
+  const duplicateCount = filtered.filter((r) => r.duplicateInvoice).length;
 
   // 반 단위 그룹핑 — 반별 일괄 확정(원장 지시). 학생명 정렬 유지된 채 반으로 묶고, 반 안은 학년·이름 순.
   const groupMap = new Map<string, ClassGroup>();
@@ -118,8 +135,13 @@ export async function SessionTermsFace({
         <FilterSelect paramName="allocation" value={pendingOnly ? "pending" : ""} options={[{ value: "pending", label: `미배분만 보기 (${pendingCount})` }]} axisLabel="배분" ariaLabel="배분 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <span className="text-text-dim text-sm whitespace-nowrap">
           반 <span className="num">{allGroups.length}</span>개 · 확정{" "}
-          <SessionTermsConfirmedCount />/<span className="num">{filtered.length}</span>건
+          <SessionTermsConfirmedCount />/<span className="num">{confirmableCount}</span>건
           {monthlyCount > 0 ? ` · 월 정액 ${monthlyCount}건` : null}
+          {missingCount > 0 ? ` · 회차 없음 ${missingCount}` : null}
+          {noInvoiceCount > 0 ? ` · 청구서 없음 ${noInvoiceCount}` : null}
+          {voidInvoiceCount > 0 ? ` · 청구서 취소 ${voidInvoiceCount}` : null}
+          {noLessonCount > 0 ? ` · ${NO_LESSON_LABEL.label} ${noLessonCount}` : null}
+          {duplicateCount > 0 ? ` · 청구서 중복 ${duplicateCount}` : null}
         </span>
         <div className="ml-auto">
           <RefreshPlanButton period={p} />
@@ -131,6 +153,9 @@ export async function SessionTermsFace({
 
       {/* 규칙 설명(N1/N2)은 지워선 안 되는 사실이라 접힌 2차로(§4). */}
       <FaceNote>
+        줄은 <b>월별 출석부와 같은 학생·반</b>입니다. 출석부엔 있는데 회차 행이 없는 줄(보강 방문 등)은 <b>회차 없음</b>으로 서고 시수를 확정하거나
+        수납을 배분하는 순간 행이 생깁니다. 그 달 청구서가 없거나 취소된 줄은 <b>청구서 없음·청구서 취소</b>로 잠기고(출석부엔 —), 회차 행은 있는데
+        이 달 출석부(세션 기간)엔 없는 줄은 <b>{NO_LESSON_LABEL.label}</b>으로 표시합니다(예정·실 소비는 달력월로 셉니다).{" "}
         수학은 출석부와 같이 <b>2시간=1 · 3시간=1.5시수</b>, 일반 영어는 교시별 시수 합계로 계산합니다.
         기존 일수 기준 확정값(확정 시수가 <b>붉은 숫자</b> — 마우스를 올리면 사유)은 해제 후 시수를 확인해 재확정하세요.
         예정 시수는 수강 기간·시간표·휴일로 볼 때마다 다시 계산하지만 확정 시수는 그대로라, 둘이 다르면 확정 시수가{" "}

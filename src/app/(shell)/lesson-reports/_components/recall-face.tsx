@@ -15,7 +15,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listReports } from "@/features/report-admin/server/actions";
 import { RecallButton } from "@/features/report-admin/components/recall-button";

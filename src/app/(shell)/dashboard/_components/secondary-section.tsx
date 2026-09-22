@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DetailsHashOpen } from "./details-hash-open";
 
 /**

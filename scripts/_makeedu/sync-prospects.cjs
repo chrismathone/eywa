@@ -3,9 +3,9 @@
  *
  * makeedu 예비원생 목록(resList.do)은 기본 정보만 있고, 상담 본문(상담경로·진로·주소·셔틀·남매·혈액형·
  * 상담과목·동의 등)은 **상세 페이지**에 있다. 상세 URL은 재원생 상담과 동일한 `counselList_detail.do?counselSeq=N`이고,
- * eywa enrollment_consultations.makeedu_id 가 곧 그 counselSeq라 매칭이 1:1이다(import-prospects가 r[0]=seq를 저장).
+ * aywa enrollment_consultations.makeedu_id 가 곧 그 counselSeq라 매칭이 1:1이다(import-prospects가 r[0]=seq를 저장).
  *
- * 따라서: eywa에 이미 적재된 makeedu 예비상담(makeedu_id=counselSeq)을 가져와 → 상세 fetch → ◆-구조 파싱 →
+ * 따라서: aywa에 이미 적재된 makeedu 예비상담(makeedu_id=counselSeq)을 가져와 → 상세 fetch → ◆-구조 파싱 →
  * enrollment_consultations의 풍부 필드를 **COALESCE(빈 값만 채움)·boolean은 OR**로 백필(ijw 값 보존).
  *
  *   node --env-file=.env.local scripts/_makeedu/sync-prospects.cjs          # dry(표본 파싱만, DB write 0)
@@ -103,7 +103,7 @@ function toFields(meta, content) {
 (async () => {
   const sql = postgres(process.env.DATABASE_URL, { prepare: false });
   const tenantId = await L.resolveTenantId(sql);
-  // eywa에 적재된 makeedu 예비상담(makeedu_id=counselSeq)만 대상.
+  // aywa에 적재된 makeedu 예비상담(makeedu_id=counselSeq)만 대상.
   const targets = await sql`
     select makeedu_id from enrollment_consultations
     where tenant_id = ${tenantId} and makeedu_id is not null`;

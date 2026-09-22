@@ -1,4 +1,4 @@
-// ijw export → eywa 교재신청(textbook_orders) + 지출(expenses) 데모 이식.
+// ijw export → aywa 교재신청(textbook_orders) + 지출(expenses) 데모 이식.
 // 멱등: 테넌트 기존 행 삭제 후 재삽입. 사용: node scripts/_poc_migration/import-textbooks-expenses.cjs [--apply]
 const fs = require("fs");
 const path = require("path");
@@ -34,7 +34,7 @@ function expenseCategory(title, items) {
   return "기타";
 }
 
-// ijw 결재 체크(작성/원장/대표/집행자) → eywa approval_checks(유효 역할만). ijw·eywa 동일 키(author/director/ceo/executor).
+// ijw 결재 체크(작성/원장/대표/집행자) → aywa approval_checks(유효 역할만). ijw·aywa 동일 키(author/director/ceo/executor).
 const APPROVAL_ROLES = ["author", "director", "ceo", "executor"];
 function normChecks(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -45,9 +45,9 @@ function normChecks(raw) {
   }
   return Object.keys(out).length ? out : null;
 }
-// ijw 통화 심볼 → eywa 통화 코드.
+// ijw 통화 심볼 → aywa 통화 코드.
 const CUR_CODE = { "₩": "KRW", "$": "USD", "¥": "JPY", "€": "EUR", "£": "GBP" };
-// ijw receiptUrls(Firebase 다운로드 URL 배열) → eywa receipt_urls([{path,name}]). path=공개 http URL 그대로(오디오처럼 Firebase 콜드 백엔드 유지).
+// ijw receiptUrls(Firebase 다운로드 URL 배열) → aywa receipt_urls([{path,name}]). path=공개 http URL 그대로(오디오처럼 Firebase 콜드 백엔드 유지).
 function receiptName(url) {
   try {
     const m = String(url).match(/\/o\/([^?]+)/);
@@ -67,7 +67,7 @@ function normReceipts(raw) {
 
 (async () => {
   try {
-    // 학생명 → eywa uuid (교재신청은 studentName만 있음 — 이름 매칭, 동명이인은 첫 매치)
+    // 학생명 → aywa uuid (교재신청은 studentName만 있음 — 이름 매칭, 동명이인은 첫 매치)
     const students = await sql`select id, name from students where tenant_id=${T}`;
     const nameMap = new Map();
     for (const s of students) { const k = normName(s.name); if (!nameMap.has(k)) nameMap.set(k, s.id); }
@@ -102,7 +102,7 @@ function normReceipts(raw) {
       const vendors = [...new Set(items.map((i) => i.vendor).filter(Boolean))];
       const checks = normChecks(e.approvalChecks);
       const receipts = normReceipts(e.receiptUrls);
-      // 결재완료 = 원장+대표 승인(eywa toggleExpenseApproval 파생 규칙과 동일) or ijw approvalStatus.
+      // 결재완료 = 원장+대표 승인(aywa toggleExpenseApproval 파생 규칙과 동일) or ijw approvalStatus.
       const approved = !!(checks && checks.director && checks.director.checked && checks.ceo && checks.ceo.checked);
       expRows.push({
         id: randomUUID(), tenant_id: T, title: e.title && String(e.title).trim() ? String(e.title).trim() : "(제목 없음)",

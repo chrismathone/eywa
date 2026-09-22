@@ -1,7 +1,7 @@
 /**
- * 원장님 마스터 시트(`2026 영어시간표_인재원 본원`) 강사별 탭 → eywa 배치 **temporal 컷오버**.
+ * 원장님 마스터 시트(`2026 영어시간표_인재원 본원`) 강사별 탭 → aywa 배치 **temporal 컷오버**.
  *
- * 배경: 앱의 '시트에서 가져오기'는 **eywa 전용 시트**(`[Eywa 2.0] 영어 시간표`)만 읽는다. 원장님이 실제로
+ * 배경: 앱의 '시트에서 가져오기'는 **aywa 전용 시트**(`[Aywa 2.0] 영어 시간표`)만 읽는다. 원장님이 실제로
  * 편집하는 마스터는 탭 구조가 다르고(블록형: 2행 강사·4행 요일·5행 시각앵커) 탭이 월마다 늘어나
  * 앱 경로로 못 읽는다. 그래서 **마스터 전용 파서(parse-grid.ts)로 읽고, 매칭·diff·쓰기는 앱과 동일한
  * 순수 모듈 + 동일 RPC(`apply_english_structure`)** 를 그대로 쓴다 = 스냅샷·롤백까지 앱과 같은 보장.
@@ -452,7 +452,7 @@ function clipGrid(g: SheetGrid): SheetGrid {
 const grid = clipGrid(await readMasterGrid(TAB));
 const raw = parseTeacherGrid(grid);
 // 자리(LAB·JJ)는 담당자 이름이 아니라 **자리 이름으로 굳혀** 저장한다(원장 2026-08-04, canonicalSlotTeacherLabel).
-// 시트가 `이주희`(LAB 아르바이트)로 그려도 eywa엔 `LAB` — 담당이 바뀌어도 자리는 그대로다.
+// 시트가 `이주희`(LAB 아르바이트)로 그려도 aywa엔 `LAB` — 담당이 바뀌어도 자리는 그대로다.
 // ⚠️ **diff 전에** 정규화해야 한다. 삽입 직전에 바꾸면 diff가 `이주희`(시트) = `이주희`(DB)로 보고
 //    'keep' 처리해 새 행 자체를 안 만들어 라벨이 영영 안 바뀐다.
 const parsed = {

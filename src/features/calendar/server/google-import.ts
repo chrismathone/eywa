@@ -12,7 +12,7 @@ import {
 } from "../google-import";
 
 /**
- * **구글 캘린더 → eywa 한 방향 임포트**(IO). 순수 변환·판정은 [`google-import.ts`](../google-import.ts).
+ * **구글 캘린더 → aywa 한 방향 임포트**(IO). 순수 변환·판정은 [`google-import.ts`](../google-import.ts).
  *
  * 원장 2026-09-10: *"동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"* + 하루 2회(06:00·18:00 KST).
  *

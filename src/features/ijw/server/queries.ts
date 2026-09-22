@@ -3,7 +3,7 @@ import "server-only";
 /**
  * 성적관리 'JJ실'·'JJ실(시험)'과 학생 상세 '성적' 탭의 인재원 데이터 조회(사용자 2026-09-10).
  *
- * 🔑 eywa에 저장하는 것은 **짝 하나**(students.ijw_student_id, 0259a)뿐이다 — 숫자는 매번 인재원에 묻는다.
+ * 🔑 aywa에 저장하는 것은 **짝 하나**(students.ijw_student_id, 0259a)뿐이다 — 숫자는 매번 인재원에 묻는다.
  * 🔑 강사(세 갈래 스코프, viewer.ts)는 **짝이 걸린 자기 학생 행만** 본다 — 짝이 없는 행은 누구 학생인지 알 수 없어서다.
  *    짝 칸이 아직 없으면(0259a 적용 전) 강사는 담당 학생을 가려낼 수 없다 → 빈 화면이 아니라 '준비 전'(scopeNotReady).
  * 🔴 조회 실패는 던지지 않는다(links.ts와 같은 규약) — 곁가지 구역이 화면 전체를 오류로 바꾸지 않게.
@@ -29,14 +29,14 @@ import {
 } from "../contract";
 import { isMissingIjwColumn } from "../db-errors";
 import { IJW_PATHS, ijwGet, type IjwFailure } from "./client";
-import { loadLinkIndex, localFailure, type EywaLink } from "./links";
+import { loadLinkIndex, localFailure, type AywaLink } from "./links";
 import type { JjViewer } from "./viewer";
 
 // 소비처가 한 곳에서 가져가도록(성적관리·결과 창·학생 상세).
 export { getJjAccess, getJjViewer, type JjAccess, type JjViewer } from "./viewer";
-export { getIjwLinkSuggestions, type EywaLink, type PoolStudent } from "./links";
+export { getIjwLinkSuggestions, type AywaLink, type PoolStudent } from "./links";
 
-export type JjStudyRow = IjwStudySummaryRow & { eywa: EywaLink | null };
+export type JjStudyRow = IjwStudySummaryRow & { aywa: AywaLink | null };
 export type JjStudyList = {
   ok: true;
   from: string;
@@ -55,9 +55,9 @@ export async function getJjStudyList(viewer: JjViewer, from: string, to: string)
   ]);
   if (!res.ok) return res;
   if (links.failure) return links.failure;
-  let rows: JjStudyRow[] = res.data.students.map((s) => ({ ...s, eywa: links.byIjw.get(s.ijwId) ?? null }));
+  let rows: JjStudyRow[] = res.data.students.map((s) => ({ ...s, aywa: links.byIjw.get(s.ijwId) ?? null }));
   const mine = viewer.teacherStudentIds;
-  if (mine) rows = rows.filter((r) => r.eywa && mine.has(r.eywa.studentId));
+  if (mine) rows = rows.filter((r) => r.aywa && mine.has(r.aywa.studentId));
   return {
     ok: true,
     from: res.data.from || from,
@@ -82,7 +82,7 @@ export async function getJjExamSummary(
   return res.ok ? { ok: true, exams: res.data.exams } : res;
 }
 
-export type JjDeckRow = IjwDeckResult & { eywa: EywaLink | null };
+export type JjDeckRow = IjwDeckResult & { aywa: AywaLink | null };
 export type JjDeckResults = {
   ok: true;
   deck: { id: string; name: string; examType: string };
@@ -99,9 +99,9 @@ export async function getJjDeckResults(viewer: JjViewer, deckId: string): Promis
   ]);
   if (!res.ok) return res;
   if (links.failure) return links.failure;
-  let rows: JjDeckRow[] = res.data.results.map((r) => ({ ...r, eywa: links.byIjw.get(r.ijwId) ?? null }));
+  let rows: JjDeckRow[] = res.data.results.map((r) => ({ ...r, aywa: links.byIjw.get(r.ijwId) ?? null }));
   const mine = viewer.teacherStudentIds;
-  if (mine) rows = rows.filter((r) => r.eywa && mine.has(r.eywa.studentId));
+  if (mine) rows = rows.filter((r) => r.aywa && mine.has(r.aywa.studentId));
   return {
     ok: true,
     deck: res.data.deck,
@@ -149,7 +149,7 @@ export async function getStudentJj(tenantId: string, studentId: string, from: st
  * 명단 판정은 eligibility.ts 단일 소스(휴원 포함 · 반이동은 반열림 — 옛 반·새 반 양쪽에 서지 않게, [[#125]]).
  * 요청당 한 번(JJ실 표·반 칩·시험 결과 창이 함께 부른다). 던지지 않는다.
  * ⚠️ 학원 전체 영어 반을 읽지만 강사 화면의 **행**은 이미 자기 학생뿐이다(스코프) — 묶음이 남의 학생을 끌어오지 않는다.
- * ⚠️ 인재원 반(className)이 아니라 eywa 반이다(1:1이 아니다, class-groups.ts).
+ * ⚠️ 인재원 반(className)이 아니라 aywa 반이다(1:1이 아니다, class-groups.ts).
  */
 export const loadJjMembership = cache(
   async (tenantId: string): Promise<{ ok: true; membership: JjMembership } | IjwFailure> => {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarOff, Settings2 } from "@/components/icons/eywa-icon-compat";
+import { CalendarOff, Settings2 } from "@/components/icons/aywa-icon-compat";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { FilterSelect } from "@/components/filter-select";
 import { PeriodNav } from "@/components/period-nav";
@@ -12,6 +12,8 @@ import { getQuoteById } from "@/features/billing/server/tuition-quote-queries";
 import { currentPeriod } from "@/features/billing/calc";
 import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isGenericTenant } from "@/features/owner/preset";
+import { isModuleEnabled } from "@/lib/modules";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
@@ -19,6 +21,7 @@ import { TuitionCalculator } from "./tuition-calculator";
 import { TuitionPricesPanel } from "./tuition-prices-panel";
 import { CatalogPanel } from "./catalog-panel";
 import { SavedQuotesPanel } from "./saved-quotes-panel";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 type Sp = Record<string, string | undefined>;
 type CalcSub = "calculator" | "prices" | "catalog" | "holidays" | "quotes";
@@ -80,14 +83,20 @@ async function CalculatorTab({ qid }: { qid?: string }) {
   const logoSrc = user ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId) : null;
   return (
     <TuitionCalculator
-      academyName={settings.profile.name || "인재원"}
+      academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
       logoSrc={logoSrc}
       defaultPeriod={currentPeriod()}
       defaultAccount={accountForTarget(settings.billing, "quote")}
       holidays={settings.operations.holidays.map((h) => h.date)}
-      catalog={withEieMonthlyTuition(catalog, settings.billing.eieMonthlyPrice)}
+      // EiE 월정액 항목은 EiE 구분을 쓰는 학원만(새 학원 기본은 꺼짐). 침산은 종전과 같다.
+      catalog={
+        isModuleEnabled(settings.modules.disabled, "eie")
+          ? withEieMonthlyTuition(catalog, settings.billing.eieMonthlyPrice)
+          : catalog
+      }
       textbooks={textbooks}
       initial={initial ?? undefined}
+      showHouseRules={!isGenericTenant(settings)}
     />
   );
 }

@@ -7,8 +7,9 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { getTextbookOrderById } from "@/features/billing/server/textbook-queries";
 import { TextbookRequestCard } from "./textbook-request-card";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
-export const metadata = { title: "교재 요청서 — eywa" };
+export const metadata = { title: "교재 요청서 — aywa" };
 
 // 교재요청서(ijw TextbookPreviewCard 이식) — 학부모 전달용 카드. 학원 입금 계좌는
 // 학원설정에서 '교재요청서'에 배선된 계좌를 자동 표시(accountForTarget). PNG 저장/인쇄는 클라 카드가 담당.
@@ -38,7 +39,7 @@ export default async function TextbookPrintPage({
   return (
     <TextbookRequestCard
       order={order}
-      academyName={settings.profile.name || "인재원"}
+      academyName={settings.profile.name || NEUTRAL_ACADEMY_NAME}
       logoUrl={logoUrl}
       account={accountForTarget(settings.billing, "textbook")}
       embedded={embedded}

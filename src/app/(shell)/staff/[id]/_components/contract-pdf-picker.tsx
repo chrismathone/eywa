@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Upload } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Upload } from "@/components/icons/aywa-icon-compat";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import {
   extractContractFromPdf,

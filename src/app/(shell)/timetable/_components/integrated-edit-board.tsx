@@ -18,8 +18,8 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { AlertTriangle, ChevronDown, ChevronUp, GripVertical, Loader2, Plus, RotateCcw, Trash2 } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { AlertTriangle, ChevronDown, ChevronUp, GripVertical, Loader2, Plus, RotateCcw, Trash2 } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { saveIntegrationGroups } from "@/features/owner/server/subject-actions";

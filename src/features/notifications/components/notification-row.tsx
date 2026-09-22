@@ -4,8 +4,8 @@ import {
   Archive,
   RotateCcw,
   Trash2,
-} from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+} from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { NOTIFICATION_ICON, type NotificationItem } from "../types";
 
 function relTime(iso: string): string {

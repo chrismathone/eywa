@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Archive } from "@/components/icons/eywa-icon-compat";
+import { Archive } from "@/components/icons/aywa-icon-compat";
 import {
   archiveNotification,
   deleteNotification,
@@ -210,8 +210,8 @@ export function NotificationBell() {
     }
     if (!n.link) return;
     const link = n.link;
-    // 외부 링크(ClassNote 학부모 글 등)는 eywa를 벗어나므로 먼저 확인받는다 — router.push는 앱 내부 경로 전용이라
-    // 절대 URL을 넘기면 동작하지 않는다. 확인 후 새 탭으로 열어 작업 중이던 eywa 화면을 잃지 않게 한다.
+    // 외부 링크(ClassNote 학부모 글 등)는 aywa를 벗어나므로 먼저 확인받는다 — router.push는 앱 내부 경로 전용이라
+    // 절대 URL을 넘기면 동작하지 않는다. 확인 후 새 탭으로 열어 작업 중이던 aywa 화면을 잃지 않게 한다.
     if (isExternal(link)) {
       setPendingLink(link);
       return;
@@ -388,7 +388,7 @@ export function NotificationBell() {
         onConfirm={() => {
           const url = pendingLink;
           setPendingLink(null);
-          // noopener/noreferrer — 새 탭이 window.opener로 eywa 세션 창을 건드리지 못하게(탭내빙 방지).
+          // noopener/noreferrer — 새 탭이 window.opener로 aywa 세션 창을 건드리지 못하게(탭내빙 방지).
           if (url) window.open(url, "_blank", "noopener,noreferrer");
         }}
         onCancel={() => setPendingLink(null)}

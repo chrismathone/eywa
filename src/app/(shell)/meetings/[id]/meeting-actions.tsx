@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, RefreshCw, Sparkles, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2, RefreshCw, Sparkles, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   deleteMeeting,

@@ -1,4 +1,4 @@
-// 시트 강사별영어시간표 ↔ eywa 강사뷰(현행 스케줄) 전격 패리티 검증 (2026-07-06 정식화).
+// 시트 강사별영어시간표 ↔ aywa 강사뷰(현행 스케줄) 전격 패리티 검증 (2026-07-06 정식화).
 // xlsx(병합 보존)를 파싱해 강사·요일·세션(start~end 반@방) 정규형으로 만들고, DB의 현행
 // (valid_to null) 영어 슬롯을 같은 형태로 접어(back-to-back 동일 반 병합) 양방향 diff.
 // 시각 = 행 인덱스 규칙(14:20 + (row-5)×10, Excel 1-based) — A열 라벨 미신뢰.
@@ -161,13 +161,13 @@ async function main() {
         diffs += onlyS.length + onlyE.length;
         console.log(`✗ ${t} ${DAY_LABEL[d]}`);
         for (const x of onlyS) console.log(`    시트에만: ${x}`);
-        for (const x of onlyE) console.log(`    eywa에만: ${x}`);
+        for (const x of onlyE) console.log(`    aywa에만: ${x}`);
       }
     }
   }
   for (const w of warnings) console.log(`  (참고) ${w}`);
   console.log(diffs === 0
-    ? `\n✅ 패리티 OK — 강사 ${teachers.length}명 전 세션 시트=eywa 일치`
+    ? `\n✅ 패리티 OK — 강사 ${teachers.length}명 전 세션 시트=aywa 일치`
     : `\n❌ diff ${diffs}건`);
   process.exit(diffs === 0 ? 0 : 2);
 }

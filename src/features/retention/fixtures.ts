@@ -1,5 +1,5 @@
-// 가상 시드 제너레이터 — eywa 실데이터 없이 위험 파이프라인을 테스트하기 위한 결정적 픽스처.
-// eywa 원시 행(snake_case) 형태를 그대로 생성하므로 buildRoster에 바로 넣을 수 있다.
+// 가상 시드 제너레이터 — aywa 실데이터 없이 위험 파이프라인을 테스트하기 위한 결정적 픽스처.
+// aywa 원시 행(snake_case) 형태를 그대로 생성하므로 buildRoster에 바로 넣을 수 있다.
 // 결정적: 같은 (count, today)면 항상 같은 결과. RNG 없이 아키타입 순환.
 import type {
   RetentionRawData,

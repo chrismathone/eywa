@@ -1,13 +1,13 @@
 "use client";
 
-// 반 공지 — eywa 반에서 학생을 골라 각 학생의 ClassNote 개별 보드로 같은 내용을 일괄 발송.
-// 반 구조는 eywa(여기)에 살고 ClassNote 1인 1반은 배달 레일(Edutrix NoticeWriteModal 패턴 계승).
+// 반 공지 — aywa 반에서 학생을 골라 각 학생의 ClassNote 개별 보드로 같은 내용을 일괄 발송.
+// 반 구조는 aywa(여기)에 살고 ClassNote 1인 1반은 배달 레일(Edutrix NoticeWriteModal 패턴 계승).
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";

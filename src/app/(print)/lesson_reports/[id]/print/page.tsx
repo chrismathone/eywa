@@ -12,8 +12,9 @@ import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
-export const metadata = { title: "수업 보고서 — eywa" };
+export const metadata = { title: "수업 보고서 — aywa" };
 
 /**
  * 수업 보고서(lesson_reports) 강사 PDF 미리보기 — 원스크린 "PDF" 버튼이 여는 인쇄 문서.
@@ -83,7 +84,7 @@ export default async function LessonReportPrintPage({
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
-  const academyName = settings.profile.name || "인재원";
+  const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
   const rpt = settings.report; // 보고서 표시 설정(학원 운영 > 보고서 탭) — /r과 동일 소스
   // 로고 해석은 GCS signed URL 등 외부 의존 — 실패해도 문서는 로고 없이 렌더.
   const logoSrc = settings.profile.logoUrl

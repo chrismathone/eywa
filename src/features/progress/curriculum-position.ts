@@ -1,7 +1,7 @@
 /**
  * 진도 컨테이너 — 커리큘럼 글로벌 위치 매핑 (edutrix lib/progress.ts 이식, 단순화).
  *
- * edutrix는 진도 텍스트를 fuzzy 매칭(학년 모호성 해소 4단계)했지만, eywa 원스크린은 진도를
+ * edutrix는 진도 텍스트를 fuzzy 매칭(학년 모호성 해소 4단계)했지만, aywa 원스크린은 진도를
  * **커리큘럼 드롭다운의 정확한 차시 문자열**로 저장한다(lesson_reports.progress = "수학 <차시>").
  * 그래서 글로벌 위치 = MATH_CURRICULUM을 학년순으로 flatten한 배열의 인덱스(1-based) + Map 조회로 끝난다.
  * 커리큘럼 데이터는 features/onescreen/curriculum.ts를 재사용(중복 정의 금지).
@@ -48,7 +48,7 @@ export const LESSON_TO_POS: Map<string, LessonPosition> = (() => {
   return m;
 })();
 
-/** 라벨 토큰을 앞에서 하나씩 벗기며 정확 조회(긴 것 우선). eywa 네이티브 "수학 <차시>"용. */
+/** 라벨 토큰을 앞에서 하나씩 벗기며 정확 조회(긴 것 우선). aywa 네이티브 "수학 <차시>"용. */
 function lookupWithLabelStrip(text: string): LessonPosition | null {
   let s = text.trim();
   if (!s) return null;
@@ -78,7 +78,7 @@ function normalizeLegacy(text: string): string | null {
 }
 
 /**
- * 보고서 진도 텍스트 → 글로벌 위치. progress = "<과목라벨> <차시>"(eywa 네이티브, 정확 문자열).
+ * 보고서 진도 텍스트 → 글로벌 위치. progress = "<과목라벨> <차시>"(aywa 네이티브, 정확 문자열).
  * 정확 미스 시 edutrix 임포트 포맷(번호·여러 줄·총괄)을 정규화해 재시도 — 초·중 실 데이터 백필용.
  * 고등·자유입력·총괄·오타는 전부 Map 미스 → null(ingest에서 skip). 학년 모호성 해소 불필요.
  */
@@ -101,7 +101,7 @@ export function gradeOfPosition(position: number): string | null {
   return describePosition(position)?.grade ?? null;
 }
 
-/** 학년 랭크 — 초=0/중=10/고=20 base + 학년 숫자. 파싱 실패면 null. (eywa 학년: 초1~고3) */
+/** 학년 랭크 — 초=0/중=10/고=20 base + 학년 숫자. 파싱 실패면 null. (aywa 학년: 초1~고3) */
 export function gradeRank(grade: string | null | undefined): number | null {
   if (!grade) return null;
   const m = /^(초|중|고)\s*(\d)/.exec(grade.trim());

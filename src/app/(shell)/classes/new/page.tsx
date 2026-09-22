@@ -1,4 +1,5 @@
 import { BackLink } from "@/components/back-link";
+import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import { getClassroomOptions } from "@/features/enrollments/server/queries";
@@ -8,7 +9,7 @@ import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { kstToday } from "@/lib/date-kst";
 import { ClassForm } from "../_components/class-form";
 
-export const metadata = { title: "새 반 — eywa" };
+export const metadata = { title: "새 반 — aywa" };
 
 export default async function NewClassPage() {
   await requireAccess("classes");
@@ -40,6 +41,7 @@ export default async function NewClassPage() {
         classroomOptions={classrooms}
         subjectOptions={subjectOptions}
         periodsConfig={periodsConfig}
+        showEnglishTrack={isModuleEnabled(settings.modules.disabled, "eie")}
       />
     </div>
   );

@@ -338,7 +338,7 @@ function ClassCard({
           >
             {tf("today.badge.report", { done: written, total: card.students.length })}
           </Badge>
-          {/* 영어 알림장의 실제 채널은 ClassNote 반 보드다(eywa 발송 아님) — 워커 적재값(0140a)으로
+          {/* 영어 알림장의 실제 채널은 ClassNote 반 보드다(aywa 발송 아님) — 워커 적재값(0140a)으로
               "이 날짜에 올라갔나"를 잇는다. 최대 30분 지연이라 '방금 올렸는데 미게시'일 수 있다(툴팁 고지).
               untracked(보드 없음·키 모호)는 배지를 아예 안 단다 — 지울 수 없는 거짓 할 일 금지(적대 리뷰). */}
           {card.classnoteToday !== "untracked" ? (

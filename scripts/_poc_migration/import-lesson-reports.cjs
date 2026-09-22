@@ -1,4 +1,4 @@
-// import-lesson-reports.cjs — Edutrix(reports) → eywa lesson_reports 이식(멱등).
+// import-lesson-reports.cjs — Edutrix(reports) → aywa lesson_reports 이식(멱등).
 // ⚠️ 매칭 키 = Edutrix students.id → students.edutrix_student_id (UUID). 이름 fan-out 금지(0094a).
 // 선행: map-edutrix-students.cjs 로 edutrix_student_id 백필(또는 --map 동시 실행).
 // 멱등: edutrix_import 삭제 후 edutrix_report_id 기준 재삽입(또는 이미 있는 report id 스킵).
@@ -23,21 +23,21 @@ function schoolGradeKey(school, grade) {
   return `${(school ?? "").trim()}|${(grade ?? "").trim()}`;
 }
 
-function pickEywa(edu, candidates) {
+function pickAywa(edu, candidates) {
   if (candidates.length === 0) return { kind: "none", reason: "no_name_match" };
-  if (candidates.length === 1) return { kind: "mapped", eywaId: candidates[0].id, reason: "unique_name" };
+  if (candidates.length === 1) return { kind: "mapped", aywaId: candidates[0].id, reason: "unique_name" };
   const sg = schoolGradeKey(edu.school, edu.grade);
   if (sg !== "|") {
     const bySg = candidates.filter((c) => schoolGradeKey(c.school, c.grade) === sg);
-    if (bySg.length === 1) return { kind: "mapped", eywaId: bySg[0].id, reason: "school_grade" };
+    if (bySg.length === 1) return { kind: "mapped", aywaId: bySg[0].id, reason: "school_grade" };
     if (bySg.length > 1) {
       const active = bySg.filter((c) => c.status === "enrolled" || c.status === "on_hold");
-      if (active.length === 1) return { kind: "mapped", eywaId: active[0].id, reason: "school_grade_enrolled" };
+      if (active.length === 1) return { kind: "mapped", aywaId: active[0].id, reason: "school_grade_enrolled" };
       return { kind: "ambiguous", reason: "school_grade_multi", ids: bySg.map((c) => c.id) };
     }
   }
   const active = candidates.filter((c) => c.status === "enrolled" || c.status === "on_hold");
-  if (active.length === 1) return { kind: "mapped", eywaId: active[0].id, reason: "enrolled_only" };
+  if (active.length === 1) return { kind: "mapped", aywaId: active[0].id, reason: "enrolled_only" };
   return { kind: "ambiguous", reason: "multi_name", ids: candidates.map((c) => c.id) };
 }
 
@@ -54,7 +54,7 @@ function normName(s) {
   const sql = postgres(DATABASE_URL, { prepare: false, max: 1 });
   const PAGE = 1000;
 
-  // ── 1) 선택: Edutrix 학생 → eywa edutrix_student_id 백필 ──
+  // ── 1) 선택: Edutrix 학생 → aywa edutrix_student_id 백필 ──
   if (DO_MAP) {
     const eduStudents = [];
     for (let from = 0; ; from += PAGE) {
@@ -67,17 +67,17 @@ function normName(s) {
       eduStudents.push(...data);
       if (data.length < PAGE) break;
     }
-    const eywa = await sql`
+    const aywa = await sql`
       select id, name, school, grade, status, edutrix_student_id, classnote_name
       from students where tenant_id = ${TENANT}
     `;
     const byName = new Map();
-    for (const s of eywa) {
+    for (const s of aywa) {
       if (!byName.has(s.name)) byName.set(s.name, []);
       byName.get(s.name).push(s);
     }
-    const takenEywa = new Set(eywa.filter((s) => s.edutrix_student_id).map((s) => s.id));
-    const takenEdu = new Set(eywa.filter((s) => s.edutrix_student_id).map((s) => s.edutrix_student_id));
+    const takenAywa = new Set(aywa.filter((s) => s.edutrix_student_id).map((s) => s.id));
+    const takenEdu = new Set(aywa.filter((s) => s.edutrix_student_id).map((s) => s.edutrix_student_id));
 
     let mapped = 0;
     let skipped = 0;
@@ -94,18 +94,18 @@ function normName(s) {
       // exact 0이면 정규화 폴백(백필만)
       if (candidates.length === 0) {
         const n = normName(es.name);
-        candidates = eywa.filter((s) => !s.edutrix_student_id && normName(s.name) === n);
+        candidates = aywa.filter((s) => !s.edutrix_student_id && normName(s.name) === n);
       } else {
         candidates = candidates.filter((c) => !c.edutrix_student_id);
       }
-      // 이미 다른 edutrix에 묶인 eywa 제외
-      candidates = candidates.filter((c) => !takenEywa.has(c.id) || !c.edutrix_student_id);
+      // 이미 다른 edutrix에 묶인 aywa 제외
+      candidates = candidates.filter((c) => !takenAywa.has(c.id) || !c.edutrix_student_id);
 
-      const pick = pickEywa(es, candidates);
+      const pick = pickAywa(es, candidates);
       if (pick.kind === "mapped") {
-        if (takenEywa.has(pick.eywaId)) {
+        if (takenAywa.has(pick.aywaId)) {
           ambiguous++;
-          ambList.push({ edu: es.name, reason: "eywa_already_mapped", eywaId: pick.eywaId });
+          ambList.push({ edu: es.name, reason: "eywa_already_mapped", aywaId: pick.aywaId });
           continue;
         }
         if (!DRY) {
@@ -113,10 +113,10 @@ function normName(s) {
             update students
             set edutrix_student_id = ${es.id},
                 classnote_name = coalesce(nullif(classnote_name, ''), ${es.class_note_submission_name || null})
-            where id = ${pick.eywaId} and tenant_id = ${TENANT} and edutrix_student_id is null
+            where id = ${pick.aywaId} and tenant_id = ${TENANT} and edutrix_student_id is null
           `;
         }
-        takenEywa.add(pick.eywaId);
+        takenAywa.add(pick.aywaId);
         takenEdu.add(es.id);
         mapped++;
       } else if (pick.kind === "ambiguous") {
@@ -138,7 +138,7 @@ function normName(s) {
     where tenant_id = ${TENANT} and edutrix_student_id is not null
   `;
   const byEdutrixId = new Map(mappedStudents.map((s) => [s.edutrix_student_id, s.id]));
-  console.log("eywa students with edutrix_student_id:", byEdutrixId.size);
+  console.log("aywa students with edutrix_student_id:", byEdutrixId.size);
   if (byEdutrixId.size === 0) {
     if (DRY) {
       console.log("dry-run: DB 매핑 0(미기록). --map 없이 dry면 import 시뮬레이션 생략. 실적용: --map 후 본 이관.");
@@ -149,7 +149,7 @@ function normName(s) {
   }
 
   // ── 3) Edutrix reports (student_id UUID 포함) — 학생당 최근 N건 ──
-  // name 키잉 제거. edutrix student uuid → eywa id.
+  // name 키잉 제거. edutrix student uuid → aywa id.
   const byEduStudent = new Map(); // edutrixStudentId -> [{reportId, date, ...}]
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await edu
@@ -179,13 +179,13 @@ function normName(s) {
   }
   console.log("edutrix students with reports (capped per student):", byEduStudent.size);
 
-  // ── 4) 행 조립 — UUID만, 1 report → 1 eywa student ──
+  // ── 4) 행 조립 — UUID만, 1 report → 1 aywa student ──
   const rows = [];
   let matchedStudents = 0;
   let unmatchedStudents = 0;
   for (const [eduSid, reps] of byEduStudent) {
-    const eywaId = byEdutrixId.get(eduSid);
-    if (!eywaId) {
+    const aywaId = byEdutrixId.get(eduSid);
+    if (!aywaId) {
       unmatchedStudents++;
       continue;
     }
@@ -193,7 +193,7 @@ function normName(s) {
     for (const rep of reps) {
       rows.push({
         tenant_id: TENANT,
-        student_id: eywaId,
+        student_id: aywaId,
         report_date: rep.date,
         progress: rep.progress,
         exam_info: rep.exam_info,

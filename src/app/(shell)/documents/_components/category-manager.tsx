@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, Loader2, Pencil, Plus, Settings2, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { Check, ChevronDown, ChevronUp, Loader2, Pencil, Plus, Settings2, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {

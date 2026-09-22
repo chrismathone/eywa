@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Archive, RotateCcw } from "@/components/icons/eywa-icon-compat";
+import { Archive, RotateCcw } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { archiveClass, type ArchiveClassState } from "@/features/classes/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";

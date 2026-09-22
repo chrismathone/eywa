@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import {
   DropdownMenu,
   DropdownMenuContent,

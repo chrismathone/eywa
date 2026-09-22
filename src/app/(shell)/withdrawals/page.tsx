@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { isValidYm, kstDateOf, kstMonth, kstToday, monthLabel, shiftMonth } from "@/lib/date-kst";
 import { inWithdrawalWindow, withdrawalMonthWindow, withdrawalProgram } from "@/features/withdrawals/window";
-import { PROGRAMS, parseProgram, programLabel, type Program } from "@/features/students/program";
+import { parseProgram, programLabel, visiblePrograms, type Program } from "@/features/students/program";
+import { isModuleEnabled } from "@/lib/modules";
 import {
   UserMinus,
   CalendarClock,
@@ -9,7 +10,7 @@ import {
   Filter,
   AlertCircle,
   UserX,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SearchToggle } from "@/components/search-toggle";
 import { PageHeader } from "@/components/page-header";
@@ -37,7 +38,7 @@ import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/t
 import { WithdrawalListLayout } from "./_components/list-layout";
 import { withdrawalPage, withdrawalPageSize } from "@/features/withdrawals/list-pagination";
 
-export const metadata = { title: "퇴원관리 — eywa" };
+export const metadata = { title: "퇴원관리 — aywa" };
 
 /** 퇴원 후 경과 일수(필터용 수치 — 표시는 relativeDayKo). withdrawn_at는 date 컬럼. */
 function daysSince(iso: string | null): number | null {
@@ -364,7 +365,10 @@ export default async function WithdrawalsPage({
         <FilterSelect
           paramName="program"
           value={program ?? ""}
-          options={PROGRAMS.map((p) => ({ value: p, label: programLabel(p, settings.operations.subjects) }))}
+          options={visiblePrograms(isModuleEnabled(settings.modules.disabled, "eie")).map((p) => ({
+            value: p,
+            label: programLabel(p, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")),
+          }))}
           axisLabel="프로그램"
           ariaLabel="프로그램 필터"
           {...SELECT_PROPS}

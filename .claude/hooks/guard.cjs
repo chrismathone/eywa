@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /*
- * eywa 프로덕션 안전 가드 (PreToolUse hook, matcher=Bash)
+ * aywa 프로덕션 안전 가드 (PreToolUse hook, matcher=Bash)
  * 되돌릴 수 없는/위험한 Bash 명령을 하드 차단한다.
  *   1) main/master 대상 git push        2) force push (--force / -f)
- *   3) db:seed / seed 스크립트(데이터 wipe)  4) 파괴적 SQL(DROP/TRUNCATE/무-WHERE DELETE)·wipe-tenant
+ *   3) db:seed / seed 스크립트(데이터 wipe — 2026-09-19 제거, 재실행 방지로 차단 유지)  4) 파괴적 SQL(DROP/TRUNCATE/무-WHERE DELETE)·wipe-tenant
  * 우회: 명령에 ALLOW_DANGER 토큰 포함 (원장이 명시적으로 승인한 경우에만).
  * 계약: 차단 = stderr 메시지 + exit 2 / 통과 = exit 0.
  *
@@ -24,7 +24,7 @@ function readStdin() {
 
 function block(reason) {
   process.stderr.write(
-    "\n⛔ eywa 안전 가드가 이 명령을 차단했습니다.\n" +
+    "\n⛔ aywa 안전 가드가 이 명령을 차단했습니다.\n" +
       reason +
       "\n\n정말 실행해야 한다면(원장 승인 시): 명령 끝에  # ALLOW_DANGER  를 붙이세요.\n" +
       "예)  git push origin main   # ALLOW_DANGER\n"
@@ -72,8 +72,12 @@ const SQL_CAPABLE =
 
 if (SQL_CAPABLE) {
   // --- 3) db:seed / seed 스크립트 (테넌트 데이터 wipe) ---
-  if (/\bdb:seed\b/.test(cmd) || /(?:tsx|node|ts-node)\s+\S*scripts[\/\\]seed\.[a-z]+/.test(cmd)) {
-    block("사유: db:seed 는 테넌트 데이터를 전부 wipe합니다. 프로덕션(injaewon) 데이터 파괴 위험.");
+  // 스크립트 자체는 2026-09-19 영구 제거했다(원장 지시). 이 차단은 git 이력에서 되살려 돌리는 경우를 막으려고 남긴다.
+  if (
+    /\bdb:seed\b/.test(cmd) ||
+    /(?:tsx|node|ts-node)\s+\S*scripts[\/\\](?:seed|demo-progress-(?:seed|cleanup))\.[a-z]+/.test(cmd)
+  ) {
+    block("사유: db:seed·데모 시드는 운영(injaewon) 데이터를 지우거나 섞습니다. 2026-09-19 영구 제거됐으니 되살리지 마세요.");
   }
 
   // --- 4) 파괴적 SQL / wipe 스크립트 (인자 안에 들어오므로 substring 검사) ---

@@ -2,7 +2,7 @@
 
 import { useDroppable } from "@dnd-kit/core";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { DAY_LABEL, incomingDayLabel } from "@/features/timetable/lib/split-attendance";
 import { readableTextColor } from "@/lib/color-utils";

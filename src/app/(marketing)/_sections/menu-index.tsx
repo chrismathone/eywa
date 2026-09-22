@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MENU_EXCLUDED, MENU_INDEX } from "@/data/marketing";
 import { Reveal } from "../_motion/reveal";
 import { Eyebrow } from "../_ui/eyebrow";

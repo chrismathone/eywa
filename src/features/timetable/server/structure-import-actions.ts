@@ -20,8 +20,8 @@ import {
 import { readSheetGridWithMerges } from "@/features/integrations/google-sheets";
 import { TEACHER_SHEET_NAME } from "@/features/exports/english-timetable/teacher-grid-sheet";
 import { normalizeEffectiveDate } from "@/features/timetable/import/effective-date";
-import { parseEywaTeacherGrid } from "@/features/timetable/import/structure/parse-eywa-grid";
-import { checkEywaGridShape } from "@/features/timetable/import/structure/eywa-grid-shape";
+import { parseAywaTeacherGrid } from "@/features/timetable/import/structure/parse-aywa-grid";
+import { checkAywaGridShape } from "@/features/timetable/import/structure/aywa-grid-shape";
 import { matchStructure } from "@/features/timetable/import/structure/match";
 import { computeStructureDiff } from "@/features/timetable/import/structure/diff";
 import { conflictChecklist, conflictKeys, describeConflict } from "@/features/timetable/import/structure/conflicts";
@@ -170,9 +170,9 @@ async function computeFresh(
   const grid = await readSheetGridWithMerges(spreadsheetId, TEACHER_SHEET_NAME);
   // 🔴 파싱보다 먼저 **격자 모양**을 본다. 마스터 시트를 이 탭에 붙여넣으면 행이 맞아떨어져 파싱은
   //    성공하는데 A열이 12시간제라 모든 수업이 12시간 앞으로 들어간다(에러 없이 조용히 틀린다).
-  const shape = checkEywaGridShape(grid);
+  const shape = checkAywaGridShape(grid);
   if (shape) return { error: shape };
-  const parsed = parseEywaTeacherGrid(grid);
+  const parsed = parseAywaTeacherGrid(grid);
   if (parsed.slots.length === 0) return { error: `'${TEACHER_SHEET_NAME}' 탭에 데이터가 없습니다(시트를 확인하세요).` };
   const { ctx, existing, pendingLater } = await loadStructureContext(supabase, asOf);
   const match = matchStructure(parsed, ctx);

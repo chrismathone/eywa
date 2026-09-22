@@ -1,4 +1,5 @@
 import { kstMonth } from "@/lib/date-kst";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveMonthlyTasks } from "@/features/staff/server/notion";
 import { MonthlyScheduleView } from "../_components/monthly-schedule-view";
 
@@ -15,7 +16,11 @@ export async function MonthlyScheduleTab({
   canManage: boolean;
 }) {
   const month = kstMonth();
-  const initial = await resolveMonthlyTasks(staffId, month);
+  const user = await getCurrentUser();
+  // 연동 학원이 아니면(또는 세션이 없으면) API를 부르지 않고 'not_configured' — 다른 학원의 Notion을 비추지 않는다.
+  const initial = user
+    ? await resolveMonthlyTasks(staffId, month, user.tenantId)
+    : ({ ok: true, state: "not_configured" } as const);
 
   return (
     <MonthlyScheduleView

@@ -141,7 +141,7 @@ export function matchReportsToRows<R extends ReportRowRef>(
   //    영어 보고서 본문이 되어 학부모에게 나간다.
   //    ⚠️ 같은 버그를 **시간표 hover는 2026-07-27에 이미 막았다**(reportSubject() 단일 소스, 원장 지시
   //    "수학 시간표에서만 수학 내용이 호버링되게"). 원스크린만 남아 있었다 — 규칙을 그 상수로 통일한다.
-  //    📌 영어도 eywa에서 발송되기 시작하면 그 보고서는 `subject='english'`를 갖고 들어와 1·2차에서
+  //    📌 영어도 aywa에서 발송되기 시작하면 그 보고서는 `subject='english'`를 갖고 들어와 1·2차에서
   //       정확히 갈리므로, 이 게이트는 영어 참고행을 영구히 막지 않는다.
   const subjectKeys = new Set(rows.map((r) => r.subjectKey?.trim() ?? ""));
   // 행 과목 미지정("")은 math 간주 — 진도 입력 분기·G2 배지(grid-row.tsx)와 같은 규약.

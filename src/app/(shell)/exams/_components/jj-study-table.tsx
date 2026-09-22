@@ -129,14 +129,14 @@ function StudentRow({ row: r, href }: { row: JjStudyRow; href: (studentId: strin
     <tr className="hover:bg-bg-soft/50">
       <td className="px-4 py-2.5">
         <span className="flex items-center gap-1.5 whitespace-nowrap">
-          {r.eywa ? (
-            <WindowLink href={href(r.eywa.studentId)} title={r.eywa.name} className="text-foreground text-sm font-bold hover:underline">
-              {r.eywa.name}
+          {r.aywa ? (
+            <WindowLink href={href(r.aywa.studentId)} title={r.aywa.name} className="text-foreground text-sm font-bold hover:underline">
+              {r.aywa.name}
             </WindowLink>
           ) : (
             <span className="text-foreground text-sm font-bold">{r.name || r.ijwId}</span>
           )}
-          {!r.eywa ? (
+          {!r.aywa ? (
             <span className="border-amber/40 bg-amber-soft text-amber rounded-pill border px-1.5 py-px text-xs font-bold">
               연결 필요
             </span>

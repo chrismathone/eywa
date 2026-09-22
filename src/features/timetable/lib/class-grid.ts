@@ -42,6 +42,8 @@ export type GridStudent = {
    * 판정·서식은 [`seat-pin-mark.ts`](./seat-pin-mark.ts) 단일 소스(화면에서 다시 만들지 말 것).
    */
   seatPinNote?: string;
+  /** LAB '따로 수업(*LAB)' 배정(0271b) — 이름을 LAB 파랑 + 이탤릭으로. 판정 = lab-separate.ts `applyLabSeparateMarks`. */
+  labSeparate?: true;
   englishName?: string | null;
   // hover 정보용 — 런타임엔 StudentLine 전체가 도착(서버 쿼리가 채움). 분리등원·퇴원일·최근 교재·최근 진도·수강 시작일.
   attendanceDays?: string[];
@@ -277,7 +279,7 @@ function periodIndexByOrder(rows: readonly { order: number; label: string; time:
  *    혼합 반(평일+주말)의 주말 블록은 인덱스 간격이 아니라 **순번**으로 얹는다(`liftToWeekday`,
  *    2026-08-14) — 간격 방식은 평일 표에 교시가 끼면 마지막 칸이 표 끝을 넘어 제자리에 남았다.
  *
- * ⚠️ eywa의 `order`는 교시 번호가 아니라 **자정 기준 분**이라 ijw처럼 번호를 빼면 안 된다(평일 40분·주말
+ * ⚠️ aywa의 `order`는 교시 번호가 아니라 **자정 기준 분**이라 ijw처럼 번호를 빼면 안 된다(평일 40분·주말
  * 60분 간격이라 분 단위 시프트는 두 번째 교시부터 어긋난다). 그래서 **교시 인덱스** 공간에서 옮긴다.
  *
  * 행의 라벨·시각은 **옮겨간 자리의 것**이 된다(행은 "몇 번째 교시"를 뜻하지 절대 시각이 아니다).
@@ -822,7 +824,7 @@ export function groupRichCards(
 
 // 솔리드 배경 + 흰 글자라 대비가 충분한 색만(amber·gold 제외 — 흰 글자 대비 미달로 셀 강사명이 안 읽힘).
 const TEACHER_PALETTE = ["blue", "purple", "rose", "primary", "danger"] as const;
-/** 강사명(라벨) → 결정적 색 키(이름 해시). eywa엔 강사 색 설정이 없어 라벨 해시로 안정 배정. */
+/** 강사명(라벨) → 결정적 색 키(이름 해시). aywa엔 강사 색 설정이 없어 라벨 해시로 안정 배정. */
 export function teacherColor(name: string | null): (typeof TEACHER_PALETTE)[number] {
   if (!name) return "blue";
   let h = 0;

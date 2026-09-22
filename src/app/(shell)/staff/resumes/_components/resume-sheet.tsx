@@ -14,7 +14,7 @@ import {
   Save,
   Square,
   X,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useFormDraft } from "@/components/forms/use-form-draft";

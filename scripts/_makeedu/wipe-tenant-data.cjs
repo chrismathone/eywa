@@ -2,7 +2,7 @@
  * scripts/_makeedu/wipe-tenant-data.cjs — Phase 1 "데모 비우고 makeedu 재구축"의 파괴적 wipe.
  * 운영 데이터(학생/반/수강/수납/상담 + 학생·반 참조 의존 테이블)를 FK-safe 순서로 삭제.
  * ⚠️ 보존: users(담임 연결)·tenants·tenant_settings·super_admins·classrooms·user_integrations·intake_tokens·
- *   kakao_channels·kiosk_devices·meeting_minutes(회의록=eywa 고유)·announcements·auth.users(로그인 계정).
+ *   kakao_channels·kiosk_devices·meeting_minutes(회의록=aywa 고유)·announcements·auth.users(로그인 계정).
  *
  * 사용:
  *   node --env-file=.env.local scripts/_makeedu/wipe-tenant-data.cjs          # dry: 삭제 예정 건수만

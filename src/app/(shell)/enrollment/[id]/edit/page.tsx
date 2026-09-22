@@ -4,7 +4,7 @@ import { BackLink } from "@/components/back-link";
 import { getEnrollmentConsultationById } from "@/features/enrollment/server/queries";
 import { ConsultationFullForm } from "../../_components/consultation-full-form";
 
-export const metadata = { title: "콜&상담 수정 — eywa" };
+export const metadata = { title: "콜&상담 수정 — aywa" };
 
 export default async function EditEnrollmentPage({
   params,

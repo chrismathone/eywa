@@ -16,11 +16,11 @@ import { YearView } from "./_components/year-view";
 import { ListView } from "./_components/list-view";
 import { StatsView } from "./_components/stats-view";
 
-export const metadata = { title: "캘린더 — eywa" };
+export const metadata = { title: "캘린더 — aywa" };
 
 /**
  * 캘린더(학원 공용 일정) — 원장 2026-08-18: *"일단 캘린더 탭으로 우리 프로그램 내에 일정부터 관리."*
- * eywa DB가 일정의 단일 진실(0218a — 구글 상시 동기화 없음).
+ * aywa DB가 일정의 단일 진실(0218a — 구글 상시 동기화 없음).
  *
  * 다중 뷰(0224a, 원장 2026-08-19 "여러가지 버전으로 볼 수 있게"): `?v=month(기본)|year|list|stats`
  * + `y=YYYY`(연간·목록·분석) + `tag=<태그id|none>`(필터). 전환·연도·필터 전부 URL(Link) —

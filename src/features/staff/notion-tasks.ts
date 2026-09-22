@@ -1,4 +1,4 @@
-// Notion 업무 DB 페이지 → eywa 표시용 순수 변환 + 에러 한글화. 클라·서버 공용(순수, server-only 금지 [[#61]]).
+// Notion 업무 DB 페이지 → aywa 표시용 순수 변환 + 에러 한글화. 클라·서버 공용(순수, server-only 금지 [[#61]]).
 // 표시 문자열은 전부 한글 매핑을 거친다(raw 코드·에러 원문 UI 노출 금지 규칙 [[feedback_no-raw-codes-in-ui]]).
 
 export type NotionTask = {

@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDest } from "@/lib/menu-hub";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
@@ -30,7 +30,7 @@ type Command = { dest: HubDest; group: string; keywords: string };
 /** 평면 결과 항목(키보드 이동 단위) — 메뉴(클라) 또는 데이터(서버 검색). */
 type Item = { kind: "menu"; cmd: Command } | { kind: "data"; hit: PaletteHit };
 
-const DATA_ICON: Record<PaletteKind, EywaIconName> = {
+const DATA_ICON: Record<PaletteKind, AywaIconName> = {
   student: "user",
   class: "book",
   consultation: "messages",

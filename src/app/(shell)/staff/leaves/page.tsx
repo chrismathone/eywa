@@ -1,4 +1,4 @@
-import { CalendarClock } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock } from "@/components/icons/aywa-icon-compat";
 import { BackLink } from "@/components/back-link";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -6,7 +6,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getAllStaffLeaves } from "@/features/payroll/server/queries";
 import { LeavesAdminClient } from "./_client";
 
-export const metadata = { title: "휴가 관리 — eywa" };
+export const metadata = { title: "휴가 관리 — aywa" };
 
 /** 전 직원 휴가 일괄 관리(master/admin/manager) — 대기 건 승인/삭제. ijw LeaveManagement 이식. */
 export default async function StaffLeavesPage() {

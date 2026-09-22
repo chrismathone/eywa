@@ -1,0 +1,85 @@
+.options { position: relative; }
+.options summary { cursor: pointer; list-style: none; }
+.options summary::-webkit-details-marker { display: none; }
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  isolation: isolate;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+.table, .detailTable {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.table :is(th, td), .detailTable :is(th, td) {
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+.table tr > :last-child, .detailTable tr > :last-child { border-right: 0; }
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 40px;
+  background: var(--bg-soft);
+  text-align: center;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.table tbody td { height: 42px; text-align: right; font-weight: 700; white-space: nowrap; }
+.table button { cursor: pointer; }
+.table button:focus-visible, .options summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.table :is(td, th) > button:not(.groupToggle) { width: 100%; min-height: 32px; text-align: inherit; }
+.table .name { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; font-weight: 700; }
+.table thead .name { z-index: 4; background: var(--bg-soft); }
+.table .school { text-align: left; font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
+.table .total, .detailTable .total { background: var(--att-col-sessions); }
+.table .status { text-align: center; line-height: 1.45; }
+.status [data-status]::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--line-strong); vertical-align: middle; }
+.status [data-status=short]::before, .status [data-status=excess]::before { background: var(--danger); }
+.status [data-status=review]::before, .status [data-status=plannedExcess]::before { background: var(--amber); }
+.status [data-status=complete]::before { background: var(--green); }
+.table tr[data-student-row]:hover > :not(.total), .table tr[data-selected] > :not(.total) { background: var(--bg-soft); }
+.table .group th { background: var(--bg-soft); font-weight: 700; text-align: center; overflow-wrap: anywhere; }
+.table .group th:first-child { padding: 0; }
+.groupToggle {
+  position: sticky;
+  left: 0;
+  display: flex;
+  width: 100%;
+  max-width: calc(100vw - 32px);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 500;
+}
+.groupToggle b { white-space: nowrap; }
+.table .empty { height: 100px; text-align: left; padding: 16px; font-weight: 500; }
+
+.detailTable { width: 100%; }
+.detailTable thead th { background: var(--bg-soft); text-align: center; font-weight: 700; }
+.detailTable tbody th { text-align: left; font-weight: 700; overflow-wrap: anywhere; }
+.detailTable td { text-align: right; font-weight: 700; }
+.detailTable :is(th, td) { padding: 8px 6px; }
+.detailTable tr > :first-child { border-left: 1px solid var(--line); }
+.detailTable tr > :last-child { border-right: 1px solid var(--line); }
+.detailTable thead tr:first-child th { border-top: 1px solid var(--line); }
+.events { border-top: 1px solid var(--line); font-size: var(--text-xs); }
+.events > div { border-bottom: 1px solid var(--line); padding: 8px 0; }
+.events > div > div { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 2fr) auto; align-items: baseline; gap: 8px; }
+.events time { white-space: nowrap; }
+.events strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.events p { margin-top: 4px; }
+.events [data-excluded] { background: var(--bg-soft); }

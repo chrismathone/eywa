@@ -6,7 +6,7 @@
  * 강사가 보는 숫자가 학원 전체라는 사실을 적는다 — 결과 창 머리는 '내 학생 기준'이라 둘이 다를 수 있다.
  * 🔑 반 칩(2026-09-11): 목록 숫자는 그대로 학원 전체이고, 고른 반은 **시험 결과 창**을 그 반으로 연다(주소 `jjClass`).
  */
-import { SearchX } from "@/components/icons/eywa-icon-compat";
+import { SearchX } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";

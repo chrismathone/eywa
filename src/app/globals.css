@@ -49,7 +49,7 @@
 }
 
 /*
- * eywa — Daylight palette v4 "White Contrast" (2026-08-18 원장 지시: 회색 캔버스 전면 제거)
+ * aywa — Daylight palette v4 "White Contrast" (2026-08-18 원장 지시: 회색 캔버스 전면 제거)
  * 화이트 캔버스 + 헤어라인 테두리 승압 + 잉크 대비 강화. Deep navy primary(#153e75) 불변.
  * v3의 애매한 뉴트럴 표면(#f5f5f7 캔버스·#fafafc surface-hi)을 화이트로 통일하고, 표면 구분은
  * 배경색 차이가 아니라 **테두리(--line 14%)**가 담당한다. 상호작용 상태(hover·선택)는 회색 잔존이
@@ -147,7 +147,7 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  /* eywa palette */
+  /* aywa palette */
   --color-gold: var(--gold);
   --color-gold-soft: var(--gold-soft);
   --color-green: var(--green);
@@ -299,7 +299,7 @@
   --line-faint: rgba(29, 29, 31, 0.1);
   --input: rgba(29, 29, 31, 0.2);
 
-  /* shadcn semantic — map to eywa */
+  /* shadcn semantic — map to aywa */
   --card: #ffffff;
   --card-foreground: #121212;
   --popover: #ffffff;
@@ -338,7 +338,7 @@
   --chart-4: #bc3838;  /* danger · 결석·미납 (= --danger) */
   --chart-5: #d2447a;  /* rose 계열 · 상담·학부모 (차트 전용) */
 
-  /* eywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등) */
+  /* aywa custom (직접 사용: bg-gold, text-blue, bg-danger-soft 등) */
   /* ⚠️ v4: 아래 -soft 틴트는 전부 한 단계 올렸다(9~11% → 12~13%) — 화이트 캔버스에선 옅은 틴트가
      "색이 있나?" 수준으로 사라진다(원장 2026-08-18: "색감을 여기저기에 넣어 눈에 띄면 좋겠네").
      🔑 **본색(잉크)도 함께 조였다** — `-soft` 배지는 *같은 색 글자*를 그 틴트 위에 얹으므로 배경이
@@ -402,6 +402,17 @@
         `bg-goal-fill-soft` 같은 유틸이 유효해져 dead-color-class 가드를 통과하는 오용 문이 열린다. */
   --goal-fill-soft: #ff8f8f;
   --goal-fill-strong: #7a1111;
+
+  /* ── MCS 진도 색(원장 2026-09-18 *"현재는 순수 파랑, 목표는 순수 빨강"* → 2026-09-19 *"mcs 막대와 완전히 일치하는
+     규칙으로. mcs 막대 규칙도 하나로 통일"*). **실제 진도(현재·도달·완료) = 파랑 · 목표 = 빨강**이 MCS의 유일한 규칙이다.
+     MCS 막대·진도 시계·범례·월별 타임라인·차시 점·목표 정거장이 전부 이 셋만 읽는다(가드 `mcs-palette.test.ts`).
+     🔴 화면 파일에 #0000ff·#ff0000을 다시 적지 말 것 — 한 곳이 따로 놀면 "완료가 빨강인 곳·파랑인 곳"이 또 생긴다
+        (2026-09-19까지 월별 타임라인·차시 점은 완료를 빨강으로, 막대는 파랑으로 칠하고 있었다).
+     `--mcs-actual-soft` = 시계의 '진행 중'(기록은 있으나 차시를 다 못 채운 칸). 막대 채움엔 쓰지 않는다(막대는 순수 두 색).
+     ⚠️ `@theme` 매핑은 일부러 없다(위 `--goal-fill-*`과 같은 이유 — 유틸로 새어 나가지 않게). */
+  --mcs-actual: #0000ff;
+  --mcs-actual-soft: #c7c7ff;
+  --mcs-goal: #ff0000;
 
   /* ── 출석부 출결 팔레트(2026-07-21 원장: "형광색은 날짜가 아니라 학생 출결 1의 배경 · 더 쨍하게") ──
      ⚠️ 여기만 앱 표준 -soft 토큰(8~11% 틴트)을 **의도적으로 벗어난다**. 출석부는 한 화면에 31칸 × 수십 행이라
@@ -651,7 +662,7 @@
   }
 
   /* ─────────────── motion ─────────────── */
-  @keyframes eywa-pulse {
+  @keyframes aywa-pulse {
     0%,
     100% {
       box-shadow: 0 0 0 0 var(--danger);
@@ -663,7 +674,7 @@
     }
   }
   .pulse-now {
-    animation: eywa-pulse 1.8s ease-out infinite;
+    animation: aywa-pulse 1.8s ease-out infinite;
   }
 
   /* 알림 벨 — 안 읽음 있을 때 은은히 "딸랑"(울린 뒤 쉼), hover 시 1회 스윙. transform-origin=top(매단 것처럼). */
@@ -708,7 +719,7 @@
      원장 2026-08-05: *"연도를 막 누르면서 변화하는것을 애니메이션으로 보고 싶기 때문."*
      서버 내비라 DOM이 통째로 새로 만들어지므로 transition이 아니라 **mount 애니메이션**이어야 한다.
      ⚠️ 접근성: 모션을 줄이도록 설정한 사용자에겐 재생하지 않는다(아래 media query). */
-  @keyframes eywa-bar-grow {
+  @keyframes aywa-bar-grow {
     from {
       transform: scaleX(0);
     }
@@ -718,7 +729,7 @@
   }
   .bar-grow {
     transform-origin: left center;
-    animation: eywa-bar-grow 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: aywa-bar-grow 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
   @media (prefers-reduced-motion: reduce) {
     .bar-grow {
@@ -726,7 +737,7 @@
     }
   }
 
-  @keyframes eywa-reveal-base {
+  @keyframes aywa-reveal-base {
     from {
       opacity: 0;
       transform: translateY(40px);
@@ -1278,7 +1289,7 @@ html[data-stage="on"] main {
   color: var(--foreground);
 }
 
-@keyframes eywa-search-hit-flash-1 {
+@keyframes aywa-search-hit-flash-1 {
   0%,
   30%,
   70% {
@@ -1297,7 +1308,7 @@ html[data-stage="on"] main {
 }
 
 /* 위 -1과 **몸통이 같아야 한다**(이름만 다른 재발화용 쌍). */
-@keyframes eywa-search-hit-flash-2 {
+@keyframes aywa-search-hit-flash-2 {
   0%,
   30%,
   70% {
@@ -1316,11 +1327,11 @@ html[data-stage="on"] main {
 }
 
 .search-hit-flash-a {
-  animation: eywa-search-hit-flash-1 1s ease-out 1 both;
+  animation: aywa-search-hit-flash-1 1s ease-out 1 both;
 }
 
 .search-hit-flash-b {
-  animation: eywa-search-hit-flash-2 1s ease-out 1 both;
+  animation: aywa-search-hit-flash-2 1s ease-out 1 both;
 }
 
 @media (prefers-reduced-motion: reduce) {

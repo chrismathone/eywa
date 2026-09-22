@@ -1,4 +1,4 @@
-import { Check } from "@/components/icons/eywa-icon-compat";
+import { Check } from "@/components/icons/aywa-icon-compat";
 import type { ExpenseLineItem, ExpenseRow } from "@/features/billing/server/expense-queries";
 import { formatMoney } from "@/features/billing/currencies";
 import { ExpensePrintBar } from "./expense-print-bar";

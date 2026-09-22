@@ -15,7 +15,7 @@
  */
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { ariaSort, sortIndicator, toggleSort, type SortState } from "@/lib/table/sort";
 
 export function SortableThLink<K extends string>({
@@ -55,7 +55,7 @@ export function SortableThLink<K extends string>({
         }
       >
         {children}
-        {/* 방향 표시는 EyIcon(아이콘 자리에 ▲▼ 텍스트 글리프 금지 — `eywa-icon-mapping` 테스트가 잡는다).
+        {/* 방향 표시는 EyIcon(아이콘 자리에 ▲▼ 텍스트 글리프 금지 — `aywa-icon-mapping` 테스트가 잡는다).
             비활성 열은 hover에서만 흐리게 = 어느 열이 정렬 가능한지 알리되 평소엔 조용하게. */}
         <span aria-hidden className={active ? "" : "opacity-0 transition-opacity group-hover:opacity-40"}>
           <EyIcon name={sortIndicator(state, sortKey) === "desc" ? "chevronDown" : "chevronUp"} size={11} />

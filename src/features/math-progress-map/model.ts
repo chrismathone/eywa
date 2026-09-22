@@ -1,12 +1,9 @@
 /**
  * 수학 학습 진도맵 — **데이터 모델**(순수 타입, 화면·서버 공용).
  *
- * 화면은 이 모양 하나만 읽는다. 지금은 샘플([`sample.ts`](./sample.ts))이 채우고, 실데이터 배선은
- * `lesson_reports`(원스크린 수학 보고서)·`math_month_goals`(MCS 월간 목표)를 이 모양으로 접는 서버
- * 어댑터 하나를 더하면 된다 — 화면 컴포넌트는 손대지 않는다.
- *
- * 🔑 단위는 **쪽(page)** 하나다 — 일·주·월·분기·연간 요약이 전부 같은 단위로 세어야 "확대/축소"가
- *    성립한다(단원 수·문제 수를 섞으면 줄마다 다른 것을 센다).
+ * 기존 시안은 쪽수, MCS 실데이터는 `learningMap`의 세부 차시 원장을 사용한다.
+ * `learning-dashboard.ts`가 같은 원장을 세 지도·타임라인에 공급한다. 실데이터의 일·주·월·분기·연간
+ * 합계는 `DailyProgress.lessons`만 세며 페이지 범위나 단원 종류 수로 환산하지 않는다.
  * 🔴 상태 4종은 **저장된 사실**이고 "예정/미학습"은 날짜가 가른다(`not-started`가 기준일 뒤면 예정,
  *    앞이면 미학습) — 화면이 스스로 상태를 지어내지 않는다.
  */
@@ -16,6 +13,8 @@ export type MapDisplay = "drill" | "full" | "continuous";
 
 /** 하루치 학습 기록(또는 계획). */
 export interface DailyProgress {
+  /** 실데이터는 페이지 범위 대신 중복 없는 세부 차시를 센다. */
+  lessons?: { positions: number[]; done: number; known: boolean };
   /** YYYY-MM-DD */
   date: string;
   bookName: string;
@@ -83,6 +82,8 @@ export interface ProgressYear {
 
 /** 학생의 수업 일정. 공휴일 색 표시와 실제 수업 유무는 별개다. */
 export interface ProgressCalendar {
+  /** 날짜별 시간표 이력과 학생 수강기간을 반영한 수업일. 미설정은 일정 미확인이다. */
+  classDates?: string[];
   /** 0=일 ~ 6=토. 미설정이면 기록 없는 날을 비수업일로 추정하지 않는다. */
   classWeekdays?: number[];
   /** 날짜 → 휴강 사유. 실데이터는 학원설정 휴원일과 학생별 휴강 일정을 접어 전달한다. */
@@ -97,6 +98,8 @@ export interface LearningRoadmap {
 }
 
 export interface StudentProgress {
+  /** MCS 차시 원장. 없으면 기존 쪽수 시안이다. */
+  learningMap?: import("./learning-map").LearningMap;
   studentId: string;
   studentName: string;
   /** "중1" — 학원설정 학년 라벨 그대로 */
@@ -153,6 +156,8 @@ export const VIEW_MODE_LABEL: Record<ViewMode, string> = {
 export type PaceStatus = "ahead" | "normal" | "delayed";
 
 export interface PlanVsActual {
+  /** 실데이터의 계획 대비는 일수로 환산하지 않는다. */
+  learningLabel?: string;
   /** 오늘 계획상 있어야 할 쪽 */
   plannedPage: number;
   /** 계획 위치의 대단원 */

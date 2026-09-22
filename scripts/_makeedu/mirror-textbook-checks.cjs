@@ -7,7 +7,7 @@
  * - **납부** = 그 수납 라인이 **납부 처리 완료**(라인 미납금액=0 — 완납 or 할인/적립 전액 충당).
  * - 입력자(마지막 변경자) = **"자동화"**.
  *
- * 데이터 소스 = **스크랩 원본**($MAKEEDU_OUT/invoices.json, 라인 단위) — eywa invoices 테이블이 아님.
+ * 데이터 소스 = **스크랩 원본**($MAKEEDU_OUT/invoices.json, 라인 단위) — aywa invoices 테이블이 아님.
  * (테이블은 (학생,청구월) additive라 이미 임포트된 달에 나중에 추가된 교재비 라인이 안 들어옴 +
  *  라인별 납부상태가 집계에서 소실됨.)
  * ⚠️ 스크랩 = makeedu 수납 목록 **기본 뷰(현재 청구월 슬라이스)** 스냅샷 — 당월 라인의 생성·완납은
@@ -108,7 +108,7 @@ const LAG_MONTHS = 1; // 청구는 신청월 당월~익월이 정상 — 그 밖
     const tenantId = await L.resolveTenantId(sql);
 
     // 2) 라인 학생 해석(이름+학년 → student_id, 모호=null=스킵).
-    //    동명(정규화 이름 비유일) 학생은 자동화 대상에서 제외 — 학년 드리프트(makeedu=최신 진급 vs eywa=구학년) 시
+    //    동명(정규화 이름 비유일) 학생은 자동화 대상에서 제외 — 학년 드리프트(makeedu=최신 진급 vs aywa=구학년) 시
     //    티어1(이름|학년) 키가 인접학년 동명이인에게 '유일' 적중해 남의 학생으로 오귀속될 수 있음(오탐>미탐 우선).
     const studs = await sql`select id, name, grade from students where tenant_id = ${tenantId}`;
     const dupNames = new Set();

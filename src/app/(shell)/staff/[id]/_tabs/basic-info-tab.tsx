@@ -1,7 +1,7 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { Pill } from "@/components/atoms/pill";
-import { CheckSquare, Pencil, Square } from "@/components/icons/eywa-icon-compat";
+import { CheckSquare, Pencil, Square } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
 import {

@@ -247,7 +247,7 @@ export async function submitPublicIntake(
     prospect_name: prospectName,
     prospect_grade: prospectGrade,
     // 학부모가 "칠성초등학교"라 적어도 저장은 앱 표기 하나로(원장 2026-09-01).
-    prospect_school: canonicalSchoolName(prospectSchool),
+    prospect_school: canonicalSchoolName(prospectSchool, settings.operations.schoolSaveAliases),
     gender,
     blood_type: bloodType,
     student_phone: clip(formData.get("studentPhone"), 20) || null,

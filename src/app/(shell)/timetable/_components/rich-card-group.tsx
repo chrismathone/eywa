@@ -2,7 +2,7 @@
 import { tipProps } from "@/components/hover-tip/tip";
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
-import { GripVertical } from "@/components/icons/eywa-icon-compat";
+import { GripVertical } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
@@ -36,7 +36,13 @@ import { shortMoveDate } from "@/features/timetable/lib/move-date";
 import { moveWaitTitle, savedMoveView } from "@/features/timetable/lib/move-note";
 import { SEAT_PIN_MARK_CLASS } from "@/features/timetable/lib/seat-pin-mark";
 // '따로 수업(*LAB)' 표식(원장 2026-09-17) — 수업설정에 있는 LAB 교시. 아래 임시 칸과 글자는 같고 모양이 다르다.
-import { LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS, LAB_SEPARATE_TIP } from "@/features/timetable/lib/lab-separate";
+import {
+  LAB_SEPARATE_LABEL,
+  LAB_SEPARATE_STUDENT_CLASS,
+  LAB_SEPARATE_TEXT_CLASS,
+  LAB_SEPARATE_TIP,
+  labSeparateMetaClass,
+} from "@/features/timetable/lib/lab-separate";
 // *LAB 임시 칸(원장 2026-09-11) — 판정은 서버가 끝냈고 여기선 **어디에 그릴지**와 서식만(단일 소스).
 import {
   borrowFromRoster,
@@ -1106,12 +1112,15 @@ function RosterRow({
         saved: false,
       })
     : (saved?.title ?? "");
+  const metaMark = labSeparateMetaClass(s.labSeparate, s.seatPinNote);
   // 기본뷰 StudentRow와 같은 조립 — 이름이 먼저, 메타는 `/`로 붙어 좁으면 메타부터 잘린다(생략부호 없이 clip).
   const inner = (
     <>
       {/* 자리(랩실) 교시 고정 — 기본뷰 학생 줄과 **같은 서식 상수·같은 문구**(뷰마다 다르게 보이면 안 된다). */}
       <span
-        className={`${moving && !scheduledMove ? "line-through" : ""}${s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : ""}`}
+        className={`${moving && !scheduledMove ? "line-through" : ""}${
+          s.seatPinNote ? ` ${SEAT_PIN_MARK_CLASS}` : s.labSeparate ? ` ${LAB_SEPARATE_STUDENT_CLASS}` : ""
+        }`}
       >
         {s.name}
       </span>
@@ -1130,7 +1139,8 @@ function RosterRow({
           {shortMoveDate(saved.on)}
         </span>
       ) : meta ? (
-        <span className="text-xs opacity-90">/{meta}</span>
+        // 🔴 꼬리도 이름과 같은 색·기울기(*LAB 줄은 한 줄 통째로 — 원장 2026-09-18 *"전체를 파랑 및 이탤릭으로"*).
+        <span className={`text-xs opacity-90${metaMark ? ` ${metaMark}` : ""}`}>/{meta}</span>
       ) : null}
     </>
   );
@@ -1192,6 +1202,7 @@ function RosterRow({
           textbook={s.latestTextbook}
           report={s.latestReport}
           pinNote={s.seatPinNote}
+          labSeparate={s.labSeparate === true}
         />
       }
     >

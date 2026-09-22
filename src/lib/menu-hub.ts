@@ -1,6 +1,6 @@
 import { menuSearchKeywords, navItemByKey, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
-import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
+import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import {
   isMenuHiddenByLayout,
   sortByMenuLayout,
@@ -27,7 +27,7 @@ export type HubDest = {
   menuKey: MenuKey;
   href: string;
   label: string;
-  icon: EywaIconName;
+  icon: AywaIconName;
   /** 버튼 아래 한 줄 설명 — 없으면 안 적는다(지어내지 않는다). */
   desc?: string;
   /** 담당 반을 전제로 만든 화면 — 담당 반이 0인 사무실 계정에겐 눌러도 빈 화면이라 감춘다(권한 아님). */
@@ -44,7 +44,7 @@ export type HubGroup = {
   /** 사이드바·허브가 함께 쓰는 식별자. 🔴 `menuKey`가 아니다 — 업무군은 권한 축이 아니다. */
   id: string;
   label: string;
-  icon: EywaIconName;
+  icon: AywaIconName;
   /** 허브 머리의 한 줄 안내. */
   note?: string;
   /**

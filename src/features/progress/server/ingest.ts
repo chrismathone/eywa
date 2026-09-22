@@ -62,7 +62,7 @@ type ActiveContainer = {
  */
 export async function ingestReport(supabase: ServerClient, report: IngestReportInput): Promise<IngestResult> {
   // 명시적 비수학(subject_1·english)만 제외. null=legacy 임포트(수학일 수 있음)는 통과시키고
-  // positionOf(커리큘럼 정확 매핑)를 실질 필터로 삼는다(eywa 네이티브 math는 그대로 통과).
+  // positionOf(커리큘럼 정확 매핑)를 실질 필터로 삼는다(aywa 네이티브 math는 그대로 통과).
   if (report.subject != null && report.subject !== MATH_SUBJECT) return { ok: true, skipped: "not-math" };
 
   const pos = positionOf(report.progress);

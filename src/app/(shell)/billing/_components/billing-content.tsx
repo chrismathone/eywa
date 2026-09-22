@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Receipt, BadgePercent, CircleDollarSign, Percent, ReceiptText } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { BigStat } from "@/components/atoms/big-stat";
@@ -277,14 +277,14 @@ export async function BillingContent({ sp }: { sp: Sp }) {
           icon={() => <ReceiptText size={32} strokeWidth={1.8} />}
           title={
             missingOnly
-              ? "동기화에 빠진 청구가 없습니다"
+              ? "현재 조건에 맞는 청구가 없습니다"
               : overdueOnly
                 ? "기한 경과 건이 없습니다"
                 : q
                   ? "검색 결과 없음"
                   : "이 달 청구 내역이 없습니다"
           }
-          // 설명 문장은 뺐다(§4) — 제목이 빈 이유를 말하고, 되돌릴 길은 아래 '전체 보기'·위 월 네비다.
+          description={missingOnly ? "이미 저장된 청구 중 마지막 동기화에 없던 건만 표시합니다. 학생 미매칭으로 가져오지 못한 수납은 우상단 ‘확인 필요’에서 확인하세요." : undefined}
           action={
             overdueOnly || missingOnly ? (
               <Button

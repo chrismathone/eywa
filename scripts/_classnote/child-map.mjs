@@ -1,5 +1,5 @@
 /**
- * scripts/_classnote/child-map.mjs — ClassNote **원아(child) ↔ eywa 학생** 확정의 순수 로직(IO 없음 · Vitest).
+ * scripts/_classnote/child-map.mjs — ClassNote **원아(child) ↔ aywa 학생** 확정의 순수 로직(IO 없음 · Vitest).
  *
  * 왜 필요한가(2026-08-06): 인바운드(학부모 글·댓글) 매핑이 지금은 **보드명**(`(수학)홍길동`) 기준이라
  * 1인 보드에서만 통한다. 그런데 영어는 **그룹반**(`[EIE] Let's Speak 6 …`)이라 보드명에 학생이 없고,
@@ -11,7 +11,7 @@
  *
  * 확정 근거 3겹(2026-08-06 실측 474명 중 461명 = 97%):
  *   ① 보호자 전화(`admissioninfos.basic_info.carer1/2_phone`) — 형제가 같은 번호를 공유해 후보가 여럿일 수 있다
- *   ② 원아명 ↔ eywa 유효이름(동명이인 접미사 A~G까지 포함) — 형제를 가르는 축
+ *   ② 원아명 ↔ aywa 유효이름(동명이인 접미사 A~G까지 포함) — 형제를 가르는 축
  *   ③ 생년 ↔ 학년(±1) — ①②로도 안 갈릴 때의 마지막 축
  * 경로별 실측: 전화유일 276 · 전화+이름 170 · 이름유일 12 · 이름+생년 2 · 미확정 13.
  *
@@ -37,7 +37,7 @@ export function phoneKey(raw) {
 }
 
 /**
- * 원아 1명 → eywa 학생 확정.
+ * 원아 1명 → aywa 학생 확정.
  *
  * @param {{ childId: number, name?: string|null, birth?: string|null, phones?: Array<string|null|undefined> }} child
  * @param {Array<{ id: string, name?: string|null, classnote_name?: string|null, grade?: string|null, phones?: Array<string|null|undefined> }>} students
@@ -97,7 +97,7 @@ export function resolveChildStudent(child, students, { schoolYear }) {
  *    → 막아야 하는 건 그 반대 방향뿐이다: **한 원아가 두 학생에** 붙는 것(남의 집 연락이 섞인다).
  *
  * @param {Array<object>} children ClassNote 원아
- * @param {Array<object>} students eywa 학생(퇴원 포함)
+ * @param {Array<object>} students aywa 학생(퇴원 포함)
  * @param {{ schoolYear:number, linkedChildIds?: Iterable<number> }} opts
  *   linkedChildIds = 이미 링크된 원아 id들(멱등 판정용).
  * @returns {{ plan: Array<{childId:number, studentId:string, by:string}>, skipped: Array<{childId:number, why:string}> }}

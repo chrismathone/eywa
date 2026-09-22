@@ -10,7 +10,7 @@ export const LEGACY_PREFIX_BY_KIND: Record<AudioKind, string> = {
   registration: "registration-recordings/",
 };
 
-/** 신규(eywa Supabase) 버킷 — 등록상담 신규 녹음은 consultation-recordings 버킷을 공유. */
+/** 신규(aywa Supabase) 버킷 — 등록상담 신규 녹음은 consultation-recordings 버킷을 공유. */
 export const SUPABASE_BUCKET_BY_KIND: Record<AudioKind, string> = {
   meeting: "meeting-recordings",
   consultation: "consultation-recordings",

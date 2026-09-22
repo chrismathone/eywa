@@ -11,7 +11,7 @@
  * 🔴 **조회 실패와 '배정 없음'을 다른 문장으로 적는다** — 실패를 "배정 없음"으로 적으면 이미 반이
  *    있는 학생을 데스크가 한 번 더 배정한다.
  */
-import { GraduationCap, ExternalLink, AlertCircle } from "@/components/icons/eywa-icon-compat";
+import { GraduationCap, ExternalLink, AlertCircle } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { assignedPanelState } from "@/features/enrollment/detail-panels";
 import type { AssignedClasses } from "@/features/enrollment/server/assigned-classes";

@@ -6,7 +6,7 @@
  * 바로 나타나야 한다. 지금은 각자 누른 것만 갱신되고(`router.refresh()`), 남이 찍은 건 새로고침해야 보인다.
  *
  * 🔑 **broadcast를 쓴다(`postgres_changes` 아님).** 회의록 StatusWatcher는 postgres_changes를 쓰는데
- *    그건 그 표가 realtime publication에 들어 있어야 동작한다 = **DB 설정이 필요**하다. eywa는 SQL을
+ *    그건 그 표가 realtime publication에 들어 있어야 동작한다 = **DB 설정이 필요**하다. aywa는 SQL을
  *    원장이 손으로 실행하므로 배포와 설정 사이에 간격이 생기고, 그 사이엔 조용히 아무 일도 안 난다.
  *    broadcast는 설정이 0이고 이미 도는 인프라다(수정중 presence가 같은 WebSocket을 쓴다).
  *

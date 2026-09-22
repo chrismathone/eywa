@@ -27,7 +27,7 @@
 | [reference-menu-buttons.png](./reference-menu-buttons.png) | 사용자가 버튼형 진입 예시로 준 이미지. 파스텔은 필수 아님 |
 | [MANIFEST.json](./MANIFEST.json) | 전달 파일 크기·해시와 출처. 복사 검증용 |
 
-패키지의 HTML은 직접 `file://`로 열 수 있다. 동작 코드는 HTML 안에 있고 별도 빌드·서버·npm 설치가 필요하지 않다. Pretendard만 저장소 `public/fonts/PretendardVariable.woff2`를 상대 경로로 읽으며 없으면 시스템 글꼴로 대체된다. SVG 아이콘 23종은 기존 Eywa 렌더러로 생성해 HTML에 내장했다. 공개 서비스에 올리지 않았다.
+패키지의 HTML은 직접 `file://`로 열 수 있다. 동작 코드는 HTML 안에 있고 별도 빌드·서버·npm 설치가 필요하지 않다. Pretendard만 저장소 `public/fonts/PretendardVariable.woff2`를 상대 경로로 읽으며 없으면 시스템 글꼴로 대체된다. SVG 아이콘 23종은 기존 Aywa 렌더러로 생성해 HTML에 내장했다. 공개 서비스에 올리지 않았다.
 
 ## 1. 작업 환경과 출처
 

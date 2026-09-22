@@ -7,7 +7,7 @@ import { canAdjustLeave } from "@/features/leave/access";
 import { getLeaveOverview } from "@/features/leave/server/admin";
 import { AdjustTable } from "./_adjust-table";
 
-export const metadata = { title: "연차 관리 — eywa" };
+export const metadata = { title: "연차 관리 — aywa" };
 
 /**
  * 연차 관리 — 직원별 연차 **부여 일수 조정**(원장 2026-09-08: *"관리자랑 김예원이 직원들의 연차갯수를
@@ -63,6 +63,16 @@ export default async function AnnualLeavePage() {
         </p>
       ) : null}
 
+      {/* 0270b 미적용 — 조정은 그대로 되고 **사용 기간 칸만** 잠긴다([[#95]]). 표 배너와 따로 두는 이유는
+          둘이 다른 사실이기 때문이다(표가 없으면 조정 자체가 안 되고, 칸이 없으면 날짜만 못 적는다). */}
+      {!overview.loadError && overview.tableReady && !overview.usedRangeReady ? (
+        <p className="border-line bg-bg-soft/50 text-text-dim rounded-xl border border-dashed px-4 py-2.5 text-sm break-keep">
+          조정에 <b className="text-foreground">휴가 사용 기간</b>을 적는 칸은 마이그레이션{" "}
+          <span className="num">0270b</span>를 적용한 뒤부터 쓸 수 있습니다 — 그전까지 조정은 일수와
+          사유만 기록됩니다.
+        </p>
+      ) : null}
+
       <p className="text-text-dim text-xs break-keep">
         부여 일수는 입사일에서 법으로 계산되고(1년 미만 = 개근 1개월당 1일 최대 11일 · 1~2년차 15일 ·
         3년차부터 2년마다 +1일 최대 25일), 여기 <b className="text-foreground">조정</b>은 그 위에
@@ -70,7 +80,11 @@ export default async function AnnualLeavePage() {
         쓰는 잔여 연차에 바로 반영됩니다.
       </p>
 
-      <AdjustTable rows={overview.rows} tableReady={overview.tableReady} />
+      <AdjustTable
+        rows={overview.rows}
+        tableReady={overview.tableReady}
+        usedRangeReady={overview.usedRangeReady}
+      />
     </div>
   );
 }

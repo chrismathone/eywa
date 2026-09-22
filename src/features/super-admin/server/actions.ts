@@ -4,6 +4,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { logSuperAdminAction } from "./audit";
@@ -12,7 +13,9 @@ export type CreateTenantState =
   | { error?: string; fieldErrors?: Record<string, string> }
   | undefined;
 
-const SLUG_RE = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
+// 2~40자 — 지점 약어(`cs` = 침산, 원장 2026-09-18)가 두 글자라 하한을 3에서 2로 내렸다. 한 번 정하면 안 바꾼다(URL엔 안 쓰지만
+// env `PUBLIC_BRAND_TENANT_SLUG`·스크립트 `--tenant=`가 가리킨다).
+const SLUG_RE = /^[a-z][a-z0-9-]{0,38}[a-z0-9]$/;
 
 /**
  * 신규 학원(tenant) + 원장(master) 동시 생성.
@@ -38,7 +41,7 @@ export async function createTenantWithMaster(
 
   const fieldErrors: Record<string, string> = {};
   if (!slug || !SLUG_RE.test(slug)) {
-    fieldErrors.slug = "영문 소문자·숫자·하이픈 3~40자 (예: ijw-demo)";
+    fieldErrors.slug = "영문 소문자·숫자·하이픈 2~40자 (예: cs)";
   }
   if (!name) fieldErrors.name = "학원 이름을 입력하세요";
   if (!masterEmail || !masterEmail.includes("@")) fieldErrors.masterEmail = "이메일 형식이 올바르지 않습니다";
@@ -64,6 +67,19 @@ export async function createTenantWithMaster(
   }
   const tenantId = tenantRow.id as string;
 
+  // 1-1) 새 학원 = 일반판 프리셋(원장 2026-09-22 방향 B). 🔴 일반판은 **이 표식이 있어야만** 켜진다(preset.ts —
+  //      표식 없는 학원은 침산 규칙으로 돈다). 그래서 표식을 못 남기면 학원 생성 자체를 되돌린다(조용히 침산 규칙을 받은
+  //      새 학원이 생기지 않게). 값은 표식뿐 — 기본값 문서를 복사하지 않는다(일반판 기본값이 나아지면 손대지 않은 칸은 따라오게).
+  //      계정보다 먼저 쓰는 이유: 여기서 실패하면 되돌릴 것이 학원 행 하나뿐이다(설정 행은 학원 삭제에 함께 지워진다 — FK cascade).
+  const { error: settingsErr } = await admin
+    .from("tenant_settings")
+    .insert({ tenant_id: tenantId, data: { version: 1, preset: "generic" } });
+  if (settingsErr) {
+    await admin.from("tenants").delete().eq("id", tenantId);
+    updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+    return { error: `학원 설정 생성 실패: ${settingsErr.message}` };
+  }
+
   // 2) auth.users 생성
   const { error: authErr } = await admin.auth.admin.createUser({
     email: masterEmail,
@@ -76,6 +92,7 @@ export async function createTenantWithMaster(
     // rollback tenant — insert~delete 사이에 단일 테넌트 판정이 캐시됐을 수 있어 롤백 후에도 비운다.
     await admin.from("tenants").delete().eq("id", tenantId);
     updateTag(PUBLIC_BRANDING_TENANTS_TAG);
+    if (isEmailTakenAuthError(authErr)) return { error: `master 계정 생성 실패 — ${EMAIL_TAKEN_MESSAGE}` };
     return { error: `master 계정 생성 실패: ${authErr.message}` };
   }
 
@@ -97,9 +114,9 @@ export async function createTenantWithMaster(
 
   revalidatePath("/super-admin/tenants");
   revalidatePath("/super-admin");
-  // 비로그인 브랜딩(getPublicBranding)은 "학원이 정확히 1개"일 때만 그 학원 로고·이름을 로그인 화면에
-  // 쓴다 — 두 번째 학원이 생기는 이 순간 판정이 뒤집히므로 캐시를 즉시 비운다(안 비우면 TTL 1시간 동안
-  // 로그인 화면이 첫 학원 브랜드를 계속 보여준다 = 남의 학원 이름 노출).
+  // 비로그인 브랜딩(getPublicBranding)은 학원이 1개면 그 학원, 2개+면 env `PUBLIC_BRAND_TENANT_SLUG`의 학원만 쓴다
+  // (`pickBrandTenantId`) — 두 번째 학원이 생기는 이 순간 판정이 바뀌고 자리 PIN의 지점 목록도 늘어나므로 캐시를
+  // 즉시 비운다(안 비우면 TTL 1시간 동안 로그인 화면이 첫 학원 브랜드를 계속 보여주고 새 지점은 PIN 화면에 안 선다).
   updateTag(PUBLIC_BRANDING_TENANTS_TAG);
   redirect(`/super-admin/tenants/${tenantId}`);
 }
@@ -137,6 +154,8 @@ export async function updateTenant(
   // 탭 제목·인쇄물에 나간다. 설정 캐시가 그 값을 담고 있으니 saveOwnerSection과 같은 규약으로 비운다
   // (경로 revalidate는 태그 캐시를 안 비운다 — 안 하면 최대 300초 옛 이름 노출).
   updateTag(tenantSettingsTag(id));
+  // 지점 선택지(자리 PIN 화면)는 `tenants.name`을 캐시해 두므로 개명도 같은 태그로 즉시 비운다(생성/삭제와 같은 규약).
+  updateTag(PUBLIC_BRANDING_TENANTS_TAG);
   revalidatePath("/", "layout");
   revalidatePath(`/super-admin/tenants/${id}`);
   revalidatePath("/super-admin/tenants");
@@ -172,6 +191,13 @@ export async function changeUserRole(
   if (!userId || !role || !tenantId) return { error: "필수 값 누락" };
 
   const admin = createAdminClient();
+  // 🔴 계정 = 지점 1:1 — 폼이 보낸 tenantId를 그대로 app_metadata에 쓰면 `users.tenant_id`와 갈릴 수 있다(로그인은 B 지점 RLS,
+  //    직원 행은 A 지점). 계정의 실제 지점과 같을 때만 진행한다. 지점을 옮기는 기능이 아니다(옮기기 = 새 지점에 계정 하나 더).
+  const { data: owner, error: ownerErr } = await admin.from("users").select("tenant_id").eq("id", userId).maybeSingle();
+  if (ownerErr || !owner?.tenant_id) return { error: "대상 계정을 찾을 수 없습니다" };
+  if (String(owner.tenant_id) !== tenantId) {
+    return { error: "계정의 지점과 요청한 지점이 다릅니다 — 화면을 새로고침한 뒤 다시 시도하세요" };
+  }
   // app_metadata 갱신 (RLS auth_tenant_id는 tenant_id, academy 권한은 system_role)
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     app_metadata: { system_role: role, tenant_id: tenantId },

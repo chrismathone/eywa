@@ -12,6 +12,12 @@ export type ExtractContext = {
   studentName: string;
   grade?: string | null;
   school?: string | null;
+  /**
+   * usage 귀속 전용(`ai_usage_logs.tenant_id`) — 프롬프트엔 안 들어간다. 지점이 둘 이상이면 비용을 지점별로 가르는 유일한 단서.
+   * 🔴 **필수**다(모르면 null을 **명시**) — optional로 두면 새 호출부가 빼먹어도 컴파일·가드가 둘 다 초록인 채 빈칸이 쌓인다
+   *    (가드는 generateJSON의 meta에 속성이 **있는지**만 본다 · 적대 리뷰 2026-09-21).
+   */
+  tenantId: string | null;
 };
 
 /**
@@ -29,7 +35,7 @@ export async function extractConsultationForm(
     keyName,
     provider,
     maxTokens: 4096,
-    meta: { feature: "enrollment_form_extract" },
+    meta: { feature: "enrollment_form_extract", tenantId: ctx.tenantId },
     prompt: [
       "당신은 학원 신입생 등록상담 녹음을 분석해 상담 기록 양식에 맞게 구조화하는 전문가입니다.",
       "아래 전사에서 명확히 언급된 정보만 추출해 JSON으로만 답하세요. 추측 금지 — 언급 안 된 필드는 빈 문자열(\"\").",

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Download, Loader2, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { planMonthLabel } from "@/features/timetable-dev/types";
 import { deletePlanMonth, seedPlanFromLive } from "@/features/timetable-dev/server/actions";
 // ⚠️ `copyPlanMonth`(달 복제)는 서버에 그대로 남아 있다 — 화면에서만 뺐다(원장 지시로 '다음 달

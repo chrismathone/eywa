@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
 
-import { CalendarOff, Filter, ListFilter, RotateCcw } from "@/components/icons/eywa-icon-compat";
+import { CalendarOff, Filter, ListFilter, RotateCcw } from "@/components/icons/aywa-icon-compat";
 import { saveTimetableViewPrefs } from "@/features/timetable/server/view-prefs-actions";
 import {
   bucketsOf,

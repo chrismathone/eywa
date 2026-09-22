@@ -1,4 +1,4 @@
-import { CalendarClock, Bell, MessageCircle } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock, Bell, MessageCircle } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -15,7 +15,7 @@ import { ActionQueue } from "@/features/retention/components/action-queue";
 import { SignalSection, type SignalRow } from "@/features/retention/components/signal-section";
 import { ddayLabel } from "@/features/retention/format";
 
-export const metadata = { title: "이탈 방어 — eywa" };
+export const metadata = { title: "이탈 방어 — aywa" };
 
 // KST 오늘(서버 UTC라 새벽 시간대 하루 밀림 방지). request당 1회 평가.
 function isoToday(): string {

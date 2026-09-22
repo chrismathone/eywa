@@ -1,6 +1,6 @@
 // 교시(periodId) ↔ 절대시각 변환 + 요일 한글↔enum 변환 — 순수 함수.
-// ijw `components/Timetable/constants.ts`의 PERIOD_INFO를 eywa로 이식.
-// eywa는 DB에 절대시각(start_time/end_time)만 저장하므로, 이 변환은 엑셀 import 어댑터(Phase 3)가
+// ijw `components/Timetable/constants.ts`의 PERIOD_INFO를 aywa로 이식.
+// aywa는 DB에 절대시각(start_time/end_time)만 저장하므로, 이 변환은 엑셀 import 어댑터(Phase 3)가
 // periodId→시각으로 1회 적용하는 데 쓰인다. periodLabel은 표시 전용.
 //
 // 평일: 과목별 교시표. math/highmath/science/korean = 8교시 55분(동일), english = 11교시.
@@ -126,6 +126,20 @@ export interface PeriodsConfig {
   weekend: Record<string, PeriodTime>;
   /** 과목키 → 평일 교시표 override. plain Record(클라 직렬화 — Map 금지). 없으면 위 폴백. */
   weekdayBySubject?: Record<string, Record<string, PeriodTime>>;
+  /**
+   * **교시마다 한 행**(새 학원 일반판, 학원설정 `operations.periodStyle: "plain"`) — 모든 과목이 제 교시표를 한 줄씩 쓴다.
+   * 없거나 false면 첫 학원(침산) 방식: 영어가 아닌 과목은 두 교시를 한 교시로 묶고(1-1·1-2), 영어는 내장 11교시로 폴백.
+   * 🔴 침산은 이 키가 없다(settingsToPeriodsConfig가 plain일 때만 싣는다) — 침산 시간표는 이 작업 전과 같다.
+   */
+  plain?: boolean;
+}
+
+/**
+ * 이 과목의 평일 교시를 **한 줄씩**(묶음 없이) 그리는가 — 영어이거나, 학원이 일반판 교시 방식(plain)일 때.
+ * 묶음·반교시 라벨(1-1·1-2)·'완교시' 판정은 이 값이 false인 과목(침산의 수학 계열)에만 있다.
+ */
+export function isPerPeriodSubject(subject: string, config: PeriodsConfig): boolean {
+  return subject === "english" || config.plain === true;
 }
 
 export const DEFAULT_PERIODS_CONFIG: PeriodsConfig = {
@@ -144,6 +158,8 @@ export function settingsToPeriodsConfig(operations: {
   weekdayPeriods: PeriodRowSetting[];
   weekendPeriods: PeriodRowSetting[];
   subjects?: { key: string; weekdayPeriods?: PeriodRowSetting[] }[];
+  /** 교시 방식 — "plain"(새 학원)이면 PeriodsConfig.plain. 침산(기본 "chinsan")은 키를 싣지 않아 종전과 같은 객체다. */
+  periodStyle?: string;
 }): PeriodsConfig {
   const toTable = (rows: PeriodRowSetting[]): Record<string, PeriodTime> => {
     const t: Record<string, PeriodTime> = {};
@@ -171,6 +187,7 @@ export function settingsToPeriodsConfig(operations: {
     weekday: operations.weekdayPeriods.length ? toTable(operations.weekdayPeriods) : MATH_PERIODS,
     weekend: operations.weekendPeriods.length ? toTable(operations.weekendPeriods) : WEEKEND_PERIODS,
     ...(weekdayBySubject ? { weekdayBySubject } : {}),
+    ...(operations.periodStyle === "plain" ? { plain: true } : {}),
   };
 }
 
@@ -178,7 +195,8 @@ export function settingsToPeriodsConfig(operations: {
 export function weekdayTableFor(subject: string, config: PeriodsConfig): Record<string, PeriodTime> {
   const custom = config.weekdayBySubject?.[subject];
   if (custom) return custom;
-  return subject === "english" ? ENGLISH_PERIODS : config.weekday;
+  // 내장 영어 11교시(침산 EiE·인재원 영어 교시)는 침산 방식에서만 폴백 — 새 학원 영어는 전역 교시를 쓴다.
+  return subject === "english" && !config.plain ? ENGLISH_PERIODS : config.weekday;
 }
 
 /** 교시 목록 한 줄 — id는 식별자(index+1), label은 학원설정에서 지은 이름(없으면 소비처가 번호로 폴백). */
@@ -233,7 +251,7 @@ export function subjectWeekdayPeriods(
       const item = toListItem(id, t);
       // 수학 평일 한 교시는 두 칸이다. 저장 식별자·시각은 그대로 두고 기본 번호만 반교시로 표시한다.
       // 직접 지은 이름과 의도적으로 비운 이름은 보존한다. 주말은 subjectWeekendPeriods의 시간 단위 번호다.
-      if ((subject === "math" || subject === "highmath") &&
+      if (!config.plain && (subject === "math" || subject === "highmath") &&
         (t.label == null || t.label.trim() === `${id}교시`)) {
         const n = Number(id);
         item.label = `${Math.ceil(n / 2)}-${n % 2 === 1 ? 1 : 2}`;
@@ -266,7 +284,7 @@ export function weekdayFullPeriodMinutes(
   subject: string,
   config: PeriodsConfig = DEFAULT_PERIODS_CONFIG,
 ): number | null {
-  if (subject === "english") return null;
+  if (isPerPeriodSubject(subject, config)) return null;
   const table = weekdayTableFor(subject, config);
   const ids = Object.keys(table).sort((a, b) => Number(a) - Number(b));
   if (ids.length < 2) return null;
@@ -404,7 +422,7 @@ export function slotPeriodRow(
         order: periodAxisOrder(config.weekend, p),
       };
     }
-  } else if (subject === "english") {
+  } else if (isPerPeriodSubject(subject, config)) {
     // 역조회는 (시작,종료) 우선 — EiE 4교시와 IJW 1교시처럼 시작이 같은 설정도 정확히 가른다.
     const table = weekdayTableFor(subject, config);
     const p = matchPeriodId(table, start, endTime);
@@ -450,7 +468,7 @@ export function weekdayPeriodRowOrNull(
   const p = matchPeriodId(table, start, endTime);
   if (!p) return null;
   const t = table[p]!;
-  if (subject === "english")
+  if (isPerPeriodSubject(subject, config))
     return {
       key: `e-${p}`,
       label: periodListLabel({ id: p, label: t.label }),
@@ -480,7 +498,7 @@ export function subjectPeriodRows(
       time: `${hm(t.startTime)}~${hm(t.endTime)}`,
       order: periodAxisOrder(config.weekend, p),
     }));
-  } else if (subject === "english") {
+  } else if (isPerPeriodSubject(subject, config)) {
     const table = weekdayTableFor(subject, config);
     out = Object.entries(table).map(([p, t]) => ({
       key: `e-${p}`,

@@ -41,7 +41,50 @@ export type TeacherTransition = {
    *    이름은 표시용(동명이인·개명에 흔들린다)이고 id는 판정용(사람을 확정한다)이다.
    */
   teacherId?: string | null;
+  /** 교체 직전 담임. 최초 인계 전 구간도 복원할 수 있도록 새 로그에 보존한다. */
+  previousTeacherId?: string | null;
 };
+
+export type HomeroomPeriod = { teacherId: string; from: string | null; to: string | null };
+
+/** 담임 이력은 반의 현재 값과 별개다. A → B → A도 각각의 구간으로 보존한다. 끝 날짜는 미포함. */
+export function buildHomeroomHistoryIndex(transitions: readonly TeacherTransition[]): Map<string, HomeroomPeriod[]> {
+  const grouped = new Map<string, TeacherTransition[]>();
+  for (const t of transitions) {
+    if (!t.classId || !t.teacherId) continue;
+    const rows = grouped.get(t.classId) ?? [];
+    rows.push(t);
+    grouped.set(t.classId, rows);
+  }
+  const result = new Map<string, HomeroomPeriod[]>();
+  for (const [id, rows] of grouped) {
+    const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+    const periods: HomeroomPeriod[] = [];
+    const first = sorted[0]!;
+    const previousTeacherId = sorted.find((t) => t.date === first.date && t.previousTeacherId)?.previousTeacherId;
+    if (previousTeacherId) periods.push({ teacherId: previousTeacherId, from: null, to: first.date });
+    for (let i = 0; i < sorted.length; i++) {
+      const t = sorted[i]!;
+      const to = sorted[i + 1]?.date ?? null;
+      if (to === t.date) continue; // 같은 날 재변경은 마지막 적용이 그날의 담당이다.
+      periods.push({ teacherId: t.teacherId!, from: t.date, to });
+    }
+    result.set(id, periods);
+  }
+  return result;
+}
+
+export function homeroomTeacherOnDate(history: readonly HomeroomPeriod[] | undefined, currentTeacherId: string | null, date: string): string | null {
+  if (!history?.length) return currentTeacherId;
+  const period = history.find((p) => (!p.from || p.from <= date) && (!p.to || date < p.to));
+  // 마지막 감사로그와 현재 배정이 어긋나면 현재 값이 우선이다. 닫힌 과거 구간은 여전히 유효하다.
+  if (period && !period.to && period.teacherId !== currentTeacherId) return currentTeacherId;
+  return period?.teacherId ?? null;
+}
+
+export function homeroomTeachersInRange(history: readonly HomeroomPeriod[], from: string, to: string): string[] {
+  return [...new Set(history.filter((p) => (!p.from || p.from <= to) && (!p.to || p.to > from)).map((p) => p.teacherId))];
+}
 
 /** 그 달 이 반 보고서를 쓴 사람(추정 근거). 같은 달에 여러 명이면 건수가 많은 쪽. */
 export type MonthlyWriter = {

@@ -15,7 +15,11 @@ const Context = createContext<{
   confirmedCount: number;
 } | null>(null);
 
-/** 저장한 행만 즉시 반영한다. 새로 조회한 서버 값이 오면 이전 덮어쓰기는 비운다. */
+/**
+ * 저장한 행만 즉시 반영한다. 새로 조회한 서버 값이 오면 이전 덮어쓰기는 비운다.
+ * ⚠️ 패치는 **행 id** 키다 — 회차 행이 없던 줄(가상 id)을 확정한 응답은 실 uuid라 여기 안 붙는다. 그 경로는 액션 응답의 `created`를
+ *    보고 `router.refresh()`로 새 데이터를 받는다(그때 이 패치도 비워진다).
+ */
 export function SessionTermsState({ rows, children }: { rows: (Pick<SessionTermRow, "id" | "confirmedSessions"> & Partial<SessionTermRow>)[]; children: ReactNode }) {
   useBillingSettingsRefresh();
   const refresh = useTermRefresh();
@@ -24,11 +28,12 @@ export function SessionTermsState({ rows, children }: { rows: (Pick<SessionTermR
   const patches = state.source === rows ? state.patches : {};
   const confirmedCount = rows.filter((row) => ({ ...row, ...patches[row.id] }).confirmedSessions !== null).length;
   function apply(terms: SessionTermPatch[]) {
-    const affected = new Set(rows.filter((r) => r.invoiceHasAllocations && terms.some((t) => t.id === r.id)).map((r) => r.invoiceId));
+    // 청구서 없는 줄(`invoiceId` null)은 배분이 없어 '재확인'으로 되돌릴 것도 없다.
+    const affected = new Set(rows.filter((r) => r.invoiceHasAllocations && r.invoiceId && terms.some((t) => t.id === r.id)).map((r) => r.invoiceId as string));
     setState((current) => {
       const next = { ...current.patches };
       // 재조회 전에는 예전 '배분 완료'를 확정값 변경 후에도 그대로 표시하지 않는다.
-      for (const row of rows) if (affected.has(row.invoiceId)) next[row.id] = { ...next[row.id], id: row.id, allocatedAmount: null, allocationStale: true };
+      for (const row of rows) if (row.invoiceId && affected.has(row.invoiceId)) next[row.id] = { ...next[row.id], id: row.id, allocatedAmount: null, allocationStale: true };
       for (const term of terms) next[term.id] = { ...next[term.id], ...term };
       return { ...current, patches: next };
     });

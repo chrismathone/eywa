@@ -1,7 +1,7 @@
 /**
  * 출결의 **강사 귀속 축(누가 가르쳤나)** — 순수 함수 단일 소스.
  *
- * 🔴 왜 한 곳으로 모으나: eywa에는 출결에 강사가 붙는 축이 **셋**이고, 화면마다 다른 축을 골라 쓰면
+ * 🔴 왜 한 곳으로 모으나: aywa에는 출결에 강사가 붙는 축이 **셋**이고, 화면마다 다른 축을 골라 쓰면
  *    같은 출결이 화면마다 다른 사람의 것이 된다(원장 제보 2026-08-18: *"ecs에서 출결하면 출결한
  *    선생님의 출석부가 아니라 담임 출결로 인정된다"*).
  *      ① `classes.teacher_id`        = **반 담임**(그 반 전체의 대표)
@@ -21,6 +21,7 @@
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import { isDelegationActiveOn, type DelegationWindow } from "@/features/classes/delegation-window";
 import type { RecordedVia } from "./live/recorded-via";
+import { homeroomTeacherOnDate, type HomeroomPeriod } from "@/features/classes/teacher-as-of";
 
 /**
  * 자리 문(자리 출석부·공개 PIN)이 쓰기 때 굳히는 값 — `attendance_records.recorded_via`(0212a).
@@ -291,6 +292,7 @@ export function attendanceNoticeRecipients(input: {
 export function ownsAttendanceSlot(input: {
   scopeTeacherId: string | null;
   homeroomTeacherId: string | null;
+  homeroomHistory?: readonly HomeroomPeriod[];
   slots: readonly AxisSlot[];
   date: string;
   slotStart: string | null;
@@ -336,11 +338,16 @@ export function ownsAttendanceSlot(input: {
   if (!input.scopeTeacherId) return true;
   if (input.seatLabel?.trim()) return false;
   if (input.recordedVia === SEAT_VIA) return false;
-  if (input.homeroomSince && input.date < input.homeroomSince) return false;
-  if (!input.slotStart) return true;
+  if (!input.homeroomHistory?.length && input.homeroomSince && input.date < input.homeroomSince) return false;
+  const homeroomTeacherId = homeroomTeacherOnDate(input.homeroomHistory, input.homeroomTeacherId, input.date);
+  if (!input.slotStart) {
+    // 수학의 일별 기록도 인계 전·후를 분리한다. 실제 교시 담당은 그 교시를 계속 볼 수 있다.
+    const homeroomRole = input.homeroomHistory?.some((p) => p.teacherId === input.scopeTeacherId);
+    return !homeroomRole || homeroomTeacherId === input.scopeTeacherId || teachesClassOn(input);
+  }
   return (
     resolveTaughtBy({
-      homeroomTeacherId: input.homeroomTeacherId,
+      homeroomTeacherId,
       slots: input.slots,
       date: input.date,
       slotStart: input.slotStart,
@@ -368,12 +375,14 @@ export function ownsAttendanceSlot(input: {
 export function teachesClassOn(input: {
   scopeTeacherId: string | null;
   homeroomTeacherId: string | null;
+  homeroomHistory?: readonly HomeroomPeriod[];
   slots: readonly AxisSlot[];
   date: string;
   homeroomSince?: string | null;
 }): boolean {
   if (!input.scopeTeacherId) return true;
-  if (input.homeroomSince && input.date < input.homeroomSince) return false;
+  if (!input.homeroomHistory?.length && input.homeroomSince && input.date < input.homeroomSince) return false;
+  const homeroomTeacherId = homeroomTeacherOnDate(input.homeroomHistory, input.homeroomTeacherId, input.date);
   const dow = axisDowOf(input.date);
   if (!dow) return false;
   const starts = new Set<string>();
@@ -385,10 +394,10 @@ export function teachesClassOn(input: {
     const start = normalizeAxisTime(s.startTime);
     if (start) starts.add(start);
   }
-  if (!liveAny) return input.homeroomTeacherId === input.scopeTeacherId;
+  if (!liveAny) return homeroomTeacherId === input.scopeTeacherId;
   for (const start of starts) {
     const who = resolveTaughtBy({
-      homeroomTeacherId: input.homeroomTeacherId,
+      homeroomTeacherId,
       slots: input.slots,
       date: input.date,
       slotStart: start,

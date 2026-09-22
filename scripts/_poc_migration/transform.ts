@@ -1,4 +1,4 @@
-// ijw-calander(Firestore/NoSQL) 문서 → eywa(Supabase/관계형) 행 변환 (순수 함수).
+// ijw-calander(Firestore/NoSQL) 문서 → aywa(Supabase/관계형) 행 변환 (순수 함수).
 // enum/status 매핑, ID 리매핑, 서브컬렉션 분해, name_normalized 미공급, 날짜 정규화 등 정제 룰.
 import { randomUUID } from "node:crypto";
 
@@ -30,14 +30,14 @@ export function normName(name?: string): string {
 }
 
 // ── enum 매핑(보강) ────────────────────────────────────────────────
-// ijw attendance status → eywa attendance_status('present','absent','late','excused','makeup')
+// ijw attendance status → aywa attendance_status('present','absent','late','excused','makeup')
 const ATT_MAP: Record<string, string> = {
   present: "present", late: "late", absent: "absent", excused: "excused", early_leave: "excused", makeup: "makeup",
 };
 export function mapAttendanceStatus(s?: string): string {
   return ATT_MAP[s ?? ""] ?? "present";
 }
-// ijw consultations.status(한글) → eywa consultation_outcome
+// ijw consultations.status(한글) → aywa consultation_outcome
 export function mapConsultationOutcome(s?: string): string {
   const t = s ?? "";
   if (t.includes("등록완료") || t.endsWith("등록")) return "enrolled"; // 영수등록/수학등록/…/등록완료
@@ -46,7 +46,7 @@ export function mapConsultationOutcome(s?: string): string {
   if (t === "상담전") return "pending";
   return "consulted";
 }
-// ijw billing(status+금액) → eywa invoice_status
+// ijw billing(status+금액) → aywa invoice_status
 // ⚠️ 완납 판정은 할인 차감 후(paid >= 청구−할인). 할인을 안 빼면 할인받고 완납한 학생이 전부
 //    partial로 잡힌다(2026-07 실측: 848건 오판, 가짜 미수 12.2M = 할인 합계). import-invoices.cjs와 동일 규칙.
 export function mapInvoiceStatus(total: number, paid: number, discount = 0): string {
@@ -70,13 +70,13 @@ export function scheduleSlotTimes(day: string, periodId: string, subject?: strin
   return t ? { start: t[0], end: t[1] } : null;
 }
 
-// 출결 카운트(0=결석, 1+=출석) → eywa attendance_status
+// 출결 카운트(0=결석, 1+=출석) → aywa attendance_status
 export function mapAttendanceCount(v: any): string {
   return Number(v) >= 1 ? "present" : "absent";
 }
 
 // ── enum / 코드 매핑 ────────────────────────────────────────────────
-// ijw students.status('active'/'on_hold'/'withdrawn'/'prospect'/'prospective') → eywa student_status
+// ijw students.status('active'/'on_hold'/'withdrawn'/'prospect'/'prospective') → aywa student_status
 export const STATUS_MAP: Record<string, string> = {
   active: "enrolled",
   on_hold: "on_hold",
@@ -88,7 +88,7 @@ export function mapStudentStatus(s?: string): string {
   return STATUS_MAP[s ?? ""] ?? "prospect";
 }
 
-// ijw staff role/systemRole → eywa system_role
+// ijw staff role/systemRole → aywa system_role
 const ROLE_MAP: Record<string, string> = {
   master: "master",
   admin: "admin",
@@ -111,13 +111,13 @@ export function mapStaffStatus(s?: string): string {
   return STAFF_STATUS_MAP[s ?? ""] ?? "active";
 }
 
-// ijw 요일(한글) → eywa day_of_week enum
+// ijw 요일(한글) → aywa day_of_week enum
 export const DAY_MAP: Record<string, string> = {
   "월": "mon", "화": "tue", "수": "wed", "목": "thu", "금": "fri", "토": "sat", "일": "sun",
 };
 
 // ── ID 리매핑 ──────────────────────────────────────────────────────
-// Firestore string id → eywa uuid. 동일 firestore id는 항상 같은 uuid로(FK 보존).
+// Firestore string id → aywa uuid. 동일 firestore id는 항상 같은 uuid로(FK 보존).
 export function makeIdMap() {
   const m = new Map<string, string>();
   return {
@@ -133,7 +133,7 @@ export function makeIdMap() {
 export type IdMap = ReturnType<typeof makeIdMap>;
 
 // ── 행 변환 ────────────────────────────────────────────────────────
-// eywa users 는 email NOT NULL UNIQUE(tenant,email) → 없으면 합성.
+// aywa users 는 email NOT NULL UNIQUE(tenant,email) → 없으면 합성.
 export function transformStaff(doc: any, tenantId: string, staffIds: IdMap) {
   return {
     id: staffIds.get(doc.id),
@@ -188,7 +188,7 @@ export function transformStudent(doc: any, tenantId: string, studentIds: IdMap, 
   };
 }
 
-// ijw classes.schedule[] → eywa class_schedules 행들(요일/시간 분해)
+// ijw classes.schedule[] → aywa class_schedules 행들(요일/시간 분해)
 export function transformClass(doc: any, tenantId: string, classIds: IdMap, classroomUuid: string | null, teacherUuid: string | null) {
   const classRow = {
     id: classIds.get(doc.id),
@@ -198,7 +198,7 @@ export function transformClass(doc: any, tenantId: string, classIds: IdMap, clas
     teacher_id: teacherUuid,
     classroom_id: classroomUuid,
     is_active: doc.isActive ?? true,
-    notes: (doc.memo ?? null) as string | null, // ijw classes.memo → eywa classes.notes(반 메모)
+    notes: (doc.memo ?? null) as string | null, // ijw classes.memo → aywa classes.notes(반 메모)
   };
   const schedules = (doc.schedule ?? [])
     .map((s: any) => {
@@ -219,7 +219,7 @@ export function transformClass(doc: any, tenantId: string, classIds: IdMap, clas
   return { classRow, schedules };
 }
 
-// 학생 문서의 enrollments[](v5 hierarchical/서브컬렉션) → eywa enrollments 행들
+// 학생 문서의 enrollments[](v5 hierarchical/서브컬렉션) → aywa enrollments 행들
 export function transformEnrollments(doc: any, tenantId: string, studentIds: IdMap, classIds: IdMap) {
   return (doc.enrollments ?? [])
     .filter((e: any) => e.classId && classIds.has(e.classId))

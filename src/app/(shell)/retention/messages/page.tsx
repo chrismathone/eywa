@@ -1,4 +1,4 @@
-import { MessageSquareOff } from "@/components/icons/eywa-icon-compat";
+import { MessageSquareOff } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { requireAccess } from "@/lib/auth/require-access";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -7,7 +7,7 @@ import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { MessageComposer } from "@/features/retention/components/message-composer";
 import { RiskBadge } from "@/features/retention/components/risk-badge";
 
-export const metadata = { title: "학부모 메시지 — eywa" };
+export const metadata = { title: "학부모 메시지 — aywa" };
 
 export default async function RetentionMessagesPage() {
   const user = await requireAccess("retention");

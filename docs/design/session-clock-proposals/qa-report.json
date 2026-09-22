@@ -1,0 +1,47 @@
+{
+  "initial": {
+    "percent": "60%",
+    "sessionCount": 102,
+    "positions": 140,
+    "selected": "session-2026-08-06",
+    "reference": "2026.08.06 기준 · 예시",
+    "overflow": 0
+  },
+  "railClick": {
+    "lesson": 42,
+    "session": "session-2026-04-23",
+    "highlighted": 1
+  },
+  "monthClick": {
+    "month": 9,
+    "rows": 7,
+    "closed": "9/24 휴강 · 수업 링에서는 제외하고 이력으로 보존",
+    "current": 84
+  },
+  "sessionClick": {
+    "selected": "session-2026-09-03",
+    "highlighted": 2
+  },
+  "continuous": {
+    "month": 10,
+    "range": "2026.5 — 2027.4",
+    "current": 84
+  },
+  "full": "100%",
+  "zero": "0%",
+  "mobile": [
+    {
+      "design": "session",
+      "overflow": 0
+    },
+    {
+      "design": "curriculum",
+      "overflow": 0
+    },
+    {
+      "design": "summary",
+      "overflow": 0
+    }
+  ],
+  "errors": []
+}

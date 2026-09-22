@@ -5,7 +5,7 @@
  * 볼 것인가"의 판단만 여기 모은다(parent-post-filter.mjs와 같은 순수/IO 분리 — 워커 파일은
  * playwright/postgres를 물고 있어 단위테스트가 불가).
  *
- * 왜 필요한가: 영어 강사는 ClassNote에 직접 쓰므로 eywa `lesson_reports`엔 안 남는다.
+ * 왜 필요한가: 영어 강사는 ClassNote에 직접 쓰므로 aywa `lesson_reports`엔 안 남는다.
  * 피드가 3주치만 보여 시간이 지나면 사라지므로, 워커가 볼 때 날짜를 적재해 둔다.
  *
  * 피드 계약(parent-post-filter.mjs 주석 + 2026-07-22 실측):

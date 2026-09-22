@@ -9,6 +9,8 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
 import { EMAIL_RE } from "@/features/staff/email";
+import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
+import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { logAction } from "@/features/audit/server/log";
 
 export type AccountActionState =
@@ -151,6 +153,9 @@ export async function applyStaffEmailChange(
     .neq("id", id)
     .maybeSingle();
   if (dup) return { error: "이미 사용 중인 이메일입니다" };
+  // 다른 지점 계정이 쓰는 이메일 — 위 검사는 제 지점만 보고, Auth는 **변경** 경로에서 중복을 500 "Error updating user"로만
+  // 답해 원인을 말해 주지 않는다(생성 경로의 422 email_exists와 다르다). 아무것도 쓰기 전에 여기서 막는다.
+  if (await isLoginEmailTakenElsewhere(admin, email, id)) return { error: EMAIL_TAKEN_MESSAGE };
 
   // 1) public.users 먼저 — unique index(tenant_id, email)가 경합도 막는다(23505).
   const { error: dbErr } = await admin
@@ -171,6 +176,9 @@ export async function applyStaffEmailChange(
   });
   if (authErr && !isMissingAuthUser(authErr)) {
     await admin.from("users").update({ email: target.email }).eq("id", id);
+    // Auth가 코드로 "이미 있는 이메일"이라 답해 준 경우만(지금 GoTrue의 변경 경로는 500이라 여기 안 온다 — 본문은 앞의 사전 조회다).
+    // users는 바로 위에서 원래 값으로 되돌렸다.
+    if (isEmailTakenAuthError(authErr)) return { error: EMAIL_TAKEN_MESSAGE };
     return { error: `로그인 계정 이메일 변경 실패 — ${authErr.message}` };
   }
 

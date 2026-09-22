@@ -21,25 +21,35 @@ const TD = "border-line border px-2.5 py-2 align-top";
 // 맞춰줘"*, 실측 반환금액 124px 어긋남).
 const TH = "border-line bg-bg-soft text-foreground border px-2.5 py-2 text-left font-bold";
 
-export function RefundPolicy() {
+/**
+ * @param showHouseRules 첫 학원(침산)의 '학원 수칙' 세 줄을 싣는가. 새 학원(일반판)은 끈다 — 남의 학원 규칙이다(2026-09-22 빈 지점 점검).
+ *   아래 **환불 규정 표는 학원법 시행령 제18조 법정 문구**라 어느 학원에나 맞아 늘 싣는다.
+ */
+export function RefundPolicy({ showHouseRules = true }: { showHouseRules?: boolean } = {}) {
   // ⚠️ 통짜 break-inside-avoid 금지: 이 섹션은 한 페이지보다 높아 통째로 다음 장으로 밀리면 1페이지
   // 하단 공백/잘림 유발. 표 행은 전역 tr/td/th page-break-inside:avoid가 보호 → 행 단위로 끊긴다. 제목만 고아 방지.
   return (
     <section className="mt-6 print:mt-2">
-      <h3 className="text-foreground mb-3 text-center text-base font-bold break-after-avoid print:mb-1.5">학원 수칙 및 환불 규정</h3>
+      <h3 className="text-foreground mb-3 text-center text-base font-bold break-after-avoid print:mb-1.5">
+        {showHouseRules ? "학원 수칙 및 환불 규정" : "환불 규정"}
+      </h3>
 
       <div className="border-line bg-card rounded-md border p-4 print:rounded-none print:border-0 print:p-0">
-        {/* 학원 수칙 */}
-        <h4 className="text-foreground mb-2 text-sm font-bold">학원 수칙</h4>
-        <ol className="text-text-dim mb-4 list-decimal space-y-1.5 pl-5 text-xs leading-relaxed">
-          {RULES.map((r) => (
-            <li key={r.text}>
-              {r.text}
-              <br />
-              <span className="text-text-faint">{r.sub}</span>
-            </li>
-          ))}
-        </ol>
+        {/* 학원 수칙 — 침산 규칙이라 새 학원엔 싣지 않는다 */}
+        {showHouseRules ? (
+          <>
+            <h4 className="text-foreground mb-2 text-sm font-bold">학원 수칙</h4>
+            <ol className="text-text-dim mb-4 list-decimal space-y-1.5 pl-5 text-xs leading-relaxed">
+              {RULES.map((r) => (
+                <li key={r.text}>
+                  {r.text}
+                  <br />
+                  <span className="text-text-faint">{r.sub}</span>
+                </li>
+              ))}
+            </ol>
+          </>
+        ) : null}
 
         {/* 환불 규정 */}
         <h4 className="text-foreground mb-2 text-sm font-bold">환불 규정</h4>

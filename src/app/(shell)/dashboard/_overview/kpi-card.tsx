@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { DetailPopup } from "./detail-popup";
 import s from "./overview.module.css";

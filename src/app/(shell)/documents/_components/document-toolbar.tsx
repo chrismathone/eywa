@@ -5,7 +5,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { ExternalLink, FilePlus2, Loader2, Search, Upload, UploadCloud } from "@/components/icons/eywa-icon-compat";
+import { ExternalLink, FilePlus2, Loader2, Search, Upload, UploadCloud } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmbedHiddenInput } from "@/components/embed-link";

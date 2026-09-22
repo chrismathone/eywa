@@ -21,7 +21,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import {
   busCellFromCell,
   busCellsFromBulk,

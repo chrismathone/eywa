@@ -1,5 +1,5 @@
 // 반명 시트 정합 — `고등E_고1 특별S` → `고등E_고1 특별 S` (시트 표기, 공백 포함).
-// 시트↔eywa 전격비교(2026-07-06)에서 발견: 배치는 일치, 반명 띄어쓰기만 상이.
+// 시트↔aywa 전격비교(2026-07-06)에서 발견: 배치는 일치, 반명 띄어쓰기만 상이.
 // 참조는 전부 class_id FK라 rename 안전. unique (tenant_id, class_name, subject) 충돌 없음(사전 확인).
 // 사용: node --env-file=.env.local scripts/_english_sync/fix-classname-teukbyeol-s.cjs [--apply]
 const fs = require("fs");

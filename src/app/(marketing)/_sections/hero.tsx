@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Reveal } from "../_motion/reveal";
 import { CtaButton } from "../_ui/cta-button";
 import { ProductShowcase } from "../_ui/product-showcase";

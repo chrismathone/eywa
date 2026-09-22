@@ -1,4 +1,4 @@
-import { CalendarClock } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock } from "@/components/icons/aywa-icon-compat";
 import { scheduledChangeLabel, type ScheduledChange } from "@/features/enrollments/scheduled-changes";
 import {
   scheduledMakeupLabel,

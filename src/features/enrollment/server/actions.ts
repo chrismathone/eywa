@@ -14,7 +14,7 @@ import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-n
 import { after } from "next/server";
 import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
 import { normalizeAssignStartDate } from "@/features/enrollment/assign-start-date";
-import { canonicalSchoolName } from "@/features/schools/school-name";
+import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
 import { combineConsultationTranscripts, type SpeakerUtterance } from "@/features/enrollment/transcripts";
 import { runConsultationAnalysis } from "@/features/enrollment/server/consultation-analysis";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
@@ -85,7 +85,12 @@ const asNum = (v?: string | null) => {
 };
 
 /** 폼 → DB 컬럼(공통). learning_history·tenant_id·consultant_id·outcome는 호출부에서 별도 처리. */
-function buildConsultationRow(d: FullForm) {
+/** 학교명 저장 별칭(학원설정) — 침산 = 일중→대구일중, 새 학원 = 없음. 요청 캐시라 한 요청에 여러 번 불러도 조회 1회. */
+async function schoolAliases(): Promise<readonly SchoolSaveAlias[]> {
+  return (await getTenantSettings()).operations.schoolSaveAliases;
+}
+
+function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAlias[]) {
   let subjectDetails: unknown = null;
   if (d.subjectDetails) {
     try {
@@ -99,7 +104,7 @@ function buildConsultationRow(d: FullForm) {
     prospect_grade: d.prospectGrade || null,
     // 🔴 학교 표기는 **저장 시 강제 정규화**(원장 2026-09-01) — "옥산초등학교"·"일 중"이 그대로
     // 들어오면 같은 학교가 두 표기로 갈린다. 정본 = features/schools/school-name.ts.
-    prospect_school: canonicalSchoolName(d.prospectSchool),
+    prospect_school: canonicalSchoolName(d.prospectSchool, aliases),
     english_name: d.englishName || null,
     gender: d.gender || null,
     blood_type: d.bloodType || null,
@@ -183,7 +188,7 @@ export async function createEnrollmentConsultation(
     .from("enrollment_consultations")
     .insert({
       tenant_id: user.tenantId,
-      ...buildConsultationRow(parsed.data),
+      ...buildConsultationRow(parsed.data, await schoolAliases()),
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: "consulted",
@@ -236,7 +241,7 @@ async function createConsultationWithAudio(
     .from("enrollment_consultations")
     .insert({
       tenant_id: user.tenantId,
-      ...buildConsultationRow(data),
+      ...buildConsultationRow(data, await schoolAliases()),
       learning_history: Object.keys(learningHistory).length > 0 ? learningHistory : null,
       consultant_id: user.id,
       outcome: "consulted",
@@ -444,7 +449,7 @@ export async function updateEnrollmentConsultation(
     !!existing?.from_public_intake &&
     ["pending", "scheduled"].includes(String(existing?.outcome ?? ""));
 
-  const row = buildConsultationRow(parsed.data);
+  const row = buildConsultationRow(parsed.data, await schoolAliases());
   const { error } = await supabase
     .from("enrollment_consultations")
     .update({
@@ -631,7 +636,7 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
     );
   const row: Record<string, unknown> = {};
   if (d.prospectName !== undefined) row.prospect_name = d.prospectName;
-  if (d.prospectSchool !== undefined) row.prospect_school = canonicalSchoolName(d.prospectSchool);
+  if (d.prospectSchool !== undefined) row.prospect_school = canonicalSchoolName(d.prospectSchool, await schoolAliases());
   if (d.prospectGrade !== undefined) row.prospect_grade = d.prospectGrade || null;
   if (d.parentPhone !== undefined) row.parent_phone = d.parentPhone || null;
   if (d.parentRequest !== undefined) row.parent_request = d.parentRequest?.trim() ? d.parentRequest : null;
@@ -858,7 +863,7 @@ export async function convertConsultationToStudent(
       tenant_id: c.tenant_id,
       name: uniqueName.name,
       grade: studentGrade,
-      school: canonicalSchoolName(studentSchool),
+      school: canonicalSchoolName(studentSchool, await schoolAliases()),
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",
@@ -1153,7 +1158,9 @@ export async function regenerateConsultationAnalysis(
   after(async () => {
     const bg = createAdminClient();
     try {
-      const { data: report, model } = await runConsultationAnalysis(ctx, formatted, multi);
+      const { data: report, model } = await runConsultationAnalysis(ctx, formatted, multi, undefined, {
+        tenantId: user.tenantId,
+      });
       const { speakerRoles, ...sections } = report;
       const now = new Date().toISOString();
       await bg

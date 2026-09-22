@@ -9,7 +9,7 @@
  * ⚠️ 서버 왕복 0 — URL 파라미터도 아니다(라우팅하면 표가 통째로 다시 그려져 즉시성이 사라진다).
  */
 import { useRef, useState, type ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { isSearchActive } from "../student-search";
 

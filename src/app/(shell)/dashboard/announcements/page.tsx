@@ -5,7 +5,7 @@ import { canWrite } from "@/lib/permissions";
 import { getAnnouncementsForManage, getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { AnnouncementsCard } from "../_components/announcements-card";
 
-export const metadata = { title: "학원 공지 — eywa" };
+export const metadata = { title: "학원 공지 — aywa" };
 
 export default async function AnnouncementsPage() {
   const user = await requireAccess("dashboard");

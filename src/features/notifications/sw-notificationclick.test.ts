@@ -20,7 +20,7 @@ type FakeClient = {
   navigate: ReturnType<typeof vi.fn>;
 };
 
-function fakeClient(frameType: string | undefined, url = "https://eywa.test/dashboard"): FakeClient {
+function fakeClient(frameType: string | undefined, url = "https://aywa.test/dashboard"): FakeClient {
   const c: FakeClient = {
     frameType,
     url,
@@ -81,7 +81,7 @@ describe("sw.js notificationclick — PC 판정(userAgentData.mobile)", () => {
     const r1 = await clickNotification([lone], "/students/s1", noUa);
     expect(lone.navigate).toHaveBeenCalledWith("/students/s1");
     expect(r1.openWindow).not.toHaveBeenCalled();
-    const win = fakeClient("nested", "https://eywa.test/ecs?embed=1");
+    const win = fakeClient("nested", "https://aywa.test/ecs?embed=1");
     const top = fakeClient("top-level");
     const r2 = await clickNotification([win, top], "/students/s1", noUa);
     expect(top.navigate).not.toHaveBeenCalled();
@@ -91,7 +91,7 @@ describe("sw.js notificationclick — PC 판정(userAgentData.mobile)", () => {
 
 describe("sw.js notificationclick — 창을 옮기지 않는다", () => {
   it("🔴 PC 작업면(플로팅 창이 떠 있다)이면 어느 탭도 옮기지 않고 새 탭으로 연다 — 작업면을 다시 실으면 창 입력이 날아간다", async () => {
-    const win = fakeClient("nested", "https://eywa.test/ecs?embed=1");
+    const win = fakeClient("nested", "https://aywa.test/ecs?embed=1");
     const top = fakeClient("top-level");
     const { openWindow } = await clickNotification([win, top]);
     expect(win.navigate).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe("sw.js notificationclick — 창을 옮기지 않는다", () => {
 
   it("창이 순서상 뒤에 와도 같다(최근 포커스 순서와 무관)", async () => {
     const top = fakeClient("top-level");
-    const win = fakeClient("nested", "https://eywa.test/ecs?embed=1");
+    const win = fakeClient("nested", "https://aywa.test/ecs?embed=1");
     const { openWindow } = await clickNotification([top, win]);
     expect(top.navigate).not.toHaveBeenCalled();
     expect(openWindow).toHaveBeenCalledWith("/students/s1");
@@ -116,7 +116,7 @@ describe("sw.js notificationclick — 창을 옮기지 않는다", () => {
   });
 
   it("최상위 창이 없고 창(iframe)만 잡히면 새 창을 연다", async () => {
-    const win = fakeClient("nested", "https://eywa.test/ecs?embed=1");
+    const win = fakeClient("nested", "https://aywa.test/ecs?embed=1");
     const { openWindow } = await clickNotification([win]);
     expect(win.navigate).not.toHaveBeenCalled();
     expect(openWindow).toHaveBeenCalledWith("/students/s1");

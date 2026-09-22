@@ -19,7 +19,7 @@
  *    다시 뽑아야 하는 일(학부모 재문의·인수인계)이 실제로 있다
  * 🔴 데이터(`prep_brief` 스냅샷)는 **한 줄도 지우지 않는다** — 표시·이름·자리만 바뀐다.
  */
-import { AlertCircle, AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, Printer, ShieldCheck } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, AlertTriangle, ClipboardCheck, HelpCircle, MessageSquare, Printer, ShieldCheck } from "@/components/icons/aywa-icon-compat";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { modelDisplayLabel } from "@/lib/ai/model-label";
 import { classLine, type PrepBriefRecord } from "@/features/enrollment/prep-brief";

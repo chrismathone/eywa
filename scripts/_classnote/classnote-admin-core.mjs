@@ -21,7 +21,7 @@ export function norm(s) {
   return (s || "").replace(/\s/g, "");
 }
 
-/** eywa 과목 키 그룹 → ClassNote 보드 prefix. 발송 화이트리스트(classnote-guard)와 동일 매핑. */
+/** aywa 과목 키 그룹 → ClassNote 보드 prefix. 발송 화이트리스트(classnote-guard)와 동일 매핑. */
 export const BOARD_GROUPS = {
   math: { label: "수학", prefix: "(수학)", subjectKeys: ["math", "subject_1"] },
   english: { label: "영어", prefix: "(영어)", subjectKeys: ["english"] },
@@ -593,6 +593,9 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
  * 호출부는 ok=false에서 fail-closed(재시도 큐 반환)해야 한다.
  */
 export async function findChildReportId(page, centerId, { cls, child, content }) {
+  // content는 문자열 하나 또는 후보 배열(같은 보고서의 옛·새 주소 표기 — share-bases.mjs `shareUrlVariants`).
+  // 어느 쪽이든 **글자까지 같은** 본문만 일치로 본다(strict 유지).
+  const wanted = Array.isArray(content) ? content : [content];
   const list = await page
     .evaluate(
       async ([center, ch]) => {
@@ -613,7 +616,7 @@ export async function findChildReportId(page, centerId, { cls, child, content })
     ok: true,
     id:
       list.find(
-        (r) => String(r.cls) === String(cls) && String(r.child) === String(child) && r.content === content,
+        (r) => String(r.cls) === String(cls) && String(r.child) === String(child) && wanted.includes(r.content),
       )?.id ?? null,
   };
 }

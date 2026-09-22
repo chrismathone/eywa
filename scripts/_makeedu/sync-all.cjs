@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/sync-all.cjs — makeedu → eywa **증분 동기화 오케스트레이터**.
+ * scripts/_makeedu/sync-all.cjs — makeedu → aywa **증분 동기화 오케스트레이터**.
  *
  * 전역 토글 확인 → 라이브 스크래핑(1 로그인) → 안전·멱등 도메인만 additive 임포트(--apply). 도메인별 실패 격리.
  * 임포터는 전부 additive(makeedu_id/자연키 매칭 + on-conflict-do-nothing/backfill)라 **재실행 = 증분**(새 행만 추가).

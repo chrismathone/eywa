@@ -1,13 +1,15 @@
 "use client";
 
 import { memo } from "react";
-import { formatMd, formatMdW, formatRange, WEEKDAY_KO } from "../calendar";
+import { formatMd, formatMdW, formatRange, weekdayLabel } from "../calendar";
 import { dayDescription, dayStatusLabel } from "../day-schedule";
 import { pctOf } from "../derive";
+import { knownProgress, periodCount, periodPercent, progressUnit } from "../learning-dashboard";
 import { drillLevel } from "../drilldown";
-import { monthOf, resolveDay, resolveWeek, weekdaySlots } from "../focus";
+import { monthOf, resolveDay, resolveWeek } from "../focus";
 import { CX, CY, DRILL_RINGS, arcPath, midAngle, polar, strokeArcPath, withGap } from "../geometry";
-import { FOCUS_INK, HAIRLINE, HOLIDAY_FILL, HOLIDAY_INK, HOLIDAY_SELECTED_INK, NO_CLASS_FILL, NO_CLASS_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
+import { ACTUAL_STROKE, FOCUS_INK, HAIRLINE, HOLIDAY_COMPLETED_INK, HOLIDAY_INK, HOLIDAY_SELECTED_INK, QUARTER_TINT, STATUS_FILL, STATUS_INK, TODAY_STROKE, WEEK_FILL, WEEK_INK } from "../palette";
+import { classDaysOfWeek } from "../session-layout";
 import type { HoverTarget } from "../tooltip-content";
 import { DialGuides } from "./dial-guides";
 import { DialLayer } from "./dial-layer";
@@ -27,7 +29,7 @@ const LAYER_NAMES = ["quarters", "months", "weeks", "focus"] as const;
 const PROGRESS_RADIUS = (DRILL_RINGS.progress[0] + DRILL_RINGS.progress[1]) / 2;
 const PROGRESS_WIDTH = DRILL_RINGS.progress[1] - DRILL_RINGS.progress[0];
 
-/** 선택한 기간의 자식들을 원 전체에 펼친다: 4분기 → 해당 분기의 3개월 → 한 달의 주 → 한 주의 7일. */
+/** 선택한 기간의 자식들을 원 전체에 펼친다: 분기 → 월 → 주 → 실제 수업일. */
 export const DrilldownDial = memo(function DrilldownDial() {
   const { view, progress, mode, focus, selectQuarter, selectMonth, selectWeek, selectDay } = useProgressMap();
   const level = drillLevel(mode);
@@ -35,47 +37,45 @@ export const DrilldownDial = memo(function DrilldownDial() {
   const quarter = view.quarters[month.quarter - 1]!;
   const week = resolveWeek(view, focus);
   const day = resolveDay(view, focus);
-  const metric = (pct: number, planned: number) => planned === 0 ? "계획 없음" : progress.estimated ? "예정" : `${pct}%`;
+  const metric = (pct: number, planned: number) => planned === 0 ? "계획 없음" : progress.estimated ? "예정" : periodPercent(progress, pct, planned);
   let periods: Period[];
 
   // 종강 뒤 칸은 세우지 않는다 — 이 다이얼은 **칸 수로 각을 나눠서** 빼도 원이 채워진다(열두 달 시계와 다르다).
   // 비는 일은 없지만(고를 수 없는 분기로는 못 들어간다) 비면 원래 목록으로 돌아가 0으로 나누지 않는다.
-  const liveQuarters = view.quarters.filter((q) => !q.afterEnd);
-  const liveMonths = quarter.months.filter((m) => !m.afterEnd);
+  const liveQuarters = view.quarters.filter((q) => !q.beforeStart && !q.afterEnd);
+  const liveMonths = quarter.months.filter((m) => !m.beforeStart && !m.afterEnd);
   if (level === 0) {
-    periods = (liveQuarters.length > 0 ? liveQuarters : view.quarters).map((q) => ({
+    periods = liveQuarters.map((q) => ({
       key: `q${q.q}`, title: `${q.q}분기`, subtitle: `${q.months[0]!.month}~${q.months.at(-1)!.month}월`,
       metric: metric(q.pct, q.plannedPages), label: `${q.q}분기 · ${metric(q.pct, q.plannedPages)} · 월별로 확대`,
       fill: QUARTER_TINT[q.q].soft, ink: QUARTER_TINT[q.q].ink, accent: QUARTER_TINT[q.q].ink,
       pct: q.pct, current: q.months.some((m) => m.isCurrent), target: { kind: "quarter", q: q.q }, onSelect: () => selectQuarter(q.q),
     }));
   } else if (level === 1) {
-    periods = (liveMonths.length > 0 ? liveMonths : quarter.months).map((m) => ({
+    periods = liveMonths.map((m) => ({
       key: `m${m.month}`, title: `${m.month}월`, subtitle: m.plan?.semester ?? "계획 없음",
       metric: metric(m.pct, m.plannedPages), label: `${m.month}월 · ${metric(m.pct, m.plannedPages)} · 주별로 확대`,
       fill: STATUS_FILL[m.status], ink: STATUS_INK[m.status], accent: QUARTER_TINT[m.quarter].ink,
       pct: m.pct, current: m.isCurrent, target: { kind: "month", month: m.month }, onSelect: () => selectMonth(m.month),
     }));
   } else if (level === 2) {
-    periods = month.weeks.map((w) => ({
+    periods = month.weeks.filter(w => !w.inactive).map((w) => ({
       key: `w${w.index}`, title: `${w.index}주`, subtitle: formatRange(w.start, w.end),
       metric: metric(w.pct, w.plannedPages), label: `${month.month}월 ${w.index}주차 · ${metric(w.pct, w.plannedPages)} · 날짜별로 확대`,
-      fill: WEEK_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : WEEK_INK[w.status], accent: "var(--green)",
+      fill: WEEK_FILL[w.status], ink: focus.week === w.index ? FOCUS_INK : WEEK_INK[w.status], accent: ACTUAL_STROKE,
       pct: w.pct, current: w.isCurrent, selected: focus.week === w.index,
       target: { kind: "week", month: month.month, week: w.index }, onSelect: () => selectWeek(month.month, w.index),
     }));
   } else {
-    periods = weekdaySlots(week).map((d, index) => {
-      if (!d) return { key: `empty-${index}`, title: `${WEEKDAY_KO[(index + 1) % 7]}요일`, subtitle: "이 달 밖", metric: "", label: "이 달 밖",
-        fill: STATUS_FILL.none, ink: NO_CLASS_INK, accent: HAIRLINE, pct: 0 };
+    periods = classDaysOfWeek(week).map((d) => {
       const selected = focus.day === d.date;
       return {
-        key: d.date, title: `${WEEKDAY_KO[(index + 1) % 7]}요일`, subtitle: formatMd(d.date),
-        metric: d.noClassReason ? "수업 없음" : d.plannedPages ? `${d.donePages}/${d.plannedPages}쪽` : dayStatusLabel(d),
+        key: d.date, title: `${weekdayLabel(d.date)}요일`, subtitle: formatMd(d.date),
+        metric: d.plannedPages ? periodCount(progress, d.donePages, d.plannedPages) : dayStatusLabel(d),
         label: `${formatMdW(d.date)} · ${dayDescription(d)}`,
-        fill: d.noClassReason ? d.holidayName ? HOLIDAY_FILL : NO_CLASS_FILL : STATUS_FILL[d.status],
-        ink: d.holidayName ? selected ? HOLIDAY_SELECTED_INK : HOLIDAY_INK : selected ? FOCUS_INK : d.noClassReason ? NO_CLASS_INK : STATUS_INK[d.status],
-        accent: d.holidayName ? HOLIDAY_INK : "var(--green)", pct: pctOf(d.donePages, d.plannedPages),
+        fill: STATUS_FILL[d.status],
+        ink: d.holidayName ? selected ? HOLIDAY_SELECTED_INK : d.status === "completed" ? HOLIDAY_COMPLETED_INK : HOLIDAY_INK : selected ? FOCUS_INK : STATUS_INK[d.status],
+        accent: d.holidayName ? HOLIDAY_INK : ACTUAL_STROKE, pct: pctOf(d.donePages, d.plannedPages),
         current: d.isToday, selected,
         target: { kind: "day", date: d.date }, onSelect: () => selectDay(d.date),
       };
@@ -87,14 +87,14 @@ export const DrilldownDial = memo(function DrilldownDial() {
   const scopeLabel = mode === "day" ? `${view.year}년 ${formatMdW(day.date)}`
     : `${view.year}년${level === 0 ? "" : level === 1 ? ` ${quarter.q}분기` : level === 2 ? ` ${month.month}월` : ` ${month.month}월 ${week.index}주`}`;
   const centerValue = mode === "day" && day.noClassReason ? "수업 없음"
-    : aggregate.plannedPages === 0 ? "—" : progress.estimated ? "예정" : `${aggregate.pct}%`;
+    : aggregate.plannedPages === 0 ? "—" : progress.estimated ? "예정" : periodPercent(progress, aggregate.pct, aggregate.plannedPages);
   const caption = mode === "day" ? day.holidayName ?? day.record?.bookName ?? ""
     : level === 0 ? "1월부터 12월까지" : level === 1 ? `${quarter.months[0]!.month}~${quarter.months.at(-1)!.month}월`
       : level === 2 ? month.plan?.bookName ?? "" : formatRange(week.start, week.end);
 
   return (
     <div className={styles.dial} role="group" data-drill-level={level}
-      aria-label={`${progress.studentName} 학습 진도맵 — ${scopeLabel} · ${progress.estimated ? "예상 진도" : `진도율 ${aggregate.pct}%`}`}>
+      aria-label={`${progress.studentName} 학습 진도맵 — ${scopeLabel} · ${progress.estimated ? "예상 진도" : knownProgress(progress) ? `진도율 ${aggregate.pct}%` : "진도 확인 필요"}`}>
       <DialLayer name="guides"><DialGuides periods={periods.length} /></DialLayer>
       <DialLayer name={LAYER_NAMES[level]}>
         {periods.map((period, index) => {
@@ -122,10 +122,10 @@ export const DrilldownDial = memo(function DrilldownDial() {
         <g className="pointer-events-none select-none" textAnchor="middle" dominantBaseline="central">
           <circle cx={CX} cy={CY} r={DRILL_RINGS.center} fill="var(--card)" stroke={HAIRLINE} />
           <circle cx={CX} cy={CY} r={PROGRESS_RADIUS} fill="none" stroke="var(--bg-soft)" strokeWidth={PROGRESS_WIDTH} />
-          {aggregate.pct > 0 ? <path d={strokeArcPath(PROGRESS_RADIUS, 0, aggregate.pct * 3.6)} fill="none" stroke="var(--green)" strokeWidth={PROGRESS_WIDTH} strokeLinecap="round" /> : null}
+          {aggregate.pct > 0 ? <path d={strokeArcPath(PROGRESS_RADIUS, 0, aggregate.pct * 3.6)} fill="none" stroke={ACTUAL_STROKE} strokeWidth={PROGRESS_WIDTH} strokeLinecap="round" /> : null}
           <text x={CX} y={CY - 95} fontSize={27} fontWeight={700} fill="var(--foreground)">{scopeLabel}</text>
           <text x={CX} y={CY - 15} fontSize={centerValue === "수업 없음" ? 54 : 84} fontWeight={700} fill={mode === "day" && day.holidayName ? HOLIDAY_INK : "var(--foreground)"}>{centerValue}</text>
-          <text x={CX} y={CY + 53} fontSize={25} fill="var(--text-dim)">{progress.estimated ? `계획 ${aggregate.plannedPages}쪽` : `${aggregate.donePages} / ${aggregate.plannedPages}쪽`}</text>
+          <text x={CX} y={CY + 53} fontSize={25} fill="var(--text-dim)">{progress.estimated ? `계획 ${aggregate.plannedPages}${progressUnit(progress)}` : periodCount(progress, aggregate.donePages, aggregate.plannedPages)}</text>
           <text x={CX} y={CY + 107} fontSize={24} fontWeight={600} fill={mode === "day" && day.holidayName ? HOLIDAY_INK : "var(--text-dim)"}>{caption}</text>
           <text x={CX} y={CY + 160} fontSize={20} fill="var(--text-dim)">{HINTS[level]}</text>
         </g>

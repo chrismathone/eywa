@@ -3,7 +3,7 @@ import {
   Clock,
   CircleDollarSign,
   Receipt,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { FilterSelect } from "@/components/filter-select";
@@ -24,6 +24,7 @@ import { kstToday } from "@/lib/date-kst";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { TextbooksTable } from "./textbooks-table";
 import styles from "./textbooks-panel.module.css";
+import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
 const KRW = new Intl.NumberFormat("ko-KR");
 
@@ -79,7 +80,7 @@ export async function TextbooksPanel({ sp }: { sp: Sp }) {
       getCurrentUser(),
     ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const academyName = settings.profile.name || "인재원";
+  const academyName = settings.profile.name || NEUTRAL_ACADEMY_NAME;
   const logoUrl = user
     ? await resolveBrandingSrc(settings.profile.logoUrl, user.tenantId)
     : null;

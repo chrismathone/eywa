@@ -165,6 +165,8 @@ export type OverviewSnapshot = {
   requestedAt: number;
   allowed: MenuKey[];
   subjects: Record<string, string>;
+  /** EiE 구분을 **쓰지 않는** 학원이면 false(EiE 모듈 꺼짐 — 새 학원 기본). 없으면 씀(침산 — 키 자체가 없어 스냅샷이 종전과 같다). */
+  eie?: false;
   sections: Sections;
 };
 

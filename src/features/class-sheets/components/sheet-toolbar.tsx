@@ -8,7 +8,7 @@
 // 🔴 상단 바의 **껍데기·왼쪽 덩어리·보기 전환은 월간 뷰와 같은 것**을 쓴다([chrome.ts](../chrome.ts) +
 //    [sheet-chrome](./sheet-chrome.tsx), 원장 2026-09-01 "월간과 주간 차이가 너무 심함 · 일관성있게
 //    디자인 통일"). 여기에 알약·셀렉트 표기를 다시 적지 말 것 — 그게 두 화면이 갈렸던 이유다.
-import { ClipboardCheck } from "@/components/icons/eywa-icon-compat";
+import { ClipboardCheck } from "@/components/icons/aywa-icon-compat";
 import { addWeeks, thisMonday, WEEK_LABEL_W } from "@/features/timetable/lib/week";
 import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";

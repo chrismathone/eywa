@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { hasTrend, type TrendPoint } from "../report-trend";
 
 // 학부모 보고서 성적 추이 — **순수 SVG**(라이브러리 0). ClassNote 워커가 headless로 스크린샷하므로
-// recharts(ResizeObserver) 불가 → edutrix ReportPaper의 PureSvgChart를 eywa 톤으로 이식(CLAUDE.md B5).
+// recharts(ResizeObserver) 불가 → edutrix ReportPaper의 PureSvgChart를 aywa 톤으로 이식(CLAUDE.md B5).
 // 색은 인라인 hex(스크린샷 안정): 시험=primary #153e75, 과제=blue #2962ce. 격자/축은 회색.
 // ⚠️ CSS 변수를 못 쓴다(워커 headless 렌더에 앱 스타일시트가 없다) — 그래서 여기만 hex를 적는다.
 //    globals.css의 `--primary`/`--blue`를 바꾸면 **이 두 값도 함께** 고칠 것(v4에서 blue를 조였다).

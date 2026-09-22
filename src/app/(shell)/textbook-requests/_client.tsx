@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { BookOpen, Eye, User, X } from "@/components/icons/eywa-icon-compat";
+import { BookOpen, Eye, User, X } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -24,7 +24,7 @@ import { TextbookSendDialog } from "./_send-dialog";
 // 교재 요청 — ijw TextbookRequestView 구조 그대로 이식(선생님들이 익숙한 화면):
 // 좌측 폼(기본 정보 → 교재 내용) + 우측 실시간 종이 서식 미리보기 + '이미지 저장 및 기록' 단일 버튼
 // (PNG 자동 다운로드 + DB 기록) + 아래 요청 내역(미완료/완료 탭·검색·페이지네이션 — request-history.tsx).
-// eywa 유지분: 학생=FK 선택(강사 스코프)·계좌=학원설정 자동(카드에 표시) — 데이터 모델은 불변.
+// aywa 유지분: 학생=FK 선택(강사 스코프)·계좌=학원설정 자동(카드에 표시) — 데이터 모델은 불변.
 
 function SectionLabel({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -340,7 +340,7 @@ export function TextbookRequestClient({
                   <BookOpen className="size-3.5" />
                   교재 내용
                 </span>
-                {/* ijw '교재 검색' 버튼 자리 — eywa는 인라인 검색 셀렉트가 그 역할 */}
+                {/* ijw '교재 검색' 버튼 자리 — aywa는 인라인 검색 셀렉트가 그 역할 */}
               </div>
               {catalogOptions.length > 0 ? (
                 <label className="block space-y-1">

@@ -129,14 +129,14 @@ export function OperationsSection({
             hint="주소 /seat/lab · 숫자만이 아니어도 됩니다."
             value={o.seatPins?.lab ?? ""}
             onChange={(lab) => set({ seatPins: { ...o.seatPins, lab } })}
-            placeholder="7099"
+            placeholder="0000"
           />
           <TextField
             label="JJ실(305호) 비밀번호"
             hint="주소 /seat/jj · 비우면 이 자리만 꺼집니다."
             value={o.seatPins?.jj ?? ""}
             onChange={(jj) => set({ seatPins: { ...o.seatPins, jj } })}
-            placeholder="7099"
+            placeholder="0000"
           />
         </div>
       </SettingsCard>

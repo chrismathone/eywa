@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Plus } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft, Plus } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getChecklistTemplates, getReviewPrivileges } from "@/features/class-review/server/queries";
 import { CHECKLIST_AREAS } from "@/features/class-review/checklist";
 import { TemplateEditor } from "../_components/template-editor";
 
-export const metadata = { title: "수업 평가 문항 편집 — eywa" };
+export const metadata = { title: "수업 평가 문항 편집 — aywa" };
 
 /**
  * 문항 세트 관리 — 원장 + class_review 개인 예외 인원만(원장 지시 2026-08-04).

@@ -1,4 +1,4 @@
-# Eywa 아이콘 시스템
+# Aywa 아이콘 시스템
 
 > 상태: v3 · 2026-09-08 — **탭·내부 탭 38개 글리프 재작성**(원장 지시: *"전부다 아이콘 새로 생성하자 탭 및
 > 내부 탭 … 일관성있고 개성있지만 심플하고 컴팩트한 아이콘으로"*). 규격(§1)은 그대로이고 그림만 다시 그렸다.
@@ -16,11 +16,11 @@
 > 엑셀·리치 에디터 표 등 제 자리에 그대로 남는다.
 >
 > 이전 상태: v2 · 2026-07-14
-> 코드 원본: `src/components/icons/eywa-icons.tsx`
-> 기존 화면 호환: `src/components/icons/eywa-icon-compat.tsx`
+> 코드 원본: `src/components/icons/aywa-icons.tsx`
+> 기존 화면 호환: `src/components/icons/aywa-icon-compat.tsx`
 > 시각 갤러리: `/help/icons`
 
-Eywa 아이콘은 기능을 빠르게 식별시키는 자체 SVG 표지다. 익숙한 기능 기호를 같은 선·비례로 다시 그려 제품의 일관성을 만든다.
+Aywa 아이콘은 기능을 빠르게 식별시키는 자체 SVG 표지다. 익숙한 기능 기호를 같은 선·비례로 다시 그려 제품의 일관성을 만든다.
 
 의미 배정의 우선순위는 **기능의 즉시성 → 제품 전체의 일관성 → 브랜드 개성**이다. 시간표를 잎사귀로, 직원관리를 뿌리로 표현하는 것처럼 설명이 있어야 이해되는 비유는 메인 내비게이션에 쓰지 않는다.
 
@@ -42,13 +42,13 @@ Eywa 아이콘은 기능을 빠르게 식별시키는 자체 SVG 표지다. 익�
 ## 2. 두 가지 패밀리
 
 - `product`: screen, report, exam처럼 실제 업무 객체를 나타낸다. 사용자가 아는 사물의 특징을 유지한다.
-- `interface`: search, plus, check처럼 보편 조작을 나타낸다. 익숙한 형태를 바꾸지 않고 선과 비례만 Eywa 문법에 맞춘다.
+- `interface`: search, plus, check처럼 보편 조작을 나타낸다. 익숙한 형태를 바꾸지 않고 선과 비례만 Aywa 문법에 맞춘다.
 
-Eywa 아이콘에는 식물 모티프를 사용하지 않는다. “닫기”는 닫기로, “검색”은 검색으로, “시간표”는 달력이나 시간 격자로 즉시 읽혀야 한다.
+Aywa 아이콘에는 식물 모티프를 사용하지 않는다. “닫기”는 닫기로, “검색”은 검색으로, “시간표”는 달력이나 시간 격자로 즉시 읽혀야 한다.
 
 ## 3. 크기와 선 굵기
 
-코드 토큰은 `EYWA_ICON_SIZES`를 사용한다.
+코드 토큰은 `AYWA_ICON_SIZES`를 사용한다.
 
 | 토큰 | 크기 | 권장 용도 | 선 굵기 |
 |---|---:|---|---:|
@@ -73,7 +73,7 @@ Eywa 아이콘에는 식물 모티프를 사용하지 않는다. “닫기”는
 ## 5. 코드 사용법
 
 ```tsx
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 // 옆 텍스트가 의미를 설명하므로 장식 아이콘
 <button type="button">
@@ -105,7 +105,7 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 1. 기존 카탈로그와 `MENU_ICON`에서 같은 의미가 있는지 먼저 찾는다.
 2. 이름은 보이는 형태를 기준으로 영문 `camelCase` 단수형으로 정한다.
 3. 24px 그리드에서 1.6 선으로 그리고, 16px와 12px에서도 판독성을 확인한다.
-4. `EyIcon` 렌더러와 `EYWA_ICON_CATALOG`에 함께 등록한다. 둘 중 하나만 추가하면 전체 카탈로그 렌더 테스트가 실패하도록 유지한다.
+4. `EyIcon` 렌더러와 `AYWA_ICON_CATALOG`에 함께 등록한다. 둘 중 하나만 추가하면 전체 카탈로그 렌더 테스트가 실패하도록 유지한다.
 5. `/help/icons`에서 패밀리·크기·주변 아이콘과 무게를 비교한다.
 6. 아이콘의 의미, 실제 사용처, 접근성 이름을 코드 리뷰에서 확인한다.
 
@@ -122,21 +122,21 @@ import { EyIcon } from "@/components/icons/eywa-icons";
 
 ## 9. 외부 아이콘 사용 경계
 
-메인 내비게이션, 핵심 제품 객체, 브랜드 빈 상태, 공용 UI 프리미티브와 업무 화면은 모두 Eywa 아이콘을 사용한다. 현재 카탈로그는 145개이며 앱에서 사용하는 143개 기존 컴포넌트 이름은 `eywa-icon-compat.tsx`가 같은 호출 계약으로 Eywa 도형에 연결한다. `eywa-icon-mapping.test.ts`가 누락 매핑, 미사용 별칭, 미등록 도형을 전수 검사한다.
+메인 내비게이션, 핵심 제품 객체, 브랜드 빈 상태, 공용 UI 프리미티브와 업무 화면은 모두 Aywa 아이콘을 사용한다. 현재 카탈로그는 145개이며 앱에서 사용하는 143개 기존 컴포넌트 이름은 `aywa-icon-compat.tsx`가 같은 호출 계약으로 Aywa 도형에 연결한다. `aywa-icon-mapping.test.ts`가 누락 매핑, 미사용 별칭, 미등록 도형을 전수 검사한다.
 
-`lucide-react`를 포함한 외부 아이콘 패키지의 직접 import는 금지한다. 새 화면은 `EyIcon name="…"`을 사용하고, 필요한 의미가 카탈로그에 없다면 신규 아이콘 절차에 따라 먼저 Eywa 도형을 등록한다. 호환 계층은 기존 화면의 점진적 API 정리를 위한 것이며 새 코드에서 별칭을 추가하는 진입점이 아니다.
+`lucide-react`를 포함한 외부 아이콘 패키지의 직접 import는 금지한다. 새 화면은 `EyIcon name="…"`을 사용하고, 필요한 의미가 카탈로그에 없다면 신규 아이콘 절차에 따라 먼저 Aywa 도형을 등록한다. 호환 계층은 기존 화면의 점진적 API 정리를 위한 것이며 새 코드에서 별칭을 추가하는 진입점이 아니다.
 
 ## 10. 의도적으로 공유하는 호환 매핑
 
-형태 이름만 다르고 제품 안에서 같은 의미인 아래 8개 그룹은 하나의 Eywa 도형을 공유한다. 상태·행동이 달라지는 나머지 변형은 별도 도형으로 분리한다.
+형태 이름만 다르고 제품 안에서 같은 의미인 아래 8개 그룹은 하나의 Aywa 도형을 공유한다. 상태·행동이 달라지는 나머지 변형은 별도 도형으로 분리한다.
 
-| 기존 이름 | Eywa 이름 | 공유 이유 |
+| 기존 이름 | Aywa 이름 | 공유 이유 |
 |---|---|---|
 | `AlertTriangle`, `TriangleAlert` | `alert` | 이름 순서만 다른 동일 경고 |
 | `CalendarDays`, `Calendar` | `calendar` | 모두 일반 날짜 선택 |
 | `CircleDollarSign`, `Coins` | `currency` | 통화·금액의 공통 의미 |
 | `MessageCircle`, `MessageSquare` | `message` | 외곽 모양 차이를 제거한 단일 대화 |
-| `Receipt`, `ReceiptText` | `receipt` | Eywa 영수증은 기본적으로 내역선을 포함 |
+| `Receipt`, `ReceiptText` | `receipt` | Aywa 영수증은 기본적으로 내역선을 포함 |
 | `Sheet`, `FileSpreadsheet` | `spreadsheet` | 동일한 표 문서 |
 | `CheckCircle2`, `CheckCircle` | `success` | 버전 번호만 다른 동일 성공 상태 |
 | `RefreshCw`, `RotateCw` | `sync` | 데이터 새로고침·재동기화의 공통 의미 |

@@ -21,7 +21,7 @@ import {
   type ShuttleRider,
 } from "@/features/shuttle/types";
 
-export const metadata = { title: "셔틀 노선표 인쇄 — eywa" };
+export const metadata = { title: "셔틀 노선표 인쇄 — aywa" };
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 

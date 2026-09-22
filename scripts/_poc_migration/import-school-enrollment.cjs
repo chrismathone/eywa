@@ -7,7 +7,7 @@
  * 받는 곳: 학교알리미(schoolinfo.go.kr) → 공시정보 → 학년별·학급별 학생수 → 시도교육청·학교급별 CSV.
  * ⚠️ 공공데이터포털 15106331은 **링크형**이라 파일이 없다(원본 사이트로 넘길 뿐).
  *
- * 실행(eywa 루트에서):
+ * 실행(aywa 루트에서):
  *   node --env-file=.env.local scripts/_poc_migration/import-school-enrollment.cjs --dir "C:/Users/user/Downloads"
  *   node --env-file=.env.local scripts/_poc_migration/import-school-enrollment.cjs --dir "..." --apply
  *
@@ -24,7 +24,7 @@ const argOf = (n) => {
   return i >= 0 ? process.argv[i + 1] : null;
 };
 const DIR = argOf("--dir") ?? "C:/Users/user/Downloads";
-const TENANT_SLUG = argOf("--tenant") ?? "injaewon";
+const TENANT_SLUG = argOf("--tenant") ?? "cs"; // 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 
 // school-name.ts와 **같은 규칙**이어야 한다. .cjs라 TS를 못 불러 옮겨 적되, 바뀌면 양쪽을 함께 고칠 것.
 // (규칙의 진실은 src/features/schools/school-name.ts + 그 테스트다.)

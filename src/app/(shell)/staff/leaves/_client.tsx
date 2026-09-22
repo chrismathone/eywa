@@ -3,7 +3,7 @@ import { tipProps } from "@/components/hover-tip/tip";
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, Loader2, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import {
   approveLeave,

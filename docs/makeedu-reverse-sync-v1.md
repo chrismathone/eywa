@@ -5,7 +5,7 @@
 
 ## 무엇을 해결하나
 
-학부모가 eywa QR 공개접수로 제출한 신규 상담(`enrollment_consultations.from_public_intake`)은 **eywa가
+학부모가 aywa QR 공개접수로 제출한 신규 상담(`enrollment_consultations.from_public_intake`)은 **aywa가
 원본**이라 makeedu에 없다. 지금까지는 사무실이 makeedu에 손으로 재입력해야 했다 → 이걸 버튼 한 번으로.
 
 **자동이 아니다.** 사무실(원장)이 후보를 눈으로 검토하고 골라서 보낸다. makeedu는 여전히 정본이고,
@@ -30,7 +30,7 @@
                                                폼 채움 → makeedu 자신의 ajaxSubmit
                                                (counselList_regist_InsProc.do) 호출
                                             ④ 응답 "OK" → resList에서 counselSeq 회수
-                                            ⑤ eywa: makeedu_pushed_at=now(),
+                                            ⑤ aywa: makeedu_pushed_at=now(),
                                                makeedu_id=counselSeq / 요청 done 마감
 ```
 
@@ -50,18 +50,18 @@
 1. **후보 쿼리**(`getUnpushedIntakeConsultations`): `from_public_intake && makeedu_id IS NULL && makeedu_pushed_at IS NULL && outcome≠enrolled`만 노출.
 2. **액션 검증**(`enqueueConsultationPush`): 같은 조건으로 서버 재검증 + 이미 pending/running인 상담은 큐잉 제외(연타 무해).
 3. **writer 재검사**: 실행 시점에 `pushed_at`(이미 전송) / `outcome=enrolled`(큐잉~실행 사이 등록됨)면 skipped 마감 — PC 꺼짐으로 지연된 요청의 레이스까지 커버.
-4. **읽기 동기화와 체계 일치**: makeedu가 부여한 counselSeq를 `makeedu_id`에 저장하는데, 읽기 임포터(import-prospects)도 같은 counselSeq를 키로 쓰므로 다음 동기화가 푸시된 건을 **"이미 연결됨"으로 스킵** → eywa에 역수입 중복이 생기지 않는다(라이브 검증).
+4. **읽기 동기화와 체계 일치**: makeedu가 부여한 counselSeq를 `makeedu_id`에 저장하는데, 읽기 임포터(import-prospects)도 같은 counselSeq를 키로 쓰므로 다음 동기화가 푸시된 건을 **"이미 연결됨"으로 스킵** → aywa에 역수입 중복이 생기지 않는다(라이브 검증).
 
-⚠️ makeedu 자체의 중복 경고(dupChk confirm)는 ajaxSubmit 직접 호출로 우회된다 — 위 eywa측 가드가 그 역할을 대신한다.
+⚠️ makeedu 자체의 중복 경고(dupChk confirm)는 ajaxSubmit 직접 호출로 우회된다 — 위 aywa측 가드가 그 역할을 대신한다.
 
 ### enrolled(학원 등록 완료) 가드의 의미
 
-`outcome=enrolled` = **학원에 등록했다**(eywa 사실)이지 makeedu 등록 여부가 아니다. 등록된 학생은 예비원생
+`outcome=enrolled` = **학원에 등록했다**(aywa 사실)이지 makeedu 등록 여부가 아니다. 등록된 학생은 예비원생
 단계를 지났으므로 makeedu **예비상담**으로 보내면 "다니는 학생이 신규 문의로 뜨는" 군더더기가 된다(허다언
 케이스 실측 — 그는 makeedu 원생목록에 이미 있었음). 그래서 3중 제외.
 
 > **⚠️ 2026-07-21 정밀화 — 무조건 제외가 아니다.** 위 판단의 **숨은 전제**("등록된 학생은 makeedu 원생목록에
-> 이미 있다")가 권도현 케이스에서 깨졌다(QR 접수→같은 날 등록·반배정까지 eywa에서 끝나 makeedu 어디에도
+> 이미 있다")가 권도현 케이스에서 깨졌다(QR 접수→같은 날 등록·반배정까지 aywa에서 끝나 makeedu 어디에도
 > 없었고, 수강 2건인데 **청구 0건**). 그래서 규칙을 **"enrolled + 학생이 makeedu 원생일 때만 제외"** 로
 > 승격했다 — 단일 소스 [`push-eligibility.ts`](../src/features/integrations/push-eligibility.ts)(순수+Vitest),
 > 3중 게이트(후보 쿼리·enqueue 액션·writer)가 같은 규칙을 쓴다. 실측 대조: 권한결(14067)·김유하(14106)·
@@ -71,7 +71,7 @@
 makeedu 원생/예비 목록 **어디에도 없는** enrolled를 **원생목록에 직접** 넣는
 '원생등록'(`/member/student/list_regist.do`) 푸시는 여전히 **v2 후보(미구현)** —
 원생은 수납·출결이 걸리는 레코드라 별도 정찰·실시간 중복확인 설계가 필요하고, 수업(반) 배정은 자동화
-불가(eywa 반↔makeedu lessonCode 연결이 거의 없음)라 기본 정보만 등록하는 스코프가 될 것.
+불가(aywa 반↔makeedu lessonCode 연결이 거의 없음)라 기본 정보만 등록하는 스코프가 될 것.
 
 ## makeedu 폼 매핑 (정찰로 확정, dry-run 실검증)
 
@@ -83,14 +83,14 @@ makeedu 원생/예비 목록 **어디에도 없는** enrolled를 **원생목록�
 | `prePKind` | 관계 | 모=M / 부=F / 기타=E |
 | `preHpNo` | 원생 연락처 | 하이픈 동일 |
 | `counselYmd` | 상담일 | consultation_date ?? received_date ?? 접수일 |
-| `title` | **`[eywa 온라인 접수]` 고정** | 학생명은 목록 원생명 컬럼에 이미 노출 |
+| `title` | **`[aywa 온라인 접수]` 고정** | 학생명은 목록 원생명 컬럼에 이미 노출 |
 | `contents`/`contentsText` | 메타(경로·과목·셔틀·주소·형제·진로) + 상담내용(parent_request) | HTML/plain 이중 기록(makeedu 폼 구조) |
 | `counselType` | N(신규 예비원생) | 폼 기본값 유지 |
 
 ## 운영 런북
 
 - **사용**: 학원설정 › 연동 면 상단 "makeedu로 상담 보내기" 카드(후보 있을 때만 표시, master 전용).
-  체크 → 전송 → 1~2분 뒤 makeedu 예비원생 목록에 등장, eywa 목록에선 사라짐.
+  체크 → 전송 → 1~2분 뒤 makeedu 예비원생 목록에 등장, aywa 목록에선 사라짐.
 - **전송 실패 시**: 카드에 "전송 실패" 배지 — 원인 확인 후 **다시 선택해 재전송 가능**(error 상태는 잠기지 않음).
 - **PC 요건**: 기존 makeedu 사용 PC(신뢰 IP) 1대에 상주 워처(`eywa-makeedu-sync-watcher`, 로그온 자동시작).
   실행 PC는 **1대만 권장** — 여러 대가 각자 makeedu에 로그인하면 봇 탐지/재인증 위험.
@@ -118,8 +118,8 @@ makeedu 원생/예비 목록 **어디에도 없는** enrolled를 **원생목록�
 
 - **정찰(읽기 전용)**: 등록 폼 853필드 덤프 → 실제 입력 폼 `form`(20필드)·제출 함수(`ajaxSubmit`→`_InsProc.do`, 응답 "OK")·학년/관계 코드표 확정. CSRF 토큰 없음.
 - **dry-run**: 허다언 상담으로 폼 전 필드 채움·되읽기 — 학년 14(초4)·관계 M(모)·전화 하이픈·counselType=N 확인, 제출 안 함.
-- **실 E2E**: 김승후(실제 QR 문의, makeedu 원생/예비 어디에도 없음 사전 확인) 큐잉 → 워처 감지 → makeedu 실제 등록 **counselSeq 5231** → resList 노출·상세 본문 확인 → eywa `makeedu_id=5231`·`pushed_at` 세팅 → 후보 목록에서 소멸.
-- **중복 0**: 이후 읽기 동기화가 김승후를 "이미 연결됨"으로 스킵(eywa 역수입 중복 없음), 재푸시는 3겹 가드에 전부 차단.
+- **실 E2E**: 김승후(실제 QR 문의, makeedu 원생/예비 어디에도 없음 사전 확인) 큐잉 → 워처 감지 → makeedu 실제 등록 **counselSeq 5231** → resList 노출·상세 본문 확인 → aywa `makeedu_id=5231`·`pushed_at` 세팅 → 후보 목록에서 소멸.
+- **중복 0**: 이후 읽기 동기화가 김승후를 "이미 연결됨"으로 스킵(aywa 역수입 중복 없음), 재푸시는 3겹 가드에 전부 차단.
 
 ## 한계 / v2 후보
 

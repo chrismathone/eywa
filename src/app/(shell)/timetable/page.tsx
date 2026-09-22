@@ -1,6 +1,7 @@
 import { ParamLink } from "./_components/param-link";
+import { isModuleEnabled } from "@/lib/modules";
 import { ParamSelect } from "./_components/param-select";
-import { Layers } from "@/components/icons/eywa-icon-compat";
+import { Layers } from "@/components/icons/aywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { Toolbar, ToolbarRow } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
@@ -21,6 +22,8 @@ import { applySeatPinMarks, NO_SEAT_PINS } from "@/features/timetable/lib/seat-p
 import { getSeatLiveSlots, getSeatPins } from "@/features/timetable/server/seat-pins";
 import { buildVirtualLabs, knownLabSources, NO_VIRTUAL_LABS } from "@/features/timetable/lib/virtual-lab";
 import { getSeatWeekMoves } from "@/features/timetable/server/seat-moves";
+import { getLabSeparateEnrollmentIdSet } from "@/features/enrollments/server/lab-separate";
+import { applyLabSeparateMarks } from "@/features/timetable/lib/lab-separate";
 import {
   settingsToPeriodsConfig,
   slotPeriodRow,
@@ -115,7 +118,7 @@ import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
 import { buildTeacherComparator } from "@/features/timetable/lib/english-teacher-sheet";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 
-export const metadata = { title: "시간표 — eywa" };
+export const metadata = { title: "시간표 — aywa" };
 
 type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 // 전부 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).
@@ -197,7 +200,7 @@ export default async function TimetablePage({
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins, seatMoves] = await Promise.all([
+  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
     //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
@@ -225,6 +228,9 @@ export default async function TimetablePage({
     paramView === null || paramView === "integrated"
       ? getSeatWeekMoves(user.tenantId, referenceDate)
       : Promise.resolve(null),
+    // ***LAB 배정 원생** 표식 재료(0271b, 원장 2026-09-18 *"이름 색을 lab 과 같은 색상으로 해주고 이탤릭체로"*) —
+    // 교시 고정과 같은 판정 자리(교실뷰는 명단이 없어 왕복 안 함). fail-soft(null = 표식 없이). 🔑 병렬(B4).
+    paramView === "rooms" && roomsViewAllowed ? Promise.resolve(null) : getLabSeparateEnrollmentIdSet(),
   ]);
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
@@ -269,7 +275,9 @@ export default async function TimetablePage({
   // 🔴 **영어에만 있는 축이다** — 다른 과목 반은 english_track이 항상 null이라 'eie'를 걸면 화면이 통째로
   //    빈다. 그래서 칩도 안 띄우고 값도 'all'로 못박는다(과목 칩으로 옮겨가도 필터가 따라붙지 않는다).
   // 우선순위 = URL 파라미터(공유 링크 존중) → 계정(0146a) → 전체. 저장은 TimetableViewPrefsSync.
-  const trackApplies = subject === "english";
+  // 🔴 EiE 모듈이 꺼진 학원(새 학원 기본)엔 이 축 자체가 없다 — 칩을 안 띄우고 'all'로 못박는다(2026-09-22 방향 B).
+  //    침산은 켜져 있어 종전과 같다.
+  const trackApplies = subject === "english" && isModuleEnabled(settings.modules.disabled, "eie");
   const englishTrack: EnglishTrackFilter = !trackApplies
     ? "all"
     : etrackRaw !== undefined
@@ -345,15 +353,20 @@ export default async function TimetablePage({
   //    표식을 얹을 명단도 없다). 반면 **다른 시간으로 옮긴** 고정의 목표 교시는 남의 반 자리 교시라 필터·강사
   //    범위 뒤엔 안 보인다 → 학원 전체 배치(`liveStarts`, 고정이 있을 때만 조회)로 본다. 고정이 0줄이면 입력을
   //    그대로 돌려주므로 평소 비용은 0이다.
-  const slots = applySeatPinMarks(
-    applyGradeFilter(
-      keepEnglishTrack(
-        kindSlots.filter((s) => s.subject === subject),
-        englishTrack,
+  // 이어서 ***LAB 배정 원생** 표식(0271b) — 그 주 *LAB 교시가 있는 반의 켠 원생 이름만 LAB 파랑 + 이탤릭(lab-separate.ts).
+  //    켠 수강이 없으면 입력을 그대로 돌려준다(평소 비용 0).
+  const slots = applyLabSeparateMarks(
+    applySeatPinMarks(
+      applyGradeFilter(
+        keepEnglishTrack(
+          kindSlots.filter((s) => s.subject === subject),
+          englishTrack,
+        ),
+        viewPrefs.grades,
       ),
-      viewPrefs.grades,
+      { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
     ),
-    { pins: seatPins.pins, liveStarts: seatPins.liveStarts, referenceDate },
+    labSeparateIds,
   );
   const subjectRow = settings.operations.subjects.find((s) => s.key === subject);
 
@@ -1142,7 +1155,9 @@ export default async function TimetablePage({
           showIssues={viewPrefs.roomIssues ?? true}
         />
       ) : slots.length === 0 ? (
-        <div className="mx-auto max-w-xl py-4">
+        // 🔴 `w-full` 필수 — 바깥 틀이 세로 flex라 `mx-auto`만 두면 이 상자가 내용 폭으로 줄고, 사진 카드는
+        //    내용이 전부 absolute라 폭 0이 된다(빈 안내가 DOM엔 있는데 화면에 안 보였다 — 2026-09-22 빈 지점 점검).
+        <div className="mx-auto w-full max-w-xl py-4">
           {/* 특강 화면의 빈 상태는 "과목이 없다"가 아니라 "특강이 없다" — 원인이 다르면 문구도 달라야 한다. */}
           <PhotoCard
             src="/photos/timetable-empty.webp"

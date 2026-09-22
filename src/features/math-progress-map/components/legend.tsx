@@ -1,5 +1,5 @@
 import { FOCUS_FILL, FOCUS_INK, HOLIDAY_FILL, HOLIDAY_INK, LEGEND_ORDER, NO_CLASS_FILL, NO_CLASS_INK, STATUS_FILL, STATUS_LABEL, TICK_FILL, TODAY_STROKE } from "../palette";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import styles from "./progress-map.module.css";
 
 /** 상태 범례 — 완료 · 진행 중 · 미학습 · 예정 · 휴강/계획 없음. 분기 색은 범례에 없다(자리 표시일 뿐 상태가 아니다). */

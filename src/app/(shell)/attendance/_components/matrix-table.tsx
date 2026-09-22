@@ -10,9 +10,11 @@ import {
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { cellKey, rowKey } from "@/features/attendance/grid/model";
 import type { AttendanceUnitSuffix } from "@/features/attendance/unit-suffix";
+import { attendanceSalaryRate, type AttendanceSalaryRates } from "@/features/attendance/salary-rates";
+import type { ReactNode } from "react";
 import { suppressedTransferRows, transferRowKey } from "@/features/attendance/transfer-badge";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import type { AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
 import { LiveRecords, MatrixColumnTotalsRow } from "./live-totals";
@@ -21,6 +23,7 @@ import { MatrixRow } from "./matrix-row";
 import { hasNoLessonDays, noLessonZeroView } from "@/features/attendance/no-lesson-row";
 import { MatrixTotalsSummary } from "./totals-row";
 import { StickyFitRow } from "./sticky-fit-row";
+import { AttendanceColumns, AttendanceColSpan, type AttendanceColumn } from "./columns";
 // 🔴 이 파일은 **서버 컴포넌트**다(GridProvider의 children으로 렌더된다) — 훅을 쓸 수 없어
 //    화면 언어를 페이지가 정해 prop으로 내려보낸다. 라벨은 사전, 상태·뱃지 표기는 각각의 단일 소스.
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
@@ -34,7 +37,6 @@ const HEAD_UNDERLINE =
   "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-line after:content-['']";
 /** 가로 스크롤에도 남아야 하는 세로 divider(좌/우 고정 열의 경계). */
 const EDGE_RIGHT = "before:absolute before:inset-y-0 before:right-0 before:w-px before:bg-line before:content-['']";
-const EDGE_LEFT = "before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-line before:content-['']";
 /**
  * 헤더 z단계 — 본문 셀의 선택 오버레이·채우기 손잡이가 z-20~40을 쓰므로(attendance-cell) 헤더는 **그 위**여야
  * 스크롤로 밀려 들어온 칸이 헤더를 뚫고 나오지 않는다. 좌우까지 고정된 모서리 칸은 한 단계 더 위.
@@ -78,7 +80,7 @@ const HEAD_CORNER_Z = "z-[60]";
 //    🔴 짧게 고를 땐 **다른 뜻이 이미 쓰는 영어**를 피할 것(`School`·`Enrolled`로 한 번 lang-wiring 가드를 깼다).
 //    `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨 길이를 잠근다.
 //    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것.
-const COL_W = { name: 96, school: 72, classBilled: 76, units: 76, termSessions: 76, diff: 64, rate: 64, day: 28 } as const;
+const COL_W = { name: 88, school: 72, unitPrice: 96, classBilled: 76, actualAmount: 80, actualSalary: 80, units: 76, termSessions: 76, diff: 64, day: 22 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -213,7 +215,15 @@ export function MatrixTable({
   showGroups,
   classBilledAmounts,
   termSessionsByRow,
+  confirmedPricesByRow,
+  showActualAmount = false,
+  salaryRates,
+  salaryView = false,
+  optionsExtra,
+  optionsLeading,
+  optionsTools,
   priceConfirmedRows,
+  noInvoiceRows,
   money,
   moneyNote,
   lockBefore,
@@ -230,6 +240,23 @@ export function MatrixTable({
   showGroups: boolean;
   /** 학생×반별 청구액(회차 확정과 동일). 빈 객체도 열을 표시하고 미매칭은 '미확정'. */
   classBilledAmounts?: Record<string, number>;
+  /** 회차 확정에 저장된 단가·월 수강료. undefined면 열을 생략한다. */
+  confirmedPricesByRow?: Record<string, AttendanceConfirmedPrice[]>;
+  /** Server-authorized: freelance teacher views only. */
+  showActualAmount?: boolean;
+  /** Supplied only to the authorized administrator's teacher view — **and only while '실급여 보이기' is on**. */
+  salaryRates?: AttendanceSalaryRates;
+  /**
+   * 실급여가 **설 수 있는** 보기(관리자 + 프리랜서 강사 전체 보기, 토글과 무관). 이 보기에선 옛 '정산액'(티어)을
+   * 안 그린다 — 토글을 끄면 실급여 열만 빠지고 급여 숫자는 **하나도** 안 보여야 한다(리뷰 2026-09-21: 끄면 정산액이
+   * 대신 떠 "끄기"가 급여를 감추는 게 아니라 다른 급여로 바꾸는 꼴이었다).
+   */
+  salaryView?: boolean;
+  optionsExtra?: ReactNode;
+  /** 표 위 줄 왼쪽 — 범례(서버 노드). */
+  optionsLeading?: ReactNode;
+  /** 표 위 줄 오른쪽 맨 앞 — 결석 통보 접수·급여명세서. */
+  optionsTools?: ReactNode;
   /**
    * 학생×반별 **등록 차수** — 회차 확정에서 확정한 시수(원장 2026-09-17). 청구액과 **같은 조회**에서 온다.
    * 키가 없으면 '미확정'(0을 지어내지 않는다). `daysBasis`면 그 숫자는 시수가 아니라 옛 **출석 일수**다.
@@ -241,6 +268,12 @@ export function MatrixTable({
    * 이미 `missingTierRowKeys`에서 빠진다(tier-rows.ts). 이 목록은 영어 줄·정산에 못 쓰는 확정분의 표식을 뗀다.
    */
   priceConfirmedRows?: readonly string[];
+  /**
+   * 그 달 **청구서가 없거나 취소된** 학생×반 줄(`rowKey` → 이유, 2026-09-18) — 청구액·등록 차수·차이확인이 '미확정' 대신 `—`.
+   * 회차 행이 없어도 청구서가 있으면 이 맵에 없다(종전 '미확정' — 회차 확정에서 만들 수 있다). 판정은 순수
+   * [`attendanceNoInvoiceRows`](@/features/attendance/class-billing). 🔴 수업날 없는 줄의 0(`noLessonZeroView`)이 이긴다.
+   */
+  noInvoiceRows?: ReadonlyMap<string, AttendanceInvoiceGap>;
   /** 원장 전용 금액 열. null/undefined면 열 자체를 안 그린다(강사는 못 본다). */
   money?: TeacherMoney | null;
   /**
@@ -272,7 +305,12 @@ export function MatrixTable({
         ),
       )
     : null;
+  const showPrice = confirmedPricesByRow !== undefined;
   const showClassBilled = classBilledAmounts !== undefined;
+  const showActualSalary = showActualAmount && salaryRates !== undefined;
+  const salaryRatesByRow = showActualSalary ? Object.fromEntries(groups.flatMap((g) => g.matrix.students.map((s) => [
+    rowKey(g.classId, s.id), attendanceSalaryRate(salaryRates!, { classId: g.classId, className: g.className, isSpecial: g.isSpecial, grade: s.grade }),
+  ]))) as Record<string, number | null> : undefined;
   // 🔴 열의 유무는 **제 데이터**가 정한다 — 청구액에 묶어 두면 등록 차수를 안 받은 호출부에서 열만 서고
   //    전 행이 '미확정'이 된다("확정을 안 했다"는 거짓 사실). 지금 두 값은 같은 조회에서 함께 온다.
   const showTermSessions = termSessionsByRow !== undefined;
@@ -301,7 +339,16 @@ export function MatrixTable({
   const billedView = noLesson.billed;
   const termView = noLesson.term;
   // 이름·학교·수업 차수·출석률(4) + 날짜 + 청구액 + 등록 차수·차이확인(둘은 한 짝).
-  const colSpan = days.length + 4 + (showClassBilled ? 1 : 0) + (showTermSessions ? 2 : 0);
+  const colSpan = days.length + 3 + (showPrice ? 1 : 0) + (showClassBilled ? 1 : 0) + (showActualAmount ? 1 : 0) + (showActualSalary ? 1 : 0) + (showTermSessions ? 2 : 0);
+  const optionalColumns: { key: AttendanceColumn; width: number }[] = [
+    { key: "school", width: COL_W.school },
+    ...(showPrice ? [{ key: "unitPrice" as const, width: COL_W.unitPrice }] : []),
+    ...(showClassBilled ? [{ key: "classBilled" as const, width: COL_W.classBilled }] : []),
+    ...(showActualAmount ? [{ key: "actualAmount" as const, width: COL_W.actualAmount }] : []),
+    ...(showActualSalary ? [{ key: "actualSalary" as const, width: COL_W.actualSalary }] : []),
+    { key: "units", width: COL_W.units },
+    ...(showTermSessions ? [{ key: "termSessions" as const, width: COL_W.termSessions }, { key: "diff" as const, width: COL_W.diff }] : []),
+  ];
   // 단가(티어) 미지정으로 정산에서 빠진 **반·학생 줄** — 「단가」 표식(합계 뱃지만으론 못 찾는다).
   // 🔴 학생 id가 아니라 **줄**(`classId|studentId`)로 가린다(원장 2026-09-18 제보) — 단가는 학생 × 반마다 따로라
   //    학생 id로 가리면 한 반만 비어도 그 학생의 모든 반 줄에 「단가」가 붙었다(표식이 실제보다 훨씬 많았다).
@@ -359,68 +406,96 @@ export function MatrixTable({
   const tableMinWidth =
     COL_W.name +
     COL_W.school +
+    (showPrice ? COL_W.unitPrice : 0) +
     (showClassBilled ? COL_W.classBilled : 0) +
+    (showActualAmount ? COL_W.actualAmount : 0) +
+    (showActualSalary ? COL_W.actualSalary : 0) +
     COL_W.units +
     (showTermSessions ? COL_W.termSessions + COL_W.diff : 0) +
-    days.length * COL_W.day +
-    COL_W.rate;
+    days.length * COL_W.day;
 
   return (
     // 격자가 **화면의 유일한 세로 스크롤**이다(scrollY) — 그래야 `thead sticky top-0`이 실제로 붙고
     // 스크롤바도 하나만 생긴다. 높이는 부모(page.tsx의 `min-h-0 flex-1`)가 정해 준다 — 상수·vh 계산 없음.
-    <div data-help="att-cell" className="h-full min-h-0">
+    <AttendanceColumns columns={optionalColumns} minWidth={tableMinWidth} dayCount={days.length} dayMinWidth={COL_W.day} lang={lang} extra={optionsExtra} leading={optionsLeading} tools={optionsTools}>
     <DragScrollArea pan={false} scrollY className="bg-card shadow-card h-full rounded-2xl">
-      <table className="w-full table-fixed border-collapse text-sm" style={{ minWidth: tableMinWidth }}>
+      <table className="table-fixed border-collapse text-sm" style={{ width: "calc(var(--att-full-width) - var(--att-hidden-width))", minWidth: `calc(${tableMinWidth}px - var(--att-hidden-width))` }}>
         {/* 열 폭의 단일 소스 — 셀의 `w-*`가 아니라 여기가 정한다(table-fixed). 접기와 무관하게 불변. */}
         <colgroup>
           <col style={{ width: COL_W.name }} />
-          <col style={{ width: COL_W.school }} />
-          {showClassBilled ? <col style={{ width: COL_W.classBilled }} /> : null}
-          <col style={{ width: COL_W.units }} />
-          {showTermSessions ? <col style={{ width: COL_W.termSessions }} /> : null}
-          {showTermSessions ? <col style={{ width: COL_W.diff }} /> : null}
+          <col data-att-column="school" style={{ width: COL_W.school }} />
+          {showPrice ? <col data-att-column="unitPrice" style={{ width: COL_W.unitPrice }} /> : null}
+          {showClassBilled ? <col data-att-column="classBilled" style={{ width: COL_W.classBilled }} /> : null}
+          {showActualAmount ? <col data-att-column="actualAmount" style={{ width: COL_W.actualAmount }} /> : null}
+          {showActualSalary ? <col data-att-column="actualSalary" style={{ width: COL_W.actualSalary }} /> : null}
+          <col data-att-column="units" style={{ width: COL_W.units }} />
+          {showTermSessions ? <col data-att-column="termSessions" style={{ width: COL_W.termSessions }} /> : null}
+          {showTermSessions ? <col data-att-column="diff" style={{ width: COL_W.diff }} /> : null}
           {days.map((d) => (
-            <col key={d.date} />
+            <col key={d.date} data-att-day={d.date} style={{ width: "var(--att-day-width, 22px)" }} />
           ))}
-          <col style={{ width: COL_W.rate }} />
         </colgroup>
         <thead>
           {/* 높이 고정 — 칸의 scroll-margin-top과 짝을 이룬다(cell-display.ts `HEAD_ROW_H` 주석). */}
           <tr className={HEAD_ROW_H}>
-            {/* 이름 열 머리는 본문 이름(왼쪽, flex)과 같은 축 — 칸 가운데에 머리만 서면 이름과 다른 자리에 선다(원장 2026-09-18). */}
+            {/* 🔴 제목행은 **전부 가운데**(원장 2026-09-21 *"제목행 가운데정렬"*) — 2026-09-18의 "머리는 본문 값과 같은 축"
+                (이름 왼쪽·금액 오른쪽)을 이 표에서 뒤집었다. 본문 값 정렬은 그대로다. */}
             <th
-              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-left whitespace-nowrap`}
+              className={`bg-bg-soft sticky top-0 left-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_RIGHT} px-2 py-1 text-center whitespace-nowrap`}
             >
               {/* 반 접기가 있는 보기에서만 — 별도 줄 없이 이름 열 머리에 얹는다. */}
               {showGroups ? <CollapseAllButton classIds={groups.map((g) => g.classId)} /> : null}
               <span className="micro">{t("att.col.name")}</span>
             </th>
             <th
+              data-att-column="school"
               className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1.5 py-1 text-center whitespace-nowrap`}
               title={t("att.col.schoolGradeTitle")}
             >
               <span className="micro font-bold">{t("att.col.schoolGrade")}</span>
             </th>
+            {showPrice ? (
+              <th
+                data-att-column="unitPrice"
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+                title={t("att.col.unitPriceTitle")}
+              >
+                <span className="micro font-bold">{t("att.col.unitPrice")}</span>
+              </th>
+            ) : null}
             {showClassBilled ? (
               <th
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+                data-att-column="classBilled"
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.classBilledTitle")}
               >
                 <span className="micro font-bold">{t("att.col.classBilled")}</span>
               </th>
             ) : null}
+            {showActualAmount ? <th data-att-column="actualAmount"
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+              title={t("att.col.actualAmountTitle")}>
+              <span className="micro font-bold">{t("att.col.actualAmount")}</span>
+            </th> : null}
+            {showActualSalary ? <th data-att-column="actualSalary"
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
+              title={t("att.col.actualSalaryTitle")}>
+              <span className="micro font-bold">{t("att.col.actualSalary")}</span>
+            </th> : null}
             {/* 수업 차수 = 출석부에서 센 시수(소비 상태 칸의 배수 합) · 등록 차수 = 회차 확정의 확정 시수(원장 2026-09-17).
                 청구액·수업 차수·등록 차수는 본문 값이 오른쪽 정렬이라 머리도 오른쪽(같은 축, 원장 2026-09-18). */}
             <th
               data-help="att-lesson-count"
-              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+              data-att-column="units"
+              className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
               title={t("att.col.lessonCountTitle")}
             >
               <span className="micro font-bold">{t("att.col.lessonCount")}</span>
             </th>
             {showTermSessions ? (
               <th
-                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-right whitespace-nowrap`}
+                data-att-column="termSessions"
+                className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.termSessionsTitle")}
               >
                 <span className="micro font-bold">{t("att.col.termSessions")}</span>
@@ -430,6 +505,7 @@ export function MatrixTable({
                 뺄 수가 없으면 열만 서고 전 행이 `—`가 된다. */}
             {showTermSessions ? (
               <th
+                data-att-column="diff"
                 className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} border-r px-1 py-1 text-center whitespace-nowrap`}
                 title={t("att.col.sessionDiffTitle")}
               >
@@ -443,7 +519,7 @@ export function MatrixTable({
                 return (
                   <th
                     key={d.date}
-                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[28px] border-r`}
+                    className={`bg-bg-soft border-line sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[22px] border-r`}
                     aria-hidden
                   />
                 );
@@ -480,19 +556,13 @@ export function MatrixTable({
                 <th
                   key={d.date}
                   title={holiday ?? undefined}
-                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[28px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
+                  className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[22px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
                 >
                   <div className="font-bold">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
                 </th>
               );
             })}
-            {/* 폰에서는 합계 열의 가로 고정을 푼다 — 이름·우측 합계가 날짜 칸 전체를 덮어 터치할 수 없었다. */}
-            <th
-              className={`bg-bg-soft sticky top-0 sm:right-0 ${HEAD_CORNER_Z} ${HEAD_UNDERLINE} ${EDGE_LEFT} w-[64px] min-w-[64px] px-2 py-2 text-center whitespace-nowrap`}
-            >
-              <span className="micro">{t("att.col.rate")}</span>
-            </th>
           </tr>
         </thead>
         {/* 반별이 아닌 정렬(가나다·학년·담임순)은 **반 구분을 없애고** 정렬된 순서 그대로 한 덩어리로.
@@ -512,9 +582,13 @@ export function MatrixTable({
                     matrix={g.matrix}
                     days={days}
                     holidays={holidays}
+                    confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    showActualAmount={showActualAmount}
+                    actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
                     classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
+                    noInvoice={noInvoiceRows?.get(rowKey(g.classId, s.id)) ?? null}
                     unitSuffix={g.unitSuffix ?? null}
                     noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                     lockBefore={lockBefore}
@@ -538,9 +612,13 @@ export function MatrixTable({
                 matrix={g.matrix}
                 days={days}
                 holidays={holidays}
+                confirmedPrices={showPrice ? confirmedPricesByRow?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                showActualAmount={showActualAmount}
+                actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
                 classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
+                noInvoice={noInvoiceRows?.get(rowKey(g.classId, s.id)) ?? null}
                 unitSuffix={g.unitSuffix ?? null}
                 noTransferBadge={noTransferBadge.has(transferRowKey(g.classId, s.id))}
                 lockBefore={lockBefore}
@@ -623,7 +701,13 @@ export function MatrixTable({
           <MatrixColumnTotalsRow
             rows={groups.flatMap((g) => g.matrix.students.map((s) => rowKey(g.classId, s.id)))}
             days={days}
+            showPrice={showPrice}
+            showActualAmount={showActualAmount}
+            pricesByRow={showActualAmount ? confirmedPricesByRow : undefined}
+            countsByRow={countByRow}
+            salaryRatesByRow={salaryRatesByRow}
             showClassBilled={showClassBilled}
+            billedColumnWidth={COL_W.classBilled}
             showTermSessions={showTermSessions}
             billedByRow={billedView}
             termByRow={termView}
@@ -632,7 +716,7 @@ export function MatrixTable({
             lang={lang}
           />
           <tr className="bg-bg-soft">
-            <td colSpan={colSpan} className="border-line border-t p-0">
+            <AttendanceColSpan colSpan={colSpan} className="border-line border-t p-0">
               {/* 검색이 걸리면 이 줄의 숫자가 **전부 검색 기준**이 된다(클라 — totals-row.tsx). */}
               {groups.length > 1 ? (
                 <MatrixTotalsSummary
@@ -640,6 +724,7 @@ export function MatrixTable({
                   fallback={totalCount}
                   countByRow={countByRow}
                   money={money}
+                  showLegacySettlement={!(showActualAmount && (salaryView || showActualSalary))}
                   moneyNote={moneyNote}
                   trailing={<ControlGuide countByRow={countByRow} fallback={totalCount} lang={lang} />}
                 />
@@ -648,12 +733,12 @@ export function MatrixTable({
                   <ControlGuide countByRow={countByRow} fallback={totalCount} lang={lang} />
                 </StickyFitRow>
               )}
-            </td>
+            </AttendanceColSpan>
           </tr>
         </tfoot>
       </table>
     </DragScrollArea>
-    </div>
+    </AttendanceColumns>
   );
 }
 

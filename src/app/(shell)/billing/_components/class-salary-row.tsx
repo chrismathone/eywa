@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { saveClassSalary, type SaveClassSalaryState } from "@/features/payroll/server/class-salary-actions";
 import { SALARY_GROUPS } from "@/features/payroll/salary-group";
 import { formatDowKeys } from "@/features/payroll/apportion";

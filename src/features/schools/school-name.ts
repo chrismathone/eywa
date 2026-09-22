@@ -1,14 +1,14 @@
 /**
- * 학교명 정규화 — 학교알리미 공시명("대구칠성초등학교")과 eywa 입력값("칠성초")을 **같은 키**로 만든다.
+ * 학교명 정규화 — 학교알리미 공시명("대구칠성초등학교")과 aywa 입력값("칠성초")을 **같은 키**로 만든다.
  *
  * 두 소스를 잇는 키가 이름뿐이라 이 함수가 곧 매칭 정확도다. 학교코드는 못 쓴다:
  * 학교알리미 `정보공시 학교코드`(S000003493) ≠ NEIS `SD_SCHUL_CODE`(7261042)로 서로 다른 체계다.
  *
  * 🔴 치환 순서가 규칙이다. `여자중학교`를 `중학교`보다 **먼저** 지워야 한다 — 반대로 하면
- * "경명여자중학교"가 "경명여자"가 되어 eywa의 "경명여중"과 영영 안 붙는다(실측: 여학교 6종
+ * "경명여자중학교"가 "경명여자"가 되어 aywa의 "경명여중"과 영영 안 붙는다(실측: 여학교 6종
  * 23+12+6+4+1+1 = 47명이 통째로 매칭에서 빠졌던 원인).
  *
- * ⚠️ 지역 접두("대구")도 지운다 — eywa엔 같은 학교가 "일중"(15명)과 "대구일중"(24명) 두 표기로
+ * ⚠️ 지역 접두("대구")도 지운다 — aywa엔 같은 학교가 "일중"(15명)과 "대구일중"(24명) 두 표기로
  * 들어가 있어 점유율이 1.5%/2.5%로 쪼개지고 있었다. 지우면 둘 다 "일중"으로 합쳐진다(39명=4.0%).
  * 과거 데이터를 고치지 않고 읽는 쪽에서 흡수하는 방식이라 되돌릴 수 있다.
  *
@@ -83,7 +83,14 @@ export function normalizeSchoolName(raw: string | null | undefined): string {
  *    둘이 싸우지 않는다 — 저장이 `대구일중`이어도 매칭 키는 여전히 `일중`이다.
  * 🔴 추측을 넣지 말 것. 원장이 확정한 것만.
  */
-const SAVE_ALIASES: Record<string, string> = { 일중: "대구일중" };
+export type SchoolSaveAlias = { from: string; to: string };
+
+/**
+ * 첫 학원(침산)의 저장 별칭 — 🔴 **학원설정 값**(`operations.schoolSaveAliases`)이 진실이고, 이 상수는 침산 프리셋
+ * 기본값의 원본일 뿐이다(defaults.ts). 새 학원(일반판)은 빈 목록이라 `일중`을 `대구일중`으로 바꾸지 않는다
+ * (다른 지역의 '일중'까지 대구로 저장되던 것 — 2026-09-22 일반판 분리).
+ */
+export const CHINSAN_SCHOOL_SAVE_ALIASES: readonly SchoolSaveAlias[] = [{ from: "일중", to: "대구일중" }];
 
 /**
  * **저장할 학교 표기**로 강제 정규화 — 화면·DB에 남는 값이 이 함수를 통과한 형태 하나뿐이게 한다.
@@ -103,11 +110,16 @@ const SAVE_ALIASES: Record<string, string> = { 일중: "대구일중" };
  *    지워도 되지만(비교용, 원본 보존) 저장 표기는 사람이 읽는 값이라 안 된다.
  * ⚠️ 빈 값은 `null`(빈 문자열로 저장하지 않는다 — 소비처가 전부 null 폴백을 쓴다).
  */
-export function canonicalSchoolName(raw: string | null | undefined): string | null {
+export function canonicalSchoolName(
+  raw: string | null | undefined,
+  // 🔴 앱 코드는 **학원설정 값을 반드시 넘긴다**(`settings.operations.schoolSaveAliases`) — 기본값은 테스트용 침산 목록이다.
+  //    가드(school-alias-wiring.test.ts)가 두 번째 인자를 빼먹은 호출을 잡는다.
+  aliases: readonly SchoolSaveAlias[] = CHINSAN_SCHOOL_SAVE_ALIASES,
+): string | null {
   const s = String(raw ?? "").trim();
   if (!s) return null;
   const compressed = applySuffix(s);
-  return SAVE_ALIASES[compressed] ?? compressed;
+  return aliases.find((a) => a.from === compressed)?.to ?? compressed;
 }
 
 /** 정규화 키가 학교 이름 꼴인가(= 급으로 끝나고, 급만 있는 게 아닌가). */

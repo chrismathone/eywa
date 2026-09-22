@@ -663,7 +663,7 @@ export type TrendDataScope = { attendance?: boolean; billing?: boolean };
  *
  * 왜 캐시인가: 이 한 함수가 **출결 7일 전건 + 겹치는 청구월 invoices 전건**(`line_items` jsonb 포함)을
  * 끌어온다 — 실측 규모로 대략 3,000~4,000행이고 이 페이지에서 바이트가 가장 큰 조회다. 게다가
- * eywa는 **창(iframe)마다 셸+페이지가 다시 도는 구조**라 창 N개면 N배고, 운영실은 5분마다 스스로
+ * aywa는 **창(iframe)마다 셸+페이지가 다시 도는 구조**라 창 N개면 N배고, 운영실은 5분마다 스스로
  * `router.refresh()`까지 한다(하루 90여 회). 7일 추세선에 초 단위 신선도는 필요 없다.
  *
  * 🔴 **호출 전에 권한을 확인할 것** — 캐시 안에서 admin 클라이언트를 쓰므로 RLS를 타지 않는다
@@ -812,7 +812,7 @@ export function dashboardWidgetsTag(tenantId: string): string {
  *
  * 왜 캐시인가(실측 2026-08-13): 이 두 RPC는 **RLS 경로에서 70~90배 비싸다** — 직접 실행 0.1~1.3ms인데
  * authenticated 롤로는 86ms·103ms(콜드 454ms·241ms)다. 게이트 함수(`auth_billing_can_read` 등)가
- * 표마다 붙는 값이라 쿼리를 더 조여도 안 줄어든다. 게다가 eywa는 **창(iframe)마다 셸+페이지가 다시
+ * 표마다 붙는 값이라 쿼리를 더 조여도 안 줄어든다. 게다가 aywa는 **창(iframe)마다 셸+페이지가 다시
  * 도는 구조**라 창 N개면 N배로 든다. 59일 실측 총합 **48분+26분**이 이 둘이었다.
  * 60초 TTL이면 창을 몇 개를 띄우든 1분에 한 번만 돈다. 미수·결석 위험은 초 단위 신선도가 필요 없다.
  */

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, TriangleAlert } from "@/components/icons/eywa-icon-compat";
+import { Loader2, TriangleAlert } from "@/components/icons/aywa-icon-compat";
 import { savePeriodsForSubject } from "@/features/periods/server/actions";
 import { parsePeriodLines, formatPeriodLines } from "@/features/periods/parse";
 import { suggestEndDate, verifyPeriodShape } from "@/features/periods/verify";

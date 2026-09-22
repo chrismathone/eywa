@@ -2,7 +2,7 @@
 
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { SUBJECT_SOFT, type SubjectMaps } from "@/features/owner/subjects";
-import type { DayOfWeek, PeriodsConfig } from "@/features/timetable/lib/periods";
+import { isPerPeriodSubject, type DayOfWeek, type PeriodsConfig } from "@/features/timetable/lib/periods";
 import {
   buildSubjectPeriodGrid,
   type GridRowMode,
@@ -14,6 +14,8 @@ import {
   periodRowHeightsForGrid,
   sumSpan,
 } from "@/features/students/lib/week-grid-row-height";
+// LAB '따로 수업(*LAB)' 표식 — 시간표와 같은 글자·모양(단일 소스).
+import { LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS, LAB_SEPARATE_TIP } from "@/features/timetable/lib/lab-separate";
 
 const DAY_KO: Record<DayOfWeek, string> = {
   mon: "월", tue: "화", wed: "수", thu: "목", fri: "금", sat: "토", sun: "일",
@@ -55,10 +57,10 @@ export function StudentPeriodGrid({
     <DragScrollArea>
       <div className="flex items-start gap-4">
         {hasWeekday ? (
-          <PeriodTable grid={weekday} subject={subject} weekend={false} cellColor={cellColor} tableHeight={tableHeight} />
+          <PeriodTable grid={weekday} weekend={false} cellColor={cellColor} tableHeight={tableHeight} perPeriod={isPerPeriodSubject(subject, config)} />
         ) : null}
         {hasWeekend ? (
-          <PeriodTable grid={weekend} subject={subject} weekend cellColor={cellColor} tableHeight={tableHeight} />
+          <PeriodTable grid={weekend} weekend cellColor={cellColor} tableHeight={tableHeight} perPeriod={isPerPeriodSubject(subject, config)} />
         ) : null}
       </div>
     </DragScrollArea>
@@ -67,22 +69,23 @@ export function StudentPeriodGrid({
 
 function PeriodTable({
   grid,
-  subject,
   weekend,
   cellColor,
   tableHeight,
+  perPeriod,
 }: {
   grid: SubjectPeriodGrid;
-  subject: string;
   weekend: boolean;
   cellColor: string;
   tableHeight: number;
+  /** 교시마다 한 줄인 과목(영어·새 학원 일반판) — 두 교시 묶음 라벨을 안 쓴다(periods.ts isPerPeriodSubject). */
+  perPeriod: boolean;
 }) {
   const { days, rows, cellAt, blocks } = grid;
   // 칸 내용(반·담당/자리·방)이 들어가게 행을 키운 뒤, 카드 총높이(tableHeight)까지 남는 세로만 나눈다.
   const heights = periodRowHeightsForGrid(grid, tableHeight);
   // 수학계열(평일·비영어)만 2교시 묶음 라벨(1교시=1·2교시 …). 영어·주말·폴백은 개별 교시 라벨.
-  const isMathFamily = !weekend && subject !== "english";
+  const isMathFamily = !weekend && !perPeriod;
   const labelCls = `bg-bg-soft/70 text-foreground ${GRID} border-b border-r px-2 py-1 align-top text-xs font-bold whitespace-nowrap`;
   return (
     <table className={`border-collapse border ${GRID} text-sm`} style={{ tableLayout: "fixed" }}>
@@ -172,8 +175,14 @@ function PeriodTable({
                         {/* 🔴 자리(LAB·JJ) 교시는 **사람이 아니라 방**이다 — 이름 자리에 자리 이름을 적고
                             테두리 알약으로 사람과 구분한다(원장 2026-09-07 "JJ실도 있을텐데 표현 제대로"). */}
                         {c.seat ? (
-                          <span className="border-line text-text-dim mt-0.5 w-fit rounded-full border px-1 text-xs">
-                            {c.seat}
+                          // '따로 수업(*LAB)' 교시면 시간표와 **같은 글자·같은 모양**(`*LAB` 이탤릭+밑줄, 0271a).
+                          <span
+                            className={`border-line text-text-dim mt-0.5 w-fit rounded-full border px-1 text-xs${
+                              c.labSeparate ? ` ${LAB_SEPARATE_TEXT_CLASS}` : ""
+                            }`}
+                            title={c.labSeparate ? LAB_SEPARATE_TIP : undefined}
+                          >
+                            {c.labSeparate ? LAB_SEPARATE_LABEL : c.seat}
                           </span>
                         ) : c.teacherName ? (
                           <span className="text-text-dim mt-0.5 text-xs">{c.teacherName}</span>

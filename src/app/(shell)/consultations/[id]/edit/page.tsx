@@ -9,7 +9,7 @@ import { getTeacherOptions } from "@/features/students/server/queries";
 import { ConsultationForm } from "../../_components/consultation-form";
 import { ConsultationDeleteButton } from "../../_components/consultation-delete-button";
 
-export const metadata = { title: "상담 수정 — eywa" };
+export const metadata = { title: "상담 수정 — aywa" };
 
 export default async function EditConsultationPage({
   params,

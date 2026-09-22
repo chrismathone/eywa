@@ -3,7 +3,7 @@ import { formatKoreanDateLong } from "@/lib/date-kst";
 import { PageHeader } from "@/components/page-header";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { ClipboardCheck } from "@/components/icons/eywa-icon-compat";
+import { ClipboardCheck } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import {
   ABSENT_STATUS_LABEL,

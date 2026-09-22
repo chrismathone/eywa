@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { Check, ExternalLink, Loader2, TriangleAlert } from "@/components/icons/eywa-icon-compat";
+import { Check, ExternalLink, Loader2, TriangleAlert } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { WindowLink } from "@/components/workspace/window-link";

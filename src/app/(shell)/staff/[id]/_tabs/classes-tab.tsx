@@ -2,7 +2,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { Pill } from "@/components/atoms/pill";
 import { EmptyState } from "@/components/empty-state";
-import { GraduationCap } from "@/components/icons/eywa-icon-compat";
+import { GraduationCap } from "@/components/icons/aywa-icon-compat";
 import { getStaffClasses, type WorkDay } from "@/features/staff/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";

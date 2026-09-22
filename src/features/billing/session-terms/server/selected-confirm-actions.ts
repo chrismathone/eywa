@@ -9,7 +9,9 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isEieMonthlyClass, sessionPricingAmount, validSessionQuantity, type SessionPricingMode } from "@/features/billing/session-pricing";
 import { monthRange } from "../plan";
+import { isVirtualTermId } from "../month-roster";
 import type { SessionTermPatch } from "./actions";
+import { materializeVirtualTerms } from "./term-materialize";
 
 /** `monthly` = 화면이 이 행을 EiE 월 정액으로 보고 있었는가(서버 판정과 다르면 그 행은 쓰지 않는다). */
 export type SelectedTermInput = { id: string; sessions: number; unitPrice: number; monthly: boolean };
@@ -44,12 +46,15 @@ type TermRow = {
  * 🔴 이 반·이 청구월의 행만 쓴다 — 화면이 보낸 id라도 다른 반·다른 달이면 무시한다(#77).
  * 🔴 한 명이 DB 규칙(예: 배분금액이 있는 반을 0시수로 확정 — 0267b 트리거)에 걸려도 **나머지는 확정**한다 — 묶음이 실패하면
  *    한 명씩 다시 써서 걸린 사람만 골라내고, 그 사유를 그대로 돌려준다(같은 묶음 전체가 영원히 실패하던 결함).
+ * 🔴 **가상 id**(출석부 줄인데 회차 행이 없는 학생, 원장 2026-09-18)는 먼저 행을 만들고(`term-materialize.ts` — 반이 이 반인지·
+ *    그 달 줄 집합에 있는지·청구서가 살아 있는지 서버가 다시 본다) 실 id로 확정한다. 못 만든 학생은 실패 목록에 **가상 id 그대로**
+ *    남긴다(화면 선택이 그 행에 남아 고쳐서 다시 누를 수 있다). 응답 `created`가 0보다 크면 화면은 새로고침한다.
  */
 export async function confirmSelectedTerms(
   period: string,
   classId: string,
   items: SelectedTermInput[],
-): Promise<{ error?: string; confirmed?: number; skipped?: number; failedIds?: string[]; terms?: SessionTermPatch[] }> {
+): Promise<{ error?: string; confirmed?: number; skipped?: number; created?: number; materialized?: number; failedIds?: string[]; terms?: SessionTermPatch[] }> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
@@ -67,9 +72,28 @@ export async function confirmSelectedTerms(
   }
 
   const supabase = await createClient();
+  const failures: { id: string; reason: string }[] = [];
+  // 가상 id → 실 행. 실패는 가상 id 그대로 실패 목록에.
+  let created = 0;
+  let materialized = 0;
+  const realOf = new Map<string, string>();
+  const virtualIds = items.map((i) => i.id).filter(isVirtualTermId);
+  if (virtualIds.length > 0) {
+    const made = await materializeVirtualTerms(supabase, { tenantId: user.tenantId, period, reason: "confirm_selected", classId }, virtualIds);
+    if (made.error) return { error: made.error };
+    created = made.created;
+    materialized = made.ids.size;
+    for (const [virtualId, realId] of made.ids) realOf.set(virtualId, realId);
+    for (const [virtualId, reason] of made.failed) failures.push({ id: virtualId, reason });
+  }
+  const failedVirtual = new Set(failures.map((f) => f.id));
+  const resolved = items.filter((i) => !failedVirtual.has(i.id)).map((i) => ({ ...i, id: realOf.get(i.id) ?? i.id }));
+  /** 실 id → 화면이 보낸 id(가상이면 가상 id) — 실패 목록은 화면이 아는 id로 돌려준다. */
+  const sentIdOf = new Map(items.map((i) => [realOf.get(i.id) ?? i.id, i.id]));
+
   let rows: TermRow[];
   try {
-    rows = await fetchInChunks<TermRow>([...ids], (chunk) =>
+    rows = await fetchInChunks<TermRow>(resolved.map((i) => i.id), (chunk) =>
       supabase
         .from("invoice_session_terms")
         .select("id, subject, confirmed_sessions, class:class_id ( english_track ), invoice:invoice_id!inner ( period )")
@@ -88,14 +112,13 @@ export async function confirmSelectedTerms(
   }
   const monthlyPrice = [...modeById.values()].includes("monthly") ? (await getTenantSettings()).billing.eieMonthlyPrice : null;
 
-  const failures: { id: string; reason: string }[] = [];
   // 같은 단위·시수·단가끼리 묶어 쓴다(금액이 같아 한 번의 update로 끝난다).
   const groups = new Map<string, { mode: SessionPricingMode; sessions: number; unitPrice: number; ids: string[] }>();
-  for (const item of items) {
+  for (const item of resolved) {
     const mode = modeById.get(item.id);
     if (!mode) continue; // 이미 확정됐거나 이 반·이 달의 행이 아니다(건너뜀)
     if ((mode === "monthly") !== item.monthly) {
-      failures.push({ id: item.id, reason: "반의 수강료 방식이 바뀌었습니다. 새로고침한 뒤 다시 확정해 주세요" });
+      failures.push({ id: sentIdOf.get(item.id) ?? item.id, reason: "반의 수강료 방식이 바뀌었습니다. 새로고침한 뒤 다시 확정해 주세요" });
       continue;
     }
     const unitPrice = mode === "monthly" ? monthlyPrice! : Math.round(item.unitPrice);
@@ -138,12 +161,12 @@ export async function confirmSelectedTerms(
       }
       // 묶음이 실패하면(한 문장이라 한 명만 걸려도 전부 롤백) 한 명씩 다시 써서 걸린 사람만 골라낸다.
       if (chunk.length === 1) {
-        failures.push({ id: chunk[0]!, reason: reasonOf(error.message) });
+        failures.push({ id: sentIdOf.get(chunk[0]!) ?? chunk[0]!, reason: reasonOf(error.message) });
         continue;
       }
       for (const id of chunk) {
         const one = await write([id]);
-        if (one.error) failures.push({ id, reason: reasonOf(one.error.message) });
+        if (one.error) failures.push({ id: sentIdOf.get(id) ?? id, reason: reasonOf(one.error.message) });
         else record(one.data);
       }
     }
@@ -159,13 +182,15 @@ export async function confirmSelectedTerms(
         action: "session_term_confirm_selected",
         targetType: "invoice_session_term",
         targetLabel: `${period} 선택 일괄 확정`,
-        metadata: { period, classId, confirmedCount: terms.length, skipped, failedCount: failures.length, items: logged },
+        metadata: { period, classId, confirmedCount: terms.length, skipped, failedCount: failures.length, items: logged, ...(created ? { createdRows: created } : {}) },
       });
     });
   }
+  // `materialized` > 0 = 가상 줄이 실제 행이 됐다(확정 쓰기가 실패한 줄도) → 화면이 새로 읽어 갈아끼운다.
+  const createdPart = { ...(created ? { created } : {}), ...(materialized ? { materialized } : {}) };
   if (failures.length) {
-    return { confirmed: terms.length, skipped, failedIds, terms, error: `${failures.length}명은 확정하지 못했습니다 — ${failures[0]!.reason}` };
+    return { confirmed: terms.length, skipped, failedIds, terms, ...createdPart, error: `${failures.length}명은 확정하지 못했습니다 — ${failures[0]!.reason}` };
   }
-  if (terms.length === 0) return { error: "선택한 학생이 이미 확정됐거나 이 반에 없습니다", confirmed: 0, skipped, failedIds, terms };
-  return { confirmed: terms.length, skipped, failedIds, terms };
+  if (terms.length === 0) return { error: "선택한 학생이 이미 확정됐거나 이 반에 없습니다", confirmed: 0, skipped, failedIds, terms, ...createdPart };
+  return { confirmed: terms.length, skipped, failedIds, terms, ...createdPart };
 }

@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Check, GripVertical, Loader2, Pencil, X } from "@/components/icons/eywa-icon-compat";
+import { Check, GripVertical, Loader2, Pencil, X } from "@/components/icons/aywa-icon-compat";
 import {
   moveEnrollmentsBatch,
   updateEnrollmentsAttendanceBatch,

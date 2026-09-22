@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Sparkles, User, UserCheck } from "@/components/icons/eywa-icon-compat";
+import { LogOut, Sparkles, User, UserCheck } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
 import {

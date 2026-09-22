@@ -10,6 +10,8 @@ import {
   type MeetingReport,
 } from "@/features/meetings/server/ai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { reportError } from "@/lib/observability/report-error";
 import { analyzeStudentConsultation } from "@/features/consultations/server/ai";
 import { extractConsultationForm } from "@/features/enrollment/server/form-extract";
@@ -174,7 +176,7 @@ export async function POST(req: Request) {
   const { data: sc } = await admin
     .from("student_consultations")
     .select(
-      "id, processing_status, consulted_at, audience, category, student:student_id ( name, grade, school )",
+      "id, tenant_id, processing_status, consulted_at, audience, category, student:student_id ( name, grade, school )",
     )
     .eq("assemblyai_transcript_id", transcriptId)
     .maybeSingle();
@@ -283,6 +285,7 @@ async function handleMeeting(
       heldAt,
       attendees,
       notepad: meeting.content,
+      tenantId: meeting.tenant_id,
     });
     report = result.report;
     speakerRoles = result.speakerRoles;
@@ -630,7 +633,7 @@ async function analyzeConsultationAndPersist(
   const [analysisRes, extractRes] = await Promise.allSettled([
     generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
       maxTokens: 8192,
-      meta: { feature: "enrollment_analysis" },
+      meta: { feature: "enrollment_analysis", tenantId: consult.tenant_id },
       // 전사 분석 기본 = DeepSeek v4-pro(2026-07-16). 재분석(runConsultationAnalysis)과 동일 라우팅. 키 없으면 폴백.
       provider: "deepseek",
       prompt: [
@@ -719,6 +722,7 @@ async function analyzeConsultationAndPersist(
       studentName: consult.prospect_name,
       grade: consult.prospect_grade,
       school: consult.prospect_school,
+      tenantId: consult.tenant_id,
     }),
   ]);
 
@@ -871,9 +875,14 @@ async function analyzeConsultationAndPersist(
       subjectDetails: cur?.subject_details,
     };
     // 후보정 하네스에 전사·학생명 전달 → 환각 고유명사·학생이름 echo 차단(약한 모델 방어).
+    // 학교명 저장 별칭은 그 상담 학원의 설정 값(침산 = 일중→대구일중, 새 학원 = 없음). 조회 자체가 던지면
+    // 이 작업 전과 같은 별칭(침산 목록)으로 — 웹훅을 멈출 이유가 아니고, 침산은 실패해도 종전과 같아야 한다.
+    const schoolAliases = await getTenantSettingsByTenantId(consult.tenant_id)
+      .then((s) => s.operations.schoolSaveAliases)
+      .catch(() => CHINSAN_SCHOOL_SAVE_ALIASES);
     Object.assign(
       patch,
-      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted }),
+      buildFormPatch(extracted, current, { studentName: consult.prospect_name, transcript: formatted, schoolAliases }),
     );
   }
 
@@ -894,6 +903,7 @@ async function handleStudentConsultation(
   transcriptId: string,
   sc: {
     id: string;
+    tenant_id: string | null;
     consulted_at: string | null;
     audience: string | null;
     category: string | null;
@@ -966,6 +976,7 @@ async function handleStudentConsultation(
       consultedAt: sc.consulted_at,
       audience: sc.audience,
       category: sc.category,
+      tenantId: sc.tenant_id,
     });
     await runWrite(
       "studentConsultation.completed",

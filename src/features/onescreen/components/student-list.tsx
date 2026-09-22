@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";

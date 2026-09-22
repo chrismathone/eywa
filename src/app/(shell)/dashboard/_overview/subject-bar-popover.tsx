@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { number } from "./charts";
 import s from "./overview.module.css";
 

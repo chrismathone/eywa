@@ -29,6 +29,14 @@ export type LeaveAdjustmentRow = {
   createdAt: string;
   /** 기록한 관리자 이름. 계정이 지워졌거나 조회 실패면 null(모르면 지어내지 않는다). */
   createdByName: string | null;
+  /**
+   * 실제 휴가 **사용 기간**(0270b) — 차감 행에만 적는다. 시작만 있으면 하루이고, 둘 다 null이면 안 적은
+   * 것이다(부여 행·칸 미적용 창이 그렇다 — 화면은 그 자리를 비운다).
+   * 🔴 이 값은 **기록·표시용**이고 잔여 산식에 들어가지 않는다 — 차감은 `days`가 이미 한다.
+   *    기간을 '사용'으로 또 세면 같은 연차가 두 번 깎인다.
+   */
+  usedStart: string | null;
+  usedEnd: string | null;
 };
 
 /** 한 줄이 어느 구간의 것인지 판정할 때 쓰는 창(저장 시점의 연차 구간). */

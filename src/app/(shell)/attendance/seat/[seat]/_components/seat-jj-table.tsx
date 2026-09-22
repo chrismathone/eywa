@@ -54,11 +54,21 @@ export type SeatPlanContext = {
 
 /**
  * 수업계획 구획의 **접힘** — '전체' 보기에서만 온다(없으면 늘 펼친 채 = 교시 하나 보기, 종전 그대로).
- * 🔑 `mounted`는 한 번 펼친 뒤로 계속 참이다 — 접을 때 블록을 **내리지 않고 감추기만** 한다.
+ * 🔴 **반마다 따로**다(원장 2026-09-18 *"각각의 수업이 펼치기 접기가 되어야함. 당일"*) — 교시 한 덩어리로 묶으면
+ *    한 반의 계획을 보려고 그 교시 반 전부를 펴야 한다.
+ * 🔑 `mountedOf`는 한 번 펼친 뒤로 계속 참이다 — 접을 때 블록을 **내리지 않고 감추기만** 한다.
  *    내렸다가 다시 올리면 블록이 첫 화면의 서버 줄(`initialLines`)로 되살아나 방금 고친 칸이 옛 값으로
  *    보이고, 그 옛 값이 CAS 기대값이 되어 다음 입력이 거짓 충돌로 뜬다(`SlotPlanBlock` 머리 주석 ⚠️).
  */
-export type SeatPlanFold = { open: boolean; mounted: boolean };
+export type SeatPlanFold = {
+  /** 이 반의 계획이 지금 펼쳐져 있나. */
+  openOf: (classId: string) => boolean;
+  /** 이 반의 블록을 한 번이라도 올렸나 — 올린 적 없으면 그리지 않는다(저널·저장 큐·presence가 블록마다 붙는다). */
+  mountedOf: (classId: string) => boolean;
+  /** 이 반의 계획 저장 충돌 수 — 접힌 버튼이 그 수를 붉게 말한다(접힌 채 두면 저장이 멈춘 걸 아무도 모른다). */
+  conflictsOf: (classId: string) => number;
+  toggle: (classId: string) => void;
+};
 
 type JjTableProps = {
   rosters: SeatClassRoster[];
@@ -95,14 +105,16 @@ export function SeatJjTable(props: JjTableProps) {
   const anyPlan = props.rosters.some((r) => props.plan?.plans[r.classId]);
   return (
     /**
-     * 🔴 **속살까지 줄맞춤 = `grid-rows-subgrid`**(원장 2026-09-10 ⑦: 세 카드의 수업계획 블록 높이가
-     *    달라 아래 표 머리가 서로 다른 높이에서 시작했다). 카드마다 계획 줄 수·presence 배지가 달라서
-     *    높이만 맞추면(items-stretch) 안쪽 구획이 그대로 어긋난다 — 행을 셋(머리·계획·표)으로 못박고
-     *    카드가 그 행을 **물려받는다**.
-     * ⚠️ `items-start`를 쓰면 안 된다 — 카드가 내용 높이로 줄어들어 행을 안 채우고 줄맞춤이 죽는다.
+     * 두 배치가 있다 — 어느 쪽인지는 `planFold`(접을 수 있는 보기인가)가 정한다.
+     * ① 접기가 없는 보기(교시 하나·공개 PIN): **속살까지 줄맞춤 = `grid-rows-subgrid`**(원장 2026-09-10 ⑦: 세 카드의
+     *    수업계획 블록 높이가 달라 아래 표 머리가 서로 다른 높이에서 시작했다). 행을 셋(머리·계획·표)으로 못박고 카드가
+     *    그 행을 물려받는다. 이 배치에서 `items-start`를 쓰면 카드가 내용 높이로 줄어들어 줄맞춤이 죽는다.
+     * ② 접을 수 있는 보기('전체', 반마다 접는다 — 원장 2026-09-18): **줄맞춤을 쓰지 않는다**(`items-start`). 행 높이가
+     *    열끼리 묶이면 한 반만 폈을 때 나머지 카드의 계획 행이 펼친 높이만큼 **빈 칸**으로 남는다. 접힌 카드는 제 높이로
+     *    선다(다 접힌 기본 상태에선 카드 모양이 같아 저절로 맞는다).
      */
     <div
-      className="grid grid-rows-[auto_auto_auto] gap-3 overflow-x-auto"
+      className={`grid gap-3 overflow-x-auto ${props.planFold ? "items-start" : "grid-rows-[auto_auto_auto]"}`}
       style={{
         gridTemplateColumns: jjClassColumns(
           props.rosters.length,
@@ -186,8 +198,15 @@ function SeatJjClass({
         onConflicts={onPlanConflicts ? handleConflicts : undefined}
       />
     ) : null;
+  const planOpen = planFold ? planFold.openOf(classId) : true;
+  const planConflictN = planFold ? planFold.conflictsOf(classId) : 0;
   return (
-    <section className="border-line row-span-3 grid min-w-0 grid-rows-subgrid overflow-hidden rounded-2xl border">
+    <section
+      // ⚠️ `gap-3` — subgrid는 부모 격자의 12px 간격을 물려주지만 flex는 안 준다(재리뷰 2026-09-18: 카드 안 간격이 0이 됐다).
+      className={`border-line min-w-0 overflow-hidden rounded-2xl border ${
+        planFold ? "flex flex-col gap-3" : "row-span-3 grid grid-rows-subgrid"
+      }`}
+    >
       <header className="bg-bg-soft border-line flex flex-wrap items-center gap-2 border-b px-3 py-1.5 text-sm">
         <span className="min-w-0 truncate font-bold" title={r.className}>
           {r.className}
@@ -218,17 +237,51 @@ function SeatJjClass({
           권한이 없는 반은 `plan.plans[classId]`가 없어 이 구획 자체가 안 생긴다. */}
       {planBlock ? (
         planFold ? (
-          // 🔴 접혀도 **이 행 자리는 남긴다**(바깥 div) — 비면 표가 계획 행으로 올라와 옆 카드와 어긋난다.
-          //    감추기는 안쪽 div에만(`hidden`) — 한 번 올린 블록은 내리지 않는다(`SeatPlanFold` 주석).
-          <div className="min-w-0">
-            {planFold.mounted ? <div hidden={!planFold.open}>{planBlock}</div> : null}
+          /**
+           * 접는 배치 — 계획 자리에 **가로로 긴 접기 줄**을 두고 그 아래에 블록을 편다(원장 2026-09-18 *"각각의 수업이
+           * 펼치기 접기가 되어야함"* · *"펼치기가 어딨어?"*). 🔴 머리에 버튼으로 넣지 않는다 — 머리는 반 이름·인원·ECS·
+           * '이 반 출석'으로 이미 빠듯해 버튼 하나에 두 줄로 꺾이고(재리뷰 2026-09-18), 같은 이름의 버튼이 교시×반만큼
+           * 서서 어느 반인지 못 가른다(그래서 접근 이름에 반 이름을 붙인다).
+           * 🔴 감추기는 안쪽 div에만(`hidden`) — 한 번 올린 블록은 내리지 않는다(`SeatPlanFold` 주석).
+           */
+          <div className="-mt-3 min-w-0">
+            <button
+              type="button"
+              aria-expanded={planOpen}
+              // 접근 이름 = 화면 글자 + 반 이름(WCAG 2.5.3 — 충돌 건수도 이름에 싣는다, 재리뷰 2026-09-18).
+              aria-label={`${r.className} 수업계획 ${planOpen ? "접기" : "펼치기"}${
+                !planOpen && planConflictN > 0 ? ` · 저장 충돌 ${planConflictN}건` : ""
+              }`}
+              onClick={() => planFold.toggle(classId)}
+              title={
+                planOpen
+                  ? "이 반의 수업계획을 접습니다 — 적어 둔 내용은 그대로입니다"
+                  : planConflictN > 0
+                    ? "수업계획에 저장이 멈춘 칸이 있습니다 — 펼쳐서 충돌한 칸의 서버값/내 값을 고르세요"
+                    : "이 반의 수업계획을 펼칩니다"
+              }
+              // `-outline-offset-2` — 카드가 `overflow-hidden`이라 밖으로 나가는 포커스 링은 좌우가 잘린다.
+              className={`border-line flex w-full items-center justify-between border-b px-3 py-1 text-xs font-semibold focus-visible:-outline-offset-2 ${
+                planOpen ? "bg-bg-soft text-text-dim" : planConflictN > 0 ? "bg-card text-danger" : "bg-card text-primary"
+              }`}
+            >
+              <span>
+                {planOpen
+                  ? "수업계획 접기"
+                  : planConflictN > 0
+                    ? `수업계획 펼치기 · 저장 충돌 ${planConflictN}건`
+                    : "수업계획 펼치기"}
+              </span>
+              <span aria-hidden="true">{planOpen ? "▴" : "▾"}</span>
+            </button>
+            {planFold.mountedOf(classId) ? <div hidden={!planOpen}>{planBlock}</div> : null}
           </div>
         ) : (
           planBlock
         )
-      ) : (
-        // 🔴 계획 구획이 없는 카드도 **그 행을 차지해야** 한다 — 안 그러면 표가 계획 행으로 올라와
-        //    옆 카드와 다시 어긋난다(권한 없는 반·랩실이 그 경우다).
+      ) : planFold ? null : (
+        // 🔴 줄맞춤 배치에선 계획 구획이 없는 카드도 **그 행을 차지해야** 한다 — 안 그러면 표가 계획 행으로 올라와
+        //    옆 카드와 다시 어긋난다(권한 없는 반·랩실이 그 경우다). 접는 배치(flex)엔 행이 없어 자리를 안 만든다.
         <div />
       )}
       <table className="w-full table-fixed border-collapse text-sm [&_tr>*:not(:first-child)]:border-l [&_tr>*:not(:first-child)]:border-[var(--line-faint)]">

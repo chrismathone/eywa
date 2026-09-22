@@ -74,7 +74,7 @@ export function JjLinkPanel({ rows, pool }: { rows: JjLinkRow[]; pool: JjPoolOpt
     <section className="border-amber/40 bg-amber-soft/40 space-y-2 rounded-2xl border px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-foreground text-sm font-bold">
-          인재원 학생 중 eywa 학생과 아직 연결되지 않은 <span className="num">{rows.length}</span>명
+          인재원 학생 중 aywa 학생과 아직 연결되지 않은 <span className="num">{rows.length}</span>명
         </p>
         <div className="flex flex-wrap items-center gap-1.5">
           {uniqueRows.length > 0 ? (
@@ -119,7 +119,7 @@ export function JjLinkPanel({ rows, pool }: { rows: JjLinkRow[]; pool: JjPoolOpt
       ) : null}
       <p className="text-text-dim text-xs">
         이름만으로 자동 연결하지 않습니다(인재원엔 생년월일·학교가 없어 동명이인을 가를 수 없습니다). 인재원 이름이
-        로그인 아이디인 학생은 아이디 머리글자(예: ijwgsy → 공서연)로 후보를 찾아 드립니다 — 머리글자는 겹칠 수 있으니
+        로그인 아이디인 학생은 아이디 머리글자(예: ijwhgd → 홍길동)로 후보를 찾아 드립니다 — 머리글자는 겹칠 수 있으니
         후보를 고른 뒤 확인 줄에서 반·학교를 보고 [연결]을 눌러 주세요.
       </p>
       {open ? (

@@ -1,5 +1,5 @@
 /**
- * scripts/_classnote/scan-board-cleanup.mjs — eywa 기준 **ClassNote 반(보드) 정리 후보** 스캔. **READ-ONLY**.
+ * scripts/_classnote/scan-board-cleanup.mjs — aywa 기준 **ClassNote 반(보드) 정리 후보** 스캔. **READ-ONLY**.
  *
  * 아무것도 변경하지 않는다(ClassNote GET · DB select 전용). 삭제·배정해제·퇴원처리는 **사람이 UI에서** 한다
  * (원아 배정 해제·교사 해제·반 삭제는 REST가 전부 405/부재).
@@ -226,7 +226,7 @@ try {
   };
   const line = (r) =>
     `   · ${r.board.name} (id ${r.board.id})` +
-    (r.student ? ` ← eywa ${r.student.name}/${r.student.grade ?? "?"}` : "") +
+    (r.student ? ` ← aywa ${r.student.name}/${r.student.grade ?? "?"}` : "") +
     (r.student?.withdrawn_at ? `/퇴원 ${r.student.withdrawn_at}` : "") +
     ` · 가족 ${r.families ?? "?"} · 교사 ${r.teachers} · 게시물 ${r.posts ? r.posts.count + (r.posts.complete ? "" : "+") : "?"}` +
     (r.posts?.lastPostAt ? `(마지막 ${r.posts.lastPostAt})` : "") +
@@ -234,7 +234,7 @@ try {
     (r.student?.makeedu_id ? " · makeedu✅" : "");
 
   if (!JSON_OUT) {
-    console.log(`\n════ ClassNote 반 정리 후보 (READ-ONLY · eywa 기준 · 기준일 ${TODAY} KST · 무게시 ${DORMANT_DAYS}일) ════`);
+    console.log(`\n════ ClassNote 반 정리 후보 (READ-ONLY · aywa 기준 · 기준일 ${TODAY} KST · 무게시 ${DORMANT_DAYS}일) ════`);
     console.log(`전체 보드 ${boards.length} · 학생모드 ${studentBoards.length} · 판정 ${results.length}`);
     console.log(`\n▶ 정리 가능(release) ${release.length}건 = **A+B(전과목 퇴원 → 반삭제+배정해제+퇴원처리) ${opB.length}** · **A만(일부 과목 퇴원 → 반삭제+배정해제, 퇴원처리 금지) ${opAonly.length}**`);
     console.log(`▶ 보류(hold) ${holds.length} — ${tally(holds)}`);

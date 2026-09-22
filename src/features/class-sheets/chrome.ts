@@ -17,7 +17,7 @@ import type { EcsMonthView } from "./view-prefs";
  * 상단 바 한 벌. 두 화면이 같은 여백·같은 줄바꿈 규칙을 쓴다.
  *
  * 🔴 **카드 껍데기를 두지 않는다**(앱 전역 툴바 규약 — [`toolbar-controls.ts`](@/components/toolbar-controls)).
- *    원장 2026-09-01: *"지금 강사 시트 뿐만 아니라 eywa 웹앱의 모든 헤더 스타일을 일관성있게."*
+ *    원장 2026-09-01: *"지금 강사 시트 뿐만 아니라 aywa 웹앱의 모든 헤더 스타일을 일관성있게."*
  *    종전엔 `bg-card shadow-card rounded-2xl px-4 py-2.5`라 ECS만 카드 안에 툴바가 든 모양이었다.
  * 🔴 **`.toolbar-rail`을 붙이지 말 것** — 이 줄엔 반 선택 드롭다운(`SheetClassPicker` → `SearchableSelect`)이
  *    있고 그건 **Portal이 아니라 인라인 absolute**다. 레일은 모바일에서 `overflow-x:auto`라 목록이

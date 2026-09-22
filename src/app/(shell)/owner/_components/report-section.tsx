@@ -7,7 +7,7 @@ import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guar
 import { SectionForm, SettingsCard } from "./section-form";
 import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
  * '표시 항목' 토글 중 부연이 필요한 것만. showAttachments는 사진과 파일(pdf·엑셀·hwp·오디오)을 **한 스위치로
@@ -385,13 +385,13 @@ export function ReportSection({
             (계정 수는 위험과 겹치지 않았다 — 상세는 docs/classnote-integration.md §5.5). 여기 등재된 보드는 검증을 면제한다. */}
         <SettingsCard
           title="발송 보류 예외 (동명이인 확인 완료)"
-          description="이름이 같은 학생이 있으면(예: 박서준 · 박서준C) 클래스노트 보드는 둘 다 '박서준'이라 어느 집인지 구분이 안 됩니다. 학부모가 가입할 때 이름 뒤 알파벳을 붙이지 않기 때문입니다. 그래서 그런 이름은 원아 생년월일이 그 학생 학년과 맞는지 대조해 보고, 안 맞으면 발송을 보류합니다. 클래스노트 운영관리에서 직접 확인해 맞는 집이 확실한 보드만 아래에 등록하면 그 보드는 검증 없이 발송됩니다."
+          description="이름이 같은 학생이 있으면(예: 홍길동 · 홍길동C) 클래스노트 보드는 둘 다 '홍길동'이라 어느 집인지 구분이 안 됩니다. 학부모가 가입할 때 이름 뒤 알파벳을 붙이지 않기 때문입니다. 그래서 그런 이름은 원아 생년월일이 그 학생 학년과 맞는지 대조해 보고, 안 맞으면 발송을 보류합니다. 클래스노트 운영관리에서 직접 확인해 맞는 집이 확실한 보드만 아래에 등록하면 그 보드는 검증 없이 발송됩니다."
         >
           <StringListEditor
             value={r.classnoteSharedBoardAllowlist}
             onChange={(v) => set({ classnoteSharedBoardAllowlist: v })}
             addLabel="보드 추가"
-            placeholder="(수학)안은지"
+            placeholder="예: (수학)홍길동"
           />
           <p className="text-danger mt-2 flex items-start gap-1.5 text-xs">
             <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />

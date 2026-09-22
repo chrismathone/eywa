@@ -110,9 +110,11 @@ const SPARSE: ParentReportCardProps = {
   attachments: [],
 };
 
-/** 템플릿 모드 도입 직전(2026-09-10) 원본 컴포넌트의 정적 마크업 SHA-256. */
+/** 템플릿 모드 도입 직전(2026-09-10) 원본 컴포넌트의 정적 마크업 SHA-256.
+ *  2026-09-21 FULL 갱신 — 제품 개명(eywa→aywa)으로 아이콘 표식 속성 `data-eywa-icon`이 `data-aywa-icon`이 됐다(보이는 글자·모양 불변,
+ *  마크업의 aywa를 eywa로 되돌리면 옛 해시 b2e6adcf…와 정확히 같다). SPARSE엔 아이콘이 없어 그대로다. */
 const GOLDEN = {
-  FULL: "b2e6adcf65bdb1fdfc5bcb42090ca0ff361d6f021dfeee818bb0c8a990cff0b4",
+  FULL: "7de0e398a70799065a52f83363c6b3675e19796d215a53c16ec19f03e9f33f1c",
   SPARSE: "954922ef759e90eed08e34fbce0e1a4ad9cdd5eeb5338fc4e4fb9d03473d5169",
 };
 
@@ -161,7 +163,7 @@ describe("ParentReportCard — 템플릿 모드(영어)", () => {
     expect(html).not.toContain("20문제 중 18개 맞음");
     expect(html).not.toContain("최근 3회 상승세입니다.");
     // 학습 추이 그래프(viewBox 660×200) — svg 요소 개수로 세면 첨부 받기 아이콘까지 걸린다.
-    // ⚠️ 이 파일에 여는 꺾쇠+svg 글자를 적지 말 것 — 아이콘 가드(eywa-icon-mapping.test)가 인라인 SVG로 센다.
+    // ⚠️ 이 파일에 여는 꺾쇠+svg 글자를 적지 말 것 — 아이콘 가드(aywa-icon-mapping.test)가 인라인 SVG로 센다.
     expect(markup(FULL)).toContain('viewBox="0 0 660 200"'); // 수학에선 그려진다(아래 부정 검사의 짝)
     expect(html).not.toContain('viewBox="0 0 660 200"');
   });

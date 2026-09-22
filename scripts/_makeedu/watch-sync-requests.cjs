@@ -54,12 +54,35 @@ async function dropDb() {
   if (s) await s.end({ timeout: 1 }).catch(() => {});
 }
 
-// pending 전부를 running으로 claim(요청 N개 = 동기화 1회). requested_by도 확보 → "누가 눌렀는지" 로그(0076a).
+// 이 워처가 맡은 지점 — 시작 뒤 첫 사용 때 한 번 푼다(env MAKEEDU_TENANT_ID → 없으면 학원이 정확히 1개일 때만, lib.cjs).
+// 🔴 **큐를 집는 모든 쿼리가 이 값으로 거른다**(원장 2026-09-21 "워커도 지점 분리" — 다른 지점은 makeedu를 아예 안 쓸 수 있다).
+//    안 거르던 때: 둘째 지점이 누른 '지금 동기화'를 이 PC가 집어 **거짓 '완료'**를 찍고, 역동기화 요청은 그 지점 학생·보호자
+//    연락처를 **이 지점 makeedu 계정에 제출**했다(감사 2026-09-21). 못 풀면 throw → 폴 루프가 로그만 남기고 아무것도 안 집는다(fail-closed).
+let workerTenantId = null;
+let tenantFailLoggedAt = 0;
+async function tenantOfWorker() {
+  if (workerTenantId) return workerTenantId;
+  try {
+    workerTenantId = await L.resolveTenantId(db());
+  } catch (e) {
+    // 🔴 이 상태에선 **아무 요청도 안 집는다** → 웹의 '지금 동기화'는 계속 '대기'로 보인다(단서가 이 로그뿐이라 눈에 띄게).
+    //    흔한 원인 = 둘째 지점이 생겼는데 MAKEEDU_TENANT_ID를 안 넣음(docs/domain-cutover.md '지점을 하나 더 만드는 날' 0번).
+    if (Date.now() - tenantFailLoggedAt > 10 * 60_000) {
+      tenantFailLoggedAt = Date.now();
+      log(`⛔ 이 워처의 지점을 정하지 못해 요청을 집지 않습니다 — .env.local의 MAKEEDU_TENANT_ID를 확인하세요: ${e.message}`);
+    }
+    throw e;
+  }
+  return workerTenantId;
+}
+
+// 이 지점의 pending 전부를 running으로 claim(요청 N개 = 동기화 1회). requested_by도 확보 → "누가 눌렀는지" 로그(0076a).
 async function claimPending() {
+  const tenantId = await tenantOfWorker();
   return db()`
     update makeedu_sync_requests
     set status = 'running', started_at = now()
-    where status = 'pending'
+    where status = 'pending' and tenant_id = ${tenantId}
     returning id, requested_by`;
 }
 
@@ -96,7 +119,9 @@ const runPush = () => runScript("push-consultations.cjs", {});
 
 // 역동기화 pending 푸시 요청이 있으면 push-consultations를 실행(스크립트가 pending을 claim). count만 보고 트리거.
 async function pendingPushCount() {
-  const [row] = await db()`select count(*)::int n from makeedu_push_requests where status = 'pending'`;
+  const tenantId = await tenantOfWorker();
+  const [row] = await db()`
+    select count(*)::int n from makeedu_push_requests where status = 'pending' and tenant_id = ${tenantId}`;
   return row ? row.n : 0;
 }
 
@@ -111,8 +136,8 @@ async function weeklyPush() {
   if (weeklyBucketDone === bucket) return;
   let r;
   try {
-    // 테넌트는 심장박동이 이미 해석해 뒀다(추가 쿼리 0). 아직이면 모듈이 스스로 해석한다.
-    r = await runWeeklyPushEnqueue(db(), { tenantId: heartbeatTenantId || undefined });
+    // 지점은 워처가 이미 풀어 뒀다(추가 쿼리 0 — tenantOfWorker). 아직이면 모듈이 스스로 푼다.
+    r = await runWeeklyPushEnqueue(db(), { tenantId: workerTenantId || undefined });
   } catch (e) {
     log(`주간 자동 전송 적재 실패(다음 폴에서 재시도): ${e.message}`);
     return;
@@ -141,9 +166,8 @@ async function weeklyPush() {
 
 // 심장박동(0073a) — 이 PC가 동기화 담당·살아있음을 매 폴마다 기록 → 웹 연동 면에서 온라인/오프라인 표시.
 // best-effort: 실패해도 요청 처리를 막지 않는다. 테넌트는 시작 시 1회 해석(단일 테넌트 배포).
-let heartbeatTenantId = null;
 async function heartbeat() {
-  if (!heartbeatTenantId) heartbeatTenantId = await L.resolveTenantId(db());
+  const heartbeatTenantId = await tenantOfWorker();
   await db()`
     insert into makeedu_sync_workers (tenant_id, hostname, started_at, last_seen)
     values (${heartbeatTenantId}, ${HOSTNAME}, ${STARTED_AT}, now())
@@ -182,7 +206,7 @@ async function heartbeat() {
       // 2) 주간 자동 역동기화 적재 — 일요일 06:00(KST) 버킷이 열렸으면 큐에 넣는다(주 1회).
       //    제출은 새 경로가 아니라 바로 아래 3)이 그대로 한다.
       await weeklyPush();
-      // 3) 역동기화 푸시 요청(eywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
+      // 3) 역동기화 푸시 요청(aywa→makeedu) — 스크립트가 pending을 claim·처리·마감.
       if ((await pendingPushCount()) > 0) {
         log(`푸시 요청 감지 → push-consultations 실행`);
         await beat();

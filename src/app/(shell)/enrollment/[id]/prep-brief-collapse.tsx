@@ -13,7 +13,7 @@
  */
 
 import { useState } from "react";
-import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 
 export function PrepBriefCollapse({
   children,

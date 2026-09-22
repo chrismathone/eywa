@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { createClassReview, type ReviewActionState } from "@/features/class-review/server/actions";

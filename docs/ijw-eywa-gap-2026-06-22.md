@@ -1,8 +1,8 @@
-# ijw-calander → eywa 기능 갭 전수 비교 (2026-06-22)
+# ijw-calander → aywa 기능 갭 전수 비교 (2026-06-22)
 
 > 멀티에이전트 전수 비교(16영역 × 비교+검증 = 32에이전트) 결과. ijw 원본(`D:/ijw-calander`)이 가진 기능 중
-> **현재 eywa에 없거나(absent) 부분만 있는(partial)** 것을 도출하고, 각 항목을 현재 eywa 코드로 재확인(거짓양성 제거).
-> 직전 감사(2026-06-18, `D:/tmp/eywa-feature-gap-audit.md`, 143건)는 P0·P1·P2 완료 + eywa 대규모 변경으로 stale → 이 문서가 최신.
+> **현재 aywa에 없거나(absent) 부분만 있는(partial)** 것을 도출하고, 각 항목을 현재 aywa 코드로 재확인(거짓양성 제거).
+> 직전 감사(2026-06-18, `D:/tmp/eywa-feature-gap-audit.md`, 143건)는 P0·P1·P2 완료 + aywa 대규모 변경으로 stale → 이 문서가 최신.
 >
 > **집계**: confirmed 107 / resolved(이미 구현, 제외) 14 / overstated(주장보다 더 구현됨) 16.
 > ⚠️ "공통 UX·내비·레이아웃" 영역 7건은 비교 에이전트 실패로 **플레이스홀더(무효)** — 재실행 필요.
@@ -11,14 +11,14 @@
 ---
 
 ## 결론 한 줄
-eywa는 핵심 CRUD·운영 흐름을 이미 갖췄고(직전 P0~P2로 메움), **남은 갭은 대부분 ① 운영 편의·깊이 ② 큰 신규 기능(P3) ③ 의도적 단순화**다.
+aywa는 핵심 CRUD·운영 흐름을 이미 갖췄고(직전 P0~P2로 메움), **남은 갭은 대부분 ① 운영 편의·깊이 ② 큰 신규 기능(P3) ③ 의도적 단순화**다.
 "진짜 이식 가치"가 있는 건 아래 **Tier 1·2 약 20건**이고, 나머지는 백로그(P3/Phase D)거나 안 만드는 게 맞다.
 
 ---
 
 ## Tier 1 — 이식 가치 높음 · 작업량 작음 — ✅ 6건 전부 구현 완료 (2026-06-22, 커밋 `0b4c1b7`~`1df1702`, 게이트 그린+실검증)
 
-| # | 영역 | 갭 | 왜 / eywa 현재 |
+| # | 영역 | 갭 | 왜 / aywa 현재 |
 |---|---|---|---|
 | 1 | 등록상담 | **텍스트 검색(이름/전화/학교) 부재** | 칸반만이라 상담 찾기 불가. 학생상담엔 검색 있음(`consultations/page.tsx`)인데 enrollment엔 없음. 같은 패턴 이식이면 끝 |
 | 2 | 수납 | **반 색상(bgColor/textColor) 폼 미배선** | 스키마(`schema.ts:242`)·시간표 소비처(`class-grid.ts`)는 이미 있는데 `createClass/updateClass`가 저장 안 함 + 폼 입력 없음 → 시간표 헤더색이 항상 과목색 폴백. 폼+액션만 배선하면 통합뷰가 ijw처럼 반색 표시 |
@@ -47,21 +47,21 @@ eywa는 핵심 CRUD·운영 흐름을 이미 갖췄고(직전 P0~P2로 메움), 
 |---|---|---|
 | 학생상담 | **AI 녹음분석 전체**(녹음→전사→13섹션 보고서) | enrollment엔 완비, **student_consultations엔 전무**. = P3 "상담녹음AI". 큰 작업 |
 | 시간표 | 강의실 자동배정(ClassroomAssignment) | useAutoAssign 알고리즘 전체. Phase D |
-| 시간표 | 엑셀 import 마법사(이력/diff/복원) | eywa는 1회 import만. 스냅샷 DB는 적재됨 → 뷰어+복원 UI |
+| 시간표 | 엑셀 import 마법사(이력/diff/복원) | aywa는 1회 import만. 스냅샷 DB는 적재됨 → 뷰어+복원 UI |
 | 시간표 | 시나리오/시뮬레이션 + 백업이력(History/Restore) | live/draft 분리, 사용자 백업 20개. P3 "시간표시뮬" |
 | 수업목록 | 강의실별 시간표 뷰 | "이 강의실 오늘 일정" 마스터 뷰 |
 | 운영 | 감사로그 범위 확대 | 현재 9개 액션만. 학생/반/수강 CRUD는 미로깅 |
 
 ## Tier 4 — 의도적 단순화 / 제외 (이식 비권장)
 
-- **Calendar(독립 이벤트 캘린더)·Gantt(프로젝트 보드)** — 학원 CRM 핵심 아님. eywa는 timetable로 충분.
-- **Homework(숙제 출제·제출 추적) 독립 메뉴** — eywa는 메모 카테고리·onescreen으로 대체.
+- **Calendar(독립 이벤트 캘린더)·Gantt(프로젝트 보드)** — 학원 CRM 핵심 아님. aywa는 timetable로 충분.
+- **Homework(숙제 출제·제출 추적) 독립 메뉴** — aywa는 메모 카테고리·onescreen으로 대체.
 - **TaskMemo(강사↔원장 메시지)** — inter-user 메시징. 알림센터와 함께 의도적 제외.
 - **Chatbot(ChatbotFAB+AI 도우미)** — 의도적 경량화. (도입하려면 별도 결정)
-- **MakeEdu ERP 자동연계 / Edutrix 동기화** — eywa는 자체 CRUD(신규 학원 가정). 외부 의존 제거가 설계 의도.
+- **MakeEdu ERP 자동연계 / Edutrix 동기화** — aywa는 자체 CRUD(신규 학원 가정). 외부 의존 제거가 설계 의도.
 - **Contracts(전자계약)** — 소규모 불필요·대규모는 별도 e-계약 서비스.
-- **역할별 대시보드 분기(Teacher/Manager 전용 대시보드)** — eywa는 강사 onescreen·학생 my-learning으로 분리 대응. Master 콕핏은 있음.
-- **반별/직원별 커스텀 설정·강사 색/순서/숨김 필드** — eywa는 테넌트 단위 설정으로 일원화(강사 색은 timetable에서 이름해시).
+- **역할별 대시보드 분기(Teacher/Manager 전용 대시보드)** — aywa는 강사 onescreen·학생 my-learning으로 분리 대응. Master 콕핏은 있음.
+- **반별/직원별 커스텀 설정·강사 색/순서/숨김 필드** — aywa는 테넌트 단위 설정으로 일원화(강사 색은 timetable에서 이름해시).
 - **셀 배경색 커스터마이즈·페이지 크기 선택·컬럼 표시토글** 등 power-user 편의 — 단순화 정당.
 
 ## 이미 구현됨 — "갭" 주장이 틀렸던 것 (overstated, 안심용)
@@ -70,8 +70,8 @@ eywa는 핵심 CRUD·운영 흐름을 이미 갖췄고(직전 P0~P2로 메움), 
 권한 매트릭스(메뉴×역할 4단계) · 회의록 필터/검색(ijw보다 명시적) · 퇴원 대시보드(추세차트 존재).
 
 ## 감사 한계
-- **공통 UX·내비·레이아웃·인증** 영역은 비교 에이전트가 플레이스홀더(a~g)를 반환 → **재실행 필요**(Layout/Header/Navigation/Common/Auth ↔ eywa app-shell·workspace).
-- **픽셀 단위 시각 비교**는 미수행(코드 기반 feature/visual 갭만). 필요 시 ijw 배포본(ijw-calander.web.app) ↔ eywa 화면 캡처 대조 별도.
+- **공통 UX·내비·레이아웃·인증** 영역은 비교 에이전트가 플레이스홀더(a~g)를 반환 → **재실행 필요**(Layout/Header/Navigation/Common/Auth ↔ aywa app-shell·workspace).
+- **픽셀 단위 시각 비교**는 미수행(코드 기반 feature/visual 갭만). 필요 시 ijw 배포본(ijw-calander.web.app) ↔ aywa 화면 캡처 대조 별도.
 
 ---
 

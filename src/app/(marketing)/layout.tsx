@@ -1,14 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { NAV_LINKS } from "@/data/marketing";
+import { AYWA_SITE_TITLE, AYWA_SITE_DESCRIPTION } from "@/lib/config/site-metadata";
 import { CtaButton } from "./_ui/cta-button";
 import "./_motion/landing.css";
 
 export const metadata = {
-  title: "EYWA — 원장님이 가장 먼저 켜는 학원관리 프로그램",
-  description:
-    "출결·수납·상담·학부모 알림까지, 학원 운영의 모든 흐름을 한 화면에서. 한 번의 출석 체크가 0.4초 만에 학부모·강사·원장·회계로 동시에 흐릅니다. 베타 기간 무료.",
+  title: AYWA_SITE_TITLE,
+  description: AYWA_SITE_DESCRIPTION,
 };
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
@@ -28,7 +28,7 @@ function MarketingNav() {
           <span className="bg-ink flex size-8 items-center justify-center rounded-[9px]">
             <EyIcon name="building" size={17} className="text-white" />
           </span>
-          <span className="text-[19px] font-extrabold tracking-[-0.02em]">EYWA</span>
+          <span className="text-[19px] font-extrabold tracking-[-0.02em]">AYWA</span>
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex" aria-label="주요 메뉴">

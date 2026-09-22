@@ -1,6 +1,6 @@
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
-import { Pencil } from "@/components/icons/eywa-icon-compat";
+import { Pencil } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { requireAccess } from "@/lib/auth/require-access";
 import { accessLevelTenant, canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -31,7 +31,7 @@ import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 
-export const metadata = { title: "학생 상세 — eywa" };
+export const metadata = { title: "학생 상세 — aywa" };
 
 
 export default async function StudentDetailPage({

@@ -12,7 +12,7 @@
 ## 0. 사전 요건 (연동 PC엔 대부분 이미 있음)
 
 `학원동기화-PC`는 makeedu 동기화를 돌리므로 아래가 이미 갖춰져 있습니다:
-- eywa 저장소 폴더(스크립트 위치) + `node_modules`(**playwright 포함** — ClassNote도 같은 playwright 사용)
+- aywa 저장소 폴더(스크립트 위치) + `node_modules`(**playwright 포함** — ClassNote도 같은 playwright 사용)
 - 저장소 루트 `.env.local`에 `DATABASE_URL`
 
 즉 **추가로 할 일은 (1) 이 패키지 풀기 (2) `.env.local`에 ClassNote 항목 추가 (3) 지정 배치 더블클릭** 뿐입니다.
@@ -21,7 +21,7 @@
 
 ## 1. 이 패키지 풀기
 
-이 zip을 연동 PC로 옮겨, **eywa 저장소 폴더**에서 **"여기에 압축 풀기"** 하세요.
+이 zip을 연동 PC로 옮겨, **aywa 저장소 폴더**에서 **"여기에 압축 풀기"** 하세요.
 그러면 `<저장소>\scripts\_classnote\` 안에 스크립트와 배치 파일이 채워집니다(기존 파일 덮어쓰기 = 최신화).
 
 > 🔴 **부분 복사 금지 — 2026-07-30부터 워커가 죽는 새 경로가 생겼습니다.**
@@ -54,11 +54,12 @@ CLASSNOTE_UPLOAD_PW=<ClassNote 로그인 비밀번호>
 CLASSNOTE_TENANT_ID=becaa316-e636-42e9-9d09-08b133e0b094
 
 # 보고서 스크린샷/공유 링크는 공개 /r 페이지를 캡처 — 연동 PC엔 로컬 앱이 없으므로
-# 배포된 공개 주소로 지정(예시. 실제 운영 도메인으로).
-CLASSNOTE_SCREENSHOT_BASE=https://eywa-alpha.vercel.app
-CLASSNOTE_SHARE_BASE=https://eywa-alpha.vercel.app
+# 배포된 공개 주소로 지정. 2026-09-21부터 운영 도메인 = www.aywa.co.kr
+# (이미 설치된 PC는 `발송PC-새도메인.bat` 더블클릭 한 번이면 이 두 줄을 바꾸고 워커를 다시 띄운다).
+CLASSNOTE_SCREENSHOT_BASE=https://www.aywa.co.kr
+CLASSNOTE_SHARE_BASE=https://www.aywa.co.kr
 
-# ⚠️ 파일 첨부(pdf·엑셀·hwp 등)를 쓰면 **필수**. 워커가 이 헤더로 eywa 내부 엔드포인트에서 첨부 원본을
+# ⚠️ 파일 첨부(pdf·엑셀·hwp 등)를 쓰면 **필수**. 워커가 이 헤더로 aywa 내부 엔드포인트에서 첨부 원본을
 # 받아 ClassNote에 올린다 — 없으면 401 → "파일 첨부 업로드 실패(전건)"으로 그 보고서 발송 자체가 실패한다.
 # (사진 전용이면 선택 — 스크린샷 시 /r 조회수 로깅을 건너뛰는 용도라 없어도 조회수만 1 늘 뿐.)
 # ⚠️ 2026-08-06부터 **학부모 출결 연락 알림에도 필수**입니다. 워커가 학부모 글·댓글 원문을 저장한 뒤
@@ -100,7 +101,7 @@ CLASSNOTE_INTERNAL_SECRET=<앱(Vercel)과 동일한 내부 시크릿>
 
 ## 6. 확인
 
-- eywa **수업보고서** 화면의 **"발송 PC"** 표시가 `학원동기화-PC` **온라인**으로 바뀌는지 확인.
+- aywa **수업보고서** 화면의 **"발송 PC"** 표시가 `학원동기화-PC` **온라인**으로 바뀌는지 확인.
 - 연동 면의 **"동기화 담당 PC"** 와 같은 PC 이름이면, 발송·동기화가 한 상시 PC로 통합된 것입니다.
 
 ---

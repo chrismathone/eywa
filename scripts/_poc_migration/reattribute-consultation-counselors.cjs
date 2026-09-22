@@ -7,8 +7,8 @@
  * (이름 매칭)이 dead code였다(run.ts에서 우선순위 수정 완료). 이 스크립트는 **이미 적재된** 보조T 상담을
  * ijw 원본의 consultantName으로 실제 상담자에게 되돌린다.
  *
- * 매칭키 = (학생명, 상담일 YMD, 상담내용) — ijw record ↔ eywa 보조T 상담. 같은 키에 서로 다른 상담자면
- * 모호(skip), consultantName이 eywa 사용자와 안 맞으면 skip(보조T 유지). **멱등**: counselor_id=보조T 행만
+ * 매칭키 = (학생명, 상담일 YMD, 상담내용) — ijw record ↔ aywa 보조T 상담. 같은 키에 서로 다른 상담자면
+ * 모호(skip), consultantName이 aywa 사용자와 안 맞으면 skip(보조T 유지). **멱등**: counselor_id=보조T 행만
  * 대상. **되돌리기**: 적용한 (id) 목록을 revert 파일로 남긴다 → 되돌리려면 그 id들을 보조T로 UPDATE.
  *
  * 실행: node --env-file=.env.local scripts/_poc_migration/reattribute-consultation-counselors.cjs        (dry-run)
@@ -46,7 +46,7 @@ const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
     const data = JSON.parse(fs.readFileSync(exportPath, "utf8"));
     const ijw = data.collections.student_consultations;
 
-    // eywa 사용자 이름맵(display_name/english_name → id), 보조T id.
+    // aywa 사용자 이름맵(display_name/english_name → id), 보조T id.
     const users = await sql`select id, display_name, english_name from users`;
     const nameToUser = new Map();
     let bojoId = null;
@@ -81,7 +81,7 @@ const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
       else if (cur !== uid && cur !== "AMBIGUOUS") map.set(k, "AMBIGUOUS");
     }
 
-    // eywa 보조T 상담 + 학생명·상담일·요약.
+    // aywa 보조T 상담 + 학생명·상담일·요약.
     const rows = await sql`
       select sc.id, s.name as student_name, sc.consulted_at::date::text as ymd, sc.summary
       from student_consultations sc join students s on s.id = sc.student_id

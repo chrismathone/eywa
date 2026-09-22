@@ -1,4 +1,4 @@
-import { BookText, CheckCircle2 } from "@/components/icons/eywa-icon-compat";
+import { BookText, CheckCircle2 } from "@/components/icons/aywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
 import { FilterSelect } from "@/components/filter-select";
 import { Pagination } from "@/components/pagination";

@@ -13,12 +13,12 @@
 //    자동값이 덮으면 "입력된 숫자가 입력되도록"(원장 2026-09-01)이 깨진다.
 // ⚠️ 9월분 소급 보정은 `scripts/_oneoff/backfill-math-auto-units.mjs`(드라이런 기본) — 규칙은
 //    `math-auto-units-rules.mjs`가 같은 식을 들고 있고 패리티 테스트가 두 벌이 갈리지 않게 잠근다.
-// ⚠️ 영어는 대상이 아니다(원장 2026-08-10 ECS *"다 1로 처리"* — sheet-client.tsx). 과목 키를 코드에 적는 건
-//    운영 enum 하드코딩 금지의 예외다 — 화면 라벨·선택지가 아니라 **저장 규칙**이고 같은 선례가 있다
-//    (`slot-axis.ts` PER_SLOT_SUBJECTS · `derive-from-reports.ts` DERIVED_ATTENDANCE_SUBJECTS).
+// 영어는 english_track을 넘기는 경로에서만 환산한다. 2026-09-21 정정: 인재원은 60분당 1,
+// EiE는 40분당 1이다. 수학의 60분당 0.5와 구분한다.
 
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import type { DowKey } from "@/features/class-sheets/lib/week";
+import { isLabSeparateSlot } from "@/features/timetable/lib/lab-separate";
 import { COUNTABLE_STATUSES, MAX_SESSION_UNITS, isDefaultUnitsRaw } from "./session-units";
 
 /** 수업 길이로 시수를 자동으로 채우는 과목 키. 새 과목을 넣기 전에 원장 확인(돈 규칙이다). */
@@ -31,7 +31,8 @@ export function isAutoUnitsSubject(subject: string | null | undefined): boolean 
 }
 
 /**
- * 그날 수업 **분** → 시수 = **ceil(분 ÷ 60) ÷ 2** = 교시 하나당 0.5.
+ * 수학 기본값: 그날 수업 **분** → 시수 = **ceil(분 ÷ 60) ÷ 2** = 교시 하나당 0.5.
+ * 영어 트랙을 지정하면 EiE는 40분당 1, 인재원은 60분당 1로 환산한다.
  * 55분 → 0.5 · 110·115·120(2교시) → 1 · 165(3교시) → 1.5 · 180(3시간) → 1.5 · 240 → 2.
  *
  * 🔴 **올림이다 — 55분 수업도 한 시간으로 센다**(원장 2026-09-14: *"55분 수업이여도 1시간으로 생각해야해.
@@ -47,7 +48,7 @@ export function unitsFromMinutes(minutes: number, track: AutoUnitsTrack = "math"
   const units =
     track === "eie"
       ? Math.min(MAX_SESSION_UNITS, Math.round((minutes / 40) * 2) / 2)
-      : Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / 2);
+      : Math.min(MAX_SESSION_UNITS, Math.ceil(minutes / 60) / (track === "injaewon" ? 1 : 2));
   return units === 1 ? null : units;
 }
 
@@ -59,7 +60,26 @@ export type AutoUnitsSchedule = {
   validFrom: string;
   validTo: string | null;
   slotTeacherLabel: string | null;
+  labSeparate?: boolean;
 };
+
+/** Bridge/EiE uses 40-minute units; ordinary 50-minute periods count as hourly lessons. */
+export function usesFortyMinuteEnglishUnits(
+  date: string,
+  schedules: readonly AutoUnitsSchedule[],
+  englishTrack: string | null,
+  className = "",
+): boolean {
+  if (englishTrack === "eie" || /브릿지|브리지|\bbridge\b/i.test(className)) return true;
+  const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  const durations = schedules.filter((s) => s.validFrom <= date && (!s.validTo || s.validTo >= date)
+    && !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? ""))
+    .map((s) => minutes(s.endTime) - minutes(s.startTime));
+  // Injaewon hourly classes use 50-minute teaching periods. A shortened period in
+  // that timetable (e.g. 20:20–21:00) must not reclassify the whole class as bridge.
+  if (durations.some((duration) => duration >= 50 && duration < 60)) return false;
+  return durations.includes(40);
+}
 
 /** DB 행(snake) → 판정 모양. 서버 헬퍼·월별 출석부·원스크린 로스터가 **같은 변환**을 쓴다. */
 export function toAutoUnitsSchedule(row: {
@@ -69,6 +89,7 @@ export function toAutoUnitsSchedule(row: {
   valid_from: string;
   valid_to: string | null;
   slot_teacher_label: string | null;
+  lab_separate?: boolean;
 }): AutoUnitsSchedule {
   return {
     dayOfWeek: row.day_of_week as DowKey,
@@ -77,6 +98,7 @@ export function toAutoUnitsSchedule(row: {
     validFrom: row.valid_from,
     validTo: row.valid_to ?? null,
     slotTeacherLabel: row.slot_teacher_label ?? null,
+    ...(row.lab_separate === undefined ? {} : { labSeparate: row.lab_separate }),
   };
 }
 
@@ -88,10 +110,15 @@ export function autoUnitsOn(
   date: string,
   schedules: readonly AutoUnitsSchedule[],
   track: AutoUnitsTrack = "math",
+  className = "",
 ): number | null {
-  let total = 0;
-  for (const m of liveSlotMinutesOn(date, schedules).values()) total += m;
-  return unitsFromMinutes(total, track);
+  const periods = [...liveSlotMinutesOn(date, schedules).values()].filter((minutes) => minutes > 0);
+  if (!periods.length) return null;
+  const basis = track !== "math" && usesFortyMinuteEnglishUnits(date, schedules, track, className) ? "eie" : track;
+  if (basis === "math") return unitsFromMinutes(periods.reduce((sum, minutes) => sum + minutes, 0), basis);
+  // Normalize each English period before adding: six 50-minute hourly lessons = 6U.
+  const total = Math.min(MAX_SESSION_UNITS, periods.reduce((sum, minutes) => sum + (unitsFromMinutes(minutes, basis) ?? 1), 0));
+  return total === 1 ? null : total;
 }
 
 /**
@@ -155,6 +182,7 @@ export function planAutoUnits(
   subjectOf: ReadonlyMap<string, string | null>,
   schedulesOf: ReadonlyMap<string, readonly AutoUnitsSchedule[]>,
   trackOf: ReadonlyMap<string, AutoUnitsTrack | null> = new Map(),
+  classNameOf: ReadonlyMap<string, string> = new Map(),
 ): Map<string, number> {
   const out = new Map<string, number>();
   for (const c of cells) {
@@ -162,7 +190,7 @@ export function planAutoUnits(
     if (out.has(key)) continue;
     const track = trackOf.get(c.classId) ?? null;
     if (!isAutoUnitsSubject(subjectOf.get(c.classId)) && !track) continue;
-    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math");
+    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math", classNameOf.get(c.classId));
     if (units !== null) out.set(key, units);
   }
   return out;

@@ -7,7 +7,7 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WindowLink } from "@/components/workspace/window-link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { ConsultationDeleteButton } from "../../../consultations/_components/consultation-delete-button";
 import { FollowUpToggle } from "../../../consultations/_components/follow-up-toggle";
 

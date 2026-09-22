@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { UNSENT_FILTER } from "@/features/report-admin/report-filters";
-import { AlertTriangle } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";

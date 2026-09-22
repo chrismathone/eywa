@@ -4,7 +4,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { SearchToggle } from "@/components/search-toggle";
 import { ToolbarChip } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { BOARD_STAGE_OPTIONS, type BoardStageKey } from "@/features/enrollment/board-stages";
 import { MonthPicker } from "./month-picker";
 import { enrollmentHref, formatMonthLabel, shiftMonth, type EnrollmentView } from "./enrollment-query";

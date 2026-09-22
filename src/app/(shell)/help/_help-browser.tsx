@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon, MENU_ICON } from "@/components/icons/eywa-icons";
+import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { HELP_POST_STATUS_LABEL, type HelpBoardList } from "@/features/help/board/types";
 import { HELP_BOARD_NOT_READY } from "@/features/help/board/missing";

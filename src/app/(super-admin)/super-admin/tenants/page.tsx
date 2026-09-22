@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill } from "@/components/atoms/pill";
 import { Pagination } from "@/components/pagination";
 import { getTenantsPage, getTenantPlanStats } from "@/features/super-admin/server/queries";
 
-export const metadata = { title: "Super Admin · 학원 목록 — eywa" };
+export const metadata = { title: "Super Admin · 학원 목록 — aywa" };
 
 const PAGE_SIZE = 50;
 const fmt = (n: number) => n.toLocaleString("ko-KR");

@@ -1,6 +1,8 @@
-// 저장된 부분 설정(jsonb)을 DEFAULT_SETTINGS에 deep-merge해 "완전한" 설정으로 해석.
+// 저장된 부분 설정(jsonb)을 **그 학원 프리셋의 기본값**에 deep-merge해 "완전한" 설정으로 해석.
 // 배열·원시는 저장값이 있으면 교체, 객체는 재귀 병합. 기본 객체는 절대 변형하지 않는다(공유 참조).
-import { DEFAULT_SETTINGS } from "./defaults";
+// 프리셋(preset.ts): 침산 = DEFAULT_SETTINGS(오늘과 같다), 새 학원 = GENERIC_SETTINGS.
+import { baseSettingsFor, presetOfStored } from "./preset";
+import { normalizeDisabledModules } from "@/lib/modules";
 import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -44,8 +46,10 @@ function normalizeHolidays(arr: unknown): { date: string; name: string }[] {
 // teacherViewLines·teacherViewStep, 2026-07-06)가 없는 옛 저장 행을 key 기반 기본값으로 채운다.
 // (normalizeHolidays와 같은 "읽기 시 승격" 패턴.) english=기본 교시/가로줄/step 주입 →
 // 폼·소비처가 프리필된 값을 본다. 기타 과목의 weekdayPeriods는 undefined 유지(=전역 폴백 의미 보존).
-function normalizeSubjects(arr: SubjectSetting[]): SubjectSetting[] {
-  const defaults = new Map(DEFAULT_SETTINGS.operations.subjects.map((s) => [s.key, s]));
+function normalizeSubjects(arr: SubjectSetting[], base: TenantSettings): SubjectSetting[] {
+  // 🔴 주입 재료는 **그 학원 프리셋의** 과목 기본값이다 — 침산은 DEFAULT_SETTINGS(영어 11교시·가로줄)로 오늘과 같고,
+  //    새 학원은 GENERIC_SETTINGS(과목별 부가 설정 없음)라 침산 영어 교시가 새 학원 영어 과목에 스며들지 않는다.
+  const defaults = new Map(base.operations.subjects.map((s) => [s.key, s]));
   return arr.map((s) => {
     const d = defaults.get(s.key);
     if (!d) return s;
@@ -89,15 +93,21 @@ function normalizeBilling(b: BillingSettings): BillingSettings {
 
 /** 저장값(부분) + 테넌트 메타 → 완전한 설정. name 미입력 시 테넌트 학원명으로 폴백. */
 export function resolveSettings(stored: unknown, tenant: { name: string }): TenantSettings {
-  const merged = deepMerge(DEFAULT_SETTINGS, stored);
+  const preset = presetOfStored(stored);
+  const base = baseSettingsFor(preset);
+  const merged = deepMerge(base, stored);
   return {
     ...merged,
+    // 프리셋은 저장값이 아니라 판정 결과다 — 행에 preset이 없어도(침산) 판정값을 싣는다.
+    preset,
     profile: { ...merged.profile, name: merged.profile.name || tenant.name },
     operations: {
       ...merged.operations,
-      subjects: normalizeSubjects(merged.operations.subjects),
+      subjects: normalizeSubjects(merged.operations.subjects, base),
       holidays: normalizeHolidays(merged.operations.holidays),
     },
     billing: normalizeBilling(merged.billing),
+    // 모르는 모듈 id는 버린다(유령 id가 게이트를 흔들지 않게).
+    modules: { disabled: normalizeDisabledModules(merged.modules.disabled) },
   };
 }

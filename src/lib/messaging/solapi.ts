@@ -2,7 +2,7 @@ import "server-only";
 import { SolapiMessageService } from "solapi";
 
 /**
- * Solapi 클라이언트 팩토리(전역 키 캐시). operator 계정은 EYWA 1개 — 학원별 시크릿이 아니라
+ * Solapi 클라이언트 팩토리(전역 키 캐시). operator 계정은 AYWA 1개 — 학원별 시크릿이 아니라
  * 전역 SOLAPI_API_KEY/SECRET을 쓰고, 학원 식별은 pfId(발신프로필)+승인 템플릿 ID(DB)로 한다.
  * ai/anthropic.ts의 캐시 팩토리 패턴 미러. 직접 호출은 messaging/provider.ts에서만.
  */

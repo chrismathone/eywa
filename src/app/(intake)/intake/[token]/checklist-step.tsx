@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check } from "@/components/icons/eywa-icon-compat";
+import { Check } from "@/components/icons/aywa-icon-compat";
 import {
   CHANGE_OPTIONS,
   ENGLISH_STATE_OPTIONS,

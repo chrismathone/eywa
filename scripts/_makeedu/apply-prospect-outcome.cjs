@@ -18,7 +18,7 @@ const postgres = require("postgres");
 const APPLY = process.argv.includes("--apply");
 const TENANT_SLUG = (() => {
   const i = process.argv.indexOf("--tenant");
-  return i >= 0 ? process.argv[i + 1] : "injaewon";
+  return i >= 0 ? process.argv[i + 1] : "cs"; // 기본 = 침산(cs) — 2026-09-18 slug 개명(옛 injaewon)
 })();
 
 // import-prospects.cjs의 등원가능성 매핑과 같은 규칙(두 곳이 갈리면 같은 사람이 화면마다 다른 상태가 된다).

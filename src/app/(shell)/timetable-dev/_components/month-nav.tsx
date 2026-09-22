@@ -1,5 +1,5 @@
 import { ParamLink } from "./param-link";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { addMonths, planMonthLabel, type PlanMonthSummary } from "@/features/timetable-dev/types";
 import { PlanMonthActions } from "./plan-month-actions";
 import { PlanSheetImportDialog } from "./plan-sheet-import-dialog";

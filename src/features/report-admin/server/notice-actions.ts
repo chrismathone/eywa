@@ -1,6 +1,6 @@
 "use server";
 
-// 반 공지 — eywa 반에서 학생을 골라 각 학생의 ClassNote 개별 보드로 일괄 게시(큐 적재까지만 담당).
+// 반 공지 — aywa 반에서 학생을 골라 각 학생의 ClassNote 개별 보드로 일괄 게시(큐 적재까지만 담당).
 // 실제 게시는 연동 PC 워커가 내부 API(POST /api/v1_2/reports/)로 처리. Edutrix NoticeWriteModal 패턴 계승.
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";

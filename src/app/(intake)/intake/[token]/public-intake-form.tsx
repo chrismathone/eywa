@@ -6,7 +6,7 @@ import { useFormStatus } from "react-dom";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { HABIT_ITEMS } from "@/features/enrollment/intake-checklist";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { isPreschoolGrade } from "@/lib/format/school-grade";
 import {
   submitPublicIntake,
@@ -375,7 +375,7 @@ export function PublicIntakeForm({
             </select>
           </Field>
         </div>
-        <Field label={selectedSchoolType?.schoolLabel ?? "학교 이름 (예: 경명여고, 칠성고)"} required>
+        <Field label={selectedSchoolType?.schoolLabel ?? "학교 이름 (예: 한빛중)"} required>
           <input
             name="prospectSchool"
             required
@@ -455,7 +455,7 @@ export function PublicIntakeForm({
           </select>
         </Field>
         <Field label="집주소 (동 또는 아파트 이름)">
-          <input name="address" placeholder="예: 침산동, 센트럴자이" className={input} />
+          <input name="address" placeholder="예: ○○동, ○○아파트" className={input} />
         </Field>
         <Field label="상담 시 궁금한 점 / 요청사항">
           <AutoTextarea

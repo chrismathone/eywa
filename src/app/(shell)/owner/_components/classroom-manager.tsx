@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Pencil, Plus, Trash2 } from "@/components/icons/aywa-icon-compat";
 import {
   createClassroom,
   updateClassroom,
@@ -32,7 +32,7 @@ function AddForm() {
     <form ref={formRef} action={action} className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col gap-1">
         <span className="text-text-dim text-xs">강의실 이름</span>
-        <input name="name" required placeholder="예: 본원 304" className={`${INPUT} w-40`} />
+        <input name="name" required placeholder="예: 304호" className={`${INPUT} w-40`} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-text-dim text-xs">정원 (선택)</span>

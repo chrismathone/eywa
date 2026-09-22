@@ -47,8 +47,10 @@ import { dateOfDowInWeek, slotLiveOnDate } from "./week";
  * ⚠️ 밑줄 색은 지정하지 않는다 — `currentColor`라 글씨 색을 저절로 따라간다(토큰을 하나 더 만들 이유가 없다).
  * ⚠️ `text-blue`는 **자식 span에** 얹는다(줄 전체가 아니라). 줄에는 이미 tone(신입 빨강·전입 초록·검색
  *    표식)이 붙어 있어 같은 축 유틸을 이어 붙이면 승자를 CSS 순서가 정한다([[#116]]) — 상속은 자식이 이긴다.
+ * 🔴 `[font-synthesis:style]`을 빼지 말 것 — body가 `font-synthesis: none`이고 Pretendard엔 이탤릭 서체가 없어,
+ *    이것 없이는 이탤릭이 **서지 않는다**(9/10부터 곧게 서 있었다 — 2026-09-18 *LAB 이탤릭을 고치며 함께 발견).
  */
-export const SEAT_PIN_MARK_CLASS = "text-blue italic underline underline-offset-2";
+export const SEAT_PIN_MARK_CLASS = "text-blue italic [font-synthesis:style] underline underline-offset-2";
 
 /** 0255a `seat_period_pins` 한 줄(앱 표기). `slotStart`는 "HH:MM", `effectiveFrom`은 "YYYY-MM-DD". */
 export type SeatPinRow = {

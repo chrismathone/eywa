@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import {
   AlertCircle, ClipboardCheck, ClipboardList, ExternalLink, Loader2, Mic, Pencil, Printer, Sparkles,
   type LucideIcon,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import type { ReactNode } from "react";
-import { EyIcon, type EywaIconName } from "@/components/icons/eywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { PrintWindowButton } from "@/components/workspace/print-window";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -41,7 +41,7 @@ import { getAssignedClasses } from "@/features/enrollment/server/assigned-classe
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { canViewClassDetail } from "@/features/classes/server/class-scope";
 
-export const metadata = { title: "신입생 상담 상세 — eywa" };
+export const metadata = { title: "신입생 상담 상세 — aywa" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다. 사전 브리프 생성은 `after()` 백그라운드로
@@ -586,7 +586,7 @@ export default async function EnrollmentDetailPage({
 
 // 공용 카드 — 좌측 정보·우측 AI 분석 섹션이 모두 이 단일 박스 스타일을 쓴다(좌우 통일).
 // 이모지 + 굵은 라벨 헤더(이중 박스 느낌의 별도 음영 바 없이) → 섹션 구분은 또렷하되 중복돼 보이지 않게.
-function Card({ title, icon, children }: { title: string; icon?: EywaIconName; children: ReactNode }) {
+function Card({ title, icon, children }: { title: string; icon?: AywaIconName; children: ReactNode }) {
   return (
     <section className="bg-card border-line rounded-2xl border p-4">
       <h3 className="text-foreground mb-2.5 flex items-center gap-1.5 text-sm font-bold">

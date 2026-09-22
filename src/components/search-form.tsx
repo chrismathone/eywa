@@ -2,7 +2,7 @@
 
 import { useRef, useTransition, type FormEvent } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
 

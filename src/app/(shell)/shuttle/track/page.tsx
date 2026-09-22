@@ -9,7 +9,7 @@ import { requireShuttleView } from "@/features/shuttle/server/access";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { TrackClient } from "./_components/track-client";
 
-export const metadata = { title: "셔틀 실시간 위치 — eywa" };
+export const metadata = { title: "셔틀 실시간 위치 — aywa" };
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 

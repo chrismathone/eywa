@@ -167,7 +167,7 @@ export async function buildTimetableWorkbook(
   }
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "eywa";
+  wb.creator = "aywa";
   wb.created = new Date();
 
   // ─── 시트 1: 전체 (요일 × 시간대) ───

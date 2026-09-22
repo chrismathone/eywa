@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/import-catalog.cjs — makeedu 기타수납 단가표 → eywa.
+ * scripts/_makeedu/import-catalog.cjs — makeedu 기타수납 단가표 → aywa.
  *   · 수납구분=교재 → `textbook_catalog` (makeedu_id 멱등, 0057a)
  *   · 그 외(재료/유니폼/차량비/식비/학용품/교구 등) → `tuition_catalog` (category="기타", 이름 기준 — fresh wipe라 insert)
  * 입력: $MAKEEDU_OUT/catalog.json.

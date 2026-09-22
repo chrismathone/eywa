@@ -3,8 +3,7 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  isNotionConfigured,
-  notionTasksDatabaseId,
+  notionConfigFor,
   queryDatabaseAll,
   listCommentsAll,
   createComment,
@@ -26,7 +25,8 @@ import { monthRange, shiftMonth } from "@/lib/month-grid";
 import { kstMonth } from "@/lib/date-kst";
 
 // Notion 업무 DB → 직원 상세 '월간일정' 조회 + 직원↔Notion 사용자 매핑. 권한 게이트는 호출부(notion-actions.ts).
-// 토큰/DB id는 env(lib/notion/client.ts). notion_user_id는 users 컬럼(0100a).
+// 토큰/DB id/연동 학원은 env(lib/notion/client.ts `notionConfigFor`). notion_user_id는 users 컬럼(0100a).
+// 🔴 Notion을 부르는 경로는 모두 `notionConfigFor(학원)`을 먼저 지난다 — 연동 학원이 아니면 API를 부르지 않는다.
 
 export type MonthlyTasksResult =
   | { ok: true; state: "ok"; tasks: NotionTask[] }
@@ -71,11 +71,11 @@ const loadNotionAssignees = unstable_cache(
   { revalidate: 600 },
 );
 
-/** 담당자 후보 목록(게스트 포함). DB 미설정이면 빈 배열. */
-async function cachedNotionAssignees(): Promise<NotionUserOption[]> {
-  const dbId = notionTasksDatabaseId();
-  if (!dbId) return [];
-  return loadNotionAssignees(dbId);
+/** 담당자 후보 목록(게스트 포함). 이 학원이 연동 학원이 아니면 빈 배열 — 후보 목록이 곧 그 워크스페이스의 사람 명단이다. */
+async function cachedNotionAssignees(tenantId: string): Promise<NotionUserOption[]> {
+  const cfg = notionConfigFor(tenantId);
+  if (!cfg) return [];
+  return loadNotionAssignees(cfg.dbId);
 }
 
 function normEmail(e: string | null | undefined): string {
@@ -126,10 +126,11 @@ export async function prepareStaffNotionMappingRow(
   actorTenantId: string,
   includeOptions: boolean,
 ): Promise<MappingPrep> {
+  if (!notionConfigFor(actorTenantId)) return { state: "none" };
   const { notionUserId, email } = await staffMappingRow(staffId);
   if (notionUserId) return { state: "matched" };
 
-  const people = await cachedNotionAssignees();
+  const people = await cachedNotionAssignees(actorTenantId);
   const target = normEmail(email);
   const hit = target ? people.find((u) => normEmail(u.email) === target) : undefined;
   if (hit) {
@@ -159,9 +160,11 @@ export async function prepareStaffNotionMappingRow(
 export async function resolveMonthlyTasks(
   staffId: string,
   month: string,
+  tenantId: string,
 ): Promise<MonthlyTasksResult> {
-  const dbId = notionTasksDatabaseId();
-  if (!isNotionConfigured() || !dbId) return { ok: true, state: "not_configured" };
+  const cfg = notionConfigFor(tenantId);
+  if (!cfg) return { ok: true, state: "not_configured" };
+  const dbId = cfg.dbId;
 
   // ⚠️ 여기(첫 페인트)선 Notion 스캔 금지 — 미매핑이면 즉시 반환하고, 이메일 자동매칭·후보 로드는
   // 클라가 화면 표시 후 prepareStaffNotionMappingRow(액션)로 지연 호출한다(B7, 2026-07-13 타임아웃 실측).
@@ -189,12 +192,12 @@ export async function resolveMonthlyTasks(
 
 export type TaskComment = { id: string; author: string; time: string | null; text: string };
 
-/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. eywa가 남긴 댓글(봇 명의)은
- *  본문 패턴을 파싱해 "이름 (eywa)"로 표시하고 표기용 접두는 본문에서 제거. 못 찾으면 "Notion" 폴백. */
-export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> {
+/** 태스크(페이지) 댓글 목록 — 작성자명은 담당자 후보(게스트 포함)에서 해결. aywa가 남긴 댓글(봇 명의)은
+ *  본문 패턴을 파싱해 "이름 (aywa)"로 표시하고 표기용 접두는 본문에서 제거. 못 찾으면 "Notion" 폴백. */
+export async function fetchTaskComments(pageId: string, tenantId: string): Promise<TaskComment[]> {
   const [comments, people] = await Promise.all([
     listCommentsAll(pageId),
-    cachedNotionAssignees().catch(() => [] as NotionUserOption[]),
+    cachedNotionAssignees(tenantId).catch(() => [] as NotionUserOption[]),
   ]);
   const nameById = new Map(people.map((u) => [u.id, u.name]));
   return comments.map((c) => {
@@ -203,9 +206,9 @@ export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> 
       .map((t) => t.plain_text ?? "")
       .join("")
       .trim();
-    const m = EYWA_COMMENT_RE.exec(text) ?? EYWA_COMMENT_LEGACY_RE.exec(text);
+    const m = AYWA_COMMENT_RE.exec(text) ?? AYWA_COMMENT_LEGACY_RE.exec(text);
     if (m) {
-      author = `${m[1]} (eywa)`;
+      author = `${m[1]} (aywa)`;
       text = (m[2] ?? "").trim();
     }
     return { id: c.id, author, time: c.created_time ?? null, text };
@@ -213,19 +216,20 @@ export async function fetchTaskComments(pageId: string): Promise<TaskComment[]> 
 }
 
 /**
- * 태스크에 댓글 추가 — ⚠️ Notion API 한계로 작성자 명의는 항상 통합(봇). 대신 **굵은 이름 + " — eywa에서 작성"**
- * 서식으로 실작성자를 표기(Notion에서 읽기 좋게). eywa 화면은 이 패턴을 파싱해 작성자로 표시.
+ * 태스크에 댓글 추가 — ⚠️ Notion API 한계로 작성자 명의는 항상 통합(봇). 대신 **굵은 이름 + " — aywa에서 작성"**
+ * 서식으로 실작성자를 표기(Notion에서 읽기 좋게). aywa 화면은 이 패턴을 파싱해 작성자로 표시.
  */
 export async function addTaskComment(pageId: string, text: string, authorName: string): Promise<void> {
   await createComment(pageId, [
     { text: { content: authorName.slice(0, 40) }, annotations: { bold: true } },
-    { text: { content: ` — eywa에서 작성\n${text.slice(0, 1800)}` } },
+    { text: { content: ` — aywa에서 작성\n${text.slice(0, 1800)}` } },
   ]);
 }
 
-// eywa가 남긴 댓글의 작성자 파싱(신형: "이름 — eywa에서 작성\n본문" / 구형: "[eywa · 이름] 본문").
-const EYWA_COMMENT_RE = /^(.{1,40}?) — eywa에서 작성\n?([\s\S]*)$/;
-const EYWA_COMMENT_LEGACY_RE = /^\[eywa · (.{1,40}?)\] ?([\s\S]*)$/;
+// aywa가 남긴 댓글의 작성자 파싱(신형: "이름 — aywa에서 작성\n본문" / 구형: "[aywa · 이름] 본문").
+// 🔴 옛 이름(eywa) 시절 댓글이 Notion에 그대로 남아 있다 — 두 이름을 다 받는다(2026-09-21 개명).
+const AYWA_COMMENT_RE = /^(.{1,40}?) — [ae]ywa에서 작성\n?([\s\S]*)$/;
+const AYWA_COMMENT_LEGACY_RE = /^\[[ae]ywa · (.{1,40}?)\] ?([\s\S]*)$/;
 
 /** 업무 본문(Notion 블록) → 표시 라인. 상세창이 열릴 때만 지연 호출(첫 페인트 밖). */
 export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
@@ -233,7 +237,7 @@ export async function fetchTaskContent(pageId: string): Promise<ContentLine[]> {
   return notionBlocksToLines(blocks);
 }
 
-// === 쓰기(eywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canWriteTenant staff). ===
+// === 쓰기(aywa → Notion) — 명시적 편집만. 자동 양방향 동기화 아님. 권한 게이트는 액션(canWriteTenant staff). ===
 
 /** 업무완료 체크박스 토글 → Notion 반영. */
 export async function setTaskDoneRow(pageId: string, done: boolean): Promise<void> {

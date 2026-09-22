@@ -1,6 +1,6 @@
 // `lesson_reports.ment_source`(0214a) **적용 여부 probe** — 서버 전용 헬퍼.
 //
-// 왜 probe인가(#95 expand/contract): eywa는 SQL을 원장이 손으로 실행해 push와 적용 사이 간격이 항상
+// 왜 probe인가(#95 expand/contract): aywa는 SQL을 원장이 손으로 실행해 push와 적용 사이 간격이 항상
 // 있다. ment_source를 select/upsert에 무조건 넣으면 그 간격 동안 **저장·목록이 통째로 죽는다**(0174a
 // 실사고 — 강사 전원 원스크린 먹통). 그래서 컬럼 유무를 가벼운 select 1행으로 확인하고, 없으면 마커
 // 기록·필터만 조용히 건너뛴다(본 저장·목록은 그대로). 반 필터 옵션의 fail-soft(0147a)와 같은 결.

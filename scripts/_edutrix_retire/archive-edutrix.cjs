@@ -1,10 +1,10 @@
 // scripts/_edutrix_retire/archive-edutrix.cjs — Edutrix Supabase 전 테이블 raw 아카이브 (은퇴 보험).
 //
 // Edutrix 완전 종료(2026-07-10 결정) 전, 원본을 무손실 보존: ① 로컬 JSONL(data/edutrix-archive/)
-// ② eywa DB edutrix_archive(0095a, service_role 전용) 멱등 upsert. 미매핑 189건·en_*·강사 프로필까지
+// ② aywa DB edutrix_archive(0095a, service_role 전용) 멱등 upsert. 미매핑 189건·en_*·강사 프로필까지
 // 전부 여기 남아 "나중에 그 필드가 필요했는데"를 차단한다.
 // 원본 접근: Edutrix **service key**(D:/edutrix/.env.local에서 읽음 — anon은 일부 테이블 RLS 차단).
-// ⚠️ profiles 등의 자격증명 필드(/pass|pw|secret|token/i)는 **제거 후** 적재(평문 비번을 eywa로 옮기지 않음).
+// ⚠️ profiles 등의 자격증명 필드(/pass|pw|secret|token/i)는 **제거 후** 적재(평문 비번을 aywa로 옮기지 않음).
 //
 // 실행: node --env-file=.env.local scripts/_edutrix_retire/archive-edutrix.cjs          # dry-run(카운트만)
 //       node --env-file=.env.local scripts/_edutrix_retire/archive-edutrix.cjs --apply
@@ -89,7 +89,7 @@ async function fetchAllPaged(q, page = 1000) {
   const eduEnv = loadEnv("D:/edutrix/.env.local");
   const serviceKey = eduEnv.SUPABASE_SERVICE_ROLE_KEY;
   if (!EDUTRIX_SUPABASE_URL || !serviceKey || !DATABASE_URL) {
-    throw new Error("EDUTRIX_SUPABASE_URL(eywa env) / D:/edutrix/.env.local의 SUPABASE_SERVICE_ROLE_KEY / DATABASE_URL 필요");
+    throw new Error("EDUTRIX_SUPABASE_URL(aywa env) / D:/edutrix/.env.local의 SUPABASE_SERVICE_ROLE_KEY / DATABASE_URL 필요");
   }
   const edu = createClient(EDUTRIX_SUPABASE_URL, serviceKey);
   const sql = postgres(DATABASE_URL, { prepare: false, max: 1 });

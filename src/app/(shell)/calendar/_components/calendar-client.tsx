@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { PeriodNav } from "@/components/period-nav";
 import { Button } from "@/components/ui/button";
 import type { CalendarEvent, CalendarTag } from "@/features/calendar/types";

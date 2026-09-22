@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore, type ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import {
   processingSummary,
@@ -221,7 +221,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
         <header className={s.header} data-overview="header">
           <div className={s.identity}>
             <span className={s.eyebrow}>
-              {snapshot.academy || "EYWA"} · ACADEMY OVERVIEW
+              {snapshot.academy || "AYWA"} · ACADEMY OVERVIEW
             </span>
             <h1>
               학원 전체 현황<span>{snapshot.today.replaceAll("-", ".")}</span>
@@ -237,7 +237,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
               )}
             <div
               className={s.freshness}
-              title="표시 시각은 eywa DB 조회 시각입니다. 외부 서비스의 동기화 완료 시각과는 다릅니다."
+              title="표시 시각은 aywa DB 조회 시각입니다. 외부 서비스의 동기화 완료 시각과는 다릅니다."
             >
               <i className={failed ? s.dotWarning : s.dotLive} />
               <span>
@@ -1185,7 +1185,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
         </div>
 
         <footer className={s.footer}>
-          <span>EYWA / OVERVIEW</span>
+          <span>AYWA / OVERVIEW</span>
         </footer>
       </div>
     </div>

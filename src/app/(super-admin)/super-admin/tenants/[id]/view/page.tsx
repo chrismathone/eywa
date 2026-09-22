@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { notFound } from "next/navigation";
 import { SuperAdminHeader } from "@/components/super-admin/header";
 import { Pill, type PillColor } from "@/components/atoms/pill";
@@ -7,7 +7,7 @@ import { getTenantSnapshot } from "@/features/super-admin/server/queries";
 import { logImpersonateView } from "@/features/super-admin/server/actions";
 import { studentStatusMeta } from "@/features/students/status-labels";
 
-export const metadata = { title: "Super Admin · 지점장 보기 — eywa" };
+export const metadata = { title: "Super Admin · 지점장 보기 — aywa" };
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" }) : "—");

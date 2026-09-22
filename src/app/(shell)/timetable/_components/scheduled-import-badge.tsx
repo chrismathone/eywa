@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Loader2, X } from "@/components/icons/eywa-icon-compat";
+import { CalendarClock, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { scheduledImportLabel } from "@/features/timetable/scheduled-import";
 import { cancelScheduledImport } from "@/features/timetable/server/scheduled-import-actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
@@ -11,7 +11,7 @@ import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-ch
  * 툴바의 **"9/1 시간표 적용 예정"** 배지 (원장 2026-08-28).
  *
  * 미래 날짜로 가져오기를 적용해 두면 **이번 주 화면은 그대로**라 아무 흔적이 없다 — 그래서 주 네비 옆에
- * 상시로 붙인다. 라벨을 누르면 연동된 구글 시트가 열리고(원장 *"eywa 2.0 영어시간표 시트로 가서 9월
+ * 상시로 붙인다. 라벨을 누르면 연동된 구글 시트가 열리고(원장 *"aywa 2.0 영어시간표 시트로 가서 9월
  * 시간표를 보여주는거야"*), 옆 **×**가 그 예약을 통째로 되돌린다(*"모든게 무로 돌아가는거야"*).
  *
  * ⚠️ 되돌리기는 **날짜 단위**다 — 한 번의 적용이 배치·반이동 스냅샷을 둘 만들기 때문에 하나만 되돌리면

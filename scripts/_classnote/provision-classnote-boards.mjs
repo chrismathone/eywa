@@ -1,7 +1,7 @@
 /**
  * scripts/_classnote/provision-classnote-boards.mjs — ClassNote 학생별 보드((수학)학생명) 프로비저닝.
  *
- * eywa DB의 발송과목 재원생 기준 "있어야 할 보드"를 계산하고, ClassNote 반 정보 관리의 실보드와 대조해
+ * aywa DB의 발송과목 재원생 기준 "있어야 할 보드"를 계산하고, ClassNote 반 정보 관리의 실보드와 대조해
  * 없는 것만 생성한다. Edutrix scripts/create_classnote_classes.js 이식(전건 생성 시도→중복거부 방식 대신
  * **스캔→diff→누락분만 생성**으로 개선 + dry-run 기본). 학생 1명=반 1개 구조 근거는
  * docs/classnote-integration.md §3 — 보드명이 봇의 유일한 주소 키라 정확해야 한다.

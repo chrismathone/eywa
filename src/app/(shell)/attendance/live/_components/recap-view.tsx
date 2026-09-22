@@ -14,8 +14,8 @@
 import { useId, useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { BigStat } from "@/components/atoms/big-stat";
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { formatKoreanDate } from "@/lib/date-kst";
 import type { RangeRecap } from "@/features/attendance/recap/range";

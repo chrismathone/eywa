@@ -1,4 +1,4 @@
-# eywa — 구현 중 막혔던 점들 (#1~#74 함정 사전, Tier 1)
+# aywa — 구현 중 막혔던 점들 (#1~#74 함정 사전, Tier 1)
 
 > CLAUDE.md에서 분리된 **Tier 1 참조 문서**. 막혔을 때 검색. 트리거 한 줄은 CLAUDE.md 막힌 점 인덱스에, 상세·재현·원인은 여기.
 
@@ -130,6 +130,8 @@ Next.js 16의 `cookies()`는 async (`await cookies()`). Server Action에서는 s
 **해결**: `(shell)/page.tsx` → `(shell)/dashboard/page.tsx`로 이동. `(marketing)/page.tsx`가 `/` 차지. proxy.ts에서 `PUBLIC_PATHS = new Set(["/"])`로 비로그인 통과. 로그인 후 navigation은 `/dashboard`로.
 
 ### 22. invoices delete 순서 (시드 재실행)
+> 기록용 — `scripts/seed.ts`·`pnpm db:seed`는 2026-09-19 영구 제거됐다(운영 DB wipe 위험). #14·#31·#32도 같은 시드의 기록이다.
+
 seed.ts wipe 단계에서 students를 invoices 삭제 전에 지우면 FK 위반. 순서: attendance → invoices → enrollments → student_consultations → enrollment_consultations → students → class_schedules → classes → classrooms → announcements → meeting_minutes → users.
 
 ### 23. dev 서버 background 출력 stdout flush 안 됨
@@ -180,7 +182,7 @@ table.tsx / billing / attendance / kanban-filters / 학생 상세 탭 nav에 일
 
 **multi-tenant read는 service_role 클라이언트로 처리** — `createAdminClient()` (`src/lib/supabase/admin.ts`). RLS bypass라 모든 tenant 데이터 한 번에 조회 가능. (이게 위험해 보이지만, 모든 사용처가 `requireSuperAdmin()` 가드를 거치므로 안전.)
 
-mathlab의 `viewing_tenant` 쿠키 + Zustand 패턴은 매력적이지만 eywa의 RLS 강제를 회피해야 해서 Phase 2로 미룸.
+mathlab의 `viewing_tenant` 쿠키 + Zustand 패턴은 매력적이지만 aywa의 RLS 강제를 회피해야 해서 Phase 2로 미룸.
 
 ### 28. `(super-admin)` 라우트 그룹 + `/super-admin/*` URL → 폴더가 두 번 중첩
 Next.js 라우트 그룹 `(super-admin)`은 URL에 영향 없음. 그래서 `/super-admin` URL을 잡으려면 폴더 구조가:
@@ -205,7 +207,7 @@ super-admin Phase 5(사용자 관리)에서 강사 계정에 `auth.admin.updateU
 
 **영향**: 시간표/출석/수업 등 `public.users`만 참조하는 기능엔 무해. 단 로그인·super-admin 사용자 관리(auth admin API)는 실패. 실 운영 user(`createTenantWithMaster`/`createStaff` = `auth.admin.createUser`로 생성)는 auth 있어 정상.
 
-**교훈**: auth가 필요한 계정은 반드시 `auth.admin.createUser`로 생성 (트리거가 public.users mirror). 데모 강사를 진짜 로그인·관리 가능하게 하려면 seed를 그 방식으로 전환해야 함 (후속).
+**교훈**: auth가 필요한 계정은 반드시 `auth.admin.createUser`로 생성 (트리거가 public.users mirror). ~~데모 강사를 진짜 로그인·관리 가능하게 하려면 seed를 그 방식으로 전환해야 함 (후속).~~ → 폐기: 시드는 2026-09-19 영구 제거됐다.
 
 ### 32. seed wipe가 실제 gmail 계정(teacher로 강등된 st2000423)을 삭제 → 로그인 튕김
 `db:seed`의 wipe `delete from users where tenant_id=... and system_role <> 'master'`가 academy 시뮬레이션용 teacher였던 `st2000423`(실제 auth 계정)을 `public.users`에서 삭제. auth.users엔 남아 signInWithPassword는 성공하지만 `getCurrentUser()`가 null → `(shell)` layout이 `/login`으로 redirect = "로그인 직후 튕김".
@@ -501,7 +503,7 @@ void useWindowStore.persist.rehydrate();`(create 직후). 컴포넌트는 `hasHy
 - **규칙**: 성공 부수효과는 **`useEffect` + "처리완료" 가드**로 1회만 발화. 처리한 식별자를 ref에 기록(`handledRef.current !== state.id`)하는
   **id-키 가드**가 가장 견고 — 같은 stale state는 재오픈해도 다시 안 돌고, 진짜 새 결과(새 id)만 발화한다([class-form.tsx](<src/app/(shell)/classes/_components/class-form.tsx>) `handledNonce`·[speaker-editor.tsx](<src/app/(shell)/meetings/[id]/speaker-editor.tsx>) `handled` 패턴 참조).
   ⚠️ **boolean 가드를 "open될 때 리셋"하는 건 함정** — stale state를 재무장시켜 버그가 재발한다. **렌더 본문에서 `queueMicrotask`로 부수효과 내기**도 가드 없으면 매 렌더 실행이라 금지.
-- **대안(안전한 기존 패턴)**: 부모를 **조건부 마운트(`{open && <Dialog/>}`)** 로 두면 닫힐 때 언마운트→`useActionState` 리셋이라 가드 없이도 안전(eywa
+- **대안(안전한 기존 패턴)**: 부모를 **조건부 마운트(`{open && <Dialog/>}`)** 로 두면 닫힐 때 언마운트→`useActionState` 리셋이라 가드 없이도 안전(aywa
   다이얼로그 대다수가 이쪽 — 시험/청구서/지출/강의실). 새 다이얼로그는 둘 중 하나를 **명시적으로** 택할 것. always-mounted를 쓰면 id-키 가드가 필수다.
 
 ### 68. 스포트라이트(앨범)모드 = 다중 창 타일 + 배경 딤 + 배경 카드를 앨범 안으로 (2026-06-30)
@@ -586,9 +588,9 @@ realtime-js가 그 키로 WS URL을 만들며 `\n`이 `%0A`로 인코딩돼 **�
 - **교훈**: **새 스키마/서버액션 필드를 추가한 뒤 라이브 검증**하는데 "저장은 성공인데 값만 안 남는다"면 코드 의심 전에 **`.next` 삭제+dev 재시작**부터. (서버액션 stale은 [[#35]]의 확장 — #35는 "새 액션 미등록", 여기선 "새 스키마 필드 strip".)
 
 ### 74. 반투명 `-soft` 토큰 셀을 sticky로 만들면 본문이 비친다 → 불투명 base + 색밴드 레이어 (2026-07-06)
-시간표 기본뷰 헤더를 sticky-top으로 고정하니 스크롤 시 헤더에 본문(학생 이름)이 **비쳐 보였다**. 원인 = eywa `-soft` 색 토큰(`bg-blue-soft` 등)이 **12% 알파(반투명)**·`/50`은 6% → sticky 셀이 반투명이라 아래로 스크롤되는 본문이 그대로 비침(computed `rgba(31,107,168,0.12)`로 확인). 불투명한 `bg-bg-soft`(rgb, 알파 없음)·`bg-card`는 안 비친다.
+시간표 기본뷰 헤더를 sticky-top으로 고정하니 스크롤 시 헤더에 본문(학생 이름)이 **비쳐 보였다**. 원인 = aywa `-soft` 색 토큰(`bg-blue-soft` 등)이 **12% 알파(반투명)**·`/50`은 6% → sticky 셀이 반투명이라 아래로 스크롤되는 본문이 그대로 비침(computed `rgba(31,107,168,0.12)`로 확인). 불투명한 `bg-bg-soft`(rgb, 알파 없음)·`bg-card`는 안 비친다.
 - **수정**: 반투명 색을 셀에 직접 주지 말고 **불투명 base(`bg-card`) 셀 + 그 위에 반투명 색밴드를 얹는 자식 div**로 분리(색감 동일, 본문 비침 차단). 두 bg-color 클래스 스택(`bg-card bg-blue-soft`)은 Tailwind 출력 순서로 승자가 갈려 불안정 → 레이어(자식 div) 방식.
-- **교훈**: **sticky/fixed로 스크롤 본문 위에 겹치는 셀은 배경이 불투명해야 한다.** eywa `-soft`(12%)·`/50` 토큰을 스크롤 컨테이너 안 sticky로 쓰면 비친다 → 불투명 base + 색 레이어. (겹치는 요소는 배경/차단을 명시 — body-portal 오버레이 `print:hidden` [[#68]]과 같은 결.)
+- **교훈**: **sticky/fixed로 스크롤 본문 위에 겹치는 셀은 배경이 불투명해야 한다.** aywa `-soft`(12%)·`/50` 토큰을 스크롤 컨테이너 안 sticky로 쓰면 비친다 → 불투명 base + 색 레이어. (겹치는 요소는 배경/차단을 명시 — body-portal 오버레이 `print:hidden` [[#68]]과 같은 결.)
 
 ### 75. localStorage를 lazy `useState` 초기값으로 읽으면 hydration 크래시(#418) — 페이지 전체 클릭 먹통 (2026-07-13)
 직원 상세 '월간일정' 탭이 **프로덕션에서 열리지 않았다**(콘솔 `Minified React error #418` = "Text content did not match" hydration mismatch). 원인 = 뷰 선호(달력/목록)를 `useState(() => localStorage.getItem(...))`로 **첫 렌더에서 읽어**, 서버 HTML(항상 "grid")과 클라 첫 렌더가 어긋남 → React가 hydration 도중 죽으면서 **그 페이지의 모든 이벤트 핸들러가 안 붙어 클릭이 전부 먹통**(탭이 "안 들어가짐"). #51(dnd-kit SSR id)과 같은 계열 — SSR/CSR 첫 렌더 불일치.
@@ -648,7 +650,7 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
   ⚠️ 스크롤 컨테이너를 `overflow:auto|scroll`로만 찾는 조회는 **문서 스크롤바를 못 잡는다**(html은 `overflow:visible`).
   반드시 `document.scrollingElement.scrollHeight > clientHeight`를 따로 볼 것.
 - **재발(2026-07-16, 운영실 대시보드)**: AI 운영실 개편(`6962b14`)이 슬림 추세 스파크라인 `p.sr-only`([slim-trend.tsx](<src/app/(shell)/dashboard/_components/slim-trend.tsx>))·브리핑 갱신 안내 `span.sr-only`([briefing-auto-refresh.tsx](<src/app/(shell)/dashboard/_components/briefing-auto-refresh.tsx>))를 **static 부모**에 넣어 재발(실측: 뷰포트 674인데 `html.scrollHeight` 1294 = 아래 620px 유령 스크롤 영역). **감싼 부모에 `relative`**로 해소.
-  ⚠️ **덮기(마스킹) 금지 — 이번 커밋은 근본원인 대신 전역 `html:has([data-eywa-shell]) { overflow:hidden }`(globals.css)로 스크롤바만 가렸다.** `overflow:hidden`은 스크롤바·사용자 조작만 막고 **프로그램적 스크롤은 허용**(`scrollTop=200` 실제로 먹힘) → 문서는 여전히 620px 넘쳐 있고, `scrollIntoView`/포커스 이동이 셸을 밀면 **스크롤바가 없어 새로고침 외 복구 불가**. 이 전역 잠금은 대시보드 커밋에서 처음 생긴 것(직전 커밋엔 없음)이라 **제거 = 안정적 이전 상태 복귀** + sr-only 근본수정으로 마무리.
+  ⚠️ **덮기(마스킹) 금지 — 이번 커밋은 근본원인 대신 전역 `html:has([data-aywa-shell]) { overflow:hidden }`(globals.css)로 스크롤바만 가렸다.** `overflow:hidden`은 스크롤바·사용자 조작만 막고 **프로그램적 스크롤은 허용**(`scrollTop=200` 실제로 먹힘) → 문서는 여전히 620px 넘쳐 있고, `scrollIntoView`/포커스 이동이 셸을 밀면 **스크롤바가 없어 새로고침 외 복구 불가**. 이 전역 잠금은 대시보드 커밋에서 처음 생긴 것(직전 커밋엔 없음)이라 **제거 = 안정적 이전 상태 복귀** + sr-only 근본수정으로 마무리.
 
 ### 80. Anthropic **Claude 5 계열은 `temperature` 파라미터가 deprecated** — 보내면 400, 폴백 경로 전멸 (2026-07-17)
 운영실 비서에서 Solar 실패 → Claude(sonnet-5) 폴백이 `temperature: 0.2` 때문에
@@ -782,7 +784,7 @@ scope에 userId도 없었다 → **로그인조차 없이** DevTools › Applica
 **증상**: 벨 알림을 눌렀는데 "아무런 출력이 없다"(원장 제보). 오류도 없고, 읽음 처리도 되고, 라우트도 실제로 바뀐다.
 그런데 화면은 그대로다.
 
-- **원인**: eywa 데스크톱 풀셸은 **메뉴 = 플로팅 창(iframe)** 이라, 사용자가 일하는 동안 **화면이 창으로 덮여
+- **원인**: aywa 데스크톱 풀셸은 **메뉴 = 플로팅 창(iframe)** 이라, 사용자가 일하는 동안 **화면이 창으로 덮여
   있는 게 정상 상태**다. 그 상태에서 `router.push("/students")`는 창 **뒤의 배경 `<main>`** 만 바꾼다 →
   보이는 변화 0. 개발자 화면(창 0개)에선 멀쩡히 동작해 **재현이 안 되는** 유형의 버그다.
 - **규칙**: 앱 안에서 **프로그램적으로 이동**시키는 코드는 `router.push`가 아니라
@@ -1187,7 +1189,7 @@ pro로 돈 적이 **한 번도 없었다**(2026-07-14·07-16·07-30 전수, conf
 ## #101 폰에 알림이 안 오는 건 권한 문제가 아니다 — **API가 다르고**(안드로이드) **설치가 필요하다**(iOS) (2026-08-07)
 
 원장 *"모바일에서 (안드로이드) 알림을 받으려면 그냥 알림 켜놓으면 자동으로 오나? ios는 사파리에서 홈으로
-내보내기 해놓으면 되고"* → **둘 다 아니었다.** eywa의 OS 알림은 `new Notification()`(생성자) 한 줄인데:
+내보내기 해놓으면 되고"* → **둘 다 아니었다.** aywa의 OS 알림은 `new Notification()`(생성자) 한 줄인데:
 
 - **안드로이드 크롬은 그 생성자를 아예 지원하지 않는다**(서비스워커의 `registration.showNotification()` 필수).
   권한을 허용해도, 탭을 열어놔도 **아무 일도 안 일어난다** — 코드의 `catch`가 조용히 삼켜서 "권한 문제"로 보인다.
@@ -1231,7 +1233,7 @@ GET  http://localhost:3100/ecs?_rsc=…                        → 200   목적�
 
 **⚠️ 같이 갈 것 — 클라가 서버에 물어보고 이동하는 자리엔 타임아웃**: 응답이 안 오면 `pending`이 영영
 `true`라 폼이 잠긴다. `Promise.race([action(), 3초 후 null])`로 **덜 정확한 착지 > 멈춤**을 택한다.
-(eywa 로그인 = `resolveLoginLanding()` 실측 ~300ms, 타임아웃 3초 + role 기반 폴백.)
+(aywa 로그인 = `resolveLoginLanding()` 실측 ~300ms, 타임아웃 3초 + role 기반 폴백.)
 
 **🔑 진단 순서**: 클릭이 "먹통"인데 에러가 없으면 콘솔보다 **네트워크 목록을 먼저** 본다.
 목적지 요청이 `200`으로 찍혀 있으면 그건 데이터·권한 문제가 아니라 **이동(라우터) 문제**다.
@@ -2084,7 +2086,7 @@ a few seconds from the window's load event`가 **주기적으로 계속 쌓인�
 - DB 트리거가 데이터를 바꾸면 **트리거가 감사로그를 남겨야** 한다(앱 한 곳에서 남기면 다른 진입 경로 — 학생 쪽 트리거·동기화 — 가 빠진다).
 - 🔴 **같은 모양이 두 곳에 더 있다(미해결)**: makeedu 학생 동기화(`import-students-list.cjs` tier1 = 이름+학교core+학년)와 수납
   가져오기(`import-invoices.cjs` = makeedu_id → **이름+학년 폴백**). 새 아이가 makeedu에 **접미사 없이 '김근우'** 로 원생 등록되면,
-  학생 동기화가 기존 아이에 매칭하고(그 아이는 makeedu_id가 이미 차 있어 백필이 막힘) 새 원생은 eywa에 안 들어오며, 수납 줄은
+  학생 동기화가 기존 아이에 매칭하고(그 아이는 makeedu_id가 이미 차 있어 백필이 막힘) 새 원생은 aywa에 안 들어오며, 수납 줄은
   이름+학년 폴백으로 **기존 아이의 월 청구에 합쳐질 수 있다**. makeedu에서도 접미사 이름(김근우A)으로 등록할 것.
 
 ## #133 창 안 **소프트 이동이 주소에서 `embed=1`을 지우면**, 다음 `router.refresh()`에 창 안에 **전체 셸**이 뜬다 (2026-09-12)

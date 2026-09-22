@@ -1,12 +1,12 @@
-import type { LucideIcon } from "@/components/icons/eywa-icon-compat";
-import { MENU_ICON, type EywaIconName } from "@/components/icons/eywa-icons";
+import type { LucideIcon } from "@/components/icons/aywa-icon-compat";
+import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import { canAccess, TEACHER_MENU_KEYS, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { OWNER_TABS } from "@/features/owner/tabs";
 
 export type NavItem = {
   href: string;
   label: string;
-  icon: EywaIconName;
+  icon: AywaIconName;
   menuKey: MenuKey;
   /**
    * 데스크톱 셸에서 이 메뉴를 표시하는 방식. 생략하면 기존처럼 플로팅 창(`window`)으로 연다.
@@ -154,9 +154,9 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
 
 /**
  * NAV: 5그룹 (홈 / 수업 / 학생 / 운영 / 지원). 아이콘은 식물 비유가 아닌 기능 중심
- * Eywa 아이콘(레일·모바일nav·검색팰릿·창 전환 공용). 그룹 번호는 사이드바에서 자동 인덱스.
+ * Aywa 아이콘(레일·모바일nav·검색팰릿·창 전환 공용). 그룹 번호는 사이드바에서 자동 인덱스.
  *
- * ⚠️ 라벨 = 각 page.tsx `metadata.title`("<라벨> — eywa")과 **동일해야 한다** — 창(iframe) 타이틀바가
+ * ⚠️ 라벨 = 각 page.tsx `metadata.title`("<라벨> — aywa")과 **동일해야 한다** — 창(iframe) 타이틀바가
  * 문서 제목을 실시간 표시(observeIframe)하므로, 여기만 바꾸면 사이드바와 창 이름이 어긋난다
  * (2026-07-16 원장 지적: 6962b14 개편이 사이드바만 대량 리네임 → 전부 원복. 라벨을 바꾸려면 페이지
  * metadata.title과 함께 바꿀 것). 대시보드만 예외적으로 "운영실"로 개칭(페이지 제목도 운영실).

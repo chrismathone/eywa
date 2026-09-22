@@ -1,8 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { AppWindow, Columns2, Layers, X } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { AppWindow, Columns2, Layers, X } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { usePrefs } from "./use-prefs";
 
 // 하이드레이션 게이트 — SSR=false/클라=true (persist 비동기 하이드레이션 미스매치·setState-in-effect 회피, #25 패턴)
@@ -11,7 +11,7 @@ const useHydrated = () => useSyncExternalStore(subscribeNoop, () => true, () => 
 
 /**
  * 멀티윈도우 워크스페이스 첫 진입 코치마크(1회용, 데스크톱 전용 — WorkspaceCanvas가 데스크톱에서만 마운트).
- * eywa의 결정적 차별점(메뉴=창, 나란히 보기, 동시 작업)을 첫 화면에 각인. 닫으면 prefs.onboarded 영속.
+ * aywa의 결정적 차별점(메뉴=창, 나란히 보기, 동시 작업)을 첫 화면에 각인. 닫으면 prefs.onboarded 영속.
  * 첫 노출 시 사이드바를 펼쳐 메뉴 라벨을 보여줘 발견성도 함께 올린다.
  */
 const POINTS: { icon: typeof AppWindow; title: string; desc: string }[] = [
@@ -66,7 +66,7 @@ export function WorkspaceOnboarding() {
           여러 화면을 한 번에
         </h2>
         <p className="text-text-dim mt-1.5 text-sm">
-          eywa는 메뉴가 <span className="text-foreground font-bold">창</span>으로 열려, 동시에 보고 일할 수 있어요.
+          aywa는 메뉴가 <span className="text-foreground font-bold">창</span>으로 열려, 동시에 보고 일할 수 있어요.
         </p>
 
         <ul className="mt-5 space-y-3.5">

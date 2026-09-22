@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { kstToday } from "@/lib/date-kst";
-import { UserCheck, UserMinus } from "@/components/icons/eywa-icon-compat";
+import { UserCheck, UserMinus } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { deactivateStaff } from "@/features/staff/server/actions";
 import type { AssistClassRow, HomeroomClassRow } from "@/features/staff/server/queries";

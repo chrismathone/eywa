@@ -49,9 +49,9 @@ function isSameDocument(frame: HTMLIFrameElement, url: string): boolean {
   }
 }
 
-/** 문서 제목에서 " — eywa" 류 접미사 제거(크롬 타이틀 표시용). */
+/** 문서 제목에서 " — aywa" 류 접미사 제거(크롬 타이틀 표시용). 옛 이름(eywa) 배포본의 창도 함께 뗀다(2026-09-21 개명). */
 function cleanTitle(raw: string) {
-  return raw.replace(/\s*[—–-]\s*eywa\s*$/i, "").trim();
+  return raw.replace(/\s*[—–-]\s*[ae]ywa\s*$/i, "").trim();
 }
 
 /**

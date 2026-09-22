@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { assetStatusForLoan, holderEditBlockReason, loanMismatchMap, loanMismatchOf } from "./loan-link";
+import {
+  assetStatusForLoan,
+  holderEditBlockReason,
+  loanMismatchMap,
+  loanMismatchOf,
+  loanStatusForReturnTarget,
+  openLoanOf,
+  restoredStatusAfterReturn,
+} from "./loan-link";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { InventoryAsset, InventoryLoan } from "./types";
 
 const asset = (id: string, status: string): InventoryAsset => ({
@@ -117,5 +127,43 @@ describe("holderEditBlockReason", () => {
   it("그 밖의 상태는 그냥 고친다", () => {
     expect(holderEditBlockReason(asset("DT-001", "in_use"), [])).toBeNull();
     expect(holderEditBlockReason(asset("NB-006", "lost"), [loan("NB-006", "unreturnable")])).toBeNull();
+  });
+});
+
+describe("자산 표에서 바로 반납(원장 2026-09-18)", () => {
+  it("반납하면 대여 전 상태로 — 대여중·폐기·없음은 사용중", () => {
+    expect(restoredStatusAfterReturn("repair")).toBe("repair");
+    expect(restoredStatusAfterReturn("on_loan")).toBe("in_use");
+    expect(restoredStatusAfterReturn("disposed")).toBe("in_use");
+    expect(restoredStatusAfterReturn(null)).toBe("in_use");
+  });
+
+  it("🔴 분실을 고르면 대여 기록은 회수불가, 확인필요면 확인필요 — '반납완료'로 남기지 않는다", () => {
+    expect(loanStatusForReturnTarget("lost")).toBe("unreturnable");
+    expect(loanStatusForReturnTarget("check")).toBe("check");
+    expect(loanStatusForReturnTarget("repair")).toBe("returned");
+    expect(loanStatusForReturnTarget(null)).toBe("returned");
+    // 거꾸로 짝이 맞아야 한다 — 장부↔자산 연결 규약(assetStatusForLoan)과 같은 방향.
+    expect(assetStatusForLoan(loanStatusForReturnTarget("lost"))).toBe("lost");
+    expect(assetStatusForLoan(loanStatusForReturnTarget("check"))).toBe("check");
+  });
+
+  it("열린 대여는 out 한 건만 — 반납·확인필요 기록은 반납 대상이 아니다", () => {
+    expect(openLoanOf([loan("a", "returned", "L-1"), loan("a", "out", "L-2")])?.loanCode).toBe("L-2");
+    expect(openLoanOf([loan("a", "returned"), loan("a", "check")])).toBeNull();
+    expect(openLoanOf([])).toBeNull();
+  });
+
+  it("🔴 화면(반납 창·상태 창)과 서버가 같은 규약을 쓴다 — 안내 문장과 실제 결과가 갈리지 않게", () => {
+    const root = join(__dirname, "..", "..", "..");
+    const read = (rel: string) => readFileSync(join(root, rel), "utf8");
+    expect(read("src/features/inventory/server/loan-actions.ts")).toContain("restoredStatusAfterReturn(loan.prev_status");
+    expect(read("src/app/(shell)/inventory/_components/return-dialog.tsx")).toContain("restoredStatusAfterReturn(loan.prevStatus)");
+    expect(read("src/app/(shell)/inventory/_components/status-dialog.tsx")).toContain("restoredStatusAfterReturn(openLoan.prevStatus)");
+    // 자산 면이 열린 대여를 두 창에 싣고, 반납 창으로 잇는다.
+    const face = read("src/app/(shell)/inventory/_components/assets-face.tsx");
+    expect(face).toContain("openLoan={openLoanFor(dialog.asset)}");
+    expect(face).toContain('kind: "return"');
+    expect(face).toContain("<ReturnDialog");
   });
 });

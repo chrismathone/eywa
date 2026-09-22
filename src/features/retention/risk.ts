@@ -1,13 +1,13 @@
 // 이탈(churn) 위험 점수 — 순수 함수. I/O·Date 없음.
 // 시간 파생 입력(상담 공백일·수강 종료 임박일 등)은 server query가 미리 계산해 넘긴다.
 // → 단위 테스트 가능 + 마이그레이션 불필요(저장하지 않고 읽을 때 파생).
-// 부원장 프로토타입의 analyzeRow / getRenewal / getPrimaryAction 로직을 eywa 데이터 형태로 포팅.
+// 부원장 프로토타입의 analyzeRow / getRenewal / getPrimaryAction 로직을 aywa 데이터 형태로 포팅.
 
 export type RiskLevel = "risk" | "warn" | "ok";
 export type RenewalTone = "risk" | "warn" | "ok";
 export type RiskCategory = "score" | "homework" | "attend" | "counsel" | "parent";
 
-/** 학생 1명의 정규화된 위험 신호 — eywa 실데이터에서 server query가 집계. */
+/** 학생 1명의 정규화된 위험 신호 — aywa 실데이터에서 server query가 집계. */
 export type RetentionSignals = {
   /** 최근 성적(%) — student_grades 최신(score/max_score*100). null = 기록 없음 */
   lastScore: number | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Trash2 } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   FEE_KIND_LABEL,

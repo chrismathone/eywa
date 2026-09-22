@@ -6,7 +6,7 @@ import { BarList, EmptyNote, SheetFrame, SheetSection, WordTable } from "./jj-sh
 import type { JjSheetLayout } from "./jj-study-sheet";
 
 /**
- * 인재원 **시험 결과지** — eywa식 재설계(사용자 2026-09-11).
+ * 인재원 **시험 결과지** — aywa식 재설계(사용자 2026-09-11).
  *
  * 정보 구조는 인재원 원본(renderExam)과 같다: 응시 정보(시험명·구분·제출·걸린 시간) → 점수 /100 · 정답 N/M ·
  * 반 평균·전체 평균 ±차 → 점수 위치(0~100, 평균 세로선) → 품사별 → 다시 봐야 할 단어(문제 | 정답 | 학생 답).

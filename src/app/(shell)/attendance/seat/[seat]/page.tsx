@@ -17,7 +17,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
-import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
 import {
   USABLE_SEAT_KEYS,
@@ -44,7 +44,7 @@ import { SeatJjAllDay } from "./_components/seat-jj-all-day";
 import { applySeatDayChoices, getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
 import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 
-export const metadata: Metadata = { title: "랩실·JJ실 출석부 — eywa" };
+export const metadata: Metadata = { title: "랩실·JJ실 출석부 — aywa" };
 
 /** KST 지금 "HH:MM" — 기본으로 열 교시를 고르는 데만 쓴다(순수 규칙은 pickPeriodIndex). */
 function kstNowHm(): string {
@@ -92,7 +92,7 @@ export default async function SeatAttendancePage({
   // 토글 담당은 메뉴 권한 없이 그 자리만 연다. 없으면 기존 seat_attendance 게이트.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!dutyAllowsSeat(await getSeatDuties(user.id), seat)) await requireAccess("seat_attendance");
+  if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 
   const today = kstToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam ?? "") ? dateParam! : today;
@@ -111,7 +111,7 @@ export default async function SeatAttendancePage({
 
   /**
    * **'전체' 보기**(원장 2026-09-10 ⑨ *"한번에 오늘 전체 볼 수 있게. 스크롤링으로 시간대별로 분리해서"*) — 랩실·JJ실 둘 다.
-   * JJ실은 2026-09-18부터(원장 *"펼치기"*): 교시마다 진도(수업계획) 블록이 붙어 하루치를 다 펴면 화면이 계획으로
+   * JJ실은 2026-09-18부터(원장 *"펼치기"* · *"각각의 수업이 펼치기 접기"*): 교시마다 진도(수업계획) 블록이 붙어 하루치를 다 펴면 화면이 계획으로
    * 덮이므로 **계획은 교시마다 접은 채** 시작한다(`SeatJjAllDay` → `SeatBoard foldPlans`).
    * 🔑 조회는 **교시 수만큼 늘리지 않는다**(B6) — 하루 명단은 원래 `getSeatDay` 한 번이고, 배치·다음 행선지·
    *    JJ 칸·계획도 하루치를 한 번 받아 교시별로 나눈다(`…ForDay`·`…BySlot`·`…ForPeriods`).

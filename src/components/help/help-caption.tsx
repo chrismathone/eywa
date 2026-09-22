@@ -23,7 +23,7 @@ export function HelpCaption({
 }) {
   return (
     <div
-      id="eywa-help-caption"
+      id="aywa-help-caption"
       className={`${HOVER_CARD_SHELL} ${s.caption} pointer-events-auto text-foreground absolute overflow-y-auto`}
       style={{ left: card.x, top: card.y, width: card.w, height: card.h }}
       onClick={stop}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Loader2, Sheet, X } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, Check, Loader2, Sheet, X } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { addMonths, planMonthLabel } from "@/features/timetable-dev/types";
 import type { PlanSheetImportPlan, SheetTab } from "@/features/timetable-dev/lib/sheet-plan";

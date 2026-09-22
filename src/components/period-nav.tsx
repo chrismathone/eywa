@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { cn } from "@/lib/utils";
 import s from "./period-nav.module.css";

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import {
   buildClassSlots,
+  filterLabSeparateRows,
   liveScheduleRows,
   roomBookOf,
   slotRoomName,
@@ -136,5 +137,31 @@ describe("liveScheduleRows — 기준일 유효 배치만(#88)", () => {
 
   it("⚠️ 전부 이력뿐이면 전 행 — '시간 미정'으로 거짓 축소하지 않는다", () => {
     expect(liveScheduleRows([old], "2026-09-11")).toEqual([old]);
+  });
+});
+
+describe("filterLabSeparateRows — *LAB 배정으로 자리 교시를 가른다(원장 2026-09-18)", () => {
+  // PL1b 화요일 실배치: 14:20 LAB(일반) · 15:00 강사 교시 · 15:40 *LAB.
+  const lab = row({ day: "tue", startTime: "14:20", endTime: "15:00", teacherLabel: "LAB" });
+  const lesson = row({ day: "tue", startTime: "15:00", endTime: "15:40", teacherLabel: "Anna" });
+  const sep = row({ day: "tue", startTime: "15:40", endTime: "16:20", teacherLabel: "LAB", labSeparate: true });
+  const rows = [lab, lesson, sep];
+
+  it("켠 원생은 *LAB만 · 끈 원생은 일반 LAB만 · 강사 교시는 둘 다 그대로", () => {
+    expect(filterLabSeparateRows(rows, true)).toEqual([lesson, sep]);
+    expect(filterLabSeparateRows(rows, false)).toEqual([lab, lesson]);
+  });
+
+  it("🔴 모르면(null) 한 줄도 안 뺀다 — 조회 실패가 수업을 지우지 않게", () => {
+    expect(filterLabSeparateRows(rows, null)).toEqual(rows);
+  });
+
+  it("🔴 그 날 *LAB이 없으면 그대로 — 켠 원생도 월요일 LAB에 선다", () => {
+    // 월요일 LAB + 화요일 *LAB — 가르기는 **요일마다** 따로 본다(월요일은 갈릴 것이 없다).
+    const mon = [row({ day: "mon", startTime: "15:00", endTime: "15:40", teacherLabel: "LAB" }), sep];
+    expect(filterLabSeparateRows(mon, true)).toEqual(mon);
+    // ⚠️ 끈 원생도 그대로다 — 이 픽스처의 화요일엔 갈 **일반 LAB이 없어서**(그 날 자리가 *LAB뿐) 빼지 않는다.
+    //    "명단에서 사람이 사라지는 것이 최악"이라는 가드(실측 그런 배치 0건). 일반 LAB이 함께 있으면 위 케이스처럼 빠진다.
+    expect(filterLabSeparateRows(mon, false)).toEqual(mon);
   });
 });

@@ -138,7 +138,7 @@ describe("실패 종류와 문장", () => {
   it("🔴 503은 인재원이 '키 미설정'이라고 할 때만 인재원 쪽 설정 문제로 본다", () => {
     expect(failKindOfStatus(503, "연동 키 미설정")).toBe("remote_not_configured");
     expect(failKindOfStatus(503, "")).toBe("server");
-    // eywa 쪽 설정 없음과 문장이 달라야 어느 쪽을 고칠지 안다.
+    // aywa 쪽 설정 없음과 문장이 달라야 어느 쪽을 고칠지 안다.
     expect(IJW_FAIL_TEXT.remote_not_configured).not.toBe(IJW_FAIL_TEXT.not_configured);
   });
 

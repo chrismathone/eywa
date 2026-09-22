@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, X } from "@/components/icons/eywa-icon-compat";
+import { Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { ScheduledChange } from "@/features/enrollments/scheduled-changes";
 import {

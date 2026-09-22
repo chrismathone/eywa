@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { Mic, RefreshCw } from "@/components/icons/eywa-icon-compat";
+import { Mic, RefreshCw } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EditingBadge } from "@/features/presence/editing-badge";
 
@@ -23,7 +23,7 @@ import {
 import { NewMeetingTrigger } from "./_new-meeting-trigger";
 import { Pagination } from "@/components/pagination";
 
-export const metadata = { title: "회의록 — eywa" };
+export const metadata = { title: "회의록 — aywa" };
 
 const PAGE_SIZE = 50;
 

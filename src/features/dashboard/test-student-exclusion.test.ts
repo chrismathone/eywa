@@ -137,7 +137,8 @@ describe("데스크 오늘 출결·처리현황은 테스트 학생을 명단에
     expect(LOAD).toContain(
       "opts.excludeTestStudents ? getTestStudentIds(supabase) : Promise.resolve(new Set<string>())",
     );
-    expect(LOAD).toMatch(/const \[classRows, enrollRows, recordRows, reservedRaw, testStudentIds\] = await Promise\.all\(/);
+    // ⚠️ 뒤에 재료가 더 붙어도 된다(2026-09-18 *LAB 배정 `labSplit`) — 지키려는 것은 **같은 묶음에서 병렬로 돈다**는 것뿐이다.
+    expect(LOAD).toMatch(/const \[classRows, enrollRows, recordRows, reservedRaw, testStudentIds[^\]]*\] = await Promise\.all\(/);
   });
 
   it("명단에 넣기 전에 빼고, 보강 예약도 같은 집합을 지난다(예약 한 줄이 반을 되살리지 않게)", () => {

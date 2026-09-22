@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
-import { Loader2, Megaphone, Pencil, Pin, PinOff, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Megaphone, Pencil, Pin, PinOff, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

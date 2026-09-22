@@ -149,6 +149,32 @@ export function clampEcsMonthView(view: EcsMonthView, isEie: boolean): EcsMonthV
 }
 
 /**
+ * `ui_prefs.ecs.monthPeriod` → EiE 월간 계획서(MP)의 **기간 축** — 달력월 / 세션(0189a).
+ *
+ * 원장 2026-09-21: *"EiE ecs에서 세션으로 뷰가 보일 수 있게 월/세션 전환"*. 세션은 학원설정의 운영 기간
+ * (`operating_periods`, 월~금이 각 4회씩 들어가는 구간)이라 라벨월을 넘어갈 수 있다(10월 세션 = 10/1~11/2).
+ *
+ * 기본은 **세션** — 출석부 날짜축(`ui_prefs.attendance.periodMode`)과 같은 기본이고, 학원이 세션으로 돈다
+ * (CLAUDE.md "기간 단위 = 세션"). 그 달에 세션이 정의돼 있지 않으면 **자동으로 달력월**로 떨어진다
+ * (`resolvePeriodWindow` 폴백 — 이 파일 밖에 폴백 분기를 두지 않는다).
+ * ⚠️ 이건 **표시 렌즈**다 — 칸은 날짜로 저장되므로 어느 축으로 봐도 같은 칸은 같은 값이다.
+ * ⚠️ **EiE 반에서만** 읽는다(`getClassSheetMonth`) — 인재원 영어의 달력·진도표는 월간 목표·메모가
+ *    달 단위라 창을 넓히면 목표 밖 날짜가 섞인다.
+ * ⚠️ 계정 귀속(원장 2026-08-04 *"모든 뷰 세팅은 계정에 귀속"*).
+ */
+export type EcsMonthPeriod = "month" | "session";
+export const DEFAULT_ECS_MONTH_PERIOD: EcsMonthPeriod = "session";
+
+/** 모양이 맞으면 그 값, 아니면 null(호출부가 저장값·기본값으로 떨어뜨린다 — 주소 한 글자로 축이 뒤집히지 않게). */
+export function normalizeEcsMonthPeriod(raw: unknown): EcsMonthPeriod | null {
+  return raw === "month" || raw === "session" ? raw : null;
+}
+
+export function readEcsMonthPeriod(uiPrefs: unknown): EcsMonthPeriod {
+  return normalizeEcsMonthPeriod(ecsScope(uiPrefs)?.monthPeriod) ?? DEFAULT_ECS_MONTH_PERIOD;
+}
+
+/**
  * 월간 뷰의 **표시 토글**(과제 / 자리 교시)은 보기마다 따로 기억한다 — 달력은 하루가 완성돼야 해서
  * 둘 다 켠 채로, 진도표는 영역 줄에 반 진도와 개별 진도가 섞이면 흐름이 끊겨 둘 다 끈 채로 연다
  * (한 벌로 묶으면 한쪽에서 켠 것이 다른 쪽을 망친다 — 원장 시안 확인 2026-08-31).

@@ -6,7 +6,7 @@ import {
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
   MapPin, MessageSquare, Mic, Save, School, Sparkles, Tag, Target, Users, User, UserCheck, XCircle,
   Droplet, type LucideIcon,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { kstToday } from "@/lib/date-kst";
 import { Button } from "@/components/ui/button";
 import { useGradeLevels, useSubjectMaps } from "@/features/owner/operations-context";
@@ -43,7 +43,7 @@ import {
   type SubjectDetails,
 } from "@/features/enrollment/form-config";
 
-// 컴팩트 입력(ijw 밀도) — eywa 토큰. 카드/라벨/그리드는 아래 헬퍼로 통일.
+// 컴팩트 입력(ijw 밀도) — aywa 토큰. 카드/라벨/그리드는 아래 헬퍼로 통일.
 const input =
   "border-border bg-card text-foreground placeholder:text-text-faint w-full rounded-md border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40";
 

@@ -41,7 +41,7 @@ const sql = postgres(url, { prepare: false, max: 3 });
 
 (async () => {
   try {
-    // 1) eywa 데모 학생 → (이름,학년,학교) 키 맵 (재원 우선)
+    // 1) aywa 데모 학생 → (이름,학년,학교) 키 맵 (재원 우선)
     const students = await sql`select id, name, grade, school, status from students where tenant_id=${TENANT}`;
     const stuMap = new Map(); // key3 → [id...] (non-withdrawn first)
     for (const s of students) {
@@ -51,7 +51,7 @@ const sql = postgres(url, { prepare: false, max: 3 });
       else stuMap.get(k).unshift(s.id);
     }
 
-    // 1b) 소스 students: Firebase id → (이름,학년,학교) 키 (eywa 학생을 시드한 바로 그 레코드)
+    // 1b) 소스 students: Firebase id → (이름,학년,학교) 키 (aywa 학생을 시드한 바로 그 레코드)
     //     상담의 denormalized name/grade/school은 드리프트가 커서, 학생 id로 소스 학생을 거쳐 매칭한다.
     const fbToKey = new Map();
     for (const s of C.students || []) fbToKey.set(s.id, key3(s.name, s.grade, s.school));
@@ -80,7 +80,7 @@ const sql = postgres(url, { prepare: false, max: 3 });
       patchByGroup.get(g).push({ summary, category, audience, subject, followAction, followDone, followDate });
     }
 
-    // 3) eywa 데모 상담 행 → (학생uuid|날짜) 그룹 (id 순서 안정)
+    // 3) aywa 데모 상담 행 → (학생uuid|날짜) 그룹 (id 순서 안정)
     const rows = await sql`
       select id, student_id, to_char(consulted_at,'YYYY-MM-DD') cdate
       from student_consultations where tenant_id=${TENANT}
@@ -113,7 +113,7 @@ const sql = postgres(url, { prepare: false, max: 3 });
     }
     console.log("=== fix-consultations", APPLY ? "[APPLY]" : "[DRY-RUN]", "===");
     console.log("source consults:", SRC.length, "| matched to student:", srcMatched, "| unmatched:", srcUnmatched);
-    console.log("eywa rows:", rows.length, "| rows in plan (will patch):", plan.length, "| rows left unpatched:", rows.length - plan.length);
+    console.log("aywa rows:", rows.length, "| rows in plan (will patch):", plan.length, "| rows left unpatched:", rows.length - plan.length);
     console.log("projected category:", JSON.stringify(projCat));
     console.log("projected empty summary:", projEmpty, "| follow_up_date set:", projFollowDate, "| audience set:", projAudience);
 

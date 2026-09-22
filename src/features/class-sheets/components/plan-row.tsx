@@ -3,7 +3,7 @@
 // 계획 1행 — 영역 셀렉트(CAS patch) + 텍스트 4칸(디바운스 CAS) + 시기 이동 + 삭제.
 // 충돌 시 그 셀만 pause + "서버값/내 값" 인라인 선택(계획 v2.2 §C — 자동 덮어쓰기 금지).
 import { memo, useCallback } from "react";
-import { X } from "@/components/icons/eywa-icon-compat";
+import { X } from "@/components/icons/aywa-icon-compat";
 import { skillAreaColorOf, skillAreaLabelOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";

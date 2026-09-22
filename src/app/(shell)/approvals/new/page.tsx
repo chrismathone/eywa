@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft } from "@/components/icons/eywa-icon-compat";
+import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
@@ -10,7 +10,7 @@ import {
 } from "@/features/approvals/server/queries";
 import { DraftComposer } from "./_composer";
 
-export const metadata = { title: "기안하기 — eywa" };
+export const metadata = { title: "기안하기 — aywa" };
 
 /**
  * 기안(결재 문서 작성) — **하이웍스 '결재 문서 작성' 화면 흐름**(원장 스크린샷 대조 2026-08-14):

@@ -1,5 +1,5 @@
 import { FLOW_NODES } from "@/data/marketing";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { CountUp } from "../_motion/count-up";
 import { Reveal } from "../_motion/reveal";
 import { EditorialPhoto } from "../_ui/photo";
@@ -54,7 +54,7 @@ export function SignatureSection() {
           {/* 콘솔 헤더 */}
           <div className="border-[var(--deep-line)] flex items-center justify-between border-b px-5 py-3 sm:px-7">
             <span className="text-[var(--deep-dim)] font-mono text-[10.5px] font-bold tracking-[0.16em] uppercase">
-              EYWA 운영 콘솔 — 자동 연동 로그
+              AYWA 운영 콘솔 — 자동 연동 로그
             </span>
             <span className="text-[var(--azure)] flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.1em]">
               <span className="ey-live bg-[var(--azure)] size-1.5 rounded-full" aria-hidden="true" />

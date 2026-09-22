@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "@/components/icons/eywa-icon-compat";
+import { RefreshCw } from "@/components/icons/aywa-icon-compat";
 import { getConsultationTotalCount } from "@/features/enrollment/server/poll-actions";
 
 /**

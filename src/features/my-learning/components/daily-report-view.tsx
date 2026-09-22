@@ -2,7 +2,7 @@ import { buildReport } from "@/features/onescreen/report";
 import { subjectTone, toneSolidClass, toneTextClass } from "@/features/onescreen/data";
 import { Pill } from "@/components/atoms/pill";
 import { DeltaChip } from "@/features/onescreen/components/delta-chip";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { OneScreenStudent, TestScore } from "@/features/onescreen/types";
 import { dateKo, pctOf, sessionToStudent, type Session } from "../history";
 

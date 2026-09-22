@@ -5,7 +5,7 @@
  * 오래 "ClassNote는 게시글 삭제가 안 된다"고 적혀 있었지만(report-card 경고문·textbook-send-dedup 주석)
  * 실제로는 **`DELETE /api/v1_2/reports/{id}/` → 204**가 된다(2026-07-13 학원이로 실검증, 반 공지 회수가
  * 이미 그 경로를 쓴다). 그래서 셋을 구분한다:
- *  - **링크 취소**(`revoked_at`) = eywa `/r/{token}` 열람 차단. **ClassNote 게시글은 그대로 남는다.**
+ *  - **링크 취소**(`revoked_at`) = aywa `/r/{token}` 열람 차단. **ClassNote 게시글은 그대로 남는다.**
  *  - **재발급** = 새 토큰 발급 + 발송 상태 리셋. 옛 게시글은 死링크인 채 게시판에 방치된다.
  *  - **회수**(이 모듈) = 게시글 자체를 지운다. 학부모 게시판에서 사라진다.
  *
@@ -23,7 +23,7 @@ export const RECALL_REQUESTED = "recall_requested";
 /**
  * 워커가 **집어가서 지우는 중** — `classnote-recall-core.mjs`가 원자 클레임하며 세우는 상태.
  * 🔴 이 상태를 "진행 중"에서 빼면 그 사이에 행을 지울 수 있고, 그러면 워커의 결과 기록이 0행이 되어
- *    **학부모 게시판에 글만 남고 eywa엔 흔적이 사라진다**(적대 리뷰 치명, 2026-08-18).
+ *    **학부모 게시판에 글만 남고 aywa엔 흔적이 사라진다**(적대 리뷰 치명, 2026-08-18).
  */
 export const RECALLING = "recalling";
 /** 회수 완료 — ClassNote 게시글 삭제됨. */

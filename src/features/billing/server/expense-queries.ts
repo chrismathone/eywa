@@ -4,7 +4,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { DEFAULT_CURRENCY, roundMoney } from "../currencies";
 
 // 지출관리(expenses) — 수납관리 창의 '지출' 책갈피 면. 월 단위(수납과 동일 톤). RLS가 tenant 강제.
-// line_items는 두 가지 형태가 섞여 있다: ① eywa 폼이 쓴 {description,quantity,unitPrice,vat,total}
+// line_items는 두 가지 형태가 섞여 있다: ① aywa 폼이 쓴 {description,quantity,unitPrice,vat,total}
 // ② ijw 임포트본이 보존한 {purpose,vendor,description,quantity,unitPrice,totalPrice,vatIncluded}.
 // normalizeLineItems가 둘을 아래 단일 형태로 흡수한다(지출결의서 상세가 용도/거래처까지 쓰므로).
 export type ExpenseLineItem = {
@@ -118,7 +118,7 @@ export function normalizeApprovalChecks(raw: unknown): ApprovalChecks {
   return out;
 }
 
-// line_items raw(jsonb) → 정규화 배열. eywa(total/vat)·ijw(totalPrice/vatIncluded/purpose) 양쪽 흡수.
+// line_items raw(jsonb) → 정규화 배열. aywa(total/vat)·ijw(totalPrice/vatIncluded/purpose) 양쪽 흡수.
 // ⚠️ ijw 임포트본은 JSON.stringify로 넣어 jsonb에 "문자열"로 이중 인코딩됨(배열 아님) → 문자열이면 1회 파싱.
 function normalizeLineItems(raw: unknown, currency: string): ExpenseLineItem[] | null {
   let arr: unknown = raw;

@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { requireMcsClassAccess } from "./access";
 import type { MathSheetMonthData } from "./month-queries";
 import {
@@ -12,10 +12,12 @@ import {
 } from "../lib/learning-plan";
 import { monthRange } from "@/lib/date-kst";
 import { readMathLearningTrack } from "./learning-track";
+import { buildLearningHistory } from "../lib/learning-history";
 
 export async function getMathLearningData(
   classId: string,
   monthData: MathSheetMonthData,
+  options: { studentId?: string; allRecords?: boolean } = {},
 ): Promise<LearningData> {
   const gate = await requireMcsClassAccess(classId);
   const endOfMonth = monthRange(monthData.month).to;
@@ -61,7 +63,7 @@ export async function getMathLearningData(
         ? "missing-table"
         : "failed",
     };
-  const visibleIds = new Set(monthData.students.map((s) => s.studentId));
+  const visibleIds = new Set(monthData.students.filter(s => !options.studentId || s.studentId === options.studentId).map((s) => s.studentId));
   for (const row of [...(legacy.data ?? []).map((row) => ({ ...row, track: "regular", block_count: null as number | null, end_study_grade: null, milestones: [], updated_at: undefined })), ...(standard.data ?? [])]) {
     if (!visibleIds.has(String(row.student_id)) || row.track !== track) continue;
     const goal: LearningGoal = {
@@ -80,56 +82,93 @@ export async function getMathLearningData(
     };
     result.goals[goal.studentId] = normalizeLearningGoal(goal);
   }
-  const goals = Object.values(result.goals);
-  if (!goals.length) return result;
-  const firstDate = goals.reduce(
-    (date, goal) => (goal.startDate < date ? goal.startDate : date),
-    referenceDate,
-  );
+  if (!visibleIds.size) return result;
   type Row = {
     student_id: string;
     report_date: string;
     progress: string | null;
     textbook: string | null;
     homework_today: string | null;
+    classnote_sent_at: string | null;
   };
+  type Enrollment = { student_id: string; class_id: string; start_date: string | null; end_date: string | null };
   try {
-    const records = await fetchAllPagedInChunks<Row>(
-      [...new Set(goals.map((g) => g.studentId))],
+    const [records, students, enrollments] = await Promise.all([fetchAllPagedInChunks<Row>(
+      [...visibleIds],
       (chunk, from, to) =>
         admin
           .from("lesson_reports")
-          .select("student_id, report_date, progress, textbook, homework_today")
+          .select("student_id, report_date, progress, textbook, homework_today, classnote_sent_at")
           .eq("tenant_id", tenantId)
           .eq("class_id", classId)
           .in("student_id", chunk)
-          .gte("report_date", firstDate)
+          // Keep the last known unit before the plan starts, including during exam preparation.
+          // A student's other classes may teach different courses, so class_id stays required.
+          .or("classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null")
+          .is("revoked_at", null)
           .lte("report_date", referenceDate)
           .order("report_date")
+          .order("classnote_sent_at", { nullsFirst: true })
           .order("id")
           .range(from, to),
-    );
+    ), fetchInChunks<{ id: string; enrolled_at: string | null }>([...visibleIds], chunk => admin.from("students")
+      .select("id, enrolled_at").eq("tenant_id", tenantId).in("id", chunk)),
+    fetchAllPagedInChunks<Enrollment>([...visibleIds], (chunk, from, to) => admin.from("enrollments")
+      .select("student_id, class_id, start_date, end_date").eq("tenant_id", tenantId).in("student_id", chunk)
+      .order("id").range(from, to))]);
+    const previousEnrollments = enrollments.filter(enrollment => {
+      if (enrollment.class_id === classId || !enrollment.end_date) return false;
+      const currentStart = enrollments.filter(item => item.student_id === enrollment.student_id && item.class_id === classId && item.start_date)
+        .map(item => item.start_date!).sort()[0];
+      return currentStart != null && enrollment.end_date <= currentStart;
+    });
+    const previousClassIds = [...new Set(previousEnrollments.map(item => item.class_id))];
+    // Historical, completed enrollments only: concurrent regular/supplement classes never replace this class's current progress.
+    const previousRecords = previousClassIds.length ? await fetchAllPagedInChunks<Row & { class_id: string }>(
+      [...visibleIds], (chunk, from, to) => admin.from("lesson_reports")
+        .select("student_id, class_id, report_date, progress, textbook, homework_today, classnote_sent_at, classes!lesson_reports_class_id_fkey!inner(subject, math_learning_track)")
+        .eq("tenant_id", tenantId).in("student_id", chunk).in("class_id", previousClassIds)
+        .eq("classes.subject", "math").eq("classes.math_learning_track", track)
+        .or("classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null")
+        .is("revoked_at", null).lte("report_date", referenceDate)
+        .order("report_date").order("classnote_sent_at", { nullsFirst: true }).order("id").range(from, to),
+    ) : [];
+    const asRecord = (row: Row): LearningRecord => ({ date: row.report_date, progress: row.progress, textbook: row.textbook, homework: row.homework_today, sentAt: row.classnote_sent_at });
+    const previousByStudent = new Map<string, LearningRecord[]>();
+    for (const row of previousRecords) {
+      if (!previousEnrollments.some(enrollment => enrollment.student_id === row.student_id && enrollment.class_id === row.class_id
+        && (!enrollment.start_date || row.report_date >= enrollment.start_date) && row.report_date <= enrollment.end_date!)) continue;
+      const list = previousByStudent.get(row.student_id) ?? [];
+      list.push(asRecord(row));
+      previousByStudent.set(row.student_id, list);
+    }
     const byStudent = new Map<string, LearningRecord[]>();
     for (const row of records) {
       const list = byStudent.get(row.student_id) ?? [];
-      list.push({
-        date: row.report_date,
-        progress: row.progress,
-        textbook: row.textbook,
-        homework: row.homework_today,
-      });
+      list.push(asRecord(row));
       byStudent.set(row.student_id, list);
     }
-    for (const goal of goals) {
-      const history = (byStudent.get(goal.studentId) ?? []).filter((record) => record.date >= goal.startDate && (goal.track !== "supplement" || record.date <= goal.endDate));
-      result.progress[goal.studentId] = buildLearningProgress(
-        goal,
-        result.context,
-        history,
-        referenceDate,
-        monthData.month,
-      );
-      result.records[goal.studentId] = history.slice(-30).reverse();
+    for (const studentId of visibleIds) {
+      const goal = result.goals[studentId];
+      const firstEnrollment = enrollments.filter(item => item.student_id === studentId && item.start_date).map(item => item.start_date!).sort()[0];
+      const enrolledAt = students.find(student => student.id === studentId)?.enrolled_at ?? firstEnrollment ?? null;
+      const currentRecords = (byStudent.get(studentId) ?? []).filter(record => !enrolledAt || record.date >= enrolledAt);
+      const history = currentRecords.filter((record) => !goal || goal.track !== "supplement" || (record.date >= goal.startDate && record.date <= goal.endDate));
+      if (goal) {
+        result.progress[studentId] = buildLearningProgress(
+          goal,
+          result.context,
+          currentRecords,
+          referenceDate,
+          monthData.month,
+        );
+        result.progress[studentId].history = buildLearningHistory(goal, result.progress[studentId], [
+          ...(previousByStudent.get(studentId) ?? []), ...(byStudent.get(studentId) ?? []),
+        ], enrolledAt, referenceDate);
+      }
+      result.records[studentId] = (options.allRecords
+        ? currentRecords.filter(record => goal?.track !== "supplement" || record.date <= goal.endDate)
+        : history.slice(-30)).reverse();
     }
   } catch {
     // Do not present a report fetch failure as zero progress or a learner falling behind.

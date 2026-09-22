@@ -25,7 +25,7 @@ export type BoardRosterView = {
 };
 
 /**
- * eywa 반 ↔ ClassNote 반 보드 구성 점검.
+ * aywa 반 ↔ ClassNote 반 보드 구성 점검.
  *
  * 대상 = **반 보드로 운영되는 과목**(현재 영어). 수학은 학생 1인 보드라 이 점검의 단위가 아니고,
  * provision/assign 스크립트가 이미 담당한다.

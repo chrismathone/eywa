@@ -16,6 +16,8 @@
  */
 import { MENU_LABEL } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { MODULES } from "@/lib/modules";
+import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 
 export type SettingChange = { label: string; from?: string; to?: string; note?: string };
 export type SettingsDiff = { changes: SettingChange[]; others: number };
@@ -49,6 +51,7 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     address: "주소",
   },
   operations: {
+    schoolSaveAliases: "학교명 저장 별칭",
     subjects: "과목",
     gradeLevels: "학년",
     jobTitles: "직급",
@@ -81,6 +84,10 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     // 줄마다 목적지 주소(href)라 이름이 없다 → diffArray가 "N개 → M개"까지만 남긴다.
     // 주소를 감사로그에 그대로 싣지 않는 건 의도 — 화면에 raw 경로를 내보내지 않는다.
     menus: "왼쪽 탭 표시·순서",
+  },
+  modules: {
+    // 끈 모듈 id 목록 — 아래 diffModules가 한국어 기능 이름으로 "켬/끔"을 적는다(영문 id를 싣지 않는다).
+    disabled: "기능 켜기·끄기",
   },
   report: {
     allowTeacherTestMax: "강사 문항수 변경 허용",
@@ -133,6 +140,33 @@ function diffArray(label: string, before: unknown[], after: unknown[]): SettingC
     to: `${after.length}개`,
     ...(parts.length ? { note: parts.join(" · ") } : {}),
   };
+}
+
+/**
+ * 새로 생긴 칸의 첫 저장이 **어느 프리셋이든 그 기본값과 같은가** — 그렇다면 사람이 바꾼 것이 아니다.
+ * (침산 = 일중→대구일중 · 두 교시 묶음 / 새 학원 = 빈 목록 · 교시마다 한 줄. 침산 저장은 애초에 기본값을 행에 안 남긴다 — preset.ts.)
+ */
+function isFirstSaveOfNewDefault(section: string, key: string, after: unknown): boolean {
+  if (section === "operations" && key === "schoolSaveAliases") {
+    const s = JSON.stringify(after);
+    return s === JSON.stringify(CHINSAN_SCHOOL_SAVE_ALIASES) || s === "[]";
+  }
+  if (section === "operations" && key === "periodStyle") return after === "chinsan" || after === "plain";
+  return false;
+}
+
+/** 기능(모듈) 켜기·끄기 변화 — 끈 목록의 차이를 "켬 …/끔 …"으로. 모르는 id는 이름이 없어 빠진다. */
+function diffModules(label: string, before: unknown[], after: unknown[]): SettingChange {
+  const nameOfModule = (v: unknown): string | null =>
+    typeof v === "string" && v in MODULES ? MODULES[v as keyof typeof MODULES].label : null;
+  const was = new Set(before.filter((v): v is string => typeof v === "string"));
+  const now = new Set(after.filter((v): v is string => typeof v === "string"));
+  const turnedOff = [...now].filter((v) => !was.has(v)).map(nameOfModule).filter((v): v is string => !!v);
+  const turnedOn = [...was].filter((v) => !now.has(v)).map(nameOfModule).filter((v): v is string => !!v);
+  const parts: string[] = [];
+  if (turnedOn.length) parts.push(`켬 ${turnedOn.join("·")}`);
+  if (turnedOff.length) parts.push(`끔 ${turnedOff.join("·")}`);
+  return { label, note: parts.length ? parts.join(" · ") : "내용 변경" };
 }
 
 const menuKo = (v: unknown): string | null =>
@@ -217,12 +251,19 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
     const b = before[key];
     const a = after[key];
     if (JSON.stringify(b) === JSON.stringify(a)) continue;
+    // 이 작업(2026-09-22 일반판 분리)이 새로 만든 칸이 **처음 저장되며 기본값 그대로** 실리는 것은 변경이 아니다 —
+    // 침산이 운영 체계를 저장할 때마다 감사로그에 "외 1건"이 붙으면 침산 기록에 흔적이 남는다(원장: 아무 일도 없던 것처럼).
+    if (b === undefined && isFirstSaveOfNewDefault(section, key, a)) continue;
     const label = labels[key];
     if (!label || changes.length >= MAX_CHANGES) {
       others += 1; // 라벨 미등록 필드(영문 키 노출 금지) 또는 상한 초과
       continue;
     }
     if (Array.isArray(a) && Array.isArray(b)) {
+      if (section === "modules" && key === "disabled") {
+        changes.push(diffModules(label, b, a));
+        continue;
+      }
       if (section === "billing" && key === "sessionPrices") {
         const prices = (rows: unknown[]) => rows
           .filter(isObj)

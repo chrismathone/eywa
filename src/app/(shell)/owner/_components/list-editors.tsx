@@ -19,9 +19,10 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { GripVertical, Plus, X } from "@/components/icons/eywa-icon-compat";
+import { GripVertical, Plus, X } from "@/components/icons/aywa-icon-compat";
 import { SUBJECT_COLORS, SUBJECT_DEFAULT_VIEW_OPTIONS, type ConsultationTemplate, type HolidaySetting, type PeriodTimeRow, type ShuttleSetting, type SubjectSetting, type TermSetting } from "@/features/owner/settings-types";
 import { SUBJECT_SOLID, KNOWN_SUBJECT_KEYS } from "@/features/owner/subjects";
+import { SUBJECT_COLOR_LABEL } from "@/features/owner/subject-color-label";
 import { WEEKDAY_GROUPING_OPTIONS } from "@/features/timetable/lib/weekday-groups";
 import { STATE_RESERVED_COLORS } from "@/lib/design/semantic-color";
 
@@ -181,7 +182,7 @@ export function SubjectListEditor({
                 >
                   {SUBJECT_COLORS.map((c) => (
                     <option key={c} value={c}>
-                      {STATE_RESERVED_COLORS.has(c) ? `${c} (상태색)` : c}
+                      {STATE_RESERVED_COLORS.has(c) ? `${SUBJECT_COLOR_LABEL[c]} (상태색)` : SUBJECT_COLOR_LABEL[c]}
                     </option>
                   ))}
                 </select>

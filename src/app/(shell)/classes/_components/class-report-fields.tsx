@@ -1,6 +1,6 @@
 "use client";
 
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { REPORT_OPTOUT_LABEL } from "@/features/classes/report-optout";
 
 /**

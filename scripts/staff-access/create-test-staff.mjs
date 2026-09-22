@@ -23,7 +23,7 @@ const rest = async (p, init) => {
   return b ? JSON.parse(b) : null;
 };
 
-const EMAIL = "test.contract@eywa.local";
+const EMAIL = "test.contract@aywa.local";
 const PASSWORD = "eywa123";
 
 const [tenant] = await rest(`tenants?select=id&limit=1`);

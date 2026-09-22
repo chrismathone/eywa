@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "@/components/icons/eywa-icon-compat";
+import { Plus } from "@/components/icons/aywa-icon-compat";
 import {
   EnrollmentAssignDialog,
   type AssignDialogClass,

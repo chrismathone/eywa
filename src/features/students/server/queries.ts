@@ -17,11 +17,15 @@ import { invoiceOutstanding } from "@/features/billing/calc";
 import { settingsToPeriodsConfig, enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import {
   buildClassSlots,
+  filterLabSeparateRows,
   liveScheduleRows,
   roomBookOf,
   type ClassSlot,
   type ScheduleRow,
 } from "../lib/class-slots";
+// '따로 수업(*LAB)' 재료 — 켠 교시(0271a)·켠 수강(0271b). 둘 다 fail-soft(모르면 안 가른다).
+import { loadLabSeparateIds } from "@/features/classes/server/lab-separate";
+import { getStudentLabSeparateEnrollmentIds } from "@/features/enrollments/server/lab-separate";
 import { goalAchieved } from "../grades-meta";
 import {
   subjectAxisOf,
@@ -43,6 +47,7 @@ import {
 import { canSeeStudentEnrollment } from "./enrollment-gate";
 import { canViewStudentDetail } from "./read-scope";
 import { isMergedStudent } from "../merged";
+import { enrollmentTimeline } from "../enrollment-timeline";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { groupSchedule, type ScheduleGroup } from "@/features/classes/schedule-periods";
@@ -889,7 +894,9 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   // ② 등록 강의실 전건(테넌트 RLS, 보관된 방 포함) — FK → 이름(`본원606`), FK 없는 맨숫자 라벨 → 등록 이름
   //    정정의 근거(좌석표·ECS와 같은 규약 · 목록은 whitelist라 무페이징 금지). ⚠️ 표시 전용이라 실패해도 탭은
   //    산다(라벨·반 기본 강의실로 떨어진다).
-  const [scheds, roomRows, labelMap, settings] = await Promise.all([
+  // ③·④ '따로 수업(*LAB)' 재료 — 켠 교시 id(0271a)와 이 원생의 켠 수강 id(0271b). 둘 다 **따로·fail-soft**로 읽는다
+  //    ([[#95]]: 위 뿌리 select에 칸을 끼우면 칸 없는 DB에서 이 탭이 통째로 죽는다). 하나라도 모르면 안 가른다.
+  const [scheds, roomRows, labelMap, settings, labSlotIds, labFlaggedEnrollments] = await Promise.all([
     fetchAllPagedInChunks<ScheduleDbRow>(classIds, (chunk, from, to) =>
       supabase
         .from("class_schedules")
@@ -909,6 +916,8 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     getTeacherLabelMap(),
     // 교시 라벨은 테넌트 설정(과목별 override 포함) 기준.
     getTenantSettings(),
+    loadLabSeparateIds(supabase, { kind: "classes", classIds }),
+    getStudentLabSeparateEnrollmentIds(studentId),
   ]);
   const rooms = roomBookOf(roomRows);
 
@@ -925,6 +934,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       roomLabel: s.slot_room_label ?? null,
       teacherId: s.teacher_id ?? null,
       teacherLabel: s.slot_teacher_label ?? null,
+      ...(labSlotIds?.has(String(s.id)) ? { labSeparate: true } : {}),
     });
     schedByClass.set(s.class_id, arr);
   }
@@ -973,9 +983,16 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     // 지난 수강이면 **그 수강의 마지막 날**(당시 스케줄이 사실 — 오늘 기준이면 종강 반은 전멸한다).
     const endYmd = e.end_date ? String(e.end_date).slice(0, 10) : null;
     const refDate = endYmd && endYmd < today ? endYmd : today;
-    const rawSlots = liveScheduleRows(schedByClass.get(e.class_id) ?? [], refDate);
+    // *LAB 배정으로 자리 교시를 가른다 — 켠 원생은 *LAB만, 끈 원생은 일반 LAB만(원장 2026-09-18).
+    //    🔴 재료를 하나라도 모르면 `null`을 넘겨 **한 줄도 빼지 않는다**(수업이 사라지는 쪽으로 틀리지 않는다).
+    //    격자·텍스트 요약이 **같은 행 목록**을 쓰므로 두 표기가 갈리지 않는다.
+    const labFlagged = labSlotIds && labFlaggedEnrollments ? labFlaggedEnrollments.has(String(e.id)) : null;
+    const liveSlots = liveScheduleRows(schedByClass.get(e.class_id) ?? [], refDate);
+    const rawSlots = filterLabSeparateRows(liveSlots, labFlagged);
     // 반 운영 요일(분리등원 선택지) = 이 반 **유효** 스케줄의 distinct 요일(요일순 — 만료 요일 금지).
-    const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => rawSlots.some((s) => s.day === d));
+    // 🔴 *LAB 가르기 **전** 목록으로 센다 — 이건 "이 반이 도는 요일"이라 한 원생의 배정으로 줄면
+    //    그 요일을 등원 요일로 고를 수 없게 된다(그 반은 그날 여전히 돈다).
+    const classDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].filter((d) => liveSlots.some((s) => s.day === d));
     // 등원요일 필터(분리등원)·교시 라벨·교시 담당·자리·강의실 = class-slots `buildClassSlots`
     // (텍스트 요약 groupSchedule과 같은 등원 요일 필터 · 강의실은 좌석표·ECS와 같은 FK 우선 규칙).
     const slots: ClassSlot[] = buildClassSlots(rawSlots, {
@@ -1066,7 +1083,7 @@ export type StudentBillingRow = {
   dueDate: string | null;
   paidAt: string | null;
   notes: string | null;
-  // makeedu는 (학생×월×항목) 라인 단위지만 eywa는 (학생×월) 1행으로 집계 → 항목 내역은 line_items에 보존.
+  // makeedu는 (학생×월×항목) 라인 단위지만 aywa는 (학생×월) 1행으로 집계 → 항목 내역은 line_items에 보존.
   // 화면에서 "수업료" 대신 실제 항목명(강의명 등)을 펼쳐 보여주기 위해 함께 반환.
   lineItems: StudentBillingLineItem[];
 };
@@ -1535,7 +1552,7 @@ export type StudentAttendanceFull = {
   /**
    * 그날 그 반의 **수업보고서를 쓴 사람**(원장 2026-09-07 *"출결 뒤에 보고서 발송자"* · *"수학의 경우"*).
    * 🔴 담임이 아니다 — 월별 출석부 담당자 라벨과 **같은 축**(보고서 작성자)이다.
-   * 🔴 **반이 적힌 보고서만** 읽는다(`class_id`) — 영어는 eywa에 보고서를 안 써서 자연히 빈다.
+   * 🔴 **반이 적힌 보고서만** 읽는다(`class_id`) — 영어는 aywa에 보고서를 안 써서 자연히 빈다.
    *    edutrix 이관분은 반이 비어 있어(17,806건) 여기서도 빈다: 날짜만 보고 아무 행에나 붙이면
    *    수학 강사 이름이 영어 칸에 앉는다. 그 구간은 반 백필로 채우는 것이 정공법이다.
    */
@@ -1625,6 +1642,7 @@ export type TimelineEvent = {
   kind:
     | "enrollment_start"
     | "enrollment_end"
+    | "enrollment_transfer"
     | "consultation"
     | "memo"
     | "status_change"
@@ -1671,7 +1689,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   ] = await Promise.all([
     supabase
       .from("enrollments")
-      .select(`start_date, end_date, withdrawal_reason, class:class_id ( class_name )`)
+      .select(`id, class_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( class_name, subject )`)
       .eq("student_id", studentId),
     consultQuery,
     supabase
@@ -1695,7 +1713,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
     // (전 이력이 필요해지면 status 전이 로그 테이블이 선행돼야 한다.)
     supabase
       .from("students")
-      .select(`enrolled_at, withdrawn_at, withdrawal_metadata`)
+      .select(`enrolled_at, withdrawn_at, withdrawal_metadata, notes`)
       .eq("id", studentId)
       .maybeSingle(),
     // 입학(등록)상담 — 재원 전 첫 접점. 게이트 없으면 아예 조회하지 않는다.
@@ -1709,24 +1727,21 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
 
   const events: TimelineEvent[] = [];
 
-  for (const e of enrollments ?? []) {
+  events.push(...enrollmentTimeline((enrollments ?? []).map((e) => {
     const c = (Array.isArray(e.class) ? e.class[0] : e.class) as
-      | { class_name?: string }
+      | { class_name?: string; subject?: string }
       | undefined;
-    events.push({
-      date: e.start_date,
-      kind: "enrollment_start",
-      title: `${c?.class_name ?? "—"} 수강 시작`,
-    });
-    if (e.end_date) {
-      events.push({
-        date: e.end_date,
-        kind: "enrollment_end",
-        title: `${c?.class_name ?? "—"} 수강 종료`,
-        description: e.withdrawal_reason,
-      });
-    }
-  }
+    return {
+      id: e.id,
+      classId: e.class_id,
+      className: c?.class_name ?? "—",
+      subject: c?.subject ?? null,
+      startDate: e.start_date,
+      endDate: e.end_date,
+      isTransferred: !!e.is_transferred,
+      reason: e.withdrawal_reason,
+    };
+  })));
 
   // category 코드 → 한글. 임포트 데이터엔 audience 값("parent")이 섞여 있어, 매핑 안 되는 코드는 접미사 생략.
   const CONSULT_CATEGORY_LABEL: Record<string, string> = {
@@ -1796,7 +1811,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   if (student?.enrolled_at) {
     events.push({ date: String(student.enrolled_at).slice(0, 10), kind: "status_change", title: "재원 시작" });
   }
-  if (student?.withdrawn_at) {
+  if (student?.withdrawn_at && !isMergedStudent(student.notes)) {
     // 사유는 reasonDisplay — 표준 코드는 한글로, "반 이동" 같은 자유 텍스트는 그대로(reasonLabel은 '기타'로 뭉갠다).
     const md = student.withdrawal_metadata as { reason?: string | null; memo?: string | null } | null;
     events.push({

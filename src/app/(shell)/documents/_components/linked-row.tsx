@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList } from "@/components/icons/eywa-icon-compat";
+import { ClipboardList } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import type { LinkedDocRow } from "@/features/documents/linked";

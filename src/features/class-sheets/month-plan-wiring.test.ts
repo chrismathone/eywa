@@ -46,7 +46,8 @@ describe("🔴 EiE 판정 — 표면 넷이 같은 근거를 본다", () => {
   });
 
   it("🔴 인쇄도 같은 게이트 + EiE 재확인을 통과한다(인쇄는 별도 주소다)", () => {
-    expect(planPrint).toContain("getClassSheetMonth(classId, monthRaw)");
+    // 기간 축(월·세션)도 같은 조회가 정한다 — 인쇄가 따로 창을 정하면 화면과 다른 날짜를 찍는다.
+    expect(planPrint).toContain("getClassSheetMonth(classId, monthRaw, { period: periodRaw })");
     expect(planPrint).toContain("if (!res.data.isEie)");
   });
 
@@ -307,5 +308,48 @@ describe("🔴 휴강은 감추지 않고 회색으로 표시한다 (2026-09-02)
     expect((planActions.match(/^export async function /gm) ?? []).length).toBe(1);
     expect(planActions).not.toContain("mpOffLabel");
     expect(planActions).not.toContain("mpDayKindOf");
+  });
+});
+
+describe("🔴 기간 축(월/세션, 2026-09-21) — 화면·인쇄·저장이 같은 창을 본다", () => {
+  const printPage = strip(read("src", "app", "(print)", "ecs", "[classId]", "month-plan", "print", "page.tsx"));
+
+  it("창은 `resolvePeriodWindow` 한 곳에서 정한다(폴백 분기를 조회에 두지 않는다)", () => {
+    expect(monthQueries).toContain("resolvePeriodWindow({");
+    expect(monthQueries).toContain("mode: periodMode");
+  });
+
+  it("🔴 세션은 EiE 반에서만 — 인재원 영어는 언제나 달력월", () => {
+    expect(monthQueries).toMatch(/const periodMode: EcsMonthPeriod = isEie\s*\?/);
+  });
+
+  it("🔴 목표·메모는 **라벨월**이 키다(창으로 바꾸면 세션이 달 중간에 시작하는 달에 통째로 사라진다)", () => {
+    expect(monthQueries).toContain('.eq("period_start", monthBounds.from)');
+    expect(monthQueries).toContain('.eq("month", monthBounds.from)');
+  });
+
+  it("🔴 꼬리말은 라벨월 1일에 앉으므로 창 밖이어도 남긴다", () => {
+    expect(monthQueries).toContain('c.colKind === "footer" ? c.planDate === footerDate');
+  });
+
+  it("🔴 화면이 보던 축을 인쇄 주소에 싣고, 인쇄가 그 축으로 다시 조회한다", () => {
+    expect(monthClient).toContain("month-plan/print?month=${data.month}&period=${data.period.mode}");
+    expect(printPage).toContain("getMonthPlanPrint(classId, month ?? null, period ?? null)");
+  });
+
+  it("🔴 주간 시트·목록에서 들어오면 **그 주가 든 세션**을 연다(주소의 달은 달력 기준이라 경계에서 틀린다)", () => {
+    expect(monthPage).toContain("getClassSheetMonth(classId, month ?? null, { period, week })");
+    expect(monthQueries).toContain("const month = weekMonth || explicitMonth || currentMonth;");
+  });
+
+  it("🔴 창이 바뀌면 월간 껍데기를 다시 세운다(계획 편집 훅은 마운트당 한 번 시드)", () => {
+    expect(monthPage).toContain("${res.data.period.start}~${res.data.period.end}");
+  });
+
+  it("🔴 인쇄물은 A4 한 장에 맞춘다 — `@page`는 맞춤 껍데기 하나만 선언한다", () => {
+    const paper = read("src", "app", "(print)", "ecs", "[classId]", "month-plan", "print", "month-plan-paper.tsx");
+    expect(paper).not.toContain("@page {");
+    expect(printPage).toContain("<MpFitToPage>");
+    expect(printPage).toContain("print:p-0");
   });
 });

@@ -9,7 +9,7 @@ import { getMathLearningData } from "@/features/math-sheets/server/learning-quer
 import { canResetMathLearningGoals } from "@/features/math-sheets/server/access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
-export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — eywa" };
+export const metadata: Metadata = { title: "수학 강사 시트 · 월간 — aywa" };
 
 /**
  * MCS **월간 뷰** — 반 1개 × 달 1개(진도표 ↔ 진도 레일).
@@ -24,10 +24,13 @@ export default async function McsMonthPage({
   searchParams,
 }: {
   params: Promise<{ classId: string }>;
-  searchParams: Promise<{ month?: string; student?: string; track?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { classId } = await params;
-  const { month, student } = await searchParams;
+  const query = await searchParams;
+  const month = typeof query.month === "string" ? query.month : undefined;
+  const student = typeof query.student === "string" ? query.student : undefined;
+  const initialQuery = new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => typeof entry[1] === "string")).toString();
   // 반 전환 드롭다운 목록은 시트와 **독립**이라 나란히 받는다(B4) — 가벼운 목록이지 랜딩 집계가 아니다.
   const [res, options] = await Promise.all([
     getMathSheetMonth(classId, month ?? null),
@@ -49,7 +52,9 @@ export default async function McsMonthPage({
   }
 
   const { data } = res;
-  const learning = await getMathLearningData(classId, data);
+  // 집중 보기에서 과거 날짜로 이동해도 보고서가 최근 30건에서 잘리지 않게 한다.
+  // 같은 반 학생 전환은 이미 조회한 자료를 사용한다.
+  const learning = await getMathLearningData(classId, data, { allRecords: true });
   // 전체 목표 '초기화'(배정 취소)는 **원장 이상급**(원장 2026-09-18) — 화면과 서버가 같은 함수를 본다([[#77]]).
   const canResetGoals = await canResetMathLearningGoals(await getCurrentUser());
   // 🔴 줄 수를 "학생 N명"이라 적지 않는다 — 행에는 이 달 중 나간 사람과 아직 안 들어온 사람이
@@ -79,10 +84,11 @@ export default async function McsMonthPage({
         <LearningOverview
           // 달·반이 바뀌면 클라 상태(보기·목표 편집 큐)를 새로 세운다 — 옛 달의 목표가 남으면
           // 새 달 화면에 남의 값이 잠깐 비친다.
-          key={`${classId}:${data.month}`}
+          key={`${classId}:${data.month}:${student ?? ""}`}
           data={data}
           learning={learning}
           initialStudentId={student}
+          initialQuery={initialQuery}
           classOptions={classOptions}
           canResetGoals={canResetGoals}
         />

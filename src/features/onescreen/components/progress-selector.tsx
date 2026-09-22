@@ -12,7 +12,7 @@
  */
 import { useRef, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { ChevronDown } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 import {
   CURRICULUM_GRADES,
   curriculumForGrade,

@@ -4,7 +4,7 @@
  * 신규생 흐름 자동화: 매일 KST 05시 이후 첫 폴에서 1회 —
  *   ① 재원 + 발송 opt-in 과목 활성 수강인데 보드 없는 학생 → `(과목)이름` 빈 보드 생성(DOM)
  *   ② 학부모 가입까지 됐는데 자기 보드가 비어있는 학생 → 배정(POST /api/v1/enrollments/, ID 기반)
- * 동명이인(eywa 유효이름 중복·ClassNote 동명 원아)은 자동 처리 안 하고 로그로 보류 — 오발송 방지.
+ * 동명이인(aywa 유효이름 중복·ClassNote 동명 원아)은 자동 처리 안 하고 로그로 보류 — 오발송 방지.
  * 학부모 초대(가입)만 사람 몫으로 남는다. 수동 실행판 = provision/assign-classnote-*.mjs (동일 기준).
  *
  * 실행 조건: 데몬 --post 모드에서만(dry-run 데몬은 아무것도 안 만짐). 발송 스위치(classnoteSendEnabled)와는

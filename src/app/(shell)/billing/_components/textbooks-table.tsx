@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { Check, FileText, Loader2, Pencil, Plus, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Check, FileText, Loader2, Pencil, Plus, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { TextbookDialog } from "./textbook-dialog";
 import { usePrintWindow } from "@/components/workspace/print-window";

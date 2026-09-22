@@ -16,7 +16,7 @@
 import { useState } from "react";
 import { EmptyState } from "@/components/empty-state";
 import { SeatingEditProvider } from "./seating-edit-context";
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import { SearchScopeChip, StudentSearchToggle } from "@/features/attendance/components/student-search-box";
 import {
   SubjectFilterSelect,

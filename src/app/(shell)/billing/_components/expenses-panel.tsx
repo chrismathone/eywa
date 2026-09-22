@@ -1,4 +1,4 @@
-import { Wallet, PieChart, Tags } from "@/components/icons/eywa-icon-compat";
+import { Wallet, PieChart, Tags } from "@/components/icons/aywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { FilterSelect } from "@/components/filter-select";

@@ -80,7 +80,7 @@ async function main() {
     out.push(`   6월: ${cov[0].mn} ~ ${cov[0].mx} · ${cov[0].days}일치 · ${cov[0].n}건`);
     out.push(`   7월: ${covJul[0].mn ?? "-"} ~ ${covJul[0].mx ?? "-"} · ${covJul[0].n}건`);
     out.push(`   → 입력된 날짜의 결석만 잡힌다. 6월 전체가 아니면 **이 목록은 부분집합**이고,`);
-    out.push(`     빠진 구간의 결석은 eywa로 복구 불가(구 시트·종이 기록 대조 필요).`);
+    out.push(`     빠진 구간의 결석은 aywa로 복구 불가(구 시트·종이 기록 대조 필요).`);
     out.push("");
     out.push(`총 ${abs.length}건 · 대상 (학생×반) ${keys.length}조합`);
     out.push("");

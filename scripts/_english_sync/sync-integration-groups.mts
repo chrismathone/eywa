@@ -3,7 +3,7 @@
  * 맞춰주면 좋겠어"*).
  *
  * 시트는 **시각 앵커(오후 2:20 / 3:00 / 4:20 …)마다 반 블록이 가로로 늘어선** 섹션 구조다.
- * → 섹션 하나 = 줄 하나, 줄 안 순서 = 시트 좌→우. eywa 통합뷰가 같은 모양으로 그려진다.
+ * → 섹션 하나 = 줄 하나, 줄 안 순서 = 시트 좌→우. aywa 통합뷰가 같은 모양으로 그려진다.
  *
  * ⚠️ 반 이름은 **개명(레벨업) 뒤에** 맞춰야 짝이 맞는다(level-up-rename.mts를 먼저).
  * ⚠️ 쓰기는 `tenant_settings.data`의 `operations.subjects[english]`에만, **섹션 머지**로 한다
@@ -106,7 +106,7 @@ function sectionTitle(row: number, idx: number): string {
   return `${idx + 1}번째 줄`;
 }
 
-// ── eywa 반 id ───────────────────────────────────────────────────────────────
+// ── aywa 반 id ───────────────────────────────────────────────────────────────
 const sql = postgres(process.env.DATABASE_URL!, { ssl: "require", max: 1 });
 const rawRows = await sql<{ id: string; class_name: string }[]>`
   select id, class_name from classes
@@ -182,7 +182,7 @@ for (const g of groups) {
 }
 const placed = new Set(groups.flatMap((g) => g.items.filter((x) => x.id).map((x) => x.id!)));
 const unplaced = rows.filter((r) => !placed.has(r.id));
-console.log(`\n배정 ${placed.size}반 · 시트에만 있고 eywa에 없음 ${missing}건 · eywa에만 있고 줄에 없음 ${unplaced.length}건`);
+console.log(`\n배정 ${placed.size}반 · 시트에만 있고 aywa에 없음 ${missing}건 · aywa에만 있고 줄에 없음 ${unplaced.length}건`);
 if (unplaced.length) console.log(`  (기타 줄로 내려감): ${unplaced.map((r) => r.class_name).join(" · ")}`);
 
 // ── 지금 저장된 배치와 무엇이 다른가 ─────────────────────────────────────────

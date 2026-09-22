@@ -484,7 +484,7 @@ export function MonthPlanView({
               </th>
               {data.dows.map((dow) => {
                 const cols = columnsByDow[dow];
-                const date = cellDateOf(week, dow, data.month);
+                const date = cellDateOf(week, dow);
                 const teaches = date ? hasClassOn(date) : false;
                 const off = date ? isOff(date) : false;
                 const kind = mpDayKindOf(date, teaches, off);
@@ -555,7 +555,7 @@ export function MonthPlanView({
               </th>
               {data.dows.flatMap((dow) => {
                 const cols = columnsByDow[dow];
-                const date = cellDateOf(week, dow, data.month);
+                const date = cellDateOf(week, dow);
                 const kind = mpDayKindOf(
                   date,
                   date ? hasClassOn(date) : false,
@@ -600,7 +600,7 @@ export function MonthPlanView({
             {/* ③ 값 행 — 시트에서도 이 행의 A열은 비어 있다. */}
             <tr>
               {data.dows.flatMap((dow) => {
-                const date = cellDateOf(week, dow, data.month);
+                const date = cellDateOf(week, dow);
                 const teaches = date ? hasClassOn(date) : false;
                 const off = date ? isOff(date) : false;
                 const kind = mpDayKindOf(date, teaches, off);
@@ -645,7 +645,7 @@ export function MonthPlanView({
               <tr>
                 {data.dows.map((dow) => {
                   const cols = columnsByDow[dow];
-                  const date = cellDateOf(week, dow, data.month);
+                  const date = cellDateOf(week, dow);
                   const teaches = date ? hasClassOn(date) : false;
                   const summary = date && teaches ? mpActualSummary(linesOfDate(date)) : [];
                   return (

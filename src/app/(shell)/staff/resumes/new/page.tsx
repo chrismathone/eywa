@@ -11,7 +11,7 @@ import { ResumeSheet } from "../_components/resume-sheet";
 // 명칭(원장 지시 2026-08-07): **직원등록(신규, 연결 없음) 때만 "직원 명부"**, 그 외(기존 직원 연결·열람·수정)는 "이력서".
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ staff?: string }> }) {
   const { staff } = await searchParams;
-  return { title: staff ? "직원 이력서 작성 — eywa" : "직원 명부 작성 — eywa" };
+  return { title: staff ? "직원 이력서 작성 — aywa" : "직원 명부 작성 — aywa" };
 }
 
 export default async function NewResumePage({

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "@/components/icons/eywa-icon-compat";
+import { Pencil } from "@/components/icons/aywa-icon-compat";
 import { dedupeEditors } from "./presence-state";
 import { useEditingOthers } from "./edit-presence";
 // 강사뷰 화면 언어(2026-09-03) — 🔴 **사람 이름은 번역하지 않는다**(자리로만 받는다).

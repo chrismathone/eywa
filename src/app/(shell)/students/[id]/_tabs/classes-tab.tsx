@@ -1,4 +1,4 @@
-import { CalendarDays } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { kstToday } from "@/lib/date-kst";
 import { Pill } from "@/components/atoms/pill";
@@ -42,7 +42,7 @@ function formatClassSchedule(days: { day: string; start: string | null }[]): str
   return [...byTime.entries()].map(([t, ds]) => `${ds.join("·")}${t ? ` ${t}` : ""}`).join(" · ");
 }
 
-// 요일 chip 색(ijw DAY_COLORS 대응 — eywa 토큰).
+// 요일 chip 색(ijw DAY_COLORS 대응 — aywa 토큰).
 const DAY_CHIP: Record<string, string> = {
   "월": "bg-amber/15 text-amber",
   "화": "bg-rose/15 text-rose",

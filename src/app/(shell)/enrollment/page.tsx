@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { QrCode } from "@/components/icons/eywa-icon-compat";
+import { QrCode } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -40,7 +40,7 @@ import { parseBoardStage } from "@/features/enrollment/board-stages";
 import { EnrollmentTable } from "./_components/enrollment-table";
 import { IntakeQrSection } from "./_components/intake-qr-section";
 
-export const metadata = { title: "콜&상담 — eywa" };
+export const metadata = { title: "콜&상담 — aywa" };
 
 // 전 목록 공통(표·카드) — 변경 시 학생·수납 등 다른 목록과 함께 바꿀 것.
 const PAGE_SIZE = 50;
@@ -307,7 +307,9 @@ export default async function EnrollmentPage({
         />
       ) : /* 빈 상태 판정은 rows.length이 아니라 total === 0 (2페이지가 비어 보이는 것과 진짜 0건은 다르다) */
       (view === "table" ? (headerCounts?.total ?? 0) === 0 : items.length === 0) ? (
-        <div className="mx-auto max-w-xl py-4">
+        // 🔴 `w-full` 필수 — 목록뷰에선 바깥 틀이 세로 flex라 `mx-auto`만 두면 이 상자가 폭 0으로 접혀
+        //    빈 안내가 안 보였다(칸반은 flex가 아니라 멀쩡 — 2026-09-22 빈 지점 점검).
+        <div className="mx-auto w-full max-w-xl py-4">
           <PhotoCard
             src="/photos/enrollment-hero.webp"
             alt=""

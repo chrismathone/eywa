@@ -1,7 +1,7 @@
 /**
  * scripts/_makeedu/import-students-list.cjs
  *
- * makeedu **재원생 목록 DOM 스크래핑**(scrape.cjs --list=students → students.json) → eywa `students` additive 동기화.
+ * makeedu **재원생 목록 DOM 스크래핑**(scrape.cjs --list=students → students.json) → aywa `students` additive 동기화.
  * Phase 2 cron 전용 — 부트스트랩의 import-students.cjs(엑셀 47컬럼)는 헤드리스에서 못 쓰므로, 컬럼 적은 DOM
  * 목록을 **header-driven**으로 소비한다. 자연키(이름+학교+학년)로 기존 학생에 매칭 → 없으면 신규 추가(ijw 값 불변).
  *
@@ -35,7 +35,7 @@ function excelSuffix(n) {
   return s;
 }
 // base 이름이 이미 있으면(taken=정규화 이름 집합) 다음 미사용 접미사 부여: 테스트→테스트A→테스트B…
-// 사용자 규칙(2026-07-06): makeedu에서 새 학생인데 이름이 eywa에 이미 있으면(퇴원 포함) 뒤에 알파벳.
+// 사용자 규칙(2026-07-06): makeedu에서 새 학생인데 이름이 aywa에 이미 있으면(퇴원 포함) 뒤에 알파벳.
 function uniqueName(base, taken) {
   if (!taken.has(L.normalizeName(base))) return base;
   for (let i = 1; ; i++) {
@@ -44,7 +44,7 @@ function uniqueName(base, taken) {
   }
 }
 
-// DOM 상태 텍스트 → eywa status. 재원생 목록이라 미상이면 enrolled 가정.
+// DOM 상태 텍스트 → aywa status. 재원생 목록이라 미상이면 enrolled 가정.
 function statusFrom(v) {
   const s = L.txt(v) || "";
   if (/퇴원/.test(s)) return "withdrawn";
@@ -115,7 +115,7 @@ function statusFrom(v) {
     const takenNames = new Set(existing.map((e) => L.normalizeName(e.name)));
 
     const toLink = []; // 기존 학생에 makeedu_id 백필(고유번호 있을 때만)
-    const toInsert = []; // eywa에 없는 신규 학생(이름 충돌 시 접미사 붙인 finalName 포함)
+    const toInsert = []; // aywa에 없는 신규 학생(이름 충돌 시 접미사 붙인 finalName 포함)
     let alreadyLinked = 0, suffixed = 0, skippedDup = 0; // skippedDup = insert 제약 백스톱 카운트
     for (const r of rows) {
       if (r.makeedu_id && byMakeedu.has(r.makeedu_id)) { alreadyLinked++; continue; }
@@ -125,13 +125,13 @@ function statusFrom(v) {
         else alreadyLinked++; // 강한 키로 이미 존재(makeedu_id 없어 백필 불가) = 멱등 스킵
         continue;
       }
-      // 신규 = makeedu 기준 새 학생. 이름이 eywa에 이미 있으면(퇴원 포함) 다음 알파벳 접미사로 구분.
+      // 신규 = makeedu 기준 새 학생. 이름이 aywa에 이미 있으면(퇴원 포함) 다음 알파벳 접미사로 구분.
       const finalName = uniqueName(r.name, takenNames);
       if (finalName !== r.name) suffixed++;
       takenNames.add(L.normalizeName(finalName));
       toInsert.push({ ...r, name: finalName, baseName: r.name });
     }
-    console.log(`\n[additive] eywa 기존 학생 ${existing.length} | makeedu DOM ${rows.length}`);
+    console.log(`\n[additive] aywa 기존 학생 ${existing.length} | makeedu DOM ${rows.length}`);
     console.log(`  이미 존재(멱등): ${alreadyLinked} | makeedu_id 백필: ${toLink.length} | 신규 추가: ${toInsert.length}` + (suffixed ? ` | 그중 동명이인 접미사: ${suffixed}` : ""));
     if (toInsert.length) console.log("  신규 표본:", toInsert.slice(0, 8).map((r) => `${r.baseName === r.name ? r.name : `${r.baseName}→${r.name}`}/${r.school || "?"}/${r.grade || "?"}`).join(", "));
 
@@ -149,7 +149,7 @@ function statusFrom(v) {
     for (const r of toInsert) {
       try {
         // 신규 추가 학생만 sync_added_at=now() → 이번 동기화 라벨 대상(매칭 백필은 대상 아님).
-        // dup_suspect = eywa가 이름 충돌로 접미사를 새로 붙인 경우만(사람 확인 필요). makeedu 원래 이름 그대로면 false.
+        // dup_suspect = aywa가 이름 충돌로 접미사를 새로 붙인 경우만(사람 확인 필요). makeedu 원래 이름 그대로면 false.
         await sql`
           insert into students (tenant_id, makeedu_id, name, gender, attendance_code, school, grade,
             student_phone, parent_phone, parent_name, birth_date, enrolled_at, status, sync_added_at, dup_suspect)

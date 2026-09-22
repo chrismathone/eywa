@@ -11,7 +11,9 @@ import type { InventoryAsset, InventoryAudit, InventoryLoan } from "../types";
  *    그 행의 tenant로 나머지를 좁힌다((share)/r 공개 보고서가 share_token으로 테넌트를 해석하는 것과 같은 결).
  * 🔴 **자산ID가 유일할 때만** 돌려준다 — `asset_code`는 `(tenant_id, asset_code)` 유니크라 **테넌트가 여럿이면
  *    같은 코드가 둘일 수 있다**. 그때 아무거나 고르면 남의 학원 기기를 보여 준다 → 모호하면 못 찾은 것으로 친다
- *    (`getPublicBranding`이 "학원이 정확히 1개일 때만" 확정하는 것과 같은 규약).
+ *    (브랜드 학원 판정 `pickBrandTenantId`가 여럿일 때 첫 학원을 임의로 고르지 않는 것과 같은 규약 — ⚠️ 지점이 둘 이상이면
+ *    같은 자산ID가 겹칠 수 있어 그 라벨은 둘 다 404가 된다: 지점별 자산ID 접두 또는 새 라벨에 지점 싣기는 원장 결정,
+ *    docs/domain-cutover.md).
  * 🔴 admin은 RLS를 우회한다 — 자산 행에서 얻은 `tenant_id`로 대여·실사를 **반드시 좁힌다**.
  * ⚠️ 사람 이름(사용자·대여자·실사자)은 **일부러 싣는다** — 원장 2026-09-03 *"괜찮아 QR은 우리내부에 사용중이니까
  *    이름도 넣어"*. 좌석 PIN 화면의 '이름 조회 금지'를 여기 적용하지 말 것(축이 다르다).

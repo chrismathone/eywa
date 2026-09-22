@@ -1,4 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { isModuleEnabled } from "@/lib/modules";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { BillingContent } from "./_components/billing-content";
 import { TextbooksFace } from "./_components/textbooks-face";
@@ -43,6 +45,9 @@ const FACES: Face[] = [
   { key: "refunds", label: "환불 요청서", href: "/billing?tab=refunds" },
 ];
 
+/** 회차 정산 모듈에 속한 면 — 모듈이 꺼지면 세우지 않는다. */
+const SESSION_FACE_KEYS: ReadonlySet<string> = new Set(["sessions", "verify", "payroll"]);
+
 // 강사 정산(급여)은 원장 전용 면 — master에게만 탭 노출(급여 PII).
 const PAYROLL_FACE: Face = { key: "payroll", label: "강사 정산", href: "/billing?tab=payroll" };
 
@@ -70,7 +75,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
                 : tab === "payroll"
                   ? " · 강사 정산"
                   : "";
-  return { title: `수납관리${suffix} — eywa` };
+  return { title: `수납관리${suffix} — aywa` };
 }
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Sp> }) {
@@ -79,8 +84,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const tab = resolveTab(sp);
   // 강사 정산 탭은 원장(master)에게만 노출. 비-master가 URL로 직접 오면 수납 면으로 폴백.
   const isMaster = user.systemRole === "master";
-  const faces = isMaster ? [...FACES, PAYROLL_FACE] : FACES;
-  const effectiveTab = tab === "payroll" && !isMaster ? "billing" : tab;
+  // 회차 정산 모듈(회차 확정·시수 검증·강사 정산) — 꺼진 학원(새 학원 기본)은 면을 세우지 않고 주소도 수납으로 떨군다.
+  // 침산은 켜져 있어 종전과 같다(2026-09-22 방향 B).
+  const sessionOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "session_billing");
+  const baseFaces = isMaster ? [...FACES, PAYROLL_FACE] : FACES;
+  const faces = sessionOn ? baseFaces : baseFaces.filter((f) => !SESSION_FACE_KEYS.has(f.key));
+  const effectiveTab =
+    (tab === "payroll" && !isMaster) || (!sessionOn && SESSION_FACE_KEYS.has(tab)) ? "billing" : tab;
 
   return (
     <div className="space-y-4 print:space-y-0">

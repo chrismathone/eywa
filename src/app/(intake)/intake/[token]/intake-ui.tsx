@@ -27,7 +27,7 @@ const TONE: Record<string, { bar: string; accent: string }> = {
  * 문항 섹션 바(체크리스트 전용) — 채도 높은 중간 톤 위에 글씨를 얹으면 대비가 무너진다(실측: amber+흰글씨
  * 2.69로 WCAG AA 4.5 미달, gold+검정글씨 5.31이지만 탁함 — 원장 지적 2026-07-15). 학부모가 폰에서 읽는
  * 긴 설문이라 가독성이 우선 → **음영(-soft) 배경 + 진한 본문색 제목 + 좌측 색 액센트**로 통일한다
- * (eywa 규약: 헤더 달린 카드 = 음영 헤더바 + 진한 제목). 색 구분은 액센트 막대가 그대로 유지.
+ * (aywa 규약: 헤더 달린 카드 = 음영 헤더바 + 진한 제목). 색 구분은 액센트 막대가 그대로 유지.
  */
 const QUESTION_TONE: Record<string, { bar: string; accent: string; border: string }> = {
   gold: { bar: "bg-gold-soft", accent: "bg-gold", border: "border-t-gold" },

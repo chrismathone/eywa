@@ -8,6 +8,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { logAction } from "@/features/audit/server/log";
 import type { SessionPricingMode } from "@/features/billing/session-pricing";
 import { monthRange } from "../plan";
+import { isVirtualTermId } from "../month-roster";
 import type { SessionTermPatch } from "./actions";
 
 /** 한 번에 받는 최대 행 수 — 선택 일괄 확정과 같은 값. */
@@ -56,6 +57,10 @@ export async function unconfirmClassTerms(
     if (typeof id !== "string" || !id || unique.has(id)) return { error: "해제할 학생을 확인해 주세요" };
     unique.add(id);
   }
+
+  // 회차 행이 없는 줄(가상 id)은 확정된 적이 없어 해제할 것이 없다 — uuid 열 조회에 섞으면 묶음 전체가 실패한다.
+  for (const id of [...unique]) if (isVirtualTermId(id)) unique.delete(id);
+  if (unique.size === 0) return { error: "해제할 확정이 없습니다" };
 
   const supabase = await createClient();
   let rows: TermRow[];

@@ -4,7 +4,7 @@
 // 시트 원본의 "담임 월간계획/주간계획·부담임 월간계획/주간계획" 4구획을 아코디언으로 이식. LWW 자동저장.
 // 행은 반 트랙별(원장 2026-09-14 — EiE = 달력 칸 `In-class · Homework · Test` / 그 외 = 6영역):
 // 호출부가 `goalAreasFor`로 골라 넘긴다. 이 파일은 받은 목록을 그리기만 한다.
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";

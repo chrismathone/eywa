@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { isDirectEditClick } from "@/lib/direct-edit";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { sortRows, type SortState, type SortValue } from "@/features/inventory/sort";
 

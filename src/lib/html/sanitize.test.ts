@@ -56,8 +56,8 @@ describe("서식·구조 보존", () => {
   });
 
   it("정상 링크(http·https·mailto)는 유지된다", () => {
-    expect(sanitizeRichHtml('<a href="https://eywa.test/x">링크</a>')).toContain(
-      'href="https://eywa.test/x"',
+    expect(sanitizeRichHtml('<a href="https://aywa.test/x">링크</a>')).toContain(
+      'href="https://aywa.test/x"',
     );
     expect(sanitizeRichHtml('<a href="mailto:a@b.com">메일</a>')).toContain("mailto:a@b.com");
   });

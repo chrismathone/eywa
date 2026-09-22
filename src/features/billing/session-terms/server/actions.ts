@@ -15,6 +15,9 @@ import { maxCarryoverOut, maxCarryoverIn, validateCarryover } from "../carryover
 import { isEieMonthlyClass, sessionPricingAmount, validSessionQuantity, type SessionPricingMode, type SessionQuantityBasis } from "@/features/billing/session-pricing";
 import { toAutoUnitsSchedule, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { loadLivePlans } from "./live-plans";
+import { isVirtualTermId, monthRosterKey, parseVirtualTermId, virtualTermId } from "../month-roster";
+import { loadMonthRoster, type MonthRoster } from "./month-roster";
+import { MATERIALIZE_ERROR, materializeVirtualTerms } from "./term-materialize";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -27,7 +30,11 @@ export type SessionTermPatch = {
   confirmedAt: string | null;
   quantityBasis?: SessionQuantityBasis;
 };
-export type SessionTermActionState = { error?: string; ok?: boolean; refreshed?: number; terms?: SessionTermPatch[] } | undefined;
+/**
+ * `created` = 이번 저장이 **회차 행을 새로 만든** 수(출석부 줄인데 행이 없던 학생 — `term-materialize.ts`). 0보다 크면 응답의 `terms`는
+ * 실 uuid라 화면의 가상 행 패치(id 키)에 안 붙는다 → 화면은 `router.refresh()`로 가상 행을 실 행으로 갈아끼운다.
+ */
+export type SessionTermActionState = { error?: string; ok?: boolean; refreshed?: number; created?: number; terms?: SessionTermPatch[] } | undefined;
 
 // 한 행 저장 때마다 월 전체 목록을 다시 그리지 않는다. 응답은 저장한 행만 보내고,
 // 감사로그·다음 방문의 캐시 무효화는 응답 뒤 실행한다(Next after의 수명 보장).
@@ -117,13 +124,27 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     });
   }
 
-  // 기존 term 로드(확정 보존·stale 판단)
+  // 기존 term 로드(확정 보존·stale 판단) + 그 달 줄 집합(출석부와 같은 규칙) — 줄 집합 안의 행은 계획에 없어도 지우지 않는다.
   const invoiceIds = invoices.map((i) => i.id);
-  const existing = await fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; confirmed_sessions: number | null; allocation_line_index: number | null; note: string | null }>(
-    invoiceIds,
-    (chunk, from, to) =>
-      supabase.from("invoice_session_terms").select("id, invoice_id, class_id, confirmed_sessions, allocation_line_index, note").in("invoice_id", chunk).order("id").range(from, to),
-  );
+  const [existing, roster] = await Promise.all([
+    fetchAllPagedInChunks<{ id: string; invoice_id: string; class_id: string | null; planned_sessions: number | null; confirmed_sessions: number | null; allocation_line_index: number | null; allocation_amount: number | string | null; note: string | null }>(
+      invoiceIds,
+      (chunk, from, to) =>
+        supabase
+          .from("invoice_session_terms")
+          .select("id, invoice_id, class_id, planned_sessions, confirmed_sessions, allocation_line_index, allocation_amount, note")
+          .in("invoice_id", chunk)
+          .order("id")
+          .range(from, to),
+    ),
+    loadMonthRoster(supabase, period),
+  ]);
+  const studentOfInvoice = new Map(invoices.map((i) => [i.id, i.student_id]));
+  /** 그 행의 (학생·반)이 이번 달 줄 집합에 있는가 — 있으면 보강 방문으로 만든 행이라 확정을 풀어도 지우지 않는다(원장 2026-09-18). */
+  const rosterPairOf = (t: { invoice_id: string; class_id: string | null }) => {
+    const student = studentOfInvoice.get(t.invoice_id);
+    return student && t.class_id ? roster.byKey.get(monthRosterKey(student, t.class_id)) : undefined;
+  };
 
   let refreshed = 0;
   const upserts: Record<string, unknown>[] = [];
@@ -148,7 +169,10 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     // 시수 미확정이어도 사용자가 저장한 수납 배분은 계획 갱신으로 지우지 않는다.
     // 🔴 메모는 삭제를 막지 않는다 — 메모 하나로 남긴 행은 계획 0·미확정으로 영영 남아 '확정 N/M'·미배분 수·시수 검증
     //    미확정 수를 부풀린다(적대적 리뷰 2026-09-17). 대신 지운 메모 원문을 아래 감사로그에 남긴다.
-    if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && t.confirmed_sessions === null && t.allocation_line_index == null) staleUnconfirmed.push(t.id);
+    // 🔴 줄 집합(출석부) 안의 행은 계획 키에 없어도 남긴다 — 그 달 기록이 있는 한 출석부엔 그 줄이 서 있다(두 화면의 줄 수가 같아야 한다).
+    // 🔴 자유 배분(0279a)은 항목 칸이 비어 있어도 금액이 있다 — **양수 금액**까지 없어야 '배분 없음'이다(안 보면 관리자가 준 돈이 조용히 사라진다).
+    //    0원 줄(항목별 '연결 안 함'을 확정 해제한 것)은 지운다 — 남기면 재확인이 떠 그 달 분배 저장을 막고, 지워도 묶음 합계는 그대로다.
+    if (!plannedKeys.has(`${t.invoice_id}|${t.class_id}`) && !rosterPairOf(t) && t.confirmed_sessions === null && t.allocation_line_index == null && Number(t.allocation_amount ?? 0) === 0) staleUnconfirmed.push(t.id);
   }
 
   // upsert는 계획 필드만 — onConflict 대상 컬럼 목록에 confirmed_*를 넣지 않아 기존 확정이 보존된다.
@@ -159,7 +183,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     if (error) return { error: `계획 저장 실패: ${error.message}` };
   }
   for (let i = 0; i < staleUnconfirmed.length; i += 200) {
-    const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200)).is("confirmed_sessions", null).is("allocation_line_index", null);
+    const { error } = await supabase.from("invoice_session_terms").delete().in("id", staleUnconfirmed.slice(i, i + 200)).is("confirmed_sessions", null).is("allocation_line_index", null).or("allocation_amount.is.null,allocation_amount.eq.0");
     if (error) return { error: `정리 실패: ${error.message}` };
   }
 
@@ -169,10 +193,22 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     .map((t) => ({ termId: t.id, invoiceId: t.invoice_id, classId: t.class_id, note: t.note }));
 
   // 확정·배분 때문에 남겨 둔 종료반도 계획은 0이다. 예전 계획값을 남기지 않는다.
-  const staleRetained = existing.filter((t) => !plannedKeys.has(`${t.invoice_id}|${t.class_id}`)).map((t) => t.id);
-  for (let i = 0; i < staleRetained.length; i += 200) {
-    const { error } = await supabase.from("invoice_session_terms").update({ planned_sessions: 0 }).in("id", staleRetained.slice(i, i + 200));
-    if (error) return { error: `종료반 계획 저장 실패: ${error.message}` };
+  // 🔴 기록·예약만으로 서는 줄(수강행 없는 보강 방문)은 예정이 **없는** 줄이라 0이 아니라 **null**로 맞춘다 — 수강행을 지우거나 시작일을
+  //    미뤄 방문 줄로 바뀐 행이 옛 예정(예: 8)을 들고 남지 않게(적대 리뷰 2026-09-18). 반 일괄 대상 판정은 저장값이 아니라 live plan이지만
+  //    저장값이 거짓 예정을 들고 있으면 다음에 읽는 곳이 또 속는다. 이미 null이면 쓰지 않는다 · 확정값은 안 건드린다.
+  const staleRetained: string[] = [];
+  const visitorNull: string[] = [];
+  for (const t of existing) {
+    if (plannedKeys.has(`${t.invoice_id}|${t.class_id}`)) continue;
+    const pair = rosterPairOf(t);
+    if (!pair || pair.sources.includes("enrolled")) staleRetained.push(t.id);
+    else if (t.planned_sessions !== null) visitorNull.push(t.id);
+  }
+  for (const [ids, value, label] of [[staleRetained, 0, "종료반"], [visitorNull, null, "보강 방문 줄"]] as const) {
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase.from("invoice_session_terms").update({ planned_sessions: value }).in("id", ids.slice(i, i + 200));
+      if (error) return { error: `${label} 계획 저장 실패: ${error.message}` };
+    }
   }
 
   // 한 달 전체를 다시 계산하고 **확정 안 된 stale 행을 지우는** 일이라 한 줄 남긴다(행마다가 아니라 실행 단위).
@@ -205,7 +241,17 @@ export async function confirmClassTerms(
   unitPriceRaw: number,
   sessionsOverride?: number | null,
   visibleTermIds?: string[],
-): Promise<{ error?: string; confirmed?: number; terms?: SessionTermPatch[] }> {
+): Promise<{
+  error?: string;
+  confirmed?: number;
+  /** 이번 저장이 새로 만든 회차 행 수(감사로그 수). */
+  created?: number;
+  /** 가상 줄이 실제 행으로 바뀐 수(다른 창이 먼저 만든 행 포함) — 0보다 크면 화면이 새로 읽어 가상 줄을 갈아끼운다. */
+  materialized?: number;
+  /** 이번 달 예정이 없어 반 일괄에서 빠진 학생 수(보강 방문·월초 종료 등) — 개별·선택 확정으로 한다. */
+  skippedUnplanned?: number;
+  terms?: SessionTermPatch[];
+}> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
@@ -226,28 +272,105 @@ export async function confirmClassTerms(
   const pricingMode: SessionPricingMode = isEieMonthlyClass(cls.subject, cls.english_track) ? "monthly" : "per_session";
   if (pricingMode === "per_session" && override === null) return { error: "일괄 확정할 회차를 입력해 주세요. 단가만 입력하면 미확정 상태로 유지됩니다" };
   if (pricingMode === "monthly") unitPrice = (await getTenantSettings()).billing.eieMonthlyPrice;
-  const { data, error } = await supabase
-    .from("invoice_session_terms")
-    .select("id, planned_sessions, invoice:invoice_id!inner ( period, student_id )")
-    .eq("class_id", classId)
-    .eq("invoice.period", period);
-  if (error) return { error: error.message };
-  // 회차 지정 시엔 계획 없어도 적용, 미지정 시엔 계획값 필요.
-  const targets = (data ?? []).filter((r) => (visibleTermIds === undefined || visibleTermIds.includes(r.id)) && (pricingMode === "monthly" || override != null || r.planned_sessions !== null));
-  if (targets.length === 0) return { error: "확정할 대상이 없습니다 — 계획 갱신을 먼저 눌러주세요" };
+
+  // 이 반·이 달의 회차 행 — 대상 선정과 "이미 행이 있는 학생" 판정에 함께 쓴다.
+  type ClassTermRow = {
+    id: string;
+    confirmed_sessions: number | null;
+    invoice: { period: string; student_id: string; status: string } | { period: string; student_id: string; status: string }[] | null;
+  };
+  // 🔴 취소(void) 청구서의 행은 대상이 아니다 — 화면·행 생성·계획 갱신·정산 전부 살아 있는 청구서만 본다(재리뷰 2026-09-18: void 행이
+  //    '이미 행 있음'으로 재발행 청구서의 가상 줄 생성을 막고, 화면에 없는 void 행을 확정했다).
+  const readTerms = () =>
+    supabase
+      .from("invoice_session_terms")
+      .select("id, confirmed_sessions, invoice:invoice_id!inner ( period, student_id, status )")
+      .eq("class_id", classId)
+      .eq("invoice.period", period)
+      .neq("invoice.status", "void");
+  const studentOfRow = (r: ClassTermRow) => (Array.isArray(r.invoice) ? r.invoice[0] : r.invoice)?.student_id;
+  // 회차 행과 그 반 줄 집합은 서로를 기다릴 이유가 없다(B4) — 필터 보기(가상 id를 화면이 보낸다)면 줄 집합은 행 생성이 학생만큼 읽는다.
+  const [first, classRoster] = await Promise.all([
+    readTerms(),
+    visibleTermIds === undefined ? loadMonthRoster(supabase, period, { classIds: [classId] }) : Promise.resolve(undefined),
+  ]);
+  if (first.error) return { error: first.error.message };
+  let data = (first.data ?? []) as ClassTermRow[];
+
+  // 🔴 이 반의 출석부 줄인데 회차 행이 없는 학생을 **먼저** 만든다 — 그래야 아래 대상 선정이 출석부와 같은 줄을 본다
+  //    (원장 2026-09-18 "출석부 행 개수 = 회차 확정 행 개수"). 청구서가 없거나 취소된 줄은 만들 수 없어 빠진다(화면도 잠겨 있다).
+  // 🔴 반 일괄은 **이번 달 예정이 있는 줄만** 만들고 확정한다(`plannedOnly` · 아래 live plan > 0) — 수강행 없는 보강 방문 줄과
+  //    예정 0인 수강 줄(월초 당일 종료·반이동 전출)에 반 전체 숫자를 넣으면 틀린 시수가 확정되고 EiE면 월 정액이 붙는다(적대 리뷰 2026-09-18).
+  //    그 줄은 실제 시수를 보고 개별·선택 확정으로 한다 — 빠진 인원은 응답 `skippedUnplanned`로 화면이 알린다.
+  // ⚡ 줄 집합은 **이 반만** 읽는다(쌍은 반마다 독립) · 이미 회차 행이 있는 학생은 만들 것이 없어 보내지 않는다.
+  let created = 0;
+  let materialized = 0;
+  /** 반 일괄에서 빠진 예정 없는 학생(가상 줄 · 이미 행이 있는 줄 둘 다) — 같은 학생을 두 번 세지 않게 학생 id로 모은다. */
+  const unplannedStudents = new Set<string>();
+  let lockedOnly = false;
+  let visible = visibleTermIds;
+  {
+    const hasRow = new Set(data.map(studentOfRow).filter((id): id is string => !!id));
+    const roster: MonthRoster | undefined = classRoster;
+    const ids = roster
+      ? roster.pairs.filter((p) => p.classId === classId && !hasRow.has(p.studentId)).map((p) => virtualTermId(p.studentId, p.classId))
+      : (visibleTermIds ?? []).filter(isVirtualTermId);
+    if (ids.length > 0) {
+      const made = await materializeVirtualTerms(supabase, { tenantId: user.tenantId, period, reason: "confirm_class", classId, roster, plannedOnly: true }, ids);
+      if (made.error) return { error: made.error };
+      created = made.created;
+      materialized = made.ids.size;
+      for (const [id, reason] of made.failed) {
+        const pair = reason === MATERIALIZE_ERROR.unplanned ? parseVirtualTermId(id) : null;
+        if (pair) unplannedStudents.add(pair.studentId);
+      }
+      lockedOnly = made.failed.size > 0 && [...made.failed.values()].every((r) => r === MATERIALIZE_ERROR.noInvoice || r === MATERIALIZE_ERROR.voidInvoice);
+      if (visible) visible = visible.map((id) => made.ids.get(id) ?? id);
+      if (made.ids.size > 0) {
+        const again = await readTerms();
+        if (again.error) return { error: again.error.message };
+        data = (again.data ?? []) as ClassTermRow[];
+      }
+    }
+  }
+
+  // 🔑 대상 = **이번 달 예정(live plan)이 있는 행만** — 화면(`batchEligible`)과 **같은 축**이다. 저장된 `planned_sessions`는 '계획 갱신'을
+  //    누른 순간의 값이라(수동 버튼) 그 뒤 휴원·반이동·종료일 소급을 모른다 — 그 값으로 고르면 화면은 '예정 없음'인 떠난 학생을 다시
+  //    확정한다(EiE면 월 정액, 재리뷰 2026-09-18). 수강행 없는 보강 방문 줄은 live plan이 없어(0) 자연히 빠진다.
+  const inView = data.filter((r) => visible === undefined || visible.includes(r.id));
+  const settingsForPlan = await getTenantSettings();
+  const livePlans = await loadLivePlans(
+    supabase,
+    period,
+    [...new Set(inView.map(studentOfRow).filter((id): id is string => !!id))],
+    mergeHolidays(Number(period.slice(0, 4)), settingsForPlan.operations.holidays.map((h) => h.date), true),
+  );
+  const planOf = (r: ClassTermRow) => livePlans.plans.get(studentOfRow(r) ?? "")?.get(classId) ?? 0;
+  const targets = inView.filter((r) => planOf(r) > 0);
+  // 빠진 인원은 **아직 확정 안 된 줄**만 센다 — 이미 확정된 줄에 "개별로 확정하세요"라고 하면 거짓 안내다.
+  for (const r of inView) {
+    const student = studentOfRow(r);
+    if (planOf(r) <= 0 && r.confirmed_sessions === null && student) unplannedStudents.add(student);
+  }
+  const skippedUnplanned = unplannedStudents.size;
+  const extra = { ...(created ? { created } : {}), ...(materialized ? { materialized } : {}), ...(skippedUnplanned ? { skippedUnplanned } : {}) };
+  if (targets.length === 0) {
+    const reason = skippedUnplanned > 0
+      ? MATERIALIZE_ERROR.unplanned
+      : lockedOnly
+        ? "이 반에서 확정할 수 있는 줄이 없습니다 — 청구서가 없거나 취소된 학생뿐입니다"
+        : "확정할 대상이 없습니다 — 계획 갱신을 먼저 눌러주세요";
+    return { error: reason, ...extra };
+  }
 
   const now = new Date().toISOString();
   const studentOf = (r: typeof targets[number]) => (Array.isArray(r.invoice) ? r.invoice[0] : r.invoice)?.student_id;
-  let liveMonthlyPlans: Awaited<ReturnType<typeof loadLivePlans>> | null = null;
-  if (pricingMode === "monthly" && override === null) {
-    const settings = await getTenantSettings();
-    const studentIds = [...new Set(targets.map(studentOf).filter((id): id is string => typeof id === "string"))];
-    liveMonthlyPlans = await loadLivePlans(supabase, period, studentIds, mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true));
-  }
+  // 월 정액·회차 미입력이면 각자 live plan — 위에서 읽은 것을 그대로 쓴다(같은 학생 집합).
+  const liveMonthlyPlans: Awaited<ReturnType<typeof loadLivePlans>> | null = pricingMode === "monthly" && override === null ? livePlans : null;
   // amount = 회차 × 단가라 회차값마다 다름 → 회차별로 묶어 batch update(반 학생은 소수라 청크 불필요).
   const byN = new Map<number, string[]>();
   for (const r of targets) {
-    const n = override != null ? override : liveMonthlyPlans ? liveMonthlyPlans.plans.get(studentOf(r) ?? "")?.get(classId) ?? 0 : Number(r.planned_sessions ?? 0);
+    const n = override != null ? override : liveMonthlyPlans ? liveMonthlyPlans.plans.get(studentOf(r) ?? "")?.get(classId) ?? 0 : planOf(r);
     (byN.get(n) ?? byN.set(n, []).get(n)!).push(r.id as string);
   }
   let confirmed = 0;
@@ -270,7 +393,7 @@ export async function confirmClassTerms(
     for (const row of saved ?? []) terms.push({ id: row.id, confirmedSessions: n, unitPrice, pricingMode, amount: sessionPricingAmount(pricingMode, n, unitPrice), confirmedAt: now, quantityBasis: "attendance_units" });
     confirmed += saved?.length ?? 0;
   }
-  if (confirmed === 0) return { error: "확정할 대상을 찾을 수 없습니다" };
+  if (confirmed === 0) return { error: "확정할 대상을 찾을 수 없습니다", ...extra };
 
   // 🔴 한 번에 반 전체 청구 회차·단가를 못박는 자리 = 돈이 실제로 결정되는 지점. 단가·회차를 남긴다
   //    (`invoice_create`가 amountTotal을 남기는 것과 같은 결 — 금액 없이 "누가 눌렀다"만 남기면
@@ -287,9 +410,11 @@ export async function confirmClassTerms(
       // 회차를 지정하면 전원 같은 값, 아니면 각자 계획 N(월중 등록·퇴원으로 반 안에서도 다르다).
       sessions: override,
       confirmedCount: confirmed,
+      ...(created ? { createdRows: created } : {}),
+      ...(skippedUnplanned ? { skippedUnplanned } : {}),
     },
   });
-  return { confirmed, terms };
+  return { confirmed, terms, ...extra };
 }
 
 /** 회차/월 금액 확정 — 회당은 N×단가, EiE는 설정의 월 금액과 단위를 스냅샷. */
@@ -301,7 +426,7 @@ export async function confirmSessionTerm(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
 
-  const id = String(formData.get("id") ?? "").trim();
+  let id = String(formData.get("id") ?? "").trim();
   const sessionsRaw = String(formData.get("sessions") ?? "").trim();
   const sessions = sessionsRaw === "" ? NaN : Number(sessionsRaw);
   const priceRaw = String(formData.get("unitPrice") ?? "").replace(/[,\s]/g, "");
@@ -312,6 +437,18 @@ export async function confirmSessionTerm(
   unitPrice = Math.round(unitPrice);
 
   const supabase = await createClient();
+  // 출석부 줄인데 회차 행이 없던 학생(가상 id) — 서버가 그 달 줄 집합·청구서로 다시 판정하고(#77) 행을 만든 뒤 실 id로 확정한다.
+  // 화면은 `created`를 보고 새로고침해 가상 행을 실 행으로 갈아끼운다.
+  let created = 0;
+  if (isVirtualTermId(id)) {
+    const period = String(formData.get("period") ?? "").trim();
+    if (!monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" };
+    const made = await materializeVirtualTerms(supabase, { tenantId: user.tenantId, period, reason: "confirm" }, [id]);
+    const real = made.ids.get(id);
+    if (!real) return { error: made.error ?? made.failed.get(id) ?? "회차 행을 만들지 못했습니다. 다시 시도해 주세요" };
+    created = made.created;
+    id = real;
+  }
   // 반·이전 확정값을 함께 읽는다 — classId는 뷰어가 반 이름으로 풀어 주고(감사로그 '대상'), 이전 확정값은
   // "얼마에서 얼마로 고쳤나"의 답이다(행에는 마지막 값만 남는다).
   const { data: before, error: readError } = await supabase
@@ -358,7 +495,7 @@ export async function confirmSessionTerm(
         : {}),
     },
   });
-  return { ok: true, terms: [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt, quantityBasis: "attendance_units" }] };
+  return { ok: true, ...(created ? { created } : {}), terms: [{ id, confirmedSessions: sessions, unitPrice, pricingMode, amount, confirmedAt, quantityBasis: "attendance_units" }] };
 }
 
 /** 확정 해제 — 계획 N은 유지. */
@@ -372,6 +509,8 @@ export async function unconfirmSessionTerm(
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "대상이 없습니다" };
+  // 가상 id(회차 행이 없는 줄)엔 해제할 확정이 없다 — uuid 열에 그대로 보내면 DB 오류 원문이 화면에 샌다.
+  if (isVirtualTermId(id)) return { error: "아직 회차 행이 없는 줄입니다 — 해제할 확정이 없습니다" };
 
   const supabase = await createClient();
   // 🔴 확정 해제는 확정값을 **null로 지운다** — 지우기 전에 읽지 않으면 "얼마였는지"가 영영 사라진다.
@@ -417,7 +556,7 @@ function prevPeriodOf(period: string): string {
  * ⚠️ 원장 제약(2026-07-22): **더한 수업은 절대 급여에 포함되지 않는다(학원 손해).**
  *   상한을 올리는 유일한 근거는 **기록된 이월**이라, 여기서 서버가 한도를 재검증한다(UI 신뢰 금지).
  *   · out ≤ 그 달 부족분(청구−실측)  · in ≤ min(그 달 초과분, 전 달 이월분)
- * ⚠️ 컷오버 예외: 전 달(26.06)은 eywa에 term 행이 **없어서** 크레딧을 조회할 수 없다.
+ * ⚠️ 컷오버 예외: 전 달(26.06)은 aywa에 term 행이 **없어서** 크레딧을 조회할 수 없다.
  *   그때만 **사유(note) 필수**로 그 달 초과분까지 허용하고, 누가·언제·왜를 남긴다(0134a 감사 컬럼).
  * 1단계는 **기록만** — 급여 상한이 실제로 이월을 소비하는 것은 2단계(돈 산식 변경 → 골든마스터 게이트).
  */
@@ -431,6 +570,7 @@ export async function setSessionTermCarryover(
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "대상이 없습니다" };
+  if (isVirtualTermId(id)) return { error: "아직 회차 행이 없는 줄입니다 — 먼저 시수를 확정해 주세요" };
   // ⚠️ **부분 수정 보존**: 키가 아예 안 오면 기존 값을 유지한다. `?? "0"`으로 두면 out만 보낸 호출이
   //    이미 승인된 carryover_in을 0으로 덮어 **크레딧이 조용히 사라진다**(돈 필드, 적대 검증 확정).
   const rawOut = formData.get("carryoverOut");

@@ -4,7 +4,7 @@
  * 필 라운드 = 마케팅 전용 톤(앱 각진 라운드와 별개).
  */
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 
 type Size = "sm" | "md" | "lg";
 

@@ -59,6 +59,15 @@ const threeBy55 = (classId: string) => [
 afterEach(() => vi.restoreAllMocks());
 
 describe("resolveAutoUnits — 서버 조회(과목·배치) → (반|날짜) → 자동 시수", () => {
+  it("다른 요일의 40분 교시로 브릿지를 판별하고 60분 수업을 1.5U로 계산한다", async () => {
+    const { client } = fakeClient({
+      classes: { data: [{ id: ENG, subject: "english", english_track: "injaewon", class_name: "중등E_초5 MED" }] },
+      class_schedules: { data: [sched(ENG, "15:00", "16:00"), sched(ENG, "15:00", "15:40", { day_of_week: "tue" })] },
+    });
+    const got = await resolveAutoUnits(client, [{ classId: ENG, date: THU }]);
+    expect(got.get(`${ENG}|${THU}`)).toBe(1.5);
+  });
+
   it("수학 165분 = 1.5 · 영어 반은 같은 배치여도 없다", async () => {
     const { client } = fakeClient({
       classes: { data: [{ id: MATH, subject: "math" }, { id: ENG, subject: "english" }] },

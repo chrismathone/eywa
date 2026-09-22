@@ -15,7 +15,7 @@ import { hasBatchim } from "@/lib/text/josa";
 import { givenNameOf, studentNameVariants } from "@/features/report-templates/name-mention";
 
 export type EnglishMentInput = {
-  /** eywa 표시 이름(동명이인 접미 가능, 예 "박서연C"). */
+  /** aywa 표시 이름(동명이인 접미 가능, 예 "박서연C"). */
   studentName: string;
   englishName?: string | null;
   /** 오늘 진도(여러 줄, ECS에서 온 영역 라벨 포함 가능). */

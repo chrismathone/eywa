@@ -2,7 +2,7 @@ import { SuperAdminHeader } from "@/components/super-admin/header";
 import { getAllTenants, getSaaSStats } from "@/features/super-admin/server/queries";
 import { Pill } from "@/components/atoms/pill";
 
-export const metadata = { title: "Super Admin · 대시보드 — eywa" };
+export const metadata = { title: "Super Admin · 대시보드 — aywa" };
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 

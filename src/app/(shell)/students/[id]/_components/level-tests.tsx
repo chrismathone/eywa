@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
-import { AlertCircle, Loader2, Plus, Save, Trash2, X } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Loader2, Plus, Save, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import {

@@ -1,4 +1,4 @@
-import { MessagesSquare, CalendarClock, BellRing, AlarmClock, Mic, Sparkles } from "@/components/icons/eywa-icon-compat";
+import { MessagesSquare, CalendarClock, BellRing, AlarmClock, Mic, Sparkles } from "@/components/icons/aywa-icon-compat";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { consultationPreview } from "@/features/consultations/summary-preview";
@@ -32,7 +32,7 @@ import { relativeTimeKo } from "@/lib/relative-time";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
-export const metadata = { title: "원생상담 — eywa" };
+export const metadata = { title: "원생상담 — aywa" };
 
 type RangeKey = "all" | "7d" | "30d";
 type CategoryKey = "all" | StudentConsultationCategory;

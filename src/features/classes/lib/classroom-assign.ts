@@ -1,12 +1,12 @@
 // 강의실 자동배정 — 순수 함수(클라가 즉시 미리보기로 import. ⚠️ server-only 금지, [[#61]]).
 //
 // ijw ClassroomAssignment(useAutoAssignAlgorithm.ts) 경량 이식. ijw는 강의실에 층·건물·선호과목
-// 메타가 있어 5축(과목-층 적합도·수용·강사동선·균등분산·학년그룹핑)으로 점수를 매겼지만, eywa
-// classrooms는 name·capacity만 있어(메타 부재) **eywa가 실제로 지원하는 3축만** 쓴다:
+// 메타가 있어 5축(과목-층 적합도·수용·강사동선·균등분산·학년그룹핑)으로 점수를 매겼지만, aywa
+// classrooms는 name·capacity만 있어(메타 부재) **aywa가 실제로 지원하는 3축만** 쓴다:
 //   ① 시간충돌 회피(같은 강의실 동시간 금지) ② 수용인원 적합 ③ 균등분산 + 기존배정 유지(안정성).
 // 과목-층/강사동선/학년그룹핑은 강의실 메타가 생기면 확장(스키마 한계라 의도적 제외 — 가짜 점수 안 만듦).
 //
-// 배정 단위 = 반(classes.classroom_id). eywa 데모/UI가 반 기본 강의실로 동작하므로 슬롯별(slotRoom)
+// 배정 단위 = 반(classes.classroom_id). aywa 데모/UI가 반 기본 강의실로 동작하므로 슬롯별(slotRoom)
 // 배정은 미이식(데모 경량판). 같은 강의실을 쓰는 두 반은 어느 슬롯도 시간이 안 겹쳐야 한다.
 
 export type AssignSlot = { day: string; start: string; end: string }; // HH:MM

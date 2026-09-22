@@ -1,18 +1,18 @@
 /**
  * scripts/_makeedu/replace-invoices-from-excel.cjs
  *
- * makeedu '수납 상세내역' 엑셀(전 기간)로 eywa `invoices`를 **전면 교체**(makeedu 우선, 사용자 확정 2026-07-08).
- * 배경: 기존 additive 임포트는 이미 임포트된 (학생,청구월)을 안 갱신 → 월 중 추가된 교재/특강 청구가 eywa에 누락
+ * makeedu '수납 상세내역' 엑셀(전 기간)로 aywa `invoices`를 **전면 교체**(makeedu 우선, 사용자 확정 2026-07-08).
+ * 배경: 기존 additive 임포트는 이미 임포트된 (학생,청구월)을 안 갱신 → 월 중 추가된 교재/특강 청구가 aywa에 누락
  * (2026-07 교재 11건 중 10건 누락 실측). 엑셀은 makeedu 완전 기록이라 이걸 소스로 재집계·upsert한다.
  *
  * 규칙:
- * - 집계 단위 = (학생, 청구월) 1행(eywa invoices UNIQUE 제약). 라인은 line_items에 **kind(구분: 교재/수업/차량비…) 보존**.
+ * - 집계 단위 = (학생, 청구월) 1행(aywa invoices UNIQUE 제약). 라인은 line_items에 **kind(구분: 교재/수업/차량비…) 보존**.
  * - 금액 = SUM(청구액/실제낸금액/할인액/적립금). status = 미납 SUM 기준(할인·적립 반영): 실납<=0 미수 / 미납<=0 완납 / 그 외 부분.
  * - category = 최대금액 라인의 구분 매핑(수업→tuition, 교재→material, 차량비/기타/원복→other).
  * - 결제수단·카드사·현금영수증·할인사유·수납일·청구일도 엑셀에서 채움(makeedu 우선).
  * - 매칭 = makeedu_id(원생고유번호) 우선 → (이름,학년) 폴백. 모호(동명+동학년 2명↑)·미존재 = 스킵(오매칭 방지).
  * - **upsert**: on conflict (tenant,student,period) DO UPDATE(makeedu-소스 필드 덮어씀). id·notes·teacher_snapshot_id·sync_added_at 보존.
- * - **교재요청서(textbook_orders)는 절대 안 건드림** — 그건 eywa 우선(신청은 eywa 소스, 자동 등록/납부 체크는 별도).
+ * - **교재요청서(textbook_orders)는 절대 안 건드림** — 그건 aywa 우선(신청은 aywa 소스, 자동 등록/납부 체크는 별도).
  * - dry-run 기본(DB write 0). --apply로 반영.
  *
  *   node --env-file=.env.local scripts/_makeedu/replace-invoices-from-excel.cjs [--apply]
@@ -39,7 +39,7 @@ const cell = (v) => {
   if (typeof v === "object" && "text" in v) return String(v.text).trim();
   return String(v).trim();
 };
-// 구분 → eywa category
+// 구분 → aywa category
 const KIND_CAT = { 수업: "tuition", 교재: "material", 차량비: "other", 기타: "other", 원복: "other" };
 
 async function readLines() {
@@ -139,7 +139,7 @@ async function readLines() {
     console.log(`집계 인보이스 ${rows.length}(학생×월) | status ${JSON.stringify(statusDist)} | 미매칭 라인 ${unmatched} (학생 ${unmatchedNames.size}명)`);
     if (unmatchedNames.size) console.log(`  미매칭 표본: ${[...unmatchedNames].slice(0, 12).join(", ")}`);
 
-    // 기존 eywa invoices와 대조(dry-run 리포트)
+    // 기존 aywa invoices와 대조(dry-run 리포트)
     const existing = await sql`
       select student_id, period, id, amount_total, amount_paid, amount_discount, status,
              case when jsonb_typeof(line_items) = 'array' then jsonb_array_length(line_items) else 0 end nli
@@ -153,7 +153,7 @@ async function readLines() {
       if (Number(e.amount_total) !== r.total || Number(e.amount_paid) !== r.paid || Number(e.amount_discount) !== r.disc || e.nli !== r.items.length) changedAmt++;
       if (e.status !== r.status) changedStatus++;
     }
-    // 엑셀에 없는 eywa 인보이스(교차 기간) = orphan 후보(makeedu에 없음)
+    // 엑셀에 없는 aywa 인보이스(교차 기간) = orphan 후보(makeedu에 없음)
     const excelKeys = new Set(rows.map((r) => `${r.student_id}|${r.period}`));
     const orphans = existing.filter((e) => !excelKeys.has(`${e.student_id}|${e.period}`));
     console.log(`\n대조: 신규 insert ${inserts} / update ${updates} (금액·항목 변경 ${changedAmt} · status 변경 ${changedStatus}) / 엑셀에 없는 기존행(orphan) ${orphans.length}`);

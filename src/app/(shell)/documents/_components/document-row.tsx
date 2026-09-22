@@ -15,7 +15,7 @@ import {
   Pin,
   StickyNote,
   Trash2,
-} from "@/components/icons/eywa-icon-compat";
+} from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { deleteDocument, toggleDocumentPin } from "@/features/documents/server/actions";
 import { downloadDocument } from "@/features/documents/open-file";

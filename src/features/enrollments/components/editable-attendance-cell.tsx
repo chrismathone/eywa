@@ -4,7 +4,7 @@ import { isDirectEditClick } from "@/lib/direct-edit";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, X } from "@/components/icons/aywa-icon-compat";
 import { updateEnrollmentsAttendanceBatch } from "@/features/enrollments/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
 // 요일 글자는 앱 전역 `sheetDowLabel` 단일 소스 — 여기에 표를 다시 만들지 않는다.

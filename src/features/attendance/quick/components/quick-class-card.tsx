@@ -9,7 +9,7 @@
  * ⚠️ 터치 타겟은 44px(`min-h-11`) 이상 — 원장 지시가 "모바일 위주"다. 이름 글자는 **칩 폭에 비례**한다
  *    (`fluidNameFontSize`, 격자형 이름 칸 규약 2026-09-04 — 하한·상한은 name-fit.ts에만 적는다).
  */
-import { ChevronDown, ChevronRight } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { fluidNameFontSize, NAME_FILL_MAX_PX, NAME_FILL_MIN_PX } from "@/features/attendance/seat/name-fit";
 import { seatHoverTitle, SEAT_MARK_TONE } from "@/features/attendance/live/mark-state";
 // 화면 언어(강사 미니셸) — 반 이름·강의실·학생 이름은 각각의 **단일 소스**를 통과시킨다.

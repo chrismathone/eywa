@@ -1,10 +1,10 @@
 /**
- * **구글 캘린더 → eywa 한 방향 임포트** — 순수 변환·판정(IO 없음, Vitest).
+ * **구글 캘린더 → aywa 한 방향 임포트** — 순수 변환·판정(IO 없음, Vitest).
  *
  * 원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부 구글 달력용으로 사용할예정임."* →
  * *"즉, 동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"* → *"하루 2회 정도, 오전 오후 6시쯤"*.
  *
- * 🔴 **한 방향이다** — eywa는 구글에 한 글자도 안 쓴다. 그래서 결정 로그가 경계하던 split-brain
+ * 🔴 **한 방향이다** — aywa는 구글에 한 글자도 안 쓴다. 그래서 결정 로그가 경계하던 split-brain
  *    (양방향 동기화)이 생기지 않는다. 서비스 계정 권한도 읽기(`일정 세부정보 보기`)까지만 받았다.
  * 🔴 **사람이 고친 일정은 덮지 않는다**(원장 확인 필요 항목 중 B안) — `updated_at > google_synced_at`이면
  *    임포트 뒤에 사람이 손댄 것이라 건너뛴다. 안 그러면 화면에서 고친 값이 밤사이 되돌아간다.
@@ -21,7 +21,7 @@ export type GoogleEventLike = {
   end?: { date?: string | null; dateTime?: string | null } | null;
 };
 
-/** eywa `calendar_events` 한 행으로 넣을 값. */
+/** aywa `calendar_events` 한 행으로 넣을 값. */
 export type ImportedEventRow = {
   googleEventId: string;
   title: string;
@@ -60,7 +60,7 @@ export function shiftYmd(ymd: string, days: number): string {
 export const UNTITLED_LABEL = "(제목 없는 일정)";
 
 /**
- * 구글 일정 → eywa 행. 넣을 수 없으면 null(취소됨·id 없음·날짜 없음).
+ * 구글 일정 → aywa 행. 넣을 수 없으면 null(취소됨·id 없음·날짜 없음).
  *
  * 🔴 **종일 일정의 `end.date`는 구글에서 '다음 날'(배타적)이다** — 그대로 넣으면 하루짜리 일정이
  *    이틀로 늘어나 달력에 한 칸 더 칠해진다. 하루 빼서 **포함 끝날**로 바꾼다.
@@ -172,7 +172,7 @@ export type CalendarSource = { calendarId: string; tagName: string };
  * 대상 캘린더 — env `GOOGLE_CALENDAR_IDS`에 `태그이름|캘린더ID` 한 줄씩(또는 `;`로 구분).
  *
  * 🔴 **코드에 캘린더 ID를 박지 않는다** — 특정 학원의 데이터라 코드에 넣으면 테넌트가 늘 때 못 쓴다.
- * 🔴 **태그는 캘린더 이름에서 파생하지 않는다** — 구글 이름이 `02. 입학 상담_NEW`인데 eywa 태그는
+ * 🔴 **태그는 캘린더 이름에서 파생하지 않는다** — 구글 이름이 `02. 입학 상담_NEW`인데 aywa 태그는
  *    `02. 입학 상담`이라, 이름을 그대로 쓰면 **같은 일이 태그 둘로 갈린다**(셔틀 정류장이 5벌로 갈렸던 함정).
  *    그래서 짝을 명시로 적는다. 구글에서 캘린더 이름을 바꿔도 태그는 안 흔들린다.
  * ⚠️ 값이 없으면 **아무 일도 안 한다**(fail-closed) — 목록을 모르면 삭제 정리를 할 수 없고,

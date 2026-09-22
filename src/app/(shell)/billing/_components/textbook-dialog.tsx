@@ -10,8 +10,8 @@
 import { useActionState, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
-import { AlertCircle, Loader2, Save, X } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { AlertCircle, Loader2, Save, X } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import {
   createTextbookOrder,

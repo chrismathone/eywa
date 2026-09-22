@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Reveal } from "../_motion/reveal";
 import { BrowserFrame } from "./browser-frame";
 import { SectionShell } from "./section-shell";

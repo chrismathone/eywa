@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Check, Loader2, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
   createStaff,
@@ -302,7 +302,7 @@ export function StaffForm({
             id="englishName"
             name="englishName"
             defaultValue={v.englishName ?? ""}
-            placeholder="예: Jane, Charlie, Sam"
+            placeholder="예: Emma"
             className={inputClass}
           />
           <p className="text-muted-foreground mt-1 text-xs">

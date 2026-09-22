@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, LayoutPanelTop, X } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronUp, LayoutPanelTop, X } from "@/components/icons/aywa-icon-compat";
 import { NAV_GROUPS } from "@/lib/navigation";
-import type { EywaIconName } from "@/components/icons/eywa-icons";
+import type { AywaIconName } from "@/components/icons/aywa-icons";
 // 🔴 창 칩·배경 카드의 메뉴 아이콘은 **사이드바와 같은 스티커 글리프**다(원장 2026-09-09
 //    *"좌하단 떠있는 창들 아이콘 안바꾼듯"*) — 같은 메뉴가 자리마다 다른 그림이면 눈이 못 잇는다.
 //    `MenuGlyph`는 스티커가 없는 이름이면 알아서 선 아이콘으로 떨어진다.
@@ -14,8 +14,8 @@ import { useWindowStore, instanceLabel } from "./window-store";
 import { useCloseWindow } from "./use-close-window";
 import { usePrefs } from "./use-prefs";
 
-// 라우트 창 칩 아이콘 — 레일과 동일한 Eywa 아이콘. 학생 요약창은 user.
-const ICON_BY_MENU: Record<string, EywaIconName> = {};
+// 라우트 창 칩 아이콘 — 레일과 동일한 Aywa 아이콘. 학생 요약창은 user.
+const ICON_BY_MENU: Record<string, AywaIconName> = {};
 for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] = it.icon;
 
 /**

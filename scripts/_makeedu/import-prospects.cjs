@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/import-prospects.cjs — makeedu 예비원생관리 → eywa `enrollment_consultations` (makeedu_id 멱등, 0057a).
+ * scripts/_makeedu/import-prospects.cjs — makeedu 예비원생관리 → aywa `enrollment_consultations` (makeedu_id 멱등, 0057a).
  * 입력: $MAKEEDU_OUT/prospects.json. outcome enum 매핑(등원가능성).
  *   node --env-file=.env.local scripts/_makeedu/import-prospects.cjs [--apply]
  */
@@ -13,7 +13,7 @@ const OUT = process.env.MAKEEDU_OUT || path.resolve(__dirname, "..", "..", ".mak
 const idx = (H) => (s) => H.findIndex((h) => (h || "").includes(s));
 
 // 방어(2026-07-11): 상담일이 이보다 오래된 예비원생은 **신규 삽입 안 함**. makeedu 예비원생 목록에 2년+ 묵은
-// 예비상담이 남아 목록 동기화로 계속 eywa에 유입되던 문제 차단(삭제해도 다음 동기화가 재삽입하던 근본원인 봉쇄).
+// 예비상담이 남아 목록 동기화로 계속 aywa에 유입되던 문제 차단(삭제해도 다음 동기화가 재삽입하던 근본원인 봉쇄).
 // env(MAKEEDU_PROSPECT_MAX_AGE_DAYS)로 조정 가능. 백필(기존 행 makeedu_id 연결)·QR 접수(실제 신규 상담)는 무관.
 const MAX_AGE_DAYS = Number(process.env.MAKEEDU_PROSPECT_MAX_AGE_DAYS) || 90;
 // 상담일(consulted_at ISO)이 컷오프 이내면 삽입 허용. **날짜 미상은 신규 가능성이라 보호**(스킵 안 함).
@@ -87,7 +87,7 @@ function outcome(v) {
       // 신규 삽입 후보만 나이 게이트 적용 — 오래된 예비상담은 스킵(백필은 위에서 이미 처리돼 무관).
       if (!isRecentEnough(r.consulted_at)) { skippedOld++; continue; }
       const bk = batchKey(r);
-      if (seenInBatch.has(bk)) { dupInBatch++; continue; } // 원본 중복 → eywa엔 1건만
+      if (seenInBatch.has(bk)) { dupInBatch++; continue; } // 원본 중복 → aywa엔 1건만
       seenInBatch.add(bk);
       toInsert.push(r);
     }

@@ -1,7 +1,7 @@
 // 보류 이동(pending moves) 압축 — 순수 함수. ijw `useStudentDragDrop.ts`의 finalMoves 로직 이식.
 // 편집 모드에서 학생(=enrollment)을 여러 번 끌면 A→B→C가 쌓인다. 저장 시 최종 결과만 커밋하도록
 // enrollment 단위로 압축한다: 최초 출발지 유지 + 마지막 목적지 채택, 원점 복귀(A→B→A)는 제거.
-// eywa의 draggable은 student:enrollmentId 이므로 studentId가 아니라 enrollmentId로 키잉한다.
+// aywa의 draggable은 student:enrollmentId 이므로 studentId가 아니라 enrollmentId로 키잉한다.
 
 import { sameDaySet } from "./split-attendance";
 

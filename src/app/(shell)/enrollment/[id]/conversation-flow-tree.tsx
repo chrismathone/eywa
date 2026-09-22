@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, MessageCircle } from "@/components/icons/eywa-icon-compat";
+import { ChevronDown, ChevronRight, MessageCircle } from "@/components/icons/aywa-icon-compat";
 import type { ConversationFlowNode } from "@/features/enrollment/server/queries";
 
-/** 상담 흐름 수형도 — 주제 트리(재귀). ijw ConversationFlowTree 이식(eywa 토큰). */
+/** 상담 흐름 수형도 — 주제 트리(재귀). ijw ConversationFlowTree 이식(aywa 토큰). */
 
 // 깊이별 좌측 색밴드(semantic 톤) — 중첩 레벨 구분.
 

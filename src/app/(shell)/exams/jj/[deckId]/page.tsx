@@ -19,11 +19,11 @@ import { JJ_SCOPE_FAILED, JjFailBanner, JjLinkColumnNotice, JjNote } from "../..
  * 성적관리 › 영어 › JJ실(시험) › **시험 하나의 학생별 결과**(인재원 설명서 7번).
  * 학생마다 마지막 제출, 점수 높은 순. 강사는 짝이 걸린 자기 학생(세 갈래 스코프)만 보고, 위 요약도 그 학생들로 센다.
  * 🔑 요약은 인재원과 **같은 반올림**(평균 정수, summarizeScores) — 전체를 보는 사람에겐 시험 목록의 평균과 같은 숫자다.
- * 🔑 반별(2026-09-11): eywa 영어 반마다 응시·평균·최고·최저 + 반 칩(`?jjClass=`) — 고르면 요약·표가 그 반만.
- *    행마다 지금 다니는 eywa 반을 적고, '결과지'는 그 응시 한 장으로 연다.
+ * 🔑 반별(2026-09-11): aywa 영어 반마다 응시·평균·최고·최저 + 반 칩(`?jjClass=`) — 고르면 요약·표가 그 반만.
+ *    행마다 지금 다니는 aywa 반을 적고, '결과지'는 그 응시 한 장으로 연다.
  * ⚠️ 인재원 호출(최대 8초)이 창 첫 페인트를 막지 않게 loading.tsx가 먼저 선다(B7).
  */
-export const metadata = { title: "JJ실 시험 결과 — eywa" };
+export const metadata = { title: "JJ실 시험 결과 — aywa" };
 
 export default async function JjDeckPage({
   params,
@@ -50,7 +50,7 @@ export default async function JjDeckPage({
   const membership = member.ok ? member.membership : null;
   const base = `/exams/jj/${encodeURIComponent(deckId)}`;
   const hrefFor = (classId: string | null) => (classId ? `${base}?jjClass=${encodeURIComponent(classId)}` : base);
-  const nameOf = (r: (typeof res.rows)[number]) => r.eywa?.name ?? (r.name || r.ijwId);
+  const nameOf = (r: (typeof res.rows)[number]) => r.aywa?.name ?? (r.name || r.ijwId);
   const groups = membership
     ? groupRowsByClass(res.rows, membership, { classFilter: null, includeUnlinked: !viewer.teacherStudentIds, nameOf })
     : [];

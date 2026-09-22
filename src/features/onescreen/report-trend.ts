@@ -27,13 +27,13 @@ const clampPct = (n: number): number => Math.max(0, Math.min(100, Math.round(n))
 /**
  * 시험 점수 → 백분율(0~100) | null. 우선순위:
  *  ① "n/m"(4/5, 9 / 10) → n/m*100  ② "N문제 중 M개"(신 분리필드) → M/N*100  ③ 단순 숫자(80, 80점) → 그 값(≤100).
- * edutrix parseExamPercent 이식 + eywa 분리필드("N문제 중 M개") 폴백.
+ * edutrix parseExamPercent 이식 + aywa 분리필드("N문제 중 M개") 폴백.
  */
 export function parseExamPercent(raw: string | null | undefined): number | null {
   if (!raw) return null;
   const s = raw.trim();
   if (!s) return null;
-  // ② "N문제 중 M개" (eywa daily_test/check_test)
+  // ② "N문제 중 M개" (aywa daily_test/check_test)
   const koreanMatch = s.match(/(\d+)\s*문제\s*중\s*(\d+)\s*개/);
   if (koreanMatch) {
     const total = parseInt(koreanMatch[1]!, 10);

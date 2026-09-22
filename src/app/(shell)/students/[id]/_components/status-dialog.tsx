@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
-import { Loader2, Save, X } from "@/components/icons/eywa-icon-compat";
+import { Loader2, Save, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { useSubjectMaps } from "@/features/owner/operations-context";

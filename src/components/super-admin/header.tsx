@@ -9,7 +9,7 @@ export function SuperAdminHeader({
   breadcrumb: Crumb[];
   action?: React.ReactNode;
 }) {
-  const trail = ["EYWA", "SuperAdmin", ...breadcrumb.map((c) => c.label)].join(" · ");
+  const trail = ["AYWA", "SuperAdmin", ...breadcrumb.map((c) => c.label)].join(" · ");
   return (
     <header className="bg-background border-line sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b px-7">
       <div className="min-w-0">

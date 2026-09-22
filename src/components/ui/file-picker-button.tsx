@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Paperclip } from "@/components/icons/eywa-icon-compat";
+import { Paperclip } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 

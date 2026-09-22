@@ -9,7 +9,7 @@
  *   node --env-file=.env.local scripts/_classnote/process-parent-posts.mjs --apply    # 실제 알림 insert + 워터마크 전진
  *
  * ⚠️ **읽기 전용 기능**이다 — ClassNote에는 어떤 경우에도 쓰지 않는다(학부모에게 나가는 경로 없음).
- * --apply가 건드리는 것은 eywa DB의 notifications(강사 벨) + classnote_feed_state(워터마크)뿐.
+ * --apply가 건드리는 것은 aywa DB의 notifications(강사 벨) + classnote_feed_state(워터마크)뿐.
  */
 import postgres from "postgres";
 import { launchBrowser, resolveTenant } from "./classnote-core.mjs";

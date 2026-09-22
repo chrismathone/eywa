@@ -10,7 +10,7 @@
  * 현재 재원(status≠withdrawn) 학생만. E_old 하나에 E_new 여럿이면 종료일에 가장 가까운 1건.
  *
  * ⚠️ 프로덕션 데이터. 기본 dry-run(변경 없음). 적용은 --apply. 범위 제한은 --since=YYYY-MM-DD
- *   (기본: eywa 수동 이동 시기 이후 = 2026-06-01. 전체는 --since=2000-01-01).
+ *   (기본: aywa 수동 이동 시기 이후 = 2026-06-01. 전체는 --since=2000-01-01).
  * 되돌리기: 출력된 old_id/new_id로 is_transferred / is_transferred_in 을 false 로 UPDATE.
  *
  *   node --env-file=.env.local scripts/_poc_migration/backfill-transfer-flags.cjs          # dry-run(기본 since 2026-06-01)

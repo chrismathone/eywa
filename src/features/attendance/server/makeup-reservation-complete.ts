@@ -1,4 +1,5 @@
 import "server-only";
+import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 
 /**
  * 보강 예약 **이행·되돌림** — 보강일에 그 (학생·반) 출결이 찍히면 예약을 `done`으로 넘기고 메모를 잇고 시수를 맞춘다.
@@ -250,7 +251,8 @@ async function fulfil(
   const explicit = src?.unitsExplicit === true;
   // 새 행이거나 시수가 아직 기본(null)인 행에만 — 예전에 친 숫자를 덮지 않는다.
   const untouched = src?.created === true || cell.session_units == null;
-  const resUnits = reservationAutoUnits(r, subject);
+  // 자동값은 학원 수업 규칙을 따른다(새 학원 = 자동 시수 없음). 침산은 종전과 같다.
+  const resUnits = (await getLessonProfile(tenantId)).autoUnits ? reservationAutoUnits(r, subject) : null;
   if (!explicit && untouched && resUnits !== null && cell.slot_start == null) {
     // 그날 정규 수업도 듣는 학생(수강 유효 + 등원 요일 + **그날 반이 실제로 돈다**)이면 정규 자동값 위에 보강값을 더한다.
     let base: number | null = 0;

@@ -58,7 +58,7 @@ describe("인재원 연동 — admin 조회·변경의 테넌트 격리", () => 
   });
 
   it("🔴 '한 번에 연결'은 학원 전체 이름 인원(유일성 재료)을 넘긴다 — 빠지면 match.ts가 한 번에 잇지 않는다", () => {
-    expect(srcOf("links.ts")).toMatch(/suggestLinks\([\s\S]*?\{\s*eywaNameCounts\s*\}/);
+    expect(srcOf("links.ts")).toMatch(/suggestLinks\([\s\S]*?\{\s*aywaNameCounts\s*\}/);
   });
 
   it("🔴 JJ 강사 스코프는 학생 상세 열람과 같은 세 갈래(read-scope 엄격판)를 쓰고, 칩은 지금 도는 영어 반만", () => {

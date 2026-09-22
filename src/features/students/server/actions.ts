@@ -9,7 +9,8 @@ import {
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { canonicalSchoolName } from "@/features/schools/school-name";
+import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
@@ -56,7 +57,7 @@ function normalizePhone(raw: string | null): string | null {
   return raw;
 }
 
-function readForm(formData: FormData) {
+function readForm(formData: FormData, schoolAliases: readonly SchoolSaveAlias[]) {
   const get = (k: string) => {
     const v = formData.get(k);
     return v == null ? "" : String(v).trim();
@@ -69,7 +70,7 @@ function readForm(formData: FormData) {
     classnoteName: get("classnoteName") || null,
     grade: get("grade") || null,
     // 저장 표기 강제(원장 2026-09-01) — 학생 자연키가 학교를 쓰므로 표기가 갈리면 중복도 갈린다.
-    school: canonicalSchoolName(get("school")),
+    school: canonicalSchoolName(get("school"), schoolAliases),
     studentCode: get("studentCode") || null,
     attendanceCode: get("attendanceCode") || null,
     gender: gender === "male" || gender === "female" ? gender : null,
@@ -134,7 +135,7 @@ export async function createStudent(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
 
-  const input = readForm(formData);
+  const input = readForm(formData, (await getTenantSettings()).operations.schoolSaveAliases);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
 
@@ -257,7 +258,7 @@ export async function updateStudent(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "학생 ID가 누락되었습니다" };
 
-  const input = readForm(formData);
+  const input = readForm(formData, (await getTenantSettings()).operations.schoolSaveAliases);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
 

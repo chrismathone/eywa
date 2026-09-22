@@ -1,5 +1,5 @@
 /**
- * scripts/_makeedu/weekly-push.cjs — **주간 자동 역동기화 적재**(eywa→makeedu).
+ * scripts/_makeedu/weekly-push.cjs — **주간 자동 역동기화 적재**(aywa→makeedu).
  *
  * 원장 2026-09-01: 등록상담 화면의 'makeedu 보내기' 수동 카드를 감추고 **매주 일요일 06:00(KST)**에
  * 자동으로 밀기로 했다(CLAUDE.md 결정 로그의 "역동기화 전면 자동 = 비권장"을 원장이 명시로 뒤집음).

@@ -1,5 +1,5 @@
 // 유령 수강 정리 — run.ts의 옛 버그(end<start → null "진행중 보정")로 되살아난 종료 수강을 닫는다.
-// ijw 원본에서 그 (학생·반) 조합이 전부 종료됐는데 eywa엔 end_date=null(무한 활성)로 남아 시간표에서
+// ijw 원본에서 그 (학생·반) 조합이 전부 종료됐는데 aywa엔 end_date=null(무한 활성)로 남아 시간표에서
 // 옛 반·새 반 양쪽에 유령으로 뜨던 것(강사 간 학생 중복). 종료로 닫되 daterange(start,end,'[)')가 end<start면
 // throw하므로 end_date=start_date(빈 구간=활성 아님)로 닫는다. 멱등(닫힌 뒤엔 0건). run.ts는 영구 수정됨.
 // 사용: node --env-file=.env.local scripts/_poc_migration/close-phantom-enrollments.cjs [--apply]
@@ -38,7 +38,7 @@ const normDate = (s) => { const m = s && String(s).match(/^(\d{4})-(\d{2})-(\d{2
       }
     }
 
-    // eywa end_date=null 전체 → ijw에 '종료 안 된' 기록이 없는 것 = 유령
+    // aywa end_date=null 전체 → ijw에 '종료 안 된' 기록이 없는 것 = 유령
     const rows = await sql`
       select e.id, s.name, s.school, s.grade, c.class_name, u.display_name teacher,
              to_char(e.start_date,'YYYY-MM-DD') start_date
@@ -51,7 +51,7 @@ const normDate = (s) => { const m = s && String(s).match(/^(\d{4})-(\d{2})-(\d{2
     const phantom = rows.filter((r) => anyNotEnded.get(`${sk(r.name, r.school, r.grade)}||${r.class_name}`) === false);
     console.log(`=== close-phantom-enrollments ${APPLY ? "[APPLY]" : "[DRY-RUN]"} ===`);
     console.log(`export: ${f} | today=${TODAY}`);
-    console.log(`eywa end_date=null: ${rows.length} | 유령(닫을 대상): ${phantom.length}\n`);
+    console.log(`aywa end_date=null: ${rows.length} | 유령(닫을 대상): ${phantom.length}\n`);
     for (const p of phantom.sort((a, b) => (a.teacher ?? "").localeCompare(b.teacher ?? "", "ko") || a.name.localeCompare(b.name, "ko")))
       console.log(`  ${p.teacher ?? "(담임없음)"} | ${p.name} (${p.school ?? "-"} ${p.grade ?? "-"}) | ${p.class_name} | start=${p.start_date}`);
 

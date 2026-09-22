@@ -43,7 +43,7 @@ function seedPersisted(ids: string[]) {
 describe("캔버스 통합 — 딥링크 창이 복원된 창들 위로 오는가", () => {
   beforeEach(() => {
     navigation.pathname = "/students/abc";
-    document.title = "학생 상세 — eywa";
+    document.title = "학생 상세 — aywa";
     window.history.replaceState({}, "", "/students/abc");
     localStorage.clear();
     useWindowStore.setState({

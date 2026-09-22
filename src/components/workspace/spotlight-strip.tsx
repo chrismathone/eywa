@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Layers, X } from "@/components/icons/eywa-icon-compat";
+import { Layers, X } from "@/components/icons/aywa-icon-compat";
 import { NAV_GROUPS } from "@/lib/navigation";
-import type { EywaIconName } from "@/components/icons/eywa-icons";
+import type { AywaIconName } from "@/components/icons/aywa-icons";
 // 🔴 창 칩·배경 카드의 메뉴 아이콘은 **사이드바와 같은 스티커 글리프**다(원장 2026-09-09
 //    *"좌하단 떠있는 창들 아이콘 안바꾼듯"*) — 같은 메뉴가 자리마다 다른 그림이면 눈이 못 잇는다.
 //    `MenuGlyph`는 스티커가 없는 이름이면 알아서 선 아이콘으로 떨어진다.
@@ -13,7 +13,7 @@ import { useWindowStore, instanceLabel } from "./window-store";
 const MAX_VISIBLE = 4; // 이보다 많으면 앞 3장 부채 + "+N" 페이지 스택(책 뒤장 …처리)
 
 // 라우트 menuKey → 아이콘(레일과 동일). 학생 요약창은 user.
-const ICON_BY_MENU: Record<string, EywaIconName> = {};
+const ICON_BY_MENU: Record<string, AywaIconName> = {};
 for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] = it.icon;
 
 // 아이콘 칩 tint + 책등(spine) 색 — 인덱스 순환(책 표지 느낌).
@@ -36,7 +36,7 @@ type StripItem = {
   key: string;
   title: string;
   subtitle?: string;
-  iconName: EywaIconName | null; // null → 학생 요약(user)
+  iconName: AywaIconName | null; // null → 학생 요약(user)
   isBackground: boolean; // 배경 라우트 카드 — "배경" 표식 + 클릭 시 그 배경을 위로 올림(swap)
   onClick: () => void;
 };

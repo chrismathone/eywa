@@ -1,10 +1,10 @@
-// scripts/_edutrix_retire/full-import-reports.cjs — Edutrix reports → eywa lesson_reports **풀 이력** 이전.
+// scripts/_edutrix_retire/full-import-reports.cjs — Edutrix reports → aywa lesson_reports **풀 이력** 이전.
 //
 // Edutrix 완전 종료(2026-07-10 결정) 대비 운영 반영: 기존 이관(최근 12건/학생 cap·얇은 필드)을
 // UUID 매핑(0094a) 기반 풀 이력·리치 필드로 승격. 삭제 없음(progress_entries FK 보호) — 2-pass:
 //   Pass1 UPDATE: 기존 source='edutrix_import' 행(edutrix_report_id 매치)에 리치 필드 보강 + 내용 refresh
 //                 (Edutrix가 원본 — cron이 "수정 전파 안 됨" 한계도 여기서 해소)
-//   Pass2 INSERT: eywa에 없는 원본 행 전부(매핑 학생만 — 미매핑 189건은 edutrix_archive가 보존)
+//   Pass2 INSERT: aywa에 없는 원본 행 전부(매핑 학생만 — 미매핑 189건은 edutrix_archive가 보존)
 // 필드 매핑: textbook_name→textbook · study_attitude→attitude · notice(AI 학부모 멘트)→notes ·
 //   homework_today→homework_today(0096a) · makeup_class→makeup(truthy) · classnote_sent_at→
 //   classnote_sent_at + status='success'(발송 사실 이관 — 원장 화면 "미발송" 오인 해소).
@@ -49,7 +49,7 @@ async function fetchAllPaged(q, page = 1000) {
 
   console.log(`[full-import] mode=${APPLY ? "APPLY" : "dry-run"}`);
 
-  // ① 원본 전량 + eywa 매핑
+  // ① 원본 전량 + aywa 매핑
   const [eduReports, students, existing] = await Promise.all([
     fetchAllPaged((a, b) =>
       edu

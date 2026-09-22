@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { PageHeader } from "@/components/page-header";
 import { WindowLink } from "@/components/workspace/window-link";
 import type { HelpManual } from "@/features/help/types";

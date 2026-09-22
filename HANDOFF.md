@@ -1,10 +1,10 @@
-# eywa 이어가기 핸드오프 — 2026-07-06 (영어 시간표 이식 + 과목 운영 설정 + 과목 흡수 삭제, main 반영 완료)
+# aywa 이어가기 핸드오프 — 2026-07-06 (영어 시간표 이식 + 과목 운영 설정 + 과목 흡수 삭제, main 반영 완료)
 
 다른 컴퓨터/세션에서 **이 시점부터 바로** 이어가기 위한 문서. 상세 규약·함정은 [`CLAUDE.md`](CLAUDE.md),
 영어 시간표 동기화의 데이터/스크립트 상세는 [`ENGLISH_SYNC_HANDOFF.md`](ENGLISH_SYNC_HANDOFF.md).
 이 문서는 **현재 상태 + 셋업 + 다음 할 일 + 세션 경계**만 담는다.
 
-> ⚠️ **eywa는 실운영 중 — main = 프로덕션(Vercel `eywa-alpha.vercel.app`).** 변경은 **dev에서 검증을 끝낸 뒤
+> ⚠️ **aywa는 실운영 중 — main = 프로덕션(`www.aywa.co.kr`, 옛 `eywa-alpha.vercel.app`은 넘김).** 변경은 **dev에서 검증을 끝낸 뒤
 > 사용자 승인이 있을 때만** main에 반영한다(곧바로 main 커밋·push 금지). 여러 세션이 병렬로 작업하므로 push 전
 > `git fetch` + `git pull --rebase`, **force push 금지**, 커밋은 **명시 경로**로. (CLAUDE.md "Git 협업 규칙")
 
@@ -12,13 +12,13 @@
 
 ## 🚀 새 세션 시작 프롬프트 (복사-붙여넣기)
 
-> eywa에서 이어간다. 직전 세션이 **(1) ijw 영어 시간표를 시트("강사별영어시간표"/"통합영어시간표")와 1:1로
+> aywa에서 이어간다. 직전 세션이 **(1) ijw 영어 시간표를 시트("강사별영어시간표"/"통합영어시간표")와 1:1로
 > 이식**(교시 11개·LAB 병렬 슬롯·SKY 실방·강사뷰 10분 격자·합반 통합 명단), **(2) 강사뷰 하드코딩 값(가로줄·격자
 > 단위·영어 교시)을 학원설정 "과목 운영" 탭으로 배선**(과목별 평일 교시 = ENGLISH_PERIODS KNOWN_EXCEPTION 해소),
 > **(3) 운영 과목 삭제 = "다른 과목에 흡수"**(전 저장 표면 이동 + 0077a 원자 RPC)까지 구현·검증하고 **main에 반영·배포
 > 완료**(Vercel success)했다. 전 게이트 그린(typecheck·lint 0 / **test 703** / build) + 시트 패리티 diff 0 + 적대
-> 리뷰(병합 교차 CONFIRMED 4건 수정). ⚠️ **데모는 `scripts/seed.ts`가 아니라 ijw POC 임포트본**(학생 ~564) →
-> **`pnpm db:seed` 절대 금지**(전체 wipe). 시작 전 `HANDOFF.md` + `ENGLISH_SYNC_HANDOFF.md` + `CLAUDE.md`
+> 리뷰(병합 교차 CONFIRMED 4건 수정). ⚠️ **테넌트 `injaewon`은 운영 실데이터**(ijw 이관본) —
+> 데모 시드(`pnpm db:seed`)는 운영 DB를 지울 수 있어 **2026-09-19 영구 제거**했다. 시작 전 `HANDOFF.md` + `ENGLISH_SYNC_HANDOFF.md` + `CLAUDE.md`
 > ("디자인 시스템", "막혔던 점들", "AI 모델 정책", "Git 협업 규칙")를 읽어라. `.env.local` 필요(§2).
 
 ---
@@ -81,7 +81,8 @@ node --env-file=.env.local scripts/_english_sync/verify-sheet-parity.cjs   # 영
 - 드리즐 번호본은 `db:migrate`, RLS/트리거/RPC 등 **손수 alpha(`000Na_*`)** 는 개별 적용(README §4·§5).
 - **이번 세션 신규: `0077a_absorb_subject_rpc.sql`**(과목 흡수 RPC `absorb_subject_key`) — **프로덕션 DB 적용됨**
   (함수 생성만, main 코드가 호출). 신규 DB 셋업 시 `supabase/migrations/README.md`의 alpha 전체 목록대로 적용.
-- ⚠️ **`pnpm db:seed` 금지** — 데모는 ijw POC 임포트본(전체 wipe하면 실데이터 소실).
+- ⚠️ 데모 시드(`pnpm db:seed`·`scripts/seed.ts`)는 **2026-09-19 영구 제거** — 테넌트 데이터를 먼저 지우는 구조라
+  운영 DB를 날릴 수 있었다. 되살리지 말 것.
 
 ---
 

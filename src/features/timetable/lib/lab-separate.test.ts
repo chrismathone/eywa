@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildRichCardGroups, type GridSlot } from "./class-grid";
-import { isLabSeparateSlot, LAB_SEPARATE_LABEL, LAB_SEPARATE_TEXT_CLASS } from "./lab-separate";
+import {
+  applyLabSeparateMarks,
+  isLabSeparateSlot,
+  LAB_SEPARATE_LABEL,
+  LAB_SEPARATE_STUDENT_CLASS,
+  LAB_SEPARATE_TEXT_CLASS,
+  labSeparateMetaClass,
+} from "./lab-separate";
 import { DEFAULT_PERIODS_CONFIG } from "./periods";
 
 const slot = (p: Partial<GridSlot>): GridSlot => ({
@@ -88,5 +95,122 @@ describe("🔴 0271a 칸을 기존 조회에 끼우지 않는다 — SQL 적용 
     const code = readFileSync(join(SRC, "features/classes/server/actions.ts"), "utf8");
     expect(code).toContain("labSeparateSupported === true");
     expect(code).toMatch(/labSupported \? \{ lab_separate:/);
+  });
+});
+
+describe("*LAB 배정 원생 이름 표식 (0271b, 원장 2026-09-18 *\"이름 색을 lab 과 같은 색상으로 해주고 이탤릭체로\"*)", () => {
+  const st = (id: string, over: Record<string, unknown> = {}) => ({
+    studentId: `s-${id}`,
+    enrollmentId: `e-${id}`,
+    status: "active" as string,
+    ...over,
+  });
+  /** PL1b 화요일 실배치 — 14:20 LAB(일반) · 15:00 강사 교시 · 15:40 *LAB. */
+  type T = { classId: string; dayOfWeek: string; slotTeacherLabel: string | null; labSeparate?: true; studentCount?: number; students: ReturnType<typeof st>[] };
+  const slot = (over: Partial<T> & { students: ReturnType<typeof st>[] }): T => ({
+    classId: "pl1b",
+    dayOfWeek: "tue",
+    slotTeacherLabel: null,
+    ...over,
+  });
+
+  it("서식 = LAB 칸과 같은 파랑 + 이탤릭(합성 켬) · 밑줄 없음(밑줄은 교시 고정)", () => {
+    expect(LAB_SEPARATE_STUDENT_CLASS).toContain("text-blue");
+    expect(LAB_SEPARATE_STUDENT_CLASS).toContain("italic");
+    expect(LAB_SEPARATE_STUDENT_CLASS).toContain("[font-synthesis:style]");
+    expect(LAB_SEPARATE_STUDENT_CLASS).not.toContain("underline");
+  });
+
+  it("그 주 *LAB 교시가 있는 반의 켠 원생에만 붙는다 — 한 반의 슬롯들은 같은 명단 배열을 공유한다", () => {
+    const roster = [st("a"), st("b")];
+    const slots = [
+      slot({ slotTeacherLabel: "Anna", students: roster }),
+      slot({ slotTeacherLabel: "LAB", labSeparate: true, students: roster }),
+      { classId: "other", dayOfWeek: "tue", slotTeacherLabel: null, students: [st("c")] },
+    ];
+    const out = applyLabSeparateMarks(slots, new Set(["e-a", "e-c"]));
+    expect(out[0]!.students[0]).toMatchObject({ labSeparate: true });
+    expect(out[0]!.students[1]).not.toHaveProperty("labSeparate");
+    // *LAB 교시가 없는 반은 켜져 있어도 안 붙인다(뜻을 잃은 배정).
+    expect(out[2]!.students[0]).not.toHaveProperty("labSeparate");
+    expect(out[2]).toBe(slots[2]);
+  });
+
+  it("🔴 자리 칸 명단을 가른다 — *LAB 칸 = 켠 원생만 · 같은 날 일반 LAB = 끈 원생만 · 강사 교시는 그대로", () => {
+    // 원장 2026-09-18: *"*lab 체크가 안된 학생은 *lab이 스케줄에 나오면 안됨. *lab은 *lab이 체크된 학생만 떠야함"*.
+    const roster = [st("a"), st("b")];
+    const slots = [
+      slot({ slotTeacherLabel: "LAB", studentCount: 2, students: roster }), // 14:20 일반 LAB
+      slot({ slotTeacherLabel: "Anna", studentCount: 2, students: roster }), // 15:00 강사 교시
+      slot({ slotTeacherLabel: "LAB", labSeparate: true, studentCount: 2, students: roster }), // 15:40 *LAB
+    ];
+    const out = applyLabSeparateMarks(slots, new Set(["e-a"]));
+    expect(out[0]!.students.map((x) => x.studentId)).toEqual(["s-b"]);
+    expect(out[2]!.students.map((x) => x.studentId)).toEqual(["s-a"]);
+    // 강사 교시는 한 줄도 안 빠진다(배정은 자리를 가르는 것이지 수업에서 빼는 게 아니다).
+    expect(out[1]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+    // 셀 머리 인원도 명단을 따라간다.
+    expect(out[0]!.studentCount).toBe(1);
+    expect(out[2]!.studentCount).toBe(1);
+    expect(out[1]!.studentCount).toBe(2);
+  });
+
+  it("🔴 아무도 안 켰으면 *LAB 칸은 빈다 · 그 날 *LAB이 없는 반은 그대로 · 교시 고정은 배정을 이긴다", () => {
+    const roster = [st("a"), st("b")];
+    const tue = [
+      slot({ slotTeacherLabel: "LAB", students: roster }),
+      slot({ slotTeacherLabel: "LAB", labSeparate: true, students: roster }),
+    ];
+    const none = applyLabSeparateMarks(tue, new Set());
+    expect(none[1]!.students).toEqual([]);
+    expect(none[0]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+    // 월요일엔 *LAB이 없다 — 켠 원생도 그날 LAB에 그대로 선다(그날 수업이 통째로 사라지지 않게).
+    const mon = [slot({ dayOfWeek: "mon", slotTeacherLabel: "LAB", students: roster }), tue[1]!];
+    expect(applyLabSeparateMarks(mon, new Set(["e-a"]))[0]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+    // 교시 고정이 걸린 줄은 가르기에서 뺀다(자리 출석부 우선순위와 같다).
+    const pinned = [st("a"), st("b", { seatPinNote: "화 15:40 고정" })];
+    const out = applyLabSeparateMarks(
+      [slot({ slotTeacherLabel: "LAB", labSeparate: true, students: pinned }), slot({ slotTeacherLabel: "LAB", students: pinned })],
+      new Set(["e-a"]),
+    );
+    expect(out[0]!.students.map((x) => x.studentId)).toEqual(["s-a", "s-b"]);
+  });
+
+  it("🔴 퇴원 줄엔 안 붙인다 · 수강 id를 모르면 안 붙인다 · 재료를 모르면(null) 아무것도 안 한다", () => {
+    const students = [st("a", { status: "withdrawn" }), st("b", { enrollmentId: undefined })];
+    const slots = [slot({ slotTeacherLabel: "Anna", students }), slot({ slotTeacherLabel: "LAB", labSeparate: true, students })];
+    const out = applyLabSeparateMarks(slots, new Set(["e-a", "e-b"]));
+    expect(out[0]!.students).toEqual(students); // 이름 표식 없음
+    // 🔴 null = 모름이라 명단도 안 가른다(조회 실패를 "아무도 안 켰다"로 읽지 않는다).
+    expect(applyLabSeparateMarks(slots, null)).toBe(slots);
+  });
+
+  it("🔴 세 뷰(기본·통합·강사)가 같은 서식 상수를 쓴다", () => {
+    for (const f of [
+      "src/app/(shell)/timetable/_components/student-rows.tsx",
+      "src/app/(shell)/timetable/_components/rich-card-group.tsx",
+      "src/app/(shell)/timetable/_components/teacher-chip.tsx",
+    ]) {
+      expect(readFileSync(join(process.cwd(), f), "utf8"), f).toContain("LAB_SEPARATE_STUDENT_CLASS");
+    }
+    expect(readFileSync(join(process.cwd(), "src/app/(shell)/timetable/page.tsx"), "utf8")).toMatch(
+      /applyLabSeparateMarks\(/,
+    );
+  });
+
+  it("🔴 이름 뒤 `/학교학년` 꼬리도 같은 서식 — 세 뷰가 같은 판정 함수를 쓴다(원장 2026-09-18 \"전체를 파랑 및 이탤릭으로\")", () => {
+    // 이름만 칠하면 `유희린`은 파랑인데 `/침산초3`은 검정이라 한 줄이 두 색으로 갈린다.
+    expect(labSeparateMetaClass(true, undefined)).toBe(LAB_SEPARATE_STUDENT_CLASS);
+    expect(labSeparateMetaClass(false, undefined)).toBe("");
+    expect(labSeparateMetaClass(undefined, undefined)).toBe("");
+    // 교시 고정 줄은 이름만 — 밑줄이 꼬리까지 끌리면 `유희린/침산초3` 전체에 줄이 그어진다.
+    expect(labSeparateMetaClass(true, "월 2교시 고정")).toBe("");
+    for (const f of [
+      "src/app/(shell)/timetable/_components/student-rows.tsx",
+      "src/app/(shell)/timetable/_components/rich-card-group.tsx",
+      "src/app/(shell)/timetable/_components/teacher-chip.tsx",
+    ]) {
+      expect(readFileSync(join(process.cwd(), f), "utf8"), f).toContain("labSeparateMetaClass(");
+    }
   });
 });

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Folder, FolderOpen } from "@/components/icons/eywa-icon-compat";
+import { Folder, FolderOpen } from "@/components/icons/aywa-icon-compat";
 import type { DocumentCategoryOption } from "@/features/documents/categories";
 import { CategoryManager } from "./category-manager";
 

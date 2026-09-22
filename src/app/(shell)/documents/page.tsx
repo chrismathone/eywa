@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Files } from "@/components/icons/eywa-icon-compat";
+import { ChevronLeft, ChevronRight, Files } from "@/components/icons/aywa-icon-compat";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -27,7 +27,7 @@ import { LinkedDocumentRow } from "./_components/linked-row";
 import { FolderNav, type FolderItem } from "./_components/folder-nav";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
-export const metadata = { title: "데이터베이스 — eywa" };
+export const metadata = { title: "데이터베이스 — aywa" };
 
 const PAGE_SIZE = 50;
 

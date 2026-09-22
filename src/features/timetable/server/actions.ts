@@ -17,7 +17,7 @@ export type ChangeClassLevelState = { error?: string; newName?: string } | undef
 
 /**
  * 영어 반 레벨업/다운 — 반이름 규칙(DP3→DP4 / DP3→PL1)에 따라 className만 변경.
- * eywa는 enrollments가 class_id(UUID)를 참조하므로 ijw처럼 enrollment.className 동기화가 불필요
+ * aywa는 enrollments가 class_id(UUID)를 참조하므로 ijw처럼 enrollment.className 동기화가 불필요
  * (반이동 흔적 없이 깔끔히 rename). 레벨 순서는 테넌트 english_levels, 없으면 기본 12레벨.
  */
 export async function changeClassLevel(

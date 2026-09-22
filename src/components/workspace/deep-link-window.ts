@@ -7,11 +7,11 @@ import { useWindowStore } from "./window-store";
 import { windowIdForHref } from "./window-link";
 
 /**
- * 라우트가 **자기 제목을 달았을 때만** 붙는 접미사(`export const metadata = { title: "학생 상세 — eywa" }`).
- * 루트 레이아웃 기본값은 `eywa — {학원명} 학원관리`라 이 접미사로 끝나지 않는다 → "페이지가 제목을
+ * 라우트가 **자기 제목을 달았을 때만** 붙는 접미사(`export const metadata = { title: "학생 상세 — aywa" }`).
+ * 루트 레이아웃 기본값은 `aywa — {학원명} 학원관리`라 이 접미사로 끝나지 않는다 → "페이지가 제목을
  * 안 달았다"를 구분할 수 있다(그때는 메뉴 라벨로 떨어진다).
  */
-const OWN_TITLE_SUFFIX = " — eywa";
+const OWN_TITLE_SUFFIX = " — aywa";
 
 /** 문서 제목에서 라우트가 직접 단 부분만. 루트 기본값이면 null(못 믿는 제목). */
 function ownPageTitle(documentTitle: string): string | null {
@@ -43,7 +43,7 @@ export function deepLinkWindow(
   const path = (pathname.split("?")[0] ?? "").split("#")[0];
   if (!path.startsWith("/") || path === "/" || path === "/menu") return null;
   // 🔴 프로토콜 상대 경로(`//evil.com`·`/\evil.com`)는 **상대 URL로 쓰면 남의 origin**이 된다 —
-  //    iframe src에 그대로 실리면 eywa 창틀 안에 남의 사이트가 뜨는 피싱 경로가 열린다.
+  //    iframe src에 그대로 실리면 aywa 창틀 안에 남의 사이트가 뜨는 피싱 경로가 열린다.
   //    (그런 주소는 라우트가 없어 404지만 **셸은 그대로 렌더된다** — 훅은 돌아간다.)
   if (path.startsWith("//") || path.startsWith("/\\")) return null;
 

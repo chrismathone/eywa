@@ -5,8 +5,9 @@ import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { getStudentById } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StudentForm } from "../../_components/student-form";
+import { isModuleEnabled } from "@/lib/modules";
 
-export const metadata = { title: "학생 수정 — eywa" };
+export const metadata = { title: "학생 수정 — aywa" };
 
 export default async function EditStudentPage({
   params,
@@ -18,7 +19,7 @@ export default async function EditStudentPage({
   // 강사(scoped)는 학생 열람 전용(원장 지시 2026-08-18) — 강제 URL도 상세로 되돌린다(#77).
   // 서버 액션(updateStudent)도 같은 full 판정으로 막혀 있어 이 리다이렉트는 UX용 이중 방어다.
   if ((await accessLevelTenant(user.systemRole, "students")) !== "full") redirect(`/students/${id}`);
-  const [student, { operations }] = await Promise.all([getStudentById(id), getTenantSettings()]);
+  const [student, { operations, modules }] = await Promise.all([getStudentById(id), getTenantSettings()]);
   if (!student) notFound();
 
   return (
@@ -34,6 +35,7 @@ export default async function EditStudentPage({
         mode="edit"
         scope={`student:${id}`}
         gradeLevels={operations.gradeLevels}
+        showClassnoteName={isModuleEnabled(modules.disabled, "classnote")}
         initialValue={{
           id: student.id,
           name: student.name,

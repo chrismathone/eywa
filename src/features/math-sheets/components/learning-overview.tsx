@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -12,7 +12,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { HrefSelect } from "@/components/href-select";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { shiftMonth } from "@/lib/date-kst";
 import type {
   MathSheetMonthData,
@@ -30,11 +30,6 @@ import {
   type McsFontSize,
 } from "../font-size";
 import { setMyMcsFontSize } from "../server/actions";
-import {
-  TEST_KIND_LABEL,
-  testCountLabel,
-  testScoresOf,
-} from "../lib/test-score";
 import styles from "./learning-overview.module.css";
 import { LearningRails } from "./learning-rails";
 import { MATH_LEARNING_CADENCE, type MathLearningTrack } from "@/features/progress/learning-cadence";
@@ -42,11 +37,15 @@ import { learningBlocks } from "../lib/learning-plan";
 import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { setMathClassLearningTrack } from "../server/learning-actions";
-import { LearningMilestones } from "./learning-milestones";
+import { LearningReportList } from "@/features/math-progress-map/components/learning-report-list";
+import { learningRailMetrics, learningTopicTicks, type LearningRailMetrics } from "../lib/learning-axis";
 
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
 );
+const StudentLearningMap = dynamic(() => import("@/features/math-progress-map/components/linked-learning-map").then(m => m.LinkedLearningMap), {
+  loading: () => <p role="status">학생 진도맵을 불러오는 중입니다…</p>,
+});
 type Filter = "all" | "behind" | "on" | "ahead" | "missing";
 const shortDate = (date: string) =>
   `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}`;
@@ -55,7 +54,7 @@ function Status({
   progress,
   student,
 }: {
-  progress?: LearningProgress;
+  progress?: Pick<LearningProgress, "status" | "difference">;
   student: MathStudentRow;
 }) {
   return (
@@ -64,7 +63,7 @@ function Status({
         ? "수강 종료"
         : student.rosterPhase === "upcoming"
           ? "수강 예정"
-          : learningStatusLabel(progress)}
+          : learningStatusLabel(progress, "차시")}
     </span>
   );
 }
@@ -74,12 +73,14 @@ export function LearningOverview({
   learning,
   classOptions,
   initialStudentId,
+  initialQuery = "",
   canResetGoals = false,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
   classOptions: { id: string; name: string }[];
   initialStudentId?: string;
+  initialQuery?: string;
   /** 전체 목표 '초기화'(배정 취소) — **원장 이상급**만(원장 2026-09-18). 서버가 같은 함수로 다시 본다. */
   canResetGoals?: boolean;
 }) {
@@ -95,6 +96,7 @@ export function LearningOverview({
       : null,
   );
   const [filter, setFilter] = useState<Filter>("all");
+  const [focusQuery, setFocusQuery] = useState(initialQuery);
   const [query, setQuery] = useState("");
   const [goalEditor, setGoalEditor] = useState<{
     studentId: string | null;
@@ -104,22 +106,39 @@ export function LearningOverview({
   const navigate = (href: string) =>
     window.location.assign(inFrame ? withEmbed(href) : href);
   const selectStudent = (studentId: string | null) => {
+    if (studentId === selected) return;
     setSelected(studentId);
+    setGoalEditor(null);
     const url = new URL(window.location.href);
     if (studentId) url.searchParams.set("student", studentId);
     else url.searchParams.delete("student");
-    window.history.pushState(null, "", url);
+    for (const key of ["date", "view", "display", "topic", "lesson", "undated"]) url.searchParams.delete(key);
+    setFocusQuery(url.searchParams.toString());
+    window.history.pushState(window.history.state, "", url);
   };
   useEffect(() => {
     const onBack = () => {
       const params = new URL(window.location.href).searchParams;
       setSelected(params.get("student"));
+      setFocusQuery(params.toString());
+      setGoalEditor(null);
     };
     window.addEventListener("popstate", onBack);
     return () => window.removeEventListener("popstate", onBack);
   }, []);
+  const { summaries, scaleLessons } = useMemo(() => {
+    const summaries: Record<string, LearningRailMetrics> = {};
+    let scaleLessons = 1;
+    for (const [id, goal] of Object.entries(learning.goals)) {
+      const progress = learning.progress[id];
+      const topics = learningTopicTicks(goal, progress);
+      scaleLessons = Math.max(scaleLessons, topics.length);
+      if (progress) summaries[id] = learningRailMetrics(goal, progress, topics);
+    }
+    return { summaries, scaleLessons };
+  }, [learning.goals, learning.progress]);
   const matches = (student: MathStudentRow, kind: Filter) => {
-    const progress = learning.progress[student.studentId];
+    const progress = summaries[student.studentId];
     if (kind === "all") return true;
     if (student.rosterPhase !== "on") return false;
     if (kind === "missing")
@@ -333,6 +352,7 @@ export function LearningOverview({
                   {shown.map((s) => {
                     const progress = learning.progress[s.studentId],
                       goal = learning.goals[s.studentId];
+                    const summary = summaries[s.studentId];
                     return (
                       <tr
                         key={s.studentId}
@@ -366,44 +386,44 @@ export function LearningOverview({
                               {goal ? `전체 목표 · ${learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade)}` : "전체 목표 미설정"}
                             </span>
                           </div>
-                          <LearningRails progress={progress} goal={goal} recentBlock={!goal && track === "regular" ? s.rail?.nowLesson : undefined} recentGrade={s.rail?.nowGrade} />
+                          <LearningRails progress={progress} goal={goal} scaleLessons={scaleLessons} recentRecord={learning.records[s.studentId]?.[0]} />
                         </td>
                         <td>
                           <strong className={styles.rate}>
-                            {progress?.percent == null ? (
+                            {summary?.percent == null ? (
                               "—"
                             ) : (
                               <>
-                                {progress.percent}
+                                {summary.percent}
                                 <small>%</small>
                               </>
                             )}
                           </strong>
                           <p className={styles.meta}>
-                            {progress?.current == null
+                            {summary?.current == null
                               ? goal
                                 ? "진도 확인 필요"
                                 : "전체 목표 미설정"
-                              : `${progress.current} / ${progress.total}블록`}
+                              : `${summary.current} / ${summary.total}차시`}
                           </p>
                         </td>
                         <td>
-                          <Status student={s} progress={progress} />
+                          <Status student={s} progress={summary} />
                           <p className={styles.meta}>
-                            {progress
-                              ? `기준일 계획 ${progress.target}블록`
+                            {summary
+                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${summary.target}차시`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
                         <td>
                           <strong className={styles.pace}>
-                            {progress?.requiredPace == null
+                            {summary?.requiredPace == null
                               ? "—"
-                              : `${progress.requiredPace.toFixed(1)}블록`}
+                              : `${summary.requiredPace.toFixed(1)}차시`}
                           </strong>
                           <p className={styles.meta}>
-                            {progress
-                              ? `남은 수업 ${progress.remainingDays}회`
+                            {summary
+                              ? `남은 수업 ${summary.remainingDays}회`
                               : "전체 목표 미설정"}
                           </p>
                         </td>
@@ -423,7 +443,9 @@ export function LearningOverview({
           <StudentFocus
             data={data}
             learning={learning}
+            summaries={summaries}
             student={student}
+            initialQuery={focusQuery}
             onSelect={selectStudent}
             onEdit={
               editable
@@ -439,7 +461,7 @@ export function LearningOverview({
             단계별 목표
           </span>
           <span>
-            정수는 목표 단계 · 소수는 단계 안의 진도 · {learning.referenceDate} 기준
+            {learning.referenceDate} 기준
           </span>
         </footer>
       </div>
@@ -459,29 +481,24 @@ export function LearningOverview({
 function StudentFocus({
   data,
   learning,
+  summaries,
   student,
+  initialQuery,
   onSelect,
   onEdit,
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
+  summaries: Record<string, LearningRailMetrics>;
   student: MathStudentRow;
+  initialQuery: string;
   onSelect: (id: string) => void;
   onEdit?: () => void;
 }) {
   const goal = learning.goals[student.studentId],
     progress = learning.progress[student.studentId];
-  const records =
-    learning.records[student.studentId] ??
-    Object.entries(student.records)
-      .filter(([date]) => date <= learning.referenceDate)
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([date, r]) => ({
-        date,
-        progress: r.progress,
-        textbook: r.textbook,
-        homework: r.homework,
-      }));
+  const summary = summaries[student.studentId];
+  const records = learning.records[student.studentId] ?? [];
   const legacyGoal = learning.track === "supplement" ? undefined : data.goals[student.studentId];
   return (
     <div className={styles.focusLayout}>
@@ -501,15 +518,15 @@ function StudentFocus({
             <strong>
               {s.name}
               <small>
-                {learning.progress[s.studentId]?.percent == null
+                {summaries[s.studentId]?.percent == null
                   ? "—"
-                  : `${learning.progress[s.studentId].percent}%`}
+                  : `${summaries[s.studentId].percent}%`}
               </small>
             </strong>
             <span>
               {s.school} {s.grade}
             </span>
-            <Status student={s} progress={learning.progress[s.studentId]} />
+            <Status student={s} progress={summaries[s.studentId]} />
           </button>
         ))}
       </aside>
@@ -517,9 +534,9 @@ function StudentFocus({
         className={styles.focusMain}
         aria-label={`${student.name} 진도 상세`}
       >
-        <div className={styles.focusTitle}>
+        {!goal || !progress ? <><div className={styles.focusTitle}>
           <h3>{student.name}</h3>
-          <Status student={student} progress={progress} />
+          <Status student={student} progress={summary} />
           {onEdit ? (
             <button className={styles.button} onClick={onEdit}>
               {goal ? "목표 확장" : "목표 설정"}
@@ -529,26 +546,23 @@ function StudentFocus({
         <p className={styles.meta}>
           {student.school} {student.grade}
           {goal?.textbook ? ` · ${goal.textbook}` : ""}
-        </p>
+        </p></> : null}
         {goal && progress ? (
           <>
-            <div className={styles.focusCourse}>
-              <strong>
-                {courseRangeLabel(goal)} · {progress.total}블록
-              </strong>
-              <span>
-                {goal.startDate} 시작 – {goal.endDate}{" "}
-                완료
-              </span>
-            </div>
-            <LearningRails progress={progress} goal={goal} />
-            <LearningMilestones goal={goal} progress={progress} />
-            <p className={styles.currentBlock}>
-              {progress.currentBlock ? learningBlockLabel(progress.currentBlock, goal.studyGrade) : "현재 진도 확인 필요"}
-              {progress.currentDate
-                ? ` (${shortDate(progress.currentDate)} 기록)`
-                : ""}
-            </p>
+            <StudentLearningMap
+              key={JSON.stringify([data.classId, student.studentId, data.month, goal, progress.referenceDate, progress.currentBlock, progress.history?.start])}
+              student={student} classId={data.classId} className={data.className} month={data.month}
+              goal={goal} progress={progress} records={records} reportScores={student.records}
+              context={learning.context}
+              initialQuery={initialQuery} embedded
+              headerActions={<>
+                {student.rosterPhase !== "on" ? <Status student={student} progress={summary} /> : null}
+                {onEdit ? <button className={styles.button} onClick={onEdit}>목표 확장</button> : null}
+              </>}
+            />
+            <details className={styles.planArchive}>
+              <summary>블록별 계획과 일간 목표</summary>
+              <p className={styles.meta}>{courseRangeLabel(goal)} · {goal.startDate} 시작 – {goal.endDate} 완료</p>
             {goal.blockCount && learning.track !== "supplement" ? (
               <details className={styles.dailyPlan}>
                 <summary>전체 {goal.blockCount}블록 진도표 · 월 {MATH_LEARNING_CADENCE.regular.monthlyBlocks}블록</summary>
@@ -602,18 +616,6 @@ function StudentFocus({
                 </div>
               ))}
             </div>
-            <div className={styles.insight}>
-              <strong>{learningStatusLabel(progress)}.</strong>
-              {progress.status === "done"
-                ? " 설정한 전체 학습 목표를 마쳤습니다."
-                : progress.requiredPace == null
-                  ? progress.status === "no-data"
-                    ? " 수업보고서의 진도 기록을 확인해 주세요."
-                    : progress.remainingDays === 0
-                      ? " 목표 기간의 수업이 끝났습니다. 완료일과 수업 계획을 확인해 주세요."
-                      : " 시간표와 목표 기간을 확인해 주세요."
-                  : ` ${goal.endDate}까지 목표를 마치려면 남은 ${progress.remainingDays}회 수업에서 평균 ${progress.requiredPace.toFixed(1)}블록씩 진행하면 됩니다.`}
-            </div>
             <details className={styles.dailyPlan}>
               <summary>
                 자동 배분된 일간 목표 · 수업 {progress.days.length}회
@@ -639,8 +641,9 @@ function StudentFocus({
                 </table>
               </div>
             </details>
+            </details>
           </>
-        ) : (
+        ) : learning.status === "ok" ? (
           <div className={styles.noGoal}>
             <h4>전체 학습 목표를 설정해 주세요.</h4>
             <p>
@@ -653,7 +656,7 @@ function StudentFocus({
               </button>
             ) : null}
           </div>
-        )}
+        ) : <p role="status" className={styles.notice}>목표 또는 수업보고서를 불러오지 못했습니다. 새로고침해 주세요.</p>}
         {legacyGoal?.targetProgress || legacyGoal?.textbook ? (
           <details className={styles.legacyGoal}>
             <summary>{data.monthLabel} 기존 월간 목표</summary>
@@ -661,40 +664,7 @@ function StudentFocus({
             <p>{legacyGoal.targetProgress}</p>
           </details>
         ) : null}
-        <div className={styles.records}>
-          <h4>
-            최근 수업 기록 <span>{records.length}건</span>
-          </h4>
-          {records.length ? (
-            records.map((r, i) => {
-              const scores = student.records[r.date];
-              return (
-                <div className={styles.record} key={`${r.date}:${i}`}>
-                  <time>{shortDate(r.date)}</time>
-                  <div>
-                    <strong>{r.progress || "진도 입력 없음"}</strong>
-                    {r.textbook ? <p>{r.textbook}</p> : null}
-                    {r.homework ? <p>과제: {r.homework}</p> : null}
-                    {scores ? (
-                      <p>
-                        {testScoresOf(scores)
-                          .map(
-                            (score) =>
-                              `${TEST_KIND_LABEL[score.kind]} ${testCountLabel(score)}`,
-                          )
-                          .join(" · ")}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className={styles.empty}>
-              기준일까지 작성된 수업 기록이 없습니다.
-            </p>
-          )}
-        </div>
+        {learning.status === "ok" && (!goal || !progress) ? <LearningReportList key={student.studentId} records={records} scores={student.records} grade={goal?.studyGrade} open /> : null}
       </section>
     </div>
   );

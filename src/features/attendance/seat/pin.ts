@@ -94,10 +94,25 @@ export function recordPinFailure(window: PinAttemptWindow): PinAttemptWindow {
 /**
  * 그 자리의 학원설정 비밀번호(`operations.seatPins[자리]`) — 비어 있으면 **그 자리 공개 접속을 끈다**.
  *
- * ⚠️ 자리 중립이다. 랩실·JJ실 모두 기본값 7099(defaults)이고, 원장이 학원설정에서
- *    자리별로 바꾸거나 비워서 그 자리만 닫는다. 자리를 하드코딩하면 새 자리가 남의 비밀번호로 열린다.
+ * ⚠️ 자리 중립이다. 랩실·JJ실 모두 기본값 0000(defaults — 원장 2026-09-22 "새로운 지점들은 기본 비밀번호 0000으로")이고,
+ *    지점마다 학원설정에서 자리별로 바꾸거나 비워서 그 자리만 닫는다. 자리를 하드코딩하면 새 자리가 남의 비밀번호로 열린다.
+ *    학원이 하나든 여럿이든 이 값 하나로 검증한다(저장값 > 기본값 — 침산은 저장해 둔 값을 그대로 쓴다).
  */
 export function configuredSeatPin(raw: string | null | undefined): string | null {
   const v = normalizePin(raw);
   return v.length > 0 ? v : null;
+}
+
+/**
+ * 자리 PIN 화면이 **어느 지점(테넌트)** 의 비밀번호로 검증할지 — 순수 판정.
+ *
+ * URL에 지점이 없다(결정 C, 2026-09-18)라 로그인 전 화면은 지점을 스스로 모른다. 학원이 하나면 그 하나로 확정하고,
+ * 둘 이상이면 화면의 지점 선택값이 목록 안에 있을 때만 그 지점이다.
+ * 🔴 여럿인데 선택이 없거나 목록 밖이면 null — 첫 지점으로 떨어뜨리면 A지점 태블릿이 B지점 명단을 연다.
+ */
+export function resolveSeatPinTenant(tenantIds: readonly string[], chosen: string | null | undefined): string | null {
+  if (tenantIds.length === 0) return null;
+  if (tenantIds.length === 1) return tenantIds[0]!;
+  const want = chosen?.trim();
+  return want && tenantIds.includes(want) ? want : null;
 }

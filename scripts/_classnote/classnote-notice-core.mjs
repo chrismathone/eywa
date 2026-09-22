@@ -1,13 +1,13 @@
 /**
  * scripts/_classnote/classnote-notice-core.mjs — 반/학부모 공지 큐(classnote_notices) 처리 코어.
  *
- * eywa 서버 액션(sendClassNotice / sendOnescreenNotice)이 큐에 넣은 공지를 잡아, 각 타깃 학생의 ClassNote
+ * aywa 서버 액션(sendClassNotice / sendOnescreenNotice)이 큐에 넣은 공지를 잡아, 각 타깃 학생의 ClassNote
  * 개별 보드에 **내부 API로 직접 게시**한다(`POST /api/v1_2/reports/`). watch-classnote-queue.mjs(연동 PC 데몬)가 매 폴 호출.
  *
  * 게시 후 **리포트 id를 조회해 results[].reports 에 저장**(회수용) — 게시 응답은 빈 201이라 id가 없어
  * `GET /api/v1_2/centers/{center}/reports/?child=…` 목록에서 방금 글(cls+child+content)을 찾는다(2026-07-14 실측 확정).
- * **개인화 본문(target.body)** 지원(태그 치환은 eywa에서 per-target 렌더) — 단 **공유 보드(2가족+)엔 개인화 게시 금지**
- * (fan-out이 다른 가족에게 남 이름을 노출하는 것 차단). **게시취소(회수)**: eywa가 status='revoke_requested'로 표시하면
+ * **개인화 본문(target.body)** 지원(태그 치환은 aywa에서 per-target 렌더) — 단 **공유 보드(2가족+)엔 개인화 게시 금지**
+ * (fan-out이 다른 가족에게 남 이름을 노출하는 것 차단). **게시취소(회수)**: aywa가 status='revoke_requested'로 표시하면
  * 저장된 리포트 id를 GET로 (cls/child) 대조 후 `DELETE /api/v1_2/reports/{id}/`(204) — 엉뚱한 id로 남 글 삭제 방지.
  *
  * **첨부(2단계, 0130a)**: 공지에 첨부가 있으면(공통 `attachments` + 학생별 `targets[].attachments`) 글자 대신
@@ -16,7 +16,7 @@
  *
  * 안전장치: 실게시·회수는 --post + classnoteSendEnabled(킬스위치) 확인. 타깃별 실패는 그 타깃만 기록(results).
  */
-import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE } from "./classnote-core.mjs";
+import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE, DEFAULT_AUTHOR_NAME } from "./classnote-core.mjs";
 import {
   CLASSNOTE_BASE,
   dismissHonorificDialog,
@@ -199,7 +199,7 @@ async function processTarget(page, ctx, target, index = 0) {
           code: "mapping_unknown",
           reason: `동명이인이 있는 이름이라 원아 확인이 필요한데 클래스노트 조회에 실패해 보류합니다(${target.board})`,
         };
-    if (!verdict.ok && amb.siblings.length) verdict.reason = `${verdict.reason} (eywa 동명: ${amb.siblings.join(", ")})`;
+    if (!verdict.ok && amb.siblings.length) verdict.reason = `${verdict.reason} (aywa 동명: ${amb.siblings.join(", ")})`;
   }
   if (!verdict.ok) return { board: target.board, ok: false, note: verdict.reason };
 
@@ -447,9 +447,9 @@ async function editNotice(page, notice) {
 export async function processNoticesOnce(
   sql,
   browser,
-  // base = eywa 앱 주소(첨부 signed URL을 받는 내부 라우트). 보고서 경로와 같은 env(CLASSNOTE_SCREENSHOT_BASE)를 쓴다
+  // base = aywa 앱 주소(첨부 signed URL을 받는 내부 라우트). 보고서 경로와 같은 env(CLASSNOTE_SCREENSHOT_BASE)를 쓴다
   // — 연동 PC는 공개 도메인이어야 한다(localhost면 첨부 조회가 실패하고 그 사유가 results에 남는다).
-  { tenant, post, log = console.log, authorName = "인재원 학원", base = DEFAULT_BASE },
+  { tenant, post, log = console.log, authorName = DEFAULT_AUTHOR_NAME, base = DEFAULT_BASE },
 ) {
   // stale 복구 — 크래시로 갇힌 처리중 상태
   await sql`update classnote_notices set status='queued', processing_at=null

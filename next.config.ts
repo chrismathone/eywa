@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
+import { buildLegacyHostRedirects } from "./src/lib/config/legacy-redirects";
 
 const nextConfig: NextConfig = {
+  // 도메인 이전(2026-09-18 준비, 구매 뒤 env 둘로 켠다) — 옛 호스트(`eywa-alpha.vercel.app`)로 온 페이지 요청을 새
+  // 도메인의 **같은 경로**로 308. 붙여 둔 자산 QR 라벨·학부모 공유 링크가 산다. `/api/*`는 제외(전사 웹훅·크론·워커).
+  // env가 비어 있으면 0개 = 지금과 같다. 규칙·테스트 = src/lib/config/legacy-redirects.ts.
+  async redirects() {
+    return buildLegacyHostRedirects({
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+      LEGACY_REDIRECT_HOSTS: process.env.LEGACY_REDIRECT_HOSTS,
+    });
+  },
+  // Keep Next 16.2's default HTML-only crawlers and add Kakao: its preview must find OG tags in <head>.
+  htmlLimitedBots: /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|kakaotalk|kakaoscrap/i,
   // dev 전용 — Next 16은 localhost 외 출처의 dev 리소스(/_next/webpack-hmr 등)를 기본 차단한다. 폰·태블릿에서
   // LAN IP로 접속하면 HMR 소켓 핸드셰이크가 막히고 **하이드레이션이 끝나지 않아 버튼 onClick이 통째로 죽는다**
   // (네이티브 select만 살아 "클릭이 안 됨"처럼 보임 — 2026-07-15 QR 접수 폼 실측). 프로덕션엔 HMR이 없어 무관.

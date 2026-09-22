@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Loader2, Paperclip, Pencil, Plus, Receipt, Trash2 } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2, Paperclip, Pencil, Plus, Receipt, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Pill, type PillColor } from "@/components/atoms/pill";
 import { toneColor } from "@/lib/design/semantic-color";
 import { Button } from "@/components/ui/button";

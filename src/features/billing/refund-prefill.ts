@@ -80,7 +80,7 @@ const METHOD_LABEL: Record<string, string> = {
   cash: "현금",
   other: "기타",
 };
-/** 레거시 영문 kind(구 eywa 폼·구 임포터) → 한글. makeedu 산 데이터는 이미 한글이라 그대로 통과. */
+/** 레거시 영문 kind(구 aywa 폼·구 임포터) → 한글. makeedu 산 데이터는 이미 한글이라 그대로 통과. */
 const KIND_LEGACY_LABEL: Record<string, string> = {
   tuition: "수업",
   material: "교재",
@@ -237,7 +237,7 @@ export function formatPaymentLines(invoices: RefundPrefillInvoice[]): string[] {
 
 /**
  * 학생 원본 → 폼 필드값. 값이 없는 칸은 **키 자체를 안 넣는다**(호출부가 "채울 게 있는 칸"만 구분).
- * 담임선생님은 담당강사가 **정확히 1명일 때만** 채운다 — eywa는 담임 개념을 폐기(과목별 담당)했고,
+ * 담임선생님은 담당강사가 **정확히 1명일 때만** 채운다 — aywa는 담임 개념을 폐기(과목별 담당)했고,
  * 여러 명을 나열하면 "담임이 여럿"이라는 없는 사실이 서류에 남는다.
  */
 export function buildRefundPrefill(

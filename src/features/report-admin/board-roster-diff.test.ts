@@ -148,7 +148,7 @@ describe("checkClassRosters", () => {
     expect(dup[0]!.status).toBe("dup_board");
   });
 
-  it("eywa 수강이 아닌 원아는 extras — 강사가 반 보드에 쓴 글은 이들에게도 간다", () => {
+  it("aywa 수강이 아닌 원아는 extras — 강사가 반 보드에 쓴 글은 이들에게도 간다", () => {
     const r = checkClassRosters(
       [{ classId: "c1", className: "중등E_중1 TOP", teacher: null, students: [stu("s1", "김나은")] }],
       board([m(1, "김나은"), m(2, "퇴원생")]),

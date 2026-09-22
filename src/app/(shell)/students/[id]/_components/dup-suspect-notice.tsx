@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check } from "@/components/icons/eywa-icon-compat";
+import { AlertTriangle, Check } from "@/components/icons/aywa-icon-compat";
 import { clearDupSuspect } from "@/features/students/server/actions";
 
 /**

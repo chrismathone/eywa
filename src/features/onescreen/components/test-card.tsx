@@ -1,6 +1,6 @@
 import { pct } from "../report";
 import { displayLessons } from "../curriculum";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { DeltaChip } from "./delta-chip";
 import { TestMaxInput } from "./test-max-input";
 import type { Tests } from "../types";

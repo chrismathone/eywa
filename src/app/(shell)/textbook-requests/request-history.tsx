@@ -8,8 +8,8 @@ import {
 } from "@/components/toolbar-controls";
 
 import { useMemo, useState, useTransition } from "react";
-import { Check, FileDown, Pencil, Search, Trash2 } from "@/components/icons/eywa-icon-compat";
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { Check, FileDown, Pencil, Search, Trash2 } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {

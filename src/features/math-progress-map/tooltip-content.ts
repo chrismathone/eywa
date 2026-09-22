@@ -9,6 +9,8 @@ import { monthOf } from "./focus";
 import type { PlanVsActual, StudentProgress } from "./model";
 import { paceDelta } from "./pace";
 import { STATUS_LABEL } from "./palette";
+import { lessonsInPeriod, mapPeriod, periodMetrics } from "./learning-map";
+import { weeksOfMonth, ymd } from "./calendar";
 
 export type HoverTarget =
   | { kind: "month"; month: number }
@@ -26,6 +28,24 @@ export function tooltipContent(
   pace: PlanVsActual,
   target: HoverTarget,
 ): TooltipContent {
+  if (progress.learningMap) {
+    const map = progress.learningMap;
+    const date = target.kind === "day" ? target.date : target.kind === "quarter" ? ymd(view.year, (target.q - 1) * 3 + 1, 1)
+      : target.kind === "week" ? weeksOfMonth(view.year, target.month).find(week => week.index === target.week)?.start ?? ymd(view.year, target.month, 1)
+        : ymd(view.year, target.month, 1);
+    const period = mapPeriod({ date, mode: target.kind });
+    const lessons = lessonsInPeriod(map, period);
+    const count = periodMetrics(lessons, map.metrics.current != null);
+    const observed = map.lessons.filter(lesson => lesson.date && lesson.date >= period.from && lesson.date <= period.to);
+    const rows: TooltipContent["rows"] = [["진도율", count.percent == null ? "—" : `${count.percent}%`], ["도달 차시", `${count.current ?? "—"} / ${count.total}차시`]];
+    if (lessons.length) rows.push(["배치된 차시", `${lessons[0].label} ~ ${lessons.at(-1)!.label}`]);
+    if (observed.length) rows.push(["수업일 확인", `${observed.length}차시${observed.some(lesson => lesson.estimated) ? " (추정 포함)" : ""}`]);
+    if (target.kind === "day") {
+      const record = progress.dailyProgress.find(record => record.date === date);
+      if (record?.note) rows.push(["수업보고서", record.note]);
+    }
+    return { title: period.label, rows };
+  }
   if (target.kind === "quarter") {
     const q = view.quarters[target.q - 1]!;
     const months = monthsOfQuarter(target.q);

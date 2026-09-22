@@ -12,7 +12,7 @@ import { buildHolidayMap } from "@/features/attendance/calendar";
 import { rollupDay } from "@/features/attendance/cell-display";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
-import { getSeatDuties } from "@/features/attendance/seat/server/duty";
+import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatMonthly } from "@/features/attendance/seat/server/monthly-queries";
 import type { SeatMonthGroup } from "@/features/attendance/seat/monthly-build";
 import { isPayrollSeat, parseAnySeatKey, parseUsableSeatKey, SEAT_NAME } from "@/features/attendance/seat/seat";
@@ -20,7 +20,7 @@ import type { AttendanceMatrix, AttendanceStatus, MatrixStudent } from "@/featur
 
 export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }) {
   const seat = parseAnySeatKey((await params).seat);
-  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 인쇄 — eywa` };
+  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 인쇄 — aywa` };
 }
 
 export default async function SeatMonthlyPrintPage({
@@ -37,7 +37,7 @@ export default async function SeatMonthlyPrintPage({
 
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!dutyAllowsSeat(await getSeatDuties(user.id), seat)) await requireAccess("seat_attendance");
+  if (!dutyAllowsSeat(await getActiveSeatDuties(user.id, user.tenantId), seat)) await requireAccess("seat_attendance");
 
   const { month: monthParam } = await searchParams;
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam ?? "") ? monthParam! : kstMonth();

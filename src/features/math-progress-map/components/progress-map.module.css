@@ -63,6 +63,24 @@
   color-scheme: dark;
 }
 
+.original {
+  /* 확정 시안의 일·주·월 팔레트. MCS 막대의 현재/목표 색상과 독립적이다. */
+  --green: #0d7743;
+  --map-completed-fill: #cfe4d9;
+  --map-completed-ink: #0d7743;
+  --map-quarter-1: #5f89da;
+  --map-quarter-2: #4a9972;
+  --map-quarter-3: #b38147;
+  --map-quarter-4: #917cd6;
+  --map-quarter-1-fill: #e3ebf9;
+  --map-quarter-2-fill: #dfede7;
+  --map-quarter-3-fill: #f7eadb;
+  --map-quarter-4-fill: #f8f6fc;
+  --map-quarter-opacity: 1;
+}
+
+.quarterSegment { opacity: var(--map-quarter-opacity, .75); }
+
 .original [data-dial-layer="guides"] {
   display: none;
 }
@@ -78,6 +96,27 @@
 .compactLegend { display: grid; grid-template-columns: repeat(3, max-content); gap: 5px 12px; margin-left: auto; padding: 2px 0; }
 .compactLegend > li { white-space: nowrap; font-size: 11px; }
 .mapFrame { width: 80%; }
+/* MCS(학습 지도) 시계 = MCS 막대와 같은 규칙(원장 2026-09-19 *"우상단 라벨 색상과 실제 시계에서 라벨 색상이 달라서
+   착각을 줄 수 있을 것 같네"* → *"mcs 막대와 완전히 일치하는 규칙으로"*):
+   완료 = 현재진도 막대의 파랑(일·주·날짜 눈금·월 알약 전부 같은 한 색) · 진행 중 = 옅은 파랑 · 가운데 진도 호 = 파랑.
+   월 칸의 분기색·선택(금색)·현재 날짜(호박색 점선)는 진도가 아니라 자리·날짜 표시라 그대로다.
+   🔴 범례는 시계(.original) **밖**의 .surface에 있다 — 두 선택자에 같은 값을 걸어야 범례와 시계가 같은 색을 읽는다
+      (한쪽만 걸면 범례만 옛 색으로 남는다 — 이번에 고친 착각이 바로 그것이었다). 가드 `mcs-palette.test.ts`. */
+.surface[data-learning="true"],
+.surface[data-learning="true"] .original {
+  --map-actual: var(--mcs-actual);
+  --map-completed-fill: var(--mcs-actual);
+  --map-completed-tick: var(--mcs-actual);
+  --map-completed-ink: #ffffff;
+  --map-week-completed-fill: var(--mcs-actual);
+  --map-week-completed-ink: #ffffff;
+  --map-progress-fill: var(--mcs-actual-soft);
+  --map-in-progress-tick: var(--mcs-actual-soft);
+  --map-progress-ink: var(--mcs-actual);
+  /* 공휴일에 수업해 완료한 날 — 파랑 채움 위 빨간 글자는 읽히지 않는다(공휴일은 툴팁·목록에 남는다). */
+  --map-holiday-completed-ink: #ffffff;
+}
+.surface[data-learning="true"] .mapFrame { width: 100%; }
 @media (max-width: 1023px) { .mapFrame { width: 100%; } }
 
 .pickerSelect {

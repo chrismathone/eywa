@@ -245,6 +245,7 @@ export function StudentInfoCard({
   pendingClassName,
   pendingTransferDate,
   pinNote,
+  labSeparate,
 }: {
   name: string;
   englishName?: string | null;
@@ -272,13 +273,21 @@ export function StudentInfoCard({
    * 🔴 줄의 표식에 툴팁을 따로 달지 말 것 — 줄은 이미 이 카드를 띄우므로 카드와 툴팁이 겹친다(원장 2026-09-15).
    */
   pinNote?: string | null;
+  /** LAB '따로 수업(*LAB)' 배정(0271b) — 줄의 파란 이탤릭 이름이 뜻하는 바를 카드가 글자로 말한다(툴팁 따로 없음). */
+  labSeparate?: boolean;
 }) {
   const partial =
     attendanceDays && attendanceDays.length > 0
       ? attendanceDays.map((d) => DAY_LABEL[d] ?? d).join("·") + "만 등원"
       : null;
   const hasDetail =
-    isNew || isTransferredIn || partial || (status === "withdrawn" && endDate) || pendingClassName || pinNote;
+    isNew ||
+    isTransferredIn ||
+    partial ||
+    (status === "withdrawn" && endDate) ||
+    pendingClassName ||
+    pinNote ||
+    labSeparate;
   return (
     <div className="space-y-2 break-keep text-xs">
       {/* 헤더 한 줄: 이름(좌) + 학년·학교(우상단). 별도 줄을 없애 세로 공간 절약. */}
@@ -322,6 +331,7 @@ export function StudentInfoCard({
           ) : null}
           {partial ? <Row label="등원" value={partial} /> : null}
           {pinNote ? <Row label="자리" value={pinNote} /> : null}
+          {labSeparate ? <Row label="LAB" value="따로 수업(*LAB) 배정" /> : null}
           {pendingClassName ? (
             <Row
               label="이동 예정"

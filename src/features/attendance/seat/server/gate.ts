@@ -3,7 +3,8 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "../duty";
 import { PIN_SEAT_KEYS, USABLE_SEAT_KEYS, ambiguousClassIds, hhmm, type SeatKey } from "../seat";
-import { getSeatDuties } from "./duty";
+import { getActiveSeatDuties } from "./duty";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import { readSeatPinSession } from "./pin-session";
 import { getPublicSeatDay, getSeatDay } from "./queries";
 import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
@@ -27,7 +28,7 @@ export async function gateSeatWrite(seat: SeatKey, date: string): Promise<SeatGa
 
   const user = await getCurrentUser();
   if (user) {
-    const duties = await getSeatDuties(user.id);
+    const duties = await getActiveSeatDuties(user.id, user.tenantId);
     const assigned = dutyAllowsSeat(duties, seat);
     const menuWrite = await canWriteTenant(user.systemRole, "seat_attendance");
     // ⚠️ 권한이 없다고 **여기서 끝내지 않는다** — 자리 태블릿에 누군가의 계정이 로그인된 채로
@@ -77,6 +78,10 @@ export async function gateSeatPinOnly(
     return { error: "비밀번호를 다시 입력해 주세요", reason: "no-pin" };
   }
   if (date !== kstToday()) return { error: "오늘 날짜만 입력할 수 있습니다", reason: "not-today" };
+  // PIN 쿠키가 남아 있어도 그 지점이 자리 모듈을 껐으면 쓰지 않는다(쿠키 발급 뒤에 끈 경우). 침산은 켜져 있다.
+  if (!(await isModuleOnForTenant(pin.tenantId, "seat_attendance"))) {
+    return { error: "비밀번호를 다시 입력해 주세요", reason: "no-pin" };
+  }
   return { ok: true, tenantId: pin.tenantId };
 }
 

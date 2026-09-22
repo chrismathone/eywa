@@ -1,5 +1,5 @@
 // AssemblyAI 전사·제출·다운로드 에러(영어 원문)를 사용자용 한글 메시지로 매핑 — 순수 함수(Vitest).
-// 이미 한글인 메시지(eywa 자체 생성)는 그대로 둔다. 알 수 없는 영어는 일반 한글 메시지로(원문은 화면 미노출).
+// 이미 한글인 메시지(aywa 자체 생성)는 그대로 둔다. 알 수 없는 영어는 일반 한글 메시지로(원문은 화면 미노출).
 // 소비처: assemblyai 웹훅(processing_error)·녹음 start 액션. 분석(generateJSON) 키 오류는 generate.ts rethrowAi가 별도 한글화.
 
 export function localizeTranscriptionError(raw: string | null | undefined): string {
@@ -31,7 +31,7 @@ export function localizeTranscriptionError(raw: string | null | undefined): stri
   if (/timeout|timed out|50[234]|server error|internal error|unavailable|econn|network|connection/.test(s)) {
     return "전사 서버가 일시적으로 응답하지 않습니다 — 잠시 후 다시 시도해주세요.";
   }
-  // 이미 한글(eywa 자체 메시지)이면 그대로.
+  // 이미 한글(aywa 자체 메시지)이면 그대로.
   if (/[가-힣]/.test(msg)) return msg;
   // 알 수 없는 영어 원문 — 일반 한글 메시지(원문은 화면 노출 X).
   return "음성 전사 중 오류가 발생했습니다. 문제가 계속되면 관리자에게 문의하세요.";

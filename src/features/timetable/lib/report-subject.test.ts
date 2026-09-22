@@ -4,10 +4,10 @@ import { LEGACY_REPORT_SUBJECT, reportMatchesSubject, reportSubject } from "./re
 /**
  * 원장 2026-07-27: "영어 시간표 학생에 호버링하면 '수학 관련 내용'이 나오지 않게 배선 차단",
  * "수학 시간표에서만 수학 관련 내용이 호버링되게",
- * "이후 영어도 eywa에서 발송되면 영어 관련 내용이 '영어 시간표'에서만 호버링되게".
+ * "이후 영어도 aywa에서 발송되면 영어 관련 내용이 '영어 시간표'에서만 호버링되게".
  */
 describe("reportSubject — 보고서 과목 판정", () => {
-  it("보고서 자체 subject가 최우선(eywa 신규 발송분)", () => {
+  it("보고서 자체 subject가 최우선(aywa 신규 발송분)", () => {
     expect(reportSubject({ subject: "english", classSubject: "math" })).toBe("english");
   });
 

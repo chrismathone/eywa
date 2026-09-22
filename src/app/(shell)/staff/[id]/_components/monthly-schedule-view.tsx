@@ -11,7 +11,7 @@ import {
 // ⚠️ 미매핑이면 서버는 즉시 unmapped만 주고(첫 페인트 안 막음, B7), 자동연결·후보는 여기서 지연 호출.
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { toast } from "sonner";
-import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Plus } from "@/components/icons/eywa-icon-compat";
+import { CalendarDays, ChevronLeft, ChevronRight, LayoutGrid, List, Plus } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";

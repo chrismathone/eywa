@@ -21,8 +21,10 @@ export type LabSeparateLookup = { ids: Set<string> } | "missing" | "error";
 
 type Scope =
   | { kind: "class"; classId: string }
+  /** 반 여러 개(원생 주간 시간표) — 격리는 RLS가 한다(세션 클라 전용, admin 경로는 쓰지 말 것). */
+  | { kind: "classes"; classIds: readonly string[] }
   | { kind: "ids"; ids: readonly string[]; tenantId: string }
-  | { kind: "window"; from: string; to: string; tenantId?: string };
+  | { kind: "window"; from: string; to: string; tenantId?: string; classIds?: readonly string[] };
 
 const MISSING_CODES = new Set(["42703", "PGRST204"]);
 
@@ -39,16 +41,20 @@ const PAGE = 1000;
 
 export async function lookupLabSeparateIds(db: SupabaseClient, scope: Scope): Promise<LabSeparateLookup> {
   if (scope.kind === "ids" && scope.ids.length === 0) return { ids: new Set() };
+  if (scope.kind === "classes" && scope.classIds.length === 0) return { ids: new Set() };
+  if (scope.kind === "window" && scope.classIds?.length === 0) return { ids: new Set() };
   try {
     const ids = new Set<string>();
     // 켜진 행만이라 몇십 행이지만 결과를 id 명단으로 쓰니 페이징한다(B2). 오류 코드를 봐야 해서 헬퍼(fetchAllPaged)를 안 쓴다.
     for (let from = 0; ; from += PAGE) {
       let q = db.from("class_schedules").select("id").eq("lab_separate", true);
       if (scope.kind === "class") q = q.eq("class_id", scope.classId);
+      else if (scope.kind === "classes") q = q.in("class_id", [...scope.classIds]);
       else if (scope.kind === "ids") q = q.in("id", [...scope.ids]).eq("tenant_id", scope.tenantId);
       else {
         q = q.lte("valid_from", scope.to).or(`valid_to.is.null,valid_to.gte.${scope.from}`);
         if (scope.tenantId) q = q.eq("tenant_id", scope.tenantId); // admin(cron) 경로 — RLS 우회라 명시 격리
+        if (scope.classIds) q = q.in("class_id", [...scope.classIds]);
       }
       const { data, error } = await q.order("id").range(from, from + PAGE - 1);
       if (error) return MISSING_CODES.has(String((error as { code?: string }).code ?? "")) ? "missing" : "error";

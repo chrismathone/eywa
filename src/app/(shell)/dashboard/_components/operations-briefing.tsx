@@ -1,4 +1,4 @@
-import { EyIcon } from "@/components/icons/eywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { CONTROL_H, CONTROL_H_LG, CONTROL_LABEL, CONTROL_LABEL_LG } from "@/components/ui/control-scale";
 import type {
@@ -125,7 +125,7 @@ export function OperationsBriefing({ briefing }: { briefing: OperationsBriefingD
               오른쪽 칩(긴급 N·오늘 N)과 아래 '먼저 할 일'이 같은 말을 이미 한다(§4 설명 문장, 리뷰 2026-09-03). */}
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 id="operations-briefing-title" className="text-foreground text-lg font-bold tracking-tight">
-              Eywa의 운영 브리핑
+              Aywa의 운영 브리핑
             </h2>
             <span className={`${state.tone} inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-bold ring-1 ring-inset`}>
               <span className={`${state.dot} size-1.5 rounded-full`} aria-hidden="true" />

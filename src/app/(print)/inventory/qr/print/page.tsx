@@ -8,7 +8,7 @@ import { getInventoryCategories } from "@/features/inventory/server/category-que
 import { getAssets } from "@/features/inventory/server/queries";
 import { RangeForm } from "./range-form";
 
-export const metadata = { title: "자산 QR 라벨 인쇄 — 재고관리 — eywa" };
+export const metadata = { title: "자산 QR 라벨 인쇄 — 재고관리 — aywa" };
 
 /**
  * QR 라벨 시트(A4 세로) — 원장 2026-09-02: *"QR 라벨을 쉽게 인쇄해서 기기에 붙일 수 있게 … 간단하게 QR이 정사각형으로

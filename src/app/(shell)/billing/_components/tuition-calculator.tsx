@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { AlertCircle, Check, Loader2, Plus, Printer, Save } from "@/components/icons/eywa-icon-compat";
+import { AlertCircle, Check, Loader2, Plus, Printer, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
@@ -76,6 +76,7 @@ export function TuitionCalculator({
   catalog = [],
   textbooks = [],
   initial,
+  showHouseRules = true,
 }: {
   academyName: string;
   logoSrc?: string | null; // 학원 로고(서버에서 resolveBrandingSrc로 푼 signed URL) — 안내문 헤더
@@ -85,6 +86,8 @@ export function TuitionCalculator({
   catalog?: TuitionCatalogOption[];
   textbooks?: CatalogOption[]; // 교재 단가표(146권) — 교재/기타 picker에 합침
   initial?: QuoteDetail;
+  /** 안내문 하단 '학원 수칙'(첫 학원 규칙) — 새 학원은 끈다. 법정 환불 규정은 늘 실린다. */
+  showHouseRules?: boolean;
 }) {
   useBillingSettingsRefresh();
   /**
@@ -471,6 +474,7 @@ export function TuitionCalculator({
           discounts={discounts}
           holidays={docHolidays}
           createdLabel={createdLabel}
+          showHouseRules={showHouseRules}
         />
       </div>
     </div>

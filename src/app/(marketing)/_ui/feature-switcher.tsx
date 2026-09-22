@@ -7,7 +7,7 @@
  * SSR/하이드레이션 불일치 없이(초기 anim=false) key 변경으로 재생한다.
  */
 import { useState, type ReactNode } from "react";
-import { EyIcon, MENU_ICON } from "@/components/icons/eywa-icons";
+import { EyIcon, MENU_ICON } from "@/components/icons/aywa-icons";
 import { motionDisabled, prefersReducedMotion } from "@/components/workspace/motion";
 import type { MenuKey } from "@/lib/permissions";
 import { BrowserFrame } from "./browser-frame";

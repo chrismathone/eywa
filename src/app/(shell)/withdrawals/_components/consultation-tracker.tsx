@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Check, Loader2 } from "@/components/icons/eywa-icon-compat";
+import { Check, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { toggleConsultationStep } from "@/features/withdrawals/server/actions";
 import type { WithdrawalConsultation } from "@/features/withdrawals/types";
 
