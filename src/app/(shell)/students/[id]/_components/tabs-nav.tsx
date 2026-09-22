@@ -6,6 +6,8 @@ export const STUDENT_TABS = [
   { key: "overview", label: "개요" },
   { key: "classes", label: "수업" },
   { key: "grades", label: "성적" },
+  // 인재원 단어 학습·시험(원장 2026-09-21: 일반 성적과 분리) — 짝이 걸린 학생에게만 보인다(showSrs).
+  { key: "srs", label: "SRS 성적" },
   { key: "progress", label: "진도" },
   { key: "attendance", label: "출결" },
   { key: "consultations", label: "상담" },
@@ -27,12 +29,17 @@ export function StudentTabsNav({
   studentId,
   active,
   canSeeBilling,
+  showSrs,
 }: {
   studentId: string;
   active: StudentTabKey;
   canSeeBilling: boolean;
+  /** 인재원 짝이 걸린 학생인가 — 아니면 'SRS 성적' 탭을 아예 안 그린다(빈 탭을 만들지 않는다). */
+  showSrs: boolean;
 }) {
-  const faces: Face[] = STUDENT_TABS.filter((t) => t.key !== "billing" || canSeeBilling).map((t) => ({
+  const faces: Face[] = STUDENT_TABS.filter(
+    (t) => (t.key !== "billing" || canSeeBilling) && (t.key !== "srs" || showSrs),
+  ).map((t) => ({
     key: t.key,
     label: t.label,
     href: t.key === "overview" ? `/students/${studentId}` : `/students/${studentId}?tab=${t.key}`,

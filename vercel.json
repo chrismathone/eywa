@@ -26,6 +26,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/ijw-memorized-words",
+      "schedule": "20 19 * * *"
+    },
+    {
       "path": "/api/cron/daily-briefing",
       "schedule": "0 22 * * *"
     },

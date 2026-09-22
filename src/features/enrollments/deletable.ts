@@ -15,6 +15,8 @@
  * `student_id`와 `class_id`를 **둘 다** 가진 표 전수(schema.ts + supabase/migrations 스캔):
  *   · `attendance_records`(출결)            · `lesson_reports`(수업보고서, `class_id`=0134a·`makeup_class_id`=0171a)
  *   · `onescreen_daily_sessions`(수업타임=시수) · `class_sheet_student_marks`(영어 시트 기록, 0157a)
+ *     ⚠️ 단 **단어수만 적힌 행은 빼고 센다**(2026-09-21) — JJ실 '누적 암기 단어수'가 인재원에서 자동으로
+ *        채워지기 때문이다. 그 행까지 세면 어제 잘못 만든 수강이 다음 날 크론 한 번에 못 지워진다.
  *   · `attendance_followups`(후속조치, 0210a)
  * 청구 계열은 학생과 반이 **다른 표에 나뉘어** 있다 — `invoices.student_id` × `invoice_session_terms.class_id`
  * / `invoice_teacher_splits.class_id`(둘 다 `invoice_id`로만 학생에 닿는다) → 호출부가 invoice id를 거쳐 센다.
