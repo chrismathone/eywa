@@ -82,7 +82,7 @@ export function GradesExcelDialog({
             <div>
               <p className="font-bold">1. 서식 내려받기</p>
               <p className="text-text-dim text-xs">
-                지금 명단·점수가 들어 있는 파일(시트: 성적 · 안내). 학기·과목·시험은 안내 시트에 적혀 있습니다.
+                지금 명단·점수가 들어 있는 파일(시트: 성적 · 안내). 어느 학기·시험인지는 성적 시트 맨 윗줄에 적혀 있습니다.
               </p>
             </div>
             <a
@@ -99,7 +99,7 @@ export function GradesExcelDialog({
               <p className="font-bold">2. 작성한 파일 올리기 — 고르면 바로 미리보기</p>
               <FilePickerButton accept=".xlsx" file={file} onSelect={pick} label="엑셀 파일 선택" disabled={busy} />
               <p className="text-text-faint text-xs">
-                매칭 키 = 학생ID(회색 열, 고치지 마세요). 빈 점수 칸은 그대로 둡니다 — 지우기는 화면에서.
+                학생은 회색 칸(이름·학교·학년·반)으로 찾습니다 — 고치지 마세요. 빈 점수 칸은 그대로 둡니다(지우기는 화면에서).
                 오류가 하나라도 있으면 아무것도 바꾸지 않습니다.
               </p>
             </section>

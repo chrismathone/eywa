@@ -47,6 +47,8 @@ export type GradeSheetRow = {
   maxScore: number | null;
   /** 이미 저장된 칸의 시험일. 저장은 **바뀐 칸만** 쓰므로 이 값이 diff의 한 축이다. */
   takenOn: string | null;
+  /** 성적표 받기 단계 표식(누른 시각). 0284a 적용 전에는 전부 null. */
+  marks: GradeMarks;
   /** 지금도 그 반 명단인가 — 학기 중 나간 학생은 false(회색 줄, 값은 그대로 보인다). */
   onRoster: boolean;
 };
@@ -56,14 +58,40 @@ export type GradeSheet = {
   classes: GradeClassOption[];
   rows: GradeSheetRow[];
   /**
+   * 0284a(독촉 표식 컬럼)가 적용됐는가. false면 점수는 그대로 저장되고 **체크박스만** 잠긴다.
+   * 🔴 `schemaReady`와 따로 두는 이유: 하나로 묶으면 표식 마이그레이션이 늦어질 때 **점수 저장까지**
+   *    멈춘다(이미 열려 있던 기능을 새 기능이 잠그면 안 된다).
+   */
+  marksReady: boolean;
+  /**
    * 0283a(학기·시험 칸 컬럼)가 적용됐는가. false면 화면은 살고 **입력만 잠근다**([[#95]]) —
    * 성적 표는 매일 쓰는 경로가 아니지만, 적용 전에 저장을 열어 두면 전건이 400으로 실패한다.
    */
   schemaReady: boolean;
 };
 
-/** 저장이 받는 한 칸. score가 null이면 그 칸을 **지운다**. */
-export type GradeEntry = { studentId: string; score: number | null };
+/**
+ * 성적표 **받기 단계 표식**(원장 2026-09-22) — 칸마다 `1차 요청 · 2차 요청 · 받아서 확인`.
+ * 🔑 불리언이 아니라 **시각**이다: "언제 독촉했나"가 다음 독촉을 정한다(화면은 체크박스 + 날짜 툴팁).
+ */
+export type GradeMarkKey = "ask1" | "ask2" | "received";
+export const GRADE_MARK_KEYS: readonly GradeMarkKey[] = ["ask1", "ask2", "received"];
+export const GRADE_MARK_LABEL: Record<GradeMarkKey, string> = {
+  ask1: "1차",
+  ask2: "2차",
+  received: "성적확인",
+};
+/** 그 칸의 표식 — 값은 누른 시각(ISO), 안 눌렀으면 null. */
+export type GradeMarks = Record<GradeMarkKey, string | null>;
+export const EMPTY_GRADE_MARKS: GradeMarks = { ask1: null, ask2: null, received: null };
+
+/** 저장이 받는 한 칸. score가 null이면 점수를 **지운다**(표식이 있으면 행은 남는다). */
+export type GradeEntry = {
+  studentId: string;
+  score: number | null;
+  /** 체크 상태(켬/끔) — 서버가 시각으로 바꾼다. 안 보내면 표식을 건드리지 않는다. */
+  marks?: Record<GradeMarkKey, boolean>;
+};
 
 export const GRADE_MAX_SCORE_DEFAULT = 100;
 /**
