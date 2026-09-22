@@ -19,6 +19,7 @@ export type DocumentRow = {
   linkUrl: string | null; // kind='link'일 때 외부 문서 주소(구글드라이브 등)
   uploaderName: string | null;
   createdAt: string;
+  updatedAt: string;
   pinned: boolean;
 };
 
@@ -41,7 +42,7 @@ export async function getDocumentsPage(
   let qb = supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, form_type, description, file_name, file_size, mime_type, link_url, pinned, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, form_type, description, file_name, file_path, file_size, mime_type, link_url, pinned, created_at, updated_at, uploader:uploaded_by(display_name)",
       { count: "exact" },
     )
     // 직원 연결 문서(이력서·계약서, staff_user_id 有)는 직원관리(4인 게이트) 전용 — 이 탐색기(사무실
@@ -66,12 +67,13 @@ export async function getDocumentsPage(
     kind: r.kind as DocumentKind,
     formType: r.form_type,
     description: r.description,
-    fileName: r.file_name,
+    fileName: r.file_name ?? r.file_path?.split("/").pop() ?? null,
     fileSize: r.file_size,
     mimeType: r.mime_type,
     linkUrl: r.link_url,
     uploaderName: uploaderNameOf(r.uploader),
     createdAt: r.created_at,
+    updatedAt: r.updated_at,
     pinned: !!r.pinned,
   }));
   return { rows, total: count ?? rows.length };
@@ -109,7 +111,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
   const { data } = await supabase
     .from("academy_documents")
     .select(
-      "id, title, category, kind, form_type, description, file_path, file_name, file_size, mime_type, link_url, body, pinned, created_at, uploader:uploaded_by(display_name)",
+      "id, title, category, kind, form_type, description, file_path, file_name, file_size, mime_type, link_url, body, pinned, created_at, updated_at, uploader:uploaded_by(display_name)",
     )
     .eq("id", id)
     .is("staff_user_id", null) // 직원 연결 문서는 이 표면에서 제외(#77) — 목록과 같은 벽
@@ -128,6 +130,7 @@ export async function getDocumentById(id: string): Promise<DocumentDetail | null
     linkUrl: data.link_url,
     uploaderName: uploaderNameOf(data.uploader),
     createdAt: data.created_at,
+    updatedAt: data.updated_at,
     pinned: !!data.pinned,
     body: data.body,
     filePath: data.file_path,

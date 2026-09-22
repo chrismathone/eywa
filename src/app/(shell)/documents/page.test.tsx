@@ -71,3 +71,11 @@ it("폴더 관리·하위 생성 화면을 열 수 있고 읽기 전용 사용�
   expect(screen.queryByRole("button", { name: "폴더 관리" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "하위 폴더 만들기" })).not.toBeInTheDocument();
 });
+
+it("분류 열을 제거하고 수정일 정렬 링크를 표시한다", async () => {
+  mocks.documents.mockResolvedValueOnce({ rows: [], total: 1 });
+  render(await DocumentsPage({ searchParams: Promise.resolve({ cat: "middle" }) }));
+  expect(screen.queryByRole("columnheader", { name: "분류" })).not.toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: /수정일/ })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /수정일/ })).toHaveAttribute("href", "/documents?cat=middle&sort=modified&dir=asc&embed=1");
+});
