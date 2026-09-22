@@ -223,3 +223,25 @@ describe("정렬은 계정에 남지만 주소는 안 바꾼다", () => {
     expect(prefs).toMatch(/\.\.\.raw, grades/);
   });
 });
+
+describe("목록 규약(원장 2026-09-22 오후)", () => {
+  it("🔴 안 치는 시험은 **줄을 안 세운다** — 회색으로 칠해 두면 적을 줄을 눈으로 골라내야 한다", () => {
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toMatch(/if \(!examAppliesTo\(sel\.slot, student\.grade\)\) continue;/);
+    // 화면에도 그 갈래가 남아 있으면 안 된다(서버가 이미 뺐다).
+    expect(read("src/app/(shell)/exams/_components/score-grid.tsx")).not.toContain("해당 없음");
+  });
+
+  it("🔴 묶음 없이 전체를 한 덩어리로 세우지 않는다 — 반별/학년별 둘 뿐", () => {
+    const types = read("src/features/grades/types.ts");
+    expect(types).toMatch(/GradeGroupBy = "class" \| "grade"/);
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).toContain("selGroup");
+  });
+
+  it("🔴 성적관리 툴바엔 형광 표기를 쓰지 않는다(원장: 드롭다운마다 크기가 널뛰면 난장판)", () => {
+    const page = read("src/app/(shell)/exams/page.tsx");
+    expect(page).not.toMatch(/^\s+marker$/m);
+    expect(page).not.toContain("MARKER_TRIGGER");
+  });
+});

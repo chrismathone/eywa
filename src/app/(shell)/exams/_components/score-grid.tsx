@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { submitAction } from "@/components/forms/submit-action";
 import { examStats } from "@/features/exams/calc";
-import { notApplicableReason } from "@/features/grades/applies";
 import { nextGradeSort, type GradeSort, type GradeSortKey } from "@/features/grades/list-prefs";
 import { saveGradeScores, type GradeSaveState } from "@/features/grades/server/actions";
 import { axisValueOf } from "@/features/grades/subject-axis";
@@ -29,8 +28,9 @@ import {
  * 🔑 체크 3칸(라벨은 `GRADE_MARK_LABEL` 단일 소스)은 **성적표를 받아 오는 과정**이다 — DB엔 누른
  *    **시각**이 남고 마우스 오버로 그 날짜를 말한다.
  * 🔑 **시험없음**(원장 2026-09-22 *"학생별 시험이 없는 학생도 존재"*)은 사람이 누르는 축이고 사유를
- *    함께 받는다. 제도상 안 치는 조합(초등·중1의 중간·기말)은 **서버가 `applies:false`로** 내려주며
- *    그런 칸은 입력·버튼 없이 `해당 없음`만 선다 — 둘은 다른 축이다(하나는 사정, 하나는 제도).
+ *    함께 받는다. 제도상 안 치는 조합(초등·중1의 중간·기말)은 **서버가 목록에서 아예 뺀다**
+ *    (원장 2026-09-22: 회색으로 칠해 두면 적을 줄을 눈으로 골라내야 한다) — 여기 오는 줄은 전부
+ *    그 시험을 치는 학생이다.
  * 🔴 머리줄과 본문의 정렬을 **열마다 같게** 맞춘다(원장 제보: "TH랑 TD랑 안 맞음") — 글자 칸은 왼쪽,
  *    숫자·체크는 가운데. 폭은 `colgroup`으로 고정해 값이 들고 나도 열이 밀리지 않는다.
  * ⚠️ 저장은 **바뀐 칸만** 서버로 간다(액션이 다시 대조한다) — 여기선 '저장 안 된 칸 N개'만 센다.
@@ -56,7 +56,7 @@ export function ScoreGrid({
   const { selection: sel, rows, marksReady, noExamReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
-  const { maxScore: selMax, date: selDate, classId: selClassId, slot: selSlot } = sel;
+  const { maxScore: selMax, date: selDate, classId: selClassId, group: selGroup } = sel;
   const locked = !canWrite || !!lockReason;
 
   // 학생 단위 초기값 — 같은 학생의 두 줄은 값이 같다(서버가 학생 키로 읽어 온다).
@@ -119,15 +119,26 @@ export function ScoreGrid({
     return ids;
   }, [firstRows, parsed, marks, noExam, reasons, selMax, selDate]);
 
-  // 반 묶음 — '전체'로 볼 때 어느 반인지 알 수 있게(반 하나만 볼 땐 머리줄을 세우지 않는다).
-  // 🔴 정렬은 **묶음 안에서만** 한다(반을 섞으면 어느 반을 적고 있는지 알 수 없다).
+  // 묶음 — **반별**(기본) 또는 **학년별**(원장 2026-09-22). 🔴 묶음 없이 전체를 한 덩어리로 세우지 않는다.
+  // 🔴 정렬은 **묶음 안에서만** 한다(묶음을 섞으면 지금 어느 반·학년을 적고 있는지 알 수 없다).
   const { key: sortKey, dir: sortDir } = sort;
   const groups = useMemo(() => {
     const byClass = new Map<string, { className: string; rows: GradeSheetRow[] }>();
+    // 🔴 학년별로 묶으면 **한 학생은 한 줄**이다 — 두 반(정규+특강)을 듣는 학생은 반별 보기에서 두 줄인데,
+    //    학년 묶음에선 같은 묶음에 두 번 서서 같은 값을 두 칸으로 보여 준다(무엇이 사실인지 알 수 없고
+    //    React 키도 부딪힌다). 표에 반 열이 없으니 잃는 정보도 없다.
+    const seen = new Set<string>();
     for (const r of rows) {
-      const g = byClass.get(r.classId) ?? { className: r.className, rows: [] };
+      if (selGroup === "grade") {
+        if (seen.has(r.studentId)) continue;
+        seen.add(r.studentId);
+      }
+      // 학년별일 땐 학년이 곧 묶음이다(학년을 모르면 '학년 미상' 한 묶음으로 — 줄을 잃지 않는다).
+      const key = selGroup === "grade" ? (r.grade ?? "") : r.classId;
+      const label = selGroup === "grade" ? (r.grade ?? "학년 미상") : r.className;
+      const g = byClass.get(key) ?? { className: label, rows: [] };
       g.rows.push(r);
-      byClass.set(r.classId, g);
+      byClass.set(key, g);
     }
     // 🔴 Enter 이동에 쓰는 칸 번호는 **정렬한 뒤에** 붙인다 — 렌더 중에 카운터를 증가시키거나 정렬 전
     //    순서로 매기면 아래 칸이 화면과 어긋난다.
@@ -140,7 +151,7 @@ export function ScoreGrid({
         return { ...r, cellIndex: idx };
       }),
     }));
-  }, [rows, sortKey, sortDir]);
+  }, [rows, sortKey, sortDir, selGroup]);
 
   // 요약은 **치는 학생만** 센다 — 초등만 있는 반에서 "입력 0/204명"은 거짓 신호다(원장 제보 화면).
   const live = useMemo(() => {
@@ -307,7 +318,7 @@ export function ScoreGrid({
           <tbody className="divide-line divide-y">
             {groups.map((g) => (
               <Fragment key={g.classId}>
-                {selClassId ? null : (
+                {selClassId && selGroup === "class" ? null : (
                   <tr className="bg-bg-soft">
                     <td colSpan={7} className="text-foreground px-4 py-1.5 text-sm font-bold">
                       {g.className}
@@ -321,12 +332,13 @@ export function ScoreGrid({
                   const isNoExam = !!noExam[id];
                   const value = scores[id] ?? "";
                   const rowMarks = marks[id] ?? { ask1: false, ask2: false, received: false };
-                  // 아직 안 적은 줄만 옅은 앰버 — '시험없음'으로 눌러 둔 줄과 제도상 없는 줄은 미기입이 아니다.
-                  const missing = r.applies && !isNoExam && (parsed.get(id) ?? null) === null;
-                  const naReason = r.applies ? null : notApplicableReason(selSlot, r.grade);
+                  // 아직 안 적은 줄만 옅은 앰버 — '시험없음'으로 눌러 둔 줄은 미기입이 아니다.
+                  // (제도상 안 치는 학생은 서버가 목록에서 뺀다 — 여기 오는 줄은 전부 치는 학생이다.)
+                  const missing = !isNoExam && (parsed.get(id) ?? null) === null;
                   return (
                     <tr
-                      key={`${g.classId}:${id}`}
+                      /* 키는 **그 줄의 반**으로 — 묶음 키(학년)로 만들면 두 반 학생이 부딪힌다. */
+                      key={`${r.classId}:${id}`}
                       className={
                         !r.onRoster ? "bg-bg-soft/40" : missing ? "bg-amber-soft" : "hover:bg-bg-soft/50"
                       }
@@ -341,17 +353,7 @@ export function ScoreGrid({
                       </td>
                       <td className="text-text-dim px-4 py-2 text-left text-sm">{r.grade ?? "—"}</td>
                       <td className="px-3 py-1.5">
-                        {!r.applies ? (
-                          <div className="text-text-faint text-center text-sm" title={naReason ?? undefined}>
-                            해당 없음
-                            {r.score != null ? (
-                              <span className="num ml-1" title="예전에 적어 둔 점수입니다">
-                                ({r.score})
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5">
                             {isNoExam ? (
                               <input
                                 type="text"
@@ -407,8 +409,7 @@ export function ScoreGrid({
                             >
                               시험없음
                             </button>
-                          </div>
-                        )}
+                        </div>
                       </td>
                       {GRADE_MARK_KEYS.map((k) => {
                         const at = r.marks[k];

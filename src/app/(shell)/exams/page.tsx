@@ -19,6 +19,7 @@ import { getGradeSheet } from "@/features/grades/server/queries";
 import { loadGradeSortPref, saveGradeSortPref } from "@/features/grades/server/list-prefs";
 import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
 import { TERM_OPTIONS, termLabel, termYearOptions } from "@/features/grades/term";
+import { GRADE_GROUP_OPTIONS } from "@/features/grades/types";
 import { JjExamView } from "./_components/jj-exam-view";
 import { JjLinkSection } from "./_components/jj-link-section";
 import { JjSkeleton } from "./_components/jj-shared";
@@ -134,6 +135,7 @@ export default async function ExamsPage({
       slot: sel.slot,
       date: sel.date,
       max: String(sel.maxScore),
+      group: sel.group,
       view: jjMode ?? "",
       jjClass: jjMode ? jjClass : "",
       from: jjMode ? from : "",
@@ -191,13 +193,18 @@ export default async function ExamsPage({
     ...o,
     href: buildHref({ slot: o.value }),
   }));
-  // 반은 **형광 표기 드롭다운**이다(원장 2026-08-18 규약: "반을 고르면 그 반의 내용이 아래를 채우는"
-  // 자리에만 켠다 — 옛 시험 상세가 갖고 있던 표기를 이 화면이 이어받는다). 전체일 땐 저절로 꺼진다.
   // ⚠️ `cap`을 올려 둔다 — 반이 80개를 넘어 기본 50이면 한 묶음이 통째로 가린다([[#84]]).
+  // 🔴 형광 표기(marker)는 **쓰지 않는다**(원장 2026-09-22: *"어떤 반은 누르면 작고 어떤 반은 겁나
+  //    크게 뜨고 너무 난장판임 … 그럴 거면 통일하고"*) — 이 화면 툴바는 드롭다운이 여섯이라 하나만
+  //    28px 노란 알약이 되면 줄 높이가 반을 고를 때마다 널뛴다. 출석부·ECS·MCS의 표기는 그대로다.
   const classOptions = (sheet?.classes ?? []).map((c) => ({
     value: c.id,
     label: c.className,
     hint: c.studentCount == null ? undefined : `${c.studentCount}명`,
+  }));
+  const groupOptions: HrefSelectOption[] = GRADE_GROUP_OPTIONS.map((o) => ({
+    ...o,
+    href: buildHref({ group: o.value }),
   }));
   const viewOptions: HrefSelectOption[] = [
     { value: "", label: "성적 입력", href: buildHref({ view: "" }) },
@@ -238,9 +245,15 @@ export default async function ExamsPage({
               value={sel.classId ?? ""}
               options={classOptions}
               cap={300}
-              marker
             />
             <HrefSelect axisLabel="시험" ariaLabel="시험 선택" value={sel.slot} options={slotOptions} />
+            {/* 묶음 — 반별(기본)/학년별. 🔴 '묶음 없음'은 없다(원장: 전체를 한 덩어리로 늘어놓지 말 것). */}
+            <HrefSelect
+              axisLabel="묶음"
+              ariaLabel="묶음 기준 선택"
+              value={sel.group}
+              options={groupOptions}
+            />
             {/* 시험일·만점은 주소에 실린다 — 격자·엑셀·저장이 같은 값을 본다(한쪽만 바뀌면 시트가
                 화면과 다른 칸을 가리킨다). 클라 조각이 `__V__` 자리에 값을 끼워 이동한다. */}
             <SheetMetaFields

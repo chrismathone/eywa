@@ -187,6 +187,10 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     const student = studentById.get(e.student_id);
     const cls = classesById.get(e.class_id);
     if (!student || !cls) continue; // 이름을 모르는 줄은 세우지 않는다(누구 점수인지 못 적는다).
+    // 🔴 제도상 안 치는 시험(초등·중1의 중간·기말)은 **목록에서 뺀다**(원장 2026-09-22:
+    //    *"검색 리스트에 빼줘야지 해당없음 이렇게 칠하는게 아니라"*). 회색 줄로 남기면 204줄짜리
+    //    화면에서 실제로 적을 줄을 눈으로 골라내야 한다. 저장·엑셀도 같은 집합을 본다.
+    if (!examAppliesTo(sel.slot, student.grade)) continue;
     const cell = scoreByStudent.get(e.student_id);
     rows.push({
       studentId: student.id,
@@ -201,8 +205,9 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       marks: cell?.marks ?? EMPTY_GRADE_MARKS,
       noExam: cell?.noExam ?? false,
       noExamReason: cell?.noExamReason ?? null,
-      // 제도상 치는 시험인가 — 저장하지 않고 학년에서 도출한다(학년을 고치면 곧바로 따라온다).
-      applies: examAppliesTo(sel.slot, student.grade),
+      // 여기까지 온 줄은 전부 치는 시험이다(위에서 걸렀다) — 그래도 필드는 남긴다: 엑셀 파서가
+      // 이 값으로 "안 치는 시험에 점수가 적혀 왔다"를 판정한다.
+      applies: true,
       onRoster: isEnrollmentOnRosterOn(
         {
           startDate: e.start_date,

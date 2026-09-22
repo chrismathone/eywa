@@ -22,7 +22,24 @@ export type GradeSelection = {
   date: string;
   /** 만점(기본 100). 화면·엑셀·저장이 같은 값을 본다. */
   maxScore: number;
+  /**
+   * 줄을 **무엇으로 묶어 볼 것인가**(원장 2026-09-22: *"반별로도 볼수있지만 학년별로도 볼수있고"*).
+   * 🔴 묶음을 끄는 선택지는 없다 — *"전체 토탈에서 나열할려고하면 안됌"*. 200줄을 한 덩어리로 세우면
+   *    지금 어느 반·어느 학년을 적고 있는지 알 수 없다.
+   */
+  group: GradeGroupBy;
 };
+
+/** 묶음 기준 — 반별(기본) 또는 학년별. */
+export type GradeGroupBy = "class" | "grade";
+export const GRADE_GROUP_LABEL: Record<GradeGroupBy, string> = {
+  class: "반별",
+  grade: "학년별",
+};
+export const GRADE_GROUP_OPTIONS: { value: GradeGroupBy; label: string }[] = [
+  { value: "class", label: GRADE_GROUP_LABEL.class },
+  { value: "grade", label: GRADE_GROUP_LABEL.grade },
+];
 
 export type GradeClassOption = {
   id: string;

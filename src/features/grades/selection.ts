@@ -6,13 +6,15 @@
  *    대신 폴백한 값은 그대로 화면 드롭다운에 비치므로 사람이 바로 알아본다.
  */
 
-import type { GradeSelection } from "./types";
+import type { GradeGroupBy, GradeSelection } from "./types";
 import { GRADE_MAX_SCORE_DEFAULT, GRADE_MAX_SCORE_LIMIT } from "./types";
 import { examSlotsFor, normalizeExamSlot } from "./exam-slots";
 import { firstAxisOf, parseAxisValue } from "./subject-axis";
 import { defaultExamDate, defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "./term";
 
 export type RawGradeParams = {
+  /** 묶음 기준 — `class`(기본) · `grade`. */
+  group?: unknown;
   year?: unknown;
   term?: unknown;
   /** 과목 축 값 — `math` · `english:eie` · `english:injaewon`. */
@@ -66,7 +68,9 @@ export function resolveGradeSelection(
       ? Math.round(maxRaw)
       : GRADE_MAX_SCORE_DEFAULT;
 
-  return { year, term, subject: axis.subject, track: axis.track, classId, slot, date, maxScore };
+  const group: GradeGroupBy = one(raw.group) === "grade" ? "grade" : "class";
+
+  return { year, term, subject: axis.subject, track: axis.track, classId, slot, date, maxScore, group };
 }
 
 /** 그 과목에 실제로 있는 시험 칸인지(액션이 폼 값을 다시 볼 때). */

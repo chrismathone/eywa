@@ -164,6 +164,12 @@ describe("주소 해석", () => {
     expect(resolveGradeSelection({ subject: "math", slot: "listening" }, opts)!.slot).toBe("midterm");
   });
 
+  it("묶음은 반별이 기본이고 학년별만 따로 받는다(전체 나열은 선택지가 아니다)", () => {
+    expect(resolveGradeSelection({}, opts)!.group).toBe("class");
+    expect(resolveGradeSelection({ group: "grade" }, opts)!.group).toBe("grade");
+    expect(resolveGradeSelection({ group: "zzz" }, opts)!.group).toBe("class");
+  });
+
   it("과목이 하나도 없으면 null(화면이 '과목을 먼저 등록' 안내를 낸다)", () => {
     expect(resolveGradeSelection({}, { subjectOptions: [], todayIso: "2026-09-22" })).toBeNull();
   });
