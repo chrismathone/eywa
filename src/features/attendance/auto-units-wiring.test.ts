@@ -116,14 +116,14 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
    *    (적대 리뷰 2026-09-11). 그래서 새 행 INSERT 바로 앞의 `} else {`(바깥 else)를 경계로 삼고, 갱신 문장
    *    (`planDayCellUnits`가 정한 묶음마다 쓰는 줄)이 그 구간 안에 있는지로 경계를 확인한다.
    */
-  it("단건: 갱신 분기 전체(안쪽 else 포함)엔 없고 바깥 else(새 행)에만 — 조회는 단 한 번", () => {
+  it("단건: 갱신 분기에는 없고 두 새 행 분기(교시별·일별)에만 조회한다", () => {
     const body = fnBody(ACTIONS, "setAttendanceCell");
     const insertAt = body.indexOf("insertWithVia(supabase, row)");
     expect(insertAt).toBeGreaterThan(-1);
     // 갱신 분기 머리 — 2026-09-17부터 `overwrote`(제 행을 새로 만드는 강사 보기 칸 `createOwn`은 갱신이 아니다).
     const updateStart = body.indexOf("if (overwrote) {");
     expect(updateStart).toBeGreaterThan(-1);
-    const outerElse = body.lastIndexOf("} else {", insertAt);
+    const outerElse = body.indexOf("} else if (ownInsertSlots) {", updateStart);
     expect(outerElse).toBeGreaterThan(updateStart);
     const updateBranch = body.slice(updateStart, outerElse);
     // 경계가 맞는지부터 — 흔한 갱신 한 줄이 이 구간에 있어야 한다(구조가 바뀌면 여기서 멈춘다).
@@ -131,7 +131,7 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
     for (const bad of ["resolveAutoUnits", "autoUnitsApply", "newRowUnits", "lookedUp", "insertedAuto ="]) {
       expect(updateBranch, bad).not.toContain(bad);
     }
-    expect(count(body, "resolveAutoUnits(")).toBe(1);
+    expect(count(body, "resolveAutoUnits(")).toBe(2);
     expect(body.indexOf("resolveAutoUnits(")).toBeGreaterThan(outerElse);
     const insertBranch = body.slice(outerElse, insertAt);
     expect(insertBranch).toContain("insertedAuto =");
@@ -142,10 +142,10 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
     const body = fnBody(ACTIONS, "setAttendanceBulk");
     const updates = between(body, "for (const [via, bucket] of byVia) {", "const bulkWantsAuto =");
     expect(updates).not.toContain("session_units");
-    expect(body).toContain("inserts.map((c) => ({ classId: c.classId, date: sessionDate }))");
+    expect(body).toContain("inserts.map((c) => ({ classId: c.classId, date: sessionDate, slotStart: slot }))");
     expect(body).toContain("session_units: bulkUnitsOf(c).units,");
     // 조회한 맵이 새 행 시수의 재료로 쓰인다(조회만 하고 버리는 변이 방지).
-    expect(body).toMatch(/bulkWantsAuto \? \(bulkAuto\.get\(autoUnitsKey\(c\.classId, sessionDate\)\) \?\? null\) : undefined/);
+    expect(body).toMatch(/bulkWantsAuto \? \(bulkAuto\.get\(autoUnitsKey\(c\.classId, sessionDate, slot\)\) \?\? null\) : undefined/);
   });
 
   it("범위: 갱신 블록엔 없고 새 칸(inserts)에만", () => {
@@ -153,7 +153,7 @@ describe("② 자동값은 새 행에만 — 있는 행을 고치는 분기엔 �
     const updates = between(body, "if (updateIds.length > 0) {", "const rangeWantsAuto =");
     expect(updates).not.toContain("rangeAuto");
     expect(updates).not.toContain("rangeUnitsOf");
-    // 새 칸의 그날 전체 행 — 강사 보기가 나눠 맡는 날 제 교시로 만드는 행(2026-09-17)은 자동값을 안 받는다(영어).
+    // 새 칸의 그날 전체 행. 나눠 맡는 날은 각 교시의 자동값을 별도로 합산한다.
     expect(body).toContain("insertRows.push(withVia({ ...base, session_units: rangeUnitsOf(c).units }, via));");
   });
 

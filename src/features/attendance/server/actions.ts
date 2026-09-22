@@ -1143,11 +1143,14 @@ export async function setAttendanceCell(input: {
       }
     }
   } else if (ownInsertSlots) {
+    const ownWantsAuto = autoUnitsApply({ rawUnits: input.units, slotStart: null, status });
+    const ownAuto = ownWantsAuto ? await resolveAutoUnits(supabase,
+      ownInsertSlots.map((slotStart) => ({ classId, date: sessionDate, slotStart }))) : new Map<string, number>();
     /**
      * 🔴 강사 보기 · 그날 교시를 **다른 선생님과 나눠 맡는 날** — "그날 전체" 한 행을 만들면 교시 없는 행은 그날 수업하는
      *    모든 강사의 몫으로 읽혀(`ownsAttendanceSlot`) 남의 출석부에도 같은 숫자가 선다(원장 2026-09-17). 그래서 제 교시마다
      *    한 행씩 만들고 친 숫자는 그 교시들에 합계로 나눈다(`planDayCellUnits` — 있는 행을 고칠 때와 같은 규칙).
-     * ⚠️ 나눠 맡는 날은 교시에 담당이 적힌 반(영어)뿐이라 수학 자동 시수는 없다.
+     * 숫자를 안 골랐으면 영어 반 기준으로 각 교시의 길이를 환산한다.
      * 🔴 메모는 **새 교시 행 전부에** 단다 — 있는 제 행을 고칠 때(`patch.note`)와 같은 규칙이고, 보강 예약 취소가 "예약이 새로 찍은
      *    결석 칸"을 알아보는 판정(`bare` = 그날 모든 행에 예정 줄)이 한 행에만 있으면 거짓이 돼 결석 0이 남는다(적대 리뷰 2026-09-17).
      */
@@ -1171,7 +1174,7 @@ export async function setAttendanceCell(input: {
           slot_start: start,
           status,
           note: noteProvided ? noteVal : null,
-          session_units: plan.units.get(`new-${i}`) ?? null,
+          session_units: ownWantsAuto ? ownAuto.get(autoUnitsKey(classId, sessionDate, start)) ?? null : plan.units.get(`new-${i}`) ?? null,
           recorded_by: user.id,
         },
         via,
@@ -1181,15 +1184,15 @@ export async function setAttendanceCell(input: {
     if (wrote.error) return { error: wrote.error };
     createdSlots = ownInsertSlots;
     // 숫자를 안 고른 저장만(친 1은 합계 1이라 교시마다 0.5다 — 여기 오지 않는다).
-    if (ownInsertSlots.length > 1 && isDefaultUnitsRaw(input.units) && COUNTABLE_STATUSES.has(status)) {
-      createdDefaultTotal = ownInsertSlots.length;
+    if (ownWantsAuto) {
+      createdDefaultTotal = ownInsertSlots.reduce((sum, start) => sum + (ownAuto.get(autoUnitsKey(classId, sessionDate, start)) ?? 1), 0);
     }
   } else {
-    // 🔴 새 행 + 숫자를 안 고른 저장(원문 없음·공백)만 수학 수업 길이 자동 시수를 받는다(auto-units.ts).
+    // 새 행 + 숫자를 안 고른 저장(원문 없음·공백)만 수업 길이 자동 시수를 받는다(auto-units.ts).
     //    있는 행을 고치는 위 분기는 종전 그대로라 강사가 고친 값·명시한 1을 덮지 않는다.
     //    친 숫자는 `newRowUnits`가 원문을 **다시** 보고 먼저 쓴다(판정 인자 하나가 유일한 방어선이 아니게).
     const lookedUp = autoUnitsApply({ rawUnits: input.units, slotStart: slot, status })
-      ? ((await resolveAutoUnits(supabase, [{ classId, date: sessionDate }])).get(autoUnitsKey(classId, sessionDate)) ??
+      ? ((await resolveAutoUnits(supabase, [{ classId, date: sessionDate, slotStart: slot }])).get(autoUnitsKey(classId, sessionDate, slot)) ??
         null)
       : undefined;
     const ins = newRowUnits(input.units, unitsVal, lookedUp);
@@ -1299,7 +1302,7 @@ export async function setAttendanceCell(input: {
   // 새 행 + 숫자 안 고른 저장이면 실제 저장 시수를 돌려준다 — 화면이 낙관값을 기록에 맞춘다(auto-units.ts).
   // 빗금 칸 입력이면 옮긴 행 수를 돌려준다 — 격자가 칠한 값의 성격을 서버와 맞춘다(grid-context pushCell).
   if (transfer) return { ok: true, ghostTransfer: ghostWritten };
-  // 제 교시 행 여럿에 기본 시수 — 칸에 보일 합(교시 수)을 돌려줘 격자가 낙관값을 맞춘다(자동 시수 응답과 같은 자리).
+  // 제 교시별로 저장한 시수의 합을 돌려줘 격자가 낙관값을 맞춘다.
   if (createdDefaultTotal !== undefined) return { ok: true, autoUnits: createdDefaultTotal };
   return insertedAuto !== undefined ? { ok: true, autoUnits: insertedAuto } : { ok: true };
 }
@@ -1755,14 +1758,14 @@ export async function setAttendanceBulk(input: {
   // 수학 자동 시수 — 이번에 **새로 만드는** 칸 + 시수를 안 고른 일괄만(auto-units.ts). 갱신 대상은 위에서 끝났다.
   const bulkWantsAuto = inserts.length > 0 && autoUnitsApply({ rawUnits: input.units, slotStart: slot, status });
   const bulkAuto = bulkWantsAuto
-    ? await resolveAutoUnits(supabase, inserts.map((c) => ({ classId: c.classId, date: sessionDate })))
+    ? await resolveAutoUnits(supabase, inserts.map((c) => ({ classId: c.classId, date: sessionDate, slotStart: slot })))
     : new Map<string, number>();
   // 🔴 친 숫자가 먼저 — `newRowUnits`가 원문을 다시 본다(auto-units.ts). 새 행·응답·감사로그가 이 한 값을 쓴다.
   const bulkUnitsOf = (c: { classId: string }) =>
     newRowUnits(
       input.units,
       bulkUnitsVal,
-      bulkWantsAuto ? (bulkAuto.get(autoUnitsKey(c.classId, sessionDate)) ?? null) : undefined,
+      bulkWantsAuto ? (bulkAuto.get(autoUnitsKey(c.classId, sessionDate, slot)) ?? null) : undefined,
     );
   if (inserts.length > 0) {
     const rows = inserts.map((c) =>
@@ -2399,10 +2402,13 @@ export async function setAttendanceRange(input: {
     }
   }
   // 수학 자동 시수 — **새 칸** + 시수를 안 고른 채우기만(auto-units.ts). 날짜가 칸마다 달라 (반,날짜)로 찾는다.
-  // 범위 insert는 교시 없는 "그날 전체" 행이라 slot은 null이다.
+  // 범위의 각 칸은 하루 합이며, 나눠 맡는 날은 아래에서 제 교시별로 조회한다.
   const rangeWantsAuto = inserts.length > 0 && autoUnitsApply({ rawUnits: input.units, slotStart: null, status });
   const rangeAuto = rangeWantsAuto
-    ? await resolveAutoUnits(supabase, inserts.map((c) => ({ classId: c.classId, date: c.sessionDate })))
+    ? await resolveAutoUnits(supabase, inserts.flatMap((c) => {
+      const slots = isScoped(c) && scopeTeacherId ? scopeInsertSlots(scopeFacts?.get(c.classId), scopeTeacherId, c.sessionDate) : null;
+      return slots ? slots.map((slotStart) => ({ classId: c.classId, date: c.sessionDate, slotStart })) : [{ classId: c.classId, date: c.sessionDate }];
+    }))
     : new Map<string, number>();
   // 🔴 친 숫자가 먼저 — `newRowUnits`가 원문을 다시 본다(auto-units.ts). 새 행·응답·감사로그가 이 한 값을 쓴다.
   const rangeUnitsOf = (c: RangeCell) =>
@@ -2418,8 +2424,8 @@ export async function setAttendanceRange(input: {
    */
   const insertRows: Record<string, unknown>[] = [];
   let rangeCreatedSlotRows = 0;
-  /** 칸 → 제 교시로 새로 만든 행 수 — 응답의 낙관값 교정(기본 시수면 칸 값 = 행 수)과 자동 시수 로그 제외에 쓴다. */
-  const slotRowsByCell = new Map<string, number>();
+  /** 칸 → 제 교시별로 새로 저장한 시수의 합. */
+  const slotUnitsByCell = new Map<string, number>();
   for (const c of inserts) {
     const via = rangeViaByClass.get(c.classId) ?? "teacher";
     const base = {
@@ -2441,12 +2447,14 @@ export async function setAttendanceRange(input: {
       owns: null,
       unitsVal: unitsProvided ? unitsVal ?? (isDefaultUnitsRaw(input.units) ? null : 1) : undefined,
     });
+    let slotUnits = 0;
     slots.forEach((start, i) => {
-      const units = plan.ok ? (plan.units.get(`new-${i}`) ?? null) : null;
+      const units = rangeWantsAuto ? rangeAuto.get(autoUnitsKey(c.classId, c.sessionDate, start)) ?? null : plan.ok ? (plan.units.get(`new-${i}`) ?? null) : null;
+      slotUnits += units ?? 1;
       insertRows.push(withVia({ ...base, slot_start: start, session_units: units }, via));
       rangeCreatedSlotRows += 1;
     });
-    slotRowsByCell.set(cellKeyOf(c), slots.length);
+    slotUnitsByCell.set(cellKeyOf(c), slotUnits);
   }
   for (let i = 0; i < insertRows.length; i += CHUNK) {
     const wrote = await insertManyWithVia(supabase, insertRows.slice(i, i + CHUNK));
@@ -2515,7 +2523,7 @@ export async function setAttendanceRange(input: {
       // 수학 자동 시수가 들어간 새 칸(원장 2026-09-11) — 없으면 키도 없다.
       ...autoUnitsLogFields(
         inserts
-          .filter((c) => !slotRowsByCell.has(cellKeyOf(c)))
+          .filter((c) => !slotUnitsByCell.has(cellKeyOf(c)))
           .map((c) => rangeUnitsOf(c).auto)
           .filter((v): v is number => typeof v === "number"),
       ),
@@ -2574,9 +2582,9 @@ export async function setAttendanceRange(input: {
             ...(rangeWantsAuto ? inserts.flatMap((c) => {
             // 🔴 제 교시로 새로 만든 칸 — 교시마다 기본(1)이라 칸 값은 행 수다(1은 null로 접는다). 그날 전체 한 행 기준
             //    `rangeUnitsOf`로 답하면 격자가 1로 굳어 새로고침 전까지 합계가 틀린다(적대 리뷰 2026-09-17).
-            const n = slotRowsByCell.get(cellKeyOf(c));
+            const n = slotUnitsByCell.get(cellKeyOf(c));
             if (n !== undefined) {
-              return [{ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate, units: n > 1 ? n : null }];
+              return [{ studentId: c.studentId, classId: c.classId, sessionDate: c.sessionDate, units: n === 1 ? null : n }];
             }
             const ins = rangeUnitsOf(c);
             // 저장값 그대로(자동 판정을 탄 칸만) — 화면이 이 값으로 낙관값을 맞춘다.

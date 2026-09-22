@@ -131,7 +131,7 @@ describe("confirmed English registration apportioned by the student's scheduled 
     }
   });
 
-  it("hourly 중2 특별 stays Elsa 14 + Song 3 + JJ 7 with one shortened 40-minute period", () => {
+  it("40분이 섞인 반의 새 예정이 기존 확정을 넘으면 자동 재배분하지 않는다", () => {
     const schedules = [
       slot(null, "19:20", "20:10", { dayOfWeek: "mon", slotTeacherLabel: "JJ" }),
       slot("elsa", "20:20", "21:10", { dayOfWeek: "mon" }),
@@ -143,13 +143,14 @@ describe("confirmed English registration apportioned by the student's scheduled 
     const weights = teacherTermWeights({ ...base, englishTrack: "injaewon", className: "중고E_중2 특별", schedules, holidays: new Set(["2026-09-24", "2026-09-25", "2026-09-26"]) });
     const registered = { units: 300000 / 12500, daysBasis: false };
     const shares = ["elsa", "song", ""].map((id) => teacherTermSessions(registered, id, weights));
-    expect(shares.map((s) => s.units)).toEqual([14, 3, 7]);
-    expect(shares.every((s) => !s.allocationPending)).toBe(true);
-    expect(shares.reduce((sum, s) => sum + s.units * 12500, 0)).toBe(300000);
-    expect(attendanceUnitsDiff(14, shares[0])).toBe(0);
+    expect(weights.get("elsa")).toBe(21);
+    expect(weights.get("song")).toBe(3);
+    expect(weights.get("")).toBe(10.5);
+    expect(shares.every((s) => s.allocationPending && s.classUnits === 24)).toBe(true);
+    expect(attendanceUnitsDiff(14, shares[0])).toBeNull();
   });
 
-  it("hourly 중2 정규 C is teacher 16 + JJ 8 despite shortened final periods", () => {
+  it("40분 교시가 있는 반의 교사·JJ도 동일한 40분 기준으로 환산한다", () => {
     const schedules = (["tue", "fri"] as const).flatMap((dayOfWeek) => [
       slot(null, "18:20", "19:20", { dayOfWeek, slotTeacherLabel: "JJ" }),
       slot("home", "19:20", "20:10", { dayOfWeek }),
@@ -158,8 +159,8 @@ describe("confirmed English registration apportioned by the student's scheduled 
     const weights = teacherTermWeights({ ...base, englishTrack: "injaewon", className: "중등E_중2 정규 C",
       schedules, holidays: new Set(["2026-09-24", "2026-09-25", "2026-09-26"]),
     });
-    expect([...weights]).toEqual([["", 8], ["home", 16]]);
-    expect(teacherTermSessions({ units: 24, daysBasis: false }, "home", weights)).toEqual({ units: 16, daysBasis: false, classUnits: 24 });
+    expect([...weights]).toEqual([["", 12], ["home", 20]]);
+    expect(teacherTermSessions({ units: 24, daysBasis: false }, "home", weights)).toMatchObject({ units: 24, classUnits: 24, allocationPending: true });
   });
 
   it("keeps an exact teacher + JJ split unchanged by teacher-id sorting", () => {

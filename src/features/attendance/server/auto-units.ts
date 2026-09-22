@@ -1,6 +1,6 @@
 import "server-only";
 /**
- * 수학 자동 시수 **서버 조회** — 출결 INSERT 경로 전부(단건·일괄·범위·일별 폼·키오스크)가 이 함수 하나를 지난다.
+ * 수학·영어 자동 시수 서버 조회 — 출결 INSERT 경로(단건·일괄·범위·일별 폼·키오스크)가 이 함수를 쓴다.
  * 규칙(과목·분 → 시수)은 순수 모듈 [`auto-units.ts`](../auto-units.ts) 한 벌.
  *
  * 🔴 **조회가 실패하면 자동값을 넣지 않는다**(빈 맵 = 종전처럼 null 저장) + console.error. 돈에 닿는 기본값을
@@ -35,12 +35,12 @@ type ScheduleRow = {
 };
 
 /**
- * (반, 날짜) 칸들 → `autoUnitsKey(반, 날짜)` → 자동 시수. 대상이 아니거나 1이면 키가 없다.
- * 호출부는 `autoUnitsApply`(숫자 안 고름 · 그날 전체 행 · 소비 상태)가 참인 **새 행**에 대해서만 부른다.
+ * (반, 날짜, 선택 교시) → 자동 시수. 대상이 아니거나 1이면 키가 없다.
+ * 호출부는 `autoUnitsApply`(숫자 안 고름 · 소비 상태)가 참인 새 행에 대해서만 부른다.
  */
 export async function resolveAutoUnits(
   client: SupabaseClient,
-  cells: readonly { classId: string; date: string }[],
+  cells: readonly { classId: string; date: string; slotStart?: string | null }[],
   opts: { tenantId?: string } = {},
 ): Promise<Map<string, number>> {
   const valid = cells.filter((c) => !!c.classId && YMD.test(c.date));

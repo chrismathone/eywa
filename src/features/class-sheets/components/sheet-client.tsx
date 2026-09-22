@@ -550,9 +550,7 @@ export function SheetClient({
         // 제자리에서 고친다. 없으면 이 칸의 교시로 새로 만든다.
         // ⚠️ 옛 null 행에 칸의 교시를 보내면 새 행이 하나 더 생겨 같은 날 시수가 두 번 잡힌다.
         const dbSlot = before ? before.slot : slotStart;
-        // 🔴 유닛 자동값은 **쓰지 않는다**(원장 2026-08-10: *"eie든 인재원 수업이든 다 1 / 분에 상관없이
-        //    다 1로 처리할것"*). 2026-08-06의 트랙별 자동값(EiE=교시 수, 인재원=총 분÷60)은 폐기 —
-        //    60분+50분짜리 날이 1.8로 찍혀 "하나당 1"이라는 셈과 어긋났다. 이제 새 기록은 전부 기본 1(=null).
+        // 새 교시의 자동 시수는 공용 서버 액션이 배치·반 기준으로 정하고 응답으로 돌려준다(2026-09-22).
         // ⚠️ `unitsByDate`는 **취소 경로에만** 남는다(아래 clearAttendance) — 옛 자동값(1.8·4 등)이 박힌
         //    기록을 계속 되돌릴 수 있어야 하기 때문(0187a 계약). 여기서 되살려 쓰지 말 것.
         // ⚠️ 낙관 표시값은 **서버와 같은 파서**로 만든다. `Number(units)`로 대충 바꾸면 쉼표 소수점("2,5" —
@@ -565,15 +563,11 @@ export function SheetClient({
               ? parsedUnits.value
               : (before?.units ?? null) // 형식 오류는 서버가 거절한다 → 화면은 안 건드린다
             : (before?.units ?? null);
+        const optimistic = { status, note: note === undefined ? (before?.note ?? null) : note, units: nextUnits, slot: dbSlot };
         setAttendance((prev) => ({
           ...prev,
           // note를 안 넘긴 저장은 기존 사유를 그대로 둔다 — 서버 규약(undefined=유지)과 일치시킨다.
-          [key]: {
-            status,
-            note: note === undefined ? (before?.note ?? null) : note,
-            units: nextUnits,
-            slot: dbSlot,
-          },
+          [key]: optimistic,
         }));
         const save = setAttendanceCell({
           classId,
@@ -582,7 +576,7 @@ export function SheetClient({
           slotStart: dbSlot,
           status,
           ...(note === undefined ? {} : { note }),
-          // 유닛은 **사람이 고쳤을 때만** 보낸다(그 외엔 서버가 기존 값 유지 — 새 기록은 기본 1).
+          // 유닛은 사람이 고쳤을 때만 보낸다. 서버는 기존 값을 보존하고 새 기록만 자동 환산한다.
           ...(units !== undefined ? { units } : {}),
         }).then((r) => {
           if ("error" in r) {
@@ -593,6 +587,9 @@ export function SheetClient({
               return next;
             });
             toast.error(r.error);
+          } else if ("autoUnits" in r) {
+            // 응답을 기다리는 동안 다시 입력한 칸은 덮지 않는다.
+            setAttendance((prev) => prev[key] === optimistic ? { ...prev, [key]: { ...optimistic, units: r.autoUnits ?? null } } : prev);
           }
         });
         trackAttendanceSave(save);

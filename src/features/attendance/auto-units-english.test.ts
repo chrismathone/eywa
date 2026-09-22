@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoUnitsOn, unitsFromMinutes, usesFortyMinuteEnglishUnits, type AutoUnitsSchedule } from "./auto-units";
+import { autoUnitsOn, planAutoUnits, unitsFromMinutes, usesFortyMinuteEnglishUnits, type AutoUnitsSchedule } from "./auto-units";
 
 const lesson = (extra: Partial<AutoUnitsSchedule> = {}): AutoUnitsSchedule => ({
   dayOfWeek: "tue", startTime: "15:00", endTime: "15:40", validFrom: "2026-09-01", validTo: null,
@@ -7,6 +7,18 @@ const lesson = (extra: Partial<AutoUnitsSchedule> = {}): AutoUnitsSchedule => ({
 });
 
 describe("영어 트랙 시수", () => {
+  it("ECS는 해당 교시만 환산하고 JJ·다른 요일의 40분 기준을 반영한다", () => {
+    const schedules = [lesson({ endTime: "16:00" }), lesson({ startTime: "16:00", endTime: "17:00", slotTeacherLabel: "JJ" }),
+      lesson({ dayOfWeek: "wed" }), lesson({ startTime: "17:00", endTime: "18:00", slotTeacherLabel: "*LAB", labSeparate: true })];
+    for (const start of ["15:00", "16:00:00"]) expect(autoUnitsOn("2026-09-08", schedules, "injaewon", "브릿지 A", start)).toBe(1.5);
+    expect(autoUnitsOn("2026-09-08", schedules, "injaewon", "브릿지 A", "16:20")).toBeNull();
+    expect(autoUnitsOn("2026-09-08", schedules, "injaewon", "브릿지 A", "17:00")).toBeNull();
+    expect(autoUnitsOn("2026-09-08", schedules, "math", "", "15:00")).toBeNull();
+    const cells = ["15:00", "16:00", "16:20"].map((slotStart) => ({ classId: "c", date: "2026-09-08", slotStart }));
+    expect([...planAutoUnits(cells, new Map([["c", "english"]]), new Map([["c", schedules]]))]).toEqual([
+      ["c|2026-09-08|15:00", 1.5], ["c|2026-09-08|16:00", 1.5],
+    ]);
+  });
   it("EiE는 40분당 1시수로 계산한다", () => {
     expect(unitsFromMinutes(40, "eie")).toBeNull();
     expect(unitsFromMinutes(60, "eie")).toBe(1.5);
@@ -22,11 +34,11 @@ describe("영어 트랙 시수", () => {
     expect(unitsFromMinutes(60, "math")).toBe(0.5);
   });
 
-  it("50분 교시를 쓰는 인재원 반은 단축 40분 교시가 섞여도 시간 단위다", () => {
+  it("40분 교시가 있으면 50분 교시가 섞여도 40분 기준을 쓴다", () => {
     const schedules = [lesson({ startTime: "19:20", endTime: "20:10" }),
       lesson({ startTime: "20:20", endTime: "21:00" })];
-    expect(usesFortyMinuteEnglishUnits("2026-09-08", schedules, "injaewon", "중등E_중2 정규 C")).toBe(false);
-    expect(autoUnitsOn("2026-09-08", schedules, "injaewon")).toBe(2);
+    expect(usesFortyMinuteEnglishUnits("2026-09-08", schedules, "injaewon", "중등E_중2 정규 C")).toBe(true);
+    expect(autoUnitsOn("2026-09-08", schedules, "injaewon")).toBe(2.5);
   });
 
   it("각 50분 교시를 60분으로 인정한 뒤 합산한다", () => {

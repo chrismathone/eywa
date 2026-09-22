@@ -59,6 +59,19 @@ const threeBy55 = (classId: string) => [
 afterEach(() => vi.restoreAllMocks());
 
 describe("resolveAutoUnits — 서버 조회(과목·배치) → (반|날짜) → 자동 시수", () => {
+  it("하루 합·각 교시를 구분하고 JJ 60분도 1.5, 시간표에 없는 교시는 기본값으로 둔다", async () => {
+    const { client } = fakeClient({
+      classes: { data: [{ id: ENG, subject: "english", english_track: "injaewon", class_name: "브릿지 A" }] },
+      class_schedules: { data: [sched(ENG, "15:00", "16:00"), sched(ENG, "16:00", "17:00", { slot_teacher_label: "JJ" })] },
+    });
+    const got = await resolveAutoUnits(client, [
+      { classId: ENG, date: THU },
+      ...["15:00:00", "16:00", "16:20"].map((slotStart) => ({ classId: ENG, date: THU, slotStart })),
+    ]);
+    expect(Object.fromEntries(got)).toEqual({
+      [`${ENG}|${THU}`]: 1.5, [`${ENG}|${THU}|15:00`]: 1.5, [`${ENG}|${THU}|16:00`]: 1.5,
+    });
+  });
   it("다른 요일의 40분 교시로 브릿지를 판별하고 60분 수업을 1.5U로 계산한다", async () => {
     const { client } = fakeClient({
       classes: { data: [{ id: ENG, subject: "english", english_track: "injaewon", class_name: "중등E_초5 MED" }] },
@@ -68,7 +81,7 @@ describe("resolveAutoUnits — 서버 조회(과목·배치) → (반|날짜) �
     expect(got.get(`${ENG}|${THU}`)).toBe(1.5);
   });
 
-  it("수학 165분 = 1.5 · 영어 반은 같은 배치여도 없다", async () => {
+  it("수학 165분 = 1.5 · 미분류 영어의 55분 3교시 = 3", async () => {
     const { client } = fakeClient({
       classes: { data: [{ id: MATH, subject: "math" }, { id: ENG, subject: "english" }] },
       class_schedules: { data: [...threeBy55(MATH), ...threeBy55(ENG)] },
@@ -78,7 +91,7 @@ describe("resolveAutoUnits — 서버 조회(과목·배치) → (반|날짜) �
       { classId: ENG, date: THU },
     ]);
     expect(got.get(`${MATH}|${THU}`)).toBe(1.5);
-    expect(got.has(`${ENG}|${THU}`)).toBe(false);
+    expect(got.get(`${ENG}|${THU}`)).toBe(3);
   });
 
   it("🔴 admin 클라이언트용 tenantId를 주면 **두 조회 모두** tenant_id로 좁힌다(RLS 우회 경로)", async () => {

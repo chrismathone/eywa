@@ -119,8 +119,8 @@ describe("autoUnitsApply — 새 행에 자동값을 받을 수 있는 저장", 
     }
   });
 
-  it("교시별 행(영어·자리 축)은 대상이 아니다", () => {
-    expect(autoUnitsApply({ rawUnits: "", slotStart: "16:20", status: "present" })).toBe(false);
+  it("교시별 새 행도 서버가 과목·길이를 확인해 자동 환산한다", () => {
+    expect(autoUnitsApply({ rawUnits: "", slotStart: "16:20", status: "present" })).toBe(true);
   });
 
   it("결석·공결·지우기엔 시수가 없다", () => {
@@ -163,7 +163,7 @@ describe("planAutoUnits — 과목·배치로 칸별 값", () => {
     [ENG, threeBy55("thu")],
   ]);
 
-  it("🔴 수학만 — 같은 165분이어도 영어 반은 자동값이 없다(원장 2026-08-10 ECS '다 1')", () => {
+  it("수학 165분은 1.5, 영어 55분 3교시는 3이다", () => {
     const got = planAutoUnits(
       [
         { classId: MATH, date: THU },
@@ -173,7 +173,7 @@ describe("planAutoUnits — 과목·배치로 칸별 값", () => {
       schedulesOf,
     );
     expect(got.get(autoUnitsKey(MATH, THU))).toBe(1.5);
-    expect(got.has(autoUnitsKey(ENG, THU))).toBe(false);
+    expect(got.get(autoUnitsKey(ENG, THU))).toBe(3);
   });
 
   it("조회에서 빠진(모르는) 반은 값을 지어내지 않는다", () => {

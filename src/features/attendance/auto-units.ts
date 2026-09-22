@@ -13,8 +13,8 @@
 //    자동값이 덮으면 "입력된 숫자가 입력되도록"(원장 2026-09-01)이 깨진다.
 // ⚠️ 9월분 소급 보정은 `scripts/_oneoff/backfill-math-auto-units.mjs`(드라이런 기본) — 규칙은
 //    `math-auto-units-rules.mjs`가 같은 식을 들고 있고 패리티 테스트가 두 벌이 갈리지 않게 잠근다.
-// 영어는 english_track을 넘기는 경로에서만 환산한다. 2026-09-21 정정: 인재원은 60분당 1,
-// EiE는 40분당 1이다. 수학의 60분당 0.5와 구분한다.
+// 영어(2026-09-22): EiE·브릿지·유효한 40분 수업이 있는 반은 40분당 1,
+// 나머지 인재원은 60분당 1(50분도 1). 수학의 60분당 0.5와 구분한다.
 
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import type { DowKey } from "@/features/class-sheets/lib/week";
@@ -75,9 +75,7 @@ export function usesFortyMinuteEnglishUnits(
   const durations = schedules.filter((s) => s.validFrom <= date && (!s.validTo || s.validTo >= date)
     && !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate) && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? ""))
     .map((s) => minutes(s.endTime) - minutes(s.startTime));
-  // Injaewon hourly classes use 50-minute teaching periods. A shortened period in
-  // that timetable (e.g. 20:20–21:00) must not reclassify the whole class as bridge.
-  if (durations.some((duration) => duration >= 50 && duration < 60)) return false;
+  // 40분 수업이 있는 반은 요일과 다른 교시의 길이에 관계없이 40분 기준(2026-09-22).
   return durations.includes(40);
 }
 
@@ -103,7 +101,7 @@ export function toAutoUnitsSchedule(row: {
 }
 
 /**
- * 그 날짜 그 반의 자동 시수 — 그날 유효한 배치 중 **자리(LAB·JJ) 제외 · 같은 시작 시각은 한 번**으로 분을 더한다.
+ * 그 날짜 그 반의 자동 시수 — 일별 합은 자리(LAB·JJ)를 제외하고, 영어 교시별 저장은 지정 교시(JJ 포함)만 쓴다.
  * 분 계산은 ECS 유닛 자동값과 **같은 함수**(`liveSlotMinutesOn`)다. null = 자동 안 함(배치 없음·1).
  */
 export function autoUnitsOn(
@@ -111,8 +109,14 @@ export function autoUnitsOn(
   schedules: readonly AutoUnitsSchedule[],
   track: AutoUnitsTrack = "math",
   className = "",
+  slotStart?: string | null,
 ): number | null {
-  const periods = [...liveSlotMinutesOn(date, schedules).values()].filter((minutes) => minutes > 0);
+  // 영어 교시 저장은 해당 교시만 환산한다. JJ도 그 교시의 출석 기록이며 별도 LAB은 제외한다.
+  if (slotStart && track === "math") return null;
+  const eligible = slotStart ? schedules.filter((s) => !isLabSeparateSlot(s.slotTeacherLabel, s.labSeparate)
+    && !/^\s*\*\s*LAB\b/i.test(s.slotTeacherLabel ?? "")).map((s) => ({ ...s, slotTeacherLabel: null })) : schedules;
+  const byStart = liveSlotMinutesOn(date, eligible);
+  const periods = (slotStart ? [byStart.get(slotStart.slice(0, 5)) ?? 0] : [...byStart.values()]).filter((minutes) => minutes > 0);
   if (!periods.length) return null;
   const basis = track !== "math" && usesFortyMinuteEnglishUnits(date, schedules, track, className) ? "eie" : track;
   if (basis === "math") return unitsFromMinutes(periods.reduce((sum, minutes) => sum + minutes, 0), basis);
@@ -122,11 +126,11 @@ export function autoUnitsOn(
 }
 
 /**
- * 이 저장이 자동값을 받을 수 있는가 — 셋 다 필요하다.
+ * 이 저장이 자동값을 받을 수 있는가 — 숫자를 안 고른 소비 상태의 새 행에만 적용한다.
  *  ① 사람이 숫자를 **안 골랐다**(원문이 없거나 공백 — `isDefaultUnitsRaw`. "1"은 명시다)
- *  ② **그날 전체** 행이다(`slot_start` null — 교시별 행은 영어·자리의 축이라 대상이 아니다)
+ *  ② 교시가 있으면 서버가 영어의 해당 교시만, 없으면 하루 수업을 환산한다.
  *  ③ 시수를 **소비하는 상태**다(출석·지각·조퇴·보강 — 결석·공결엔 시수가 없다)
- * ⚠️ 과목·배치(수업 길이)는 서버가 본다(`resolveAutoUnits`) — 여기서 true여도 영어 반이면 값이 없다.
+ * ⚠️ 과목·배치(수업 길이)는 서버가 본다(`resolveAutoUnits`) — 배치가 없거나 수학 교시별 행이면 값이 없다.
  * ⚠️ **새 행을 만들 때만** 부른다. 있는 행을 고치는 저장에 쓰지 말 것(강사가 고친 값을 덮는다).
  */
 export function autoUnitsApply(input: {
@@ -136,7 +140,6 @@ export function autoUnitsApply(input: {
 }): boolean {
   return (
     isDefaultUnitsRaw(input.rawUnits) &&
-    !input.slotStart &&
     !!input.status &&
     COUNTABLE_STATUSES.has(input.status)
   );
@@ -148,7 +151,7 @@ export type NewRowUnits = {
   units: number | null;
   /**
    * 자동 판정을 탄 새 행이면 실제로 들어간 값(null = 1 — 대상 아님·조회 실패). 사람이 숫자를 골랐거나
-   * 판정 밖(결석·교시별 행)이면 undefined. 호출부는 이 값으로 화면·감사로그를 **저장값과 같게** 맞춘다.
+   * 판정 밖(결석 등)이면 undefined. 호출부는 이 값으로 화면·감사로그를 **저장값과 같게** 맞춘다.
    */
   auto: number | null | undefined;
 };
@@ -168,9 +171,9 @@ export function newRowUnits(
   return { units: auto, auto };
 }
 
-/** (반, 날짜) 조회 키. */
-export function autoUnitsKey(classId: string, date: string): string {
-  return `${classId}|${date}`;
+/** (반, 날짜, 선택 교시) 조회 키 — 하루 합과 개별 교시 값을 분리한다. */
+export function autoUnitsKey(classId: string, date: string, slotStart?: string | null): string {
+  return `${classId}|${date}${slotStart ? `|${slotStart.slice(0, 5)}` : ""}`;
 }
 
 /**
@@ -178,7 +181,7 @@ export function autoUnitsKey(classId: string, date: string): string {
  * `subjectOf`에 없는 반(조회에서 빠진 반)도 키가 없다 — 모르는 반에 돈 값을 지어내지 않는다.
  */
 export function planAutoUnits(
-  cells: readonly { classId: string; date: string }[],
+  cells: readonly { classId: string; date: string; slotStart?: string | null }[],
   subjectOf: ReadonlyMap<string, string | null>,
   schedulesOf: ReadonlyMap<string, readonly AutoUnitsSchedule[]>,
   trackOf: ReadonlyMap<string, AutoUnitsTrack | null> = new Map(),
@@ -186,11 +189,11 @@ export function planAutoUnits(
 ): Map<string, number> {
   const out = new Map<string, number>();
   for (const c of cells) {
-    const key = autoUnitsKey(c.classId, c.date);
+    const key = autoUnitsKey(c.classId, c.date, c.slotStart);
     if (out.has(key)) continue;
-    const track = trackOf.get(c.classId) ?? null;
+    const track = subjectOf.get(c.classId) === "english" ? trackOf.get(c.classId) ?? "injaewon" : null;
     if (!isAutoUnitsSubject(subjectOf.get(c.classId)) && !track) continue;
-    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math", classNameOf.get(c.classId));
+    const units = autoUnitsOn(c.date, schedulesOf.get(c.classId) ?? [], track ?? "math", classNameOf.get(c.classId), c.slotStart);
     if (units !== null) out.set(key, units);
   }
   return out;
