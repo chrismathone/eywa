@@ -97,8 +97,8 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
 
   return (
     <tr className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""}`}>
-      <td className="px-4 py-2" title={doc.categoryLabel}>
-        <div className="flex min-w-0 items-center gap-2">
+      <td className="max-w-0 px-4 py-2" title={doc.categoryLabel}>
+        <div className="group/name flex min-w-0 items-center gap-2">
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.8} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
           {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산).
@@ -128,7 +128,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
             </WindowLink>
           )}
           {doc.kind === "file" && isPreviewableType(doc.typeLabel) ? (
-            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-xs font-bold whitespace-nowrap">
+            <span className="text-primary bg-primary/10 shrink-0 rounded px-1.5 py-0.5 text-xs font-bold whitespace-nowrap group-has-[form]/name:hidden">
               미리보기
             </span>
           ) : null}

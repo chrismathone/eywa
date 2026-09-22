@@ -62,21 +62,23 @@ export function InlineRename({ enabled, name, suffix = "", maxLength, onSave, ch
     }}
     onDoubleClickCapture={(e) => { if (enabled && !editing) { e.preventDefault(); e.stopPropagation(); begin(); } }}
     onKeyDown={(e) => { if (enabled && !editing && e.key === "F2") { e.preventDefault(); begin(); } }}>
-    {editing ? <form className="space-y-1" onSubmit={(e) => { e.preventDefault(); save(); }}
+    {editing ? <form className="min-w-0 max-w-full" onSubmit={(e) => { e.preventDefault(); save(); }}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null) && !error) save(); }}>
       <div className="flex min-w-0 items-center gap-1">
-        <input value={draft} onChange={(e) => { setDraft(e.target.value); setError(null); }} maxLength={maxLength}
+        {/* 같은 글꼴의 숨은 텍스트로 내용 너비를 잡고, 공간이 부족하면 입력칸만 줄인다. */}
+        <span className="inline-grid min-w-0 max-w-full shrink items-center text-sm">
+          <span aria-hidden className="invisible col-start-1 row-start-1 overflow-hidden px-1.5 whitespace-pre">{draft || " "} </span>
+          <input value={draft} onChange={(e) => { setDraft(e.target.value); setError(null); }} maxLength={maxLength} size={1}
           autoFocus onFocus={(e) => e.target.select()} disabled={pending} aria-label="새 이름"
-          className="min-w-0 w-full rounded border border-primary bg-background px-1.5 py-1 text-sm text-foreground outline-none"
+          className="col-start-1 row-start-1 h-6 min-w-0 w-full rounded border border-primary bg-background px-1.5 text-sm text-foreground outline-none"
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing || e.keyCode === 229) { if (e.key === "Enter") e.preventDefault(); return; }
             if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
           }} />
+        </span>
         {suffix ? <span className="shrink-0 text-xs text-text-dim" title="확장자는 변경할 수 없습니다">{suffix}</span> : null}
-      </div>
-      <div className="flex items-center justify-end gap-1">
-        <button type="submit" disabled={pending} aria-label="이름 저장" className="rounded p-1 text-primary disabled:opacity-40"><Check className="size-3.5" /></button>
-        <button type="button" disabled={pending} aria-label="이름 변경 취소" onMouseDown={(e) => e.preventDefault()} onClick={cancel} className="rounded p-1 text-text-dim disabled:opacity-40"><X className="size-3.5" /></button>
+        <button type="submit" disabled={pending} aria-label="이름 저장" title="저장 (Enter)" className="shrink-0 rounded p-0.5 text-primary disabled:opacity-40"><Check className="size-3.5" /></button>
+        <button type="button" disabled={pending} aria-label="이름 변경 취소" title="취소 (Esc)" onMouseDown={(e) => e.preventDefault()} onClick={cancel} className="shrink-0 rounded p-0.5 text-text-dim disabled:opacity-40"><X className="size-3.5" /></button>
       </div>
       {error ? <p role="alert" className="text-xs text-danger whitespace-normal">{error}</p> : null}
     </form> : children}

@@ -18,7 +18,7 @@ export function LinkedDocumentRow({ doc }: { doc: LinkedDocRow }) {
   const openPrint = usePrintWindow();
   return (
     <tr className="border-line hover:bg-bg-soft/50 border-t transition-colors">
-      <td className="px-4 py-2">
+      <td className="max-w-0 px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <ClipboardList className="text-rose size-4 shrink-0" />
           {doc.printId ? (
