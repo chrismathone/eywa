@@ -6,8 +6,8 @@ import s from "./_overview/overview.module.css";
 // ⚠️ **실제 화면의 뼈대를 그대로 따른다** — 스켈레톤이 더 크거나 작으면 로드가 끝나는 순간 화면이 튄다.
 // 🔑 격자·줄 높이를 손으로 다시 짓지 않는다: 실제 CSS 모듈 클래스(.header·.identity·.kpis·.kpiBody·.grid·.panel…)에
 //    **같은 길이의 글자를 투명하게** 넣어 줄 높이를 그대로 얻는다(창 폭에 따른 열 수도 컨테이너 쿼리 한 벌로 같아진다).
-// 구조(원장 2026-09-11): 머리 → KPI 여섯 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(여덟,
-// 셋째는 두 줄) → '수업과 학원 운영'(여덟) → 꼬리. 패널 속 높이는 그 패널의 흔한 내용 높이에 맞춘 근삿값이다.
+// 구조: 머리 → KPI 일곱 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(일곱,
+// 셋째는 두 줄 + 학습·보고와 학생 상담 한 쌍) → '수업과 학원 운영'(여덟) → 꼬리. 패널 속 높이는 흔한 내용 높이의 근삿값이다.
 import type { CSSProperties } from "react";
 
 const T = "text-transparent bg-bg-soft animate-pulse rounded";
@@ -32,7 +32,7 @@ const KPI = [
 
 type PanelShape = { title: string; note: string; body: number; wide?: boolean; className?: string };
 
-const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
+const SECTIONS: { title: string; note: string; panels: PanelShape[]; followups?: PanelShape[] }[] = [
   {
     title: "학원 운영 한눈에",
     note: "재원 · 출결 · 수납 · 신규생",
@@ -56,8 +56,10 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[] }[] = [
       { title: "상담 진행", note: "상담일 기준 최근 30일 · 접수 → 수업 시작", body: 230 },
       { title: "최근 14일 등원율", note: "(출석 + 지각) / 유효 출결 칸", body: 200 },
       { title: "반복 결석 학생", note: "최근 14일 · 사전 통보 제외", body: 180 },
+    ],
+    followups: [
       { title: "학습 · 학부모 보고", note: "수업보고서 기준", body: 200 },
-      { title: "학생 상담", note: "전체 상담 기록 · 후속조치", body: 180, className: s.consultationPanel },
+      { title: "학생 상담", note: "전체 상담 기록 · 후속조치", body: 180 },
     ],
   },
   {
@@ -154,6 +156,13 @@ export default function DashboardLoading() {
               {section.panels.map((panel) => (
                 <PanelSkeleton key={panel.title} {...panel} />
               ))}
+              {section.followups && (
+                <div className={s.followupPanels}>
+                  {section.followups.map((panel) => (
+                    <PanelSkeleton key={panel.title} {...panel} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}

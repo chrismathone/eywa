@@ -747,105 +747,108 @@ export function Overview({
               </>
             )}
           </Panel>
-          <Panel
-            title="학습 · 학부모 보고"
-            note={
-              homework
-                ? `최근 ${homework.windowDays}일 숙제 · ${subjects(homework.subjects)}`
-                : "수업보고서 기준"
-            }
-            href="/lesson-reports?tab=list"
-            sections={[v.homework, v.unread]}
-          >
-            {homework && (
-              <>
-                <InlineStat
-                  label="숙제 수행률 60% 미만 학생"
-                  value={
-                    <>
-                      {number(homework.students)}
-                      <small>명</small>
-                    </>
-                  }
-                  danger={homework.students > 0}
-                />
-                <Bars
-                  data={[
-                    {
-                      label: "미제출 학생",
-                      value: homework.notSubmitted,
-                      color: COLORS[3],
-                    },
-                    {
-                      label: "수행률 0% 학생",
-                      value: homework.zero,
-                      color: "#bc3838",
-                    },
-                  ]}
-                />
-              </>
-            )}
-            {unread && (
-              <div className={s.separated}>
-                <InlineStat
-                  label={`수업보고서 미확인 건 (${unread.graceHours}시간 초과)`}
-                  value={
-                    <>
-                      {number(unread.reports)}
-                      <small>건</small>
-                    </>
-                  }
-                />
-                <p className={s.footnote}>
-                  최근 {unread.windowDays}일 · {subjects(unread.subjects)}
-                </p>
-              </div>
-            )}
-          </Panel>
-          <Panel
-            title="학생 상담"
-            className={s.consultationPanel}
-            note="전체 상담 기록 · 후속조치"
-            href="/consultations"
-            sections={[v.consultations]}
-          >
-            {consultations && (
-              <>
-                <InlineStat
-                  label="최근 7일 상담"
-                  value={
-                    <>
-                      {number(consultations.lastWeek)}
-                      <small>건</small>
-                    </>
-                  }
-                />
-                <Bars
-                  data={[
-                    {
-                      label: "기한 경과",
-                      value: consultations.overdueFollowUps,
-                      color: "#bc3838",
-                    },
-                    {
-                      label: "기한 예정",
-                      value:
-                        consultations.pendingFollowUps -
-                        consultations.overdueFollowUps,
-                      color: COLORS[0],
-                    },
-                  ]}
-                  unit="건"
-                />
-                <div className={s.smallStats}>
-                  <span>
-                    전체 기록 <b>{number(consultations.total)}건</b>
-                  </span>
-                  <Jump href="/consultations?urg=overdue">후속조치 확인</Jump>
-                </div>
-              </>
-            )}
-          </Panel>
+          {(v.homework || v.unread || v.consultations) && (
+            <div className={s.followupPanels}>
+              <Panel
+                title="학습 · 학부모 보고"
+                note={
+                  homework
+                    ? `최근 ${homework.windowDays}일 숙제 · ${subjects(homework.subjects)}`
+                    : "수업보고서 기준"
+                }
+                href="/lesson-reports?tab=list"
+                sections={[v.homework, v.unread]}
+              >
+                {homework && (
+                  <>
+                    <InlineStat
+                      label="숙제 수행률 60% 미만 학생"
+                      value={
+                        <>
+                          {number(homework.students)}
+                          <small>명</small>
+                        </>
+                      }
+                      danger={homework.students > 0}
+                    />
+                    <Bars
+                      data={[
+                        {
+                          label: "미제출 학생",
+                          value: homework.notSubmitted,
+                          color: COLORS[3],
+                        },
+                        {
+                          label: "수행률 0% 학생",
+                          value: homework.zero,
+                          color: "#bc3838",
+                        },
+                      ]}
+                    />
+                  </>
+                )}
+                {unread && (
+                  <div className={s.separated}>
+                    <InlineStat
+                      label={`수업보고서 미확인 건 (${unread.graceHours}시간 초과)`}
+                      value={
+                        <>
+                          {number(unread.reports)}
+                          <small>건</small>
+                        </>
+                      }
+                    />
+                    <p className={s.footnote}>
+                      최근 {unread.windowDays}일 · {subjects(unread.subjects)}
+                    </p>
+                  </div>
+                )}
+              </Panel>
+              <Panel
+                title="학생 상담"
+                note="전체 상담 기록 · 후속조치"
+                href="/consultations"
+                sections={[v.consultations]}
+              >
+                {consultations && (
+                  <>
+                    <InlineStat
+                      label="최근 7일 상담"
+                      value={
+                        <>
+                          {number(consultations.lastWeek)}
+                          <small>건</small>
+                        </>
+                      }
+                    />
+                    <Bars
+                      data={[
+                        {
+                          label: "기한 경과",
+                          value: consultations.overdueFollowUps,
+                          color: "#bc3838",
+                        },
+                        {
+                          label: "기한 예정",
+                          value:
+                            consultations.pendingFollowUps -
+                            consultations.overdueFollowUps,
+                          color: COLORS[0],
+                        },
+                      ]}
+                      unit="건"
+                    />
+                    <div className={s.smallStats}>
+                      <span>
+                        전체 기록 <b>{number(consultations.total)}건</b>
+                      </span>
+                      <Jump href="/consultations?urg=overdue">후속조치 확인</Jump>
+                    </div>
+                  </>
+                )}
+              </Panel>
+            </div>
+          )}
         </div>
 
         <div id="operations-overview" className={s.sectionLine}>
