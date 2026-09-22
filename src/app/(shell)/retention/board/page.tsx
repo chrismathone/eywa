@@ -118,45 +118,45 @@ export default async function RetentionBoardPage({
 
       {/* ⚠️ 툴바엔 카드 껍데기를 두지 않는다(앱 전역 툴바 규약) — 컨트롤이 저마다 테두리를 갖고 있어
           줄은 그대로 읽히고, 아래 목록 카드와 선이 겹치지 않는다. */}
-      <div className="space-y-3 px-1 py-1">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="micro mr-1">등급</span>
-            {LEVELS.map((f) => (
-              <Link
-                key={f.key}
-                href={buildHref({ ...state, level: f.key })}
-                className={`${TOOLBAR_CHIP} ${state.level === f.key ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
-              >
-                {f.label}
-              </Link>
-            ))}
-          </div>
-          <SearchForm placeholder="학생명" defaultValue={state.q} inputWidth="w-28" />
+      {/* 한 줄 — 등급·담당강사·정렬은 왼쪽, 검색·인원은 오른쪽 묶음(원장 2026-09-22 *"넓은 화면까지 2행일 필요가 없어보임"* —
+          종전엔 등급+검색 / 담당강사+정렬+인원 두 줄이라 넓은 창에서 두 줄 모두 비어 있었다). 좁아지면 묶음째 감긴다. */}
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="micro mr-1">등급</span>
+          {LEVELS.map((f) => (
+            <Link
+              key={f.key}
+              href={buildHref({ ...state, level: f.key })}
+              className={`${TOOLBAR_CHIP} ${state.level === f.key ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
+            >
+              {f.label}
+            </Link>
+          ))}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">담당강사</span>
-            <FilterSelect
-              paramName="teacher"
-              triggerClassName={TOOLBAR_SELECT}
-              value={state.teacher || null}
-              options={teacherNames.map((n) => ({ value: n, label: n }))}
-              ariaLabel="담당강사 필터"
-            />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="micro mr-1">정렬</span>
-            <FilterSelect
-              paramName="sort"
-              triggerClassName={TOOLBAR_SELECT}
-              value={state.sort === "risk" ? null : state.sort}
-              allLabel="위험도순"
-              options={SORTS.filter((s) => s.value !== "risk")}
-              ariaLabel="정렬"
-            />
-          </div>
-          <span className="text-text-dim num ml-auto text-xs">
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">담당강사</span>
+          <FilterSelect
+            paramName="teacher"
+            triggerClassName={TOOLBAR_SELECT}
+            value={state.teacher || null}
+            options={teacherNames.map((n) => ({ value: n, label: n }))}
+            ariaLabel="담당강사 필터"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="micro mr-1">정렬</span>
+          <FilterSelect
+            paramName="sort"
+            triggerClassName={TOOLBAR_SELECT}
+            value={state.sort === "risk" ? null : state.sort}
+            allLabel="위험도순"
+            options={SORTS.filter((s) => s.value !== "risk")}
+            ariaLabel="정렬"
+          />
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <SearchForm placeholder="학생명" defaultValue={state.q} inputWidth="w-28" />
+          <span className="text-text-dim num text-xs">
             {total}명{totalPages > 1 ? ` · ${page}/${totalPages}` : ""}
           </span>
         </div>

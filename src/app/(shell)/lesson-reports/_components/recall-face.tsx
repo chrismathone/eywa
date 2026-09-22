@@ -129,6 +129,8 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
           <option value="recalled">회수됨</option>
           <option value="recall_failed">회수 실패</option>
         </select>
+        {/* 건수는 검색 줄 끝에(원장 2026-09-22 *"넓은 화면까지 2행일 필요가 없어보임"* — 종전엔 표 위에 이 한 줄만 따로 섰다). */}
+        {result && rows.length > 0 ? <p className="text-text-dim ml-auto text-xs whitespace-nowrap">총 {result.total}건</p> : null}
       </div>
 
       {result === null ? (
@@ -139,7 +141,6 @@ export function RecallFace({ options, todayYmd }: { options: ReportFilterOptions
         <p className="text-text-faint py-8 text-center text-sm">조건에 맞는 보고서가 없습니다.</p>
       ) : (
         <>
-          <p className="text-text-dim mb-1.5 text-xs">총 {result.total}건</p>
           <DragScrollArea>
             <table className="w-full text-sm">
               <thead className="text-text-faint border-line border-b text-left">

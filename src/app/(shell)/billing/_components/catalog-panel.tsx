@@ -54,39 +54,43 @@ export async function CatalogPanel({ sp, base }: { sp: Sp; base: Record<string, 
       </section>
 
       {/* 결과 줄 + 필터(지시서 §10): 옛 `micro` 소라벨 + 칩 두 묶음(학년 4·상태 3) + 상시 검색창 → `학년: 전체`·`상태: 전체` 라벨 + 검색 토글. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1">
-        <p className="text-text-dim text-sm whitespace-nowrap">
-          교재 <span className="num text-foreground font-bold">{total}</span>종
-          {totalPages > 1 ? (
-            <span className="num ml-1.5">
-              · {page}/{totalPages}
-            </span>
-          ) : null}
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterSelect
-            paramName="grade"
-            value={grade === "all" ? "" : grade}
-            options={GRADE_OPTIONS}
-            axisLabel="학년"
-            ariaLabel="학년 필터"
-            className="w-auto"
-            triggerClassName={TOOLBAR_SELECT}
-          />
-          <FilterSelect
-            paramName="active"
-            value={active === "all" ? "" : active}
-            options={ACTIVE_OPTIONS}
-            axisLabel="상태"
-            ariaLabel="사용 상태 필터"
-            className="w-auto"
-            triggerClassName={TOOLBAR_SELECT}
-          />
-          <SearchToggle placeholder="교재명·출판사" defaultValue={q} />
-        </div>
-      </div>
-
-      <CatalogTable rows={rows} />
+      {/* ↳ 그 줄이 '교재 추가' 버튼과 한 행을 나눠 쓴다(원장 2026-09-22 — 종전엔 버튼 하나만 선 둘째 줄이 있었다). */}
+      <CatalogTable
+        rows={rows}
+        toolbar={
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="text-text-dim text-sm whitespace-nowrap">
+              교재 <span className="num text-foreground font-bold">{total}</span>종
+              {totalPages > 1 ? (
+                <span className="num ml-1.5">
+                  · {page}/{totalPages}
+                </span>
+              ) : null}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterSelect
+                paramName="grade"
+                value={grade === "all" ? "" : grade}
+                options={GRADE_OPTIONS}
+                axisLabel="학년"
+                ariaLabel="학년 필터"
+                className="w-auto"
+                triggerClassName={TOOLBAR_SELECT}
+              />
+              <FilterSelect
+                paramName="active"
+                value={active === "all" ? "" : active}
+                options={ACTIVE_OPTIONS}
+                axisLabel="상태"
+                ariaLabel="사용 상태 필터"
+                className="w-auto"
+                triggerClassName={TOOLBAR_SELECT}
+              />
+              <SearchToggle placeholder="교재명·출판사" defaultValue={q} />
+            </div>
+          </div>
+        }
+      />
       {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} /> : null}
     </div>
   );
