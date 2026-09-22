@@ -12,7 +12,7 @@ import { termLabel } from "../term";
 import { GRADE_MARK_KEYS, type GradeEntry, type GradeMarkKey, type GradeSheetRow } from "../types";
 import { gradeWriteError } from "./access";
 import { getGradeSheet } from "./queries";
-import { gradeMarksReady, gradesSchemaReady, writeGradeCells } from "./write";
+import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady, writeGradeCells } from "./write";
 
 export type GradeSaveState =
   | { error?: string; ok?: boolean; saved?: number; cleared?: number }
@@ -35,12 +35,17 @@ function parseEntries(raw: FormDataEntryValue | null): GradeEntry[] | null {
         const m = marksRaw as Record<string, unknown>;
         marks = { ask1: !!m.ask1, ask2: !!m.ask2, received: !!m.received };
       }
+      const noExamRaw = (item as { noExam?: unknown }).noExam;
+      const reasonRaw = (item as { noExamReason?: unknown }).noExamReason;
+      const noExam = noExamRaw === undefined ? undefined : !!noExamRaw;
+      const noExamReason =
+        typeof reasonRaw === "string" ? reasonRaw.trim().slice(0, 200) || null : null;
       if (score === null || score === undefined) {
-        out.push({ studentId, score: null, marks });
+        out.push({ studentId, score: null, marks, noExam, noExamReason });
         continue;
       }
       if (typeof score !== "number" || !Number.isFinite(score)) return null;
-      out.push({ studentId, score, marks });
+      out.push({ studentId, score, marks, noExam, noExamReason });
     }
     return out;
   } catch {
@@ -94,12 +99,15 @@ export async function saveGradeScores(
 
   // 표식(성적표 받기 단계)은 0284a가 있어야 쓴다 — 없으면 점수만 저장하고 체크는 화면에서 이미 잠겨 있다.
   const marksReady = await gradeMarksReady();
+  const noExamReady = await gradeNoExamReady();
   const now = new Date().toISOString();
   const changed: {
     studentId: string;
     classId: string | null;
     score: number | null;
     marks?: Partial<Record<GradeMarkKey, string | null>>;
+    noExam?: boolean;
+    noExamReason?: string | null;
   }[] = [];
   const seen = new Set<string>();
   for (const e of entries) {
@@ -107,11 +115,16 @@ export async function saveGradeScores(
     seen.add(e.studentId);
     const row = rowByStudent.get(e.studentId);
     if (!row) return { error: "이 학기 명단에 없는 학생이 있습니다" };
+    // 🔴 제도상 안 치는 시험(초등·중1의 중간·기말)은 **아무것도 쓰지 않는다** — 화면에도 칸이 없고,
+    //    주소·POST로 밀어 넣어도 그 학생에게 없는 시험의 행이 생기면 안 된다([[#77]]).
+    if (!row.applies) continue;
     if (e.score != null) {
       if (e.score < 0) return { error: "점수는 0점 이상이어야 합니다" };
       if (e.score > sel.maxScore) return { error: `점수는 만점(${sel.maxScore})을 넘을 수 없습니다` };
     }
-    const score = e.score == null ? null : Math.round(e.score * 100) / 100; // numeric(6,2)
+    // '시험없음'이면 점수는 비운다(둘은 같이 못 선다 — 화면도 입력을 잠근다).
+    const wantNoExam = noExamReady && e.noExam === true;
+    const score = wantNoExam ? null : e.score == null ? null : Math.round(e.score * 100) / 100;
     // 표식 diff — **켜져 있던 것은 그 시각 그대로** 넘긴다(다시 누른 것으로 만들지 않는다).
     // 🔴 **토글된 칸만** 싣는다 — 켜져 있던 것을 그대로 다시 쓰면 `*_by`(누가 눌렀나)가 이번에 저장한
     //    사람으로 덮여, 시각은 어제인데 사람은 오늘인 거짓 기록이 된다(옛 기록을 지우지 않는다).
@@ -129,8 +142,16 @@ export async function saveGradeScores(
     const scoreSame =
       score === row.score &&
       (score === null || (row.maxScore === sel.maxScore && row.takenOn === sel.date));
-    if (scoreSame && !marksChanged) continue;
-    changed.push({ studentId: e.studentId, classId: row.classId, score, marks });
+    const wantReason = wantNoExam ? ((e.noExamReason ?? null) || null) : null;
+    const noExamSame = !noExamReady || (wantNoExam === row.noExam && wantReason === row.noExamReason);
+    if (scoreSame && !marksChanged && noExamSame) continue;
+    changed.push({
+      studentId: e.studentId,
+      classId: row.classId,
+      score,
+      marks,
+      ...(noExamReady ? { noExam: wantNoExam, noExamReason: wantReason } : {}),
+    });
   }
 
   if (changed.length === 0) return { ok: true, saved: 0, cleared: 0 };

@@ -25,26 +25,39 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-describe("성적 저장 단일 경로", () => {
-  it("🔴 student_grades에 쓰는 곳은 write.ts 하나(삭제 휴지통 한 줄만 예외)", () => {
-    const writers: string[] = [];
-    for (const f of walk("src")) {
-      const src = read(f);
-      if (!src.includes('from("student_grades")')) continue;
-      // 쓰기 동사가 붙은 파일만 — 조회(select)는 여러 화면이 한다.
-      if (/from\("student_grades"\)[\s\S]{0,200}?\.(insert|upsert|update)\(/.test(src)) writers.push(f);
-    }
-    expect(writers).toEqual(["src/features/grades/server/write.ts"]);
-  });
+/**
+ * 소스 전체를 **한 번만** 읽는다 — 검사마다 다시 훑으면 파일 수천 개라 기본 제한(5초)을 넘겨
+ * 내용과 무관하게 빨개진다(실제로 났다). 아래 두 검사는 이 목록을 공유하고 넉넉한 제한을 둔다.
+ */
+let cached: { file: string; src: string }[] | null = null;
+const allSources = () => (cached ??= walk("src").map((file) => ({ file, src: read(file) })));
+const SCAN_TIMEOUT = 60_000;
 
-  it("성적 행 삭제는 두 곳뿐 — 칸 비우기(write.ts)와 학생 상세 휴지통(행 id)", () => {
-    const deleters = walk("src").filter((f) =>
-      /from\("student_grades"\)[\s\S]{0,120}?\.delete\(/.test(read(f)),
-    );
-    expect(new Set(deleters)).toEqual(
-      new Set(["src/features/grades/server/write.ts", "src/features/students/server/actions.ts"]),
-    );
-  });
+describe("성적 저장 단일 경로", () => {
+  it(
+    "🔴 student_grades에 쓰는 곳은 write.ts 하나(삭제 휴지통 한 줄만 예외)",
+    () => {
+      const writers = allSources()
+        // 쓰기 동사가 붙은 파일만 — 조회(select)는 여러 화면이 한다.
+        .filter(({ src }) => /from\("student_grades"\)[\s\S]{0,200}?\.(insert|upsert|update)\(/.test(src))
+        .map(({ file }) => file);
+      expect(writers).toEqual(["src/features/grades/server/write.ts"]);
+    },
+    SCAN_TIMEOUT,
+  );
+
+  it(
+    "성적 행 삭제는 두 곳뿐 — 칸 비우기(write.ts)와 학생 상세 휴지통(행 id)",
+    () => {
+      const deleters = allSources()
+        .filter(({ src }) => /from\("student_grades"\)[\s\S]{0,120}?\.delete\(/.test(src))
+        .map(({ file }) => file);
+      expect(new Set(deleters)).toEqual(
+        new Set(["src/features/grades/server/write.ts", "src/features/students/server/actions.ts"]),
+      );
+    },
+    SCAN_TIMEOUT,
+  );
 
   it("격자 저장은 메모를 싣지 않는다 — 실으면 학생 상세 메모가 한 번에 지워진다", () => {
     const grid = read("src/features/grades/server/actions.ts");
@@ -174,5 +187,39 @@ describe("옛 '시험 등록'은 되살아나지 않는다(원장 2026-09-22)", 
     const page = read("src/app/(shell)/exams/page.tsx");
     expect(page).toContain("JjStudyView");
     expect(page).toContain("JjExamView");
+  });
+});
+
+describe("시험없음 · 해당 없음(원장 2026-09-22)", () => {
+  it("🔴 두 축은 다르다 — 제도상 해당 없음은 저장하지 않고 학년에서 도출한다", () => {
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toContain("examAppliesTo");
+    // 안 치는 시험은 **아무것도 쓰지 않는다**(주소·POST로 밀어 넣어도 행이 생기면 안 된다).
+    expect(read("src/features/grades/server/actions.ts")).toContain("if (!row.applies) continue;");
+  });
+
+  it("사람이 누른 '시험없음'은 같은 저장 경로가 든다(사유 포함)", () => {
+    const write = read("src/features/grades/server/write.ts");
+    expect(write).toContain("no_exam");
+    expect(write).toContain("no_exam_reason");
+    // 켜진 칸은 점수가 없어도 행을 남긴다(사유가 기록이다).
+    expect(write).toMatch(/r\.noExam === true/);
+    const sql = read("supabase/migrations/0285a_student_grades_no_exam.sql");
+    expect(sql).toContain("no_exam boolean");
+    // 수학의 새 칸(내신·월말평가)이 제약에 들어갔는가 — 빠지면 저장이 23514로 거절된다.
+    expect(sql).toContain("'school'");
+    expect(sql).toContain("'monthly'");
+  });
+});
+
+describe("정렬은 계정에 남지만 주소는 안 바꾼다", () => {
+  it("🔴 주소를 바꾸면 격자가 다시 마운트되어 적다 만 점수가 날아간다", () => {
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).toContain("saveSort");
+    expect(grid).not.toContain("useRouter");
+    expect(grid).not.toContain("router.push");
+    // 계정 저장은 ui_prefs의 형제 키를 보존한다(통째로 덮으면 남의 화면 설정이 날아간다).
+    const prefs = read("src/features/grades/server/list-prefs.ts");
+    expect(prefs).toMatch(/\.\.\.raw, grades/);
   });
 });

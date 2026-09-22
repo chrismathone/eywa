@@ -44,6 +44,12 @@ export type GradeWriteRow = {
    * 이미 눌러 둔 표식은 호출부가 **옛 시각을 그대로** 넘겨 유지한다(다시 누른 것으로 만들지 않는다).
    */
   marks?: Partial<Record<GradeMarkKey, string | null>>;
+  /**
+   * 사람이 누른 '시험없음'과 사유 — `undefined`면 안 건드린다.
+   * 🔴 켜면 점수를 비운다(둘은 같이 못 선다) · 켜진 칸은 점수가 없어도 **행을 남긴다**(사유가 기록이다).
+   */
+  noExam?: boolean;
+  noExamReason?: string | null;
 };
 
 const MARK_COL: Record<GradeMarkKey, { at: string; by: string }> = {
@@ -65,7 +71,7 @@ export async function writeGradeCells(
   // 🔑 남길 칸 = **점수가 있거나 표식이 하나라도 켜진 칸**. 점수가 없어도 "1차 독촉함"은 남아야 한다.
   //    점수도 표식도 없으면 그 행은 존재할 이유가 없으니 지운다.
   const keeps = (r: GradeWriteRow) =>
-    r.score != null || GRADE_MARK_KEYS.some((k) => !!r.marks?.[k]);
+    r.score != null || GRADE_MARK_KEYS.some((k) => !!r.marks?.[k]) || r.noExam === true;
   const toSave = rows.filter(keeps);
   const toClear = rows.filter((r) => !keeps(r));
 
@@ -100,13 +106,20 @@ export async function writeGradeCells(
   //    같은 행끼리 묶어 따로 쓴다. 안 그러면 메모만 보낸 저장이 남의 표식을, 표식만 보낸 저장이 남의
   //    메모를 지운다.
   const shapeOf = (r: GradeWriteRow) =>
-    `${r.notes === undefined ? "" : "n"}|${GRADE_MARK_KEYS.filter((k) => r.marks?.[k] !== undefined).join(",")}`;
+    [
+      r.notes === undefined ? "" : "n",
+      GRADE_MARK_KEYS.filter((k) => r.marks?.[k] !== undefined).join(","),
+      r.noExam === undefined ? "" : "x",
+    ].join("|");
   const byShape = new Map<string, Record<string, unknown>[]>();
   for (const r of toSave) {
     const payload = {
       ...cellOf(r),
       ...(r.notes === undefined ? {} : { notes: r.notes ?? null }),
       ...marksOf(r),
+      ...(r.noExam === undefined
+        ? {}
+        : { no_exam: r.noExam, no_exam_reason: r.noExam ? (r.noExamReason ?? null) : null }),
     };
     const key = shapeOf(r);
     byShape.set(key, [...(byShape.get(key) ?? []), payload]);
@@ -157,5 +170,12 @@ export const gradesSchemaReady = cache(async (): Promise<boolean> => {
 export const gradeMarksReady = cache(async (): Promise<boolean> => {
   const supabase = await createClient();
   const { error } = await supabase.from("student_grades").select("ask1_at").limit(1);
+  return !error;
+});
+
+/** 0285a('시험없음'·사유)가 적용됐는가 — 위 둘과 **따로** 본다(같은 이유). */
+export const gradeNoExamReady = cache(async (): Promise<boolean> => {
+  const supabase = await createClient();
+  const { error } = await supabase.from("student_grades").select("no_exam").limit(1);
   return !error;
 });

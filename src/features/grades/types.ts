@@ -49,6 +49,14 @@ export type GradeSheetRow = {
   takenOn: string | null;
   /** 성적표 받기 단계 표식(누른 시각). 0284a 적용 전에는 전부 null. */
   marks: GradeMarks;
+  /** 사람이 '시험없음'으로 표시했는가(사유는 아래) — 제도상 해당 없음(`applies`)과는 다른 축이다. */
+  noExam: boolean;
+  noExamReason: string | null;
+  /**
+   * 제도상 **그 학생이 치는 시험인가**([`applies.ts`](../applies.ts)) — false면 입력·집계·미기입 색에서 빠진다.
+   * 🔴 저장되는 값이 아니다(학년에서 그때그때 도출) — 학년을 고치면 곧바로 따라온다.
+   */
+  applies: boolean;
   /** 지금도 그 반 명단인가 — 학기 중 나간 학생은 false(회색 줄, 값은 그대로 보인다). */
   onRoster: boolean;
 };
@@ -64,6 +72,10 @@ export type GradeSheet = {
    */
   marksReady: boolean;
   /**
+   * 0285a('시험없음'·사유 컬럼)가 적용됐는가. false면 점수·표식은 그대로 되고 **그 버튼만** 잠긴다.
+   */
+  noExamReady: boolean;
+  /**
    * 0283a(학기·시험 칸 컬럼)가 적용됐는가. false면 화면은 살고 **입력만 잠근다**([[#95]]) —
    * 성적 표는 매일 쓰는 경로가 아니지만, 적용 전에 저장을 열어 두면 전건이 400으로 실패한다.
    */
@@ -77,8 +89,9 @@ export type GradeSheet = {
 export type GradeMarkKey = "ask1" | "ask2" | "received";
 export const GRADE_MARK_KEYS: readonly GradeMarkKey[] = ["ask1", "ask2", "received"];
 export const GRADE_MARK_LABEL: Record<GradeMarkKey, string> = {
-  ask1: "1차",
-  ask2: "2차",
+  // 원장 2026-09-22: *"1차 2차를 1차상담, 2차상담으로 변경"* — 키(`ask1`·`ask2`)는 그대로 두고 라벨만.
+  ask1: "1차상담",
+  ask2: "2차상담",
   received: "성적확인",
 };
 /** 그 칸의 표식 — 값은 누른 시각(ISO), 안 눌렀으면 null. */
@@ -91,6 +104,10 @@ export type GradeEntry = {
   score: number | null;
   /** 체크 상태(켬/끔) — 서버가 시각으로 바꾼다. 안 보내면 표식을 건드리지 않는다. */
   marks?: Record<GradeMarkKey, boolean>;
+  /** 사람이 누른 '시험없음'. 켜면 점수는 비운다(둘은 같이 못 선다). */
+  noExam?: boolean;
+  /** '시험없음' 사유 — 끄면 함께 지운다. */
+  noExamReason?: string | null;
 };
 
 export const GRADE_MAX_SCORE_DEFAULT = 100;
