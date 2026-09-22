@@ -4,8 +4,6 @@ import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { PublicBrand } from "@/components/public-site/public-brand";
 import styles from "@/components/public-site/public-site.module.css";
-import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
-import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -19,12 +17,10 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string | string[] }>;
 }) {
-  const [params, branding] = await Promise.all([searchParams, getPublicBranding()]);
-  const { academyLine, academyName } = brandLabels(branding);
-  // Preserve deployment branding. Without a designated academy, show only AYWA.
-  const logoSrc = branding
-    ? await resolveBrandingSrc(branding.settings.profile.logoUrl, branding.tenantId)
-    : null;
+  // 🔴 학원·지점 표기(로고·"인재원 · 침산")를 두지 않는다 — 원장 2026-09-22 *"로그인 페이지에는 지점과 관련된거 전부
+  //    삭제하고 그냥 로그인만. 어차피 로그인하면 지점 보일텐데"*. 로그인 전엔 누가 어느 지점인지 모르니 한 지점을
+  //    보여 주면 다른 지점 직원에게 남의 이름이 선다. 지점은 로그인 뒤 셸(사이드바)이 그 계정의 학원 설정으로 보인다.
+  const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : undefined;
 
   return (
@@ -48,13 +44,6 @@ export default async function LoginPage({
             <Link href="/"><EyIcon name="arrowLeft" size={15} />AYWA 소개</Link>
           </div>
           <div className={styles.loginContent}>
-            <div className={styles.academyIdentity}>
-              {logoSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element -- tenant logo uses a per-request signed URL
-                <img src={logoSrc} alt="" />
-              ) : <EyIcon name="building" size={18} />}
-              <span>{academyName ? academyLine : "AYWA 학원 업무 공간"}</span>
-            </div>
             <h1>로그인</h1>
             <p className={styles.loginIntro}>학원에서 발급받은 계정으로 접속해 주세요.<br />로그인하면 소속 학원의 업무 공간으로 연결됩니다.</p>
             <LoginForm next={next} />

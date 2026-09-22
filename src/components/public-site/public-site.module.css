@@ -123,8 +123,6 @@
 .loginTop > a:hover { color: var(--public-green); }
 .mobileBrand { display: none; }
 .loginContent { width: 100%; max-width: 380px; margin: auto; padding-block: 56px; }
-.academyIdentity { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; font-size: 13px; font-weight: 600; color: var(--public-green); }
-.academyIdentity img { width: 34px; height: 34px; border: 1px solid var(--public-line); border-radius: 8px; padding: 3px; object-fit: contain; }
 .loginContent h1 { font-size: 34px; font-weight: 720; line-height: 1.25; letter-spacing: -.04em; }
 .loginIntro { font-size: 14px; color: var(--public-muted); margin-top: 12px; line-height: 1.9; }
 .loginForm { display: flex; flex-direction: column; gap: 24px; margin-top: 36px; }
