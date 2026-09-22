@@ -229,6 +229,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/retention/board/page.tsx",
   "src/app/(shell)/newcomers/_components/newcomer-board.tsx",
   "src/app/(shell)/owner/_components/audit-face.tsx",
+  // 탭 및 메뉴 구성(2026-09-22) — 관리자뷰·강사뷰 전환이 부품(ToolbarSegment)으로.
+  "src/app/(shell)/owner/_components/navigation-section.tsx",
   "src/app/(shell)/class-review/_components/review-table.tsx",
   "src/app/(shell)/class-review/template/page.tsx",
   "src/app/(shell)/documents/_components/document-toolbar.tsx",
@@ -237,6 +239,8 @@ const CANON_SURFACES = [
   // 교재목록(2026-09-16, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/textbooks/_components/books-face.tsx",
   "src/app/(shell)/textbooks/_components/plans-face.tsx",
+  // 성적관리(2026-09-22, 격자로 다시 지음) — 년도·학기·과목·반·시험 드롭다운이 전부 부품이다.
+  "src/app/(shell)/exams/page.tsx",
   // 재고관리(2026-09-02, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/inventory/_components/assets-face.tsx",
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",

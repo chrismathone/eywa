@@ -1,70 +1,58 @@
 import { Suspense } from "react";
 import { SearchX } from "@/components/icons/aywa-icon-compat";
-import { WindowLink } from "@/components/workspace/window-link";
-import { EmbedAnchor, EmbedHiddenInput } from "@/components/embed-link";
-import { PageHeader } from "@/components/page-header";
-import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/aywa-icons";
-import {
-  TOOLBAR_SEARCH_BOX,
-  TOOLBAR_SEG_BOX,
-  TOOLBAR_SEG_BOX_WRAP,
-  TOOLBAR_SEG_ITEM,
-  TOOLBAR_SEG_OFF,
-  TOOLBAR_SEG_ON_PRIMARY,
-} from "@/components/toolbar-controls";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { FilterSelect } from "@/components/filter-select";
+import { HrefSelect, type HrefSelectOption } from "@/components/href-select";
+import { PageHeader } from "@/components/page-header";
+import { Toolbar } from "@/components/toolbar";
 import { requireAccess } from "@/lib/auth/require-access";
-import { Pagination } from "@/components/pagination";
 import { kstToday } from "@/lib/date-kst";
 import { JJ_STUDY_MAX_DAYS, ijwStudyDay, resolveJjRange, type JjRange } from "@/features/ijw/range";
-import { getExamsPage, type ExamRow } from "@/features/exams/server/queries";
-import { getClassesList } from "@/features/classes/server/queries";
-import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { ijwConfigFor } from "@/features/ijw/server/client";
 import { getJjViewer } from "@/features/ijw/server/queries";
-import { CreateExamTrigger, type ExamClassOption } from "./_components/exam-form-dialog";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { EXAM_SLOT_LABEL, examSlotOptions } from "@/features/grades/exam-slots";
+import { resolveGradeSelection } from "@/features/grades/selection";
+import { gradeWriteError } from "@/features/grades/server/access";
+import { getGradeSheet } from "@/features/grades/server/queries";
+import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
+import { TERM_OPTIONS, termLabel, termYearOptions } from "@/features/grades/term";
 import { JjExamView } from "./_components/jj-exam-view";
 import { JjLinkSection } from "./_components/jj-link-section";
 import { JjSkeleton } from "./_components/jj-shared";
 import { JjStudyView } from "./_components/jj-study-view";
+import { GradesExcelTrigger } from "./_components/excel-trigger";
+import { ScoreGrid } from "./_components/score-grid";
+import { SheetMetaFields } from "./_components/sheet-meta-fields";
 
 export const metadata = { title: "성적관리 — aywa" };
 
-const PAGE_SIZE = 50;
-
-const TYPE_LABEL: Record<string, string> = { weekly: "주간", mock: "모의", school: "학교" };
-const TYPE_FILTERS = [
-  { value: "all", label: "전체" },
-  { value: "weekly", label: "주간" },
-  { value: "mock", label: "모의" },
-  { value: "school", label: "학교" },
-];
-
 /**
- * 영어 전용 보기 2개(사용자 2026-09-10) — 인재원 학습 프로그램(MemoType)의 **JJ실 학습**과 **단어시험**.
- * 기존 시험 표(exams·student_grades)와 데이터가 다르다: aywa에 저장하지 않고 매번 인재원에 묻는다(pull).
- * 그래서 '유형' 칩에 나란히 두되 **영어일 때만** 보이고, 고르면 표 대신 JJ 화면을 그린다.
- * ⚠️ 연동이 설정된 학원(IJW_TENANT_ID)에서만 칩이 뜬다 — 다른 학원엔 "설정 안 됨"만 뜨는 빈 칩이 생기지 않게.
- * ⚠️ 강사는 담당(세 갈래 — 담임·교시 담당·위임) 반에 영어가 있을 때만(viewer.hasEnglish) — 수학만 맡은 강사에게
- *    학원 전체 영어 시험 집계가 새지 않게(적대 리뷰 2026-09-10).
- * ⚠️ `english`는 과목 **표준 키**(코드 특수동작 허용 범위) — 과목 라벨·색은 계속 학원설정에서 읽는다.
+ * 성적관리 — **시험을 등록하지 않는다**(원장 2026-09-22: *"시험자체를 등록하는게 아니라 과목 반별
+ * 형식으로 학생리스트가 뜨고 바로 이렇게 쭈루룩 입력할 수 있게"*).
+ * `년도 · 학기 · 과목 · 반 · 시험`을 고르면 그 학기 명단이 서고 점수를 바로 적는다.
+ *
+ * 🔑 영어는 **고르는 자리에서만** 인재원/EiE로 갈린다 — 저장되는 과목은 `english` 하나라
+ *    학생 상세·추이·급락 감지는 영어를 한 과목으로 본다(subject-axis.ts).
+ * ⚠️ 인재원 연동 보기(JJ실 학습·단어시험, 2026-09-10)는 그대로 산다 — 데이터가 다른 화면이라
+ *    '보기' 축으로 나란히 둔다(영어 + 연동 학원 + 영어 담당일 때만).
  */
-const JJ_TYPES = [
-  { value: "jj", label: "JJ실" },
-  { value: "jj_exam", label: "JJ실(시험)" },
-] as const;
-const isJjType = (t: string) => t === "jj" || t === "jj_exam";
+const JJ_VIEWS = new Set(["jj", "jj_exam"]);
 
 export default async function ExamsPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    year?: string;
+    term?: string;
     subject?: string;
-    page?: string;
-    q?: string;
+    class?: string;
+    slot?: string;
+    date?: string;
+    max?: string;
+    view?: string;
+    /** 옛 주소(2026-09-10 JJ 보기) 호환 — `type=jj`가 즐겨찾기에 남아 있다. */
     type?: string;
     from?: string;
     to?: string;
@@ -74,200 +62,198 @@ export default async function ExamsPage({
 }) {
   const user = await requireAccess("exams");
   const sp = await searchParams;
-  // 같은 이름의 주소 값이 두 번 오면 배열이 된다 — 문자열일 때만 읽는다(`.trim()` TypeError·배열 필터 400으로 화면이
-  // 죽지 않게, 적대 리뷰 2026-09-11).
+  // 같은 이름의 주소 값이 두 번 오면 배열이 된다 — 문자열일 때만 읽는다(`.trim()` TypeError 방지).
   const one = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-  const subject = one(sp.subject) || "all";
-  const rawType = one(sp.type) || "all";
-  const jjEnabled = !!ijwConfigFor(user.tenantId);
-  // JJ 보기는 영어·연동 학원일 때만 — 과목을 바꾸면 '전체'로 돌아간다(주소에 남은 type=jj가 빈 표를 만들지 않게).
-  const wantsJj = jjEnabled && subject === "english" && isJjType(rawType);
-  const examType = isJjType(rawType) ? "all" : rawType;
-  const q = one(sp.q);
+  const isEmbed = one(sp.embed) === "1";
+  const rawView = one(sp.view) || one(sp.type);
   const from = one(sp.from);
   const to = one(sp.to);
-  // JJ 반 칩(aywa 영어 반 id, 2026-09-11) — JJ 보기에서만 쓴다. 담당 밖·모르는 반이면 보기 쪽이 무시하고 그 사실을 적는다.
   const jjClass = one(sp.jjClass);
-  const page = Math.max(1, Number(sp.page) || 1);
-  // 플로팅 창(iframe) 안이면 주소 빌더가 embed=1을 싣는다(페이지·JJ 반 칩 — 학원 설정 감사로그 면과 같은 규칙).
-  // ⚠️ 하드 이동(칩·초기화·검색 폼)은 이 값에 기대지 않는다 — embed 없이 소프트 이동으로 들어온 첫 렌더에선 이 값이
-  //    거짓이라, 그쪽은 `EmbedAnchor`·`EmbedHiddenInput`이 클라에서 판정한다(전수검사 2026-09-11).
-  const isEmbed = one(sp.embed) === "1";
 
-  const loadRegular = () =>
-    Promise.all([
-      getExamsPage(
-        {
-          subject: subject === "all" ? undefined : subject,
-          examType: examType === "all" ? undefined : examType,
-          q: q || undefined,
-          from: from || undefined,
-          to: to || undefined,
-        },
-        page,
-        PAGE_SIZE,
-      ),
-      getClassesList({ active: "active" }),
-    ] as const);
-  // JJ 칩을 세울지는 **보는 사람**이 정한다(viewer.hasEnglish) — 영어 과목을 볼 때만 계산한다.
-  const [viewer, settings, regularFirst] = await Promise.all([
-    jjEnabled && subject === "english" ? getJjViewer() : Promise.resolve(null),
-    getTenantSettings(),
-    wantsJj ? Promise.resolve(null) : loadRegular(),
+  const settings = await getTenantSettings();
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  const subjectOptions = axisOptionsFrom(subjects.options);
+  const sel = resolveGradeSelection(
+    {
+      year: sp.year,
+      term: sp.term,
+      subject: sp.subject,
+      class: sp.class,
+      slot: sp.slot,
+      date: sp.date,
+      max: sp.max,
+    },
+    { subjectOptions: subjects.options, todayIso: kstToday() },
+  );
+
+  if (!sel) {
+    return (
+      <div className="space-y-5">
+        <PageHeader eyebrow="학생 관리" title="성적관리" description="반별로 점수를 바로 입력합니다" />
+        <EmptyState
+          compact
+          image="exams"
+          icon={() => <SearchX size={32} strokeWidth={1.8} />}
+          title="학원 설정에 과목이 없습니다"
+          description="학원 설정 → 운영에서 과목을 먼저 등록해주세요."
+        />
+      </div>
+    );
+  }
+
+  const jjEnabled = !!ijwConfigFor(user.tenantId);
+  const isEnglish = sel.subject === "english";
+  const wantsJj = jjEnabled && isEnglish && JJ_VIEWS.has(rawView);
+
+  const [viewer, writeError, sheetFirst] = await Promise.all([
+    jjEnabled && isEnglish ? getJjViewer() : Promise.resolve(null),
+    gradeWriteError(),
+    wantsJj ? Promise.resolve(null) : getGradeSheet(sel),
   ]);
   const jjAvailable = !!viewer?.hasEnglish;
-  const jjMode = wantsJj && jjAvailable ? (rawType as "jj" | "jj_exam") : null;
-  // 드묾: 주소는 JJ인데 이 사람에게 JJ가 없으면(수학만 맡은 강사) 그때 일반 목록을 읽는다.
-  const regular = jjMode ? null : (regularFirst ?? (await loadRegular()));
-  const rows = regular?.[0].rows ?? [];
-  const total = regular?.[0].total ?? 0;
-  const classList = regular?.[1] ?? [];
-  // JJ 기간 — 형식·순서·상한을 인재원이 받는 모양으로(range.ts). 학습 = 학습일(03:00 경계), 시험 = KST 달력 날짜.
-  // 기본은 학습 최근 7일(인재원 설명서: 반 묶음이 가장 가볍다), 시험 최근 30일.
+  const jjMode = wantsJj && jjAvailable ? (rawView as "jj" | "jj_exam") : null;
+  // 드묾: 주소는 JJ인데 이 사람에게 JJ가 없으면(수학만 맡은 강사) 그때 성적표를 읽는다.
+  const sheet = jjMode ? null : (sheetFirst ?? (await getGradeSheet(sel)));
+
   const jjRange: JjRange | null =
     jjMode === "jj"
       ? resolveJjRange({ from, to }, { today: ijwStudyDay(), defaultDays: 7, maxDays: JJ_STUDY_MAX_DAYS })
       : jjMode === "jj_exam"
         ? resolveJjRange({ from, to }, { today: kstToday(), defaultDays: 30 })
         : null;
-  // 과목 라벨·색·필터 칩은 학원설정(operations.subjects) 단일 소스 — 미등록 과목은 칩에 안 뜸.
-  const subjects = buildSubjectMaps(settings.operations.subjects);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const classOptions: ExamClassOption[] = classList.map((c) => ({
-    id: c.id,
-    className: c.className,
-    subject: c.subject,
-  }));
-  const activeType = jjMode ?? examType;
-  const typeFilters = jjAvailable ? [...TYPE_FILTERS, ...JJ_TYPES] : TYPE_FILTERS;
 
-  // 필터/검색 href — 칩·검색은 page 리셋(page 미세팅).
-  const buildHref = (
-    patch: Partial<{ subject: string; type: string; q: string; from: string; to: string; jjClass: string }>,
-  ) => {
-    const cur = { subject, type: activeType, q, from, to, jjClass: jjMode ? jjClass : "", ...patch };
-    // 영어가 아니면 JJ 보기가 없다 — 과목 칩을 누르면 유형을 '전체'로 되돌린다.
-    if (cur.subject !== "english" && isJjType(cur.type)) cur.type = "all";
-    // 반 칩은 JJ 보기 전용 — 일반 목록으로 가면 버린다(주소에 남아 다음 JJ 진입을 몰래 좁히지 않게).
-    if (!isJjType(cur.type)) cur.jjClass = "";
-    // 🔴 JJ ↔ 일반 목록을 오갈 땐 기간을 버린다 — 날짜 기준이 다르고(학습일·제출일 ↔ 시험일), JJ에서 누른 '검색'의
-    //    기간이 일반 목록을 조용히 좁혀 "등록된 시험이 없습니다"가 떴다(적대 리뷰 2026-09-10). 반대 방향도 같다.
-    if (isJjType(activeType) !== isJjType(cur.type)) {
+  const buildHref = (patch: Partial<Record<string, string>>) => {
+    const cur: Record<string, string> = {
+      year: String(sel.year),
+      term: String(sel.term),
+      subject: axisValueOf(sel),
+      class: sel.classId ?? "",
+      slot: sel.slot,
+      date: sel.date,
+      max: String(sel.maxScore),
+      view: jjMode ?? "",
+      jjClass: jjMode ? jjClass : "",
+      from: jjMode ? from : "",
+      to: jjMode ? to : "",
+      ...patch,
+    };
+    // 과목을 바꾸면 반·시험 칸이 통째로 달라진다 — 옛 값이 따라가면 엉뚱한 반이 고정되거나 그 과목에
+    // 없는 시험이 주소에 남는다(해석은 폴백하지만 주소가 거짓말을 한다).
+    if (patch.subject !== undefined && patch.subject !== axisValueOf(sel)) {
+      cur.class = "";
+      if (patch.slot === undefined) cur.slot = "";
+    }
+    // 영어가 아니면 JJ 보기가 없다.
+    if (!cur.subject.startsWith("english")) cur.view = "";
+    if (!JJ_VIEWS.has(cur.view)) {
+      cur.jjClass = "";
+      // 🔴 JJ ↔ 성적표를 오갈 땐 기간을 버린다 — 날짜 기준이 다르다(학습일·제출일 ↔ 시험일).
       cur.from = "";
       cur.to = "";
     }
     const params = new URLSearchParams();
-    if (cur.subject !== "all") params.set("subject", cur.subject);
-    if (cur.type !== "all") params.set("type", cur.type);
-    if (cur.q) params.set("q", cur.q);
-    if (cur.from) params.set("from", cur.from);
-    if (cur.to) params.set("to", cur.to);
-    if (cur.jjClass) params.set("jjClass", cur.jjClass);
+    for (const [k, v] of Object.entries(cur)) if (v) params.set(k, v);
     if (isEmbed) params.set("embed", "1");
     const s = params.toString();
     return s ? `/exams?${s}` : "/exams";
   };
-  const pageHref = (p: number) => {
-    const base = buildHref({});
-    if (p <= 1) return base;
-    return base === "/exams" ? `/exams?page=${p}` : `${base}&page=${p}`;
-  };
+
+  const excelHref = (() => {
+    const p = new URLSearchParams({
+      year: String(sel.year),
+      term: String(sel.term),
+      subject: axisValueOf(sel),
+      slot: sel.slot,
+      date: sel.date,
+      max: String(sel.maxScore),
+    });
+    if (sel.classId) p.set("class", sel.classId);
+    return `/api/exams/excel?${p.toString()}`;
+  })();
+
+  const yearOptions: HrefSelectOption[] = termYearOptions(kstToday()).map((y) => ({
+    value: String(y),
+    label: `${y}년`,
+    href: buildHref({ year: String(y) }),
+  }));
+  const termOptions: HrefSelectOption[] = TERM_OPTIONS.map((t) => ({
+    ...t,
+    href: buildHref({ term: t.value }),
+  }));
+  const subjectSelectOptions: HrefSelectOption[] = subjectOptions.map((o) => ({
+    ...o,
+    href: buildHref({ subject: o.value }),
+  }));
+  const slotOptions: HrefSelectOption[] = examSlotOptions(sel.subject).map((o) => ({
+    ...o,
+    href: buildHref({ slot: o.value }),
+  }));
+  // 반은 **형광 표기 드롭다운**이다(원장 2026-08-18 규약: "반을 고르면 그 반의 내용이 아래를 채우는"
+  // 자리에만 켠다 — 옛 시험 상세가 갖고 있던 표기를 이 화면이 이어받는다). 전체일 땐 저절로 꺼진다.
+  // ⚠️ `cap`을 올려 둔다 — 반이 80개를 넘어 기본 50이면 한 묶음이 통째로 가린다([[#84]]).
+  const classOptions = (sheet?.classes ?? []).map((c) => ({
+    value: c.id,
+    label: c.className,
+    hint: c.studentCount == null ? undefined : `${c.studentCount}명`,
+  }));
+  const viewOptions: HrefSelectOption[] = [
+    { value: "", label: "성적 입력", href: buildHref({ view: "" }) },
+    { value: "jj", label: "JJ실", href: buildHref({ view: "jj" }) },
+    { value: "jj_exam", label: "JJ실(시험)", href: buildHref({ view: "jj_exam" }) },
+  ];
+
+  const canWrite = !writeError;
+  const lockReason = writeError ?? (sheet && !sheet.schemaReady ? "성적 표 준비(0283a)가 아직 적용되지 않아 입력을 잠갔습니다 — 적용 후 저장할 수 있습니다" : null);
 
   return (
     <div className="space-y-5">
-      {/* Editorial 문법 ① — eyebrow→헤드라인→서브('결과 N개' micro가 유일 타이틀이던 상태 해소) */}
       <PageHeader
         eyebrow="학생 관리"
         title="성적관리"
-        description="시험을 만들고 반별 점수를 일괄 입력합니다"
+        description={`${termLabel(sel.year, sel.term)} · ${axisLabelFor(sel, subjects.labelOf)} · ${EXAM_SLOT_LABEL[sel.slot]}`}
+        embedLabel={`${termLabel(sel.year, sel.term)} · ${EXAM_SLOT_LABEL[sel.slot]}`}
       />
 
-      {/* Filter bar */}
-      {/* 🔴 툴바 카드 껍데기 제거(원장 2026-09-01) — 아래 표가 자기 테두리를 가져 선이 겹쳤다. */}
-      {/* ⚠️ 칩·초기화는 `<Link>`가 아니라 하드 이동(`EmbedAnchor`)이다 — 아래 검색 폼 입력은 `defaultValue`(비제어)라
-          소프트 이동이면 **옛 검색어·기간이 칸에 남아** '검색' 한 번에 도로 실린다(JJ ↔ 일반 전환 때 기간을 버리는
-          2026-09-10 수리가 그 순간 무너진다). embed는 `EmbedAnchor`가 창 안이면 싣는다. */}
-      <div className="flex flex-col gap-2 px-1 py-1">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">과목</span>
-            <div className={TOOLBAR_SEG_BOX_WRAP}>
-            {subjects.filters.map((f) => (
-              <EmbedAnchor
-                key={f.value}
-                href={buildHref({ subject: f.value })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${subject === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {f.label}
-              </EmbedAnchor>
-            ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="micro shrink-0">유형</span>
-            <div className={TOOLBAR_SEG_BOX}>
-            {typeFilters.map((f) => (
-              <EmbedAnchor
-                key={f.value}
-                href={buildHref({ type: f.value })}
-                className={`${TOOLBAR_SEG_ITEM} shrink-0 ${activeType === f.value ? TOOLBAR_SEG_ON_PRIMARY : TOOLBAR_SEG_OFF}`}
-              >
-                {f.label}
-              </EmbedAnchor>
-            ))}
-            </div>
-          </div>
-        </div>
-        <form action="/exams" method="get" className="flex flex-wrap items-center gap-2">
-          {subject !== "all" ? <input type="hidden" name="subject" value={subject} /> : null}
-          {activeType !== "all" ? <input type="hidden" name="type" value={activeType} /> : null}
-          {/* 기간을 바꿔 '검색'해도 고른 반은 그대로(반 칩은 표 위에 선다). */}
-          {jjMode && jjClass ? <input type="hidden" name="jjClass" value={jjClass} /> : null}
-          {/* 창 안이면 embed도 동행 — 안 실으면 제출 순간 창 안에 전체 셸이 뜬다(클라 판정: EmbedHiddenInput). */}
-          <EmbedHiddenInput />
-          {/* JJ 보기는 시험명 검색이 없다(인재원 목록 전체를 기간으로만 자른다). */}
-          {jjMode ? null : (
-            <div className={TOOLBAR_SEARCH_BOX}>
-              <EyIcon name="search" size={13} />
-              <input
-                type="search"
-                name="q"
-                defaultValue={q}
-                placeholder="시험명"
-                className="text-foreground placeholder:text-text-faint h-full w-32 bg-transparent text-(length:--control-label-sm) leading-normal focus:outline-none"
-              />
-            </div>
-          )}
-          <label className="text-text-dim flex items-center gap-1 text-xs">
-            기간
-            {/* JJ 기본 기간은 값으로 채우지 않는다 — 채우면 '검색' 한 번에 주소로 굳어 버린다. 실제 기간은 표 위 기간 줄이 말한다. */}
-            <input
-              type="date"
-              name="from"
-              defaultValue={jjRange && !jjRange.isDefault ? jjRange.from : from}
-              className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs"
+      <Toolbar>
+        {jjAvailable ? (
+          <HrefSelect axisLabel="보기" ariaLabel="보기 선택" value={jjMode ?? ""} options={viewOptions} />
+        ) : null}
+        <HrefSelect axisLabel="년도" ariaLabel="년도 선택" value={String(sel.year)} options={yearOptions} />
+        <HrefSelect axisLabel="학기" ariaLabel="학기 선택" value={String(sel.term)} options={termOptions} />
+        <HrefSelect
+          axisLabel="과목"
+          ariaLabel="과목 선택"
+          value={axisValueOf(sel)}
+          options={subjectSelectOptions}
+        />
+        {jjMode ? null : (
+          <>
+            <FilterSelect
+              paramName="class"
+              axisLabel="반"
+              ariaLabel="반 선택"
+              value={sel.classId ?? ""}
+              options={classOptions}
+              cap={300}
+              marker
             />
-            <span>~</span>
-            <input
-              type="date"
-              name="to"
-              defaultValue={jjRange && !jjRange.isDefault ? jjRange.to : to}
-              className="border-line bg-bg-soft h-8 rounded-lg border px-1.5 text-xs"
+            <HrefSelect axisLabel="시험" ariaLabel="시험 선택" value={sel.slot} options={slotOptions} />
+            {/* 시험일·만점은 주소에 실린다 — 격자·엑셀·저장이 같은 값을 본다(한쪽만 바뀌면 시트가
+                화면과 다른 칸을 가리킨다). 클라 조각이 `__V__` 자리에 값을 끼워 이동한다. */}
+            <SheetMetaFields
+              date={sel.date}
+              maxScore={sel.maxScore}
+              dateHref={buildHref({ date: "__V__" })}
+              maxHref={buildHref({ max: "__V__" })}
             />
-          </label>
-          <Button type="submit" variant="outline">검색</Button>
-          {q || from || to ? (
-            <EmbedAnchor href={buildHref({ q: "", from: "", to: "" })} className="text-text-faint hover:text-foreground text-xs underline">
-              초기화
-            </EmbedAnchor>
-          ) : null}
-        </form>
-      </div>
+            <GradesExcelTrigger excelHref={excelHref} canWrite={canWrite} />
+          </>
+        )}
+      </Toolbar>
 
       {jjMode && viewer && jjRange ? (
         <div className="space-y-4">
           {/* 인재원 호출(0.1~1초)이 첫 페인트를 막지 않게 스켈레톤을 먼저 흘린다(B7). */}
-          {/* 반 칩(aywa 영어 반)은 보기 안에 선다 — 반 목록 조회가 페이지 첫 페인트를 막지 않게(B7). */}
           <Suspense key={`${jjMode}:${jjRange.from}:${jjRange.to}:${jjClass}`} fallback={<JjSkeleton />}>
             {jjMode === "jj" ? (
               <JjStudyView
@@ -285,10 +271,8 @@ export default async function ExamsPage({
               />
             )}
           </Suspense>
-          {/* 짝 잇기(관리자) — 표 **아래**에 둔다. 표보다 일이 많아(인재원 명단 + 학원 전체 이름 인원) 늦게 오는데,
-              위에 두면 도착하는 순간 보고 있던 표를 밀어 내렸다(적대 재리뷰 2026-09-10). */}
           {jjMode === "jj" ? (
-            // `#jj-link` — 원스크린 영어 칸의 '인재원 미연결 → 연결하러 가기'가 여기로 온다(english-jj-status-line.tsx).
+            // `#jj-link` — 원스크린 영어 칸의 '인재원 미연결 → 연결하러 가기'가 여기로 온다.
             <div id="jj-link" className="scroll-mt-4">
               <Suspense fallback={null}>
                 <JjLinkSection viewer={viewer} />
@@ -296,98 +280,34 @@ export default async function ExamsPage({
             </div>
           ) : null}
         </div>
+      ) : sheet && sheet.rows.length > 0 ? (
+        <ScoreGrid
+          /* 🔴 축이 바뀌면 **다시 마운트**한다 — 격자는 입력값을 제 상태로 들고 있어서, 키가 없으면
+             중간고사에 친 점수가 기말고사 칸에 그대로 남는다(반·학기를 바꿔도 같다). 시험일·만점은
+             키에 넣지 않는다: 그 둘은 같은 칸의 속성이라, 넣으면 적다 만 점수가 사라진다. */
+          key={`${sel.year}:${sel.term}:${sel.subject}:${sel.track ?? ""}:${sel.classId ?? ""}:${sel.slot}`}
+          sheet={sheet}
+          canWrite={canWrite}
+          slotLabel={EXAM_SLOT_LABEL[sel.slot]}
+          lockReason={lockReason}
+        />
       ) : (
-        <>
-          <div className="flex items-center justify-between">
-            <p className="micro">
-              결과 <span className="text-foreground font-bold">{total}</span>개
-              {totalPages > 1 ? (
-                <span className="text-text-faint ml-2 normal-case">
-                  · {page}/{totalPages} 페이지
-                </span>
-              ) : null}
-            </p>
-            <CreateExamTrigger classOptions={classOptions} />
-          </div>
-
-          {total === 0 ? (
-            <EmptyState
-              compact
-              image="exams"
-              icon={() => <SearchX size={32} strokeWidth={1.8} />}
-              title={
-                q || from || to || subject !== "all" || examType !== "all"
-                  ? "조건에 맞는 시험이 없습니다"
-                  : "등록된 시험이 없습니다"
-              }
-              description="위에서 검색 조건을 바꾸거나 시험을 등록할 수 있습니다."
-            />
-          ) : (
-            <>
-              <ExamTable rows={rows} subjects={subjects} />
-              <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
-            </>
-          )}
-        </>
+        <EmptyState
+          compact
+          image="exams"
+          icon={() => <SearchX size={32} strokeWidth={1.8} />}
+          title={
+            (sheet?.classes.length ?? 0) === 0
+              ? "이 과목에 운영 중인 반이 없습니다"
+              : "이 학기 명단이 없습니다"
+          }
+          description={
+            (sheet?.classes.length ?? 0) === 0
+              ? "수업목록에서 반을 먼저 만들거나 과목을 바꿔보세요."
+              : `${termLabel(sel.year, sel.term)}에 이 반을 다닌 학생이 없습니다. 년도·학기나 반을 바꿔보세요.`
+          }
+        />
       )}
-    </div>
-  );
-}
-
-function ExamTable({ rows, subjects }: { rows: ExamRow[]; subjects: SubjectMaps }) {
-  return (
-    <div className="bg-card shadow-card overflow-auto rounded-2xl">
-      <table className="w-full text-sm [&_td]:whitespace-nowrap">
-        <thead className="border-line border-b [&_th]:whitespace-nowrap">
-          <tr>
-            <th className="micro px-4 py-3 text-left">시험일</th>
-            <th className="micro px-4 py-3 text-left">과목</th>
-            <th className="micro px-4 py-3 text-left">유형</th>
-            <th className="micro px-4 py-3 text-left">시험명</th>
-            <th className="micro px-4 py-3 text-right">응시</th>
-            <th className="micro px-4 py-3 text-right">평균</th>
-            <th className="micro px-4 py-3 text-right">최고</th>
-            <th className="micro px-4 py-3 text-right">최저</th>
-          </tr>
-        </thead>
-        <tbody className="divide-line divide-y">
-          {rows.map((e) => {
-            const meta = { label: subjects.labelOf(e.subject), color: subjects.colorOf(e.subject) };
-            const s = e.stats;
-            return (
-              <tr key={e.id} className="hover:bg-bg-soft/50">
-                <td className="text-text-dim num px-4 py-2.5 text-xs">{e.examDate}</td>
-                <td className="px-4 py-2.5">
-                  <Pill color={meta.color}>{meta.label}</Pill>
-                </td>
-                <td className="text-text-dim px-4 py-2.5 text-xs">
-                  {TYPE_LABEL[e.examType] ?? e.examType}
-                </td>
-                <td className="px-4 py-2.5">
-                  <WindowLink
-                    href={`/exams/${e.id}`}
-                    title={e.name}
-                    className="text-foreground text-sm font-bold hover:underline"
-                  >
-                    {e.name}
-                  </WindowLink>
-                </td>
-                <td className="text-foreground num px-4 py-2.5 text-right text-xs font-bold">
-                  {s.count}명
-                </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">
-                  {s.avg ?? "—"}
-                  {s.avgPct != null ? (
-                    <span className="text-text-faint ml-1">({s.avgPct}%)</span>
-                  ) : null}
-                </td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">{s.max ?? "—"}</td>
-                <td className="text-text-dim num px-4 py-2.5 text-right text-xs">{s.min ?? "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }

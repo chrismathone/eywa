@@ -281,6 +281,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 showEcs={ecsForTeacher}
                 showMcs={mcsForTeacher}
                 home={teacherHome}
+                layout={settings.navigation.teacherMenus}
               />
             ) : null}
             {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}

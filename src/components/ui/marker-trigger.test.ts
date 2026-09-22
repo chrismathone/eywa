@@ -25,7 +25,8 @@ const MARKED = [
     why: "ECS 시트(주간·월간) — 반 전환",
   },
   { path: "src/app/(shell)/attendance/page.tsx", why: "출석부 — 반을 고르면 그 반 월 시트" },
-  { path: "src/app/(shell)/exams/[id]/page.tsx", why: "시험 상세 — 고른 반의 점수 행" },
+  // 2026-09-22: 시험 상세(`exams/[id]`)가 사라지고 성적관리 격자가 그 자리를 이어받았다(반을 고르면 그 반 명단).
+  { path: "src/app/(shell)/exams/page.tsx", why: "성적관리 — 고른 반의 점수 명단" },
 ];
 
 describe("형광 반 표기(marker)", () => {

@@ -1,115 +1,60 @@
+import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { brandLabels, getPublicBranding } from "@/features/owner/server/public-branding";
-import { resolveBrandingSrc } from "@/lib/storage/media-storage";
+import { PublicBrand } from "@/components/public-site/public-brand";
+import styles from "@/components/public-site/public-site.module.css";
 import { LoginForm } from "./login-form";
 
-export const metadata = { title: "로그인 — aywa" };
+export const metadata: Metadata = {
+  title: "로그인 — AYWA",
+  description: "학원에서 발급받은 계정으로 AYWA에 로그인하세요.",
+  robots: { index: false, follow: false },
+};
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string | string[] }>;
 }) {
-  const { next } = await searchParams;
+  // 🔴 학원·지점 표기(로고·"인재원 · 침산")를 두지 않는다 — 원장 2026-09-22 *"로그인 페이지에는 지점과 관련된거 전부
+  //    삭제하고 그냥 로그인만. 어차피 로그인하면 지점 보일텐데"*. 로그인 전엔 누가 어느 지점인지 모르니 한 지점을
+  //    보여 주면 다른 지점 직원에게 남의 이름이 선다. 지점은 로그인 뒤 셸(사이드바)이 그 계정의 학원 설정으로 보인다.
+  const params = await searchParams;
+  const next = typeof params.next === "string" ? params.next : undefined;
 
   return (
-    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
-      <BrandPanel />
+    <div className={styles.site}>
+      <a href="#login-content" className={styles.skipLink}>로그인으로 이동</a>
+      <div className={styles.loginPage}>
+        <aside className={styles.loginStory} aria-label="AYWA 소개">
+          <PublicBrand />
+          <div className={styles.loginStoryCopy}>
+            <h2>가르치는 일에 집중하는<br />하루의 시작.</h2>
+            <p>매일의 기록이 쌓이고, 함께하는 일이 이어지는 곳.<br />우리 학원의 하루를 AYWA와 함께하세요.</p>
+          </div>
+          <div className={styles.loginPhoto}>
+            <Image src="/photos/login-panel.webp" alt="" fill sizes="(max-width: 820px) 0px, 45vw" loading="eager" />
+          </div>
+        </aside>
 
-      <div className="flex items-center justify-center px-6 py-12 sm:px-12">
-        <div className="w-full max-w-sm space-y-10">
-          <header className="space-y-3">
-            <p className="editorial-eyebrow">로그인</p>
-            <h1 className="font-bold tracking-tight text-foreground text-3xl">
-              다시 만나서<br />
-              반갑습니다.
-            </h1>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              학원 운영 데이터를 보려면<br />
-              계정으로 로그인해 주세요.
-            </p>
-          </header>
-
-          <LoginForm next={next} />
-        </div>
+        <main id="login-content" className={styles.loginMain}>
+          <div className={styles.loginTop}>
+            <div className={styles.mobileBrand}><PublicBrand /></div>
+            <Link href="/"><EyIcon name="arrowLeft" size={15} />AYWA 소개</Link>
+          </div>
+          <div className={styles.loginContent}>
+            <h1>로그인</h1>
+            <p className={styles.loginIntro}>학원에서 발급받은 계정으로 접속해 주세요.<br />로그인하면 소속 학원의 업무 공간으로 연결됩니다.</p>
+            <LoginForm next={next} />
+            <details className={styles.loginHelp}>
+              <summary>계정이나 비밀번호 확인이 필요한가요?<EyIcon name="chevronDown" size={17} /></summary>
+              <p>계정 발급과 비밀번호 재설정은 학원 원장 또는 시스템 담당자에게 요청해 주세요. 소속 학원이나 이용 권한이 맞지 않을 때도 담당자에게 확인할 수 있습니다.</p>
+            </details>
+          </div>
+          <p className={styles.loginFootnote}>소속 학원과 계정 권한에 따라 이용 메뉴가 달라집니다.</p>
+        </main>
       </div>
     </div>
-  );
-}
-
-/**
- * 좌측 브랜드 패널 — Editorial 문법 ④(실사 사진 + 캡션 오버레이).
- * 구판의 CSS 괘선 텍스처·가짜 출석부 장식(LedgerDecoration)·영문 mono 푸터는 "코딩 틱함"의
- * 대표 사례라 제거. 사진은 public/photos/login-panel.webp (placeholder → 실사 덮어쓰기 계약,
- * docs/photo-generation-prompts.md). LCP라 preload.
- *
- * 브랜드(로고·워드마크·학원명)는 **학원설정에서 읽는다**(getPublicBranding — 로그인 전이라 세션이 없으므로
- * **회사 브랜드 학원**(`pickBrandTenantId`: 1개면 그 학원, 2개+면 env `PUBLIC_BRAND_TENANT_SLUG`)만 확정하고 아니면
- * 제품 중립 표기로 폴백 — URL에 지점이 없는 C안, 2026-09-18). /owner에서 값을 바꾸면 이 화면이
- * 따라온다. 학원명을 코드에 적지 말 것(구판은 "인재원"이 3곳 하드코딩돼 있었다).
- */
-async function BrandPanel() {
-  const branding = await getPublicBranding();
-  const { wordmark, academyLine, academyName } = brandLabels(branding);
-  // signed URL은 캐시 밖에서 요청마다((shell)/layout.tsx 동일 규약). 미업로드·실패면 null → 마크 폴백.
-  const logoSrc = branding
-    ? await resolveBrandingSrc(branding.settings.profile.logoUrl, branding.tenantId)
-    : null;
-  // 학원명이 없으면 "학원"으로 — 본문 카피가 특정 학원에 묶이지 않게.
-  const subject = academyName ?? "학원";
-
-  return (
-    <aside className="relative hidden flex-col overflow-hidden p-12 text-white lg:flex">
-      <Image
-        src="/photos/login-panel.webp"
-        alt=""
-        fill
-        sizes="(max-width: 1024px) 0px, 55vw"
-        preload
-        className="object-cover"
-      />
-      {/* 텍스트 가독 오버레이 — 사진 위 흰 글자 대비 확보.
-          🔴 사진 위 글자에 알파를 먹이지 말 것(옛 white/60·70·75·85) — 2026-09-08 원장이 캡처로
-          흐려진 "같은 자리,"를 지목했다. 화면 글자를 흐리게 하지 않는다는 같은 날 규칙(글자색 한 값)의
-          비로그인 판이다. 위계가 필요하면 굵기·크기로. */}
-      <div
-        className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/50 to-black/35"
-        aria-hidden
-      />
-
-      <div className="relative flex items-center gap-3">
-        {logoSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS signed URL), next/image 최적화 불필요
-          <img src={logoSrc} alt={wordmark} className="size-9 shrink-0 rounded-xl bg-white object-contain p-1" />
-        ) : (
-          <span className="text-primary inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-white">
-            <EyIcon name="building" size={20} strokeWidth={1.8} />
-          </span>
-        )}
-        <div className="leading-tight">
-          <p className="text-sm font-bold tracking-tight">{wordmark}</p>
-          <p className="text-xs text-white">{academyLine}</p>
-        </div>
-      </div>
-
-      <div className="relative my-auto space-y-7 py-12">
-        <h2 className="font-bold tracking-tight text-5xl xl:text-[3.75rem]">
-          매일 같은 시간,<br />
-          <span className="text-white">같은 자리,</span><br />
-          한 화면에 모인 하루.
-        </h2>
-        {/* 🔴 기능을 **나열하지 말 것**(원장 2026-09-08 "너무 그렇게 메뉴 나열하지말고 간단하게") —
-            메뉴가 늘 때마다 고쳐야 하고 읽히지도 않는다. 옛 문구 "출석부, 시간표, 수강료, 상담 기록"이 그래서 낡았다. */}
-        <p className="max-w-md text-base leading-relaxed text-white">
-          {subject} 운영에 필요한 것만,<br />
-          빠르고 단순하게.
-        </p>
-      </div>
-
-      <p className="relative text-xs font-medium text-white">
-        {academyName ? `${academyName} · ` : ""}학원 운영의 하루가 여기서 시작됩니다
-      </p>
-    </aside>
   );
 }

@@ -19,7 +19,9 @@ import { PermissionsSection } from "./_components/permissions-section";
 import { NavigationSection } from "./_components/navigation-section";
 import { ModulesSection } from "./_components/modules-section";
 import { isGenericTenant } from "@/features/owner/preset";
-import { isModuleEnabled } from "@/lib/modules";
+import { capDisabledModules, isModuleEnabled } from "@/lib/modules";
+import { resolveMatrix } from "@/lib/permissions";
+import { teacherMenuKeysFor } from "@/lib/navigation";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
@@ -173,9 +175,19 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           </div>
         )
       ) : null}
-      {/* 왼쪽 탭 — 보기 설정이라 **권한(master 전용)과 달리 위임 계정도 편집**한다(saveOwnerSection이 owner 쓰기로 게이트).
+      {/* 탭 및 메뉴 구성(관리자뷰·강사뷰) — 보기 설정이라 **권한(master 전용)과 달리 위임 계정도 편집**한다(saveOwnerSection이 owner 쓰기로 게이트).
           권한을 대체하지 않기 때문에 여기서 켜도 못 보던 화면이 열리지 않는다. */}
-      {tab === "navigation" ? <NavigationSection initial={settings.navigation} /> : null}
+      {tab === "navigation" ? (
+        <NavigationSection
+          initial={settings.navigation}
+          // 강사뷰 안내 줄("강사 권한이 꺼져 있어 안 보입니다")의 근거 = 이 학원의 **강사 역할** 권한(override + 꺼진 모듈).
+          // 보는 사람의 매트릭스(getUserPermMatrix)를 쓰지 않는 이유 — 총괄은 잠금을 무시한 병합이라 실제 강사 화면과 달라진다.
+          teacherOpen={teacherMenuKeysFor(
+            "teacher",
+            capDisabledModules(resolveMatrix(settings.permissions.overrides), settings.modules.disabled),
+          )}
+        />
+      ) : null}
       {/* '기능' 면 = 원장·총괄만 편집(saveOwnerSection·0281a 트리거와 같은 선) — 위임 계정엔 저장이 실패할 폼 대신 안내.
           판정은 감사로그 면과 같은 식(원장 또는 총괄)이라 canReadAudit을 그대로 쓴다. */}
       {tab === "modules" ? (

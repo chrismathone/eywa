@@ -132,7 +132,9 @@ describe("입구 — 하부탭 하나만으로는 폰에서 갈 길이 없다", 
   });
 
   it("🔴 강사 미니셸 '내 메뉴'에도 있다 — 폰 강사의 실제 입구", () => {
-    expect(read("src/components/teacher-menu.tsx")).toMatch(/"\/attendance\/quick"/);
+    // 항목 표는 2026-09-22부터 순수 모듈 한 곳 — 드롭다운은 그 표를 그린다.
+    expect(read("src/lib/teacher-menu-links.ts")).toMatch(/"\/attendance\/quick"/);
+    expect(read("src/components/teacher-menu.tsx")).toContain("TEACHER_MENU_LINKS");
   });
 
   // 원장 2026-08-20: *"강사뷰가 아닌데 왜 메뉴에 '출결 모드'가 있지..?"* — 사이드바는 관리자뷰에만

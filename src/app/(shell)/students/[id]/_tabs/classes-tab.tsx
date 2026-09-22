@@ -20,7 +20,7 @@ import type { AssignDialogClass } from "@/components/enrollment-assign-dialog";
 import { StudentAssignAction } from "../_components/student-assign-action";
 import { EndEnrollmentAction } from "@/features/enrollments/components/end-enrollment-action";
 import { DeleteEnrollmentButton } from "../_components/delete-enrollment-button";
-import { MoveEnrollmentButton } from "../_components/move-enrollment-button";
+import { MoveEnrollmentButton, MoveEnrollmentProvider } from "../_components/move-enrollment-button";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import { EditableAttendanceCell } from "@/features/enrollments/components/editable-attendance-cell";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -142,6 +142,7 @@ export async function ClassesTab({
     }));
 
   return (
+    <MoveEnrollmentProvider>
     <div className="space-y-5">
       {/* 주간 시간표(읽기전용) — 수강 중 반의 과목별 교시 탭(행 구성 = 그 과목 시간표가 처음 여는 뷰의 규칙). 슬롯 없으면 null. */}
       <StudentWeekGrid rows={current} config={periodsConfig} usedRowSubjects={usedRowSubjects} />
@@ -172,6 +173,7 @@ export async function ClassesTab({
       <Section title="배정 예정 수업" rows={scheduled} kind="scheduled" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
       <Section title="지난 수업" rows={pastRows} kind="past" studentId={student.id} subjects={subjects} canEnd={canEnd} canEditDates={canEditDates} canEditSchedule={canEditSchedule} canDeleteEnrollment={canDeleteEnrollment} />
     </div>
+    </MoveEnrollmentProvider>
   );
 }
 

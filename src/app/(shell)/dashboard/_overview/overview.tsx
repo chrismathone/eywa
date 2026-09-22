@@ -1013,13 +1013,13 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
             note={monthAheadNote(admissionsRange)}
             sections={[v.calendar]}
           >
-            <AdmissionsSchedule events={v.calendar?.data?.slice(0, 6) ?? []} />
+            <AdmissionsSchedule events={v.calendar?.data ?? []} limit={3} />
             {v.calendar?.data?.length === 0 && (
               <p className={s.empty}>
                 오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.
               </p>
             )}
-            {(v.calendar?.data?.length ?? 0) > 6 && (
+            {(["levelTest", "firstClass"] as const).some((kind) => (v.calendar?.data?.filter((event) => event.kind === kind).length ?? 0) > 3) && (
               <DetailPopup
                 title="레벨테스트 및 첫수업 일정"
                 label={`전체 ${v.calendar!.data!.length}개 일정 보기`}

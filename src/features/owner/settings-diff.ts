@@ -83,7 +83,8 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   navigation: {
     // 줄마다 목적지 주소(href)라 이름이 없다 → diffArray가 "N개 → M개"까지만 남긴다.
     // 주소를 감사로그에 그대로 싣지 않는 건 의도 — 화면에 raw 경로를 내보내지 않는다.
-    menus: "왼쪽 탭 표시·순서",
+    menus: "관리자뷰 메뉴 표시·순서",
+    teacherMenus: "강사뷰 메뉴 표시·순서",
   },
   modules: {
     // 끈 모듈 id 목록 — 아래 diffModules가 한국어 기능 이름으로 "켬/끔"을 적는다(영문 id를 싣지 않는다).
@@ -248,8 +249,10 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
   const changes: SettingChange[] = [];
   let others = 0;
   for (const key of Object.keys(after)) {
-    const b = before[key];
     const a = after[key];
+    // 강사뷰 구성(2026-09-22)은 옛 행에 키 자체가 없다 — 없음을 빈 목록으로 읽는다. 관리자뷰만 고쳐 저장해 빈 목록이
+    // 처음 실리는 것은 변경이 아니고(아래 비교에서 같음), 처음 정하면 "없음 → 변경됨"이 아니라 "0개 → N개"로 적힌다.
+    const b = before[key] === undefined && section === "navigation" && key === "teacherMenus" ? [] : before[key];
     if (JSON.stringify(b) === JSON.stringify(a)) continue;
     // 이 작업(2026-09-22 일반판 분리)이 새로 만든 칸이 **처음 저장되며 기본값 그대로** 실리는 것은 변경이 아니다 —
     // 침산이 운영 체계를 저장할 때마다 감사로그에 "외 1건"이 붙으면 침산 기록에 흔적이 남는다(원장: 아무 일도 없던 것처럼).

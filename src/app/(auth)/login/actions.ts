@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { safeLoginNext } from "@/lib/auth/login-next";
 import { recordLoginEvent, pickClientIp } from "@/features/audit/server/login-log";
 
 const credentialsSchema = z.object({
@@ -19,7 +20,7 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
   const parsed = credentialsSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
-    next: formData.get("next"),
+    next: formData.get("next") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -46,7 +47,7 @@ export async function signIn(_prev: LoginState, formData: FormData): Promise<Log
     after(() => recordLoginEvent(uid, ua, ip));
   }
 
-  redirect(parsed.data.next?.startsWith("/") ? parsed.data.next : "/");
+  redirect(safeLoginNext(parsed.data.next) ?? "/home");
 }
 
 export async function signOut() {

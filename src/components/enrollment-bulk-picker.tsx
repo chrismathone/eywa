@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   candidateMeta,
   filterBulkCandidates,
@@ -18,15 +18,24 @@ export function EnrollmentBulkPicker({
   selected,
   onChange,
   disabled,
+  blocked = {},
+  descriptions = {},
+  listLabel = "배정할 학생 목록",
+  emptyLabel = "배정할 수 있는 학생이 없습니다",
 }: {
   options: BulkCandidate[];
   selected: string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
+  blocked?: Record<string, string | null>;
+  descriptions?: Record<string, string>;
+  listLabel?: string;
+  emptyLabel?: string;
 }) {
+  const searchId = useId();
   const [query, setQuery] = useState("");
   const visible = filterBulkCandidates(options, query);
-  const visibleIds = visible.map((c) => c.id);
+  const visibleIds = visible.filter((c) => !blocked[c.id]).map((c) => c.id);
   const chosen = new Set(selected);
   const allVisibleOn = visibleIds.length > 0 && visibleIds.every((id) => chosen.has(id));
   const toggle = (id: string) =>
@@ -35,7 +44,7 @@ export function EnrollmentBulkPicker({
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <label htmlFor="bulk-assign-search" className="text-foreground block text-sm font-medium">
+        <label htmlFor={searchId} className="text-foreground block text-sm font-medium">
           학생 선택
         </label>
         <span className="text-muted-foreground num text-xs" aria-live="polite">
@@ -43,7 +52,7 @@ export function EnrollmentBulkPicker({
         </span>
       </div>
       <input
-        id="bulk-assign-search"
+        id={searchId}
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -71,10 +80,10 @@ export function EnrollmentBulkPicker({
           </button>
         ) : null}
       </div>
-      <ul className="border-border max-h-64 overflow-y-auto rounded-lg border" aria-label="배정할 학생 목록">
+      <ul className="border-border max-h-64 overflow-y-auto rounded-lg border" aria-label={listLabel}>
         {visible.length === 0 ? (
           <li className="text-muted-foreground px-3 py-4 text-center text-sm">
-            {options.length === 0 ? "배정할 수 있는 학생이 없습니다" : "검색 결과가 없습니다"}
+            {options.length === 0 ? emptyLabel : "검색 결과가 없습니다"}
           </li>
         ) : (
           visible.map((c) => {
@@ -86,11 +95,15 @@ export function EnrollmentBulkPicker({
                     type="checkbox"
                     checked={chosen.has(c.id)}
                     onChange={() => toggle(c.id)}
-                    disabled={disabled}
+                    disabled={disabled || (!!blocked[c.id] && !chosen.has(c.id))}
                     className="accent-primary size-4 shrink-0"
                   />
                   <span className="text-foreground shrink-0 font-medium">{c.name}</span>
-                  {meta ? <span className="text-muted-foreground min-w-0 truncate text-xs">{meta}</span> : null}
+                  <span className="text-muted-foreground min-w-0 text-xs">
+                    {meta}
+                    {descriptions[c.id] ? <span className="block">{descriptions[c.id]}</span> : null}
+                    {blocked[c.id] ? <span className="text-danger block">{blocked[c.id]}</span> : null}
+                  </span>
                 </label>
               </li>
             );

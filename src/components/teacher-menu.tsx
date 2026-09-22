@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { EyIcon, MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Button } from "@/components/ui/button";
 import { switchToAdminView } from "@/features/shell/view-actions";
@@ -17,7 +17,8 @@ import type { MenuKey } from "@/lib/permissions";
 // 강사뷰 화면 언어(2026-09-03) — 라벨은 사전에서, 스위치는 이 드롭다운 **하나**(원장 지정 자리).
 import { useSheetT } from "@/features/teacher-view/lang-context";
 import { TeacherLangSwitch } from "@/features/teacher-view/lang-switch";
-import type { SheetDictKey } from "@/features/teacher-view/i18n";
+import { applyTeacherMenuLayout, type MenuLayout } from "@/features/owner/menu-layout";
+import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
 
 /**
  * 강사 미니멀 셸용 '내 메뉴' 드롭다운(B 옵션 — onescreen 허브 + 필요한 깊은 페이지 진입).
@@ -28,45 +29,6 @@ import type { SheetDictKey } from "@/features/teacher-view/i18n";
  * (겸직 강사뷰·'다른 강사 뷰'에서 누르면 튕기는 항목을 세우지 않는다) ∧ ③ 입구 정책(메뉴에서 뺀 항목은 여기서도 닫는다).
  * teacher_onescreen(수업 마감)은 ROLE_LOCKED + 뷰 기준 게이트라 항상 표시.
  */
-// 🔴 라벨은 **사전 키**다(한국어 원문은 [i18n.ts](@/features/teacher-view/i18n) 한 곳) — 여기에 문자열을
-//    다시 적으면 한/영이 갈린다. 키는 `menu.item.<menuKey>`가 원칙이고, 같은 menuKey를 두 줄이 쓰는
-//    출결 모드만 `menu.item.attendanceQuick`으로 구분한다.
-const LINKS: { href: string; labelKey: SheetDictKey; icon: AywaIconName; menu: MenuKey }[] = [
-  // 출결 모드(2026-08-20) — 내 반 오늘 출결만 터치 몇 번으로. 원장 지시: 원스크린 상단 바에만 두니
-  //   *"완전 안보인다"* → 강사의 주 진입로인 이 드롭다운에도 올린다(홈 바로 아래).
-  //   ⚠️ 권한 키는 출석부와 같은 `attendance` — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS 누락으로 잠긴다.
-  // 🔴 출석부와 **다른 그림**이어야 한다 — 같은 드롭다운에 나란히 선다(menu-hub의 출결 모드와 같은 listChecks).
-  { href: "/attendance/quick", labelKey: "menu.item.attendanceQuick", icon: "listChecks", menu: "attendance" },
-  { href: "/onescreen", labelKey: "menu.item.teacher_onescreen", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
-  // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
-  { href: "/ecs", labelKey: "menu.item.ecs", icon: MENU_ICON.ecs, menu: "ecs" },
-  // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만. requireMcsClassAccess 게이트).
-  // 🔴 이 줄이 없어서 **수학만 맡은 강사 9명에게는 MCS로 가는 길이 아예 없었다**(폰엔 사이드바가 없고
-  //    이 드롭다운이 강사의 유일한 진입로다). 노출 조건은 영어와 대칭(`showMcs`).
-  { href: "/mcs", labelKey: "menu.item.mcs", icon: MENU_ICON.mcs, menu: "mcs" },
-  { href: "/students", labelKey: "menu.item.students", icon: MENU_ICON.students, menu: "students" },
-  { href: "/attendance", labelKey: "menu.item.attendance", icon: MENU_ICON.attendance, menu: "attendance" },
-  { href: "/classes", labelKey: "menu.item.classes", icon: MENU_ICON.classes, menu: "classes" },
-  { href: "/timetable", labelKey: "menu.item.timetable", icon: MENU_ICON.timetable, menu: "timetable" },
-  { href: "/exams", labelKey: "menu.item.exams", icon: MENU_ICON.exams, menu: "exams" },
-  { href: "/consultations", labelKey: "menu.item.consultations", icon: MENU_ICON.consultations, menu: "consultations" },
-  // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
-  { href: "/textbook-requests", labelKey: "menu.item.textbook_requests", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
-  // 지출결의서 — 강사가 본인 지출을 작성·제출 + 결재 진행상태 조회. 사무실은 /billing 지출 면에서 결재.
-  { href: "/expense-requests", labelKey: "menu.item.expense_requests", icon: MENU_ICON.expense_requests, menu: "expense_requests" },
-  // 캘린더 — 학원 공용 일정(강사 readonly 기본). 테넌트 공용 정보라 스코핑 무관.
-  // 🔴 지금은 **메뉴에서 뺀 항목**이라 서지 않는다(원장 2026-09-10 "캘린더 탭은 메뉴에서 제외") — NAV 표의 `hidden`을
-  //    teacherMenuKeysFor가 따른다. 되살릴 땐 그 표의 `hidden`만 푼다(이 줄은 그대로 둔다 — 입구 정책은 한 곳).
-  { href: "/calendar", labelKey: "menu.item.calendar", icon: MENU_ICON.calendar, menu: "calendar" },
-  // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
-  // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
-  { href: "/approvals", labelKey: "menu.item.approvals", icon: MENU_ICON.approvals, menu: "approvals" },
-  // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).
-  // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
-  { href: "/class-review", labelKey: "menu.item.class_review", icon: MENU_ICON.class_review, menu: "class_review" },
-  // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
-  { href: "/documents", labelKey: "menu.item.documents", icon: MENU_ICON.documents, menu: "documents" },
-];
 
 export function TeacherMenu({
   menus,
@@ -74,6 +36,7 @@ export function TeacherMenu({
   showEcs = true,
   showMcs = true,
   home = null,
+  layout,
 }: {
   /**
    * 이 사람의 '내 메뉴'에 세울 메뉴 키 — 레이아웃이 [teacherMenuKeysFor](@/lib/navigation)로 계산해 내린다
@@ -102,20 +65,26 @@ export function TeacherMenu({
    * "쓴 게 안 보임"이 된다. 순서만 바꾼다. 모르면(null) 기존 순서 그대로.
    */
   home?: string | null;
+  /**
+   * 학원 설정 '탭 및 메뉴 구성 → 강사뷰'(`navigation.teacherMenus`, 원장 2026-09-22) — 감춘 항목을 빼고 정한 순서로 세운다.
+   * **보기 설정이지 권한이 아니다**(위 `menus`가 먼저 거른다). 홈은 감춰도 남고 늘 맨 위다(`applyTeacherMenuLayout`).
+   * 비어 있으면(기본) 코드 순서 + 홈 맨 위 — 이 설정 이전과 같다.
+   */
+  layout?: MenuLayout;
 }) {
   // 화면 언어 — provider는 강사 미니셸에만 있다(관리자 풀셸은 한국어 고정, 원장 2026-09-03).
   const t = useSheetT();
   // 세울 메뉴는 레이아웃이 정해 내려준다(menus). 🔴 여기서 권한 매트릭스로 다시 거르지 말 것 — 강사 행만 보면
   // 겸직·'다른 강사 뷰'에서 누르면 강사 홈으로 튕기는 항목이 되살아난다(2026-09-11 전수검사).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
-  const visible = LINKS.filter(
+  const visible = TEACHER_MENU_LINKS.filter(
     (l) =>
       menus.includes(l.menu) &&
       (l.menu !== "ecs" || showEcs) &&
       (l.menu !== "mcs" || showMcs),
   );
-  // 홈을 첫 줄로. 나머지는 원래 순서를 그대로 보존한다(가장 위 한 줄만 바뀌는 최소 변화).
-  const links = home ? [...visible.filter((l) => l.href === home), ...visible.filter((l) => l.href !== home)] : visible;
+  // 학원 설정 강사뷰 구성(감춤·순서) → 홈을 첫 줄로. 설정이 비면 원래 순서 + 홈만 맨 위(최소 변화).
+  const links = applyTeacherMenuLayout(visible, layout, home);
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger

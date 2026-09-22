@@ -387,13 +387,11 @@ export default async function StaffPage({
           triggerClassName={TOOLBAR_SELECT}
         />
         </div>
-        <div className="toolbar-group ml-auto flex flex-wrap items-center gap-3">
-          <SearchToggle placeholder="이름·이메일·연락처" defaultValue={q} resetParams={INVITE_PARAMS} />
-        </div>
-      </Toolbar>
-
-      {/* 결과 줄 — 숫자 + 표 보기 설정 셋(표시 수·글자 크기·볼 열)이 한 자리에(§10 "설정은 한 곳"). 둘 다 계정에 저장된다. */}
-      <Toolbar rail={false} gap="gap-x-3 gap-y-2">
+        {/* 오른쪽 묶음 = 결과 숫자 + 표 보기 설정 셋(표시 수·글자 크기·볼 열) + 검색 — 한 줄(원장 2026-09-22 *"넓은 화면까지
+            2행일 필요가 없어보임"*). 종전엔 이 셋이 따로 둘째 줄이라 넓은 창에서 두 줄 모두 대부분 비어 있었다.
+            좁아지면 묶음째 다음 줄로 감긴다(위 주석의 좌·우 묶음 규약). ⚠️ '열 고르기'도 인라인 `absolute` 겹판이라
+            레일에 넣으면 잘린다(위 주석) — 그래서 `rail={false}` 그대로. 보기 설정 둘은 계정에 저장된다(§10 "설정은 한 곳"). */}
+        <div className="toolbar-group ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
         <p className="text-text-dim text-sm whitespace-nowrap">
           결과 <span className="text-foreground font-bold">{total}</span>명
           {totalPages > 1 ? (
@@ -403,9 +401,7 @@ export default async function StaffPage({
           ) : null}
           {q ? <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span> : null}
         </p>
-        {/* 보기 설정 묶음 — 위 필터 줄과 같은 규약(`ml-auto`는 묶음 자신에, 좁아지면 묶음이 풀린다).
-            ⚠️ 여기 '열 고르기'도 인라인 `absolute` 겹판이라 레일에 넣으면 잘린다(위 주석). */}
-        <div className="toolbar-group ml-auto flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <FilterSelect
             paramName="per"
             clearParams={INVITE_PARAMS}
@@ -425,6 +421,8 @@ export default async function StaffPage({
             <StaffTableScaleControl />
           </div>
           <StaffColumnPicker />
+        </div>
+        <SearchToggle placeholder="이름·이메일·연락처" defaultValue={q} resetParams={INVITE_PARAMS} />
         </div>
       </Toolbar>
 

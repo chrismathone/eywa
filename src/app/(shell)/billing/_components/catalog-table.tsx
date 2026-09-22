@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Loader2, Pencil, Plus, Save, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
@@ -179,13 +179,24 @@ function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
   );
 }
 
-export function CatalogTable({ rows }: { rows: CatalogRow[] }) {
+export function CatalogTable({
+  rows,
+  toolbar,
+}: {
+  rows: CatalogRow[];
+  /**
+   * '교재 추가' 버튼과 **한 행**을 나눠 쓸 결과 줄·필터 — 서버 패널이 넘긴다(원장 2026-09-22 *"넓은 화면까지 2행일 필요가
+   * 없어보임"* — 종전엔 결과·필터 줄 아래에 버튼 하나만 선 둘째 줄이 있었다). 수강료 단가표의 `summary`와 같은 모양.
+   */
+  toolbar?: ReactNode;
+}) {
   const subjects = useSubjectMaps();
   const [open, setOpen] = useState<CatalogRow | "new" | null>(null);
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">{toolbar}</div>
         <Button size="sm" onClick={() => setOpen("new")}>
           <Plus className="size-4" />
           교재 추가

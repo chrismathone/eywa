@@ -12,9 +12,33 @@ import s from "./overview.module.css";
  */
 export function AdmissionsSchedule({
   events,
+  limit,
 }: {
   events: OverviewData["calendar"];
+  limit?: number;
 }) {
+  const columns = [
+    { kind: "levelTest", label: "입학 테스트" },
+    { kind: "firstClass", label: "첫 수업" },
+  ] as const;
+  return (
+    <div className={s.admissionsColumns}>
+      {columns.map(({ kind, label }) => {
+        const items = events.filter((event) => event.kind === kind);
+        return (
+          <section key={kind} aria-label={label} className={s.admissionsColumn}>
+            <h3 className={s.admissionsHeading}>{label}<span>{items.length}건</span></h3>
+            <AdmissionEvents events={limit === undefined ? items : items.slice(0, limit)} />
+            {items.length === 0 && events.length > 0 ? <p className={s.empty}>예정된 {label}이 없습니다.</p> : null}
+            {limit !== undefined && items.length > limit ? <p className={s.admissionsMore}>외 {items.length - limit}건</p> : null}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function AdmissionEvents({ events }: { events: OverviewData["calendar"] }) {
   return (
     <div className={s.notices}>
       {events.map((event) => {

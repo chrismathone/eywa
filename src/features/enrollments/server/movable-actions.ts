@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import type { TransferCandidate } from "../bulk-transfer";
 
 /**
  * **반이동 예약의 출발지 후보** — 그 학생이 지금(또는 앞으로) 다니는 수강 한 줄.
@@ -50,6 +52,7 @@ export async function listMovableEnrollments(
     .select("id, class_id, start_date, end_date, attendance_days")
     .eq("tenant_id", user.tenantId)
     .eq("student_id", studentId)
+    .eq("is_transferred", false)
     .or(`end_date.is.null,end_date.gt.${today}`)
     .order("start_date", { ascending: true });
   if (error) return { ok: false, error: "수강 목록을 불러오지 못했습니다" };
@@ -81,4 +84,49 @@ export async function listMovableEnrollments(
     };
   });
   return { ok: true, items };
+}
+
+/** 단체 반 이동을 켤 때만 같은 출발 반의 수강을 조회한다. */
+export async function listClassTransferCandidates(enrollmentId: string): Promise<
+  | { ok: true; classId: string; className: string; items: TransferCandidate[] }
+  | { ok: false; error: string }
+> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canManageTenant(user.systemRole, "classes")))
+    return { ok: false, error: "반 이동은 관리자만 할 수 있습니다" };
+  if (!/^[0-9a-f-]{36}$/i.test(enrollmentId))
+    return { ok: false, error: "기존 수강을 확인할 수 없습니다" };
+  const db = await createClient();
+  try {
+    const { data: source, error } = await db.from("enrollments").select("class_id")
+      .eq("tenant_id", user.tenantId).eq("id", enrollmentId).maybeSingle();
+    if (error || !source) return { ok: false, error: "기존 수강을 찾을 수 없습니다" };
+    const [klass, rows] = await Promise.all([
+      db.from("classes").select("class_name").eq("tenant_id", user.tenantId).eq("id", source.class_id).single(),
+      fetchAllPaged((from, to) => db.from("enrollments")
+        .select("id, student_id, start_date, end_date, attendance_days, on_hold, is_transferred")
+        .eq("tenant_id", user.tenantId).eq("class_id", source.class_id)
+        .or(`end_date.is.null,end_date.gte.${kstToday()}`).order("id").range(from, to)),
+    ]);
+    if (klass.error) throw klass.error;
+    const students = await fetchInChunks([...new Set(rows.map((r) => r.student_id as string))],
+      (ids) => db.from("students").select("id, name, school, grade").eq("tenant_id", user.tenantId).in("id", ids));
+    const byId = new Map(students.map((s) => [s.id, s]));
+    const items: TransferCandidate[] = rows.map((r) => {
+      const student = byId.get(r.student_id);
+      if (!student) throw new Error("student_missing");
+      return {
+        id: r.id, name: student.name, school: student.school, grade: student.grade,
+        snapshot: {
+          studentId: r.student_id, startDate: r.start_date, endDate: r.end_date,
+          onHold: r.on_hold, isTransferred: r.is_transferred, attendanceDays: r.attendance_days,
+        },
+      };
+    });
+    items.sort((a, b) => a.name.localeCompare(b.name, "ko") || a.id.localeCompare(b.id));
+    return { ok: true, classId: source.class_id, className: klass.data.class_name, items };
+  } catch {
+    return { ok: false, error: "같은 반 학생 목록을 불러오지 못했습니다. 다시 불러와 주세요." };
+  }
 }

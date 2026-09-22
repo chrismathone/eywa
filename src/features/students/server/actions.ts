@@ -21,6 +21,10 @@ import {
   type WithdrawalReason,
 } from "@/features/withdrawals/types";
 import { currentPeriod, isCommentCategory } from "../grades-meta";
+import { normalizeExamSlot } from "@/features/grades/exam-slots";
+import { defaultTermOf, normalizeTerm, normalizeYear } from "@/features/grades/term";
+// 성적 칸 저장은 **단일 경로**다 — 성적관리 격자·엑셀·이 폼이 같은 함수를 지난다(칸 키를 여러 곳이 알지 않게).
+import { gradesSchemaReady, writeGradeCells } from "@/features/grades/server/write";
 // 생성 = 공용 진입점(전 경로 공유) / 수정 = 자기 자신을 taken에서 빼야 해서 순수 함수 직접 호출.
 import { resolveUniqueStudentName } from "../name-suffix";
 import { preserveMergeNote } from "../merged";
@@ -975,32 +979,42 @@ export async function createStudentGrade(
   if (!(await canWriteTenant(user.systemRole, "students"))) return { error: "학생 관리 권한이 없습니다" };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
-  const examName = String(formData.get("examName") ?? "").trim();
   const subject = String(formData.get("subject") ?? "").trim();
   const scoreStr = String(formData.get("score") ?? "").trim();
   const maxScoreStr = String(formData.get("maxScore") ?? "").trim();
   const takenOn = String(formData.get("takenOn") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim() || null;
+  // 학기 축(2026-09-22) — 시험명 자유 입력을 없애고 성적관리 격자와 **같은 칸**에 적는다.
+  const fallback = defaultTermOf(kstToday());
+  const year = normalizeYear(formData.get("year"), fallback.year);
+  const term = normalizeTerm(formData.get("term"), fallback.term);
+  const slot = normalizeExamSlot(subject, formData.get("slot"));
 
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
-  if (!examName) return { error: "시험명을 입력해주세요" };
   if (!subject) return { error: "과목을 선택해주세요" };
   if (!takenOn) return { error: "시험일을 입력해주세요" };
+  // 🔴 점수를 비우면 공용 저장 경로가 그 칸을 **지운다** — '성적 추가'가 삭제로 동작하면 안 되니 여기서 막는다
+  //    (지우는 자리는 성적 기록 표의 휴지통·성적관리 격자다).
+  if (!scoreStr) return { error: "점수를 입력해주세요" };
+  const score = Number(scoreStr);
+  if (!Number.isFinite(score)) return { error: "점수는 숫자로 입력해주세요" };
+  const maxScore = maxScoreStr ? Number(maxScoreStr) : null;
+  if (maxScoreStr && !Number.isFinite(maxScore)) return { error: "만점은 숫자로 입력해주세요" };
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").insert({
-    tenant_id: user.tenantId,
-    student_id: studentId,
-    exam_name: examName,
-    subject,
-    score: scoreStr || null,
-    max_score: maxScoreStr || null,
-    taken_on: takenOn,
-    notes,
-    created_by: user.id,
-  });
+  // 0283a 미적용이면 저장 자체가 400이라, 실패 메시지 대신 **왜 안 되는지**를 말한다([[#95]]).
+  if (!(await gradesSchemaReady())) {
+    return { error: "성적 학기 구조(0283a)가 아직 적용되지 않아 저장할 수 없습니다" };
+  }
 
-  if (error) return { error: error.message };
+  try {
+    // 메모도 같은 저장 경로가 함께 받는다 — 칸 키를 아는 곳을 하나로 둔다(격자 저장은 notes를 안 보낸다).
+    await writeGradeCells(
+      { subject, year, term, slot, date: takenOn, maxScore },
+      [{ studentId, classId: null, score, notes }],
+    );
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "성적을 저장하지 못했습니다" };
+  }
 
   revalidatePath(`/students/${studentId}`);
   return undefined;
