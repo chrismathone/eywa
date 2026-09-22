@@ -460,19 +460,16 @@
   margin-left: 3px;
   font-weight: 400;
 }
-.consultationPanel {
+/* 학습·보고와 학생 상담은 격자의 열 수나 앞 카드의 표시 권한이 바뀌어도 같은 줄에 둔다. */
+.followupPanels {
   grid-column: 1 / -1;
-}
-.consultationPanel > .panelBody {
   display: grid;
-  grid-template-columns: 1fr 1.5fr 1fr;
-  align-items: center;
-  gap: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: inherit;
+  min-width: 0;
 }
-.consultationPanel .smallStats {
-  flex-direction: column;
-  align-items: flex-start;
-  margin-top: 0;
+.followupPanels > :only-child {
+  grid-column: 1 / -1;
 }
 .detailButton:hover {
   color: var(--primary);
@@ -1395,9 +1392,8 @@ a.kpiCountRow:hover > span {
   .schoolPanel {
     grid-row: auto;
   }
-  .consultationPanel > .panelBody {
+  .followupPanels {
     grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
   }
   .board {
     padding: 12px 10px;
