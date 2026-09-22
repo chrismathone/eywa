@@ -7,6 +7,8 @@ import {
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
 import { gradeSeries, gradeStats } from "@/lib/calc/grades";
+import { EXAM_SLOT_LABEL } from "@/features/grades/exam-slots";
+import { termLabel } from "@/features/grades/term";
 import { GradeForm } from "../_components/grade-form";
 import { GradesChart } from "../_components/grades-chart";
 import { GoalsSection } from "../_components/goals-section";
@@ -108,7 +110,19 @@ export async function GradesTab({
                   <td className="text-foreground px-4 py-2 text-xs font-medium">
                     {subjectMaps.labelOf(g.subject)}
                   </td>
-                  <td className="text-foreground px-4 py-2 text-xs">{g.examName}</td>
+                  <td className="text-foreground px-4 py-2 text-xs">
+                    {/* 학기 축(0281a)이 있으면 `2026년 2학기 · 중간고사`. 옛 자유 입력 행·SQL 미적용 창에선
+                        시험명만 선다(없는 것을 지어내지 않는다, [[#95]]). */}
+                    {g.schoolYear != null && g.term != null ? (
+                      <span className="text-muted-foreground">
+                        {termLabel(g.schoolYear, g.term)}
+                        <span className="px-1">·</span>
+                      </span>
+                    ) : null}
+                    <span className="text-foreground">
+                      {g.examSlot ? EXAM_SLOT_LABEL[g.examSlot] : g.examName}
+                    </span>
+                  </td>
                   <td className="num px-4 py-2 text-right text-xs">
                     {g.score == null ? (
                       "—"

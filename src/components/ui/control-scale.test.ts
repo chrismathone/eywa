@@ -111,7 +111,7 @@ describe("컨트롤 프리셋 — 높이는 라벨에서 도출, 공용 컨트�
       "components/search-form.tsx",
       // 수업목록 필터바는 2026-09-03 열 머리 필터로 바뀌며 사라졌다(검색은 공용 SearchToggle → search-form.tsx).
       "app/(shell)/documents/_components/document-toolbar.tsx",
-      "app/(shell)/exams/page.tsx",
+      // 성적관리는 2026-09-22 격자로 바뀌며 검색 입력이 사라졌다(명단은 반 드롭다운이 고른다).
       "app/(shell)/inventory/_components/list-toolbar.tsx",
       // 학생목록 필터바는 2026-09-03 열 머리 필터로 바뀌며 사라졌다(검색은 공용 SearchToggle → search-form.tsx).
     ]) {
