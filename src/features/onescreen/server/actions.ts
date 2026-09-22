@@ -60,6 +60,7 @@ import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
 import { mentStyleDirective } from "../ment-style-prompt";
+import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { captureReportJj } from "./jj-capture";
@@ -979,6 +980,11 @@ export async function generateReportComment(
   const roError = await readonlyTeacherViewError();
   if (roError) return { ok: false, error: roError };
 
+  // 학부모께 직접 드리는 사과·양해 문장(특이사항·반 전체 안내)은 AI에 주지 않고 멘트 맨 앞에 그대로 붙인다
+  // (2026-09-22 강사 제보 — '인사말·날짜 금지'에 걸려 모델이 때때로 뺐다, parent-address.ts 주석).
+  const noteSplit = splitParentAddress(input.specialNote);
+  const noticeSplit = splitParentAddress(input.classNotice);
+  const parentAddress = [...noteSplit.address, ...noticeSplit.address];
   // 방지로직 — 진도/태도/테스트/과제 등 최소 사실이 하나도 없으면 생성 거부(빈 껍데기 멘트 방지).
   // 개별 자동작성 버튼은 클라에서 진도 없으면 비활성이지만, 서버에서도 이중 방어(edutrix 관례).
   const hasFacts = !!(
@@ -988,14 +994,20 @@ export async function generateReportComment(
     input.checkTest?.trim() ||
     input.homework?.trim() ||
     input.homeworkToday?.trim() ||
-    input.specialNote?.trim()
+    noteSplit.rest.trim()
   );
-  if (!hasFacts) return { ok: false, error: "진도·태도 등을 입력한 뒤 자동작성할 수 있습니다" };
+  if (!hasFacts) {
+    // 특이사항이 사과 문장뿐이면 AI를 부르지 않고 그 문장만 — 재료 없이 부르면 멘트를 지어낸다.
+    if (parentAddress.length) return { ok: true, comment: prependParentAddress("", parentAddress) };
+    return { ok: false, error: "진도·태도 등을 입력한 뒤 자동작성할 수 있습니다" };
+  }
   // 반 공통 서술(G6) — 클라 입력이라 길이 상한(프롬프트 비대·토큰 남용 방지). ⚠️ hasFacts 게이트에는
   // **불포함 유지** — 반 서술만으로 개별 학생 멘트를 생성하면 환각(학생 사실 0 + 반 맥락만)이라 거부가 맞다.
   // 개행 접기 — 여러 줄 서술이 fact 블록의 가드 라벨을 탈출해 맨줄 개별 사실로 위장하는 것 차단(빌더와 이중 방어).
   const safeInput: ReportCommentInput = {
     ...input,
+    specialNote: noteSplit.rest,
+    classNotice: noticeSplit.rest,
     classContext: input.classContext?.replace(/\s*\n+\s*/g, " ").trim().slice(0, 300) || "",
   };
   try {
@@ -1082,8 +1094,9 @@ ${style}` : body) });
       ...MENT_AI_TUNING,
     });
     const pick = (k: string) => (data[k] ?? "").trim();
-    const comment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
-    if (!comment) return { ok: false, error: "빈 응답" };
+    const aiComment = mode === "B" ? [pick("p1"), pick("p2")].filter(Boolean).join("\n\n") : pick("comment");
+    if (!aiComment) return { ok: false, error: "빈 응답" };
+    const comment = prependParentAddress(aiComment, parentAddress);
     // 🔴 추세 문장 후검증(2026-08-13) — 척도가 섞인 학생에게서 *"9~15문제 중 9~15개 선을 유지"* 같은
     //    **사실일 수 없는 표기**가 실제로 학부모에게 나갔다. 프롬프트 주의 문구가 이미 있었는데도 뚫렸으므로
     //    생성 뒤에도 한 번 더 본다. 걸리면 **추세를 아예 안 실는다** — 없는 것보다 거짓이 나쁘다.
