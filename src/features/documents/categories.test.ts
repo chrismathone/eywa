@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   categoryLabelOf,
+  categoryDescendants,
+  categoryPathLabel,
+  categorySelectOptions,
+  categoryTreeCounts,
+  flattenCategories,
   linkHostLabel,
   linkServiceLabel,
   nextCategoryKey,
@@ -13,6 +18,39 @@ const opts: DocumentCategoryOption[] = [
   ...SYSTEM_CATEGORY_OPTIONS,
   { key: "cat_1", label: "기출시험", isSystem: false },
 ];
+
+describe("중첩 폴더", () => {
+  const tree: DocumentCategoryOption[] = [
+    { key: "root", label: "수업", isSystem: true },
+    { key: "leaf", label: "시험지", isSystem: false, parentKey: "middle" },
+    { key: "middle", label: "중등", isSystem: false, parentKey: "root" },
+    { key: "peer", label: "시험지", isSystem: false },
+  ];
+  it("입력 순서와 무관하게 부모부터 정렬하고 동명 폴더를 경로로 구별한다", () => {
+    expect(flattenCategories(tree).map((r) => [r.category.key, r.depth])).toEqual([["root", 0], ["middle", 1], ["leaf", 2], ["peer", 0]]);
+    expect(categorySelectOptions(tree).map((o) => o.label)).toEqual(["수업", "수업 / 중등", "수업 / 중등 / 시험지", "시험지"]);
+    expect(categoryPathLabel(tree, "leaf")).toBe("수업 / 중등 / 시험지");
+  });
+  it("하위 문서 수를 중복 없이 합산하고 이동 제외 대상으로 모든 후손을 구한다", () => {
+    expect(categoryTreeCounts(tree, { root: 2, middle: 1, leaf: 3, peer: 4, all: 10 })).toEqual({ root: 6, middle: 4, leaf: 3, peer: 4, all: 10 });
+    expect([...categoryDescendants(tree, "root")]).toEqual(["root", "middle", "leaf"]);
+  });
+  it("유실 부모·잘못된 순환 캐시에서도 폴더를 숨기거나 무한 순회하지 않는다", () => {
+    const corrupt = [
+      { key: "a", label: "A", isSystem: false, parentKey: "b" },
+      { key: "b", label: "B", isSystem: false, parentKey: "a" },
+      { key: "c", label: "C", isSystem: false, parentKey: "missing" },
+    ];
+    expect(flattenCategories(corrupt)).toHaveLength(3);
+    expect(categoryPathLabel(corrupt, "a")).toBe("B / A");
+    expect(categoryDescendants(corrupt, "a").size).toBe(2);
+  });
+  it("세 단계보다 깊은 폴더도 제한 없이 탐색한다", () => {
+    const deep = Array.from({ length: 100 }, (_, i) => ({ key: `k${i}`, label: `${i}`, isSystem: false, parentKey: i ? `k${i - 1}` : null }));
+    expect(flattenCategories(deep).at(-1)?.depth).toBe(99);
+    expect(categoryDescendants(deep, "k0").size).toBe(100);
+  });
+});
 
 describe("categoryLabelOf", () => {
   it("학원장이 추가한 분류의 이름을 그대로 쓴다", () => {

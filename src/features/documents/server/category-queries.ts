@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { SYSTEM_CATEGORY_OPTIONS, type DocumentCategoryOption } from "../categories";
 
@@ -21,22 +22,22 @@ const loadCategories = (tenantId: string) =>
   unstable_cache(
     async (): Promise<DocumentCategoryOption[]> => {
       const admin = createAdminClient();
-      const { data, error } = await admin
-        .from("document_categories")
-        .select("key, label, is_system, sort_order")
-        .eq("tenant_id", tenantId)
-        .order("sort_order", { ascending: true })
-        .order("key", { ascending: true });
-      // 조회 실패를 빈 배열로 삼키면 폴더가 통째로 사라져 "문서를 어디에도 못 넣는" 화면이 된다 —
-      // 로그를 남기고 시스템 기본값으로 폴백(동작은 관대, 진단은 가능).
-      if (error) {
+      try {
+        const data = await fetchAllPaged<{ key: string; label: string; is_system: boolean; parent_key: string | null }>((from, to) => admin
+          .from("document_categories")
+          .select("key, label, is_system, parent_key")
+          .eq("tenant_id", tenantId)
+          .order("sort_order", { ascending: true })
+          .order("key", { ascending: true })
+          .range(from, to));
+        if (!data.length) return SYSTEM_CATEGORY_OPTIONS;
+        return data.map((r) => ({ key: r.key, label: r.label, isSystem: !!r.is_system, parentKey: r.parent_key }));
+      } catch (error) {
         console.error("[documents/category-queries] document_categories 조회 오류", error);
         return SYSTEM_CATEGORY_OPTIONS;
       }
-      if (!data?.length) return SYSTEM_CATEGORY_OPTIONS; // 시드 전 테넌트 폴백
-      return data.map((r) => ({ key: r.key, label: r.label, isSystem: !!r.is_system }));
     },
-    ["document-categories", tenantId],
+    ["document-categories-tree-v2", tenantId],
     // 변경 액션이 updateTag로 즉시 무효화. revalidate는 그게 실패할 때의 TTL 백스톱.
     { tags: [documentCategoriesTag(tenantId)], revalidate: 300 },
   )();

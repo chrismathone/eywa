@@ -1,4 +1,5 @@
-import { ChevronLeft, ChevronRight, Files } from "@/components/icons/aywa-icon-compat";
+import { ChevronLeft, ChevronRight, Files, Folder } from "@/components/icons/aywa-icon-compat";
+import Link from "next/link";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -12,7 +13,9 @@ import {
 import { getLinkedCounts, getLinkedPage } from "@/features/documents/server/linked-queries";
 import { getDocumentCategories } from "@/features/documents/server/category-queries";
 import {
-  categoryLabelOf,
+  categoryPath,
+  categoryPathLabel,
+  categoryTreeCounts,
   fileTypeLabel,
   formatFileSize,
   formViewHref,
@@ -26,6 +29,8 @@ import { DocumentRow } from "./_components/document-row";
 import { LinkedDocumentRow } from "./_components/linked-row";
 import { FolderNav, type FolderItem } from "./_components/folder-nav";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { NewFolderButton } from "./_components/category-manager";
+import { FolderBreadcrumbs } from "./_components/folder-breadcrumbs";
 
 export const metadata = { title: "데이터베이스 — aywa" };
 
@@ -59,6 +64,8 @@ export default async function DocumentsPage({
   const linked: LinkedSourceKey | null = canBilling && isLinkedSource(catRaw) ? catRaw : null;
   const cat = !linked && categories.some((c) => c.key === catRaw) ? catRaw : null;
   const activeKey = linked ?? cat;
+  const children = linked ? [] : categories.filter((c) => (c.parentKey ?? null) === cat);
+  const path = cat ? categoryPath(categories, cat) : [];
 
   const [docPage, linkedPage, counts, linkedCounts] = await Promise.all([
     linked ? null : getDocumentsPage({ category: cat ?? undefined, q, sort }, page, PAGE_SIZE),
@@ -68,6 +75,7 @@ export default async function DocumentsPage({
   ]);
   const total = linked ? (linkedPage?.total ?? 0) : (docPage?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const treeCounts = counts ? categoryTreeCounts(categories, counts) : null;
 
   // 폴더/페이지/정렬 href — 필터·정렬을 바꾸면 page 리셋(파라미터 미포함), pageHref만 p>1일 때 page 세팅.
   // ⚠️ 세 링크가 서로의 파라미터를 **보존**해야 한다 — 하나라도 흘리면 폴더를 옮길 때 정렬이 조용히 풀리거나
@@ -135,7 +143,7 @@ export default async function DocumentsPage({
       />
 
       {/* 탐색기 레이아웃 — 넓은 창: 좌 폴더 팬 + 우 상세 테이블 / 좁은 창: 폴더가 상단 칩으로 접힘 */}
-      <div className="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:items-start lg:gap-4">
+      <div className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:items-start lg:gap-4">
         <FolderNav
           folders={folders}
           linkedFolders={linkedFolders}
@@ -146,11 +154,27 @@ export default async function DocumentsPage({
           canManage={canWrite}
         />
 
-        <section className="bg-card border-line rounded-2xl border">
-          <div className="border-line text-text-dim flex items-center justify-between border-b px-4 py-2 text-xs">
+        <section className="bg-card border-line min-w-0 rounded-2xl border">
+          {!linked ? <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+            <FolderBreadcrumbs rootHref={folderHref(null)} path={path.map((c) => ({ key: c.key, label: c.label, href: folderHref(c.key) }))} />
+            {canWrite ? <NewFolderButton categories={categories} parentKey={cat} /> : null}
+          </div> : null}
+          {children.length ? <div className="border-b border-line p-4">
+            <p className="mb-2 text-xs text-text-faint">{cat ? "하위 폴더" : "폴더"} · {children.length}개</p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {children.map((c) => <Link key={c.key} href={folderHref(c.key)}
+                className="flex min-w-0 items-center gap-2 rounded-lg border border-line px-3 py-2.5 hover:bg-bg-soft">
+                <Folder className="size-4 shrink-0 text-amber" />
+                <span className="min-w-0 flex-1 truncate text-sm" title={c.label}>{c.label}</span>
+                <span className="num shrink-0 text-xs text-text-faint" title="하위 폴더 문서 포함">{treeCounts ? treeCounts[c.key] ?? 0 : "—"}건</span>
+                <ChevronRight className="size-3 shrink-0 text-text-faint" />
+              </Link>)}
+            </div>
+          </div> : null}
+          <div className="border-line text-text-dim flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs">
             <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
               <Files className="size-3.5" />
-              {linked ? LINKED_LABEL[linked] : cat ? categoryLabelOf(categories, cat) : "전체 문서"} · {total}건
+              {linked ? LINKED_LABEL[linked] : cat ? "이 폴더의 문서" : "전체 문서"} · {total}건
             </span>
             {totalPages > 1 ? (
               // 헤더 컴팩트 페이저 — 작은 창에선 50행 아래 하단 표준 페이저가 안 보여(스크롤 필요)
@@ -170,7 +194,8 @@ export default async function DocumentsPage({
           </div>
 
           {total === 0 ? (
-            <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
+            children.length && !q ? <p className="px-4 py-8 text-center text-sm text-text-faint">{cat ? "이 폴더에 직접 저장된 문서가 없습니다. 하위 폴더를 열거나 문서를 추가하세요." : "폴더를 열어 문서를 추가하세요."}</p>
+              : <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
           ) : (
             <DragScrollArea>
               <table className="w-full text-sm">
@@ -227,7 +252,7 @@ export default async function DocumentsPage({
                             title: r.title,
                             kind: r.kind,
                             description: r.description,
-                            categoryLabel: categoryLabelOf(categories, r.category),
+                            categoryLabel: categoryPathLabel(categories, r.category),
                             typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType, r.linkUrl),
                             sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",
                             createdAt: r.createdAt,
@@ -254,7 +279,7 @@ export default async function DocumentsPage({
         </section>
       </div>
 
-      <div className="lg:pl-[206px]">
+      <div className="lg:pl-[246px]">
         <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} total={total} />
       </div>
     </div>

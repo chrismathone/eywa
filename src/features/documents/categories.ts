@@ -25,6 +25,8 @@ export type DocumentCategoryOption = {
   key: string;
   label: string;
   isSystem: boolean;
+  /** null/미지정 = 최상위. 문서의 category 키는 위치를 바꿔도 유지한다. */
+  parentKey?: string | null;
 };
 
 /** 시드/폴백용 기본 목록 — DB가 비었을 때만 쓴다. */
@@ -47,7 +49,76 @@ export function categoryLabelOf(options: DocumentCategoryOption[], key: string):
 
 /** 폼 `<select>`용 옵션 변환. */
 export function categorySelectOptions(options: DocumentCategoryOption[]): { value: string; label: string }[] {
-  return options.map((o) => ({ value: o.key, label: o.label }));
+  return flattenCategories(options).map(({ category, path }) => ({ value: category.key, label: path.map((c) => c.label).join(" / ") }));
+}
+
+/** 임의 깊이의 폴더를 순회한다. 오래된 캐시나 잘못된 데이터도 무한 순회하지 않는다. */
+export function flattenCategories(options: DocumentCategoryOption[]): {
+  category: DocumentCategoryOption; depth: number; path: DocumentCategoryOption[];
+}[] {
+  const byKey = new Map(options.map((c) => [c.key, c]));
+  const children = new Map<string | null, DocumentCategoryOption[]>();
+  for (const category of options) {
+    const parent = category.parentKey && byKey.has(category.parentKey) ? category.parentKey : null;
+    const siblings = children.get(parent) ?? [];
+    siblings.push(category);
+    children.set(parent, siblings);
+  }
+  const result: { category: DocumentCategoryOption; depth: number; path: DocumentCategoryOption[] }[] = [];
+  const visited = new Set<string>();
+  const append = (roots: DocumentCategoryOption[]) => {
+    const stack = [...roots].reverse().map((category) => ({ category, path: [] as DocumentCategoryOption[] }));
+    while (stack.length) {
+      const { category, path } = stack.pop()!;
+      if (visited.has(category.key)) continue;
+      visited.add(category.key);
+      const next = [...path, category];
+      result.push({ category, depth: path.length, path: next });
+      for (const child of [...(children.get(category.key) ?? [])].reverse()) stack.push({ category: child, path: next });
+    }
+  };
+  append(children.get(null) ?? []);
+  // DB 제약 도입 전 잘못된 자료도 화면에서 사라지지는 않게 한다.
+  append(options.filter((c) => !visited.has(c.key)));
+  return result;
+}
+
+export function categoryPath(options: DocumentCategoryOption[], key: string): DocumentCategoryOption[] {
+  const byKey = new Map(options.map((c) => [c.key, c]));
+  const path: DocumentCategoryOption[] = [];
+  const seen = new Set<string>();
+  let current = byKey.get(key);
+  while (current && !seen.has(current.key)) {
+    seen.add(current.key);
+    path.push(current);
+    current = current.parentKey ? byKey.get(current.parentKey) : undefined;
+  }
+  return path.reverse();
+}
+
+export function categoryPathLabel(options: DocumentCategoryOption[], key: string): string {
+  return categoryPath(options, key).map((c) => c.label).join(" / ") || categoryLabelOf(options, key);
+}
+
+/** 자신과 하위 폴더를 이동 목적지에서 제외한다(서버·DB에서도 다시 검증). */
+export function categoryDescendants(options: DocumentCategoryOption[], key: string): Set<string> {
+  const descendants = new Set([key]);
+  const children = new Map<string, string[]>();
+  for (const c of options) if (c.parentKey) children.set(c.parentKey, [...(children.get(c.parentKey) ?? []), c.key]);
+  const queue = [key];
+  for (let i = 0; i < queue.length; i++) for (const child of children.get(queue[i]) ?? []) {
+    if (!descendants.has(child)) { descendants.add(child); queue.push(child); }
+  }
+  return descendants;
+}
+
+export function categoryTreeCounts(options: DocumentCategoryOption[], counts: Record<string, number>): Record<string, number> {
+  const totals = { ...counts };
+  for (const { category } of flattenCategories(options).reverse()) {
+    const parent = category.parentKey;
+    if (parent && parent !== category.key) totals[parent] = (totals[parent] ?? 0) + (totals[category.key] ?? 0);
+  }
+  return totals;
 }
 
 /**

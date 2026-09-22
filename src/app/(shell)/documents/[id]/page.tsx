@@ -6,7 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { getDocumentById } from "@/features/documents/server/queries";
 import { getDocumentCategories } from "@/features/documents/server/category-queries";
 import {
-  categoryLabelOf,
+  categoryPathLabel,
   categorySelectOptions,
   fileTypeLabel,
   formatFileSize,
@@ -34,7 +34,7 @@ export default async function DocumentDetailPage({ params }: { params: Promise<{
 
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Pill color="neutral">{categoryLabelOf(categories, doc.category)}</Pill>
+          <Pill color="neutral">{categoryPathLabel(categories, doc.category)}</Pill>
           <Pill color={doc.kind === "file" || doc.kind === "link" ? "blue" : "primary"}>
             {fileTypeLabel(doc.kind, doc.fileName, doc.mimeType, doc.formType, doc.linkUrl)}
           </Pill>

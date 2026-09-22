@@ -406,7 +406,7 @@ export const AUDIT_ACTIONS = {
   document_pin: "서식 상단 고정 전환",
   document_category_create: "서식 분류 추가",
   document_category_rename: "서식 분류 이름 변경",
-  document_category_move: "서식 분류 순서 변경",
+  document_category_move: "서식 폴더 위치·순서 변경",
   document_category_delete: "서식 분류 삭제",
   retention_action_create: "이탈 방어 조치 기록",
   retention_campaign_add: "재등록 캠페인 추가",

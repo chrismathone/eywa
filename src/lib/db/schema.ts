@@ -1860,6 +1860,7 @@ export const documentCategories = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     key: text("key").notNull(), // academy_documents.category가 참조하는 불변 식별자
+    parentKey: text("parent_key"), // 상위 폴더. 동일 테넌트 FK·순환 방지는 0286a SQL.
     label: text("label").notNull(), // 화면 표시 이름(편집 가능)
     sortOrder: integer("sort_order").notNull().default(0),
     isSystem: boolean("is_system").notNull().default(false),
