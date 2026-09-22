@@ -21,6 +21,8 @@
 - ⏪ **되돌리기 = [`docs/landing-rollback.md`](landing-rollback.md)** — (A) 어제까지 운영하던 판
   `4ec22cae9abdc91e0852bcdcbefddb3ffcdf335e` · (B) 오늘 낮 판 `ee7cc124`(공개 화면 파일은 `8247b4a1`과 같다).
   옛 코드 사본은 두지 않는다(git이 원본). 🔴 (A)로 되돌리면 그 판의 '무료' 문구가 함께 되살아난다.
+  되돌리기 명령을 임시 워크트리에서 **실제로 돌려** 확인했다 — (B)는 타입 검사 0건, **(A)는 한 줄**
+  (`_ui/mock-workspace.tsx`의 `LayoutDashboard` → `LayoutGrid`, 그 판 이후 아이콘 호환 이름이 바뀌었다).
 - 인라인 SVG 둘(연결선·브랜드 표식)은 아이콘 가드 허용 목록에 이유와 함께 적었다. 이전 판 잔재
   `_components/product-preview.tsx`·`_img/*.webp`는 소비처가 0이라 지웠다(되돌릴 땐 checkout이 되살린다).
 

@@ -16,7 +16,7 @@
 ## 판마다 어떤 파일이 그 판을 이루나
 
 - `src/app/(marketing)/**` — 랜딩 페이지·레이아웃·섹션. (C)는 여기에 `_desk/**`(모형 작업 공간)·`_parts/**`·`landing.css`가 있다.
-- `src/app/(auth)/login/**` — 로그인 페이지·폼. (A)는 `page.tsx`+`login-form.tsx`뿐이고 (B)·(C)엔 `login-form.test.tsx`가 더 있다.
+- `src/app/(auth)/login/**` — 로그인 페이지·폼. (A)는 `page.tsx`·`login-form.tsx`·`actions.ts`이고 (B)·(C)엔 `login-form.test.tsx`가 더 있다.
 - `src/components/public-site/**` — (B)에서 생긴 공개 화면 모듈(로그인 CSS·브랜드). (A)엔 **없다**.
 - `src/data/marketing.ts` — 랜딩 카피. 판마다 내용이 전혀 다르다.
 - 자산: (A)·(B)는 `public/photos/login-panel.webp`(+`src/app/(marketing)/_img/*.webp`), (C)는 여기에 `public/landing/*.webp`(모형·층 크롭)가 더 붙는다.
@@ -54,16 +54,19 @@ git checkout $B -- "src/app/(marketing)" "src/app/(auth)/login" src/components/p
 - `public/landing/academy-model.webp`, `public/landing/floor-{1,2,3}.webp`
 - (`src/components/public-site/public-site.module.css`는 (B)에서 온 파일을 고친 것이라 checkout으로 그 판 모습이 그대로 돌아온다.)
 
-## 실제로 해 본 결과
+## 실제로 해 본 결과 (2026-09-22, 임시 워크트리에서 명령을 그대로 적용)
 
-임시 워크트리에서 위 명령을 그대로 적용하고 타입 검사를 돌렸다(2026-09-22).
+| 판 | 명령 적용 | `tsc --noEmit` | 손봐야 하는 것 |
+|---|---|---|---|
+| **(A)** | 됨 | ❌ → ✅ | **한 줄**: `_ui/mock-workspace.tsx`의 `LayoutDashboard` → **`LayoutGrid`**(import 1 · 사용 1) |
+| **(B)** | 됨 | ✅ 0건 | 없음 |
 
-- (A): _아래 '검증' 절 참조_
-- (B): _아래 '검증' 절 참조_
-
-## 검증
-
-| 판 | 명령 적용 | `tsc --noEmit` |
-|---|---|---|
-| (A) | 적용됨 | (결과는 아래 줄에 기록) |
-| (B) | 적용됨 | (결과는 아래 줄에 기록) |
+- 🔴 **(A)는 그대로 되돌리면 타입 검사가 안 된다** — 그 판 이후 아이콘 호환 모듈에서 `LayoutDashboard`가
+  **`LayoutGrid`로 이름이 바뀌었다**. 되돌린 뒤 그 파일에서 두 곳을 바꾸면 0건이 된다(실제로 해서 확인).
+  🔑 **판이 오래될수록 이런 드리프트가 는다** — (A)로 되돌릴 일이 생기면 타입 검사부터 한 번 돌릴 것.
+- (B)는 오늘 낮 판이라 드리프트가 없다(0건).
+- ⚠️ 임시 워크트리에서만 나는 잡음: `next-env.d.ts`가 git에 없어(gitignore) 처음엔 `*.webp` import 3건이
+  "모듈을 찾을 수 없다"로 떴다. 실제 저장소엔 그 파일이 있으니 **되돌리기와 무관**하다(복사하니 사라졌다).
+- 검증에 쓴 명령(그대로 재현 가능):
+  `git worktree add --detach <임시폴더> <지금 커밋>` → node_modules 정션 → 위 되돌리기 명령 → `tsc --noEmit`.
+  🔴 정션은 **링크만** 지우고(`[System.IO.Directory]::Delete(...)`) 워크트리를 제거할 것(원본 node_modules 보호).
