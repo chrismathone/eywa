@@ -228,9 +228,32 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       a.name.localeCompare(b.name, "ko"),
   );
 
+  /*
+   * 🔴 **한 학생은 한 줄**(원장 2026-09-22 저녁, 묶음 폐기와 한 몸). 표엔 반 열이 없어서 두 반을
+   *    듣는 학생이 두 줄이면 **같은 점수가 두 칸으로** 보이고 어느 쪽이 사실인지 알 수 없다.
+   * 🔴 남길 줄은 **지금도 다니는 쪽**을 고른다 — 아무 줄이나 남기면 반이동한 학생이 옛 반 줄로 남아
+   *    이름 옆에 '종료'가 붙는다(실측 2026-09-22: 수학 2학기 수강 432건 중 85건이 이미 끝난 행이고
+   *    그중 8건이 반이동이었다). 모든 줄이 끝났으면 그때만 '종료'가 붙는다 = 진짜로 그만둔 학생.
+   */
+  const oneEach = new Map<string, GradeSheetRow>();
+  for (const r of rows) {
+    const cur = oneEach.get(r.studentId);
+    if (!cur || (!cur.onRoster && r.onRoster)) oneEach.set(r.studentId, r);
+  }
+  /*
+   * 🔴 **그만둔 학생은 줄을 안 세운다**(원장 2026-09-22 저녁: *"그러면 종료도 없는 거 아님?"*) —
+   *    이 학기에 다녔더라도 지금 다니는 반이 하나도 없으면 적을 일이 없다. 반이동한 학생은 위
+   *    dedupe가 **지금 반** 줄을 남기므로 여기 걸리지 않는다.
+   * ⚠️ 단 **이미 적어 둔 것이 있으면 남긴다**(점수·시험없음·상담 표식) — 시험을 보고 그만둔 학생의
+   *    기록을 화면에서 지워 버리면 아무도 못 고친다. 그 줄에만 '종료'가 붙는다.
+   */
+  const hasAnything = (r: GradeSheetRow) =>
+    r.score != null || r.noExam || !!r.marks.ask1 || !!r.marks.ask2 || !!r.marks.received;
+  const uniqueRows = [...oneEach.values()].filter((r) => r.onRoster || hasAnything(r));
+
   // 인원은 **이번에 실제로 읽은 반만** 센다 — 반 하나만 볼 땐 나머지 반을 안 읽었으므로 null(모름).
   const countByClass = new Map<string, number>();
-  for (const e of inTerm) countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1);
+  for (const r of rows) countByClass.set(r.classId, (countByClass.get(r.classId) ?? 0) + 1);
   const counted = new Set(targetIds);
   const classes: GradeClassOption[] = tracked.map((c) => ({
     id: c.id,
@@ -245,5 +268,5 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       (myClassIds.has(a.id) ? 0 : 1) - (myClassIds.has(b.id) ? 0 : 1) ||
       a.className.localeCompare(b.className, "ko"),
   );
-  return { selection: sel, classes, rows, schemaReady, marksReady, noExamReady };
+  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady };
 }

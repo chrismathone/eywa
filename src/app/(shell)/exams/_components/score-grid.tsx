@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -56,7 +56,7 @@ export function ScoreGrid({
   const { selection: sel, rows, marksReady, noExamReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
-  const { maxScore: selMax, date: selDate, classId: selClassId, group: selGroup } = sel;
+  const { maxScore: selMax, date: selDate } = sel;
   const locked = !canWrite || !!lockReason;
 
   // 학생 단위 초기값 — 같은 학생의 두 줄은 값이 같다(서버가 학생 키로 읽어 온다).
@@ -119,41 +119,17 @@ export function ScoreGrid({
     return ids;
   }, [firstRows, parsed, marks, noExam, reasons, selMax, selDate]);
 
-  // 묶음 — **반별**(기본) 또는 **학년별**(원장 2026-09-22). 🔴 묶음 없이 전체를 한 덩어리로 세우지 않는다.
-  // 🔴 정렬은 **묶음 안에서만** 한다(묶음을 섞으면 지금 어느 반·학년을 적고 있는지 알 수 없다).
+  /*
+   * 🔴 **묶음은 없다**(원장 2026-09-22 저녁: *"묶음 자체를 없애고 학년을 디폴트로"*) — 묶으면 정렬이
+   *    묶음 안에서만 걸려 "학년 오름차순"을 눌러도 화면 전체로는 그렇게 안 보인다. 반만 보고 싶으면
+   *    툴바의 반 드롭다운이 그 일을 한다. 🔴 되살리지 말 것.
+   * 🔴 Enter 이동에 쓰는 칸 번호는 **정렬한 뒤에** 붙인다(정렬 전 순서로 매기면 아래 칸이 어긋난다).
+   */
   const { key: sortKey, dir: sortDir } = sort;
-  const groups = useMemo(() => {
-    const byClass = new Map<string, { className: string; rows: GradeSheetRow[] }>();
-    // 🔴 학년별로 묶으면 **한 학생은 한 줄**이다 — 두 반(정규+특강)을 듣는 학생은 반별 보기에서 두 줄인데,
-    //    학년 묶음에선 같은 묶음에 두 번 서서 같은 값을 두 칸으로 보여 준다(무엇이 사실인지 알 수 없고
-    //    React 키도 부딪힌다). 표에 반 열이 없으니 잃는 정보도 없다.
-    const seen = new Set<string>();
-    for (const r of rows) {
-      if (selGroup === "grade") {
-        if (seen.has(r.studentId)) continue;
-        seen.add(r.studentId);
-      }
-      // 학년별일 땐 학년이 곧 묶음이다(학년을 모르면 '학년 미상' 한 묶음으로 — 줄을 잃지 않는다).
-      const key = selGroup === "grade" ? (r.grade ?? "") : r.classId;
-      const label = selGroup === "grade" ? (r.grade ?? "학년 미상") : r.className;
-      const g = byClass.get(key) ?? { className: label, rows: [] };
-      g.rows.push(r);
-      byClass.set(key, g);
-    }
-    // 🔴 Enter 이동에 쓰는 칸 번호는 **정렬한 뒤에** 붙인다 — 렌더 중에 카운터를 증가시키거나 정렬 전
-    //    순서로 매기면 아래 칸이 화면과 어긋난다.
-    let idx = -1;
-    return [...byClass.entries()].map(([classId, g]) => ({
-      classId,
-      className: g.className,
-      rows: sortRows(g.rows, sortKey, sortDir).map((r) => {
-        idx += 1;
-        return { ...r, cellIndex: idx };
-      }),
-    }));
-  }, [rows, sortKey, sortDir, selGroup]);
-
-  // 요약은 **치는 학생만** 센다 — 초등만 있는 반에서 "입력 0/204명"은 거짓 신호다(원장 제보 화면).
+  const visibleRows = useMemo(
+    () => sortRows(rows, sortKey, sortDir).map((r, i) => ({ ...r, cellIndex: i })),
+    [rows, sortKey, sortDir],
+  );
   const live = useMemo(() => {
     const cells: { score: number | null; maxScore: number | null }[] = [];
     let received = 0;
@@ -316,17 +292,7 @@ export function ScoreGrid({
             </tr>
           </thead>
           <tbody className="divide-line divide-y">
-            {groups.map((g) => (
-              <Fragment key={g.classId}>
-                {selClassId && selGroup === "class" ? null : (
-                  <tr className="bg-bg-soft">
-                    <td colSpan={7} className="text-foreground px-4 py-1.5 text-sm font-bold">
-                      {g.className}
-                      <span className="text-text-faint ml-2 text-xs font-normal">{g.rows.length}명</span>
-                    </td>
-                  </tr>
-                )}
-                {g.rows.map((r) => {
+            {visibleRows.map((r) => {
                   const myIndex = r.cellIndex;
                   const id = r.studentId;
                   const isNoExam = !!noExam[id];
@@ -342,7 +308,11 @@ export function ScoreGrid({
                       className={
                         !r.onRoster ? "bg-bg-soft/40" : missing ? "bg-amber-soft" : "hover:bg-bg-soft/50"
                       }
-                      title={r.onRoster ? undefined : "이 학기에 이 반 수강이 끝난 학생입니다"}
+                      title={
+                        r.onRoster
+                          ? undefined
+                          : "지금은 이 과목을 안 다니는 학생입니다 — 적어 둔 기록이 있어 남겨 둡니다"
+                      }
                     >
                       <td className="text-foreground overflow-hidden px-4 py-2 text-left font-medium text-ellipsis">
                         {r.name}
@@ -429,9 +399,7 @@ export function ScoreGrid({
                       })}
                     </tr>
                   );
-                })}
-              </Fragment>
-            ))}
+            })}
           </tbody>
         </table>
       </DragScrollArea>

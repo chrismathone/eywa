@@ -164,12 +164,6 @@ describe("주소 해석", () => {
     expect(resolveGradeSelection({ subject: "math", slot: "listening" }, opts)!.slot).toBe("midterm");
   });
 
-  it("묶음은 반별이 기본이고 학년별만 따로 받는다(전체 나열은 선택지가 아니다)", () => {
-    expect(resolveGradeSelection({}, opts)!.group).toBe("class");
-    expect(resolveGradeSelection({ group: "grade" }, opts)!.group).toBe("grade");
-    expect(resolveGradeSelection({ group: "zzz" }, opts)!.group).toBe("class");
-  });
-
   it("과목이 하나도 없으면 null(화면이 '과목을 먼저 등록' 안내를 낸다)", () => {
     expect(resolveGradeSelection({}, { subjectOptions: [], todayIso: "2026-09-22" })).toBeNull();
   });
@@ -208,19 +202,20 @@ describe("제도상 안 치는 시험(원장 2026-09-22)", () => {
 });
 
 describe("정렬 보기 설정", () => {
-  it("같은 열을 다시 누르면 오름→내림→해제", () => {
+  it("🔴 기본은 학년 오름차순이고 '정렬 없음'으로 못 돌아간다(묶음을 없앴으니 유일한 순서다)", () => {
+    expect(GRADE_SORT_DEFAULT).toEqual({ key: "grade", dir: "asc" });
+    expect(parseGradeSort(undefined)).toEqual(GRADE_SORT_DEFAULT);
     const a = nextGradeSort(GRADE_SORT_DEFAULT, "grade");
-    expect(a).toEqual({ key: "grade", dir: "asc" });
-    const b = nextGradeSort(a, "grade");
-    expect(b).toEqual({ key: "grade", dir: "desc" });
-    expect(nextGradeSort(b, "grade")).toEqual(GRADE_SORT_DEFAULT);
+    expect(a).toEqual({ key: "grade", dir: "desc" });
+    expect(nextGradeSort(a, "grade")).toEqual({ key: "grade", dir: "asc" });
     // 다른 열을 누르면 그 열 오름차순부터.
-    expect(nextGradeSort(b, "name")).toEqual({ key: "name", dir: "asc" });
+    expect(nextGradeSort(a, "name")).toEqual({ key: "name", dir: "asc" });
   });
 
   it("저장값이 망가져 있어도 화면은 뜬다(기본값 폴백)", () => {
     expect(parseGradeSort(undefined)).toEqual(GRADE_SORT_DEFAULT);
     expect(parseGradeSort({ key: "zzz", dir: "sideways" })).toEqual(GRADE_SORT_DEFAULT);
+    expect(parseGradeSort({ key: "zzz", dir: "desc" })).toEqual({ key: "grade", dir: "desc" });
     expect(parseGradeSort({ key: "score", dir: "desc" })).toEqual({ key: "score", dir: "desc" });
   });
 });

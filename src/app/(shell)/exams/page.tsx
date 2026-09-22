@@ -20,7 +20,6 @@ import { getGradeSheet } from "@/features/grades/server/queries";
 import { loadGradeSortPref, saveGradeSortPref } from "@/features/grades/server/list-prefs";
 import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
 import { TERM_OPTIONS, termLabel, termYearOptions } from "@/features/grades/term";
-import { GRADE_GROUP_OPTIONS } from "@/features/grades/types";
 import { JjExamView } from "./_components/jj-exam-view";
 import { JjLinkSection } from "./_components/jj-link-section";
 import { JjSkeleton } from "./_components/jj-shared";
@@ -54,7 +53,6 @@ export default async function ExamsPage({
     slot?: string;
     date?: string;
     max?: string;
-    group?: string;
     view?: string;
     /** 옛 주소(2026-09-10 JJ 보기) 호환 — `type=jj`가 즐겨찾기에 남아 있다. */
     type?: string;
@@ -86,8 +84,6 @@ export default async function ExamsPage({
       slot: sp.slot,
       date: sp.date,
       max: sp.max,
-      // 🔴 여기 빠뜨리면 주소엔 group=grade가 실리는데 화면은 늘 '반별'로 돌아온다(2026-09-22 실제 제보).
-      group: sp.group,
     },
     { subjectOptions: subjects.options, todayIso: kstToday() },
   );
@@ -139,7 +135,6 @@ export default async function ExamsPage({
       slot: sel.slot,
       date: sel.date,
       max: String(sel.maxScore),
-      group: sel.group,
       view: jjMode ?? "",
       jjClass: jjMode ? jjClass : "",
       from: jjMode ? from : "",
@@ -206,10 +201,6 @@ export default async function ExamsPage({
     label: c.className,
     hint: c.studentCount == null ? undefined : `${c.studentCount}명`,
   }));
-  const groupOptions: HrefSelectOption[] = GRADE_GROUP_OPTIONS.map((o) => ({
-    ...o,
-    href: buildHref({ group: o.value }),
-  }));
   const viewOptions: HrefSelectOption[] = [
     { value: "", label: "성적 입력", href: buildHref({ view: "" }) },
     { value: "jj", label: "JJ실", href: buildHref({ view: "jj" }) },
@@ -253,13 +244,6 @@ export default async function ExamsPage({
               triggerClassName={TOOLBAR_SELECT}
             />
             <HrefSelect axisLabel="시험" ariaLabel="시험 선택" value={sel.slot} options={slotOptions} />
-            {/* 묶음 — 반별(기본)/학년별. 🔴 '묶음 없음'은 없다(원장: 전체를 한 덩어리로 늘어놓지 말 것). */}
-            <HrefSelect
-              axisLabel="묶음"
-              ariaLabel="묶음 기준 선택"
-              value={sel.group}
-              options={groupOptions}
-            />
             {/* 시험일·만점은 주소에 실린다 — 격자·엑셀·저장이 같은 값을 본다(한쪽만 바뀌면 시트가
                 화면과 다른 칸을 가리킨다). 클라 조각이 `__V__` 자리에 값을 끼워 이동한다. */}
             <SheetMetaFields
