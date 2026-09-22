@@ -19,7 +19,7 @@
 - `src/app/(auth)/login/**` — 로그인 페이지·폼. (A)는 `page.tsx`·`login-form.tsx`·`actions.ts`이고 (B)·(C)엔 `login-form.test.tsx`가 더 있다.
 - `src/components/public-site/**` — (B)에서 생긴 공개 화면 모듈(로그인 CSS·브랜드). (A)엔 **없다**.
 - `src/data/marketing.ts` — 랜딩 카피. 판마다 내용이 전혀 다르다.
-- 자산: (A)·(B)는 `public/photos/login-panel.webp`(+`src/app/(marketing)/_img/*.webp`), (C)는 여기에 `public/landing/*.webp`(모형·층 크롭)가 더 붙는다.
+- 자산: (A)·(B)는 `public/photos/login-panel.webp`(+`src/app/(marketing)/_img/*.webp`), (C)는 `public/landing/*.webp`(모형·층 크롭)와 로그인 패널 **영상** `public/photos/login-panel.mp4`·포스터 `login-panel-poster.webp`(2026-09-22 원장 *"이미지 대신에 이 영상 사용"* — 옛 `login-panel.webp`는 (C)에서 지웠다. (A)·(B)로 되돌리는 checkout이 되살린다).
 - (A)만 쓰는 것: `src/app/(marketing)/_motion/landing.css`·`_sections/**`·`_ui/**`(그 판 안에 들어 있다).
 
 ## 되돌리는 명령

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { landingDisplay } from "@/components/public-site/fonts";
 import { PublicBrand } from "@/components/public-site/public-brand";
 import styles from "@/components/public-site/public-site.module.css";
 import { LoginForm } from "./login-form";
+import { LoginVideo } from "./login-video";
 
 export const metadata: Metadata = {
   title: "로그인 — AYWA",
@@ -36,7 +36,8 @@ export default async function LoginPage({
           </div>
           <div className={styles.loginPhoto}>
             <div className={styles.loginPhotoInner}>
-              <Image src="/photos/login-panel.webp" alt="" fill sizes="(max-width: 820px) 0px, 45vw" loading="eager" />
+              {/* 사진 대신 무음 영상(원장 2026-09-22). 포스터 = 영상 첫 장면. 폰 폭(≤820px)에선 패널째 숨는다. */}
+              <LoginVideo src="/photos/login-panel.mp4" poster="/photos/login-panel-poster.webp" />
             </div>
           </div>
         </aside>
