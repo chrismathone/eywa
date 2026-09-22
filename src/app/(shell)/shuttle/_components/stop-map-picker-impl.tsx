@@ -349,8 +349,8 @@ export function StopMapPickerImpl({ appKey, lat, lng, radiusM, onPick }: StopMap
           지도를 불러오지 못했습니다 — 아래에서 위도·경도를 직접 입력하세요.
         </p>
       )}
+      {/* 문구는 셔틀 세션의 새 흐름(핀 끌기), 글자 크기는 v5 규약(`text-[Npx]` 금지)을 따른다. */}
       {status === "ready" && (
-        {/* 문구는 셔틀 세션의 새 흐름(핀 끌기), 글자 크기는 v5 규약(`text-[Npx]` 금지)을 따른다. */}
         <p className="text-text-faint text-xs">
           {searchable ? "위에서 이름으로 찾거나, " : ""}지도를 누르거나 <b>핀을 끌어</b> 자리를
           잡으세요. 원은 도착 반경입니다.
