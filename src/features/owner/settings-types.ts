@@ -504,7 +504,7 @@ export const permissionsSchema = z
   });
 export type PermissionsSettings = z.infer<typeof permissionsSchema>;
 
-// === 사이드바(왼쪽 탭) 표시 — 보기 설정, 권한 아님 ===
+// === 탭 및 메뉴 구성(관리자뷰 사이드바 + 강사뷰 '내 메뉴') — 보기 설정, 권한 아님 ===
 // 규약·적용은 [`menu-layout.ts`](./menu-layout.ts) 단일 소스. 여기 담기는 건 **바뀐 줄만**(sparse)이고,
 // 비어 있으면 지금과 똑같이 동작한다(전부 표시·코드 순서). 판정 단위가 menuKey가 아니라 목적지 주소인
 // 이유도 그 파일에 적혀 있다(한 메뉴가 버튼 여럿을 갖는다 — 수납 7면·설정 11면…).
@@ -517,6 +517,10 @@ export const navigationSchema = z
   .object({
     // 상한은 목적지 총수보다 넉넉히 — 목적지가 늘어도 저장이 막히지 않게(지금 47개).
     menus: z.array(menuLayoutRowSchema).max(200),
+    // 강사뷰 '내 메뉴' 구성(원장 2026-09-22 *"'관리자뷰' '강사뷰' 메뉴를 따로 구성할 수 있게"*) — 규약은 menus와 같다
+    // (sparse · 목적지 단위 · 권한 아님, 적용 = menu-layout.ts `applyTeacherMenuLayout`). 기본값이 있어 배포 순간 열린
+    // 옛 화면이 이 칸 없이 저장해도 거절하지 않는다 — 그 경우 저장돼 있던 값을 지킨다(preset.ts `prepareSectionForSave`).
+    teacherMenus: z.array(menuLayoutRowSchema).max(60).default([]),
   })
   .superRefine((v, ctx) => {
     const seen = new Set<string>();
@@ -529,6 +533,13 @@ export const navigationSchema = z
       if (r.hidden && isLayoutHideLocked(r.href)) {
         ctx.addIssue({ code: "custom", message: "학원 설정 자신은 사이드바에서 감출 수 없습니다" });
       }
+    }
+    const seenTeacher = new Set<string>();
+    for (const r of v.teacherMenus) {
+      if (seenTeacher.has(r.href)) {
+        ctx.addIssue({ code: "custom", message: `강사뷰에 같은 메뉴가 두 번 담겼습니다 (${r.href})` });
+      }
+      seenTeacher.add(r.href);
     }
   });
 export type NavigationSettings = z.infer<typeof navigationSchema>;
@@ -588,6 +599,6 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   consultations: "상담 양식",
   report: "보고서",
   permissions: "역할별 메뉴 권한",
-  navigation: "사이드바(왼쪽 탭) 표시",
+  navigation: "탭 및 메뉴 구성",
   modules: "기능 켜기·끄기",
 };

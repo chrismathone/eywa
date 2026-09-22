@@ -81,3 +81,51 @@ export function sortByMenuLayout<T extends { href: string }>(
     })
     .map((x) => x.item);
 }
+
+/**
+ * 강사뷰 '내 메뉴'에 **강사뷰 구성**(`navigation.teacherMenus`)을 적용한다 — 원장 2026-09-22: *"'관리자뷰' '강사뷰'
+ * 메뉴를 따로 구성할 수 있게"*. 관리자뷰 구성(`navigation.menus`)과 **따로 저장**되고 규약은 같다(sparse · 목적지 단위 ·
+ * 권한 아님 — 권한이 먼저 거르고, 여기서 꺼도 주소를 치면 열린다).
+ *
+ * 🔴 **그 강사의 홈은 감춰도 남고, 늘 맨 위다**(원장 2026-08-07 "영어 전담 = ECS, 그 외 = 원스크린"). 설정은
+ *    학원 전체에 한 벌이라 선생님마다 다른 홈을 표현할 수 없다 — 홈을 감추면 영어 선생님이 ECS로 돌아갈 입구를 잃는다.
+ * ⚠️ 비어 있으면 받은 순서 그대로 + 홈만 맨 위(이 기능 이전과 글자 그대로 같다).
+ */
+export function applyTeacherMenuLayout<T extends { href: string }>(
+  items: readonly T[],
+  layout: MenuLayout | undefined,
+  home: string | null,
+): T[] {
+  const kept = items.filter((i) => i.href === home || !isMenuHiddenByLayout(i.href, layout));
+  const sorted = sortByMenuLayout(kept, layout);
+  if (!home) return sorted;
+  return [...sorted.filter((i) => i.href === home), ...sorted.filter((i) => i.href !== home)];
+}
+
+/** 목록 안에서 한 칸 옮긴 새 배열(범위 밖이면 그대로). 두 편집기 공용. */
+export function moveInList(list: readonly string[], index: number, delta: number): string[] {
+  const to = index + delta;
+  if (to < 0 || to >= list.length) return [...list];
+  const next = [...list];
+  [next[index], next[to]] = [next[to]!, next[index]!];
+  return next;
+}
+
+/**
+ * 저장할 줄(sparse) — **바뀐 줄만**. 순서를 한 번이라도 바꾼 목록은 그 목록 전체의 순서를 적는다(일부만 적으면
+ * 나머지가 어디 끼는지가 코드 순서에 따라 흔들려, 메뉴가 하나 늘 때마다 정해 둔 순서가 조용히 달라진다).
+ */
+export function sparseLayoutRows(
+  current: readonly string[],
+  codeOrder: readonly string[],
+  hidden: ReadonlySet<string>,
+): MenuLayoutRow[] {
+  const reordered = current.join("|") !== codeOrder.join("|");
+  const rows: MenuLayoutRow[] = [];
+  current.forEach((href, i) => {
+    const isHidden = hidden.has(href);
+    if (!isHidden && !reordered) return;
+    rows.push({ href, ...(isHidden ? { hidden: true } : {}), ...(reordered ? { order: i } : {}) });
+  });
+  return rows;
+}

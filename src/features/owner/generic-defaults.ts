@@ -54,6 +54,6 @@ export const GENERIC_SETTINGS: TenantSettings = {
   consultations: { templates: DEFAULT_SETTINGS.consultations.templates.map((t) => ({ ...t })) },
   report: { ...DEFAULT_SETTINGS.report },
   permissions: { overrides: [], userOverrides: [] },
-  navigation: { menus: [] },
+  navigation: { menus: [], teacherMenus: [] },
   modules: { disabled: [...GENERIC_DISABLED_MODULES] },
 };

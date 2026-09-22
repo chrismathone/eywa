@@ -47,6 +47,7 @@ const NEW_OPERATIONS_KEYS = ["periodStyle", "schoolSaveAliases"] as const;
  *    (modules 섹션을 거절하는 것과 같은 이유 [[#77]]). 빠진 칸은 읽을 때 침산 기본값으로 채워진다 — 동작도 행도 오늘과 같다.
  *  · **새 학원**: 요청에 **없던** 칸은 스키마 기본값(침산 값)이 끼어든 것이다 — 저장돼 있던 값이 있으면 그것을, 없으면 비워서
  *    읽을 때 일반판 기본값으로 채워지게 한다(배포 순간 열린 옛 화면이 칸 없이 저장해도 침산 규칙이 박히지 않게).
+ *  · **탭 및 메뉴 구성**(프리셋 무관): 요청에 없던 강사뷰 칸(`teacherMenus`)은 저장돼 있던 값으로 둔다(옛 화면이 지우지 않게).
  */
 export function prepareSectionForSave(
   preset: TenantPreset,
@@ -55,6 +56,15 @@ export function prepareSectionForSave(
   parsed: unknown,
   storedSection: unknown,
 ): unknown {
+  // 탭 및 메뉴 구성 — 배포 순간 열린 옛 화면이 강사뷰 칸(teacherMenus) 없이 보내면 스키마 기본값([])이 채워진다.
+  // 그대로 저장하면 원장이 정해 둔 강사뷰 구성이 조용히 지워지므로, 요청에 **없던** 칸은 저장돼 있던 값으로 둔다(프리셋 무관).
+  if (section === "navigation" && isPlainObject(parsed)) {
+    if (isPlainObject(rawInput) && "teacherMenus" in rawInput) return parsed;
+    const out: Record<string, unknown> = { ...parsed };
+    if (isPlainObject(storedSection) && "teacherMenus" in storedSection) out.teacherMenus = storedSection.teacherMenus;
+    else delete out.teacherMenus;
+    return out;
+  }
   if (section !== "operations" || !isPlainObject(parsed)) return parsed;
   const out: Record<string, unknown> = { ...parsed };
   for (const key of NEW_OPERATIONS_KEYS) {

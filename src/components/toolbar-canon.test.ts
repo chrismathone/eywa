@@ -229,6 +229,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/retention/board/page.tsx",
   "src/app/(shell)/newcomers/_components/newcomer-board.tsx",
   "src/app/(shell)/owner/_components/audit-face.tsx",
+  // 탭 및 메뉴 구성(2026-09-22) — 관리자뷰·강사뷰 전환이 부품(ToolbarSegment)으로.
+  "src/app/(shell)/owner/_components/navigation-section.tsx",
   "src/app/(shell)/class-review/_components/review-table.tsx",
   "src/app/(shell)/class-review/template/page.tsx",
   "src/app/(shell)/documents/_components/document-toolbar.tsx",

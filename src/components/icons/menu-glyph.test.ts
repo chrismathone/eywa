@@ -99,8 +99,9 @@ const PENDING_GLYPH = new Set<string>(["bookText"]);
     // ② 강사 '내 메뉴' 드롭다운 — 한 목록 안에서 출결 모드와 출석부가 같은 클립보드였다.
     //    🔴 강사(폰)에겐 사이드바가 없어 이 드롭다운이 유일한 메뉴라 여기서의 중복이 더 아프다.
     //    이 목록은 MENU_ICON을 거치기도 하고 문자열을 직접 적기도 해서 ①만 봐서는 안 잡힌다.
-    const teacher = readFileSync(join(SRC, "components", "teacher-menu.tsx"), "utf8");
-    const from = teacher.indexOf("const LINKS");
+    // 항목 표는 2026-09-22부터 순수 모듈 한 곳(학원 설정 '탭 및 메뉴 구성 → 강사뷰'와 공유) — 그 표를 읽는다.
+    const teacher = readFileSync(join(SRC, "lib", "teacher-menu-links.ts"), "utf8");
+    const from = teacher.indexOf("TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [");
     const links = teacher.slice(from, teacher.indexOf("];", from));
     const menu: [string, string][] = [];
     for (const line of links.split("\n")) {

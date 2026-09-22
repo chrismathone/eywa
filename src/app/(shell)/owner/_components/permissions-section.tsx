@@ -122,7 +122,8 @@ export function PermissionsSection({
         <p className="text-text-dim mt-1 text-xs leading-relaxed">
           강사 화면 우상단 <b>내 메뉴</b> 드롭다운에 보여줄 탭을 고릅니다. 끄면 그 탭이 숨겨지고 강사가 해당
           페이지에 접근할 수 없습니다(모든 강사 공통). <b>수업 마감(원스크린)</b>은 강사 홈이라 항상 표시됩니다.
-          세부 권한(담당/읽기 등)은 아래 표에서 조정합니다.
+          세부 권한(담당/읽기 등)은 아래 표에서 조정합니다. 권한은 그대로 두고 <b>순서만 바꾸거나 메뉴에서만 감추려면</b>{" "}
+          <b>탭 및 메뉴 구성 → 강사뷰</b>에서 합니다.
           {TEACHER_TOGGLE_KEYS.length < TEACHER_MENU_KEYS.length
             ? " 메뉴에서 뺀 탭은 여기 나오지 않습니다 — 그 탭의 접근은 아래 표에서 조정합니다."
             : null}

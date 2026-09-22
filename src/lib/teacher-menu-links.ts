@@ -1,0 +1,56 @@
+/**
+ * 강사 미니셸 '내 메뉴'의 **항목 표 — 단일 소스**. 드롭다운([TeacherMenu](@/components/teacher-menu))과
+ * 학원 설정 '탭 및 메뉴 구성 → 강사뷰'(원장이 순서·표시를 정하는 화면)가 같은 표를 본다.
+ *
+ * ⚠️ 여기엔 **강사 스코핑이 적용된 페이지만** 넣는다(teacher-scope.ts). 미스코프 페이지(대시보드 등)는
+ *    테넌트 전체가 새므로 노출 금지 — 스코핑하면 그때 추가.
+ * 🔴 라벨은 **사전 키**다(한국어 원문은 [i18n.ts](@/features/teacher-view/i18n) 한 곳) — 여기에 문자열을
+ *    다시 적으면 한/영이 갈린다. 키는 `menu.item.<menuKey>`가 원칙이고, 같은 menuKey를 두 줄이 쓰는
+ *    출결 모드만 `menu.item.attendanceQuick`으로 구분한다.
+ * 🔴 판정 단위는 **목적지(href)** 다 — 출결 모드와 출석부가 같은 menuKey(`attendance`)라 menuKey로는 둘을 못 가른다
+ *    (관리자뷰 메뉴 구성 [menu-layout.ts](@/features/owner/menu-layout)와 같은 규약).
+ * ⚠️ 이 파일은 순수 모듈이다(`"use client"` 금지) — 서버 컴포넌트가 import해도 값이 살아 있어야 한다([[#81]]).
+ */
+import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
+import type { SheetDictKey } from "@/features/teacher-view/i18n";
+import type { MenuKey } from "@/lib/permissions";
+
+export type TeacherMenuLink = { href: string; labelKey: SheetDictKey; icon: AywaIconName; menu: MenuKey };
+
+/** 코드 기본 순서 — 원장이 순서를 정하지 않은 학원은 이 순서 그대로(설정이 비면 지금과 같다). */
+export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
+  // 출결 모드(2026-08-20) — 내 반 오늘 출결만 터치 몇 번으로. 원장 지시: 원스크린 상단 바에만 두니
+  //   *"완전 안보인다"* → 강사의 주 진입로인 이 드롭다운에도 올린다(홈 바로 아래).
+  //   ⚠️ 권한 키는 출석부와 같은 `attendance` — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS 누락으로 잠긴다.
+  // 🔴 출석부와 **다른 그림**이어야 한다 — 같은 드롭다운에 나란히 선다(menu-hub의 출결 모드와 같은 listChecks).
+  { href: "/attendance/quick", labelKey: "menu.item.attendanceQuick", icon: "listChecks", menu: "attendance" },
+  { href: "/onescreen", labelKey: "menu.item.teacher_onescreen", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
+  // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
+  { href: "/ecs", labelKey: "menu.item.ecs", icon: MENU_ICON.ecs, menu: "ecs" },
+  // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만. requireMcsClassAccess 게이트).
+  // 🔴 이 줄이 없어서 **수학만 맡은 강사 9명에게는 MCS로 가는 길이 아예 없었다**(폰엔 사이드바가 없고
+  //    이 드롭다운이 강사의 유일한 진입로다). 노출 조건은 영어와 대칭(`showMcs`).
+  { href: "/mcs", labelKey: "menu.item.mcs", icon: MENU_ICON.mcs, menu: "mcs" },
+  { href: "/students", labelKey: "menu.item.students", icon: MENU_ICON.students, menu: "students" },
+  { href: "/attendance", labelKey: "menu.item.attendance", icon: MENU_ICON.attendance, menu: "attendance" },
+  { href: "/classes", labelKey: "menu.item.classes", icon: MENU_ICON.classes, menu: "classes" },
+  { href: "/timetable", labelKey: "menu.item.timetable", icon: MENU_ICON.timetable, menu: "timetable" },
+  { href: "/exams", labelKey: "menu.item.exams", icon: MENU_ICON.exams, menu: "exams" },
+  { href: "/consultations", labelKey: "menu.item.consultations", icon: MENU_ICON.consultations, menu: "consultations" },
+  // 교재 요청 — 강사 스코프(본인 담당 학생) 요청 + 진행상태. 사무실은 /billing 교재 면에서 처리.
+  { href: "/textbook-requests", labelKey: "menu.item.textbook_requests", icon: MENU_ICON.textbook_requests, menu: "textbook_requests" },
+  // 지출결의서 — 강사가 본인 지출을 작성·제출 + 결재 진행상태 조회. 사무실은 /billing 지출 면에서 결재.
+  { href: "/expense-requests", labelKey: "menu.item.expense_requests", icon: MENU_ICON.expense_requests, menu: "expense_requests" },
+  // 캘린더 — 학원 공용 일정(강사 readonly 기본). 테넌트 공용 정보라 스코핑 무관.
+  // 🔴 지금은 **메뉴에서 뺀 항목**이라 서지 않는다(원장 2026-09-10 "캘린더 탭은 메뉴에서 제외") — NAV 표의 `hidden`을
+  //    teacherMenuKeysFor가 따른다. 되살릴 땐 그 표의 `hidden`만 푼다(이 줄은 그대로 둔다 — 입구 정책은 한 곳).
+  { href: "/calendar", labelKey: "menu.item.calendar", icon: MENU_ICON.calendar, menu: "calendar" },
+  // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
+  // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
+  { href: "/approvals", labelKey: "menu.item.approvals", icon: MENU_ICON.approvals, menu: "approvals" },
+  // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).
+  // 기본 teacher=none이라 학원설정에서 연 학원에서만 보인다.
+  { href: "/class-review", labelKey: "menu.item.class_review", icon: MENU_ICON.class_review, menu: "class_review" },
+  // 데이터베이스(서식 저장소) — 강사 readonly(빈 양식 다운로드). 테넌트 공용 자료라 스코핑 무관.
+  { href: "/documents", labelKey: "menu.item.documents", icon: MENU_ICON.documents, menu: "documents" },
+];

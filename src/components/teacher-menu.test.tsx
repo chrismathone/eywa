@@ -183,3 +183,37 @@ describe("입구 정책은 NAV 표 한 곳 — `hidden`이면 강사 '내 메뉴
     expect(stray).toEqual([]);
   });
 });
+
+describe("학원 설정 '탭 및 메뉴 구성 → 강사뷰'가 '내 메뉴'를 바꾼다(원장 2026-09-22)", () => {
+  const OPEN_ALL = resolveMatrix([]);
+  const base = layoutProps("teacher", OPEN_ALL);
+  const hrefsOf = () => Array.from(document.querySelectorAll("a")).map((a) => a.getAttribute("href"));
+
+  it("감춘 항목은 빠지고 정한 순서로 선다", () => {
+    cleanup();
+    render(
+      <TeacherMenu
+        {...base}
+        home={null}
+        layout={[
+          { href: "/students", order: 0 },
+          { href: "/attendance/quick", order: 1, hidden: true },
+        ]}
+      />,
+    );
+    const hs = hrefsOf();
+    expect(hs[0]).toBe("/students");
+    expect(hs).not.toContain("/attendance/quick");
+  });
+
+  it("홈은 감춰도 맨 위에 남는다", () => {
+    cleanup();
+    render(<TeacherMenu {...base} home="/onescreen" layout={[{ href: "/onescreen", hidden: true }]} />);
+    expect(hrefsOf()[0]).toBe("/onescreen");
+  });
+
+  it("레이아웃이 학원 설정 값을 내려 준다(배선)", () => {
+    const layout = readFileSync(join(process.cwd(), "src/app/(shell)/layout.tsx"), "utf8");
+    expect(layout).toMatch(/layout=\{settings\.navigation\.teacherMenus\}/);
+  });
+});

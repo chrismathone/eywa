@@ -216,7 +216,7 @@ export const SUPPORT_GROUPS: HubGroup[] = [
       //    그림을 쓰면 실패). `layoutGrid`는 대시보드가, `sheetRows`는 수학 강사 시트가 이미 쓴다.
       //    실제로 남아 있는 그림은 아홉 개뿐이라(alarm·alert·calendarCheck·chart·check·percent·sparkle·trash·userX)
       //    그중 "고르는 목록"에 가장 가까운 `check`를 쓴다.
-      face("owner", "/owner?tab=navigation", "왼쪽 탭", undefined, { section: "학원 정보", icon: "check" }),
+      face("owner", "/owner?tab=navigation", "탭 및 메뉴 구성", undefined, { section: "학원 정보", icon: "check" }),
       face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: "clock" }),
       face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영", icon: "tag" }),
       face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: "invoice" }),

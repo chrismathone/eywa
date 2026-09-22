@@ -211,16 +211,19 @@ describe("'내 메뉴' — 라벨이 사전과 어긋나지 않는다", () => {
     join(process.cwd(), "src", "components", "teacher-menu.tsx"),
     "utf8",
   );
+  const links = readFileSync(join(process.cwd(), "src", "lib", "teacher-menu-links.ts"), "utf8");
 
   it("🔴 메뉴 파일에 한국어 라벨을 다시 적지 않는다(사전이 단일 소스)", () => {
     // `labelKey: "menu.item.*"`만 있어야 한다 — `label: "출석부"`가 되살아나면 영어 전환에서
     // 그 줄만 한글로 남고, 아무도 에러를 못 본다.
     expect(menu).not.toMatch(/label: "/);
-    expect(menu).toContain("labelKey:");
+    // 항목 표는 2026-09-22부터 순수 모듈 한 곳(학원 설정 '강사뷰' 편집기와 공유) — 라벨 규약은 그 표에 건다.
+    expect(links).not.toMatch(/\blabel: "/);
+    expect(links).toContain("labelKey:");
   });
 
   it("메뉴가 쓰는 키가 사전에 전부 있다", () => {
-    const used = [...menu.matchAll(/labelKey: "([^"]+)"/g)].map((m) => m[1]);
+    const used = [...links.matchAll(/labelKey: "([^"]+)"/g)].map((m) => m[1]);
     expect(used.length).toBeGreaterThan(10);
     for (const k of used) expect(Object.keys(SHEET_DICT)).toContain(k);
   });
