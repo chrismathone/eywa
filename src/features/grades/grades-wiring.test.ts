@@ -245,3 +245,21 @@ describe("목록 규약(원장 2026-09-22 오후)", () => {
     expect(page).not.toContain("MARKER_TRIGGER");
   });
 });
+
+describe("주소 축 배선", () => {
+  it("🔴 화면이 주소의 축을 하나도 빠뜨리지 않는다 — 빠지면 링크만 바뀌고 화면은 안 바뀐다", () => {
+    // 2026-09-22 실제 제보: `group`을 안 넘겨서 '학년별'을 눌러도 늘 '반별'로 돌아왔다.
+    const sel = read("src/features/grades/selection.ts");
+    const from = sel.indexOf("export type RawGradeParams");
+    const block = sel.slice(from, sel.indexOf("};", from));
+    const keys = [...block.matchAll(/^ {2}(\w+)\?: unknown;/gm)].map((m) => m[1]!);
+    expect(keys.length).toBeGreaterThan(5);
+    const page = read("src/app/(shell)/exams/page.tsx");
+    for (const k of keys) expect(page, `page.tsx가 ${k}를 안 읽는다`).toContain(`${k}: sp.${k}`);
+  });
+
+  it("툴바 컨트롤은 같은 상자 — 반만 다른 부품이라 치수를 맞춰 준다", () => {
+    const page = read("src/app/(shell)/exams/page.tsx");
+    expect(page).toMatch(/triggerClassName=\{TOOLBAR_SELECT\}/);
+  });
+});

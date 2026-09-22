@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { SearchX } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { HrefSelect, type HrefSelectOption } from "@/components/href-select";
 import { PageHeader } from "@/components/page-header";
 import { Toolbar } from "@/components/toolbar";
@@ -53,6 +54,7 @@ export default async function ExamsPage({
     slot?: string;
     date?: string;
     max?: string;
+    group?: string;
     view?: string;
     /** 옛 주소(2026-09-10 JJ 보기) 호환 — `type=jj`가 즐겨찾기에 남아 있다. */
     type?: string;
@@ -84,6 +86,8 @@ export default async function ExamsPage({
       slot: sp.slot,
       date: sp.date,
       max: sp.max,
+      // 🔴 여기 빠뜨리면 주소엔 group=grade가 실리는데 화면은 늘 '반별'로 돌아온다(2026-09-22 실제 제보).
+      group: sp.group,
     },
     { subjectOptions: subjects.options, todayIso: kstToday() },
   );
@@ -245,6 +249,8 @@ export default async function ExamsPage({
               value={sel.classId ?? ""}
               options={classOptions}
               cap={300}
+              // 반만 다른 부품(SearchableSelect)이라 기본 상자가 다르다 — 툴바 한 줄에서 **같은 치수**로.
+              triggerClassName={TOOLBAR_SELECT}
             />
             <HrefSelect axisLabel="시험" ariaLabel="시험 선택" value={sel.slot} options={slotOptions} />
             {/* 묶음 — 반별(기본)/학년별. 🔴 '묶음 없음'은 없다(원장: 전체를 한 덩어리로 늘어놓지 말 것). */}
