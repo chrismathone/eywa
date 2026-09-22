@@ -96,6 +96,8 @@ export type ClassSheetMonthData = {
    *    [월간계획 가져오기]뿐이다. 그래서 달력은 둘을 **다른 자리에 다른 색**으로 그린다.
    */
   plannedBySlot: Record<string, PlannedLine[]>;
+  /** 미루기·당기기 표식(0282a) — `"날짜|교시"` → `skip` | `advance`. 달력의 토글 상태다. */
+  shiftBySlot: Record<string, "skip" | "advance">;
   /** 계획 줄 전체(평면) — 경고 판정·목표 대조가 날짜를 넘나들며 쓴다. */
   lines: MonthPlanLine[];
   /** `YYYY-MM-DD|HH:MM` → 교시 라벨(표시 전용, 학원설정이 단일 소스). */
@@ -533,6 +535,7 @@ export async function getClassSheetMonth(
       slotsByDate,
       linesBySlot,
       plannedBySlot: plannedRes.byCell,
+      shiftBySlot: plannedRes.shiftByCell,
       lines,
       periodLabelBySlot,
       goals,

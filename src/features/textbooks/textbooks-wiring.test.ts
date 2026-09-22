@@ -254,3 +254,34 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
     expect(monthPlan).not.toContain("throw ");
   });
 });
+
+/**
+ * 🔴 **회차 미루기·당기기**(0282a) — 원장 2026-09-22 *"실제 에서는 수업 회차를 한주 미루거나 당기거나
+ *    할수있게 하고싶음 미루면 차수 무시하고 수업내용 기입해서 쓸수있게"*.
+ */
+describe("교재 배정 — 회차 미루기·당기기", () => {
+  const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
+  const sched = read("src", "features", "textbooks", "lesson-schedule.ts");
+
+  it("표식은 (반, 날짜, 교시) 한 칸 단위다 — 배정마다 따로 담지 않는다", () => {
+    const sql = read("supabase", "migrations", "0282a_class_lesson_shifts.sql");
+    expect(sql).toContain("create table if not exists public.class_lesson_shifts");
+    expect(sql).toContain("(tenant_id, class_id, plan_date, slot_start)");
+    // 🔴 부분 유니크 금지([[#113]]) — 이 축으로 upsert한다(토글).
+    // ⚠️ `[^;]*`로 **그 문장 안에서만** 본다 — `[\s\S]*?`면 뒤의 RLS 정책(`where schemaname = …`)까지 걸린다.
+    expect(sql).not.toMatch(/create unique index[^;]*where/i);
+  });
+
+  it("🔴 표식은 **실제 줄을 안 건드린다** — 바뀌는 건 앞으로의 계획뿐이다", () => {
+    const body = plan.slice(plan.indexOf("export async function setLessonShift"));
+    expect(body).not.toContain("class_sheet_plan_lines");
+    expect(body).not.toContain("ecs_apply_textbook_lessons");
+  });
+
+  it("미루기는 차수를 **안 쓰고** 지나간다 — 휴일과 같은 규칙", () => {
+    expect(sched).toContain('if (shift === "skip") continue;');
+    // ⚠️ 미룬 칸을 '연휴로 건너뜀'에 섞지 않는다(사람이 내린 결정이지 연휴가 아니다).
+    const loop = sched.slice(sched.indexOf("for (const slot of daySlots)"));
+    expect(loop).not.toContain("skippedHolidays.push");
+  });
+});

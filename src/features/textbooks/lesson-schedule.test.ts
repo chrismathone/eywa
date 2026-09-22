@@ -390,3 +390,96 @@ describe("buildLessonSchedule — 칸 선택(slotPicks)", () => {
     expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-14", slotStart: "20:20" }]);
   });
 });
+
+/**
+ * 🔴 **회차 미루기·당기기**(0282a) — 원장 2026-09-22 *"실제 에서는 수업 회차를 한주 미루거나 당기거나
+ *    할수있게 하고싶음 미루면 차수 무시하고 수업내용 기입해서 쓸수있게"*.
+ */
+describe("buildLessonSchedule — 회차 미루기·당기기(shifts)", () => {
+  const MON_ONLY = [row("mon", "18:20:00", "19:20:00")];
+
+  it("미루면 그 칸은 비고 **차수를 안 쓴다** — 뒤가 한 주씩 밀린다", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14", // 월
+      lessonNos: [1, 2],
+      schedules: MON_ONLY,
+      holidays: {},
+      axis: "class",
+      slotPicks: ["mon|18:20"],
+      shifts: { "2026-09-21|18:20": "skip" }, // 둘째 주를 미룬다
+      pace: "period",
+      lookaheadDays: 28,
+    });
+    expect(s.targets).toEqual([
+      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
+      // 9/21은 통째로 비고(자유 기입), 2차수는 9/28로 밀린다.
+      { lessonNo: 2, date: "2026-09-28", slotStart: "18:20" },
+    ]);
+  });
+
+  it("🔴 미룬 칸은 **휴일로 세지 않는다** — 사람이 내린 결정이지 연휴가 아니다", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1],
+      schedules: MON_ONLY,
+      holidays: {},
+      axis: "class",
+      slotPicks: ["mon|18:20"],
+      shifts: { "2026-09-14|18:20": "skip" },
+      pace: "period",
+      lookaheadDays: 14,
+    });
+    expect(s.skippedHolidays).toEqual([]);
+    expect(s.targets).toEqual([{ lessonNo: 1, date: "2026-09-21", slotStart: "18:20" }]);
+  });
+
+  it("당기면 그 칸의 차수를 버리고 **다음 차수**가 온다", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2, 3],
+      schedules: MON_ONLY,
+      holidays: {},
+      axis: "class",
+      slotPicks: ["mon|18:20"],
+      shifts: { "2026-09-21|18:20": "advance" },
+      pace: "period",
+      lookaheadDays: 28,
+    });
+    expect(s.targets).toEqual([
+      { lessonNo: 1, date: "2026-09-14", slotStart: "18:20" },
+      { lessonNo: 3, date: "2026-09-21", slotStart: "18:20" }, // 2차수를 버렸다
+    ]);
+  });
+
+  it("day 단위 — 그 날이 통째로 미뤄지면 차수를 안 쓴다", () => {
+    const s = buildLessonSchedule({
+      startDate: "2026-09-14",
+      lessonNos: [1, 2],
+      schedules: [row("mon", "18:20:00", "19:20:00"), row("mon", "19:20:00", "20:10:00")],
+      holidays: {},
+      axis: "class",
+      slotPicks: ["mon|18:20", "mon|19:20"],
+      shifts: { "2026-09-14|18:20": "skip", "2026-09-14|19:20": "skip" },
+      pace: "day",
+      lookaheadDays: 14,
+    });
+    expect(s.targets).toEqual([
+      { lessonNo: 1, date: "2026-09-21", slotStart: "18:20" },
+      { lessonNo: 1, date: "2026-09-21", slotStart: "19:20" },
+    ]);
+  });
+
+  it("표식이 없으면 종전과 똑같다(회귀 방지)", () => {
+    const base = {
+      startDate: "2026-09-14",
+      lessonNos: [1, 2],
+      schedules: MON_ONLY,
+      holidays: {},
+      axis: "class" as const,
+      slotPicks: ["mon|18:20"],
+      pace: "period" as const,
+      lookaheadDays: 28,
+    };
+    expect(buildLessonSchedule({ ...base, shifts: {} })).toEqual(buildLessonSchedule(base));
+  });
+});
