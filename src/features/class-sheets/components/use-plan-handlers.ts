@@ -44,6 +44,8 @@ export type PlanHandlers = {
   copySlot: (planDate: string, slotStart: string, termMode: "regular" | "exam") => void;
   /** 월간계획 가져오기 — 문이 그 기능을 안 내면 **없다**(표가 버튼을 안 그린다). */
   importPlan?: (planDate: string, slotStart: string) => void;
+  /** 회차 미루기·당기기(0282a) — 같은 이유로 선택. `null`이면 표식을 지운다. */
+  setShift?: (planDate: string, slotStart: string, kind: "skip" | "advance" | null) => void;
   removeLine: (lineId: string, planDate: string, slotStart: string) => void;
   moveLineTerm: (
     lineId: string,
@@ -181,6 +183,27 @@ export function usePlanHandlers({
                 if (touched === 0) toast.info("빈 칸이 없어 채울 게 없습니다(이미 쓴 칸은 덮어쓰지 않습니다)");
                 else toast.success(`월간계획에서 ${touched}칸 채움 — 실제와 다르면 고쳐 주세요`);
               });
+            });
+          }
+        : undefined,
+      /**
+       * **회차 미루기·당기기**(원장 2026-09-22) — 계획이 파생값이라 표식 한 줄이 앞으로를 통째로 바꾼다.
+       * 🔴 **실제 줄은 안 건드린다** — 이미 적은 진도는 그대로다. 그래서 되돌리기도 같은 버튼 한 번이다.
+       * ⚠️ 화면 갱신은 서버 액션의 `revalidatePath`가 한다(계획은 서버가 계산해 내려보내는 값이다).
+       */
+      setShift: api.setShift
+        ? (planDate, slotStart, kind) => {
+            const call = api.setShift;
+            if (!call) return;
+            void call({ classId, planDate, slotStart }, kind).then((r) => {
+              if (!r.ok) return toast.error(r.error);
+              toast.success(
+                kind === "skip"
+                  ? "이 회차를 미뤘습니다 — 이 칸은 계획 없이 직접 적고, 다음 수업일부터 차수가 이어집니다"
+                  : kind === "advance"
+                    ? "이 회차를 당겼습니다 — 이 칸엔 다음 차수가 옵니다"
+                    : "회차 표식을 지웠습니다 — 원래 차수로 돌아갑니다",
+              );
             });
           }
         : undefined,

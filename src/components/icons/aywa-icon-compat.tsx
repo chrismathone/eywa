@@ -154,7 +154,6 @@ export const ImageDown = createAywaCompatIcon("imageDownload", "ImageDown");
 export const Info = createAywaCompatIcon("info", "Info");
 export const KeyRound = createAywaCompatIcon("key", "KeyRound");
 export const Languages = createAywaCompatIcon("languages", "Languages");
-export const LayoutDashboard = createAywaCompatIcon("layoutGrid", "LayoutDashboard");
 export const LayoutPanelTop = createAywaCompatIcon("panelTop", "LayoutPanelTop");
 export const ListChecks = createAywaCompatIcon("listChecks", "ListChecks");
 export const ListFilter = createAywaCompatIcon("filterList", "ListFilter");
