@@ -20,6 +20,9 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { deleteDocument, toggleDocumentPin } from "@/features/documents/server/actions";
 import { downloadDocument } from "@/features/documents/open-file";
 import { isPreviewableType, type DocumentKind } from "@/features/documents/categories";
+import { splitFileName } from "@/features/documents/file-name";
+import { renameDocumentFile } from "@/features/documents/server/file-actions";
+import { InlineRename } from "./inline-rename";
 
 export type DocumentRowData = {
   id: string;
@@ -30,6 +33,8 @@ export type DocumentRowData = {
   typeLabel: string;
   sizeLabel: string;
   createdAt: string;
+  updatedAt?: string | null;
+  fileName?: string | null;
   uploaderName: string | null;
   pinned: boolean;
   /** 이름 클릭 목적지 — 페이지가 kind별로 계산(file=내부 미리보기 / text=상세 / form=이력서 뷰 / link=외부 주소). */
@@ -60,6 +65,8 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const extension = doc.fileName ? splitFileName(doc.fileName).extension : "";
+  const renameBase = extension && doc.title.toLowerCase().endsWith(extension.toLowerCase()) ? doc.title.slice(0, -extension.length) : doc.title;
 
   async function run(fn: () => Promise<void>) {
     if (busy) return;
@@ -90,13 +97,18 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
 
   return (
     <tr className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""}`}>
-      <td className="px-4 py-2">
+      <td className="px-4 py-2" title={doc.categoryLabel}>
         <div className="flex min-w-0 items-center gap-2">
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.8} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
           {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산).
               link=외부 사이트라 창(iframe) 시스템에 못 태운다(구글드라이브 등은 X-Frame-Options로 차단) → 새 탭. */}
-          {doc.external ? (
+          {doc.kind === "file" && doc.fileName ? (
+            <InlineRename enabled={canWrite && !busy} name={renameBase} suffix={extension} maxLength={180}
+              onSave={(name) => renameDocumentFile(doc.id, name, { title: doc.title, fileName: doc.fileName! })}>
+              <WindowLink href={doc.href} title={doc.title} className="text-foreground hover:text-primary block min-w-0 truncate font-medium hover:underline">{doc.title}</WindowLink>
+            </InlineRename>
+          ) : doc.external ? (
             <a
               href={doc.href}
               target="_blank"
@@ -128,9 +140,9 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
         </div>
         {doc.description ? <p className="text-text-faint mt-0.5 truncate pl-6 text-xs">{doc.description}</p> : null}
       </td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.categoryLabel}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.typeLabel}</td>
       <td className="text-text-dim num px-3 py-2 text-right whitespace-nowrap">{doc.sizeLabel}</td>
+      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.updatedAt ? new Date(doc.updatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(doc.createdAt)}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.uploaderName ?? "—"}</td>
       <td className="px-3 py-2 text-right whitespace-nowrap">

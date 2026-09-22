@@ -1,10 +1,9 @@
 "use client";
 
 import { TOOLBAR_SEARCH_BOX } from "@/components/toolbar-controls";
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
-import { toast } from "sonner";
 import { ExternalLink, FilePlus2, Loader2, Search, Upload, UploadCloud } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -18,12 +17,13 @@ import {
 } from "@/features/documents/server/actions";
 import {
   categorySelectOptions,
+  categoryPathLabel,
   FALLBACK_CATEGORY,
   type DocumentCategoryOption,
 } from "@/features/documents/categories";
 import { DialogShell, ErrorNote, Field, inputCls } from "./dialog-parts";
-
-const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types?.includes("Files");
+import { DirectFileDrop } from "./direct-file-drop";
+import { isLinkedSource } from "@/features/documents/linked";
 
 export function DocumentToolbar({
   canWrite,
@@ -46,61 +46,6 @@ export function DocumentToolbar({
   const categoryOptions = categorySelectOptions(categories);
   const keepCat = catParam !== undefined ? catParam : category;
   const [dialog, setDialog] = useState<"upload" | "text" | "link" | null>(null);
-  const [droppedFile, setDroppedFile] = useState<File | null>(null);
-  const [dragging, setDragging] = useState(false);
-  // dragenter/leave는 자식 요소마다 발화 → 깊이 카운터로 "창 밖으로 나갔을 때만" 오버레이 해제.
-  const depth = useRef(0);
-  const dialogOpen = useRef(false);
-  useEffect(() => {
-    dialogOpen.current = dialog !== null;
-  }, [dialog]);
-
-  // 페이지 전역 드래그드랍 — 탐색기처럼 파일을 창 아무 데나 끌어다 놓으면 업로드 다이얼로그가 열린다.
-  useEffect(() => {
-    if (!canWrite) return;
-    const onEnter = (e: DragEvent) => {
-      if (!hasFiles(e) || dialogOpen.current) return;
-      depth.current += 1;
-      setDragging(true);
-    };
-    const onLeave = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      depth.current = Math.max(0, depth.current - 1);
-      if (depth.current === 0) setDragging(false);
-    };
-    const onOver = (e: DragEvent) => {
-      if (hasFiles(e)) e.preventDefault(); // 기본 동작(브라우저가 파일 열기) 차단 = 드롭 허용
-    };
-    const onDrop = (e: DragEvent) => {
-      if (!hasFiles(e)) return;
-      e.preventDefault();
-      depth.current = 0;
-      setDragging(false);
-      if (dialogOpen.current) return; // 다이얼로그 열림 중엔 다이얼로그 자체 드롭존이 처리
-      const files = e.dataTransfer?.files;
-      if (!files?.length) return;
-      if (files.length > 1) toast.info("한 번에 1개 파일만 업로드됩니다 — 첫 번째 파일을 선택했어요");
-      setDroppedFile(files[0]);
-      setDialog("upload");
-    };
-    const onEnd = () => {
-      depth.current = 0;
-      setDragging(false);
-    };
-    window.addEventListener("dragenter", onEnter);
-    window.addEventListener("dragleave", onLeave);
-    window.addEventListener("dragover", onOver);
-    window.addEventListener("drop", onDrop);
-    window.addEventListener("dragend", onEnd);
-    return () => {
-      window.removeEventListener("dragenter", onEnter);
-      window.removeEventListener("dragleave", onLeave);
-      window.removeEventListener("dragover", onOver);
-      window.removeEventListener("drop", onDrop);
-      window.removeEventListener("dragend", onEnd);
-    };
-  }, [canWrite]);
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       {/* 검색 — GET 폼(현재 폴더 유지, page 리셋) */}
@@ -143,25 +88,14 @@ export function DocumentToolbar({
           </Button>
         </>
       ) : null}
-      {/* 드래그 중 전면 오버레이 — 드롭 유도(z-40 = 다이얼로그 z-50 아래) */}
-      {dragging ? (
-        <div className="bg-background/80 fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm">
-          <div className="border-primary/60 bg-primary/5 text-primary pointer-events-none flex flex-col items-center gap-2 rounded-lg border-2 border-dashed px-14 py-10">
-            <UploadCloud className="size-9" strokeWidth={1.8} />
-            <p className="text-base font-bold">여기에 놓아 서식 업로드</p>
-            <p className="text-text-dim text-xs">이미지 · PDF · Word · Excel · 한글(HWP)</p>
-          </div>
-        </div>
-      ) : null}
+      {canWrite ? <DirectFileDrop category={category ?? FALLBACK_CATEGORY}
+        folderLabel={categoryPathLabel(categories, category ?? FALLBACK_CATEGORY)}
+        dialogOpen={dialog !== null} blocked={isLinkedSource(keepCat ?? "")} /> : null}
       {dialog === "upload" ? (
         <UploadDialog
           defaultCategory={category ?? FALLBACK_CATEGORY}
           categoryOptions={categoryOptions}
-          initialFile={droppedFile}
-          onClose={() => {
-            setDialog(null);
-            setDroppedFile(null);
-          }}
+          onClose={() => setDialog(null)}
         />
       ) : null}
       {dialog === "text" ? (
@@ -188,16 +122,14 @@ type CategoryOptions = { value: string; label: string }[];
 function UploadDialog({
   defaultCategory,
   categoryOptions,
-  initialFile,
   onClose,
 }: {
   defaultCategory: string;
   categoryOptions: CategoryOptions;
-  initialFile?: File | null;
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(initialFile ?? null);
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [err, setErr] = useState<string | null>(null);
@@ -212,13 +144,6 @@ function UploadDialog({
       titleRef.current.value = f.name.replace(/\.[^.]+$/, "");
     }
   }
-
-  // 전역 드롭으로 열렸을 때 — 마운트 후 제목 자동 채움(titleRef는 마운트 뒤에야 존재).
-  useEffect(() => {
-    if (initialFile && titleRef.current && !titleRef.current.value.trim()) {
-      titleRef.current.value = initialFile.name.replace(/\.[^.]+$/, "");
-    }
-  }, [initialFile]);
 
   function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     applyFile(e.target.files?.[0] ?? null);

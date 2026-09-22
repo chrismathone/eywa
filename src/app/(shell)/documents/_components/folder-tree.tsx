@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "@/components/icons/aywa-icon-compat";
 import { categoryPath, flattenCategories, type DocumentCategoryOption } from "@/features/documents/categories";
+import { FolderDropTarget, FolderName } from "./folder-interactions";
 
 type FolderTreeProps = {
   categories: DocumentCategoryOption[];
@@ -32,7 +32,8 @@ function FolderTreeItems({ categories, counts, activeKey, hrefs, ancestors }: Fo
         const pathLabel = path.map((p) => p.label).join(" / ");
         return (
           <li key={c.key}>
-            <div className={`flex items-center rounded-md ${active ? "bg-primary/10 text-primary font-bold" : "text-text-dim hover:bg-bg-soft"}`}
+            <FolderDropTarget folderKey={c.key} onHoverExpand={() => setExpanded((prev) => prev.has(c.key) ? prev : new Set(prev).add(c.key))}
+              className={`flex items-center rounded-md ${active ? "bg-primary/10 text-primary font-bold" : "text-text-dim hover:bg-bg-soft"}`}
               style={{ paddingLeft: depth * 14, minWidth: depth * 14 + 150 }}>
               {parents.has(c.key) ? (
                 <button type="button" className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-primary/10 disabled:opacity-50"
@@ -41,13 +42,12 @@ function FolderTreeItems({ categories, counts, activeKey, hrefs, ancestors }: Fo
                   {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                 </button>
               ) : <span className="w-6 shrink-0" />}
-              <Link href={hrefs[c.key]} aria-current={active ? "page" : undefined} title={pathLabel}
-                className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-sm">
+              <div className="flex min-w-0 flex-1 items-center gap-2 pr-2 text-sm">
                 <Icon className={`size-4 shrink-0 ${active ? "text-primary" : "text-amber"}`} strokeWidth={1.8} />
-                <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                <FolderName folder={c} href={hrefs[c.key]} active={active} title={pathLabel} />
                 <span className="num text-text-faint text-xs" title="하위 폴더 문서 포함">{counts ? counts[c.key] ?? 0 : "—"}</span>
-              </Link>
-            </div>
+              </div>
+            </FolderDropTarget>
           </li>
         );
       })}

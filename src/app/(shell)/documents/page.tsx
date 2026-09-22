@@ -1,5 +1,4 @@
 import { ChevronLeft, ChevronRight, Files, Folder } from "@/components/icons/aywa-icon-compat";
-import Link from "next/link";
 import { headers } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -31,6 +30,7 @@ import { FolderNav, type FolderItem } from "./_components/folder-nav";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { NewFolderButton } from "./_components/category-manager";
 import { FolderBreadcrumbs } from "./_components/folder-breadcrumbs";
+import { FolderDropTarget, FolderInteractionProvider, FolderName } from "./_components/folder-interactions";
 
 export const metadata = { title: "데이터베이스 — aywa" };
 
@@ -143,6 +143,7 @@ export default async function DocumentsPage({
       />
 
       {/* 탐색기 레이아웃 — 넓은 창: 좌 폴더 팬 + 우 상세 테이블 / 좁은 창: 폴더가 상단 칩으로 접힘 */}
+      <FolderInteractionProvider categories={categories} canManage={canWrite}>
       <div className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:items-start lg:gap-4">
         <FolderNav
           folders={folders}
@@ -162,13 +163,13 @@ export default async function DocumentsPage({
           {children.length ? <div className="border-b border-line p-4">
             <p className="mb-2 text-xs text-text-faint">{cat ? "하위 폴더" : "폴더"} · {children.length}개</p>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {children.map((c) => <Link key={c.key} href={folderHref(c.key)}
-                className="flex min-w-0 items-center gap-2 rounded-lg border border-line px-3 py-2.5 hover:bg-bg-soft">
+              {children.map((c) => <FolderDropTarget key={c.key} folderKey={c.key}
+                className="flex min-w-0 items-center gap-2 rounded-lg border border-line px-3 py-1 hover:bg-bg-soft">
                 <Folder className="size-4 shrink-0 text-amber" />
-                <span className="min-w-0 flex-1 truncate text-sm" title={c.label}>{c.label}</span>
+                <FolderName folder={c} href={folderHref(c.key)} />
                 <span className="num shrink-0 text-xs text-text-faint" title="하위 폴더 문서 포함">{treeCounts ? treeCounts[c.key] ?? 0 : "—"}건</span>
                 <ChevronRight className="size-3 shrink-0 text-text-faint" />
-              </Link>)}
+              </FolderDropTarget>)}
             </div>
           </div> : null}
           <div className="border-line text-text-dim flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 text-xs">
@@ -203,14 +204,14 @@ export default async function DocumentsPage({
                   {/* 헤더 클릭 정렬 — 서버 정렬(URL `?sort=&dir=`)이라 페이지를 넘겨도 전체 기준으로 줄 선다.
                       ⚠️ 연동 폴더(교재 요청서·수강료 견적서)는 원본 테이블을 따로 조회해 정렬 배선이 없다 →
                          누를 수 있게 두면 "눌렀는데 안 바뀐다"가 된다. 그 폴더에선 정적 헤더로 되돌린다.
-                      ⚠️ '분류'·'유형'은 의도적으로 정렬 대상이 아니다(사유 = document-sort.ts). */}
+                      ⚠️ '유형'은 의도적으로 정렬 대상이 아니다(사유 = document-sort.ts). */}
                   <tr className="text-text-dim border-line border-b text-left text-xs">
                     {linked ? (
                       <>
                         <th className="px-4 py-2 font-medium">이름</th>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">분류</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
                         <th className="px-3 py-2 text-right font-medium whitespace-nowrap">크기</th>
+                        <th className="px-3 py-2 font-medium whitespace-nowrap">수정일</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">등록일</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">등록자</th>
                       </>
@@ -219,7 +220,6 @@ export default async function DocumentsPage({
                         <SortableThLink sortKey="name" state={sort} hrefFor={sortHref} padClassName="px-4 py-2">
                           이름
                         </SortableThLink>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">분류</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
                         <SortableThLink
                           sortKey="size"
@@ -229,6 +229,9 @@ export default async function DocumentsPage({
                           className="whitespace-nowrap"
                         >
                           크기
+                        </SortableThLink>
+                        <SortableThLink sortKey="modified" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
+                          수정일
                         </SortableThLink>
                         <SortableThLink sortKey="date" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
                           등록일
@@ -256,6 +259,8 @@ export default async function DocumentsPage({
                             typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType, r.linkUrl),
                             sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",
                             createdAt: r.createdAt,
+                            updatedAt: r.updatedAt,
+                            fileName: r.fileName,
                             uploaderName: r.uploaderName,
                             pinned: r.pinned,
                             // 링크 문서는 외부 주소로 직행(새 탭) — 값이 비면 상세로 폴백해 죽은 링크를 안 만든다.
@@ -278,6 +283,7 @@ export default async function DocumentsPage({
           )}
         </section>
       </div>
+      </FolderInteractionProvider>
 
       <div className="lg:pl-[246px]">
         <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} total={total} />

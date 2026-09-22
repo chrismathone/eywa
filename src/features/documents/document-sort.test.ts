@@ -65,6 +65,7 @@ describe("documentOrderSpecs", () => {
     expect(documentOrderSpecs({ key: "name", dir: "desc" })[0]?.ascending).toBe(false);
     expect(documentOrderSpecs({ key: "size", dir: "asc" })[0]?.column).toBe("file_size");
     expect(documentOrderSpecs({ key: "date", dir: "asc" })[0]?.column).toBe("created_at");
+    expect(documentOrderSpecs({ key: "modified", dir: "desc" })[0]).toEqual({ column: "updated_at", ascending: false, nullsFirst: false });
   });
 
   it("빈 값은 방향과 무관하게 뒤로(nullsFirst=false) — '값 없음'이 맨 위로 오면 목록이 쓸모없다", () => {

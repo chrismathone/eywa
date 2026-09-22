@@ -12,15 +12,12 @@ type OrderSpec = { column: string; ascending: boolean; nullsFirst: boolean };
 
 /**
  * 정렬 가능한 열. **표시 라벨과 정렬 기준이 같은 열만 연다.**
- * · `name`=title · `size`=file_size · `date`=created_at · `uploader`=등록자(to-one 임베드)
+ * · `name`=title · `size`=file_size · `modified`=updated_at · `date`=created_at · `uploader`=등록자(to-one 임베드)
  *
- * 🔴 '분류'·'유형'은 일부러 안 연다:
- *   · 분류는 저장값이 내부 키(`hr`·`cat_7`)라 헤더는 한글인데 로마자 키 순으로 줄 선다(수업보고서 '과목'과
- *     같은 이유). 게다가 왼쪽 폴더가 이미 분류 필터라 실익도 없다. 열려면 `document_categories.sort_order`
- *     기준으로 정렬할 설계(FK+임베드)가 먼저다.
- *   · 유형은 DB 컬럼이 아니라 kind+확장자+form_type+링크 호스트로 **화면에서 만드는 라벨**이라 정렬할 값 자체가 없다.
+ * 분류는 폴더 경로로 표시한다. 유형은 kind+확장자+form_type+링크 호스트로 만드는 라벨이라
+ * 화면과 일치하는 DB 정렬 값이 없어 정렬을 제공하지 않는다.
  */
-export const DOCUMENT_SORT_KEYS = ["name", "size", "date", "uploader"] as const;
+export const DOCUMENT_SORT_KEYS = ["name", "size", "modified", "date", "uploader"] as const;
 export type DocumentSortKey = (typeof DOCUMENT_SORT_KEYS)[number];
 
 export type DocumentSort = { key: DocumentSortKey; dir: "asc" | "desc" } | null;
@@ -71,5 +68,7 @@ export function documentOrderSpecs(sort: DocumentSort): OrderSpec[] {
     case "date":
       // created_at이 정렬 열 자신이라 tiebreak에서 중복 제거(id만 남긴다).
       return [{ column: "created_at", ascending: asc, nullsFirst: false }, tiebreak[1]!];
+    case "modified":
+      return [{ column: "updated_at", ascending: asc, nullsFirst: false }, ...tiebreak];
   }
 }

@@ -38,9 +38,9 @@ export function LinkedDocumentRow({ doc }: { doc: LinkedDocRow }) {
         </div>
         {doc.description ? <p className="text-text-faint mt-0.5 truncate pl-6 text-xs">{doc.description}</p> : null}
       </td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.categoryLabel}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.typeLabel}</td>
       <td className="text-text-dim num px-3 py-2 text-right whitespace-nowrap">—</td>
+      <td className="text-text-dim px-3 py-2 whitespace-nowrap">—</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(doc.createdAt)}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.byName ?? "—"}</td>
       <td className="px-3 py-2" />
