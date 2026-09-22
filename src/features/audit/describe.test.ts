@@ -18,6 +18,10 @@ const ctx = (names: Record<string, string> = {}) => ({
 });
 
 describe("auditDetail — 청구 회차 행 생성(출석부 줄에 맞춤, 2026-09-18)", () => {
+  it("회차 삭제는 0시수·0원과 삭제된 메모까지 표시한다", () => {
+    expect(auditDetail("session_term_delete", { period: "2026-09", sessionsBefore: 0, amountBefore: 0, note: "종료반 정리" }, ctx()))
+      .toBe("2026-09 · 확정 0시수 삭제 · 0원 · 메모: 종료반 정리");
+  });
   const CID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   it("어느 달·어느 반·왜·예정 시수를 한 줄로 — 기록만 있는 줄은 '예정 없음', 모르는 계기는 영문을 흘리지 않는다", () => {
     expect(

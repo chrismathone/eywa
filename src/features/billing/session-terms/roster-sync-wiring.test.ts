@@ -88,7 +88,8 @@ describe("가상 id — 저장하는 순간에만 행을 만들고, 서버가 �
         if (EXEMPT[name]) continue;
         const body = bodyOf(src, name);
         const writesTerms = /from\("invoice_session_terms"\)[\s\S]*?\.(update|delete)\(/.test(body) || /save_session_receipt_allocations/.test(body);
-        if (writesTerms && !/isVirtualTermId\(|materializeVirtualTerms\(/.test(body)) offenders.push(`${f}:${name}`);
+        // 삭제의 미리보기·실행은 deletionContext가 가상 id·권한을 함께 검사한다(동작은 delete-actions.test).
+        if (writesTerms && !/isVirtualTermId\(|materializeVirtualTerms\(|deletionContext\(/.test(body)) offenders.push(`${f}:${name}`);
       }
     }
     expect(offenders).toEqual([]);

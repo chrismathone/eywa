@@ -25,6 +25,7 @@ import { MonthlySessionEditor } from "./monthly-session-editor";
 import { TermNoteCell } from "./term-note-cell";
 import { SelectedConfirmButton, scaledConfirmText, type TermDraft } from "./selected-confirm-button";
 import { ClassUnconfirmButton } from "./class-unconfirm-button";
+import { TermDeleteButton } from "./term-delete-button";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { formatTermDays } from "@/features/billing/session-terms/term-days";
 import { isUntouchedScaledSessions } from "@/features/billing/session-terms/last-month-suggestion";
@@ -585,7 +586,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
           <span className="text-text-dim cursor-help text-xs" {...NO_ROW_NOTE_TIP}>—</span>
         )}
       </td>
-      {/* 기타(옛 '개별') — 확정·해제. 오른쪽에 고정(STICKY_END_ROW). 청구서 없는 줄엔 동작이 없다. */}
+      {/* 기타 — 확정·해제·삭제. 삭제는 저장된 회차 행에만 제공한다. */}
       <td className={`${STICKY_END_ROW} px-3 py-2 text-center`}>
         {locked ? (
           <span className="text-text-dim">—</span>
@@ -606,6 +607,7 @@ function TermRow({ r, period, listId, draft, onDraft, selected, onSelect, awaiti
             {confirming || awaiting ? "확정 중…" : monthly ? "월 금액 확정" : "확정"}
           </button>
         )}
+        {r.termState === "term" ? <TermDeleteButton id={r.id} period={period} studentName={r.studentName} className={r.className} disabled={pending} onDeleted={() => { onSelect(false); onAwait(); }} /> : null}
         {err ? <p className="text-danger mt-1 text-xs whitespace-normal">{err}</p> : null}
       </td>
     </tr>
@@ -740,17 +742,10 @@ export function SessionTermGroups({
           <option key={c.price} value={c.price} label={`${won(c.price)}${c.label ? ` · ${c.label}` : ""}`} />
         ))}
       </datalist>
-      {/* 열 11개 = 선택 체크박스 + 원장 2026-09-17 *"이름 / 학교학년 / 담임 / 예정시수 / 확정시수 / 단가 및 수강료 / 예상 및 확정
-          청구액 / 실납 청구액 / 메모(특이사항) / 기타"*. 한 행 = 한 줄(원장 2026-09-16)은 그대로 — 비율은 칸에 실제로 서는 내용 폭을
-          Pretendard로 잰 값(2026-09-17, 칸 여백 포함: 선택 36 · 이름 4자 88 · 학교학년 6자 102 · 담임 70 · 시수 머리 94 · 단가 122 ·
-          예상 `148,750원 예상 · 7시수 × 21,250원` 약 250~290 · 실납 `148,750원 배분 재확인 필요 수납 연결·배분` 약 306 ·
-          메모 머리 132 · 기타 `월 금액 확정` 134)에서 잡았고, 이름 칸은 개별 등원 요일(4자 이름 약 62 + `월·수·금` 약 49)을 붙이며 최소 폭을
-          1,580px로 올리고 이름 9% · 실납 19.75% · 메모 8.5%로 옮겼다(2026-09-17), 최소 폭 1,580px에서 각 칸이 제 한 줄을 담는다(메모가 가장 빠듯하다 — 134 vs 132). 남는 폭은 메모에
-          조금 더 준다. ⚠️ 수납 창 기본 크기(1,160)보다 넓다 — 그 크기에선 끌어서 가로로 민다(수납 15열 표와 같은 결정,
-          원장 2026-09-04). 그래서 '기타' 열(확정·해제)은 오른쪽에, 반 머리 줄의 일괄 입력·확정 버튼은 보이는 오른쪽 끝에
-          고정했다(원장 2026-09-17 승인). 열을 더하면 이 폭과 비율을 함께 다시 잴 것. 2026-09-18 줄 상태 표식('회차 없음'·'청구서 없음')은
-          기존 칸 안에 서고 열을 늘리지 않는다. */}
-      <table className="w-full min-w-[1580px] table-fixed text-sm">
+      {/* 선택 포함 11열 · 한 행은 한 줄. 기타 열은 최소 180px로 월 금액 확정과 삭제를 함께 담는다.
+          이름·개별 등원 요일, 실납 금액·배분 표식·연결 버튼, 메모의 폭도 유지한다.
+          좁은 수납 창에서는 가로로 끌어 이동하며, 기타 열과 반 일괄 버튼은 오른쪽 끝에 고정한다. */}
+      <table className="w-full min-w-[1640px] table-fixed text-sm">
         <colgroup>
           <col className="w-[2.5%]" />
           <col className="w-[9%]" />
@@ -758,11 +753,11 @@ export function SessionTermGroups({
           <col className="w-[5%]" />
           <col className="w-[6.25%]" />
           <col className="w-[6.25%]" />
-          <col className="w-[8%]" />
-          <col className="w-[18.5%]" />
+          <col className="w-[7.75%]" />
+          <col className="w-[17%]" />
           <col className="w-[19.75%]" />
           <col className="w-[8.5%]" />
-          <col className="w-[9.25%]" />
+          <col className="w-[11%]" />
         </colgroup>
         <thead>
           <tr className="bg-bg-soft text-text-dim text-sm [&>th]:whitespace-nowrap">
