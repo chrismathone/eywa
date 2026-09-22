@@ -36,6 +36,11 @@ export type EcsDayPlan = {
   skillAreas: SkillAreaSetting[];
   /** `HH:MM` → 그 교시의 계획 줄 전부(**거르지 않은 원본**, line_no 순). */
   linesBySlot: Record<string, PlanLineDTO[]>;
+  /**
+   * 그 날의 회차 표식(0282a) — `"HH:MM"` → `skip` | `advance`. 버튼의 **눌린 상태**를 그린다.
+   * ⚠️ 표가 없거나(0282a 미적용) 조회가 실패해도 **빈 객체**다 — 버튼은 그대로 돈다(토글은 서버가 판정).
+   */
+  shiftBySlot: Record<string, "skip" | "advance">;
 };
 
 export type EcsDayPlanResult = { ok: true; data: EcsDayPlan } | { ok: false; error: string };
@@ -70,6 +75,22 @@ export async function getEcsDayPlan(input: {
     return { ok: false, error: "수업계획을 불러오지 못했습니다" };
   }
 
+  // 회차 표식 — 🔴 **삼켜도 되는 조회**다(표시용). 실패하면 강조만 없고 버튼은 그대로 동작한다.
+  const shiftBySlot: Record<string, "skip" | "advance"> = {};
+  try {
+    const { data } = await createAdminClient()
+      .from("class_lesson_shifts")
+      .select("slot_start, kind")
+      .eq("tenant_id", access.tenantId)
+      .eq("class_id", input.classId)
+      .eq("plan_date", input.planDate);
+    for (const r of data ?? []) {
+      shiftBySlot[normalizeSlotTime(String(r.slot_start))] = String(r.kind) === "advance" ? "advance" : "skip";
+    }
+  } catch {
+    /* 표시용이라 조용히 넘어간다 — 위 ⚠️ */
+  }
+
   const linesBySlot: Record<string, PlanLineDTO[]> = {};
   for (const row of rows) {
     const dto = planLineFromRow(row);
@@ -86,6 +107,7 @@ export async function getEcsDayPlan(input: {
       showExamTerm: access.englishTrack !== "eie",
       skillAreas: access.skillAreas,
       linesBySlot,
+      shiftBySlot,
     },
   };
 }

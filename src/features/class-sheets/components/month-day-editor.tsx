@@ -285,6 +285,7 @@ function DaySlot({
         skillAreas={plan.skillAreas}
         canEdit={plan.canEdit}
         showExamTerm={plan.showExamTerm}
+        shift={plan.shiftBySlot[slot.slotStart] ?? null}
         registerFlush={onFlush}
       />
     </section>

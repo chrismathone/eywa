@@ -278,6 +278,16 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(body).not.toContain("ecs_apply_textbook_lessons");
   });
 
+  it("🔴 버튼은 **실제를 적는 표**에 있다 — 달력에만 두면 사람이 못 찾는다", () => {
+    // 원장 제보 2026-09-22 *"밀기 당기기는 어디에있음?"* — 처음엔 월간 달력 칸에만 뒀다.
+    const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
+    expect(table).toContain("plan.shift.skip");
+    expect(table).toContain("handlers.setShift");
+    // ⚠️ 지난 날짜를 막지 않는다(뒤늦게 미루는 게 정상 흐름) — 날짜 비교로 버튼을 감추면 안 된다.
+    const cal = read("src", "features", "class-sheets", "components", "month-calendar.tsx");
+    expect(cal).not.toContain("date >= data.today ?");
+  });
+
   it("미루기는 차수를 **안 쓰고** 지나간다 — 휴일과 같은 규칙", () => {
     expect(sched).toContain('if (shift === "skip") continue;');
     // ⚠️ 미룬 칸을 '연휴로 건너뜀'에 섞지 않는다(사람이 내린 결정이지 연휴가 아니다).
