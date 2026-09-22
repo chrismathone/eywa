@@ -1001,9 +1001,9 @@ export async function createStudentGrade(
   const maxScore = maxScoreStr ? Number(maxScoreStr) : null;
   if (maxScoreStr && !Number.isFinite(maxScore)) return { error: "만점은 숫자로 입력해주세요" };
 
-  // 0281a 미적용이면 저장 자체가 400이라, 실패 메시지 대신 **왜 안 되는지**를 말한다([[#95]]).
+  // 0282a 미적용이면 저장 자체가 400이라, 실패 메시지 대신 **왜 안 되는지**를 말한다([[#95]]).
   if (!(await gradesSchemaReady())) {
-    return { error: "성적 학기 구조(0281a)가 아직 적용되지 않아 저장할 수 없습니다" };
+    return { error: "성적 학기 구조(0282a)가 아직 적용되지 않아 저장할 수 없습니다" };
   }
 
   try {

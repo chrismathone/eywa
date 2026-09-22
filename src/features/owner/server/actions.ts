@@ -3,6 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
@@ -73,6 +74,11 @@ export async function saveOwnerSection(
     }
   } else if (!(await canWriteTenant(actor.systemRole, "owner"))) {
     return { error: "학원 설정 변경 권한이 없습니다" };
+  }
+  // '기능 켜기·끄기'는 권한처럼 "무엇이 있나"를 정하는 층이라 위임 계정엔 안 연다 — 원장 + 총괄(super_admin 자동 통과 규약).
+  // 0281a 트리거가 같은 선을 DB에서 긋는다(이중 방어, [[#77]]).
+  if (section === "modules" && actor.systemRole !== "master" && !(await isCurrentUserSuperAdmin())) {
+    return { error: "기능 켜기·끄기는 원장만 바꿀 수 있습니다" };
   }
 
   let parsedJson: unknown;

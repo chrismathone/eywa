@@ -8,7 +8,7 @@ import type { Term } from "../term";
 /**
  * 성적 칸 **저장 단일 경로** — 격자·학생 상세 폼·엑셀 반영이 전부 여기로 들어온다.
  *
- * 🔑 한 칸의 주인은 `(학생, 과목, 년도, 학기, 시험 칸)`이다(0281a 유니크). 학교 시험이라 한 학생이
+ * 🔑 한 칸의 주인은 `(학생, 과목, 년도, 학기, 시험 칸)`이다(0282a 유니크). 학교 시험이라 한 학생이
  *    같은 과목 반을 둘 들어도 성적은 하나 — 어느 반 화면에서 적어도 같은 칸이 갱신된다.
  * 🔴 `upsert`는 **payload에 있는 컬럼만** 갱신한다 — 그래서 `notes`를 싣지 않는다(학생 상세에서 적어
  *    둔 메모가 격자 저장 한 번에 지워지지 않게). 옛 `batchSaveScores`는 delete→insert라 메모가 날아갔다.
@@ -62,7 +62,7 @@ export async function writeGradeCells(
     school_year: axis.year,
     term: axis.term,
     exam_slot: axis.slot,
-    // 라벨도 함께 저장한다 — 0281a 전 화면(학생 타임라인·성적 급락 알림)이 시험 이름을 계속 읽는다.
+    // 라벨도 함께 저장한다 — 0282a 전 화면(학생 타임라인·성적 급락 알림)이 시험 이름을 계속 읽는다.
     exam_name: EXAM_SLOT_LABEL[axis.slot],
     score: r.score,
     max_score: axis.maxScore,
@@ -100,7 +100,7 @@ export async function writeGradeCells(
 }
 
 /**
- * 0281a(학기·시험 칸 컬럼)가 적용됐는가 — 요청당 한 번.
+ * 0282a(학기·시험 칸 컬럼)가 적용됐는가 — 요청당 한 번.
  *
  * 🔴 앱이 마이그레이션보다 먼저 배포될 수 있다([[#95]]: SQL은 원장이 손으로 적용한다). 컬럼이 없으면
  *    조회는 옛 모양으로 살고 **저장만 잠근다** — 열어 두면 전건이 PostgREST 400으로 실패한다.

@@ -30,7 +30,7 @@ export function ScoreGrid({
   sheet: GradeSheet;
   canWrite: boolean;
   slotLabel: string;
-  /** 입력을 잠그는 한글 사유(권한 없음·0281a 미적용). 없으면 입력 가능. */
+  /** 입력을 잠그는 한글 사유(권한 없음·0282a 미적용). 없으면 입력 가능. */
   lockReason: string | null;
 }) {
   const { selection: sel, rows } = sheet;

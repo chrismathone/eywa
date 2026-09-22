@@ -28,6 +28,8 @@ import type { PlanCopyResult, PlanLinesResult, PlanPatchesResult } from "../serv
 /** 계획 줄 한 칸을 특정하는 문맥 — 모든 호출이 **같은 (날짜, 교시)** 한 벌만 싣는다. */
 export type PlanSlotRef = { classId: string; planDate: string; slotStart: string };
 
+import { importPlannedSlot, type ImportPlannedResult } from "@/features/textbooks/server/plan-actions";
+
 export type PlanWriteApi = {
   flushPatches: (ref: PlanSlotRef, patches: unknown) => Promise<PlanPatchesResult>;
   createLine: (ref: PlanSlotRef, input: { termMode: "regular" | "exam"; skillArea: string }) => Promise<PlanLinesResult>;
@@ -37,6 +39,12 @@ export type PlanWriteApi = {
   ) => Promise<PlanLinesResult>;
   deleteLine: (ref: PlanSlotRef, input: { lineId: string }) => Promise<PlanLinesResult>;
   copySlot: (ref: PlanSlotRef, input: { termMode: "regular" | "exam" }) => Promise<PlanCopyResult>;
+  /**
+   * **월간계획 가져오기**(원장 2026-09-22) — 그 칸에 오기로 된 계획(교재·차수)을 실제 줄로 옮긴다.
+   * ⚠️ **선택**이다 — 비로그인 자리 PIN 화면(`/seat/jj`)은 세션이 없어 교재 배정을 읽을 수 없다.
+   *    문이 이 메서드를 안 내면 표가 버튼을 아예 안 그린다(없는 기능을 회색으로 보여 주지 않는다).
+   */
+  importPlan?: (ref: PlanSlotRef) => Promise<ImportPlannedResult>;
   /**
    * 계획 **칸 값** 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 저장과 **같은 문**을 지난다.
    * ⚠️ 없으면 그 문의 계획 칸은 기록되지 않는다(가드 `edit-audit-wiring.test.ts`가 두 문 모두 구현했는지 본다).
@@ -65,5 +73,7 @@ export const ECS_PLAN_API: PlanWriteApi = {
       slotStart: ref.slotStart,
       termMode: input.termMode,
     }),
+  importPlan: (ref) =>
+    importPlannedSlot({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart }),
   commitEdits: (ref, edits) => commitSheetEdits({ classId: ref.classId, edits }),
 };

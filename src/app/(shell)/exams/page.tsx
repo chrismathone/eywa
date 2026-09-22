@@ -203,7 +203,7 @@ export default async function ExamsPage({
   ];
 
   const canWrite = !writeError;
-  const lockReason = writeError ?? (sheet && !sheet.schemaReady ? "성적 표 준비(0281a)가 아직 적용되지 않아 입력을 잠갔습니다 — 적용 후 저장할 수 있습니다" : null);
+  const lockReason = writeError ?? (sheet && !sheet.schemaReady ? "성적 표 준비(0282a)가 아직 적용되지 않아 입력을 잠갔습니다 — 적용 후 저장할 수 있습니다" : null);
 
   return (
     <div className="space-y-5">

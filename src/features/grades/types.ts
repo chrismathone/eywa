@@ -56,7 +56,7 @@ export type GradeSheet = {
   classes: GradeClassOption[];
   rows: GradeSheetRow[];
   /**
-   * 0281a(학기·시험 칸 컬럼)가 적용됐는가. false면 화면은 살고 **입력만 잠근다**([[#95]]) —
+   * 0282a(학기·시험 칸 컬럼)가 적용됐는가. false면 화면은 살고 **입력만 잠근다**([[#95]]) —
    * 성적 표는 매일 쓰는 경로가 아니지만, 적용 전에 저장을 열어 두면 전건이 400으로 실패한다.
    */
   schemaReady: boolean;
