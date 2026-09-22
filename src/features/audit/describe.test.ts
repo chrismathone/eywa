@@ -490,6 +490,7 @@ describe("AUDIT_TYPE_LABEL", () => {
       "student_consultation",
       // 2026-09-22 성적관리 개편 — 저장 대상이 시험 행이 아니라 `학기·과목·시험 칸` 격자다.
       "grades",
+      "demo_roster",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
   });
