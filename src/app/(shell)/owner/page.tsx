@@ -176,7 +176,20 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {/* 왼쪽 탭 — 보기 설정이라 **권한(master 전용)과 달리 위임 계정도 편집**한다(saveOwnerSection이 owner 쓰기로 게이트).
           권한을 대체하지 않기 때문에 여기서 켜도 못 보던 화면이 열리지 않는다. */}
       {tab === "navigation" ? <NavigationSection initial={settings.navigation} /> : null}
-      {tab === "modules" ? <ModulesSection initial={settings.modules} /> : null}
+      {/* '기능' 면 = 원장·총괄만 편집(saveOwnerSection·0281a 트리거와 같은 선) — 위임 계정엔 저장이 실패할 폼 대신 안내.
+          판정은 감사로그 면과 같은 식(원장 또는 총괄)이라 canReadAudit을 그대로 쓴다. */}
+      {tab === "modules" ? (
+        canReadAudit ? (
+          <ModulesSection initial={settings.modules} />
+        ) : (
+          <div className="bg-card border-line rounded-2xl border p-6">
+            <p className="text-foreground text-sm font-bold">기능 켜기·끄기는 원장만 바꿀 수 있습니다</p>
+            <p className="text-text-dim mt-1 text-sm">
+              어떤 기능을 쓸지는 원장 계정에서 정합니다. 나머지 설정 면은 그대로 편집할 수 있습니다.
+            </p>
+          </div>
+        )
+      ) : null}
       {tab === "popups" ? <PopupsFace /> : null}
       {tab === "data" ? (
         <div className="space-y-10">
