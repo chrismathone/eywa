@@ -26,7 +26,7 @@ export default async function LandingPage() {
             <Link href="/login" className={styles.primaryLink}>로그인<EyIcon name="arrowRight" size={18} /></Link>
             <a href="#features" className={styles.textLink}>기능 살펴보기<EyIcon name="arrowDown" size={16} /></a>
           </div>
-          <p className={styles.accountNote}>학원에서 발급받은 계정으로 이용하세요.</p>
+          <p className={styles.accountNote}>학원에서 발급받은 계정으로 이용하세요. 도입과 이용 요금은 문의해 주세요.</p>
         </div>
         <ProductPreview />
       </section>
@@ -74,7 +74,7 @@ export default async function LandingPage() {
       <section id="guide" className={styles.section} aria-labelledby="guide-title">
         <div className={styles.sectionHeading}>
           <h2 id="guide-title">우리 학원에서<br />AYWA 이용하기.</h2>
-          <p>이용 준비부터 계정 접속까지,<br />담당자와 함께 확인해 주세요.</p>
+          <p>도입 문의부터 계정 접속까지,<br />담당자와 함께 확인해 주세요.</p>
         </div>
         <ol className={styles.steps}>
           {ACCESS_STEPS.map((step, index) => (
@@ -95,7 +95,7 @@ export default async function LandingPage() {
       </section>
 
       <section className={styles.loginBand} aria-labelledby="login-band-title">
-        <div><h2 id="login-band-title">오늘의 업무를 이어가세요.</h2><p>계정이 준비되어 있다면, 우리 학원의 AYWA로.</p></div>
+        <div><h2 id="login-band-title">오늘의 업무를 이어가세요.</h2><p>계정이 준비되어 있다면, 우리 학원의 AYWA로.<br />처음이라면 도입을 문의해 주세요.</p></div>
         <Link href="/login" className={styles.primaryLink}>로그인<EyIcon name="arrowRight" size={18} /></Link>
       </section>
     </>

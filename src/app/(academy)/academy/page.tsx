@@ -6,7 +6,7 @@ import { WalkScene } from "./walk-scene";
  * 학원 공개 랜딩(/academy) — 관객은 학부모. 입구 영상을 스크롤로 감아 상담 데스크까지 걸어 들어간다.
  *
  * ⚠️ aywa **제품** 랜딩(`/`, (marketing))과는 다른 페이지다. 저쪽 관객은 원장(고객사)이고
- *    요금제·"무료로 시작하기"가 있다. 여기는 학원 자신의 홍보면이라 섞지 말 것.
+ *    로그인·도입 문의 안내가 있다. 여기는 학원 자신의 홍보면이라 섞지 말 것.
  * ⚠️ 학원명은 하드코딩하지 않고 `getPublicBranding()`으로 읽는다 — 로그인 전이라 세션이 없어
  *    `getTenantSettings()`는 못 쓴다(**회사 브랜드 학원**만 확정 — 1개면 그 학원, 2개+면 env `PUBLIC_BRAND_TENANT_SLUG`,
  *    아니면 제품 중립 표기로 폴백. `pickBrandTenantId`, 2026-09-18).
