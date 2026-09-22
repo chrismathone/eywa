@@ -12,8 +12,8 @@ it.skipIf(!process.env.DATABASE_URL)("단체 이동: 실제 RLS·부분 실패·
   const rollback = new Error("rollback_bulk_transfer_test");
   try {
     await expect(db.begin(async (tx) => {
-      await tx.unsafe(readFileSync("supabase/migrations/0281a_class_bulk_transfer.sql", "utf8"));
-      await tx.unsafe(readFileSync("supabase/migrations/0281b_move_enrollments_lock_source.sql", "utf8"));
+      await tx.unsafe(readFileSync("supabase/migrations/0285a_class_bulk_transfer.sql", "utf8"));
+      await tx.unsafe(readFileSync("supabase/migrations/0285b_move_enrollments_lock_source.sql", "utf8"));
       const tag = randomUUID();
       const [tenant] = await tx`insert into tenants (slug, name) values (${`transfer-${tag}`}, 'Transfer test') returning id`;
       const [other] = await tx`insert into tenants (slug, name) values (${`other-${tag}`}, 'Other transfer test') returning id`;
