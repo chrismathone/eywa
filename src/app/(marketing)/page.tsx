@@ -1,14 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { EyIcon } from "@/components/icons/aywa-icons";
-import { ACCESS_FAQ, ACCESS_STEPS, PRODUCT_FEATURES, WORKSPACE_ROLES } from "@/data/marketing";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
+import { INQUIRY_NOTE } from "@/data/marketing";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
-import styles from "@/components/public-site/public-site.module.css";
-import { ProductPreview } from "./_components/product-preview";
+import { Desk } from "./_desk/desk";
+import { RoomButton } from "./_desk/room-button";
+import { AskBand, RolesSection, SmallRoomsSection } from "./_parts/landing-sections";
 
+/**
+ * 공개 랜딩 = '모형 속 작업 공간'(원장 선택 2026-09-22, 시안 섞기 3+5). 학원 모형이 바탕화면이고 방을 누르면 AYWA 창이
+ * 뜬다. 되돌리는 방법 = docs/landing-rollback.md.
+ */
 export default async function LandingPage() {
+  // 로그인 상태면 랜딩 대신 역할 홈으로(강사=원스크린 or ECS, 학생=/my-learning, 그 외=/dashboard) — landingPath 단일 소스.
+  // 권한 override로 홈이 '/'가 되는 엣지에선 리다이렉트를 건너뛰어 무한루프를 막는다.
   const user = await getCurrentUser();
   if (user) {
     const home = await landingPath(user.systemRole, await getPermMatrix());
@@ -17,87 +24,33 @@ export default async function LandingPage() {
 
   return (
     <>
-      <section className={styles.hero} aria-labelledby="hero-title">
-        <div className={styles.heroCopy}>
-          <p className={styles.intro}>학원을 위한 하나의 업무 공간</p>
-          <h1 id="hero-title">학원의 하루를,<br />하나의 흐름으로.</h1>
-          <p className={styles.heroDescription}>수업을 준비하고, 학생을 살피고, 운영을 마무리하는 일.<br className={styles.desktopBreak} /> 매일의 업무가 AYWA에서 이어집니다.</p>
-          <div className={styles.heroActions}>
-            <Link href="/login" className={styles.primaryLink}>로그인<EyIcon name="arrowRight" size={18} /></Link>
-            <a href="#features" className={styles.textLink}>기능 살펴보기<EyIcon name="arrowDown" size={16} /></a>
+      <section className="hero" aria-labelledby="hero-title">
+        <div className="wrap">
+          <div className="hero-head">
+            <div>
+              <p className="eyebrow"><i aria-hidden="true" />학원 한 채가 그대로 바탕화면이 되는 업무 공간</p>
+              <h1 id="hero-title">
+                <span className="ln">
+                  <span className="nw"><RoomButton room="desk" className="hchip"><MenuGlyph name="userPlus" size={48} />데스크</RoomButton>부터</span>{" "}
+                  <span className="nw"><RoomButton room="office" className="hchip"><MenuGlyph name="layoutGrid" size={48} />원장실</RoomButton>까지,</span>
+                </span>
+                <span className="ln">방을 누르면 <em>창이 열립니다.</em></span>
+              </h1>
+            </div>
+            <div>
+              <p className="lede">AYWA는 학원 일을 한곳에서 하는 업무 공간입니다. 모형의 점이나 건물 안내판을 누르면 그 방에서 쓰는 화면이 창으로 떠오릅니다. 창은 끌어 옮기고, 가장자리에 붙이고, 접어 둘 수 있습니다.</p>
+              <div className="cta">
+                <Link className="btn" href="/login">로그인 <span className="arrow" aria-hidden="true">→</span></Link>
+                <p className="ask">{INQUIRY_NOTE}</p>
+              </div>
+            </div>
           </div>
-          <p className={styles.accountNote}>학원에서 발급받은 계정으로 이용하세요. 도입과 이용 요금은 문의해 주세요.</p>
-        </div>
-        <ProductPreview />
-      </section>
-
-      <div className={styles.scopeBand}>
-        <p>수업에서 운영까지, 끊김 없이.</p>
-        <div><span>수업과 출결</span><span>학생과 상담</span><span>수납과 행정</span><span>팀과 학원 운영</span></div>
-      </div>
-
-      <section id="features" className={styles.section} aria-labelledby="features-title">
-        <div className={styles.sectionHeading}>
-          <h2 id="features-title">매일 하는 일에,<br />꼭 맞는 도구.</h2>
-          <p>각자 기록하던 업무를 연결해<br />우리 학원의 흐름을 함께 살펴보세요.</p>
-        </div>
-        <div className={styles.features}>
-          {PRODUCT_FEATURES.map((feature) => (
-            <article key={feature.title} className={styles.feature}>
-              <EyIcon name={feature.icon} size={26} className={styles.featureIcon} />
-              <h3>{feature.title}</h3>
-              <p>{feature.description}</p>
-              <span>{feature.tools}</span>
-            </article>
-          ))}
+          <div className="ws-shell"><Desk /></div>
         </div>
       </section>
-
-      <section id="workspace" className={styles.workspace} aria-labelledby="workspace-title">
-        <div className={styles.workspaceHeading}>
-          <span className={styles.workspaceMark}><EyIcon name="building" size={30} /></span>
-          <h2 id="workspace-title">같은 학원,<br />각자의 일에 맞는 화면.</h2>
-          <p>하나의 업무 공간 안에서<br />맡은 일에 필요한 정보부터 만납니다.</p>
-          <a href="#guide" className={styles.textLink}>이용 방법 확인<EyIcon name="arrowRight" size={17} /></a>
-        </div>
-        <div className={styles.roles}>
-          {WORKSPACE_ROLES.map((role) => (
-            <article key={role.title}>
-              <EyIcon name={role.icon} size={22} />
-              <div><h3>{role.title}</h3><p>{role.description}</p></div>
-            </article>
-          ))}
-          <p className={styles.roleNote}><EyIcon name="shield" size={16} />소속 학원과 계정 권한에 따라 이용 메뉴가 달라집니다.</p>
-        </div>
-      </section>
-
-      <section id="guide" className={styles.section} aria-labelledby="guide-title">
-        <div className={styles.sectionHeading}>
-          <h2 id="guide-title">우리 학원에서<br />AYWA 이용하기.</h2>
-          <p>도입 문의부터 계정 접속까지,<br />담당자와 함께 확인해 주세요.</p>
-        </div>
-        <ol className={styles.steps}>
-          {ACCESS_STEPS.map((step, index) => (
-            <li key={step.title}><span>{String(index + 1).padStart(2, "0")}</span><h3>{step.title}</h3><p>{step.description}</p></li>
-          ))}
-        </ol>
-        <div className={styles.faq}>
-          <h3>접속 전에 확인해 주세요</h3>
-          <div>
-            {ACCESS_FAQ.map((item) => (
-              <details key={item.question}>
-                <summary>{item.question}<EyIcon name="plus" size={18} /></summary>
-                <p>{item.answer}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className={styles.loginBand} aria-labelledby="login-band-title">
-        <div><h2 id="login-band-title">오늘의 업무를 이어가세요.</h2><p>계정이 준비되어 있다면, 우리 학원의 AYWA로.<br />처음이라면 도입을 문의해 주세요.</p></div>
-        <Link href="/login" className={styles.primaryLink}>로그인<EyIcon name="arrowRight" size={18} /></Link>
-      </section>
+      <RolesSection />
+      <SmallRoomsSection />
+      <AskBand />
     </>
   );
 }

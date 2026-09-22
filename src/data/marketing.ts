@@ -1,37 +1,44 @@
 import type { AywaIconName } from "@/components/icons/aywa-icons";
 
-/** Public product copy, aligned with current menus. Never include tenant data. */
-export const NAV_LINKS = [
-  { label: "주요 기능", href: "#features" },
-  { label: "함께 쓰는 AYWA", href: "#workspace" },
-  { label: "이용 안내", href: "#guide" },
-] as const;
+/**
+ * 공개 랜딩(`/`) 카피 — 지금 메뉴와 맞춘다. 학원·지점 이름이나 실데이터는 넣지 않는다.
+ * 🔴 무료·베타·요금 약속 금지 — 도입·요금은 '문의' 말투, 연결(메일·전화) 없이 문구만(원장 2026-09-22).
+ *    연락처가 정해지면 이 문구에 연결만 단다.
+ */
+export const INQUIRY_NOTE = "도입과 이용 요금은 문의해 주세요.";
 
-export const PRODUCT_FEATURES: { icon: AywaIconName; title: string; description: string; tools: string }[] = [
-  { icon: "calendar", title: "수업의 준비부터 기록까지", description: "시간표와 출결을 확인하고, 영어·수학 강사 시트에서 진도와 과제를 관리합니다.", tools: "시간표 · 출석부 · 강사 시트" },
-  { icon: "users", title: "학생 한 명의 흐름을 이어서", description: "첫 상담과 등록, 재원 중 상담과 성적을 연결해 학생에게 필요한 관리를 이어갑니다.", tools: "원생목록 · 콜&상담 · 성적관리" },
-  { icon: "wallet", title: "수납과 지출을 한곳에서", description: "수강료 청구와 납부 내역을 확인하고, 미납 관리부터 교재와 지출 업무까지 정리합니다.", tools: "수납관리 · 교재 · 지출" },
-  { icon: "clipboardCheck", title: "함께 일하는 팀의 업무도", description: "직원 정보와 근무 기록을 관리하고, 회의에서 결정한 일과 결재 문서를 함께 확인합니다.", tools: "직원관리 · 회의록 · 전자결재" },
-  { icon: "bus", title: "교실 밖 운영까지 꼼꼼하게", description: "셔틀 노선과 등하원 현황, 학원 자산과 소모품을 각각의 관리 화면에서 살펴봅니다.", tools: "셔틀 · 재고관리" },
-  { icon: "sparkle", title: "기록을 읽고, 다음 일을 확인", description: "운영 브리핑과 상담·회의 요약을 참고해 확인할 내용을 정리하고 후속 업무로 이어갑니다.", tools: "운영실 · 상담 분석 · 회의 요약" },
+export type LandingRoom = "office" | "classA" | "desk";
+
+/** 역할 카드 — 모형의 층이 곧 그 역할이 일하는 자리. */
+export const LANDING_ROLES: {
+  room: LandingRoom; tag: string; title: string; body: string; menus: string[]; image: string; alt: string;
+}[] = [
+  {
+    room: "office", tag: "3F · 원장 · 관리자", title: "학원 전체를 한눈에",
+    body: "운영실에서 재원생·결석·신규 문의를 보고, 매일 07:00에 만들어지는 AI 운영 브리핑으로 오늘 챙길 일을 확인합니다.",
+    menus: ["운영실", "직원관리", "회의록"], image: "/landing/floor-3.webp", alt: "모형 3층 원장실 확대",
+  },
+  {
+    room: "classA", tag: "2F · 강사", title: "오늘 수업만 간단하게",
+    body: "사이드바 없는 화면에서 출결을 찍고, 원스크린에서 수업보고서를 써서 학부모 알림장으로 보냅니다. 반별 진도는 강사 시트에 남깁니다.",
+    menus: ["원스크린", "강사 시트", "출결 모드"], image: "/landing/floor-2.webp", alt: "모형 2층 교실 확대",
+  },
+  {
+    room: "desk", tag: "1F · 데스크", title: "문의와 등원, 수납",
+    body: "걸려 온 상담을 네 칸으로 옮기며 관리하고, 원생 정보를 찾고, 청구와 미수를 챙깁니다.",
+    menus: ["콜&상담", "원생목록", "수납관리"], image: "/landing/floor-1.webp", alt: "모형 1층 데스크 확대",
+  },
 ];
 
-export const WORKSPACE_ROLES = [
-  { title: "원장과 관리자", description: "운영 현황을 살피고, 필요한 업무 화면을 나란히 열어 확인합니다.", icon: "layoutGrid" },
-  { title: "강사", description: "담당 수업과 학생을 중심으로 출결, 진도, 수업 기록을 관리합니다.", icon: "book" },
-  { title: "운영 담당자", description: "계정에 부여된 권한과 담당 업무에 맞는 메뉴에서 일합니다.", icon: "userCheck" },
-] satisfies { title: string; description: string; icon: AywaIconName }[];
-
-export const ACCESS_STEPS = [
-  { title: "도입 문의", description: "도입과 이용 요금은 문의해 주세요. 담당자가 학원 등록과 이용 환경을 함께 안내해 드립니다." },
-  { title: "계정 발급", description: "학원 관리자에게 개인 계정과 담당 업무에 맞는 권한을 받습니다." },
-  { title: "로그인 후 업무 시작", description: "발급받은 이메일과 비밀번호로 소속 학원의 업무 공간에 접속합니다." },
-] as const;
-
-export const ACCESS_FAQ = [
-  { question: "계정은 어떻게 발급받나요?", answer: "AYWA는 학원에서 발급한 계정으로 이용합니다. 학원 구성원은 원장 또는 시스템 담당자에게 계정을 요청해 주세요. 새로 이용하려는 학원은 도입을 문의해 주세요." },
-  { question: "이용 요금은 어떻게 되나요?", answer: "요금과 도입 조건은 문의해 주시면 담당자가 안내해 드립니다." },
-  { question: "로그인할 때 학원을 선택해야 하나요?", answer: "계정에 연결된 소속 학원으로 접속합니다. 로그인 화면에서 학원을 따로 선택하지 않아도 됩니다. 소속이나 접근 권한이 맞지 않으면 학원 관리자에게 확인해 주세요." },
-  { question: "비밀번호가 기억나지 않으면 어떻게 하나요?", answer: "학원 관리자에게 비밀번호 재설정을 요청해 주세요. 계정을 발급받은 이메일 주소를 함께 전달하면 계정 확인에 도움이 됩니다." },
-  { question: "모든 직원에게 같은 화면이 보이나요?", answer: "역할과 담당 업무, 학원에서 설정한 접근 권한에 따라 보이는 메뉴가 달라집니다. 필요한 메뉴가 보이지 않으면 학원 관리자에게 권한을 확인해 주세요." },
-] as const;
+/** 건물 곳곳의 작은 방 — 큰 메뉴 말고도 한 체계 안에 있는 일들. */
+export const LANDING_SMALL_ROOMS: { icon: AywaIconName; title: string; body: string }[] = [
+  { icon: "userCheck", title: "신규생 관리", body: "등록 뒤 7·30·60·90일에 챙길 콜과 안내를 체크합니다." },
+  { icon: "sheetRows", title: "수학 강사 시트", body: "학생마다 다른 교재와 진도를 한 달 단위로 봅니다." },
+  { icon: "exam", title: "성적관리", body: "시험 점수를 과목·반별 학생 목록에 바로 적어 모읍니다." },
+  { icon: "scrollText", title: "전자결재", body: "휴가·품의·지출 문서를 결재선에 올립니다." },
+  { icon: "calendar", title: "캘린더", body: "학원 공용 일정을 한 곳에서 관리합니다." },
+  { icon: "archive", title: "재고관리", body: "자산마다 QR 라벨을 붙여 상태와 대여를 기록합니다." },
+  { icon: "settings", title: "학원 설정", body: "과목·학년·교시·휴일을 학원 운영에 맞춰 정합니다." },
+  { icon: "key", title: "권한", body: "역할별로 정하고, 사람별 예외를 둡니다. 권한 없는 메뉴는 보이지 않습니다." },
+  { icon: "mapPin", title: "여러 지점", body: "지점마다 계정을 두고 한 체계로 운영합니다." },
+];
