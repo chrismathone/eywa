@@ -173,6 +173,7 @@ vi.mock("@/features/classes/server/teacher-as-of-queries", () => ({
 import { SCOPED_REJECT_MESSAGE } from "../ghost-transfer";
 import { SCOPE_INVALID_MESSAGE, SCOPE_LOAD_FAILED_MESSAGE, SCOPE_NOT_TAUGHT_MESSAGE } from "../scoped-split";
 import { setAttendanceCell, setAttendanceRange } from "./actions";
+import { resolveAutoUnits } from "./auto-units";
 
 const D = "2026-09-10"; // 목요일
 
@@ -923,6 +924,18 @@ describe("🔴 강사 출석부의 새 칸 — 나눠 맡는 날은 제 교시 �
       ["17:20", 1.5],
       ["18:20", 1.5],
     ]);
+  });
+
+  it.each(["cell", "range"])("영어 60분/40분 기준 %s 저장은 제 교시마다 1.5, 화면 합은 3", async (kind) => {
+    sharedEmptyDay();
+    vi.mocked(resolveAutoUnits).mockResolvedValueOnce(new Map([
+      [`${h.CLASS}|${D}|17:20`, 1.5], [`${h.CLASS}|${D}|18:20`, 1.5],
+    ]));
+    const res = kind === "cell" ? await cell({ scopeTeacherId: h.CHARLIE })
+      : await range({ units: "", scopeTeacherId: h.CHARLIE, scopeClassIds: [h.CLASS] });
+    expect(h.state.inserts.map((r) => [r.slot_start, r.session_units])).toEqual([["17:20", 1.5], ["18:20", 1.5]]);
+    expect(res).toMatchObject(kind === "cell" ? { ok: true, autoUnits: 3 }
+      : { ok: true, autoUnits: [{ studentId: h.S1, classId: h.CLASS, sessionDate: D, units: 3 }] });
   });
 
   it("숫자 없이 상태만 — 교시마다 기본(null), 칸에 보일 합(2)을 돌려줘 격자 낙관값이 맞는다", async () => {

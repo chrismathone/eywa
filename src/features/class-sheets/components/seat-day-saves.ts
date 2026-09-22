@@ -99,14 +99,10 @@ export function useSeatDaySaves(
         const parsed = units !== undefined ? parseSessionUnits(units) : null;
         const nextUnits =
           parsed !== null ? (parsed.ok ? parsed.value : (before?.units ?? null)) : (before?.units ?? null);
+        const optimistic = { status, note: note === undefined ? (before?.note ?? null) : note, units: nextUnits, slot: dbSlot };
         setAttendance((prev) => ({
           ...prev,
-          [key]: {
-            status,
-            note: note === undefined ? (before?.note ?? null) : note,
-            units: nextUnits,
-            slot: dbSlot,
-          },
+          [key]: optimistic,
         }));
         void setAttendanceCell({
           classId,
@@ -125,6 +121,8 @@ export function useSeatDaySaves(
               return next;
             });
             toast.error(r.error);
+          } else if ("autoUnits" in r) {
+            setAttendance((prev) => prev[key] === optimistic ? { ...prev, [key]: { ...optimistic, units: r.autoUnits ?? null } } : prev);
           }
         });
       },

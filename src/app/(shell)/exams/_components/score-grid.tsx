@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -56,7 +56,7 @@ export function ScoreGrid({
   const { selection: sel, rows, marksReady, noExamReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
-  const { maxScore: selMax, date: selDate, classId: selClassId, group: selGroup } = sel;
+  const { maxScore: selMax, date: selDate } = sel;
   const locked = !canWrite || !!lockReason;
 
   // 학생 단위 초기값 — 같은 학생의 두 줄은 값이 같다(서버가 학생 키로 읽어 온다).
@@ -89,6 +89,8 @@ export function ScoreGrid({
   });
   // 정렬은 **화면 안 상태**다 — 주소를 바꾸면 격자가 다시 마운트되어 적다 만 점수가 날아간다.
   const [sort, setSort] = useState<GradeSort>(sortSeed);
+  /** 붙여넣기 결과 한 줄 — 몇 칸을 채웠고 무엇을 건너뛰었는지(조용히 흘리지 않는다). */
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
   const [state, formAction] = useActionState<GradeSaveState, FormData>(saveGradeScores, undefined);
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -119,41 +121,17 @@ export function ScoreGrid({
     return ids;
   }, [firstRows, parsed, marks, noExam, reasons, selMax, selDate]);
 
-  // 묶음 — **반별**(기본) 또는 **학년별**(원장 2026-09-22). 🔴 묶음 없이 전체를 한 덩어리로 세우지 않는다.
-  // 🔴 정렬은 **묶음 안에서만** 한다(묶음을 섞으면 지금 어느 반·학년을 적고 있는지 알 수 없다).
+  /*
+   * 🔴 **묶음은 없다**(원장 2026-09-22 저녁: *"묶음 자체를 없애고 학년을 디폴트로"*) — 묶으면 정렬이
+   *    묶음 안에서만 걸려 "학년 오름차순"을 눌러도 화면 전체로는 그렇게 안 보인다. 반만 보고 싶으면
+   *    툴바의 반 드롭다운이 그 일을 한다. 🔴 되살리지 말 것.
+   * 🔴 Enter 이동에 쓰는 칸 번호는 **정렬한 뒤에** 붙인다(정렬 전 순서로 매기면 아래 칸이 어긋난다).
+   */
   const { key: sortKey, dir: sortDir } = sort;
-  const groups = useMemo(() => {
-    const byClass = new Map<string, { className: string; rows: GradeSheetRow[] }>();
-    // 🔴 학년별로 묶으면 **한 학생은 한 줄**이다 — 두 반(정규+특강)을 듣는 학생은 반별 보기에서 두 줄인데,
-    //    학년 묶음에선 같은 묶음에 두 번 서서 같은 값을 두 칸으로 보여 준다(무엇이 사실인지 알 수 없고
-    //    React 키도 부딪힌다). 표에 반 열이 없으니 잃는 정보도 없다.
-    const seen = new Set<string>();
-    for (const r of rows) {
-      if (selGroup === "grade") {
-        if (seen.has(r.studentId)) continue;
-        seen.add(r.studentId);
-      }
-      // 학년별일 땐 학년이 곧 묶음이다(학년을 모르면 '학년 미상' 한 묶음으로 — 줄을 잃지 않는다).
-      const key = selGroup === "grade" ? (r.grade ?? "") : r.classId;
-      const label = selGroup === "grade" ? (r.grade ?? "학년 미상") : r.className;
-      const g = byClass.get(key) ?? { className: label, rows: [] };
-      g.rows.push(r);
-      byClass.set(key, g);
-    }
-    // 🔴 Enter 이동에 쓰는 칸 번호는 **정렬한 뒤에** 붙인다 — 렌더 중에 카운터를 증가시키거나 정렬 전
-    //    순서로 매기면 아래 칸이 화면과 어긋난다.
-    let idx = -1;
-    return [...byClass.entries()].map(([classId, g]) => ({
-      classId,
-      className: g.className,
-      rows: sortRows(g.rows, sortKey, sortDir).map((r) => {
-        idx += 1;
-        return { ...r, cellIndex: idx };
-      }),
-    }));
-  }, [rows, sortKey, sortDir, selGroup]);
-
-  // 요약은 **치는 학생만** 센다 — 초등만 있는 반에서 "입력 0/204명"은 거짓 신호다(원장 제보 화면).
+  const visibleRows = useMemo(
+    () => sortRows(rows, sortKey, sortDir).map((r, i) => ({ ...r, cellIndex: i })),
+    [rows, sortKey, sortDir],
+  );
   const live = useMemo(() => {
     const cells: { score: number | null; maxScore: number | null }[] = [];
     let received = 0;
@@ -197,8 +175,9 @@ export function ScoreGrid({
     return JSON.stringify(out);
   }, [firstRows, parsed, marks, noExam, reasons]);
 
-  const focusNext = (index: number) => {
-    for (let i = index + 1; i < inputs.current.length; i += 1) {
+  /** 위·아래 칸으로 — Enter는 아래, 방향키는 양쪽(숫자를 세로로 치는 화면의 기본 이동). */
+  const focusStep = (index: number, step: 1 | -1) => {
+    for (let i = index + step; i >= 0 && i < inputs.current.length; i += step) {
       const el = inputs.current[i];
       if (el && !el.disabled) {
         el.focus();
@@ -206,6 +185,47 @@ export function ScoreGrid({
         return;
       }
     }
+  };
+
+  /**
+   * 🔑 **여러 값 붙여넣기** — 인쇄된 성적표·엑셀 한 열을 그대로 붙이면 이 칸부터 아래로 채운다.
+   *    줄바꿈·탭·쉼표 어느 것으로 끊겨 있어도 받는다(사람이 어디서 복사해 오는지 우리가 못 정한다).
+   * ⚠️ 값이 하나뿐이면 브라우저 기본 동작에 맡긴다(한 칸 붙여넣기까지 가로채면 되돌리기가 깨진다).
+   */
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+    const text = e.clipboardData.getData("text");
+    const values = text
+      .split(/[\s,]+/)
+      .map((t) => t.trim())
+      .filter((t) => t !== "");
+    if (values.length < 2) return;
+    e.preventDefault();
+    const order = visibleRows.slice(index).filter((r) => !noExam[r.studentId]);
+    // 🔴 집계는 **updater 밖에서** 미리 한다 — `setScores(prev => …)` 안에서 세면 그 함수가 나중에(또는
+    //    StrictMode에서 두 번) 불려 안내 문구가 0이거나 두 배가 된다(codex 리뷰 2026-09-22).
+    const usable = Math.min(values.length, order.length);
+    const applied: Record<string, string> = {};
+    let skipped = 0;
+    for (let i = 0; i < usable; i += 1) {
+      const v = values[i]!;
+      const row = order[i]!;
+      if (Number.isFinite(Number(v))) applied[row.studentId] = v;
+      else skipped += 1;
+    }
+    const filled = Object.keys(applied).length;
+    setScores((prev) => ({ ...prev, ...applied }));
+    // 🔴 건너뛴 값을 조용히 흘리지 않는다 — 대량 붙여넣기에서 한두 칸이 빈 것은 눈으로 못 찾는다.
+    //    줄이 모자라 못 넣은 것(overflow)과 숫자가 아니어서 건너뛴 것(skipped)은 **다른 사실**이다.
+    const overflow = values.length - usable;
+    setPasteNote(
+      [
+        `${filled}칸 채웠습니다`,
+        skipped > 0 ? `숫자가 아닌 값 ${skipped}개는 건너뜀` : null,
+        overflow > 0 ? `남은 줄이 없어 ${overflow}개는 못 넣음` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    );
   };
 
   const toggleMark = (studentId: string, key: GradeMarkKey) =>
@@ -230,7 +250,9 @@ export function ScoreGrid({
   };
 
   return (
-    <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-3">
+    // 🔴 폭 상한은 두지 않는다 — 창을 **가득 채우되** 열 비율로 벌린다(원장 2026-09-22:
+    //    "페이지는 가득차야지 가득차되 벌리는거지"). 빈 공간은 폭 없는 열이 독식할 때 생긴다.
+    <form onSubmit={(e) => submitAction(e, formAction)} className="w-full space-y-3">
       <input type="hidden" name="year" value={sel.year} />
       <input type="hidden" name="term" value={sel.term} />
       <input type="hidden" name="subject" value={axisValueOf(sel)} />
@@ -256,10 +278,22 @@ export function ScoreGrid({
         </p>
       ) : null}
 
-      <div className="bg-bg-soft border-line flex flex-wrap items-center gap-4 rounded-xl border px-4 py-2.5 text-sm">
-        <span className="text-text-dim">
-          입력 <span className="text-foreground num font-bold">{live.stats.count}</span>/{live.people}명
+      {/* 요약 줄 — 왼쪽은 **진행**(적은 칸/전체 + 막대), 가운데는 분포, 오른쪽은 이 판의 조건.
+          세 덩어리를 가는 세로선으로 가른다(한 줄에 여섯 숫자가 평평하게 늘어서면 뭘 봐야 할지 모른다). */}
+      <div className="bg-bg-soft border-line flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-2.5 text-sm">
+        <span className="text-text-dim flex items-center gap-2">
+          입력
+          <span className="text-foreground num font-bold">{live.stats.count}</span>
+          <span className="text-text-faint">/ {live.people}명</span>
+          {/* 🔑 직접 그린 막대가 아니라 `<progress>` — 보조기기가 값으로 읽는다(장식이 아니라 값이다). */}
+          <progress
+            className="h-1.5 w-24 overflow-hidden rounded-full [&::-webkit-progress-bar]:bg-line/70 [&::-webkit-progress-value]:bg-primary"
+            value={live.stats.count}
+            max={Math.max(live.people, 1)}
+            aria-label="점수 입력 진행"
+          />
         </span>
+        <Divider />
         <span className="text-text-dim">
           평균 <span className="text-foreground num font-bold">{live.stats.avg ?? "—"}</span>
           {live.stats.avgPct != null ? <span className="text-text-faint"> ({live.stats.avgPct}%)</span> : null}
@@ -270,37 +304,54 @@ export function ScoreGrid({
         <span className="text-text-dim">
           최저 <span className="text-foreground num font-bold">{live.stats.min ?? "—"}</span>
         </span>
+        <Divider />
         <span className="text-text-dim">
           {GRADE_MARK_LABEL.received}{" "}
-          <span className="text-foreground num font-bold">{live.received}</span>/{live.people}명
+          <span className="text-foreground num font-bold">{live.received}</span>
+          <span className="text-text-faint">/{live.people}명</span>
         </span>
         {live.skipped > 0 ? (
           <span className="text-text-dim">
             시험없음 <span className="text-foreground num font-bold">{live.skipped}</span>명
           </span>
         ) : null}
-        <span className="text-text-faint">
+        <span className="text-text-faint ml-auto">
           만점 {sel.maxScore} · 시험일 {sel.date}
         </span>
       </div>
 
-      <DragScrollArea className="bg-card shadow-card rounded-2xl">
-        <table className="w-full table-fixed text-sm [&_td]:whitespace-nowrap">
-          {/* 폭 고정 — 값이 들고 나도 열이 밀리지 않는다(학교만 남는 폭을 가져간다). */}
+      {pasteNote ? (
+        <p role="status" className="text-text-dim bg-bg-soft border-line rounded-lg border px-3 py-1.5 text-sm">
+          붙여넣기 — {pasteNote}
+        </p>
+      ) : null}
+      {/* 🔴 `scrollY` 없이 `sticky`만 붙이면 아무 일도 안 난다 — 이 컨테이너는 기본이 `overflow-y-hidden`이라
+          세로는 페이지가 스크롤한다(그러면 머리줄이 그냥 위로 사라진다). 높이를 잡아 **여기서** 스크롤시킨다. */}
+      <DragScrollArea scrollY className="bg-card shadow-card max-h-[calc(100dvh-19rem)] rounded-2xl">
+        {/* 🔴 최소 폭 — 없으면 좁은 창에서 7열이 서로를 찌그러뜨린다(가로 스크롤도 안 생긴다).
+            폭이 모자라면 컨테이너가 가로로 스크롤한다(잡고 끌기도 된다). */}
+        <table className="w-full min-w-[880px] table-fixed text-sm [&_td]:whitespace-nowrap">
+          <caption className="sr-only">
+            {slotLabel} 점수 입력표 — 이름·학교·학년·점수와 성적표 받기 단계 체크
+          </caption>
+          {/* 🔴 **모든 열에 폭을 준다** — 하나라도 비워 두면 그 열이 남는 폭을 독식해 표 가운데가 빈다.
+              `table-fixed`는 남는 폭을 이 비율대로 나눠 주므로 창이 넓어져도 리듬이 유지된다. */}
           <colgroup>
-            <col className="w-40" />
-            <col />
-            <col className="w-20" />
-            <col className="w-52" />
-            <col className="w-24" />
-            <col className="w-24" />
-            <col className="w-24" />
+            <col className="w-[13%]" />
+            <col className="w-[15%]" />
+            <col className="w-[7%]" />
+            <col className="w-[25%]" />
+            <col className="w-[13%]" />
+            <col className="w-[13%]" />
+            <col className="w-[14%]" />
           </colgroup>
-          <thead className="border-line border-b [&_th]:whitespace-nowrap">
+          {/* 머리줄은 스크롤에 붙는다 — 아래 선은 `border`가 아니라 그림자로(스티키 + border-collapse에선
+              테두리가 스크롤과 함께 사라진다, [[#71]]). */}
+          <thead className="bg-card sticky top-0 z-10 [&_th]:shadow-[0_1px_0_0_var(--color-line)] [&_th]:whitespace-nowrap">
             <tr>
               <SortHead label="이름" sortKey="name" sort={sort} onSort={applySort} align="text-left" />
               <SortHead label="학교" sortKey="school" sort={sort} onSort={applySort} align="text-left" />
-              <SortHead label="학년" sortKey="grade" sort={sort} onSort={applySort} align="text-left" />
+              <SortHead label="학년" sortKey="grade" sort={sort} onSort={applySort} align="text-center" />
               <SortHead
                 label={`${slotLabel} 점수`}
                 sortKey="score"
@@ -309,24 +360,14 @@ export function ScoreGrid({
                 align="text-center"
               />
               {GRADE_MARK_KEYS.map((k) => (
-                <th key={k} className="micro px-2 py-3 text-center">
+                <th key={k} scope="col" className="micro px-2 py-3 text-center">
                   {GRADE_MARK_LABEL[k]}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-line divide-y">
-            {groups.map((g) => (
-              <Fragment key={g.classId}>
-                {selClassId && selGroup === "class" ? null : (
-                  <tr className="bg-bg-soft">
-                    <td colSpan={7} className="text-foreground px-4 py-1.5 text-sm font-bold">
-                      {g.className}
-                      <span className="text-text-faint ml-2 text-xs font-normal">{g.rows.length}명</span>
-                    </td>
-                  </tr>
-                )}
-                {g.rows.map((r) => {
+            {visibleRows.map((r) => {
                   const myIndex = r.cellIndex;
                   const id = r.studentId;
                   const isNoExam = !!noExam[id];
@@ -335,25 +376,36 @@ export function ScoreGrid({
                   // 아직 안 적은 줄만 옅은 앰버 — '시험없음'으로 눌러 둔 줄은 미기입이 아니다.
                   // (제도상 안 치는 학생은 서버가 목록에서 뺀다 — 여기 오는 줄은 전부 치는 학생이다.)
                   const missing = !isNoExam && (parsed.get(id) ?? null) === null;
+                  // 범위를 벗어난 값은 **적는 순간** 말해 준다(저장 때 전건이 거절되고 나서가 아니라).
+                  const typed = parsed.get(id) ?? null;
+                  const outOfRange = typed != null && (typed < 0 || typed > selMax);
                   return (
                     <tr
                       /* 키는 **그 줄의 반**으로 — 묶음 키(학년)로 만들면 두 반 학생이 부딪힌다. */
                       key={`${r.classId}:${id}`}
                       className={
-                        !r.onRoster ? "bg-bg-soft/40" : missing ? "bg-amber-soft" : "hover:bg-bg-soft/50"
+                        r.withdrawn ? "bg-bg-soft/40" : "hover:bg-bg-soft/50"
                       }
-                      title={r.onRoster ? undefined : "이 학기에 이 반 수강이 끝난 학생입니다"}
+                      title={
+                        r.withdrawn
+                          ? "퇴원한 학생입니다 — 적어 둔 기록이 있어 남겨 둡니다"
+                          : undefined
+                      }
                     >
-                      <td className="text-foreground overflow-hidden px-4 py-2 text-left font-medium text-ellipsis">
+                      {/* 🔴 미기입은 **줄 전체를 칠하지 않는다** — 처음엔 전원이 미기입이라 노란 벽이 된다
+                          (codex 리뷰 2026-09-22: "경고가 아니라 황색 벽"). 말하는 자리는 **점수 칸 하나**다.
+                          🔴 왼쪽 색 띠도 쓰지 않는다(원장 2026-09-16 금지 — `no-left-accent-bar` 가드). */}
+                      <td className="text-foreground overflow-hidden px-4 py-1.5 text-left font-medium text-ellipsis">
                         {r.name}
-                        {r.onRoster ? null : <span className="text-text-faint ml-1.5 text-xs">종료</span>}
+                        {/* 🔴 표식은 **퇴원** 하나뿐 — 반이동·과목 변경엔 아무 표식도 붙이지 않는다. */}
+                        {r.withdrawn ? <span className="text-text-faint ml-1.5 text-xs">퇴원</span> : null}
                       </td>
-                      <td className="text-text-dim overflow-hidden px-4 py-2 text-left text-sm text-ellipsis">
+                      <td className="text-text-dim overflow-hidden px-4 py-1.5 text-left text-sm text-ellipsis">
                         {r.school ?? "—"}
                       </td>
-                      <td className="text-text-dim px-4 py-2 text-left text-sm">{r.grade ?? "—"}</td>
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center justify-center gap-1.5">
+                      <td className="text-text-dim num px-2 py-1.5 text-center text-sm">{r.grade ?? "—"}</td>
+                      <td className="px-3 py-1">
+                        <div className="mx-auto flex max-w-[16rem] items-center justify-center gap-2">
                             {isNoExam ? (
                               <input
                                 type="text"
@@ -381,16 +433,35 @@ export function ScoreGrid({
                                 aria-label={`${r.name} ${slotLabel} 점수`}
                                 onChange={(e) => setScores((prev) => ({ ...prev, [id]: e.target.value }))}
                                 onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    // 🔴 Enter로 폼이 제출되면 한 칸 적을 때마다 저장이 돈다 — 아래 칸으로만 간다.
+                                  // 🔴 Enter로 폼이 제출되면 한 칸 적을 때마다 저장이 돈다 — 아래 칸으로만 간다.
+                                  if (e.key === "Enter" || e.key === "ArrowDown") {
                                     e.preventDefault();
-                                    focusNext(myIndex);
+                                    focusStep(myIndex, 1);
+                                  } else if (e.key === "ArrowUp") {
+                                    e.preventDefault();
+                                    focusStep(myIndex, -1);
                                   }
                                 }}
+                                onPaste={(e) => handlePaste(e, myIndex)}
+                                aria-invalid={outOfRange || undefined}
                                 placeholder="—"
-                                className="border-line bg-background text-foreground num focus:ring-primary/40 min-w-0 flex-1 rounded-md border px-2 py-1 text-center text-sm focus:ring-1 focus:outline-none disabled:opacity-60"
+                                className={`bg-background text-foreground num focus:ring-primary/40 min-w-0 flex-1 rounded-md border px-2 py-1 text-center text-sm focus:ring-1 focus:outline-none disabled:opacity-60 ${
+                                  outOfRange
+                                    ? "border-danger text-danger"
+                                    : missing
+                                      ? "border-amber/60"
+                                      : "border-line"
+                                }`}
+                                aria-describedby={outOfRange ? `range-${r.classId}-${id}` : undefined}
                               />
                             )}
+                            {/* 범위를 벗어나면 **칸 옆에 글자로** 말한다 — `title`만으로는 화면낭독기·터치에
+                                아무 말도 안 한 것과 같다(codex 리뷰 2026-09-22). */}
+                            {outOfRange ? (
+                              <span id={`range-${r.classId}-${id}`} className="text-danger shrink-0 text-xs">
+                                0~{selMax}
+                              </span>
+                            ) : null}
                             <button
                               type="button"
                               disabled={locked || !noExamReady}
@@ -401,7 +472,7 @@ export function ScoreGrid({
                                   ? "다시 누르면 점수를 적을 수 있습니다"
                                   : "이 학생은 이 시험을 보지 않았습니다"
                               }
-                              className={`shrink-0 rounded-md border px-1.5 py-1 text-xs whitespace-nowrap disabled:opacity-50 ${
+                              className={`h-8 shrink-0 rounded-md border px-2 text-xs whitespace-nowrap disabled:opacity-50 ${
                                 isNoExam
                                   ? "border-primary/40 bg-primary-soft text-primary font-bold"
                                   : "border-line bg-background text-text-dim hover:text-foreground"
@@ -414,24 +485,29 @@ export function ScoreGrid({
                       {GRADE_MARK_KEYS.map((k) => {
                         const at = r.marks[k];
                         return (
-                          <td key={k} className="px-2 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              className="accent-primary size-4 align-middle disabled:opacity-50"
-                              checked={rowMarks[k]}
-                              disabled={locked || !marksReady}
-                              aria-label={`${r.name} ${GRADE_MARK_LABEL[k]}`}
+                          <td key={k} className="p-0 text-center">
+                            {/* 🔴 체크 자체는 16px이라 표적이 너무 작다 — **칸 전체**를 누를 수 있게 라벨로 감싼다. */}
+                            <label
+                              className={`flex min-h-9 cursor-pointer items-center justify-center ${
+                                locked || !marksReady ? "cursor-not-allowed" : "hover:bg-primary-soft/40"
+                              }`}
                               title={at ? `${GRADE_MARK_LABEL[k]} ${at.slice(0, 10)}` : GRADE_MARK_LABEL[k]}
-                              onChange={() => toggleMark(id, k)}
-                            />
+                            >
+                              <input
+                                type="checkbox"
+                                className="accent-primary size-[18px] align-middle disabled:opacity-50"
+                                checked={rowMarks[k]}
+                                disabled={locked || !marksReady}
+                                aria-label={`${r.name} ${GRADE_MARK_LABEL[k]}`}
+                                onChange={() => toggleMark(id, k)}
+                              />
+                            </label>
                           </td>
                         );
                       })}
                     </tr>
                   );
-                })}
-              </Fragment>
-            ))}
+            })}
           </tbody>
         </table>
       </DragScrollArea>
@@ -481,7 +557,11 @@ function SortHead({
 }) {
   const active = sort.key === sortKey;
   return (
-    <th className={`micro px-4 py-3 ${align}`}>
+    <th
+      scope="col"
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+      className={`micro px-4 py-3 ${align}`}
+    >
       <button
         type="button"
         onClick={() => onSort(sortKey)}
@@ -543,6 +623,11 @@ function sortRows(
         : String(va).localeCompare(String(vb), "ko");
     return cmp !== 0 ? cmp * d : a.name.localeCompare(b.name, "ko");
   });
+}
+
+/** 요약 줄의 가는 세로선 — 덩어리를 가른다(색·굵기를 화면마다 새로 적지 않게 한 곳에). */
+function Divider() {
+  return <span className="bg-line hidden h-3 w-px sm:block" aria-hidden />;
 }
 
 function SaveButton({ disabled }: { disabled: boolean }) {

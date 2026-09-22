@@ -1,7 +1,7 @@
 // 계획 N(planned_sessions) 산출 — 순수 함수(Vitest 강제). 청구=N회 키스톤(docs/per-session-billing-plan.md).
 // ⚠️ 불변규칙 N1: 여기서 나온 값은 "계획"이지 "청구값"이 아니다 — 프리필·참고 전용, 확정은 사람이 한다.
 
-import { unitsFromMinutes, isAutoUnitsSubject, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
+import { unitsFromMinutes, usesFortyMinuteEnglishUnits, isAutoUnitsSubject, type AutoUnitsSchedule } from "@/features/attendance/auto-units";
 import { liveSlotMinutesOn } from "@/features/class-sheets/lib/grid";
 import { koreanHolidaysForYear } from "@/features/billing/holidays-data";
 import { fixedHolidaysForYear } from "@/features/billing/tuition-calc";
@@ -9,6 +9,8 @@ import { fixedHolidaysForYear } from "@/features/billing/tuition-calc";
 export type PlanEnrollment = {
   classId: string;
   subject: string; // 운영 enum key
+  englishTrack?: string | null;
+  className?: string;
   startDate: string; // enrollment 시작 "YYYY-MM-DD"
   endDate: string | null; // 종료(null=계속)
   weekdays: number[]; // class_schedules 요일(0=일~6=토, 중복 제거)
@@ -68,8 +70,9 @@ export function planTermsForMonth(
       if (schedules) {
         const slots = [...liveSlotMinutesOn(date, schedules).values()].filter((minutes) => minutes > 0);
         if (slots.length === 0) continue;
-        // 수학은 출석부 시간 환산, 영어는 출석부와 같이 교시마다 기본 1시수.
-        dates.set(date, isAutoUnitsSubject(e.subject) ? unitsFromMinutes(slots.reduce((sum, n) => sum + n, 0)) ?? 1 : e.subject === "english" ? slots.length : 1);
+        const englishBasis = usesFortyMinuteEnglishUnits(date, e.schedules ?? [], e.englishTrack ?? null, e.className) ? "eie" : "injaewon";
+        dates.set(date, isAutoUnitsSubject(e.subject) ? unitsFromMinutes(slots.reduce((sum, n) => sum + n, 0)) ?? 1
+          : e.subject === "english" ? slots.reduce((sum, minutes) => sum + (unitsFromMinutes(minutes, englishBasis) ?? 1), 0) : 1);
       } else if (e.weekdays.includes(day.getUTCDay())) {
         dates.set(date, 1);
       }

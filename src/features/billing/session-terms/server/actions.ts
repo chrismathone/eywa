@@ -77,11 +77,11 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
     end_date: string | null;
     attendance_days: string[] | null;
     is_transferred: boolean;
-    class: { subject?: string; is_active?: boolean } | { subject?: string }[] | null;
+    class: { subject?: string; is_active?: boolean; english_track?: string | null; class_name?: string } | { subject?: string; english_track?: string | null; class_name?: string }[] | null;
   }>(studentIds, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("student_id, class_id, start_date, end_date, attendance_days, is_transferred, class:class_id!inner ( subject, is_active )")
+      .select("student_id, class_id, start_date, end_date, attendance_days, is_transferred, class:class_id!inner ( subject, is_active, english_track, class_name )")
       .in("student_id", chunk)
       .eq("on_hold", false)
       .eq("class.is_active", true)
@@ -89,10 +89,10 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
       .or(`end_date.is.null,end_date.gte.${start}`).order("id").range(from, to),
   );
   const classIds = [...new Set(enrollments.map((e) => e.class_id))];
-  const schedules = await fetchAllPagedInChunks<{ class_id: string; day_of_week: string; start_time: string; end_time: string; valid_from: string; valid_to: string | null; slot_teacher_label: string | null }>(classIds, (chunk, from, to) =>
+  const schedules = await fetchAllPagedInChunks<{ class_id: string; day_of_week: string; start_time: string; end_time: string; valid_from: string; valid_to: string | null; slot_teacher_label: string | null; lab_separate?: boolean }>(classIds, (chunk, from, to) =>
     supabase
       .from("class_schedules")
-      .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label")
+      .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, lab_separate")
       .in("class_id", chunk)
       .lte("valid_from", end)
       .or(`valid_to.is.null,valid_to.gte.${start}`).order("id").range(from, to),
@@ -109,12 +109,14 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   const holidays = mergeHolidays(Number(period.slice(0, 4)), settings.operations.holidays.map((h) => h.date), true);
   const byStudent = new Map<string, PlanEnrollment[]>();
   for (const e of enrollments) {
-    const cls = (Array.isArray(e.class) ? e.class[0] : e.class) as { subject?: string } | undefined;
+    const cls = Array.isArray(e.class) ? e.class[0] : e.class;
     if (!cls?.subject) continue;
     const list = byStudent.get(e.student_id) ?? byStudent.set(e.student_id, []).get(e.student_id)!;
     list.push({
       classId: e.class_id,
       subject: cls.subject,
+      englishTrack: cls.english_track,
+      className: cls.class_name,
       startDate: e.start_date,
       endDate: e.end_date,
       isTransferred: e.is_transferred,

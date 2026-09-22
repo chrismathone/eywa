@@ -232,11 +232,28 @@ describe("목록 규약(원장 2026-09-22 오후)", () => {
     expect(read("src/app/(shell)/exams/_components/score-grid.tsx")).not.toContain("해당 없음");
   });
 
-  it("🔴 묶음 없이 전체를 한 덩어리로 세우지 않는다 — 반별/학년별 둘 뿐", () => {
-    const types = read("src/features/grades/types.ts");
-    expect(types).toMatch(/GradeGroupBy = "class" \| "grade"/);
+  it("🔴 묶음은 폐기했다 — 되살리면 정렬이 묶음 안에서만 걸려 '학년순'이 화면에서 안 보인다", () => {
+    // 원장 2026-09-22 저녁: *"묶음 자체를 없애고 학년을 디폴트로"* (같은 날 오후 결정을 써 보고 뒤집었다).
+    expect(read("src/features/grades/types.ts")).not.toContain("GradeGroupBy");
     const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
-    expect(grid).toContain("selGroup");
+    expect(grid).not.toContain("selGroup");
+    // 툴바에 그 드롭다운이 다시 서지 않는지(주석의 "한 묶음" 같은 낱말에 걸리지 않게 축 이름으로).
+    expect(read("src/app/(shell)/exams/page.tsx")).not.toMatch(/axisLabel="묶음"/);
+  });
+
+  it("🔴 한 학생은 한 줄 — 지금 다니는 반 줄을 남긴다(반이동 학생이 옛 반으로 남지 않게)", () => {
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toMatch(/!curOn && rOn/);
+  });
+
+  it("🔴 표식 축은 **학원 퇴원** 하나 — 반이 끝난 것은 표식이 아니다(원장 2026-09-22)", () => {
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toMatch(/withdrawn: student\.status === "withdrawn"/);
+    // 퇴원이어도 적어 둔 것이 있으면 남긴다(기록을 화면에서 지우지 않는다).
+    expect(q).toMatch(/!r\.withdrawn \|\| hasAnything\(r\)/);
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).not.toContain("종료");
+    expect(grid).toContain("퇴원");
   });
 
   it("🔴 성적관리 툴바엔 형광 표기를 쓰지 않는다(원장: 드롭다운마다 크기가 널뛰면 난장판)", () => {

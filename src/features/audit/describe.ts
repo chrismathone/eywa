@@ -65,6 +65,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   exam: "시험",
   // 2026-09-22 성적관리 개편 — 시험 행이 아니라 `학기·과목·시험 칸` 격자를 저장한다(옛 `exam` 행도 남아 있어 둘 다 둔다).
   grades: "성적",
+  demo_roster: "데모 재원",
   payroll: "급여",
   class: "반",
   classroom: "강의실",
@@ -1806,6 +1807,12 @@ export function auditDetail(
     case "help_post_close":
     case "help_answer_create":
       return str(m.title) ?? null;
+
+    case "demo_roster_apply": {
+      const label = str(m.label);
+      const n = typeof m.students === "number" && Number.isFinite(m.students) ? `재원 ${m.students}명` : null;
+      return join(label, n);
+    }
 
     default: {
       /**

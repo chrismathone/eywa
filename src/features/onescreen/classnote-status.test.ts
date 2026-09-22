@@ -29,6 +29,17 @@ describe("pendingSendStudentIds", () => {
 });
 
 describe("mergeClassnoteStatuses", () => {
+  it("회수 대기·처리 중에도 감시하고 완료·실패가 오면 종료한다", () => {
+    const prev = { s1: { 수학: rep({ classnoteStatus: "recall_requested" }) }, s2: { 수학: rep({ classnoteStatus: "recalling" }) } };
+    expect(pendingSendStudentIds(prev)).toEqual(["s1", "s2"]);
+    const next = mergeClassnoteStatuses(prev, [
+      { studentId: "s1", subject: "math", status: "recalled" },
+      { studentId: "s2", subject: "math", status: "recall_failed" },
+    ], (_studentId, subject) => subject === "math" ? "수학" : undefined);
+    expect(next.s1.수학.classnoteStatus).toBe("recalled");
+    expect(next.s2.수학.classnoteStatus).toBe("recall_failed");
+    expect(pendingSendStudentIds(next)).toEqual([]);
+  });
   it("워커가 끝낸 결과를 배지에 반영한다", () => {
     const prev = { s1: { 수학: rep({ classnoteStatus: "queued" }) } };
     const next = mergeClassnoteStatuses(prev, [{ studentId: "s1", subject: "math", status: "success" }], nameOf);

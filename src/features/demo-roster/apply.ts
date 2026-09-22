@@ -1,0 +1,158 @@
+import { and, eq, inArray, like } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { classes, classrooms, classSchedules, enrollments, invoices, students, tenants } from "@/lib/db/schema";
+import { buildScenario, SCENARIOS } from "./plan.mjs";
+
+const ROOM_NAMES = ["1강의실", "2강의실", "3강의실", "4강의실"] as const;
+const NOTE_PREFIX = "demo-roster:";
+
+class NotDemoError extends Error {
+  constructor() {
+    super("NOT_DEMO");
+  }
+}
+
+/**
+ * 가상 재원을 데모 지점에만 넣는다.
+ * 슬러그가 `demo`가 아니면 지우기 전에 멈춘다. 지우는 행은 이 버튼이 넣은 것
+ * (학생 코드 DMO- · 반 메모 demo-roster:)뿐이다.
+ */
+export async function replaceDemoRoster(
+  tenantId: string,
+  scenarioId: string,
+): Promise<{ label: string; students: number } | { error: string }> {
+  if (!(scenarioId in SCENARIOS)) return { error: "없는 구성입니다" };
+  const plan = buildScenario(scenarioId);
+  const note = `${NOTE_PREFIX}${scenarioId}`;
+
+  try {
+    return await db.transaction(async (tx) => {
+      const [tenant] = await tx
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .for("update");
+      if (tenant?.slug !== "demo") throw new NotDemoError();
+
+      const doomedStudents = await tx
+        .select({ id: students.id })
+        .from(students)
+        .where(and(eq(students.tenantId, tenantId), like(students.studentCode, "DMO-%"), like(students.notes, `${NOTE_PREFIX}%`)));
+      const doomedClasses = await tx
+        .select({ id: classes.id })
+        .from(classes)
+        .where(and(eq(classes.tenantId, tenantId), like(classes.notes, `${NOTE_PREFIX}%`)));
+      const studentIds = doomedStudents.map((row) => row.id);
+      const classIds = doomedClasses.map((row) => row.id);
+
+      if (classIds.length) {
+        await tx.delete(enrollments).where(and(eq(enrollments.tenantId, tenantId), inArray(enrollments.classId, classIds)));
+      }
+      if (studentIds.length) {
+        await tx.delete(enrollments).where(and(eq(enrollments.tenantId, tenantId), inArray(enrollments.studentId, studentIds)));
+        await tx.delete(invoices).where(and(eq(invoices.tenantId, tenantId), inArray(invoices.studentId, studentIds)));
+        await tx.delete(students).where(and(eq(students.tenantId, tenantId), inArray(students.id, studentIds)));
+      }
+      if (classIds.length) {
+        await tx.delete(classes).where(and(eq(classes.tenantId, tenantId), inArray(classes.id, classIds)));
+      }
+      await removeSpareRooms(tx, tenantId);
+
+      const roomId = new Map<string, string>();
+      for (const name of ROOM_NAMES) {
+        const [existing] = await tx
+          .select({ id: classrooms.id })
+          .from(classrooms)
+          .where(and(eq(classrooms.tenantId, tenantId), eq(classrooms.name, name)));
+        if (existing) {
+          roomId.set(name, existing.id);
+          continue;
+        }
+        const id = crypto.randomUUID();
+        await tx.insert(classrooms).values({ id, tenantId, name, capacity: 20 });
+        roomId.set(name, id);
+      }
+
+      const classId = new Map<object, string>();
+      await tx.insert(classes).values(
+        plan.classes.map((cls) => {
+          const id = crypto.randomUUID();
+          classId.set(cls, id);
+          return { id, tenantId, className: cls.name, subject: cls.subject, isActive: true, notes: note };
+        }),
+      );
+
+      const studentId = new Map<object, string>();
+      await tx.insert(students).values(
+        plan.students.map((student) => {
+          const id = crypto.randomUUID();
+          studentId.set(student, id);
+          return {
+            id,
+            tenantId,
+            name: student.name,
+            gender: student.gender,
+            school: student.school.name,
+            grade: student.grade,
+            status: "enrolled" as const,
+            enrolledAt: plan.start,
+            parentName: student.parentName,
+            parentPhone: student.parentPhone,
+            studentCode: student.code,
+            notes: note,
+          };
+        }),
+      );
+
+      await tx.insert(classSchedules).values(
+        plan.classes.flatMap((cls) =>
+          cls.days.flatMap((day) =>
+            cls.periods.map((period) => ({
+              id: crypto.randomUUID(),
+              tenantId,
+              classId: classId.get(cls)!,
+              dayOfWeek: day,
+              startTime: period.start,
+              endTime: period.end,
+              validFrom: plan.start,
+              periodLabel: period.label,
+              classroomId: roomId.get(cls.room) ?? null,
+            })),
+          ),
+        ),
+      );
+
+      await tx.insert(enrollments).values(
+        plan.students.flatMap((student) =>
+          student.classes.map((cls) => ({
+            id: crypto.randomUUID(),
+            tenantId,
+            studentId: studentId.get(student)!,
+            classId: classId.get(cls)!,
+            startDate: plan.start,
+          })),
+        ),
+      );
+
+      return { label: plan.scenario.title as string, students: plan.stats.students as number };
+    });
+  } catch (err) {
+    if (err instanceof NotDemoError) return { error: "데모 지점에서만 바꿀 수 있습니다" };
+    console.error("[demo-roster]", err instanceof Error ? err.message : err);
+    return { error: "데모 데이터를 바꾸지 못했습니다" };
+  }
+}
+
+async function removeSpareRooms(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], tenantId: string) {
+  const classRooms = await tx.select({ id: classes.classroomId }).from(classes).where(eq(classes.tenantId, tenantId));
+  const slotRooms = await tx.select({ id: classSchedules.classroomId }).from(classSchedules).where(eq(classSchedules.tenantId, tenantId));
+  const named = await tx
+    .select({ id: classrooms.id })
+    .from(classrooms)
+    .where(and(eq(classrooms.tenantId, tenantId), inArray(classrooms.name, [...ROOM_NAMES])));
+  const used = new Set(
+    [...classRooms, ...slotRooms].map((row) => row.id).filter((id): id is string => !!id),
+  );
+  const spare = named.map((row) => row.id).filter((id) => !used.has(id));
+  if (spare.length) await tx.delete(classrooms).where(inArray(classrooms.id, spare));
+}

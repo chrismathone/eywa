@@ -199,7 +199,7 @@ export default async function DocumentsPage({
               : <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
           ) : (
             <DragScrollArea>
-              <table className="w-full text-sm">
+              <table className="min-w-[860px] w-full text-sm">
                 <thead>
                   {/* 헤더 클릭 정렬 — 서버 정렬(URL `?sort=&dir=`)이라 페이지를 넘겨도 전체 기준으로 줄 선다.
                       ⚠️ 연동 폴더(교재 요청서·수강료 견적서)는 원본 테이블을 따로 조회해 정렬 배선이 없다 →
@@ -208,7 +208,7 @@ export default async function DocumentsPage({
                   <tr className="text-text-dim border-line border-b text-left text-xs">
                     {linked ? (
                       <>
-                        <th className="px-4 py-2 font-medium">이름</th>
+                        <th className="w-[30%] px-4 py-2 font-medium">이름</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
                         <th className="px-3 py-2 text-right font-medium whitespace-nowrap">크기</th>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">수정일</th>
@@ -217,7 +217,7 @@ export default async function DocumentsPage({
                       </>
                     ) : (
                       <>
-                        <SortableThLink sortKey="name" state={sort} hrefFor={sortHref} padClassName="px-4 py-2">
+                        <SortableThLink sortKey="name" state={sort} hrefFor={sortHref} padClassName="px-4 py-2" className="w-[30%]">
                           이름
                         </SortableThLink>
                         <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>

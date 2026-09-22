@@ -4,7 +4,7 @@
  * 배선 가드(`auto-units-wiring.test.ts`)는 소스 문자열을 본다. 여기는 **실제로 무엇이 저장되나**를 본다 — 돈 값인데
  * 적대 리뷰(2026-09-11)에서 판정 인자 한 토큰 변이("1"·"2"가 1.5로 저장)가 202개 테스트 파일을 전부 통과했다.
  *   · 친 숫자는 쓴 그대로 — "1" = null(=1) · "2" = 2 (원장 2026-09-01 *"입력된 숫자가 입력되도록"*)
- *   · 빈 칸(원문 없음·공백)만 수학 자동 시수 · 영어·결석·교시별 행은 없다
+ *   · 빈 칸(원문 없음·공백)에 수학 일별·영어 교시별 자동 시수, 결석은 제외
  *   · 있는 행을 고치는 저장엔 자동값이 없다(강사가 고친 값 보존) · 응답의 자동값 = 저장값
  * ⚠️ 수업 길이 조회(`resolveAutoUnits`)는 흉내 낸다(수학 반 = 1.5) — 조회·규칙 자체는 `auto-units.test.ts`·
  *    `server/auto-units.test.ts`가 잠근다.
@@ -17,7 +17,7 @@ const h = vi.hoisted(() => {
     updates: [] as Record<string, unknown>[],
     /** attendance_records 조회가 돌려줄 행 — 있으면 갱신 경로를 탄다. */
     existing: [] as Record<string, unknown>[],
-    autoCalls: [] as { classId: string; date: string }[][],
+    autoCalls: [] as { classId: string; date: string; slotStart?: string | null }[][],
   };
   const MATH = "11111111-1111-1111-1111-111111111111";
   const ENG = "22222222-2222-2222-2222-222222222222";
@@ -72,11 +72,12 @@ vi.mock("@/features/attendance/live/server/write-policy", () => ({
   userTaughtClassSet: vi.fn(async () => new Set<string>()),
   withVia: (row: Record<string, unknown>, via: string) => ({ ...row, recorded_via: via }),
 }));
-/** 수업 길이 조회 — 수학 반만 165분(= 1.5). 영어 반은 키가 없다(= 자동값 없음). */
+/** 조회 흉내 — 수학 일별 165분, 영어 교시별 60분/40분 기준은 모두 1.5. */
 vi.mock("./auto-units", () => ({
-  resolveAutoUnits: vi.fn(async (_client: unknown, cells: { classId: string; date: string }[]) => {
+  resolveAutoUnits: vi.fn(async (_client: unknown, cells: { classId: string; date: string; slotStart?: string | null }[]) => {
     h.state.autoCalls.push(cells);
-    return new Map(cells.filter((c) => c.classId === h.MATH).map((c) => [`${c.classId}|${c.date}`, 1.5] as const));
+    return new Map(cells.filter((c) => c.classId === h.MATH && !c.slotStart || c.classId === h.ENG && c.slotStart)
+      .map((c) => [`${c.classId}|${c.date}${c.slotStart ? `|${c.slotStart.slice(0, 5)}` : ""}`, 1.5] as const));
   }),
 }));
 
@@ -84,6 +85,7 @@ import { saveAttendance, setAttendanceBulk, setAttendanceCell, setAttendanceRang
 
 const D = "2026-09-10";
 const S1 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const S2 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const unitsOf = () => h.state.inserts.map((r) => r.session_units);
 
 beforeEach(() => {
@@ -94,6 +96,15 @@ beforeEach(() => {
 });
 
 describe("setAttendanceCell — 단건(격자 타이핑·팝오버·원스크린 알약·출결 모드)", () => {
+  it("ECS 영어 교시에 서버 자동값을 저장하고 돌려주며 직접 입력한 1은 보존한다", async () => {
+    const res = await setAttendanceCell({ studentId: S1, classId: h.ENG, sessionDate: D, slotStart: "15:00", status: "present", quiet: true });
+    expect(res).toEqual({ ok: true, autoUnits: 1.5 });
+    expect(h.state.inserts[0]).toMatchObject({ slot_start: "15:00", session_units: 1.5 });
+    expect(h.state.autoCalls[0]).toEqual([{ classId: h.ENG, date: D, slotStart: "15:00" }]);
+    await setAttendanceCell({ studentId: S2, classId: h.ENG, sessionDate: D, slotStart: "15:00", status: "present", units: "1", quiet: true });
+    expect(h.state.inserts[1].session_units).toBeNull();
+    expect(h.state.autoCalls).toHaveLength(1);
+  });
   const cell = (over: Partial<Parameters<typeof setAttendanceCell>[0]> = {}) =>
     setAttendanceCell({ studentId: S1, classId: h.MATH, sessionDate: D, status: "present", quiet: true, ...over });
 
@@ -112,7 +123,7 @@ describe("setAttendanceCell — 단건(격자 타이핑·팝오버·원스크린
     expect(unitsOf()).toEqual([null, 2]);
   });
 
-  it("영어 반·결석·교시별 행엔 자동값이 없다", async () => {
+  it("조회값이 없는 칸·결석·수학 교시별 행엔 자동값이 없다", async () => {
     expect(await cell({ classId: h.ENG })).toEqual({ ok: true, autoUnits: null });
     await cell({ status: "absent" });
     await cell({ slotStart: "16:20" });
@@ -158,6 +169,17 @@ describe("setAttendanceRange — 격자 범위 채우기·붙여넣기", () => {
 });
 
 describe("setAttendanceBulk — 전원 출석·일괄", () => {
+  it("영어 전원 출석도 교시별 자동값을 각 학생에게 저장한다", async () => {
+    const result = await setAttendanceBulk({
+      sessionDate: D, slotStart: "15:00", status: "present",
+      cells: [S1, S2].map((studentId) => ({ studentId, classId: h.ENG })),
+    });
+    expect(unitsOf()).toEqual([1.5, 1.5]);
+    expect(h.state.inserts.every((row) => row.slot_start === "15:00")).toBe(true);
+    expect(result).toMatchObject({ ok: true, applied: [
+      { studentId: S1, autoUnits: 1.5 }, { studentId: S2, autoUnits: 1.5 },
+    ] });
+  });
   const bulk = (units?: string) =>
     setAttendanceBulk({
       sessionDate: D,

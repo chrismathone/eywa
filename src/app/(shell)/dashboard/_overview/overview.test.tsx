@@ -11,6 +11,10 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/features/demo-roster/server/actions", () => ({
+  switchDemoRoster: vi.fn(async () => ({ ok: true as const, label: "동네형" })),
+}));
 import { summarizeInvoices } from "@/features/billing/calc";
 import type {
   OverviewData,

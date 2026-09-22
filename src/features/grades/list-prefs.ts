@@ -8,9 +8,14 @@
  */
 export type GradeSortKey = "name" | "school" | "grade" | "score";
 export type GradeSortDir = "asc" | "desc";
-export type GradeSort = { key: GradeSortKey | null; dir: GradeSortDir };
+export type GradeSort = { key: GradeSortKey; dir: GradeSortDir };
 
-export const GRADE_SORT_DEFAULT: GradeSort = { key: null, dir: "asc" };
+/**
+ * 기본 정렬 = **학년 오름차순**(원장 2026-09-22: *"묶음 자체를 없애고 학년을 디폴트로"*).
+ * 🔴 묶음을 없앴으니 정렬이 유일한 순서다 — '정렬 없음'으로 되돌아가는 상태를 두지 않는다
+ *    (그러면 200줄이 반 이름순이라는, 화면에 적히지 않은 순서로 선다).
+ */
+export const GRADE_SORT_DEFAULT: GradeSort = { key: "grade", dir: "asc" };
 
 const KEYS: readonly GradeSortKey[] = ["name", "school", "grade", "score"];
 
@@ -23,13 +28,13 @@ export function parseGradeSort(raw: unknown): GradeSort {
   if (!raw || typeof raw !== "object") return GRADE_SORT_DEFAULT;
   const o = raw as { key?: unknown; dir?: unknown };
   return {
-    key: isGradeSortKey(o.key) ? o.key : null,
+    key: isGradeSortKey(o.key) ? o.key : GRADE_SORT_DEFAULT.key,
     dir: o.dir === "desc" ? "desc" : "asc",
   };
 }
 
-/** 같은 열을 다시 누르면 오름↔내림, 다른 열이면 그 열 오름차순. */
+/** 같은 열을 다시 누르면 오름↔내림(해제는 없다 — 위 주석), 다른 열이면 그 열 오름차순. */
 export function nextGradeSort(cur: GradeSort, key: GradeSortKey): GradeSort {
   if (cur.key !== key) return { key, dir: "asc" };
-  return cur.dir === "asc" ? { key, dir: "desc" } : GRADE_SORT_DEFAULT;
+  return { key, dir: cur.dir === "asc" ? "desc" : "asc" };
 }

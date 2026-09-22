@@ -22,24 +22,14 @@ export type GradeSelection = {
   date: string;
   /** 만점(기본 100). 화면·엑셀·저장이 같은 값을 본다. */
   maxScore: number;
-  /**
-   * 줄을 **무엇으로 묶어 볼 것인가**(원장 2026-09-22: *"반별로도 볼수있지만 학년별로도 볼수있고"*).
-   * 🔴 묶음을 끄는 선택지는 없다 — *"전체 토탈에서 나열할려고하면 안됌"*. 200줄을 한 덩어리로 세우면
-   *    지금 어느 반·어느 학년을 적고 있는지 알 수 없다.
-   */
-  group: GradeGroupBy;
 };
 
-/** 묶음 기준 — 반별(기본) 또는 학년별. */
-export type GradeGroupBy = "class" | "grade";
-export const GRADE_GROUP_LABEL: Record<GradeGroupBy, string> = {
-  class: "반별",
-  grade: "학년별",
-};
-export const GRADE_GROUP_OPTIONS: { value: GradeGroupBy; label: string }[] = [
-  { value: "class", label: GRADE_GROUP_LABEL.class },
-  { value: "grade", label: GRADE_GROUP_LABEL.grade },
-];
+/*
+ * 🔴 **묶음(반별/학년별) 축은 폐기했다**(원장 2026-09-22 저녁: *"묶음 자체를 없애고 학년을 디폴트로"*).
+ *    같은 날 오후에 넣었다가 실제로 써 보고 뒤집힌 것이다 — 묶으면 정렬이 **묶음 안에서만** 걸려
+ *    "학년 오름차순"을 눌러도 화면 전체로는 그렇게 안 보였다(반이 먼저라서). 반만 보고 싶으면 반
+ *    드롭다운이 이미 있다. 되살리지 말 것.
+ */
 
 export type GradeClassOption = {
   id: string;
@@ -74,8 +64,13 @@ export type GradeSheetRow = {
    * 🔴 저장되는 값이 아니다(학년에서 그때그때 도출) — 학년을 고치면 곧바로 따라온다.
    */
   applies: boolean;
-  /** 지금도 그 반 명단인가 — 학기 중 나간 학생은 false(회색 줄, 값은 그대로 보인다). */
-  onRoster: boolean;
+  /**
+   * **학원을 퇴원했는가**(`students.status`) — 표식은 이 축 하나뿐이다.
+   * 🔴 '그 반 수강이 끝났다'를 표식으로 쓰지 말 것(원장 2026-09-22: *"퇴원 아니면 떠야 하고 '종료'라는 게
+   *    뜨는 게 말이 안 됨"*) — 반이동·과목 변경은 학원을 그만둔 것이 아니라서 그냥 명단에 선다.
+   *    실측 2026-09-22(수학 2학기 204명): 지금 수학 반이 없는 8명 중 **6명만 퇴원**이고 2명은 재원이었다.
+   */
+  withdrawn: boolean;
 };
 
 export type GradeSheet = {

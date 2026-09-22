@@ -25,15 +25,40 @@ describe("monthRange", () => {
 });
 
 describe("출석부 기준 계획 시수", () => {
+  it.each([
+    { className: "브릿지 A", englishTrack: "injaewon" },
+    { className: "영어 A", englishTrack: "eie" },
+  ])("$className 60분 두 교시(JJ 포함)는 하루 3시수", ({ className, englishTrack }) => {
+    const e = enr({ subject: "english", className, englishTrack, schedules: [
+      slot({ endTime: "17:00" }),
+      slot({ startTime: "17:00", endTime: "18:00", slotTeacherLabel: "JJ" }),
+    ] });
+    expect(planTermsForMonth("2026-07", [e], [])[0].plannedSessions).toBe(12);
+  });
+  it("다른 요일에 40분 수업이 있으면 개인 수강 요일의 60분도 1.5로 환산한다", () => {
+    const e = enr({ subject: "english", englishTrack: "injaewon", attendanceDays: [1], schedules: [
+      slot({ endTime: "17:00" }), slot({ dayOfWeek: "tue", endTime: "16:40" }),
+    ] });
+    expect(planTermsForMonth("2026-07", [e], [])[0].plannedSessions).toBe(6);
+    const ended = { ...e, schedules: [e.schedules![0], { ...e.schedules![1], validTo: "2026-06-30" }] };
+    expect(planTermsForMonth("2026-07", [ended], [])[0].plannedSessions).toBe(4);
+  });
+  it("인재원 50분·60분·120분을 각각 1·1·2로 환산한다", () => {
+    const e = enr({ subject: "english", englishTrack: "injaewon", schedules: [
+      slot({ endTime: "16:50" }), slot({ startTime: "17:00", endTime: "18:00" }),
+      slot({ startTime: "18:00", endTime: "20:00" }),
+    ] });
+    expect(planTermsForMonth("2026-07", [e], [])[0].plannedSessions).toBe(16);
+  });
   it("설정이 비어 있어도 추석·대체공휴일과 추가 학원 휴무일을 제외한다", () => {
     const e = enr({ subject: "english", schedules: [slot({ dayOfWeek: "thu" }), slot({ dayOfWeek: "fri" }), slot({ dayOfWeek: "sat" })] });
-    expect(planTermsForMonth("2026-09", [e], [])[0].plannedSessions).toBe(9);
-    expect(planTermsForMonth("2026-09", [e], ["2026-09-03"])[0].plannedSessions).toBe(8);
-    expect(planTermsForMonth("2026-08", [enr({ subject: "english", schedules: [slot()] })], [])[0].plannedSessions).toBe(4);
+    expect(planTermsForMonth("2026-09", [e], [])[0].plannedSessions).toBe(27);
+    expect(planTermsForMonth("2026-09", [e], ["2026-09-03"])[0].plannedSessions).toBe(24);
+    expect(planTermsForMonth("2026-08", [enr({ subject: "english", schedules: [slot()] })], [])[0].plannedSessions).toBe(12);
   });
   it("종강일 정정은 0시수이며 반 이동 당일은 이전 반에서 제외한다", () => {
     const e = enr({ subject: "english", endDate: "2026-09-01", schedules: [slot({ dayOfWeek: "tue" })] });
-    expect(planTermsForMonth("2026-09", [e], [])[0].plannedSessions).toBe(1);
+    expect(planTermsForMonth("2026-09", [e], [])[0].plannedSessions).toBe(3);
     expect(planTermsForMonth("2026-09", [{ ...e, isTransferred: true }], [])).toEqual([]);
     expect(planTermsForMonth("2026-09", [{ ...e, endDate: "2026-08-31" }], [])).toEqual([]);
   });

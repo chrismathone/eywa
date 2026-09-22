@@ -11,6 +11,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { autoUnitsKey } from "@/features/attendance/auto-units";
+import { resolveAutoUnits } from "@/features/attendance/server/auto-units";
 import { kstToday } from "@/lib/date-kst";
 import { mondayOf, shiftDays } from "@/features/timetable/lib/week";
 import {
@@ -757,8 +759,8 @@ export async function clearPresentAttendance(input: {
   studentId: string;
   date: string;
   /**
-   * 그 날의 유닛 자동값(ECS가 출결 생성 시 넣는 값) — 0187a. 저장된 시수가 **기본 1이거나 이 값과 같을
-   * 때만** 삭제된다. 안 넘기면 0169a와 동일(기본 1만). 사람이 다른 값으로 고친 기록은 여전히 거절.
+   * 옛 교시 미지정 기록의 일별 자동값(0187a). 교시를 지정하면 클라이언트 값 대신 서버가 자동 시수를 조회한다.
+   * 저장된 시수가 기본 1이거나 자동값과 같을 때만 삭제된다. 다른 수동값은 여전히 거절한다.
    */
   autoUnits?: number | null;
   /**
@@ -787,7 +789,10 @@ export async function clearPresentAttendance(input: {
     p_student: input.studentId,
     p_date: input.date,
     // 0187a — ECS가 넣은 자동값 그대로인 시수는 '손 안 댄 기록'으로 보고 취소를 허용한다.
-    p_auto_units: input.autoUnits ?? null,
+    p_auto_units: input.slot
+      ? (await resolveAutoUnits(admin, [{ classId: input.classId, date: input.date, slotStart: input.slot }], { tenantId }))
+        .get(autoUnitsKey(input.classId, input.date, input.slot)) ?? null
+      : input.autoUnits ?? null,
   };
   // 0197a — 그 교시만. null이면 '그날 전체' 행(옛 기록)만 지운다(`is not distinct from`).
   // ⚠️ **옛 스키마에서도 돌아야 한다**([[#95]]): SQL은 사람이 손으로 돌리므로 앱이 먼저 뜰 수 있다.

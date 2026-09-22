@@ -211,8 +211,6 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
     slot: axis.slot,
     date: axis.date,
     maxScore: axis.maxScore,
-    // 묶음은 화면 보기용이라 명단 집합을 바꾸지 않는다 — 기본값으로 둔다.
-    group: "class",
   };
   let roster: Awaited<ReturnType<typeof getGradeSheet>>;
   try {

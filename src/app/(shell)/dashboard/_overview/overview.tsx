@@ -37,6 +37,8 @@ import {
   money,
   chartMoney,
 } from "./charts";
+import { DemoRosterSwitch } from "../_components/demo-roster-switch";
+import type { DemoRosterControl } from "@/features/demo-roster/types";
 import s from "./overview.module.css";
 import appearance from "./appearance.module.css";
 
@@ -167,7 +169,14 @@ function InlineStat({
   );
 }
 
-export function Overview({ initial }: { initial: OverviewSnapshot }) {
+export function Overview({
+  initial,
+  demoRoster = null,
+}: {
+  initial: OverviewSnapshot;
+  /** 데모 지점 원장에게만. 다른 지점은 null이라 버튼이 없다. */
+  demoRoster?: DemoRosterControl | null;
+}) {
   const hydrated = useSyncExternalStore(
     subscribeHydration,
     () => true,
@@ -233,6 +242,7 @@ export function Overview({ initial }: { initial: OverviewSnapshot }) {
           {/* eslint-disable-next-line @next/next/no-img-element -- static 19KB pre-rendered artwork */}
           <img className={appearance.headerArtwork} src="/previews/dashboard/study.webp" width="96" height="64" alt="" aria-hidden />
           <div className={s.headerTools}>
+            {demoRoster ? <DemoRosterSwitch control={demoRoster} /> : null}
             {snapshot.allowed.includes("timetable") && snapshot.allowed.includes("classes") && (
                 <Jump href="/dashboard?view=rooms" className={s.classroomPreview}>
                   강의실 2D/3D

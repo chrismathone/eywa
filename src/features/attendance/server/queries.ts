@@ -48,7 +48,9 @@ import {
 } from "@/features/attendance/derive-from-reports";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { teacherProcessing, type ProcessingRecord, type TeacherProcessing } from "../teacher-processing";
-import { autoUnitsByDate, isAutoUnitsSubject, toAutoUnitsSchedule } from "../auto-units";
+import { autoUnitsByDate, autoUnitsKey, isAutoUnitsSubject, toAutoUnitsSchedule } from "../auto-units";
+import { resolveAutoUnits } from "./auto-units";
+import { scopeInsertSlots } from "../scope-ownership";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
 // 보강 예약(0264a) — 그 달 이 반에 예약된 보강 칸 + 예약된 학생을 명단에 합친다. 조회는 fail-soft(표 없음 = 예약 없음).
 import {
@@ -1511,6 +1513,12 @@ export async function getMonthlyAttendanceMatrix(
     }
   }
 
+  const englishCells = classId && selectedSubject === "english" ? days.map((d) => ({
+    classId, date: d.date,
+    starts: scopeTeacherId ? scopeInsertSlots({ homeroomTeacherId, slots: axisSlots }, scopeTeacherId, d.date) : null,
+  })) : [];
+  const englishAuto = englishCells.length ? await resolveAutoUnits(supabase, englishCells.flatMap((c) =>
+    c.starts ? c.starts.map((slotStart) => ({ classId: c.classId, date: c.date, slotStart })) : [{ classId: c.classId, date: c.date }])) : null;
   const presentRate =
     totalRecords > 0 ? Math.round(attendanceRate(presentCount, totalRecords) * 10) / 10 : 0;
 
@@ -1537,6 +1545,12 @@ export async function getMonthlyAttendanceMatrix(
     ...(isAutoUnitsSubject(selectedSubject) && (await getLessonProfile()).autoUnits
       ? { autoUnits: autoUnitsByDate(days.map((d) => d.date), (schedules ?? []).map(toAutoUnitsSchedule)) }
       : {}),
+    ...(englishAuto ? { autoUnits: Object.fromEntries(englishCells.flatMap((c) => {
+      const units = c.starts
+        ? c.starts.reduce((sum, start) => sum + (englishAuto.get(autoUnitsKey(c.classId, c.date, start)) ?? 1), 0)
+        : englishAuto.get(autoUnitsKey(c.classId, c.date));
+      return units === undefined || units === 1 ? [] : [[c.date, units]];
+    })) } : {}),
     // 보강 예약 칸(0264a) — 있을 때만 싣는다(강사 전체 보기는 반마다 매트릭스라 빈 객체도 곱이 된다).
     ...(Object.keys(reservations).length > 0 ? { reservations } : {}),
     stats: {

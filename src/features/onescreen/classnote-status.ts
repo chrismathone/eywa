@@ -11,8 +11,8 @@ export type ClassnoteStatusRow = {
   status: string | null;
 };
 
-/** 아직 결과가 안 나온 발송(워커가 처리 중) — 이 학생들이 있는 동안만 상태를 다시 읽는다. */
-export const PENDING_STATUSES = ["queued", "processing"] as const;
+/** 발송·회수 작업의 결과가 나오기 전까지 이 학생들의 상태를 다시 읽는다. */
+export const PENDING_STATUSES = ["queued", "processing", "recall_requested", "recalling"] as const;
 
 // null = 이번 세션에서 명시적으로 해제됨(재발급·첨부변경). undefined = 아직 모름.
 type HasStatus = { classnoteStatus?: string | null };
