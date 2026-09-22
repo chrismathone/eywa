@@ -137,9 +137,14 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   };
 
   const [students, scores] = await Promise.all([
-    fetchInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(
-      studentIds,
-      (chunk) => supabase.from("students").select("id, name, school, grade").in("id", chunk),
+    fetchInChunks<{
+      id: string;
+      name: string;
+      school: string | null;
+      grade: string | null;
+      status: string | null;
+    }>(studentIds, (chunk) =>
+      supabase.from("students").select("id, name, school, grade, status").in("id", chunk),
     ),
     schemaReady
       ? fetchInChunks<ScoreCell>(
@@ -208,14 +213,8 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       // 여기까지 온 줄은 전부 치는 시험이다(위에서 걸렀다) — 그래도 필드는 남긴다: 엑셀 파서가
       // 이 값으로 "안 치는 시험에 점수가 적혀 왔다"를 판정한다.
       applies: true,
-      onRoster: isEnrollmentOnRosterOn(
-        {
-          startDate: e.start_date,
-          endDate: e.end_date,
-          isTransferred: e.is_transferred ?? false,
-        },
-        anchor,
-      ),
+      // 표식 축은 **학원 퇴원** 하나다(위 types 주석). 반 단위 종료는 표식이 아니라 아래 dedupe의 기준일 뿐.
+      withdrawn: student.status === "withdrawn",
     });
   }
   // 반은 이름순, 같은 반 안에서는 학생 이름순. 🔑 강사가 보면 **자기 반이 먼저**(원장 2026-09-22) —
@@ -235,21 +234,31 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
    *    이름 옆에 '종료'가 붙는다(실측 2026-09-22: 수학 2학기 수강 432건 중 85건이 이미 끝난 행이고
    *    그중 8건이 반이동이었다). 모든 줄이 끝났으면 그때만 '종료'가 붙는다 = 진짜로 그만둔 학생.
    */
+  // 남길 줄은 **지금도 도는 반** 쪽(반이동 학생이 옛 반 줄로 남지 않게). 표식과는 다른 축이다.
+  const stillOn = new Map<string, boolean>();
+  for (const e of inTerm) {
+    const on = isEnrollmentOnRosterOn(
+      { startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred ?? false },
+      anchor,
+    );
+    if (on) stillOn.set(`${e.student_id}:${e.class_id}`, true);
+  }
   const oneEach = new Map<string, GradeSheetRow>();
   for (const r of rows) {
     const cur = oneEach.get(r.studentId);
-    if (!cur || (!cur.onRoster && r.onRoster)) oneEach.set(r.studentId, r);
+    const rOn = stillOn.has(`${r.studentId}:${r.classId}`);
+    const curOn = cur ? stillOn.has(`${cur.studentId}:${cur.classId}`) : false;
+    if (!cur || (!curOn && rOn)) oneEach.set(r.studentId, r);
   }
   /*
-   * 🔴 **그만둔 학생은 줄을 안 세운다**(원장 2026-09-22 저녁: *"그러면 종료도 없는 거 아님?"*) —
-   *    이 학기에 다녔더라도 지금 다니는 반이 하나도 없으면 적을 일이 없다. 반이동한 학생은 위
-   *    dedupe가 **지금 반** 줄을 남기므로 여기 걸리지 않는다.
-   * ⚠️ 단 **이미 적어 둔 것이 있으면 남긴다**(점수·시험없음·상담 표식) — 시험을 보고 그만둔 학생의
-   *    기록을 화면에서 지워 버리면 아무도 못 고친다. 그 줄에만 '종료'가 붙는다.
+   * 🔴 **퇴원한 학생만 뺀다**(원장 2026-09-22: *"퇴원 아니면 떠야 하고"*) — 반이 바뀌었거나 그 과목을
+   *    그만뒀어도 **학원에 다니면 그냥 명단에 선다**(표식도 없다).
+   * ⚠️ 퇴원이어도 **이미 적어 둔 것이 있으면 남긴다**(점수·시험없음·상담 표식) — 시험을 보고 그만둔
+   *    학생의 기록을 화면에서 지우면 아무도 못 고친다. 그 줄에만 '퇴원'이 붙는다.
    */
   const hasAnything = (r: GradeSheetRow) =>
     r.score != null || r.noExam || !!r.marks.ask1 || !!r.marks.ask2 || !!r.marks.received;
-  const uniqueRows = [...oneEach.values()].filter((r) => r.onRoster || hasAnything(r));
+  const uniqueRows = [...oneEach.values()].filter((r) => !r.withdrawn || hasAnything(r));
 
   // 인원은 **이번에 실제로 읽은 반만** 센다 — 반 하나만 볼 땐 나머지 반을 안 읽었으므로 null(모름).
   const countByClass = new Map<string, number>();

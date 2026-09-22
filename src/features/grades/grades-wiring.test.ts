@@ -241,11 +241,19 @@ describe("목록 규약(원장 2026-09-22 오후)", () => {
     expect(read("src/app/(shell)/exams/page.tsx")).not.toMatch(/axisLabel="묶음"/);
   });
 
-  it("🔴 한 학생은 한 줄 — 지금 다니는 반 줄을 남긴다(반이동 학생에게 '종료'가 붙지 않게)", () => {
+  it("🔴 한 학생은 한 줄 — 지금 다니는 반 줄을 남긴다(반이동 학생이 옛 반으로 남지 않게)", () => {
     const q = read("src/features/grades/server/queries.ts");
-    expect(q).toMatch(/!cur\.onRoster && r\.onRoster/);
-    // 그만둔 학생은 적어 둔 것이 있을 때만 남는다.
-    expect(q).toMatch(/r\.onRoster \|\| hasAnything\(r\)/);
+    expect(q).toMatch(/!curOn && rOn/);
+  });
+
+  it("🔴 표식 축은 **학원 퇴원** 하나 — 반이 끝난 것은 표식이 아니다(원장 2026-09-22)", () => {
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toMatch(/withdrawn: student\.status === "withdrawn"/);
+    // 퇴원이어도 적어 둔 것이 있으면 남긴다(기록을 화면에서 지우지 않는다).
+    expect(q).toMatch(/!r\.withdrawn \|\| hasAnything\(r\)/);
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).not.toContain("종료");
+    expect(grid).toContain("퇴원");
   });
 
   it("🔴 성적관리 툴바엔 형광 표기를 쓰지 않는다(원장: 드롭다운마다 크기가 널뛰면 난장판)", () => {

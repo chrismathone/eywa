@@ -306,17 +306,18 @@ export function ScoreGrid({
                       /* 키는 **그 줄의 반**으로 — 묶음 키(학년)로 만들면 두 반 학생이 부딪힌다. */
                       key={`${r.classId}:${id}`}
                       className={
-                        !r.onRoster ? "bg-bg-soft/40" : missing ? "bg-amber-soft" : "hover:bg-bg-soft/50"
+                        r.withdrawn ? "bg-bg-soft/40" : missing ? "bg-amber-soft" : "hover:bg-bg-soft/50"
                       }
                       title={
-                        r.onRoster
-                          ? undefined
-                          : "지금은 이 과목을 안 다니는 학생입니다 — 적어 둔 기록이 있어 남겨 둡니다"
+                        r.withdrawn
+                          ? "퇴원한 학생입니다 — 적어 둔 기록이 있어 남겨 둡니다"
+                          : undefined
                       }
                     >
                       <td className="text-foreground overflow-hidden px-4 py-2 text-left font-medium text-ellipsis">
                         {r.name}
-                        {r.onRoster ? null : <span className="text-text-faint ml-1.5 text-xs">종료</span>}
+                        {/* 🔴 표식은 **퇴원** 하나뿐 — 반이동·과목 변경엔 아무 표식도 붙이지 않는다. */}
+                        {r.withdrawn ? <span className="text-text-faint ml-1.5 text-xs">퇴원</span> : null}
                       </td>
                       <td className="text-text-dim overflow-hidden px-4 py-2 text-left text-sm text-ellipsis">
                         {r.school ?? "—"}
