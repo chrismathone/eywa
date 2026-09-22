@@ -19,6 +19,7 @@ import { kstToday } from "@/lib/date-kst";
 import { dutyAllowsSeat } from "@/features/attendance/seat/duty";
 import { getActiveSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getSeatDay } from "@/features/attendance/seat/server/queries";
+import { ijwConfigFor } from "@/features/ijw/server/client";
 import {
   USABLE_SEAT_KEYS,
   ambiguousClassIds,
@@ -41,6 +42,7 @@ import { mondayOf } from "@/features/timetable/lib/week";
 import { SeatBoard } from "./_components/seat-board";
 import { SeatAllDay } from "./_components/seat-all-day";
 import { SeatJjAllDay } from "./_components/seat-jj-all-day";
+import { MemorizedPullButton } from "./_components/memorized-pull-button";
 import { applySeatDayChoices, getSeatPeriodChoices } from "@/features/attendance/seat/server/period-choice";
 import { resolveSeatPeriodChoices } from "@/features/attendance/seat/period-choice";
 
@@ -128,6 +130,8 @@ export default async function SeatAttendancePage({
   // 지난 날짜 쓰기는 사무실만 — 자리 전용 권한(아르바이트)은 오늘만. 서버 액션이 같은 판정을 다시 한다(#77).
   const canEditPast = await canWriteTenant(user.systemRole, "attendance");
   const readOnly = date !== today && !canEditPast;
+  // 인재원 연동이 걸린 학원에서만 '단어수 가져오기'를 내놓는다 — 눌러도 안 되는 버튼을 두지 않는다.
+  const ijwReady = !!ijwConfigFor(user.tenantId);
 
   /** JJ실 '전체' 보기인가 — 이때만 JJ 칸·계획을 하루치로 읽는다(교시 하나 몫은 안 읽는다). */
   const jjAll = viewAll && seatHasJjFields(seat);
@@ -267,6 +271,12 @@ export default async function SeatAttendancePage({
                   </Link>
                 ))}
               </div>
+            ) : null}
+            {/* 인재원 단어수 가져오기(원장 2026-09-21) — JJ실에서, 쓸 수 있는 사람에게만. 자동(매일 04:20
+                KST 크론)과 같은 서버 함수라 두 길이 같은 숫자를 적는다. 연동이 없는 학원엔 버튼 자체가 없다
+                (눌러도 안 되는 버튼을 두지 않는다). */}
+            {seat === "jj" && !readOnly && ijwReady ? (
+              <MemorizedPullButton seat={seat} date={date} />
             ) : null}
             {/* 날짜 이동 — 앱 전역 단일 소스 PeriodNav(원장 2026-09-01). '오늘' 알약이 하던 두 일은
                 라벨 클릭(오늘로)과 지난/미래 조회 배지로 나뉜다.

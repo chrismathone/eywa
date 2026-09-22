@@ -16,6 +16,7 @@ import { EXAM_SLOT_LABEL, examSlotOptions } from "@/features/grades/exam-slots";
 import { resolveGradeSelection } from "@/features/grades/selection";
 import { gradeWriteError } from "@/features/grades/server/access";
 import { getGradeSheet } from "@/features/grades/server/queries";
+import { loadGradeSortPref, saveGradeSortPref } from "@/features/grades/server/list-prefs";
 import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
 import { TERM_OPTIONS, termLabel, termYearOptions } from "@/features/grades/term";
 import { JjExamView } from "./_components/jj-exam-view";
@@ -105,10 +106,12 @@ export default async function ExamsPage({
   const isEnglish = sel.subject === "english";
   const wantsJj = jjEnabled && isEnglish && JJ_VIEWS.has(rawView);
 
-  const [viewer, writeError, sheetFirst] = await Promise.all([
+  const [viewer, writeError, sheetFirst, sortPref] = await Promise.all([
     jjEnabled && isEnglish ? getJjViewer() : Promise.resolve(null),
     gradeWriteError(),
     wantsJj ? Promise.resolve(null) : getGradeSheet(sel),
+    // 정렬은 계정에 남는다(원장 2026-08-04 "뷰 세팅은 계정 귀속") — 화면 안에서 바꾸고 조용히 저장한다.
+    loadGradeSortPref(),
   ]);
   const jjAvailable = !!viewer?.hasEnglish;
   const jjMode = wantsJj && jjAvailable ? (rawView as "jj" | "jj_exam") : null;
@@ -287,6 +290,8 @@ export default async function ExamsPage({
              키에 넣지 않는다: 그 둘은 같은 칸의 속성이라, 넣으면 적다 만 점수가 사라진다. */
           key={`${sel.year}:${sel.term}:${sel.subject}:${sel.track ?? ""}:${sel.classId ?? ""}:${sel.slot}`}
           sheet={sheet}
+          sort={sortPref}
+          saveSort={saveGradeSortPref}
           canWrite={canWrite}
           slotLabel={EXAM_SLOT_LABEL[sel.slot]}
           lockReason={lockReason}

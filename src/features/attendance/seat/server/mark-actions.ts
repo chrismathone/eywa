@@ -15,6 +15,7 @@ import { normalizePlanText } from "@/features/class-sheets/lib/plan-codec";
 import {
   JJ_MARK_COLUMN,
   JJ_MARK_MAXLEN,
+  JJ_MARK_ON_CONFLICT,
   jjMarkLabel,
   parseJjMarkField,
   seatHasJjFields,
@@ -23,7 +24,8 @@ import {
 import { hhmm, type SeatKey } from "../seat";
 import { gateSeatWrite, rosterKeys } from "./gate";
 
-const ON_CONFLICT = "tenant_id,class_id,student_id,mark_date,slot_start";
+// 충돌 축은 `jj-fields.ts` 한 곳에서 온다 — 이 칸을 쓰는 문이 셋이라(손입력·영어 시트·인재원 자동) 갈리면 행이 쪼개진다.
+const ON_CONFLICT = JJ_MARK_ON_CONFLICT;
 
 function isMissingColumn(err: { code?: string; message?: string } | null, column: string): boolean {
   if (!err) return false;

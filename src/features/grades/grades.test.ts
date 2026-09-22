@@ -6,6 +6,8 @@ import {
   examSlotsFor,
   normalizeExamSlot,
 } from "./exam-slots";
+import { examAppliesTo, isElementaryGrade, isMiddleFirstGrade, notApplicableReason } from "./applies";
+import { GRADE_SORT_DEFAULT, nextGradeSort, parseGradeSort } from "./list-prefs";
 import { resolveGradeSelection, selectionSlotIsValid } from "./selection";
 import { axisOptionsFrom, axisValueOf, firstAxisOf, parseAxisValue } from "./subject-axis";
 import {
@@ -63,8 +65,8 @@ describe("학기 축", () => {
 });
 
 describe("시험 칸", () => {
-  it("수학은 중간·기말, 영어는 듣기평가가 앞에 붙는다(원장 2026-09-22)", () => {
-    expect(examSlotsFor("math")).toEqual(["midterm", "final"]);
+  it("수학은 중간·기말 + 내신·월말평가, 영어는 듣기평가가 앞에 붙는다(원장 2026-09-22)", () => {
+    expect(examSlotsFor("math")).toEqual(["midterm", "final", "school", "monthly"]);
     expect(examSlotsFor("english")).toEqual(["listening", "midterm", "final"]);
     // 등록만 된 다른 과목도 화면이 서야 한다 — 기본 두 칸.
     expect(examSlotsFor("science")).toEqual(["midterm", "final"]);
@@ -164,5 +166,55 @@ describe("주소 해석", () => {
 
   it("과목이 하나도 없으면 null(화면이 '과목을 먼저 등록' 안내를 낸다)", () => {
     expect(resolveGradeSelection({}, { subjectOptions: [], todayIso: "2026-09-22" })).toBeNull();
+  });
+});
+
+describe("제도상 안 치는 시험(원장 2026-09-22)", () => {
+  it("🔴 초등학생은 중간·기말이 없다 — 빈 칸이 미기입으로 보이면 0을 적게 만든다", () => {
+    expect(examAppliesTo("midterm", "초6")).toBe(false);
+    expect(examAppliesTo("final", "초3")).toBe(false);
+    // 학원 시험(월말평가)·듣기평가는 학년과 무관하다.
+    expect(examAppliesTo("monthly", "초6")).toBe(true);
+    expect(examAppliesTo("listening", "초6")).toBe(true);
+  });
+
+  it("🔴 중1은 두 학기 모두 중간·기말이 없다(자유학년제)", () => {
+    expect(examAppliesTo("midterm", "중1")).toBe(false);
+    expect(examAppliesTo("final", "중1")).toBe(false);
+    expect(examAppliesTo("midterm", "중2")).toBe(true);
+    expect(examAppliesTo("midterm", "고1")).toBe(true);
+  });
+
+  it("🔴 모르는 학년은 막지 않는다 — 모른다고 칸을 지우면 실제로 시험 본 학생이 사라진다", () => {
+    expect(examAppliesTo("midterm", null)).toBe(true);
+    expect(examAppliesTo("midterm", "")).toBe(true);
+    expect(examAppliesTo("midterm", "7세")).toBe(true);
+  });
+
+  it("학년 판정은 접두로 — `중1-2` 같은 변형도 중1", () => {
+    expect(isMiddleFirstGrade("중1-2")).toBe(true);
+    expect(isMiddleFirstGrade("중12")).toBe(false); // 두 자리는 다른 학년
+    expect(isElementaryGrade(" 초 6 ")).toBe(true);
+    expect(notApplicableReason("midterm", "초6")).toMatch(/초등/);
+    expect(notApplicableReason("midterm", "중1")).toMatch(/중1/);
+    expect(notApplicableReason("monthly", "초6")).toBeNull();
+  });
+});
+
+describe("정렬 보기 설정", () => {
+  it("같은 열을 다시 누르면 오름→내림→해제", () => {
+    const a = nextGradeSort(GRADE_SORT_DEFAULT, "grade");
+    expect(a).toEqual({ key: "grade", dir: "asc" });
+    const b = nextGradeSort(a, "grade");
+    expect(b).toEqual({ key: "grade", dir: "desc" });
+    expect(nextGradeSort(b, "grade")).toEqual(GRADE_SORT_DEFAULT);
+    // 다른 열을 누르면 그 열 오름차순부터.
+    expect(nextGradeSort(b, "name")).toEqual({ key: "name", dir: "asc" });
+  });
+
+  it("저장값이 망가져 있어도 화면은 뜬다(기본값 폴백)", () => {
+    expect(parseGradeSort(undefined)).toEqual(GRADE_SORT_DEFAULT);
+    expect(parseGradeSort({ key: "zzz", dir: "sideways" })).toEqual(GRADE_SORT_DEFAULT);
+    expect(parseGradeSort({ key: "score", dir: "desc" })).toEqual({ key: "score", dir: "desc" });
   });
 });

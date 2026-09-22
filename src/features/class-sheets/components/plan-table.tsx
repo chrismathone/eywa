@@ -32,6 +32,7 @@ export function PlanTable({
   handlers,
   canEdit,
   showExamTerm,
+  shift,
 }: {
   date: string;
   slotStart: string;
@@ -40,6 +41,11 @@ export function PlanTable({
   store: SheetSaveStore;
   handlers: PlanHandlers;
   canEdit: boolean;
+  /**
+   * 이 칸의 회차 표식(0282a) — 버튼의 **눌린 상태**를 그린다.
+   * ⚠️ **없어도 버튼은 돈다**(토글은 서버가 판정한다) — 상태를 안 내려보내는 화면에선 강조만 없다.
+   */
+  shift?: "skip" | "advance" | null;
   /**
    * '내신' 구획을 그릴지 — EiE 반은 **초등 수업이라 내신이 없다**(원장 2026-08-06 "EiE 수업의 경우
    * 내신 제거"). 판정은 `classes.english_track` 컬럼뿐(반 이름 추측 금지 — english-track.ts 🔴).
@@ -106,6 +112,33 @@ export function PlanTable({
                   {sheetT(lang, "plan.fromPlan")}
                 </button>
               ) : null}
+              {/* 🔴 **회차 미루기·당기기는 여기 있어야 한다**(원장 제보 2026-09-22 *"밀기 당기기는 어디에있음?"*)
+                  — 처음엔 월간 달력 칸에만 뒀는데, 사람이 서 있는 자리는 **실제를 적는 이 표**다.
+                  원장 원문도 *"실제 에서는 수업 회차를 한주 미루거나 당기거나"*였다.
+                  ⚠️ 지난 날짜에도 **막지 않는다** — "지난주에 못 나갔다"를 뒤늦게 미루는 게 정상 흐름이고,
+                     실제 줄은 안 건드리므로 눌러도 잃을 게 없다(바뀌는 건 앞으로의 차수 배치뿐).
+                  🔑 `shift`를 안 받는 화면에서도 **같은 버튼으로 켜고 끈다** — 토글은 서버가 판정한다. */}
+              {canEdit && term.key === "regular" && handlers.setShift
+                ? (["skip", "advance"] as const).map((kind) => {
+                    const on = shift === kind;
+                    return (
+                      <button
+                        key={kind}
+                        type="button"
+                        aria-pressed={on}
+                        className={`cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold ${
+                          on
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-line-strong text-foreground hover:text-primary hover:border-primary"
+                        }`}
+                        title={sheetT(lang, kind === "skip" ? "plan.shift.skip.title" : "plan.shift.advance.title")}
+                        onClick={() => handlers.setShift?.(date, slotStart, kind)}
+                      >
+                        {sheetT(lang, kind === "skip" ? "plan.shift.skip" : "plan.shift.advance")}
+                      </button>
+                    );
+                  })
+                : null}
             </div>
             {rows.length > 0 ? (
               // 고정 열은 요일 열 다이어트(2026-08-17, today-columns TODAY_PLAN_W 540→436)와 함께 줄였다

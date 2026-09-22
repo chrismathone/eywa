@@ -12,19 +12,25 @@
  *    아직 안 걸린 창에서도 학생 상세·타임라인이 시험 이름을 계속 읽는다([[#95]]).
  */
 
-export type ExamSlotKey = "listening" | "midterm" | "final";
+export type ExamSlotKey = "listening" | "midterm" | "final" | "school" | "monthly";
 
 export const EXAM_SLOT_LABEL: Record<ExamSlotKey, string> = {
   listening: "듣기평가",
   midterm: "중간고사",
   final: "기말고사",
+  school: "내신",
+  monthly: "월말평가",
 };
 
 const DEFAULT_SLOTS: readonly ExamSlotKey[] = ["midterm", "final"];
 
-/** 과목 표준 키별 예외. 여기 없는 과목은 전부 기본 두 칸. */
+/**
+ * 과목 표준 키별 예외. 여기 없는 과목은 전부 기본 두 칸.
+ * ⚠️ 수학의 `내신`·`월말평가`는 원장 2026-09-22 추가 — **수학에만** 세운다(다른 과목은 요청이 없었다).
+ */
 const SLOTS_BY_SUBJECT: Record<string, readonly ExamSlotKey[]> = {
   english: ["listening", "midterm", "final"],
+  math: ["midterm", "final", "school", "monthly"],
 };
 
 export function examSlotsFor(subjectKey: string): ExamSlotKey[] {
@@ -32,7 +38,9 @@ export function examSlotsFor(subjectKey: string): ExamSlotKey[] {
 }
 
 export function isExamSlot(v: unknown): v is ExamSlotKey {
-  return v === "listening" || v === "midterm" || v === "final";
+  return (
+    v === "listening" || v === "midterm" || v === "final" || v === "school" || v === "monthly"
+  );
 }
 
 /** 주소·시트의 값을 그 과목의 시험 칸으로. 그 과목에 없는 칸이면 **첫 칸**으로 떨어진다. */

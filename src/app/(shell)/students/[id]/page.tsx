@@ -25,6 +25,9 @@ import { OverviewTab } from "./_tabs/overview-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { BillingTab } from "./_tabs/billing-tab";
 import { GradesTab } from "./_tabs/grades-tab";
+import { SrsTab } from "./_tabs/srs-tab";
+import { ijwConfigFor } from "@/features/ijw/server/client";
+import { getJjAccess, hasIjwLink } from "@/features/ijw/server/queries";
 import { ProgressTab } from "./_tabs/progress-tab";
 import { AttendanceTab } from "./_tabs/attendance-tab";
 import { ConsultationsTab } from "./_tabs/consultations-tab";
@@ -68,7 +71,17 @@ export default async function StudentDetailPage({
   // DB에서도 0158a RLS가 같은 매트릭스로 막는다(권한 없으면 0행) — 여기서 되돌리는 이유는 그 경우
   // 화면이 "미납 0원"이라는 **거짓 요약**을 보여주기 때문.
   const canSeeBilling = await canAccessTenant(user.systemRole, "billing");
-  const tab = requestedTab === "billing" && !canSeeBilling ? "overview" : requestedTab;
+  // 'SRS 성적'(인재원 단어 학습·시험) 탭은 **짝이 걸린 학생**에게만(원장 2026-09-21: 일반 성적과 분리).
+  // 짝이 없으면 그 구역이 스스로 비어 **빈 탭**이 된다 — 탭 자체를 안 그리고, 강제 URL(?tab=srs)도 개요로
+  // 되돌린다(화면에서 감추는 것만으로는 게이트가 아니다, [[#77]]). 인재원을 부르지 않는 가벼운 판정이다.
+  const jjAccess = await getJjAccess();
+  const showSrs = !!jjAccess && !!ijwConfigFor(jjAccess.tenantId) && (await hasIjwLink(jjAccess.tenantId, id));
+  const tab =
+    requestedTab === "billing" && !canSeeBilling
+      ? "overview"
+      : requestedTab === "srs" && !showSrs
+        ? "overview"
+        : requestedTab;
 
   const student = await getStudentById(id);
   if (!student) {
@@ -218,7 +231,12 @@ export default async function StudentDetailPage({
         }
       />
 
-      <StudentTabsNav studentId={student.id} active={tab} canSeeBilling={canSeeBilling} />
+      <StudentTabsNav
+        studentId={student.id}
+        active={tab}
+        canSeeBilling={canSeeBilling}
+        showSrs={showSrs}
+      />
 
       <section>
         {tab === "overview" ? (
@@ -232,7 +250,9 @@ export default async function StudentDetailPage({
             canDeleteEnrollment={canDeleteEnrollment}
           />
         ) : tab === "grades" ? (
-          <GradesTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
+          <GradesTab studentId={student.id} />
+        ) : tab === "srs" ? (
+          <SrsTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
         ) : tab === "progress" ? (
           <ProgressTab
             studentId={student.id}

@@ -986,10 +986,27 @@ export async function setLessonShift(input: {
   if (!YMD_RE.test(input.date)) return { ok: false, error: "날짜가 올바르지 않습니다" };
   const slot = String(input.slotStart).slice(0, 5);
   if (!/^[0-2]\d:[0-5]\d$/.test(slot)) return { ok: false, error: "교시가 올바르지 않습니다" };
-  const kind = input.kind === "skip" || input.kind === "advance" ? input.kind : null;
+  const asked = input.kind === "skip" || input.kind === "advance" ? input.kind : null;
 
   const admin = createAdminClient();
   const where = { tenant_id: gate.access.tenantId, class_id: input.classId, plan_date: input.date, slot_start: slot };
+
+  /**
+   * 🔑 **토글은 서버가 판정한다** — 화면이 지금 상태를 몰라도 같은 버튼으로 켜고 끌 수 있다.
+   *    (상태를 클라까지 내려보내지 않는 화면이 있어서 — 주간 시트 — 거기서도 버튼이 제대로 돈다.)
+   * ⚠️ 표가 없으면(0282a 미적용) 조회도 실패한다 — 그건 아래 쓰기 단계에서 한글로 안내한다.
+   */
+  const cur = asked
+    ? await admin
+        .from("class_lesson_shifts")
+        .select("kind")
+        .eq("tenant_id", where.tenant_id)
+        .eq("class_id", where.class_id)
+        .eq("plan_date", where.plan_date)
+        .eq("slot_start", where.slot_start)
+        .maybeSingle()
+    : null;
+  const kind = asked && cur?.data?.kind === asked ? null : asked;
 
   const { error } = kind
     ? // 🔴 일반 유니크(부분 술어 없음, [[#113]])라 이 축으로 추론된다 — 토글이 같은 칸을 갈아끼운다.

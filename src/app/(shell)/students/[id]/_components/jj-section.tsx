@@ -1,5 +1,6 @@
 /**
- * 학생 상세 '성적' 탭 — **JJ실 학습**(인재원 학습 프로그램) 구역. 서버 컴포넌트.
+ * 학생 상세 **'SRS 성적' 탭** — JJ실 학습(인재원 단어 학습 프로그램) 구역. 서버 컴포넌트.
+ * ⚠️ 2026-09-21까지는 '성적' 탭 안에 있었다(원장 지시로 탭을 갈랐다) — 조각은 그대로 옮겨 왔다.
  *
  * 짝(students.ijw_student_id)이 걸린 학생만 보인다 — 짝이 없거나 연동이 설정되지 않은 학원이면 아무것도
  * 그리지 않는다(수학만 듣는 학생 화면에 빈 구역이 생기지 않게). 숫자는 매번 인재원에 묻는다.
@@ -80,7 +81,9 @@ export async function StudentJjSection({
           {data.failed.message}
         </p>
       ) : null}
-      <JjRangeBar baseHref={`/students/${studentId}?tab=grades`} range={range} today={today} anchor={ANCHOR} />
+      {/* 기간을 바꿔도 **이 탭**으로 돌아온다 — 2026-09-21에 성적 탭에서 'SRS 성적' 탭으로 옮겼다.
+          🔴 `?tab=grades`로 두면 기간 칩을 누를 때마다 성적 탭으로 튕겨 이 구역이 사라진다. */}
+      <JjRangeBar baseHref={`/students/${studentId}?tab=srs`} range={range} today={today} anchor={ANCHOR} />
       {data.study ? <JjStudySheet study={data.study} layout="wide" /> : null}
       {exams.length ? (
         <div className="space-y-1.5">

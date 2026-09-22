@@ -7,8 +7,9 @@ import { isEnrollmentEndedOn, isEnrollmentOnRosterOn } from "@/features/enrollme
 import { readEnglishTrack } from "@/features/classes/english-track";
 import { ENGLISH_SUBJECT_KEY } from "../subject-axis";
 import { rosterAnchorFor, termWindow } from "../term";
+import { examAppliesTo } from "../applies";
 import { EMPTY_GRADE_MARKS, type GradeClassOption, type GradeMarks, type GradeSelection, type GradeSheet, type GradeSheetRow } from "../types";
-import { gradeMarksReady, gradesSchemaReady } from "./write";
+import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady } from "./write";
 import { kstToday } from "@/lib/date-kst";
 
 /**
@@ -21,7 +22,14 @@ import { kstToday } from "@/lib/date-kst";
  * ⚠️ 강사 스코프는 **과목 기준**이다(옛 시험 목록과 같은 규약) — 반 단위로 더 좁히지 않는다.
  */
 export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
-  const empty: GradeSheet = { selection: sel, classes: [], rows: [], schemaReady: true, marksReady: false };
+  const empty: GradeSheet = {
+    selection: sel,
+    classes: [],
+    rows: [],
+    schemaReady: true,
+    marksReady: false,
+    noExamReady: false,
+  };
   const user = await getCurrentUser();
   if (!user) return { ...empty, schemaReady: false };
 
@@ -75,6 +83,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       classes: optionsOnly,
       schemaReady: await gradesSchemaReady(),
       marksReady: await gradeMarksReady(),
+      noExamReady: await gradeNoExamReady(),
     };
   }
 
@@ -103,11 +112,18 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   );
 
   const studentIds = [...new Set(inTerm.map((e) => e.student_id))];
-  const [schemaReady, marksReady] = await Promise.all([gradesSchemaReady(), gradeMarksReady()]);
+  const [schemaReady, marksReady, noExamReady] = await Promise.all([
+    gradesSchemaReady(),
+    gradeMarksReady(),
+    gradeNoExamReady(),
+  ]);
   // 표식 컬럼(0284a)이 아직 없으면 그 열만 빼고 읽는다 — 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]).
-  const SCORE_COLS = marksReady
-    ? "student_id, score, max_score, taken_on, ask1_at, ask2_at, received_at"
-    : "student_id, score, max_score, taken_on";
+  // 아직 없는 컬럼을 select에 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]) — 준비된 것만 읽는다.
+  const SCORE_COLS = [
+    "student_id, score, max_score, taken_on",
+    marksReady ? ", ask1_at, ask2_at, received_at" : "",
+    noExamReady ? ", no_exam, no_exam_reason" : "",
+  ].join("");
   type ScoreCell = {
     student_id: string;
     score: string | null;
@@ -116,6 +132,8 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     ask1_at?: string | null;
     ask2_at?: string | null;
     received_at?: string | null;
+    no_exam?: boolean | null;
+    no_exam_reason?: string | null;
   };
 
   const [students, scores] = await Promise.all([
@@ -158,6 +176,8 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
           ask2: s.ask2_at ?? null,
           received: s.received_at ?? null,
         } satisfies GradeMarks,
+        noExam: s.no_exam === true,
+        noExamReason: s.no_exam_reason ?? null,
       },
     ]),
   );
@@ -179,6 +199,10 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       maxScore: cell?.maxScore ?? null,
       takenOn: cell?.takenOn ?? null,
       marks: cell?.marks ?? EMPTY_GRADE_MARKS,
+      noExam: cell?.noExam ?? false,
+      noExamReason: cell?.noExamReason ?? null,
+      // 제도상 치는 시험인가 — 저장하지 않고 학년에서 도출한다(학년을 고치면 곧바로 따라온다).
+      applies: examAppliesTo(sel.slot, student.grade),
       onRoster: isEnrollmentOnRosterOn(
         {
           startDate: e.start_date,
@@ -216,5 +240,5 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       (myClassIds.has(a.id) ? 0 : 1) - (myClassIds.has(b.id) ? 0 : 1) ||
       a.className.localeCompare(b.className, "ko"),
   );
-  return { selection: sel, classes, rows, schemaReady, marksReady };
+  return { selection: sel, classes, rows, schemaReady, marksReady, noExamReady };
 }

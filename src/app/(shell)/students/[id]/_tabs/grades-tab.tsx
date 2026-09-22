@@ -15,8 +15,6 @@ import { GoalsSection } from "../_components/goals-section";
 import { GradeCommentsSection } from "../_components/grade-comments-section";
 import { LevelTests } from "../_components/level-tests";
 import { DeleteGradeButton } from "../_components/delete-grade-button";
-import { Suspense } from "react";
-import { StudentJjSection } from "../_components/jj-section";
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -27,16 +25,7 @@ function Kpi({ label, value, tone }: { label: string; value: string; tone?: stri
   );
 }
 
-export async function GradesTab({
-  studentId,
-  jjFrom,
-  jjTo,
-}: {
-  studentId: string;
-  /** JJ실 학습 기간(학습일, 주소 `jjFrom`·`jjTo`) — 성적관리 JJ실이 같은 기간을 싣고 넘어온다. 없으면 최근 30일. */
-  jjFrom?: string;
-  jjTo?: string;
-}) {
+export async function GradesTab({ studentId }: { studentId: string }) {
   const [grades, levelTests, settings, goals, comments] = await Promise.all([
     getStudentGrades(studentId),
     getStudentLevelTests(studentId),
@@ -77,11 +66,8 @@ export async function GradesTab({
         </>
       ) : null}
 
-      {/* JJ실 학습(인재원, 2026-09-10) — 짝이 걸린 학생만. 인재원 호출이 성적 탭 첫 페인트를 막지 않게 따로 흘린다(B7). */}
-      <Suspense fallback={null}>
-        <StudentJjSection studentId={studentId} jjFrom={jjFrom} jjTo={jjTo} />
-      </Suspense>
-
+      {/* JJ실 학습(인재원)은 2026-09-21에 **'SRS 성적' 탭**으로 옮겼다(원장 지시: 일반 성적과 분리).
+          이 탭에 다시 끌어오지 말 것 — 두 탭이 같은 구역을 그리면 기간 칩이 서로를 튕겨 낸다. */}
       <div className="border-border border-t pt-4">
         <GoalsSection studentId={studentId} goals={goals} />
       </div>

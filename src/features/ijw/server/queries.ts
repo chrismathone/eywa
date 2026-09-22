@@ -34,7 +34,7 @@ import type { JjViewer } from "./viewer";
 
 // 소비처가 한 곳에서 가져가도록(성적관리·결과 창·학생 상세).
 export { getJjAccess, getJjViewer, type JjAccess, type JjViewer } from "./viewer";
-export { getIjwLinkSuggestions, type AywaLink, type PoolStudent } from "./links";
+export { getIjwLinkSuggestions, hasIjwLink, type AywaLink, type PoolStudent } from "./links";
 
 export type JjStudyRow = IjwStudySummaryRow & { aywa: AywaLink | null };
 export type JjStudyList = {

@@ -148,11 +148,12 @@ function scriptActions(): Map<string, Set<string>> {
 }
 
 describe("감사로그 액션 레지스트리", () => {
+  // 전건 스캔이라 전 스위트 병렬에서 기본 5초를 넘긴다(아이콘 가드와 같은 이유) — 내용과 무관한 빨간불 방지.
   it("스캔이 실제로 동작한다(호출부를 하나도 못 찾으면 통과는 무의미)", () => {
     const used = usedActions();
     expect(used.size).toBeGreaterThan(20);
     expect(used.has("staff_role_change")).toBe(true);
-  });
+  }, 60_000);
 
   it("logAction으로 기록하는 모든 액션이 AUDIT_ACTIONS에 한글 라벨로 등록돼 있다", () => {
     const registry = registryKeys();

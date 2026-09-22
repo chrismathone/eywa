@@ -519,6 +519,18 @@ export const SHEET_DICT = {
   "plan.term.exam": { ko: "내신", en: "Exam prep" },
   "plan.addRow": { ko: "+ 줄 추가", en: "+ Add row" },
   // 월간계획 가져오기(원장 2026-09-22) — 배정이 만든 계획을 **이 칸**에 옮긴다. 빈 칸만 채운다.
+  // 회차 미루기·당기기(0282a) — 🔴 **실제를 적는 표**에 둔다(원장 2026-09-22 *"밀기 당기기는 어디에있음?"*).
+  //    달력 칸에만 뒀더니 정작 사람이 서 있는 자리에 없었다. 지난 날짜에도 막지 않는다(뒤늦게 미루는 게 정상).
+  "plan.shift.skip": { ko: "한 주 미룸", en: "Push a week" },
+  "plan.shift.skip.title": {
+    ko: "이 교시의 회차를 미룹니다 — 이 칸엔 차수가 안 오니 수업 내용을 직접 적고, 다음 수업일부터 차수가 이어집니다. 이미 적은 줄은 그대로 둡니다. 다시 누르면 되돌립니다.",
+    en: "Pushes this period’s lesson — no lesson number lands here (write what you actually did) and the sequence resumes next class day. Written rows are left alone. Press again to undo.",
+  },
+  "plan.shift.advance": { ko: "한 주 당김", en: "Pull a week" },
+  "plan.shift.advance.title": {
+    ko: "이 교시의 회차를 당깁니다 — 이 칸엔 다음 차수가 옵니다. 이미 적은 줄은 그대로 둡니다. 다시 누르면 되돌립니다.",
+    en: "Pulls this period’s lesson — the next lesson number lands here. Written rows are left alone. Press again to undo.",
+  },
   "plan.fromPlan": { ko: "월간계획 가져오기", en: "Import plan" },
   "plan.fromPlan.title": {
     ko: "이 교시에 오기로 된 월간계획(교재·차수)을 이 칸에 넣습니다 — 빈 칸만 채우고, 넣은 뒤 고쳐 쓸 수 있습니다",

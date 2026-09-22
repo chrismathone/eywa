@@ -281,6 +281,11 @@ export type RosterCandidate = {
   classId: string;
   className: string;
   score: number | null;
+  /**
+   * 제도상 그 시험을 치는가(초등·중1의 중간·기말은 false) — 호출부가 **점수가 적혀 온 행만** 거절한다.
+   * ⚠️ 선택 속성이다: 이 모듈은 판정을 하지 않고 명단이 준 값을 그대로 나른다.
+   */
+  applies?: boolean;
 };
 
 /**

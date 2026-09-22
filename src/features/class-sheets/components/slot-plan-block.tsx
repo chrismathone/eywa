@@ -55,6 +55,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   skillAreas,
   canEdit,
   showExamTerm,
+  shift,
   onCarried,
   flushHost,
   registerFlush,
@@ -79,6 +80,8 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
   canEdit: boolean;
   /** '내신' 구획을 그릴지 — EiE 반은 초등이라 내신이 없다(시트와 같은 판정: `english_track`). */
   showExamTerm: boolean;
+  /** 이 칸의 회차 표식(0282a) — 버튼의 눌린 상태. 없어도 버튼은 돈다(토글은 서버가 판정한다). */
+  shift?: "skip" | "advance" | null;
   /** JJ 이어받기(듣기 레벨·누적 암기 단어수) — 호출부가 학생 칸 화면 상태에 머지한다. */
   onCarried?: (patches: CarryPatch[]) => void;
   /** 호스트가 따로 들고 있는 저장 큐(자리 출석부의 듣기·단어 디바운스)를 복사 전에 함께 비운다. */
@@ -230,6 +233,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
         handlers={handlers}
         canEdit={canEdit}
         showExamTerm={showExamTerm}
+        shift={shift}
       />
     </section>
   );

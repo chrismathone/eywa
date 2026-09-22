@@ -655,12 +655,19 @@ async function countEnrollmentRecords(
           .eq("student_id", studentId)
           .eq("class_id", classId),
       ),
+      // 🔴 **단어수만 적힌 행은 세지 않는다**(2026-09-21) — JJ실 '누적 암기 단어수'는 이제 인재원에서
+      //    자동으로 채워진다(`fillMemorizedWords`). 그 행까지 '기록'으로 세면 **어제 잘못 만든 수강이
+      //    다음 날 아침 크론 한 번에 영영 안 지워진다**(원장 2026-08-20 기능이 조용히 죽는다).
+      //    자동으로 다시 만들 수 있는 파생값은 "주인 없어지면 안 되는 기록"이 아니다.
+      // ⚠️ 사람이 단어수만 손으로 적은 행도 함께 빠진다 — 실측 4,318행 중 69행(1.6%)이고, 그 (학생·반)은
+      //    거의 다 출결이 따로 있어 위 `attendance`가 이미 막는다(맞바꾼 위험이 훨씬 작다).
       headCount("class_sheet_student_marks", (q) =>
         q
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenantId)
           .eq("student_id", studentId)
-          .eq("class_id", classId),
+          .eq("class_id", classId)
+          .or("status.not.is.null,progress_note.not.is.null,score.not.is.null,listening_level.not.is.null"),
       ),
       headCount("attendance_followups", (q) =>
         q
