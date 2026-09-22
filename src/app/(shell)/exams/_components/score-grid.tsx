@@ -3,6 +3,7 @@
 import { Fragment, useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { AlertCircle, Check, Loader2, Save } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { submitAction } from "@/components/forms/submit-action";
@@ -487,10 +488,13 @@ function SortHead({
         className={`hover:text-foreground inline-flex items-center gap-1 ${align === "text-center" ? "justify-center" : ""}`}
       >
         {label}
+        {/* 🔴 방향 표시는 **아이콘**으로 — ▲▼ 같은 글자는 아이콘 자리에 서면 안 된다(가드 `aywa-icon-mapping`). */}
         {active ? (
-          <span className="text-primary" aria-hidden>
-            {sort.dir === "asc" ? "▲" : "▼"}
-          </span>
+          <EyIcon
+            name={sort.dir === "asc" ? "chevronUp" : "chevronDown"}
+            size={14}
+            className="text-primary size-3.5 shrink-0"
+          />
         ) : null}
       </button>
     </th>
