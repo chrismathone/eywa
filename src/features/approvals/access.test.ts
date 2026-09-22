@@ -8,8 +8,8 @@ const [SEUNGYEOP, YEWON] = APPROVAL_PILOT_USER_IDS;
 const OUTSIDER = "00000000-0000-4000-8000-000000000000";
 
 describe("파일럿 명단", () => {
-  it("이승엽·김예원·테스터 세 계정뿐", () => {
-    expect(APPROVAL_PILOT_USER_IDS).toHaveLength(3);
+  it("이승엽·김예원·테스터·엄소윤 네 계정뿐", () => {
+    expect(APPROVAL_PILOT_USER_IDS).toHaveLength(4);
     expect(isApprovalPilotUser(SEUNGYEOP!)).toBe(true);
     expect(isApprovalPilotUser(OUTSIDER)).toBe(false);
   });

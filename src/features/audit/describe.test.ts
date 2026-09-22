@@ -488,6 +488,8 @@ describe("AUDIT_TYPE_LABEL", () => {
       // 2026-08-25 회의록·학생상담 — 이 두 영역은 애초에 logAction이 0이라 target_type도 없었다.
       "meeting",
       "student_consultation",
+      // 2026-09-22 성적관리 개편 — 저장 대상이 시험 행이 아니라 `학기·과목·시험 칸` 격자다.
+      "grades",
     ];
     for (const t of usedTypes) expect(AUDIT_TYPE_LABEL[t], t).toBeTruthy();
   });

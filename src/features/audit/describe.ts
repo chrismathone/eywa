@@ -63,6 +63,8 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   invoice: "청구서",
   textbook_order: "교재 신청",
   exam: "시험",
+  // 2026-09-22 성적관리 개편 — 시험 행이 아니라 `학기·과목·시험 칸` 격자를 저장한다(옛 `exam` 행도 남아 있어 둘 다 둔다).
+  grades: "성적",
   payroll: "급여",
   class: "반",
   classroom: "강의실",

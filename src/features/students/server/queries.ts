@@ -14,6 +14,8 @@ import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode"
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { attendanceRate } from "@/lib/calc/attendance";
 import { invoiceOutstanding } from "@/features/billing/calc";
+import { isExamSlot, type ExamSlotKey } from "@/features/grades/exam-slots";
+import { isTerm, type Term } from "@/features/grades/term";
 import { settingsToPeriodsConfig, enumDayToKo, type DayOfWeek } from "@/features/timetable/lib/periods";
 import {
   buildClassSlots,
@@ -1126,15 +1128,41 @@ export type StudentGradeRow = {
   maxScore: number | null;
   takenOn: string;
   notes: string | null;
+  /** 학기 축(0283a). 적용 전이거나 옛 자유 입력 행이면 전부 null — 그때는 시험명만 읽는다. */
+  schoolYear: number | null;
+  term: Term | null;
+  examSlot: ExamSlotKey | null;
 };
+
+const BASE_GRADE_COLS = "id, exam_name, subject, score, max_score, taken_on, notes";
 
 export async function getStudentGrades(studentId: string): Promise<StudentGradeRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("student_grades")
-    .select("id, exam_name, subject, score, max_score, taken_on, notes")
-    .eq("student_id", studentId)
-    .order("taken_on", { ascending: false });
+  const rowsOf = (cols: string) =>
+    supabase
+      .from("student_grades")
+      .select(cols)
+      .eq("student_id", studentId)
+      .order("taken_on", { ascending: false });
+
+  // 🔴 새 컬럼(0283a)을 select에 넣으면 **적용 전에는 PostgREST 400**이라 성적 탭이 통째로 죽는다([[#95]] —
+  //    eywa는 SQL을 손으로 적용하므로 배포와 적용 사이에 항상 간격이 있다). 한 번 시도하고, 실패하면
+  //    옛 모양으로 되읽는다(그 창에선 `2026년 2학기 · 중간고사` 라벨만 안 보이고 나머지는 그대로).
+  const withTerm = await rowsOf(`${BASE_GRADE_COLS}, school_year, term, exam_slot`);
+  const data = (withTerm.error ? (await rowsOf(BASE_GRADE_COLS)).data : withTerm.data) as
+    | {
+        id: string;
+        exam_name: string;
+        subject: string;
+        score: string | number | null;
+        max_score: string | number | null;
+        taken_on: string;
+        notes: string | null;
+        school_year?: number | null;
+        term?: number | null;
+        exam_slot?: string | null;
+      }[]
+    | null;
   if (!data) return [];
   return data.map((r) => ({
     id: r.id,
@@ -1144,6 +1172,9 @@ export async function getStudentGrades(studentId: string): Promise<StudentGradeR
     maxScore: r.max_score == null ? null : Number(r.max_score),
     takenOn: r.taken_on,
     notes: r.notes,
+    schoolYear: r.school_year ?? null,
+    term: isTerm(r.term) ? r.term : null,
+    examSlot: isExamSlot(r.exam_slot) ? r.exam_slot : null,
   }));
 }
 
