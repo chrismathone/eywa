@@ -787,7 +787,7 @@ export function WeekdayGroupTables({
   weekMonday?: string;
   /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
   weekdayGrouping?: WeekdayGrouping;
-  /** '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(평일·주말 표 각각 판정). 끄는 동안은 자동 펼침. */
+  /** '빈 교시 접기' — 평일의 빈 교시만 축소. 주말은 중간 공백도 고정 높이로 유지한다. */
   collapseEmptyPeriods?: boolean;
   /**
    * '학생 명단 접기'(뷰 설정, 계정 귀속) — 셀에 반 이름·강의실·인원만 남긴다.
@@ -861,7 +861,8 @@ export function WeekdayGroupTables({
               config={config}
               dateOf={dateOf}
               wideDays={weekendWide}
-              collapseEmpty={collapseEmptyPeriods}
+              // 주말의 빈 교시는 접지 않는다. 중간 공백도 같은 높이를 유지해야 평일 격자선과 어긋나지 않는다.
+              collapseEmpty={false}
             />
           </SearchedCell>
         ) : null}

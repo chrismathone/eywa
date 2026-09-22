@@ -382,6 +382,7 @@ export const AUDIT_ACTIONS = {
   session_term_receipt_allocate: "수납 청구액 반별 배분",
   session_term_receipt_allocate_free: "수납 자유 배분(관리자)",
   session_term_unconfirm: "청구 회차 확정 해제",
+  session_term_delete: "청구 회차 삭제",
   session_term_unconfirm_class: "청구 회차 반 전체 확정 해제",
   session_term_carryover: "청구 회차 이월",
   session_term_money_carryover: "청구 회차 금액 이월",

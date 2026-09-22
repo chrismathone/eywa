@@ -343,6 +343,10 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    case "session_term_delete": {
+      const sessions = num(m.sessionsBefore);
+      return join(str(m.period), ctx.nameOf(m.classId), sessions === null ? "미확정 회차 삭제" : `확정 ${sessions}시수 삭제`, won(m.amountBefore), str(m.note) ? `메모: ${str(m.note)}` : null);
+    }
     case "session_term_create": {
       // 출석부 줄에 맞춰 생긴 회차 행 — 어느 달·어느 반·어느 저장이 만들었나·예정 시수(기록만 있는 줄은 예정이 없다).
       const reason = str(m.reason);

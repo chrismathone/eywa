@@ -11,6 +11,8 @@ import { updateMonthlyTermSessions } from "@/features/billing/session-terms/serv
 import { updateSessionTermNote } from "@/features/billing/session-terms/server/note-actions";
 import { confirmSelectedTerms } from "@/features/billing/session-terms/server/selected-confirm-actions";
 import { unconfirmClassTerms } from "@/features/billing/session-terms/server/class-unconfirm-actions";
+import { deleteSessionTerm, getSessionTermDeletePreview } from "@/features/billing/session-terms/server/delete-actions";
+import { publishRecordSaved } from "@/lib/realtime/record-channel";
 import { NO_LESSON_LABEL, TERM_STATE_LABEL } from "@/features/billing/session-terms/month-roster";
 
 const h = vi.hoisted(() => ({ refresh: vi.fn(), saved: null as null | ((message: RecordSavedMessage) => void) }));
@@ -26,6 +28,7 @@ vi.mock("@/features/billing/session-terms/server/monthly-sessions", () => ({ upd
 vi.mock("@/features/billing/session-terms/server/note-actions", () => ({ updateSessionTermNote: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/selected-confirm-actions", () => ({ confirmSelectedTerms: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/class-unconfirm-actions", () => ({ unconfirmClassTerms: vi.fn() }));
+vi.mock("@/features/billing/session-terms/server/delete-actions", () => ({ deleteSessionTerm: vi.fn(), getSessionTermDeletePreview: vi.fn() }));
 vi.mock("@/features/billing/session-terms/server/receipt-allocation-actions", () => ({ getReceiptAllocation: vi.fn(), saveReceiptAllocation: vi.fn() }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({ DragScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 
@@ -44,6 +47,69 @@ function SessionTermGroups(props: React.ComponentProps<typeof Table>) {
 }
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("회차 삭제", () => {
+  const preview = { updatedAt: "2026-09-22T01:02:03Z", confirmedSessions: 0, amount: 0, note: "종료반", blockedReason: null };
+  async function openDeletion() {
+    render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    fireEvent.click(screen.getByRole("button", { name: "수학학생 수학반 회차 삭제" }));
+    const dialog = await screen.findByRole("dialog", { name: "회차 삭제" });
+    await waitFor(() => expect(within(dialog).queryByRole("status")).not.toBeInTheDocument());
+    return dialog;
+  }
+
+  it("최신 확정값과 메모·재생성 안내를 보여주고 취소하면 삭제하지 않는다", async () => {
+    vi.mocked(getSessionTermDeletePreview).mockResolvedValueOnce({ preview });
+    const dialog = await openDeletion();
+    expect(dialog).toHaveTextContent("확정 0시수 · 0원");
+    expect(dialog).toHaveTextContent("메모: 종료반");
+    expect(dialog).toHaveTextContent("회차 없음");
+    expect(getSessionTermDeletePreview).toHaveBeenCalledWith("수학", "2026-09");
+    fireEvent.click(within(dialog).getByRole("button", { name: "취소" }));
+    expect(deleteSessionTerm).not.toHaveBeenCalled();
+  });
+
+  it("배분·이월이 남으면 사유를 보여주고 삭제를 막는다", async () => {
+    vi.mocked(getSessionTermDeletePreview).mockResolvedValueOnce({ preview: { ...preview, blockedReason: "수납 배분금이 남아 있습니다" } });
+    const dialog = await openDeletion();
+    expect(within(dialog).getByRole("alert")).toHaveTextContent("수납 배분금이 남아 있습니다");
+    expect(within(dialog).getByRole("button", { name: "회차 삭제" })).toBeDisabled();
+  });
+
+  it("삭제 중 재클릭을 차단하고 성공 후 목록과 다른 창을 갱신한다", async () => {
+    vi.mocked(getSessionTermDeletePreview).mockResolvedValueOnce({ preview });
+    let finish!: (value: { ok: true }) => void;
+    vi.mocked(deleteSessionTerm).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const dialog = await openDeletion();
+    const button = within(dialog).getByRole("button", { name: "회차 삭제" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(deleteSessionTerm).toHaveBeenCalledTimes(1);
+    expect(deleteSessionTerm).toHaveBeenCalledWith("수학", "2026-09", preview.updatedAt);
+    expect(within(dialog).getByRole("button", { name: "삭제 중…" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "취소" })).toBeDisabled();
+    await act(async () => finish({ ok: true }));
+    expect(h.refresh).toHaveBeenCalled();
+    expect(publishRecordSaved).toHaveBeenCalledWith("billing:session-terms");
+  });
+
+  it("실패는 창 안에 남고 성공 신호나 목록 갱신을 보내지 않는다", async () => {
+    vi.mocked(getSessionTermDeletePreview).mockResolvedValueOnce({ preview });
+    vi.mocked(deleteSessionTerm).mockResolvedValueOnce({ error: "회차가 변경되었습니다" });
+    const dialog = await openDeletion();
+    fireEvent.click(within(dialog).getByRole("button", { name: "회차 삭제" }));
+    await waitFor(() => expect(within(dialog).getByRole("alert")).toHaveTextContent("회차가 변경되었습니다"));
+    expect(h.refresh).not.toHaveBeenCalled();
+    expect(publishRecordSaved).not.toHaveBeenCalled();
+  });
+
+  it.each(["missing", "no_invoice", "void_invoice"] as const)("%s 가상 줄에는 삭제 버튼이 없다", (termState) => {
+    const g = group("수학");
+    Object.assign(g.students[0], { id: "v:student:class", termState });
+    render(<SessionTermGroups groups={[g]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
+    expect(screen.queryByRole("button", { name: "수학학생 수학반 회차 삭제" })).not.toBeInTheDocument();
+  });
+});
 
 describe("회차 단가 선택", () => {
   it("배분된 행도 해제 응답 직후 입력할 수 있고 재조회는 별도 작업으로 진행한다", async () => {
@@ -256,7 +322,7 @@ describe("한 행 = 한 줄 (원장 2026-09-16)", () => {
     // 학생 행의 칸은 줄바꿈하지 않는다 — 폭은 표의 최소 폭이 보장한다.
     const row = cell().closest("tr")!;
     expect(row.className).toContain("[&>td]:whitespace-nowrap");
-    expect(container.querySelector("table")!.className).toContain("min-w-[1580px]");
+    expect(container.querySelector("table")!.className).toContain("min-w-[1640px]");
   });
 });
 
