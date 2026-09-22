@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { EXAM_SLOT_LABEL, type ExamSlotKey } from "../exam-slots";
 import type { Term } from "../term";
+import { GRADE_MARK_KEYS, type GradeMarkKey } from "../types";
 
 /**
  * 성적 칸 **저장 단일 경로** — 격자·학생 상세 폼·엑셀 반영이 전부 여기로 들어온다.
@@ -35,9 +36,20 @@ export type GradeWriteRow = {
   /**
    * 메모 — **값을 준 칸만** 바꾼다(`undefined`면 손대지 않는다).
    * 🔴 격자 저장은 이 값을 주지 않는다: 주면 PostgREST가 배열 전체에 `notes` 열을 만들어(빠진 행은 null)
-   *    학생 상세에서 적어 둔 메모를 한 번에 지운다. 그래서 아래에서 **두 무리로 나눠** 쓴다.
+   *    학생 상세에서 적어 둔 메모를 한 번에 지운다. 그래서 아래에서 **무리로 나눠** 쓴다.
    */
   notes?: string | null;
+  /**
+   * 성적표 받기 표식 — 키마다 **쓸 시각(ISO) 또는 null**. `undefined`면 그 칸은 안 건드린다.
+   * 이미 눌러 둔 표식은 호출부가 **옛 시각을 그대로** 넘겨 유지한다(다시 누른 것으로 만들지 않는다).
+   */
+  marks?: Partial<Record<GradeMarkKey, string | null>>;
+};
+
+const MARK_COL: Record<GradeMarkKey, { at: string; by: string }> = {
+  ask1: { at: "ask1_at", by: "ask1_by" },
+  ask2: { at: "ask2_at", by: "ask2_by" },
+  received: { at: "received_at", by: "received_by" },
 };
 
 const CHUNK = 100; // 대량 `.in()` 414 회피([[#53]])
@@ -50,8 +62,12 @@ export async function writeGradeCells(
   if (!user) throw new Error("로그인이 필요합니다");
   const supabase = await createClient();
 
-  const toSave = rows.filter((r) => r.score != null);
-  const toClear = rows.filter((r) => r.score == null);
+  // 🔑 남길 칸 = **점수가 있거나 표식이 하나라도 켜진 칸**. 점수가 없어도 "1차 독촉함"은 남아야 한다.
+  //    점수도 표식도 없으면 그 행은 존재할 이유가 없으니 지운다.
+  const keeps = (r: GradeWriteRow) =>
+    r.score != null || GRADE_MARK_KEYS.some((k) => !!r.marks?.[k]);
+  const toSave = rows.filter(keeps);
+  const toClear = rows.filter((r) => !keeps(r));
 
   // 메모를 준 행과 안 준 행을 나눠 쓴다 — 한 배열에 섞으면 메모 없는 행이 기존 메모를 null로 덮는다.
   const cellOf = (r: GradeWriteRow) => ({
@@ -69,10 +85,33 @@ export async function writeGradeCells(
     taken_on: axis.date,
     created_by: user.id,
   });
-  const groups = [
-    toSave.filter((r) => r.notes === undefined).map(cellOf),
-    toSave.filter((r) => r.notes !== undefined).map((r) => ({ ...cellOf(r), notes: r.notes ?? null })),
-  ].filter((g) => g.length > 0);
+  // 표식은 준 키만 payload에 실린다(안 준 칸을 null로 덮지 않게).
+  const marksOf = (r: GradeWriteRow): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    for (const k of GRADE_MARK_KEYS) {
+      const v = r.marks?.[k];
+      if (v === undefined) continue;
+      out[MARK_COL[k].at] = v;
+      out[MARK_COL[k].by] = v ? user.id : null;
+    }
+    return out;
+  };
+  // 🔴 upsert는 **배열 전체에 같은 열 집합**을 만든다(빠진 행은 null) — 그래서 "어떤 선택 열을 들었나"가
+  //    같은 행끼리 묶어 따로 쓴다. 안 그러면 메모만 보낸 저장이 남의 표식을, 표식만 보낸 저장이 남의
+  //    메모를 지운다.
+  const shapeOf = (r: GradeWriteRow) =>
+    `${r.notes === undefined ? "" : "n"}|${GRADE_MARK_KEYS.filter((k) => r.marks?.[k] !== undefined).join(",")}`;
+  const byShape = new Map<string, Record<string, unknown>[]>();
+  for (const r of toSave) {
+    const payload = {
+      ...cellOf(r),
+      ...(r.notes === undefined ? {} : { notes: r.notes ?? null }),
+      ...marksOf(r),
+    };
+    const key = shapeOf(r);
+    byShape.set(key, [...(byShape.get(key) ?? []), payload]);
+  }
+  const groups = [...byShape.values()];
   for (const payload of groups) {
     const { error } = await supabase
       .from("student_grades")
@@ -108,5 +147,15 @@ export async function writeGradeCells(
 export const gradesSchemaReady = cache(async (): Promise<boolean> => {
   const supabase = await createClient();
   const { error } = await supabase.from("student_grades").select("exam_slot").limit(1);
+  return !error;
+});
+
+/**
+ * 0284a(성적표 받기 표식)가 적용됐는가 — **점수 저장과 따로** 본다.
+ * 🔴 하나로 묶지 말 것: 묶으면 표식 마이그레이션이 늦어지는 동안 이미 열려 있던 점수 저장까지 멈춘다.
+ */
+export const gradeMarksReady = cache(async (): Promise<boolean> => {
+  const supabase = await createClient();
+  const { error } = await supabase.from("student_grades").select("ask1_at").limit(1);
   return !error;
 });

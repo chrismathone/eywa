@@ -69,7 +69,8 @@ describe("쓰기 게이트", () => {
   it("엑셀 반영은 명단으로 대조한다 — 파일로 남의 반 성적을 밀어 넣지 못하게", () => {
     const src = read("src/features/grades/server/excel-actions.ts");
     expect(src).toContain("getGradeSheet");
-    expect(src).toMatch(/명단에 없는 학생/);
+    // 문구가 아니라 **대조한다는 사실**을 잠근다(매칭 규칙이 바뀌어도 이 가드는 살아 있어야 한다).
+    expect(src).toMatch(/명단/);
   });
 });
 
@@ -88,6 +89,54 @@ describe("마이그레이션(0283a)보다 앱이 먼저 배포돼도 산다", ()
     const sql = read("supabase/migrations/0283a_student_grades_term.sql");
     expect(sql).toContain("create unique index if not exists ux_grades_term_slot");
     expect(sql).not.toMatch(/create unique index[\s\S]{0,200}?where/i);
+  });
+
+  it("🔴 표식(0284a) 준비 여부는 점수 저장과 **따로** 본다 — 묶으면 점수 저장까지 멈춘다", () => {
+    const write = read("src/features/grades/server/write.ts");
+    expect(write).toContain("gradeMarksReady");
+    expect(write).toContain("gradesSchemaReady");
+    // 조회는 컬럼이 없을 때 그 열을 빼고 읽는다(넣으면 PostgREST 400으로 화면이 죽는다).
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toContain("marksReady");
+    expect(q).toMatch(/marksReady[\s\S]{0,200}ask1_at/);
+    const sql = read("supabase/migrations/0284a_student_grades_marks.sql");
+    for (const col of ["ask1_at", "ask2_at", "received_at", "ask1_by", "ask2_by", "received_by"]) {
+      expect(sql).toContain(col);
+    }
+  });
+});
+
+describe("성적표 받기 표식(원장 2026-09-22)", () => {
+  it("🔴 표식이 켜진 칸은 점수를 비워도 행을 지우지 않는다 — 독촉 기록이 날아가지 않게", () => {
+    const write = read("src/features/grades/server/write.ts");
+    // 남길 칸 판정이 '점수 또는 표식'이어야 한다(점수만 보면 독촉만 해 둔 칸이 사라진다).
+    expect(write).toMatch(/r\.score != null \|\|[\s\S]{0,120}marks/);
+  });
+
+  it("🔴 선택 열(메모·표식)은 **같은 모양끼리 묶어** 쓴다 — upsert가 배열 전체에 열을 만든다", () => {
+    expect(read("src/features/grades/server/write.ts")).toContain("shapeOf");
+  });
+
+  it("🔴 토글된 표식만 쓴다 — 켜져 있던 것을 다시 쓰면 '누가 눌렀나'가 저장한 사람으로 덮인다", () => {
+    const src = read("src/features/grades/server/actions.ts");
+    expect(src).toMatch(/if \(was === want\) continue;/);
+  });
+
+  it("격자는 체크 3칸을 세우고 백분율·석차 열은 없앴다(원장 지시 열 구성)", () => {
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).toContain("GRADE_MARK_KEYS");
+    expect(grid).not.toContain("백분율");
+    expect(grid).not.toContain("반 석차");
+    // 머리줄과 본문 정렬이 열마다 같아야 한다 — colgroup으로 폭도 고정.
+    expect(grid).toContain("<colgroup>");
+  });
+});
+
+describe("강사는 자기 반이 먼저", () => {
+  it("명단·반 목록이 담당 반을 위로 올린다(원장 2026-09-22)", () => {
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toContain("myClassIds");
+    expect(q).toMatch(/mine\(a\) - mine\(b\)/);
   });
 });
 

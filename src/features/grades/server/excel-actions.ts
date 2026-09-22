@@ -11,14 +11,18 @@ import { TERM_LABEL } from "../term";
 import {
   AXIS_SHEET_NAME,
   REQUIRED_SCORE_HEADERS,
+  SCORE_HEADER_LOOKAHEAD,
   SCORE_SHEET_COLUMNS,
   SCORE_SHEET_NAME,
   isBlankCells,
   mapHeaders,
+  matchRosterRow,
   parseAxisSheetRows,
   parseScoreRow,
   scoreConflictErrors,
   type GradeSheetAxis,
+  type MatchedScore,
+  type RosterCandidate,
   type ScoreSheetKey,
   type ScoreSheetRow,
 } from "../sheet";
@@ -31,14 +35,15 @@ import { writeGradeCells } from "./write";
 /**
  * 성적 엑셀 올리기 — 원장 2026-09-22: *"양식에 맞춰서 성적하고 기입 쭈루룩해서 업로드할수있는 기능"*.
  *
- * 흐름: 파일 → 서식 확인(안내 시트의 축 · 성적 시트의 학생ID·점수 열) → 행 파싱 → **그 학기 명단과 대조**
+ * 흐름: 파일 → 서식 확인(안내 시트의 축 · 성적 시트의 이름·점수 열) → 행 파싱 → **그 학기 명단과 대조**
  * → 행별 미리보기(반영/그대로) → **오류가 하나라도 있으면 아무것도 안 쓴다** → `dryRun`이면 여기서 끝.
  *
  * 🔴 **축은 파일이 정한다**(안내 시트) — 화면에서 고른 축과 대조하지 않는다(sheet.ts 머리주석).
  *    대신 미리보기가 "2026년 2학기 · 영어(EiE) · 듣기평가"를 크게 적어 사람이 확인한다.
  * 🔴 **빈 점수 칸은 건드리지 않는다**(원장 선택) — 지우기는 화면에서. 그래서 파일로는 성적이 사라질 수 없다.
- * 🔴 **명단 밖 학생ID는 오류**([[#77]]) — 파일로 남의 반·남의 학기 성적을 밀어 넣는 우회를 막는다.
+ * 🔴 **명단 밖 학생은 오류**([[#77]]) — 파일로 남의 반·남의 학기 성적을 밀어 넣는 우회를 막는다.
  *    판정 근거는 화면과 같은 `getGradeSheet`(강사 스코프도 그 안에서 걸린다).
+ * 🔑 매칭 키는 **이름·학교·학년·반**(학생ID 열은 2026-09-22에 없앴다) — 좁혀도 둘이면 그 행은 오류다.
  * ⚠️ 5MB까지. 엑셀 날짜 칸은 시간대가 없어 UTC 성분으로 읽는다(`cellText`).
  */
 export type GradesExcelCounts = { total: number; apply: number; keep: number };
@@ -88,21 +93,43 @@ function cellText(v: unknown): string {
   return String(v);
 }
 
+/**
+ * 열 머리 줄을 **찾아서** 읽는다 — 1행은 제목(축)이고 2행은 빈 줄이라 고정 번호로 읽으면 통째로 깨진다.
+ * 못 찾으면 가장 많이 맞은 줄을 돌려줘 "무슨 열이 없는지"를 사람에게 알려 준다.
+ */
 function readScoreSheet(ws: ExcelJS.Worksheet) {
-  const headers: string[] = [];
-  ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
-    headers[col - 1] = cellText(cell.value);
-  });
-  const map = mapHeaders<ScoreSheetKey>(headers, SCORE_SHEET_COLUMNS);
+  const headersAt = (r: number) => {
+    const headers: string[] = [];
+    ws.getRow(r).eachCell({ includeEmpty: true }, (cell, col) => {
+      headers[col - 1] = cellText(cell.value);
+    });
+    return mapHeaders<ScoreSheetKey>(headers, SCORE_SHEET_COLUMNS);
+  };
+
+  let headerRow = 0;
+  let map = new Map<ScoreSheetKey, number>();
+  let best = new Map<ScoreSheetKey, number>();
+  const last = Math.min(SCORE_HEADER_LOOKAHEAD, ws.rowCount);
+  for (let r = 1; r <= last; r++) {
+    const m = headersAt(r);
+    if (m.size > best.size) best = m;
+    if (REQUIRED_SCORE_HEADERS.every((k) => m.has(k))) {
+      headerRow = r;
+      map = m;
+      break;
+    }
+  }
+  if (!headerRow) return { headerRow: 0, map: best, rows: [] };
+
   const rows: { rowNum: number; cells: Partial<Record<ScoreSheetKey, string>> }[] = [];
-  for (let r = 2; r <= ws.rowCount; r++) {
+  for (let r = headerRow + 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
     const cells: Partial<Record<ScoreSheetKey, string>> = {};
     for (const [key, idx] of map) cells[key] = cellText(row.getCell(idx + 1).value).trim();
     if (isBlankCells(cells)) continue;
     rows.push({ rowNum: r, cells });
   }
-  return { map, rows };
+  return { headerRow, map, rows };
 }
 
 /** 안내 시트 = `항목 | 값` 두 열(3열 '설명'은 사람용). 모르는 줄은 파서가 무시한다. */
@@ -146,12 +173,12 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
   const scoreWs = wb.getWorksheet(SCORE_SHEET_NAME) ?? wb.worksheets[0];
   if (!scoreWs) return { error: "시트를 찾을 수 없습니다 — 내려받은 서식으로 작성해 주세요", formatMismatch: true };
   const sheetRead = readScoreSheet(scoreWs);
-  const missing = REQUIRED_SCORE_HEADERS.filter((k) => !sheetRead.map.has(k)).map(
-    (k) => SCORE_SHEET_COLUMNS.find((c) => c.key === k)!.header,
-  );
-  if (missing.length > 0) {
+  if (!sheetRead.headerRow) {
+    const missing = REQUIRED_SCORE_HEADERS.filter((k) => !sheetRead.map.has(k)).map(
+      (k) => SCORE_SHEET_COLUMNS.find((c) => c.key === k)!.header,
+    );
     return {
-      error: `서식이 일치하지 않습니다 — '${SCORE_SHEET_NAME}' 시트에 ${missing.map((h) => `'${h}'`).join("·")} 열이 없습니다. [서식 내려받기]로 받은 파일에 작성해 주세요.`,
+      error: `서식이 일치하지 않습니다 — '${SCORE_SHEET_NAME}' 시트에서 ${missing.map((h) => `'${h}'`).join("·")} 열 머리를 찾지 못했습니다. [서식 내려받기]로 받은 파일에 작성해 주세요.`,
       formatMismatch: true,
     };
   }
@@ -159,14 +186,11 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
   const errors: string[] = [];
   const notes: string[] = [];
   const parsedRows: ScoreSheetRow[] = [];
-  const nameByRow = new Map<number, string>();
   for (const { rowNum, cells } of sheetRead.rows) {
-    nameByRow.set(rowNum, String(cells.name ?? "").trim());
     const p = parseScoreRow(cells, rowNum, axis.maxScore);
     if (p.ok) parsedRows.push(p.row);
     else errors.push(p.error);
   }
-  errors.push(...scoreConflictErrors(parsedRows));
 
   // 축 요약 — 과목 라벨은 학원설정이 단일 소스(하드코딩 금지).
   const settings = await getTenantSettings();
@@ -176,7 +200,7 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
 
   if (parsedRows.length === 0 && errors.length === 0) return { error: "데이터 행이 없습니다", axisSummary };
 
-  // 명단(= 화면과 같은 조회). 반 전체를 받아 파일의 학생ID를 대조한다.
+  // 명단(= 화면과 같은 조회). 반 전체를 받아 시트의 이름·학교·학년·반을 대조한다.
   const selection: GradeSelection = {
     year: axis.year,
     term: axis.term,
@@ -200,56 +224,63 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
     };
   }
 
-  /** 학생ID → 그 학기 명단 줄들(한 학생이 두 반이면 여럿). */
-  const byStudent = new Map<string, { classId: string; className: string; name: string; score: number | null }[]>();
-  for (const r of roster.rows) {
-    const arr = byStudent.get(r.studentId) ?? [];
-    arr.push({ classId: r.classId, className: r.className, name: r.name, score: r.score });
-    byStudent.set(r.studentId, arr);
+  // 이름·학교·학년·반으로 명단의 그 학생을 찾는다(sheet.ts 단일 규약). 못 찾거나 둘이면 그 행은 오류.
+  const candidates: RosterCandidate[] = roster.rows;
+  const matched: { row: ScoreSheetRow; hit: RosterCandidate }[] = [];
+  for (const row of parsedRows) {
+    const m = matchRosterRow(row, candidates);
+    if (m.ok) matched.push({ row, hit: m.row });
+    else errors.push(m.error);
   }
+  // 다툼 판정은 **매칭된 학생** 기준 — 이름만 보면 다른 반의 동명이인이 한 사람으로 뭉친다.
+  const matchedScores: MatchedScore[] = matched.map((m) => ({
+    rowNum: m.row.rowNum,
+    studentId: m.hit.studentId,
+    score: m.row.score,
+  }));
+  errors.push(...scoreConflictErrors(matchedScores));
+
+  const rowsPerStudent = new Map<string, number>();
+  for (const m of matched) rowsPerStudent.set(m.hit.studentId, (rowsPerStudent.get(m.hit.studentId) ?? 0) + 1);
 
   const preview: GradesExcelPreviewRow[] = [];
   const toWrite: { studentId: string; classId: string | null; score: number }[] = [];
   const seenWrite = new Set<string>();
-  for (const row of parsedRows) {
-    const hits = byStudent.get(row.studentId);
-    if (!hits || hits.length === 0) {
-      const who = nameByRow.get(row.rowNum);
-      errors.push(
-        `${row.rowNum}행: 이 학기 명단에 없는 학생입니다${who ? `(${who})` : ""} — 학생ID를 고쳤거나 다른 학기·과목 시트일 수 있습니다`,
-      );
-      continue;
-    }
-    const cur = hits[0]!;
-    const className = hits.length > 1 ? `${cur.className} 외 ${hits.length - 1}` : cur.className;
+  for (const { row, hit } of matched) {
     if (row.score === undefined) {
-      preview.push({ rowNum: row.rowNum, name: cur.name, className, action: "keep", summary: "빈 칸 — 그대로 둡니다" });
+      preview.push({
+        rowNum: row.rowNum,
+        name: hit.name,
+        className: hit.className,
+        action: "keep",
+        summary: "빈 칸 — 그대로 둡니다",
+      });
       continue;
     }
-    const same = cur.score != null && cur.score === row.score;
+    const same = hit.score != null && hit.score === row.score;
     preview.push({
       rowNum: row.rowNum,
-      name: cur.name,
-      className,
+      name: hit.name,
+      className: hit.className,
       action: same ? "keep" : "apply",
       summary: same
         ? `${row.score}점 — 이미 같은 점수입니다`
-        : cur.score == null
+        : hit.score == null
           ? `${row.score}점 기입`
-          : `${cur.score}점 → ${row.score}점`,
+          : `${hit.score}점 → ${row.score}점`,
     });
     if (same) continue;
-    // 한 학생이 두 줄(두 반)이어도 성적은 하나 — 같은 값이라 한 번만 쓴다(sheet.ts scoreConflictErrors).
-    if (seenWrite.has(row.studentId)) continue;
-    seenWrite.add(row.studentId);
-    // 🔑 반이 둘이면 `class_id`를 비운다 — "어느 반 화면에서 적었나"를 남기는 값이라 추측해 넣지 않는다.
-    toWrite.push({ studentId: row.studentId, classId: hits.length === 1 ? cur.classId : null, score: row.score });
+    // 한 학생이 두 줄(두 반)이어도 성적은 하나 — 값이 같아야 여기까지 오므로 한 번만 쓴다.
+    if (seenWrite.has(hit.studentId)) continue;
+    seenWrite.add(hit.studentId);
+    // 🔑 `class_id`는 "어느 반 줄에서 적었나"를 남기는 값 — 시트 행이 그 반을 말하므로 그대로 싣는다.
+    toWrite.push({ studentId: hit.studentId, classId: hit.classId, score: row.score });
   }
-  const multi = parsedRows.filter((r) => (byStudent.get(r.studentId)?.length ?? 0) > 1).length;
-  if (multi > 0) notes.push(`두 반 이상 듣는 학생이 ${multi}줄 있습니다 — 성적은 한 벌이라 한 번만 반영됩니다`);
+  const multi = [...rowsPerStudent.values()].filter((n) => n > 1).length;
+  if (multi > 0) notes.push(`두 반 이상 듣는 학생이 ${multi}명 있습니다 — 성적은 한 벌이라 한 번만 반영됩니다`);
 
   const counts: GradesExcelCounts = {
-    total: parsedRows.length,
+    total: matched.length,
     apply: toWrite.length,
     keep: preview.filter((p) => p.action === "keep").length,
   };

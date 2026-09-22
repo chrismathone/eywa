@@ -13,7 +13,14 @@
  *    `undefined`로 돌려주고 **`null`을 쓰지 않는다** — 저장 경로(`writeGradeCells`)에서 `null`은 "그 칸을
  *    지운다"는 뜻이라, 빈 칸을 null로 접으면 일부만 채운 시트 한 장이 나머지 성적을 전부 지운다.
  *    `0`은 유효한 점수다(빈 칸과 반드시 구분).
- * ⚠️ 매칭 키는 **학생ID**(이름은 동명이인이 있다). 파일 안 중복은 오류 — 어느 행이 맞는지 알 수 없다.
+ * 🔑 **매칭 키 = 이름 + 학교 + 학년 + 반**(원장 2026-09-22 *"시트 보면 학생 ID는 받을 필요 없지 않음?
+ *    이름 학교 학년 반 다 있는데?"*). 학생ID 열은 없앴다 — 사람이 읽을 수 없는 uuid라 시트가 지저분해지고,
+ *    실수로 고치면 그 행이 조용히 사라진다. 🔴 대신 **후보가 둘 이상이면 그 행은 오류**다(첫 번째를 조용히
+ *    고르면 남의 성적이 된다). ⚠️ 동명이인은 학원이 이름에 `박준우A`·`김현준B`처럼 접미사를 붙여 구분하므로
+ *    그 글자를 떼지 말 것 — 그게 구분자다.
+ * 🔑 **'성적' 시트 맨 윗줄에 축을 적는다**(원장 같은 날 *"1학기 중간인지 그런 게 시트에 없는데"*) — 성적 시트만
+ *    봐도 무슨 시험인지 알 수 있게. 🔴 단 그 줄은 **사람용 표시**다: 기계가 읽는 축은 여전히 '안내' 시트이고
+ *    (라벨은 학원설정을 따라 바뀐다), 그래서 파서는 제목 줄을 건너뛰고 **열 머리 줄을 찾아서** 읽는다.
  * ⚠️ 이 파일에 `import "server-only"`를 붙이지 말 것([[#61]]).
  *
  * 헬퍼(`mapHeaders`·`isBlankCells`·`duplicateKeyErrors`)는 재고 `inventory/excel-sheet.ts`와 같은 규약이지만
@@ -30,20 +37,29 @@ import { GRADE_MAX_SCORE_LIMIT } from "./types";
 export const SCORE_SHEET_NAME = "성적";
 export const AXIS_SHEET_NAME = "안내";
 
-export type ScoreSheetKey = "studentId" | "name" | "school" | "grade" | "className" | "score";
+export type ScoreSheetKey = "name" | "school" | "grade" | "className" | "score";
 
 /** 점수 시트 열 — 내려받기(header·width)와 올리기(key)가 **이 배열 하나**를 쓴다. */
 export const SCORE_SHEET_COLUMNS: ReadonlyArray<{ key: ScoreSheetKey; header: string; width: number }> = [
-  { key: "studentId", header: "학생ID", width: 38 },
-  { key: "name", header: "이름", width: 12 },
+  { key: "name", header: "이름", width: 14 },
   { key: "school", header: "학교", width: 18 },
   { key: "grade", header: "학년", width: 8 },
-  { key: "className", header: "반", width: 18 },
+  { key: "className", header: "반", width: 20 },
   { key: "score", header: "점수", width: 10 },
 ];
 
 /** 이 열들이 없으면 서식 불일치 — 화면이 파일 선택을 취소한다. */
-export const REQUIRED_SCORE_HEADERS: ScoreSheetKey[] = ["studentId", "score"];
+export const REQUIRED_SCORE_HEADERS: ScoreSheetKey[] = ["name", "score"];
+
+/**
+ * 시트 줄 배치 — 1행 제목(축) · 2행 빈 줄 · 3행 열 머리 · 4행부터 데이터.
+ * ⚠️ 파서는 이 숫자에 기대지 않고 **열 머리 줄을 찾는다**(사람이 위에 줄을 더 끼워 넣어도 살게).
+ *    빌더만 이 상수를 쓴다.
+ */
+export const SCORE_TITLE_ROW = 1;
+export const SCORE_HEADER_ROW = 3;
+/** 열 머리를 찾을 때 훑는 범위 — 이 안에 없으면 서식 불일치로 본다. */
+export const SCORE_HEADER_LOOKAHEAD = 10;
 
 /** 안내 시트의 축 항목 이름(1열) — 내려받기·올리기가 같은 글자를 쓴다. */
 export const AXIS_LABEL = {
@@ -93,11 +109,15 @@ export function isBlankCells(cells: Record<string, string | undefined>): boolean
 /**
  * 같은 학생이 **서로 다른 점수**로 두 번 적혀 있으면 어느 행이 맞는지 알 수 없다 — 오류로 세운다.
  *
- * 🔴 "학생ID가 두 번 나오면 오류"가 아니다 — 한 학생이 두 반을 들으면(실측: 수학 학생 196명이 수강 348건)
+ * ⚠️ 키는 시트의 칸이 아니라 **매칭된 학생**(`matchRosterRow`가 돌려준 `studentId`)이다 — 이름 칸만 보면
+ *    다른 반의 동명이인이 한 사람으로 뭉친다.
+ * 🔴 "이름이 두 번 나오면 오류"가 아니다 — 한 학생이 두 반을 들으면(실측: 수학 학생 196명이 수강 348건)
  *    '반 전체' 시트에 그 학생이 **정상적으로 두 줄** 선다. 그걸 오류로 세우면 과목 전체 시트가 통째로
  *    못 쓰게 된다. 성적은 학생·과목·학기당 한 벌이라 값이 같으면(또는 한쪽이 빈 칸이면) 다툼이 없다.
  */
-export function scoreConflictErrors(rows: ReadonlyArray<ScoreSheetRow>): string[] {
+export type MatchedScore = { rowNum: number; studentId: string; score: number | undefined };
+
+export function scoreConflictErrors(rows: ReadonlyArray<MatchedScore>): string[] {
   const byStudent = new Map<string, { rowNum: number; score: number }[]>();
   for (const r of rows) {
     if (r.score === undefined) continue; // 빈 칸은 아무것도 주장하지 않는다
@@ -118,7 +138,6 @@ export function scoreConflictErrors(rows: ReadonlyArray<ScoreSheetRow>): string[
   return out;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^(\d{4})[-./]?(\d{1,2})[-./]?(\d{1,2})$/;
 
 /** `YYYY-MM-DD`/`YYYY.MM.DD`/`YYYYMMDD` → ISO. 모르는 모양이면 null. */
@@ -214,7 +233,11 @@ export function axisSheetRows(
 
 export type ScoreSheetRow = {
   rowNum: number;
-  studentId: string;
+  /** 매칭 키 넷. 빈 문자열 = 그 칸을 안 적었다(대조에서 뺀다). */
+  name: string;
+  school: string;
+  grade: string;
+  className: string;
   /**
    * 🔴 **빈 칸은 `undefined`**(= 이 칸은 건드리지 않는다) — `null`을 쓰지 않는다. 저장 경로에서 null은
    *    "지운다"는 뜻이라, 일부만 채운 시트가 나머지 성적을 지우게 된다. `0`은 유효한 점수다.
@@ -229,17 +252,90 @@ export function parseScoreRow(
   maxScore: number,
 ): Parsed<ScoreSheetRow> {
   const at = (msg: string) => ({ ok: false as const, error: `${rowNum}행: ${msg}` });
-  const studentId = String(cells.studentId ?? "").trim();
-  if (!studentId) return at("학생ID가 비어 있습니다(매칭 키라 필수입니다)");
-  if (!UUID_RE.test(studentId)) return at(`학생ID "${studentId}"의 모양이 아닙니다 — 이 열은 고치지 마세요`);
+  const text = (k: ScoreSheetKey) => String(cells[k] ?? "").trim();
+  const name = text("name");
+  // 이름이 없으면 누구 성적인지 알 길이 없다(나머지 셋은 좁히는 값일 뿐이다).
+  if (!name) return at("이름이 비어 있습니다(학생을 찾는 칸이라 필수입니다)");
+  const ident = { name, school: text("school"), grade: text("grade"), className: text("className") };
 
-  const raw = String(cells.score ?? "").trim();
-  if (!raw) return { ok: true, row: { rowNum, studentId, score: undefined } };
+  const raw = text("score");
+  if (!raw) return { ok: true, row: { rowNum, ...ident, score: undefined } };
   const score = Number(raw);
   if (!Number.isFinite(score)) return at(`점수 "${raw}"이(가) 숫자가 아닙니다`);
   if (score < 0) return at(`점수 "${raw}"이(가) 0보다 작습니다`);
   if (score > maxScore) return at(`점수 ${raw}이(가) 만점 ${maxScore}을(를) 넘습니다`);
   // numeric(6,2) — 소수 셋째 자리부터는 DB가 조용히 반올림한다. 조용한 변형보다 되돌려 보내는 게 낫다.
   if (Math.round(score * 100) !== score * 100) return at(`점수 "${raw}"은(는) 소수점 둘째 자리까지만 적을 수 있습니다`);
-  return { ok: true, row: { rowNum, studentId, score } };
+  return { ok: true, row: { rowNum, ...ident, score } };
+}
+
+/** 대조용 정규화 — 공백을 접고 대소문자를 무시한다(`Kim Seoyeon` ↔ `kimseoyeon`). */
+const normIdent = (v: string | null | undefined) => String(v ?? "").trim().replace(/\s+/g, "").toLowerCase();
+
+/** 명단 한 줄 중 매칭에 필요한 것만 — `GradeSheetRow`가 이 모양을 만족한다(그대로 넘기면 된다). */
+export type RosterCandidate = {
+  studentId: string;
+  name: string;
+  school: string | null;
+  grade: string | null;
+  classId: string;
+  className: string;
+  score: number | null;
+};
+
+/**
+ * 시트 한 행 → 그 학기 명단의 학생 하나.
+ *
+ * 🔴 **좁혔는데도 둘이면 오류**다 — 첫 번째를 조용히 고르면 남의 성적이 된다.
+ * ⚠️ 학교·학년·반은 **양쪽이 다 적혀 있을 때만** 비교한다: 명단 쪽이 비어 있는 학생이 실제로 있고
+ *    (화면에 `—`로 뜬다), 그때 "같아야 한다"로 걸면 내려받은 시트를 그대로 올려도 안 붙는다.
+ */
+export function matchRosterRow(
+  row: ScoreSheetRow,
+  roster: ReadonlyArray<RosterCandidate>,
+): Parsed<RosterCandidate> {
+  const at = (msg: string) => ({ ok: false as const, error: `${row.rowNum}행: ${msg}` });
+  const where = [row.name, row.school, row.grade, row.className].filter(Boolean).join(" · ");
+
+  const sameName = roster.filter((c) => normIdent(c.name) === normIdent(row.name));
+  if (sameName.length === 0) {
+    return at(`이 학기 명단에 없는 학생입니다(${where}) — 이름·학교·학년·반을 내려받은 서식 그대로 두세요`);
+  }
+  // 적혀 있는 칸만 순서대로 좁힌다(하나로 좁혀지면 더 볼 필요가 없다).
+  let hits = sameName;
+  for (const [sheetValue, pick] of [
+    [row.className, (c: RosterCandidate) => c.className],
+    [row.school, (c: RosterCandidate) => c.school],
+    [row.grade, (c: RosterCandidate) => c.grade],
+  ] as const) {
+    if (hits.length === 1) break;
+    if (!sheetValue) continue;
+    const narrowed = hits.filter((c) => {
+      const mine = normIdent(pick(c));
+      return !mine || mine === normIdent(sheetValue);
+    });
+    if (narrowed.length > 0) hits = narrowed;
+  }
+  if (hits.length > 1) {
+    return at(`같은 이름이 둘이라 어느 학생인지 알 수 없습니다(${where} — 학교·학년·반까지 같습니다)`);
+  }
+  return { ok: true, row: hits[0]! };
+}
+
+/**
+ * '성적' 시트 맨 윗줄에 적는 한 줄 — **사람이 읽는 표시**다(파싱 근거 아님).
+ * 라벨은 학원설정에서 오므로 호출부가 넘긴다(하드코딩 금지).
+ */
+export function scoreSheetTitle(
+  axis: GradeSheetAxis,
+  labels: { subjectLabel: string; slotLabel: string; trackLabel: string },
+): string {
+  const subject = labels.trackLabel ? `${labels.subjectLabel} (${labels.trackLabel})` : labels.subjectLabel;
+  return [
+    `${axis.year}년 ${TERM_LABEL[axis.term]}`,
+    subject,
+    labels.slotLabel,
+    `만점 ${axis.maxScore}`,
+    `시험일 ${axis.date}`,
+  ].join(" · ");
 }
