@@ -727,12 +727,15 @@ export default async function AttendancePage({
    * ⚠️ 표가 없을 때(허브·빈 반)는 표 위 줄 자체가 없으므로 종전대로 툴바에 둔다(버튼이 사라지면 안 된다).
    */
   const gridShown = allGroups.length > 0 && totalStudents > 0;
+  // 전체 영어 시수 도구는 강사·반을 고르기 전 요약 화면에서 연다.
+  const showUnitsMaster = allGroups.length === 0 && canViewUnitsMaster(user.systemRole, myTeacherId);
   // 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼.
   // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
   // 면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만.
   const sheetTools =
-    canIntakeAbsence || (canOpenPayslip && effectiveTeacher) ? (
+    showUnitsMaster || canIntakeAbsence || (canOpenPayslip && effectiveTeacher) ? (
       <>
+        {showUnitsMaster ? <UnitsMasterButton month={month} /> : null}
         {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
         {canOpenPayslip && effectiveTeacher ? (
           <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
@@ -902,7 +905,7 @@ export default async function AttendancePage({
     // BigStat 카드 4장(→ 툴바 우측 한 줄), 상시 안내문 2개(→ '안내' 토글). 총 ~230px 회수.
     // ⚠️ 여기에 새 줄(배너·설명·요약 카드)을 얹지 말 것 — 그 높이는 전부 학생 행에서 빼 오는 것이다.
     //
-    // `pb-3`은 border-box라 총 높이를 늘리지 않는다(늘리면 페이지 스크롤이 되살아난다) — 아래 숨돌릴 여백만 확보.
+    // 하단 도구 줄·여백 없이 남는 높이를 모두 표에 준다.
     //
     // ⚠️ GridProvider가 **툴바까지** 감싼다 — 합계(LiveStats)가 툴바로 올라갔기 때문. 칸을 치면 출석률·결석·
     //    지각이 그 자리에서 따라 움직이려면 툴바가 격자 저장소를 구독해야 한다(DOM은 안 만드는 컨텍스트라 무비용).
@@ -920,7 +923,7 @@ export default async function AttendancePage({
       initialCollapsed={viewPrefs.collapsed}
       autoUnits={gridSource.autoUnits}
     >
-      <div className="flex h-full min-h-0 flex-col gap-3 pb-3">
+      <div className="flex h-full min-h-0 flex-col gap-2">
       {/* Toolbar — 월/범위/보기(+관리자 필터) 좌측, 살아있는 합계 우측. 이 화면의 유일한 크롬 줄. */}
       {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 격자가 자기 테두리를 갖고
           있어 선이 이중으로 겹쳐 보였다. `relative`는 남긴다(우측 '안내' 패널의 기준 상자).
@@ -1198,9 +1201,6 @@ export default async function AttendancePage({
           />
         </div>
       )}
-      {canViewUnitsMaster(user.systemRole, myTeacherId) && (effectiveSubject === "english"
-        || (!effectiveSubject && (selectedClass?.subject === "english" || (teacherClasses.length > 0 && teacherClasses.every((c) => c.subject === "english")))))
-        ? <UnitsMasterButton month={month} /> : null}
       </div>
     </GridProvider>
     </AttendanceScopeProvider>
