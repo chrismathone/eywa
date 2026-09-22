@@ -104,6 +104,12 @@ export type ApplyResult = {
   added: number;
   skipped: number;
   truncated: number;
+  /**
+   * 배정으로 **계획에 선** 칸 수(원장 2026-09-22). 실제에 쓴 칸이 아니다 — 실제는 강사가
+   * [가져오기]를 누를 때만 채워진다. 그래서 위 넷(applied/filled/added/skipped)과 **다른 축**이고,
+   * 배정 저장 응답에서는 그 넷이 전부 0이다.
+   */
+  planned?: number;
 };
 
 /** 배정 다이얼로그가 고르는 교시 한 칸 — 그 반이 실제로 도는 시각. */

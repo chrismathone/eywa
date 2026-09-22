@@ -220,13 +220,11 @@ export function TextbookFillDialog({
         setError(res.error);
         return;
       }
-      const r = res.result;
-      const tail = [
-        r.skipped > 0 ? tf("fill.done.skipped", { n: r.skipped }) : "",
-        r.truncated > 0 ? tf("fill.done.truncated", { n: r.truncated }) : "",
-      ].filter(Boolean);
-      if (r.applied === 0) toast.info(`${t("fill.done.none")}${tail.length ? ` — ${tail.join(" · ")}` : ""}`);
-      else toast.success(`${tf("fill.done", { added: r.added, filled: r.filled })}${tail.length ? ` · ${tail.join(" · ")}` : ""}`);
+      // 🔴 배정은 **월간계획까지만** 만든다(원장 2026-09-22) — 실제 칸은 강사가 [월간계획 가져오기]를
+      //    누를 때만 채워지므로, 여기서 '기입 완료'라고 말하면 거짓이 된다.
+      const planned = res.result.planned ?? 0;
+      if (planned === 0) toast.info(t("fill.done.none"));
+      else toast.success(tf("fill.done", { n: planned }));
       router.refresh();
       onApplied();
       onClose();
