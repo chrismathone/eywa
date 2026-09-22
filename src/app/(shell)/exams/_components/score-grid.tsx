@@ -206,7 +206,12 @@ export function ScoreGrid({
   };
 
   return (
-    <form onSubmit={(e) => submitAction(e, formAction)} className="space-y-3">
+    // 🔴 폼 폭 상한 — 7열짜리 **입력 서식**이라 창을 다 채우면 이름과 점수 사이가 통째로 빈다
+    //    (원장 2026-09-22 제보). 창이 좁으면 그대로 줄어든다(`w-full`).
+    <form
+      onSubmit={(e) => submitAction(e, formAction)}
+      className="mx-auto w-full max-w-[1080px] space-y-3"
+    >
       <input type="hidden" name="year" value={sel.year} />
       <input type="hidden" name="term" value={sel.term} />
       <input type="hidden" name="subject" value={axisValueOf(sel)} />
@@ -232,10 +237,21 @@ export function ScoreGrid({
         </p>
       ) : null}
 
-      <div className="bg-bg-soft border-line flex flex-wrap items-center gap-4 rounded-xl border px-4 py-2.5 text-sm">
-        <span className="text-text-dim">
-          입력 <span className="text-foreground num font-bold">{live.stats.count}</span>/{live.people}명
+      {/* 요약 줄 — 왼쪽은 **진행**(적은 칸/전체 + 막대), 가운데는 분포, 오른쪽은 이 판의 조건.
+          세 덩어리를 가는 세로선으로 가른다(한 줄에 여섯 숫자가 평평하게 늘어서면 뭘 봐야 할지 모른다). */}
+      <div className="bg-bg-soft border-line flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-2.5 text-sm">
+        <span className="text-text-dim flex items-center gap-2">
+          입력
+          <span className="text-foreground num font-bold">{live.stats.count}</span>
+          <span className="text-text-faint">/ {live.people}명</span>
+          <span className="bg-line/70 relative h-1.5 w-24 overflow-hidden rounded-full" aria-hidden>
+            <span
+              className="bg-primary absolute inset-y-0 left-0 rounded-full"
+              style={{ width: `${live.people ? (live.stats.count / live.people) * 100 : 0}%` }}
+            />
+          </span>
         </span>
+        <Divider />
         <span className="text-text-dim">
           평균 <span className="text-foreground num font-bold">{live.stats.avg ?? "—"}</span>
           {live.stats.avgPct != null ? <span className="text-text-faint"> ({live.stats.avgPct}%)</span> : null}
@@ -246,37 +262,41 @@ export function ScoreGrid({
         <span className="text-text-dim">
           최저 <span className="text-foreground num font-bold">{live.stats.min ?? "—"}</span>
         </span>
+        <Divider />
         <span className="text-text-dim">
           {GRADE_MARK_LABEL.received}{" "}
-          <span className="text-foreground num font-bold">{live.received}</span>/{live.people}명
+          <span className="text-foreground num font-bold">{live.received}</span>
+          <span className="text-text-faint">/{live.people}명</span>
         </span>
         {live.skipped > 0 ? (
           <span className="text-text-dim">
             시험없음 <span className="text-foreground num font-bold">{live.skipped}</span>명
           </span>
         ) : null}
-        <span className="text-text-faint">
+        <span className="text-text-faint ml-auto">
           만점 {sel.maxScore} · 시험일 {sel.date}
         </span>
       </div>
-
       <DragScrollArea className="bg-card shadow-card rounded-2xl">
         <table className="w-full table-fixed text-sm [&_td]:whitespace-nowrap">
-          {/* 폭 고정 — 값이 들고 나도 열이 밀리지 않는다(학교만 남는 폭을 가져간다). */}
+          {/* 🔴 **모든 열에 폭을 준다** — 하나라도 비워 두면 그 열이 남는 폭을 독식해 표 가운데가 빈다.
+              `table-fixed`는 남는 폭을 이 비율대로 나눠 주므로 창이 넓어져도 리듬이 유지된다. */}
           <colgroup>
-            <col className="w-40" />
-            <col />
-            <col className="w-20" />
-            <col className="w-52" />
-            <col className="w-24" />
-            <col className="w-24" />
-            <col className="w-24" />
+            <col className="w-[22%]" />
+            <col className="w-[24%]" />
+            <col className="w-[9%]" />
+            <col className="w-[21%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
+            <col className="w-[8%]" />
           </colgroup>
-          <thead className="border-line border-b [&_th]:whitespace-nowrap">
+          {/* 머리줄은 스크롤에 붙는다 — 아래 선은 `border`가 아니라 그림자로(스티키 + border-collapse에선
+              테두리가 스크롤과 함께 사라진다, [[#71]]). */}
+          <thead className="bg-card sticky top-0 z-10 [&_th]:shadow-[0_1px_0_0_var(--color-line)] [&_th]:whitespace-nowrap">
             <tr>
               <SortHead label="이름" sortKey="name" sort={sort} onSort={applySort} align="text-left" />
               <SortHead label="학교" sortKey="school" sort={sort} onSort={applySort} align="text-left" />
-              <SortHead label="학년" sortKey="grade" sort={sort} onSort={applySort} align="text-left" />
+              <SortHead label="학년" sortKey="grade" sort={sort} onSort={applySort} align="text-center" />
               <SortHead
                 label={`${slotLabel} 점수`}
                 sortKey="score"
@@ -306,7 +326,12 @@ export function ScoreGrid({
                       /* 키는 **그 줄의 반**으로 — 묶음 키(학년)로 만들면 두 반 학생이 부딪힌다. */
                       key={`${r.classId}:${id}`}
                       className={
-                        r.withdrawn ? "bg-bg-soft/40" : missing ? "bg-amber-soft" : "hover:bg-bg-soft/50"
+                        r.withdrawn
+                          ? "bg-bg-soft/40"
+                          : missing
+                            ? // 미기입은 **옅게**만 — 처음엔 전원이 미기입이라 진하면 화면이 통째로 물든다.
+                              "bg-amber-soft/45 hover:bg-amber-soft/70"
+                            : "hover:bg-bg-soft/50"
                       }
                       title={
                         r.withdrawn
@@ -314,16 +339,16 @@ export function ScoreGrid({
                           : undefined
                       }
                     >
-                      <td className="text-foreground overflow-hidden px-4 py-2 text-left font-medium text-ellipsis">
+                      <td className="text-foreground overflow-hidden px-4 py-1.5 text-left font-medium text-ellipsis">
                         {r.name}
                         {/* 🔴 표식은 **퇴원** 하나뿐 — 반이동·과목 변경엔 아무 표식도 붙이지 않는다. */}
                         {r.withdrawn ? <span className="text-text-faint ml-1.5 text-xs">퇴원</span> : null}
                       </td>
-                      <td className="text-text-dim overflow-hidden px-4 py-2 text-left text-sm text-ellipsis">
+                      <td className="text-text-dim overflow-hidden px-4 py-1.5 text-left text-sm text-ellipsis">
                         {r.school ?? "—"}
                       </td>
-                      <td className="text-text-dim px-4 py-2 text-left text-sm">{r.grade ?? "—"}</td>
-                      <td className="px-3 py-1.5">
+                      <td className="text-text-dim num px-2 py-1.5 text-center text-sm">{r.grade ?? "—"}</td>
+                      <td className="px-3 py-1">
                         <div className="flex items-center justify-center gap-1.5">
                             {isNoExam ? (
                               <input
@@ -359,7 +384,9 @@ export function ScoreGrid({
                                   }
                                 }}
                                 placeholder="—"
-                                className="border-line bg-background text-foreground num focus:ring-primary/40 min-w-0 flex-1 rounded-md border px-2 py-1 text-center text-sm focus:ring-1 focus:outline-none disabled:opacity-60"
+                                className={`bg-background text-foreground num focus:ring-primary/40 min-w-0 flex-1 rounded-md border px-2 py-1 text-center text-sm focus:ring-1 focus:outline-none disabled:opacity-60 ${
+                                  missing ? "border-amber/60" : "border-line"
+                                }`}
                               />
                             )}
                             <button
@@ -372,7 +399,7 @@ export function ScoreGrid({
                                   ? "다시 누르면 점수를 적을 수 있습니다"
                                   : "이 학생은 이 시험을 보지 않았습니다"
                               }
-                              className={`shrink-0 rounded-md border px-1.5 py-1 text-xs whitespace-nowrap disabled:opacity-50 ${
+                              className={`h-7 shrink-0 rounded-md border px-2 text-xs whitespace-nowrap disabled:opacity-50 ${
                                 isNoExam
                                   ? "border-primary/40 bg-primary-soft text-primary font-bold"
                                   : "border-line bg-background text-text-dim hover:text-foreground"
@@ -385,7 +412,7 @@ export function ScoreGrid({
                       {GRADE_MARK_KEYS.map((k) => {
                         const at = r.marks[k];
                         return (
-                          <td key={k} className="px-2 py-2 text-center">
+                          <td key={k} className="px-2 py-1.5 text-center">
                             <input
                               type="checkbox"
                               className="accent-primary size-4 align-middle disabled:opacity-50"
@@ -512,6 +539,11 @@ function sortRows(
         : String(va).localeCompare(String(vb), "ko");
     return cmp !== 0 ? cmp * d : a.name.localeCompare(b.name, "ko");
   });
+}
+
+/** 요약 줄의 가는 세로선 — 덩어리를 가른다(색·굵기를 화면마다 새로 적지 않게 한 곳에). */
+function Divider() {
+  return <span className="bg-line hidden h-3 w-px sm:block" aria-hidden />;
 }
 
 function SaveButton({ disabled }: { disabled: boolean }) {
