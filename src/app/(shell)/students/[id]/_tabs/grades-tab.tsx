@@ -111,7 +111,7 @@ export async function GradesTab({
                     {subjectMaps.labelOf(g.subject)}
                   </td>
                   <td className="text-foreground px-4 py-2 text-xs">
-                    {/* 학기 축(0282a)이 있으면 `2026년 2학기 · 중간고사`. 옛 자유 입력 행·SQL 미적용 창에선
+                    {/* 학기 축(0283a)이 있으면 `2026년 2학기 · 중간고사`. 옛 자유 입력 행·SQL 미적용 창에선
                         시험명만 선다(없는 것을 지어내지 않는다, [[#95]]). */}
                     {g.schoolYear != null && g.term != null ? (
                       <span className="text-muted-foreground">

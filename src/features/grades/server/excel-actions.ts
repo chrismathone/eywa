@@ -195,7 +195,7 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
   }
   if (!roster.schemaReady) {
     return {
-      error: "성적 표가 아직 준비되지 않아 반영할 수 없습니다(마이그레이션 0282a 적용 필요) — 내려받기·미리보기는 됩니다.",
+      error: "성적 표가 아직 준비되지 않아 반영할 수 없습니다(마이그레이션 0283a 적용 필요) — 내려받기·미리보기는 됩니다.",
       axisSummary,
     };
   }

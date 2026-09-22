@@ -57,7 +57,7 @@ export async function saveGradeScores(
   const gate = await gradeWriteError();
   if (gate) return { error: gate };
   if (!(await gradesSchemaReady())) {
-    return { error: "성적 표 준비(0282a)가 아직 적용되지 않아 저장할 수 없습니다" };
+    return { error: "성적 표 준비(0283a)가 아직 적용되지 않아 저장할 수 없습니다" };
   }
 
   const settings = await getTenantSettings();

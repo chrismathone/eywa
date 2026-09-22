@@ -1128,7 +1128,7 @@ export type StudentGradeRow = {
   maxScore: number | null;
   takenOn: string;
   notes: string | null;
-  /** 학기 축(0282a). 적용 전이거나 옛 자유 입력 행이면 전부 null — 그때는 시험명만 읽는다. */
+  /** 학기 축(0283a). 적용 전이거나 옛 자유 입력 행이면 전부 null — 그때는 시험명만 읽는다. */
   schoolYear: number | null;
   term: Term | null;
   examSlot: ExamSlotKey | null;
@@ -1145,7 +1145,7 @@ export async function getStudentGrades(studentId: string): Promise<StudentGradeR
       .eq("student_id", studentId)
       .order("taken_on", { ascending: false });
 
-  // 🔴 새 컬럼(0282a)을 select에 넣으면 **적용 전에는 PostgREST 400**이라 성적 탭이 통째로 죽는다([[#95]] —
+  // 🔴 새 컬럼(0283a)을 select에 넣으면 **적용 전에는 PostgREST 400**이라 성적 탭이 통째로 죽는다([[#95]] —
   //    eywa는 SQL을 손으로 적용하므로 배포와 적용 사이에 항상 간격이 있다). 한 번 시도하고, 실패하면
   //    옛 모양으로 되읽는다(그 창에선 `2026년 2학기 · 중간고사` 라벨만 안 보이고 나머지는 그대로).
   const withTerm = await rowsOf(`${BASE_GRADE_COLS}, school_year, term, exam_slot`);

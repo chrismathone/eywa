@@ -28,7 +28,13 @@ import type { PlanCopyResult, PlanLinesResult, PlanPatchesResult } from "../serv
 /** 계획 줄 한 칸을 특정하는 문맥 — 모든 호출이 **같은 (날짜, 교시)** 한 벌만 싣는다. */
 export type PlanSlotRef = { classId: string; planDate: string; slotStart: string };
 
-import { importPlannedSlot, type ImportPlannedResult } from "@/features/textbooks/server/plan-actions";
+import {
+  importPlannedSlot,
+  setLessonShift,
+  type ImportPlannedResult,
+  type LessonShiftKind,
+  type LessonShiftResult,
+} from "@/features/textbooks/server/plan-actions";
 
 export type PlanWriteApi = {
   flushPatches: (ref: PlanSlotRef, patches: unknown) => Promise<PlanPatchesResult>;
@@ -45,6 +51,10 @@ export type PlanWriteApi = {
    *    문이 이 메서드를 안 내면 표가 버튼을 아예 안 그린다(없는 기능을 회색으로 보여 주지 않는다).
    */
   importPlan?: (ref: PlanSlotRef) => Promise<ImportPlannedResult>;
+  /**
+   * **회차 미루기·당기기**(0282a) — 그 칸에서 차수를 건너뛸지/버릴지. `importPlan`과 같은 이유로 선택이다.
+   */
+  setShift?: (ref: PlanSlotRef, kind: LessonShiftKind | null) => Promise<LessonShiftResult>;
   /**
    * 계획 **칸 값** 감사로그 — 칸을 떠날 때 한 줄(원장 결정 2026-09-14). 저장과 **같은 문**을 지난다.
    * ⚠️ 없으면 그 문의 계획 칸은 기록되지 않는다(가드 `edit-audit-wiring.test.ts`가 두 문 모두 구현했는지 본다).
@@ -75,5 +85,7 @@ export const ECS_PLAN_API: PlanWriteApi = {
     }),
   importPlan: (ref) =>
     importPlannedSlot({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart }),
+  setShift: (ref, kind) =>
+    setLessonShift({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart, kind }),
   commitEdits: (ref, edits) => commitSheetEdits({ classId: ref.classId, edits }),
 };

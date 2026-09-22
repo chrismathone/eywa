@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { shiftMonth } from "@/lib/date-kst";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -9,6 +10,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { offGoalCountByDate } from "../lib/goal-match";
 import { setMyEcsMonthDisplay, setMyEcsMonthPeriod, setMyEcsMonthView } from "../server/actions";
+import { setLessonShift } from "@/features/textbooks/server/plan-actions";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetMonthLabel } from "@/features/teacher-view/i18n";
 import { classNameFor } from "@/features/teacher-view/class-name";
@@ -157,6 +159,31 @@ export function MonthClient({
   };
 
   const t = useSheetT();
+
+  /**
+   * 회차 미루기·당기기(0282a) — 계획이 파생값이라 표식 한 줄이 앞으로 전부를 바꾼다.
+   * 🔴 **실제 줄은 안 건드린다**(이미 적은 진도는 그대로) → 눌러도 잃을 게 없고 같은 버튼으로 되돌린다.
+   * ⚠️ 화면 갱신은 액션의 `revalidatePath`가 한다 — 계획은 서버가 계산해 내려보내는 값이다.
+   */
+  const onShift = useCallback(
+    (date: string, slotStart: string, kind: "skip" | "advance" | null) => {
+      void setLessonShift({ classId: data.classId, date, slotStart, kind }).then((r) => {
+        if (!r.ok) {
+          toast.error(r.error);
+          return;
+        }
+        toast.success(
+          kind === "skip"
+            ? t("month.shift.skip.done")
+            : kind === "advance"
+              ? t("month.shift.advance.done")
+              : t("month.shift.clear.done"),
+        );
+        router.refresh();
+      });
+    },
+    [data.classId, router, t],
+  );
   const tf = useSheetTf();
   const lang = useSheetLang();
   // 반 이름·월 라벨은 화면 언어를 따른다(상단 바·창 제목이 같은 값을 봐야 갈리지 않는다).
@@ -412,7 +439,13 @@ export function MonthClient({
             canEdit={data.canEdit}
             audit={audit}
           />
-          <MonthCalendar data={data} goals={warnGoals} display={cur} onOpenDay={openDayEditor} />
+          <MonthCalendar
+            data={data}
+            goals={warnGoals}
+            display={cur}
+            onOpenDay={openDayEditor}
+            onShift={onShift}
+          />
         </>
       ) : (
         <MonthRail

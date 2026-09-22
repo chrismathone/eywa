@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * 지키는 것 다섯:
  *  · 성적 칸을 **쓰는 곳은 `server/write.ts` 하나**(격자·학생 상세 폼·엑셀이 같은 함수를 지난다).
  *  · 쓰기 게이트는 `gradeWriteError()` 하나 — 화면에서만 잠그면 주소·POST로 우회된다([[#77]]).
- *  · 0282a 미적용에도 화면이 살고 **저장만 잠긴다**([[#95]]).
+ *  · 0283a 미적용에도 화면이 살고 **저장만 잠긴다**([[#95]]).
  *  · 주소 → 축 해석은 순수 함수 하나(화면·엑셀 라우트가 같은 시트를 가리킨다).
  *  · 엑셀은 **내려받는 서식 = 올리는 서식** 한 배열(재고 선례).
  * 그리고 옛 '시험 등록'이 되살아나지 않는지(원장 결정: 없애고 격자 하나로).
@@ -73,7 +73,7 @@ describe("쓰기 게이트", () => {
   });
 });
 
-describe("마이그레이션(0282a)보다 앱이 먼저 배포돼도 산다", () => {
+describe("마이그레이션(0283a)보다 앱이 먼저 배포돼도 산다", () => {
   it("조회는 fail-soft 플래그로, 저장은 잠근다", () => {
     expect(read("src/features/grades/server/queries.ts")).toContain("gradesSchemaReady");
     for (const f of [
@@ -85,7 +85,7 @@ describe("마이그레이션(0282a)보다 앱이 먼저 배포돼도 산다", ()
   });
 
   it("마이그레이션 파일이 있고 부분 유니크(WHERE)를 쓰지 않는다([[#113]])", () => {
-    const sql = read("supabase/migrations/0282a_student_grades_term.sql");
+    const sql = read("supabase/migrations/0283a_student_grades_term.sql");
     expect(sql).toContain("create unique index if not exists ux_grades_term_slot");
     expect(sql).not.toMatch(/create unique index[\s\S]{0,200}?where/i);
   });

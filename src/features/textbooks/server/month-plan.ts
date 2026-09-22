@@ -48,9 +48,14 @@ export type MonthPlanResult = {
   status: TextbookTableStatus;
   /** `"YYYY-MM-DD|HH:MM"` → 그 칸에 올 계획 줄(구분·교재명 순). */
   byCell: Record<string, PlannedLine[]>;
+  /**
+   * 사람이 미루거나 당긴 칸(0282a) — `"YYYY-MM-DD|HH:MM"` → `skip` | `advance`.
+   * 🔑 화면이 **토글 상태**로 쓴다(다시 누르면 지운다). 표가 없으면 빈 객체라 버튼이 '안 걸림'으로 뜬다.
+   */
+  shiftByCell: Record<string, "skip" | "advance">;
 };
 
-const EMPTY: MonthPlanResult = { status: "ok", byCell: {} };
+const EMPTY: MonthPlanResult = { status: "ok", byCell: {}, shiftByCell: {} };
 
 /** `class_textbook_plans` 한 줄이 계산에 필요로 하는 것만. */
 type PlanRow = {
@@ -108,10 +113,32 @@ export async function getClassPlannedLines(input: {
   }
   // 🔴 표가 없거나(0266a 미적용) 실패면 **빈 계획**으로 돈다 — 시트를 죽이지 않는다.
   if (planRes.error) {
-    return { status: isMissingTextbookTable(planRes.error) ? "missing-table" : "failed", byCell: {} };
+    return { status: isMissingTextbookTable(planRes.error) ? "missing-table" : "failed", byCell: {}, shiftByCell: {} };
   }
   const plans = ((planRes.data ?? []) as unknown as PlanRow[]) ?? [];
-  if (plans.length === 0) return EMPTY;
+
+  /**
+   * 사람이 미루거나 당긴 칸(0282a) — 🔴 **표가 없어도 죽지 않는다**([[#95]]). 적용 전에는 표식이 0개라
+   * 계획이 종전과 똑같이 계산된다(버튼만 "잠시 뒤 다시"로 막힌다).
+   */
+  const shiftRes = await admin
+    .from("class_lesson_shifts")
+    .select("plan_date, slot_start, kind")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId)
+    // 🔑 창을 **`from`으로 자르지 않는다** — 달 앞에 걸린 미루기도 그 달 차수를 밀기 때문이다.
+    //    배정 시작일부터 봐야 하므로 하한은 안 걸고 상한(`to`)만 건다.
+    .lte("plan_date", to)
+    .order("plan_date", { ascending: true })
+    .range(0, 999);
+  const shifts: Record<string, "skip" | "advance"> = {};
+  for (const r of shiftRes.data ?? []) {
+    const kind = String(r.kind) === "advance" ? "advance" : "skip";
+    shifts[`${String(r.plan_date).slice(0, 10)}|${String(r.slot_start).slice(0, 5)}`] = kind;
+  }
+
+  // 배정이 하나도 없어도 **표식은 돌려준다** — 미뤄 둔 칸의 버튼 상태는 배정과 무관하게 보여야 한다.
+  if (plans.length === 0) return { status: "ok", byCell: {}, shiftByCell: shifts };
 
   const bookIds = [...new Set(plans.map((p) => String(p.textbook_id)))];
   const [bookRes, lessonRows, settings, schedRes] = await Promise.all([
@@ -143,10 +170,10 @@ export async function getClassPlannedLines(input: {
       .order("start_time", { ascending: true })
       .range(0, 499),
   ]);
-  if (bookRes.error || schedRes.error) return { status: "failed", byCell: {} };
+  if (bookRes.error || schedRes.error) return { status: "failed", byCell: {}, shiftByCell: shifts };
   // 🔴 차수 조회가 실패하면 **계획을 그리지 않는다** — 진도·과제가 빠진 계획을 보여 주면 강사가
   //    그걸 가져와 빈 칸을 채운 줄 알고 넘어간다(빈 계획이 거짓 계획보다 낫다).
-  if (lessonRows === null) return { status: "failed", byCell: {} };
+  if (lessonRows === null) return { status: "failed", byCell: {}, shiftByCell: shifts };
 
   const books = new Map(
     (bookRes.data ?? []).map((b) => [
@@ -203,6 +230,7 @@ export async function getClassPlannedLines(input: {
       holidays,
       axis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
       slotPicks: picks,
+      shifts,
       pace: (p.pace === "day" ? "day" : "period") as LessonPace,
       lookaheadDays: lookaheadFor(startDate, to),
     });
@@ -233,5 +261,5 @@ export async function getClassPlannedLines(input: {
       a.skillArea !== b.skillArea ? a.skillArea.localeCompare(b.skillArea) : a.title.localeCompare(b.title, "ko"),
     );
   }
-  return { status: "ok", byCell };
+  return { status: "ok", byCell, shiftByCell: shifts };
 }
