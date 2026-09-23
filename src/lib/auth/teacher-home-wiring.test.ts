@@ -43,9 +43,15 @@ const LANDING_SURFACES: { file: string[]; via: string; what: string }[] = [
     // 🔴 로그인 폼은 **목적지를 스스로 정하면 안 된다** — 담당 과목을 모르는 데다, 로그인 직후엔
     // 세션 쿠키가 서버 요청에 아직 안 실릴 수 있어 클라가 물어봐도 답이 왔다갔다 한다(2026-08-07 경합).
     // 판정은 /home이 문서 요청에서 한다. 여기 있어야 할 것은 그리로 보내는 한 줄뿐이다.
+    // (2026-09-23 M1 — 로그인 기록을 남기려고 `/home?login=1`로 가며, 그 주소는 login-next.ts 한 곳이 만든다.)
     file: ["src", "app", "(auth)", "login", "login-form.tsx"],
-    via: '"/home"',
+    via: "loginLandingHref",
     what: "로그인 직후 착지",
+  },
+  {
+    file: ["src", "lib", "auth", "login-next.ts"],
+    via: '"/home?login=1"',
+    what: "로그인 착지 주소",
   },
   {
     file: ["src", "app", "(shell)", "me", "page.tsx"],

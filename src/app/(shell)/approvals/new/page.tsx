@@ -50,7 +50,7 @@ export default async function NewApprovalPage() {
         // 기본 결재선은 없다 — 하이웍스처럼 기안자가 [+]로 매번 지정하거나 자주 쓰는 결재선을 불러온다.
         initialApproverIds={[]}
         periodEnd={balance.period?.end ?? null}
-        remaining={balance.remaining}
+        remaining={balance.usageUnknown ? null : balance.remaining}
         today={kstToday()}
       />
     </div>

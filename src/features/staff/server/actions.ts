@@ -17,6 +17,8 @@ import { moveLiveSlotTeacher, reassignHomeroom } from "@/features/classes/server
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
+import { canManageStaffMember } from "@/lib/auth/role-hierarchy";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { createClient } from "@/lib/supabase/server";
 import { canEditLoginEmail, EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
@@ -547,6 +549,31 @@ async function recordResignNote(
   }
 }
 
+/**
+ * 재직 상태를 바꿀 대상의 역할·현재 상태를 서버가 직접 읽는다(클라가 보낸 역할은 안 믿는다).
+ * admin 클라이언트라 RLS를 우회하므로 tenant 대조를 여기서 한다.
+ */
+async function loadStatusTarget(
+  id: string,
+  tenantId: string,
+): Promise<
+  { role: SystemRole; status: string | null; displayName: string | null } | { error: string }
+> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("users")
+    .select("tenant_id, system_role, status, display_name")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) return { error: humanizeDbError(error.message) };
+  if (!data || data.tenant_id !== tenantId) return { error: "대상 직원을 찾을 수 없습니다" };
+  return {
+    role: data.system_role as SystemRole,
+    status: (data.status as string | null) ?? null,
+    displayName: (data.display_name as string | null) ?? null,
+  };
+}
+
 export type DeactivateState =
   | { error?: string; ok?: true; homeroomCount?: number }
   | undefined;
@@ -571,9 +598,25 @@ export async function deactivateStaff(
     return { error: "유효한 상태가 아닙니다" };
   }
 
+  // 대상 직급 검사(2026-09-23 전수 점검 S1) — 계정 관리 카드(deleteStaff 등)와 같은 '자신 권한 이하' 규칙.
+  // 없으면 직원관리 쓰기만 가진 매니저가 직접 POST로 원장·관리자를 퇴사시킬 수 있었다(#77).
+  const target = await loadStatusTarget(id, actor.tenantId);
+  if ("error" in target) return target;
+  if (!canManageStaffMember(actor.systemRole, target.role)) {
+    return { error: "이 직원의 재직 상태를 바꿀 권한이 없습니다" };
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase.from("users").update({ status: next }).eq("id", id);
-  if (error) return { error: error.message };
+  // `.select` — RLS가 행을 거부하면 error 없이 0행이다. 그때 "변경됨"+감사로그를 남기면 거짓 기록이 된다.
+  const { data: changedRows, error } = await supabase.from("users").update({ status: next }).eq("id", id).select("id");
+  if (error) return { error: humanizeDbError(error.message) };
+  if (!changedRows?.length) return { error: "직원 상태를 바꾸지 못했습니다 — 권한이 없거나 이미 삭제된 계정입니다" };
+  await logAction({
+    action: "staff_status_change",
+    targetType: "staff",
+    targetLabel: target.displayName,
+    metadata: { userId: id, from: target.status, to: next },
+  });
 
   // 퇴사일 기록(원장 지시 2026-08-07) — users에 퇴사일 컬럼이 없어(SQL 접근 보류) **계약 이력 한 줄**로 남긴다.
   // kind='note'는 기간 없는 이력 줄이라 현재계약·차수 계산을 건드리지 않는다(contract.ts contractsOnly).
@@ -632,6 +675,12 @@ export async function handoverAndDeactivate(
   // deactivateStaff와 같은 self 가드 — 본인을 퇴사시키면 그 자리에서 자기 접근이 끊긴다.
   if (id === actor.id) return { error: "본인 계정의 재직 상태는 바꿀 수 없습니다" };
   if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
+  // 대상 직급 검사(S1) — 인계를 시작하기 **전에** 막는다(담임만 옮겨지고 퇴사가 거절되는 반쪽 상태 방지).
+  const target = await loadStatusTarget(id, actor.tenantId);
+  if ("error" in target) return target;
+  if (!canManageStaffMember(actor.systemRole, target.role)) {
+    return { error: "이 직원의 재직 상태를 바꿀 권한이 없습니다" };
+  }
 
   const supabase = await createClient();
   const skip = String(formData.get("mode") ?? "") === "skip";
@@ -735,11 +784,19 @@ export async function handoverAndDeactivate(
     }
   }
 
-  const { error: statusErr } = await supabase
+  const { data: statusRows, error: statusErr } = await supabase
     .from("users")
     .update({ status: "inactive" })
-    .eq("id", id);
-  if (statusErr) return { error: statusErr.message };
+    .eq("id", id)
+    .select("id");
+  if (statusErr) return { error: humanizeDbError(statusErr.message) };
+  if (!statusRows?.length) return { error: "담임은 넘겼지만 퇴사 처리는 하지 못했습니다 — 권한을 확인하세요" };
+  await logAction({
+    action: "staff_status_change",
+    targetType: "staff",
+    targetLabel: target.displayName,
+    metadata: { userId: id, from: target.status, to: "inactive" },
+  });
   await recordResignNote(id, String(formData.get("resignDate") ?? ""), actor);
 
   // 인계 후에도 남은 담임 반(화면이 stale했거나 일부만 선택한 경우) — 막지 않고 사후 안내용. head:true(B2).

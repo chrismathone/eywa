@@ -144,24 +144,32 @@ function mapManual(r: ManualEventRow): CalendarEvent {
 async function fetchManualEvents(
   first: string,
   last: string,
+  opts: { titleContains?: string } = {},
 ): Promise<{ ready: boolean; events: CalendarEvent[] }> {
   const supabase = await createClient();
+  // 제목 검색(N9) — `%`·`_`·`\`는 ilike 와일드카드라 글자 그대로 찾게 이스케이프한다.
+  const titlePattern = opts.titleContains
+    ? `%${opts.titleContains.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
+    : null;
   let lastError = "";
   for (const attempt of ATTEMPTS) {
     try {
       const rows = await fetchAllPaged<ManualEventRow>(
-        (from, to) =>
-          supabase
+        (from, to) => {
+          let q = supabase
             .from("calendar_events")
             .select(attempt.cols)
             .lte("start_date", last)
-            .gte("end_date", first)
+            .gte("end_date", first);
+          if (titlePattern) q = q.ilike("title", titlePattern);
+          return q
             .order("start_date", { ascending: true })
             .order("id", { ascending: true }) // OFFSET 페이지 흔들림 방지 tie-break
             .range(from, to) as unknown as PromiseLike<{
             data: ManualEventRow[] | null;
             error: { message: string } | null;
-          }>,
+          }>;
+        },
       );
       return { ready: true, events: rows.map(mapManual) };
     } catch (e) {
@@ -231,6 +239,41 @@ export async function getDateRangeEvents(first: string, last: string): Promise<C
  */
 export async function getYearEvents(year: number): Promise<CalendarMonth> {
   return getYearRangeEvents(year, year);
+}
+
+/** 제목 검색어 상한 — 주소창에서 긴 문자열을 받아도 쿼리를 키우지 않는다. */
+export const CALENDAR_QUERY_MAX = 50;
+
+/**
+ * 제목으로 찾기(목록 보기 `?q=`, 2026-09-23 전수 점검 N9) — **전체 연도**의 수기 일정에서 제목에 검색어가 든 것.
+ * 🔑 한 해로 좁히면 몇 해 전 일정(누적 약 6,500행)을 찾으려고 연도를 하나씩 넘겨야 했다. 페이징(B2)이라 절단 없음.
+ * 빈 검색어면 빈 결과(호출부가 연 단위 조회를 쓴다).
+ */
+export async function searchEventsByTitle(query: string): Promise<CalendarMonth> {
+  const q = query.trim().slice(0, CALENDAR_QUERY_MAX);
+  if (!q) return { ready: true, events: [] };
+  return fetchManualEvents(`${YEAR_MIN}-01-01`, `${YEAR_MAX}-12-31`, { titleContains: q });
+}
+
+/**
+ * 일정 한 건(목록·연간 보기에서 눌러 여는 다이얼로그용, N9) — 목록 전건에 메모까지 실어 보내지 않으려고
+ * 누른 한 건만 읽는다(반응속도). 세션 클라이언트 + RLS(테넌트). 없으면 null.
+ */
+export async function getCalendarEventById(id: string): Promise<CalendarEvent | null> {
+  const supabase = await createClient();
+  let lastError = "";
+  for (const attempt of ATTEMPTS) {
+    const { data, error } = await supabase
+      .from("calendar_events")
+      .select(attempt.cols)
+      .eq("id", id)
+      .maybeSingle();
+    if (!error) return data ? mapManual(data as unknown as ManualEventRow) : null;
+    lastError = error.message;
+    if (attempt.droppedBy.test(lastError)) continue;
+    break;
+  }
+  throw new Error(`일정 조회 실패 — ${lastError}`);
 }
 
 /**

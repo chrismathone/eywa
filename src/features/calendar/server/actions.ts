@@ -2,10 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { normalizeCalendarColor } from "../color";
+import { googleEventKey } from "../google-import";
+import type { CalendarEvent } from "../types";
+import { getCalendarEventById } from "./queries";
 
 /**
  * 캘린더 쓰기 — 일정 등록·수정·삭제. 게이트는 화면과 같은 `canWriteTenant("calendar")`(사무실 full,
@@ -86,6 +89,26 @@ async function requireCalendarWriter() {
     return { error: "일정을 등록·수정할 권한이 없습니다" as const };
   }
   return { user };
+}
+
+/**
+ * 일정 한 건 불러오기(목록·연간 보기에서 행을 눌러 다이얼로그를 열 때, 2026-09-23 전수 점검 N9).
+ * 목록 전건에 메모까지 실어 보내지 않으려고 누른 한 건만 읽는다. 게이트 = 캘린더 **열람**(화면과 같은
+ * `calendar` 메뉴 — 쓰기 여부는 다이얼로그가 따로 받는다). 원문 오류는 화면에 안 내보낸다.
+ */
+export async function loadCalendarEvent(
+  id: string,
+): Promise<{ event: CalendarEvent } | { error: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "calendar"))) return { error: "일정을 볼 권한이 없습니다" };
+  if (!id || typeof id !== "string") return { error: "일정을 찾을 수 없습니다" };
+  try {
+    const event = await getCalendarEventById(id);
+    return event ? { event } : { error: "일정을 찾을 수 없습니다 — 이미 삭제되었을 수 있습니다" };
+  } catch {
+    return { error: "일정을 불러오지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
+  }
 }
 
 /** 등록·수정 공용(id 있으면 수정) — 폼 필드: id?, title, startDate, endDate, startTime?, endTime?, color, memo. */
@@ -246,6 +269,15 @@ export async function saveCalendarEvent(
   };
 }
 
+/** 지운 행 중 구글에서 온 것의 묘비 키 — 손으로 만든 일정(구글 id 없음)은 빠진다. */
+function googleKeysOf(
+  rows: { google_calendar_id?: string | null; google_event_id?: string | null }[],
+): string[] {
+  return rows
+    .filter((r) => r.google_calendar_id && r.google_event_id)
+    .map((r) => googleEventKey(r.google_calendar_id as string, r.google_event_id as string));
+}
+
 export async function deleteCalendarEvent(
   _prev: CalendarActionState,
   formData: FormData,
@@ -269,14 +301,16 @@ export async function deleteCalendarEvent(
       .delete()
       .eq("tenant_id", user.tenantId)
       .eq("series_id", seriesId)
-      .select("id, title");
+      .select("id, title, google_calendar_id, google_event_id");
     if (error) return { error: `삭제 실패 — ${error.message}` };
     if (!data || data.length === 0) return { error: "삭제할 반복 일정을 찾을 수 없습니다" };
 
+    const keys = googleKeysOf(data);
     await logAction({
       action: "calendar_event_delete",
       targetType: "calendar_event",
       targetLabel: `${data[0]!.title} — 반복 전체 ${data.length}건`,
+      ...(keys.length > 0 ? { metadata: { googleEventKeys: keys } } : {}),
     });
     revalidatePath("/calendar");
     return { ok: true, notice: `반복 일정 ${data.length}건을 삭제했습니다` };
@@ -287,15 +321,18 @@ export async function deleteCalendarEvent(
     .delete()
     .eq("id", id)
     .eq("tenant_id", user.tenantId)
-    .select("title, start_date")
+    .select("title, start_date, google_calendar_id, google_event_id")
     .maybeSingle();
   if (error) return { error: `삭제 실패 — ${error.message}` };
   if (!data) return { error: "삭제할 일정을 찾을 수 없습니다" };
 
+  const keys = googleKeysOf([data]);
   await logAction({
     action: "calendar_event_delete",
     targetType: "calendar_event",
     targetLabel: `${data.title} (${data.start_date})`,
+    // 구글에서 온 일정이면 묘비 키를 남긴다 — 임포트 크론이 이 키를 보고 다시 넣지 않는다(F15).
+    ...(keys.length > 0 ? { metadata: { googleEventKeys: keys } } : {}),
   });
   revalidatePath("/calendar");
   return { ok: true, notice: "일정을 삭제했습니다" };

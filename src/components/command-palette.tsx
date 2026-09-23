@@ -7,6 +7,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDest } from "@/lib/menu-hub";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
+import type { MenuLayout } from "@/features/owner/menu-layout";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { useMenuHub } from "@/components/workspace/menu-hub-store";
@@ -61,6 +62,8 @@ export function CommandPalette({
   permMatrix,
   canTeacherView = false,
   isSuperAdmin = false,
+  menuLayout,
+  isGenericTenant = false,
 }: {
   systemRole: SystemRole;
   permMatrix?: AccessMatrix;
@@ -71,6 +74,14 @@ export function CommandPalette({
    * 🔴 빠지면 사이드바엔 뜨는 '감사로그'가 검색에선 안 나온다(입구가 갈린다 — 가드 `audit-read-gate.test.ts`).
    */
   isSuperAdmin?: boolean;
+  /**
+   * '왼쪽 탭' 보기 설정 + 꺼진 모듈의 면(`menuLayoutWithModules`) — 사이드바·메뉴 판과 **같은 목록**을 받는다.
+   * 🔴 빠지면 일반판에서 끈 '회차 확정·시수 검증'이 검색에 뜨고, 누르면 안내 없이 수납 면으로 떨어진다
+   *    (2026-09-23 전수 점검 F18).
+   */
+  menuLayout?: MenuLayout;
+  /** 새 학원(일반판) — 설정 '기능' 면 노출(사이드바·메뉴 판과 같은 값). */
+  isGenericTenant?: boolean;
 }) {
   const router = useRouter();
   const isDesktop = useIsDesktop();
@@ -90,6 +101,8 @@ export function CommandPalette({
         permMatrix,
         canTeacherView,
         isMaster: systemRole === "master" || isSuperAdmin,
+        menuLayout,
+        isGenericTenant,
       }).flatMap((group) =>
         group.items.map((dest) => ({
           dest,
@@ -100,7 +113,7 @@ export function CommandPalette({
           keywords: hubSearchKeywords(dest, group.label),
         })),
       ),
-    [systemRole, permMatrix, canTeacherView, isSuperAdmin],
+    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, isGenericTenant],
   );
 
   const q = query.trim().toLowerCase();

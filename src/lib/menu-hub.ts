@@ -34,6 +34,11 @@ export type HubDest = {
   teacherOnly?: boolean;
   /** 이 목적지만 master 전용(예: 강사 정산) — 메뉴 권한과 별개의 화면 안 게이트를 화면이 이미 건다. */
   masterOnly?: boolean;
+  /**
+   * 새 학원(일반판)에만 서는 목적지 — 학원 설정 '기능' 면(모듈 켜기·끄기). 🔴 침산 화면은 이 작업 전과
+   * 같아야 해서(원장 2026-09-22) 게이트가 모르면(`isGenericTenant` 미지정) **안 세운다**(침산 쪽으로 기운다).
+   */
+  genericOnly?: boolean;
   /** 부차 도구 — 큰 버튼이 아니라 아래 작은 줄로 그린다(자주 쓰는 것과 가끔 쓰는 것을 가른다). */
   tool?: boolean;
   /** 설명 줄 안에서의 묶음 제목(설정처럼 목적지가 많은 허브에서만). */
@@ -217,6 +222,9 @@ export const SUPPORT_GROUPS: HubGroup[] = [
       //    실제로 남아 있는 그림은 아홉 개뿐이라(alarm·alert·calendarCheck·chart·check·percent·sparkle·trash·userX)
       //    그중 "고르는 목록"에 가장 가까운 `check`를 쓴다.
       face("owner", "/owner?tab=navigation", "탭 및 메뉴 구성", undefined, { section: "학원 정보", icon: "check" }),
+      // '기능'(모듈 켜기·끄기) — **새 학원에만**(2026-09-23 전수 점검 F19: 화면 탭엔 있는데 사이드바·메뉴 판엔
+      // 없었다). 면 목록 판정은 설정 화면(owner/page.tsx facesFor)과 같다 — 일반판이면 선다.
+      face("owner", "/owner?tab=modules", "기능", undefined, { section: "학원 정보", icon: "sparkle", genericOnly: true }),
       face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: "clock" }),
       face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영", icon: "tag" }),
       face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: "invoice" }),
@@ -273,12 +281,15 @@ type Gate = {
    * 비면(기본) 지금과 글자 그대로 같다 — 전부 표시·코드 순서. 규약 = [`menu-layout.ts`](@/features/owner/menu-layout).
    */
   menuLayout?: MenuLayout;
+  /** 새 학원(일반판)인가 — `genericOnly` 목적지('기능' 면)의 노출. 모르면 false(침산처럼). */
+  isGenericTenant?: boolean;
 };
 
 function allowed(dest: HubDest, gate: Gate): boolean {
   if (!canAccess(gate.systemRole, dest.menuKey, gate.permMatrix)) return false;
   if (dest.teacherOnly && !gate.canTeacherView) return false;
   if (dest.masterOnly && !gate.isMaster) return false;
+  if (dest.genericOnly && !gate.isGenericTenant) return false;
   // 🔴 권한 **뒤에** 본다 — 순서를 바꿔도 결과는 같지만, "권한이 먼저 거른다"가 이 설정의 정의다.
   if (isMenuHiddenByLayout(dest.href, gate.menuLayout)) return false;
   return true;

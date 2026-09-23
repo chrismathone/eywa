@@ -64,7 +64,9 @@ export async function getStaffList(): Promise<StaffRow[]> {
 
   // 세 쿼리는 서로 독립 → 병렬(3 round-trip → 1). users/classes/students 모두 단일 테넌트 ≤1000행이라
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
-  const [{ data: users }, { data: teaching }, contracts, contractFileRows] = await Promise.all([
+  // 🔴 조회 실패는 던진다(2026-09-23 전수 점검 E4) — 종전엔 users 실패가 "직원 없음", 계약 실패가
+  //    `.catch(() => [])`로 "계약 없음"처럼 정상 화면으로 보였다. 던지면 셸 error.tsx가 한글로 알린다.
+  const [{ data: users, error: usersErr }, { data: teaching, error: teachingErr }, contracts, contractFileRows] = await Promise.all([
     // 🔴 퇴사자(inactive)도 가져온다 — 종전 `.neq("status","inactive")`가 목록에서 통째로 빼는 바람에
     // 상태 칩 '퇴사'를 눌러도 **항상 0명**이었다(원장 제보 2026-08-07, 필터가 아니라 데이터가 없던 것).
     // 기본 화면은 페이지 쪽 기본 상태 필터(재직)가 좁힌다 — 여기서 자르면 필터가 영원히 못 본다.
@@ -90,7 +92,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
               .order("user_id", { ascending: true })
               .order("seq", { ascending: true })
               .range(from, to),
-        ).catch(() => []),
+        ),
     // 계약서 파일 첨부 여부 — 직원 연결 파일 문서의 staff_user_id만 뽑는다(행 수 = 파일 수, 직원 41명
     // 규모라 절단 위험 없음). 게이트·클라이언트 규약은 위 계약 열과 동일.
     !canSeeContracts
@@ -101,9 +103,14 @@ export async function getStaffList(): Promise<StaffRow[]> {
           .eq("tenant_id", viewer.tenantId)
           .eq("kind", "file")
           .not("staff_user_id", "is", null)
-          .then(({ data }) => (data ?? []) as { staff_user_id: string }[]),
+          .then(({ data, error }) => {
+            if (error) throw new Error(`계약서 파일 조회 실패: ${error.message}`);
+            return (data ?? []) as { staff_user_id: string }[];
+          }),
   ]);
 
+  if (usersErr) throw new Error(`직원 목록 조회 실패: ${usersErr.message}`);
+  if (teachingErr) throw new Error(`담당 반 조회 실패: ${teachingErr.message}`);
   if (!users) return [];
   // 과목 범위(원장 2026-09-23 — 정유진=영어·허은진=수학 선생님만). 범위 밖 직원은 **목록에서 뺀다**
   // (화면 필터가 아니라 서버에서 — 표·검색·필터가 전부 이 배열을 쓴다). 본인은 항상 남긴다.

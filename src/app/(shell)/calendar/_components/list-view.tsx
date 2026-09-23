@@ -3,6 +3,7 @@ import { dotProps } from "@/features/calendar/color";
 import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
 // 날짜 표기는 분석 화면과 **같은 함수**를 쓴다 — 같은 일정이 화면마다 다른 모양이면 안 된다.
 import { shortDate } from "./event-row";
+import { EventOpenButton } from "./event-open";
 
 /**
  * 목록(표) 뷰 — 조건(연도·태그)에 맞는 일정을 표로 조사한다(0224a 다중 뷰).
@@ -16,11 +17,11 @@ function spanDays(start: string, end: string): number {
   return Math.floor((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
-export function ListView({ events }: { events: CalendarEvent[] }) {
+export function ListView({ events, searchAllYears = false }: { events: CalendarEvent[]; searchAllYears?: boolean }) {
   if (events.length === 0) {
     return (
       <div className="border-line bg-card text-text-dim rounded-2xl border border-dashed p-8 text-center text-sm">
-        조건에 맞는 일정이 없습니다
+        {searchAllYears ? "전체 연도에서 이 제목의 일정을 찾지 못했습니다" : "조건에 맞는 일정이 없습니다"}
       </div>
     );
   }
@@ -71,7 +72,10 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
                     <span className="text-text-faint">—</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-left text-sm font-medium break-keep">{e.title}</td>
+                {/* 제목을 누르면 월 보기와 같은 일정 창이 열린다(N9) — 쓰기 권한이면 수정, 아니면 읽기. */}
+                <td className="px-3 py-2 text-left text-sm font-medium break-keep">
+                  <EventOpenButton id={e.id}>{e.title}</EventOpenButton>
+                </td>
                 <td className="text-text-dim px-3 py-2 text-sm whitespace-nowrap">
                   {e.createdByName ?? <span className="text-text-faint">—</span>}
                 </td>
@@ -81,7 +85,8 @@ export function ListView({ events }: { events: CalendarEvent[] }) {
         </tbody>
       </table>
       <p className="text-text-dim border-line border-t px-3 py-2 text-right text-sm">
-        총 <span className="num font-semibold">{events.length}</span>건
+        {searchAllYears ? "전체 연도에서 " : "총 "}
+        <span className="num font-semibold">{events.length}</span>건
       </p>
     </DragScrollArea>
   );

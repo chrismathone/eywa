@@ -20,7 +20,11 @@ import { AdminMenuEditor } from "./admin-menu-editor";
 import { TeacherMenuEditor } from "./teacher-menu-editor";
 
 /** 관리자뷰 편집 대상 = 사이드바·메뉴 판이 실제로 그리는 목록 그대로(권한으로 거르지 않은 원본). */
-const ALL_GROUPS: HubGroup[] = [...HUB_GROUPS, ...SUPPORT_GROUPS];
+// ⚠️ 새 학원 전용 목적지('기능' 면)는 뺀다 — 침산 편집기가 이 작업 전과 같아야 하고, 그 면은 감출 대상도 아니다.
+const ALL_GROUPS: HubGroup[] = [...HUB_GROUPS, ...SUPPORT_GROUPS].map((g) => ({
+  ...g,
+  items: g.items.filter((d) => !d.genericOnly),
+}));
 /** 강사뷰 편집 대상 = '내 메뉴' 항목 표에서 입구가 열린 것(메뉴에서 뺀 캘린더 등은 강사 화면에도 없다). */
 const TEACHER_LINKS = TEACHER_MENU_LINKS.filter((l) => isTeacherMenuEntranceOpen(l.menu));
 

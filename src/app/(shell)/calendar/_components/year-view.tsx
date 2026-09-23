@@ -1,5 +1,6 @@
 import { chipProps } from "@/features/calendar/color";
 import { eventDisplayColor, type CalendarEvent } from "@/features/calendar/types";
+import { EventOpenButton } from "./event-open";
 
 /**
  * 연간 뷰 — 12개월 카드 격자(0224a 다중 뷰). "행사 태그 연간보기": 태그 필터는 page가 URL로
@@ -50,8 +51,10 @@ export function YearView({ year, events }: { year: number; events: CalendarEvent
                       <span className="num text-text-dim w-18 shrink-0 pt-0.5 text-right text-sm whitespace-nowrap">
                         {dayLabel(e, monthKey)}
                       </span>
+                      {/* 누르면 월 보기와 같은 일정 창(N9). 칩 색은 버튼 안 span이 든다(버튼에 인라인 style을 넘기지 않게). */}
+                      <EventOpenButton id={e.id} className="min-w-0 flex-1">
                       <span
-                        className={`min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-sm leading-tight font-medium ${chip.className}`}
+                        className={`block truncate rounded px-1.5 py-0.5 text-sm leading-tight font-medium ${chip.className}`}
                         style={chip.style}
                         // 태그 이름은 툴팁에 — 옛 태그 칩 줄이 색의 범례였는데 드롭다운엔 색이 없어, 연간 카드에선 이 툴팁이
                         // 유일하게 "이 색이 무슨 태그인지"를 말한다(월 그리드와 같은 `[태그] 제목` 규약, 적대 리뷰 2026-09-04).
@@ -59,6 +62,7 @@ export function YearView({ year, events }: { year: number; events: CalendarEvent
                       >
                         {e.title}
                       </span>
+                      </EventOpenButton>
                     </li>
                   );
                 })}

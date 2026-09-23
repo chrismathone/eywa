@@ -46,6 +46,7 @@ import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-noti
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
 import { menuLayoutWithModules } from "@/lib/modules";
+import { isGenericTenant } from "@/features/owner/preset";
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -64,6 +65,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 왼쪽 탭 보기 설정 + 꺼진 기능(모듈)의 면 입구 — 사이드바·휴대폰 메뉴·메뉴 판이 같은 목록을 본다.
   // 꺼진 면이 없으면 settings.navigation.menus 그대로(침산 = 오늘과 같은 값).
   const menuLayout = menuLayoutWithModules(settings.navigation.menus, settings.modules.disabled);
+  // 새 학원(일반판)이면 설정 '기능' 면을 사이드바·메뉴 판·검색에도 세운다(설정 화면 탭과 같은 판정, F19).
+  const genericTenant = isGenericTenant(settings);
 
   // Stage Manager 임베드(?embed=1 → proxy가 x-embed 주입): 사이드바·헤더·캔버스·팰릿 전부
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
@@ -358,6 +361,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           isSuperAdmin={isSuperAdmin}
           frequentKeys={frequentKeys}
           menuLayout={menuLayout}
+          isGenericTenant={genericTenant}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
@@ -386,7 +390,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       </div>
 
       {/* 검색 메뉴 점프 팰릿 — 헤더 검색 클릭으로 열림, 포털 렌더라 위치 무관 */}
-      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} />
+      <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} menuLayout={menuLayout} isGenericTenant={genericTenant} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
       <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={canAccess(user.systemRole, "dashboard", permMatrix) ? "/dashboard" : "/menu"} />
@@ -401,6 +405,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           canTeacherView={canTeacherView}
           isSuperAdmin={isSuperAdmin}
           menuLayout={menuLayout}
+          isGenericTenant={genericTenant}
         />
       </HideInFrame>
 

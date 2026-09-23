@@ -102,9 +102,14 @@ export function LeaveCard({
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label={t("me.leave.granted")} value={formatLeaveDays(balance.granted)} strong />
-        <Stat label={t("me.leave.used")} value={formatLeaveDays(balance.used)} />
-        <Stat label={t("me.leave.pending")} value={formatLeaveDays(balance.pending)} />
-        <Stat label={t("me.leave.remaining")} value={formatLeaveDays(balance.remaining)} strong />
+        {/* 사용 조회가 실패하면(E10) 세 칸 모두 셀 수 없다 — 0일·부여 전체로 보이지 않게 '확인 불가'. */}
+        <Stat label={t("me.leave.used")} value={balance.usageUnknown ? t("me.leave.unknown") : formatLeaveDays(balance.used)} />
+        <Stat label={t("me.leave.pending")} value={balance.usageUnknown ? t("me.leave.unknown") : formatLeaveDays(balance.pending)} />
+        <Stat
+          label={t("me.leave.remaining")}
+          value={balance.usageUnknown ? t("me.leave.unknown") : formatLeaveDays(balance.remaining)}
+          strong
+        />
       </div>
 
       <p className="text-text-faint mt-2 text-xs break-keep">

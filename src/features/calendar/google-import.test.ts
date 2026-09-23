@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  googleEventKey,
   IMPORT_MEMO_PREFIX,
   LEGACY_SNAPSHOT_MEMO_PREFIX,
   canOverwrite,
@@ -196,5 +197,12 @@ describe("메모 접두 — 첫 회차 정리가 새 행을 잡아먹지 않는�
     const r = toImportedRow({ id: "z", start: { date: "2026-09-10" } }, "05. 학원행사");
     expect(r?.memo?.startsWith(LEGACY_SNAPSHOT_MEMO_PREFIX)).toBe(false);
     expect(r?.memo?.startsWith(IMPORT_MEMO_PREFIX)).toBe(true);
+  });
+});
+
+describe("googleEventKey — 삭제 묘비 키", () => {
+  it("캘린더 id와 일정 id를 묶는다(일정 id는 캘린더 안에서만 유일)", () => {
+    expect(googleEventKey("a@group", "ev1")).toBe("a@group::ev1");
+    expect(googleEventKey("a@group", "ev1")).not.toBe(googleEventKey("b@group", "ev1"));
   });
 });

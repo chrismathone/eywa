@@ -3,7 +3,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import styles from "@/components/public-site/public-site.module.css";
-import { safeLoginNext } from "@/lib/auth/login-next";
+import { loginLandingHref } from "@/lib/auth/login-next";
 import { loginErrorMessage } from "@/lib/auth/login-error";
 import { createClient } from "@/lib/supabase/client";
 
@@ -36,7 +36,9 @@ export function LoginForm({ next }: { next?: string }) {
       } else {
         // Full document navigation ensures the server sees the new session cookie.
         // /home resolves the user's role and teaching subject; never guess it here.
-        window.location.assign(safeLoginNext(next) ?? "/home");
+        // It also records the login (login_events) — this form signs in from the browser, so /home is the
+        // only server hop right after a manual login.
+        window.location.assign(loginLandingHref(next));
         return;
       }
     } catch {

@@ -63,6 +63,12 @@ const BOX_TABS = [
     label: "참조",
     empty: "참조로 지정된 문서가 없습니다.",
   },
+  // 원장 전용(N13) — 결재선에 없어도 대결할 문서를 찾는 자리. 원장이 아니면 탭 자체가 없다.
+  {
+    key: "academy",
+    label: "학원 전체 진행",
+    empty: "학원에 진행 중인 결재 문서가 없습니다.",
+  },
 ] as const;
 
 type BoxTabKey = (typeof BOX_TABS)[number]["key"];
@@ -75,16 +81,19 @@ export default async function ApprovalsPage({
   const user = await requireAccess("approvals");
   const sp = await searchParams;
 
+  // 대결은 원장만 한다(decideDocument) — '학원 전체 진행' 함도 원장에게만(같은 판정).
+  const isMaster = user.systemRole === "master";
   // 두 조회는 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
   const [boxes, balance] = await Promise.all([
-    getApprovalBoxes(user.id),
+    getApprovalBoxes(user.id, { academyWide: isMaster }),
     getMyLeaveBalance(user.id),
   ]);
 
-  const face: BoxTabKey = BOX_TABS.some((t) => t.key === sp.tab)
+  const tabs = BOX_TABS.filter((t) => t.key !== "academy" || boxes.academyPending !== null);
+  const face: BoxTabKey = tabs.some((t) => t.key === sp.tab)
     ? (sp.tab as BoxTabKey)
     : "waiting";
-  const faces: Face[] = BOX_TABS.map((t) => ({
+  const faces: Face[] = tabs.map((t) => ({
     key: t.key,
     label:
       t.key === "waiting" && boxes.waiting.length > 0
@@ -103,8 +112,9 @@ export default async function ApprovalsPage({
     done: boxes.completed,
     rejected: boxes.rejected,
     refs: boxes.refDocs,
+    academy: boxes.academyPending ?? [],
   };
-  const activeTab = BOX_TABS.find((t) => t.key === face)!;
+  const activeTab = tabs.find((t) => t.key === face)!;
   // 🔴 조회 실패(loadError)·표 미적용(ready=false)이면 값을 **안 적는다** — 빈 배열 길이 0을 "0건"이라 찍으면 거짓
   //    숫자다(`getApprovalBoxes`는 실패해도 `ready=true`인 빈 함을 돌려준다, 적대 리뷰 2026-09-04). 머리는 제목만 남는다.
   const boxSummary =
@@ -171,20 +181,21 @@ export default async function ApprovalsPage({
                   잔여=positive(여유 있음) / critical(0일=더 못 씀). */}
               <BigStat
                 label="사용"
-                value={formatLeaveDays(balance.used)}
+                value={balance.usageUnknown ? "확인 불가" : formatLeaveDays(balance.used)}
                 tone="blue"
                 icon={<MenuGlyph name="history" size={22} />}
               />
               <BigStat
                 label="결재중"
-                value={formatLeaveDays(balance.pending)}
+                value={balance.usageUnknown ? "확인 불가" : formatLeaveDays(balance.pending)}
                 tone="amber"
                 icon={<MenuGlyph name="clock" size={22} />}
               />
               <BigStat
                 label="잔여"
-                value={formatLeaveDays(balance.remaining)}
-                tone={balance.remaining > 0 ? "green" : "danger"}
+                // 사용 조회가 실패하면 잔여를 셀 수 없다(E10) — '부여 전체'로 보이지 않게 '확인 불가'.
+                value={balance.usageUnknown ? "확인 불가" : formatLeaveDays(balance.remaining)}
+                tone={balance.usageUnknown ? "amber" : balance.remaining > 0 ? "green" : "danger"}
                 icon={<MenuGlyph name="wallet" size={22} />}
                 sub={leavePeriodLabel(period)}
               />

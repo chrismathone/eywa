@@ -20,6 +20,7 @@ export function MenuHubPanel({
   permMatrix,
   canTeacherView = false,
   menuLayout,
+  isGenericTenant = false,
 }: {
   systemRole: SystemRole;
   /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
@@ -28,6 +29,8 @@ export function MenuHubPanel({
   canTeacherView?: boolean;
   /** 학원 설정 '왼쪽 탭'(보기 설정) — 사이드바와 **같은 값**을 봐야 왼쪽과 본문이 같은 목록을 그린다. */
   menuLayout?: MenuLayout;
+  /** 새 학원(일반판) — 설정 '기능' 면 노출. 사이드바와 같은 값을 받는다. */
+  isGenericTenant?: boolean;
 }) {
   const groupId = useMenuHub((s) => s.groupId);
   const close = useMenuHub((s) => s.close);
@@ -54,6 +57,7 @@ export function MenuHubPanel({
     // 🔴 총괄(super_admin)도 통과 — 사이드바 게이트와 같은 규약(한쪽만 고치면 입구가 갈린다).
     isMaster: systemRole === "master" || isSuperAdmin,
     menuLayout,
+    isGenericTenant,
   }).find((g) => g.id === groupId);
   if (!group) return null;
 

@@ -36,7 +36,7 @@ describe("LoginForm", () => {
     expect(screen.getByLabelText("이메일")).toBeEnabled();
   });
 
-  it.each([[undefined, "/home"], ["//example.com", "/home"], ["/login", "/home"], ["/attendance?view=live", "/attendance?view=live"]])("navigates with a fresh document after login: %s", async (next, destination) => {
+  it.each([[undefined, "/home?login=1"], ["//example.com", "/home?login=1"], ["/login", "/home?login=1"], ["/attendance?view=live", "/home?login=1&next=%2Fattendance%3Fview%3Dlive"]])("navigates with a fresh document after login: %s", async (next, destination) => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
     signInWithPassword.mockResolvedValue({ error: null });
     render(<LoginForm next={next} />);

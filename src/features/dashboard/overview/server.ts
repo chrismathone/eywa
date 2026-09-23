@@ -442,7 +442,9 @@ async function operations(
   };
   count("meetings", "회의록", "meeting_minutes", "/meetings");
   count("documents", "공용 문서", "academy_documents", "/documents", true);
-  count("exams", "등록 시험", "exams", "/exams");
+  // '등록 시험'은 뺐다(2026-09-23 전수 점검 D2) — 시험 등록을 폐지해(0283a, 결정 로그 '성적관리') exams 표에
+  // 쓰는 코드가 없어 늘 0건이었다. 이번 학기 성적 기입 건수로 바꾸는 안은 강사 범위(담임·부담임 반만)와
+  // 숫자가 갈리고 student_grades는 실시간 구독 대상도 아니라 거짓 숫자가 되기 쉬워 두지 않는다.
   if (allowed.includes("shuttle"))
     jobs.push(
       (async () => {

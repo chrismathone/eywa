@@ -166,6 +166,14 @@ export function planDeletions(
   return existingIds.filter((id) => !seenIds.has(id));
 }
 
+/**
+ * 삭제 묘비 키(F15) — 사람이 aywa에서 지운 구글 일정을 다음 회차가 되살리지 않게, 삭제 감사로그에
+ * 이 키를 남기고 임포트가 건너뛴다. 구글 일정 id는 캘린더 안에서만 유일해서 캘린더 id와 묶는다.
+ */
+export function googleEventKey(calendarId: string, eventId: string): string {
+  return `${calendarId}::${eventId}`;
+}
+
 export type CalendarSource = { calendarId: string; tagName: string };
 
 /**

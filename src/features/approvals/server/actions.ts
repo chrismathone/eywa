@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 import { notifyUsers } from "@/features/notifications/server/notify";
@@ -680,14 +681,17 @@ export async function decideDocument(
 
   // ── 전결: 남은 pending 칸 생략 처리(deferred 칸은 사후 확인 대상으로 남긴다) ──
   const isFinal = decision === "final";
+  let skippedIds: string[] = [];
   if (isFinal) {
-    const { error: skipErr } = await admin
+    const { data: skipped, error: skipErr } = await admin
       .from("approval_steps")
       .update({ decision: "skipped" })
       .eq("document_id", docId)
       .gt("step_no", target.step_no)
-      .eq("decision", "pending");
+      .eq("decision", "pending")
+      .select("id");
     if (skipErr) return { error: `전결 처리 실패 — ${skipErr.message}` };
+    skippedIds = (skipped ?? []).map((r) => r.id as string);
   }
 
   // ── 문서 진행/종결 ─────────────────────────────────────────────────────────
@@ -713,14 +717,50 @@ export async function decideDocument(
         ? { current_step: nextPending.step_no }
         : { status: "approved", completed_at: now, outcome_note: `최종 승인 — ${who}` };
 
-  const { error: docErr } = await admin
+  // 🔴 `status = 'pending'` 조건(2026-09-23 전수 점검 S8) — 결재자가 문서를 읽은 뒤 쓰기 전에 기안자가
+  //    회수하면, 조건 없는 update가 canceled를 approved로 덮었다(휴가면 연차가 사용으로 잡힌다).
+  //    0행이면 이 결재가 늦은 것 — 방금 쓴 결재란을 되돌리고 알린다.
+  const { data: docWritten, error: docErr } = await admin
     .from("approval_documents")
     .update(patch)
     .eq("id", docId)
-    .eq("tenant_id", user.tenantId);
-  if (docErr) return { error: `문서 상태 갱신 실패 — ${docErr.message}` };
+    .eq("tenant_id", user.tenantId)
+    .eq("status", "pending")
+    .select("id");
+  if (docErr || (docWritten ?? []).length === 0) {
+    await admin
+      .from("approval_steps")
+      .update({ decision: "pending", decided_at: null, comment: null, acted_by: null })
+      .eq("id", target.id)
+      .eq("decision", decision);
+    // 전결로 생략한 칸·후결로 넘긴 칸도 원래(pending)로 — 각자 방금 바꾼 값일 때만.
+    const reverts: Array<[string[], "skipped" | "deferred"]> = [
+      [skippedIds, "skipped"],
+      [deferredCells.map((c) => c.id as string), "deferred"],
+    ];
+    for (const [ids, from] of reverts) {
+      if (ids.length === 0) continue;
+      await admin.from("approval_steps").update({ decision: "pending" }).in("id", ids).eq("decision", from);
+    }
+    if (docErr) return { error: `문서 상태 갱신 실패 — ${humanizeDbError(docErr.message)}` };
+    return { error: "그 사이 문서가 회수되었거나 이미 처리되었습니다 — 새로고침 후 확인해 주세요" };
+  }
 
   // ── 알림 ───────────────────────────────────────────────────────────────────
+  // 대결 — 원래 결재자(부재자)에게 원장이 대신 처리했다고 알린다(N13: 전엔 본인 칸이 처리된 걸 몰랐다).
+  if (proxy && target.approver_id && target.approver_id !== user.id) {
+    await notifyUsers([
+      {
+        tenantId: user.tenantId,
+        recipientId: target.approver_id as string,
+        type: "approval_decided",
+        title: "대결 처리 안내",
+        body: `${doc.title} — ${user.displayName}님이 내 결재 칸을 대신 ${!approvedLike ? "반려" : isFinal ? "전결" : "승인"}했습니다.`,
+        link: `/approvals/${docId}`,
+        actorId: user.id,
+      },
+    ]);
+  }
   // 후결로 건너뛰어진 부재자들 — 나중에 '후결 확인'이 필요함을 알린다.
   if (deferredCells.length > 0) {
     await notifyUsers(
@@ -867,7 +907,7 @@ export async function withdrawDocument(
   const admin = createAdminClient();
   const { data: steps } = await admin
     .from("approval_steps")
-    .select("decision")
+    .select("decision, step_no, approver_id")
     .eq("document_id", docId);
   if ((steps ?? []).some((s) => s.decision !== "pending")) {
     return { error: "이미 결재가 시작돼 회수할 수 없습니다" };
@@ -884,10 +924,26 @@ export async function withdrawDocument(
     .eq("tenant_id", user.tenantId)
     .eq("drafter_id", user.id) // 남의 문서는 못 건드린다
     .eq("status", "pending")
-    .select("id")
+    .select("id, title, current_step")
     .maybeSingle();
   if (error) return { error: `회수 실패 — ${error.message}` };
   if (!updated) return { error: "진행중인 본인 기안만 회수할 수 있습니다" };
+
+  // 결재 요청을 받은 사람(현재 차례)에게 회수 사실을 알린다(N13) — 알림을 누르면 '회수됨'이 보인다.
+  const currentApprover = (steps ?? []).find((s) => s.step_no === updated.current_step)?.approver_id;
+  if (currentApprover && currentApprover !== user.id) {
+    await notifyUsers([
+      {
+        tenantId: user.tenantId,
+        recipientId: currentApprover as string,
+        type: "approval_decided",
+        title: "결재 문서 회수",
+        body: `${String(updated.title)} — 기안자가 문서를 회수했습니다. 결재할 필요가 없습니다.`,
+        link: `/approvals/${docId}`,
+        actorId: user.id,
+      },
+    ]);
+  }
 
   await logAction({
     action: "approval_withdraw",

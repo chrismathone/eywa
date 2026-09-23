@@ -101,7 +101,8 @@ export function DraftComposer({
   initialApproverIds: string[];
   /** 연차 구간 끝 — 입사일 미등록이면 null. **휴가신청서만** 막고 다른 양식은 기안할 수 있어야 한다. */
   periodEnd: string | null;
-  remaining: number;
+  /** 잔여 연차. null = 사용 조회 실패로 셀 수 없음(E10) — 화면 사전 경고만 끄고, 판정은 서버가 한다. */
+  remaining: number | null;
   today: string;
 }) {
   const byId = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates]);
@@ -166,7 +167,7 @@ export function DraftComposer({
     periodEnd: inCurrentPeriod ? periodEnd : null,
   });
   const over =
-    inCurrentPeriod && !invalid && days > remaining
+    inCurrentPeriod && !invalid && remaining !== null && days > remaining
       ? remaining <= 0
         ? "남은 연차가 없어 상신할 수 없습니다"
         : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다`
@@ -468,7 +469,7 @@ export function DraftComposer({
               {inCurrentPeriod ? (
                 <>
                   <span className="text-text-faint"> / 잔여 </span>
-                  <b className="num text-foreground">{formatLeaveDays(remaining)}</b>
+                  <b className="num text-foreground">{remaining === null ? "확인 불가" : formatLeaveDays(remaining)}</b>
                 </>
               ) : (
                 <span className="text-text-faint"> · 다음 연차 구간이라 잔여는 그 구간 기준입니다</span>

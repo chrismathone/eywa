@@ -1,8 +1,10 @@
 import "server-only";
 import { google } from "googleapis";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   canOverwrite,
+  googleEventKey,
   planDeletions,
   LEGACY_SNAPSHOT_MEMO_PREFIX,
   parseCalendarSources,
@@ -74,6 +76,8 @@ export type ImportSummary = {
   inserted: number;
   updated: number;
   skippedEdited: number;
+  /** 사람이 aywa에서 지운 구글 일정 — 다시 넣지 않고 건너뛴 수(F15). */
+  skippedDeleted: number;
   unchanged: number;
   deleted: number;
   failed: { calendarId: string; reason: string }[];
@@ -142,6 +146,7 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
     inserted: 0,
     updated: 0,
     skippedEdited: 0,
+    skippedDeleted: 0,
     unchanged: 0,
     deleted: 0,
     failed: [],
@@ -172,6 +177,37 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
   const windowEnd = new Date(now + FUTURE_DAYS * 86_400_000);
   const startYmd = new Date(windowStart.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
   const endYmd = new Date(windowEnd.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+
+  // 🔴 사람이 aywa에서 지운 구글 일정(2026-09-23 전수 점검 F15) — 지워도 다음 회차가 "새 일정"으로 다시
+  //    넣어서, 취소된 레벨테스트가 12시간 뒤 '금일입테'에 또 떴다. 표에 숨김 컬럼이 없어(마이그레이션 없이)
+  //    **삭제 감사로그(append-only)**가 묘비가 된다: deleteCalendarEvent가 지운 행의 구글 키를 metadata에
+  //    남기고, 여기선 그 키를 건너뛴다. 창(과거 30일 + 미래 400일)보다 오래된 삭제는 볼 필요가 없다.
+  //    ⚠️ 조회가 실패하면 임포트를 멈추지 않는다 — 대신 실패로 적는다(묘비를 못 읽었다고 전 캘린더를 버리면
+  //       더 큰 손실이다. 이 회차에 되살아난 행은 사람이 다시 지우면 된다).
+  const tombstones = new Set<string>();
+  try {
+    const since = new Date(now - (PAST_DAYS + FUTURE_DAYS) * 86_400_000).toISOString();
+    const logs = await fetchAllPaged<{ metadata: { googleEventKeys?: unknown } | null }>((from, to) =>
+      admin
+        .from("audit_logs")
+        .select("metadata")
+        .eq("tenant_id", tenantId)
+        .eq("action", "calendar_event_delete")
+        .gte("created_at", since)
+        .not("metadata->googleEventKeys", "is", null)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    for (const l of logs) {
+      const keys = l.metadata?.googleEventKeys;
+      if (Array.isArray(keys)) for (const k of keys) if (typeof k === "string") tombstones.add(k);
+    }
+  } catch (e) {
+    summary.failed.push({
+      calendarId: "-",
+      reason: `삭제한 일정 목록을 읽지 못했습니다 — ${e instanceof Error ? e.message.slice(0, 160) : "조회 실패"}`,
+    });
+  }
 
   for (const src of sources) {
     let events: GoogleEventLike[];
@@ -208,14 +244,28 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
       .filter((r): r is ImportedEventRow => r !== null);
     const seen = new Set(rows.map((r) => r.googleEventId));
 
-    const { data: existingRaw } = await admin
-      .from("calendar_events")
-      .select("id, google_event_id, updated_at, google_synced_at, title, memo, start_date, end_date, start_time, end_time, tag_id")
-      .eq("tenant_id", tenantId)
-      .eq("google_calendar_id", src.calendarId)
-      .gte("start_date", startYmd)
-      .lte("start_date", endYmd);
-    const existing = (existingRaw ?? []) as ExistingRow[];
+    // 🔴 페이징(2026-09-23 전수 점검 T2) — 창 안 행이 1,000을 넘으면(실측 1,077) 잘린 꼬리가 "없는 행"으로
+    //    읽혀 새 일정으로 **중복 삽입**됐다(B2). 못 읽으면 이 캘린더는 손대지 않는다(삽입·삭제 둘 다).
+    let existing: ExistingRow[];
+    try {
+      existing = await fetchAllPaged<ExistingRow>((from, to) =>
+        admin
+          .from("calendar_events")
+          .select("id, google_event_id, updated_at, google_synced_at, title, memo, start_date, end_date, start_time, end_time, tag_id")
+          .eq("tenant_id", tenantId)
+          .eq("google_calendar_id", src.calendarId)
+          .gte("start_date", startYmd)
+          .lte("start_date", endYmd)
+          .order("id", { ascending: true })
+          .range(from, to),
+      );
+    } catch (e) {
+      summary.failed.push({
+        calendarId: src.calendarId,
+        reason: `기존 일정 조회 실패 — ${e instanceof Error ? e.message.slice(0, 160) : "조회 실패"}`,
+      });
+      continue;
+    }
     const byGoogleId = new Map(
       existing.filter((r) => r.google_event_id).map((r) => [r.google_event_id as string, r]),
     );
@@ -237,8 +287,19 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
     }
 
     const syncedAt = new Date().toISOString();
+    // 쓰기 실패는 행마다가 아니라 캘린더마다 한 줄로 모은다(감사로그 metadata가 수천 줄이 되지 않게).
+    let writeFailures = 0;
+    let firstWriteError: string | null = null;
+    const noteWriteError = (message: string) => {
+      writeFailures += 1;
+      firstWriteError ??= message.slice(0, 160);
+    };
     for (const row of rows) {
       const prev = byGoogleId.get(row.googleEventId);
+      if (!prev && tombstones.has(googleEventKey(src.calendarId, row.googleEventId))) {
+        summary.skippedDeleted += 1;
+        continue;
+      }
       const payload = {
         tenant_id: tenantId,
         google_calendar_id: src.calendarId,
@@ -254,7 +315,8 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
       };
       if (!prev) {
         const { error } = await admin.from("calendar_events").insert(payload);
-        if (!error) summary.inserted += 1;
+        if (error) noteWriteError(error.message);
+        else summary.inserted += 1;
         continue;
       }
       if (!canOverwrite({ updatedAt: prev.updated_at, googleSyncedAt: prev.google_synced_at })) {
@@ -271,7 +333,8 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
         .update(payload)
         .eq("id", prev.id)
         .eq("tenant_id", tenantId);
-      if (!error) summary.updated += 1;
+      if (error) noteWriteError(error.message);
+      else summary.updated += 1;
     }
 
     // 구글에서 사라진 회차 정리 — **이 캘린더에서 온 행만**, 창 안에서만.
@@ -285,7 +348,14 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
         .eq("tenant_id", tenantId)
         .eq("google_calendar_id", src.calendarId)
         .in("google_event_id", chunk);
-      if (!error) summary.deleted += chunk.length;
+      if (error) noteWriteError(error.message);
+      else summary.deleted += chunk.length;
+    }
+    if (writeFailures > 0) {
+      summary.failed.push({
+        calendarId: src.calendarId,
+        reason: `일정 ${writeFailures}건 쓰기 실패 — ${firstWriteError ?? "알 수 없음"}`,
+      });
     }
   }
 
@@ -301,6 +371,7 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
       inserted: summary.inserted,
       updated: summary.updated,
       skippedEdited: summary.skippedEdited,
+      skippedDeleted: summary.skippedDeleted,
       unchanged: summary.unchanged,
       deleted: summary.deleted,
       failed: summary.failed,

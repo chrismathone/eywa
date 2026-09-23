@@ -9,6 +9,8 @@ import {
   type Section,
 } from "@/features/dashboard/overview/model";
 import { concurrentShare } from "@/features/students/enrolled-composition";
+// 재원생 패널 ↗는 KPI 카드와 같은 주소 — "/students"만 적으면 계정에 저장된 필터가 끼어 숫자가 달라 보인다(F21).
+import { studentsEnrolledHref } from "@/features/dashboard/overview/kpi-links";
 import { DASHBOARD_SUBJECT_COLORS, STAFF_SUBJECT_LEGEND, dashboardSubjectColor, dashboardCombinationColor } from "@/features/dashboard/overview/subject-colors";
 import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
@@ -293,7 +295,7 @@ export function Overview({
           <Panel
             title="재원생 구성"
             note="초·중·고 · 영어·동시수강·수학"
-            href="/students"
+            href={studentsEnrolledHref()}
             sections={[v.students]}
           >
             {student && (student.levelSplit
@@ -574,7 +576,7 @@ export function Overview({
           <Panel
             title="과목별 수강"
             note="재원생 · 과목별 수강과 동시 수강"
-            href="/students"
+            href={studentsEnrolledHref()}
             sections={[v.students]}
           >
             {student && (
@@ -628,7 +630,7 @@ export function Overview({
           <Panel
             title="학년별 재원생"
             note="학원설정 학년 순 · 영어·수학 수강 구성"
-            href="/students"
+            href={studentsEnrolledHref()}
             sections={[v.students]}
           >
             {student && <GradeSplitChart split={student.gradeSplit} noEnrollment={student.programs.noEnrollment} />}
@@ -637,7 +639,7 @@ export function Overview({
             title="학교별 학생"
             note="재원생 · 초등·중등·고등"
             className={s.schoolPanel}
-            href="/students"
+            href={studentsEnrolledHref()}
             sections={[v.students]}
           >
             {student &&

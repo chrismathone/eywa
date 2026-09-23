@@ -5,16 +5,20 @@ import { FilterSelect } from "@/components/filter-select";
 import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { SearchToggle } from "@/components/search-toggle";
 import {
+  CALENDAR_QUERY_MAX,
   getCalendarTags,
   getMonthEvents,
   getYearEvents,
   getYearRangeEvents,
+  searchEventsByTitle,
 } from "@/features/calendar/server/queries";
 import { CalendarClient } from "./_components/calendar-client";
 import { YearView } from "./_components/year-view";
 import { ListView } from "./_components/list-view";
 import { StatsView } from "./_components/stats-view";
+import { EventOpenHost } from "./_components/event-open";
 
 export const metadata = { title: "캘린더 — aywa" };
 
@@ -56,7 +60,7 @@ type ViewKey = (typeof VIEWS)[number]["key"];
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; v?: string; y?: string; tag?: string }>;
+  searchParams: Promise<{ m?: string; v?: string; y?: string; tag?: string; q?: string }>;
 }) {
   const user = await requireAccess("calendar");
   const sp = await searchParams;
@@ -73,6 +77,11 @@ export default async function CalendarPage({
   // "화면엔 있는데 데이터는 없는 해"가 생기지 않는다.
   const statsYears = [year - 1, year, year + 1].filter((y) => y >= YEAR_MIN && y <= YEAR_MAX);
 
+  // 제목 검색(N9, 2026-09-23 전수 점검) — 목록·연간 보기에서만. 목록은 **전체 연도**에서 찾고(몇 해 전 일정을
+  // 연도를 넘기며 찾지 않게), 연간은 보고 있는 해 안에서 거른다(12개월 카드는 한 해의 틀이다).
+  const q = view === "list" || view === "year" ? (sp.q ?? "").trim().slice(0, CALENDAR_QUERY_MAX) : "";
+  const searchAllYears = view === "list" && q.length > 0;
+
   // 태그 사전·일정·쓰기 판정은 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
   const [tags, data, canWrite] = await Promise.all([
     getCalendarTags(),
@@ -80,26 +89,36 @@ export default async function CalendarPage({
       ? getMonthEvents(month)
       : view === "stats"
         ? getYearRangeEvents(statsYears[0]!, statsYears[statsYears.length - 1]!)
-        : getYearEvents(year),
+        : searchAllYears
+          ? searchEventsByTitle(q)
+          : getYearEvents(year),
     canWriteTenant(user.systemRole, "calendar"),
   ]);
 
   // 태그 필터 — 사전에 없는 id는 조용히 "전체"로(주소창 장난·삭제된 태그의 딥링크).
   const tagParam =
     sp.tag === "none" || (sp.tag && tags.some((t) => t.id === sp.tag)) ? sp.tag : undefined;
-  const filtered =
-    tagParam === undefined
-      ? data.events
-      : data.events.filter((e) => (tagParam === "none" ? !e.tag : e.tag?.id === tagParam));
+  const qLower = q.toLowerCase();
+  const filtered = data.events.filter(
+    (e) =>
+      (tagParam === undefined || (tagParam === "none" ? !e.tag : e.tag?.id === tagParam)) &&
+      // 연간 보기의 제목 검색은 여기서(목록은 서버 조회가 이미 제목으로 좁혔다 — 같은 조건이라 다시 걸러도 무해).
+      (!qLower || e.title.toLowerCase().includes(qLower)),
+  );
 
   const tagQ = tagParam ? `&tag=${tagParam}` : "";
+  // 연도를 넘겨도 검색어는 잇는다(목록·연간끼리 오갈 때도) — 월·분석으로 가면 쓰지 않는다.
+  const qQ = q ? `&q=${encodeURIComponent(q)}` : "";
   // 월 보기에서 다른 보기로 갈 땐 **보던 달의 해**를 잇는다(옛 코드는 올해 고정이라 2027-03을 보다 연간을 고르면 2026으로 갔다).
   // ⚠️ 월 보기는 연도 바닥이 없어(‹로 1999-12까지 간다) 범위 밖이면 서버가 쓸 값(`year` = 올해)을 그대로 싣는다 — href가
   //    "1999로 간다"고 적고 2026에 내리는 거짓 주소를 만들지 않는다(재리뷰 2026-09-04).
   const monthYear = Number(month.slice(0, 4));
   const yearForView = view === "month" && monthYear >= YEAR_MIN && monthYear <= YEAR_MAX ? monthYear : year;
-  const viewHref = (k: ViewKey) => (k === "month" ? "/calendar" : `/calendar?v=${k}&y=${yearForView}${tagQ}`);
-  const yearHref = (yy: number) => `/calendar?v=${view}&y=${yy}${tagQ}`;
+  const viewHref = (k: ViewKey) =>
+    k === "month"
+      ? "/calendar"
+      : `/calendar?v=${k}&y=${yearForView}${tagQ}${k === "list" || k === "year" ? qQ : ""}`;
+  const yearHref = (yy: number) => `/calendar?v=${view}&y=${yy}${tagQ}${qQ}`;
 
   const [y, mo] = month.split("-");
   const monthLabel = `${y}년 ${Number(mo)}월`;
@@ -161,6 +180,8 @@ export default async function CalendarPage({
               triggerClassName={TOOLBAR_SELECT}
             />
           ) : null}
+          {/* 제목 검색(N9) — 목록은 전체 연도, 연간은 이 해 안. 필요할 때만 펼친다(§10). */}
+          {view === "list" || view === "year" ? <SearchToggle placeholder="일정 제목" defaultValue={q} /> : null}
           {/* 숫자의 뜻을 바꾸는 사실이라 접지 않는다 — 휴가(결재 문서) 오버레이는 월 보기에만 있다. */}
           <span className="text-text-faint ml-auto text-xs">휴가는 월 보기에서만 표시됩니다</span>
         </div>
@@ -189,9 +210,13 @@ export default async function CalendarPage({
           tags={tags}
         />
       ) : view === "year" ? (
-        <YearView year={year} events={filtered} />
+        <EventOpenHost canWrite={canWrite} today={today} tags={tags}>
+          <YearView year={year} events={filtered} />
+        </EventOpenHost>
       ) : view === "list" ? (
-        <ListView events={filtered} />
+        <EventOpenHost canWrite={canWrite} today={today} tags={tags}>
+          <ListView events={filtered} searchAllYears={searchAllYears} />
+        </EventOpenHost>
       ) : (
         <StatsView years={statsYears} events={data.events} tags={tags} tagFilter={tagParam} />
       )}

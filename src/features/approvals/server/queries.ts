@@ -317,6 +317,11 @@ export type ApprovalBoxes = {
   refDocs: ApprovalDocRow[];
   /** 전체 — 내가 관련된 모든 문서(기안·결재선·참조), 최근 기안 먼저(하이웍스 문서함 '전체'). */
   all: ApprovalDocRow[];
+  /**
+   * 학원 전체 진행 중 — **원장 전용**(2026-09-23 전수 점검 N13). 대결 권한이 있어도 결재선에 없는 문서는 주소를
+   * 알아야 열 수 있었다. null = 이 사람에겐 이 함이 없다(원장이 아님). 오래된 기안 먼저(먼저 막힌 것부터).
+   */
+  academyPending: ApprovalDocRow[] | null;
 };
 
 const EMPTY_BOXES: ApprovalBoxes = {
@@ -329,13 +334,20 @@ const EMPTY_BOXES: ApprovalBoxes = {
   rejected: [],
   refDocs: [],
   all: [],
+  academyPending: null,
 };
 
-/** 결재함 전부를 한 번에 — 문서 id를 모아 **한 벌만** 적재한다(같은 문서를 함마다 다시 읽지 않게). */
-export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
+/**
+ * 결재함 전부를 한 번에 — 문서 id를 모아 **한 벌만** 적재한다(같은 문서를 함마다 다시 읽지 않게).
+ * `academyWide`(원장) = 학원 전체 진행 중 문서도 함께 싣는다 — 원장은 RLS가 테넌트 전 문서를 열어 준다.
+ */
+export async function getApprovalBoxes(
+  userId: string,
+  opts: { academyWide?: boolean } = {},
+): Promise<ApprovalBoxes> {
   const supabase = await createClient();
 
-  const [mine, asApprover, asRef] = await Promise.all([
+  const [mine, asApprover, asRef, academy] = await Promise.all([
     supabase
       .from("approval_documents")
       .select("id")
@@ -354,30 +366,43 @@ export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(300),
+    opts.academyWide
+      ? supabase
+          .from("approval_documents")
+          .select("id")
+          .eq("status", "pending")
+          .order("submitted_at", { ascending: true })
+          .limit(300)
+      : Promise.resolve({ data: [] as { id: string }[], error: null }),
   ]);
 
-  const err = mine.error ?? asApprover.error ?? asRef.error;
+  // 오류로 돌아갈 때도 원장의 '학원 전체 진행' 탭은 남긴다(null이면 탭이 사라져 보던 자리를 잃는다).
+  const emptyAcademy = opts.academyWide ? [] : null;
+  const err = mine.error ?? asApprover.error ?? asRef.error ?? academy.error;
   if (err) {
-    if (isMissingRelation(err)) return { ...EMPTY_BOXES, ready: false };
-    return { ...EMPTY_BOXES, loadError: describeLoadError(new Error(err.message)) };
+    if (isMissingRelation(err)) return { ...EMPTY_BOXES, ready: false, academyPending: emptyAcademy };
+    return { ...EMPTY_BOXES, loadError: describeLoadError(new Error(err.message)), academyPending: emptyAcademy };
   }
 
   const refIds = new Set((asRef.data ?? []).map((r) => String(r.document_id)));
-  const ids = [
-    ...new Set([
-      ...(mine.data ?? []).map((r) => String(r.id)),
-      ...(asApprover.data ?? []).map((r) => String(r.document_id)),
-      ...refIds,
-    ]),
-  ];
-  if (ids.length === 0) return EMPTY_BOXES;
+  const relatedIds = new Set([
+    ...(mine.data ?? []).map((r) => String(r.id)),
+    ...(asApprover.data ?? []).map((r) => String(r.document_id)),
+    ...refIds,
+  ]);
+  const academyIds = new Set((academy.data ?? []).map((r) => String(r.id)));
+  const ids = [...new Set([...relatedIds, ...academyIds])];
+  if (ids.length === 0) return { ...EMPTY_BOXES, academyPending: emptyAcademy };
 
   let docs: ApprovalDocRow[];
   try {
     docs = await loadDocs(ids);
   } catch (e) {
-    return { ...EMPTY_BOXES, loadError: describeLoadError(e) };
+    return { ...EMPTY_BOXES, loadError: describeLoadError(e), academyPending: emptyAcademy };
   }
+  // 🔴 학원 전체 함은 **따로 센다** — 아래 함들은 "내가 관련된 문서"만 봐야 한다(특히 '전체').
+  const academyDocs = docs.filter((d) => academyIds.has(d.id) && d.status === "pending");
+  docs = docs.filter((d) => relatedIds.has(d.id));
 
   const byNewest = (a: ApprovalDocRow, b: ApprovalDocRow) =>
     b.submittedAt.localeCompare(a.submittedAt);
@@ -412,8 +437,11 @@ export async function getApprovalBoxes(userId: string): Promise<ApprovalBoxes> {
       .filter((d) => (d.status === "rejected" || d.status === "canceled") && involved(d))
       .sort(byNewest),
     refDocs: docs.filter((d) => refIds.has(d.id)).sort(byNewest),
-    // ids 자체가 "내가 관련된 문서"의 합집합이라 docs 전부가 곧 전체함이다.
+    // docs는 위에서 "내가 관련된 문서"로 좁혔다 — 그래서 docs 전부가 곧 전체함이다.
     all: [...docs].sort(byNewest),
+    academyPending: opts.academyWide
+      ? academyDocs.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+      : null,
   };
 }
 
@@ -548,6 +576,12 @@ export type LeaveBalance = {
   used: number;
   pending: number;
   remaining: number;
+  /**
+   * 사용·결재중 조회가 실패했다(2026-09-23 전수 점검 E10) — 이때 used·pending·remaining은 **믿을 수 없다**.
+   * 화면은 숫자 대신 '확인 불가'를 적는다(0일 사용 = 잔여 전부로 보이면 안 쓴 연차가 있는 것처럼 읽힌다).
+   * 기안 거절은 서버 액션이 따로 다시 세므로 이 값에 기대지 않는다.
+   */
+  usageUnknown: boolean;
 };
 
 /**
@@ -568,7 +602,7 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   // 테스트 계정 부여 오버라이드(파일럿 전용 — test-grants.ts) 적용 후의 부여가 이 화면의 진실이다.
   const period = applyLeaveGrantOverride(userId, resolveLeavePeriod(hireDate, today), isChinsanTenant(settings));
   if (!period) {
-    return { hireDate, period, adjustment: 0, granted: 0, used: 0, pending: 0, remaining: 0 };
+    return { hireDate, period, adjustment: 0, granted: 0, used: 0, pending: 0, remaining: 0, usageUnknown: false };
   }
 
   // 두 조회는 서로 독립 — 함께 받는다(B4). 본인·한 구간이라 행 수가 작다(상한 명시로 절단 위험 차단, B2).
@@ -599,8 +633,9 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
     ? 0
     : sumAdjustments((adjRes.data ?? []).filter(inPeriod).map((r) => ({ days: num(r.days) })));
   const granted = grantedTotal(period.granted, adjustment);
-  const zero = { hireDate, period, adjustment, granted, used: 0, pending: 0, remaining: granted };
-  if (formsRes.error || !formsRes.data) return zero;
+  if (formsRes.error || !formsRes.data) {
+    return { hireDate, period, adjustment, granted, used: 0, pending: 0, remaining: 0, usageUnknown: true };
+  }
 
   let used = 0;
   let pending = 0;
@@ -611,5 +646,14 @@ export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   }
   used = roundDays(used);
   pending = roundDays(pending);
-  return { hireDate, period, adjustment, granted, used, pending, remaining: remainingDays({ granted, used, pending }) };
+  return {
+    hireDate,
+    period,
+    adjustment,
+    granted,
+    used,
+    pending,
+    remaining: remainingDays({ granted, used, pending }),
+    usageUnknown: false,
+  };
 }

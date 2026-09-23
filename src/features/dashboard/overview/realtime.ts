@@ -26,7 +26,6 @@ export const OVERVIEW_TABLES: { table: string; menu: MenuKey }[] = [
   { table: "class_sheet_plan_lines", menu: "ecs" },
   { table: "class_sheet_student_marks", menu: "ecs" },
   { table: "shuttle_vehicles", menu: "shuttle" },
-  { table: "exams", menu: "exams" },
 ];
 
 export function overviewTables(allowed: readonly MenuKey[]) {

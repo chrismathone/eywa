@@ -120,7 +120,14 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   help: { w: 960, h: 760 },
   // ⚠️ 메뉴 루트 창 id는 경로가 아니라 menuKey(언더스코어) — windowIdForHref가 menuKey를 반환한다.
   textbook_requests: { w: 1180, h: 760 }, // 교재 요청 — ijw 구조(좌 폼 + 우 실시간 요청서 미리보기 720px)
-  "expense-requests": { w: 900, h: 720 }, // 지출결의서(강사) — 내 결의서 목록 + 등록 모달. 상세 id는 prefix 상속(A4 문서는 max-w-760 중앙정렬이라 무해)
+  // 지출결의서(강사) — 내 결의서 목록 + 등록 모달. 🔴 메뉴 루트 창 id는 menuKey(`expense_requests`, 언더스코어)라
+  // 하이픈 키만 두면 목록 창이 480×560으로 열렸다(2026-09-23 전수 점검 F20). 하이픈 키는 상세(`expense-requests/<id>`,
+  // 경로 기반 id)의 prefix 상속용으로 남긴다(A4 문서는 max-w-760 중앙정렬이라 무해).
+  expense_requests: { w: 900, h: 720 },
+  "expense-requests": { w: 900, h: 720 },
+  // 이탈 방어 — 위험 목록과 사유 패널이 `lg`(1024px)부터 2열로 선다. 기본 480이면 한 열로 접혀 '창마다 최소 크기'
+  // 규칙(2026-09-03)을 어겼다(F20). 보드(retention/board)·캠페인도 prefix로 상속한다.
+  retention: { w: 1100, h: 760 },
   // "새 X" 생성 폼 창(옛 우측 슬라이드 패널 폭 계승). 기본 480×560은 다열 폼엔 좁다.
   "classes/new": { w: 760, h: 680 },
   "staff/new": { w: 620, h: 680 },

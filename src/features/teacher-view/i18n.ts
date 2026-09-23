@@ -900,6 +900,18 @@ export const SHEET_DICT = {
   "fill.done.skipped": { ko: "이미 적혀 있어 그대로 둠 {n}칸", en: "{n} already written" },
   "fill.done.truncated": { ko: "줄 상한(20)으로 못 넣음 {n}칸", en: "{n} skipped (20-row cap)" },
   "fill.err.generic": { ko: "처리하지 못했습니다", en: "Could not complete" },
+  // 이 반에 이미 걸린 배정 — 잘못 건 배정을 지우는 자리(감사 F4). 지우면 월간계획만 사라지고 실제 진도는 남는다.
+  "fill.existing": { ko: "이 반의 배정", en: "Books assigned to this class" },
+  "fill.existing.none": { ko: "아직 배정된 교재가 없습니다.", en: "No books assigned yet." },
+  "fill.existing.from": { ko: "{date}부터", en: "from {date}" },
+  "fill.existing.delete": { ko: "배정 삭제", en: "Remove assignment" },
+  "fill.existing.confirm": {
+    ko: "이 배정의 월간계획이 사라집니다(실제 진도는 그대로). 삭제할까요?",
+    en: "The monthly plan from this assignment will disappear (actual progress stays). Remove it?",
+  },
+  "fill.existing.confirmYes": { ko: "삭제", en: "Remove" },
+  "fill.existing.cancel": { ko: "취소", en: "Cancel" },
+  "fill.existing.deleted": { ko: "배정을 삭제했습니다", en: "Assignment removed" },
   "month.print.title": {
     ko: "지금 화면의 계획을 A4 한 장으로 인쇄합니다(대조·경고는 실리지 않습니다)",
     en: "Prints the plan on screen as one A4 page (comparisons and warnings are not included)",
@@ -1135,6 +1147,8 @@ export const SHEET_DICT = {
   "me.leave.used": { ko: "사용", en: "Used" },
   "me.leave.pending": { ko: "결재중", en: "In approval" },
   "me.leave.remaining": { ko: "잔여", en: "Remaining" },
+  // 사용 내역 조회가 실패했을 때 — 0일로 적으면 "하나도 안 썼다"는 거짓이 된다(2026-09-23 E10).
+  "me.leave.unknown": { ko: "확인 불가", en: "Unavailable" },
   "me.leave.history": { ko: "사용·조정 내역", en: "Leave and adjustment history" },
   "me.leave.empty": { ko: "이 구간에는 아직 기록이 없습니다.", en: "No records in this leave year yet." },
   "me.leave.adjustTag": { ko: "조정", en: "Adjustment" },
@@ -1490,6 +1504,9 @@ export const SHEET_DICT = {
   },
   "att.payslip.period": { ko: "급여명세서 {period}", en: "Payslip {period}" },
   "att.payslip": { ko: "급여명세서", en: "Payslip" },
+  // 반별 월간 출석부 A4 인쇄(감사 N1) — 자리 월간 인쇄와 같은 서식(급여 별지 `AttendanceAppendix`).
+  "att.print": { ko: "인쇄", en: "Print" },
+  "att.print.title": { ko: "{class} 출석부 인쇄", en: "Print attendance — {class}" },
   "att.payslip.allSubjects": { ko: " (전 과목)", en: " (all subjects)" },
   "att.hub.retired": { ko: "(퇴직)", en: "(former)" },
   "att.hub.classesSuffix": { ko: "개 반", en: " classes" },

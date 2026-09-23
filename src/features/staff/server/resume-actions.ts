@@ -5,7 +5,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { applyStaffEmailChange, applyStaffNameChange } from "./account-actions";
-import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import { canManageStaffMember, ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
@@ -25,6 +25,7 @@ import {
   type StaffResumeData,
 } from "../resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "./resume-access";
+import { canSeeStaffMember } from "./subject-scope";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { appendResumeToRoster } from "./resume-roster-sheet";
 
@@ -310,6 +311,8 @@ export async function saveStaffResume(
   let emailNotice: string | null = null;
   let nameWarning: string | null = null;
   let nameNotice: string | null = null;
+  let syncWarning: string | null = null;
+  let syncNotice: string | null = null;
 
   if (id) {
     // 🔴 **바뀐 것만** 로그인에 반영하려고 저장 전 값을 먼저 읽는다(아래 이메일 동기).
@@ -348,19 +351,59 @@ export async function saveStaffResume(
     // 직원목록·필터·대시보드는 users를 읽으므로, 이력서 수정이 인사 필드를 users로 밀어줘야 한다.
     // 이력서에 **값이 있는 항목만** 덮는다(빈 칸으로 계정 값을 지우지 않게). admin + tenant 스코프(0104a 규약).
     const linkedId = (updated[0] as { staff_user_id?: string | null }).staff_user_id ?? null;
+    // 🔴 인사 필드 동기화는 **사무실 쓰기 권한 ∧ 대상이 내 권한 이하**일 때만(2026-09-23 전수 점검 S2).
+    //    종전엔 무조건 밀어서, 강사가 /me에서 자기 이력서의 계약 시작일을 앞당기면 users.hire_date가 바뀌어
+    //    법정 연차가 늘었고, 부서를 바꾸면 담당 과목·부원장 과목 범위 판정까지 따라 바뀌었다.
+    //    본인 이력서는 여전히 저장되고(기록), 계정 값은 사무실이 이력서를 저장할 때 반영된다.
+    const officeWrite = await canWriteTenant(gate.user.systemRole, "staff");
+    let hrSyncAllowed = false;
+    let current: Record<string, unknown> = {};
+    if (linkedId && officeWrite) {
+      const { data: targetRow } = await createAdminClient()
+        .from("users")
+        .select("system_role, department, employment_type, job_title, phone, hire_date")
+        .eq("id", linkedId)
+        .eq("tenant_id", gate.user.tenantId)
+        .maybeSingle();
+      // 과목 범위(원장 2026-09-23 — 부원장은 제 과목 선생님만)도 같이 본다: 목록에서 뺀 직원의 계정 값을
+      // 이력서 저장으로 바꾸지 못하게(#77).
+      hrSyncAllowed =
+        !!targetRow &&
+        canManageStaffMember(gate.user.systemRole, targetRow.system_role as SystemRole) &&
+        (await canSeeStaffMember(gate.user, linkedId));
+      current = (targetRow ?? {}) as Record<string, unknown>;
+    }
     if (linkedId) {
+      // 🔴 **계정의 지금 값과 다른 칸만** 민다(적대적 리뷰 2회차). 사무실이 저장하면 이력서가 계정에 반영되는 게
+      //    설계다(위 주석) — 이전 이력서와 비교하면 실패한 동기를 다시 저장해도 안 밀리고, 연결 모드로 만든 이력서는
+      //    영영 반영되지 않았다. 대신 **무엇이 바뀌었는지 안내**해(syncNotice) 강사가 /me에서 고쳐 둔 값이 조용히
+      //    계정에 들어가지 않게 한다. 빈 칸으로 계정 값을 지우지는 않는다.
+      const differs = (next: string | undefined, col: string) =>
+        Boolean(next) && String(next).trim() !== String(current[col] ?? "").trim();
       const sync: Record<string, unknown> = {};
-      if (data.contract.division) sync.department = data.contract.division;
-      if (data.contract.employmentType) sync.employment_type = data.contract.employmentType;
-      if (data.contract.jobTitle) sync.job_title = data.contract.jobTitle;
-      if (data.personal.phone) sync.phone = data.personal.phone;
-      if (data.contract.startDate) sync.hire_date = data.contract.startDate;
+      if (differs(data.contract.division, "department")) sync.department = data.contract.division;
+      if (differs(data.contract.employmentType, "employment_type")) sync.employment_type = data.contract.employmentType;
+      if (differs(data.contract.jobTitle, "job_title")) sync.job_title = data.contract.jobTitle;
+      if (differs(data.personal.phone, "phone")) sync.phone = data.personal.phone;
+      if (differs(data.contract.startDate, "hire_date")) sync.hire_date = data.contract.startDate;
       // 담당 과목은 부서에서 파생(별도 입력 없음, 2026-07-29). 부서를 바꾸면 과목도 따라간다.
       // 교과가 아닌 부서(파생 0건)면 손대지 않는다 — 겸임(경영팀이면서 수업)의 수동 지정 보존.
-      const derived = await subjectsForDivision(data.contract.division);
+      const derived = hrSyncAllowed && "department" in sync ? await subjectsForDivision(data.contract.division) : [];
       if (derived.length > 0) sync.subjects = derived;
-      if (Object.keys(sync).length > 0) {
-        await createAdminClient().from("users").update(sync).eq("id", linkedId).eq("tenant_id", gate.user.tenantId);
+      if (hrSyncAllowed && Object.keys(sync).length > 0) {
+        const { error: syncErr } = await createAdminClient()
+          .from("users")
+          .update(sync)
+          .eq("id", linkedId)
+          .eq("tenant_id", gate.user.tenantId);
+        if (syncErr) {
+          syncWarning = `이력서는 저장했지만 직원 정보(부서·직급·입사일 등) 반영에 실패했습니다 — ${humanizeDbError(syncErr.message)}`;
+        } else {
+          const LABEL: Record<string, string> = {
+            department: "부서", employment_type: "고용형태", job_title: "직급", phone: "연락처", hire_date: "입사일", subjects: "담당 과목",
+          };
+          syncNotice = `직원 정보도 함께 바꿨습니다: ${Object.keys(sync).map((k) => LABEL[k] ?? k).join("·")}`;
+        }
       }
       // 로그인 이메일도 이력서를 따라간다(원장 지시 2026-08-25 — "이력서 email 변경하면 로그인 이메일도").
       // 🔴 위 sync처럼 users를 직접 update하지 **않는다**: 로그인 아이디는 public.users만 바꾸면 미러
@@ -373,7 +416,6 @@ export async function saveStaffResume(
       // 성명도 같은 규약 — 표시 이름(users.display_name)의 입력 창구는 이력서 하나다(원장 2026-08-25).
       const nextName = data.personal.name.trim();
       const nameEdited = Boolean(nextName) && nextName !== prevName;
-      const officeWrite = await canWriteTenant(gate.user.systemRole, "staff");
       if (emailEdited && officeWrite) {
         const applied = await applyStaffEmailChange(linkedId, nextEmail, "resume");
         if ("error" in applied) {
@@ -405,11 +447,11 @@ export async function saveStaffResume(
       nonce: Date.now(),
       redirectTo: `/staff/resumes/${id}`,
       // 경고·안내는 각각 한 줄뿐이라 이메일·이름 둘 다 생기면 합쳐 보낸다(하나가 조용히 사라지지 않게).
-      ...(emailWarning || nameWarning
-        ? { warning: [emailWarning, nameWarning].filter(Boolean).join(" · ") }
+      ...(emailWarning || nameWarning || syncWarning
+        ? { warning: [syncWarning, emailWarning, nameWarning].filter(Boolean).join(" · ") }
         : {}),
-      ...(emailNotice || nameNotice
-        ? { notice: [emailNotice, nameNotice].filter(Boolean).join(" · ") }
+      ...(emailNotice || nameNotice || syncNotice
+        ? { notice: [syncNotice, emailNotice, nameNotice].filter(Boolean).join(" · ") }
         : {}),
     };
   }

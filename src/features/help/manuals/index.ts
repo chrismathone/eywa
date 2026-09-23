@@ -26,6 +26,7 @@ import { expenseRequests } from "./expense-requests";
 import { meetings } from "./meetings";
 import { documents } from "./documents";
 import { inventory } from "./inventory";
+import { textbooks } from "./textbooks";
 import { shuttle } from "./shuttle";
 import { calendar } from "./calendar";
 import { approvals } from "./approvals";
@@ -62,6 +63,7 @@ export const MANUALS: HelpManual[] = [
   meetings,
   documents,
   inventory,
+  textbooks,
   shuttle,
   calendar,
   approvals,

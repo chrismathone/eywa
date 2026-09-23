@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { EmptyState } from "@/components/empty-state";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { MODULES, MODULE_IDS, type ModuleId } from "@/lib/modules";
 
 export const metadata = { title: "쓰지 않는 기능 — aywa" };
@@ -21,18 +22,21 @@ export default async function UnavailableFeaturePage({
   const { feature } = await searchParams;
   const id = (MODULE_IDS as readonly string[]).includes(feature ?? "") ? (feature as ModuleId) : null;
   const label = id ? MODULES[id].label : "이 기능";
+  // 기능을 켜는 사람 = 원장·총괄(결정 로그 '새 지점 = 일반판'). 🔴 총괄은 역할이 아니라 별도 표라 system_role이
+  // 'admin'인 사람이 있다 — `=== "master"`만 보면 총괄에게 '원장님께 요청하라'가 뜬다(2026-09-23 전수 점검 D6).
+  const canEnable = user.systemRole === "master" || (await isCurrentUserSuperAdmin());
 
   return (
     <div className="mx-auto w-full max-w-xl py-10">
       <EmptyState
         title={`${label}은(는) 이 학원에서 쓰지 않는 기능입니다`}
         description={
-          user.systemRole === "master"
+          canEnable
             ? "학원 설정의 '기능' 면에서 켤 수 있습니다."
             : "필요하면 원장님께 기능을 켜 달라고 요청해 주세요."
         }
         action={
-          user.systemRole === "master" ? (
+          canEnable ? (
             <Link href="/owner?tab=modules" className="text-primary font-semibold underline underline-offset-4">
               학원 설정 › 기능 열기
             </Link>

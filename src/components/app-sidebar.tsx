@@ -126,6 +126,7 @@ export function AppSidebar({
   canOtherTeacherView = false,
   frequentKeys,
   menuLayout,
+  isGenericTenant = false,
 }: {
   systemRole: SystemRole;
   /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
@@ -148,6 +149,8 @@ export function AppSidebar({
    * ⚠️ 감춘 메뉴는 '자주 방문한 메뉴' 줄에서도 빠진다 — 안 그러면 "감췄는데 맨 위에 그대로"가 된다.
    */
   menuLayout?: MenuLayout;
+  /** 새 학원(일반판) — 설정 '기능' 면 노출(설정 화면 탭과 같은 판정). 모르면 false(침산처럼). */
+  isGenericTenant?: boolean;
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
@@ -219,6 +222,7 @@ export function AppSidebar({
     //    사람이 실제로 있다(결정 로그 2026-08-13 *"super_admin은 … 어떤 제한 명단·게이트도 자동 통과"*).
     isMaster: systemRole === "master" || isSuperAdmin,
     menuLayout,
+    isGenericTenant,
   };
   // 자주 방문한 메뉴 — 서버가 계정 기록에서 뽑아 순서대로 내려준다(없으면 기본값).
   const frequent = frequentFor(gate, frequentKeys);
