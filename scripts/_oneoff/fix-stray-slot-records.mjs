@@ -11,7 +11,9 @@
  *    (실측 9/22: 1.5를 15:00에 0.8, 고아 16:20에 0.7), 고아 시각이 우연히 JJ 시간대 안이라고 JJ로 합치면
  *    강사 수업 시수가 자리로 옮겨 간다. 그래서 품는 칸이 자리면 **그 날 강사 칸**으로 보내고, 강사 칸이
  *    둘 이상이면 사람 판단으로 넘긴다. 옮길 곳이 없으면 건드리지 않는다.
- *  · 계획 줄: `slot_start`를 그 칸으로. 같은 (반,날짜,칸,구분,줄번호)이 이미 있으면 충돌로 보고만 한다.
+ *  · 계획 줄: `slot_start`를 그 칸으로 옮기고 **줄번호는 그 칸의 빈 번호로 새로 매긴다**.
+ *    🔴 유니크는 `(반,날짜,칸,평시/특강,줄번호)`라 **구분(skill_area)과 무관하게** 줄번호가 칸 안에서 유일해야 한다
+ *    (처음엔 구분까지 같이 보고 검사해 적용이 통째로 되돌아갔다). 내용(구분·교재·진도)이 똑같은 줄이 이미 있으면 옮기지 않는다.
  *  · 출결: 같은 학생의 그 칸 행이 있으면 **시수를 합치고** 고아 행을 지운다. 없으면 행을 그 칸으로 옮긴다.
  *    🔴 상태가 다르거나(출석↔결석 등) 시수가 수상한 행(보강 5.0 등)은 **자동으로 안 건드리고** 사람 판단으로 넘긴다.
  *  · 자리(JJ·LAB) 칸에 들어간 시수는 이 스크립트가 손대지 않는다 — 따로 보고만 한다(원장 결정).
@@ -91,17 +93,26 @@ async function main() {
 
     const lines = await sql`
       select id, skill_area, line_no, term_mode, textbook, progress from class_sheet_plan_lines
-       where class_id = ${row.class_id} and plan_date = ${row.d} and slot_start = ${row.s}`;
+       where class_id = ${row.class_id} and plan_date = ${row.d} and slot_start = ${row.s}
+       order by line_no`;
+    const same = (a, b) => (a ?? "").trim().replace(/\s+/g, " ") === (b ?? "").trim().replace(/\s+/g, " ");
     for (const l of lines) {
-      const [clash] = await sql`
-        select id from class_sheet_plan_lines
-         where class_id = ${row.class_id} and plan_date = ${row.d} and slot_start = ${to}
-           and skill_area = ${l.skill_area} and line_no = ${l.line_no} and term_mode = ${l.term_mode} limit 1`;
-      if (clash) {
-        skips.push(`${where} 계획 [${l.skill_area} ${l.line_no}] — ${to} 칸에 같은 줄이 이미 있음`);
+      const there = await sql`
+        select line_no, skill_area, textbook, progress from class_sheet_plan_lines
+         where class_id = ${row.class_id} and plan_date = ${row.d} and slot_start = ${to} and term_mode = ${l.term_mode}`;
+      if (there.some((t) => t.skill_area === l.skill_area && same(t.textbook, l.textbook) && same(t.progress, l.progress))) {
+        skips.push(`${where} 계획 [${l.skill_area} ${l.line_no}] — ${to} 칸에 같은 내용이 이미 있음(옮기지 않는다)`);
         continue;
       }
-      plans.push({ id: l.id, to, where, what: `${l.skill_area} ${l.line_no} ${l.textbook ?? ""} ${l.progress ?? ""}`.trim() });
+      // 🔴 줄번호는 구분과 무관하게 칸 안에서 유일하다 — 이번 실행에서 이미 잡아 둔 번호까지 세어 다음 빈 번호를 준다.
+      const taken = new Set(there.map((t) => Number(t.line_no)));
+      for (const q of plans) if (q.slotKey === `${row.class_id}|${row.d}|${to}|${l.term_mode}`) taken.add(q.lineNo);
+      let lineNo = 1;
+      while (taken.has(lineNo)) lineNo += 1;
+      plans.push({
+        id: l.id, to, lineNo, slotKey: `${row.class_id}|${row.d}|${to}|${l.term_mode}`, where,
+        what: `${l.skill_area} ${l.line_no}→${lineNo} ${l.textbook ?? ""} ${l.progress ?? ""}`.trim(),
+      });
     }
 
     const rows = await sql`
@@ -167,7 +178,7 @@ async function main() {
     return;
   }
   await sql.begin(async (tx) => {
-    for (const p of plans) await tx`update class_sheet_plan_lines set slot_start = ${p.to}, updated_at = now() where id = ${p.id}`;
+    for (const p of plans) await tx`update class_sheet_plan_lines set slot_start = ${p.to}, line_no = ${p.lineNo}, updated_at = now() where id = ${p.id}`;
     for (const a of atts) {
       if (a.kind === "move") await tx`update attendance_records set slot_start = ${a.to} where id = ${a.id}`;
       else {
