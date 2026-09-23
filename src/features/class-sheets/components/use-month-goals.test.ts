@@ -9,6 +9,63 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(upsertGoal).mockReset();
 });
+
+describe("반 계획 보기 — 주간 목표도 같은 자동저장 큐", () => {
+  it("더블클릭 편집 값이 주간 기간과 역할을 보존해 저장된다", async () => {
+    vi.mocked(upsertGoal).mockResolvedValue({ ok: true });
+    const { result } = renderHook(() =>
+      useMonthGoals({
+        classId: "c1",
+        scope: "week",
+        periodStart: "2026-09-21",
+        initial: { homeroom: {}, assistant: {} },
+      }),
+    );
+    act(() => result.current.setField("assistant", "reading", "textbook", "Reading A"));
+    await act(async () => { await result.current.flushAll(); });
+    expect(upsertGoal).toHaveBeenCalledWith(expect.objectContaining({
+      classId: "c1",
+      scope: "week",
+      periodStart: "2026-09-21",
+      role: "assistant",
+      skillArea: "reading",
+      textbook: "Reading A",
+    }));
+    expect(result.current.getError()).toBeNull();
+  });
+
+  it("저장 실패 후 입력을 버리고 닫으면 대기 중이던 값은 전송하지 않는다", async () => {
+    vi.mocked(upsertGoal).mockResolvedValueOnce({ ok: false, error: "저장 실패" });
+    const { result, unmount } = renderHook(() =>
+      useMonthGoals({ classId: "c1", scope: "week", periodStart: "2026-09-21", initial: { homeroom: {}, assistant: {} } }),
+    );
+    act(() => result.current.setField("homeroom", "reading", "textbook", "A"));
+    await act(async () => { await result.current.flushAll(); });
+    expect(result.current.getError()).toBe("저장 실패");
+    act(() => {
+      result.current.setField("homeroom", "reading", "textbook", "B");
+      result.current.discardPending();
+      unmount();
+    });
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(upsertGoal).toHaveBeenCalledTimes(1);
+  });
+
+  it("한 역할의 저장 실패를 다른 역할의 저장 성공이 지우지 않는다", async () => {
+    vi.mocked(upsertGoal).mockImplementation(async ({ role }) =>
+      role === "homeroom" ? { ok: false, error: "담임 저장 실패" } : { ok: true },
+    );
+    const { result } = renderHook(() =>
+      useMonthGoals({ classId: "c1", scope: "week", periodStart: "2026-09-21", initial: { homeroom: {}, assistant: {} } }),
+    );
+    act(() => {
+      result.current.setField("homeroom", "reading", "textbook", "A");
+      result.current.setField("assistant", "reading", "textbook", "B");
+    });
+    await act(async () => { await result.current.flushAll(); });
+    expect(result.current.getError()).toBe("담임 저장 실패");
+  });
+});
 afterEach(() => {
   vi.useRealTimers();
 });

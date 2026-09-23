@@ -10,7 +10,7 @@
 .lp .dh .tools em{font-style:normal;font-size:.92cqw;font-weight:700;border:1px solid #dce4ee;border-radius:.7cqw;padding:.45cqw .8cqw;color:var(--ink)}
 .lp .dh .tools .live{display:flex;align-items:center;gap:.5cqw;color:var(--ink2);font-weight:600}
 .lp .dh .tools .live i{width:.6cqw;height:.6cqw;border-radius:50%;background:var(--green)}
-.lp .kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.75cqw}
+.lp .kpis{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:.75cqw}
 .lp .kpi{background:#fff;border:1px solid #dce4ee;border-radius:1cqw;box-shadow:0 .25cqw 0 #e7edf5;padding:.9cqw 1cqw .8cqw;display:grid;gap:.35cqw;min-width:0}
 .lp .kpi small{display:flex;align-items:center;gap:.45cqw;font-size:.95cqw;font-weight:700;white-space:nowrap}
 .lp .kpi small .stk{width:1.6cqw;height:1.6cqw}

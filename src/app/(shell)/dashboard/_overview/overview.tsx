@@ -282,7 +282,7 @@ export function Overview({
           </div>
         </header>
 
-        {/* KPI 여섯 칸(원장 2026-09-11) — 카드 = 팝업, ↗ = 목적지 창. 카드·팝업·목적지가 같은 함수를 부른다. */}
+        {/* KPI 여덟 칸(원장 2026-09-11 여섯 칸 → 보강예정 → 2026-09-23 금일 등록) — 카드 = 팝업, ↗ = 목적지 창. 카드·팝업·목적지가 같은 함수를 부른다. */}
         <KpiStrip snapshot={snapshot} />
 
         <div id="academy-overview" className={s.sectionLine}>

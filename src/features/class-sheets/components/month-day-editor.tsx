@@ -65,6 +65,7 @@ export function MonthDayEditor({
   date,
   slots,
   periodLabelBySlot,
+  focusArea,
   onClose,
   onSaved,
 }: {
@@ -74,6 +75,8 @@ export function MonthDayEditor({
   /** 그 날 실제로 도는 교시(월간 조회가 이미 날짜 단위로 판정해 둔 것 — 여기서 다시 정하지 않는다). */
   slots: MonthSlot[];
   periodLabelBySlot: Record<string, string>;
+  /** 계획 표에서 더블클릭해 왔으면 그 영역의 첫 교재 칸으로 바로 이동한다. */
+  focusArea?: { key: string; label: string };
   onClose: () => void;
   /** 저장 큐를 다 비운 뒤 호출 — 호출부가 월간을 다시 읽어 배지·경고를 갱신한다. */
   onSaved: () => void;
@@ -89,6 +92,7 @@ export function MonthDayEditor({
   const flushers = useRef(new Map<string, () => Promise<unknown>>());
   // 열린 직후 바깥 클릭을 무시하는 창(위 OUTSIDE_CLOSE_GRACE_MS 주석 — 더블클릭의 두 번째 클릭).
   const outsideArmedRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -100,6 +104,15 @@ export function MonthDayEditor({
       alive = false;
     };
   }, [classId, date]);
+
+  useEffect(() => {
+    if (state.kind !== "ready" || !focusArea) return;
+    const input = contentRef.current?.querySelector<HTMLInputElement>(
+      `[data-skill-area="${focusArea.key}"] input[aria-label="교재"]`,
+    );
+    input?.focus();
+    input?.scrollIntoView?.({ block: "center" });
+  }, [state.kind, focusArea]);
 
   // 바깥 클릭 닫기를 조금 늦게 켠다(위 OUTSIDE_CLOSE_GRACE_MS 🔴).
   useEffect(() => {
@@ -163,13 +176,14 @@ export function MonthDayEditor({
         close();
       }}
     >
-      <DialogContent className="max-h-[88vh] overflow-y-auto px-2 sm:max-w-3xl" showCloseButton={false}>
+      <DialogContent ref={contentRef} className="max-h-[88vh] overflow-y-auto px-2 sm:max-w-3xl" showCloseButton={false}>
         <DialogHeader className="gap-1 px-2">
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle className="text-base font-bold">
               <span className="num">{dayLabel(date, lang)}</span> {t("plan.editor.title")}
             </DialogTitle>
             <span className="text-text-dim text-xs font-semibold">{className}</span>
+            {focusArea ? <span className="text-primary text-xs font-bold">{focusArea.label}</span> : null}
             <span className="ml-auto flex items-center gap-2">
               <button
                 type="button"
