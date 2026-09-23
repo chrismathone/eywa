@@ -2,16 +2,14 @@
 // node --env-file=.env.local scripts/_manual/build.mjs [메뉴 | 메뉴/면]   (인자가 없으면 책까지 만든다)
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
 import { REPO, MANUAL, OUT, require, readToc, flatFaces, selectFaces, readPage, shotBase, demoSession, moduleEnabled } from "./lib.mjs";
 import { esc, faceBlocks, documentHtml, toPdf } from "./render.mjs";
 
 const { chromium } = require("@playwright/test");
 const arg = process.argv[2];
 const toc = readToc();
-const sha = execSync("git rev-parse --short=8 HEAD", { cwd: REPO }).toString().trim();
 const date = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "long" }).format(new Date());
-const stamp = `${date} · 판 ${sha}`;
+const stamp = date; // 만든 날짜만 적는다(원장 2026-09-23 — 판 번호는 필요 없음)
 const clean = (s) => s.replace(/[\\/:*?"<>|]/g, "·").trim();
 const n2 = (i) => String(i + 1).padStart(2, "0");
 
@@ -72,7 +70,7 @@ for (const list of menus.values()) {
 if (!arg) {
   const all = flatFaces(toc).filter((f) => mats.has(f.id));
   const sections = [];
-  sections.push({ id: "cover", foot: "", blocks: [`<div class="cover"><div class="brand">aywa</div><h1>학원 운영 프로그램<br>사용 설명서</h1><p>처음 오신 원장님이 이 책만 보고 학원을 세팅할 수 있도록, 메뉴와 화면마다 나눠 설명했습니다.</p><p>${esc(stamp)} · 화면 ${all.length}개</p></div>`] });
+  sections.push({ id: "cover", foot: "", blocks: [`<div class="cover"><div class="brand">aywa</div><h1>학원 운영 프로그램<br>사용 설명서</h1><p>처음 오신 원장님이 이 책만 보고 학원을 세팅할 수 있도록, 메뉴와 화면마다 나눠 설명했습니다.</p><p>${esc(stamp)}</p></div>`] });
   // 목차 — 그룹 · 메뉴 · 면. 쪽 번호는 조립 뒤에 채워진다.
   const tocBlocks = [`<h2 data-keep style="padding-top:0;font-size:18pt;color:#121212">목차</h2>`,
     `<div class="toc-f"><span>처음 시작하기</span><span class="dots"></span><span class="pg" data-for="start">–</span></div>`];
@@ -102,7 +100,7 @@ if (!arg) {
     });
   });
   fs.mkdirSync(OUT, { recursive: true });
-  const r = await toPdf(browser, documentHtml(sections), path.join(OUT, "aywa-사용설명서.pdf"));
+  const r = await toPdf(browser, documentHtml(sections), path.join(OUT, process.env.MANUAL_BOOK ?? "aywa-사용설명서.pdf"));
   report.push(r.ok ? `✓ 전체 한 권 — ${r.layout.length}쪽` : `✗ 전체 한 권 — ${r.bad.join(" / ")}`);
 }
 await browser.close();

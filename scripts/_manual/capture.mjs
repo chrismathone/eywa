@@ -63,8 +63,8 @@ for (const f of faces) {
     href = href.replace(":id", id);
   }
   const tab = await s.ctx.newPage();
-  // 화면 폭: 창을 최대화하는 면·창이 아닌 화면은 A4 폭에 넣었을 때 글자가 읽히도록 조금 좁힌다.
-  await tab.setViewportSize(page.viewport ?? (page.maximize ? { width: 1320, height: 900 } : (page.open ?? "window") === "page" ? { width: 1366, height: 900 } : VIEWPORT));
+  // 화면 폭: 창을 최대화하는 면은 글자가 읽히도록 조금 좁히고, 대시보드처럼 창이 아닌 화면은 가장 큰 해상도(1920×1080) 기준으로 찍는다(원장 2026-09-23).
+  await tab.setViewportSize(page.viewport ?? (page.maximize ? { width: 1320, height: 900 } : (page.open ?? "window") === "page" ? { width: 1920, height: 1080 } : VIEWPORT));
   try {
     // 개발 서버가 메모리 때문에 스스로 재시작하는 동안엔 연결이 끊긴다 — 잠시 기다렸다 다시 연다.
     for (let tries = 0; ; tries++) {
@@ -114,7 +114,7 @@ for (const f of faces) {
       const dialogs = [...document.querySelectorAll('[role="dialog"],[aria-modal="true"],[role="alertdialog"]')].filter(vis);
       if (dialogs.length) problems.push(`팝업이 떠 있음: ${dialogs.map((d) => d.getAttribute("aria-label") ?? d.textContent.slice(0, 20)).join(", ")}`);
       const text = document.body.innerText;
-      for (const bad of ["문제가 발생", "오류가 발생", "Application error", "권한이 없습니다", "페이지를 찾을 수 없"]) if (text.includes(bad)) problems.push(`화면에 '${bad}' 문구`);
+      for (const bad of ["문제가 발생", "오류가 발생", "Application error", "권한이 없습니다", "페이지를 찾을 수 없", "조회 실패", "못 갱신했습니다"]) if (text.includes(bad)) problems.push(`화면에 '${bad}' 문구`);
       // '기록이 없습니다' 같은 빈 안내 한 줄은 행으로 세지 않는다.
       const rows = [...document.querySelectorAll("tbody tr")].filter((tr) => tr.querySelectorAll("td").length >= 2).length;
       if (rows < minRows) problems.push(`표 행이 ${rows}개뿐(최소 ${minRows}) — 예시 데이터 부족`);
