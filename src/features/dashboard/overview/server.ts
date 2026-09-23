@@ -325,7 +325,7 @@ const loadPastInvoiceMonths = (tenantId: string, months: string[]) =>
       );
       return summarizeInvoiceMonths(rows, months);
     },
-    ["dashboard-invoice-trend", tenantId, months.join(",")],
+    ["dashboard-invoice-trend-v2", tenantId, months.join(",")],
     { tags: [`dashboard-invoice-trend:${tenantId}`], revalidate: 300 },
   )();
 

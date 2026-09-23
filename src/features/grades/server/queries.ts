@@ -195,7 +195,8 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     // 🔴 제도상 안 치는 시험(초등·중1의 중간·기말)은 **목록에서 뺀다**(원장 2026-09-22:
     //    *"검색 리스트에 빼줘야지 해당없음 이렇게 칠하는게 아니라"*). 회색 줄로 남기면 204줄짜리
     //    화면에서 실제로 적을 줄을 눈으로 골라내야 한다. 저장·엑셀도 같은 집합을 본다.
-    if (!examAppliesTo(sel.slot, student.grade)) continue;
+    // 🔴 학기를 함께 넘긴다 — 중1은 1학기엔 시험을 치므로 빠지면 안 된다(원장 2026-09-23).
+    if (!examAppliesTo(sel.slot, student.grade, sel.term)) continue;
     const cell = scoreByStudent.get(e.student_id);
     rows.push({
       studentId: student.id,

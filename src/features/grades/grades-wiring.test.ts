@@ -227,7 +227,8 @@ describe("정렬은 계정에 남지만 주소는 안 바꾼다", () => {
 describe("목록 규약(원장 2026-09-22 오후)", () => {
   it("🔴 안 치는 시험은 **줄을 안 세운다** — 회색으로 칠해 두면 적을 줄을 눈으로 골라내야 한다", () => {
     const q = read("src/features/grades/server/queries.ts");
-    expect(q).toMatch(/if \(!examAppliesTo\(sel\.slot, student\.grade\)\) continue;/);
+    // 🔴 학기까지 넘겨야 한다 — 학년만 보면 중1이 **1학기에도** 통째로 사라진다(원장 2026-09-23).
+    expect(q).toMatch(/if \(!examAppliesTo\(sel\.slot, student\.grade, sel\.term\)\) continue;/);
     // 화면에도 그 갈래가 남아 있으면 안 된다(서버가 이미 뺐다).
     expect(read("src/app/(shell)/exams/_components/score-grid.tsx")).not.toContain("해당 없음");
   });
@@ -278,5 +279,29 @@ describe("주소 축 배선", () => {
   it("툴바 컨트롤은 같은 상자 — 반만 다른 부품이라 치수를 맞춰 준다", () => {
     const page = read("src/app/(shell)/exams/page.tsx");
     expect(page).toMatch(/triggerClassName=\{TOOLBAR_SELECT\}/);
+  });
+});
+
+describe("표가 창 안에서 스크롤한다(원장 2026-09-23)", () => {
+  it("🔴 높이는 flex로 **받는다** — `max-h`를 박으면 안쪽 스크롤러가 높이를 못 받아 스크롤 자체가 없다", () => {
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    // DragScrollArea의 진짜 스크롤러는 안쪽 `h-full`이라, 바깥이 **확정 높이**를 가져야 한다.
+    expect(grid).toMatch(/<DragScrollArea scrollY className="[^"]*min-h-\[14rem\] flex-1/);
+    expect(grid).not.toContain("max-h-[calc(100dvh");
+    // 🔴 같은 축(min-height) 유틸을 겹치지 않는다 — 승자를 CSS 순서가 정한다([[#116]]).
+    expect(grid).not.toMatch(/min-h-\[14rem\] min-h-0|min-h-0 min-h-\[/);
+    // 폼이 기둥(세로 flex)이어야 표가 남는 높이를 가져간다.
+    expect(grid).toMatch(/<form[\s\S]{0,160}?className="flex min-h-0 w-full flex-1 flex-col/);
+    // 페이지 루트도 같은 기둥이어야 폼의 flex-1이 잴 높이가 생긴다(등록상담 목록뷰 선례).
+    // 🔴 폭으로 가르지 않는다 — 좁은 창만 문서 흐름으로 두면 그 폭에선 `sticky thead`가 붙을
+    //    스크롤러가 없어 머리줄 고정이 죽는다(적대적 리뷰 2026-09-23).
+    expect(read("src/app/(shell)/exams/page.tsx")).toContain('gridView ? "flex h-full min-h-0 flex-col space-y-5"');
+  });
+
+  it("🔴 성적을 안 적은 줄은 배경으로 알린다(원장이 두 번 요구 — 09-22 지시·09-23 재지시)", () => {
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).toMatch(/missing\s*\n?\s*\?\s*"bg-amber-soft/);
+    // '시험없음'으로 눌러 둔 줄은 미기입이 아니다.
+    expect(grid).toMatch(/const missing = !isNoExam &&/);
   });
 });
