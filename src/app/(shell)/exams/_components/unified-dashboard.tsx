@@ -1,21 +1,20 @@
 import { PageHeader } from "@/components/page-header";
 import { FaceTabs } from "@/components/face-tabs";
 import { gradeWriteError } from "@/features/grades/server/access";
-import { getGradeSheet } from "@/features/grades/server/queries";
-import { resolveGradeSelection } from "@/features/grades/selection";
-import { axisValueOf } from "@/features/grades/subject-axis";
+import { axisOptionsFrom } from "@/features/grades/subject-axis";
+import { applyLedgerView, ledgerOptions, parseLedgerView } from "@/features/grades/unified/ledger-view";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
 import { aggregateBy, KIND_LABEL, withPreviousScores, type UnifiedRow } from "@/features/grades/unified/model";
 import { kstToday } from "@/lib/date-kst";
 import { UnifiedLedger } from "./unified-ledger";
-import { NewTestForm } from "./new-test-form";
+import { LedgerHead } from "./ledger-head";
+import { GradeEntryDialog, type EntryClass } from "./grade-entry-dialog";
 import { ExamsToolbar } from "./exams-toolbar";
 import { type ExamDayItem } from "./exam-calendar";
 import { OverviewTab } from "./overview-tab";
 import { RecordsPager } from "./records-tab";
-import { EntryPicker } from "./entry-picker";
 import { StudentTab } from "./student-tab";
 import { ClassesTab } from "./classes-tab";
 import { CohortsTab } from "./cohorts-tab";
@@ -23,6 +22,7 @@ import { ScheduleTab } from "./schedule-tab";
 
 type Params = { from?: string; to?: string; subject?: string; kind?: string; missing?: string; student?: string; cohortClass?: string;
   schoolGroup?: string; gradeGroup?: string; page?: string; tab?: string; q?: string; month?: string;
+  sort?: string; dir?: string; fSchool?: string; fClass?: string; fTeacher?: string; fScore?: string; fDelta?: string; fConsult?: string;
   entry?: string; entryYear?: string; entryTerm?: string; entrySubject?: string; entrySlot?: string; entryClass?: string; entryDate?: string; entryMax?: string };
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (value: string | undefined): value is string => {
@@ -68,12 +68,6 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const fetchTo = tab === "schedule" && monthEnd(month) > to ? monthEnd(month) : to;
   const [data, writeError, settings] = await Promise.all([getUnifiedGrades(fetchFrom, fetchTo), gradeWriteError(), getTenantSettings()]);
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
-  const entrySelection = entryMode ? resolveGradeSelection({
-    year: searchParams.entryYear, term: searchParams.entryTerm,
-    subject: searchParams.entrySubject ?? (data.subjects.includes("math") ? "math" : undefined),
-    class: searchParams.entryClass, slot: searchParams.entrySlot, date: searchParams.entryDate, max: searchParams.entryMax,
-  }, { subjectOptions: subjectMaps.options, todayIso: today }) : null;
-  const sheet = entrySelection && tab === "records" ? await getGradeSheet(entrySelection) : null;
 
   const matches = (row: UnifiedRow) =>
     (kind === "all" || row.kind === kind) && (subject === "all" || row.subject === subject) && (!q || row.name.includes(q));
@@ -82,12 +76,16 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const rows = filteredRows.filter((row) => showMissing || !isBlank(row));
   const missingCount = filteredRows.filter(isBlank).length;
   // 필터를 좁혀 마지막 페이지가 줄면 "101–40건" 같은 빈 화면이 된다 — 마지막 페이지로 당긴다.
-  const page = Math.max(1, Math.min(Math.ceil(rows.length / PAGE_SIZE) || 1, Number(searchParams.page) || 1));
+  // 원장 열 머리 정렬·필터 — 페이지를 자르기 전에(한 페이지 안에서만 정렬하면 오름차순이 50건 안에서만 맞는다).
+  const ledgerView = parseLedgerView(searchParams);
+  const ledgerRows = tab === "records" ? applyLedgerView(rows, ledgerView) : [];
+  const page = Math.max(1, Math.min(Math.ceil(ledgerRows.length / PAGE_SIZE) || 1, Number(searchParams.page) || 1));
 
-  const entryParams: Record<string, string> = entrySelection ? { entry: "1", entryYear: String(entrySelection.year), entryTerm: String(entrySelection.term),
-    entrySubject: axisValueOf(entrySelection), entrySlot: entrySelection.slot, entryClass: entrySelection.classId ?? "", entryDate: entrySelection.date,
-    entryMax: String(entrySelection.maxScore) } : {};
-  const base: Record<string, string> = { from, to, subject, kind, missing: showMissing ? "1" : "0", tab, ...(q ? { q } : {}), ...entryParams };
+  const base: Record<string, string> = { from, to, subject, kind, missing: showMissing ? "1" : "0", tab, ...(q ? { q } : {}) };
+  // 원장 정렬·필터는 원장 링크(페이지 이동·정렬 머리)에만 싣는다 — 다른 면으로 가면 풀린다.
+  const ledgerHref = (patch: Record<string, string>) => href({ ...Object.fromEntries(Object.entries({ sort: searchParams.sort, dir: searchParams.dir, fSchool: searchParams.fSchool,
+    fClass: searchParams.fClass, fTeacher: searchParams.fTeacher, fScore: searchParams.fScore, fDelta: searchParams.fDelta, fConsult: searchParams.fConsult })
+    .filter((e): e is [string, string] => !!e[1])), ...patch });
   const href = (patch: Record<string, string>) => `/exams?${new URLSearchParams({ ...base, ...patch }).toString()}`;
   const exportHref = `/api/exams/unified-export?${new URLSearchParams({ from, to, subject, kind, missing: showMissing ? "1" : "0" })}`;
 
@@ -97,6 +95,16 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const schools = aggregateBy(rows, "school");
   const grades = aggregateBy(rows, "grade");
 
+  const entryClasses = new Map<string, EntryClass>();
+  for (const [key, list] of Object.entries(data.studentClasses)) {
+    const [studentId, classSubject] = key.split("|");
+    for (const cls of list) {
+      const entry = entryClasses.get(cls.id) ?? { id: cls.id, name: cls.name, subject: classSubject ?? "", studentIds: [] };
+      if (studentId && !entry.studentIds.includes(studentId)) entry.studentIds.push(studentId);
+      entryClasses.set(cls.id, entry);
+    }
+  }
+  const subjectOptions = data.subjects.map((key) => ({ value: key, label: subjectMaps.labelOf(key) }));
   const dayCounts = new Map<string, ExamDayItem>();
   for (const row of tab === "schedule" ? allRows : []) {
     if (!row.date.startsWith(month) || (!showMissing && isBlank(row))) continue;
@@ -113,23 +121,19 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     {/* 시간표처럼 창(임베드)에선 헤더 줄을 접어 탭 줄이 맨 위에 선다. */}
     <div className="compact-chrome:hidden"><PageHeader eyebrow="학생 관리" title="통합 성적관리" /></div>
     <FaceTabs ariaLabel="성적관리 면" active={tab} faces={TABS.map(([key, label]) => ({ key, label, href: href({ tab: key, page: "1" }) }))} />
-    <ExamsToolbar from={from} to={to} subject={subject} kind={kind} missing={showMissing} q={q} exportHref={exportHref} entryMode={entryMode}
-      entryHref={href({ entry: entryMode ? "0" : "1", page: "1", tab: "records" })}
-      subjectOptions={data.subjects.map((key) => ({ value: key, label: subjectMaps.labelOf(key) }))}
+    <ExamsToolbar from={from} to={to} subject={subject} kind={kind} missing={showMissing} q={q} exportHref={exportHref} subjectOptions={subjectOptions}
+      action={<GradeEntryDialog canWrite={!writeError} today={today} subjects={subjectOptions} axisSubjects={axisOptionsFrom(subjectMaps.options)}
+        students={data.students} initialOpen={entryMode} classes={[...entryClasses.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))} />}
       kindOptions={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
 
     {tab === "overview" ? <OverviewTab rows={rows} studentCount={students.length} academy={aggregateBy(rows, "academy")[0]} missingCount={missingCount} href={href} /> : null}
 
     {tab === "records" ? <div className="space-y-3">
-      {sheet && entrySelection ? <EntryPicker selection={entrySelection} sheet={sheet} subjectOptions={subjectMaps.options}
-        keep={{ from, to, subject, kind, ...(q ? { q } : {}) }} /> : null}
-      <NewTestForm students={data.students} subjects={data.subjects.map((key) => ({ value: key, label: subjectMaps.labelOf(key) }))} date={to} canWrite={!writeError} />
-      <RecordsPager page={page} pageSize={PAGE_SIZE} total={rows.length} href={href} note={showMissing ? "미입력 포함" : undefined} />
-      <UnifiedLedger rows={rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)} canWrite={!writeError} sheet={page === 1 ? sheet : null}
-        studentClasses={data.studentClasses} consultationDates={data.consultationDates} />
+      <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note={showMissing ? "미입력 포함" : undefined} />
+      <UnifiedLedger rows={ledgerRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)} canWrite={!writeError}
+        head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} />} />
       {writeError ? <p className="text-danger text-sm">{writeError}</p> : null}
-      {sheet && !sheet.schemaReady ? <p className="text-danger text-sm">성적 표 준비(0283a)가 적용되어야 명단 점수를 저장할 수 있습니다.</p> : null}
-      <RecordsPager page={page} pageSize={PAGE_SIZE} total={rows.length} href={href} note="수업보고서 테스트일은 보고서 날짜와 연결됩니다" />
+      <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note="수업보고서 테스트일은 보고서 날짜와 연결됩니다" />
     </div> : null}
 
     {tab === "student" ? <StudentTab students={students} selected={selectedStudent} href={href}
