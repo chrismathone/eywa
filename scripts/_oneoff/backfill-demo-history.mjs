@@ -704,6 +704,54 @@ try {
           and x.parent_request=${marker} and x.prospect_name='데모 상담 '||m.month_key
       )
     `;
+    // 운영실 '금일 등록'(원장 2026-09-23) — 매일 아침 오늘 콜&상담 '등록 완료'로 옮긴 상담을 채운다.
+    // 재원 중인 데모 학생 둘(반 배정 완료 — 연결 학생의 수강)과 등록만 한 한 명(배정 전). 사흘 전에 상담했고
+    // 오늘 옮겼다. 옮긴 시각은 앱과 같은 상태 변경 감사로그로 남긴다(운영실이 그 로그로 센다). 날짜별 표식으로 멱등.
+    const enrolledMark = `${marker}:enrolled-today:${today}`;
+    // 배정 전인 한 명은 데모 학교 밖(하늘초)이라 이름·학교·학년 자동 연결(0258a)에 안 걸린다.
+    const newcomerName = ["윤서하", "박도윤", "최지안", "한예린", "정시우", "오하람", "강민재"][Number(today.slice(8)) % 7];
+    const moved = await tx`
+      with picked as (
+        select distinct on (st.id) st.id student_id, st.name, st.school, st.grade, c.subject
+        from students st
+        join enrollments e on e.student_id=st.id and e.tenant_id=st.tenant_id
+        join classes c on c.id=e.class_id and c.tenant_id=e.tenant_id
+        where st.tenant_id=${tenantId} and st.status='enrolled'
+          and st.student_code like 'DMO-%' and st.notes like 'demo-roster:%'
+          and e.start_date <= ${throughDate}::date
+          and (e.end_date is null or e.end_date >= ${throughDate}::date)
+        order by st.id, c.subject
+      ), ranked as (
+        select p.*, row_number() over (order by md5(p.student_id::text || ${today})) rn from picked p
+      ), prospects as (
+        select student_id, name, school, grade, subject, rn from ranked where rn <= 2
+        union all
+        select null, ${newcomerName}, '하늘초', '초5', 'math', 3
+      )
+      insert into enrollment_consultations
+        (tenant_id,student_id,prospect_name,prospect_grade,prospect_school,parent_phone,
+         parent_request,subject,consultation_path,outcome,consulted_at,created_at)
+      select ${tenantId}, p.student_id, p.name, p.grade, p.school, null,
+        ${enrolledMark}, p.subject, '지인 소개', 'enrolled'::consultation_outcome,
+        ((${throughDate}::date - 3)::timestamp + interval '13 hours') at time zone 'Asia/Seoul',
+        ((${throughDate}::date - 3)::timestamp + interval '13 hours') at time zone 'Asia/Seoul'
+      from prospects p
+      where not exists (
+        select 1 from enrollment_consultations x where x.tenant_id=${tenantId}
+          and x.parent_request=${enrolledMark}
+      )
+      returning id, prospect_name
+    `;
+    for (const [i, row] of moved.entries()) {
+      await tx`
+        insert into audit_logs (tenant_id,actor_id,actor_name,action,target_type,target_label,metadata,created_at)
+        values (${tenantId}, null, '데모 데이터', 'enrollment_consultation_outcome', 'enrollment_consultations',
+          ${row.prospect_name},
+          jsonb_build_object('consultationId', ${row.id}::text, 'from', 'consulted', 'to', 'enrolled', 'via', 'demo'),
+          greatest(${asOf.toISOString()}::timestamptz - make_interval(mins => ${(i + 1) * 7}),
+            (${throughDate}::date::timestamp + interval '1 minute') at time zone 'Asia/Seoul'))
+      `;
+    }
     // Make the locally populated demo modules browsable. Integration-backed
     // modules stay disabled because these rows have no real external service.
     await tx`

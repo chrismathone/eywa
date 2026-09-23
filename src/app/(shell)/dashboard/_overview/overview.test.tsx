@@ -223,7 +223,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "오늘첫수업", "전일 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "금일 등록", "오늘첫수업", "전일 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -305,6 +305,14 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
         ...ok,
       },
       intake: { data: [{ id: "i1", name: "문의가", time: "14:32" }], ...ok },
+      // 금일 등록(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담 둘(반 배정 하나 · 배정 전 하나).
+      enrolledToday: {
+        data: [
+          { id: "r1", name: "등록가", schoolGrade: "침산중1", time: "15:10", assigned: true },
+          { id: "r2", name: "등록나", schoolGrade: null, time: "11:02", assigned: false },
+        ],
+        ...ok,
+      },
       calendar: {
         data: [
           { id: "e1", title: "영어 레테", startDate: "2026-09-10", endDate: "2026-09-10", startTime: "15:00", source: "manual", kind: "levelTest" },
@@ -448,6 +456,19 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     cleanup();
   });
 
+  it("금일 등록 = 오늘 등록 완료로 옮긴 상담, 보조 줄은 반 배정 / 배정 전, 이름은 상담 상세로(↗ 없음)", () => {
+    mocks.data = kpiSnapshot();
+    render(<Overview initial={mocks.data} />);
+    const card = screen.getByRole("button", { name: /^금일 등록 2명\./ });
+    expect(card.getAttribute("aria-label")).toContain("반 배정 1 · 배정 전 1");
+    fireEvent.click(card);
+    const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("반 배정 완료");
+    expect(popup.textContent).toContain("배정 전");
+    expect(within(popup).getByRole("link", { name: "등록가 상담 상세" }).getAttribute("href")).toContain("/enrollment/r1");
+    cleanup();
+  });
+
   it("금일입테 = 오늘 레벨테스트만(첫 수업·내일 제외), ↗ 없음", () => {
     mocks.data = kpiSnapshot();
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
@@ -562,11 +583,16 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(kpiGridVars(5)).toMatchObject({ "--kpi-n": 5, "--kpi-mid": 3, "--kpi-last-mid": "span 2" });
     expect(kpiGridVars(4)).toMatchObject({ "--kpi-n": 4, "--kpi-mid": 2, "--kpi-last-mid": "auto" });
     expect(kpiGridVars(1)).toMatchObject({ "--kpi-n": 1, "--kpi-mid": 1, "--kpi-last-mid": "auto" });
-    // 운영실은 역할에 따라 칸 수가 다르다 — 출석부 권한이 없는 역할이면 전일 결석·보강예정(둘 다 출석부 영역)이 빠져 5칸.
+    // 여덟 칸(금일 등록 포함)은 4 × 2 — 마지막 칸이 넓어지지 않는다.
+    expect(kpiGridVars(8)).toMatchObject({ "--kpi-n": 8, "--kpi-mid": 4, "--kpi-last-mid": "auto" });
+    // 운영실은 역할에 따라 칸 수가 다르다 — 출석부 권한이 없는 역할이면 전일 결석·보강예정(둘 다 출석부 영역)이 빠져
+    // 6칸(금일 등록은 콜&상담 권한이라 남는다), 콜&상담 권한까지 없으면 금일 등록도 빠진다.
     const snap = kpiSnapshot(["dashboard", "students", "withdrawals", "enrollment", "calendar"]);
     delete snap.sections.absent;
     delete snap.sections.makeup;
     mocks.data = snap;
+    expect(renderToStaticMarkup(<Overview initial={mocks.data} />)).toContain("--kpi-n:6");
+    delete snap.sections.enrolledToday;
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
     expect(html).toContain("--kpi-n:5");
   });

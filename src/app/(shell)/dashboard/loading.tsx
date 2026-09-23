@@ -7,7 +7,7 @@ import { DashboardWidthGate } from "./_components/dashboard-width-gate";
 // ⚠️ **실제 화면의 뼈대를 그대로 따른다** — 스켈레톤이 더 크거나 작으면 로드가 끝나는 순간 화면이 튄다.
 // 🔑 격자·줄 높이를 손으로 다시 짓지 않는다: 실제 CSS 모듈 클래스(.header·.identity·.kpis·.kpiBody·.grid·.panel…)에
 //    **같은 길이의 글자를 투명하게** 넣어 줄 높이를 그대로 얻는다(창 폭에 따른 열 수도 컨테이너 쿼리 한 벌로 같아진다).
-// 구조: 머리 → KPI 일곱 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(일곱,
+// 구조: 머리 → KPI 여덟 칸 → '학원 운영 한눈에'(패널 넷 + 넓은 패널 둘) → '학생 · 학습 · 상담'(일곱,
 // 셋째는 두 줄 + 학습·보고와 학생 상담 한 쌍) → '수업과 학원 운영'(여덟) → 꼬리. 패널 속 높이는 흔한 내용 높이의 근삿값이다.
 import type { CSSProperties } from "react";
 
@@ -18,6 +18,8 @@ const KPI = [
   ["퇴원생", "0", "명", "EiE 0 · 인재원 영어 0 · 수학 0"],
   ["신규문의", "0", "건", "마지막 접수 00:00"],
   ["금일입테", "0", "건", "첫 일정 00:00"],
+  // 금일 등록(원장 2026-09-23 — 금일입테 오른쪽).
+  ["금일 등록", "0", "명", "반 배정 0 · 배정 전 0"],
   ["오늘첫수업", "0", "명", "첫 등원 0 · 새 과목 0"],
   // 전일 결석 보조 줄은 기준일(어제) + 항목 셋이라 여섯 칸 중 가장 길다. **흔한 경우**로 자리를 잡는다 —
   // '일부 교시'는 실측상 거의 매일 있다(2026-09-09 11명 · 09-10 5명 · 09-11 1명). 그러니 그 꼬리를 빼면
@@ -125,7 +127,7 @@ export default function DashboardLoading() {
           </div>
         </header>
         {/* 열 수 = 칸 수(실제 띠의 `kpiGridVars`와 같은 변수) — 없으면 기본 6열이라 일곱째 칸이 줄을 바꿔 로드 끝에 화면이 튄다. */}
-        <div className={s.kpis} style={{ "--kpi-n": KPI.length } as CSSProperties} data-kpi-n={KPI.length}>
+        <div className={s.kpis} style={{ "--kpi-n": KPI.length, "--kpi-mid": 4 } as CSSProperties} data-kpi-n={KPI.length}>
           {KPI.map(([label, value, unit, detail]) => (
             <div key={label} className={s.kpi}>
               <div className={s.kpiBody}>

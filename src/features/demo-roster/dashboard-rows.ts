@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   academyDocuments,
   announcements,
+  auditLogs,
   enrollmentConsultations,
   expenses,
   lessonReports,
@@ -23,11 +24,19 @@ async function flag(tx: Tx, query: ReturnType<typeof sql>): Promise<boolean> {
   return value === true || value === "t" || value === "true";
 }
 
-export async function insertConsultations(tx: Tx, tenantId: string, note: string, world: World) {
+export async function insertConsultations(
+  tx: Tx,
+  tenantId: string,
+  note: string,
+  world: World,
+  studentOf: Map<string, string>,
+) {
+  const rows = world.consultations.map((row) => ({ row, id: crypto.randomUUID() }));
   await tx.insert(enrollmentConsultations).values(
-    world.consultations.map((row) => ({
-      id: crypto.randomUUID(),
+    rows.map(({ row, id }) => ({
+      id,
       tenantId,
+      studentId: row.studentCode ? (studentOf.get(row.studentCode) ?? null) : null,
       prospectName: row.name,
       prospectGrade: row.grade,
       prospectSchool: row.school,
@@ -41,6 +50,22 @@ export async function insertConsultations(tx: Tx, tenantId: string, note: string
       createdAt: new Date(row.at),
     })),
   );
+  // 운영실 '금일 등록'은 '등록 완료'로 옮긴 시각을 상태 변경 감사로그에서 읽는다 — 앱이 남기는 것과 같은 모양으로.
+  const moved = rows.filter(({ row }) => row.movedAt);
+  if (moved.length) {
+    await tx.insert(auditLogs).values(
+      moved.map(({ row, id }) => ({
+        tenantId,
+        actorId: null,
+        actorName: "데모 데이터",
+        action: "enrollment_consultation_outcome",
+        targetType: "enrollment_consultations",
+        targetLabel: row.name,
+        metadata: { consultationId: id, from: "consulted", to: "enrolled", via: "demo" },
+        createdAt: new Date(row.movedAt!),
+      })),
+    );
+  }
 }
 
 export async function insertStudentConsultations(tx: Tx, tenantId: string, world: World, studentOf: Map<string, string>) {

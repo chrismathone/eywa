@@ -83,6 +83,12 @@ describe("데모 운영실 데이터", () => {
       expect(todayIntake).toHaveLength(4);
       expect(todayIntake.every((row: { outcome: string }) => row.outcome === "pending")).toBe(true);
       expect(world.consultations.some((row: { outcome: string; at: string }) => row.outcome === "enrolled" && !row.at.startsWith(TODAY))).toBe(true);
+      // 금일 등록(원장 2026-09-23) — 오늘 옮긴 상담 셋: 오늘 첫 수업 학생 둘(반 배정) + 등록만 한 한 명.
+      const movedToday = world.consultations.filter((row: { movedAt?: string }) => row.movedAt?.startsWith(TODAY));
+      expect(movedToday).toHaveLength(3);
+      expect(movedToday.every((row: { outcome: string }) => row.outcome === "enrolled")).toBe(true);
+      expect(movedToday.filter((row: { studentCode?: string | null }) => row.studentCode && world.firstClassCodes.has(row.studentCode))).toHaveLength(2);
+      expect(movedToday.every((row: { subject: string }) => row.subject === "math" || row.subject === "english")).toBe(true);
 
       expect(world.studentConsultations.filter((row: { followUpDate: string | null }) => row.followUpDate && row.followUpDate < TODAY)).toHaveLength(3);
       expect(world.reports.some((row: { homeworkScore: string }) => row.homeworkScore === "40%")).toBe(true);
