@@ -23,8 +23,9 @@ export type UnifiedRecord = {
   classes: UnifiedClass[];
   /** 반별 추이는 평가 당시 수강 반을 기준으로 계산한다. */
   trendClasses?: UnifiedClass[];
-  /** 상담 탭의 학습·성적 상담 날짜. 기존 시험 체크 날짜는 백업으로 사용한다. */
+  /** 이 시험 행의 고유 키가 명시된 학습·성적 상담 날짜만 표시한다. */
   consultationDate: string | null;
+  /** 기존 UI 계약. 성적표 1차 요청(ask1_at)은 상담이 아니므로 여기에 넣지 않는다. */
   manualConsultationDate: string | null;
   editHref: string;
   /** 학교 성적 저장에 필요한 기존 선택 축. 다른 출처에는 없다. */

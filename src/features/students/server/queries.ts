@@ -40,6 +40,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
 import { reportSubject } from "@/features/timetable/lib/report-subject";
+import { visibleConsultationSummary } from "@/features/consultations/internal-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import {
@@ -1489,7 +1490,7 @@ export async function getStudentConsultationHistory(
       category: r.category,
       subject: r.subject,
       audience: r.audience,
-      summary: r.summary,
+      summary: visibleConsultationSummary(r.summary),
       followUpAction: r.follow_up_action,
       followUpDate: r.follow_up_date,
       followUpDone: r.follow_up_done,
@@ -1787,7 +1788,7 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   };
   for (const c of consultations ?? []) {
     const catLabel = c.category ? CONSULT_CATEGORY_LABEL[c.category] : null;
-    const p = parseImportedNote(c.summary);
+    const p = parseImportedNote(visibleConsultationSummary(c.summary));
     events.push({
       date: String(c.consulted_at).slice(0, 10),
       kind: "consultation",

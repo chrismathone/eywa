@@ -1,4 +1,5 @@
 import "server-only";
+import { visibleConsultationSummary } from "@/features/consultations/internal-link";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
@@ -164,7 +165,9 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
     attendance: attendance as RetentionRawData["attendance"],
     reportHomework: reportHomework as RetentionRawData["reportHomework"],
     grades: grades as RetentionRawData["grades"],
-    consultations: consultations as RetentionRawData["consultations"],
+    consultations: (consultations as RetentionRawData["consultations"]).map((row) => ({
+      ...row, summary: row.summary ? visibleConsultationSummary(row.summary) : row.summary,
+    })),
     invoices: invoices as RetentionRawData["invoices"],
     enrollments: enrollments as RetentionRawData["enrollments"],
   };

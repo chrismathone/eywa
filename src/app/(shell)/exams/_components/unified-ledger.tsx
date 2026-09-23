@@ -1,90 +1,124 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { saveUnifiedGrade, type UnifiedSaveState } from "@/features/grades/unified/server/actions";
-import { KIND_LABEL, schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
-import type { GradeSheet } from "@/features/grades/types";
-import type { UnifiedClass } from "@/features/grades/unified/model";
-import { RosterLedgerRows } from "./roster-ledger";
+import { saveUnifiedGrade } from "@/features/grades/unified/server/actions";
+import { schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
+import { examInfoOf } from "@/features/grades/unified/ledger-view";
+import { DeltaBadge, KindPill, ScoreLine } from "./tab-parts";
+import { useSubjectMaps } from "@/features/owner/operations-context";
+import { SUBJECT_SOFT } from "@/features/owner/subjects";
 
-function Delta({ row }: { row: UnifiedRow }) {
-  if (row.delta == null || row.delta === 0) return <span>—</span>;
-  const up = row.delta > 0;
-  return <strong className={up ? "text-green" : "text-danger"}>{up ? "↑" : "↓"}{Math.abs(row.delta)}{row.deltaUnit === "%p" ? "%p" : ""}</strong>;
-}
+const INPUT = "border-line min-w-0 rounded-md border bg-background px-1.5 py-1 text-sm text-center";
+const BTN = "border-line hover:bg-bg-soft rounded-md border px-2 py-1 text-sm font-semibold whitespace-nowrap disabled:opacity-50";
 
+/**
+ * 원장 한 줄 — **기본은 읽기 전용**이고 [수정]을 눌러야 칸이 열린다(원장 2026-09-23 "기본적으로 수정 불가능").
+ * [삭제]는 행을 지우지 않고 **점수를 비운다**(성적 행 삭제는 칸 비우기·학생 상세 휴지통 두 곳뿐 — grades-wiring 가드).
+ *
+ * 🔴 저장 요청은 **이 줄의 state로 직접** 만든다. 옛 줄은 입력칸을 `form=` 속성으로 숨은 폼에 묶었는데,
+ *    날짜 칸이 요청에 실리지 않아 DB엔 멀쩡한 날짜가 있는데도 "시험일을 확인해 주세요"가 떴다(원장 제보 2026-09-23).
+ */
 function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
-  const [state, action, pending] = useActionState<UnifiedSaveState, FormData>(saveUnifiedGrade, undefined);
-  const initialConsultation = row.consultationDate ?? row.manualConsultationDate;
-  const [consulted, setConsulted] = useState(!!initialConsultation);
-  const formId = `grade-row-${row.key.replace(/[^a-z0-9]/gi, "-")}`;
+  const initialConsult = row.consultationDate ?? row.manualConsultationDate ?? "";
+  const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [date, setDate] = useState(row.date);
+  const [score, setScore] = useState(row.score == null ? "" : String(row.score));
+  const [max, setMax] = useState(String(row.maxScore ?? 100));
+  const [consulted, setConsulted] = useState(!!initialConsult);
+  const [consultDate, setConsultDate] = useState(initialConsult);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pending, start] = useTransition();
+  const subjectMaps = useSubjectMaps();
   const reportDate = row.source === "report";
   const classNames = row.classes.map((cls) => cls.name).join(" / ");
   const teacherNames = [...new Set(row.classes.map((cls) => cls.teacher).filter(Boolean))].join(" / ");
+
+  const send = (fields: { score: string; label: string }) => start(async () => {
+    const fd = new FormData();
+    fd.set("source", row.source); fd.set("id", row.sourceId); fd.set("kind", row.kind);
+    fd.set("date", reportDate ? row.date : date);
+    fd.set("score", fields.score); fd.set("maxScore", max);
+    fd.set("originalConsultationDate", initialConsult);
+    fd.set("consultationDate", consulted && !row.consultationDate ? consultDate : initialConsult);
+    const result = await saveUnifiedGrade(undefined, fd);
+    if (result?.error) { setMessage({ ok: false, text: result.error }); return; }
+    setMessage({ ok: true, text: fields.label });
+    setEditing(false); setConfirmDelete(false);
+  });
+  // 편집 칸은 **열 때마다 지금 행 값으로** 다시 채운다 — 저장 뒤 서버가 새 행을 내려줘도 state는 옛 값이라서.
+  const reset = (open: boolean) => {
+    setEditing(open); setDate(row.date); setScore(row.score == null ? "" : String(row.score));
+    setMax(String(row.maxScore ?? 100)); setConsulted(!!initialConsult); setConsultDate(initialConsult); setMessage(null);
+  };
+  const cancel = () => reset(false);
+
   return (
-    <tr className="border-line-faint border-t align-middle hover:bg-muted/40">
-      <td className="px-2 py-2">
-        <form id={formId} action={action} className="space-y-1">
-          <input type="hidden" name="source" value={row.source} />
-          <input type="hidden" name="id" value={row.sourceId} />
-          <input type="hidden" name="kind" value={row.kind} />
-          <input type="hidden" name="originalConsultationDate" value={initialConsultation ?? ""} />
-          <input type="date" name="date" defaultValue={row.date} readOnly={reportDate} disabled={!canWrite}
-            title={reportDate ? "수업보고서 날짜입니다. 날짜 수정은 보고서에서 해주세요" : "시험일"}
-            className="border-line min-w-0 w-full rounded-md border bg-background px-1 py-1 text-xs" aria-label={`${row.name} 시험일`} />
-        </form>
-        {state?.error ? <span role="alert" className="text-danger mt-1 block text-xs">{state.error}</span> : null}
-        {state?.ok ? <span role="status" className="text-green mt-1 block text-xs">저장됨</span> : null}
+    <tr className={`border-line-faint border-t align-middle ${editing ? "bg-primary-soft/30" : "hover:bg-muted/40"} ${row.score == null && !row.rawScore ? "bg-amber-soft/40" : ""}`}>
+      <td className="px-2 py-2 text-center"><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${SUBJECT_SOFT[subjectMaps.colorOf(row.subject)]}`}>{subjectMaps.labelOf(row.subject)}</span></td>
+      <td className="px-2 py-2 text-center">
+        {editing && !reportDate ? <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={`${row.name} 시험일`} className={`${INPUT} w-full`} />
+          : <span className="num" title={reportDate ? "수업보고서 날짜 — 날짜는 보고서에서 고칩니다" : undefined}>{row.date.slice(2).replaceAll("-", ".")}</span>}
       </td>
-      <td className="px-2 py-2 font-semibold"><Link href={`/students/${row.studentId}?tab=grades`} className="hover:text-primary hover:underline">{row.name}</Link></td>
-      <td className="px-2 py-2">{schoolGradeLabel(row.school, row.grade)}</td>
+      <td className="px-2 py-2 text-center font-semibold"><Link href={`/students/${row.studentId}?tab=grades`} className="hover:text-primary hover:underline">{row.name}</Link></td>
+      <td className="px-2 py-2 text-center">{schoolGradeLabel(row.school, row.grade)}</td>
       <td className="max-w-0 px-2 py-2" title={classNames}><span className="block truncate">{classNames || "—"}</span></td>
-      <td className="max-w-0 px-2 py-2" title={teacherNames}><span className="block truncate">{teacherNames || "—"}</span></td>
-      <td className="px-2 py-2"><span className="bg-primary-soft text-primary inline-block rounded-md px-2 py-1 font-semibold whitespace-nowrap">{KIND_LABEL[row.kind]}</span></td>
-      <td className="px-2 py-2">
-        <div className="flex min-w-0 items-center gap-1">
-          <input type="number" name="score" form={formId} min="0" step="0.01" defaultValue={row.score ?? ""} disabled={!canWrite}
-            placeholder={row.rawScore ?? "점수"} aria-label={`${row.name} 점수`}
-            className="border-line min-w-0 w-17 rounded-md border bg-background px-1 py-1 text-xs" />
+      <td className="max-w-0 px-2 py-2 text-center" title={teacherNames}><span className="block truncate">{teacherNames || "—"}</span></td>
+      <td className="px-2 py-2 text-center"><KindPill kind={row.kind} /></td>
+      <td className="px-2 py-2 text-center text-sm">{examInfoOf(row) ?? <span className="text-text-dim">—</span>}</td>
+      <td className="px-2 py-2 text-center">
+        {editing ? <div className="flex items-center justify-center gap-1">
+          <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="점수" aria-label={`${row.name} 점수`} className={`${INPUT} w-16`} />
           <span>/</span>
-          <input type="number" name="maxScore" form={formId} min="1" max="1000" step="0.01" defaultValue={row.maxScore ?? 100} disabled={!canWrite}
-            aria-label={`${row.name} 만점`} className="border-line min-w-0 w-15 rounded-md border bg-background px-1 py-1 text-xs" />
-        </div>
-        {row.rawScore && row.score == null ? <span title={row.rawScore} className="block truncate text-xs">원문: {row.rawScore}</span> : null}
+          <input type="number" min="1" max="1000" step="0.01" value={max} onChange={(e) => setMax(e.target.value)} aria-label={`${row.name} 만점`} className={`${INPUT} w-16`} />
+        </div> : <ScoreLine row={row} />}
       </td>
-      <td className="px-2 py-2 text-center"><Delta row={row} /></td>
-      <td className="px-2 py-2">
-        <div className="flex items-center gap-1">
-          <input type="checkbox" checked={consulted} disabled={!canWrite || !!row.consultationDate}
-            onChange={(event) => setConsulted(event.target.checked)} aria-label={`${row.name} 성적 상담`} />
-          {consulted ? (
-            row.consultationDate ? <span title="학생 상담 탭의 학습·성적 상담">{row.consultationDate.slice(5)}</span>
-              : <input type="date" name="consultationDate" form={formId} defaultValue={row.manualConsultationDate ?? ""}
-                  required disabled={!canWrite} aria-label={`${row.name} 상담일`}
-                  className="border-line min-w-0 w-27 rounded-md border bg-background px-1 py-1 text-xs" />
-          ) : null}
-        </div>
+      <td className="py-2 pl-2 pr-4 text-right"><DeltaBadge row={row} /></td>
+      <td className="px-2 py-2 text-center">
+        {row.consultationDate ? <span className="text-green num" title="학생 상담 탭의 학습·성적 상담">{row.consultationDate.slice(5).replace("-", "/")}</span>
+          : editing ? <span className="flex items-center justify-center gap-1">
+            <input type="checkbox" checked={consulted} onChange={(e) => setConsulted(e.target.checked)} aria-label={`${row.name} 성적 상담`} />
+            {consulted ? <input type="date" value={consultDate} onChange={(e) => setConsultDate(e.target.value)} aria-label={`${row.name} 상담일`} className={`${INPUT} w-28`} /> : null}
+          </span>
+          : initialConsult ? <span className="num">{initialConsult.slice(5).replace("-", "/")}</span> : <span className="text-text-dim">—</span>}
       </td>
-      <td className="px-2 py-2 text-right"><button type="submit" form={formId} disabled={!canWrite || pending}
-        className="border-line hover:bg-primary-soft rounded-md border px-2 py-1 font-semibold disabled:opacity-50">{pending ? "저장 중" : "저장"}</button></td>
+      <td className="px-2 py-2 text-center">
+        <div className="flex items-center justify-center gap-1">
+          {editing ? <>
+            <button type="button" className={`${BTN} bg-primary text-primary-foreground border-primary`} disabled={pending || (consulted && !row.consultationDate && !consultDate)}
+              onClick={() => send({ score, label: "저장됨" })}>{pending ? "저장 중" : "저장"}</button>
+            <button type="button" className={BTN} disabled={pending} onClick={cancel}>취소</button>
+          </> : confirmDelete ? <>
+            <button type="button" className={`${BTN} border-danger text-danger`} disabled={pending} onClick={() => send({ score: "", label: "점수를 지웠습니다" })}>{pending ? "지우는 중" : "지우기"}</button>
+            <button type="button" className={BTN} disabled={pending} onClick={() => setConfirmDelete(false)}>취소</button>
+          </> : <>
+            <button type="button" className={BTN} disabled={!canWrite} onClick={() => reset(true)}>수정</button>
+            <button type="button" className={`${BTN} text-danger`} disabled={!canWrite || (row.score == null && !row.rawScore)}
+              title="이 기록의 점수를 지웁니다" onClick={() => { setConfirmDelete(true); setMessage(null); }}>삭제</button>
+          </>}
+        </div>
+        {confirmDelete ? <span className="text-danger mt-1 block text-xs">점수를 지울까요?</span> : null}
+        {message ? <span role={message.ok ? "status" : "alert"} className={`mt-1 block text-xs ${message.ok ? "text-green" : "text-danger"}`}>{message.text}</span> : null}
+      </td>
     </tr>
   );
 }
 
-export function UnifiedLedger({ rows, canWrite, sheet, studentClasses, consultationDates }: {
-  rows: UnifiedRow[]; canWrite: boolean; sheet?: GradeSheet | null;
-  studentClasses?: Record<string, UnifiedClass[]>; consultationDates?: Record<string, string>;
-}) {
+export function UnifiedLedger({ rows, canWrite, head }: { rows: UnifiedRow[]; canWrite: boolean; head: ReactNode }) {
   return (
-    <div className="border-line overflow-x-auto rounded-xl border">
-      <table className="w-full min-w-[1150px] table-fixed text-left text-xs">
-        <colgroup><col className="w-[12%]" /><col className="w-[8%]" /><col className="w-[10%]" /><col className="w-[15%]" /><col className="w-[9%]" /><col className="w-[10%]" /><col className="w-[16%]" /><col className="w-[6%]" /><col className="w-[9%]" /><col className="w-[5%]" /></colgroup>
-        <thead className="bg-bg-soft"><tr>{["시험일", "이름", "학교학년", "반", "담임", "시험", "점수 / 만점", "증감", "상담", "저장"].map((label) => <th key={label} className="px-2 py-2 font-bold whitespace-nowrap">{label}</th>)}</tr></thead>
-        <tbody>{sheet ? <RosterLedgerRows sheet={sheet} canWrite={canWrite && sheet.schemaReady && (sheet.selection.slot !== "monthly" || sheet.monthReady)}
-          studentClasses={studentClasses ?? {}} consultationDates={consultationDates ?? {}} /> : null}{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} />)}</tbody>
+    // 열 머리 필터 팝업이 짧은 표에서 잘리지 않게 최소 높이를 둔다(overflow 컨테이너 안 absolute 팝업 — header-filter 주석).
+    <div className="bg-card shadow-card min-h-[26rem] overflow-x-auto rounded-2xl">
+      <table className="w-full min-w-[1330px] table-fixed text-sm">
+        <colgroup>
+          <col className="w-[5.5rem]" /><col className="w-[7.75rem]" /><col className="w-[6rem]" /><col className="w-[7rem]" /><col />
+          <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[10.5rem]" /><col className="w-[6.5rem]" />
+          <col className="w-[7.5rem]" /><col className="w-[8.5rem]" />
+        </colgroup>
+        {head}
+        <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} />)}</tbody>
       </table>
-      {rows.length === 0 && !sheet?.rows.length ? <p className="p-8 text-center text-sm">이 기간에 표시할 성적 기록이 없습니다.</p> : null}
+      {rows.length === 0 ? <p className="text-text-dim p-8 text-center text-sm">조건에 맞는 성적 기록이 없습니다. 필터나 검색어를 바꿔 보세요.</p> : null}
     </div>
   );
 }

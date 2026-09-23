@@ -9,6 +9,7 @@ import { kstDateOf, kstMonth, kstMonthStartIso, kstToday, shiftMonth } from "@/l
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { visibleConsultationSummary } from "../internal-link";
 
 export { followUpUrgency, type FollowUpUrgency };
 
@@ -119,7 +120,7 @@ function mapRow(r: {
     category: r.category as StudentConsultationCategory | null,
     subject: r.subject,
     audience: r.audience as StudentConsultationAudience | null,
-    summary: r.summary,
+    summary: visibleConsultationSummary(r.summary),
     followUpAction: r.follow_up_action,
     followUpDate: r.follow_up_date,
     followUpDone: r.follow_up_done,

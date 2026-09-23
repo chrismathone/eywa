@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireAccess } from "@/lib/auth/require-access";
 import { kstToday } from "@/lib/date-kst";
 import { attachmentFilename } from "@/lib/http/content-disposition";
+import { defaultRangeFrom } from "@/features/grades/unified/default-range";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
 import { KIND_LABEL, schoolGradeLabel, withPreviousScores } from "@/features/grades/unified/model";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -20,9 +21,7 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const today = kstToday();
   const to = validDate(params.get("to")) ? params.get("to")! : today;
-  const fallback = new Date(`${to}T00:00:00Z`);
-  fallback.setUTCDate(fallback.getUTCDate() - 180);
-  const start = fallback.toISOString().slice(0, 10);
+  const start = defaultRangeFrom(to);
   const from = validDate(params.get("from")) && params.get("from")! <= to ? params.get("from")! : start;
   const kind = params.get("kind") ?? "all";
   const subject = params.get("subject") ?? "all";

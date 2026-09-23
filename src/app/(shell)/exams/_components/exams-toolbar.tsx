@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FilterSelect, type FilterSelectOption } from "@/components/filter-select";
+import { SearchToggle } from "@/components/search-toggle";
 import { Toolbar, ToolbarButton, ToolbarDivider } from "@/components/toolbar";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 
@@ -10,10 +11,12 @@ import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
  * 기간은 날짜 두 칸이라 드롭다운이 아니라 같은 높이의 날짜 입력으로 둔다. 바꾸면 곧바로 URL로 반영된다
  * (옛 [적용] 버튼 폼 대체 — 다른 필터 드롭다운과 반응 방식을 맞춘다).
  */
-export function ExamsToolbar({ from, to, subject, kind, missing, subjectOptions, kindOptions, exportHref, entryHref, entryMode }: {
-  from: string; to: string; subject: string; kind: string; missing: boolean;
+export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptions, kindOptions, exportHref, action }: {
+  from: string; to: string; subject: string; kind: string; missing: boolean; q: string;
   subjectOptions: FilterSelectOption[]; kindOptions: FilterSelectOption[];
-  exportHref: string; entryHref: string; entryMode: boolean;
+  exportHref: string;
+  /** 오른쪽 끝 주 동작(성적 입력 창의 버튼) — 창 상태를 가진 클라 부품이라 슬롯으로 받는다. */
+  action: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/exams";
@@ -35,9 +38,10 @@ export function ExamsToolbar({ from, to, subject, kind, missing, subjectOptions,
     <FilterSelect paramName="subject" axisLabel="과목" value={subject} allValue="all" options={subjectOptions} />
     <FilterSelect paramName="kind" axisLabel="시험" value={kind} allValue="all" options={kindOptions} />
     <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
+    <SearchToggle placeholder="학생 이름" defaultValue={q} />
     <span className="ml-auto" />
     <ToolbarButton onClick={() => window.location.assign(exportHref)}>엑셀</ToolbarButton>
     <ToolbarDivider />
-    <ToolbarButton variant="primary" href={entryHref}>{entryMode ? "입력 닫기" : "새 시험 입력"}</ToolbarButton>
+    {action}
   </Toolbar>;
 }
