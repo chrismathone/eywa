@@ -18,7 +18,6 @@ import {
   cellClassKey,
   computeBlocks,
   expandHalfPeriodBlocks,
-  sortDaysByGroup,
   type SubSlot,
 } from "@/features/timetable/lib/grid";
 import {
@@ -36,7 +35,7 @@ import {
   toMinutes,
   type MovePart,
 } from "@/features/timetable/lib/class-move";
-import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import { sortDaysInGroup, weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
 import { ReservedSection } from "./reserved-section";
@@ -177,7 +176,7 @@ function buildGroups(
     const cols: TeacherCol[] = [];
     // 묶음마다 **그 사람이 저장한 순서**(없으면 가나다순) — 원장 2026-09-08 "월목 / 화금 / 수 그룹 내에서".
     for (const t of sortTeachersByOrder(teachers, order?.[teacherGroupKey(def.days)])) {
-      const days = sortDaysByGroup(
+      const days = sortDaysInGroup(
         Array.from(
           new Set(
             slots
@@ -185,6 +184,7 @@ function buildGroups(
               .map((s) => s.dayOfWeek as DayOfWeek),
           ),
         ),
+        def.days,
       );
       if (days.length > 0) cols.push({ name: t, days });
     }

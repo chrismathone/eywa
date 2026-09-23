@@ -15,7 +15,6 @@ import {
   cellClassKey,
   computeBlocks,
   expandHalfPeriodBlocks,
-  sortDaysByGroup,
   type SubSlot,
 } from "@/features/timetable/lib/grid";
 import {
@@ -23,7 +22,7 @@ import {
   periodRowHeight,
   stackedHeights,
 } from "@/features/timetable/lib/empty-period-rows";
-import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import { sortDaysInGroup, weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell } from "./class-cell";
 import { HapbanCell } from "./hapban-cell";
@@ -124,7 +123,7 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
     const groupDaySet = new Set(def.days);
     const cols: TeacherCol[] = [];
     for (const t of teachers) {
-      const days = sortDaysByGroup(
+      const days = sortDaysInGroup(
         Array.from(
           new Set(
             slots
@@ -132,6 +131,7 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
               .map((s) => s.dayOfWeek as DayOfWeek),
           ),
         ),
+        def.days,
       );
       if (days.length > 0) cols.push({ name: t, days });
     }
