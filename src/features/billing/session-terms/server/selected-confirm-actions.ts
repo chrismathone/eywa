@@ -1,4 +1,6 @@
 "use server";
+
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -58,6 +60,7 @@ export async function confirmSelectedTerms(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" };
   if (!UUID_RE.test(classId)) return { error: "반이 지정되지 않았습니다" };
   if (!Array.isArray(items) || items.length === 0) return { error: "확정할 학생을 선택해 주세요" };

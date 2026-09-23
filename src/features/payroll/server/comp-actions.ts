@@ -6,6 +6,9 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { humanizeDbError } from "@/lib/supabase/db-error";
+import { canManageSalary } from "./salary-access";
 import { SALARY_GROUPS } from "../salary-group";
 import type { SalaryType } from "../settlement";
 
@@ -25,8 +28,8 @@ export async function saveTeacherComp(
 ): Promise<SaveCompState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // 급여 = 원장 전용. master만 편집(admin/manager 불가).
-  if (user.systemRole !== "master") return { error: "급여 정책은 원장만 설정할 수 있습니다" };
+  // 급여 = 원장·총괄 전용(admin/manager 불가 · 감사 D6 — 총괄은 자동 통과).
+  if (!(await canManageSalary())) return { error: "급여 정책은 원장만 설정할 수 있습니다" };
 
   const targetId = String(formData.get("userId") ?? "").trim();
   if (!targetId) return { error: "대상 강사가 지정되지 않았습니다" };
@@ -66,14 +69,17 @@ export async function saveTeacherComp(
     return { error: "급여제는 월 기본급(0 초과)이 필요합니다" };
   }
 
-  const supabase = await createClient();
-  // 같은 테넌트 소속만(RLS가 이미 tenant 격리하나 명시 방어).
+  // 원장은 종전대로 세션 클라이언트(users의 log_activity 트리거가 auth.uid()로 행위자를 남긴다 — 이 액션의 유일한
+  // 감사 기록이라 admin으로 바꾸면 행위자가 비어 버린다). 총괄(비-master)만 admin + 명시 tenant_id로 쓴다(D6).
+  const supabase = user.systemRole === "master" ? await createClient() : createAdminClient();
+  // 같은 테넌트 소속만 — admin이라 RLS가 막아 주지 않으므로 여기서 막는다.
   const { data: target } = await supabase
     .from("users")
     .select("id, tenant_id")
     .eq("id", targetId)
+    .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (!target || target.tenant_id !== user.tenantId) {
+  if (!target) {
     return { error: "대상 강사를 찾을 수 없습니다" };
   }
 
@@ -100,8 +106,8 @@ export async function saveTeacherComp(
   // 급여제/혼합일 때만 기본급 저장(비율제·미설정에선 monthly_base 안 건드림 — 시간모델 값 보존).
   if (needsBase) patch.monthly_base = monthlyBase;
 
-  const { error } = await supabase.from("users").update(patch).eq("id", targetId);
-  if (error) return { error: error.message };
+  const { error } = await supabase.from("users").update(patch).eq("id", targetId).eq("tenant_id", user.tenantId);
+  if (error) return { error: humanizeDbError(error.message) };
 
   // 감사기록은 users의 log_activity 트리거에 위임(급여 컬럼은 0120a에서 redact = "바뀜"만 기록, 값 미노출).
   // 여기서 별도 audit_logs를 남기지 않는다 — /owner 감사 화면이 admin/manager에도 열려 배분율 PII가 샐 수 있어서.

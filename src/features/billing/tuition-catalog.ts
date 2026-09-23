@@ -2,10 +2,38 @@
 // ⚠️ "server-only" 금지: 클라이언트 컴포넌트도 import하므로(런타임 상수 DISCOUNT_CATEGORY 등).
 // DB 쿼리는 tuition-catalog-queries.ts(server-only)에.
 
-/** 분류(category) — ijw 충실 이식. "할인"은 계산기 할인 picker로, 나머지는 단가 picker로. */
-export const TUITION_CATEGORIES = ["수학", "EIE", "영어", "국어", "기타", "할인"] as const;
-export type TuitionCategory = (typeof TUITION_CATEGORIES)[number];
+/**
+ * 분류(category) — "할인"은 계산기 할인 picker로, 나머지는 단가 picker로.
+ *
+ * 🔴 과목 분류는 **학원설정 과목 라벨**에서 온다(감사 D7, 2026-09-23 — 종전 ijw 이식 상수
+ *    `["수학","EIE","영어","국어","기타","할인"]`은 새 지점에 쓰지 않는 '국어'·'EIE'를 보여 주고 과학 같은
+ *    과목은 '기타'로만 넣게 했다). 코드에 남는 것은 **과목이 아닌 두 칸**('기타'·'할인')뿐이다.
+ * 🔴 이미 저장된 행의 분류(예: 옛 'EIE')는 선택지에서 빠지지 않는다 — 고아 행이 생기지 않게 합집합.
+ */
+export const OTHER_CATEGORY = "기타";
 export const DISCOUNT_CATEGORY = "할인";
+const FIXED_CATEGORIES = [OTHER_CATEGORY, DISCOUNT_CATEGORY] as const;
+
+/**
+ * 분류 선택지 = 학원설정 과목 라벨(설정 순서) ∪ 이미 쓰인 분류(가나다) ∪ '기타'·'할인'(맨 뒤). 순수 함수.
+ * 빈 값·공백 차이는 한 칸으로 접는다.
+ */
+export function tuitionCategoryOptions(subjectLabels: readonly string[], existing: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: string) => {
+    const v = raw.trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    out.push(v);
+  };
+  const fixed = new Set<string>(FIXED_CATEGORIES);
+  for (const l of subjectLabels) if (!fixed.has(l.trim())) add(l);
+  const extra = existing.map((e) => e.trim()).filter((e) => e && !seen.has(e) && !fixed.has(e));
+  for (const e of [...new Set(extra)].sort((a, b) => a.localeCompare(b, "ko"))) add(e);
+  for (const f of FIXED_CATEGORIES) add(f);
+  return out;
+}
 
 /**
  * 단가 종류(pricing_mode, 0102a) — price가 "회당/월/할인"으로 미구분이라 곱셈 사고 방지용 판별.

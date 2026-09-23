@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { textbookRequestStudentIds } from "./textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
@@ -163,8 +163,7 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
   // 강사(또는 겸직-강사뷰)는 본인 담당 학생만 요청 가능 — 하나라도 스코프 밖이면 전체 거부(intra-tenant PII 스코프).
   const tId = await effectiveTeacherId();
   if (tId) {
-    const { studentIds: scoped } = await getTeacherScope(tId);
-    const scopedSet = new Set(scoped);
+    const scopedSet = new Set(await textbookRequestStudentIds(tId));
     if (!studentIds.every((id) => scopedSet.has(id))) {
       return { error: "담당 학생만 교재를 요청할 수 있습니다" };
     }
@@ -253,8 +252,11 @@ async function loadEditableRequest(
   const tId = await effectiveTeacherId();
   if (tId) {
     const user = await getCurrentUser();
-    const { studentIds } = await getTeacherScope(tId);
-    if (!row.student_id || !studentIds.includes(row.student_id)) return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
+    // 본인이 만든 요청(created_by)은 담당 범위 밖 학생이어도 목록에 뜨므로(D5) 여기서도 고칠 수 있어야 한다.
+    const studentIds = await textbookRequestStudentIds(tId);
+    const createdByViewer = !!row.created_by && row.created_by === user?.id;
+    if (!createdByViewer && (!row.student_id || !studentIds.includes(row.student_id)))
+      return { error: "담당 학생의 요청만 수정·삭제할 수 있습니다" };
     if (!ownsTextbookRequest(row.teacher_name, user?.displayName, row.created_by, user?.id))
       return { error: `본인이 낸 요청만 수정·삭제할 수 있습니다${row.teacher_name ? ` (이 요청: ${row.teacher_name})` : ""}` };
   }

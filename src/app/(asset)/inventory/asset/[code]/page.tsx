@@ -6,6 +6,7 @@ import { getAssetDetail } from "@/features/inventory/server/asset-queries";
 import { getInventoryCategoriesByTenantId } from "@/features/inventory/server/category-queries";
 import { dashIfEmpty, unknownIfEmpty } from "@/features/inventory/unknown-value";
 import { AssetStatusPill, AuditResultPill, LoanStatusPill } from "@/features/inventory/components/status-pill";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 
 /** 기기 대장이라 검색엔진 색인은 막는다(자산ID가 추측 가능한 공개 주소 — (share)/r 선례와 같은 처리). */
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }) {
@@ -35,8 +36,15 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ co
   const detail = await getAssetDetail(code);
   if (!detail) notFound();
   const { asset, loans, audits, tenantId } = detail;
+  // 🔴 **재고관리 모듈을 끈 학원은 라벨을 찍어도 404** — 공개 화면이라 권한 매트릭스(모듈 캡)가 안 걸린다.
+  //    판정은 그 자산 행의 학원으로(세션 없음). 조회 실패는 켜진 것으로 본다(`isModuleOnForTenant` fail-open).
   // 분류 라벨은 학원별 데이터(0247a)라 그 자산의 학원으로 읽는다 — 세션이 없어 `getInventoryCategories()`를 못 쓴다.
-  const cats = buildCategoryMaps((await getInventoryCategoriesByTenantId(tenantId)).rows);
+  const [moduleOn, catData] = await Promise.all([
+    isModuleOnForTenant(tenantId, "inventory"),
+    getInventoryCategoriesByTenantId(tenantId),
+  ]);
+  if (!moduleOn) notFound();
+  const cats = buildCategoryMaps(catData.rows);
 
   const rows: Array<[string, React.ReactNode]> = [
     // 🔴 자산번호가 첫 행 — 머리글의 제목이던 값이라 여기 없으면 화면 어디에도 자산ID가 안 남는다.

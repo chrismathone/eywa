@@ -3,7 +3,7 @@
  * 틀리면 **학부모 게시판에 같은 글이 두세 번 붙는다**(ClassNote는 게시글 삭제가 앱에서 안 되므로 회수 불가).
  */
 import { describe, expect, it } from "vitest";
-import { partitionAlreadySent, textbookSendKey, type DedupCandidate } from "./textbook-send-dedup";
+import { isDeadNoticeStatus, partitionAlreadySent, textbookSendKey, type DedupCandidate } from "./textbook-send-dedup";
 
 const row = (over: Partial<DedupCandidate> & { id: string }): DedupCandidate => ({
   studentId: "s1",
@@ -72,5 +72,17 @@ describe("partitionAlreadySent", () => {
       new Set(),
     );
     expect(skipped[0]?.name).toBe("(학생)"); // 이름이 없어도 raw null이 화면에 뜨지 않는다
+  });
+});
+
+describe("isDeadNoticeStatus — 발송분으로 치지 않는 공지 상태(F3)", () => {
+  it("실패·회수 완료만 죽은 공지다", () => {
+    expect(isDeadNoticeStatus("failed")).toBe(true);
+    expect(isDeadNoticeStatus("revoked")).toBe(true);
+  });
+  it("글이 남아 있거나 곧 생기는 상태는 계속 막는다", () => {
+    for (const s of ["queued", "processing", "success", "partial", "revoke_requested", "revoking", "revoke_partial", "edit_requested", "editing", null, undefined, ""]) {
+      expect(isDeadNoticeStatus(s)).toBe(false);
+    }
   });
 });

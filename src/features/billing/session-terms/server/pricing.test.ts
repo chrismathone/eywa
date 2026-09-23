@@ -75,6 +75,8 @@ const h = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => h.client }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.client }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => resolveSettings({ billing: h.state.billing }, { name: "학원" }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "owner", tenantId: "tenant", systemRole: "master" }) }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true }));

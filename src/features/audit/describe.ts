@@ -553,6 +553,13 @@ export function auditDetail(
       const docs = num(m.docs);
       return join(r ? `삭제 당시 역할: ${r}` : null, docs ? `문서 ${docs}건 함께 삭제` : null);
     }
+    case "staff_status_change": {
+      const label = (v: unknown) =>
+        v === "active" ? "재직" : v === "inactive" ? "퇴사" : v === "pending" ? "대기" : null;
+      const from = label(m.from);
+      const to = label(m.to);
+      return to ? (from && from !== to ? `재직 상태 ${from} → ${to}` : `재직 상태 ${to}`) : null;
+    }
     case "staff_teacher_view_access": {
       // '강사뷰 접근'(다른 강사 뷰 열람) 토글 — 대상은 targetLabel(직원 이름)이 이미 보여준다.
       return m.enabled === true ? "허용으로 변경" : m.enabled === false ? "차단으로 변경" : null;
@@ -612,6 +619,16 @@ export function auditDetail(
       const n = Array.isArray(m.filled) ? m.filled.length : null;
       return n === null ? null : `PDF에서 항목 ${n}개 추출`;
     }
+    case "invoice_manual_void": {
+      const w = won(m.amountTotal);
+      return join(ctx.nameOf(m.studentId), str(m.period), w ? `청구액 ${w} 취소` : "취소");
+    }
+    case "invoice_manual_paid": {
+      const to = won(m.paidTo);
+      const method = str(m.method);
+      const METHOD: Record<string, string> = { card: "카드", transfer: "계좌이체", cash: "현금", other: "기타" };
+      return join(ctx.nameOf(m.studentId), str(m.period), to ? `수납 ${to} 완납` : "완납", method ? METHOD[method] ?? null : null);
+    }
     case "invoice_create": {
       const w = won(m.amountTotal);
       return join(ctx.nameOf(m.studentId), w ? `청구액 ${w}` : null);
@@ -629,6 +646,29 @@ export function auditDetail(
       if (saved === null && students === null) return null;
       return `학생 ${students ?? "?"}명 중 점수 ${saved ?? "?"}건 저장`;
     }
+    case "class_salary_update": {
+      const fmt = (v: unknown): string | null => {
+        if (!v || typeof v !== "object") return null;
+        const o = v as Record<string, unknown>;
+        const rate = num(o.commissionRate);
+        return join(str(o.salaryGroup) ? `과정 ${str(o.salaryGroup)}` : "과정 자동", rate === null ? "배분율 기본" : `배분율 ${rate}%`);
+      };
+      const before = fmt(m.before);
+      const after = fmt(m.after);
+      return after ? (before ? `${before} → ${after}` : `새 설정: ${after}`) : null;
+    }
+    case "session_splits_save": {
+      const cb = won(m.confirmedBefore);
+      const ca = won(m.confirmedAfter);
+      const saved = num(m.saved);
+      return join(
+        str(m.period),
+        saved === null ? null : `분배 ${saved}건 저장`,
+        m.beforeKnown === false ? (ca ? `청구 기준 합계 ${ca}` : null) : cb && ca ? `청구 기준 합계 ${cb} → ${ca}` : null,
+      );
+    }
+    case "payroll_mark_paid":
+    case "payroll_auto_compute":
     case "payroll_upsert": {
       const w = won(m.total);
       return join(ctx.nameOf(m.userId), w ? `지급 합계 ${w}` : null);
@@ -636,6 +676,25 @@ export function auditDetail(
     case "withdrawal_update": {
       const reason = str(m.reason);
       return join(ctx.nameOf(m.studentId), reason ? `사유: ${reason}` : null);
+    }
+    case "withdrawal_consultation_step": {
+      const STEP: Record<string, string> = {
+        adminCalledParent: "관리자 학부모 통화",
+        teacherCalledParent: "강사 학부모 통화",
+        talkedWithStudent: "학생 면담",
+      };
+      const step = STEP[str(m.step) ?? ""] ?? null;
+      return join(ctx.nameOf(m.studentId), step ? `${step} ${m.done ? "체크" : "해제"}` : null);
+    }
+    case "intake_token_toggle": {
+      const a = str(m.change);
+      if (a === "close") return "링크 닫기";
+      if (a === "reopen") return "링크 다시 열기";
+      if (a === "expire") {
+        const d = str(m.expiresOn);
+        return d ? `만료일 ${d}로 변경` : "만료일 변경";
+      }
+      return null;
     }
     // 교재 신청 전수 감사(2026-09-09) — 금액 수정의 '범인 찾기'가 목적이라 **전후 값**을 그대로 적는다.
     case "textbook_order_update": {
@@ -1267,10 +1326,33 @@ export function auditDetail(
       const from = num(m.qtyFrom);
       const to = num(m.qtyTo);
       const on = str(m.checkedOn);
+      // 품목·모델·위치 변경(감사 N5) — [{field, from, to}].
+      const changes = Array.isArray(m.changes)
+        ? (m.changes as unknown[])
+            .map((c) => {
+              if (!c || typeof c !== "object") return null;
+              const o = c as Record<string, unknown>;
+              const f = str(o.field);
+              return f ? `${f} ${str(o.from) ?? "—"} → ${str(o.to) ?? "—"}` : null;
+            })
+            .filter((x): x is string => !!x)
+            .join(" · ")
+        : null;
       return join(
         [code ? `「${code}」` : null, name].filter(Boolean).join(" ") || null,
-        from !== null && to !== null ? `수량 ${from} → ${to}` : to !== null ? `수량 ${to}` : null,
+        from !== null && to !== null ? (from === to ? null : `수량 ${from} → ${to}`) : to !== null ? `수량 ${to}` : null,
+        changes || null,
         on ? `확인 ${on}` : null,
+      );
+    }
+    case "inventory_supply_create": {
+      const code = str(m.itemCode);
+      const name = str(m.name);
+      const qty = num(m.qty);
+      return join(
+        [code ? `「${code}」` : null, name].filter(Boolean).join(" ") || "소모품",
+        "등록",
+        qty !== null ? `수량 ${qty}` : null,
       );
     }
     // 운행 단위(0243a) — 날짜만 있으면 그날 어느 운행인지가 목록에서 바로 읽힌다.
@@ -1634,6 +1716,7 @@ export function auditDetail(
           cnt(m.updated, "갱신"),
           cnt(m.deleted, "삭제"),
           cnt(m.skippedEdited, "직접 고친 일정 유지"),
+          cnt(m.skippedDeleted, "직접 지운 일정 제외"),
           failed ? `실패 ${failed}건` : null,
         ) ?? "변경 없음"
       );

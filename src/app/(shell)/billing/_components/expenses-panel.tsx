@@ -9,13 +9,14 @@ import {
   summarizeExpenses,
 } from "@/features/billing/server/expense-queries";
 import { currencyMeta, formatMoney } from "@/features/billing/currencies";
-import { filterExpensesByQuery } from "@/features/billing/expense-search";
+import { EXPENSE_FILTER_CATEGORIES, filterExpensesForView, normalizeExpenseCategoryFilter } from "@/features/billing/expense-search";
 import { SearchToggle } from "@/components/search-toggle";
+import { Button } from "@/components/ui/button";
 import { kstMonth, monthLabel } from "@/lib/date-kst";
 import { BillingMonthNav } from "./billing-month-nav";
 import { ExpensesTable } from "./expenses-table";
 
-const CATS = ["인건비", "운영비", "매입", "마케팅", "기타"];
+const CATS: readonly string[] = EXPENSE_FILTER_CATEGORIES;
 
 function currentPeriod(): string {
   return kstMonth();
@@ -27,7 +28,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
   const period = sp.period ?? currentPeriod();
   // ⚠️ 아는 분류만 받는다 — 손으로 친 `?cat=zzz`면 드롭다운은 "분류"(전체)로 보이는데 표만 비어
   //    화면이 스스로 모순됐고, 아래 빈 화면 문구가 그 쓰레기 값을 그대로 읊었다.
-  const cat = sp.cat && CATS.includes(sp.cat) ? sp.cat : "all";
+  const cat = normalizeExpenseCategoryFilter(sp.cat);
   // ⚠️ `?q=a&q=b`면 Next가 **배열**을 준다(타입은 string이라 조용하다) → `.trim()`이 터져 면이 500.
   //    문자열일 때만 받는다.
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
@@ -39,8 +40,7 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
   const [allRows, months] = await Promise.all([getExpensesForMonth(period), getExpenseMonths()]);
   // 🔴 집계는 **언제나 이 달 전체(allRows)** 기준 — 검색·분류 필터가 닿지 않는다(돈 산식 불변).
   const summary = summarizeExpenses(allRows, period);
-  const catRows = cat === "all" ? allRows : allRows.filter((r) => r.category === cat);
-  const rows = filterExpensesByQuery(catRows, q);
+  const rows = filterExpensesForView(allRows, cat, q);
   const filterOn = cat !== "all" || q !== "";
 
   const maxCat = Math.max(1, ...summary.byCategory.map((c) => c.amount));
@@ -85,6 +85,22 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
         {/* 수납·교재 면과 같은 공용 검색(눌러야 나온다). 대상 칸은 `expense-search.ts` 머리주석 —
             제목·거래처·성명·부서명·메모 + 라인 항목의 용도·거래처·사용내역. 금액·분류는 일부러 뺐다. */}
         <SearchToggle placeholder="제목·거래처·성명" defaultValue={q} />
+        {/* 엑셀(감사 N2) — 표와 같은 집합(월·분류·검색어)을 내보낸다. 수납 면 '엑셀 내보내기'와 같은 모양. */}
+        <Button
+          variant="ghost"
+          className="text-primary"
+          render={
+            <a
+              href={`/api/exports/expenses?${new URLSearchParams({
+                period,
+                ...(cat !== "all" ? { cat } : {}),
+                ...(q ? { q } : {}),
+              }).toString()}`}
+            />
+          }
+        >
+          엑셀 내보내기
+        </Button>
         {months.length > 0 ? (
           <span className="text-text-faint num ml-auto text-sm whitespace-nowrap">지출 기록 {months.length}개월</span>
         ) : null}

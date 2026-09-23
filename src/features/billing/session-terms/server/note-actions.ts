@@ -1,4 +1,6 @@
 "use server";
+
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -20,6 +22,7 @@ export async function updateSessionTermNote(id: string, raw: string): Promise<{ 
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!id) return { error: "대상이 없습니다" };
   // 회차 행이 없는 줄(가상 id) — 메모를 적을 행이 아직 없다(화면도 그 칸을 잠근다). uuid 열에 그대로 보내지 않는다.
   if (isVirtualTermId(id)) return { error: "아직 회차 행이 없는 줄입니다 — 시수를 확정하거나 수납을 배분하면 메모를 적을 수 있습니다" };

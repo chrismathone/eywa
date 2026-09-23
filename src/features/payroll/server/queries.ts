@@ -1,6 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged } from "@/lib/supabase/batch";
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import {
   aggregateClassHours,
   computePayrollAmounts,
@@ -117,15 +121,35 @@ export async function calculateMonthlyPayroll(
   };
 }
 
+/**
+ * payroll_records 읽기용 클라이언트 — **admin + 명시 tenant_id 필터**.
+ *
+ * 🔴 0290a가 이 표를 master 전용 RLS로 잠근다. 그런데 급여 화면(/staff/[id]/payroll)은 직원관리 권한이 있는
+ *    admin·manager도 연다(호출부 게이트 = requireAccess("staff") + isPayrollEnabled). 세션 클라이언트로 읽으면
+ *    SQL 적용 뒤 그들에게 **에러 없이 0행**이 된다([[#104]]) → 호출부 게이트를 지난 뒤 여기서 admin으로 읽는다.
+ *    SQL 적용 전·후 모두 같은 결과(expand/contract, [[#95]]).
+ */
+async function payrollReadScope(): Promise<{ db: ReturnType<typeof createAdminClient>; tenantId: string } | null> {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  // 🔴 admin 클라이언트는 RLS를 우회한다 — 쓰기 게이트(canManageStaff)와 **같은 역할 게이트**를 여기서 건다
+  //    (적대적 리뷰: 직원관리 개인 예외를 받은 강사·회계가 동료 급여 이력을 열 수 있었다, #77). super_admin 통과.
+  if (!canManageStaff(user.systemRole) && !(await isCurrentUserSuperAdmin())) return null;
+  return { db: createAdminClient(), tenantId: user.tenantId };
+}
+
 export async function getPayrollHistory(userId: string): Promise<PayrollRecord[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
+  const scope = await payrollReadScope();
+  if (!scope) return [];
+  const { data, error } = await scope.db
     .from("payroll_records")
     .select(
       "id, user_id, period, base_amount, hours_worked, hourly_amount, bonus, deduction, total, paid_at, notes",
     )
+    .eq("tenant_id", scope.tenantId)
     .eq("user_id", userId)
     .order("period", { ascending: false });
+  if (error) throw new Error("급여 기록을 불러오지 못했습니다");
 
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -182,10 +206,16 @@ export async function getMonthlyPayrollOverview(period: string): Promise<Payroll
     .order("display_name", { ascending: true });
   const staffList = staff ?? [];
 
-  const { data: records } = await supabase
-    .from("payroll_records")
-    .select("user_id, base_amount, hours_worked, hourly_amount, bonus, deduction, total, paid_at")
-    .eq("period", period);
+  const scope = await payrollReadScope();
+  const { data: records, error: recordsError } = scope
+    ? await scope.db
+        .from("payroll_records")
+        .select("user_id, base_amount, hours_worked, hourly_amount, bonus, deduction, total, paid_at")
+        .eq("tenant_id", scope.tenantId)
+        .eq("period", period)
+        .order("id")
+    : { data: [], error: null };
+  if (recordsError) throw new Error("급여 기록을 불러오지 못했습니다");
   const recByUser = new Map((records ?? []).map((r) => [r.user_id, r]));
 
   // 저장된 정산은 record가 진실. 미작성은 월기본만 표기(정확한 시급분 attendance 계산은 무거워

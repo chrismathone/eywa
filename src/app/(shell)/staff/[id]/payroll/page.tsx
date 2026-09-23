@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isPayrollEnabled } from "@/features/payroll/config";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getStaffDetail } from "@/features/staff/server/queries";
@@ -20,8 +22,10 @@ export default async function StaffPayrollPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ period?: string }>;
 }) {
-  await requireAccess("staff");
+  const user = await requireAccess("staff");
   if (!isPayrollEnabled(await getTenantSettings())) redirect("/staff");
+  // 급여 읽기 = 쓰기와 같은 역할 게이트(payrollReadScope와 동일) — 직원관리 개인 예외만으로는 급여를 못 연다.
+  if (!canManageStaff(user.systemRole) && !(await isCurrentUserSuperAdmin())) redirect("/staff");
   const { id } = await params;
   const { period: periodParam } = await searchParams;
 

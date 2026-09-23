@@ -233,6 +233,47 @@ export async function getTextbookOrdersForStudents(studentIds: string[]): Promis
     .sort((a, b) => (b.requestDate ?? "").localeCompare(a.requestDate ?? ""));
 }
 
+/**
+ * 강사 교재 요청 화면 — **본인이 만든 요청**(created_by). 담당 범위(학생)가 바뀌어도 내가 낸 요청은 늘 보이게
+ * (감사 D5). getTextbookOrdersForStudents와 같은 열·같은 모양(원스크린 경로 규약 그대로 — 새 컬럼 금지).
+ */
+export async function getTextbookOrdersCreatedBy(userId: string): Promise<TextbookOrderRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("textbook_orders")
+    .select(
+      "id, book_name, book_detail, student_id, student_name, teacher_name, created_by, price, status, request_date, notes, registered_at, ordered_at, paid_at, status_by_name, status_at, created_at",
+    )
+    .eq("created_by", userId)
+    .order("created_at", { ascending: false })
+    .order("id")
+    .limit(500);
+  if (error) throw new Error("교재 요청을 불러오지 못했습니다");
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    bookName: r.book_name as string,
+    bookDetail: (r.book_detail as string | null) ?? null,
+    studentId: (r.student_id as string | null) ?? null,
+    studentName: (r.student_name as string | null) ?? null,
+    teacherName: (r.teacher_name as string | null) ?? null,
+    price: Number(r.price),
+    status: r.status as string,
+    requestDate: (r.request_date as string | null) ?? null,
+    notes: (r.notes as string | null) ?? null,
+    registered: !!r.registered_at,
+    ordered: !!r.ordered_at,
+    paid: !!r.paid_at,
+    registeredAt: (r.registered_at as string | null) ?? null,
+    orderedAt: (r.ordered_at as string | null) ?? null,
+    paidAt: (r.paid_at as string | null) ?? null,
+    statusByName: (r.status_by_name as string | null) ?? null,
+    statusAt: (r.status_at as string | null) ?? null,
+    createdAt: r.created_at as string,
+    createdBy: (r.created_by as string | null) ?? null,
+    classnoteNoticeId: null,
+  }));
+}
+
 // 강사 교재 요청 폼의 학생 picker — 본인 담당 학생(studentIds)만, 재원·휴원(퇴원 제외), 이름순.
 export async function getStudentOptionsForIds(studentIds: string[]): Promise<StudentOption[]> {
   if (studentIds.length === 0) return [];
@@ -275,7 +316,7 @@ export async function getTextbookStats(): Promise<TextbookStats> {
     paid_at: string | null;
     price: string | number;
   }>((from, to) =>
-    supabase.from("textbook_orders").select("registered_at, ordered_at, paid_at, price").range(from, to),
+    supabase.from("textbook_orders").select("registered_at, ordered_at, paid_at, price").order("id").range(from, to),
   );
   let needReg = 0,
     needPay = 0,

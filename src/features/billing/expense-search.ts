@@ -82,3 +82,22 @@ export function filterExpensesByQuery<T extends ExpenseSearchFields>(
   if (tokens.length === 0) return rows;
   return rows.filter((r) => expenseMatches(r, tokens));
 }
+
+/** 지출 면 분류 필터 값(화면·엑셀 공용 — 감사 N2). 아는 값만 받는다(손으로 친 `?cat=zzz`는 '전체'). */
+export const EXPENSE_FILTER_CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"] as const;
+export function normalizeExpenseCategoryFilter(cat: string | null | undefined): string {
+  return cat && (EXPENSE_FILTER_CATEGORIES as readonly string[]).includes(cat) ? cat : "all";
+}
+
+/**
+ * 지출 면 **표에 보이는 집합** = 이 달 행 → 분류 → 검색어. 화면(expenses-panel)과 엑셀이 같은 함수를 지난다(N2).
+ * 집계(KPI)는 여기 없다 — 부르는 쪽이 이 달 전체로 따로 낸다(위 머리주석 규약).
+ */
+export function filterExpensesForView<T extends ExpenseSearchFields & { category: string }>(
+  rows: readonly T[],
+  cat: string,
+  q: string,
+): T[] {
+  const catRows = cat === "all" ? [...rows] : rows.filter((r) => r.category === cat);
+  return filterExpensesByQuery(catRows, q);
+}

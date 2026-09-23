@@ -1,13 +1,34 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { normalizePricingMode, PMODE_UNSET } from "@/features/billing/tuition-catalog";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { normalizePricingMode, PMODE_UNSET, tuitionCategoryOptions } from "@/features/billing/tuition-catalog";
 import type { TuitionCatalogRow, TuitionCatalogOption } from "@/features/billing/tuition-catalog";
 
 // 수강료 단가표 DB 쿼리(server-only) — 과목 단가 + 기타 항목 + 할인 프리셋 통합 레지스트리(category로 구분).
 // ijw 수강료 계산기 "설정"의 수강료 단가표를 aywa 한 테이블로 이식. textbook-catalog-queries 패턴 미러.
 // 공유 상수·타입은 ../tuition-catalog.ts(클라이언트도 import 가능).
 export type { TuitionCatalogRow, TuitionCatalogOption };
-export { TUITION_CATEGORIES, DISCOUNT_CATEGORY } from "@/features/billing/tuition-catalog";
+export { DISCOUNT_CATEGORY } from "@/features/billing/tuition-catalog";
+
+/**
+ * 단가표 분류 선택지(감사 D7) — 학원설정 과목 라벨 ∪ 이미 쓰인 분류 ∪ '기타'·'할인'.
+ * 이미 쓰인 분류는 distinct라 행 수와 무관하게 전건이 필요하다 → fetchAllPaged(B2, `.order("id")`).
+ * 단가표는 학원당 수백 행 규모라 분류 한 칸만 읽는다.
+ */
+export async function getTuitionCategoryOptions(): Promise<string[]> {
+  const supabase = await createClient();
+  const [settings, rows] = await Promise.all([
+    getTenantSettings(),
+    fetchAllPaged<{ category: string | null }>((from, to) =>
+      supabase.from("tuition_catalog").select("category").order("id").range(from, to),
+    ),
+  ]);
+  return tuitionCategoryOptions(
+    settings.operations.subjects.map((s) => s.label),
+    rows.map((r) => r.category ?? ""),
+  );
+}
 
 const PAGE_SIZE = 50;
 const num = (v: string | number | null): number => (v == null ? 0 : Number(v));

@@ -8,6 +8,8 @@ import { StatStrip } from "@/components/atoms/stat-strip";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   getAvailablePeriods,
   getInvoicesForPeriod,
@@ -74,11 +76,13 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   const PAGE_SIZE = 50;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [monthRows, periods, students, syncState] = await Promise.all([
+  const [monthRows, periods, students, syncState, canWriteBilling] = await Promise.all([
     getInvoicesForPeriod({ period, sort, desc }),
     getAvailablePeriods(),
     getStudentOptions(),
     getMakeeduSyncState("invoices"),
+    // 수동 청구서 '완납'·'취소'(감사 N15)를 세울지 — 서버 액션이 같은 게이트를 다시 본다.
+    getCurrentUser().then((u) => (u ? canWriteTenant(u.systemRole, "billing") : false)),
   ]);
 
   const summary = summarizeInvoices(monthRows, period);
@@ -417,6 +421,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             q={q}
             overdueOnly={overdueOnly}
             missingOnly={missingOnly}
+            canWrite={canWriteBilling}
           />
           <Pagination page={page} totalPages={totalPages} hrefForPage={pageHref} />
         </>

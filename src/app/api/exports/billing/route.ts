@@ -37,7 +37,8 @@ export async function GET(request: Request) {
     );
   }
   const periodLabel = period ?? kstMonth();
-  const wb = await buildInvoicesWorkbook(invoices, periodLabel);
+  // '기한 경과만'은 화면처럼 **미납 라인만**(청구서 안의 완납 라인은 빼고) 내보낸다.
+  const wb = await buildInvoicesWorkbook(invoices, periodLabel, { overdueOnly });
   const buf = await wb.xlsx.writeBuffer();
   return new NextResponse(buf, {
     headers: {

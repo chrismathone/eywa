@@ -1,5 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { textbookRequestStudentIds } from "@/features/billing/server/textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accountForTarget } from "@/features/owner/settings-types";
@@ -8,6 +8,7 @@ import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
 import {
   getStudentOptions,
   getStudentOptionsForIds,
+  getTextbookOrdersCreatedBy,
   getTextbookOrdersForStudents,
   getTextbookOrdersPage,
 } from "@/features/billing/server/textbook-queries";
@@ -43,11 +44,18 @@ export default async function TextbookRequestsPage({
   let rows;
   let students;
   if (teacherId) {
-    const { studentIds } = await getTeacherScope(teacherId);
-    [rows, students] = await Promise.all([
+    // 감사 D5 — 담임 ∪ 교시 담당 ∪ 임시 위임(학생 상세 열람과 같은 판정) + **본인이 만든 요청은 항상**.
+    const studentIds = await textbookRequestStudentIds(teacherId);
+    const [scopedRows, mine, opts] = await Promise.all([
       getTextbookOrdersForStudents(studentIds),
+      getTextbookOrdersCreatedBy(teacherId),
       getStudentOptionsForIds(studentIds),
     ]);
+    const seen = new Set(scopedRows.map((r) => r.id));
+    rows = [...scopedRows, ...mine.filter((r) => !seen.has(r.id))].sort((a, b) =>
+      (b.requestDate ?? "").localeCompare(a.requestDate ?? ""),
+    );
+    students = opts;
   } else {
     // 사무실 역할 — 전체 요청/학생(처리는 /billing에서). 최근 100건.
     const [page, opts] = await Promise.all([getTextbookOrdersPage({}, 1, 100), getStudentOptions()]);

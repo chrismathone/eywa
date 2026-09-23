@@ -1,5 +1,7 @@
 "use server";
 
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
+
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -43,6 +45,7 @@ export type ReceiptAllocationInput = { termId: string; lineIndex: number | null;
 export async function getReceiptAllocation(invoiceId: string): Promise<{ data?: ReceiptAllocationView; error?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const db = await createClient();
   const { data: invoice, error } = await db.from("invoices").select("period, student_id, line_items").eq("id", invoiceId).neq("status", "void").maybeSingle();
   if (error) return { error: error.message };
@@ -77,6 +80,7 @@ async function freeAllocationLock(db: Awaited<ReturnType<typeof createClient>>, 
 export async function mergeReceiptItems(invoiceId: string, source: unknown, indices: number[], label: string, removeId?: string): Promise<{ data?: ReceiptAllocationView; error?: string; committed?: boolean }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const lockDb = await createClient();
   const locked = await freeAllocationLock(lockDb, invoiceId, user.systemRole);
   if (locked) return { error: locked };
@@ -96,6 +100,7 @@ export async function mergeReceiptItems(invoiceId: string, source: unknown, indi
 export async function saveReceiptAllocation(invoiceId: string, source: unknown, input: ReceiptAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!Array.isArray(input) || input.length > 500 || input.some((row) => !Number.isSafeInteger(row.amount) || row.amount < 0 || (row.lineIndex === null ? row.amount !== 0 : !Number.isInteger(row.lineIndex) || row.lineIndex < 0))) return { error: "배분금액과 연결 항목을 확인해 주세요" };
   const eligible = new Set(receiptLines(source).filter((line) => isTuitionReceipt(line.source)).map((line) => line.index));
   if (input.some((row) => row.lineIndex !== null && !eligible.has(row.lineIndex))) return { error: "수업 청구액에만 배분할 수 있습니다" };
@@ -154,6 +159,7 @@ export type FreeAllocationInput = FreeAllocationRow & { confirmedAt: string | nu
 export async function saveFreeReceiptAllocation(invoiceId: string, source: unknown, input: FreeAllocationInput[]): Promise<{ ok?: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!canUseFreeAllocation(user.systemRole) && !(await isCurrentUserSuperAdmin())) return { error: "자유 배분은 관리자 이상만 할 수 있습니다" };
   if (!Array.isArray(input) || input.length === 0 || input.length > 500) return { error: "배분할 반을 확인해 주세요" };
   const view = await getReceiptAllocation(invoiceId);

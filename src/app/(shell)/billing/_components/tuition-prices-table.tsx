@@ -16,7 +16,6 @@ import {
   type TuitionCatalogActionState,
 } from "@/features/billing/server/tuition-catalog-actions";
 import {
-  TUITION_CATEGORIES,
   DISCOUNT_CATEGORY,
   PRICING_MODES,
   PRICING_MODE_EFFECT,
@@ -46,7 +45,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: () => void }) {
+function TuitionDialog({
+  item,
+  categories,
+  onClose,
+}: {
+  item?: TuitionCatalogRow;
+  /** 분류 선택지 — 학원설정 과목 ∪ 이미 쓰인 분류 ∪ 기타·할인(감사 D7, 서버가 넘긴다). */
+  categories: string[];
+  onClose: () => void;
+}) {
   const isEdit = !!item;
   const [state, formAction] = useActionState<TuitionCatalogActionState, FormData>(
     isEdit ? updateTuitionItem : createTuitionItem,
@@ -78,8 +86,8 @@ function TuitionDialog({ item, onClose }: { item?: TuitionCatalogRow; onClose: (
           {isEdit ? <input type="hidden" name="id" value={item.id} /> : null}
           <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-3">
             <Field label="분류">
-              <select name="category" defaultValue={item?.category ?? "수학"} className={inputCls}>
-                {TUITION_CATEGORIES.map((c) => (
+              <select name="category" defaultValue={item?.category ?? categories[0] ?? "기타"} className={inputCls}>
+                {(item?.category && !categories.includes(item.category) ? [item.category, ...categories] : categories).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -239,9 +247,11 @@ function ToggleActive({ id, isActive }: { id: string; isActive: boolean }) {
 
 export function TuitionPricesTable({
   rows,
+  categories,
   summary,
 }: {
   rows: TuitionCatalogRow[];
+  categories: string[];
   /** 좌측에 놓을 요약(건수·페이지)과 필터·검색 — 서버 패널이 넘긴다. 이 줄과 '항목 추가'가 **한 행**을 나눠 쓴다
    *  (원장 2026-08-07: *"단가 104개·1/3 페이지 랑 항목 추가 버튼이 2개 행으로 공간차지하고 있는데 한개 행으로"* →
    *  2026-09-22 필터 줄도 같은 행으로 *"넓은화면까지 2행일 필요가 없어보임"*). */
@@ -371,8 +381,8 @@ export function TuitionPricesTable({
         </DragScrollArea>
       )}
 
-      {open === "new" ? <TuitionDialog onClose={() => setOpen(null)} /> : null}
-      {open && open !== "new" ? <TuitionDialog item={open} onClose={() => setOpen(null)} /> : null}
+      {open === "new" ? <TuitionDialog categories={categories} onClose={() => setOpen(null)} /> : null}
+      {open && open !== "new" ? <TuitionDialog item={open} categories={categories} onClose={() => setOpen(null)} /> : null}
     </div>
   );
 }

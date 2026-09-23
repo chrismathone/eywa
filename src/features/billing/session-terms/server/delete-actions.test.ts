@@ -27,6 +27,7 @@ const h = vi.hoisted(() => {
 });
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => h.state.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => h.state.canWrite }));
+vi.mock("./module-gate", () => ({ SESSION_BILLING_OFF: "off", sessionBillingOff: async () => false }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => h.db }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));

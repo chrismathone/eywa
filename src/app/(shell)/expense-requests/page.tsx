@@ -15,8 +15,10 @@ export default async function ExpenseRequestsPage() {
   const teacherId = await effectiveTeacherId();
   if (teacherId === null) redirect("/billing?tab=expenses");
 
-  // 본인(created_by=본인)이 작성한 결의서 전건 — 스코프 소스는 실제 작성자 user id(view-mode와 무관).
-  const rows = await getMyExpenseRequests(user.id);
+  // 이 화면의 주인(created_by)이 작성한 결의서 전건. 🔴 '다른 강사 뷰'(열람 전용)에선 보는 사람이 아니라
+  // **대상 강사**의 결의서여야 한다(감사 E6 — 그 뷰의 존재 이유가 "그 사람이 보는 화면 그대로").
+  // effectiveTeacherId = 본인 강사·겸직 강사뷰면 본인 id, 다른 강사 뷰면 대상 강사 id.
+  const rows = await getMyExpenseRequests(teacherId);
 
   return <ExpenseRequestsClient rows={rows} requesterName={user.displayName} />;
 }

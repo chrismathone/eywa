@@ -1,5 +1,8 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageSalary } from "./salary-access";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { autoSalaryGroup, type SalaryGroup } from "../salary-group";
 
@@ -44,8 +47,12 @@ export async function getClassSalaryRows(): Promise<ClassSalaryRow[]> {
   );
 
   const ids = classes.map((c) => c.id);
+  // 급여 값은 원장·총괄만(canManageSalary) — 통과하면 admin + 명시 tenant_id(RLS가 총괄을 0행으로 만들지 않게, [[#104]]).
+  // 통과 못 하면 종전처럼 빈 설정(값 누출 없음).
+  const viewer = await getCurrentUser();
+  const salaryDb = viewer && (await canManageSalary()) ? createAdminClient() : null;
   const settings =
-    ids.length > 0
+    ids.length > 0 && salaryDb && viewer
       ? await fetchInChunks<{
           class_id: string;
           salary_group: string | null;
@@ -54,9 +61,10 @@ export async function getClassSalaryRows(): Promise<ClassSalaryRow[]> {
         }>(
           ids,
           (chunk) =>
-            supabase
+            salaryDb
               .from("class_salary_settings")
               .select("class_id, salary_group, commission_rate, applies_dows")
+              .eq("tenant_id", viewer.tenantId)
               .in("class_id", chunk),
         )
       : [];

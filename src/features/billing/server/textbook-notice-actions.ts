@@ -27,7 +27,7 @@ import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 import { DEFAULT_TEXTBOOK_MENT, resolveTextbookMent, textbookNoticeCommon } from "../textbook-notice";
 import { groupTextbookNoticeStudents } from "../textbook-notice-group";
 // 중복 발송 차단 규칙(0174a) — 순수함수 단일 소스.
-import { partitionAlreadySent, textbookSendKey } from "../textbook-send-dedup";
+import { isDeadNoticeStatus, partitionAlreadySent, textbookSendKey } from "../textbook-send-dedup";
 import type {
   PreparedTextbookNotice,
   SendTextbookNoticeResult,
@@ -167,22 +167,45 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
   const studentIds = [...new Set(loaded.rows.map((r) => r.student_id).filter(Boolean))] as string[];
   const supabase = await createClient();
   const sentRows = studentIds.length
-    ? await fetchInChunks<{ student_id: string | null; book_name: string }>(studentIds, (chunk) =>
+    ? await fetchInChunks<{ student_id: string | null; book_name: string; classnote_notice_id: string | null }>(studentIds, (chunk) =>
         supabase
           .from("textbook_orders")
-          .select("student_id, book_name")
+          .select("student_id, book_name, classnote_notice_id")
           .in("student_id", chunk)
           .not("classnote_notice_id", "is", null),
       )
     : [];
-  const alreadySentKeys = new Set(sentRows.map((r) => textbookSendKey(r.student_id, r.book_name)));
+  // 감사 F3 — 실패·회수 완료된 공지에 연결된 요청서는 발송분으로 치지 않는다(재발송 가능).
+  //   공지 상태를 못 읽으면 종전처럼 전부 발송분으로 본다(막는 쪽 — 중복 게시가 되돌리기 어렵다).
+  const linkedNoticeIds = [
+    ...new Set(
+      [...loaded.rows.map((r) => r.classnote_notice_id), ...sentRows.map((r) => r.classnote_notice_id)].filter(
+        (x): x is string => !!x,
+      ),
+    ),
+  ];
+  let deadNoticeIds = new Set<string>();
+  if (linkedNoticeIds.length) {
+    try {
+      const notices = await fetchInChunks<{ id: string; status: string | null }>(linkedNoticeIds, (chunk) =>
+        supabase.from("classnote_notices").select("id, status").eq("tenant_id", user.tenantId).in("id", chunk),
+      );
+      deadNoticeIds = new Set(notices.filter((n) => isDeadNoticeStatus(n.status)).map((n) => n.id));
+    } catch {
+      deadNoticeIds = new Set();
+    }
+  }
+  const liveNotice = (id: string | null) => (id && !deadNoticeIds.has(id) ? id : null);
+  const alreadySentKeys = new Set(
+    sentRows.filter((r) => liveNotice(r.classnote_notice_id)).map((r) => textbookSendKey(r.student_id, r.book_name)),
+  );
   const dedup = partitionAlreadySent(
     loaded.rows.map((r) => ({
       id: r.id,
       studentId: r.student_id,
       studentName: r.student_name,
       bookName: r.book_name,
-      classnoteNoticeId: r.classnote_notice_id,
+      classnoteNoticeId: liveNotice(r.classnote_notice_id),
     })),
     alreadySentKeys,
   );

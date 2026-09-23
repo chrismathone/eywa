@@ -6,7 +6,7 @@ import "server-only";
  */
 
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getTeacherScope } from "@/lib/auth/teacher-scope";
+import { textbookRequestStudentIds } from "./textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
@@ -128,9 +128,9 @@ export async function loadScopedOrders(
   const teacherId = await effectiveTeacherId();
   if (teacherId) {
     const user = await getCurrentUser();
-    const { studentIds } = await getTeacherScope(teacherId);
-    const scoped = new Set(studentIds);
-    if (!rows.every((r) => r.student_id && scoped.has(r.student_id)))
+    const scoped = new Set(await textbookRequestStudentIds(teacherId));
+    // 본인이 만든 요청은 담당 범위와 무관하게 본인 것(D5 — 목록에 뜨는 요청은 보낼 수 있어야 한다).
+    if (!rows.every((r) => (r.created_by && r.created_by === user?.id) || (r.student_id && scoped.has(r.student_id))))
       return { error: "담당 학생의 요청만 학부모에게 보낼 수 있습니다" };
     const notMine = rows.filter((r) => !ownsTextbookRequest(r.teacher_name, user?.displayName, r.created_by, user?.id));
     if (notMine.length)

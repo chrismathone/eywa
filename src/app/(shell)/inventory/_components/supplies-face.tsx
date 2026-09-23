@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ToolbarButton } from "@/components/toolbar";
 import { matchesTextQuery } from "@/features/inventory/filter";
 import type { InventorySupply } from "@/features/inventory/types";
 import { DashCell, UnknownCell } from "./cell-bits";
@@ -9,10 +10,11 @@ import { SortableTable, type Column } from "./sortable-table";
 import { SupplyDialog } from "./supply-dialog";
 import { useSort } from "./use-sort";
 
-/** 소모품 면 — `품목ID · 품목 · 제조사/모델 · 수량 · 분배위치 · 최종확인 · 확인자`. 수량 수정은 행 더블클릭. */
+/** 소모품 면 — `품목ID · 품목 · 제조사/모델 · 수량 · 분배위치 · 최종확인 · 확인자`. 수정은 행 더블클릭, 등록은 '+ 소모품 등록'. */
 export function SuppliesFace({ supplies, canWrite, today, userName }: { supplies: InventorySupply[]; canWrite: boolean; today: string; userName: string }) {
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<InventorySupply | null>(null);
+  // "new" = 새로 등록(감사 N5) · 행 = 그 소모품 수정.
+  const [editing, setEditing] = useState<InventorySupply | "new" | null>(null);
   const { sort, toggle } = useSort();
   const rows = useMemo(
     () => supplies.filter((s) => matchesTextQuery([s.itemCode, s.name, s.makerModel, s.location, s.checkerName], query)),
@@ -34,7 +36,8 @@ export function SuppliesFace({ supplies, canWrite, today, userName }: { supplies
         query={query}
         onQueryChange={setQuery}
         placeholder="품목, 모델, 위치 검색"
-        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수량 수정" : ""}`}
+        summary={`${rows.length}건${canWrite ? " · 행 더블클릭 = 수정" : ""}`}
+        actions={canWrite ? <ToolbarButton variant="primary" onClick={() => setEditing("new")}>+ 소모품 등록</ToolbarButton> : null}
       />
       <div className="bg-card shadow-card rounded-2xl p-2">
         <SortableTable
@@ -47,7 +50,9 @@ export function SuppliesFace({ supplies, canWrite, today, userName }: { supplies
           onRowDoubleClick={canWrite ? (s) => setEditing(s) : undefined}
         />
       </div>
-      {editing ? <SupplyDialog supply={editing} today={today} userName={userName} onClose={() => setEditing(null)} /> : null}
+      {editing ? (
+        <SupplyDialog supply={editing === "new" ? undefined : editing} today={today} userName={userName} onClose={() => setEditing(null)} />
+      ) : null}
     </section>
   );
 }

@@ -224,7 +224,9 @@ async function loadAvailablePeriods(
   const rows: { period: string }[] = error || tenantId
     ? await fetchAllPaged<{ period: string }>((from, to) => {
         // ⚠️ admin 경로는 RLS를 안 타므로 tenant 필터가 **필수**(교차 테넌트 유출 방지).
-        const q = supabase.from("invoices").select("period").order("period", { ascending: false });
+        // 🔴 `.order("id")` 보조 키 — period만으로 정렬하면 같은 월 행 사이 순서가 요청마다 달라 페이지 경계에서
+        //    행이 겹치거나 빠진다(B2, 감사 T8). 월 하나가 통째로 빠지는 일은 드물지만 결과는 칩 목록이라 조용하다.
+        const q = supabase.from("invoices").select("period").order("period", { ascending: false }).order("id");
         return (tenantId ? q.eq("tenant_id", tenantId) : q).range(from, to);
       })
     : ((data ?? []) as { period: string }[]);

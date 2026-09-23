@@ -10,18 +10,14 @@ import { SessionTermGroups, RefreshPlanButton, type ClassGroup } from "./session
 import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
-import { needsReceiptAllocation } from "@/features/billing/session-terms/tuition-receipt";
-import { matchesTermQuery } from "@/features/billing/session-terms/term-search";
-import { canMaterializeTerm, NO_LESSON_LABEL, type TermRowState } from "@/features/billing/session-terms/month-roster";
+import { NO_LESSON_LABEL } from "@/features/billing/session-terms/month-roster";
+import { confirmableTermRow, filterSessionTermRows } from "@/features/billing/session-terms/term-filter";
 
 const PAGE_SIZE = 25; // 반(그룹) 단위 페이지
 
-/**
- * 확정할 수 있는 줄 — 회차 행이 있거나(`term`), 청구서가 있어 확정하는 순간 행을 만들 수 있는 줄(`missing`). 청구서가 없거나 취소된
- * 줄은 확정할 수 없어 '미확정'이 아니다(출석부가 '—'로 적는 줄과 같은 집합, 원장 2026-09-18). 표(`session-term-table.tsx`)와 같은 판정.
- */
-const confirmableRow = (r: { termState: TermRowState }) => r.termState === "term" || canMaterializeTerm(r.termState);
+const confirmableRow = confirmableTermRow;
 
 /**
  * 회차 확정 면 — 청구=N회 키스톤(docs/per-session-billing-plan.md).
@@ -49,23 +45,9 @@ export async function SessionTermsFace({
   const subjects = buildSubjectMaps(settings.operations.subjects);
 
   const allRows = view.rows.map((r) => ({ ...r, subjectLabel: subjects.labelOf(r.subject) }));
-  // 과목별 조회는 유지하되 수학·영어의 단가 목록은 같은 학원 설정을 쓴다.
-  const presentSubjects = [...new Set(allRows.map((r) => r.subject))].sort();
-  const activeSubject = subject && presentSubjects.includes(subject) ? subject : null;
-  const bySubject = activeSubject ? allRows.filter((r) => r.subject === activeSubject) : allRows;
-
-  // 검색 = 표의 글자 열 전부(이름·반·학교학년·담임·메모, 부분 일치 — matchesTermQuery 한 벌). 페이저는 검색 결과 기준.
-  const query = (q ?? "").trim();
-  const searched = query ? bySubject.filter((r) => matchesTermQuery(r, query)) : bySubject;
-  const pendingOnly = allocation === "pending";
-  const openOnly = confirmation === "open";
-  // 미확정 = 확정할 수 있는 줄 중 아직 안 한 줄 · 미배분 = 배분할 수납이 있는 줄 중 아직 안 한 줄(청구서 없음·취소는 둘 다 아니다).
-  const isOpen = (r: { confirmedSessions: number | null; termState: TermRowState }) => r.confirmedSessions === null && confirmableRow(r);
-  const isPending = (r: Parameters<typeof needsReceiptAllocation>[0] & { termState: TermRowState }) => confirmableRow(r) && needsReceiptAllocation(r);
-  // 두 필터의 괄호 속 건수는 서로를 거르지 않은 수(과목·검색까지만) — 한쪽을 켜도 다른 쪽 건수가 흔들리지 않는다.
-  const pendingCount = searched.filter(isPending).length;
-  const openCount = searched.filter(isOpen).length;
-  const filtered = searched.filter((r) => (!pendingOnly || isPending(r)) && (!openOnly || isOpen(r)));
+  // 과목·검색·미확정만·미배분만 = 엑셀과 같은 한 벌(filterSessionTermRows, 감사 N2). 페이저는 검색 결과 기준.
+  const { presentSubjects, activeSubject, query, pendingOnly, openOnly, pendingCount, openCount, filtered } =
+    filterSessionTermRows(allRows, { subject, q, allocation, confirmation });
   // 머리 줄 카운트(원장 2026-09-18) — 확정 분모는 확정 가능한 줄, 그 뒤에 줄 상태별 수(0이면 생략).
   const confirmableCount = filtered.filter(confirmableRow).length;
   const missingCount = filtered.filter((r) => r.termState === "missing").length;
@@ -143,7 +125,25 @@ export async function SessionTermsFace({
           {noLessonCount > 0 ? ` · ${NO_LESSON_LABEL.label} ${noLessonCount}` : null}
           {duplicateCount > 0 ? ` · 청구서 중복 ${duplicateCount}` : null}
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1">
+          {/* 엑셀(감사 N2) — 이 표와 같은 줄 집합(과목·검색·미확정만·미배분만)을 내보낸다. */}
+          <Button
+            variant="ghost"
+            className="text-primary"
+            render={
+              <a
+                href={`/api/exports/session-terms?${new URLSearchParams({
+                  period: p,
+                  ...(activeSubject ? { subject: activeSubject } : {}),
+                  ...(query ? { q: query } : {}),
+                  ...(pendingOnly ? { allocation: "pending" } : {}),
+                  ...(openOnly ? { confirmation: "open" } : {}),
+                }).toString()}`}
+              />
+            }
+          >
+            엑셀 내보내기
+          </Button>
           <RefreshPlanButton period={p} />
         </div>
         <Link href="/owner?tab=billing" className="text-primary text-sm underline-offset-2 hover:underline">

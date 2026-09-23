@@ -1,7 +1,8 @@
+import { canManageSalary } from "@/features/payroll/server/salary-access";
 import { requireAccess } from "@/lib/auth/require-access";
 import { isModuleEnabled } from "@/lib/modules";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { getCurrentUser } from "@/lib/auth/current-user";
 import { BillingContent } from "./_components/billing-content";
 import { TextbooksFace } from "./_components/textbooks-face";
 import { ExpensesPanel } from "./_components/expenses-panel";
@@ -55,10 +56,7 @@ const PAYROLL_FACE: Face = { key: "payroll", label: "강사 정산", href: "/bil
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   let tab = resolveTab(await searchParams);
   // 강사 정산 탭은 원장 전용 — 비-master가 URL로 와도 제목에 "강사 정산"을 노출하지 않는다(본문도 수납으로 폴백).
-  if (tab === "payroll") {
-    const u = await getCurrentUser();
-    if (u?.systemRole !== "master") tab = "billing";
-  }
+  if (tab === "payroll" && !(await canManageSalary())) tab = "billing"; // 본문 게이트와 같은 판정(D6 — super_admin 통과)
   const suffix =
     tab === "textbooks"
       ? " · 교재"
@@ -82,8 +80,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const user = await requireAccess("billing");
   const sp = await searchParams;
   const tab = resolveTab(sp);
-  // 강사 정산 탭은 원장(master)에게만 노출. 비-master가 URL로 직접 오면 수납 면으로 폴백.
-  const isMaster = user.systemRole === "master";
+  // 강사 정산 탭은 원장(master)·총괄(super_admin)에게만 노출(감사 D6 — 총괄은 게이트 자동 통과). 그 밖이 URL로 오면 수납 면으로 폴백.
+  const isMaster = user.systemRole === "master" || (await isCurrentUserSuperAdmin());
   // 회차 정산 모듈(회차 확정·시수 검증·강사 정산) — 꺼진 학원(새 학원 기본)은 면을 세우지 않고 주소도 수납으로 떨군다.
   // 침산은 켜져 있어 종전과 같다(2026-09-22 방향 B).
   const sessionOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "session_billing");

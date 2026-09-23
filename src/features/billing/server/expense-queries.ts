@@ -205,12 +205,15 @@ export async function getExpensesForMonth(period: string): Promise<ExpenseRow[]>
 // tenant RLS로 테넌트 격리 + created_by eq로 본인 것만(사무실 결의서·타 강사 제출분은 안 보임). 최근 200건.
 export async function getMyExpenseRequests(userId: string): Promise<ExpenseRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("expenses")
     .select(EXPENSE_COLS)
     .eq("created_by", userId)
     .order("created_at", { ascending: false })
+    .order("id")
     .limit(200);
+  // 감사 E6 — 조회 실패를 빈 목록으로 삼키면 "결의서 0건"이라는 거짓 화면이 된다. 한글 요약으로 알린다.
+  if (error) throw new Error("지출결의서 목록을 불러오지 못했습니다. 잠시 뒤 다시 열어 주세요");
   return (data ?? []).map(mapExpenseRow);
 }
 

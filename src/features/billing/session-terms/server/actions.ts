@@ -1,5 +1,7 @@
 "use server";
 
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
+
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -54,6 +56,7 @@ export async function refreshPlannedTerms(period: string): Promise<SessionTermAc
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" };
 
   const supabase = await createClient();
@@ -257,6 +260,7 @@ export async function confirmClassTerms(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   if (!monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" };
   if (!classId) return { error: "반이 지정되지 않았습니다" };
   if (visibleTermIds !== undefined && (!Array.isArray(visibleTermIds) || visibleTermIds.length === 0 || visibleTermIds.length > 1000 || visibleTermIds.some((id) => typeof id !== "string" || !id))) return { error: "확정할 학생을 확인해 주세요" };
@@ -427,6 +431,7 @@ export async function confirmSessionTerm(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
 
   let id = String(formData.get("id") ?? "").trim();
   const sessionsRaw = String(formData.get("sessions") ?? "").trim();
@@ -508,6 +513,7 @@ export async function unconfirmSessionTerm(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "대상이 없습니다" };
@@ -569,6 +575,7 @@ export async function setSessionTermCarryover(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "대상이 없습니다" };

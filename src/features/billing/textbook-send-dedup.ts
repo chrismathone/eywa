@@ -76,3 +76,17 @@ export function partitionAlreadySent(
   }
   return { sendable, skipped };
 }
+
+/**
+ * 연결된 공지가 **실제로 학부모에게 남아 있지 않은** 상태인가 — 감사 F3(2026-09-23).
+ *
+ * 연결(`classnoteNoticeId`)은 큐 적재 직후 박히므로, 워커가 끝내 실패(`failed`)했거나 게시취소가 끝난(`revoked`)
+ * 공지도 연결은 그대로 남아 "이미 발송함"으로 영영 걸러졌다(같은 학생·같은 교재의 새 요청서까지 막혔다).
+ * 이 둘만 발송분으로 치지 않는다. 🔴 나머지(대기·처리 중·성공·일부 성공·회수 중·일부 회수·수정 중)는
+ *    학부모 보드에 글이 있거나 곧 생기므로 **계속 막는다**(중복 게시가 되돌리기 어려운 쪽이다).
+ * ⚠️ `dry_run`은 공지 상태가 아니다 — 발송 스위치가 꺼진 발송은 애초에 연결하지 않는다(textbook-notice-actions).
+ */
+const DEAD_NOTICE_STATUSES: ReadonlySet<string> = new Set(["failed", "revoked"]);
+export function isDeadNoticeStatus(status: string | null | undefined): boolean {
+  return !!status && DEAD_NOTICE_STATUSES.has(status);
+}

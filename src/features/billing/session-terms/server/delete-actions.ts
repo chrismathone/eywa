@@ -1,5 +1,7 @@
 "use server";
 
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
+
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -33,6 +35,7 @@ export type SessionTermDeletePreview = {
 async function deletionContext(id: string, period: string) {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" } as const;
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF } as const;
   if (typeof id !== "string" || isVirtualTermId(id) || !UUID.test(id)) return { error: "삭제할 회차 행이 없습니다" } as const;
   if (typeof period !== "string" || !monthRange(period)) return { error: "청구월 형식이 올바르지 않습니다" } as const;
   const db = await createClient();

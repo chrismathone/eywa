@@ -4,17 +4,37 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll } from "./queries";
 import { logAction } from "@/features/audit/server/log";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isChinsanTenant } from "@/features/owner/preset";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "../config";
 
 async function genericFeatureDisabled(feature: "payroll" | "staff_leaves"): Promise<boolean> {
   const settings = await getTenantSettings();
-  return !isChinsanTenant(settings) && !(feature === "payroll" ? isPayrollEnabled(settings) : isStaffLeavesEnabled(settings));
+  // 🔴 급여는 침산도 스위치를 본다(PAYROLL_ENABLED=false 동결) — 화면(/staff/payroll·/staff/[id]/payroll)이
+  //    isPayrollEnabled로 닫혀 있어도 액션을 직접 부르면 돌던 구멍(감사 S5). 휴가는 종전대로(침산 = 옛 기록 열람 유지).
+  if (feature === "payroll") return !isPayrollEnabled(settings);
+  return !isChinsanTenant(settings) && !isStaffLeavesEnabled(settings);
+}
+
+/**
+ * 급여 쓰기 대상 확인 — 대상 직원이 **내 지점** 사람인지 admin으로 확인한다.
+ * payroll_records 쓰기는 admin 클라이언트(아래)라 RLS가 테넌트를 막아 주지 않는다 → 여기서 막는다.
+ */
+async function assertStaffInTenant(tenantId: string, userId: string): Promise<boolean> {
+  const { data } = await createAdminClient()
+    .from("users")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("id", userId)
+    .maybeSingle();
+  return !!data;
 }
 
 export type SavePayrollState = { error?: string; recordId?: string } | undefined;
@@ -25,7 +45,9 @@ export async function upsertPayroll(
 ): Promise<SavePayrollState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  if (!(await isCurrentUserSuperAdmin()) && (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff")))) {
+    return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  }
   if (await genericFeatureDisabled("payroll")) return { error: "이 지점은 급여 기능을 사용하지 않습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
@@ -38,10 +60,12 @@ export async function upsertPayroll(
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
   if (!userId || !period) return { error: "강사·정산 기간이 필요합니다" };
+  if (!(await assertStaffInTenant(user.tenantId, userId))) return { error: "직원을 찾을 수 없습니다" };
 
   const total = payrollTotal({ baseAmount, hourlyAmount, bonus, deduction });
 
-  const supabase = await createClient();
+  // 🔴 admin + 명시 tenant_id — 0290a(master 전용 RLS) 적용 뒤에도 게이트를 통과한 admin·manager가 쓸 수 있게.
+  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("payroll_records")
     .upsert(
@@ -62,7 +86,7 @@ export async function upsertPayroll(
     .select("id")
     .single();
 
-  if (error || !data) return { error: error?.message ?? "저장 실패" };
+  if (error || !data) return { error: error ? humanizeDbError(error.message) : "저장 실패" };
 
   await logAction({
     action: "payroll_upsert",
@@ -82,22 +106,37 @@ export async function markPayrollPaid(
 ): Promise<MarkPaidState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  if (!(await isCurrentUserSuperAdmin()) && (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff")))) {
+    return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  }
   if (await genericFeatureDisabled("payroll")) return { error: "이 지점은 급여 기능을 사용하지 않습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
   if (!id) return { error: "정산 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
-  const { error } = await supabase
+  const supabase = createAdminClient();
+  const { data: updated, error } = await supabase
     .from("payroll_records")
     .update({ paid_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("tenant_id", user.tenantId)
+    .eq("id", id)
+    // 이미 지급 처리된 행은 다시 찍지 않는다(더블클릭·옛 탭 — 최초 지급 시각을 덮고 감사로그가 두 번 남던 것).
+    .is("paid_at", null)
+    .select("id, user_id, period, total")
+    .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message) };
+  if (!updated) return { error: "정산 기록이 없거나 이미 지급 완료로 처리되었습니다" };
 
-  if (userId) revalidatePath(`/staff/${userId}/payroll`);
+  await logAction({
+    action: "payroll_mark_paid",
+    targetType: "payroll",
+    targetLabel: updated.period,
+    metadata: { userId: updated.user_id, total: Number(updated.total) },
+  });
+  revalidatePath(`/staff/${updated.user_id}/payroll`);
+  if (userId && userId !== updated.user_id) revalidatePath(`/staff/${userId}/payroll`);
   return undefined;
 }
 
@@ -108,16 +147,19 @@ export async function autoComputePayroll(
 ): Promise<SavePayrollState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  if (!(await isCurrentUserSuperAdmin()) && (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff")))) {
+    return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  }
   if (await genericFeatureDisabled("payroll")) return { error: "이 지점은 급여 기능을 사용하지 않습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
   if (!userId || !period) return { error: "강사·정산 기간이 필요합니다" };
+  if (!(await assertStaffInTenant(user.tenantId, userId))) return { error: "직원을 찾을 수 없습니다" };
 
   const calc = await calculateMonthlyPayroll(userId, period);
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const total = payrollTotal({ baseAmount: calc.baseAmount, hourlyAmount: calc.hourlyAmount });
 
   const { data, error } = await supabase
@@ -137,8 +179,14 @@ export async function autoComputePayroll(
     .select("id")
     .single();
 
-  if (error || !data) return { error: error?.message ?? "저장 실패" };
+  if (error || !data) return { error: error ? humanizeDbError(error.message) : "저장 실패" };
 
+  await logAction({
+    action: "payroll_auto_compute",
+    targetType: "payroll",
+    targetLabel: period,
+    metadata: { userId, total, hoursWorked: calc.hoursWorked },
+  });
   revalidatePath(`/staff/${userId}/payroll`);
   return { recordId: data.id };
 }
@@ -155,7 +203,7 @@ export async function requestLeave(
 ): Promise<LeaveActionState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
+  if (!(await isCurrentUserSuperAdmin()) && (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff")))) {
     return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
   }
   if (await genericFeatureDisabled("staff_leaves")) return { error: "이 지점은 기존 휴가 기능을 사용하지 않습니다" };
@@ -194,7 +242,7 @@ export async function approveLeave(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
-  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
+  if (!(await isCurrentUserSuperAdmin()) && (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff")))) {
     return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
   }
   if (await genericFeatureDisabled("staff_leaves")) return { error: "이 지점은 기존 휴가 기능을 사용하지 않습니다" };
@@ -223,7 +271,7 @@ export async function deleteLeave(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
 
-  if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
+  if (!(await isCurrentUserSuperAdmin()) && (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff")))) {
     return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
   }
   if (await genericFeatureDisabled("staff_leaves")) return { error: "이 지점은 기존 휴가 기능을 사용하지 않습니다" };

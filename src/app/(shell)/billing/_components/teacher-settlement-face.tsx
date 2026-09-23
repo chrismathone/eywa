@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCurrentUser } from "@/lib/auth/current-user";
+import { canManageSalary } from "@/features/payroll/server/salary-access";
 import { currentPeriod } from "@/features/billing/calc";
 import { getTeacherSettlementView } from "@/features/payroll/server/settlement-queries";
 import { getClassSalaryRows } from "@/features/payroll/server/class-salary-queries";
@@ -31,9 +31,8 @@ const STATUS_NOTE: Record<Exclude<SettlementStatus, "computed">, string> = {
  * 지급 기준 = 청구(confirmed), 실측/diff는 신호로만(P1/P2). docs/payroll-linkage-plan.md.
  */
 export async function TeacherSettlementFace({ period }: { period?: string }) {
-  const user = await getCurrentUser();
-  // 급여 = 원장 전용 PII. master 외에는 화면 자체를 막는다.
-  if (!user || user.systemRole !== "master") {
+  // 급여 = 원장·총괄 전용 PII(감사 D6). 그 밖에는 화면 자체를 막는다.
+  if (!(await canManageSalary())) {
     return (
       <div className="border-line text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
         강사 정산(급여)은 <b>원장</b>만 열람할 수 있습니다.

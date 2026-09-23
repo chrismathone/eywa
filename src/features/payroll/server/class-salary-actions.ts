@@ -5,8 +5,11 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { humanizeDbError } from "@/lib/supabase/db-error";
+import { logAction } from "@/features/audit/server/log";
 import { isSalaryGroup } from "../salary-group";
+import { canManageSalary } from "./salary-access";
 
 const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -18,8 +21,8 @@ export async function saveClassSalary(
 ): Promise<SaveClassSalaryState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  // 급여 = 원장 전용(RLS로도 막히지만 여기서 먼저 분명한 메시지를 준다).
-  if (user.systemRole !== "master") return { error: "반별 급여 설정은 원장만 변경할 수 있습니다" };
+  // 급여 = 원장·총괄 전용(감사 D6 — 총괄은 모든 게이트를 자동 통과).
+  if (!(await canManageSalary())) return { error: "반별 급여 설정은 원장만 변경할 수 있습니다" };
 
   const classId = String(formData.get("classId") ?? "").trim();
   if (!classId) return { error: "대상 반이 지정되지 않았습니다" };
@@ -40,10 +43,26 @@ export async function saveClassSalary(
   const dows = DOW_KEYS.filter((d) => formData.get(`dow_${d}`) === "on");
   const appliesDows = dows.length === 0 || dows.length === DOW_KEYS.length ? null : dows;
 
-  const supabase = await createClient();
-  // 같은 테넌트의 반인지 확인(RLS가 이미 막지만 명시 방어 — 남의 반 id로 행을 만들지 못하게).
-  const { data: klass } = await supabase.from("classes").select("id, tenant_id").eq("id", classId).maybeSingle();
-  if (!klass || klass.tenant_id !== user.tenantId) return { error: "대상 반을 찾을 수 없습니다" };
+  // 🔴 admin + 명시 tenant_id — class_salary_settings는 master 전용 RLS(0130a)라 총괄(비-master)이 세션으로 쓰면 막힌다.
+  //    게이트(canManageSalary)를 통과한 뒤에만 여기 온다.
+  const supabase = createAdminClient();
+  // 같은 테넌트의 반인지 확인 — admin이라 RLS가 막아 주지 않는다(남의 반 id로 행을 만들지 못하게).
+  const { data: klass } = await supabase
+    .from("classes")
+    .select("id, tenant_id, class_name")
+    .eq("id", classId)
+    .eq("tenant_id", user.tenantId)
+    .maybeSingle();
+  if (!klass) return { error: "대상 반을 찾을 수 없습니다" };
+
+  // 감사 M2 — 누가 무엇에서 무엇으로 바꿨는지 되짚도록 이전 값을 먼저 읽는다(감사로그는 원장·총괄만 읽는다, 0253a).
+  const { data: before, error: beforeError } = await supabase
+    .from("class_salary_settings")
+    .select("salary_group, commission_rate, applies_dows")
+    .eq("tenant_id", user.tenantId)
+    .eq("class_id", classId)
+    .maybeSingle();
+  if (beforeError) return { error: humanizeDbError(beforeError.message) };
 
   const { error } = await supabase.from("class_salary_settings").upsert(
     {
@@ -57,8 +76,24 @@ export async function saveClassSalary(
     },
     { onConflict: "class_id" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message) };
 
+  await logAction({
+    action: "class_salary_update",
+    targetType: "class",
+    targetLabel: klass.class_name ?? null,
+    metadata: {
+      classId,
+      before: before
+        ? {
+            salaryGroup: before.salary_group ?? null,
+            commissionRate: before.commission_rate === null ? null : Number(before.commission_rate),
+            appliesDows: before.applies_dows ?? null,
+          }
+        : null,
+      after: { salaryGroup, commissionRate, appliesDows },
+    },
+  });
   revalidatePath("/billing");
   return { ok: true, nonce: Date.now() };
 }

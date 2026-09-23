@@ -1,3 +1,4 @@
+import { canManageSalary } from "@/features/payroll/server/salary-access";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, ChevronRight, Wallet, CheckCircle2, Clock } from "@/components/icons/aywa-icon-compat";
@@ -53,10 +54,10 @@ export default async function StaffPayrollPage({
 }: {
   searchParams: Promise<{ period?: string; q?: string; status?: string }>;
 }) {
-  const viewer = await requireAccess("staff");
+  await requireAccess("staff");
   if (!isPayrollEnabled(await getTenantSettings())) redirect("/staff");
   // 급여 노출은 원장(master) 전용 (schema.ts 주석 — 전직원 급여는 민감 정보).
-  if (viewer.systemRole !== "master") redirect("/staff");
+  if (!(await canManageSalary())) redirect("/staff"); // 원장 + super_admin(D6)
 
   const sp = await searchParams;
   const period = /^\d{4}-\d{2}$/.test(sp.period ?? "") ? sp.period! : currentPeriod();

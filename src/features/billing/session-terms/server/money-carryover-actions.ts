@@ -1,5 +1,7 @@
 "use server";
 
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
+
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -68,6 +70,7 @@ async function loadContext(termId: string): Promise<{ data?: Context; error?: st
 export async function getMoneyCarryoverOptions(termId: string): Promise<{ data?: MoneyCarryOptions; error?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const ctx = await loadContext(termId);
   if (!ctx.data) return { error: ctx.error };
   const c = ctx.data;
@@ -81,6 +84,7 @@ export async function getMoneyCarryoverOptions(termId: string): Promise<{ data?:
 export async function saveMoneyCarryover(input: { termId: string; amount: number; classId: string | null; note: string | null; expectedAllocation: number | null }): Promise<{ ok?: true; error?: string; warning?: string }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
   const ctx = await loadContext(input?.termId);
   if (!ctx.data) return { error: ctx.error };
   const c = ctx.data;

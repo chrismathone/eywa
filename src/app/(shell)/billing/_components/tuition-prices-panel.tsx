@@ -8,12 +8,11 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import {
   getTuitionCatalogPage,
   getTuitionCatalogStats,
-  TUITION_CATEGORIES,
+  getTuitionCategoryOptions,
 } from "@/features/billing/server/tuition-catalog-queries";
 import { PMODE_UNSET, PRICING_MODES } from "@/features/billing/tuition-catalog";
 import { TuitionPricesTable } from "./tuition-prices-table";
 
-const CATEGORY_OPTIONS = TUITION_CATEGORIES.map((c) => ({ value: c, label: c }));
 // 🔴 '미지정'이 필터에 없으면 **아직 안 고른 항목을 화면에서 골라낼 방법이 아예 없다**(전체·회당·월·할인
 //    어디에도 안 잡힌다). 남은 것을 세고 고르는 게 이 화면의 실제 용무라 마지막 칸으로 넣는다.
 const PMODE_OPTIONS = [
@@ -39,10 +38,13 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
   const active = sp.cactive ?? "all";
   const page = Math.max(1, Number(sp.cpage) || 1);
 
-  const [{ rows, total }, stats] = await Promise.all([
+  const [{ rows, total }, stats, categories] = await Promise.all([
     getTuitionCatalogPage({ q, category, pmode, active }, page, PAGE_SIZE),
     getTuitionCatalogStats(),
+    getTuitionCategoryOptions(),
   ]);
+  // 분류 = 학원설정 과목 ∪ 이미 쓰인 분류 ∪ 기타·할인(감사 D7). 필터와 편집 창이 같은 목록을 쓴다.
+  const CATEGORY_OPTIONS = categories.map((c) => ({ value: c, label: c }));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const build = (patch: Partial<Sp>) => {
@@ -87,6 +89,7 @@ export async function TuitionPricesPanel({ sp }: { sp: Sp }) {
           필터(지시서 §10 — 라벨 셋 + 검색 토글)도 같은 행으로(원장 2026-09-22 *"넓은 화면까지 2행일 필요가 없어보임"*). */}
       <TuitionPricesTable
         rows={rows}
+        categories={categories}
         summary={
           <div className="flex flex-wrap items-center gap-2">
             <FilterSelect

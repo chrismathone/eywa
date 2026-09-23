@@ -11,7 +11,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { WindowLink } from "@/components/workspace/window-link";
 import { summarizeLines } from "@/features/billing/line-summary";
-import { invoiceOutstanding } from "@/features/billing/calc";
+import { invoiceDisplayLines, invoiceKindLabel, isManualInvoiceShape, PAYMENT_METHOD_LABEL } from "@/features/billing/invoice-lines";
+import { ManualInvoiceActions } from "./manual-invoice-actions";
 import { overdueLinesOnly } from "@/features/billing/sync-window";
 import type { InvoiceRow, InvoiceLineItem, SortKey } from "@/features/billing/server/queries";
 import { MakeeduOriginTag } from "@/components/makeedu-origin-tag";
@@ -26,20 +27,8 @@ const KIND_STYLE: Record<string, string> = {
   기타: "text-text-dim bg-bg-soft",
   원복: "text-text-dim bg-bg-soft",
 };
-// 레거시 영문 kind(재적재 이전 aywa 폼·구 임포터 산: tuition/material/exam/other) → 한글 표시(raw 코드 노출 금지).
-const KIND_LEGACY_LABEL: Record<string, string> = {
-  tuition: "수업",
-  material: "교재",
-  exam: "시험",
-  other: "기타",
-};
-const kindLabel = (k: string) => KIND_LEGACY_LABEL[k] ?? k;
-const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  card: "카드",
-  transfer: "계좌이체",
-  cash: "현금",
-  other: "기타",
-};
+// 레거시 kind 라벨·결제수단 라벨·라인 펼치기는 엑셀과 한 벌([`invoice-lines.ts`](src/features/billing/invoice-lines.ts), 감사 N3).
+const kindLabel = invoiceKindLabel;
 const KRW = new Intl.NumberFormat("ko-KR");
 const won = (n: number) => `${KRW.format(n)}원`;
 /** billed_at("2026-07-05" 또는 timestamptz) → 일(day) 숫자. 라인에 dueDay가 없는 수동 청구서 폴백. */
@@ -62,6 +51,8 @@ type Props = {
   overdueOnly?: boolean;
   /** 마지막 동기화에 없던 행만 보기 — 위와 같은 이유로 정렬 링크가 함께 실어 나른다. */
   missingOnly?: boolean;
+  /** 수납 쓰기 권한 — 수동 청구서의 '완납'·'취소'를 세운다(감사 N15, 게이트는 서버가 다시 본다). */
+  canWrite?: boolean;
 };
 
 function buildSortHref(
@@ -107,29 +98,9 @@ function SortHeader({
   );
 }
 
-// InvoiceRow(집계) → 라인 단위 행 목록. 구데이터(항목 상세 없음)는 인보이스 값으로 1행 폴백.
-// ⚠️ 라인은 있는데 상세 키(paid/unpaid)가 전무한 구형 3-key 인보이스(재적재 이전·aywa 폼 산)는
-// 라인별 미납을 알 수 없다 — 그대로 두면 `unpaid ?? 0`이 전부 '완납'으로 렌더(실측 미납 28건 ₩7.3M 은폐).
-// → 항목명·금액은 살리고 **첫 라인에만 인보이스 값(할인/실납/미납 등)을 합성**, 나머지는 미상(—) 처리.
-function toLines(r: InvoiceRow): InvoiceLineItem[] {
-  const invoiceLevel = {
-    discount: r.amountDiscount,
-    paid: r.amountPaid,
-    // 행 레벨 미수 = calc.ts 단일 공식(paid/refunded/void = 0 — 적립금 잔차를 미납으로 안 그림).
-    unpaid: invoiceOutstanding(r),
-    points: r.pointsUsed,
-    method: r.paymentMethod,
-    paidDate: r.paidAt,
-  };
-  if (r.lineItems.length > 0) {
-    const hasDetail = r.lineItems.some((li) => li.paid !== undefined || li.unpaid !== undefined);
-    if (hasDetail) return r.lineItems;
-    return r.lineItems.map((li, i) => (i === 0 ? { ...li, ...invoiceLevel } : li));
-  }
-  return [{ kind: "수업", description: r.notes ?? "수납", amount: r.amountTotal, ...invoiceLevel }];
-}
+const toLines = (r: InvoiceRow): InvoiceLineItem[] => invoiceDisplayLines(r);
 
-export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missingOnly }: Props) {
+export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missingOnly, canWrite = false }: Props) {
   const current = { sort, desc, period, q, overdueOnly, missingOnly };
   // '기한 경과만'은 **미납 라인만** 보여준다 — 필터가 청구서 단위라 예전엔 같은 청구서의 완납 라인이
   // 함께 딸려 나왔다(sync-window.overdueLinesOnly에 판정·예외 근거).
@@ -250,6 +221,9 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                         {r.studentName}
                       </WindowLink>
                       {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
+                      {canWrite && isManualInvoiceShape(r.lineItems) ? (
+                        <ManualInvoiceActions invoiceId={r.id} status={r.status} label={`${r.studentName} ${r.period}`} />
+                      ) : null}
                     </span>
                   </td>
                   <td className="text-text-dim num px-3 py-2.5 text-xs">{r.period}</td>
@@ -358,6 +332,9 @@ export function BillingTable({ rows, sort, desc, period, q, overdueOnly, missing
                           {r.studentName}
                         </WindowLink>
                         {r.syncAddedAt ? <MakeeduOriginTag className="ml-1.5" /> : null}
+                        {canWrite && isManualInvoiceShape(r.lineItems) ? (
+                          <ManualInvoiceActions invoiceId={r.id} status={r.status} label={`${r.studentName} ${r.period}`} />
+                        ) : null}
                       </span>
                     ) : (
                       ""

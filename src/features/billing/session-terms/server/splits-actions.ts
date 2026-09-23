@@ -1,5 +1,7 @@
 "use server";
 
+import { SESSION_BILLING_OFF, sessionBillingOff } from "./module-gate";
+
 // 강사 분배 스냅샷 저장 — 로드맵 2단계 (b). 골든마스터(N6) 통과 후 착수(2026-07-16).
 // 스냅샷 의미론: 그 달 확정 행(N1) 전체를 계산해 기간 단위로 교체한다.
 // ⚠️ 순서가 생명(적대 리뷰 픽스): **upsert 먼저 → 잔여(stale) 행 정리 마지막** — 기존 스냅샷을
@@ -13,6 +15,9 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionVerificationView } from "./verification-queries";
 import { computeSplitRows } from "../splits";
+import { summarizeSplitChange } from "../splits-audit";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { logAction } from "@/features/audit/server/log";
 
 export type SaveSplitsState =
   | { error?: string; saved?: number; skipped?: number }
@@ -31,6 +36,7 @@ export async function saveTeacherSplits(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "billing"))) return { error: "수납 관리 권한이 없습니다" };
+  if (await sessionBillingOff()) return { error: SESSION_BILLING_OFF };
 
   const period = String(formData.get("period") ?? "").trim();
   if (!/^\d{4}-\d{2}$/.test(period)) return { error: "잘못된 청구월입니다" };
@@ -56,6 +62,23 @@ export async function saveTeacherSplits(
 
   const supabase = await createClient();
 
+  // 감사 M2 — 저장 **전** 스냅샷(강사별 합계 전후 비교용). 한 달 행이 1,000을 넘을 수 있어 페이지네이션(B2).
+  // 못 읽으면 저장을 막지 않고 감사 요약에 '전 값 모름'만 남긴다(기록 전용 조회라 돈 계산과 무관).
+  let beforeRows: { teacher_name: string | null; confirmed_amount: number | string; actual_amount: number | string }[] | null = null;
+  try {
+    beforeRows = await fetchAllPaged((from, to) =>
+      supabase
+        .from("invoice_teacher_splits")
+        .select("teacher_name, confirmed_amount, actual_amount")
+        .eq("tenant_id", user.tenantId)
+        .eq("period", period)
+        .order("id")
+        .range(from, to),
+    );
+  } catch {
+    beforeRows = null;
+  }
+
   // ① upsert — (tenant, invoice, class) 키로 제자리 교체. 기존 스냅샷은 이 시점까지 온전하다.
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK).map((r) => ({
@@ -79,21 +102,30 @@ export async function saveTeacherSplits(
       .from("invoice_teacher_splits")
       .upsert(chunk, { onConflict: "tenant_id,invoice_id,class_id" });
     if (error) {
-      return { error: `분배 저장 실패 — 기존 스냅샷은 보존됐습니다. 다시 시도하세요. (${error.message})` };
+      console.error("[splits] 분배 저장 실패", error.message);
+      return { error: "분배 저장에 실패했습니다 — 기존 스냅샷은 보존됐습니다. 다시 시도하세요" };
     }
   }
 
   // ② 잔여 정리 — 이 기간의 저장 행 중 이번 계산에 없는 키(확정 해제된 행 등)만 제거.
-  const { data: existing, error: listError } = await supabase
-    .from("invoice_teacher_splits")
-    .select("id, invoice_id, class_id")
-    .eq("tenant_id", user.tenantId)
-    .eq("period", period);
-  if (listError) {
-    return { error: `저장은 완료됐으나 이전 잔여 행 확인 실패 — 다시 저장하세요. (${listError.message})` };
+  // 한 달 행이 1,000을 넘으면 무페이징 select는 조용히 잘려 잔여 행이 남는다(B2) → 페이지네이션.
+  let existing: { id: string; invoice_id: string; class_id: string }[];
+  try {
+    existing = await fetchAllPaged((from, to) =>
+      supabase
+        .from("invoice_teacher_splits")
+        .select("id, invoice_id, class_id")
+        .eq("tenant_id", user.tenantId)
+        .eq("period", period)
+        .order("id")
+        .range(from, to),
+    );
+  } catch (e) {
+    console.error("[splits] 잔여 행 확인 실패", e);
+    return { error: "저장은 완료됐으나 이전 잔여 행 확인에 실패했습니다 — 다시 저장하세요" };
   }
   const liveKeys = new Set(rows.map((r) => `${r.invoiceId}|${r.classId}`));
-  const staleIds = (existing ?? [])
+  const staleIds = existing
     .filter((e) => !liveKeys.has(`${e.invoice_id}|${e.class_id}`))
     .map((e) => e.id);
   for (let i = 0; i < staleIds.length; i += CHUNK) {
@@ -102,10 +134,25 @@ export async function saveTeacherSplits(
       .delete()
       .in("id", staleIds.slice(i, i + CHUNK));
     if (error) {
-      return { error: `저장은 완료됐으나 이전 잔여 행 정리 실패 — 다시 저장하세요. (${error.message})` };
+      console.error("[splits] 잔여 행 정리 실패", error.message);
+      return { error: "저장은 완료됐으나 이전 잔여 행 정리에 실패했습니다 — 다시 저장하세요" };
     }
   }
 
+  const summary = summarizeSplitChange(
+    (beforeRows ?? []).map((r) => ({
+      teacherName: r.teacher_name,
+      confirmedAmount: Number(r.confirmed_amount),
+      actualAmount: Number(r.actual_amount),
+    })),
+    rows.map((r) => ({ teacherName: r.teacherName, confirmedAmount: r.confirmedAmount, actualAmount: r.actualAmount })),
+  );
+  await logAction({
+    action: "session_splits_save",
+    targetType: "invoice",
+    targetLabel: period,
+    metadata: { period, saved: rows.length, skipped, removed: staleIds.length, beforeKnown: beforeRows !== null, ...summary },
+  });
   revalidatePath("/billing");
   return { saved: rows.length, skipped };
 }

@@ -163,6 +163,20 @@ describe("auditDetail — 액션별 한글 상세", () => {
     );
   });
 
+  it("withdrawal_consultation_step / intake_token_toggle: 한글 상세(감사 M3·M4)", () => {
+    expect(
+      auditDetail(
+        "withdrawal_consultation_step",
+        { studentId: SID, step: "adminCalledParent", done: true },
+        ctx({ [SID]: "이윤건" }),
+      ),
+    ).toBe("이윤건 · 관리자 학부모 통화 체크");
+    expect(auditDetail("intake_token_toggle", { change: "close" }, ctx())).toBe("링크 닫기");
+    expect(auditDetail("intake_token_toggle", { change: "expire", expiresOn: "2026-12-31" }, ctx())).toBe(
+      "만료일 2026-12-31로 변경",
+    );
+  });
+
   it("class_period_enrollments: 운영 종료일 · 닫은 수강 수", () => {
     expect(auditDetail("class_period_enrollments", { classId: SID, periodEnd: "2026-09-21", changed: 5 }, ctx())).toBe(
       "운영 종료일 2026-09-21 · 수강 5건 종료",
