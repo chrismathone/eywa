@@ -157,8 +157,12 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
   }
   for (const report of reports) {
     const subject = report.subject || (report.class_id ? rawClassById.get(report.class_id)?.subject : null) || "unknown";
-    const context = base(report.student_id, subject, report.report_date);
-    if (!context) continue;
+    const found = base(report.student_id, subject, report.report_date);
+    if (!found) continue;
+    // 일일·확인테스트는 **그 수업보고서의 반**에서 친 시험이다(원장 2026-09-24) — 다니는 반 전부가 아니라 그 반 하나·그 반 담임으로.
+    // 반을 못 찾으면(보강 반·강사 범위 밖·반 없음) 종전대로 학생의 반 목록.
+    const reportClass = report.class_id ? classById.get(report.class_id) : undefined;
+    const context = reportClass ? { ...found, classes: [reportClass], trendClasses: [reportClass] } : found;
     for (const test of testScoresOf({ dailyTest: report.daily_test, checkTest: report.check_test, examInfo: report.exam_info })) {
       const kind = test.kind === "legacy" ? "other" : test.kind;
       const key = `report:${report.id}:${test.kind}`;
