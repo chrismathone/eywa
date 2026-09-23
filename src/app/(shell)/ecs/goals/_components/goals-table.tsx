@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { WindowLink } from "@/components/workspace/window-link";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
@@ -166,14 +166,14 @@ export function GoalsTable({
               className="border-line-strong grid border-b last:border-b-0"
               style={{ gridTemplateColumns: cols }}
             >
-              <div className="flex min-w-0 flex-col justify-center gap-0.5 px-3 py-2">
-                <Link
+              <div className="flex min-w-0 flex-col justify-center gap-0.5 px-3 py-2" title={r.className}>
+                <WindowLink
                   href={`/ecs/${r.classId}?week=${weekMonday}`}
                   className="text-foreground truncate text-base font-bold hover:underline"
                   title={r.className}
                 >
                   {classLabel(r.className)}
-                </Link>
+                </WindowLink>
                 {teacher ? <span className="truncate text-sm">{teacher}</span> : null}
               </div>
               {r.cells.map((c) => {
