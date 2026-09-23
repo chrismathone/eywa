@@ -6,11 +6,9 @@ import { Toolbar, ToolbarButton } from "@/components/toolbar";
 import { addDays, formatKoreanDate } from "@/lib/date-kst";
 import { mondayOf } from "@/features/timetable/lib/week";
 import { getGoalsBoard } from "@/features/class-sheets/server/goals-board";
-import { countGoalCells } from "@/features/class-sheets/lib/goals-board";
+import { countGoalCells, GOAL_STATE_DOT } from "@/features/class-sheets/lib/goals-board";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
-import { teacherNameFor } from "@/features/teacher-view/teacher-name";
-import { classNameFor } from "@/features/teacher-view/class-name";
 import {
   sheetDateLabelEn,
   sheetMonthLabel,
@@ -21,14 +19,14 @@ import {
 } from "@/features/teacher-view/i18n";
 import { GoalsPeriodBar } from "./_components/goals-period-bar";
 import { GoalsRoleSwitch } from "./_components/goals-role-switch";
-import { GoalsTable, GOAL_STATE_DOT } from "./_components/goals-table";
+import { GoalsTable } from "./_components/goals-table";
 
 export const metadata: Metadata = { title: "반 계획 보기 — aywa" };
 
 /**
  * **반 계획 보기** — 인재원 영어 반 × 6영역, 그 달 월간 목표와 그 주 주간 목표를 한 칸에서 대조한다
  * (원장 2026-09-23, 시안 C안). 입구 = ECS 랜딩 툴바 오른쪽 끝 [반 계획 보기].
- * 🔴 읽기 전용 — 고치는 곳은 반 시트의 왼쪽 계획 표 하나다(반 이름을 누르면 그 주 시트).
+ * 월·주 줄은 반 시트와 같은 목표 저장 경로, 일 줄은 같은 수업계획 편집기로 고친다.
  * 규칙·거르기는 [`getGoalsBoard`](@/features/class-sheets/server/goals-board) 주석.
  */
 export default async function EcsGoalsPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
@@ -108,14 +106,13 @@ export default async function EcsGoalsPage({ searchParams }: { searchParams: Pro
             rows={res.rows}
             areas={res.areas}
             weekMonday={res.weekMonday}
+            monthStart={res.monthStart}
+            date={res.date}
             lang={lang}
             role={res.role}
             showDay={res.view === "day"}
-            classLabel={(n) => classNameFor(n, lang)}
-            teacherLabel={(n) => {
-              const name = teacherNameFor(n, names, lang);
-              return name ? sheetTf(lang, "goals.homeroomOf", { name }) : null;
-            }}
+            canEdit={res.canEdit}
+            teacherNames={names}
           />
         </>
       )}

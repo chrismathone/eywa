@@ -28,12 +28,12 @@ import {
 } from "../lib/goals-board";
 import { readEcsGoalsRole, readEcsGoalsView } from "../view-prefs";
 import { ecsVisibleClassFilter } from "./access";
+import type { MonthSlot } from "../lib/month-assemble";
 
 /**
  * **반 계획 보기**(/ecs/goals) — 인재원 영어 반 × 영역, 그 달 월간 목표 ↔ 그 주 주간 목표(원장 2026-09-23 C안).
  *
- * 🔴 **읽기 전용 화면이다** — 쓰기는 반 시트(왼쪽 계획 표 `upsertGoal`) 한 곳뿐이고 여기서 누르면 그 시트로 간다.
- *    같은 값을 두 화면에서 고치게 하면 저장 경로가 둘이 된다.
+ * 🔴 표에서 고쳐도 목표는 반 시트와 같은 `upsertGoal`, 일간 계획은 같은 `SlotPlanBlock`을 쓴다.
  * 🔴 **반 목록 = ECS 랜딩과 같은 거르기**: 영어·운영·그 주 폐강 전 · 스코프(`ecsVisibleClassFilter(주)` —
  *    게이트와 같은 세 갈래) · **그 주에 배정 교시가 있는 반**(`hasLiveSlotInWeek`) · 프로그램은 **인재원 영어**
  *    (`keepEnglishTrack("injaewon")` = EiE가 아닌 전부, 비대칭 규약). 랜딩 '인재원 영어 N'과 같은 반 수가 나와야 한다.
@@ -58,6 +58,8 @@ export type GoalsBoardRow = {
   teacherName: string | null;
   /** 그 날 이 반에 (자리 아닌) 수업 교시가 있나 — 없으면 일간 줄은 '수업 없음'. */
   hasLessonOnDate: boolean;
+  /** 일간 줄 더블클릭 때 기존 수업계획 편집기에 넘길 실제 수업 교시. */
+  daySlots: MonthSlot[];
   cells: GoalsBoardCell[];
 };
 
@@ -70,6 +72,7 @@ export type GoalsBoardResult =
       monthStart: string;
       today: string;
       role: GoalsBoardRole;
+      canEdit: boolean;
       view: GoalsBoardView;
       areas: SkillAreaSetting[];
       rows: GoalsBoardRow[];
@@ -122,6 +125,8 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
       day_of_week: DowKey;
       start_time: string;
       slot_teacher_label: string | null;
+      end_time: string | null;
+      slot_room_label: string | null;
       valid_from: string;
       valid_to: string | null;
     }>(
@@ -129,7 +134,7 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
       (chunk) =>
         supabase
           .from("class_schedules")
-          .select("class_id, day_of_week, start_time, slot_teacher_label, valid_from, valid_to")
+          .select("class_id, day_of_week, start_time, end_time, slot_teacher_label, slot_room_label, valid_from, valid_to")
           .in("class_id", chunk)
           .lte("valid_from", weekSunday)
           .or(`valid_to.is.null,valid_to.gte.${weekMonday}`),
@@ -152,14 +157,30 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
   const dow = dowKeyOf(date);
   const seatStarts = new Map<string, Set<string>>();
   const lessonOnDate = new Set<string>();
+  const daySlotsByClass = new Map<string, MonthSlot[]>();
   for (const s of schedules) {
     if (s.day_of_week !== dow || s.valid_from > date || (s.valid_to !== null && s.valid_to < date)) continue;
     if (specialSlotLabel(s.slot_teacher_label)) {
       const set = seatStarts.get(s.class_id) ?? new Set<string>();
       set.add(normalizeSlotTime(s.start_time));
       seatStarts.set(s.class_id, set);
-    } else lessonOnDate.add(s.class_id);
+    } else {
+      lessonOnDate.add(s.class_id);
+      const slots = daySlotsByClass.get(s.class_id) ?? [];
+      const slotStart = normalizeSlotTime(s.start_time);
+      if (!slots.some((slot) => slot.slotStart === slotStart)) {
+        slots.push({
+          slotStart,
+          slotEnd: s.end_time ? normalizeSlotTime(s.end_time) : null,
+          teacherLabel: s.slot_teacher_label,
+          roomLabel: s.slot_room_label,
+          seat: null,
+        });
+      }
+      daySlotsByClass.set(s.class_id, slots);
+    }
   }
+  for (const slots of daySlotsByClass.values()) slots.sort((a, b) => a.slotStart.localeCompare(b.slotStart));
 
   // 목표와 그 날 계획 줄은 서로 독립 → 병렬(B4). 둘 다 행이 많을 수 있어 청크 × 페이징([[#54]]).
   const [goalRows, lineRows] =
@@ -190,6 +211,17 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
         ]);
   const idx = indexGoals(goalRows, role);
   const dayIdx = indexDayLines(lineRows, seatStarts);
+  // 배정이 바뀌어 현재 교시가 없어도 표에 남아 보이는 과거 계획 줄은 더블클릭해 고칠 수 있어야 한다.
+  for (const line of lineRows) {
+    const start = normalizeSlotTime(line.slot_start);
+    if (seatStarts.get(line.class_id)?.has(start)) continue;
+    if (![line.textbook, line.page_range, line.progress, line.homework].some((v) => v?.trim())) continue;
+    const slots = daySlotsByClass.get(line.class_id) ?? [];
+    if (slots.some((slot) => slot.slotStart === start)) continue;
+    slots.push({ slotStart: start, slotEnd: null, teacherLabel: null, roomLabel: null, seat: null });
+    slots.sort((a, b) => a.slotStart.localeCompare(b.slotStart));
+    daySlotsByClass.set(line.class_id, slots);
+  }
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
 
   const rows: GoalsBoardRow[] = running
@@ -200,6 +232,7 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
         className: (c.class_name as string) ?? "",
         teacherName: teacherName.get(c.teacher_id as string) ?? null,
         hasLessonOnDate: lessonOnDate.has(id),
+        daySlots: daySlotsByClass.get(id) ?? [],
         cells: areas.map((a) => {
           const month = idx.month.get(goalKey(id, a.key)) ?? [];
           const week = idx.week.get(goalKey(id, a.key)) ?? [];
@@ -216,5 +249,5 @@ export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoa
         a.className.localeCompare(b.className, "ko"),
     );
 
-  return { ok: true, date, weekMonday, weekLabel: weekLabel(weekMonday), monthStart, today, role, view, areas, rows };
+  return { ok: true, date, weekMonday, weekLabel: weekLabel(weekMonday), monthStart, today, role, canEdit: level === "full" || level === "scoped", view, areas, rows };
 }

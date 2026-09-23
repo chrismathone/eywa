@@ -352,6 +352,10 @@ function EcsTodayFace({
         <EcsDayNav date={res.date} today={res.today} mode={mode} lang={lang} />
         {/* 출결 모드 — 영어 전담 강사에게는 ECS가 홈이라 여기가 그 사람의 입구다(폰엔 사이드바가 없다). */}
         <EcsQuickAttendanceLink lang={lang} />
+        {/* 오늘 면이 강사의 기본 진입점 — 보던 날짜로 계획 표를 연다. 교시담당 반은 표의 서버 스코프가 포함한다. */}
+        <ToolbarButton href={`/ecs/goals?date=${res.date}`} className="ml-auto">
+          {sheetT(lang, "goals.title")}
+        </ToolbarButton>
       </div>
 
       {/* 휴일 한 줄(원장 2026-09-01 *"ecs/mcs 휴일참조"* + *"대신 입력은 가능하도록"*).
