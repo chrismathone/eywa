@@ -1,0 +1,43 @@
+"use client";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { FilterSelect, type FilterSelectOption } from "@/components/filter-select";
+import { Toolbar, ToolbarButton, ToolbarDivider } from "@/components/toolbar";
+import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+
+/**
+ * 통합 성적관리 툴바 — 다른 화면과 같은 규약(`축: 값` 드롭다운 · control-scale 높이 · 상시 버튼 ≤2).
+ * 기간은 날짜 두 칸이라 드롭다운이 아니라 같은 높이의 날짜 입력으로 둔다. 바꾸면 곧바로 URL로 반영된다
+ * (옛 [적용] 버튼 폼 대체 — 다른 필터 드롭다운과 반응 방식을 맞춘다).
+ */
+export function ExamsToolbar({ from, to, subject, kind, missing, subjectOptions, kindOptions, exportHref, entryHref, entryMode }: {
+  from: string; to: string; subject: string; kind: string; missing: boolean;
+  subjectOptions: FilterSelectOption[]; kindOptions: FilterSelectOption[];
+  exportHref: string; entryHref: string; entryMode: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname() ?? "/exams";
+  const current = useSearchParams();
+  const setDate = (key: "from" | "to", value: string) => {
+    // 연도를 칠 때 0002·0020…도 "유효한 날짜"라 매 타자마다 이동한다 — 온전한 연도일 때만.
+    if (!/^(19|20)\d{2}-\d{2}-\d{2}$/.test(value)) return;
+    const params = new URLSearchParams(current?.toString() ?? "");
+    params.set(key, value);
+    params.delete("page");
+    router.push(`${pathname}?${params.toString()}`);
+  };
+  const dateInput = `${CONTROL_H} ${CONTROL_LABEL} border-line bg-background rounded-lg border px-2`;
+  return <Toolbar>
+    <span className={`${CONTROL_LABEL} text-text-dim`}>기간:</span>
+    <input type="date" aria-label="시작일" className={dateInput} value={from} max={to} onChange={(e) => setDate("from", e.target.value)} />
+    <span aria-hidden>~</span>
+    <input type="date" aria-label="종료일" className={dateInput} value={to} min={from} onChange={(e) => setDate("to", e.target.value)} />
+    <FilterSelect paramName="subject" axisLabel="과목" value={subject} allValue="all" options={subjectOptions} />
+    <FilterSelect paramName="kind" axisLabel="시험" value={kind} allValue="all" options={kindOptions} />
+    <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
+    <span className="ml-auto" />
+    <ToolbarButton onClick={() => window.location.assign(exportHref)}>엑셀</ToolbarButton>
+    <ToolbarDivider />
+    <ToolbarButton variant="primary" href={entryHref}>{entryMode ? "입력 닫기" : "새 시험 입력"}</ToolbarButton>
+  </Toolbar>;
+}

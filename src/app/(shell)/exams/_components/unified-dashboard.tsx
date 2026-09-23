@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { Toolbar } from "@/components/toolbar";
 import { FaceTabs } from "@/components/face-tabs";
 import { gradeWriteError } from "@/features/grades/server/access";
 import { getGradeSheet } from "@/features/grades/server/queries";
@@ -14,6 +13,9 @@ import { aggregateBy, averagePercent, KIND_LABEL, scorePercent, schoolGradeLabel
 import { kstToday } from "@/lib/date-kst";
 import { UnifiedLedger } from "./unified-ledger";
 import { NewTestForm } from "./new-test-form";
+import { ExamsToolbar } from "./exams-toolbar";
+import { TrendChart as Trend } from "./trend-chart";
+import { ExamCalendar, type ExamDayItem } from "./exam-calendar";
 
 type Params = { from?: string; to?: string; subject?: string; kind?: string; missing?: string; student?: string; cohortClass?: string;
   schoolGroup?: string; gradeGroup?: string; page?: string; tab?: string;
@@ -43,18 +45,6 @@ function SectionHead({ title, description, right }: { title: string; description
   return <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-lg font-bold">{title}</h2><p className="mt-1 text-sm">{description}</p></div>{right}</div>;
 }
 
-function Trend({ points }: { points: { month: string; average: number }[] }) {
-  if (!points.length) return <p className="py-12 text-center text-sm">비교할 점수 기록이 없습니다.</p>;
-  const x = (i: number) => points.length === 1 ? 50 : 12 + i * 76 / (points.length - 1);
-  const y = (score: number) => 90 - score * .75;
-  const path = points.map((point, i) => `${i ? "L" : "M"}${x(i)} ${y(point.average)}`).join(" ");
-  return <div><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-44 w-full" role="img" aria-label={`월별 평균 ${points.map((p) => `${p.month} ${p.average}점`).join(", ")}`}>
-    {[25, 50, 75].map((score) => <line key={score} x1="0" x2="100" y1={y(score)} y2={y(score)} stroke="var(--line-faint)" strokeWidth=".4" strokeDasharray="1 1" />)}
-    <path d={path} fill="none" stroke="var(--primary)" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
-    {points.map((p, i) => <circle key={p.month} cx={x(i)} cy={y(p.average)} r="1.1" fill="var(--primary)" />)}
-  </svg><div className="flex justify-between text-xs">{points.map((point) => <span key={point.month}>{point.month.slice(5)}월</span>)}</div></div>;
-}
-
 function ScoreText({ row }: { row: UnifiedRow }) {
   return row.score != null && row.maxScore != null ? <span>{row.score} / {row.maxScore}</span> : <span title={row.rawScore ?? ""}>{row.rawScore || "미입력"}</span>;
 }
@@ -70,9 +60,10 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const entryMode = searchParams.entry === "1";
   const tab: Tab = isTab(searchParams.tab) ? searchParams.tab : entryMode ? "records" : "overview";
   const [data, writeError, settings] = await Promise.all([
-    getUnifiedGrades(from, to), gradeWriteError(), entryMode ? getTenantSettings() : Promise.resolve(null),
+    getUnifiedGrades(from, to), gradeWriteError(), getTenantSettings(),
   ]);
-  const entrySubjects = settings ? buildSubjectMaps(settings.operations.subjects) : null;
+  const subjectMaps = buildSubjectMaps(settings.operations.subjects);
+  const entrySubjects = entryMode ? subjectMaps : null;
   const entrySelection = entrySubjects ? resolveGradeSelection({
     year: searchParams.entryYear, term: searchParams.entryTerm,
     subject: searchParams.entrySubject ?? (data.subjects.includes("math") ? "math" : undefined),
@@ -108,16 +99,6 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     cohort.set(key, entry);
   }
   const cohortRows = [...cohort.values()].sort((a, b) => a.school.localeCompare(b.school, "ko") || a.grade.localeCompare(b.grade, "ko"));
-  const month = to.slice(0, 7);
-  const calendarRows = rows.filter((row) => row.date.startsWith(month));
-  const byDay = new Map<number, UnifiedRow[]>();
-  for (const row of calendarRows) {
-    const day = Number(row.date.slice(8, 10));
-    byDay.set(day, [...(byDay.get(day) ?? []), row]);
-  }
-  const [year, monthNumber] = month.split("-").map(Number);
-  const monthDays = new Date(Date.UTC(year!, monthNumber!, 0)).getUTCDate();
-  const firstWeekday = (new Date(Date.UTC(year!, monthNumber! - 1, 1)).getUTCDay() + 6) % 7;
   const filteredHref = (patch: Record<string, string>) => {
     const entry = entrySelection ? { entry: "1", entryYear: String(entrySelection.year), entryTerm: String(entrySelection.term),
       entrySubject: axisValueOf(entrySelection), entrySlot: entrySelection.slot, entryClass: entrySelection.classId ?? "", entryDate: entrySelection.date,
@@ -127,21 +108,28 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     for (const [key, value] of Object.entries(patch)) params.set(key, value);
     return `/exams?${params.toString()}`;
   };
+  const month = to.slice(0, 7);
+  const dayCounts = new Map<string, ExamDayItem>();
+  for (const row of rows) {
+    if (!row.date.startsWith(month)) continue;
+    const key = `${row.date}:${row.kind}`;
+    const item = dayCounts.get(key) ?? { date: row.date, kind: row.kind, label: KIND_LABEL[row.kind], count: 0,
+      href: filteredHref({ tab: "records", from: row.date, to: row.date, kind: row.kind, page: "1" }) };
+    item.count += 1;
+    dayCounts.set(key, item);
+  }
+  const calendarItems = [...dayCounts.values()];
+  const dayHref = Object.fromEntries(calendarItems.map((item) => [item.date, filteredHref({ tab: "records", from: item.date, to: item.date, kind: "all", page: "1" })]));
   const exportHref = `/api/exams/unified-export?${new URLSearchParams({ from, to, subject, kind, missing: showMissing ? "1" : "0" })}`;
 
   return <div className="space-y-6 pb-12">
-    <PageHeader eyebrow="학생 관리" title="통합 성적관리" description="모든 시험 기록을 입력하고 학생·반·학교학년별 변화를 확인합니다." />
+    {/* 시간표처럼 창(임베드)에선 헤더 줄을 접어 탭 줄이 맨 위에 선다. */}
+    <div className="compact-chrome:hidden"><PageHeader eyebrow="학생 관리" title="통합 성적관리" /></div>
     <FaceTabs ariaLabel="성적관리 면" active={tab} faces={TABS.map(([key, label]) => ({ key, label, href: filteredHref({ tab: key, page: "1" }) }))} />
-    <Toolbar><div className="flex flex-wrap gap-2 text-sm font-semibold"><a href={exportHref} className="border-line rounded-lg border px-3 py-1.5">엑셀</a><Link href={filteredHref({ entry: entryMode ? "0" : "1", page: "1", tab: "records" })} className="bg-primary rounded-lg px-3 py-1.5 text-white">{entryMode ? "입력 닫기" : "새 시험 입력"}</Link></div></Toolbar>
-    <form action="/exams" className="border-line-faint flex flex-wrap items-end gap-3 border-b pb-4 text-sm">
-      <input type="hidden" name="tab" value={tab} />
-      <label className="grid gap-1">시작일<input type="date" name="from" defaultValue={from} className="border-line rounded-lg border bg-background p-2" /></label>
-      <label className="grid gap-1">종료일<input type="date" name="to" defaultValue={to} className="border-line rounded-lg border bg-background p-2" /></label>
-      <label className="grid gap-1">과목<select name="subject" defaultValue={subject} className="border-line rounded-lg border bg-background p-2"><option value="all">전체</option>{data.subjects.map((key) => <option key={key} value={key}>{key === "math" ? "수학" : key === "english" ? "영어" : key}</option>)}</select></label>
-      <label className="grid gap-1">시험<select name="kind" defaultValue={kind} className="border-line rounded-lg border bg-background p-2"><option value="all">전체</option>{Object.entries(KIND_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-      <label className="flex items-center gap-2 pb-2"><input type="checkbox" name="missing" value="1" defaultChecked={showMissing} className="accent-primary size-4" />미입력 표시</label>
-      <button type="submit" className="bg-primary rounded-lg px-4 py-2 font-semibold text-white">적용</button>
-    </form>
+    <ExamsToolbar from={from} to={to} subject={subject} kind={kind} missing={showMissing} exportHref={exportHref} entryMode={entryMode}
+      entryHref={filteredHref({ entry: entryMode ? "0" : "1", page: "1", tab: "records" })}
+      subjectOptions={data.subjects.map((key) => ({ value: key, label: subjectMaps.labelOf(key) }))}
+      kindOptions={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
 
     {tab === "overview" ? <section id="overview">
       <SectionHead title="전체 현황" description="기간에 포함된 모든 평가 출처를 함께 봅니다." />
@@ -205,6 +193,6 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
       <div className="border-line overflow-x-auto rounded-xl border"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-bg-soft"><tr><th className="px-4 py-3">학교</th><th className="px-4 py-3">학년</th><th className="px-4 py-3">평균</th><th className="px-4 py-3">기록</th><th className="px-4 py-3">추이</th></tr></thead><tbody>{cohortRows.map((entry) => { const avg = averagePercent(entry.rows); const points = aggregateBy(entry.rows, "academy")[0]?.points ?? []; return <tr key={`${entry.school}:${entry.grade}`} className="border-line-faint border-t"><td className="px-4 py-3">{entry.school}</td><td className="px-4 py-3">{entry.grade}</td><td className="px-4 py-3 font-bold">{avg ?? "—"}점</td><td className="px-4 py-3">{entry.rows.length}건</td><td className="px-4 py-3">{points.map((point) => `${point.month.slice(5)}월 ${point.average}`).join(" → ") || "—"}</td></tr>; })}</tbody></table>{cohortRows.length === 0 ? <p className="p-8 text-center">비교할 점수 기록이 없습니다.</p> : null}</div>
     </section> : null}
 
-    {tab === "schedule" ? <section id="schedule"><SectionHead title="시험 일정" description={`${month}에 기록된 시험 날짜와 입력 현황입니다.`} /><div className="border-line overflow-hidden rounded-xl border"><div className="bg-bg-soft grid grid-cols-7 text-center text-xs font-bold">{["월", "화", "수", "목", "금", "토", "일"].map((day) => <span key={day} className="p-2">{day}</span>)}</div><div className="grid grid-cols-7">{Array.from({ length: firstWeekday }, (_, i) => <div key={`blank-${i}`} className="border-line-faint min-h-20 border-t border-r" />)}{Array.from({ length: monthDays }, (_, i) => { const day = i + 1; const list = byDay.get(day) ?? []; return <div key={day} className="border-line-faint min-h-20 overflow-hidden border-t border-r p-2 text-xs"><strong>{day}</strong>{list.length ? <Link href={filteredHref({ tab: "records" })} className="bg-primary-soft text-primary mt-1 block truncate rounded px-1 py-0.5" title={list.map((r) => `${r.name} ${KIND_LABEL[r.kind]}`).join(", ")}>{list.length}건 · {KIND_LABEL[list[0]!.kind]}</Link> : null}</div>; })}</div></div></section> : null}
+    {tab === "schedule" ? <section id="schedule"><SectionHead title="시험 일정" description={`${Number(month.slice(5))}월 시험 기록 — 칸을 누르면 그날 성적 원장이 열립니다.`} /><ExamCalendar month={month} today={today} items={calendarItems} dayHref={dayHref} /></section> : null}
   </div>;
 }

@@ -204,7 +204,7 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  *    통째로 비교하면 정당한 색 변경까지 막혀서 곧 지워진다.
  */
 const CANON_SURFACES = [
-  "src/app/(shell)/exams/page.tsx",
+  "src/app/(shell)/exams/_components/exams-toolbar.tsx",
   "src/app/(shell)/exams/view/page.tsx",
   "src/app/(shell)/exams/_components/view-switch.tsx",
   "src/app/(shell)/ecs/goals/page.tsx",
@@ -245,7 +245,7 @@ const CANON_SURFACES = [
   "src/app/(shell)/textbooks/_components/books-face.tsx",
   "src/app/(shell)/textbooks/_components/plans-face.tsx",
   // 성적관리(2026-09-22, 격자로 다시 지음) — 년도·학기·과목·반·시험 드롭다운이 전부 부품이다.
-  "src/app/(shell)/exams/page.tsx",
+  "src/app/(shell)/exams/input/page.tsx",
   // 재고관리(2026-09-02, 새 화면) — 만들 때부터 부품으로.
   "src/app/(shell)/inventory/_components/assets-face.tsx",
   "src/app/(shell)/inventory/_components/list-toolbar.tsx",
