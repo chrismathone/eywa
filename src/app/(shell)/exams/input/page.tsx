@@ -71,13 +71,13 @@ export default async function ExamsPage({
   const isEmbed = one(sp.embed) === "1";
   const rawView = one(sp.view) || one(sp.type);
   if (!JJ_VIEWS.has(rawView)) {
-    const params = new URLSearchParams({ entry: "1" });
+    const params = new URLSearchParams({ entry: "1", tab: "records" });
     for (const [oldKey, newKey] of [["year", "entryYear"], ["term", "entryTerm"], ["subject", "entrySubject"],
       ["class", "entryClass"], ["slot", "entrySlot"], ["date", "entryDate"], ["max", "entryMax"]] as const) {
       const value = one(sp[oldKey]);
       if (value) params.set(newKey, value);
     }
-    redirect(`/exams?${params.toString()}#records`);
+    redirect(`/exams?${params.toString()}`);
   }
   const from = one(sp.from);
   const to = one(sp.to);

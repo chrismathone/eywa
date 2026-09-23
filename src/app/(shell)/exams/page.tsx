@@ -6,7 +6,7 @@ export const metadata = { title: "통합 성적관리 — aywa" };
 type ExamsParams = {
   year?: string; term?: string; subject?: string; class?: string; slot?: string; date?: string; max?: string;
   view?: string; type?: string; from?: string; to?: string; jjClass?: string; embed?: string;
-  kind?: string; missing?: string; student?: string; page?: string;
+  kind?: string; missing?: string; student?: string; page?: string; tab?: string;
   cohortClass?: string; schoolGroup?: string; gradeGroup?: string; entry?: string; entryYear?: string; entryTerm?: string; entrySubject?: string;
   entrySlot?: string; entryClass?: string; entryDate?: string; entryMax?: string;
 };
