@@ -4,21 +4,21 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
-import { kstDateOf, kstToday } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import { testScoresOf } from "@/features/math-sheets/lib/test-score";
 import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import { gradeTeacherClassIds } from "@/features/grades/server/teacher-classes";
-import { gradeMarksReady, gradesSchemaReady } from "@/features/grades/server/write";
+import { gradesSchemaReady } from "@/features/grades/server/write";
 import { classOrder, type UnifiedClass, type UnifiedRecord } from "../model";
+import { consultationDateFor, linkedConsultationDates, type LinkedConsultation } from "./consultation-link";
 import { gradeKind, isoDaysBefore, numberOrNull } from "./normalize";
 
 type RawClass = { id: string; class_name: string; subject: string; teacher_id: string | null };
 type RawEnrollment = { id: string; student_id: string; class_id: string; start_date: string; end_date: string | null; attendance_days: string[] | null; is_transferred: boolean | null };
-type RawGrade = { id: string; student_id: string; exam_name: string; exam_slot?: string | null; school_year?: number | null; term?: number | null; subject: string; score: string | null; max_score: string | null; taken_on: string; ask1_at?: string | null };
+type RawGrade = { id: string; student_id: string; exam_name: string; exam_slot?: string | null; school_year?: number | null; term?: number | null; subject: string; score: string | null; max_score: string | null; taken_on: string };
 type RawReport = { id: string; student_id: string; class_id: string | null; subject: string | null; report_date: string; daily_test: string | null; check_test: string | null; exam_info: string | null };
 type RawLevel = { id: string; student_id: string; test_type: string; subject: string; tested_on: string; level: string | null; subscores: Record<string, number> | null };
 type RawStudent = { id: string; name: string; school: string | null; grade: string | null };
-type RawConsultation = { student_id: string; subject: string | null; consulted_at: string; summary: string; follow_up_action: string | null };
 type RawSchedule = { id: string; class_id: string; day_of_week: string; valid_from: string; valid_to: string | null };
 
 export type UnifiedStudent = { id: string; name: string; school: string | null; grade: string | null };
@@ -28,19 +28,17 @@ export type UnifiedData = {
   classes: UnifiedClass[];
   subjects: string[];
   studentClasses: Record<string, UnifiedClass[]>;
-  consultationDates: Record<string, string>;
 };
 
-const EMPTY: UnifiedData = { records: [], students: [], classes: [], subjects: [], studentClasses: {}, consultationDates: {} };
+const EMPTY: UnifiedData = { records: [], students: [], classes: [], subjects: [], studentClasses: {} };
 
 export async function getUnifiedGrades(from: string, to: string): Promise<UnifiedData> {
   const user = await getCurrentUser();
   if (!user) return EMPTY;
   const supabase = await createClient();
-  const [scope, schemaReady, marksReady, classRows] = await Promise.all([
+  const [scope, schemaReady, classRows] = await Promise.all([
     effectiveTeacherScope(),
     gradesSchemaReady(),
-    gradeMarksReady(),
     fetchAllPaged<RawClass>((start, end) => supabase.from("classes")
       .select("id, class_name, subject, teacher_id").eq("tenant_id", user.tenantId).order("id").range(start, end)),
   ]);
@@ -51,7 +49,7 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
   if (scope && classIds.length === 0) return EMPTY;
   const lookback = isoDaysBefore(from, 180);
   const classAnchor = kstToday();
-  const gradeCols = `id, student_id, exam_name, subject, score, max_score, taken_on${schemaReady ? ", exam_slot, school_year, term" : ""}${marksReady ? ", ask1_at" : ""}`;
+  const gradeCols = `id, student_id, exam_name, subject, score, max_score, taken_on${schemaReady ? ", exam_slot, school_year, term" : ""}`;
 
   const [enrollments, schedules, gradeRows, reports, levels] = await Promise.all([
     fetchAllPagedInChunks<RawEnrollment>(classIds, (chunk, start, end) => supabase.from("enrollments")
@@ -86,9 +84,10 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
   const [students, consultations, teachers] = await Promise.all([
     fetchInChunks<RawStudent>(allStudentIds, (chunk) => supabase.from("students")
       .select("id, name, school, grade").eq("tenant_id", user.tenantId).in("id", chunk)),
-    fetchAllPagedInChunks<RawConsultation>(allStudentIds, (chunk, start, end) => supabase.from("student_consultations")
-      .select("student_id, subject, consulted_at, summary, follow_up_action").eq("tenant_id", user.tenantId)
-      .in("student_id", chunk).order("id").range(start, end)),
+    fetchAllPagedInChunks<LinkedConsultation>(allStudentIds, (chunk, start, end) => supabase.from("student_consultations")
+      .select("student_id, subject, category, consulted_at, summary").eq("tenant_id", user.tenantId)
+      .in("student_id", chunk).eq("category", "academic").ilike("summary", "%[EYWA-UNIFIED:%")
+      .order("id").range(start, end)),
     fetchInChunks<{ id: string; display_name: string | null }>(teacherIds, (chunk) => supabase.from("users")
       .select("id, display_name").eq("tenant_id", user.tenantId).in("id", chunk)),
   ]);
@@ -123,14 +122,7 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
       }).filter((item): item is UnifiedClass => !!item);
     return classOrder(candidates);
   };
-  const latestConsult = new Map<string, string>();
-  for (const row of consultations) {
-    if (!/성적|시험|점수|평가/.test(`${row.summary} ${row.follow_up_action ?? ""}`)) continue;
-    const key = row.student_id;
-    const date = kstDateOf(row.consulted_at);
-    if (!date) continue;
-    if (!latestConsult.has(key) || latestConsult.get(key)! < date) latestConsult.set(key, date);
-  }
+  const linkedConsultDates = linkedConsultationDates(consultations);
   const base = (studentId: string, subject: string, date: string) => {
     const student = studentById.get(studentId);
     if (!student || (scope?.subjects && !scope.subjects.includes(subject))) return null;
@@ -145,7 +137,7 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
       date,
       classes: latestClasses.length ? latestClasses : historicalClasses,
       trendClasses: historicalClasses,
-      consultationDate: latestConsult.get(studentId) ?? null,
+      consultationDate: null,
       manualConsultationDate: null,
       editHref: `/students/${studentId}?tab=grades`,
     };
@@ -155,9 +147,10 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
     const context = base(row.student_id, row.subject, row.taken_on);
     if (!context) continue;
     const kind = gradeKind(row.exam_slot, row.exam_name);
-    records.push({ ...context, key: `grade:${row.id}`, source: "grade", sourceId: row.id, kind,
+    const key = `grade:${row.id}`;
+    records.push({ ...context, key, source: "grade", sourceId: row.id, kind,
       score: numberOrNull(row.score), maxScore: numberOrNull(row.max_score), rawScore: null,
-      manualConsultationDate: kstDateOf(row.ask1_at),
+      consultationDate: consultationDateFor(linkedConsultDates, row.student_id, row.subject, key),
       slot: row.exam_slot ?? undefined, schoolYear: row.school_year ?? undefined, term: row.term ?? undefined,
       editHref: `/exams/input?year=${row.school_year ?? ""}&term=${row.term ?? ""}&subject=${encodeURIComponent(row.subject)}&slot=${row.exam_slot ?? ""}&date=${row.taken_on}`,
     });
@@ -167,9 +160,12 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
     const context = base(report.student_id, subject, report.report_date);
     if (!context) continue;
     for (const test of testScoresOf({ dailyTest: report.daily_test, checkTest: report.check_test, examInfo: report.exam_info })) {
-      records.push({ ...context, key: `report:${report.id}:${test.kind}`, source: "report", sourceId: report.id,
-        kind: test.kind === "legacy" ? "other" : test.kind, score: test.correct, maxScore: test.total,
-        rawScore: test.raw, editHref: `/lesson-reports?tab=list`,
+      const kind = test.kind === "legacy" ? "other" : test.kind;
+      const key = `report:${report.id}:${test.kind}`;
+      records.push({ ...context, key, source: "report", sourceId: report.id,
+        kind, score: test.correct, maxScore: test.total,
+        rawScore: test.raw, consultationDate: consultationDateFor(linkedConsultDates, report.student_id, subject, key),
+        editHref: `/lesson-reports?tab=list`,
       });
     }
   }
@@ -178,9 +174,10 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
     if (!context) continue;
     const score = numberOrNull(level.subscores?.["총점"]);
     const maxScore = numberOrNull(level.subscores?.["만점"]);
-    records.push({ ...context, key: `level:${level.id}`, source: "level", sourceId: level.id,
+    const key = `level:${level.id}`;
+    records.push({ ...context, key, source: "level", sourceId: level.id,
       kind: level.test_type === "placement" ? "admission" : "other",
-      score, maxScore,
+      score, maxScore, consultationDate: consultationDateFor(linkedConsultDates, level.student_id, level.subject, key),
       rawScore: [level.level, ...Object.entries(level.subscores ?? {}).filter(([name]) => name !== "총점" && name !== "만점").map(([name, value]) => `${name} ${value}`)].filter(Boolean).join(" · ") || null,
     });
   }
@@ -193,6 +190,6 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
   return {
     records, students: students.sort((a, b) => a.name.localeCompare(b.name, "ko")), classes: classOrder([...classById.values()]),
     subjects: [...new Set(visibleClasses.map((row) => row.subject))],
-    studentClasses, consultationDates: Object.fromEntries(latestConsult),
+    studentClasses,
   };
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maskName, maskText, pseudonym } from "@/features/consultations/export-masking";
+import { visibleConsultationSummary } from "@/features/consultations/internal-link";
 
 // 상담 텍스트 외부 AI 반출 API — 원장의 외부 챗봇("AI 사무실")이 읽는 읽기 전용 엔드포인트.
 // 인증: Authorization: Bearer <CONSULT_EXPORT_TOKEN>(env). 미설정 시 503(기능 꺼짐), 불일치 401.
@@ -102,7 +103,7 @@ export async function GET(req: Request) {
         category: r.category,
         subject: r.subject,
         audience: r.audience,
-        text: maskText(r.summary ?? "", names),
+        text: maskText(visibleConsultationSummary(r.summary ?? ""), names),
         followUpAction: r.follow_up_action ? maskText(r.follow_up_action, names) : null,
         aiSummary: r.ai_summary ? maskText(r.ai_summary, names) : null,
         ...(includeTranscript && r.transcription ? { transcript: maskText(r.transcription, names) } : {}),

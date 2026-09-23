@@ -13,6 +13,7 @@ import { stripPastedMarkup } from "../paste-cleanup";
 import { consultationSubject } from "../subject";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
+import { preserveConsultationLink, visibleConsultationSummary } from "../internal-link";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -84,7 +85,7 @@ export async function runStudentCareAnalysis(
       const date = new Date(c.consulted_at).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
       return [
         `[${date} · ${co?.display_name ?? "?"}]`,
-        `요약: ${c.summary}`,
+        `요약: ${visibleConsultationSummary(c.summary)}`,
         c.follow_up_action ? `Follow-up: ${c.follow_up_action}` : null,
       ]
         .filter(Boolean)
@@ -203,7 +204,7 @@ function readConsultationForm(formData: FormData) {
     category: CATEGORIES.includes(category as (typeof CATEGORIES)[number]) ? category : null,
     subject: get("subject") || null,
     audience: AUDIENCES.includes(audience as (typeof AUDIENCES)[number]) ? audience : null,
-    summary: get("summary"),
+    summary: visibleConsultationSummary(get("summary")),
     followUpAction: get("followUpAction") || null,
     followUpDate: get("followUpDate") || null,
     followUpDone: get("followUpDone") === "true",
@@ -320,6 +321,14 @@ export async function updateStudentConsultation(
   const counselorId = input.counselorId ?? user.id;
   const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
   if (resolved.error) return { error: resolved.error };
+  const { data: stored, error: readError } = await supabase.from("student_consultations")
+    .select("summary, student_id, subject, category").eq("id", id).eq("tenant_id", user.tenantId).maybeSingle();
+  if (readError || !stored) return { error: "상담 기록을 찾지 못했습니다" };
+  const cleanSummary = stripPastedMarkup(input.summary) ?? "";
+  const summary = stored.student_id === input.studentId && stored.subject === resolved.subject &&
+    stored.category === "academic" && input.category === "academic"
+    ? preserveConsultationLink(cleanSummary, stored.summary ?? "")
+    : cleanSummary;
   const { error } = await supabase
     .from("student_consultations")
     .update({
@@ -332,12 +341,12 @@ export async function updateStudentConsultation(
       subject: resolved.subject,
       audience: input.audience,
       // 붙여넣기로 딸려 온 화면 코드 조각을 걷어낸다(원장 2026-09-09 *"그 조각만 걷어내. 앞으로 가져올때도 조심"*).
-      summary: stripPastedMarkup(input.summary),
+      summary,
       follow_up_action: input.followUpAction,
       follow_up_date: input.followUpDate,
       follow_up_done: input.followUpDone,
     })
-    .eq("id", id);
+    .eq("id", id).eq("tenant_id", user.tenantId);
 
   if (error) return { error: error.message };
 
