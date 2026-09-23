@@ -2,7 +2,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { gradeTeacherClassIds } from "./teacher-classes";
 import { isEnrollmentEndedOn, isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import { readEnglishTrack } from "@/features/classes/english-track";
 import { ENGLISH_SUBJECT_KEY } from "../subject-axis";
@@ -36,13 +37,20 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
 
   const supabase = await createClient();
 
-  // 강사(겸직 강사뷰 포함)는 자기 과목만 — 영어 강사에게 수학 성적표가 열리지 않게.
-  // 강사(겸직 강사뷰 포함)는 과목 스코프 + **자기 반이 위로** 선다(원장 2026-09-22: "강사는 자기 반
-  // 학생들 우선으로 뜨게"). 담당이 아닌 반도 계속 보인다 — 순서만 바뀐다.
+  // 🔴 강사는 **담임·부담임인 반만** 본다(원장 2026-09-23: *"성적관리는 자기가 담임, 부담임반으로
+  //    되어있으면 나오고 부원장 관리자 직급은 모든반 볼 수있도록"*). 그전엔 과목 기준이라 영어 강사가
+  //    영어 전 반(58개·재원 343명)을 다 봤고 자기 반은 **위로 정렬만** 됐다 — 그건 "담당 학생만 읽는다"
+  //    (2026-08-18 F9 결정)와 어긋난다.
+  // 🔑 판정 축은 `effectiveTeacherScope()`의 유무 그대로다 — 진짜 강사와 **겸직 관리자의 강사뷰**는
+  //    스코프가 서고, 평소의 부원장·관리자(effectiveTeacherId 없음)는 안 선다 = 모든 반.
+  // ⚠️ 과목 스코프는 그대로 둔다(영어 강사에게 수학 성적표가 열리지 않게) — 반 필터가 사실상 같은 일을
+  //    하지만, 고른 과목이 내 것이 아니면 **명단을 만들기도 전에** 접는 쪽이 싸다.
   const scope = await effectiveTeacherScope();
   const teacherSubjects = scope?.subjects ?? null;
-  const myClassIds = new Set(scope?.classIds ?? []);
   if (teacherSubjects && !teacherSubjects.includes(sel.subject)) return empty;
+  const teacherId = scope ? await effectiveTeacherId() : null;
+  // 담임 ∪ 부담임 — 공용 스코프(`classes.teacher_id`만 본다)를 넓히지 않고 성적관리 전용으로 구한다.
+  const myClassIds = new Set(teacherId ? await gradeTeacherClassIds(teacherId) : []);
 
   const { start: termStart, end: termEnd } = termWindow(sel.year, sel.term);
   const anchor = rosterAnchorFor(sel.year, sel.term, kstToday());
@@ -65,13 +73,17 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     return sel.track === "eie" ? track === "eie" : track !== "eie";
   });
 
-  const classesById = new Map(tracked.map((c) => [c.id, c]));
+  // 🔴 **여기서 좁힌다** — 강사면 담당(담임·부담임) 반만 남는다. 드롭다운·명단·엑셀이 전부 이 목록에서
+  //    파생되므로 한 곳만 거르면 화면 전체가 따라온다([[#77]] — 정렬로 감추면 주소를 직접 치면 열린다).
+  const visible = scope ? tracked.filter((c) => myClassIds.has(c.id)) : tracked;
+
+  const classesById = new Map(visible.map((c) => [c.id, c]));
   const targetIds = sel.classId
-    ? tracked.filter((c) => c.id === sel.classId).map((c) => c.id)
-    : tracked.map((c) => c.id);
+    ? visible.filter((c) => c.id === sel.classId).map((c) => c.id)
+    : visible.map((c) => c.id);
   // 고른 반이 이 과목·트랙에 없으면(주소를 직접 고쳤거나 반이 폐지됨) 줄은 비우되 **반 목록은 살린다**
   // — 드롭다운까지 비면 다른 반으로 갈 길이 없다.
-  const optionsOnly: GradeClassOption[] = tracked.map((c) => ({
+  const optionsOnly: GradeClassOption[] = visible.map((c) => ({
     id: c.id,
     className: c.class_name,
     track: readEnglishTrack(c),
