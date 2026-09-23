@@ -81,9 +81,10 @@ export function resolveWeekdayGroups(
   return parsed ?? weekdayPartition("mon-thu");
 }
 
-/** 과목 드롭다운. 기본 다섯 개 뒤에, 학원이 만든 묶음이 붙는다. */
+/** 과목 드롭다운. 목록에서 뺀 기본 묶음은 숨기고, 학원이 만든 묶음은 뒤에 붙인다. */
 export function weekdayGroupingChoices(
   customs?: readonly { id: string; groups: readonly (readonly DayOfWeek[])[] }[],
+  hiddenBuiltins: readonly WeekdayGrouping[] = [],
 ): { value: string; label: string }[] {
   const extra: { value: string; label: string }[] = [];
   for (const custom of customs ?? []) {
@@ -91,7 +92,7 @@ export function weekdayGroupingChoices(
     if (!parsed) continue;
     extra.push({ value: custom.id, label: formatWeekdayGroups(parsed) });
   }
-  return [...WEEKDAY_GROUPING_OPTIONS, ...extra];
+  return [...WEEKDAY_GROUPING_OPTIONS.filter((option) => !hiddenBuiltins.includes(option.value)), ...extra];
 }
 
 /** 기본뷰는 평일 판과 주말 판이 따로다. 토·일을 안 적으면 주말은 예전처럼 토·일 각각이다. */

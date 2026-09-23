@@ -235,6 +235,8 @@ export const operationsSchema = z
     subjects: z.array(subjectSchema).max(40),
     // 과목 드롭다운에 더해지는 요일 병합. 비어 있으면 기본 다섯 개만. 기본값 []이라 옛 저장도 통과한다.
     weekdayGroupings: z.array(customWeekdayGroupingSchema).max(20).default([]),
+    // 기본 묶음은 시간표 해석 규칙을 남겨 두고 과목 드롭다운에서만 숨긴다. 옛 저장에는 없는 필드.
+    hiddenBuiltinWeekdayGroupings: z.array(z.enum(WEEKDAY_GROUPINGS)).max(WEEKDAY_GROUPINGS.length).default([]),
     jobTitles: z.array(z.string().min(1).max(24)).max(40),
     /**
      * 부서별 직급 선택지(2026-07-29 원장 지시) — 이력서 '근무부서'를 고르면 직급 드롭다운이 그 부서 것으로 바뀐다.
@@ -327,8 +329,21 @@ export const operationsSchema = z
       }
       groupingKeys.add(key);
     });
+    const hidden = new Set(v.hiddenBuiltinWeekdayGroupings);
+    if (hidden.size !== v.hiddenBuiltinWeekdayGroupings.length) {
+      ctx.addIssue({ code: "custom", message: "숨긴 요일 병합이 중복됩니다", path: ["hiddenBuiltinWeekdayGroupings"] });
+    }
+    if (WEEKDAY_GROUPINGS.length - hidden.size + v.weekdayGroupings.length === 0) {
+      ctx.addIssue({ code: "custom", message: "요일 병합 선택지를 하나 이상 남겨 주세요", path: ["hiddenBuiltinWeekdayGroupings"] });
+    }
     v.subjects.forEach((subject, i) => {
       const chosen = subject.weekdayGrouping;
+      if (hidden.has(chosen as WeekdayGrouping)) {
+        ctx.addIssue({
+          code: "custom", message: "사용 중인 요일 병합은 목록에서 뺄 수 없습니다", path: ["subjects", i, "weekdayGrouping"],
+        });
+        return;
+      }
       if ((WEEKDAY_GROUPINGS as readonly string[]).includes(chosen) || groupingIds.has(chosen)) return;
       ctx.addIssue({
         code: "custom",

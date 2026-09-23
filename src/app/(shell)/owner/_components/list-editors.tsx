@@ -196,7 +196,7 @@ export function SubjectListEditor({
                 value={
                   groupingChoices.some((choice) => choice.value === (s.weekdayGrouping ?? "mon-thu"))
                     ? (s.weekdayGrouping ?? "mon-thu")
-                    : "mon-thu"
+                    : (groupingChoices[0]?.value ?? "mon-thu")
                 }
                 onChange={(e) => set(i, { weekdayGrouping: e.target.value })}
                 aria-label="시간표 요일 병합"
@@ -265,7 +265,7 @@ export function SubjectListEditor({
         onClick={() =>
           onChange([
             ...value,
-            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: "mon-thu", testMax: 5 },
+            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: groupingChoices[0]?.value ?? "mon-thu", testMax: 5 },
           ])
         }
         label="과목 추가"

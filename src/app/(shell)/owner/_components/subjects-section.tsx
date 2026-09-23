@@ -83,9 +83,10 @@ export function SubjectsSection({
         >
           <WeekdayGroupingEditor
             groupings={o.weekdayGroupings ?? []}
+            hiddenBuiltins={o.hiddenBuiltinWeekdayGroupings ?? []}
             subjects={o.subjects}
-            onChange={({ groupings, subjects }) =>
-              setO((prev) => ({ ...prev, weekdayGroupings: groupings, subjects }))
+            onChange={({ groupings, hiddenBuiltins, subjects }) =>
+              setO((prev) => ({ ...prev, weekdayGroupings: groupings, hiddenBuiltinWeekdayGroupings: hiddenBuiltins, subjects }))
             }
           />
         </SettingsCard>
@@ -98,7 +99,7 @@ export function SubjectsSection({
           <SubjectListEditor
             value={o.subjects}
             onChange={setSubjects}
-            groupingChoices={weekdayGroupingChoices(o.weekdayGroupings)}
+            groupingChoices={weekdayGroupingChoices(o.weekdayGroupings, o.hiddenBuiltinWeekdayGroupings)}
             onRemove={(i) => {
               const s = o.subjects[i];
               setRemoving({ index: i, key: s.key, label: s.label.trim() || s.key });

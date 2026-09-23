@@ -97,6 +97,8 @@ describe("만든 요일 병합", () => {
     const choices = weekdayGroupingChoices([{ id: "c_abcdef0123", groups: custom! }]);
     expect(choices.at(-1)).toEqual({ value: "c_abcdef0123", label: "월·수 / 화·목 / 금" });
     expect(choices.some((choice) => choice.value === "mon-thu")).toBe(true);
+    expect(weekdayGroupingChoices([{ id: "c_abcdef0123", groups: custom! }], ["mon-thu"]).map((choice) => choice.value))
+      .not.toContain("mon-thu");
   });
 
   it("깨진 분할은 받아들이지 않는다", () => {
@@ -166,6 +168,18 @@ describe("만든 요일 병합", () => {
         weekdayGroupings: [{ id: "c_weekend01", groups: weekend }],
       }).success,
     ).toBe(true);
+  });
+
+  it("사용 중인 기본 묶음과 마지막 선택지는 목록에서 뺄 수 없다", () => {
+    const operations = DEFAULT_SETTINGS.operations;
+    expect(operationsSchema.safeParse({ ...operations, hiddenBuiltinWeekdayGroupings: ["mon-tue-seq"] }).success).toBe(true);
+    expect(operationsSchema.safeParse({ ...operations, hiddenBuiltinWeekdayGroupings: ["mon-thu"] }).success).toBe(false);
+    expect(operationsSchema.safeParse({ ...operations, hiddenBuiltinWeekdayGroupings: ["none"] }).success).toBe(false);
+    expect(operationsSchema.safeParse({ ...operations, hiddenBuiltinWeekdayGroupings: ["bad"] }).success).toBe(false);
+    expect(operationsSchema.safeParse({ ...operations, hiddenBuiltinWeekdayGroupings: ["mon-tue-seq", "mon-tue-seq"] }).success).toBe(false);
+    expect(operationsSchema.safeParse({
+      ...operations, subjects: [], hiddenBuiltinWeekdayGroupings: [...WEEKDAY_GROUPINGS],
+    }).success).toBe(false);
   });
 });
 
