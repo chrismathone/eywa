@@ -11,6 +11,7 @@ import { sheetT } from "@/features/teacher-view/i18n";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { listMakeupPoolClassIds } from "@/features/attendance/server/makeup-pool";
+import { visibleConsultationSummary } from "@/features/consultations/internal-link";
 import {
   EMPTY_PALETTE_RESULT,
   PALETTE_LIMIT,
@@ -227,7 +228,7 @@ async function searchConsultations(term: string): Promise<Axis> {
         kind: "consultation",
         id: r.id,
         title: s?.name ? `${s.name} 상담` : "상담",
-        subtitle: r.summary ? String(r.summary).slice(0, 40) : null,
+        subtitle: r.summary ? visibleConsultationSummary(String(r.summary)).slice(0, 40) : null,
       };
     }),
   );

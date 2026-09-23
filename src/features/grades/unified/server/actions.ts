@@ -8,6 +8,7 @@ import { gradeMonthReady, gradeNoExamReady } from "@/features/grades/server/writ
 import { termWindow, type Term } from "@/features/grades/term";
 import { logAction } from "@/features/audit/server/log";
 import { addAcademicConsultation } from "./consultation";
+import { recordKey } from "./consultation-link";
 import { canEditStudent } from "./scope";
 import { reportScorePatch } from "../report-patch";
 
@@ -45,6 +46,7 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
   const supabase = await createClient();
   let studentId: string;
   let subject: string;
+  let consultationRecordKey: string;
   let classId: string | null = null;
   if (source === "grade") {
     const { data, error } = await supabase.from("student_grades")
@@ -53,6 +55,7 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     if (error || !data) return { error: "성적 기록을 찾지 못했습니다" };
     studentId = data.student_id;
     subject = data.subject;
+    consultationRecordKey = recordKey("grade", id);
     const year = Number(data.school_year);
     const term = Number(data.term) as Term;
     if ((term === 1 || term === 2) && year >= 2000) {
@@ -79,6 +82,7 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     if (error || !data) return { error: "수업보고서 기록을 찾지 못했습니다" };
     studentId = data.student_id;
     subject = data.subject ?? "";
+    consultationRecordKey = recordKey("report", id, kind as "daily" | "check" | "other");
     classId = data.class_id;
     if (!subject && classId) {
       const { data: sourceClass } = await supabase.from("classes").select("subject")
@@ -101,6 +105,7 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     if (error || !data) return { error: "입학테스트 기록을 찾지 못했습니다" };
     studentId = data.student_id;
     subject = data.subject;
+    consultationRecordKey = recordKey("level", id);
     if (!(await canEditStudent(studentId, subject, user.tenantId))) return { error: "이 학생의 테스트를 수정할 권한이 없습니다" };
     const subscores = { ...((data.subscores as Record<string, number> | null) ?? {}) };
     const numeric = (value: number | null | undefined) => value == null || !Number.isFinite(Number(value)) ? null : Number(value);
@@ -120,7 +125,9 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
   } else return { error: "알 수 없는 성적 출처입니다" };
 
   if (consultationDate && consultationDate !== originalConsultationDate) {
-    const error = await addAcademicConsultation(user.tenantId, studentId, subject, consultationDate);
+    const error = await addAcademicConsultation(user.tenantId, {
+      studentId, subject, recordKey: consultationRecordKey, date: consultationDate,
+    });
     if (error) return { error: `점수는 저장됐지만 상담일을 저장하지 못했습니다: ${error}` };
   }
   await logAction({ action: "exam_scores", targetType: "grades", targetLabel: `${subject} 성적 · ${date}`,

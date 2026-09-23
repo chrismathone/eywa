@@ -1,8 +1,10 @@
+import { visibleConsultationSummary } from "./internal-link";
+
 /** 목록에만 쓰는 미리보기. 저장된 원문이나 사용자 양식은 변경하지 않는다. */
 export function consultationPreview(
   summary: string | null | undefined,
 ): string {
-  const raw = summary?.trim();
+  const raw = visibleConsultationSummary(summary ?? "").trim();
   if (!raw) return "상담 내용 미입력";
   const lines = raw
     .split(/\r?\n/)
