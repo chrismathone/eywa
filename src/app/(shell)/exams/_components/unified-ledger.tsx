@@ -70,7 +70,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
           <input type="number" min="1" max="1000" step="0.01" value={max} onChange={(e) => setMax(e.target.value)} aria-label={`${row.name} 만점`} className={`${INPUT} w-16`} />
         </div> : <ScoreLine row={row} />}
       </td>
-      <td className="px-2 py-2 text-center"><DeltaBadge row={row} /></td>
+      <td className="py-2 pl-2 pr-4 text-right"><DeltaBadge row={row} /></td>
       <td className="px-2 py-2 text-center">
         {row.consultationDate ? <span className="text-green num" title="학생 상담 탭의 학습·성적 상담">{row.consultationDate.slice(5).replace("-", "/")}</span>
           : editing ? <span className="flex items-center justify-center gap-1">

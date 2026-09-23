@@ -37,7 +37,7 @@ export function LedgerHead({ view, href, options }: {
     <th className={`${th} text-center`}><SortButton sort="info" view={view} href={href} label="시험정보" /></th>
     <th className={`${th} text-center`}>{both(<HeaderFilter paramName="fScore" axisLabel="점수" value={view.score}
       options={[{ value: "high", label: "90% 이상" }, { value: "mid", label: "60~89%" }, { value: "low", label: "60% 미만" }]} />, "score")}</th>
-    <th className={`${th} text-center`}>{both(<HeaderFilter paramName="fDelta" axisLabel="증감" value={view.delta}
+    <th className="py-2 pl-2 pr-4 text-right font-bold whitespace-nowrap">{both(<HeaderFilter paramName="fDelta" axisLabel="증감" value={view.delta}
       options={[{ value: "up", label: "상승" }, { value: "down", label: "하락" }, { value: "same", label: "변화 없음" }]} />, "delta")}</th>
     <th className={`${th} text-center`}><HeaderFilter paramName="fConsult" axisLabel="상담" value={view.consult}
       options={[{ value: "done", label: "상담함" }, { value: "none", label: "상담 안 함" }]} /></th>

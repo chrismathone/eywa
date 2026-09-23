@@ -29,6 +29,15 @@ describe("통합 성적 원장", () => {
     expect(screen.getByRole("button", { name: "삭제" })).toBeInTheDocument();
   });
 
+  it("100점 만점은 백분율을 반복하지 않고, 0점 변화는 변화없음으로 표시한다", () => {
+    render(table([{ ...record, delta: 0 }]));
+    const cells = screen.getByText("김서아").closest("tr")?.querySelectorAll("td");
+    expect(cells?.[7]).toHaveTextContent("66 / 100");
+    expect(cells?.[7]).not.toHaveTextContent("%");
+    expect(cells?.[8]).toHaveTextContent("변화없음");
+    expect(cells?.[8]).not.toHaveTextContent("±0");
+  });
+
   it("[수정] → 칸이 열리고 [저장]은 이 줄의 값을 **날짜까지** 실어 보낸다(옛 '시험일을 확인해 주세요' 회귀)", async () => {
     render(table([record]));
     fireEvent.click(screen.getByRole("button", { name: "수정" }));
