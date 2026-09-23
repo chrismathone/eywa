@@ -9,6 +9,7 @@ import { termWindow, type Term } from "@/features/grades/term";
 import { logAction } from "@/features/audit/server/log";
 import { addAcademicConsultation } from "./consultation";
 import { canEditStudent } from "./scope";
+import { reportScorePatch } from "../report-patch";
 
 export type UnifiedSaveState = { ok?: boolean; error?: string } | undefined;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,7 +48,7 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
   let classId: string | null = null;
   if (source === "grade") {
     const { data, error } = await supabase.from("student_grades")
-      .select("id, student_id, subject, school_year, term, exam_slot")
+      .select("id, student_id, subject, school_year, term, exam_slot, score, max_score, taken_on")
       .eq("id", id).eq("tenant_id", user.tenantId).single();
     if (error || !data) return { error: "성적 기록을 찾지 못했습니다" };
     studentId = data.student_id;
@@ -58,14 +59,18 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
       const window = termWindow(year, term);
       if (date < window.start || date > window.end) return { error: "시험일은 해당 학기 안이어야 합니다" };
     }
-    const patch: Record<string, unknown> = { score, max_score: maxScore, taken_on: date };
-    if (score != null && await gradeNoExamReady()) { patch.no_exam = false; patch.no_exam_reason = null; }
-    if (data.exam_slot === "monthly" && await gradeMonthReady()) patch.exam_month = Number(date.slice(5, 7));
     const access = await canEditStudent(studentId, subject, user.tenantId);
     if (!access) return { error: "이 학생의 성적을 수정할 권한이 없습니다" };
-    const { data: saved, error: saveError } = await supabase.from("student_grades").update(patch)
-      .eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
-    if (saveError || !saved) return { error: saveError?.message ?? "성적을 저장하지 못했습니다" };
+    const sameScore = score === (data.score == null ? null : Number(data.score)) &&
+      (score == null || maxScore === (data.max_score == null ? null : Number(data.max_score)));
+    if (!sameScore || date !== data.taken_on) {
+      const patch: Record<string, unknown> = { score, max_score: maxScore, taken_on: date };
+      if (score != null && await gradeNoExamReady()) { patch.no_exam = false; patch.no_exam_reason = null; }
+      if (data.exam_slot === "monthly" && await gradeMonthReady()) patch.exam_month = Number(date.slice(5, 7));
+      const { data: saved, error: saveError } = await supabase.from("student_grades").update(patch)
+        .eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
+      if (saveError || !saved) return { error: saveError?.message ?? "성적을 저장하지 못했습니다" };
+    }
   } else if (source === "report") {
     if (kind !== "daily" && kind !== "check" && kind !== "other") return { error: "시험 종류를 확인해 주세요" };
     const { data, error } = await supabase.from("lesson_reports")
@@ -82,39 +87,36 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     }
     if (date !== data.report_date) return { error: "일일·확인테스트 날짜는 수업보고서 날짜와 같습니다. 보고서에서 수정해 주세요" };
     if (!(await canEditStudent(studentId, subject, user.tenantId, classId))) return { error: "이 보고서를 수정할 권한이 없습니다" };
-    const value = score == null ? null : `${score}/${maxScore}`;
-    let patch: Record<string, string | null>;
-    if (kind === "other") {
-      if (data.daily_test || data.check_test || !data.exam_info) return { error: "기존 시험점수 형식을 확인해 주세요" };
-      patch = { exam_info: value };
-    } else {
-      const field = kind === "daily" ? "daily_test" : "check_test";
-      patch = { [field]: value };
-      // 옛 합본 기록을 분리 칸으로 옮기며 함께 저장된 다른 시험은 남긴다.
-      if (!data.daily_test && !data.check_test && data.exam_info) {
-        const other = kind === "daily" ? "확인" : "일일";
-        const otherValue = data.exam_info.match(new RegExp(`${other}\\s*(\\d+\\s*\/\\s*\\d+)`))?.[1];
-        if (otherValue) patch[kind === "daily" ? "check_test" : "daily_test"] = otherValue.replace(/\s+/g, "");
-        patch.exam_info = null;
-      }
+    if (kind === "other" && (data.daily_test || data.check_test || !data.exam_info)) return { error: "기존 시험점수 형식을 확인해 주세요" };
+    const patch = reportScorePatch(data, kind, score, maxScore);
+    if (patch) {
+      const { data: saved, error: saveError } = await supabase.from("lesson_reports").update(patch)
+        .eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
+      if (saveError || !saved) return { error: saveError?.message ?? "테스트 점수를 저장하지 못했습니다" };
     }
-    const { data: saved, error: saveError } = await supabase.from("lesson_reports").update(patch)
-      .eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
-    if (saveError || !saved) return { error: saveError?.message ?? "테스트 점수를 저장하지 못했습니다" };
   } else if (source === "level") {
     const { data, error } = await supabase.from("level_tests")
-      .select("id, student_id, subject, subscores")
+      .select("id, student_id, subject, tested_on, subscores")
       .eq("id", id).eq("tenant_id", user.tenantId).single();
     if (error || !data) return { error: "입학테스트 기록을 찾지 못했습니다" };
     studentId = data.student_id;
     subject = data.subject;
     if (!(await canEditStudent(studentId, subject, user.tenantId))) return { error: "이 학생의 테스트를 수정할 권한이 없습니다" };
     const subscores = { ...((data.subscores as Record<string, number> | null) ?? {}) };
-    if (score == null) { delete subscores["총점"]; delete subscores["만점"]; }
-    else { subscores["총점"] = score; subscores["만점"] = maxScore!; }
-    const { data: saved, error: saveError } = await supabase.from("level_tests")
-      .update({ tested_on: date, subscores }).eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
-    if (saveError || !saved) return { error: saveError?.message ?? "입학테스트를 저장하지 못했습니다" };
+    const numeric = (value: number | null | undefined) => value == null || !Number.isFinite(Number(value)) ? null : Number(value);
+    const storedScore = numeric(subscores["총점"]);
+    const storedMax = numeric(subscores["만점"]);
+    const scoreChanged = score !== storedScore || score != null && maxScore !== storedMax;
+    if (date !== data.tested_on || scoreChanged) {
+      if (scoreChanged) {
+        if (score == null) { delete subscores["총점"]; delete subscores["만점"]; }
+        else { subscores["총점"] = score; subscores["만점"] = maxScore!; }
+      }
+      const { data: saved, error: saveError } = await supabase.from("level_tests")
+        .update({ tested_on: date, ...(scoreChanged ? { subscores } : {}) })
+        .eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
+      if (saveError || !saved) return { error: saveError?.message ?? "입학테스트를 저장하지 못했습니다" };
+    }
   } else return { error: "알 수 없는 성적 출처입니다" };
 
   if (consultationDate && consultationDate !== originalConsultationDate) {
