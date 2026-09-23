@@ -32,10 +32,12 @@ describe("통합 성적 원장", () => {
   it("100점 만점은 백분율을 반복하지 않고, 0점 변화는 변화없음으로 표시한다", () => {
     render(table([{ ...record, delta: 0 }]));
     const cells = screen.getByText("김서아").closest("tr")?.querySelectorAll("td");
-    expect(cells?.[7]).toHaveTextContent("66 / 100");
-    expect(cells?.[7]).not.toHaveTextContent("%");
-    expect(cells?.[8]).toHaveTextContent("변화없음");
-    expect(cells?.[8]).not.toHaveTextContent("±0");
+    // 열: 0 과목 · 1 시험일 · 2 이름 · 3 학교학년 · 4 반 · 5 담임 · 6 시험 · 7 시험정보 · 8 점수 · 9 증감
+    expect(cells?.[8]).toHaveTextContent("66점 / 100점");
+    expect(cells?.[8]).not.toHaveTextContent("%");
+    expect(cells?.[8]).not.toHaveTextContent("환산");
+    expect(cells?.[9]).toHaveTextContent("변화없음");
+    expect(cells?.[9]).not.toHaveTextContent("±0");
   });
 
   it("[수정] → 칸이 열리고 [저장]은 이 줄의 값을 **날짜까지** 실어 보낸다(옛 '시험일을 확인해 주세요' 회귀)", async () => {

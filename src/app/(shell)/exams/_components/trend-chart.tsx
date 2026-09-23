@@ -26,8 +26,8 @@ export function TrendChart({ points }: { points: Point[] }) {
   const ticks = [hi, (hi + lo) / 2, lo];
   const path = points.map((p, i) => `${i ? "L" : "M"}${x(i)} ${y(p.average)}`).join(" ");
   return <div className="mt-3 flex gap-2" role="img" aria-label={`월별 평균 ${points.map((p) => `${p.month} ${p.average}점`).join(", ")}`}>
-    <div className="relative h-44 w-9 shrink-0 text-right text-xs" aria-hidden>
-      {ticks.map((t) => <span key={t} className="num absolute right-0 -translate-y-1/2" style={{ top: `${y(t)}%` }}>{Math.round(t)}</span>)}
+    <div className="relative h-44 w-11 shrink-0 text-right text-xs" aria-hidden>
+      {ticks.map((t) => <span key={t} className="num absolute right-0 -translate-y-1/2" style={{ top: `${y(t)}%` }}>{Math.round(t)}점</span>)}
     </div>
     <div className="min-w-0 flex-1">
       <div className="relative h-44">
@@ -36,7 +36,7 @@ export function TrendChart({ points }: { points: Point[] }) {
           <path d={path} fill="none" stroke="var(--primary)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         </svg>
         {points.map((p, i) => <div key={p.month} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x(i)}%`, top: `${y(p.average)}%` }}>
-          <span className="num text-primary absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-xs font-bold whitespace-nowrap">{p.average}</span>
+          <span className="num text-primary absolute bottom-full left-1/2 mb-1 -translate-x-1/2 text-xs font-bold whitespace-nowrap">{p.average}점</span>
           <span className="bg-card border-primary block size-2.5 rounded-full border-2" />
         </div>)}
       </div>
