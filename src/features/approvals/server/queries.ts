@@ -13,6 +13,7 @@ import {
 import { applyLeaveGrantOverride } from "@/features/leave/test-grants";
 import { isLeaveKind, type LeaveKind } from "@/features/leave/request-days";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { compareByJobRank } from "../job-rank";
 import type { ApprovalForm, DocStatus, StepDecision } from "../types";
 
@@ -560,11 +561,12 @@ export type LeaveBalance = {
  */
 export async function getMyLeaveBalance(userId: string): Promise<LeaveBalance> {
   const supabase = await createClient();
+  const settings = await getTenantSettings();
   const today = kstToday();
   const { data: me } = await supabase.from("users").select("hire_date").eq("id", userId).maybeSingle();
   const hireDate = (me?.hire_date as string | null) ?? null;
   // 테스트 계정 부여 오버라이드(파일럿 전용 — test-grants.ts) 적용 후의 부여가 이 화면의 진실이다.
-  const period = applyLeaveGrantOverride(userId, resolveLeavePeriod(hireDate, today));
+  const period = applyLeaveGrantOverride(userId, resolveLeavePeriod(hireDate, today), isChinsanTenant(settings));
   if (!period) {
     return { hireDate, period, adjustment: 0, granted: 0, used: 0, pending: 0, remaining: 0 };
   }

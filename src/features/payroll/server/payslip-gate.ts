@@ -1,6 +1,8 @@
 import "server-only";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canViewPayslip } from "../payslip-access";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import type { SystemRole } from "@/lib/permissions";
 
 /**
@@ -18,6 +20,10 @@ import type { SystemRole } from "@/lib/permissions";
  * ⚠️ 명단에 있으면 super_admin 조회 자체를 건너뛴다(대부분의 호출이 여기서 끝난다).
  */
 export async function canViewPayslipNow(user: { id: string; systemRole: SystemRole }): Promise<boolean> {
-  if (canViewPayslip(user)) return true;
-  return isCurrentUserSuperAdmin();
+  if (await isCurrentUserSuperAdmin()) return true;
+  const settings = await getTenantSettings();
+  return canViewPayslip(user, {
+    isChinsanTenant: isChinsanTenant(settings),
+    viewerIds: settings.permissions.specialAccess.payslipViewerIds,
+  });
 }

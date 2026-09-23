@@ -3,23 +3,19 @@
  *
  * Dry run: node --env-file=.env.local scripts/_oneoff/backfill-demo-history.mjs
  * Apply:   node --env-file=.env.local scripts/_oneoff/backfill-demo-history.mjs --apply
+ * Rehearse a presentation date without writing:
+ *          node --env-file=.env.local scripts/_oneoff/backfill-demo-history.mjs --apply --verify-rollback --as-of=2026-10-05
  *
  * Every write is scoped to the tenant whose slug is exactly "demo". Existing
  * attendance and reports are preserved. Re-running inserts only missing rows.
- * The current day is deliberately left open for the live first-class workflow.
+ * The current day's fictional classes are filled before the demo opens, so
+ * today's math and English sheets are ready for a presentation.
+ * Production cron /api/cron/demo-refresh invokes this same function at 06:05 KST.
  */
 import postgres from "postgres";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
-const apply = process.argv.includes("--apply");
-const verifyRollback = process.argv.includes("--verify-rollback");
-const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 1, connect_timeout: 15 });
-const today = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
-}).format(new Date());
-// Date arithmetic handles a January rollover, unlike a string month subtraction.
-const [year, month] = today.split("-").map(Number);
-const windowStart = new Date(Date.UTC(year, month - 6, 1)).toISOString().slice(0, 10);
-const yesterday = new Date(Date.UTC(year, month - 1, Number(today.slice(8)) - 1)).toISOString().slice(0, 10);
 const marker = "demo-history:v1";
 
 function assert(condition, message) {
@@ -58,6 +54,16 @@ async function counts(tx, tenantId) {
   return Object.fromEntries(rows.map((r) => [r.item, r.n]));
 }
 
+/** Idempotent six-month demo refresh; cron and the local CLI share this transaction. */
+export async function runDemoHistory({ apply = false, verifyRollback = false, asOf = new Date() } = {}) {
+const sql = postgres(process.env.DATABASE_URL, { prepare: false, max: 1, connect_timeout: 15 });
+const today = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+}).format(asOf);
+const [year, month] = today.split("-").map(Number);
+const windowStart = new Date(Date.UTC(year, month - 6, 1)).toISOString().slice(0, 10);
+// Demo is a fictional live academy: fill today's class outcomes before the morning presentation.
+const throughDate = today;
 try {
   const summary = await sql.begin(async (tx) => {
     const tenants = await tx`select id,slug from tenants where slug='demo' for update`;
@@ -86,7 +92,7 @@ try {
       join students st on st.id=e.student_id and st.tenant_id=e.tenant_id
       join classes c on c.id=e.class_id and c.tenant_id=e.tenant_id
       join class_schedules sc on sc.class_id=c.id and sc.tenant_id=e.tenant_id
-      join generate_series(${windowStart}::date,${yesterday}::date,interval '1 day') d(day)
+      join generate_series(${windowStart}::date,${throughDate}::date,interval '1 day') d(day)
         on sc.day_of_week::text =
            (array['sun','mon','tue','wed','thu','fri','sat'])[extract(dow from d.day)::int + 1]
        and (sc.valid_to is null or sc.valid_to >= d.day)
@@ -100,7 +106,10 @@ try {
       select count(*)::int n, count(distinct student_id)::int students,
              count(distinct date_trunc('month',day))::int months from dh_expected
     `;
-    assert(expected.n > 1000 && expected.months === 6, "Expected six months of eligible class days");
+    // On the first days of a new month, no scheduled class may have happened yet.
+    // The window still spans six calendar months, but only five have class days.
+    assert(expected.n > 1000 && expected.months >= 5 && expected.months <= 6,
+      "Expected class days across the rolling six-month window");
     const [missing] = await tx`
       select count(*)::int n from dh_expected x
       where not exists (
@@ -109,7 +118,7 @@ try {
           and a.session_date=x.day and a.slot_start=x.slot_start
       )
     `;
-    if (!apply) return { mode: "dry-run", windowStart, yesterday, roster: roster[0], expected, missingAttendance: missing.n, before };
+    if (!apply) return { mode: "dry-run", windowStart, throughDate, roster: roster[0], expected, missingAttendance: missing.n, before };
 
     await tx`
       update class_schedules s set valid_from=least(s.valid_from,${windowStart}::date)
@@ -170,7 +179,7 @@ try {
         select distinct on (student_id,class_id,session_date,slot_start)
           student_id,class_id,session_date,slot_start,status
         from attendance_records where tenant_id=${tenantId}
-          and session_date between ${windowStart}::date and ${yesterday}::date
+          and session_date between ${windowStart}::date and ${throughDate}::date
         order by student_id,class_id,session_date,slot_start,recorded_at desc,id desc
       ) a join classes c on c.id=a.class_id and c.tenant_id=${tenantId}
       where c.notes like 'demo-roster:%' and a.status::text in ('present','late','early_leave','makeup')
@@ -291,7 +300,7 @@ try {
         '본문 이해 및 표현 연습','본문 복습 및 어휘 암기'
       from classes c
       join class_schedules sc on sc.class_id=c.id and sc.tenant_id=${tenantId}
-      join generate_series(${windowStart}::date,${yesterday}::date,interval '1 day') d(day)
+      join generate_series(${windowStart}::date,${throughDate}::date,interval '1 day') d(day)
         on sc.day_of_week::text =
            (array['sun','mon','tue','wed','thu','fri','sat'])[extract(dow from d.day)::int + 1]
       where c.tenant_id=${tenantId} and c.notes like 'demo-roster:%'
@@ -416,7 +425,7 @@ try {
     await tx`
       insert into exams (tenant_id,name,subject,exam_type,exam_date,max_score,notes,created_at)
       select ${tenantId},m.month_key||' 월간 진단',subjects.subject,'weekly',
-        least((m.first_day+interval '20 days')::date,${yesterday}::date),100,${marker},
+        least((m.first_day+interval '20 days')::date,${throughDate}::date),100,${marker},
         (m.first_day::timestamp + interval '9 hours') at time zone 'Asia/Seoul'
       from dh_months m cross join (values ('math'),('english')) subjects(subject)
       where not exists (
@@ -600,8 +609,8 @@ try {
       insert into staff_leaves
         (tenant_id,user_id,leave_type,starts_on,ends_on,reason)
       select ${tenantId},staff.id,'연차',
-        least((m.first_day+interval '10 days')::date,${yesterday}::date),
-        least((m.first_day+interval '10 days')::date,${yesterday}::date),
+        least((m.first_day+interval '10 days')::date,${throughDate}::date),
+        least((m.first_day+interval '10 days')::date,${throughDate}::date),
         ${marker}
       from dh_months m
       join lateral (
@@ -634,7 +643,7 @@ try {
     await tx`
       insert into inventory_supplies
         (tenant_id,item_code,name,qty,location,checked_on,note)
-      select ${tenantId},'DMO-PAPER','복사용지',30,'교무실',${yesterday}::date,${marker}
+      select ${tenantId},'DMO-PAPER','복사용지',30,'교무실',${throughDate}::date,${marker}
       where not exists (
         select 1 from inventory_supplies s where s.tenant_id=${tenantId}
           and s.item_code='DMO-PAPER'
@@ -644,7 +653,7 @@ try {
       insert into expenses (tenant_id,title,category,amount,expense_date,memo,approval_status)
       select ${tenantId},'교재·소모품 구입 ('||m.month_key||')','매입',
         90000+(extract(month from m.first_day)::int*7000),
-        least((m.first_day+interval '12 days')::date,${yesterday}::date),${marker},'approved'
+        least((m.first_day+interval '12 days')::date,${throughDate}::date),${marker},'approved'
       from dh_months m where not exists (
         select 1 from expenses e where e.tenant_id=${tenantId}
           and e.memo=${marker} and e.title='교재·소모품 구입 ('||m.month_key||')'
@@ -653,8 +662,8 @@ try {
     await tx`
       insert into calendar_events (tenant_id,title,memo,start_date,end_date,color)
       select ${tenantId},'[데모] '||m.month_key||' 월간 학습 점검',${marker},
-        least((m.first_day+interval '14 days')::date,${yesterday}::date),
-        least((m.first_day+interval '14 days')::date,${yesterday}::date),'blue'
+        least((m.first_day+interval '14 days')::date,${throughDate}::date),
+        least((m.first_day+interval '14 days')::date,${throughDate}::date),'blue'
       from dh_months m where not exists (
         select 1 from calendar_events e where e.tenant_id=${tenantId}
           and e.memo=${marker} and e.title='[데모] '||m.month_key||' 월간 학습 점검'
@@ -664,7 +673,7 @@ try {
       insert into meeting_minutes (tenant_id,title,content,held_at)
       select ${tenantId},'[데모] '||m.month_key||' 운영 회의',
         '출결 추이, 수업보고서, 월간 진단 결과를 확인했습니다. '||${marker},
-        (least((m.first_day+interval '19 days')::date,${yesterday}::date)::timestamp + interval '10 hours') at time zone 'Asia/Seoul'
+        (least((m.first_day+interval '19 days')::date,${throughDate}::date)::timestamp + interval '10 hours') at time zone 'Asia/Seoul'
       from dh_months m where not exists (
         select 1 from meeting_minutes x where x.tenant_id=${tenantId}
           and x.title='[데모] '||m.month_key||' 운영 회의'
@@ -688,8 +697,8 @@ try {
       select ${tenantId},'데모 상담 '||m.month_key,
         '중1','한빛중',null,${marker},'math','지인 소개',
         'consulted'::consultation_outcome,
-        (least((m.first_day+interval '8 days')::date,${yesterday}::date)::timestamp + interval '13 hours') at time zone 'Asia/Seoul',
-        (least((m.first_day+interval '8 days')::date,${yesterday}::date)::timestamp + interval '13 hours') at time zone 'Asia/Seoul'
+        (least((m.first_day+interval '8 days')::date,${throughDate}::date)::timestamp + interval '13 hours') at time zone 'Asia/Seoul',
+        (least((m.first_day+interval '8 days')::date,${throughDate}::date)::timestamp + interval '13 hours') at time zone 'Asia/Seoul'
       from dh_months m where not exists (
         select 1 from enrollment_consultations x where x.tenant_id=${tenantId}
           and x.parent_request=${marker} and x.prospect_name='데모 상담 '||m.month_key
@@ -703,7 +712,7 @@ try {
         (select coalesce(jsonb_agg(to_jsonb(x.value)),'[]'::jsonb)
            from jsonb_array_elements_text(coalesce(s.data->'modules'->'disabled','[]'::jsonb)) x(value)
           where x.value <> all(array[
-            'ecs','mcs','textbooks','inventory','calendar','retention','session_billing'
+            'ecs','mcs','textbooks','inventory','calendar','retention','session_billing','payroll','staff_leaves'
           ]::text[])),true)
       where s.tenant_id=${tenantId}
         and exists (
@@ -711,23 +720,32 @@ try {
             coalesce(s.data->'modules'->'disabled','[]'::jsonb)
           ) x(value)
           where x.value=any(array[
-            'ecs','mcs','textbooks','inventory','calendar','retention','session_billing'
+            'ecs','mcs','textbooks','inventory','calendar','retention','session_billing','payroll','staff_leaves'
           ]::text[])
         )
     `;
     const after = await counts(tx, tenantId);
-    const result = { mode: "applied", windowStart, yesterday, roster: roster[0], expected, missingAttendance: missing.n, before, after };
+    const result = { mode: "applied", windowStart, throughDate, roster: roster[0], expected, missingAttendance: missing.n, before, after };
     if (verifyRollback) throw Object.assign(new Error("VERIFIED_ROLLBACK"), { summary: result });
     return result;
   });
-  console.log(JSON.stringify(summary, null, 2));
+  return summary;
 } catch (error) {
   if (error.message === "VERIFIED_ROLLBACK") {
-    console.log(JSON.stringify({ ...error.summary, mode: "verified-and-rolled-back" }, null, 2));
+    return { ...error.summary, mode: "verified-and-rolled-back" };
   } else {
-  console.error("Demo history backfill failed:", error.message);
-  process.exitCode = 1;
+    throw error;
   }
 } finally {
   await sql.end();
+}
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const day = process.argv.find((arg) => arg.startsWith("--as-of="))?.slice(8);
+  if (day && !/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("--as-of requires YYYY-MM-DD");
+  runDemoHistory({ apply: process.argv.includes("--apply"), verifyRollback: process.argv.includes("--verify-rollback"),
+    asOf: day ? new Date(`${day}T12:00:00+09:00`) : new Date() })
+    .then((summary) => console.log(JSON.stringify(summary, null, 2)))
+    .catch((error) => { console.error("Demo history backfill failed:", error); process.exitCode = 1; });
 }

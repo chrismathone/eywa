@@ -10,7 +10,8 @@ import { getStaffById } from "@/features/staff/server/queries";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
-import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
+import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
+import { getTenantSettings } from "@/features/owner/server/queries";
 
 export const metadata = { title: "근무 설정 — aywa" };
 
@@ -28,6 +29,7 @@ export default async function EditStaffPage({
   const { id } = await params;
   const staff = await getStaffById(id);
   if (!staff) notFound();
+  const settings = await getTenantSettings();
   // 이메일 칸은 근무 설정에 없다 — 로그인 이메일 창구는 **이력서 인적사항 E-mail**과 **계정 관리** 둘이고
   // 둘 다 applyStaffEmailChange(단일 구현)를 탄다. 옛 판정(canEditLoginEmail + auth 왕복)이 사라져
   // 이 창이 한 번 덜 왕복한다.
@@ -52,8 +54,8 @@ export default async function EditStaffPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* 급여 정산은 강사·원장 한정 유지 — 시급/월급 산식이 그 둘 전제다(PAYROLL_ENABLED 상위 결정 뒤). */}
-          {PAYROLL_ENABLED && (staff.systemRole === "teacher" || staff.systemRole === "master") ? (
+          {/* 급여 정산은 강사·원장 한정 유지 — 시급/월급 산식이 그 둘 전제다. */}
+          {isPayrollEnabled(settings) && (staff.systemRole === "teacher" || staff.systemRole === "master") ? (
             <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}>
               <Wallet className="size-4" />
               급여 정산
@@ -64,9 +66,8 @@ export default async function EditStaffPage({
               행정 직원의 휴가를 아예 열 수 없었다. ⚠️ 이 버튼은 게이트가 아니다 — 실제 권한은
               /staff/[id]/leaves가 requireAccess("staff") + canManageStaff·canWriteTenant로 잡는다
               (버튼을 숨겨도 URL로 열렸다 = 숨김은 잠금이 아니다, gotcha #77).
-              🔴 2026-08-25 원장 지시로 STAFF_LEAVES_ENABLED=false → 숨김(휴가는 전자결재에서 관리).
-              되살릴 땐 위 "전 직원" 규칙을 그대로 유지할 것 — 역할로 가리던 옛 조건으로 되돌리지 말 것. */}
-          {STAFF_LEAVES_ENABLED ? (
+              침산은 기존 결정대로 숨기고 일반 지점은 기능 설정을 따른다. */}
+          {isStaffLeavesEnabled(settings) ? (
             <Button variant="outline" render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}>
               <CalendarDays className="size-4" />
               휴가 관리

@@ -7,14 +7,15 @@ import { canViewPayslip, PAYSLIP_VIEWER_IDS } from "./payslip-access";
  */
 describe("급여명세서 열람 자격", () => {
   const at = (i: number) => ({ id: PAYSLIP_VIEWER_IDS[i]!, systemRole: "admin" as const });
+  const chinsan = { isChinsanTenant: true, viewerIds: [] };
 
   it("명단에 오른 사람은 전부 통과한다", () => {
     expect(PAYSLIP_VIEWER_IDS).toHaveLength(5);
-    for (let i = 0; i < PAYSLIP_VIEWER_IDS.length; i++) expect(canViewPayslip(at(i))).toBe(true);
+    for (let i = 0; i < PAYSLIP_VIEWER_IDS.length; i++) expect(canViewPayslip(at(i), chinsan)).toBe(true);
   });
 
   it("🔴 명단에 없으면 master여도 못 본다 — 역할이 아니라 명단이 게이트다", () => {
-    expect(canViewPayslip({ id: "someone-else", systemRole: "master" })).toBe(false);
+    expect(canViewPayslip({ id: "someone-else", systemRole: "master" }, chinsan)).toBe(false);
   });
 
   /**
@@ -22,13 +23,18 @@ describe("급여명세서 열람 자격", () => {
    *    있다(DB 조회가 필요해 async). 여기서 false가 나오는 게 정상이며, 새 호출부는 반드시 그쪽을 쓸 것.
    */
   it("순수 판정은 super_admin을 모른다 — 게이트는 canViewPayslipNow가 한다", () => {
-    expect(canViewPayslip({ id: "some-super-admin", systemRole: "admin" })).toBe(false);
+    expect(canViewPayslip({ id: "some-super-admin", systemRole: "admin" }, chinsan)).toBe(false);
   });
 
   it("역할이 무엇이든 명단이 아니면 전부 거부", () => {
     for (const role of ["admin", "manager", "teacher", "counselor", "accountant", "viewer", "student"] as const) {
-      expect(canViewPayslip({ id: "not-in-list", systemRole: role })).toBe(false);
+      expect(canViewPayslip({ id: "not-in-list", systemRole: role }, chinsan)).toBe(false);
     }
+  });
+
+  it("일반 지점은 침산 명단을 무시하고 설정에서 지정한 직원만 허용", () => {
+    expect(canViewPayslip(at(0), { isChinsanTenant: false, viewerIds: [] })).toBe(false);
+    expect(canViewPayslip(at(0), { isChinsanTenant: false, viewerIds: [at(0).id] })).toBe(true);
   });
 
   it("명단이 uuid 형식이다(이름·이메일로 잠그면 개명·동명이인에 흔들린다)", () => {

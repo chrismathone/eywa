@@ -58,6 +58,7 @@ import {
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { mergeContinuousClasses } from "./continuous-classes";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { getApprovalBoxes } from "@/features/approvals/server/queries";
 import { getInventoryCounts } from "@/features/inventory/server/queries";
@@ -403,7 +404,7 @@ async function staff(settingsPromise: Promise<Settings>) {
     settingsPromise,
   ]);
   return staffComposition(
-    rows.map((r) => ({ role: staffDisplayRole(r), subjects: r.subjects })),
+    rows.map((r) => ({ role: staffDisplayRole(r, isChinsanTenant(settings)), subjects: r.subjects })),
     settings.operations.subjects,
   );
 }

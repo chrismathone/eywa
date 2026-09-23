@@ -86,9 +86,10 @@ describe("대시보드 표시 기준", () => {
       id: "fcf735fa-edf7-4095-8fa6-724285a018ed",
       system_role: "master",
     };
-    expect(staffDisplayRole(user)).toBe("admin");
+    expect(staffDisplayRole(user, true)).toBe("admin");
+    expect(staffDisplayRole(user, false)).toBe("master");
     expect(user.system_role).toBe("master");
-    expect(staffDisplayRole({ id: "other", system_role: "master" })).toBe(
+    expect(staffDisplayRole({ id: "other", system_role: "master" }, true)).toBe(
       "master",
     );
   });

@@ -30,6 +30,11 @@ export const PAYSLIP_DENIED_MSG = "급여명세서는 지정된 계정만 열람
  * ⚠️ 실제 게이트는 이 함수가 아니라 **`canViewPayslipNow()`**(server/payslip-gate.ts)다 —
  *    super_admin 자동 통과가 거기 붙어 있다. 새 호출부는 그쪽을 쓸 것.
  */
-export function canViewPayslip(user: { id: string; systemRole: SystemRole }): boolean {
-  return PAYSLIP_VIEWER_IDS.includes(user.id);
+export function canViewPayslip(
+  user: { id: string; systemRole: SystemRole },
+  policy: { isChinsanTenant: boolean; viewerIds: readonly string[] },
+): boolean {
+  return policy.isChinsanTenant
+    ? PAYSLIP_VIEWER_IDS.includes(user.id)
+    : policy.viewerIds.includes(user.id);
 }

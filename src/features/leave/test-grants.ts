@@ -20,8 +20,9 @@ const LEAVE_GRANT_OVERRIDES: Record<string, number> = {
 export function applyLeaveGrantOverride(
   userId: string,
   period: LeavePeriod | null,
+  isChinsanTenant: boolean,
 ): LeavePeriod | null {
-  if (!period) return period;
+  if (!period || !isChinsanTenant) return period;
   const granted = LEAVE_GRANT_OVERRIDES[userId];
   if (granted === undefined) return period;
   return { ...period, granted, monthly: false, monthsWorked: null, label: `${period.label} (테스트 부여)` };
