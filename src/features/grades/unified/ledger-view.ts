@@ -5,7 +5,7 @@ import { schoolGradeLabel, scorePercent, type UnifiedRow } from "./model";
  * 성적 원장 열 머리의 **정렬·필터** — 순수 함수 한 벌(화면 머리의 선택지와 실제 거르기가 같은 판정을 쓴다).
  * 페이지를 자르기 **전에** 적용한다(한 페이지 안에서만 정렬하면 "오름차순"이 50건 안에서만 맞는다).
  */
-export const LEDGER_SORTS = ["date", "name", "school", "class", "teacher", "kind", "info", "score", "delta"] as const;
+export const LEDGER_SORTS = ["date", "name", "school", "subject", "class", "teacher", "kind", "info", "score", "delta"] as const;
 export type LedgerSort = (typeof LEDGER_SORTS)[number];
 export type LedgerView = {
   sort: LedgerSort; dir: "asc" | "desc";
@@ -50,6 +50,7 @@ function sortKey(row: UnifiedRow, sort: LedgerSort): string | number | null {
     case "date": return row.date;
     case "name": return row.name;
     case "school": return schoolOf(row);
+    case "subject": return row.subject;
     case "class": return row.classes.map((c) => c.name).join(" / ") || null;
     case "teacher": return teachersOf(row).join(" / ") || null;
     case "kind": return row.kind;

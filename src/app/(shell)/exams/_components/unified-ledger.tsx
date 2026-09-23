@@ -6,6 +6,8 @@ import { saveUnifiedGrade } from "@/features/grades/unified/server/actions";
 import { schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
 import { examInfoOf } from "@/features/grades/unified/ledger-view";
 import { DeltaBadge, KindPill, ScoreLine } from "./tab-parts";
+import { useSubjectMaps } from "@/features/owner/operations-context";
+import { SUBJECT_SOFT } from "@/features/owner/subjects";
 
 const INPUT = "border-line min-w-0 rounded-md border bg-background px-1.5 py-1 text-sm text-center";
 const BTN = "border-line hover:bg-bg-soft rounded-md border px-2 py-1 text-sm font-semibold whitespace-nowrap disabled:opacity-50";
@@ -28,6 +30,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
   const [consultDate, setConsultDate] = useState(initialConsult);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const subjectMaps = useSubjectMaps();
   const reportDate = row.source === "report";
   const classNames = row.classes.map((cls) => cls.name).join(" / ");
   const teacherNames = [...new Set(row.classes.map((cls) => cls.teacher).filter(Boolean))].join(" / ");
@@ -53,6 +56,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
 
   return (
     <tr className={`border-line-faint border-t align-middle ${editing ? "bg-primary-soft/30" : "hover:bg-muted/40"} ${row.score == null && !row.rawScore ? "bg-amber-soft/40" : ""}`}>
+      <td className="px-2 py-2 text-center"><span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${SUBJECT_SOFT[subjectMaps.colorOf(row.subject)]}`}>{subjectMaps.labelOf(row.subject)}</span></td>
       <td className="px-2 py-2 text-center">
         {editing && !reportDate ? <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label={`${row.name} 시험일`} className={`${INPUT} w-full`} />
           : <span className="num" title={reportDate ? "수업보고서 날짜 — 날짜는 보고서에서 고칩니다" : undefined}>{row.date.slice(2).replaceAll("-", ".")}</span>}
@@ -105,9 +109,9 @@ export function UnifiedLedger({ rows, canWrite, head }: { rows: UnifiedRow[]; ca
   return (
     // 열 머리 필터 팝업이 짧은 표에서 잘리지 않게 최소 높이를 둔다(overflow 컨테이너 안 absolute 팝업 — header-filter 주석).
     <div className="bg-card shadow-card min-h-[26rem] overflow-x-auto rounded-2xl">
-      <table className="w-full min-w-[1240px] table-fixed text-sm">
+      <table className="w-full min-w-[1330px] table-fixed text-sm">
         <colgroup>
-          <col className="w-[7.75rem]" /><col className="w-[6rem]" /><col className="w-[7rem]" /><col />
+          <col className="w-[5.5rem]" /><col className="w-[7.75rem]" /><col className="w-[6rem]" /><col className="w-[7rem]" /><col />
           <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[10.5rem]" /><col className="w-[6.5rem]" />
           <col className="w-[7.5rem]" /><col className="w-[8.5rem]" />
         </colgroup>

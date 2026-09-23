@@ -31,21 +31,21 @@ export function DeltaBadge({ row }: { row: Pick<UnifiedRow, "delta" | "deltaUnit
   </span>;
 }
 
-/** "18 / 20 · 90%" — 점수가 없으면 원문, 원문도 없으면 미입력. */
+/** "18 / 20 (90점)" — 만점이 100이 아니면 100점 환산을 괄호로. 점수가 없으면 원문, 원문도 없으면 미입력. */
 export function ScoreLine({ row }: { row: UnifiedRow }) {
   const pct = scorePercent(row);
   if (row.score == null || row.maxScore == null) return <span className="text-text-dim" title={row.rawScore ?? ""}>{row.rawScore || "미입력"}</span>;
-  return <span className="num whitespace-nowrap"><b>{row.score}</b><span className="text-text-dim"> / {row.maxScore}</span>
-    {pct != null ? <b className={`ml-1.5 ${percentTone(pct)}`}>{Math.round(pct)}%</b> : null}</span>;
+  return <span className="num whitespace-nowrap"><b>{row.score}점</b><span className="text-text-dim"> / {row.maxScore}점</span>
+    {pct != null && row.maxScore !== 100 ? <b className={`ml-1.5 ${percentTone(pct)}`} title="100점 만점으로 바꾼 점수">(환산 {Math.round(pct)}점)</b> : null}</span>;
 }
 
 /** 라벨 + 가로 막대 + 값 한 줄(반·학교·종류 평균 목록). 막대 폭 = 100점 환산 평균. */
 export function BarRow({ label, sub, value, bar = "bg-primary", active = false }: {
   label: ReactNode; sub?: ReactNode; value: number | null; bar?: string; active?: boolean;
 }) {
-  return <span className={`grid grid-cols-[minmax(0,1fr)_7rem_3rem] items-center gap-3 rounded-lg px-2 py-2 text-sm transition ${active ? "bg-primary-soft text-primary font-bold" : "hover:bg-bg-soft"}`}>
+  return <span className={`grid grid-cols-[minmax(0,1fr)_7rem_4rem] items-center gap-3 rounded-lg px-2 py-2 text-sm transition ${active ? "bg-primary-soft text-primary font-bold" : "hover:bg-bg-soft"}`}>
     <span className="min-w-0 truncate">{label}{sub ? <small className="text-text-dim ml-1 font-normal">{sub}</small> : null}</span>
     <span className="bg-bg-soft h-2 overflow-hidden rounded-full"><span className={`block h-full rounded-full ${bar}`} style={{ width: `${Math.max(0, Math.min(100, value ?? 0))}%` }} /></span>
-    <b className={`num text-right ${percentTone(value)}`}>{value ?? "—"}</b>
+    <b className={`num text-right whitespace-nowrap ${percentTone(value)}`}>{value == null ? "—" : `${value}점`}</b>
   </span>;
 }

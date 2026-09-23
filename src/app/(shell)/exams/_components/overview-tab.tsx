@@ -34,7 +34,7 @@ export function OverviewTab({ rows, studentCount, academy, missingCount, href }:
       <BigStat label="상승" value={ups.length} unit="건" tone="green" sub="직전 같은 시험 대비" />
       <BigStat label="하락" value={downs.length} unit="건" tone="danger" sub="직전 같은 시험 대비" />
       <BigStat label="미입력" value={missingCount} unit="건" tone="amber"
-        sub={missingCount ? <Link href={href({ tab: "records", missing: "1", page: "1" })} className="text-primary hover:underline">원장에서 채우기 →</Link> : "모두 입력됨"} />
+        sub={missingCount ? <Link href={href({ tab: "records", missing: "1", page: "1" })} className="text-primary hover:underline">성적 현황에서 채우기 →</Link> : "모두 입력됨"} />
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
       <Panel title="학원 통합 추이" sub="월별 평균 · 100점 환산"><TrendChart points={academy?.points ?? []} /></Panel>
@@ -45,10 +45,10 @@ export function OverviewTab({ rows, studentCount, academy, missingCount, href }:
       </Panel>
     </div>
     <div className="grid gap-4 lg:grid-cols-2">
-      <Panel title="먼저 챙길 학생" sub="직전 같은 시험보다 떨어진 기록 · 낙폭 큰 순">
+      <Panel title="최근 성적 감소한 학생">
         <MoverList href={href} empty="하락 기록이 없습니다." rows={[...downs].sort((a, b) => (a.delta ?? 0) - (b.delta ?? 0)).slice(0, 6)} />
       </Panel>
-      <Panel title="칭찬할 학생" sub="직전 같은 시험보다 오른 기록 · 상승 폭 큰 순">
+      <Panel title="최근 성적 증가한 학생">
         <MoverList href={href} empty="상승 기록이 없습니다." rows={[...ups].sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0)).slice(0, 6)} />
       </Panel>
     </div>
