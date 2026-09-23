@@ -23,6 +23,7 @@ const read = (p: string) => readFileSync(join(ROOT, p), "utf-8");
 const SOSUN = "fcf735fa-edf7-4095-8fa6-724285a018ed"; // 박소선 (master)
 const YEWON = "8bb70f71-a8c3-450c-9236-561e9b43ca4f"; // 김예원 (admin)
 const OUTSIDER = "00000000-0000-4000-8000-000000000000";
+const chinsan = { isChinsanTenant: true, adjusterIds: [] };
 
 describe("연차 조정 자격", () => {
   it("명단 = 박소선·이승엽·김예원 세 사람", () => {
@@ -32,15 +33,17 @@ describe("연차 조정 자격", () => {
   });
 
   it("명단 밖은 막고, super_admin은 명단 없이 통과(원장 2026-08-13)", () => {
-    expect(canAdjustLeave(YEWON, false)).toBe(true);
-    expect(canAdjustLeave(OUTSIDER, false)).toBe(false);
-    expect(canAdjustLeave(OUTSIDER, true)).toBe(true);
+    expect(canAdjustLeave(YEWON, false, chinsan)).toBe(true);
+    expect(canAdjustLeave(OUTSIDER, false, chinsan)).toBe(false);
+    expect(canAdjustLeave(OUTSIDER, true, chinsan)).toBe(true);
+    expect(canAdjustLeave(YEWON, false, { isChinsanTenant: false, adjusterIds: [] })).toBe(false);
+    expect(canAdjustLeave(YEWON, false, { isChinsanTenant: false, adjusterIds: [YEWON] })).toBe(true);
   });
 
   it("🔴 파일럿 명단과 섞이지 않는다 — 테스터는 결재를 써 보지만 남의 연차는 못 고친다", () => {
     const tester = APPROVAL_PILOT_USER_IDS.find((id) => !LEAVE_ADJUSTER_USER_IDS.includes(id));
     expect(tester).toBeTruthy();
-    expect(canAdjustLeave(tester!, false)).toBe(false);
+    expect(canAdjustLeave(tester!, false, chinsan)).toBe(false);
   });
 
   it("🔴 연차 조정 명단이 전자결재 메뉴를 열지 않는다 — 자리는 직원관리다(원장 2026-09-09)", () => {
@@ -53,7 +56,7 @@ describe("연차 조정 자격", () => {
     // 대신 직원관리 목록이 같은 함수로 버튼을 낸다.
     const staffPage = read("src/app/(shell)/staff/page.tsx");
     expect(staffPage).toContain('from "@/features/leave/access"');
-    expect(staffPage).toContain("canAdjustLeave(user.id, isSuperAdmin)");
+    expect(staffPage).toContain("canAdjustLeave(user.id, isSuperAdmin,");
     expect(staffPage).toContain('href="/staff/annual-leave"');
   });
 });

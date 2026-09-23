@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
-import { PAYROLL_ENABLED } from "@/features/payroll/config";
+import { isPayrollEnabled } from "@/features/payroll/config";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { getStaffDetail } from "@/features/staff/server/queries";
 import {
   calculateMonthlyPayroll,
@@ -20,7 +21,7 @@ export default async function StaffPayrollPage({
   searchParams: Promise<{ period?: string }>;
 }) {
   await requireAccess("staff");
-  if (!PAYROLL_ENABLED) redirect("/staff"); // 급여 기능 비활성화(직접 URL 진입 차단)
+  if (!isPayrollEnabled(await getTenantSettings())) redirect("/staff");
   const { id } = await params;
   const { period: periodParam } = await searchParams;
 

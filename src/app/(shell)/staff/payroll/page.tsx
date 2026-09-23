@@ -14,7 +14,8 @@ import {
 } from "@/components/toolbar-controls";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { requireAccess } from "@/lib/auth/require-access";
-import { PAYROLL_ENABLED } from "@/features/payroll/config";
+import { isPayrollEnabled } from "@/features/payroll/config";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import { currentPeriod } from "@/features/billing/calc";
@@ -53,7 +54,7 @@ export default async function StaffPayrollPage({
   searchParams: Promise<{ period?: string; q?: string; status?: string }>;
 }) {
   const viewer = await requireAccess("staff");
-  if (!PAYROLL_ENABLED) redirect("/staff"); // 급여 기능 비활성화(직접 URL 진입 차단)
+  if (!isPayrollEnabled(await getTenantSettings())) redirect("/staff");
   // 급여 노출은 원장(master) 전용 (schema.ts 주석 — 전직원 급여는 민감 정보).
   if (viewer.systemRole !== "master") redirect("/staff");
 

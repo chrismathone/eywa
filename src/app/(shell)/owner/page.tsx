@@ -3,7 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
-import { getTenantSettings, getSettingsMeta, getUserDisplayNames } from "@/features/owner/server/queries";
+import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions } from "@/features/owner/server/queries";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
@@ -118,6 +118,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
     tab === "permissions" && settings.permissions.userOverrides.length > 0
       ? await getUserDisplayNames(settings.permissions.userOverrides.map((o) => o.userId))
       : {};
+  const permissionStaff = tab === "permissions" && isMaster && isGenericTenant(settings)
+    ? await getPermissionStaffOptions()
+    : [];
   // 세션 기간(과목 운영 안)의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
   const thisYear = Number(kstToday().slice(0, 4));
   const yearParam = Number(sp.year);
@@ -164,7 +167,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
-          <PermissionsSection initial={settings.permissions} userOverrideNames={userOverrideNames} />
+          <PermissionsSection initial={settings.permissions} userOverrideNames={userOverrideNames} staffOptions={permissionStaff} generic={isGenericTenant(settings)} />
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">역할·권한은 원장(master)만 변경할 수 있습니다</p>

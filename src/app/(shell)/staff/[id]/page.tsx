@@ -14,12 +14,13 @@ import { canViewResume } from "@/features/staff/server/resume-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import { StaffTabsNav, isStaffTabKey } from "./_components/tabs-nav";
 import { BasicInfoTab } from "./_tabs/basic-info-tab";
 import { MonthlyScheduleTab } from "./_tabs/monthly-schedule-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
 import { ActivityLogTab } from "./_tabs/activity-log-tab";
-import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
+import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
 
 export const metadata = { title: "직원 상세 — aywa" };
 
@@ -37,10 +38,11 @@ export default async function StaffDetailPage({
   const tabRaw = isStaffTabKey(tabParam) ? tabParam : "info";
   const activityPage = Math.max(1, Number(pageParam) || 1);
 
-  const [staff, viewer, superAdminIds] = await Promise.all([
+  const [staff, viewer, superAdminIds, settings] = await Promise.all([
     getStaffById(id),
     getCurrentUser(),
     getSuperAdminIds(),
+    getTenantSettings(),
   ]);
   if (!staff) notFound();
 
@@ -119,7 +121,7 @@ export default async function StaffDetailPage({
             ) : null}
             {isTeacherLike ? (
               <>
-                {PAYROLL_ENABLED ? (
+                {isPayrollEnabled(settings) ? (
                   <Button
                     variant="outline"
                     render={<WindowLink href={`/staff/${staff.id}/payroll`} title="급여 정산" />}
@@ -128,7 +130,7 @@ export default async function StaffDetailPage({
                     급여
                   </Button>
                 ) : null}
-                {STAFF_LEAVES_ENABLED ? (
+                {isStaffLeavesEnabled(settings) ? (
                   <Button
                     variant="outline"
                     render={<WindowLink href={`/staff/${staff.id}/leaves`} title="휴가 관리" />}

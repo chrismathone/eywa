@@ -1,10 +1,10 @@
 import type { CalendarEvent } from "@/features/calendar/types";
 
 /** 대시보드 표시용 분류. 실제 계정 권한은 바꾸지 않는다. */
-export function staffDisplayRole(user: { id: string; system_role: string }) {
+export function staffDisplayRole(user: { id: string; system_role: string }, isChinsanTenant: boolean) {
   // 박소선은 운영 관리자에 포함(2026-09-11). 동명이인이나 개명에 영향받지 않도록 ID로 판정.
   if (
-    user.id === "fcf735fa-edf7-4095-8fa6-724285a018ed" &&
+    isChinsanTenant && user.id === "fcf735fa-edf7-4095-8fa6-724285a018ed" &&
     user.system_role === "master"
   )
     return "admin";

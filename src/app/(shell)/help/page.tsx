@@ -1,4 +1,5 @@
 import { EyIcon } from "@/components/icons/aywa-icons";
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { SearchToggle } from "@/components/search-toggle";
@@ -76,9 +77,14 @@ export default async function HelpPage({
           title="도움말"
           description={`화면 설명서 ${manuals.length}개 · 자주 묻는 질문 ${faq.length}개 · F1 = 보고 있는 화면 도움말`}
           actions={
-            <span {...helpAttr("help-search")}>
-              <SearchToggle placeholder="설명서 · 질문 검색" defaultValue={q} />
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/print/help/manuals" target="_blank" className="border-border hover:bg-bg-soft rounded-md border px-3 py-2 text-sm font-semibold">
+                전체 설명서 PDF
+              </Link>
+              <span {...helpAttr("help-search")}>
+                <SearchToggle placeholder="설명서 · 질문 검색" defaultValue={q} />
+              </span>
+            </div>
           }
         />
 

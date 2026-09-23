@@ -8,6 +8,14 @@ import { payrollTotal } from "../calc";
 import { calculateMonthlyPayroll } from "./queries";
 import { logAction } from "@/features/audit/server/log";
 import { canManageStaff } from "@/lib/auth/role-hierarchy";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
+import { isPayrollEnabled, isStaffLeavesEnabled } from "../config";
+
+async function genericFeatureDisabled(feature: "payroll" | "staff_leaves"): Promise<boolean> {
+  const settings = await getTenantSettings();
+  return !isChinsanTenant(settings) && !(feature === "payroll" ? isPayrollEnabled(settings) : isStaffLeavesEnabled(settings));
+}
 
 export type SavePayrollState = { error?: string; recordId?: string } | undefined;
 
@@ -18,6 +26,7 @@ export async function upsertPayroll(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  if (await genericFeatureDisabled("payroll")) return { error: "이 지점은 급여 기능을 사용하지 않습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -74,6 +83,7 @@ export async function markPayrollPaid(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  if (await genericFeatureDisabled("payroll")) return { error: "이 지점은 급여 기능을 사용하지 않습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
@@ -99,6 +109,7 @@ export async function autoComputePayroll(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole)) return { error: "급여 관리 권한이 없습니다 (master / admin / manager)" };
+  if (await genericFeatureDisabled("payroll")) return { error: "이 지점은 급여 기능을 사용하지 않습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const period = String(formData.get("period") ?? "").trim();
@@ -147,6 +158,7 @@ export async function requestLeave(
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
     return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
   }
+  if (await genericFeatureDisabled("staff_leaves")) return { error: "이 지점은 기존 휴가 기능을 사용하지 않습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
   const leaveType = String(formData.get("leaveType") ?? "").trim();
@@ -185,6 +197,7 @@ export async function approveLeave(
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
     return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
   }
+  if (await genericFeatureDisabled("staff_leaves")) return { error: "이 지점은 기존 휴가 기능을 사용하지 않습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
@@ -213,6 +226,7 @@ export async function deleteLeave(
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "staff"))) {
     return { error: "휴가 관리 권한이 없습니다 (master / admin / manager)" };
   }
+  if (await genericFeatureDisabled("staff_leaves")) return { error: "이 지점은 기존 휴가 기능을 사용하지 않습니다" };
 
   const id = String(formData.get("id") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();

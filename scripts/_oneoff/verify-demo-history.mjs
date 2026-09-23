@@ -59,7 +59,8 @@ try {
        )) historical_students_without_attendance
  `;
  for(const [name,value] of Object.entries(issues))fail(name,value);
- if(monthly.length!==6||monthly.some(m=>m.attendance===0||m.reports===0||m.grades===0))throw Error('missing monthly coverage');
+ // Current month can be empty on the first morning before any scheduled class.
+ if(monthly.length!==6||monthly.slice(0,-1).some(m=>m.attendance===0||m.reports===0||m.grades===0))throw Error('missing monthly coverage');
  const [settings]=await sql`select data->'modules'->'disabled' disabled from tenant_settings where tenant_id=${id}`;
  console.log(JSON.stringify({monthly,issues,disabledModules:settings.disabled},null,2));
 }finally{await sql.end()}

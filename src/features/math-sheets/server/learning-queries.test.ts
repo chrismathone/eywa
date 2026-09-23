@@ -91,7 +91,7 @@ describe("반별 수업 유형의 계획 조회", () => {
     expect(filters).toContainEqual(["lesson_reports", "tenant_id", "tenant"]);
     expect(filters).toContainEqual(["lesson_reports", "class_id", "class"]);
     expect(filters).toContainEqual(["lesson_reports", "in", "student_id", [studentId]]);
-    expect(filters).toContainEqual(["lesson_reports", "or", "classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null"]);
+    expect(filters).toContainEqual(["lesson_reports", "or", "classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null,source.eq.demo_history"]);
     expect(filters).toContainEqual(["lesson_reports", "is", "revoked_at", null]);
     expect(filters).toContainEqual(["lesson_reports", "lte", "report_date", "2026-09-17"]);
     expect(filters).toContainEqual(["lesson_reports", "order", "classnote_sent_at", { nullsFirst: true }]);
@@ -109,6 +109,14 @@ describe("반별 수업 유형의 계획 조회", () => {
     expect(data.progress[studentId].latestRecord?.date).toBe("2026-09-14");
     expect(data.progress[studentId].currentIsLatest).toBe(false);
     expect(data.records[studentId].map((record) => record.date)).toEqual(["2026-09-14", "2026-08-31"]);
+  });
+  it("학부모에게 발송하지 않은 데모 가상 보고서도 진도선에 반영한다", async () => {
+    reportRows = [{ student_id: studentId, report_date: "2026-09-16", progress: topics[9], textbook: null, classnote_sent_at: null }];
+    const data = await getMathLearningData("class", monthData);
+    expect(data.progress[studentId].currentBlock).toBe(topics[9]);
+    expect(data.progress[studentId].currentDate).toBe("2026-09-16");
+    expect(data.progress[studentId].latestRecord?.sentAt).toBeNull();
+    expect(filters).toContainEqual(["lesson_reports", "or", "classnote_status.eq.success,classnote_sent_at.not.is.null,edutrix_share_token.not.is.null,source.eq.demo_history"]);
   });
   it("등록일과 이전 반 이력을 읽되 현재 반 진도는 다른 반 기록으로 바꾸지 않는다", async () => {
     registeredAt = "2026-07-09";

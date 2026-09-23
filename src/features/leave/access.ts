@@ -26,9 +26,15 @@ export const LEAVE_ADJUSTER_USER_IDS: readonly string[] = [
 ];
 
 /** 연차 조정 게이트 — 화면·서버 액션이 **같은 함수**를 통과한다([[#77]]). */
-export function canAdjustLeave(userId: string, isSuperAdmin: boolean): boolean {
+export function canAdjustLeave(
+  userId: string,
+  isSuperAdmin: boolean,
+  policy: { isChinsanTenant: boolean; adjusterIds: readonly string[] },
+): boolean {
   // super_admin은 새로 만드는 어떤 제한 명단도 자동 통과(원장 2026-08-13 — 총괄이 자기 시스템에 잠기지 않게).
-  return isSuperAdmin || LEAVE_ADJUSTER_USER_IDS.includes(userId);
+  return isSuperAdmin || (policy.isChinsanTenant
+    ? LEAVE_ADJUSTER_USER_IDS.includes(userId)
+    : policy.adjusterIds.includes(userId));
 }
 
 export const LEAVE_ADJUST_DENIED_MSG = "연차를 조정할 권한이 없습니다";

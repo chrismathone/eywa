@@ -58,14 +58,18 @@ describe("권한 매트릭스에 얹히는 개인 예외", () => {
       resolveMatrix([]),
       YEWON!,
       "admin",
-      approvalMenuOverridesFor(YEWON!, false),
+      approvalMenuOverridesFor(YEWON!, false, true),
     );
     expect(matrix.approvals.admin).toBe("full");
     expect(matrix.staff.admin).toBe(MENU_ACCESS.staff.admin); // 다른 메뉴는 그대로
   });
 
   it("명단 밖은 예외가 생기지 않는다", () => {
-    expect(approvalMenuOverridesFor(OUTSIDER, false)).toEqual([]);
+    expect(approvalMenuOverridesFor(OUTSIDER, false, true)).toEqual([]);
+  });
+
+  it("같은 파일럿 계정도 일반 지점에서는 코드 명단으로 열리지 않는다", () => {
+    expect(approvalMenuOverridesFor(YEWON!, false, false)).toEqual([]);
   });
 
   it("super_admin은 명단에 없어도 통과(원장 지시 2026-08-13)", () => {
@@ -73,7 +77,7 @@ describe("권한 매트릭스에 얹히는 개인 예외", () => {
       resolveMatrix([]),
       OUTSIDER,
       "master",
-      approvalMenuOverridesFor(OUTSIDER, true),
+      approvalMenuOverridesFor(OUTSIDER, true, false),
     );
     expect(matrix.approvals.master).toBe("full");
   });
