@@ -255,6 +255,7 @@ export default async function DocumentsPage({
                             title: r.title,
                             kind: r.kind,
                             description: r.description,
+                            category: r.category,
                             categoryLabel: categoryPathLabel(categories, r.category),
                             typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType, r.linkUrl),
                             sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",

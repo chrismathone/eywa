@@ -28,6 +28,7 @@ vi.mock("@/features/documents/server/category-actions", () => ({
 }));
 vi.mock("./_components/document-toolbar", () => ({ DocumentToolbar: () => <div className="flex gap-2"><button>업로드</button><button>새 문서</button><button>링크 추가</button></div> }));
 vi.mock("./_components/document-row", () => ({ DocumentRow: () => null }));
+vi.mock("@/features/documents/server/file-actions", () => ({ moveDocumentFile: vi.fn() }));
 vi.mock("./_components/linked-row", () => ({ LinkedDocumentRow: () => null }));
 import DocumentsPage from "./page";
 

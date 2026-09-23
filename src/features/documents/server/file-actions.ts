@@ -7,6 +7,40 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { renamedFileName } from "../file-name";
 
+/** 저장 객체는 그대로 두고 폴더 연결만 변경한다. 다른 화면의 이동·수정을 덮어쓰지 않는다. */
+export async function moveDocumentFile(id: string, targetCategory: string, expectedCategory: string) {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canWriteTenant(user.systemRole, "documents"))) return { error: "파일을 이동할 권한이 없습니다" };
+  if (typeof id !== "string" || !id || typeof targetCategory !== "string" || !targetCategory.trim() ||
+      typeof expectedCategory !== "string" || !expectedCategory)
+    return { error: "이동할 파일과 폴더를 선택해 주세요." };
+
+  const db = await createClient();
+  const { data: row, error } = await db.from("academy_documents")
+    .select("title, category, updated_at").eq("id", id).eq("tenant_id", user.tenantId)
+    .eq("kind", "file").is("staff_user_id", null).maybeSingle();
+  if (error || !row) return { error: "파일을 찾을 수 없거나 이동할 수 없습니다." };
+  if (row.category !== expectedCategory) return { error: "파일 위치가 변경되었습니다. 새로고침 후 다시 시도해 주세요." };
+  if (row.category === targetCategory) return { error: "이미 이 폴더에 있는 파일입니다." };
+
+  // 캐시 대신 현재 학원의 실제 폴더를 확인한다. 이후 삭제와 경합하면 DB의 복합 외래 키가 막는다.
+  const { data: folder, error: folderError } = await db.from("document_categories")
+    .select("key").eq("tenant_id", user.tenantId).eq("key", targetCategory).maybeSingle();
+  if (folderError || !folder) return { error: "이동할 폴더를 찾을 수 없습니다. 새로고침 후 다시 선택해 주세요." };
+
+  const { data: changed, error: writeError } = await db.from("academy_documents")
+    .update({ category: targetCategory, updated_at: new Date().toISOString() })
+    .eq("id", id).eq("tenant_id", user.tenantId).eq("kind", "file").is("staff_user_id", null)
+    .eq("category", expectedCategory).eq("updated_at", row.updated_at).select("id");
+  if (writeError) return { error: "파일을 이동하지 못했습니다. 폴더가 변경되었는지 확인한 뒤 다시 시도해 주세요." };
+  if (!changed?.length) return { error: "다른 화면에서 파일이 변경되었습니다. 새로고침 후 다시 시도해 주세요." };
+  await logAction({ action: "document_update", targetType: "document", targetLabel: row.title,
+    metadata: { documentId: id, fromCategory: row.category, toCategory: targetCategory, moved: true } });
+  revalidatePath("/documents", "layout");
+  return { ok: true };
+}
+
 export async function renameDocumentFile(id: string, baseName: string, expected: { title: string; fileName: string }) {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
