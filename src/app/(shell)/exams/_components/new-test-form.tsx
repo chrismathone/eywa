@@ -7,17 +7,17 @@ import { schoolGradeLabel } from "@/features/grades/unified/model";
 import type { UnifiedStudent } from "@/features/grades/unified/server/queries";
 
 export function NewTestForm({ students, subjects, date, canWrite }: {
-  students: UnifiedStudent[]; subjects: string[]; date: string; canWrite: boolean;
+  students: UnifiedStudent[]; subjects: { value: string; label: string }[]; date: string; canWrite: boolean;
 }) {
   const [state, action, pending] = useActionState<UnifiedSaveState, FormData>(createUnifiedGrade, undefined);
-  return <details className="border-line mb-3 rounded-lg border text-sm">
-    <summary className="cursor-pointer px-4 py-3 font-bold">일일·확인·입학테스트 새 기록 입력</summary>
+  return <details className="bg-card shadow-card rounded-2xl text-sm">
+    <summary className="text-primary cursor-pointer px-4 py-3 font-bold">+ 학생 한 명 기록 추가 <span className="text-text-dim font-normal">(일일·확인·입학테스트)</span></summary>
     <form action={action} className="border-line-faint flex flex-wrap items-end gap-3 border-t px-4 py-3">
       <label className="grid min-w-36 gap-1">학생<select name="studentId" required className="border-line rounded-md border bg-background p-2">
         {students.map((student) => <option key={student.id} value={student.id}>{student.name} · {schoolGradeLabel(student.school, student.grade)}</option>)}
       </select></label>
       <label className="grid gap-1">과목<select name="subject" required className="border-line rounded-md border bg-background p-2">
-        {subjects.map((subject) => <option key={subject} value={subject}>{subject === "math" ? "수학" : subject === "english" ? "영어" : subject}</option>)}
+        {subjects.map((subject) => <option key={subject.value} value={subject.value}>{subject.label}</option>)}
       </select></label>
       <label className="grid gap-1">시험<select name="kind" className="border-line rounded-md border bg-background p-2">
         <option value="daily">일일테스트</option><option value="check">확인테스트</option>

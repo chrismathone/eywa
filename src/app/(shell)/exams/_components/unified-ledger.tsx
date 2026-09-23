@@ -3,16 +3,12 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { saveUnifiedGrade, type UnifiedSaveState } from "@/features/grades/unified/server/actions";
-import { KIND_LABEL, schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
+import { scorePercent, schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
+import { percentTone } from "@/features/grades/unified/kind-color";
+import { DeltaBadge, KindPill } from "./tab-parts";
 import type { GradeSheet } from "@/features/grades/types";
 import type { UnifiedClass } from "@/features/grades/unified/model";
 import { RosterLedgerRows } from "./roster-ledger";
-
-function Delta({ row }: { row: UnifiedRow }) {
-  if (row.delta == null || row.delta === 0) return <span>—</span>;
-  const up = row.delta > 0;
-  return <strong className={up ? "text-green" : "text-danger"}>{up ? "↑" : "↓"}{Math.abs(row.delta)}{row.deltaUnit === "%p" ? "%p" : ""}</strong>;
-}
 
 function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
   const [state, action, pending] = useActionState<UnifiedSaveState, FormData>(saveUnifiedGrade, undefined);
@@ -23,7 +19,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
   const classNames = row.classes.map((cls) => cls.name).join(" / ");
   const teacherNames = [...new Set(row.classes.map((cls) => cls.teacher).filter(Boolean))].join(" / ");
   return (
-    <tr className="border-line-faint border-t align-middle hover:bg-muted/40">
+    <tr className={`border-line-faint border-t align-middle hover:bg-muted/40 ${row.score == null && !row.rawScore ? "bg-amber-soft/40" : ""}`}>
       <td className="px-2 py-2">
         <form id={formId} action={action} className="space-y-1">
           <input type="hidden" name="source" value={row.source} />
@@ -41,7 +37,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
       <td className="px-2 py-2">{schoolGradeLabel(row.school, row.grade)}</td>
       <td className="max-w-0 px-2 py-2" title={classNames}><span className="block truncate">{classNames || "—"}</span></td>
       <td className="max-w-0 px-2 py-2" title={teacherNames}><span className="block truncate">{teacherNames || "—"}</span></td>
-      <td className="px-2 py-2"><span className="bg-primary-soft text-primary inline-block rounded-md px-2 py-1 font-semibold whitespace-nowrap">{KIND_LABEL[row.kind]}</span></td>
+      <td className="px-2 py-2"><KindPill kind={row.kind} /></td>
       <td className="px-2 py-2">
         <div className="flex min-w-0 items-center gap-1">
           <input type="number" name="score" form={formId} min="0" step="0.01" defaultValue={row.score ?? ""} disabled={!canWrite}
@@ -50,10 +46,11 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
           <span>/</span>
           <input type="number" name="maxScore" form={formId} min="1" max="1000" step="0.01" defaultValue={row.maxScore ?? 100} disabled={!canWrite}
             aria-label={`${row.name} 만점`} className="border-line min-w-0 w-15 rounded-md border bg-background px-1 py-1 text-xs" />
+          {scorePercent(row) != null ? <b className={`num ml-1 ${percentTone(scorePercent(row))}`}>{Math.round(scorePercent(row)!)}%</b> : null}
         </div>
         {row.rawScore && row.score == null ? <span title={row.rawScore} className="block truncate text-xs">원문: {row.rawScore}</span> : null}
       </td>
-      <td className="px-2 py-2 text-center"><Delta row={row} /></td>
+      <td className="px-2 py-2 text-center"><DeltaBadge row={row} /></td>
       <td className="px-2 py-2">
         <div className="flex items-center gap-1">
           <input type="checkbox" checked={consulted} disabled={!canWrite || !!row.consultationDate}
@@ -77,14 +74,14 @@ export function UnifiedLedger({ rows, canWrite, sheet, studentClasses, consultat
   studentClasses?: Record<string, UnifiedClass[]>; consultationDates?: Record<string, string>;
 }) {
   return (
-    <div className="border-line overflow-x-auto rounded-xl border">
+    <div className="bg-card shadow-card overflow-x-auto rounded-2xl">
       <table className="w-full min-w-[1150px] table-fixed text-left text-xs">
         <colgroup><col className="w-[12%]" /><col className="w-[8%]" /><col className="w-[10%]" /><col className="w-[15%]" /><col className="w-[9%]" /><col className="w-[10%]" /><col className="w-[16%]" /><col className="w-[6%]" /><col className="w-[9%]" /><col className="w-[5%]" /></colgroup>
         <thead className="bg-bg-soft"><tr>{["시험일", "이름", "학교학년", "반", "담임", "시험", "점수 / 만점", "증감", "상담", "저장"].map((label) => <th key={label} className="px-2 py-2 font-bold whitespace-nowrap">{label}</th>)}</tr></thead>
         <tbody>{sheet ? <RosterLedgerRows sheet={sheet} canWrite={canWrite && sheet.schemaReady && (sheet.selection.slot !== "monthly" || sheet.monthReady)}
           studentClasses={studentClasses ?? {}} consultationDates={consultationDates ?? {}} /> : null}{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} />)}</tbody>
       </table>
-      {rows.length === 0 && !sheet?.rows.length ? <p className="p-8 text-center text-sm">이 기간에 표시할 성적 기록이 없습니다.</p> : null}
+      {rows.length === 0 && !sheet?.rows.length ? <p className="p-8 text-center text-sm">조건에 맞는 성적 기록이 없습니다. 기간·과목·시험 필터나 검색어를 바꿔 보세요.</p> : null}
     </div>
   );
 }

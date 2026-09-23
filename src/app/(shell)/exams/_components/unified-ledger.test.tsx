@@ -26,7 +26,7 @@ describe("통합 성적 입력표", () => {
     expect(screen.getByLabelText("김서아 만점")).toHaveValue(100);
     expect(screen.getByLabelText("김서아 성적 상담")).toBeChecked();
     expect(screen.getByTitle("중등 수학 월·수 / 중등 수학 금")).toBeInTheDocument();
-    expect(screen.getByText("↓12")).toBeInTheDocument();
+    expect(screen.getByLabelText("직전보다 12점 하락")).toBeInTheDocument();
   });
 
   it("시험 명단에는 이미 저장한 점수와 빈 점수를 함께 입력 가능하게 표시한다", () => {
