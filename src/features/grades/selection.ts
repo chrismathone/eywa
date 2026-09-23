@@ -8,7 +8,7 @@
 
 import type { GradeSelection } from "./types";
 import { GRADE_MAX_SCORE_DEFAULT, GRADE_MAX_SCORE_LIMIT } from "./types";
-import { examSlotsFor, normalizeExamSlot } from "./exam-slots";
+import { examSlotsFor, gradeMonthOf, normalizeExamSlot } from "./exam-slots";
 import { firstAxisOf, parseAxisValue } from "./subject-axis";
 import { defaultExamDate, defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "./term";
 
@@ -66,7 +66,19 @@ export function resolveGradeSelection(
       ? Math.round(maxRaw)
       : GRADE_MAX_SCORE_DEFAULT;
 
-  return { year, term, subject: axis.subject, track: axis.track, classId, slot, date, maxScore };
+  return {
+    year,
+    term,
+    subject: axis.subject,
+    track: axis.track,
+    classId,
+    slot,
+    date,
+    // 🔑 월은 **시험일에서 나온다** — 주소에 따로 싣지 않는다(두 값이 어긋날 자리를 안 만든다).
+    //    월 드롭다운은 시험일을 그 달로 옮기는 링크일 뿐이다(`monthAnchorDate`).
+    month: gradeMonthOf(slot, date),
+    maxScore,
+  };
 }
 
 /** 그 과목에 실제로 있는 시험 칸인지(액션이 폼 값을 다시 볼 때). */

@@ -33,6 +33,30 @@ const SLOTS_BY_SUBJECT: Record<string, readonly ExamSlotKey[]> = {
   math: ["midterm", "final", "school", "monthly"],
 };
 
+/**
+ * **달마다 치는 시험인가** — 월말평가 하나(원장 2026-09-23: *"시험일이 있으니까 월도 선택해서 볼수있게"*).
+ *
+ * 🔑 왜 축이 필요한가: 성적 칸의 주인은 `(학생, 과목, 년도, 학기, 시험)`이라 **한 학기에 한 번**이다.
+ *    중간·기말·듣기평가는 실제로 한 번씩이라 맞지만 월말평가는 9월·10월·11월…이 따로라, 월이 없으면
+ *    10월을 저장하는 순간 9월을 덮어쓴다(에러 없이 조용히 — 0287a가 유니크 축에 월을 더한다).
+ * 🔴 다른 시험에 월을 열지 말 것 — 열면 `(중간고사, 5월)`과 `(중간고사, 6월)`이 다른 칸이 되어
+ *    한 학생의 중간고사가 둘로 갈린다(학생 상세 추이·급락 감지가 서로 다른 것을 본다).
+ */
+export function slotUsesMonth(slot: ExamSlotKey): boolean {
+  return slot === "monthly";
+}
+
+/**
+ * 그 칸의 **월**(1~12). 월을 안 쓰는 시험은 `0`이다 — 유니크 축의 '월 미지정' 자리이고,
+ * null이 아니다(null은 서로 안 겹쳐 같은 중간고사 행이 여러 개 생긴다, [[#113]] 계열).
+ * 🔑 월은 **시험일에서 도출**한다 — 따로 든 값과 날짜가 어긋날 자리를 아예 만들지 않는다.
+ */
+export function gradeMonthOf(slot: ExamSlotKey, dateIso: string): number {
+  if (!slotUsesMonth(slot)) return 0;
+  const m = Number(String(dateIso ?? "").slice(5, 7));
+  return Number.isInteger(m) && m >= 1 && m <= 12 ? m : 0;
+}
+
 export function examSlotsFor(subjectKey: string): ExamSlotKey[] {
   return [...(SLOTS_BY_SUBJECT[subjectKey] ?? DEFAULT_SLOTS)];
 }

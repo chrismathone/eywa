@@ -9,6 +9,9 @@ import {
 import { examAppliesTo, isElementaryGrade, isMiddleFirstGrade, notApplicableReason } from "./applies";
 import { GRADE_MARK_KEYS, gradeMarkKeysFor } from "./types";
 import { gradeCellKeeps, hasUntouchedMark } from "./keep";
+import { gradeMonthOf, slotUsesMonth } from "./exam-slots";
+import { monthAnchorDate, termMonths } from "./term";
+import { buildOverviewColumns, overviewAvgPct, overviewColumnKey } from "./overview";
 import { GRADE_SORT_DEFAULT, nextGradeSort, parseGradeSort } from "./list-prefs";
 import { resolveGradeSelection, selectionSlotIsValid } from "./selection";
 import { axisOptionsFrom, axisValueOf, firstAxisOf, parseAxisValue } from "./subject-axis";
@@ -263,5 +266,75 @@ describe("칸을 지울지 판정(적대적 리뷰 2026-09-23)", () => {
     expect(hasUntouchedMark(db, { ask1: null })).toBe(true); // ask2가 아직 켜져 있다
     expect(hasUntouchedMark(db, { ask1: null, ask2: null })).toBe(false); // 둘 다 끄는 중
     expect(hasUntouchedMark({ ask1: null, ask2: null, received: null }, undefined)).toBe(false);
+  });
+});
+
+describe("월 축(원장 2026-09-23)", () => {
+  it("🔴 달마다 치는 시험은 월말평가 하나 — 다른 시험에 월을 열면 한 학생의 중간고사가 둘로 갈린다", () => {
+    expect(slotUsesMonth("monthly")).toBe(true);
+    for (const s of ["midterm", "final", "listening", "school"] as const) {
+      expect(slotUsesMonth(s)).toBe(false);
+      expect(gradeMonthOf(s, "2026-10-15")).toBe(0);
+    }
+  });
+
+  it("월은 **시험일에서** 나온다 — 따로 들면 날짜와 어긋난다", () => {
+    expect(gradeMonthOf("monthly", "2026-10-15")).toBe(10);
+    expect(gradeMonthOf("monthly", "2027-01-05")).toBe(1);
+    expect(gradeMonthOf("monthly", "")).toBe(0); // 못 읽으면 '월 미지정'
+  });
+
+  it("학기의 달 — 2학기는 9~12월 + 이듬해 1·2월", () => {
+    expect(termMonths(1)).toEqual([3, 4, 5, 6, 7, 8]);
+    expect(termMonths(2)).toEqual([9, 10, 11, 12, 1, 2]);
+  });
+
+  it("🔴 그 달을 고르면 시험일이 그 달로 간다 — 2학기의 1·2월은 **이듬해**다", () => {
+    expect(monthAnchorDate(2026, 2, 10, "2026-09-23")).toBe("2026-10-31");
+    expect(monthAnchorDate(2026, 2, 1, "2026-09-23")).toBe("2027-01-31");
+    expect(monthAnchorDate(2026, 2, 2, "2026-09-23")).toBe("2027-02-28"); // 학기 끝
+    // 오늘이 그 달이면 오늘(사람이 대개 오늘 친 시험을 적는다).
+    expect(monthAnchorDate(2026, 2, 9, "2026-09-23")).toBe("2026-09-23");
+    // 학기 밖으로는 안 나간다.
+    expect(monthAnchorDate(2026, 1, 3, "2026-09-23")).toBe("2026-03-31");
+  });
+});
+
+describe("확인 뷰의 열(원장 2026-09-23)", () => {
+  const present = [
+    { slot: "monthly" as const, month: 10 },
+    { slot: "midterm" as const, month: 0 },
+    { slot: "monthly" as const, month: 9 },
+    { slot: "monthly" as const, month: 1 },
+    { slot: "monthly" as const, month: 10 }, // 같은 달이 여러 학생 → 열은 하나
+  ];
+
+  it("🔴 과목의 시험 순서대로, 월말평가는 **학기 순서**로 편다(1·2월은 맨 뒤)", () => {
+    const cols = buildOverviewColumns("math", present);
+    expect(cols.map((c) => c.key)).toEqual(["midterm", "monthly:9", "monthly:10", "monthly:1"]);
+    expect(cols.map((c) => c.label)).toEqual(["중간고사", "9월", "10월", "1월"]);
+  });
+
+  it("🔴 값이 없는 칸은 열을 안 세운다 — 안 친 달까지 빈 열로 깔리면 표만 길어진다", () => {
+    expect(buildOverviewColumns("math", []).length).toBe(0);
+    // 그 과목에 없는 시험(영어의 월말평가)은 남아 있어도 안 세운다.
+    expect(buildOverviewColumns("english", [{ slot: "monthly", month: 9 }])).toEqual([]);
+  });
+
+  it("평균은 **비율**로 센다 — 만점이 칸마다 다를 수 있다", () => {
+    expect(overviewAvgPct([{ score: 80, maxScore: 100, noExam: false }])).toBe(80);
+    expect(
+      overviewAvgPct([
+        { score: 80, maxScore: 100, noExam: false },
+        { score: 10, maxScore: 20, noExam: false }, // 50%
+      ]),
+    ).toBe(65);
+    expect(overviewAvgPct([{ score: null, maxScore: 100, noExam: true }])).toBeNull();
+    expect(overviewAvgPct([])).toBeNull();
+  });
+
+  it("열 키는 월을 쓰는 시험만 월을 단다", () => {
+    expect(overviewColumnKey("midterm", 0)).toBe("midterm");
+    expect(overviewColumnKey("monthly", 9)).toBe("monthly:9");
   });
 });

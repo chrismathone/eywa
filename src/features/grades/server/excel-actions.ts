@@ -6,7 +6,7 @@ import { logAction } from "@/features/audit/server/log";
 import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EXAM_SLOT_LABEL } from "../exam-slots";
+import { EXAM_SLOT_LABEL, gradeMonthOf } from "../exam-slots";
 import { TERM_LABEL } from "../term";
 import {
   AXIS_SHEET_NAME,
@@ -210,6 +210,8 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
     classId: null,
     slot: axis.slot,
     date: axis.date,
+    // 월은 시험일에서 나온다 — 시트의 시험일이 곧 그 달이다(안내 시트가 날짜를 싣는다).
+    month: gradeMonthOf(axis.slot, axis.date),
     maxScore: axis.maxScore,
   };
   let roster: Awaited<ReturnType<typeof getGradeSheet>>;
@@ -335,5 +337,7 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
     },
   });
   revalidatePath("/exams");
+  // 확인 뷰도 같은 데이터를 읽는다 — 저장 뒤 돌아갔을 때 옛 표가 남지 않게.
+  revalidatePath("/exams/view");
   return { ...base, dryRun: false, errors: [], applied: true };
 }

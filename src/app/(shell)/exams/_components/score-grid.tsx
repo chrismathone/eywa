@@ -10,6 +10,7 @@ import { submitAction } from "@/components/forms/submit-action";
 import { examStats } from "@/features/exams/calc";
 import { nextGradeSort, type GradeSort, type GradeSortKey } from "@/features/grades/list-prefs";
 import { saveGradeScores, type GradeSaveState } from "@/features/grades/server/actions";
+import { slotUsesMonth } from "@/features/grades/exam-slots";
 import { axisValueOf } from "@/features/grades/subject-axis";
 import {
   GRADE_MARK_LABEL,
@@ -53,7 +54,7 @@ export function ScoreGrid({
   /** 정렬이 바뀌면 계정에 남긴다 — 실패해도 화면은 그대로(주소는 안 바뀐다). */
   saveSort: (next: GradeSort) => Promise<{ ok: boolean }>;
 }) {
-  const { selection: sel, rows, marksReady, noExamReady } = sheet;
+  const { selection: sel, rows, marksReady, noExamReady, monthReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
   const { maxScore: selMax, date: selDate, slot: selSlot } = sel;
@@ -280,6 +281,14 @@ export function ScoreGrid({
       {!lockReason && !marksReady ? (
         <p className="border-amber/40 bg-amber-soft text-foreground rounded-lg border px-3 py-2 text-sm">
           성적표 받기 체크는 준비(0284a)가 적용된 뒤에 눌립니다 — 점수 입력·저장은 그대로 됩니다.
+        </p>
+      ) : null}
+      {/* 🔴 월 축이 없으면 월말평가는 **학기에 한 칸**이라 다음 달이 지난달을 덮는다 — 조용히 잃는 것이라
+          반드시 말한다(적용 전에도 화면은 산다, [[#95]]). 다른 시험은 원래 학기에 한 번이라 이 배너가 안 뜬다. */}
+      {!lockReason && !monthReady && slotUsesMonth(sel.slot) ? (
+        <p className="border-danger/40 bg-danger-soft text-foreground rounded-lg border px-3 py-2 text-sm">
+          월 축 준비(0287a)가 아직 적용되지 않았습니다 — 지금은 월말평가가 한 학기에 한 칸이라, 다른 달을
+          저장하면 지난달 점수를 덮어씁니다. 적용한 뒤에는 달마다 따로 남습니다.
         </p>
       ) : null}
       {!lockReason && !noExamReady ? (

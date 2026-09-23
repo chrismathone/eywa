@@ -202,6 +202,8 @@ export async function saveGradeScores(
   });
 
   revalidatePath("/exams");
+  // 확인 뷰도 같은 데이터를 읽는다 — 저장 뒤 돌아갔을 때 옛 표가 남지 않게.
+  revalidatePath("/exams/view");
   // 성적은 학생 상세(성적 탭·타임라인)도 읽는다 — 바뀐 학생 화면만 다시 그린다.
   for (const c of changed) revalidatePath(`/students/${c.studentId}`);
 

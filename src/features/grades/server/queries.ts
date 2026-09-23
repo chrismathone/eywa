@@ -9,7 +9,7 @@ import { ENGLISH_SUBJECT_KEY } from "../subject-axis";
 import { rosterAnchorFor, termWindow } from "../term";
 import { examAppliesTo } from "../applies";
 import { EMPTY_GRADE_MARKS, type GradeClassOption, type GradeMarks, type GradeSelection, type GradeSheet, type GradeSheetRow } from "../types";
-import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady } from "./write";
+import { gradeMarksReady, gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "./write";
 import { kstToday } from "@/lib/date-kst";
 
 /**
@@ -29,6 +29,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
     schemaReady: true,
     marksReady: false,
     noExamReady: false,
+    monthReady: false,
   };
   const user = await getCurrentUser();
   if (!user) return { ...empty, schemaReady: false };
@@ -84,6 +85,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       schemaReady: await gradesSchemaReady(),
       marksReady: await gradeMarksReady(),
       noExamReady: await gradeNoExamReady(),
+      monthReady: await gradeMonthReady(),
     };
   }
 
@@ -112,10 +114,11 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   );
 
   const studentIds = [...new Set(inTerm.map((e) => e.student_id))];
-  const [schemaReady, marksReady, noExamReady] = await Promise.all([
+  const [schemaReady, marksReady, noExamReady, monthReady] = await Promise.all([
     gradesSchemaReady(),
     gradeMarksReady(),
     gradeNoExamReady(),
+    gradeMonthReady(),
   ]);
   // 표식 컬럼(0284a)이 아직 없으면 그 열만 빼고 읽는다 — 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]).
   // 아직 없는 컬럼을 select에 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]) — 준비된 것만 읽는다.
@@ -151,18 +154,23 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
           studentIds,
           // 🔴 select 문자열이 실행 중에 갈리므로(0284a 유무) 타입 추론이 안 된다 — 반환 모양은 위
           //    `ScoreCell`이 정본이고, 표식 열은 없을 수 있어 **선택 속성**이다.
-          (chunk) =>
-            supabase
+          (chunk) => {
+            let q = supabase
               .from("student_grades")
               .select(SCORE_COLS)
               .eq("subject", sel.subject)
               .eq("school_year", sel.year)
               .eq("term", sel.term)
-              .eq("exam_slot", sel.slot)
-              .in("student_id", chunk) as unknown as PromiseLike<{
+              .eq("exam_slot", sel.slot);
+            // 🔴 월말평가는 달마다 다른 칸이다(0287a) — 안 좁히면 9월·10월 두 행이 같이 와서
+            //    Map이 아무거나 하나를 집는다(화면이 지난달 점수를 이번 달로 보여 준다).
+            // ⚠️ 0287a 미적용이면 그 컬럼이 없어 필터 자체가 PostgREST 400이다 — 그땐 안 건다([[#95]]).
+            if (monthReady) q = q.eq("exam_month", sel.month);
+            return q.in("student_id", chunk) as unknown as PromiseLike<{
               data: ScoreCell[] | null;
               error: { message: string } | null;
-            }>,
+            }>;
+          },
         )
       : Promise.resolve([]),
   ]);
@@ -278,5 +286,5 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       (myClassIds.has(a.id) ? 0 : 1) - (myClassIds.has(b.id) ? 0 : 1) ||
       a.className.localeCompare(b.className, "ko"),
   );
-  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady };
+  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady, monthReady };
 }

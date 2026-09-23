@@ -13,13 +13,13 @@ import { ijwConfigFor } from "@/features/ijw/server/client";
 import { getJjViewer } from "@/features/ijw/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EXAM_SLOT_LABEL, examSlotOptions } from "@/features/grades/exam-slots";
+import { EXAM_SLOT_LABEL, examSlotOptions, slotUsesMonth } from "@/features/grades/exam-slots";
 import { resolveGradeSelection } from "@/features/grades/selection";
 import { gradeWriteError } from "@/features/grades/server/access";
 import { getGradeSheet } from "@/features/grades/server/queries";
 import { loadGradeSortPref, saveGradeSortPref } from "@/features/grades/server/list-prefs";
 import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
-import { TERM_OPTIONS, termLabel, termYearOptions } from "@/features/grades/term";
+import { TERM_OPTIONS, monthAnchorDate, termLabel, termMonths, termYearOptions } from "@/features/grades/term";
 import { JjExamView } from "./_components/jj-exam-view";
 import { JjLinkSection } from "./_components/jj-link-section";
 import { JjSkeleton } from "./_components/jj-shared";
@@ -27,6 +27,7 @@ import { JjStudyView } from "./_components/jj-study-view";
 import { GradesExcelTrigger } from "./_components/excel-trigger";
 import { ScoreGrid } from "./_components/score-grid";
 import { SheetMetaFields } from "./_components/sheet-meta-fields";
+import { GradeViewSwitch } from "./_components/view-switch";
 
 export const metadata = { title: "성적관리 — aywa" };
 
@@ -201,6 +202,14 @@ export default async function ExamsPage({
     label: c.className,
     hint: c.studentCount == null ? undefined : `${c.studentCount}명`,
   }));
+  // 🔑 **월 선택**(원장 2026-09-23: *"시험일이 있으니까 월도 선택해서 볼수있게"*) — 달마다 치는
+  //    시험(월말평가)에만 선다. 월은 시험일에서 도출하므로 이 드롭다운은 **시험일을 그 달로 옮기는
+  //    링크**다(두 값이 어긋날 자리를 안 만든다).
+  const monthOptions: HrefSelectOption[] = termMonths(sel.term).map((m) => ({
+    value: String(m),
+    label: `${m}월`,
+    href: buildHref({ date: monthAnchorDate(sel.year, sel.term, m, kstToday()) }),
+  }));
   const viewOptions: HrefSelectOption[] = [
     { value: "", label: "성적 입력", href: buildHref({ view: "" }) },
     { value: "jj", label: "JJ실", href: buildHref({ view: "jj" }) },
@@ -208,7 +217,15 @@ export default async function ExamsPage({
   ];
 
   const canWrite = !writeError;
-  const lockReason = writeError ?? (sheet && !sheet.schemaReady ? "성적 표 준비(0283a)가 아직 적용되지 않아 입력을 잠갔습니다 — 적용 후 저장할 수 있습니다" : null);
+  const lockReason =
+    writeError ??
+    (sheet && !sheet.schemaReady
+      ? "성적 표 준비(0283a)가 아직 적용되지 않아 입력을 잠갔습니다 — 적용 후 저장할 수 있습니다"
+      : // 🔴 월 축이 없으면 월말평가는 학기에 한 칸이라 다른 달을 적는 순간 지난달을 덮는다 —
+        //    경고만 띄우지 말고 **저장을 막는다**(서버도 같은 판정: `writeGradeCells`).
+        sheet && !sheet.monthReady && slotUsesMonth(sel.slot)
+        ? "월 축 준비(0287a)가 아직 적용되지 않아 월말평가 입력을 잠갔습니다 — 지금 저장하면 지난달 점수를 덮어씁니다"
+        : null);
 
   // 격자를 그릴 때만 **창 높이를 채우는 flex 기둥**(등록상담 목록뷰 선례) — 표가 남는 높이를 전부
   // 가져가 그 안에서 스크롤하고 저장 바는 창 바닥에 붙는다. JJ 뷰·빈 화면은 종전대로 문서 흐름.
@@ -227,6 +244,12 @@ export default async function ExamsPage({
       />
 
       <Toolbar>
+        {/* 🔑 입력 ↔ 확인(원장 2026-09-23) — 확인 뷰는 축이 학기 전체라 시험 칸·시험일을 안 넘긴다. */}
+        <GradeViewSwitch
+          active="input"
+          inputHref={buildHref({})}
+          viewHref={`/exams/view?year=${sel.year}&term=${sel.term}&subject=${sel.subject}${isEmbed ? "&embed=1" : ""}`}
+        />
         {jjAvailable ? (
           <HrefSelect axisLabel="보기" ariaLabel="보기 선택" value={jjMode ?? ""} options={viewOptions} />
         ) : null}
@@ -251,6 +274,14 @@ export default async function ExamsPage({
               triggerClassName={TOOLBAR_SELECT}
             />
             <HrefSelect axisLabel="시험" ariaLabel="시험 선택" value={sel.slot} options={slotOptions} />
+            {slotUsesMonth(sel.slot) ? (
+              <HrefSelect
+                axisLabel="월"
+                ariaLabel="월 선택"
+                value={String(sel.month)}
+                options={monthOptions}
+              />
+            ) : null}
             {/* 시험일·만점은 주소에 실린다 — 격자·엑셀·저장이 같은 값을 본다(한쪽만 바뀌면 시트가
                 화면과 다른 칸을 가리킨다). 클라 조각이 `__V__` 자리에 값을 끼워 이동한다. */}
             <SheetMetaFields

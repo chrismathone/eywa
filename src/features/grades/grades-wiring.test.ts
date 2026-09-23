@@ -335,3 +335,74 @@ describe("월말평가 표식 열(원장 2026-09-23)", () => {
     );
   });
 });
+
+describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
+  it("마이그레이션이 있고 유니크 축에 월이 들어간다(부분 유니크 금지 [[#113]])", () => {
+    const sql = read("supabase/migrations/0287a_student_grades_month.sql");
+    expect(sql).toContain("exam_month smallint not null default 0");
+    expect(sql).toContain("ux_grades_term_slot_month");
+    expect(sql).toContain("drop index if exists ux_grades_term_slot");
+    expect(sql).not.toMatch(/create unique index[\s\S]{0,200}?where/i);
+  });
+
+  it("🔴 저장·삭제·조회가 **같은 월**을 본다 — 하나라도 빠지면 지난달을 덮거나 함께 지운다", () => {
+    const write = read("src/features/grades/server/write.ts");
+    expect(write).toContain("exam_slot,exam_month");
+    // 지울 때도 월을 좁힌다(안 좁히면 10월을 비우는 한 번에 9월·11월이 사라진다).
+    expect(write).toMatch(/if \(monthReady\) q = q\.eq\("exam_month", month\);/);
+    const q = read("src/features/grades/server/queries.ts");
+    expect(q).toMatch(/if \(monthReady\) q = q\.eq\("exam_month", sel\.month\);/);
+  });
+
+  it("🔴 0287a 미적용에도 산다 — 컬럼을 select·filter에 조건 없이 넣지 않는다([[#95]])", () => {
+    const write = read("src/features/grades/server/write.ts");
+    expect(write).toContain("gradeMonthReady");
+    // 준비 안 됐으면 옛 유니크 축으로 저장한다(없는 인덱스를 가리키면 전건 42P10).
+    expect(write).toContain("const conflict = monthReady");
+    expect(write).toContain("...(monthReady ? { exam_month: month } : {})");
+    expect(read("src/features/grades/server/overview-queries.ts")).toMatch(/monthReady \? ", exam_month" : ""/);
+  });
+
+  it("🔴 확인 뷰는 **읽기 전용**이다 — 입력·저장 경로가 한 줄도 없어야 한다", () => {
+    const page = read("src/app/(shell)/exams/view/page.tsx");
+    const table = read("src/app/(shell)/exams/view/_components/overview-table.tsx");
+    for (const src of [page, table]) {
+      expect(src).not.toContain("<input");
+      expect(src).not.toContain("<form");
+      expect(src).not.toContain("writeGradeCells");
+      expect(src).not.toContain("saveGradeScores");
+    }
+    // 메뉴 게이트는 그대로 지난다(읽기도 권한이 필요하다).
+    expect(page).toContain('requireAccess("exams")');
+    expect(page).toContain("getGradeOverview");
+  });
+
+  it("🔴 0287a 전에는 월말평가 **저장을 막는다** — 경고만 띄우면 10월이 9월을 덮는다", () => {
+    const write = read("src/features/grades/server/write.ts");
+    // 게이트는 서버가 정본(엑셀·학생 상세 폼도 이 함수를 지난다).
+    expect(write).toMatch(/if \(!monthReady && slotUsesMonth\(axis\.slot\)\)/);
+    // 화면은 같은 판정으로 이유를 말한다.
+    expect(read("src/app/(shell)/exams/page.tsx")).toMatch(/!sheet\.monthReady && slotUsesMonth\(sel\.slot\)/);
+  });
+
+  it("🔴 옛 월말평가 행을 시험일의 달로 백필한다 — 안 하면 적용 직후 지난 점수가 안 보인다", () => {
+    const sql = read("supabase/migrations/0287a_student_grades_month.sql");
+    expect(sql).toMatch(/update student_grades[\s\S]{0,200}extract\(month from taken_on\)/);
+    // 스키마 캐시 갱신이 없으면 새 컬럼을 한동안 "없다"고 답한다.
+    expect(sql).toContain("notify pgrst, 'reload schema'");
+  });
+
+  it("확인 뷰 조회는 절단되지 않는다 — 유일 키 정렬 + 페이지네이션", () => {
+    const q = read("src/features/grades/server/overview-queries.ts");
+    expect(q).not.toContain('.order("student_id")');
+    expect(q).toContain("fetchAllPagedInChunks<Cell>");
+    // 값이 없는 칸(표식만 눌러 둔 행)은 열을 세우지 않는다.
+    expect(q).toMatch(/if \(cell\.score != null \|\| cell\.noExam\) present\.push/);
+  });
+
+  it("두 화면을 오가는 길이 양쪽에 있다(같은 부품)", () => {
+    for (const f of ["src/app/(shell)/exams/page.tsx", "src/app/(shell)/exams/view/page.tsx"]) {
+      expect(read(f)).toContain("GradeViewSwitch");
+    }
+  });
+});

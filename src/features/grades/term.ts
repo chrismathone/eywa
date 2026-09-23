@@ -50,6 +50,35 @@ export function termWindow(year: number, term: Term): { start: string; end: stri
   return { start: `${year}-09-01`, end: `${next}-02-${pad(isLeap(next) ? 29 : 28)}` };
 }
 
+/**
+ * 그 학기에 **실제로 도는 달** — 1학기 `3~8월`, 2학기 `9~12월 + 이듬해 1·2월`.
+ * 월말평가처럼 달마다 치는 시험의 드롭다운이 이 목록을 그대로 쓴다(원장 2026-09-23).
+ */
+export function termMonths(term: Term): number[] {
+  return term === 1 ? [3, 4, 5, 6, 7, 8] : [9, 10, 11, 12, 1, 2];
+}
+
+/**
+ * 그 달을 고르면 **시험일을 그 달 안으로** 옮긴다 — 월은 시험일에서 도출하므로(`gradeMonthOf`)
+ * 둘이 어긋날 자리를 만들지 않는다.
+ * 🔑 오늘이 그 달이면 오늘, 아니면 **그 달 말일**(단 학기 밖으로는 안 나간다).
+ */
+export function monthAnchorDate(year: number, term: Term, month: number, todayIso: string): string {
+  const { start, end } = termWindow(year, term);
+  // 2학기의 1·2월은 **이듬해**다 — 연도를 안 옮기면 학기 밖으로 떨어져 폴백에 먹힌다.
+  const y = term === 2 && month <= 2 ? year + 1 : year;
+  if (todayIso.slice(0, 7) === `${y}-${pad(month)}` && todayIso >= start && todayIso <= end) {
+    return todayIso;
+  }
+  const last = `${y}-${pad(month)}-${pad(daysInMonth(y, month))}`;
+  return last < start ? start : last > end ? end : last;
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return isLeap(year) ? 29 : 28;
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+
 /** 그 날짜가 속한 (년도, 학기). 1·2월은 **전년도 2학기**. */
 export function defaultTermOf(todayIso: string): { year: number; term: Term } {
   const year = Number(todayIso.slice(0, 4));

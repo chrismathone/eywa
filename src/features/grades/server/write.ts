@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { EXAM_SLOT_LABEL, type ExamSlotKey } from "../exam-slots";
+import { EXAM_SLOT_LABEL, gradeMonthOf, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
 import type { Term } from "../term";
 import { gradeCellKeeps } from "../keep";
 import { GRADE_MARK_KEYS, type GradeMarkKey } from "../types";
@@ -73,6 +73,19 @@ export async function writeGradeCells(
   const user = await getCurrentUser();
   if (!user) throw new Error("로그인이 필요합니다");
   const supabase = await createClient();
+  // 🔴 월 축(0287a) — 월말평가는 달마다 다른 칸이다. 적용 전에는 옛 유니크 축 그대로 쓴다([[#95]]):
+  //    컬럼이 없는데 `onConflict`에 넣으면 저장이 전건 실패한다(42P10).
+  const monthReady = await gradeMonthReady();
+  const month = gradeMonthOf(axis.slot, axis.date);
+  // 🔴 준비 전에는 **월말평가 저장만 막는다**(fail-closed) — 옛 축으로 쓰면 10월이 9월을 조용히
+  //    덮는다. 화면도 같은 이유로 입력을 잠그지만, 게이트는 여기가 정본이다([[#77]]: 엑셀·학생
+  //    상세 폼도 이 함수를 지난다). 다른 시험은 원래 학기에 한 번이라 영향이 없다.
+  if (!monthReady && slotUsesMonth(axis.slot)) {
+    throw new Error("월 축 준비(0287a)가 아직 적용되지 않아 월말평가는 저장할 수 없습니다");
+  }
+  const CONFLICT_WITH_MONTH = "tenant_id,student_id,subject,school_year,term,exam_slot,exam_month";
+  const CONFLICT_LEGACY = "tenant_id,student_id,subject,school_year,term,exam_slot";
+  const conflict = monthReady ? CONFLICT_WITH_MONTH : CONFLICT_LEGACY;
 
   // 🔑 남길 칸 = **점수가 있거나 표식이 하나라도 켜진 칸**. 점수가 없어도 "1차 독촉함"은 남아야 한다.
   //    점수도 표식도 없으면 그 행은 존재할 이유가 없으니 지운다.
@@ -96,6 +109,7 @@ export async function writeGradeCells(
     score: r.score,
     max_score: axis.maxScore,
     taken_on: axis.date,
+    ...(monthReady ? { exam_month: month } : {}),
     created_by: user.id,
   });
   // 표식은 준 키만 payload에 실린다(안 준 칸을 null로 덮지 않게).
@@ -135,21 +149,32 @@ export async function writeGradeCells(
   for (const payload of groups) {
     const { error } = await supabase
       .from("student_grades")
-      .upsert(payload, { onConflict: "tenant_id,student_id,subject,school_year,term,exam_slot" });
-    if (error) throw new Error(`성적 저장 실패: ${error.message}`);
+      .upsert(payload, { onConflict: conflict });
+    if (!error) continue;
+    // 🔴 42P10 = `on conflict`가 가리킨 인덱스가 없다. 0287a를 적용하는 **그 몇 초**에 컬럼과 인덱스가
+    //    엇갈릴 수 있어(스키마 캐시 지연 포함) 한 번만 반대 축으로 되돌려 시도한다 — 안 그러면 그 순간
+    //    저장 전건이 실패한다. 월말평가는 위에서 이미 막혀 있어 이 되돌림이 달을 덮을 수 없다.
+    const other = conflict === CONFLICT_WITH_MONTH ? CONFLICT_LEGACY : CONFLICT_WITH_MONTH;
+    const isMissingIndex = (error as { code?: string }).code === "42P10";
+    if (!isMissingIndex) throw new Error(`성적 저장 실패: ${error.message}`);
+    const retry = await supabase.from("student_grades").upsert(payload, { onConflict: other });
+    if (retry.error) throw new Error(`성적 저장 실패: ${retry.error.message}`);
   }
 
   if (toClear.length > 0) {
     const ids = toClear.map((r) => r.studentId);
     for (let i = 0; i < ids.length; i += CHUNK) {
-      const { error } = await supabase
+      // 🔴 지울 때도 **월을 좁힌다** — 안 좁히면 10월 칸을 비우는 한 번에 9월·11월 월말평가가 함께 사라진다.
+      let q = supabase
         .from("student_grades")
         .delete()
         .eq("tenant_id", user.tenantId)
         .eq("subject", axis.subject)
         .eq("school_year", axis.year)
         .eq("term", axis.term)
-        .eq("exam_slot", axis.slot)
+        .eq("exam_slot", axis.slot);
+      if (monthReady) q = q.eq("exam_month", month);
+      const { error } = await q
         .in("student_id", ids.slice(i, i + CHUNK));
       if (error) throw new Error(`성적 삭제 실패: ${error.message}`);
     }
@@ -177,6 +202,16 @@ export const gradesSchemaReady = cache(async (): Promise<boolean> => {
 export const gradeMarksReady = cache(async (): Promise<boolean> => {
   const supabase = await createClient();
   const { error } = await supabase.from("student_grades").select("ask1_at").limit(1);
+  return !error;
+});
+
+/**
+ * 0287a(월 축)가 적용됐는가 — 위 셋과 **따로** 본다(같은 이유).
+ * 🔴 false면 월말평가는 학기에 한 칸이라 다음 달이 지난달을 덮는다 → 화면이 배너로 그 사실을 말한다.
+ */
+export const gradeMonthReady = cache(async (): Promise<boolean> => {
+  const supabase = await createClient();
+  const { error } = await supabase.from("student_grades").select("exam_month").limit(1);
   return !error;
 });
 

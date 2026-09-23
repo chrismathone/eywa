@@ -20,6 +20,11 @@ export type GradeSelection = {
   slot: ExamSlotKey;
   /** 시험일 — 저장되는 행의 `taken_on`. 기본은 오늘을 학기 안으로 눌러 담은 날. */
   date: string;
+  /**
+   * 달마다 치는 시험(월말평가)의 **월**(1~12). 다른 시험은 `0`이다.
+   * 🔴 저장하는 값이 아니라 **시험일에서 도출**한다(`gradeMonthOf`) — 따로 들면 날짜와 어긋난다.
+   */
+  month: number;
   /** 만점(기본 100). 화면·엑셀·저장이 같은 값을 본다. */
   maxScore: number;
 };
@@ -92,6 +97,11 @@ export type GradeSheet = {
    * 성적 표는 매일 쓰는 경로가 아니지만, 적용 전에 저장을 열어 두면 전건이 400으로 실패한다.
    */
   schemaReady: boolean;
+  /**
+   * 0287a(월 축)가 적용됐는가. false면 월 드롭다운을 안 세우고 옛 유니크 축으로 저장한다 —
+   * 그동안 월말평가는 **학기에 한 칸**이라 다음 달을 적으면 지난달을 덮어쓴다(그래서 배너로 알린다).
+   */
+  monthReady: boolean;
 };
 
 /**
