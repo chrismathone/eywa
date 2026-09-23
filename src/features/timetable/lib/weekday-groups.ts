@@ -1,5 +1,13 @@
 import { WEEKDAY_GROUPINGS, type WeekdayGrouping } from "@/features/owner/settings-types";
 import type { DayOfWeek } from "./periods";
+import {
+  formatWeekdayGroups,
+  parseWeekdayPartition,
+  weekdayPartitionKey,
+  type Weekday,
+} from "./weekday-partition";
+
+export { formatWeekdayGroups };
 
 // 과목별 시간표 요일 병합 — 프리셋(WeekdayGrouping)을 실제 평일 요일 분할로. 같은 그룹의 요일은
 // (같은 반·내용이면) 한 칸으로 병합 표시, 단독 그룹은 풀너비. 단일 소스(시간표 렌더 + 과목 편집기 공용).
@@ -41,4 +49,47 @@ export function normalizeWeekdayGrouping(v: unknown): WeekdayGrouping {
   return (WEEKDAY_GROUPINGS as readonly string[]).includes(v as string)
     ? (v as WeekdayGrouping)
     : "mon-thu";
+}
+
+function isBuiltin(value: string): value is WeekdayGrouping {
+  return (WEEKDAY_GROUPINGS as readonly string[]).includes(value);
+}
+
+/** 만든 묶음이 기본 목록과 같으면 그 프리셋. 없으면 null. */
+export function builtinIdForGroups(groups: readonly (readonly Weekday[])[]): WeekdayGrouping | null {
+  const parsed = parseWeekdayPartition(groups);
+  if (!parsed) return null;
+  const key = weekdayPartitionKey(parsed);
+  for (const id of WEEKDAY_GROUPINGS) {
+    const part = parseWeekdayPartition(weekdayPartition(id));
+    if (part && weekdayPartitionKey(part) === key) return id;
+  }
+  return null;
+}
+
+/**
+ * 과목에 저장된 병합 → 기본뷰가 그릴 요일 묶음.
+ * 기본 프리셋이면 그 분할, 학원이 만든 id면 그 분할, 없거나 깨졌으면 월·목 / 화·금.
+ */
+export function resolveWeekdayGroups(
+  value: unknown,
+  customs?: readonly { id: string; groups: readonly (readonly DayOfWeek[])[] }[],
+): DayOfWeek[][] {
+  if (typeof value === "string" && isBuiltin(value)) return weekdayPartition(value);
+  const custom = typeof value === "string" ? customs?.find((row) => row.id === value) : undefined;
+  const parsed = custom ? parseWeekdayPartition(custom.groups) : null;
+  return parsed ?? weekdayPartition("mon-thu");
+}
+
+/** 과목 드롭다운. 기본 다섯 개 뒤에, 학원이 만든 묶음이 붙는다. */
+export function weekdayGroupingChoices(
+  customs?: readonly { id: string; groups: readonly (readonly DayOfWeek[])[] }[],
+): { value: string; label: string }[] {
+  const extra: { value: string; label: string }[] = [];
+  for (const custom of customs ?? []) {
+    const parsed = parseWeekdayPartition(custom.groups);
+    if (!parsed) continue;
+    extra.push({ value: custom.id, label: formatWeekdayGroups(parsed) });
+  }
+  return [...WEEKDAY_GROUPING_OPTIONS, ...extra];
 }

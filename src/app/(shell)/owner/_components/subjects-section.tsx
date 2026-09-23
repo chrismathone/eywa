@@ -33,6 +33,8 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SectionForm, SettingsCard } from "./section-form";
 import { PeriodListEditor, SubjectListEditor } from "./list-editors";
+import { WeekdayGroupingEditor } from "./weekday-grouping-editor";
+import { weekdayGroupingChoices } from "@/features/timetable/lib/weekday-groups";
 import { SubjectSessionEditor } from "./subject-session-editor";
 import type { PeriodDef } from "@/features/periods/resolve";
 
@@ -75,6 +77,18 @@ export function SubjectsSection({
   return (
     <SectionForm section="operations" payload={o} savedNonce={savedNonce}>
       <div className="space-y-5">
+        <SettingsCard
+          title="요일 병합 묶음"
+          description="월·화, 수·목처럼 원하는 요일을 묶어 두면 과목의 시간표 요일 병합 목록에 나타납니다. 묶음에 넣지 않은 요일은 수업이 있는 날 혼자 섭니다."
+        >
+          <WeekdayGroupingEditor
+            groupings={o.weekdayGroupings ?? []}
+            subjects={o.subjects}
+            onChange={({ groupings, subjects }) =>
+              setO((prev) => ({ ...prev, weekdayGroupings: groupings, subjects }))
+            }
+          />
+        </SettingsCard>
         {/* 원장 지시(2026-08-07): *"운영 과목-과목 설정도 하나로 합쳐도 되겠는데 굳이 다른 섹션으로 있을 필요 없을듯."*
             과목 목록과 그 과목의 상세 설정은 같은 대상이라 한 카드에서 위(목록) → 아래(과목별 상세)로 잇는다. */}
         <SettingsCard
@@ -84,6 +98,7 @@ export function SubjectsSection({
           <SubjectListEditor
             value={o.subjects}
             onChange={setSubjects}
+            groupingChoices={weekdayGroupingChoices(o.weekdayGroupings)}
             onRemove={(i) => {
               const s = o.subjects[i];
               setRemoving({ index: i, key: s.key, label: s.label.trim() || s.key });

@@ -168,6 +168,8 @@ export const DEFAULT_SETTINGS: TenantSettings = {
       { key: "science", label: "과학", color: "purple", weekdayGrouping: "none", testMax: 5 },
       { key: "korean", label: "국어", color: "gold", weekdayGrouping: "mon-thu", testMax: 5 },
     ],
+    // 학원이 만든 요일 병합. 비어 있으면 기본 프리셋만 드롭다운에 선다.
+    weekdayGroupings: [],
     jobTitles: ["원장", "부원장", "실장", "강사", "조교", "행정"],
     // 부서별 직급(원장 지시 2026-07-29). 교과 3부서는 같은 체계, 관리 부서는 일반 직급 체계.
     // '아르바이트'는 항목이 하나뿐이라 부서를 고르면 직급이 자동 확정된다.

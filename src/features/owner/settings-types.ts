@@ -10,6 +10,7 @@ import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { MODULE_IDS } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
+import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -125,8 +126,9 @@ export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
   color: z.enum(SUBJECT_COLORS).default("neutral"),
-  // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
-  weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
+  // 시간표 기본뷰 요일 병합. 기본 프리셋 id 또는 학원이 만든 묶음 id.
+  // 문자열인 이유: 만든 묶음 id는 코드 enum에 없다. 없는 id는 읽을 때 월·목/화·금으로 떨어진다.
+  weekdayGrouping: z.string().min(1).max(40).default("mon-thu"),
   // 이 과목을 열 때 처음 보이는 시간표 뷰. 미설정 = 기본뷰(지금까지의 동작).
   // (.optional() — 예외 플래그 관례. 안 적은 과목은 지금과 완전히 같게 동작한다.)
   defaultView: z.enum(SUBJECT_DEFAULT_VIEWS).optional(),
@@ -219,9 +221,20 @@ export const shuttleSchema = z.object({
 });
 export type ShuttleSetting = z.infer<typeof shuttleSchema>;
 
+const weekdayNameSchema = z.enum(["mon", "tue", "wed", "thu", "fri"]);
+
+/** 학원이 만든 요일 병합. id는 과목의 weekdayGrouping이 가리킨다. groups는 월~금 분할. */
+export const customWeekdayGroupingSchema = z.object({
+  id: z.string().regex(/^c_[a-z0-9]{6,24}$/),
+  groups: z.array(z.array(weekdayNameSchema).min(1).max(5)).min(1).max(5),
+});
+export type CustomWeekdayGrouping = z.infer<typeof customWeekdayGroupingSchema>;
+
 export const operationsSchema = z
   .object({
     subjects: z.array(subjectSchema).max(40),
+    // 과목 드롭다운에 더해지는 요일 병합. 비어 있으면 기본 다섯 개만. 기본값 []이라 옛 저장도 통과한다.
+    weekdayGroupings: z.array(customWeekdayGroupingSchema).max(20).default([]),
     jobTitles: z.array(z.string().min(1).max(24)).max(40),
     /**
      * 부서별 직급 선택지(2026-07-29 원장 지시) — 이력서 '근무부서'를 고르면 직급 드롭다운이 그 부서 것으로 바뀐다.
@@ -291,6 +304,37 @@ export const operationsSchema = z
           areaLabels.add(al);
         });
       }
+    });
+    const groupingIds = new Set<string>();
+    const groupingKeys = new Set<string>();
+    v.weekdayGroupings.forEach((grouping, i) => {
+      if (groupingIds.has(grouping.id)) {
+        ctx.addIssue({ code: "custom", message: "요일 병합 ID가 중복됩니다", path: ["weekdayGroupings", i, "id"] });
+      }
+      groupingIds.add(grouping.id);
+      const parsed = parseWeekdayPartition(grouping.groups);
+      if (!parsed) {
+        ctx.addIssue({
+          code: "custom",
+          message: "월~금을 빠짐없이, 한 번씩만 나누세요",
+          path: ["weekdayGroupings", i, "groups"],
+        });
+        return;
+      }
+      const key = weekdayPartitionKey(parsed);
+      if (groupingKeys.has(key)) {
+        ctx.addIssue({ code: "custom", message: "같은 요일 병합이 이미 있습니다", path: ["weekdayGroupings", i] });
+      }
+      groupingKeys.add(key);
+    });
+    v.subjects.forEach((subject, i) => {
+      const chosen = subject.weekdayGrouping;
+      if ((WEEKDAY_GROUPINGS as readonly string[]).includes(chosen) || groupingIds.has(chosen)) return;
+      ctx.addIssue({
+        code: "custom",
+        message: "없는 요일 병합입니다",
+        path: ["subjects", i, "weekdayGrouping"],
+      });
     });
   });
 export type OperationsSettings = z.infer<typeof operationsSchema>;

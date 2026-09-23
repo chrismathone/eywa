@@ -22,7 +22,12 @@ import {
   periodRowHeight,
   stackedHeights,
 } from "@/features/timetable/lib/empty-period-rows";
-import { sortDaysInGroup, weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import {
+  normalizeWeekdayGrouping,
+  sortDaysInGroup,
+  weekdayPartition,
+  type WeekdayGrouping,
+} from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell } from "./class-cell";
 import { HapbanCell } from "./hapban-cell";
@@ -43,8 +48,8 @@ const GROUP_PALETTE: { band: string; tint: string }[] = [
 ];
 
 // 과목 프리셋 → 평일 그룹 정의. 묶인 요일(길이≥2)=병합 표시, 단독(길이1)=풀너비. 색은 팔레트 순환.
-function buildWeekdayGroupDefs(grouping: WeekdayGrouping): GroupDef[] {
-  return weekdayPartition(grouping).map((days, i) => {
+function buildWeekdayGroupDefs(groups: readonly DayOfWeek[][]): GroupDef[] {
+  return groups.map((days, i) => {
     const pal = GROUP_PALETTE[i % GROUP_PALETTE.length];
     return {
       title: days.map((d) => DAY_LABEL[d] ?? d).join("/"),
@@ -516,14 +521,17 @@ export function WeekdayGroupTables({
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
   weekdayGrouping = "mon-thu",
+  dayGroups,
   collapseEmptyPeriods = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
   /** 조회 중인 주의 월요일("YYYY-MM-DD") — 요일 헤더에 날짜(M/D) 표시(스프레드시트 패리티). */
   weekMonday?: string;
-  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
+  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). dayGroups가 있으면 그쪽이 이긴다. */
   weekdayGrouping?: WeekdayGrouping;
+  /** 이미 풀어 둔 요일 묶음(기본 프리셋 또는 학원이 만든 묶음). */
+  dayGroups?: readonly DayOfWeek[][];
   /** '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(평일·주말 표 각각 판정). 편집 모드는 자동 펼침. */
   collapseEmptyPeriods?: boolean;
 }) {
@@ -537,7 +545,9 @@ export function WeekdayGroupTables({
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
   // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide). 주말은 토/일 항상 풀너비.
-  const weekdayDefs = buildWeekdayGroupDefs(weekdayGrouping);
+  const weekdayDefs = buildWeekdayGroupDefs(
+    dayGroups?.length ? dayGroups : weekdayPartition(normalizeWeekdayGrouping(weekdayGrouping)),
+  );
   const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
   const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
 
