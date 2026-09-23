@@ -1,25 +1,30 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
+import { EditingBadge } from "@/features/presence/editing-badge";
+import { ecsPresenceScope } from "@/features/class-sheets/lib/presence-scope";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { teacherNameFor, type TeacherEnglishNames } from "@/features/teacher-view/teacher-name";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 import { skillAreaColorOf } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import type {
   DayLine,
-  GoalCellState,
   GoalText,
   GoalsBoardRole,
   RoleGoal,
 } from "@/features/class-sheets/lib/goals-board";
+import { GOAL_STATE_DOT } from "@/features/class-sheets/lib/goals-board";
 import type { GoalsBoardRow } from "@/features/class-sheets/server/goals-board";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
+import { GoalsGoalEditor } from "./goals-goal-editor";
 
-/** 칸 상태 → 점 색 · 칸 바탕. 뜻은 의미색 캐논 그대로(같음 = 초록 · 어긋남 = 앰버 · 비어 있음 = 중립). */
-export const GOAL_STATE_DOT: Record<GoalCellState, string> = {
-  same: "bg-green",
-  diff: "bg-amber",
-  weekEmpty: "bg-neutral-fill",
-  none: "",
-};
+const MonthDayEditor = dynamic(() => import("@/features/class-sheets/components/month-day-editor").then((m) => m.MonthDayEditor));
+
 /**
  * 영역 열의 바탕 = 그 영역 라벨 알약과 **같은 색**(원장 2026-09-23 *"열 색상을 해당 라벨 색상과 맞춰서 통일"*).
  * 색은 학원설정 영역 색 단일 소스(`skillAreaColorOf`) — 알약의 옅은 채움(`SUBJECT_SOFT`의 bg 조각)만 빌린다.
@@ -76,6 +81,7 @@ function GoalLine({
   blank,
   dot,
   emphasis = false,
+  muted = false,
 }: {
   label: string;
   pieces: Piece[];
@@ -83,9 +89,10 @@ function GoalLine({
   /** 주 줄에만 — 월간 대비 상태 점. */
   dot?: string;
   emphasis?: boolean;
+  muted?: boolean;
 }) {
   return (
-    <div className={`flex min-w-0 items-start gap-1.5 py-1 text-sm ${emphasis ? "text-amber" : ""}`}>
+    <div className={`flex min-w-0 items-start gap-1.5 py-1 text-sm ${emphasis ? "text-amber" : muted ? "text-text-dim opacity-70" : ""}`}>
       <b className="w-4 shrink-0">{label}</b>
       <div className="flex min-w-0 flex-1 flex-col">
         {pieces.length === 0 ? (
@@ -106,30 +113,39 @@ function GoalLine({
 
 /**
  * 반 계획 보기 표 — 행 = 반, 열 = 영역. 칸 한 개에 월(월간 목표) · 주(주간 목표) · 일(그 날 계획 줄) 세 줄.
- * ⚠️ 행 헤더(반 이름)는 그 주의 반 시트로 가는 링크 — 고치는 곳은 거기 하나다(이 화면은 읽기 전용).
+ * ⚠️ 행 헤더(반 이름)는 그 주의 반 시트로 가는 링크. 월·주·일 줄은 더블클릭해 같은 데이터에 저장한다.
  * ⚠️ 칸 전문은 `title`로(좁은 창에서 말줄임이 걸린다).
  */
 export function GoalsTable({
   rows,
   areas,
   weekMonday,
+  monthStart,
+  date,
   lang,
   role,
   showDay,
-  classLabel,
-  teacherLabel,
+  canEdit,
+  teacherNames,
 }: {
   rows: GoalsBoardRow[];
   areas: SkillAreaSetting[];
   weekMonday: string;
+  monthStart: string;
+  date: string;
   lang: SheetLang;
   role: GoalsBoardRole;
   /** 일간 보기면 세 번째 줄(일)을 그린다 — 주간 보기는 월·주 두 줄. */
   showDay: boolean;
-  /** 화면 언어에 맞춘 반 이름·강사 이름 — 서버 페이지가 표를 갖고 있어 미리 풀어 넘긴다. */
-  classLabel: (name: string) => string;
-  teacherLabel: (name: string | null) => string | null;
+  canEdit: boolean;
+  teacherNames: TeacherEnglishNames;
 }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState<{
+    row: GoalsBoardRow;
+    area: string;
+    scope: "month" | "week" | "day";
+  } | null>(null);
   const t = (k: Parameters<typeof sheetT>[1]) => sheetT(lang, k);
   // 툴팁 줄 — 두 사람 것이면 `담)`·`부)`를 붙여 전부 적는다.
   const line = (label: string, items: RoleGoal[]) =>
@@ -140,7 +156,26 @@ export function GoalsTable({
   const classWidth = 195;
   const areaMinWidth = 170 - (classWidth - 150) / Math.max(areas.length, 1);
   const cols = `${classWidth}px repeat(${areas.length}, minmax(${areaMinWidth}px, 1fr))`;
+  const openEditor = (row: GoalsBoardRow, area: string, scope: "month" | "week" | "day") => {
+    if (!canEdit || (scope === "day" && row.daySlots.length === 0)) return;
+    setEditing({ row, area, scope });
+  };
+  const editableLine = (row: GoalsBoardRow, area: string, scope: "month" | "week" | "day", node: ReactNode) =>
+    canEdit && (scope !== "day" || row.daySlots.length > 0) ? (
+      <div
+        role="button"
+        tabIndex={0}
+        className="w-full cursor-text text-left hover:bg-white/40 focus-visible:outline-2 focus-visible:outline-primary"
+        title={t("goals.editHint")}
+        aria-label={`${classNameFor(row.className, lang)} · ${areas.find((a) => a.key === area)?.label ?? area} · ${t(scope === "month" ? "goals.month" : scope === "week" ? "goals.week" : "goals.day")} · ${t("goals.editHint")}`}
+        onDoubleClick={() => openEditor(row, area, scope)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditor(row, area, scope); } }}
+      >
+        {node}
+      </div>
+    ) : node;
   return (
+    <>
     <DragScrollArea className="bg-card shadow-card rounded-2xl">
       <div style={{ minWidth: classWidth + areas.length * areaMinWidth }}>
         <div
@@ -161,7 +196,8 @@ export function GoalsTable({
           ))}
         </div>
         {rows.map((r) => {
-          const teacher = teacherLabel(r.teacherName);
+          const teacherName = teacherNameFor(r.teacherName, teacherNames, lang);
+          const teacher = teacherName ? sheetTf(lang, "goals.homeroomOf", { name: teacherName }) : null;
           return (
             <div
               key={r.classId}
@@ -174,9 +210,10 @@ export function GoalsTable({
                   className="text-foreground truncate text-base font-bold hover:underline"
                   title={r.className}
                 >
-                  {classLabel(r.className)}
+                  {classNameFor(r.className, lang)}
                 </WindowLink>
                 {teacher ? <span className="truncate text-sm">{teacher}</span> : null}
+                <EditingBadge scope={ecsPresenceScope(r.classId, weekMonday)} className="self-start" />
               </div>
               {r.cells.map((c) => {
                 const dayText = !r.hasLessonOnDate && c.day.length === 0
@@ -196,20 +233,21 @@ export function GoalsTable({
                           : [`${t("goals.day")} ${dayText ?? t("goals.blank")}`]),
                     ].join("\n")}
                   >
-                    <GoalLine label={t("goals.month")} pieces={piecesOf(c.month, role, lang)} blank={t("goals.blank")} />
-                    <GoalLine
+                    {editableLine(r, c.area, "month", <GoalLine label={t("goals.month")} pieces={piecesOf(c.month, role, lang)} blank={t("goals.blank")} />)}
+                    {editableLine(r, c.area, "week", <GoalLine
                       label={t("goals.week")}
                       pieces={piecesOf(c.week, role, lang)}
                       blank={t("goals.blank")}
                       dot={GOAL_STATE_DOT[c.state]}
                       emphasis={c.state === "diff"}
-                    />
+                    />)}
                     {showDay ? (
-                      <GoalLine
+                      editableLine(r, c.area, "day", <GoalLine
                         label={t("goals.day")}
                         pieces={dayText ? [{ text: dayText, bold: false, prefix: null }] : []}
                         blank={t("goals.blank")}
-                      />
+                        muted={dayText === t("goals.noLesson")}
+                      />)
                     ) : null}
                   </div>
                 );
@@ -219,5 +257,34 @@ export function GoalsTable({
         })}
       </div>
     </DragScrollArea>
+    {editing?.scope === "day" ? (
+      <MonthDayEditor
+        key={`${editing.row.classId}:${date}`}
+        classId={editing.row.classId}
+        className={editing.row.className}
+        date={date}
+        slots={editing.row.daySlots}
+        periodLabelBySlot={{}}
+        focusArea={areas.find((a) => a.key === editing.area)}
+        onClose={() => setEditing(null)}
+        onSaved={() => router.refresh()}
+      />
+    ) : editing ? (
+      <GoalsGoalEditor
+        key={`${editing.row.classId}:${editing.area}:${editing.scope}`}
+        classId={editing.row.classId}
+        className={editing.row.className}
+        area={areas.find((a) => a.key === editing.area)!}
+        scope={editing.scope}
+        periodStart={editing.scope === "month" ? monthStart : weekMonday}
+        items={editing.row.cells.find((c) => c.area === editing.area)![editing.scope]}
+        role={role}
+        weekMonday={weekMonday}
+        lang={lang}
+        onClose={() => setEditing(null)}
+        onSaved={() => router.refresh()}
+      />
+    ) : null}
+    </>
   );
 }

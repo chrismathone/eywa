@@ -42,6 +42,12 @@ export function normalizeGoalsBoardView(raw: unknown): GoalsBoardView {
 
 export type GoalText = { textbook: string | null; targetProgress: string | null };
 export type GoalCellState = "same" | "diff" | "weekEmpty" | "none";
+export const GOAL_STATE_DOT: Record<GoalCellState, string> = {
+  same: "bg-green",
+  diff: "bg-amber",
+  weekEmpty: "bg-neutral-fill",
+  none: "",
+};
 
 /** 칸에 적힌 것이 있나 — 입력했다 지운 행(빈 문자열)은 없는 것과 같다. */
 export function hasGoal(g: GoalText | null | undefined): g is GoalText {

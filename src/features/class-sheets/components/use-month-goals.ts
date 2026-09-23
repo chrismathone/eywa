@@ -24,18 +24,23 @@ const SAVE_DELAY_MS = 600;
 
 export function useMonthGoals(input: {
   classId: string;
-  /** 그 달 1일(`class_sheet_goals.period_start`) — 액션이 다시 정규화하지만 여기서도 맞춰 보낸다. */
+  /** 반 계획 보기의 주간 목표도 같은 자동저장 큐를 쓴다. */
+  scope?: "month" | "week";
+  /** 월간이면 그 달 1일, 주간이면 그 주 월요일(`class_sheet_goals.period_start`). */
   periodStart: string;
   initial: { homeroom: MonthGoalMap; assistant: MonthGoalMap };
 }) {
-  const { classId, periodStart, initial } = input;
+  const { classId, periodStart, initial, scope = "month" } = input;
   const [goals, setGoals] = useState(initial);
   const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<string | null>(null);
+  const failedKeys = useRef(new Map<string, string>());
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const pending = useRef(new Map<string, { role: GoalRole; skillArea: string }>());
   /** 이미 떠난 저장 — `flushAll`이 이것까지 기다린다(디바운스가 먼저 발화한 저장도 도착한 뒤에 움직이게). */
   const inflight = useRef(new Set<Promise<void>>());
+  const discarded = useRef(false);
   /** 저장 실패 시 되돌릴 값 — 낙관적 반영 직전의 스냅샷. */
   const lastSaved = useRef(initial);
   /**
@@ -48,6 +53,13 @@ export function useMonthGoals(input: {
    * (updater는 StrictMode에서 두 번 불릴 수 있어 그 안에 부수효과를 두면 저장이 두 번 나간다.)
    */
   const goalsRef = useRef(initial);
+  const recordError = useCallback((key: string, message: string | null) => {
+    if (message) failedKeys.current.set(key, message);
+    else failedKeys.current.delete(key);
+    const next = failedKeys.current.values().next().value ?? null;
+    errorRef.current = next;
+    setError(next);
+  }, []);
 
   // ⚠️ 서버 값이 바뀌면(달 이동·반 전환) **페이지가 컴포넌트를 새로 세운다**(`key={classId:month}`) —
   //    effect로 state를 덮어쓰면 React 19가 막는 캐스케이딩 렌더가 되고([[#25]]), 무엇보다 타이핑 중에
@@ -59,7 +71,7 @@ export function useMonthGoals(input: {
       const sentGen = editGen.current.get(key) ?? 0;
       const job: Promise<void> = upsertGoal({
         classId,
-        scope: "month",
+        scope,
         periodStart,
         role,
         skillArea,
@@ -70,13 +82,13 @@ export function useMonthGoals(input: {
           if (res.ok) {
             lastSaved.current = { ...lastSaved.current, [role]: { ...lastSaved.current[role], [skillArea]: cell } };
             setSavedAt(Date.now());
-            setError(null);
+            recordError(key, null);
             return;
           }
           // 실패는 되돌린다 — 화면에만 남은 목표는 경고 판정을 조용히 뒤집는다.
           // ⚠️ 입력칸은 `defaultValue`(비컨트롤드)라 글자는 그대로 남는다 — 되돌아가는 건 **판정에 쓰는 값**이다.
           //    (컨트롤드로 바꾸면 저장 왕복마다 커서가 튄다.)
-          setError(res.error);
+          recordError(key, res.error);
           // 🔴 이 저장이 떠난 뒤 같은 키에 새로 친 값이 있으면(세대가 바뀜) **되돌리지 않는다** — 되돌리면 그 새 값까지
           //    지워지고, 뒤따르는 타이머·flush가 **옛 값**을 보내 화면엔 '저장됨'이 뜬다(재리뷰 2026-09-14).
           //    새 값의 저장이 곧 나가고, 그것도 실패하면 그때 되돌린다.
@@ -91,7 +103,8 @@ export function useMonthGoals(input: {
         .catch((e: unknown) => {
           // 액션은 {ok:false}로 실패를 알리지만 **네트워크가 끊기면 reject**된다 — 안 잡으면
           // unhandled rejection이 되고, 이 Promise에 이동을 매단 화면이 영영 안 움직인다.
-          setError(e instanceof Error ? e.message : "네트워크 오류로 저장하지 못했습니다");
+          const message = e instanceof Error ? e.message : "네트워크 오류로 저장하지 못했습니다";
+          recordError(key, message);
         })
         .finally(() => {
           // 🔴 저장 중에 같은 키(역할·영역)에 새 입력이 들어와 **타이머가 다시 섰으면** 그 대기분은 지우지 않는다 —
@@ -103,7 +116,7 @@ export function useMonthGoals(input: {
       inflight.current.add(job);
       return job;
     },
-    [classId, periodStart],
+    [classId, periodStart, scope, recordError],
   );
 
   const setField = useCallback(
@@ -140,6 +153,7 @@ export function useMonthGoals(input: {
    *    읽거나 칸 편집 감사로그가 DB를 읽을 때 아직 도착 전 값을 본다.
    */
   const flushAll = useCallback((): Promise<void> => {
+    if (discarded.current) return Promise.resolve();
     for (const [key, timer] of [...timers.current]) {
       clearTimeout(timer);
       // 끈 타이머는 대상이 없어도 지운다 — 남겨 두면 위 finally가 "대기 중"으로 읽어 대기분을 영영 못 지운다.
@@ -151,8 +165,16 @@ export function useMonthGoals(input: {
     return Promise.all([...inflight.current]).then(() => undefined);
   }, [flushKey]);
 
+  /** 저장 실패 뒤 편집기를 닫을 때 아직 타이머에 있는 입력만 취소한다. 이미 떠난 요청은 취소할 수 없다. */
+  const discardPending = () => {
+    discarded.current = true;
+    for (const timer of timers.current.values()) clearTimeout(timer);
+    timers.current.clear();
+    pending.current.clear();
+  };
+
   // 언마운트 시에도 한 번 — 사람이 이동 버튼을 안 누르고 창을 닫는 길이 있다(여기선 기다릴 수 없다).
   useEffect(() => () => void flushAll(), [flushAll]);
 
-  return { goals, setField, flushAll, error, savedAt, dismissError: () => setError(null) };
+  return { goals, setField, flushAll, discardPending, error, savedAt, getError: () => errorRef.current, dismissError: () => { failedKeys.current.clear(); errorRef.current = null; setError(null); } };
 }

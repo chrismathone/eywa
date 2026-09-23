@@ -175,7 +175,7 @@ export const PlanRow = memo(function PlanRow({
   const areaCls = `${SHEET_BOX_FRAME} w-full cursor-pointer px-1 text-sm font-bold outline-none focus:border-primary ${SUBJECT_SOFT[areaTone]}`;
 
   return (
-    <tr className="align-top">
+    <tr className="align-top" data-skill-area={areaValue ?? undefined}>
       <td className="py-0.5 pr-1">
         {canEdit ? (
           <select
