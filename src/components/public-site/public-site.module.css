@@ -35,8 +35,9 @@
 .loginStoryCopy h2 { font-size: clamp(34px, 3.5vw, 50px); line-height: 1.25; font-weight: 700; letter-spacing: -.05em; }
 .loginStoryCopy > p { color: var(--public-muted); margin-top: 20px; font-size: 15px; line-height: 1.9; }
 .loginPhoto { position: relative; min-height: 270px; flex: 1; overflow: hidden; border-radius: 90px 12px 0 0; background: #d5e2ef; }
-/* 영상은 세로(480×608)라 가로 넓은 칸에서 위아래가 잘린다 — 복도 끝·사람이 보이도록 위쪽을 남긴다(원장 "너무 아래쪽이니까 올려주고"). */
-.loginVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 22%; }
+/* 영상은 세로(624×832)라 가로 넓은 칸에서 위아래가 잘린다 — 복도와 창이 남도록 가운데 위쪽을 보인다
+   (원장 2026-09-23에 준 새 영상으로 교체, 음소거 그대로). */
+.loginVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 40%; }
 
 /* 오른쪽 = 맨 폼 */
 .loginMain { display: flex; flex-direction: column; padding: 44px 52px 26px; min-width: 0; }
