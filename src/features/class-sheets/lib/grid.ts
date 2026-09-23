@@ -8,7 +8,8 @@
 //    섹션 — 시간표 셀과 같은 창). 반이동 전출(is_transferred)은 새 반에서 보이므로 옛 반엔 안 남긴다.
 //  · 과거 데이터 보존: 로스터 = eligible ∪ 퇴원 유예 ∪ 그 슬롯 mark 보유 ∪ 그 날짜 effective 출석 보유
 //    (비eligible은 historical 읽기 전용). 스케줄 없는 날짜의 출석은 가짜 슬롯 없이 attendanceOnly로 분리.
-//  · 고아 슬롯: 계획·마크·슬롯 메모가 있는데 그 날짜 스케줄에 없는 (date,slot) — 표시는 유지(소실 금지).
+//  · 고아 슬롯: 계획·마크·슬롯 메모가 있는데 그 날짜 스케줄에 없는 (date,slot) — **카드로 안 세우고**
+//    `strayRecords` 각주로만 알린다(2026-09-22 원장 지시. 카드가 서면 그 칸에 출결이 들어가 시수가 갈린다).
 //  · 자리(LAB·JJ): 판정은 `hiddenSeatOf` 하나 — **LAB은 항상 제외**(전용 출석부로 이관 예정, 원장
 //    2026-08-06)이고 상단 토글이 정하는 건 **JJ뿐**이다. 안 그린 자리에 기록이 남아 있으면 `hiddenSpecial`에
 //    자리별 건수로 알린다(조용히 사라지면 "쓴 게 증발했다"가 된다 — 07-31에 실제로 밟은 함정).
@@ -129,7 +130,10 @@ export type RosterEntry = {
 export type GridSlot = {
   slotStart: string; // "HH:MM"
   slotEnd: string | null; // 고아 슬롯은 null
-  /** 그 날짜에 유효한 스케줄이 실재하는가. false=고아(시간 변경됨 — 데이터만 남음). */
+  /**
+   * 그 날짜에 유효한 스케줄이 실재하는가. `buildWeekGrid`는 **true인 칸만** 담는다(2026-09-22~ — 고아는
+   * `strayRecords` 각주). 소비처의 `scheduled` 게이트는 그대로 둔다(다른 빌더·옛 데이터에 대한 방어).
+   */
   scheduled: boolean;
   teacherId: string | null;
   // slot_teacher_label을 **해석기(resolveTeacherLabel)를 통과시킨 표시명** — 로더(queries.ts)가 이미
@@ -155,7 +159,7 @@ export type GridDay = {
 
 export type WeekGrid = {
   weekMonday: string;
-  days: GridDay[]; // 슬롯(스케줄 or 고아 데이터)이 있는 날짜만
+  days: GridDay[]; // 그 날짜에 **유효한 스케줄이 있는** 교시만(고아는 strayRecords로)
   /** 스케줄이 전혀 없는 날짜의 출석 기록 — 별도 영역 표시(가짜 슬롯 금지). */
   attendanceOnly: { date: string; studentIds: string[] }[];
   /**
@@ -166,10 +170,23 @@ export type WeekGrid = {
    *    화면에서 되돌릴 길이 없다(항상 제외) — 한 문장으로 뭉치면 둘 중 한쪽이 반드시 거짓말이 된다.
    */
   hiddenSpecial: HiddenSeatCount[];
+  /**
+   * **시간표에 없는 시각**(고아)에 남아 있는 기록 — 카드로 세우지 않고 건수만 각주로 알린다
+   * (원장 2026-09-22 *"본인 수업 스케줄만 나오면 될거같은데"*).
+   *
+   * 🔴 **카드를 세우면 사람이 거기에 출결까지 넣는다.** 실측(중등E_초등 브릿지 A): 9/17에 교시 시각이
+   *    바뀌었는데 미리 적어 둔 계획 줄이 옛 시각(15:40·16:20)에 남아 카드가 섰고, 그 카드에 출결 16건이
+   *    들어가 **한 수업의 시수가 두 칸으로 갈리거나 겹쳤다**(9/22은 학생당 3.0시수 = 실제의 두 배).
+   * ⚠️ 그래도 **숨기지는 않는다** — 건수를 각주로 남긴다(기록은 DB에 그대로 있고, 고치는 곳은 출석부다).
+   */
+  strayRecords: StraySlotCount[];
 };
 
 /** 안 그린 자리 하나의 기록 요약(기록이 0건인 자리는 담지 않는다). */
 export type HiddenSeatCount = { seat: SpecialSlotLabel; slots: number; records: number };
+
+/** 시간표에 없는 시각 하나 — `records`는 의미 있는 계획 줄·마크·슬롯 메모의 합(0이면 각주에 안 적는다). */
+export type StraySlotCount = { date: string; slotStart: string; records: number };
 
 function slotKey(date: string, slot: string): string {
   return `${date}|${slot}`;
@@ -598,6 +615,19 @@ export function buildWeekGrid(input: {
   const attendanceOnly: { date: string; studentIds: string[] }[] = [];
   // 자리별 누계 — 되돌리는 방법이 자리마다 달라 한 덩어리로 못 센다(WeekGrid.hiddenSpecial 주석).
   const hiddenBySeat = new Map<SpecialSlotLabel, { slots: number; records: number }>();
+  const strayRecords: StraySlotCount[] = [];
+  /** 그 칸에 남아 있는 '의미 있는' 기록 수 — 각주(자리·고아)가 같은 셈을 쓴다. */
+  const recordsAt = (key: string) =>
+    (linesByKey.get(key) ?? []).filter((l) =>
+      isMeaningfulPlanLine({
+        textbook: l.textbook,
+        pageRange: l.pageRange,
+        progress: l.progress,
+        homework: l.homework,
+      }),
+    ).length +
+    (marksByKey.get(key)?.length ?? 0) +
+    (memoSlotKeys.has(key) ? 1 : 0);
 
   for (const date of dates) {
     const dow = dowKeyOf(date);
@@ -620,20 +650,15 @@ export function buildWeekGrid(input: {
     const hiddenSeatAt = (slot: string) =>
       hiddenSeatOf(scheduledByKey.get(slotKey(date, slot))?.slotTeacherLabel ?? null, includeSelfStudy);
     for (const slot of slotStarts) {
+      const key = slotKey(date, slot);
+      // 시간표에 없는 시각(고아) — 카드를 안 세우고 각주로만(WeekGrid.strayRecords 주석).
+      if (!scheduledByKey.has(key)) {
+        strayRecords.push({ date, slotStart: slot, records: recordsAt(key) });
+        continue;
+      }
       const seat = hiddenSeatAt(slot);
       if (!seat) continue;
-      const key = slotKey(date, slot);
-      const records =
-        (linesByKey.get(key) ?? []).filter((l) =>
-          isMeaningfulPlanLine({
-            textbook: l.textbook,
-            pageRange: l.pageRange,
-            progress: l.progress,
-            homework: l.homework,
-          }),
-        ).length +
-        (marksByKey.get(key)?.length ?? 0) +
-        (memoSlotKeys.has(key) ? 1 : 0);
+      const records = recordsAt(key);
       if (records > 0) {
         const cur = hiddenBySeat.get(seat) ?? { slots: 0, records: 0 };
         cur.slots += 1;
@@ -643,7 +668,7 @@ export function buildWeekGrid(input: {
     }
 
     const slots: GridSlot[] = [...slotStarts]
-      .filter((slot) => !hiddenSeatAt(slot))
+      .filter((slot) => scheduledByKey.has(slotKey(date, slot)) && !hiddenSeatAt(slot))
       .sort()
       .map((slot) => {
       const key = slotKey(date, slot);
@@ -697,7 +722,7 @@ export function buildWeekGrid(input: {
     return c ? [{ seat, slots: c.slots, records: c.records }] : [];
   });
 
-  return { weekMonday: input.weekMonday, days, attendanceOnly, hiddenSpecial };
+  return { weekMonday: input.weekMonday, days, attendanceOnly, hiddenSpecial, strayRecords };
 }
 
 /**
@@ -716,14 +741,12 @@ export function sheetFillStats(grid: WeekGrid): {
   /** 휴일인데 계획이 있어 **한 일로 인정**된 교시 수(분모·분자에 함께 들어간 수). */
   holidayFilledSlots: number;
 } {
-  let orphan = 0;
+  // 고아(시간표에 없는 시각)는 2026-09-22부터 카드로 안 선다 — 수는 `strayRecords`에서 센다.
+  const orphan = grid.strayRecords.length;
   const cells: { holiday: boolean; written: boolean }[] = [];
   for (const day of grid.days) {
     for (const slot of day.slots) {
-      if (!slot.scheduled) {
-        orphan += 1;
-        continue;
-      }
+      if (!slot.scheduled) continue; // 방어(이 빌더는 스케줄 있는 칸만 담는다)
       const meaningful = slot.lines.some((l) =>
         isMeaningfulPlanLine({
           textbook: l.textbook,

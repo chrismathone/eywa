@@ -64,11 +64,10 @@ describe("buildWeekGrid — 실날짜별 슬롯 유효성", () => {
     });
     const wed = grid.days.find((d) => d.date === "2026-07-22");
     expect(wed).toBeDefined();
-    const s15 = wed!.slots.find((s) => s.slotStart === "15:00");
-    const s16 = wed!.slots.find((s) => s.slotStart === "16:00");
-    expect(s15?.scheduled).toBe(false); // 고아(계획은 보존)
-    expect(s15?.lines).toHaveLength(1);
-    expect(s16?.scheduled).toBe(true);
+    // 고아(옛 시각)는 카드로 안 선다 — 각주(strayRecords)로만(원장 2026-09-22). 그 날 도는 교시만 남는다.
+    expect(wed!.slots.map((s) => s.slotStart)).toEqual(["16:00"]);
+    expect(wed!.slots[0].scheduled).toBe(true);
+    expect(grid.strayRecords).toEqual([{ date: "2026-07-22", slotStart: "15:00", records: 1 }]);
   });
 
   it("스케줄도 데이터도 없는 날짜는 렌더 대상이 아니다", () => {
@@ -467,7 +466,7 @@ describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아�
     ]);
   });
 
-  it("고아 판정은 계획∪마크∪슬롯메모 합집합 — 마크만 있어도 슬롯 보존", () => {
+  it("고아 판정은 계획∪마크∪슬롯메모 합집합 — 카드는 안 세우고 각주로 알린다", () => {
     const grid = buildWeekGrid({
       weekMonday: MON,
       schedules: [],
@@ -477,8 +476,12 @@ describe("buildWeekGrid — 과거 데이터 보존(합집합 로스터·고아�
       attendance: [],
       slotMemoKeys: ["slot:2026-07-21:18:00"],
     });
-    expect(grid.days.map((d) => d.date)).toEqual(["2026-07-21", "2026-07-24"]);
-    expect(grid.days.every((d) => d.slots[0].scheduled === false)).toBe(true);
+    // 스케줄이 하나도 없으므로 카드가 설 날짜가 없다 — 남은 기록은 각주로만 드러난다.
+    expect(grid.days).toEqual([]);
+    expect(grid.strayRecords).toEqual([
+      { date: "2026-07-21", slotStart: "18:00", records: 1 },
+      { date: "2026-07-24", slotStart: "17:00", records: 1 },
+    ]);
   });
 
   it("스케줄 없는 날짜의 출석은 가짜 슬롯 없이 attendanceOnly로 분리", () => {
