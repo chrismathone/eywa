@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-23 (8) — 직원관리 과목 범위: 정유진=영어 · 허은진=수학 선생님만
+
+두 부원장에게 직원관리를 연다(개인 예외 staff full). 보이는 직원은 담당 과목(`users.subjects`)으로 좁힌다 —
+목록은 서버에서 빼고, 상세·근무 설정·휴가·이력서·계정·계약 액션은 `canSeeStaffMember`로 막는다(범위 밖 = 404 / 거절).
+명단은 `src/features/staff/subject-scope.ts`(user id), 메뉴 열기는 `scripts/staff-access/narrow-staff-menu.mjs --tenant cs --apply`.
+
 ## 2026-09-23 (7) — 요일 병합을 목록에서 빼고, 토·일도 묶는다
 
 과목 운영에서 만든 묶음은 **목록에서 빼기** 버튼으로 뺀다. 토·일도 고를 수 있고, 토·일은 서로만 묶인다.

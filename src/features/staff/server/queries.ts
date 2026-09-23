@@ -7,6 +7,8 @@ import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import type { SystemRole } from "@/lib/permissions";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getDeskAttendanceOptin } from "@/features/attendance/live/server/desk-optin";
+import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
+import { canSeeStaffMember, getViewerStaffScope } from "./subject-scope";
 import {
   WORK_DAYS,
   WORK_TIME_RANGE,
@@ -103,6 +105,16 @@ export async function getStaffList(): Promise<StaffRow[]> {
   ]);
 
   if (!users) return [];
+  // 과목 범위(원장 2026-09-23 — 정유진=영어·허은진=수학 선생님만). 범위 밖 직원은 **목록에서 뺀다**
+  // (화면 필터가 아니라 서버에서 — 표·검색·필터가 전부 이 배열을 쓴다). 본인은 항상 남긴다.
+  const scope = viewer ? await getViewerStaffScope(viewer) : null;
+  const visibleUsers = scope
+    ? users.filter(
+        (u) =>
+          u.id === viewer?.id ||
+          isStaffInSubjectScope(scope, Array.isArray(u.subjects) ? (u.subjects as string[]) : []),
+      )
+    : users;
   const hasContractFile = new Set(contractFileRows.map((r) => r.staff_user_id));
 
   // 사람별 현재 계약 = 가장 큰 차수(위에서 seq 오름차순이라 마지막 것이 최신).
@@ -134,7 +146,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     }
   }
 
-  return users.map((u) => ({
+  return visibleUsers.map((u) => ({
     id: u.id,
     displayName: u.display_name,
     email: u.email,
@@ -255,6 +267,14 @@ export async function getStaffById(id: string): Promise<StaffDetail | null> {
     .single();
 
   if (!data) return null;
+  // 과목 범위 밖 직원은 없는 것처럼(상세·근무 설정·휴가·급여·이력서 작성이 전부 이 함수로 대상을 읽는다 → 404).
+  const viewer = await getCurrentUser();
+  if (
+    !viewer ||
+    !(await canSeeStaffMember(viewer, data.id, Array.isArray(data.subjects) ? (data.subjects as string[]) : []))
+  ) {
+    return null;
+  }
 
   // 자리·셔틀 담당, 데스크 알림, 강사뷰 접근 컬럼은 0209a/0212a/0224a/0227a 이후.
   // 없으면 빈 값으로 — 직원 상세를 죽이지 않는다(#95). 넷 다 독립이라 함께 받는다(B4).

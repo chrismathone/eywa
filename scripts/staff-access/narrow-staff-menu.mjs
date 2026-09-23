@@ -69,6 +69,10 @@ const GRANTEES = [
   { name: "김예원", role: "admin" }, // 2026-08-05 원장 추가 지시
   { name: "오은진", role: "admin" }, // 2026-08-06 원장 추가 지시
   { name: "엄소윤", role: "admin" }, // 2026-08-11 원장 추가 지시("데스크 직원이여서 필요함")
+  // 2026-09-23 원장 지시 — 부원장 둘. **과목 범위**가 함께 걸려 자기 과목 선생님만 보인다
+  // (src/features/staff/subject-scope.ts — 메뉴는 여기서 열고, 무엇이 보이는지는 그 파일이 정한다).
+  { name: "정유진", role: "admin" }, // 영어 선생님만
+  { name: "허은진", role: "admin" }, // 수학 선생님만
 ];
 // 역할 잠금 대상(코드 기본값이 full인 역할만; counselor는 기존 readonly override 제거로 잠김).
 const CLOSE_ROLES = ["admin", "manager", "accountant"];

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MEDIA_KIND, removeObject, resolveTenantReadUrl } from "@/lib/storage/media-storage";
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
@@ -40,6 +41,7 @@ export async function registerStaffContractFile(
   const fileName = String(formData.get("fileName") ?? "").trim() || "계약서.pdf";
   const fileSize = Number(formData.get("fileSize") ?? 0);
   if (!userId) return { error: "직원을 찾을 수 없습니다" };
+  if (!(await canSeeStaffMember(gate.user, userId))) return { error: STAFF_SCOPE_DENIED_MSG };
   if (!path || !isTenantDocumentPath(path, gate.user.tenantId)) {
     return { error: "파일 경로가 올바르지 않습니다 — 다시 첨부하세요" };
   }
@@ -91,6 +93,7 @@ export async function deleteStaffContractFile(
   const docId = String(formData.get("docId") ?? "").trim();
   const userId = String(formData.get("userId") ?? "").trim();
   if (!docId || !userId) return { error: "삭제할 계약서를 찾을 수 없습니다" };
+  if (!(await canSeeStaffMember(gate.user, userId))) return { error: STAFF_SCOPE_DENIED_MSG };
 
   const admin = createAdminClient();
   const { data: row, error: readErr } = await admin
@@ -140,13 +143,14 @@ export async function signStaffContractFileUrl(
 
   const { data: row } = await createAdminClient()
     .from("academy_documents")
-    .select("file_path, file_name")
+    .select("file_path, file_name, staff_user_id")
     .eq("tenant_id", user.tenantId)
     .eq("id", docId)
     .eq("kind", "file")
     .not("staff_user_id", "is", null)
     .maybeSingle();
   if (!row?.file_path) return { error: "파일을 찾을 수 없습니다" };
+  if (!(await canSeeStaffMember(user, row.staff_user_id as string))) return { error: STAFF_SCOPE_DENIED_MSG };
   try {
     const fileName = row.file_name ?? row.file_path.split("/").pop() ?? "contract.pdf";
     return {

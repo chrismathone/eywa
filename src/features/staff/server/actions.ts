@@ -11,6 +11,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { moveLiveSlotTeacher, reassignHomeroom } from "@/features/classes/server/handover";
 import { notifyUsers } from "@/features/notifications/server/notify";
@@ -243,6 +244,7 @@ export async function updateStaff(
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "직원 ID가 누락되었습니다" };
+  if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
 
   const input = readBaseForm(formData);
 
@@ -452,6 +454,7 @@ export async function changeStaffRole(
   const newRole = String(formData.get("newRole") ?? "") as SystemRole;
   if (!id) return { error: "직원 ID가 누락되었습니다" };
   if (!ROLES.includes(newRole)) return { error: "유효한 역할이 아닙니다" };
+  if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
 
   const admin = createAdminClient();
 
@@ -562,6 +565,7 @@ export async function deactivateStaff(
   // 본인을 퇴사 처리하면 그 자리에서 자기 접근이 끊긴다(복구는 다른 원장·관리자만 가능) — 원천 차단.
   // 삭제(deleteStaff)와 같은 self 가드. 동급 관리가 열린 뒤(2026-07-29)엔 실수로 닿기 더 쉬워졌다.
   if (id === actor.id) return { error: "본인 계정의 재직 상태는 바꿀 수 없습니다" };
+  if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
   const next = String(formData.get("next") ?? "inactive");
   if (!STATUSES.includes(next as "active" | "inactive" | "pending")) {
     return { error: "유효한 상태가 아닙니다" };
@@ -627,6 +631,7 @@ export async function handoverAndDeactivate(
   if (!id) return { error: "직원 ID가 누락되었습니다" };
   // deactivateStaff와 같은 self 가드 — 본인을 퇴사시키면 그 자리에서 자기 접근이 끊긴다.
   if (id === actor.id) return { error: "본인 계정의 재직 상태는 바꿀 수 없습니다" };
+  if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
 
   const supabase = await createClient();
   const skip = String(formData.get("mode") ?? "") === "skip";
