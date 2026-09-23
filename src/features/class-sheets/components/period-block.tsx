@@ -136,14 +136,9 @@ export const PeriodBlock = memo(function PeriodBlock({
             {roomNameFor(slot.roomLabel, lang)}
           </span>
         ) : null}
-        {!slot.scheduled ? (
-          <span
-            className="border-amber/50 bg-amber-soft text-amber rounded-full border px-2 py-0.5 text-xs font-bold whitespace-nowrap"
-            title={t("slot.orphan.title")}
-          >
-            {t("slot.orphan")}
-          </span>
-        ) : null}
+        {/* 🔴 '시간 변경됨' 배지는 없앴다 — 원장 2026-09-23 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"*.
+            `buildWeekGrid`가 2026-09-22부터 고아 교시를 아예 안 내려보내 어차피 죽은 가지였다(`scheduled`
+            게이트 자체는 Shouting 등 다른 소비처가 아직 쓰므로 그대로 둔다). 기록은 지우지 않는다. */}
         {/* Shouting 체크 — **EiE 반만**(부모가 onShouting을 줄 때만 그린다). 머리 줄 오른쪽 끝, 구분선 위
             (원장 2026-08-27 "우상단에 우측정렬해서 구분선 위쪽에"). 라벨까지 눌리게 label로 감싼다. */}
         {onShouting ? (

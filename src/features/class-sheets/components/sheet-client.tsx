@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmbedLink } from "@/components/embed-link";
 // 강사뷰 화면 언어(2026-09-03) — 반 이름은 번역 대상이 아니고 안내·링크 글자만 사전을 탄다.
-import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { classNameFor } from "@/features/teacher-view/class-name";
 import { useRouter } from "next/navigation";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
@@ -1072,8 +1072,8 @@ export function SheetClient({
              (항상 제외). 한 문장으로 뭉치면 둘 중 하나는 반드시 거짓말이 된다.
           ⚠️ 오늘 변형엔 그 토글(SheetToolbar)이 없다 — 없는 컨트롤을 가리키면 거짓 안내이므로 문구를
              '주간 시트의 토글'로 바꾼다(건수는 주 전체 기준임을 함께 밝힌다). */}
-      {/* 시간표에 없는 시각(고아)에 남은 기록 — 카드는 안 세우고 건수만(원장 2026-09-22). 고치는 곳은 출석부다. */}
-      <StrayNote stray={data.grid.strayRecords} />
+      {/* 🔴 시간표에 없는 시각(고아)은 카드도 각주도 세우지 않는다 — 원장 2026-09-23 *"앞으로 안뜨게하면 되고
+          이전 데이터들은 무시해"*. 기록은 지우지 않고 `grid.strayRecords`에 그대로 남아 있다(작성률 분모 밖). */}
 
       {data.grid.hiddenSpecial.map((h) => (
         <p key={h.seat} className="text-text-dim px-1 text-xs">
@@ -1087,25 +1087,6 @@ export function SheetClient({
         </p>
       ))}
     </div>
-  );
-}
-
-/**
- * 시간표에 없는 시각에 남은 기록 각주 — 카드를 안 세우는 대신 **몇 곳에 몇 건이** 남았는지 밝힌다.
- * 🔴 기록이 0건인 곳(빈 줄만 남은 칸)은 적지 않는다 — 사람이 손댈 것이 없는데 경고처럼 읽힌다.
- */
-function StrayNote({ stray }: { stray: { date: string; slotStart: string; records: number }[] }) {
-  const tf = useSheetTf();
-  const shown = stray.filter((s) => s.records > 0);
-  if (shown.length === 0) return null;
-  const when = shown
-    .map((s) => `${Number(s.date.slice(5, 7))}/${Number(s.date.slice(8, 10))} ${s.slotStart}`)
-    .join(" · ");
-  const records = shown.reduce((n, s) => n + s.records, 0);
-  return (
-    <p className="text-text-dim px-1 text-xs">
-      {tf("slot.stray.note", { slots: shown.length, when, records })}
-    </p>
   );
 }
 
