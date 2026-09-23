@@ -54,6 +54,7 @@ export function MonthClient({
   initialView,
   initialDisplay,
   fromWeek,
+  textbooksOn,
 }: {
   data: ClassSheetMonthData;
   /**
@@ -66,6 +67,8 @@ export function MonthClient({
   initialDisplay: Record<EcsMonthView, EcsMonthDisplay>;
   /** 주소가 들고 온 **"왔던 주"** — 주간 시트에서 넘어왔을 때만 있다(없으면 null). */
   fromWeek: string | null;
+  /** 교재목록 모듈이 켜져 있나 — 꺼진 학원엔 [교재 배정] 입구를 세우지 않는다(서버도 거절한다). */
+  textbooksOn: boolean;
 }) {
   const router = useRouter();
   const embed = useEmbed();
@@ -332,7 +335,7 @@ export function MonthClient({
         <span className="ml-auto flex flex-wrap items-center gap-2">
           {/* 🔴 배정은 **여기서** 한다(원장 2026-09-16) — 교재목록의 '반 배정' 탭은 읽기 전용이다.
               쓰기 게이트는 서버(`requireEcsClassAccess`)라 이 조건은 게이트가 아니다([[#77]]). */}
-          {data.canEdit ? (
+          {data.canEdit && textbooksOn ? (
             <button
               type="button"
               onClick={() => setFillOpen(true)}

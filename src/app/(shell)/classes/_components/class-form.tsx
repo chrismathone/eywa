@@ -31,17 +31,7 @@ import { ClassEnglishTrackField } from "./class-english-track-field";
 import { DEFAULT_ENGLISH_TRACK, normalizeEnglishTrack, type EnglishTrack } from "@/features/classes/english-track";
 import { CUSTOM_SLOTS_ANCHOR_ID, CustomTimeSlots } from "./custom-time-slots";
 import { OverlapNotice } from "./overlap-notice";
-
-// 설정(operations.subjects) 미전달 경로용 폴백 = DEFAULT_SETTINGS.subjects와 동일 키/순서로 유지
-// (드리프트 방지). 서버 부모가 subjectOptions를 주면 그 값(=테넌트 설정)이 우선한다.
-const DEFAULT_SUBJECT_OPTIONS = [
-  { value: "math", label: "수학" },
-  // 수학(심화)는 subject_1로 통일(highmath 폐기, 2026-06-19). DEFAULT_SETTINGS.subjects와 키/순서 일치.
-  { value: "subject_1", label: "수학(심화)" },
-  { value: "english", label: "영어" },
-  { value: "science", label: "과학" },
-  { value: "korean", label: "국어" },
-];
+import { useSubjectMaps } from "@/features/owner/operations-context";
 
 type Schedule = {
   dayOfWeek: string;
@@ -136,7 +126,10 @@ export function ClassForm({
    */
   showEnglishTrack?: boolean;
 }) {
-  const subjects = subjectOptions ?? DEFAULT_SUBJECT_OPTIONS;
+  // 🔴 과목 선택지는 학원설정 단일 소스 — 서버 부모가 안 주면 셸의 `OperationsProvider`에서 읽는다
+  //    (옛 `DEFAULT_SUBJECT_OPTIONS` 하드코딩 폐기, 감사 D9 · CLAUDE.md "운영 enum 하드코딩 금지").
+  const subjectMaps = useSubjectMaps();
+  const subjects = subjectOptions ?? subjectMaps.options;
   const action = mode === "create" ? createClass : updateClass;
   const [state, formAction, pending] = useActionState<ClassFormState, FormData>(action, undefined);
   const router = useRouter();

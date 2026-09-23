@@ -332,7 +332,10 @@ export async function getClassSheetMonth(
     // 등록 강의실(id→이름) — 라벨을 aywa 기준 이름으로 맞추는 근거(주간 시트와 같은 규약).
     admin.from("classrooms").select("id, name").eq("tenant_id", access.tenantId),
     // 강사 라벨 해석기(닉네임 `Song` → 표시 이름 `송지혜`) — 주간 시트·시간표 3뷰와 **같은 함수**.
-    getTeacherLabelMap({ supabase: admin, tenantId: access.tenantId }),
+    getTeacherLabelMap({ supabase: admin, tenantId: access.tenantId })
+      // ⚠️ 이름 조회가 실패해도 시트는 연다 — 표시 전용이라 원문 라벨로 떨어지는 편이 시트 전체가 죽는 것보다 낫다
+      //    (시간표는 같은 함수가 던진다 — 감사 E5. 영어 강사 전원이 매일 여는 화면이라 여기선 삼킨다).
+      .catch(() => undefined),
     // 월간계획(교재 배정에서 계산) — 🔴 **절대 throw하지 않는다**(그 안에서 상태로 접는다, [[#95]]).
     //    0266a/0268a 미적용이거나 배정이 0건이면 빈 계획으로 돌고 달력은 그대로 뜬다.
     getClassPlannedLines({

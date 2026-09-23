@@ -11,14 +11,20 @@ export function GradeViewSwitch({
   active,
   inputHref,
   viewHref,
+  unifiedHref = "/exams",
+  jjHref,
 }: {
-  active: "input" | "view";
+  active: "unified" | "input" | "view";
   inputHref: string;
   viewHref: string;
+  /** 창 안이면 호출부가 `embed=1`을 실어 넘긴다([[#133]]). */
+  unifiedHref?: string;
+  /** JJ실 입구 — 영어 + 연동 학원 + 영어 담당일 때만 호출부가 넘긴다(입력 화면의 '보기' 드롭다운과 같은 판정). */
+  jjHref?: string | null;
 }) {
   return (
     <ToolbarSegment label="보기">
-      <ToolbarSegmentItem active={false} href="/exams">
+      <ToolbarSegmentItem active={active === "unified"} href={unifiedHref}>
         통합
       </ToolbarSegmentItem>
       <ToolbarSegmentItem active={active === "input"} href={inputHref}>
@@ -27,6 +33,11 @@ export function GradeViewSwitch({
       <ToolbarSegmentItem active={active === "view"} href={viewHref}>
         확인
       </ToolbarSegmentItem>
+      {jjHref ? (
+        <ToolbarSegmentItem active={false} href={jjHref}>
+          JJ실
+        </ToolbarSegmentItem>
+      ) : null}
     </ToolbarSegment>
   );
 }

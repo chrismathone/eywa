@@ -15,12 +15,19 @@ import { parseForwardedFor } from "../device-info";
 
 // 키오스크 설정 mutation 게이트 = 쓰기 권한(canWriteTenant, #58 — readonly 누수 방지).
 // 기본 matrix는 master만 full이나, 원장이 역할·권한에서 admin/manager에게 kiosk_settings를 위임하면 열림.
+// 🔴 **던지지 않고 null**을 돌려준다(감사 E3) — 던지면 useActionState 폼이 안내 대신 오류 화면으로 무너진다
+//    (readonly 예외·'다른 강사 뷰'에서 버튼을 누른 경우). 호출부는 `{ error: NO_PERMISSION }`으로 답한다.
+const NO_PERMISSION = "키오스크 설정을 바꿀 권한이 없습니다";
 async function requireKioskWrite() {
   const user = await getCurrentUser();
-  if (!user || !(await canWriteTenant(user.systemRole, "kiosk_settings"))) {
-    throw new Error("권한이 없습니다");
-  }
+  if (!user || !(await canWriteTenant(user.systemRole, "kiosk_settings"))) return null;
   return user;
+}
+
+/** DB 오류 원문을 화면에 내보내지 않는다(raw 노출 금지) — 원문은 서버 로그로. */
+function friendly(error: { message?: string } | null | undefined, fallback: string): string {
+  if (error) console.error("[kiosk-settings]", error.message ?? error);
+  return fallback;
 }
 
 export type KioskActionState = { error?: string; ok?: string } | undefined;
@@ -31,6 +38,7 @@ export async function registerKioskDevice(
   formData: FormData,
 ): Promise<KioskActionState> {
   const user = await requireKioskWrite();
+  if (!user) return { error: NO_PERMISSION };
   const name = String(formData.get("name") ?? "").trim() || "키오스크";
 
   const token = randomBytes(32).toString("base64url");
@@ -51,7 +59,7 @@ export async function registerKioskDevice(
     last_seen_ip: ip,
     user_agent: ua,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendly(error, "기기를 등록하지 못했습니다") };
 
   // 평문 토큰은 이 기기 쿠키에만(서버엔 해시만). httpOnly → JS 추출 불가.
   const jar = await cookies();
@@ -81,6 +89,7 @@ export async function revokeKioskDevice(
   formData: FormData,
 ): Promise<KioskActionState> {
   const user = await requireKioskWrite();
+  if (!user) return { error: NO_PERMISSION };
   const id = String(formData.get("deviceId") ?? "").trim();
   if (!id) return { error: "기기 ID가 필요합니다" };
 
@@ -92,7 +101,7 @@ export async function revokeKioskDevice(
     .eq("tenant_id", user.tenantId)
     .select("name")
     .maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: friendly(error, "기기를 폐기하지 못했습니다") };
 
   await logAction({
     action: "kiosk_device_revoke",
@@ -110,6 +119,7 @@ export async function assignAttendanceCodesAction(
   _formData: FormData,
 ): Promise<KioskActionState> {
   const user = await requireKioskWrite();
+  if (!user) return { error: NO_PERMISSION };
   const supabase = await createClient();
 
   const { data: rows, error } = await supabase
@@ -118,7 +128,7 @@ export async function assignAttendanceCodesAction(
     .eq("tenant_id", user.tenantId)
     .neq("status", "withdrawn")
     .order("created_at", { ascending: true });
-  if (error) return { error: error.message };
+  if (error) return { error: friendly(error, "학생 목록을 불러오지 못했습니다") };
 
   const taken = new Set<string>();
   for (const r of rows ?? []) if (r.attendance_code) taken.add(r.attendance_code);
@@ -162,6 +172,7 @@ export async function saveKakaoChannel(
   formData: FormData,
 ): Promise<KioskActionState> {
   const user = await requireKioskWrite();
+  if (!user) return { error: NO_PERMISSION };
   const pfId = String(formData.get("pfId") ?? "").trim();
   const checkinTemplateId = String(formData.get("checkinTemplateId") ?? "").trim();
   const checkoutTemplateId = String(formData.get("checkoutTemplateId") ?? "").trim();
@@ -178,7 +189,7 @@ export async function saveKakaoChannel(
     },
     { onConflict: "tenant_id" },
   );
-  if (error) return { error: error.message };
+  if (error) return { error: friendly(error, "연동 정보를 저장하지 못했습니다") };
 
   // 발신 프로필·템플릿 ID는 **값 없이** 변경 사실만(외부 발신 자격 계열).
   await logAction({
@@ -198,6 +209,7 @@ export async function sendTestAlimtalk(
   formData: FormData,
 ): Promise<KioskActionState> {
   const user = await requireKioskWrite();
+  if (!user) return { error: NO_PERMISSION };
   const phone = String(formData.get("phone") ?? "").replace(/\D/g, "");
   if (phone.length < 10) return { error: "받는 번호를 정확히 입력하세요." };
 

@@ -75,13 +75,13 @@ it("문서가 없는 폴더 삭제에도 문서 이동 위치를 명시한다", 
 it("접힌 트리를 단계별로 펼치고 직접 진입한 깊은 폴더의 경로를 노출한다", async () => {
   const user = userEvent.setup();
   const hrefs = Object.fromEntries(categories.map((c) => [c.key, `/documents?cat=${c.key}&embed=1`]));
-  const view = render(<FolderTree categories={categories} counts={{ class: 4, middle: 4, leaf: 4 }} activeKey={null} hrefs={hrefs} />);
+  const view = render(<FolderTree categories={categories} counts={{ class: 4, middle: 4, leaf: 4 }} activeKey={null} hrefs={hrefs} favoriteKeys={[]} />);
   expect(screen.queryByRole("link", { name: /중등/ })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "수업 펼치기" }));
   await user.click(screen.getByRole("button", { name: "수업 / 중등 펼치기" }));
   expect(screen.getByRole("link", { name: /시험지/ })).toHaveAttribute("href", hrefs.leaf);
   await user.click(screen.getByRole("button", { name: "수업 접기" }));
   expect(screen.queryByRole("link", { name: /시험지/ })).not.toBeInTheDocument();
-  view.rerender(<FolderTree categories={categories} counts={{ leaf: 4 }} activeKey="leaf" hrefs={hrefs} />);
+  view.rerender(<FolderTree categories={categories} counts={{ leaf: 4 }} activeKey="leaf" hrefs={hrefs} favoriteKeys={[]} />);
   expect(screen.getByRole("link", { name: /시험지/ })).toHaveAttribute("aria-current", "page");
 });

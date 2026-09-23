@@ -5,6 +5,8 @@ import { kstToday } from "@/lib/date-kst";
 import { attachmentFilename } from "@/lib/http/content-disposition";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
 import { KIND_LABEL, schoolGradeLabel, withPreviousScores } from "@/features/grades/unified/model";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 function validDate(value: string | null): value is string {
@@ -25,7 +27,9 @@ export async function GET(request: NextRequest) {
   const kind = params.get("kind") ?? "all";
   const subject = params.get("subject") ?? "all";
   const showMissing = params.get("missing") === "1";
-  const data = await getUnifiedGrades(from, to);
+  const [data, settings] = await Promise.all([getUnifiedGrades(from, to), getTenantSettings()]);
+  // 과목 칸은 학원설정 라벨로(내부 키 `math`·`subject_1`을 내보내지 않는다 — 전수 점검 D3).
+  const { labelOf } = buildSubjectMaps(settings.operations.subjects);
   const rows = withPreviousScores(data.records).filter((row) => row.date >= from && row.date <= to &&
     (kind === "all" || row.kind === kind) && (subject === "all" || row.subject === subject) &&
     (showMissing || row.score != null || row.source === "level" || !!row.rawScore));
@@ -45,9 +49,11 @@ export async function GET(request: NextRequest) {
   sheet.autoFilter = { from: "A1", to: "L1" };
   for (const row of rows) {
     const added = sheet.addRow({ date: row.date, name: row.name, schoolGrade: schoolGradeLabel(row.school, row.grade),
-      subject: row.subject, classes: row.classes.map((item) => item.name).join(" / "),
+      subject: labelOf(row.subject), classes: row.classes.map((item) => item.name).join(" / "),
       teachers: [...new Set(row.classes.map((item) => item.teacher).filter(Boolean))].join(" / "),
-      kind: KIND_LABEL[row.kind], score: row.score, maxScore: row.maxScore, previous: row.previousScore,
+      kind: KIND_LABEL[row.kind],
+      // 숫자로 못 읽은 결과(레벨·원문 점수)는 빈칸이 아니라 원문 그대로(D3).
+      score: row.score ?? row.rawScore, maxScore: row.maxScore, previous: row.previousScore,
       delta: row.delta == null ? null : `${row.delta > 0 ? "↑" : row.delta < 0 ? "↓" : ""}${Math.abs(row.delta)}${row.deltaUnit === "%p" ? "%p" : ""}`,
       consultation: row.consultationDate ?? row.manualConsultationDate,
     });

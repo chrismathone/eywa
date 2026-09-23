@@ -12,7 +12,7 @@ vi.mock("@/features/attendance/server/actions", () => ({
   setAttendanceRange: vi.fn(async () => ({ ok: true, applied: 0, blocked: 0 })),
 }));
 const { savePrefs } = vi.hoisted(() => ({ savePrefs: vi.fn(async () => ({ ok: true })) }));
-// ⚠️ 접기는 **전용 액션**(saveAttendanceCollapsed)으로 저장한다 — 통째 저장(saveAttendanceViewPrefs)을
+// ⚠️ 접기는 **전용 액션**(saveAttendanceCollapsed)으로 저장한다 — 통째 저장(옛 saveAttendanceViewPrefs — 삭제됨)을
 // 쓰면 이 컴포넌트가 모르는 정렬 설정(ui_prefs.attendance.sort)이 함께 덮여 되돌아간다(2026-08-06).
 vi.mock("@/features/attendance/server/prefs-actions", () => ({ saveAttendanceCollapsed: savePrefs }));
 

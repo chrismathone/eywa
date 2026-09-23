@@ -16,6 +16,7 @@ import {
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetDowLabel, sheetDowLabelByIndex, type SheetLang } from "@/features/teacher-view/i18n";
 import type { ApplyPreview, ApplyPreviewRow, ClassSlotChoice, LessonPace } from "@/features/textbooks/types";
+import { TextbookFillExisting } from "./textbook-fill-existing";
 
 /**
  * **교재 배정** — 월간 시트에서 교시를 고르고 교재를 고르면 차수가 수업일마다 순서대로 들어간다.
@@ -269,6 +270,8 @@ export function TextbookFillDialog({
             <p className="text-text-dim py-6 text-center text-xs">{t("fill.loading")}</p>
           ) : (
             <>
+              {/* 이 반에 이미 걸린 배정 + [배정 삭제] — 잘못 건 배정을 지우는 자리(감사 F4). */}
+              <TextbookFillExisting classId={classId} />
               <div className="flex flex-col gap-1.5">
                 <span className="text-text-dim text-xs font-bold">{t("fill.slots")}</span>
                 <span className="text-text-faint text-xs">{t("fill.slots.oneTeacher")}</span>

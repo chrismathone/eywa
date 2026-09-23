@@ -36,7 +36,7 @@ export async function getDocumentsPage(
   opts: { category?: string; q?: string; sort?: DocumentSort } = {},
   page = 1,
   pageSize = PAGE,
-): Promise<{ rows: DocumentRow[]; total: number }> {
+): Promise<{ rows: DocumentRow[]; total: number; /** 조회 실패 — '0건'과 구분해 화면이 알린다(전수 점검 E6). */ failed: boolean }> {
   const supabase = await createClient();
   const from = (page - 1) * pageSize;
   let qb = supabase
@@ -59,7 +59,11 @@ export async function getDocumentsPage(
     qb = qb.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
   }
   qb = qb.range(from, from + pageSize - 1);
-  const { data, count } = await qb;
+  const { data, count, error } = await qb;
+  if (error) {
+    console.error("[documents/queries] 문서 목록 조회 실패", error);
+    return { rows: [], total: 0, failed: true };
+  }
   const rows: DocumentRow[] = (data ?? []).map((r) => ({
     id: r.id,
     title: r.title,
@@ -76,7 +80,7 @@ export async function getDocumentsPage(
     updatedAt: r.updated_at,
     pinned: !!r.pinned,
   }));
-  return { rows, total: count ?? rows.length };
+  return { rows, total: count ?? rows.length, failed: false };
 }
 
 /**

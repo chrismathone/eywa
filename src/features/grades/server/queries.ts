@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
-import { gradeTeacherClassIds } from "./teacher-classes";
+import { gradeTeacherClassScope } from "./teacher-classes";
 import { isEnrollmentEndedOn, isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import { readEnglishTrack } from "@/features/classes/english-track";
 import { ENGLISH_SUBJECT_KEY } from "../subject-axis";
@@ -51,7 +51,9 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   if (teacherSubjects && !teacherSubjects.includes(sel.subject)) return empty;
   const teacherId = scope ? await effectiveTeacherId() : null;
   // 담임 ∪ 부담임 — 공용 스코프(`classes.teacher_id`만 본다)를 넓히지 않고 성적관리 전용으로 구한다.
-  const myClassIds = new Set(teacherId ? await gradeTeacherClassIds(teacherId) : []);
+  const teacherScope = teacherId ? await gradeTeacherClassScope(teacherId) : { ids: [], partial: false };
+  const myClassIds = new Set(teacherScope.ids);
+  const scopePartial = teacherScope.partial;
 
   const { start: termStart, end: termEnd } = termWindow(sel.year, sel.term);
   const anchor = rosterAnchorFor(sel.year, sel.term, kstToday());
@@ -93,6 +95,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   if (targetIds.length === 0) {
     return {
       ...empty,
+      scopePartial,
       classes: optionsOnly,
       schemaReady: await gradesSchemaReady(),
       marksReady: await gradeMarksReady(),
@@ -307,5 +310,5 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       (myClassIds.has(a.id) ? 0 : 1) - (myClassIds.has(b.id) ? 0 : 1) ||
       a.className.localeCompare(b.className, "ko"),
   );
-  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady, monthReady };
+  return { selection: sel, classes, rows: uniqueRows, schemaReady, marksReady, noExamReady, monthReady, scopePartial };
 }

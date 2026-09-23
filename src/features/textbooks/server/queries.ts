@@ -1,7 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstToday } from "@/lib/date-kst";
@@ -353,21 +353,23 @@ export async function getClassTextbookPlans(opts: {
   }
 
   let plans: PlanDbRow[];
-  if (opts.classId) {
-    const { data, error } = await base(cols)
-      .eq("class_id", opts.classId)
-      .order("start_date", { ascending: false })
-      .order("id")
-      .range(0, 499);
-    const status = classify(error);
-    if (status !== "ok" || !data) return { status, rows: [] };
-    plans = data as unknown as PlanDbRow[];
-  } else if (scope.classIds === null) {
-    // 사무실 — 스코프가 없다(전 반).
-    const { data, error } = await base(cols).order("start_date", { ascending: false }).order("id").range(0, 499);
-    const status = classify(error);
-    if (status !== "ok" || !data) return { status, rows: [] };
-    plans = data as unknown as PlanDbRow[];
+  if (opts.classId || scope.classIds === null) {
+    // 한 반 또는 사무실(스코프 없음 = 전 반).
+    // 🔴 **페이지로 끝까지** 읽는다(감사 T9) — 예전엔 `.range(0, 499)`라 배정이 500건을 넘으면 오래된 배정이
+    //    **말없이** 목록에서 사라졌다(B2). 순서는 unique tie-break(`id`)까지 걸어야 페이지가 안 흔들린다.
+    const classId = opts.classId ?? null;
+    try {
+      plans = await fetchAllPaged<PlanDbRow>((f, t) => {
+        let q = base(cols);
+        if (classId) q = q.eq("class_id", classId);
+        return q.order("start_date", { ascending: false }).order("id").range(f, t) as unknown as PromiseLike<{
+          data: PlanDbRow[] | null;
+          error: { message: string } | null;
+        }>;
+      });
+    } catch (e) {
+      return { status: classify({ message: e instanceof Error ? e.message : "" }), rows: [] };
+    }
   } else {
     // ⚠️ 스코프는 담당 ∪ 부담임 ∪ 위임 합집합이라 수십 개까지 간다 — 거대 `.in()`은 URL 414로 실패한다(B3).
     try {

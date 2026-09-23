@@ -28,7 +28,8 @@ describe("성적관리 — 반 스코프", () => {
   it("🔴 강사는 **반 단위로** 좁힌다 — 정렬로 감추지 않는다([[#77]])", () => {
     const q = read("src", "features", "grades", "server", "queries.ts");
     // 담임 ∪ 부담임을 구하는 전용 헬퍼를 탄다(공용 스코프는 담임만 본다).
-    expect(q).toContain("gradeTeacherClassIds");
+    // `gradeTeacherClassScope` = 같은 헬퍼에 '일부 조회 실패' 신호를 더한 판(전수 점검 E7).
+    expect(q).toMatch(/gradeTeacherClass(Ids|Scope)/);
     // 목록을 실제로 거른다 — 여기가 빠지면 과목 전체가 다시 보인다.
     expect(q).toContain("scope ? tracked.filter((c) => myClassIds.has(c.id)) : tracked");
   });

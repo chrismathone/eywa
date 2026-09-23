@@ -104,6 +104,8 @@ export type GradeSheet = {
    * 그동안 월말평가는 **학기에 한 칸**이라 다음 달을 적으면 지난달을 덮어쓴다(그래서 배너로 알린다).
    */
   monthReady: boolean;
+  /** 강사 담당 반 조회가 일부 실패했다(`gradeTeacherClassScope`) — 화면이 배너로 알린다. */
+  scopePartial?: boolean;
 };
 
 /**

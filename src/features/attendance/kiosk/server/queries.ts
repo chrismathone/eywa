@@ -37,13 +37,18 @@ export type NotificationRow = {
   createdAt: string;
 };
 
+/**
+ * 🔴 아래 조회들은 실패하면 **던진다**(감사 E1) — 예전엔 `data ?? []`로 삼켜 조회 실패가 "등록된 기기가 없습니다"로
+ *    보였고, 원장이 기기를 다시 등록하는 등 엉뚱한 조치를 했다. 페이지가 섹션마다 받아 한글 배너로 알린다.
+ */
 /** 이 테넌트의 키오스크 기기 목록(RLS 스코프). 등록 순(오래된 것=기기 #1)으로 번호 부여. */
 export async function getKioskDevices(): Promise<KioskDeviceRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("kiosk_devices")
     .select("id, name, is_active, registered_ip, last_seen_ip, user_agent, last_seen_at, created_at")
     .order("created_at", { ascending: true });
+  if (error) throw new Error(`kiosk_devices: ${error.message}`);
   return (data ?? []).map((d, i) => ({
     id: d.id,
     deviceNo: i + 1,
@@ -60,11 +65,12 @@ export async function getKioskDevices(): Promise<KioskDeviceRow[]> {
 /** 최근 등하원(현재 기기/브라우저에 쿠키가 있으면 그 기기로 보이지만 목록은 tenant 전체). */
 export async function getRecentCheckins(limit = 20): Promise<CheckinRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("attendance_checkins")
     .select("id, checkin_date, checked_in_at, checked_out_at, student:student_id(name)")
     .order("checked_in_at", { ascending: false, nullsFirst: false })
     .limit(limit);
+  if (error) throw new Error(`attendance_checkins: ${error.message}`);
   return (data ?? []).map((r) => {
     const s = (Array.isArray(r.student) ? r.student[0] : r.student) as { name?: string } | undefined;
     return {
@@ -80,11 +86,12 @@ export async function getRecentCheckins(limit = 20): Promise<CheckinRow[]> {
 /** 최근 발송 시뮬레이션 로그. */
 export async function getRecentNotifications(limit = 20): Promise<NotificationRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("attendance_notifications")
     .select("id, kind, recipient_masked, message, status, created_at")
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (error) throw new Error(`attendance_notifications: ${error.message}`);
   return (data ?? []).map((n) => ({
     id: n.id,
     kind: n.kind,
@@ -110,7 +117,7 @@ export type KakaoChannelStatus = {
 /** 카카오 연동 상태(설정 페이지 표시용). RLS로 이 테넌트 행만 보임. */
 export async function getKakaoChannelStatus(): Promise<KakaoChannelStatus> {
   const supabase = await createClient();
-  const [{ data: ch }, { data: lic }] = await Promise.all([
+  const [{ data: ch, error: chErr }, { data: lic, error: licErr }] = await Promise.all([
     supabase
       .from("kakao_channels")
       .select("pf_id, checkin_template_id, checkout_template_id, sms_fallback, is_active, last_error")
@@ -121,6 +128,7 @@ export async function getKakaoChannelStatus(): Promise<KakaoChannelStatus> {
       .eq("feature", "kakao_messaging")
       .maybeSingle(),
   ]);
+  if (chErr || licErr) throw new Error(`kakao_channels: ${(chErr ?? licErr)?.message}`);
   const pfId = ch?.pf_id ?? null;
   const checkinTemplateId = ch?.checkin_template_id ?? null;
   const checkoutTemplateId = ch?.checkout_template_id ?? null;
@@ -143,15 +151,16 @@ export async function getKakaoChannelStatus(): Promise<KakaoChannelStatus> {
 /** 출석번호 발급 현황(전체 기준 count — 페이지 rows 아님). */
 export async function getAttendanceCodeStats(): Promise<{ withCode: number; total: number }> {
   const supabase = await createClient();
-  const totalQ = await supabase
-    .from("students")
-    .select("id", { count: "exact", head: true })
-    .neq("status", "withdrawn");
-  const withQ = await supabase
-    .from("students")
-    .select("id", { count: "exact", head: true })
-    .neq("status", "withdrawn")
-    .not("attendance_code", "is", null);
+  // 서로 독립 — 함께 보낸다(B4).
+  const [totalQ, withQ] = await Promise.all([
+    supabase.from("students").select("id", { count: "exact", head: true }).neq("status", "withdrawn"),
+    supabase
+      .from("students")
+      .select("id", { count: "exact", head: true })
+      .neq("status", "withdrawn")
+      .not("attendance_code", "is", null),
+  ]);
+  if (totalQ.error || withQ.error) throw new Error(`students count: ${(totalQ.error ?? withQ.error)?.message}`);
   return { withCode: withQ.count ?? 0, total: totalQ.count ?? 0 };
 }
 

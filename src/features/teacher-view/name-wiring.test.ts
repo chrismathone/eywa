@@ -461,6 +461,8 @@ describe("🔴 월간 뷰는 사전만 본다 — 화면 파일에 한글 리터
     "month-period-switch.tsx",
     // 교재 배정 창(0266a·0268a) — 월간 툴바에서 열리고, 담당 슬롯이 있는 **원어민 강사도 연다**.
     "textbook-fill-dialog.tsx",
+    // 교재 배정 창 맨 위의 '이 반의 배정' 목록(감사 F4) — 같은 창 안이라 같은 규약.
+    "textbook-fill-existing.tsx",
   ];
 
   it.each(FILES)("%s", (f) => {

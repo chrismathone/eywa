@@ -228,8 +228,9 @@ describe("창 안 하드 이동은 embed=1을 지킨다", () => {
   });
 });
 
+// 학기 격자는 2026-09 통합 성적관리 개편으로 /exams/input 으로 옮겨 갔다.
 describe("성적관리 — 서버 컴포넌트 주소 빌더가 embed를 싣는다", () => {
-  const exams = FILES.find((f) => f.rel === "src/app/(shell)/exams/page.tsx")!.src;
+  const exams = FILES.find((f) => f.rel === "src/app/(shell)/exams/input/page.tsx")!.src;
 
   it("칩·초기화·페이지·JJ 반 칩이 쓰는 buildHref가 창 안이면 embed=1을 싣는다", () => {
     expect(exams).toMatch(/isEmbed/);

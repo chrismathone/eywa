@@ -16,7 +16,7 @@ import { hasUntouchedMark } from "../keep";
 import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady, writeGradeCells } from "./write";
 
 export type GradeSaveState =
-  | { error?: string; ok?: boolean; saved?: number; cleared?: number }
+  | { error?: string; ok?: boolean; saved?: number; cleared?: number; /** DB 원문 — 화면은 title 툴팁으로만. */ detail?: string }
   | undefined;
 
 /** 화면이 보내는 `entries` = `[{studentId, score}]`. 형식이 틀리면 null(저장 안 함). */

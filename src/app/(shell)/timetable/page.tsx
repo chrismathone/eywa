@@ -432,6 +432,9 @@ export default async function TimetablePage({
             className: cls.className,
             teacherName: cls.teacherName,
             absenceDate: r.absenceDate,
+            // 잘못 잡힌 예약을 고치는 자리 = 결석일이 있는 **원반의 월별 출석부 칸**(우클릭 → 보강 예약 취소, 감사 N10).
+            //    학생 검색 씨앗(`q`)으로 그 학생 줄만 남긴 채 연다. 이 탭은 여전히 표시 전용이다(링크 하나만).
+            attendanceHref: `/attendance?class=${encodeURIComponent(r.classId)}&month=${r.absenceDate.slice(0, 7)}&q=${encodeURIComponent(stu.name)}`,
             note: r.note,
             createdByName: r.createdBy ? creatorById.get(r.createdBy) ?? null : null,
           },

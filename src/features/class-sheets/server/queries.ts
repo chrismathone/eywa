@@ -304,7 +304,10 @@ export async function getClassSheetWeek(
     // ("Hannah")·옛 이름("이주희")이라 그대로 그리면 시간표는 "이현이/LAB"인데 ECS만 다른 이름이 뜬다
     // (원장 제보 2026-07-29). DB 원문은 시트 동기의 원본이라 건드리지 않고 **표시할 때만** 해석한다.
     // admin 클라이언트를 주입해 tenantId로 좁힌다(무인자 호출은 쿠키 세션 경로라 admin 흐름과 섞인다).
-    getTeacherLabelMap({ supabase: admin, tenantId }),
+    getTeacherLabelMap({ supabase: admin, tenantId })
+      // ⚠️ 이름 조회가 실패해도 시트는 연다 — 표시 전용이라 원문 라벨로 떨어지는 편이 시트 전체가 죽는 것보다 낫다
+      //    (시간표는 같은 함수가 던진다 — 감사 E5. 영어 강사 전원이 매일 여는 화면이라 여기선 삼킨다).
+      .catch(() => undefined),
     // 내 글씨 크기(계정 귀속) — 서버 확정값이라 첫 렌더부터 정확하다(localStorage 초기값 = 하이드레이션 크래시 #75).
     admin.from("users").select("ui_prefs").eq("id", access.user.id).eq("tenant_id", tenantId).maybeSingle(),
     // 교시 체크(Shouting, 0230a). ⚠️ **에러를 일부러 삼킨다**(아래 에러 게이트 목록에도 안 넣는다) —

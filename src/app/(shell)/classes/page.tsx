@@ -209,6 +209,17 @@ export default async function ClassesPage({
     return s ? `/classes?${s}` : "/classes";
   };
   const pageHref = (p: number) => listParams({ page: p });
+  // 엑셀(감사 N2) — 엑셀 API는 계정 보기 설정을 모른다. **이 화면이 실제로 건 값**(보정 후)을 그대로 넘겨 파일 행 = 목록 행.
+  const exportHref = `/api/exports/classes?${new URLSearchParams({
+    ...(kind !== "all" ? { kind } : {}),
+    ...(subject !== "all" ? { subject } : {}),
+    ...(teacherId !== "all" ? { teacher: teacherId } : {}),
+    ...(days.length ? { days: days.join(",") } : {}),
+    ...(q ? { q } : {}),
+    ...(sort !== "name" ? { sort } : {}),
+    // 상태는 **항상** 적는다 — 빠지면 라우트가 기본값(운영)으로 읽어 '전체'를 고른 화면과 파일이 갈린다.
+    status,
+  }).toString()}`;
 
   // 열 머리 필터 한 벌 — 표 보기는 `<th>` 안에, 카드 보기는 격자 위 머리 줄에 **같은 것**이 선다(필터 코드를 두 벌 두지 않는다).
   const head = {
@@ -319,6 +330,10 @@ export default async function ClassesPage({
             triggerClassName={TOOLBAR_SELECT}
           />
           <SearchToggle placeholder={sheetT(lang, "cls.filter.searchPh")} defaultValue={q} />
+          {/* 화면과 같은 집합을 파일로(감사 N2) — 다운로드라 소프트 이동(Link)이 아니라 맨 `<a>`. */}
+          <Button variant="ghost" className="text-primary" render={<a href={exportHref} />}>
+            {sheetT(lang, "stu.excel")}
+          </Button>
         </div>
       </div>
 

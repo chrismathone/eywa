@@ -8,7 +8,9 @@ import { KIND_LABEL, type UnifiedKind } from "../model";
 import { testScoresOf } from "@/features/math-sheets/lib/test-score";
 import { logAction } from "@/features/audit/server/log";
 import { canEditStudent } from "./scope";
+import { insertUnslottedGrade } from "@/features/grades/server/write";
 import type { UnifiedSaveState } from "./actions";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -59,11 +61,12 @@ export async function createUnifiedGrade(_previous: UnifiedSaveState, formData: 
     if (levelError) return { error: "입학테스트 기록을 확인하지 못했습니다" };
     if (levels?.length) return { error: "같은 날짜의 입학테스트가 있습니다. 아래 원장에서 수정해 주세요" };
   }
-  const { error } = await supabase.from("student_grades").insert({
+  // 쓰기는 write.ts 한 모듈에서(성적 저장 단일 경로 가드) — 이 기록엔 학기·시험 칸 축이 없다.
+  const error = await insertUnslottedGrade({
     tenant_id: user.tenantId, student_id: studentId, subject, exam_name: examName,
     taken_on: date, score, max_score: maxScore, created_by: user.id,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error) };
   await logAction({ action: "exam_scores", targetType: "grades", targetLabel: `${examName} · ${date}`,
     metadata: { studentId, subject, date, score, maxScore, kind, created: true } });
   revalidatePath("/exams");

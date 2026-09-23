@@ -38,7 +38,7 @@ describe("export — 시트 강사 밴드는 해석된 표기 이름이다", () 
 describe("import — 기존 라벨을 같은 해석기로 한 번 더 읽는다", () => {
   it("loadStructureContext가 라벨맵을 받아 slotTeacherDisplay를 채운다", () => {
     const s = read(STRUCTURE);
-    expect(s).toMatch(/getTeacherLabelMap\(\)/);
+    expect(s).toMatch(/getTeacherLabelMapStrict\(\)/); // 쓰기 경로 = 조회 실패 시 던지는 strict 판
     expect(s).toMatch(/slotTeacherDisplay: resolveTeacherLabel\(s\.slot_teacher_label, labelMap\)/);
     // 🔴 원문은 그대로 둔다 — 저장·시트 동기의 원본이라 덮으면 안 된다(teacher-label.ts 📌).
     expect(s).toMatch(/slotTeacherLabel: s\.slot_teacher_label/);

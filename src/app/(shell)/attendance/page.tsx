@@ -64,6 +64,7 @@ import { CollapseAllChip } from "./_components/class-group";
 import { LiveStats } from "./_components/live-totals";
 import { attHref, resolveViewMode, type ViewMode } from "./_components/att-href";
 import { PayslipWindowButton } from "./_components/payslip-window-button";
+import { ClassMonthPrintButton } from "./_components/class-month-print-button";
 import { canViewPayslipNow } from "@/features/payroll/server/payslip-gate";
 // 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
 // 🔴 이름 축은 각각의 단일 소스를 통과시킨다 — 반 `classNameFor` · 정렬 `attendanceSortLabelOf`.
@@ -732,9 +733,25 @@ export default async function AttendancePage({
   // 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼.
   // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
   // 면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만.
+  // 반별 A4 인쇄(감사 N1) — 반을 골라 표가 서 있을 때만. 화면과 같은 표를 찍도록 날짜축·강사 렌즈를 싣는다.
+  const printClass = mode === "class" && effectiveClassId && selectedClass && matrix.students.length > 0 ? selectedClass : null;
   const sheetTools =
-    showUnitsMaster || canIntakeAbsence || (canOpenPayslip && effectiveTeacher) ? (
+    showUnitsMaster || canIntakeAbsence || (canOpenPayslip && effectiveTeacher) || printClass ? (
       <>
+        {printClass ? (
+          <ClassMonthPrintButton
+            classId={printClass.id}
+            className={printClass.className}
+            month={month}
+            periodMode={viewPrefs.periodMode}
+            lens={classScopeTeacher}
+            since={
+              classScopeTeacher && homeroomSinceIdx && teacherRoles.get(printClass.id) === "homeroom"
+                ? homeroomSinceOf(homeroomSinceIdx, printClass.id, classScopeTeacher)
+                : null
+            }
+          />
+        ) : null}
         {showUnitsMaster ? <UnitsMasterButton month={month} /> : null}
         {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
         {canOpenPayslip && effectiveTeacher ? (

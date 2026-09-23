@@ -22,16 +22,30 @@ import "server-only";
  *    (주 단위로 좁히는 ECS 목록과 반대 방향이다).
  */
 import { createClient } from "@/lib/supabase/server";
+import { reportError } from "@/lib/observability/report-error";
 
-export async function gradeTeacherClassIds(teacherId: string): Promise<string[]> {
+/**
+ * 담당 반 id + **일부 조회가 실패했는가**(`partial`). 실패는 로그로 남기고(reportError) 화면이 배너로
+ * "일부 반을 불러오지 못했습니다"를 알린다 — 조용히 빠지면 강사가 '내 반이 없다'로 읽는다(전수 점검 E7).
+ */
+export async function gradeTeacherClassScope(teacherId: string): Promise<{ ids: string[]; partial: boolean }> {
   const supabase = await createClient();
   const [own, slots] = await Promise.all([
     supabase.from("classes").select("id").eq("teacher_id", teacherId),
     supabase.from("class_schedules").select("class_id").eq("teacher_id", teacherId),
   ]);
+  if (own.error) reportError(own.error, { scope: "grades.teacherClasses.homeroom", teacherId });
+  if (slots.error) reportError(slots.error, { scope: "grades.teacherClasses.slots", teacherId });
 
   const ids = new Set<string>();
   for (const r of own.data ?? []) ids.add(String(r.id));
   for (const r of slots.data ?? []) ids.add(String(r.class_id));
-  return [...ids];
+  return { ids: [...ids], partial: !!(own.error || slots.error) };
 }
+
+export async function gradeTeacherClassIds(teacherId: string): Promise<string[]> {
+  return (await gradeTeacherClassScope(teacherId)).ids;
+}
+
+/** 화면 배너 문구 — 세 화면(통합·입력·확인)이 같은 문장을 쓴다. */
+export const GRADE_SCOPE_PARTIAL_MESSAGE = "담당 반 일부를 불러오지 못했습니다 — 목록에 없는 반이 있으면 잠시 후 새로고침해 주세요";

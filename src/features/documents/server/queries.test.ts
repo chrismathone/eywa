@@ -83,6 +83,19 @@ describe("문서 탐색기 집계 범위", () => {
     ]);
   });
 
+  it("목록 조회가 실패하면 '0건'이 아니라 실패로 알린다(E6)", async () => {
+    db.rows = [{ id: 1, category: "class", staff_user_id: null }];
+    db.failOffset = 0;
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const page = await getDocumentsPage({}, 1, 20);
+      expect(page.failed).toBe(true);
+      expect(page.rows).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("다음 페이지가 실패하면 부분 합계나 0 대신 조회 실패를 반환한다", async () => {
     db.rows = Array.from({ length: 1003 }, (_, id) => ({
       id,

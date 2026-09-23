@@ -74,7 +74,7 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
       <PageHeader
         eyebrow="수업"
         title="교재목록"
-        description="교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트에 차수대로 기입됩니다."
+        description="교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트의 월간계획에 차수대로 뜹니다."
         embedLabel="교재 · 차수별 진도·과제 · 반 배정"
       />
       <NotReadyBanner status={status} />

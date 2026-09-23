@@ -19,6 +19,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { resolvePeriodLabel, tableToEntries } from "@/features/class-sheets/lib/period-label";
 import { isWeekendDow } from "@/features/class-sheets/lib/grid-rows";
@@ -37,7 +38,7 @@ import {
   type LessonPace,
   type SlotAxis,
 } from "../lesson-schedule";
-import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice } from "../types";
+import type { ApplyPreview, ApplyPreviewRow, ApplyResult, ClassSlotChoice, ClassTextbookPlanRow } from "../types";
 import { friendlyTextbookError, isMissingTextbookTable, SLOTS_NOT_READY, TEXTBOOKS_NOT_READY } from "./access";
 
 export type PlanActionResult = { ok: true; id: string } | { ok: false; error: string };
@@ -93,9 +94,21 @@ function isMissingSlotPicksColumn(error: { code?: string; message?: string } | n
   return error.code === "42703" || error.code === "PGRST204";
 }
 
+/**
+ * 🔴 **교재목록 모듈을 끈 학원에선 배정 액션이 돌지 않는다**(감사 S7) — 서버 액션은 공개 엔드포인트라
+ *    화면에서 [교재 배정] 입구를 감춘 것만으로는 게이트가 아니다([[#77]]). 판정 실패는 켜진 것으로 본다
+ *    (`isModuleOnForTenant` fail-open — 침산은 꺼진 모듈이 없다).
+ * ⚠️ [월간계획 가져오기](`importPlannedSlot`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
+ */
+const TEXTBOOKS_MODULE_OFF = "이 학원은 교재목록 기능이 꺼져 있습니다";
+async function textbooksModuleOff(tenantId: string): Promise<boolean> {
+  return !(await isModuleOnForTenant(tenantId, "textbooks"));
+}
+
 export async function saveClassTextbookPlan(input: ClassTextbookPlanInput): Promise<PlanActionResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
+  if (await textbooksModuleOff(gate.access.tenantId)) return { ok: false, error: TEXTBOOKS_MODULE_OFF };
   if (!YMD_RE.test(input.startDate)) return { ok: false, error: "시작일을 골라 주세요" };
   const today = kstToday();
 
@@ -262,6 +275,9 @@ export async function deleteClassTextbookPlan(planId: string): Promise<{ ok: tru
   if (error) return { ok: false, error: friendlyTextbookError(error, "배정을 지우지 못했습니다") };
   await logAction({ action: "textbook_plan_delete", targetType: "class", targetLabel: gate.access.className, metadata: { id: planId } });
   revalidatePath("/textbooks");
+  // 월간계획은 배정에서 **계산**되므로 배정이 사라지면 그 반 시트의 '계획' 표식도 함께 사라져야 한다
+  // (`"layout"` — 월간 화면은 `/ecs/<반>/month`라 기본값이면 정작 보는 화면이 안 바뀐다, [[#102]] 계열).
+  revalidatePath(`/ecs/${loaded.plan.classId}`, "layout");
   return { ok: true };
 }
 
@@ -283,7 +299,7 @@ type LoadedPlan = {
 };
 
 /** 배정 1건 + 그 반 ECS 게이트. 🔴 반 id는 **DB 행에서** 읽는다(클라가 준 값을 믿지 않는다). */
-async function loadPlan(planId: string): Promise<LoadedPlan | { error: string }> {
+async function loadPlan(planId: string, opts: { write: boolean } = { write: true }): Promise<LoadedPlan | { error: string }> {
   const admin = createAdminClient();
   const BASE = "id, tenant_id, class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no";
   let { data, error } = await admin
@@ -298,10 +314,12 @@ async function loadPlan(planId: string): Promise<LoadedPlan | { error: string }>
   if (error) return { error: isMissingTextbookTable(error) ? TEXTBOOKS_NOT_READY : "배정을 찾지 못했습니다" };
   if (!data) return { error: "배정을 찾을 수 없습니다" };
 
-  const gate = await requireEcsClassAccess(String(data.class_id), { write: true });
+  // 읽기 전용 미리보기는 읽기 게이트, 삭제는 쓰기 게이트 — 둘 다 **그 반의 ECS 권한**이다.
+  const gate = await requireEcsClassAccess(String(data.class_id), { write: opts.write });
   if (!gate.ok) return { error: gate.error };
   // 테넌트 이중 확인 — admin 조회라 RLS가 안 걸린다.
   if (String(data.tenant_id) !== gate.access.tenantId) return { error: "배정을 찾을 수 없습니다" };
+  if (await textbooksModuleOff(gate.access.tenantId)) return { error: TEXTBOOKS_MODULE_OFF };
 
   return {
     gate,
@@ -490,8 +508,9 @@ async function computeTargets(loaded: LoadedPlan): Promise<Computed | { error: s
   };
 }
 
+/** 저장된 배정의 월간계획 미리보기 — **읽기 전용**(교재목록 '반 배정' 탭, 원장 결정 D1). */
 export async function previewTextbookApply(planId: string): Promise<PlanPreviewResult> {
-  const loaded = await loadPlan(planId);
+  const loaded = await loadPlan(planId, { write: false });
   if ("error" in loaded) return { ok: false, error: loaded.error };
   return previewLoaded(loaded, planId);
 }
@@ -624,89 +643,9 @@ async function previewLoaded(loaded: LoadedPlan, planId: string): Promise<PlanPr
   };
 }
 
-export async function applyTextbookPlan(planId: string): Promise<PlanApplyResult> {
-  const loaded = await loadPlan(planId);
-  if ("error" in loaded) return { ok: false, error: loaded.error };
-  return applyLoaded(loaded, planId);
-}
-
-/** 기입 본체 — 저장된 배정과 시트에서 고른 입력이 **같은 함수**를 탄다. */
-async function applyLoaded(loaded: LoadedPlan, planId?: string): Promise<PlanApplyResult> {
-  const computed = await computeTargets(loaded);
-  if ("error" in computed) return { ok: false, error: computed.error };
-  const { gate, plan } = loaded;
-
-  // 🔴 **지난 날짜만 뺀다** — 미리보기가 `skip-past`로 보여 준 것과 같은 집합이어야 화면과 결과가 안 갈린다.
-  // ⚠️ **진도가 비어도 기입한다**(원장 제보 2026-09-17 "기입이 안 됨"). 처음엔 "둘 다 빈 차수는 안 넣는다"로
-  //    막았는데 — ECS 작성률이 교재명만으로 오르는 걸 걱정해서였다 — 실측하니 이 학원 계획 줄 2,550개 중
-  //    **290개(11%)가 이미 교재명만 적힌 줄**이다. 즉 "교재는 정했고 진도는 그날 적는다"가 정상 운영이고,
-  //    막아 두면 새 교재를 등록한 직후엔 아무것도 안 들어가 기능이 죽은 것처럼 보인다.
-  const today = kstToday();
-  const targets = computed.targets.filter((t) => t.date >= today);
-  if (targets.length === 0) {
-    return { ok: false, error: "기입할 칸이 없습니다 — 고른 교시에 남은 수업일이 없습니다" };
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin.rpc("ecs_apply_textbook_lessons", {
-    p_tenant: gate.access.tenantId,
-    p_actor: gate.access.user.id,
-    p_class: plan.classId,
-    p_term_mode: plan.termMode,
-    p_skill_area: computed.skillArea,
-    p_title: computed.title,
-    p_page_time: computed.pageTime,
-    p_targets: targets.map((t) => ({
-      date: t.date,
-      slot: t.slotStart,
-      progress: t.progress,
-      homework: t.homework,
-    })),
-  });
-  if (error) {
-    // RPC가 던지는 식별자는 화면에 그대로 내보내지 않는다(raw 노출 금지).
-    if (/ECS_TOO_MANY_TARGETS/.test(error.message ?? "")) {
-      return {
-        ok: false,
-        error: "한 번에 기입할 칸이 너무 많습니다(최대 300칸) — 시작 차수를 올리거나 교재를 나눠 배정하세요",
-      };
-    }
-    return { ok: false, error: friendlyTextbookError(error, "기입하지 못했습니다") };
-  }
-
-  const out = (data ?? {}) as Partial<ApplyResult>;
-  const result: ApplyResult = {
-    applied: Number(out.applied ?? 0),
-    filled: Number(out.filled ?? 0),
-    added: Number(out.added ?? 0),
-    skipped: Number(out.skipped ?? 0),
-    truncated: Number(out.truncated ?? 0),
-  };
-
-  if (planId) {
-    await admin
-      .from("class_textbook_plans")
-      .update({ last_applied_at: new Date().toISOString(), last_applied_by: gate.access.user.id })
-      .eq("tenant_id", gate.access.tenantId)
-      .eq("id", planId);
-  }
-
-  await logAction({
-    action: "textbook_plan_apply",
-    targetType: "class",
-    targetLabel: gate.access.className,
-    metadata: { planId: planId ?? null, textbook: computed.title, ...result, from: kstToday() },
-  });
-  revalidatePath("/textbooks");
-  // 🔴 **`"layout"`이어야 한다** — 기입을 부르는 화면은 `/ecs/<반>/month`(월간)인데 기본값(`"page"`)은
-  //    부모 한 페이지만 무효화해서 **정작 보고 있는 화면이 안 바뀐다**. 원장 제보 2026-09-17:
-  //    *"교재 배정해도 입력에는 안되는데 … 새로고침 하면 들어가네"* — 값은 멀쩡히 들어가 있었다.
-  //    창의 `router.refresh()`만으로는 부족하다(서버 액션 응답이 무효화 안 된 옛 트리를 다시 덮는다, [[#102]] 계열).
-  revalidatePath(`/ecs/${plan.classId}`, "layout");
-  // 작성률·'계획 N/N'이 함께 움직이므로 목록(랜딩)도 무효화한다 — 안 하면 카드 숫자만 옛것으로 남는다.
-  revalidatePath("/ecs");
-  return { ok: true, result };
-}
+// 🔴 **저장된 배정을 실제 칸으로 기입하던 문(`applyTextbookPlan`)은 걷어냈다**(원장 결정 D1, 2026-09-23 —
+//    09-22 *"배정은 실제 칸에 한 줄도 쓰지 않는다 · 실제는 [월간계획 가져오기]로만"*). 교재목록 '반 배정' 탭의
+//    [기입]이 유일한 호출처였고, 남겨 두면 배정만으로 작성률이 오른다. 되살리지 말 것.
 
 /**
  * 교재 배정 창이 쓰는 **읽기 진입점 둘** — 클라 컴포넌트가 `server/queries.ts`를 직접 import하면
@@ -722,6 +661,23 @@ export async function loadClassSlotChoices(
   if (!gate.ok) return { ok: false, error: gate.error };
   const { getClassSlotChoices } = await import("./queries");
   const res = await getClassSlotChoices(classId);
+  return { ok: true, rows: res.rows };
+}
+
+/**
+ * 이 반에 걸린 배정 — 시트의 교재 배정 창이 [배정 삭제]를 세우는 데 쓴다(감사 F4).
+ * 게이트는 그 반의 ECS 읽기(교시 목록과 같다). 모듈이 꺼졌으면 빈 목록.
+ */
+export async function loadClassTextbookPlans(
+  classId: string,
+): Promise<{ ok: true; rows: ClassTextbookPlanRow[] } | { ok: false; error: string }> {
+  const gate = await requireEcsClassAccess(classId);
+  if (!gate.ok) return { ok: false, error: gate.error };
+  if (await textbooksModuleOff(gate.access.tenantId)) return { ok: true, rows: [] };
+  const { getClassTextbookPlans } = await import("./queries");
+  const res = await getClassTextbookPlans({ classId });
+  if (res.status === "missing-table") return { ok: false, error: TEXTBOOKS_NOT_READY };
+  if (res.status === "failed") return { ok: false, error: "배정 목록을 불러오지 못했습니다" };
   return { ok: true, rows: res.rows };
 }
 
@@ -759,6 +715,7 @@ export type TextbookFillInput = {
 async function loadFillInput(input: TextbookFillInput): Promise<LoadedPlan | { error: string }> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { error: gate.error };
+  if (await textbooksModuleOff(gate.access.tenantId)) return { error: TEXTBOOKS_MODULE_OFF };
   if (!YMD_RE.test(input.startDate)) return { error: "시작일을 골라 주세요" };
 
   const slotPicks = normalizeSlotPicks(input.slotPicks);

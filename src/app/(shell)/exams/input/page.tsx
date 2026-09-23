@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { SearchX } from "@/components/icons/aywa-icon-compat";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -18,6 +17,7 @@ import { EXAM_SLOT_LABEL, examSlotOptions, slotUsesMonth } from "@/features/grad
 import { resolveGradeSelection } from "@/features/grades/selection";
 import { gradeWriteError } from "@/features/grades/server/access";
 import { getGradeSheet } from "@/features/grades/server/queries";
+import { GRADE_SCOPE_PARTIAL_MESSAGE } from "@/features/grades/server/teacher-classes";
 import { loadGradeSortPref, saveGradeSortPref } from "@/features/grades/server/list-prefs";
 import { axisLabelFor, axisOptionsFrom, axisValueOf } from "@/features/grades/subject-axis";
 import { TERM_OPTIONS, monthAnchorDate, termLabel, termMonths, termYearOptions } from "@/features/grades/term";
@@ -69,16 +69,10 @@ export default async function ExamsPage({
   // 같은 이름의 주소 값이 두 번 오면 배열이 된다 — 문자열일 때만 읽는다(`.trim()` TypeError 방지).
   const one = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   const isEmbed = one(sp.embed) === "1";
+  // 🔑 이 주소가 **학기 격자 입력**(ScoreGrid — 1차·2차상담·성적확인 표식·시험없음·월·정렬·엑셀)의 자리다.
+  //    통합 화면(`/exams`)의 '입력' 입구와 확인 뷰의 '입력'이 여기로 온다(전수 점검 F8 — 예전엔 JJ가 아니면
+  //    통합 화면으로 되돌려 보내 격자로 갈 길이 없었다).
   const rawView = one(sp.view) || one(sp.type);
-  if (!JJ_VIEWS.has(rawView)) {
-    const params = new URLSearchParams({ entry: "1", tab: "records" });
-    for (const [oldKey, newKey] of [["year", "entryYear"], ["term", "entryTerm"], ["subject", "entrySubject"],
-      ["class", "entryClass"], ["slot", "entrySlot"], ["date", "entryDate"], ["max", "entryMax"]] as const) {
-      const value = one(sp[oldKey]);
-      if (value) params.set(newKey, value);
-    }
-    redirect(`/exams?${params.toString()}`);
-  }
   const from = one(sp.from);
   const to = one(sp.to);
   const jjClass = one(sp.jjClass);
@@ -259,6 +253,7 @@ export default async function ExamsPage({
           active="input"
           inputHref={buildHref({})}
           viewHref={`/exams/view?year=${sel.year}&term=${sel.term}&subject=${sel.subject}${isEmbed ? "&embed=1" : ""}`}
+          unifiedHref={isEmbed ? "/exams?embed=1" : "/exams"}
         />
         {jjAvailable ? (
           <HrefSelect axisLabel="보기" ariaLabel="보기 선택" value={jjMode ?? ""} options={viewOptions} />
@@ -304,6 +299,8 @@ export default async function ExamsPage({
           </>
         )}
       </Toolbar>
+
+      {sheet?.scopePartial ? <p role="status" className="text-amber text-sm">{GRADE_SCOPE_PARTIAL_MESSAGE}</p> : null}
 
       {jjMode && viewer && jjRange ? (
         <div className="space-y-4">

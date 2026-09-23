@@ -9,7 +9,9 @@
  * 🔴 교시 행은 **학원설정 교시표**(평일 = 이 과목 표, 주말 = 주말 표)에서 온다 — 예약이 그 표의 시각으로만 잡히므로
  *    빈 행이 있어도 칸이 어긋나지 않는다. 표에 없는 시각(설정이 바뀐 뒤의 옛 예약)은 아래 '그 밖의 시각' 행으로 모은다.
  * ⚠️ 학생 이름은 창 링크가 아니다 — 이 탭의 목적은 "그 시간에 누가 오나"를 훑는 것이고, 고치는 자리는 출석부 칸이다.
+ *    그래서 칩 끝에 **'출석부' 링크 하나**만 둔다(감사 N10) — 결석일이 있는 원반의 월별 출석부를 그 학생 줄만 남겨 연다.
  */
+import { WindowLink } from "@/components/workspace/window-link";
 import { HoverCard } from "./hover-cards";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { RESERVED_BADGE_CLASS, RESERVED_CELL_LABEL } from "@/features/attendance/makeup-reservation";
@@ -31,6 +33,8 @@ export type MakeupWeekEntry = {
   className: string;
   teacherName: string | null;
   absenceDate: string;
+  /** 결석일이 있는 원반의 월별 출석부(그 학생 줄만) — 잘못 잡힌 예약을 우클릭으로 취소하는 자리. */
+  attendanceHref: string;
   note: string | null;
   createdByName: string | null;
 };
@@ -94,6 +98,13 @@ function Cell({ list, showTime = false }: { list: MakeupWeekEntry[]; showTime?: 
               <span className="text-foreground truncate text-sm font-bold">{e.studentName}</span>
               <span className="text-text-dim min-w-0 truncate text-xs">{e.className}</span>
               {showTime ? <span className="num ml-auto shrink-0 text-xs">{e.slotStart}</span> : null}
+              <WindowLink
+                href={e.attendanceHref}
+                title={`${e.className} 출석부 — ${shortDate(e.absenceDate)} 결석 칸(우클릭으로 예약 취소)`}
+                className={`${showTime ? "" : "ml-auto "}text-primary shrink-0 text-xs font-bold underline-offset-2 hover:underline`}
+              >
+                출석부
+              </WindowLink>
             </div>
           </HoverCard>
         </li>

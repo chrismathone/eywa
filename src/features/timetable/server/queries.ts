@@ -68,19 +68,34 @@ export const getTeacherLabelMap = cache(async (db?: TimetableDb): Promise<Teache
 });
 
 /** 닉네임 보유자 행 — 라벨 맵과 닉네임 맵이 **같은 조회**를 나눠 쓴다(요청당 왕복 1회, B4). */
-const getTeacherNameRows = cache(
-  async (db?: TimetableDb): Promise<{ displayName: string | null; englishName: string | null; active: boolean }[]> => {
-    const supabase = db?.supabase ?? (await createClient());
-    let q = supabase.from("users").select("display_name, english_name, status").not("english_name", "is", null);
-    if (db) q = q.eq("tenant_id", db.tenantId);
-    const { data } = await q;
-    return (data ?? []).map((u) => ({
+type TeacherNameRow = { displayName: string | null; englishName: string | null; active: boolean };
+
+async function readTeacherNameRows(db: TimetableDb | undefined, strict: boolean): Promise<TeacherNameRow[]> {
+  const supabase = db?.supabase ?? (await createClient());
+  let q = supabase.from("users").select("display_name, english_name, status").not("english_name", "is", null);
+  if (db) q = q.eq("tenant_id", db.tenantId);
+  const { data, error } = await q;
+  if (error) {
+    // 🔴 화면(시간표·학생 상세·ECS)은 **fail-soft**(감사 E5 리뷰) — 강사 전원이 매일 여는 핫패스라 조회 한 번
+    //    실패로 화면 전체가 오류로 넘어가면 안 된다. 원문 라벨로 그리고 로그를 남긴다(열이 둘로 갈릴 수 있음 = 표시만).
+    //    쓰기(시트 가져오기)는 strict — 잘못 해석한 라벨을 DB에 남기지 않는다.
+    if (strict) throw error;
+    console.error("[timetable] 강사 닉네임 조회 실패 — 원문 라벨로 표시", error);
+    return [];
+  }
+  return (data ?? []).map((u) => ({
       displayName: (u.display_name as string | null) ?? null,
       englishName: (u.english_name as string | null) ?? null,
       active: (u.status as string | null) === "active",
-    }));
-  },
-);
+  }));
+}
+
+const getTeacherNameRows = cache((db?: TimetableDb) => readTeacherNameRows(db, false));
+
+/** 쓰기 경로(시트 가져오기) 전용 — 조회 실패 시 던진다(캐시 없음). */
+export async function getTeacherLabelMapStrict(db?: TimetableDb): Promise<TeacherLabelMap> {
+  return buildTeacherLabelMap(await readTeacherNameRows(db, true));
+}
 
 /**
  * 표시 이름 → 영어 닉네임 맵(**한국인 강사만**) — 통합뷰 담임 줄·강사뷰 강사 헤더가 `한글이름(영어이름)`으로
@@ -103,7 +118,12 @@ export async function getTeacherColorMap(db?: TimetableDb): Promise<TeacherColor
     .select("display_name, english_name, bg_color, text_color")
     .not("bg_color", "is", null);
   if (db) q = q.eq("tenant_id", db.tenantId);
-  const { data } = await q;
+  // 실패는 로그만 남기고 해시 색으로 그린다(감사 E5 리뷰 — 시간표 핫패스를 오류 화면으로 무너뜨리지 않는다).
+  const { data, error } = await q;
+  if (error) {
+    console.error("[timetable] 강사 색 조회 실패 — 기본 색으로 표시", error);
+    return {};
+  }
   const map: TeacherColorMap = {};
   for (const u of data ?? []) {
     if (!u.bg_color) continue;
@@ -1277,6 +1297,9 @@ export async function getClassroomsLite(): Promise<ClassroomLite[]> {
       supabase.from("classes").select("classroom_id").in("classroom_id", archivedIds),
       supabase.from("class_schedules").select("classroom_id").in("classroom_id", archivedIds),
     ]);
+    // 🔴 오류를 삼키지 않는다(감사 E5) — 삼키면 "참조 0건"으로 읽혀 보관 방의 수업 열이 통째로 빠진다.
+    if (cls.error) throw cls.error;
+    if (slots.error) throw slots.error;
     for (const r of [...(cls.data ?? []), ...(slots.data ?? [])]) {
       const id = r.classroom_id as string | null;
       if (id) used.add(id);

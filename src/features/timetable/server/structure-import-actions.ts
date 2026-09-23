@@ -10,7 +10,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { shiftDays } from "@/features/timetable/lib/week";
 import { sheetsProvider, supportsStructureImport } from "@/features/integrations/sheets-provider";
-import { getTeacherLabelMap } from "@/features/timetable/server/queries";
+import { getTeacherLabelMapStrict } from "@/features/timetable/server/queries";
 import { resolveTeacherLabel } from "@/features/timetable/lib/teacher-label";
 import {
   claimSheetSyncLease,
@@ -106,7 +106,7 @@ async function loadStructureContext(
         .or(`valid_to.is.null,valid_to.gte.${today}`)
         .range(from, to),
     ),
-    getTeacherLabelMap(),
+    getTeacherLabelMapStrict(),
   ]);
 
   const ctx: ExistingContext = {

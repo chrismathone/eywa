@@ -202,7 +202,10 @@ export default async function DocumentsPage({
             ) : null}
           </div>
 
-          {total === 0 ? (
+          {docPage?.failed ? (
+            // 조회 실패를 '아직 문서가 없습니다'로 보이면 사람이 문서가 사라진 줄 안다(E6) — 사실대로 알린다.
+            <p role="alert" className="text-danger px-4 py-8 text-center text-sm">문서 목록을 불러오지 못했습니다 — 잠시 후 새로고침해 주세요.</p>
+          ) : total === 0 ? (
             children.length && !q ? <p className="px-4 py-8 text-center text-sm text-text-faint">{cat ? "이 폴더에 직접 저장된 문서가 없습니다. 하위 폴더를 열거나 문서를 추가하세요." : "폴더를 열어 문서를 추가하세요."}</p>
               : <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
           ) : (

@@ -10,6 +10,8 @@ import { clampEcsMonthView } from "@/features/class-sheets/view-prefs";
 import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-gate";
 import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
 import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — aywa" };
 
@@ -37,13 +39,16 @@ export default async function EcsMonthPage({
 }) {
   const { classId } = await params;
   const { month, view, week, period } = await searchParams;
-  const [res, landing, textbookOptions] = await Promise.all([
+  const [res, landing, textbookOptions, settings] = await Promise.all([
     // `week`도 넘긴다 — 세션 축이면 '왔던 주'가 든 세션을 연다(주소의 달은 달력 기준이라 경계에서 틀린다).
     getClassSheetMonth(classId, month ?? null, { period, week }),
     getSheetLanding(null), // 반 전환 드롭다운(주간 시트와 같은 스코프)
     // '그 날 고치기' 창이 주간 시트와 같은 계획 표를 쓴다 — 제안 목록도 같이 내려준다(B4: 같은 묶음).
     loadEcsTextbookOptions(),
+    // [교재 배정] 입구 — 교재목록 모듈을 끈 학원엔 세우지 않는다(서버 액션도 같은 판정으로 거절한다, #77).
+    getTenantSettings(),
   ]);
+  const textbooksOn = isModuleEnabled(settings.modules.disabled, "textbooks");
 
   if (!res.ok) {
     return (
@@ -124,6 +129,7 @@ export default async function EcsMonthPage({
             // 주간 시트에서 넘어왔으면 **왔던 주**를 들고 온다 — '주간'을 누르면 그 주로 정확히
             // 돌아간다(왕복이 제자리로). 모양이 아니면 버린다(face-nav `readFromWeek`).
             fromWeek={readFromWeek(week)}
+            textbooksOn={textbooksOn}
           />
         </TextbookOptionsProvider>
       </SheetWidthGate>

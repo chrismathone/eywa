@@ -157,7 +157,7 @@ describe("강사는 자기 반이 먼저", () => {
 
 describe("축 해석·서식 단일 소스", () => {
   it("화면과 엑셀 라우트가 같은 해석 함수를 쓴다", () => {
-    for (const f of ["src/app/(shell)/exams/page.tsx", "src/app/api/exams/excel/route.ts"]) {
+    for (const f of ["src/app/(shell)/exams/input/page.tsx", "src/app/api/exams/excel/route.ts"]) {
       expect(read(f)).toContain("resolveGradeSelection");
     }
   });
@@ -172,7 +172,7 @@ describe("축 해석·서식 단일 소스", () => {
   });
 
   it("🔴 과목 라벨을 화면에 하드코딩하지 않는다(학원설정 단일 소스)", () => {
-    const page = read("src/app/(shell)/exams/page.tsx");
+    const page = read("src/app/(shell)/exams/input/page.tsx");
     expect(page).toContain("buildSubjectMaps");
     expect(page).not.toMatch(/"(수학|영어|과학|국어)"/);
   });
@@ -186,7 +186,7 @@ describe("옛 '시험 등록'은 되살아나지 않는다(원장 2026-09-22)", 
   });
 
   it("인재원 JJ 보기는 그대로 산다(데이터가 다른 화면 — 함께 걷어내지 말 것)", () => {
-    const page = read("src/app/(shell)/exams/page.tsx");
+    const page = read("src/app/(shell)/exams/input/page.tsx");
     expect(page).toContain("JjStudyView");
     expect(page).toContain("JjExamView");
   });
@@ -241,7 +241,7 @@ describe("목록 규약(원장 2026-09-22 오후)", () => {
     const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
     expect(grid).not.toContain("selGroup");
     // 툴바에 그 드롭다운이 다시 서지 않는지(주석의 "한 묶음" 같은 낱말에 걸리지 않게 축 이름으로).
-    expect(read("src/app/(shell)/exams/page.tsx")).not.toMatch(/axisLabel="묶음"/);
+    expect(read("src/app/(shell)/exams/input/page.tsx")).not.toMatch(/axisLabel="묶음"/);
   });
 
   it("🔴 한 학생은 한 줄 — 지금 다니는 반 줄을 남긴다(반이동 학생이 옛 반으로 남지 않게)", () => {
@@ -260,7 +260,7 @@ describe("목록 규약(원장 2026-09-22 오후)", () => {
   });
 
   it("🔴 성적관리 툴바엔 형광 표기를 쓰지 않는다(원장: 드롭다운마다 크기가 널뛰면 난장판)", () => {
-    const page = read("src/app/(shell)/exams/page.tsx");
+    const page = read("src/app/(shell)/exams/input/page.tsx");
     expect(page).not.toMatch(/^\s+marker$/m);
     expect(page).not.toContain("MARKER_TRIGGER");
   });
@@ -274,12 +274,12 @@ describe("주소 축 배선", () => {
     const block = sel.slice(from, sel.indexOf("};", from));
     const keys = [...block.matchAll(/^ {2}(\w+)\?: unknown;/gm)].map((m) => m[1]!);
     expect(keys.length).toBeGreaterThan(5);
-    const page = read("src/app/(shell)/exams/page.tsx");
+    const page = read("src/app/(shell)/exams/input/page.tsx");
     for (const k of keys) expect(page, `page.tsx가 ${k}를 안 읽는다`).toContain(`${k}: sp.${k}`);
   });
 
   it("툴바 컨트롤은 같은 상자 — 반만 다른 부품이라 치수를 맞춰 준다", () => {
-    const page = read("src/app/(shell)/exams/page.tsx");
+    const page = read("src/app/(shell)/exams/input/page.tsx");
     expect(page).toMatch(/triggerClassName=\{TOOLBAR_SELECT\}/);
   });
 });
@@ -297,7 +297,7 @@ describe("표가 창 안에서 스크롤한다(원장 2026-09-23)", () => {
     // 페이지 루트도 같은 기둥이어야 폼의 flex-1이 잴 높이가 생긴다(등록상담 목록뷰 선례).
     // 🔴 폭으로 가르지 않는다 — 좁은 창만 문서 흐름으로 두면 그 폭에선 `sticky thead`가 붙을
     //    스크롤러가 없어 머리줄 고정이 죽는다(적대적 리뷰 2026-09-23).
-    expect(read("src/app/(shell)/exams/page.tsx")).toContain('gridView ? "flex h-full min-h-0 flex-col space-y-5"');
+    expect(read("src/app/(shell)/exams/input/page.tsx")).toContain('gridView ? "flex h-full min-h-0 flex-col space-y-5"');
   });
 
   it("🔴 성적을 안 적은 줄은 배경으로 알린다(원장이 두 번 요구 — 09-22 지시·09-23 재지시)", () => {
@@ -382,7 +382,7 @@ describe("월 축 0288a · 확인 뷰(원장 2026-09-23)", () => {
     // 게이트는 서버가 정본(엑셀·학생 상세 폼도 이 함수를 지난다).
     expect(write).toMatch(/if \(!monthReady && slotUsesMonth\(axis\.slot\)\)/);
     // 화면은 같은 판정으로 이유를 말한다.
-    expect(read("src/app/(shell)/exams/page.tsx")).toMatch(/!sheet\.monthReady && slotUsesMonth\(sel\.slot\)/);
+    expect(read("src/app/(shell)/exams/input/page.tsx")).toMatch(/!sheet\.monthReady && slotUsesMonth\(sel\.slot\)/);
   });
 
   it("🔴 옛 월말평가 행을 시험일의 달로 백필한다 — 안 하면 적용 직후 지난 점수가 안 보인다", () => {
@@ -440,7 +440,7 @@ describe("월 축 0288a · 확인 뷰(원장 2026-09-23)", () => {
   });
 
   it("두 화면을 오가는 길이 양쪽에 있다(같은 부품)", () => {
-    for (const f of ["src/app/(shell)/exams/page.tsx", "src/app/(shell)/exams/view/page.tsx"]) {
+    for (const f of ["src/app/(shell)/exams/input/page.tsx", "src/app/(shell)/exams/view/page.tsx"]) {
       expect(read(f)).toContain("GradeViewSwitch");
     }
   });

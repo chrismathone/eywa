@@ -295,3 +295,50 @@ describe("교재 배정 — 회차 미루기·당기기", () => {
     expect(loop).not.toContain("skippedHolidays.push");
   });
 });
+
+/**
+ * 🔴 **교재목록 '반 배정' 탭은 실제 칸에 쓰지 않는다**(원장 결정 D1, 2026-09-23 — 감사 D1·F4·N7·S7·T9).
+ *    옛 [미리보기]→[기입](`applyTextbookPlan`)이 09-22 결정(*"배정은 실제 칸에 한 줄도 안 쓴다"*)의 뒷문으로
+ *    남아 배정만으로 작성률이 올랐다. 실제로 옮기는 길은 시트의 [월간계획 가져오기] 하나뿐이다.
+ */
+describe("교재 배정 — 반 배정 탭은 읽기 전용", () => {
+  const plan = read("src", "features", "textbooks", "server", "plan-actions.ts");
+  const face = read("src", "app", "(shell)", "textbooks", "_components", "plans-face.tsx");
+  const preview = read("src", "app", "(shell)", "textbooks", "_components", "plan-preview-dialog.tsx");
+
+  it("🔴 저장된 배정을 실제로 기입하던 액션이 없다", () => {
+    expect(plan).not.toContain("export async function applyTextbookPlan");
+    expect(plan).not.toContain("async function applyLoaded");
+    for (const f of [face, preview]) {
+      expect(f).not.toContain("applyTextbookPlan");
+      expect(f).not.toContain("applyTextbookFill");
+    }
+  });
+
+  it("미리보기는 읽기 게이트로 연다(쓰기 권한 없는 사무실도 본다)", () => {
+    expect(plan).toContain("loadPlan(planId, { write: false })");
+  });
+
+  it("잘못 건 배정을 지울 입구가 탭과 시트 배정 창 둘 다에 있다(F4)", () => {
+    expect(face).toContain("deleteClassTextbookPlan");
+    const existing = read("src", "features", "class-sheets", "components", "textbook-fill-existing.tsx");
+    expect(existing).toContain("deleteClassTextbookPlan");
+    const dlg = read("src", "features", "class-sheets", "components", "textbook-fill-dialog.tsx");
+    expect(dlg).toContain("<TextbookFillExisting");
+  });
+
+  it("🔴 모듈을 끈 학원에선 배정 액션이 서버에서 거절된다(S7) — 화면 입구도 같은 판정", () => {
+    expect(plan).toContain('isModuleOnForTenant(tenantId, "textbooks")');
+    const saveBody = plan.slice(plan.indexOf("export async function saveClassTextbookPlan"));
+    expect(saveBody.slice(0, 600)).toContain("textbooksModuleOff(");
+    const month = read("src", "app", "(shell)", "ecs", "[classId]", "month", "page.tsx");
+    expect(month).toContain('isModuleEnabled(settings.modules.disabled, "textbooks")');
+  });
+
+  it("배정 목록은 500건에서 자르지 않는다(T9)", () => {
+    const q = read("src", "features", "textbooks", "server", "queries.ts");
+    const body = q.slice(q.indexOf("export async function getClassTextbookPlans"), q.indexOf("export async function getAssignableTextbooks"));
+    expect(body).toContain("fetchAllPaged<PlanDbRow>");
+    expect(body).not.toMatch(/\.range\(0, 499\)[;)]/);
+  });
+});

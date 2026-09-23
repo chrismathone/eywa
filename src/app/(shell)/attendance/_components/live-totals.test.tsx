@@ -17,7 +17,7 @@ vi.mock("@/features/attendance/server/actions", () => ({
   setAttendanceRange: vi.fn(async () => ({ ok: true, applied: 0, blocked: 0 })),
 }));
 vi.mock("@/features/attendance/server/prefs-actions", () => ({
-  saveAttendanceViewPrefs: vi.fn(async () => ({ ok: true })),
+  saveAttendanceCollapsed: vi.fn(async () => ({ ok: true })),
 }));
 
 const C = "11111111-1111-1111-1111-111111111111";

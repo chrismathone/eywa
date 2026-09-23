@@ -223,3 +223,25 @@ export const gradeMonthReady = cache(async () => columnExists("exam_month"));
 
 /** 0285a('시험없음'·사유)가 적용됐는가 — 위 둘과 **따로** 본다(같은 이유). */
 export const gradeNoExamReady = cache(async () => columnExists("no_exam"));
+
+/**
+ * **시험 칸 축이 없는** 행(옛 이관분·통합 원장의 일일·확인·입학 기록) 쓰기 — 통합 원장 전용 두 갈래.
+ * 🔴 학기·시험 칸이 있는 행은 여기로 오지 말 것 — `writeGradeCells`(= `saveGradeScores`)가 단일 경로다.
+ *    그래도 이 파일에 두는 이유: `student_grades` 쓰기가 한 모듈에 모여 있어야 가드가 새 우회로를 잡는다
+ *    (`grades-wiring.test.ts` '쓰는 곳은 write.ts 하나'). 실패는 **DB 원문**을 돌려주고 화면이 한글로 바꾼다.
+ */
+export async function updateUnslottedGrade(tenantId: string, id: string,
+  patch: { score: number | null; max_score: number | null; taken_on: string }): Promise<string | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("student_grades").update(patch)
+    .eq("id", id).eq("tenant_id", tenantId).select("id").maybeSingle();
+  if (error) return error.message;
+  return data ? null : "성적 기록을 찾지 못했습니다";
+}
+
+export async function insertUnslottedGrade(row: { tenant_id: string; student_id: string; subject: string; exam_name: string;
+  taken_on: string; score: number | null; max_score: number; created_by: string }): Promise<string | null> {
+  const supabase = await createClient();
+  const { error } = await supabase.from("student_grades").insert(row);
+  return error?.message ?? null;
+}
