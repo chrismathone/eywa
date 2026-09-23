@@ -22,6 +22,7 @@ import { ScheduleTab } from "./schedule-tab";
 
 type Params = { from?: string; to?: string; subject?: string; kind?: string; missing?: string; student?: string; cohortClass?: string;
   schoolGroup?: string; gradeGroup?: string; page?: string; tab?: string; q?: string; month?: string;
+  embed?: string; level?: string; tlevel?: string;
   sort?: string; dir?: string; fSchool?: string; fClass?: string; fTeacher?: string; fScore?: string; fDelta?: string; fConsult?: string;
   entry?: string; entryYear?: string; entryTerm?: string; entrySubject?: string; entrySlot?: string; entryClass?: string; entryDate?: string; entryMax?: string };
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -30,7 +31,7 @@ const validDate = (value: string | undefined): value is string => {
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
-const TABS = [["overview", "전체 현황"], ["records", "성적 원장"], ["student", "학생 추이"], ["classes", "반별 분석"], ["cohorts", "학교·학년"], ["schedule", "시험 일정"]] as const;
+const TABS = [["overview", "전체 현황"], ["records", "성적 현황"], ["student", "학생 추이"], ["classes", "반별 분석"], ["cohorts", "학교·학년"], ["schedule", "시험 일정"]] as const;
 type Tab = (typeof TABS)[number][0];
 const isTab = (value: string | undefined): value is Tab => TABS.some(([key]) => key === value);
 const PAGE_SIZE = 50;
@@ -81,7 +82,9 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const ledgerRows = tab === "records" ? applyLedgerView(rows, ledgerView) : [];
   const page = Math.max(1, Math.min(Math.ceil(ledgerRows.length / PAGE_SIZE) || 1, Number(searchParams.page) || 1));
 
-  const base: Record<string, string> = { from, to, subject, kind, missing: showMissing ? "1" : "0", tab, ...(q ? { q } : {}) };
+  const base: Record<string, string> = { from, to, subject, kind, missing: showMissing ? "1" : "0", tab, ...(q ? { q } : {}),
+    // 🔴 창(iframe) 안이면 모든 링크가 embed=1을 싣는다 — 빠지면 창의 주소 복원이 이동과 겹쳐 반·학교를 눌러도 안 바뀐다([[#133]]).
+    ...(searchParams.embed === "1" ? { embed: "1" } : {}) };
   // 원장 정렬·필터는 원장 링크(페이지 이동·정렬 머리)에만 싣는다 — 다른 면으로 가면 풀린다.
   const ledgerHref = (patch: Record<string, string>) => href({ ...Object.fromEntries(Object.entries({ sort: searchParams.sort, dir: searchParams.dir, fSchool: searchParams.fSchool,
     fClass: searchParams.fClass, fTeacher: searchParams.fTeacher, fScore: searchParams.fScore, fDelta: searchParams.fDelta, fConsult: searchParams.fConsult })
@@ -90,7 +93,8 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const exportHref = `/api/exams/unified-export?${new URLSearchParams({ from, to, subject, kind, missing: showMissing ? "1" : "0" })}`;
 
   const students = [...new Map(rows.map((row) => [row.studentId, row])).values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  const selectedStudent = students.find((row) => row.studentId === searchParams.student) ?? students[0];
+  // 학생은 **고르기 전엔 비어 있다**(원장 2026-09-23) — 첫 학생을 멋대로 띄우지 않는다.
+  const selectedStudent = students.find((row) => row.studentId === searchParams.student);
   const classes = aggregateBy(rows, "class");
   const schools = aggregateBy(rows, "school");
   const grades = aggregateBy(rows, "grade");
@@ -131,18 +135,17 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     {tab === "records" ? <div className="space-y-3">
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note={showMissing ? "미입력 포함" : undefined} />
       <UnifiedLedger rows={ledgerRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)} canWrite={!writeError}
-        head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} />} />
+        head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} subject={subject} subjects={subjectOptions} />} />
       {writeError ? <p className="text-danger text-sm">{writeError}</p> : null}
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note="수업보고서 테스트일은 보고서 날짜와 연결됩니다" />
     </div> : null}
 
-    {tab === "student" ? <StudentTab students={students} selected={selectedStudent} href={href}
+    {tab === "student" ? <StudentTab students={students} selected={selectedStudent} href={href} allRows={rows}
       rows={selectedStudent ? rows.filter((row) => row.studentId === selectedStudent.studentId) : []} /> : null}
     {tab === "classes" ? <ClassesTab classes={classes} rows={rows} href={href}
       selected={classes.find((row) => row.key === searchParams.cohortClass) ?? classes[0]} /> : null}
     {tab === "cohorts" ? <CohortsTab rows={rows} schools={schools} grades={grades} href={href}
-      selectedSchool={schools.find((row) => row.key === searchParams.schoolGroup) ?? schools[0]}
-      selectedGrade={grades.find((row) => row.key === searchParams.gradeGroup) ?? grades[0]} /> : null}
+      schoolKey={searchParams.schoolGroup} gradeKey={searchParams.gradeGroup} level={searchParams.level} tableLevel={searchParams.tlevel} /> : null}
     {tab === "schedule" ? <ScheduleTab month={month} today={today} items={calendarItems} dayHref={dayHref} href={href} /> : null}
   </div>;
 }
