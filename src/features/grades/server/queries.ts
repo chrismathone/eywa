@@ -135,11 +135,13 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
   // 표식 컬럼(0284a)이 아직 없으면 그 열만 빼고 읽는다 — 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]).
   // 아직 없는 컬럼을 select에 넣으면 PostgREST 400으로 화면이 죽는다([[#95]]) — 준비된 것만 읽는다.
   const SCORE_COLS = [
-    "student_id, score, max_score, taken_on",
+    "id, student_id, exam_slot, score, max_score, taken_on",
     marksReady ? ", ask1_at, ask2_at, received_at" : "",
     noExamReady ? ", no_exam, no_exam_reason" : "",
   ].join("");
   type ScoreCell = {
+    id: string;
+    exam_slot: string | null;
     student_id: string;
     score: string | null;
     max_score: string | null;
@@ -172,8 +174,10 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
               .select(SCORE_COLS)
               .eq("subject", sel.subject)
               .eq("school_year", sel.year)
-              .eq("term", sel.term)
-              .eq("exam_slot", sel.slot);
+              .eq("term", sel.term);
+            q = sel.subject === "math" && sel.slot === "school"
+              ? q.in("exam_slot", ["school", "midterm", "final"])
+              : q.eq("exam_slot", sel.slot);
             // 🔴 월말평가는 달마다 다른 칸이다(0288a) — 안 좁히면 9월·10월 두 행이 같이 와서
             //    Map이 아무거나 하나를 집는다(화면이 지난달 점수를 이번 달로 보여 준다).
             // ⚠️ 0288a 미적용이면 그 컬럼이 없어 필터 자체가 PostgREST 400이다 — 그땐 안 건다([[#95]]).
@@ -189,10 +193,14 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
 
   const studentById = new Map(students.map((s) => [s.id, s]));
   const num = (v: string | number | null): number | null => (v == null ? null : Number(v));
+  // 이관 전 수학 중간·기말은 내신으로 읽는다. 겹치면 내신 원본을 우선하고 과거 행은 원장에 남긴다.
+  const orderedScores = [...scores].sort((a, b) =>
+    (a.exam_slot === "school" ? 1 : 0) - (b.exam_slot === "school" ? 1 : 0) || (a.taken_on ?? "").localeCompare(b.taken_on ?? ""));
   const scoreByStudent = new Map(
-    scores.map((s) => [
+    orderedScores.map((s) => [
       s.student_id,
       {
+        id: s.id,
         score: num(s.score),
         maxScore: num(s.max_score),
         takenOn: s.taken_on,
@@ -226,6 +234,7 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
       classId: cls.id,
       className: cls.class_name,
       score: cell?.score ?? null,
+      scoreId: cell?.id ?? null,
       maxScore: cell?.maxScore ?? null,
       takenOn: cell?.takenOn ?? null,
       marks: cell?.marks ?? EMPTY_GRADE_MARKS,

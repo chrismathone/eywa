@@ -56,6 +56,8 @@ export type GradeSheetRow = {
   classId: string;
   className: string;
   score: number | null;
+  /** 새 통합 원장에서 기존 행을 원래 ID 그대로 고치기 위한 값. */
+  scoreId?: string | null;
   maxScore: number | null;
   /** 이미 저장된 칸의 시험일. 저장은 **바뀐 칸만** 쓰므로 이 값이 diff의 한 축이다. */
   takenOn: string | null;

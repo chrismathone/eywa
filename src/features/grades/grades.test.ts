@@ -72,16 +72,18 @@ describe("학기 축", () => {
 
 describe("시험 칸", () => {
   it("수학은 중간·기말 + 내신·월말평가, 영어는 듣기평가가 앞에 붙는다(원장 2026-09-22)", () => {
-    expect(examSlotsFor("math")).toEqual(["midterm", "final", "school", "monthly"]);
+    expect(examSlotsFor("math")).toEqual(["school", "monthly"]);
     expect(examSlotsFor("english")).toEqual(["listening", "midterm", "final"]);
     // 등록만 된 다른 과목도 화면이 서야 한다 — 기본 두 칸.
     expect(examSlotsFor("science")).toEqual(["midterm", "final"]);
   });
 
   it("그 과목에 없는 칸은 첫 칸으로 떨어진다", () => {
-    expect(normalizeExamSlot("math", "listening")).toBe("midterm");
+    expect(normalizeExamSlot("math", "listening")).toBe("school");
     expect(normalizeExamSlot("english", "listening")).toBe("listening");
-    expect(normalizeExamSlot("math", "zzz")).toBe("midterm");
+    expect(normalizeExamSlot("math", "zzz")).toBe("school");
+    expect(normalizeExamSlot("math", "midterm")).toBe("school");
+    expect(normalizeExamSlot("math", "final")).toBe("school");
   });
 
   it("라벨 왕복 — 엑셀이 이름으로 적혀 와도 읽는다", () => {
@@ -134,7 +136,7 @@ describe("주소 해석", () => {
       subject: "math",
       track: null,
       classId: null,
-      slot: "midterm",
+      slot: "school",
       maxScore: 100,
     });
     expect(sel.date).toBe("2026-09-22");
@@ -167,7 +169,7 @@ describe("주소 해석", () => {
       track: "eie",
       slot: "listening", // 영어의 첫 칸
     });
-    expect(resolveGradeSelection({ subject: "math", slot: "listening" }, opts)!.slot).toBe("midterm");
+    expect(resolveGradeSelection({ subject: "math", slot: "listening" }, opts)!.slot).toBe("school");
   });
 
   it("과목이 하나도 없으면 null(화면이 '과목을 먼저 등록' 안내를 낸다)", () => {
@@ -304,7 +306,7 @@ describe("월 축(원장 2026-09-23)", () => {
 describe("확인 뷰의 열(원장 2026-09-23)", () => {
   const present = [
     { slot: "monthly" as const, month: 10 },
-    { slot: "midterm" as const, month: 0 },
+    { slot: "school" as const, month: 0 },
     { slot: "monthly" as const, month: 9 },
     { slot: "monthly" as const, month: 1 },
     { slot: "monthly" as const, month: 10 }, // 같은 달이 여러 학생 → 열은 하나
@@ -312,8 +314,8 @@ describe("확인 뷰의 열(원장 2026-09-23)", () => {
 
   it("🔴 과목의 시험 순서대로, 월말평가는 **학기 순서**로 편다(1·2월은 맨 뒤)", () => {
     const cols = buildOverviewColumns("math", present);
-    expect(cols.map((c) => c.key)).toEqual(["midterm", "monthly:9", "monthly:10", "monthly:1"]);
-    expect(cols.map((c) => c.label)).toEqual(["중간고사", "9월", "10월", "1월"]);
+    expect(cols.map((c) => c.key)).toEqual(["school", "monthly:9", "monthly:10", "monthly:1"]);
+    expect(cols.map((c) => c.label)).toEqual(["내신", "9월", "10월", "1월"]);
   });
 
   it("🔴 값이 없는 칸은 열을 안 세운다 — 안 친 달까지 빈 열로 깔리면 표만 길어진다", () => {

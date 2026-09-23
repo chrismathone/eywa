@@ -30,7 +30,7 @@ const DEFAULT_SLOTS: readonly ExamSlotKey[] = ["midterm", "final"];
  */
 const SLOTS_BY_SUBJECT: Record<string, readonly ExamSlotKey[]> = {
   english: ["listening", "midterm", "final"],
-  math: ["midterm", "final", "school", "monthly"],
+  math: ["school", "monthly"],
 };
 
 /**
@@ -78,6 +78,7 @@ export function isExamSlot(v: unknown): v is ExamSlotKey {
 export function normalizeExamSlot(subjectKey: string, raw: unknown): ExamSlotKey {
   const slots = examSlotsFor(subjectKey);
   const v = typeof raw === "string" ? raw.trim() : "";
+  if (subjectKey === "math" && (v === "midterm" || v === "final")) return "school";
   return isExamSlot(v) && slots.includes(v) ? v : slots[0]!;
 }
 

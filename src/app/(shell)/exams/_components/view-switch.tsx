@@ -18,6 +18,9 @@ export function GradeViewSwitch({
 }) {
   return (
     <ToolbarSegment label="보기">
+      <ToolbarSegmentItem active={false} href="/exams">
+        통합
+      </ToolbarSegmentItem>
       <ToolbarSegmentItem active={active === "input"} href={inputHref}>
         입력
       </ToolbarSegmentItem>

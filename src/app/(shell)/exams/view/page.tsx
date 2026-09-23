@@ -109,7 +109,7 @@ export default async function ExamsViewPage({
       />
 
       <Toolbar>
-        <GradeViewSwitch active="view" inputHref="/exams" viewHref={buildHref({})} />
+        <GradeViewSwitch active="view" inputHref="/exams/input" viewHref={buildHref({})} />
         <HrefSelect axisLabel="년도" ariaLabel="년도 선택" value={String(year)} options={yearOptions} />
         <HrefSelect axisLabel="학기" ariaLabel="학기 선택" value={String(term)} options={termOptions} />
         <HrefSelect axisLabel="과목" ariaLabel="과목 선택" value={subject} options={subjectSelectOptions} />

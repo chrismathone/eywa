@@ -210,12 +210,12 @@ describe("헤더 매핑 · 제목 줄", () => {
     expect(t).toBe("2026년 2학기 · 영어 (EiE) · 듣기평가 · 만점 100 · 시험일 2026-09-22");
     // 트랙이 없는 과목은 괄호를 안 붙인다.
     expect(
-      scoreSheetTitle({ ...AXIS, subject: "math", track: null, slot: "midterm" }, {
+      scoreSheetTitle({ ...AXIS, subject: "math", track: null, slot: "school" }, {
         subjectLabel: "수학",
-        slotLabel: "중간고사",
+        slotLabel: "내신",
         trackLabel: "",
       }),
-    ).toContain("수학 · 중간고사");
+    ).toContain("수학 · 내신");
   });
 
   it("모르는 서식이면 필수 열이 비어 형식 불일치로 잡힌다", () => {
@@ -237,8 +237,8 @@ describe("안내 시트 축 — 왕복", () => {
   });
 
   it("영어가 아니면 트랙은 비워서 왕복(다른 과목엔 트랙이 없다)", () => {
-    const math: GradeSheetAxis = { ...AXIS, subject: "math", track: null, slot: "midterm" };
-    const parsed = parseAxisSheetRows(axisSheetRows(math, { subjectLabel: "수학", slotLabel: "중간고사", trackLabel: "" }));
+    const math: GradeSheetAxis = { ...AXIS, subject: "math", track: null, slot: "school" };
+    const parsed = parseAxisSheetRows(axisSheetRows(math, { subjectLabel: "수학", slotLabel: "내신", trackLabel: "" }));
     expect(parsed.ok && parsed.row).toEqual(math);
   });
 
