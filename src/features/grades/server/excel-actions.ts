@@ -251,7 +251,7 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
     // 🔴 제도상 안 치는 시험(초등·중1의 중간·기말)에 점수가 적혀 오면 **오류**다 — 화면엔 칸이 없는데
     //    파일로만 들어오면 아무도 못 고치는 값이 남는다. 빈 칸이면 아무 말 없이 지나간다.
     if (row.score !== undefined && hit.applies === false) {
-      const why = notApplicableReason(axis.slot, hit.grade) ?? "이 학생은 그 시험을 치지 않습니다";
+      const why = notApplicableReason(axis.slot, hit.grade, axis.term) ?? "이 학생은 그 시험을 치지 않습니다";
       errors.push(`${row.rowNum}행: ${hit.name} — ${why}`);
       continue;
     }

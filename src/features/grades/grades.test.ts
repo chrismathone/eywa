@@ -170,34 +170,38 @@ describe("주소 해석", () => {
 });
 
 describe("제도상 안 치는 시험(원장 2026-09-22)", () => {
-  it("🔴 초등학생은 중간·기말이 없다 — 빈 칸이 미기입으로 보이면 0을 적게 만든다", () => {
-    expect(examAppliesTo("midterm", "초6")).toBe(false);
-    expect(examAppliesTo("final", "초3")).toBe(false);
+  it("🔴 초등학생은 두 학기 모두 중간·기말이 없다 — 빈 칸이 미기입으로 보이면 0을 적게 만든다", () => {
+    expect(examAppliesTo("midterm", "초6", 1)).toBe(false);
+    expect(examAppliesTo("midterm", "초6", 2)).toBe(false);
+    expect(examAppliesTo("final", "초3", 1)).toBe(false);
     // 학원 시험(월말평가)·듣기평가는 학년과 무관하다.
-    expect(examAppliesTo("monthly", "초6")).toBe(true);
-    expect(examAppliesTo("listening", "초6")).toBe(true);
+    expect(examAppliesTo("monthly", "초6", 2)).toBe(true);
+    expect(examAppliesTo("listening", "초6", 2)).toBe(true);
   });
 
-  it("🔴 중1은 두 학기 모두 중간·기말이 없다(자유학년제)", () => {
-    expect(examAppliesTo("midterm", "중1")).toBe(false);
-    expect(examAppliesTo("final", "중1")).toBe(false);
-    expect(examAppliesTo("midterm", "중2")).toBe(true);
-    expect(examAppliesTo("midterm", "고1")).toBe(true);
+  it("🔴 중1은 **2학기만** 중간·기말이 없다(원장 2026-09-23) — 1학기는 치므로 명단에 떠야 한다", () => {
+    expect(examAppliesTo("midterm", "중1", 1)).toBe(true);
+    expect(examAppliesTo("final", "중1", 1)).toBe(true);
+    expect(examAppliesTo("midterm", "중1", 2)).toBe(false);
+    expect(examAppliesTo("final", "중1", 2)).toBe(false);
+    expect(examAppliesTo("midterm", "중2", 2)).toBe(true);
+    expect(examAppliesTo("midterm", "고1", 2)).toBe(true);
   });
 
   it("🔴 모르는 학년은 막지 않는다 — 모른다고 칸을 지우면 실제로 시험 본 학생이 사라진다", () => {
-    expect(examAppliesTo("midterm", null)).toBe(true);
-    expect(examAppliesTo("midterm", "")).toBe(true);
-    expect(examAppliesTo("midterm", "7세")).toBe(true);
+    expect(examAppliesTo("midterm", null, 2)).toBe(true);
+    expect(examAppliesTo("midterm", "", 2)).toBe(true);
+    expect(examAppliesTo("midterm", "7세", 2)).toBe(true);
   });
 
   it("학년 판정은 접두로 — `중1-2` 같은 변형도 중1", () => {
     expect(isMiddleFirstGrade("중1-2")).toBe(true);
     expect(isMiddleFirstGrade("중12")).toBe(false); // 두 자리는 다른 학년
     expect(isElementaryGrade(" 초 6 ")).toBe(true);
-    expect(notApplicableReason("midterm", "초6")).toMatch(/초등/);
-    expect(notApplicableReason("midterm", "중1")).toMatch(/중1/);
-    expect(notApplicableReason("monthly", "초6")).toBeNull();
+    expect(notApplicableReason("midterm", "초6", 1)).toMatch(/초등/);
+    expect(notApplicableReason("midterm", "중1", 2)).toMatch(/중1/);
+    expect(notApplicableReason("midterm", "중1", 1)).toBeNull();
+    expect(notApplicableReason("monthly", "초6", 2)).toBeNull();
   });
 });
 

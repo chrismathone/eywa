@@ -252,7 +252,12 @@ export function ScoreGrid({
   return (
     // 🔴 폭 상한은 두지 않는다 — 창을 **가득 채우되** 열 비율로 벌린다(원장 2026-09-22:
     //    "페이지는 가득차야지 가득차되 벌리는거지"). 빈 공간은 폭 없는 열이 독식할 때 생긴다.
-    <form onSubmit={(e) => submitAction(e, formAction)} className="w-full space-y-3">
+    // 🔴 세로는 **flex 기둥**이다(등록상담 목록뷰 선례) — 배너·요약·저장 바는 제 높이를 갖고 표가
+    //    남는 높이를 전부 가져가 그 안에서 스크롤한다. `max-h`를 dvh 계산으로 박으면 ① 툴바가 한 줄
+    //    접힌 만큼 표 아래 빈 띠가 남고 ② 스크롤 자체가 안 된다(그 높이는 DragScrollArea의 **바깥**
+    //    `overflow-hidden` 껍데기에 붙어, 진짜 스크롤러인 안쪽 `h-full`이 높이를 못 받고 내용만큼
+    //    늘어난 뒤 바깥이 잘라 내기만 했다 — 원장 2026-09-23 *"스크롤이 안되는뎈ㅋㅋㅋ"*).
+    <form onSubmit={(e) => submitAction(e, formAction)} className="flex min-h-0 w-full flex-1 flex-col gap-3">
       <input type="hidden" name="year" value={sel.year} />
       <input type="hidden" name="term" value={sel.term} />
       <input type="hidden" name="subject" value={axisValueOf(sel)} />
@@ -326,8 +331,10 @@ export function ScoreGrid({
         </p>
       ) : null}
       {/* 🔴 `scrollY` 없이 `sticky`만 붙이면 아무 일도 안 난다 — 이 컨테이너는 기본이 `overflow-y-hidden`이라
-          세로는 페이지가 스크롤한다(그러면 머리줄이 그냥 위로 사라진다). 높이를 잡아 **여기서** 스크롤시킨다. */}
-      <DragScrollArea scrollY className="bg-card shadow-card max-h-[calc(100dvh-19rem)] rounded-2xl">
+          세로는 페이지가 스크롤한다(그러면 머리줄이 그냥 위로 사라진다). 높이를 잡아 **여기서** 스크롤시킨다.
+          🔴 높이는 `min-h-0 flex-1`로 **받는다** — 안쪽 스크롤러가 `h-full`이라 바깥이 확정 높이를
+          가져야 스크롤이 생긴다(`max-h`만 주면 안쪽은 내용만큼 늘고 바깥이 잘라 내기만 한다). */}
+      <DragScrollArea scrollY className="bg-card shadow-card min-h-[14rem] flex-1 rounded-2xl">
         {/* 🔴 최소 폭 — 없으면 좁은 창에서 7열이 서로를 찌그러뜨린다(가로 스크롤도 안 생긴다).
             폭이 모자라면 컨테이너가 가로로 스크롤한다(잡고 끌기도 된다). */}
         <table className="w-full min-w-[880px] table-fixed text-sm [&_td]:whitespace-nowrap">
@@ -384,7 +391,18 @@ export function ScoreGrid({
                       /* 키는 **그 줄의 반**으로 — 묶음 키(학년)로 만들면 두 반 학생이 부딪힌다. */
                       key={`${r.classId}:${id}`}
                       className={
-                        r.withdrawn ? "bg-bg-soft/40" : "hover:bg-bg-soft/50"
+                        // 🔴 **아직 안 적은 줄은 배경을 바꾼다**(원장 2026-09-22 *"성적기입이 안된학생은
+                        //    노란색 또는 빨강색으로 백그라운드 색변경 눈이 너무 안아플정도로"* → 09-23 재지시
+                        //    *"해당 기능도 빠져있음"*). 한때 "황색 벽"이라는 리뷰를 받아 뺐었지만, 원장이
+                        //    두 번 요구한 신호다 — 대신 **아주 옅게**(앰버 12% 틴트의 45%≈5%) 깔아 눈이
+                        //    아프지 않게 하고, 적는 즉시 흰 줄로 바뀌어 진행이 보이게 한다.
+                        // ⚠️ '시험없음'으로 눌러 둔 줄은 미기입이 아니다. 제도상 안 치는 학생은 서버가
+                        //    이미 목록에서 뺐다(여기 오는 줄은 전부 그 시험을 치는 학생이다).
+                        r.withdrawn
+                          ? "bg-bg-soft/40"
+                          : missing
+                            ? "bg-amber-soft/45 hover:bg-amber-soft/70"
+                            : "hover:bg-bg-soft/50"
                       }
                       title={
                         r.withdrawn
@@ -392,9 +410,8 @@ export function ScoreGrid({
                           : undefined
                       }
                     >
-                      {/* 🔴 미기입은 **줄 전체를 칠하지 않는다** — 처음엔 전원이 미기입이라 노란 벽이 된다
-                          (codex 리뷰 2026-09-22: "경고가 아니라 황색 벽"). 말하는 자리는 **점수 칸 하나**다.
-                          🔴 왼쪽 색 띠도 쓰지 않는다(원장 2026-09-16 금지 — `no-left-accent-bar` 가드). */}
+                      {/* 🔴 왼쪽 색 띠는 쓰지 않는다(원장 2026-09-16 금지 — `no-left-accent-bar` 가드).
+                          미기입 신호는 **줄 배경(옅은 앰버) + 점수 칸 테두리** 둘뿐이다. */}
                       <td className="text-foreground overflow-hidden px-4 py-1.5 text-left font-medium text-ellipsis">
                         {r.name}
                         {/* 🔴 표식은 **퇴원** 하나뿐 — 반이동·과목 변경엔 아무 표식도 붙이지 않는다. */}
@@ -489,7 +506,7 @@ export function ScoreGrid({
                             {/* 🔴 체크 자체는 16px이라 표적이 너무 작다 — **칸 전체**를 누를 수 있게 라벨로 감싼다. */}
                             <label
                               className={`flex min-h-9 cursor-pointer items-center justify-center ${
-                                locked || !marksReady ? "cursor-not-allowed" : "hover:bg-primary-soft/40"
+                                locked || !marksReady ? "cursor-not-allowed" : "hover:bg-foreground/5"
                               }`}
                               title={at ? `${GRADE_MARK_LABEL[k]} ${at.slice(0, 10)}` : GRADE_MARK_LABEL[k]}
                             >

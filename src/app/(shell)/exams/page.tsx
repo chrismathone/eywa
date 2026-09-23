@@ -210,8 +210,15 @@ export default async function ExamsPage({
   const canWrite = !writeError;
   const lockReason = writeError ?? (sheet && !sheet.schemaReady ? "성적 표 준비(0283a)가 아직 적용되지 않아 입력을 잠갔습니다 — 적용 후 저장할 수 있습니다" : null);
 
+  // 격자를 그릴 때만 **창 높이를 채우는 flex 기둥**(등록상담 목록뷰 선례) — 표가 남는 높이를 전부
+  // 가져가 그 안에서 스크롤하고 저장 바는 창 바닥에 붙는다. JJ 뷰·빈 화면은 종전대로 문서 흐름.
+  // 🔴 폭으로 가르지 않는다(좁은 창만 문서 흐름으로 두려다 **머리줄 고정이 죽는** 것을 리뷰에서
+  //    잡았다 — 스크롤러가 없으면 `sticky thead`가 붙을 자리가 없어 그냥 위로 사라진다). 좁은 창
+  //    대비는 표에 최소 높이를 주는 쪽으로(그 아래로 밀리면 페이지가 스크롤한다).
+  const gridView = !jjMode && !!sheet && sheet.rows.length > 0;
+
   return (
-    <div className="space-y-5">
+    <div className={gridView ? "flex h-full min-h-0 flex-col space-y-5" : "space-y-5"}>
       <PageHeader
         eyebrow="학생 관리"
         title="성적관리"
