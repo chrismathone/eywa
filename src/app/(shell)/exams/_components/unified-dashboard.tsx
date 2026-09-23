@@ -8,6 +8,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
 import { aggregateBy, KIND_LABEL, withPreviousScores, type UnifiedRow } from "@/features/grades/unified/model";
 import { kstToday } from "@/lib/date-kst";
+import { defaultRangeFrom } from "@/features/grades/unified/default-range";
 import { UnifiedLedger } from "./unified-ledger";
 import { LedgerHead } from "./ledger-head";
 import { GradeEntryDialog, type EntryClass } from "./grade-entry-dialog";
@@ -36,11 +37,6 @@ type Tab = (typeof TABS)[number][0];
 const isTab = (value: string | undefined): value is Tab => TABS.some(([key]) => key === value);
 const PAGE_SIZE = 50;
 
-function daysBefore(dateIso: string, days: number): string {
-  const date = new Date(`${dateIso}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() - days);
-  return date.toISOString().slice(0, 10);
-}
 function monthEnd(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
@@ -55,7 +51,7 @@ const isBlank = (row: UnifiedRow) => row.score == null && row.source !== "level"
 export async function UnifiedDashboard({ searchParams }: { searchParams: Params }) {
   const today = kstToday();
   const to = validDate(searchParams.to) ? searchParams.to : today;
-  const proposedFrom = validDate(searchParams.from) ? searchParams.from : daysBefore(to, 180);
+  const proposedFrom = validDate(searchParams.from) ? searchParams.from : defaultRangeFrom(to);
   const from = proposedFrom <= to ? proposedFrom : to;
   const kind = searchParams.kind ?? "all";
   const subject = searchParams.subject ?? "all";

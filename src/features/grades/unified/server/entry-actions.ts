@@ -28,6 +28,8 @@ export type SchoolRoster = {
  */
 export async function loadSchoolRoster(raw: {
   year?: string; term?: string; subject?: string; classId?: string; slot?: string; date?: string; max?: string;
+  /** 내신은 반이 아니라 **학교·학년**으로 명단을 세운다(원장 2026-09-24) — 비우면 그 축은 거르지 않는다. */
+  school?: string; grade?: string;
 }): Promise<{ error: string } | { roster: SchoolRoster }> {
   const gate = await gradeWriteError();
   if (gate) return { error: gate };
@@ -41,6 +43,8 @@ export async function loadSchoolRoster(raw: {
   const rows: SchoolRosterRow[] = [];
   for (const r of sheet.rows) {
     if (seen.has(r.studentId)) continue; // 두 반 수강생도 값은 하나 — 한 줄만
+    if (raw.school && (r.school ?? "") !== raw.school) continue;
+    if (raw.grade && (r.grade ?? "") !== raw.grade) continue;
     seen.add(r.studentId);
     rows.push({ studentId: r.studentId, name: r.name, school: r.school, grade: r.grade, className: r.className, score: r.score,
       applies: r.applies, withdrawn: r.withdrawn, noExam: r.noExam, noExamReason: r.noExamReason });

@@ -15,11 +15,13 @@ export type EntryResult = { ok: true } | { ok: false; error: string };
  * 성적 입력 명단 — 한 줄 = 학생 한 명, 점수 칸만 친다. **Enter = 다음 학생**(엑셀처럼 세로로 내려간다).
  * 만점을 넘는 값은 칸을 빨갛게 — 저장 전에 보인다(서버도 다시 막는다).
  */
-export function EntryGrid({ rows, scores, max, results, onScore, onRemove, disabled }: {
+export function EntryGrid({ rows, scores, max, results, onScore, onRemove, disabled, emptyText }: {
   rows: EntryGridRow[]; scores: Record<string, string>; max: number; results: Record<string, EntryResult>;
   onScore: (studentId: string, value: string) => void; onRemove?: (studentId: string) => void; disabled: boolean;
+  /** 빈 명단 문구 — 이유가 화면마다 다르다(미입력만 보기로 다 걸러짐 · 그 학교·학년에 학생 없음). */
+  emptyText?: string;
 }) {
-  if (!rows.length) return <p className="text-text-dim py-10 text-center text-sm">명단이 비어 있습니다. 반을 고르거나 학생을 추가해 주세요.</p>;
+  if (!rows.length) return <p className="text-text-dim py-10 text-center text-sm">{emptyText ?? "명단이 비어 있습니다. 반을 고르거나 학생을 추가해 주세요."}</p>;
   const focusNext = (index: number) => {
     const next = document.querySelector<HTMLInputElement>(`[data-entry-index="${index + 1}"]`);
     next?.focus(); next?.select();

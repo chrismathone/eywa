@@ -11,6 +11,7 @@ import { createUnifiedGrade } from "@/features/grades/unified/server/create-acti
 import { loadSchoolRoster, type SchoolRoster } from "@/features/grades/unified/server/entry-actions";
 import { KIND_LABEL, schoolGradeLabel } from "@/features/grades/unified/model";
 import { EntryGrid, type EntryGridRow, type EntryResult } from "./entry-grid";
+import { SchoolGradeFields } from "./school-grade-fields";
 
 type Option = { value: string; label: string };
 type Student = { id: string; name: string; school: string | null; grade: string | null };
@@ -22,6 +23,7 @@ const LABEL = "grid gap-1 text-sm";
 /**
  * **성적 입력** 창(원장 2026-09-23) — 1행 = 모든 시험에 공통(시험·과목·반·시험일·만점), 2행 = 고른 시험에만 필요한 것
  * (수업 시험: 학생 추가 / 내신: 년도·학기·내신 종류 / 월말평가: 년도·학기). 명단을 세우고 점수만 Enter로 쭉 친다.
+ * 내신은 학교 시험이라 1행의 **반 자리에 학교·학년**을 세운다(원장 2026-09-24) — 월말평가는 학원 시험이라 반 그대로.
  * 저장 경로는 **새로 만들지 않았다**: 수업 시험 = `createUnifiedGrade`(한 명씩), 내신·월말 = `saveGradeScores`(명단 일괄).
  */
 export function GradeEntryDialog({ canWrite, today, subjects, students, classes, initialOpen }: {
@@ -33,6 +35,9 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   const [kind, setKind] = useState<EntryKind>(initialOpen ? "school" : "daily");
   const [subject, setSubject] = useState(subjects[0]?.value ?? "");
   const [classId, setClassId] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [gradeName, setGradeName] = useState("");
+  const [onlyMissing, setOnlyMissing] = useState(false);
   const [date, setDate] = useState(today);
   const [max, setMax] = useState("100");
   const [year, setYear] = useState(today.slice(0, 4));
@@ -55,6 +60,8 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   const school = kind === "school" || kind === "monthly";
   const byId = useMemo(() => new Map(students.map((s) => [s.id, s])), [students]);
   const subjectClasses = classes.filter((c) => c.subject === baseSubject);
+  const subjectStudents = useMemo(() => [...new Set(subjectClasses.flatMap((c) => c.studentIds))].map((id) => byId.get(id)).filter((s): s is Student => !!s),
+    [subjectClasses, byId]);
 
   // 조건이 바뀌면 이미 친 점수·결과·명단을 비운다 — 다른 시험의 점수가 새 명단에 남아 잘못 저장되지 않게.
   const resetWork = () => { setScores({}); setResults({}); setRoster(null); setNotice(null); };
@@ -71,10 +78,13 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
   const rows = school ? schoolRows : quickRows;
   const maxNum = school ? roster?.selection.maxScore ?? Number(max) : Number(max);
   const filled = rows.filter((r) => !r.lockedReason && (scores[r.studentId] ?? "") !== "");
+  // 미입력만 보기 — 기준은 **저장된 값**(내신·월말) / 저장 결과(수업 시험)다. 치는 중인 칸으로 거르면 Enter를 누르는 순간 줄이 사라진다.
+  const shownRows = onlyMissing ? rows.filter((r) => !r.lockedReason && (school ? r.existing == null : !results[r.studentId]?.ok)) : rows;
 
   const loadRoster = () => start(async () => {
     resetWork();
-    const res = await loadSchoolRoster({ year, term, subject, classId, date, max,
+    const res = await loadSchoolRoster({ year, term, subject, date, max,
+      ...(kind === "school" ? { classId: "", school: schoolName, grade: gradeName } : { classId }),
       slot: kind === "monthly" ? "monthly" : slot || schoolSlots[0]?.value });
     if ("error" in res) { setNotice({ ok: false, text: res.error }); return; }
     setRoster(res.roster);
@@ -97,6 +107,9 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
       const res = await saveGradeScores(undefined, fd);
       if (res?.error) { setNotice({ ok: false, text: res.error }); return; }
       setResults(Object.fromEntries(touched.map((r) => [r.studentId, { ok: true } as const])));
+      // 저장한 값을 명단의 '저장된 값'으로 올린다 — 안 올리면 미입력만 보기에 방금 친 학생이 남고, 다시 저장하면 같은 줄이 또 나간다.
+      const savedScore = new Map(touched.map((r) => { const v = scores[r.studentId] ?? ""; return [r.studentId, v === "" ? null : Number(v)] as const; }));
+      setRoster({ ...roster, rows: roster.rows.map((r) => savedScore.has(r.studentId) ? { ...r, score: savedScore.get(r.studentId) ?? null } : r) });
       setNotice({ ok: true, text: `${res?.saved ?? touched.length}명 저장했습니다` });
       return;
     }
@@ -133,12 +146,14 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
             {kinds.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
           <label className={LABEL}>과목<select value={subject} onChange={(e) => {
             const next = e.target.value;
-            change(setSubject)(next); setClassId(""); setExtraIds([]); setSlot("");
+            change(setSubject)(next); setClassId(""); setSchoolName(""); setGradeName(""); setExtraIds([]); setSlot("");
             if (kind === "monthly" && !examSlotsFor(next.split(":")[0] ?? "").includes("monthly")) setKind("school");
           }} className={FIELD}>{subjects.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
-          <div className={LABEL}>반<SearchableSelect value={classId} placeholder={school ? "전체" : "반 검색"} searchPlaceholder="반 이름" requireQuery cap={50} ariaLabel="반"
+          {kind === "school" ? <SchoolGradeFields students={subjectStudents} school={schoolName} grade={gradeName} fieldClass={FIELD} labelClass={LABEL}
+            onSchool={(v) => { change(setSchoolName)(v); setGradeName(""); }} onGrade={(v) => change(setGradeName)(v)} />
+          : <div className={LABEL}>반<SearchableSelect value={classId} placeholder={school ? "전체" : "반 검색"} searchPlaceholder="반 이름" requireQuery cap={50} ariaLabel="반"
             className="w-60" triggerClassName={FIELD} onValueChange={(id) => change(setClassId)(id)}
-            options={[...(school ? [{ value: "", label: "전체" }] : []), ...subjectClasses.map((c) => ({ value: c.id, label: c.name, hint: `${c.studentIds.length}명` }))]} /></div>
+            options={[...(school ? [{ value: "", label: "전체" }] : []), ...subjectClasses.map((c) => ({ value: c.id, label: c.name, hint: `${c.studentIds.length}명` }))]} /></div>}
           <label className={LABEL}>시험일<input type="date" value={date} onChange={(e) => change(setDate)(e.target.value)} className={FIELD} /></label>
           <label className={LABEL}>만점<input type="number" min="1" max="1000" value={max} onChange={(e) => change(setMax)(e.target.value)} className={`${FIELD} w-20`} /></label>
         </div>
@@ -155,12 +170,14 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
         </div>
         {school && roster?.notice ? <p className="text-danger text-sm">{roster.notice}</p> : null}
         {school && !roster ? <p className="text-text-dim py-8 text-center text-sm">조건을 고르고 [명단 불러오기]를 누르면 그 학기 명단이 섭니다. 이미 있는 점수는 채워져 나옵니다.</p>
-          : <EntryGrid rows={rows} scores={scores} max={maxNum} results={results} disabled={pending}
+          : <EntryGrid rows={shownRows} scores={scores} max={maxNum} results={results} disabled={pending}
+            emptyText={onlyMissing && rows.length ? "미입력 학생이 없습니다." : school ? "조건에 맞는 학생이 없습니다." : undefined}
             onScore={(id, v) => { setScores((prev) => ({ ...prev, [id]: v })); setResults((prev) => { const { [id]: _drop, ...rest } = prev; void _drop; return rest; }); }}
             onRemove={school ? undefined : (id) => setExtraIds((prev) => prev.filter((x) => x !== id))} />}
         <DialogFooter className="items-center">
           {notice ? <p role={notice.ok ? "status" : "alert"} className={`mr-auto text-sm font-semibold ${notice.ok ? "text-green" : "text-danger"}`}>{notice.text}</p>
             : <p className="text-text-dim mr-auto text-sm">점수 친 학생 {filled.length}명 / {rows.filter((r) => !r.lockedReason).length}명</p>}
+          <label className="flex items-center gap-1.5 text-sm font-semibold"><input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} />미입력만 보기</label>
           <ToolbarButton onClick={() => setOpen(false)}>닫기</ToolbarButton>
           <ToolbarButton variant="primary" onClick={save} disabled={pending || !canWrite || (school ? !roster?.ready : filled.length === 0)}>{pending ? "저장 중" : "저장"}</ToolbarButton>
         </DialogFooter>
