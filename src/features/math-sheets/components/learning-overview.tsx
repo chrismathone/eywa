@@ -38,7 +38,7 @@ import { courseRangeLabel } from "../lib/learning-path";
 import { learningBlockLabel } from "../lib/learning-label";
 import { setMathClassLearningTrack } from "../server/learning-actions";
 import { LearningReportList } from "@/features/math-progress-map/components/learning-report-list";
-import { learningRailMetrics, learningTopicTicks, type LearningRailMetrics } from "../lib/learning-axis";
+import { learningTopicTicks } from "../lib/learning-axis";
 
 const GoalDialog = dynamic(() =>
   import("./learning-goal-dialog").then((m) => m.LearningGoalDialog),
@@ -63,7 +63,7 @@ function Status({
         ? "수강 종료"
         : student.rosterPhase === "upcoming"
           ? "수강 예정"
-          : learningStatusLabel(progress, "차시")}
+          : learningStatusLabel(progress, "블록")}
     </span>
   );
 }
@@ -127,13 +127,13 @@ export function LearningOverview({
     return () => window.removeEventListener("popstate", onBack);
   }, []);
   const { summaries, scaleLessons } = useMemo(() => {
-    const summaries: Record<string, LearningRailMetrics> = {};
+    const summaries: Record<string, LearningProgress> = {};
     let scaleLessons = 1;
     for (const [id, goal] of Object.entries(learning.goals)) {
       const progress = learning.progress[id];
       const topics = learningTopicTicks(goal, progress);
       scaleLessons = Math.max(scaleLessons, topics.length);
-      if (progress) summaries[id] = learningRailMetrics(goal, progress, topics);
+      if (progress) summaries[id] = progress;
     }
     return { summaries, scaleLessons };
   }, [learning.goals, learning.progress]);
@@ -404,14 +404,14 @@ export function LearningOverview({
                               ? goal
                                 ? "진도 확인 필요"
                                 : "전체 목표 미설정"
-                              : `${summary.current} / ${summary.total}차시`}
+                              : `${summary.current} / ${summary.total}블록`}
                           </p>
                         </td>
                         <td>
                           <Status student={s} progress={summary} />
                           <p className={styles.meta}>
                             {summary
-                              ? summary.targetBeforeRail ? "기준일 계획 · 첫 기록보다 앞" : `기준일 계획 ${summary.target}차시`
+                              ? `기준일 계획 ${summary.target}블록`
                               : "학생을 눌러 목표 설정"}
                           </p>
                         </td>
@@ -419,7 +419,7 @@ export function LearningOverview({
                           <strong className={styles.pace}>
                             {summary?.requiredPace == null
                               ? "—"
-                              : `${summary.requiredPace.toFixed(1)}차시`}
+                              : `${summary.requiredPace.toFixed(1)}블록`}
                           </strong>
                           <p className={styles.meta}>
                             {summary
@@ -489,7 +489,7 @@ function StudentFocus({
 }: {
   data: MathSheetMonthData;
   learning: LearningData;
-  summaries: Record<string, LearningRailMetrics>;
+  summaries: Record<string, LearningProgress>;
   student: MathStudentRow;
   initialQuery: string;
   onSelect: (id: string) => void;
