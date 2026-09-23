@@ -80,7 +80,7 @@ function GoalLine({
   blank,
   dot,
   emphasis = false,
-  muted = false,
+  disabled = false,
 }: {
   label: string;
   pieces: Piece[];
@@ -88,10 +88,18 @@ function GoalLine({
   /** 주 줄에만 — 월간 대비 상태 점. */
   dot?: string;
   emphasis?: boolean;
-  muted?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <div className={`flex min-w-0 items-start gap-1.5 py-1 text-sm ${emphasis ? "text-amber" : muted ? "text-text-dim opacity-70" : ""}`}>
+    <div
+      data-no-lesson={disabled ? "" : undefined}
+      className={`flex min-w-0 items-start gap-1.5 py-1 text-sm ${
+        disabled ? "-mx-2.5 bg-slate-200 px-2.5 text-slate-700" : emphasis ? "text-amber" : ""
+      }`}
+      style={disabled ? {
+        backgroundImage: "repeating-linear-gradient(135deg, transparent 0 7px, rgba(71, 85, 105, 0.24) 7px 9px)",
+      } : undefined}
+    >
       <b className="w-4 shrink-0">{label}</b>
       <div className="flex min-w-0 flex-1 flex-col">
         {pieces.length === 0 ? (
@@ -274,7 +282,8 @@ export function GoalsTable({
                 <EditingBadge scope={ecsPresenceScope(r.classId, weekMonday)} className="self-start" />
               </div>
               {r.cells.map((c) => {
-                const dayText = !r.hasLessonOnDate && c.day.length === 0
+                const noLesson = !r.hasLessonOnDate && c.day.length === 0;
+                const dayText = noLesson
                   ? t("goals.noLesson")
                   : dayLineText(c.day, lang);
                 return (
@@ -304,7 +313,7 @@ export function GoalsTable({
                         label={t("goals.day")}
                         pieces={dayText ? [{ text: dayText, bold: false, prefix: null }] : []}
                         blank={t("goals.blank")}
-                        muted={dayText === t("goals.noLesson")}
+                        disabled={noLesson}
                       />)
                     ) : null}
                   </div>

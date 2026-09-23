@@ -95,6 +95,9 @@ describe("반 계획 보기의 반 링크", () => {
       scope: "week", periodStart: "2026-09-21", textbook: "주간 교재",
     })));
     expect(screen.getByText("수업 없음").textContent).toBe("수업 없음");
+    const disabledDay = screen.getByText("수업 없음").closest("[data-no-lesson]");
+    expect(disabledDay?.className).toContain("bg-slate-200");
+    expect(disabledDay?.getAttribute("style")).toContain("repeating-linear-gradient");
     expect(screen.queryByRole("button", { name: /Vocab · 일 · 더블클릭하여 수정/ })).toBeNull();
   });
 
