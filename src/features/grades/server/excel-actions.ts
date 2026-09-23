@@ -6,7 +6,7 @@ import { logAction } from "@/features/audit/server/log";
 import { ENGLISH_TRACK_LABEL } from "@/features/classes/english-track";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { EXAM_SLOT_LABEL, gradeMonthOf } from "../exam-slots";
+import { EXAM_SLOT_LABEL, GRADE_MONTH_NOT_READY, gradeMonthOf, slotUsesMonth } from "../exam-slots";
 import { TERM_LABEL } from "../term";
 import {
   AXIS_SHEET_NAME,
@@ -31,7 +31,7 @@ import { notApplicableReason } from "../applies";
 import { gradeWriteError } from "./access";
 import { getGradeSheet } from "./queries";
 // ⚠️ `gradesSchemaReady()`를 따로 부르지 않는다 — `getGradeSheet`가 이미 `schemaReady`로 알려 준다(왕복 1회).
-import { writeGradeCells } from "./write";
+import { gradeMonthReady, writeGradeCells } from "./write";
 
 /**
  * 성적 엑셀 올리기 — 원장 2026-09-22: *"양식에 맞춰서 성적하고 기입 쭈루룩해서 업로드할수있는 기능"*.
@@ -200,6 +200,12 @@ export async function importGradesExcel(fd: FormData): Promise<GradesExcelResult
   const axisSummary = `${axis.year}년 ${TERM_LABEL[axis.term]} · ${subjects.labelOf(axis.subject)}${trackPart} · ${EXAM_SLOT_LABEL[axis.slot]} · 만점 ${axis.maxScore} · 시험일 ${axis.date}`;
 
   if (parsedRows.length === 0 && errors.length === 0) return { error: "데이터 행이 없습니다", axisSummary };
+  // 🔴 월 축(0288a) 미적용이면 월말평가는 저장 자체가 막힌다 — **미리보기 전에** 말한다. 안 그러면
+  //    파싱·명단 대조가 전부 통과한 뒤 [반영]에서 "잠시 뒤 다시 시도"가 뜨는데, 그 재시도는 SQL을
+  //    넣기 전엔 영원히 성공하지 않는다(적대적 리뷰 2026-09-23).
+  if (slotUsesMonth(axis.slot) && !(await gradeMonthReady())) {
+    return { error: GRADE_MONTH_NOT_READY, axisSummary };
+  }
 
   // 명단(= 화면과 같은 조회). 반 전체를 받아 시트의 이름·학교·학년·반을 대조한다.
   const selection: GradeSelection = {

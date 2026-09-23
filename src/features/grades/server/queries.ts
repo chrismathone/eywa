@@ -174,9 +174,9 @@ export async function getGradeSheet(sel: GradeSelection): Promise<GradeSheet> {
               .eq("school_year", sel.year)
               .eq("term", sel.term)
               .eq("exam_slot", sel.slot);
-            // 🔴 월말평가는 달마다 다른 칸이다(0287a) — 안 좁히면 9월·10월 두 행이 같이 와서
+            // 🔴 월말평가는 달마다 다른 칸이다(0288a) — 안 좁히면 9월·10월 두 행이 같이 와서
             //    Map이 아무거나 하나를 집는다(화면이 지난달 점수를 이번 달로 보여 준다).
-            // ⚠️ 0287a 미적용이면 그 컬럼이 없어 필터 자체가 PostgREST 400이다 — 그땐 안 건다([[#95]]).
+            // ⚠️ 0288a 미적용이면 그 컬럼이 없어 필터 자체가 PostgREST 400이다 — 그땐 안 건다([[#95]]).
             if (monthReady) q = q.eq("exam_month", sel.month);
             return q.in("student_id", chunk) as unknown as PromiseLike<{
               data: ScoreCell[] | null;

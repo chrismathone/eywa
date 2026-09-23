@@ -8,9 +8,9 @@ import { Button } from "@/components/ui/button";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { submitAction } from "@/components/forms/submit-action";
 import { examStats } from "@/features/exams/calc";
+import { gradeSortRank } from "@/features/grades/grade-rank";
 import { nextGradeSort, type GradeSort, type GradeSortKey } from "@/features/grades/list-prefs";
 import { saveGradeScores, type GradeSaveState } from "@/features/grades/server/actions";
-import { slotUsesMonth } from "@/features/grades/exam-slots";
 import { axisValueOf } from "@/features/grades/subject-axis";
 import {
   GRADE_MARK_LABEL,
@@ -54,7 +54,7 @@ export function ScoreGrid({
   /** 정렬이 바뀌면 계정에 남긴다 — 실패해도 화면은 그대로(주소는 안 바뀐다). */
   saveSort: (next: GradeSort) => Promise<{ ok: boolean }>;
 }) {
-  const { selection: sel, rows, marksReady, noExamReady, monthReady } = sheet;
+  const { selection: sel, rows, marksReady, noExamReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
   const { maxScore: selMax, date: selDate, slot: selSlot } = sel;
@@ -281,14 +281,6 @@ export function ScoreGrid({
       {!lockReason && !marksReady ? (
         <p className="border-amber/40 bg-amber-soft text-foreground rounded-lg border px-3 py-2 text-sm">
           성적표 받기 체크는 준비(0284a)가 적용된 뒤에 눌립니다 — 점수 입력·저장은 그대로 됩니다.
-        </p>
-      ) : null}
-      {/* 🔴 월 축이 없으면 월말평가는 **학기에 한 칸**이라 다음 달이 지난달을 덮는다 — 조용히 잃는 것이라
-          반드시 말한다(적용 전에도 화면은 산다, [[#95]]). 다른 시험은 원래 학기에 한 번이라 이 배너가 안 뜬다. */}
-      {!lockReason && !monthReady && slotUsesMonth(sel.slot) ? (
-        <p className="border-danger/40 bg-danger-soft text-foreground rounded-lg border px-3 py-2 text-sm">
-          월 축 준비(0287a)가 아직 적용되지 않았습니다 — 지금은 월말평가가 한 학기에 한 칸이라, 다른 달을
-          저장하면 지난달 점수를 덮어씁니다. 적용한 뒤에는 달마다 따로 남습니다.
         </p>
       ) : null}
       {!lockReason && !noExamReady ? (
@@ -615,16 +607,6 @@ function SortHead({
   );
 }
 
-/** 학년 문자열(`초6`·`중1`·`고2`)의 정렬 순서 — 초 < 중 < 고, 같은 급이면 숫자. 모르는 값은 맨 뒤. */
-const GRADE_LEVEL: Record<string, number> = { 초: 0, 중: 1, 고: 2 };
-function gradeRank(grade: string | null): number | null {
-  const s = String(grade ?? "").replace(/\s+/g, "");
-  if (!s) return null;
-  const level = GRADE_LEVEL[s[0] ?? ""];
-  const num = Number((s.match(/\d+/) ?? ["0"])[0]);
-  if (level === undefined) return null; // `7세` 같은 값은 뒤로 — 학년 축이 아니다
-  return level * 100 + (Number.isFinite(num) ? num : 0);
-}
 
 /**
  * 묶음 안 정렬. 🔴 **값이 없는 칸은 방향과 상관없이 항상 뒤로** — 내림차순을 눌렀다고 빈 칸이 맨 위에
@@ -641,7 +623,7 @@ function sortRows(
   const valueOf = (r: GradeSheetRow): string | number | null => {
     if (key === "name") return r.name;
     if (key === "school") return r.school;
-    if (key === "grade") return gradeRank(r.grade);
+    if (key === "grade") return gradeSortRank(r.grade);
     return r.score;
   };
   return [...rows].sort((a, b) => {

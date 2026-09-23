@@ -12,6 +12,7 @@ import { gradeCellKeeps, hasUntouchedMark } from "./keep";
 import { gradeMonthOf, slotUsesMonth } from "./exam-slots";
 import { monthAnchorDate, termMonths } from "./term";
 import { buildOverviewColumns, overviewAvgPct, overviewColumnKey } from "./overview";
+import { compareByGrade, gradeSortRank } from "./grade-rank";
 import { GRADE_SORT_DEFAULT, nextGradeSort, parseGradeSort } from "./list-prefs";
 import { resolveGradeSelection, selectionSlotIsValid } from "./selection";
 import { axisOptionsFrom, axisValueOf, firstAxisOf, parseAxisValue } from "./subject-axis";
@@ -336,5 +337,23 @@ describe("확인 뷰의 열(원장 2026-09-23)", () => {
   it("열 키는 월을 쓰는 시험만 월을 단다", () => {
     expect(overviewColumnKey("midterm", 0)).toBe("midterm");
     expect(overviewColumnKey("monthly", 9)).toBe("monthly:9");
+  });
+});
+
+describe("학년 사다리(두 화면 공용)", () => {
+  it("🔴 초 → 중 → 고 오름차순 — 문자열 정렬이면 고1이 맨 앞에 선다", () => {
+    const order = ["고2", "중1", "초6", "고1", "중3", "초3"].sort(compareByGrade);
+    expect(order).toEqual(["초3", "초6", "중1", "중3", "고1", "고2"]);
+  });
+
+  it("학년 축이 아닌 값은 맨 뒤(0으로 접으면 초1보다 앞에 선다)", () => {
+    expect(gradeSortRank("7세")).toBeNull();
+    expect(gradeSortRank("")).toBeNull();
+    expect(gradeSortRank(null)).toBeNull();
+    expect(["7세", "중1"].sort(compareByGrade)).toEqual(["중1", "7세"]);
+  });
+
+  it("공백은 무시한다(`초 6` = `초6`)", () => {
+    expect(gradeSortRank(" 초 6 ")).toBe(gradeSortRank("초6"));
   });
 });

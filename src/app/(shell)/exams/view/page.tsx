@@ -144,7 +144,7 @@ export default async function ExamsViewPage({
           image="exams"
           icon={() => <SearchX size={32} strokeWidth={1.8} />}
           title="이 학기 명단이 없습니다"
-          description="년도·학기·과목을 바꿔보거나, 수업목록에서 반을 먼저 만들어주세요."
+          description="년도·학기·과목을 바꿔보세요. 강사 계정은 담당(담임·부담임) 반만 보입니다."
         />
       )}
     </div>

@@ -98,7 +98,7 @@ export type GradeSheet = {
    */
   schemaReady: boolean;
   /**
-   * 0287a(월 축)가 적용됐는가. false면 월 드롭다운을 안 세우고 옛 유니크 축으로 저장한다 —
+   * 0288a(월 축)가 적용됐는가. false면 월 드롭다운을 안 세우고 옛 유니크 축으로 저장한다 —
    * 그동안 월말평가는 **학기에 한 칸**이라 다음 달을 적으면 지난달을 덮어쓴다(그래서 배너로 알린다).
    */
   monthReady: boolean;

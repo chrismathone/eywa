@@ -5,7 +5,7 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstToday } from "@/lib/date-kst";
-import { EXAM_SLOT_LABEL } from "../exam-slots";
+import { EXAM_SLOT_LABEL, GRADE_MONTH_NOT_READY } from "../exam-slots";
 import { resolveGradeSelection, selectionSlotIsValid } from "../selection";
 import { axisLabelFor } from "../subject-axis";
 import { termLabel } from "../term";
@@ -181,7 +181,10 @@ export async function saveGradeScores(
     );
   } catch (err) {
     // 원문은 화면에 그대로 내보내지 않는다(raw 노출 금지) — 한글 요약만.
+    // 🔴 단 **사람이 고칠 수 있는 사유**는 그대로 전한다 — "저장하지 못했습니다"로 뭉개면 SQL을
+    //    적용하기 전엔 성공할 수 없는 저장을 사람이 계속 다시 누른다(적대적 리뷰 2026-09-23).
     console.error("[grades] saveGradeScores", err);
+    if (err instanceof Error && err.message === GRADE_MONTH_NOT_READY) return { error: err.message };
     return { error: "성적을 저장하지 못했습니다" };
   }
 
@@ -194,6 +197,10 @@ export async function saveGradeScores(
       year: sel.year,
       term: sel.term,
       slot: sel.slot,
+      // 🔴 월·시험일을 남긴다 — 월이 유니크 축이 된 뒤로는 이게 없으면 9월 수정과 10월 수정이
+      //    로그에서 같은 줄로 보인다(역검수 불가).
+      month: sel.month,
+      date: sel.date,
       classId: sel.classId,
       saved: result.saved,
       cleared: result.cleared,

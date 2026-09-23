@@ -336,9 +336,9 @@ describe("월말평가 표식 열(원장 2026-09-23)", () => {
   });
 });
 
-describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
+describe("월 축 0288a · 확인 뷰(원장 2026-09-23)", () => {
   it("마이그레이션이 있고 유니크 축에 월이 들어간다(부분 유니크 금지 [[#113]])", () => {
-    const sql = read("supabase/migrations/0287a_student_grades_month.sql");
+    const sql = read("supabase/migrations/0288a_student_grades_month.sql");
     expect(sql).toContain("exam_month smallint not null default 0");
     expect(sql).toContain("ux_grades_term_slot_month");
     expect(sql).toContain("drop index if exists ux_grades_term_slot");
@@ -354,7 +354,7 @@ describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
     expect(q).toMatch(/if \(monthReady\) q = q\.eq\("exam_month", sel\.month\);/);
   });
 
-  it("🔴 0287a 미적용에도 산다 — 컬럼을 select·filter에 조건 없이 넣지 않는다([[#95]])", () => {
+  it("🔴 0288a 미적용에도 산다 — 컬럼을 select·filter에 조건 없이 넣지 않는다([[#95]])", () => {
     const write = read("src/features/grades/server/write.ts");
     expect(write).toContain("gradeMonthReady");
     // 준비 안 됐으면 옛 유니크 축으로 저장한다(없는 인덱스를 가리키면 전건 42P10).
@@ -377,7 +377,7 @@ describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
     expect(page).toContain("getGradeOverview");
   });
 
-  it("🔴 0287a 전에는 월말평가 **저장을 막는다** — 경고만 띄우면 10월이 9월을 덮는다", () => {
+  it("🔴 0288a 전에는 월말평가 **저장을 막는다** — 경고만 띄우면 10월이 9월을 덮는다", () => {
     const write = read("src/features/grades/server/write.ts");
     // 게이트는 서버가 정본(엑셀·학생 상세 폼도 이 함수를 지난다).
     expect(write).toMatch(/if \(!monthReady && slotUsesMonth\(axis\.slot\)\)/);
@@ -386,7 +386,7 @@ describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
   });
 
   it("🔴 옛 월말평가 행을 시험일의 달로 백필한다 — 안 하면 적용 직후 지난 점수가 안 보인다", () => {
-    const sql = read("supabase/migrations/0287a_student_grades_month.sql");
+    const sql = read("supabase/migrations/0288a_student_grades_month.sql");
     expect(sql).toMatch(/update student_grades[\s\S]{0,200}extract\(month from taken_on\)/);
     // 스키마 캐시 갱신이 없으면 새 컬럼을 한동안 "없다"고 답한다.
     expect(sql).toContain("notify pgrst, 'reload schema'");
@@ -404,6 +404,39 @@ describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
     const q = read("src/features/grades/server/overview-queries.ts");
     expect(q).toContain("gradeTeacherClassIds");
     expect(q).toMatch(/scope \? \(classRows \?\? \[\]\)\.filter\(\(c\) => myClassIds\.has\(c\.id\)\)/);
+  });
+
+  it("🔴🔴 42P10 되돌림은 **월말평가에 쓰지 않는다** — 옛 축으로 쓰면 10월이 9월을 덮는다", () => {
+    const write = read("src/features/grades/server/write.ts");
+    expect(write).toContain("if (!isMissingIndex || slotUsesMonth(axis.slot))");
+  });
+
+  it("🔴 준비 플래그는 '컬럼 없음'만 미준비로 읽는다 — 일시 실패를 미준비로 읽으면 표식이 지워진다", () => {
+    const write = read("src/features/grades/server/write.ts");
+    expect(write).toContain("async function columnExists");
+    expect(write).toMatch(/code === "42703" \|\| code === "PGRST204"/);
+  });
+
+  it("월말평가 저장이 막힌 사유는 화면까지 닿는다(엑셀은 미리보기 전에 말한다)", () => {
+    expect(read("src/features/grades/server/actions.ts")).toContain("=== GRADE_MONTH_NOT_READY");
+    const excel = read("src/features/grades/server/excel-actions.ts");
+    expect(excel).toMatch(/slotUsesMonth\(axis\.slot\) && !\(await gradeMonthReady\(\)\)/);
+  });
+
+  it("🔴 두 화면의 학년 순서가 같다 — 사다리는 공용 모듈 하나", () => {
+    for (const f of [
+      "src/app/(shell)/exams/_components/score-grid.tsx",
+      "src/features/grades/server/overview-queries.ts",
+    ]) {
+      expect(read(f)).toMatch(/from "(@\/features\/grades|\.\.)\/grade-rank"/);
+    }
+    // 화면 파일에 자기 사다리를 다시 적지 말 것.
+    expect(read("src/app/(shell)/exams/_components/score-grid.tsx")).not.toContain("GRADE_LEVEL");
+  });
+
+  it("확인 뷰도 '안 치는 시험'을 미기입과 다르게 그린다(줄을 뺄 수 없는 화면이라 칸으로)", () => {
+    expect(read("src/features/grades/server/overview-queries.ts")).toContain("examAppliesTo");
+    expect(read("src/app/(shell)/exams/view/_components/overview-table.tsx")).toContain("skipKeys");
   });
 
   it("두 화면을 오가는 길이 양쪽에 있다(같은 부품)", () => {

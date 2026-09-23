@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { EXAM_SLOT_LABEL, gradeMonthOf, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
+import { EXAM_SLOT_LABEL, GRADE_MONTH_NOT_READY, gradeMonthOf, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
 import type { Term } from "../term";
 import { gradeCellKeeps } from "../keep";
 import { GRADE_MARK_KEYS, type GradeMarkKey } from "../types";
@@ -73,7 +73,7 @@ export async function writeGradeCells(
   const user = await getCurrentUser();
   if (!user) throw new Error("로그인이 필요합니다");
   const supabase = await createClient();
-  // 🔴 월 축(0287a) — 월말평가는 달마다 다른 칸이다. 적용 전에는 옛 유니크 축 그대로 쓴다([[#95]]):
+  // 🔴 월 축(0288a) — 월말평가는 달마다 다른 칸이다. 적용 전에는 옛 유니크 축 그대로 쓴다([[#95]]):
   //    컬럼이 없는데 `onConflict`에 넣으면 저장이 전건 실패한다(42P10).
   const monthReady = await gradeMonthReady();
   const month = gradeMonthOf(axis.slot, axis.date);
@@ -81,7 +81,7 @@ export async function writeGradeCells(
   //    덮는다. 화면도 같은 이유로 입력을 잠그지만, 게이트는 여기가 정본이다([[#77]]: 엑셀·학생
   //    상세 폼도 이 함수를 지난다). 다른 시험은 원래 학기에 한 번이라 영향이 없다.
   if (!monthReady && slotUsesMonth(axis.slot)) {
-    throw new Error("월 축 준비(0287a)가 아직 적용되지 않아 월말평가는 저장할 수 없습니다");
+    throw new Error(GRADE_MONTH_NOT_READY);
   }
   const CONFLICT_WITH_MONTH = "tenant_id,student_id,subject,school_year,term,exam_slot,exam_month";
   const CONFLICT_LEGACY = "tenant_id,student_id,subject,school_year,term,exam_slot";
@@ -151,12 +151,15 @@ export async function writeGradeCells(
       .from("student_grades")
       .upsert(payload, { onConflict: conflict });
     if (!error) continue;
-    // 🔴 42P10 = `on conflict`가 가리킨 인덱스가 없다. 0287a를 적용하는 **그 몇 초**에 컬럼과 인덱스가
+    // 🔴 42P10 = `on conflict`가 가리킨 인덱스가 없다. 0288a를 적용하는 **그 몇 초**에 컬럼과 인덱스가
     //    엇갈릴 수 있어(스키마 캐시 지연 포함) 한 번만 반대 축으로 되돌려 시도한다 — 안 그러면 그 순간
-    //    저장 전건이 실패한다. 월말평가는 위에서 이미 막혀 있어 이 되돌림이 달을 덮을 수 없다.
-    const other = conflict === CONFLICT_WITH_MONTH ? CONFLICT_LEGACY : CONFLICT_WITH_MONTH;
+    //    저장 전건이 실패한다.
+    // 🔴🔴 **월말평가는 절대 되돌리지 않는다** — 옛 축(월 없음)으로 쓰면 10월 저장이 9월 행을 덮는다
+    //    (고치려던 바로 그 버그가 이 예외 경로로 되살아난다, 적대적 리뷰 2026-09-23). 위 fail-closed
+    //    가드는 **컬럼이 없을 때**만 걸려서, 컬럼은 생기고 인덱스는 아직인 순간을 못 막는다.
     const isMissingIndex = (error as { code?: string }).code === "42P10";
-    if (!isMissingIndex) throw new Error(`성적 저장 실패: ${error.message}`);
+    if (!isMissingIndex || slotUsesMonth(axis.slot)) throw new Error(`성적 저장 실패: ${error.message}`);
+    const other = conflict === CONFLICT_WITH_MONTH ? CONFLICT_LEGACY : CONFLICT_WITH_MONTH;
     const retry = await supabase.from("student_grades").upsert(payload, { onConflict: other });
     if (retry.error) throw new Error(`성적 저장 실패: ${retry.error.message}`);
   }
@@ -189,35 +192,34 @@ export async function writeGradeCells(
  * 🔴 앱이 마이그레이션보다 먼저 배포될 수 있다([[#95]]: SQL은 원장이 손으로 적용한다). 컬럼이 없으면
  *    조회는 옛 모양으로 살고 **저장만 잠근다** — 열어 두면 전건이 PostgREST 400으로 실패한다.
  */
-export const gradesSchemaReady = cache(async (): Promise<boolean> => {
+export const gradesSchemaReady = cache(async () => columnExists("exam_slot"));
+
+/**
+ * 그 컬럼이 **있는가** — 준비 플래그 넷이 공유하는 판정.
+ *
+ * 🔴 "조회 실패 = 미준비"로 읽지 말 것(적대적 리뷰 2026-09-23) — 일시적 실패 한 번에 월 필터가
+ *    빠져서 9월 화면이 10월 점수를 보여 주고, 표식 플래그에선 **표식이 있는 행을 지우는** 판정까지
+ *    간다. 컬럼이 없다는 **그 오류**(PostgREST 42703/PGRST204)만 미준비로 본다.
+ */
+async function columnExists(column: string): Promise<boolean> {
   const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").select("exam_slot").limit(1);
-  return !error;
-});
+  const { error } = await supabase.from("student_grades").select(column).limit(1);
+  if (!error) return true;
+  const code = (error as { code?: string }).code ?? "";
+  return !(code === "42703" || code === "PGRST204" || /does not exist|column/i.test(error.message));
+}
 
 /**
  * 0284a(성적표 받기 표식)가 적용됐는가 — **점수 저장과 따로** 본다.
  * 🔴 하나로 묶지 말 것: 묶으면 표식 마이그레이션이 늦어지는 동안 이미 열려 있던 점수 저장까지 멈춘다.
  */
-export const gradeMarksReady = cache(async (): Promise<boolean> => {
-  const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").select("ask1_at").limit(1);
-  return !error;
-});
+export const gradeMarksReady = cache(async () => columnExists("ask1_at"));
 
 /**
- * 0287a(월 축)가 적용됐는가 — 위 셋과 **따로** 본다(같은 이유).
+ * 0288a(월 축)가 적용됐는가 — 위 셋과 **따로** 본다(같은 이유).
  * 🔴 false면 월말평가는 학기에 한 칸이라 다음 달이 지난달을 덮는다 → 화면이 배너로 그 사실을 말한다.
  */
-export const gradeMonthReady = cache(async (): Promise<boolean> => {
-  const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").select("exam_month").limit(1);
-  return !error;
-});
+export const gradeMonthReady = cache(async () => columnExists("exam_month"));
 
 /** 0285a('시험없음'·사유)가 적용됐는가 — 위 둘과 **따로** 본다(같은 이유). */
-export const gradeNoExamReady = cache(async (): Promise<boolean> => {
-  const supabase = await createClient();
-  const { error } = await supabase.from("student_grades").select("no_exam").limit(1);
-  return !error;
-});
+export const gradeNoExamReady = cache(async () => columnExists("no_exam"));

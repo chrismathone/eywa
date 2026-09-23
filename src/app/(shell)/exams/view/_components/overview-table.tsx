@@ -14,7 +14,9 @@ import type { OverviewColumn, OverviewRow } from "@/features/grades/overview";
 export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; rows: OverviewRow[] }) {
   return (
     <DragScrollArea scrollY className="bg-card shadow-card min-h-[14rem] flex-1 rounded-2xl">
-      <table className="w-full text-sm [&_td]:whitespace-nowrap">
+      {/* 🔴 최소 폭 — 없으면 좁은 창에서 열이 서로를 찌그러뜨린다(입력 격자와 같은 이유).
+          시험이 늘면 가로로 스크롤한다(잡고 끌기도 된다). */}
+      <table className="w-full min-w-[880px] text-sm [&_td]:whitespace-nowrap">
         <caption className="sr-only">학기 성적 확인표 — 학생별 시험 점수와 평균</caption>
         <thead className="bg-card sticky top-0 z-10 [&_th]:shadow-[0_1px_0_0_var(--color-line)] [&_th]:whitespace-nowrap">
           <tr>
@@ -32,13 +34,23 @@ export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; ro
             </th>
             {columns.map((c) => (
               <th key={c.key} scope="col" className="micro px-3 py-3 text-center">
-                {/* 월말평가는 열 이름이 `10월`이라, 무슨 시험인지는 마우스 오버로 말한다. */}
-                <span title={c.month > 0 ? `${EXAM_SLOT_LABEL[c.slot]} ${c.month}월` : EXAM_SLOT_LABEL[c.slot]}>
-                  {c.label}
-                </span>
+                {/* 🔴 달 열은 시험 이름을 **글자로** 함께 적는다 — `title` 툴팁은 모바일에서 없는 것과
+                    같은데(디자인 규약), 수학은 `내신`과 `월말평가`가 나란히 서서 `10월`만으론 구분이 안 된다. */}
+                {c.month > 0 ? (
+                  <span className="block leading-tight">
+                    <span className="text-text-faint block font-normal">{EXAM_SLOT_LABEL[c.slot]}</span>
+                    {c.label}
+                  </span>
+                ) : (
+                  c.label
+                )}
               </th>
             ))}
-            <th scope="col" className="micro px-3 py-3 text-center">
+            <th
+              scope="col"
+              className="micro px-3 py-3 text-center"
+              title="적힌 시험만의 평균입니다 — 학생마다 친 시험 수가 다를 수 있습니다"
+            >
               평균
             </th>
           </tr>
@@ -54,13 +66,23 @@ export function OverviewTable({ columns, rows }: { columns: OverviewColumn[]; ro
               </td>
               {columns.map((c) => {
                 const cell = r.cells[c.key];
+                // 🔴 제도상 안 치는 칸은 `—`(미기입)와 다르게 그린다 — 안 그러면 초등이 절반인 반에서
+                //    거짓 공백 수백 칸이 "안 적음"으로 읽힌다(입력 격자는 그 줄을 아예 안 세운다).
+                const skipped = r.skipKeys.includes(c.key);
                 return (
-                  <td key={c.key} className="num px-3 py-1.5 text-center">
+                  <td
+                    key={c.key}
+                    className={`num px-3 py-1.5 text-center ${skipped ? "bg-bg-soft/60" : ""}`}
+                  >
                     {cell?.score != null ? (
                       <span className="text-foreground font-medium">{cell.score}</span>
                     ) : cell?.noExam ? (
                       <span className="text-text-faint" title="시험없음으로 표시된 칸입니다">
                         없음
+                      </span>
+                    ) : skipped ? (
+                      <span className="text-text-faint" title="이 학년은 이 시험을 치지 않습니다">
+                        ·
                       </span>
                     ) : (
                       <span className="text-text-faint">—</span>

@@ -4,6 +4,8 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { examAppliesTo } from "../applies";
+import { compareByGrade } from "../grade-rank";
 import { isExamSlot, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
 import { termWindow, type Term } from "../term";
 import {
@@ -26,7 +28,7 @@ import { gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "./write";
  * 🔑 **읽기 전용**이라 쓰기 게이트가 없다(메뉴 권한은 페이지의 `requireAccess`가 본다).
  * 🔴 과목은 합쳐서 본다 — 영어의 EiE/인재원 트랙으로 나누지 않는다(원장 2026-09-22).
  * ⚠️ 강사는 **자기 과목만**(입력 격자와 같은 규약) — 영어 강사에게 수학 성적표가 열리지 않게.
- * ⚠️ 0283a/0287a 미적용에도 산다([[#95]]) — 컬럼이 없으면 그 열을 안 읽고 빈 표를 낸다.
+ * ⚠️ 0283a/0288a 미적용에도 산다([[#95]]) — 컬럼이 없으면 그 열을 안 읽고 빈 표를 낸다.
  * ⚠️ **알려진 한계(입력 격자와 같다)**: 반은 `is_active=true`만 본다 — 지난 학기 뒤 폐지한 반의
  *    학생은 이 표에도 안 선다. 고치려면 두 화면을 **함께** 고쳐야 하고(한쪽만 넓히면 확인 뷰에는
  *    보이는데 고칠 수는 없는 줄이 생긴다), 그때 보이지 않는 '보강' 반(0241a)을 빼는 것도 함께
@@ -59,18 +61,17 @@ export async function getGradeOverview(sel: OverviewSelection): Promise<GradeOve
   const scope = await effectiveTeacherScope();
   if (scope?.subjects && !scope.subjects.includes(sel.subject)) return empty;
   const teacherId = scope ? await effectiveTeacherId() : null;
-  // 담임 ∪ 부담임 — 입력 격자와 **같은 헬퍼**(공용 스코프를 넓히지 않는다).
-  const myClassIds = new Set(teacherId ? await gradeTeacherClassIds(teacherId) : []);
-
   const { start: termStart, end: termEnd } = termWindow(sel.year, sel.term);
 
-  const { data: classRows, error: classErr } = await supabase
-    .from("classes")
-    .select("id, class_name")
-    .eq("subject", sel.subject)
-    .eq("is_active", true)
-    .order("class_name");
+  // 🔑 반 목록과 담당 반 조회는 서로를 안 쓴다 — 나란히 돈다(B4).
+  // 담임 ∪ 부담임 — 입력 격자와 **같은 헬퍼**(공용 스코프를 넓히지 않는다).
+  const [classQuery, myIds] = await Promise.all([
+    supabase.from("classes").select("id, class_name").eq("subject", sel.subject).eq("is_active", true).order("class_name"),
+    teacherId ? gradeTeacherClassIds(teacherId) : Promise.resolve<string[]>([]),
+  ]);
+  const { data: classRows, error: classErr } = classQuery;
   if (classErr) throw new Error(`getGradeOverview(classes): ${classErr.message}`);
+  const myClassIds = new Set(myIds);
   // 🔴 **여기서 좁힌다** — 강사면 담당 반만. 드롭다운·명단·점수가 전부 이 목록에서 파생된다.
   const visible = scope ? (classRows ?? []).filter((c) => myClassIds.has(c.id)) : (classRows ?? []);
   const classes = visible.map((c) => ({ id: c.id, className: c.class_name }));
@@ -183,7 +184,9 @@ export async function getGradeOverview(sel: OverviewSelection): Promise<GradeOve
   for (const s of students) {
     const cellMap = byStudent.get(s.id) ?? {};
     // ⚠️ 퇴원 학생은 **적어 둔 것이 있을 때만** 남긴다(입력 격자와 같은 규약).
-    const has = Object.values(cellMap).some((c) => c.score != null || c.noExam);
+    //    🔑 '적어 둔 것'엔 독촉 표식도 든다 — 행이 있다는 것 자체가 누가 무언가를 적었다는 뜻이다
+    //    (점수 없이 1차상담만 눌러 둔 학생이 격자엔 있고 여기엔 없으면 두 화면이 다른 말을 한다).
+    const has = byStudent.has(s.id);
     if (s.status === "withdrawn" && !has) continue;
     rows.push({
       studentId: s.id,
@@ -192,14 +195,15 @@ export async function getGradeOverview(sel: OverviewSelection): Promise<GradeOve
       grade: s.grade,
       classNames: [...(classNamesByStudent.get(s.id) ?? [])].sort((a, b) => a.localeCompare(b, "ko")),
       cells: cellMap,
+      // 제도상 안 치는 칸 — 화면이 `—`가 아니라 다른 표기로 그린다(입력 격자는 줄째로 뺀다).
+      skipKeys: columns.filter((col) => !examAppliesTo(col.slot, s.grade, sel.term)).map((col) => col.key),
       avgPct: overviewAvgPct(columns.map((col) => cellMap[col.key]).filter((c): c is OverviewCell => !!c)),
     });
   }
-  // 기본 정렬 = 학년 → 이름(입력 격자의 기본과 같다).
-  rows.sort(
-    (a, b) =>
-      (a.grade ?? "").localeCompare(b.grade ?? "", "ko") || a.name.localeCompare(b.name, "ko"),
-  );
+  // 기본 정렬 = 학년 → 이름. 🔴 학년은 **사다리 값**(`gradeRank`: 초→중→고)으로 센다 — 문자열
+  //    `localeCompare("ko")`면 `고1 → 중1 → 초3` 순이 되어, 나란히 대조하라고 만든 두 화면의 명단
+  //    순서가 정반대가 된다(적대적 리뷰 2026-09-23).
+  rows.sort((a, b) => compareByGrade(a.grade, b.grade) || a.name.localeCompare(b.name, "ko"));
 
   return { columns, rows, classes, schemaReady };
 }

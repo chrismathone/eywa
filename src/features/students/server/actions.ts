@@ -22,7 +22,7 @@ import {
 } from "@/features/withdrawals/types";
 import { currentPeriod, isCommentCategory } from "../grades-meta";
 import { normalizeExamSlot } from "@/features/grades/exam-slots";
-import { defaultTermOf, normalizeTerm, normalizeYear } from "@/features/grades/term";
+import { defaultTermOf, normalizeTerm, normalizeYear, termWindow } from "@/features/grades/term";
 // 성적 칸 저장은 **단일 경로**다 — 성적관리 격자·엑셀·이 폼이 같은 함수를 지난다(칸 키를 여러 곳이 알지 않게).
 import { gradesSchemaReady, writeGradeCells } from "@/features/grades/server/write";
 // 생성 = 공용 진입점(전 경로 공유) / 수정 = 자기 자신을 taken에서 빼야 해서 순수 함수 직접 호출.
@@ -993,6 +993,13 @@ export async function createStudentGrade(
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!subject) return { error: "과목을 선택해주세요" };
   if (!takenOn) return { error: "시험일을 입력해주세요" };
+  // 🔴 시험일이 학기 밖이면 **어느 화면에도 안 잡히는 행**이 된다 — 월말평가는 월이 시험일에서
+  //    나오므로(0288a) 학기에 없는 달로 저장되면 격자의 월 드롭다운에 그 달이 없어 영영 못 고친다.
+  //    엑셀·주소는 이미 같은 창으로 누른다(sheet.ts·selection.ts).
+  const window = termWindow(year, term);
+  if (takenOn < window.start || takenOn > window.end) {
+    return { error: `시험일이 그 학기(${window.start} ~ ${window.end}) 밖입니다` };
+  }
   // 🔴 점수를 비우면 공용 저장 경로가 그 칸을 **지운다** — '성적 추가'가 삭제로 동작하면 안 되니 여기서 막는다
   //    (지우는 자리는 성적 기록 표의 휴지통·성적관리 격자다).
   if (!scoreStr) return { error: "점수를 입력해주세요" };
