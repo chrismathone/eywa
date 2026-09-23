@@ -270,7 +270,7 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
               makeupDate: "2026-09-10",
               slotStart: "16:20",
               slotEnd: "17:15",
-              periodLabel: "1-1",
+              createdByName: "예약강사",
               absenceDate: "2026-09-03",
               overdue: false,
             },
@@ -284,7 +284,7 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
               makeupDate: "2026-09-08",
               slotStart: "17:20",
               slotEnd: "18:00",
-              periodLabel: null,
+              createdByName: null,
               absenceDate: "2026-09-01",
               overdue: true,
             },
@@ -423,6 +423,9 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     const popup = screen.getByRole("dialog");
     expect(popup.textContent).toContain("10/9 (금)까지 보강 예약 2건");
     expect(popup.textContent).toContain("그 뒤로 잡힌 1건은 시간표 보강 탭에서 주를 옮겨 보세요");
+    expect(popup.textContent).toContain("16:20");
+    expect(popup.textContent).toContain("예약: 예약강사");
+    expect(popup.textContent).toContain("예약자 미상");
     expect(within(popup).getByText("지남")).toBeTruthy();
     cleanup();
   });

@@ -38,7 +38,8 @@ export type UpcomingMakeupRow = {
   makeupDate: string;
   slotStart: string;
   slotEnd: string;
-  periodLabel: string | null;
+  /** 보강 예약을 실제로 등록한 직원 이름(created_by). */
+  createdByName: string | null;
   absenceDate: string;
   /** 오늘 이전인데 아직 이행 안 됨 — 팝업이 '지남'으로 표시한다. */
   overdue: boolean;
@@ -89,15 +90,22 @@ export async function getUpcomingMakeupOverview(today: string, teacherId: string
     countLater(supabase, range.end, classIds).catch(() => 0),
   ]);
   const studentIds = [...new Set(reservations.map((r) => r.studentId))];
+  const creatorIds = [...new Set(reservations.flatMap((r) => r.createdBy ? [r.createdBy] : []))];
   // 🔴 이름 조회 실패는 **삼키지 않는다** — 빈 배열로 접으면 모든 줄이 걸러져 카드가 "0건", 팝업이 "예약이 없습니다"라는
   //    거짓 사실을 말한다(적대 리뷰 2026-09-16). 던지면 이 칸만 "조회 실패"로 뜬다(운영실 영역 단위 실패 규약).
-  const students = studentIds.length
-    ? await fetchInChunks<{ id: string; name: string; grade: string | null; school: string | null }>(
-        studentIds,
-        (chunk) => supabase.from("students").select("id, name, grade, school").in("id", chunk),
-      )
-    : [];
+  const [students, creators] = await Promise.all([
+    fetchInChunks<{ id: string; name: string; grade: string | null; school: string | null }>(
+      studentIds,
+      (chunk) => supabase.from("students").select("id, name, grade, school").in("id", chunk),
+    ),
+    // 세션 RLS로 같은 학원의 예약자만 조회한다. 퇴사자도 남기며, 원반 담임으로 대신 채우지 않는다.
+    fetchInChunks<{ id: string; display_name: string | null }>(
+      creatorIds,
+      (chunk) => supabase.from("users").select("id, display_name").in("id", chunk),
+    ),
+  ]);
   const studentById = new Map(students.map((s) => [s.id, s]));
+  const creatorById = new Map(creators.map((c) => [c.id, c.display_name?.trim() || null]));
   const rows: UpcomingMakeupRow[] = reservations.flatMap((r) => {
     const stu = studentById.get(r.studentId);
     const cls = classById.get(r.classId);
@@ -113,7 +121,7 @@ export async function getUpcomingMakeupOverview(today: string, teacherId: string
         makeupDate: r.makeupDate,
         slotStart: r.slotStart,
         slotEnd: r.slotEnd,
-        periodLabel: r.periodLabel,
+        createdByName: r.createdBy ? creatorById.get(r.createdBy) ?? null : null,
         absenceDate: r.absenceDate,
         overdue: r.makeupDate < today,
       },
