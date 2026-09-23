@@ -195,6 +195,47 @@ export function buildDashboardWorld(plan, today) {
     });
   });
 
+  // 운영실 '금일 등록'(원장 2026-09-23) — 며칠 전 상담한 사람을 **오늘** 콜&상담 '등록 완료'로 옮긴 모양.
+  // 오늘 첫 수업 학생 둘은 반 배정까지 끝났고(연결 학생의 수강 = 칸반 '반 배정 완료'), 한 명은 등록만 하고 배정 전이다.
+  // `movedAt` = 옮긴 시각 — 운영실은 이 시각의 상태 변경 감사로그로 센다(dashboard-rows가 함께 쓴다).
+  // 상담일(`at`)은 사흘 전이라 오늘 '신규문의'에는 안 섞인다.
+  const consultedOn = shiftYmd(today, -3);
+  plan.students
+    .filter((s) => firstClassCodes.has(s.code))
+    .slice(0, 2)
+    .forEach((student, i) => {
+      consultations.push({
+        name: student.name,
+        grade: student.grade,
+        school: student.school.name,
+        subject: student.classes[0].subject,
+        path: "지인 소개",
+        outcome: "enrolled",
+        at: atNoonKst(consultedOn),
+        payment: tuitionOf(student),
+        parentPhone: `010-5551-${String(40 + i).padStart(4, "0")}`,
+        studentCode: student.code,
+        movedAt: `${today}T0${1 + i}:10:00.000Z`,
+      });
+    });
+  {
+    const person = personName(540);
+    consultations.push({
+      name: person.name,
+      grade: "초5",
+      // 데모 학교 밖 — 이름·학교·학년 자동 연결(0258a)에 걸려 '반 배정 완료'로 바뀌지 않게.
+      school: "하늘초",
+      subject: "math",
+      path: "네이버",
+      outcome: "enrolled",
+      at: atNoonKst(consultedOn),
+      payment: null,
+      parentPhone: "010-5551-0042",
+      studentCode: null,
+      movedAt: `${today}T04:30:00.000Z`,
+    });
+  }
+
   const studentConsultations = [];
   const consultPool = plan.students.filter((s) => !firstClassCodes.has(s.code)).slice(0, 8);
   consultPool.forEach((student, i) => {

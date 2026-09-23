@@ -4,12 +4,14 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "@/components/icons/aywa-icon-compat";
 import { categoryPath, flattenCategories, type DocumentCategoryOption } from "@/features/documents/categories";
 import { FolderDropTarget, FolderName } from "./folder-interactions";
+import { FolderFavoriteToggle } from "./folder-favorite-toggle";
 
 type FolderTreeProps = {
   categories: DocumentCategoryOption[];
   counts: Record<string, number> | null;
   activeKey: string | null;
   hrefs: Record<string, string>;
+  favoriteKeys: string[];
 };
 
 export function FolderTree(props: FolderTreeProps) {
@@ -18,10 +20,11 @@ export function FolderTree(props: FolderTreeProps) {
   return <FolderTreeItems key={JSON.stringify([props.activeKey, ancestors])} {...props} ancestors={ancestors} />;
 }
 
-function FolderTreeItems({ categories, counts, activeKey, hrefs, ancestors }: FolderTreeProps & { ancestors: string[] }) {
+function FolderTreeItems({ categories, counts, activeKey, hrefs, favoriteKeys, ancestors }: FolderTreeProps & { ancestors: string[] }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(ancestors));
   const parents = new Set(categories.map((c) => c.parentKey).filter(Boolean));
   const rows = flattenCategories(categories);
+  const favorites = new Set(favoriteKeys);
   return (
     <ul className="max-h-64 space-y-0.5 overflow-auto lg:max-h-[60vh]" aria-label="폴더 목록">
       {rows.map(({ category: c, depth, path }) => {
@@ -46,6 +49,7 @@ function FolderTreeItems({ categories, counts, activeKey, hrefs, ancestors }: Fo
                 <Icon className={`size-4 shrink-0 ${active ? "text-primary" : "text-amber"}`} strokeWidth={1.8} />
                 <FolderName folder={c} href={hrefs[c.key]} active={active} title={pathLabel} />
                 <span className="num text-text-faint text-xs" title="하위 폴더 문서 포함">{counts ? counts[c.key] ?? 0 : "—"}</span>
+                <FolderFavoriteToggle folderKey={c.key} pathLabel={pathLabel} favorite={favorites.has(c.key)} atLimit={favoriteKeys.length >= 10} />
               </div>
             </FolderDropTarget>
           </li>

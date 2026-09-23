@@ -8,20 +8,20 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReactNode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { teacherMenuKeysFor } from "@/lib/navigation";
 import { MENU_LABEL, resolveMatrix, TEACHER_MENU_KEYS } from "@/lib/permissions";
 import { PermissionsSection } from "./permissions-section";
 
 vi.mock("./section-form", () => ({
-  SectionForm: ({ children }: { children?: ReactNode }) => <form>{children}</form>,
+  SectionForm: ({ children, payload }: { children?: ReactNode; payload?: unknown }) => <form>{children}<output data-testid="payload">{JSON.stringify(payload)}</output></form>,
 }));
 vi.mock("@/components/ui/drag-scroll-area", () => ({
   DragScrollArea: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
 
-const EMPTY = { overrides: [], userOverrides: [] };
+const EMPTY = { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } };
 
 /** '강사 내 메뉴 표시' 구획의 체크박스 라벨(" · 고정" 꼬리는 뗀다). */
 function toggleLabels(): string[] {
@@ -69,5 +69,36 @@ describe("배선 — 입구 정책은 navigation.ts의 순수 함수 하나", ()
     expect(read("src", "app", "(shell)", "owner", "_components", "permissions-section.tsx")).toContain(
       "TEACHER_MENU_KEYS.filter(isTeacherMenuEntranceOpen)",
     );
+  });
+});
+
+describe("일반판 권한 설정", () => {
+  const staff = [{ id: "11111111-1111-4111-8111-111111111111", name: "데모 강사", role: "teacher" }];
+  const payload = () => JSON.parse(screen.getByTestId("payload").textContent ?? "{}");
+
+  it("직원 한 명에게 메뉴 예외를 추가하고 해제할 수 있다", () => {
+    render(<PermissionsSection initial={EMPTY} generic staffOptions={staff} />);
+    fireEvent.change(screen.getByLabelText("직원 선택"), { target: { value: staff[0].id } });
+    fireEvent.change(screen.getByLabelText("메뉴 선택"), { target: { value: "staff" } });
+    fireEvent.click(screen.getByRole("button", { name: "추가·변경" }));
+    expect(payload().userOverrides).toEqual([{ userId: staff[0].id, menu: "staff", access: "full" }]);
+    fireEvent.click(screen.getByRole("button", { name: "제거" }));
+    expect(payload().userOverrides).toEqual([]);
+  });
+
+  it("급여명세서 열람과 연차 조정을 별도 명단으로 저장한다", () => {
+    render(<PermissionsSection initial={EMPTY} generic staffOptions={staff} />);
+    fireEvent.change(screen.getByLabelText("급여명세서 열람 담당자 선택"), { target: { value: staff[0].id } });
+    fireEvent.click(screen.getAllByRole("button", { name: "담당자 추가" })[0]);
+    expect(payload().specialAccess.payslipViewerIds).toEqual([staff[0].id]);
+    expect(payload().specialAccess.leaveAdjusterIds).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "데모 강사 급여명세서 열람 해제" }));
+    expect(payload().specialAccess.payslipViewerIds).toEqual([]);
+  });
+
+  it("침산 화면에는 일반판 담당자 편집기가 나타나지 않는다", () => {
+    render(<PermissionsSection initial={EMPTY} staffOptions={staff} />);
+    expect(screen.queryByText("민감 기능 담당자")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("직원 선택")).not.toBeInTheDocument();
   });
 });

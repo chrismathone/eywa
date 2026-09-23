@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
+import { ToolbarButton } from "@/components/toolbar";
+import { addDays } from "@/lib/date-kst";
 import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
 import { getClassSheetWeek, getSheetLanding } from "@/features/class-sheets/server/queries";
 import { getEcsToday, type EcsTodayResult } from "@/features/class-sheets/server/today";
@@ -225,6 +227,17 @@ export default async function EcsLandingPage({
           options={res.teacherOptions}
           totalCount={res.trackCounts[res.trackFilter]}
         />
+        {/* 반 계획 보기(원장 2026-09-23 *"우상단 [반 계획 보기] 버튼"* · 툴바 줄 **끝**) — 인재원 영어 반 ×
+            영역 월간·주간 대조. 인재원 반이 한 곳도 없는 주엔 빈 화면이라 버튼을 안 세운다. */}
+        {res.trackCounts.injaewon > 0 ? (
+          <ToolbarButton
+            // 보던 주가 이번 주면 오늘(일간 기본), 아니면 그 주 월요일로 연다.
+            href={`/ecs/goals?date=${res.today >= res.weekMonday && res.today <= addDays(res.weekMonday, 6) ? res.today : res.weekMonday}`}
+            className="ml-auto"
+          >
+            {sheetT(lang, "goals.title")}
+          </ToolbarButton>
+        ) : null}
       </div>
 
       {res.cards.length === 0 ? (

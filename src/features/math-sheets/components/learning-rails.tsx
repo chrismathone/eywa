@@ -24,6 +24,8 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
   const total = topicTicks.length;
   const targetPosition = goal ? learningTargetPosition(goal, topicTicks) : 0;
   const axisCurrent = goal ? learningCurrentPosition(goal, progress, topicTicks) : null;
+  const currentBlocks = axisCurrent == null ? null : progress?.current ?? null;
+  const targetBlocks = goal?.blockCount ?? progress?.total ?? null;
   const pastStops = stops.filter(stop => stop.semesterEndPosition <= (axisCurrent ?? 0)
     && !goalStops.some(goal => goal.position === stop.semesterEndPosition));
   const position = (value: number) => total ? value / total * 100 : 0;
@@ -33,7 +35,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
   const currentLabel = currentBlock ? learningBlockLabel(currentBlock, goal?.studyGrade ?? recentGrade) : "진도 기록 확인 필요";
   const finalStop = goalStops.find(stop => stop.studyGrade === (goal?.endStudyGrade ?? goal?.studyGrade) && stop.endBlock === goal?.endBlock);
   const finalLabel = goal ? learningBlockLabel(goal.endBlock, goal.endStudyGrade ?? goal.studyGrade) : "전체 목표를 설정해 주세요";
-  const currentText = axisCurrent == null ? "현재 진도 확인 필요" : `현재 ${axisCurrent} / 목표 ${targetPosition}차시 · ${currentLabel}`;
+  const currentText = currentBlocks == null ? "현재 진도 확인 필요" : `현재 ${currentBlocks} / 목표 ${targetBlocks}블록 · ${currentLabel}`;
   const goalText = goalStops.length ? goalStops.map(stop => `${stop.goalNumber}차 목표 · ${learningBlockLabel(stop.endBlock, stop.studyGrade)} · ${stop.endDate}`).join("; ") : goal ? `전체 목표 · ${finalLabel} · ${goal.endDate}` : "전체 목표 미설정";
   const variables = { "--current-position": `${currentPosition}%`, "--target-position": `${position(targetPosition)}%`,
     "--lesson-count": total, "--scale-lessons": Math.max(1, total, scaleLessons ?? total),
@@ -59,11 +61,11 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
           <span className={styles.annotationTag}>{carried ? "마지막 확인" : "현재"}</span><span className={styles.blockName}>{currentLabel}</span>
         </div>
         <div className={`${styles.track} ${styles.currentTrack}`}
-          role={total > 0 && axisCurrent != null ? "progressbar" : "img"} aria-label="현재진도"
-          aria-valuemin={total > 0 && axisCurrent != null ? 0 : undefined}
-          aria-valuemax={total > 0 && axisCurrent != null ? total : undefined}
-          aria-valuenow={total > 0 && axisCurrent != null ? axisCurrent : undefined}
-          aria-valuetext={total > 0 && axisCurrent != null ? currentText : undefined} aria-description={currentText}>
+          role={total > 0 && currentBlocks != null ? "progressbar" : "img"} aria-label="현재진도"
+          aria-valuemin={total > 0 && currentBlocks != null ? 0 : undefined}
+          aria-valuemax={total > 0 && currentBlocks != null ? targetBlocks ?? undefined : undefined}
+          aria-valuenow={total > 0 && currentBlocks != null ? currentBlocks : undefined}
+          aria-valuetext={total > 0 && currentBlocks != null ? currentText : undefined} aria-description={currentText}>
           <span className={styles.currentFill} />
         </div>
         {total > 0 && axisCurrent != null ? (
@@ -74,7 +76,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
               <div>
                 <strong>{carried ? "마지막 확인 진도" : "현재 진도"}</strong>
                 <p>{currentLabel}</p>
-                <small>기준 수업일 · {progress?.currentDate ?? "날짜 확인 필요"} · {axisCurrent} / {targetPosition}차시</small>
+                <small>기준 수업일 · {progress?.currentDate ?? "날짜 확인 필요"} · {currentBlocks ?? "—"} / {targetBlocks ?? "—"}블록</small>
                 {sourceText ? <p className={styles.reportSource}>{sourceText}</p> : null}
               </div>
             </TooltipContent>
@@ -107,7 +109,7 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
               <div>
                 <strong>{stop.goalNumber}차 목표</strong>
                 <p>{learningBlockLabel(stop.endBlock, stop.studyGrade)}</p>
-                <small>{stop.endDate ? `완료 예정 · ${stop.endDate}` : "완료일 미설정"} · 누적 {stop.position}차시</small>
+                <small>{stop.endDate ? `완료 예정 · ${stop.endDate}` : "완료일 미설정"} · 누적 {stop.blockCount}블록</small>
               </div>
             </TooltipContent>
           </Tooltip>
@@ -138,8 +140,8 @@ export function LearningRails({ progress, goal, recentBlock, recentGrade, recent
       </div>
       <span id={goalDescriptionId} className={styles.description}>{goalText}</span>
       <div className={styles.values} aria-hidden="true">
-        <span className={styles.currentValue}>{axisCurrent == null ? "—" : <><b>{axisCurrent}</b><small>차시</small></>}</span>
-        <span className={styles.targetValue}>{goal ? <><b>{targetPosition}</b><small>차시 목표</small></> : "—"}</span>
+        <span className={styles.currentValue}>{currentBlocks == null ? "—" : <><b>{currentBlocks}</b><small>블록</small></>}</span>
+        <span className={styles.targetValue}>{targetBlocks == null ? "—" : <><b>{targetBlocks}</b><small>블록 목표</small></>}</span>
       </div>
     </div>
     </div>

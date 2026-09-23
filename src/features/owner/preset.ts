@@ -37,6 +37,11 @@ export function isGenericTenant(settings: Pick<TenantSettings, "preset">): boole
   return settings.preset === "generic";
 }
 
+/** Legacy first-academy exceptions are isolated here so generic tenants never inherit them. */
+export function isChinsanTenant(settings: Pick<TenantSettings, "preset">): boolean {
+  return !isGenericTenant(settings);
+}
+
 /** 이번 작업(2026-09-22 방향 B)이 운영 섹션에 새로 만든 칸 — 침산 행엔 절대 남지 않고, 새 학원 행엔 사람이 준 값만 남는다. */
 const NEW_OPERATIONS_KEYS = ["periodStyle", "schoolSaveAliases"] as const;
 
@@ -56,6 +61,22 @@ export function prepareSectionForSave(
   parsed: unknown,
   storedSection: unknown,
 ): unknown {
+  if (section === "permissions" && isPlainObject(parsed)) {
+    const out: Record<string, unknown> = { ...parsed };
+    if (!isPlainObject(rawInput) || !("userOverrides" in rawInput)) {
+      if (isPlainObject(storedSection) && "userOverrides" in storedSection) out.userOverrides = storedSection.userOverrides;
+      else delete out.userOverrides;
+    }
+    // 침산의 기존 민감 기능 명단은 이 새 설정 화면이 절대 덮지 않는다.
+    if (preset !== "generic") delete out.specialAccess;
+    // 배포 전 열린 폼이 새 칸을 보내지 않아도 저장된 담당자 명단을 지키고,
+    // 이전 화면이 개인 예외를 누락했다면 그것도 보존한다.
+    else if (!isPlainObject(rawInput) || !("specialAccess" in rawInput)) {
+      if (isPlainObject(storedSection) && "specialAccess" in storedSection) out.specialAccess = storedSection.specialAccess;
+      else delete out.specialAccess;
+    }
+    return out;
+  }
   // 탭 및 메뉴 구성 — 배포 순간 열린 옛 화면이 강사뷰 칸(teacherMenus) 없이 보내면 스키마 기본값([])이 채워진다.
   // 그대로 저장하면 원장이 정해 둔 강사뷰 구성이 조용히 지워지므로, 요청에 **없던** 칸은 저장돼 있던 값으로 둔다(프리셋 무관).
   if (section === "navigation" && isPlainObject(parsed)) {

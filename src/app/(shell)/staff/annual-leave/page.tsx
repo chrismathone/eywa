@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAdjustLeave } from "@/features/leave/access";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { getLeaveOverview } from "@/features/leave/server/admin";
 import { AdjustTable } from "./_adjust-table";
 
@@ -21,7 +23,8 @@ export const metadata = { title: "연차 관리 — aywa" };
  */
 export default async function AnnualLeavePage() {
   const user = await requireAccess("staff");
-  if (!canAdjustLeave(user.id, await isCurrentUserSuperAdmin())) redirect("/staff");
+  const [settings, isSuperAdmin] = await Promise.all([getTenantSettings(), isCurrentUserSuperAdmin()]);
+  if (!canAdjustLeave(user.id, isSuperAdmin, { isChinsanTenant: isChinsanTenant(settings), adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) redirect("/staff");
 
   const overview = await getLeaveOverview(user.tenantId);
   const adjusted = overview.rows.filter((r) => r.adjustment !== 0).length;

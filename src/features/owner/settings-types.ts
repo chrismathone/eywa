@@ -534,12 +534,18 @@ export const userPermissionOverrideSchema = z.object({
   menu: z.enum(MENU_KEYS as unknown as [MenuKey, ...MenuKey[]]),
   access: accessEnum,
 });
+const specialAccessSchema = z.object({
+  payslipViewerIds: z.array(z.string().uuid()).max(80).default([]),
+  leaveAdjusterIds: z.array(z.string().uuid()).max(80).default([]),
+});
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(160),
     // .default([]) — 기존 저장분(키 없음)이 그대로 파싱되도록. 폼 저장 시엔 payload가 이 키를
     // 관통시켜야 한다(permissions-section) — 빠뜨리면 매트릭스 저장 한 번에 개인 예외가 전멸한다.
     userOverrides: z.array(userPermissionOverrideSchema).max(80).default([]),
+    // 일반판의 민감 기능은 메뉴 권한과 별도로 사람을 지정한다. 침산은 기존 명단을 유지한다.
+    specialAccess: specialAccessSchema.default({ payslipViewerIds: [], leaveAdjusterIds: [] }),
   })
   .superRefine((v, ctx) => {
     // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
@@ -560,6 +566,15 @@ export const permissionsSchema = z
       if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {
         ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 개인 예외로 편집할 수 없습니다" });
       }
+    }
+    for (const ids of [v.specialAccess.payslipViewerIds, v.specialAccess.leaveAdjusterIds]) {
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({ code: "custom", message: "담당자를 중복 지정할 수 없습니다" });
+      }
+    }
+    const menuCells = v.userOverrides.map((r) => `${r.userId}:${r.menu}`);
+    if (new Set(menuCells).size !== menuCells.length) {
+      ctx.addIssue({ code: "custom", message: "같은 사람의 같은 메뉴 예외를 중복 지정할 수 없습니다" });
     }
   });
 export type PermissionsSettings = z.infer<typeof permissionsSchema>;

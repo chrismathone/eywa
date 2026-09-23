@@ -212,6 +212,17 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
         access: o.access,
       });
     }
+    if (isObj(v.specialAccess)) {
+      for (const [key, label] of [
+        ["payslipViewerIds", "급여명세서 열람"],
+        ["leaveAdjusterIds", "연차 조정"],
+      ] as const) {
+        for (const id of Array.isArray(v.specialAccess[key]) ? v.specialAccess[key] : []) {
+          if (typeof id !== "string") continue;
+          out.set(`special:${key}:${id}`, { label: `${label} · ${id.slice(0, 8)}`, access: "full" });
+        }
+      }
+    }
     return out;
   };
   const b = rows(before);

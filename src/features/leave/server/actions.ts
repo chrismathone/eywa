@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
@@ -51,7 +53,8 @@ const REASON_REQUIRED_MSG =
 async function requireAdjuster() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
-  if (!canAdjustLeave(user.id, await isCurrentUserSuperAdmin())) {
+  const [settings, isSuperAdmin] = await Promise.all([getTenantSettings(), isCurrentUserSuperAdmin()]);
+  if (!canAdjustLeave(user.id, isSuperAdmin, { isChinsanTenant: isChinsanTenant(settings), adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) {
     return { error: LEAVE_ADJUST_DENIED_MSG as string };
   }
   return { user };
@@ -77,7 +80,7 @@ async function loadTarget(tenantId: string, userId: string) {
   if (data.system_role === "student") return { error: "학생 계정은 연차 대상이 아닙니다" };
 
   const today = kstToday();
-  const period = applyLeaveGrantOverride(userId, resolveLeavePeriod((data.hire_date as string | null) ?? null, today));
+  const period = applyLeaveGrantOverride(userId, resolveLeavePeriod((data.hire_date as string | null) ?? null, today), isChinsanTenant(await getTenantSettings()));
   if (!period) {
     return {
       error: "입사일이 등록되지 않아 연차 구간을 계산할 수 없습니다 — 직원관리에서 입사일을 먼저 등록하세요",
@@ -297,6 +300,7 @@ export async function deleteLeaveAdjustment(
   const period = applyLeaveGrantOverride(
     targetId,
     resolveLeavePeriod((person?.hire_date as string | null) ?? null, kstToday()),
+    isChinsanTenant(await getTenantSettings()),
   );
 
   const removed = Number(row.days) || 0;

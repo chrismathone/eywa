@@ -52,7 +52,7 @@ export async function insertDashboardSatellite(
   await insertWithdrawn(tx, tenantId, note, world, classOf, studentOf);
   await insertAttendance(tx, tenantId, world, classOf, studentOf);
   await insertInvoices(tx, tenantId, note, world, studentOf);
-  await insertConsultations(tx, tenantId, note, world);
+  await insertConsultations(tx, tenantId, note, world, studentOf);
   await insertStudentConsultations(tx, tenantId, world, studentOf);
   await insertReports(tx, tenantId, today, world, studentOf);
   await insertOps(tx, tenantId, world);

@@ -40,6 +40,8 @@ export const SYSTEM_READABLE_AUDIT_ACTIONS = [
   "class_schedule_move",
   "classroom_auto_assign",
   "consultation_merge",
+  // 운영실 '금일 등록'(원장 2026-09-23) — 콜&상담 상태를 등록 완료로 옮긴 시각. 칸반에서 이미 보이는 사실이다.
+  "enrollment_consultation_outcome",
 ] as const;
 
 export type SystemReadableAuditAction = (typeof SYSTEM_READABLE_AUDIT_ACTIONS)[number];

@@ -16,6 +16,7 @@ import {
   type MenuKey,
   type PermissionOverride,
   type SystemRole,
+  type UserPermissionOverride,
 } from "@/lib/permissions";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
 import { isTeacherMenuEntranceOpen } from "@/lib/navigation";
@@ -72,16 +73,42 @@ function diffOverrides(matrix: AccessMatrix): PermissionOverride[] {
 export function PermissionsSection({
   initial,
   userOverrideNames = {},
+  staffOptions = [],
+  generic = false,
 }: {
   initial: PermissionsSettings;
   /** 개인 예외 표시용 userId→이름(서버에서 해석). 이름 없는 id는 축약 id로 표시. */
   userOverrideNames?: Record<string, string>;
+  staffOptions?: { id: string; name: string; role: string }[];
+  generic?: boolean;
 }) {
   const [matrix, setMatrix] = useState<AccessMatrix>(() => resolveMatrix(initial.overrides));
   const overrides = useMemo(() => diffOverrides(matrix), [matrix]);
-  // 개인 예외는 이 폼에서 편집하지 않는다(조회 전용) — 단 저장 payload에 **그대로 관통**시킨다.
-  // 빠뜨리면 permissionsSchema의 default([])가 채워져 매트릭스 저장 한 번에 개인 예외가 전멸한다.
-  const userOverrides = initial.userOverrides;
+  const [userOverrides, setUserOverrides] = useState<UserPermissionOverride[]>(initial.userOverrides);
+  const [specialAccess, setSpecialAccess] = useState(initial.specialAccess);
+  const [pickedUser, setPickedUser] = useState("");
+  const [pickedMenu, setPickedMenu] = useState<MenuKey>("staff");
+  const [pickedAccess, setPickedAccess] = useState<Access>("full");
+  const [pickedPayslip, setPickedPayslip] = useState("");
+  const [pickedLeave, setPickedLeave] = useState("");
+  const staffName = (id: string) => staffOptions.find((s) => s.id === id)?.name || userOverrideNames[id] || `${id.slice(0, 8)}…`;
+
+  function addUserOverride() {
+    if (!pickedUser) return;
+    const role = staffOptions.find((s) => s.id === pickedUser)?.role as SystemRole | undefined;
+    if (!role || isPermissionLocked(pickedMenu, role, pickedAccess)) return;
+    setUserOverrides((rows) => {
+      const next = rows.filter((r) => r.userId !== pickedUser || r.menu !== pickedMenu);
+      return next.length >= 80 ? rows : [...next, { userId: pickedUser, menu: pickedMenu, access: pickedAccess }];
+    });
+  }
+
+  function addSpecial(key: "payslipViewerIds" | "leaveAdjusterIds", id: string) {
+    if (!id) return;
+    setSpecialAccess((prev) => prev[key].includes(id) || prev[key].length >= 80
+      ? prev
+      : { ...prev, [key]: [...prev[key], id] });
+  }
 
   function cycle(menu: MenuKey, role: SystemRole) {
     const next = CYCLE[(CYCLE.indexOf(matrix[menu][role]) + 1) % CYCLE.length];
@@ -115,7 +142,7 @@ export function PermissionsSection({
   }
 
   return (
-    <SectionForm section="permissions" payload={{ overrides, userOverrides }}>
+    <SectionForm section="permissions" payload={{ overrides, userOverrides, specialAccess }}>
       <>
       <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">강사 &lsquo;내 메뉴&rsquo; 표시</h3>
@@ -206,30 +233,67 @@ export function PermissionsSection({
             </tbody>
           </table>
         </DragScrollArea>
-        {userOverrides.length > 0 ? (
-          // 개인 예외 — 역할 표 위에 특정 사용자에게만 얹힌 셀(예: 직원관리를 원장+개발팀 4인으로 좁히며
-          // 설현·이승엽 admin에게만 개별 허용, 2026-08-01). 표의 역할 값과 다르게 동작하는 이유를 원장이
-          // 여기서 확인한다. 편집은 시스템 반영(스크립트) 경로만 — 이 폼은 저장 시 그대로 보존한다.
-          <div className="border-border bg-bg-soft mt-4 rounded-md border px-4 py-3">
-            <p className="text-foreground text-xs font-bold">개인 예외 {userOverrides.length}건</p>
-            <p className="text-text-dim mt-0.5 text-xs leading-relaxed">
-              아래 사용자는 역할과 무관하게 해당 메뉴가 개별 적용됩니다(위 표보다 우선).
-            </p>
-            <ul className="mt-1.5 space-y-0.5">
+        {generic || userOverrides.length > 0 ? (
+          <div className="border-border bg-bg-soft mt-4 space-y-3 rounded-md border px-4 py-3">
+            <div>
+              <p className="text-foreground text-xs font-bold">개인별 메뉴 권한 {userOverrides.length}건</p>
+              <p className="text-text-dim mt-0.5 text-xs">역할별 권한보다 우선합니다. 같은 사람의 같은 메뉴는 새 값으로 바뀝니다.</p>
+            </div>
+            {generic ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <select aria-label="직원 선택" value={pickedUser} onChange={(e) => setPickedUser(e.target.value)} className="border-border bg-card rounded border px-2 py-1.5 text-xs">
+                  <option value="">직원 선택</option>
+                  {staffOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <select aria-label="메뉴 선택" value={pickedMenu} onChange={(e) => setPickedMenu(e.target.value as MenuKey)} className="border-border bg-card rounded border px-2 py-1.5 text-xs">
+                  {MENU_KEYS.filter((menu) => menu !== "teacher_onescreen" && menu !== "my_learning" && !(menu === "dashboard" && staffOptions.find((s) => s.id === pickedUser)?.role === "teacher")).map((menu) => <option key={menu} value={menu}>{MENU_LABEL[menu]}</option>)}
+                </select>
+                <select aria-label="접근 수준" value={pickedAccess} onChange={(e) => setPickedAccess(e.target.value as Access)} className="border-border bg-card rounded border px-2 py-1.5 text-xs">
+                  {CYCLE.map((access) => <option key={access} value={access}>{ACCESS_LABEL[access]}</option>)}
+                </select>
+                <button type="button" onClick={addUserOverride} disabled={!pickedUser || (userOverrides.length >= 80 && !userOverrides.some((r) => r.userId === pickedUser && r.menu === pickedMenu)) || isPermissionLocked(pickedMenu, (staffOptions.find((s) => s.id === pickedUser)?.role ?? "student") as SystemRole, pickedAccess)} className="border-border bg-card rounded border px-3 py-1.5 text-xs disabled:opacity-40">추가·변경</button>
+              </div>
+            ) : null}
+            {userOverrides.length > 0 ? <ul className="space-y-1">
               {userOverrides.map((o) => (
-                <li key={`${o.userId}-${o.menu}`} className="text-xs">
-                  <span className="text-foreground font-medium">
-                    {userOverrideNames[o.userId] || `${o.userId.slice(0, 8)}…`}
-                  </span>
-                  <span className="text-text-dim"> — {MENU_LABEL[o.menu]}: </span>
-                  <span className={`rounded px-1 py-0.5 text-xs font-medium ${ACCESS_CLS[o.access]}`}>
-                    {ACCESS_LABEL[o.access]}
-                  </span>
+                <li key={`${o.userId}-${o.menu}`} className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-foreground min-w-20 font-medium">{staffName(o.userId)}</span>
+                  <span className="text-text-dim">{MENU_LABEL[o.menu]}</span>
+                  {generic ? (
+                    <>
+                      <select aria-label={`${staffName(o.userId)} ${MENU_LABEL[o.menu]} 권한`} value={o.access} onChange={(e) => setUserOverrides((rows) => rows.map((r) => r === o ? { ...r, access: e.target.value as Access } : r))} className="border-border bg-card rounded border px-2 py-1 text-xs">
+                        {CYCLE.map((access) => <option key={access} value={access}>{ACCESS_LABEL[access]}</option>)}
+                      </select>
+                      <button type="button" onClick={() => setUserOverrides((rows) => rows.filter((r) => r !== o))} className="text-text-dim hover:text-foreground">제거</button>
+                    </>
+                  ) : <span className={`rounded px-1 py-0.5 ${ACCESS_CLS[o.access]}`}>{ACCESS_LABEL[o.access]}</span>}
                 </li>
               ))}
-            </ul>
+            </ul> : <p className="text-text-dim text-xs">지정된 개인 예외가 없습니다.</p>}
           </div>
         ) : null}
+        {generic ? <div className="border-border bg-bg-soft mt-4 space-y-4 rounded-md border px-4 py-3">
+          <div>
+            <p className="text-foreground text-xs font-bold">민감 기능 담당자</p>
+            <p className="text-text-dim mt-0.5 text-xs">두 기능의 담당자를 따로 지정합니다. 연차 조정은 직원관리 메뉴 권한도 있어야 합니다.</p>
+          </div>
+          {([
+            { key: "payslipViewerIds" as const, label: "급여명세서 열람", picked: pickedPayslip, setPicked: setPickedPayslip },
+            { key: "leaveAdjusterIds" as const, label: "연차 조정", picked: pickedLeave, setPicked: setPickedLeave },
+          ]).map(({ key, label, picked, setPicked }) => <div key={key} className="space-y-2">
+            <p className="text-xs font-medium">{label}</p>
+            <div className="flex flex-wrap gap-2">
+              <select aria-label={`${label} 담당자 선택`} value={picked} onChange={(e) => setPicked(e.target.value)} className="border-border bg-card rounded border px-2 py-1.5 text-xs">
+                <option value="">직원 선택</option>
+                {staffOptions.filter((s) => !specialAccess[key].includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <button type="button" onClick={() => { addSpecial(key, picked); setPicked(""); }} disabled={!picked || specialAccess[key].length >= 80} className="border-border bg-card rounded border px-3 py-1.5 text-xs disabled:opacity-40">담당자 추가</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {specialAccess[key].length === 0 ? <span className="text-text-dim text-xs">지정된 직원 없음</span> : specialAccess[key].map((id) => <span key={id} className="border-border bg-card inline-flex items-center gap-1 rounded border px-2 py-1 text-xs">{staffName(id)} <button type="button" aria-label={`${staffName(id)} ${label} 해제`} onClick={() => setSpecialAccess((prev) => ({ ...prev, [key]: prev[key].filter((v) => v !== id) }))}>×</button></span>)}
+            </div>
+          </div>)}
+        </div> : null}
       </section>
       </>
     </SectionForm>

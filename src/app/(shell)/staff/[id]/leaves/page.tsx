@@ -1,4 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
+import { isStaffLeavesEnabled } from "@/features/payroll/config";
 import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -14,6 +17,8 @@ export default async function StaffLeavesPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireAccess("staff");
+  const settings = await getTenantSettings();
+  if (!isChinsanTenant(settings) && !isStaffLeavesEnabled(settings)) redirect("/staff");
   const { id } = await params;
   const canManage =
     await canWriteTenant(user.systemRole, "staff"); // 메뉴 쓰기 권한(개인 예외 포함) 단일 기준

@@ -21,7 +21,7 @@ import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
 import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
-import { AbsentPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
+import { AbsentPopup, EnrolledTodayPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
 import s from "./overview.module.css";
 
 const count = (n: number | null | undefined) => (n == null ? "—" : number(n));
@@ -32,7 +32,8 @@ const count = (n: number | null | undefined) => (n == null ? "—" : number(n));
  * 좁을 때 2열(홀수 번째 마지막 카드는 CSS가 두 칸으로).
  */
 export function kpiGridVars(n: number): CSSProperties {
-  const mid = n === 4 ? 2 : Math.max(1, Math.min(n, 3));
+  // 8칸(금일 등록 포함)은 4 × 2 — 3열이면 3·3·2로 마지막 줄만 넓어진다.
+  const mid = n === 4 ? 2 : n === 8 ? 4 : Math.max(1, Math.min(n, 3));
   const rest = n % mid;
   return {
     "--kpi-n": Math.max(1, n),
@@ -42,14 +43,15 @@ export function kpiGridVars(n: number): CSSProperties {
 }
 
 /**
- * KPI 여섯 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · 오늘첫수업 · 전일 결석.
+ * KPI 칸(원장 2026-09-11 확정 순서): 재원생 · 퇴원생 · 신규문의 · 금일입테 · **금일 등록**(2026-09-23 — 금일입테 오른쪽) ·
+ * 오늘첫수업 · 전일 결석 · 보강예정.
  * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
  * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
  */
 export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const v = snapshot.sections;
   // '보강예정'(원장 2026-09-14 *"보강 예정은 가장 끝으로"*)이 맨 뒤 — 앞 여섯은 2026-09-11 확정 순서 그대로.
-  const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.firstClass, v.absent, v.makeup].filter(Boolean).length;
+  const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.enrolledToday, v.firstClass, v.absent, v.makeup].filter(Boolean).length;
   if (shown === 0) return null;
   const today = snapshot.today;
   const can = (menu: MenuKey) => snapshot.allowed.includes(menu);
@@ -65,6 +67,9 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const month = withdrawals?.month ?? today.slice(0, 7);
   const intake = v.intake?.data;
   const levelTests = v.calendar?.data ? todayLevelTests(v.calendar.data, today) : null;
+  // 금일 등록 = 오늘 콜&상담 '등록 완료'로 옮긴 상담(원장 2026-09-23). 보조 줄은 반 배정 완료 / 배정 전.
+  const registered = v.enrolledToday?.data;
+  const registeredAssigned = registered?.filter((row) => row.assigned).length ?? 0;
   const firsts = v.firstClass?.data;
   const firstCount = firsts?.filter((row) => row.kind === "first").length ?? 0;
   // 전일 결석 = **어제**(원장 2026-09-12 — 오늘은 수업을 안 하면 볼 수가 없다) 한 교시도 안 온 학생만 센다.
@@ -159,6 +164,25 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
           jump={null}
         >
           <LevelTestPopup events={levelTests} />
+        </KpiCard>
+      )}
+      {v.enrolledToday && (
+        <KpiCard
+          helpKey="dash-enrolled-today"
+          label="금일 등록"
+          value={count(registered?.length)}
+          unit="명"
+          detail={
+            registered
+              ? `반 배정 ${number(registeredAssigned)} · 배정 전 ${number(registered.length - registeredAssigned)}`
+              : "콜&상담 등록 완료 기준"
+          }
+          icon={<MenuGlyph name="userCheck" size={20} />}
+          error={v.enrolledToday.error}
+          popupTitle="오늘 등록 완료"
+          jump={null}
+        >
+          <EnrolledTodayPopup rows={registered} canOpen={can("enrollment")} />
         </KpiCard>
       )}
       {v.firstClass && (

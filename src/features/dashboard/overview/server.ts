@@ -31,6 +31,7 @@ import {
 import { isMergedStudent } from "@/features/students/merged";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
+import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { absentKpiDate } from "./kpi-links";
 import { getUpcomingMakeupOverview } from "@/features/dashboard/server/makeup-upcoming";
@@ -58,6 +59,7 @@ import {
 import { getTodaySchedule } from "@/features/timetable/server/queries";
 import { mergeContinuousClasses } from "./continuous-classes";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { getApprovalBoxes } from "@/features/approvals/server/queries";
 import { getInventoryCounts } from "@/features/inventory/server/queries";
@@ -403,7 +405,7 @@ async function staff(settingsPromise: Promise<Settings>) {
     settingsPromise,
   ]);
   return staffComposition(
-    rows.map((r) => ({ role: staffDisplayRole(r), subjects: r.subjects })),
+    rows.map((r) => ({ role: staffDisplayRole(r, isChinsanTenant(settings)), subjects: r.subjects })),
     settings.operations.subjects,
   );
 }
@@ -579,6 +581,8 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       time: kstTimeOf(row.createdAt),
     })),
   );
+  // '금일 등록'(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담. 카드·팝업이 같은 배열.
+  add("enrolledToday", ["enrollment"], () => getEnrolledToday(today));
   add("firstClass", ["students"], async () => firstClasses(today, await scopePromise, settingsPromise));
   // '보강예정'(원장 2026-09-14) — **오늘부터 한 달**(원장 2026-09-16) 보강 예약 + 지난 미이행. 창은 `monthAheadWindow` 한 함수
   // (아래 '레벨테스트 및 첫수업 일정'과 같은 끝 날짜) · 반 집합·기간 조회는 시간표 '보강' 탭과 같은 두 함수.

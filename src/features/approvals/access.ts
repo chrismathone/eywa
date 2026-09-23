@@ -44,6 +44,7 @@ const PILOT_MENUS: readonly MenuKey[] = ["approvals"];
  * 권한 매트릭스에 얹을 **코드 기반 개인 예외**. `tenant_settings`의 userOverrides와 같은 모양이라
  * `applyUserOverrides`가 그대로 처리한다(사이드바·requireAccess·서버 액션이 한 게이트를 공유).
  *
+ * ⚠️ 파일럿 명단은 침산에만 적용한다. 새 지점의 일반 프리셋에 침산 계정 ID를 섞지 않는다.
  * ⚠️ super_admin은 명단에 없어도 통과시킨다 — 원장 지시(2026-08-13) *"superadmin은 앞으로 뭘 안해도
  *    그냥 넣고봐"*. 명단만 두면 총괄이 자기 시스템의 신기능에서 잠긴다.
  * ⚠️ 저장된 설정(userOverrides)보다 **먼저** 적용된다 → 원장이 나중에 owner 콘솔에서 이 셀을
@@ -52,7 +53,8 @@ const PILOT_MENUS: readonly MenuKey[] = ["approvals"];
 export function approvalMenuOverridesFor(
   userId: string,
   isSuperAdmin: boolean,
+  isChinsanTenant: boolean,
 ): UserPermissionOverride[] {
-  if (!isSuperAdmin && !isApprovalPilotUser(userId)) return [];
+  if (!isSuperAdmin && (!isChinsanTenant || !isApprovalPilotUser(userId))) return [];
   return PILOT_MENUS.map((menu) => ({ userId, menu, access: "full" as const }));
 }

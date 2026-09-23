@@ -40,6 +40,11 @@
   .dashboard :global([data-overview="kpis"][data-kpi-n="7"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .dashboard :global([data-overview="kpis"][data-kpi-n="7"] > [data-overview="kpi"]:last-child) { grid-column: span 2; }
 }
+/* 여덟 칸(금일 등록 포함, 원장 2026-09-23) — 581~1500px에서 4칸 × 2줄(8칸 한 줄은 1500px 아래에서 칸당 ~180px라 보조 줄이
+   세 줄로 꺾인다). 특이도는 위 일곱 칸 규칙과 같은 0,3,0. 1100px 아래는 --kpi-mid(4)가 같은 모양을 낸다. */
+@container dashboard (min-width: 581px) and (max-width: 1500px) {
+  .dashboard :global([data-overview="kpis"][data-kpi-n="8"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 @container dashboard (max-width: 1100px) {
   .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-mid, 3), minmax(0, 1fr)); }
   .dashboard :global([data-overview="kpi"]:last-child) { grid-column: var(--kpi-last-mid, auto); }
