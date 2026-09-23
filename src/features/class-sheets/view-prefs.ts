@@ -19,6 +19,7 @@ import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features
 import { normalizeEcsTeacher } from "./landing-teacher";
 import type { RosterGroupKey } from "./lib/roster-order";
 import { normalizeTodayOrder } from "./today-order";
+import { normalizeGoalsBoardRole, type GoalsBoardRole } from "./lib/goals-board";
 
 /** 미설정 기본값 = 표시(원장 2026-08-03). 저장은 기본값이 아닐 때만 키를 남긴다. */
 
@@ -212,4 +213,12 @@ function ecsScope(uiPrefs: unknown): Record<string, unknown> | null {
   const scope = (uiPrefs as Record<string, unknown>).ecs;
   if (!scope || typeof scope !== "object" || Array.isArray(scope)) return null;
   return scope as Record<string, unknown>;
+}
+
+/**
+ * `ui_prefs.ecs.goalsRole` → **반 계획 보기**(/ecs/goals)의 역할 토글(담임/부담임, 2026-09-23).
+ * ⚠️ 계정 귀속(원장 2026-08-04). 기본값(담임)은 저장하지 않는다 — 깨진 값도 담임으로.
+ */
+export function readEcsGoalsRole(uiPrefs: unknown): GoalsBoardRole {
+  return normalizeGoalsBoardRole(ecsScope(uiPrefs)?.goalsRole);
 }

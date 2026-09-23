@@ -238,6 +238,40 @@ export const SHEET_DICT = {
     ko: "영어 반별 주간 수업계획서/출석부",
     en: "Weekly lesson plans and attendance by English class",
   },
+
+  // ── 반 계획 보기(/ecs/goals, 2026-09-23) — 인재원 영어 반 × 영역, 월간 ↔ 주간 대조 ──
+  "goals.title": { ko: "반 계획 보기", en: "Class plans" },
+  "goals.desc": {
+    ko: "인재원 영어 반의 영역별 월간 목표와 이번 주 목표를 나란히 봅니다",
+    en: "Monthly and weekly goals by skill for Injaewon English classes, side by side",
+  },
+  "goals.back": { ko: "반 목록", en: "Class list" },
+  "goals.role": { ko: "계획", en: "Plan by" },
+  "goals.role.homeroom": { ko: "담임", en: "Homeroom" },
+  "goals.role.assistant": { ko: "부담임", en: "Assistant" },
+  "goals.caption": { ko: "월간 {month} · 주간 {week}", en: "Monthly {month} · Weekly {week}" },
+  "goals.cells": { ko: "{n}칸", en: "{n} cells" },
+  "goals.stat.same": { ko: "같은 교재로 진행", en: "Same book as monthly" },
+  "goals.stat.diff": { ko: "주간 교재 다름", en: "Different book this week" },
+  "goals.stat.weekEmpty": { ko: "이번 주 비어 있음", en: "Week goal not set" },
+  "goals.stat.none": { ko: "월간 목표 없음", en: "No monthly goal" },
+  "goals.col.class": { ko: "반", en: "Class" },
+  "goals.month": { ko: "월", en: "Mo" },
+  "goals.week": { ko: "주", en: "Wk" },
+  "goals.weekBlank": { ko: "비어 있음", en: "Blank this week" },
+  "goals.empty": {
+    ko: "이 주에 수업이 있는 인재원 영어 반이 없습니다. 주를 옮겨 보세요.",
+    en: "No Injaewon English classes have lessons this week. Try another week.",
+  },
+  "goals.noAreas": {
+    ko: "학원설정 과목 운영에서 영어 영역을 먼저 정해 주세요.",
+    en: "Set the English skill areas in academy settings first.",
+  },
+  "goals.readonly": {
+    ko: "고치는 곳은 반 시트입니다 — 반 이름을 누르세요",
+    en: "Edit in the class sheet — click a class name",
+  },
+  "goals.homeroomOf": { ko: "담임 {name}", en: "Homeroom {name}" },
   "landing.empty.filtered.prefix": {
     ko: "지금 보기가",
     en: "Your current view is limited to",

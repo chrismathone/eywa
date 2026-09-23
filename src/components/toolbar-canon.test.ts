@@ -204,6 +204,8 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  *    통째로 비교하면 정당한 색 변경까지 막혀서 곧 지워진다.
  */
 const CANON_SURFACES = [
+  "src/app/(shell)/ecs/goals/page.tsx",
+  "src/app/(shell)/ecs/goals/_components/goals-role-switch.tsx",
   "src/features/onescreen/components/top-bar.tsx",
   "src/features/ijw/components/jj-range-bar.tsx",
   "src/app/(shell)/timetable/page.tsx",
