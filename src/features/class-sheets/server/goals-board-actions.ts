@@ -1,7 +1,12 @@
 "use server";
 
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
-import { DEFAULT_GOALS_BOARD_ROLE, normalizeGoalsBoardRole } from "../lib/goals-board";
+import {
+  DEFAULT_GOALS_BOARD_ROLE,
+  DEFAULT_GOALS_BOARD_VIEW,
+  normalizeGoalsBoardRole,
+  normalizeGoalsBoardView,
+} from "../lib/goals-board";
 
 /**
  * 반 계획 보기(/ecs/goals)의 역할 토글(담임/부담임)을 본인 계정에 저장 — `users.ui_prefs.ecs.goalsRole`.
@@ -12,4 +17,11 @@ export async function setMyEcsGoalsRole(role: string): Promise<{ ok: boolean; er
   const safe = normalizeGoalsBoardRole(role);
   if (safe !== role) return { ok: false, error: "잘못된 값입니다" };
   return patchMyUiPrefs("ecs", { goalsRole: safe === DEFAULT_GOALS_BOARD_ROLE ? undefined : safe });
+}
+
+/** 반 계획 보기의 보기 단위(일간/주간)를 본인 계정에 저장 — `users.ui_prefs.ecs.goalsView`. */
+export async function setMyEcsGoalsView(view: string): Promise<{ ok: boolean; error?: string }> {
+  const safe = normalizeGoalsBoardView(view);
+  if (safe !== view) return { ok: false, error: "잘못된 값입니다" };
+  return patchMyUiPrefs("ecs", { goalsView: safe === DEFAULT_GOALS_BOARD_VIEW ? undefined : safe });
 }

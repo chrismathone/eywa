@@ -9,7 +9,7 @@ import { GOALS_BOARD_ROLES, type GoalsBoardRole } from "@/features/class-sheets/
 import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
- * 반 계획 보기의 **담임 / 부담임** 토글 — 계정 귀속(`ui_prefs.ecs.goalsRole`).
+ * 반 계획 보기의 **전체 / 담임 / 부담임** 토글 — 계정 귀속(`ui_prefs.ecs.goalsRole`).
  * ⚠️ 서버가 표를 그리므로 저장 뒤 `router.refresh()`(프로그램 필터와 같은 규약).
  */
 export function GoalsRoleSwitch({ value }: { value: GoalsBoardRole }) {
@@ -36,7 +36,7 @@ export function GoalsRoleSwitch({ value }: { value: GoalsBoardRole }) {
     <ToolbarSegment label={t("goals.role")}>
       {GOALS_BOARD_ROLES.map((r) => (
         <ToolbarSegmentItem key={r} active={value === r} disabled={pending} onClick={() => pick(r)}>
-          {t(r === "homeroom" ? "goals.role.homeroom" : "goals.role.assistant")}
+          {t(r === "all" ? "goals.role.all" : r === "homeroom" ? "goals.role.homeroom" : "goals.role.assistant")}
         </ToolbarSegmentItem>
       ))}
     </ToolbarSegment>

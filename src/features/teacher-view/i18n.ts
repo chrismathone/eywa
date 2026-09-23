@@ -247,7 +247,10 @@ export const SHEET_DICT = {
   },
   "goals.back": { ko: "반 목록", en: "Class list" },
   "goals.role": { ko: "계획", en: "Plan by" },
+  "goals.role.all": { ko: "전체", en: "All" },
   "goals.role.homeroom": { ko: "담임", en: "Homeroom" },
+  "goals.prefix.homeroom": { ko: "담)", en: "H)" },
+  "goals.prefix.assistant": { ko: "부)", en: "A)" },
   "goals.role.assistant": { ko: "부담임", en: "Assistant" },
   "goals.caption": { ko: "월간 {month} · 주간 {week}", en: "Monthly {month} · Weekly {week}" },
   "goals.cells": { ko: "{n}칸", en: "{n} cells" },
@@ -258,7 +261,15 @@ export const SHEET_DICT = {
   "goals.col.class": { ko: "반", en: "Class" },
   "goals.month": { ko: "월", en: "Mo" },
   "goals.week": { ko: "주", en: "Wk" },
-  "goals.weekBlank": { ko: "비어 있음", en: "Blank this week" },
+  "goals.day": { ko: "일", en: "Dy" },
+  "goals.blank": { ko: "비어 있음", en: "Blank" },
+  "goals.noLesson": { ko: "수업 없음", en: "No lesson" },
+  "goals.more": { ko: "외 {n}", en: "+{n}" },
+  "goals.view": { ko: "보기", en: "View" },
+  "goals.view.day": { ko: "일간", en: "By day" },
+  "goals.view.week": { ko: "주간", en: "By week" },
+  "goals.pickDate": { ko: "달력에서 날짜 선택", en: "Open calendar" },
+  "goals.toToday": { ko: "오늘 날짜로", en: "Go to today" },
   "goals.empty": {
     ko: "이 주에 수업이 있는 인재원 영어 반이 없습니다. 주를 옮겨 보세요.",
     en: "No Injaewon English classes have lessons this week. Try another week.",
@@ -266,10 +277,6 @@ export const SHEET_DICT = {
   "goals.noAreas": {
     ko: "학원설정 과목 운영에서 영어 영역을 먼저 정해 주세요.",
     en: "Set the English skill areas in academy settings first.",
-  },
-  "goals.readonly": {
-    ko: "고치는 곳은 반 시트입니다 — 반 이름을 누르세요",
-    en: "Edit in the class sheet — click a class name",
   },
   "goals.homeroomOf": { ko: "담임 {name}", en: "Homeroom {name}" },
   "landing.empty.filtered.prefix": {

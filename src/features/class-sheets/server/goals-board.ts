@@ -11,17 +11,22 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { keepEnglishTrack } from "@/features/classes/english-track";
 import { hasLiveSlotInWeek } from "../lib/grid";
-import { YMD_RE, type DowKey } from "../lib/week";
+import { dowKeyOf, normalizeSlotTime, YMD_RE, type DowKey } from "../lib/week";
+import { specialSlotLabel } from "@/features/timetable/lib/teacher-label";
 import {
-  goalCellState,
+  goalCellStateOf,
   goalKey,
+  indexDayLines,
   indexGoals,
+  type DayLine,
   type GoalCellState,
   type GoalRow,
-  type GoalText,
+  type PlanLineRow,
+  type RoleGoal,
   type GoalsBoardRole,
+  type GoalsBoardView,
 } from "../lib/goals-board";
-import { readEcsGoalsRole } from "../view-prefs";
+import { readEcsGoalsRole, readEcsGoalsView } from "../view-prefs";
 import { ecsVisibleClassFilter } from "./access";
 
 /**
@@ -40,38 +45,47 @@ import { ecsVisibleClassFilter } from "./access";
 export type GoalsBoardCell = {
   area: string;
   state: GoalCellState;
-  month: GoalText | null;
-  week: GoalText | null;
+  /** 적힌 목표만(담임 → 부담임 순). 담임·부담임 보기면 0~1개, 전체면 0~2개. */
+  month: RoleGoal[];
+  week: RoleGoal[];
+  /** 그 날 시트에 적힌 계획 줄(자리 교시 제외) — 빈 배열 = 수업은 있는데 안 적음. */
+  day: DayLine[];
 };
 
 export type GoalsBoardRow = {
   classId: string;
   className: string;
   teacherName: string | null;
+  /** 그 날 이 반에 (자리 아닌) 수업 교시가 있나 — 없으면 일간 줄은 '수업 없음'. */
+  hasLessonOnDate: boolean;
   cells: GoalsBoardCell[];
 };
 
 export type GoalsBoardResult =
   | {
       ok: true;
+      date: string;
       weekMonday: string;
       weekLabel: string;
       monthStart: string;
       today: string;
       role: GoalsBoardRole;
+      view: GoalsBoardView;
       areas: SkillAreaSetting[];
       rows: GoalsBoardRow[];
     }
   | { ok: false; error: string };
 
-export async function getGoalsBoard(weekParam?: string | null): Promise<GoalsBoardResult> {
+export async function getGoalsBoard(dateParam?: string | null): Promise<GoalsBoardResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   const level = await accessLevelTenant(user.systemRole, "ecs");
   if (level === "none") return { ok: false, error: "접근 권한이 없습니다" };
 
   const today = kstToday();
-  const weekMonday = mondayOf(weekParam && YMD_RE.test(weekParam) ? weekParam : today);
+  // 일간의 기준 날짜 — 기본 오늘(원장 *"오늘날짜 기준으로"*). 주·월은 이 날짜에서 따라온다.
+  const date = dateParam && YMD_RE.test(dateParam) ? dateParam : today;
+  const weekMonday = mondayOf(date);
   const weekSunday = shiftDays(weekMonday, 6);
   const monthStart = `${weekMonday.slice(0, 7)}-01`;
 
@@ -93,6 +107,7 @@ export async function getGoalsBoard(weekParam?: string | null): Promise<GoalsBoa
   const english = settings.operations.subjects.find((s) => s.key === "english");
   const areas = resolveSkillAreas(english);
   const role = readEcsGoalsRole(prefsRes.data?.ui_prefs);
+  const view = readEcsGoalsView(prefsRes.data?.ui_prefs);
 
   const scopeSet = scope.classIds ? new Set(scope.classIds) : null;
   const candidates = keepEnglishTrack(
@@ -102,12 +117,19 @@ export async function getGoalsBoard(weekParam?: string | null): Promise<GoalsBoa
   const candidateIds = candidates.map((c) => c.id as string);
 
   const [schedules, teachers] = await Promise.all([
-    fetchInChunks<{ class_id: string; day_of_week: DowKey; valid_from: string; valid_to: string | null }>(
+    fetchInChunks<{
+      class_id: string;
+      day_of_week: DowKey;
+      start_time: string;
+      slot_teacher_label: string | null;
+      valid_from: string;
+      valid_to: string | null;
+    }>(
       candidateIds,
       (chunk) =>
         supabase
           .from("class_schedules")
-          .select("class_id, day_of_week, valid_from, valid_to")
+          .select("class_id, day_of_week, start_time, slot_teacher_label, valid_from, valid_to")
           .in("class_id", chunk)
           .lte("valid_from", weekSunday)
           .or(`valid_to.is.null,valid_to.gte.${weekMonday}`),
@@ -126,21 +148,48 @@ export async function getGoalsBoard(weekParam?: string | null): Promise<GoalsBoa
   const running = candidates.filter((c) => hasLiveSlotInWeek(weekMonday, slotsByClass.get(c.id as string) ?? []));
   const runningIds = running.map((c) => c.id as string);
 
-  const goalRows =
+  // 그 날 도는 교시 — 자리(JJ·LAB) 시작시각은 일간 줄에서 빼고, 자리 아닌 교시가 있어야 '수업 있음'.
+  const dow = dowKeyOf(date);
+  const seatStarts = new Map<string, Set<string>>();
+  const lessonOnDate = new Set<string>();
+  for (const s of schedules) {
+    if (s.day_of_week !== dow || s.valid_from > date || (s.valid_to !== null && s.valid_to < date)) continue;
+    if (specialSlotLabel(s.slot_teacher_label)) {
+      const set = seatStarts.get(s.class_id) ?? new Set<string>();
+      set.add(normalizeSlotTime(s.start_time));
+      seatStarts.set(s.class_id, set);
+    } else lessonOnDate.add(s.class_id);
+  }
+
+  // 목표와 그 날 계획 줄은 서로 독립 → 병렬(B4). 둘 다 행이 많을 수 있어 청크 × 페이징([[#54]]).
+  const [goalRows, lineRows] =
     areas.length === 0
-      ? []
-      : await fetchAllPagedInChunks<GoalRow>(runningIds, (chunk, from, to) =>
-          admin
-            .from("class_sheet_goals")
-            .select("id, class_id, scope, role, skill_area, textbook, target_progress")
-            .eq("tenant_id", user.tenantId)
-            .eq("role", role)
-            .in("class_id", chunk)
-            .or(`and(scope.eq.month,period_start.eq.${monthStart}),and(scope.eq.week,period_start.eq.${weekMonday})`)
-            .order("id")
-            .range(from, to),
-        );
+      ? [[], []]
+      : await Promise.all([
+          fetchAllPagedInChunks<GoalRow>(runningIds, (chunk, from, to) =>
+            admin
+              .from("class_sheet_goals")
+              .select("id, class_id, scope, role, skill_area, textbook, target_progress")
+              .eq("tenant_id", user.tenantId)
+              .in("role", role === "all" ? ["homeroom", "assistant"] : [role])
+              .in("class_id", chunk)
+              .or(`and(scope.eq.month,period_start.eq.${monthStart}),and(scope.eq.week,period_start.eq.${weekMonday})`)
+              .order("id")
+              .range(from, to),
+          ),
+          fetchAllPagedInChunks<PlanLineRow>(runningIds, (chunk, from, to) =>
+            admin
+              .from("class_sheet_plan_lines")
+              .select("id, class_id, slot_start, skill_area, line_no, textbook, page_range, progress, homework")
+              .eq("tenant_id", user.tenantId)
+              .in("class_id", chunk)
+              .eq("plan_date", date)
+              .order("id")
+              .range(from, to),
+          ),
+        ]);
   const idx = indexGoals(goalRows, role);
+  const dayIdx = indexDayLines(lineRows, seatStarts);
   const teacherName = new Map(teachers.map((t) => [t.id, t.display_name]));
 
   const rows: GoalsBoardRow[] = running
@@ -150,10 +199,12 @@ export async function getGoalsBoard(weekParam?: string | null): Promise<GoalsBoa
         classId: id,
         className: (c.class_name as string) ?? "",
         teacherName: teacherName.get(c.teacher_id as string) ?? null,
+        hasLessonOnDate: lessonOnDate.has(id),
         cells: areas.map((a) => {
-          const month = idx.month.get(goalKey(id, a.key)) ?? null;
-          const week = idx.week.get(goalKey(id, a.key)) ?? null;
-          return { area: a.key, state: goalCellState(month, week), month, week };
+          const month = idx.month.get(goalKey(id, a.key)) ?? [];
+          const week = idx.week.get(goalKey(id, a.key)) ?? [];
+          const day = dayIdx.get(goalKey(id, a.key)) ?? [];
+          return { area: a.key, state: goalCellStateOf(month, week), month, week, day };
         }),
       };
     })
@@ -165,5 +216,5 @@ export async function getGoalsBoard(weekParam?: string | null): Promise<GoalsBoa
         a.className.localeCompare(b.className, "ko"),
     );
 
-  return { ok: true, weekMonday, weekLabel: weekLabel(weekMonday), monthStart, today, role, areas, rows };
+  return { ok: true, date, weekMonday, weekLabel: weekLabel(weekMonday), monthStart, today, role, view, areas, rows };
 }

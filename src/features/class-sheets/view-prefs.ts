@@ -19,7 +19,12 @@ import { normalizeEnglishTrackFilter, type EnglishTrackFilter } from "@/features
 import { normalizeEcsTeacher } from "./landing-teacher";
 import type { RosterGroupKey } from "./lib/roster-order";
 import { normalizeTodayOrder } from "./today-order";
-import { normalizeGoalsBoardRole, type GoalsBoardRole } from "./lib/goals-board";
+import {
+  normalizeGoalsBoardRole,
+  normalizeGoalsBoardView,
+  type GoalsBoardRole,
+  type GoalsBoardView,
+} from "./lib/goals-board";
 
 /** 미설정 기본값 = 표시(원장 2026-08-03). 저장은 기본값이 아닐 때만 키를 남긴다. */
 
@@ -221,4 +226,9 @@ function ecsScope(uiPrefs: unknown): Record<string, unknown> | null {
  */
 export function readEcsGoalsRole(uiPrefs: unknown): GoalsBoardRole {
   return normalizeGoalsBoardRole(ecsScope(uiPrefs)?.goalsRole);
+}
+
+/** `ui_prefs.ecs.goalsView` → 반 계획 보기의 보기 단위(일간/주간). 기본 일간. */
+export function readEcsGoalsView(uiPrefs: unknown): GoalsBoardView {
+  return normalizeGoalsBoardView(ecsScope(uiPrefs)?.goalsView);
 }

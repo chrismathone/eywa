@@ -3,14 +3,23 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { PageHeader } from "@/components/page-header";
 import { BigStat } from "@/components/atoms/big-stat";
 import { Toolbar, ToolbarButton } from "@/components/toolbar";
-import { WeekNav } from "@/app/(shell)/timetable/_components/week-nav";
+import { addDays, formatKoreanDate } from "@/lib/date-kst";
+import { mondayOf } from "@/features/timetable/lib/week";
 import { getGoalsBoard } from "@/features/class-sheets/server/goals-board";
 import { countGoalCells } from "@/features/class-sheets/lib/goals-board";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-names";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { classNameFor } from "@/features/teacher-view/class-name";
-import { sheetMonthLabel, sheetT, sheetTf, sheetWeekLabel } from "@/features/teacher-view/i18n";
+import {
+  sheetDateLabelEn,
+  sheetMonthLabel,
+  sheetT,
+  sheetTf,
+  sheetWeekLabel,
+  type SheetLang,
+} from "@/features/teacher-view/i18n";
+import { GoalsPeriodBar } from "./_components/goals-period-bar";
 import { GoalsRoleSwitch } from "./_components/goals-role-switch";
 import { GoalsTable, GOAL_STATE_DOT } from "./_components/goals-table";
 
@@ -22,10 +31,10 @@ export const metadata: Metadata = { title: "반 계획 보기 — aywa" };
  * 🔴 읽기 전용 — 고치는 곳은 반 시트의 왼쪽 계획 표 하나다(반 이름을 누르면 그 주 시트).
  * 규칙·거르기는 [`getGoalsBoard`](@/features/class-sheets/server/goals-board) 주석.
  */
-export default async function EcsGoalsPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
+export default async function EcsGoalsPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   await requireAccess("ecs");
-  const { week } = await searchParams;
-  const [res, lang, names] = await Promise.all([getGoalsBoard(week ?? null), getTeacherViewLang(), getTeacherEnglishNames()]);
+  const { date } = await searchParams;
+  const [res, lang, names] = await Promise.all([getGoalsBoard(date ?? null), getTeacherViewLang(), getTeacherEnglishNames()]);
   const title = sheetT(lang, "goals.title");
 
   if (!res.ok) {
@@ -57,7 +66,19 @@ export default async function EcsGoalsPage({ searchParams }: { searchParams: Pro
 
       <Toolbar>
         <ToolbarButton href={`/ecs?view=week&week=${res.weekMonday}`}>{sheetT(lang, "goals.back")}</ToolbarButton>
-        <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(m) => `/ecs/goals?week=${m}`} />
+        <GoalsPeriodBar
+          view={res.view}
+          date={res.date}
+          isToday={res.date === res.today}
+          navLabel={res.view === "day" ? dayLabel(res.date, lang) : weekText}
+          prevHref={`/ecs/goals?date=${addDays(res.date, res.view === "day" ? -1 : -7)}`}
+          nextHref={`/ecs/goals?date=${addDays(res.date, res.view === "day" ? 1 : 7)}`}
+          relation={
+            res.view === "day"
+              ? res.date === res.today ? "current" : res.date < res.today ? "past" : "future"
+              : res.weekMonday === mondayOf(res.today) ? "current" : res.weekMonday < res.today ? "past" : "future"
+          }
+        />
         <GoalsRoleSwitch value={res.role} />
         <span className="text-sm">{sheetTf(lang, "goals.caption", { month: monthText, week: weekText })}</span>
       </Toolbar>
@@ -81,13 +102,14 @@ export default async function EcsGoalsPage({ searchParams }: { searchParams: Pro
                 {sheetT(lang, s === "same" ? "goals.stat.same" : s === "diff" ? "goals.stat.diff" : "goals.stat.weekEmpty")}
               </span>
             ))}
-            <span className="ml-auto">{sheetT(lang, "goals.readonly")}</span>
           </p>
           <GoalsTable
             rows={res.rows}
             areas={res.areas}
             weekMonday={res.weekMonday}
             lang={lang}
+            role={res.role}
+            showDay={res.view === "day"}
             classLabel={(n) => classNameFor(n, lang)}
             teacherLabel={(n) => {
               const name = teacherNameFor(n, names, lang);
@@ -99,3 +121,8 @@ export default async function EcsGoalsPage({ searchParams }: { searchParams: Pro
     </div>
   );
 }
+
+function dayLabel(d: string, lang: SheetLang): string {
+  return lang === "en" ? sheetDateLabelEn(d) : formatKoreanDate(d);
+}
+
