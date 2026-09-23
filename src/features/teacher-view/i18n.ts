@@ -258,6 +258,7 @@ export const SHEET_DICT = {
   "goals.stat.diff": { ko: "주간 교재 다름", en: "Different book this week" },
   "goals.stat.weekEmpty": { ko: "이번 주 비어 있음", en: "Week goal not set" },
   "goals.stat.none": { ko: "월간 목표 없음", en: "No monthly goal" },
+  "goals.legend.role": { ko: "굵은 글씨 = 담임 · 일반 글씨 = 부담임", en: "Bold = homeroom · Regular = assistant" },
   "goals.col.class": { ko: "반", en: "Class" },
   "goals.month": { ko: "월", en: "Mo" },
   "goals.week": { ko: "주", en: "Wk" },

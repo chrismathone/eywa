@@ -102,6 +102,7 @@ export default async function EcsGoalsPage({ searchParams }: { searchParams: Pro
                 {sheetT(lang, s === "same" ? "goals.stat.same" : s === "diff" ? "goals.stat.diff" : "goals.stat.weekEmpty")}
               </span>
             ))}
+            {res.role === "all" ? <span className="text-text-dim">{sheetT(lang, "goals.legend.role")}</span> : null}
           </p>
           <GoalsTable
             rows={res.rows}
