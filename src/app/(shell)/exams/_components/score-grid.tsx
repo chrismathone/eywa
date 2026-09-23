@@ -12,8 +12,8 @@ import { nextGradeSort, type GradeSort, type GradeSortKey } from "@/features/gra
 import { saveGradeScores, type GradeSaveState } from "@/features/grades/server/actions";
 import { axisValueOf } from "@/features/grades/subject-axis";
 import {
-  GRADE_MARK_KEYS,
   GRADE_MARK_LABEL,
+  gradeMarkKeysFor,
   type GradeMarkKey,
   type GradeSheet,
   type GradeSheetRow,
@@ -56,8 +56,11 @@ export function ScoreGrid({
   const { selection: sel, rows, marksReady, noExamReady } = sheet;
   // 메모 의존성은 **값**으로 뽑는다 — `sel.maxScore`처럼 속성을 적으면 React Compiler가 `sel` 전체로
   // 추론해 수동 메모를 못 지킨다(lint `preserve-manual-memoization`).
-  const { maxScore: selMax, date: selDate } = sel;
+  const { maxScore: selMax, date: selDate, slot: selSlot } = sel;
   const locked = !canWrite || !!lockReason;
+  // 🔴 표식 열은 **시험마다 다르다**(월말평가 = 1차상담 하나, 원장 2026-09-23). 모듈 상수를 돌려주는
+  //    순수 함수라 메모가 필요 없다. 감춘 열의 DB 값은 건드리지 않는다(저장은 바뀐 것만 쓴다).
+  const markKeys = gradeMarkKeysFor(selSlot);
 
   // 학생 단위 초기값 — 같은 학생의 두 줄은 값이 같다(서버가 학생 키로 읽어 온다).
   const firstRows = useMemo(() => {
@@ -113,13 +116,13 @@ export function ScoreGrid({
       const next = off ? (parsed.get(id) ?? null) : null;
       const scoreSame =
         next === row.score && (next === null || (row.maxScore === selMax && row.takenOn === selDate));
-      const markSame = GRADE_MARK_KEYS.every((k) => !!row.marks[k] === !!marks[id]?.[k]);
+      const markSame = markKeys.every((k) => !!row.marks[k] === !!marks[id]?.[k]);
       const reasonNow = off ? "" : (reasons[id] ?? "").trim();
       const noExamSame = row.noExam === !off && (row.noExamReason ?? "") === reasonNow;
       if (!scoreSame || !markSame || !noExamSame) ids.push(id);
     }
     return ids;
-  }, [firstRows, parsed, marks, noExam, reasons, selMax, selDate]);
+  }, [firstRows, parsed, marks, noExam, reasons, selMax, selDate, markKeys]);
 
   /*
    * 🔴 **묶음은 없다**(원장 2026-09-22 저녁: *"묶음 자체를 없애고 학년을 디폴트로"*) — 묶으면 정렬이
@@ -156,7 +159,7 @@ export function ScoreGrid({
     const out: {
       studentId: string;
       score: number | null;
-      marks: Record<GradeMarkKey, boolean>;
+      marks: Partial<Record<GradeMarkKey, boolean>>;
       noExam: boolean;
       noExamReason: string | null;
     }[] = [];
@@ -167,13 +170,15 @@ export function ScoreGrid({
         studentId: id,
         // 🔴 '시험없음'과 점수는 같이 못 선다 — 켜져 있으면 점수는 비워 보낸다.
         score: on ? null : (parsed.get(id) ?? null),
-        marks: marks[id] ?? { ask1: false, ask2: false, received: false },
+        // 🔴 **세운 열만** 싣는다 — 감춘 열(월말평가의 2차상담·성적확인)을 false로 보내면 서버가
+        //    '끔'으로 읽어 적어 둔 표식을 지운다(적대적 리뷰 2026-09-23).
+        marks: Object.fromEntries(markKeys.map((k) => [k, !!marks[id]?.[k]])),
         noExam: on,
         noExamReason: on ? (reasons[id] ?? "").trim() || null : null,
       });
     }
     return JSON.stringify(out);
-  }, [firstRows, parsed, marks, noExam, reasons]);
+  }, [firstRows, parsed, marks, noExam, reasons, markKeys]);
 
   /** 위·아래 칸으로 — Enter는 아래, 방향키는 양쪽(숫자를 세로로 치는 화면의 기본 이동). */
   const focusStep = (index: number, step: 1 | -1) => {
@@ -309,12 +314,16 @@ export function ScoreGrid({
         <span className="text-text-dim">
           최저 <span className="text-foreground num font-bold">{live.stats.min ?? "—"}</span>
         </span>
-        <Divider />
-        <span className="text-text-dim">
-          {GRADE_MARK_LABEL.received}{" "}
-          <span className="text-foreground num font-bold">{live.received}</span>
-          <span className="text-text-faint">/{live.people}명</span>
-        </span>
+        {markKeys.includes("received") ? (
+          <>
+            <Divider />
+            <span className="text-text-dim">
+              {GRADE_MARK_LABEL.received}{" "}
+              <span className="text-foreground num font-bold">{live.received}</span>
+              <span className="text-text-faint">/{live.people}명</span>
+            </span>
+          </>
+        ) : null}
         {live.skipped > 0 ? (
           <span className="text-text-dim">
             시험없음 <span className="text-foreground num font-bold">{live.skipped}</span>명
@@ -339,18 +348,16 @@ export function ScoreGrid({
             폭이 모자라면 컨테이너가 가로로 스크롤한다(잡고 끌기도 된다). */}
         <table className="w-full min-w-[880px] table-fixed text-sm [&_td]:whitespace-nowrap">
           <caption className="sr-only">
-            {slotLabel} 점수 입력표 — 이름·학교·학년·점수와 성적표 받기 단계 체크
+            {slotLabel} 점수 입력표 — 이름·학교·학년·점수와 {markKeys.map((k) => GRADE_MARK_LABEL[k]).join("·")} 체크
           </caption>
           {/* 🔴 **모든 열에 폭을 준다** — 하나라도 비워 두면 그 열이 남는 폭을 독식해 표 가운데가 빈다.
-              `table-fixed`는 남는 폭을 이 비율대로 나눠 주므로 창이 넓어져도 리듬이 유지된다. */}
+              `table-fixed`는 남는 폭을 이 비율대로 나눠 주므로 창이 넓어져도 리듬이 유지된다.
+              🔴 표식 열이 줄면 그 폭을 **이름·학교·점수가 나눠 갖는다** — 비율을 그대로 두면 남은 체크
+              한 칸이 40%를 독식해 표 오른쪽이 텅 빈다(원장 2026-09-23 월말평가). */}
           <colgroup>
-            <col className="w-[13%]" />
-            <col className="w-[15%]" />
-            <col className="w-[7%]" />
-            <col className="w-[25%]" />
-            <col className="w-[13%]" />
-            <col className="w-[13%]" />
-            <col className="w-[14%]" />
+            {colWidths(markKeys.length).map((w, i) => (
+              <col key={i} style={{ width: `${w}%` }} />
+            ))}
           </colgroup>
           {/* 머리줄은 스크롤에 붙는다 — 아래 선은 `border`가 아니라 그림자로(스티키 + border-collapse에선
               테두리가 스크롤과 함께 사라진다, [[#71]]). */}
@@ -366,7 +373,7 @@ export function ScoreGrid({
                 onSort={applySort}
                 align="text-center"
               />
-              {GRADE_MARK_KEYS.map((k) => (
+              {markKeys.map((k) => (
                 <th key={k} scope="col" className="micro px-2 py-3 text-center">
                   {GRADE_MARK_LABEL[k]}
                 </th>
@@ -499,7 +506,7 @@ export function ScoreGrid({
                             </button>
                         </div>
                       </td>
-                      {GRADE_MARK_KEYS.map((k) => {
+                      {markKeys.map((k) => {
                         const at = r.marks[k];
                         return (
                           <td key={k} className="p-0 text-center">
@@ -643,6 +650,21 @@ function sortRows(
 }
 
 /** 요약 줄의 가는 세로선 — 덩어리를 가른다(색·굵기를 화면마다 새로 적지 않게 한 곳에). */
+/**
+ * 열 폭 비율(%) — 앞 네 열(이름·학교·학년·점수)을 먼저 정하고 **남는 폭을 표식 열이 똑같이 나눈다**.
+ * 합은 항상 100이다(`table-fixed`라 100이 안 되면 남는 폭이 마지막 열로 몰려 표 오른쪽이 텅 빈다).
+ * 🔴 표식 열이 줄면 글자 열이 넓어진다 — 체크는 18px 상자라 넓을 이유가 없고, 이름·학교가 잘리는 게
+ *    실제 불편이다(원장 2026-09-22 *"이름 학교는 엄청 자리 쓸데없이 많이 차지"*의 반대 방향 균형).
+ */
+function colWidths(marks: number): number[] {
+  const head = marks <= 1 ? [20, 24, 8, 32] : marks === 2 ? [16, 19, 8, 28] : [13, 15, 7, 25];
+  if (marks <= 0) return [...head.slice(0, 3), 100 - head[0]! - head[1]! - head[2]!];
+  const rest = 100 - head.reduce((a, b) => a + b, 0);
+  const each = Math.floor(rest / marks);
+  // 나머지는 마지막 열이 받는다(반올림 오차로 합이 99가 되면 그만큼 밀린다).
+  return [...head, ...Array.from({ length: marks }, (_, i) => (i === marks - 1 ? rest - each * (marks - 1) : each))];
+}
+
 function Divider() {
   return <span className="bg-line hidden h-3 w-px sm:block" aria-hidden />;
 }

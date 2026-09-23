@@ -12,6 +12,7 @@ import { termLabel } from "../term";
 import { GRADE_MARK_KEYS, type GradeEntry, type GradeMarkKey, type GradeSheetRow } from "../types";
 import { gradeWriteError } from "./access";
 import { getGradeSheet } from "./queries";
+import { hasUntouchedMark } from "../keep";
 import { gradeMarksReady, gradeNoExamReady, gradesSchemaReady, writeGradeCells } from "./write";
 
 export type GradeSaveState =
@@ -30,10 +31,13 @@ function parseEntries(raw: FormDataEntryValue | null): GradeEntry[] | null {
       const { studentId, score } = item as { studentId?: unknown; score?: unknown };
       if (typeof studentId !== "string" || !studentId) return null;
       const marksRaw = (item as { marks?: unknown }).marks;
-      let marks: Record<GradeMarkKey, boolean> | undefined;
+      let marks: Partial<Record<GradeMarkKey, boolean>> | undefined;
       if (marksRaw && typeof marksRaw === "object") {
         const m = marksRaw as Record<string, unknown>;
-        marks = { ask1: !!m.ask1, ask2: !!m.ask2, received: !!m.received };
+        // 🔴 **온 키만** 읽는다 — 빠진 키를 false로 채우면 화면이 감춘 열의 표식이 지워진다.
+        const picked: Partial<Record<GradeMarkKey, boolean>> = {};
+        for (const k of GRADE_MARK_KEYS) if (m[k] !== undefined) picked[k] = !!m[k];
+        marks = picked;
       }
       const noExamRaw = (item as { noExam?: unknown }).noExam;
       const reasonRaw = (item as { noExamReason?: unknown }).noExamReason;
@@ -106,6 +110,7 @@ export async function saveGradeScores(
     classId: string | null;
     score: number | null;
     marks?: Partial<Record<GradeMarkKey, string | null>>;
+    otherMarks?: boolean;
     noExam?: boolean;
     noExamReason?: string | null;
   }[] = [];
@@ -134,6 +139,9 @@ export async function saveGradeScores(
       for (const k of GRADE_MARK_KEYS) {
         const was = !!row.marks[k];
         const want = e.marks[k];
+        // 🔴 화면이 **안 보낸 키는 안 건드린다** — 월말평가는 2차상담·성적확인 열이 없어서 아예 안 온다.
+        //    `undefined`를 '끔'으로 읽으면 감춰 둔 표식이 저장 한 번에 지워진다(적대적 리뷰 2026-09-23).
+        if (want === undefined) continue;
         if (was === want) continue;
         marks = { ...(marks ?? {}), [k]: want ? now : null };
         marksChanged = true;
@@ -150,6 +158,8 @@ export async function saveGradeScores(
       classId: row.classId,
       score,
       marks,
+      // 이 저장이 안 건드리는데 DB엔 켜져 있는 표식 — 있으면 행을 지우지 않는다(삭제 판정 전용).
+      otherMarks: hasUntouchedMark(row.marks, marks),
       ...(noExamReady ? { noExam: wantNoExam, noExamReason: wantReason } : {}),
     });
   }

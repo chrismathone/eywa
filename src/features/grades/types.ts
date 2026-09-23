@@ -106,6 +106,19 @@ export const GRADE_MARK_LABEL: Record<GradeMarkKey, string> = {
   ask2: "2차상담",
   received: "성적확인",
 };
+/**
+ * **그 시험에 세울 표식 열** — 시험마다 받아 올 것이 다르다(원장 2026-09-23:
+ * *"월말평가는 1차상담만 있으면 됌 2차상담, 성적확인 없어도됌"*).
+ * 🔑 월말평가는 **학원이 직접 치는 시험**이라 학교 성적표를 받아 올 일이 없다 — 남는 건 상담 한 번뿐.
+ * 🔴 **감추는 것이지 지우는 것이 아니다** — 열이 안 서도 DB 값은 그대로 두고 저장에서도 손대지 않는다
+ *    (학교 시험으로 다시 고르면 그때 적어 둔 표식이 그대로 보인다).
+ * ⚠️ 새 시험 칸(`exam_slots.ts`)을 더할 땐 여기도 볼 것 — 기본은 3칸 전부다.
+ */
+export function gradeMarkKeysFor(slot: string): readonly GradeMarkKey[] {
+  return slot === "monthly" ? MONTHLY_MARK_KEYS : GRADE_MARK_KEYS;
+}
+const MONTHLY_MARK_KEYS: readonly GradeMarkKey[] = ["ask1"];
+
 /** 그 칸의 표식 — 값은 누른 시각(ISO), 안 눌렀으면 null. */
 export type GradeMarks = Record<GradeMarkKey, string | null>;
 export const EMPTY_GRADE_MARKS: GradeMarks = { ask1: null, ask2: null, received: null };
@@ -114,8 +127,12 @@ export const EMPTY_GRADE_MARKS: GradeMarks = { ask1: null, ask2: null, received:
 export type GradeEntry = {
   studentId: string;
   score: number | null;
-  /** 체크 상태(켬/끔) — 서버가 시각으로 바꾼다. 안 보내면 표식을 건드리지 않는다. */
-  marks?: Record<GradeMarkKey, boolean>;
+  /**
+   * 체크 상태(켬/끔) — 서버가 시각으로 바꾼다. 안 보내면 표식을 건드리지 않는다.
+   * 🔴 **키 단위로 부분**이다 — 화면이 안 세운 열(월말평가의 2차상담·성적확인)은 키 자체가 안 온다.
+   *    빠진 키를 `false`로 채우면 감춰 둔 표식이 저장 한 번에 지워진다.
+   */
+  marks?: Partial<Record<GradeMarkKey, boolean>>;
   /** 사람이 누른 '시험없음'. 켜면 점수는 비운다(둘은 같이 못 선다). */
   noExam?: boolean;
   /** '시험없음' 사유 — 끄면 함께 지운다. */

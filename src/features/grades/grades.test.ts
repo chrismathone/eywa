@@ -7,6 +7,8 @@ import {
   normalizeExamSlot,
 } from "./exam-slots";
 import { examAppliesTo, isElementaryGrade, isMiddleFirstGrade, notApplicableReason } from "./applies";
+import { GRADE_MARK_KEYS, gradeMarkKeysFor } from "./types";
+import { gradeCellKeeps, hasUntouchedMark } from "./keep";
 import { GRADE_SORT_DEFAULT, nextGradeSort, parseGradeSort } from "./list-prefs";
 import { resolveGradeSelection, selectionSlotIsValid } from "./selection";
 import { axisOptionsFrom, axisValueOf, firstAxisOf, parseAxisValue } from "./subject-axis";
@@ -221,5 +223,45 @@ describe("정렬 보기 설정", () => {
     expect(parseGradeSort({ key: "zzz", dir: "sideways" })).toEqual(GRADE_SORT_DEFAULT);
     expect(parseGradeSort({ key: "zzz", dir: "desc" })).toEqual({ key: "grade", dir: "desc" });
     expect(parseGradeSort({ key: "score", dir: "desc" })).toEqual({ key: "score", dir: "desc" });
+  });
+});
+
+describe("표식 열은 시험마다 다르다(원장 2026-09-23)", () => {
+  it("🔴 월말평가는 1차상담 하나 — 학원이 치는 시험이라 성적표를 받아 올 일이 없다", () => {
+    expect(gradeMarkKeysFor("monthly")).toEqual(["ask1"]);
+  });
+
+  it("나머지 시험은 3칸 그대로(중간·기말·듣기평가·내신)", () => {
+    for (const slot of ["midterm", "final", "listening", "school"]) {
+      expect(gradeMarkKeysFor(slot)).toEqual(GRADE_MARK_KEYS);
+    }
+  });
+
+  it("🔴 감추는 것이지 지우는 것이 아니다 — 키 자체는 늘 셋", () => {
+    expect(GRADE_MARK_KEYS).toEqual(["ask1", "ask2", "received"]);
+  });
+});
+
+describe("칸을 지울지 판정(적대적 리뷰 2026-09-23)", () => {
+  it("점수도 표식도 '시험없음'도 없으면 지운다", () => {
+    expect(gradeCellKeeps({ score: null })).toBe(false);
+    expect(gradeCellKeeps({ score: 0 })).toBe(true);
+    expect(gradeCellKeeps({ score: null, noExam: true })).toBe(true);
+    expect(gradeCellKeeps({ score: null, marks: { ask1: "2026-09-23T00:00:00Z" } })).toBe(true);
+    expect(gradeCellKeeps({ score: null, marks: { ask1: null } })).toBe(false);
+  });
+
+  it("🔴 이번 저장이 안 건드리는 표식이 켜져 있으면 지우지 않는다 — 부분 패치가 남의 기록을 지웠다", () => {
+    // `점수 80 + 2차상담 켜짐`에서 점수만 지우면 패치는 {score:null}뿐이다(2차상담은 안 바뀌어 안 실린다).
+    expect(gradeCellKeeps({ score: null })).toBe(false); // 이것이 옛 판정 = 행 삭제 = 2차상담 소실
+    expect(gradeCellKeeps({ score: null, otherMarks: true })).toBe(true);
+  });
+
+  it("'안 건드리는 표식' 계산 — 패치에 든 키는 빼고 본다", () => {
+    const db = { ask1: "t", ask2: "t", received: null };
+    expect(hasUntouchedMark(db, undefined)).toBe(true); // 아무것도 안 실었다 → 둘 다 남는다
+    expect(hasUntouchedMark(db, { ask1: null })).toBe(true); // ask2가 아직 켜져 있다
+    expect(hasUntouchedMark(db, { ask1: null, ask2: null })).toBe(false); // 둘 다 끄는 중
+    expect(hasUntouchedMark({ ask1: null, ask2: null, received: null }, undefined)).toBe(false);
   });
 });

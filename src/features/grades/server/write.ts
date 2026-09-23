@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { EXAM_SLOT_LABEL, type ExamSlotKey } from "../exam-slots";
 import type { Term } from "../term";
+import { gradeCellKeeps } from "../keep";
 import { GRADE_MARK_KEYS, type GradeMarkKey } from "../types";
 
 /**
@@ -45,6 +46,11 @@ export type GradeWriteRow = {
    */
   marks?: Partial<Record<GradeMarkKey, string | null>>;
   /**
+   * 이 저장이 **안 건드리는데 이미 켜져 있는** 표식이 있는가(호출부가 방금 읽은 DB 값).
+   * 🔴 삭제 판정에만 쓴다 — 없으면 부분 패치 저장이 숨은 표식을 통째로 지운다([[keep.ts]] 주석).
+   */
+  otherMarks?: boolean;
+  /**
    * 사람이 누른 '시험없음'과 사유 — `undefined`면 안 건드린다.
    * 🔴 켜면 점수를 비운다(둘은 같이 못 선다) · 켜진 칸은 점수가 없어도 **행을 남긴다**(사유가 기록이다).
    */
@@ -70,8 +76,9 @@ export async function writeGradeCells(
 
   // 🔑 남길 칸 = **점수가 있거나 표식이 하나라도 켜진 칸**. 점수가 없어도 "1차 독촉함"은 남아야 한다.
   //    점수도 표식도 없으면 그 행은 존재할 이유가 없으니 지운다.
-  const keeps = (r: GradeWriteRow) =>
-    r.score != null || GRADE_MARK_KEYS.some((k) => !!r.marks?.[k]) || r.noExam === true;
+  // 🔴 판정은 순수 모듈 하나([`gradeCellKeeps`](../keep.ts)) — 부분 패치만 보고 지우면 이 저장이
+  //    건드리지도 않은 표식이 함께 사라진다(`otherMarks`가 그걸 막는다).
+  const keeps = (r: GradeWriteRow) => gradeCellKeeps(r);
   const toSave = rows.filter(keeps);
   const toClear = rows.filter((r) => !keeps(r));
 

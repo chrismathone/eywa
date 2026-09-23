@@ -121,9 +121,11 @@ describe("마이그레이션(0283a)보다 앱이 먼저 배포돼도 산다", ()
 
 describe("성적표 받기 표식(원장 2026-09-22)", () => {
   it("🔴 표식이 켜진 칸은 점수를 비워도 행을 지우지 않는다 — 독촉 기록이 날아가지 않게", () => {
-    const write = read("src/features/grades/server/write.ts");
-    // 남길 칸 판정이 '점수 또는 표식'이어야 한다(점수만 보면 독촉만 해 둔 칸이 사라진다).
-    expect(write).toMatch(/r\.score != null \|\|[\s\S]{0,120}marks/);
+    // 판정은 순수 모듈 하나 — write.ts는 그걸 부르기만 한다(두 곳에서 세면 한쪽만 고쳐진다).
+    expect(read("src/features/grades/server/write.ts")).toContain("gradeCellKeeps");
+    const keep = read("src/features/grades/keep.ts");
+    expect(keep).toMatch(/r\.score != null/);
+    expect(keep).toMatch(/otherMarks/);
   });
 
   it("🔴 선택 열(메모·표식)은 **같은 모양끼리 묶어** 쓴다 — upsert가 배열 전체에 열을 만든다", () => {
@@ -137,7 +139,7 @@ describe("성적표 받기 표식(원장 2026-09-22)", () => {
 
   it("격자는 체크 3칸을 세우고 백분율·석차 열은 없앴다(원장 지시 열 구성)", () => {
     const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
-    expect(grid).toContain("GRADE_MARK_KEYS");
+    expect(grid).toContain("gradeMarkKeysFor");
     expect(grid).not.toContain("백분율");
     expect(grid).not.toContain("반 석차");
     // 머리줄과 본문 정렬이 열마다 같아야 한다 — colgroup으로 폭도 고정.
@@ -203,7 +205,7 @@ describe("시험없음 · 해당 없음(원장 2026-09-22)", () => {
     expect(write).toContain("no_exam");
     expect(write).toContain("no_exam_reason");
     // 켜진 칸은 점수가 없어도 행을 남긴다(사유가 기록이다).
-    expect(write).toMatch(/r\.noExam === true/);
+    expect(read("src/features/grades/keep.ts")).toMatch(/r\.noExam === true/);
     const sql = read("supabase/migrations/0285a_student_grades_no_exam.sql");
     expect(sql).toContain("no_exam boolean");
     // 수학의 새 칸(내신·월말평가)이 제약에 들어갔는가 — 빠지면 저장이 23514로 거절된다.
@@ -303,5 +305,33 @@ describe("표가 창 안에서 스크롤한다(원장 2026-09-23)", () => {
     expect(grid).toMatch(/missing\s*\n?\s*\?\s*"bg-amber-soft/);
     // '시험없음'으로 눌러 둔 줄은 미기입이 아니다.
     expect(grid).toMatch(/const missing = !isNoExam &&/);
+  });
+});
+
+describe("월말평가 표식 열(원장 2026-09-23)", () => {
+  it("🔴 화면은 슬롯에 맞는 열만 세운다 — 상수를 그대로 돌리면 월말평가에도 3칸이 선다", () => {
+    const grid = read("src/app/(shell)/exams/_components/score-grid.tsx");
+    expect(grid).toContain("gradeMarkKeysFor");
+    // 머리줄·본문 둘 다 슬롯 기준 배열을 돈다(한쪽만 고치면 열 수가 어긋나 표가 밀린다).
+    expect(grid).toMatch(/\{markKeys\.map\(\(k\) => \(/);
+    expect(grid).toMatch(/\{markKeys\.map\(\(k\) => \{/);
+    // 폭도 열 수를 따라간다(고정 7칸이면 남은 한 칸이 40%를 독식한다).
+    expect(grid).toContain("colWidths(markKeys.length)");
+    // 요약 줄의 '성적확인'도 그 열이 있을 때만.
+    expect(grid).toMatch(/markKeys\.includes\("received"\)/);
+  });
+
+  it("🔴 감춘 표식의 DB 값을 지우지 않는다 — 안 온 키는 '안 건드림'이다", () => {
+    const act = read("src/features/grades/server/actions.ts");
+    // ① 화면이 안 보낸 키를 '끔'으로 읽지 않는다.
+    expect(act).toContain("if (want === undefined) continue;");
+    // ② 파서가 빠진 키를 false로 채우지 않는다(채우면 ①이 무의미해진다).
+    expect(act).toMatch(/if \(m\[k\] !== undefined\) picked\[k\] = !!m\[k\];/);
+    // ③ 삭제 판정에 '안 건드리는 표식'을 넘긴다.
+    expect(act).toContain("otherMarks: hasUntouchedMark(row.marks, marks)");
+    // ④ 화면은 세운 열만 싣는다.
+    expect(read("src/app/(shell)/exams/_components/score-grid.tsx")).toContain(
+      "Object.fromEntries(markKeys.map((k) => [k, !!marks[id]?.[k]]))",
+    );
   });
 });
