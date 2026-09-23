@@ -26,8 +26,10 @@ const LABEL = "grid gap-1 text-sm";
  * 내신은 학교 시험이라 1행의 **반 자리에 학교·학년**을 세운다(원장 2026-09-24) — 월말평가는 학원 시험이라 반 그대로.
  * 저장 경로는 **새로 만들지 않았다**: 수업 시험 = `createUnifiedGrade`(한 명씩), 내신·월말 = `saveGradeScores`(명단 일괄).
  */
-export function GradeEntryDialog({ canWrite, today, subjects, students, classes, initialOpen }: {
+export function GradeEntryDialog({ canWrite, today, subjects, students, classes, initialOpen, classNamesOf }: {
   canWrite: boolean; today: string; subjects: Option[]; students: Student[]; classes: EntryClass[];
+  /** `학생id|과목` → 그 과목 지금 다니는 반 전부(성적 현황 '반' 열과 같은 값). 없으면 명단이 준 반 하나로. */
+  classNamesOf: Record<string, string>;
   /** 옛 입력 주소(`/exams/input?…` → `entry=1`)로 들어오면 내신으로 열린 채 시작한다. */
   initialOpen: boolean;
 }) {
@@ -71,10 +73,10 @@ export function GradeEntryDialog({ canWrite, today, subjects, students, classes,
     const cls = classes.find((c) => c.id === classId);
     const ids = [...new Set([...(cls?.studentIds ?? []), ...extraIds])];
     return ids.map((id) => byId.get(id)).filter((s): s is Student => !!s).sort((a, b) => a.name.localeCompare(b.name, "ko"))
-      .map((s) => ({ studentId: s.id, name: s.name, school: s.school, grade: s.grade, className: cls?.studentIds.includes(s.id) ? cls.name : "추가한 학생" }));
-  }, [classes, classId, extraIds, byId]);
+      .map((s) => ({ studentId: s.id, name: s.name, school: s.school, grade: s.grade, className: classNamesOf[`${s.id}|${baseSubject}`] ?? (cls?.studentIds.includes(s.id) ? cls.name : "추가한 학생") }));
+  }, [classes, classId, extraIds, byId, classNamesOf, baseSubject]);
   const schoolRows: EntryGridRow[] = (roster?.rows ?? []).map((r) => ({ studentId: r.studentId, name: r.name, school: r.school, grade: r.grade,
-    className: r.className, existing: r.score, lockedReason: r.withdrawn ? "퇴원" : !r.applies ? "해당 없는 시험" : null }));
+    className: classNamesOf[`${r.studentId}|${baseSubject}`] ?? r.className, existing: r.score, lockedReason: r.withdrawn ? "퇴원" : !r.applies ? "해당 없는 시험" : null }));
   const rows = school ? schoolRows : quickRows;
   const maxNum = school ? roster?.selection.maxScore ?? Number(max) : Number(max);
   const filled = rows.filter((r) => !r.lockedReason && (scores[r.studentId] ?? "") !== "");

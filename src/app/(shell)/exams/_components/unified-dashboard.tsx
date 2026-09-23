@@ -95,6 +95,9 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
   const schools = aggregateBy(rows, "school");
   const grades = aggregateBy(rows, "grade");
 
+  // 입력 창 '반' 칸 = 성적 현황 '반' 열과 **같은 값**(그 과목 지금 다니는 반 전부, 같은 순서로 ` / `) — 두 화면이 한 학생을 다른 반으로 부르지 않게.
+  const classNamesOf: Record<string, string> = {};
+  for (const [key, list] of Object.entries(data.studentClasses)) if (list.length) classNamesOf[key] = list.map((c) => c.name).join(" / ");
   const entryClasses = new Map<string, EntryClass>();
   for (const [key, list] of Object.entries(data.studentClasses)) {
     const [studentId, classSubject] = key.split("|");
@@ -123,7 +126,7 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     <FaceTabs ariaLabel="성적관리 면" active={tab} faces={TABS.map(([key, label]) => ({ key, label, href: href({ tab: key, page: "1" }) }))} />
     <ExamsToolbar from={from} to={to} subject={subject} kind={kind} missing={showMissing} q={q} exportHref={exportHref} subjectOptions={subjectOptions}
       action={<GradeEntryDialog canWrite={!writeError} today={today} subjects={axisOptionsFrom(subjectMaps.options)}
-        students={data.students} initialOpen={entryMode} classes={[...entryClasses.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))} />}
+        students={data.students} initialOpen={entryMode} classNamesOf={classNamesOf} classes={[...entryClasses.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))} />}
       kindOptions={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
 
     {tab === "overview" ? <OverviewTab rows={rows} studentCount={students.length} academy={aggregateBy(rows, "academy")[0]} missingCount={missingCount} href={href} /> : null}
