@@ -57,6 +57,16 @@ describe("문서 탐색기 집계 범위", () => {
     expect(page.rows.map((row) => row.id)).toEqual([2, 3]);
   });
 
+  it("37건은 20건씩 서버에서 나눠 읽는다", async () => {
+    db.rows = Array.from({ length: 37 }, (_, id) => ({ id, category: "class", staff_user_id: null }));
+    const first = await getDocumentsPage({}, 1, 20);
+    const second = await getDocumentsPage({}, 2, 20);
+    expect(db.ranges).toEqual([[0, 19], [20, 39]]);
+    expect([first.rows.length, second.rows.length]).toEqual([20, 17]);
+    expect(first.total).toBe(37);
+    expect(second.total).toBe(37);
+  });
+
   it("1000건 응답 상한을 넘어도 모든 공개 문서를 센다", async () => {
     db.rows = Array.from({ length: 1003 }, (_, id) => ({
       id,
