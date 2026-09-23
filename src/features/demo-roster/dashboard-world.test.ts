@@ -69,7 +69,7 @@ describe("데모 운영실 데이터", () => {
       expect(world.invoices.some((row: { status: string }) => row.status === "unpaid")).toBe(true);
       expect(world.invoices.some((row: { status: string }) => row.status === "paid")).toBe(true);
 
-      expect(world.withdrawn).toHaveLength(12);
+      expect(world.withdrawn).toHaveLength(18);
       for (const student of world.withdrawn) {
         expect(student.code.startsWith("DMO-9")).toBe(true);
         expect(student.withdrawnAt <= TODAY).toBe(true);

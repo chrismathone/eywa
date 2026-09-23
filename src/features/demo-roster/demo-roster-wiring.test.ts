@@ -48,7 +48,9 @@ describe("데모 재원 드롭다운", () => {
     expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain('id !== "newcomers"');
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(tenantSettingsTag(user.tenantId))");
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(`dashboard-invoice-trend:${user.tenantId}`)");
-    expect(read("src/features/dashboard/overview/server.ts")).toContain("dashboard-invoice-trend:${tenantId}");
+    expect(read("src/features/dashboard/overview/server.ts")).toContain("dashboard-invoice-trend-v2");
+    expect(read("src/features/demo-roster/apply.ts")).toContain("ensureDemoStaff");
+    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("'{profile}'");
     const queries = read("src/features/demo-roster/server/queries.ts");
     expect(queries).toContain('tenant?.slug !== "demo"');
     expect(queries).toContain('user.systemRole !== "master"');

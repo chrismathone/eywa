@@ -89,6 +89,21 @@ async function enableNewcomers(tx: Tx, tenantId: string) {
     )
     where tenant_id = ${tenantId}
   `);
+  await tx.execute(sql`
+    update tenant_settings
+    set data = jsonb_set(
+      jsonb_set(
+        coalesce(data, '{}'::jsonb),
+        '{profile}',
+        coalesce(data->'profile', '{}'::jsonb),
+        true
+      ),
+      '{operations}',
+      coalesce(data->'operations', '{}'::jsonb),
+      true
+    )
+    where tenant_id = ${tenantId}
+  `);
 }
 
 async function deleteMarkers(tx: Tx, tenantId: string) {
@@ -163,7 +178,7 @@ async function insertAttendance(
         sessionDate: row.date,
         slotStart: row.slotStart,
         status: row.status as "present" | "absent" | "late" | "excused",
-        sessionUnits: row.status === "absent" || row.status === "excused" ? "0" : "1",
+        sessionUnits: row.status === "absent" || row.status === "excused" ? null : "1",
         recordedAt: new Date(`${row.date}T01:00:00.000Z`),
       })),
     );

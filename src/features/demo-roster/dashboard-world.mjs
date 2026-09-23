@@ -75,7 +75,9 @@ export function buildDashboardWorld(plan, today) {
       startDate.set(student.code, today);
       continue;
     }
-    const month = months[student.seq % months.length];
+    // 앞달은 두텁고 최근 달은 얇게. 여섯 달 추이가 한 달에 몰리지 않게.
+    const slot = [0, 0, 0, 1, 1, 2, 2, 3, 4, 5][student.seq % 10];
+    const month = months[slot];
     const when = `${month}-02` <= today ? `${month}-02` : today;
     enrolledAt.set(student.code, when);
     startDate.set(student.code, when);
@@ -90,7 +92,7 @@ export function buildDashboardWorld(plan, today) {
       if (startDate.get(student.code) > date) continue;
       for (const cls of student.classes) {
         if (!cls.days.includes(DOW[dowOf(date)])) continue;
-        if (!riskCodes.has(student.code) && date === today && student.seq % 7 === 0) continue;
+        if (!riskCodes.has(student.code) && date === today && student.seq % 29 === 0) continue;
         let status = "present";
         if (riskCodes.has(student.code)) status = "absent";
         else if (date === yesterday && student.seq % 11 === 0) status = "absent";
@@ -123,7 +125,7 @@ export function buildDashboardWorld(plan, today) {
   const withdrawn = [];
   let n = 0;
   for (const month of months) {
-    for (let k = 0; k < 2; k++) {
+    for (let k = 0; k < 3; k++) {
       const sample = plan.students[n % plan.students.length];
       const cls = sample.classes[0];
       const person = personName(400 + n);
@@ -291,8 +293,10 @@ export function buildDashboardWorld(plan, today) {
     const enrolled = enrolledAt.get(student.code);
     if (shiftYmd(enrolled, 90) < today) continue;
     const subject = "";
-    const done = student.seq % 2 === 0 && !firstClassCodes.has(student.code);
-    for (const key of done ? ["pre_call", "first_class_guide", "ojt"] : []) {
+    if (firstClassCodes.has(student.code) || student.seq % 7 === 0) continue;
+    const keys = ["pre_call", "first_class_guide", "ojt"];
+    if (shiftYmd(enrolled, 30) <= today) keys.push("month1_call");
+    for (const key of keys) {
       checks.push({ studentCode: student.code, subject, itemKey: key, doneOn: enrolled });
     }
   }
