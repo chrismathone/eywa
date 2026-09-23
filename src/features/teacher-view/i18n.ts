@@ -1335,6 +1335,7 @@ export const SHEET_DICT = {
     en: "Recorded this month's attendance (this class has no lesson reports). Someone may have marked it on another teacher's behalf.",
   },
   "att.role.slot": { ko: "교시 담당", en: "Period teacher" },
+  "att.role.former": { ko: "이전 담임", en: "Former homeroom" },
   "att.since": { ko: "{date}부터 담임", en: "Homeroom since {date}" },
   "att.notice.lock.a": { ko: "출결 수정은 ", en: "Attendance can be edited only for the " },
   "att.notice.lock.b": { ko: "최근 {n}일", en: "last {n} days" },

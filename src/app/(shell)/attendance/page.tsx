@@ -564,7 +564,7 @@ export default async function AttendancePage({
           //    거기까지 붙이면 거의 모든 반에 배지가 달려 정작 남의 반 표식이 안 보인다.
           roleLabel: teacherRoles.get(c.id) === "slot" ? sheetT(lang, "att.role.slot")
             : c.teacherId !== effectiveTeacher && c.historicalTeachers?.some((t) => t.id === effectiveTeacher)
-              ? lang === "en" ? "Former homeroom" : "이전 담임" : null,
+              ? sheetT(lang, "att.role.former") : null,
           ...workerOf(c.id),
           // 담임 시작일 — 그 이전 칸이 왜 값에서 빠졌는지 반 머리행에서 밝힌다(빗금만 있으면 "왜 비었지").
           sinceLabel: sinceByClass.get(c.id)

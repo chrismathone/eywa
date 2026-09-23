@@ -617,6 +617,7 @@ describe("🔴 월별 출석부는 사전만 본다 — 화면 파일에 한글 
     const src = read("app", "(shell)", "attendance", "page.tsx");
     for (const key of [
       "att.title",
+      "att.role.former",
       "att.filter.subject",
       "att.filter.teacher",
       "att.filter.class",
