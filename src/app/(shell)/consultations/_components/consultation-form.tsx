@@ -82,6 +82,8 @@ export function ConsultationForm({
   initialValue,
   students,
   counselors,
+  subjectLabels,
+  currentUserId,
   templates,
   currentUserName,
 }: {
@@ -89,6 +91,8 @@ export function ConsultationForm({
   initialValue?: ConsultationFormValue;
   students: StudentOption[];
   counselors: TeacherOption[];
+  subjectLabels: Record<string, string>;
+  currentUserId: string;
   /** 상담 양식(테넌트 공용) — 등록(create) 모드에서만 양식 선택기로 소비. 기본양식은 요약을 프리필. */
   templates?: ConsultationTemplate[];
   /** 현재 로그인 사용자 표시명 — 상담사 "본인" 선택 시 {{담당}} 태그 치환값. */
@@ -110,6 +114,25 @@ export function ConsultationForm({
     followUpDate: null,
     followUpDone: false,
   };
+  const subjectFor = (counselorId: string | null) => {
+    const counselor = counselors.find((c) => c.id === (counselorId || currentUserId));
+    const subjects = counselor?.subjects ?? [];
+    return subjects.length === 1 ? subjectLabels[subjects[0]] ?? subjects[0] : "";
+  };
+  const initialAutoSubject = v.subject ? "" : subjectFor(v.counselorId);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const lastAutoSubject = useRef(
+    v.subject && v.subject === subjectFor(v.counselorId) ? v.subject : initialAutoSubject,
+  );
+
+  function onCounselorChange(nextId: string) {
+    const field = subjectRef.current;
+    if (!field || (field.value && field.value !== lastAutoSubject.current)) return;
+    const next = subjectFor(nextId || null);
+    field.value = next;
+    lastAutoSubject.current = next;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 
   // 기본양식(등록 모드) — 요약·범주·대상 초기값을 프리필. 초안 복구는 배너(사용자 확인)라 여기 프리필과 충돌 없음.
   const defaultTemplate = mode === "create" ? templates?.find((t) => t.isDefault) : undefined;
@@ -234,6 +257,7 @@ export function ConsultationForm({
               id="counselorId"
               name="counselorId"
               defaultValue={v.counselorId ?? ""}
+              onChange={(event) => onCounselorChange(event.target.value)}
               className={inputClass}
             >
               <option value="">본인</option>
@@ -291,7 +315,8 @@ export function ConsultationForm({
             <input
               id="subject"
               name="subject"
-              defaultValue={v.subject ?? ""}
+              ref={subjectRef}
+              defaultValue={v.subject ?? initialAutoSubject}
               placeholder="예: 수학"
               className={inputClass}
             />

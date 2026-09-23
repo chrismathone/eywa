@@ -3,6 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getStudentOptionsForConsultation } from "@/features/consultations/server/queries";
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { subjectLabelRecord } from "@/features/owner/subjects";
 import { ConsultationForm } from "../_components/consultation-form";
 import { AudioConsultationForm } from "../_components/audio-consultation-form";
 
@@ -39,6 +40,8 @@ export default async function NewConsultationPage({
         mode="create"
         students={students}
         counselors={counselors}
+        subjectLabels={subjectLabelRecord(settings.operations.subjects)}
+        currentUserId={viewer.id}
         templates={settings.consultations.templates}
         currentUserName={viewer.displayName}
         initialValue={

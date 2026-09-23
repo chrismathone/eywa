@@ -10,6 +10,9 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { addDays, kstDateOf, kstLocalToIso, kstToday } from "@/lib/date-kst";
 import { stripPastedMarkup } from "../paste-cleanup";
+import { consultationSubject } from "../subject";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { subjectLabelRecord } from "@/features/owner/subjects";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -215,6 +218,26 @@ function validateConsultation(input: ReturnType<typeof readConsultationForm>): R
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
+async function subjectForConsultation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenantId: string,
+  counselorId: string,
+  entered: string | null,
+): Promise<{ subject: string | null; error?: string }> {
+  const { data: counselor, error } = await supabase
+    .from("users")
+    .select("subjects")
+    .eq("id", counselorId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (error || !counselor) return { subject: null, error: "상담사를 확인할 수 없습니다." };
+  if (entered) return { subject: entered };
+  const settings = await getTenantSettings();
+  return {
+    subject: consultationSubject(null, counselor.subjects, subjectLabelRecord(settings.operations.subjects)),
+  };
+}
+
 export async function createStudentConsultation(
   _prev: ConsultationFormState,
   formData: FormData,
@@ -228,17 +251,20 @@ export async function createStudentConsultation(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+  const counselorId = input.counselorId ?? user.id;
+  const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
+  if (resolved.error) return { error: resolved.error };
   const { data, error } = await supabase
     .from("student_consultations")
     .insert({
       tenant_id: user.tenantId,
       student_id: input.studentId,
-      counselor_id: input.counselorId ?? user.id,
+      counselor_id: counselorId,
       // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**라 서버(UTC)가
       //    그대로 읽으면 9시간 뒤로 앉는다(원장 제보 2026-09-09, date-kst `kstLocalToIso` 주석).
       consulted_at: kstLocalToIso(input.consultedAt) ?? new Date().toISOString(),
       category: input.category,
-      subject: input.subject,
+      subject: resolved.subject,
       audience: input.audience,
       // 붙여넣기로 딸려 온 화면 코드 조각을 걷어낸다(원장 2026-09-09 *"그 조각만 걷어내. 앞으로 가져올때도 조심"*).
       summary: stripPastedMarkup(input.summary),
@@ -291,16 +317,19 @@ export async function updateStudentConsultation(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+  const counselorId = input.counselorId ?? user.id;
+  const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
+  if (resolved.error) return { error: resolved.error };
   const { error } = await supabase
     .from("student_consultations")
     .update({
       student_id: input.studentId,
-      counselor_id: input.counselorId ?? user.id,
+      counselor_id: counselorId,
       // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**라 서버(UTC)가
       //    그대로 읽으면 9시간 뒤로 앉는다(원장 제보 2026-09-09, date-kst `kstLocalToIso` 주석).
       consulted_at: kstLocalToIso(input.consultedAt) ?? new Date().toISOString(),
       category: input.category,
-      subject: input.subject,
+      subject: resolved.subject,
       audience: input.audience,
       // 붙여넣기로 딸려 온 화면 코드 조각을 걷어낸다(원장 2026-09-09 *"그 조각만 걷어내. 앞으로 가져올때도 조심"*).
       summary: stripPastedMarkup(input.summary),

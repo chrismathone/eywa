@@ -6,6 +6,8 @@ import {
   getStudentOptionsForConsultation,
 } from "@/features/consultations/server/queries";
 import { getTeacherOptions } from "@/features/students/server/queries";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { subjectLabelRecord } from "@/features/owner/subjects";
 import { ConsultationForm } from "../../_components/consultation-form";
 import { ConsultationDeleteButton } from "../../_components/consultation-delete-button";
 
@@ -16,12 +18,13 @@ export default async function EditConsultationPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAccess("consultations");
+  const viewer = await requireAccess("consultations");
   const { id } = await params;
-  const [item, students, counselors] = await Promise.all([
+  const [item, students, counselors, settings] = await Promise.all([
     getStudentConsultationById(id),
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
+    getTenantSettings(),
   ]);
   if (!item) notFound();
 
@@ -46,6 +49,8 @@ export default async function EditConsultationPage({
         mode="edit"
         students={students}
         counselors={counselors}
+        subjectLabels={subjectLabelRecord(settings.operations.subjects)}
+        currentUserId={viewer.id}
         initialValue={{
           id: item.id,
           studentId: item.studentId,

@@ -656,13 +656,14 @@ export type TeacherOption = {
   id: string;
   displayName: string;
   systemRole: string;
+  subjects?: string[];
 };
 
 export async function getTeacherOptions(): Promise<TeacherOption[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("users")
-    .select("id, display_name, system_role")
+    .select("id, display_name, system_role, subjects")
     .in("system_role", ["teacher", "counselor", "manager", "admin", "master"])
     .eq("status", "active")
     .order("display_name", { ascending: true });
@@ -671,6 +672,7 @@ export async function getTeacherOptions(): Promise<TeacherOption[]> {
     id: r.id,
     displayName: r.display_name,
     systemRole: r.system_role,
+    subjects: Array.isArray(r.subjects) ? r.subjects : [],
   }));
 }
 

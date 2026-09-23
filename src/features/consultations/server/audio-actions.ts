@@ -17,6 +17,9 @@ import {
 } from "@/lib/storage/media-storage";
 import { localizeTranscriptionError } from "@/lib/ai/transcription-error";
 import { analyzeStudentConsultation } from "./ai";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { subjectLabelRecord } from "@/features/owner/subjects";
+import { consultationSubject } from "../subject";
 
 async function requireConsultationWrite() {
   const user = await getCurrentUser();
@@ -52,6 +55,11 @@ export async function startStudentConsultationFromAudio(
   if (!isTenantAudioPath(audioPath, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
 
   const admin = createAdminClient();
+  const [{ data: counselor }, settings] = await Promise.all([
+    admin.from("users").select("subjects").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
+    getTenantSettings(),
+  ]);
+  const subject = consultationSubject(null, counselor?.subjects, subjectLabelRecord(settings.operations.subjects));
 
   let audioUrl: string;
   let verifiedSize = audioSizeBytes;
@@ -70,6 +78,7 @@ export async function startStudentConsultationFromAudio(
       tenant_id: user.tenantId,
       student_id: studentId,
       counselor_id: user.id,
+      subject,
       consulted_at: consultedAtRaw ? new Date(consultedAtRaw).toISOString() : new Date().toISOString(),
       audience,
       category,

@@ -23,6 +23,7 @@ const fs = require("fs");
 const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const { makeCounselorMatcher, loadSubjectLabels, singleCounselorSubject } = require("./consultation-counselor.cjs");
 
 const APPLY = process.argv.includes("--apply");
 const SKIP_SAME_DAY = process.argv.includes("--skip-same-day");
@@ -152,13 +153,9 @@ function mapCategory(v) {
     const dayKeys = new Set(existing.map((e) => `${e.student_id}|${e.d}`));
 
     // 상담사 매칭(best-effort): "이지은(Amy)" → 괄호 앞 이름 = users.display_name 유일 일치 시만.
-    const users = await sql`select id, display_name from users where tenant_id = ${tenantId}`;
-    const byDisplay = new Map();
-    for (const u of users) byDisplay.set(u.display_name, byDisplay.has(u.display_name) ? null : u.id);
-    const matchCounselor = (writer) => {
-      const nm = (L.txt(writer) || "").replace(/\(.*\)$/, "").trim();
-      return (nm && byDisplay.get(nm)) || null;
-    };
+    const users = await sql`select id, display_name, english_name, subjects from users where tenant_id = ${tenantId}`;
+    const matchCounselor = makeCounselorMatcher(users);
+    const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
     // ── 행 처리 ──
     const stats = { total: rows.length, notEnrolledKind: 0, prospectTemplate: 0, noContent: 0, noStudent: 0, strictDup: 0, sameDay: 0, batchDup: 0, toInsert: 0 };
@@ -214,7 +211,8 @@ function mapCategory(v) {
         studentId, summary, name, dateStr,
         consultedAt: `${dateStr}T00:00:00+09:00`, // KST 자정(parseTimestamp 규약)
         category: mapCategory(ci.cat1 >= 0 ? r[ci.cat1] : null),
-        counselorId: matchCounselor(ci.writer >= 0 ? r[ci.writer] : null),
+        counselorId: matchCounselor(ci.writer >= 0 ? r[ci.writer] : null)?.id ?? null,
+        subject: singleCounselorSubject(matchCounselor(ci.writer >= 0 ? r[ci.writer] : null), subjectLabels),
       });
     }
 
@@ -236,8 +234,8 @@ function mapCategory(v) {
     for (const it of inserts) {
       await sql`
         insert into student_consultations
-          (tenant_id, student_id, counselor_id, consulted_at, category, summary)
-        values (${tenantId}, ${it.studentId}, ${it.counselorId}, ${it.consultedAt}, ${it.category}, ${it.summary})`;
+          (tenant_id, student_id, counselor_id, consulted_at, category, subject, summary)
+        values (${tenantId}, ${it.studentId}, ${it.counselorId}, ${it.consultedAt}, ${it.category}, ${it.subject}, ${it.summary})`;
       inserted++;
     }
     // 수동 부트스트랩도 동기화 시각으로 기록(학생상담 화면 '↻ 동기화' 배지). sync_added_at 배지는 자동 증분용이라 안 찍음.

@@ -26,6 +26,7 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const { makeCounselorMatcher, loadSubjectLabels, singleCounselorSubject } = require("./consultation-counselor.cjs");
 
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
@@ -199,18 +200,9 @@ function EXTRACT_DETAIL() {
     }
 
     // 상담사 매칭(등록자 "이지은(Amy)" → 한글명/영문명 유일 일치 — sync-consultations 로직 + 유일성 가드).
-    const users = await sql`select id, display_name, english_name from users where tenant_id = ${tenantId}`;
-    const uKo = new Map(), uEn = new Map();
-    for (const u of users) {
-      if (u.display_name) { const k = u.display_name.trim(); uKo.set(k, uKo.has(k) ? null : u.id); }
-      if (u.english_name) { const k = u.english_name.trim().toLowerCase(); uEn.set(k, uEn.has(k) ? null : u.id); }
-    }
-    const matchCounselor = (reg) => {
-      const m = (L.txt(reg) || "").match(/^(.*?)\s*[(（]([^)）]+)[)）]?\s*$/);
-      const ko = m ? m[1].trim() : (L.txt(reg) || "").trim();
-      const en = m ? m[2].trim().toLowerCase() : null;
-      return (ko && uKo.get(ko)) || (en && uEn.get(en)) || null;
-    };
+    const users = await sql`select id, display_name, english_name, subjects from users where tenant_id = ${tenantId}`;
+    const matchCounselor = makeCounselorMatcher(users);
+    const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
     // ── 목록 걷기(fromYmd 검색 필터 없이 — 날짜 조기종료가 correctness 담당) ──
     browser = await chromium.launch({ headless: !process.env.HEADED });
@@ -353,9 +345,10 @@ function EXTRACT_DETAIL() {
       // insert-only + ON CONFLICT DO NOTHING: 동시 실행(스케줄+워처 겹침)에도 같은 seq 이중 insert 불가.
       const res = await sql`
         insert into student_consultations
-          (tenant_id, makeedu_id, student_id, counselor_id, consulted_at, category, summary, sync_added_at)
-        values (${tenantId}, ${it.seq}, ${it.studentId}, ${matchCounselor(it.reg)},
-                ${`${it.dateStr}T00:00:00+09:00`}, ${mapCategory(it.cat)}, ${it.summary}, now())
+          (tenant_id, makeedu_id, student_id, counselor_id, consulted_at, category, subject, summary, sync_added_at)
+        values (${tenantId}, ${it.seq}, ${it.studentId}, ${matchCounselor(it.reg)?.id ?? null},
+                ${`${it.dateStr}T00:00:00+09:00`}, ${mapCategory(it.cat)},
+                ${singleCounselorSubject(matchCounselor(it.reg), subjectLabels)}, ${it.summary}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
       inserted += res.count;
     }

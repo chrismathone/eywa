@@ -11,6 +11,7 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
+const { makeCounselorMatcher, loadSubjectLabels, singleCounselorSubject } = require("./consultation-counselor.cjs");
 
 let chromium;
 try {
@@ -94,9 +95,9 @@ function EXTRACT_DETAIL() {
     m2.set(`${n}|${s.grade || ""}`, s.id);
     m1.set(n, m1.has(n) ? null : s.id);
   }
-  const users = await sql`select id, display_name, english_name from users where tenant_id = ${tenantId}`;
-  const uKo = new Map(), uEn = new Map();
-  for (const u of users) { if (u.display_name) uKo.set(u.display_name.trim(), u.id); if (u.english_name) uEn.set(u.english_name.trim().toLowerCase(), u.id); }
+  const users = await sql`select id, display_name, english_name, subjects from users where tenant_id = ${tenantId}`;
+  const matchCounselor = makeCounselorMatcher(users);
+  const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
   const browser = await chromium.launch({ headless: !process.env.HEADED });
   const ctx = await browser.newContext();
@@ -131,10 +132,9 @@ function EXTRACT_DETAIL() {
       const n = L.normalizeName(r.name);
       const sid = m3.get(`${n}|${r.grade || ""}|${r.school || ""}`) || m2.get(`${n}|${r.grade || ""}`) || m1.get(n) || null;
       if (!sid) continue;
-      const rk = (r.reg || "").match(/^(.*?)\s*[(（]([^)）]+)[)）]?\s*$/);
-      const ko = rk ? rk[1].trim() : r.reg, en = rk ? rk[2].trim().toLowerCase() : null;
       r.student_id = sid;
-      r.counselor_id = (ko && uKo.get(ko)) || (en && uEn.get(en)) || null;
+      r.counselor_id = matchCounselor(r.reg)?.id ?? null;
+      r.subject = singleCounselorSubject(matchCounselor(r.reg), subjectLabels);
       matched.push(r);
     }
     console.log(`matched(active students): ${matched.length} / ${all.length}`);
@@ -172,10 +172,12 @@ function EXTRACT_DETAIL() {
     for (const r of matched) {
       const summary = r.content && r.content.length > 10 ? r.content : r.title || "상담";
       await sql`
-        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, summary, consulted_at, sync_added_at)
-        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`}, now())
+        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, subject, summary, consulted_at, sync_added_at)
+        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${r.subject}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null
-        do update set student_id = excluded.student_id, counselor_id = excluded.counselor_id,
+        do update set student_id = excluded.student_id,
+          counselor_id = coalesce(excluded.counselor_id, student_consultations.counselor_id),
+          subject = coalesce(nullif(btrim(student_consultations.subject), ''), excluded.subject),
           summary = excluded.summary, consulted_at = excluded.consulted_at, updated_at = now()`;
       up++;
     }
