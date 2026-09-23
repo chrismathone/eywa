@@ -31,6 +31,7 @@ export function timelineRange(progress: StudentProgress): { min: number; max: nu
   ]);
   const dates = [
     ...(progress.roadmap ? [progress.roadmap.enrolledOn, ...progress.roadmap.steps.flatMap((step) => [step.startMonth, step.endMonth])] : []),
+    ...(progress.learningMap ? [progress.plan.startDate, progress.plan.targetDate] : []),
   ];
   months.push(...dates.map((date) => monthPosition(Number(date.slice(0, 4)), Number(date.slice(5, 7)))));
   const usable = months.filter((position) => Number.isFinite(position) && years.includes(periodAt(position).year));

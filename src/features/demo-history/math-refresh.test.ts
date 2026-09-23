@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { flatLessons } from "@/features/onescreen/curriculum";
-import { demoMathLesson, demoMathLongGoal } from "./math-refresh";
-import { learningGoalError, type LearningGoal } from "@/features/math-sheets/lib/learning-plan";
+import { demoMathFirstGoal, demoMathLesson, demoMathLongGoal } from "./math-refresh";
+import { learningDays, learningGoalError, type LearningGoal } from "@/features/math-sheets/lib/learning-plan";
 
 describe("데모 수학 진도", () => {
   it("실제 수학 교과 차시를 사용하고 같은 날짜는 매일 재실행해도 같은 진도다", () => {
@@ -36,5 +36,22 @@ describe("데모 수학 진도", () => {
       : ["2026-09-30", "2027-03-31", "2027-12-31", "2028-09-30"]);
     expect(long!.endDate).toBe(grade === "중3" ? "2028-03-31" : "2028-09-30");
     expect(demoMathLongGoal(long!)).toBeNull();
+  });
+
+  it.each(["2026-05-01", "2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01"])("등록 월 %s부터 미래 수업일과 4차 목표를 연결한다", (startDate) => {
+    for (const grade of ["초3", "초5", "초6", "중1", "중2", "중3"]) {
+      const first = demoMathFirstGoal("demo", grade, startDate);
+      expect(first, `${grade} 첫 목표`).not.toBeNull();
+      const long = demoMathLongGoal(first!);
+      expect(long, `${grade} 장기 목표`).not.toBeNull();
+      expect(learningGoalError(long!)).toBeNull();
+      expect(long!.milestones).toHaveLength(4);
+      expect(long!.endDate > "2028-01-01").toBe(true);
+      const days = learningDays(long!, { schedules: ["mon", "wed"].map(dayOfWeek => ({
+        dayOfWeek, startTime: "16:00", endTime: "17:00", validFrom: null, validTo: null })),
+        holidays: {}, spans: { demo: [{ start: startDate, end: null }] } });
+      expect(days.length, `${grade} ${startDate} 수업일`).toBeGreaterThan(0);
+      expect(days.at(-1)?.date.slice(0, 7)).toBe(long!.endDate.slice(0, 7));
+    }
   });
 });

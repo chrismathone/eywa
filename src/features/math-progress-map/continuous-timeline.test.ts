@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { monthPosition, periodAt, rollingPeriods, timelineRange, timelineStops, turnDelta } from "./continuous-timeline";
 import { buildSampleProgress } from "./sample";
+import type { StudentProgress } from "./model";
 
 describe("연도를 잇는 시계 좌표", () => {
   it("12월에서 양방향으로 연도를 넘나든다", () => {
@@ -29,6 +30,18 @@ describe("연도를 잇는 시계 좌표", () => {
     const { min, max } = timelineRange(buildSampleProgress());
     expect(periodAt(min)).toEqual({ year: 2026, month: 1 });
     expect(periodAt(max)).toEqual({ year: 2029, month: 2 });
+  });
+
+  it("수업일 배분이 비어도 저장된 수학 최종 목표 월까지 이동한다", () => {
+    const sample = buildSampleProgress();
+    const progress: StudentProgress = { ...sample, year: 2026,
+      years: [2027, 2028].map(year => ({ year, yearPlan: [], dailyProgress: [] })),
+      yearPlan: [], dailyProgress: [], roadmap: { ...sample.roadmap!, steps: [] },
+      plan: { ...sample.plan, startDate: "2026-04-01", targetDate: "2028-09-30" },
+      learningMap: {} as StudentProgress["learningMap"] };
+    const { min, max } = timelineRange(progress);
+    expect(periodAt(min)).toEqual({ year: 2026, month: 1 });
+    expect(periodAt(max)).toEqual({ year: 2028, month: 9 });
   });
 
   it("연도 눈금은 시작·종료 월 사이의 실제 월 간격에 비례한다", () => {

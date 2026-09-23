@@ -18,10 +18,12 @@ import { monthKey } from "./years";
 const MONTH_KEY = /^\d{4}-\d{2}$/;
 
 /** 종강(예상) 달 `YYYY-MM` — 로드맵이 없거나 끝 달이 비었으면 null. */
-export function courseEndMonth(progress: Pick<StudentProgress, "roadmap">): string | null {
+export function courseEndMonth(progress: Pick<StudentProgress, "roadmap"> & Partial<Pick<StudentProgress, "learningMap" | "plan">>): string | null {
   const steps: readonly RoadmapStep[] = progress.roadmap?.steps ?? [];
   // 단계 배열이 시간 순이라는 보장은 없다 — 가장 늦은 끝 달을 고른다.
   const ends = steps.map((step) => step.endMonth).filter((month) => MONTH_KEY.test(month));
+  // A saved math goal remains the browsing horizon even when its future class dates are not scheduled yet.
+  if (progress.learningMap && progress.plan?.targetDate) ends.push(progress.plan.targetDate.slice(0, 7));
   return ends.length > 0 ? ends.reduce((a, b) => (a > b ? a : b)) : null;
 }
 

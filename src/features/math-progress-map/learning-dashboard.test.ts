@@ -7,8 +7,24 @@ import { progressForYear } from "./years";
 import { curriculumPeriods } from "./timeline-data";
 import { paceLabel, planVsActual } from "./pace";
 import { dayOf, focusOfDate } from "./focus";
+import { demoMathFirstGoal, demoMathLongGoal } from "@/features/demo-history/math-refresh";
+import { buildLearningProgress } from "@/features/math-sheets/lib/learning-plan";
+import { periodAt, timelineRange } from "./continuous-timeline";
 
 describe("기존 전체 진도맵의 실데이터 배선", () => {
+  it("등록 월부터 시작한 장기 목표의 미래 월을 전체 진도 목록과 연속 지도에 표시한다", () => {
+    const goal = demoMathLongGoal(demoMathFirstGoal("demo", "초5", "2026-06-01")!)!;
+    const context = { schedules: ["mon", "wed"].map(dayOfWeek => ({ dayOfWeek, startTime: "16:00",
+      endTime: "17:00", validFrom: null, validTo: null })), holidays: {},
+      spans: { demo: [{ start: "2026-06-02", end: null }] } };
+    const progress = buildLearningProgress(goal, context, [], "2026-09-23");
+    const map = buildLearningMap(goal, progress);
+    const data = buildLearningDashboard({ studentId: "demo", name: "데모 학생", grade: "초5" }, goal, progress, [], map, context);
+    expect(progress.days.at(-1)?.date.slice(0, 7)).toBe(goal.endDate.slice(0, 7));
+    expect(data.years?.find(year => year.year === 2028)?.yearPlan.length).toBeGreaterThan(0);
+    expect(periodAt(timelineRange(data).max)).toEqual({ year: Number(goal.endDate.slice(0, 4)),
+      month: Number(goal.endDate.slice(5, 7)) });
+  });
   it("세 지도가 실제 반별 수업일을 공유하며 과거 진도는 발송 보고서의 수업일에만 그린다", () => {
     const f = learningMapFixture();
     const map = buildLearningMap(f.goal, f.progress);

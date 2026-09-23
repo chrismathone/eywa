@@ -27,6 +27,12 @@ describe("종강 달 판정", () => {
     expect(courseEndMonth({ roadmap: roadmapOf(step("a", "2026-01", "")) })).toBeNull();
   });
 
+  it("수학 지도는 미래 수업일이 비어도 저장된 최종 목표 월을 종점으로 삼는다", () => {
+    expect(courseEndMonth({ roadmap: roadmapOf(step("old", "2026-04", "2026-09")),
+      learningMap: {} as StudentProgress["learningMap"],
+      plan: { startDate: "2026-04-01", targetDate: "2028-09-30", startPage: 0, targetPage: 120 } })).toBe("2028-09");
+  });
+
   it("종강 달 자체는 살아 있고, 그 다음 달부터 뒤다", () => {
     expect(isAfterCourseEnd("2029-02", 2029, 2)).toBe(false);
     expect(isAfterCourseEnd("2029-02", 2029, 3)).toBe(true);

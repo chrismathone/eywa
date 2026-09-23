@@ -1,10 +1,9 @@
 import postgres from "postgres";
 import { flatLessons } from "@/features/onescreen/curriculum";
-import { learningGoalError, planLearningGoal, type LearningGoal } from "@/features/math-sheets/lib/learning-plan";
+import { learningGoalError, planLearningGoal, standardGoalDates, type LearningGoal } from "@/features/math-sheets/lib/learning-plan";
 import { learningCoursePath, learningTopics, topicSegments } from "@/features/math-sheets/lib/learning-path";
 
 const FIRST_DEMO_DAY = "2026-04-01";
-const FIRST_GOAL_END = "2026-09-30";
 const DEMO_TEXTBOOK = "개념원리";
 const GENERATED_MONTHLY_TARGET = "월간 단원 복습 및 유형별 문제 80% 이상 정답";
 
@@ -28,31 +27,48 @@ function monthBounds(today: string): { start: string; end: string } {
   return { start, end };
 }
 
-type Pair = { class_id: string; student_id: string; grade: string; student_code: string };
+type Pair = { class_id: string; student_id: string; grade: string; student_code: string; enrolled_at: string; active: boolean };
 type Report = { id: string; grade: string; student_code: string; report_day: string };
 type MonthlyGoal = { id: string; grade: string; student_code: string; month_start: string; month_end: string };
 type StoredGoal = { id: string; class_id: string; student_id: string; study_grade: string; end_study_grade: string;
   start_block: string; end_block: string; start_date: string; end_date: string; block_count: number;
   milestones: LearningGoal["milestones"]; textbook: string | null; updated_by: string | null; updated_at: string };
 
-/** Keep the original six-month stop and extend the synthetic plan to September 2028. */
+/** Start a demo plan in a month when the student actually attends this class. */
+export function demoMathFirstGoal(studentId: string, grade: string, startDate: string, offset = 0): LearningGoal | null {
+  const startBlock = demoMathLesson(grade, startDate, offset);
+  const lastLesson = flatLessons("미적분Ⅱ").at(-1);
+  if (!startBlock || !lastLesson) return null;
+  const semesters = topicSegments(learningTopics({ studyGrade: grade, startBlock,
+    endStudyGrade: "미적분Ⅱ", endBlock: lastLesson }));
+  const endpoint = semesters[1]?.at(-1);
+  if (!endpoint) return null;
+  const endDate = standardGoalDates(startDate.slice(0, 7), "regular", 24).endDate;
+  const first: LearningGoal = { studentId, studyGrade: grade, endStudyGrade: endpoint.grade,
+    startBlock, endBlock: endpoint.lesson, startDate, endDate, textbook: DEMO_TEXTBOOK,
+    track: "regular", blockCount: 24,
+    milestones: [{ studyGrade: endpoint.grade, endBlock: endpoint.lesson, endDate, blockCount: 24 }] };
+  return learningGoalError(first) ? null : first;
+}
+
+/** Extend a valid first stop to four curriculum-backed milestones. */
 export function demoMathLongGoal(first: LearningGoal): LearningGoal | null {
-  if (first.track !== "regular" || first.startDate !== FIRST_DEMO_DAY || first.endDate !== FIRST_GOAL_END
-    || first.blockCount !== 24 || first.milestones?.length !== 1 || learningGoalError(first)) return null;
+  if (first.track !== "regular" || first.blockCount !== 24 || first.milestones?.length !== 1 || learningGoalError(first)) return null;
   const endGrade = "미적분Ⅱ";
   const lastLesson = flatLessons(endGrade).at(-1);
   if (!lastLesson || !learningCoursePath(first.endStudyGrade ?? first.studyGrade, endGrade).length) return null;
   const remaining = learningTopics({ studyGrade: first.endStudyGrade ?? first.studyGrade,
     startBlock: first.endBlock, endStudyGrade: endGrade, endBlock: lastLesson }).slice(1);
   const semesters = topicSegments(remaining);
-  if (semesters.length < 8 && first.studyGrade !== "중3") return null;
+  if (semesters.length < 2) return null;
+  const shortPath = semesters.length < 8;
   let goal = first;
-  for (const semesterCount of first.studyGrade === "중3" ? [2, 5] : [2, 5, 8]) {
+  for (const semesterCount of shortPath ? [Math.min(2, semesters.length - 1), semesters.length] : [2, 5, 8]) {
     const endpoint = semesters[semesterCount - 1].at(-1)!;
     goal = planLearningGoal({ ...goal, endStudyGrade: endpoint.grade, endBlock: endpoint.lesson }, goal);
     if (learningGoalError(goal)) return null;
   }
-  if (first.studyGrade === "중3") {
+  if (shortPath) {
     const elective = "확률과 통계";
     goal = planLearningGoal({ ...goal, endStudyGrade: elective, endBlock: flatLessons(elective).at(-1)! }, goal);
     if (learningGoalError(goal)) return null;
@@ -84,13 +100,16 @@ export async function refreshDemoMath(asOf = new Date(), apply = false, verifyRo
         throw new Error("demo contains untagged roster data; refusing refresh");
       }
       const pairs = await tx<Pair[]>`
-        select distinct e.class_id,e.student_id,s.grade,s.student_code
+        select e.class_id,e.student_id,s.grade,s.student_code,
+          to_char(min(e.start_date),'YYYY-MM-DD') enrolled_at,
+          bool_or(e.end_date is null or e.end_date>=${today}::date) active
         from enrollments e
         join classes c on c.id=e.class_id and c.tenant_id=e.tenant_id
         join students s on s.id=e.student_id and s.tenant_id=e.tenant_id
         where e.tenant_id=${id} and c.subject='math'
           and c.notes like 'demo-roster:%' and s.notes like 'demo-roster:%'
           and e.start_date<=${today}::date and (e.end_date is null or e.end_date>=${start}::date)
+        group by e.class_id,e.student_id,s.grade,s.student_code
       `;
       const reports = await tx<Report[]>`
         select r.id,s.grade,s.student_code,to_char(r.report_date,'YYYY-MM-DD') report_day
@@ -139,29 +158,26 @@ export async function refreshDemoMath(asOf = new Date(), apply = false, verifyRo
         const existing = byPair.get(`${p.class_id}:${p.student_id}`) ?? [];
         // User-owned goals always win; never replace a newer or unrelated plan.
         if (existing.some(row => row.updated_by !== null) || existing.length > 1) return [];
-        const startBlock = demoMathLesson(p.grade, FIRST_DEMO_DAY, offset(p.student_code));
-        const endBlock = demoMathLesson(p.grade, FIRST_GOAL_END, offset(p.student_code));
-        if (!startBlock || !endBlock) return [];
-        const first: LearningGoal = existing.length ? {
+        if (existing.length && (existing[0].textbook !== DEMO_TEXTBOOK
+          || existing[0].milestones?.[0]?.blockCount !== 24)) return [];
+        const anchor = p.active && p.enrolled_at.slice(0, 7) > FIRST_DEMO_DAY.slice(0, 7)
+          ? `${p.enrolled_at.slice(0, 7)}-01` : FIRST_DEMO_DAY;
+        const first: LearningGoal | null = existing.length && existing[0].start_date === anchor ? {
           studentId: p.student_id, studyGrade: existing[0].study_grade,
           endStudyGrade: existing[0].milestones?.[0]?.studyGrade ?? existing[0].study_grade,
           startBlock: existing[0].start_block, endBlock: existing[0].milestones?.[0]?.endBlock ?? existing[0].end_block,
           startDate: existing[0].start_date, endDate: existing[0].milestones?.[0]?.endDate ?? existing[0].end_date,
           textbook: existing[0].textbook, track: "regular", blockCount: existing[0].milestones?.[0]?.blockCount,
           milestones: existing[0].milestones?.slice(0, 1),
-        } : {
-          studentId: p.student_id, studyGrade: p.grade, endStudyGrade: p.grade,
-          startBlock, endBlock, startDate: FIRST_DEMO_DAY, endDate: FIRST_GOAL_END,
-          textbook: DEMO_TEXTBOOK, track: "regular", blockCount: 24,
-          milestones: [{ studyGrade: p.grade, endBlock, endDate: FIRST_GOAL_END, blockCount: 24 }],
-        };
-        if (existing.length && (existing[0].start_date !== FIRST_DEMO_DAY || existing[0].textbook !== DEMO_TEXTBOOK
-          || existing[0].milestones?.[0]?.blockCount !== 24)) return [];
+        } : demoMathFirstGoal(p.student_id, p.grade, anchor, offset(p.student_code));
+        if (!first) return [];
         const goal = demoMathLongGoal(first);
         if (!goal) return [];
         return [{ id: existing[0]?.id ?? null, updated_at: existing[0]?.updated_at ?? null,
+          old_start_date: existing[0]?.start_date ?? null,
           class_id: p.class_id, student_id: p.student_id, study_grade: goal.studyGrade,
-          end_study_grade: goal.endStudyGrade ?? goal.studyGrade, start_block: goal.startBlock,
+          end_study_grade: goal.endStudyGrade ?? goal.studyGrade, start_date: goal.startDate,
+          start_block: goal.startBlock,
           end_block: goal.endBlock, end_date: goal.endDate, block_count: goal.blockCount,
           milestones: goal.milestones }];
       });
@@ -180,15 +196,16 @@ export async function refreshDemoMath(asOf = new Date(), apply = false, verifyRo
         `;
         const updates = goals.filter(goal => goal.id);
         if (updates.length) await tx`
-          update math_learning_track_goals g set end_study_grade=v.end_study_grade,
-            end_block=v.end_block,end_date=v.end_date::date,block_count=v.block_count,milestones=v.milestones
+          update math_learning_track_goals g set study_grade=v.study_grade,start_block=v.start_block,
+            start_date=v.start_date::date,end_study_grade=v.end_study_grade,end_block=v.end_block,
+            end_date=v.end_date::date,block_count=v.block_count,milestones=v.milestones
           from jsonb_to_recordset(${tx.json(updates)}::jsonb)
-            as v(id uuid,updated_at timestamptz,end_study_grade text,end_block text,end_date text,
-              block_count integer,milestones jsonb)
+            as v(id uuid,updated_at timestamptz,old_start_date text,study_grade text,start_block text,
+              start_date text,end_study_grade text,end_block text,end_date text,block_count integer,milestones jsonb)
           where g.id=v.id and g.tenant_id=${id} and g.updated_by is null
-            and g.updated_at=v.updated_at and g.start_date=${FIRST_DEMO_DAY}::date
-            and (g.block_count,g.end_date,g.milestones) is distinct from
-              (v.block_count,v.end_date::date,v.milestones)
+            and g.updated_at=v.updated_at and g.start_date=v.old_start_date::date
+            and (g.start_date,g.start_block,g.block_count,g.end_date,g.milestones) is distinct from
+              (v.start_date::date,v.start_block,v.block_count,v.end_date::date,v.milestones)
         `;
         const inserts = goals.filter(goal => !goal.id);
         if (inserts.length) await tx`
@@ -196,10 +213,10 @@ export async function refreshDemoMath(asOf = new Date(), apply = false, verifyRo
             (tenant_id,class_id,student_id,track,block_count,study_grade,end_study_grade,
              start_block,end_block,start_date,end_date,textbook,milestones)
           select ${id},v.class_id,v.student_id,'regular',v.block_count,v.study_grade,v.end_study_grade,
-            v.start_block,v.end_block,${FIRST_DEMO_DAY}::date,v.end_date::date,${DEMO_TEXTBOOK},v.milestones
+            v.start_block,v.end_block,v.start_date::date,v.end_date::date,${DEMO_TEXTBOOK},v.milestones
           from jsonb_to_recordset(${tx.json(inserts)}::jsonb)
             as v(class_id uuid,student_id uuid,study_grade text,end_study_grade text,
-              start_block text,end_block text,end_date text,block_count integer,milestones jsonb)
+              start_block text,end_block text,start_date text,end_date text,block_count integer,milestones jsonb)
           where not exists (
             select 1 from math_learning_track_goals old where old.tenant_id=${id}
               and old.class_id=v.class_id and old.student_id=v.student_id
