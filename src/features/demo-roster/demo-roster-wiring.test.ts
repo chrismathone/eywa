@@ -22,8 +22,10 @@ describe("데모 재원 드롭다운", () => {
     const src = read("src/features/demo-roster/apply.ts");
     const gate = src.indexOf('tenant?.slug !== "demo"');
     const wipe = src.indexOf("tx.delete");
+    const satellite = src.indexOf("await insertDashboardSatellite");
     expect(gate).toBeGreaterThan(-1);
     expect(wipe).toBeGreaterThan(gate);
+    expect(satellite).toBeGreaterThan(wipe);
     expect(src).not.toContain('slug === "cs"');
     expect(src).not.toContain("delete from students");
   });
@@ -40,6 +42,13 @@ describe("데모 재원 드롭다운", () => {
     const overview = read("src/app/(shell)/dashboard/_overview/overview.tsx");
     expect(server).toContain("getDemoRosterControl()");
     expect(overview).toContain("demoRoster ? <DemoRosterSwitch");
+    const sw = read("src/app/(shell)/dashboard/_components/demo-roster-switch.tsx");
+    expect(sw).toContain('refetchQueries({ queryKey: ["dashboard-overview"], type: "active" })');
+    expect(read("src/features/demo-roster/apply.ts")).toContain("insertDashboardSatellite");
+    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain('id !== "newcomers"');
+    expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(tenantSettingsTag(user.tenantId))");
+    expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(`dashboard-invoice-trend:${user.tenantId}`)");
+    expect(read("src/features/dashboard/overview/server.ts")).toContain("dashboard-invoice-trend:${tenantId}");
     const queries = read("src/features/demo-roster/server/queries.ts");
     expect(queries).toContain('tenant?.slug !== "demo"');
     expect(queries).toContain('user.systemRole !== "master"');

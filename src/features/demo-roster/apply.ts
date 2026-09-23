@@ -1,6 +1,9 @@
 import { and, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { classes, classrooms, classSchedules, enrollments, invoices, students, tenants } from "@/lib/db/schema";
+import { kstToday } from "@/lib/date-kst";
+import { insertDashboardSatellite } from "./dashboard-apply";
+import { buildDashboardWorld } from "./dashboard-world.mjs";
 import { buildScenario, SCENARIOS } from "./plan.mjs";
 
 const ROOM_NAMES = ["1강의실", "2강의실", "3강의실", "4강의실"] as const;
@@ -23,6 +26,8 @@ export async function replaceDemoRoster(
 ): Promise<{ label: string; students: number } | { error: string }> {
   if (!(scenarioId in SCENARIOS)) return { error: "없는 구성입니다" };
   const plan = buildScenario(scenarioId);
+  const today = kstToday();
+  const world = buildDashboardWorld(plan, today);
   const note = `${NOTE_PREFIX}${scenarioId}`;
 
   try {
@@ -95,7 +100,8 @@ export async function replaceDemoRoster(
             school: student.school.name,
             grade: student.grade,
             status: "enrolled" as const,
-            enrolledAt: plan.start,
+            enrolledAt: world.enrolledAt.get(student.code) ?? plan.start,
+            isTest: false,
             parentName: student.parentName,
             parentPhone: student.parentPhone,
             studentCode: student.code,
@@ -129,10 +135,12 @@ export async function replaceDemoRoster(
             tenantId,
             studentId: studentId.get(student)!,
             classId: classId.get(cls)!,
-            startDate: plan.start,
+            startDate: world.startDate.get(student.code) ?? plan.start,
           })),
         ),
       );
+
+      await insertDashboardSatellite(tx, tenantId, plan, note, classId, studentId, today);
 
       return { label: plan.scenario.title as string, students: plan.stats.students as number };
     });

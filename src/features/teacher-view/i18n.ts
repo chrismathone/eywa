@@ -1238,6 +1238,14 @@ export const SHEET_DICT = {
     ko: "시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시",
     en: "This time is no longer on the timetable — shown so the record is not lost",
   },
+  /**
+   * 시간표에 없는 시각에 남은 기록 각주(원장 2026-09-22 *"본인 수업 스케줄만 나오면 될거같은데"*).
+   * 카드를 안 세우는 대신 **건수와 시각**을 밝힌다 — 조용히 사라지면 "쓴 게 증발했다"가 된다.
+   */
+  "slot.stray.note": {
+    ko: "시간표에 없는 시각 {slots}곳({when})에 기록 {records}건이 남아 있습니다 — 이 시트에는 표시하지 않고, 기록은 지워지지 않았습니다.",
+    en: "{records} record(s) remain at {slots} time(s) no longer on the timetable ({when}) — not shown on this sheet, and nothing was deleted.",
+  },
   /** 입력칸 접근성 이름 — `{class} {field}`(반 이름 + 칸 이름). */
   "plan.editor.cellAria": { ko: "{class} {field}", en: "{class} {field}" },
 

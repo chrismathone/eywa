@@ -15,12 +15,14 @@ export async function proxy(request: NextRequest) {
  * - `robots.txt`·`sitemap.xml`·`manifest.json` — 정적 메타. 실측상 이들이 `/login`으로 **307**
  *   리다이렉트되고 있었다(크롤러·PWA에 잘못된 응답).
  * - 폰트·스타일·데이터 확장자 — 이미지 6종만 빼고 있어 `woff2` 등이 함수를 태우고 있었다.
+ * - `mp4`·`webm` (2026-09-22) — 로그인 패널 배경 영상(`/photos/login-panel.mp4`). 빠져 있으면 영상 요청이
+ *   `/login?next=…`로 **307**되어 `<video>`가 MEDIA_ERR_SRC_NOT_SUPPORTED로 멈춘다(실측 — 포스터만 남는다).
  *
  * ⚠️ 여기서 빼는 건 "인증을 면제한다"가 아니라 "쿠키 세션 갱신을 건너뛴다"이다. 보호가 필요한
  *    표면은 페이지·라우트 핸들러가 각자 게이트를 갖는다(#77 — 화면에서만 잠그면 우회된다).
  */
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map|txt|json)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map|txt|json|mp4|webm)$).*)",
   ],
 };

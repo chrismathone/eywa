@@ -1,0 +1,110 @@
+@media (max-width:900px){
+.lp{--wpad:20px}
+.lp .nav nav{display:none}
+.lp .grid{grid-template-columns:repeat(2,1fr);gap:14px}
+.lp .trio{grid-template-columns:1fr}
+.lp .two,.lp .two.rev,.lp .two.half{grid-template-columns:1fr;gap:18px;align-content:start;padding-top:72px;height:100%}
+.lp .two.rev .caps{order:0}
+.lp .caps{gap:12px}
+.lp .caps .h2{font-size:clamp(26px,7vw,34px)}
+.lp .steps{grid-template-columns:1fr;gap:6px}
+.lp .steps li{font-size:14px}
+.lp .steps li:not(.on) span{display:none}
+.lp .desk{aspect-ratio:4/3}
+.lp .win{width:66cqw;zoom:1.4}
+.lp .desk{aspect-ratio:4/3}
+.lp .w1,.lp .w2,.lp .w3,.lp .w4{left:3cqw;right:auto;top:4cqw;width:66cqw}
+.lp .win.show:not(.top){opacity:0;transform:translateY(-3cqw) scale(.97)}
+.lp .app{grid-template-columns:1fr;height:auto}
+.lp .side{display:none}
+.lp .main{padding:2.4cqw;gap:1.8cqw}
+.lp .dh b{font-size:3.4cqw}
+.lp .dh .num{font-size:2.2cqw}
+.lp .dh .tools{display:none}
+.lp .kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:1.4cqw}
+.lp .kpi:last-child{grid-column:span 2}
+.lp .kpi{padding:1.6cqw;border-radius:1.8cqw}
+.lp .kpi small{font-size:1.8cqw;gap:.8cqw}
+.lp .kpi small .stk{width:2.8cqw;height:2.8cqw}
+.lp .kpi b{font-size:4.4cqw}
+.lp .kpi b span{font-size:1.8cqw}
+.lp .kpi em{font-size:1.5cqw}
+.lp .secline b{font-size:2.6cqw}
+.lp .secline span{font-size:1.9cqw}
+.lp .pans{grid-template-columns:repeat(2,minmax(0,1fr));gap:1.8cqw}
+.lp .pan{padding:2cqw;border-radius:1.8cqw;gap:1.3cqw}
+.lp .pan h4{font-size:2.2cqw;padding-bottom:1.2cqw}
+.lp .pan h4 span{font-size:1.6cqw}
+.lp .pan.wide{display:none}
+.lp .lv{font-size:1.8cqw;grid-template-columns:5cqw 1fr 4.2cqw;gap:1cqw}
+.lp .lv i{height:2.4cqw}
+.lp .lg{font-size:1.55cqw}
+.lp .lg i{width:1.5cqw;height:1.5cqw}
+.lp .donut i{width:11cqw;height:11cqw}
+.lp .donut b{font-size:4cqw}
+.lp .donut small{font-size:1.6cqw}
+.lp .rate b{font-size:4.4cqw}
+.lp .rate small{font-size:1.7cqw}
+.lp .stackbar{height:2.2cqw}
+.lp .nw{font-size:1.7cqw;grid-template-columns:8.4cqw 1fr 3cqw}
+.lp .nw i{height:1.8cqw}
+.lp .pill{height:3.4cqw;font-size:1.7cqw;padding:0 1.4cqw}
+.lp .chrome{height:5cqw}
+.lp .chrome .url{font-size:1.9cqw;height:3.4cqw}
+.lp .att{font-size:2cqw}
+.lp .att th,.lp .att td{height:5.2cqw;font-size:1.8cqw}
+.lp .att th small{font-size:1.4cqw}
+.lp .att td.nm,.lp .att th.nm{width:12cqw;padding-left:1.2cqw}
+.lp .att td.sum,.lp .att th.sum{width:9cqw}
+.lp .att .tb{height:6cqw;font-size:2.2cqw}
+.lp .att .legend{font-size:1.7cqw}
+.lp .att .legend i{width:1.8cqw;height:1.8cqw}
+.lp .att td.c .memo{font-size:1.6cqw}
+.lp .att th.d:nth-child(n+16),.lp .att td.d:nth-child(n+16){display:none}
+.lp .ai-card{padding:20px 18px;gap:10px}
+.lp .ai-card .ln{font-size:14px;gap:8px}
+.lp .strip>*{width:min(340px,84vw)}
+.lp .stack{gap:14px;padding-top:70px;align-content:start;height:100%}
+.lp .stack .top{grid-template-columns:1fr;gap:10px}
+.lp .stack .steps{grid-template-columns:1fr;gap:6px}
+}
+@media (max-width:520px){
+.lp .hero-in .cta{flex-direction:column;gap:14px}
+}
+@media (prefers-reduced-motion:reduce){
+.lp .hero-in>*,.lp .frame-wrap{animation:none}
+.lp.js .rv{opacity:1;transform:none;transition:none}
+.lp .frame{transform:none}
+}
+.lp.rm .pin{height:auto}
+.lp.rm .stage{position:relative;height:auto;padding:80px 0}
+.lp.rm .frame{transform:none}
+.lp.rm .steps li{color:var(--ink)}
+.lp.rm .light .steps li{color:#fff}
+.lp.rm .win{position:relative;width:100%;inset:auto;margin-bottom:16px}
+.lp.rm .desk{aspect-ratio:auto;padding:16px}
+/* 스티커 아이콘(앱 탭 아이콘과 같은 그림) · 사진 */
+.lp .i-book{background-image:url(/icons/book.png)}
+.lp .i-calendar{background-image:url(/icons/calendar.png)}
+.lp .i-clipboardCheck{background-image:url(/icons/clipboardCheck.png)}
+.lp .i-exam{background-image:url(/icons/exam.png)}
+.lp .i-help{background-image:url(/icons/help.png)}
+.lp .i-layoutGrid{background-image:url(/icons/layoutGrid.png)}
+.lp .i-messages{background-image:url(/icons/messages.png)}
+.lp .i-note{background-image:url(/icons/note.png)}
+.lp .i-report{background-image:url(/icons/report.png)}
+.lp .i-sheetColumns{background-image:url(/icons/sheetColumns.png)}
+.lp .i-undo{background-image:url(/icons/undo.png)}
+.lp .i-userCheck{background-image:url(/icons/userCheck.png)}
+.lp .i-userMinus{background-image:url(/icons/userMinus.png)}
+.lp .i-userPlus{background-image:url(/icons/userPlus.png)}
+.lp .i-userSettings{background-image:url(/icons/userSettings.png)}
+.lp .i-userX{background-image:url(/icons/userX.png)}
+.lp .i-users{background-image:url(/icons/users.png)}
+.lp .i-wallet{background-image:url(/icons/wallet.png)}
+.lp .i-weekGrid{background-image:url(/icons/weekGrid.png)}
+.lp .ph-hero{background-image:url(/landing/scroll-hero.webp)}
+.lp .ph-office{background-image:url(/landing/scroll-office.webp)}
+.lp .ph-class{background-image:url(/landing/scroll-class.webp)}
+.lp .ph-teacher{background-image:url(/landing/scroll-teacher.webp)}
+.lp .ph-shuttle{background-image:url(/landing/scroll-shuttle.webp)}

@@ -213,7 +213,7 @@ function spreadMatrix(rowTargets, colTargets) {
 
 const GIVEN = [...FEMALE, ...MALE];
 
-function personName(i) {
+export function personName(i) {
   // 15×60 = 900가지. 17은 900과 서로소라 0..159 안에서는 이름·성이 겹치지 않고, 옆 번호와 성·이름이 바로 겹치지도 않는다.
   const idx = (i * 17) % (SURNAMES.length * GIVEN.length);
   const surname = SURNAMES[idx % SURNAMES.length];
