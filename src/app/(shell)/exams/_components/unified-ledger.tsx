@@ -4,6 +4,7 @@ import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { saveUnifiedGrade } from "@/features/grades/unified/server/actions";
 import { schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
+import { examInfoOf } from "@/features/grades/unified/ledger-view";
 import { DeltaBadge, KindPill, ScoreLine } from "./tab-parts";
 
 const INPUT = "border-line min-w-0 rounded-md border bg-background px-1.5 py-1 text-sm text-center";
@@ -61,6 +62,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
       <td className="max-w-0 px-2 py-2" title={classNames}><span className="block truncate">{classNames || "—"}</span></td>
       <td className="max-w-0 px-2 py-2 text-center" title={teacherNames}><span className="block truncate">{teacherNames || "—"}</span></td>
       <td className="px-2 py-2 text-center"><KindPill kind={row.kind} /></td>
+      <td className="px-2 py-2 text-center text-sm">{examInfoOf(row) ?? <span className="text-text-dim">—</span>}</td>
       <td className="px-2 py-2 text-center">
         {editing ? <div className="flex items-center justify-center gap-1">
           <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="점수" aria-label={`${row.name} 점수`} className={`${INPUT} w-16`} />
@@ -103,10 +105,10 @@ export function UnifiedLedger({ rows, canWrite, head }: { rows: UnifiedRow[]; ca
   return (
     // 열 머리 필터 팝업이 짧은 표에서 잘리지 않게 최소 높이를 둔다(overflow 컨테이너 안 absolute 팝업 — header-filter 주석).
     <div className="bg-card shadow-card min-h-[26rem] overflow-x-auto rounded-2xl">
-      <table className="w-full min-w-[1080px] table-fixed text-sm">
+      <table className="w-full min-w-[1240px] table-fixed text-sm">
         <colgroup>
           <col className="w-[7.75rem]" /><col className="w-[6rem]" /><col className="w-[7rem]" /><col />
-          <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[6.5rem]" />
+          <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[10.5rem]" /><col className="w-[6.5rem]" />
           <col className="w-[7.5rem]" /><col className="w-[8.5rem]" />
         </colgroup>
         {head}

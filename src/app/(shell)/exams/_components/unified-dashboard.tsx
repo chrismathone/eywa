@@ -122,7 +122,7 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     <div className="compact-chrome:hidden"><PageHeader eyebrow="학생 관리" title="통합 성적관리" /></div>
     <FaceTabs ariaLabel="성적관리 면" active={tab} faces={TABS.map(([key, label]) => ({ key, label, href: href({ tab: key, page: "1" }) }))} />
     <ExamsToolbar from={from} to={to} subject={subject} kind={kind} missing={showMissing} q={q} exportHref={exportHref} subjectOptions={subjectOptions}
-      action={<GradeEntryDialog canWrite={!writeError} today={today} subjects={subjectOptions} axisSubjects={axisOptionsFrom(subjectMaps.options)}
+      action={<GradeEntryDialog canWrite={!writeError} today={today} subjects={axisOptionsFrom(subjectMaps.options)}
         students={data.students} initialOpen={entryMode} classes={[...entryClasses.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))} />}
       kindOptions={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
 

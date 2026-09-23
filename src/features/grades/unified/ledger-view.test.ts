@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as helpers from "./ledger-view";
 import { applyLedgerView, ledgerOptions, parseLedgerView } from "./ledger-view";
 import type { UnifiedRow } from "./model";
 
@@ -25,6 +26,12 @@ describe("성적 원장 정렬·필터", () => {
     expect(applyLedgerView(rows, parseLedgerView({ fDelta: "down" })).map((r) => r.key)).toEqual(["b"]);
     expect(applyLedgerView(rows, parseLedgerView({ fConsult: "none" })).map((r) => r.key)).toEqual(["b"]);
     expect(ledgerOptions(rows).teachers.map((t) => t.value)).toEqual(["김", "이"]);
+  });
+  it("시험정보 — 월말은 몇 월, 내신은 연도·학기·시험", () => {
+    const { examInfoOf } = helpers;
+    expect(examInfoOf({ kind: "monthly", date: "2026-09-21" })).toBe("2026년 9월");
+    expect(examInfoOf({ kind: "school", date: "2026-07-01", schoolYear: 2026, term: 1, slot: "final" })).toBe("2026년 1학기 · 기말고사");
+    expect(examInfoOf({ kind: "daily", date: "2026-09-21" })).toBeNull();
   });
   it("모르는 값은 무시한다(주소를 손으로 고쳐도 빈 화면이 안 된다)", () => {
     expect(parseLedgerView({ sort: "zzz", fScore: "nope" })).toMatchObject({ sort: "date", score: undefined });

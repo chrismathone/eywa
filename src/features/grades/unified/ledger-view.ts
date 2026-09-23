@@ -1,10 +1,11 @@
+import { EXAM_SLOT_LABEL, isExamSlot } from "@/features/grades/exam-slots";
 import { schoolGradeLabel, scorePercent, type UnifiedRow } from "./model";
 
 /**
  * 성적 원장 열 머리의 **정렬·필터** — 순수 함수 한 벌(화면 머리의 선택지와 실제 거르기가 같은 판정을 쓴다).
  * 페이지를 자르기 **전에** 적용한다(한 페이지 안에서만 정렬하면 "오름차순"이 50건 안에서만 맞는다).
  */
-export const LEDGER_SORTS = ["date", "name", "school", "class", "teacher", "kind", "score", "delta"] as const;
+export const LEDGER_SORTS = ["date", "name", "school", "class", "teacher", "kind", "info", "score", "delta"] as const;
 export type LedgerSort = (typeof LEDGER_SORTS)[number];
 export type LedgerView = {
   sort: LedgerSort; dir: "asc" | "desc";
@@ -23,6 +24,19 @@ export function parseLedgerView(raw: Record<string, string | undefined>): Ledger
 
 export const teachersOf = (row: UnifiedRow) => [...new Set(row.classes.map((c) => c.teacher).filter((t): t is string => !!t))];
 export const schoolOf = (row: UnifiedRow) => schoolGradeLabel(row.school, row.grade);
+/**
+ * '시험정보' 열(원장 2026-09-23) — 월말평가는 **몇 월**, 내신은 **몇 년도 몇 학기 어떤 시험**. 저장된 축 그대로 읽는다
+ * (월은 시험일에서 — 월말평가의 월은 저장값이 아니라 시험일에서 도출하는 규약, `gradeMonthOf`와 같다).
+ * 수업보고서·입학테스트는 그런 축이 없어 null(화면은 —).
+ */
+export function examInfoOf(row: Pick<UnifiedRow, "kind" | "date" | "slot" | "schoolYear" | "term">): string | null {
+  if (row.kind === "monthly") return `${row.date.slice(0, 4)}년 ${Number(row.date.slice(5, 7))}월`;
+  if (row.kind === "school" && row.schoolYear && row.term) {
+    const slot = isExamSlot(row.slot) ? EXAM_SLOT_LABEL[row.slot] : "내신";
+    return `${row.schoolYear}년 ${row.term}학기 · ${slot}`;
+  }
+  return null;
+}
 const consulted = (row: UnifiedRow) => !!(row.consultationDate ?? row.manualConsultationDate);
 
 function scoreBand(row: UnifiedRow): "high" | "mid" | "low" | null {
@@ -39,6 +53,7 @@ function sortKey(row: UnifiedRow, sort: LedgerSort): string | number | null {
     case "class": return row.classes.map((c) => c.name).join(" / ") || null;
     case "teacher": return teachersOf(row).join(" / ") || null;
     case "kind": return row.kind;
+    case "info": return examInfoOf(row);
     case "score": return scorePercent(row);
     case "delta": return row.delta;
   }

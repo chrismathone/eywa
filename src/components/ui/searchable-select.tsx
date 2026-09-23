@@ -44,6 +44,7 @@ export function SearchableSelect({
   valuePrefix,
   prefixOnlyFor,
   sideColumns,
+  requireQuery = false,
 }: {
   options: ComboOption[];
   value?: string;
@@ -106,6 +107,11 @@ export function SearchableSelect({
   defaultOpen?: boolean;
   /** 목록이 열리고 닫힐 때(바깥 클릭·Esc·선택 포함) — 인라인 편집 칸이 "고르지 않고 닫았다"를 알아채는 데 쓴다. */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * 검색어를 치기 전엔 **목록을 안 세운다**(원장 2026-09-23 성적 입력 창 *"처음부터 반을 드랍다운 모두 놓지말고
+   * 검색해서 검색결과에 따라 노출"*). 항목이 수십~수백인 자리(반·학생)에서만 켠다 — 기본은 종전처럼 전부 보인다.
+   */
+  requireQuery?: boolean;
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
@@ -130,8 +136,10 @@ export function SearchableSelect({
       (o) => o.label.toLowerCase().includes(t) || (o.hint ?? "").toLowerCase().includes(t),
     );
   }, [q, options]);
-  const shown = filtered.slice(0, cap);
-  const overflow = filtered.length - shown.length;
+  const waiting = requireQuery && !q.trim();
+  // 검색 전엔 '전체' 같은 해제 항목(빈 값)만 남긴다 — 그것까지 숨기면 되돌리려고 '전체'를 타이핑해야 한다.
+  const shown = waiting ? options.filter((o) => o.value === "") : filtered.slice(0, cap);
+  const overflow = waiting ? 0 : filtered.length - shown.length;
 
   useEffect(() => {
     if (!open) return;
@@ -221,8 +229,9 @@ export function SearchableSelect({
             />
           </div>
           <ul className="max-h-56 overflow-y-auto py-1">
+            {waiting && shown.length > 0 ? <li className="text-text-faint px-3 py-2 text-xs">검색어를 입력하세요</li> : null}
             {shown.length === 0 ? (
-              <li className="text-text-faint px-3 py-2 text-xs">결과 없음</li>
+              <li className="text-text-faint px-3 py-2 text-xs">{waiting ? "검색어를 입력하세요" : "결과 없음"}</li>
             ) : (
               shown.map((o) => {
                 const isCurrent = o.value === current;
