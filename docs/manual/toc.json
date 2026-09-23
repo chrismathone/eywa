@@ -1,0 +1,466 @@
+{
+  "$comment": "aywa 사용 설명서 목차 — 그룹(사이드바 묶음) → 메뉴 → 면(화면 안 탭·하부탭·상세 화면). 순서가 곧 책 순서다. 면 내용은 pages/<menu>/<face>.json. module = 그 기능이 꺼진 학원에선 화면이 없다(생성기가 건너뛰고 알린다). as = 누구 계정으로 찍나(기본 원장).",
+  "start": {
+    "slug": "00-start",
+    "title": "처음 시작하기"
+  },
+  "groups": [
+    {
+      "title": "홈",
+      "menus": [
+        {
+          "slug": "dashboard",
+          "title": "대시보드(운영실)",
+          "faces": [
+            {
+              "slug": "dashboard",
+              "title": "운영실"
+            }
+          ]
+        },
+        {
+          "slug": "calendar",
+          "title": "캘린더",
+          "faces": [
+            {
+              "slug": "calendar",
+              "title": "캘린더"
+            }
+          ],
+          "module": "calendar"
+        }
+      ]
+    },
+    {
+      "title": "수업",
+      "menus": [
+        {
+          "slug": "onescreen",
+          "title": "선생님 원스크린",
+          "faces": [
+            {
+              "slug": "onescreen",
+              "title": "원스크린",
+              "as": "teacher"
+            }
+          ]
+        },
+        {
+          "slug": "timetable",
+          "title": "시간표",
+          "faces": [
+            {
+              "slug": "timetable",
+              "title": "시간표"
+            }
+          ]
+        },
+        {
+          "slug": "sheets",
+          "title": "강사 시트",
+          "faces": [
+            {
+              "slug": "ecs",
+              "title": "영어 강사 시트",
+              "module": "ecs"
+            },
+            {
+              "slug": "mcs",
+              "title": "수학 강사 시트",
+              "module": "mcs"
+            }
+          ]
+        },
+        {
+          "slug": "attendance",
+          "title": "출석부",
+          "faces": [
+            {
+              "slug": "monthly",
+              "title": "월별 출석부"
+            },
+            {
+              "slug": "live",
+              "title": "오늘 출결"
+            },
+            {
+              "slug": "quick",
+              "title": "출결 모드",
+              "as": "teacher"
+            },
+            {
+              "slug": "seat",
+              "title": "자리 출석부",
+              "module": "seat_attendance"
+            }
+          ]
+        },
+        {
+          "slug": "classes",
+          "title": "수업목록",
+          "faces": [
+            {
+              "slug": "classes",
+              "title": "수업목록"
+            },
+            {
+              "slug": "class-detail",
+              "title": "반 상세(학생 배정)"
+            }
+          ]
+        },
+        {
+          "slug": "textbooks",
+          "title": "교재목록",
+          "faces": [
+            {
+              "slug": "books",
+              "title": "교재"
+            },
+            {
+              "slug": "plans",
+              "title": "반 배정"
+            }
+          ],
+          "module": "textbooks"
+        },
+        {
+          "slug": "lesson-reports",
+          "title": "수업보고서",
+          "faces": [
+            {
+              "slug": "writing",
+              "title": "작성률"
+            },
+            {
+              "slug": "list",
+              "title": "목록"
+            },
+            {
+              "slug": "report",
+              "title": "보고서 설정"
+            },
+            {
+              "slug": "ai-ment",
+              "title": "AI 멘트"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "원생",
+      "menus": [
+        {
+          "slug": "students",
+          "title": "원생목록",
+          "faces": [
+            {
+              "slug": "students",
+              "title": "원생목록"
+            },
+            {
+              "slug": "student-detail",
+              "title": "원생 상세"
+            }
+          ]
+        },
+        {
+          "slug": "exams",
+          "title": "성적관리",
+          "faces": [
+            {
+              "slug": "exams",
+              "title": "성적관리"
+            }
+          ]
+        },
+        {
+          "slug": "consultations",
+          "title": "원생상담",
+          "faces": [
+            {
+              "slug": "consultations",
+              "title": "원생상담"
+            }
+          ]
+        },
+        {
+          "slug": "enrollment",
+          "title": "콜&상담",
+          "faces": [
+            {
+              "slug": "enrollment",
+              "title": "콜&상담"
+            }
+          ]
+        },
+        {
+          "slug": "retention",
+          "title": "이탈 방어",
+          "faces": [
+            {
+              "slug": "retention",
+              "title": "이탈 방어"
+            }
+          ],
+          "module": "retention"
+        },
+        {
+          "slug": "newcomers",
+          "title": "신규생 관리",
+          "faces": [
+            {
+              "slug": "newcomers",
+              "title": "신규생 관리"
+            }
+          ],
+          "module": "newcomers"
+        },
+        {
+          "slug": "withdrawals",
+          "title": "퇴원관리",
+          "faces": [
+            {
+              "slug": "withdrawals",
+              "title": "퇴원관리"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "운영",
+      "menus": [
+        {
+          "slug": "staff",
+          "title": "직원관리",
+          "faces": [
+            {
+              "slug": "staff",
+              "title": "직원 목록"
+            },
+            {
+              "slug": "staff-detail",
+              "title": "직원 상세(이력서·근무 설정·계정)"
+            }
+          ]
+        },
+        {
+          "slug": "billing",
+          "title": "수납관리",
+          "faces": [
+            {
+              "slug": "payments",
+              "title": "수납"
+            },
+            {
+              "slug": "textbooks",
+              "title": "교재"
+            },
+            {
+              "slug": "expenses",
+              "title": "지출"
+            },
+            {
+              "slug": "calculator",
+              "title": "수강료 계산기"
+            },
+            {
+              "slug": "sessions",
+              "title": "회차 확정",
+              "module": "session_billing"
+            },
+            {
+              "slug": "verify",
+              "title": "시수 검증",
+              "module": "session_billing"
+            },
+            {
+              "slug": "refunds",
+              "title": "환불 요청서"
+            },
+            {
+              "slug": "payroll",
+              "title": "강사 정산"
+            }
+          ]
+        },
+        {
+          "slug": "shuttle",
+          "title": "셔틀",
+          "module": "shuttle",
+          "faces": [
+            {
+              "slug": "routes",
+              "title": "노선 편성"
+            },
+            {
+              "slug": "today",
+              "title": "오늘 등하원"
+            },
+            {
+              "slug": "live",
+              "title": "운행 현황"
+            }
+          ]
+        },
+        {
+          "slug": "inventory",
+          "title": "재고관리",
+          "faces": [
+            {
+              "slug": "assets",
+              "title": "자산"
+            },
+            {
+              "slug": "loans",
+              "title": "대여"
+            },
+            {
+              "slug": "audits",
+              "title": "실사"
+            },
+            {
+              "slug": "supplies",
+              "title": "소모품"
+            }
+          ],
+          "module": "inventory"
+        },
+        {
+          "slug": "meetings",
+          "title": "회의록",
+          "faces": [
+            {
+              "slug": "meetings",
+              "title": "회의록"
+            }
+          ]
+        },
+        {
+          "slug": "class-review",
+          "title": "수업 평가",
+          "module": "class_review",
+          "faces": [
+            {
+              "slug": "class-review",
+              "title": "수업 평가"
+            }
+          ]
+        },
+        {
+          "slug": "approvals",
+          "title": "전자결재",
+          "module": "approvals",
+          "faces": [
+            {
+              "slug": "approvals",
+              "title": "결재함"
+            }
+          ]
+        },
+        {
+          "slug": "documents",
+          "title": "데이터베이스",
+          "faces": [
+            {
+              "slug": "documents",
+              "title": "데이터베이스"
+            }
+          ]
+        },
+        {
+          "slug": "teacher-requests",
+          "title": "강사 요청(교재·지출)",
+          "faces": [
+            {
+              "slug": "textbook-requests",
+              "title": "교재 요청",
+              "as": "teacher"
+            },
+            {
+              "slug": "expense-requests",
+              "title": "지출결의서",
+              "as": "teacher"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "지원",
+      "menus": [
+        {
+          "slug": "help",
+          "title": "도움말",
+          "faces": [
+            {
+              "slug": "help",
+              "title": "도움말"
+            }
+          ]
+        },
+        {
+          "slug": "owner",
+          "title": "학원 설정",
+          "faces": [
+            {
+              "slug": "profile",
+              "title": "프로필·브랜드"
+            },
+            {
+              "slug": "operations",
+              "title": "운영 체계"
+            },
+            {
+              "slug": "subjects",
+              "title": "과목 운영"
+            },
+            {
+              "slug": "billing",
+              "title": "수납·청구"
+            },
+            {
+              "slug": "notifications",
+              "title": "알림·약관"
+            },
+            {
+              "slug": "consultations",
+              "title": "상담 양식"
+            },
+            {
+              "slug": "permissions",
+              "title": "역할·권한"
+            },
+            {
+              "slug": "navigation",
+              "title": "탭 및 메뉴 구성"
+            },
+            {
+              "slug": "modules",
+              "title": "기능(켜기·끄기)",
+              "generic": true
+            },
+            {
+              "slug": "popups",
+              "title": "팝업 공지"
+            },
+            {
+              "slug": "data",
+              "title": "데이터 정리"
+            },
+            {
+              "slug": "audit",
+              "title": "감사로그"
+            },
+            {
+              "slug": "sheets",
+              "title": "연동"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
