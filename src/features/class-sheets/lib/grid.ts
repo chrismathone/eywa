@@ -9,7 +9,8 @@
 //  · 과거 데이터 보존: 로스터 = eligible ∪ 퇴원 유예 ∪ 그 슬롯 mark 보유 ∪ 그 날짜 effective 출석 보유
 //    (비eligible은 historical 읽기 전용). 스케줄 없는 날짜의 출석은 가짜 슬롯 없이 attendanceOnly로 분리.
 //  · 고아 슬롯: 계획·마크·슬롯 메모가 있는데 그 날짜 스케줄에 없는 (date,slot) — **카드로 안 세우고**
-//    `strayRecords` 각주로만 알린다(2026-09-22 원장 지시. 카드가 서면 그 칸에 출결이 들어가 시수가 갈린다).
+//    `strayRecords`에 건수만 담는다(2026-09-22 원장 지시. 카드가 서면 그 칸에 출결이 들어가 시수가 갈린다).
+//    🔴 그 값은 **화면에 안 띄운다**(2026-09-23 원장 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"*) — 점검용이다.
 //  · 자리(LAB·JJ): 판정은 `hiddenSeatOf` 하나 — **LAB은 항상 제외**(전용 출석부로 이관 예정, 원장
 //    2026-08-06)이고 상단 토글이 정하는 건 **JJ뿐**이다. 안 그린 자리에 기록이 남아 있으면 `hiddenSpecial`에
 //    자리별 건수로 알린다(조용히 사라지면 "쓴 게 증발했다"가 된다 — 07-31에 실제로 밟은 함정).
@@ -132,7 +133,7 @@ export type GridSlot = {
   slotEnd: string | null; // 고아 슬롯은 null
   /**
    * 그 날짜에 유효한 스케줄이 실재하는가. `buildWeekGrid`는 **true인 칸만** 담는다(2026-09-22~ — 고아는
-   * `strayRecords` 각주). 소비처의 `scheduled` 게이트는 그대로 둔다(다른 빌더·옛 데이터에 대한 방어).
+   * `strayRecords`). 소비처의 `scheduled` 게이트는 그대로 둔다(다른 빌더·옛 데이터에 대한 방어).
    */
   scheduled: boolean;
   teacherId: string | null;
@@ -171,13 +172,14 @@ export type WeekGrid = {
    */
   hiddenSpecial: HiddenSeatCount[];
   /**
-   * **시간표에 없는 시각**(고아)에 남아 있는 기록 — 카드로 세우지 않고 건수만 각주로 알린다
+   * **시간표에 없는 시각**(고아)에 남아 있는 기록 — 카드로 세우지 않고 건수만 담는다
    * (원장 2026-09-22 *"본인 수업 스케줄만 나오면 될거같은데"*).
    *
    * 🔴 **카드를 세우면 사람이 거기에 출결까지 넣는다.** 실측(중등E_초등 브릿지 A): 9/17에 교시 시각이
    *    바뀌었는데 미리 적어 둔 계획 줄이 옛 시각(15:40·16:20)에 남아 카드가 섰고, 그 카드에 출결 16건이
    *    들어가 **한 수업의 시수가 두 칸으로 갈리거나 겹쳤다**(9/22은 학생당 3.0시수 = 실제의 두 배).
-   * ⚠️ 그래도 **숨기지는 않는다** — 건수를 각주로 남긴다(기록은 DB에 그대로 있고, 고치는 곳은 출석부다).
+   * 🔴 **화면엔 아무것도 안 띄운다**(2026-09-23 원장 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"* — 각주·칩·배지를
+   *    전부 없앴다, 되살리지 말 것). 기록은 DB에 그대로 있고 이 값은 점검용으로만 남는다(고치는 곳은 출석부다).
    */
   strayRecords: StraySlotCount[];
 };
@@ -185,7 +187,7 @@ export type WeekGrid = {
 /** 안 그린 자리 하나의 기록 요약(기록이 0건인 자리는 담지 않는다). */
 export type HiddenSeatCount = { seat: SpecialSlotLabel; slots: number; records: number };
 
-/** 시간표에 없는 시각 하나 — `records`는 의미 있는 계획 줄·마크·슬롯 메모의 합(0이면 각주에 안 적는다). */
+/** 시간표에 없는 시각 하나 — `records`는 의미 있는 계획 줄·마크·슬롯 메모의 합(화면엔 안 띄운다). */
 export type StraySlotCount = { date: string; slotStart: string; records: number };
 
 function slotKey(date: string, slot: string): string {
@@ -407,11 +409,11 @@ export function hasLiveSlotInWeek(
 }
 
 /**
- * 그 주의 **자리(LAB·JJ) 슬롯 키** 집합 — 랜딩이 "고아(시간 변경됨)"를 셀 때 빼기 위한 것.
+ * 그 주의 **자리(LAB·JJ) 슬롯 키** 집합 — 랜딩이 고아 칸을 셀 때 빼기 위한 것(그 수는 화면에 안 띄운다).
  *
  * 🔴 자리 교시는 스케줄에 **있다**. 우리가 화면에서 안 그릴 뿐이다. 그래서 `scheduledSlotKeySet`에서
  *    빠지는데, 그걸 그대로 "스케줄에 없는 기록 = 고아"로 세면 LAB에 남은 계획이 통째로
- *    *"시간 변경된 기록 N건"* 으로 둔갑한다(같은 데이터를 시트 상세는 'LAB 각주'라 부른다).
+ *    고아로 둔갑한다(같은 데이터를 시트 상세는 'LAB 각주'라 부른다 — 그쪽 각주는 그대로 있다).
  * ⚠️ 표시 설정과 무관하게 **자리면 전부** 담는다 — JJ를 켜 둔 계정에선 JJ 키가 `scheduled`에도 있어
  *    어차피 고아 판정에 안 걸리므로, 여기서 굳이 토글을 볼 이유가 없다(볼수록 갈릴 여지만 는다).
  */
@@ -651,7 +653,7 @@ export function buildWeekGrid(input: {
       hiddenSeatOf(scheduledByKey.get(slotKey(date, slot))?.slotTeacherLabel ?? null, includeSelfStudy);
     for (const slot of slotStarts) {
       const key = slotKey(date, slot);
-      // 시간표에 없는 시각(고아) — 카드를 안 세우고 각주로만(WeekGrid.strayRecords 주석).
+      // 시간표에 없는 시각(고아) — 카드를 안 세우고 건수만 담는다(WeekGrid.strayRecords 주석 · 화면 표시 없음).
       if (!scheduledByKey.has(key)) {
         strayRecords.push({ date, slotStart: slot, records: recordsAt(key) });
         continue;
@@ -737,6 +739,7 @@ export function buildWeekGrid(input: {
 export function sheetFillStats(grid: WeekGrid): {
   totalSlots: number;
   filledSlots: number;
+  /** 시간표에 없는 시각(고아) 칸 수. 🔴 **화면에 안 띄운다**(원장 2026-09-23 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"*) — 값은 남겨 둔다(점검용). */
   orphanSlots: number;
   /** 휴일인데 계획이 있어 **한 일로 인정**된 교시 수(분모·분자에 함께 들어간 수). */
   holidayFilledSlots: number;

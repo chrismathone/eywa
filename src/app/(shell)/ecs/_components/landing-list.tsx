@@ -311,9 +311,6 @@ function TeacherGroupFlow({
                 shownName,
                 renameNote,
                 card.delegated ? sheetT(lang, "landing.sr.delegated") : null,
-                card.orphanSlots > 0
-                  ? sheetTf(lang, "landing.orphan.title", { n: String(card.orphanSlots) })
-                  : null,
                 sheetTf(lang, "landing.sr.homeroom", {
                   name: card.teacherName ?? sheetT(lang, "landing.sr.unassigned"),
                 }),
@@ -368,14 +365,6 @@ function TeacherGroupFlow({
                     {card.delegated ? (
                       <span className="border-amber bg-amber-soft text-amber shrink-0 rounded-pill border px-1 py-px text-xs font-bold">
                         {sheetT(lang, "today.chip.delegated")}
-                      </span>
-                    ) : null}
-                    {card.orphanSlots > 0 ? (
-                      <span
-                        className="text-amber shrink-0 text-xs font-bold"
-                        title={sheetTf(lang, "landing.orphan.title", { n: String(card.orphanSlots) })}
-                      >
-                        {sheetT(lang, "landing.orphan.chip")} <span className="num">{card.orphanSlots}</span>
                       </span>
                     ) : null}
                     {/* Shouting 구역(0230a) — **폭을 항상 잡는다**(원장 2026-08-28 *"영역 구분해서 열 정렬되서

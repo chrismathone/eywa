@@ -297,11 +297,6 @@ export const SHEET_DICT = {
   "landing.sr.homeroom": { ko: "담임 {name}", en: "Homeroom {name}" },
   "landing.sr.unassigned": { ko: "미지정", en: "No homeroom" },
   "landing.sr.fill": { ko: "작성 교시 {done}/{total}", en: "Filled {done}/{total}" },
-  "landing.orphan.chip": { ko: "시간변경", en: "Moved" },
-  "landing.orphan.title": {
-    ko: "시간표가 바뀌어 지금 시간표에 없는 기록 {n}건",
-    en: "{n} records no longer on the timetable",
-  },
   "landing.holidayMark": { ko: "휴", en: "Hol" },
   "landing.rename.note": { ko: "{date}부터 {from} → {to}", en: "From {date}: {from} → {to}" },
   // 행 끝 '달력' 진입로의 접근성 이름 — 🔴 **문장 전체**를 사전에 둔다(조각 `이름 + "달력 열기"`로
@@ -1232,19 +1227,6 @@ export const SHEET_DICT = {
   "plan.editor.gone": {
     ko: "다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요",
     en: "Someone else deleted this row — refresh to see the latest",
-  },
-  "slot.orphan": { ko: "시간 변경됨", en: "Schedule changed" },
-  "slot.orphan.title": {
-    ko: "시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시",
-    en: "This time is no longer on the timetable — shown so the record is not lost",
-  },
-  /**
-   * 시간표에 없는 시각에 남은 기록 각주(원장 2026-09-22 *"본인 수업 스케줄만 나오면 될거같은데"*).
-   * 카드를 안 세우는 대신 **건수와 시각**을 밝힌다 — 조용히 사라지면 "쓴 게 증발했다"가 된다.
-   */
-  "slot.stray.note": {
-    ko: "시간표에 없는 시각 {slots}곳({when})에 기록 {records}건이 남아 있습니다 — 이 시트에는 표시하지 않고, 기록은 지워지지 않았습니다.",
-    en: "{records} record(s) remain at {slots} time(s) no longer on the timetable ({when}) — not shown on this sheet, and nothing was deleted.",
   },
   /** 입력칸 접근성 이름 — `{class} {field}`(반 이름 + 칸 이름). */
   "plan.editor.cellAria": { ko: "{class} {field}", en: "{class} {field}" },
