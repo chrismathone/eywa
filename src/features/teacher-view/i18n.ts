@@ -238,6 +238,51 @@ export const SHEET_DICT = {
     ko: "영어 반별 주간 수업계획서/출석부",
     en: "Weekly lesson plans and attendance by English class",
   },
+
+  // ── 반 계획 보기(/ecs/goals, 2026-09-23) — 인재원 영어 반 × 영역, 월간 ↔ 주간 대조 ──
+  "goals.title": { ko: "반 계획 보기", en: "Class plans" },
+  "goals.desc": {
+    ko: "인재원 영어 반의 영역별 월간 목표와 이번 주 목표를 나란히 봅니다",
+    en: "Monthly and weekly goals by skill for Injaewon English classes, side by side",
+  },
+  "goals.back": { ko: "반 목록", en: "Class list" },
+  "goals.role": { ko: "계획", en: "Plan by" },
+  "goals.role.all": { ko: "전체", en: "All" },
+  "goals.role.homeroom": { ko: "담임", en: "Homeroom" },
+  "goals.prefix.homeroom": { ko: "담)", en: "H)" },
+  "goals.prefix.assistant": { ko: "부)", en: "A)" },
+  "goals.role.assistant": { ko: "부담임", en: "Assistant" },
+  "goals.caption": { ko: "월간 {month} · 주간 {week}", en: "Monthly {month} · Weekly {week}" },
+  "goals.cells": { ko: "{n}칸", en: "{n} cells" },
+  "goals.stat.same": { ko: "같은 교재로 진행", en: "Same book as monthly" },
+  "goals.stat.diff": { ko: "주간 교재 다름", en: "Different book this week" },
+  "goals.stat.weekEmpty": { ko: "이번 주 비어 있음", en: "Week goal not set" },
+  "goals.stat.none": { ko: "월간 목표 없음", en: "No monthly goal" },
+  "goals.legend.role": { ko: "굵은 글씨 = 담임 · 일반 글씨 = 부담임", en: "Bold = homeroom · Regular = assistant" },
+  "goals.col.class": { ko: "반", en: "Class" },
+  "goals.month": { ko: "월", en: "Mo" },
+  "goals.week": { ko: "주", en: "Wk" },
+  "goals.day": { ko: "일", en: "Dy" },
+  "goals.blank": { ko: "비어 있음", en: "Blank" },
+  "goals.noLesson": { ko: "수업 없음", en: "No lesson" },
+  "goals.editHint": { ko: "더블클릭하여 수정", en: "Double-click to edit" },
+  "goals.editAutosave": { ko: "입력하면 자동으로 저장됩니다. 다른 선생님이 수정 중이면 이름이 표시됩니다.", en: "Changes save automatically. Other teachers editing this class appear by name." },
+  "goals.discard": { ko: "저장하지 않고 닫기", en: "Close without saving" },
+  "goals.more": { ko: "외 {n}", en: "+{n}" },
+  "goals.view": { ko: "보기", en: "View" },
+  "goals.view.day": { ko: "일간", en: "By day" },
+  "goals.view.week": { ko: "주간", en: "By week" },
+  "goals.pickDate": { ko: "달력에서 날짜 선택", en: "Open calendar" },
+  "goals.toToday": { ko: "오늘 날짜로", en: "Go to today" },
+  "goals.empty": {
+    ko: "이 주에 수업이 있는 인재원 영어 반이 없습니다. 주를 옮겨 보세요.",
+    en: "No Injaewon English classes have lessons this week. Try another week.",
+  },
+  "goals.noAreas": {
+    ko: "학원설정 과목 운영에서 영어 영역을 먼저 정해 주세요.",
+    en: "Set the English skill areas in academy settings first.",
+  },
+  "goals.homeroomOf": { ko: "담임 {name}", en: "Homeroom {name}" },
   "landing.empty.filtered.prefix": {
     ko: "지금 보기가",
     en: "Your current view is limited to",
@@ -297,11 +342,6 @@ export const SHEET_DICT = {
   "landing.sr.homeroom": { ko: "담임 {name}", en: "Homeroom {name}" },
   "landing.sr.unassigned": { ko: "미지정", en: "No homeroom" },
   "landing.sr.fill": { ko: "작성 교시 {done}/{total}", en: "Filled {done}/{total}" },
-  "landing.orphan.chip": { ko: "시간변경", en: "Moved" },
-  "landing.orphan.title": {
-    ko: "시간표가 바뀌어 지금 시간표에 없는 기록 {n}건",
-    en: "{n} records no longer on the timetable",
-  },
   "landing.holidayMark": { ko: "휴", en: "Hol" },
   "landing.rename.note": { ko: "{date}부터 {from} → {to}", en: "From {date}: {from} → {to}" },
   // 행 끝 '달력' 진입로의 접근성 이름 — 🔴 **문장 전체**를 사전에 둔다(조각 `이름 + "달력 열기"`로
@@ -1233,19 +1273,6 @@ export const SHEET_DICT = {
     ko: "다른 사용자가 이 줄을 삭제했습니다 — 새로고침해 최신 상태를 확인하세요",
     en: "Someone else deleted this row — refresh to see the latest",
   },
-  "slot.orphan": { ko: "시간 변경됨", en: "Schedule changed" },
-  "slot.orphan.title": {
-    ko: "시간표가 바뀌어 현재 스케줄에 없는 시각입니다 — 기록 보존을 위해 표시",
-    en: "This time is no longer on the timetable — shown so the record is not lost",
-  },
-  /**
-   * 시간표에 없는 시각에 남은 기록 각주(원장 2026-09-22 *"본인 수업 스케줄만 나오면 될거같은데"*).
-   * 카드를 안 세우는 대신 **건수와 시각**을 밝힌다 — 조용히 사라지면 "쓴 게 증발했다"가 된다.
-   */
-  "slot.stray.note": {
-    ko: "시간표에 없는 시각 {slots}곳({when})에 기록 {records}건이 남아 있습니다 — 이 시트에는 표시하지 않고, 기록은 지워지지 않았습니다.",
-    en: "{records} record(s) remain at {slots} time(s) no longer on the timetable ({when}) — not shown on this sheet, and nothing was deleted.",
-  },
   /** 입력칸 접근성 이름 — `{class} {field}`(반 이름 + 칸 이름). */
   "plan.editor.cellAria": { ko: "{class} {field}", en: "{class} {field}" },
 
@@ -1353,6 +1380,7 @@ export const SHEET_DICT = {
     en: "Recorded this month's attendance (this class has no lesson reports). Someone may have marked it on another teacher's behalf.",
   },
   "att.role.slot": { ko: "교시 담당", en: "Period teacher" },
+  "att.role.former": { ko: "이전 담임", en: "Former homeroom" },
   "att.since": { ko: "{date}부터 담임", en: "Homeroom since {date}" },
   "att.notice.lock.a": { ko: "출결 수정은 ", en: "Attendance can be edited only for the " },
   "att.notice.lock.b": { ko: "최근 {n}일", en: "last {n} days" },

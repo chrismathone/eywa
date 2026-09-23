@@ -10,6 +10,7 @@ import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { MODULE_IDS } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
+import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
 
 const HHMM = /^\d{2}:\d{2}$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -20,9 +21,10 @@ export const SUBJECT_COLORS = [
 ] as const;
 
 // 과목별 시간표 요일 병합 프리셋 — 같은 반이 묶인 요일에 걸치면 한 칸으로 병합(기본뷰).
-// mon-thu=월목/화금(수 단독, 수학식), mon-tue=월화/목금(수 단독, 영어식), mon-wed-fri=월수금/화목, none=요일별 개별.
+// mon-thu=월목/화금(수 단독), mon-tue=월화/목금(수 단독), mon-wed-fri=월수금/화목,
+// mon-tue-seq=월화/수목(금 단독), none=요일별 개별.
 // 실제 요일 분할·라벨은 features/timetable/lib/weekday-groups.ts(단일 소스). 미설정 행은 코드에서 mon-thu 폴백.
-export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "none"] as const;
+export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "mon-tue-seq", "none"] as const;
 export type WeekdayGrouping = (typeof WEEKDAY_GROUPINGS)[number];
 
 // 과목을 열 때 처음 보이는 시간표 뷰(과목별). 원장 2026-08-06: *"영어는 기본뷰를 잘 안 쓴다"* —
@@ -124,8 +126,9 @@ export const subjectSchema = z.object({
   key: z.string().min(1).max(24).regex(/^[a-z0-9_]+$/, "영문 소문자·숫자·_"),
   label: z.string().min(1).max(24),
   color: z.enum(SUBJECT_COLORS).default("neutral"),
-  // 시간표 기본뷰 요일 병합 방식(과목별). 미설정 저장 데이터는 읽을 때 mon-thu로 폴백(resolve는 스키마 미통과).
-  weekdayGrouping: z.enum(WEEKDAY_GROUPINGS).default("mon-thu"),
+  // 시간표 기본뷰 요일 병합. 기본 프리셋 id 또는 학원이 만든 묶음 id.
+  // 문자열인 이유: 만든 묶음 id는 코드 enum에 없다. 없는 id는 읽을 때 월·목/화·금으로 떨어진다.
+  weekdayGrouping: z.string().min(1).max(40).default("mon-thu"),
   // 이 과목을 열 때 처음 보이는 시간표 뷰. 미설정 = 기본뷰(지금까지의 동작).
   // (.optional() — 예외 플래그 관례. 안 적은 과목은 지금과 완전히 같게 동작한다.)
   defaultView: z.enum(SUBJECT_DEFAULT_VIEWS).optional(),
@@ -218,9 +221,22 @@ export const shuttleSchema = z.object({
 });
 export type ShuttleSetting = z.infer<typeof shuttleSchema>;
 
+const weekdayNameSchema = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
+
+/** 학원이 만든 요일 병합. id는 과목의 weekdayGrouping이 가리킨다. 월~금은 빠짐없이, 토·일은 넣은 것만. */
+export const customWeekdayGroupingSchema = z.object({
+  id: z.string().regex(/^c_[a-z0-9]{6,24}$/),
+  groups: z.array(z.array(weekdayNameSchema).min(1).max(7)).min(1).max(7),
+});
+export type CustomWeekdayGrouping = z.infer<typeof customWeekdayGroupingSchema>;
+
 export const operationsSchema = z
   .object({
     subjects: z.array(subjectSchema).max(40),
+    // 과목 드롭다운에 더해지는 요일 병합. 비어 있으면 기본 다섯 개만. 기본값 []이라 옛 저장도 통과한다.
+    weekdayGroupings: z.array(customWeekdayGroupingSchema).max(20).default([]),
+    // 기본 묶음은 시간표 해석 규칙을 남겨 두고 과목 드롭다운에서만 숨긴다. 옛 저장에는 없는 필드.
+    hiddenBuiltinWeekdayGroupings: z.array(z.enum(WEEKDAY_GROUPINGS)).max(WEEKDAY_GROUPINGS.length).default([]),
     jobTitles: z.array(z.string().min(1).max(24)).max(40),
     /**
      * 부서별 직급 선택지(2026-07-29 원장 지시) — 이력서 '근무부서'를 고르면 직급 드롭다운이 그 부서 것으로 바뀐다.
@@ -290,6 +306,50 @@ export const operationsSchema = z
           areaLabels.add(al);
         });
       }
+    });
+    const groupingIds = new Set<string>();
+    const groupingKeys = new Set<string>();
+    v.weekdayGroupings.forEach((grouping, i) => {
+      if (groupingIds.has(grouping.id)) {
+        ctx.addIssue({ code: "custom", message: "요일 병합 ID가 중복됩니다", path: ["weekdayGroupings", i, "id"] });
+      }
+      groupingIds.add(grouping.id);
+      const parsed = parseWeekdayPartition(grouping.groups);
+      if (!parsed) {
+        ctx.addIssue({
+          code: "custom",
+          message: "월~금을 빠짐없이, 한 번씩만 나누세요",
+          path: ["weekdayGroupings", i, "groups"],
+        });
+        return;
+      }
+      const key = weekdayPartitionKey(parsed);
+      if (groupingKeys.has(key)) {
+        ctx.addIssue({ code: "custom", message: "같은 요일 병합이 이미 있습니다", path: ["weekdayGroupings", i] });
+      }
+      groupingKeys.add(key);
+    });
+    const hidden = new Set(v.hiddenBuiltinWeekdayGroupings);
+    if (hidden.size !== v.hiddenBuiltinWeekdayGroupings.length) {
+      ctx.addIssue({ code: "custom", message: "숨긴 요일 병합이 중복됩니다", path: ["hiddenBuiltinWeekdayGroupings"] });
+    }
+    if (WEEKDAY_GROUPINGS.length - hidden.size + v.weekdayGroupings.length === 0) {
+      ctx.addIssue({ code: "custom", message: "요일 병합 선택지를 하나 이상 남겨 주세요", path: ["hiddenBuiltinWeekdayGroupings"] });
+    }
+    v.subjects.forEach((subject, i) => {
+      const chosen = subject.weekdayGrouping;
+      if (hidden.has(chosen as WeekdayGrouping)) {
+        ctx.addIssue({
+          code: "custom", message: "사용 중인 요일 병합은 목록에서 뺄 수 없습니다", path: ["subjects", i, "weekdayGrouping"],
+        });
+        return;
+      }
+      if ((WEEKDAY_GROUPINGS as readonly string[]).includes(chosen) || groupingIds.has(chosen)) return;
+      ctx.addIssue({
+        code: "custom",
+        message: "없는 요일 병합입니다",
+        path: ["subjects", i, "weekdayGrouping"],
+      });
     });
   });
 export type OperationsSettings = z.infer<typeof operationsSchema>;
@@ -474,12 +534,18 @@ export const userPermissionOverrideSchema = z.object({
   menu: z.enum(MENU_KEYS as unknown as [MenuKey, ...MenuKey[]]),
   access: accessEnum,
 });
+const specialAccessSchema = z.object({
+  payslipViewerIds: z.array(z.string().uuid()).max(80).default([]),
+  leaveAdjusterIds: z.array(z.string().uuid()).max(80).default([]),
+});
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(160),
     // .default([]) — 기존 저장분(키 없음)이 그대로 파싱되도록. 폼 저장 시엔 payload가 이 키를
     // 관통시켜야 한다(permissions-section) — 빠뜨리면 매트릭스 저장 한 번에 개인 예외가 전멸한다.
     userOverrides: z.array(userPermissionOverrideSchema).max(80).default([]),
+    // 일반판의 민감 기능은 메뉴 권한과 별도로 사람을 지정한다. 침산은 기존 명단을 유지한다.
+    specialAccess: specialAccessSchema.default({ payslipViewerIds: [], leaveAdjusterIds: [] }),
   })
   .superRefine((v, ctx) => {
     // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
@@ -500,6 +566,15 @@ export const permissionsSchema = z
       if (r.menu === "teacher_onescreen" || r.menu === "my_learning") {
         ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 개인 예외로 편집할 수 없습니다" });
       }
+    }
+    for (const ids of [v.specialAccess.payslipViewerIds, v.specialAccess.leaveAdjusterIds]) {
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({ code: "custom", message: "담당자를 중복 지정할 수 없습니다" });
+      }
+    }
+    const menuCells = v.userOverrides.map((r) => `${r.userId}:${r.menu}`);
+    if (new Set(menuCells).size !== menuCells.length) {
+      ctx.addIssue({ code: "custom", message: "같은 사람의 같은 메뉴 예외를 중복 지정할 수 없습니다" });
     }
   });
 export type PermissionsSettings = z.infer<typeof permissionsSchema>;

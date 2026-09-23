@@ -10,7 +10,7 @@ import styles from "@/components/public-site/public-site.module.css";
  * - React는 `muted`를 속성이 아니라 프로퍼티로 다뤄 서버 렌더 HTML에 `muted`가 안 실린다. 그 상태로는 브라우저
  *   자동재생 정책에 걸려 첫 그림이 멈춰 있으므로, 붙자마자 `muted`를 확실히 켜고 `play()`를 부른다.
  * - 영상 주소는 마크업에 적지 않고 **패널이 실제로 보이는 폭(821px 이상)에서만** 넣는다. 폰에선 패널이
- *   `display:none`인데 `autoplay`가 달린 `<video src>`는 그래도 받아 온다(880KB 낭비).
+ *   `display:none`인데 `autoplay`가 달린 `<video src>`는 그래도 받아 온다(6MB 낭비).
  * 움직임 줄이기 설정이면 재생하지 않고 포스터(첫 장면)만 둔다. 소리는 어디서도 켜지지 않는다(음소거 고정).
  */
 export function LoginVideo({ src, poster }: { src: string; poster: string }) {

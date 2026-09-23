@@ -80,7 +80,10 @@ function AdmissionEvents({ events }: { events: OverviewData["calendar"] }) {
               <span title={original}>{shown}</span>
             )}
             {/* 그 일정의 콜&상담이 지금 어느 단계인지(원장 2026-09-22) — 연결된 상담이 있을 때만. */}
-            <ConsultStageChip id={event.matchedConsultation?.id} />
+            <ConsultStageChip
+              id={event.matchedConsultation?.id}
+              shownFirstClassDate={event.kind === "firstClass" ? event.startDate : undefined}
+            />
           </div>
         );
       })}

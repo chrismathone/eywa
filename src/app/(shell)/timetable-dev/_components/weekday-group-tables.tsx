@@ -15,7 +15,6 @@ import {
   cellClassKey,
   computeBlocks,
   expandHalfPeriodBlocks,
-  sortDaysByGroup,
   type SubSlot,
 } from "@/features/timetable/lib/grid";
 import {
@@ -23,7 +22,14 @@ import {
   periodRowHeight,
   stackedHeights,
 } from "@/features/timetable/lib/empty-period-rows";
-import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import {
+  normalizeWeekdayGrouping,
+  sortDaysInGroup,
+  timetableBoards,
+  weekdayPartition,
+  weekendBoardDays,
+  type WeekdayGrouping,
+} from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell } from "./class-cell";
 import { HapbanCell } from "./hapban-cell";
@@ -44,8 +50,8 @@ const GROUP_PALETTE: { band: string; tint: string }[] = [
 ];
 
 // 과목 프리셋 → 평일 그룹 정의. 묶인 요일(길이≥2)=병합 표시, 단독(길이1)=풀너비. 색은 팔레트 순환.
-function buildWeekdayGroupDefs(grouping: WeekdayGrouping): GroupDef[] {
-  return weekdayPartition(grouping).map((days, i) => {
+function buildWeekdayGroupDefs(groups: readonly DayOfWeek[][]): GroupDef[] {
+  return groups.map((days, i) => {
     const pal = GROUP_PALETTE[i % GROUP_PALETTE.length];
     return {
       title: days.map((d) => DAY_LABEL[d] ?? d).join("/"),
@@ -124,7 +130,7 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
     const groupDaySet = new Set(def.days);
     const cols: TeacherCol[] = [];
     for (const t of teachers) {
-      const days = sortDaysByGroup(
+      const days = sortDaysInGroup(
         Array.from(
           new Set(
             slots
@@ -132,6 +138,7 @@ function buildGroups(slots: ScheduleSlotWithStudents[], defs: GroupDef[]): Group
               .map((s) => s.dayOfWeek as DayOfWeek),
           ),
         ),
+        def.days,
       );
       if (days.length > 0) cols.push({ name: t, days });
     }
@@ -516,14 +523,17 @@ export function WeekdayGroupTables({
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
   weekdayGrouping = "mon-thu",
+  dayGroups,
   collapseEmptyPeriods = false,
 }: {
   slots: ScheduleSlotWithStudents[];
   config?: PeriodsConfig;
   /** 조회 중인 주의 월요일("YYYY-MM-DD") — 요일 헤더에 날짜(M/D) 표시(스프레드시트 패리티). */
   weekMonday?: string;
-  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
+  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). dayGroups가 있으면 그쪽이 이긴다. */
   weekdayGrouping?: WeekdayGrouping;
+  /** 이미 풀어 둔 요일 묶음(기본 프리셋 또는 학원이 만든 묶음). */
+  dayGroups?: readonly DayOfWeek[][];
   /** '빈 교시 접기' — 수업 없는 교시 행을 얇은 밴드로 축소(평일·주말 표 각각 판정). 편집 모드는 자동 펼침. */
   collapseEmptyPeriods?: boolean;
 }) {
@@ -536,13 +546,26 @@ export function WeekdayGroupTables({
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
-  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide). 주말은 토/일 항상 풀너비.
-  const weekdayDefs = buildWeekdayGroupDefs(weekdayGrouping);
+  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide).
+  // 토·일을 안 적은 묶음은 예전처럼 토·일 각각 풀너비. 적은 묶음만 주말 판에서 병합한다.
+  const resolvedGroups = dayGroups?.length ? dayGroups : weekdayPartition(normalizeWeekdayGrouping(weekdayGrouping));
+  const boards = timetableBoards(resolvedGroups);
+  const weekdayDefs = buildWeekdayGroupDefs(boards.weekdays);
   const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
-  const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
+  const weekendDays = weekendBoardDays(resolvedGroups);
+  const weekendDefs = weekendDays
+    ? buildWeekdayGroupDefs(weekendDays).map((group) => ({
+        ...group,
+        band: "bg-amber-soft text-amber",
+        tint: "bg-amber-soft/50",
+      }))
+    : [WEEKEND_GROUP];
+  const weekendWide = new Set<DayOfWeek>(
+    weekendDays ? weekendDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days) : ["sat", "sun"],
+  );
 
   const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs);
-  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP]);
+  const weekendGroups = buildGroups(weekendSlots, weekendDefs);
 
   return (
     <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">

@@ -45,7 +45,7 @@ import { canManageSheetSync } from "@/features/integrations/server/sheet-access"
 import { canManageTimetableImport } from "@/features/timetable/server/import-access";
 import { isSheetExportSubject } from "@/features/integrations/sheets-provider";
 import { SUBJECT_SOFT, buildSubjectMaps } from "@/features/owner/subjects";
-import { normalizeWeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import { resolveWeekdayGroups } from "@/features/timetable/lib/weekday-groups";
 import {
   DEFAULT_TIMETABLE_KIND,
   TIMETABLE_KINDS,
@@ -480,8 +480,8 @@ export default async function TimetablePage({
     subjectRow?.integrationGroupPresets,
     subjectRow?.integrationOthersTitle ?? "",
   );
-  // 과목별 요일 병합 프리셋(설정) — 미설정/구데이터는 mon-thu 폴백(resolve가 스키마 미통과).
-  const weekdayGrouping = normalizeWeekdayGrouping(subjectRow?.weekdayGrouping);
+  // 과목별 요일 병합 — 기본 프리셋 또는 학원이 만든 묶음. 없거나 깨지면 월·목 / 화·금.
+  const weekdayGroups = resolveWeekdayGroups(subjectRow?.weekdayGrouping, settings.operations.weekdayGroupings);
 
   // 강사뷰 허용 = 영어 또는 강사별시간표 설정(teacherViewLines)이 있는 과목만 — URL 직입력으로
   // 비영어에 영어 전용 격자·시트 강사 순서가 렌더되던 것 서버 강제 차단(2026-07-06, effView로 렌더).
@@ -1261,7 +1261,7 @@ export default async function TimetablePage({
                   strays={strayReserved}
                   config={periodsConfig}
                   weekMonday={week}
-                  weekdayGrouping={weekdayGrouping}
+                  dayGroups={weekdayGroups}
                   collapseEmptyPeriods={collapseEmptyPeriods}
                   hideStudents={hideStudents}
                   teacherOrder={viewPrefs.teacherOrder?.[subject]}

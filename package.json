@@ -14,6 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "test:assets": "vitest run tests/unit/empty-state-assets.test.ts",
     "test:e2e": "playwright test",
+    "manual:shots": "node --env-file=.env.local scripts/_manual/capture.mjs",
+    "manual:build": "node --env-file=.env.local scripts/_manual/build.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

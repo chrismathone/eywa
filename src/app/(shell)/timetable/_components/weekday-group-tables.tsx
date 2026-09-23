@@ -18,7 +18,6 @@ import {
   cellClassKey,
   computeBlocks,
   expandHalfPeriodBlocks,
-  sortDaysByGroup,
   type SubSlot,
 } from "@/features/timetable/lib/grid";
 import {
@@ -36,7 +35,14 @@ import {
   toMinutes,
   type MovePart,
 } from "@/features/timetable/lib/class-move";
-import { weekdayPartition, type WeekdayGrouping } from "@/features/timetable/lib/weekday-groups";
+import {
+  normalizeWeekdayGrouping,
+  sortDaysInGroup,
+  timetableBoards,
+  weekdayPartition,
+  weekendBoardDays,
+  type WeekdayGrouping,
+} from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
 import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
 import { ReservedSection } from "./reserved-section";
@@ -82,8 +88,8 @@ const GROUP_PALETTE: { tint: string }[] = [
 ];
 
 // 과목 프리셋 → 평일 그룹 정의. 묶인 요일(길이≥2)=병합 표시, 단독(길이1)=풀너비. 색은 팔레트 순환.
-function buildWeekdayGroupDefs(grouping: WeekdayGrouping): GroupDef[] {
-  return weekdayPartition(grouping).map((days, i) => {
+function buildWeekdayGroupDefs(groups: readonly DayOfWeek[][]): GroupDef[] {
+  return groups.map((days, i) => {
     const pal = GROUP_PALETTE[i % GROUP_PALETTE.length];
     return {
       title: days.map((d) => DAY_LABEL[d] ?? d).join("/"),
@@ -177,7 +183,7 @@ function buildGroups(
     const cols: TeacherCol[] = [];
     // 묶음마다 **그 사람이 저장한 순서**(없으면 가나다순) — 원장 2026-09-08 "월목 / 화금 / 수 그룹 내에서".
     for (const t of sortTeachersByOrder(teachers, order?.[teacherGroupKey(def.days)])) {
-      const days = sortDaysByGroup(
+      const days = sortDaysInGroup(
         Array.from(
           new Set(
             slots
@@ -185,6 +191,7 @@ function buildGroups(
               .map((s) => s.dayOfWeek as DayOfWeek),
           ),
         ),
+        def.days,
       );
       if (days.length > 0) cols.push({ name: t, days });
     }
@@ -772,6 +779,7 @@ export function WeekdayGroupTables({
   config = DEFAULT_PERIODS_CONFIG,
   weekMonday,
   weekdayGrouping = "mon-thu",
+  dayGroups,
   collapseEmptyPeriods = false,
   hideStudents = false,
   teacherOrder,
@@ -785,8 +793,10 @@ export function WeekdayGroupTables({
   config?: PeriodsConfig;
   /** 조회 중인 주의 월요일("YYYY-MM-DD") — 요일 헤더에 날짜(M/D) 표시(스프레드시트 패리티). */
   weekMonday?: string;
-  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). 단독 그룹 요일은 풀너비. */
+  /** 과목별 평일 요일 병합 프리셋(미설정 시 월목·화금). dayGroups가 있으면 그쪽이 이긴다. */
   weekdayGrouping?: WeekdayGrouping;
+  /** 이미 풀어 둔 요일 묶음(기본 프리셋 또는 학원이 만든 묶음). 단독 요일은 풀너비. */
+  dayGroups?: readonly DayOfWeek[][];
   /** '빈 교시 접기' — 평일의 빈 교시만 축소. 주말은 중간 공백도 고정 높이로 유지한다. */
   collapseEmptyPeriods?: boolean;
   /**
@@ -811,13 +821,22 @@ export function WeekdayGroupTables({
   const weekdayStrays = strays.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendStrays = strays.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
-  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide). 주말은 토/일 항상 풀너비.
-  const weekdayDefs = buildWeekdayGroupDefs(weekdayGrouping);
+  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide).
+  // 토·일을 안 적은 묶음은 예전처럼 토·일 각각 풀너비. 적은 묶음만 주말 판에서 병합한다.
+  const resolvedGroups = dayGroups?.length ? dayGroups : weekdayPartition(normalizeWeekdayGrouping(weekdayGrouping));
+  const boards = timetableBoards(resolvedGroups);
+  const weekdayDefs = buildWeekdayGroupDefs(boards.weekdays);
   const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
-  const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
+  const weekendDays = weekendBoardDays(resolvedGroups);
+  const weekendDefs = weekendDays
+    ? buildWeekdayGroupDefs(weekendDays).map((group) => ({ ...group, tint: "bg-amber-soft/50" }))
+    : [WEEKEND_GROUP];
+  const weekendWide = new Set<DayOfWeek>(
+    weekendDays ? weekendDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days) : ["sat", "sun"],
+  );
 
   const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs, teacherOrder);
-  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP], teacherOrder);
+  const weekendGroups = buildGroups(weekendSlots, weekendDefs, teacherOrder);
 
   return (
     // 🔴 팬(잡고 끌기) 없음 — 이 격자는 **학생·반 블록을 끌어 옮기는 곳**이라 같은 포인터를 다툰다

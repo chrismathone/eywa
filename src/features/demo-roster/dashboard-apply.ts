@@ -22,6 +22,7 @@ import {
   insertReports,
   insertStudentConsultations,
 } from "./dashboard-rows";
+import { writeDemoWeekdayGrouping } from "./demo-weekday";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Plan = Parameters<typeof buildDashboardWorld>[0];
@@ -44,14 +45,14 @@ export async function insertDashboardSatellite(
   today: string,
 ) {
   const world = buildDashboardWorld(plan, today);
-  await enableNewcomers(tx, tenantId);
+  await enableNewcomers(tx, tenantId, typeof plan.id === "string" ? plan.id : "");
   await deleteMarkers(tx, tenantId);
   const classOf = new Map(plan.classes.map((cls) => [classKey(cls), classId.get(cls)!]));
   const studentOf = new Map(plan.students.map((student) => [student.code, studentId.get(student)!]));
   await insertWithdrawn(tx, tenantId, note, world, classOf, studentOf);
   await insertAttendance(tx, tenantId, world, classOf, studentOf);
   await insertInvoices(tx, tenantId, note, world, studentOf);
-  await insertConsultations(tx, tenantId, note, world);
+  await insertConsultations(tx, tenantId, note, world, studentOf);
   await insertStudentConsultations(tx, tenantId, world, studentOf);
   await insertReports(tx, tenantId, today, world, studentOf);
   await insertOps(tx, tenantId, world);
@@ -59,7 +60,7 @@ export async function insertDashboardSatellite(
   await insertChecks(tx, tenantId, world, studentOf);
 }
 
-async function enableNewcomers(tx: Tx, tenantId: string) {
+async function enableNewcomers(tx: Tx, tenantId: string, scenarioId: string) {
   const [row] = await tx
     .select({ tenantId: tenantSettings.tenantId })
     .from(tenantSettings)
@@ -67,9 +68,14 @@ async function enableNewcomers(tx: Tx, tenantId: string) {
   if (!row) {
     await tx.insert(tenantSettings).values({
       tenantId,
-      data: { version: 1, preset: "generic", modules: { disabled: DISABLED_WITH_NEWCOMERS } },
+      data: {
+        version: 1,
+        preset: "generic",
+        modules: { disabled: DISABLED_WITH_NEWCOMERS },
+        profile: {},
+        operations: {},
+      },
     });
-    return;
   }
   await tx.execute(sql`
     update tenant_settings
@@ -89,6 +95,22 @@ async function enableNewcomers(tx: Tx, tenantId: string) {
     )
     where tenant_id = ${tenantId}
   `);
+  await tx.execute(sql`
+    update tenant_settings
+    set data = jsonb_set(
+      jsonb_set(
+        coalesce(data, '{}'::jsonb),
+        '{profile}',
+        coalesce(data->'profile', '{}'::jsonb),
+        true
+      ),
+      '{operations}',
+      coalesce(data->'operations', '{}'::jsonb),
+      true
+    )
+    where tenant_id = ${tenantId}
+  `);
+  await writeDemoWeekdayGrouping(tx, tenantId, scenarioId);
 }
 
 async function deleteMarkers(tx: Tx, tenantId: string) {
@@ -163,7 +185,7 @@ async function insertAttendance(
         sessionDate: row.date,
         slotStart: row.slotStart,
         status: row.status as "present" | "absent" | "late" | "excused",
-        sessionUnits: row.status === "absent" || row.status === "excused" ? "0" : "1",
+        sessionUnits: row.status === "absent" || row.status === "excused" ? null : "1",
         recordedAt: new Date(`${row.date}T01:00:00.000Z`),
       })),
     );

@@ -13,6 +13,7 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { approvalMenuOverridesFor } from "@/features/approvals/access";
@@ -76,10 +77,11 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     if (!user) return base;
     const settings = await getTenantSettings(); // getPermMatrix와 같은 요청 캐시 — 추가 라운드트립 0
     // 파일럿 명단 판정에 super_admin 여부가 필요하다(명단에 없어도 통과 — 원장 지시 2026-08-13).
+    // 명단 자체는 침산 전용이다. 일반 프리셋은 저장된 개인 예외만 사용한다.
     // 요청 캐시된 PK 조회 1회이고, override가 있는 테넌트는 getPermMatrix에서 이미 부른 그 캐시다.
     const isSuperAdmin = await isCurrentUserSuperAdmin();
     const userOverrides = [
-      ...approvalMenuOverridesFor(user.id, isSuperAdmin),
+      ...approvalMenuOverridesFor(user.id, isSuperAdmin, isChinsanTenant(settings)),
       ...settings.permissions.userOverrides,
     ];
     if (userOverrides.length === 0) return base;

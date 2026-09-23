@@ -22,6 +22,7 @@ import { canAdjustLeave } from "@/features/leave/access";
 import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { loadStaffListPrefs } from "@/features/staff/server/list-prefs";
@@ -50,7 +51,7 @@ import { StaffColumnPicker } from "./_components/staff-column-picker";
 import { StaffQrSection } from "./_components/staff-qr-section";
 import { StaffTable } from "./_components/staff-table";
 import { StaffRememberPrefs, StaffViewPrefsProvider } from "./_components/staff-view-prefs";
-import { PAYROLL_ENABLED, STAFF_LEAVES_ENABLED } from "@/features/payroll/config";
+import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
 
 export const metadata = { title: "직원관리 — aywa" };
 
@@ -253,7 +254,7 @@ export default async function StaffPage({
         title="직원관리"
         actions={
           <>
-            {PAYROLL_ENABLED && user.systemRole === "master" ? (
+            {isPayrollEnabled(settings) && user.systemRole === "master" ? (
               <Button variant="outline" render={<WindowLink href="/staff/payroll" title="월별 급여" />}>
                 <Wallet className="size-4" />
                 월별 급여
@@ -263,7 +264,7 @@ export default async function StaffPage({
                 *"직원관리에 버튼 연동해주지 전자결재에 있는게 연차를 관리하는게 이상하자나"*).
                 휴가 신청·결재는 여전히 전자결재다. 명단(박소선·이승엽·김예원)+super_admin에게만 보이고
                 실제 차단은 그 페이지·서버 액션이 같은 함수로 한다([[#77]]). */}
-            {canAdjustLeave(user.id, isSuperAdmin) ? (
+            {canAdjustLeave(user.id, isSuperAdmin, { isChinsanTenant: isChinsanTenant(settings), adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds }) ? (
               <Button variant="outline" render={<WindowLink href="/staff/annual-leave" title="연차 관리" />}>
                 {/* 아이콘은 옛 '휴가 관리'(CalendarClock)와 **다른 것**으로 — 그 플래그를 되살리면
                     두 버튼이 나란히 서는데 같은 그림이면 무엇이 무엇인지 못 가린다. */}
@@ -271,7 +272,7 @@ export default async function StaffPage({
                 연차 관리
               </Button>
             ) : null}
-            {STAFF_LEAVES_ENABLED && canManage ? (
+            {isStaffLeavesEnabled(settings) && canManage ? (
               <Button variant="outline" render={<WindowLink href="/staff/leaves" title="휴가 관리" />}>
                 <CalendarClock className="size-4" />
                 휴가 관리

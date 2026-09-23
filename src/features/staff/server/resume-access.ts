@@ -1,6 +1,7 @@
 import "server-only";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canSeeStaffMember, getViewerStaffScope } from "./subject-scope";
 
 export const RESUME_LOCKED_MSG = "이력서는 직원관리 권한이 있는 계정과 본인만 열람·수정할 수 있습니다";
 
@@ -22,5 +23,9 @@ export async function canViewResume(
   ownerStaffUserId?: string | null,
 ): Promise<boolean> {
   if (!!ownerStaffUserId && ownerStaffUserId === user.id) return true;
-  return canAccessTenant(user.systemRole, "staff");
+  if (!(await canAccessTenant(user.systemRole, "staff"))) return false;
+  // 과목 범위(원장 2026-09-23)가 걸린 사람은 **범위 안 직원의 이력서만** — 누구 것인지 모르는 판정(owner 생략)은 거절.
+  if (!(await getViewerStaffScope(user))) return true;
+  if (!ownerStaffUserId) return false;
+  return canSeeStaffMember(user, ownerStaffUserId);
 }

@@ -23,12 +23,14 @@ import { isPreviewableType, type DocumentKind } from "@/features/documents/categ
 import { splitFileName } from "@/features/documents/file-name";
 import { renameDocumentFile } from "@/features/documents/server/file-actions";
 import { InlineRename } from "./inline-rename";
+import { useDocumentFileDrag } from "./folder-interactions";
 
 export type DocumentRowData = {
   id: string;
   title: string;
   kind: DocumentKind;
   description: string | null;
+  category: string;
   categoryLabel: string;
   typeLabel: string;
   sizeLabel: string;
@@ -65,11 +67,13 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const drag = useDocumentFileDrag({ id: doc.id, category: doc.category }, canWrite && doc.kind === "file" && !busy && !confirming);
+  const disabled = busy || drag.pending;
   const extension = doc.fileName ? splitFileName(doc.fileName).extension : "";
   const renameBase = extension && doc.title.toLowerCase().endsWith(extension.toLowerCase()) ? doc.title.slice(0, -extension.length) : doc.title;
 
   async function run(fn: () => Promise<void>) {
-    if (busy) return;
+    if (disabled) return;
     setBusy(true);
     try {
       await fn();
@@ -96,7 +100,9 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
   }
 
   return (
-    <tr className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""}`}>
+    <tr data-document-id={doc.id} draggable={drag.draggable} data-no-drag-scroll={drag.draggable || undefined}
+      onDragStart={drag.onDragStart} onDragEnd={drag.onDragEnd}
+      className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""} ${drag.dragging ? "opacity-50" : ""}`}>
       <td className="max-w-0 px-4 py-2" title={doc.categoryLabel}>
         <div className="group/name flex min-w-0 items-center gap-2">
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.8} /> : null}
@@ -104,7 +110,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
           {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산).
               link=외부 사이트라 창(iframe) 시스템에 못 태운다(구글드라이브 등은 X-Frame-Options로 차단) → 새 탭. */}
           {doc.kind === "file" && doc.fileName ? (
-            <InlineRename enabled={canWrite && !busy} name={renameBase} suffix={extension} maxLength={180}
+            <InlineRename enabled={canWrite && !disabled} name={renameBase} suffix={extension} maxLength={180}
               onSave={(name) => renameDocumentFile(doc.id, name, { title: doc.title, fileName: doc.fileName! })}>
               <WindowLink href={doc.href} title={doc.title} className="text-foreground hover:text-primary block min-w-0 truncate font-medium hover:underline">{doc.title}</WindowLink>
             </InlineRename>
@@ -151,7 +157,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
             <button
               type="button"
               onClick={() => void run(() => downloadDocument(doc.id))}
-              disabled={busy}
+              disabled={disabled}
               className="text-text-faint hover:text-primary"
               aria-label={`${doc.title} 다운로드`}
               title="다운로드"
@@ -163,7 +169,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
             <button
               type="button"
               onClick={() => void onTogglePin()}
-              disabled={busy}
+              disabled={disabled}
               className={doc.pinned ? "text-gold hover:text-text-dim" : "text-text-faint hover:text-gold"}
               aria-label={doc.pinned ? `${doc.title} 고정 해제` : `${doc.title} 상단 고정`}
               title={doc.pinned ? "고정 해제" : "상단 고정"}
@@ -176,7 +182,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
           {canWrite && doc.kind !== "form" ? (
             confirming ? (
               <span className="inline-flex items-center gap-1.5 text-xs">
-                <button type="button" onClick={() => void onDelete()} disabled={busy} className="text-danger font-bold hover:underline">
+                <button type="button" onClick={() => void onDelete()} disabled={disabled} className="text-danger font-bold hover:underline">
                   {busy ? <Loader2 className="size-3.5 animate-spin" /> : "삭제"}
                 </button>
                 <button type="button" onClick={() => setConfirming(false)} className="text-text-dim hover:underline">
@@ -186,6 +192,7 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
             ) : (
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => setConfirming(true)}
                 className="text-text-faint hover:text-danger"
                 aria-label={`${doc.title} 삭제`}

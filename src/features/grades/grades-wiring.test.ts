@@ -400,6 +400,12 @@ describe("월 축 0287a · 확인 뷰(원장 2026-09-23)", () => {
     expect(q).toMatch(/if \(cell\.score != null \|\| cell\.noExam\) present\.push/);
   });
 
+  it("🔴 확인 뷰도 **담당 반만** 본다 — 한쪽만 과목 기준이면 격자에서 감춘 반이 여기서 열린다", () => {
+    const q = read("src/features/grades/server/overview-queries.ts");
+    expect(q).toContain("gradeTeacherClassIds");
+    expect(q).toMatch(/scope \? \(classRows \?\? \[\]\)\.filter\(\(c\) => myClassIds\.has\(c\.id\)\)/);
+  });
+
   it("두 화면을 오가는 길이 양쪽에 있다(같은 부품)", () => {
     for (const f of ["src/app/(shell)/exams/page.tsx", "src/app/(shell)/exams/view/page.tsx"]) {
       expect(read(f)).toContain("GradeViewSwitch");

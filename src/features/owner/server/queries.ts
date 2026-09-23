@@ -128,3 +128,20 @@ export async function getUserDisplayNames(ids: readonly string[]): Promise<Recor
     .in("id", [...new Set(ids)]);
   return Object.fromEntries((data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
 }
+
+/** 일반판 권한 설정에서 선택할 현재 지점의 재직 직원. 호출처는 원장 전용 설정 면이다. */
+export async function getPermissionStaffOptions(): Promise<{ id: string; name: string; role: string }[]> {
+  const viewer = await getCurrentUser();
+  if (!viewer || viewer.systemRole !== "master") return [];
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("users")
+    .select("id, display_name, system_role")
+    .eq("tenant_id", viewer.tenantId)
+    .neq("status", "inactive")
+    .neq("system_role", "student")
+    .order("display_name")
+    .limit(1000);
+  if (error) throw error;
+  return (data ?? []).map((u) => ({ id: String(u.id), name: String(u.display_name ?? "(이름 없음)"), role: String(u.system_role) }));
+}

@@ -207,6 +207,8 @@ const CANON_SURFACES = [
   "src/app/(shell)/exams/page.tsx",
   "src/app/(shell)/exams/view/page.tsx",
   "src/app/(shell)/exams/_components/view-switch.tsx",
+  "src/app/(shell)/ecs/goals/page.tsx",
+  "src/app/(shell)/ecs/goals/_components/goals-role-switch.tsx",
   "src/features/onescreen/components/top-bar.tsx",
   "src/features/ijw/components/jj-range-bar.tsx",
   "src/app/(shell)/timetable/page.tsx",

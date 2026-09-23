@@ -753,6 +753,7 @@ export type SheetLandingCard = {
    */
   totalSlots: number;
   filledSlots: number;
+  /** 시간표에 없는 시각(고아) 칸 수. 🔴 **화면에 안 띄운다**(원장 2026-09-23 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"*) — 값은 남겨 둔다(점검용). */
   orphanSlots: number;
   /**
    * 그 주 **휴일에 배정된** 교시 수(쓴 것·안 쓴 것 모두). 0이 아닌데 `totalSlots`가 0이면

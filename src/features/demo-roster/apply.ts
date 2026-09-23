@@ -4,6 +4,7 @@ import { classes, classrooms, classSchedules, enrollments, invoices, students, t
 import { kstToday } from "@/lib/date-kst";
 import { insertDashboardSatellite } from "./dashboard-apply";
 import { buildDashboardWorld } from "./dashboard-world.mjs";
+import { ensureDemoStaff } from "./demo-staff";
 import { buildScenario, SCENARIOS } from "./plan.mjs";
 
 const ROOM_NAMES = ["1강의실", "2강의실", "3강의실", "4강의실"] as const;
@@ -31,6 +32,10 @@ export async function replaceDemoRoster(
   const note = `${NOTE_PREFIX}${scenarioId}`;
 
   try {
+    const [gate] = await db.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId));
+    if (gate?.slug !== "demo") return { error: "데모 지점에서만 바꿀 수 있습니다" };
+    const staff = await ensureDemoStaff(tenantId);
+    const teacherCursor = { math: 0, english: 0 };
     return await db.transaction(async (tx) => {
       const [tenant] = await tx
         .select({ slug: tenants.slug })
@@ -83,7 +88,19 @@ export async function replaceDemoRoster(
         plan.classes.map((cls) => {
           const id = crypto.randomUUID();
           classId.set(cls, id);
-          return { id, tenantId, className: cls.name, subject: cls.subject, isActive: true, notes: note };
+          const pool = cls.subject === "english" ? staff.english : staff.math;
+          const cursor = cls.subject === "english" ? "english" : "math";
+          const teacherId = pool.length ? pool[teacherCursor[cursor]++ % pool.length] : null;
+          return {
+            id,
+            tenantId,
+            className: cls.name,
+            subject: cls.subject,
+            isActive: true,
+            notes: note,
+            teacherId,
+            classroomId: roomId.get(cls.room) ?? null,
+          };
         }),
       );
 
@@ -146,7 +163,8 @@ export async function replaceDemoRoster(
     });
   } catch (err) {
     if (err instanceof NotDemoError) return { error: "데모 지점에서만 바꿀 수 있습니다" };
-    console.error("[demo-roster]", err instanceof Error ? err.message : err);
+    const cause = err instanceof Error ? (err.cause as { message?: string } | undefined)?.message ?? err.message : String(err);
+    console.error("[demo-roster]", cause.slice(0, 300));
     return { error: "데모 데이터를 바꾸지 못했습니다" };
   }
 }

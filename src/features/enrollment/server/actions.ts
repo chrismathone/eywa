@@ -967,6 +967,16 @@ export async function convertConsultationToStudent(
     .from("enrollment_consultations")
     .update({ student_id: studentId, outcome: "enrolled" })
     .eq("id", consultationId);
+  // 상태가 '등록 완료'로 바뀐 것도 칸반 드래그와 **같은 로그**로 남긴다 — 운영실 '금일 등록'(원장 2026-09-23)이 이 로그의
+  // 시각으로 "오늘 등록 완료로 옮긴 상담"을 센다(여기가 빠지면 '수업 배정'으로 등록한 학생이 카드에서 사라진다).
+  if (c.outcome !== "enrolled") {
+    await logAction({
+      action: "enrollment_consultation_outcome",
+      targetType: "enrollment_consultations",
+      targetLabel: c.prospect_name ?? null,
+      metadata: { consultationId, from: c.outcome, to: "enrolled", via: "convert" },
+    });
+  }
 
   // 기존 학생 재사용(자연키 충돌 경로)은 **새 학생을 안 만들고 이미 있는 기록에 붙이는** 일이라 따로 남긴다
   // (2026-09-10 김근우 건 — 동명이인이 조용히 합쳐지는 것과 같은 모양이라 되짚을 흔적이 있어야 한다).

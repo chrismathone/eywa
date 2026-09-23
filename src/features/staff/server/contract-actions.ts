@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
@@ -26,6 +27,7 @@ export async function extendStaffContract(
   if (!(await canWriteTenant(actor.systemRole, "staff"))) return { error: "계약을 변경할 권한이 없습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
+  if (userId && !(await canSeeStaffMember(actor, userId))) return { error: STAFF_SCOPE_DENIED_MSG };
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
   const terms = String(formData.get("terms") ?? "").trim();
@@ -94,6 +96,7 @@ export async function updateStaffContract(
   if (!(await canWriteTenant(actor.systemRole, "staff"))) return { error: "계약을 변경할 권한이 없습니다" };
 
   const userId = String(formData.get("userId") ?? "").trim();
+  if (userId && !(await canSeeStaffMember(actor, userId))) return { error: STAFF_SCOPE_DENIED_MSG };
   const contractId = String(formData.get("contractId") ?? "").trim();
   const startDate = String(formData.get("startDate") ?? "").trim();
   const endDate = String(formData.get("endDate") ?? "").trim();
@@ -164,6 +167,7 @@ export async function deleteStaffContract(
   const userId = String(formData.get("userId") ?? "").trim();
   const contractId = String(formData.get("contractId") ?? "").trim();
   if (!userId || !contractId) return { error: "삭제할 계약을 찾을 수 없습니다" };
+  if (!(await canSeeStaffMember(actor, userId))) return { error: STAFF_SCOPE_DENIED_MSG };
 
   const supabase = createAdminClient();
   const { data: row, error: readErr } = await supabase

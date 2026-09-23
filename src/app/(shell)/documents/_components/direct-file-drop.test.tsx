@@ -32,5 +32,6 @@ it("연동 폴더·열린 다이얼로그·앱 내부 폴더 드래그는 직접
   view.rerender(<DirectFileDrop category="class" folderLabel="수업" dialogOpen blocked={false} />);
   drop([file]);
   fireEvent.drop(window, { dataTransfer: { types: ["application/x-aywa-document-folder"], files: [] } });
+  fireEvent.drop(window, { dataTransfer: { types: ["application/x-aywa-document-file"], files: [] } });
   expect(mocks.upload).not.toHaveBeenCalled();
 });

@@ -200,6 +200,31 @@ describe("④ 금일입테 — 분류기 한 벌, ↗ 없음", () => {
   });
 });
 
+/**
+ * 원장 2026-09-23: *"금일 등록 카드를 최상단에 추가 … 금일 입테 우측에"* → *"콜&상담에서 등록 완료로 이동한 학생을 오늘날짜 기준으로"*.
+ * 옮긴 시각은 상태 변경 감사로그뿐이라, **등록 완료로 옮기는 두 경로가 모두 그 로그를 남겨야** 카드가 안 빈다.
+ */
+describe("④-2 금일 등록 — 등록 완료로 옮긴 로그 한 벌, 반 배정은 칸반과 같은 함수", () => {
+  const QUERY = src("src/features/dashboard/server/enrolled-today.ts");
+  const ACTIONS = src("src/features/enrollment/server/actions.ts");
+  it("카드·팝업이 같은 서버 배열, 자리는 금일입테 오른쪽", () => {
+    expect(SERVER).toContain('add("enrolledToday", ["enrollment"], () => getEnrolledToday(today));');
+    expect(STRIP).toContain("<EnrolledTodayPopup rows={registered}");
+    expect(STRIP.indexOf('label="금일 등록"')).toBeGreaterThan(STRIP.indexOf('label="금일입테"'));
+    expect(STRIP.indexOf('label="금일 등록"')).toBeLessThan(STRIP.indexOf('label="오늘첫수업"'));
+  });
+  it("등록 완료로 옮기는 두 경로(상태 변경·수업 배정)가 같은 로그를 남긴다", () => {
+    expect(count(ACTIONS, 'action: "enrollment_consultation_outcome"')).toBe(2);
+    expect(ACTIONS).toContain('to: "enrolled", via: "convert"');
+    expect(QUERY).toContain('systemAuditScope(["enrollment_consultation_outcome"])');
+    expect(QUERY).toContain('.eq("metadata->>to", "enrolled")');
+  });
+  it("반 배정 판정은 칸반 카드 표식과 같은 countAssignedClasses · 지금도 등록 완료인 상담만", () => {
+    expect(QUERY).toContain("countAssignedClasses(db, row.student_id");
+    expect(QUERY).toContain('row.outcome === "enrolled"');
+  });
+});
+
 describe("⑤ 오늘첫수업 — 같은 조회·같은 판정·같은 과목 묶음", () => {
   const ARRIVALS = src("src/features/dashboard/day-arrivals.ts");
   const ARRIVALS_QUERY = src("src/features/dashboard/server/day-arrivals-query.ts");
@@ -333,8 +358,8 @@ describe("카드 구조 — ↗는 버튼 안에 들어가지 않는다", () => 
     expect(CARD.indexOf("<WindowLink")).toBeGreaterThan(CARD.indexOf("</DetailPopup>"));
   });
 
-  it("일곱 칸이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
-    expect(count(STRIP, "<KpiCard")).toBe(7);
+  it("여덟 칸이 모두 같은 카드 부품을 쓰고, 열 수는 선 카드 수에서 나온다(D2)", () => {
+    expect(count(STRIP, "<KpiCard")).toBe(8);
     expect(STRIP).toContain("style={kpiGridVars(shown)}");
   });
 });

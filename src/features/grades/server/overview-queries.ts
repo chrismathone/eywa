@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { effectiveTeacherScope } from "@/lib/auth/view-mode";
+import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { isExamSlot, slotUsesMonth, type ExamSlotKey } from "../exam-slots";
 import { termWindow, type Term } from "../term";
@@ -14,6 +14,7 @@ import {
   type OverviewColumn,
   type OverviewRow,
 } from "../overview";
+import { gradeTeacherClassIds } from "./teacher-classes";
 import { gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "./write";
 
 /**
@@ -30,8 +31,8 @@ import { gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "./write";
  *    학생은 이 표에도 안 선다. 고치려면 두 화면을 **함께** 고쳐야 하고(한쪽만 넓히면 확인 뷰에는
  *    보이는데 고칠 수는 없는 줄이 생긴다), 그때 보이지 않는 '보강' 반(0241a)을 빼는 것도 함께
  *    챙겨야 한다(지금은 `is_active=false`가 그 일을 겸한다).
- * ⚠️ 강사 스코프도 **과목 기준**이다 — 반 단위로 더 좁히지 않는다(입력 격자의 규약 그대로).
- *    좁히려면 두 화면을 함께 바꿀 것.
+ * 🔴 강사 스코프는 입력 격자와 **똑같이 반 단위**다(담임 ∪ 부담임, `gradeTeacherClassIds`) —
+ *    한쪽만 과목 기준으로 두면 격자에선 안 보이는 반이 확인 뷰에서 통째로 열린다([[#77]]).
  */
 export type GradeOverview = {
   columns: OverviewColumn[];
@@ -57,6 +58,9 @@ export async function getGradeOverview(sel: OverviewSelection): Promise<GradeOve
 
   const scope = await effectiveTeacherScope();
   if (scope?.subjects && !scope.subjects.includes(sel.subject)) return empty;
+  const teacherId = scope ? await effectiveTeacherId() : null;
+  // 담임 ∪ 부담임 — 입력 격자와 **같은 헬퍼**(공용 스코프를 넓히지 않는다).
+  const myClassIds = new Set(teacherId ? await gradeTeacherClassIds(teacherId) : []);
 
   const { start: termStart, end: termEnd } = termWindow(sel.year, sel.term);
 
@@ -67,7 +71,9 @@ export async function getGradeOverview(sel: OverviewSelection): Promise<GradeOve
     .eq("is_active", true)
     .order("class_name");
   if (classErr) throw new Error(`getGradeOverview(classes): ${classErr.message}`);
-  const classes = (classRows ?? []).map((c) => ({ id: c.id, className: c.class_name }));
+  // 🔴 **여기서 좁힌다** — 강사면 담당 반만. 드롭다운·명단·점수가 전부 이 목록에서 파생된다.
+  const visible = scope ? (classRows ?? []).filter((c) => myClassIds.has(c.id)) : (classRows ?? []);
+  const classes = visible.map((c) => ({ id: c.id, className: c.class_name }));
   const classById = new Map(classes.map((c) => [c.id, c.className]));
   const targetIds = sel.classId ? classes.filter((c) => c.id === sel.classId).map((c) => c.id) : classes.map((c) => c.id);
   if (targetIds.length === 0) return { ...empty, classes, schemaReady: await gradesSchemaReady() };

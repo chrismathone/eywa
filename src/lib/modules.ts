@@ -33,6 +33,8 @@ export const MODULE_IDS = [
   "sheet_sync",
   "eie",
   "session_billing",
+  "payroll",
+  "staff_leaves",
 ] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
@@ -147,6 +149,18 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
     id: "session_billing",
     label: "회차 정산",
     description: "회차 확정·시수 검증·강사 정산(청구 N회 × 단가 기반 급여 분배)",
+    menuKeys: [],
+  },
+  payroll: {
+    id: "payroll",
+    label: "월별 급여",
+    description: "직원별 급여 정산과 지급 현황",
+    menuKeys: [],
+  },
+  staff_leaves: {
+    id: "staff_leaves",
+    label: "기존 직원 휴가",
+    description: "직원별 기존 휴가 기록과 승인 관리",
     menuKeys: [],
   },
 };

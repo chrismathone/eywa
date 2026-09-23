@@ -104,11 +104,14 @@ export function SubjectListEditor({
   value,
   onChange,
   onRemove,
+  groupingChoices = WEEKDAY_GROUPING_OPTIONS,
 }: {
   value: SubjectSetting[];
   onChange: (v: SubjectSetting[]) => void;
   // 삭제를 가로채는 콜백(과목 흡수 다이얼로그) — 미지정 시 기존처럼 행 즉시 제거.
   onRemove?: (index: number) => void;
+  /** 기본 프리셋 + 학원이 만든 요일 병합. 없으면 기본 다섯 개. */
+  groupingChoices?: { value: string; label: string }[];
 }) {
   // 확정된 key 집합 — 최초 로드된(저장된) key + 이번 세션에서 blur로 확정된 key. 여기 든 key는 다신 안 바뀐다.
   const frozen = useRef<Set<string>>(new Set(value.map((s) => s.key).filter(Boolean)));
@@ -141,7 +144,7 @@ export function SubjectListEditor({
         <div className="text-text-faint micro flex flex-wrap items-center gap-2 px-0.5">
           <span className="w-[110px]">과목명</span>
           <span className="w-[122px]">색</span>
-          <span className="w-[160px]">시간표 요일 병합</span>
+          <span className="w-[220px]">시간표 요일 병합</span>
           <span className="w-[104px]">처음 보이는 뷰</span>
           <span className="w-[92px]">QR 접수 노출</span>
           <span className="w-[70px]">내부 ID</span>
@@ -187,14 +190,18 @@ export function SubjectListEditor({
                   ))}
                 </select>
               </span>
-              {/* 요일 병합 — 과목별 시간표 기본뷰 병합 프리셋(월목/화금·월화/목금·월수금/화목·없음) */}
+              {/* 요일 병합 — 과목별 시간표 기본뷰 병합 프리셋 */}
               <select
-                className={`${cellCls} w-[160px]`}
-                value={s.weekdayGrouping ?? "mon-thu"}
-                onChange={(e) => set(i, { weekdayGrouping: e.target.value as SubjectSetting["weekdayGrouping"] })}
+                className={`${cellCls} w-[220px]`}
+                value={
+                  groupingChoices.some((choice) => choice.value === (s.weekdayGrouping ?? "mon-thu"))
+                    ? (s.weekdayGrouping ?? "mon-thu")
+                    : (groupingChoices[0]?.value ?? "mon-thu")
+                }
+                onChange={(e) => set(i, { weekdayGrouping: e.target.value })}
                 aria-label="시간표 요일 병합"
               >
-                {WEEKDAY_GROUPING_OPTIONS.map((o) => (
+                {groupingChoices.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
@@ -258,7 +265,7 @@ export function SubjectListEditor({
         onClick={() =>
           onChange([
             ...value,
-            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: "mon-thu", testMax: 5 },
+            { key: nextSubjectKey(new Set(value.map((s) => s.key))), label: "", color: "neutral", weekdayGrouping: groupingChoices[0]?.value ?? "mon-thu", testMax: 5 },
           ])
         }
         label="과목 추가"

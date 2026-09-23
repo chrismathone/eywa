@@ -13,7 +13,14 @@ export function learningTopicTicks(goal: LearningGoal, progress?: LearningProgre
   const anchor = full[anchorIndex];
   const semesters = topicSegments(full);
   const semesterIndex = semesters.findIndex(topics => topics[0].grade === anchor.grade && topics[0].semester === anchor.semester);
-  const window = semesters.slice(Math.max(0, semesterIndex - 2), semesterIndex + 4).flat();
+  // Long plans must keep their later saved stops reachable on the horizontally scrolling rail.
+  const savedStops = goalMilestones(goal);
+  const lastStop = savedStops.at(-1);
+  const lastSemesterIndex = lastStop ? semesters.findIndex(topics => topics.some(topic =>
+    topic.grade === lastStop.studyGrade && topic.lesson === lastStop.endBlock)) : -1;
+  const windowEnd = savedStops.length >= 4 && (goal.blockCount ?? 0) >= 96
+    ? Math.max(semesterIndex + 4, lastSemesterIndex + 1) : semesterIndex + 4;
+  const window = semesters.slice(Math.max(0, semesterIndex - 2), windowEnd).flat();
   const start = progress?.history?.start;
   const historyStart = start ? window.findIndex(topic => topic.grade === start.grade && topic.lesson === start.lesson) : -1;
   const dates = new Map(progress?.history?.lessons.map(lesson => [`${lesson.grade}:${lesson.lesson}`, lesson]));

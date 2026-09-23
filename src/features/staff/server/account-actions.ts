@@ -6,6 +6,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { canManageStaffMember } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
 import { EMAIL_RE } from "@/features/staff/email";
@@ -49,6 +50,8 @@ async function loadTarget(
     .single();
   if (error || !data) return { error: "대상 직원을 찾을 수 없습니다" };
   if (data.tenant_id !== actor.tenantId) return { error: "다른 지점의 계정은 변경할 수 없습니다" };
+  // 과목 범위(원장 2026-09-23) — 목록에서 뺀 직원을 직접 POST로 고치지 못하게 여기서도 막는다(#77).
+  if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
   return {
     role: data.system_role as SystemRole,
     email: data.email as string,

@@ -11,6 +11,7 @@ import {
 } from "@/features/documents/server/queries";
 import { getLinkedCounts, getLinkedPage } from "@/features/documents/server/linked-queries";
 import { getDocumentCategories } from "@/features/documents/server/category-queries";
+import { getDocumentFolderFavorites } from "@/features/documents/server/favorite-queries";
 import {
   categoryPath,
   categoryPathLabel,
@@ -31,10 +32,11 @@ import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { NewFolderButton } from "./_components/category-manager";
 import { FolderBreadcrumbs } from "./_components/folder-breadcrumbs";
 import { FolderDropTarget, FolderInteractionProvider, FolderName } from "./_components/folder-interactions";
+import { FolderFavoriteToggle } from "./_components/folder-favorite-toggle";
 
 export const metadata = { title: "데이터베이스 — aywa" };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
 
 export default async function DocumentsPage({
   searchParams,
@@ -55,11 +57,12 @@ export default async function DocumentsPage({
 
   // 연동 폴더(교재 요청서·수강료 견적서)는 billing 접근권한이 있어야 노출·조회 —
   // 강사는 담당 학생 스코프 밖 전체 목록을 보면 안 됨(전용 면 /textbook-requests 사용).
-  const [canWrite, canBilling, categories] = await Promise.all([
+  const [canWrite, canBilling, categories, favoriteKeys] = await Promise.all([
     canWriteTenant(user.systemRole, "documents"),
     canAccessTenant(user.systemRole, "billing"),
     // 분류는 학원장이 관리하는 테넌트 데이터(0161a) — 코드 상수가 아니라 DB가 단일 소스.
     getDocumentCategories(),
+    getDocumentFolderFavorites(),
   ]);
   const linked: LinkedSourceKey | null = canBilling && isLinkedSource(catRaw) ? catRaw : null;
   const cat = !linked && categories.some((c) => c.key === catRaw) ? catRaw : null;
@@ -153,12 +156,17 @@ export default async function DocumentsPage({
           categories={categories}
           counts={counts}
           canManage={canWrite}
+          favoriteKeys={favoriteKeys}
         />
 
         <section className="bg-card border-line min-w-0 rounded-2xl border">
           {!linked ? <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
             <FolderBreadcrumbs rootHref={folderHref(null)} path={path.map((c) => ({ key: c.key, label: c.label, href: folderHref(c.key) }))} />
-            {canWrite ? <NewFolderButton categories={categories} parentKey={cat} /> : null}
+            <div className="flex items-center gap-2">
+              {cat ? <FolderFavoriteToggle folderKey={cat} pathLabel={path.map((part) => part.label).join(" / ")}
+                favorite={favoriteKeys.includes(cat)} atLimit={favoriteKeys.length >= 10} /> : null}
+              {canWrite ? <NewFolderButton categories={categories} parentKey={cat} /> : null}
+            </div>
           </div> : null}
           {children.length ? <div className="border-b border-line p-4">
             <p className="mb-2 text-xs text-text-faint">{cat ? "하위 폴더" : "폴더"} · {children.length}개</p>
@@ -255,6 +263,7 @@ export default async function DocumentsPage({
                             title: r.title,
                             kind: r.kind,
                             description: r.description,
+                            category: r.category,
                             categoryLabel: categoryPathLabel(categories, r.category),
                             typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType, r.linkUrl),
                             sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",

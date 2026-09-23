@@ -75,7 +75,9 @@ export function buildDashboardWorld(plan, today) {
       startDate.set(student.code, today);
       continue;
     }
-    const month = months[student.seq % months.length];
+    // 앞달은 두텁고 최근 달은 얇게. 여섯 달 추이가 한 달에 몰리지 않게.
+    const slot = [0, 0, 0, 1, 1, 2, 2, 3, 4, 5][student.seq % 10];
+    const month = months[slot];
     const when = `${month}-02` <= today ? `${month}-02` : today;
     enrolledAt.set(student.code, when);
     startDate.set(student.code, when);
@@ -90,7 +92,7 @@ export function buildDashboardWorld(plan, today) {
       if (startDate.get(student.code) > date) continue;
       for (const cls of student.classes) {
         if (!cls.days.includes(DOW[dowOf(date)])) continue;
-        if (!riskCodes.has(student.code) && date === today && student.seq % 7 === 0) continue;
+        if (!riskCodes.has(student.code) && date === today && student.seq % 29 === 0) continue;
         let status = "present";
         if (riskCodes.has(student.code)) status = "absent";
         else if (date === yesterday && student.seq % 11 === 0) status = "absent";
@@ -123,7 +125,7 @@ export function buildDashboardWorld(plan, today) {
   const withdrawn = [];
   let n = 0;
   for (const month of months) {
-    for (let k = 0; k < 2; k++) {
+    for (let k = 0; k < 3; k++) {
       const sample = plan.students[n % plan.students.length];
       const cls = sample.classes[0];
       const person = personName(400 + n);
@@ -192,6 +194,47 @@ export function buildDashboardWorld(plan, today) {
       parentPhone: `010-5551-${String(20 + i).padStart(4, "0")}`,
     });
   });
+
+  // 운영실 '금일 등록'(원장 2026-09-23) — 며칠 전 상담한 사람을 **오늘** 콜&상담 '등록 완료'로 옮긴 모양.
+  // 오늘 첫 수업 학생 둘은 반 배정까지 끝났고(연결 학생의 수강 = 칸반 '반 배정 완료'), 한 명은 등록만 하고 배정 전이다.
+  // `movedAt` = 옮긴 시각 — 운영실은 이 시각의 상태 변경 감사로그로 센다(dashboard-rows가 함께 쓴다).
+  // 상담일(`at`)은 사흘 전이라 오늘 '신규문의'에는 안 섞인다.
+  const consultedOn = shiftYmd(today, -3);
+  plan.students
+    .filter((s) => firstClassCodes.has(s.code))
+    .slice(0, 2)
+    .forEach((student, i) => {
+      consultations.push({
+        name: student.name,
+        grade: student.grade,
+        school: student.school.name,
+        subject: student.classes[0].subject,
+        path: "지인 소개",
+        outcome: "enrolled",
+        at: atNoonKst(consultedOn),
+        payment: tuitionOf(student),
+        parentPhone: `010-5551-${String(40 + i).padStart(4, "0")}`,
+        studentCode: student.code,
+        movedAt: `${today}T0${1 + i}:10:00.000Z`,
+      });
+    });
+  {
+    const person = personName(540);
+    consultations.push({
+      name: person.name,
+      grade: "초5",
+      // 데모 학교 밖 — 이름·학교·학년 자동 연결(0258a)에 걸려 '반 배정 완료'로 바뀌지 않게.
+      school: "하늘초",
+      subject: "math",
+      path: "네이버",
+      outcome: "enrolled",
+      at: atNoonKst(consultedOn),
+      payment: null,
+      parentPhone: "010-5551-0042",
+      studentCode: null,
+      movedAt: `${today}T04:30:00.000Z`,
+    });
+  }
 
   const studentConsultations = [];
   const consultPool = plan.students.filter((s) => !firstClassCodes.has(s.code)).slice(0, 8);
@@ -291,8 +334,10 @@ export function buildDashboardWorld(plan, today) {
     const enrolled = enrolledAt.get(student.code);
     if (shiftYmd(enrolled, 90) < today) continue;
     const subject = "";
-    const done = student.seq % 2 === 0 && !firstClassCodes.has(student.code);
-    for (const key of done ? ["pre_call", "first_class_guide", "ojt"] : []) {
+    if (firstClassCodes.has(student.code) || student.seq % 7 === 0) continue;
+    const keys = ["pre_call", "first_class_guide", "ojt"];
+    if (shiftYmd(enrolled, 30) <= today) keys.push("month1_call");
+    for (const key of keys) {
       checks.push({ studentCode: student.code, subject, itemKey: key, doneOn: enrolled });
     }
   }

@@ -5,13 +5,15 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isPermissionLocked, type SystemRole } from "@/lib/permissions";
 import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantBrandingPath } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import { logAction } from "@/features/audit/server/log";
 import { diffSettingsSection } from "../settings-diff";
 import { tenantSettingsTag } from "./queries";
-import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey } from "../settings-types";
+import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey, type PermissionsSettings } from "../settings-types";
 import { prepareSectionForSave, presetOfStored } from "../preset";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
@@ -113,6 +115,31 @@ export async function saveOwnerSection(
   // (받으면 owner 쓰기를 위임받은 사람이 요청을 만들어 침산 모듈을 끌 수 있고, 침산엔 되돌릴 화면이 없다.)
   if (section === "modules" && preset !== "generic") {
     return { error: "이 학원은 기능 켜기·끄기를 쓰지 않습니다" };
+  }
+  if (section === "permissions" && preset === "generic") {
+    const p = result.data as PermissionsSettings;
+    const ids = [...new Set([
+      ...p.userOverrides.map((r) => r.userId),
+      ...p.specialAccess.payslipViewerIds,
+      ...p.specialAccess.leaveAdjusterIds,
+    ])];
+    if (ids.length > 0) {
+      const { data: people, error: peopleError } = await createAdminClient()
+        .from("users")
+        .select("id, system_role, status")
+        .eq("tenant_id", actor.tenantId)
+        .in("id", ids)
+        .limit(250);
+      if (peopleError) return { error: "권한 대상 직원을 확인하지 못했습니다" };
+      const validIds = new Set((people ?? [])
+        .filter((u) => u.system_role !== "student" && u.status !== "inactive")
+        .map((u) => u.id));
+      if (ids.some((id) => !validIds.has(id))) return { error: "현재 지점의 재직 직원만 권한 대상에 지정할 수 있습니다" };
+      const roles = new Map((people ?? []).map((u) => [u.id, u.system_role as SystemRole]));
+      if (p.userOverrides.some((r) => isPermissionLocked(r.menu, roles.get(r.userId)!, r.access))) {
+        return { error: "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
+      }
+    }
   }
   const base = (existing?.data as Record<string, unknown> | null) ?? {};
   const sectionData = prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);

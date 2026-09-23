@@ -46,6 +46,46 @@ export function IntakePopup({
 }
 
 /**
+ * 금일 등록 팝업(원장 2026-09-23) — 오늘 콜&상담 '등록 완료'로 옮긴 상담(옮긴 시각 · 이름 · 반 배정 여부).
+ * 카드와 **같은 배열**이라 숫자가 같다. 이름은 그 상담으로 간다(콜&상담 권한이 있을 때만).
+ */
+export function EnrolledTodayPopup({
+  rows,
+  canOpen,
+}: {
+  rows: OverviewData["enrolledToday"] | null | undefined;
+  canOpen: boolean;
+}) {
+  if (!rows) return <PopupEmpty>등록 정보를 불러오지 못했습니다.</PopupEmpty>;
+  return (
+    <>
+      <PopupTotal label="오늘 등록 완료" value={rows.length} unit="명" />
+      {rows.length === 0 ? (
+        <PopupEmpty>오늘 등록 완료로 옮긴 상담이 없습니다.</PopupEmpty>
+      ) : (
+        <ul className={s.kpiList}>
+          {rows.map((row) => (
+            <li key={row.id} className={s.kpiListRow}>
+              <time className={s.kpiTime}>{row.time ?? "—"}</time>
+              <NameCell
+                href={canOpen ? `/enrollment/${row.id}` : null}
+                title={row.name}
+                ariaLabel={`${row.name} 상담 상세`}
+              >
+                {row.name}
+              </NameCell>
+              {row.schoolGrade ? <span className={s.kpiListMeta}>{row.schoolGrade}</span> : null}
+              {row.assigned ? <Tag tone="info">반 배정 완료</Tag> : <Tag tone="caution">배정 전</Tag>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={s.footnote}>시각 = 콜&상담에서 등록 완료로 옮긴 때. 반 배정은 칸반의 ‘반 배정 완료’와 같은 기준입니다.</p>
+    </>
+  );
+}
+
+/**
  * 보강예정 팝업(원장 2026-09-14) — **오늘부터 한 달**(원장 2026-09-16) 보강 예약을 날짜·시각 순으로. 카드와 **같은 배열**
  * (`rows`)이라 숫자가 같고, 끝 날짜도 카드와 같은 값(`data.range`)을 읽는다.
  * 지난 날짜인데 아직 이행 안 된 줄은 '지남' 표식 — 숨기지 않는다(안 한 보강이 사라지면 안 된다).
@@ -83,7 +123,7 @@ export function MakeupPopup({
               </NameCell>
               <span className={s.kpiListMeta}>
                 {row.className} · {row.absenceDate.slice(5).replace("-", "/")} 결석분
-                {row.periodLabel ? ` · ${row.periodLabel}` : ""}
+                {row.createdByName ? ` · 예약: ${row.createdByName}` : " · 예약자 미상"}
               </span>
               {row.overdue ? <Tag tone="caution">지남</Tag> : row.makeupDate === today ? <Tag tone="info">오늘</Tag> : null}
             </li>

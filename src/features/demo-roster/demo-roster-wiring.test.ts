@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditDetail } from "@/features/audit/describe";
 import { AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
+import { demoWeekdayGrouping } from "./demo-weekday";
 import { buildScenario, SCENARIOS } from "./plan.mjs";
 
 const root = process.cwd();
@@ -48,7 +49,14 @@ describe("데모 재원 드롭다운", () => {
     expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain('id !== "newcomers"');
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(tenantSettingsTag(user.tenantId))");
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(`dashboard-invoice-trend:${user.tenantId}`)");
-    expect(read("src/features/dashboard/overview/server.ts")).toContain("dashboard-invoice-trend:${tenantId}");
+    expect(read("src/features/dashboard/overview/server.ts")).toContain("dashboard-invoice-trend-v2");
+    expect(read("src/features/demo-roster/apply.ts")).toContain("ensureDemoStaff");
+    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("'{profile}'");
+    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("writeDemoWeekdayGrouping");
+    expect(demoWeekdayGrouping("neighborhood")).toBe("mon-wed-fri");
+    expect(demoWeekdayGrouping("targetHeavy")).toBe("mon-wed-fri");
+    expect(demoWeekdayGrouping("split")).toBe("mon-wed-fri");
+    expect(demoWeekdayGrouping("dual")).toBe("mon-tue-seq");
     const queries = read("src/features/demo-roster/server/queries.ts");
     expect(queries).toContain('tenant?.slug !== "demo"');
     expect(queries).toContain('user.systemRole !== "master"');

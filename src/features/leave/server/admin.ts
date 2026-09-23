@@ -5,6 +5,7 @@ import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { compareByJobRank } from "@/features/approvals/job-rank";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isChinsanTenant } from "@/features/owner/preset";
 import { resolveLeavePeriod, type LeavePeriod } from "../accrual";
 import { applyLeaveGrantOverride } from "../test-grants";
 import {
@@ -224,7 +225,7 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
 
   const rows: LeaveOverviewRow[] = staff.map((s) => {
     const hireDate = s.hire_date ?? null;
-    const period = applyLeaveGrantOverride(s.id, resolveLeavePeriod(hireDate, today));
+    const period = applyLeaveGrantOverride(s.id, resolveLeavePeriod(hireDate, today), isChinsanTenant(settings));
     const legalGranted = period?.granted ?? 0;
 
     const mine = period

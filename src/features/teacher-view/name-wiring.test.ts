@@ -315,10 +315,11 @@ describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () =
     );
   });
 
-  it("오늘·주간 카드의 샤우팅·시간변경도 사전", () => {
+  it("오늘·주간 카드의 샤우팅은 사전 · 시간변경 배지는 없다", () => {
     const period = read("features", "class-sheets", "components", "period-block.tsx");
     expect(period).toContain("landing.col.shouting");
-    expect(period).toContain("slot.orphan");
+    // 🔴 '시간 변경됨' 배지는 2026-09-23에 없앴다(원장 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"*) — 되살리지 말 것.
+    expect(codeOnly(period)).not.toContain("slot.orphan");
     expect(codeOnly(period)).not.toContain(">Shouting<");
     expect(codeOnly(period)).not.toContain(">시간 변경됨<");
     const editor = read("features", "class-sheets", "components", "today-plan-editor.tsx");
@@ -616,6 +617,7 @@ describe("🔴 월별 출석부는 사전만 본다 — 화면 파일에 한글 
     const src = read("app", "(shell)", "attendance", "page.tsx");
     for (const key of [
       "att.title",
+      "att.role.former",
       "att.filter.subject",
       "att.filter.teacher",
       "att.filter.class",

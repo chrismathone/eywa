@@ -34,7 +34,7 @@ const CHINSAN_LIKE_ROW = {
   billing: { dueDay: 10 },
   notifications: { printHeader: "" },
   consultations: {},
-  permissions: { overrides: [], userOverrides: [] },
+  permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } },
   report: {},
 };
 
@@ -142,6 +142,20 @@ describe("일반판 — 새로 연 학원", () => {
     expect(isGenericTenant(g)).toBe(true);
     expect(g.profile.name).toBe("새학원");
     expect(g.operations.subjects.map((s) => s.key)).toEqual(["math", "english", "korean", "science"]);
+  });
+
+  it("민감 기능 담당자와 개인 메뉴 권한은 비어 있고, 옛 설정 폼 저장이 명단을 지우지 않는다", () => {
+    expect(g.permissions.userOverrides).toEqual([]);
+    expect(g.permissions.specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [] });
+    const stored = {
+      userOverrides: [{ userId: "11111111-1111-4111-8111-111111111111", menu: "staff", access: "full" }],
+      specialAccess: { payslipViewerIds: ["11111111-1111-4111-8111-111111111111"], leaveAdjusterIds: [] },
+    };
+    const parsed = { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } };
+    const saved = prepareSectionForSave("generic", "permissions", { overrides: [] }, parsed, stored) as typeof parsed;
+    expect(saved.userOverrides).toEqual(stored.userOverrides);
+    expect(saved.specialAccess).toEqual(stored.specialAccess);
+    expect(prepareSectionForSave("chinsan", "permissions", parsed, parsed, stored)).not.toHaveProperty("specialAccess");
   });
 
   it("침산 전용 값을 물려받지 않는다", () => {
