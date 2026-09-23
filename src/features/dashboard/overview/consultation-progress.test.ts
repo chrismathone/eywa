@@ -154,6 +154,6 @@ describe("배선 — 칩과 카드는 한 표를 읽는다", () => {
   it("화면: 세 줄(신규문의·금일입테·입학 일정)이 같은 칩 부품을 쓴다", () => {
     const popups = read("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
     expect(popups.match(/<ConsultStageChip /g)?.length).toBe(2);
-    expect(read("src/app/(shell)/dashboard/_overview/admissions-schedule.tsx")).toContain("<ConsultStageChip id={event.matchedConsultation?.id} />");
+    expect(read("src/app/(shell)/dashboard/_overview/admissions-schedule.tsx")).toMatch(/<ConsultStageChip\s+id=\{event\.matchedConsultation\?\.id\}/);
   });
 });

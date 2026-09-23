@@ -83,7 +83,7 @@ export function MakeupPopup({
               </NameCell>
               <span className={s.kpiListMeta}>
                 {row.className} · {row.absenceDate.slice(5).replace("-", "/")} 결석분
-                {row.periodLabel ? ` · ${row.periodLabel}` : ""}
+                {row.createdByName ? ` · 예약: ${row.createdByName}` : " · 예약자 미상"}
               </span>
               {row.overdue ? <Tag tone="caution">지남</Tag> : row.makeupDate === today ? <Tag tone="info">오늘</Tag> : null}
             </li>
