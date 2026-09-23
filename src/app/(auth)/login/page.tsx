@@ -29,14 +29,16 @@ export default async function LoginPage({
       <a href="#login-content" className={styles.skipLink}>로그인으로 이동</a>
       <div className={styles.loginPage}>
         <aside className={styles.loginStory} aria-label="AYWA 소개">
-          <PublicBrand />
-          <div className={styles.loginStoryCopy}>
-            <h2>가르치는 일에 집중하는<br />하루의 시작.</h2>
-            <p>매일의 기록이 쌓이고, 함께하는 일이 이어지는 곳.<br />우리 학원의 하루를 AYWA와 함께하세요.</p>
-          </div>
-          <div className={styles.loginPhoto}>
-            {/* 사진 대신 무음 영상(원장 2026-09-22 *"영상은 최대한 여기 다 채워"*). 포스터 = 영상 첫 장면. 폰 폭(≤820px)에선 패널째 숨는다. */}
-            <LoginVideo src="/photos/login-panel.mp4" poster="/photos/login-panel-poster.webp" />
+          {/* 🔴 영상이 패널 전체다 — 글은 그 위에 얹는다(원장 2026-09-23 *"영상 위에 글자 적어도 되니까 영상을 부각시켜"*).
+              포스터 = 영상 첫 장면. 폰 폭(≤820px)에선 패널째 숨고 주소도 안 넣는다. */}
+          <LoginVideo src="/photos/login-panel.mp4" poster="/photos/login-panel-poster.webp" />
+          <div className={styles.loginStoryScrim} aria-hidden="true" />
+          <div className={styles.loginStoryInner}>
+            <PublicBrand />
+            <div className={styles.loginStoryCopy}>
+              <h2>가르치는 일에 집중하는<br />하루의 시작.</h2>
+              <p>매일의 기록이 쌓이고, 함께하는 일이 이어지는 곳.<br />우리 학원의 하루를 AYWA와 함께하세요.</p>
+            </div>
           </div>
         </aside>
 
