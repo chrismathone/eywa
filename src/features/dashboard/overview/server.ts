@@ -326,7 +326,7 @@ const loadPastInvoiceMonths = (tenantId: string, months: string[]) =>
       return summarizeInvoiceMonths(rows, months);
     },
     ["dashboard-invoice-trend", tenantId, months.join(",")],
-    { revalidate: 300 },
+    { tags: [`dashboard-invoice-trend:${tenantId}`], revalidate: 300 },
   )();
 
 async function billing(today: string, tenantId: string) {
