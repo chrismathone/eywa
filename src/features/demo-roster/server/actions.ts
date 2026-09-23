@@ -1,8 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
+import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { replaceDemoRoster } from "../apply";
 
 /** 데모 지점 원장이 고른 가상 재원 구성으로 갈아끼운다. 다른 지점은 거절한다. */
@@ -22,6 +23,8 @@ export async function switchDemoRoster(
     targetLabel: result.label,
     metadata: { label: result.label, students: result.students },
   });
+  updateTag(tenantSettingsTag(user.tenantId));
+  updateTag(`dashboard-invoice-trend:${user.tenantId}`);
   revalidatePath("/", "layout");
   return { ok: true, label: result.label };
 }
