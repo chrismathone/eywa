@@ -25,7 +25,9 @@ import {
 import {
   normalizeWeekdayGrouping,
   sortDaysInGroup,
+  timetableBoards,
   weekdayPartition,
+  weekendBoardDays,
   type WeekdayGrouping,
 } from "@/features/timetable/lib/weekday-groups";
 import { DAY_LABEL } from "@/features/timetable/lib/split-attendance";
@@ -544,15 +546,26 @@ export function WeekdayGroupTables({
   const weekdaySlots = slots.filter((s) => !WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
   const weekendSlots = slots.filter((s) => WEEKEND_KEYS.has(s.dayOfWeek as DayOfWeek));
 
-  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide). 주말은 토/일 항상 풀너비.
-  const weekdayDefs = buildWeekdayGroupDefs(
-    dayGroups?.length ? dayGroups : weekdayPartition(normalizeWeekdayGrouping(weekdayGrouping)),
-  );
+  // 과목 프리셋 → 평일 그룹. 단독(병합 안 되는) 요일은 2배 폭(wide).
+  // 토·일을 안 적은 묶음은 예전처럼 토·일 각각 풀너비. 적은 묶음만 주말 판에서 병합한다.
+  const resolvedGroups = dayGroups?.length ? dayGroups : weekdayPartition(normalizeWeekdayGrouping(weekdayGrouping));
+  const boards = timetableBoards(resolvedGroups);
+  const weekdayDefs = buildWeekdayGroupDefs(boards.weekdays);
   const weekdayWide = new Set<DayOfWeek>(weekdayDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days));
-  const weekendWide = new Set<DayOfWeek>(["sat", "sun"]);
+  const weekendDays = weekendBoardDays(resolvedGroups);
+  const weekendDefs = weekendDays
+    ? buildWeekdayGroupDefs(weekendDays).map((group) => ({
+        ...group,
+        band: "bg-amber-soft text-amber",
+        tint: "bg-amber-soft/50",
+      }))
+    : [WEEKEND_GROUP];
+  const weekendWide = new Set<DayOfWeek>(
+    weekendDays ? weekendDefs.filter((g) => g.days.length === 1).flatMap((g) => g.days) : ["sat", "sun"],
+  );
 
   const weekdayGroups = buildGroups(weekdaySlots, weekdayDefs);
-  const weekendGroups = buildGroups(weekendSlots, [WEEKEND_GROUP]);
+  const weekendGroups = buildGroups(weekendSlots, weekendDefs);
 
   return (
     <DragScrollArea barX className="bg-card border-line shadow-card min-h-0 flex-1 rounded-2xl border p-1">

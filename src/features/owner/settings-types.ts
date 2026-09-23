@@ -221,12 +221,12 @@ export const shuttleSchema = z.object({
 });
 export type ShuttleSetting = z.infer<typeof shuttleSchema>;
 
-const weekdayNameSchema = z.enum(["mon", "tue", "wed", "thu", "fri"]);
+const weekdayNameSchema = z.enum(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
 
-/** 학원이 만든 요일 병합. id는 과목의 weekdayGrouping이 가리킨다. groups는 월~금 분할. */
+/** 학원이 만든 요일 병합. id는 과목의 weekdayGrouping이 가리킨다. 월~금은 빠짐없이, 토·일은 넣은 것만. */
 export const customWeekdayGroupingSchema = z.object({
   id: z.string().regex(/^c_[a-z0-9]{6,24}$/),
-  groups: z.array(z.array(weekdayNameSchema).min(1).max(5)).min(1).max(5),
+  groups: z.array(z.array(weekdayNameSchema).min(1).max(7)).min(1).max(7),
 });
 export type CustomWeekdayGrouping = z.infer<typeof customWeekdayGroupingSchema>;
 

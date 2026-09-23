@@ -4,7 +4,7 @@ import {
   formatWeekdayGroups,
   parseWeekdayPartition,
   weekdayPartitionKey,
-  type Weekday,
+  type GroupingDay,
 } from "./weekday-partition";
 
 export { formatWeekdayGroups };
@@ -55,8 +55,8 @@ function isBuiltin(value: string): value is WeekdayGrouping {
   return (WEEKDAY_GROUPINGS as readonly string[]).includes(value);
 }
 
-/** 만든 묶음이 기본 목록과 같으면 그 프리셋. 없으면 null. */
-export function builtinIdForGroups(groups: readonly (readonly Weekday[])[]): WeekdayGrouping | null {
+/** 만든 묶음이 기본 목록과 같으면 그 프리셋. 없으면 null. 토·일이 있으면 기본 목록과 다르다. */
+export function builtinIdForGroups(groups: readonly (readonly GroupingDay[])[]): WeekdayGrouping | null {
   const parsed = parseWeekdayPartition(groups);
   if (!parsed) return null;
   const key = weekdayPartitionKey(parsed);
@@ -92,4 +92,35 @@ export function weekdayGroupingChoices(
     extra.push({ value: custom.id, label: formatWeekdayGroups(parsed) });
   }
   return [...WEEKDAY_GROUPING_OPTIONS, ...extra];
+}
+
+/** 기본뷰는 평일 판과 주말 판이 따로다. 토·일을 안 적으면 주말은 예전처럼 토·일 각각이다. */
+export function timetableBoards(groups: readonly (readonly DayOfWeek[])[]): {
+  weekdays: DayOfWeek[][];
+  weekend: DayOfWeek[][] | null;
+} {
+  const weekdays: DayOfWeek[][] = [];
+  const weekend: DayOfWeek[][] = [];
+  for (const group of groups) {
+    const days = group.filter((day) => day !== "sat" && day !== "sun");
+    const ends = group.filter((day) => day === "sat" || day === "sun");
+    if (days.length > 0) weekdays.push(days);
+    if (ends.length > 0) weekend.push(ends);
+  }
+  return { weekdays, weekend: weekend.length > 0 ? weekend : null };
+}
+
+const WEEKEND_ORDER: DayOfWeek[] = ["sat", "sun"];
+
+/**
+ * 주말 판에 그릴 묶음. null이면 호출부가 예전처럼 토·일을 각각(병합 없음) 그린다.
+ * 한쪽만 적혀 있으면 나머지 요일은 혼자 남겨 그 날 수업이 사라지지 않게 한다.
+ */
+export function weekendBoardDays(groups: readonly (readonly DayOfWeek[])[]): DayOfWeek[][] | null {
+  const weekend = timetableBoards(groups).weekend;
+  if (!weekend) return null;
+  const seen = new Set(weekend.flat());
+  const filled = weekend.map((group) => [...group]);
+  for (const day of WEEKEND_ORDER) if (!seen.has(day)) filled.push([day]);
+  return filled.sort((a, b) => WEEKEND_ORDER.indexOf(a[0]!) - WEEKEND_ORDER.indexOf(b[0]!));
 }

@@ -10,8 +10,10 @@ import {
   builtinIdForGroups,
   resolveWeekdayGroups,
   sortDaysInGroup,
+  timetableBoards,
   weekdayGroupingChoices,
   weekdayPartition,
+  weekendBoardDays,
   normalizeWeekdayGrouping,
   WEEKDAY_GROUPING_OPTIONS,
   WEEKDAY_GROUPINGS,
@@ -102,6 +104,43 @@ describe("만든 요일 병합", () => {
     expect(parseWeekdayPartition([["mon", "tue"]])).toBeNull();
   });
 
+  it("토·일을 묶으면 금요일은 혼자 남고 주말 판으로만 간다", () => {
+    const full = completeWeekdayPartition([
+      ["sat", "sun"],
+      ["mon", "wed"],
+      ["tue", "thu"],
+    ]);
+    expect(full).toEqual([
+      ["mon", "wed"],
+      ["tue", "thu"],
+      ["fri"],
+      ["sat", "sun"],
+    ]);
+    expect(formatWeekdayGroups(full!)).toBe("월·수 / 화·목 / 금 / 토·일");
+    expect(builtinIdForGroups(full!)).toBeNull();
+    const boards = timetableBoards(full!);
+    expect(boards.weekdays).toEqual([
+      ["mon", "wed"],
+      ["tue", "thu"],
+      ["fri"],
+    ]);
+    expect(boards.weekend).toEqual([["sat", "sun"]]);
+    expect(weekendBoardDays(full!)).toEqual([["sat", "sun"]]);
+  });
+
+  it("기본 묶음은 주말 판을 따로 두지 않는다", () => {
+    expect(timetableBoards(weekdayPartition("mon-thu")).weekend).toBeNull();
+    expect(weekendBoardDays(weekdayPartition("none"))).toBeNull();
+  });
+
+  it("평일에 섞여 적힌 토요일은 주말 판으로 가르고, 일요일은 혼자 남긴다", () => {
+    const mixed = [["mon", "sat"], ["tue"], ["wed"], ["thu"], ["fri"]] as const;
+    const boards = timetableBoards(mixed);
+    expect(boards.weekdays).toEqual([["mon"], ["tue"], ["wed"], ["thu"], ["fri"]]);
+    expect(boards.weekend).toEqual([["sat"]]);
+    expect(weekendBoardDays(mixed)).toEqual([["sat"], ["sun"]]);
+  });
+
   it("설정 스키마는 빈 목록과 만든 묶음을 통과시킨다", () => {
     expect(operationsSchema.safeParse(DEFAULT_SETTINGS.operations).success).toBe(true);
     const withCustom = {
@@ -120,6 +159,13 @@ describe("만든 요일 병합", () => {
         ),
       }).success,
     ).toBe(false);
+    const weekend = completeWeekdayPartition([["sat", "sun"]]);
+    expect(
+      operationsSchema.safeParse({
+        ...DEFAULT_SETTINGS.operations,
+        weekdayGroupings: [{ id: "c_weekend01", groups: weekend }],
+      }).success,
+    ).toBe(true);
   });
 });
 

@@ -79,7 +79,7 @@ export function SubjectsSection({
       <div className="space-y-5">
         <SettingsCard
           title="요일 병합 묶음"
-          description="월·화, 수·목처럼 원하는 요일을 묶어 두면 과목의 시간표 요일 병합 목록에 나타납니다. 묶음에 넣지 않은 요일은 수업이 있는 날 혼자 섭니다."
+          description="월·화, 수·목, 토·일처럼 원하는 요일을 묶어 두면 과목의 시간표 요일 병합 목록에 나타납니다. 묶음에 넣지 않은 평일은 수업이 있는 날 혼자 섭니다."
         >
           <WeekdayGroupingEditor
             groupings={o.weekdayGroupings ?? []}

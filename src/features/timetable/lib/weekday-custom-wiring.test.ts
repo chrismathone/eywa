@@ -19,4 +19,17 @@ describe("만든 요일 병합이 화면까지 간다", () => {
       expect(src).toContain("dayGroups={weekdayGroups}");
     }
   });
+
+  it("목록에서 빼기가 있고, 주말 묶음은 주말 판에서만 그린다", () => {
+    expect(read("src/app/(shell)/owner/_components/weekday-grouping-editor.tsx")).toContain("목록에서 빼기");
+    for (const table of [
+      "src/app/(shell)/timetable/_components/weekday-group-tables.tsx",
+      "src/app/(shell)/timetable-dev/_components/weekday-group-tables.tsx",
+    ]) {
+      const src = read(table);
+      expect(src).toContain("timetableBoards");
+      expect(src).toContain("weekendBoardDays");
+      expect(src).toContain("WEEKEND_GROUP");
+    }
+  });
 });

@@ -9,14 +9,15 @@ import {
   formatWeekdayGroups,
 } from "@/features/timetable/lib/weekday-groups";
 import {
-  WEEKDAYS,
+  GROUPING_DAYS,
   completeWeekdayPartition,
+  isWeekendDay,
   parseWeekdayPartition,
   weekdayPartitionKey,
-  type Weekday,
+  type GroupingDay,
 } from "@/features/timetable/lib/weekday-partition";
 
-const KO: Record<Weekday, string> = { mon: "월", tue: "화", wed: "수", thu: "목", fri: "금" };
+const CHIP = "rounded-md border px-3 py-1 text-sm";
 
 function newGroupingId(): string {
   return `c_${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
@@ -31,14 +32,14 @@ export function WeekdayGroupingEditor({
   subjects: SubjectSetting[];
   onChange: (next: { groupings: CustomWeekdayGrouping[]; subjects: SubjectSetting[] }) => void;
 }) {
-  const [picked, setPicked] = useState<Weekday[]>([]);
-  const [draft, setDraft] = useState<Weekday[][]>([]);
+  const [picked, setPicked] = useState<GroupingDay[]>([]);
+  const [draft, setDraft] = useState<GroupingDay[][]>([]);
   const [note, setNote] = useState("");
 
   const used = new Set(draft.flat());
   const preview = completeWeekdayPartition(draft);
 
-  function toggle(day: Weekday) {
+  function toggle(day: GroupingDay) {
     setNote("");
     if (used.has(day)) {
       setDraft((rows) =>
@@ -54,7 +55,12 @@ export function WeekdayGroupingEditor({
       setNote("묶을 요일을 둘 이상 고르세요.");
       return;
     }
-    setDraft((rows) => [...rows, WEEKDAYS.filter((day) => picked.includes(day))]);
+    const mixesWeekend = picked.some((day) => isWeekendDay(day)) && picked.some((day) => !isWeekendDay(day));
+    if (mixesWeekend) {
+      setNote("토·일은 평일과 따로 묶습니다.");
+      return;
+    }
+    setDraft((rows) => [...rows, GROUPING_DAYS.filter((day) => picked.includes(day))]);
     setPicked([]);
     setNote("");
   }
@@ -94,7 +100,7 @@ export function WeekdayGroupingEditor({
       .filter((subject) => subject.weekdayGrouping === id)
       .map((subject) => subject.label.trim() || subject.key);
     if (labels.length > 0) {
-      setNote(`${labels.join(", ")}에서 쓰는 중이라 지울 수 없습니다. 과목의 병합을 다른 것으로 바꾼 뒤 지우세요.`);
+      setNote(`${labels.join(", ")}에서 쓰는 중이라 지울 수 없습니다. 과목의 병합을 다른 것으로 바꾼 뒤 빼세요.`);
       return;
     }
     onChange({ groupings: groupings.filter((row) => row.id !== id), subjects });
@@ -104,18 +110,18 @@ export function WeekdayGroupingEditor({
   return (
     <div className="space-y-3">
       <p className="text-sm">
-        요일을 고른 뒤 묶으면 한 칸이 됩니다. 고르지 않은 요일은 혼자 남습니다. 목록에 넣은 묶음은 아래 과목의
-        시간표 요일 병합에서 고릅니다.
+        요일을 고른 뒤 묶으면 한 칸이 됩니다. 고르지 않은 평일은 혼자 남습니다. 토·일을 묶으면 주말 판에서 한 칸이 됩니다.
+        목록에 넣은 묶음은 아래 과목의 시간표 요일 병합에서 고릅니다.
       </p>
       {groupings.length > 0 ? (
-        <ul className="space-y-1">
+        <ul className="space-y-2">
           {groupings.map((row) => {
             const parsed = parseWeekdayPartition(row.groups);
             return (
               <li key={row.id} className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-bold">{parsed ? formatWeekdayGroups(parsed) : row.id}</span>
-                <button type="button" className="text-sm underline" onClick={() => remove(row.id)}>
-                  삭제
+                <button type="button" className={`border-line bg-card ${CHIP}`} onClick={() => remove(row.id)}>
+                  목록에서 빼기
                 </button>
               </li>
             );
@@ -123,7 +129,7 @@ export function WeekdayGroupingEditor({
         </ul>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {WEEKDAYS.map((day) => {
+        {GROUPING_DAYS.map((day) => {
           const grouped = used.has(day);
           const on = picked.includes(day);
           return (
@@ -131,7 +137,7 @@ export function WeekdayGroupingEditor({
               key={day}
               type="button"
               aria-pressed={on || grouped}
-              className={`rounded-md border px-3 py-1 text-sm ${
+              className={`${CHIP} ${
                 on
                   ? "border-primary bg-primary text-primary-foreground"
                   : grouped
@@ -140,22 +146,41 @@ export function WeekdayGroupingEditor({
               }`}
               onClick={() => toggle(day)}
             >
-              {KO[day]}
+              {formatWeekdayGroups([[day]])}
             </button>
           );
         })}
       </div>
+      {draft.length > 0 ? (
+        <ul className="space-y-2">
+          {draft.map((group, index) => (
+            <li key={group.join("-")} className="flex flex-wrap items-center gap-2">
+              <span className="text-sm">{formatWeekdayGroups([group])}</span>
+              <button
+                type="button"
+                className={`border-line bg-card ${CHIP}`}
+                onClick={() => {
+                  setDraft((rows) => rows.filter((_, i) => i !== index));
+                  setNote("");
+                }}
+              >
+                빼기
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {preview ? <p className="text-sm">미리보기 {formatWeekdayGroups(preview)}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="border-line rounded-md border px-3 py-1 text-sm" onClick={bundle}>
+        <button type="button" className={`border-line bg-card ${CHIP}`} onClick={bundle}>
           선택한 요일 묶기
         </button>
-        <button type="button" className="border-line rounded-md border px-3 py-1 text-sm" onClick={addToList}>
+        <button type="button" className={`border-line bg-card ${CHIP}`} onClick={addToList}>
           목록에 넣기
         </button>
         <button
           type="button"
-          className="border-line rounded-md border px-3 py-1 text-sm"
+          className={`border-line bg-card ${CHIP}`}
           onClick={() => {
             setDraft([]);
             setPicked([]);
