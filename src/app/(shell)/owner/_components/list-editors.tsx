@@ -187,7 +187,7 @@ export function SubjectListEditor({
                   ))}
                 </select>
               </span>
-              {/* 요일 병합 — 과목별 시간표 기본뷰 병합 프리셋(월목/화금·월화/목금·월수금/화목·없음) */}
+              {/* 요일 병합 — 과목별 시간표 기본뷰 병합 프리셋 */}
               <select
                 className={`${cellCls} w-[160px]`}
                 value={s.weekdayGrouping ?? "mon-thu"}

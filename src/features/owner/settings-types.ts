@@ -20,9 +20,10 @@ export const SUBJECT_COLORS = [
 ] as const;
 
 // 과목별 시간표 요일 병합 프리셋 — 같은 반이 묶인 요일에 걸치면 한 칸으로 병합(기본뷰).
-// mon-thu=월목/화금(수 단독, 수학식), mon-tue=월화/목금(수 단독, 영어식), mon-wed-fri=월수금/화목, none=요일별 개별.
+// mon-thu=월목/화금(수 단독), mon-tue=월화/목금(수 단독), mon-wed-fri=월수금/화목,
+// mon-tue-seq=월화/수목(금 단독), none=요일별 개별.
 // 실제 요일 분할·라벨은 features/timetable/lib/weekday-groups.ts(단일 소스). 미설정 행은 코드에서 mon-thu 폴백.
-export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "none"] as const;
+export const WEEKDAY_GROUPINGS = ["mon-thu", "mon-tue", "mon-wed-fri", "mon-tue-seq", "none"] as const;
 export type WeekdayGrouping = (typeof WEEKDAY_GROUPINGS)[number];
 
 // 과목을 열 때 처음 보이는 시간표 뷰(과목별). 원장 2026-08-06: *"영어는 기본뷰를 잘 안 쓴다"* —

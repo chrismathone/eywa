@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  sortDaysInGroup,
   weekdayPartition,
   normalizeWeekdayGrouping,
   WEEKDAY_GROUPING_OPTIONS,
@@ -15,6 +16,9 @@ describe("weekdayPartition", () => {
   });
   it("mon-wed-fri = 월수금/화목", () => {
     expect(weekdayPartition("mon-wed-fri")).toEqual([["mon", "wed", "fri"], ["tue", "thu"]]);
+  });
+  it("mon-tue-seq = 월화/수목/금", () => {
+    expect(weekdayPartition("mon-tue-seq")).toEqual([["mon", "tue"], ["wed", "thu"], ["fri"]]);
   });
   it("none = 요일별 개별(전부 단독)", () => {
     expect(weekdayPartition("none")).toEqual([["mon"], ["tue"], ["wed"], ["thu"], ["fri"]]);
@@ -41,9 +45,18 @@ describe("normalizeWeekdayGrouping", () => {
   });
 });
 
+describe("sortDaysInGroup", () => {
+  it("프리셋에 적힌 순서를 따른다 — 화·목은 화요일이 먼저", () => {
+    expect(sortDaysInGroup(["thu", "tue"], ["tue", "thu"])).toEqual(["tue", "thu"]);
+    expect(sortDaysInGroup(["wed", "mon"], ["mon", "wed", "fri"])).toEqual(["mon", "wed"]);
+    expect(sortDaysInGroup(["thu", "mon"], ["mon", "thu"])).toEqual(["mon", "thu"]);
+    expect(sortDaysInGroup(["fri", "tue"], ["tue", "fri"])).toEqual(["tue", "fri"]);
+  });
+});
+
 describe("WEEKDAY_GROUPING_OPTIONS", () => {
-  it("프리셋 4개 모두 라벨 제공", () => {
-    expect(WEEKDAY_GROUPING_OPTIONS).toHaveLength(4);
+  it("프리셋마다 라벨이 있다", () => {
+    expect(WEEKDAY_GROUPING_OPTIONS).toHaveLength(WEEKDAY_GROUPINGS.length);
     expect(WEEKDAY_GROUPING_OPTIONS.every((o) => o.label.length > 0)).toBe(true);
   });
 });

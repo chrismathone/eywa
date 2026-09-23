@@ -10,6 +10,7 @@ export const WEEKDAY_GROUPING_LABEL: Record<WeekdayGrouping, string> = {
   "mon-thu": "월·목 / 화·금 (주2회)",
   "mon-tue": "월·화 / 목·금 (주2회)",
   "mon-wed-fri": "월·수·금 / 화·목",
+  "mon-tue-seq": "월·화 / 수·목 (주2회)",
   none: "병합 없음 (요일별 개별)",
 };
 
@@ -21,11 +22,18 @@ const PARTITIONS: Record<WeekdayGrouping, DayOfWeek[][]> = {
   "mon-thu": [["mon", "thu"], ["tue", "fri"], ["wed"]],
   "mon-tue": [["mon", "tue"], ["thu", "fri"], ["wed"]],
   "mon-wed-fri": [["mon", "wed", "fri"], ["tue", "thu"]],
+  "mon-tue-seq": [["mon", "tue"], ["wed", "thu"], ["fri"]],
   none: [["mon"], ["tue"], ["wed"], ["thu"], ["fri"]],
 };
 
 export function weekdayPartition(g: WeekdayGrouping): DayOfWeek[][] {
   return PARTITIONS[g];
+}
+
+/** 한 묶음 안의 요일을 그 프리셋이 적은 순서로. 수업 없는 요일은 호출부가 이미 빼 둔다. */
+export function sortDaysInGroup(days: readonly DayOfWeek[], group: readonly DayOfWeek[]): DayOfWeek[] {
+  const rank = new Map(group.map((day, index) => [day, index]));
+  return [...days].sort((a, b) => (rank.get(a) ?? 99) - (rank.get(b) ?? 99));
 }
 
 /** 저장값(미설정·불량 포함)을 안전한 프리셋으로 — resolve가 스키마를 안 거치므로 읽는 쪽에서 폴백. */
