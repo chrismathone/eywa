@@ -136,11 +136,13 @@ export function GoalsTable({
     items.length === 0
       ? [`${label} ${t("goals.blank")}`]
       : piecesOf(items, role, lang).map((p) => `${label} ${p.prefix ? `${p.prefix} ` : ""}${p.text}`);
-  // 반 열은 이름이 들어갈 만큼만(원장 *"반 열을 좀 더 줄이고 나머지 열에 더 너비"*) — 긴 이름은 말줄임 + title.
-  const cols = `minmax(128px, 150px) repeat(${areas.length}, minmax(170px, 1fr))`;
+  // 반 열 150 → 195px(+30%). 늘어난 45px는 영역 열에 균등하게 나눠 표 전체 너비를 유지한다.
+  const classWidth = 195;
+  const areaMinWidth = 170 - (classWidth - 150) / Math.max(areas.length, 1);
+  const cols = `${classWidth}px repeat(${areas.length}, minmax(${areaMinWidth}px, 1fr))`;
   return (
     <DragScrollArea className="bg-card shadow-card rounded-2xl">
-      <div style={{ minWidth: 128 + areas.length * 170 }}>
+      <div style={{ minWidth: classWidth + areas.length * areaMinWidth }}>
         <div
           className="bg-bg-soft border-line-strong grid border-b"
           style={{ gridTemplateColumns: cols }}
