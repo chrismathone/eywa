@@ -72,10 +72,13 @@ describe("반 계획 보기의 반 링크", () => {
 
   it("월·주 줄을 더블클릭하면 칸 안에서 직접 수정하고 기존 목표 저장 경로를 쓴다", async () => {
     upsertGoal.mockResolvedValue({ ok: true });
-    renderTable();
+    const table = renderTable();
     fireEvent.doubleClick(screen.getByRole("button", { name: /Vocab · 월 · 더블클릭하여 수정/ }));
     expect(screen.queryByRole("dialog")).toBeNull();
     const monthlyBook = screen.getByRole("textbox", { name: /담임.*교재/ });
+    expect(table.container.contains(monthlyBook)).toBe(false);
+    expect(monthlyBook.closest("[data-anchored-editor]")).not.toBeNull();
+    expect(table.container.textContent).toContain("월비어 있음");
     fireEvent.change(monthlyBook, { target: { value: "능률보카" } });
     fireEvent.keyDown(monthlyBook, { key: "Enter" });
     await waitFor(() => expect(upsertGoal).toHaveBeenCalledWith(expect.objectContaining({
@@ -103,10 +106,12 @@ describe("반 계획 보기의 반 링크", () => {
         textbook: "능률보카", pageRange: null, progress: "Day 1", homework: null, updatedAt: "2026-09-23" }] },
     } });
     flushPatches.mockResolvedValue({ ok: true, results: [{ saveKey: "a1111111-1111-4111-8111-111111111111:progress", status: "applied", clientRev: 1 }] });
-    renderTable(true);
+    const table = renderTable(true);
     fireEvent.doubleClick(screen.getByRole("button", { name: /Vocab · 일 · 더블클릭하여 수정/ }));
     const progress = await screen.findByRole("textbox", { name: /일 15:00.*진도/ });
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(table.container.contains(progress)).toBe(false);
+    expect(table.container.textContent).toContain("일비어 있음");
     fireEvent.change(progress, { target: { value: "Day 2" } });
     fireEvent.keyDown(progress, { key: "Enter" });
     await waitFor(() => expect(flushPatches).toHaveBeenCalledWith(

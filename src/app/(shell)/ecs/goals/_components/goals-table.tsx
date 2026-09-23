@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -22,6 +22,7 @@ import type { GoalsBoardRow } from "@/features/class-sheets/server/goals-board";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { InlineDayEditor } from "./inline-day-editor";
 import { InlineGoalEditor } from "./inline-goal-editor";
+import { AnchoredEditor } from "./anchored-editor";
 
 /**
  * 영역 열의 바탕 = 그 영역 라벨 알약과 **같은 색**(원장 2026-09-23 *"열 색상을 해당 라벨 색상과 맞춰서 통일"*).
@@ -109,6 +110,37 @@ function GoalLine({
   );
 }
 
+function EditableGoalLine({ children, label, hint, active, editor, onOpen }: {
+  children: ReactNode;
+  label: string;
+  hint: string;
+  active: boolean;
+  editor: ReactNode;
+  onOpen: () => void;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  return (
+    <div
+      ref={anchorRef}
+      role="button"
+      tabIndex={0}
+      className="w-full cursor-text text-left hover:bg-white/40 focus-visible:outline-2 focus-visible:outline-primary"
+      title={active ? undefined : hint}
+      aria-label={label}
+      onDoubleClick={() => { if (!active) onOpen(); }}
+      onKeyDown={(event) => {
+        if (!active && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      {children}
+      {active ? <AnchoredEditor anchorRef={anchorRef}>{editor}</AnchoredEditor> : null}
+    </div>
+  );
+}
+
 /**
  * 반 계획 보기 표 — 행 = 반, 열 = 영역. 칸 한 개에 월(월간 목표) · 주(주간 목표) · 일(그 날 계획 줄) 세 줄.
  * ⚠️ 행 헤더(반 이름)는 그 주의 반 시트로 가는 링크. 월·주·일 줄은 더블클릭해 같은 데이터에 저장한다.
@@ -164,8 +196,8 @@ export function GoalsTable({
   };
   const editableLine = (row: GoalsBoardRow, area: string, scope: "month" | "week" | "day", node: ReactNode) => {
     const active = editing?.row.classId === row.classId && editing.area === area && editing.scope === scope;
-    if (active) {
-      return scope === "day" ? (
+    if (!canEdit || (scope === "day" && row.daySlots.length === 0)) return node;
+    const editor = active ? scope === "day" ? (
         <InlineDayEditor
           key={`${row.classId}:${area}:${date}`}
           classId={row.classId}
@@ -191,21 +223,14 @@ export function GoalsTable({
           onClose={() => closeEditor(row, area, scope)}
           onSaved={() => router.refresh()}
         />
-      );
-    }
-    return canEdit && (scope !== "day" || row.daySlots.length > 0) ? (
-      <div
-        role="button"
-        tabIndex={0}
-        className="w-full cursor-text text-left hover:bg-white/40 focus-visible:outline-2 focus-visible:outline-primary"
-        title={t("goals.editHint")}
-        aria-label={`${classNameFor(row.className, lang)} · ${areas.find((a) => a.key === area)?.label ?? area} · ${t(scope === "month" ? "goals.month" : scope === "week" ? "goals.week" : "goals.day")} · ${t("goals.editHint")}`}
-        onDoubleClick={() => openEditor(row, area, scope)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditor(row, area, scope); } }}
-      >
-        {node}
-      </div>
-    ) : node;
+      ) : null;
+    return <EditableGoalLine
+      label={`${classNameFor(row.className, lang)} · ${areas.find((a) => a.key === area)?.label ?? area} · ${t(scope === "month" ? "goals.month" : scope === "week" ? "goals.week" : "goals.day")} · ${t("goals.editHint")}`}
+      hint={t("goals.editHint")}
+      active={active}
+      editor={editor}
+      onOpen={() => openEditor(row, area, scope)}
+    >{node}</EditableGoalLine>;
   };
   return (
     <>
