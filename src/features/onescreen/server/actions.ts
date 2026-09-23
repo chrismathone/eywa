@@ -65,6 +65,7 @@ import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -627,7 +628,7 @@ export async function saveAndQueueClassnote(
       classnote_error: null,
     })
     .eq("id", saved.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "발송 요청") };
   /**
    * 🔴 **학부모에게 나가는 순간**이라 반드시 남긴다(ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없다).
    * ⚠️ 위 조기 반환들(dry_run·subject_off·report_optout·absent·no_attendance·already_sent·processing·
@@ -693,7 +694,7 @@ export async function revokeShareLink(shareToken: string): Promise<{ ok: boolean
     .from("lesson_reports")
     .update({ revoked_at: new Date().toISOString(), revoked_by: user.id })
     .eq("id", report.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "열람 차단") };
   // 🔴 학부모가 보던 링크를 **끄는** 동작 — 밖으로 나갔던 것을 되돌리는 일이라 흔적이 필수다.
   //    (행의 `revoked_by`가 남긴 하지만 재발급 한 번에 지워진다 — 아래 reissue가 null로 되돌린다.)
   await logAction({
@@ -753,7 +754,7 @@ export async function reissueShareLink(
       classnote_retry_count: 0,
     })
     .eq("id", report.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "재발급") };
   /**
    * 🔴 재발급은 **옛 링크를 죽이고 발송 상태를 지운다** — 학부모가 갖고 있던 주소가 404가 되고,
    *    발송 완료였던 건이 '미발송'으로 돌아가 재발송이 열린다(수정 금지를 푸는 유일한 문).
@@ -954,7 +955,7 @@ export async function saveOnescreenSession(
     .eq("updated_at", expectedRevision)
     .select("updated_at")
     .maybeSingle();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
   if (!data) return { ok: true, skipped: true };
   return { ok: true, updatedAt: (data?.updated_at as string | undefined) ?? undefined };
 }
@@ -1141,7 +1142,7 @@ export async function setMyNoticeMode(
     .update({ report_notice_mode: mode })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
   return { ok: true };
 }
 
@@ -1193,7 +1194,7 @@ export async function setMyOnescreenFontSize(
     .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "저장") };
   return { ok: true };
 }
 

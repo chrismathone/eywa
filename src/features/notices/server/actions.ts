@@ -10,6 +10,7 @@ import { normalizeNoticeAudience, POPUP_POSITIONS } from "../audience";
 import { noticePopupsTag } from "./queries";
 // 영문 번역(0249a) — 저장 시점 백그라운드 · [영문 만들기] 버튼. 🔴 페이지 로드에서 부르지 말 것.
 import { buildNoticeTranslation } from "./translate";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 
 export type NoticePopupActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -90,7 +91,7 @@ export async function createNoticePopup(
     ends_at: input.endsAt,
     author_id: g.user.id,
   }).select("id").maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "등록") };
 
   await logAction({ action: "notice_popup_create", targetType: "notice_popup", targetLabel: input.title });
   invalidate(g.user.tenantId);
@@ -199,7 +200,7 @@ export async function updateNoticePopup(
     })
     .eq("id", input.id)
     .eq("tenant_id", g.user.tenantId);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "저장") };
 
   // 생성·삭제만 남기고 **수정은 빠져 있었다**(2026-08-27 점검) — 팝업은 전 직원·학부모가 보는 글이라
   // 내용이 언제 누구 손에 바뀌었는지가 남아야 한다.
@@ -232,7 +233,7 @@ export async function toggleNoticePopupActive(
     .eq("tenant_id", g.user.tenantId)
     .select("title")
     .maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "변경") };
 
   await logAction({
     action: "notice_popup_toggle",
@@ -267,7 +268,7 @@ export async function deleteNoticePopup(
     .delete()
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "삭제") };
 
   await logAction({
     action: "notice_popup_delete",

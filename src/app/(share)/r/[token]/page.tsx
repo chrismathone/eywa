@@ -32,13 +32,15 @@ export default async function PublicLessonReportPage({
   const { token } = await params;
   const admin = createAdminClient();
 
-  const { data: report } = await admin
+  const { data: report, error: reportError } = await admin
     .from("lesson_reports")
     .select(
       "id, tenant_id, student_id, class_id, subject, report_date, revoked_at, textbook, progress, exam_info, homework_score, homework_today, teacher_name, notes, trend_note, daily_test, check_test, attitude, attachments, makeup",
     )
     .eq("share_token", token)
     .maybeSingle();
+  // 순간 DB 오류를 "링크 없음(404)"으로 보이면 학부모는 링크가 없어졌다고 받아들인다(E8) — 다시 열어 달라고 안내한다.
+  if (reportError) return <ClosedReportScreen reason="unavailable" />;
   if (!report) notFound();
   // 취소(강사가 열람 차단) → 취소화면. 만료(보고서일+90일 경과) → 만료화면. 둘 다 생 404 대신 친화 안내.
   if (report.revoked_at) return <ClosedReportScreen reason="revoked" />;

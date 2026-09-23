@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { PublicIntakeForm } from "./public-intake-form";
+import { isIntakeExpired } from "@/features/enrollment/intake-expiry";
 
 export const metadata = { title: "입학 상담 신청" };
 
@@ -37,7 +38,7 @@ export default async function PublicIntakePage({
   if (!tok || !tok.is_active) {
     return <ClosedScreen message="유효하지 않거나 종료된 접수 링크입니다." />;
   }
-  if (tok.expires_at && new Date(tok.expires_at as string) < new Date()) {
+  if (isIntakeExpired(tok.expires_at as string | null)) {
     return <ClosedScreen message="접수 기간이 만료되었습니다." />;
   }
 

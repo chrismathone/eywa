@@ -513,8 +513,8 @@ export function NoticeComposer({
                         ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        {/* 수정 = 대기건(발송 전 교체) + 게시건(게시글 PATCH). 삭제 = 대기건만. 게시취소 = 게시건. */}
-                        {(r.status === "queued" || r.canRevoke) && !editing ? (
+                        {/* 수정 = 대기건(발송 전 교체) + 게시건(게시글 PATCH). 삭제 = 대기건만. 게시취소 = 게시건 + 회수 일부 실패(다시). */}
+                        {(r.status === "queued" || r.canEdit) && !editing ? (
                           <Button
                             size="sm"
                             variant="ghost"

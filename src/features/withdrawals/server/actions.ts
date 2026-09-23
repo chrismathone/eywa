@@ -6,7 +6,7 @@ import {
   reopenEnrollmentsClosedByWithdrawal,
 } from "@/features/students/server/enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import {
@@ -140,9 +140,17 @@ export async function toggleConsultationStep(
     .update({ withdrawal_metadata: updated })
     .eq("id", studentId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: "상담 추적을 저장하지 못했습니다" };
+
+  // 누가 학부모 통화를 켜고 껐는지 남긴다(감사 M3 — 사유 저장·신규생 체크와 같은 결).
+  await logAction({
+    action: "withdrawal_consultation_step",
+    targetType: "student",
+    metadata: { studentId, step, done: next },
+  });
 
   revalidatePath(`/withdrawals/${studentId}`);
+  revalidatePath("/withdrawals");
   return undefined;
 }
 
@@ -156,6 +164,11 @@ export async function reactivateStudent(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "withdrawals"))) return { error: "퇴원 관리 권한이 없습니다" };
+  // 🔴 재원 복구는 **학생 기록 변경**이다 — 원생 상세의 재원 전환과 같은 문(students full)을 함께 요구한다(감사 S6).
+  //    퇴원관리만 full인 경리 계정이 여기서만 학생을 재원으로 되돌릴 수 있었다(#77).
+  if (!(await canManageTenant(user.systemRole, "students"))) {
+    return { error: "재원 복구 권한이 없습니다 — 원생 정보 변경 권한이 필요합니다" };
+  }
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
@@ -178,7 +191,7 @@ export async function reactivateStudent(
     })
     .eq("id", studentId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: "재원 복구에 실패했습니다. 잠시 후 다시 시도해 주세요." };
 
   // ⚠️ students만 되돌리면 수강은 종료된 채로 남아 시간표 셀 '퇴원' 섹션에 계속 뜨고 휴원도 안 풀린다.
   // 학생 상세(changeStudentStatus)의 재원 전환과 **같은 불변식**을 공유해야 한다 — 예전엔 이 경로에만
@@ -196,6 +209,7 @@ export async function reactivateStudent(
   });
 
   revalidatePath("/withdrawals");
+  revalidatePath(`/withdrawals/${studentId}`);
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/timetable");
   return undefined;

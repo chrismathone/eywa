@@ -350,18 +350,33 @@ export function ConvertToStudentDialog({
                   <div className="border-chart-4/40 bg-chart-4/5 space-y-2 rounded-md border px-3 py-2">
                     <p className="text-chart-4 text-sm">{state.error}</p>
                     {state.existingStudentId ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          const sid = state?.existingStudentId;
-                          if (!sid) return;
-                          openRoute(`/students/${sid}`, defaults.name ?? "학생");
-                        }}
-                      >
-                        <UserPlus className="size-4" />
-                        기존 학생 정보 보기
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            const sid = state?.existingStudentId;
+                            if (!sid) return;
+                            openRoute(`/students/${sid}`, defaults.name ?? "학생");
+                          }}
+                        >
+                          <UserPlus className="size-4" />
+                          {state.withdrawnMatch ? "퇴원 학생 열기(재원 복구)" : "기존 학생 정보 보기"}
+                        </Button>
+                        {/* 퇴원생과 이름·학교·학년만 같은 **다른 아이**일 수도 있다 — 그때만 사람이 골라 새로 만든다(감사 F13).
+                            자동 병합은 없다. submitter의 name/value가 FormData에 실린다. */}
+                        {state.withdrawnMatch ? (
+                          <Button
+                            type="submit"
+                            variant="ghost"
+                            name="ignoreWithdrawn"
+                            value="1"
+                            disabled={selected.size === 0 || !!startError}
+                          >
+                            다른 학생이면 새로 등록
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
@@ -458,12 +473,16 @@ function Field({
   mono?: boolean;
   className?: string;
 }) {
+  // 컨트롤드 — React 19는 `<form action>` 제출마다 비컨트롤드 입력을 기본값으로 되돌린다(#83). 퇴원생 경고 뒤
+  // '다른 학생이면 새로 등록'으로 다시 제출할 때 직원이 고친 학년·연락처가 상담 원본으로 돌아가면 안 된다.
+  const [value, setValue] = useState(defaultValue ?? "");
   return (
     <div className={`space-y-1 ${className ?? ""}`}>
       <label className="text-muted-foreground block text-xs font-medium">{label}</label>
       <input
         name={name}
-        defaultValue={defaultValue}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
         required={required}
         className={`border-border bg-card text-foreground w-full rounded-md border px-2 py-1.5 text-sm ${mono ? "num" : ""}`}
       />

@@ -154,10 +154,12 @@ export default async function StudentDetailPage({
   // 앞으로 잡힌 **보강 예약**(0264a)도 같은 배너에 선다(원장 2026-09-14: *"여기서도 보강 정보 알 수 있으면
   // 더 좋을듯? 바로가기로 오는것이니까"*). 🔴 읽기 전용 — 수정·취소 버튼은 붙이지 않는다(고치는 자리는
   // 출석부 칸이다). 조회는 fail-soft라 0264a 미적용·실패면 줄이 없을 뿐 화면은 그대로다([[#95]]).
-  const [scheduled, canManageScheduled, upcomingMakeups] = await Promise.all([
+  const [scheduled, canManageScheduled, upcomingMakeups, canSeeWithdrawals] = await Promise.all([
     getScheduledForStudent(student.id),
     canManageTenant(user.systemRole, "classes"),
     getStudentUpcomingReservations(student.id, kstToday()),
+    // 퇴원생이면 퇴원 기록(사유·사후 상담)으로 바로 가는 링크(감사 N6) — 퇴원관리를 못 여는 사람에겐 안 선다.
+    student.status === "withdrawn" ? canAccessTenant(user.systemRole, "withdrawals") : Promise.resolve(false),
   ]);
 
   return (
@@ -210,6 +212,11 @@ export default async function StudentDetailPage({
             ) : null}
             {/* 🔴 'AI 케어 분석' 버튼은 **없앴다**(원장 2026-09-18 "삭제") — 되살리지 말 것.
                 지난 분석 결과는 개요 탭 'AI 케어 인사이트'에 그대로 보인다(결과가 있을 때만 서는 패널). */}
+            {canSeeWithdrawals ? (
+              <WindowLink href={`/withdrawals/${student.id}`} title={student.name}>
+                <span className="text-primary text-sm font-semibold hover:underline">퇴원 기록 보기</span>
+              </WindowLink>
+            ) : null}
             {canDeleteStudent ? (
               <DeleteStudentButton studentId={student.id} studentName={student.name} backHref={backHref} />
             ) : null}

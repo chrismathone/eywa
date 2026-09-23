@@ -14,6 +14,7 @@ import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import {
   flattenNoticeReportLinks,
   boardStudentName,
+  noticePostedActions,
   type NoticeReportLink,
 } from "@/features/onescreen/notice-links";
 import {
@@ -251,6 +252,9 @@ export type NoticeRow = {
   results: { board: string; studentName: string; ok?: boolean; note?: string }[] | null;
   /** 게시된 글 주소 + 학생 이름 — '#1 #2'로는 누구 글인지 알 수 없어 이름으로 되붙인다. */
   reportLinks: NoticeReportLink[];
+  /** 게시취소(회수 일부 실패면 남은 글 다시)·제자리 수정 가능 여부 — 원스크린 발송자 화면과 같은 판정(F1·F2). */
+  canRevoke: boolean;
+  canEdit: boolean;
   error: string | null;
   createdAt: string;
   processedAt: string | null;
@@ -292,6 +296,7 @@ export async function listClassNotices(): Promise<{ ok: boolean; rows?: NoticeRo
             }))
           : null,
         reportLinks: flattenNoticeReportLinks(r.results, r.targets),
+        ...noticePostedActions(r.status as string, r.results, r.targets),
         error: r.error as string | null,
         createdAt: r.created_at as string,
         processedAt: r.processed_at as string | null,

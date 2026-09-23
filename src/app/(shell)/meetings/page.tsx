@@ -14,12 +14,12 @@ import { FilterSelect } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
-import { kstMonth } from "@/lib/date-kst";
 import {
-  getMeetings,
+  getMeetingsPage,
   type MeetingProcessingStatus,
   type MeetingRow,
 } from "@/features/meetings/server/queries";
+import type { MeetingRangeKey as RangeKey, MeetingStatusKey as StatusKey } from "@/features/meetings/list-filter";
 import { NewMeetingTrigger } from "./_new-meeting-trigger";
 import { Pagination } from "@/components/pagination";
 
@@ -150,9 +150,6 @@ function MeetingItem({ m }: { m: MeetingRow }) {
   );
 }
 
-type RangeKey = "all" | "7d" | "30d" | "month";
-type StatusKey = "all" | "completed" | "processing" | "failed" | "idle";
-
 /** 드롭다운 항목 — 해제 항목('전체')은 FilterSelect가 맨 위에 스스로 세운다(축 이름은 `axisLabel`, `allLabel`에 넣지 말 것). */
 const RANGE_OPTIONS: { value: Exclude<RangeKey, "all">; label: string }[] = [
   { value: "7d", label: "최근 7일" },
@@ -167,28 +164,6 @@ const STATUS_OPTIONS: { value: Exclude<StatusKey, "all">; label: string }[] = [
   { value: "idle", label: "수동" },
 ];
 
-function inRange(iso: string, key: RangeKey): boolean {
-  if (key === "all") return true;
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  if (key === "7d") return now - then <= 7 * 86_400_000;
-  if (key === "30d") return now - then <= 30 * 86_400_000;
-  if (key === "month") {
-    return kstMonth(new Date(iso)) === kstMonth();
-  }
-  return true;
-}
-
-function matchStatus(s: MeetingProcessingStatus, key: StatusKey): boolean {
-  if (key === "all") return true;
-  if (key === "completed") return s === "completed";
-  if (key === "processing")
-    return s === "transcribing" || s === "analyzing" || s === "uploaded";
-  if (key === "failed") return s === "failed";
-  if (key === "idle") return s === "idle";
-  return true;
-}
-
 export default async function MeetingsPage({
   searchParams,
 }: {
@@ -201,29 +176,12 @@ export default async function MeetingsPage({
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  // 회의는 모집단이 모더릿(수백)하고 필터(다중 상태·참석자 jsonb·상대기간)가 SQL로 옮기기 까다로워,
-  // 수납 페이지와 같은 메모리 페이지네이션을 쓴다(전건 fetch는 기존과 동일 — 렌더만 50행으로 캡).
-  const all = await getMeetings();
-  let meetings = all;
-  if (q) {
-    const term = q.toLowerCase();
-    meetings = meetings.filter(
-      (m) =>
-        m.title.toLowerCase().includes(term) ||
-        m.attendees.some((a) => a.toLowerCase().includes(term)),
-    );
-  }
-  meetings = meetings.filter((m) => inRange(m.heldAt, range));
-  meetings = meetings.filter((m) => matchStatus(m.processingStatus, status));
-
-  const total = meetings.length;
+  // 목록은 서버가 걸러 한 페이지만 준다(T6·N8) — 전사 원문 전체를 받지 않고, 검색은 제목·참석자·AI 요약·전사까지.
+  const result = await getMeetingsPage({ range, status, q, page, pageSize: PAGE_SIZE });
+  const rows = result.ok ? result.rows : [];
+  const total = result.ok ? result.total : 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const rows = meetings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const completed = all.filter((m) => m.processingStatus === "completed").length;
-  const inProgress = all.filter(
-    (m) => m.processingStatus === "transcribing" || m.processingStatus === "analyzing",
-  ).length;
+  const counts = result.ok ? result.counts : { all: 0, completed: 0, inProgress: 0 };
 
   // 필터 드롭다운(FilterSelect)은 page를 지워 자동 1페이지 리셋. pageHref만 p>1에서 page= 세팅 — URL 원값을 잇는다.
   const pageHref = (p: number) => {
@@ -245,9 +203,9 @@ export default async function MeetingsPage({
 
       {/* Stat strip — Editorial 문법 ②(BigStat 공용 아톰) */}
       <StatStrip>
-        <BigStat label="전체 회의" value={all.length} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={1.8} />} />
-        <BigStat label="AI 분석 완료" value={completed} unit="건" tone="gold" icon={<MenuGlyph name="sparkle" size={22} />} />
-        <BigStat label="처리 중" value={inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={1.8} />} />
+        <BigStat label="전체 회의" value={counts.all} unit="건" tone="primary" icon={<Mic size={16} strokeWidth={1.8} />} />
+        <BigStat label="AI 분석 완료" value={counts.completed} unit="건" tone="gold" icon={<MenuGlyph name="sparkle" size={22} />} />
+        <BigStat label="처리 중" value={counts.inProgress} unit="건" tone="rose" icon={<RefreshCw size={16} strokeWidth={1.8} />} />
       </StatStrip>
 
       {/* 결과 줄 + 필터 — 지시서 §10: 필터는 축마다 라벨 하나(`기간: 최근 7일`처럼 축이 붙어 읽힌다) · 검색은 눌러야 나온다.
@@ -281,12 +239,17 @@ export default async function MeetingsPage({
             className="w-auto"
             triggerClassName={TOOLBAR_SELECT}
           />
-          <SearchToggle placeholder="제목·참석자" defaultValue={q} />
+          <SearchToggle placeholder="제목·참석자·내용" defaultValue={q} />
           <NewMeetingTrigger />
         </div>
       </div>
 
-      {total === 0 ? (
+      {!result.ok ? (
+        // 조회 실패를 "회의 없음"으로 보이지 않는다(T6) — 한글 요약 + 원문은 툴팁.
+        <p className="bg-danger-soft text-danger rounded-xl px-4 py-3 text-sm" role="alert" title={result.raw}>
+          회의록을 불러오지 못했습니다 — {result.error}
+        </p>
+      ) : total === 0 ? (
         <div className="mx-auto max-w-xl py-4">
           <PhotoCard
             src="/photos/meetings-hero.webp"

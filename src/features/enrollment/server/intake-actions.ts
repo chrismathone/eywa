@@ -15,6 +15,8 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { parseIntakeChecklist } from "@/features/enrollment/intake-checklist-parse";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
+import { intakeExpiryIso, isIntakeExpired } from "@/features/enrollment/intake-expiry";
+import { isValidYmd } from "@/lib/date-kst";
 import {
   GENDER_OPTIONS,
   BLOOD_OPTIONS,
@@ -50,19 +52,18 @@ export async function createIntakeToken(
     token: randomBytes(16).toString("hex"),
     name: name.slice(0, 80),
     // 미입력 시 영구 유효 대신 기본 90일 만료(방치된 공개 링크 방지). 학원장이 폼에서 직접 지정 가능.
-    expires_at: expiresRaw
-      ? new Date(expiresRaw).toISOString()
-      : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
+    // 🔴 만료는 **그날 KST 23:59:59**(감사 F14) — 날짜만 new Date로 읽으면 UTC 자정 = 오전 9시에 끊겼다.
+    expires_at: intakeExpiryIso(expiresRaw || null),
     created_by: user.id,
   });
-  if (insErr) return { error: insErr.message };
+  if (insErr) return { error: "접수 링크를 만들지 못했습니다" };
 
   await logAction({ action: "intake_token_create", targetType: "intake_token", targetLabel: name });
   revalidatePath("/enrollment");
   return { ok: true };
 }
 
-/** 토큰 활성/비활성 토글 또는 삭제. */
+/** 토큰 활성/비활성 토글·만료일 변경·삭제. 셋 다 감사로그(감사 M4 — QR 포스터가 왜 죽었는지 되짚게). */
 export async function setIntakeTokenActive(
   _prev: IntakeTokenState,
   formData: FormData,
@@ -74,16 +75,43 @@ export async function setIntakeTokenActive(
   const action = String(formData.get("action") ?? "toggle");
 
   const supabase = await createClient();
+  // 지우면 이름을 되짚을 수 없으니 먼저 읽는다(감사로그 대상 이름).
+  const { data: tok } = await supabase.from("intake_tokens").select("name").eq("id", id).maybeSingle();
+  if (!tok) return { error: "접수 링크를 찾을 수 없습니다" };
+  const label = (tok.name as string | null) ?? null;
   if (action === "delete") {
     const { error: delErr } = await supabase.from("intake_tokens").delete().eq("id", id);
-    if (delErr) return { error: delErr.message };
+    if (delErr) return { error: "접수 링크를 삭제하지 못했습니다" };
+    await logAction({ action: "intake_token_delete", targetType: "intake_token", targetLabel: label });
+  } else if (action === "expire") {
+    // 만료일 변경(연장) — 기본 90일이 지나 죽은 QR도 새로 인쇄하지 않고 되살린다(감사 F14).
+    const raw = String(formData.get("expiresAt") ?? "").trim();
+    if (!isValidYmd(raw)) return { error: "만료일을 선택해주세요" };
+    const expiresAt = intakeExpiryIso(raw);
+    const { error: updErr } = await supabase
+      .from("intake_tokens")
+      .update({ expires_at: expiresAt })
+      .eq("id", id);
+    if (updErr) return { error: "만료일을 바꾸지 못했습니다" };
+    await logAction({
+      action: "intake_token_toggle",
+      targetType: "intake_token",
+      targetLabel: label,
+      metadata: { change: "expire", expiresOn: raw },
+    });
   } else {
     const active = String(formData.get("active") ?? "false") === "true";
     const { error: updErr } = await supabase
       .from("intake_tokens")
       .update({ is_active: active })
       .eq("id", id);
-    if (updErr) return { error: updErr.message };
+    if (updErr) return { error: "접수 링크 상태를 바꾸지 못했습니다" };
+    await logAction({
+      action: "intake_token_toggle",
+      targetType: "intake_token",
+      targetLabel: label,
+      metadata: { change: active ? "reopen" : "close" },
+    });
   }
   revalidatePath("/enrollment");
   return { ok: true };
@@ -156,7 +184,7 @@ export async function submitPublicIntake(
     .eq("token", token)
     .maybeSingle();
   if (!tok || !tok.is_active) return { error: "사용할 수 없는 접수 링크입니다" };
-  if (tok.expires_at && new Date(tok.expires_at as string) < new Date()) {
+  if (isIntakeExpired(tok.expires_at as string | null)) {
     return { error: "만료된 접수 링크입니다" };
   }
 

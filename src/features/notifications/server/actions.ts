@@ -16,8 +16,9 @@ import type { NotificationItem } from "../types";
 /** 벨 데이터 새로고침(클라 NotificationBell가 마운트·열기·폴링에서 호출). view=받은함/보관함. */
 export async function fetchMyNotifications(
   view: NotificationView = "active",
+  limit?: number,
 ): Promise<{ unread: number; items: NotificationItem[] }> {
-  return getMyNotifications(view);
+  return getMyNotifications(view, limit);
 }
 
 /**
@@ -27,6 +28,7 @@ export async function fetchMyNotifications(
 export async function markNotificationsRead(
   ids?: string[],
   view: NotificationView = "active",
+  limit?: number,
 ): Promise<{ unread: number; items: NotificationItem[] }> {
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
@@ -37,7 +39,7 @@ export async function markNotificationsRead(
     .is("read_at", null);
   if (ids && ids.length > 0) q = q.in("id", ids.slice(0, 100)); // #53 방어(과대 배열 방지)
   await q;
-  return getMyNotifications(view);
+  return getMyNotifications(view, limit);
 }
 
 /**
@@ -47,34 +49,37 @@ export async function markNotificationsRead(
 export async function archiveNotification(
   id: string,
   view: NotificationView = "active",
+  limit?: number,
 ): Promise<{ unread: number; items: NotificationItem[] }> {
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
   const supabase = await createClient();
   await supabase.from("notifications").update({ archived_at: new Date().toISOString() }).eq("id", id);
-  return getMyNotifications(view);
+  return getMyNotifications(view, limit);
 }
 
 /** 보관 해제 — 보관함에서 받은함으로 복원. */
 export async function unarchiveNotification(
   id: string,
   view: NotificationView = "archived",
+  limit?: number,
 ): Promise<{ unread: number; items: NotificationItem[] }> {
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
   const supabase = await createClient();
   await supabase.from("notifications").update({ archived_at: null }).eq("id", id);
-  return getMyNotifications(view);
+  return getMyNotifications(view, limit);
 }
 
 /** 알림 영구 삭제 — RLS(delete: recipient_id=auth.uid(), 0074a)로 본인 것만. 복구 불가(보관이 안전판). */
 export async function deleteNotification(
   id: string,
   view: NotificationView = "active",
+  limit?: number,
 ): Promise<{ unread: number; items: NotificationItem[] }> {
   const user = await getCurrentUser();
   if (!user) return { unread: 0, items: [] };
   const supabase = await createClient();
   await supabase.from("notifications").delete().eq("id", id);
-  return getMyNotifications(view);
+  return getMyNotifications(view, limit);
 }

@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { classnoteBadge } from "@/features/onescreen/components/report-card";
 import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { listReports, sendClassnoteForUnsent, setReportCoversDate } from "@/features/report-admin/server/actions";
+import { listReports, retryClassnote, sendClassnoteForUnsent, setReportCoversDate } from "@/features/report-admin/server/actions";
+import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import {
   isAdminSendable,
   type ReportListFilters,
@@ -92,6 +93,14 @@ function MentSourceCell({ value }: { value: string | null | undefined }) {
 
 type Result = { rows: ReportListRow[]; total: number; page: number; pageSize: number };
 
+/**
+ * 목록 줄에서 재발송을 권할 상태(N4, 2026-09-23 감사) — 재발송은 3일 창 발송 큐 카드에만 있어, 그 창을 지난
+ * 실패 건은 목록에서 찾아도 다시 보낼 문이 없었다. 게이트는 서버 `retryClassnote`(기한·과목·빈 멘트·결석)가
+ * 최종으로 다시 본다(#77) — 여기는 눌러 봐야 헛돌 줄(발송 완료·기한 지남)에 버튼을 세우지 않을 뿐이다.
+ * 동명이인·공유 보드 보류는 사람이 원인을 고친 뒤 내보내는 것이라 확인을 한 번 더 받는다(큐 카드와 같은 판단).
+ */
+const RETRY_STATUSES = new Set(["failed", "name_conflict", "blocked_shared"]);
+
 export function ReportList({
   options,
   initial,
@@ -112,6 +121,7 @@ export function ReportList({
   const [result, setResult] = useState<Result>(initial);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   function run(next: ReportListFilters) {
@@ -204,6 +214,30 @@ export function ReportList({
     } else toast.error(res.error ?? "발송 요청에 실패했습니다");
   }
 
+  async function doRetryRow(r: ReportListRow) {
+    const held = r.classnoteStatus === "name_conflict" || r.classnoteStatus === "blocked_shared";
+    const msg = held
+      ? `${r.studentName} 보고서는 ${r.classnoteStatus === "name_conflict" ? "동명이인" : "공유 보드"} 때문에 보류된 건입니다. 원인을 확인했다면 다시 보냅니다. 계속할까요?`
+      : `${r.studentName} 보고서를 ClassNote로 다시 보냅니다. 계속할까요?`;
+    if (!window.confirm(msg)) return;
+    setRetryingId(r.id);
+    const res = await retryClassnote([r.id]);
+    setRetryingId(null);
+    if (res.ok && res.dryRun) {
+      toast.message("dry-run — 승인 전이라 실제 재발송 안 함. 원장 설정(보고서)에서 'ClassNote 실제 발송'을 켜야 전송됩니다");
+    } else if (res.ok && (res.requeued ?? 0) > 0) {
+      toast.success("재발송 대기에 올렸습니다 — 발송 PC가 순서대로 보냅니다");
+      run({ ...filters });
+      router.refresh();
+    } else if (res.ok) {
+      toast.message(
+        res.absentSkipped
+          ? "그날 결석으로 기록된 학생이라 다시 보내지 않았습니다"
+          : "다시 보낼 수 없는 보고서입니다(멘트 미작성·과목 미허용·기한 지남)",
+      );
+    } else toast.error(res.error ?? "재발송에 실패했습니다");
+  }
+
   return (
     <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
       {/* 상단 **1줄** — 제목 · 월 이동 · 뷰 설정 · 발송 · 건수.
@@ -264,7 +298,7 @@ export function ReportList({
             size="sm"
             disabled={busy || pending || checked.size === 0}
             onClick={doSend}
-            title="미발송 보고서만 선택할 수 있습니다 · 발송된 건의 재발송은 위 발송 큐 카드에서"
+            title="미발송 보고서만 선택할 수 있습니다 · 실패·보류된 건은 각 줄의 '재발송'으로 다시 보냅니다"
           >
             선택 발송 {checked.size > 0 ? `(${checked.size})` : ""}
           </Button>
@@ -365,6 +399,21 @@ export function ReportList({
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <CoversDateControl row={r} canEdit={canSend} onSaved={() => run(filters)} />
+                      {canSend &&
+                      r.classnoteStatus &&
+                      RETRY_STATUSES.has(r.classnoteStatus) &&
+                      r.source !== "edutrix_import" &&
+                      !classnoteRetryDeadline(r.reportDate, todayYmd).expired ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={retryingId === r.id}
+                          onClick={() => doRetryRow(r)}
+                          title="실패·보류된 보고서를 ClassNote로 다시 보냅니다(서버가 기한·과목·결석을 다시 확인)"
+                        >
+                          재발송
+                        </Button>
+                      ) : null}
                       {/* 관리자 강제 회수(2026-08-05 원장 지시) — 위 필터로 **전체 보고서를 검색한 뒤**
                           그 자리에서 회수한다. 게시 완료건에만 뜨고(RecallButton 판정), 경고 + 이중확인은
                           강사 카드와 **같은 컴포넌트**를 써서 한쪽만 약해지지 않는다. */}

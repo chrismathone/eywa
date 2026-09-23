@@ -2,6 +2,13 @@ import type { AywaIconName } from "@/components/icons/aywa-icons";
 
 // 알림 공용 타입/상수 — server-only 없음(클라 벨 컴포넌트도 import). 하드코딩 라벨은 여기 한 곳.
 
+/**
+ * 벨 목록 크기 — 기본 20, '더 보기'로 20씩 늘려 최대 100(읽음 처리 id 상한과 같다, F17 2026-09-23).
+ * 배지(안 읽음 수)는 전체를 세는데 목록은 잘려 있어서, '모두 읽음'이 보지도 못한 알림을 치우던 것을 막는다.
+ */
+export const NOTIFICATION_LIST_LIMIT = 20;
+export const NOTIFICATION_LIST_MAX = 100;
+
 export type NotificationType =
   | "enrollment_assigned" // 내 반에 학생 배정
   | "enrollment_transferred_in" // 반이동으로 내 반에 전입

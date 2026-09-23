@@ -11,6 +11,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
+import { cancelOnescreenNotice, editPostedNotice } from "@/features/onescreen/server/notice-actions";
 import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
 import { noticeFailures } from "@/features/report-admin/notice-failures";
@@ -63,6 +64,10 @@ export function NoticeFace({
   const [rows, setRows] = useState<NoticeRow[]>(initial);
   const [atts, setAtts] = useState<NoticeAttachment[]>([]); // 전원 공통 이미지
   const [uploading, setUploading] = useState(false);
+  // 발송 이력의 게시취소·제자리 수정(F1) — 원스크린 발송자와 **같은 서버 액션**(같은 큐·같은 워커). 새 발송 경로 없음.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
 
   // 선택 반들의 재원생 합집합(학생이 두 반에 걸치면 1회) — 개별 내용 입력 박스의 소스이자 실제 대상 수.
   const selectedStudents = (() => {
@@ -112,6 +117,43 @@ export function NoticeFace({
   async function refresh() {
     const res = await listClassNotices();
     if (res.ok) setRows(res.rows ?? []);
+  }
+
+  async function revokeRow(r: NoticeRow) {
+    const again = r.status === "revoke_partial";
+    const msg = again
+      ? "회수하지 못하고 남은 게시글을 다시 삭제 요청합니다. 계속할까요?"
+      : `학부모 알림장에 게시된 이 공지(${r.reportLinks.filter((l) => !l.revoked).length}건)를 삭제 요청합니다. 되돌릴 수 없습니다. 계속할까요?`;
+    if (!window.confirm(msg)) return;
+    setRowBusy(r.id);
+    const res = await cancelOnescreenNotice(r.id);
+    setRowBusy(null);
+    if (!res.ok) {
+      toast.error(res.error ?? "게시취소 요청에 실패했습니다");
+      return;
+    }
+    toast.success("게시취소를 요청했습니다 — 발송 PC가 순서대로 삭제합니다");
+    refresh();
+  }
+
+  async function saveRowEdit(r: NoticeRow) {
+    const live = r.reportLinks.filter((l) => !l.revoked).length;
+    if (
+      !window.confirm(
+        `학부모 알림장에 게시된 ${live}건의 내용을 새 내용으로 바꿉니다. 학생별로 덧붙였던 개별 내용은 사라지고 모두 같은 내용이 됩니다. 계속할까요?`,
+      )
+    )
+      return;
+    setRowBusy(r.id);
+    const res = await editPostedNotice(r.id, editBody);
+    setRowBusy(null);
+    if (!res.ok) {
+      toast.error(res.error ?? "수정 요청에 실패했습니다");
+      return;
+    }
+    toast.success("수정을 요청했습니다 — 발송 PC가 게시글 내용을 바꿉니다");
+    setEditingId(null);
+    refresh();
   }
 
   async function doSend(test: boolean) {
@@ -287,7 +329,7 @@ export function NoticeFace({
                 >
                   테스트 발송(학원이)
                 </Button>
-                <span className="text-text-faint text-xs">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수는 발송 이력에서 요청</span>
+                <span className="text-text-faint text-xs">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수·수정은 아래 발송 이력에서 요청</span>
               </div>
             ) : (
               <p className="text-text-faint text-xs">공지 발송 권한이 없습니다(열람 전용).</p>
@@ -310,6 +352,7 @@ export function NoticeFace({
                   <th className="px-3 py-2 font-bold">내용</th>
                   <th className="px-3 py-2 font-bold">대상</th>
                   <th className="px-3 py-2 font-bold">상태</th>
+                  {canSend ? <th className="px-3 py-2 font-bold">관리</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -322,7 +365,16 @@ export function NoticeFace({
                     <tr key={r.id} className="border-line border-b last:border-b-0">
                       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{fmtKst(r.createdAt)}</td>
                       <td className="text-foreground max-w-[320px] truncate px-3 py-2" title={r.body}>
-                        {r.body}
+                        {editingId === r.id ? (
+                          <textarea
+                            value={editBody}
+                            onChange={(e) => setEditBody(e.target.value)}
+                            aria-label="공지 새 내용"
+                            className="border-line bg-card focus:border-primary min-h-[96px] w-full min-w-[240px] resize-y rounded-md border p-2 text-xs whitespace-pre-wrap outline-none"
+                          />
+                        ) : (
+                          r.body
+                        )}
                       </td>
                       <td className="text-text-dim px-3 py-2">
                         {r.targetCount}명
@@ -376,6 +428,52 @@ export function NoticeFace({
                           </span>
                         ) : null}
                       </td>
+                      {canSend ? (
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {editingId === r.id ? (
+                            <span className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                disabled={rowBusy === r.id || !editBody.trim()}
+                                onClick={() => saveRowEdit(r)}
+                              >
+                                저장
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                                취소
+                              </Button>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              {r.canEdit ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={rowBusy === r.id}
+                                  title="게시된 알림장 글의 내용을 새 내용으로 바꿉니다(발송 PC가 처리)"
+                                  onClick={() => {
+                                    setEditingId(r.id);
+                                    setEditBody(r.body);
+                                  }}
+                                >
+                                  수정
+                                </Button>
+                              ) : null}
+                              {r.canRevoke ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={rowBusy === r.id}
+                                  title="학부모 알림장에 게시된 글을 삭제합니다(발송 PC가 처리)"
+                                  onClick={() => revokeRow(r)}
+                                >
+                                  {r.status === "revoke_partial" ? "남은 글 다시 회수" : "게시취소"}
+                                </Button>
+                              ) : null}
+                            </span>
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}

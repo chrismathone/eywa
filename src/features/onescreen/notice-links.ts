@@ -58,3 +58,37 @@ export function flattenNoticeReportLinks(results: unknown, targets: unknown): No
   }
   return out;
 }
+
+/**
+ * 게시된 공지에 어떤 조치가 가능한가 — 발송자 원스크린·사무실 발송 이력이 **같은 판정**을 쓴다(#77).
+ * - 게시취소: 게시됨(success/partial) 또는 **회수 일부 실패(revoke_partial)** + 아직 안 지운 글이 남음.
+ *   회수가 일부만 됐는데 다시 누를 문이 없으면 학부모 게시판에 공지가 영영 남는다(F2, 2026-09-23 감사).
+ * - 제자리 수정: 게시됨(success/partial) + 살아 있는 글이 있을 때만(회수가 시작된 공지는 고치지 않는다).
+ */
+export function noticePostedActions(
+  status: string,
+  results: unknown,
+  targets: unknown,
+): { canRevoke: boolean; canEdit: boolean } {
+  const hasLive = flattenNoticeReportLinks(results, targets).some((l) => !l.revoked);
+  const posted = status === "success" || status === "partial";
+  return { canRevoke: hasLive && (posted || status === "revoke_partial"), canEdit: hasLive && posted };
+}
+
+/**
+ * 회수를 **다시** 요청할 때 워커에게 넘길 results — 워커(`revokeNotice`)는 `{board, reports:[…]}`만 읽는데
+ * 한 번 회수한 결과는 `{board, revoked:[…]}` 모양이라, 그대로 다시 큐에 올리면 지울 글이 0개로 보여
+ * **아무것도 안 지우고 '회수됨'**이 된다. 회수 결과를 게시 결과 모양으로 되돌려 같은 큐(revoke_requested)를 태운다.
+ * 이미 지운 글도 함께 넘긴다 — 워커가 GET 404를 확인해 "이미 삭제됨"으로 다시 적으므로 기록이 사라지지 않는다.
+ * 새 발송 경로가 아니다(같은 워커·같은 대조 규칙).
+ */
+export function resultsForRetryRevoke(results: unknown): unknown {
+  if (!Array.isArray(results)) return results;
+  return (results as Array<Record<string, unknown>>).map((r) => {
+    if (r && typeof r === "object" && !Array.isArray(r.reports) && Array.isArray(r.revoked)) {
+      const { revoked, ...rest } = r;
+      return { ...rest, reports: revoked };
+    }
+    return r;
+  });
+}

@@ -13,6 +13,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { generateJSON } from "@/lib/ai/generate";
 import { reportError } from "@/lib/observability/report-error";
+import { aiUserMessage } from "@/lib/ai/user-message";
 import { mentionsStudentName } from "@/features/report-templates/name-mention";
 import { MENT_AI_TUNING } from "../prompt-defaults";
 import {
@@ -63,7 +64,8 @@ export async function generateEnglishMent(input: EnglishMentInput): Promise<Engl
     first = await generateOnce(safe, false, user.tenantId);
   } catch (e) {
     reportError(e, { scope: "onescreen.english-ment", step: "generate" });
-    return { ok: false, error: "AI 자동작성에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+    // 잔액 소진·키 오류·한도 같은 사유는 한글로 그대로 보인다(E11 — 이유를 모르면 강사가 계속 다시 누른다).
+    return { ok: false, error: aiUserMessage(e, "AI 자동작성에 실패했습니다. 잠시 후 다시 시도해 주세요.") };
   }
   if (!first) return { ok: false, error: "AI가 빈 답을 돌려줬습니다. 다시 시도해 주세요." };
   if (mentions(first)) return { ok: true, ...first, nameMissing: false };

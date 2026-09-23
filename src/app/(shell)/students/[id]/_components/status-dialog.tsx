@@ -22,6 +22,7 @@ import {
   type ChangeStatusState,
 } from "@/features/students/server/actions";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+import { REASON_LABEL, type WithdrawalReason } from "@/features/withdrawals/types";
 
 type Target = "withdrawn" | "on_hold" | "enrolled";
 
@@ -36,15 +37,10 @@ export type OpenEnrollment = {
   onHold?: boolean;
 };
 
-const WITHDRAWAL_REASON_OPTIONS = [
-  { value: "graduated", label: "졸업" },
-  { value: "relocation", label: "이사" },
-  { value: "competitor", label: "타학원" },
-  { value: "financial", label: "경제적 사유" },
-  { value: "schedule", label: "일정" },
-  { value: "dissatisfaction", label: "불만족" },
-  { value: "other", label: "기타" },
-];
+// 퇴원 사유 라벨은 퇴원관리와 **한 벌**(REASON_LABEL) — 두 벌이면 여기서 고른 사유가 퇴원관리에선 다른 말로 보였다(감사 D4).
+const WITHDRAWAL_REASON_OPTIONS = (Object.entries(REASON_LABEL) as [WithdrawalReason, string][]).map(
+  ([value, label]) => ({ value, label }),
+);
 
 function SubmitBtn({ target, label, disabled }: { target: Target; label?: string; disabled?: boolean }) {
   const { pending } = useFormStatus();

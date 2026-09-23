@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { pushConfigured, pushPublicKey } from "@/lib/push/web-push";
 
 /**
  * 휴대폰 알림 구독 관리 (0188a, 2026-08-07).
  *
  *  GET    — 이 계정이 휴대폰 알림을 켤 수 있나 + 구독에 필요한 공개키.
- *  POST   — 이 기기 구독 저장(같은 기기는 endpoint가 같아 갱신된다).
+ *           `?endpoint=`를 주면 그 기기 구독이 **DB에서 이 계정 것인지**(`mine`)도 답한다(F16 — 화면의 켜짐/꺼짐은
+ *           브라우저 구독 유무가 아니라 DB 기준. 같은 폰을 다른 계정이 쓰면 브라우저엔 구독이 있어도 내 것이 아니다).
+ *  POST   — 이 기기 구독 저장(같은 기기는 endpoint가 같아 갱신된다). 그 기기가 **같은 학원의 다른 계정**에
+ *           묶여 있으면 이 계정으로 옮긴다(F16, 원장 기본값 2026-09-23 — 마지막으로 켠 계정이 받는다).
  *  DELETE — 이 기기 구독 해제.
  *
  * 게이트(원장 2026-08-07): **`users.attendance_alert_optin`이 켜진 계정만.** 셔틀·사무실이 출결 연락을
@@ -35,12 +39,26 @@ async function meWithOptin() {
   return { user, optin: Boolean(data?.attendance_alert_optin) };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const me = await meWithOptin();
   if (!me) return NextResponse.json({ ok: false }, { status: 401 });
   // 서버가 준비 안 됐거나(키 없음) 토글이 꺼진 계정이면 버튼 자체를 띄우지 않는다(할 수 없는 일을 권하지 않기).
   const enabled = me.optin && pushConfigured();
-  return NextResponse.json({ ok: true, enabled, publicKey: enabled ? pushPublicKey() : null });
+  let mine = false;
+  const endpoint = new URL(req.url).searchParams.get("endpoint") ?? "";
+  if (enabled && endpoint) {
+    // 세션 클라이언트 — RLS(push_subscriptions_self)가 본인 행만 보여 주므로 "보이면 내 것"이다.
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("push_subscriptions")
+      .select("id")
+      .eq("endpoint", endpoint)
+      .eq("user_id", me.user.id)
+      .is("failed_at", null)
+      .maybeSingle();
+    mine = Boolean(data);
+  }
+  return NextResponse.json({ ok: true, enabled, publicKey: enabled ? pushPublicKey() : null, mine });
 }
 
 export async function POST(req: Request) {
@@ -59,6 +77,37 @@ export async function POST(req: Request) {
   const auth = typeof payload.keys?.auth === "string" ? payload.keys.auth : "";
   if (!endpoint.startsWith("https://") || !p256dh || !auth) {
     return NextResponse.json({ ok: false, reason: "bad_subscription" }, { status: 400 });
+  }
+
+  // F16 — 같은 기기(endpoint)가 이미 **다른 계정**에 묶여 있으면 본인 RLS로는 그 행이 안 보여 upsert가
+  //    유니크 충돌로 실패한다("등록 실패"). 같은 학원 계정끼리면 서버가 이 계정으로 옮긴다(admin + 테넌트 명시 확인).
+  //    다른 학원 계정의 기기는 옮기지 않는다(자격증명이 학원 경계를 넘지 않게).
+  const admin = createAdminClient();
+  const { data: owner, error: ownerErr } = await admin
+    .from("push_subscriptions")
+    .select("id, tenant_id, user_id")
+    .eq("endpoint", endpoint)
+    .maybeSingle();
+  if (ownerErr) return NextResponse.json({ ok: false, reason: "save_failed" }, { status: 200 });
+  if (owner && owner.user_id !== me.user.id) {
+    if (owner.tenant_id !== me.user.tenantId) {
+      return NextResponse.json({ ok: false, reason: "other_tenant" }, { status: 200 });
+    }
+    const { error: moveErr } = await admin
+      .from("push_subscriptions")
+      .update({
+        user_id: me.user.id,
+        p256dh,
+        auth,
+        user_agent: req.headers.get("user-agent")?.slice(0, 300) ?? null,
+        failed_at: null,
+        fail_reason: null,
+      })
+      .eq("id", owner.id)
+      .eq("tenant_id", me.user.tenantId)
+      .eq("user_id", owner.user_id); // 그 사이 주인이 바뀌었으면 건드리지 않는다
+    if (moveErr) return NextResponse.json({ ok: false, reason: "save_failed" }, { status: 200 });
+    return NextResponse.json({ ok: true, moved: true });
   }
 
   const supabase = await createClient();

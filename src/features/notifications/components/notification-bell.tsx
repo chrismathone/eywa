@@ -20,7 +20,11 @@ import {
   unarchiveNotification,
 } from "@/features/notifications/server/actions";
 import type { NotificationView } from "@/features/notifications/server/queries";
-import { type NotificationItem } from "@/features/notifications/types";
+import {
+  NOTIFICATION_LIST_LIMIT,
+  NOTIFICATION_LIST_MAX,
+  type NotificationItem,
+} from "@/features/notifications/types";
 import {
   mergeAlerted,
   pickAlertTargets,
@@ -89,6 +93,8 @@ export function NotificationBell() {
   // 받은함/보관함(0125a) — 보관은 벨에서 치우되 나중에 볼 수 있는 안전판(삭제는 영구).
   const [view, setView] = useState<NotificationView>("active");
   const viewRef = useRef<NotificationView>("active");
+  // 목록 크기 — 배지는 안 읽은 알림 전체를 세는데 목록은 잘려 있다. '더 보기'로 늘린다(F17). 뷰를 바꾸면 20으로.
+  const [limit, setLimit] = useState(NOTIFICATION_LIST_LIMIT);
   const [, startTransition] = useTransition();
   // 요청 순번 — 모든 서버 왕복(폴링·읽음처리·모두읽음)이 공유한다. 늦게 도착한 응답이
   // 최신 요청 결과를 덮지 않게(적대리뷰: mark 응답을 느린 폴링이 되돌리던 레이스).
@@ -160,8 +166,8 @@ export function NotificationBell() {
     viewRef.current = view;
   }, [view]);
   const refresh = useCallback(
-    () => run(() => fetchMyNotifications(view)),
-    [run, view],
+    () => run(() => fetchMyNotifications(view, limit)),
+    [run, view, limit],
   );
 
   // 마운트 + 경로 변경(네비마다 신선) + 60초 폴링 + 창 포커스/가시성 복귀
@@ -184,8 +190,15 @@ export function NotificationBell() {
     };
   }, [refresh]);
 
+  // '모두 읽음' = **보이는 목록의** 안 읽은 알림만(F17) — 목록 밖 알림까지 치우면 보지도 못한 알림이 사라진다.
+  const visibleUnreadIds = items.filter((n) => !n.read).map((n) => n.id);
+  const hiddenUnread = view === "active" ? Math.max(0, unread - visibleUnreadIds.length) : 0;
   function markAllRead() {
-    run(() => markNotificationsRead());
+    if (visibleUnreadIds.length === 0) return;
+    const ids = new Set(visibleUnreadIds);
+    setItems((prev) => prev.map((x) => (ids.has(x.id) ? { ...x, read: true } : x)));
+    setUnread((u) => Math.max(0, u - ids.size));
+    run(() => markNotificationsRead(visibleUnreadIds, view, limit));
   }
 
   // 보관/복원/삭제 — 낙관적으로 목록에서 즉시 제거하고 서버 응답(그 뷰의 최신 목록+unread)으로 동기화.
@@ -206,7 +219,7 @@ export function NotificationBell() {
         prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)),
       );
       setUnread((u) => Math.max(0, u - 1));
-      run(() => markNotificationsRead([n.id], view));
+      run(() => markNotificationsRead([n.id], view, limit));
     }
     if (!n.link) return;
     const link = n.link;
@@ -301,21 +314,23 @@ export function NotificationBell() {
               {view === "archived" ? "보관함" : "알림"}
             </DropdownMenuLabel>
             <span className="flex items-center gap-2.5">
-              {view === "active" && unread > 0 ? (
+              {view === "active" && visibleUnreadIds.length > 0 ? (
                 <button
                   type="button"
                   onClick={markAllRead}
                   className="text-text-dim hover:text-foreground text-xs transition"
+                  title={hiddenUnread > 0 ? "목록에 보이는 알림만 읽음으로 바꿉니다" : undefined}
                 >
-                  모두 읽음
+                  {hiddenUnread > 0 ? "보이는 알림 읽음" : "모두 읽음"}
                 </button>
               ) : null}
               {/* 받은함 ↔ 보관함 전환 — 보관은 삭제의 안전판(복원 가능). */}
               <button
                 type="button"
-                onClick={() =>
-                  setView((v) => (v === "active" ? "archived" : "active"))
-                }
+                onClick={() => {
+                  setLimit(NOTIFICATION_LIST_LIMIT);
+                  setView((v) => (v === "active" ? "archived" : "active"));
+                }}
                 className="text-text-dim hover:text-foreground inline-flex items-center gap-1 text-xs transition"
               >
                 <Archive className="size-3" />
@@ -366,15 +381,31 @@ export function NotificationBell() {
                   onArchive={() =>
                     removeThen(n.id, () =>
                       view === "active"
-                        ? archiveNotification(n.id, "active")
-                        : unarchiveNotification(n.id, "archived"),
+                        ? archiveNotification(n.id, "active", limit)
+                        : unarchiveNotification(n.id, "archived", limit),
                     )
                   }
                   onDelete={() =>
-                    removeThen(n.id, () => deleteNotification(n.id, view))
+                    removeThen(n.id, () => deleteNotification(n.id, view, limit))
                   }
                 />
               ))}
+              {/* 더 보기(F17) — 목록이 꽉 찼으면 더 있을 수 있다. 목록 밖 안 읽은 알림 수를 함께 밝힌다. */}
+              {items.length >= limit && limit < NOTIFICATION_LIST_MAX ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLimit((l) => Math.min(NOTIFICATION_LIST_MAX, l + NOTIFICATION_LIST_LIMIT))
+                  }
+                  className="text-text-dim hover:text-foreground hover:bg-bg-soft w-full px-3 py-2 text-center text-xs transition"
+                >
+                  더 보기{hiddenUnread > 0 ? ` · 안 읽은 알림 ${hiddenUnread}건 더` : ""}
+                </button>
+              ) : hiddenUnread > 0 ? (
+                <p className="text-text-faint px-3 py-2 text-center text-xs">
+                  목록 밖에 안 읽은 알림 {hiddenUnread}건이 더 있습니다
+                </p>
+              ) : null}
             </div>
           )}
         </DropdownMenuContent>

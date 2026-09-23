@@ -65,7 +65,10 @@ const nowLocalIso = (): string => kstDateTimeLocal();
  * 저장된 절대시각 → `datetime-local` 입력 값. 🔴 **KST로 읽는다** — 런타임 로컬 게터로 풀면 서버(UTC)
  * 렌더에서 9시간 이른 시각이 폼에 박히고, 사용자가 손대지 않고 저장하면 그 값이 그대로 들어간다.
  */
-const isoToLocal = (iso: string): string => kstDateTimeLocal(new Date(iso));
+const isoToLocal = (iso: string): string =>
+  // 🔴 시간대가 **붙은** 값(DB의 timestamptz)만 KST로 푼다. 새 상담 기본값(nowLocalIso)은 이미 KST 벽시계라
+  //    `new Date()`로 다시 읽으면 서버(UTC)가 그 벽시계를 UTC로 읽어 9시간 뒤가 박혔다(감사 F12).
+  /T.*(Z|[+-]\d{2}(:?\d{2})?)$/.test(iso) ? kstDateTimeLocal(new Date(iso)) : iso.slice(0, 16);
 
 function SubmitButton({ mode }: { mode: Mode }) {
   const { pending } = useFormStatus();
@@ -273,7 +276,7 @@ export function ConsultationForm({
               id="consultedAt"
               name="consultedAt"
               type="datetime-local"
-              defaultValue={isoToLocal(v.consultedAt || new Date().toISOString())}
+              defaultValue={isoToLocal(v.consultedAt || nowLocalIso())}
               required
               className={inputClass}
             />

@@ -15,7 +15,18 @@ import { reportError, reportWarning } from "@/lib/observability/report-error";
  */
 export const dynamic = "force-dynamic";
 
-const STUCK_STATES = ["uploaded", "transcribing", "analyzing"];
+/**
+ * 멈춘 단계별로 **원인이 다른** 안내를 남긴다(E14, 2026-09-23 감사) — 'analyzing'은 전사가 이미 끝나고
+ * AI 분석에서 멈춘 것이라, "전사 시간 초과"라고 적으면 비용이 드는 '전사부터 다시'를 누르게 된다.
+ * 분석 단계는 저장된 전사로 다시 만드는 'AI 분석 다시 생성'(오디오·전사 비용 없음)을 안내한다.
+ */
+const STUCK_GROUPS = [
+  { states: ["uploaded", "transcribing"], error: "전사 시간 초과(웹훅 미수신). 다시 시도하세요." },
+  {
+    states: ["analyzing"],
+    error: "AI 분석 시간 초과 — 전사는 끝났을 수 있습니다. 화면의 AI 분석 버튼으로 다시 실행하세요(전사부터 다시 할 필요 없음).",
+  },
+] as const;
 const STUCK_MINUTES = 30;
 // consultation_recordings: 등록상담 녹음 행(0068a) — 상담 행 미러와 별개로 행 자체도 회수해야
 // 상세의 녹음 행 상태칩이 영구 스피너로 남지 않는다(updated_at은 제출/전이 시 명시 세팅됨).
@@ -25,7 +36,6 @@ const TABLES = [
   "student_consultations",
   "consultation_recordings",
 ] as const;
-const STUCK_ERROR = "전사 시간 초과(웹훅 미수신). 다시 시도하세요.";
 
 export async function GET(req: Request) {
   // CRON_SECRET 미설정이면 라우트를 닫는다(임의 호출로 in-progress 행 강제 실패 방지).
@@ -40,18 +50,22 @@ export async function GET(req: Request) {
   const reconciled: Record<string, number> = {};
 
   for (const table of TABLES) {
-    const { data, error } = await admin
-      .from(table)
-      .update({ processing_status: "failed", processing_error: STUCK_ERROR })
-      .in("processing_status", STUCK_STATES)
-      .lt("updated_at", cutoff)
-      .select("id");
-    if (error) {
-      reportError(error, { scope: "cron.reconcile", table });
-      reconciled[table] = -1;
-      continue;
+    let count = 0;
+    for (const group of STUCK_GROUPS) {
+      const { data, error } = await admin
+        .from(table)
+        .update({ processing_status: "failed", processing_error: group.error })
+        .in("processing_status", [...group.states])
+        .lt("updated_at", cutoff)
+        .select("id");
+      if (error) {
+        reportError(error, { scope: "cron.reconcile", table, states: group.states });
+        count = -1;
+        break;
+      }
+      count += data?.length ?? 0;
     }
-    reconciled[table] = data?.length ?? 0;
+    reconciled[table] = count;
   }
 
   const total = Object.values(reconciled)

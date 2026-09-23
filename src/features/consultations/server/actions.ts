@@ -13,6 +13,12 @@ import { stripPastedMarkup } from "../paste-cleanup";
 import { consultationSubject } from "../subject";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
+import {
+  canConsultStudent,
+  OUT_OF_SCOPE_CONSULTATION,
+  OUT_OF_SCOPE_STUDENT,
+  scopedConsultationUserId,
+} from "./write-scope";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -250,6 +256,13 @@ export async function createStudentConsultation(
   const fieldErrors = validateConsultation(input);
   if (fieldErrors) return { fieldErrors };
 
+  // 담당 범위(감사 S3) — 강사는 본인 이름으로, 담당 학생에게만 기록한다(화면 드롭다운과 같은 범위).
+  const scopedId = await scopedConsultationUserId(user);
+  if (scopedId) {
+    if (input.counselorId && input.counselorId !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
+    if (!(await canConsultStudent(input.studentId))) return { error: OUT_OF_SCOPE_STUDENT };
+  }
+
   const supabase = await createClient();
   const counselorId = input.counselorId ?? user.id;
   const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
@@ -317,6 +330,22 @@ export async function updateStudentConsultation(
   if (fieldErrors) return { fieldErrors };
 
   const supabase = await createClient();
+  // 담당 범위(감사 S3) — 강사는 **본인이 쓴 상담**만, 학생을 바꿀 땐 담당 학생으로만.
+  const scopedId = await scopedConsultationUserId(user);
+  if (scopedId) {
+    const { data: current, error: curErr } = await supabase
+      .from("student_consultations")
+      .select("student_id, counselor_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (curErr) return { error: "상담을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    if (!current) return { error: "상담을 찾을 수 없습니다" };
+    if (current.counselor_id !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
+    if (input.counselorId && input.counselorId !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
+    if (current.student_id !== input.studentId && !(await canConsultStudent(input.studentId))) {
+      return { error: OUT_OF_SCOPE_STUDENT };
+    }
+  }
   const counselorId = input.counselorId ?? user.id;
   const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
   if (resolved.error) return { error: resolved.error };
@@ -377,15 +406,15 @@ export async function toggleConsultationFollowUp(
   if (!id) return { error: "상담 ID가 누락되었습니다" };
 
   const supabase = await createClient();
+  // 담당 범위(감사 S3) — 강사는 본인이 쓴 상담의 후속조치만 체크한다(목록과 같은 기준).
+  const scopedId = await scopedConsultationUserId(user);
   // .select()로 학생 id를 함께 받는다 — 감사로그 '대상' 칸에 학생 이름이 뜨게(왕복 증가 0).
-  // maybeSingle: 없는 id면 종전처럼 조용히 통과(0행 = 에러 아님) — 동작을 바꾸지 않는다.
-  const { data: row, error } = await supabase
-    .from("student_consultations")
-    .update({ follow_up_done: done })
-    .eq("id", id)
-    .select("student_id")
-    .maybeSingle();
+  let upd = supabase.from("student_consultations").update({ follow_up_done: done }).eq("id", id);
+  if (scopedId) upd = upd.eq("counselor_id", scopedId);
+  const { data: row, error } = await upd.select("student_id").maybeSingle();
   if (error) return { error: error.message };
+  // 강사 범위에서 0행 = 남의 상담(또는 없는 상담) — 조용히 성공으로 보이지 않게 알린다.
+  if (scopedId && !row) return { error: OUT_OF_SCOPE_CONSULTATION };
 
   await logAction({
     action: "student_consultation_follow_up",
@@ -415,12 +444,20 @@ export async function deleteStudentConsultation(
   const supabase = await createClient();
   // 지우면 되찾을 수 없는 맥락(누구의·언제·어떤 분류 상담이었나)을 삭제 **전**에 읽어 둔다.
   // 🔴 요약 본문은 읽지도 담지도 않는다(상담 내용 금지).
-  const { data: before } = await supabase
+  const { data: before, error: beforeErr } = await supabase
     .from("student_consultations")
-    .select("student_id, consulted_at, category, audience, follow_up_action, follow_up_done")
+    .select("student_id, counselor_id, consulted_at, category, audience, follow_up_action, follow_up_done")
     .eq("id", id)
     .maybeSingle();
-  const { error } = await supabase.from("student_consultations").delete().eq("id", id);
+  // 담당 범위(감사 S3) — 강사는 본인이 쓴 상담만 지운다. 확인을 못 하면 지우지 않는다.
+  const scopedId = await scopedConsultationUserId(user);
+  let del = supabase.from("student_consultations").delete().eq("id", id);
+  if (scopedId) {
+    if (beforeErr) return { error: "상담을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    if (!before || before.counselor_id !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
+    del = del.eq("counselor_id", scopedId);
+  }
+  const { error } = await del;
   if (error) return { error: error.message };
 
   await logAction({

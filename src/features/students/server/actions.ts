@@ -29,6 +29,7 @@ import { gradesSchemaReady, writeGradeCells } from "@/features/grades/server/wri
 import { resolveUniqueStudentName } from "../name-suffix";
 import { preserveMergeNote } from "../merged";
 import { resolveUniqueStudentNameFor } from "./unique-name";
+import { canViewStudentDetail } from "./read-scope";
 
 export type StudentFormState =
   | {
@@ -855,6 +856,43 @@ export async function endSingleEnrollment(
 
 // ────────────────────── 메모 + 성적 ──────────────────────
 
+/**
+ * 담당 학생 범위(감사 S4, 원장 2026-09-23) — 강사에게 메모·성적·목표·레벨테스트 **쓰기**를 연 것은 결정대로지만,
+ * 그 쓰기도 학생 상세 열람과 **같은 범위**(canViewStudentDetail — 담임∪교시 담당∪임시 위임)여야 한다.
+ * 안 그러면 요청을 직접 보내 남의 학생 메모를 지울 수 있다(#77). 판정 대상은 students가 scoped인 사용자뿐.
+ */
+const OUT_OF_STUDENT_SCOPE = "담당 학생의 기록만 고칠 수 있습니다";
+
+async function studentsScoped(role: Parameters<typeof accessLevelTenant>[0]): Promise<boolean> {
+  return (await accessLevelTenant(role, "students")) === "scoped";
+}
+
+/** 새 기록을 쓸 학생이 범위 안인가 — 밖이면 오류 문구. */
+async function studentScopeError(
+  role: Parameters<typeof accessLevelTenant>[0],
+  studentId: string,
+): Promise<string | null> {
+  if (!(await studentsScoped(role))) return null;
+  return (await canViewStudentDetail(studentId)) ? null : OUT_OF_STUDENT_SCOPE;
+}
+
+/**
+ * 기존 행(id)을 고치거나 지우기 전 — 강사면 **행을 먼저 읽어** 그 학생이 범위 안인지 본다
+ * (폼의 studentId는 믿지 않는다). 사무실은 추가 조회 없이 통과.
+ */
+async function rowScopeError(
+  role: Parameters<typeof accessLevelTenant>[0],
+  table: "student_memos" | "student_grades" | "level_tests" | "grade_goals" | "grade_comments",
+  id: string,
+): Promise<string | null> {
+  if (!(await studentsScoped(role))) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.from(table).select("student_id").eq("id", id).maybeSingle();
+  if (error) return "기록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  if (!data) return "기록을 찾을 수 없습니다";
+  return (await canViewStudentDetail(data.student_id as string)) ? null : OUT_OF_STUDENT_SCOPE;
+}
+
 export type CreateMemoState = { error?: string; ok?: boolean } | undefined;
 
 export async function createStudentMemo(
@@ -873,6 +911,8 @@ export async function createStudentMemo(
 
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!content) return { error: "메모 내용을 입력해주세요" };
+  const scopeErr = await studentScopeError(user.systemRole, studentId);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error } = await supabase.from("student_memos").insert({
@@ -904,6 +944,8 @@ export async function deleteStudentMemo(
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!id) return { error: "메모 ID가 누락되었습니다" };
+  const scopeErr = await rowScopeError(user.systemRole, "student_memos", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error } = await supabase.from("student_memos").delete().eq("id", id);
@@ -930,6 +972,8 @@ export async function updateStudentMemo(
   const searchable = formData.get("searchable") !== null;
   if (!id) return { error: "메모 ID가 누락되었습니다" };
   if (!content) return { error: "메모 내용을 입력해주세요" };
+  const scopeErr = await rowScopeError(user.systemRole, "student_memos", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -956,6 +1000,8 @@ export async function toggleStudentMemoPin(
   const studentId = String(formData.get("studentId") ?? "").trim();
   const pinned = String(formData.get("pinned") ?? "false") === "true";
   if (!id) return { error: "메모 ID가 누락되었습니다" };
+  const scopeErr = await rowScopeError(user.systemRole, "student_memos", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -993,6 +1039,8 @@ export async function createStudentGrade(
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!subject) return { error: "과목을 선택해주세요" };
   if (!takenOn) return { error: "시험일을 입력해주세요" };
+  const scopeErr = await studentScopeError(user.systemRole, studentId);
+  if (scopeErr) return { error: scopeErr };
   // 🔴 시험일이 학기 밖이면 **어느 화면에도 안 잡히는 행**이 된다 — 월말평가는 월이 시험일에서
   //    나오므로(0288a) 학기에 없는 달로 저장되면 격자의 월 드롭다운에 그 달이 없어 영영 못 고친다.
   //    엑셀·주소는 이미 같은 창으로 누른다(sheet.ts·selection.ts).
@@ -1041,6 +1089,8 @@ export async function deleteStudentGrade(
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!id) return { error: "성적 ID가 누락되었습니다" };
+  const scopeErr = await rowScopeError(user.systemRole, "student_grades", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error } = await supabase.from("student_grades").delete().eq("id", id);
@@ -1079,6 +1129,8 @@ export async function createStudentLevelTest(
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!subject) return { error: "과목을 선택해주세요" };
   if (!testedOn) return { error: "시험일을 입력해주세요" };
+  const scopeErr = await studentScopeError(user.systemRole, studentId);
+  if (scopeErr) return { error: scopeErr };
 
   const subscores: Record<string, number> = {};
   for (const k of LEVEL_SUBSCORE_KEYS[subject] ?? []) {
@@ -1115,6 +1167,8 @@ export async function deleteStudentLevelTest(
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!id) return { error: "레벨테스트 ID가 누락되었습니다" };
+  const scopeErr = await rowScopeError(user.systemRole, "level_tests", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error } = await supabase.from("level_tests").delete().eq("id", id);
@@ -1152,6 +1206,8 @@ export async function createStudentGoal(_prev: GoalState, formData: FormData): P
   if (!examName) return { error: "시험명을 입력해주세요" };
   if (!subject) return { error: "과목을 선택해주세요" };
   if (!targetStr || !Number.isFinite(Number(targetStr))) return { error: "목표 점수를 입력해주세요" };
+  const scopeErr = await studentScopeError(user.systemRole, studentId);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error: insErr } = await supabase.from("grade_goals").insert({
@@ -1178,6 +1234,8 @@ export async function deleteStudentGoal(_prev: GoalState, formData: FormData): P
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!id) return { error: "목표 ID가 누락되었습니다" };
+  const scopeErr = await rowScopeError(user.systemRole, "grade_goals", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error: delErr } = await supabase.from("grade_goals").delete().eq("id", id);
@@ -1211,6 +1269,8 @@ export async function createStudentGradeComment(
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
   if (!isCommentCategory(f.category)) return { error: "유효한 카테고리가 아닙니다" };
   if (!f.content) return { error: "코멘트 내용을 입력해주세요" };
+  const scopeErr = await studentScopeError(user.systemRole, studentId);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error: insErr } = await supabase.from("grade_comments").insert({
@@ -1242,6 +1302,8 @@ export async function updateStudentGradeComment(
   if (!id) return { error: "코멘트 ID가 누락되었습니다" };
   if (!isCommentCategory(f.category)) return { error: "유효한 카테고리가 아닙니다" };
   if (!f.content) return { error: "코멘트 내용을 입력해주세요" };
+  const scopeErr = await rowScopeError(user.systemRole, "grade_comments", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error: updErr } = await supabase
@@ -1270,6 +1332,8 @@ export async function deleteStudentGradeComment(
   const id = String(formData.get("id") ?? "").trim();
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!id) return { error: "코멘트 ID가 누락되었습니다" };
+  const scopeErr = await rowScopeError(user.systemRole, "grade_comments", id);
+  if (scopeErr) return { error: scopeErr };
 
   const supabase = await createClient();
   const { error: delErr } = await supabase.from("grade_comments").delete().eq("id", id);

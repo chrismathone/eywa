@@ -3,6 +3,9 @@
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
+import { kstDateOf } from "@/lib/date-kst";
+import { isIntakeExpired } from "@/features/enrollment/intake-expiry";
 import { Copy, Loader2, Power, QrCode, Trash2, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +47,9 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
 
   const mutate = (fd: FormData) =>
     startMutate(async () => {
-      await setIntakeTokenActive(undefined, fd);
+      const res = await setIntakeTokenActive(undefined, fd);
+      // 실패를 삼키면 눌러도 무반응으로 보인다 — 사유를 띄운다.
+      if (res?.error) toast.error(res.error);
       router.refresh();
     });
 
@@ -116,12 +121,16 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                   <div className="flex items-center gap-2">
                     <p className="text-foreground truncate text-sm font-bold">{t.name}</p>
                     {!t.isActive ? <span className="text-text-faint text-xs">(비활성)</span> : null}
+                    {t.isActive && isIntakeExpired(t.expiresAt) ? (
+                      <span className="text-danger text-xs">(만료 — 접수 안 됨)</span>
+                    ) : null}
                   </div>
                   <p className="text-text-faint break-all font-mono text-xs">{t.url}</p>
                   <p className="text-text-dim text-xs">
                     조회 <span className="num">{t.usageCount}</span> · 제출{" "}
                     <span className="text-primary num font-bold">{t.submissionCount}</span>
-                    {t.expiresAt ? ` · ~${t.expiresAt.slice(0, 10)}` : ""}
+                    {/* 만료일은 KST 날짜로 — 그날 밤 23:59까지 접수된다(감사 F14). */}
+                    {t.expiresAt ? ` · ~${kstDateOf(t.expiresAt) ?? ""}까지` : ""}
                   </p>
                   <div className="flex flex-wrap items-center gap-1.5 pt-1">
                     <button
@@ -142,6 +151,25 @@ function Dialog({ tokens, onClose }: { tokens: IntakeTokenView[]; onClose: () =>
                       >
                         <Power className="size-3" />
                         {t.isActive ? "비활성" : "활성"}
+                      </button>
+                    </form>
+                    {/* 만료일 변경(연장) — 만료된 QR도 새로 인쇄하지 않고 되살린다(감사 F14). */}
+                    <form action={mutate} className="inline-flex items-center gap-1">
+                      <input type="hidden" name="id" value={t.id} />
+                      <input type="hidden" name="action" value="expire" />
+                      <input
+                        name="expiresAt"
+                        type="date"
+                        required
+                        aria-label="새 만료일"
+                        defaultValue={t.expiresAt ? (kstDateOf(t.expiresAt) ?? "") : ""}
+                        className="border-border bg-card text-foreground num rounded border px-1.5 py-0.5 text-xs"
+                      />
+                      <button
+                        type="submit"
+                        className="border-border text-text-dim hover:text-foreground inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs"
+                      >
+                        만료일 변경
                       </button>
                     </form>
                     <form action={mutate}>

@@ -21,6 +21,8 @@ import { logAction } from "@/features/audit/server/log";
 import { kstDateOf } from "@/lib/date-kst";
 import { EDITABLE_REPORT_KEYS } from "../report-sections";
 import { analyzeMeeting, buildMeetingAnalysisInput } from "./ai";
+import { mergeSpeakerRoles } from "../speaker-roles";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 
 /**
  * Audio flow: client already uploaded the file to storage. Server creates the
@@ -53,7 +55,7 @@ export async function updateMeetingTitle(
     .eq("id", id)
     .maybeSingle();
   const { error } = await supabase.from("meeting_minutes").update({ title }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "저장") };
 
   await logAction({
     action: "meeting_title_update",
@@ -88,7 +90,7 @@ export async function updateMeetingNotepad(
 
   const supabase = await createClient();
   const { error } = await supabase.from("meeting_minutes").update({ content }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "저장") };
 
   revalidatePath(`/meetings/${id}`);
   revalidatePath("/meetings");
@@ -135,7 +137,7 @@ export async function updateMeetingReportSection(
       ai_report_edited_at: now,
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "저장") };
 
   // 한 번 저장 = 섹션 하나(명시 '저장' 버튼 — 자동저장이 아니다. 자동저장은 IDB 로컬 초안만 건드린다)라
   // 로그가 범람하지 않는다. 메모장(updateMeetingNotepad)과 갈리는 지점이다.
@@ -195,7 +197,7 @@ export async function updateMeetingSpeakers(
     .eq("id", id)
     .select("title")
     .maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "저장") };
 
   await logAction({
     action: "meeting_speakers_update",
@@ -439,7 +441,7 @@ export async function deleteMeeting(
 
   // 2) row 삭제 (RLS 스코프).
   const { error } = await supabase.from("meeting_minutes").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: humanizeDbError(error.message, "삭제") };
 
   // 이 로그가 유일한 흔적이다 — 녹음·전사·AI 분석이 통째로 사라진다.
   await logAction({
@@ -612,12 +614,20 @@ export async function regenerateMeetingAnalysis(
         notepad,
         tenantId: user.tenantId,
       });
+      // F5 — 사람이 고친 화자 이름은 지킨다: 분석이 끝난 **지금** 저장값을 다시 읽어(분석 중에 고쳤을 수도 있다)
+      //      빈 화자만 AI 값으로 채운다. 조회가 실패하면 화자 칸은 건드리지 않는다(덮는 쪽이 더 나쁘다).
+      const { data: cur, error: curErr } = await admin
+        .from("meeting_minutes")
+        .select("ai_speaker_roles")
+        .eq("id", id)
+        .eq("tenant_id", user.tenantId)
+        .maybeSingle();
       await admin
         .from("meeting_minutes")
         .update({
           ai_report: report,
           ai_summary: report.summary,
-          ai_speaker_roles: speakerRoles,
+          ...(curErr ? {} : { ai_speaker_roles: mergeSpeakerRoles(cur?.ai_speaker_roles, speakerRoles) }),
           ai_model_version: model,
           ai_generated_at: new Date().toISOString(),
           processing_status: "completed",

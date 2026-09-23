@@ -26,7 +26,12 @@ import {
   type NoticeTarget,
 } from "@/features/report-admin/notice-targets";
 import { logAction } from "@/features/audit/server/log";
-import { flattenNoticeReportLinks, type NoticeReportLink } from "../notice-links";
+import {
+  flattenNoticeReportLinks,
+  noticePostedActions,
+  resultsForRetryRevoke,
+  type NoticeReportLink,
+} from "../notice-links";
 import { isTenantReportAttachmentPath } from "@/lib/storage/legacy-audio-path";
 import {
   hasNoticeTargetAttachments,
@@ -36,6 +41,7 @@ import {
   sanitizeNoticeAttachments,
   type NoticeAttachment,
 } from "../notice-attachments";
+import { humanizeDbError } from "@/lib/supabase/db-error";
 
 const BODY_MAX = 4000;
 // 학원이(테스트 학생) 고정 타깃 — 실 학부모에게 안 가는 검증 경로(반 공지 TEST_TARGET과 동일 관례).
@@ -227,7 +233,7 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     })
     .select("id")
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "발송 요청") };
 
   // 감사 로그 — '발송 대기(큐 적재)'(실제 게시는 워커, 완료 아님). best-effort.
   await logAction({
@@ -294,7 +300,7 @@ export async function listMyNoticeStudents(): Promise<{
   // "목록엔 뜨는데 보내면 거절"이 안 생긴다.
   const myIds = teacherId ? (await getTeachingClassIds(supabase, teacherId)).all : null;
   const { data: classes, error } = await (myIds ? base.in("id", myIds) : base).order("class_name");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
   const classById = new Map((classes ?? []).map((c) => [c.id as string, c]));
   const classIds = [...classById.keys()];
   if (!classIds.length) return { ok: true, students: [], scope };
@@ -352,7 +358,8 @@ export type OnescreenNoticeRow = {
   processedAt: string | null;
   // 게시된 리포트 주소(회수용 워커가 캡처) + **학생 이름**(targets에서 되붙임) — 없으면 구버전/미게시
   reportLinks: NoticeReportLink[];
-  canRevoke: boolean; // 게시취소 가능(게시됨 + 캡처 id 있음 + 아직 회수 안 됨)
+  canRevoke: boolean; // 게시취소 가능(게시됨/회수 일부 실패 + 캡처 id 있음 + 아직 안 지운 글이 남음)
+  canEdit: boolean; // 게시본 제자리 수정 가능(게시됨 + 살아 있는 글)
 };
 
 /** 내가 보낸 공지 이력(20건) — 대기건 수정/삭제·게시건 게시취소 UI의 소스. created_by=본인만. */
@@ -366,15 +373,15 @@ export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: On
     .eq("created_by", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "조회") };
   return {
     ok: true,
     rows: (data ?? []).map((r) => {
       const status = r.status as string;
       const links = flattenNoticeReportLinks(r.results, r.targets);
-      // 게시취소 가능 = 게시됨(success/partial) + 캡처된 리포트 id(=워커 신버전) 있음 + 아직 회수 안 됨.
-      const hasLive = links.some((l) => !l.revoked);
-      const canRevoke = (status === "success" || status === "partial") && hasLive;
+      // 게시취소 가능 = 게시됨(success/partial) 또는 회수 일부 실패 + 아직 안 지운 글이 남음(F2).
+      // 제자리 수정 = 게시됨 + 살아 있는 글. 사무실 발송 이력과 같은 판정(noticePostedActions).
+      const { canRevoke, canEdit } = noticePostedActions(status, r.results, r.targets);
       return {
         id: r.id as string,
         body: r.body as string,
@@ -385,14 +392,31 @@ export async function listMyOnescreenNotices(): Promise<{ ok: boolean; rows?: On
         processedAt: r.processed_at as string | null,
         reportLinks: links,
         canRevoke,
+        canEdit,
       };
     }),
   };
 }
 
 /**
+ * 게시된 공지에 손댈 수 있는 사람 — **보낸 본인** 또는 **사무실(수업보고서 쓰기 권한)**(F1, 2026-09-23 감사).
+ * 사무실 발송 이력 화면은 "회수는 발송 이력에서"라고 안내하면서 정작 버튼이 없었다(쓴 본인만, 원스크린에서만).
+ * 새 발송 경로가 아니다 — 같은 큐 상태(revoke_requested·edit_requested)를 같은 연동 PC 워커가 처리한다.
+ * ⚠️ `canWriteTenant`는 '다른 강사 뷰'(열람 전용)에서 false라 그 화면에선 사무실 통로가 열리지 않는다.
+ */
+async function postedNoticeActor(
+  createdBy: unknown,
+  user: { id: string; systemRole: Parameters<typeof canWriteTenant>[0] },
+): Promise<"owner" | "office" | null> {
+  if (createdBy === user.id) return "owner";
+  if (await canWriteTenant(user.systemRole, "lesson_reports")) return "office";
+  return null;
+}
+
+/**
  * 게시취소(회수) — 게시된 공지의 실제 ClassNote 글을 삭제 요청(status='revoke_requested').
- * 연동 PC 워커가 저장된 리포트 id를 대조 후 DELETE(비동기). 본인 공지 + 게시됨 + 캡처 id 있을 때만.
+ * 연동 PC 워커가 저장된 리포트 id를 대조 후 DELETE(비동기). 본인(또는 사무실) + 게시됨 + 캡처 id 있을 때만.
+ * **회수 일부 실패(revoke_partial)도 다시 요청할 수 있다**(F2) — 남은 글만 워커가 다시 지운다(이미 지운 글은 404 확인).
  * ⚠️ 캡처 id 없는 구버전 발송분은 회수 불가(워커가 지울 대상 정보 없음) — 명확 안내.
  */
 export async function cancelOnescreenNotice(noticeId: string): Promise<MutateResult> {
@@ -405,27 +429,40 @@ export async function cancelOnescreenNotice(noticeId: string): Promise<MutateRes
     .eq("id", noticeId)
     .maybeSingle();
   if (!row) return { ok: false, reason: "not_found", error: "공지를 찾을 수 없습니다" };
-  if (row.created_by !== user.id) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 회수할 수 있습니다" };
-  if (row.status !== "success" && row.status !== "partial")
+  const actor = await postedNoticeActor(row.created_by, user);
+  if (!actor) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 회수할 수 있습니다" };
+  const status = row.status as string;
+  if (status !== "success" && status !== "partial" && status !== "revoke_partial")
     return { ok: false, error: "게시 완료된 공지만 게시취소할 수 있습니다" };
   const links = flattenNoticeReportLinks(row.results, row.targets);
-  if (!links.some((l) => !l.revoked))
+  if (!noticePostedActions(status, row.results, row.targets).canRevoke)
     return { ok: false, error: "회수할 게시글 정보가 없습니다(연동 PC 업데이트 전 발송분은 ClassNote 앱에서 직접 삭제)" };
 
-  // status='queued' 아닌 게시완료건이라 status 가드로 원자 전환(동시 회수 레이스 방지).
-  const { data } = await supabase
+  // 원자 전환(동시 회수 레이스 방지) — 지금 읽은 상태 그대로일 때만 바꾼다.
+  // 재회수는 워커가 읽는 모양으로 results를 되돌려 같은 큐에 올린다(resultsForRetryRevoke 주석).
+  const retry = status === "revoke_partial";
+  let q = supabase
     .from("classnote_notices")
-    .update({ status: "revoke_requested", processing_at: null })
+    .update({
+      status: "revoke_requested",
+      processing_at: null,
+      ...(retry ? { results: resultsForRetryRevoke(row.results) } : {}),
+    })
     .eq("id", noticeId)
-    .eq("created_by", user.id)
-    .in("status", ["success", "partial"])
-    .select("id");
-  if (!data || data.length === 0) return explainZeroRows(supabase, noticeId, user.id);
+    .eq("status", status);
+  if (actor === "owner") q = q.eq("created_by", user.id);
+  const { data } = await q.select("id");
+  if (!data || data.length === 0) return explainZeroRows(supabase, noticeId, actor === "office" ? null : user.id);
   await logAction({
     action: "classnote_notice_revoke",
     targetType: "classnote_notice",
-    targetLabel: "학부모 공지 게시취소",
-    metadata: { noticeId, reportCount: links.filter((l) => !l.revoked).length },
+    targetLabel: retry ? "학부모 공지 게시취소(남은 글 다시)" : "학부모 공지 게시취소",
+    metadata: {
+      noticeId,
+      reportCount: links.filter((l) => !l.revoked).length,
+      ...(retry ? { retry: true } : {}),
+      ...(actor === "office" ? { via: "admin_console" } : {}),
+    },
   });
   return { ok: true };
 }
@@ -448,7 +485,8 @@ export async function editPostedNotice(noticeId: string, newBody: string): Promi
     .eq("id", noticeId)
     .maybeSingle();
   if (!row) return { ok: false, reason: "not_found", error: "공지를 찾을 수 없습니다" };
-  if (row.created_by !== user.id) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 수정할 수 있습니다" };
+  const actor = await postedNoticeActor(row.created_by, user);
+  if (!actor) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 수정할 수 있습니다" };
   if (row.status !== "success" && row.status !== "partial")
     return { ok: false, error: "게시 완료된 공지만 제자리 수정할 수 있습니다" };
   const links = flattenNoticeReportLinks(row.results, row.targets);
@@ -469,19 +507,24 @@ export async function editPostedNotice(noticeId: string, newBody: string): Promi
         return rest;
       })
     : undefined;
-  const { data } = await supabase
+  let q = supabase
     .from("classnote_notices")
     .update({ body, status: "edit_requested", processing_at: null, ...(strippedTargets ? { targets: strippedTargets } : {}) })
     .eq("id", noticeId)
-    .eq("created_by", user.id)
-    .in("status", ["success", "partial"])
-    .select("id");
-  if (!data || data.length === 0) return explainZeroRows(supabase, noticeId, user.id);
+    .in("status", ["success", "partial"]);
+  if (actor === "owner") q = q.eq("created_by", user.id);
+  const { data } = await q.select("id");
+  if (!data || data.length === 0) return explainZeroRows(supabase, noticeId, actor === "office" ? null : user.id);
   await logAction({
     action: "classnote_notice_edit",
     targetType: "classnote_notice",
     targetLabel: "게시 공지 제자리 수정",
-    metadata: { noticeId, posted: true, reportCount: links.filter((l) => !l.revoked).length },
+    metadata: {
+      noticeId,
+      posted: true,
+      reportCount: links.filter((l) => !l.revoked).length,
+      ...(actor === "office" ? { via: "admin_console" } : {}),
+    },
   });
   return { ok: true };
 }
@@ -493,7 +536,8 @@ type MutateResult = { ok: boolean; reason?: "already_sent" | "forbidden" | "not_
 async function explainZeroRows(
   supabase: Awaited<ReturnType<typeof createClient>>,
   noticeId: string,
-  userId: string,
+  /** 본인 소유를 따지는 경로면 그 사람 id — 사무실 경로(null)는 소유를 따지지 않는다. */
+  userId: string | null,
 ): Promise<MutateResult> {
   const { data: row } = await supabase
     .from("classnote_notices")
@@ -501,7 +545,8 @@ async function explainZeroRows(
     .eq("id", noticeId)
     .maybeSingle();
   if (!row) return { ok: false, reason: "not_found", error: "공지를 찾을 수 없습니다" };
-  if (row.created_by !== userId) return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 관리할 수 있습니다" };
+  if (userId !== null && row.created_by !== userId)
+    return { ok: false, reason: "forbidden", error: "본인이 보낸 공지만 관리할 수 있습니다" };
   return {
     ok: false,
     reason: "already_sent",

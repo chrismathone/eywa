@@ -40,6 +40,9 @@ function hasMent(r: { notes?: string | null }): boolean {
   return hasTextBesidesMarkers(r.notes);
 }
 
+/** 사람이 다시 보낼 수 있는 상태 — 큐 카드(실패·기한 초과·사람 해결)와 목록 행 재발송이 같은 집합을 쓴다. */
+const RETRIABLE_STATUSES = ["failed", "too_old", "name_conflict", "blocked_shared"] as const;
+
 export async function retryClassnote(
   ids: string[],
 ): Promise<{ ok: boolean; requeued?: number; skipped?: number; absentSkipped?: number; dryRun?: boolean; error?: string }> {
@@ -56,13 +59,24 @@ export async function retryClassnote(
   // 취소(revoked_at)된 행도 제외 — 워커가 영원히 클레임 안 해 좀비 queued가 되던 구멍.
   // ⚠️ 임베드는 FK 이름을 명시한다(#94). 학생 이름은 **감사로그 라벨용** — 일괄 재발송 한 줄에
   //    "누구에게 다시 나갔나"가 안 적히면 되짚을 방법이 건수뿐이다(recall-actions와 같은 규약).
-  const { data: rows } = await supabase
-    .from("lesson_reports")
-    .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
-    .in("id", ids.slice(0, 200))
-    .not("classnote_status", "is", null)
-    .neq("source", "edutrix_import")
-    .is("revoked_at", null);
+  // B3 — 최대 200개 id를 한 `.in()`에 싣지 않고 청크로 나눈다. 조회가 실패하면 "0건 발송 대기"로
+  //    성공처럼 보이지 않게 실패를 돌려준다(fetchInChunks는 error를 던진다).
+  let rows;
+  try {
+    rows = await fetchInChunks(ids.slice(0, 200), (chunk) =>
+      supabase
+        .from("lesson_reports")
+        .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
+        .in("id", chunk)
+        // 🔴 재발송은 **끝나지 못한 행만**(적대적 리뷰) — 목록 스냅샷이 옛 '실패'를 들고 있는 사이 워커가 이미
+        //    게시했거나(success) 게시 중(processing/queued)인 행을 다시 queued로 돌리면 학부모에게 **두 번** 나간다.
+        .in("classnote_status", [...RETRIABLE_STATUSES])
+        .neq("source", "edutrix_import")
+        .is("revoked_at", null),
+    );
+  } catch {
+    return { ok: false, error: "보고서를 불러오지 못했습니다 — 다시 시도하세요" };
+  }
   // 발송 안전 스위치·허용 과목 — allowed 계산 전에 설정 조회(과목 게이트에 필요).
   const settings = await getTenantSettings();
   const allowed = (rows ?? []).filter(
@@ -102,7 +116,7 @@ export async function retryClassnote(
   }
   if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
 
-  const { error } = await supabase
+  const { data: requeuedRows, error } = await supabase
     .from("lesson_reports")
     .update({
       classnote_status: "queued",
@@ -111,8 +125,14 @@ export async function retryClassnote(
       classnote_retry_count: 0,
       classnote_error: null,
     })
-    .in("id", requeueIds);
+    .in("id", requeueIds)
+    // 조회와 갱신 사이에 워커가 집어 간 행은 건드리지 않는다(같은 조건을 갱신에도 — 원자적으로).
+    .in("classnote_status", [...RETRIABLE_STATUSES])
+    .select("id");
   if (error) return { ok: false, error: humanizeDbError(error.message, "재발송") };
+  // 실제로 갱신된 행만 센다(사이에 워커가 집어 간 행은 빠진다 — 감사로그·토스트 숫자가 거짓이 되지 않게).
+  requeueIds = (requeuedRows ?? []).map((r) => r.id as string);
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
   // 🔴 학부모 게시판에 **글이 하나 더 붙는** 동작이라 반드시 남긴다. 일괄이므로 **한 줄 요약**
   //    (건별 N줄 금지) — 대신 되짚을 id·이름을 함께 담는다(재발송은 최대 200건이라 id는 50개로 자른다).
   const requeuedSet = new Set(requeueIds);
@@ -169,14 +189,22 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   const capped = ids.slice(0, 200);
 
   // 대상 조회 — 미발송 native만. source NULL(구컬럼 이전 행)은 native로 간주(현 DB 0건, too_old가 최종 방어).
-  const { data: rows } = await supabase
-    .from("lesson_reports")
-    // 학생 이름은 감사로그 라벨용(위 retryClassnote와 같은 이유). 임베드엔 FK 이름 명시(#94).
-    .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
-    .in("id", capped)
-    .is("classnote_status", null)
-    .or("source.is.null,source.neq.edutrix_import")
-    .is("revoked_at", null);
+  // B3 — 청크 조회 + 실패는 실패로(위 retryClassnote와 같은 규약).
+  let rows;
+  try {
+    rows = await fetchInChunks(capped, (chunk) =>
+      supabase
+        .from("lesson_reports")
+        // 학생 이름은 감사로그 라벨용(위 retryClassnote와 같은 이유). 임베드엔 FK 이름 명시(#94).
+        .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
+        .in("id", chunk)
+        .is("classnote_status", null)
+        .or("source.is.null,source.neq.edutrix_import")
+        .is("revoked_at", null),
+    );
+  } catch {
+    return { ok: false, error: "보고서를 불러오지 못했습니다 — 다시 시도하세요" };
+  }
 
   const settings = await getTenantSettings();
   const withMent = (rows ?? []).filter(hasMent); // 빈 멘트 절대 가드(위 주석) — 큐에 올리기 전에 거른다
@@ -186,11 +214,11 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
       isClassnoteAllowed(r.report_date as string) &&
       isClassnoteSubjectEnabled(r.subject as string | null, settings.report.classnoteSubjects),
   );
-  if (eligible.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length, emptyMent };
+  if (eligible.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent, emptyMent };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 어떤 행도 변경하지 않고 반환(동명이인 마킹도 안 함).
   if (!settings.report.classnoteSendEnabled) {
-    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - eligible.length, dryRun: true, emptyMent };
+    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - eligible.length, dryRun: true, emptyMent };
   }
 
   // 결석 게이트(#77) — 보고서 날짜에 결석으로 기록된 학생은 관리자 최초 발송에서도 제외(원스크린
@@ -213,7 +241,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   }
   const absentSkipped = eligible.length - sendable.length;
   if (sendable.length === 0)
-    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - absentSkipped, absentSkipped, emptyMent };
+    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped, absentSkipped, emptyMent };
 
   // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
   const studentIds = [...new Set(sendable.map((r) => r.student_id as string))];
@@ -288,7 +316,8 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     ok: true,
     queued,
     conflicts,
-    skipped: capped.length - queued - conflicts - absentSkipped,
+    // E13 — 멘트 미작성(emptyMent)은 따로 세므로 "제외"에서 뺀다(같은 건이 두 사유로 두 번 세지던 것).
+    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped,
     absentSkipped,
     emptyMent,
   };

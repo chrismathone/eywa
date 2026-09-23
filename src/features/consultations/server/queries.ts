@@ -347,16 +347,32 @@ export async function getStudentOptionsForConsultation(): Promise<StudentOption[
   // 강사 스코프: teacher(또는 겸직-강사뷰)면 본인 담당 학생만 상담 대상 드롭다운에.
   const teacherStudentIds = (await effectiveTeacherScope())?.studentIds ?? null;
   if (teacherStudentIds && teacherStudentIds.length === 0) return [];
-  let qb = supabase
-    .from("students")
-    .select("id, name, grade, status")
-    .neq("status", "withdrawn");
-  if (teacherStudentIds) qb = qb.in("id", teacherStudentIds);
-  const { data } = await qb
-    .order("grade", { ascending: true })
-    .order("name", { ascending: true });
-  if (!data) return [];
-  return data.map((r) => ({ id: r.id, name: r.name, grade: r.grade }));
+  type Row = { id: string; name: string; grade: string | null };
+  // ⚠️ 담당 학생이 많은 강사는 단일 `.in()`이 URL 414로 실패하고, 오류를 `?? []`로 삼키면 드롭다운이
+  //    조용히 비어 상담을 쓸 수 없었다(감사 T4, #53) → 100개 청크. 사무실은 전건이라 페이징(B2).
+  const rows: Row[] = teacherStudentIds
+    ? await fetchInChunks<Row>(teacherStudentIds, (chunk) =>
+        supabase.from("students").select("id, name, grade").neq("status", "withdrawn").in("id", chunk),
+      )
+    : await fetchAllPaged<Row>((from, to) =>
+        supabase
+          .from("students")
+          .select("id, name, grade")
+          .neq("status", "withdrawn")
+          .order("id")
+          .range(from, to),
+      );
+  // 청크마다 따로 정렬되므로 합친 뒤 한 번 정렬한다(학년 → 이름, 종전 순서와 같다 — 학년 없는 학생은 뒤로).
+  return rows
+    .map((r) => ({ id: r.id, name: r.name, grade: r.grade }))
+    .sort((a, b) => {
+      if (a.grade !== b.grade) {
+        if (a.grade == null) return 1;
+        if (b.grade == null) return -1;
+        return a.grade < b.grade ? -1 : 1;
+      }
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
 }
 
 export type ConsultationNeededRow = {

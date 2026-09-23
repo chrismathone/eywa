@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { toast } from "sonner";
 import { Check, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { toggleConsultationStep } from "@/features/withdrawals/server/actions";
 import type { WithdrawalConsultation } from "@/features/withdrawals/types";
@@ -32,9 +33,12 @@ const STEPS: Step[] = [
 export function ConsultationTracker({
   studentId,
   initial,
+  readOnly = false,
 }: {
   studentId: string;
   initial: WithdrawalConsultation;
+  /** 퇴원관리 읽기 전용(뷰어 등) — 눌러도 서버가 거절하니 처음부터 잠근다(감사 E9). */
+  readOnly?: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
 
@@ -44,7 +48,9 @@ export function ConsultationTracker({
     fd.append("step", key);
     fd.append("next", String(next));
     startTransition(async () => {
-      await toggleConsultationStep(undefined, fd);
+      const res = await toggleConsultationStep(undefined, fd);
+      // 실패를 삼키면 체크가 안 바뀐 채 무반응으로 보인다(감사 E9).
+      if (res?.error) toast.error(res.error);
     });
   }
 
@@ -61,7 +67,7 @@ export function ConsultationTracker({
           >
             <button
               type="button"
-              disabled={isPending}
+              disabled={isPending || readOnly}
               onClick={() => handleToggle(s.key, !checked)}
               className={`mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md border ${
                 checked

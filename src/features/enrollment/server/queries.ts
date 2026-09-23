@@ -891,10 +891,15 @@ export async function getMonthlyConversionTrend(months = 6): Promise<ConversionT
   const supabase = await createClient();
   // 🔴 달 축은 전부 **KST** — 경계도 버킷 키도(섞이면 경계 근처 건이 옆 달로 샌다).
   const thisMonth = kstMonth();
-  const { data } = await supabase
-    .from("enrollment_consultations")
-    .select("outcome, consulted_at")
-    .gte("consulted_at", kstMonthStartIso(shiftMonth(thisMonth, -(months - 1))));
+  // 🔴 무페이징 select는 1000건에서 조용히 잘리고, 오류를 `?? []`로 삼키면 전부 0%로 보인다(감사 T3, B2).
+  const data = await fetchAllPaged<{ outcome: string; consulted_at: string }>((from, to) =>
+    supabase
+      .from("enrollment_consultations")
+      .select("outcome, consulted_at")
+      .gte("consulted_at", kstMonthStartIso(shiftMonth(thisMonth, -(months - 1))))
+      .order("id")
+      .range(from, to),
+  );
 
   // group by YYYY-MM
   const buckets = new Map<string, { total: number; consulted: number; enrolled: number }>();
@@ -903,7 +908,7 @@ export async function getMonthlyConversionTrend(months = 6): Promise<ConversionT
     buckets.set(key, { total: 0, consulted: 0, enrolled: 0 });
   }
 
-  for (const r of data ?? []) {
+  for (const r of data) {
     // 🔴 버킷 키도 **KST 날짜**에서 뽑는다 — `new Date(...).getMonth()`는 서버가 UTC라 매달 1일 새벽 건이
     //    앞 달 칸에 들어간다(경계와 키가 서로 다른 축이면 합계가 안 맞는다).
     const key = kstDateOf(r.consulted_at)?.slice(0, 7);
@@ -941,21 +946,31 @@ export async function getConsultantPerformance(months = 3): Promise<ConsultantSt
   const supabase = await createClient();
   const since = kstMonthStartIso(shiftMonth(kstMonth(), -(months - 1)));
 
-  const { data } = await supabase
-    .from("enrollment_consultations")
-    .select(
-      `outcome, consultant_id, consulted_at,
-       consultant:consultant_id ( display_name )`,
-    )
-    .gte("consulted_at", since)
-    .not("consultant_id", "is", null);
+  // 🔴 전건 select는 1000건에서 잘리고 오류를 삼키면 전원 0%가 된다(감사 T3, B2) — 페이징 + throw.
+  const data = await fetchAllPaged<{
+    outcome: string;
+    consultant_id: string | null;
+    consulted_at: string;
+    consultant: { display_name?: string } | { display_name?: string }[] | null;
+  }>((from, to) =>
+    supabase
+      .from("enrollment_consultations")
+      .select(
+        `outcome, consultant_id, consulted_at,
+         consultant:consultant_id ( display_name )`,
+      )
+      .gte("consulted_at", since)
+      .not("consultant_id", "is", null)
+      .order("id")
+      .range(from, to),
+  );
 
   const byConsultant = new Map<
     string,
     { name: string; total: number; consulted: number; enrolled: number }
   >();
 
-  for (const r of data ?? []) {
+  for (const r of data) {
     if (!r.consultant_id) continue;
     const c = (Array.isArray(r.consultant) ? r.consultant[0] : r.consultant) as
       | { display_name?: string }

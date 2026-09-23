@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getMyNotifications } from "./queries";
+import { clampNotificationLimit, getMyNotifications } from "./queries";
 
 type Row = {
   id: string;
@@ -91,5 +91,14 @@ describe("notification list and badge", () => {
     const result = await getMyNotifications("archived");
     expect(result.items.map((item) => item.id)).toEqual(["archive"]);
     expect(result.unread).toBe(1);
+  });
+  it("목록 크기는 요청값을 따르되 20~100으로 자른다(F17 더 보기)", async () => {
+    mocks.rows = Array.from({ length: 50 }, (_, i) => row(`n${i}`, "followup_due"));
+    expect((await getMyNotifications("active", 40)).items).toHaveLength(40);
+    expect((await getMyNotifications()).items).toHaveLength(20);
+    expect(clampNotificationLimit(5)).toBe(20);
+    expect(clampNotificationLimit(999)).toBe(100);
+    expect(clampNotificationLimit("x")).toBe(20);
+    expect(clampNotificationLimit(33.7)).toBe(33);
   });
 });

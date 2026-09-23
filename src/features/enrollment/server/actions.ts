@@ -769,6 +769,11 @@ export type ConvertToStudentState =
       error?: string;
       studentId?: string;
       existingStudentId?: string;
+      /**
+       * existingStudentId가 **퇴원생**을 가리킨다(감사 F13) — 화면이 '재원 복구 후 배정'을 권하고,
+       * 다른 아이가 맞으면 '그래도 새 학생으로 등록'(ignoreWithdrawn=1)을 고를 수 있게 한다. 자동 병합은 없다.
+       */
+      withdrawnMatch?: boolean;
       notice?: string;
       /**
        * 이번에 **실제로 만들어진** 수강의 반 id. 화면이 "수학 반을 배정했나"를 이걸로 판정한다 —
@@ -780,6 +785,33 @@ export type ConvertToStudentState =
       startDate?: string;
     }
   | undefined;
+
+/**
+ * 같은 자연키(정규화 이름 + 학교 + 학년)의 **퇴원생** id — 없거나 조회 실패면 null(감사 F13).
+ * 조회 실패를 막음으로 두지 않는다: 알림은 도움이지 게이트가 아니다(종전 동작 = 새 학생 생성).
+ */
+async function findWithdrawnNaturalKeyMatch(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  key: { tenantId: string; name: string; school: string | null; grade: string | null; aliases: Awaited<ReturnType<typeof schoolAliases>> },
+): Promise<string | null> {
+  const norm = key.name.toLowerCase().replace(/\s+/g, "");
+  if (!norm) return null;
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, school, grade")
+    .eq("tenant_id", key.tenantId)
+    .eq("name_normalized", norm)
+    .eq("status", "withdrawn")
+    .order("withdrawn_at", { ascending: false, nullsFirst: false })
+    .limit(20);
+  if (error || !data) return null;
+  const hit = data.find(
+    (s) =>
+      (canonicalSchoolName(s.school as string | null, key.aliases) ?? "") === (key.school ?? "") &&
+      ((s.grade as string | null) ?? "") === (key.grade ?? ""),
+  );
+  return hit ? (hit.id as string) : null;
+}
 
 /**
  * 등록상담 → 학생 자동 생성. 선택한 반들에 enrollments도 동시에 INSERT.
@@ -855,6 +887,29 @@ export async function convertConsultationToStudent(
   // 상담 → 학생 전환도 같은 규칙(옛 상담 행이 긴 표기여도 학생엔 짧은 표기로 들어간다).
   const studentSchool = overrideSchool ?? c.prospect_school;
   const studentGrade = overrideGrade ?? c.prospect_grade;
+  const aliases = await schoolAliases();
+
+  // 퇴원했다 돌아온 학생(감사 F13, 원장 2026-09-23) — 같은 이름·학교·학년의 **퇴원생**이 있으면 새 학생
+  // '이름A'를 조용히 만들지 않고 멈춰서 알린다(만들면 출결·수납·상담 이력이 두 학생으로 갈라진다).
+  // 🔴 자동 병합·자동 재원 복구는 하지 않는다 — 사람이 그 학생을 열어 재원 복구한 뒤 배정한다.
+  //    다른 아이가 맞으면 화면의 '그래도 새 학생으로 등록'이 ignoreWithdrawn=1로 다시 보낸다.
+  if (String(formData.get("ignoreWithdrawn") ?? "") !== "1") {
+    const withdrawn = await findWithdrawnNaturalKeyMatch(supabase, {
+      tenantId: c.tenant_id,
+      name: studentName ?? "",
+      school: canonicalSchoolName(studentSchool, aliases),
+      grade: studentGrade,
+      aliases,
+    });
+    if (withdrawn) {
+      const who = [studentName, studentSchool, studentGrade].filter(Boolean).join(" · ");
+      return {
+        error: `같은 이름·학교·학년의 퇴원 학생이 있습니다 (${who}). 돌아온 학생이면 그 학생을 열어 '재원 복구'한 뒤 반을 배정해 주세요.`,
+        existingStudentId: withdrawn,
+        withdrawnMatch: true,
+      };
+    }
+  }
 
   // students INSERT
   const { data: stu, error: stuErr } = await supabase
@@ -863,7 +918,7 @@ export async function convertConsultationToStudent(
       tenant_id: c.tenant_id,
       name: uniqueName.name,
       grade: studentGrade,
-      school: canonicalSchoolName(studentSchool, await schoolAliases()),
+      school: canonicalSchoolName(studentSchool, aliases),
       parent_name: overrideParentName ?? c.parent_name,
       parent_phone: overrideParentPhone ?? c.parent_phone,
       status: "enrolled",

@@ -102,11 +102,11 @@ it("보관함 알림을 읽을 때 받은함 응답으로 바뀌지 않는다", 
   render(<NotificationBell />);
   fireEvent.click(await screen.findByRole("button", { name: "알림 1개" }));
   fireEvent.click(await screen.findByRole("button", { name: "보관함" }));
-  await waitFor(() => expect(mocks.fetch).toHaveBeenCalledWith("archived"));
+  await waitFor(() => expect(mocks.fetch).toHaveBeenCalledWith("archived", 20));
   fireEvent.click(
     await screen.findByRole("button", {
       name: /반복 결석 학생 안 읽음 김지유/,
     }),
   );
-  expect(mocks.mark).toHaveBeenCalledWith(["n1"], "archived");
+  expect(mocks.mark).toHaveBeenCalledWith(["n1"], "archived", 20);
 });

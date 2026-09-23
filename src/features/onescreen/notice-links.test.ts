@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardStudentName, flattenNoticeReportLinks } from "./notice-links";
+import { boardStudentName, flattenNoticeReportLinks, noticePostedActions, resultsForRetryRevoke } from "./notice-links";
 
 describe("boardStudentName", () => {
   it("과목 접두어를 벗긴다", () => {
@@ -60,5 +60,33 @@ describe("flattenNoticeReportLinks", () => {
   it("results가 배열이 아니면 빈 목록", () => {
     expect(flattenNoticeReportLinks(null, targets)).toEqual([]);
     expect(flattenNoticeReportLinks(undefined, undefined)).toEqual([]);
+  });
+});
+
+describe("noticePostedActions · resultsForRetryRevoke (F1·F2)", () => {
+  const live = [{ board: "(수학)김경민", reports: [{ id: 1, url: "u" }] }];
+  const partialRevoke = [
+    { board: "(수학)김경민", revoked: [{ id: 1, url: "u", revoked: true }] },
+    { board: "(수학)최주원", revoked: [{ id: 2, url: "v", revoked: false, note: "삭제 실패(500)" }] },
+  ];
+  it("게시됨은 회수·수정 모두", () => {
+    expect(noticePostedActions("success", live, [])).toEqual({ canRevoke: true, canEdit: true });
+  });
+  it("회수 일부 실패는 남은 글이 있으면 다시 회수만", () => {
+    expect(noticePostedActions("revoke_partial", partialRevoke, [])).toEqual({ canRevoke: true, canEdit: false });
+    const allGone = [{ board: "b", revoked: [{ id: 1, url: "u", revoked: true }] }];
+    expect(noticePostedActions("revoke_partial", allGone, [])).toEqual({ canRevoke: false, canEdit: false });
+  });
+  it("대기·회수 중은 아무것도 안 된다", () => {
+    expect(noticePostedActions("revoke_requested", live, [])).toEqual({ canRevoke: false, canEdit: false });
+    expect(noticePostedActions("queued", live, [])).toEqual({ canRevoke: false, canEdit: false });
+  });
+  it("재회수 results는 워커가 읽는 reports 모양으로", () => {
+    expect(resultsForRetryRevoke(partialRevoke)).toEqual([
+      { board: "(수학)김경민", reports: [{ id: 1, url: "u", revoked: true }] },
+      { board: "(수학)최주원", reports: [{ id: 2, url: "v", revoked: false, note: "삭제 실패(500)" }] },
+    ]);
+    expect(resultsForRetryRevoke(live)).toEqual(live);
+    expect(resultsForRetryRevoke(null)).toBeNull();
   });
 });

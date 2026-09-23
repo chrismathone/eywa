@@ -302,8 +302,11 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   // 아직 안 고쳐졌으면 안전하게 다시 막힌다 = 개별 재발송을 열어둬도 위험하지 않다.
   // ⚠️ 기한이 지난 건도 뺀다 — 눌러도 서버(too_old 게이트)가 거부해 헛돌 뿐이다. 개별 체크박스는
   //    그대로 열어 둔다(규칙·예외가 바뀌어도 화면이 길을 막지 않게. 최종 판단은 언제나 서버).
+  // ⚠️ 멈춘 '처리 중'은 재발송이 아니라 **멈춤복구**가 담당한다(서버 retryClassnote는 끝나지 못한 상태만 받는다 —
+  //    게시 도중일 수 있는 행을 다시 큐에 올리면 학부모에게 두 번 나간다).
   const retriable = items.filter(
     (i) =>
+      i.status !== "processing" &&
       i.status !== "name_conflict" &&
       i.status !== "blocked_shared" &&
       !classnoteRetryDeadline(i.reportDate, todayKst).expired,
@@ -532,6 +535,8 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                         type="checkbox"
                         checked={checked.has(it.id)}
                         onChange={() => toggle(it.id)}
+                        disabled={it.status === "processing"}
+                        title={it.status === "processing" ? "처리 중에 멈춘 건은 '멈춤복구'로 되돌린 뒤 재발송합니다" : undefined}
                         aria-label={`${it.studentName} 선택`}
                       />
                     </td>

@@ -20,6 +20,12 @@ import { analyzeStudentConsultation } from "./ai";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import { consultationSubject } from "../subject";
+import {
+  canConsultStudent,
+  OUT_OF_SCOPE_CONSULTATION,
+  OUT_OF_SCOPE_STUDENT,
+  scopedConsultationUserId,
+} from "./write-scope";
 
 async function requireConsultationWrite() {
   const user = await getCurrentUser();
@@ -53,6 +59,11 @@ export async function startStudentConsultationFromAudio(
   if (!studentId) return { error: "학생을 선택해주세요" };
   if (!audioPath) return { error: "음성 파일이 누락되었습니다" };
   if (!isTenantAudioPath(audioPath, user.tenantId)) return { error: "파일 경로가 잘못되었습니다" };
+  // 담당 범위(감사 S3) — 강사는 담당 학생에게만 녹음 상담을 만든다(텍스트 등록과 같은 판정).
+  if ((await scopedConsultationUserId(user)) && !(await canConsultStudent(studentId))) {
+    // ⚠️ 여기서 음성을 지우지 않는다 — 경로는 요청이 준 값이라, 지우면 남의 상담 녹음을 지우는 문이 된다.
+    return { error: OUT_OF_SCOPE_STUDENT };
+  }
 
   const admin = createAdminClient();
   const [{ data: counselor }, settings] = await Promise.all([
@@ -139,11 +150,14 @@ export async function runStudentConsultationAnalysis(
   const { data: row } = await supabase
     .from("student_consultations")
     .select(
-      "id, summary, transcription, consulted_at, audience, category, student:student_id ( name, grade, school )",
+      "id, counselor_id, summary, transcription, consulted_at, audience, category, student:student_id ( name, grade, school )",
     )
     .eq("id", id)
     .single();
   if (!row) return { error: "상담을 찾을 수 없습니다" };
+  // 담당 범위(감사 S3) — 강사는 본인이 쓴 상담만 분석한다(유료 AI 호출).
+  const scopedId = await scopedConsultationUserId(user);
+  if (scopedId && row.counselor_id !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
 
   // 🔴 **AI 분석은 녹음(전사)에만**(원장 2026-09-09 *"AI 분석은 '녹음'에만 분석되도록 해줘"*) —
   //    상담 요약은 사람이 직접 쓴 글이라 그걸 다시 AI로 요약하면 같은 말을 두 번 하는 셈이고,

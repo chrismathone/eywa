@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { BookOpen, MessagesSquare, ScrollText } from "@/components/icons/aywa-icon-compat";
 import type { ReactNode } from "react";
 import { requireAccess } from "@/lib/auth/require-access";
-import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { WindowLink } from "@/components/workspace/window-link";
 import { BackLink } from "@/components/back-link";
 import { EditableDateCell } from "@/features/enrollments/components/editable-date-cell";
 import {
@@ -33,7 +34,17 @@ export default async function WithdrawalDetailPage({
   if (!detail) notFound();
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 수강 이력 시작/종료일 더블클릭 정정 = owner(원장) 권한 이상만(다른 화면과 동일 게이트).
-  const canEditDates = (await accessLevelTenant(user.systemRole, "owner")) === "full";
+  // 권한 판정 셋은 서로 독립 → 병렬(B4).
+  const [ownerLvl, canWrite, canManageStudents, studentsLvl] = await Promise.all([
+    accessLevelTenant(user.systemRole, "owner"),
+    canWriteTenant(user.systemRole, "withdrawals"),
+    canManageTenant(user.systemRole, "students"),
+    accessLevelTenant(user.systemRole, "students"),
+  ]);
+  const canEditDates = ownerLvl === "full";
+  // 재원 복구 = 서버 게이트와 같은 두 문(퇴원관리 쓰기 ∧ 원생 기록 변경) — 못 누를 사람에겐 안 보인다(감사 E9·S6).
+  const canReactivate = canWrite && canManageStudents;
+  const canOpenStudent = studentsLvl !== "none";
 
   const md = detail.metadata;
   const duration = enrollmentDuration(detail.enrolledAt, detail.withdrawnAt);
@@ -79,7 +90,15 @@ export default async function WithdrawalDetailPage({
             <span>총 등록 기간 {duration}</span>
           </p>
         </div>
-        <ReactivateButton studentId={detail.id} />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 사후 상담 중 이력을 보려고 원생목록에서 다시 찾지 않게(감사 N6). */}
+          {canOpenStudent ? (
+            <WindowLink href={`/students/${detail.id}`} title={detail.name}>
+              <span className="text-primary text-sm font-semibold hover:underline">원생 상세 보기</span>
+            </WindowLink>
+          ) : null}
+          {canReactivate ? <ReactivateButton studentId={detail.id} /> : null}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -94,6 +113,7 @@ export default async function WithdrawalDetailPage({
         <Card title="상담 추적" icon={<MessagesSquare className="size-3.5" />}>
           <ConsultationTracker
             studentId={detail.id}
+            readOnly={!canWrite}
             initial={
               md?.consultation ?? {
                 adminCalledParent: false,

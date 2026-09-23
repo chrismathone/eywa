@@ -27,19 +27,24 @@ export function MobilePushRow() {
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch("/api/push", { cache: "no-store" });
-        const data = (await res.json()) as { enabled?: boolean; publicKey?: string | null };
+        // 켜짐/꺼짐은 **DB 기준**(F16) — 이 기기에 브라우저 구독이 있어도 다른 계정 것이면 이 계정은 못 받는다.
+        //    그래서 기기 구독의 endpoint를 서버에 물어 "이 계정 것인가"(mine)로 판정한다.
+        let endpoint = "";
+        if (pushSupported()) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          const sub = await reg?.pushManager.getSubscription();
+          endpoint = sub?.endpoint ?? "";
+        }
+        const url = endpoint ? `/api/push?endpoint=${encodeURIComponent(endpoint)}` : "/api/push";
+        const res = await fetch(url, { cache: "no-store" });
+        const data = (await res.json()) as { enabled?: boolean; publicKey?: string | null; mine?: boolean };
         if (!alive || !data?.enabled || !data.publicKey) return;
         setPublicKey(data.publicKey);
         const standalone =
           window.matchMedia?.("(display-mode: standalone)").matches ||
           (navigator as unknown as { standalone?: boolean }).standalone === true;
         setNeedsInstall(iosNeedsInstall(navigator.userAgent, standalone));
-        if (pushSupported()) {
-          const reg = await navigator.serviceWorker.getRegistration();
-          const sub = await reg?.pushManager.getSubscription();
-          if (alive) setSubscribed(Boolean(sub));
-        }
+        setSubscribed(Boolean(endpoint) && data.mine === true);
       } catch {
         /* 구독 상태 조회 실패는 조용히 — 벨 본체가 이것 때문에 깨지면 안 된다 */
       }
@@ -77,9 +82,13 @@ export function MobilePushRow() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(sub.toJSON()),
       });
-      const data = (await res.json()) as { ok?: boolean };
+      const data = (await res.json()) as { ok?: boolean; reason?: string };
       if (!data?.ok) {
-        setError("등록에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        setError(
+          data?.reason === "other_tenant"
+            ? "이 기기는 다른 학원 계정의 알림을 받고 있어 옮길 수 없습니다."
+            : "등록에 실패했습니다. 잠시 후 다시 시도해주세요.",
+        );
         return;
       }
       setSubscribed(true);

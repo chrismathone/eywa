@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { QrCode } from "@/components/icons/aywa-icon-compat";
+import { Calculator, QrCode } from "@/components/icons/aywa-icon-compat";
+import { WindowLink } from "@/components/workspace/window-link";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -14,7 +15,7 @@ import { getConsultationTotalCount } from "@/features/enrollment/server/poll-act
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   getConsultantOptions,
   getConsultationFilteredCounts,
@@ -108,7 +109,12 @@ export default async function EnrollmentPage({
 
   // 칸반 드래그(상태 변경) 가능 여부 — 권한 판정은 캐시된 매트릭스 재사용이라 추가 쿼리 0.
   // ⚠️ 이건 **화면을 줄이는 용도**일 뿐이고 진짜 게이트는 setEnrollmentOutcome 안에 있다([[#77]]).
-  const canWriteEnrollment = await canWriteTenant(user.systemRole, "enrollment");
+  // 수강료 계산기 바로가기(감사 N14, 원장 2026-09-23) — 계산기는 수납관리의 한 면이라 **그 화면을 열 수 있는
+  // 사람에게만** 링크를 세운다(권한은 바꾸지 않는다 — 못 여는 사람에게 링크를 주면 눌러도 거절된다).
+  const [canWriteEnrollment, canOpenCalculator] = await Promise.all([
+    canWriteTenant(user.systemRole, "enrollment"),
+    canAccessTenant(user.systemRole, "billing"),
+  ]);
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
   // 전건을 유지하되, 그래서 기간 필터 없이 열면 여전히 무겁다(별도 과제).
@@ -210,6 +216,15 @@ export default async function EnrollmentPage({
             >
               <IntakeQrSection />
             </Suspense>
+            {canOpenCalculator ? (
+              <Button
+                variant="ghost"
+                render={<WindowLink href="/billing?tab=calculator" title="수강료 계산기" />}
+              >
+                <Calculator className="size-4" />
+                수강료 계산기
+              </Button>
+            ) : null}
             <NewEnrollmentTrigger />
           </>
         }

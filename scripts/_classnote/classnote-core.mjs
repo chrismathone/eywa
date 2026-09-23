@@ -652,7 +652,7 @@ export async function processQueueOnce(sql, browser, opts) {
       // waitUntil은 'domcontentloaded' — 'networkidle'은 /r이 로고 이미지를 Firebase 서명 URL로 불러오는데
       // 발송 PC 망에서 그 요청이 늘어지면 '네트워크 완전 정지'가 영영 안 떠 30초 타임아웃(실측 2026-07-10).
       // DOM 로드 후 fonts.ready + 700ms 정착으로 렌더 완성도는 확보되므로 취약한 networkidle 의존을 뺀다.
-      await page.goto(`${base}/r/${r.share_token}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      const resp = await page.goto(`${base}/r/${r.share_token}`, { waitUntil: "domcontentloaded", timeout: 30000 });
       await page.evaluate(() => document.fonts?.ready).catch(() => {});
       // 로고·학생사진 등 이미지가 스크린샷에 담기도록 로드 대기(최대 8초, 실패해도 진행 — 캡처는 계속).
       await page
@@ -660,9 +660,30 @@ export async function processQueueOnce(sql, browser, opts) {
         .catch(() => {});
       await new Promise((x) => setTimeout(x, 700));
       const card = page.locator(".report-capture").first(); // ParentReportCard 루트(공유 컴포넌트) — 폭 유틸과 분리된 안정 마커
-      const buf = (await card.count())
-        ? await card.screenshot({ type: "jpeg", quality: 90 })
-        : await page.screenshot({ type: "jpeg", quality: 90, fullPage: true });
+      // 🔴 카드가 없으면 **게시하지 않는다**(2026-09-23 전수 점검) — 예전엔 페이지 전체를 찍어 올렸는데,
+      //    /r이 DB 오류·만료·취소일 때 띄우는 안내 화면("보고서를 잠시 불러올 수 없습니다")이 그대로 학부모 알림장에
+      //    올라갈 수 있었다(되돌릴 수 없는 외부 발신). 재시도 카운트를 올려 3회면 failed로 고정 → 발송 콘솔에서 사람이 본다.
+      if (!resp || resp.status() !== 200 || (await card.count()) === 0) {
+        await ctx.close();
+        // 취소된 보고서는 /r이 취소 화면을 띄운다 — 아래 기존 '취소됨 → skip'과 같은 결말로(재시도 카운트 X).
+        const [rv] = await sql`select revoked_at from lesson_reports where id=${r.id}`;
+        if (rv?.revoked_at || !post) {
+          // dry-run은 상태를 바꾸지 않는다(다시 queued로만).
+          await sql`update lesson_reports set classnote_status='queued' where id=${r.id}`;
+          summary.requeued++;
+          log(`  · ${studentName}: ${rv?.revoked_at ? "취소됨" : "dry-run · 보고서 카드 없음"} → 게시 skip`);
+          continue;
+        }
+        await sql`update lesson_reports set
+          classnote_retry_count = coalesce(classnote_retry_count, 0) + 1,
+          classnote_status = case when coalesce(classnote_retry_count, 0) + 1 >= 3 then 'failed' else 'queued' end,
+          classnote_error = ${`보고서 화면을 불러오지 못해 게시 보류(카드 없음 · HTTP ${resp?.status() ?? "-"})`}
+          where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: 보고서 카드 없음(HTTP ${resp?.status() ?? "-"}) → 게시 보류, 재큐`);
+        continue;
+      }
+      const buf = await card.screenshot({ type: "jpeg", quality: 90 });
       await ctx.close();
       log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${className}" img=${buf.length}B`);
 
