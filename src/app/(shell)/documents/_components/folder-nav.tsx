@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { Folder, FolderOpen } from "@/components/icons/aywa-icon-compat";
-import { categoryTreeCounts, type DocumentCategoryOption } from "@/features/documents/categories";
+import { categoryPath, categoryTreeCounts, type DocumentCategoryOption } from "@/features/documents/categories";
 import { CategoryManager } from "./category-manager";
 import { FolderTree } from "./folder-tree";
 import { FolderDropTarget } from "./folder-interactions";
+import { FolderFavoriteToggle } from "./folder-favorite-toggle";
 
-// 탐색기 좌측 폴더 팬 — 서식 분류 폴더 + (권한 있으면) 수납관리 연동 폴더(교재 요청서·수강료 견적서).
+// 탐색기 좌측 폴더 팬 — 개인 즐겨찾기, 서식 분류 폴더, (권한 있으면) 수납관리 연동 폴더.
 // 서버 컴포넌트(함수 prop hrefFor는 같은 렌더 패스의 서버 부모가 넘김 — 클라 경계 없음).
 // 분류 폴더는 학원장이 관리하는 테넌트 데이터(0161a) — 쓰기 권한이 있으면 목록 아래에 '분류 관리'가 붙는다.
 
@@ -35,6 +36,7 @@ export function FolderNav({
   categories,
   counts,
   canManage,
+  favoriteKeys,
 }: {
   folders: FolderItem[];
   linkedFolders: FolderItem[];
@@ -44,16 +46,40 @@ export function FolderNav({
   categories: DocumentCategoryOption[];
   counts: Record<string, number> | null;
   canManage: boolean;
+  favoriteKeys: string[];
 }) {
+  const byKey = new Map(categories.map((category) => [category.key, category]));
+  const favorites = favoriteKeys.flatMap((key) => { const category = byKey.get(key); return category ? [category] : []; });
+  const treeCounts = counts ? categoryTreeCounts(categories, counts) : null;
   return (
     <nav aria-label="문서 폴더" className="mb-3 min-w-0 space-y-1 lg:mb-0">
+      {favorites.length > 0 ? <div aria-label="즐겨찾기 폴더" className="space-y-0.5 border-b border-line pb-2 mb-2">
+        <p className="flex items-center justify-between px-2.5 pb-1 text-xs font-semibold text-text-dim">
+          <span>즐겨찾기</span><span className="num text-text-faint">{favorites.length}/10</span>
+        </p>
+        {favorites.map((category) => {
+          const pathLabel = categoryPath(categories, category.key).map((part) => part.label).join(" / ");
+          const active = category.key === activeKey;
+          return <FolderDropTarget key={category.key} folderKey={category.key}
+            className={`flex min-w-0 items-center rounded-md ${active ? "bg-primary/10 text-primary font-bold" : "text-text-dim hover:bg-bg-soft"}`}>
+            <Link href={hrefFor(category.key)} title={pathLabel} aria-current={active ? "page" : undefined}
+              className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1 text-sm">
+              <Folder className="size-4 shrink-0 text-amber" strokeWidth={1.8} />
+              <span className="min-w-0 flex-1 truncate">{category.label}</span>
+              <span className="num text-text-faint shrink-0 text-xs">{treeCounts ? treeCounts[category.key] ?? 0 : "—"}</span>
+            </Link>
+            <FolderFavoriteToggle folderKey={category.key} pathLabel={pathLabel} favorite atLimit={favorites.length >= 10} />
+          </FolderDropTarget>;
+        })}
+      </div> : null}
       {folders.filter((f) => f.key === null).map((f) => (
         <FolderDropTarget key={f.key ?? "all"} folderKey={null} className="rounded-md">
           <FolderLink f={f} active={f.key === activeKey} href={hrefFor(f.key)} />
         </FolderDropTarget>
       ))}
-      <FolderTree categories={categories} counts={counts ? categoryTreeCounts(categories, counts) : null}
-        activeKey={activeKey} hrefs={Object.fromEntries(categories.map((c) => [c.key, hrefFor(c.key)]))} />
+      <FolderTree categories={categories} counts={treeCounts}
+        activeKey={activeKey} hrefs={Object.fromEntries(categories.map((c) => [c.key, hrefFor(c.key)]))}
+        favoriteKeys={favoriteKeys} />
       {counts === null ? <p role="status" className="px-2.5 text-xs">문서 수 조회 실패. 새로고침해 주세요.</p> : null}
       {canManage && counts ? <CategoryManager categories={categories} counts={counts} /> : null}
       {linkedFolders.length > 0 ? (

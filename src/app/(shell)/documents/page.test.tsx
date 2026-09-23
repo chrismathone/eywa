@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const mocks = vi.hoisted(() => ({ documents: vi.fn().mockResolvedValue({ rows: [], total: 0 }), access: vi.fn().mockResolvedValue(true) }));
+const mocks = vi.hoisted(() => ({ documents: vi.fn().mockResolvedValue({ rows: [], total: 0 }), access: vi.fn().mockResolvedValue(true),
+  favorites: vi.fn().mockResolvedValue([]) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-embed": "1" }) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: async () => ({ systemRole: "master" }) }));
@@ -13,6 +14,8 @@ vi.mock("@/features/documents/server/queries", () => ({
   getDocumentsPage: mocks.documents, getDocumentCategoryCounts: async () => ({ all: 33, billing: 25, hr: 8 }),
 }));
 vi.mock("@/features/documents/server/linked-queries", () => ({ getLinkedPage: vi.fn(), getLinkedCounts: async () => ({ textbooks: 538, quotes: 17 }) }));
+vi.mock("@/features/documents/server/favorite-queries", () => ({ getDocumentFolderFavorites: mocks.favorites }));
+vi.mock("@/features/documents/server/favorite-actions", () => ({ setDocumentFolderFavorite: vi.fn() }));
 vi.mock("@/features/documents/server/category-queries", async () => {
   const { SYSTEM_CATEGORY_OPTIONS } = await import("@/features/documents/categories");
   return { getDocumentCategories: async () => [...SYSTEM_CATEGORY_OPTIONS,
@@ -32,7 +35,7 @@ vi.mock("@/features/documents/server/file-actions", () => ({ moveDocumentFile: v
 vi.mock("./_components/linked-row", () => ({ LinkedDocumentRow: () => null }));
 import DocumentsPage from "./page";
 
-afterEach(() => { cleanup(); mocks.access.mockResolvedValue(true); });
+afterEach(() => { cleanup(); mocks.access.mockResolvedValue(true); mocks.favorites.mockResolvedValue([]); });
 
 function preview(name: string) {
   if (!process.env.FOLDER_PREVIEW_DIR) return;
@@ -52,7 +55,7 @@ it("현재 경로와 바로 아래 폴더를 표시하고 폴더 이동 링크�
   const target = screen.getAllByRole("link").find((a) => a.textContent?.startsWith("1학년"))!;
   const href = new URL(target.getAttribute("href")!, "https://example.test");
   expect(Object.fromEntries(href.searchParams)).toEqual({ cat: "leaf", q: "시험", sort: "name", dir: "asc", embed: "1" });
-  expect(mocks.documents).toHaveBeenLastCalledWith({ category: "middle", q: "시험", sort: { key: "name", dir: "asc" } }, 1, 50);
+  expect(mocks.documents).toHaveBeenLastCalledWith({ category: "middle", q: "시험", sort: { key: "name", dir: "asc" } }, 1, 20);
 });
 
 it("폴더 관리·하위 생성 화면을 열 수 있고 읽기 전용 사용자에게 변경 버튼을 노출하지 않는다", async () => {
@@ -79,4 +82,23 @@ it("분류 열을 제거하고 수정일 정렬 링크를 표시한다", async (
   expect(screen.queryByRole("columnheader", { name: "분류" })).not.toBeInTheDocument();
   expect(screen.getByRole("columnheader", { name: /수정일/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /수정일/ })).toHaveAttribute("href", "/documents?cat=middle&sort=modified&dir=asc&embed=1");
+});
+
+it("즐겨찾기는 전체 문서보다 위에 구분선으로 표시하고 하위 폴더 경로를 알려준다", async () => {
+  mocks.favorites.mockResolvedValueOnce(["leaf", "middle"]);
+  render(await DocumentsPage({ searchParams: Promise.resolve({}) }));
+  const nav = screen.getByRole("navigation", { name: "문서 폴더" });
+  const favorites = within(nav).getByLabelText("즐겨찾기 폴더");
+  expect(nav.firstElementChild).toBe(favorites);
+  expect(favorites).toHaveClass("border-b");
+  expect(within(favorites).getAllByRole("link").map((link) => link.textContent)).toEqual(["1학년0", "중등0"]);
+  expect(within(favorites).getByRole("link", { name: /1학년/ })).toHaveAttribute("title", "수업 / 수학 자료 / 중등 / 1학년");
+  expect(within(favorites).getByText("2/10")).toBeInTheDocument();
+});
+
+it("전체 문서 37건은 첫 20건만 조회하고 2페이지 이동 링크를 표시한다", async () => {
+  mocks.documents.mockResolvedValueOnce({ rows: [], total: 37 });
+  render(await DocumentsPage({ searchParams: Promise.resolve({}) }));
+  expect(mocks.documents).toHaveBeenLastCalledWith({ category: undefined, q: "", sort: null }, 1, 20);
+  expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/documents?page=2&embed=1")).toBe(true);
 });
