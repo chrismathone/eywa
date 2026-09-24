@@ -89,7 +89,7 @@ export default async function TenantDetailPage({
         {/* KPI 3 */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Kpi label="사용자" value={fmt(detail.users.length)} unit="명" />
-          <Kpi label="재원 학생" value={fmt(detail.studentCount)} unit="명" />
+          <Kpi label="등록 학생" value={fmt(detail.studentCount)} unit="명" />
           <Kpi label="이번 달 청구" value={fmt(detail.monthBilling)} unit={`원 · ${detail.monthInvoiceCount}건`} />
         </div>
 
@@ -113,7 +113,7 @@ export default async function TenantDetailPage({
         </section>
 
         {/* 사용자 목록 */}
-        <section className="bg-card border-line shadow-card overflow-hidden rounded-2xl border">
+        <section id="accounts" className="bg-card border-line shadow-card scroll-mt-20 overflow-hidden rounded-2xl border">
           <header className="border-line border-b px-5 py-3">
             <p className="micro">계정</p>
             <h3 className="text-foreground mt-0.5 text-base font-bold">사용자 목록 ({detail.users.length})</h3>
@@ -160,7 +160,7 @@ export default async function TenantDetailPage({
         </section>
 
         {/* 학원 정보 수정 */}
-        <section className="bg-card border-line shadow-card rounded-2xl border p-5">
+        <section id="settings" className="bg-card border-line shadow-card scroll-mt-20 rounded-2xl border p-5">
           <header className="mb-3">
             <p className="micro">학원 정보 수정</p>
             <h3 className="text-foreground mt-0.5 text-base font-bold">기본 정보</h3>

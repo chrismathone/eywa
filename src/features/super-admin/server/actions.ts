@@ -204,7 +204,7 @@ export async function changeUserRole(
   });
   if (authErr) return { error: authErr.message };
   // public.users 즉시 반영 (트리거가 처리하지만 명시)
-  await admin.from("users").update({ system_role: role }).eq("id", userId);
+  await admin.from("users").update({ system_role: role }).eq("id", userId).eq("tenant_id", tenantId);
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -227,14 +227,18 @@ export async function resetUserPassword(
   const userId = String(formData.get("userId") ?? "").trim();
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const tenantName = String(formData.get("tenantName") ?? "").trim();
-  if (!userId) return { error: "userId 누락" };
+  if (!userId || !tenantId) return { error: "필수 값 누락" };
+
+  const admin = createAdminClient();
+  const { data: account, error: accountError } = await admin.from("users")
+    .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+  if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
 
   // 임시 비번 생성 (영숫자 12자)
   const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
     .map((b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31])
     .join("");
 
-  const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword });
   if (error) return { error: error.message };
 
@@ -259,15 +263,18 @@ export async function setUserActive(
   const active = String(formData.get("active") ?? "") === "true";
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const tenantName = String(formData.get("tenantName") ?? "").trim();
-  if (!userId) return { error: "userId 누락" };
+  if (!userId || !tenantId) return { error: "필수 값 누락" };
 
   const admin = createAdminClient();
+  const { data: account, error: accountError } = await admin.from("users")
+    .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+  if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
   // 비활성: 100년 ban / 활성: ban 해제(0)
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     ban_duration: active ? "none" : "876000h",
   });
   if (authErr) return { error: authErr.message };
-  await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId);
+  await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId).eq("tenant_id", tenantId);
 
   await logSuperAdminAction({
     actorId: sa.id,

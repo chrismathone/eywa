@@ -44,7 +44,7 @@ export default async function TenantViewPage({ params }: { params: Promise<{ id:
 
         {/* KPI 4 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Kpi label="재원 학생" value={fmt(snap.kpi.students)} unit="명" />
+          <Kpi label="등록 학생" value={fmt(snap.kpi.students)} unit="명" />
           <Kpi label="강사" value={fmt(snap.kpi.teachers)} unit="명" />
           <Kpi label="운영 반" value={fmt(snap.kpi.activeClasses)} unit="개" />
           <Kpi label="이번 달 청구" value={fmt(snap.kpi.monthBilling)} unit="원" />

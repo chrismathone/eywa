@@ -5,6 +5,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import styles from "@/components/public-site/public-site.module.css";
 import { loginLandingHref } from "@/lib/auth/login-next";
 import { loginErrorMessage } from "@/lib/auth/login-error";
+import { isAdminLoginId, loginEmailFor } from "@/lib/auth/admin-login";
 import { createClient } from "@/lib/supabase/client";
 
 export function LoginForm({ next }: { next?: string }) {
@@ -17,12 +18,12 @@ export function LoginForm({ next }: { next?: string }) {
     e.preventDefault();
     if (submitting.current) return;
     const form = new FormData(e.currentTarget);
-    const email = String(form.get("email") ?? "").trim();
+    const loginId = String(form.get("email") ?? "").trim();
     const password = String(form.get("password") ?? "");
     setError(null);
 
-    if (!email || password.length < 6) {
-      setError(!email ? "이메일을 입력해 주세요." : "비밀번호는 6자 이상 입력해 주세요.");
+    if (!loginId || password.length < 6) {
+      setError(!loginId ? "계정을 입력해 주세요." : "비밀번호는 6자 이상 입력해 주세요.");
       return;
     }
 
@@ -30,7 +31,7 @@ export function LoginForm({ next }: { next?: string }) {
     setPending(true);
     try {
       const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: loginEmailFor(loginId), password });
       if (signInError) {
         setError(loginErrorMessage(signInError));
       } else {
@@ -38,7 +39,7 @@ export function LoginForm({ next }: { next?: string }) {
         // /home resolves the user's role and teaching subject; never guess it here.
         // It also records the login (login_events) — this form signs in from the browser, so /home is the
         // only server hop right after a manual login.
-        window.location.assign(loginLandingHref(next));
+        window.location.assign(loginLandingHref(isAdminLoginId(loginId) ? "/admin" : next));
         return;
       }
     } catch {
@@ -51,8 +52,8 @@ export function LoginForm({ next }: { next?: string }) {
   return (
     <form method="post" onSubmit={handleSubmit} className={styles.loginForm} aria-busy={pending} aria-describedby={error ? "login-error" : undefined}>
       <div className={styles.formField}>
-        <label htmlFor="email">이메일</label>
-        <input id="email" name="email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} required placeholder="name@academy.kr" disabled={pending} />
+        <label htmlFor="email">이메일 또는 관리자 ID</label>
+        <input id="email" name="email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required placeholder="name@academy.kr" disabled={pending} />
       </div>
       <div className={styles.formField}>
         <label htmlFor="password">비밀번호</label>
