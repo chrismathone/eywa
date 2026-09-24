@@ -976,7 +976,8 @@ async function handleStudentConsultation(
       consultedAt: sc.consulted_at,
       audience: sc.audience,
       category: sc.category,
-      tenantId: sc.tenant_id,
+      // tenant_id는 DB에서 NOT NULL이다 — 타입만 느슨하다. 비어 있으면 generateJSON이 거절해 아래 catch가 '실패'로 적는다.
+      tenantId: sc.tenant_id ?? "",
     });
     await runWrite(
       "studentConsultation.completed",

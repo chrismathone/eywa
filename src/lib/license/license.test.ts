@@ -81,7 +81,11 @@ describe("라이선스 배선 가드", () => {
 
   it("AI 게이트는 단일 관문 generateJSON 안에 있다", () => {
     const gen = SRC.find((f) => f.path === "src/lib/ai/generate.ts")!.src;
-    expect(gen).toMatch(/isFeatureLicensed\(opts\.meta\.tenantId, "ai_analysis"\)/);
+    expect(gen).toMatch(/isFeatureLicensed\(tenantId, "ai_analysis"\)/);
+    // 지점을 모르는 호출은 통과가 아니라 거절 — "빈틈"(원장 2026-09-25)이 다시 열리지 않게.
+    expect(gen).toMatch(/if \(!tenantId\) throw new Error\(AI_TENANT_MISSING_MESSAGE\)/);
+    // 타입에서도 지점이 필수다(선택으로 되돌리면 호출부가 조용히 빠진다).
+    expect(gen).toMatch(/meta: \{ tenantId: string; feature: string \};/);
   });
 
   it("학생이 재원이 되는 모든 경로가 좌석을 본다", () => {

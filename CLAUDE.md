@@ -105,8 +105,9 @@ aywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
     텍스트는 [`maskResidentRegNo`](src/features/staff/contract-extract.ts)로 **주민번호 뒤 7자리 항상 마스킹**(글자 PDF
     경로 포함), ③ `generateJSON({ document })`는 Anthropic 한정(폴백 없음 — 다른 provider로 첨부가 새는 것 방지).
     다른 스캔/이미지 전송을 새로 열 땐 이 예외를 근거로 확장하지 말고 다시 물을 것.
-- **usage 계측(0113a `ai_usage_logs`)**: 새 AI 호출부는 `generateJSON({ …, meta: { feature: "<호출부 식별자>", tenantId? } })`를
-  넘긴다(비용 실측 — 키 분리만으로는 기능별 구분 불가). 기록은 best-effort라 본 호출을 절대 안 막는다.
+- **usage 계측(0113a `ai_usage_logs`) + 지점 라이선스**: 모든 AI 호출부는 `generateJSON({ …, meta: { feature: "<호출부 식별자>", tenantId } })`를
+  넘긴다 — 🔴 **`tenantId`는 필수**(2026-09-25, 타입 + 런타임 거절). 지점을 모르면 라이선스(ai_analysis)를 판정할 수 없어 꺼진 지점에서도
+  AI가 새므로, 비어 있으면 `generateJSON`이 호출 전에 거절한다([`decisions/tenant.md`](docs/decisions/tenant.md) 지점 기능 라이선스). 사용량 기록 자체는 best-effort.
 
 provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어×provider) + `resolveModel()`:
 

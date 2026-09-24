@@ -5,6 +5,10 @@ const { upstageCreate, anthropicCreate } = vi.hoisted(() => ({
   upstageCreate: vi.fn(),
   anthropicCreate: vi.fn(),
 }));
+// 지점 라이선스 조회는 DB를 부른다 — 이 파일은 provider 동작만 보므로 늘 허용으로 둔다(라이선스 자체는 license.test.ts).
+vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
+const TEST_META = { tenantId: "tenant-test", feature: "test" };
+
 vi.mock("./upstage", () => ({
   getUpstage: () => ({ chat: { completions: { create: upstageCreate } } }),
 }));
@@ -280,7 +284,7 @@ describe("generateJSON 폴백", () => {
   it("upstage 401 → anthropic로 자동 폴백해 성공", async () => {
     upstageCreate.mockRejectedValueOnce({ status: 401 });
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
-    const { data, model } = await generateJSON<{ ok: boolean }>({ prompt: "JSON 주세요", maxTokens: 100 });
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ ok: true });
     expect(model).toBe("claude-sonnet-5");
     expect(upstageCreate).toHaveBeenCalledOnce();
@@ -289,7 +293,7 @@ describe("generateJSON 폴백", () => {
 
   it("upstage 성공 시 anthropic 호출 안 함", async () => {
     upstageCreate.mockResolvedValueOnce(upstageOk('{"x":1}'));
-    const { data } = await generateJSON<{ x: number }>({ prompt: "JSON 주세요", maxTokens: 100 });
+    const { data } = await generateJSON<{ x: number }>({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ x: 1 });
     expect(anthropicCreate).not.toHaveBeenCalled();
   });
@@ -304,14 +308,14 @@ describe("generateJSON 폴백", () => {
       ),
     );
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
-    const { data } = await generateJSON<{ ok: boolean }>({ prompt: "JSON 주세요", maxTokens: 100 });
+    const { data } = await generateJSON<{ ok: boolean }>({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 });
     expect(data).toEqual({ ok: true }); // 종전엔 여기서 throw → 호출부가 폴백 템플릿으로 떨어졌다
     expect(anthropicCreate).toHaveBeenCalledOnce();
   });
 
   it("폴백 불가 오류(400)는 즉시 throw, 다음 provider 시도 안 함", async () => {
     upstageCreate.mockRejectedValueOnce({ status: 400, message: "bad request" });
-    await expect(generateJSON({ prompt: "JSON 주세요", maxTokens: 100 })).rejects.toThrow();
+    await expect(generateJSON({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100 })).rejects.toThrow();
     expect(anthropicCreate).not.toHaveBeenCalled();
   });
 
@@ -322,7 +326,7 @@ describe("generateJSON 폴백", () => {
       }),
     );
     anthropicCreate.mockResolvedValueOnce(anthropicOk('{"ok":true}'));
-    const { data, model } = await generateJSON<{ ok: boolean }>({
+    const { data, model } = await generateJSON<{ ok: boolean }>({ meta: TEST_META, 
       prompt: "JSON 주세요",
       maxTokens: 100,
       provider: "anthropic",
@@ -343,7 +347,7 @@ describe("generateJSON 폴백", () => {
       }),
     );
     await expect(
-      generateJSON({ prompt: "JSON 주세요", maxTokens: 100, provider: "anthropic" }),
+      generateJSON({ meta: TEST_META,  prompt: "JSON 주세요", maxTokens: 100, provider: "anthropic" }),
     ).rejects.toThrow();
     expect(anthropicCreate).toHaveBeenCalledTimes(1);
   });

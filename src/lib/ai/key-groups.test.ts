@@ -12,6 +12,7 @@ const { anthropicCreate, clientCalls } = vi.hoisted(() => ({
   // 클라이언트를 어떤 버킷·그룹으로 만들었는지 — 배선 검증용
   clientCalls: [] as unknown[][],
 }));
+vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
 vi.mock("./anthropic", () => ({
   getAnthropic: (...args: unknown[]) => {
     clientCalls.push(["anthropic", ...args]);
@@ -138,7 +139,7 @@ describe("generateJSON 배선 — 호출부 이름이 키 그룹으로 클라이
       prompt: "JSON",
       maxTokens: 50,
       tier: "fast",
-      meta: { feature: "classnote_ment" },
+      meta: { tenantId: "tenant-test", feature: "classnote_ment" },
     });
     expect(data).toEqual({ ok: true });
     expect(clientCalls).toEqual([["anthropic", "default", "ment"]]);
@@ -148,7 +149,7 @@ describe("generateJSON 배선 — 호출부 이름이 키 그룹으로 클라이
     process.env.AI_PROVIDER = "anthropic";
     process.env.ANTHROPIC_API_KEY = "a";
     anthropicCreate.mockResolvedValueOnce(ok('{"ok":1}'));
-    await generateJSON({ prompt: "JSON", maxTokens: 50, meta: { feature: "something_new" } });
+    await generateJSON({ prompt: "JSON", maxTokens: 50, meta: { tenantId: "tenant-test", feature: "something_new" } });
     expect(clientCalls).toEqual([["anthropic", "default", null]]);
   });
 });

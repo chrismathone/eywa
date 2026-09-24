@@ -89,7 +89,8 @@ export async function classifyPendingParentMessages(): Promise<ClassifyOutcome> 
       const res = await generateJSON<ModelResult>({
         provider: "deepseek", // 전사·상담 계열과 같은 선택 — 한국어 맥락 판단이 저렴하고 정확했다
         maxTokens: 4096,
-        meta: { feature: "parent_attendance_intent", tenantId: batch[0]?.tenant_id },
+        // 배치는 지점별로 끊겨 있어 첫 행의 지점이 곧 배치의 지점이다. 비면 generateJSON이 거절 → 이 배치만 실패로 남는다.
+        meta: { feature: "parent_attendance_intent", tenantId: batch[0]?.tenant_id ?? "" },
         prompt: buildClassifyPrompt(
           batch.map((r) => ({
             id: r.id,

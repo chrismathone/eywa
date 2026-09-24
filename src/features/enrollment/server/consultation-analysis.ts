@@ -146,7 +146,7 @@ export function runConsultationAnalysis(
   multi: boolean,
   provider: AiProvider = "deepseek",
   /** usage 귀속 전용(`ai_usage_logs.tenant_id`) — 프롬프트엔 안 들어간다. 🔴 필수(모르면 null 명시) — optional이면 빼먹어도 초록이다. */
-  opts: { tenantId: string | null },
+  opts: { tenantId: string },
 ) {
   return generateJSON<ConsultationReport13 & { speakerRoles?: Record<string, string> }>({
     maxTokens: 8192,

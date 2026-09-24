@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { withFactGuard } from "./fact-guard";
-import { LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
+import { AI_TENANT_MISSING_MESSAGE, LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
@@ -114,7 +114,9 @@ export type GenerateJSONOptions = {
    * usage 계측 메타(0113a ai_usage_logs). feature = 호출부 식별자('meeting_analysis' 등),
    * tenantId = 테넌트 귀속(미상이면 생략 → null 기록). 기록은 best-effort — 실패해도 본 호출을 안 막는다.
    */
-  meta?: { tenantId?: string | null; feature?: string };
+  // 🔴 필수(2026-09-25) — 지점을 모르는 AI 호출은 라이선스(ai_analysis)를 판정할 수 없어 **꺼진 지점에서도 새어 나간다**.
+  //    그래서 타입에서 빼지 못하게 하고, 런타임에서도 빈 값이면 거절한다(아래 generateJSON 머리).
+  meta: { tenantId: string; feature: string };
   /**
    * 문서(PDF) 입력 — 스캔 계약서 OCR 전사용(원장 승인 2026-08-03). **Anthropic 전용**(Claude 비전이
    * 스캔 페이지를 직접 읽는다) — 지정 시 후보를 anthropic으로 한정하고, 키가 없으면 명확히 throw
@@ -393,11 +395,14 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
   // 🔴 지점 라이선스(ai_analysis) — 슈퍼관리자가 끈 지점은 **어떤 AI 호출도** 나가지 않는다(원장 2026-09-25 배선).
   //    이 단일 관문에 두는 이유는 사실 원칙과 같다: 호출부마다 두면 새 호출부가 빠진다. 판정은 행 없음 = 허용·조회 실패 = 허용
   //    (`lib/license/rule.ts`)이라, 라이선스 카드가 생기기 전부터 쓰던 지점(침산)은 그대로 돈다.
-  //    ⚠️ `meta.tenantId`가 없는 호출은 지점을 모르므로 통과한다 — 새 호출부는 반드시 tenantId를 넘길 것(key-groups 표와 같이).
+  //    🔴 지점을 모르는 호출은 **거절한다**(fail-closed) — 통과시키면 꺼진 지점의 AI가 그 틈으로 나간다(원장 "빈틈 매꿀것").
+  //       타입이 `meta.tenantId: string` 필수라 정상 코드는 여기 오지 않는다 — any·빈 문자열 같은 뒷문만 막는다.
   //    막히면 폴백 사다리를 타지 않고 바로 던진다(다른 회사로 넘긴다고 풀릴 문제가 아니다).
-  if (opts.meta?.tenantId) {
+  const tenantId = typeof opts.meta?.tenantId === "string" ? opts.meta.tenantId.trim() : "";
+  if (!tenantId) throw new Error(AI_TENANT_MISSING_MESSAGE);
+  {
     const { isFeatureLicensed } = await import("@/lib/license/server");
-    if (!(await isFeatureLicensed(opts.meta.tenantId, "ai_analysis"))) {
+    if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) {
       throw new Error(LICENSE_BLOCKED_MESSAGE.ai_analysis);
     }
   }

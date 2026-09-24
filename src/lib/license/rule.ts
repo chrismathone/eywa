@@ -32,6 +32,9 @@ export const LICENSE_BLOCKED_MESSAGE: Record<LicensedFeature, string> = {
   ai_analysis: "AI 기능 꺼짐: 이 지점은 AI 분석 기능이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",
 };
 
+/** AI 호출에 지점이 없을 때 — 라이선스를 판정할 수 없으니 부르지 않는다(generateJSON). "AI 기능 꺼짐:" 머리라 화면까지 그대로 간다. */
+export const AI_TENANT_MISSING_MESSAGE = "AI 기능 꺼짐: 어느 지점의 요청인지 알 수 없어 AI를 호출하지 않았습니다 — 새로고침 후 다시 시도하세요";
+
 /**
  * 재원생 좌석 — 좌석 라이선스 행의 `max_seats`가 **숫자로 정해졌고 켜져 있을 때만** 한도가 있다
  * (행 없음·끔·비어 있음 = 제한 없음 — 침산은 max_seats가 비어 있어 제한이 없다).
