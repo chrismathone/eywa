@@ -52,12 +52,20 @@ export default async function StudentDetailPage({
     page?: string;
     from?: string;
     to?: string;
+    // 성적 탭 목록의 열 머리 필터·정렬·쪽(원장 2026-09-24) — 쪽 키 `page`는 진도 탭과 같은 이름(탭을 옮기면 초기화).
+    subject?: string;
+    kind?: string;
+    sort?: string;
+    dir?: string;
+    fScore?: string;
+    fDelta?: string;
+    embed?: string;
   }>;
 }) {
   const user = await requireAccess("students");
   const { id } = await params;
-  const { tab: tabParam, back: backParam, jjFrom, jjTo, page: pageParam, from: fromParam, to: toParam } =
-    await searchParams;
+  const sp = await searchParams;
+  const { tab: tabParam, back: backParam, jjFrom, jjTo, page: pageParam, from: fromParam, to: toParam } = sp;
   const requestedTab = isStudentTabKey(tabParam) ? tabParam : "overview";
   // 학생을 **어디서 열었는지** — 영구 삭제 뒤 돌아갈 자리다(원장 2026-09-09: 신규생 관리에서 삭제하면
   // 그 창이 원생목록으로 바뀌어 신규생 관리로 못 돌아갔다). 목록마다 링크에 `?back=<경로>`를 달면 된다.
@@ -257,7 +265,8 @@ export default async function StudentDetailPage({
             canDeleteEnrollment={canDeleteEnrollment}
           />
         ) : tab === "grades" ? (
-          <GradesTab studentId={student.id} />
+          <GradesTab studentId={student.id} back={isInternalPath(backParam) ? backParam : null} embed={sp.embed === "1"}
+            query={{ subject: sp.subject, kind: sp.kind, sort: sp.sort, dir: sp.dir, fScore: sp.fScore, fDelta: sp.fDelta, page: pageParam }} />
         ) : tab === "srs" ? (
           <SrsTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
         ) : tab === "progress" ? (

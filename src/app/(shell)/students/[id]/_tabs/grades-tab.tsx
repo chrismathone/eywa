@@ -6,7 +6,9 @@ import {
 } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
-import { aggregateBy } from "@/features/grades/unified/model";
+import { aggregateBy, KIND_LABEL } from "@/features/grades/unified/model";
+import { applyLedgerView, parseLedgerView } from "@/features/grades/unified/ledger-view";
+import { Pagination } from "@/components/pagination";
 import { getStudentUnifiedRows } from "@/features/grades/unified/server/student-records";
 import { StudentGradeStats } from "@/app/(shell)/exams/_components/student-stats";
 import { TrendChart } from "@/app/(shell)/exams/_components/trend-chart";
@@ -21,7 +23,13 @@ import { StudentGradeRecords } from "../_components/student-grade-records";
  * 지표 4칸·추이는 통합 성적관리 '학생 추이'와 같은 부품이고, 목록엔 수업보고서 일일·확인테스트도 선다.
  * 입력은 여전히 이 탭의 폼(성적 입력 표 — 통합 성적관리와 같은 저장 경로 `writeGradeCells`).
  */
-export async function GradesTab({ studentId }: { studentId: string }) {
+const PAGE_SIZE = 20;
+/** 성적 목록 열 머리 필터·정렬·쪽 — 주소에 싣는 키(탭을 옮기면 탭 링크가 `?tab=`만 실어 저절로 풀린다). */
+export const GRADES_QUERY_KEYS = ["subject", "kind", "sort", "dir", "fScore", "fDelta", "page"] as const;
+
+export async function GradesTab({ studentId, query, back, embed }: {
+  studentId: string; query: Partial<Record<(typeof GRADES_QUERY_KEYS)[number], string>>; back: string | null; embed: boolean;
+}) {
   const [rows, grades, levelTests, settings, goals, comments] = await Promise.all([
     getStudentUnifiedRows(studentId),
     getStudentGrades(studentId),
@@ -34,6 +42,26 @@ export async function GradesTab({ studentId }: { studentId: string }) {
   const subjectLabels = subjectLabelRecord(settings.operations.subjects);
   const notesById = Object.fromEntries(grades.map((g) => [g.id, g.notes]));
   const points = aggregateBy(rows, "academy")[0]?.points ?? [];
+
+  // 목록 — 지표·추이는 **학생 전체**, 목록만 열 머리 필터·정렬·쪽(통합 성적관리 원장과 같은 판정 `applyLedgerView`).
+  const subject = query.subject ?? "";
+  const kind = query.kind ?? "";
+  const view = parseLedgerView(query);
+  const listed = applyLedgerView(rows.filter((r) => (!subject || r.subject === subject) && (!kind || r.kind === kind)), view);
+  const totalPages = Math.max(1, Math.ceil(listed.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Math.floor(Number(query.page) || 1)), totalPages);
+  const pageRows = listed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // 🔴 창(iframe) 안이면 링크가 embed=1을 싣는다([[#133]]) · back은 페이지가 검증한 내부 경로만 온다.
+  const href = (patch: Record<string, string>) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries({ tab: "grades", ...query, ...(back ? { back } : {}), ...(embed ? { embed: "1" } : {}), ...patch })) if (v) q.set(k, v);
+    return `/students/${studentId}?${q.toString()}`;
+  };
+  const filterOptions = {
+    subject, kind,
+    subjects: [...new Set(rows.map((r) => r.subject))].map((s) => ({ value: s, label: subjectLabels[s] ?? s })).sort((a, b) => a.label.localeCompare(b.label, "ko")),
+    kinds: (Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]).filter((k) => rows.some((r) => r.kind === k)).map((k) => ({ value: k, label: KIND_LABEL[k] })),
+  };
 
   return (
     <div className="space-y-4">
@@ -62,7 +90,9 @@ export async function GradesTab({ studentId }: { studentId: string }) {
 
       <GradeForm studentId={studentId} subjectOptions={subjectMaps.options} />
 
-      <StudentGradeRecords rows={rows} studentId={studentId} notesById={notesById} subjectLabel={subjectLabels} />
+      <StudentGradeRecords rows={pageRows} studentId={studentId} notesById={notesById} subjectLabel={subjectLabels}
+        view={view} href={href} filters={filterOptions} />
+      {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} total={listed.length} hrefForPage={(p) => href({ page: String(p) })} /> : null}
 
       {/* 성적 코멘트 · 레벨테스트 — 둘 다 짧은 목록이라 세로로만 쌓으면 넓은 창에서 오른쪽이 통째로 빈다.
           폭이 되면 나란히(auto-fit), 좁으면 접힘. 구분선은 두 줄이 겹치지 않게 그리드 바깥에 한 번만.

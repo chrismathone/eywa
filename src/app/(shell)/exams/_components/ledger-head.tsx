@@ -7,7 +7,7 @@ import type { LedgerSort, LedgerView } from "@/features/grades/unified/ledger-vi
 type Href = (patch: Record<string, string>) => string;
 
 /** 누르면 그 열로 정렬, 같은 열을 다시 누르면 방향을 뒤집는다. 지금 정렬 열만 화살표가 진하다. */
-function SortButton({ sort, view, href, label }: { sort: LedgerSort; view: LedgerView; href: Href; label?: string }) {
+export function SortButton({ sort, view, href, label }: { sort: LedgerSort; view: LedgerView; href: Href; label?: string }) {
   const on = view.sort === sort;
   const nextDir = on ? (view.dir === "asc" ? "desc" : "asc") : sort === "date" || sort === "score" || sort === "delta" ? "desc" : "asc";
   return <Link href={href({ sort, dir: nextDir, page: "1" })} aria-label={`${label ?? ""} ${nextDir === "asc" ? "오름차순" : "내림차순"} 정렬`.trim()}
