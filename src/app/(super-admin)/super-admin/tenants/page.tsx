@@ -1,16 +1,36 @@
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { SuperAdminHeader } from "@/components/super-admin/header";
-import { Pill } from "@/components/atoms/pill";
+import { PageHeader } from "@/components/page-header";
+import { BigStat } from "@/components/atoms/big-stat";
+import { Toolbar } from "@/components/toolbar";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
+import { FilterSelect } from "@/components/filter-select";
+import { SearchForm } from "@/components/search-form";
 import { Pagination } from "@/components/pagination";
+import { buttonVariants } from "@/components/ui/button";
+import { PlanPill, TABLE_COL_LINES, TH, fmtDate, fmtNum } from "@/components/super-admin/parts";
 import { getAllTenants } from "@/features/super-admin/server/queries";
 import { parseTenantFilters, selectTenants, tenantPage } from "@/features/super-admin/tenant-operations";
 
-export const metadata = { title: "Super Admin · 전 지점 운영 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 전 지점 운영 — aywa" };
 
 const PAGE_SIZE = 50;
-const fmt = (n: number) => n.toLocaleString("ko-KR");
-const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
+
+const PLAN_OPTIONS = [
+  { value: "free", label: "무료·데모" },
+  { value: "paid", label: "유료 계약" },
+];
+const ACTIVITY_OPTIONS = [
+  { value: "students", label: "등록 학생 있음" },
+  { value: "empty", label: "등록 학생 없음" },
+  { value: "billed", label: "이번 달 청구 있음" },
+  { value: "unbilled", label: "이번 달 청구 없음" },
+];
+const SORT_OPTIONS = [
+  { value: "students", label: "등록 학생 많은 순" },
+  { value: "billing", label: "청구액 높은 순" },
+  { value: "name", label: "학원 이름 순" },
+];
 
 export default async function TenantsListPage({
   searchParams,
@@ -43,105 +63,110 @@ export default async function TenantsListPage({
 
   return (
     <>
-      <SuperAdminHeader
+      <PageHeader
+        eyebrow="슈퍼관리자"
         title="전 지점 운영"
-        breadcrumb={[{ label: "전 지점 운영" }]}
-        action={
-          <Link href="/super-admin/tenants/new" className="bg-primary text-primary-foreground shadow-primary-glow inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-bold">
-            <EyIcon name="plus" size={12} /> 신규 학원 발급
+        description="지점별 등록 학생·활성 반·이번 달 청구를 비교하고 계정·설정으로 들어갑니다."
+        embedLabel="지점별 운영 비교"
+        actions={
+          <Link href="/super-admin/tenants/new" className={buttonVariants()}>
+            <EyIcon name="plus" size={16} strokeWidth={1.8} /> 신규 학원 발급
           </Link>
         }
-      />
-      <div className="space-y-5 px-7 py-6">
-        <div>
-          <h2 className="text-foreground text-lg font-bold">전체 학원 운영 현황</h2>
-          <p className="text-text-dim mt-1 text-xs">등록 학생, 활성 반, 이번 달 청구를 지점별로 비교하고 계정·설정으로 이동하세요.</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <Stat label="전체 학원" value={fmt(all.length)} unit="개" />
-          <Stat label="등록 학생" value={fmt(totals.students)} unit="명" />
-          <Stat label="활성 반" value={fmt(totals.classes)} unit="개" />
-          <Stat label="이번 달 청구" value={fmt(totals.billing)} unit="원" />
-        </div>
-        <form action="/super-admin/tenants" className="bg-card border-line shadow-card flex flex-wrap items-end gap-3 rounded-xl border p-4">
-          <label className="min-w-52 flex-[2]">
-            <span className="text-text-dim mb-1 block text-xs font-bold">학원 검색</span>
-            <input type="search" name="q" defaultValue={filters.q} maxLength={100} placeholder="학원명 또는 slug" className="border-line text-foreground w-full rounded-md border bg-transparent px-3 py-2 text-sm" />
-          </label>
-          <FilterSelect label="플랜" name="plan" value={filters.plan} options={[["all", "전체"], ["free", "Free"], ["paid", "유료"]]} />
-          <FilterSelect label="운영 현황" name="activity" value={filters.activity} options={[["all", "전체"], ["students", "등록 학생 있음"], ["empty", "등록 학생 없음"], ["billed", "이번 달 청구서 있음"], ["unbilled", "이번 달 청구서 없음"]]} />
-          <FilterSelect label="정렬" name="sort" value={filters.sort} options={[["recent", "최근 가입"], ["students", "등록 학생 많은 순"], ["billing", "청구액 높은 순"], ["name", "학원명 순"]]} />
-          <button type="submit" className="bg-primary text-primary-foreground rounded-md px-4 py-2 text-sm font-bold">적용</button>
-          <Link href="/super-admin/tenants" className="border-line text-text-dim hover:text-foreground rounded-md border px-4 py-2 text-sm">초기화</Link>
-        </form>
-        <section className="bg-card border-line shadow-card overflow-hidden rounded-xl border" aria-label="학원별 운영 현황">
-          <div className="border-line flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
-            <h3 className="text-foreground text-sm font-bold">학원별 비교 <span className="text-text-dim font-normal">{fmt(total)} / {fmt(all.length)}개</span></h3>
-            <p className="text-text-dim text-xs">사용자: 전체 계정 · 학생: enrolled · 반: 활성 · 청구: 이번 달 void 제외</p>
+        stats={
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <BigStat label="전체 학원" value={fmtNum(all.length)} unit="개" icon={<EyIcon name="building" size={16} />} tone="primary" />
+            <BigStat label="등록 학생" value={fmtNum(totals.students)} unit="명" icon={<EyIcon name="graduationCap" size={16} />} tone="green" />
+            <BigStat label="활성 반" value={fmtNum(totals.classes)} unit="개" icon={<EyIcon name="layers" size={16} />} tone="blue" />
+            <div className="col-span-2 lg:col-span-1">
+              <BigStat label="이번 달 청구" value={fmtNum(totals.billing)} unit="원" icon={<EyIcon name="receipt" size={16} />} tone="gold" />
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-sm">
-              <thead>
-                <tr className="bg-bg-soft text-text-dim border-line border-b text-xs">
-                  <th scope="col" className="px-4 py-3 text-left font-bold">학원</th>
-                  <th scope="col" className="px-3 py-3 text-left font-bold">플랜</th>
-                  <th scope="col" className="px-3 py-3 text-right font-bold">사용자</th>
-                  <th scope="col" className="px-3 py-3 text-right font-bold">등록 학생</th>
-                  <th scope="col" className="px-3 py-3 text-right font-bold">활성 반</th>
-                  <th scope="col" className="px-3 py-3 text-right font-bold">이번 달 청구</th>
-                  <th scope="col" className="px-3 py-3 text-left font-bold">가입일</th>
-                  <th scope="col" className="px-4 py-3 text-right font-bold">관리</th>
+        }
+      />
+
+      <Toolbar>
+        <SearchForm placeholder="학원 이름 또는 코드" defaultValue={filters.q} className="flex items-center gap-2" />
+        <FilterSelect paramName="plan" axisLabel="플랜" value={filters.plan === "all" ? null : filters.plan} options={PLAN_OPTIONS} ariaLabel="플랜 필터" triggerClassName={TOOLBAR_SELECT} />
+        <FilterSelect paramName="activity" axisLabel="운영" value={filters.activity === "all" ? null : filters.activity} options={ACTIVITY_OPTIONS} ariaLabel="운영 현황 필터" triggerClassName={TOOLBAR_SELECT} />
+        <FilterSelect paramName="sort" axisLabel="정렬" allLabel="최근 가입 순" value={filters.sort === "recent" ? null : filters.sort} options={SORT_OPTIONS} ariaLabel="정렬" triggerClassName={TOOLBAR_SELECT} />
+        <span className="num text-foreground ml-auto text-sm">
+          {fmtNum(total)} / {fmtNum(all.length)}곳
+        </span>
+      </Toolbar>
+
+      <section className="bg-card shadow-card stack-rows overflow-hidden rounded-2xl" aria-label="학원별 운영 현황">
+        <div className="overflow-x-auto phone:overflow-visible">
+          <table className={`w-full min-w-[960px] text-sm ${TABLE_COL_LINES}`}>
+            <thead>
+              <tr>
+                <th scope="col" data-cell="label" className={`${TH} text-left`}>학원</th>
+                <th scope="col" data-cell="label" className={`${TH} text-center`}>플랜</th>
+                <th scope="col" data-cell="label" className={`${TH} text-center`}>사용자</th>
+                <th scope="col" data-cell="label" className={`${TH} text-center`}>등록 학생</th>
+                <th scope="col" data-cell="label" className={`${TH} text-center`}>활성 반</th>
+                <th scope="col" data-cell="label" className={`${TH} text-right`}>이번 달 청구</th>
+                <th scope="col" data-cell="label" className={`${TH} text-center`}>가입일</th>
+                <th scope="col" data-cell="label" className={`${TH} text-center`}>바로 가기</th>
+              </tr>
+            </thead>
+            <tbody className="divide-line divide-y">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-foreground px-4 py-12 text-center">
+                    조건에 맞는 학원이 없습니다. 검색어나 필터를 바꿔 보세요.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-line divide-y">
-                {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="text-text-dim px-4 py-12 text-center">조건에 맞는 학원이 없습니다. 검색어나 필터를 바꿔 보세요.</td></tr>
-                ) : rows.map((t) => (
-                  <tr key={t.id} className="hover:bg-bg-soft">
-                    <td className="px-4 py-3">
-                      <Link href={`/super-admin/tenants/${t.id}`} className="text-foreground hover:text-primary font-bold">{t.name}</Link>
-                      <span className="text-text-dim mt-0.5 block font-mono text-xs">{t.slug}</span>
+              ) : (
+                rows.map((t) => (
+                  <tr key={t.id} className="hover:bg-muted">
+                    <td data-cell="primary" className="px-3 py-2.5">
+                      <Link href={`/super-admin/tenants/${t.id}`} className="text-foreground hover:text-primary block truncate font-bold">
+                        {t.name}
+                      </Link>
+                      <span className="text-foreground block truncate font-mono text-xs">{t.slug}</span>
                     </td>
-                    <td className="px-3 py-3"><Pill color={t.plan === "free" ? "neutral" : "gold"} soft>{t.plan}</Pill></td>
-                    <td className="px-3 py-3 text-right tabular-nums">{fmt(t.userCount)}</td>
-                    <td className="px-3 py-3 text-right font-bold tabular-nums">{fmt(t.studentCount)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{fmt(t.classCount)}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">
-                      <span className="block font-bold">{fmt(t.monthBilling)}원</span>
-                      <span className="text-text-dim text-xs">{fmt(t.monthInvoiceCount)}건</span>
+                    <td data-cell="status" className="px-3 py-2.5 text-center">
+                      <PlanPill plan={t.plan} />
                     </td>
-                    <td className="text-text-dim px-3 py-3 text-xs whitespace-nowrap">{formatDate(t.createdAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2 whitespace-nowrap text-xs font-bold">
+                    <td className="num px-3 py-2.5 text-center">
+                      <span className="hidden phone:inline">사용자 </span>
+                      {fmtNum(t.userCount)}
+                    </td>
+                    <td className="num px-3 py-2.5 text-center font-bold">
+                      <span className="hidden font-medium phone:inline">학생 </span>
+                      {fmtNum(t.studentCount)}
+                    </td>
+                    <td className="num px-3 py-2.5 text-center">
+                      <span className="hidden phone:inline">반 </span>
+                      {fmtNum(t.classCount)}
+                    </td>
+                    <td className="num px-3 py-2.5 text-right">
+                      <span className="font-bold">{fmtNum(t.monthBilling)}원</span>
+                      <span className="text-foreground ml-1 text-xs">({fmtNum(t.monthInvoiceCount)}건)</span>
+                    </td>
+                    <td className="num px-3 py-2.5 text-center whitespace-nowrap">
+                      <span className="hidden phone:inline">가입 </span>
+                      {fmtDate(t.createdAt)}
+                    </td>
+                    <td data-cell="wide" className="px-3 py-2.5">
+                      <div className="flex items-center justify-center gap-3 text-sm font-bold whitespace-nowrap phone:justify-start">
                         <Link href={`/super-admin/tenants/${t.id}`} className="text-primary hover:underline">상세</Link>
-                        <Link href={`/super-admin/tenants/${t.id}#accounts`} className="text-text-dim hover:text-foreground">계정</Link>
-                        <Link href={`/super-admin/tenants/${t.id}#settings`} className="text-text-dim hover:text-foreground">설정</Link>
+                        <Link href={`/super-admin/tenants/${t.id}#accounts`} className="text-primary hover:underline">계정</Link>
+                        <Link href={`/super-admin/tenants/${t.id}#settings`} className="text-primary hover:underline">설정</Link>
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <Pagination page={page} totalPages={totalPages} total={total} hrefForPage={pageHref} />
-      </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <p className="text-foreground px-1 text-xs">
+        사용자 = 전체 계정 · 등록 학생 = 재원 · 반 = 활성 · 청구 = 이번 달(취소 제외)
+      </p>
+      <Pagination page={page} totalPages={totalPages} total={total} hrefForPage={pageHref} />
     </>
   );
-}
-
-function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return <div className="bg-card border-line shadow-card rounded-xl border p-4">
-    <p className="text-text-dim text-xs font-bold">{label}</p>
-    <p className="text-foreground mt-2 text-2xl font-bold tabular-nums">{value}<span className="text-text-dim ml-1 text-xs font-normal">{unit}</span></p>
-  </div>;
-}
-
-function FilterSelect({ label, name, value, options }: { label: string; name: string; value: string; options: [string, string][] }) {
-  return <label className="min-w-32 flex-1">
-    <span className="text-text-dim mb-1 block text-xs font-bold">{label}</span>
-    <select name={name} defaultValue={value} className="border-line text-foreground bg-card w-full rounded-md border px-3 py-2 text-sm">
-      {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
-    </select>
-  </label>;
 }

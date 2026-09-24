@@ -1,16 +1,17 @@
 "use client";
 
 import { useActionState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Panel, fmtNum } from "@/components/super-admin/parts";
+import { SEAT_FEATURES, TOGGLE_FEATURES } from "@/features/super-admin/labels";
 import { upsertTenantLicense, toggleTenantLicense } from "@/features/super-admin/server/actions";
 import type { TenantLicenseRow } from "@/features/super-admin/server/queries";
 
-const SEAT_FEATURES = [{ key: "student_seats", label: "재원생 좌석" }];
-const TOGGLE_FEATURES = [
-  { key: "ai_analysis", label: "AI 분석" },
-  { key: "google_sheets", label: "Google Sheets 연동" },
-  { key: "meeting_recording", label: "회의 녹음·전사" },
-];
-
+/**
+ * 학원 라이선스 — 좌석 제한(숫자) + 기능 켜기·끄기. 기능 이름은 `labels.ts` 단일 소스(서버 액션 검증과 같은 목록).
+ * ⚠️ 켜짐 스위치는 `role="switch"` + `aria-checked` — 색만으로 상태를 말하지 않게 옆에 '켜짐/꺼짐' 글자를 둔다.
+ */
 export function LicenseSection({
   tenantId,
   tenantName,
@@ -23,139 +24,80 @@ export function LicenseSection({
   const byFeature = new Map(licenses.map((l) => [l.feature, l]));
 
   return (
-    <section className="bg-card border-line shadow-card space-y-5 rounded-2xl border p-5">
-      <header>
-        <p className="micro">라이선스</p>
-        <h3 className="text-foreground mt-0.5 text-base font-bold">기능·좌석 관리</h3>
-      </header>
-
-      {/* 좌석형 */}
-      <div className="space-y-2">
-        <p className="text-text-dim text-xs font-bold tracking-wide uppercase">좌석 제한</p>
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-text-dim border-line border-b">
-              <th className="py-1.5 text-left font-bold">기능</th>
-              <th className="py-1.5 text-right font-bold">사용 / 최대</th>
-              <th className="py-1.5 text-right font-bold">설정</th>
-            </tr>
-          </thead>
-          <tbody className="divide-line divide-y">
-            {SEAT_FEATURES.map((f) => (
-              <SeatRow
-                key={f.key}
-                tenantId={tenantId}
-                tenantName={tenantName}
-                feature={f.key}
-                label={f.label}
-                license={byFeature.get(f.key)}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 토글형 */}
-      <div className="space-y-2">
-        <p className="text-text-dim text-xs font-bold tracking-wide uppercase">기능 On / Off</p>
-        <ul className="divide-line divide-y">
-          {TOGGLE_FEATURES.map((f) => (
-            <ToggleRow
-              key={f.key}
-              tenantId={tenantId}
-              tenantName={tenantName}
-              feature={f.key}
-              label={f.label}
-              license={byFeature.get(f.key)}
-            />
-          ))}
-        </ul>
-      </div>
-    </section>
+    <Panel title="라이선스" description="좌석 수와 기능 사용 여부를 정합니다." flush>
+      <ul className="divide-line divide-y">
+        {SEAT_FEATURES.map((f) => (
+          <SeatRow key={f.key} tenantId={tenantId} tenantName={tenantName} feature={f.key} label={f.label} license={byFeature.get(f.key)} />
+        ))}
+        {TOGGLE_FEATURES.map((f) => (
+          <ToggleRow key={f.key} tenantId={tenantId} tenantName={tenantName} feature={f.key} label={f.label} license={byFeature.get(f.key)} />
+        ))}
+      </ul>
+    </Panel>
   );
 }
 
-function SeatRow({
-  tenantId,
-  tenantName,
-  feature,
-  label,
-  license,
-}: {
-  tenantId: string;
-  tenantName: string;
-  feature: string;
-  label: string;
-  license?: TenantLicenseRow;
-}) {
+type RowProps = { tenantId: string; tenantName: string; feature: string; label: string; license?: TenantLicenseRow };
+
+function SeatRow({ tenantId, tenantName, feature, label, license }: RowProps) {
   const [state, action, pending] = useActionState(upsertTenantLicense, undefined);
+  const usage = license
+    ? `${fmtNum(license.usedSeats)} / ${license.maxSeats === null ? "제한 없음" : `${fmtNum(license.maxSeats)}석`}`
+    : "미설정";
   return (
-    <tr>
-      <td className="text-foreground py-2 font-medium">{label}</td>
-      <td className="text-text-dim py-2 text-right tabular-nums">
-        {license ? `${license.usedSeats} / ${license.maxSeats ?? "∞"}` : "미설정"}
-      </td>
-      <td className="py-2 text-right">
-        <form action={action} className="inline-flex items-center gap-1.5">
-          <input type="hidden" name="tenantId" value={tenantId} />
-          <input type="hidden" name="tenantName" value={tenantName} />
-          <input type="hidden" name="feature" value={feature} />
-          <input
-            type="number"
-            name="maxSeats"
-            min={0}
-            defaultValue={license?.maxSeats ?? ""}
-            placeholder="좌석"
-            className="border-line w-20 rounded-sm border bg-transparent px-2 py-1 text-right text-xs"
-          />
-          <button
-            type="submit"
-            disabled={pending}
-            className="bg-primary text-primary-foreground rounded-sm px-2.5 py-1 text-xs font-bold disabled:opacity-60"
-          >
-            {pending ? "…" : "저장"}
-          </button>
-        </form>
-        {state?.error ? <p className="text-danger mt-1 text-xs">{state.error}</p> : null}
-      </td>
-    </tr>
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3">
+      <div className="min-w-0">
+        <p className="text-foreground text-sm font-bold">{label}</p>
+        <p className="num text-foreground text-xs">사용 / 최대: {usage}</p>
+      </div>
+      <form action={action} className="flex items-center gap-1.5">
+        <input type="hidden" name="tenantId" value={tenantId} />
+        <input type="hidden" name="tenantName" value={tenantName} />
+        <input type="hidden" name="feature" value={feature} />
+        <Input
+          type="number"
+          name="maxSeats"
+          min={0}
+          defaultValue={license?.maxSeats ?? ""}
+          placeholder="비우면 제한 없음"
+          aria-label={`${label} 최대 좌석`}
+          className="num h-(--control-h) w-36 text-right"
+        />
+        <Button type="submit" disabled={pending}>
+          {pending ? "저장 중…" : "저장"}
+        </Button>
+      </form>
+      {state?.error ? <p className="text-danger w-full text-right text-xs font-medium">{state.error}</p> : null}
+    </li>
   );
 }
 
-function ToggleRow({
-  tenantId,
-  tenantName,
-  feature,
-  label,
-  license,
-}: {
-  tenantId: string;
-  tenantName: string;
-  feature: string;
-  label: string;
-  license?: TenantLicenseRow;
-}) {
-  const [, action, pending] = useActionState(toggleTenantLicense, undefined);
+function ToggleRow({ tenantId, tenantName, feature, label, license }: RowProps) {
+  const [state, action, pending] = useActionState(toggleTenantLicense, undefined);
   const isOn = license?.isActive ?? false;
   return (
-    <li className="flex items-center justify-between py-2.5">
-      <span className="text-foreground text-sm">{label}</span>
-      <form action={action}>
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3">
+      <span className="text-foreground text-sm font-bold">{label}</span>
+      <form action={action} className="flex items-center gap-2">
         <input type="hidden" name="tenantId" value={tenantId} />
         <input type="hidden" name="tenantName" value={tenantName} />
         <input type="hidden" name="feature" value={feature} />
         <input type="hidden" name="nextActive" value={(!isOn).toString()} />
+        <span className={`text-sm font-medium ${isOn ? "text-green" : "text-foreground"}`}>{isOn ? "켜짐" : "꺼짐"}</span>
         <button
           type="submit"
+          role="switch"
+          aria-checked={isOn}
           disabled={pending}
-          className={`inline-flex h-6 w-11 items-center rounded-full px-0.5 transition disabled:opacity-60 ${
-            isOn ? "bg-primary justify-end" : "bg-bg-soft border-line border justify-start"
-          }`}
           aria-label={`${label} ${isOn ? "끄기" : "켜기"}`}
+          className={`inline-flex h-6 w-11 cursor-pointer items-center rounded-full px-0.5 transition disabled:opacity-60 ${
+            isOn ? "bg-green justify-end" : "bg-muted border-line justify-start border"
+          }`}
         >
           <span className="bg-card size-5 rounded-full shadow-sm" />
         </button>
       </form>
+      {state?.error ? <p className="text-danger w-full text-right text-xs font-medium">{state.error}</p> : null}
     </li>
   );
 }

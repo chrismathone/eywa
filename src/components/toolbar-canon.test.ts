@@ -255,6 +255,9 @@ const CANON_SURFACES = [
   "src/app/(shell)/staff/page.tsx",
   "src/app/(shell)/meetings/page.tsx",
   "src/app/(shell)/withdrawals/page.tsx",
+  // 슈퍼관리자(2026-09-25 전면 정리) — 손으로 적은 GET 폼·필터 줄을 부품으로(영역 가드: super-admin-design.test.ts).
+  "src/app/(super-admin)/super-admin/tenants/page.tsx",
+  "src/app/(super-admin)/super-admin/audit/page.tsx",
   // 수납(2026-09-04, 14단계) — 월 네비 부품·면 툴바가 부품을 읽는다(수납 면·환불·정산은 BillingMonthNav 경유라 직접 import 없음).
   "src/app/(shell)/billing/_components/billing-month-nav.tsx",
   "src/app/(shell)/billing/_components/calculator-panel.tsx",

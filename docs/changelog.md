@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-25 — 슈퍼관리자 전면 정리: 앱과 같은 옷 + 폰 레이아웃 + 영역 가드
+
+- 원장 폰 캡처 *"색상 등이 기존과 너무 차이나는걸?"* → *"완전한 리팩토링하면서 모바일 레이아웃까지 잡아. 이것까지 관리된다 싶을정도로 전부 관리"*.
+- 셸: 검정·금색 사이드바(05-28 첫 구현 그대로) → 관리자뷰와 같은 화이트 사이드바·네이비 활성·'슈퍼관리자' 둘째 줄. 폰·터치는 상단 한 줄 바 + 햄버거(`SuperAdminMobileBar`) — 조건 `lg:pointer-fine:`(앱 셸과 같은 축). 메뉴 목록은 `components/super-admin/nav.ts` 한 벌.
+- 화면 6개: 옛 `SuperAdminHeader`(영문 브레드크럼) → `PageHeader` · 로컬 Kpi/Stat 3벌 → `BigStat` · 손으로 적은 GET 필터 폼 → `Toolbar`+`SearchForm`+`FilterSelect` · 표는 폰에서 `.stack-rows` 두 줄 카드 · native select → `SearchableSelect` · 버튼/입력 = 공용 `Button`·`Input`.
+- 어휘 단일 소스 `features/super-admin/labels.ts`: 플랜(무료/프로/엔터프라이즈) · 계정 상태 · 역할 선택지(= `ROLE_LABEL` — 종전 사본은 "상담"·"뷰어"로 직원관리와 이름이 갈려 있었다) · 라이선스 기능(3벌 → 1벌) · 감사 로그 조치 라벨·tone · **감사 로그 상세 = 한글 문장**(JSON 원문은 툴팁으로).
+- 가드: `src/app/(super-admin)/super-admin-design.test.ts`(검정·금색·영문 대문자·px 글자·native select·배지 색 직접 선택·로컬 지표 카드·라벨 표 사본·이니셜 배지·JSON 원문·셸 축) + `labels.test.ts` + 툴바 캐논 2곳 등록.
+
 ## 2026-09-24 (3) — 성적: 시험 목표를 성적 칸에 잇는다(0291a, codex 합의)
 
 - 🔴 **`0291a_grade_goals_exam_axis.sql` 원장 수동 적용 필요**(`db query -f`) — grade_goals에 년도·학기·시험·월 + 유니크 `ux_grade_goals_cell`. 적용 전엔 새 목표 저장만 잠기고 나머지는 산다.

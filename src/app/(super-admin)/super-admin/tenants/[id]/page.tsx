@@ -1,32 +1,24 @@
 import Link from "next/link";
-import { EyIcon } from "@/components/icons/aywa-icons";
 import { notFound } from "next/navigation";
-import { SuperAdminHeader } from "@/components/super-admin/header";
-import { Pill } from "@/components/atoms/pill";
-import { roleMeta } from "@/features/staff/status-labels";
-import { getTenantDetail, getTenantLicenses } from "@/features/super-admin/server/queries";
-import { Pagination } from "@/components/pagination";
+import { EyIcon } from "@/components/icons/aywa-icons";
+import { PageHeader } from "@/components/page-header";
+import { BigStat } from "@/components/atoms/big-stat";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  Panel,
+  PlanPill,
+  fmtDate,
+  fmtNum,
+} from "@/components/super-admin/parts";
+import {
+  getTenantDetail,
+  getTenantLicenses,
+} from "@/features/super-admin/server/queries";
 import { UpdateTenantForm } from "./_update-form";
 import { LicenseSection } from "./_license-section";
-import { UserActions } from "./_user-actions";
+import { AccountsPanel } from "./_accounts-panel";
 
-export const metadata = { title: "Super Admin · 학원 상세 — aywa" };
-
-const USERS_PAGE_SIZE = 50;
-
-const fmt = (n: number) => n.toLocaleString("ko-KR");
-const formatDate = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
-
-// 역할 라벨·색은 [`roleMeta`](src/features/staff/status-labels.ts) 단일 소스.
-// ⚠️ 여기 있던 3번째 사본은 직원관리와 **색이 통째로 달랐다**(원장=primary vs danger, 강사=gold vs
-// primary, 매니저=purple vs blue, 회계=amber vs purple) — 같은 사람을 두 화면에서 보면 역할 색이
-// 바뀌었다. 라벨도 viewer가 "뷰어"/"참관"으로 갈려 있었다.
-
-const STATUS_LABEL: Record<string, string> = {
-  active: "활성",
-  inactive: "비활성",
-  pending: "대기",
-};
+export const metadata = { title: "슈퍼관리자 · 학원 상세 — aywa" };
 
 export default async function TenantDetailPage({
   params,
@@ -37,168 +29,104 @@ export default async function TenantDetailPage({
 }) {
   const { id } = await params;
   const { upage } = await searchParams;
-  const detail = await getTenantDetail(id);
+  const [detail, licenses] = await Promise.all([
+    getTenantDetail(id),
+    getTenantLicenses(id),
+  ]);
   if (!detail) notFound();
-  const licenses = await getTenantLicenses(id);
-
-  const roleCount = detail.users.reduce<Record<string, number>>((acc, u) => {
-    acc[u.systemRole] = (acc[u.systemRole] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  // 사용자(직원)는 보통 소수지만 대형 테넌트 대비 50명씩 페이지네이션(<=50이면 Pagination 자동 숨김).
-  const userPage = Math.max(1, Number(upage) || 1);
-  const userTotalPages = Math.max(1, Math.ceil(detail.users.length / USERS_PAGE_SIZE));
-  const pageUsers = detail.users.slice((userPage - 1) * USERS_PAGE_SIZE, userPage * USERS_PAGE_SIZE);
-  const userPageHref = (p: number) =>
-    p > 1 ? `/super-admin/tenants/${id}?upage=${p}` : `/super-admin/tenants/${id}`;
 
   return (
     <>
-      <SuperAdminHeader
+      <PageHeader
+        eyebrow="전 지점 운영"
         title={detail.name}
-        breadcrumb={[{ label: "학원 목록" }, { label: detail.name }]}
-        action={
+        description={
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>
+              코드 <span className="font-mono">{detail.slug}</span> · 가입{" "}
+              <span className="num">{fmtDate(detail.createdAt)}</span>
+            </span>
+            <PlanPill plan={detail.plan} />
+          </span>
+        }
+        embedLabel={detail.name}
+        actions={
           <Link
             href="/super-admin/tenants"
-            className="border-line text-text-dim hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs font-bold"
+            className={buttonVariants({ variant: "outline" })}
           >
-            <EyIcon name="arrowLeft" size={14} />
-            목록
+            <EyIcon name="arrowLeft" size={16} strokeWidth={1.8} /> 목록으로
+          </Link>
+        }
+        stats={
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <BigStat
+              label="사용자"
+              value={fmtNum(detail.users.length)}
+              unit="명"
+              icon={<EyIcon name="users" size={16} />}
+              tone="blue"
+            />
+            <BigStat
+              label="등록 학생"
+              value={fmtNum(detail.studentCount)}
+              unit="명"
+              icon={<EyIcon name="graduationCap" size={16} />}
+              tone="green"
+            />
+            {/* 금액은 길어서 폰 반쪽 칸에선 숫자 중간에서 꺾인다 → 폰에선 한 줄을 통째로. */}
+            <div className="col-span-2 lg:col-span-1">
+              <BigStat
+                label="이번 달 청구"
+                value={fmtNum(detail.monthBilling)}
+                unit="원"
+                sub={`청구서 ${fmtNum(detail.monthInvoiceCount)}건`}
+                icon={<EyIcon name="receipt" size={16} />}
+                tone="gold"
+              />
+            </div>
+          </div>
+        }
+      />
+
+      <AccountsPanel
+        tenantId={detail.id}
+        tenantName={detail.name}
+        users={detail.users}
+        page={Number(upage) || 1}
+      />
+
+      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+        <Panel
+          id="settings"
+          title="기본 정보"
+          description="학원 이름과 플랜을 고칩니다."
+        >
+          <UpdateTenantForm
+            id={detail.id}
+            name={detail.name}
+            plan={detail.plan}
+          />
+        </Panel>
+        <LicenseSection
+          tenantId={detail.id}
+          tenantName={detail.name}
+          licenses={licenses}
+        />
+      </div>
+
+      <Panel
+        title="지점장 보기"
+        description="이 학원의 학생·반·회의 현황을 읽기 전용으로 들여다봅니다. 들어간 기록은 감사 로그에 남습니다."
+        action={
+          <Link
+            href={`/super-admin/tenants/${detail.id}/view`}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <EyIcon name="search" size={16} strokeWidth={1.8} /> 들여다보기
           </Link>
         }
       />
-      <div className="space-y-5 px-7 py-6">
-        {/* 헤더 카드 */}
-        <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div>
-                <h2 className="text-foreground text-lg font-bold">{detail.name}</h2>
-                <p className="text-text-dim font-mono text-xs">
-                  {detail.slug} · 가입 {formatDate(detail.createdAt)}
-                </p>
-              </div>
-            </div>
-            <Pill color={detail.plan === "free" ? "neutral" : "gold"} soft>
-              {detail.plan}
-            </Pill>
-          </div>
-        </section>
-
-        {/* KPI 3 */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Kpi label="사용자" value={fmt(detail.users.length)} unit="명" />
-          <Kpi label="등록 학생" value={fmt(detail.studentCount)} unit="명" />
-          <Kpi label="이번 달 청구" value={fmt(detail.monthBilling)} unit={`원 · ${detail.monthInvoiceCount}건`} />
-        </div>
-
-        {/* 역할별 분포 */}
-        <section className="bg-card border-line shadow-card rounded-2xl border p-5">
-          <header className="mb-3">
-            <p className="micro">사용자</p>
-            <h3 className="text-foreground mt-0.5 text-base font-bold">역할별 분포</h3>
-          </header>
-          {Object.keys(roleCount).length === 0 ? (
-            <p className="text-text-dim text-xs">사용자 없음</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(roleCount).map(([role, count]) => (
-                <Pill key={role} color={roleMeta(role).color} soft>
-                  {roleMeta(role).label} · {count}
-                </Pill>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 사용자 목록 */}
-        <section id="accounts" className="bg-card border-line shadow-card scroll-mt-20 overflow-hidden rounded-2xl border">
-          <header className="border-line border-b px-5 py-3">
-            <p className="micro">계정</p>
-            <h3 className="text-foreground mt-0.5 text-base font-bold">사용자 목록 ({detail.users.length})</h3>
-          </header>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-bg-soft text-text-dim border-line border-b">
-                <th className="px-4 py-2 text-left font-bold">이름</th>
-                <th className="px-4 py-2 text-left font-bold">이메일</th>
-                <th className="px-4 py-2 text-left font-bold">역할</th>
-                <th className="px-4 py-2 text-left font-bold">상태</th>
-                <th className="px-4 py-2 text-right font-bold">관리</th>
-              </tr>
-            </thead>
-            <tbody className="divide-line divide-y">
-              {pageUsers.map((u) => (
-                <tr key={u.id}>
-                  <td className="text-foreground px-4 py-2.5 font-bold whitespace-nowrap">{u.displayName}</td>
-                  <td className="text-text-dim px-4 py-2.5 font-mono text-xs">{u.email}</td>
-                  <td className="px-4 py-2.5">
-                    <Pill color={roleMeta(u.systemRole).color} soft>
-                      {roleMeta(u.systemRole).label}
-                    </Pill>
-                  </td>
-                  <td className="text-text-dim px-4 py-2.5">{STATUS_LABEL[u.status] ?? u.status}</td>
-                  <td className="px-4 py-2.5">
-                    <UserActions
-                      userId={u.id}
-                      tenantId={detail.id}
-                      tenantName={detail.name}
-                      currentRole={u.systemRole}
-                      status={u.status}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {userTotalPages > 1 ? (
-            <div className="border-line border-t px-4 py-3">
-              <Pagination page={userPage} totalPages={userTotalPages} hrefForPage={userPageHref} />
-            </div>
-          ) : null}
-        </section>
-
-        {/* 학원 정보 수정 */}
-        <section id="settings" className="bg-card border-line shadow-card scroll-mt-20 rounded-2xl border p-5">
-          <header className="mb-3">
-            <p className="micro">학원 정보 수정</p>
-            <h3 className="text-foreground mt-0.5 text-base font-bold">기본 정보</h3>
-          </header>
-          <UpdateTenantForm id={detail.id} name={detail.name} plan={detail.plan} />
-        </section>
-
-        {/* 라이선스·좌석 */}
-        <LicenseSection tenantId={detail.id} tenantName={detail.name} licenses={licenses} />
-
-        {/* 지점장 보기 (read-only 미러) */}
-        <section className="bg-card border-line shadow-card flex items-center justify-between rounded-2xl border p-5">
-          <div>
-            <p className="text-foreground text-sm font-bold">지점장 보기</p>
-            <p className="text-text-dim mt-1 text-xs">
-              해당 학원의 현황(학생·반·회의)을 읽기 전용으로 들여다봅니다. 진입 기록은 감사 로그에 남습니다.
-            </p>
-          </div>
-          <Link
-            href={`/super-admin/tenants/${detail.id}/view`}
-            className="bg-gold text-ink inline-flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-2 text-xs font-bold"
-          >
-            <EyIcon name="search" size={13} /> 들여다보기
-          </Link>
-        </section>
-      </div>
     </>
-  );
-}
-
-function Kpi({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return (
-    <div className="bg-card border-line shadow-card rounded-md border p-4">
-      <p className="text-text-dim font-mono text-xs tracking-wider uppercase">{label}</p>
-      <p className="text-foreground mt-1.5 flex items-baseline gap-1">
-        <span className="text-3xl font-bold tabular-nums">{value}</span>
-        <span className="text-text-dim text-xs">{unit}</span>
-      </p>
-    </div>
   );
 }

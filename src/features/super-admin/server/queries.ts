@@ -295,14 +295,7 @@ export type TenantLicenseRow = {
   expiresAt: string | null;
 };
 
-// 좌석형 + 토글형 기능 정의 (UI 렌더 기준). DB에 없으면 "미설정"으로 표시.
-export const SEAT_FEATURES = [{ key: "student_seats", label: "재원생 좌석" }] as const;
-export const TOGGLE_FEATURES = [
-  { key: "ai_analysis", label: "AI 분석" },
-  { key: "google_sheets", label: "Google Sheets 연동" },
-  { key: "meeting_recording", label: "회의 녹음·전사" },
-] as const;
-
+// 좌석형·토글형 기능 정의(라벨 포함)는 `../labels.ts`(SEAT_FEATURES·TOGGLE_FEATURES) 단일 소스. DB에 없으면 "미설정"으로 표시.
 export const getTenantLicenses = cache(async (tenantId: string): Promise<TenantLicenseRow[]> => {
   await requireSuperAdmin();
   const admin = createAdminClient();

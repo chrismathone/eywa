@@ -8,7 +8,7 @@ import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-emai
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { SYSTEM_ROLES } from "@/lib/permissions";
-import { SEAT_FEATURES, TOGGLE_FEATURES } from "./queries";
+import { SEAT_FEATURES, TOGGLE_FEATURES } from "../labels";
 import { logSuperAdminAction } from "./audit";
 
 export type CreateTenantState =
@@ -135,8 +135,10 @@ export async function updateTenant(
   const name = String(formData.get("name") ?? "").trim();
   const plan = String(formData.get("plan") ?? "").trim();
 
-  if (!id) return { error: "id 누락" };
+  if (!id) return { error: "학원을 찾을 수 없습니다 — 새로고침 후 다시 저장하세요" };
   if (!name) return { error: "이름은 비울 수 없습니다" };
+  // 빈 플랜은 저장하지 않는다 — 목록 배지가 "—"가 되고 플랜 필터(무료/유료) 어디에도 안 잡힌다.
+  if (!plan) return { error: "플랜을 비울 수 없습니다 — 무료·프로·엔터프라이즈 중 하나를 고르거나 직접 적으세요" };
 
   const admin = createAdminClient();
   const { error } = await admin.from("tenants").update({ name, plan }).eq("id", id);

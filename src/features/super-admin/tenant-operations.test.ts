@@ -23,6 +23,15 @@ describe("super-admin tenant comparison", () => {
     expect(tenantPage(sorted, 99, 2).page).toBe(2);
   });
 
+  it("플랜 필터는 배지와 같은 판정 — 데모 지점은 '유료 계약'에 섞이지 않는다", () => {
+    const withDemo: TenantRow[] = [
+      ...rows,
+      { id: "d", slug: "demo", name: "데모학원", plan: "demo", createdAt: "2026-01-02", userCount: 1, studentCount: 1, classCount: 0, monthBilling: 0, monthInvoiceCount: 0 },
+    ];
+    expect(selectTenants(withDemo, parseTenantFilters({ plan: "paid" })).map((row) => row.id).sort()).toEqual(["b", "c"]);
+    expect(selectTenants(withDemo, parseTenantFilters({ plan: "free" })).map((row) => row.id).sort()).toEqual(["a", "d"]);
+  });
+
   it("ignores unsupported filter values", () => {
     expect(parseTenantFilters({ plan: "secret", sort: "bad", activity: "bad" })).toMatchObject({
       plan: "all", sort: "recent", activity: "all",

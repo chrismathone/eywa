@@ -1,8 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { createTenantWithMaster, type CreateTenantState } from "@/features/super-admin/server/actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { PlanField } from "@/components/super-admin/plan-field";
+import { createTenantWithMaster, type CreateTenantState } from "@/features/super-admin/server/actions";
 
 const initial: CreateTenantState = undefined;
 
@@ -14,43 +17,27 @@ export function NewTenantForm() {
     <form action={formAction} className="space-y-4">
       <Field
         name="slug"
-        label="학원 slug"
+        label="학원 코드"
         placeholder="예: hanbit"
-        hint="영문 소문자·숫자·하이픈 2~40자(학원·지점 약어). 한 번 정하면 바꾸지 않는다."
+        hint="영문 소문자·숫자·하이픈 2~40자(학원·지점 약어). 한 번 정하면 바꾸지 않습니다."
         error={fe.slug}
       />
       <Field name="name" label="학원 이름" placeholder="예: 한빛학원" error={fe.name} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field
-          name="masterEmail"
-          type="email"
-          label="원장 이메일"
-          placeholder="owner@academy.kr"
-          error={fe.masterEmail}
-        />
-        <Field
-          name="masterPassword"
-          type="password"
-          label="초기 비밀번호"
-          placeholder="8자 이상"
-          error={fe.masterPassword}
-        />
+        <Field name="masterEmail" type="email" label="원장 이메일" placeholder="owner@academy.kr" error={fe.masterEmail} />
+        <Field name="masterPassword" type="password" label="초기 비밀번호" placeholder="8자 이상" error={fe.masterPassword} />
       </div>
-      <Field name="displayName" label="원장 표시명" placeholder="김수진" error={fe.displayName} />
-      <Field name="plan" label="플랜" defaultValue="free" hint="free · pro · enterprise 등 자유 입력" />
+      <Field name="displayName" label="원장 표시 이름" placeholder="김수진" error={fe.displayName} />
+      <PlanField />
 
       {state?.error ? (
-        <p className="bg-danger-soft text-danger rounded-md px-3 py-2 text-xs">{state.error}</p>
+        <p className="bg-danger-soft text-danger rounded-lg px-3 py-2 text-sm font-medium">{state.error}</p>
       ) : null}
 
-      <div className="flex justify-end gap-2 pt-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="bg-primary text-primary-foreground shadow-primary-glow inline-flex items-center gap-1.5 rounded-md px-4 py-2.5 text-sm font-bold disabled:opacity-60"
-        >
-          {pending ? "생성 중…" : "학원 + 원장 발급"}
-        </button>
+      <div className="flex justify-end pt-2">
+        <Button type="submit" size="lg" disabled={pending}>
+          {pending ? "만드는 중…" : "학원과 원장 계정 만들기"}
+        </Button>
       </div>
     </form>
   );
@@ -63,7 +50,6 @@ function Field({
   placeholder,
   hint,
   error,
-  defaultValue,
 }: {
   name: string;
   label: string;
@@ -71,35 +57,22 @@ function Field({
   placeholder?: string;
   hint?: string;
   error?: string;
-  defaultValue?: string;
 }) {
+  const invalid = error ? true : undefined;
   return (
     <label className="block">
-      <span className="text-foreground text-xs font-bold">{label}</span>
+      <span className="text-foreground text-sm font-bold">{label}</span>
       {type === "password" ? (
-        <PasswordInput
-          name={name}
-          placeholder={placeholder}
-          defaultValue={defaultValue}
-          className={`border-line text-foreground mt-1 block h-auto w-full rounded-md border bg-transparent px-3 py-2 text-sm ${
-            error ? "border-danger" : ""
-          }`}
-        />
+        <div className="mt-1">
+          <PasswordInput name={name} placeholder={placeholder} aria-invalid={invalid} />
+        </div>
       ) : (
-        <input
-          type={type}
-          name={name}
-          placeholder={placeholder}
-          defaultValue={defaultValue}
-          className={`border-line text-foreground mt-1 block w-full rounded-md border bg-transparent px-3 py-2 text-sm ${
-            error ? "border-danger" : ""
-          }`}
-        />
+        <Input type={type} name={name} placeholder={placeholder} aria-invalid={invalid} className="mt-1" />
       )}
       {error ? (
-        <p className="text-danger mt-1 text-xs">{error}</p>
+        <p className="text-danger mt-1 text-xs font-medium">{error}</p>
       ) : hint ? (
-        <p className="text-text-dim mt-1 text-xs">{hint}</p>
+        <p className="text-foreground mt-1 text-xs">{hint}</p>
       ) : null}
     </label>
   );

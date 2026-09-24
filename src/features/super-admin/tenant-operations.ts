@@ -1,4 +1,5 @@
 import type { TenantRow } from "./server/queries";
+import { planTone } from "./labels";
 
 export type TenantFilters = {
   q: string;
@@ -24,8 +25,9 @@ export function selectTenants(rows: TenantRow[], filters: TenantFilters): Tenant
   const q = filters.q.toLocaleLowerCase("ko-KR");
   const selected = rows.filter((row) => {
     if (q && !`${row.name} ${row.slug}`.toLocaleLowerCase("ko-KR").includes(q)) return false;
-    if (filters.plan === "free" && row.plan !== "free") return false;
-    if (filters.plan === "paid" && row.plan === "free") return false;
+    // 플랜 분류는 배지 색과 같은 판정(`planTone`) — 종전엔 "free가 아니면 유료"라 데모 지점이 유료로 섞였다.
+    if (filters.plan === "free" && planTone(row.plan) !== "inert") return false;
+    if (filters.plan === "paid" && planTone(row.plan) !== "positive") return false;
     if (filters.activity === "students" && row.studentCount === 0) return false;
     if (filters.activity === "empty" && row.studentCount > 0) return false;
     if (filters.activity === "billed" && row.monthInvoiceCount === 0) return false;
