@@ -8,7 +8,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: "http://localhost:3107",
     trace: "on-first-retry",
   },
   projects: [
@@ -18,9 +18,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    // E2E checks the same compiled output that can be deployed; run pnpm build first.
+    command: "pnpm exec next start --port 3107",
+    url: "http://localhost:3107",
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

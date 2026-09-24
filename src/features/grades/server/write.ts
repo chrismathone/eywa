@@ -239,6 +239,27 @@ export async function updateUnslottedGrade(tenantId: string, id: string,
   return data ? null : "성적 기록을 찾지 못했습니다";
 }
 
+export type UnifiedGradePatch = {
+  score: number | null;
+  max_score: number | null;
+  taken_on: string;
+  no_exam?: boolean;
+  no_exam_reason?: null;
+  exam_month?: number;
+};
+
+/** 통합 성적 화면의 행 수정도 이 모듈에서 실행한다. 호출부가 학생·과목 쓰기 권한을 확인한다. */
+export async function updateUnifiedGrade(tenantId: string, id: string,
+  patch: UnifiedGradePatch): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (!user || user.tenantId !== tenantId) return "로그인이 필요합니다";
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("student_grades").update(patch)
+    .eq("id", id).eq("tenant_id", tenantId).select("id").maybeSingle();
+  if (error) return error.message;
+  return data ? null : "성적 기록을 찾지 못했습니다";
+}
+
 export async function insertUnslottedGrade(row: { tenant_id: string; student_id: string; subject: string; exam_name: string;
   taken_on: string; score: number | null; max_score: number; created_by: string }): Promise<string | null> {
   const supabase = await createClient();

@@ -1,4 +1,5 @@
 // Read-only browser verification of the standalone mockup; no application or DB access.
+/* eslint-disable @typescript-eslint/no-require-imports -- Standalone CommonJS script run directly by Node. */
 const { chromium } = require('@playwright/test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

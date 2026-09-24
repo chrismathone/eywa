@@ -49,7 +49,7 @@ export function LoginForm({ next }: { next?: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className={styles.loginForm} aria-busy={pending} aria-describedby={error ? "login-error" : undefined}>
+    <form method="post" onSubmit={handleSubmit} className={styles.loginForm} aria-busy={pending} aria-describedby={error ? "login-error" : undefined}>
       <div className={styles.formField}>
         <label htmlFor="email">이메일</label>
         <input id="email" name="email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" spellCheck={false} required placeholder="name@academy.kr" disabled={pending} />

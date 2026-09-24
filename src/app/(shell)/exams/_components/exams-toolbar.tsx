@@ -5,6 +5,8 @@ import { FilterSelect, type FilterSelectOption } from "@/components/filter-selec
 import { SearchToggle } from "@/components/search-toggle";
 import { Toolbar, ToolbarButton, ToolbarDivider } from "@/components/toolbar";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
+import { useInFrame } from "@/components/workspace/use-in-frame";
+import { withEmbed } from "@/components/workspace/embed-context";
 
 /**
  * 통합 성적관리 툴바 — 다른 화면과 같은 규약(`축: 값` 드롭다운 · control-scale 높이 · 상시 버튼 ≤2).
@@ -19,6 +21,7 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
   action: React.ReactNode;
 }) {
   const router = useRouter();
+  const inFrame = useInFrame();
   const pathname = usePathname() ?? "/exams";
   const current = useSearchParams();
   const setDate = (key: "from" | "to", value: string) => {
@@ -40,7 +43,7 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
     <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
     <SearchToggle placeholder="학생 이름" defaultValue={q} />
     <span className="ml-auto" />
-    <ToolbarButton onClick={() => window.location.assign(exportHref)}>엑셀</ToolbarButton>
+    <ToolbarButton onClick={() => window.location.assign(inFrame ? withEmbed(exportHref) : exportHref)}>엑셀</ToolbarButton>
     <ToolbarDivider />
     {action}
   </Toolbar>;

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { gradeWriteError } from "@/features/grades/server/access";
-import { gradeMonthReady, gradeNoExamReady } from "@/features/grades/server/write";
+import { gradeMonthReady, gradeNoExamReady, updateUnifiedGrade, type UnifiedGradePatch } from "@/features/grades/server/write";
 import { termWindow, type Term } from "@/features/grades/term";
 import { logAction } from "@/features/audit/server/log";
 import { addAcademicConsultation } from "./consultation";
@@ -67,12 +67,11 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     const sameScore = score === (data.score == null ? null : Number(data.score)) &&
       (score == null || maxScore === (data.max_score == null ? null : Number(data.max_score)));
     if (!sameScore || date !== data.taken_on) {
-      const patch: Record<string, unknown> = { score, max_score: maxScore, taken_on: date };
+      const patch: UnifiedGradePatch = { score, max_score: maxScore, taken_on: date };
       if (score != null && await gradeNoExamReady()) { patch.no_exam = false; patch.no_exam_reason = null; }
       if (data.exam_slot === "monthly" && await gradeMonthReady()) patch.exam_month = Number(date.slice(5, 7));
-      const { data: saved, error: saveError } = await supabase.from("student_grades").update(patch)
-        .eq("id", id).eq("tenant_id", user.tenantId).select("id").single();
-      if (saveError || !saved) return { error: saveError?.message ?? "성적을 저장하지 못했습니다" };
+      const saveError = await updateUnifiedGrade(user.tenantId, id, patch);
+      if (saveError) return { error: saveError };
     }
   } else if (source === "report") {
     if (kind !== "daily" && kind !== "check" && kind !== "other") return { error: "시험 종류를 확인해 주세요" };

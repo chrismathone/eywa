@@ -107,8 +107,8 @@ export async function insertOps(tx: Tx, tenantId: string, world: World) {
     world.expenses.map((row) => ({
       id: crypto.randomUUID(),
       tenantId,
-      title: row.title,
-      category: row.category,
+      title: String(row.title),
+      category: String(row.category),
       amount: String(row.amount),
       expenseDate: row.date,
       memo: row.memo,

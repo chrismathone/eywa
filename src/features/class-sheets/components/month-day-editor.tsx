@@ -108,7 +108,7 @@ export function MonthDayEditor({
   useEffect(() => {
     if (state.kind !== "ready" || !focusArea) return;
     const input = contentRef.current?.querySelector<HTMLInputElement>(
-      `[data-skill-area="${focusArea.key}"] input[aria-label="교재"]`,
+      `[data-skill-area="${focusArea.key}"] input[data-plan-field="textbook"]`,
     );
     input?.focus();
     input?.scrollIntoView?.({ block: "center" });

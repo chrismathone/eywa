@@ -30,7 +30,7 @@ describe("진도맵 ↔ 프로그레스바 상호 선택", () => {
       fireEvent.click(days[1]);
       expect(screen.getByLabelText("진도맵 날짜")).toHaveValue("2026-09-16");
       expect(screen.getByLabelText("전체 진도율")).toHaveTextContent("38%59 / 155차시");
-      expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", "59");
+      expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", String(f.progress.current));
     }
   });
   it("현재 점은 마지막 확인 날짜를 열고 기준일 진도율은 고정한다", () => {
@@ -57,7 +57,7 @@ describe("진도맵 ↔ 프로그레스바 상호 선택", () => {
     expect(container.querySelector('[data-lesson="확률의 계산"]')).toHaveAttribute("data-selected", "true");
     expect(screen.getByLabelText("선택한 진도 상세")).toHaveTextContent("앞으로 학습");
     expect(screen.getByLabelText("전체 진도율")).toHaveTextContent("38%");
-    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", "59");
+    expect(screen.getByRole("progressbar", { name: "현재진도" })).toHaveAttribute("aria-valuenow", String(f.progress.current));
   });
   it("기간 선택·뒤로 가기·URL 복원에서도 같은 차시가 강조된다", () => {
     const f = learningMapFixture();
