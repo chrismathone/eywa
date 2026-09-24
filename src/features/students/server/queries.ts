@@ -28,7 +28,9 @@ import {
 // '따로 수업(*LAB)' 재료 — 켠 교시(0271a)·켠 수강(0271b). 둘 다 fail-soft(모르면 안 가른다).
 import { loadLabSeparateIds } from "@/features/classes/server/lab-separate";
 import { getStudentLabSeparateEnrollmentIds } from "@/features/enrollments/server/lab-separate";
-import { goalAchieved } from "../grades-meta";
+import { goalCellKey, goalExamLabel, goalStatus, type GoalStatus } from "@/features/grades/goals";
+import { loadGoals } from "@/features/grades/server/goals";
+import { gradeMonthReady, gradeNoExamReady, gradesSchemaReady } from "@/features/grades/server/write";
 import {
   subjectAxisOf,
   axisHasSubject,
@@ -1280,6 +1282,7 @@ export async function getStudentLessonReportsPage(
 export type GradeGoalRow = {
   id: string;
   examId: string | null;
+  /** 축이 있는 목표는 `2026년 2학기 · 중간고사`(칸에서 다시 만든 라벨), 옛 목표는 적힌 이름 그대로. */
   examName: string;
   subject: string;
   targetScore: number;
@@ -1289,51 +1292,51 @@ export type GradeGoalRow = {
   // 읽기 시점 산출(denormalize 안 함)
   actualScore: number | null;
   actualMaxScore: number | null;
+  /** 달성률 집계용(달성 true · 미달 false · 그 밖 null). 화면 표시는 `status`. */
   achieved: boolean | null;
+  status: GoalStatus;
+  /** 성적 칸 키(`goalCellKey`) — 옛 이름 매칭 목표는 null. 기록 행에 목표를 붙일 때 쓴다. */
+  cellKey: string | null;
 };
 
+/**
+ * 학생의 시험 목표 + 실제 점수 대비 상태(원장 2026-09-24, codex 합의).
+ * 🔑 축이 있는 목표 = 성적 칸(과목·년도·학기·시험·월) **정확 일치**, 옛 목표만 `시험명 + 과목` 이름 매칭 폴백.
+ * 🔴 축이 채워진 목표는 이름 폴백을 절대 안 탄다(같은 이름의 다른 해 성적에 붙는다).
+ */
 export async function getStudentGradeGoals(studentId: string): Promise<GradeGoalRow[]> {
+  const user = await getCurrentUser();
+  if (!user) return [];
   const supabase = await createClient();
-  const [{ data: goalsData }, { data: gradesData }] = await Promise.all([
-    supabase
-      .from("grade_goals")
-      .select("id, exam_id, exam_name, subject, target_score, max_score, reason, created_at")
-      .eq("student_id", studentId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("student_grades")
-      .select("exam_id, exam_name, subject, score, max_score")
-      .eq("student_id", studentId),
+  const [goals, schemaReady, monthReady, noExamReady] = await Promise.all([
+    loadGoals(user.tenantId, [studentId]), gradesSchemaReady(), gradeMonthReady(), gradeNoExamReady(),
   ]);
-
-  // 실제 점수 매칭: exam_id 우선, 없으면 시험명+과목.
-  const byExamId = new Map<string, { score: number | null; max: number | null }>();
-  const byNameSubject = new Map<string, { score: number | null; max: number | null }>();
-  for (const g of gradesData ?? []) {
-    const score = g.score == null ? null : Number(g.score);
-    const max = g.max_score == null ? null : Number(g.max_score);
-    if (g.exam_id) byExamId.set(g.exam_id, { score, max });
-    byNameSubject.set(`${g.exam_name}__${g.subject}`, { score, max });
+  if (!goals.length) return [];
+  const cols = `exam_name, subject, score, max_score${schemaReady ? ", school_year, term, exam_slot" : ""}${monthReady ? ", exam_month" : ""}${noExamReady ? ", no_exam" : ""}`;
+  const { data, error } = await supabase.from("student_grades").select(cols).eq("tenant_id", user.tenantId).eq("student_id", studentId);
+  if (error) throw new Error(`성적 조회 실패: ${error.message}`);
+  type Cell = { score: number | null; max: number | null; noExam: boolean };
+  const byCell = new Map<string, Cell>();
+  const byName = new Map<string, Cell>();
+  for (const g of (data ?? []) as unknown as {
+    exam_name: string; subject: string; score: string | null; max_score: string | null;
+    school_year?: number | null; term?: number | null; exam_slot?: string | null; exam_month?: number | null; no_exam?: boolean | null;
+  }[]) {
+    const cell = { score: g.score == null ? null : Number(g.score), max: g.max_score == null ? null : Number(g.max_score), noExam: g.no_exam === true };
+    if (g.school_year != null && g.term != null && g.exam_slot) {
+      byCell.set(goalCellKey({ subject: g.subject, year: g.school_year, term: g.term, slot: g.exam_slot, month: g.exam_month ?? 0 }), cell);
+    }
+    byName.set(`${g.exam_name}__${g.subject}`, cell);
   }
-
-  return (goalsData ?? []).map((r) => {
-    const target = Number(r.target_score);
-    const matched =
-      (r.exam_id ? byExamId.get(r.exam_id) : undefined) ??
-      byNameSubject.get(`${r.exam_name}__${r.subject}`);
-    const actualScore = matched?.score ?? null;
+  return goals.map((g) => {
+    const cellKey = g.axis ? goalCellKey({ subject: g.subject, ...g.axis }) : null;
+    const cell = (cellKey ? byCell.get(cellKey) : byName.get(`${g.examName}__${g.subject}`)) ?? null;
+    const status = goalStatus({ target: g.target, max: g.max }, cell);
     return {
-      id: r.id,
-      examId: r.exam_id,
-      examName: r.exam_name,
-      subject: r.subject,
-      targetScore: target,
-      maxScore: r.max_score == null ? null : Number(r.max_score),
-      reason: r.reason,
-      createdAt: r.created_at,
-      actualScore,
-      actualMaxScore: matched?.max ?? null,
-      achieved: goalAchieved(target, actualScore),
+      id: g.id, examId: null, examName: g.axis ? goalExamLabel(g.axis) : g.examName, subject: g.subject,
+      targetScore: g.target, maxScore: g.max, reason: g.reason, createdAt: g.createdAt,
+      actualScore: cell?.score ?? null, actualMaxScore: cell?.max ?? null,
+      achieved: status === "achieved" ? true : status === "missed" ? false : null, status, cellKey,
     };
   });
 }

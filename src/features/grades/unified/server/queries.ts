@@ -8,14 +8,14 @@ import { kstToday } from "@/lib/date-kst";
 import { testScoresOf } from "@/features/math-sheets/lib/test-score";
 import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import { gradeTeacherClassIds } from "@/features/grades/server/teacher-classes";
-import { gradesSchemaReady } from "@/features/grades/server/write";
+import { gradeNoExamReady, gradesSchemaReady } from "@/features/grades/server/write";
 import { classOrder, type UnifiedClass, type UnifiedRecord } from "../model";
 import { consultationDateFor, linkedConsultationDates, type LinkedConsultation } from "./consultation-link";
 import { gradeKind, isoDaysBefore, numberOrNull } from "./normalize";
 
 type RawClass = { id: string; class_name: string; subject: string; teacher_id: string | null };
 type RawEnrollment = { id: string; student_id: string; class_id: string; start_date: string; end_date: string | null; attendance_days: string[] | null; is_transferred: boolean | null };
-type RawGrade = { id: string; student_id: string; exam_name: string; exam_slot?: string | null; school_year?: number | null; term?: number | null; subject: string; score: string | null; max_score: string | null; taken_on: string };
+type RawGrade = { id: string; student_id: string; exam_name: string; no_exam?: boolean | null; exam_slot?: string | null; school_year?: number | null; term?: number | null; subject: string; score: string | null; max_score: string | null; taken_on: string };
 type RawReport = { id: string; student_id: string; class_id: string | null; subject: string | null; report_date: string; daily_test: string | null; check_test: string | null; exam_info: string | null };
 type RawLevel = { id: string; student_id: string; test_type: string; subject: string; tested_on: string; level: string | null; subscores: Record<string, number> | null };
 type RawStudent = { id: string; name: string; school: string | null; grade: string | null };
@@ -40,9 +40,10 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
   const user = await getCurrentUser();
   if (!user) return EMPTY;
   const supabase = await createClient();
-  const [scope, schemaReady, classRows] = await Promise.all([
+  const [scope, schemaReady, noExamReady, classRows] = await Promise.all([
     effectiveTeacherScope(),
     gradesSchemaReady(),
+    gradeNoExamReady(),
     fetchAllPaged<RawClass>((start, end) => supabase.from("classes")
       .select("id, class_name, subject, teacher_id").eq("tenant_id", user.tenantId).order("id").range(start, end)),
   ]);
@@ -55,7 +56,7 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
   const classAnchor = kstToday();
   // 학생 하나로 좁힐 땐 tenant_id 조건 자리에 student_id를 한 번 더 건다(tenant_id는 따로 이미 걸려 있다).
   const [byCol, byVal] = opts.studentId ? ["student_id", opts.studentId] as const : ["tenant_id", user.tenantId] as const;
-  const gradeCols = `id, student_id, exam_name, subject, score, max_score, taken_on${schemaReady ? ", exam_slot, school_year, term" : ""}`;
+  const gradeCols = `id, student_id, exam_name, subject, score, max_score, taken_on${schemaReady ? ", exam_slot, school_year, term" : ""}${noExamReady ? ", no_exam" : ""}`;
 
   const [enrollments, schedules, gradeRows, reports, levels] = await Promise.all([
     fetchAllPagedInChunks<RawEnrollment>(classIds, (chunk, start, end) => supabase.from("enrollments")
@@ -158,6 +159,7 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
       score: numberOrNull(row.score), maxScore: numberOrNull(row.max_score), rawScore: null,
       consultationDate: consultationDateFor(linkedConsultDates, row.student_id, row.subject, key),
       slot: row.exam_slot ?? undefined, schoolYear: row.school_year ?? undefined, term: row.term ?? undefined,
+      noExam: row.no_exam === true,
       editHref: `/exams/input?year=${row.school_year ?? ""}&term=${row.term ?? ""}&subject=${encodeURIComponent(row.subject)}&slot=${row.exam_slot ?? ""}&date=${row.taken_on}`,
     });
   }

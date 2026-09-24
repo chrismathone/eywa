@@ -10,6 +10,7 @@ import { aggregateBy, KIND_LABEL } from "@/features/grades/unified/model";
 import { applyLedgerView, parseLedgerView } from "@/features/grades/unified/ledger-view";
 import { Pagination } from "@/components/pagination";
 import { getStudentUnifiedRows } from "@/features/grades/unified/server/student-records";
+import { goalViewsForRows } from "@/features/grades/server/goals";
 import { StudentGradeStats } from "@/app/(shell)/exams/_components/student-stats";
 import { TrendChart } from "@/app/(shell)/exams/_components/trend-chart";
 import { GradeForm } from "../_components/grade-form";
@@ -51,6 +52,8 @@ export async function GradesTab({ studentId, query, back, embed }: {
   const totalPages = Math.max(1, Math.ceil(listed.length / PAGE_SIZE));
   const page = Math.min(Math.max(1, Math.floor(Number(query.page) || 1)), totalPages);
   const pageRows = listed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // 줄마다 목표 대비 — /exams 성적 현황과 같은 함수(원장 2026-09-24 "모든 면에서 일치").
+  const goalViews = await goalViewsForRows(pageRows);
   // 🔴 창(iframe) 안이면 링크가 embed=1을 싣는다([[#133]]) · back은 페이지가 검증한 내부 경로만 온다.
   const href = (patch: Record<string, string>) => {
     const q = new URLSearchParams();
@@ -91,7 +94,7 @@ export async function GradesTab({ studentId, query, back, embed }: {
       <GradeForm studentId={studentId} subjectOptions={subjectMaps.options} />
 
       <StudentGradeRecords rows={pageRows} studentId={studentId} notesById={notesById} subjectLabel={subjectLabels}
-        view={view} href={href} filters={filterOptions} />
+        view={view} href={href} filters={filterOptions} goals={goalViews} />
       {totalPages > 1 ? <Pagination page={page} totalPages={totalPages} total={listed.length} hrefForPage={(p) => href({ page: String(p) })} /> : null}
 
       {/* 성적 코멘트 · 레벨테스트 — 둘 다 짧은 목록이라 세로로만 쌓으면 넓은 창에서 오른쪽이 통째로 빈다.

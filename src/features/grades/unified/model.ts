@@ -32,6 +32,8 @@ export type UnifiedRecord = {
   slot?: string;
   schoolYear?: number;
   term?: number;
+  /** 학교 시험 칸에 '시험없음'이 표시됐나(0285a) — 목표 대비 상태가 '시험없음'을 가른다. */
+  noExam?: boolean;
 };
 
 export type UnifiedRow = UnifiedRecord & {

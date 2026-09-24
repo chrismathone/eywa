@@ -8,6 +8,8 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
 import { aggregateBy, KIND_LABEL, withPreviousScores, type UnifiedRow } from "@/features/grades/unified/model";
 import { kstToday } from "@/lib/date-kst";
+import { goalViewsForRows } from "@/features/grades/server/goals";
+import { getStudentGradeGoals } from "@/features/students/server/queries";
 import { defaultRangeFrom } from "@/features/grades/unified/default-range";
 import { UnifiedLedger } from "./unified-ledger";
 import { LedgerHead } from "./ledger-head";
@@ -118,6 +120,13 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
     dayCounts.set(key, item);
   }
   const calendarItems = [...dayCounts.values()];
+  // 시험 목표 대비(원장 2026-09-24, codex 합의) — 화면에 서는 줄만 붙인다(성적 현황 한 쪽 · 고른 학생). 판정은 원생 상세와 같은 함수.
+  const pageRows = tab === "records" ? ledgerRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) : [];
+  const studentRows = tab === "student" && selectedStudent ? rows.filter((row) => row.studentId === selectedStudent.studentId) : [];
+  const [goalViews, studentGoals] = await Promise.all([
+    goalViewsForRows([...pageRows, ...studentRows]),
+    selectedStudent && tab === "student" ? getStudentGradeGoals(selectedStudent.studentId) : Promise.resolve([]),
+  ]);
   const dayHref = Object.fromEntries(calendarItems.map((item) => [item.date, href({ tab: "records", from: item.date, to: item.date, kind: "all", page: "1" })]));
 
   return <div className="space-y-5 pb-12">
@@ -133,14 +142,14 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
 
     {tab === "records" ? <div className="space-y-3">
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note={showMissing ? "미입력 포함" : undefined} />
-      <UnifiedLedger rows={ledgerRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)} canWrite={!writeError}
+      <UnifiedLedger rows={pageRows} canWrite={!writeError} goals={goalViews}
         head={<LedgerHead view={ledgerView} href={ledgerHref} options={ledgerOptions(rows)} subject={subject} subjects={subjectOptions} />} />
       {writeError ? <p className="text-danger text-sm">{writeError}</p> : null}
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note="수업보고서 테스트일은 보고서 날짜와 연결됩니다" />
     </div> : null}
 
     {tab === "student" ? <StudentTab students={students} selected={selectedStudent} href={href} allRows={rows}
-      rows={selectedStudent ? rows.filter((row) => row.studentId === selectedStudent.studentId) : []} /> : null}
+      rows={studentRows} goalViews={goalViews} goals={studentGoals} /> : null}
     {tab === "classes" ? <ClassesTab classes={classes} rows={rows} href={href}
       selected={classes.find((row) => row.key === searchParams.cohortClass) ?? classes[0]} /> : null}
     {tab === "cohorts" ? <CohortsTab rows={rows} schools={schools} grades={grades} href={href}

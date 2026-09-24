@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
+import { goalAxisReady } from "@/features/grades/server/goals";
 import {
   clearOnHoldForActiveEnrollments,
   endEnrollmentById,
@@ -1190,40 +1192,62 @@ async function requireGradeWrite() {
 
 export type GoalState = { error?: string; ok?: boolean } | undefined;
 
+/**
+ * 시험 목표 추가 — **성적 칸 축**(과목·년도·학기·시험·월)으로 저장한다(원장 2026-09-24, codex 합의).
+ * 🔴 같은 칸에 목표가 이미 있으면 **거절**한다 — 갱신 경로를 만들지 않아 수정 경합이 없다(바꾸려면 지우고 다시).
+ *    동시에 두 번 눌러도 유니크(0291a `ux_grade_goals_cell`)가 막고 같은 문구로 돌려준다.
+ * 🔴 0291a 적용 전엔 저장을 잠근다 — 축 없이 넣으면 옛 이름 매칭으로 새어 다른 해 성적에 붙는다.
+ */
+const GOAL_DUPLICATE = "이 시험의 목표가 이미 있습니다 — 기존 목표를 지우고 다시 추가하세요";
+
 export async function createStudentGoal(_prev: GoalState, formData: FormData): Promise<GoalState> {
   const { user, error } = await requireGradeWrite();
   if (error || !user) return { error };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
-  const examName = String(formData.get("examName") ?? "").trim();
-  const subject = String(formData.get("subject") ?? "").trim();
-  const examId = String(formData.get("examId") ?? "").trim() || null;
   const targetStr = String(formData.get("targetScore") ?? "").trim();
   const maxStr = String(formData.get("maxScore") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim() || null;
-
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
-  if (!examName) return { error: "시험명을 입력해주세요" };
-  if (!subject) return { error: "과목을 선택해주세요" };
-  if (!targetStr || !Number.isFinite(Number(targetStr))) return { error: "목표 점수를 입력해주세요" };
+  const axis = parseGoalAxis({
+    subject: String(formData.get("subject") ?? ""), year: formData.get("year"), term: formData.get("term"),
+    slot: formData.get("slot"), month: formData.get("month"),
+  });
+  if (typeof axis === "string") return { error: axis };
+  const max = Number(maxStr);
+  if (!maxStr || !Number.isFinite(max) || max < 1 || max > 1000) return { error: "만점은 1~1000 사이로 입력해주세요" };
+  const target = Number(targetStr);
+  if (!targetStr || !Number.isFinite(target) || target < 0 || target > max) return { error: "목표 점수는 0 이상 만점 이하로 입력해주세요" };
   const scopeErr = await studentScopeError(user.systemRole, studentId);
   if (scopeErr) return { error: scopeErr };
+  if (!(await goalAxisReady())) return { error: "목표 구조(0291a)가 아직 적용되지 않아 목표를 저장할 수 없습니다" };
 
   const supabase = await createClient();
+  const { data: existing, error: findErr } = await supabase.from("grade_goals").select("id")
+    .eq("tenant_id", user.tenantId).eq("student_id", studentId).eq("subject", axis.subject)
+    .eq("school_year", axis.year).eq("term", axis.term).eq("exam_slot", axis.slot).eq("exam_month", axis.month).limit(1);
+  if (findErr) return { error: `목표를 확인하지 못했습니다: ${findErr.message}` };
+  if (existing?.length) return { error: GOAL_DUPLICATE };
+
   const { error: insErr } = await supabase.from("grade_goals").insert({
     tenant_id: user.tenantId,
     student_id: studentId,
-    exam_id: examId,
-    exam_name: examName,
-    subject,
-    target_score: Number(targetStr),
-    max_score: maxStr && Number.isFinite(Number(maxStr)) ? Number(maxStr) : null,
+    exam_id: null,
+    exam_name: goalExamLabel(axis),
+    subject: axis.subject,
+    school_year: axis.year,
+    term: axis.term,
+    exam_slot: axis.slot,
+    exam_month: axis.month,
+    target_score: target,
+    max_score: max,
     reason,
     created_by: user.id,
   });
-  if (insErr) return { error: insErr.message };
+  if (insErr) return { error: (insErr as { code?: string }).code === "23505" ? GOAL_DUPLICATE : insErr.message };
 
   revalidatePath(`/students/${studentId}`);
+  revalidatePath("/exams");
   return { ok: true };
 }
 
@@ -1242,6 +1266,7 @@ export async function deleteStudentGoal(_prev: GoalState, formData: FormData): P
   if (delErr) return { error: delErr.message };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
+  revalidatePath("/exams");
   return undefined;
 }
 

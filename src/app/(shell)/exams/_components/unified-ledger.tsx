@@ -5,6 +5,8 @@ import Link from "next/link";
 import { saveUnifiedGrade } from "@/features/grades/unified/server/actions";
 import { schoolGradeLabel, type UnifiedRow } from "@/features/grades/unified/model";
 import { examInfoOf } from "@/features/grades/unified/ledger-view";
+import { GoalBadge } from "@/features/grades/components/goal-badge";
+import type { GoalView } from "@/features/grades/goals";
 import { DeltaBadge, KindPill, ScoreLine } from "./tab-parts";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
@@ -19,7 +21,7 @@ const BTN = "border-line hover:bg-bg-soft rounded-md border px-2 py-1 text-sm fo
  * 🔴 저장 요청은 **이 줄의 state로 직접** 만든다. 옛 줄은 입력칸을 `form=` 속성으로 숨은 폼에 묶었는데,
  *    날짜 칸이 요청에 실리지 않아 DB엔 멀쩡한 날짜가 있는데도 "시험일을 확인해 주세요"가 떴다(원장 제보 2026-09-23).
  */
-function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
+function LedgerRow({ row, canWrite, goal }: { row: UnifiedRow; canWrite: boolean; goal?: GoalView }) {
   const initialConsult = row.consultationDate ?? row.manualConsultationDate ?? "";
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -72,7 +74,7 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
           <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="점수" aria-label={`${row.name} 점수`} className={`${INPUT} w-16`} />
           <span>/</span>
           <input type="number" min="1" max="1000" step="0.01" value={max} onChange={(e) => setMax(e.target.value)} aria-label={`${row.name} 만점`} className={`${INPUT} w-16`} />
-        </div> : <ScoreLine row={row} />}
+        </div> : <><ScoreLine row={row} />{goal ? <GoalBadge goal={goal} className="mt-0.5 flex" /> : null}</>}
       </td>
       <td className="py-2 pl-2 pr-4 text-right"><DeltaBadge row={row} /></td>
       <td className="px-2 py-2 text-center">
@@ -105,18 +107,22 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
   );
 }
 
-export function UnifiedLedger({ rows, canWrite, head }: { rows: UnifiedRow[]; canWrite: boolean; head: ReactNode }) {
+export function UnifiedLedger({ rows, canWrite, head, goals = {} }: {
+  rows: UnifiedRow[]; canWrite: boolean; head: ReactNode;
+  /** 줄 key → 시험 목표 대비(서버 `goalViewsForRows`). 목표가 없는 줄은 비어 있다. */
+  goals?: Record<string, GoalView>;
+}) {
   return (
     // 열 머리 필터 팝업이 짧은 표에서 잘리지 않게 최소 높이를 둔다(overflow 컨테이너 안 absolute 팝업 — header-filter 주석).
     <div className="bg-card shadow-card min-h-[26rem] overflow-x-auto rounded-2xl">
-      <table className="w-full min-w-[1330px] table-fixed text-sm">
+      <table className="w-full min-w-[1360px] table-fixed text-sm">
         <colgroup>
           <col className="w-[5.5rem]" /><col className="w-[7.75rem]" /><col className="w-[6rem]" /><col className="w-[7rem]" /><col />
-          <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[10.5rem]" /><col className="w-[6.5rem]" />
+          <col className="w-[8rem]" /><col className="w-[7rem]" /><col className="w-[10.5rem]" /><col className="w-[12.5rem]" /><col className="w-[6.5rem]" />
           <col className="w-[7.5rem]" /><col className="w-[8.5rem]" />
         </colgroup>
         {head}
-        <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} />)}</tbody>
+        <tbody>{rows.map((row) => <LedgerRow key={row.key} row={row} canWrite={canWrite} goal={goals[row.key]} />)}</tbody>
       </table>
       {rows.length === 0 ? <p className="text-text-dim p-8 text-center text-sm">조건에 맞는 성적 기록이 없습니다. 필터나 검색어를 바꿔 보세요.</p> : null}
     </div>

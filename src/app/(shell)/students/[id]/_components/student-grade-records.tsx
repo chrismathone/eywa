@@ -6,6 +6,8 @@ import { KIND_LABEL, type UnifiedRow } from "@/features/grades/unified/model";
 import { DeltaBadge, KindPill, ScoreLine } from "@/app/(shell)/exams/_components/tab-parts";
 import { SortButton } from "@/app/(shell)/exams/_components/ledger-head";
 import { DeleteGradeButton } from "./delete-grade-button";
+import { GoalBadge } from "@/features/grades/components/goal-badge";
+import type { GoalView } from "@/features/grades/goals";
 
 type Href = (patch: Record<string, string>) => string;
 
@@ -15,10 +17,12 @@ type Href = (patch: Record<string, string>) => string;
  * 열 머리 = 필터·정렬(통합 성적관리 원장과 같은 부품·같은 판정 `applyLedgerView`). 결과가 0건이어도 머리는 남긴다
  * (치우면 걸린 필터를 못 되돌린다). 지우기는 **성적 입력 행만** — 보고서 점수는 보고서에서, 레벨테스트는 그 구역에서.
  */
-export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, view, href, filters }: {
+export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, view, href, filters, goals }: {
   rows: readonly UnifiedRow[]; studentId: string; notesById: Record<string, string | null>; subjectLabel: Record<string, string>;
   view: LedgerView; href: Href;
   filters: { subject: string; kind: string; subjects: FilterSelectOption[]; kinds: FilterSelectOption[] };
+  /** 줄 key → 시험 목표 대비(`goalViewsForRows` — /exams와 같은 함수). */
+  goals: Record<string, GoalView>;
 }) {
   const th = "micro px-4 py-2 font-bold whitespace-nowrap";
   // 🔴 overflow-x-auto로 싸지 말 것 — 열 머리 필터 팝업이 표 밖으로 못 나와 잘린다(원생목록 규약).
@@ -49,7 +53,7 @@ export function StudentGradeRecords({ rows, studentId, notesById, subjectLabel, 
             <td className="num text-muted-foreground px-4 py-2 text-xs whitespace-nowrap">{row.date}</td>
             <td className="text-foreground px-4 py-2 text-xs font-medium whitespace-nowrap">{subjectLabel[row.subject] ?? row.subject}</td>
             <td className="px-4 py-2 text-xs"><span className="flex flex-wrap items-center gap-1.5"><KindPill kind={row.kind} />{info ? <span className="text-muted-foreground">{info}</span> : null}</span></td>
-            <td className="px-4 py-2 text-xs"><ScoreLine row={row} /></td>
+            <td className="px-4 py-2 text-xs"><ScoreLine row={row} />{goals[row.key] ? <GoalBadge goal={goals[row.key]!} className="mt-0.5 flex" /> : null}</td>
             <td className="px-4 py-2 text-xs"><DeltaBadge row={row} /></td>
             <td className="text-muted-foreground px-4 py-2 text-xs">{(row.source === "grade" ? notesById[row.sourceId] : null) ?? "—"}</td>
             <td className="px-4 py-2 text-right whitespace-nowrap">
