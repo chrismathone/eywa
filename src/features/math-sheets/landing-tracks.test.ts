@@ -6,6 +6,7 @@ import type { MathClassCard } from "./server/landing";
 
 const mocks = vi.hoisted(() => ({ landing: vi.fn() }));
 vi.mock("./server/landing", () => ({ getMathSheetLanding: mocks.landing }));
+vi.mock("@/lib/auth/require-access", () => ({ requireAccess: async () => ({ systemRole: "master" }) }));
 vi.mock("@/features/math-progress-map/server/access", () => ({ canPreviewProgressMap: async () => false }));
 vi.mock("@/components/embed-link", () => ({ EmbedLink: (props: Record<string, unknown>) => createElement("a", props) }));
 vi.mock("@/components/period-nav", () => ({ PeriodNav: () => createElement("div", null, "월 선택") }));
