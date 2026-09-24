@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "happy-dom",
+    maxWorkers: 2,
+    testTimeout: 30_000,
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     include: [

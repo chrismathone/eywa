@@ -79,6 +79,7 @@ function CasInput({
       value={value}
       disabled={!canEdit}
       aria-label={ariaLabel}
+      data-plan-field={field}
       list={listId ?? undefined}
       onChange={(e) => handlers.editCell(lineId, field, e.target.value)}
       onBlur={onCommit ? (e) => onCommit(e.target.value) : undefined}
@@ -114,6 +115,7 @@ function BookCasInput({
   handlers: PlanHandlers;
   canEdit: boolean;
 }) {
+  const t = useSheetT();
   const { options, listId } = useTextbookOptions();
   const pageCell = useCellState(store, buildSaveKey(lineId, "page_range"));
   const pageValue = pageCell ? (pageCell.value ?? "") : (pageRangeFallback ?? "");
@@ -138,7 +140,7 @@ function BookCasInput({
       store={store}
       handlers={handlers}
       canEdit={canEdit}
-      ariaLabel="교재"
+      ariaLabel={t("fill.book")}
       listId={listId}
       onCommit={onCommit}
     />
@@ -162,6 +164,7 @@ export const PlanRow = memo(function PlanRow({
   handlers: PlanHandlers;
   canEdit: boolean;
 }) {
+  const t = useSheetT();
   const areaKey = buildSaveKey(line.id, "skill_area");
   const areaCell = useCellState(store, areaKey);
   const areaValue = areaCell?.value ?? line.skillArea;
@@ -212,13 +215,13 @@ export const PlanRow = memo(function PlanRow({
         />
       </td>
       <td className="py-0.5 pr-1">
-        <CasInput lineId={line.id} field="page_range" fallback={line.pageRange} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="페이지/시간" />
+        <CasInput lineId={line.id} field="page_range" fallback={line.pageRange} store={store} handlers={handlers} canEdit={canEdit} ariaLabel={t("plan.col.pageTime")} />
       </td>
       <td className="py-0.5 pr-1">
-        <CasInput lineId={line.id} field="progress" fallback={line.progress} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="진도" />
+        <CasInput lineId={line.id} field="progress" fallback={line.progress} store={store} handlers={handlers} canEdit={canEdit} ariaLabel={t("plan.col.progress")} />
       </td>
       <td className="py-0.5 pr-1">
-        <CasInput lineId={line.id} field="homework" fallback={line.homework} store={store} handlers={handlers} canEdit={canEdit} ariaLabel="과제" />
+        <CasInput lineId={line.id} field="homework" fallback={line.homework} store={store} handlers={handlers} canEdit={canEdit} ariaLabel={t("plan.col.homework")} />
       </td>
       <td className="py-0.5">
         {canEdit ? (

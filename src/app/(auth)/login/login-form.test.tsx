@@ -15,6 +15,11 @@ beforeEach(() => { signInWithPassword.mockReset(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("LoginForm", () => {
+  it("never submits credentials in the URL before hydration", () => {
+    render(<LoginForm />);
+    expect(screen.getByLabelText("비밀번호", { exact: true }).closest("form")).toHaveAttribute("method", "post");
+  });
+
   it.each([
     [{ code: "invalid_credentials", status: 400 }, "이메일 또는 비밀번호가 올바르지 않습니다."],
     [{ code: "over_request_rate_limit", status: 429 }, "로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요."],

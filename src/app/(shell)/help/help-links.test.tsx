@@ -59,7 +59,8 @@ describe("구조 — 도움말 안의 앱 화면 링크는 창 규약(WindowLink
     ]) {
       const src = read(f);
       expect(src, f).not.toMatch(/<a\s[^>]*href=(\{|"\/)/);
-      expect(src, f).not.toContain('from "next/link"');
+      // 별도 탭에 여는 인쇄 문서는 창 안 업무 화면 탐색과 관계없다.
+      expect(src, f).not.toMatch(/<Link\s+href="\/(?!print\/)/);
     }
   });
 

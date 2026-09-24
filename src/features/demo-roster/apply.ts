@@ -1,6 +1,6 @@
 import { and, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { classes, classrooms, classSchedules, enrollments, invoices, students, tenants } from "@/lib/db/schema";
+import { classes, classrooms, classSchedules, dayOfWeekEnum, enrollments, invoices, students, tenants } from "@/lib/db/schema";
 import { kstToday } from "@/lib/date-kst";
 import { insertDashboardSatellite } from "./dashboard-apply";
 import { buildDashboardWorld } from "./dashboard-world.mjs";
@@ -129,8 +129,8 @@ export async function replaceDemoRoster(
 
       await tx.insert(classSchedules).values(
         plan.classes.flatMap((cls) =>
-          cls.days.flatMap((day) =>
-            cls.periods.map((period) => ({
+          cls.days.flatMap((day: typeof dayOfWeekEnum.enumValues[number]) =>
+            cls.periods.map((period: { start: string; end: string; label: string }) => ({
               id: crypto.randomUUID(),
               tenantId,
               classId: classId.get(cls)!,
@@ -147,7 +147,7 @@ export async function replaceDemoRoster(
 
       await tx.insert(enrollments).values(
         plan.students.flatMap((student) =>
-          student.classes.map((cls) => ({
+          student.classes.map((cls: object) => ({
             id: crypto.randomUUID(),
             tenantId,
             studentId: studentId.get(student)!,

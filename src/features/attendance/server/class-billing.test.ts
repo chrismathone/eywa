@@ -60,7 +60,7 @@ describe("강사 출석부 청구액 조회 범위", () => {
     }
   });
 
-  it("인재원 50분 교시는 1U이며 단축 40분 교시가 섞여도 JJ를 포함해 24U를 배분한다", async () => {
+  it("예정 시수가 확정 24U를 넘으면 담당별 배분을 보류한다", async () => {
     mocks.tables.classes = [{ id: "c1", class_name: "중고E_중2 특별", teacher_id: "elsa", english_track: "injaewon" }];
     const slots = [
       ["mon", "19:20", "20:10", null, "JJ"], ["mon", "20:20", "21:10", "elsa", null],
@@ -73,11 +73,11 @@ describe("강사 출석부 청구액 조회 범위", () => {
     }));
     mocks.tables.enrollments = [{ class_id: "c1", student_id: "s1", start_date: "2026-09-01", end_date: null, is_transferred: false, attendance_days: [] }];
     mocks.tables.invoice_session_terms = [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: 300000, confirmed_sessions: 24, unit_price: 12500, quantity_basis: "attendance_units", pricing_mode: "per_session" }];
-    for (const [teacherId, expected] of [["elsa", 14], ["song", 3]] as const) {
+    for (const teacherId of ["elsa", "song"] as const) {
       const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }], {
         teacherScope: { teacherId, classIds: ["c1"], holidays: ["2026-09-24", "2026-09-25", "2026-09-26"] },
       });
-      expect(result.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: expected, daysBasis: false, classUnits: 24 });
+      expect(result.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 24, daysBasis: false, classUnits: 24, allocationPending: true });
       expect(result.confirmedPrices[rowKey("c1", "s1")]).toEqual([{ unitPrice: 12500, monthly: false, daysBasis: false }]);
     }
   });
