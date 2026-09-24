@@ -30,15 +30,15 @@ export function OverviewTab({ rows, studentCount, academy, missingCount, href }:
   return <div className="space-y-4">
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
       <BigStat label="응시 학생" value={studentCount} unit="명" tone="blue" sub={`기록 ${rows.length}건`} />
-      <BigStat label="평가 평균" value={academy?.average ?? "—"} unit={academy?.average == null ? undefined : "점"} tone="primary" sub="100점 환산" />
+      <BigStat label="평균 정답률" value={academy?.average ?? "—"} unit={academy?.average == null ? undefined : "%"} tone="primary" sub="만점 대비 맞힌 비율" />
       <BigStat label="상승" value={ups.length} unit="건" tone="green" sub="직전 같은 시험 대비" />
       <BigStat label="하락" value={downs.length} unit="건" tone="danger" sub="직전 같은 시험 대비" />
       <BigStat label="미입력" value={missingCount} unit="건" tone="amber"
         sub={missingCount ? <Link href={href({ tab: "records", missing: "1", page: "1" })} className="text-primary hover:underline">성적 현황에서 채우기 →</Link> : "모두 입력됨"} />
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-      <Panel title="학원 통합 추이" sub="월별 평균 · 100점 환산"><TrendChart points={academy?.points ?? []} /></Panel>
-      <Panel title="시험 종류별 평균" sub="기록 수와 100점 환산 평균">
+      <Panel title="학원 통합 추이" sub="월별 평균 정답률"><TrendChart points={academy?.points ?? []} /></Panel>
+      <Panel title="시험 종류별 평균" sub="기록 수와 평균 정답률">
         {kinds.length ? <div className="space-y-1">{kinds.map((k) => <Link key={k.kind} href={href({ tab: "records", kind: k.kind, page: "1" })} className="block">
           <BarRow label={KIND_LABEL[k.kind]} sub={`${k.count}건`} value={k.average} bar={KIND_SOLID[k.kind]} /></Link>)}</div>
           : <p className="text-text-dim py-8 text-center text-sm">기록이 없습니다.</p>}

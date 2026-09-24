@@ -6,7 +6,6 @@ import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import {
   getStudentAttendanceStats,
   getStudentEnrollments,
-  getStudentGrades,
   getStudentInvoices,
   getStudentConsultationHistory,
   getStudentMemos,
@@ -14,6 +13,8 @@ import {
   type StudentDetail,
 } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { getStudentUnifiedRows } from "@/features/grades/unified/server/student-records";
+import { KIND_LABEL, scoreUnit } from "@/features/grades/unified/model";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { TabLink } from "../_components/tab-link";
@@ -38,7 +39,8 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
   const [attendance, enrollments, grades, invoices, consultations, memos, settings] = await Promise.all([
     getStudentAttendanceStats(sid, 30),
     getStudentEnrollments(sid),
-    getStudentGrades(sid),
+    // 성적 탭·통합 성적관리와 같은 기록(수업보고서 일일·확인테스트 포함 — 원장 2026-09-24).
+    getStudentUnifiedRows(sid),
     getStudentInvoices(sid),
     getStudentConsultationHistory(sid),
     getStudentMemos(sid),
@@ -154,9 +156,9 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
           ) : (
             grades.slice(0, 4).map((g) => (
               <DigestRow
-                key={g.id}
-                left={`${subjects.labelOf(g.subject)} ${g.examName}`}
-                right={g.score == null ? "—" : g.maxScore ? `${g.score}/${g.maxScore}` : String(g.score)}
+                key={g.key}
+                left={`${subjects.labelOf(g.subject)} ${KIND_LABEL[g.kind]}`}
+                right={g.score == null || g.maxScore == null ? g.rawScore || "—" : `${g.score} / ${g.maxScore}${scoreUnit(g)}`}
                 mono
               />
             ))

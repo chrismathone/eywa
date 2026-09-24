@@ -32,7 +32,11 @@ export type UnifiedData = {
 
 const EMPTY: UnifiedData = { records: [], students: [], classes: [], subjects: [], studentClasses: {} };
 
-export async function getUnifiedGrades(from: string, to: string): Promise<UnifiedData> {
+/**
+ * 통합 성적 기록 — 성적 입력(student_grades) + 수업보고서 일일·확인테스트 + 레벨테스트를 한 모양으로.
+ * `studentId`를 주면 **그 학생만** 읽는다(학생 상세 성적 탭·개요 — 통합 성적관리와 같은 기록·같은 계산이 되게).
+ */
+export async function getUnifiedGrades(from: string, to: string, opts: { studentId?: string } = {}): Promise<UnifiedData> {
   const user = await getCurrentUser();
   if (!user) return EMPTY;
   const supabase = await createClient();
@@ -49,27 +53,29 @@ export async function getUnifiedGrades(from: string, to: string): Promise<Unifie
   if (scope && classIds.length === 0) return EMPTY;
   const lookback = isoDaysBefore(from, 180);
   const classAnchor = kstToday();
+  // 학생 하나로 좁힐 땐 tenant_id 조건 자리에 student_id를 한 번 더 건다(tenant_id는 따로 이미 걸려 있다).
+  const [byCol, byVal] = opts.studentId ? ["student_id", opts.studentId] as const : ["tenant_id", user.tenantId] as const;
   const gradeCols = `id, student_id, exam_name, subject, score, max_score, taken_on${schemaReady ? ", exam_slot, school_year, term" : ""}`;
 
   const [enrollments, schedules, gradeRows, reports, levels] = await Promise.all([
     fetchAllPagedInChunks<RawEnrollment>(classIds, (chunk, start, end) => supabase.from("enrollments")
       .select("id, student_id, class_id, start_date, end_date, attendance_days, is_transferred")
-      .eq("tenant_id", user.tenantId).in("class_id", chunk).lte("start_date", classAnchor)
+      .eq("tenant_id", user.tenantId).eq(byCol, byVal).in("class_id", chunk).lte("start_date", classAnchor)
       .or(`end_date.is.null,end_date.gte.${lookback}`).order("id").range(start, end)),
     fetchAllPagedInChunks<RawSchedule>(classIds, (chunk, start, end) => supabase.from("class_schedules")
       .select("id, class_id, day_of_week, valid_from, valid_to")
       .eq("tenant_id", user.tenantId).in("class_id", chunk).lte("valid_from", classAnchor)
       .or(`valid_to.is.null,valid_to.gte.${lookback}`).order("id").range(start, end)),
     fetchAllPaged<RawGrade>((start, end) => supabase.from("student_grades")
-      .select(gradeCols).eq("tenant_id", user.tenantId).lte("taken_on", to)
+      .select(gradeCols).eq("tenant_id", user.tenantId).eq(byCol, byVal).lte("taken_on", to)
       .order("id").range(start, end) as unknown as PromiseLike<{ data: RawGrade[] | null; error: { message: string } | null }>),
     fetchAllPaged<RawReport>((start, end) => supabase.from("lesson_reports")
       .select("id, student_id, class_id, subject, report_date, daily_test, check_test, exam_info")
-      .eq("tenant_id", user.tenantId).gte("report_date", lookback).lte("report_date", to)
+      .eq("tenant_id", user.tenantId).eq(byCol, byVal).gte("report_date", lookback).lte("report_date", to)
       .order("id").range(start, end)),
     fetchAllPaged<RawLevel>((start, end) => supabase.from("level_tests")
       .select("id, student_id, test_type, subject, tested_on, level, subscores")
-      .eq("tenant_id", user.tenantId).gte("tested_on", lookback).lte("tested_on", to)
+      .eq("tenant_id", user.tenantId).eq(byCol, byVal).gte("tested_on", lookback).lte("tested_on", to)
       .order("id").range(start, end)),
   ]);
 

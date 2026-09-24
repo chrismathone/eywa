@@ -38,7 +38,7 @@ export type UnifiedRow = UnifiedRecord & {
   previousScore: number | null;
   previousMaxScore: number | null;
   delta: number | null;
-  deltaUnit: "점" | "%p";
+  deltaUnit: ScoreUnit;
 };
 
 export const KIND_LABEL: Record<UnifiedKind, string> = {
@@ -54,12 +54,25 @@ export function schoolGradeLabel(school: string | null, grade: string | null): s
   return formatSchoolGradeLabel(school, grade) || "학교학년 미입력";
 }
 
+/**
+ * 점수의 단위 — **기록할 때 정한 그대로**(원장 2026-09-24 *"개수는 개수로, 점수면 점수로 … 환산은 전부 제거"*).
+ * 수업보고서의 일일·확인테스트는 "N문제 중 M개 맞음"이라 **개**, 성적 입력·레벨테스트는 **점**.
+ */
+export type ScoreUnit = "점" | "개";
+export function scoreUnit(record: Pick<UnifiedRecord, "source">): ScoreUnit {
+  return record.source === "report" ? "개" : "점";
+}
+
+/** 만점 대비 비율(정답률) — **평균·추이에만** 쓴다(만점이 다른 시험을 합칠 때). 한 줄 점수는 원래 단위로 적는다. */
 export function scorePercent(record: Pick<UnifiedRecord, "score" | "maxScore">): number | null {
   if (record.score == null || record.maxScore == null || record.maxScore <= 0) return null;
   return (record.score / record.maxScore) * 100;
 }
 
-/** 동일 학생·과목·시험 종류의 직전 유효 점수만 비교한다. 만점이 다르면 백분율 포인트다. */
+/**
+ * 동일 학생·과목·시험 종류의 직전 유효 점수와 비교한다. **만점이 같을 때만** 원래 단위로 차이를 적고,
+ * 만점이 다르면 증감을 비운다(환산 차이를 적지 않는다 — 원장 2026-09-24).
+ */
 export function withPreviousScores(records: readonly UnifiedRecord[]): UnifiedRow[] {
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
   const previous = new Map<string, UnifiedRecord>();
@@ -69,16 +82,15 @@ export function withPreviousScores(records: readonly UnifiedRecord[]): UnifiedRo
     const currentPct = scorePercent(record);
     const earlierPct = earlier ? scorePercent(earlier) : null;
     const sameMax = earlier?.maxScore != null && earlier.maxScore === record.maxScore;
-    const delta = currentPct == null || earlierPct == null ? null : sameMax
-      ? Math.round(((record.score ?? 0) - (earlier?.score ?? 0)) * 10) / 10
-      : Math.round((currentPct - earlierPct) * 10) / 10;
+    const delta = currentPct == null || earlierPct == null || !sameMax ? null
+      : Math.round(((record.score ?? 0) - (earlier?.score ?? 0)) * 10) / 10;
     if (currentPct != null) previous.set(key, record);
     return {
       ...record,
       previousScore: earlier?.score ?? null,
       previousMaxScore: earlier?.maxScore ?? null,
       delta,
-      deltaUnit: sameMax ? "점" as const : "%p" as const,
+      deltaUnit: scoreUnit(record),
     };
   });
   return rows.reverse();

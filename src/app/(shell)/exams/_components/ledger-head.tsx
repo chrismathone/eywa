@@ -38,8 +38,9 @@ export function LedgerHead({ view, href, options, subject, subjects }: {
     <th className={`${th} text-center`}>{both(<HeaderFilter paramName="fTeacher" axisLabel="담임" value={view.teacher} options={options.teachers} cap={200} />, "teacher")}</th>
     <th className={`${th} text-center`}><SortButton sort="kind" view={view} href={href} label="시험" /></th>
     <th className={`${th} text-center`}><SortButton sort="info" view={view} href={href} label="시험정보" /></th>
-    <th className={`${th} text-center`}>{both(<HeaderFilter paramName="fScore" axisLabel="점수" value={view.score}
-      options={[{ value: "high", label: "90점 이상" }, { value: "mid", label: "60~89점" }, { value: "low", label: "60점 미만" }]} />, "score")}</th>
+    {/* 점수는 `4개 / 5개`·`84점 / 100점`처럼 단위가 섞여 **정답률**로 거른다(원장 2026-09-24 환산 표기 제거). 값은 왼쪽 정렬. */}
+    <th className={`${th} text-left`}>{both(<HeaderFilter paramName="fScore" axisLabel="정답률" value={view.score}
+      options={[{ value: "high", label: "90% 이상" }, { value: "mid", label: "60~89%" }, { value: "low", label: "60% 미만" }]} />, "score")}</th>
     <th className="py-2 pl-2 pr-4 text-right font-bold whitespace-nowrap">{both(<HeaderFilter paramName="fDelta" axisLabel="증감" value={view.delta}
       options={[{ value: "up", label: "상승" }, { value: "down", label: "하락" }, { value: "same", label: "변화 없음" }]} />, "delta")}</th>
     <th className={`${th} text-center`}><HeaderFilter paramName="fConsult" axisLabel="상담" value={view.consult}

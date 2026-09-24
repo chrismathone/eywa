@@ -77,8 +77,8 @@ export function CohortsTab({ rows, schools, grades, schoolKey, gradeKey, level: 
         <tbody>{cohortRows.map((entry) => { const avg = averagePercent(entry.rows); const points = aggregateBy(entry.rows, "academy")[0]?.points ?? [];
           return <tr key={`${entry.school}:${entry.grade}`} className="border-line-faint border-t">
             <td className="px-3 py-2 text-center font-semibold">{entry.school}</td><td className="px-3 py-2 text-center">{entry.grade}</td>
-            <td className={`num px-3 py-2 text-center font-bold ${percentTone(avg)}`}>{avg == null ? "—" : `${avg}점`}</td><td className="num px-3 py-2 text-center">{entry.rows.length}건</td>
-            <td className="text-text-dim px-3 py-2">{points.map((p) => `${Number(p.month.slice(5))}월 ${p.average}점`).join(" → ") || "—"}</td>
+            <td className={`num px-3 py-2 text-center font-bold ${percentTone(avg)}`}>{avg == null ? "—" : `${avg}%`}</td><td className="num px-3 py-2 text-center">{entry.rows.length}건</td>
+            <td className="text-text-dim px-3 py-2">{points.map((p) => `${Number(p.month.slice(5))}월 ${p.average}%`).join(" → ") || "—"}</td>
           </tr>; })}</tbody></table></div>
         : <p className="text-text-dim py-8 text-center text-sm">비교할 점수 기록이 없습니다.</p>}
     </Panel>

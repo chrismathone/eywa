@@ -5,7 +5,7 @@ import { kstToday } from "@/lib/date-kst";
 import { attachmentFilename } from "@/lib/http/content-disposition";
 import { defaultRangeFrom } from "@/features/grades/unified/default-range";
 import { getUnifiedGrades } from "@/features/grades/unified/server/queries";
-import { KIND_LABEL, schoolGradeLabel, withPreviousScores } from "@/features/grades/unified/model";
+import { KIND_LABEL, schoolGradeLabel, scoreUnit, withPreviousScores } from "@/features/grades/unified/model";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
@@ -40,23 +40,23 @@ export async function GET(request: NextRequest) {
     { header: "학교학년", key: "schoolGrade", width: 17 }, { header: "과목", key: "subject", width: 14 },
     { header: "반", key: "classes", width: 30 }, { header: "담임", key: "teachers", width: 18 },
     { header: "시험", key: "kind", width: 17 }, { header: "점수", key: "score", width: 11 },
-    { header: "만점", key: "maxScore", width: 11 }, { header: "이전 점수", key: "previous", width: 13 },
+    { header: "만점", key: "maxScore", width: 11 }, { header: "단위", key: "unit", width: 8 }, { header: "이전 점수", key: "previous", width: 13 },
     { header: "증감", key: "delta", width: 13 }, { header: "상담일", key: "consultation", width: 14 },
   ];
   sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
   sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF153E75" } };
-  sheet.autoFilter = { from: "A1", to: "L1" };
+  sheet.autoFilter = { from: "A1", to: "M1" };
   for (const row of rows) {
     const added = sheet.addRow({ date: row.date, name: row.name, schoolGrade: schoolGradeLabel(row.school, row.grade),
       subject: labelOf(row.subject), classes: row.classes.map((item) => item.name).join(" / "),
       teachers: [...new Set(row.classes.map((item) => item.teacher).filter(Boolean))].join(" / "),
       kind: KIND_LABEL[row.kind],
       // 숫자로 못 읽은 결과(레벨·원문 점수)는 빈칸이 아니라 원문 그대로(D3).
-      score: row.score ?? row.rawScore, maxScore: row.maxScore, previous: row.previousScore,
-      delta: row.delta == null ? null : `${row.delta > 0 ? "↑" : row.delta < 0 ? "↓" : ""}${Math.abs(row.delta)}${row.deltaUnit === "%p" ? "%p" : ""}`,
+      score: row.score ?? row.rawScore, maxScore: row.maxScore, unit: row.score == null ? null : scoreUnit(row), previous: row.previousScore,
+      delta: row.delta == null ? null : `${row.delta > 0 ? "↑" : row.delta < 0 ? "↓" : ""}${Math.abs(row.delta)}${row.deltaUnit}`,
       consultation: row.consultationDate ?? row.manualConsultationDate,
     });
-    if (row.delta != null && row.delta !== 0) added.getCell(11).font = { color: { argb: row.delta > 0 ? "FF078552" : "FFD73A49" } };
+    if (row.delta != null && row.delta !== 0) added.getCell(12).font = { color: { argb: row.delta > 0 ? "FF078552" : "FFD73A49" } };
   }
   const buffer = await workbook.xlsx.writeBuffer();
   return new NextResponse(buffer, { headers: {

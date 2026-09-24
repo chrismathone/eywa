@@ -67,8 +67,8 @@ function LedgerRow({ row, canWrite }: { row: UnifiedRow; canWrite: boolean }) {
       <td className="max-w-0 px-2 py-2 text-center" title={teacherNames}><span className="block truncate">{teacherNames || "—"}</span></td>
       <td className="px-2 py-2 text-center"><KindPill kind={row.kind} /></td>
       <td className="px-2 py-2 text-center text-sm">{examInfoOf(row) ?? <span className="text-text-dim">—</span>}</td>
-      <td className="px-2 py-2 text-center">
-        {editing ? <div className="flex items-center justify-center gap-1">
+      <td className="px-2 py-2 text-left">
+        {editing ? <div className="flex items-center gap-1">
           <input type="number" min="0" step="0.01" value={score} onChange={(e) => setScore(e.target.value)} placeholder="점수" aria-label={`${row.name} 점수`} className={`${INPUT} w-16`} />
           <span>/</span>
           <input type="number" min="1" max="1000" step="0.01" value={max} onChange={(e) => setMax(e.target.value)} aria-label={`${row.name} 만점`} className={`${INPUT} w-16`} />

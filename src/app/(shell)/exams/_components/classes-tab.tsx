@@ -28,7 +28,7 @@ export function ClassesTab({ classes, selected, rows, href }: {
         : <p className="text-text-dim py-8 text-center text-sm">반 기록이 없습니다.</p>}
     </Panel>
     <div className="min-w-0 space-y-4">
-      <Panel title={selected?.label ?? "반을 선택해 주세요"} sub={selected ? `${selected.count}건 · 평균 ${selected.average ?? "—"}점 · 학생 ${ranked.length}명` : undefined}
+      <Panel title={selected?.label ?? "반을 선택해 주세요"} sub={selected ? `${selected.count}건 · 평균 정답률 ${selected.average == null ? "—" : `${selected.average}%`} · 학생 ${ranked.length}명` : undefined}
         right={selected ? <Link href={`/classes/${selected.key}`} className="text-primary text-sm font-semibold hover:underline">반 상세 →</Link> : null}>
         <TrendChart points={selected?.points ?? []} />
       </Panel>
@@ -38,7 +38,7 @@ export function ClassesTab({ classes, selected, rows, href }: {
             <span className="num text-text-dim">{i + 1}</span>
             <span className="min-w-0 truncate"><b>{entry.row.name}</b> <small className="text-text-dim">{schoolGradeLabel(entry.row.school, entry.row.grade)} · {entry.count}건</small></span>
             <DeltaBadge row={entry.row} />
-            <b className="num text-right">{entry.average == null ? "—" : `${entry.average}점`}</b>
+            <b className="num text-right">{entry.average == null ? "—" : `${entry.average}%`}</b>
           </Link></li>)}</ol>
       </Panel> : null}
     </div>

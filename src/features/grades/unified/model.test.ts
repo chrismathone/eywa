@@ -32,12 +32,11 @@ describe("통합 성적 원장", () => {
     expect(rows.find((row) => row.kind === "school")?.delta).toBeNull();
   });
 
-  it("만점이 다르면 백분율 차이를 쓰고 반별 추이는 시험 당시 반으로 집계한다", () => {
+  it("만점이 다르면 증감을 비우고 반별 추이는 시험 당시 반으로 집계한다", () => {
     const earlier = { ...grade("2026-08-31", 8, 10), trendClasses: [{ id: "old", name: "이전 반", teacher: null, days: 1 }] };
     const later = { ...grade("2026-09-30", 15, 20), trendClasses: [{ id: "new", name: "현재 반", teacher: null, days: 2 }] };
     const rows = withPreviousScores([earlier, later]);
-    expect(rows[0]?.delta).toBe(-5);
-    expect(rows[0]?.deltaUnit).toBe("%p");
+    expect(rows[0]?.delta).toBeNull();
     expect(aggregateBy(rows, "class").map((item) => item.key).sort()).toEqual(["new", "old"]);
   });
 });
