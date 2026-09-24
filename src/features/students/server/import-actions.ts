@@ -1,5 +1,6 @@
 "use server";
 
+import { seatBlockReason } from "@/lib/license/server";
 import ExcelJS from "exceljs";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -141,6 +142,12 @@ export async function applyStudentImport(rows: ImportInsertRow[]): Promise<Stude
   const { user, error } = await requireStudentWrite();
   if (error || !user) return { error };
   if (!Array.isArray(rows) || rows.length === 0) return { error: "등록할 학생이 없습니다" };
+  {
+    // 재원생 좌석 한도 — 파일에서 재원으로 들어올 인원 전체를 한 번에 본다(중간에 끊기면 반쯤 들어간 채 남는다).
+    const adding = rows.filter((r) => normalizeStatus(r?.status) === "enrolled").length;
+    const seat = await seatBlockReason(user.tenantId, adding);
+    if (seat) return { error: seat };
+  }
   const schoolAliases = (await getTenantSettings()).operations.schoolSaveAliases;
 
   const supabase = await createClient();

@@ -1,4 +1,5 @@
 import "server-only";
+import { licenseBlockReason } from "@/lib/license/server";
 import { readSheetTabRows, updateSheetRow } from "@/features/integrations/google-sheets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { StaffResumeData } from "../resume";
@@ -53,6 +54,9 @@ export async function appendResumeToRoster(
     console.warn("[resume-roster-sheet] 이 지점의 명부 시트가 아님 — 기입 건너뜀(HR_ROSTER_TENANT_ID 확인)");
     return { ok: true, skipped: true };
   }
+  // 지점 라이선스(google_sheets) — 끈 지점은 명부 시트에 쓰지 않는다. 이력서 저장은 이미 끝났으니 경고로만 알린다.
+  const blocked = await licenseBlockReason(tenantId, "google_sheets");
+  if (blocked) return { ok: false, error: `직원명부 시트 기입을 건너뛰었습니다 — ${blocked}` };
   const tab = process.env.HR_ROSTER_SHEET_TAB?.trim() || DEFAULT_TAB;
   // 저장 액션이 동기 대기하므로 전체 상한 10s — 초과 시 "실패"가 아니라 "확인 필요"로 안내
   // (기입 자체는 그 뒤 성공했을 수 있다). 개별 요청 timeout(8s)은 updateSheetRow 쪽.

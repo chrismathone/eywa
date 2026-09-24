@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { withFactGuard } from "./fact-guard";
+import { LICENSE_BLOCKED_MESSAGE } from "@/lib/license/rule";
 import { getAnthropic } from "./anthropic";
 import { getUpstage } from "./upstage";
 import { getDeepseek } from "./deepseek";
@@ -389,6 +390,17 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
   //    호출부 프롬프트가 아니라 이 단일 관문에 두는 이유·삭제 금지 사유는 fact-guard.ts 주석 참조
   //    (요약: 프롬프트 본문은 원장이 화면에서 편집 가능 = 가드가 지워질 수 있는 자리다).
   const opts: GenerateJSONOptions = { ...rawOpts, prompt: withFactGuard(rawOpts.prompt) };
+  // 🔴 지점 라이선스(ai_analysis) — 슈퍼관리자가 끈 지점은 **어떤 AI 호출도** 나가지 않는다(원장 2026-09-25 배선).
+  //    이 단일 관문에 두는 이유는 사실 원칙과 같다: 호출부마다 두면 새 호출부가 빠진다. 판정은 행 없음 = 허용·조회 실패 = 허용
+  //    (`lib/license/rule.ts`)이라, 라이선스 카드가 생기기 전부터 쓰던 지점(침산)은 그대로 돈다.
+  //    ⚠️ `meta.tenantId`가 없는 호출은 지점을 모르므로 통과한다 — 새 호출부는 반드시 tenantId를 넘길 것(key-groups 표와 같이).
+  //    막히면 폴백 사다리를 타지 않고 바로 던진다(다른 회사로 넘긴다고 풀릴 문제가 아니다).
+  if (opts.meta?.tenantId) {
+    const { isFeatureLicensed } = await import("@/lib/license/server");
+    if (!(await isFeatureLicensed(opts.meta.tenantId, "ai_analysis"))) {
+      throw new Error(LICENSE_BLOCKED_MESSAGE.ai_analysis);
+    }
+  }
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
   // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).

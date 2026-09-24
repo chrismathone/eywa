@@ -68,10 +68,18 @@ export const ASSIGNABLE_ROLES: { value: SystemRole; label: string }[] = (
 
 // ── 라이선스 기능 ──────────────────────────────────────────────────────
 export const SEAT_FEATURES = [{ key: "student_seats", label: "재원생 좌석" }] as const;
+/**
+ * 켜기·끄기 기능 — **`defaultOn` = 라이선스 행이 없을 때의 실제 동작**이다. 카드의 스위치는 이 값을 보여야 한다
+ * (행이 없는데 '꺼짐'으로 그리면, 실제로는 도는 기능을 꺼진 것처럼 속인다).
+ * - 녹음·시트·AI = 기본 켜짐: 라이선스 카드가 생기기 전부터 쓰던 기능이라 행이 없으면 허용([`rule.ts`](src/lib/license/rule.ts)).
+ * - 카카오 알림 = 기본 꺼짐: 학부모에게 실제 메시지가 나가는 기능이라 **명시로 켠 지점만** 보낸다(`resolveKakaoChannel`).
+ * 🔴 여기 한 줄을 더하면 **그 키를 읽는 곳**(게이트)도 함께 만들 것 — 읽는 곳 없는 스위치는 거짓 약속이다(2026-09-25 전수 확인).
+ */
 export const TOGGLE_FEATURES = [
-  { key: "ai_analysis", label: "AI 분석" },
-  { key: "google_sheets", label: "구글 시트 연동" },
-  { key: "meeting_recording", label: "회의 녹음·전사" },
+  { key: "ai_analysis", label: "AI 분석", defaultOn: true },
+  { key: "google_sheets", label: "구글 시트 연동", defaultOn: true },
+  { key: "meeting_recording", label: "회의 녹음·전사", defaultOn: true },
+  { key: "kakao_messaging", label: "등하원 카카오 알림", defaultOn: false },
 ] as const;
 
 export function featureLabel(key: unknown): string {

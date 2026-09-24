@@ -352,7 +352,10 @@ export async function toggleTenantLicense(
   const { error } = await admin
     .from("tenant_licenses")
     .upsert(
-      { tenant_id: tenantId, feature, is_active: nextActive },
+      // 켤 때는 만료일도 지운다 — 만료된 행을 켜 봐야 게이트(`licenseAllows`)는 여전히 막아 스위치만 켜진 척한다.
+      nextActive
+        ? { tenant_id: tenantId, feature, is_active: true, expires_at: null }
+        : { tenant_id: tenantId, feature, is_active: false },
       { onConflict: "tenant_id,feature" },
     );
   if (error) return { error: error.message };

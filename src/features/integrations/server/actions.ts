@@ -1,5 +1,6 @@
 "use server";
 
+import { licenseBlockReason } from "@/lib/license/server";
 import { spawn } from "node:child_process";
 import { logAction } from "@/features/audit/server/log";
 import { existsSync, openSync, closeSync, statSync, writeFileSync } from "node:fs";
@@ -526,6 +527,11 @@ export async function syncSheetsNow(subject: string, compact1h?: number[]): Prom
   // 시간표**(전 강사·전 학생 명단)를 외부 공유 시트로 내보내므로 scoped(강사)·readonly는 제외. 버튼 숨김과 이중 방어.
   if (!(await canManageSheetSync(user.systemRole))) {
     return { error: SHEET_ACCESS_DENIED_MSG };
+  }
+  {
+    // 지점 라이선스(google_sheets) — 슈퍼관리자가 끈 지점은 시트를 읽고 쓰지 않는다(행 없음 = 허용).
+    const blocked = await licenseBlockReason(user.tenantId, "google_sheets");
+    if (blocked) return { error: blocked };
   }
   if (!isSheetExportSubject(subject)) {
     return { error: "지원하지 않는 과목입니다" };

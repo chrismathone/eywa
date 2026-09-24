@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
@@ -87,6 +88,12 @@ export async function GET(req: Request) {
     if (!subject || !spreadsheetId) continue; // 미지원 provider 키·빈 시트 ID는 대상 아님
     const tenantId = row.tenant_id;
     const key = `${tenantId}:${row.provider}`; // 멀티테넌트에서 결과가 서로 덮이지 않게(관측성)
+
+    // ⓪ 지점 라이선스(google_sheets) — 슈퍼관리자가 끈 지점은 자동 반영하지 않는다(행 없음 = 허용).
+    if (!(await isFeatureLicensed(tenantId, "google_sheets"))) {
+      results[key] = "skip: 지점 라이선스(구글 시트 연동) 꺼짐";
+      continue;
+    }
 
     // ② 첫 반영 가드 — 수동 반영 이력이 없는 시트는 자동으로 건드리지 않는다.
     if (!row.last_synced_at) {

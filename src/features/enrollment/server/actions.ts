@@ -1,5 +1,6 @@
 "use server";
 
+import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -909,6 +910,12 @@ export async function convertConsultationToStudent(
         withdrawnMatch: true,
       };
     }
+  }
+
+  // 재원생 좌석 한도 — 이 전환은 새 재원생을 만든다(상담 행의 지점 기준).
+  {
+    const seat = await seatBlockReason(c.tenant_id, 1);
+    if (seat) return { error: seat };
   }
 
   // students INSERT

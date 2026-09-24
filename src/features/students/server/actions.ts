@@ -1,5 +1,6 @@
 "use server";
 
+import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
 import { goalAxisReady } from "@/features/grades/server/goals";
@@ -145,6 +146,11 @@ export async function createStudent(
   const input = readForm(formData, (await getTenantSettings()).operations.schoolSaveAliases);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
+  if (input.status === "enrolled") {
+    // 재원생 좌석 한도(슈퍼관리자 라이선스) — 한도가 없는 지점은 조회 한 번으로 통과.
+    const seat = await seatBlockReason(user.tenantId, 1);
+    if (seat) return { error: seat };
+  }
 
   const supabase = await createClient();
 
@@ -280,6 +286,10 @@ export async function updateStudent(
     .eq("id", id)
     .single();
   const prevStatus = cur?.status as string | undefined;
+  if (input.status === "enrolled" && prevStatus !== "enrolled") {
+    const seat = await seatBlockReason(user.tenantId, 1, [id]);
+    if (seat) return { error: seat };
+  }
 
   let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
   if (input.status === "withdrawn" && prevStatus !== "withdrawn") {
@@ -474,6 +484,11 @@ export async function changeStudentStatus(
   if (!id) return { error: "학생 ID가 누락되었습니다" };
   if (!["withdrawn", "on_hold", "enrolled"].includes(target)) {
     return { error: "유효하지 않은 상태 전환입니다" };
+  }
+  if (target === "enrolled") {
+    // 복구(퇴원·휴원 → 재원)도 자리를 하나 차지한다 — 이미 재원이면 본인을 빼고 세서 0이 된다.
+    const seat = await seatBlockReason(user.tenantId, 1, [id]);
+    if (seat) return { error: seat };
   }
 
   const supabase = await createClient();

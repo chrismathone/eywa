@@ -6,7 +6,8 @@
  * 크레딧이 떨어졌는데 "실패했습니다"만 보이면 강사가 계속 다시 누른다(E11, 2026-09-23 감사).
  * 순수 함수(Vitest).
  */
-const KNOWN_AI_REASONS = /^AI (잔액 소진|키 오류|사용량 한도 초과):/;
+// "기능 꺼짐" = 지점 라이선스(ai_analysis)가 꺼진 지점(`lib/license/rule.ts`) — 다시 눌러도 안 풀린다는 것을 알려야 한다.
+const KNOWN_AI_REASONS = /^AI (잔액 소진|키 오류|사용량 한도 초과|기능 꺼짐):/;
 
 export function aiUserMessage(err: unknown, fallback: string): string {
   const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";

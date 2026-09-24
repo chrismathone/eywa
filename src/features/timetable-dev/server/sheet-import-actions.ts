@@ -1,5 +1,6 @@
 "use server";
 
+import { licenseBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -158,6 +159,11 @@ async function resolveSpreadsheetId(
 export async function listPlanImportTabs(source?: string): Promise<PlanSheetTabsResult> {
   const gate = await requireTimetablePlanAccess({ write: true });
   if (!gate.ok) return fail(gate.error);
+  {
+    // 지점 라이선스(google_sheets) — 끈 지점은 시트를 읽지 않는다(행 없음 = 허용).
+    const blocked = await licenseBlockReason(gate.access.tenantId, "google_sheets");
+    if (blocked) return fail(blocked);
+  }
 
   const target = await resolveSpreadsheetId(source);
   if ("ok" in target) return target;
@@ -332,6 +338,11 @@ export async function previewPlanSheetImport(args: {
 }): Promise<PlanSheetPreviewResult> {
   const gate = await requireTimetablePlanAccess({ write: true });
   if (!gate.ok) return fail(gate.error);
+  {
+    // 지점 라이선스(google_sheets) — 끈 지점은 시트를 읽지 않는다(행 없음 = 허용).
+    const blocked = await licenseBlockReason(gate.access.tenantId, "google_sheets");
+    if (blocked) return fail(blocked);
+  }
   if (!isPlanMonth(args.month)) return fail("달 형식이 올바르지 않습니다(예: 2026-09)");
 
   try {
@@ -373,6 +384,11 @@ export async function applyPlanSheetImport(args: {
 }): Promise<PlanSheetApplyResult> {
   const gate = await requireTimetablePlanAccess({ write: true });
   if (!gate.ok) return fail(gate.error);
+  {
+    // 지점 라이선스(google_sheets) — 끈 지점은 시트를 읽지 않는다(행 없음 = 허용).
+    const blocked = await licenseBlockReason(gate.access.tenantId, "google_sheets");
+    if (blocked) return fail(blocked);
+  }
   const { month } = args;
   if (!isPlanMonth(month)) return fail("달 형식이 올바르지 않습니다(예: 2026-09)");
   const mode: PlanImportMode = args.mode === "replace" ? "replace" : "merge";

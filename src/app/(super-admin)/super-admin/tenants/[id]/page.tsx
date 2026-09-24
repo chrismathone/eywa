@@ -112,6 +112,7 @@ export default async function TenantDetailPage({
           tenantId={detail.id}
           tenantName={detail.name}
           licenses={licenses}
+          enrolledCount={detail.studentCount}
         />
       </div>
 

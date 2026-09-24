@@ -1,5 +1,6 @@
 "use server";
 
+import { licenseBlockReason } from "@/lib/license/server";
 import ExcelJS from "exceljs";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
@@ -208,6 +209,11 @@ export async function previewSheetImport(subject: string = "math"): Promise<Prev
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageSheetSync(user.systemRole))) return { error: SHEET_ACCESS_DENIED_MSG };
+  {
+    // 지점 라이선스(google_sheets) — 슈퍼관리자가 끈 지점은 시트를 읽고 쓰지 않는다(행 없음 = 허용).
+    const blocked = await licenseBlockReason(user.tenantId, "google_sheets");
+    if (blocked) return { error: blocked };
+  }
   if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
 
   try {
@@ -295,6 +301,11 @@ export async function applySheetImport(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canManageSheetSync(user.systemRole))) return { error: SHEET_ACCESS_DENIED_MSG };
+  {
+    // 지점 라이선스(google_sheets) — 슈퍼관리자가 끈 지점은 시트를 읽고 쓰지 않는다(행 없음 = 허용).
+    const blocked = await licenseBlockReason(user.tenantId, "google_sheets");
+    if (blocked) return { error: blocked };
+  }
   if (!(await canWriteTenant(user.systemRole, "classes"))) return { error: "시간표 관리 권한이 없습니다" };
   if (!supportsTimetableImport(subject)) return { error: "이 과목은 학생 반이동 가져오기를 지원하지 않습니다" };
   const eff = normalizeEffectiveDate(effectiveDateRaw, kstToday());

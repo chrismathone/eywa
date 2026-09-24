@@ -1,5 +1,6 @@
 "use server";
 
+import { seatBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import {
   clearOnHoldForActiveEnrollments,
@@ -172,6 +173,10 @@ export async function reactivateStudent(
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   if (!studentId) return { error: "학생 ID가 누락되었습니다" };
+  {
+    const seat = await seatBlockReason(user.tenantId, 1, [studentId]);
+    if (seat) return { error: seat };
+  }
 
   const supabase = await createClient();
   // 되돌릴 대상 판정을 위해 퇴원일을 먼저 읽는다 — 퇴원이 닫은 수강(end_date=퇴원일)만 다시 연다.

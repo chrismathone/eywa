@@ -1,5 +1,6 @@
 "use server";
 
+import { licenseBlockReason } from "@/lib/license/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -231,6 +232,11 @@ export async function startMeetingFromAudio(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  {
+    // 지점 라이선스(meeting_recording) — 전사 제출 직전 게이트(업로드 티켓에서도 한 번 막는다).
+    const blocked = await licenseBlockReason(user.tenantId, "meeting_recording");
+    if (blocked) return { error: blocked };
+  }
 
   const title = String(formData.get("title") ?? "").trim();
   const heldAt = String(formData.get("heldAt") ?? "").trim();
@@ -479,6 +485,11 @@ export async function retryMeetingProcessing(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "meetings"))) return { error: "회의록 권한이 없습니다" };
+  {
+    // 지점 라이선스(meeting_recording) — 전사 제출 직전 게이트(업로드 티켓에서도 한 번 막는다).
+    const blocked = await licenseBlockReason(user.tenantId, "meeting_recording");
+    if (blocked) return { error: blocked };
+  }
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "회의록 ID가 누락되었습니다" };

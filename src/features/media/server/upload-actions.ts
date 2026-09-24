@@ -6,6 +6,7 @@ import { createUploadTicket, MEDIA_KIND } from "@/lib/storage/media-storage";
 import { isTenantAudioPath, type AudioKind } from "@/lib/storage/legacy-audio-path";
 import type { UploadTicket } from "@/lib/storage/types";
 import type { MenuKey } from "@/lib/permissions";
+import { licenseBlockReason } from "@/lib/license/server";
 
 // 신규 미디어 업로드 티켓 발급 — 서버가 (a) kind별 권한 (b) 경로 빌드/검증 (c) size·형식 max를 검증한 뒤
 // signed 업로드 URL을 내준다. ⚠️ 서버 액션은 UI 밖 직접 POST 가능 → 게이트 필수(CLAUDE.md #58).
@@ -33,6 +34,11 @@ export async function issueAudioUploadTicket(
   // (a) kind별 권한 게이트(write = full|scoped).
   const lvl = await accessLevelTenant(user.systemRole, AUDIO_MENU[kind]);
   if (lvl !== "full" && lvl !== "scoped") return { error: "업로드 권한이 없습니다" };
+  // 회의 녹음은 지점 라이선스(meeting_recording)를 본다 — 상담·등록상담 녹음은 이 라이선스 밖이다.
+  if (kind === "meeting") {
+    const blocked = await licenseBlockReason(user.tenantId, "meeting_recording");
+    if (blocked) return { error: blocked };
+  }
 
   // (c) 형식·크기 검증.
   const ext = String(formData.get("ext") ?? "webm").toLowerCase();
