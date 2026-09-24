@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstMonth } from "@/lib/date-kst";
+import { requireSuperAdmin } from "@/lib/auth/super-admin";
 
 export type TenantRow = {
   id: string;
@@ -12,7 +13,9 @@ export type TenantRow = {
   createdAt: string;
   userCount: number;
   studentCount: number;
+  classCount: number;
   monthBilling: number;
+  monthInvoiceCount: number;
 };
 
 export type SaaSStats = {
@@ -26,24 +29,35 @@ function currentPeriod() {
   return kstMonth();
 }
 
+function exactCount(count: number | null, source: string): number {
+  if (count === null) throw new Error(`${source}: exact count missing`);
+  return count;
+}
+
 // 전체 tenant 목록 + 카운트. multi-tenant read이므로 service_role 사용.
 export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
+  await requireSuperAdmin();
   const admin = createAdminClient();
   const period = currentPeriod();
 
   // users/students/invoices는 전 테넌트 전건을 가져와 JS로 집계 → PostgREST 1000행 한도에
   // silent 절단되면 카운트·청구가 과소된다. 페이지네이션으로 전건 확보(테넌트 증가 대비).
-  const [tenantsRes, users, students, invoices] = await Promise.all([
-    admin.from("tenants").select("id, slug, name, plan, created_at").order("created_at", { ascending: false }),
-    fetchAllPaged<{ tenant_id: string }>((from, to) =>
-      admin.from("users").select("tenant_id").range(from, to),
+  const [tenants, users, students, classes, invoices] = await Promise.all([
+    fetchAllPaged<{ id: string; slug: string; name: string; plan: string; created_at: string }>((from, to) =>
+      admin.from("tenants").select("id, slug, name, plan, created_at").order("created_at", { ascending: false }).order("id").range(from, to),
     ),
     fetchAllPaged<{ tenant_id: string }>((from, to) =>
-      admin.from("students").select("tenant_id").neq("status", "withdrawn").range(from, to),
+      admin.from("users").select("tenant_id").order("id").range(from, to),
+    ),
+    fetchAllPaged<{ tenant_id: string }>((from, to) =>
+      admin.from("students").select("tenant_id").eq("status", "enrolled").order("id").range(from, to),
+    ),
+    fetchAllPaged<{ tenant_id: string }>((from, to) =>
+      admin.from("classes").select("tenant_id").eq("is_active", true).order("id").range(from, to),
     ),
     // void(makeedu 삭제분)는 매출 집계에서 제외 — 이하 invoices 합계 쿼리 공통.
     fetchAllPaged<{ tenant_id: string; amount_total: number | string | null }>((from, to) =>
-      admin.from("invoices").select("tenant_id, amount_total").eq("period", period).neq("status", "void").range(from, to),
+      admin.from("invoices").select("tenant_id, amount_total").eq("period", period).neq("status", "void").order("id").range(from, to),
     ),
   ]);
 
@@ -57,13 +71,20 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
     studentCountByTenant.set(s.tenant_id, (studentCountByTenant.get(s.tenant_id) ?? 0) + 1);
   });
 
+  const classCountByTenant = new Map<string, number>();
+  classes.forEach((c) => {
+    classCountByTenant.set(c.tenant_id, (classCountByTenant.get(c.tenant_id) ?? 0) + 1);
+  });
+
   const billingByTenant = new Map<string, number>();
+  const invoiceCountByTenant = new Map<string, number>();
   invoices.forEach((i) => {
     const amt = Number(i.amount_total ?? 0);
     billingByTenant.set(i.tenant_id, (billingByTenant.get(i.tenant_id) ?? 0) + amt);
+    invoiceCountByTenant.set(i.tenant_id, (invoiceCountByTenant.get(i.tenant_id) ?? 0) + 1);
   });
 
-  return (tenantsRes.data ?? []).map((t) => ({
+  return tenants.map((t) => ({
     id: t.id,
     slug: t.slug,
     name: t.name,
@@ -71,7 +92,9 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
     createdAt: t.created_at,
     userCount: userCountByTenant.get(t.id) ?? 0,
     studentCount: studentCountByTenant.get(t.id) ?? 0,
+    classCount: classCountByTenant.get(t.id) ?? 0,
     monthBilling: billingByTenant.get(t.id) ?? 0,
+    monthInvoiceCount: invoiceCountByTenant.get(t.id) ?? 0,
   }));
 });
 
@@ -82,9 +105,10 @@ export type TenantPlanStats = { total: number; free: number; paid: number; thisM
  * 테넌트 모집단은 작지만 1000행 한도 대비 fetchAllPaged.
  */
 export async function getTenantPlanStats(): Promise<TenantPlanStats> {
+  await requireSuperAdmin();
   const admin = createAdminClient();
   const rows = await fetchAllPaged<{ plan: string; created_at: string }>((from, to) =>
-    admin.from("tenants").select("plan, created_at").range(from, to),
+    admin.from("tenants").select("plan, created_at").order("id").range(from, to),
   );
   const thisMonth = kstMonth();
   let free = 0;
@@ -105,6 +129,7 @@ export async function getTenantsPage(
   page = 1,
   pageSize = 50,
 ): Promise<{ rows: TenantRow[]; total: number }> {
+  await requireSuperAdmin();
   const admin = createAdminClient();
   const period = currentPeriod();
   const from = (page - 1) * pageSize;
@@ -113,27 +138,32 @@ export async function getTenantsPage(
     .from("tenants")
     .select("id, slug, name, plan, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
+    .order("id")
     .range(from, from + pageSize - 1);
   if (filter.plan && filter.plan !== "all") tq = tq.eq("plan", filter.plan);
   const term = filter.q?.trim();
   if (term) tq = tq.or(`name.ilike.%${term}%,slug.ilike.%${term}%`);
 
-  const { data, count } = await tq;
+  const { data, count, error } = await tq;
+  if (error) throw new Error(`getTenantsPage: ${error.message}`);
   const tenants = data ?? [];
   const ids = tenants.map((t) => t.id);
 
-  const [users, students, invoices] =
+  const [users, students, classes, invoices] =
     ids.length === 0
-      ? [[], [], []]
+      ? [[], [], [], []]
       : await Promise.all([
           fetchAllPaged<{ tenant_id: string }>((f, t) =>
-            admin.from("users").select("tenant_id").in("tenant_id", ids).range(f, t),
+            admin.from("users").select("tenant_id").in("tenant_id", ids).order("id").range(f, t),
           ),
           fetchAllPaged<{ tenant_id: string }>((f, t) =>
-            admin.from("students").select("tenant_id").neq("status", "withdrawn").in("tenant_id", ids).range(f, t),
+            admin.from("students").select("tenant_id").eq("status", "enrolled").in("tenant_id", ids).order("id").range(f, t),
+          ),
+          fetchAllPaged<{ tenant_id: string }>((f, t) =>
+            admin.from("classes").select("tenant_id").eq("is_active", true).in("tenant_id", ids).order("id").range(f, t),
           ),
           fetchAllPaged<{ tenant_id: string; amount_total: number | string | null }>((f, t) =>
-            admin.from("invoices").select("tenant_id, amount_total").eq("period", period).neq("status", "void").in("tenant_id", ids).range(f, t),
+            admin.from("invoices").select("tenant_id, amount_total").eq("period", period).neq("status", "void").in("tenant_id", ids).order("id").range(f, t),
           ),
         ]);
 
@@ -141,10 +171,14 @@ export async function getTenantsPage(
   users.forEach((u) => userCountByTenant.set(u.tenant_id, (userCountByTenant.get(u.tenant_id) ?? 0) + 1));
   const studentCountByTenant = new Map<string, number>();
   students.forEach((s) => studentCountByTenant.set(s.tenant_id, (studentCountByTenant.get(s.tenant_id) ?? 0) + 1));
+  const classCountByTenant = new Map<string, number>();
+  classes.forEach((c) => classCountByTenant.set(c.tenant_id, (classCountByTenant.get(c.tenant_id) ?? 0) + 1));
   const billingByTenant = new Map<string, number>();
-  invoices.forEach((i) =>
-    billingByTenant.set(i.tenant_id, (billingByTenant.get(i.tenant_id) ?? 0) + Number(i.amount_total ?? 0)),
-  );
+  const invoiceCountByTenant = new Map<string, number>();
+  invoices.forEach((i) => {
+    billingByTenant.set(i.tenant_id, (billingByTenant.get(i.tenant_id) ?? 0) + Number(i.amount_total ?? 0));
+    invoiceCountByTenant.set(i.tenant_id, (invoiceCountByTenant.get(i.tenant_id) ?? 0) + 1);
+  });
 
   const rows = tenants.map((t) => ({
     id: t.id,
@@ -154,10 +188,12 @@ export async function getTenantsPage(
     createdAt: t.created_at,
     userCount: userCountByTenant.get(t.id) ?? 0,
     studentCount: studentCountByTenant.get(t.id) ?? 0,
+    classCount: classCountByTenant.get(t.id) ?? 0,
     monthBilling: billingByTenant.get(t.id) ?? 0,
+    monthInvoiceCount: invoiceCountByTenant.get(t.id) ?? 0,
   }));
 
-  return { rows, total: count ?? rows.length };
+  return { rows, total: exactCount(count, "getTenantsPage") };
 }
 
 export type TenantDetail = {
@@ -174,28 +210,31 @@ export type TenantDetail = {
 };
 
 export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | null> => {
+  await requireSuperAdmin();
   const admin = createAdminClient();
   const period = currentPeriod();
 
-  const { data: tenant } = await admin
+  const { data: tenant, error: tenantError } = await admin
     .from("tenants")
     .select("id, slug, name, plan, created_at")
     .eq("id", id)
     .maybeSingle();
+  if (tenantError) throw new Error(`getTenantDetail: ${tenantError.message}`);
   if (!tenant) return null;
 
-  const [usersRes, studentsRes, classesRes, invoices] = await Promise.all([
-    admin
-      .from("users")
-      .select("id, email, display_name, system_role, status")
-      .eq("tenant_id", id)
-      .order("created_at", { ascending: true }),
-    admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
+  const [users, studentsRes, classesRes, invoices] = await Promise.all([
+    fetchAllPaged<{ id: string; email: string; display_name: string; system_role: string; status: string }>((from, to) =>
+      admin.from("users").select("id, email, display_name, system_role, status").eq("tenant_id", id)
+        .order("created_at", { ascending: true }).order("id").range(from, to),
+    ),
+    admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("status", "enrolled"),
     admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
     fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
-      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).neq("status", "void").range(from, to),
+      admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).neq("status", "void").order("id").range(from, to),
     ),
   ]);
+  if (studentsRes.error) throw new Error(`getTenantDetail: ${studentsRes.error.message}`);
+  if (classesRes.error) throw new Error(`getTenantDetail: ${classesRes.error.message}`);
 
   const monthBilling = invoices.reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
@@ -205,39 +244,44 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
     name: tenant.name,
     plan: tenant.plan,
     createdAt: tenant.created_at,
-    users: (usersRes.data ?? []).map((u) => ({
+    users: users.map((u) => ({
       id: u.id,
       email: u.email,
       displayName: u.display_name,
       systemRole: u.system_role,
       status: u.status,
     })),
-    studentCount: studentsRes.count ?? 0,
-    classCount: classesRes.count ?? 0,
+    studentCount: exactCount(studentsRes.count, "getTenantDetail students"),
+    classCount: exactCount(classesRes.count, "getTenantDetail classes"),
     monthBilling,
     monthInvoiceCount: invoices.length,
   };
 });
 
 export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
+  await requireSuperAdmin();
   const admin = createAdminClient();
   const period = currentPeriod();
 
   const [tenantsRes, usersRes, studentsRes, invoices] = await Promise.all([
     admin.from("tenants").select("id", { count: "exact", head: true }),
     admin.from("users").select("id", { count: "exact", head: true }).eq("status", "active"),
-    admin.from("students").select("id", { count: "exact", head: true }).neq("status", "withdrawn"),
+    admin.from("students").select("id", { count: "exact", head: true }).eq("status", "enrolled"),
     fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
-      admin.from("invoices").select("amount_total").eq("period", period).neq("status", "void").range(from, to),
+      admin.from("invoices").select("amount_total").eq("period", period).neq("status", "void").order("id").range(from, to),
     ),
   ]);
+
+  for (const result of [tenantsRes, usersRes, studentsRes]) {
+    if (result.error) throw new Error(`getSaaSStats: ${result.error.message}`);
+  }
 
   const monthBillingSum = invoices.reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
   return {
-    tenantCount: tenantsRes.count ?? 0,
-    userCount: usersRes.count ?? 0,
-    studentCount: studentsRes.count ?? 0,
+    tenantCount: exactCount(tenantsRes.count, "getSaaSStats tenants"),
+    userCount: exactCount(usersRes.count, "getSaaSStats users"),
+    studentCount: exactCount(studentsRes.count, "getSaaSStats students"),
     monthBillingSum,
   };
 });
@@ -260,11 +304,13 @@ export const TOGGLE_FEATURES = [
 ] as const;
 
 export const getTenantLicenses = cache(async (tenantId: string): Promise<TenantLicenseRow[]> => {
+  await requireSuperAdmin();
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("tenant_licenses")
     .select("id, feature, max_seats, used_seats, is_active, expires_at")
     .eq("tenant_id", tenantId);
+  if (error) throw new Error(`getTenantLicenses: ${error.message}`);
   return (data ?? []).map((r) => ({
     id: r.id,
     feature: r.feature,
@@ -287,29 +333,31 @@ export type TenantSnapshot = {
 
 // 지점장 보기(read-only 미러)용 — 그 학원의 현황을 service_role로 읽어 요약.
 export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapshot | null> => {
+  await requireSuperAdmin();
   const admin = createAdminClient();
   const period = currentPeriod();
 
-  const { data: tenant } = await admin
+  const { data: tenant, error: tenantError } = await admin
     .from("tenants")
     .select("id, name, slug, plan")
     .eq("id", id)
     .maybeSingle();
+  if (tenantError) throw new Error(`getTenantSnapshot: ${tenantError.message}`);
   if (!tenant) return null;
 
   const [studentsRes, teachersRes, classesRes, invoices, recentStudentsRes, recentMeetingsRes] =
     await Promise.all([
-      admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).neq("status", "withdrawn"),
+      admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("status", "enrolled"),
       admin.from("users").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("system_role", "teacher"),
       admin.from("classes").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("is_active", true),
       fetchAllPaged<{ amount_total: number | string | null }>((from, to) =>
-        admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).neq("status", "void").range(from, to),
+        admin.from("invoices").select("amount_total").eq("tenant_id", id).eq("period", period).neq("status", "void").order("id").range(from, to),
       ),
       admin
         .from("students")
         .select("id, name, grade, status")
         .eq("tenant_id", id)
-        .neq("status", "withdrawn")
+        .eq("status", "enrolled")
         .order("created_at", { ascending: false })
         .limit(8),
       admin
@@ -319,6 +367,9 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
         .order("held_at", { ascending: false })
         .limit(3),
     ]);
+  for (const result of [studentsRes, teachersRes, classesRes, recentStudentsRes, recentMeetingsRes]) {
+    if (result.error) throw new Error(`getTenantSnapshot: ${result.error.message}`);
+  }
 
   const monthBilling = invoices.reduce((sum, i) => sum + Number(i.amount_total ?? 0), 0);
 
@@ -328,9 +379,9 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
     slug: tenant.slug,
     plan: tenant.plan,
     kpi: {
-      students: studentsRes.count ?? 0,
-      teachers: teachersRes.count ?? 0,
-      activeClasses: classesRes.count ?? 0,
+      students: exactCount(studentsRes.count, "getTenantSnapshot students"),
+      teachers: exactCount(teachersRes.count, "getTenantSnapshot teachers"),
+      activeClasses: exactCount(classesRes.count, "getTenantSnapshot classes"),
       monthBilling,
     },
     recentStudents: (recentStudentsRes.data ?? []).map((s) => ({

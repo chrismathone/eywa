@@ -49,7 +49,7 @@ export default async function LoginPage({
           </div>
           <div className={styles.loginContent}>
             <h1>로그인</h1>
-            <p className={styles.loginIntro}>학원에서 발급받은 계정으로 접속해 주세요.<br />로그인하면 소속 학원의 업무 공간으로 연결됩니다.</p>
+            <p className={styles.loginIntro}>발급받은 계정으로 접속해 주세요.<br />로그인하면 계정 권한에 맞는 업무 공간으로 연결됩니다.</p>
             <LoginForm next={next} />
             <details className={styles.loginHelp}>
               <summary>계정이나 비밀번호 확인이 필요한가요?<EyIcon name="chevronDown" size={17} /></summary>

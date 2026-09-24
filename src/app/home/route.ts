@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { after, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getCurrentSuperAdmin } from "@/lib/auth/super-admin";
+import { isAdminAuthEmail } from "@/lib/auth/admin-login";
 import { getPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { safeLoginNext } from "@/lib/auth/login-next";
@@ -43,7 +45,14 @@ async function signedInJustNow(): Promise<boolean> {
  */
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // 지점 소속 없이 만든 SaaS 관리자 계정은 public.users 행이 없다.
+  // 기존 지점 사용자는 아래의 역할/과목 착지 경로를 그대로 쓴다.
+  if (!user) {
+    const sa = await getCurrentSuperAdmin();
+    if (!sa) redirect("/login");
+    redirect(isAdminAuthEmail(sa.email) ? "/admin" : "/super-admin");
+  }
+  if (isAdminAuthEmail(user.email) && (await getCurrentSuperAdmin())) redirect("/admin");
   const params = request.nextUrl.searchParams;
   // 🔴 `?login=1`만으로 기록하지 않는다(적대적 리뷰) — 새로고침·북마크·남이 보낸 링크마다 로그인 기록이 한 줄씩
   //    쌓여 감사 기록이 흐려진다. JWT의 `amr` 로그인 시각이 **방금(2분 이내)**일 때만 진짜 로그인으로 본다.

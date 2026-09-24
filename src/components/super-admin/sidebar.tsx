@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
+import { signOut } from "@/app/(auth)/login/actions";
+import { ADMIN_LOGIN_ID, isAdminAuthEmail } from "@/lib/auth/admin-login";
 
 type NavItem = { href: string; label: string; icon: AywaIconName };
 
 const NAV: NavItem[] = [
   { href: "/super-admin", label: "대시보드", icon: "layoutGrid" },
-  { href: "/super-admin/tenants", label: "학원 목록", icon: "building" },
+  { href: "/super-admin/tenants", label: "전 지점 운영", icon: "building" },
   { href: "/super-admin/audit", label: "감사 로그", icon: "history" },
 ];
 
@@ -20,6 +22,7 @@ export function SuperAdminSidebar({
   displayName: string;
 }) {
   const activeHref = usePathname() ?? "/super-admin";
+  const dedicatedAdmin = isAdminAuthEmail(email);
   return (
     // 폭 232→256px (2026-09-08 v5 글자 기준 실측): 푸터 이메일이 font-mono text-xs(14px)라 22자 계정이
     // 169~185px인데 예산(232−px-4 32−칩 28−gap 10)이 162px이라 꼬리가 잘렸다 → 예산 186px.
@@ -75,16 +78,19 @@ export function SuperAdminSidebar({
           </span>
           <div className="min-w-0">
             <p className="truncate text-xs font-bold">{displayName}</p>
-            <p className="truncate font-mono text-xs text-white/55">{email}</p>
+            <p className="truncate font-mono text-xs text-white/55">{dedicatedAdmin ? ADMIN_LOGIN_ID : email}</p>
           </div>
         </div>
-        <Link
-          href="/dashboard"
-          className="text-white/60 hover:text-gold mt-3 inline-flex items-center gap-1 font-mono text-xs tracking-wider uppercase"
-        >
-          <EyIcon name="arrowLeft" size={12} />
-          Academy로 돌아가기
-        </Link>
+        {dedicatedAdmin ? null : (
+          <Link href="/dashboard" className="text-white/60 hover:text-gold mt-3 inline-flex items-center gap-1 font-mono text-xs tracking-wider uppercase">
+            <EyIcon name="arrowLeft" size={12} /> Academy로 돌아가기
+          </Link>
+        )}
+        <form action={signOut}>
+          <button type="submit" className="text-white/60 hover:text-gold mt-3 inline-flex items-center gap-1 font-mono text-xs tracking-wider uppercase">
+            로그아웃
+          </button>
+        </form>
       </div>
     </aside>
   );

@@ -32,9 +32,22 @@ test.describe("new academy manager", () => {
   });
 
   test("manager cannot open superadmin and disabled modules", async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
     await page.goto("/super-admin/tenants");
     await expect(page).toHaveURL(/\/dashboard(?:\?|$)/);
-    await page.goto("/calendar");
-    await expect(page).toHaveURL(/\/unavailable(?:\?|$)/);
+    for (const route of [
+      "/ecs", "/mcs", "/attendance/seat", "/textbooks", "/shuttle", "/inventory",
+      "/kiosk-settings", "/newcomers", "/retention", "/approvals", "/class-review", "/calendar",
+      "/mcs/fc824c14-e4f9-4677-8dd9-af9ee08735e1/month", "/shuttle/today",
+      "/retention/board", "/approvals/new",
+    ]) {
+      await page.goto(route);
+      await expect(page, route).toHaveURL(new RegExp(`${route.replaceAll("/", "\\/")}(?:\\?|$)`));
+      await expect(page.locator("body"), route).toContainText("기능을 사용하지 않습니다");
+      await expect(page.locator("body"), route).not.toContainText("Application error");
+    }
+    expect(errors).toEqual([]);
   });
 });

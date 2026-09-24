@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAccess } from "@/lib/auth/require-access";
 import { EmbedLink } from "@/components/embed-link";
 import { PeriodNav } from "@/components/period-nav";
 import { shiftMonth, kstMonth } from "@/lib/date-kst";
@@ -15,6 +16,7 @@ const EMPTY_TEXT: Record<string, string> = {
 };
 
 export default async function McsLandingPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  await requireAccess("mcs");
   const { month } = await searchParams;
   const [res, previewProgressMap] = await Promise.all([getMathSheetLanding(month ?? null), canPreviewProgressMap()]);
   if (!res.ok) return <div className={styles.surface}><header className={styles.heading}><h2>수학 강사 시트</h2></header><p className={styles.empty}>{res.error}</p></div>;

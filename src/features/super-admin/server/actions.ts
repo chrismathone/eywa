@@ -7,6 +7,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
+import { SYSTEM_ROLES } from "@/lib/permissions";
+import { SEAT_FEATURES, TOGGLE_FEATURES } from "./queries";
 import { logSuperAdminAction } from "./audit";
 
 export type CreateTenantState =
@@ -189,6 +191,9 @@ export async function changeUserRole(
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const tenantName = String(formData.get("tenantName") ?? "").trim();
   if (!userId || !role || !tenantId) return { error: "필수 값 누락" };
+  if (!SYSTEM_ROLES.some((allowed) => allowed === role && allowed !== "student")) {
+    return { error: "지원하지 않는 역할입니다" };
+  }
 
   const admin = createAdminClient();
   // 🔴 계정 = 지점 1:1 — 폼이 보낸 tenantId를 그대로 app_metadata에 쓰면 `users.tenant_id`와 갈릴 수 있다(로그인은 B 지점 RLS,
@@ -204,7 +209,7 @@ export async function changeUserRole(
   });
   if (authErr) return { error: authErr.message };
   // public.users 즉시 반영 (트리거가 처리하지만 명시)
-  await admin.from("users").update({ system_role: role }).eq("id", userId);
+  await admin.from("users").update({ system_role: role }).eq("id", userId).eq("tenant_id", tenantId);
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -227,14 +232,18 @@ export async function resetUserPassword(
   const userId = String(formData.get("userId") ?? "").trim();
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const tenantName = String(formData.get("tenantName") ?? "").trim();
-  if (!userId) return { error: "userId 누락" };
+  if (!userId || !tenantId) return { error: "필수 값 누락" };
+
+  const admin = createAdminClient();
+  const { data: account, error: accountError } = await admin.from("users")
+    .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+  if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
 
   // 임시 비번 생성 (영숫자 12자)
   const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
     .map((b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31])
     .join("");
 
-  const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(userId, { password: tempPassword });
   if (error) return { error: error.message };
 
@@ -259,15 +268,18 @@ export async function setUserActive(
   const active = String(formData.get("active") ?? "") === "true";
   const tenantId = String(formData.get("tenantId") ?? "").trim();
   const tenantName = String(formData.get("tenantName") ?? "").trim();
-  if (!userId) return { error: "userId 누락" };
+  if (!userId || !tenantId) return { error: "필수 값 누락" };
 
   const admin = createAdminClient();
+  const { data: account, error: accountError } = await admin.from("users")
+    .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
+  if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
   // 비활성: 100년 ban / 활성: ban 해제(0)
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     ban_duration: active ? "none" : "876000h",
   });
   if (authErr) return { error: authErr.message };
-  await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId);
+  await admin.from("users").update({ status: active ? "active" : "inactive" }).eq("id", userId).eq("tenant_id", tenantId);
 
   await logSuperAdminAction({
     actorId: sa.id,
@@ -294,8 +306,9 @@ export async function upsertTenantLicense(
   const maxSeatsRaw = String(formData.get("maxSeats") ?? "").trim();
   const tenantName = String(formData.get("tenantName") ?? "").trim();
   if (!tenantId || !feature) return { error: "필수 값 누락" };
+  if (!SEAT_FEATURES.some((item) => item.key === feature)) return { error: "지원하지 않는 좌석 기능입니다" };
   const maxSeats = maxSeatsRaw === "" ? null : Number(maxSeatsRaw);
-  if (maxSeats !== null && (!Number.isFinite(maxSeats) || maxSeats < 0)) {
+  if (maxSeats !== null && (!Number.isSafeInteger(maxSeats) || maxSeats < 0)) {
     return { error: "좌석 수가 올바르지 않습니다" };
   }
 
@@ -331,6 +344,7 @@ export async function toggleTenantLicense(
   const nextActive = String(formData.get("nextActive") ?? "") === "true";
   const tenantName = String(formData.get("tenantName") ?? "").trim();
   if (!tenantId || !feature) return { error: "필수 값 누락" };
+  if (!TOGGLE_FEATURES.some((item) => item.key === feature)) return { error: "지원하지 않는 기능입니다" };
 
   const admin = createAdminClient();
   const { error } = await admin
