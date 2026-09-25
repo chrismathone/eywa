@@ -31,6 +31,7 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { TeacherViewToggle } from "@/components/view-mode-toggle";
 import { OtherTeacherViewPicker } from "@/components/other-teacher-view";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowMode } from "@/components/workspace/use-window-mode";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarWidth } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
@@ -157,7 +158,10 @@ export function AppSidebar({
   // 이름이 비면(이론상 거의 없음) 이메일 앞부분으로 폴백해 빈 줄을 방지.
   const name = displayName?.trim() || email.split("@")[0];
   const pathname = usePathname();
+  // 🔴 두 값이 다르다 — `isDesktop`은 **모양**(사이드바에 벨을 달까 · 단축키 안내), `windows`는 **동작**(메뉴를 창으로 여나).
+  //    지점 설정으로 창 모드를 끈 PC는 isDesktop=true · windows=false다(사이드바는 그대로, 메뉴는 본문 이동).
   const isDesktop = useIsDesktop();
+  const windows = useWindowMode();
   const showDesktop = useShowDesktop();
   // 폭은 고정이다(원장 2026-09-07) — 접기/펴기만.
   const { expanded, width } = useSidebarWidth();
@@ -199,7 +203,7 @@ export function AppSidebar({
       .join("|"),
   );
   const openIds = new Set(openKey ? openKey.split("|") : []);
-  const hasFocus = isDesktop && !!focusedId && openIds.has(focusedId);
+  const hasFocus = windows && !!focusedId && openIds.has(focusedId);
   // 포커스된 창이 **지금 보여 주는 주소**(창 안 이동을 따라가는 nav 스택 맨 위, 아직 보고가 없으면 창의 첫 주소) —
   // '지금 보는 곳' 표시의 단일 입력. 🔴 창 id로 비교하지 않는다(2026-09-11 전수검사): 알림·링크로 연 상세 창
   // (`route:students/abc`)은 메뉴 id가 아니라 켜지는 줄이 없었고, 창 안에서 다른 화면으로 옮겨 가도 옛 줄이 켜져 있었다.
@@ -253,7 +257,7 @@ export function AppSidebar({
             href="/dashboard"
             aria-label="대시보드로"
             onClick={(e) => {
-              if (!isDesktop || e.metaKey || e.ctrlKey || e.altKey) return;
+              if (!windows || e.metaKey || e.ctrlKey || e.altKey) return;
               e.preventDefault();
               // 🔴 배경에 깔린 업무군 판을 **먼저 걷는다** — 안 걷으면 '메뉴로'를 눌러도 그 판이 그대로 덮고 있어
               //    아무 일도 안 일어난 것처럼 보인다(허브가 배경 층으로 남을 수 있게 된 뒤의 함정).
@@ -346,7 +350,7 @@ export function AppSidebar({
                   <MenuRail
                     key={d.href}
                     item={item}
-                    isDesktop={isDesktop}
+                    isDesktop={windows}
                     expanded={expanded}
                     motion={motion}
                     onShowDesktop={showDesktop}
@@ -367,7 +371,7 @@ export function AppSidebar({
               <GroupRail
                 key={g.id}
                 group={g}
-                isDesktop={isDesktop}
+                isDesktop={windows}
                 expanded={expanded}
                 motion={motion}
                 onShowDesktop={showDesktop}
@@ -388,7 +392,7 @@ export function AppSidebar({
                 <GroupRail
                   key={g.id}
                   group={g}
-                  isDesktop={isDesktop}
+                  isDesktop={windows}
                   expanded={expanded}
                   motion={motion}
                   onShowDesktop={showDesktop}
@@ -415,12 +419,14 @@ export function AppSidebar({
                 </kbd>{" "}
                 검색(메뉴·학생·수업 점프)
               </span>
-              <span className="block">
-                <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-xs">
-                  Shift
-                </kbd>
-                +클릭 = 같은 화면을 새 창으로 하나 더
-              </span>
+              {windows ? (
+                <span className="block">
+                  <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-xs">
+                    Shift
+                  </kbd>
+                  +클릭 = 같은 화면을 새 창으로 하나 더
+                </span>
+              ) : null}
             </p>
           ) : null}
           </nav>
@@ -684,8 +690,10 @@ function GroupRail({
   // 🔴 허브가 떠 있는 동안엔 창 쪽 표시를 끈다 — 허브가 캔버스를 불투명하게 덮어 그 창은 안 보인다
   //    (켜 두면 두 업무군이 동시에 칠해졌다, 2026-09-11 전수검사). 판정은 `hubGroupOfPath` 한 곳.
   const hubOpen = hubOpenId === group.id;
-  const focusedHere =
-    hasFocus && hubOpenId === null && !!focusedPath && hubGroupOfPath(focusedPath)?.id === group.id;
+  // 창 모드가 꺼진 지점(`isDesktop`=창 모드)은 포커스 창이 없다 — 본문 주소가 곧 "지금 보는 곳"이다(폰과 같은 판정).
+  const focusedHere = isDesktop
+    ? hasFocus && hubOpenId === null && !!focusedPath && hubGroupOfPath(focusedPath)?.id === group.id
+    : hubOpenId === null && hubGroupOfPath(pathname)?.id === group.id;
   const active = hubOpen || focusedHere;
   // 🔴 **열려 있는 창을 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
   //    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.

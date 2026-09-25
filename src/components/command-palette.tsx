@@ -8,7 +8,7 @@ import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDest } from "@/lib/menu-hub";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import type { MenuLayout } from "@/features/owner/menu-layout";
-import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowMode } from "@/components/workspace/use-window-mode";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { useMenuHub } from "@/components/workspace/menu-hub-store";
 import { useOpenMenu } from "@/components/workspace/menu-hub-grid";
@@ -84,7 +84,7 @@ export function CommandPalette({
   isGenericTenant?: boolean;
 }) {
   const router = useRouter();
-  const isDesktop = useIsDesktop();
+  const isDesktop = useWindowMode(); // 창 모드가 아니면 결과를 본문으로 연다
   const openWindow = useWindowStore((s) => s.open);
   const openMenu = useOpenMenu();
   const [open, setOpen] = useState(false);

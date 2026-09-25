@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { headers } from "next/headers";
 import { Suspense, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -328,6 +329,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // (총괄은 역할이 아니라 별도 표라 users.system_role이 'admin'인 사람이 실제로 있다).
   // 요청 캐시라 master가 아닐 때만 PK 조회 1회.
   const isSuperAdmin = await isCurrentUserSuperAdmin();
+  // 창 모드(플로팅 창 = 메뉴마다 iframe) — **지점 설정**(원장 2026-09-25 *"iframe 모드를 켜고 끌수 잇게 … 모드를 켜면
+  // 일반적인 웹앱처럼 단일창으로"* · *"지점별 세팅"* · *"admin에서 토글가능하게"*). 슈퍼관리자 학원 상세 라이선스 카드의
+  // `window_mode`를 읽는다 — 행이 없으면 켜짐(지금까지와 같다). 끄면 아래 WorkspaceEnabledProvider가 false라 캔버스가
+  // 안 뜨고, 메뉴·링크가 전부 본문 이동이 된다(폰과 같은 길 · 사이드바는 그대로). 강사·학생 미니셸은 원래 창이 없다.
+  // 서버에서 읽어 첫 페인트부터 정해진다(깜빡임 없음). 요청 캐시 · 창(iframe) 안은 위 embed 분기라 여기 안 온다.
+  const windowMode = await isFeatureLicensed(user.tenantId, "window_mode");
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
   const frequentKeys = topVisitedMenus(
@@ -343,6 +350,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     // (2026-07-22 전수검사 — 학생 요약 peek 창, 진입=커맨드 팰릿 학생 검색).
     // 라우트 창(iframe)은 자식 문서가 위 embed 분기에서 다시 받으므로 무관했다.
     <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+    <WorkspaceEnabledProvider enabled={windowMode}>
     {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible lg:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
@@ -415,6 +423,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />
     </div>
+    </WorkspaceEnabledProvider>
     </OperationsProvider>
   );
 }

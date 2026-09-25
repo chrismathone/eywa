@@ -8,7 +8,7 @@ import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import type { HubDest } from "@/lib/menu-hub";
 import { navItemByKey, navPresentation } from "@/lib/navigation";
-import { useIsDesktop } from "./use-is-desktop";
+import { useWindowMode } from "./use-window-mode";
 import { useMenuHub } from "./menu-hub-store";
 import { useShowDesktop } from "./use-show-desktop";
 import { useWindowStore } from "./window-store";
@@ -27,7 +27,7 @@ import { windowIdForHref } from "./window-link";
  */
 export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
   const router = useRouter();
-  const isDesktop = useIsDesktop();
+  const isDesktop = useWindowMode(); // 창 모드가 아니면 그냥 이동(아래 router.push)
   const showDesktop = useShowDesktop();
   const closeHub = useMenuHub((s) => s.close);
 

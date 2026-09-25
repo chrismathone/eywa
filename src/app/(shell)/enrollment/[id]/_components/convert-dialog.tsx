@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { BookOpen, Loader2, UserPlus, X } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
-import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useWindowMode } from "@/components/workspace/use-window-mode";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { windowIdForHref } from "@/components/workspace/window-link";
 import { addDays, formatKoreanDate, kstToday } from "@/lib/date-kst";
@@ -77,7 +77,7 @@ export function ConvertToStudentDialog({
   canRequestTextbook: boolean;
 }) {
   const router = useRouter();
-  const isDesktop = useIsDesktop();
+  const isDesktop = useWindowMode();
   const subjects = useSubjectMaps();
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState<ConvertToStudentState, FormData>(

@@ -12,7 +12,7 @@
  */
 
 /** 켜고 끄는 기능 — 슈퍼관리자 라이선스 카드(`TOGGLE_FEATURES`)와 같은 키. */
-export type LicensedFeature = "ai_analysis" | "google_sheets" | "meeting_recording";
+export type LicensedFeature = "ai_analysis" | "google_sheets" | "meeting_recording" | "window_mode";
 
 export type LicenseRow = { is_active: boolean; expires_at: string | null } | null;
 
@@ -29,6 +29,8 @@ export const LICENSE_BLOCKED_MESSAGE: Record<LicensedFeature, string> = {
   google_sheets: "이 지점은 구글 시트 연동이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",
   // "AI 기능 꺼짐:" 머리는 `aiUserMessage`가 알아보고 화면까지 그대로 통과시키는 표식이다(일반 실패 문구로 덮이면
   // 강사가 계속 다시 누른다) — 머리를 바꾸면 user-message.ts의 정규식도 함께.
+  // 창 모드는 막는 기능이 아니라 화면 방식이라 이 문구가 화면에 뜰 일은 없다(셸이 조용히 단일창으로 연다).
+  window_mode: "이 지점은 창 모드가 꺼져 있습니다",
   ai_analysis: "AI 기능 꺼짐: 이 지점은 AI 분석 기능이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",
 };
 

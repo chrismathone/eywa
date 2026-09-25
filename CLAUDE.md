@@ -408,6 +408,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - master 시스템역할 표시 라벨 = "원장"
 
 ### 셸·창·강사뷰·로그인 세션 → [`docs/decisions/shell.md`](docs/decisions/shell.md)
+- 창 모드(플로팅 창) = 지점별 켜고 끄기 · 슈퍼관리자 학원 상세 · 기본 켜짐 · 창을 여는 판정은 `useWindowMode()`
 - 창 이동 규칙 — 메뉴·창 전수검사 나머지 7종
 - 강사뷰 화면 언어(한국어/English) = `users.teacher_view_lang` + 개인 선택 · 스위치는 '내 메뉴' 하나
 - 강사 = 원스크린 전용 미니셸

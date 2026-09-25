@@ -80,6 +80,9 @@ export const TOGGLE_FEATURES = [
   { key: "google_sheets", label: "구글 시트 연동", defaultOn: true },
   { key: "meeting_recording", label: "회의 녹음·전사", defaultOn: true },
   { key: "kakao_messaging", label: "등하원 카카오 알림", defaultOn: false },
+  // 화면 방식 — 켜짐 = PC 관리자뷰에서 메뉴마다 플로팅 창(iframe) · 꺼짐 = 일반 웹앱처럼 본문 하나(원장 2026-09-25).
+  // 강사·학생 화면과 폰은 원래 창이 없어 이 스위치와 무관하다. 읽는 곳 = (shell)/layout.tsx.
+  { key: "window_mode", label: "창 모드(메뉴를 플로팅 창으로)", defaultOn: true },
 ] as const;
 
 export function featureLabel(key: unknown): string {

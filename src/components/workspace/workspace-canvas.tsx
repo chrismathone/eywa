@@ -6,7 +6,7 @@ import { subscribeWindowBusy } from "@/lib/realtime/window-busy";
 import { useWindowStore } from "./window-store";
 import { usePrefs } from "./use-prefs";
 import { railWidth } from "./use-sidebar-resize";
-import { useIsDesktop } from "./use-is-desktop";
+import { useWindowMode } from "./use-window-mode";
 import { FloatingWindow } from "./floating-window";
 import { iframeRegistry } from "./route-window";
 import { noteDirtyOwner } from "./window-signals-core";
@@ -33,7 +33,8 @@ const HEADER = 0;
  * owner=`tenantId:userId` — 복원 레이아웃이 다른 계정 것이면 store가 초기화(메타 누수 방지).
  */
 export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: string; homeHref?: string }) {
-  const isDesktop = useIsDesktop();
+  // 창 모드가 꺼진 지점(또는 미니셸)에선 캔버스가 없다 — 본문(<main>)이 모바일처럼 유일한 화면이 된다.
+  const isDesktop = useWindowMode();
   const pathname = usePathname();
   // 대시보드가 작업 배경이다. /menu는 접근 제한 계정의 안내 화면만 남긴다.
   const isDesktopSurface = pathname === "/dashboard" || pathname === "/menu";
