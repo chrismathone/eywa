@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import { serializeForm } from "@/lib/realtime/form-snapshot";
+import { windowDirtyMessage } from "./window-bridge";
 
 /**
  * 미저장 변경 가드 — 이 폼에 작성 중(dirty) 변경이 있으면, 폼이 든 플로팅 창의 닫기(X)·Esc가
@@ -31,7 +32,7 @@ export function useUnsavedGuard({
   const send = useCallback((dirty: boolean) => {
     if (typeof window === "undefined" || window.parent === window) return; // 창(iframe) 안에서만
     try {
-      window.parent.postMessage({ type: "eywa-window-dirty", dirty }, window.location.origin);
+      window.parent.postMessage(windowDirtyMessage(dirty), window.location.origin);
     } catch {
       /* cross-origin 등 — 무시 */
     }

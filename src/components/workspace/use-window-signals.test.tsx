@@ -5,7 +5,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push:
 
 import { publishMutation } from "@/lib/realtime/mutation-signal";
 import { RouteWindow } from "./route-window";
-import { hasPainted, isWindowHidden, mayTakeFocus, SLOW_LOAD_MS, STALE_AFTER_MS } from "./window-signals-core";
+import { hasPainted, isWindowHidden, mayTakeFocus, noteDirtyOwner, SLOW_LOAD_MS, STALE_AFTER_MS } from "./window-signals-core";
 import { WINDOW_REFRESH_MESSAGE } from "./window-bridge";
 import { useWindowStore, windowId, type Win } from "./window-store";
 
@@ -318,16 +318,51 @@ describe("mayTakeFocus — 키보드 초점을 옮겨도 되나", () => {
   });
 });
 
-describe("미저장 표식 — 새 문서당 한 번만 내린다", () => {
+describe("미저장 표식 — 떠난 문서의 것만 내린다", () => {
+  /** workspace-canvas가 'eywa-window-dirty'를 받을 때 하는 일 — 표식 + 그때 붙어 있던 문서를 주인으로. */
+  const raiseDirty = (doc: Document) => {
+    useWindowStore.getState().setWindowDirty(ID, true);
+    noteDirtyOwner(ID, doc);
+  };
+
   it("🔴 첫 페인트 뒤 입력으로 올라온 표식을 load가 지우지 않는다(닫기가 확인 없이 닫히던 것)", () => {
     const { container } = renderWindow();
     const f = mountFrame(container);
     f.paint();
-    act(() => vi.advanceTimersByTime(50)); // 첫 페인트 — 옛 표식 정리
-    act(() => useWindowStore.getState().setWindowDirty(ID, true)); // load 전에 입력 시작
+    act(() => vi.advanceTimersByTime(50)); // 첫 페인트
+    act(() => raiseDirty(f.doc)); // load 전에 입력 시작
     act(() => {
       fireEvent.load(f.iframe);
     });
     expect(useWindowStore.getState().dirty[ID]).toBe(true);
+  });
+
+  it("🔴 덮개 없는 창 안 하드 이동 — 새 문서가 load 전에 올린 표식도 load가 지우지 않는다(남은 빈틈)", () => {
+    const { container } = renderWindow();
+    const f = mountFrame(container);
+    f.paint();
+    act(() => vi.advanceTimersByTime(50));
+    act(() => {
+      fireEvent.load(f.iframe); // 첫 문서 로드 완료 — 덮개 없음
+    });
+    f.paint(); // 창 안에서 하드 이동(덮개가 안 올라옴) — 새 문서가 보인다
+    act(() => raiseDirty(f.doc)); // 새 문서에서 load 전에 입력
+    act(() => {
+      fireEvent.load(f.iframe);
+    });
+    expect(useWindowStore.getState().dirty[ID]).toBe(true);
+  });
+
+  it("떠난 문서가 남긴 표식은 새 문서가 뜨면 내린다(하드 이동은 언마운트 정리를 못 돌린다)", () => {
+    const { container } = renderWindow();
+    const f = mountFrame(container);
+    f.paint();
+    act(() => vi.advanceTimersByTime(50));
+    act(() => raiseDirty(f.doc)); // 옛 문서에서 입력
+    f.paint(); // 하드 이동 — 옛 문서는 정리 없이 떠났다
+    act(() => {
+      fireEvent.load(f.iframe);
+    });
+    expect(useWindowStore.getState().dirty[ID]).toBeUndefined();
   });
 });

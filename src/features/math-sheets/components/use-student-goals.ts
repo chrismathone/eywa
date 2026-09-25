@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { upsertStudentGoal } from "../server/actions";
 import type { StudentGoal, StudentGoalMap } from "../lib/student-goals";
+import { windowDirtyMessage } from "@/components/workspace/window-bridge";
 
 /**
  * 학생별 월간 목표 편집 — 낙관 상태 + 디바운스 저장. ECS `useMonthGoals`와 같은 결이되 키가 학생이다.
@@ -48,7 +49,7 @@ export function useStudentGoals({
     dirtyRef.current = dirty;
     if (typeof window === "undefined" || window.parent === window) return; // 창(iframe) 안에서만
     try {
-      window.parent.postMessage({ type: "eywa-window-dirty", dirty }, window.location.origin);
+      window.parent.postMessage(windowDirtyMessage(dirty), window.location.origin);
     } catch {
       /* cross-origin 등 — 무시 */
     }
@@ -124,7 +125,7 @@ export function useStudentGoals({
         dirtyRef.current = false;
         if (typeof window !== "undefined" && window.parent !== window) {
           try {
-            window.parent.postMessage({ type: "eywa-window-dirty", dirty: false }, window.location.origin);
+            window.parent.postMessage(windowDirtyMessage(false), window.location.origin);
           } catch {
             /* 무시 */
           }

@@ -248,7 +248,7 @@ export function RouteWindow({ win }: { win: Win }) {
       // 가드의 send(false))을 못 돌린다 → 부모에 stale dirty=true가 남아 리로드된 pristine 폼을 거짓 잠금.
       // 새 문서는 항상 clean에서 시작하므로 로드 시 dirty 해제(편집하면 새 폼의 가드가 다시 dirty를 올림).
       // (소프트 client nav[드릴인/백]은 load가 안 떠 이 경로를 안 타고, 폼 언마운트 cleanup이 이미 처리.)
-      // 🔴 **문서당 한 번** — 첫 페인트에 덮개를 걷은 뒤(use-window-signals)엔 load 전에 입력이 시작될 수 있다(그 표식은 지우면 다시 안 온다).
+      // 🔴 **떠난 문서의 표식만** — 지금 문서가 load 전에 올린 표식(첫 페인트·덮개 없는 이동 뒤 입력)은 남긴다(window-signals-core).
       clearDirtyForNewDocument(win.id, el.contentDocument);
       // 메뉴가 첫 화면을 바꾼 뒤의 첫 로드면 스택을 새로 시작한다(실제로 보고한 뒤에만 표식을 내린다 —
       // 아직 about:blank인 로드가 표식을 먹어 버리면 진짜 새 문서가 옛 스택 위에 쌓인다).

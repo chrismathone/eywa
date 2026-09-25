@@ -9,6 +9,8 @@ import { railWidth } from "./use-sidebar-resize";
 import { useIsDesktop } from "./use-is-desktop";
 import { FloatingWindow } from "./floating-window";
 import { iframeRegistry } from "./route-window";
+import { noteDirtyOwner } from "./window-signals-core";
+import { isFromCurrentDocument, WINDOW_DIRTY_MESSAGE } from "./window-bridge";
 import { WindowSwitcher } from "./window-switcher";
 import { SnapAssist } from "./snap-assist";
 import { SnapLayoutsBar } from "./snap-layouts-bar";
@@ -147,6 +149,8 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         href?: string;
         autoClose?: boolean;
         dirty?: boolean;
+        /** 미저장 메시지를 보낸 문서의 표지(performance.timeOrigin). */
+        doc?: number;
         /** 창 안 Shift+클릭(WindowLink) — 같은 화면을 새 창으로 한 벌 더. */
         newInstance?: boolean;
       } | null;
@@ -164,9 +168,19 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
         if (st.focusedId !== sourceWinId) st.focus(sourceWinId);
         return;
       }
-      if (data.type === "eywa-window-dirty") {
+      if (data.type === WINDOW_DIRTY_MESSAGE) {
+        // 떠난 문서가 늦게 보낸 메시지는 버린다(window-bridge `windowDirtyMessage`) — 새 문서를 거짓 주인으로 적지 않게.
+        if (!isFromCurrentDocument(iframeRegistry.get(sourceWinId)?.contentWindow, data.doc)) return;
         // 창 본문 폼의 미저장 변경 여부(useUnsavedGuard) → 그 창 id로 저장. FloatingWindow가 X/Esc 확인에 사용.
         st.setWindowDirty(sourceWinId, data.dirty === true);
+        // 표식의 주인 = 지금 그 창에 붙은 문서 — 새 문서가 뜰 때 "떠난 문서의 표식"만 내리게(window-signals-core).
+        let ownerDoc: Document | null = null;
+        try {
+          ownerDoc = data.dirty === true ? (iframeRegistry.get(sourceWinId)?.contentDocument ?? null) : null;
+        } catch {
+          /* 접근 불가 — 주인 모름(종전 동작) */
+        }
+        noteDirtyOwner(sourceWinId, ownerDoc);
         return;
       }
       if (data.type === "eywa-window-maximize") {

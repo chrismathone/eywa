@@ -46,17 +46,30 @@ export function hasPainted(doc: Document | null, shown: Document | null): boolea
   return !!doc.querySelector("main.embed-main");
 }
 
-const cleared = new WeakSet<Document>();
+/** 창별 "미저장 표식을 올린 문서" — 표식은 문서의 것이다. 약한 참조라 닫힌 창의 옛 문서를 붙들지 않는다. */
+const dirtyOwner = new Map<string, WeakRef<Document>>();
 
 /**
- * 새 문서가 떴으니 그 창의 미저장 표식을 **문서당 한 번** 내린다 — 옛 문서는 언마운트 정리를 못 돌려 표식이 남는다.
- * 🔴 `load`마다 무조건 내리면 안 된다: 첫 페인트에 덮개를 걷으면 `load`(이미지·폰트까지 기다림) 전에 이미 입력이
- *    시작될 수 있고, 미저장 가드는 **바뀔 때만** 알리므로 그 표식을 지우면 다시 안 온다(✕가 확인 없이 닫혔다 — 리뷰 2026-09-25).
- *    첫 페인트는 하이드레이션보다 앞이라 그때 내리는 건 안전하다.
+ * 창 문서가 미저장 표식을 올렸다/내렸다 — 그때 창에 붙어 있던 문서를 주인으로 적는다(workspace-canvas가 메시지를 받을 때).
+ * 내리면 주인도 지운다.
+ */
+export function noteDirtyOwner(winId: string, doc: Document | null): void {
+  if (doc) dirtyOwner.set(winId, new WeakRef(doc));
+  else dirtyOwner.delete(winId);
+}
+
+/**
+ * 새 문서가 떴다(첫 페인트·load) — 그 창의 미저장 표식이 **다른(떠난) 문서의 것**이면 내린다. 옛 문서는 하드 이동에서
+ * 언마운트 정리를 못 돌려 표식이 남는다.
+ * 🔴 **지금 문서가 올린 표식은 절대 안 내린다** — 덮개를 첫 페인트에 걷거나 덮개 없이 창 안에서 하드 이동하면
+ *    `load`(이미지·폰트까지 기다림) 전에 입력이 시작된다. 미저장 가드는 **바뀔 때만** 알리므로 지우면 다시 안 온다
+ *    (✕가 확인 없이 닫혔다 — 리뷰 2026-09-25). 예전 "문서당 한 번" 규칙은 덮개 없는 이동을 못 막았다(원장 2026-09-25 "남은 빈틈").
+ * 주인을 모르는 표식(주인을 적지 못함 — 접근 불가 등)은 떠난 문서의 것으로 보고 내린다(종전 동작).
  */
 export function clearDirtyForNewDocument(winId: string, doc: Document | null): void {
-  if (!doc || cleared.has(doc)) return;
-  cleared.add(doc);
+  const owner = dirtyOwner.get(winId)?.deref();
+  if (doc && owner === doc) return;
+  dirtyOwner.delete(winId);
   useWindowStore.getState().setWindowDirty(winId, false);
 }
 

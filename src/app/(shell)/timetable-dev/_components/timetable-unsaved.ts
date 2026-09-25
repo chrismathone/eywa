@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { windowDirtyMessage } from "@/components/workspace/window-bridge";
 
 /**
  * 시간표 화면의 **미저장 이탈 가드** — '그룹 설정'(배치 편집)에서 아직 반영하지 않은 배치가 있는데
@@ -22,7 +23,7 @@ let dirty = false;
 function publishToParent(next: boolean) {
   if (typeof window === "undefined" || window.parent === window) return; // 창(iframe) 안에서만
   try {
-    window.parent.postMessage({ type: "eywa-window-dirty", dirty: next }, window.location.origin);
+    window.parent.postMessage(windowDirtyMessage(next), window.location.origin);
   } catch {
     /* cross-origin 등 — 무시 */
   }
