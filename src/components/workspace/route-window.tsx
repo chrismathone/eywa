@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { useWindowStore, type Win } from "./window-store";
 import { withEmbed } from "./embed-context";
 import { WINDOW_BUSY_MESSAGE } from "./use-recording-lock";
+import { useWindowSignals } from "./use-window-signals";
+import { clearDirtyForNewDocument } from "./window-signals-core";
+import { Button } from "@/components/ui/button";
 
 /**
  * 라우트 창의 iframe 엘리먼트 레지스트리(런타임·모듈 전역). 타이틀바 뒤로(←) 버튼이
@@ -245,7 +248,8 @@ export function RouteWindow({ win }: { win: Win }) {
       // 가드의 send(false))을 못 돌린다 → 부모에 stale dirty=true가 남아 리로드된 pristine 폼을 거짓 잠금.
       // 새 문서는 항상 clean에서 시작하므로 로드 시 dirty 해제(편집하면 새 폼의 가드가 다시 dirty를 올림).
       // (소프트 client nav[드릴인/백]은 load가 안 떠 이 경로를 안 타고, 폼 언마운트 cleanup이 이미 처리.)
-      useWindowStore.getState().setWindowDirty(win.id, false);
+      // 🔴 **문서당 한 번** — 첫 페인트에 덮개를 걷은 뒤(use-window-signals)엔 load 전에 입력이 시작될 수 있다(그 표식은 지우면 다시 안 온다).
+      clearDirtyForNewDocument(win.id, el.contentDocument);
       // 메뉴가 첫 화면을 바꾼 뒤의 첫 로드면 스택을 새로 시작한다(실제로 보고한 뒤에만 표식을 내린다 —
       // 아직 about:blank인 로드가 표식을 먹어 버리면 진짜 새 문서가 옛 스택 위에 쌓인다).
       fromLoad = true;
@@ -276,6 +280,9 @@ export function RouteWindow({ win }: { win: Win }) {
     };
   }, [win.id, fallbackTitle, observeIframe, href, win.params.autoClose, win.params.spawnedBy, close, reloadWindow, router]);
 
+  // 첫 페인트에서 스켈레톤 걷기 · 숨김을 창 문서에 · 다시 보일 때 새로고침 · 느린 첫 화면 · 키보드 초점(use-window-signals.ts).
+  const { slow, retry } = useWindowSignals({ win, iframeRef, activated, loaded, setLoaded, isFocused });
+
   if (!href) return null;
 
   return (
@@ -293,13 +300,22 @@ export function RouteWindow({ win }: { win: Win }) {
         onLoad={() => { if (activated) setLoaded(true); }}
       />
       {(!activated || !loaded) && !dragging ? (
-        <div className="bg-card absolute inset-0 p-5" aria-hidden="true">
+        <div className="bg-card absolute inset-0 p-5" aria-hidden={slow ? undefined : true}>
           <div className="animate-pulse space-y-3">
             <div className="bg-bg-soft h-6 w-40 rounded" />
             <div className="bg-bg-soft h-24 w-full rounded" />
             <div className="bg-bg-soft h-4 w-3/4 rounded" />
             <div className="bg-bg-soft h-4 w-2/3 rounded" />
           </div>
+          {slow ? (
+            // 12초가 지나도 첫 화면이 안 그려졌다 — 영원히 도는 스켈레톤 대신 이유와 출구를 준다.
+            <div className="mt-6 flex flex-col items-start gap-2" role="status">
+              <p className="text-text-dim text-sm">화면을 불러오는 데 시간이 오래 걸리고 있어요.</p>
+              <Button type="button" variant="outline" onClick={retry}>
+                다시 시도
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {dragging ? (

@@ -56,6 +56,14 @@ function fakeFrame(container: HTMLElement, loc: FakeLoc, title?: string) {
     removeEventListener: (type: string, cb: () => void) => {
       listeners[type] = (listeners[type] ?? []).filter((x) => x !== cb);
     },
+    // 창이 앞으로 오면 키보드 초점이 iframe으로 간다(use-window-signals) — 그때 React가 초점 요소를 iframe 안까지
+    // 따라 들어가며 `contentWindow.HTMLIFrameElement`를 본다. 진짜 창엔 있는 생성자들이라 가짜에도 싣는다.
+    // (`document`가 없으면 React가 바깥 문서의 초점 = 이 iframe을 다시 집어 무한히 돈다.)
+    HTMLIFrameElement: window.HTMLIFrameElement,
+    document: { activeElement: null, body: null },
+    Document: window.Document,
+    Event: window.Event,
+    postMessage: vi.fn(),
   };
   Object.defineProperty(iframe, "contentWindow", { configurable: true, value: frameWin });
   if (title !== undefined) {

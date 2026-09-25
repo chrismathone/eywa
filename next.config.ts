@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
       LEGACY_REDIRECT_HOSTS: process.env.LEGACY_REDIRECT_HOSTS,
     });
   },
+  // 남의 사이트가 aywa를 iframe으로 띄우지 못하게(클릭재킹 방어, 2026-09-25) — 창 시스템은 **같은 origin** iframe이라
+  // 'self'로 그대로 산다. 로그인 쿠키가 SameSite라 남의 사이트 안에선 어차피 로그아웃 상태지만, 로그인 화면을 겹쳐
+  // 띄워 입력을 가로채는 길까지 닫는다. ⚠️ 외부 서비스에 aywa 화면을 iframe으로 넣어야 하는 날이 오면 여기서 그 출처를 연다.
+  async headers() {
+    return [{ source: "/:path*", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }] }];
+  },
   // Keep Next 16.2's default HTML-only crawlers and add Kakao: its preview must find OG tags in <head>.
   htmlLimitedBots: /[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight|kakaotalk|kakaoscrap/i,
   // dev 전용 — Next 16은 localhost 외 출처의 dev 리소스(/_next/webpack-hmr 등)를 기본 차단한다. 폰·태블릿에서

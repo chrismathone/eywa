@@ -1,5 +1,15 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-25 (4) — 창(iframe) 고도화: 첫 페인트 · 숨은 창 멈춤 · 다시 보일 때 새로고침
+
+- 원장 *"iframe 기반 새창 띄우기를 좀 더 고도화 할 방법 전수 검토"* → *"꼼꼼하게 효과잇는것들은 전부 진행"*.
+- **첫 페인트에서 스켈레톤을 걷는다**(`use-window-signals.ts` ①) — 창 덮개가 `load`(스트림 끝 + 이미지·폰트)까지 기다려 창 안 `loading.tsx`·먼저 온 본문이 **한 번도 안 보였다**(B7이 창에선 무효). 창 문서에 `main.embed-main`이 도착한 프레임에 걷는다. dev 실측 시간표 load보다 7.8초·회의록 2.1초 먼저 보임. ⚠️ 미저장 표식 해제는 **문서당 한 번**(`clearDirtyForNewDocument`)으로 바꿨다 — load 전에 입력이 시작될 수 있다.
+- **숨은 창은 폴링을 멈춘다**(`frame-visibility.ts`) — iframe의 `visibilityState`는 탭 기준이라 최소화·보관·최대화 뒤 창도 `visible`이었다. 부모가 창 문서의 `visibilityState`/`hidden`을 덮고 `visibilitychange`(bubbles)를 쏜다 → 기존 폴링 20여 곳이 **소비처 수정 0**으로 멈춘다(초안 자동저장의 숨을 때 기록·툴팁 닫기도 창 단위로).
+- **숨어 있던 사이 바뀐 창은 다시 보일 때 소프트 새로고침**(`mutation-signal.ts` + `embed-refresh-listener.tsx`) — 각 문서의 fetch를 감싸 재검증한 서버 액션(303 리다이렉트 포함)·`/api` 쓰기·Supabase REST 쓰기를 BroadcastChannel로 방송, 숨은 창이 기억했다가 드러날 때 `router.refresh()`(10분+ 숨었어도). 미저장·녹음 중이면 안 한다 · 여러 창이 한꺼번에 드러나면 위 창부터 250ms 간격.
+- **12초 안에 첫 화면이 안 그려지면 '다시 시도'** · **앞으로 온 창에 키보드 초점**(입력 중·열린 메뉴·창 틀·다른 창에서 입력 중이면 안 뺏음) · **`frame-ancestors 'self'`**(남의 사이트 iframe 차단).
+- ❌ **예비 창(hot spare) = 실측 후 비채택** — 숨은 예비 문서를 `moveBefore`로 옮겨 소프트 이동. 프로덕션 A/B(CPU 1배)는 조작 가능까지 ~70–110ms 이득이었지만 **CPU 4배에선 첫 화면이 오히려 늦었다**(소프트 이동은 RSC를 다 받아야 그린다 ↔ 새 문서는 HTML을 흘리며 그린다) · 상세 = perf-open-window-backlog.md.
+- ❌ ⟳를 `router.refresh()`로 바꾸기 = 비채택 — `useState(props)`로 시드한 편집 표(시간표·출석부·ECS)는 소프트 새로고침으로 안 바뀐다. ⟳는 하드 그대로.
+
 ## 2026-09-25 (3) — AI 라이선스 빈틈: 지점을 모르는 AI 호출은 거절
 
 - 원장 *"빈틈 매꿀것"* — `generateJSON`이 `meta.tenantId`가 없으면 라이선스 판정을 건너뛰고 통과시켰다(학부모 글 분류 등 타입상 null 가능 4곳 + 선택 필드).

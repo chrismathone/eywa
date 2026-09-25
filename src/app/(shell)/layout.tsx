@@ -41,6 +41,7 @@ import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
+import { EmbedRefreshListener } from "@/components/workspace/embed-refresh-listener";
 import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
@@ -108,6 +109,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                  (`.sticky-save-bar`와 같은 결, 시간표 선례 — 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*). */}
           <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]">
             <EmbedFocusSignal />
+            {/* 부모의 소프트 새로고침 명령(숨어 있던 사이 데이터가 바뀐 창이 다시 보일 때) — router.refresh. */}
+            <EmbedRefreshListener />
             {/* 창 안 소프트 이동(맨 Link·router.push)이 주소에서 embed=1을 지우면 되붙인다 — 안 붙이면 뒤이은
                 refresh·서버 액션·reload가 embed 없는 주소로 이 레이아웃을 다시 받아 창 안에 전체 셸이 뜬다
                 (전수검사 2026-09-11, embed-url-keeper.tsx). useSearchParams라 Suspense로 감싼다. */}

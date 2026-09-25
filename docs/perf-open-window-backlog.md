@@ -41,6 +41,16 @@
   **트레이드오프**: 재오픈은 "닫을 때 그 내용"(자동 새로고침 안 함 = 즉시성) → stale하면 타이틀바 ⟳. 숨은 iframe 최대 +2(=minimize 동급, 상한 가드).
   ⚠️ BL4와 보완(첫 오픈=BL4 hover 프리워밍, 재오픈=BL3 warm).
 
+## ✅ 추가 적용 (2026-09-25) — 창 신호 다섯 ([use-window-signals.ts](../src/components/workspace/use-window-signals.ts))
+
+- **첫 페인트 덮개 해제** — `load` 대신 창 문서에 `main.embed-main`이 도착한 프레임. 창 안 `loading.tsx`가 처음으로 보인다([[#134]]).
+- **숨은 창 = 문서도 hidden** — 최소화·보관(BL3)·앨범 밖·최대화 창 뒤 창에서 폴링이 멈춘다([frame-visibility.ts](../src/components/workspace/frame-visibility.ts)).
+  ⚠️ 위 BL3의 "숨은 iframe 최대 +N" 비용 중 **CPU(폴링) 쪽은 이걸로 거의 0**이 됐다(메모리는 그대로).
+- **다시 보일 때 소프트 새로고침** — 숨어 있던 사이 저장 신호([mutation-signal.ts](../src/lib/realtime/mutation-signal.ts))가 왔거나 10분+ 숨었으면.
+  BL3의 "재오픈은 닫을 때 그 내용"이 목록 화면에선 풀린다(`useState(props)` 시드 편집 표는 여전히 ⟳).
+- **12초 '다시 시도'** · **앞으로 온 창에 키보드 초점**.
+- ⚠️ `CACHE_MAX`는 코드상 **4**다(07-29 상향, 위 BL3 문단의 "상한 2"는 옛 값).
+
 ## ⏸️ 보류 — 요청 시 바로 실행 (효과 큰 순)
 
 ### loading.tsx 추가 (남은 후보)  효과 중(제한적)
@@ -96,6 +106,19 @@
 - **localStorage 데이터 캐시 = 여전히 비권장**(공유 PC PII 잔존). "재오픈 즉시화"는 BL3가 더 빠르고 안전.
 
 ## 🚫 비권장 (효과 0 / 위험만)
+
+- **예비 창(hot spare) — 실측 후 비채택(2026-09-25)**. 숨은 예비 문서(`/window-spare`)를 한가할 때 띄워 두고 새 창에 `Element.moveBefore`
+  (상태 보존 이동 — iframe 재로드 없음)로 넘겨 목적지로 **소프트 이동**. 창마다의 프레임워크·셸 부팅을 건너뛴다는 가설이었다.
+  프로덕션 빌드 A/B(3메뉴 × 반복, `moveBefore` 삭제로 대조):
+  | | 첫 화면 | 조작 가능 |
+  |---|---|---|
+  | CPU 1배 | 30–130ms 빠름 | 70–110ms 빠름(시간표는 들쭉날쭉) |
+  | CPU 4배 | **콜&상담 +200~340ms 느림**·시간표 들쭉날쭉 | ±150ms 섞임 |
+  원인: 소프트 이동은 **RSC를 다 받아야** 그리지만 새 문서는 **HTML을 흘리며** 그린다 — 느린 PC에서 첫 화면이 오히려 늦다.
+  거기에 브라우저 API 의존(`moveBefore`, Chrome 133+) · 셸이 든 학원 설정·권한이 낡는 문제(저장마다 폐기·재생성) · React 밖에서 iframe을
+  다루는 복잡도. **다시 제안하지 말 것** — 재검토하려면 "느린 PC(4배)에서도 첫 화면이 안 늦는다"를 먼저 보여야 한다.
+- **⟳를 `router.refresh()`로** — 편집 표 대부분이 `useState(props)`로 시드돼 소프트 새로고침으로는 **안 바뀐다**(누른 것 같은데 옛 값).
+  ⟳는 하드 그대로. 소프트 새로고침은 "다시 보일 때" 자동 경로에만 쓴다(안 바뀌어도 종전과 같을 뿐).
 
 - **WindowLink에 `router.prefetch(href)`** — iframe은 별도 document라 부모 router cache 미공유 → **코드만 늘고 효과 0.**
 - **next.config `experimental.staleTimes`** — 데스크톱 새 창(iframe)엔 무효 + stale 노출 위험.

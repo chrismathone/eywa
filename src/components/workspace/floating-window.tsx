@@ -129,6 +129,7 @@ export function FloatingWindow({
     >
       <div
         role="dialog"
+        data-window-dialog
         aria-modal={false}
         aria-label={win.params.title}
         tabIndex={-1}
