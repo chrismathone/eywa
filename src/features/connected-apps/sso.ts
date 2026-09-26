@@ -10,6 +10,9 @@ import { createHmac, randomUUID } from "node:crypto";
  * 형식 `v1.<payloadB64>.<sigB64>` — payloadB64 = base64url(JSON), sig = HMAC-SHA256(secret, "v1." + payloadB64).
  * 🔴 수명 60초 — 표가 주소창·기록에 남아도 곧 쓸모가 없어진다. 늘리지 말 것.
  * 🔴 secret(`EYWA_SSO_SECRET`)은 두 배포에 같은 값 · 32자 미만이면 표를 만들지 않는다(보통 링크로 떨어진다).
+ * 🔴🔴 **지금은 secret을 넣지 말 것(2026-09-26 잠금)** — eywa 이메일은 본인 확인값이 아니다(직원이 자기 이메일을 확인 메일 없이
+ *    바꿀 수 있다). 이메일로 로그인시키면 계정 탈취 구멍이라 받는 쪽도 늘 거절하게 잠갔다. 다음 판은 바뀌지 않는 eywa 사용자 id(`sub`)
+ *    + 오늘의 수학 비밀번호로 처음 한 번 연결 — [`decisions/tenant.md`](../../../docs/decisions/tenant.md) 연결 앱.
  * ⚠️ 서버 전용이지만 `server-only`는 붙이지 않는다 — 순수 함수라 Vitest가 직접 부른다(node:crypto라 클라에 못 간다).
  */
 export const SSO_TOKEN_TTL_SEC = 60;
