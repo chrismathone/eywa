@@ -33,7 +33,7 @@ export function AccountsPanel({
   const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
   const current = Math.min(Math.max(1, page), totalPages);
   const pageUsers = users.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
-  const pageHref = (p: number) => (p > 1 ? `/super-admin/tenants/${tenantId}?upage=${p}#accounts` : `/super-admin/tenants/${tenantId}#accounts`);
+  const pageHref = (p: number) => (p > 1 ? `/super-admin/tenants/${tenantId}?upage=${p}` : `/super-admin/tenants/${tenantId}`);
 
   return (
     <Panel

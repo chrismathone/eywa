@@ -151,9 +151,9 @@ export default async function TenantsListPage({
                     </td>
                     <td data-cell="wide" className="px-3 py-2.5">
                       <div className="flex items-center justify-center gap-3 text-sm font-bold whitespace-nowrap phone:justify-start">
-                        <Link href={`/super-admin/tenants/${t.id}`} className="text-primary hover:underline">상세</Link>
-                        <Link href={`/super-admin/tenants/${t.id}#accounts`} className="text-primary hover:underline">계정</Link>
-                        <Link href={`/super-admin/tenants/${t.id}#settings`} className="text-primary hover:underline">설정</Link>
+                        <Link href={`/super-admin/tenants/${t.id}`} className="text-primary hover:underline">계정</Link>
+                        <Link href={`/super-admin/tenants/${t.id}?tab=license`} className="text-primary hover:underline">기능</Link>
+                        <Link href={`/super-admin/tenants/${t.id}?tab=settings`} className="text-primary hover:underline">설정</Link>
                       </div>
                     </td>
                   </tr>

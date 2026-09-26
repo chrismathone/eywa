@@ -17,6 +17,7 @@ import {
 import { UpdateTenantForm } from "./_update-form";
 import { LicenseSection } from "./_license-section";
 import { AccountsPanel } from "./_accounts-panel";
+import { TenantTabs, parseTenantTab } from "./_tabs";
 
 export const metadata = { title: "슈퍼관리자 · 학원 상세 — aywa" };
 
@@ -25,13 +26,15 @@ export default async function TenantDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ upage?: string }>;
+  searchParams: Promise<{ upage?: string; tab?: string }>;
 }) {
   const { id } = await params;
-  const { upage } = await searchParams;
+  const { upage, tab: rawTab } = await searchParams;
+  const tab = parseTenantTab(rawTab);
+  // 라이선스 표는 그 탭에서만 쓴다 — 다른 탭에선 조회하지 않는다.
   const [detail, licenses] = await Promise.all([
     getTenantDetail(id),
-    getTenantLicenses(id),
+    tab === "license" ? getTenantLicenses(id) : null,
   ]);
   if (!detail) notFound();
 
@@ -89,45 +92,60 @@ export default async function TenantDetailPage({
         }
       />
 
-      <AccountsPanel
+      <TenantTabs
         tenantId={detail.id}
-        tenantName={detail.name}
-        users={detail.users}
-        page={Number(upage) || 1}
+        active={tab}
+        counts={{ accounts: detail.users.length }}
       />
 
-      <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
-        <Panel
-          id="settings"
-          title="기본 정보"
-          description="학원 이름과 플랜을 고칩니다."
-        >
-          <UpdateTenantForm
-            id={detail.id}
-            name={detail.name}
-            plan={detail.plan}
-          />
-        </Panel>
-        <LicenseSection
+      {tab === "accounts" ? (
+        <AccountsPanel
           tenantId={detail.id}
           tenantName={detail.name}
-          licenses={licenses}
-          enrolledCount={detail.studentCount}
+          users={detail.users}
+          page={Number(upage) || 1}
         />
-      </div>
+      ) : null}
 
-      <Panel
-        title="지점장 보기"
-        description="이 학원의 학생·반·회의 현황을 읽기 전용으로 들여다봅니다. 들어간 기록은 감사 로그에 남습니다."
-        action={
-          <Link
-            href={`/super-admin/tenants/${detail.id}/view`}
-            className={buttonVariants({ variant: "outline" })}
+      {/* 이름↔스위치가 한 줄 양 끝이라 넓은 화면에서 멀어지지 않게 폭을 묶는다. */}
+      {tab === "license" && licenses ? (
+        <div className="lg:max-w-3xl">
+          <LicenseSection
+            tenantId={detail.id}
+            tenantName={detail.name}
+            licenses={licenses}
+            enrolledCount={detail.studentCount}
+          />
+        </div>
+      ) : null}
+
+      {tab === "settings" ? (
+        <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+          <Panel
+            id="settings"
+            title="기본 정보"
+            description="학원 이름과 플랜을 고칩니다."
           >
-            <EyIcon name="search" size={16} strokeWidth={1.8} /> 들여다보기
-          </Link>
-        }
-      />
+            <UpdateTenantForm
+              id={detail.id}
+              name={detail.name}
+              plan={detail.plan}
+            />
+          </Panel>
+          <Panel
+            title="지점장 보기"
+            description="이 학원의 학생·반·회의 현황을 읽기 전용으로 들여다봅니다. 들어간 기록은 감사 로그에 남습니다."
+            action={
+              <Link
+                href={`/super-admin/tenants/${detail.id}/view`}
+                className={buttonVariants({ variant: "outline" })}
+              >
+                <EyIcon name="search" size={16} strokeWidth={1.8} /> 들여다보기
+              </Link>
+            }
+          />
+        </div>
+      ) : null}
     </>
   );
 }
