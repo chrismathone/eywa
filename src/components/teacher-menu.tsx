@@ -19,6 +19,7 @@ import { useSheetT } from "@/features/teacher-view/lang-context";
 import { TeacherLangSwitch } from "@/features/teacher-view/lang-switch";
 import { applyTeacherMenuLayout, type MenuLayout } from "@/features/owner/menu-layout";
 import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
+import type { ConnectedApp } from "@/features/connected-apps/apps";
 
 /**
  * 강사 미니멀 셸용 '내 메뉴' 드롭다운(B 옵션 — onescreen 허브 + 필요한 깊은 페이지 진입).
@@ -37,6 +38,7 @@ export function TeacherMenu({
   showMcs = true,
   home = null,
   layout,
+  connectedApps = [],
 }: {
   /**
    * 이 사람의 '내 메뉴'에 세울 메뉴 키 — 레이아웃이 [teacherMenuKeysFor](@/lib/navigation)로 계산해 내린다
@@ -71,6 +73,11 @@ export function TeacherMenu({
    * 비어 있으면(기본) 코드 순서 + 홈 맨 위 — 이 설정 이전과 같다.
    */
   layout?: MenuLayout;
+  /**
+   * 연결 앱(오늘의 수학 등) — 레이아웃이 [`getMyConnectedApps`](@/features/connected-apps/server/visible)로 거른 목록
+   * (지점 스위치 ∧ 담당 과목 — 영어 선생님에겐 비어 온다). 풀셸 사이드바 '연결 앱'과 같은 **보통 링크(새 탭)**다.
+   */
+  connectedApps?: readonly ConnectedApp[];
 }) {
   // 화면 언어 — provider는 강사 미니셸에만 있다(관리자 풀셸은 한국어 고정, 원장 2026-09-03).
   const t = useSheetT();
@@ -100,6 +107,23 @@ export function TeacherMenu({
             <MenuGlyph name={icon} size={16} /> {t(labelKey)}
           </DropdownMenuItem>
         ))}
+        {/* 연결 앱 — aywa 밖의 앱이라 메뉴 줄과 구분선으로 떼고, 끝의 바깥 화살표가 "새 탭으로 나간다"를 말한다.
+            🔴 `Link`가 아니라 맨 `<a target=_blank>` — 출발 라우트(자동 로그인 표)는 라우트 핸들러라 클라 이동으로 못 간다. */}
+        {connectedApps.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-text-faint">{t("menu.connectedApps")}</DropdownMenuLabel>
+            {connectedApps.map((a) => (
+              <DropdownMenuItem
+                key={a.feature}
+                render={<a href={a.launchPath} target="_blank" rel="noopener noreferrer" className="cursor-pointer" />}
+              >
+                <EyIcon name="calculator" size={16} strokeWidth={1.8} /> {a.label}
+                <EyIcon name="externalLink" size={13} strokeWidth={1.8} className="ml-auto size-3.5 opacity-70" />
+              </DropdownMenuItem>
+            ))}
+          </>
+        ) : null}
         {/* 내 정보 — 본인 이력서·로그인 정보. 권한 매트릭스와 무관(자기 것만이라 항상 표시). */}
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/me" className="cursor-pointer" />}>

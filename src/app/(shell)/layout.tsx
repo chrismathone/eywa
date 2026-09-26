@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { isFeatureLicensed, isFeatureOptedIn } from "@/lib/license/server";
-import { CONNECTED_APPS } from "@/features/connected-apps/apps";
+import { isFeatureLicensed } from "@/lib/license/server";
+import type { ConnectedApp } from "@/features/connected-apps/apps";
+import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
 import { headers } from "next/headers";
 import { Suspense, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -155,6 +156,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 겸직(관리자 계열 + 담당 반)이 '강사뷰' 쿠키를 켜면 view="teacher"라 아래 미니셸을 탄다(권한은 실 role 유지).
   const view = await getShellView();
 
+  // 연결 앱(오늘의 수학 등) — 지점 스위치 ∧ 담당 과목(영어 선생님에겐 안 보인다) 판정은 `getMyConnectedApps` 한 곳.
+  // 풀셸은 사이드바·폰 메뉴, 강사 미니셸은 '내 메뉴' 끝에 선다. 아래 다른 조회들과 독립이라 **먼저 출발**시킨다(B4).
+  // 학생 미니셸엔 자리가 없고, '다른 강사 뷰'(열람 전용)에선 세우지 않는다 — 출발 라우트는 **보는 사람 자신**으로
+  // 로그인시키므로 남의 화면에 그 사람 것처럼 둘 수 없다.
+  const connectedAppsPromise: Promise<ConnectedApp[]> =
+    view === "student" || (view === "teacher" && viewAs) ? Promise.resolve([]) : getMyConnectedApps().catch(() => []);
+
   // ── 뷰-경로 정합성 가드 — 강사 미니셸은 "강사가 접근 가능한 페이지"만 감싼다. ──
   // 겸직(관리자 계열)이 '강사뷰로 전환' 후 브라우저 **뒤로가기**로 관리자 전용 URL(대시보드 등)로 돌아오면,
   // 쿠키는 teacher라 미니셸이 관리자 페이지를 감싸 "강사뷰인데 관리자 화면"인 깨진 렌더가 났다(심각 버그).
@@ -204,6 +212,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   //    겸직 강사뷰·'다른 강사 뷰'(열람 전용 — user는 보는 사람 자신)에서 누르면 강사 홈으로 튕기는 항목이 선다
   //    (상담사는 다섯 개). permMatrix는 페이지 게이트와 같은 사용자 유효 매트릭스라 쿼리 0. 실 강사는 두 축이 같아 불변.
   const teacherMenus = view === "teacher" ? teacherMenuKeysFor(user.systemRole, permMatrix) : [];
+  const teacherConnectedApps = view === "teacher" ? await connectedAppsPromise : [];
 
   // 강사뷰 화면 언어(원장 2026-09-03) — 크롬('내 메뉴')과 본문이 **한 값**을 봐야 하므로 셸에서 한 번 읽어
   // 아래 미니셸 전체를 감싼다. 🔴 관리자 풀셸·학생 미니셸에는 주입하지 않는다(원장: 관리자뷰 수정 불필요).
@@ -290,6 +299,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 showMcs={mcsForTeacher}
                 home={teacherHome}
                 layout={settings.navigation.teacherMenus}
+                connectedApps={teacherConnectedApps}
               />
             ) : null}
             {/* 강사가 알림 1차 수신자(반 배정·전입·인수인계) — 미니셸에도 벨 필수(적대리뷰). 학생은 미노출. */}
@@ -336,12 +346,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 안 뜨고, 메뉴·링크가 전부 본문 이동이 된다(폰과 같은 길 · 사이드바는 그대로). 강사·학생 미니셸은 원래 창이 없다.
   // 서버에서 읽어 첫 페인트부터 정해진다(깜빡임 없음). 요청 캐시 · 창(iframe) 안은 위 embed 분기라 여기 안 온다.
   // 연결 앱(오늘의 수학 등) — 슈퍼관리자가 **켠 지점만** 왼쪽 '연결 앱'에 바로가기가 선다(기본 꺼짐, 원장 2026-09-26).
-  // 창 모드와 독립 조회라 함께 기다린다(B4). 요청 캐시.
-  const [windowMode, todaysMath] = await Promise.all([
+  // 영어 선생님(담당 과목이 영어뿐)에겐 켜도 안 선다(같은 날). 위에서 먼저 출발시킨 조회를 창 모드와 함께 기다린다(B4).
+  const [windowMode, connectedApps] = await Promise.all([
     isFeatureLicensed(user.tenantId, "window_mode"),
-    isFeatureOptedIn(user.tenantId, "todays_math"),
+    connectedAppsPromise,
   ]);
-  const connectedApps = CONNECTED_APPS.filter((a) => (a.feature === "todays_math" ? todaysMath : false));
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
   const frequentKeys = topVisitedMenus(

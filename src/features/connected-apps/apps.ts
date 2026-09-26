@@ -28,6 +28,11 @@ export type ConnectedApp = {
   ssoPath: string;
   /** 표의 `aud` — 받는 쪽이 자기 이름인지 확인한다. */
   audience: string;
+  /**
+   * 담당 과목(직원관리 `users.subjects`)이 **전부 이 안에 드는 사람**에겐 세우지 않는다 — 오늘의 수학은 수학 앱이라
+   * 지점을 켜도 영어 선생님에겐 안 보인다(원장 2026-09-26). 판정은 `connectedAppVisibleTo` 한 곳.
+   */
+  hiddenForOnlySubjects?: readonly string[];
 };
 
 export const CONNECTED_APPS: readonly ConnectedApp[] = [
@@ -38,5 +43,20 @@ export const CONNECTED_APPS: readonly ConnectedApp[] = [
     launchPath: "/api/connected-apps/todays-math/launch",
     ssoPath: "/api/sso/eywa",
     audience: "todays-math",
+    hiddenForOnlySubjects: ["english"],
   },
 ];
+
+/**
+ * 이 사람(담당 과목)에게 이 앱을 세우나 — **과목 축만**. 지점 스위치는 [`getMyConnectedApps`](./server/visible.ts)가 먼저 본다.
+ *
+ * - 과목이 비어 있으면(원장·사무·조교처럼 과목 없는 직원) **세운다** — 과목으로 가를 근거가 없다.
+ * - 과목이 전부 `hiddenForOnlySubjects` 안이면(영어만) 감춘다. 하나라도 밖이면(수학+영어 겸업) 세운다.
+ * ⚠️ 근거는 반 담당(`classes.teacher_id`)·배치가 아니라 **직원관리의 담당 과목**이다 — 자리(JJ·LAB) 강사처럼 맡은 반도
+ *    배치도 없는 영어 직원이 침산에 6명이라(실측 2026-09-26) 반으로 가르면(강사 홈 규칙) 그들에게 보인다.
+ */
+export function connectedAppVisibleTo(app: ConnectedApp, subjects: readonly string[]): boolean {
+  const hidden = app.hiddenForOnlySubjects;
+  if (!hidden?.length || subjects.length === 0) return true;
+  return !subjects.every((s) => hidden.includes(s));
+}

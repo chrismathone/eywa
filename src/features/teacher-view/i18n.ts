@@ -132,6 +132,7 @@ export const SHEET_DICT = {
   "menu.trigger": { ko: "내 메뉴", en: "My menu" },
   "menu.heading": { ko: "강사 메뉴", en: "Teacher menu" },
   "menu.me": { ko: "내 정보", en: "My profile" },
+  "menu.connectedApps": { ko: "연결 앱", en: "Connected apps" },
   "menu.toAdmin": { ko: "관리자뷰로 전환", en: "Switch to admin view" },
   "menu.item.attendanceQuick": { ko: "출결 모드", en: "Quick attendance" },
   "menu.item.teacher_onescreen": { ko: "수업 마감 (원스크린)", en: "Lesson wrap-up (One Screen)" },

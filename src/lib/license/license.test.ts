@@ -86,7 +86,7 @@ describe("라이선스 배선 가드", () => {
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
     expect(consumersOf("todays_math")).toEqual(
       expect.arrayContaining([
-        "src/app/(shell)/layout.tsx",
+        "src/features/connected-apps/server/visible.ts",
         "src/app/api/integrations/todays-math/roster/route.ts",
         "src/app/api/integrations/todays-math/progress/route.ts",
       ]),
