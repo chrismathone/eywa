@@ -11,10 +11,10 @@ describe("연결 앱 자동 로그인 표", () => {
     expect(usableSsoSecret(` ${SECRET} `)).toBe(SECRET);
   });
 
-  it("형식 v1.payload.sig — 받는 쪽이 같은 HMAC으로 검증할 수 있다", () => {
+  it("형식 v1.payload.sig — 신원은 sub(eywa 사용자 id), 받는 쪽이 같은 HMAC으로 검증한다", () => {
     const now = Date.UTC(2026, 8, 26, 3, 0, 0);
     const token = signSsoToken(
-      { aud: "todays-math", email: " Teacher@Example.COM ", name: "박소선", tenantId: "t-1" },
+      { aud: "todays-math", sub: "u-1", email: " Teacher@Example.COM ", name: "박소선", tenantId: "t-1" },
       SECRET,
       now,
       "jti-1",
@@ -27,6 +27,7 @@ describe("연결 앱 자동 로그인 표", () => {
     expect(payload).toEqual({
       iss: "aywa",
       aud: "todays-math",
+      sub: "u-1",
       email: "teacher@example.com",
       name: "박소선",
       tenantId: "t-1",

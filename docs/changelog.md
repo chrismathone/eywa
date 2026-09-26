@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-26 (4) — 연결 앱 자동 로그인 다음 판: eywa 사용자 id + 처음 한 번 비밀번호 연결
+- 원장 *"1번으로 진행해"* — 이메일 방식(v1) 잠금 뒤의 다음 판.
+- eywa: 표 머리는 `v1` 그대로(받는 쪽 제안) + **`sub` 필수**(= eywa `users.id`, 신원) · 이메일·이름은 연결 화면 표시용 · 학생 계정은 표를 안 만든다.
+- 받는 쪽(연결 대기 쿠키 → 오늘의 수학 비밀번호 로그인 → **연결 확인 한 번 더**(링크 CSRF 방지) → `User.eywaUserId` 저장 · 해제 길)은 오늘의 수학 main 세션에 Orca로 명세 전달.
+- 켜는 순서: 두 쪽 구현·배포 → 두 Vercel에 `EYWA_SSO_SECRET` → 침산 스위치.
+
 ## 2026-09-26 (3) — 연결 앱 자동 로그인(보내는 쪽)
 - 원장 *"토글을 켰을 경우 기존 eywa의 계정이 today_math에도 계정 로그인 가능하게"* → 추천안(같은 이메일 기존 계정만, 자동 가입 없음) *"그래"*.
 - eywa: 링크 → `/api/connected-apps/todays-math/launch` → 60초 HMAC 표(`sso.ts`) → `todays-math.vercel.app/api/sso/eywa?token=`. 비로그인 = eywa 로그인 · 꺼진 지점 = 운영실 · secret 없음 = 표 없이 첫 화면.
