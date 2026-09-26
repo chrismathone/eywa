@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { isFeatureLicensed } from "@/lib/license/server";
+import { isFeatureLicensed, isFeatureOptedIn } from "@/lib/license/server";
+import { CONNECTED_APPS } from "@/features/connected-apps/apps";
 import { headers } from "next/headers";
 import { Suspense, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -334,7 +335,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // `window_mode`를 읽는다 — 행이 없으면 켜짐(지금까지와 같다). 끄면 아래 WorkspaceEnabledProvider가 false라 캔버스가
   // 안 뜨고, 메뉴·링크가 전부 본문 이동이 된다(폰과 같은 길 · 사이드바는 그대로). 강사·학생 미니셸은 원래 창이 없다.
   // 서버에서 읽어 첫 페인트부터 정해진다(깜빡임 없음). 요청 캐시 · 창(iframe) 안은 위 embed 분기라 여기 안 온다.
-  const windowMode = await isFeatureLicensed(user.tenantId, "window_mode");
+  // 연결 앱(오늘의 수학 등) — 슈퍼관리자가 **켠 지점만** 왼쪽 '연결 앱'에 바로가기가 선다(기본 꺼짐, 원장 2026-09-26).
+  // 창 모드와 독립 조회라 함께 기다린다(B4). 요청 캐시.
+  const [windowMode, todaysMath] = await Promise.all([
+    isFeatureLicensed(user.tenantId, "window_mode"),
+    isFeatureOptedIn(user.tenantId, "todays_math"),
+  ]);
+  const connectedApps = CONNECTED_APPS.filter((a) => (a.feature === "todays_math" ? todaysMath : false));
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
   const frequentKeys = topVisitedMenus(
@@ -373,13 +380,14 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           frequentKeys={frequentKeys}
           menuLayout={menuLayout}
           isGenericTenant={genericTenant}
+          connectedApps={connectedApps}
           className="hidden lg:pointer-fine:flex"
         />
       </HideInFrame>
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥lg + 마우스): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} className="lg:pointer-fine:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} connectedApps={connectedApps} className="lg:pointer-fine:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">

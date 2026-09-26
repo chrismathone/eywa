@@ -23,6 +23,17 @@ export function licenseAllows(row: LicenseRow, now: Date = new Date()): boolean 
   return true;
 }
 
+/**
+ * **명시로 켠 지점만** 쓰는 기능(기본 꺼짐) — 위 `licenseAllows`의 반대 기본값이다.
+ * 외부 앱 연결(오늘의 수학)처럼 "이 지점이 계약한 것"만 열어야 하는 기능은 행이 없으면 **꺼짐**이다
+ * (행 없음 = 허용으로 두면 새 지점마다 남의 앱 메뉴와 데이터 반출이 저절로 열린다).
+ */
+export type OptInFeature = "todays_math";
+
+export function licenseExplicitlyOn(row: LicenseRow, now: Date = new Date()): boolean {
+  return row !== null && licenseAllows(row, now);
+}
+
 /** 막혔을 때 사용자에게 보이는 한 줄(한글) — 어디서 막혔는지 + 누구에게 물을지. */
 export const LICENSE_BLOCKED_MESSAGE: Record<LicensedFeature, string> = {
   meeting_recording: "이 지점은 회의 녹음·전사 기능이 꺼져 있습니다 — 사용하려면 운영사에 문의하세요",

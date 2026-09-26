@@ -25,6 +25,8 @@ import {
   type HubGroup,
 } from "@/lib/menu-hub";
 import type { MenuLayout } from "@/features/owner/menu-layout";
+import type { ConnectedApp } from "@/features/connected-apps/apps";
+import { ConnectedAppRail } from "@/components/connected-app-rail";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import { useMenuHub } from "./workspace/menu-hub-store";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
@@ -128,6 +130,7 @@ export function AppSidebar({
   frequentKeys,
   menuLayout,
   isGenericTenant = false,
+  connectedApps = [],
 }: {
   systemRole: SystemRole;
   /** 총괄(super_admin) — master 전용 목적지를 함께 연다. */
@@ -152,6 +155,8 @@ export function AppSidebar({
   menuLayout?: MenuLayout;
   /** 새 학원(일반판) — 설정 '기능' 면 노출(설정 화면 탭과 같은 판정). 모르면 false(침산처럼). */
   isGenericTenant?: boolean;
+  /** 이 지점에 켜진 연결 앱(슈퍼관리자 스위치, 기본 꺼짐) — 비면 '연결 앱' 구역이 안 선다. */
+  connectedApps?: readonly ConnectedApp[];
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
@@ -384,6 +389,15 @@ export function AppSidebar({
               />
             ))}
           </NavSection>
+
+          {/* 연결 앱 — aywa 밖의 우리 앱 바로가기(새 탭). 켠 지점에만 선다(원장 2026-09-26). */}
+          {connectedApps.length > 0 ? (
+            <NavSection label="연결 앱" expanded={expanded} motion={motion}>
+              {connectedApps.map((a) => (
+                <ConnectedAppRail key={a.feature} app={a} expanded={expanded} motion={motion} />
+              ))}
+            </NavSection>
+          ) : null}
 
           {/* 지원 — 설정(면이 많아 허브)·도움말. */}
           {supportGroups.length > 0 ? (

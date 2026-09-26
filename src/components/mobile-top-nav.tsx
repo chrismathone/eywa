@@ -9,6 +9,7 @@ import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { NAV_GROUPS, findNavItem, type NavItem } from "@/lib/navigation";
 import { isMenuHiddenByLayout, type MenuLayout } from "@/features/owner/menu-layout";
+import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 
@@ -38,6 +39,7 @@ export function MobileTopNav({
   logoSrc,
   permMatrix,
   menuLayout,
+  connectedApps = [],
 }: {
   systemRole: SystemRole;
   email: string;
@@ -51,6 +53,8 @@ export function MobileTopNav({
    * ⚠️ 면(`?tab=`) 목적지는 이 줄에 애초에 없다(부모 메뉴만 그린다) — 감춰도 여기선 달라질 게 없다.
    */
   menuLayout?: MenuLayout;
+  /** 켜진 연결 앱(오늘의 수학 등) — 폰엔 사이드바가 없어 메뉴 격자 끝에 바깥 링크로 둔다(새 탭). */
+  connectedApps?: readonly ConnectedApp[];
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
@@ -144,6 +148,21 @@ export function MobileTopNav({
             </li>
           );
         })}
+        {connectedApps.map((a) => (
+          <li key={a.feature}>
+            <a
+              href={a.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="text-text-dim hover:text-foreground hover:bg-bg-soft flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold transition"
+            >
+              <EyIcon name="calculator" size={14} strokeWidth={1.8} />
+              <span className="truncate">{a.label}</span>
+              <EyIcon name="externalLink" size={12} strokeWidth={1.8} className="shrink-0 opacity-70" />
+            </a>
+          </li>
+        ))}
       </ul>
       ) : null}
     </nav>

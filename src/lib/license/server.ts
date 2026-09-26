@@ -4,10 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   LICENSE_BLOCKED_MESSAGE,
   licenseAllows,
+  licenseExplicitlyOn,
   seatBlockedMessage,
   seatLimitOf,
   seatsExceeded,
   type LicensedFeature,
+  type OptInFeature,
 } from "./rule";
 
 /**
@@ -32,6 +34,31 @@ export const isFeatureLicensed = cache(async (tenantId: string, feature: License
   } catch (e) {
     console.error("[license] 조회 예외 — 허용으로 둔다", feature, e);
     return true;
+  }
+});
+
+/**
+ * 기본 꺼짐 기능(외부 앱 연결)의 조회 — 슈퍼관리자가 **켠 행이 있을 때만** true.
+ * 🔴 조회가 실패하면 **꺼짐**(fail-closed) — 위 `isFeatureLicensed`와 반대다. 이 기능들은 멈춰도 원내 업무가 서지 않고
+ *    (링크 하나·외부 반출), 잘못 열리면 계약하지 않은 지점의 데이터가 나간다.
+ */
+export const isFeatureOptedIn = cache(async (tenantId: string, feature: OptInFeature): Promise<boolean> => {
+  if (!tenantId) return false;
+  try {
+    const { data, error } = await createAdminClient()
+      .from("tenant_licenses")
+      .select("is_active, expires_at")
+      .eq("tenant_id", tenantId)
+      .eq("feature", feature)
+      .maybeSingle();
+    if (error) {
+      console.error("[license] 조회 실패 — 꺼짐으로 둔다", feature, error.message);
+      return false;
+    }
+    return licenseExplicitlyOn(data);
+  } catch (e) {
+    console.error("[license] 조회 예외 — 꺼짐으로 둔다", feature, e);
+    return false;
   }
 });
 

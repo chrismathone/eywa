@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TOGGLE_FEATURES } from "@/features/super-admin/labels";
-import { LICENSE_BLOCKED_MESSAGE, licenseAllows, seatLimitOf, seatsExceeded } from "./rule";
+import { LICENSE_BLOCKED_MESSAGE, licenseAllows, licenseExplicitlyOn, seatLimitOf, seatsExceeded } from "./rule";
 import { aiUserMessage } from "@/lib/ai/user-message";
 
 describe("라이선스 판정 규칙", () => {
@@ -17,6 +17,13 @@ describe("라이선스 판정 규칙", () => {
     expect(licenseAllows({ is_active: false, expires_at: null }, now)).toBe(false);
     expect(licenseAllows({ is_active: true, expires_at: "2026-09-24T23:59:59Z" }, now)).toBe(false);
     expect(licenseAllows({ is_active: true, expires_at: "2026-12-31T00:00:00Z" }, now)).toBe(true);
+  });
+
+  it("기본 꺼짐 기능(연결 앱)은 켠 행이 있을 때만 — 행이 없으면 꺼짐", () => {
+    expect(licenseExplicitlyOn(null, now)).toBe(false);
+    expect(licenseExplicitlyOn({ is_active: true, expires_at: null }, now)).toBe(true);
+    expect(licenseExplicitlyOn({ is_active: false, expires_at: null }, now)).toBe(false);
+    expect(licenseExplicitlyOn({ is_active: true, expires_at: "2026-09-24T23:59:59Z" }, now)).toBe(false);
   });
 
   it("좌석: 행 없음·끔·비어 있음 = 제한 없음, 한도를 넘는 순간만 막는다", () => {
@@ -55,7 +62,7 @@ describe("라이선스 배선 가드", () => {
   const consumersOf = (key: string) =>
     SRC.filter(
       ({ src }) =>
-        new RegExp(`(licenseBlockReason|isFeatureLicensed)\\([^)]*"${key}"`).test(src) ||
+        new RegExp(`(licenseBlockReason|isFeatureLicensed|isFeatureOptedIn)\\([^)]*"${key}"`).test(src) ||
         new RegExp(`\\.eq\\("feature",\\s*"${key}"\\)`).test(src),
     ).map((f) => f.path);
 
@@ -77,6 +84,13 @@ describe("라이선스 배선 가드", () => {
       ]),
     );
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
+    expect(consumersOf("todays_math")).toEqual(
+      expect.arrayContaining([
+        "src/app/(shell)/layout.tsx",
+        "src/app/api/integrations/todays-math/roster/route.ts",
+        "src/app/api/integrations/todays-math/progress/route.ts",
+      ]),
+    );
   });
 
   it("AI 게이트는 단일 관문 generateJSON 안에 있다", () => {
