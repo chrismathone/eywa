@@ -151,7 +151,7 @@ export function MobileTopNav({
         {connectedApps.map((a) => (
           <li key={a.feature}>
             <a
-              href={a.href}
+              href={a.launchPath}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setOpen(false)}

@@ -24,7 +24,7 @@ export function ConnectedAppRail({
 }) {
   const link = (
     <a
-      href={app.href}
+      href={app.launchPath}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`${app.label} (새 탭)`}

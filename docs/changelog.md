@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-26 (3) — 연결 앱 자동 로그인(보내는 쪽)
+- 원장 *"토글을 켰을 경우 기존 eywa의 계정이 today_math에도 계정 로그인 가능하게"* → 추천안(같은 이메일 기존 계정만, 자동 가입 없음) *"그래"*.
+- eywa: 링크 → `/api/connected-apps/todays-math/launch` → 60초 HMAC 표(`sso.ts`) → `todays-math.vercel.app/api/sso/eywa?token=`. 비로그인 = eywa 로그인 · 꺼진 지점 = 운영실 · secret 없음 = 표 없이 첫 화면.
+- 받는 쪽은 오늘의 수학 main 세션에 Orca로 명세 전달(원장 지시 *"여기서 직접 수정하지말고 main에 신호"*). ⚠️ **받는 쪽 배포 후** 두 Vercel에 `EYWA_SSO_SECRET`(같은 값, 32자+)을 넣어야 켜진다.
+
 ## 2026-09-26 (2) — 연결 앱: 오늘의 수학 바로가기 + 지점 스위치
 - 원장 *"superadmin에 todays-math 프로젝트와 연결할 수 잇는 토글"* → *"'연결 앱' 탭 … 내부에 '오늘의 수학'메뉴"* → *"그냥 하이퍼링크처럼 바로가기하면 될듯"*.
 - 슈퍼관리자 '기능·라이선스'에 `todays_math`(기본 꺼짐) · 켠 지점만 PC 사이드바 '연결 앱' 구역·폰 메뉴 격자에 `https://todays-math.vercel.app` 새 탭 링크 · 명단·진도 API도 같은 스위치(끄면 503).
