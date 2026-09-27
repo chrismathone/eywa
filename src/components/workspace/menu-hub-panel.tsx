@@ -68,6 +68,8 @@ export function MenuHubPanel({
 
   return (
     <div
+      // data-usage-chrome — 메뉴 판 입력은 배경 화면의 활동이 아니다(이용 분석, features/usage/session.ts).
+      data-usage-chrome=""
       className="animate-in fade-in-0 fixed z-[44] duration-150 print:hidden"
       style={{ left: rail, top: 0, right: 0, bottom: 0 }}
       role="dialog"

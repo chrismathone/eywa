@@ -10,6 +10,7 @@ export type SuperAdminNavItem = { href: string; label: string; icon: AywaIconNam
 export const SUPER_ADMIN_NAV: SuperAdminNavItem[] = [
   { href: "/super-admin", label: "대시보드", icon: "layoutGrid" },
   { href: "/super-admin/tenants", label: "전 지점 운영", icon: "building" },
+  { href: "/super-admin/usage", label: "이용 분석", icon: "barChart" },
   { href: "/super-admin/audit", label: "감사 로그", icon: "history" },
 ];
 

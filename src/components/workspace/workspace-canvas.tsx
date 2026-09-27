@@ -226,6 +226,9 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
       // print:hidden — 배경 문서를 인쇄(계산기·시간표 Ctrl+P 등)할 때 열려 있는 플로팅 창·딤이
       // fixed로 매 페이지 위에 찍히는 것 방지(인쇄물은 문서만).
       className="pointer-events-none fixed z-40 print:hidden"
+      // data-usage-chrome — 창 테두리·제목줄·작업 표시 입력은 배경 화면의 활동이 아니다(이용 분석,
+      // features/usage/session.ts). 창 **본문**은 iframe이라 원래 이 문서로 안 온다.
+      data-usage-chrome=""
       style={{ left: rail, top: HEADER, right: 0, bottom: 0 }}
     >
       {/* 직접 연 업무 페이지는 창에 표시한다. 마지막 창을 닫으면 대시보드로 이동한다. */}

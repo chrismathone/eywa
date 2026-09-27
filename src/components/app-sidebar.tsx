@@ -249,6 +249,9 @@ export function AppSidebar({
           되게 한다(사이드바 폭이 바뀌면 캔버스 left=rail도 따라가 창들이 함께 reflow). 창은 x≥0로
           클램프(use-pointer-drag)돼 사이드바 영역으로 안 들어오므로, 올려도 창을 가리지 않는다. */}
       <aside
+        // data-usage-chrome — 이용 분석이 사이드바 입력을 **배경 화면의 활동**으로 세지 않는다(메뉴를 여는 손이지
+        // 배경을 쓰는 손이 아니다, features/usage/session.ts).
+        data-usage-chrome=""
         style={{ width }}
         className={`bg-sidebar border-line sticky top-0 z-[45] flex h-screen shrink-0 flex-col border-r ${
           motion ? `transition-[width] duration-200 ${EASE}` : ""

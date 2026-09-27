@@ -46,6 +46,7 @@ import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forw
 import { EmbedFocusSignal } from "@/components/workspace/embed-focus-signal";
 import { EmbedRefreshListener } from "@/components/workspace/embed-refresh-listener";
 import { EmbedUrlKeeper } from "@/components/workspace/embed-url-keeper";
+import { UsageTracker } from "@/features/usage/usage-tracker";
 import { WindowMinSizeNotice } from "@/components/workspace/window-min-size-notice";
 import { HideInFrame } from "@/components/workspace/hide-in-frame";
 import { ScreenHelpOverlay } from "@/components/help/screen-help-overlay";
@@ -119,6 +120,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 (전수검사 2026-09-11, embed-url-keeper.tsx). useSearchParams라 Suspense로 감싼다. */}
             <Suspense fallback={null}>
               <EmbedUrlKeeper />
+            </Suspense>
+            {/* 이용 분석 계측(슈퍼관리자 '이용 분석') — 창마다 따로 센다. 그리는 것 없음 · useSearchParams라 Suspense. */}
+            <Suspense fallback={null}>
+              <UsageTracker />
             </Suspense>
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
@@ -319,6 +324,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
             <ScreenHelpOverlay />
+            <Suspense fallback={null}>
+              <UsageTracker />
+            </Suspense>
             {children}
           </OperationsProvider></EditPresenceProvider>
         </main>
@@ -409,6 +417,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
+          <Suspense fallback={null}>
+            <UsageTracker />
+          </Suspense>
           <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {/* 배경(운영실) F1 은 창(z-40) 아래 — 창을 보고 있는데 대시보드 설명이 덮이지 않게. */}
             <ScreenHelpOverlay beneathWindows />

@@ -242,6 +242,8 @@ export function CommandPalette({
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/20 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0" />
         <Dialog.Popup
+          // data-usage-chrome — 검색 팰릿 입력은 배경 화면의 활동이 아니다(이용 분석, features/usage/session.ts).
+          data-usage-chrome=""
           initialFocus={() => inputRef.current}
           className="border-line bg-card shadow-modal fixed top-[26vh] left-1/2 z-50 w-full max-w-[min(560px,calc(100%-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border outline-none duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
         >
