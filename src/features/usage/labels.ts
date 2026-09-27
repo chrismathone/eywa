@@ -2,14 +2,18 @@ import { MENU_LABEL, SYSTEM_ROLES } from "@/lib/permissions";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { SUBTABS_BY_MENU } from "@/lib/navigation";
 import { menuKeyOfRoute, routeKeyOf } from "./route-key";
+import { splitSegmentKey, subjectGroupLabel } from "./segment";
 
 /**
  * 이용 분석 **표시 말** — 권한·메뉴·화면·시간을 한글로(raw 키 노출 금지 규칙). 순수 함수(Vitest).
  * 🔴 라벨 표를 여기 새로 적지 않는다 — 메뉴 = `MENU_LABEL`, 권한 = `ROLE_LABEL`, 하부 면 = `SUBTABS_BY_MENU`(사이드바와 같은 말).
  */
 
-/** 분석에 나오는 권한 — 학원 시스템 역할 + 슈퍼관리자 계정(0292a가 따로 적는다). */
-export const USAGE_ROLES = [...SYSTEM_ROLES, "super_admin"] as const;
+/**
+ * 분석에 나오는 권한 = 학원 시스템 역할. 🔴 슈퍼관리자는 **세지 않는다**(0293a, 원장 2026-09-28 *"슈퍼 관리자는 제외"*) —
+ * 필터에도 두지 않는다.
+ */
+export const USAGE_ROLES = SYSTEM_ROLES;
 export type UsageRole = (typeof USAGE_ROLES)[number];
 
 export function isUsageRole(v: string): v is UsageRole {
@@ -17,8 +21,16 @@ export function isUsageRole(v: string): v is UsageRole {
 }
 
 export function usageRoleLabel(role: string): string {
+  // 0293a 적용 전에 쌓인 슈퍼관리자 행(0293a가 지운다)이 잠깐 보여도 영문 키가 새지 않게.
   if (role === "super_admin") return "슈퍼관리자";
   return (ROLE_LABEL as Record<string, string>)[role] ?? "알 수 없는 권한";
+}
+
+/** 사용자 분류(권한 · 강사는 과목) → "원장" · "강사 · 수학" · "강사 · 과목 미지정". */
+export function usageSegmentLabel(key: string, labelOf: (subjectKey: string) => string): string {
+  const { role, subject } = splitSegmentKey(key);
+  const roleLabel = usageRoleLabel(role);
+  return subject === null ? roleLabel : `${roleLabel} · ${subjectGroupLabel(subject, labelOf)}`;
 }
 
 export function usageMenuLabel(menuKey: string): string {

@@ -4,6 +4,7 @@ import { parseUsageRows, shapeUsage, type RawUsageRow } from "./summary";
 const row = (p: Partial<RawUsageRow> & { set: string }): RawUsageRow => ({
   tenantId: null,
   role: null,
+  subjectGroup: null,
   menuKey: null,
   routeKey: null,
   visits: 0,
@@ -51,6 +52,22 @@ describe("shapeUsage", () => {
     expect(second!.topMenus).toEqual([]);
   });
 
+  it("강사는 과목 묶음으로 갈린다(0293a) — 강사 아닌 권한은 과목 칸이 ''라 그대로", () => {
+    const s = shapeUsage(
+      [
+        row({ set: "role", role: "teacher", subjectGroup: "math", activeSec: 300, users: 2 }),
+        row({ set: "role", role: "teacher", subjectGroup: "english+math", activeSec: 200, users: 1 }),
+        row({ set: "role", role: "teacher", subjectGroup: "", activeSec: 100, users: 1 }),
+        row({ set: "role", role: "admin", subjectGroup: "", activeSec: 50, users: 1 }),
+        row({ set: "role_menu", role: "teacher", subjectGroup: "math", menuKey: "mcs", activeSec: 300, users: 2 }),
+      ],
+      [],
+    );
+    expect(s.roles.map((r) => r.key).join(",")).toBe("teacher:math,teacher:english+math,teacher:,admin");
+    expect(s.roles[0]!.topMenus.map((m) => m.menuKey)).toEqual(["mcs"]);
+    expect(s.roles[1]!.topMenus).toEqual([]);
+  });
+
   it("기간 안에 안 열린 메뉴를 가려낸다", () => {
     expect(shapeUsage(ROWS, ["timetable", "attendance", "shuttle"]).unusedMenus).toEqual(["shuttle"]);
   });
@@ -71,8 +88,9 @@ describe("parseUsageRows", () => {
       { visits: 1 },
     ]);
     expect(rows).toEqual([
-      { set: "menu", tenantId: null, role: null, menuKey: "billing", routeKey: null, visits: 3, openSec: 10, activeSec: 5, users: 1 },
+      { set: "menu", tenantId: null, role: null, subjectGroup: null, menuKey: "billing", routeKey: null, visits: 3, openSec: 10, activeSec: 5, users: 1 },
     ]);
     expect(parseUsageRows(null)).toEqual([]);
+    expect(parseUsageRows([{ set: "role", role: "teacher", subject_group: "" }])[0]!.subjectGroup).toBe("");
   });
 });

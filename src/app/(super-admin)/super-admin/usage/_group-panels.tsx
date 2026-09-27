@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Panel, TABLE_COL_LINES, TH, fmtNum } from "@/components/super-admin/parts";
-import { fmtDuration, usageMenuLabel, usageRoleLabel } from "@/features/usage/labels";
+import { fmtDuration, usageMenuLabel, usageSegmentLabel } from "@/features/usage/labels";
+import { splitSegmentKey } from "@/features/usage/segment";
 import { usageHref, type UsageQuery } from "@/features/usage/query";
 import type { GroupUsage } from "@/features/usage/summary";
 import type { TenantOption } from "@/features/usage/server/summary-query";
@@ -8,7 +9,7 @@ import { EmptyRow, ShareBar, SORT_LABEL, activityRatio, metricText } from "./_pa
 
 /**
  * 권한별·지점별 묶음 — "누가 어디를 쓰나". 사람 한 명 단위는 보여 주지 않는다(권한·지점 집계만, 0292a 머리주석).
- * 카드·행을 누르면 그 권한·지점으로 좁혀 아래 표 전체를 다시 본다.
+ * 강사는 과목별 카드로 갈린다(0293a). 카드·행을 누르면 그 분류·지점으로 좁혀 아래 표 전체를 다시 본다.
  */
 
 function TopMenus({ group, q }: { group: GroupUsage; q: UsageQuery }) {
@@ -28,9 +29,27 @@ function TopMenus({ group, q }: { group: GroupUsage; q: UsageQuery }) {
   );
 }
 
-export function RoleUsagePanel({ roles, q }: { roles: GroupUsage[]; q: UsageQuery }) {
+/** 분류 카드 → 그 분류로 좁힌 주소(강사 과목이면 과목 필터까지). */
+function segmentHref(q: UsageQuery, key: string): string {
+  const { role, subject } = splitSegmentKey(key);
+  return usageHref(q, { role: role as UsageQuery["role"], subject });
+}
+
+export function RoleUsagePanel({
+  roles,
+  q,
+  subjectLabels,
+}: {
+  roles: GroupUsage[];
+  q: UsageQuery;
+  subjectLabels: Record<string, string>;
+}) {
+  const labelOf = (k: string) => subjectLabels[k] ?? k;
   return (
-    <Panel title="권한별 많이 쓰는 메뉴" description={`권한마다 ${SORT_LABEL[q.sort]} 상위 5개 메뉴입니다. 권한 이름을 누르면 그 권한만 봅니다.`}>
+    <Panel
+      title="권한별 많이 쓰는 메뉴"
+      description={`권한마다(강사는 담당 과목별로) ${SORT_LABEL[q.sort]} 상위 5개 메뉴입니다. 이름을 누르면 그 분류만 봅니다.`}
+    >
       {roles.length === 0 ? (
         <p className="text-foreground py-6 text-center text-sm">이 조건에서 기록된 이용이 없습니다.</p>
       ) : (
@@ -38,8 +57,8 @@ export function RoleUsagePanel({ roles, q }: { roles: GroupUsage[]; q: UsageQuer
           {roles.map((r) => (
             <section key={r.key} className="border-line space-y-2.5 rounded-2xl border p-3">
               <header className="flex flex-wrap items-baseline justify-between gap-x-2">
-                <Link href={usageHref(q, { role: r.key as UsageQuery["role"] })} className="text-foreground hover:text-primary text-base font-bold">
-                  {usageRoleLabel(r.key)}
+                <Link href={segmentHref(q, r.key)} className="text-foreground hover:text-primary text-base font-bold">
+                  {usageSegmentLabel(r.key, labelOf)}
                 </Link>
                 <span className="num text-foreground text-sm">
                   {fmtNum(r.users)}명 · 활동 {fmtDuration(r.activeSec)} · 활동률 {activityRatio(r)}

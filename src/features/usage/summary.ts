@@ -1,3 +1,5 @@
+import { usageSegmentKey } from "./segment";
+
 /**
  * 이용 분석 **집계 모양 잡기** — DB 함수(0292a `page_usage_summary`)가 준 묶음 행을 화면 모델로(순수 함수, Vitest).
  *
@@ -12,6 +14,8 @@ export type RawUsageRow = {
   set: string;
   tenantId: string | null;
   role: string | null;
+  /** 강사 과목 묶음(0293a). ''=과목 없음 · null=칸이 없는 옛 스키마(0293a 적용 전). */
+  subjectGroup: string | null;
   menuKey: string | null;
   routeKey: string | null;
 } & UsageAgg;
@@ -24,6 +28,7 @@ export type UsageSummary = {
   total: UsageAgg;
   menus: MenuUsage[];
   routes: RouteUsage[];
+  /** 권한 묶음 — 강사는 과목별로 갈린다(키 = `usageSegmentKey`). */
   roles: GroupUsage[];
   tenants: GroupUsage[];
   /** 기간 안에 한 번도 안 열린 메뉴(유지보수 우선순위를 낮출 후보). */
@@ -51,6 +56,7 @@ export function parseUsageRows(raw: unknown): RawUsageRow[] {
         set,
         tenantId: str(o.tenant_id),
         role: str(o.role),
+        subjectGroup: typeof o.subject_group === "string" ? o.subject_group : null,
         menuKey: str(o.menu_key),
         routeKey: str(o.route_key),
         visits: num(o.visits),
@@ -120,7 +126,7 @@ export function shapeUsage(
     total,
     menus,
     routes,
-    roles: groups("role", "role_menu", (r) => r.role),
+    roles: groups("role", "role_menu", (r) => (r.role ? usageSegmentKey(r.role, r.subjectGroup) : null)),
     tenants: groups("tenant", "tenant_menu", (r) => r.tenantId),
     unusedMenus: allMenus.filter((k) => !used.has(k)),
   };
