@@ -182,9 +182,11 @@ export async function reactivateStudent(
   // 되돌릴 대상 판정을 위해 퇴원일을 먼저 읽는다 — 퇴원이 닫은 수강(end_date=퇴원일)만 다시 연다.
   const { data: cur } = await supabase
     .from("students")
-    .select("withdrawn_at")
+    .select("status, withdrawn_at")
     .eq("id", studentId)
     .maybeSingle();
+  // 퇴원 상태만 복구한다 — 퇴원 예약(상태 재원·휴원 + 퇴원일) 학생은 원생 상세 '퇴원 예약 취소'로 푼다(원장 2026-09-28).
+  if (cur?.status !== "withdrawn") return { error: "퇴원 상태가 아닙니다. 화면을 새로고침해 주세요." };
   const withdrawnDate = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
 
   const { error } = await supabase

@@ -34,7 +34,6 @@ describe("F1 겹침 배선", () => {
     const src = [
       read("app/(shell)/timetable/page.tsx"),
       read("app/(shell)/timetable/_components/week-nav.tsx"),
-      read("app/(shell)/timetable/_components/student-tally.tsx"),
       read("app/(shell)/timetable/_components/class-cell.tsx"),
       read("app/(shell)/timetable/_components/reserved-section.tsx"),
       read("app/(shell)/timetable/_components/teacher-head-cell.tsx"),

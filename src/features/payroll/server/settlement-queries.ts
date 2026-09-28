@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageSalary } from "./salary-access";
@@ -91,23 +92,29 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
     const from = `${period}-01`;
     const [y, m] = period.split("-").map(Number);
     const to = new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
-    const recs = await fetchAllPagedInChunks<{
+    const rawRecs = await fetchAllPagedInChunks<{
+      id: string;
+      student_id: string;
       class_id: string;
       session_date: string;
+      slot_start: string | null;
+      recorded_at: string;
       session_units: number | string | null;
       status: string;
       seat_label: string | null;
     }>(dowClassIds, (chunk, f, t) =>
       supabase
         .from("attendance_records")
-        .select("class_id, session_date, session_units, status, seat_label")
+        .select("id, student_id, class_id, session_date, slot_start, recorded_at, session_units, status, seat_label")
         .in("class_id", chunk)
         .gte("session_date", from)
         .lte("session_date", to)
         .order("id", { ascending: true })
         .range(f, t),
     );
-    for (const r of recs) {
+    // 🔴 정정 줄은 최신 하나만(공용 `effectiveAttendanceRecords`) — 원본 줄을 다 더하면 정정한 칸이 두 번 들어가
+    //    주말/평일 비율이 틀어지고 급여가 움직였다(점검 2026-09-28).
+    for (const r of effectiveAttendanceRecords(rawRecs)) {
       // 결석은 시수를 소비하지 않는다(COUNTABLE_STATUSES와 같은 기준) — 안분 분모에서도 뺀다.
       if (r.status === "absent" || r.status === "excused") continue;
       // 자리(랩실·JJ실) 수업은 담임 시수가 아니다(0208a) — 안분 분모에서도 뺀다. tier-rows.ts와 같은 규칙.

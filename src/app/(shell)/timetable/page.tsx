@@ -106,7 +106,6 @@ import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-siz
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
 import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
-import { StudentTally } from "./_components/student-tally";
 import { WeekNav } from "./_components/week-nav";
 import { ScheduledImportBadge } from "./_components/scheduled-import-badge";
 import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
@@ -664,31 +663,8 @@ export default async function TimetablePage({
   const nowMin = kstMinutesOfDay();
   // ('1시간 단위' 섹션 토글 href는 없앴다 — 토글이 통합뷰에서 '그룹 설정' 화면으로 옮겨갔고,
   //  거기선 URL이 아니라 계정 설정에 직접 저장한다. 2026-08-13)
-  // 상단 명단 요약(ijw식 재원/신입/전입/퇴원) — 그 주 시점(타임머신) 기준. 학생이 여러 반에 걸쳐 있어
-  // studentId로 유일 집계(중복 제거). 상태 우선순위 재원>대기>퇴원(한 반 재원·다른 반 퇴원이면 재원).
-  const statusOf = new Map<string, "active" | "hold" | "withdrawn">();
-  const newIds = new Set<string>();
-  const transferIds = new Set<string>();
-  const sRank = (s: "active" | "hold" | "withdrawn") => (s === "active" ? 0 : s === "hold" ? 1 : 2);
-  for (const sl of slots) {
-    for (const st of sl.students) {
-      const prev = statusOf.get(st.studentId);
-      if (prev === undefined || sRank(st.status) < sRank(prev)) statusOf.set(st.studentId, st.status);
-      if (st.isNew) newIds.add(st.studentId);
-      if (st.isTransferredIn) transferIds.add(st.studentId);
-    }
-  }
-  let enrolledCount = 0;
-  let holdCount = 0;
-  let withdrawnCount = 0;
-  for (const s of statusOf.values()) {
-    if (s === "active") enrolledCount++;
-    else if (s === "hold") holdCount++;
-    else withdrawnCount++;
-  }
-  // 신입·전입은 재원(active) 학생만 카운트(퇴원자의 옛 플래그 제외).
-  const newCount = [...newIds].filter((id) => statusOf.get(id) === "active").length;
-  const transferCount = [...transferIds].filter((id) => statusOf.get(id) === "active").length;
+  // 🔴 상단 명단 요약(재원·신입·반이동·대기·퇴원 인원)은 **없앴다**(원장 2026-09-28 *"시간표 우측 상단 인원 표시 삭제. 헷갈리니까"*).
+  //    셀의 신입·준신입·반이동·대기·퇴원 **표시**(30일·60일 창)는 그대로다. 인원은 원생목록·운영실·퇴원관리가 센다.
 
   // 학생 검색(원장 2026-08-20 "학생 검색하면 해당 학생이 존재하는 수업만 노출") — **새 조회 없이**
   // 위에서 이미 만든 `slots[].students[]`로 반 단위 색인만 만든다(그래서 강사 열람 범위도 안 넓어진다).
@@ -734,27 +710,16 @@ export default async function TimetablePage({
       <TimetableColorPrefSync mode={viewPrefs.colorMode} />
       {/* 글씨 크기(계정) → 스토어 주입. 색 강도와 같은 단방향 동기화 — 토글은 뷰 설정 팝오버에 있다. */}
       <TimetableFontPrefSync fontSize={viewPrefs.fontSize} />
-      {/* Editorial 문법 ① — 헤더 위계 + 우측 학생 집계(StudentTally). 시간표는 세로 공간이 가장
-          귀한 화면이라 **창(임베드)에선 이 줄을 통째로 접고** 집계를 툴바 우측으로 내린다(컴팩트
-          1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지. */}
+      {/* Editorial 문법 ① — 헤더 위계. 시간표는 세로 공간이 가장 귀한 화면이라 **창(임베드)에선 이 줄을
+          통째로 접는다**(컴팩트 1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지.
+          (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
       <div className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title="시간표"
           description={isRooms ? "교실 사용 현황 지도" : `${subjectMaps.labelOf(subject)} 주간표`}
           actions={
-            isRooms ? null : (
-              <>
-                {showEcsShortcut ? <EcsShortcut week={week} /> : null}
-                <StudentTally
-                  enrolled={enrolledCount}
-                  newCount={newCount}
-                  transferCount={transferCount}
-                  holdCount={holdCount}
-                  withdrawnCount={withdrawnCount}
-                />
-              </>
-            )
+            isRooms || !showEcsShortcut ? null : <EcsShortcut week={week} />
           }
         />
       </div>
@@ -1089,26 +1054,13 @@ export default async function TimetablePage({
         <div className="rail-spacer ml-auto" aria-hidden />
         <div className="toolbar-group flex flex-wrap items-center gap-3">
 
-        {/* 학생 집계 — 최상위 프레임은 PageHeader 우측(문법 ②), 창(임베드)은 헤더 줄을 접으므로
-            여기 툴바 우측에 노출(StudentTally 공유, 순수 마크업이라 이중 마운트 안전). */}
-        {/* 창(임베드)에선 위 헤더 줄이 통째로 접히므로 ECS 바로가기도 여기 한 번 더 — 안 그러면
-            실사용(플로팅 창)에서 영영 안 보인다(StudentTally가 이중 렌더인 이유와 동일). */}
+        {/* 창(임베드)에선 위 헤더 줄이 통째로 접히므로 ECS 바로가기를 여기 한 번 더 — 안 그러면
+            실사용(플로팅 창)에서 영영 안 보인다. */}
         {showEcsShortcut && !isRooms ? (
           <div className="hidden compact-chrome:block">
             <EcsShortcut week={week} />
           </div>
         ) : null}
-        {isRooms ? null : (
-          <div className="hidden compact-chrome:block">
-            <StudentTally
-              enrolled={enrolledCount}
-              newCount={newCount}
-              transferCount={transferCount}
-              holdCount={holdCount}
-              withdrawnCount={withdrawnCount}
-            />
-          </div>
-        )}
 
         {/* 편집 컨트롤 — 기본뷰·**통합뷰** + 이번/미래 주(강사뷰=읽기전용, 과거=조회 전용).
             🔴 2026-09-09: 통합뷰에도 학생 반 이동이 생겨(원장 *"통합뷰에서도 학생 드래그 기능 추가시켜"*)

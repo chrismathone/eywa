@@ -122,3 +122,50 @@ export async function listOpenEnrollments(
     })),
   };
 }
+
+/**
+ * 학생의 활성(end_date null) 수강을 date로 종료한다. ⚠️ 미래 시작(start_date > date) 수강에
+ * end_date=date를 넣으면 daterange(start_date, date)가 lower>upper로 throw("range lower bound must be
+ * less than or equal to range upper bound") → 그 건은 end_date=start_date(zero-length=미활성=사실상 취소)로 클램프.
+ * 🔑 퇴원 저장(오늘·과거 퇴원일)과 퇴원 예약 cron(`apply-due-withdrawals`)이 이 한 함수를 쓴다.
+ * (admin 데이터정리 closeOrphanEnrollments와 동일 원리 — 그쪽은 다중 학생 청크판.) date 없으면 원래 동작(미종료).
+ */
+export async function closeActiveEnrollmentsClamped(
+  supabase: Supabase,
+  studentId: string,
+  date: string | null,
+  extra: Record<string, unknown> = {},
+): Promise<string | null> {
+  if (!date) {
+    const { error } = await supabase
+      .from("enrollments")
+      .update({ end_date: null, ...extra })
+      .eq("student_id", studentId)
+      .is("end_date", null);
+    return error?.message ?? null;
+  }
+  // 정상(시작일 ≤ date): 일괄 end_date=date.
+  const { error } = await supabase
+    .from("enrollments")
+    .update({ end_date: date, ...extra })
+    .eq("student_id", studentId)
+    .is("end_date", null)
+    .lte("start_date", date);
+  if (error) return error.message;
+  // 미래 시작(배정 예정): 행마다 start_date가 달라 개별 종료(end_date = 그 수강의 start_date).
+  const { data: future, error: fErr } = await supabase
+    .from("enrollments")
+    .select("id, start_date")
+    .eq("student_id", studentId)
+    .is("end_date", null)
+    .gt("start_date", date);
+  if (fErr) return fErr.message;
+  for (const e of future ?? []) {
+    const { error: uErr } = await supabase
+      .from("enrollments")
+      .update({ end_date: e.start_date, ...extra })
+      .eq("id", e.id);
+    if (uErr) return uErr.message;
+  }
+  return null;
+}
