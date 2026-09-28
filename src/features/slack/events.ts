@@ -1,7 +1,7 @@
 import type { NotificationType } from "@/features/notifications/types";
 
 /**
- * 잔디 방으로 보낼 수 있는 알림 종류 — `notifyUsers()`를 **거치는** 것만(2026-09-28 1단계).
+ * 슬랙으로 보낼 수 있는 알림 종류 — `notifyUsers()`를 **거치는** 것만(2026-09-28 1단계).
  *
  * 🔴 여기 없는 알림은 `notifyUsers()`를 안 거치고 직접 insert된다 → 목록에 올리면 "골랐는데 안 온다"는
  *    거짓 약속이 된다(write-only-orphan). 빠진 것과 이유:
@@ -11,9 +11,9 @@ import type { NotificationType } from "@/features/notifications/types";
  *    · daily_briefing = 생성 중단(과거 데이터 호환용)
  *    새 알림 종류를 notifyUsers로 만들면 여기에도 한 줄 더할 것(가드 `events.test.ts`).
  */
-export type JandiEventOption = { type: NotificationType; label: string; group: string };
+export type ForwardEventOption = { type: NotificationType; label: string; group: string };
 
-export const JANDI_EVENT_OPTIONS: readonly JandiEventOption[] = [
+export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "enrollment_assigned", label: "내 반에 학생 배정", group: "수업·반" },
   { type: "enrollment_transferred_in", label: "반이동 전입", group: "수업·반" },
   { type: "teacher_handover", label: "담임 인수인계", group: "수업·반" },
@@ -37,14 +37,14 @@ export const JANDI_EVENT_OPTIONS: readonly JandiEventOption[] = [
   { type: "help_answer", label: "도움말 답변", group: "도움말" },
 ];
 
-const LABEL_BY_TYPE = new Map<string, string>(JANDI_EVENT_OPTIONS.map((o) => [o.type, o.label]));
+const LABEL_BY_TYPE = new Map<string, string>(FORWARD_EVENT_OPTIONS.map((o) => [o.type, o.label]));
 
-export function jandiEventLabel(type: string): string {
+export function forwardEventLabel(type: string): string {
   return LABEL_BY_TYPE.get(type) ?? "알림";
 }
 
 /** 저장 전 정리 — 목록에 있는 종류만, 중복 없이, 목록 순서대로. */
-export function sanitizeJandiEventTypes(input: readonly string[]): NotificationType[] {
+export function sanitizeForwardEventTypes(input: readonly string[]): NotificationType[] {
   const picked = new Set(input);
-  return JANDI_EVENT_OPTIONS.filter((o) => picked.has(o.type)).map((o) => o.type);
+  return FORWARD_EVENT_OPTIONS.filter((o) => picked.has(o.type)).map((o) => o.type);
 }

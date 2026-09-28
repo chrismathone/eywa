@@ -26,7 +26,7 @@ import {
   CONSULTATION_CATEGORY_LABEL,
 } from "@/features/consultations/labels";
 import { meetingReportSectionLabel } from "@/features/meetings/report-sections";
-import { jandiEventLabel } from "@/features/jandi/events";
+import { forwardEventLabel } from "@/features/slack/events";
 import {
   TEXTBOOK_CHECK_LABEL,
   describeTextbookChanges,
@@ -494,17 +494,29 @@ export function auditDetail(
     }
     case "integration_sync_now":
       return "지금 동기화 실행";
-    case "jandi_webhook_update": {
-      // 웹훅 주소(비밀)는 애초에 metadata에 없다 — 바뀌었는지와 고른 알림 종류만 한글로.
-      const types = arr(m.eventTypes).map(str).filter((v): v is string => !!v);
-      const names = types.slice(0, 3).map(jandiEventLabel).join(", ");
-      const list = types.length ? `알림 ${types.length}종 (${names}${types.length > 3 ? " 외" : ""})` : "보낼 알림 없음";
-      return m.urlChanged === true ? `주소 변경 · ${list}` : list;
+    case "slack_connection_token": {
+      // 토큰(비밀)은 애초에 metadata에 없다 — 연결된 워크스페이스 이름만.
+      const team = str(m.team);
+      return team ? `워크스페이스 ${team}` : "토큰 등록";
     }
-    case "jandi_webhook_disconnect":
+    case "slack_connection_routes": {
+      const routes = arr(m.routes).filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
+      if (!routes.length) return "보낼 곳 없음";
+      return routes
+        .map((r) => {
+          const types = arr(r.eventTypes).map(str).filter((v): v is string => !!v);
+          const names = types.slice(0, 2).map((t) => forwardEventLabel(t)).join(", ");
+          return `${str(r.to) ?? "?"} ${types.length}종${names ? ` (${names}${types.length > 2 ? " 외" : ""})` : ""}`;
+        })
+        .join(" · ");
+    }
+    case "slack_connection_disconnect":
       return "연결 해제";
-    case "jandi_webhook_test":
-      return m.ok === true ? "확인 메시지 보냄" : "확인 메시지 실패";
+    case "slack_connection_test": {
+      const sent = num(m.sent);
+      const failed = num(m.failed);
+      return `확인 메시지 ${sent ?? 0}곳 보냄${failed ? ` · ${failed}곳 실패` : ""}`;
+    }
     case "makeedu_paid_recovery": {
       const count = num(m.count);
       return count === null ? "수납 입력값 복구" : `수납 ${count}건 복구 · 환불·확정·배분값 보존`;
