@@ -1,5 +1,6 @@
 // 학생 상세 출결 탭 — 라벨·필터·달력 배치(순수). 과목 라벨은 학원설정 labelOf.
 import { seatKeyOf, SEAT_NAME } from "@/features/attendance/seat/seat";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import {
   ATT_SOFT,
@@ -179,14 +180,14 @@ export type AttendanceMonthStats = {
   rate: number;
 };
 
-/** 출석률 = (출석+지각+보강)/전건. */
+/** 출석률 = (출석+지각)/전건 — 보강은 출석이 아니다(원장 2026-09-28, 공용 `attendedCount`). */
 export function computeAttendanceStats(records: { status: string }[]): AttendanceMonthStats {
   const c = { present: 0, absent: 0, late: 0, excused: 0, early_leave: 0, makeup: 0 };
   for (const r of records) {
     if (r.status in c) c[r.status as keyof typeof c]++;
   }
   const total = records.length;
-  const rate = total > 0 ? Math.round(((c.present + c.late + c.makeup) / total) * 1000) / 10 : 0;
+  const rate = Math.round(attendanceRate(attendedCount(c), total) * 10) / 10;
   return { ...c, total, rate };
 }
 

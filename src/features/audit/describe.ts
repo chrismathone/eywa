@@ -757,6 +757,8 @@ export function auditDetail(
       const reason = reasonDisplay(str(m.reason));
       return join(
         ctx.nameOf(m.studentId),
+        // 퇴원 예약(미래 퇴원일 — 그날 cron이 처리) · 예약이 그날 적용된 것 — 원장 2026-09-28.
+        m.scheduled ? "퇴원 예약" : m.applied === "scheduled" ? "예약된 퇴원 적용" : null,
         str(m.date) ? `퇴원일 ${str(m.date)}` : null,
         reason ? `사유: ${reason}` : null,
         str(m.memo),
@@ -765,6 +767,8 @@ export function auditDetail(
     case "student_hold":
     case "student_restore": {
       // 휴원 메모는 여기 말고 남는 자리가 없다(enrollments·students에 칸이 없다) — 적혔으면 보여 준다.
+      if ("cancelledWithdrawal" in m)
+        return join(ctx.nameOf(m.studentId), "퇴원 예약 취소", str(m.cancelledWithdrawal) ? `예약일 ${str(m.cancelledWithdrawal)}` : null);
       return join(ctx.nameOf(m.studentId), str(m.memo));
     }
     case "student_update": {
@@ -774,7 +778,13 @@ export function auditDetail(
         from && to && from !== to
           ? `상태 ${STUDENT_STATUS_LABEL[from] ?? from} → ${STUDENT_STATUS_LABEL[to] ?? to}`
           : null;
-      return join(ctx.nameOf(m.studentId), statusChanged);
+      return join(
+        ctx.nameOf(m.studentId),
+        statusChanged,
+        // 수정 폼으로 건·푼 퇴원 예약(원장 2026-09-28) — 상태가 그대로여도 남는다.
+        str(m.scheduledWithdrawal) ? `퇴원 예약 ${str(m.scheduledWithdrawal)}` : null,
+        str(m.cancelledWithdrawal) ? `퇴원 예약 취소(예약일 ${str(m.cancelledWithdrawal)})` : null,
+      );
     }
     case "student_create": {
       return ctx.nameOf(m.studentId) ?? str(m.studentName);

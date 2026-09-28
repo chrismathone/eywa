@@ -20,12 +20,12 @@ export function withdrawalMonthWindow(month: string, today: string): { from: str
   return { from, to: to < today ? to : today };
 }
 
-/** 시간표 상단 '퇴원'과 퇴원관리 '최근 30일'의 창 길이 — 한 값(원장 2026-09-28 *"같은 배선을 따야"*). */
+/** 시간표 칸의 퇴원 표시 창과 퇴원관리 '최근 30일' 필터의 길이 — 한 값(원장 2026-09-28 *"같은 배선을 따야"*). 인원 **숫자**는 이 창이 아니라 `withdrawalMonthWindow`(이번 달)다. */
 export const RECENT_EXIT_DAYS = 30;
 
 /**
- * **최근 이탈 창** — 기준일 N일 전 ~ 기준일(KST, 양끝 포함). 🔴 시간표 상단 집계(`getWeeklyScheduleWithStudents`의
- * 퇴원 표시 하한)와 퇴원관리 롤링 기간(최근 30·90일·1년)이 **이 한 함수**를 쓴다 — 따로 적으면 한쪽만 예정일을 세거나
+ * **최근 이탈 창** — 기준일 N일 전 ~ 기준일(KST, 양끝 포함). 🔴 시간표 칸(`getWeeklyScheduleWithStudents`의
+ * 퇴원 표시 하한 — 상단 인원 숫자는 2026-09-28 삭제)와 퇴원관리 롤링 기간(최근 30·90일·1년)이 **이 한 함수**를 쓴다 — 따로 적으면 한쪽만 예정일을 세거나
  * 하루 경계가 갈려 같은 학생을 두 화면이 다르게 센다(최다은 10/1 퇴원 예정: 시간표 8 · 퇴원관리 9, 2026-09-28).
  * 🔴 끝은 **기준일**이다 — 오늘 이후로 적힌 퇴원은 아직 퇴원이 아니다(`withdrawalMonthWindow`와 같은 규칙).
  */

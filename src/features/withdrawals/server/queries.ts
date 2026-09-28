@@ -64,6 +64,8 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       .select(
         `id, name, school, grade, enrolled_at, withdrawn_at, withdrawal_metadata, notes`,
       )
+      // 🔴 퇴원 **예약**(상태 재원·휴원 + 퇴원일)은 싣지 않는다 — 퇴원일 전까지 재원이다(원장 2026-09-28). 그날 cron이
+      //    퇴원 처리하면 이 목록에 들어온다. 싣으면 전체 퇴원 수·사유·상담·추이에 미리 섞인다(리뷰 2026-09-28).
       .eq("status", "withdrawn")
       .order("withdrawn_at", { ascending: false })
       // OFFSET 페이지 안정화 — unique tie-break(id) 필수(batch.ts 계약)

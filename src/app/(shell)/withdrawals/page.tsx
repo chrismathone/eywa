@@ -259,8 +259,10 @@ export default async function WithdrawalsPage({
   const topReasons = Array.from(reasonCounts.entries()).sort((a, b) => b[1] - a[1]);
   const maxCount = topReasons[0]?.[1] ?? 1;
 
-  // 최근 30일 — **기간 축만 뺀** 모집단(자기 기간을 이미 30일로 못박은 수치라 기간 필터를 또 걸 수 없다).
-  const recentWindow = resolveRange("30d", { today, month: monthWindow });
+  // 이번 달 — **기간 축만 뺀** 모집단(자기 기간을 이미 이번 달로 못박은 수치라 기간 필터를 또 걸 수 없다).
+  // 🔴 운영실 '퇴원생'과 같은 창(`withdrawalMonthWindow`, 1일 ~ 오늘) — 원장 2026-09-28 *"최근 30일 -> 이번달"*.
+  //    툴바에서 다른 달을 골라도 이 카드는 **이번 달**이다(카드 이름이 곧 기간).
+  const recentWindow = resolveRange("month", { today, month: withdrawalMonthWindow(kstMonth(), today) });
   const recent = trendRows.filter((r) => inRange(r, recentWindow)).length;
 
   // 월별 추이 = 기간 축 제외 · 과목별 분포 = 과목 축 제외(위 술어 주석 참조).
@@ -335,7 +337,7 @@ export default async function WithdrawalsPage({
           icon={<BookOpen size={16} strokeWidth={1.8} />}
         />
         ) : null}
-        <BigStat label="최근 30일" value={recent} unit="건" sub={noun} tone="danger" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
+        <BigStat label="이번 달" value={recent} unit="건" sub={noun} tone="danger" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
         <BigStat
           label="상담 미완료"
           value={consultPending}
