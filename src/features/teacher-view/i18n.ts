@@ -680,8 +680,8 @@ export const SHEET_DICT = {
   "roster.srs": { ko: "SRS 단어수", en: "SRS words" },
   "roster.srs.busy": { ko: "가져오는 중…", en: "Fetching…" },
   "roster.srs.title": {
-    ko: "이 교시 명단의 '누적 암기 단어수'를 SRS 최신값으로 맞춥니다 — 빈 칸은 채우고 숫자는 갱신하며, 메모가 적힌 칸과 지난 날 칸은 그대로 둡니다",
-    en: "Bring this period's memorized-word counts up to date from SRS — fills blanks and refreshes numbers, but leaves notes and past days untouched",
+    ko: "이 교시 명단의 '누적 암기 단어수'를 SRS의 '지금까지 학습한 단어 수'로 맞춥니다 — 빈 칸은 채우고 숫자는 갱신하며, 메모가 적힌 칸과 지난 날 칸은 그대로 둡니다",
+    en: "Bring this period's word counts up to date from the SRS total words studied — fills blanks and refreshes numbers, but leaves notes and past days untouched",
   },
   /** 결과 한 줄 — 수·낱말은 서버가 만든 문장(`memorizedFillNotice`)이 그대로 들어온다. */
   "roster.srs.done": { ko: "누적 암기 단어수 — {notice}", en: "Memorized words — {notice}" },
