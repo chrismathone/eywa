@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { isMergedStudent } from "@/features/students/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
-import { getEndedSubjects } from "../subject-ended";
+import { countsForSubjectExit, getEndedSubjects } from "../subject-ended";
+import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { isSystemBulkWithdrawal } from "../system-bulk";
 import { lastEndedByStudent, pickLastEnded } from "../window";
 import { withdrawalSubjects } from "../exit-rows";
@@ -223,7 +224,7 @@ export type SubjectEndedRow = {
   }[];
 };
 
-type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null };
+type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null; is_special?: boolean | null };
 
 export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
   const supabase = await createClient();
@@ -258,7 +259,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     supabase
       .from("enrollments")
       .select(
-        "id, student_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( subject, class_name, english_track )",
+        "id, student_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( subject, class_name, english_track, is_special )",
       )
       .in("student_id", chunk)
       .order("id")
@@ -271,6 +272,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     startDate: string | null;
     endDate: string | null;
     isTransferred?: boolean;
+    isSpecial: boolean;
     className: string | null;
     englishTrack: string | null;
     reason: string | null;
@@ -287,6 +289,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
       startDate: e.start_date,
       endDate: e.end_date,
       isTransferred: e.is_transferred ?? undefined,
+      isSpecial: isSpecialLecture({ isSpecial: klass?.is_special, className: klass?.class_name }),
       className: klass?.class_name ?? null,
       englishTrack: klass?.english_track ?? null,
       reason: e.withdrawal_reason ?? null,
@@ -298,14 +301,18 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
   const today = kstToday();
   const rows: SubjectEndedRow[] = [];
   for (const s of students) {
-    const enr = bySt.get(s.id) ?? [];
+    // 끝난 특강은 **판정**과 반 이름·사유에서 뺀다(subject-ended.ts 🔴). 단 **날짜**는 그 과목 수강 전부(특강 포함)의
+    // 마지막 종료일 — 정규반 8/31 · 특강 10/15면 과목을 끊은 날은 10/15다(8/31로 찍으면 '최근' 목록을 건너뛰고 8월 추이가 뒤늦게 는다).
+    const all = bySt.get(s.id) ?? [];
+    const enr = all.filter((e) => countsForSubjectExit(e, today));
+    const lastEndOf = (subject: string) =>
+      all.reduce<string | null>((m, e) => (e.subject === subject && e.endDate && (!m || e.endDate > m) ? e.endDate : m), null);
     const { ended, active } = getEndedSubjects(enr, today);
     if (ended.length === 0) continue; // 수강종료 과목이 없으면 제외
     let lastEndedAt: string | null = null;
-    for (const e of enr) {
-      if (ended.includes(e.subject) && e.endDate && (!lastEndedAt || e.endDate > lastEndedAt)) {
-        lastEndedAt = e.endDate;
-      }
+    for (const subject of ended) {
+      const d = lastEndOf(subject);
+      if (d && (!lastEndedAt || d > lastEndedAt)) lastEndedAt = d;
     }
     // 과목마다 마지막으로 끝난 수강 — 날짜·반 이름·프로그램 재료. 고르는 규칙은 `pickLastEnded`(종료일 → 시작일 →
     // id, window.ts)와 같다 — 같은 날 끝난 두 반을 화면마다 다르게 고르면 반 이름·프로그램이 갈린다.
@@ -317,7 +324,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
       );
       return {
         subject,
-        endedAt: best?.endDate ?? null,
+        endedAt: lastEndOf(subject) ?? best?.endDate ?? null,
         className: best?.className ?? null,
         englishTrack: best?.englishTrack ?? null,
         // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.

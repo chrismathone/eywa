@@ -5,6 +5,9 @@
 // 🔴 end_date가 **있기만 하면** 끝난 것으로 보지 않는다 — 종료 예정일이 미래인 반은 아직 다니는 중이다
 //    (예전엔 날짜 비교 없이 잡아 계속 다니는 학생이 수강종료 목록에 섰다). 끝남 판정은
 //    [eligibility](@/features/enrollments/eligibility) `isEnrollmentEndedOn` 그대로(반이동 반열림 규약 포함).
+// 🔴 **끝난 특강은 수강종료가 아니다**(원장 2026-09-28 *"퇴원 (수강종료)카운트에 특강은 제외. 특강을 수강종료했어도 여전히
+//    같은 과목의 다른 수업을 듣고 있으면 수강 종료 및 퇴원으로 처리하지않아야함"*) — 방학 단기강좌가 끝난 것이지 과목을 끊은
+//    것이 아니다. 끝난 특강 수강은 판정에서 통째로 뺀다(`countsForSubjectExit`). 다니는 중인 특강은 그 과목을 '수강 중'으로 둔다.
 
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 
@@ -13,7 +16,14 @@ export type SubjectEnrollment = {
   endDate: string | null;
   /** 반이동으로 닫힌 수강(`enrollments.is_transferred`) — 종료일 당일부터 끝난 것으로 본다. */
   isTransferred?: boolean;
+  /** 특강 반([`isSpecialLecture`](@/features/classes/special-lecture)) — 끝난 특강은 과목 이탈로 세지 않는다. */
+  isSpecial?: boolean;
 };
+
+/** 과목 이탈 판정에 넣는 수강인가 — 끝난 특강만 뺀다(위 🔴). 목록의 날짜·반 이름도 같은 술어로 고른다. */
+export function countsForSubjectExit(e: SubjectEnrollment, today: string): boolean {
+  return !(e.isSpecial && isEnrollmentEndedOn(e.endDate, today, e.isTransferred));
+}
 
 export type SubjectSplit = {
   /** 오늘 기준 모든 수강이 끝난 과목 코드들. */
@@ -29,6 +39,7 @@ export type SubjectSplit = {
 export function getEndedSubjects(enrollments: SubjectEnrollment[], today: string): SubjectSplit {
   const map = new Map<string, { active: boolean; ended: boolean }>();
   for (const e of enrollments) {
+    if (!countsForSubjectExit(e, today)) continue;
     const cur = map.get(e.subject) ?? { active: false, ended: false };
     if (isEnrollmentEndedOn(e.endDate, today, e.isTransferred)) cur.ended = true;
     else cur.active = true;
