@@ -26,7 +26,6 @@ import {
   CONSULTATION_CATEGORY_LABEL,
 } from "@/features/consultations/labels";
 import { meetingReportSectionLabel } from "@/features/meetings/report-sections";
-import { forwardEventLabel } from "@/features/slack/events";
 import {
   TEXTBOOK_CHECK_LABEL,
   describeTextbookChanges,
@@ -500,17 +499,6 @@ export function auditDetail(
       const team = str(m.team);
       return team ? `워크스페이스 ${team}` : "토큰 등록";
     }
-    case "slack_connection_routes": {
-      const routes = arr(m.routes).filter((r): r is Record<string, unknown> => !!r && typeof r === "object");
-      if (!routes.length) return "보낼 곳 없음";
-      return routes
-        .map((r) => {
-          const types = arr(r.eventTypes).map(str).filter((v): v is string => !!v);
-          const names = types.slice(0, 2).map((t) => forwardEventLabel(t)).join(", ");
-          return `${str(r.to) ?? "?"} ${types.length}종${names ? ` (${names}${types.length > 2 ? " 외" : ""})` : ""}`;
-        })
-        .join(" · ");
-    }
     case "slack_connection_disconnect":
       return "연결 해제";
     case "slack_connection_sample": {
@@ -518,10 +506,24 @@ export function auditDetail(
       const failed = num(m.failed);
       return `샘플 알림 ${sent ?? 0}통 보냄${failed ? ` · ${failed}곳 실패` : ""}`;
     }
-    case "slack_connection_test": {
-      const sent = num(m.sent);
-      const failed = num(m.failed);
-      return `확인 메시지 ${sent ?? 0}곳 보냄${failed ? ` · ${failed}곳 실패` : ""}`;
+    case "slack_schedule_update": {
+      const dnd = m.dndEnabled === true ? `방해금지 ${str(m.dndStart) ?? "?"}~${str(m.dndEnd) ?? "?"}` : "방해금지 끔";
+      return join(dnd, m.weekendQuiet === true ? "주말 조용히" : null, str(m.digestAt) ? `요약 ${str(m.digestAt)}` : null);
+    }
+    case "slack_rule_save": {
+      const targets = arr(m.targets).map(str).filter((v): v is string => !!v);
+      return join(
+        m.created === true ? "새 규칙" : "수정",
+        m.enabled === false ? "꺼짐" : null,
+        m.source === "activity" ? "활동 기록" : "알림",
+        num(m.typeCount) !== null ? `${num(m.typeCount)}종` : null,
+        targets.length ? `→ ${targets.slice(0, 3).join(", ")}${targets.length > 3 ? " 외" : ""}` : null,
+        m.timing === "digest" ? "요약으로만" : null,
+      );
+    }
+    case "slack_link_owner": {
+      const n = num(m.count);
+      return n === null ? "이메일 일치 후보 연결" : `이메일 일치 후보 ${n}명 연결`;
     }
     case "makeedu_paid_recovery": {
       const count = num(m.count);

@@ -86,7 +86,7 @@ describe("라이선스 배선 가드", () => {
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
     expect(consumersOf("slack")).toEqual(
       expect.arrayContaining([
-        "src/features/slack/server/forward.ts",
+        "src/features/slack/server/dispatch.ts",
         "src/features/slack/server/gate.ts",
         "src/features/slack/server/queries.ts",
       ]),

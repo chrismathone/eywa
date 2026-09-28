@@ -72,6 +72,21 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   approval_requested: { title: "결재 요청", body: "박지현 · 10월 교재 구입 품의", link: "/approvals" },
   approval_decided: { title: "결재 승인", body: "10월 교재 구입 품의 — 승인되었습니다", link: "/approvals" },
   approval_comment: { title: "결재 문서 댓글", body: "10월 교재 구입 품의 — 박지현: 수량 한 번만 확인 부탁드려요", link: "/approvals" },
+  student_attendance_notice: {
+    title: "김하늘 결석 9/30",
+    body: "학부모: \"내일 가족 행사가 있어 하루 쉽니다\" — 출결 확인이 필요합니다.",
+    link: "/attendance/live?tab=desk",
+  },
+  classnote_parent_post: { title: "학부모 새 글 — 이서준", body: "이번 주 숙제 범위를 다시 알려주실 수 있을까요?", link: "/onescreen" },
+  classnote_parent_comment: { title: "학부모 댓글 — 박지우", body: "알림장 확인했습니다. 감사합니다!", link: "/onescreen" },
+  report_send_failed: { title: "수업 보고서 발송 실패", body: "김하늘 · 09-26 — 학부모 보드를 찾지 못했습니다", link: "/lesson-reports" },
+  notice_send_failed: { title: "학부모 공지 게시 실패", body: "10월 휴원 안내 — 3명에게 게시하지 못했습니다", link: "/lesson-reports" },
+  makeedu_login_failed: {
+    title: "makeedu 접속이 실패했습니다",
+    body: "makeedu 동기화가 멈춥니다 — 비밀번호 변경·CAPTCHA·계정 잠금을 확인해 주세요. (감지 2026-09-28)",
+    link: "/owner?tab=sheets",
+  },
+  support_answer: { title: "개선요청에 답변이 달렸습니다", body: "출석부 인쇄 여백 조정 요청 — 처리 완료", link: "/help" },
   help_question: { title: "도움말 새 질문", body: "보강 예약은 어디서 하나요?", link: "/help" },
   help_answer: { title: "도움말 질문에 답변이 달렸습니다", body: "보강 예약은 어디서 하나요?", link: "/help" },
 };
