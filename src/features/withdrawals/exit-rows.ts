@@ -13,7 +13,7 @@
  * ⚠️ 사후상담은 **퇴원에만** 있다 — 상담 필터를 걸면 수강종료 줄은 빠진다(모르는 것을 '미완료'로 세지 않는다).
  */
 
-import { inWithdrawalWindow } from "./window";
+import { inWithdrawalWindow, recentExitWindow } from "./window";
 import { normalizeReason, reasonDisplay } from "./types";
 
 export type ExitKind = "withdrawn" | "subject-ended";
@@ -67,17 +67,14 @@ export function withdrawalSubjects(ended: readonly { endDate: string | null; sub
 
 export type RangeKey = "all" | "month" | "30d" | "90d" | "year" | "custom";
 
-/** 기간 판정 — 롤링(`30d`·`90d`·`year`)은 옛 동작 그대로 **시작만** 막는다(퇴원 예정일도 보인다). */
-export type RangeWindow =
-  | { kind: "all" }
-  | { kind: "since"; from: string }
-  /** 양끝 포함. 시스템 정리(날짜 미상)는 뺀다 — 장부 날짜로 그 기간에 세면 사실이 아니다. */
-  | { kind: "between"; from: string; to: string };
+/**
+ * 기간 판정 — 전부 **양끝 포함 창**이다. 롤링(`30d`·`90d`·`year`)도 끝이 오늘이다(`recentExitWindow`) — 옛 롤링은 시작만
+ * 막아 퇴원 예정일(10/1)이 '최근 30일'에 들어와 시간표 집계와 한 명이 갈렸다(2026-09-28).
+ * 시스템 정리(날짜 미상)는 뺀다 — 장부 날짜로 그 기간에 세면 사실이 아니다(시간표엔 수강 이력이 없어 원래 안 선다).
+ */
+export type RangeWindow = { kind: "all" } | { kind: "between"; from: string; to: string };
 
 const ymd = (v: string | undefined | null): string | null => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
-
-const shift = (date: string, days: number) =>
-  new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 
 /**
  * URL 값 → 판정 창. `custom`에서 날짜가 비었거나 틀리면 **최근 30일**(시작) ~ 오늘로 채운다 —
@@ -91,13 +88,13 @@ export function resolveRange(
     case "month":
       return { kind: "between", ...opts.month };
     case "30d":
-      return { kind: "since", from: shift(opts.today, -30) };
+      return { kind: "between", ...recentExitWindow(opts.today) };
     case "90d":
-      return { kind: "since", from: shift(opts.today, -90) };
+      return { kind: "between", ...recentExitWindow(opts.today, 90) };
     case "year":
-      return { kind: "since", from: shift(opts.today, -365) };
+      return { kind: "between", ...recentExitWindow(opts.today, 365) };
     case "custom": {
-      let from = ymd(opts.from) ?? shift(opts.today, -30);
+      let from = ymd(opts.from) ?? recentExitWindow(opts.today).from;
       let to = ymd(opts.to) ?? opts.today;
       if (from > to) [from, to] = [to, from];
       return { kind: "between", from, to, custom: { from, to } };
@@ -110,7 +107,6 @@ export function resolveRange(
 export function inRange(row: Pick<ExitRow, "date" | "systemBulk">, w: RangeWindow): boolean {
   if (w.kind === "all") return true;
   if (!row.date) return false;
-  if (w.kind === "since") return row.date >= w.from;
   // 🔴 양끝 창은 운영실 '퇴원생' 카드와 **같은 함수** — 이번 달 판정이 두 화면에서 갈리지 않게(kpi-wiring 가드).
   return inWithdrawalWindow({ withdrawnAt: row.date, systemBulk: row.systemBulk }, w.from, w.to);
 }

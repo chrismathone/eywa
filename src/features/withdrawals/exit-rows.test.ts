@@ -29,9 +29,10 @@ describe("withdrawalSubjects — 퇴원 무렵 끝난 과목 전부", () => {
 });
 
 describe("resolveRange · inRange", () => {
-  it("롤링은 시작만 막는다 — 퇴원 예정일도 보인다(옛 동작)", () => {
+  it("롤링도 끝이 오늘 — 퇴원 예정일은 아직 퇴원이 아니다(시간표 집계와 같은 창, 최다은 10/1)", () => {
     const w = resolveRange("30d", { today, month });
-    expect(inRange({ date: "2026-10-01", systemBulk: false }, w)).toBe(true);
+    expect(inRange({ date: "2026-10-01", systemBulk: false }, w)).toBe(false);
+    expect(inRange({ date: today, systemBulk: false }, w)).toBe(true);
     expect(inRange({ date: "2026-08-28", systemBulk: false }, w)).toBe(false);
     expect(inRange({ date: "2026-08-29", systemBulk: false }, w)).toBe(true);
   });

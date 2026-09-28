@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, kstMinutesOfDay } from "@/lib/date-kst";
+import { recentExitWindow } from "@/features/withdrawals/window";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import {
   dateOfDowInWeek,
@@ -646,7 +647,9 @@ export async function getWeeklyScheduleWithStudents(
   const newCutoff = shiftDays(referenceDate, -30); // 신입: 기준일 30일 이내 시작
   // 준신입: 30일 초과 60일 이내(원장 2026-09-07) — 신입 빨강이 꺼진 뒤에도 두 달째까지는  한눈에 보이게 한 단계 옅은 색을 준다. 경계는 `[newCutoff, ...]`(신입)와 겹치지 않는다.
   const recentCutoff = shiftDays(referenceDate, -60);
-  const withdrawnFloor = shiftDays(referenceDate, -30); // 퇴원 표시 윈도우: 기준일 1달(30일) 전까지(클러터 캡, 2026-07-14 원장 1년→1달)
+  // 퇴원 표시 윈도우: 기준일 30일 전까지(클러터 캡, 2026-07-14 원장 1년→1달). 🔴 퇴원관리 '최근 30일'과 **같은 함수**
+  // (`recentExitWindow`) — 상단 '퇴원' 숫자와 퇴원관리 숫자가 같은 창을 쓴다(원장 2026-09-28 *"같은 배선을 따야"*).
+  const withdrawnFloor = recentExitWindow(referenceDate).from;
 
   // skipCounts — 이 함수는 바로 아래에서 정확한 로스터를 조회하므로 근사 카운트 쿼리(전 enrollment)를
   // 생략하고, 반환 직전에 로스터 재원 수로 studentCount를 다시 채운다(같은 데이터 2회 조회 제거).

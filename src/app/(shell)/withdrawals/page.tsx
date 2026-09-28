@@ -488,7 +488,7 @@ export default async function WithdrawalsPage({
                 (퇴원 상세는 퇴원 사유·사후상담 화면이라 재원생에겐 맞지 않는다). */}
             <ul data-withdrawal-rows className="divide-line divide-y">
               {pageRows.map((r) => (
-                <ExitRowItem key={r.key} row={r} labelOf={subjectMaps.labelOf} />
+                <ExitRowItem key={r.key} row={r} labelOf={subjectMaps.labelOf} today={today} />
               ))}
             </ul>
             <div data-withdrawal-pager className="border-line border-t px-5 py-3">
@@ -555,8 +555,9 @@ export default async function WithdrawalsPage({
 }
 
 /** 목록 한 줄 — 퇴원과 수강종료가 같은 열에 선다(라벨로 가른다). */
-function ExitRowItem({ row: r, labelOf }: { row: ExitRow; labelOf: (key: string) => string }) {
-  const ago = relativeDayKo(r.date);
+function ExitRowItem({ row: r, labelOf, today }: { row: ExitRow; labelOf: (key: string) => string; today: string }) {
+  // 오늘 이후 날짜 = 퇴원 예정(아직 다니는 중) — '오늘'이라 적으면 거짓이다.
+  const ago = r.date && r.date > today ? "예정" : relativeDayKo(r.date, today);
   const where = schoolGradeLabel(r.school, r.grade);
   const ended = r.kind === "subject-ended";
   return (
