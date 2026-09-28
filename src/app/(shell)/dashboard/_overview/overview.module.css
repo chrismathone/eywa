@@ -1288,9 +1288,13 @@ a.kpiCountRow:hover > span {
 .barRowLink { color: inherit; text-decoration: none; cursor: pointer; border-radius: 3px; }
 .barRowLink:hover { text-decoration: underline; text-underline-offset: 3px; }
 .barRowLink:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.barSegLink { display: block; width: 100%; height: 100%; cursor: pointer; }
-.barSegLink:hover { background: rgb(0 0 0 / 0.16); }
-.barSegLink:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+/* 미수강 막대 = 트랙 전체가 링크(좁은 막대도 누를 수 있게) · 팝업 줄 = 그 구성의 원생목록 */
+a.levelTrack { display: block; cursor: pointer; }
+a.levelTrack:hover .barSegHover { filter: brightness(0.8); }
+a.levelTrack:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.subjectPopoverLink { display: inline-flex; align-items: center; gap: inherit; color: inherit; text-decoration: none; cursor: pointer; }
+.subjectPopoverLinkRow:hover .subjectPopoverLink { text-decoration: underline; text-underline-offset: 3px; }
+.subjectPopoverLink:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 3px; }
 .levelTrack { height: 18px; background: #f1f4f7; border-radius: 3px; overflow: hidden; }
 .levelCount { min-width: 3.2em; text-align: right; font-weight: 700; }
 .admissionMonths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 12px; }

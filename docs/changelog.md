@@ -1,9 +1,9 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
-## 2026-09-28 (12) — 원생목록 수강 과목 '미수강' · 열 머리 필터 다중 선택 · 운영실 '재원생 구성' 막대 → 원생목록
+## 2026-09-28 (12) — 원생목록 수강 과목 '미수강' · 열 머리 필터 다중 선택 · 운영실 '재원생 구성' 팝업 줄·미수강 막대 → 원생목록
 - 원장 *"수강 과목 드롭다운에 '미수강'"* · *"막대를 클릭하면 그 조건으로 필터된 원생목록"* · *"다른 막대그래프들도 전부 해당기능으로 배선"* · *"이런 류의 드랍다운 선택은 중복 선택가능하게"*.
 - **'미수강'** = 지금 수강 중인 과목이 하나도 없는 학생(`NO_SUBJECT`, [`list-filter-values.ts`](../src/features/students/list-filter-values.ts)). 판정 = `activeStudentIds`의 여집합 — 운영실 미수강 막대(`composeEnrolled().active`)와 **같은 줄 판정 `activeRows`**(시작함 · 스코프 · 표시 축, 휴원 수강은 수강 아님). 재원이면 재료도 같은 요청 캐시. 🔴 옛 '미수강 제외' 토글(휴원도 수강으로 침)과 뜻이 달라 '미수강'을 고르면 토글을 감추고 서버도 무시한다 · 퇴원 목록엔 선택지를 안 세운다.
-- **막대 링크**: 조각 = `level=<학교급>&mix=<구성>` · 줄 이름·숫자 = 세 구성 · 기타 과목 = `mix=other` · 미수강 = `subject=__none__`(모두 [`kpi-links.ts`](../src/features/dashboard/overview/kpi-links.ts), 다른 축은 명시값 + `from=dashboard`). 목록은 막대와 같은 `compositionStudentIds`(`studentLevelOf`·`subjectMixOf`)로 거른다(엑셀도 같은 `restrictIdsFor`). 옛 '수강 구성' 팝업은 급별 막대에서 걷었다(누르면 창이 열린다 — 인원은 `title`).
+- **막대 링크**(정정본): 학교급 막대는 종전처럼 '수강 구성' 팝업 · 팝업의 영어만·동시수강·수학만 줄 = `level=<학교급>&mix=<구성>` 원생목록 · '미수강' 막대 = `subject=__none__` · 기타 과목은 링크 없음(원장 *"'미수강' 막대그래프 누르면 이동하는걸로 나머지는 현재 그대로"* · *"이 안에서 누르면 이동"*). 주소는 [`kpi-links.ts`](../src/features/dashboard/overview/kpi-links.ts).
 - **다중 선택**: `HeaderFilter`/`FilterSelect`/`SearchableSelect`에 `multiple`(선택 시 안 닫힘·낙관적 선택·'전체' = 전부 해제·트리거 `수학 외 1`). URL·계정 저장값 = 쉼표 문자열(옛 단일 값 호환, [`multi-value.ts`](../src/lib/multi-value.ts)). 원생목록 과목·학년·담당 강사를 켰고 서버(`getStudentsPage`·`getStudentsList`·엑셀)는 합집합으로 읽는다(과목 `.in` · 학년 `.in` · 강사 여럿은 URL에 안 싣고 JS로 — #53).
 - 실측(2026-09-28, 침산, 읽기 전용 `scripts/_oneoff/_probe-unenrolled-parity.mts`): 미수강 막대 7 = 목록 7 · 초·중·고 × 세 구성 9조각 전부 일치. 가드 = `composition-filter-parity.test.ts`(같은 재료 → 같은 수) · `kpi-wiring.test.ts`(표면이 그 함수를 부르는지) · `header-filter.test.tsx`.
 - ⏳ 아직 단일 선택: 원생목록 **상태**(재원 기본값·시작 전 제외·퇴원 이력 판정이 한 값에 묶여 있다) · 수업목록(유형·과목·담임·상태) · 성적관리 원장(과목·학교학년·반·담임·정답률·증감·상담) · 학생 상세 성적(과목·시험·정답률·증감) — 서버가 한 값만 읽어 `multiple`을 켜면 거짓 약속이 된다. '학년별 재원생' 막대는 팝업 그대로(`기타·미입력` 줄을 학년 필터로 못 옮긴다).
