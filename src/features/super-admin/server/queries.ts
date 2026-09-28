@@ -2,8 +2,42 @@ import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
-import { kstMonth } from "@/lib/date-kst";
+import { kstMonth, kstToday } from "@/lib/date-kst";
+import { notYetStartedStudentIds, type ActiveEnrollmentRow } from "@/features/students/enrolled-composition";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
+
+
+/**
+ * 지점별 **아직 한 과목도 시작 안 한 재원생** 수 — 운영실·원생목록의 '실시간 재원생'(원장 2026-09-16)과 **같은 순수 함수**
+ * (`notYetStartedStudentIds`). 슈퍼관리자 재원생 = 상태 재원 − 이 수(점검 2026-09-28: 여기만 안 빼서 운영실보다 늘 많았다).
+ * admin(RLS 우회)이라 지점을 줄 땐 `tenant_id`로 좁힌다. 없으면 전 지점.
+ */
+async function notStartedCountByTenant(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantIds?: readonly string[],
+): Promise<Map<string, number>> {
+  const rows = await fetchAllPaged<{ id: string; student_id: string; tenant_id: string; start_date: string | null }>(
+    (from, to) => {
+      let q = admin
+        .from("enrollments")
+        // 운영실(fetchActiveEnrolledEnrollments)과 같은 조건 — 반이 없는 수강은 세지 않는다(`class!inner`).
+        .select("id, student_id, tenant_id, start_date, class:class_id!inner ( id ), student:student_id!inner ( status )")
+        .is("end_date", null)
+        .eq("on_hold", false)
+        .eq("student.status", "enrolled");
+      if (tenantIds) q = q.in("tenant_id", [...tenantIds]);
+      return q.order("id").range(from, to);
+    },
+  );
+  const byTenant = new Map<string, ActiveEnrollmentRow[]>();
+  for (const r of rows) {
+    const list = byTenant.get(r.tenant_id) ?? [];
+    list.push({ id: r.id, student_id: r.student_id, start_date: r.start_date, class: null });
+    byTenant.set(r.tenant_id, list);
+  }
+  const today = kstToday();
+  return new Map([...byTenant].map(([t, list]) => [t, notYetStartedStudentIds(list, today).size]));
+}
 
 export type TenantRow = {
   id: string;
@@ -42,6 +76,8 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
 
   // users/students/invoices는 전 테넌트 전건을 가져와 JS로 집계 → PostgREST 1000행 한도에
   // silent 절단되면 카운트·청구가 과소된다. 페이지네이션으로 전건 확보(테넌트 증가 대비).
+  const notStartedP = notStartedCountByTenant(admin);
+  notStartedP.catch(() => {}); // 아래 Promise.all과 동시에 돈다(B4) · 그쪽이 먼저 던져도 이 거부가 떠돌지 않게(실패는 await에서 다시 던져진다)
   const [tenants, users, students, classes, invoices] = await Promise.all([
     fetchAllPaged<{ id: string; slug: string; name: string; plan: string; created_at: string }>((from, to) =>
       admin.from("tenants").select("id, slug, name, plan, created_at").order("created_at", { ascending: false }).order("id").range(from, to),
@@ -70,6 +106,8 @@ export const getAllTenants = cache(async (): Promise<TenantRow[]> => {
   students.forEach((s) => {
     studentCountByTenant.set(s.tenant_id, (studentCountByTenant.get(s.tenant_id) ?? 0) + 1);
   });
+  // 실시간 재원생 — 아직 한 과목도 시작 안 한 학생은 뺀다(운영실·원생목록과 같은 규칙, notStartedCountByTenant).
+  for (const [t, n] of await notStartedP) studentCountByTenant.set(t, Math.max(0, (studentCountByTenant.get(t) ?? 0) - n));
 
   const classCountByTenant = new Map<string, number>();
   classes.forEach((c) => {
@@ -149,6 +187,8 @@ export async function getTenantsPage(
   const tenants = data ?? [];
   const ids = tenants.map((t) => t.id);
 
+  const notStartedP = ids.length === 0 ? Promise.resolve(new Map<string, number>()) : notStartedCountByTenant(admin, ids);
+  notStartedP.catch(() => {}); // 아래 Promise.all이 먼저 던지면 이 거부가 처리되지 않은 채 남는다 — 실패는 await에서 다시 던져진다
   const [users, students, classes, invoices] =
     ids.length === 0
       ? [[], [], [], []]
@@ -171,6 +211,8 @@ export async function getTenantsPage(
   users.forEach((u) => userCountByTenant.set(u.tenant_id, (userCountByTenant.get(u.tenant_id) ?? 0) + 1));
   const studentCountByTenant = new Map<string, number>();
   students.forEach((s) => studentCountByTenant.set(s.tenant_id, (studentCountByTenant.get(s.tenant_id) ?? 0) + 1));
+  // 실시간 재원생 — 아직 한 과목도 시작 안 한 학생은 뺀다(운영실·원생목록과 같은 규칙, notStartedCountByTenant).
+  for (const [t, n] of await notStartedP) studentCountByTenant.set(t, Math.max(0, (studentCountByTenant.get(t) ?? 0) - n));
   const classCountByTenant = new Map<string, number>();
   classes.forEach((c) => classCountByTenant.set(c.tenant_id, (classCountByTenant.get(c.tenant_id) ?? 0) + 1));
   const billingByTenant = new Map<string, number>();
@@ -222,6 +264,8 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
   if (tenantError) throw new Error(`getTenantDetail: ${tenantError.message}`);
   if (!tenant) return null;
 
+  const notStartedP = notStartedCountByTenant(admin, [id]);
+  notStartedP.catch(() => {}); // 아래 Promise.all이 먼저 던지면 이 거부가 처리되지 않은 채 남는다 — 실패는 await에서 다시 던져진다
   const [users, studentsRes, classesRes, invoices] = await Promise.all([
     fetchAllPaged<{ id: string; email: string; display_name: string; system_role: string; status: string }>((from, to) =>
       admin.from("users").select("id, email, display_name, system_role, status").eq("tenant_id", id)
@@ -251,7 +295,7 @@ export const getTenantDetail = cache(async (id: string): Promise<TenantDetail | 
       systemRole: u.system_role,
       status: u.status,
     })),
-    studentCount: exactCount(studentsRes.count, "getTenantDetail students"),
+    studentCount: Math.max(0, exactCount(studentsRes.count, "getTenantDetail students") - ((await notStartedP).get(id) ?? 0)),
     classCount: exactCount(classesRes.count, "getTenantDetail classes"),
     monthBilling,
     monthInvoiceCount: invoices.length,
@@ -263,6 +307,8 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
   const admin = createAdminClient();
   const period = currentPeriod();
 
+  const notStartedP = notStartedCountByTenant(admin);
+  notStartedP.catch(() => {}); // 아래 Promise.all이 먼저 던지면 이 거부가 처리되지 않은 채 남는다 — 실패는 await에서 다시 던져진다
   const [tenantsRes, usersRes, studentsRes, invoices] = await Promise.all([
     admin.from("tenants").select("id", { count: "exact", head: true }),
     admin.from("users").select("id", { count: "exact", head: true }).eq("status", "active"),
@@ -281,7 +327,10 @@ export const getSaaSStats = cache(async (): Promise<SaaSStats> => {
   return {
     tenantCount: exactCount(tenantsRes.count, "getSaaSStats tenants"),
     userCount: exactCount(usersRes.count, "getSaaSStats users"),
-    studentCount: exactCount(studentsRes.count, "getSaaSStats students"),
+    studentCount: Math.max(
+      0,
+      exactCount(studentsRes.count, "getSaaSStats students") - [...(await notStartedP).values()].reduce((a, b) => a + b, 0),
+    ),
     monthBillingSum,
   };
 });
@@ -338,6 +387,8 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
   if (tenantError) throw new Error(`getTenantSnapshot: ${tenantError.message}`);
   if (!tenant) return null;
 
+  const notStartedP = notStartedCountByTenant(admin, [id]);
+  notStartedP.catch(() => {}); // 아래 Promise.all이 먼저 던지면 이 거부가 처리되지 않은 채 남는다 — 실패는 await에서 다시 던져진다
   const [studentsRes, teachersRes, classesRes, invoices, recentStudentsRes, recentMeetingsRes] =
     await Promise.all([
       admin.from("students").select("id", { count: "exact", head: true }).eq("tenant_id", id).eq("status", "enrolled"),
@@ -372,7 +423,7 @@ export const getTenantSnapshot = cache(async (id: string): Promise<TenantSnapsho
     slug: tenant.slug,
     plan: tenant.plan,
     kpi: {
-      students: exactCount(studentsRes.count, "getTenantSnapshot students"),
+      students: Math.max(0, exactCount(studentsRes.count, "getTenantSnapshot students") - ((await notStartedP).get(id) ?? 0)),
       teachers: exactCount(teachersRes.count, "getTenantSnapshot teachers"),
       activeClasses: exactCount(classesRes.count, "getTenantSnapshot classes"),
       monthBilling,

@@ -4,10 +4,8 @@ import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstMonth } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { computeTierSettlement } from "@/features/payroll/tier-settlement";
-import { parseGroupRates, SALARY_GROUPS, type GroupRates } from "@/features/payroll/salary-group";
-import { collectTierRows } from "@/features/payroll/server/tier-rows";
-import { applyRatePenalty, computePayslipAmounts } from "@/features/payroll/payslip";
+import { appliedRatesOf, computeTeacherTuition } from "@/features/payroll/server/tuition";
+import { computePayslipAmounts } from "@/features/payroll/payslip";
 import {
   studentIdsInMonth,
   withdrawalStats,
@@ -25,7 +23,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * 급여명세서 데이터 조립 — **원장(master) 전용**.
  *
  * 🔴 금액의 단일 소스는 0199a 티어 정산이다(출석부 하단 정산액과 **같은 조립 코드** collectTierRows).
- *    /billing?tab=payroll의 splits 기반 숫자와는 산식이 달라 섞으면 안 된다.
+ *    /billing?tab=payroll(강사 정산 면)도 2026-09-28부터 **같은 함수**(tuition.ts)를 쓴다 — splits 산식은 화면에서 뺐다.
  * 🔴 게이트는 `user.systemRole !== "master"` 직접 비교다 — canWriteTenant("billing")은 admin·accountant를
  *    통과시켜(권한 매트릭스 실측) 급여 PII 게이트로 못 쓴다(class-salary-actions.ts와 같은 선례).
  * 🔴 실패하면 **던진다**. 0원짜리 명세서를 뽑느니 안 뽑는 게 낫다(출석부는 화면을 살리려 접지만 여기는 반대).
@@ -113,28 +111,29 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   }
 
   // 계약 비율(users.commission_rates) — **패널티는 여기에 얹지 않는다**(계약은 계약대로 남긴다).
-  const baseRates: GroupRates = parseGroupRates(teacher.commission_rates);
-  const baseDefault =
-    teacher.commission_rate === null || teacher.commission_rate === undefined
-      ? null
-      : Number(teacher.commission_rate);
+  // 적용 비율 = 계약 − 패널티 — 수납 '강사 정산' 면과 **같은 함수**(`appliedRatesOf`, 원장 2026-09-28 "급여는 출석부 기준").
   const penalty = adjustments.ratePenaltyPoints;
-  const appliedRates: GroupRates = {};
-  for (const g of SALARY_GROUPS) {
-    const v = baseRates[g];
-    if (v !== undefined) appliedRates[g] = applyRatePenalty(v, penalty);
-  }
-  const appliedDefault = baseDefault === null ? null : applyRatePenalty(baseDefault, penalty);
+  const {
+    groupRates: appliedRates,
+    defaultRate: appliedDefault,
+    baseRates,
+    baseDefault,
+  } = appliedRatesOf(teacher, penalty);
 
   const warnings: string[] = [];
 
   // ── 정산 · 지표 · 신상 ───────────────────────────────────────────────────────
   // 셋은 서로 독립이라 병렬(B4) — 직렬로 두면 명세서 첫 페인트가 세 왕복을 합산한다.
   // ⚠️ 신상(academy_documents)은 명세서 성패를 좌우하지 않으므로 실패해도 접는다(지어내진 않는다).
-  const [collected, metrics, resume] = await Promise.all([
-    classIds.length > 0
-      ? collectTierRows(admin, period, classIds, user.tenantId, settings.operations.subjects)
-      : Promise.resolve(null),
+  const [settlement, metrics, resume] = await Promise.all([
+    // 수업료 = 정산 면과 같은 함수(`computeTeacherTuition` — collectTierRows 조립 + computeTierSettlement).
+    computeTeacherTuition(admin, {
+      period,
+      classIds,
+      tenantId: user.tenantId,
+      subjects: settings.operations.subjects,
+      rates: { groupRates: appliedRates, defaultRate: appliedDefault },
+    }),
     loadMetrics(supabase, classIds, period, year),
     supabase
       .from("academy_documents")
@@ -150,12 +149,6 @@ export async function getPayslipData(teacherId: string, period: string): Promise
         () => null,
       ),
   ]);
-  const settlement = collected
-    ? computeTierSettlement(collected.rows, collected.priceByTier, {
-        groupRates: appliedRates,
-        defaultRate: appliedDefault,
-      })
-    : null;
 
   if (classIds.length === 0) warnings.push("담당 반이 없어 수업료를 산정할 수 없습니다.");
   else if (!settlement) warnings.push("그 달 출결이 없거나 단가표가 비어 있어 수업료를 산정할 수 없습니다.");

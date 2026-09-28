@@ -47,7 +47,7 @@ export function FreeAllocationPanel({ terms, total, initial, pending, onSave }: 
         ))}
       </tbody></table></div>
       <footer className="mt-4 flex items-center justify-between gap-4">
-        <div className="text-sm">{checked.ok ? <span className="text-text-dim">{left > 0 ? `${won(left)}은 어느 반에도 나누지 않고 남깁니다.` : "청구액을 모두 나눴습니다."} 저장한 금액에 강사 배분율을 적용합니다.</span> : <p role="alert" className="text-amber">{checked.error}</p>}</div>
+        <div className="text-sm">{checked.ok ? <span className="text-text-dim">{left > 0 ? `${won(left)}은 어느 반에도 나누지 않고 남깁니다.` : "청구액을 모두 나눴습니다."}</span> : <p role="alert" className="text-amber">{checked.error}</p>}</div>
         <button type="button" disabled={pending || !checked.ok} onClick={() => onSave(rows)} className="bg-primary text-primary-foreground shrink-0 rounded-md px-4 py-2 text-sm font-bold disabled:opacity-40">{pending ? "저장 중…" : "자유 배분 저장"}</button>
       </footer>
     </section>

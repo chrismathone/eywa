@@ -82,16 +82,10 @@ export function ClassSalaryRowForm({ row }: { row: ClassSalaryRow }) {
               </option>
             ))}
           </select>
-          <label className="text-text-dim inline-flex items-center gap-0.5 text-xs">
-            <input
-              name="commissionRate"
-              defaultValue={row.commissionRate ?? ""}
-              inputMode="decimal"
-              placeholder="비율"
-              className="border-line bg-card text-foreground w-14 rounded-md border px-1.5 py-1 text-xs"
-            />
-            %
-          </label>
+          {/* 🔴 반별 배분율(%) 입력은 걷었다(원장 2026-09-28 "급여는 출석부 기준") — 급여명세서·정산 면의 산식
+              (tier-rows·computeTierSettlement)은 과정·적용 요일만 읽고 반별 %는 안 읽어 "저장됨"이 거짓 약속이었다.
+              저장된 값은 hidden으로 그대로 보낸다(과정·요일만 고쳐도 지우지 않게). */}
+          <input type="hidden" name="commissionRate" value={row.commissionRate ?? ""} />
           {/* 적용 요일 — 반 하나에 주말·평일이 섞인 경우(예: 토+수) 주말분만 비율제로 인정한다.
               전부 비우면 전 요일(안분 없음). 그 달 시수 기록이 없으면 화면이 '산정 보류'로 밝힌다. */}
           <span className="text-text-faint text-xs" title="비율제를 적용할 요일 — 비우면 전 요일">
