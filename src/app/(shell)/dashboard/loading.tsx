@@ -1,5 +1,4 @@
 import s from "./_overview/overview.module.css";
-import { DashboardWidthGate } from "./_components/dashboard-width-gate";
 
 // 운영실(학원 전체 현황) 초기 로드 스트리밍 — 여러 영역 병렬 조회가 도는 동안 Next가 이 loading을
 // Suspense fallback으로 즉시 흘린다(첫 페인트 체감, B7).
@@ -104,7 +103,6 @@ function PanelSkeleton({ title, note, body, wide, className }: PanelShape) {
 
 export default function DashboardLoading() {
   return (
-    <DashboardWidthGate>
     <div className={s.root} aria-busy="true" aria-label="학원 전체 현황을 불러오는 중">
       <div className={s.board}>
         <header className={s.header}>
@@ -175,6 +173,5 @@ export default function DashboardLoading() {
         </footer>
       </div>
     </div>
-    </DashboardWidthGate>
   );
 }

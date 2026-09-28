@@ -18,7 +18,7 @@ import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
  * 수식키 클릭(새 탭)은 브라우저에 넘긴다 · 지금 값을 다시 고르면 닫기만 한다 · `beforeNavigate`가 false를 주면 이동하지 않는다
  * (시간표의 미저장 배치 경고 — 클라 래퍼가 넘긴다; 서버 컴포넌트는 함수를 못 넘기니 그 화면의 얇은 클라 래퍼가 든다).
  *
- * 🔴 **목록은 Portal**(base-ui Popover) — 툴바는 1024px 미만·거친 포인터에서 `.toolbar-rail`(overflow) 스크롤 컨테이너가 되어
+ * 🔴 **목록은 Portal**(base-ui Popover) — 툴바는 1240px 미만·거친 포인터에서 `.toolbar-rail`(overflow) 스크롤 컨테이너가 되어
  *    인라인 `absolute` 팝업을 잘라 버린다(globals.css의 rail 주석, 적대적 리뷰 2026-09-04).
  * ⚠️ 트리거의 접근성 이름은 **보이는 글자 그대로**(`과목: 수학`) — aria-label로 덮으면 보조기기엔 지금 값이 사라진다.
  *    `ariaLabel`은 펼친 목록(menu)의 이름이다.

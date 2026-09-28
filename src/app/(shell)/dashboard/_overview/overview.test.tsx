@@ -407,7 +407,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
     const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
-    expect(href("퇴원관리에서 이번 달 퇴원 보기")).toBe("/withdrawals?range=month&month=2026-09");
+    expect(href("퇴원관리에서 이번 달 퇴원 보기")).toBe("/withdrawals?type=withdrawn&range=month&month=2026-09");
     expect(href("콜&상담에서 오늘 접수 보기")).toBe("/enrollment?view=table&received=2026-09-10");
     expect(href("원생목록에서 오늘 첫 수업 보기")).toBe(
       "/students?first=2026-09-10&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
@@ -492,7 +492,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     expect(popup.textContent).toContain("9월 퇴원생 2명");
     expect(
       within(popup).getByRole("link", { name: "EiE 1명 목록 열기" }).getAttribute("href"),
-    ).toBe("/withdrawals?range=month&month=2026-09&program=eie");
+    ).toBe("/withdrawals?type=withdrawn&range=month&month=2026-09&program=eie");
     expect(popup.textContent).toContain("기타·미상");
     expect(within(popup).getByRole("link", { name: "퇴원가 원생 상세" }).getAttribute("href")).toBe("/students/w1");
     cleanup();

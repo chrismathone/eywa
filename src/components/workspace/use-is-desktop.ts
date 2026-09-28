@@ -2,8 +2,14 @@
 
 import { useSyncExternalStore } from "react";
 
+/**
+ * 데스크톱 셸의 최소 화면 폭 — 원장 2026-09-28 "대시보드 기준으로 전체 적용"(globals.css `desk` 변형 주석).
+ * 🔴 CSS 쪽(`desk`·`compact-chrome`·`.toolbar-rail`·period-nav)과 같은 값이어야 한다(가드 desktop-breakpoint.test.ts).
+ */
+export const DESKTOP_MIN_WIDTH = 1240;
+
 // 데스크톱 = 넓은 폭 + 정밀 포인터(마우스). 모바일/태블릿 터치는 false → Stage Manager 미마운트.
-const QUERY = "(min-width: 1024px) and (pointer: fine)";
+const QUERY = `(min-width: ${DESKTOP_MIN_WIDTH}px) and (pointer: fine)`;
 
 /**
  * 🔑 `MediaQueryList`는 **문서당 하나**만 만든다.

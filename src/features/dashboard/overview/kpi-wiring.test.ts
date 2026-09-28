@@ -97,6 +97,7 @@ describe("② 퇴원생 — 1일~오늘, 카드 = 추이 패널 = 퇴원관리",
   const PAGE = src("src/app/(shell)/withdrawals/page.tsx");
   const QUERIES = src("src/features/withdrawals/server/queries.ts");
   const WINDOW = src("src/features/withdrawals/server/window.ts");
+  const EXIT_ROWS = src("src/features/withdrawals/exit-rows.ts");
 
   it("카드와 추이 패널은 **같은 행**(getWithdrawalsInWindow 한 번)을 쓰고, 카드는 같은 창 판정으로 거른다", () => {
     expect(count(SERVER, "getWithdrawalsInWindow(")).toBe(1);
@@ -108,9 +109,11 @@ describe("② 퇴원생 — 1일~오늘, 카드 = 추이 패널 = 퇴원관리",
   });
 
   it("퇴원관리 range=month·program=은 같은 판정(withdrawalMonthWindow·inWithdrawalWindow·withdrawalProgram)", () => {
-    expect(PAGE).toContain("withdrawalMonthWindow(monthKey, kstToday())");
-    expect(PAGE).toMatch(/inWithdrawalWindow\(r, monthWindow\.from, monthWindow\.to\)/);
-    expect(PAGE).toMatch(/withdrawalProgram\(r, settings\.operations\.subjects\)/);
+    // 2026-09-28 퇴원·수강종료 한 목록 — 기간 판정은 exit-rows.ts `inRange`가 같은 `inWithdrawalWindow`를 부른다.
+    expect(PAGE).toContain("withdrawalMonthWindow(monthKey, today)");
+    expect(PAGE).toContain("resolveRange(range, { today, month: monthWindow");
+    expect(EXIT_ROWS).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.date, systemBulk: row\.systemBulk \}, w\.from, w\.to\)/);
+    expect(PAGE).toMatch(/withdrawalProgram\(\s*\{ lastClassSubject: r\.programSubject, lastClassEnglishTrack: r\.englishTrack \},\s*settings\.operations\.subjects,?\s*\)/);
     expect(PAGE).toContain("isValidYm(sp.month)");
   });
 
@@ -126,7 +129,7 @@ describe("② 퇴원생 — 1일~오늘, 카드 = 추이 패널 = 퇴원관리",
     expect(STRIP).toContain("countWithdrawalPrograms(withdrawals.rows)");
     expect(POPUPS).toContain("countWithdrawalPrograms(data.rows)");
     expect(PAGE).not.toContain('"올해"');
-    expect(withdrawalsMonthHref("2026-09")).toBe("/withdrawals?range=month&month=2026-09");
+    expect(withdrawalsMonthHref("2026-09")).toBe("/withdrawals?type=withdrawn&range=month&month=2026-09");
   });
 
   /**
