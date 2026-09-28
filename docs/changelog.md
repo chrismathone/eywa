@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-28 (5) — 퇴원관리 = 퇴원 + 수강종료 한 목록 · 기간 직접 지정 · 시간표 집계 기준 카드
+
+- 발단: 시간표 상단 '퇴원 8'(이 과목 수업이 끝난 학생)과 퇴원관리 '퇴원 6'(학원을 그만둔 학생)이 달라 헷갈림(수학, 실측: 장건욱·추연우는 영어 계속 = 수강종료, 김도연은 수학·영어 같은 날 퇴원인데 마지막 반이 영어라 수학 필터에서 빠짐, 최다은은 10/1 퇴원 예정이라 시간표는 재원).
+- 시간표 집계(재원·신입·반이동·대기·퇴원)에 항목별 기준 카드(마우스 오버, `data-tip`) — 계산 불변([`student-tally.tsx`](src/app/(shell)/timetable/_components/student-tally.tsx)).
+- 퇴원관리: 퇴원 + 수강종료(학생 × 끊은 과목)를 한 목록 + 줄마다 라벨 · 유형 필터(전체 기본/퇴원/수강종료) · 기간 '직접 지정'(날짜 두 칸, 두 칸을 다 떠나거나 Enter일 때 반영) · 퇴원생 과목 = 마지막 종료일 14일 안에 끝난 과목 전부([`exit-rows.ts`](src/features/withdrawals/exit-rows.ts)). 사유·상담은 퇴원만.
+- 운영실 '퇴원생' 링크는 `type=withdrawn`(카드 숫자와 목록 일치) · 그 보기에선 수강종료 조회를 안 부른다. 양끝 기간 판정은 운영실과 같은 `inWithdrawalWindow`.
+
 ## 2026-09-28 (4) — 신규생 체크 ↔ 원생상담 반자동 연결(0295a)
 
 - 원장 *"지정된 학생이 90일 관리 학생이면 자동연동 … 반자동으로"* → 원생상담 등록·수정 폼에 '신규생 관리' 칸([`newcomer-link-field.tsx`](src/app/(shell)/consultations/_components/newcomer-link-field.tsx)). 새 상담은 날짜 규칙으로 한 칸을 미리 잡고([`consult-link.ts`](src/features/newcomers/consult-link.ts)), 저장하면 그 칸이 상담일로 완료 + `consultation_id` 기록([`server/consult-link.ts`](src/features/newcomers/server/consult-link.ts)). 감사로그 = `newcomer_check`/`newcomer_uncheck` + `via: consultation`(설명에 "원생상담으로").

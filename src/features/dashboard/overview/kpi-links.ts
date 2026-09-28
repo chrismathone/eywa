@@ -20,9 +20,12 @@ export function studentsFirstClassHref(date: string): string {
   return `/students?first=${date}&status=all&${STUDENT_AXES}`;
 }
 
-/** 그 달 퇴원(시스템 정리 제외) — program을 주면 그 프로그램만(마지막 수강 반 기준). */
+/**
+ * 그 달 퇴원(시스템 정리 제외) — program을 주면 그 프로그램만(마지막 수강 반 기준).
+ * 🔴 `type=withdrawn` — 퇴원관리 기본 목록은 수강종료까지 함께 보이므로(2026-09-28) 카드 숫자(퇴원만)와 맞추려면 유형을 못박는다.
+ */
 export function withdrawalsMonthHref(month: string, program?: Program): string {
-  return `/withdrawals?range=month&month=${month}${program ? `&program=${program}` : ""}`;
+  return `/withdrawals?type=withdrawn&range=month&month=${month}${program ? `&program=${program}` : ""}`;
 }
 
 /** 그날 접수된 콜&상담(목록 보기). */
