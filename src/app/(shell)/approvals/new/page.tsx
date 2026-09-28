@@ -10,7 +10,7 @@ import {
 } from "@/features/approvals/server/queries";
 import { DraftComposer } from "./_composer";
 
-export const metadata = { title: "기안하기 — aywa" };
+export const metadata = { title: "기안하기 — 에이와" };
 
 /**
  * 기안(결재 문서 작성) — **하이웍스 '결재 문서 작성' 화면 흐름**(원장 스크린샷 대조 2026-08-14):

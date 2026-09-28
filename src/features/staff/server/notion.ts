@@ -208,7 +208,7 @@ export async function fetchTaskComments(pageId: string, tenantId: string): Promi
       .trim();
     const m = AYWA_COMMENT_RE.exec(text) ?? AYWA_COMMENT_LEGACY_RE.exec(text);
     if (m) {
-      author = `${m[1]} (aywa)`;
+      author = `${m[1]} (에이와)`;
       text = (m[2] ?? "").trim();
     }
     return { id: c.id, author, time: c.created_time ?? null, text };
@@ -222,13 +222,13 @@ export async function fetchTaskComments(pageId: string, tenantId: string): Promi
 export async function addTaskComment(pageId: string, text: string, authorName: string): Promise<void> {
   await createComment(pageId, [
     { text: { content: authorName.slice(0, 40) }, annotations: { bold: true } },
-    { text: { content: ` — aywa에서 작성\n${text.slice(0, 1800)}` } },
+    { text: { content: ` — 에이와에서 작성\n${text.slice(0, 1800)}` } },
   ]);
 }
 
 // aywa가 남긴 댓글의 작성자 파싱(신형: "이름 — aywa에서 작성\n본문" / 구형: "[aywa · 이름] 본문").
 // 🔴 옛 이름(eywa) 시절 댓글이 Notion에 그대로 남아 있다 — 두 이름을 다 받는다(2026-09-21 개명).
-const AYWA_COMMENT_RE = /^(.{1,40}?) — [ae]ywa에서 작성\n?([\s\S]*)$/;
+const AYWA_COMMENT_RE = /^(.{1,40}?) — (?:[ae]ywa|에이와)에서 작성\n?([\s\S]*)$/;
 const AYWA_COMMENT_LEGACY_RE = /^\[[ae]ywa · (.{1,40}?)\] ?([\s\S]*)$/;
 
 /** 업무 본문(Notion 블록) → 표시 라인. 상세창이 열릴 때만 지연 호출(첫 페인트 밖). */

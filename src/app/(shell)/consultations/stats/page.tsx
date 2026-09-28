@@ -12,7 +12,7 @@ import {
 } from "@/features/consultations/server/queries";
 import { StatsCharts } from "./_charts";
 
-export const metadata = { title: "상담 통계 — aywa" };
+export const metadata = { title: "상담 통계 — 에이와" };
 
 export default async function ConsultationStatsPage() {
   await requireAccess("consultations");

@@ -41,7 +41,7 @@ import { getAssignedClasses } from "@/features/enrollment/server/assigned-classe
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { canViewClassDetail } from "@/features/classes/server/class-scope";
 
-export const metadata = { title: "신입생 상담 상세 — aywa" };
+export const metadata = { title: "신입생 상담 상세 — 에이와" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다. 사전 브리프 생성은 `after()` 백그라운드로

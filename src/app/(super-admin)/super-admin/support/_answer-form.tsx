@@ -69,7 +69,7 @@ export function SupportAnswerForm({
           onChange={(e) => setAnswer(e.target.value)}
           maxLength={8000}
           rows={10}
-          placeholder="안녕하세요. aywa 운영팀입니다."
+          placeholder="안녕하세요. 에이와 운영팀입니다."
           className="border-line mt-1 w-full rounded-lg border px-3 py-2 text-sm leading-relaxed"
         />
       </label>

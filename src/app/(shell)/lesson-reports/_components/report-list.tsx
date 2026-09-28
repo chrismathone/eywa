@@ -71,7 +71,7 @@ function StatusCell({ status, source, readAt }: { status: string | null; source:
   if (source === "edutrix_import")
     return (
       <>
-        <span className="text-text-faint text-xs" title="edutrix에서 이관된 기록(aywa 발송 아님)">이관</span>
+        <span className="text-text-faint text-xs" title="edutrix에서 이관된 기록(에이와 발송 아님)">이관</span>
         {read}
       </>
     );

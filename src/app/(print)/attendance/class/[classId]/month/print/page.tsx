@@ -12,7 +12,7 @@ import { getMonthlyAttendanceMatrix } from "@/features/attendance/server/queries
 import { parsePeriodMode } from "@/features/attendance/view-prefs";
 import { getTenantSettings } from "@/features/owner/server/queries";
 
-export const metadata = { title: "출석부 인쇄 — aywa", robots: { index: false, follow: false } };
+export const metadata = { title: "출석부 인쇄 — 에이와", robots: { index: false, follow: false } };
 
 /** 반별 인쇄 머리 문구 — 급여 별지 문구("급여 산정에 들어간 값")를 그대로 쓰면 이 종이에선 거짓이다. */
 const CLASS_PRINT_CAPTION =

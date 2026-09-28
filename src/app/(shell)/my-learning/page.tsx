@@ -8,7 +8,7 @@ import { CurriculumProgress } from "@/features/my-learning/components/curriculum
 import { AttendanceCalendar } from "@/features/my-learning/components/attendance-calendar";
 import { RecentRecords } from "@/features/my-learning/components/recent-records";
 
-export const metadata = { title: "내 학습 현황 — aywa" };
+export const metadata = { title: "내 학습 현황 — 에이와" };
 
 /**
  * 내 학습 현황 — 학생 전용 누적 대시보드.

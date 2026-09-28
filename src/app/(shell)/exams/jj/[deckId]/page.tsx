@@ -23,7 +23,7 @@ import { JJ_SCOPE_FAILED, JjFailBanner, JjLinkColumnNotice, JjNote } from "../..
  *    행마다 지금 다니는 aywa 반을 적고, '결과지'는 그 응시 한 장으로 연다.
  * ⚠️ 인재원 호출(최대 8초)이 창 첫 페인트를 막지 않게 loading.tsx가 먼저 선다(B7).
  */
-export const metadata = { title: "JJ실 시험 결과 — aywa" };
+export const metadata = { title: "JJ실 시험 결과 — 에이와" };
 
 export default async function JjDeckPage({
   params,

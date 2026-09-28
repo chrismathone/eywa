@@ -14,7 +14,7 @@ import { getTeacherEnglishNames } from "@/features/teacher-view/server/teacher-n
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { sheetMonthLabel, sheetT, sheetTf, type SheetDictKey, type SheetLang } from "@/features/teacher-view/i18n";
 
-export const metadata: Metadata = { title: "계획 대비 현황 — aywa" };
+export const metadata: Metadata = { title: "계획 대비 현황 — 에이와" };
 
 /**
  * **계획 대비 현황** — 한 달, 선생님별로 실제 수업이 원래 월간계획과 얼마나 달랐나(원장 2026-09-28).

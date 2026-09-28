@@ -7,7 +7,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getChecklistTemplates, getReviewViewer } from "@/features/class-review/server/queries";
 import { NewReviewForm } from "../_components/new-review-form";
 
-export const metadata = { title: "새 평가 — aywa" };
+export const metadata = { title: "새 평가 — 에이와" };
 
 /**
  * 새 평가 건 — 강사·과목·문항 세트 + 평가자 지정. 날짜는 생성 당일 자동(원장 지시 2026-08-05).

@@ -40,7 +40,7 @@ export function SupportRequestDetailView({ item, showTenant = false }: { item: S
         <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
           <h2 className="text-foreground text-base font-bold">답변</h2>
           {item.answeredAt ? (
-            <span className="num text-text-dim text-sm">aywa 운영팀 · {fmtSupportDateTime(item.answeredAt)}</span>
+            <span className="num text-text-dim text-sm">에이와 운영팀 · {fmtSupportDateTime(item.answeredAt)}</span>
           ) : null}
         </div>
         {item.answer ? (

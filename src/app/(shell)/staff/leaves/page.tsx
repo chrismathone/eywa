@@ -10,7 +10,7 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getAllStaffLeaves } from "@/features/payroll/server/queries";
 import { LeavesAdminClient } from "./_client";
 
-export const metadata = { title: "휴가 관리 — aywa" };
+export const metadata = { title: "휴가 관리 — 에이와" };
 
 /** 전 직원 휴가 일괄 관리(master/admin/manager) — 대기 건 승인/삭제. ijw LeaveManagement 이식. */
 export default async function StaffLeavesPage() {

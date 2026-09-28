@@ -98,7 +98,7 @@ export async function buildInvoicesWorkbook(
   opts: { overdueOnly?: boolean } = {},
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "aywa";
+  wb.creator = "에이와";
   wb.created = new Date();
   const sheet = wb.addWorksheet(`${period} 수납`);
 

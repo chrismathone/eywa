@@ -66,7 +66,7 @@ export function WorkspaceOnboarding() {
           여러 화면을 한 번에
         </h2>
         <p className="text-text-dim mt-1.5 text-sm">
-          aywa는 메뉴가 <span className="text-foreground font-bold">창</span>으로 열려, 동시에 보고 일할 수 있어요.
+          에이와는 메뉴가 <span className="text-foreground font-bold">창</span>으로 열려, 동시에 보고 일할 수 있어요.
         </p>
 
         <ul className="mt-5 space-y-3.5">

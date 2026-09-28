@@ -10,7 +10,7 @@ import { getTenantSnapshot } from "@/features/super-admin/server/queries";
 import { logImpersonateView } from "@/features/super-admin/server/actions";
 import { studentStatusMeta } from "@/features/students/status-labels";
 
-export const metadata = { title: "슈퍼관리자 · 지점장 보기 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 지점장 보기 — 에이와" };
 
 export default async function TenantViewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

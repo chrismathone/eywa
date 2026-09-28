@@ -66,7 +66,7 @@ export async function buildSessionTermsWorkbook(
   period: string,
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "aywa";
+  wb.creator = "에이와";
   wb.created = new Date();
   const sheet = wb.addWorksheet(`${period} 회차 확정`);
   sheet.columns = [

@@ -3,7 +3,7 @@ import { UnavailableFeatureContent } from "@/components/unavailable-feature-cont
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { MODULE_IDS, type ModuleId } from "@/lib/modules";
 
-export const metadata = { title: "쓰지 않는 기능 — aywa" };
+export const metadata = { title: "쓰지 않는 기능 — 에이와" };
 
 /**
  * 꺼진 기능(모듈)의 주소로 들어왔을 때의 안내 — 말없이 대시보드로 보내지 않는다(2026-09-22 빈 지점 점검:

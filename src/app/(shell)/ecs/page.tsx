@@ -47,7 +47,7 @@ type TodaySheet = {
   res: Awaited<ReturnType<typeof getClassSheetWeek>>;
 };
 
-export const metadata: Metadata = { title: "영어 강사 시트 — aywa" };
+export const metadata: Metadata = { title: "영어 강사 시트 — 에이와" };
 
 /**
  * 담당 영어 반이 0개일 때의 안내 — **막다른 안내 금지.**

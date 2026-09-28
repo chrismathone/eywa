@@ -58,9 +58,10 @@ import { parseProgram, programLabel, type Program } from "@/features/students/pr
 // 운영실 KPI ↗ 집합 — 엑셀 파일 라우트와 **같은 함수**(파일 행 = 목록 행).
 import { restrictIdsFor } from "@/features/students/server/restrict-ids";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 // 상태 — 디폴트(재원)는 파라미터가 없을 때다. "전체"는 명시적 status=all로만(HeaderFilter의 allValue=enrolled가 지운다).

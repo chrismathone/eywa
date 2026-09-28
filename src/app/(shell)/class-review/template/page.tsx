@@ -8,7 +8,7 @@ import { getChecklistTemplates, getReviewPrivileges } from "@/features/class-rev
 import { CHECKLIST_AREAS } from "@/features/class-review/checklist";
 import { TemplateEditor } from "../_components/template-editor";
 
-export const metadata = { title: "수업 평가 문항 편집 — aywa" };
+export const metadata = { title: "수업 평가 문항 편집 — 에이와" };
 
 /**
  * 문항 세트 관리 — 원장 + class_review 개인 예외 인원만(원장 지시 2026-08-04).

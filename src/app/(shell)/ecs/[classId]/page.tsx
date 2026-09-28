@@ -9,7 +9,7 @@ import { SheetWidthGate } from "@/features/class-sheets/components/sheet-width-g
 import { TextbookOptionsProvider } from "@/features/textbooks/textbook-options-context";
 import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options";
 
-export const metadata: Metadata = { title: "영어 강사 시트 — aywa" };
+export const metadata: Metadata = { title: "영어 강사 시트 — 에이와" };
 
 /**
  * ECS 주간 시트 — 반 1개 × 주 1개. key={classId:week:JJ표시}로 클라 상태를 재초기화한다

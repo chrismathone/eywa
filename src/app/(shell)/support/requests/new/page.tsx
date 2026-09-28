@@ -4,14 +4,14 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteSupportRequest } from "@/features/support/access";
 import { SupportRequestForm } from "../../_components/request-form";
 
-export const metadata = { title: "고객센터 · 개선요청 글쓰기 — aywa" };
+export const metadata = { title: "고객센터 · 개선요청 글쓰기 — 에이와" };
 
 export default async function NewSupportRequestPage() {
   const user = await requireAccess("support");
   const canWrite = await canWriteSupportRequest(user.systemRole);
   return (
     <div className="space-y-4">
-      <PageHeader eyebrow="고객센터" title="개선요청 글쓰기" description="aywa 운영팀이 읽고 처리상태와 답변을 달아 드립니다." />
+      <PageHeader eyebrow="고객센터" title="개선요청 글쓰기" description="에이와 운영팀이 읽고 처리상태와 답변을 달아 드립니다." />
       {canWrite ? (
         <SupportRequestForm initial={{ title: "", body: "", contactPhone: "", contactEmail: user.email }} />
       ) : (

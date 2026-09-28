@@ -19,7 +19,7 @@ const TITLE_SUFFIX: Record<TextbookTab, string> = { books: "", plans: " · 반 �
 // ⚠️ 접두 "교재목록"은 사이드바 라벨(navigation.ts)과 같아야 한다.
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const tab = resolveTextbookTab((await searchParams).tab);
-  return { title: `교재목록${TITLE_SUFFIX[tab]} — aywa` };
+  return { title: `교재목록${TITLE_SUFFIX[tab]} — 에이와` };
 }
 
 /**

@@ -5,7 +5,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { Panel, PlanPill, fmtNum } from "@/components/super-admin/parts";
 import { getTenantsPage, getSaaSStats } from "@/features/super-admin/server/queries";
 
-export const metadata = { title: "슈퍼관리자 · 대시보드 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 대시보드 — 에이와" };
 
 export default async function SuperAdminDashboardPage() {
   const [stats, { rows: recent }] = await Promise.all([getSaaSStats(), getTenantsPage({}, 1, 5)]);

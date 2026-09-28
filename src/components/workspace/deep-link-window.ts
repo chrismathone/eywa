@@ -11,13 +11,15 @@ import { windowIdForHref } from "./window-link";
  * 루트 레이아웃 기본값은 `aywa — {학원명} 학원관리`라 이 접미사로 끝나지 않는다 → "페이지가 제목을
  * 안 달았다"를 구분할 수 있다(그때는 메뉴 라벨로 떨어진다).
  */
-const OWN_TITLE_SUFFIX = " — aywa";
+// 화면 표기 = "에이와"(원장 2026-09-28). 배포 직후 옛 판이 연 문서 제목(" — aywa")도 같은 뜻으로 받는다.
+const OWN_TITLE_SUFFIXES = [" — 에이와", " — aywa"] as const;
 
 /** 문서 제목에서 라우트가 직접 단 부분만. 루트 기본값이면 null(못 믿는 제목). */
 function ownPageTitle(documentTitle: string): string | null {
   const raw = documentTitle.trim();
-  if (!raw.endsWith(OWN_TITLE_SUFFIX)) return null;
-  return raw.slice(0, -OWN_TITLE_SUFFIX.length).trim() || null;
+  const suffix = OWN_TITLE_SUFFIXES.find((s) => raw.endsWith(s));
+  if (!suffix) return null;
+  return raw.slice(0, -suffix.length).trim() || null;
 }
 
 /**

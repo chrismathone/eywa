@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { UnifiedDashboard } from "./_components/unified-dashboard";
 import { requireAccess } from "@/lib/auth/require-access";
 
-export const metadata = { title: "통합 성적관리 — aywa" };
+export const metadata = { title: "통합 성적관리 — 에이와" };
 
 type ExamsParams = {
   year?: string; term?: string; subject?: string; class?: string; slot?: string; date?: string; max?: string;

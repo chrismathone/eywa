@@ -235,7 +235,7 @@ export function Overview({
         <header className={s.header} data-overview="header">
           <div className={s.identity}>
             <span className={s.eyebrow}>
-              {snapshot.academy || "AYWA"} · ACADEMY OVERVIEW
+              {snapshot.academy || "에이와"} · ACADEMY OVERVIEW
             </span>
             <h1>
               학원 전체 현황<span>{snapshot.today.replaceAll("-", ".")}</span>
@@ -252,7 +252,7 @@ export function Overview({
               )}
             <div
               className={s.freshness}
-              title="표시 시각은 aywa DB 조회 시각입니다. 외부 서비스의 동기화 완료 시각과는 다릅니다."
+              title="표시 시각은 에이와 DB 조회 시각입니다. 외부 서비스의 동기화 완료 시각과는 다릅니다."
             >
               <i className={failed ? s.dotWarning : s.dotLive} />
               <span>
@@ -1215,7 +1215,7 @@ export function Overview({
         </div>
 
         <footer className={s.footer}>
-          <span>AYWA / OVERVIEW</span>
+          <span>에이와 / OVERVIEW</span>
         </footer>
       </div>
     </div>

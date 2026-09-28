@@ -12,7 +12,7 @@ import { PlanPill, TABLE_COL_LINES, TH, fmtDate, fmtNum } from "@/components/sup
 import { getAllTenants } from "@/features/super-admin/server/queries";
 import { parseTenantFilters, selectTenants, tenantPage } from "@/features/super-admin/tenant-operations";
 
-export const metadata = { title: "슈퍼관리자 · 전 지점 운영 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 전 지점 운영 — 에이와" };
 
 const PAGE_SIZE = 50;
 

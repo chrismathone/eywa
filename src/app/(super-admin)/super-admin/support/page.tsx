@@ -15,7 +15,7 @@ import { isSupportStatus, SUPPORT_STATUSES, SUPPORT_STATUS_META, type SupportSta
 import { fmtNum } from "@/components/super-admin/parts";
 import { SupportAdminTabs } from "./_tabs";
 
-export const metadata = { title: "슈퍼관리자 · 고객센터 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 고객센터 — 에이와" };
 
 const PAGE_SIZE = 30;
 
