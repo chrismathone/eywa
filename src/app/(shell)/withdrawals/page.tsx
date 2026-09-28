@@ -213,14 +213,14 @@ export default async function WithdrawalsPage({
    *    · 상담률에 **상담**을 걸면 0% 아니면 100%밖에 안 나온다.
    * ⚠️ 반대로 아무것도 안 걸면(예전 동작) 사유 카드만 필터를 따라 움직여 **한 화면이 서로 다른 모집단을
    *    말한다** — 원장 지적(2026-08-10)의 실체가 그것이었다.
-   * ⚠️ 사유·상담은 퇴원에만 있다 — 그 필터를 걸면 수강종료 줄은 빠진다(모르는 것을 '미기재'로 세지 않는다).
+   * ⚠️ 사유는 퇴원·수강종료 둘 다(수강종료 = 그 과목 수강의 종료 사유). 사후상담은 퇴원에만 있어 상담 필터를 걸면
+   *    수강종료 줄은 빠진다(모르는 것을 '미완료'로 세지 않는다).
    */
   const term = q.toLowerCase();
   const byName = (r: ExitRow) => !q || r.name.toLowerCase().includes(term);
   const byType = (r: ExitRow) => type === "all" || r.kind === type;
   const byRange = (r: ExitRow) => inRange(r, rangeWindow);
-  const byReason = (r: ExitRow) =>
-    reason === "all" || (r.kind === "withdrawn" && (r.reasonKey ?? "unspecified") === reason);
+  const byReason = (r: ExitRow) => reason === "all" || (r.reasonKey ?? "unspecified") === reason;
   const bySubject = (r: ExitRow) => subject === "all" || r.subjects.includes(subject);
   const byConsult = (r: ExitRow) =>
     consult === "all" || (r.consulted !== null && (consult === "done" ? r.consulted : !r.consulted));
@@ -238,13 +238,11 @@ export default async function WithdrawalsPage({
   // 카드별 모집단 — 자기 축 하나만 뺀다.
   const trendRows = all.filter((r) => base(r) && byReason(r) && bySubject(r) && byConsult(r)); // 기간 제외
   const subjectRows = all.filter((r) => base(r) && byRange(r) && byReason(r) && byConsult(r)); // 과목 제외
-  // 상담·사유 카드는 퇴원만 — 수강종료에는 사후상담·퇴원 사유가 없다.
+  // 상담 카드는 퇴원만 — 수강종료에는 사후상담이 없다. 사유 카드는 둘 다(유형 필터를 따른다).
   const consultRows = all.filter(
     (r) => r.kind === "withdrawn" && base(r) && byRange(r) && byReason(r) && bySubject(r),
   ); // 상담 제외
-  const reasonRows = all.filter(
-    (r) => r.kind === "withdrawn" && base(r) && byRange(r) && bySubject(r) && byConsult(r),
-  ); // 사유 제외
+  const reasonRows = all.filter((r) => base(r) && byRange(r) && bySubject(r) && byConsult(r)); // 사유 제외
 
   // 상담 미완료 worklist 집계 — **상담 축만 뺀** 모집단(상담 필터를 걸면 0%/100%밖에 안 나온다).
   const consultPending = consultRows.filter((r) => !r.consulted).length;
@@ -502,14 +500,14 @@ export default async function WithdrawalsPage({
             </div>
           </section>
 
-          {/* 사유 분석 — 퇴원만(수강종료에는 퇴원 사유가 없다) */}
+          {/* 사유 분석 — 퇴원 사유 + 수강종료 사유(그 과목 수강의 종료 사유). 유형 필터를 따른다. */}
           <section data-withdrawal-reasons className="bg-card shadow-card overflow-hidden rounded-2xl">
             <header className="border-line border-b px-5 py-4">
               <p className="micro text-amber">사유 분석</p>
-              <h2 className="text-foreground mt-1 text-base font-bold">상위 퇴원 사유</h2>
+              <h2 className="text-foreground mt-1 text-base font-bold">상위 {noun} 사유</h2>
               <p className="mt-1 text-xs">
-                퇴원 {reasonRows.length}명 기준 · 사유 필터 제외 · 수강종료는 사유가 없어 빠집니다
-                {reasonCounts.has("미기재") ? ` · 사유 미기재 ${reasonCounts.get("미기재")}명 포함` : ""}
+                {reasonRows.length}건 기준 · 사유 필터 제외
+                {reasonCounts.has("미기재") ? ` · 사유 미기재 ${reasonCounts.get("미기재")}건 포함` : ""}
               </p>
             </header>
             <div className="space-y-3 p-5">
@@ -520,7 +518,7 @@ export default async function WithdrawalsPage({
                     <div className="mb-1 flex items-baseline justify-between">
                       <span className="text-foreground text-xs font-bold">{reason}</span>
                       <span className="text-text-dim num text-xs">
-                        <span className="text-foreground font-bold">{count}</span>명 ·{" "}
+                        <span className="text-foreground font-bold">{count}</span>건 ·{" "}
                         {((count / Math.max(reasonRows.length, 1)) * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -543,8 +541,8 @@ export default async function WithdrawalsPage({
                     {topReasons[0]?.[0] === "미기재"
                       ? "사유 미기재가 가장 많습니다. 기록된 사유를 보완해야 퇴원 원인을 비교할 수 있습니다."
                       : topReasons[0]
-                        ? `현재 가장 빈번한 퇴원 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
-                        : "퇴원 사유가 등록되면 인사이트가 표시됩니다."}
+                        ? `현재 가장 빈번한 ${noun} 사유는 "${topReasons[0][0]}"입니다. 추세 모니터링과 사전 상담 강화를 고려해 보세요.`
+                        : `${noun} 사유가 등록되면 인사이트가 표시됩니다.`}
                   </p>
                 </div>
               </div>

@@ -211,7 +211,14 @@ export type SubjectEndedRow = {
   activeSubjects: string[]; // 아직 수강 중인 과목 코드
   lastEndedAt: string | null; // 종료 과목 중 가장 최근 end_date
   /** 끊은 과목마다 — 그 과목 마지막 수강이 끝난 날·반(퇴원관리 한 목록의 한 줄, `exit-rows.ts`). */
-  endedDetail: { subject: string; endedAt: string | null; className: string | null; englishTrack: string | null }[];
+  endedDetail: {
+    subject: string;
+    endedAt: string | null;
+    className: string | null;
+    englishTrack: string | null;
+    /** 그 과목 마지막 수강의 종료 사유 원문(`enrollments.withdrawal_reason`). */
+    reason: string | null;
+  }[];
 };
 
 type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null };
@@ -243,11 +250,14 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     start_date: string | null;
     end_date: string | null;
     is_transferred: boolean | null;
+    withdrawal_reason: string | null;
     class: ClassBits | ClassBits[] | null;
   }>(ids, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("id, student_id, start_date, end_date, is_transferred, class:class_id ( subject, class_name, english_track )")
+      .select(
+        "id, student_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( subject, class_name, english_track )",
+      )
       .in("student_id", chunk)
       .order("id")
       .range(from, to),
@@ -261,6 +271,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
     isTransferred?: boolean;
     className: string | null;
     englishTrack: string | null;
+    reason: string | null;
   };
   const bySt = new Map<string, Enr[]>();
   for (const e of enrollments) {
@@ -276,6 +287,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
       isTransferred: e.is_transferred ?? undefined,
       className: klass?.class_name ?? null,
       englishTrack: klass?.english_track ?? null,
+      reason: e.withdrawal_reason ?? null,
     });
     bySt.set(e.student_id, arr);
   }
@@ -306,6 +318,8 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
         endedAt: best?.endDate ?? null,
         className: best?.className ?? null,
         englishTrack: best?.englishTrack ?? null,
+        // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.
+        reason: best?.reason ?? null,
       };
     });
     rows.push({

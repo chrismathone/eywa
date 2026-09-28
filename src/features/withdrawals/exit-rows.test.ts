@@ -101,3 +101,28 @@ describe("parseType", () => {
     expect(parseType("x")).toBe("all");
   });
 });
+
+describe("수강종료 사유 — 그 과목 수강의 종료 사유", () => {
+  it("표준 키는 한글, 자유 텍스트는 원문 그대로(키는 '기타'), 비면 미기재(null)", () => {
+    const rows = toExitRows([], [
+      {
+        id: "s",
+        name: "가",
+        school: null,
+        grade: null,
+        status: "enrolled",
+        activeSubjects: [],
+        endedDetail: [
+          { subject: "math", endedAt: "2026-09-01", className: null, englishTrack: null, reason: "competitor" },
+          { subject: "english", endedAt: "2026-09-01", className: null, englishTrack: null, reason: "종강" },
+          { subject: "science", endedAt: "2026-09-01", className: null, englishTrack: null, reason: null },
+        ],
+      },
+    ]);
+    expect(rows.map((r) => [r.reasonKey, r.reasonLabel])).toEqual([
+      ["competitor", "타 학원으로 이동"],
+      ["other", "종강"],
+      [null, null],
+    ]);
+  });
+});
