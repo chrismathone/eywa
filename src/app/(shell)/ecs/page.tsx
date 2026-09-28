@@ -1,3 +1,5 @@
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -85,12 +87,14 @@ export default async function EcsLandingPage({
   // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
   // 학원 전체의 하루를 보는 건 시간표의 일이다. `?view=today`를 손으로 넣어도 주간으로 떨어뜨린다.
   // 화면 언어(2026-09-03) — ECS 레이아웃이 이미 읽어 둔 값을 **요청 캐시에서 그대로** 받는다(왕복 0).
-  const [scoped, lang, viewAs] = await Promise.all([
+  const [scoped, lang, viewAs, textbooksOn] = await Promise.all([
     effectiveTeacherScope().then((s) => s !== null),
     getTeacherViewLang(),
     // '다른 강사 뷰'(열람 전용)면 순서 바꾸기를 **아예 안 만든다**(원장 2026-09-05
     // *"어차피 다른 강사 뷰는 읽음 전용이니까 드래그기능을 넣어주면 안되는 부분"*).
     viewAsTeacher(),
+    // [계획 대비 현황] 입구 — 교재목록 모듈을 끈 학원엔 월간계획(교재 배정) 자체가 없다(요청 캐시라 왕복 0).
+    getTenantSettings().then((st) => isModuleEnabled(st.modules.disabled, "textbooks")),
   ]);
   const canReorder = viewAs === null;
   // 305 면은 사무실도 연다(오늘 면의 24반 폭탄과 달리 타임 단위). view=room 은 스코프와 무관.
@@ -236,6 +240,12 @@ export default async function EcsLandingPage({
             className="ml-auto"
           >
             {sheetT(lang, "goals.title")}
+          </ToolbarButton>
+        ) : null}
+        {/* 계획 대비 현황(원장 2026-09-28) — 원래 월간계획 ↔ 실제를 선생님별·월별로. 반 계획 보기 옆. */}
+        {textbooksOn ? (
+          <ToolbarButton href="/ecs/plan-gap" className={res.trackCounts.injaewon > 0 ? undefined : "ml-auto"}>
+            {sheetT(lang, "gap.title")}
           </ToolbarButton>
         ) : null}
       </div>
