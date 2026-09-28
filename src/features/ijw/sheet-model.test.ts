@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { IjwExamResult, IjwStudy } from "./contract";
 import {
   avgCompare,
+  examExtras,
   dailyChart,
   examHeadline,
   foldBarRows,
@@ -199,5 +200,50 @@ describe("시험 결과지", () => {
     const w = wrongRows(exam(), 1);
     expect(w).toEqual({ rows: [{ key: "0", no: 1, prompt: "[명] 교복", answer: "school uniform", typed: null }], rest: 1, total: 2 });
     expect(wrongRows(exam()).rows[1]!.typed).toBe("help");
+  });
+});
+
+describe("examExtras — 등수·객관식/주관식(2026-09-28)", () => {
+  const base = {
+    student: { id: "김근호", name: "김근호", className: null },
+    deck: { id: "d", name: "[보카킹] 26년 9월", examType: "regular" },
+    submittedAt: "2026-09-17T08:34:09.999Z",
+    elapsedMs: 1582957,
+    total: 200,
+    correct: 198,
+    score: 99,
+    classAvg: 80,
+    overallAvg: 61,
+    byPos: [],
+    wrong: [],
+  };
+  it("옛 응답(새 칸 없음)이면 칸을 세우지 않는다", () => {
+    expect(examExtras(base)).toEqual([]);
+  });
+  it("인재원 실측 예시 그대로", () => {
+    const x = examExtras({
+      ...base,
+      rank: { overall: { rank: 1, of: 88 }, class: { rank: 1, of: 6 } },
+      byKind: [
+        { kind: "objective", label: "객관식", correct: 100, total: 100 },
+        { kind: "subjective", label: "주관식", correct: 98, total: 100 },
+      ],
+    });
+    expect(x.map((e) => [e.label, e.value, e.note])).toEqual([
+      ["전체 등수", "1위", "88명 중"],
+      ["반 등수", "1위", "6명 중"],
+      ["객관식", "100 / 100", "정답률 100%"],
+      ["주관식", "98 / 100", "정답률 98%"],
+    ]);
+  });
+  it("등수 null(테스트 계정·옛 결과)은 칸이 없다", () => {
+    expect(examExtras({ ...base, rank: { overall: null, class: null } })).toEqual([]);
+  });
+  it("평균 라벨에 모수를 붙인다(모르면 그대로)", () => {
+    expect(examHeadline({ ...base, classCount: 6, overallCount: 88 }).compares.map((c) => c.label)).toEqual([
+      "반 평균 · 6명",
+      "전체 평균 · 88명",
+    ]);
+    expect(examHeadline(base).compares.map((c) => c.label)).toEqual(["반 평균", "전체 평균"]);
   });
 });

@@ -21,9 +21,11 @@ export async function captureReportJj(args: {
   reportId: string;
   studentId: string;
   date: string;
+  /** 강사가 고른 결과지(report-snapshot.ts `fetchStudentJjDay`) — `undefined` = 저장해 둔 고르기를 따른다. */
+  pick?: string[] | null;
 }): Promise<string | null> {
   try {
-    const day = await fetchStudentJjDay(args.tenantId, args.studentId, args.date);
+    const day = await fetchStudentJjDay(args.tenantId, args.studentId, args.date, args.pick);
     if (day.state === "unlinked") {
       // 🔴 짝이 끊겼으면 **예전에 묶어 둔 자료를 지운다** — 잘못 이은 짝의 자료가 이 학생 카드에 계속 그려지지 않게.
       await deleteReportJjSnapshot(args.tenantId, args.reportId);
