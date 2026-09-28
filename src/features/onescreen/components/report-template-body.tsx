@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { JjExamSheet } from "@/features/ijw/components/jj-exam-sheet";
+import { JjSrsExamSheet } from "@/features/ijw/components/jj-srs-exam-sheet";
 import { JjStudySheet } from "@/features/ijw/components/jj-study-sheet";
+import { srsSheetDataOf } from "@/features/ijw/srs-sheet";
+import type { IjwExamResult } from "@/features/ijw/contract";
 import { slotAvailability, type JjReportSnapshot } from "@/features/ijw/snapshot";
 import { splitImageSlots } from "@/features/report-templates/image-slots";
 import { isImageAttachment } from "../attachment-utils";
@@ -33,10 +36,13 @@ export function TemplateBody({
   text,
   jj,
   inline,
+  studentName,
 }: {
   text: string | null;
   jj?: JjReportSnapshot | null;
   inline: ReadonlyMap<string, CardAttachment>;
+  /** aywa 학생 이름 — 인재원 결과지(SRS)에 찍힌다(인재원 이름은 대개 로그인 아이디라 쓰지 않는다). */
+  studentName?: string | null;
 }) {
   const body = (text ?? "").replace(/\r\n?/g, "\n").trim();
   const segments = splitImageSlots(body);
@@ -54,12 +60,22 @@ export function TemplateBody({
     }
     if (seg.key === "시험결과지") {
       return avail.시험결과지 && jj
-        ? jj.exams.map((exam, j) => <JjExamSheet key={`e${i}-${j}`} exam={exam} layout="card" />)
+        ? jj.exams.map((exam, j) => <ExamSheet key={`e${i}-${j}`} exam={exam} studentName={studentName} />)
         : [];
     }
     return avail.학습분석지 && jj?.study ? [<JjStudySheet key={`s${i}`} study={jj.study} layout="card" />] : [];
   });
   return blocks.length ? <>{blocks}</> : <TemplateText text={EMPTY_NOTES} />;
+}
+
+/**
+ * 시험 결과지 한 장 — 인재원이 문항 목록을 준 응시는 **인재원 SRS 결과지 그대로**(원장 2026-09-28), 아니면(옛 동결본·문항 없는 응답)
+ * aywa 결과지. SRS 쪽이 그리다 실패해도 aywa 결과지로 대신 그린다.
+ */
+function ExamSheet({ exam, studentName }: { exam: IjwExamResult; studentName?: string | null }) {
+  const aywa = <JjExamSheet exam={exam} layout="card" />;
+  const srs = srsSheetDataOf(exam, studentName);
+  return srs ? <JjSrsExamSheet data={srs} fallback={aywa} /> : aywa;
 }
 
 /** 템플릿 글 한 칸(자리 사이의 글 조각도 같은 칸) — 자리가 생기기 전 본문과 같은 모양. */

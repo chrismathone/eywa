@@ -22,6 +22,8 @@ const eslintConfig = defineConfig([
     "scripts/_poc_migration/**",
     // 수동 실행 CJS 운영 도구(CORS 설정 등) — 앱 빌드 비포함, require 사용.
     "scripts/**/*.cjs",
+    // 인재원 결과지 캔버스(원본을 그대로 복사한 파일 — 고치면 원본과 갈라진다, src/features/ijw/srs-sheet.ts).
+    "public/ijw/**",
   ]),
 ]);
 

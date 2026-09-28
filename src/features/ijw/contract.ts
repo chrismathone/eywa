@@ -41,11 +41,28 @@ const ExamListItem = z.object({
 const RankPart = z.object({ rank: num, of: num }).nullable();
 const Rank = z.object({ overall: RankPart.optional(), class: RankPart.optional() });
 const ByKind = z.array(z.object({ kind: str, label: str, correct: num, total: num }));
+/**
+ * 전 문항(출제 순서) — 인재원 결과지(SRS 캔버스)의 문항별 결과·구간별 정답률·오답 입력 유형·풀이 시간 재료(2026-09-28 요청).
+ * 모양 = 인재원 관리자 `examRepDataOf`. 한 문항이라도 어긋나면 목록 전체를 버린다(일부 빠진 문항표는 번호가 밀려 거짓이 된다).
+ */
+const ExamItems = z.array(
+  z.object({
+    no: z.number().optional(),
+    prompt: str,
+    answer: str,
+    typed: str,
+    correct: z.boolean(),
+    choice: z.boolean().optional(),
+    answered: z.boolean().optional(),
+    ms: z.number().optional(),
+  }),
+);
 
 const ExamResult = z.object({
   attemptId: z.string().optional().catch(undefined),
   rank: Rank.optional().catch(undefined),
   byKind: ByKind.optional().catch(undefined),
+  items: ExamItems.optional().catch(undefined),
   classCount: z.number().nullable().optional().catch(undefined),
   overallCount: z.number().nullable().optional().catch(undefined),
   student: StudentRef,

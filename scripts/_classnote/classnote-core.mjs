@@ -661,11 +661,15 @@ export async function processQueueOnce(sql, browser, opts) {
         .waitForLoadState("load", { timeout: 8000 })
         .catch(() => {});
       await new Promise((x) => setTimeout(x, 700));
+      // 인재원 SRS 결과지는 카드가 뜬 뒤 브라우저가 캔버스로 그린다(`data-render-pending`) — 다 그릴 때까지 기다린다(최대 20초).
+      await page.waitForSelector("[data-render-pending]", { state: "detached", timeout: 20000 }).catch(() => {});
+      const renderPending = (await page.locator("[data-render-pending]").count()) > 0;
       const card = page.locator(".report-capture").first(); // ParentReportCard 루트(공유 컴포넌트) — 폭 유틸과 분리된 안정 마커
       // 🔴 카드가 없으면 **게시하지 않는다**(2026-09-23 전수 점검) — 예전엔 페이지 전체를 찍어 올렸는데,
       //    /r이 DB 오류·만료·취소일 때 띄우는 안내 화면("보고서를 잠시 불러올 수 없습니다")이 그대로 학부모 알림장에
       //    올라갈 수 있었다(되돌릴 수 없는 외부 발신). 재시도 카운트를 올려 3회면 failed로 고정 → 발송 콘솔에서 사람이 본다.
-      if (!resp || resp.status() !== 200 || (await card.count()) === 0) {
+      // 🔴 결과지를 아직 못 그렸으면 카드가 없는 것과 같이 다룬다 — '그리는 중' 빈 칸이 학부모 알림장에 올라가지 않게(재시도).
+      if (!resp || resp.status() !== 200 || (await card.count()) === 0 || renderPending) {
         await ctx.close();
         // 취소된 보고서는 /r이 취소 화면을 띄운다 — 아래 기존 '취소됨 → skip'과 같은 결말로(재시도 카운트 X).
         const [rv] = await sql`select revoked_at from lesson_reports where id=${r.id}`;
@@ -679,7 +683,9 @@ export async function processQueueOnce(sql, browser, opts) {
         await sql`update lesson_reports set
           classnote_retry_count = coalesce(classnote_retry_count, 0) + 1,
           classnote_status = case when coalesce(classnote_retry_count, 0) + 1 >= 3 then 'failed' else 'queued' end,
-          classnote_error = ${`보고서 화면을 불러오지 못해 게시 보류(카드 없음 · HTTP ${resp?.status() ?? "-"})`}
+          classnote_error = ${renderPending
+            ? "인재원 결과지를 그리지 못해 게시 보류(시간 초과)"
+            : `보고서 화면을 불러오지 못해 게시 보류(카드 없음 · HTTP ${resp?.status() ?? "-"})`}
           where id=${r.id}`;
         summary.requeued++;
         log(`  · ${studentName}: 보고서 카드 없음(HTTP ${resp?.status() ?? "-"}) → 게시 보류, 재큐`);
