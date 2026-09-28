@@ -26,6 +26,8 @@ import type {
 import type { TeacherOption } from "@/features/students/server/queries";
 import type { ConsultationTemplate } from "@/features/owner/settings-types";
 import { fillTemplate, formatConsultDate, type TemplateVars } from "@/features/consultations/template-vars";
+import type { NewcomerLinkTarget } from "@/features/newcomers/consult-link";
+import { NewcomerLinkField } from "./newcomer-link-field";
 
 type Mode = "create" | "edit";
 
@@ -89,6 +91,7 @@ export function ConsultationForm({
   currentUserId,
   templates,
   currentUserName,
+  newcomerTargets,
 }: {
   mode: Mode;
   initialValue?: ConsultationFormValue;
@@ -100,6 +103,8 @@ export function ConsultationForm({
   templates?: ConsultationTemplate[];
   /** 현재 로그인 사용자 표시명 — 상담사 "본인" 선택 시 {{담당}} 태그 치환값. */
   currentUserName?: string;
+  /** 90일 관리 신규생(0294a 반자동) — 고른 학생이 여기 있으면 '신규생 관리' 칸을 그린다. */
+  newcomerTargets?: NewcomerLinkTarget[];
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
@@ -128,11 +133,52 @@ export function ConsultationForm({
     v.subject && v.subject === subjectFor(v.counselorId) ? v.subject : initialAutoSubject,
   );
 
+  // 신규생 관리 칸이 보는 값 — 나머지 입력은 uncontrolled라 바뀔 때만 따로 붙잡는다.
+  const [linkStudentId, setLinkStudentId] = useState(v.studentId);
+  const [linkConsultedAt, setLinkConsultedAt] = useState(isoToLocal(v.consultedAt || nowLocalIso()));
+  const [linkSubject, setLinkSubject] = useState(v.subject ?? initialAutoSubject);
+  const [linkCounselorId, setLinkCounselorId] = useState(v.counselorId ?? "");
+  // 🔴 일시·과목은 uncontrolled라 **폼이 스스로 값을 바꾸는** 두 경우를 React onChange가 못 본다 — 초안 복구
+  //    (값을 넣고 이벤트를 쏘면 React 값 추적기가 삼킨다)와 제출 뒤 자동 리셋([[#83]]). 그래서 폼의 네이티브
+  //    이벤트로 DOM을 다시 읽는다. 리셋이면 칸도 다시 마운트해(사람이 고른 값 포함) 화면과 제출값을 맞춘다.
+  const [linkResetKey, setLinkResetKey] = useState(0);
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const read = () => {
+      const val = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | null)?.value ?? "";
+      setLinkConsultedAt(val("consultedAt"));
+      setLinkSubject(val("subject"));
+      setLinkCounselorId(val("counselorId"));
+    };
+    const onReset = () => {
+      // reset 이벤트는 값이 돌아가기 **전에** 온다 — 한 틱 뒤에 읽는다.
+      setTimeout(read, 0);
+      setLinkResetKey((k) => k + 1);
+    };
+    form.addEventListener("input", read);
+    form.addEventListener("change", read);
+    form.addEventListener("reset", onReset);
+    return () => {
+      form.removeEventListener("input", read);
+      form.removeEventListener("change", read);
+      form.removeEventListener("reset", onReset);
+    };
+  }, []);
+  const linkTarget = newcomerTargets?.find((t) => t.studentId === linkStudentId);
+  const linkSubjectKey =
+    Object.entries(subjectLabels).find(([key, label]) => label === linkSubject.trim() || key === linkSubject.trim())?.[0] ??
+    null;
+  const linkCounselorSubjects =
+    counselors.find((c) => c.id === (linkCounselorId || currentUserId))?.subjects ?? [];
+
   function onCounselorChange(nextId: string) {
+    setLinkCounselorId(nextId);
     const field = subjectRef.current;
     if (!field || (field.value && field.value !== lastAutoSubject.current)) return;
     const next = subjectFor(nextId || null);
     field.value = next;
+    setLinkSubject(next);
     lastAutoSubject.current = next;
     field.dispatchEvent(new Event("input", { bubbles: true }));
   }
@@ -206,7 +252,8 @@ export function ConsultationForm({
   const draft = useFormDraft({
     scope: mode === "create" ? "student-consultation:new" : `student-consultation:${initialValue?.id ?? "edit"}`,
     formRef,
-    exclude: ["studentId"],
+    // 신규생 관리 칸은 학생마다 선택지가 달라 초안으로 되살리면 엉뚱한 칸이 잡힌다.
+    exclude: ["studentId", "newcomerLink", "newcomerLinkRow"],
     ignoreForBanner: ["consultedAt", "category", "audience"],
   });
   const clearDraft = draft.clear;
@@ -246,6 +293,7 @@ export function ConsultationForm({
             <SearchableSelect
               name="studentId"
               defaultValue={v.studentId}
+              onValueChange={setLinkStudentId}
               placeholder="학생 선택..."
               searchPlaceholder="학생 이름 검색..."
               options={students.map((s) => ({
@@ -324,6 +372,16 @@ export function ConsultationForm({
               className={inputClass}
             />
           </Field>
+          {linkTarget ? (
+            <NewcomerLinkField
+              key={`${linkTarget.studentId}:${linkResetKey}`}
+              target={linkTarget}
+              consultedOn={linkConsultedAt.slice(0, 10)}
+              consultSubjectKey={linkSubjectKey}
+              counselorSubjects={linkCounselorSubjects}
+              suggest={mode === "create"}
+            />
+          ) : null}
           {/* 후속 조치 — 구분선으로 본 메타와 분리(영역 구분). */}
           <div className="border-border flex flex-col gap-4 border-t pt-4">
             <Field label="후속 조치" htmlFor="followUpAction">

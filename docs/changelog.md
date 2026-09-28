@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-28 (3) — 신규생 체크 ↔ 원생상담 반자동 연결(0294a)
+
+- 원장 *"지정된 학생이 90일 관리 학생이면 자동연동 … 반자동으로"* → 원생상담 등록·수정 폼에 '신규생 관리' 칸([`newcomer-link-field.tsx`](src/app/(shell)/consultations/_components/newcomer-link-field.tsx)). 새 상담은 날짜 규칙으로 한 칸을 미리 잡고([`consult-link.ts`](src/features/newcomers/consult-link.ts)), 저장하면 그 칸이 상담일로 완료 + `consultation_id` 기록([`server/consult-link.ts`](src/features/newcomers/server/consult-link.ts)). 감사로그 = `newcomer_check`/`newcomer_uncheck` + `via: consultation`(설명에 "원생상담으로").
+- 손 체크 우선 · 수정 화면은 제안 없음 · '해당 없음'/학생 변경 = 해제 · 상담 삭제 = 먼저 해제(실패하면 삭제 안 함) · 신규생 표 손 체크는 연결을 끊는다. 과목 확인은 손 체크와 같은 헬퍼 `studentTakesSubject`.
+- makeedu 동기화 상담은 대상 아님(원장 선택 1번). 같은 날 시험한 AI 판정안은 폐기 — 0294a가 `consultation_call_labels`(0행)를 걷는다.
+- ⚠️ 0294a 전에도 산다([[#95]]): 연결 없이 체크만 하고, 되돌리기(수정·삭제 해제)는 SQL 적용 뒤 체크부터.
+
 ## 2026-09-28 (2) — 이용 분석: 강사 과목별 분류 · 슈퍼관리자 제외 · 지점 비공개
 - 원장 *"과목별 강사 분류를 따로해"* · *"슈퍼 관리자는 제외"* · *"전혀 지점에 알려줄 사항이 아니야 오직 superadmin만"* · *"직원별 머무는 시간을 측정하는 용도가 아닌것"*.
 - 0293a(**SQL 원장 적용 필요**): `subject_group` 칸(강사 담당 과목을 기록 시점에 접음, PK 포함) · 슈퍼관리자 기록 안 함 + 쌓인 행 삭제 · 집계에 과목 필터(`p_subject`), 옛 4인자 함수 삭제.

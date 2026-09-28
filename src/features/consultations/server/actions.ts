@@ -20,6 +20,11 @@ import {
   scopedConsultationUserId,
 } from "./write-scope";
 import { preserveConsultationLink, visibleConsultationSummary } from "../internal-link";
+import { decodeLinkPick } from "@/features/newcomers/consult-link";
+import {
+  applyConsultationNewcomerLinks,
+  prepareConsultationUnlink,
+} from "@/features/newcomers/server/consult-link";
 
 type CareFocus = {
   priority: "high" | "medium" | "low";
@@ -217,6 +222,38 @@ function readConsultationForm(formData: FormData) {
   };
 }
 
+/**
+ * 신규생 관리 칸(0294a 반자동) — 폼이 **그린 과목 줄마다** `newcomerLinkRow`(과목 키, 과목 무관 = 빈 값)가 온다.
+ * 안 그린 줄의 연결은 건드리지 않는다(신규생이 아닌 학생·그만둔 과목의 옛 연결이 풀리면 안 된다).
+ */
+function readNewcomerLinks(formData: FormData) {
+  const picks = formData
+    .getAll("newcomerLink")
+    .map((v) => decodeLinkPick(String(v)))
+    .filter((p): p is NonNullable<typeof p> => !!p);
+  return { renderedSubjects: new Set(formData.getAll("newcomerLinkRow").map((v) => String(v))), picks };
+}
+
+/** 상담 저장 뒤 신규생 체크 연결 — 실패해도 상담 저장은 되돌리지 않는다(재제출하면 상담이 두 번 생긴다). */
+async function linkNewcomerChecks(
+  user: { tenantId: string; id: string },
+  consultationId: string,
+  input: ReturnType<typeof readConsultationForm>,
+  formData: FormData,
+) {
+  const links = readNewcomerLinks(formData);
+  const consultedOn = kstDateOf(input.consultedAt) ?? kstToday();
+  const res = await applyConsultationNewcomerLinks({
+    tenantId: user.tenantId,
+    userId: user.id,
+    consultationId,
+    studentId: input.studentId,
+    consultedOn,
+    ...links,
+  });
+  if (res.error) console.error("[consultation] newcomer link:", res.error);
+}
+
 function validateConsultation(input: ReturnType<typeof readConsultationForm>): Record<string, string> | null {
   const errors: Record<string, string> = {};
   if (!input.studentId) errors.studentId = "학생을 선택해주세요";
@@ -290,6 +327,8 @@ export async function createStudentConsultation(
     .single();
 
   if (error || !data) return { error: error?.message ?? "상담 저장 실패" };
+
+  await linkNewcomerChecks(user, data.id as string, input, formData);
 
   // 🔴 요약·후속조치 **본문은 담지 않는다**(상담 내용 금지) — 분류·대상·후속조치 유무까지만.
   // 대상 열의 학생 이름은 metadata.studentId를 뷰어가 일괄 해석한다(auditTargetName).
@@ -378,6 +417,7 @@ export async function updateStudentConsultation(
     .eq("id", id).eq("tenant_id", user.tenantId);
 
   if (error) return { error: error.message };
+  await linkNewcomerChecks(user, id, input, formData);
 
   await logAction({
     action: "student_consultation_update",
@@ -466,8 +506,13 @@ export async function deleteStudentConsultation(
     if (!before || before.counselor_id !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
     del = del.eq("counselor_id", scopedId);
   }
+  // 🔴 이 상담으로 한 신규생 체크를 지우기 **전에** 찾아 두고, 삭제가 성공한 **뒤에** 푼다 — 상담이 없는데
+  //    "콜 했음"만 남으면 거짓 기록이다. 못 찾으면 지우지 않는다(지운 뒤엔 FK set null로 찾을 길이 없다).
+  const unlink = await prepareConsultationUnlink(user.tenantId, id);
+  if (unlink.error) return { error: `${unlink.error} — 상담을 지우지 않았습니다` };
   const { error } = await del;
   if (error) return { error: error.message };
+  await unlink.apply();
 
   await logAction({
     action: "student_consultation_delete",
