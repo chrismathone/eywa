@@ -41,7 +41,7 @@ export function SuperAdminSidebar({
             <EyIcon name="shieldCheck" size={16} strokeWidth={1.8} className="text-white" />
           </span>
           <span className="min-w-0 leading-none">
-            <span className="text-foreground block truncate text-lg leading-tight font-bold tracking-tight">AYWA</span>
+            <span className="text-foreground block truncate text-lg leading-tight font-bold tracking-tight">에이와</span>
             <span className="text-primary mt-[3px] block truncate text-base leading-none font-bold">슈퍼관리자</span>
           </span>
         </Link>

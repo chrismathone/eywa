@@ -13,7 +13,7 @@ import { loadEcsTextbookOptions } from "@/features/textbooks/server/ecs-options"
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
 
-export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — aywa" };
+export const metadata: Metadata = { title: "영어 강사 시트 · 월간 — 에이와" };
 
 /**
  * ECS **월간 뷰** — 반 1개 × 달 1개(달력 ↔ 진도표).

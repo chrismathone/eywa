@@ -23,6 +23,11 @@ export async function loadEnglishJjDay(input: {
   date?: string;
   /** 보강·수업외 행 — 저장과 같이 담당 반 대신 같은 학원 학생이면 된다. */
   outOfClass?: boolean;
+  /**
+   * 고른 결과지(2026-09-28) — `undefined` = 저장해 둔 고르기, `null` = 기본(그날 낸 응시 전부), 배열 = 그 응시들.
+   * 응시가 이 학생 것인지는 서버가 결과지의 학생으로 다시 확인한다(report-snapshot.ts).
+   */
+  pick?: string[] | null;
 }): Promise<JjDayState> {
   const user = await getCurrentUser();
   if (!user || user.systemRole === "student") return { status: "error", message: "로그인이 필요합니다" };
@@ -46,8 +51,8 @@ export async function loadEnglishJjDay(input: {
     }
   }
 
-  const day = await fetchStudentJjDay(user.tenantId, input.studentId, date);
-  if (day.state === "ok") return { status: "ok", snapshot: day.snapshot };
+  const day = await fetchStudentJjDay(user.tenantId, input.studentId, date, input.pick);
+  if (day.state === "ok") return { status: "ok", snapshot: day.snapshot, options: day.options };
   if (day.state === "unlinked") return { status: "unlinked" };
   return { status: "error", message: day.failure.message, unreachable: day.failure.kind === "unreachable" };
 }

@@ -418,7 +418,7 @@ export const SHEET_DICT = {
   //    설명 조각을 JSX에서 붙여 놔 공백이 없었다. 뜻은 한 글자도 안 바꿨다.
   "banner.notify.title": { ko: "컴퓨터 알림을 켜주세요.", en: "Turn on desktop notifications." },
   "banner.notify.body": {
-    ko: "학부모가 클래스노트에 새 글을 올리면 aywa 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
+    ko: "학부모가 클래스노트에 새 글을 올리면 에이와 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
     en: "When a parent posts on ClassNote, you'll be notified right away even if aywa isn't open. (If the browser asks, choose “Allow”.)",
   },
   "banner.notify.enable": { ko: "켜기", en: "Turn on" },
@@ -3023,13 +3023,24 @@ export const SHEET_DICT = {
     en: "Link this student to their Injaewon account under Grades › English › JJ room to include the result sheets",
   },
   "os.tpl.jjSummary": {
-    ko: "인재원 · 오늘 시험 {exams}건 · 30일 학습 {answers}문제",
-    en: "Injaewon · {exams} tests today · {answers} answers in 30 days",
+    ko: "인재원 · 결과지 {exams}건 · 30일 학습 {answers}문제",
+    en: "Injaewon · {exams} result sheets · {answers} answers in 30 days",
   },
   "os.tpl.jjFailed": { ko: "인재원 자료를 불러오지 못했습니다", en: "Couldn't load Injaewon data" },
   "os.tpl.jjRetry": { ko: "다시 불러오기", en: "Load again" },
   // 받아 둔 인재원 하루치를 **새로** 받는다(수업 중 본 시험·방금 이은 짝 반영, 2026-09-11 적대 리뷰).
   "os.tpl.jjReload": { ko: "새로 고침", en: "Refresh" },
+  "os.tpl.jjPickTitle": { ko: "결과지에 넣을 시험", en: "Exams to attach" },
+  "os.tpl.jjPickDefault": { ko: "기본 = 이날 본 시험", en: "Default = exams taken that day" },
+  "os.tpl.jjPickCount": { ko: "{n}개 선택", en: "{n} exams chosen" },
+  "os.tpl.jjPickNone": { ko: "선택 없음 — 결과지가 빠집니다", en: "None — no result sheet" },
+  "os.tpl.jjPickReset": { ko: "기본으로", en: "Back to default" },
+  "os.tpl.jjPickMax": { ko: "최대 {n}개까지", en: "Up to {n}" },
+  "os.tpl.jjPickEmpty": { ko: "인재원에 본 시험이 없습니다", en: "No exams in Injaewon yet" },
+  "os.tpl.jjPickHint": {
+    ko: "고르면 글의 [시험결과지] 자리에 그 결과지가 들어갑니다. 글에 자리 줄이 없으면 '다시 채우기'를 누르세요.",
+    en: "Checked exams fill the exam result-sheet line. If the text has no such line, press Refill.",
+  },
   "os.tpl.slotHelp": {
     ko: "그림 칸 — 그 줄 자리에 인재원 그림이 들어갑니다 · 자료가 없으면 줄이 빠집니다",
     en: "Image fields — an Injaewon sheet goes where the line is · the line is left out when there is no data",

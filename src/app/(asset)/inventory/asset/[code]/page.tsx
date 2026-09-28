@@ -11,7 +11,7 @@ import { isModuleOnForTenant } from "@/features/owner/server/modules";
 /** 기기 대장이라 검색엔진 색인은 막는다(자산ID가 추측 가능한 공개 주소 — (share)/r 선례와 같은 처리). */
 export async function generateMetadata({ params }: { params: Promise<{ code: string }> }) {
   return {
-    title: `${decodeURIComponent((await params).code)} — 재고관리 — aywa`,
+    title: `${decodeURIComponent((await params).code)} — 재고관리 — 에이와`,
     robots: { index: false, follow: false },
   };
 }

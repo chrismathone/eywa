@@ -22,7 +22,7 @@ import { ClassesTab } from "./_tabs/classes-tab";
 import { ActivityLogTab } from "./_tabs/activity-log-tab";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
 
-export const metadata = { title: "직원 상세 — aywa" };
+export const metadata = { title: "직원 상세 — 에이와" };
 
 
 export default async function StaffDetailPage({

@@ -9,7 +9,7 @@ import { AUDIT_ACTION_OPTIONS, auditActionMeta, auditDetail } from "@/features/s
 import { toneColor } from "@/lib/design/semantic-color";
 import { getAuditLogsPage } from "@/features/super-admin/server/audit";
 
-export const metadata = { title: "슈퍼관리자 · 감사 로그 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 감사 로그 — 에이와" };
 
 const PAGE_SIZE = 50;
 

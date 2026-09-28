@@ -21,7 +21,7 @@ import { MeetingReportAccordion } from "./ai-report";
 import { MeetingTitleEditor } from "./meeting-title-editor";
 import { trimTrailingNoise } from "@/lib/ai/transcript-trim";
 
-export const metadata = { title: "회의록 상세 — aywa" };
+export const metadata = { title: "회의록 상세 — 에이와" };
 
 /** 목록(page.tsx)과 같은 의미색 캐논 — 대기=caution · 처리 중=info · 완료=positive · 실패=critical(옛 chart-3/4 로컬 클래스 폐기). */
 const STATUS_BADGE: Record<MeetingProcessingStatus, { label: string; color: PillColor; spin?: boolean } | null> = {

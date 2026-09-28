@@ -224,7 +224,7 @@ describe("RouteWindow 스켈레톤 — 문서가 실제로 바뀔 때만 덮는�
 
   it("🔴 다른 화면(면)으로 옮기면 새 문서가 뜰 때까지 덮고, 옛 문서의 보고가 ←를 되살리지 않는다", () => {
     const { container, rerender } = render(<RouteWindow win={makeWin()} />);
-    const f = fakeFrame(container, DETAIL, "상세 — aywa");
+    const f = fakeFrame(container, DETAIL, "상세 — 에이와");
     act(() => {
       fireEvent.load(f.iframe);
     });

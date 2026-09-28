@@ -10,9 +10,9 @@ import "server-only";
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
-import { IJW_SCHEMAS } from "../contract";
+import { IJW_SCHEMAS, type IjwExamListItem, type IjwExamResult } from "../contract";
 import { isMissingIjwColumn } from "../db-errors";
-import { parseJjSnapshot, snapshotFromDay, type JjReportSnapshot } from "../snapshot";
+import { normalizeJjPick, parseJjSnapshot, snapshotFromDay, type JjReportSnapshot } from "../snapshot";
 import { IJW_PATHS, ijwGet, type IjwFailure } from "./client";
 import { localFailure } from "./links";
 
@@ -20,10 +20,25 @@ export type StudentJjDay =
   | { state: "unlinked" }
   /** `ijwId` = 짝은 알았는데 인재원 호출이 실패했을 때의 지금 짝(옛 짝 동결본을 가려내는 데 쓴다). */
   | { state: "error"; failure: IjwFailure; ijwId?: string }
-  | { state: "ok"; snapshot: JjReportSnapshot };
+  /** `options` = 고를 수 있는 결과지(2번 시험 목록, 단어장마다 마지막 제출·최신순) — 목록을 못 받았으면 빈 배열. */
+  | { state: "ok"; snapshot: JjReportSnapshot; options: IjwExamListItem[] };
 
-/** 한 학생의 그날 인재원 자료(설명서 5번). 짝이 없으면 `unlinked`. */
-export async function fetchStudentJjDay(tenantId: string, studentId: string, date: string): Promise<StudentJjDay> {
+/**
+ * 한 학생의 그날 인재원 자료(설명서 5번) + 고를 수 있는 결과지 목록(2번). 짝이 없으면 `unlinked`.
+ *
+ * `pick` — 강사가 고른 결과지(응시 id, 2026-09-28):
+ * - `undefined` = 이 날짜에 **이미 저장해 둔 고르기**를 따른다(없으면 기본). 저장·발송이 고르기를 모르는 경로(일괄 발송·
+ *   옛 화면)로 와도 고른 것이 풀리지 않게.
+ * - `null` = 기본(그날 낸 응시 전부 — 종전 동작) · 배열 = 그 응시들(다른 날 것도 된다).
+ * 🔴 고른 응시는 **이 학생의 것만** 받는다(결과지의 `student.id`가 짝과 다르면 버린다) — 화면이 보낸 id를 믿지 않는다([[#77]]).
+ * 🔴 고른 것 중 하나라도 **못 받으면**(없는 응시 404 말고) 실패로 돌린다 — 일부만 붙은 결과지가 학부모에게 나가지 않게.
+ */
+export async function fetchStudentJjDay(
+  tenantId: string,
+  studentId: string,
+  date: string,
+  pick?: string[] | null,
+): Promise<StudentJjDay> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("students")
@@ -37,9 +52,63 @@ export async function fetchStudentJjDay(tenantId: string, studentId: string, dat
   }
   const ijwId = (data as { ijw_student_id: string | null } | null)?.ijw_student_id ?? null;
   if (!ijwId) return { state: "unlinked" };
-  const res = await ijwGet(tenantId, IJW_PATHS.day(ijwId, date), IJW_SCHEMAS.day);
+  // 하루치 · 시험 목록 · (모르면) 저장해 둔 고르기 — 서로 독립이라 함께(B4).
+  const [res, list, saved] = await Promise.all([
+    ijwGet(tenantId, IJW_PATHS.day(ijwId, date), IJW_SCHEMAS.day),
+    ijwGet(tenantId, IJW_PATHS.studentExams(ijwId), IJW_SCHEMAS.studentExams),
+    pick === undefined ? loadSavedJjPick(tenantId, ijwId, date) : Promise.resolve(null),
+  ]);
   if (!res.ok) return { state: "error", failure: res, ijwId };
-  return { state: "ok", snapshot: snapshotFromDay(res.data, new Date().toISOString()) };
+  const options = list.ok ? list.data.exams : [];
+  const want = pick === undefined ? saved : normalizeJjPick(pick);
+  let picked: { pick: string[]; exams: IjwExamResult[] } | null = null;
+  if (want) {
+    const got = await Promise.all(want.map((id) => ijwGet(tenantId, IJW_PATHS.examResult(id), IJW_SCHEMAS.examResult)));
+    const exams: IjwExamResult[] = [];
+    const kept: string[] = [];
+    for (let i = 0; i < got.length; i++) {
+      const r = got[i]!;
+      if (!r.ok) {
+        if (r.kind === "not_found") continue; // 지워진 응시 — 빼고 간다
+        return { state: "error", failure: r, ijwId };
+      }
+      if (r.data.student.id !== ijwId) continue; // 남의 응시 — 버린다
+      // 3번 응답의 `v`는 동결본을 다시 읽을 때 버려진다(스키마에 없는 키).
+      exams.push({ ...r.data, attemptId: r.data.attemptId ?? want[i]! });
+      kept.push(want[i]!);
+    }
+    picked = { pick: kept, exams };
+  }
+  return { state: "ok", snapshot: snapshotFromDay(res.data, new Date().toISOString(), picked), options };
+}
+
+/**
+ * 이 학생·이 날짜 보고서에 **저장해 둔 고르기** — 없거나 기본이면 null. 던지지 않는다(못 읽으면 기본).
+ * 🔑 짝(ijwId)으로 찾는다 — 동결본은 보고서마다 한 벌이고 영어 보고서는 학생·날짜마다 대개 하나다.
+ */
+async function loadSavedJjPick(tenantId: string, ijwId: string, date: string): Promise<string[] | null> {
+  const admin = createAdminClient();
+  try {
+    const { data, error } = await admin
+      .from("report_jj_snapshots")
+      .select("payload")
+      .eq("tenant_id", tenantId)
+      .eq("ijw_student_id", ijwId)
+      .eq("report_date", date)
+      .limit(5);
+    if (error) {
+      if (!isMissingSnapshotTable(error)) reportError(error, { scope: "ijw", step: "snapshot-pick-load" });
+      return null;
+    }
+    for (const row of (data ?? []) as { payload: unknown }[]) {
+      const snap = parseJjSnapshot(row.payload);
+      if (snap?.pick) return snap.pick;
+    }
+    return null;
+  } catch (e) {
+    reportError(e, { scope: "ijw", step: "snapshot-pick-load" });
+    return null;
+  }
 }
 
 /** 표가 아직 없다(0261a 적용 전) — 코드와 문구 둘 다 본다(다른 실패를 "적용 전"으로 오인하지 않게). */

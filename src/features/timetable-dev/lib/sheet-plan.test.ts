@@ -206,7 +206,7 @@ describe("buildPlanSheetImport — 시트 슬롯 → 계획 칸", () => {
     expect(p.counts.add).toBe(1);
     expect(p.counts.skipped).toBe(2);
     expect(p.skipped[0]).toMatchObject({ className: "TEVO", count: 2 });
-    expect(p.skipped[0]!.reason).toContain("aywa에 없는 반");
+    expect(p.skipped[0]!.reason).toContain("에이와에 없는 반");
   });
 
   it("종료 시각이 없거나 뒤집힌 칸은 담지 않는다(DB가 NOT NULL·순서를 요구한다)", () => {

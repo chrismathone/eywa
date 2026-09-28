@@ -38,7 +38,7 @@ function seedWindows(ids: string[]) {
 describe("딥링크 창은 이미 열린 창들 **위**로 온다", () => {
   beforeEach(() => {
     navigation.pathname = "/students/abc";
-    document.title = "학생 상세 — aywa";
+    document.title = "학생 상세 — 에이와";
     window.history.replaceState({}, "", "/students/abc");
   });
 

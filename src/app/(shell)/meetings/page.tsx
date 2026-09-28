@@ -23,7 +23,7 @@ import type { MeetingRangeKey as RangeKey, MeetingStatusKey as StatusKey } from 
 import { NewMeetingTrigger } from "./_new-meeting-trigger";
 import { Pagination } from "@/components/pagination";
 
-export const metadata = { title: "회의록 — aywa" };
+export const metadata = { title: "회의록 — 에이와" };
 
 const PAGE_SIZE = 50;
 

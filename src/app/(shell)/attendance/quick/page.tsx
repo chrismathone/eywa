@@ -10,9 +10,10 @@ import { quickClasses } from "@/features/attendance/quick/board";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { sheetDateLabel, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 import { QuickBoard } from "@/features/attendance/quick/components/quick-board";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "quick.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "quick.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 /**

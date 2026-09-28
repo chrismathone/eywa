@@ -24,7 +24,7 @@ import { DiffSummary } from "./_components/diff-summary";
 import { DiffFilter, parseDiffScope, scopeIncludes, type DiffScope } from "./_components/diff-filter";
 import { DiffTable } from "./_components/diff-table";
 
-export const metadata = { title: "월별 시간표 비교 — aywa" };
+export const metadata = { title: "월별 시간표 비교 — 에이와" };
 
 /**
  * 한 화면에 그리는 행 상한. 한 달 계획이 1,000칸을 넘을 수 있어 '동일' 범위를 열면 표가 그만큼 길어진다.

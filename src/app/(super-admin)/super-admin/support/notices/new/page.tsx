@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SupportNoticeForm } from "../../_notice-form";
 
-export const metadata = { title: "슈퍼관리자 · 새 공지 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 새 공지 — 에이와" };
 
 export default function NewSupportNoticePage() {
   return (

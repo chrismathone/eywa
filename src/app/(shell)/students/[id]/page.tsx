@@ -34,7 +34,7 @@ import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 
-export const metadata = { title: "학생 상세 — aywa" };
+export const metadata = { title: "학생 상세 — 에이와" };
 
 
 export default async function StudentDetailPage({

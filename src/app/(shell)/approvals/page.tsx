@@ -13,7 +13,7 @@ import { formatSignedDays } from "@/features/leave/balance";
 import { getApprovalBoxes, getMyLeaveBalance, needsMyDeferredConfirm } from "@/features/approvals/server/queries";
 import { DocList } from "./_components/doc-list";
 
-export const metadata = { title: "전자결재 — aywa" };
+export const metadata = { title: "전자결재 — 에이와" };
 
 /**
  * 전자결재 결재함 — 원장 지시 2026-08-14: *"하이웍스 기준으로 디자인 및 기능 따서 우리 디자인에 맞게."*

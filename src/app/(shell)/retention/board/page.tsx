@@ -21,7 +21,7 @@ import {
 import { Pagination } from "@/components/pagination";
 import { formatWonShort } from "@/features/retention/format";
 
-export const metadata = { title: "리텐션 보드 — aywa" };
+export const metadata = { title: "리텐션 보드 — 에이와" };
 
 const PAGE_SIZE = 50;
 

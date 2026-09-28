@@ -7,7 +7,7 @@ import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { MessageComposer } from "@/features/retention/components/message-composer";
 import { RiskBadge } from "@/features/retention/components/risk-badge";
 
-export const metadata = { title: "학부모 메시지 — aywa" };
+export const metadata = { title: "학부모 메시지 — 에이와" };
 
 export default async function RetentionMessagesPage() {
   const user = await requireAccess("retention");

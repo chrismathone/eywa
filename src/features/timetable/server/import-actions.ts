@@ -128,7 +128,7 @@ async function computeFreshFromFile(file: File): Promise<{ error: string } | { d
   await wb.xlsx.load(await file.arrayBuffer());
   const parsed = parseEditSheet(wb);
   if (parsed.length === 0) {
-    return { error: "'수강편집' 시트를 찾을 수 없습니다 (aywa에서 내보낸 엑셀인지 확인)" };
+    return { error: "'수강편집' 시트를 찾을 수 없습니다 (에이와에서 내보낸 엑셀인지 확인)" };
   }
   const ctx = await loadContext();
   // stale-drift 보호(파일 경로) — 시트 경로가 `last_synced_at`을 쓰듯, 파일은 **워크북 생성 시각**을 쓴다.

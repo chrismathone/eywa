@@ -16,7 +16,7 @@ export async function buildStudentsWorkbook(
   subjectLabelOf: (key: string) => string,
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "aywa";
+  wb.creator = "에이와";
   wb.created = new Date();
   const sheet = wb.addWorksheet("학생 목록");
 

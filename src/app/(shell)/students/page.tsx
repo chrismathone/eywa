@@ -69,9 +69,10 @@ import {
   type StudentMixFilter,
 } from "@/features/students/list-filter-values";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 // 상태 — 디폴트(재원)는 파라미터가 없을 때다. "전체"는 명시적 status=all로만(HeaderFilter의 allValue=enrolled가 지운다).

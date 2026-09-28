@@ -118,7 +118,7 @@ import { resolveDayWindows } from "@/features/timetable/lib/room-metrics";
 import { buildTeacherComparator } from "@/features/timetable/lib/english-teacher-sheet";
 import type { DayOfWeek } from "@/features/timetable/lib/periods";
 
-export const metadata = { title: "시간표 — aywa" };
+export const metadata = { title: "시간표 — 에이와" };
 
 type ViewMode = "basic" | "integrated" | "teacher" | "rooms";
 // 전부 과목별(과목칩으로 1개 선택·전환). 기본뷰 = 요일그룹밴드(교시×강사요일, 학생명단, 드래그 편집).

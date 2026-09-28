@@ -12,7 +12,7 @@ import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { PrintActions } from "./print-actions";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
-export const metadata = { title: "신입생 인수인계서 — aywa" };
+export const metadata = { title: "신입생 인수인계서 — 에이와" };
 
 // 과목 라벨은 print_payload 스냅샷에 이미 한글로 동결돼 있어 별도 맵이 필요 없다(과목 하드코딩 금지).
 // 향후 라벨이 필요하면 buildSubjectMaps(getTenantSettings).labelOf로 읽을 것.
@@ -35,7 +35,7 @@ export default async function EnrollmentPrintPage({
   // 침산은 학원 이름이 '인재원'이라 같은 글자가 나온다(2026-09-22 확인).
   const printHeader =
     settings.notifications.printHeader ||
-    (settings.profile.name ? `aywa · ${settings.profile.name} 학원관리` : "aywa");
+    (settings.profile.name ? `에이와 · ${settings.profile.name} 학원관리` : "에이와");
 
   // 학원 연락처·정책 — owner 설정에서(값 있을 때만 인쇄물에 노출). 인수인계서는 학부모 전달용 1부 포함.
   const profile = settings.profile;

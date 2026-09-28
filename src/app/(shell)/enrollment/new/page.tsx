@@ -2,7 +2,7 @@ import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { NewConsultationForm } from "./form";
 
-export const metadata = { title: "신규 콜&상담 — aywa" };
+export const metadata = { title: "신규 콜&상담 — 에이와" };
 
 export default async function NewEnrollmentPage() {
   await requireAccess("enrollment");

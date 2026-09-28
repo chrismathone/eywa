@@ -35,7 +35,16 @@ const PAUSED = "인재원 서버가 응답하지 않아 잠시 부르지 않습�
  * 눌렀다 — 멈춤 차단기도 무시한다. 🔴 차단기는 학생마다가 아니라 **화면 전체**다 — 학생마다 1분이면 일괄 저장·발송이
  * 15명 × 8초를 그대로 기다린다(적대 재리뷰 2026-09-11).
  */
-export type JjEnsureOpts = { outOfClass?: boolean; force?: boolean; manual?: boolean };
+export type JjEnsureOpts = {
+  outOfClass?: boolean;
+  force?: boolean;
+  manual?: boolean;
+  /**
+   * 결과지 고르기(2026-09-28) — 주면 그 고르기로 받는다(`null` = 기본). 안 주면 서버가 **이미 알고 있는 고르기**를 쓴다:
+   * 이 화면에서 받은 적이 있으면 그 값, 아니면 서버에 저장해 둔 값.
+   */
+  pick?: string[] | null;
+};
 
 export function useEnglishJj(date: string) {
   const [cache, setCache] = useState<JjDayCache>({});
@@ -47,13 +56,15 @@ export function useEnglishJj(date: string) {
   const pausedUntilRef = useRef(0);
   /** 마지막으로 받은(ok) 시각 — 그보다 먼저 시작한 요청이 늦게 실패해도 멈춤을 다시 걸지 않는다. */
   const lastOkAtRef = useRef(0);
+  /**
+   * (학생, 날짜) → 지금 고르기(서버가 돌려준 값). 🔑 저장 입력이 이것을 싣는다 — 키가 없으면(아직 안 받음) 저장에 안 싣고
+   * 서버가 저장해 둔 고르기를 따른다. 화면(렌더)은 캐시의 `snapshot.pick`을 읽는다 — 같은 순간에 함께 갱신된다.
+   */
+  const picksRef = useRef<Readonly<Record<string, string[] | null>>>({});
 
-  const ensure = useCallback(
-    (studentId: string, opts?: JjEnsureOpts): Promise<JjDayState> => {
-      const key = jjDayKey(studentId, date);
-      // 받는 중이면 그걸 기다린다(방금 시작한 요청이라 force여도 충분히 새것이다).
-      const running = inflight.current.get(key);
-      if (running) return running;
+  /** 캐시·멈춤 판정을 거쳐 한 번 받는다 — 받는 중 합치기는 `ensure`가 한다. */
+  const startJob = useCallback(
+    (key: string, studentId: string, opts?: JjEnsureOpts): Promise<JjDayState> => {
       const have = cacheRef.current[key];
       const window = have?.status === "error" ? JJ_ERROR_FRESH_MS : JJ_FRESH_MS;
       const fresh = Date.now() - (stampRef.current.get(key) ?? 0) < window;
@@ -75,13 +86,16 @@ export function useEnglishJj(date: string) {
         const startedAt = Date.now();
         let next: JjDayState;
         try {
-          next = await loadEnglishJjDay({ studentId, date, outOfClass: opts?.outOfClass });
+          // 이 화면에서 이미 아는 고르기가 있으면 그걸로(새로 고침·자동작성이 고른 것을 풀지 않게), 없으면 서버가 저장본에서 찾는다.
+          const pick = opts?.pick !== undefined ? opts.pick : key in picksRef.current ? picksRef.current[key] : undefined;
+          next = await loadEnglishJjDay({ studentId, date, outOfClass: opts?.outOfClass, pick });
         } catch {
           next = { status: "error", message: UNREACHABLE };
         }
         // 인재원에 닿지 못했을 때만 멈추고, 한 번이라도 받으면(다시 불러오기 포함) 곧바로 푼다. 마지막 성공보다 **먼저
         // 시작한** 요청이 늦게 실패한 것은 멈춤을 다시 걸지 않는다(회복 중에 늦게 온 시간 초과, 적대 재리뷰).
         if (next.status === "ok") {
+          picksRef.current = { ...picksRef.current, [key]: next.snapshot.pick ?? null };
           pausedUntilRef.current = 0;
           lastOkAtRef.current = Date.now();
         } else if (next.status === "error" && next.unreachable && startedAt >= lastOkAtRef.current) {
@@ -105,5 +119,32 @@ export function useEnglishJj(date: string) {
     [date],
   );
 
-  return { cache, cacheRef, pending, ensure, date };
+  const ensure = useCallback(
+    (studentId: string, opts?: JjEnsureOpts): Promise<JjDayState> => {
+      const key = jjDayKey(studentId, date);
+      // 받는 중이면 그걸 기다린다(방금 시작한 요청이라 force여도 충분히 새것이다).
+      // 🔴 고르기를 바꾸는 호출은 예외 — 받는 중인 요청은 **옛 고르기**라 그걸 돌려주면 누른 체크가 안 먹는다.
+      //    끝나기를 기다렸다가(그사이 또 누른 것도 차례로) 새 고르기로 다시 받는다.
+      const running = inflight.current.get(key);
+      if (running && opts?.pick !== undefined) {
+        const again = (): Promise<JjDayState> => {
+          const still = inflight.current.get(key);
+          return still ? still.then(again, again) : startJob(key, studentId, opts);
+        };
+        return running.then(again, again);
+      }
+      if (running) return running;
+      return startJob(key, studentId, opts);
+    },
+    [date, startJob],
+  );
+
+  /** 결과지 고르기를 바꾼다 — 새 고르기로 곧바로 다시 받는다(미리보기·그림 칸 판정이 따라온다). */
+  const choose = useCallback(
+    (studentId: string, pick: string[] | null, opts?: { outOfClass?: boolean }) =>
+      ensure(studentId, { outOfClass: opts?.outOfClass, force: true, manual: true, pick }),
+    [ensure],
+  );
+
+  return { cache, cacheRef, pending, ensure, choose, date, picksRef };
 }

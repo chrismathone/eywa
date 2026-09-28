@@ -12,7 +12,7 @@ import { loadShuttleTodayPrefs } from "@/features/shuttle/server/today-prefs";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { DayBoardClient } from "./_components/day-board-client";
 
-export const metadata = { title: "셔틀 — aywa" };
+export const metadata = { title: "셔틀 — 에이와" };
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 

@@ -10,7 +10,7 @@ import { HelpAnswerForm, HelpCloseButton } from "../../_components/answer-form";
 import { HelpDeleteButton } from "../../_components/delete-post";
 import { HelpPostForm } from "../../_components/post-form";
 
-export const metadata = { title: "도움말 질문 — aywa" };
+export const metadata = { title: "도움말 질문 — 에이와" };
 
 export default async function HelpPostPage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }, user] = await Promise.all([params, requireAccess("help")]);

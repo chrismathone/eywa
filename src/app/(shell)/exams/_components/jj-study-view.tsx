@@ -59,7 +59,7 @@ export async function JjStudyView({
           to={res.to}
           basis="study"
           note={rangeNote(range, "기본: 최근 7일")}
-          extra={filterName ? `반 ${filterName} · 학생 ${shown}명` : `학생 ${res.rows.length}명 · aywa 연결 ${linked}명`}
+          extra={filterName ? `반 ${filterName} · 학생 ${shown}명` : `학생 ${res.rows.length}명 · 에이와 연결 ${linked}명`}
         />
         {options ? <JjClassFilter classes={options} value={filter} hrefFor={classHref} /> : null}
       </div>
