@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { ActivityOption } from "@/features/slack/activity-catalog";
 import { emptyRule, RULE_PRESETS, SLACK_MAX_RULES, type SlackRule } from "@/features/slack/rules";
 import { listSlackChannels } from "@/features/slack/server/connection-actions";
-import { SLACK_BTN_ON } from "./check-dropdowns";
+import { Button } from "@/components/ui/button";
 import { RuleEditor } from "./rule-editor";
 import type { ChannelOption } from "./target-picker";
 
@@ -52,7 +52,7 @@ export function RulesSection({
         <p className="text-foreground text-sm font-bold">규칙</p>
         <span className="text-text-dim text-xs">규칙마다 무엇을 · 어디로 · 어떻게 · 언제 보낼지 정합니다. 같은 일이 여러 규칙에 걸리면 각각 보냅니다.</span>
         <DropdownMenu>
-          <DropdownMenuTrigger render={<button type="button" disabled={full} className={`${SLACK_BTN_ON} ml-auto`} />}>
+          <DropdownMenuTrigger render={<Button disabled={full} className="ml-auto" />}>
             규칙 추가
             <EyIcon name="chevronDown" size={14} className="opacity-60" />
           </DropdownMenuTrigger>

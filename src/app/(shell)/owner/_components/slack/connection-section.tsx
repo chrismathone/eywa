@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { describeSlackError } from "@/features/slack/format";
 import type { SlackHealth } from "@/features/slack/server/queries";
 import { disconnectSlack, saveSlackToken } from "@/features/slack/server/connection-actions";
-import { SLACK_BTN, SLACK_BTN_ON } from "./check-dropdowns";
+import { Button } from "@/components/ui/button";
 
 /** 연결 — 봇 토큰(바꿀 때만 입력) · 상태(끊김·마지막 발송·대기/실패 건수) · 연결 해제. 토큰 원문은 받지 않는다(가린 값만). */
 export function ConnectionSection({
@@ -68,20 +68,19 @@ export function ConnectionSection({
           placeholder={connected ? "바꿀 때만 새 토큰을 붙여 넣으세요" : "xoxb-…"}
           spellCheck={false}
           autoComplete="off"
-          className="border-line bg-bg-soft focus:border-primary min-w-64 flex-1 rounded-md border px-2.5 py-1.5 font-mono text-xs outline-none"
+          className="border-line bg-bg-soft focus:border-primary h-(--control-h) min-w-64 flex-1 rounded-lg border px-2.5 font-mono text-sm outline-none"
         />
-        <button type="button" onClick={() => run(() => saveSlackToken(token))} disabled={pending || !token.trim()} className={SLACK_BTN_ON}>
+        <Button onClick={() => run(() => saveSlackToken(token))} disabled={pending || !token.trim()}>
           토큰 저장
-        </button>
+        </Button>
         {connected ? (
-          <button
-            type="button"
+          <Button
+            variant="outline"
             onClick={() => window.confirm("슬랙 연결을 해제할까요? 알림이 더 이상 슬랙으로 가지 않습니다.") && run(() => disconnectSlack())}
             disabled={pending}
-            className={SLACK_BTN}
           >
             연결 해제
-          </button>
+          </Button>
         ) : null}
       </div>
       {connected ? (

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { linkSlackByEmail, loadSlackPeople, unlinkSlackUser, type SlackPersonRow } from "@/features/slack/server/link-actions";
-import { SLACK_BTN, SLACK_BTN_ON } from "./check-dropdowns";
+import { Button } from "@/components/ui/button";
 
 /**
  * 사람 연결 — 1:1·@멘션은 슬랙 계정이 연결된 직원에게만 간다. 이메일 일치는 **후보**로만 보여 주고
@@ -46,9 +46,9 @@ export function PeopleSection() {
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-foreground text-sm font-bold">사람 연결</p>
         <span className="text-text-dim text-xs">1:1과 @멘션은 슬랙 계정이 연결된 사람에게만 갑니다. 직원은 &lsquo;내 정보&rsquo;에서 직접 연결할 수도 있습니다.</span>
-        <button type="button" onClick={load} disabled={pending} className={`${SLACK_BTN} ml-auto`}>
+        <Button variant="outline" onClick={load} disabled={pending} className="ml-auto">
           {rows ? "다시 불러오기" : "직원 목록 불러오기"}
-        </button>
+        </Button>
       </div>
       {rows ? (
         <>
@@ -56,11 +56,11 @@ export function PeopleSection() {
             연결됨 {linked}명 / 전체 {rows.length}명 · 이메일이 같은 슬랙 계정 후보 {candidates.length}명
           </p>
           {candidates.length ? (
-            <button type="button" onClick={() => act(() => linkSlackByEmail([...picked]))} disabled={pending || picked.size === 0} className={SLACK_BTN_ON}>
+            <Button onClick={() => act(() => linkSlackByEmail([...picked]))} disabled={pending || picked.size === 0}>
               체크한 후보 {picked.size}명 연결
-            </button>
+            </Button>
           ) : null}
-          <ul className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((r) => (
               <li key={r.userId} className="flex items-center gap-2">
                 {r.candidate ? (
