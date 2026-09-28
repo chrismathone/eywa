@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { pokeSlack } from "@/features/slack/server/poke";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { collectAuditNameIds, systemActorMatches, SYSTEM_ACTOR_PREFIX } from "../describe";
 
@@ -14,6 +15,18 @@ export const AUDIT_ACTIONS = {
   integration_sheets_toggle: "구글 시트 내보내기 토글",
   integration_sheet_target: "구글 시트 대상 지정",
   integration_sync_now: "makeedu 지금 동기화",
+  slack_connection_token: "슬랙 봇 토큰 등록",
+  slack_connection_disconnect: "슬랙 알림 연결 해제",
+  slack_connection_sample: "슬랙 샘플 알림 발송",
+  slack_schedule_update: "슬랙 발송 시간 설정",
+  slack_rule_save: "슬랙 규칙 저장",
+  slack_rule_delete: "슬랙 규칙 삭제",
+  slack_link_owner: "슬랙 사람 연결(원장 확인)",
+  slack_link_self: "내 슬랙 계정 연결",
+  slack_unlink: "슬랙 사람 연결 해제",
+  slack_link_code_request: "슬랙 연결 코드 요청",
+  slack_connection_broken: "슬랙 발송 중단(토큰 문제)",
+  slack_resend: "슬랙 실패 건 다시 보내기",
   makeedu_paid_recovery: "수납 동기화 오류 복구",
   sheets_sync_now: "구글 시트 내보내기 실행",
   intake_push_enqueue: "makeedu 상담 역동기화",
@@ -491,6 +504,8 @@ export async function logAction(args: LogArgs): Promise<void> {
       target_label: args.targetLabel ?? null,
       metadata: args.metadata ?? null,
     });
+    // 슬랙 활동 피드(0298a) — 트리거가 같은 트랜잭션에서 인박스에 넣었다. 응답 뒤 발송기를 깨운다.
+    pokeSlack(user.tenantId);
   } catch {
     // 감사 기록 실패는 본 작업을 막지 않음
   }
@@ -524,6 +539,7 @@ export async function logActionAs(
         target_label: args.targetLabel ?? null,
         metadata: args.metadata ?? null,
       });
+    pokeSlack(actor.tenantId);
   } catch {
     // 감사 기록 실패는 본 작업을 막지 않음
   }

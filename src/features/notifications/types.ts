@@ -54,7 +54,9 @@ export type NotificationType =
   | "help_question"
   | "help_answer"
   // 고객센터 개선요청(0294a) — 슈퍼관리자가 처리상태를 바꾸거나 답변을 달면 요청자에게.
-  | "support_answer";
+  | "support_answer"
+  // 슬랙 발송이 토큰 문제로 멈춤(0298a 발송기) → 원장(master). 설정 화면 밖에서도 알게(grok 2차).
+  | "slack_broken";
 
 export type NotificationItem = {
   id: string;
@@ -96,4 +98,5 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   help_question: "help",
   help_answer: "help",
   support_answer: "mail",
+  slack_broken: "alert",
 };

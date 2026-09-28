@@ -27,6 +27,7 @@ import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { SheetsFace } from "./_components/sheets-face";
+import { SlackCard } from "./_components/slack-card";
 import { PopupsFace } from "./_components/popups-face";
 
 export const dynamic = "force-dynamic";
@@ -228,6 +229,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           </div>
         )
       ) : null}
+      {/* 슬랙 알림 — 슈퍼관리자가 켠 지점만 카드가 선다(끈 지점은 null). */}
+      {tab === "sheets" ? <SlackCard /> : null}
       {tab === "sheets" ? (
         <SheetsFace
           subjects={settings.operations.subjects}

@@ -1,0 +1,147 @@
+/**
+ * 슬랙 **활동 피드** 분류·등급 — 감사로그 액션 키(`AUDIT_ACTIONS`, 350여 종)를 화면용 분류와 발송 등급으로 나눈다.
+ * 서버·클라 공용 순수 모듈(라벨은 서버가 `AUDIT_ACTIONS`에서 붙여 내려준다 — log.ts는 server-only).
+ *
+ * 등급(codex·grok 합의 2026-09-28 — **허용된 것만 나간다**):
+ *  · forbid = 규칙에서 **고를 수 없다**. 급여·명세서·이력서·근로계약·비밀번호·토큰처럼 "누가 무엇을 했다"만으로도 인사·비밀 정보.
+ *  · opaque = 라벨 + 행위자만. 대상(target_label)도 안 싣는다(금액·계좌가 대상 문구에 섞일 수 있는 돈 계열).
+ *  · safe   = 라벨 + 대상 + 행위자.
+ * 🔴 어떤 등급도 감사로그 **metadata(상세)는 싣지 않는다** — 액션마다 모양이 달라 민감값이 어디 섞일지 모른다.
+ * 🔴 분류 규칙에 안 걸린 키는 `null` → 가드 `activity-catalog.test.ts`가 실패한다(새 액션은 분류를 강제).
+ */
+export type ActivityGrade = "forbid" | "opaque" | "safe";
+export type ActivityCategory = { id: string; label: string };
+
+export const ACTIVITY_CATEGORIES: readonly ActivityCategory[] = [
+  { id: "students", label: "원생·수강" },
+  { id: "consult", label: "콜&상담·학생상담" },
+  { id: "attendance", label: "출결·보강·자리" },
+  { id: "billing", label: "청구·수납·지출" },
+  { id: "payroll", label: "급여" },
+  { id: "classes", label: "반·시간표·강의실" },
+  { id: "reports", label: "보고서·학부모 발송" },
+  { id: "sheets", label: "강사 시트·교재·성적" },
+  { id: "staff", label: "직원·결재·연차" },
+  { id: "comms", label: "일정·공지·회의·도움말" },
+  { id: "ops", label: "셔틀·재고" },
+  { id: "settings", label: "설정·연동" },
+];
+
+/** 위에서부터 **처음 맞는 규칙**이 이긴다 — 좁은 접두어를 넓은 것보다 먼저. 문자열 끝 `_`가 없으면 정확히 그 키. */
+const RULES: readonly [string, string][] = [
+  ["student_consultation_", "consult"],
+  ["student_care_analysis", "consult"],
+  ["student_ijw_", "settings"],
+  ["enrollment_consultation_", "consult"],
+  ["consultation_", "consult"],
+  ["intake_token_", "consult"],
+  ["intake_push_enqueue", "settings"],
+  ["student_", "students"],
+  ["enrollment_", "students"],
+  ["newcomer_", "students"],
+  ["withdrawal_", "students"],
+  ["retention_", "students"],
+  ["makeup_remove", "attendance"],
+  ["ecs_attendance_clear", "attendance"],
+  ["seat_jj_", "sheets"],
+  ["attendance_", "attendance"],
+  ["makeup_", "attendance"],
+  ["seat_", "attendance"],
+  ["payroll_", "payroll"],
+  ["payslip_", "payroll"],
+  ["class_salary_update", "payroll"],
+  ["session_splits_save", "payroll"],
+  ["session_term_", "billing"],
+  ["session_terms_refresh", "billing"],
+  ["invoice_", "billing"],
+  ["makeedu_paid_recovery", "billing"],
+  ["expense_", "billing"],
+  ["refund_request_", "billing"],
+  ["class_review_", "staff"],
+  ["class_sheet_", "sheets"],
+  ["class_", "classes"],
+  ["classroom_", "classes"],
+  ["timetable_", "classes"],
+  ["operating_periods_save", "classes"],
+  ["lesson_report_", "reports"],
+  ["report_", "reports"],
+  ["share_link_", "reports"],
+  ["classnote_", "reports"],
+  ["textbook_notice_send", "reports"],
+  ["ecs_", "sheets"],
+  ["mcs_", "sheets"],
+  ["textbook_", "sheets"],
+  ["exam_", "sheets"],
+  ["staff_", "staff"],
+  ["approval_", "staff"],
+  ["leave_", "staff"],
+  ["self_", "staff"],
+  ["resume_", "staff"],
+  ["teacher_view_", "settings"],
+  ["calendar_google_import", "settings"],
+  ["calendar_", "comms"],
+  ["announcement_", "comms"],
+  ["meeting_", "comms"],
+  ["notice_popup_", "comms"],
+  ["help_", "comms"],
+  ["support_", "comms"],
+  ["document_", "comms"],
+  ["notion_", "comms"],
+  ["briefing_", "comms"],
+  ["shuttle_", "ops"],
+  ["inventory_", "ops"],
+  ["owner_", "settings"],
+  ["integration_", "settings"],
+  ["slack_", "settings"],
+  ["kiosk_", "settings"],
+  ["kakao_", "settings"],
+  ["ai_prompt_", "settings"],
+  ["ment_style_", "settings"],
+  ["sheets_sync_now", "settings"],
+  ["demo_", "settings"],
+];
+
+/** 고를 수 없는 액션 — 분류 통째(급여) + 개별 키. */
+const FORBID_CATEGORIES = new Set(["payroll"]);
+const FORBID_PREFIXES = ["resume_", "staff_contract_", "staff_create_from_resume", "staff_link_from_resume", "slack_connection_token"];
+const FORBID_KEYS = new Set([
+  "staff_password_reset",
+  "self_password_change",
+  "self_email_change",
+  "staff_email_change",
+  "kakao_channel_save",
+  "kiosk_device_register",
+  "staff_roster_import",
+  "staff_roster_import_revert",
+]);
+/** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
+const OPAQUE_CATEGORIES = new Set(["billing"]);
+const OPAQUE_PREFIXES = ["leave_"];
+
+export function activityCategoryOf(action: string): string | null {
+  for (const [rule, cat] of RULES) {
+    if (rule.endsWith("_") ? action.startsWith(rule) : action === rule || action.startsWith(`${rule}_`)) return cat;
+  }
+  return null;
+}
+
+export function activityGradeOf(action: string): ActivityGrade {
+  const cat = activityCategoryOf(action);
+  if (!cat) return "forbid"; // 분류 안 된 새 액션은 나가지 않는다(가드가 분류를 강제)
+  if (FORBID_CATEGORIES.has(cat) || FORBID_KEYS.has(action) || FORBID_PREFIXES.some((p) => action.startsWith(p))) {
+    return "forbid";
+  }
+  if (OPAQUE_CATEGORIES.has(cat) || OPAQUE_PREFIXES.some((p) => action.startsWith(p))) return "opaque";
+  return "safe";
+}
+
+export type ActivityOption = { key: string; label: string; category: string; grade: ActivityGrade };
+
+/** 서버가 `AUDIT_ACTIONS`(키→라벨)로 만든다. 순서 = 분류 순 → 원래 등록 순. */
+export function buildActivityOptions(labels: Readonly<Record<string, string>>): ActivityOption[] {
+  const order = new Map(ACTIVITY_CATEGORIES.map((c, i) => [c.id, i]));
+  return Object.entries(labels)
+    .map(([key, label]) => ({ key, label, category: activityCategoryOf(key) ?? "", grade: activityGradeOf(key) }))
+    .filter((o) => o.category)
+    .sort((a, b) => (order.get(a.category) ?? 99) - (order.get(b.category) ?? 99));
+}

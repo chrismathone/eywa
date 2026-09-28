@@ -241,6 +241,8 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "backfill-math-auto-units": "수학 출석 시수 자동값 보정",
   // 주간 cron(/api/cron/ment-style-rebuild) — 세션이 없어 logActionAs로 남긴다.
   "ment-style-rebuild": "강사 말투 주간 갱신",
+  // 슬랙 발송기(/api/cron/slack-dispatch · 응답 뒤 poke) — 토큰이 죽어 연결을 '끊김'으로 바꿀 때.
+  "slack-dispatch": "슬랙 발송기",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -494,6 +496,43 @@ export function auditDetail(
     }
     case "integration_sync_now":
       return "지금 동기화 실행";
+    case "slack_connection_token": {
+      // 토큰(비밀)은 애초에 metadata에 없다 — 연결된 워크스페이스 이름만.
+      const team = str(m.team);
+      return team ? `워크스페이스 ${team}` : "토큰 등록";
+    }
+    case "slack_connection_disconnect":
+      return "연결 해제";
+    case "slack_connection_sample": {
+      const sent = num(m.sent);
+      const failed = num(m.failed);
+      return `샘플 알림 ${sent ?? 0}통 보냄${failed ? ` · ${failed}곳 실패` : ""}`;
+    }
+    case "slack_schedule_update": {
+      const dnd = m.dndEnabled === true ? `방해금지 ${str(m.dndStart) ?? "?"}~${str(m.dndEnd) ?? "?"}` : "방해금지 끔";
+      return join(dnd, m.weekendQuiet === true ? "주말 조용히" : null, str(m.digestAt) ? `요약 ${str(m.digestAt)}` : null);
+    }
+    case "slack_rule_save": {
+      const targets = arr(m.targets).map(str).filter((v): v is string => !!v);
+      return join(
+        m.created === true ? "새 규칙" : "수정",
+        m.enabled === false ? "꺼짐" : null,
+        m.source === "activity" ? "활동 기록" : "알림",
+        num(m.typeCount) !== null ? `${num(m.typeCount)}종` : null,
+        targets.length ? `→ ${targets.slice(0, 3).join(", ")}${targets.length > 3 ? " 외" : ""}` : null,
+        m.timing === "digest" ? "요약으로만" : null,
+      );
+    }
+    case "slack_resend": {
+      const n = num(m.count);
+      return n === null ? "실패 건 다시 보내기" : `실패 ${n}건 다시 보내기`;
+    }
+    case "slack_connection_broken":
+      return m.code === "missing_scope" ? "앱 권한 부족 — 권한 추가 후 새 토큰 필요" : "토큰이 거절됨 — 새 토큰 필요";
+    case "slack_link_owner": {
+      const n = num(m.count);
+      return n === null ? "이메일 일치 후보 연결" : `이메일 일치 후보 ${n}명 연결`;
+    }
     case "makeedu_paid_recovery": {
       const count = num(m.count);
       return count === null ? "수납 입력값 복구" : `수납 ${count}건 복구 · 환불·확정·배분값 보존`;

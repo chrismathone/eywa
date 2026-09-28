@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
+import { pokeSlack } from "@/features/slack/server/poke";
 import type { NotificationType } from "../types";
 
 /**
@@ -34,6 +35,8 @@ export async function notifyUsers(items: NotifyInput[]): Promise<void> {
     const admin = createAdminClient();
     const { error } = await admin.from("notifications").insert(rows);
     if (error) reportError(error, { scope: "notify.insert", count: rows.length });
+    // 슬랙(0298a) — 트리거가 같은 트랜잭션에서 인박스에 넣었다. 응답 뒤 발송기를 깨운다(지점마다 한 번).
+    else for (const t of new Set(rows.map((r) => r.tenant_id))) pokeSlack(t);
   } catch (e) {
     reportError(e, { scope: "notify.insert.throw" });
   }

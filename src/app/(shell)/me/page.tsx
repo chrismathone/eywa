@@ -24,6 +24,8 @@ import { getMyLeaveHistory } from "@/features/leave/server/my-history";
 import { AccountCard } from "./_components/account-card";
 import { LeaveCard } from "./_components/leave-card";
 import { ReportNameCard } from "./_components/report-name-card";
+import { SlackLinkCard } from "./_components/slack-link-card";
+import { getMySlackState } from "@/features/slack/server/queries";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 // 탭 제목도 화면 언어를 따른다 — 강사가 창을 여럿 열어 두면 제목이 유일한 구분이다.
@@ -42,7 +44,7 @@ export default async function MyPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [resume, me, reportName, resolvedSendName, balance] = await Promise.all([
+  const [resume, me, reportName, resolvedSendName, balance, slack] = await Promise.all([
     getResumeByStaffUser(user.id),
     getStaffById(user.id),
     // 수업보고서 발송용 이름(0217a) — fail-soft: 컬럼 미적용이면 null(빈 칸)이고 페이지는 그대로 산다.
@@ -53,6 +55,8 @@ export default async function MyPage() {
     // 연차 잔여(원장 2026-09-18) — 다른 조회와 독립이라 함께 받는다(B4). 학생 계정엔 없는 개념이라
     // 아예 안 부르고, 실패해도 null로 떨어뜨린다(이력서를 채우는 화면이 연차 한 조각에 죽으면 안 된다).
     user.systemRole === "student" ? Promise.resolve(null) : getMyLeaveBalance(user.id).catch(() => null),
+    // 내 슬랙 연결 — 지점이 슬랙을 켜고 연결했을 때만 카드가 선다. 실패해도 카드만 빠진다.
+    getMySlackState().catch(() => null),
   ]);
   // 내역은 구간이 있어야 물어볼 수 있다(입사일 미등록이면 구간 자체가 없다) — 잔여에 의존하는 조회라
   // 위 Promise.all에 못 넣는다. 여기서도 실패는 null(카드가 "못 불러왔다"를 그대로 적는다).
@@ -119,6 +123,7 @@ export default async function MyPage() {
           initialName={reportName}
           mappingBlocked={!!reportName && resolvedSendName !== reportName}
         />
+        {slack ? <SlackLinkCard linked={slack.linked} email={slack.email} /> : null}
       </div>
 
       <ResumeSheet
