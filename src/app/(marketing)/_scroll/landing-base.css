@@ -50,12 +50,7 @@
 .lp .hero-in>*:nth-child(3){animation-delay:.16s}
 .lp .hero-in>*:nth-child(4){animation-delay:.24s}
 .lp .frame-wrap{animation:lp-rise 1.1s var(--ease) .3s both}
-/* ---------- 앱 목업(공통, 컨테이너 단위 cqw) ---------- */
-.lp .app{display:grid;grid-template-columns:16cqw 1fr;font-size:1.15cqw;line-height:1.35;color:var(--ink)}
-.lp .side{border-right:1px solid var(--line2);padding:1.2cqw .9cqw;display:flex;flex-direction:column;gap:.25cqw;background:#fbfbfc}
-.lp .side .brand{font-family:inherit;font-weight:800;letter-spacing:-.05em;font-size:1.6cqw;padding:.4cqw .8cqw 1cqw}
-.lp .mi{display:flex;align-items:center;gap:.7cqw;padding:.62cqw .8cqw;border-radius:.8cqw;font-weight:500;color:var(--ink)}
-.lp .mi.on{background:var(--navy);color:#fff;font-weight:700}
+/* ---------- 나머지 장면 공통 요소(컨테이너 단위 cqw) ---------- */
 .lp .stk{display:inline-block;width:1.7cqw;height:1.7cqw;background:center/contain no-repeat;flex:none}
 .lp .pill{display:inline-flex;align-items:center;height:1.9cqw;padding:0 .8cqw;border-radius:999px;font-size:.95cqw;font-weight:700;white-space:nowrap}
 .lp .pill.g{background:var(--green-s);color:var(--green)}

@@ -21,8 +21,9 @@ describe("랜딩 출석부 예시 표", () => {
     rows.forEach((r, si) => r.cells.forEach((c) => { if (c.kind === "mark") expect(c.order % 10).toBe(si); }));
   });
 
-  it("9/7 입반 학생은 그 전 수업일이 '해당 없음'", () => {
+  it("9/7 입학 학생은 그 전 수업일이 '해당 없음'", () => {
     const hanjian = rows[5];
+    expect(hanjian.note).toBe("9/7 입학");
     const firstMark = hanjian.cells.findIndex((c) => c.kind === "mark");
     expect(days[firstMark].day).toBeGreaterThanOrEqual(7);
     expect(hanjian.cells.slice(0, firstMark).some((c) => c.kind === "out")).toBe(true);

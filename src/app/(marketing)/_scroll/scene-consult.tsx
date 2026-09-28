@@ -39,7 +39,7 @@ export function SceneConsult() {
                 <div className="ln" data-i="1"><span className="tag p">요청</span><div>평일 저녁, 주 2회 수업을 원합니다.<span className="warn">주의 · 학원을 옮긴 이유는 아직 듣지 못했습니다.</span></div></div>
                 <div className="ln" data-i="2"><span className="tag g">자동 입력</span><div>이름 · 학교 · 학년 · 연락처 <b>4칸</b>을 채웠습니다. 등록 여부는 상담 담당이 정합니다.</div></div>
                 <div className="ln" data-i="3"><span className="tag a">후속 조치</span><div>입테 결과가 나오면 상담 담당이 학부모에게 연락합니다.</div></div>
-                <div className="bf"><span>분석 17:42 · DeepSeek v4-pro</span><span className="btn">다시 분석</span></div>
+                <div className="bf"><span>분석 17:42 · AI 분석중...</span><span className="btn">다시 분석</span></div>
               </div>
             </div>
           </div>
