@@ -66,6 +66,7 @@ export const MENU_KEYS = [
   "integrations",
   "sheet_sync",
   "help",
+  "support",
   "admin",
   "owner",
   "teacher_onescreen",
@@ -109,6 +110,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   integrations: "makeedu 연동",
   sheet_sync: "구글 시트 연동",
   help: "도움말",
+  support: "고객센터",
   admin: "관리자 도구",
   owner: "학원 설정",
   teacher_onescreen: "선생님 원스크린",
@@ -248,6 +250,9 @@ export const MENU_ACCESS: AccessMatrix = {
   // 개념이 없다 — 게이트가 "full"만 통과시킨다(전체/없음만 의미 있음). 강사에게 열면 전 학생 명단이 나간다.
   sheet_sync: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   help: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", student: "none" },
+  // 고객센터(0294a) — 지점 → aywa 운영자 창구(공지사항·개선요청). makeedu처럼 지점 직원 누구나 요청을 쓴다.
+  // 원장이 좁히려면 역할·권한 면에서 끈다. 🔴 표 RLS는 이 키를 안 본다(tenant 격리만, #92) — 새 키라도 락아웃 없음.
+  support: { master: "full", admin: "full", manager: "full", teacher: "full", counselor: "full", accountant: "full", viewer: "full", student: "none" },
   // master 전용 — 중복 병합 / 데이터 정리 / Google Sheets 통합 등 위험도 높은 도구
   admin: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // owner(=원장/테넌트 소유자) 전용 — 학원 설정 콘솔(과목·교시·직급·청구 기본값·약관 등 테넌트 전체 적용)
@@ -360,6 +365,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   inventory: "inventory",
   textbooks: "textbooks",
   help: "help",
+  support: "support",
   admin: "admin",
   owner: "owner",
   onescreen: "teacher_onescreen",

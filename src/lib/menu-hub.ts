@@ -251,6 +251,15 @@ export const SUPPORT_GROUPS: HubGroup[] = [
     kind: "direct",
     items: keep([fromMenu("help")]),
   },
+  // 고객센터(0294a) — 도움말 **아래**(원장 2026-09-28 *"고객센터 메뉴를 도움말 아래에"*). 공지사항·개선요청은
+  // 화면 안 탭바로 오간다(면이 둘뿐이라 허브를 거치지 않고 바로 연다).
+  {
+    id: "support",
+    label: "고객센터",
+    icon: MENU_ICON.support,
+    kind: "direct",
+    items: keep([fromMenu("support")]),
+  },
 ];
 
 /**

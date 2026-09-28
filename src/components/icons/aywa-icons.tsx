@@ -1283,6 +1283,8 @@ export const MENU_ICON = {
   integrations: "sync",
   sheet_sync: "spreadsheet",
   help: "help",
+  // 고객센터 — 운영팀에 보내는 문의(봉투 + 말풍선 스티커, codex 2026-09-28). `megaphone`은 학원 설정 '팝업 공지' 면이 쓴다(같은 그림 금지).
+  support: "mail",
   admin: "wrench",
   owner: "settings",
   teacher_onescreen: "screen",
