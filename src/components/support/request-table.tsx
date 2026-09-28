@@ -31,12 +31,12 @@ export function SupportRequestTable({
   return (
     <section className="bg-card shadow-card overflow-hidden rounded-2xl" aria-label="개선요청 목록">
       <div className="overflow-x-auto">
-        <table className={`w-full table-fixed text-sm ${showTenant ? "min-w-[860px]" : "min-w-[720px]"} ${TABLE_COL_LINES}`}>
+        <table className={`w-full table-fixed text-sm ${showTenant ? "min-w-[900px]" : "min-w-[720px]"} ${TABLE_COL_LINES}`}>
           <colgroup>
             <col className="w-16" />
             {showTenant ? <col className="w-36" /> : null}
             <col />
-            <col className="w-28" />
+            <col className={showTenant ? "w-36" : "w-28"} />
             <col className="w-40" />
             <col className="w-24" />
             <col className="w-28" />
@@ -66,7 +66,10 @@ export function SupportRequestTable({
                     {r.title}
                   </LinkAs>
                 </td>
-                <td className="text-foreground truncate px-3 py-2.5 text-center">{r.authorName}</td>
+                <td className="text-foreground truncate px-3 py-2.5 text-center" title={r.authorRole ? `${r.authorName} · ${r.authorRole}` : undefined}>
+                  {r.authorName}
+                  {r.authorRole ? <span className="text-text-dim"> · {r.authorRole}</span> : null}
+                </td>
                 <td className="num text-foreground px-3 py-2.5 text-center">{fmtSupportDateTime(r.createdAt)}</td>
                 <td className="px-3 py-2.5 text-center">
                   <SupportStatusPill status={r.status} />

@@ -266,10 +266,11 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "지원",
     items: [
-      { href: "/help", label: "도움말", icon: MENU_ICON.help, menuKey: "help", aliases: ["F1", "화면 도움말"] },
       // 고객센터(0294a) — makeedu 고객센터처럼 공지사항·개선요청. 면은 화면 안 탭바(`features/support/faces.ts`)로만.
+      // 지원 묶음 맨 위(원장 2026-09-28) — 사이드바(menu-hub SUPPORT_GROUPS)와 같은 순서.
       { href: "/support", label: "고객센터", icon: MENU_ICON.support, menuKey: "support", aliases: ["개선요청", "공지사항", "문의"] },
       { href: "/owner", label: "학원 설정", icon: MENU_ICON.owner, menuKey: "owner" },
+      { href: "/help", label: "도움말", icon: MENU_ICON.help, menuKey: "help", aliases: ["F1", "화면 도움말"] },
       // 관리자 도구는 학원 설정(/owner) "관리" 면들로 흡수 → 사이드바 숨김. menuKey는 /admin 리다이렉트 stub·창 해석용 유지.
       { href: "/admin", label: "관리자 도구", icon: MENU_ICON.admin, menuKey: "admin", hidden: true },
     ],

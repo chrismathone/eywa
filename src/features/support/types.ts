@@ -48,6 +48,8 @@ export type SupportRequestListItem = {
   dueDate: string | null;
   /** 슈퍼관리자 목록만 채운다. */
   tenantName?: string;
+  /** 슈퍼관리자 목록만 — 글쓴이 역할 한글 라벨("원장"·"강사"). 동명이인·권한을 가르려고. */
+  authorRole?: string;
 };
 
 export type SupportRequestDetail = {
@@ -65,6 +67,9 @@ export type SupportRequestDetail = {
   authorName: string;
   createdAt: string;
   tenantName?: string;
+  /** 슈퍼관리자 상세만 — 글쓴이 역할 라벨·로그인 이메일(어느 계정이 썼는지). */
+  authorRole?: string;
+  authorEmail?: string;
 };
 
 export type SupportNoticeListItem = {

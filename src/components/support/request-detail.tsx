@@ -12,7 +12,11 @@ export function SupportRequestDetailView({ item, showTenant = false }: { item: S
       <section className="bg-card shadow-card overflow-hidden rounded-2xl" aria-label="요청 정보">
         <dl className="divide-line grid divide-y text-sm">
           {showTenant ? <Row label="지점">{item.tenantName ?? "—"}</Row> : null}
-          <Row label="글쓴이">{item.authorName}</Row>
+          <Row label="글쓴이">
+            {item.authorName}
+            {item.authorRole ? <span className="text-text-dim"> · {item.authorRole}</span> : null}
+            {item.authorEmail ? <span className="text-text-dim"> · {item.authorEmail}</span> : null}
+          </Row>
           <Row label="작성일시">
             <span className="num">{fmtSupportDateTime(item.createdAt)}</span>
           </Row>

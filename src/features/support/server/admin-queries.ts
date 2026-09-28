@@ -1,7 +1,8 @@
 import "server-only";
+import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { cleanSearch, searchFilter } from "../missing";
 import {
   asSupportStatus,
@@ -12,7 +13,7 @@ import {
   type SupportRequestListItem,
   type SupportStatus,
 } from "../types";
-import { listFailure, loadFailure, loadNames, toRequestDetail } from "./queries";
+import { listFailure, loadFailure, toRequestDetail } from "./queries";
 
 /**
  * 슈퍼관리자 전 지점 조회 — service_role(RLS 우회). 🔴 **맨 앞에서 `requireSuperAdmin()`** — 이 파일의 함수가
@@ -41,8 +42,8 @@ export async function getAllSupportRequestsPage(opts: {
   if (error) return listFailure(error, "support.admin.list", "개선요청을 불러오지 못했습니다");
   const rows = data ?? [];
   const total = count ?? 0;
-  const [names, tenants] = await Promise.all([
-    loadNames(admin, rows.map((r) => r.author_id as string)).catch(() => new Map<string, string>()),
+  const [authors, tenants] = await Promise.all([
+    loadAuthors(admin, rows.map((r) => r.author_id as string)).catch(() => new Map<string, Author>()),
     loadTenantNames(admin, rows.map((r) => r.tenant_id as string)).catch(() => new Map<string, string>()),
   ]);
   return {
@@ -53,7 +54,8 @@ export async function getAllSupportRequestsPage(opts: {
       no: total - from - i,
       title: r.title as string,
       status: asSupportStatus(r.status),
-      authorName: names.get(r.author_id as string) ?? "직원",
+      authorName: authors.get(r.author_id as string)?.name ?? "직원",
+      authorRole: authors.get(r.author_id as string)?.role,
       createdAt: r.created_at as string,
       dueDate: (r.due_date as string | null) ?? null,
       tenantName: tenants.get(r.tenant_id as string) ?? "알 수 없는 지점",
@@ -73,28 +75,32 @@ export async function getAnySupportRequest(id: string): Promise<SupportLoad<Supp
     .maybeSingle();
   if (error) return loadFailure(error, "support.admin.detail", "글을 불러오지 못했습니다");
   if (!data) return { ready: true, item: null };
-  const [names, tenants] = await Promise.all([
-    loadNames(admin, [data.author_id as string]).catch(() => new Map<string, string>()),
+  const [authors, tenants] = await Promise.all([
+    loadAuthors(admin, [data.author_id as string]).catch(() => new Map<string, Author>()),
     loadTenantNames(admin, [data.tenant_id as string]).catch(() => new Map<string, string>()),
   ]);
+  const author = authors.get(data.author_id as string);
   return {
     ready: true,
     item: {
-      ...toRequestDetail(data, names.get(data.author_id as string) ?? "직원"),
+      ...toRequestDetail(data, author?.name ?? "직원"),
       tenantName: tenants.get(data.tenant_id as string) ?? "알 수 없는 지점",
+      authorRole: author?.role,
+      authorEmail: author?.email ?? undefined,
     },
   };
 }
 
-/** 처리상태별 건수 — 대기 중인 일을 한눈에(`count: exact, head: true`, B2). */
-export async function getSupportStatusCounts(): Promise<Record<SupportStatus, number> | null> {
+/** 처리상태별 건수 — 대기 중인 일을 한눈에(`count: exact, head: true`, B2). 지점을 고르면 그 지점만. */
+export async function getSupportStatusCounts(tenantId?: string | null): Promise<Record<SupportStatus, number> | null> {
   await requireSuperAdmin();
   const admin = createAdminClient();
   const statuses: SupportStatus[] = ["received", "checking", "in_progress", "done"];
   const results = await Promise.all(
-    statuses.map((s) =>
-      admin.from("support_requests").select("*", { count: "exact", head: true }).eq("status", s),
-    ),
+    statuses.map((s) => {
+      const qb = admin.from("support_requests").select("*", { count: "exact", head: true }).eq("status", s);
+      return tenantId ? qb.eq("tenant_id", tenantId) : qb;
+    }),
   );
   if (results.some((r) => r.error)) return null;
   return Object.fromEntries(statuses.map((s, i) => [s, results[i].count ?? 0])) as Record<SupportStatus, number>;
@@ -120,6 +126,37 @@ export async function getAnySupportNotice(id: string): Promise<SupportLoad<Suppo
       createdAt: data.created_at as string,
     },
   };
+}
+
+/** 지점 필터 선택지 — 전 지점(이름순). 지점 수는 작지만 규약대로 페이징 조회(B2). */
+export async function getSupportTenantOptions(): Promise<{ value: string; label: string }[]> {
+  await requireSuperAdmin();
+  const admin = createAdminClient();
+  const rows = await fetchAllPaged<{ id: string; name: string | null }>((f, t) =>
+    admin.from("tenants").select("id, name").order("name").order("id").range(f, t),
+  ).catch(() => []);
+  return rows.map((t) => ({ value: t.id, label: t.name || "이름 없는 지점" }));
+}
+
+type Author = { name: string; role: string; email: string | null };
+
+/** 글쓴이 — 이름 · 역할 라벨(raw 코드 금지) · 로그인 이메일. 동명이인과 권한을 가르려고 셋 다. */
+async function loadAuthors(admin: ReturnType<typeof createAdminClient>, ids: string[]): Promise<Map<string, Author>> {
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (uniq.length === 0) return new Map();
+  const rows = await fetchInChunks(uniq, (chunk) =>
+    admin.from("users").select("id, display_name, system_role, email").in("id", chunk),
+  );
+  return new Map(
+    rows.map((u) => [
+      u.id as string,
+      {
+        name: (u.display_name as string) || "직원",
+        role: (ROLE_LABEL as Record<string, string>)[u.system_role as string] ?? "알 수 없는 역할",
+        email: (u.email as string | null) ?? null,
+      },
+    ]),
+  );
 }
 
 async function loadTenantNames(

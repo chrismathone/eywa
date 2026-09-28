@@ -2,9 +2,15 @@ import { PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { SearchToggle } from "@/components/search-toggle";
 import { SupportRequestTable } from "@/components/support/request-table";
+import { FilterSelect } from "@/components/filter-select";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { SupportNotReady } from "@/components/support/list-states";
-import { getAllSupportRequestsPage, getSupportStatusCounts } from "@/features/support/server/admin-queries";
+import {
+  getAllSupportRequestsPage,
+  getSupportStatusCounts,
+  getSupportTenantOptions,
+} from "@/features/support/server/admin-queries";
 import { isSupportStatus, SUPPORT_STATUSES, SUPPORT_STATUS_META, type SupportStatus } from "@/features/support/types";
 import { fmtNum } from "@/components/super-admin/parts";
 import { SupportAdminTabs } from "./_tabs";
@@ -20,20 +26,24 @@ const PAGE_SIZE = 30;
 export default async function SupportAdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; tenant?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const status: SupportStatus | null = isSupportStatus(sp.status) ? sp.status : null;
   const page = Math.max(1, Number(sp.page) || 1);
+  const tenants = await getSupportTenantOptions();
+  // 모르는 지점 id(지워진 지점·손으로 고친 주소)는 필터로 쓰지 않는다 — '전 지점'으로.
+  const tenantId = tenants.some((t) => t.value === sp.tenant) ? (sp.tenant as string) : null;
   const [list, counts] = await Promise.all([
-    getAllSupportRequestsPage({ q: q || undefined, status, page, pageSize: PAGE_SIZE }),
-    getSupportStatusCounts(),
+    getAllSupportRequestsPage({ q: q || undefined, status, tenantId, page, pageSize: PAGE_SIZE }),
+    getSupportStatusCounts(tenantId),
   ]);
   const totalPages = Math.max(1, Math.ceil(list.total / PAGE_SIZE));
   const hrefWith = (next: { status?: SupportStatus | null; page?: number }) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
+    if (tenantId) params.set("tenant", tenantId);
     const st = next.status === undefined ? status : next.status;
     if (st) params.set("status", st);
     if (next.page && next.page > 1) params.set("page", String(next.page));
@@ -41,6 +51,8 @@ export default async function SupportAdminPage({
     return s ? `/super-admin/support?${s}` : "/super-admin/support";
   };
   const open = counts ? counts.received + counts.checking + counts.in_progress : null;
+  // 문구와 건수가 같은 범위를 말하게 — 지점을 골랐으면 그 지점 이름으로.
+  const scope = tenantId ? (tenants.find((t) => t.value === tenantId)?.label ?? "이 지점") : "전 지점";
 
   return (
     <>
@@ -48,11 +60,20 @@ export default async function SupportAdminPage({
         eyebrow="슈퍼관리자"
         title="고객센터"
         description={
-          open === null ? "전 지점의 개선요청을 처리합니다." : `전 지점의 개선요청을 처리합니다 · 처리할 요청 ${fmtNum(open)}건`
+          open === null ? `${scope}의 개선요청을 처리합니다.` : `${scope}의 개선요청을 처리합니다 · 처리할 요청 ${fmtNum(open)}건`
         }
       />
       <Toolbar>
         <SupportAdminTabs active="requests" />
+        <FilterSelect
+          paramName="tenant"
+          axisLabel="지점"
+          allLabel="전 지점"
+          value={tenantId}
+          options={tenants}
+          ariaLabel="지점 필터"
+          triggerClassName={TOOLBAR_SELECT}
+        />
         <ToolbarSegment label="처리상태" wrap>
           <ToolbarSegmentItem active={status === null} href={hrefWith({ status: null })}>
             전체
@@ -71,7 +92,7 @@ export default async function SupportAdminPage({
         <SupportNotReady error={list.error} />
       ) : list.rows.length === 0 ? (
         <p className="bg-card shadow-card text-foreground rounded-2xl p-5 text-sm">
-          {q || status ? "조건에 맞는 개선요청이 없습니다." : "아직 들어온 개선요청이 없습니다."}
+          {q || status || tenantId ? "조건에 맞는 개선요청이 없습니다." : "아직 들어온 개선요청이 없습니다."}
         </p>
       ) : (
         <SupportRequestTable
