@@ -25,7 +25,7 @@ export function SrsTab({
   return (
     <div className="space-y-4">
       <header className="border-border flex items-baseline justify-between border-b pb-3">
-        <h2 className="text-foreground text-base font-bold">SRS 성적</h2>
+        <h2 className="text-foreground text-base font-bold">SRS</h2>
         <p className="text-muted-foreground text-xs">인재원 단어 학습·시험</p>
       </header>
       <Suspense fallback={null}>

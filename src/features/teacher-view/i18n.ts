@@ -618,6 +618,19 @@ export const SHEET_DICT = {
     ko: "지금까지 외운 누적 단어 수 — 자유 입력",
     en: "Cumulative memorized words — free text",
   },
+  /**
+   * JJ 교시 카드의 **SRS 단어수 가져오기** — 이 교시 명단의 누적 암기 단어수를 SRS 최신값으로 맞춘다
+   * (원장 2026-09-28). 🔑 이름은 앱 전역에서 **SRS**(학생 상세 탭과 같은 낱말) — '인재원'으로 갈리면
+   * 같은 기능인지 눌러 보기 전엔 모른다.
+   */
+  "roster.srs": { ko: "SRS 단어수", en: "SRS words" },
+  "roster.srs.busy": { ko: "가져오는 중…", en: "Fetching…" },
+  "roster.srs.title": {
+    ko: "이 교시 명단의 '누적 암기 단어수'를 SRS 최신값으로 맞춥니다 — 빈 칸은 채우고 숫자는 갱신하며, 메모가 적힌 칸과 지난 날 칸은 그대로 둡니다",
+    en: "Bring this period's memorized-word counts up to date from SRS — fills blanks and refreshes numbers, but leaves notes and past days untouched",
+  },
+  /** 결과 한 줄 — 수·낱말은 서버가 만든 문장(`memorizedFillNotice`)이 그대로 들어온다. */
+  "roster.srs.done": { ko: "누적 암기 단어수 — {notice}", en: "Memorized words — {notice}" },
   "roster.group.active": { ko: "학생", en: "Students" },
   "roster.group.makeup": { ko: "보강", en: "Makeup" },
   // 종강 — 이 반만 끝나고 같은 과목 다른 반은 계속(원장 2026-09-14). 영어는 뱃지·수업목록 '종강'과 같은 낱말.

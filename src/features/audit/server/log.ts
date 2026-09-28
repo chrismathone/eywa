@@ -374,7 +374,9 @@ export const AUDIT_ACTIONS = {
   // 자리 출석부 JJ 칸(`mark-actions.ts` `commitSeatJjEdits`, PIN이면 문 이름).
   ecs_plan_cell_edit: "수업계획 칸 수정",
   seat_jj_mark_edit: "자리 출석부 JJ 칸 수정",
-  seat_jj_memorized_pull: "자리 출석부 단어수 가져오기(인재원)",
+  seat_jj_memorized_pull: "자리 출석부 단어수 가져오기(SRS)",
+  // 강사 시트(수업계획서)에서 누른 한 번 — 자리 출석부 버튼과 같은 일이지만 **어느 화면에서 눌렀나**가 다르다.
+  ecs_memorized_pull: "강사 시트 단어수 가져오기(SRS)",
 
   // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
   expense_create: "지출결의서 작성",

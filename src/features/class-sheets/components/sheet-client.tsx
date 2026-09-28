@@ -39,6 +39,7 @@ import {
 } from "../server/actions";
 import { ECS_FONT_SIZE_ZOOM, type EcsFontSize } from "../font-size";
 import type { CarryPatch } from "../lib/carry-marks";
+import type { EcsMemorizedWritten } from "../server/memorized-actions";
 import type { RosterGroupKey } from "../lib/roster-order";
 import { ecsPresenceScope } from "../lib/presence-scope";
 import type { MarkTextField } from "../lib/roster-form";
@@ -124,6 +125,18 @@ export type SheetHandlers = PlanHandlers & {
      *    듣기 레벨을 고쳐도 그 행의 시험 점수가 지워지지 않고, 반대도 마찬가지다.
      */
     patch?: Partial<Record<MarkTextField, string | null>>,
+  ) => void;
+  /**
+   * [SRS 단어수] 가져오기가 **실제로 적은 값**을 화면 state에 옮긴다(0206a 칸).
+   * 🔴 `router.refresh()`로는 안 바뀐다 — 마크는 `useState(data.marks)`라 마운트 1회만 복사된다
+   *    (`applyCarried` 각주와 같은 함정: 안 옮기면 "눌렀는데 칸이 그대로"로 보인다).
+   * ⚠️ **없으면 버튼 자체를 안 그린다**(`onShouting`과 같은 규약) — 값을 옮길 손이 없는 화면에
+   *    버튼을 세우면 거짓 성공이 된다. 서버가 이미 썼으므로 저장 큐는 타지 않는다(낙관 반영 아님).
+   */
+  applyMemorizedWords?: (
+    date: string,
+    slotStart: string,
+    written: readonly EcsMemorizedWritten[],
   ) => void;
 };
 
@@ -526,6 +539,31 @@ export function SheetClient({
     },
     [],
   );
+  /**
+   * SRS 단어수 반영 — 서버가 **이미 저장한** 값을 화면에 옮기는 것뿐이다(낙관 반영이 아니라 사후 반영이라
+   * 롤백이 없다). 🔴 `memorizedWords`만 바꾼다 — 태도·특이사항·시험 점수·듣기 레벨은 있던 값 그대로.
+   */
+  const applyMemorizedWords = useCallback(
+    (date: string, slotStart: string, written: readonly EcsMemorizedWritten[]) => {
+      if (!written.length) return;
+      setMarks((prev) => {
+        const next = { ...prev };
+        for (const w of written) {
+          const markKey = `${w.studentId}|${date}|${slotStart}`;
+          const had = next[markKey];
+          next[markKey] = {
+            status: had?.status ?? null,
+            progressNote: had?.progressNote ?? null,
+            score: had?.score ?? null,
+            listeningLevel: had?.listeningLevel ?? null,
+            memorizedWords: w.memorizedWords,
+          };
+        }
+        return next;
+      });
+    },
+    [],
+  );
   const planHandlers = usePlanHandlers({
     classId,
     // 로그인 시트는 언제나 ECS 게이트 — 공개 자리 PIN 문(seatPlanApi)은 그 화면만 쓴다.
@@ -539,6 +577,7 @@ export function SheetClient({
   const handlers: SheetHandlers = useMemo(
     () => ({
       ...planHandlers,
+      applyMemorizedWords,
       // 출결(출석/지각/결석) — 출석부·원스크린과 **같은 액션**을 호출한다(게이트를 여기서 다시 짜지 않는다).
       // 낙관 반영 후 실패하면 직전 값으로 되돌린다 — 화면엔 남고 서버엔 없는 상태를 만들지 않기 위해
       // (툴바가 "저장됨"이라 말하는 동안 기록을 잃는 사고, 2026-07-29 적대검증).
@@ -744,6 +783,7 @@ export function SheetClient({
     }),
     // unitsByDate가 빠지면 주를 넘긴 뒤에도 **옛 주의 유닛**이 박힌다(시수=급여라 조용한 오기록).
     [
+      applyMemorizedWords,
       audit,
       classId,
       data.canMarkAttendanceByDate,
