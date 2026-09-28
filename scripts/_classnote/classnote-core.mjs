@@ -13,6 +13,7 @@ import {
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
+import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
 
 /**
@@ -584,7 +585,8 @@ export async function processQueueOnce(sql, browser, opts) {
     // 경로의 최종 관문**(앱 큐잉·콘솔·재발송·직접 DB 큐잉·재고·복구분 전부 통과)이라 여기 없으면 절대가
     // 아니다. 재시도 무의미(멘트를 써야 풀림) → 결정적 failed + 한글 사유. dry-run은 상태 무변경 원칙이라
     // post 모드에서만 기록. 실측: 정상 onescreen 발송 232건 중 빈 멘트 0 — 기존 워크플로 파급 없음.
-    if (post && !((r.notes ?? "").trim())) {
+    // 자리 줄(`[시험결과지]`·`[첨부: …]`)은 글이 아니다 — 영어 템플릿 글이 자리 줄뿐이면 빈 멘트(앱 hasTextBesidesMarkers와 같은 판정).
+    if (post && !hasMentText(r.notes)) {
       await sql`update lesson_reports set classnote_status='failed',
         classnote_error=${"멘트(학부모 전달 내용)가 비어 있어 발송하지 않았습니다 — 멘트 작성 후 다시 발송하세요"}
         where id=${r.id}`;
