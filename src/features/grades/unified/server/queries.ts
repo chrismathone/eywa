@@ -115,6 +115,7 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
     days: schedulesByClass.get(row.id)?.size ?? 0,
   } satisfies UnifiedClass]));
   const rawClassById = new Map(visibleClasses.map((row) => [row.id, row]));
+  const allClassById = new Map(classRows.map((row) => [row.id, row]));
   const enrollmentsByStudent = new Map<string, RawEnrollment[]>();
   for (const row of enrollments) enrollmentsByStudent.set(row.student_id, [...(enrollmentsByStudent.get(row.student_id) ?? []), row]);
   const classesFor = (studentId: string, subject: string, date: string): UnifiedClass[] => {
@@ -128,6 +129,15 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
         return cls && raw?.subject === subject ? { ...cls, days: row.attendance_days?.length || cls.days } : null;
       }).filter((item): item is UnifiedClass => !!item);
     return classOrder(candidates);
+  };
+  const subjectOnDate = (studentId: string, date: string): string | null => {
+    const subjects = new Set(
+      (enrollmentsByStudent.get(studentId) ?? [])
+        .filter((row) => isEnrollmentOnRosterOn({ startDate: row.start_date, endDate: row.end_date, isTransferred: row.is_transferred ?? false }, date))
+        .map((row) => rawClassById.get(row.class_id)?.subject)
+        .filter((s): s is string => !!s),
+    );
+    return subjects.size === 1 ? [...subjects][0]! : null;
   };
   const linkedConsultDates = linkedConsultationDates(consultations);
   const base = (studentId: string, subject: string, date: string) => {
@@ -164,7 +174,13 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
     });
   }
   for (const report of reports) {
-    const subject = report.subject || (report.class_id ? rawClassById.get(report.class_id)?.subject : null) || "unknown";
+    // 과목이 빈 옛 보고서(0083a 이전) — 반이 있으면 그 반의 과목(**전체 반**에서 찾는다: 보이는 반만 보면 남의 반 점수가
+    // 추정 과목으로 새어 든다. 범위 거르기는 `base`의 scope.subjects가 한다). 반도 없으면 그날 다니던 과목이 하나로
+    // 좁혀질 때만 그 과목 — 강사 범위에선 수강을 제 반만 읽어 좁혀진 것이 사실이 아닐 수 있으니 추정하지 않는다.
+    // 끝내 모르면 숨긴다(원장 2026-09-28 "과목 unknown으로 뜨는거 숨김처리" — 예전엔 원문 'unknown'이 과목 칸에 섰다).
+    const subject = report.subject
+      || (report.class_id ? allClassById.get(report.class_id)?.subject : scope ? null : subjectOnDate(report.student_id, report.report_date));
+    if (!subject) continue;
     const found = base(report.student_id, subject, report.report_date);
     if (!found) continue;
     // 일일·확인테스트는 **그 수업보고서의 반**에서 친 시험이다(원장 2026-09-24) — 다니는 반 전부가 아니라 그 반 하나·그 반 담임으로.
