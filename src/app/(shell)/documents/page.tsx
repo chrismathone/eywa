@@ -34,7 +34,7 @@ import { FolderBreadcrumbs } from "./_components/folder-breadcrumbs";
 import { FolderDropTarget, FolderInteractionProvider, FolderName } from "./_components/folder-interactions";
 import { FolderFavoriteToggle } from "./_components/folder-favorite-toggle";
 
-export const metadata = { title: "데이터베이스 — aywa" };
+export const metadata = { title: "데이터베이스 — 에이와" };
 
 const PAGE_SIZE = 20;
 

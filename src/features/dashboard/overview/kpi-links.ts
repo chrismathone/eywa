@@ -7,12 +7,32 @@
  */
 import { addDays } from "@/lib/date-kst";
 import type { Program } from "@/features/students/program";
+import { NO_SUBJECT, type StudentLevel, type StudentMixFilter } from "@/features/students/list-filter-values";
 
 const STUDENT_AXES = "subject=all&grade=all&teacher=all&noenr=0&from=dashboard";
 
 /** 재원생(전 과목·전 학년·전 담임·미수강 포함) — program을 주면 그 프로그램만(같은 programOf 규칙). */
 export function studentsEnrolledHref(program?: Program): string {
   return `/students?status=enrolled&${STUDENT_AXES}${program ? `&program=${program}` : ""}`;
+}
+
+/**
+ * '재원생 구성' 막대 한 조각(원장 2026-09-28 *"다른 막대그래프들도 전부 해당기능으로 배선"*) — 학교급 × 수강 구성.
+ * 원생목록이 막대와 **같은 함수**(compositionStudentIds)로 거른다 → 막대 숫자 = 목록 건수.
+ * 줄 전체(막대 하나)는 `mixes`에 막대에 서는 셋(영어만·동시수강·수학만)을 모두 적는다(줄 오른쪽 숫자 = 그 셋의 합).
+ */
+export function studentsCompositionHref(filter: { level?: StudentLevel; mixes: readonly StudentMixFilter[] }): string {
+  const level = filter.level ? `&level=${filter.level}` : "";
+  const mix = filter.mixes.length > 0 ? `&mix=${filter.mixes.join(",")}` : "";
+  return `${studentsEnrolledHref()}${level}${mix}`;
+}
+
+/**
+ * '재원생 구성'의 **미수강** 막대 → 원생목록 수강 과목 = 미수강(원장 2026-09-28). 판정은 막대와 같은 activeStudentIds.
+ * 🔑 다른 축(학년·담임·미수강 제외)은 전부 명시값 — 과목만 '미수강'으로 바꾼다(STUDENT_AXES의 subject=all 자리).
+ */
+export function studentsUnenrolledHref(): string {
+  return studentsEnrolledHref().replace("subject=all", `subject=${NO_SUBJECT}`);
 }
 
 /** 그날 첫 수업 학생(첫 등원 + 새 과목) — 상태는 전체(첫 수업 학생의 상태를 가리지 않는다). */

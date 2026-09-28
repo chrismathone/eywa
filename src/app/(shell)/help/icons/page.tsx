@@ -7,7 +7,7 @@ import {
 } from "@/components/icons/aywa-icons";
 import { requireAccess } from "@/lib/auth/require-access";
 
-export const metadata = { title: "아이콘 시스템 — aywa" };
+export const metadata = { title: "아이콘 시스템 — 에이와" };
 
 const FAMILY_ORDER: AywaIconFamily[] = ["product", "interface"];
 
@@ -49,7 +49,7 @@ export default async function IconSystemPage() {
                 도움말로 돌아가기
               </Link>
               <p className="text-primary mt-10 text-xs font-bold">
-                Aywa icon system · v2
+                에이와 icon system · v2
               </p>
               <h1 className="text-foreground mt-3 max-w-2xl text-[clamp(2rem,5vw,4.4rem)] leading-[1.05] font-bold tracking-[-0.045em]">
                 형태는 통일하고,
@@ -58,7 +58,7 @@ export default async function IconSystemPage() {
               </h1>
               <p className="text-text-dim mt-5 max-w-xl text-sm leading-[1.75] sm:text-base">
                 학원 운영의 익숙한 사물과 보편 조작을 한 문법으로 그립니다. 누구나 같은 기능을 같은 모양으로
-                알아볼 수 있게 만든 Aywa의 자체 아이콘입니다.
+                알아볼 수 있게 만든 에이와의 자체 아이콘입니다.
               </p>
             </div>
 

@@ -49,7 +49,7 @@ import { WithdrawalListLayout } from "./_components/list-layout";
 import { CustomRange } from "./_components/custom-range";
 import { withdrawalPage, withdrawalPageSize } from "@/features/withdrawals/list-pagination";
 
-export const metadata = { title: "퇴원관리 — aywa" };
+export const metadata = { title: "퇴원관리 — 에이와" };
 
 /** 최근 12개월 추이(기간 축 제외 모집단) — 모듈 함수라 RSC 본문 아님(new Date 허용, #11). */
 function monthlyExits(rows: { date: string | null }[]): WithdrawalMonthPoint[] {

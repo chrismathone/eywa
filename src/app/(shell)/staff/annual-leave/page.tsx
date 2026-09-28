@@ -9,7 +9,7 @@ import { isChinsanTenant } from "@/features/owner/preset";
 import { getLeaveOverview } from "@/features/leave/server/admin";
 import { AdjustTable } from "./_adjust-table";
 
-export const metadata = { title: "연차 관리 — aywa" };
+export const metadata = { title: "연차 관리 — 에이와" };
 
 /**
  * 연차 관리 — 직원별 연차 **부여 일수 조정**(원장 2026-09-08: *"관리자랑 김예원이 직원들의 연차갯수를

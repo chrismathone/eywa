@@ -30,7 +30,7 @@ export function SuperAdminMobileBar({ email, className = "" }: { email: string; 
             <span className="bg-primary flex size-5 items-center justify-center rounded-[3px]">
               <EyIcon name="shieldCheck" size={12} strokeWidth={1.8} className="text-white" />
             </span>
-            <span className="text-foreground text-sm font-bold tracking-tight">AYWA</span>
+            <span className="text-foreground text-sm font-bold tracking-tight">에이와</span>
             <span className="text-primary text-sm font-bold">슈퍼관리자</span>
           </Link>
           {active ? (

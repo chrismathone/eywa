@@ -56,9 +56,10 @@ import {
 import { NewClassTrigger } from "./_components/new-class-trigger";
 import { ClassroomAssignButton } from "./_components/classroom-assign-dialog";
 import { HeaderDayFilter } from "./_components/header-day-filter";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "cls.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 const PAGE_SIZE = 50;

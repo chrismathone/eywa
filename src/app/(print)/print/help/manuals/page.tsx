@@ -7,7 +7,7 @@ import { kstToday } from "@/lib/date-kst";
 import { PrintManualActions } from "./print-actions";
 import styles from "./manual-bundle.module.css";
 
-export const metadata = { title: "전체 화면 설명서 — aywa" };
+export const metadata = { title: "전체 화면 설명서 — 에이와" };
 
 const GROUP_ORDER: HelpGroup[] = ["창", "홈", "수업", "원생", "운영", "지원"];
 
@@ -19,7 +19,7 @@ function plain(text: string): string {
 function ManualSection({ manual, number }: { manual: HelpManual; number: number }) {
   return (
     <article id={`manual-${manual.slug}`} className={styles.chapter}>
-      <div className={styles.chapterTop}><span>{String(number).padStart(2, "0")} / {manual.group}</span><span>AYWA SCREEN GUIDE</span></div>
+      <div className={styles.chapterTop}><span>{String(number).padStart(2, "0")} / {manual.group}</span><span>에이와 SCREEN GUIDE</span></div>
       <h2>{manual.title}</h2>
       <p className={styles.summary}>{plain(manual.summary)}</p>
       <h3>화면 사용 안내</h3>
@@ -62,7 +62,7 @@ export default async function ManualBundlePage() {
     <PrintManualActions />
     <main className={`${styles.book} print-portrait`}>
       <section className={styles.cover}>
-        <div className={styles.brand}>AYWA <span>USER MANUAL</span></div>
+        <div className={styles.brand}>에이와 <span>USER MANUAL</span></div>
         <div className={styles.coverTitle}>
           <p>학원 운영 화면 안내</p>
           <h1>전체 화면 설명서</h1>
@@ -101,7 +101,7 @@ export default async function ManualBundlePage() {
         <p>앱의 <strong>도움말</strong>에서 화면 설명서와 자주 묻는 질문을 검색할 수 있습니다.</p>
         <p>화면을 보는 중에는 <strong>F1</strong>을 눌러 해당 화면의 설명을 확인하세요.</p>
         <div className={styles.endRule} />
-        <small>AYWA · 전체 화면 설명서 · 자료 기준일 {referenceDate}</small>
+        <small>에이와 · 전체 화면 설명서 · 자료 기준일 {referenceDate}</small>
       </section>
     </main>
   </>;

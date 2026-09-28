@@ -11,7 +11,7 @@ import { MenuUsagePanel } from "./_menu-panel";
 import { RoleUsagePanel, TenantUsagePanel } from "./_group-panels";
 import { RouteUsagePanel, UnusedMenusPanel } from "./_route-panels";
 
-export const metadata = { title: "슈퍼관리자 · 이용 분석 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 이용 분석 — 에이와" };
 
 const hours = (sec: number) => (sec / 3600).toLocaleString("ko-KR", { maximumFractionDigits: 1 });
 

@@ -18,7 +18,7 @@ import { ConsultationTracker } from "../_components/consultation-tracker";
 import { ReactivateButton } from "../_components/reactivate-button";
 import { WithdrawalReasonCard } from "../_components/reason-card";
 
-export const metadata = { title: "퇴원 상세 — aywa" };
+export const metadata = { title: "퇴원 상세 — 에이와" };
 
 export default async function WithdrawalDetailPage({
   params,

@@ -30,7 +30,7 @@ import { ScoreGrid } from "../_components/score-grid";
 import { SheetMetaFields } from "../_components/sheet-meta-fields";
 import { GradeViewSwitch } from "../_components/view-switch";
 
-export const metadata = { title: "성적관리 — aywa" };
+export const metadata = { title: "성적관리 — 에이와" };
 
 /**
  * 성적관리 — **시험을 등록하지 않는다**(원장 2026-09-22: *"시험자체를 등록하는게 아니라 과목 반별

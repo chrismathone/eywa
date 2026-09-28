@@ -29,7 +29,10 @@ describe("누적 암기 단어수 자동 채우기", () => {
       const src = read(p);
       expect(src, p).toContain("fillMemorizedWords");
       // 무엇을 적을지·덮을지·어떻게 맞출지를 여기서 다시 정하지 않는다(그 판단은 core 한 곳).
-      expect(src, p).not.toContain("longTermWords");
+      // 🔴 **어느 지표를 적을지도 호출부가 고르지 않는다** — core 한 곳이 정한다.
+      for (const metric of ["seenWords", "longTermWords", "newWords"]) {
+        expect(src, `${p} · ${metric}`).not.toContain(metric);
+      }
       expect(src, p).not.toContain("class_sheet_student_marks");
       // 🔴 모드(덮을지 말지)도 호출부가 고르지 않는다 — core가 날짜로 정한다.
       expect(src, p).not.toContain("memorizedFillMode");
@@ -55,11 +58,15 @@ describe("누적 암기 단어수 자동 채우기", () => {
     expect(rule.replace(/\s+/g, " ")).toContain('return date < today ? "fill" : "refresh";');
   });
 
-  it("장기기억(longTermWords)을 적는다 — 본 단어·새 단어가 아니다", () => {
+  it("🔴 본 단어(seenWords) = '지금까지 학습한 단어 수'를 적는다 — 장기기억·새 단어가 아니다", () => {
+    // 원장 2026-09-28: *"지금까지 학습한 단어수로 할꺼임"* — 기준 화면은 인재원 랭킹이고
+    // 그 캡션이 "지금까지 학습한 단어 수"다. 2026-09-22의 장기기억 선택을 **원장이 뒤집었다**.
+    // ⚠️ `newWords`는 기간 지표(`kpi` 안)라 애초에 대상이 아니다 — 넣으면 그 달치만 적힌다.
     const core = read(CORE);
-    expect(core).toContain("s.longTermWords");
-    expect(core).not.toContain("s.seenWords");
-    expect(core).not.toContain("s.newWords");
+    // 주석이 아니라 **실제로 읽는 줄**을 본다(설명에도 지표 이름이 나온다 — 설명을 결과로 오인하면 안 된다).
+    expect(core).toContain("[s.ijwId, s.seenWords]");
+    expect(core).not.toContain("[s.ijwId, s.longTermWords]");
+    expect(core).not.toContain("[s.ijwId, s.newWords]");
   });
 
   it("🔴 짝(ijw_student_id)으로만 맞춘다 — 이름으로 맞추지 않는다(지점마다 같은 이름이 있다)", () => {

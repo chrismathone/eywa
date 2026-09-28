@@ -9,7 +9,7 @@ import { fmtNum } from "@/components/super-admin/parts";
 import { getSupportNoticesPage } from "@/features/support/server/queries";
 import { SupportAdminTabs } from "../_tabs";
 
-export const metadata = { title: "슈퍼관리자 · 공지사항 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 공지사항 — 에이와" };
 
 const PAGE_SIZE = 30;
 

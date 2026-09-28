@@ -107,7 +107,7 @@ export default function DashboardLoading() {
       <div className={s.board}>
         <header className={s.header}>
           <div className={s.identity}>
-            <span className={`${s.eyebrow} ${T}`}>AYWA · ACADEMY OVERVIEW</span>
+            <span className={`${s.eyebrow} ${T}`}>에이와 · ACADEMY OVERVIEW</span>
             <h1>
               <i className={`not-italic ${T}`}>학원 전체 현황</i>
               <span className={T}>2026.09.11</span>
@@ -169,7 +169,7 @@ export default function DashboardLoading() {
           </div>
         ))}
         <footer className={s.footer}>
-          <span className={T}>AYWA / OVERVIEW</span>
+          <span className={T}>에이와 / OVERVIEW</span>
         </footer>
       </div>
     </div>

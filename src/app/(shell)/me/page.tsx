@@ -24,10 +24,11 @@ import { getMyLeaveHistory } from "@/features/leave/server/my-history";
 import { AccountCard } from "./_components/account-card";
 import { LeaveCard } from "./_components/leave-card";
 import { ReportNameCard } from "./_components/report-name-card";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 // 탭 제목도 화면 언어를 따른다 — 강사가 창을 여럿 열어 두면 제목이 유일한 구분이다.
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "me.eyebrow")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "me.eyebrow")}${PAGE_TITLE_SUFFIX}` };
 }
 
 /**

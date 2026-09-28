@@ -4,7 +4,7 @@ import { getNewcomers } from "@/features/newcomers/server/queries";
 import { parseBoardFilters } from "@/features/newcomers/board-model";
 import { NewcomerBoard } from "./_components/newcomer-board";
 
-export const metadata = { title: "신규생 관리 — aywa" };
+export const metadata = { title: "신규생 관리 — 에이와" };
 export default async function NewcomersPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {

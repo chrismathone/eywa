@@ -46,7 +46,7 @@ export async function buildGradesWorkbook(
   };
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "aywa";
+  wb.creator = "에이와";
   wb.created = new Date();
 
   const trackLabel = selection.track ? ENGLISH_TRACK_LABEL[selection.track] : "";

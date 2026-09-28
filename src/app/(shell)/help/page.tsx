@@ -15,7 +15,7 @@ import { MANUALS } from "@/features/help/manuals";
 import { HelpAllowProvider } from "./_components/help-text";
 import { HelpBoard, HelpFaq, HelpManuals } from "./_help-browser";
 
-export const metadata = { title: "도움말 — aywa" };
+export const metadata = { title: "도움말 — 에이와" };
 
 const PAGE_SIZE = 20;
 
@@ -115,7 +115,7 @@ export default async function HelpPage({
           </span>
           <div className="min-w-0 flex-1">
             <p className="editorial-eyebrow">디자인 시스템</p>
-            <h2 className="text-foreground mt-0.5 text-base font-bold">Aywa 아이콘 시스템</h2>
+            <h2 className="text-foreground mt-0.5 text-base font-bold">에이와 아이콘 시스템</h2>
             <p className="text-text-dim mt-1 text-xs leading-relaxed">
               제품에서 사용하는 아이콘과 크기, 선, 의미 배정 규칙을 한눈에 확인하세요.
             </p>

@@ -74,7 +74,7 @@ export function JjLinkPanel({ rows, pool }: { rows: JjLinkRow[]; pool: JjPoolOpt
     <section className="border-amber/40 bg-amber-soft/40 space-y-2 rounded-2xl border px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-foreground text-sm font-bold">
-          인재원 학생 중 aywa 학생과 아직 연결되지 않은 <span className="num">{rows.length}</span>명
+          인재원 학생 중 에이와 학생과 아직 연결되지 않은 <span className="num">{rows.length}</span>명
         </p>
         <div className="flex flex-wrap items-center gap-1.5">
           {uniqueRows.length > 0 ? (

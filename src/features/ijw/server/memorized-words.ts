@@ -1,14 +1,19 @@
 import "server-only";
 
 /**
- * JJ실 **'누적 암기 단어수' 자동 채우기** — SRS(인재원) 장기기억 단어수를 그 날 명단 칸에 적는다
+ * JJ실 **'누적 암기 단어수' 자동 채우기** — SRS(인재원) **지금까지 학습한 단어 수**를 그 날 명단 칸에 적는다
  * (원장 2026-09-21: *"api로 하루에한번이나 수동연계 버튼으로 자동 입력하게해줘"* → *"자동으로 해주고
  * 수동으로 가져와서 입력되게도해줘"* / 2026-09-28: *"최신버전으로 srs 업데이트 뭐 해서 가져와서
  * 자동기입되게 하는 기능 추가"*).
  *
- * 🔑 **무엇을 적나 = 장기기억 단어수**(`longTermWords` = 복습 간격 15일 이상, 인재원 장기기억 랭킹과 같은 기준).
- *    실측 2026-09-22: 선생님이 손으로 적어 온 값 67명 중 **66명**이 '본 단어(seenWords)'보다 이 값에 가까웠다.
- *    기간과 무관한 **지금** 값이라 언제 불러도 같은 숫자다(설명서 8번).
+ * 🔑 **무엇을 적나 = 본 단어 `seenWords`**(= 인재원 랭킹 화면의 *"지금까지 학습한 단어 수"*).
+ *    🔴 **2026-09-28 원장이 `longTermWords`(장기기억)에서 갈아탔다** — *"지금까지 학습한 단어수로 할꺼임"*.
+ *    2026-09-22엔 "손으로 적어 온 값 67명 중 66명이 장기기억에 가깝다"는 실측으로 장기기억을 골랐지만,
+ *    그 손 값들이 **9/6에 적힌 뒤 '내용 복사'로 흘러온 낡은 값**이었음이 드러나(짝 없는 학생 53명) 근거가
+ *    무너졌고, 원장이 보는 기준 화면은 랭킹이다. **되돌리지 말 것.**
+ *    ⚠️ `newWords`(새 단어)는 **기간 지표**(`kpi` 블록 안)라 대상이 아니다. `seenWords`·`longTermWords`만
+ *    `kpi` 밖의 **기간 무관 누적값**이고(contract.ts `Study`), 화면도 `장기기억 = 본 단어 N개 중 M%`로
+ *    그려서 seenWords가 모수임을 보인다(sheet-model.ts). 그래서 기간을 비워 불러도 '지금까지'가 나온다.
  * 🔴 **무엇을 덮고 무엇을 지킬지는 [`memorized-cell.ts`](../memorized-cell) 한 곳**이 정한다 — 빈 칸은 채우고,
  *    **숫자만 든 칸은 최신값으로 갱신하고, 글자가 섞인 칸은 손대지 않는다**(그 칸엔 `150/200점 - STARTING 2`·
  *    `눈 아파서 조퇴` 같은 다른 기록이 실제로 섞여 있다 — 실측 1,507칸 중 134칸). **모드는 호출부가 고르지
@@ -153,10 +158,10 @@ export async function fillMemorizedWords(args: {
   );
   const ijwIdOf = new Map(links.map((r) => [r.id, (r.ijw_student_id ?? "").trim()]));
 
-  // ④ 인재원 한 번 — 전교생 요약(장기기억은 기간과 무관한 '지금' 값이라 기간을 비워 둔다).
+  // ④ 인재원 한 번 — 전교생 요약(본 단어는 기간과 무관한 '지금까지' 누적값이라 기간을 비워 둔다).
   const res = await ijwGet(args.tenantId, IJW_PATHS.studySummary(), IJW_SCHEMAS.studySummary);
   if (!res.ok) return res;
-  const wordsOf = new Map(res.data.students.map((s) => [s.ijwId, s.longTermWords]));
+  const wordsOf = new Map(res.data.students.map((s) => [s.ijwId, s.seenWords]));
 
   const now = new Date().toISOString();
   const col = JJ_MARK_COLUMN.memorizedWords;

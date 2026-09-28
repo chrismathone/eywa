@@ -15,7 +15,7 @@ import {
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
 import { ReviewTable } from "./_components/review-table";
 
-export const metadata = { title: "수업 평가 — aywa" };
+export const metadata = { title: "수업 평가 — 에이와" };
 
 /**
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).

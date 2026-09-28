@@ -19,7 +19,7 @@ import { LicenseSection } from "./_license-section";
 import { AccountsPanel } from "./_accounts-panel";
 import { TenantTabs, parseTenantTab } from "./_tabs";
 
-export const metadata = { title: "슈퍼관리자 · 학원 상세 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 학원 상세 — 에이와" };
 
 export default async function TenantDetailPage({
   params,

@@ -38,7 +38,7 @@ export function DashboardMock() {
   return (
     <div className="app">
       <aside className="side" aria-hidden="true">
-        <div className="brand">aywa</div>
+        <div className="brand">에이와</div>
         {SIDE.map((g) => (
           <div key={g.group} className="grp">
             <p>{g.group}</p>

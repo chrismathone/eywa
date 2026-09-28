@@ -5,7 +5,7 @@ import { BackLink } from "@/components/back-link";
 import { getRefundRequestById } from "@/features/billing/server/refund-queries";
 import { RefundSheet } from "../_components/refund-sheet";
 
-export const metadata = { title: "환불 요청서 — aywa" };
+export const metadata = { title: "환불 요청서 — 에이와" };
 
 export default async function RefundViewPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireAccess("billing");

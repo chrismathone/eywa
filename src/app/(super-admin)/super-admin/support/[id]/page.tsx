@@ -6,7 +6,7 @@ import { SupportNotReady } from "@/components/support/list-states";
 import { getAnySupportRequest } from "@/features/support/server/admin-queries";
 import { SupportAnswerForm } from "../_answer-form";
 
-export const metadata = { title: "슈퍼관리자 · 개선요청 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 개선요청 — 에이와" };
 
 export default async function SupportAdminRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

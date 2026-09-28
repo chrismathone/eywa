@@ -131,7 +131,7 @@ export function brandLabels(branding: PublicBranding | null): {
   const academyName = p?.name?.trim() || null;
   return {
     // (shell)/layout.tsx와 동일 규약: logoText 우선, 없으면 제품명.
-    wordmark: p?.logoText?.trim() || "AYWA",
+    wordmark: p?.logoText?.trim() || "에이와",
     academyLine:
       [academyName, p?.branchLabel?.trim()].filter(Boolean).join(" · ") || "학원관리 시스템",
     academyName,

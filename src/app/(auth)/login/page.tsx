@@ -7,8 +7,8 @@ import { LoginForm } from "./login-form";
 import { LoginVideo } from "./login-video";
 
 export const metadata: Metadata = {
-  title: "로그인 — AYWA",
-  description: "학원에서 발급받은 계정으로 AYWA에 로그인하세요.",
+  title: "로그인 — 에이와",
+  description: "학원에서 발급받은 계정으로 에이와에 로그인하세요.",
   robots: { index: false, follow: false },
 };
 
@@ -28,7 +28,7 @@ export default async function LoginPage({
     <div className={styles.site}>
       <a href="#login-content" className={styles.skipLink}>로그인으로 이동</a>
       <div className={styles.loginPage}>
-        <aside className={styles.loginStory} aria-label="AYWA 소개">
+        <aside className={styles.loginStory} aria-label="에이와 소개">
           {/* 🔴 영상이 패널 전체다 — 글은 그 위에 얹는다(원장 2026-09-23 *"영상 위에 글자 적어도 되니까 영상을 부각시켜"*).
               포스터 = 영상 첫 장면. 폰 폭(≤820px)에선 패널째 숨고 주소도 안 넣는다. */}
           <LoginVideo src="/photos/login-panel.mp4" poster="/photos/login-panel-poster.webp" />
@@ -37,7 +37,7 @@ export default async function LoginPage({
             <PublicBrand />
             <div className={styles.loginStoryCopy}>
               <h2>가르치는 일에 집중하는<br />하루의 시작.</h2>
-              <p>매일의 기록이 쌓이고, 함께하는 일이 이어지는 곳.<br />우리 학원의 하루를 AYWA와 함께하세요.</p>
+              <p>매일의 기록이 쌓이고, 함께하는 일이 이어지는 곳.<br />우리 학원의 하루를 에이와와 함께하세요.</p>
             </div>
           </div>
         </aside>
@@ -45,7 +45,7 @@ export default async function LoginPage({
         <main id="login-content" className={styles.loginMain}>
           <div className={styles.loginTop}>
             <div className={styles.mobileBrand}><PublicBrand /></div>
-            <Link href="/"><EyIcon name="arrowLeft" size={15} />AYWA 소개</Link>
+            <Link href="/"><EyIcon name="arrowLeft" size={15} />에이와 소개</Link>
           </div>
           <div className={styles.loginContent}>
             <h1>로그인</h1>

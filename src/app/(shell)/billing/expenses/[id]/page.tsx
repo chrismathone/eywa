@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Params) {
   const { id } = await params;
   const expense = await getExpenseById(id);
-  return { title: expense ? `${expense.title} · 지출결의서 — aywa` : "지출결의서 — aywa" };
+  return { title: expense ? `${expense.title} · 지출결의서 — 에이와` : "지출결의서 — 에이와" };
 }
 
 export default async function ExpenseDetailPage({ params }: Params) {

@@ -45,7 +45,7 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
     expect(QUERIES).toContain("countEnrolledStudents(supabase, teacherScope, notStarted)");
     expect(QUERIES).toContain("enrolledSubjectCounts(ens, teacherScope, kstToday())");
     expect(COMPOSITION).toMatch(/composeEnrolled\(\{[\s\S]*?today: kstToday\(\)/);
-    expect(STUDENTS_PAGE).toContain("restrictIdsFor(program, firstDay)");
+    expect(STUDENTS_PAGE).toContain("restrictIdsFor(program, firstDay, { levels, mixes })");
     expect(STUDENTS_PAGE).toContain("restrictIds");
   });
 
@@ -81,6 +81,33 @@ describe("① 재원생 — 원생목록과 같은 조회·같은 순수 집계"
       "/students?status=enrolled&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
     );
     expect(studentsEnrolledHref("eie")).toMatch(/&program=eie$/);
+  });
+
+  /**
+   * '재원생 구성' 막대 → 원생목록(원장 2026-09-28 "막대 숫자 = 열린 목록 건수"). 숫자 자체는 composition-filter-parity.test.ts가
+   * 같은 재료로 잠그고, 여기선 **표면이 그 함수를 부르는지**를 잠근다(주석은 강제력이 없다).
+   */
+  it("재원생 구성 막대·원생목록 level=·mix=·'미수강'이 같은 판정 함수를 지난다", () => {
+    const PURE = src("src/features/students/enrolled-composition.ts");
+    // 운영실 active(미수강 막대의 여집합)와 목록 '미수강'이 같은 줄 판정(activeRows)
+    expect(PURE).toMatch(/for \(const \[row, klass\] of activeRows\(input\.rows, input\.scope, input\.today\)\)/);
+    expect(PURE).toMatch(/export function activeStudentIds[\s\S]*?activeRows\(rows, scope, today\)/);
+    // 목록 '미수강'은 재원이면 운영실 구성과 같은 요청 캐시 행을 쓴다
+    expect(COMPOSITION).toMatch(/enrolledOnly \? loadActiveEnrolledEnrollments\(\)/);
+    expect(COMPOSITION).toContain("activeStudentIds(rows, scope, kstToday())");
+    expect(QUERIES).toContain('getSubjectFilterKeep(subjectFilter.all, options?.status === "enrolled")');
+    // 학교급 × 구성 = 막대와 같은 재료(getEnrolledComposition) · 같은 학교급 분류(studentLevelOf)
+    expect(COMPOSITION).toContain("compositionStudentIds(await getEnrolledComposition(), filter)");
+    expect(src("src/features/dashboard/overview/student-composition.ts")).toContain(
+      "levelLabel(studentLevelOf(student.grade))",
+    );
+    expect(src("src/features/students/server/restrict-ids.ts")).toContain("getCompositionStudentIds(composition)");
+    // 엑셀도 같은 집합(파일 행 = 목록 행)
+    expect(src("src/app/api/exports/students/route.ts")).toContain("parseLevels(url.searchParams.get(\"level\"))");
+    // 막대 링크는 kpi-links 한 곳에서 만든다(목적지 축을 명시값으로)
+    const CHART = src("src/app/(shell)/dashboard/_overview/level-split.tsx");
+    expect(CHART).toContain("studentsCompositionHref(");
+    expect(CHART).toContain("studentsUnenrolledHref()");
   });
 });
 

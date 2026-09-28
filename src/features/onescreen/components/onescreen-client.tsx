@@ -79,6 +79,7 @@ import { englishTestText } from "@/features/report-templates/values";
 import { useEnglishJj } from "./use-english-jj";
 import { jjDayKey, jjDaySummary, jjKnownSlots, type JjDayCache } from "../jj-day";
 import type { EnglishJjStatus } from "./english-template-panel";
+import type { JjExamPickState } from "./english-jj-exam-picker";
 import {
   aiFactsHashOf,
   canRecompose,
@@ -2184,6 +2185,18 @@ export function OneScreenClient({
     const sum = jjDaySummary(st);
     return { kind: "ok", exams: sum?.exams ?? 0, answers: sum?.answers ?? 0 };
   }
+  /** 결과지 고르기 재료 — 받은 자료가 있을 때만. 받는 중이면 잠근다(옛 목록 위에서 고르기가 계산되지 않게). */
+  function englishJjPickOf(studentId: string): JjExamPickState | null {
+    const key = jjDayKey(studentId, activeDate);
+    const st = jj.cache[key];
+    if (st?.status !== "ok") return null;
+    return {
+      options: st.options ?? [],
+      pick: st.snapshot.pick ?? null,
+      date: activeDate,
+      busy: jj.pending.has(key),
+    };
+  }
   /** 미리보기에 실을 인재원 자료(받은 것만) — 발송본은 저장 때 서버가 다시 받은 것으로 그린다. */
   function englishJjSnapshotOf(studentId: string) {
     const st = jj.cache[jjDayKey(studentId, activeDate)];
@@ -3119,6 +3132,10 @@ export function OneScreenClient({
         makeupClassId: su?.makeupClassId ?? null,
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
+        // 영어 결과지 고르기(2026-09-28) — 이 화면이 아는 값만 싣는다. 모르면(안 받음) 빼서 서버가 저장해 둔 고르기를 따르게.
+        ...(su?.subjectKey === "english" && jjDayKey(student.id, activeDate) in jj.picksRef.current
+          ? { jjExamPick: jj.picksRef.current[jjDayKey(student.id, activeDate)] }
+          : {}),
       },
     };
   }
@@ -4382,6 +4399,7 @@ export function OneScreenClient({
                         // 경고 셋은 저장값이 아니라 **지금 글·칸** 기준(english-draft.ts) — 새로고침·일괄 작성 뒤에도 맞다.
                         ...englishRowFlags(selected, previewSubject, previewReport),
                         jj: englishJjStatusOf(selected.id),
+                        jjPick: englishJjPickOf(selected.id),
                         canLinkJj: canLinkIjw,
                         media: {
                           busy: uploadingAttKey === rowKey(selected.id, previewSubject.name),
@@ -4401,6 +4419,8 @@ export function OneScreenClient({
                             force: true,
                             manual: true, // 사람이 누른 것 — 멈춤 차단기도 무시한다
                           }),
+                        onJjPick: (pick) =>
+                          void jj.choose(selected.id, pick, { outOfClass: rowOutOfClass(selected, previewSubject) }),
                         onInsertFile: (file) => void insertEnglishMediaFor(selected, previewSubject.name, file),
                       }}
                     />

@@ -20,7 +20,7 @@ import { ListView } from "./_components/list-view";
 import { StatsView } from "./_components/stats-view";
 import { EventOpenHost } from "./_components/event-open";
 
-export const metadata = { title: "캘린더 — aywa" };
+export const metadata = { title: "캘린더 — 에이와" };
 
 /**
  * 캘린더(학원 공용 일정) — 원장 2026-08-18: *"일단 캘린더 탭으로 우리 프로그램 내에 일정부터 관리."*
