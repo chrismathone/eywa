@@ -30,8 +30,13 @@ export function appUrlOrNull(): string | null {
 
 export async function drainTenant(tenantId: string, opts: { reconcile?: boolean } = {}): Promise<{ expanded: number; sent: number } | null> {
   const loaded = await loadConnection(tenantId);
-  if (loaded.status !== "ok" || !loaded.value?.botToken || loaded.value.status !== "active") return null;
+  if (loaded.status !== "ok" || !loaded.value?.botToken) return null;
   if (!(await isFeatureOptedIn(tenantId, "slack"))) return null;
+  if (loaded.value.status !== "active") {
+    // 끊긴 동안엔 보내지 않지만, 유실 대조(인박스 채우기)는 계속 — 끊김이 30분을 넘어도 트리거가 놓친 사건이 남는다(codex 3차).
+    if (opts.reconcile) await reconcileInbox(tenantId, new Date()).catch((e) => reportError(e, { scope: "slack.reconcile_broken", tenantId }));
+    return null;
+  }
   const conn = loaded.value;
 
   const admin = createAdminClient();
@@ -104,7 +109,8 @@ async function notifyMasters(tenantId: string, code: string) {
 /** cron — 연결된 지점 전부 + 오래된 기록 정리(인박스 처리분 7일 · 아웃박스 끝난 것 30일). */
 export async function drainAll(): Promise<{ tenants: number; expanded: number; sent: number }> {
   const admin = createAdminClient();
-  const { data, error } = await admin.from("slack_connections").select("tenant_id").neq("bot_token", "").eq("status", "active");
+  // 끊긴(broken) 지점도 돈다 — drainTenant가 발송은 건너뛰고 유실 대조만 한다.
+  const { data, error } = await admin.from("slack_connections").select("tenant_id").neq("bot_token", "");
   if (error) return { tenants: 0, expanded: 0, sent: 0 };
   let expanded = 0;
   let sent = 0;

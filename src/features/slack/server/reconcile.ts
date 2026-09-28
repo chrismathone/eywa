@@ -7,8 +7,9 @@ import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
  * 발송기는 인박스만 읽으니 **영영 빠진다**(codex 2차 검토). 그래서 cron이 5분마다 최근 30분의 원본(알림·감사로그) 중
  * 켜진 규칙의 키에 해당하는 id를 인박스와 대조해 빠진 것을 다시 넣는다. `dedupe_key`가 있어 두 번 나가지 않는다.
  * 창 끝은 2분 전 — 방금 커밋 중인 행을 "빠졌다"고 오인하지 않게.
- * 🔴 키마다 **그 키를 가진 규칙이 마지막으로 저장된 시각 이후**만 본다 — 규칙을 새로 만들거나 키를 더한 직후,
- *    트리거가 원래 넣지 않았던(규칙이 없던) 과거 30분이 한꺼번에 나가지 않게.
+ * 🔴 키마다 **그 키가 규칙에 들어온 시각(0300a `key_since`) 이후**만 본다 — 규칙을 만들거나 키를 더한 직후
+ *    트리거가 원래 넣지 않았던 과거 30분이 쏟아지지 않게. 규칙을 고쳐도 이미 있던 키의 시각은 그대로라 기준이 밀리지 않는다(codex 3차).
+ *    같은 키를 여러 규칙이 가지면 **가장 이른 시각**(트리거는 켜진 규칙 하나라도 그 키를 가지면 넣는다).
  */
 const WINDOW_MS = 30 * 60_000;
 const SETTLE_MS = 2 * 60_000;
@@ -17,16 +18,17 @@ export async function reconcileInbox(tenantId: string, now: Date): Promise<numbe
   const admin = createAdminClient();
   const { data: ruleRows, error: ruleErr } = await admin
     .from("slack_rules")
-    .select("source, type_keys, updated_at")
+    .select("source, type_keys, key_since, created_at")
     .eq("tenant_id", tenantId)
     .eq("enabled", true);
   if (ruleErr || !ruleRows?.length) return 0;
-  const floor = new Map<string, number>(); // `${source}:${key}` → 그 키를 가진 규칙 중 가장 늦게 저장된 시각
+  const floor = new Map<string, number>(); // `${source}:${key}` → 그 키가 켜진 규칙에 처음 들어온 시각
   for (const r of ruleRows) {
-    const t = new Date(r.updated_at as string).getTime();
+    const since = (r.key_since as Record<string, string> | null) ?? {};
     for (const k of (r.type_keys as string[]) ?? []) {
+      const t = new Date(since[k] ?? (r.created_at as string)).getTime();
       const id = `${r.source}:${k}`;
-      floor.set(id, Math.max(floor.get(id) ?? 0, t));
+      floor.set(id, Math.min(floor.get(id) ?? Infinity, t));
     }
   }
   const since = new Date(now.getTime() - WINDOW_MS).toISOString();

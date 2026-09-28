@@ -4,7 +4,6 @@ import { SLACK_AGGREGATE_THRESHOLD, slackErrorKind } from "../format";
 import { renderAggregate, renderDigest } from "../render";
 import { isQuietAt, nextAwakeAt, type QuietConfig } from "../schedule";
 import { slackPostDm, slackPostMessage, type SlackFail } from "./client";
-import { loadLinks } from "./store";
 
 /**
  * 아웃박스 → 슬랙. 보낼 시각이 된 줄을 **대상별로 묶어** 보낸다.
@@ -46,7 +45,6 @@ export async function deliverDue(tenantId: string, token: string, now: Date, dea
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
 
-  const links = await loadLinks(tenantId);
   const dmCache = new Map<string, string>();
   let sent = 0;
   for (const rows of groups.values()) {
@@ -57,8 +55,9 @@ export async function deliverDue(tenantId: string, token: string, now: Date, dea
       await update(tenantId, rows.map((r) => r.id), { kind: "digest_item", due_at: nextAwakeAt(now, quiet).toISOString() });
       continue;
     }
-    // 1:1 대상 재확인 — 연결표가 정본이다(대기 줄에 박힌 슬랙 id는 만든 때의 것).
-    const dmTo = target.kind === "dm" ? (target.aywaUserId ? links.get(target.aywaUserId)?.slackUserId ?? "" : target.slackUserId ?? "") : "";
+    // 1:1 대상 재확인 — 연결표가 정본이다(대기 줄에 박힌 슬랙 id는 만든 때의 것). **보내기 직전에** 그 사람 한 줄을 읽는다
+    // (실행 시작 때 한 번 읽으면 발송 도중 바뀐 연결을 놓친다, codex 3차).
+    const dmTo = target.kind === "dm" ? await currentSlackId(tenantId, target) : "";
     const ping = (target.ping as Ping) ?? "none";
     const items = rows.map((r) => ({ body: r.body, groupLabel: r.group_label, createdAt: new Date(r.created_at) }));
     const posts: { ids: string[]; text: string }[] =
@@ -95,6 +94,17 @@ export async function deliverDue(tenantId: string, token: string, now: Date, dea
     }
   }
   return { sent, authError: null };
+}
+
+async function currentSlackId(tenantId: string, target: Row["target"]): Promise<string> {
+  if (!target.aywaUserId) return target.slackUserId ?? "";
+  const { data } = await createAdminClient()
+    .from("slack_user_links")
+    .select("slack_user_id")
+    .eq("tenant_id", tenantId)
+    .eq("aywa_user_id", target.aywaUserId)
+    .maybeSingle();
+  return (data?.slack_user_id as string | undefined) ?? "";
 }
 
 async function retryOrGiveUp(tenantId: string, rows: Row[], now: Date, code: string | null) {

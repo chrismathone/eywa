@@ -139,6 +139,14 @@ function ruleToRow(rule: SlackRule) {
   };
 }
 
+/**
+ * 키마다 "언제부터 이 규칙이 보냈나"(0300a `key_since`) — 원래 있던 키는 그 시각 그대로, 새 키만 지금.
+ * 유실 대조가 이 시각 이후의 사건만 되살린다(규칙을 고쳐도 기준이 밀리지 않게, codex 3차).
+ */
+function mergeKeySince(prev: Record<string, string>, keys: string[], now: string): Record<string, string> {
+  return Object.fromEntries(keys.map((k) => [k, prev[k] ?? now]));
+}
+
 /** 새 규칙이면 만들고, 있으면 `version`이 같을 때만 고친다(동시 편집 충돌 = 다른 사람이 먼저 저장). */
 export async function upsertRule(
   tenantId: string,
@@ -147,10 +155,18 @@ export async function upsertRule(
 ): Promise<{ id?: string; version?: number; error?: string; conflict?: boolean }> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
+  // 0300a 전이면 key_since 칸이 없다 — 그땐 빼고 저장한다(규칙 저장이 SQL 순서에 묶이지 않게, [[#95]]).
+  const { data: prevRow, error: prevErr } = rule.id
+    ? await admin.from("slack_rules").select("key_since").eq("tenant_id", tenantId).eq("id", rule.id).maybeSingle()
+    : await admin.from("slack_rules").select("key_since").eq("tenant_id", tenantId).limit(1).maybeSingle();
+  const hasKeySince = !prevErr;
+  const keySince = hasKeySince
+    ? { key_since: mergeKeySince(rule.id ? ((prevRow?.key_since as Record<string, string>) ?? {}) : {}, rule.typeKeys, now) }
+    : {};
   if (!rule.id) {
     const { data, error } = await admin
       .from("slack_rules")
-      .insert({ tenant_id: tenantId, ...ruleToRow(rule), updated_by: userId, updated_at: now })
+      .insert({ tenant_id: tenantId, ...ruleToRow(rule), ...keySince, updated_by: userId, updated_at: now })
       .select("id, version")
       .single();
     if (error) return { error: isMissingTable(error) ? SLACK_TABLE_MISSING_MESSAGE : "규칙을 저장하지 못했습니다" };
@@ -158,7 +174,7 @@ export async function upsertRule(
   }
   const { data, error } = await admin
     .from("slack_rules")
-    .update({ ...ruleToRow(rule), version: rule.version + 1, updated_by: userId, updated_at: now })
+    .update({ ...ruleToRow(rule), ...keySince, version: rule.version + 1, updated_by: userId, updated_at: now })
     .eq("tenant_id", tenantId)
     .eq("id", rule.id)
     .eq("version", rule.version)
