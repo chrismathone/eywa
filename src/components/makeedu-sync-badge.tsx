@@ -93,7 +93,7 @@ export async function MakeeduSyncBadge({ domain }: { domain: MakeeduSyncDomain }
         <p className="font-bold">{sheetT(lang, "sync.detailsTitle")}</p>
         <p className="break-words" title={state.issue ?? undefined}>{failed ? humanizeMakeeduSyncError(state.issue) || sheetT(lang, "sync.failed") : issue}</p>
         {domain === "invoices" ? <p className="text-text-dim">{sheetT(lang, "sync.invoiceGuide")}</p> : null}
-        {canManage ? <WindowLink href="/owner?tab=sheets" className="inline-flex font-semibold text-primary underline underline-offset-2">{sheetT(lang, "sync.openSettings")}</WindowLink>
+        {canManage ? <WindowLink href="/owner?tab=sheets&sub=makeedu" className="inline-flex font-semibold text-primary underline underline-offset-2">{sheetT(lang, "sync.openSettings")}</WindowLink>
           : <p className="text-text-dim">{sheetT(lang, "sync.askManager")}</p>}
       </div>
     </details>

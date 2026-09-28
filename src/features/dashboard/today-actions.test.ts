@@ -453,7 +453,7 @@ describe("buildTodayActions", () => {
       ...EMPTY,
       makeeduIssue: { kind: "error", detail: "students 실패" },
     });
-    expect(items[0]).toMatchObject({ count: null, note: "students 실패", href: "/owner?tab=sheets" });
+    expect(items[0]).toMatchObject({ count: null, note: "students 실패", href: "/owner?tab=sheets&sub=makeedu" });
   });
 
   it("휴가: 승인 대기=amber, 오늘 휴가=info(명단)", () => {

@@ -817,7 +817,7 @@ export async function getTodayActionSignals(
       {
         key: "makeedu-sync",
         label: "makeedu 동기화",
-        href: "/owner?tab=sheets",
+        href: "/owner?tab=sheets&sub=makeedu",
         menuKey: "owner",
         requiredAccess: "read",
       },

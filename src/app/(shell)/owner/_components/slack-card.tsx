@@ -42,7 +42,15 @@ export async function SlackCard() {
             <>
               <ScheduleSection initial={state.schedule} />
               <RulesSection initialRules={state.rules} staff={state.staff} activityOptions={state.activityOptions} />
-              <PeopleSection />
+              {/* 사람 연결 명단(직원 전원)은 길다 — 접어 두고 필요할 때 연다(원장 2026-09-28 "세로 스크롤이 너무 길어짐"). */}
+              <details className="border-border rounded-xl border">
+                <summary className="text-foreground hover:bg-bg-soft/60 cursor-pointer rounded-xl px-4 py-2.5 text-sm font-bold">
+                  사람 연결 <span className="text-text-dim ml-1 text-xs font-normal">1:1 메시지를 받을 직원의 슬랙 계정 연결 · 누르면 펼침</span>
+                </summary>
+                <div className="border-line border-t px-4 py-3">
+                  <PeopleSection />
+                </div>
+              </details>
             </>
           ) : null}
         </>

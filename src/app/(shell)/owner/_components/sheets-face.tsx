@@ -75,7 +75,7 @@ export async function SheetsFace({
   const runsTotalPages = Math.max(1, Math.ceil(runsPage.total / RUNS_PAGE_SIZE));
   // 실행 이력 페이저 href — ?tab=sheets(+embed) 보존, page>1일 때만 page 파라미터(1페이지는 생략).
   const runsHref = (p: number) => {
-    const params = new URLSearchParams({ tab: "sheets" });
+    const params = new URLSearchParams({ tab: "sheets", sub: "makeedu" }); // 연동 내부 탭(makeedu) 유지
     if (isEmbed) params.set("embed", "1");
     if (p > 1) params.set("page", String(p));
     return `/owner?${params.toString()}`;

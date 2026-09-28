@@ -26,8 +26,7 @@ import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
-import { SheetsFace } from "./_components/sheets-face";
-import { SlackCard } from "./_components/slack-card";
+import { IntegrationsFace } from "./_components/integrations-face";
 import { PopupsFace } from "./_components/popups-face";
 
 export const dynamic = "force-dynamic";
@@ -229,15 +228,17 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           </div>
         )
       ) : null}
-      {/* 슬랙 알림 — 슈퍼관리자가 켠 지점만 카드가 선다(끈 지점은 null). */}
-      {tab === "sheets" ? <SlackCard /> : null}
+      {/* 연동 = 켜진 연동만 내부 탭(슬랙 · makeedu · 구글 시트) — 원장 2026-09-28 "세로 스크롤이 너무 길어짐". */}
       {tab === "sheets" ? (
-        <SheetsFace
-          subjects={settings.operations.subjects}
+        <IntegrationsFace
+          sub={sp.sub}
+          settings={settings}
+          modulesOn={{
+            makeedu: isModuleEnabled(settings.modules.disabled, "makeedu"),
+            sheets: isModuleEnabled(settings.modules.disabled, "sheet_sync"),
+          }}
           page={page}
           isEmbed={isEmbed}
-          makeeduOn={isModuleEnabled(settings.modules.disabled, "makeedu")}
-          sheetsOn={isModuleEnabled(settings.modules.disabled, "sheet_sync")}
         />
       ) : null}
     </div>

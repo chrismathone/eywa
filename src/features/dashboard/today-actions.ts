@@ -645,7 +645,7 @@ export function buildTodayActions(
       // 어느 도메인이 얼마나 밀렸는지가 이 신호의 전부다 — note라야 요약·프롬프트까지 함께 간다.
       note: raw.makeeduIssue.detail,
       bySubject: [],
-      href: "/owner?tab=sheets",
+      href: "/owner?tab=sheets&sub=makeedu",
       menuKey: "owner",
       requiredAccess: "read",
     });

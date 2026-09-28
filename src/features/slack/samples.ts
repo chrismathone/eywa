@@ -84,7 +84,7 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   makeedu_login_failed: {
     title: "makeedu 접속이 실패했습니다",
     body: "makeedu 동기화가 멈춥니다 — 비밀번호 변경·CAPTCHA·계정 잠금을 확인해 주세요. (감지 2026-09-28)",
-    link: "/owner?tab=sheets",
+    link: "/owner?tab=sheets&sub=makeedu",
   },
   support_answer: { title: "개선요청에 답변이 달렸습니다", body: "출석부 인쇄 여백 조정 요청 — 처리 완료", link: "/help" },
   slack_broken: { title: "슬랙 발송이 멈췄습니다", body: "슬랙이 토큰을 거절했습니다 — 학원 설정 → 연동에서 새 봇 토큰을 저장해 주세요. 그동안의 알림은 쌓아 두었다가 이어서 보냅니다.", link: "/owner?tab=sheets" },
