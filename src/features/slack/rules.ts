@@ -174,3 +174,17 @@ export const RULE_PRESETS: readonly RulePreset[] = [
     }),
   },
 ];
+
+/**
+ * 키마다 "언제부터 이 규칙이 보냈나"(0300a `key_since`) — 유실 대조가 이 시각 이후의 사건만 되살린다.
+ * 켜진 채 고친 규칙은 원래 있던 키의 시각을 그대로 두고 새 키만 지금(고쳐도 기준이 밀리지 않게, codex 3차).
+ * 새 규칙·꺼져 있던 규칙·끄는 저장은 전부 지금부터(꺼 둔 동안의 사건을 켠 뒤 되살리지 않게, codex 4차).
+ */
+export function nextKeySince(
+  prev: { since: Record<string, string>; enabled: boolean } | null,
+  rule: Pick<SlackRule, "typeKeys" | "enabled">,
+  now: string,
+): Record<string, string> {
+  const keep = prev && prev.enabled && rule.enabled ? prev.since : {};
+  return Object.fromEntries(rule.typeKeys.map((k) => [k, keep[k] ?? now]));
+}

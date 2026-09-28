@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RULE_PRESETS, sanitizeRule, SLACK_MAX_TARGETS, targetLabel } from "./rules";
+import { nextKeySince, RULE_PRESETS, sanitizeRule, SLACK_MAX_TARGETS, targetLabel } from "./rules";
 
 const KEYS = new Set(["student_create", "payroll_upsert", "invoice_create", "resume_view_unlock"]);
 const U1 = "11111111-1111-4111-8111-111111111111";
@@ -56,5 +56,19 @@ describe("규칙 정리", () => {
       // 순서는 목록 순으로 다시 서므로 집합으로 비교 — 프리셋 키가 하나도 버려지지 않아야 한다.
       expect([...sanitizeRule(built, keys)!.typeKeys].sort(), p.id).toEqual([...built.typeKeys].sort());
     }
+  });
+});
+
+describe("키별 시작 시각(key_since)", () => {
+  const T0 = "2026-09-28T01:00:00.000Z";
+  const NOW = "2026-09-28T09:00:00.000Z";
+  it("켜진 채 고치면 원래 키는 그 시각, 새 키만 지금, 빠진 키는 버린다", () => {
+    const r = nextKeySince({ since: { a: T0, b: T0 }, enabled: true }, { typeKeys: ["a", "c"], enabled: true }, NOW);
+    expect(r).toEqual({ a: T0, c: NOW });
+  });
+  it("새 규칙·꺼져 있던 규칙을 켜는 저장·끄는 저장은 전부 지금부터", () => {
+    expect(nextKeySince(null, { typeKeys: ["a"], enabled: true }, NOW)).toEqual({ a: NOW });
+    expect(nextKeySince({ since: { a: T0 }, enabled: false }, { typeKeys: ["a"], enabled: true }, NOW)).toEqual({ a: NOW });
+    expect(nextKeySince({ since: { a: T0 }, enabled: true }, { typeKeys: ["a"], enabled: false }, NOW)).toEqual({ a: NOW });
   });
 });

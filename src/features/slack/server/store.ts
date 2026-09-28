@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { normalizeTime, sanitizeRule, type SlackRule } from "../rules";
+import { nextKeySince, normalizeTime, sanitizeRule, type SlackRule } from "../rules";
 
 /**
  * 슬랙 저장소 — 연결(0297a·0298a `slack_connections`) · 규칙(`slack_rules`) · 사람 연결(`slack_user_links`). 서버 전용.
@@ -139,14 +139,6 @@ function ruleToRow(rule: SlackRule) {
   };
 }
 
-/**
- * 키마다 "언제부터 이 규칙이 보냈나"(0300a `key_since`) — 원래 있던 키는 그 시각 그대로, 새 키만 지금.
- * 유실 대조가 이 시각 이후의 사건만 되살린다(규칙을 고쳐도 기준이 밀리지 않게, codex 3차).
- */
-function mergeKeySince(prev: Record<string, string>, keys: string[], now: string): Record<string, string> {
-  return Object.fromEntries(keys.map((k) => [k, prev[k] ?? now]));
-}
-
 /** 새 규칙이면 만들고, 있으면 `version`이 같을 때만 고친다(동시 편집 충돌 = 다른 사람이 먼저 저장). */
 export async function upsertRule(
   tenantId: string,
@@ -157,11 +149,12 @@ export async function upsertRule(
   const now = new Date().toISOString();
   // 0300a 전이면 key_since 칸이 없다 — 그땐 빼고 저장한다(규칙 저장이 SQL 순서에 묶이지 않게, [[#95]]).
   const { data: prevRow, error: prevErr } = rule.id
-    ? await admin.from("slack_rules").select("key_since").eq("tenant_id", tenantId).eq("id", rule.id).maybeSingle()
+    ? await admin.from("slack_rules").select("key_since, enabled").eq("tenant_id", tenantId).eq("id", rule.id).maybeSingle()
     : await admin.from("slack_rules").select("key_since").eq("tenant_id", tenantId).limit(1).maybeSingle();
   const hasKeySince = !prevErr;
+  const prev = rule.id ? (prevRow as { key_since?: Record<string, string>; enabled?: boolean } | null) : null;
   const keySince = hasKeySince
-    ? { key_since: mergeKeySince(rule.id ? ((prevRow?.key_since as Record<string, string>) ?? {}) : {}, rule.typeKeys, now) }
+    ? { key_since: nextKeySince(prev ? { since: prev.key_since ?? {}, enabled: prev.enabled === true } : null, rule, now) }
     : {};
   if (!rule.id) {
     const { data, error } = await admin
