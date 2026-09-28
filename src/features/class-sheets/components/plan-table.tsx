@@ -9,6 +9,7 @@ import type { PlanLineDTO } from "../server/actions";
 import type { PlanHandlers } from "./use-plan-handlers";
 import type { SheetSaveStore } from "./use-sheet-saves";
 import { PlanRow } from "./plan-row";
+import { PlanCompareButton } from "./plan-compare-dialog";
 import { useSheetLang } from "@/features/teacher-view/lang-context";
 import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 
@@ -98,19 +99,16 @@ export function PlanTable({
                   {sheetT(lang, "plan.copy")}
                 </button>
               ) : null}
-              {/* 월간계획 가져오기(원장 2026-09-22) — 교재 배정이 만든 계획을 이 칸에 옮긴다.
-                  🔴 **평시 구획에만** 둔다 — 배정은 평시 축으로만 걸리고(내신은 사람이 따로 적는 자리라),
-                     내신 칩 옆에도 세우면 눌러도 늘 "가져올 계획이 없습니다"가 된다.
+              {/* 계획 비교(원장 2026-09-28) — 이 칸의 원래 월간계획 ↔ 실제를 모달로 견준다(읽기 전용).
+                  🔴 옛 [월간계획 가져오기](교시 한 칸)는 없앴다(*"한주씩 가져오는건 필요없음"*) — 가져오기는
+                     월간 화면의 [월간계획 전체 가져오기] 하나뿐이다. **평시 구획에만** 둔다(배정은 평시 축뿐).
                   ⚠️ 문이 기능을 안 내면(공개 자리 PIN) 핸들러가 `undefined`라 버튼이 아예 안 선다. */}
-              {canEdit && term.key === "regular" && handlers.importPlan ? (
-                <button
-                  type="button"
-                  className="border-line-strong text-foreground hover:text-primary hover:border-primary cursor-pointer rounded-full border px-2 py-0.5 text-xs font-bold"
-                  title={sheetT(lang, "plan.fromPlan.title")}
-                  onClick={() => handlers.importPlan?.(date, slotStart)}
-                >
-                  {sheetT(lang, "plan.fromPlan")}
-                </button>
+              {term.key === "regular" && handlers.comparePlan ? (
+                <PlanCompareButton
+                  date={date}
+                  slotStart={slotStart}
+                  load={() => handlers.comparePlan!(date, slotStart)}
+                />
               ) : null}
               {/* 🔴 **회차 미루기·당기기는 여기 있어야 한다**(원장 제보 2026-09-22 *"밀기 당기기는 어디에있음?"*)
                   — 처음엔 월간 달력 칸에만 뒀는데, 사람이 서 있는 자리는 **실제를 적는 이 표**다.

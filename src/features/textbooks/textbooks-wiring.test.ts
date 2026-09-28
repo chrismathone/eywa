@@ -238,15 +238,34 @@ describe("교재 배정 — 계획과 실제를 가른다", () => {
       expect(monthPlan).not.toContain(write);
     }
     // 배분 규칙은 순수 함수 한 곳을 그대로 탄다(미리보기·계획·가져오기가 같은 답을 내야 한다).
-    expect(monthPlan).toContain("buildLessonSchedule");
+    const expand = read("src", "features", "textbooks", "plan-expand.ts");
+    expect(expand).toContain("buildLessonSchedule");
+    expect(monthPlan).toContain("expandPlans");
   });
 
-  it("계획이 실제로 들어가는 길은 [가져오기] 하나뿐이다", () => {
-    expect(plan).toContain("export async function importPlannedSlot");
+  it("🔴 원래 계획은 미루기를 반영하지 않는다 — 일정(가져오기)만 밀린다(원장 2026-09-28)", () => {
+    // 같은 함수를 두 번 — 원래 계획은 shifts 없이, 일정은 shifts로.
+    expect(monthPlan).toContain("expandPlans({ ...common, shifts: null })");
+    expect(monthPlan).toContain("expandPlans({ ...common, shifts: m.shifts })");
+    // 달력의 '계획' 표식·비교 배지는 원래 계획을 본다.
+    const monthQueries = read("src", "features", "class-sheets", "server", "month-queries.ts");
+    expect(monthQueries).toContain("plannedBySlot: plannedRes.baselineByCell");
+    // 가져오기는 일정(byCell)을 옮긴다.
+    const importFn = plan.slice(plan.indexOf("export async function importPlannedRange"));
+    expect(importFn).toContain("planned.byCell");
+    expect(importFn).not.toContain("baselineByCell");
+  });
+
+  it("계획이 실제로 들어가는 길은 [월간계획 전체 가져오기] 하나뿐이다 — 교시 한 칸 가져오기는 없앴다", () => {
+    expect(plan).toContain("export async function importPlannedRange");
+    expect(plan).not.toContain("export async function importPlannedSlot");
     const api = read("src", "features", "class-sheets", "components", "plan-api.ts");
-    expect(api).toContain("importPlannedSlot");
+    expect(api).not.toContain("importPlan");
     const table = read("src", "features", "class-sheets", "components", "plan-table.tsx");
-    expect(table).toContain("plan.fromPlan");
+    expect(table).not.toContain("plan.fromPlan");
+    expect(table).toContain("PlanCompareButton");
+    const month = read("src", "features", "class-sheets", "components", "month-client.tsx");
+    expect(month).toContain("importPlannedRange");
   });
 
   it("🔴 시트가 못 읽어도 죽지 않는다 — 0266a 미적용이면 빈 계획으로 돈다", () => {
