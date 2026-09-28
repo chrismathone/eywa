@@ -28,7 +28,7 @@ function isItemActive(href: string, pathname: string) {
  * **318px = 화면의 43%**를 먹어 정작 시간표 격자는 367px만 남았다. AppHeader를 이 바에 흡수해
  * 제목 1회 + 벨을 여기로 모았다(창=타이틀바가 제목인 것과 같은 규칙, `compact-chrome` 변형).
  *
- * ⚠️ 벨은 **`useIsDesktop()`으로 조건 마운트**한다 — 이 바는 데스크톱에서 CSS(`lg:pointer-fine:hidden`)로
+ * ⚠️ 벨은 **`useIsDesktop()`으로 조건 마운트**한다 — 이 바는 데스크톱에서 CSS(`desk:hidden`)로
  *    숨을 뿐 **마운트는 된다**. 사이드바 벨과 이중 마운트되면 폴링·OS 알림 팝업이 중복 발화한다.
  */
 export function MobileTopNav({

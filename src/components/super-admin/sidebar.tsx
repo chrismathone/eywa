@@ -18,7 +18,7 @@ import { SUPER_ADMIN_NAV, activeSuperAdminNav } from "./nav";
  * 🔑 '슈퍼관리자' 둘째 줄은 관리자뷰 사이드바의 '관리자뷰'와 **같은 자리·같은 모양**이다 — 지금 어느 화면인지를
  *    색이 아니라 글자로 말한다(색을 바꿔 구분하면 의미색 캐논이 깨진다).
  * ⚠️ 폭 216px = 관리자뷰 사이드바 기본 폭. 이메일은 한 줄 말줄임 + `title`로 전체.
- * ⚠️ 데스크톱(≥lg + 마우스)에서만 보인다 — 조건은 레이아웃의 `lg:pointer-fine:`(앱 셸과 같은 축).
+ * ⚠️ 데스크톱(≥1240 + 마우스, `desk:`)에서만 보인다 — 조건은 레이아웃의 `desk:`(앱 셸과 같은 축).
  */
 export function SuperAdminSidebar({
   email,
