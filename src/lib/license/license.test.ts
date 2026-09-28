@@ -84,6 +84,13 @@ describe("라이선스 배선 가드", () => {
       ]),
     );
     expect(consumersOf("kakao_messaging")).toContain("src/lib/messaging/provider.ts");
+    expect(consumersOf("jandi")).toEqual(
+      expect.arrayContaining([
+        "src/features/jandi/server/forward.ts",
+        "src/features/jandi/server/actions.ts",
+        "src/features/jandi/server/queries.ts",
+      ]),
+    );
     expect(consumersOf("todays_math")).toEqual(
       expect.arrayContaining([
         "src/features/connected-apps/server/visible.ts",

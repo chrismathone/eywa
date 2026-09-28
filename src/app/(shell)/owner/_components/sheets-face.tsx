@@ -54,7 +54,7 @@ export async function SheetsFace({
   if (!makeeduOn && !sheetsOn) {
     return (
       <div className="bg-card shadow-card w-full rounded-2xl p-6">
-        <p className="text-foreground text-sm font-bold">이 학원은 외부 연동을 쓰지 않습니다</p>
+        <p className="text-foreground text-sm font-bold">이 학원은 makeedu·구글 시트 연동을 쓰지 않습니다</p>
         <p className="text-text-dim mt-1 text-sm">
           makeedu 동기화·구글 시트 시간표 연동은 학원 설정의 &lsquo;기능&rsquo; 면에서 켤 수 있습니다.
         </p>

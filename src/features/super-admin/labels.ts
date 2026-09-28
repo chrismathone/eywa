@@ -87,6 +87,9 @@ export const TOGGLE_FEATURES = [
   // 연결 앱 — 켠 지점만 왼쪽 '연결 앱'에 바로가기가 서고, 오늘의 수학이 당겨 가는 명단·진도 API도 이 스위치를 본다
   // (원장 2026-09-26). 읽는 곳 = (shell)/layout.tsx · api/integrations/todays-math/*. 목록 = features/connected-apps.
   { key: "todays_math", label: "오늘의 수학 연결", defaultOn: false },
+  // 잔디 알림 — 켠 지점만 학원 설정 '연동' 면에 잔디 카드가 서고, aywa 알림을 잔디 방으로 보낸다(원장 2026-09-28).
+  // 학생 이름 등이 외부 메신저로 나가므로 기본 꺼짐. 읽는 곳 = features/jandi/server/{forward,actions,queries}.ts.
+  { key: "jandi", label: "잔디 알림 연결", defaultOn: false },
 ] as const;
 
 export function featureLabel(key: unknown): string {

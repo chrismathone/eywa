@@ -26,6 +26,7 @@ import {
   CONSULTATION_CATEGORY_LABEL,
 } from "@/features/consultations/labels";
 import { meetingReportSectionLabel } from "@/features/meetings/report-sections";
+import { jandiEventLabel } from "@/features/jandi/events";
 import {
   TEXTBOOK_CHECK_LABEL,
   describeTextbookChanges,
@@ -493,6 +494,17 @@ export function auditDetail(
     }
     case "integration_sync_now":
       return "지금 동기화 실행";
+    case "jandi_webhook_update": {
+      // 웹훅 주소(비밀)는 애초에 metadata에 없다 — 바뀌었는지와 고른 알림 종류만 한글로.
+      const types = arr(m.eventTypes).map(str).filter((v): v is string => !!v);
+      const names = types.slice(0, 3).map(jandiEventLabel).join(", ");
+      const list = types.length ? `알림 ${types.length}종 (${names}${types.length > 3 ? " 외" : ""})` : "보낼 알림 없음";
+      return m.urlChanged === true ? `주소 변경 · ${list}` : list;
+    }
+    case "jandi_webhook_disconnect":
+      return "연결 해제";
+    case "jandi_webhook_test":
+      return m.ok === true ? "확인 메시지 보냄" : "확인 메시지 실패";
     case "makeedu_paid_recovery": {
       const count = num(m.count);
       return count === null ? "수납 입력값 복구" : `수납 ${count}건 복구 · 환불·확정·배분값 보존`;
