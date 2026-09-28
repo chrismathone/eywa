@@ -57,6 +57,7 @@ export async function startSlackSelfLink(slackEmail: string): Promise<{ error?: 
     `*aywa 계정 연결 코드: ${code}*\n10분 안에 aywa '내 정보'의 슬랙 연결 칸에 넣어 주세요. 직접 요청하지 않았다면 무시하세요.`,
   );
   if (!sent.ok) return { error: describeSlackError(sent.error) };
+  await logAction({ action: "slack_link_code_request", targetType: "integration", targetLabel: "내 슬랙 계정" });
   return { message: "슬랙 1:1(aywa 앱)로 6자리 코드를 보냈습니다" };
 }
 

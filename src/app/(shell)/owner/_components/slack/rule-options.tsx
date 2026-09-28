@@ -6,7 +6,7 @@ import { ChipField } from "./chip-field";
 
 /**
  * 규칙의 모양·시점·제외 — 고른 값은 **반전(학원색 채움)**으로 보인다(원장 2026-09-28 *"체크로 하니 못알아보겠음. 반전"*).
- * ⚠️ @here·@channel은 채널 사람 전원에게 알림이 울린다 — 기본은 꺼짐, 켜면 경고 문구.
+ * ⚠️ 채널 알림 울림(@here·@channel)은 기본 꺼짐. 화면엔 슬랙 용어 대신 풀어 쓴 말만(원장 2026-09-28).
  */
 type Patch = (p: Partial<SlackRule>) => void;
 
@@ -27,17 +27,18 @@ export function RuleOptions({ rule, patch, staff }: { rule: SlackRule; patch: Pa
           <ToolbarSegmentItem active={rule.template === "short"} onClick={() => patch({ template: "short" })}>짧게</ToolbarSegmentItem>
           <ToolbarSegmentItem active={rule.template === "detailed"} onClick={() => patch({ template: "detailed" })}>자세히</ToolbarSegmentItem>
         </ToolbarSegment>
-        <ToolbarSegment label="호출">
-          <ToolbarSegmentItem active={rule.ping === "none"} onClick={() => patch({ ping: "none" })}>없음</ToolbarSegmentItem>
-          <ToolbarSegmentItem active={rule.ping === "here"} onClick={() => patch({ ping: "here" })}>@here</ToolbarSegmentItem>
-          <ToolbarSegmentItem active={rule.ping === "channel"} onClick={() => patch({ ping: "channel" })}>@channel</ToolbarSegmentItem>
+        {/* 슬랙 용어(@here·@channel)는 화면에 내지 않는다 — 원장 2026-09-28 *"슬랙 초보는 몰라. 그냥 풀어쓰고"*. 보낼 땐 그대로 쓴다. */}
+        <ToolbarSegment label="채널 알림 울림" title="채널 메시지를 올릴 때 사람들 슬랙에서 알림이 울리게 할지">
+          <ToolbarSegmentItem active={rule.ping === "none"} onClick={() => patch({ ping: "none" })}>울리지 않음</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={rule.ping === "here"} onClick={() => patch({ ping: "here" })}>지금 슬랙 켜 둔 사람만</ToolbarSegmentItem>
+          <ToolbarSegmentItem active={rule.ping === "channel"} onClick={() => patch({ ping: "channel" })}>채널 사람 모두</ToolbarSegmentItem>
         </ToolbarSegment>
         {rule.source === "notification" ? (
-          <ToolbarChip active={rule.mentionRecipients} onClick={() => patch({ mentionRecipients: !rule.mentionRecipients })} title="채널 메시지에서 받는 사람을 @이름으로 불러 슬랙 알림이 울리게(슬랙 계정이 연결된 사람만)">
-            받는 사람 @멘션
+          <ToolbarChip active={rule.mentionRecipients} onClick={() => patch({ mentionRecipients: !rule.mentionRecipients })} title="채널 메시지에 받는 사람 이름을 불러, 그 사람 슬랙에서 알림이 울리게(슬랙 계정이 연결된 사람만)">
+            받는 사람 이름 불러서 울리기
           </ToolbarChip>
         ) : null}
-        {rule.ping !== "none" ? <span className="text-danger text-sm">채널 사람 전원에게 알림이 울립니다</span> : null}
+        {rule.ping !== "none" ? <span className="text-danger text-sm">자주 오는 알림에 켜면 피로해집니다 — 급한 것에만</span> : null}
       </Row>
       <Row label="언제">
         <ToolbarSegment>

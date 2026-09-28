@@ -45,7 +45,7 @@ export function PeopleSection() {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-foreground text-sm font-bold">사람 연결</p>
-        <span className="text-text-dim text-xs">1:1과 @멘션은 슬랙 계정이 연결된 사람에게만 갑니다. 직원은 &lsquo;내 정보&rsquo;에서 직접 연결할 수도 있습니다.</span>
+        <span className="text-text-dim text-xs">1:1 메시지와 이름 불러 울리기는 슬랙 계정이 연결된 사람에게만 됩니다. 직원은 &lsquo;내 정보&rsquo;에서 직접 연결할 수도 있습니다.</span>
         <Button variant="outline" onClick={load} disabled={pending} className="ml-auto">
           {rows ? "다시 불러오기" : "직원 목록 불러오기"}
         </Button>

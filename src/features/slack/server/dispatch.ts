@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureOptedIn } from "@/lib/license/server";
+import { logActionAs } from "@/features/audit/server/log";
 import { reportError } from "@/lib/observability/report-error";
 import { deliverDue } from "./deliver";
 import { expandInbox } from "./expand";
@@ -61,6 +62,13 @@ export async function drainTenant(tenantId: string): Promise<{ expanded: number;
       })
       .eq("tenant_id", tenantId)
       .eq("lease_id", leaseId);
+    // 사람이 아니라 발송기가 연결을 '끊김'으로 바꾼 것 — 감사로그에 시스템 행위자로 남긴다(원장 "감사로그도 잘 배선").
+    if (errorCode && errorCode !== "drain_failed") {
+      await logActionAs(
+        { tenantId, actorName: "system:slack-dispatch" },
+        { action: "slack_connection_broken", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { code: errorCode } },
+      );
+    }
   }
   return { expanded, sent };
 }

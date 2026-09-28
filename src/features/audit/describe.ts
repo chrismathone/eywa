@@ -241,6 +241,8 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "backfill-math-auto-units": "수학 출석 시수 자동값 보정",
   // 주간 cron(/api/cron/ment-style-rebuild) — 세션이 없어 logActionAs로 남긴다.
   "ment-style-rebuild": "강사 말투 주간 갱신",
+  // 슬랙 발송기(/api/cron/slack-dispatch · 응답 뒤 poke) — 토큰이 죽어 연결을 '끊김'으로 바꿀 때.
+  "slack-dispatch": "슬랙 발송기",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -521,6 +523,8 @@ export function auditDetail(
         m.timing === "digest" ? "요약으로만" : null,
       );
     }
+    case "slack_connection_broken":
+      return m.code === "missing_scope" ? "앱 권한 부족 — 권한 추가 후 새 토큰 필요" : "토큰이 거절됨 — 새 토큰 필요";
     case "slack_link_owner": {
       const n = num(m.count);
       return n === null ? "이메일 일치 후보 연결" : `이메일 일치 후보 ${n}명 연결`;

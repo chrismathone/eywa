@@ -35,7 +35,7 @@ export function SlackLinkCard({ linked, email }: { linked: "code" | "owner_email
     <section className="bg-card shadow-card space-y-3 rounded-2xl p-5" aria-label="내 슬랙 연결">
       <div>
         <h3 className="text-foreground text-sm font-bold">내 슬랙 연결</h3>
-        <p className="text-text-dim mt-1 text-xs">연결하면 학원이 정한 알림이 슬랙 1:1로도 오고, 채널에서 내 이름이 @멘션됩니다.</p>
+        <p className="text-text-dim mt-1 text-xs">연결하면 학원이 정한 알림이 슬랙 1:1로도 오고, 채널 메시지에서 내 이름이 불리면 알림이 울립니다.</p>
       </div>
       {linked === "code" ? (
         <div className="flex flex-wrap items-center gap-2 text-sm">
