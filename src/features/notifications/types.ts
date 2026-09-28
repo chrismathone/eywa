@@ -52,7 +52,9 @@ export type NotificationType =
   // 결재 문서에 댓글(0227a) — 기안자·결재선에게(작성자 제외). 전결 사유 등 공유가 목적이라 참조는 제외.
   | "approval_comment"
   | "help_question"
-  | "help_answer";
+  | "help_answer"
+  // 고객센터 개선요청(0294a) — 슈퍼관리자가 처리상태를 바꾸거나 답변을 달면 요청자에게.
+  | "support_answer";
 
 export type NotificationItem = {
   id: string;
@@ -93,4 +95,5 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   approval_comment: "message",
   help_question: "help",
   help_answer: "help",
+  support_answer: "mail",
 };

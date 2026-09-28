@@ -96,8 +96,8 @@ export async function setOnboardingCheck(input: {
         : "체크를 저장하지 못했습니다 — 다시 시도해 주세요",
     };
   }
-  // 손으로 바꾼 칸은 더 이상 "상담으로 한 체크"가 아니다(0294a) — 연결을 끊어야 그 상담을 지우거나 고칠 때
-  // 이 손 체크가 함께 풀리지 않는다. 컬럼이 아직 없으면(0294a 전) 끊을 연결도 없다 — 오류는 무시한다.
+  // 손으로 바꾼 칸은 더 이상 "상담으로 한 체크"가 아니다(0295a) — 연결을 끊어야 그 상담을 지우거나 고칠 때
+  // 이 손 체크가 함께 풀리지 않는다. 컬럼이 아직 없으면(0295a 전) 끊을 연결도 없다 — 오류는 무시한다.
   const unlinked = await admin
     .from("student_onboarding_checks")
     .update({ consultation_id: null })
@@ -106,7 +106,7 @@ export async function setOnboardingCheck(input: {
     .eq("subject", storedSubject)
     .eq("item_key", input.itemKey)
     .not("consultation_id", "is", null);
-  // 컬럼 부재(0294a 전)만 조용히 넘긴다 — 다른 실패는 남겨야 "상담을 지웠더니 손 체크가 풀렸다"를 되짚는다.
+  // 컬럼 부재(0295a 전)만 조용히 넘긴다 — 다른 실패는 남겨야 "상담을 지웠더니 손 체크가 풀렸다"를 되짚는다.
   if (unlinked.error && !/consultation_id/i.test(unlinked.error.message))
     console.error("[newcomers] clear consultation link:", unlinked.error.message);
 

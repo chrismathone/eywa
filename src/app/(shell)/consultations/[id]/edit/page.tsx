@@ -26,7 +26,7 @@ export default async function EditConsultationPage({
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
     getTenantSettings(),
-    // 신규생 관리 칸(0294a) — 못 읽어도 상담 수정은 된다(칸만 안 뜬다).
+    // 신규생 관리 칸(0295a) — 못 읽어도 상담 수정은 된다(칸만 안 뜬다).
     getNewcomerLinkTargets(id).catch(() => []),
   ]);
   if (!item) notFound();

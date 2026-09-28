@@ -16,6 +16,9 @@ import { isOffGoalLine, type MonthGoalMap } from "../lib/goal-match";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { SHEET_BOX_FRAME } from "../ui-box";
 import type { ClassSheetMonthData } from "../server/month-queries";
+import { compareCell } from "@/features/textbooks/plan-compare";
+import { getSlotPlanCompare } from "@/features/textbooks/server/compare-actions";
+import { PlanCompareButton } from "./plan-compare-dialog";
 
 
 /**
@@ -237,6 +240,17 @@ function DayCell({
         const planned = data.plannedBySlot[cellKey] ?? [];
         // 회차 미루기·당기기(0282a) — 표식이 걸린 칸은 계획이 비거나(미루기) 다음 차수가 온다(당기기).
         const shift = data.shiftBySlot[cellKey] ?? null;
+        // 🔑 원래 계획 ↔ 실제 판정(원장 2026-09-28) — 칩에 판정을 적어 **열지 않아도** 보이게 한다.
+        //    평시 줄만 견준다(배정은 평시 축뿐). 판정은 plan-compare 단일 소스(현황 페이지와 같은 답).
+        const verdict =
+          planned.length > 0
+            ? compareCell({
+                baseline: planned,
+                actual: lines.filter((l) => l.termMode === "regular"),
+                lessonIndex: data.lessonIndex,
+                isFuture: date > data.today,
+              })
+            : null;
         return (
           <div key={slot.slotStart} className="border-line-faint grid grid-cols-[46px_minmax(0,1fr)] gap-1.5 border-t border-dashed pt-1 first:border-0 first:pt-0">
             <span
@@ -248,6 +262,16 @@ function DayCell({
               {seat ? <span className="block">{slot.seat}</span> : null}
             </span>
             <div className="flex min-w-0 flex-col gap-0.5">
+              {verdict ? (
+                <PlanCompareButton
+                  inButton
+                  size="sm"
+                  date={date}
+                  slotStart={slot.slotStart}
+                  known={verdict}
+                  load={() => getSlotPlanCompare({ classId: data.classId, date, slotStart: slot.slotStart })}
+                />
+              ) : null}
               {lines.length === 0 ? (
                 <>
                   {/* 🔴 휴일엔 '미작성'이라 부르지 않는다 — 안 쓴 게 아니라 쓸 의무가 없던 것이다(앰버=재촉). */}
@@ -261,7 +285,7 @@ function DayCell({
                   </span>
                   {/* 🔴 **월간계획은 실제가 아니다**(원장 2026-09-22) — 아직 안 쓴 칸에만, 무채색으로,
                       `계획` 표식을 달아 보여 준다. 실제가 한 줄이라도 있으면 안 그린다(이미 한 수업이다).
-                      강사는 시트에서 [월간계획 가져오기]로 이걸 옮긴 뒤 고쳐 쓴다. */}
+                      강사는 월간 화면의 [월간계획 전체 가져오기]로 이걸(일정) 옮긴 뒤 고쳐 쓴다. */}
                   {/* 🔴 **회차 미루기·당기기**(원장 2026-09-22 *"수업 회차를 한주 미루거나 당기거나 …
                       미루면 차수 무시하고 수업내용 기입해서"*) — 계획이 파생값이라 이 표식 한 줄이 앞으로를
                       통째로 바꾼다. **실제 줄은 안 건드린다**(이미 적은 진도는 그대로) → 눌러도 잃을 게 없고

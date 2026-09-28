@@ -1,4 +1,4 @@
--- 0294a — 신규생 체크 ↔ 원생상담 연결 (반자동)
+-- 0295a — 신규생 체크 ↔ 원생상담 연결 (반자동)
 --
 -- 원장 2026-09-28: *"사용자가 상담 등록할때, 학생을 지정할거 아냐? 그럼 지정된 학생이 90일 관리 학생이면
 -- 자동연동되는 방향이 낫겟다. 반자동으로"* → 상담 등록·수정 화면에서 그 학생이 신규생이면 '신규생 관리'
@@ -18,7 +18,7 @@ alter table public.student_onboarding_checks
     references public.student_consultations(id) on delete set null;
 
 comment on column public.student_onboarding_checks.consultation_id is
-  '이 체크를 만든 원생상담(0294a) — 상담 등록·수정 화면에서 신규생 관리 칸을 고른 경우. 손 체크는 null.';
+  '이 체크를 만든 원생상담(0295a) — 상담 등록·수정 화면에서 신규생 관리 칸을 고른 경우. 손 체크는 null.';
 
 -- 상담 수정·삭제가 "이 상담으로 한 체크"를 찾는다.
 create index if not exists student_onboarding_checks_consultation_idx

@@ -223,7 +223,7 @@ function readConsultationForm(formData: FormData) {
 }
 
 /**
- * 신규생 관리 칸(0294a 반자동) — 폼이 **그린 과목 줄마다** `newcomerLinkRow`(과목 키, 과목 무관 = 빈 값)가 온다.
+ * 신규생 관리 칸(0295a 반자동) — 폼이 **그린 과목 줄마다** `newcomerLinkRow`(과목 키, 과목 무관 = 빈 값)가 온다.
  * 안 그린 줄의 연결은 건드리지 않는다(신규생이 아닌 학생·그만둔 과목의 옛 연결이 풀리면 안 된다).
  */
 function readNewcomerLinks(formData: FormData) {

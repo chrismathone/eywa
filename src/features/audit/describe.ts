@@ -109,6 +109,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   textbook: "교재",
   help_post: "도움말 질문",
   help_answer: "도움말 답변",
+  support_request: "개선요청",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -791,7 +792,7 @@ export function auditDetail(
     case "newcomer_uncheck": {
       // 항목 이름은 신규생 체크리스트 정의가 단일 소스 — 여기 라벨을 다시 적으면 항목을 바꿀 때 갈린다.
       const item = ONBOARDING_ITEMS.find((i) => i.key === str(m.itemKey));
-      // 상담 등록·수정 화면에서 고른 체크(0294a 반자동)는 그 사실을 적는다 — 손 체크와 구별돼야 되짚을 수 있다.
+      // 상담 등록·수정 화면에서 고른 체크(0295a 반자동)는 그 사실을 적는다 — 손 체크와 구별돼야 되짚을 수 있다.
       return join(
         ctx.nameOf(m.studentId),
         item?.label ?? str(m.itemKey),
@@ -1895,6 +1896,9 @@ export function auditDetail(
     case "help_post_delete":
     case "help_post_close":
     case "help_answer_create":
+    case "support_request_create":
+    case "support_request_update":
+    case "support_request_delete":
       return str(m.title) ?? null;
 
     case "demo_roster_apply": {

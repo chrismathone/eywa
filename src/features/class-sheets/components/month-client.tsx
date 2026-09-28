@@ -10,7 +10,7 @@ import { PeriodNav } from "@/components/period-nav";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { offGoalCountByDate } from "../lib/goal-match";
 import { setMyEcsMonthDisplay, setMyEcsMonthPeriod, setMyEcsMonthView } from "../server/actions";
-import { setLessonShift } from "@/features/textbooks/server/plan-actions";
+import { importPlannedRange, setLessonShift } from "@/features/textbooks/server/plan-actions";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { sheetMonthLabel } from "@/features/teacher-view/i18n";
 import { classNameFor } from "@/features/teacher-view/class-name";
@@ -189,6 +189,29 @@ export function MonthClient({
   );
   const tf = useSheetTf();
   const lang = useSheetLang();
+  const [importing, setImporting] = useState(false);
+  /**
+   * 🔑 가져오기 전에 **저장 큐를 비운다**(flush) — 방금 친 글자가 큐에 남아 있으면 서버가 빈 칸으로 보고
+   *    계획을 채운 뒤, 뒤늦게 도착한 저장이 그걸 덮는다('내용 복사'와 같은 계약).
+   */
+  const importAll = () => {
+    setImporting(true);
+    void flushEdits()
+      .then(() => importPlannedRange({ classId: data.classId, from: data.period.start, to: data.period.end }))
+      .then((r) => {
+        if (!r.ok) {
+          toast.error(r.error);
+          return;
+        }
+        // 🔴 "가져왔다"고만 말하지 않는다 — 빈 칸이 없어 아무것도 안 바뀐 경우가 흔하다.
+        const touched = r.result.added + r.result.filled;
+        const tail = r.result.truncated > 0 ? tf("month.importAll.truncated", { n: r.result.truncated }) : "";
+        if (touched === 0) toast.info(t("month.importAll.none") + tail);
+        else toast.success(tf("month.importAll.done", { n: touched }) + tail);
+        router.refresh();
+      })
+      .finally(() => setImporting(false));
+  };
   // 반 이름·월 라벨은 화면 언어를 따른다(상단 바·창 제목이 같은 값을 봐야 갈리지 않는다).
   const shownClassName = classNameFor(data.className, lang);
   const shownMonthLabel = sheetMonthLabel(data.month, data.monthLabel, lang);
@@ -343,6 +366,20 @@ export function MonthClient({
               title={t("fill.open.title")}
             >
               {t("fill.open")}
+            </button>
+          ) : null}
+          {/* 월간계획 전체 가져오기(원장 2026-09-28 *"선생님이 월간계획 전체가져오기 기능 추가"*) — 이 화면이
+              그린 기간(달력월 또는 세션)의 **일정**(미루기 반영)을 실제 빈 칸에 한 번에 넣는다.
+              🔴 교시 한 칸 가져오기는 없앴다 — 계획이 실제에 들어가는 길은 이 버튼 하나다. */}
+          {data.canEdit && textbooksOn ? (
+            <button
+              type="button"
+              disabled={importing}
+              onClick={importAll}
+              className={`${sheetPill(false)} inline-flex items-center gap-1 disabled:opacity-60`}
+              title={t("month.importAll.title")}
+            >
+              {importing ? t("month.importAll.busy") : t("month.importAll")}
             </button>
           ) : null}
           {view === "mp" ? (

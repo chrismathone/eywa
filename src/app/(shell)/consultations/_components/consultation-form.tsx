@@ -103,7 +103,7 @@ export function ConsultationForm({
   templates?: ConsultationTemplate[];
   /** 현재 로그인 사용자 표시명 — 상담사 "본인" 선택 시 {{담당}} 태그 치환값. */
   currentUserName?: string;
-  /** 90일 관리 신규생(0294a 반자동) — 고른 학생이 여기 있으면 '신규생 관리' 칸을 그린다. */
+  /** 90일 관리 신규생(0295a 반자동) — 고른 학생이 여기 있으면 '신규생 관리' 칸을 그린다. */
   newcomerTargets?: NewcomerLinkTarget[];
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;

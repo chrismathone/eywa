@@ -46,6 +46,7 @@ import { isMeaningfulPlanLine } from "../lib/plan-codec";
 import { planLineFromRow } from "../lib/plan-line";
 import type { PlanLineDTO } from "./actions";
 import { getClassPlannedLines, type PlannedLine } from "@/features/textbooks/server/month-plan";
+import type { LessonIndex } from "@/features/textbooks/plan-compare";
 import { requireEcsClassAccess } from "./access";
 import type { DowKey } from "../lib/week";
 
@@ -91,11 +92,13 @@ export type ClassSheetMonthData = {
   /** `YYYY-MM-DD|HH:MM` → 그 교시의 계획 줄(line_no 순). */
   linesBySlot: Record<string, MonthPlanLine[]>;
   /**
-   * **월간계획**(교재 배정에서 계산) — `"날짜|교시"` → 그 칸에 오기로 된 차수(원장 2026-09-22).
+   * **원래 월간계획**(교재 배정에서 계산, 미루기 미반영) — `"날짜|교시"` → 그 칸에 오기로 된 차수(원장 2026-09-22·28).
    * 🔴 **실제가 아니다.** 실제는 위 `linesBySlot` 하나뿐이고, 계획이 거기 들어가는 길은 시트의
    *    [월간계획 가져오기]뿐이다. 그래서 달력은 둘을 **다른 자리에 다른 색**으로 그린다.
    */
   plannedBySlot: Record<string, PlannedLine[]>;
+  /** 배정 교재들의 차수표 — 실제 진도 → 차수(달력 비교 배지의 늦음·빠름, plan-compare). */
+  lessonIndex: LessonIndex;
   /** 미루기·당기기 표식(0282a) — `"날짜|교시"` → `skip` | `advance`. 달력의 토글 상태다. */
   shiftBySlot: Record<string, "skip" | "advance">;
   /** 계획 줄 전체(평면) — 경고 판정·목표 대조가 날짜를 넘나들며 쓴다. */
@@ -537,7 +540,10 @@ export async function getClassSheetMonth(
       weeks: rangeWeeks(from, to),
       slotsByDate,
       linesBySlot,
-      plannedBySlot: plannedRes.byCell,
+      // 🔑 **원래 계획**을 싣는다(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — 미루기는 가져오기(일정)에만
+      //    반영되고 달력의 '계획' 표식·비교 배지는 처음 배정한 그대로를 기준으로 선다.
+      plannedBySlot: plannedRes.baselineByCell,
+      lessonIndex: plannedRes.lessonIndex,
       shiftBySlot: plannedRes.shiftByCell,
       lines,
       periodLabelBySlot,

@@ -29,12 +29,11 @@ import type { PlanCopyResult, PlanLinesResult, PlanPatchesResult } from "../serv
 export type PlanSlotRef = { classId: string; planDate: string; slotStart: string };
 
 import {
-  importPlannedSlot,
   setLessonShift,
-  type ImportPlannedResult,
   type LessonShiftKind,
   type LessonShiftResult,
 } from "@/features/textbooks/server/plan-actions";
+import { getSlotPlanCompare, type SlotCompareResult } from "@/features/textbooks/server/compare-actions";
 
 export type PlanWriteApi = {
   flushPatches: (ref: PlanSlotRef, patches: unknown) => Promise<PlanPatchesResult>;
@@ -46,13 +45,15 @@ export type PlanWriteApi = {
   deleteLine: (ref: PlanSlotRef, input: { lineId: string }) => Promise<PlanLinesResult>;
   copySlot: (ref: PlanSlotRef, input: { termMode: "regular" | "exam" }) => Promise<PlanCopyResult>;
   /**
-   * **월간계획 가져오기**(원장 2026-09-22) — 그 칸에 오기로 된 계획(교재·차수)을 실제 줄로 옮긴다.
+   * **계획 비교**(원장 2026-09-28) — 그 칸의 원래 월간계획 ↔ 실제를 모달로 견준다(읽기 전용).
    * ⚠️ **선택**이다 — 비로그인 자리 PIN 화면(`/seat/jj`)은 세션이 없어 교재 배정을 읽을 수 없다.
    *    문이 이 메서드를 안 내면 표가 버튼을 아예 안 그린다(없는 기능을 회색으로 보여 주지 않는다).
+   * 🔴 옛 **[월간계획 가져오기](교시 한 칸)는 없앴다**(원장 2026-09-28 *"한주씩 가져오는건 필요없음"*) —
+   *    가져오기는 월간 화면의 [월간계획 전체 가져오기] 하나뿐이다.
    */
-  importPlan?: (ref: PlanSlotRef) => Promise<ImportPlannedResult>;
+  comparePlan?: (ref: PlanSlotRef) => Promise<SlotCompareResult>;
   /**
-   * **회차 미루기·당기기**(0282a) — 그 칸에서 차수를 건너뛸지/버릴지. `importPlan`과 같은 이유로 선택이다.
+   * **회차 미루기·당기기**(0282a) — 그 칸에서 차수를 건너뛸지/버릴지. `comparePlan`과 같은 이유로 선택이다.
    */
   setShift?: (ref: PlanSlotRef, kind: LessonShiftKind | null) => Promise<LessonShiftResult>;
   /**
@@ -83,8 +84,8 @@ export const ECS_PLAN_API: PlanWriteApi = {
       slotStart: ref.slotStart,
       termMode: input.termMode,
     }),
-  importPlan: (ref) =>
-    importPlannedSlot({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart }),
+  comparePlan: (ref) =>
+    getSlotPlanCompare({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart }),
   setShift: (ref, kind) =>
     setLessonShift({ classId: ref.classId, date: ref.planDate, slotStart: ref.slotStart, kind }),
   commitEdits: (ref, edits) => commitSheetEdits({ classId: ref.classId, edits }),

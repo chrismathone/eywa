@@ -11,7 +11,7 @@ import { CONSULT_LINK_ITEM_KEYS, type NewcomerLinkTarget } from "../consult-link
 import { getNewcomers } from "./queries";
 
 /**
- * 상담 → 신규생 체크 **반자동 연결**의 조회·쓰기(0294a). 규칙은 [`consult-link.ts`](../consult-link.ts).
+ * 상담 → 신규생 체크 **반자동 연결**의 조회·쓰기(0295a). 규칙은 [`consult-link.ts`](../consult-link.ts).
  *
  * ⚠️ 이 파일은 `"use server"`가 아니다([[#119]]) — 원생상담 서버 액션이 import하는 헬퍼다.
  * 🔴 권한: 연결은 **그 상담을 쓸 수 있는 사람**이면 한다 — 상담 저장 게이트(담당 범위 포함)를 이미 지난 뒤에만
@@ -20,7 +20,7 @@ import { getNewcomers } from "./queries";
  * 🔴 쓰기는 admin 클라이언트다(0251a는 select 정책만 있다 — 세션 upsert는 RLS가 조용히 거부). admin은 RLS를
  *    우회하므로 모든 조회·쓰기에 `tenant_id`를 건다.
  * 🔴 **손 체크가 이긴다** — 다른 경로로 이미 완료된 칸은 덮어쓰지 않는다(데스크가 적은 날짜가 사실이다).
- * ⚠️ 0294a 미적용이면 `consultation_id`가 없다 — 그때는 연결 없이 체크만 한다([[#95]]). 되돌리기(수정·삭제)는
+ * ⚠️ 0295a 미적용이면 `consultation_id`가 없다 — 그때는 연결 없이 체크만 한다([[#95]]). 되돌리기(수정·삭제)는
  *    그 컬럼으로 찾으니 SQL 적용 전 체크는 상담을 지워도 남는다.
  */
 
@@ -44,7 +44,7 @@ export async function getNewcomerLinkTargets(consultationId?: string): Promise<N
       .from("student_onboarding_checks")
       .select("student_id, subject, item_key, done_on")
       .eq("consultation_id", consultationId);
-    // 컬럼이 아직 없으면(0294a 전) 연결된 것이 없는 것과 같다.
+    // 컬럼이 아직 없으면(0295a 전) 연결된 것이 없는 것과 같다.
     for (const r of error ? [] : (data ?? [])) {
       if (!r.done_on) continue;
       const k = `${r.student_id}|${r.subject ?? ""}`;
@@ -174,7 +174,7 @@ async function writeLinkedCheck(
     .maybeSingle();
   if (curErr && !isMissingColumn(curErr.message)) throw new Error(curErr.message);
   if (curErr) {
-    // 0294a 전 — 연결 칸이 없다. 비어 있는 칸만 채운다(연결 없이 체크만, [[#95]]).
+    // 0295a 전 — 연결 칸이 없다. 비어 있는 칸만 채운다(연결 없이 체크만, [[#95]]).
     const { data: inserted, error } = await admin
       .from("student_onboarding_checks")
       .upsert(

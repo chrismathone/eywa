@@ -42,7 +42,7 @@ describe("② 쓰기 — 과목별로 저장하고, 0256a 전에는 옛 모양�
 
   it("🔴 화면이 보낸 과목을 서버가 다시 확인한다([[#77]]) — 키 모양 + 그 학생이 실제로 듣는 과목", () => {
     expect(ACTIONS).toContain("isSubjectKey(subject)");
-    // 확인은 상담 연결(0294a)과 같은 헬퍼다 — 두 쓰기 경로가 따로 구현하면 한쪽만 고쳐진다.
+    // 확인은 상담 연결(0295a)과 같은 헬퍼다 — 두 쓰기 경로가 따로 구현하면 한쪽만 고쳐진다.
     expect(ACTIONS).toContain("studentTakesSubject(admin, user.tenantId, input.studentId, subject)");
     const helper = strip(read("src", "features", "newcomers", "server", "consult-link.ts"));
     expect(helper).toContain('.from("enrollments")');
