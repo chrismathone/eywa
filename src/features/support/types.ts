@@ -30,13 +30,13 @@ export function asSupportStatus(v: unknown): SupportStatus {
 }
 
 /**
- * 작성자는 '접수' 상태이고 **한 번도 답변이 달린 적 없을 때만** 고친다 — 운영자가 읽기 시작한 글이 바뀌면 답이 엇나간다.
- * 🔴 상태만 보면 안 된다: 운영자는 '접수'로 둔 채 답변만 저장할 수 있다(그 뒤 본문이 바뀌면 답이 다른 질문에 붙는다).
- * 🔴 지금 답변 칸만 보면 안 된다: 답을 달았다 지워도 잠금은 그대로다(원장 2026-09-28 *"잠궈둬"*) — `answered_by`가 표식.
+ * 작성자는 **운영자가 한 번도 손대지 않은** 요청만 고친다 — 운영자가 읽기 시작한 글이 바뀌면 답이 엇나간다.
+ * 🔴 지금 상태·답변 칸만 보면 안 된다: 상태를 '접수'로 되돌리거나 답을 지워도 잠금은 그대로다
+ *    (원장 2026-09-28 *"잠궈둬"* · *"그것도 잠궈"*) — 표식 = `author_locked_at`(0296a 트리거가 한 번 찍고 안 지운다).
  * 작성자는 **지우지 못한다**(원장 2026-09-28 *"작성자가 지울 수 없게해"*) — 삭제 경로 자체가 없다.
  */
-export function canAuthorEditRequest(status: SupportStatus, everAnswered: boolean): boolean {
-  return status === "received" && !everAnswered;
+export function canAuthorEditRequest(status: SupportStatus, authorLocked: boolean): boolean {
+  return status === "received" && !authorLocked;
 }
 
 export type SupportRequestListItem = {
@@ -65,8 +65,8 @@ export type SupportRequestDetail = {
   dueDate: string | null;
   answer: string | null;
   answeredAt: string | null;
-  /** 답변이 한 번이라도 저장된 적 있나(지운 뒤에도 true) — 작성자 수정 잠금 판정. */
-  everAnswered: boolean;
+  /** 운영자가 한 번이라도 손댔나(상태 변경·답변 — 되돌려도 true) — 작성자 수정 잠금 판정. */
+  authorLocked: boolean;
   authorId: string;
   authorName: string;
   createdAt: string;

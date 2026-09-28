@@ -30,7 +30,7 @@ export default async function SupportRequestPage({ params }: { params: Promise<{
   }
   if (!loaded.item) notFound();
   const item = loaded.item;
-  const editable = canWrite && item.authorId === user.id && canAuthorEditRequest(item.status, item.everAnswered);
+  const editable = canWrite && item.authorId === user.id && canAuthorEditRequest(item.status, item.authorLocked);
 
   return (
     <div className="space-y-4">

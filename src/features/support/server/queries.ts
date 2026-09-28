@@ -63,7 +63,7 @@ export async function getSupportRequest(id: string): Promise<SupportLoad<Support
   const { data, error } = await supabase
     .from("support_requests")
     .select(
-      "id, tenant_id, title, body, contact_phone, contact_email, status, due_date, answer, answered_at, answered_by, author_id, created_at",
+      "id, tenant_id, title, body, contact_phone, contact_email, status, due_date, answer, answered_at, author_locked_at, author_id, created_at",
     )
     .eq("id", id)
     .maybeSingle();
@@ -146,7 +146,7 @@ export function toRequestDetail(r: Record<string, unknown>, authorName: string):
     dueDate: (r.due_date as string | null) ?? null,
     answer: (r.answer as string | null) ?? null,
     answeredAt: (r.answered_at as string | null) ?? null,
-    everAnswered: r.answered_by != null || Boolean(r.answer),
+    authorLocked: r.author_locked_at != null,
     authorId: r.author_id as string,
     authorName,
     createdAt: r.created_at as string,

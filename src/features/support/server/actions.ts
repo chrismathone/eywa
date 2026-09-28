@@ -57,7 +57,7 @@ export async function createSupportRequest(form: SupportRequestForm): Promise<Re
 }
 
 /**
- * 자기 글 · '접수' 상태 · 답변이 달린 적 없을 때만. 운영자가 읽기 시작하면 잠근다(답이 엇나가지 않게).
+ * 자기 글 · 운영자가 한 번도 손대지 않았을 때만(`author_locked_at`, 0296a 트리거가 찍는다). 운영자가 읽기 시작하면 잠근다(답이 엇나가지 않게).
  * 작성자 삭제는 없다(원장 2026-09-28) — 지울 일은 운영팀에 새 글로.
  */
 async function loadOwnEditable(requestId: string, verb: string) {
@@ -67,7 +67,7 @@ async function loadOwnEditable(requestId: string, verb: string) {
   const admin = createAdminClient();
   const { data: row, error } = await admin
     .from("support_requests")
-    .select("id, author_id, title, status, answer, answered_by")
+    .select("id, author_id, title, status, author_locked_at")
     .eq("id", requestId)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
@@ -77,7 +77,7 @@ async function loadOwnEditable(requestId: string, verb: string) {
   }
   if (!row) return { error: "글을 찾지 못했습니다" } as const;
   if (row.author_id !== user.id) return { error: `자기 글만 ${verb} 수 있습니다` } as const;
-  if (!canAuthorEditRequest(asSupportStatus(row.status), row.answered_by != null || Boolean(row.answer))) {
+  if (!canAuthorEditRequest(asSupportStatus(row.status), row.author_locked_at != null)) {
     return { error: `처리가 시작된 요청은 ${verb} 수 없습니다 — 새 글로 이어서 적어 주세요` } as const;
   }
   return { user, admin, row } as const;
@@ -96,7 +96,7 @@ export async function updateSupportRequest(requestId: string, form: SupportReque
     .eq("tenant_id", user.tenantId)
     .eq("status", "received")
     .is("answer", null)
-    .is("answered_by", null)
+    .is("author_locked_at", null)
     .select("id");
   if (error) return { error: "수정하지 못했습니다" };
   // 읽는 사이 운영자가 처리를 시작했으면 0행 — 저장된 척하지 않는다.
