@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { titleWithFileExtension } from "../file-name";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -84,9 +85,10 @@ export async function registerUploadedDocument(
 
   const path = String(formData.get("path") ?? "");
   if (!isTenantDocumentPath(path, gate.user.tenantId)) return { error: "잘못된 파일 경로입니다" };
-  const title = String(formData.get("title") ?? "").trim();
-  if (!title) return { error: "이름을 입력하세요" };
+  const rawTitle = String(formData.get("title") ?? "").trim();
+  if (!rawTitle) return { error: "이름을 입력하세요" };
   const fileName = String(formData.get("fileName") ?? "").trim() || null;
+  const title = titleWithFileExtension(rawTitle, fileName ?? path.split("/").pop() ?? null);
   const description = String(formData.get("description") ?? "").trim() || null;
   // 분류 검증은 스토리지 검증 전에 — 못 쓸 값이면 업로드된 객체를 여기서 바로 회수한다(고아 객체 방지).
   const cat = await parseCategory(formData.get("category"));
@@ -242,8 +244,20 @@ export async function updateDocument(
   const cat = await parseCategory(formData.get("category"));
   if ("error" in cat) return { error: cat.error };
 
+  const supabase = await createClient();
+  const { data: current, error: currentError } = await supabase
+    .from("academy_documents")
+    .select("kind, file_name, file_path")
+    .eq("id", id)
+    .eq("tenant_id", gate.user.tenantId)
+    .is("staff_user_id", null)
+    .maybeSingle();
+  if (currentError || !current) return { error: "문서를 찾을 수 없습니다" };
+  const savedTitle = current.kind === "file"
+    ? titleWithFileExtension(title, current.file_name ?? current.file_path?.split("/").pop() ?? null)
+    : title;
   const patch: Record<string, unknown> = {
-    title,
+    title: savedTitle,
     category: cat.category,
     description: String(formData.get("description") ?? "").trim() || null,
     updated_at: new Date().toISOString(),
@@ -259,7 +273,6 @@ export async function updateDocument(
     patch.link_url = link.url;
   }
 
-  const supabase = await createClient();
   // 직원 연결 문서(이력서·계약서)는 이 표면에서 조작 불가(#77) — 관리도 /staff 쪽 전용 액션으로만.
   const { data: updated, error } = await supabase
     .from("academy_documents")
@@ -274,7 +287,7 @@ export async function updateDocument(
     await logAction({
       action: "document_update",
       targetType: "document",
-      targetLabel: title,
+      targetLabel: savedTitle,
       metadata: {
         documentId: id,
         category: cat.category,
