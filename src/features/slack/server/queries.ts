@@ -14,7 +14,8 @@ import { loadConnection, loadLinks, loadRules } from "./store";
  *  · off = 슈퍼관리자 스위치가 꺼짐 → 카드를 세우지 않는다 · readonly = 원장·총괄이 아님 → 안내만
  * 상태 숫자는 **건수만 센다**(행을 끌어오지 않는다, B2).
  */
-export type SlackHealth = { pending: number; failedDay: number; notLinkedDay: number };
+/** 최근 48시간 포기(dead) 건을 원인별로 — 화면이 원인마다 해결법을 붙이고 '다시 보내기'를 연다. */
+export type SlackHealth = { pending: number; channelFail: number; notLinked: number; otherFail: number };
 export type SlackCardReady = {
   kind: "ready";
   connected: boolean;
@@ -81,15 +82,18 @@ async function staffOptions(tenantId: string): Promise<{ id: string; name: strin
 
 async function healthOf(tenantId: string): Promise<SlackHealth> {
   const admin = createAdminClient();
-  const day = new Date(Date.now() - 86_400_000).toISOString();
+  const since = new Date(Date.now() - 48 * 3_600_000).toISOString();
+  const CHANNEL_CODES = ["channel_not_found", "not_in_channel", "is_archived"];
   const count = (q: PromiseLike<{ count: number | null }>) => Promise.resolve(q).then((r) => r.count ?? 0).catch(() => 0);
   const base = () => admin.from("slack_outbox").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
-  const [pending, failedDay, notLinkedDay] = await Promise.all([
+  const dead = () => base().eq("status", "dead").gte("created_at", since);
+  const [pending, all, channelFail, notLinked] = await Promise.all([
     count(base().eq("status", "pending")),
-    count(base().eq("status", "dead").neq("last_error_code", "not_linked").gte("created_at", day)),
-    count(base().eq("status", "dead").eq("last_error_code", "not_linked").gte("created_at", day)),
+    count(dead()),
+    count(dead().in("last_error_code", CHANNEL_CODES)),
+    count(dead().eq("last_error_code", "not_linked")),
   ]);
-  return { pending, failedDay, notLinkedDay };
+  return { pending, channelFail, notLinked, otherFail: Math.max(0, all - channelFail - notLinked) };
 }
 
 /** '내 정보' 슬랙 카드 — 스위치가 꺼졌거나 학원 슬랙이 연결 전이면 null(카드를 안 세운다). */

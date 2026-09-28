@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { logAction } from "@/features/audit/server/log";
-import { checkSlackBotToken, describeSlackError } from "../format";
+import { checkSlackBotToken, describeSlackError, missingSlackScopes } from "../format";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { pokeSlack } from "./poke";
 import { normalizeTime } from "../rules";
 import { slackAuthTest, slackListChannels, type SlackChannel } from "./client";
 import { slackGate } from "./gate";
@@ -32,8 +34,18 @@ export async function saveSlackToken(rawToken: string): Promise<SlackActionResul
     last_error_at: null,
   });
   if (saved.error) return saved;
-  await logAction({ action: "slack_connection_token", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { team: auth.team } });
+  // 권한 헤더가 안 왔으면(드묾) 비교하지 않는다 — 전부 빠졌다고 잘못 경고하지 않게.
+  const missing = auth.scopes.length ? missingSlackScopes(auth.scopes) : [];
+  await logAction({ action: "slack_connection_token", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { team: auth.team, missingScopes: missing.length } });
   revalidatePath("/owner");
+  pokeSlack(g.tenantId); // 끊긴 동안 쌓인 것(0299a)을 바로 이어서 보낸다
+  // auth.test 성공은 토큰이 살아 있다는 뜻일 뿐 — 보낼 권한까지는 따로 본다(codex 2차).
+  if (missing.length) {
+    return {
+      message: `'${auth.team}' 워크스페이스에 연결했습니다`,
+      error: `슬랙 앱에 이 권한이 빠져 있습니다: ${missing.join(", ")} — 앱 설정(OAuth & Permissions)에서 추가하고 '다시 설치' 한 뒤 새 토큰을 저장해 주세요`,
+    };
+  }
   return { message: `'${auth.team}' 워크스페이스에 연결했습니다` };
 }
 
@@ -76,6 +88,31 @@ export async function saveSlackSchedule(input: SlackScheduleInput): Promise<Slac
   });
   revalidatePath("/owner");
   return { message: "발송 시간을 저장했습니다" };
+}
+
+/**
+ * 다시 보내기 — 최근 48시간 동안 포기(dead)된 발송을 다시 대기로. 채널 초대·사람 연결을 고친 뒤 누른다(codex 2차: "수정 후 재발송 수단").
+ * 1:1은 보내는 순간 연결을 다시 보므로, 그 사이 연결한 사람에게는 이번엔 간다.
+ */
+export async function resendSlackFailures(): Promise<SlackActionResult> {
+  const g = await slackGate();
+  if ("error" in g) return g;
+  const since = new Date(Date.now() - 48 * 3_600_000).toISOString();
+  const now = new Date().toISOString();
+  const { data, error } = await createAdminClient()
+    .from("slack_outbox")
+    .update({ status: "pending", attempt_count: 0, next_attempt_at: now, due_at: now, last_error_code: null })
+    .eq("tenant_id", g.tenantId)
+    .eq("status", "dead")
+    .gte("created_at", since)
+    .select("id");
+  if (error) return { error: "다시 보내지 못했습니다" };
+  const n = data?.length ?? 0;
+  if (n === 0) return { message: "다시 보낼 실패 건이 없습니다" };
+  await logAction({ action: "slack_resend", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { count: n } });
+  pokeSlack(g.tenantId);
+  revalidatePath("/owner");
+  return { message: `${n}건을 다시 보냅니다 — 1분 안에 나갑니다` };
 }
 
 export async function listSlackChannels(): Promise<{ channels?: SlackChannel[]; error?: string }> {

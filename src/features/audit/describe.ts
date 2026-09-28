@@ -523,6 +523,10 @@ export function auditDetail(
         m.timing === "digest" ? "요약으로만" : null,
       );
     }
+    case "slack_resend": {
+      const n = num(m.count);
+      return n === null ? "실패 건 다시 보내기" : `실패 ${n}건 다시 보내기`;
+    }
     case "slack_connection_broken":
       return m.code === "missing_scope" ? "앱 권한 부족 — 권한 추가 후 새 토큰 필요" : "토큰이 거절됨 — 새 토큰 필요";
     case "slack_link_owner": {

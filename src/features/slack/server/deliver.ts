@@ -2,7 +2,9 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SLACK_AGGREGATE_THRESHOLD, slackErrorKind } from "../format";
 import { renderAggregate, renderDigest } from "../render";
+import { isQuietAt, nextAwakeAt, type QuietConfig } from "../schedule";
 import { slackPostDm, slackPostMessage, type SlackFail } from "./client";
+import { loadLinks } from "./store";
 
 /**
  * 아웃박스 → 슬랙. 보낼 시각이 된 줄을 **대상별로 묶어** 보낸다.
@@ -10,19 +12,21 @@ import { slackPostDm, slackPostMessage, type SlackFail } from "./client";
  *  · digest_item: 한 곳의 몫을 요약 한 통(방해금지 동안 쌓인 것·요약만 규칙)
  * 실패 처리(format.ts `slackErrorKind`): 토큰 문제 = 연결 '끊김' + 중단 / 대상 문제 = 그 건 포기 /
  * 한도 = Retry-After 뒤 / 일시 오류 = 1·5·15·60분 백오프, 5번째 실패나 보낼 시각에서 하루 지난 건은 포기.
- * 예산: 한 번 실행에 최대 40통(Vercel 함수 시간·슬랙 한도) — 남은 건 다음 분에.
+ * 예산: 한 번 실행에 최대 40통 **그리고 `deadline`까지**(지점 리스보다 짧게 — 한 실행이 리스를 넘겨 다음 실행과 겹치면
+ * 같은 줄을 두 번 보낸다, codex 2차) — 남은 건 다음 분에.
+ * 1:1은 보내는 순간 **현재 연결을 다시 확인**한다 — 대기 중에 연결이 풀리면 안 보내고, 바뀌었으면 새 계정으로.
  */
 const MAX_POSTS = 40;
 const BACKOFF_MIN = [1, 5, 15, 60];
 const GIVE_UP_ATTEMPTS = 5;
 const GIVE_UP_AGE_MS = 24 * 60 * 60 * 1000;
 
-type Row = { id: string; target: { kind: string; channelId?: string; slackUserId?: string; ping?: string }; kind: string; body: string; group_label: string; created_at: string; due_at: string; attempt_count: number };
+type Row = { id: string; target: { kind: string; channelId?: string; slackUserId?: string; aywaUserId?: string; ping?: string; quiet?: boolean }; kind: string; body: string; group_label: string; created_at: string; due_at: string; attempt_count: number };
 type Ping = "none" | "here" | "channel";
 
 export type DeliverResult = { sent: number; authError: string | null };
 
-export async function deliverDue(tenantId: string, token: string, now: Date): Promise<DeliverResult> {
+export async function deliverDue(tenantId: string, token: string, now: Date, deadline: number, quiet: QuietConfig): Promise<DeliverResult> {
   const admin = createAdminClient();
   const nowIso = now.toISOString();
   const { data, error } = await admin
@@ -42,11 +46,19 @@ export async function deliverDue(tenantId: string, token: string, now: Date): Pr
     groups.set(k, [...(groups.get(k) ?? []), r]);
   }
 
+  const links = await loadLinks(tenantId);
   const dmCache = new Map<string, string>();
   let sent = 0;
   for (const rows of groups.values()) {
-    if (sent >= MAX_POSTS) break;
+    if (sent >= MAX_POSTS || Date.now() > deadline) break;
     const target = rows[0].target;
+    // 방해금지를 **보내는 순간에도** 본다 — 만들 때는 낮이었어도 재시도·밀림으로 밤에 나가려는 것은 아침 요약으로(grok 2차).
+    if (rows[0].kind === "message" && target.quiet && isQuietAt(now, quiet)) {
+      await update(tenantId, rows.map((r) => r.id), { kind: "digest_item", due_at: nextAwakeAt(now, quiet).toISOString() });
+      continue;
+    }
+    // 1:1 대상 재확인 — 연결표가 정본이다(대기 줄에 박힌 슬랙 id는 만든 때의 것).
+    const dmTo = target.kind === "dm" ? (target.aywaUserId ? links.get(target.aywaUserId)?.slackUserId ?? "" : target.slackUserId ?? "") : "";
     const ping = (target.ping as Ping) ?? "none";
     const items = rows.map((r) => ({ body: r.body, groupLabel: r.group_label, createdAt: new Date(r.created_at) }));
     const posts: { ids: string[]; text: string }[] =
@@ -57,12 +69,12 @@ export async function deliverDue(tenantId: string, token: string, now: Date): Pr
           : rows.map((r) => ({ ids: [r.id], text: r.body }));
 
     for (const p of posts) {
-      if (sent >= MAX_POSTS) break;
+      if (sent >= MAX_POSTS || Date.now() > deadline) break;
       const res =
         target.kind === "channel" && target.channelId
           ? await slackPostMessage(token, target.channelId, p.text)
-          : target.kind === "dm" && target.slackUserId
-            ? await slackPostDm(token, target.slackUserId, p.text, dmCache)
+          : target.kind === "dm" && dmTo
+            ? await slackPostDm(token, dmTo, p.text, dmCache)
             : ({ ok: false, error: "not_linked" } as SlackFail);
       if (res.ok) {
         sent++;

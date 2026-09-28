@@ -8,6 +8,22 @@ export const SLACK_AGGREGATE_THRESHOLD = 3;
 
 const TOKEN_RE = /^xoxb-[0-9A-Za-z-]{20,200}$/;
 
+/** 봇이 쓰는 권한 전부 — 토큰 저장 때 슬랙이 알려 주는 권한 목록과 비교해 빠진 것을 바로 알린다. */
+export const SLACK_REQUIRED_SCOPES = [
+  "chat:write",
+  "chat:write.public",
+  "channels:read",
+  "groups:read",
+  "im:write",
+  "users:read",
+  "users:read.email",
+] as const;
+
+export function missingSlackScopes(granted: readonly string[]): string[] {
+  const have = new Set(granted.map((s) => s.trim()));
+  return SLACK_REQUIRED_SCOPES.filter((s) => !have.has(s));
+}
+
 export type SlackTokenCheck = { ok: true; token: string } | { ok: false; error: string };
 
 export function checkSlackBotToken(raw: string): SlackTokenCheck {

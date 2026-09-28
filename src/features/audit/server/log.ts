@@ -26,6 +26,7 @@ export const AUDIT_ACTIONS = {
   slack_unlink: "슬랙 사람 연결 해제",
   slack_link_code_request: "슬랙 연결 코드 요청",
   slack_connection_broken: "슬랙 발송 중단(토큰 문제)",
+  slack_resend: "슬랙 실패 건 다시 보내기",
   makeedu_paid_recovery: "수납 동기화 오류 복구",
   sheets_sync_now: "구글 시트 내보내기 실행",
   intake_push_enqueue: "makeedu 상담 역동기화",

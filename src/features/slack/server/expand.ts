@@ -53,7 +53,8 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
       rule_id: rule.id,
       inbox_id: inboxId ?? null,
       dedupe_key: dedupe,
-      target: { ...target, ping: rule.ping },
+      // quiet = 이 규칙은 방해금지를 지킨다 — 보내는 순간에도 다시 본다(deliver).
+      target: { ...target, ping: rule.ping, quiet: rule.honorDnd && rule.timing === "immediate" },
       kind: d.kind,
       body: r.body,
       group_label: r.groupLabel,
@@ -86,10 +87,10 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
           push(rule, `n:${head.id}|${rule.id}|c:${t.channelId}`, inboxId, { kind: "channel", channelId: t.channelId }, renderNotification(ev, style, shown), head.created_at);
         } else if (t.kind === "recipient_dm") {
           for (const n of group) {
-            pushDm(push, rule, `n:${n.id}|${rule.id}|r`, inboxBySource.get(`notification:${n.id}`), links.get(n.recipient_id), renderNotification(ev, style), n.created_at);
+            pushDm(push, rule, `n:${n.id}|${rule.id}|r`, inboxBySource.get(`notification:${n.id}`), links, n.recipient_id, renderNotification(ev, style), n.created_at);
           }
         } else {
-          pushDm(push, rule, `n:${head.id}|${rule.id}|u:${t.userId}`, inboxId, links.get(t.userId), renderNotification(ev, style), head.created_at);
+          pushDm(push, rule, `n:${head.id}|${rule.id}|u:${t.userId}`, inboxId, links, t.userId, renderNotification(ev, style), head.created_at);
         }
       }
     }
@@ -107,7 +108,7 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
       const inboxId = inboxBySource.get(`activity:${a.id}`);
       for (const t of rule.targets) {
         if (t.kind === "channel") push(rule, `a:${a.id}|${rule.id}|c:${t.channelId}`, inboxId, { kind: "channel", channelId: t.channelId }, rendered, a.created_at);
-        else if (t.kind === "user_dm") pushDm(push, rule, `a:${a.id}|${rule.id}|u:${t.userId}`, inboxId, links.get(t.userId), rendered, a.created_at);
+        else if (t.kind === "user_dm") pushDm(push, rule, `a:${a.id}|${rule.id}|u:${t.userId}`, inboxId, links, t.userId, rendered, a.created_at);
       }
     }
   }
@@ -123,18 +124,23 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
   return inbox.length;
 }
 
-/** 1:1 — 연결 안 된 사람은 보내지 않고 '연결 안 됨'으로 남긴다(화면 상태에 드러난다). */
+/**
+ * 1:1 — 연결 안 된 사람은 보내지 않고 '연결 안 됨'으로 남긴다(화면 상태에 드러난다).
+ * 대상에 **aywa 사용자 id**도 적는다 — 보내는 순간 연결을 다시 확인해(deliver), 그 사이 해제·변경된 연결로 옛 사람에게 가지 않게(codex 2차).
+ */
 function pushDm(
   push: (rule: SlackRule, dedupe: string, inboxId: number | undefined, target: object, r: Rendered, at: string, dead?: string) => void,
   rule: SlackRule,
   dedupe: string,
   inboxId: number | undefined,
-  link: SlackLink | undefined,
+  links: Map<string, SlackLink>,
+  aywaUserId: string,
   rendered: Rendered,
   at: string,
 ) {
-  if (link) push(rule, dedupe, inboxId, { kind: "dm", slackUserId: link.slackUserId }, rendered, at);
-  else push(rule, dedupe, inboxId, { kind: "dm", slackUserId: "" }, rendered, at, "not_linked");
+  const link = links.get(aywaUserId);
+  if (link) push(rule, dedupe, inboxId, { kind: "dm", slackUserId: link.slackUserId, aywaUserId }, rendered, at);
+  else push(rule, dedupe, inboxId, { kind: "dm", slackUserId: "", aywaUserId }, rendered, at, "not_linked");
 }
 
 async function recipientNames(tenantId: string, ids: string[]): Promise<Map<string, string>> {

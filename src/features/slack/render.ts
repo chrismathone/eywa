@@ -27,13 +27,15 @@ type Style = { template: "short" | "detailed"; appUrl: string | null; ping: "non
 const MAX_BODY = 1200;
 const MAX_MESSAGE = 3500;
 const DIGEST_LINES = 20;
+const AGGREGATE_LINES = 10;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** 주민번호(6-7) · 하이픈으로 이은 긴 숫자열(계좌·전화, 숫자 10자리 이상)을 가린다. */
 export function scrubSensitive(text: string): string {
   return text
     .replace(/\b\d{6}\s*-\s*[1-8]\d{6}\b/g, "******-*******")
-    .replace(/\b\d{2,6}(?:-\d{2,8}){1,4}\b/g, (m) => (m.replace(/-/g, "").length >= 10 ? m.replace(/\d/g, "*") : m));
+    .replace(/\b\d{2,6}(?:-\d{2,8}){1,4}\b/g, (m) => (m.replace(/-/g, "").length >= 10 ? m.replace(/\d/g, "*") : m))
+    .replace(/\b01[016789]\d{7,8}\b/g, (m) => "*".repeat(m.length)); // 하이픈 없는 휴대폰 번호(grok 2차)
 }
 
 function link(href: string | null, appUrl: string | null, text: string): string | null {
@@ -97,7 +99,11 @@ function countLines(items: readonly Item[]): string[] {
 
 /** 한 번에 여러 건(일괄 배정·출결 한꺼번에) → 종류별 건수 한 통. */
 export function renderAggregate(items: readonly Item[], ping: Style["ping"] = "none"): string {
-  return withPing(clip([`*[aywa] ${items.length}건*`, ...countLines(items)].join("\n"), MAX_MESSAGE), ping);
+  // 앞 10건은 한 줄씩(누가·무엇을이 보여야 체크할 수 있다 — grok 2차: 출결이 "N건"만 남으면 쓸모없다), 나머지는 종류별 건수.
+  const lines = items.slice(0, AGGREGATE_LINES).map((i) => `• ${i.body.split("\n")[0].replace(/^<![a-z]+> /, "")}`);
+  const rest = items.slice(AGGREGATE_LINES);
+  const tail = rest.length ? [`외 ${rest.length}건`, ...countLines(rest)] : [];
+  return withPing(clip([`*[aywa] ${items.length}건*`, ...lines, ...tail].join("\n"), MAX_MESSAGE), ping);
 }
 
 /** 요약(방해금지 동안 · 요약만 규칙) — 앞 20건은 시각과 첫 줄, 나머지는 종류별 건수. */

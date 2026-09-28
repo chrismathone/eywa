@@ -2,18 +2,24 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureOptedIn } from "@/lib/license/server";
 import { logActionAs } from "@/features/audit/server/log";
+import { notifyUsers } from "@/features/notifications/server/notify";
+import { describeSlackError } from "../format";
 import { reportError } from "@/lib/observability/report-error";
 import { deliverDue } from "./deliver";
 import { expandInbox } from "./expand";
+import { reconcileInbox } from "./reconcile";
 import { loadConnection } from "./store";
 
 /**
  * 슬랙 발송기 — 지점 하나를 한 번 돌린다(인박스 펼치기 → 보낼 것 보내기). 두 곳에서 부른다:
  *  · 앱에서 알림·활동이 생긴 요청의 **응답 뒤**(`pokeSlack`) — 앱에서 생긴 일은 수 초 안에 나간다
  *  · 1분 cron(`/api/cron/slack-dispatch`) — 워커·DB 트리거·스크립트가 넣은 것, 재시도, 요약 시각
- * 🔴 지점 리스(55초)로 동시에 둘이 돌지 않는다 — 못 잡으면 조용히 끝낸다(다른 실행이 처리 중).
+ * 🔴 지점 리스(90초)로 동시에 둘이 돌지 않는다 — 못 잡으면 조용히 끝낸다(다른 실행이 처리 중).
+ *    발송은 `SEND_BUDGET_MS`(40초)까지만 — 한 실행이 리스보다 오래 가서 다음 실행과 겹치는 일이 없게(codex 2차).
+ * cron 실행은 5분마다 유실 대조(`reconcileInbox`)도 한다 — 트리거가 삼킨 예외로 인박스에 못 들어간 사건 복구.
  */
-const LEASE_MS = 55_000;
+const LEASE_MS = 90_000;
+const SEND_BUDGET_MS = 40_000;
 
 export function appUrlOrNull(): string | null {
   const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -22,7 +28,7 @@ export function appUrlOrNull(): string | null {
   return vercel ? `https://${vercel}` : null;
 }
 
-export async function drainTenant(tenantId: string): Promise<{ expanded: number; sent: number } | null> {
+export async function drainTenant(tenantId: string, opts: { reconcile?: boolean } = {}): Promise<{ expanded: number; sent: number } | null> {
   const loaded = await loadConnection(tenantId);
   if (loaded.status !== "ok" || !loaded.value?.botToken || loaded.value.status !== "active") return null;
   if (!(await isFeatureOptedIn(tenantId, "slack"))) return null;
@@ -43,8 +49,9 @@ export async function drainTenant(tenantId: string): Promise<{ expanded: number;
   let sent = 0;
   let errorCode: string | null = null;
   try {
+    if (opts.reconcile) await reconcileInbox(tenantId, now);
     expanded = await expandInbox(tenantId, conn, appUrlOrNull(), now);
-    const res = await deliverDue(tenantId, conn.botToken, new Date());
+    const res = await deliverDue(tenantId, conn.botToken, new Date(), now.getTime() + SEND_BUDGET_MS, conn);
     sent = res.sent;
     errorCode = res.authError;
   } catch (e) {
@@ -68,9 +75,30 @@ export async function drainTenant(tenantId: string): Promise<{ expanded: number;
         { tenantId, actorName: "system:slack-dispatch" },
         { action: "slack_connection_broken", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { code: errorCode } },
       );
+      await notifyMasters(tenantId, errorCode);
     }
   }
   return { expanded, sent };
+}
+
+/** 끊김을 원장 알림(벨)으로도 — 슬랙만 보고 있으면 빠지고 있는 줄 모른다(grok 2차). 발송기는 멈춰 있으니 슬랙으로는 안 간다. */
+async function notifyMasters(tenantId: string, code: string) {
+  const { data } = await createAdminClient()
+    .from("users")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("system_role", "master")
+    .eq("status", "active");
+  await notifyUsers(
+    (data ?? []).map((u) => ({
+      tenantId,
+      recipientId: u.id as string,
+      type: "slack_broken" as const,
+      title: "슬랙 발송이 멈췄습니다",
+      body: `${describeSlackError(code)} 그동안의 알림은 쌓아 두었다가 새 토큰을 저장하면 이어서 보냅니다.`,
+      link: "/owner?tab=sheets",
+    })),
+  );
 }
 
 /** cron — 연결된 지점 전부 + 오래된 기록 정리(인박스 처리분 7일 · 아웃박스 끝난 것 30일). */
@@ -81,7 +109,8 @@ export async function drainAll(): Promise<{ tenants: number; expanded: number; s
   let expanded = 0;
   let sent = 0;
   for (const row of data ?? []) {
-    const r = await drainTenant(row.tenant_id as string).catch((e) => {
+    // 유실 대조는 5분마다(매분 돌 필요는 없다 — 원본 두 표를 30분 창으로 읽는다).
+    const r = await drainTenant(row.tenant_id as string, { reconcile: new Date().getUTCMinutes() % 5 === 0 }).catch((e) => {
       reportError(e, { scope: "slack.drain_all", tenantId: row.tenant_id });
       return null;
     });

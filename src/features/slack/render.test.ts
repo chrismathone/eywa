@@ -44,6 +44,7 @@ describe("개인정보 가리기", () => {
     expect(scrubSensitive("주민 900101-1234567 끝")).toBe("주민 ******-******* 끝");
     expect(scrubSensitive("계좌 110-123-456789")).toBe("계좌 ***-***-******");
     expect(scrubSensitive("연락처 010-1234-5678")).toBe("연락처 ***-****-****");
+    expect(scrubSensitive("연락처 01012345678 끝")).toBe("연락처 *********** 끝");
     expect(scrubSensitive("2026-09-28 · 3-2반")).toBe("2026-09-28 · 3-2반"); // 날짜·짧은 숫자는 그대로
   });
   it("🔴 링크 줄은 가리지 않는다 — 숫자로만 된 uuid 조각이 있어도 주소가 안 깨진다", () => {
@@ -60,8 +61,15 @@ describe("묶음·요약", () => {
     { body: "*[출결 입력·정정]* 이서준 — 박소선", groupLabel: "출결 입력·정정 — 박소선", createdAt: at("2026-09-28T22:11:00") },
     { body: "*[학생 등록]* 박지우 — 원장", groupLabel: "학생 등록 — 원장", createdAt: at("2026-09-29T07:00:00") },
   ];
-  it("묶음 = 종류별 건수", () => {
-    expect(renderAggregate(items)).toBe("*[aywa] 3건*\n• 출결 입력·정정 — 박소선 2건\n• 학생 등록 — 원장 1건");
+  it("묶음 = 앞 10건은 한 줄씩(누가·무엇을), 넘치면 나머지는 종류별 건수", () => {
+    expect(renderAggregate(items)).toBe(
+      "*[aywa] 3건*\n• *[출결 입력·정정]* 김하늘 — 박소선\n• *[출결 입력·정정]* 이서준 — 박소선\n• *[학생 등록]* 박지우 — 원장",
+    );
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...items[0], body: `*[출결 입력·정정]* 학생${i} — 박소선` }));
+    const text = renderAggregate(many);
+    expect(text).toContain("• *[출결 입력·정정]* 학생9 — 박소선");
+    expect(text).not.toContain("학생10");
+    expect(text).toContain("외 2건\n• 출결 입력·정정 — 박소선 2건");
   });
   it("요약 = 기간 + 시각별 첫 줄", () => {
     const d = renderDigest(items);

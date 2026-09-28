@@ -30,16 +30,19 @@ async function call<T>(
     }
     const json = (await res.json()) as { ok?: boolean; error?: string } & T;
     if (!json.ok) return { ok: false, error: json.error ?? "unknown" };
-    return { ...json, ok: true };
+    // 토큰의 권한 목록은 응답 헤더로 온다(auth.test에서 빠진 권한 확인용).
+    return { ...json, ok: true, grantedScopes: (res.headers.get("x-oauth-scopes") ?? "").split(",").filter(Boolean) };
   } catch {
     return { ok: false, error: null };
   }
 }
 
-/** 토큰 확인 — 워크스페이스 이름·id와 봇 사용자 id. */
-export async function slackAuthTest(token: string): Promise<SlackResult<{ team: string; teamId: string; botUserId: string }>> {
-  const r = await call<{ team?: string; team_id?: string; user_id?: string }>(token, "auth.test", {});
-  return r.ok ? { ok: true, team: r.team ?? "", teamId: r.team_id ?? "", botUserId: r.user_id ?? "" } : r;
+/** 토큰 확인 — 워크스페이스 이름·id, 봇 사용자 id, 받은 권한 목록. */
+export async function slackAuthTest(
+  token: string,
+): Promise<SlackResult<{ team: string; teamId: string; botUserId: string; scopes: string[] }>> {
+  const r = await call<{ team?: string; team_id?: string; user_id?: string; grantedScopes?: string[] }>(token, "auth.test", {});
+  return r.ok ? { ok: true, team: r.team ?? "", teamId: r.team_id ?? "", botUserId: r.user_id ?? "", scopes: r.grantedScopes ?? [] } : r;
 }
 
 export type SlackChannel = { id: string; name: string; isPrivate: boolean };
