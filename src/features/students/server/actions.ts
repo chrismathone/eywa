@@ -6,6 +6,7 @@ import { goalExamLabel, parseGoalAxis } from "@/features/grades/goals";
 import { goalAxisReady } from "@/features/grades/server/goals";
 import {
   clearOnHoldForActiveEnrollments,
+  closeActiveEnrollmentsClamped,
   endEnrollmentById,
   listOpenEnrollments,
   reopenEnrollmentsClosedByWithdrawal,
@@ -17,6 +18,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { logAction } from "@/features/audit/server/log";
 import { kstToday } from "@/lib/date-kst";
+import { planFormWithdrawal } from "../withdrawal-plan";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import {
   DEFAULT_WITHDRAWAL_METADATA,
@@ -146,7 +148,10 @@ export async function createStudent(
   const input = readForm(formData, (await getTenantSettings()).operations.schoolSaveAliases);
   const fieldErrors = validate(input);
   if (fieldErrors) return { fieldErrors };
-  if (input.status === "enrolled") {
+  // 퇴원일 칸 — 미래면 퇴원 예약(상태 그대로), 재원·휴원에 지난 날짜는 거절(수정 폼과 같은 `planFormWithdrawal`).
+  const createPlan = planFormWithdrawal({ prevStatus: null, status: input.status, withdrawnAt: input.withdrawnAt, today: kstToday() });
+  if (createPlan.error) return { fieldErrors: { withdrawnAt: createPlan.error } };
+  if (createPlan.status === "enrolled") {
     // 재원생 좌석 한도(슈퍼관리자 라이선스) — 한도가 없는 지점은 조회 한 번으로 통과.
     const seat = await seatBlockReason(user.tenantId, 1);
     if (seat) return { error: seat };
@@ -183,11 +188,10 @@ export async function createStudent(
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       parent_relation: input.parentRelation,
-      status: input.status,
+      status: createPlan.status,
       enrolled_at: input.enrolledAt,
-      withdrawn_at: input.withdrawnAt,
-      withdrawal_metadata:
-        input.status === "withdrawn" ? DEFAULT_WITHDRAWAL_METADATA : null,
+      withdrawn_at: createPlan.withdrawnAt,
+      withdrawal_metadata: createPlan.kind === "none" ? null : DEFAULT_WITHDRAWAL_METADATA,
       notes: input.notes,
     })
     .select("id")
@@ -291,12 +295,37 @@ export async function updateStudent(
     if (seat) return { error: seat };
   }
 
+  // 🔴 퇴원 예약(원장 2026-09-28 *"퇴원이 미래인학생은 퇴원당일전까지 '재원'"*) — 상태 변경 창과 **같은 규칙**:
+  //    퇴원일이 미래면 상태·수강은 그대로 두고 날짜·사유만 적는다(그날 cron이 퇴원 처리). 표식 = 퇴원이 아닌데 withdrawn_at 있음.
+  //    이 폼은 **퇴원일 칸이 예약을 정한다**(폼이 칸을 늘 보여 주고 예약일을 채워 둔다):
+  //      · 재원·휴원으로 저장 + 미래 날짜 = 그 날짜로 예약(새로 걸거나 날짜를 바꾼다) · 빈칸 = 예약 취소
+  //      · 재원·휴원으로 저장 + 오늘 이전 날짜 = 거절(이미 그만뒀다면 상태를 '퇴원'으로)
+  //      · 퇴원에서 되돌리는 저장(복구) = 종전대로 비운다
+  //    예전 식(`퇴원 아니면 withdrawn_at = null`)이면 이름 한 글자 고치는 저장이 예약을 조용히 지웠다.
+  const today = kstToday();
+  const scheduledPrev = prevStatus !== "withdrawn" && !!cur?.withdrawn_at;
+  const withdrawalPlan = planFormWithdrawal({
+    prevStatus: prevStatus ?? null,
+    prevWithdrawnAt: (cur?.withdrawn_at as string | null) ?? null,
+    status: input.status,
+    withdrawnAt: input.withdrawnAt,
+    today,
+  });
+  if (withdrawalPlan.error) return { fieldErrors: { withdrawnAt: withdrawalPlan.error } };
+  const schedulingNow = withdrawalPlan.kind === "schedule";
+  const savedStatus = withdrawalPlan.status;
+
   let withdrawalMetadata: unknown = cur?.withdrawal_metadata ?? null;
-  if (input.status === "withdrawn" && prevStatus !== "withdrawn") {
-    withdrawalMetadata = DEFAULT_WITHDRAWAL_METADATA;
-  } else if (input.status !== "withdrawn") {
+  if (withdrawalPlan.kind === "withdraw" && prevStatus !== "withdrawn") {
+    // 예약돼 있던 사유는 살린다(폼엔 사유 칸이 없다) — 없으면 기본값.
+    withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
+  } else if (schedulingNow) {
+    withdrawalMetadata = scheduledPrev && cur?.withdrawal_metadata ? cur.withdrawal_metadata : DEFAULT_WITHDRAWAL_METADATA;
+  } else if (withdrawalPlan.kind === "none") {
     withdrawalMetadata = null;
   }
+  const savedWithdrawnAt = withdrawalPlan.withdrawnAt;
+  const cancelledSchedule = scheduledPrev && withdrawalPlan.kind === "none" ? String(cur?.withdrawn_at).slice(0, 10) : null;
 
   // 이름을 새 값으로 바꾼 경우만 중복 검사 — 기존(=현재) 이름 유지 저장은 제외(원장 지시). 자기 자신(id)은 taken에서 빼서
   // 자기 이름과 충돌로 오인되지 않게. 신규 이름이 다른 학생과 겹치면 접미사(A·B·C…) 강제.
@@ -339,9 +368,9 @@ export async function updateStudent(
       parent_name: input.parentName,
       parent_phone: input.parentPhone,
       parent_relation: input.parentRelation,
-      status: input.status,
+      status: savedStatus,
       enrolled_at: input.enrolledAt,
-      withdrawn_at: input.status === "withdrawn" ? input.withdrawnAt : null,
+      withdrawn_at: savedWithdrawnAt,
       withdrawal_metadata: withdrawalMetadata,
       // 🔴 병합 표식은 사람이 지울 수 없다 — 이 칸('메모 / 특이사항')이 곧 `students.notes`라, 표식이
       //    사람 메모와 **같은 칸**에 들어 있다. 그냥 저장하면 표식이 날아가고 그 학생이 집계에서
@@ -359,17 +388,18 @@ export async function updateStudent(
 
   // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
   // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
-  if (input.status === "withdrawn" && prevStatus !== "withdrawn") {
+  if (savedStatus === "withdrawn" && prevStatus !== "withdrawn") {
     const enrErr = await closeActiveEnrollmentsClamped(supabase, id, input.withdrawnAt ?? null);
     if (enrErr) return { error: enrErr };
-  } else if (input.status === "enrolled" && prevStatus !== "enrolled") {
+  } else if (savedStatus === "enrolled" && prevStatus !== "enrolled") {
     // 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 시간표 '퇴원'에 남음.
-    const withdrawnDate = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
+    // 🔴 퇴원에서 돌아올 때만 — 휴원·예비의 withdrawn_at은 **퇴원 예약**이라 그 날짜로 끝나는 다른 수강을 잘못 연다.
+    const withdrawnDate = prevStatus === "withdrawn" && cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
     const reopenErr = await reopenEnrollmentsClosedByWithdrawal(supabase, id, withdrawnDate);
     if (reopenErr) return { error: reopenErr };
     const holdErr = await clearOnHoldForActiveEnrollments(supabase, id);
     if (holdErr) return { error: holdErr };
-  } else if (input.status === "on_hold" && prevStatus !== "on_hold") {
+  } else if (savedStatus === "on_hold" && prevStatus !== "on_hold") {
     const { error: enrErr } = await supabase
       .from("enrollments")
       .update({ on_hold: true })
@@ -382,7 +412,16 @@ export async function updateStudent(
     action: "student_update",
     targetType: "student",
     targetLabel: finalName,
-    metadata: { studentId: id, statusFrom: prevStatus ?? null, statusTo: input.status },
+    metadata: {
+      studentId: id,
+      statusFrom: prevStatus ?? null,
+      statusTo: savedStatus,
+      // 날짜를 새로 걸거나 바꾼 저장만 적는다(예약일 그대로 다시 저장한 것은 사건이 아니다).
+      ...(schedulingNow && input.withdrawnAt !== (cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null)
+        ? { scheduledWithdrawal: input.withdrawnAt }
+        : {}),
+      ...(cancelledSchedule ? { cancelledWithdrawal: cancelledSchedule } : {}),
+    },
   });
 
   revalidatePath(`/students/${id}`);
@@ -396,52 +435,6 @@ export async function updateStudent(
   };
 }
 
-
-/**
- * 학생의 활성(end_date null) 수강을 date로 종료한다. ⚠️ 미래 시작(start_date > date) 수강에
- * end_date=date를 넣으면 daterange(start_date, date)가 lower>upper로 throw("range lower bound must be
- * less than or equal to range upper bound") → 그 건은 end_date=start_date(zero-length=미활성=사실상 취소)로 클램프.
- * (admin 데이터정리 closeOrphanEnrollments와 동일 원리 — 그쪽은 다중 학생 청크판.) date 없으면 원래 동작(미종료).
- */
-async function closeActiveEnrollmentsClamped(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  studentId: string,
-  date: string | null,
-  extra: Record<string, unknown> = {},
-): Promise<string | null> {
-  if (!date) {
-    const { error } = await supabase
-      .from("enrollments")
-      .update({ end_date: null, ...extra })
-      .eq("student_id", studentId)
-      .is("end_date", null);
-    return error?.message ?? null;
-  }
-  // 정상(시작일 ≤ date): 일괄 end_date=date.
-  const { error } = await supabase
-    .from("enrollments")
-    .update({ end_date: date, ...extra })
-    .eq("student_id", studentId)
-    .is("end_date", null)
-    .lte("start_date", date);
-  if (error) return error.message;
-  // 미래 시작(배정 예정): 행마다 start_date가 달라 개별 종료(end_date = 그 수강의 start_date).
-  const { data: future, error: fErr } = await supabase
-    .from("enrollments")
-    .select("id, start_date")
-    .eq("student_id", studentId)
-    .is("end_date", null)
-    .gt("start_date", date);
-  if (fErr) return fErr.message;
-  for (const e of future ?? []) {
-    const { error: uErr } = await supabase
-      .from("enrollments")
-      .update({ end_date: e.start_date, ...extra })
-      .eq("id", e.id);
-    if (uErr) return uErr.message;
-  }
-  return null;
-}
 
 // ────────────────────── 상태 전환 모달 (퇴원/휴원/수강종료/복구) ──────────────────────
 
@@ -496,7 +489,7 @@ export async function changeStudentStatus(
   // 퇴원/휴원/복구는 전부 감사로그에 actor를 남긴다 — "누가 퇴원시켰는지 역검수 불가" 사고(2026-08-18) 재발 방지.
   // 🔴 로그는 students.update **성공 직후**에 남긴다 — 뒤의 enrollment 정합 단계가 실패해도 상태는 이미
   //    바뀌었으므로, 끝에서 몰아 남기면 "상태는 바뀌었는데 기록이 없는" 무기록 창이 생긴다(적대 리뷰 F6).
-  const writeStatusLog = (closing?: { enrollmentIds: string[]; classIds: (string | null)[] }) =>
+  const writeStatusLog = (closing?: { enrollmentIds: string[]; classIds: (string | null)[] } | { scheduled: true }) =>
     logAction({
       action:
         target === "withdrawn" ? "student_withdraw" : target === "on_hold" ? "student_hold" : "student_restore",
@@ -534,6 +527,30 @@ export async function changeStudentStatus(
         talkedWithStudent: false,
       },
     };
+
+    // 🔴 **퇴원일이 미래면 예약만 한다**(원장 2026-09-28 *"퇴원이 미래인학생은 퇴원당일전까지 '재원'임"*) — 상태·수강은
+    //    그대로 두고 퇴원일·사유만 적는다. 그날 00:05 cron(`/api/cron/apply-due-withdrawals`)이 **아래와 같은 함수**
+    //    (`closeActiveEnrollmentsClamped`)로 상태를 퇴원으로 바꾸고 수강을 닫는다. 예전엔 저장 즉시 status='withdrawn'이라
+    //    운영실 재원·퇴원 어디에도 안 잡혔고(퇴원은 '오늘까지'만 센다), 수강 종료일을 미리 박아 과목별 재원·재원생 구성에서도
+    //    먼저 빠졌다(운영 기간 종료 cron과 같은 이유 — "종료일 비었음 = 수강 중"인 곳이 많다).
+    //    '퇴원 예약' 표식 = status가 퇴원이 아닌데 withdrawn_at이 있다(복구·예약 취소는 둘 다 비운다).
+    if (date > kstToday()) {
+      const { data: schRows, error: schErr } = await supabase
+        .from("students")
+        .update({ withdrawn_at: date, withdrawal_metadata: metadata })
+        .eq("id", id)
+        // 예약은 **재원·휴원**만(학생 폼과 같은 규칙 — withdrawal-plan.ts) · 이미 퇴원이면 0행.
+        .in("status", ["enrolled", "on_hold"])
+        .select("id");
+      if (schErr) return { error: schErr.message };
+      if (!schRows || schRows.length === 0)
+        return { error: "재원·휴원 학생만 퇴원 예약을 걸 수 있습니다. 화면을 새로고침해 주세요." };
+      await writeStatusLog({ scheduled: true });
+      revalidatePath(`/students/${id}`);
+      revalidatePath("/students");
+      revalidatePath("/withdrawals");
+      return { ok: true };
+    }
 
     // 닫힐 수강을 **닫기 전에** 읽어 둔다 — 감사로그에 어느 반이 종료 대상이었는지 싣기 위해서다.
     // (조회 실패는 퇴원을 막지 않는다: 기록이 조금 얇아질 뿐, 상태 전환이 더 중요하다.)
@@ -574,19 +591,22 @@ export async function changeStudentStatus(
     // 복구 전에 이 학생의 퇴원일(withdrawn_at)을 먼저 읽는다 — 그 날짜로 닫힌 enrollment가 이번 퇴원이 종료시킨 것.
     const { data: before } = await supabase
       .from("students")
-      .select("withdrawn_at")
+      .select("status, withdrawn_at")
       .eq("id", id)
       .single();
-    const withdrawnDate = before?.withdrawn_at ? String(before.withdrawn_at).slice(0, 10) : null;
+    // 🔴 퇴원이 아니던 학생(휴원 → 재원)의 withdrawn_at은 **퇴원 예약**이다 — 지우지 않고, 그 날짜로 수강을 다시 열지도 않는다
+    //    (예약은 수강을 닫지 않았다 · 그 날짜로 끝나는 다른 수강을 잘못 연다). 예약 취소는 '퇴원 예약 취소'로만.
+    const wasWithdrawn = before?.status === "withdrawn";
+    const withdrawnDate = wasWithdrawn && before?.withdrawn_at ? String(before.withdrawn_at).slice(0, 10) : null;
 
-    // 복구: status=enrolled, withdrawn_at=null, metadata=null, on_hold=false
+    // 복구: status=enrolled (+ 퇴원에서 돌아올 때만 withdrawn_at·metadata 비움), on_hold=false
     const { error: stuErr } = await supabase
       .from("students")
-      .update({
-        status: "enrolled",
-        withdrawn_at: null,
-        withdrawal_metadata: null,
-      })
+      .update(
+        wasWithdrawn
+          ? { status: "enrolled", withdrawn_at: null, withdrawal_metadata: null }
+          : { status: "enrolled" },
+      )
       .eq("id", id);
     if (stuErr) return { error: stuErr.message };
     await writeStatusLog();
@@ -604,6 +624,45 @@ export async function changeStudentStatus(
     if (enrErr) return { error: enrErr.message };
   }
 
+  revalidatePath(`/students/${id}`);
+  revalidatePath("/students");
+  revalidatePath("/withdrawals");
+  return { ok: true };
+}
+
+/**
+ * **퇴원 예약 취소** — 미래 퇴원일로 저장해 둔 예약(상태는 재원·휴원, `withdrawn_at`만 있음)을 지운다.
+ * 원장 2026-09-28 *"퇴원이 미래인학생은 퇴원당일전까지 '재원'"* — 예약은 상태 변경 창의 퇴원(미래 날짜)으로 걸고, 여기서만 푼다.
+ * 🔴 이미 퇴원 처리된 학생(status='withdrawn')은 대상이 아니다 — 그건 '재원으로 복구'(수강 재개까지 함께)다.
+ */
+export async function cancelScheduledWithdrawal(
+  _prev: ChangeStatusState,
+  formData: FormData,
+): Promise<ChangeStatusState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "로그인이 필요합니다" };
+  if (!(await canManageStudentRecords(user.systemRole))) return { error: STUDENT_MANAGE_DENIED };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "학생 ID가 누락되었습니다" };
+
+  const supabase = await createClient();
+  const { data: cur } = await supabase.from("students").select("withdrawn_at").eq("id", id).maybeSingle();
+  const { data, error } = await supabase
+    .from("students")
+    .update({ withdrawn_at: null, withdrawal_metadata: null })
+    .eq("id", id)
+    .neq("status", "withdrawn")
+    .not("withdrawn_at", "is", null)
+    .select("id, name");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "취소할 퇴원 예약이 없습니다. 화면을 새로고침해 주세요." };
+  const before = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
+  await logAction({
+    action: "student_restore",
+    targetType: "student",
+    targetLabel: (data[0]?.name as string | null) ?? null,
+    metadata: { studentId: id, cancelledWithdrawal: before },
+  });
   revalidatePath(`/students/${id}`);
   revalidatePath("/students");
   revalidatePath("/withdrawals");

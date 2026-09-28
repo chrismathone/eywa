@@ -94,6 +94,8 @@ export function StatusDialog({
     undefined,
   );
   const [target, setTarget] = useState<Target>(initialTarget);
+  // 퇴원일이 미래면 예약이다(서버 `changeStudentStatus`) — 저장 전에 그 사실을 한 줄로 알린다.
+  const [pickedDate, setPickedDate] = useState(() => kstToday());
 
   /**
    * 🔑 **선택 단위 = 과목**(원장 2026-09-16 *"과목 선택 가능하게 해달라한것 같은데, 수업 선택이 아니라"*).
@@ -233,8 +235,14 @@ export function StatusDialog({
                   type="date"
                   required
                   defaultValue={kstToday()}
+                  onChange={(e) => setPickedDate(e.target.value)}
                   className="border-border bg-card text-foreground num w-full rounded-lg border px-3 py-2 text-sm"
                 />
+                {!isPartial && pickedDate > kstToday() ? (
+                  <p className="text-muted-foreground text-sm">
+                    퇴원 예약입니다 — 퇴원일 전날까지는 재원으로 남고, 퇴원일에 자동으로 퇴원 처리됩니다.
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <label className="text-foreground block text-sm font-medium">

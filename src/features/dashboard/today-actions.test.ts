@@ -3,6 +3,8 @@ import {
   buildTodayActions,
   enrollmentAttendsOnDay,
   findMissingLessonReportPairs,
+  absentClassKeysOf,
+  judgeTodayLessonReports,
   isEnrollmentActiveOn,
   nameList,
   subjectBreakdownText,
@@ -551,6 +553,39 @@ describe("수업보고서 작성 대상", () => {
       { studentId: "s1", subject: "math" },
     ]);
     expect(findMissingLessonReportPairs(targets, new Set(["s1::math-a", "s1::math-b"]), [])).toEqual([]);
+  });
+
+  it("미리 쓴 보고서(covers_date=오늘)는 오늘 의무를 끝낸다 — 작성률 카드와 같은 규칙(점검 2026-09-28)", () => {
+    const targets = [
+      { studentId: "s1", classId: "math-a", subject: "math" },
+      { studentId: "s2", classId: "math-a", subject: "math" },
+    ];
+    const r = judgeTodayLessonReports(
+      targets,
+      new Set(),
+      [{ studentId: "s1", subject: "math", reportDate: "2026-09-20", coversDate: "2026-09-28" }],
+      "2026-09-28",
+    );
+    expect(r.due.map((p) => p.studentId)).toEqual(["s2"]);
+    expect(r.missing.map((p) => p.studentId)).toEqual(["s2"]);
+  });
+
+  it("다른 날 쓴 보고서(오늘을 지정하지 않음)는 오늘을 채우지 않는다", () => {
+    const targets = [{ studentId: "s1", classId: "math-a", subject: "math" }];
+    expect(
+      findMissingLessonReportPairs(targets, new Set(), [{ studentId: "s1", subject: "math", reportDate: "2026-09-27" }], "2026-09-28"),
+    ).toEqual([{ studentId: "s1", subject: "math" }]);
+  });
+
+  it("결석 반 = 최신 정정 기준 · 그 반 교시가 전부 결석일 때만", () => {
+    const row = (id: string, slot: string, status: string, at: string) => ({
+      id, student_id: "s1", class_id: "c1", session_date: "2026-09-28", slot_start: slot, recorded_at: at, status,
+    });
+    expect([...absentClassKeysOf([row("a", "16:00", "absent", "2026-09-28T07:00:00Z")])]).toEqual(["s1::c1"]);
+    // 결석 → 출석으로 정정
+    expect(absentClassKeysOf([row("a", "16:00", "absent", "2026-09-28T07:00:00Z"), row("b", "16:00", "present", "2026-09-28T08:00:00Z")]).size).toBe(0);
+    // 두 교시 중 하나는 출석
+    expect(absentClassKeysOf([row("a", "16:00", "absent", "2026-09-28T07:00:00Z"), row("b", "17:00", "present", "2026-09-28T07:00:00Z")]).size).toBe(0);
   });
 });
 

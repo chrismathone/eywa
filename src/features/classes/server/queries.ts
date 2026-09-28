@@ -4,7 +4,8 @@ import { readEnglishTrack, type EnglishTrack } from "../english-track";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { enrollmentPhaseOn, isEnrollmentOnRosterOn, type EnrollmentPhase } from "@/features/enrollments/eligibility";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { ASSIGNABLE_TEACHER_ROLES } from "@/lib/permissions";
@@ -990,13 +991,25 @@ export async function getClassAttendanceStats(
   //    창이 하루 밀려 출결 집계가 화면과 어긋난다.
   const since = addDays(kstToday(), -days);
 
-  const { data } = await supabase
-    .from("attendance_records")
-    .select("status")
-    .eq("class_id", classId)
-    .gte("session_date", since);
-
-  const rows = data ?? [];
+  const rawRows = await fetchAllPaged<{
+    id: string;
+    student_id: string;
+    class_id: string;
+    session_date: string;
+    slot_start: string | null;
+    recorded_at: string;
+    status: string;
+  }>((from, to) =>
+    supabase
+      .from("attendance_records")
+      .select("id, student_id, class_id, session_date, slot_start, recorded_at, status")
+      .eq("class_id", classId)
+      .gte("session_date", since)
+      .order("id")
+      .range(from, to),
+  );
+  // 🔴 정정 줄은 최신 하나만 — 원본 줄을 세면 고친 칸이 분자·분모에 두 번 들어갔다(점검 2026-09-28).
+  const rows = effectiveAttendanceRecords(rawRows);
   const total = rows.length;
   const present = rows.filter((r) => r.status === "present").length;
   const absent = rows.filter((r) => r.status === "absent").length;
@@ -1008,6 +1021,6 @@ export async function getClassAttendanceStats(
     absent,
     late,
     excused,
-    rate: attendanceRate(present, total),
+    rate: attendanceRate(attendedCount({ present, late }), total),
   };
 }

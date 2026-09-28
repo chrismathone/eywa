@@ -107,7 +107,7 @@ function SummaryBody({ summary }: { summary: StudentSummary }) {
   return (
     <div className="space-y-4">
       <div className={`grid gap-2.5 ${billingValue === null ? "grid-cols-1" : "grid-cols-2"}`}>
-        <Metric label="출석률 (30일)" value={`${Math.round(a.rate)}%`} sub={`${a.present}/${a.total}회`} tone="primary" />
+        <Metric label="출석률 (30일)" value={`${Math.round(a.rate)}%`} sub={`출석·지각 ${a.present + a.late}/${a.total}회`} tone="primary" />
         {billingValue === null ? null : (
           <Metric label="미납" value={billingValue} sub={billingSub} tone={billingTone} />
         )}

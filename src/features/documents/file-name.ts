@@ -6,6 +6,14 @@ export function splitFileName(fileName: string): { base: string; extension: stri
     : { base: fileName, extension: "" };
 }
 
+/** 목록에 쓰는 제목에도 실제 파일 확장자를 한 번만 붙인다. */
+export function titleWithFileExtension(title: string, fileName: string | null): string {
+  const extension = fileName ? splitFileName(fileName).extension : "";
+  return extension && !title.toLowerCase().endsWith(extension.toLowerCase())
+    ? title + extension
+    : title;
+}
+
 export function renamedFileName(baseName: string, originalFileName: string): { fileName: string } | { error: string } {
   const base = baseName.trim();
   if (!base || base === "." || base === "..") return { error: "파일 이름을 입력해 주세요." };

@@ -14,7 +14,7 @@ import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supab
 import { addDays, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { isExamSlot, type ExamSlotKey } from "@/features/grades/exam-slots";
 import { isTerm, type Term } from "@/features/grades/term";
@@ -1118,13 +1118,14 @@ export async function getStudentAttendanceStats(
   );
   const total = rows.length;
   const present = rows.filter((r) => r.status === "present").length;
+  const late = rows.filter((r) => r.status === "late").length;
   return {
     total,
     present,
     absent: rows.filter((r) => r.status === "absent").length,
-    late: rows.filter((r) => r.status === "late").length,
+    late,
     excused: rows.filter((r) => r.status === "excused").length,
-    rate: attendanceRate(present, total),
+    rate: attendanceRate(attendedCount({ present, late }), total),
   };
 }
 
@@ -1903,10 +1904,12 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   if (student?.withdrawn_at && !isMergedStudent(student.notes)) {
     // 사유는 reasonDisplay — 표준 코드는 한글로, "반 이동" 같은 자유 텍스트는 그대로(reasonLabel은 '기타'로 뭉갠다).
     const md = student.withdrawal_metadata as { reason?: string | null; memo?: string | null } | null;
+    // 퇴원일이 오늘 뒤면 **퇴원 예약**이다(원장 2026-09-28 "퇴원당일전까지 재원") — 일어난 일처럼 '퇴원'이라 적지 않는다.
+    const wDate = String(student.withdrawn_at).slice(0, 10);
     events.push({
-      date: String(student.withdrawn_at).slice(0, 10),
+      date: wDate,
       kind: "status_change",
-      title: "퇴원",
+      title: wDate > kstToday() ? "퇴원 예정" : "퇴원",
       description: [reasonDisplay(md?.reason), md?.memo].filter(Boolean).join(" · ") || null,
     });
   }

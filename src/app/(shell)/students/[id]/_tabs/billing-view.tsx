@@ -5,7 +5,7 @@ import { kstYear } from "@/lib/date-kst";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown, CircleDollarSign, AlertTriangle } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { invoiceOutstanding, paymentRateOf } from "@/features/billing/calc";
+import { invoiceOutstanding, paymentRateDisplay, paymentRateOf } from "@/features/billing/calc";
 import {
   BILLING_BADGE,
   BILLING_CARD,
@@ -60,7 +60,8 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
     return invoices.filter((r) => {
       if (!r.period.startsWith(String(year))) return false;
       if (statusFilter === "paid") return r.status === "paid";
-      if (statusFilter === "pending") return r.status === "unpaid" || r.status === "partial";
+      // 🔴 미납 = 남은 금액이 있는 청구(`invoiceOutstanding` > 0) — 빠른 요약·운영실과 같은 판정(점검 2026-09-28).
+      if (statusFilter === "pending") return invoiceOutstanding(r) > 0;
       return true;
     });
   }, [invoices, year, statusFilter]);
@@ -76,8 +77,9 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
       billed += r.amountTotal;
       paid += r.amountPaid;
       discount += r.amountDiscount;
-      if (r.status === "unpaid" || r.status === "partial") {
-        unpaid += invoiceOutstanding(r); // 행 레벨 clamp — calc.ts 단일 공식
+      const left = invoiceOutstanding(r); // 행 레벨 clamp — calc.ts 단일 공식
+      if (left > 0) {
+        unpaid += left;
         pending++;
       }
     }
@@ -94,16 +96,24 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
     let billed = 0,
       paid = 0,
       discount = 0,
-      paidCount = 0;
+      paidCount = 0,
+      pendingCount = 0,
+      outstanding = 0;
     for (const r of rows) {
       billed += r.amountTotal;
       paid += r.amountPaid;
       discount += r.amountDiscount;
       if (r.status === "paid") paidCount++;
+      // 🔴 미납 건수 = 남은 금액이 있는 청구 — 예전 '전체 − 완납'은 환불·잔액 0 청구까지 미납으로 셌다(점검 2026-09-28).
+      const left = invoiceOutstanding(r);
+      if (left > 0) {
+        pendingCount++;
+        outstanding += left;
+      }
     }
     const net = billed - discount;
     const rate = paymentRateOf(paid, net);
-    return { total: rows.length, paidCount, pendingCount: rows.length - paidCount, rate };
+    return { total: rows.length, paidCount, pendingCount, rate, outstanding };
   }, [invoices]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -294,7 +304,7 @@ export function BillingView({ invoices }: { invoices: StudentBillingRow[] }) {
               미납 <b className="num">{overall.pendingCount}</b>건
             </span>
             <span className="text-blue">
-              수납률 <b className="num">{overall.rate.toFixed(1)}</b>%
+              수납률 <b className="num">{paymentRateDisplay(overall.rate, overall.outstanding)}</b>%
             </span>
           </div>
         </Section>

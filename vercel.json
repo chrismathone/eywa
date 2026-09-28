@@ -10,6 +10,10 @@
       "schedule": "5 21 * * *"
     },
     {
+      "path": "/api/cron/apply-due-withdrawals",
+      "schedule": "5 15 * * *"
+    },
+    {
       "path": "/api/cron/apply-due-class-updates",
       "schedule": "30 15 * * *"
     },

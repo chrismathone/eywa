@@ -187,7 +187,7 @@ describe("monthCells / stats", () => {
     expect(cells.filter((d) => d !== null)).toHaveLength(31);
   });
 
-  it("병결을 세고, 출석률 분자에는 안 넣는다", () => {
+  it("병결을 세고, 출석률 분자에는 안 넣는다 — 분자 = 출석+지각(보강 아님, 원장 2026-09-28)", () => {
     const s = computeAttendanceStats([
       { status: "present" },
       { status: "late" },
@@ -204,7 +204,7 @@ describe("monthCells / stats", () => {
       early_leave: 1,
       makeup: 1,
       total: 6,
-      rate: 50,
+      rate: 33.3,
     });
   });
 });

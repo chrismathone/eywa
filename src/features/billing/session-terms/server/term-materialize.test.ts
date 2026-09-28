@@ -87,7 +87,7 @@ beforeEach(() => {
       { id: "e2", student_id: S2, class_id: C1, start_date: "2026-03-01", end_date: null, on_hold: false },
       { id: "e3", student_id: S3, class_id: C1, start_date: "2026-03-01", end_date: null, on_hold: false },
     ],
-    attendance_records: [{ id: "a1", student_id: S1, class_id: C2, session_date: "2026-09-06", slot_start: null, status: "makeup", session_units: 1.5 }],
+    attendance_records: [{ id: "a1", student_id: S1, class_id: C2, session_date: "2026-09-06", slot_start: null, status: "makeup", session_units: 1.5, recorded_at: "2026-09-01T00:00:00Z" }],
     invoices: [
       { id: "inv-1", student_id: S1, period: P, status: "issued" },
       { id: "inv-3", student_id: S3, period: P, status: "void" },
@@ -153,7 +153,7 @@ describe("materializeVirtualTerms — 확정·배분을 저장하는 순간에�
   it("🔑 기간 창은 출석부와 같다 — 반의 과목에 세션이 있으면 세션 창으로 줄을 세운다", async () => {
     // 수학 9월 세션 = 9/1~10/1(운영 실측 모양). 10/1에 찍힌 보강 방문은 9월 줄, 달력월이었다면 10월 줄.
     h.state.periodDefs = [{ id: "p9", subjectKey: "math", classId: null, labelYear: 2026, labelMonth: 9, startDate: "2026-09-01", endDate: "2026-10-01" }];
-    h.state.tables.attendance_records.push({ id: "a2", student_id: S2, class_id: C2, session_date: "2026-10-01", slot_start: null, status: "makeup", session_units: 1 });
+    h.state.tables.attendance_records.push({ id: "a2", student_id: S2, class_id: C2, session_date: "2026-10-01", slot_start: null, status: "makeup", session_units: 1, recorded_at: "2026-09-01T00:00:00Z" });
     h.state.tables.invoices.push({ id: "inv-2", student_id: S2, period: P, status: "issued" });
     const out = await materializeVirtualTerms(db, ctx(), [virtualTermId(S2, C2)]);
     expect(out.created).toBe(1);

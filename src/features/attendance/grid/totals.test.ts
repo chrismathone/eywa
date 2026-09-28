@@ -80,6 +80,14 @@ describe("합산", () => {
   });
 });
 
+describe("출석률 분자 = 출석 + 지각(원장 2026-09-28) — 보강은 출석이 아니다", () => {
+  it("지각은 출석으로, 보강·조퇴·공결은 아니다 — 분모는 기록 칸 전부", () => {
+    const c = countCells([cell("present"), cell("late"), cell("makeup"), cell("early_leave")]);
+    expect(ratePercent(c)).toBe(50);
+    expect(rateDecimal(c)).toBe(50);
+  });
+});
+
 describe("출석률 자릿수", () => {
   it("행 열은 정수 %, 상단 스탯은 소수 한 자리", () => {
     const c = countCells([cell("present"), cell("present"), cell("absent")]);

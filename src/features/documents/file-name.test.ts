@@ -1,5 +1,12 @@
 import { expect, it } from "vitest";
-import { renamedFileName, splitFileName } from "./file-name";
+import { renamedFileName, splitFileName, titleWithFileExtension } from "./file-name";
+
+it("표시 제목에 원본 파일 확장자를 한 번만 붙인다", () => {
+  expect(titleWithFileExtension("중간 시험지", "원본.PDF")).toBe("중간 시험지.PDF");
+  expect(titleWithFileExtension("중간 시험지.pdf", "원본.PDF")).toBe("중간 시험지.pdf");
+  expect(titleWithFileExtension("중간 시험지.v2", "원본.pdf")).toBe("중간 시험지.v2.pdf");
+  expect(titleWithFileExtension("문서", null)).toBe("문서");
+});
 
 it("이름의 점과 확장자를 구분하고 원본 확장자 대소문자를 보존한다", () => {
   expect(splitFileName("시험지.v2.PDF")).toEqual({ base: "시험지.v2", extension: ".PDF" });
