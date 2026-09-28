@@ -65,7 +65,11 @@ export async function disconnectSlack(): Promise<SlackActionResult> {
   return { message: "연결을 해제했습니다" };
 }
 
-/** 확인 메시지 — 저장된 채널 전부 + 누른 사람 본인에게 1:1. 하나라도 실패하면 그 사유를 돌려준다. */
+/**
+ * 확인 메시지 — 저장된 채널 전부 + (1:1 줄에 알림을 골랐으면) 누른 사람 본인에게 1:1. 하나라도 실패하면 그 사유를 돌려준다.
+ * 🔴 1:1을 안 쓰는데 1:1로 오면 "채널을 골랐는데 왜 개인 메시지로 오지?"가 된다(원장 2026-09-28). 보낼 곳이 하나도
+ *    없을 때만 토큰 확인용으로 나에게 1:1을 보낸다.
+ */
 export async function sendSlackTest(): Promise<SlackActionResult> {
   const g = await slackGate();
   if ("error" in g) return g;
@@ -81,12 +85,15 @@ export async function sendSlackTest(): Promise<SlackActionResult> {
     if (res.ok) sent++;
     else failures.push(`#${r.channelName}: ${describeSlackError(res.error)}`);
   }
-  const me = await slackLookupByEmail(token, g.email);
-  if (me.ok) {
+  const dmOn = routes.some((r) => r.kind === "dm" && r.eventTypes.length > 0);
+  const channelCount = routes.filter((r) => r.kind === "channel").length;
+  // 1:1을 안 쓰는 설정이면 채널로만 확인한다.
+  const me = dmOn || channelCount === 0 ? await slackLookupByEmail(token, g.email) : null;
+  if (me?.ok) {
     const res = await slackPostDm(token, me.userId, text);
     if (res.ok) sent++;
     else failures.push(`나에게 1:1: ${describeSlackError(res.error)}`);
-  } else failures.push(`나에게 1:1: ${describeSlackError(me.error)}`);
+  } else if (me) failures.push(`나에게 1:1: ${describeSlackError(me.error)}`);
   await logAction({ action: "slack_connection_test", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { sent, failed: failures.length } });
   if (failures.length > 0) return { error: failures.join(" · "), message: sent ? `${sent}곳에 보냈습니다` : undefined };
   return { message: `${sent}곳에 확인 메시지를 보냈습니다` };

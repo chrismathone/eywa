@@ -18,6 +18,7 @@ export const AUDIT_ACTIONS = {
   slack_connection_routes: "슬랙 알림 보낼 곳 저장",
   slack_connection_disconnect: "슬랙 알림 연결 해제",
   slack_connection_test: "슬랙 확인 메시지 발송",
+  slack_connection_sample: "슬랙 샘플 알림 발송",
   makeedu_paid_recovery: "수납 동기화 오류 복구",
   sheets_sync_now: "구글 시트 내보내기 실행",
   intake_push_enqueue: "makeedu 상담 역동기화",

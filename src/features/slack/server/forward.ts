@@ -41,7 +41,8 @@ export function scheduleSlackForward(rows: readonly NotificationInsertRow[]): vo
   }
 }
 
-function appUrlOrNull(): string | null {
+/** 알림 링크를 절대 주소로 만들 앱 주소 — 모르면 null(링크 줄을 뺀다). 샘플 알림도 같은 값을 쓴다. */
+export function appUrlOrNull(): string | null {
   const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (explicit) return explicit.replace(/\/+$/, "");
   const vercel = process.env.VERCEL_URL?.trim();

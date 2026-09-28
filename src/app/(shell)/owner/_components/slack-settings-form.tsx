@@ -13,6 +13,7 @@ import {
   saveSlackToken,
   sendSlackTest,
 } from "@/features/slack/server/actions";
+import { sendSlackSamples } from "@/features/slack/server/sample-actions";
 import { SLACK_BTN } from "./slack-event-dropdowns";
 import { SlackRouteRow } from "./slack-route-row";
 
@@ -98,6 +99,15 @@ export function SlackSettingsForm({
         : { message: `슬랙에서 못 찾은 직원 ${missing.length}명(1:1 알림을 못 받습니다): ${missing.join(", ")}` };
     });
   const channelCount = routes.filter((r) => r.kind === "channel").length;
+  // 샘플은 **저장된** 설정으로 나간다 — 고치고 저장 안 한 채 누르면 옛 설정으로 가서 헷갈린다.
+  const dirty = JSON.stringify(routes) !== JSON.stringify(withDm(initialRoutes));
+  const sendSamples = () => {
+    if (dirty) {
+      setErr("바꾼 내용을 먼저 저장해 주세요 — 샘플은 저장된 설정으로 보냅니다");
+      return;
+    }
+    run(() => sendSlackSamples());
+  };
 
   return (
     <div className="space-y-4">
@@ -157,6 +167,15 @@ export function SlackSettingsForm({
             </button>
             <button type="button" onClick={() => run(() => sendSlackTest())} disabled={pending} className={SLACK_BTN}>
               확인 메시지 보내기
+            </button>
+            <button
+              type="button"
+              onClick={sendSamples}
+              disabled={pending}
+              className={SLACK_BTN}
+              title="보낼 곳마다 고른 알림 종류로 실제와 같은 모양의 [테스트] 알림을 보냅니다(1:1은 나에게만)"
+            >
+              샘플 알림 보내기
             </button>
             <button type="button" onClick={checkMembers} disabled={pending} className={SLACK_BTN}>
               직원 매칭 확인

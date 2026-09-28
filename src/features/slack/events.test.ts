@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FORWARD_EVENT_OPTIONS, forwardEventLabel, sanitizeForwardEventTypes } from "./events";
+import { SAMPLE_NOTIFICATIONS } from "./samples";
 
 /**
  * 🔴 슬랙으로 보낼 수 있는 알림 = `notifyUsers()`를 거치는 것만. 거치지 않는 알림을 목록에 올리면
@@ -44,5 +45,12 @@ describe("슬랙 알림 종류 목록", () => {
       "help_answer",
     ]);
     expect(forwardEventLabel("bogus")).toBe("알림");
+  });
+});
+
+describe("샘플 알림", () => {
+  it("고를 수 있는 모든 알림 종류에 가상 데이터 샘플이 있다(없으면 샘플 버튼이 그 종류를 조용히 건너뛴다)", () => {
+    const missing = FORWARD_EVENT_OPTIONS.filter((o) => !SAMPLE_NOTIFICATIONS[o.type]).map((o) => o.type);
+    expect(missing).toEqual([]);
   });
 });

@@ -512,6 +512,11 @@ export function auditDetail(
     }
     case "slack_connection_disconnect":
       return "연결 해제";
+    case "slack_connection_sample": {
+      const sent = num(m.sent);
+      const failed = num(m.failed);
+      return `샘플 알림 ${sent ?? 0}통 보냄${failed ? ` · ${failed}곳 실패` : ""}`;
+    }
     case "slack_connection_test": {
       const sent = num(m.sent);
       const failed = num(m.failed);
