@@ -8,6 +8,7 @@ import {
 import { getTeacherOptions } from "@/features/students/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { subjectLabelRecord } from "@/features/owner/subjects";
+import { getNewcomerLinkTargets } from "@/features/newcomers/server/consult-link";
 import { ConsultationForm } from "../../_components/consultation-form";
 import { ConsultationDeleteButton } from "../../_components/consultation-delete-button";
 
@@ -20,11 +21,13 @@ export default async function EditConsultationPage({
 }) {
   const viewer = await requireAccess("consultations");
   const { id } = await params;
-  const [item, students, counselors, settings] = await Promise.all([
+  const [item, students, counselors, settings, newcomerTargets] = await Promise.all([
     getStudentConsultationById(id),
     getStudentOptionsForConsultation(),
     getTeacherOptions(),
     getTenantSettings(),
+    // 신규생 관리 칸(0295a) — 못 읽어도 상담 수정은 된다(칸만 안 뜬다).
+    getNewcomerLinkTargets(id).catch(() => []),
   ]);
   if (!item) notFound();
 
@@ -51,6 +54,8 @@ export default async function EditConsultationPage({
         counselors={counselors}
         subjectLabels={subjectLabelRecord(settings.operations.subjects)}
         currentUserId={viewer.id}
+        // 🔴 고를 수 있는 학생(담당 범위로 좁힌 목록)의 것만 내려보낸다 — 강사에게 전사 신입 명단이 새지 않게.
+        newcomerTargets={newcomerTargets.filter((t) => students.some((s) => s.id === t.studentId))}
         initialValue={{
           id: item.id,
           studentId: item.studentId,

@@ -118,6 +118,8 @@ export const ROUTE_WINDOW_SIZE: Record<string, { w: number; h: number }> = {
   documents: { w: 980, h: 640 }, // 데이터베이스(서식 저장소) — 탐색기형(좌 폴더 팬 + 우 상세 테이블)
   // 도움말 허브(FAQ + 질문 게시판). 상세 `/help/posts/<id>` · `/help/icons` 도 prefix 상속.
   help: { w: 960, h: 760 },
+  // 고객센터 — 개선요청 표(No·제목·등록자·등록일시·처리상태·예정일)가 한 줄에 서는 폭. 상세·글쓰기도 prefix 상속.
+  support: { w: 1000, h: 760 },
   // ⚠️ 메뉴 루트 창 id는 경로가 아니라 menuKey(언더스코어) — windowIdForHref가 menuKey를 반환한다.
   textbook_requests: { w: 1180, h: 760 }, // 교재 요청 — ijw 구조(좌 폼 + 우 실시간 요청서 미리보기 720px)
   // 지출결의서(강사) — 내 결의서 목록 + 등록 모달. 🔴 메뉴 루트 창 id는 menuKey(`expense_requests`, 언더스코어)라

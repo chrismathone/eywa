@@ -14,6 +14,11 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import type { SemanticTone } from "@/lib/design/semantic-color";
+import { isSupportStatus, SUPPORT_STATUS_META } from "@/features/support/types";
+
+function supportStatusLabel(v: string): string {
+  return isSupportStatus(v) ? SUPPORT_STATUS_META[v].label : "알 수 없는 상태";
+}
 
 // ── 플랜 ────────────────────────────────────────────────────────────────
 /** 알려진 플랜 키의 한글 이름. 플랜은 발급 폼에서 **자유 입력**이라 모르는 값은 적힌 그대로 보인다(운영자가 직접 친 글자). */
@@ -109,6 +114,11 @@ export const AUDIT_ACTIONS = {
   change_user_role: { label: "역할 변경", tone: "caution" },
   reset_user_password: { label: "비밀번호 재설정", tone: "critical" },
   set_user_active: { label: "계정 활성·비활성", tone: "caution" },
+  // 고객센터(0294a) — 개선요청 처리·공지사항.
+  support_request_answer: { label: "개선요청 처리", tone: "info" },
+  support_notice_create: { label: "공지 등록", tone: "positive" },
+  support_notice_update: { label: "공지 수정", tone: "info" },
+  support_notice_delete: { label: "공지 삭제", tone: "caution" },
 } as const satisfies Record<string, { label: string; tone: SemanticTone }>;
 
 export type AuditActionKey = keyof typeof AUDIT_ACTIONS;
@@ -162,6 +172,18 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       return "임시 비밀번호 발급";
     case "set_user_active":
       return m.active === true ? "활성화" : "비활성화";
+    case "support_request_answer": {
+      const st = str(m.status);
+      const label = st ? supportStatusLabel(st) : null;
+      return [label ? `처리상태 → ${label}` : null, str(m.dueDate) ? `예정일 ${str(m.dueDate)}` : null, m.answered === true ? "답변 있음" : null]
+        .filter(Boolean)
+        .join(" · ") || "—";
+    }
+    case "support_notice_create":
+    case "support_notice_update":
+      return m.pinned === true ? "상단 고정" : "일반 공지";
+    case "support_notice_delete":
+      return "공지 삭제";
     default:
       return "—";
   }

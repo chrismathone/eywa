@@ -454,6 +454,10 @@ export const AUDIT_ACTIONS = {
   help_post_delete: "도움말 질문 삭제",
   help_post_close: "도움말 질문 닫기",
   help_answer_create: "도움말 답변 작성",
+  // 고객센터 개선요청(0294a) — 답변·공지는 슈퍼관리자 감사 로그에 남는다(super-admin/server/audit.ts).
+  support_request_create: "개선요청 작성",
+  support_request_update: "개선요청 수정",
+  support_request_delete: "개선요청 삭제",
   // 데모 지점 대시보드에서만. 가상 재원 네 구성 중 하나로 갈아끼운다.
   demo_roster_apply: "데모 재원 구성 바꾸기",
 } as const;
