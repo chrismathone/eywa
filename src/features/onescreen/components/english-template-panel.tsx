@@ -15,6 +15,7 @@ import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { builtinTemplateLabelKey, type ReportTemplate } from "@/features/report-templates/defaults";
 import { EnglishMediaButton } from "./english-media-button";
 import { JjStatusLine, type EnglishJjStatus } from "./english-jj-status-line";
+import { JjExamPicker, type JjExamPickState } from "./english-jj-exam-picker";
 
 export type { EnglishJjStatus } from "./english-jj-status-line";
 
@@ -35,6 +36,8 @@ export type EnglishTemplateState = {
   appliedTemplateId: string;
   /** 그 행의 인재원 하루치(그림 칸 재료) 요약. */
   jj: EnglishJjStatus;
+  /** 결과지 고르기 재료 — 인재원 자료를 받았을 때만(미연결·실패·받는 중엔 null). */
+  jjPick: JjExamPickState | null;
   /** 짝을 이을 수 있는 사람인가 — 미연결 줄에 짝 잇기 링크를 달지(아니면 관리자에게 요청하라고 적는다). */
   canLinkJj: boolean;
   /** 글 속 사진·PDF — 올리는 중 · 첨부가 가득 참(서버 상한과 같은 수). */
@@ -51,6 +54,8 @@ export type EnglishTemplateHandlers = {
    * 인재원 하루치 **새로** 받기 — 모든 상태에서 보인다(수업 중 본 시험·방금 이은 짝을 바로 반영하게, 적대 리뷰 2026-09-11).
    */
   onJjRetry: () => void;
+  /** 결과지 고르기를 바꿨다(`null` = 기본으로) — 부모가 새 고르기로 다시 받는다. */
+  onJjPick: (pick: string[] | null) => void;
   /** 고른(사진이면 자른) 파일 — 부모가 올리고 글의 커서 줄에 첨부 자리를 넣는다. */
   onInsertFile: (file: File) => void;
 };
@@ -150,6 +155,7 @@ export function EnglishTemplatePanel({
         </span>
       </div>
       <JjStatusLine jj={state.jj} canLink={state.canLinkJj} onRetry={handlers.onJjRetry} />
+      {state.jjPick ? <JjExamPicker state={state.jjPick} onPick={handlers.onJjPick} /> : null}
       {notice ? <p className="text-text-faint text-xs">{notice}</p> : null}
     </div>
   );

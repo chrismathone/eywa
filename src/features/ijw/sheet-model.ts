@@ -268,8 +268,42 @@ export function examHeadline(e: IjwExamResult): ExamHeadline {
     typeLabel: examTypeLabel(e.deck.examType),
     submitted: kstStamp(e.submittedAt),
     elapsed: formatElapsed(e.elapsedMs),
-    compares: [avgCompare("반 평균", score, e.classAvg), avgCompare("전체 평균", score, e.overallAvg)],
+    compares: [
+      avgCompare(withCount("반 평균", e.classCount), score, e.classAvg),
+      avgCompare(withCount("전체 평균", e.overallCount), score, e.overallAvg),
+    ],
   };
+}
+
+/** 평균의 모수(명)를 라벨에 붙인다 — 모르면 라벨 그대로(옛 응답). */
+function withCount(label: string, count: number | null | undefined): string {
+  return count != null && Number.isFinite(count) && count > 0 ? `${label} · ${comma(count)}명` : label;
+}
+
+/** 결과지의 부가 칸 한 개 — 등수·객관식/주관식(2026-09-28 인재원이 더한 값). */
+export type ExamExtra = { key: string; label: string; value: string; note: string };
+
+/**
+ * 등수(전체·반)와 객관식/주관식 — **인재원이 준 값이 있을 때만** 칸을 세운다(옛 응답·테스트 계정·재응시 전 옛 결과는 null →
+ * 칸 없음). 🔑 등수는 인재원 순위표 규칙(정답률 → 걸린 시간 → 아이디, 공동 등수 없음) 그대로 — 여기서 다시 세지 않는다.
+ */
+export function examExtras(e: IjwExamResult): ExamExtra[] {
+  const out: ExamExtra[] = [];
+  const rank = e.rank;
+  if (rank?.overall && rank.overall.of > 0)
+    out.push({ key: "rank-overall", label: "전체 등수", value: `${comma(rank.overall.rank)}위`, note: `${comma(rank.overall.of)}명 중` });
+  if (rank?.class && rank.class.of > 0)
+    out.push({ key: "rank-class", label: "반 등수", value: `${comma(rank.class.rank)}위`, note: `${comma(rank.class.of)}명 중` });
+  for (const k of e.byKind ?? []) {
+    if (!(k.total > 0)) continue;
+    out.push({
+      key: `kind-${k.kind || k.label}`,
+      label: k.label || "문항",
+      value: `${comma(k.correct)} / ${comma(k.total)}`,
+      note: `정답률 ${pctOf(k.correct, k.total)}%`,
+    });
+  }
+  return out;
 }
 
 export type BandMarker = { key: string; label: string; pct: number; tone: "ink" | "muted" };
