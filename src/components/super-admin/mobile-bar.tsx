@@ -14,7 +14,7 @@ import { SUPER_ADMIN_NAV, activeSuperAdminNav } from "./nav";
  *
  * 계기(원장 2026-09-25 폰 캡처): 종전엔 256px 검정 사이드바가 폰에서도 그대로 서서 본문이 130px만 남았고,
  * 지표 카드의 "전체 학원"·"507"이 **한 글자씩 세로로** 쌓였다. 데스크톱이 아니면 사이드바를 숨기고 이 바가 메뉴다.
- * ⚠️ 보이는 조건은 레이아웃의 `lg:pointer-fine:hidden`(사이드바와 정확히 여집합 — 앱 셸과 같은 축).
+ * ⚠️ 보이는 조건은 레이아웃의 `desk:hidden`(사이드바와 정확히 여집합 — 앱 셸과 같은 축).
  * ⚠️ 이 줄이 화면 제목이다 — 본문 `PageHeader`는 `compact-chrome`으로 접힌다(제목 두 번 금지).
  */
 export function SuperAdminMobileBar({ email, className = "" }: { email: string; className?: string }) {
