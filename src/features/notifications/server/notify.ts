@@ -35,7 +35,7 @@ export async function notifyUsers(items: NotifyInput[]): Promise<void> {
     const admin = createAdminClient();
     const { error } = await admin.from("notifications").insert(rows);
     if (error) reportError(error, { scope: "notify.insert", count: rows.length });
-    // 슬랙 전달(0295a) — 응답 뒤에 돌고, 켠 지점·고른 종류만 나간다. aywa 알림이 들어간 것만 보낸다.
+    // 슬랙 전달(0297a) — 응답 뒤에 돌고, 켠 지점·고른 종류만 나간다. aywa 알림이 들어간 것만 보낸다.
     else scheduleSlackForward(rows);
   } catch (e) {
     reportError(e, { scope: "notify.insert.throw" });

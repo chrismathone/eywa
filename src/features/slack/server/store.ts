@@ -3,13 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeSlackRoutes, type SlackRoute } from "../format";
 
 /**
- * 슬랙 연결 저장소(0295a `slack_connections`, 지점당 1행) — 서버 전용.
+ * 슬랙 연결 저장소(0297a `slack_connections`, 지점당 1행) — 서버 전용.
  * 🔴 표는 service_role만 읽는다(정책 0, 권한 회수) → 여기 함수들은 **게이트를 통과한 호출부**만 부른다.
  */
 export type SlackRow = { botToken: string; teamName: string; routes: SlackRoute[]; updatedAt: string | null };
 export type SlackLoad = { status: "ok"; row: SlackRow | null } | { status: "missing_table" } | { status: "error" };
 
-export const SLACK_TABLE_MISSING_MESSAGE = "슬랙 연결 표가 아직 DB에 없습니다(0295a 적용 필요)";
+export const SLACK_TABLE_MISSING_MESSAGE = "슬랙 연결 표가 아직 DB에 없습니다(0297a 적용 필요)";
 
 function isMissingTable(err: { code?: string; message?: string }): boolean {
   const msg = err.message ?? "";

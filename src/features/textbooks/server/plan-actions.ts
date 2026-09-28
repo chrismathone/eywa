@@ -25,8 +25,6 @@ import { resolvePeriodLabel, tableToEntries } from "@/features/class-sheets/lib/
 import { isWeekendDow } from "@/features/class-sheets/lib/grid-rows";
 import { canonicalSlotTeacherLabel } from "@/features/timetable/lib/teacher-label";
 import { dowKeyOf } from "@/features/class-sheets/lib/week";
-import { planLineFromRow } from "@/features/class-sheets/lib/plan-line";
-import type { PlanLineDTO } from "@/features/class-sheets/server/actions";
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
 import { kstToday } from "@/lib/date-kst";
@@ -98,7 +96,7 @@ function isMissingSlotPicksColumn(error: { code?: string; message?: string } | n
  * 🔴 **교재목록 모듈을 끈 학원에선 배정 액션이 돌지 않는다**(감사 S7) — 서버 액션은 공개 엔드포인트라
  *    화면에서 [교재 배정] 입구를 감춘 것만으로는 게이트가 아니다([[#77]]). 판정 실패는 켜진 것으로 본다
  *    (`isModuleOnForTenant` fail-open — 침산은 꺼진 모듈이 없다).
- * ⚠️ [월간계획 가져오기](`importPlannedSlot`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
+ * ⚠️ [월간계획 전체 가져오기](`importPlannedRange`)·회차 미루기는 시트의 **실제** 쪽 문이라 여기 걸지 않는다.
  */
 const TEXTBOOKS_MODULE_OFF = "이 학원은 교재목록 기능이 꺼져 있습니다";
 async function textbooksModuleOff(tenantId: string): Promise<boolean> {
@@ -802,60 +800,57 @@ export async function applyTextbookFill(
   };
 }
 
-// ── 가져오기 — 월간계획 한 칸을 **실제**로 옮긴다 ────────────────────────────────
+// ── 가져오기 — 월간계획(일정)을 한 달치 **실제**로 옮긴다 ────────────────────────
 
-export type ImportPlannedResult =
-  | {
-      ok: true;
-      result: ApplyResult;
-      /**
-       * 그 칸의 **확정된 계획 줄 전부**(시트가 쓰는 것과 같은 모양) — 화면이 이걸 그대로 갈아끼운다.
-       * 🔑 '내용 복사'와 같은 계약이다: 서버가 canonical을 돌려줘야 클라가 제 손으로 줄을 지어내지 않는다.
-       */
-      lines: PlanLineDTO[];
-    }
-  | { ok: false; error: string };
+export type ImportPlannedResult = { ok: true; result: ApplyResult; cells: number } | { ok: false; error: string };
+
+/** 한 번에 가져올 수 있는 날 수 — 세션 한 달(최대 ~40일)을 넉넉히 덮는 상한. 락·시간 예산 가드. */
+const IMPORT_MAX_DAYS = 62;
+/** RPC 한 번에 싣는 칸 수 — RPC 상한(300, 락 예산)보다 넉넉히 작게. */
+const IMPORT_CHUNK = 100;
 
 /**
- * **[가져오기]** — 그 (날짜, 교시)의 월간계획을 실제 계획 줄로 복사한다.
+ * **[월간계획 전체 가져오기]** — 그 기간의 월간계획(**일정**, 미루기 반영)을 실제 계획 줄로 복사한다.
  *
- * 🔴 원장 2026-09-22: *"각자 월간계획에서 가저오기 해서 실제수업에서 변동사항이 있으면 변경 후 사용"*.
- *    계획이 실제로 들어가는 길은 **이 버튼 하나뿐**이다 — 배정만으로는 실제가 한 칸도 안 바뀐다
- *    (그래야 작성률이 "강사가 실제로 쓴 것"으로 남는다).
- * 🔑 **빈 칸만 채운다** — 밑바닥은 기입과 같은 RPC(`ecs_apply_textbook_lessons`)라, 가져온 뒤 고쳐 쓴
- *    값을 다시 누른다고 덮어쓰지 않는다(여러 번 눌러도 안전하다).
+ * 🔴 원장 2026-09-28: *"선생님이 월간계획 전체가져오기 기능 추가, 한주씩 가져오는건 필요없음"* — 옛
+ *    교시 한 칸 가져오기(`importPlannedSlot`)는 없앴다. 계획이 실제에 들어가는 길은 **이 버튼 하나**다.
+ * 🔑 가져오는 건 **일정**이다(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — 미룬 칸은 비워 두고 뒤로
+ *    밀린 차수가 들어간다. 비교의 기준인 원래 계획(`baselineByCell`)은 여기서 안 쓴다.
+ * 🔑 **빈 칸만 채운다** — 밑바닥은 기입과 같은 RPC(`ecs_apply_textbook_lessons`)라, 이미 적은 칸이나
+ *    가져온 뒤 고쳐 쓴 값은 다시 눌러도 덮어쓰지 않는다(여러 번 눌러도 안전하다).
  * 🔴 게이트는 그 반의 ECS 쓰기 권한 — 서버 액션은 공개 엔드포인트다([[#77]]).
- * ⚠️ 한 칸이라 RPC 대상은 많아야 계획 줄 몇 개다(락 예산 걱정 없음).
  */
-export async function importPlannedSlot(input: {
+export async function importPlannedRange(input: {
   classId: string;
-  /** `"YYYY-MM-DD"` */
-  date: string;
-  /** `"HH:MM"` */
-  slotStart: string;
+  /** `"YYYY-MM-DD"` — 화면이 그린 기간(달력월 또는 세션). */
+  from: string;
+  to: string;
 }): Promise<ImportPlannedResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  if (!YMD_RE.test(input.date)) return { ok: false, error: "날짜가 올바르지 않습니다" };
-  const slot = String(input.slotStart).slice(0, 5);
-  if (!/^[0-2]\d:[0-5]\d$/.test(slot)) return { ok: false, error: "교시가 올바르지 않습니다" };
+  if (!YMD_RE.test(input.from) || !YMD_RE.test(input.to) || input.from > input.to) {
+    return { ok: false, error: "기간이 올바르지 않습니다" };
+  }
+  const days = (Date.parse(`${input.to}T00:00:00Z`) - Date.parse(`${input.from}T00:00:00Z`)) / 86_400_000;
+  if (!(days < IMPORT_MAX_DAYS)) return { ok: false, error: "한 번에 가져올 수 있는 기간을 넘었습니다" };
 
   const { getClassPlannedLines } = await import("./month-plan");
   const planned = await getClassPlannedLines({
     tenantId: gate.access.tenantId,
     subject: gate.access.subject,
     classId: input.classId,
-    from: input.date,
-    to: input.date,
+    from: input.from,
+    to: input.to,
   });
   if (planned.status === "missing-table") return { ok: false, error: TEXTBOOKS_NOT_READY };
   if (planned.status !== "ok") return { ok: false, error: "월간계획을 읽지 못했습니다 — 잠시 뒤 다시 시도해 주세요" };
 
-  const lines = planned.byCell[`${input.date}|${slot}`] ?? [];
-  if (lines.length === 0) return { ok: false, error: "그 교시엔 가져올 월간계획이 없습니다" };
+  const cells = Object.keys(planned.byCell).sort();
+  const lines = cells.flatMap((k) => planned.byCell[k]!);
+  if (lines.length === 0) return { ok: false, error: "이 기간엔 가져올 월간계획이 없습니다" };
 
-  // 🔴 RPC는 (구분, 교재명) 한 벌을 받는다 — 한 칸에 교재가 둘이면 **교재마다 따로** 부른다.
-  //    한 번에 뭉치면 다른 교재의 진도가 첫 교재 줄에 적힌다(구분은 선호가 아니라 필터다, 0266a).
+  // 🔴 RPC는 (시기, 구분, 교재명) 한 벌을 받는다 — 교재마다 따로 부른다. 한 번에 뭉치면 다른 교재의
+  //    진도가 첫 교재 줄에 적힌다(구분은 선호가 아니라 필터다, 0266a).
   const admin = createAdminClient();
   const groups = new Map<string, typeof lines>();
   for (const l of lines) {
@@ -866,52 +861,46 @@ export async function importPlannedSlot(input: {
   const total: ApplyResult = { applied: 0, filled: 0, added: 0, skipped: 0, truncated: 0 };
   for (const group of groups.values()) {
     const head = group[0]!;
-    const { data, error } = await admin.rpc("ecs_apply_textbook_lessons", {
-      p_tenant: gate.access.tenantId,
-      p_actor: gate.access.user.id,
-      p_class: input.classId,
-      p_term_mode: head.termMode,
-      p_skill_area: head.skillArea,
-      p_title: head.title,
-      p_page_time: head.pageTime,
-      p_targets: group.map((l) => ({
-        date: l.date,
-        slot: l.slotStart,
-        progress: l.progress,
-        homework: l.homework,
-      })),
-    });
-    if (error) return { ok: false, error: friendlyTextbookError(error, "가져오지 못했습니다") };
-    const out = (data ?? {}) as Partial<ApplyResult>;
-    total.applied += Number(out.applied ?? 0);
-    total.filled += Number(out.filled ?? 0);
-    total.added += Number(out.added ?? 0);
-    total.skipped += Number(out.skipped ?? 0);
-    total.truncated += Number(out.truncated ?? 0);
+    // 날짜·교시 오름차순(동시 호출도 같은 순서로 락을 잡는다 — 0266a 교착 회피 규약).
+    const sorted = [...group].sort((a, b) =>
+      a.date === b.date ? a.slotStart.localeCompare(b.slotStart) : a.date.localeCompare(b.date),
+    );
+    for (let i = 0; i < sorted.length; i += IMPORT_CHUNK) {
+      const { data, error } = await admin.rpc("ecs_apply_textbook_lessons", {
+        p_tenant: gate.access.tenantId,
+        p_actor: gate.access.user.id,
+        p_class: input.classId,
+        p_term_mode: head.termMode,
+        p_skill_area: head.skillArea,
+        p_title: head.title,
+        p_page_time: head.pageTime,
+        p_targets: sorted.slice(i, i + IMPORT_CHUNK).map((l) => ({
+          date: l.date,
+          slot: l.slotStart,
+          progress: l.progress,
+          homework: l.homework,
+        })),
+      });
+      if (error) return { ok: false, error: friendlyTextbookError(error, "가져오지 못했습니다") };
+      const out = (data ?? {}) as Partial<ApplyResult>;
+      total.applied += Number(out.applied ?? 0);
+      total.filled += Number(out.filled ?? 0);
+      total.added += Number(out.added ?? 0);
+      total.skipped += Number(out.skipped ?? 0);
+      total.truncated += Number(out.truncated ?? 0);
+    }
   }
-
-  // 🔑 그 칸의 canonical 줄을 돌려준다 — 화면이 새로고침 없이 그대로 반영한다('내용 복사'와 같은 계약).
-  const { data: fresh } = await admin
-    .from("class_sheet_plan_lines")
-    .select("id, plan_date, slot_start, term_mode, skill_area, line_no, textbook, page_range, progress, homework, updated_at")
-    .eq("tenant_id", gate.access.tenantId)
-    .eq("class_id", input.classId)
-    .eq("plan_date", input.date)
-    .eq("slot_start", slot)
-    .order("term_mode", { ascending: true })
-    .order("line_no", { ascending: true })
-    .range(0, 99);
 
   await logAction({
     action: "textbook_plan_import",
     targetType: "class",
     targetLabel: gate.access.className,
-    metadata: { date: input.date, slot, ...total },
+    metadata: { from: input.from, to: input.to, cells: cells.length, ...total },
   });
-  // 실제 줄이 바뀌었다 — 그 반의 시트·월간을 통째로 무효화한다(위 `applyLoaded`와 같은 이유).
+  // 실제 줄이 바뀌었다 — 그 반의 시트·월간을 통째로 무효화한다([[#102]] 계열 — `"layout"` 필수).
   revalidatePath(`/ecs/${input.classId}`, "layout");
   revalidatePath("/ecs");
-  return { ok: true, result: total, lines: ((fresh ?? []) as Record<string, unknown>[]).map(planLineFromRow) };
+  return { ok: true, result: total, cells: cells.length };
 }
 
 // ── 회차 미루기·당기기 — 그 칸에서 차수를 어떻게 할지 ─────────────────────────

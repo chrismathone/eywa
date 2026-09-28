@@ -110,6 +110,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   textbook: "교재",
   help_post: "도움말 질문",
   help_answer: "도움말 답변",
+  support_request: "개선요청",
 };
 
 // 시험유형은 운영 enum이 아니라 코드 고정(CLAUDE.md) — exams 화면과 동일 라벨.
@@ -820,7 +821,13 @@ export function auditDetail(
     case "newcomer_uncheck": {
       // 항목 이름은 신규생 체크리스트 정의가 단일 소스 — 여기 라벨을 다시 적으면 항목을 바꿀 때 갈린다.
       const item = ONBOARDING_ITEMS.find((i) => i.key === str(m.itemKey));
-      return join(ctx.nameOf(m.studentId), item?.label ?? str(m.itemKey), str(m.doneOn));
+      // 상담 등록·수정 화면에서 고른 체크(0295a 반자동)는 그 사실을 적는다 — 손 체크와 구별돼야 되짚을 수 있다.
+      return join(
+        ctx.nameOf(m.studentId),
+        item?.label ?? str(m.itemKey),
+        str(m.doneOn),
+        str(m.via) === "consultation" ? "원생상담으로" : null,
+      );
     }
     case "enrollment_assign": {
       return join(
@@ -1694,16 +1701,23 @@ export function auditDetail(
         str(m.startBlock) && str(m.endBlock) ? `${m.startBlock} → ${m.endBlock}` : null,
         str(m.textbook),
       );
-    // 인재원에서 단어수를 당겨 온 한 번(수동 버튼) — 칸마다 남기지 않고 **누른 한 번**을 한 줄로.
-    case "seat_jj_memorized_pull": {
+    // SRS에서 단어수를 당겨 온 한 번(수동 버튼) — 칸마다 남기지 않고 **누른 한 번**을 한 줄로.
+    // ⚠️ `updated`·`same`은 2026-09-28부터 실린다 — 옛 행엔 없으므로 `?? 0`이 그 칸을 조용히 뺀다
+    //    (0을 "갱신 0칸"으로 적으면 그때는 갱신이라는 개념이 없었다는 사실이 가려진다).
+    case "seat_jj_memorized_pull":
+    case "ecs_memorized_pull": {
       const filled = num(m.filled) ?? 0;
+      const updated = num(m.updated) ?? 0;
+      const same = num(m.same) ?? 0;
       const kept = num(m.kept) ?? 0;
       const unlinked = num(m.unlinked) ?? 0;
       return join(
         str(m.date),
         `누적 암기 단어수 ${filled}칸 채움`,
-        kept ? `${kept}칸은 이미 적혀 있어 그대로` : null,
-        unlinked ? `인재원 짝 없음 ${unlinked}칸` : null,
+        updated ? `${updated}칸 갱신` : null,
+        same ? `${same}칸은 이미 최신` : null,
+        kept ? `${kept}칸은 그대로` : null,
+        unlinked ? `SRS 짝 없음 ${unlinked}칸` : null,
       );
     }
     case "ecs_plan_cell_edit":
@@ -1918,6 +1932,9 @@ export function auditDetail(
     case "help_post_delete":
     case "help_post_close":
     case "help_answer_create":
+    case "support_request_create":
+    case "support_request_update":
+    case "support_request_delete":
       return str(m.title) ?? null;
 
     case "demo_roster_apply": {

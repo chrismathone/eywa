@@ -11,6 +11,8 @@ export const SUPER_ADMIN_NAV: SuperAdminNavItem[] = [
   { href: "/super-admin", label: "대시보드", icon: "layoutGrid" },
   { href: "/super-admin/tenants", label: "전 지점 운영", icon: "building" },
   { href: "/super-admin/usage", label: "이용 분석", icon: "barChart" },
+  // 고객센터(0294a) — 전 지점 개선요청 처리 + 공지사항 작성. 공지는 하위 경로(`/support/notices`)라 이 항목이 활성으로 선다.
+  { href: "/super-admin/support", label: "고객센터", icon: "mail" },
   { href: "/super-admin/audit", label: "감사 로그", icon: "history" },
 ];
 

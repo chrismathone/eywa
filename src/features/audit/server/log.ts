@@ -379,7 +379,9 @@ export const AUDIT_ACTIONS = {
   // 자리 출석부 JJ 칸(`mark-actions.ts` `commitSeatJjEdits`, PIN이면 문 이름).
   ecs_plan_cell_edit: "수업계획 칸 수정",
   seat_jj_mark_edit: "자리 출석부 JJ 칸 수정",
-  seat_jj_memorized_pull: "자리 출석부 단어수 가져오기(인재원)",
+  seat_jj_memorized_pull: "자리 출석부 단어수 가져오기(SRS)",
+  // 강사 시트(수업계획서)에서 누른 한 번 — 자리 출석부 버튼과 같은 일이지만 **어느 화면에서 눌렀나**가 다르다.
+  ecs_memorized_pull: "강사 시트 단어수 가져오기(SRS)",
 
   // 돈 — 🔴 **금액은 담지 않는다**(아래 '금액' 주석 참조).
   expense_create: "지출결의서 작성",
@@ -457,6 +459,10 @@ export const AUDIT_ACTIONS = {
   help_post_delete: "도움말 질문 삭제",
   help_post_close: "도움말 질문 닫기",
   help_answer_create: "도움말 답변 작성",
+  // 고객센터 개선요청(0294a) — 답변·공지는 슈퍼관리자 감사 로그에 남는다(super-admin/server/audit.ts).
+  support_request_create: "개선요청 작성",
+  support_request_update: "개선요청 수정",
+  support_request_delete: "개선요청 삭제",
   // 데모 지점 대시보드에서만. 가상 재원 네 구성 중 하나로 갈아끼운다.
   demo_roster_apply: "데모 재원 구성 바꾸기",
 } as const;

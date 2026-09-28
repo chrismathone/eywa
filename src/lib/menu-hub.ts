@@ -203,8 +203,17 @@ export const HUB_GROUPS: HubGroup[] = [
   },
 ];
 
-/** 하단 지원 줄 — 설정은 면이 많아 허브로, 도움말은 바로 연다. */
+/** 하단 지원 줄 — 고객센터 · 설정(면이 많아 허브) · 도움말(바로 연다). */
 export const SUPPORT_GROUPS: HubGroup[] = [
+  // 고객센터(0294a) — 지원 묶음 **맨 위**(원장 2026-09-28 *"고객센터, 지원, 도움말 순서로"* → 고객센터 · 설정 · 도움말).
+  // 공지사항·개선요청은 화면 안 탭바로 오간다(면이 둘뿐이라 허브를 거치지 않고 바로 연다).
+  {
+    id: "support",
+    label: "고객센터",
+    icon: MENU_ICON.support,
+    kind: "direct",
+    items: keep([fromMenu("support")]),
+  },
   {
     id: "owner",
     label: "설정",

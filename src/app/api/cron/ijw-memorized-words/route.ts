@@ -12,8 +12,12 @@ import { getPublicSeatDay } from "@/features/attendance/seat/server/queries";
  *    아니라 지금 값으로 선다. 선생님이 출근해 시트를 열 때 이미 적혀 있게 하는 것이 이 크론의 목적이다.
  * 🔑 대상은 **그 날 JJ실 명단**이다(자리 하루치 조회 그대로) — 세션이 없으므로 공개 PIN 화면이 쓰는
  *    admin 경로(`getPublicSeatDay`)를 쓴다. 명단이 없는 날(수업 없음)은 아무것도 하지 않는다.
- * 🔴 빈 칸만 채운다 · 사람이 적은 값은 덮지 않는다 · 짝 없는 학생은 건너뛴다 — 판단은 전부
- *    [`fillMemorizedWords`](@/features/ijw/server/memorized-words) 한 곳이고 수동 버튼과 **같은 함수**다.
+ * 🔴 빈 칸은 채우고 · **숫자만 든 칸은 최신값으로 갱신**하고 · 글자가 섞인 칸은 손대지 않고 · 짝 없는
+ *    학생은 건너뛴다 — 판단은 전부 [`fillMemorizedWords`](@/features/ijw/server/memorized-words) 한 곳이고
+ *    수동 버튼 둘(자리 출석부·영어 강사 시트)과 **같은 함수**다.
+ * 🔑 **갱신이 있어야 '자동'이 성립한다**: '내용 복사 (지난 수업)'가 이 칸을 지난 값으로 미리 채워 두면
+ *    종전 규칙("빈 칸만")으로는 영영 안 고쳐져 시트에 낡은 숫자가 굳었다(실측 2026-09-28). 이 크론이
+ *    그 날 아침에 그것을 지금 값으로 바로잡는다.
  * 🔴 `updated_by`는 null이다 — 사람이 적었다고 지어내지 않는다(키오스크·자리 출결과 같은 규약).
  * ⚠️ 인재원 연동은 한 학원(IJW_TENANT_ID)에 묶여 있다 — 설정이 없으면 조용히 건너뛴다(실패가 아니다).
  */
@@ -49,7 +53,10 @@ export async function GET(req: Request) {
       ok: true,
       date,
       summary: memorizedFillNotice(res),
+      mode: res.mode,
       filled: res.filled,
+      updated: res.updated,
+      same: res.same,
       kept: res.kept,
       unlinked: res.unlinked,
       noData: res.noData,

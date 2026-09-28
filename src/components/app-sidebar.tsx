@@ -402,7 +402,7 @@ export function AppSidebar({
             </NavSection>
           ) : null}
 
-          {/* 지원 — 설정(면이 많아 허브)·도움말. */}
+          {/* 지원 — 고객센터·설정(면이 많아 허브)·도움말. */}
           {supportGroups.length > 0 ? (
             <NavSection label="지원" expanded={expanded} motion={motion}>
               {supportGroups.map((g) => (

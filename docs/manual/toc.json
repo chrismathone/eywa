@@ -402,6 +402,20 @@
           ]
         },
         {
+          "slug": "support",
+          "title": "고객센터",
+          "faces": [
+            {
+              "slug": "notices",
+              "title": "공지사항"
+            },
+            {
+              "slug": "requests",
+              "title": "개선요청"
+            }
+          ]
+        },
+        {
           "slug": "owner",
           "title": "학원 설정",
           "faces": [

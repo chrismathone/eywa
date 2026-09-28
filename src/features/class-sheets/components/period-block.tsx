@@ -12,6 +12,7 @@ import { PlanTable } from "./plan-table";
 import { RosterTable } from "./roster-table";
 import type { RosterGroupKey } from "../lib/roster-order";
 import { rosterFormOf, type SheetMark } from "../lib/roster-form";
+import { MemorizedPullChip } from "./memorized-pull-chip";
 import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { useTeacherNames } from "@/features/teacher-view/teacher-names-context";
 import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
@@ -83,6 +84,20 @@ export const PeriodBlock = memo(function PeriodBlock({
   const teacherNames = useTeacherNames();
   const lang = useSheetLang();
   const t = useSheetT();
+  // JJ(집중자율수업실) 교시는 전용 폼 — 판정은 슬롯 라벨 하나(원장 2026-08-13).
+  // ⚠️ `teacher`(아래 폴백)로 판정하지 말 것: 라벨이 없으면 반 담임 이름으로 떨어져 자리가 아니게 된다.
+  const form = rosterFormOf(slot.teacherLabel);
+  /**
+   * [SRS 단어수] — **JJ 교시에만** 선다(누적 암기 단어수 칸이 그 폼에만 있다).
+   * ⚠️ 고아 교시(`!slot.scheduled`)·명단 0명엔 안 그린다 — 서버가 "그 교시 명단이 없습니다"로 거절할
+   *    버튼을 세워 두면 눌러 보기 전엔 모른다.
+   * ⚠️ `applyMemorizedWords`를 안 주는 호스트에선 아예 안 그린다(`onShouting`과 같은 규약) — 값을 화면에
+   *    옮길 손이 없으면 "눌렀는데 칸이 그대로"가 된다.
+   */
+  const srsPull =
+    form === "selfStudy" && canEdit && slot.scheduled && slot.roster.length > 0 && handlers.applyMemorizedWords
+      ? handlers.applyMemorizedWords
+      : null;
   const teacher = teacherNameFor(
     slot.teacherLabel ??
       (slot.teacherId ? (data.teacherNames[slot.teacherId] ?? null) : null) ??
@@ -139,24 +154,40 @@ export const PeriodBlock = memo(function PeriodBlock({
         {/* 🔴 '시간 변경됨' 배지는 없앴다 — 원장 2026-09-23 *"앞으로 안뜨게하면 되고 이전 데이터들은 무시해"*.
             `buildWeekGrid`가 2026-09-22부터 고아 교시를 아예 안 내려보내 어차피 죽은 가지였다(`scheduled`
             게이트 자체는 Shouting 등 다른 소비처가 아직 쓰므로 그대로 둔다). 기록은 지우지 않는다. */}
-        {/* Shouting 체크 — **EiE 반만**(부모가 onShouting을 줄 때만 그린다). 머리 줄 오른쪽 끝, 구분선 위
-            (원장 2026-08-27 "우상단에 우측정렬해서 구분선 위쪽에"). 라벨까지 눌리게 label로 감싼다. */}
-        {onShouting ? (
-          <label
-            className={`ml-auto flex shrink-0 items-center gap-1 text-xs font-bold whitespace-nowrap ${
-              canEdit && slot.scheduled ? "cursor-pointer" : "cursor-default opacity-60"
-            }`}
-            title={t("plan.shouting.title")}
-          >
-            <input
-              type="checkbox"
-              className="size-3.5 shrink-0 accent-primary"
-              checked={shouting}
-              disabled={!canEdit || !slot.scheduled}
-              onChange={(e) => onShouting(date, slot.slotStart, e.target.checked)}
-            />
-            <span className={shouting ? "text-primary" : "text-text-dim"}>{t("landing.col.shouting")}</span>
-          </label>
+        {/* 머리 줄 **오른쪽 끝**, 구분선 위(원장 2026-08-27 "우상단에 우측정렬해서 구분선 위쪽에") —
+            [SRS 단어수](JJ 교시) · Shouting 체크(EiE 반). 둘 다 없으면 아무것도 서지 않는다.
+            ⚠️ `ml-auto`는 **이 묶음**이 든다 — 조각마다 따로 들면 둘이 함께 설 때 앞엣것이 가운데로 밀린다. */}
+        {srsPull || onShouting ? (
+          <span className="ml-auto flex shrink-0 items-center gap-2">
+            {srsPull ? (
+              <MemorizedPullChip
+                classId={data.classId}
+                date={date}
+                slotStart={slot.slotStart}
+                onWritten={srsPull}
+              />
+            ) : null}
+            {/* Shouting 체크 — **EiE 반만**(부모가 onShouting을 줄 때만 그린다). 라벨까지 눌리게 label로 감싼다. */}
+            {onShouting ? (
+              <label
+                className={`flex shrink-0 items-center gap-1 text-xs font-bold whitespace-nowrap ${
+                  canEdit && slot.scheduled ? "cursor-pointer" : "cursor-default opacity-60"
+                }`}
+                title={t("plan.shouting.title")}
+              >
+                <input
+                  type="checkbox"
+                  className="size-3.5 shrink-0 accent-primary"
+                  checked={shouting}
+                  disabled={!canEdit || !slot.scheduled}
+                  onChange={(e) => onShouting(date, slot.slotStart, e.target.checked)}
+                />
+                <span className={shouting ? "text-primary" : "text-text-dim"}>
+                  {t("landing.col.shouting")}
+                </span>
+              </label>
+            ) : null}
+          </span>
         ) : null}
       </header>
 
@@ -183,9 +214,8 @@ export const PeriodBlock = memo(function PeriodBlock({
           canEdit={canEdit}
           collapsedGroups={collapsedGroups}
           onToggleGroup={onToggleGroup}
-          // JJ(집중자율수업실) 교시는 전용 폼 — 판정은 슬롯 라벨 하나(원장 2026-08-13).
-          // ⚠️ `teacher`(위 폴백)로 판정하지 말 것: 라벨이 없으면 반 담임 이름으로 떨어져 자리가 아니게 된다.
-          form={rosterFormOf(slot.teacherLabel)}
+          // 폼 판정은 위에서 한 번(`form`) — 같은 판정을 두 곳에서 하면 한쪽만 고쳐진다.
+          form={form}
         />
       ) : null}
     </article>

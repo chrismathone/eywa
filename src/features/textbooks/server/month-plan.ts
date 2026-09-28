@@ -8,46 +8,43 @@ import "server-only";
  * 변동사항이 있으면 변경 후 사용가능하도록"*.
  *
  * 🔑 **계획은 파생값이다**(원장 선택 2026-09-22, "표 신설 없음") — 배정 한 건(`class_textbook_plans`)이
- *    곧 그 반의 월간계획이고, 여기서 (날짜, 교시) → 차수로 펼친다. 그래서 배정을 고치면 계획이
- *    **즉시 따라오고**, 계획과 배정이 어긋나는 상태 자체가 없다(저장했다면 반드시 생겼을 문제다).
+ *    곧 그 반의 월간계획이고, 여기서 (날짜, 교시) → 차수로 펼친다.
+ * 🔑 **두 벌이다**(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — `baselineByCell`(원래 계획, 미루기
+ *    미반영)은 달력·비교·현황의 **기준**이고, `byCell`(일정, 미루기 반영)은 [가져오기]가 옮기는 값이다.
+ *    미루기가 원래 계획을 고쳐 쓰면 "얼마나 밀렸나"를 잴 기준이 사라진다.
  * 🔴 **실제와 섞지 않는다** — 실제는 `class_sheet_plan_lines` 하나뿐이고, 계획이 거기 들어가는 길은
- *    사람이 누르는 [가져오기]뿐이다(`importPlannedSlot`). 배정만으로 실제가 채워지면 작성률이
- *    "계획을 세웠다"만으로 올라 *"강사가 실제 나간 진도"*라는 말이 거짓이 된다.
- * 🔑 배분 규칙은 [`buildLessonSchedule`](../lesson-schedule.ts) **한 곳**을 그대로 탄다 — 미리보기·계획·
- *    가져오기가 같은 함수를 써야 세 화면이 같은 답을 낸다.
+ *    사람이 누르는 [월간계획 전체 가져오기]뿐이다(`importPlannedRange`).
  * ⚠️ 0266a/0268a 미적용이어도 **절대 throw하지 않는다**([[#95]]) — 영어 강사 전원이 매일 여는 화면이
  *    이걸 읽는다. 못 읽으면 계획이 빈 채로 시트가 그대로 돈다.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { buildHolidayMap } from "@/features/attendance/calendar";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import type { HolidayMap } from "@/features/class-sheets/lib/holiday";
 import type { MonthScheduleRow } from "@/features/class-sheets/lib/month-assemble";
-import { buildLessonSchedule, MAX_LOOKAHEAD_DAYS } from "../lesson-schedule";
-import type { LessonPace, SlotAxis } from "../lesson-schedule";
 import { isMissingTextbookTable } from "./access";
 import type { TextbookTableStatus } from "../types";
+import {
+  expandPlans,
+  lessonIndexOf,
+  type BookInfo,
+  type LessonText,
+  type PlannedLine,
+  type PlanRow,
+} from "../plan-expand";
+import type { LessonIndex } from "../plan-compare";
 
-/** 계획 한 줄 — 그 날 그 교시에 **오기로 되어 있는** 차수. 실제 줄(`class_sheet_plan_lines`)이 아니다. */
-export type PlannedLine = {
-  /** 몇 차수인가(교재의 N차수). */
-  lessonNo: number;
-  date: string;
-  /** `"HH:MM"` — 계획 줄 `slot_start`와 같은 표기. */
-  slotStart: string;
-  /** 구분(vocab·writing…) — 실제 줄의 `skill_area`와 같은 값이라 가져오기가 줄을 맞춰 넣는다. */
-  skillArea: string;
-  title: string;
-  pageTime: string | null;
-  progress: string | null;
-  homework: string | null;
-  termMode: "regular" | "exam";
-};
+export type { PlannedLine } from "../plan-expand";
 
 export type MonthPlanResult = {
   status: TextbookTableStatus;
-  /** `"YYYY-MM-DD|HH:MM"` → 그 칸에 올 계획 줄(구분·교재명 순). */
+  /** **일정**(미루기 반영) — `"YYYY-MM-DD|HH:MM"` → 그 칸에 가져올 계획 줄. [가져오기]만 쓴다. */
   byCell: Record<string, PlannedLine[]>;
+  /** **원래 계획**(미루기 미반영) — 달력 표식·비교 모달·현황 페이지의 기준. */
+  baselineByCell: Record<string, PlannedLine[]>;
+  /** 배정된 교재들의 차수표 — 실제 진도 → 차수(늦음·빠름 판정, plan-compare). */
+  lessonIndex: LessonIndex;
   /**
    * 사람이 미루거나 당긴 칸(0282a) — `"YYYY-MM-DD|HH:MM"` → `skip` | `advance`.
    * 🔑 화면이 **토글 상태**로 쓴다(다시 누르면 지운다). 표가 없으면 빈 객체라 버튼이 '안 걸림'으로 뜬다.
@@ -55,26 +52,222 @@ export type MonthPlanResult = {
   shiftByCell: Record<string, "skip" | "advance">;
 };
 
-const EMPTY: MonthPlanResult = { status: "ok", byCell: {}, shiftByCell: {} };
+const emptyResult = (
+  status: TextbookTableStatus,
+  shiftByCell: Record<string, "skip" | "advance"> = {},
+): MonthPlanResult => ({ status, byCell: {}, baselineByCell: {}, lessonIndex: {}, shiftByCell });
 
-/** `class_textbook_plans` 한 줄이 계산에 필요로 하는 것만. */
-type PlanRow = {
-  textbook_id: string;
-  slot_axis: string;
-  pace: string;
-  term_mode: string;
-  start_date: string;
-  start_lesson_no: number;
-  slot_picks?: unknown;
+const BASE_COLS = "class_id, textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no";
+
+/** 반 하나가 계산에 쓰는 재료 — 여러 반 현황(plan-gap)도 같은 모양을 받는다. */
+export type ClassPlanMaterials = {
+  plans: PlanRow[];
+  /** 시간표 원본 행(담당 FK 포함) — 한 반 조회는 라벨만, 현황은 담당 이름까지 쓴다. */
+  scheduleRows: Record<string, unknown>[];
+  schedules: MonthScheduleRow[];
+  shifts: Record<string, "skip" | "advance">;
 };
 
-const BASE_COLS = "textbook_id, slot_axis, pace, term_mode, start_date, start_lesson_no";
+export type PlanMaterials = {
+  status: TextbookTableStatus;
+  byClass: Map<string, ClassPlanMaterials>;
+  books: Map<string, BookInfo>;
+  lessonsByBook: Map<string, Map<number, LessonText>>;
+  holidays: HolidayMap;
+};
 
-/** 며칠 앞까지 훑을지 — 달 끝까지 닿기만 하면 된다(상한은 스케줄러와 같다). */
-function lookaheadFor(startDate: string, to: string): number {
-  const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`);
-  if (!Number.isFinite(ms)) return MAX_LOOKAHEAD_DAYS;
-  return Math.max(1, Math.min(MAX_LOOKAHEAD_DAYS, Math.floor(ms / 86_400_000) + 1));
+/**
+ * 여러 반의 계획 재료를 **한 번에** 읽는다(B3 청크 · B4 병렬). `classIds`가 null이면 **배정이 있는 반 전부**.
+ * 🔴 게이트는 호출부 몫 — admin 클라이언트(RLS 우회)라 `tenant_id` 필터가 곧 격리다.
+ */
+export async function loadPlanMaterials(input: {
+  tenantId: string;
+  classIds: readonly string[] | null;
+  /** 미루기 표식을 어디까지 읽을지(구간 끝). 하한은 안 건다 — 앞선 미루기도 뒤 차수를 민다. */
+  to: string;
+}): Promise<PlanMaterials> {
+  const { tenantId, to } = input;
+  const admin = createAdminClient();
+  const empty = (status: TextbookTableStatus): PlanMaterials => ({
+    status,
+    byClass: new Map(),
+    books: new Map(),
+    lessonsByBook: new Map(),
+    holidays: {},
+  });
+
+  // 배정 목록 — 0268a 적용 전이면 `slot_picks` 없이 한 번 더(그 배정은 옛 축 방식으로 읽힌다, [[#95]]).
+  const readPlans = async (cols: string): Promise<{ data: PlanRow[]; error: { code?: string; message?: string } | null }> => {
+    if (input.classIds) {
+      if (input.classIds.length === 0) return { data: [], error: null };
+      try {
+        const data = await fetchInChunks<PlanRow & { class_id: string }>([...input.classIds], (chunk) =>
+          admin
+            .from("class_textbook_plans")
+            .select(cols)
+            .eq("tenant_id", tenantId)
+            .eq("is_active", true)
+            .in("class_id", chunk)
+            .order("created_at", { ascending: true }) as never,
+        );
+        return { data, error: null };
+      } catch (e) {
+        return { data: [], error: e as { code?: string; message?: string } };
+      }
+    }
+    // 반 목록을 여기서 **도출**하므로(distinct) 무페이징 select 금지 — 1000행 절단(B2).
+    try {
+      const data = await fetchAllPaged<PlanRow>((f, t) =>
+        admin
+          .from("class_textbook_plans")
+          .select(cols)
+          .eq("tenant_id", tenantId)
+          .eq("is_active", true)
+          .order("id", { ascending: true })
+          .range(f, t) as never,
+      );
+      return { data, error: null };
+    } catch (e) {
+      return { data: [], error: e as { code?: string; message?: string } };
+    }
+  };
+  let planRes = await readPlans(`${BASE_COLS}, slot_picks`);
+  if (planRes.error && (planRes.error.code === "42703" || planRes.error.code === "PGRST204" || /slot_picks/.test(planRes.error.message ?? ""))) {
+    planRes = await readPlans(BASE_COLS);
+  }
+  if (planRes.error) return empty(isMissingTextbookTable(planRes.error) ? "missing-table" : "failed");
+  const plans = planRes.data as (PlanRow & { class_id: string })[];
+
+  const classIds = input.classIds ? [...input.classIds] : [...new Set(plans.map((p) => String(p.class_id)))];
+  const byClass = new Map<string, ClassPlanMaterials>(
+    classIds.map((id) => [id, { plans: [], scheduleRows: [], schedules: [], shifts: {} }]),
+  );
+  for (const p of plans) byClass.get(String(p.class_id))?.plans.push(p);
+  if (classIds.length === 0) return { ...empty("ok"), holidays: {} };
+
+  const bookIds = [...new Set(plans.map((p) => String(p.textbook_id)))];
+  const [shiftRows, bookRows, lessonRows, settings, schedRows] = await Promise.all([
+    // 🔴 표가 없어도 죽지 않는다(0282a 미적용 = 표식 0개 = 종전 계산) — 그래서 catch로 빈 배열.
+    fetchAllPagedInChunks<{ class_id: string; plan_date: string; slot_start: string; kind: string }>(
+      classIds,
+      (chunk, f, t) =>
+        admin
+          .from("class_lesson_shifts")
+          .select("class_id, plan_date, slot_start, kind")
+          .eq("tenant_id", tenantId)
+          .in("class_id", chunk)
+          .lte("plan_date", to)
+          .order("id", { ascending: true })
+          .range(f, t),
+    ).catch(() => []),
+    bookIds.length === 0
+      ? Promise.resolve([] as Record<string, unknown>[])
+      : fetchInChunks<Record<string, unknown>>(bookIds, (chunk) =>
+          admin.from("textbooks").select("id, title, page_time, skill_area, session_count").eq("tenant_id", tenantId).in("id", chunk),
+        ).catch(() => null),
+    // 차수는 교재마다 최대 200줄이라 청크 페이지 순회로 전건을 받는다(B2·B3).
+    bookIds.length === 0
+      ? Promise.resolve([] as { textbook_id: string; lesson_no: number; progress: string | null; homework: string | null }[])
+      : fetchAllPagedInChunks<{ textbook_id: string; lesson_no: number; progress: string | null; homework: string | null }>(
+          bookIds,
+          (chunk, f, t) =>
+            admin
+              .from("textbook_lessons")
+              .select("textbook_id, lesson_no, progress, homework")
+              .eq("tenant_id", tenantId)
+              .in("textbook_id", chunk)
+              .order("textbook_id", { ascending: true })
+              .order("lesson_no", { ascending: true })
+              .range(f, t),
+        ).catch(() => null),
+    getTenantSettings(),
+    fetchAllPagedInChunks<Record<string, unknown>>(classIds, (chunk, f, t) =>
+      admin
+        .from("class_schedules")
+        .select("id, class_id, day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label, teacher_id")
+        .eq("tenant_id", tenantId)
+        .in("class_id", chunk)
+        .order("id", { ascending: true })
+        .range(f, t),
+    ).catch(() => null),
+  ]);
+  // 🔴 교재·차수·시간표가 하나라도 실패하면 **계획을 그리지 않는다** — 진도가 빠진 계획을 보여 주면
+  //    강사가 그걸 가져와 빈 칸을 채운 줄 알고 넘어간다(빈 계획이 거짓 계획보다 낫다).
+  if (bookRows === null || lessonRows === null || schedRows === null) return empty("failed");
+
+  for (const r of shiftRows) {
+    const m = byClass.get(String(r.class_id));
+    if (!m) continue;
+    m.shifts[`${String(r.plan_date).slice(0, 10)}|${String(r.slot_start).slice(0, 5)}`] =
+      String(r.kind) === "advance" ? "advance" : "skip";
+  }
+  // 시간표는 요일·시작시각 순이어야 `slotsByDateOf`가 같은 답을 낸다(페이지 순회는 id 순이라 다시 정렬).
+  const sorted = [...schedRows].sort((a, b) =>
+    String(a.day_of_week) === String(b.day_of_week)
+      ? String(a.start_time).localeCompare(String(b.start_time))
+      : String(a.day_of_week).localeCompare(String(b.day_of_week)),
+  );
+  for (const r of sorted) {
+    const m = byClass.get(String(r.class_id));
+    if (!m) continue;
+    m.scheduleRows.push(r);
+    m.schedules.push({
+      dayOfWeek: String(r.day_of_week),
+      startTime: String(r.start_time),
+      endTime: r.end_time ? String(r.end_time) : null,
+      validFrom: r.valid_from ? String(r.valid_from) : null,
+      validTo: r.valid_to ? String(r.valid_to) : null,
+      slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
+      slotRoomLabel: (r.slot_room_label as string | null) ?? null,
+    });
+  }
+
+  const books = new Map<string, BookInfo>(
+    bookRows.map((b) => [
+      String(b.id),
+      {
+        title: String(b.title),
+        pageTime: (b.page_time as string | null) ?? null,
+        skillArea: (b.skill_area as string | null) ?? null,
+        sessionCount: Number(b.session_count ?? 0),
+      },
+    ]),
+  );
+  const lessonsByBook = new Map<string, Map<number, LessonText>>();
+  for (const l of lessonRows) {
+    const key = String(l.textbook_id);
+    const m = lessonsByBook.get(key) ?? new Map<number, LessonText>();
+    m.set(Number(l.lesson_no), { progress: l.progress ?? null, homework: l.homework ?? null });
+    lessonsByBook.set(key, m);
+  }
+
+  return { status: "ok", byClass, books, lessonsByBook, holidays: buildHolidayMap(settings.operations.holidays) };
+}
+
+/** 재료 한 반 → 원래 계획·일정·차수표. */
+export function planCellsOf(
+  materials: PlanMaterials,
+  classId: string,
+  from: string,
+  to: string,
+): Omit<MonthPlanResult, "status"> {
+  const m = materials.byClass.get(classId);
+  if (!m) return { byCell: {}, baselineByCell: {}, lessonIndex: {}, shiftByCell: {} };
+  const common = {
+    plans: m.plans,
+    books: materials.books,
+    lessonsByBook: materials.lessonsByBook,
+    schedules: m.schedules,
+    holidays: materials.holidays,
+    from,
+    to,
+  };
+  return {
+    byCell: m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: m.shifts }),
+    baselineByCell: m.plans.length === 0 ? {} : expandPlans({ ...common, shifts: null }),
+    lessonIndex: lessonIndexOf(m.plans, materials.books, materials.lessonsByBook),
+    shiftByCell: m.shifts,
+  };
 }
 
 /**
@@ -92,174 +285,8 @@ export async function getClassPlannedLines(input: {
   to: string;
 }): Promise<MonthPlanResult> {
   const { tenantId, classId, from, to } = input;
-  if (!from || !to || from > to) return EMPTY;
-  const admin = createAdminClient();
-
-  // 배정 목록 — 0268a 적용 전이면 `slot_picks` 없이 한 번 더(그 배정은 옛 축 방식으로 읽힌다, [[#95]]).
-  const readPlans = (cols: string) =>
-    admin
-      .from("class_textbook_plans")
-      .select(cols)
-      .eq("tenant_id", tenantId)
-      .eq("class_id", classId)
-      .eq("is_active", true)
-      .order("created_at", { ascending: true })
-      .range(0, 199);
-  let planRes: { data: unknown; error: { code?: string; message?: string } | null } = await readPlans(
-    `${BASE_COLS}, slot_picks`,
-  );
-  if (planRes.error && (planRes.error.code === "42703" || planRes.error.code === "PGRST204")) {
-    planRes = await readPlans(BASE_COLS);
-  }
-  // 🔴 표가 없거나(0266a 미적용) 실패면 **빈 계획**으로 돈다 — 시트를 죽이지 않는다.
-  if (planRes.error) {
-    return { status: isMissingTextbookTable(planRes.error) ? "missing-table" : "failed", byCell: {}, shiftByCell: {} };
-  }
-  const plans = ((planRes.data ?? []) as unknown as PlanRow[]) ?? [];
-
-  /**
-   * 사람이 미루거나 당긴 칸(0282a) — 🔴 **표가 없어도 죽지 않는다**([[#95]]). 적용 전에는 표식이 0개라
-   * 계획이 종전과 똑같이 계산된다(버튼만 "잠시 뒤 다시"로 막힌다).
-   */
-  const shiftRes = await admin
-    .from("class_lesson_shifts")
-    .select("plan_date, slot_start, kind")
-    .eq("tenant_id", tenantId)
-    .eq("class_id", classId)
-    // 🔑 창을 **`from`으로 자르지 않는다** — 달 앞에 걸린 미루기도 그 달 차수를 밀기 때문이다.
-    //    배정 시작일부터 봐야 하므로 하한은 안 걸고 상한(`to`)만 건다.
-    .lte("plan_date", to)
-    .order("plan_date", { ascending: true })
-    .range(0, 999);
-  const shifts: Record<string, "skip" | "advance"> = {};
-  for (const r of shiftRes.data ?? []) {
-    const kind = String(r.kind) === "advance" ? "advance" : "skip";
-    shifts[`${String(r.plan_date).slice(0, 10)}|${String(r.slot_start).slice(0, 5)}`] = kind;
-  }
-
-  // 배정이 하나도 없어도 **표식은 돌려준다** — 미뤄 둔 칸의 버튼 상태는 배정과 무관하게 보여야 한다.
-  if (plans.length === 0) return { status: "ok", byCell: {}, shiftByCell: shifts };
-
-  const bookIds = [...new Set(plans.map((p) => String(p.textbook_id)))];
-  const [bookRes, lessonRows, settings, schedRes] = await Promise.all([
-    admin
-      .from("textbooks")
-      .select("id, title, page_time, skill_area, session_count")
-      .eq("tenant_id", tenantId)
-      .in("id", bookIds),
-    // 차수는 교재마다 최대 200줄이라 청크 페이지 순회로 전건을 받는다(B2·B3).
-    fetchAllPagedInChunks<{ textbook_id: string; lesson_no: number; progress: string | null; homework: string | null }>(
-      bookIds,
-      (chunk, f, t) =>
-        admin
-          .from("textbook_lessons")
-          .select("textbook_id, lesson_no, progress, homework")
-          .eq("tenant_id", tenantId)
-          .in("textbook_id", chunk)
-          .order("textbook_id", { ascending: true })
-          .order("lesson_no", { ascending: true })
-          .range(f, t),
-    ).catch(() => null),
-    getTenantSettings(),
-    admin
-      .from("class_schedules")
-      .select("day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label, slot_room_label")
-      .eq("tenant_id", tenantId)
-      .eq("class_id", classId)
-      .order("day_of_week", { ascending: true })
-      .order("start_time", { ascending: true })
-      .range(0, 499),
-  ]);
-  if (bookRes.error || schedRes.error) return { status: "failed", byCell: {}, shiftByCell: shifts };
-  // 🔴 차수 조회가 실패하면 **계획을 그리지 않는다** — 진도·과제가 빠진 계획을 보여 주면 강사가
-  //    그걸 가져와 빈 칸을 채운 줄 알고 넘어간다(빈 계획이 거짓 계획보다 낫다).
-  if (lessonRows === null) return { status: "failed", byCell: {}, shiftByCell: shifts };
-
-  const books = new Map(
-    (bookRes.data ?? []).map((b) => [
-      String(b.id),
-      {
-        title: String(b.title),
-        pageTime: (b.page_time as string | null) ?? null,
-        skillArea: (b.skill_area as string | null) ?? null,
-        sessionCount: Number(b.session_count ?? 0),
-      },
-    ]),
-  );
-  const lessonsByBook = new Map<string, Map<number, { progress: string | null; homework: string | null }>>();
-  for (const l of lessonRows) {
-    const key = String(l.textbook_id);
-    const m = lessonsByBook.get(key) ?? new Map();
-    m.set(Number(l.lesson_no), { progress: l.progress ?? null, homework: l.homework ?? null });
-    lessonsByBook.set(key, m);
-  }
-
-  const schedules = (schedRes.data ?? []).map(
-    (r): MonthScheduleRow => ({
-      dayOfWeek: String(r.day_of_week),
-      startTime: String(r.start_time),
-      endTime: r.end_time ? String(r.end_time) : null,
-      validFrom: r.valid_from ? String(r.valid_from) : null,
-      validTo: r.valid_to ? String(r.valid_to) : null,
-      slotTeacherLabel: (r.slot_teacher_label as string | null) ?? null,
-      slotRoomLabel: (r.slot_room_label as string | null) ?? null,
-    }),
-  );
-  const holidays = buildHolidayMap(settings.operations.holidays);
-
-  const byCell: Record<string, PlannedLine[]> = {};
-  for (const p of plans) {
-    const book = books.get(String(p.textbook_id));
-    // 구분·차수가 없는 교재는 애초에 배정이 거절되지만, 나중에 지워졌을 수 있다 — 조용히 건너뛴다.
-    if (!book || !book.skillArea || book.sessionCount < 1) continue;
-
-    const startDate = String(p.start_date).slice(0, 10);
-    // 달이 시작일보다 앞이면 그 달엔 계획이 없다(스케줄러는 시작일부터만 앉힌다).
-    if (startDate > to) continue;
-
-    const startNo = Math.max(1, Math.min(200, Number(p.start_lesson_no ?? 1)));
-    const lessonNos: number[] = [];
-    for (let n = startNo; n <= book.sessionCount; n += 1) lessonNos.push(n);
-    if (lessonNos.length === 0) continue;
-
-    const picks = Array.isArray(p.slot_picks) ? (p.slot_picks as unknown[]).map((v) => String(v)) : null;
-    const schedule = buildLessonSchedule({
-      startDate,
-      lessonNos,
-      schedules,
-      holidays,
-      axis: (p.slot_axis === "jj" ? "jj" : "class") as SlotAxis,
-      slotPicks: picks,
-      shifts,
-      pace: (p.pace === "day" ? "day" : "period") as LessonPace,
-      lookaheadDays: lookaheadFor(startDate, to),
-    });
-
-    const lessons = lessonsByBook.get(String(p.textbook_id));
-    const termMode = p.term_mode === "exam" ? "exam" : "regular";
-    for (const t of schedule.targets) {
-      if (t.date < from || t.date > to) continue;
-      const l = lessons?.get(t.lessonNo);
-      const key = `${t.date}|${t.slotStart}`;
-      (byCell[key] ??= []).push({
-        lessonNo: t.lessonNo,
-        date: t.date,
-        slotStart: t.slotStart,
-        skillArea: book.skillArea,
-        title: book.title,
-        pageTime: book.pageTime,
-        progress: (l?.progress ?? null) || null,
-        homework: (l?.homework ?? null) || null,
-        termMode,
-      });
-    }
-  }
-
-  // 칸 안 순서를 고정한다 — 구분 → 교재명. 호출마다 줄 순서가 흔들리면 화면이 깜빡이고 비교가 안 된다.
-  for (const key of Object.keys(byCell)) {
-    byCell[key]!.sort((a, b) =>
-      a.skillArea !== b.skillArea ? a.skillArea.localeCompare(b.skillArea) : a.title.localeCompare(b.title, "ko"),
-    );
-  }
-  return { status: "ok", byCell, shiftByCell: shifts };
+  if (!from || !to || from > to) return emptyResult("ok");
+  const materials = await loadPlanMaterials({ tenantId, classIds: [classId], to });
+  if (materials.status !== "ok") return emptyResult(materials.status);
+  return { status: "ok", ...planCellsOf(materials, classId, from, to) };
 }
