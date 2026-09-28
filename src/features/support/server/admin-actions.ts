@@ -42,6 +42,7 @@ export async function answerSupportRequest(
       status,
       due_date: dueDate || null,
       answer: answer || null,
+      // answered_by는 답을 지워도 남는다 — 작성자 수정 잠금의 표식(canAuthorEditRequest).
       ...(answerChanged ? { answered_by: sa.id, answered_at: answer ? new Date().toISOString() : null } : {}),
     })
     .eq("id", requestId)

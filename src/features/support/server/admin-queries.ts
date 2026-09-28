@@ -69,7 +69,7 @@ export async function getAnySupportRequest(id: string): Promise<SupportLoad<Supp
   const { data, error } = await admin
     .from("support_requests")
     .select(
-      "id, tenant_id, title, body, contact_phone, contact_email, status, due_date, answer, answered_at, author_id, created_at",
+      "id, tenant_id, title, body, contact_phone, contact_email, status, due_date, answer, answered_at, answered_by, author_id, created_at",
     )
     .eq("id", id)
     .maybeSingle();
