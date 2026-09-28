@@ -1,7 +1,10 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { activityGradeOf } from "../activity-catalog";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { activityCategoryOf, activityGradeOf } from "../activity-catalog";
+import { activityFacts, factIds, type FactLookups } from "../activity-facts";
 import { renderActivity, renderNotification, type Rendered } from "../render";
 import type { SlackRule } from "../rules";
 import { planDelivery } from "../schedule";
@@ -16,7 +19,8 @@ import { loadLinks, loadRules, type SlackConnection, type SlackLink } from "./st
 const BATCH = 300;
 type Outbox = Record<string, unknown>;
 type NotifRow = { id: string; type: string; title: string; body: string | null; link: string | null; recipient_id: string; actor_id: string | null; created_at: string };
-type AuditRow = { id: string; action: string; actor_id: string | null; actor_name: string | null; target_label: string | null; created_at: string };
+// metadata는 여기서만 읽고 **허용 키만** facts로 바꿔 넘긴다(activity-facts.ts) — 렌더러·아웃박스엔 원본이 안 간다.
+type AuditRow = { id: string; action: string; actor_id: string | null; actor_name: string | null; target_label: string | null; metadata: unknown; created_at: string };
 
 export async function expandInbox(tenantId: string, conn: SlackConnection, appUrl: string | null, now: Date): Promise<number> {
   const admin = createAdminClient();
@@ -37,13 +41,16 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
       admin.from("notifications").select("id, type, title, body, link, recipient_id, actor_id, created_at").eq("tenant_id", tenantId).in("id", c),
     ),
     fetchInChunks<AuditRow>(idsOf("activity"), (c) =>
-      admin.from("audit_logs").select("id, action, actor_id, actor_name, target_label, created_at").eq("tenant_id", tenantId).in("id", c),
+      admin.from("audit_logs").select("id, action, actor_id, actor_name, target_label, metadata, created_at").eq("tenant_id", tenantId).in("id", c),
     ),
     loadRules(tenantId, keys),
     loadLinks(tenantId),
   ]);
   const rules = rulesLoad.status === "ok" ? rulesLoad.value.filter((r) => r.enabled && r.targets.length > 0) : [];
-  const names = await recipientNames(tenantId, [...new Set(notifs.map((n) => n.recipient_id))]);
+  const [names, lookups] = await Promise.all([
+    recipientNames(tenantId, [...new Set(notifs.map((n) => n.recipient_id))]),
+    factLookups(tenantId, audits.filter((a) => activityGradeOf(a.action) === "safe" && keys.has(a.action))),
+  ]);
 
   const rows: Outbox[] = [];
   const push = (rule: SlackRule, dedupe: string, inboxId: number | undefined, target: object, r: Rendered, at: string, dead?: string) => {
@@ -100,7 +107,16 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
   for (const a of audits) {
     const grade = activityGradeOf(a.action);
     if (grade === "forbid" || !keys.has(a.action)) continue;
-    const ev = { label: activityLabel(a.action), opaque: grade === "opaque", targetLabel: a.target_label, actorName: a.actor_name, createdAt: new Date(a.created_at) };
+    const opaque = grade === "opaque";
+    const ev = {
+      label: activityLabel(a.action),
+      opaque,
+      targetLabel: a.target_label,
+      actorName: a.actor_name,
+      category: activityCategoryOf(a.action),
+      facts: opaque ? undefined : activityFacts(a.action, a.metadata, lookups),
+      createdAt: new Date(a.created_at),
+    };
     for (const rule of rules) {
       if (rule.source !== "activity" || !rule.typeKeys.includes(a.action)) continue;
       if (a.actor_id && rule.excludeActorIds.includes(a.actor_id)) continue;
@@ -151,3 +167,44 @@ async function recipientNames(tenantId: string, ids: string[]): Promise<Map<stri
   return new Map(data.map((u) => [u.id, u.display_name]));
 }
 
+
+/** 활동 facts의 이름 조회 — 허용 키(studentId·studentIds·classId)에서 모은 id만. 실패하면 이름 없이 보낸다(발송을 막지 않는다). */
+async function factLookups(tenantId: string, audits: readonly AuditRow[]): Promise<FactLookups> {
+  const studentIds = new Set<string>();
+  const classIds = new Set<string>();
+  for (const a of audits) {
+    const f = factIds(a.metadata);
+    f.students.forEach((id) => studentIds.add(id));
+    f.classes.forEach((id) => classIds.add(id));
+  }
+  const admin = createAdminClient();
+  try {
+    const [students, classes, maps] = await Promise.all([
+      fetchInChunks<{ id: string; name: string; school: string | null; grade: string | null }>([...studentIds], (c) =>
+        admin.from("students").select("id, name, school, grade").eq("tenant_id", tenantId).in("id", c),
+      ),
+      fetchInChunks<{ id: string; class_name: string; subject: string | null }>([...classIds], (c) =>
+        admin.from("classes").select("id, class_name, subject").eq("tenant_id", tenantId).in("id", c),
+      ),
+      // 설정 조회만 실패하면 과목 라벨만 빠진다(학생·반 이름은 산다).
+      getTenantSettingsByTenantId(tenantId)
+        .then((s) => buildSubjectMaps(s.operations.subjects))
+        .catch((e) => {
+          console.error("[slack] subject labels unavailable", e);
+          return null;
+        }),
+    ]);
+    return {
+      student: new Map(students.map((s) => [s.id, { name: s.name, school: s.school, grade: s.grade }])),
+      klass: new Map(classes.map((c) => [c.id, { name: c.class_name, subject: c.subject }])),
+      // 설정에 없는 키는 labelOf가 원문을 돌려준다 — 영문 키는 싣지 않는다(raw 코드 노출 금지).
+      subjectLabel: (k) => {
+        const l = maps?.labelOf(k) ?? "";
+        return /^[a-z0-9_]+$/i.test(l) ? "" : l;
+      },
+    };
+  } catch (e) {
+    console.error("[slack] activity facts lookup failed", e);
+    return { student: new Map(), klass: new Map(), subjectLabel: () => "" };
+  }
+}

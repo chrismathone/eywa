@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { logAction } from "@/features/audit/server/log";
-import { activityGradeOf } from "../activity-catalog";
+import { activityCategoryOf, activityGradeOf } from "../activity-catalog";
 import { describeSlackError } from "../format";
 import { renderActivity, renderNotification } from "../render";
 import { sanitizeRule, SLACK_MAX_RULES, targetLabel, type SlackRule } from "../rules";
-import { SAMPLE_FOOTER, SAMPLE_NOTIFICATIONS, SAMPLE_RECIPIENTS } from "../samples";
+import { SAMPLE_ACTIVITY_FACTS, SAMPLE_FOOTER, SAMPLE_NOTIFICATIONS, SAMPLE_RECIPIENTS } from "../samples";
 import { activityKeySet, activityLabel } from "./catalog";
 import { slackPostDm, slackPostMessage } from "./client";
 import { appUrlOrNull } from "./dispatch";
@@ -80,7 +80,15 @@ export async function sendSlackRuleSample(ruleId: string): Promise<Result> {
       const ev = { type: key, title: s.title, body: s.body, link: s.link, createdAt: new Date() };
       return (channel: boolean) => `${renderNotification(ev, style, channel && rule.template === "detailed" ? SAMPLE_RECIPIENTS : []).body}\n${SAMPLE_FOOTER}`;
     }
-    const ev = { label: activityLabel(key), opaque: activityGradeOf(key) === "opaque", targetLabel: "김하늘(중2 수학 A)", actorName: "박지현", createdAt: new Date() };
+    const ev = {
+      label: activityLabel(key),
+      opaque: activityGradeOf(key) === "opaque",
+      targetLabel: null,
+      category: activityCategoryOf(key),
+      facts: SAMPLE_ACTIVITY_FACTS,
+      actorName: "박지현",
+      createdAt: new Date(),
+    };
     return () => `${renderActivity(ev, style).body}\n${SAMPLE_FOOTER}`;
   });
 

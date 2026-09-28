@@ -93,3 +93,14 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
 };
 
 export const SAMPLE_FOOTER = "_테스트 알림 · 가상 데이터_";
+
+/** 활동 미리보기·샘플의 가상 '누구의 무엇'(activity-facts 모양). */
+export const SAMPLE_ACTIVITY_FACTS = {
+  brief: ["김하늘", "중등M 중1 A", "9/28(월) 17:15"],
+  rows: [
+    { label: "학생", value: "김하늘 (칠성중1)" },
+    { label: "반", value: "중등M 중1 A · 수학" },
+    { label: "날짜", value: "9/28(월) 17:15 교시" },
+  ],
+  href: "/students",
+};

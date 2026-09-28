@@ -32,10 +32,32 @@ describe("활동", () => {
       "*[청구서 생성]* — 박소선",
     );
   });
-  it("자세히 = 시각 + 감사로그 링크 · 행위자 없으면 시스템", () => {
+  it("자세히 = 누가·시각 줄 + 감사로그 링크 · 행위자 없으면 시스템", () => {
     const b = renderActivity({ ...ev, actorName: null }, { ...style, template: "detailed" }).body;
-    expect(b).toContain("— 시스템 · 09:05");
+    expect(b).toContain(">누가  시스템 · 09:05");
     expect(b).toContain("/owner?tab=audit|감사로그에서 보기>");
+  });
+  const facts = {
+    brief: ["김하늘", "중등M 중1 A", "9/28(월) 17:15"],
+    rows: [{ label: "학생", value: "김하늘 (칠성중1)" }, { label: "반", value: "중등M 중1 A · 수학" }],
+    href: "/students/s1",
+  };
+  it("facts = 짧게 한 줄에 누구의 무엇 · 자세히는 표 줄 + 학생 화면 링크 · 첫 줄은 두 모양이 같다", () => {
+    const e = { ...ev, label: "수업보고서 저장", targetLabel: null, category: "reports", facts };
+    const short = renderActivity(e, style).body;
+    expect(short).toBe("📝 *[수업보고서 저장]* 김하늘 · 중등M 중1 A · 9/28(월) 17:15 — 박소선");
+    const long = renderActivity(e, { ...style, template: "detailed" }).body;
+    expect(long.split("\n")[0]).toBe(short);
+    expect(long).toContain(">학생  김하늘 (칠성중1)");
+    expect(long).toContain("<https://www.aywa.co.kr/students/s1|에이와에서 열기>");
+  });
+  it("대상 칸에 이미 든 이름은 다시 붙이지 않는다", () => {
+    const e = { ...ev, label: "보강 예약", targetLabel: "김하늘 · 중등M 중1 A", facts };
+    expect(renderActivity(e, style).body).toBe("*[보강 예약]* 김하늘 · 중등M 중1 A · 9/28(월) 17:15 — 박소선");
+  });
+  it("돈 계열(opaque)은 facts도 싣지 않는다", () => {
+    const b = renderActivity({ ...ev, opaque: true, facts }, { ...style, template: "detailed" }).body;
+    expect(b).not.toContain("김하늘");
   });
 });
 

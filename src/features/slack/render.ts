@@ -1,10 +1,12 @@
+import type { ActivityFacts } from "./activity-facts";
 import { forwardEventLabel } from "./events";
 import { escapeMrkdwn } from "./format";
 import { kstClock, kstStamp } from "./schedule";
 
 /**
  * 슬랙 메시지 조립 — 순수 함수. 알림·활동 사건 → 본문(`body`) + 묶음용 한 줄(`groupLabel`).
- * 🔴 활동은 감사로그 **metadata를 받지도 않는다**(렌더러 입력에 없음) — 민감값이 섞일 길을 타입으로 막는다.
+ * 🔴 활동은 감사로그 **metadata를 받지 않는다** — 호출부가 허용 키만 확인된 이름·한글 라벨로 바꾼 `facts`만 받는다
+ *    ([`activityFacts`](./activity-facts), 원장 2026-09-28 '허용 항목만 풀기'). 민감값이 섞일 길을 타입으로 막는다.
  * 🔴 모든 출력은 `scrubSensitive`를 지난다 — 주민번호·계좌·전화번호 모양의 숫자열은 가린다.
  */
 export type NotificationEvent = {
@@ -16,8 +18,11 @@ export type NotificationEvent = {
 };
 export type ActivityEvent = {
   label: string; // 한글 액션 라벨(AUDIT_ACTIONS)
-  opaque: boolean; // 대상 문구를 싣지 않는다(돈 계열)
+  opaque: boolean; // 대상 문구·facts를 싣지 않는다(돈 계열)
   targetLabel: string | null;
+  /** 분류(activity-catalog) — 머리 이모지. */
+  category?: string | null;
+  facts?: ActivityFacts;
   actorName: string | null;
   createdAt: Date;
 };
@@ -68,6 +73,7 @@ export function renderNotification(ev: NotificationEvent, style: Style, recipien
       detailed && ev.body ? escapeMrkdwn(clip(ev.body, MAX_BODY)) : null,
       !detailed && ev.body ? escapeMrkdwn(clip(ev.body, 200)) : null,
       recipients.length ? `받는 사람: ${recipients.join(", ")}` : null,
+      detailed ? `_${kstStamp(ev.createdAt)}_` : null,
     ],
     link(ev.link, style.appUrl, "에이와에서 열기"),
     style,
@@ -75,15 +81,46 @@ export function renderNotification(ev: NotificationEvent, style: Style, recipien
   return { body, groupLabel: label };
 }
 
-/** 활동 한 건. 짧게 = `*[라벨]* 대상 — 누가` · 자세히 = + 시각 + 감사로그 링크. */
+/** 분류별 머리 표식 — 채널에서 한눈에 갈리게. 모르는 분류는 표식 없이. */
+const CATEGORY_MARK: Record<string, string> = {
+  students: "🧑‍🎓",
+  consult: "📞",
+  attendance: "✅",
+  billing: "💳",
+  classes: "🏫",
+  reports: "📝",
+  sheets: "📒",
+  staff: "👥",
+  comms: "📣",
+  ops: "🚌",
+  settings: "⚙️",
+};
+
+/**
+ * 활동 한 건. 짧게 = `표식 *[라벨]* 대상 · 학생 · 반 · 날짜 — 누가`(한 줄) ·
+ * 자세히 = 같은 첫 줄 + 학생·반·날짜·출결 줄 + 누가·시각 + 에이와 링크(학생 한 명이면 그 학생 화면, 아니면 감사로그).
+ * 🔑 첫 줄은 두 모양이 같다 — 여러 건 묶음·요약은 **첫 줄만** 싣는다(renderAggregate·renderDigest).
+ */
 export function renderActivity(ev: ActivityEvent, style: Style): Rendered {
   const actor = ev.actorName ? escapeMrkdwn(ev.actorName) : "시스템";
-  const target = !ev.opaque && ev.targetLabel ? ` ${escapeMrkdwn(clip(ev.targetLabel, 200))}` : "";
-  const first = `*[${escapeMrkdwn(ev.label)}]*${target} — ${actor}`;
+  const facts = ev.opaque ? undefined : ev.facts;
+  const target = !ev.opaque && ev.targetLabel ? clip(ev.targetLabel, 200) : null;
+  // 대상 칸이 이미 이름을 담는 액션이 많다(`학생 · 반`) — 대상에 든 조각은 다시 붙이지 않는다(두 번 찍힘 방지).
+  const pieces = [target, ...(facts?.brief ?? []).filter((b) => !target?.includes(b))]
+    .filter((p): p is string => !!p)
+    .map(escapeMrkdwn);
+  const mark = ev.category ? CATEGORY_MARK[ev.category] : undefined;
+  const first = `${mark ? `${mark} ` : ""}*[${escapeMrkdwn(ev.label)}]*${pieces.length ? ` ${pieces.join(" · ")}` : ""} — ${actor}`;
   const detailed = style.template === "detailed";
+  const rows = detailed
+    ? [
+        ...(facts?.rows ?? []).map((r) => `>${r.label}  ${escapeMrkdwn(r.value)}`),
+        `>누가  ${actor} · ${kstClock(ev.createdAt)}`,
+      ]
+    : [];
   const body = finish(
-    [detailed ? `${first} · ${kstClock(ev.createdAt)}` : first],
-    detailed ? link("/owner?tab=audit", style.appUrl, "감사로그에서 보기") : null,
+    [first, ...rows],
+    detailed ? link(facts?.href ?? "/owner?tab=audit", style.appUrl, facts?.href ? "에이와에서 열기" : "감사로그에서 보기") : null,
     style,
   );
   return { body, groupLabel: `${ev.label} — ${ev.actorName ?? "시스템"}` };
