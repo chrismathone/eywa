@@ -6,7 +6,8 @@ import { isMergedStudent } from "@/features/students/merged";
 import { REASON_LABEL, normalizeReason, type WithdrawalMetadata } from "../types";
 import { getEndedSubjects } from "../subject-ended";
 import { isSystemBulkWithdrawal } from "../system-bulk";
-import { lastEndedByStudent } from "../window";
+import { lastEndedByStudent, pickLastEnded } from "../window";
+import { withdrawalSubjects } from "../exit-rows";
 import { lastClassOf, loadEndedEnrollments } from "./window";
 
 // Re-export common types so existing callers don't need to switch import paths
@@ -34,6 +35,8 @@ export type WithdrawalRow = {
   hasEnrollmentHistory: boolean;
   /** 퇴원일이 장부상 일괄 날짜이고 수강 이력도 없어 **실제 퇴원 시점을 알 수 없는** 행. */
   systemBulk: boolean;
+  /** 퇴원 무렵 끝난 수강의 과목 전부(`withdrawalSubjects`) — 과목 필터가 본다. 상세 화면은 안 채운다. */
+  exitSubjects?: string[];
 };
 
 function parseMetadata(raw: unknown): WithdrawalMetadata | null {
@@ -76,7 +79,14 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
 
   // 마지막 종료 수강 = 운영실 '퇴원생'과 **같은 조회·같은 선택**(window.ts) — 청크 × 페이징이라 청크 안 1000행
   // 절단도 없고, 종료일이 같은 두 줄은 결정적 tie-break로 고른다(조회마다 다른 반이 뽑히지 않게).
-  const lastByStudent = lastEndedByStudent(await loadEndedEnrollments(supabase, students.map((s) => s.id)));
+  const ended = await loadEndedEnrollments(supabase, students.map((s) => s.id));
+  const lastByStudent = lastEndedByStudent(ended);
+  const endedByStudent = new Map<string, { endDate: string | null; subject: string | null }[]>();
+  for (const e of ended) {
+    const list = endedByStudent.get(e.student_id) ?? [];
+    list.push({ endDate: e.end_date, subject: lastClassOf(e).subject });
+    endedByStudent.set(e.student_id, list);
+  }
 
   return students.map((s) => {
     const lastRow = lastByStudent.get(s.id);
@@ -99,6 +109,7 @@ export async function getWithdrawnStudents(): Promise<WithdrawalRow[]> {
       metadata: md,
       hasEnrollmentHistory,
       systemBulk: isSystemBulkWithdrawal({ withdrawnAt: s.withdrawn_at, hasEnrollmentHistory }),
+      exitSubjects: withdrawalSubjects(endedByStudent.get(s.id) ?? []),
     };
   });
 }
@@ -199,7 +210,18 @@ export type SubjectEndedRow = {
   endedSubjects: string[]; // 종료된 과목 코드
   activeSubjects: string[]; // 아직 수강 중인 과목 코드
   lastEndedAt: string | null; // 종료 과목 중 가장 최근 end_date
+  /** 끊은 과목마다 — 그 과목 마지막 수강이 끝난 날·반(퇴원관리 한 목록의 한 줄, `exit-rows.ts`). */
+  endedDetail: {
+    subject: string;
+    endedAt: string | null;
+    className: string | null;
+    englishTrack: string | null;
+    /** 그 과목 마지막 수강의 종료 사유 원문(`enrollments.withdrawal_reason`). */
+    reason: string | null;
+  }[];
 };
+
+type ClassBits = { subject?: string; class_name?: string | null; english_track?: string | null };
 
 export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
   const supabase = await createClient();
@@ -223,26 +245,50 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
   // 학생 enrollment + 반 과목 — id 청크로 .in()(414/error삼킴 방지, #53).
   // 🔴 학생 100명 × 수강 이력이라 한 청크가 1,000행을 넘을 수 있다 → 청크 × 페이징(B2 🔴, `.order("id")`).
   const enrollments = await fetchAllPagedInChunks<{
+    id: string;
     student_id: string;
+    start_date: string | null;
     end_date: string | null;
     is_transferred: boolean | null;
-    class: { subject?: string } | { subject?: string }[] | null;
+    withdrawal_reason: string | null;
+    class: ClassBits | ClassBits[] | null;
   }>(ids, (chunk, from, to) =>
     supabase
       .from("enrollments")
-      .select("id, student_id, end_date, is_transferred, class:class_id ( subject )")
+      .select(
+        "id, student_id, start_date, end_date, is_transferred, withdrawal_reason, class:class_id ( subject, class_name, english_track )",
+      )
       .in("student_id", chunk)
       .order("id")
       .range(from, to),
   );
 
-  const bySt = new Map<string, { subject: string; endDate: string | null; isTransferred?: boolean }[]>();
+  type Enr = {
+    id: string;
+    subject: string;
+    startDate: string | null;
+    endDate: string | null;
+    isTransferred?: boolean;
+    className: string | null;
+    englishTrack: string | null;
+    reason: string | null;
+  };
+  const bySt = new Map<string, Enr[]>();
   for (const e of enrollments) {
-    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) as { subject?: string } | undefined;
+    const klass = (Array.isArray(e.class) ? e.class[0] : e.class) ?? undefined;
     const subject = klass?.subject;
     if (!subject) continue;
     const arr = bySt.get(e.student_id) ?? [];
-    arr.push({ subject, endDate: e.end_date, isTransferred: e.is_transferred ?? undefined });
+    arr.push({
+      id: e.id,
+      subject,
+      startDate: e.start_date,
+      endDate: e.end_date,
+      isTransferred: e.is_transferred ?? undefined,
+      className: klass?.class_name ?? null,
+      englishTrack: klass?.english_track ?? null,
+      reason: e.withdrawal_reason ?? null,
+    });
     bySt.set(e.student_id, arr);
   }
 
@@ -259,6 +305,23 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
         lastEndedAt = e.endDate;
       }
     }
+    // 과목마다 마지막으로 끝난 수강 — 날짜·반 이름·프로그램 재료. 고르는 규칙은 `pickLastEnded`(종료일 → 시작일 →
+    // id, window.ts)와 같다 — 같은 날 끝난 두 반을 화면마다 다르게 고르면 반 이름·프로그램이 갈린다.
+    const endedDetail = ended.map((subject) => {
+      const best = pickLastEnded(
+        enr
+          .filter((e) => e.subject === subject)
+          .map((e) => ({ ...e, end_date: e.endDate, start_date: e.startDate })),
+      );
+      return {
+        subject,
+        endedAt: best?.endDate ?? null,
+        className: best?.className ?? null,
+        englishTrack: best?.englishTrack ?? null,
+        // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.
+        reason: best?.reason ?? null,
+      };
+    });
     rows.push({
       id: s.id,
       name: s.name,
@@ -268,6 +331,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
       endedSubjects: ended,
       activeSubjects: active,
       lastEndedAt,
+      endedDetail,
     });
   }
   rows.sort((a, b) => (b.lastEndedAt ?? "").localeCompare(a.lastEndedAt ?? "")); // 최근 종료순

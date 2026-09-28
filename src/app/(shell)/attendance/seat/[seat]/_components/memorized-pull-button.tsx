@@ -26,7 +26,7 @@ export function MemorizedPullButton({ seat, date }: { seat: SeatKey; date: strin
     <button
       type="button"
       disabled={pending}
-      title="그 날 명단의 '누적 암기 단어수'를 SRS 장기기억 단어수로 맞춥니다 — 빈 칸은 채우고 숫자는 최신값으로 갱신하며, 메모가 적힌 칸은 그대로 둡니다"
+      title="그 날 명단의 '누적 암기 단어수'를 SRS의 '지금까지 학습한 단어 수'로 맞춥니다 — 빈 칸은 채우고 숫자는 최신값으로 갱신하며, 메모가 적힌 칸은 그대로 둡니다"
       className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1 disabled:opacity-50`}
       onClick={() =>
         start(async () => {

@@ -93,9 +93,9 @@ describe("슈퍼관리자 디자인 가드", () => {
 
   it("셸 = 앱과 같은 축: 데스크톱은 사이드바, 그 외는 상단 바 · 본문 하단 여백 규약", () => {
     const layout = FILES.find((f) => f.path === "src/app/(super-admin)/layout.tsx")!.src;
-    expect(layout).toMatch(/<SuperAdminSidebar[^>]*className="hidden lg:pointer-fine:flex"/);
-    expect(layout).toMatch(/<SuperAdminMobileBar[^>]*className="lg:pointer-fine:hidden"/);
-    expect(layout).toContain("lg:pointer-fine:flex-row");
+    expect(layout).toMatch(/<SuperAdminSidebar[^>]*className="hidden desk:flex"/);
+    expect(layout).toMatch(/<SuperAdminMobileBar[^>]*className="desk:hidden"/);
+    expect(layout).toContain("desk:flex-row");
     const main = layout.match(/<main className="([^"]*)"/)![1].split(" ");
     expect(main).toEqual(expect.arrayContaining(["pb-8", "lg:pb-10"]));
   });

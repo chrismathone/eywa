@@ -20,6 +20,11 @@ export type JjReportSnapshot = {
   fetchedAt: string;
   study: IjwStudy | null;
   exams: IjwExamResult[];
+  /**
+   * 강사가 고른 결과지(응시 id, 고른 순서) — 2026-09-28 원장 *"어떤 시험인지 선택"*. `null`·없음 = 기본(그날 KST 달력
+   * 날짜에 낸 응시 전부 — 종전 동작). 있으면 `exams`는 **고른 응시**다(다른 날 본 시험도 된다 — 보카킹 월례 시험을 며칠 뒤 보고서에).
+   */
+  pick?: string[] | null;
 };
 
 const SnapshotSchema = z.object({
@@ -29,6 +34,7 @@ const SnapshotSchema = z.object({
   fetchedAt: z.string(),
   study: IJW_SHAPES.study.nullable(),
   exams: z.array(IJW_SHAPES.examResult),
+  pick: z.array(z.string()).nullable().optional().catch(null),
 });
 
 /** 저장본 → 동결본. 모양이 어긋나면 null(그림을 안 그린다). */
@@ -37,9 +43,42 @@ export function parseJjSnapshot(raw: unknown): JjReportSnapshot | null {
   return parsed.success ? parsed.data : null;
 }
 
-/** 5번 하루치 응답 → 저장할 동결본. */
-export function snapshotFromDay(day: IjwDay, fetchedAt: string): JjReportSnapshot {
-  return { v: 1, date: day.date, ijwId: day.ijwId, fetchedAt, study: day.study ?? null, exams: day.exams };
+/**
+ * 5번 하루치 응답 → 저장할 동결본. `picked`를 주면(강사가 고른 결과지) 시험은 그것으로 갈아 끼운다 — 학습(study)은
+ * 고르기와 무관하게 하루치 그대로다.
+ */
+export function snapshotFromDay(
+  day: IjwDay,
+  fetchedAt: string,
+  picked?: { pick: string[]; exams: IjwExamResult[] } | null,
+): JjReportSnapshot {
+  return {
+    v: 1,
+    date: day.date,
+    ijwId: day.ijwId,
+    fetchedAt,
+    study: day.study ?? null,
+    exams: picked ? picked.exams : day.exams,
+    // 기본이면 키를 아예 안 싣는다 — 고르기 전과 같은 저장본(읽을 땐 없음 = 기본).
+    ...(picked ? { pick: picked.pick } : {}),
+  };
+}
+
+/** 한 번에 고를 수 있는 결과지 수 — 카드가 한없이 길어지지 않게, 인재원 호출도 그만큼만. */
+export const JJ_PICK_MAX = 6;
+
+/** 받은 고르기 값을 정리한다 — 문자열만·중복 제거·상한. 빈 배열은 "하나도 안 붙임"이라 그대로 둔다. */
+export function normalizeJjPick(raw: unknown): string[] | null {
+  if (raw === null || raw === undefined) return null;
+  if (!Array.isArray(raw)) return null;
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const id = v.trim();
+    if (id && id.length <= 64 && !out.includes(id)) out.push(id);
+    if (out.length >= JJ_PICK_MAX) break;
+  }
+  return out;
 }
 
 /**

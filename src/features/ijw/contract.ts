@@ -33,7 +33,21 @@ const ExamListItem = z.object({
   score: num,
 });
 
+/**
+ * 인재원이 **나중에 더한** 결과지 칸(2026-09-28 요청 — 등수·객관식/주관식·평균 모수·응시 id). 없던 시절 응답도 받아야 하므로
+ * 전부 선택이고, 모양이 어긋나면 **그 칸만** 버린다(`catch(undefined)`) — 부가 정보 하나 때문에 결과지 전체를 잃지 않게.
+ * 🔴 필수 숫자(맞은 수·총 문항)는 여전히 엄격하다(위 `num`).
+ */
+const RankPart = z.object({ rank: num, of: num }).nullable();
+const Rank = z.object({ overall: RankPart.optional(), class: RankPart.optional() });
+const ByKind = z.array(z.object({ kind: str, label: str, correct: num, total: num }));
+
 const ExamResult = z.object({
+  attemptId: z.string().optional().catch(undefined),
+  rank: Rank.optional().catch(undefined),
+  byKind: ByKind.optional().catch(undefined),
+  classCount: z.number().nullable().optional().catch(undefined),
+  overallCount: z.number().nullable().optional().catch(undefined),
   student: StudentRef,
   deck: Deck,
   submittedAt: str,

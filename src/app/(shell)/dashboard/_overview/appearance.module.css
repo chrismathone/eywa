@@ -40,10 +40,25 @@
   .dashboard :global([data-overview="kpis"][data-kpi-n="7"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .dashboard :global([data-overview="kpis"][data-kpi-n="7"] > [data-overview="kpi"]:last-child) { grid-column: span 2; }
 }
-/* 여덟 칸(금일 등록 포함, 원장 2026-09-23) — 581~1500px에서 4칸 × 2줄(8칸 한 줄은 1500px 아래에서 칸당 ~180px라 보조 줄이
-   세 줄로 꺾인다). 특이도는 위 일곱 칸 규칙과 같은 0,3,0. 1100px 아래는 --kpi-mid(4)가 같은 모양을 낸다. */
-@container dashboard (min-width: 581px) and (max-width: 1500px) {
-  .dashboard :global([data-overview="kpis"][data-kpi-n="8"]) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* 여덟 칸(금일 등록 포함, 원장 2026-09-23) — 🔴 1101~1500px에서도 **한 줄(8칸)**을 지키고 카드를 조인다(원장 2026-09-28
+   *"적당한 사이즈에도 8x1 유지될 수 있게. 공간 많은데도 4x2가 됨"*). 옛 규칙은 1500 아래를 통째로 4×2로 접었다 — 125% 배율
+   1920 화면(대시보드 ~1470px)이 거기 걸렸다.
+   🔑 기본 카드는 최소 ~170px(여백 16×2 + 아이콘 26 + 틈 8 + '오늘첫수업' 16px ≈ 75 + ↗ 자리 26)라 8칸 한 줄에 ~1500px가 든다.
+      조인 카드(아이콘 숨김 · 여백 12 · 라벨 14px · ↗ 자리 22 · 값 32px)는 ~115px라 1180(데스크톱 셸 최소 1240 − 접힌 사이드바)
+      에서도 칸당 ~132px가 남는다. 1100 아래(사이드바를 넓게 편 좁은 창·작은 플로팅 창)는 아래 --kpi-mid(4) 규칙이 4×2로 접는다.
+   특이도는 위 일곱 칸 규칙과 같은 0,3,0(+자손). */
+/* 범위 문법 — `min-width:1101px`로 적으면 확대 배율에서 1100~1101px 틈이 생겨 두 규칙 다 안 걸린다(리뷰 2026-09-28). */
+@container dashboard (width > 1100px) and (width <= 1500px) {
+  .dashboard :global([data-overview="kpis"][data-kpi-n="8"]) { gap: 8px; }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="8"] [data-overview="kpi"]) > button { padding: 14px 12px 12px; }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="8"] [data-overview="kpi-label"]) {
+    font-size: var(--text-xs);
+    gap: 6px;
+    padding-right: 26px;
+    white-space: nowrap;
+  }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="8"] [data-overview="kpi-label"]) > span:first-child { display: none; }
+  .dashboard :global([data-overview="kpis"][data-kpi-n="8"] [data-overview="kpi-value"]) { font-size: var(--text-3xl); margin-top: 10px; margin-bottom: 8px; }
 }
 @container dashboard (max-width: 1100px) {
   .dashboard :global([data-overview="kpis"]) { grid-template-columns: repeat(var(--kpi-mid, 3), minmax(0, 1fr)); }
