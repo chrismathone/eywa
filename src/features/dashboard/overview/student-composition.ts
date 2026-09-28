@@ -1,17 +1,18 @@
 import { getGradeLevel, isPreschoolGrade } from "@/lib/format/school-grade";
 import { subjectMixOf, type GradeSplitRow, type StudentPrograms } from "@/features/students/enrolled-composition";
+import { STUDENT_LEVELS, levelLabel, studentLevelOf } from "@/features/students/list-filter-values";
 
 export type LevelSubjectSplit = { rows: (GradeSplitRow & { neither: number; total: number })[] };
 
 /** Same students and program map as the grade chart; no additional data fetch or double counting. */
 export function levelSubjectSplit(students: readonly { id: string; grade: string | null }[], programs: StudentPrograms): LevelSubjectSplit {
-  const rows = new Map<string, LevelSubjectSplit["rows"][number]>(["초등", "중등", "고등", "미취학", "기타·미입력"].map((label) => [label, { label, englishOnly: 0, both: 0, mathOnly: 0, neither: 0, total: 0 }]));
+  // 줄 순서·라벨 = STUDENT_LEVELS(초등·중등·고등·미취학·기타·미입력). 원생목록 `level=`이 같은 분류(studentLevelOf)로 거른다.
+  const rows = new Map<string, LevelSubjectSplit["rows"][number]>(STUDENT_LEVELS.map(({ label }) => [label, { label, englishOnly: 0, both: 0, mathOnly: 0, neither: 0, total: 0 }]));
   const seen = new Set<string>();
   for (const student of students) {
     if (seen.has(student.id)) continue;
     seen.add(student.id);
-    const label = isPreschoolGrade(student.grade) ? "미취학"
-      : ({ 초: "초등", 중: "중등", 고: "고등" }[getGradeLevel(student.grade?.trim())] ?? "기타·미입력");
+    const label = levelLabel(studentLevelOf(student.grade));
     const row = rows.get(label)!;
     row[subjectMixOf(programs.get(student.id))] += 1;
     row.total += 1;

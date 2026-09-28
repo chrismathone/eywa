@@ -14,6 +14,8 @@
  *   좁히면 모든 과목이 사라져 화면이 통째로 빈다(권한 폴백 fail-open과 같은 결).
  */
 
+import { NO_SUBJECT, joinMulti, parseMulti } from "./list-filter-values";
+
 /** 좁힐 과목 집합. `null` = 좁히지 않음(관리자 or 담당 과목 미상). */
 export type SubjectAxis = ReadonlySet<string> | null;
 
@@ -98,10 +100,12 @@ export function showSubjectFilter(axis: SubjectAxis): boolean {
  * - 🔴 **필터를 감춘 화면에선 축 안 과목이어도 "전체"** — 되돌릴 컨트롤이 없는데 값이 살아 있으면
  *   조용히 행이 빠진다(과목 필터는 `on_hold=false`까지 보므로 **휴원 학생이 사라진다**).
  * 저장된 필터(localStorage 복원)·직접 URL 둘 다 이 한 규칙을 지난다(화면·엑셀 공용).
+ * 다중 선택(`math,english`, 원장 2026-09-28)이면 **값마다** 같은 규칙 — 축 밖 과목만 떨어지고 남은 게 없으면 "전체".
+ * '미수강'(`NO_SUBJECT`)은 과목이 아니라 축과 무관하게 남는다(축 과목 수강이 없는 학생 — 판정도 축을 본다).
  */
 export function coerceSubjectFilter(axis: SubjectAxis, subject: string | undefined): string {
   const s = subject ?? "all";
   if (!axis || s === "all") return s;
   if (!showSubjectFilter(axis)) return "all";
-  return axis.has(s) ? s : "all";
+  return joinMulti(parseMulti(s).filter((v) => v === NO_SUBJECT || axis.has(v)));
 }

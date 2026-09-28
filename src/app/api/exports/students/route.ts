@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { parseProgram } from "@/features/students/program";
 import { restrictIdsFor } from "@/features/students/server/restrict-ids";
+import { parseLevels, parseMixes } from "@/features/students/list-filter-values";
 import { requireAccess } from "@/lib/auth/require-access";
 import { attachmentFilename } from "@/lib/http/content-disposition";
 import {
@@ -25,7 +26,8 @@ export async function GET(request: Request) {
   const axis = subjectAxisOf(await effectiveTeacherScope());
   const subject = coerceSubjectFilter(axis, url.searchParams.get("subject") ?? undefined);
   const q = url.searchParams.get("q") ?? undefined;
-  // 고급 필터 — 화면 필터와 동일하게 export에 반영(목록과 파일 불일치 방지).
+  // 고급 필터 — 화면 필터와 동일하게 export에 반영(목록과 파일 불일치 방지). 과목·학년·담임은 쉼표 다중 값 그대로 넘긴다
+  // (getStudentsList가 화면과 같은 parseMulti로 푼다 — 원장 2026-09-28 다중 선택).
   const grade = url.searchParams.get("grade") ?? undefined;
   const teacherId = url.searchParams.get("teacher") ?? undefined;
   const sortParam = url.searchParams.get("sort");
@@ -39,6 +41,8 @@ export async function GET(request: Request) {
   const restrictPromise = restrictIdsFor(
     parseProgram(url.searchParams.get("program")),
     isValidYmd(firstParam) ? firstParam : null,
+    // 운영실 '재원생 구성' 막대 조각 — 화면과 같은 compositionStudentIds(파일 행 = 목록 행).
+    { levels: parseLevels(url.searchParams.get("level")), mixes: parseMixes(url.searchParams.get("mix")) },
   );
 
   const [rows, settings, restrict] = await Promise.all([

@@ -1,4 +1,5 @@
 import type { SearchField, StudentSort } from "./server/queries";
+import { joinMulti, parseMulti } from "./list-filter-values";
 
 /**
  * 학생목록 **보기 설정**(`users.ui_prefs.students`) — 과목·학년·담임·검색 필드·정렬·미수강 제외.
@@ -9,6 +10,9 @@ import type { SearchField, StudentSort } from "./server/queries";
  * 🔴 **상태(status)와 검색어(q)는 저장하지 않는다** — "필터 디폴트는 항상 재원"(열 때마다 재원에서 시작, URL로만 바꾼다).
  * 서버·클라 양쪽이 쓰는 순수 모듈 — `"use client"`도 `server-only`도 붙이지 말 것([[#61]]·[[#81]]).
  * `import type`뿐이라 서버 모듈(queries.ts)의 런타임은 딸려 오지 않는다.
+ *
+ * 과목·학년·담임은 **다중 선택**(원장 2026-09-28) — 저장 형식은 URL과 같은 쉼표 문자열(`math,english`, 없으면 `all`)이다.
+ * 옛 저장값(`math` 한 값)은 그대로 원소 하나짜리 목록으로 읽힌다(호환). 배열로 저장된 값이 와도 같은 문자열로 접는다.
  */
 export type StudentListPrefs = {
   subject: string;
@@ -41,17 +45,18 @@ export function parseSearchField(raw: unknown): SearchField {
   return typeof raw === "string" && (FIELDS as readonly string[]).includes(raw) ? (raw as SearchField) : "all";
 }
 
-function str(raw: unknown, fallback: string): string {
-  return typeof raw === "string" && raw.trim() ? raw : fallback;
+/** 다중 값 축(과목·학년·담임) — 쉼표 문자열·배열 어느 쪽이 와도 정규화한 쉼표 문자열(없으면 `all`). */
+function multi(raw: unknown): string {
+  return joinMulti(parseMulti(raw));
 }
 
 /** 저장된 jsonb 조각 → 완전한 보기 설정(모르는 키·깨진 값은 기본값). 클라가 보낸 값도 이걸 한 번 태운다. */
 export function parseStudentListPrefs(raw: unknown): StudentListPrefs {
   const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   return {
-    subject: str(o.subject, "all"),
-    grade: str(o.grade, "all"),
-    teacher: str(o.teacher, "all"),
+    subject: multi(o.subject),
+    grade: multi(o.grade),
+    teacher: multi(o.teacher),
     field: parseSearchField(o.field),
     sort: parseStudentSort(o.sort),
     noenr: o.noenr === true,
