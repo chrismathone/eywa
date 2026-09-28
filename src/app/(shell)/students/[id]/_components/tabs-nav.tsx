@@ -7,7 +7,9 @@ export const STUDENT_TABS = [
   { key: "classes", label: "수업" },
   { key: "grades", label: "성적" },
   // 인재원 단어 학습·시험(원장 2026-09-21: 일반 성적과 분리) — 짝이 걸린 학생에게만 보인다(showSrs).
-  { key: "srs", label: "SRS 성적" },
+  // 라벨은 **`SRS` 한 단어**다(원장 2026-09-28: *"얘는 그냥 SRS로 변경"*) — 옆의 '성적' 탭과 나란히
+  // 서면 "성적이 둘"로 읽혔다. 무엇을 담는지는 탭 안 제목이 말한다.
+  { key: "srs", label: "SRS" },
   { key: "progress", label: "진도" },
   { key: "attendance", label: "출결" },
   { key: "consultations", label: "상담" },

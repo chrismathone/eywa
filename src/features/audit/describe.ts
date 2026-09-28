@@ -1672,16 +1672,23 @@ export function auditDetail(
         str(m.startBlock) && str(m.endBlock) ? `${m.startBlock} → ${m.endBlock}` : null,
         str(m.textbook),
       );
-    // 인재원에서 단어수를 당겨 온 한 번(수동 버튼) — 칸마다 남기지 않고 **누른 한 번**을 한 줄로.
-    case "seat_jj_memorized_pull": {
+    // SRS에서 단어수를 당겨 온 한 번(수동 버튼) — 칸마다 남기지 않고 **누른 한 번**을 한 줄로.
+    // ⚠️ `updated`·`same`은 2026-09-28부터 실린다 — 옛 행엔 없으므로 `?? 0`이 그 칸을 조용히 뺀다
+    //    (0을 "갱신 0칸"으로 적으면 그때는 갱신이라는 개념이 없었다는 사실이 가려진다).
+    case "seat_jj_memorized_pull":
+    case "ecs_memorized_pull": {
       const filled = num(m.filled) ?? 0;
+      const updated = num(m.updated) ?? 0;
+      const same = num(m.same) ?? 0;
       const kept = num(m.kept) ?? 0;
       const unlinked = num(m.unlinked) ?? 0;
       return join(
         str(m.date),
         `누적 암기 단어수 ${filled}칸 채움`,
-        kept ? `${kept}칸은 이미 적혀 있어 그대로` : null,
-        unlinked ? `인재원 짝 없음 ${unlinked}칸` : null,
+        updated ? `${updated}칸 갱신` : null,
+        same ? `${same}칸은 이미 최신` : null,
+        kept ? `${kept}칸은 그대로` : null,
+        unlinked ? `SRS 짝 없음 ${unlinked}칸` : null,
       );
     }
     case "ecs_plan_cell_edit":
