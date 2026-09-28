@@ -34,7 +34,7 @@ const TITLE_SUFFIX: Record<InventoryTab, string> = { assets: "", loans: " · 대
 // ⚠️ 접두 "재고관리"는 사이드바 라벨(navigation.ts)과 같아야 한다.
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const tab = resolveInventoryTab((await searchParams).tab);
-  return { title: `재고관리${TITLE_SUFFIX[tab]} — aywa` };
+  return { title: `재고관리${TITLE_SUFFIX[tab]} — 에이와` };
 }
 
 /** 활성 면의 데이터 — 자산 면은 자산 전건(항상 받는 것)만으로 그린다. */

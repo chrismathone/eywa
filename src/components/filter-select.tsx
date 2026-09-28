@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { orderMulti, parseMulti } from "@/lib/multi-value";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { MARKER_TRIGGER, MARKER_WIDTH } from "@/components/ui/marker-trigger";
 
@@ -33,6 +35,7 @@ export function FilterSelect({
   axisLabel,
   explicitAll = false,
   prefixOnlyFor,
+  multiple = false,
 }: {
   paramName: string;
   value: string | null | undefined;
@@ -84,21 +87,54 @@ export function FilterSelect({
   explicitAll?: boolean;
   /** 이 값(보통 `allValue`)이 골라져 있으면 트리거에 축 이름만 — SearchableSelect 주석. */
   prefixOnlyFor?: string;
+  /**
+   * **다중 선택**(원장 2026-09-28) — `value`는 쉼표 문자열(`math,english`), 항목을 누르면 더하거나 빼고 목록은 열린 채다.
+   * '전체'는 전부 해제. URL도 쉼표 문자열 — 🔴 **서버가 여러 값을 읽는 화면에서만** 켤 것(화면만 다중이고 서버가 첫 값만 쓰면 거짓 약속).
+   */
+  multiple?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
   const currentParams = useSearchParams();
+  const [pending, startTransition] = useTransition();
+  const serverValues = multiple ? parseMulti(value, allValue) : [];
+  // 🔴 낙관적 선택 — 서버 왕복 안에 둘째 항목을 누르면 서버가 준 값으로 다음 집합을 만들 때 첫 클릭이 사라진다
+  //    (요일 필터 HeaderDayFilter와 같은 이유 — 적대적 리뷰 2026-09-04). 전환 중엔 마지막으로 보낸 집합이 화면이다.
+  const [local, setLocal] = useState<string[]>(serverValues);
+  const values = pending ? local : serverValues;
 
-  const navigate = (v: string) => {
-    const params = new URLSearchParams(currentParams?.toString() ?? "");
-    if (v === allValue || v === "") {
-      if (explicitAll && allValue !== "") params.set(paramName, allValue);
-      else params.delete(paramName);
-    } else params.set(paramName, v);
+  const push = (params: URLSearchParams) => {
     for (const k of clearParams ?? []) params.delete(k);
     params.delete("page"); // 필터 변경은 결과집합이 바뀌므로 1페이지로 리셋(stale page 방지).
     const s = params.toString();
-    router.push(`${pathname}${s ? `?${s}` : ""}`);
+    return `${pathname}${s ? `?${s}` : ""}`;
+  };
+
+  const setAll = (params: URLSearchParams) => {
+    if (explicitAll && allValue !== "") params.set(paramName, allValue);
+    else params.delete(paramName);
+  };
+
+  const navigate = (v: string) => {
+    const params = new URLSearchParams(currentParams?.toString() ?? "");
+    if (multiple) {
+      const next =
+        v === allValue || v === ""
+          ? []
+          : orderMulti(
+              values.includes(v) ? values.filter((x) => x !== v) : [...values, v],
+              options.map((o) => o.value),
+            );
+      if (next.length === 0) setAll(params);
+      else params.set(paramName, next.join(","));
+      setLocal(next);
+      const href = push(params);
+      startTransition(() => router.push(href));
+      return;
+    }
+    if (v === allValue || v === "") setAll(params);
+    else params.set(paramName, v);
+    router.push(push(params));
   };
 
   // 실제로 하나를 골랐을 때만 표기가 켜진다("전체"는 반을 고른 게 아니다 — 위 `marker` 주석).
@@ -110,7 +146,8 @@ export function FilterSelect({
   return (
     <SearchableSelect
       className={className ?? (markerOn ? MARKER_WIDTH : "w-auto")}
-      value={value ?? allValue}
+      value={multiple ? (values.length > 0 ? values.join(",") : allValue) : (value ?? allValue)}
+      multiValues={multiple ? values : undefined}
       onValueChange={navigate}
       placeholder={axisLabel ?? allLabel}
       valuePrefix={axisLabel}

@@ -143,7 +143,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 1회 fetch(테넌트별 unstable_cache·역할 audience 필터). 대부분 0건이라 비용 거의 없음.
   const popups = await getActivePopups(user.systemRole, user.tenantId, user.id);
 
-  const brand = settings.profile.logoText || "AYWA";
+  const brand = settings.profile.logoText || "에이와";
   const academyLine =
     [settings.profile.name, settings.profile.branchLabel].filter(Boolean).join(" · ") || brand;
   // 학원 로고 이미지(GCS 비공개 path는 signed URL, 외부 http URL은 그대로). 셸 크롬(사이드바·미니셸·모바일내비)에

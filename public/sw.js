@@ -25,7 +25,7 @@ self.addEventListener("push", (event) => {
   } catch {
     payload = {};
   }
-  const title = payload.title || "aywa 알림";
+  const title = payload.title || "에이와 알림";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || "",

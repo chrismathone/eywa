@@ -45,6 +45,7 @@ export function SearchableSelect({
   prefixOnlyFor,
   sideColumns,
   requireQuery = false,
+  multiValues,
 }: {
   options: ComboOption[];
   value?: string;
@@ -112,6 +113,12 @@ export function SearchableSelect({
    * 검색해서 검색결과에 따라 노출"*). 항목이 수십~수백인 자리(반·학생)에서만 켠다 — 기본은 종전처럼 전부 보인다.
    */
   requireQuery?: boolean;
+  /**
+   * **다중 선택**(원장 2026-09-28 *"이런 류의 드랍다운 선택은 중복 선택가능하게"*) — 지금 골라진 값들. 주면 항목을 눌러도
+   * 목록이 **닫히지 않고** `onValueChange(눌린 값)`만 부른다(더하기·빼기는 호출부가 정한다). 비어 있으면 `value`(보통 '전체')에 ✓.
+   * 트리거는 고른 이름을 `·`로 잇는다(셋부터 `수학·영어 외 1`). 안 주면 종전 단일 선택 그대로.
+   */
+  multiValues?: readonly string[];
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
@@ -128,7 +135,16 @@ export function SearchableSelect({
     [onOpenChange],
   );
 
-  const selected = options.find((o) => o.value === current) ?? null;
+  const multi = multiValues !== undefined;
+  const picked = multi ? options.filter((o) => multiValues.includes(o.value)) : [];
+  const selected: ComboOption | null =
+    multi && picked.length > 0
+      ? {
+          value: picked.map((o) => o.value).join(","),
+          // 둘부터 `수학 외 1` — 열 머리(고정 폭 칸)에서 이름을 잇대면 옆 칸으로 넘친다. 전체 목록은 트리거 `title`·낭독 이름에.
+          label: picked.length === 1 ? picked[0].label : `${picked[0].label} 외 ${picked.length - 1}`,
+        }
+      : (options.find((o) => o.value === current) ?? null);
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return options;
@@ -151,6 +167,11 @@ export function SearchableSelect({
   }, [open, setOpen]);
 
   function choose(v: string) {
+    if (multi) {
+      // 다중 선택 — 여러 개를 고르는 데 여러 번 열 이유가 없다(요일 필터 `closeOnClick={false}`와 같다). 검색어도 남긴다.
+      onValueChange?.(v);
+      return;
+    }
     if (!isControlled) setInternal(v);
     onValueChange?.(v);
     setOpen(false);
@@ -172,7 +193,8 @@ export function SearchableSelect({
    *    지금 고른 값을 영영 안 읽는다(재리뷰 2026-09-04. `HrefSelect`는 처음부터 트리거에 안 달았다).
    *    서술 라벨이 필요한 자리에선 **값을 붙여 한 이름으로** 만든다("과목 필터: 수학").
    */
-  const a11yValue = selected ? selected.label : (placeholder ?? null);
+  const multiFull = multi && picked.length > 1 ? picked.map((o) => o.label).join(", ") : null;
+  const a11yValue = multiFull ?? (selected ? selected.label : (placeholder ?? null));
   const a11yName = ariaLabel ? (a11yValue ? `${ariaLabel}: ${a11yValue}` : ariaLabel) : undefined;
 
   return (
@@ -181,6 +203,7 @@ export function SearchableSelect({
       <button
         type="button"
         aria-label={a11yName}
+        title={multiFull ?? undefined}
         onClick={() => setOpen(!open)}
         className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
@@ -234,7 +257,7 @@ export function SearchableSelect({
               <li className="text-text-faint px-3 py-2 text-xs">{waiting ? "검색어를 입력하세요" : "결과 없음"}</li>
             ) : (
               shown.map((o) => {
-                const isCurrent = o.value === current;
+                const isCurrent = multi && picked.length > 0 ? multiValues.includes(o.value) : o.value === current;
                 // 강조는 **선택된 줄에만** — hover는 그대로 둔다(마우스가 지나간 줄이 선택된 줄처럼 보이면
                 // 강조가 무의미해진다). amber-soft/amber는 전역 토큰이라 라이트 팔레트와 어긋나지 않는다.
                 const rowTone =
@@ -245,6 +268,7 @@ export function SearchableSelect({
                   <li key={o.value}>
                     <button
                       type="button"
+                      aria-pressed={multi ? isCurrent : undefined}
                       onClick={() => choose(o.value)}
                       className={`flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-sm ${rowTone}`}
                     >

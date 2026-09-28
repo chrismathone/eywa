@@ -23,7 +23,7 @@ import {
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
-export const metadata = { title: "수업 평가 상세 — aywa" };
+export const metadata = { title: "수업 평가 상세 — 에이와" };
 
 /**
  * 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점.

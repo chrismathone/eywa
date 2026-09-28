@@ -73,7 +73,7 @@ export function TargetPicker({
         }}
         extra={
           allowRecipient ? (
-            <ToolbarChip active={hasRecipient} onClick={() => rebuild({ recipient: !hasRecipient })} title="그 알림을 aywa에서 받는 사람 본인에게 1:1">
+            <ToolbarChip active={hasRecipient} onClick={() => rebuild({ recipient: !hasRecipient })} title="그 알림을 에이와에서 받는 사람 본인에게 1:1">
               받는 사람 본인에게도
             </ToolbarChip>
           ) : null

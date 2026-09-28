@@ -53,7 +53,7 @@ import { StaffTable } from "./_components/staff-table";
 import { StaffRememberPrefs, StaffViewPrefsProvider } from "./_components/staff-view-prefs";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
 
-export const metadata = { title: "직원관리 — aywa" };
+export const metadata = { title: "직원관리 — 에이와" };
 
 /** 페이지 번호 나열(1 … 현재±2 … 끝) — 눈에 띄는 번호형 페이저용. null = 말줄임. */
 function pageNumbers(page: number, totalPages: number): (number | null)[] {

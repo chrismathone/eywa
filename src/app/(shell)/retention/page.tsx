@@ -15,7 +15,7 @@ import { ActionQueue } from "@/features/retention/components/action-queue";
 import { SignalSection, type SignalRow } from "@/features/retention/components/signal-section";
 import { ddayLabel } from "@/features/retention/format";
 
-export const metadata = { title: "이탈 방어 — aywa" };
+export const metadata = { title: "이탈 방어 — 에이와" };
 
 // KST 오늘(서버 UTC라 새벽 시간대 하루 밀림 방지). request당 1회 평가.
 function isoToday(): string {

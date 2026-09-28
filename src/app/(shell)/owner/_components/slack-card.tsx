@@ -17,7 +17,7 @@ export async function SlackCard() {
       <div>
         <h3 className="text-foreground text-sm font-bold">슬랙 연동</h3>
         <p className="text-text-dim mt-1 text-xs">
-          aywa에서 일어나는 일(알림·활동 기록)을 정한 규칙대로 슬랙 채널이나 1:1로 보냅니다. 급여·이력서·근로계약·비밀번호 관련은
+          에이와에서 일어나는 일(알림·활동 기록)을 정한 규칙대로 슬랙 채널이나 1:1로 보냅니다. 급여·이력서·근로계약·비밀번호 관련은
           보내지 않고, 돈 관련 활동은 누가 무엇을 했는지만 보냅니다. 학생 이름이 들어가므로 직원만 있는 워크스페이스에 연결하세요.
         </p>
       </div>

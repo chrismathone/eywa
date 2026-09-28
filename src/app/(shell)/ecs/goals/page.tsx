@@ -21,7 +21,7 @@ import { GoalsPeriodBar } from "./_components/goals-period-bar";
 import { GoalsRoleSwitch } from "./_components/goals-role-switch";
 import { GoalsTable } from "./_components/goals-table";
 
-export const metadata: Metadata = { title: "반 계획 보기 — aywa" };
+export const metadata: Metadata = { title: "반 계획 보기 — 에이와" };
 
 /**
  * **반 계획 보기** — 인재원 영어 반 × 6영역, 그 달 월간 목표와 그 주 주간 목표를 한 칸에서 대조한다

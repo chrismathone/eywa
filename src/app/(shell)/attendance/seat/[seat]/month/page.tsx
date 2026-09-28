@@ -24,7 +24,7 @@ import { MonthlyPrintButton } from "./_components/print-button";
 /** 탭 제목은 자리 이름을 따라간다 — 같은 화면이 랩실·JJ실 둘 다를 연다. */
 export async function generateMetadata({ params }: { params: Promise<{ seat: string }> }): Promise<Metadata> {
   const seat = parseAnySeatKey((await params).seat);
-  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 — aywa` };
+  return { title: `${seat ? SEAT_NAME[seat] : "자리"} 월간 출석부 — 에이와` };
 }
 
 function shiftMonth(month: string, delta: number): string {

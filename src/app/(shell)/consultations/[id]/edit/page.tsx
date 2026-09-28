@@ -12,7 +12,7 @@ import { getNewcomerLinkTargets } from "@/features/newcomers/server/consult-link
 import { ConsultationForm } from "../../_components/consultation-form";
 import { ConsultationDeleteButton } from "../../_components/consultation-delete-button";
 
-export const metadata = { title: "상담 수정 — aywa" };
+export const metadata = { title: "상담 수정 — 에이와" };
 
 export default async function EditConsultationPage({
   params,

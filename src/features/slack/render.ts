@@ -69,7 +69,7 @@ export function renderNotification(ev: NotificationEvent, style: Style, recipien
       !detailed && ev.body ? escapeMrkdwn(clip(ev.body, 200)) : null,
       recipients.length ? `받는 사람: ${recipients.join(", ")}` : null,
     ],
-    link(ev.link, style.appUrl, "aywa에서 열기"),
+    link(ev.link, style.appUrl, "에이와에서 열기"),
     style,
   );
   return { body, groupLabel: label };
@@ -103,7 +103,7 @@ export function renderAggregate(items: readonly Item[], ping: Style["ping"] = "n
   const lines = items.slice(0, AGGREGATE_LINES).map((i) => `• ${i.body.split("\n")[0].replace(/^<![a-z]+> /, "")}`);
   const rest = items.slice(AGGREGATE_LINES);
   const tail = rest.length ? [`외 ${rest.length}건`, ...countLines(rest)] : [];
-  return withPing(clip([`*[aywa] ${items.length}건*`, ...lines, ...tail].join("\n"), MAX_MESSAGE), ping);
+  return withPing(clip([`*[에이와] ${items.length}건*`, ...lines, ...tail].join("\n"), MAX_MESSAGE), ping);
 }
 
 /** 요약(방해금지 동안 · 요약만 규칙) — 앞 20건은 시각과 첫 줄, 나머지는 종류별 건수. */
@@ -115,5 +115,5 @@ export function renderDigest(items: readonly Item[], ping: Style["ping"] = "none
   const lines = sorted.slice(0, DIGEST_LINES).map((i) => `• ${kstClock(i.createdAt)} ${i.body.split("\n")[0].replace(/^<![a-z]+> /, "")}`);
   const rest = sorted.slice(DIGEST_LINES);
   const tail = rest.length ? [`외 ${rest.length}건`, ...countLines(rest)] : [];
-  return withPing(clip([`*[aywa] 요약 ${items.length}건*${range}`, ...lines, ...tail].join("\n"), MAX_MESSAGE), ping);
+  return withPing(clip([`*[에이와] 요약 ${items.length}건*${range}`, ...lines, ...tail].join("\n"), MAX_MESSAGE), ping);
 }

@@ -13,7 +13,7 @@ import { ManualArticle } from "../_components/manual-article";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const manual = manualBySlug(slug);
-  return { title: manual ? `${manual.title} 설명서 — aywa` : "도움말 — aywa" };
+  return { title: manual ? `${manual.title} 설명서 — 에이와` : "도움말 — 에이와" };
 }
 
 export default async function HelpManualPage({ params }: { params: Promise<{ slug: string }> }) {

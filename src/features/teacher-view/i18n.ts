@@ -418,7 +418,7 @@ export const SHEET_DICT = {
   //    설명 조각을 JSX에서 붙여 놔 공백이 없었다. 뜻은 한 글자도 안 바꿨다.
   "banner.notify.title": { ko: "컴퓨터 알림을 켜주세요.", en: "Turn on desktop notifications." },
   "banner.notify.body": {
-    ko: "학부모가 클래스노트에 새 글을 올리면 aywa 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
+    ko: "학부모가 클래스노트에 새 글을 올리면 에이와 화면을 보고 있지 않아도 바로 알려드립니다. (브라우저가 물어보면 ‘허용’)",
     en: "When a parent posts on ClassNote, you'll be notified right away even if aywa isn't open. (If the browser asks, choose “Allow”.)",
   },
   "banner.notify.enable": { ko: "켜기", en: "Turn on" },
@@ -2153,6 +2153,10 @@ export const SHEET_DICT = {
   "stu.filter.searchPh": { ko: "이름·학교·연락처·메모", en: "Name, school, phone or memo" },
   // 운영실 KPI ↗가 넘긴 학생 집합 칩(원장 2026-09-11) — 눌러 푼다. 프로그램 이름(EiE·인재원 영어)은 번역하지 않는다.
   "stu.filter.program": { ko: "프로그램", en: "Program" },
+  // 수강 과목 열 머리의 '미수강'(원장 2026-09-28) — 지금 수강 중인 과목이 하나도 없는 학생.
+  "stu.filter.subject.none": { ko: "미수강", en: "No current class" },
+  // 운영실 '재원생 구성' 막대가 넘긴 조각(학교급 × 수강 구성) 칩 — 눌러 푼다.
+  "stu.filter.composition": { ko: "재원생 구성", en: "Enrolled mix" },
   "stu.filter.first": { ko: "첫 수업: {m}월 {d}일", en: "First class: {m}/{d}" },
 
   // ── 이력서 종이 서식(/me) — 🔴 화면만 언어를 타고 **인쇄물은 언제나 한국어**다 ────

@@ -2,7 +2,7 @@ import { BackLink } from "@/components/back-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { NewMeetingForm } from "./new-meeting-form";
 
-export const metadata = { title: "새 회의록 — aywa" };
+export const metadata = { title: "새 회의록 — 에이와" };
 
 export default async function NewMeetingPage() {
   await requireAccess("meetings");

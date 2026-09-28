@@ -88,7 +88,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   // '기능' 면 판정에만 설정이 필요하다 — 그 외엔 종전처럼 조회 없이(요청 캐시라 본문과 같은 조회를 나눠 쓴다).
   const tab = sp.tab === "modules" ? effectiveTab(sp, await getTenantSettings()) : resolveTab(sp);
-  return { title: `학원 설정 · ${tab === "modules" ? MODULES_TAB_LABEL : TAB_LABEL[tab]} — aywa` };
+  return { title: `학원 설정 · ${tab === "modules" ? MODULES_TAB_LABEL : TAB_LABEL[tab]} — 에이와` };
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {

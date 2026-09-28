@@ -77,7 +77,7 @@ function mountFrame(container: HTMLElement) {
   const postMessage = vi.fn();
   const replace = vi.fn();
   const makeDoc = (painted: boolean) => {
-    const d = document.implementation.createHTMLDocument("원생 — aywa");
+    const d = document.implementation.createHTMLDocument("원생 — 에이와");
     if (painted) {
       const m = d.createElement("main");
       m.className = "embed-main";

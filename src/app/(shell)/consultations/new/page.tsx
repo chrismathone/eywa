@@ -8,7 +8,7 @@ import { getNewcomerLinkTargets } from "@/features/newcomers/server/consult-link
 import { ConsultationForm } from "../_components/consultation-form";
 import { AudioConsultationForm } from "../_components/audio-consultation-form";
 
-export const metadata = { title: "새 원생상담 — aywa" };
+export const metadata = { title: "새 원생상담 — 에이와" };
 
 export default async function NewConsultationPage({
   searchParams,

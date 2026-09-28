@@ -8,7 +8,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { StaffForm } from "../_components/staff-form";
 
-export const metadata = { title: "직원 등록 — aywa" };
+export const metadata = { title: "직원 등록 — 에이와" };
 
 export default async function NewStaffPage() {
   await requireAccess("staff");

@@ -23,7 +23,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isValidYmd } from "@/lib/date-kst";
 import { AbsentStudentsView } from "./_components/absent-students-view";
 
-export const metadata = { title: "출석부 — aywa" };
+export const metadata = { title: "출석부 — 에이와" };
 
 const STATUS_LABEL: Record<string, string> = {
   present: "출석",

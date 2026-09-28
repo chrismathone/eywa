@@ -58,7 +58,7 @@ describe("교재목록 — 메뉴 배선", () => {
 
   it("사이드바 라벨과 페이지 제목 접두가 같다 — 창 타이틀바가 문서 제목을 읽는다", () => {
     expect(navItemByKey("textbooks")?.label).toBe("교재목록");
-    expect(read("src", "app", "(shell)", "textbooks", "page.tsx")).toContain("`교재목록${TITLE_SUFFIX[tab]} — aywa`");
+    expect(read("src", "app", "(shell)", "textbooks", "page.tsx")).toContain("`교재목록${TITLE_SUFFIX[tab]} — 에이와`");
   });
 });
 

@@ -173,7 +173,7 @@ export const IJW_FAIL_TEXT: Record<IjwFailKind, string> = {
   unreachable: "인재원 서버에 연결하지 못했습니다. 잠시 후 다시 열어 주세요.",
   bad_response: "인재원 응답을 읽지 못했습니다(형식이 바뀌었을 수 있습니다).",
   server: "인재원 서버에서 오류가 났습니다. 잠시 후 다시 열어 주세요.",
-  local: "aywa에서 학생 연결 정보를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.",
+  local: "에이와에서 학생 연결 정보를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.",
 };
 
 /**

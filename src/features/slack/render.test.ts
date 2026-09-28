@@ -8,7 +8,7 @@ const notif = { type: "approval_requested", title: "결재 요청", body: "박�
 describe("알림", () => {
   it("짧게 = 머리 + 한 줄 본문 + 링크", () => {
     expect(renderNotification(notif, style).body).toBe(
-      "*[결재 요청] 결재 요청*\n박지현 · 10월 교재 구입 품의\n<https://www.aywa.co.kr/approvals/1|aywa에서 열기>",
+      "*[결재 요청] 결재 요청*\n박지현 · 10월 교재 구입 품의\n<https://www.aywa.co.kr/approvals/1|에이와에서 열기>",
     );
   });
   it("자세히 + 받는 사람(멘션) + @here", () => {
@@ -50,7 +50,7 @@ describe("개인정보 가리기", () => {
   it("🔴 링크 줄은 가리지 않는다 — 숫자로만 된 uuid 조각이 있어도 주소가 안 깨진다", () => {
     const link = "/approvals/1a2b3c4d-1234-4123-8123-123456789012";
     const body = renderNotification({ ...notif, link, body: "연락처 010-1234-5678" }, style).body;
-    expect(body).toContain(`<https://www.aywa.co.kr${link}|aywa에서 열기>`);
+    expect(body).toContain(`<https://www.aywa.co.kr${link}|에이와에서 열기>`);
     expect(body).toContain("연락처 ***-****-****");
   });
 });
@@ -63,7 +63,7 @@ describe("묶음·요약", () => {
   ];
   it("묶음 = 앞 10건은 한 줄씩(누가·무엇을), 넘치면 나머지는 종류별 건수", () => {
     expect(renderAggregate(items)).toBe(
-      "*[aywa] 3건*\n• *[출결 입력·정정]* 김하늘 — 박소선\n• *[출결 입력·정정]* 이서준 — 박소선\n• *[학생 등록]* 박지우 — 원장",
+      "*[에이와] 3건*\n• *[출결 입력·정정]* 김하늘 — 박소선\n• *[출결 입력·정정]* 이서준 — 박소선\n• *[학생 등록]* 박지우 — 원장",
     );
     const many = Array.from({ length: 12 }, (_, i) => ({ ...items[0], body: `*[출결 입력·정정]* 학생${i} — 박소선` }));
     const text = renderAggregate(many);
@@ -73,7 +73,7 @@ describe("묶음·요약", () => {
   });
   it("요약 = 기간 + 시각별 첫 줄", () => {
     const d = renderDigest(items);
-    expect(d.split("\n")[0]).toBe("*[aywa] 요약 3건* (9/28 22:10 ~ 9/29 07:00)");
+    expect(d.split("\n")[0]).toBe("*[에이와] 요약 3건* (9/28 22:10 ~ 9/29 07:00)");
     expect(d).toContain("• 22:10 *[출결 입력·정정]* 김하늘 — 박소선");
   });
   it("요약 줄에 낱개 호출(@here)을 반복하지 않는다", () => {

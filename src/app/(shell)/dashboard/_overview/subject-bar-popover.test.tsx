@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { GradeSplitChart } from "./grade-split";
-import { LevelSplitChart } from "./level-split";
 import { StudentSubjectBars } from "./student-subject-bars";
 import { SchoolDistribution } from "./school-distribution";
 
@@ -11,7 +10,7 @@ const subjects = { englishOnly: 2, both: 3, mathOnly: 4, otherOnly: 0, noEnrollm
 const row = { label: "초등", ...subjects, neither: 0, total: 9 };
 const charts = [
   { name: "학년", chart: () => <GradeSplitChart split={{ rows: [row], neither: 0 }} /> },
-  { name: "급별", chart: () => <LevelSplitChart split={{ rows: [row] }} noEnrollment={0} /> },
+  // 급별(재원생 구성)은 2026-09-28부터 조각이 원생목록 링크다 — level-split.test.tsx가 잠근다.
   { name: "학교·신규생 단계", chart: () => <StudentSubjectBars rows={[{ label: row.label, value: 9, subjects }]} /> },
 ];
 

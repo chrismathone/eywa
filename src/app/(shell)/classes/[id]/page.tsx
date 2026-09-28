@@ -51,9 +51,10 @@ import { sheetDowLabel, sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { seatMarkLabelOf } from "@/features/attendance/live/mark-state";
 import { ijwConfigFor } from "@/features/ijw/server/client";
 import { JjClassLink } from "@/app/(shell)/exams/_components/jj-class-link";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 function todayIso(): string {

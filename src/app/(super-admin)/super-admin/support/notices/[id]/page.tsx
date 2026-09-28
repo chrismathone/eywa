@@ -6,7 +6,7 @@ import { fmtSupportDate } from "@/features/support/format";
 import { getAnySupportNotice } from "@/features/support/server/admin-queries";
 import { SupportNoticeForm } from "../../_notice-form";
 
-export const metadata = { title: "슈퍼관리자 · 공지 수정 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 공지 수정 — 에이와" };
 
 export default async function EditSupportNoticePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

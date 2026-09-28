@@ -13,7 +13,7 @@ import { OutcomeDonut } from "./_components/outcome-donut";
 import { kstMonth } from "@/lib/date-kst";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
-export const metadata = { title: "콜&상담 대시보드 — aywa" };
+export const metadata = { title: "콜&상담 대시보드 — 에이와" };
 
 function currentMonthKey(): string {
   return kstMonth();

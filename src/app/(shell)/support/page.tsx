@@ -24,7 +24,7 @@ const TITLE_SUFFIX: Record<SupportTab, string> = { notices: "", requests: " · �
 // 면마다 문서 제목을 달리해 창 타이틀바가 "고객센터 · 개선요청"으로 갱신된다. 접두는 사이드바 라벨과 같다.
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   const tab = resolveSupportTab((await searchParams).tab);
-  return { title: `고객센터${TITLE_SUFFIX[tab]} — aywa` };
+  return { title: `고객센터${TITLE_SUFFIX[tab]} — 에이와` };
 }
 
 /**
@@ -55,7 +55,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
       <PageHeader
         eyebrow="지원"
         title="고객센터"
-        description="aywa 운영팀의 공지를 보고, 바라는 점을 개선요청으로 남깁니다."
+        description="에이와 운영팀의 공지를 보고, 바라는 점을 개선요청으로 남깁니다."
       />
       <FaceTabs faces={supportFaces()} active={tab} ariaLabel="고객센터 면" />
       {tab === "notices" ? (

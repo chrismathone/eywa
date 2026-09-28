@@ -13,7 +13,7 @@ import { StaffForm } from "../../_components/staff-form";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
 import { getTenantSettings } from "@/features/owner/server/queries";
 
-export const metadata = { title: "근무 설정 — aywa" };
+export const metadata = { title: "근무 설정 — 에이와" };
 
 export default async function EditStaffPage({
   params,

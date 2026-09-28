@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 
 // 🔴 고정 제목(감사 S9) — 탭 제목은 본문의 소유 판정보다 먼저 만들어져, 남의 결의서 주소를 열면 본문은 404인데
 //    탭에 그 결의서 제목이 새어 나갔다. 제목엔 레코드 내용을 싣지 않는다.
-export const metadata = { title: "지출결의서 — aywa" };
+export const metadata = { title: "지출결의서 — 에이와" };
 
 /**
  * 강사 본인 지출결의서 상세(읽기전용 + 인쇄) — /billing/expenses/[id]는 billing 게이트라 강사가 못 봄.

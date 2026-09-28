@@ -39,7 +39,7 @@ export const lessonReports: HelpManual = {
       n: 5,
       label: "작성률",
       zone: "board",
-      body: "강사별 이번 기간 작성. 영어는 aywa에 보고서를 쓰지 않아 운영실 미작성 신호에서 빠집니다.",
+      body: "강사별 이번 기간 작성. 영어는 에이와에 보고서를 쓰지 않아 운영실 미작성 신호에서 빠집니다.",
     },
   ],
 };

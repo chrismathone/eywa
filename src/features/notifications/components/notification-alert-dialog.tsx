@@ -51,7 +51,7 @@ export function NotificationAlertDialog({
         {perm === "default" ? (
           <div className="border-primary/30 bg-primary-soft/40 rounded-md border px-3 py-2.5">
             <p className="text-foreground text-xs leading-relaxed break-keep">
-              <b>컴퓨터 알림을 켜면</b> aywa를 보고 있지 않아도 이런 알림을 윈도우 알림으로 바로 받습니다.
+              <b>컴퓨터 알림을 켜면</b> 에이와를 보고 있지 않아도 이런 알림을 윈도우 알림으로 바로 받습니다.
             </p>
             <Button size="sm" className="mt-2 w-full" onClick={onEnableDesktop}>
               <EyIcon name="bell" size={13} /> 컴퓨터 알림 켜기
@@ -62,7 +62,7 @@ export function NotificationAlertDialog({
           </div>
         ) : perm === "denied" ? (
           <p className="text-text-faint border-line rounded-md border px-3 py-2 text-xs leading-snug break-keep">
-            컴퓨터 알림이 차단돼 있어 aywa 화면을 볼 때만 알림이 보입니다 — 주소창의 자물쇠 &gt; 알림에서
+            컴퓨터 알림이 차단돼 있어 에이와 화면을 볼 때만 알림이 보입니다 — 주소창의 자물쇠 &gt; 알림에서
             &lsquo;허용&rsquo;으로 바꾸면 윈도우 알림으로도 받습니다.
           </p>
         ) : null}

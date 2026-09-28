@@ -78,9 +78,10 @@ import {
 import { classNameFor } from "@/features/teacher-view/class-name";
 import { periodWindowLabel } from "@/features/periods/window-label";
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "att.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "att.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 function currentMonthKey(): string {

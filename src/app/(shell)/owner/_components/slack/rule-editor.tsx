@@ -116,8 +116,8 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
             picker={{
               title: isNotif ? "보낼 알림" : "보낼 활동 기록",
               description: isNotif
-                ? "aywa 알림 벨에 뜨는 것과 같은 알림입니다."
-                : "aywa에서 누가 무엇을 했는지(감사로그). 급여·이력서·근로계약·비밀번호는 보낼 수 없고, 돈 관련은 누가·무엇을만 보냅니다.",
+                ? "에이와 알림 벨에 뜨는 것과 같은 알림입니다."
+                : "에이와에서 누가 무엇을 했는지(감사로그). 급여·이력서·근로계약·비밀번호는 보낼 수 없고, 돈 관련은 누가·무엇을만 보냅니다.",
               groups,
               options,
               picked: rule.typeKeys,
