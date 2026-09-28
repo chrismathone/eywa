@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-28 (4) — 신규생 체크 ↔ 원생상담 반자동 연결(0295a)
+
+- 원장 *"지정된 학생이 90일 관리 학생이면 자동연동 … 반자동으로"* → 원생상담 등록·수정 폼에 '신규생 관리' 칸([`newcomer-link-field.tsx`](src/app/(shell)/consultations/_components/newcomer-link-field.tsx)). 새 상담은 날짜 규칙으로 한 칸을 미리 잡고([`consult-link.ts`](src/features/newcomers/consult-link.ts)), 저장하면 그 칸이 상담일로 완료 + `consultation_id` 기록([`server/consult-link.ts`](src/features/newcomers/server/consult-link.ts)). 감사로그 = `newcomer_check`/`newcomer_uncheck` + `via: consultation`(설명에 "원생상담으로").
+- 손 체크 우선 · 수정 화면은 제안 없음 · '해당 없음'/학생 변경 = 해제 · 상담 삭제 = 먼저 해제(실패하면 삭제 안 함) · 신규생 표 손 체크는 연결을 끊는다. 과목 확인은 손 체크와 같은 헬퍼 `studentTakesSubject`.
+- makeedu 동기화 상담은 대상 아님(원장 선택 1번). 같은 날 시험한 AI 판정안은 폐기 — 0295a가 `consultation_call_labels`(0행)를 걷는다.
+- ⚠️ 0295a 전에도 산다([[#95]]): 연결 없이 체크만 하고, 되돌리기(수정·삭제 해제)는 SQL 적용 뒤 체크부터.
+
 ## 2026-09-28 (3) — 고객센터(공지사항 · 개선요청) — 사이드바 지원 묶음 맨 위
 - 원장 *"https://school.makeedu.co.kr/board/csQnaList.do 를 참고해서 고객센터 메뉴를 도움말 아래에"*. makeedu 고객센터(공지사항·개선요청·이용료청구서·원격지원·공동구매·사용설명서) 중 **공지사항·개선요청 두 면**만 옮겼다(사용설명서는 도움말이 이미 한다).
 - 방향: **지점 → aywa 운영자(슈퍼관리자)**. 도움말 질문 게시판(0265a, 지점 안 원장·관리자가 답)과 다른 창구다.

@@ -792,7 +792,13 @@ export function auditDetail(
     case "newcomer_uncheck": {
       // 항목 이름은 신규생 체크리스트 정의가 단일 소스 — 여기 라벨을 다시 적으면 항목을 바꿀 때 갈린다.
       const item = ONBOARDING_ITEMS.find((i) => i.key === str(m.itemKey));
-      return join(ctx.nameOf(m.studentId), item?.label ?? str(m.itemKey), str(m.doneOn));
+      // 상담 등록·수정 화면에서 고른 체크(0295a 반자동)는 그 사실을 적는다 — 손 체크와 구별돼야 되짚을 수 있다.
+      return join(
+        ctx.nameOf(m.studentId),
+        item?.label ?? str(m.itemKey),
+        str(m.doneOn),
+        str(m.via) === "consultation" ? "원생상담으로" : null,
+      );
     }
     case "enrollment_assign": {
       return join(

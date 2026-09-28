@@ -10,6 +10,7 @@ import { kstToday } from "@/lib/date-kst";
 import { ONBOARDING_ITEM_KEYS } from "../onboarding-items";
 import { ANY_SUBJECT, isSubjectKey } from "../subject-rows";
 import { isMissingSubjectColumn } from "./cohort";
+import { studentTakesSubject } from "./consult-link";
 
 /**
  * 신규생 체크리스트 한 칸 — 완료/해제(0251a `student_onboarding_checks`).
@@ -62,26 +63,9 @@ export async function setOnboardingCheck(input: {
 
   // 🔴 과목은 **그 학생이 실제로 듣는 과목**이어야 한다([[#77]]) — 반은 학생 한 명분이라 수 개뿐이다.
   if (subject !== ANY_SUBJECT) {
-    const { data: enr, error: enrErr } = await admin
-      .from("enrollments")
-      .select("class_id")
-      .eq("tenant_id", user.tenantId)
-      .eq("student_id", input.studentId);
-    if (enrErr) return { ok: false, error: "체크를 저장하지 못했습니다 — 다시 시도해 주세요" };
-    const classIds = [...new Set((enr ?? []).map((e) => e.class_id as string | null).filter((v): v is string => !!v))];
-    let hit = false;
-    if (classIds.length > 0) {
-      const { data: cls, error: clsErr } = await admin
-        .from("classes")
-        .select("id")
-        .eq("tenant_id", user.tenantId)
-        .eq("subject", subject)
-        .in("id", classIds)
-        .limit(1);
-      if (clsErr) return { ok: false, error: "체크를 저장하지 못했습니다 — 다시 시도해 주세요" };
-      hit = (cls ?? []).length > 0;
-    }
-    if (!hit) return { ok: false, error: "이 학생은 그 과목을 듣지 않습니다" };
+    const takes = await studentTakesSubject(admin, user.tenantId, input.studentId, subject);
+    if (!takes.ok) return { ok: false, error: "체크를 저장하지 못했습니다 — 다시 시도해 주세요" };
+    if (!takes.takes) return { ok: false, error: "이 학생은 그 과목을 듣지 않습니다" };
   }
 
   const record = {
@@ -112,6 +96,20 @@ export async function setOnboardingCheck(input: {
         : "체크를 저장하지 못했습니다 — 다시 시도해 주세요",
     };
   }
+  // 손으로 바꾼 칸은 더 이상 "상담으로 한 체크"가 아니다(0295a) — 연결을 끊어야 그 상담을 지우거나 고칠 때
+  // 이 손 체크가 함께 풀리지 않는다. 컬럼이 아직 없으면(0295a 전) 끊을 연결도 없다 — 오류는 무시한다.
+  const unlinked = await admin
+    .from("student_onboarding_checks")
+    .update({ consultation_id: null })
+    .eq("tenant_id", user.tenantId)
+    .eq("student_id", input.studentId)
+    .eq("subject", storedSubject)
+    .eq("item_key", input.itemKey)
+    .not("consultation_id", "is", null);
+  // 컬럼 부재(0295a 전)만 조용히 넘긴다 — 다른 실패는 남겨야 "상담을 지웠더니 손 체크가 풀렸다"를 되짚는다.
+  if (unlinked.error && !/consultation_id/i.test(unlinked.error.message))
+    console.error("[newcomers] clear consultation link:", unlinked.error.message);
+
   // 🔴 **쓰기는 감사로그로 남긴다**(원장 2026-09-09 *"기능이 추가되거나 변동되는건 모두 감사로그에
   //    남도록 해야함"*). 이 칸은 "학부모에게 전화했다"는 **사실 주장**이라, 나중에 "안 왔다는데 콜은
   //    했다고 돼 있네"를 되짚을 수 있어야 한다. 체크만큼 **해제**도 남긴다(해제가 더 중요한 흔적이다).
