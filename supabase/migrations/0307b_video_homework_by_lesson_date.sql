@@ -21,6 +21,8 @@ create unique index if not exists video_homework_marks_lesson_uq
   on public.video_homework_marks (tenant_id, class_id, student_id, check_date);
 
 alter table public.video_homework_marks
+  drop constraint if exists video_homework_marks_homework_date_ck;
+alter table public.video_homework_marks
   add constraint video_homework_marks_homework_date_ck
   check (homework_date is null or homework_date <= check_date);
 
