@@ -65,6 +65,8 @@ export type OverviewData = {
     levelSplit?: import("./student-composition").LevelSubjectSplit;
   };
   changes: MonthChange[];
+  /** 재원생 추이(월말·연말 재원생 수, 원장 2026-09-29) — 강사 스코프면 null(지금 담당 학생으로 과거를 셀 수 없다). */
+  enrolledTrend: import("./enrolled-trend-server").EnrolledTrend | null;
   /** KPI '퇴원생' — 이번 달 1일 ~ 오늘(KST) 퇴원, 시스템 정리 제외. 프로그램 = 마지막 수강 반. */
   withdrawals: {
     month: string;

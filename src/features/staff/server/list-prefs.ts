@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { mergeStaffView, parseStaffListPrefs, pickStaffViewPrefs, type StaffListPrefs, type StaffViewPrefs } from "../list-prefs";
 
 /**
- * `users.ui_prefs.staff`만 **필드 단위로** 갱신 — 직원목록 보기 설정(필터·정렬·표시 수·볼 열·표 글자 크기).
+ * `users.ui_prefs.staff`만 **필드 단위로** 갱신 — 직원목록 보기 설정(필터·정렬·볼 열·표 글자 크기 — 한 쪽 행 수는 창이 정해 저장하지 않는다).
  * 학생목록 `saveStudentListPrefs`·수업목록 `saveClassListPrefs`와 같은 규약.
  *
  * ⚠️ 형제 키(`students`·`classes`·`timetable`…)는 반드시 보존한다 — 통째로 덮으면 남의 화면 설정이 조용히 날아간다.

@@ -98,7 +98,8 @@ const CATEGORY_MARK: Record<string, string> = {
 
 /**
  * 활동 한 건. 짧게 = `표식 *[라벨]* 대상 · 학생 · 반 · 날짜 — 누가`(한 줄) ·
- * 자세히 = 같은 첫 줄 + 학생·반·날짜·출결 줄 + 누가·시각 + 에이와 링크(학생 한 명이면 그 학생 화면, 아니면 감사로그).
+ * 자세히 = 같은 첫 줄 + 학생·반·날짜·출결 줄 + `시각 · 에이와 링크`(학생 한 명이면 그 학생 화면, 아니면 감사로그).
+ * 🔴 '누가' 줄을 따로 두지 않는다 — 첫 줄 끝에 이미 있어 같은 이름이 두 번 찍혔다(원장 2026-09-29 *"의미없는 이름이 중복 표기됨"*).
  * 🔑 첫 줄은 두 모양이 같다 — 여러 건 묶음·요약은 **첫 줄만** 싣는다(renderAggregate·renderDigest).
  */
 export function renderActivity(ev: ActivityEvent, style: Style): Rendered {
@@ -112,15 +113,11 @@ export function renderActivity(ev: ActivityEvent, style: Style): Rendered {
   const mark = ev.category ? CATEGORY_MARK[ev.category] : undefined;
   const first = `${mark ? `${mark} ` : ""}*[${escapeMrkdwn(ev.label)}]*${pieces.length ? ` ${pieces.join(" · ")}` : ""} — ${actor}`;
   const detailed = style.template === "detailed";
-  const rows = detailed
-    ? [
-        ...(facts?.rows ?? []).map((r) => `>${r.label}  ${escapeMrkdwn(r.value)}`),
-        `>누가  ${actor} · ${kstClock(ev.createdAt)}`,
-      ]
-    : [];
+  const rows = detailed ? (facts?.rows ?? []).map((r) => `>${r.label}  ${escapeMrkdwn(r.value)}`) : [];
+  const open = detailed ? link(facts?.href ?? "/owner?tab=audit", style.appUrl, facts?.href ? "에이와에서 열기" : "감사로그에서 보기") : null;
   const body = finish(
     [first, ...rows],
-    detailed ? link(facts?.href ?? "/owner?tab=audit", style.appUrl, facts?.href ? "에이와에서 열기" : "감사로그에서 보기") : null,
+    detailed ? `_${kstClock(ev.createdAt)}_${open ? ` · ${open}` : ""}` : null,
     style,
   );
   return { body, groupLabel: `${ev.label} — ${ev.actorName ?? "시스템"}` };
@@ -131,7 +128,8 @@ type Item = { body: string; groupLabel: string; createdAt: Date };
 function countLines(items: readonly Item[]): string[] {
   const counts = new Map<string, number>();
   for (const i of items) counts.set(i.groupLabel, (counts.get(i.groupLabel) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1]).map(([g, n]) => `• ${escapeMrkdwn(g)} ${n}건`);
+  // 나머지 건수 줄도 본문과 같은 가리기를 지난다(codex 2026-09-29 — 11번째부터는 이 경로라 빠져 있었다).
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([g, n]) => `• ${scrubSensitive(escapeMrkdwn(g))} ${n}건`);
 }
 
 /** 한 번에 여러 건(일괄 배정·출결 한꺼번에) → 종류별 건수 한 통. */

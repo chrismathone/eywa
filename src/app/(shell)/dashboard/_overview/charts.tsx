@@ -220,6 +220,7 @@ export function Columns({
   format = number,
   axisFormat = format,
   valueLabels = "all",
+  kind = "bar",
 }: {
   labels: string[];
   series: { name: string; color: string; values: number[] }[];
@@ -229,6 +230,8 @@ export function Columns({
   axisFormat?: (n: number) => string;
   /** `last` = 마지막 **시리즈**의 모든 칸 · `end` = 마지막 시리즈의 **마지막 칸**만(단일 시리즈 12칸처럼 칸이 좁을 때). */
   valueLabels?: "all" | "last" | "end";
+  /** 막대 / 꺾은선(원장 2026-09-29 토글) — 축·눈금·수치 표는 같고 표식만 다르다. */
+  kind?: "bar" | "line";
 }) {
   const id = useId();
   const { ref, width } = useChartWidth(480);
@@ -279,9 +282,42 @@ export function Columns({
             </text>
           </g>
         ))}
+        {kind === "line"
+          ? series.map((v, j) => {
+              const cx = (i: number) => left + group * (i + 0.5);
+              const pts = labels.map((_, i) => `${cx(i)},${y(v.values[i] ?? 0)}`).join(" ");
+              return (
+                <g key={v.name}>
+                  <polyline points={pts} fill="none" stroke={v.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                  {labels.map((label, i) => {
+                    const value = v.values[i] ?? 0;
+                    const show = valueLabels === "all" || (j === series.length - 1 && (valueLabels === "last" || i === labels.length - 1));
+                    // 두 선의 값 글자가 겹치지 않게 — 그 칸에서 **작은 쪽**은 점 아래, 큰 쪽은 위(같으면 마지막 선만 적는다).
+                    // 아래 글자가 가로축 글자에 닿으면 위로 돌린다.
+                    const others = series.filter((_, k) => k !== j).map((o) => o.values[i] ?? 0);
+                    const lowest = others.length > 0 && others.every((o) => value < o);
+                    const tie = others.some((o) => o === value) && j < series.length - 1;
+                    const below = lowest && y(value) + 16 <= top + plot - 2;
+                    return (
+                      <g key={label}>
+                        <circle cx={cx(i)} cy={y(value)} r="3.5" fill="white" stroke={v.color} strokeWidth="2">
+                          <title>{`${label} ${v.name}: ${number(value)}${unit}`}</title>
+                        </circle>
+                        {show && !tie && (
+                          <text x={cx(i)} y={y(value) + (below ? 16 : -8)} textAnchor="middle" className={s.columnValue}>
+                            {format(value)}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })
+          : null}
         {labels.map((label, i) => (
           <g key={label}>
-            {series.map((v, j) => {
+            {kind === "bar" && series.map((v, j) => {
               const value = v.values[i] ?? 0;
               const h = Math.abs(y(value) - y(0));
               const x =

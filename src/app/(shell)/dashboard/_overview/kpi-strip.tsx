@@ -47,6 +47,8 @@ export function kpiGridVars(n: number): CSSProperties {
  * 오늘첫수업 · 전일 결석 · 보강예정.
  * 볼 권한이 없는 칸은 영역이 오지 않아 숨는다(종전 규약). ↗는 목적지 메뉴를 열 수 있을 때만 선다.
  * 🔴 금일입테는 ↗가 없다 — 캘린더 메뉴는 감춰져 있다(링크 금지 테스트가 잠근다).
+ * **산정 기간**은 라벨 옆 꼬리표로(원장 2026-09-29 *"현 재원생, 이번달 퇴원 등 모두 기간 명시"* · *"날짜라기보다 이번달,
+ * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(금일입테·금일 등록·오늘첫수업·전일 결석)은 같은 말을 덧붙이지 않는다.
  */
 export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const v = snapshot.sections;
@@ -94,12 +96,13 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
         <KpiCard
           helpKey="dash-enrolled"
           label="재원생"
+          labelNote="현재"
           value={count(student?.enrolled)}
           unit="명"
           detail={student ? programLine(student.programs) : "재원 상태 기준"}
           icon={<MenuGlyph name="users" size={20} />}
           error={v.students.error}
-          popupTitle="재원생 프로그램별 인원"
+          popupTitle="현재 재원생 프로그램별 인원"
           jump={can("students") ? { href: studentsEnrolledHref(), label: "원생목록에서 재원생 보기" } : null}
         >
           <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} eieOn={eieOn} />
@@ -109,12 +112,13 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
         <KpiCard
           helpKey="dash-withdrawn"
           label="퇴원생"
+          labelNote="이번 달"
           value={count(wd?.total)}
           unit="명"
           detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원 기준"}
           icon={<MenuGlyph name="userMinus" size={20} />}
           error={v.withdrawals.error}
-          popupTitle={`${Number(month.slice(5))}월 퇴원생`}
+          popupTitle={`이번 달(${Number(month.slice(5))}월 1일~오늘) 퇴원생`}
           jump={
             can("withdrawals")
               ? { href: withdrawalsMonthHref(month), label: "퇴원관리에서 이번 달 퇴원 보기" }
@@ -134,6 +138,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
         <KpiCard
           helpKey="dash-intake"
           label="신규문의"
+          labelNote="오늘"
           value={count(intake?.length)}
           unit="건"
           detail={intake ? (intake.length ? `마지막 접수 ${intake[0]?.time ?? "—"}` : "오늘 접수 없음") : "오늘 접수 기준"}
@@ -231,6 +236,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
         <KpiCard
           helpKey="dash-makeup"
           label="보강예정"
+          labelNote="한 달"
           value={count(makeup?.rows.length)}
           unit="건"
           detail={

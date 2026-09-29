@@ -200,7 +200,7 @@ export default async function EcsLandingPage({
         // 🔴 **'다른 강사 뷰'에서도 그 강사의 이름을 적는다**(원장 2026-09-05 *"관리자가 강사뷰를
         //    접근할때도 내이름 + 담임/부담임으로 보여야하는거 아냐?"*). 그 뷰의 존재 이유가
         //    **"그 사람이 보는 화면 그대로"**라 이름도 그 사람 것이어야 한다(원장 2026-08-19 규약).
-        //    상단 배지가 이미 '○○ 강사뷰 · 열람 전용'이라 내 이름으로 오해할 여지도 없다.
+        //    상단 배지가 이미 '○○ 강사뷰 · 열람 종료'라 내 이름으로 오해할 여지도 없다.
         const display = target?.displayName ?? (id && me && id === me.id ? me.displayName : null);
         return { id, name: display ? teacherNameFor(display, names, lang) : null };
       })()

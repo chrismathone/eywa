@@ -1773,6 +1773,11 @@ export const SHEET_DICT = {
   // 강사 미니셸 머리 둘째 줄 — 지금 보는 것이 강사뷰라는 표시(원장 2026-09-14 *"강사뷰 라고 큼직하게"*).
   // 관리자 풀셸 사이드바의 '관리자뷰'와 짝이다(관리자뷰는 한국어 고정이라 사전을 안 거친다).
   "chrome.teacherView": { ko: "강사뷰", en: "Teacher view" },
+  // '다른 강사 뷰' 열람 배지 = 나가는 버튼(원장 2026-09-29 *"강사뷰 열람 종료"*). 이름 뒤에 붙는다.
+  "chrome.viewAs.suffix": { ko: "강사뷰", en: "'s view" },
+  "chrome.viewAs.end": { ko: "열람 종료", en: "End viewing" },
+  "chrome.viewAs.endTitle": { ko: "눌러서 관리자뷰로 돌아갑니다", en: "Back to the admin view" },
+  "chrome.viewAs.noName": { ko: "이름 없음", en: "No name" },
   "att.legend": { ko: "범례", en: "Legend" },
   "att.units.guide": { ko: "시수 기준", en: "Lesson units" },
   "att.units.math": {
