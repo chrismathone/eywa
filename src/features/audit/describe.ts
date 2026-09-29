@@ -229,7 +229,7 @@ const FALLBACK_ID_LABEL: Record<string, string> = {
  */
 export const SYSTEM_ACTOR_PREFIX = "system:";
 const SYSTEM_ACTOR_LABEL: Record<string, string> = {
-  "grant-class-review": "수업 평가 권한 부여",
+  "grant-class-review": "직원 평가 권한 부여",
   "grant-seat-attendance": "자리 출석부 권한 부여",
   "narrow-staff-menu": "직원관리 권한 조정",
   "create-test-staff": "테스트 직원 생성",
@@ -1502,6 +1502,11 @@ export function auditDetail(
         areas === null ? null : `영역 ${areas}개`,
         items === null ? null : `문항 ${items}개`,
       );
+    }
+    case "class_review_final_review": {
+      // 총평 본문은 적지 않는다(인사 평가 문장 — 감사로그 목록에 새면 안 된다). 지웠는지·길이만.
+      const length = num(m.length);
+      return m.cleared === true ? "총평 지움" : length === null ? "총평 저장" : `총평 저장 (${length}자)`;
     }
     case "class_review_delete":
     case "class_review_template_delete":

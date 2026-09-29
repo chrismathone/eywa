@@ -149,7 +149,7 @@ export const SHEET_DICT = {
   // 🔴 ECS 월간 보기의 `달력`(face.cal)과 **다른 것**이다 — 이쪽은 학원 공용 일정 탭이라 영어도 갈라 적는다.
   "menu.item.calendar": { ko: "캘린더", en: "Academy calendar" },
   "menu.item.approvals": { ko: "전자결재", en: "Approvals" },
-  "menu.item.class_review": { ko: "수업 평가", en: "Class review" },
+  "menu.item.class_review": { ko: "직원 평가", en: "Staff review" },
   "menu.item.documents": { ko: "데이터베이스", en: "Documents" },
 
   // ── 면 전환(주간 | 달력 | 진도표 | 계획) ──────────────────────────
