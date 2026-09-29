@@ -24,7 +24,7 @@ import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 import { isModuleEnabled } from "@/lib/modules";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "수업보고서 — aywa" };
+export const metadata = { title: "수업보고서 — 에이와" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다 — 직접발송 면의 자동작성

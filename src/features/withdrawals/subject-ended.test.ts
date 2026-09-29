@@ -71,3 +71,19 @@ describe("isSubjectEnded", () => {
     expect(isSubjectEnded([], TODAY)).toBe(false);
   });
 });
+
+describe("끝난 특강은 수강종료가 아니다(원장 2026-09-28)", () => {
+  const sp = (subject: string, endDate: string | null): SubjectEnrollment => ({ subject, endDate, isSpecial: true });
+  it("특강만 끝나고 같은 과목 정규반을 다니면 종료 아님", () => {
+    expect(getEndedSubjects([sp("math", "2026-09-13"), e("math", null)], TODAY)).toEqual({ ended: [], active: ["math"] });
+  });
+  it("그 과목에 끝난 특강뿐이면 과목 이탈로 세지 않는다", () => {
+    expect(isSubjectEnded([sp("math", "2026-09-13"), e("english", null)], TODAY)).toBe(false);
+  });
+  it("정규반이 끝났으면 특강과 무관하게 종료", () => {
+    expect(getEndedSubjects([sp("math", "2026-09-13"), e("math", "2026-08-31")], TODAY).ended).toEqual(["math"]);
+  });
+  it("다니는 중인 특강은 그 과목을 수강 중으로 둔다", () => {
+    expect(getEndedSubjects([sp("math", null), e("math", "2026-08-31")], TODAY).active).toEqual(["math"]);
+  });
+});

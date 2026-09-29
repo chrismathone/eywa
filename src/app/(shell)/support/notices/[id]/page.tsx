@@ -8,7 +8,7 @@ import { fmtSupportDate } from "@/features/support/format";
 import { getSupportNotice } from "@/features/support/server/queries";
 import { SupportNotReady } from "@/components/support/list-states";
 
-export const metadata = { title: "고객센터 · 공지사항 — aywa" };
+export const metadata = { title: "고객센터 · 공지사항 — 에이와" };
 
 export default async function SupportNoticePage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }] = await Promise.all([params, requireAccess("support")]);

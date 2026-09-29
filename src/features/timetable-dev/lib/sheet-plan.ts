@@ -121,7 +121,7 @@ export type PlanSheetImportPlan = {
   hash: string;
 };
 
-const SKIP_NO_CLASS = "aywa에 없는 반이라 계획에 담지 않았습니다(반을 먼저 만들어 주세요)";
+const SKIP_NO_CLASS = "에이와에 없는 반이라 계획에 담지 않았습니다(반을 먼저 만들어 주세요)";
 const SKIP_NO_END = "종료 시각을 읽지 못했습니다";
 const SKIP_BAD_DAY = "요일을 읽지 못했습니다";
 const SKIP_BAD_TIME = "시각 형식이 올바르지 않습니다";

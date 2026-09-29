@@ -139,9 +139,9 @@ function UploadDialog({
   function applyFile(f: File | null) {
     setFile(f);
     setErr(null);
-    // 탐색기 UX — 제목이 비어 있으면 파일명(확장자 제외)으로 자동 채움.
-    if (f && titleRef.current && !titleRef.current.value.trim()) {
-      titleRef.current.value = f.name.replace(/\.[^.]+$/, "");
+    // 파일명 전체를 기본 제목으로 사용한다. 사용자 지정 제목에도 서버가 실제 확장자를 보장한다.
+    if (f && titleRef.current && (!titleRef.current.value.trim() || titleRef.current.value === file?.name)) {
+      titleRef.current.value = f.name;
     }
   }
 
@@ -240,6 +240,7 @@ function UploadDialog({
         </Field>
         <Field label="이름 *">
           <input ref={titleRef} name="title" required className={inputCls} placeholder="예: 입학 등록 신청서 (빈 양식)" />
+          <p className="text-text-faint text-xs">파일 확장자는 자동으로 붙습니다.</p>
         </Field>
         <Field label="분류">
           <SearchableSelect name="category" defaultValue={defaultCategory} options={categoryOptions} placeholder="분류 선택..." />

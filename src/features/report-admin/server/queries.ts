@@ -7,6 +7,8 @@ import { getTodaySchedule, getWeeklySchedule, getTeacherLabelsBySubject } from "
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
+import { absentClassKeysOf, judgeTodayLessonReports } from "@/features/dashboard/today-actions";
+import { isReportTrackedSubject } from "@/features/dashboard/report-subjects";
 import { needsAttention, summarizeQueue, type QueueSummary, HUMAN_RESOLVED_STATUSES } from "../classnote-queue";
 import { classnoteMinDate } from "@/features/onescreen/classnote-guard";
 import { absenceKeyOf, getAbsenceBlockedKeys } from "@/features/onescreen/server/absence-gate";
@@ -621,7 +623,11 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
    * 두 경로를 과목으로 갈라 겹치지 않게 한다: 여기 = 영어 외, 저기 = 영어.
    */
   const CLASSNOTE_MEASURED = new Set(["english"]);
-  const measuredHere = (subject: string | null | undefined) => !CLASSNOTE_MEASURED.has(String(subject ?? ""));
+  // 🔴 세는 과목은 운영실 '미작성 보고서'와 같은 축 = 학원설정 report.classnoteSubjects(비면 전부) — 예전엔 여기만
+  //    '영어 뺀 전부'(코드 고정)라 설정에 없는 과목이 작성률에만 섰다(점검 2026-09-28).
+  const trackedSubjects = settings.report.classnoteSubjects ?? null;
+  const measuredHere = (subject: string | null | undefined) =>
+    !CLASSNOTE_MEASURED.has(String(subject ?? "")) && isReportTrackedSubject(subject ?? null, trackedSubjects);
   /**
    * 이 슬롯을 **분모에 넣는가** — 과목 갈래(measuredHere) + 반 단위 제외(0174a).
    * 🔴 아래 세 곳(오늘 분모·오늘 수업예정·과거일 분모)에서 **전부** 써야 한다. 하나라도 빠지면
@@ -681,12 +687,14 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
   // 영어반(RTT2류)이 "(미지정)"으로 뭉치지 않게. 라벨 인물이 예외면 그 슬롯도 예외로 빠진다.
   const started = schedule.filter((s) => s.status !== "upcoming" && countedHere(s));
   const teacherOfClass = new Map<string, string>();
+  const subjectOfClass = new Map<string, string>();
   for (const s of started) {
     // 위임된 날은 **대신 맡은 사람**이 그 반의 주인이다(0173a) — 그래야 결근한 담임이 0%로 빨갛게 남지 않고,
     // 대신 쓴 강사의 작성이 대상 없이 "·"로 사라지지 않는다.
     const t = delegateOn(s.classId, today) ?? s.teacherName ?? s.slotTeacherLabel ?? "(미지정)";
     if (exempt.has(t)) continue;
     teacherOfClass.set(s.classId, t);
+    if (s.subject) subjectOfClass.set(s.classId, s.subject);
   }
   const classIds = [...teacherOfClass.keys()];
 
@@ -736,31 +744,71 @@ export async function getWeeklyWritingRates(month?: string): Promise<WritingRate
     }
     const allStudentIds = [...new Set(enr.map((e) => e.student_id))];
 
-    // 4) 오늘 결석 + 오늘 작성 + 이름.
-    const [absRows, todayRepRows, nameRows] = await Promise.all([
-      fetchInChunks<{ student_id: string }>(allStudentIds, (chunk) =>
-        supabase.from("attendance_records").select("student_id").eq("session_date", today).eq("status", "absent").in("student_id", chunk),
+    // 4) 오늘 출결 + 오늘 쓴·오늘을 지정한 보고서 + 이름.
+    const [attRows, todayRepRows, nameRows] = await Promise.all([
+      fetchInChunks<{
+        id: string;
+        student_id: string;
+        class_id: string;
+        session_date: string;
+        slot_start: string | null;
+        status: string;
+        recorded_at: string;
+      }>(allStudentIds, (chunk) =>
+        supabase
+          .from("attendance_records")
+          .select("id, student_id, class_id, session_date, slot_start, status, recorded_at")
+          .eq("session_date", today)
+          .in("student_id", chunk),
       ),
-      fetchInChunks<{ student_id: string }>(allStudentIds, (chunk) =>
-        supabase.from("lesson_reports").select("student_id").eq("report_date", today).in("student_id", chunk),
+      fetchInChunks<{
+        student_id: string;
+        subject: string | null;
+        report_date: string;
+        covers_date: string | null;
+        class_id: string | null;
+      }>(
+        allStudentIds,
+        (chunk) =>
+          supabase
+            .from("lesson_reports")
+            .select("student_id, subject, report_date, covers_date, class_id")
+            .or(`report_date.eq.${today},covers_date.eq.${today}`)
+            .in("student_id", chunk),
       ),
       fetchInChunks<{ id: string; name: string }>(allStudentIds, (chunk) =>
         supabase.from("students").select("id, name").in("id", chunk),
       ),
     ]);
-    const absent = new Set(absRows.map((r) => r.student_id));
-    const reported = new Set(todayRepRows.map((r) => r.student_id));
     const nameById = new Map(nameRows.map((s) => [s.id, s.name]));
 
-    // 5) 강사별 대상(결석 제외)/작성/미작성.
-    todayTargets = [...studentsByTeacher].map(([teacher, ids]) => {
-      // 결석 제외 + **의무 면제(covers_date로 이미 처리된 수업)** 제외 — 오지 않는 학생을 미작성으로 몰지 않는다.
-      const target = [...ids].filter(
-        (id) => !absent.has(id) && !discharged.has(dischargeKey(id, today, teacher)),
-      );
-      const written = target.filter((id) => reported.has(id)).length;
-      const missing = target.filter((id) => !reported.has(id)).map((id) => nameById.get(id) ?? "(학생)").slice(0, 20);
-      return { teacher, target: target.length, written, missing };
+    // 5) 🔴 오늘 판정은 운영실·브리핑 '미작성 보고서'와 **같은 함수**(`judgeTodayLessonReports`) — 그 과목 반이 전부 결석이면 대상 아님 ·
+    //    그 과목 보고서만 작성 인정 · 오늘을 지정한 미리 쓴 보고서는 의무 끝(점검 2026-09-28: 예전엔 '그날 어느 반이든 결석이면 통째 제외'
+    //    · '아무 과목 보고서나 인정'이라 두 화면 숫자가 갈렸다). 강사 귀속만 이 카드의 몫이다(위임 → 담임 → 슬롯 라벨).
+    const judged = judgeTodayLessonReports(
+      enr
+        .filter((e) => teacherOfClass.has(e.class_id) && !testStudentIds.has(e.student_id))
+        .map((e) => ({ studentId: e.student_id, classId: e.class_id, subject: subjectOfClass.get(e.class_id) ?? "" })),
+      absentClassKeysOf(attRows),
+      // 미발송 반(0174a) 보고서는 다른 반 의무를 채우거나 면제하지 않는다(위 repsCounted와 같은 규약 · class_id 없으면 둔다).
+      todayRepRows.filter((r) => !r.class_id || !reportOptoutIds.has(r.class_id)).map((r) => ({
+        studentId: r.student_id,
+        subject: r.subject,
+        reportDate: String(r.report_date).slice(0, 10),
+        coversDate: r.covers_date ? String(r.covers_date).slice(0, 10) : null,
+      })),
+      today,
+    );
+    todayTargets = [...studentsByTeacher.keys()].map((teacher) => {
+      const mine = (p: { classIds: string[] }) => p.classIds.some((c) => teacherOfClass.get(c) === teacher);
+      const due = [...new Set(judged.due.filter(mine).map((p) => p.studentId))];
+      const missingIds = [...new Set(judged.missing.filter(mine).map((p) => p.studentId))];
+      return {
+        teacher,
+        target: due.length,
+        written: due.length - missingIds.length,
+        missing: missingIds.map((id) => nameById.get(id) ?? "(학생)").slice(0, 20),
+      };
     });
   }
 

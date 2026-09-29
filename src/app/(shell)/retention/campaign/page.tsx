@@ -4,7 +4,7 @@ import { RetentionTabs } from "@/features/retention/components/retention-tabs";
 import { getCampaignBoard } from "@/features/retention/server/campaign-queries";
 import { CampaignBoard } from "@/features/retention/components/campaign-board";
 
-export const metadata = { title: "재등록 캠페인 — aywa" };
+export const metadata = { title: "재등록 캠페인 — 에이와" };
 
 export default async function RetentionCampaignPage() {
   await requireAccess("retention");

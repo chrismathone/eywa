@@ -102,6 +102,12 @@ export type SaveLessonReportInput = {
    * 미지정(구 클라·직접 호출)이어도 저장은 그대로 — 라벨만 보수적으로(null 또는 auto_edited) 남는다.
    */
   mentSource?: MentSource;
+  /**
+   * 영어 결과지 고르기(2026-09-28) — 그림 칸 `[시험결과지]`에 붙일 인재원 응시 id. `undefined` = 이 보고서에 저장해 둔
+   * 고르기를 따른다(일괄 발송·옛 화면처럼 고르기를 모르는 경로가 고른 것을 풀지 않게), `null` = 기본(그날 낸 시험 전부).
+   * 응시가 이 학생 것인지는 서버가 다시 확인한다(ijw/server/report-snapshot.ts).
+   */
+  jjExamPick?: string[] | null;
 };
 
 /**
@@ -274,7 +280,13 @@ export async function saveLessonReport(
    * ⚠️ 발송(saveAndQueueClassnote)도 이 함수를 지나므로 보내는 순간의 자료로 다시 묶인다(인재원 설명서 ⑤).
    */
   const jjCapture = shouldCaptureJj(input.subject, input.notes)
-    ? captureReportJj({ tenantId: user.tenantId, reportId: data.id, studentId: input.studentId, date: reportDate })
+    ? captureReportJj({
+        tenantId: user.tenantId,
+        reportId: data.id,
+        studentId: input.studentId,
+        date: reportDate,
+        pick: input.jjExamPick,
+      })
     : null;
 
   // 진도 컨테이너 반영(edutrix 이식) — 저장 성공 후 동기. 비수학·진도없음·이미반영은 내부에서 즉시 skip.

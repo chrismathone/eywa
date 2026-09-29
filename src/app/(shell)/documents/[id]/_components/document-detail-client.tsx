@@ -66,6 +66,7 @@ export function DocumentDetailClient({
         <div className="space-y-1.5">
           <span className="text-foreground block text-sm font-medium">제목 *</span>
           <input name="title" required defaultValue={doc.title} className={inputCls} />
+          {doc.kind === "file" ? <p className="text-text-faint text-xs">파일 확장자는 자동으로 유지됩니다.</p> : null}
         </div>
         <div className="space-y-1.5">
           <span className="text-foreground block text-sm font-medium">분류</span>

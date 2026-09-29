@@ -14,7 +14,7 @@ import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 
-export const metadata = { title: "수업 보고서 — aywa" };
+export const metadata = { title: "수업 보고서 — 에이와" };
 
 /**
  * 수업 보고서(lesson_reports) 강사 PDF 미리보기 — 원스크린 "PDF" 버튼이 여는 인쇄 문서.

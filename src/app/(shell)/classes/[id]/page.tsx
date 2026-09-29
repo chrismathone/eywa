@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/observability/report-error";
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "@/components/icons/aywa-icon-compat";
@@ -51,9 +52,10 @@ import { sheetDowLabel, sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { seatMarkLabelOf } from "@/features/attendance/live/mark-state";
 import { ijwConfigFor } from "@/features/ijw/server/client";
 import { JjClassLink } from "@/app/(shell)/exams/_components/jj-class-link";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "cls.d.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 function todayIso(): string {
@@ -72,7 +74,11 @@ export default async function ClassDetailPage({
     await Promise.all([
       getClassDetail(id),
       getClassStudents(id),
-      getClassAttendanceStats(id, 30),
+      // 부가 패널 — 조회가 실패해도 반 상세는 연다(0 통계 + 기록).
+      getClassAttendanceStats(id, 30).catch((e: unknown) => {
+        reportError(e, { scope: "classes.detail.attendanceStats", classId: id });
+        return null;
+      }),
       getStudentsList({ status: "enrolled" }),
       getTenantSettings(),
       getClassTeacherOptions(),
@@ -397,22 +403,22 @@ export default async function ClassDetailPage({
 
           <Card title={sheetT(lang, "cls.d.att30")}>
             <dl className="grid grid-cols-2 gap-3 text-sm">
-              <Stat label={sheetT(lang, "cls.d.rate")} value={`${stats.rate.toFixed(1)}%`} highlight="text-chart-2" />
+              <Stat label={sheetT(lang, "cls.d.rate")} value={stats ? `${stats.rate.toFixed(1)}%` : "—"} highlight="text-chart-2" />
               <Stat
                 label={sheetT(lang, "cls.d.records")}
-                value={String(stats.total)}
+                value={stats ? String(stats.total) : "—"}
                 unit={sheetT(lang, "cls.d.unitCount")}
               />
               {/* 🔴 출결 상태 이름은 `seatMarkLabelOf` 단일 소스 — 여기서 낱말을 새로 짓지 않는다. */}
               <Stat
                 label={seatMarkLabelOf("absent", lang)}
-                value={String(stats.absent)}
+                value={stats ? String(stats.absent) : "—"}
                 unit={sheetT(lang, "cls.d.unitCount")}
                 highlight="text-chart-4"
               />
               <Stat
                 label={seatMarkLabelOf("late", lang)}
-                value={String(stats.late)}
+                value={stats ? String(stats.late) : "—"}
                 unit={sheetT(lang, "cls.d.unitCount")}
                 highlight="text-chart-3"
               />

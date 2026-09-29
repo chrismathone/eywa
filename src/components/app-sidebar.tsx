@@ -122,7 +122,7 @@ export function AppSidebar({
   displayName,
   jobTitle,
   className,
-  logoText = "AYWA",
+  logoText = "에이와",
   logoSrc,
   permMatrix,
   canTeacherView = false,

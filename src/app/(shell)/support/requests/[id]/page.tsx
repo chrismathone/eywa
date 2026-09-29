@@ -9,7 +9,7 @@ import { canAuthorEditRequest } from "@/features/support/types";
 import { SupportNotReady } from "@/components/support/list-states";
 import { SupportRequestOwnerActions } from "../../_components/owner-actions";
 
-export const metadata = { title: "고객센터 · 개선요청 — aywa" };
+export const metadata = { title: "고객센터 · 개선요청 — 에이와" };
 
 export default async function SupportRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }, user] = await Promise.all([params, requireAccess("support")]);

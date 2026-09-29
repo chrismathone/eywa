@@ -11,9 +11,9 @@ import { addAcademicConsultation } from "./consultation";
 import { recordKey } from "./consultation-link";
 import { canEditStudent } from "./scope";
 import { reportScorePatch } from "../report-patch";
+import { isUuid } from "./uuid";
 
 export type UnifiedSaveState = { ok?: boolean; error?: string } | undefined;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
@@ -35,7 +35,8 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
   const maxRaw = String(formData.get("maxScore") ?? "").trim();
   const consultationDate = String(formData.get("consultationDate") ?? "").trim();
   const originalConsultationDate = String(formData.get("originalConsultationDate") ?? "").trim();
-  if (!UUID.test(id) || !validIsoDate(date)) return { error: "시험일을 확인해 주세요" };
+  if (!isUuid(id)) return { error: "성적 기록을 확인해 주세요" };
+  if (!validIsoDate(date)) return { error: "시험일을 확인해 주세요" };
   const score = scoreRaw === "" ? null : Number(scoreRaw);
   const maxScore = maxRaw === "" ? null : Number(maxRaw);
   if (score != null && (!Number.isFinite(score) || score < 0)) return { error: "점수는 0 이상이어야 합니다" };

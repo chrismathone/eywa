@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import {
   enrollmentAttendsOnDay,
   isEnrollmentActiveOn,
@@ -1520,7 +1521,7 @@ export async function getMonthlyAttendanceMatrix(
   const englishAuto = englishCells.length ? await resolveAutoUnits(supabase, englishCells.flatMap((c) =>
     c.starts ? c.starts.map((slotStart) => ({ classId: c.classId, date: c.date, slotStart })) : [{ classId: c.classId, date: c.date }])) : null;
   const presentRate =
-    totalRecords > 0 ? Math.round(attendanceRate(presentCount, totalRecords) * 10) / 10 : 0;
+    totalRecords > 0 ? Math.round(attendanceRate(attendedCount({ present: presentCount, late: lateCount }), totalRecords) * 10) / 10 : 0;
 
   return {
     classes,
@@ -1573,7 +1574,7 @@ export async function getAttendanceForDate(date: string): Promise<AttendanceRow[
     supabase
       .from("attendance_records")
       .select(
-        `id, status,
+        `id, status, student_id, class_id, session_date, slot_start, recorded_at,
          student:student_id ( id, name, grade ),
          class:class_id ( id, class_name, subject )`,
       )
@@ -1584,7 +1585,9 @@ export async function getAttendanceForDate(date: string): Promise<AttendanceRow[
       .range(from, to),
   );
 
-  return data.map((r) => {
+  // 🔴 정정 줄은 최신 하나만(공용 `effectiveAttendanceRecords`) — 원본 줄을 세면 정정한 칸이 요약·반별 목록에
+  //    두 번 잡히고 결석→출석으로 고친 칸이 결석으로 남았다(점검 2026-09-28).
+  return effectiveAttendanceRecords(data).map((r) => {
     const student = (Array.isArray(r.student) ? r.student[0] : r.student) as
       | { id: string; name: string; grade: string | null }
       | undefined;

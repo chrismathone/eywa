@@ -1,4 +1,4 @@
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, isAttendedStatus } from "@/lib/calc/attendance";
 import { shiftDate } from "@/features/newcomers/onboarding-items";
 import type { AttendanceSnapshot } from "@/features/dashboard/server/queries";
 
@@ -46,5 +46,5 @@ export function attendanceOverview(cells: readonly AttendanceCell[], today: stri
 }
 
 function attended(cells: readonly AttendanceCell[]): number {
-  return cells.filter((r) => r.status === "present" || r.status === "late").length;
+  return cells.filter((r) => isAttendedStatus(r.status)).length;
 }

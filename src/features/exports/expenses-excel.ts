@@ -63,7 +63,7 @@ export function expenseExcelRows(rows: readonly ExpenseRow[]): ExpenseExcelRow[]
 
 export async function buildExpensesWorkbook(rows: readonly ExpenseRow[], period: string): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "aywa";
+  wb.creator = "에이와";
   wb.created = new Date();
   const sheet = wb.addWorksheet(`${period} 지출`);
   sheet.columns = [

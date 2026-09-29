@@ -40,7 +40,7 @@ export function checkAywaGridShape(grid: SheetGrid): string | null {
   // ① 2행이 요일이어야 한다. 마스터를 통째로 붙이면 여기 강사 이름이 온다.
   const dayRow = grid.cells[DAY_ROW] ?? [];
   if (!dayRow.some((v) => DAY_HEAD.test((v ?? "").trim())))
-    return "이 탭은 aywa 형식이 아닙니다 — 2행이 요일(월·화…)이어야 하는데 아닙니다. 마스터 시트를 붙여넣으셨다면 그대로는 가져올 수 없습니다.";
+    return "이 탭은 에이와 형식이 아닙니다 — 2행이 요일(월·화…)이어야 하는데 아닙니다. 마스터 시트를 붙여넣으셨다면 그대로는 가져올 수 없습니다.";
 
   // ② A열 시각이 24시간 `HH:MM`이어야 한다. 🔴 여기가 조용히 틀리는 자리다.
   //    데이터 첫 행이 비어 있을 수 있어 위에서부터 처음 값이 있는 행을 앵커로 본다(파서와 같은 열).
@@ -52,14 +52,14 @@ export function checkAywaGridShape(grid: SheetGrid): string | null {
       break;
     }
   }
-  if (label === null) return "이 탭의 A열에 시각이 없습니다 — aywa에서 내보낸 시트인지 확인하세요.";
+  if (label === null) return "이 탭의 A열에 시각이 없습니다 — 에이와에서 내보낸 시트인지 확인하세요.";
   if (!AYWA_TIME.test(label))
-    return `A열 시각이 aywa 형식이 아닙니다("${label}"). aywa 시트는 24시간 표기(예 14:20)를 씁니다 — 마스터 시트의 12시간 표기를 그대로 가져오면 모든 수업이 12시간 앞으로 들어갑니다.`;
+    return `A열 시각이 에이와 형식이 아닙니다("${label}"). 에이와 시트는 24시간 표기(예 14:20)를 씁니다 — 마스터 시트의 12시간 표기를 그대로 가져오면 모든 수업이 12시간 앞으로 들어갑니다.`;
 
   // ③ 1행에 강사 라벨이 하나라도 있어야 한다(A열 "시각" 코너 제외).
   const teacherRow = (grid.cells[TEACHER_ROW] ?? []).slice(1);
   if (!teacherRow.some((v) => (v ?? "").trim() !== ""))
-    return "이 탭의 1행에 강사가 없습니다 — aywa에서 내보낸 시트인지 확인하세요.";
+    return "이 탭의 1행에 강사가 없습니다 — 에이와에서 내보낸 시트인지 확인하세요.";
 
   return null;
 }

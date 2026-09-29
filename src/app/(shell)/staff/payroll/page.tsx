@@ -25,7 +25,7 @@ import {
   type PayrollOverviewRow,
 } from "@/features/payroll/server/queries";
 
-export const metadata = { title: "월별 급여 — aywa" };
+export const metadata = { title: "월별 급여 — 에이와" };
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 

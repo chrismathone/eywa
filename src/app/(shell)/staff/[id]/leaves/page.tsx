@@ -9,7 +9,7 @@ import { getStaffDetail } from "@/features/staff/server/queries";
 import { getStaffLeaves } from "@/features/payroll/server/queries";
 import { LeavesClient } from "./_client";
 
-export const metadata = { title: "휴가 관리 — aywa" };
+export const metadata = { title: "휴가 관리 — 에이와" };
 
 export default async function StaffLeavesPage({
   params,

@@ -13,7 +13,7 @@ export type AttRow = { name: string; note: string; cells: AttCell[]; sum: number
 export type AttDay = { day: number; label: string; holiday: boolean };
 
 const STUDENTS: [string, string][] = [
-  ["김하늘", ""], ["이준서", ""], ["박서윤", ""], ["최도윤", ""], ["정하린", ""], ["한지안", "9/7 입반"],
+  ["김하늘", ""], ["이준서", ""], ["박서윤", ""], ["최도윤", ""], ["정하린", ""], ["한지안", "9/7 입학"],
 ];
 const CLASS_DOWS = [1, 3, 5];
 const HOLIDAYS = new Set([24, 25, 26]);

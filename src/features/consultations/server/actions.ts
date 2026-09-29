@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
@@ -75,7 +76,7 @@ export async function runStudentCareAnalysis(
         .limit(10),
       supabase
         .from("attendance_records")
-        .select("status")
+        .select("id, student_id, class_id, session_date, slot_start, recorded_at, status")
         .eq("student_id", studentId)
         // 날짜 컬럼이라 **KST 오늘** 기준 30일 — UTC로 세면 한국 새벽에 창이 하루 밀린다.
         .gte("session_date", addDays(kstToday(), -30)),
@@ -104,12 +105,13 @@ export async function runStudentCareAnalysis(
     })
     .join("\n\n");
 
-  const attRows = attendance ?? [];
+  // 🔴 정정 줄은 최신 하나만 — 고친 결석을 여전히 결석으로 AI에 넘기던 것(점검 2026-09-28).
+  const attRows = effectiveAttendanceRecords(attendance ?? []);
   const total = attRows.length;
   const present = attRows.filter((r) => r.status === "present").length;
   const absent = attRows.filter((r) => r.status === "absent").length;
   const late = attRows.filter((r) => r.status === "late").length;
-  const rate = total > 0 ? attendanceRate(present, total).toFixed(1) : "—";
+  const rate = total > 0 ? attendanceRate(attendedCount({ present, late }), total).toFixed(1) : "—";
 
   const enrolledClasses = (enrollments ?? [])
     .map((e) => {

@@ -32,7 +32,7 @@ import { relativeTimeKo } from "@/lib/relative-time";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 
-export const metadata = { title: "원생상담 — aywa" };
+export const metadata = { title: "원생상담 — 에이와" };
 
 type RangeKey = "all" | "7d" | "30d";
 type CategoryKey = "all" | StudentConsultationCategory;

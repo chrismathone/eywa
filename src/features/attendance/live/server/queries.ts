@@ -15,6 +15,7 @@ import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
+import { getAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { addDays, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { nowBandOf, type NowBand } from "../now-band";
@@ -358,6 +359,9 @@ export async function loadRequestMarks(
  *
  * 🔑 어제 보드를 통째로 다시 적재하지 않는다(비싸다). 가장 확실한 신호인 **결석**만, 그것도
  *    "조치 기록이 없는 학생 수"로 센다 — 미확인까지 세면 숫자가 커져 배너가 무시된다.
+ * 🔴 결석 학생 판정은 운영실 '전일 결석' 카드와 **같은 함수**(`getAbsentStudents` → `foldAbsentStudents`: 최신 정정 ·
+ *    결석+공결 · 한 교시도 안 온 학생) — 원본 줄을 따로 세던 시절엔 결석→출석으로 고친 학생이 배너에만 남았다(점검 2026-09-28).
+ *    여기서 빼는 것은 **조치 끝난 학생**과 **공결만 있는 학생**(큐가 공결을 안 올린다)뿐이다.
  */
 export async function getCarryOverAbsences(
   date: string,
@@ -367,19 +371,26 @@ export async function getCarryOverAbsences(
   if ((await accessLevelTenant(user.systemRole, "attendance")) !== "full") return null;
   const prev = addDays(date, -1);
   const supabase = await createClient();
-  const [absRes, fuRes] = await Promise.all([
-    supabase.from("attendance_records").select("student_id").eq("session_date", prev).eq("status", "absent"),
+  const [day, fuRes] = await Promise.all([
+    getAbsentStudents(prev, { supabase }).catch((e: unknown) => {
+      reportError(e, { scope: "attendance.getCarryOverAbsences", date: prev });
+      return null;
+    }),
     supabase.from("attendance_followups").select("student_id, state").eq("session_date", prev),
   ]);
-  if (absRes.error) return null;
+  if (!day) return null;
   // 조치 표가 아직 없으면(마이그레이션 미적용) 조치는 0건으로 본다 — 화면은 살아야 한다(#95).
   const settled = new Set(
     (fuRes.data ?? [])
       .filter((r) => r.state === "resolved" || r.state === "dismissed")
       .map((r) => r.student_id as string),
   );
+  // 공결만 있는 학생은 뺀다 — 데스크 큐가 공결을 신호로 올리지 않아(사유를 이미 안다, signals.ts) 배너에서 눌러도 조치할 곳이 없다.
   const pending = new Set(
-    (absRes.data ?? []).map((r) => r.student_id as string).filter((id) => !settled.has(id)),
+    day.absent
+      .filter((s) => s.statuses.includes("absent"))
+      .map((s) => s.studentId)
+      .filter((id) => !settled.has(id)),
   );
   return pending.size > 0 ? { date: prev, count: pending.size } : null;
 }

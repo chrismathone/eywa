@@ -85,7 +85,8 @@ export function monthRosterPairs(input: {
     if (!live.has(key)) live.set(key, { studentId: e.studentId, classId: e.classId, sources: ["enrolled"], recordedUnits: null });
   }
 
-  // 실제 시수 — 같은 (학생·반·날짜·교시)는 마지막 행 하나(0267a `distinct on … order by id desc`와 같은 뜻 — 입력이 id 순이면 뒤가 이긴다).
+  // 실제 시수 — 같은 (학생·반·날짜·교시)는 한 행. 🔴 서버가 `effectiveAttendanceRecords`로 **이미 최신 정정만** 넘긴다
+  //    (0267a `order by recorded_at desc, id desc`와 같은 규칙) — 여기서 순서로 고르지 말 것(id 순은 무작위다).
   const latest = (rows: readonly MonthRosterRecord[]) => {
     const cells = new Map<string, MonthRosterRecord>();
     for (const r of rows) cells.set(`${r.studentId}|${r.classId}|${r.sessionDate}|${r.slotStart ?? ""}`, r);

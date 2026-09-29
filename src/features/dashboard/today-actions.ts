@@ -5,6 +5,7 @@
  * server-only 미의존(타입+순수) → Vitest로 정렬·문구·링크를 결정적으로 검증.
  */
 import type { MenuKey } from "@/lib/permissions";
+import { effectiveAttendanceRecords, type EffectiveAttendanceRecord } from "@/features/attendance/effective-records";
 import { balancedTake } from "@/lib/collections/balanced-take";
 import { absentDayHref, intakeDayHref, studentsFirstClassHref } from "./overview/kpi-links";
 export {
@@ -215,19 +216,35 @@ export function subjectBreakdownText(bySubject: readonly { label: string; count:
   return bySubject.map((s) => `${s.label} ${s.count}`).join(" · ");
 }
 
+/** 판정에 쓰는 보고서 한 건. `reportDate` 없음 = 오늘 쓴 것(옛 호출부 호환). */
+export type ObligationReport = {
+  studentId: string;
+  subject: string | null;
+  reportDate?: string;
+  /** 0136a — 이 보고서가 대신한 실제 수업일(미리 쓴 보고서·연속 수업). */
+  coversDate?: string | null;
+};
+
+export type ReportObligation = { studentId: string; subject: string; classIds: string[] };
+
 /**
- * 오늘 미작성 보고서를 **학생×과목 쌍**으로 판정한다(과목별 분해의 원천).
- * lesson_reports에는 class_id가 없으므로 같은 학생의 같은 과목 여러 반은 한 대상으로 합치되,
- * 그 과목을 듣는 시작된 반이 전부 결석이면 작성 대상에서 제외한다.
+ * **오늘 보고서 의무 판정 — 운영실·일일 브리핑 '미작성 보고서'와 수업보고서 '작성률' 카드의 오늘 열이 같이 쓰는 한 벌**
+ * (점검 2026-09-28 *"같은 곳을 물어보고 있는데 서로 다른 대답"* — 두 화면이 과목·결석·작성 인정·미리 쓴 보고서를 각자 판정했다).
  *
- * 반환은 학생 첫 등장 순서 — 호출부가 학생 단위로 접으면(dedupe) 예전과 같은 "미작성 N명"이 되고,
- * 과목으로 묶으면 "영어 147 · 수학 39"가 된다. 한 학생이 두 과목 다 미작성이면 쌍은 2, 학생은 1이다.
+ * 단위 = **학생×과목 쌍**. lesson_reports에는 반이 없어(옛 행) 같은 학생의 같은 과목 여러 반은 한 대상으로 합친다.
+ *   · 결석 — 그 과목의 시작된 반이 **전부** 결석이면 대상이 아니다(다른 과목 반의 결석은 상관없다).
+ *   · 작성 인정 — **그 과목** 보고서만(수학 보고서가 영어를 채우지 않는다). 과목 없는 옛 보고서는 그날 그 학생의 전 과목을 채운다.
+ *   · 미리 쓴 보고서 — 다른 날 쓰고 오늘을 `covers_date`로 지정한 보고서가 있으면 오늘 의무는 이미 끝났다(대상 아님).
+ * 반환 `due` = 오늘 써야 하는 쌍(작성 여부 무관), `missing` = 그중 아직 안 쓴 쌍. `classIds` = 그 쌍의 출석한 반.
+ * 학생 첫 등장 순서 — 호출부가 학생 단위로 접으면 "미작성 N명", 과목으로 묶으면 "수학 39"가 된다.
+ * ⚠️ 작성 예외 강사·테스트 학생·미발송 반·세는 과목은 **대상(targets)을 만들 때** 호출부가 거른다 — 두 호출부가 같은 재료를 쓴다.
  */
-export function findMissingLessonReportPairs(
+export function judgeTodayLessonReports(
   targets: readonly { studentId: string; classId: string; subject: string }[],
   absentClassKeys: ReadonlySet<string>,
-  reports: readonly { studentId: string; subject: string | null }[],
-): { studentId: string; subject: string }[] {
+  reports: readonly ObligationReport[],
+  today?: string,
+): { due: ReportObligation[]; missing: ReportObligation[] } {
   const classesByTarget = new Map<string, Set<string>>();
   const studentOrder: string[] = [];
   const seenStudents = new Set<string>();
@@ -243,31 +260,61 @@ export function findMissingLessonReportPairs(
     }
   }
 
+  const writtenToday = (r: ObligationReport) => !today || r.reportDate === undefined || r.reportDate === today;
+  const coversToday = (r: ObligationReport) => !!today && !!r.coversDate && r.coversDate === today && !writtenToday(r);
+  const hasSubject = (r: ObligationReport): r is ObligationReport & { subject: string } => !!r.subject?.trim();
   // 과목 컬럼 도입 전 레거시/cron 보고서는 subject=null일 수 있다. 이미 보고서가 존재하는 학생을
   // 미작성으로 잘못 재촉하지 않도록 null/빈 과목 보고서는 그날 해당 학생의 모든 과목을 충족한 것으로 본다.
-  const legacyReportedStudents = new Set(
-    reports.filter((report) => !report.subject?.trim()).map((report) => report.studentId),
-  );
-  const reported = new Set(
-    reports
-      .filter((report): report is { studentId: string; subject: string } => !!report.subject?.trim())
-      .map((report) => `${report.studentId}::${report.subject}`),
-  );
-  const missingByStudent = new Map<string, string[]>();
+  const legacyReportedStudents = new Set(reports.filter((r) => writtenToday(r) && !hasSubject(r)).map((r) => r.studentId));
+  const reported = new Set(reports.filter((r) => writtenToday(r) && hasSubject(r)).map((r) => `${r.studentId}::${r.subject}`));
+  const legacyCoveredStudents = new Set(reports.filter((r) => coversToday(r) && !hasSubject(r)).map((r) => r.studentId));
+  const covered = new Set(reports.filter((r) => coversToday(r) && hasSubject(r)).map((r) => `${r.studentId}::${r.subject}`));
+
+  const dueByStudent = new Map<string, ReportObligation[]>();
+  const missingByStudent = new Map<string, ReportObligation[]>();
   for (const [targetKey, classIds] of classesByTarget) {
     const separator = targetKey.indexOf("::");
     const studentId = targetKey.slice(0, separator);
     const subject = targetKey.slice(separator + 2);
-    if (legacyReportedStudents.has(studentId)) continue;
-    const hasAttendedTarget = [...classIds].some((classId) => !absentClassKeys.has(`${studentId}::${classId}`));
-    if (hasAttendedTarget && !reported.has(targetKey)) {
-      missingByStudent.set(studentId, [...(missingByStudent.get(studentId) ?? []), subject]);
-    }
+    if (legacyCoveredStudents.has(studentId) || covered.has(targetKey)) continue;
+    const attended = [...classIds].filter((classId) => !absentClassKeys.has(`${studentId}::${classId}`));
+    if (attended.length === 0) continue;
+    const pair = { studentId, subject, classIds: attended };
+    dueByStudent.set(studentId, [...(dueByStudent.get(studentId) ?? []), pair]);
+    if (legacyReportedStudents.has(studentId) || reported.has(targetKey)) continue;
+    missingByStudent.set(studentId, [...(missingByStudent.get(studentId) ?? []), pair]);
   }
 
-  return studentOrder.flatMap((studentId) =>
-    (missingByStudent.get(studentId) ?? []).map((subject) => ({ studentId, subject })),
-  );
+  return {
+    due: studentOrder.flatMap((id) => dueByStudent.get(id) ?? []),
+    missing: studentOrder.flatMap((id) => missingByStudent.get(id) ?? []),
+  };
+}
+
+/** `judgeTodayLessonReports`의 미작성 쌍만 — 운영실 신호가 쓰던 모양. */
+export function findMissingLessonReportPairs(
+  targets: readonly { studentId: string; classId: string; subject: string }[],
+  absentClassKeys: ReadonlySet<string>,
+  reports: readonly ObligationReport[],
+  today?: string,
+): { studentId: string; subject: string }[] {
+  return judgeTodayLessonReports(targets, absentClassKeys, reports, today).missing.map(({ studentId, subject }) => ({
+    studentId,
+    subject,
+  }));
+}
+
+/**
+ * 그날 **결석한 반** 키(`학생::반`) — 정정 줄은 최신 하나만(`effectiveAttendanceRecords`), 그 반의 교시가 **전부** 결석일 때만.
+ * 한 교시라도 온 반은 결석한 반이 아니다. 두 판정 호출부가 같은 규칙으로 결석을 뺀다.
+ */
+export function absentClassKeysOf(rows: readonly (EffectiveAttendanceRecord & { status: string })[]): Set<string> {
+  const byKey = new Map<string, boolean>();
+  for (const r of effectiveAttendanceRecords(rows)) {
+    const key = `${r.student_id}::${r.class_id}`;
+    byKey.set(key, (byKey.get(key) ?? true) && r.status === "absent");
+  }
+  return new Set([...byKey].filter(([, allAbsent]) => allAbsent).map(([key]) => key));
 }
 
 export function buildTodayActions(
@@ -598,7 +645,7 @@ export function buildTodayActions(
       // 어느 도메인이 얼마나 밀렸는지가 이 신호의 전부다 — note라야 요약·프롬프트까지 함께 간다.
       note: raw.makeeduIssue.detail,
       bySubject: [],
-      href: "/owner?tab=sheets",
+      href: "/owner?tab=sheets&sub=makeedu",
       menuKey: "owner",
       requiredAccess: "read",
     });

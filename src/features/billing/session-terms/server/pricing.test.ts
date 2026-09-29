@@ -524,7 +524,7 @@ describe("회차 확정 줄 = 월별 출석부 줄(원장 2026-09-18 \"행 개�
       { id: "visitor", name: "보강생", grade: "중1" },
     ];
     h.state.tables.enrollments = [enrolled("student", "class"), enrolled("student", "class2", "math"), enrolled("voided", "class"), enrolled("nobill", "class")];
-    h.state.tables.attendance_records = [{ student_id: "visitor", class_id: "class2", session_date: "2026-09-06", slot_start: null, status: "makeup", session_units: 1.5 }];
+    h.state.tables.attendance_records = [{ id: "r1", student_id: "visitor", class_id: "class2", session_date: "2026-09-06", slot_start: null, status: "makeup", session_units: 1.5, recorded_at: "2026-09-01T00:00:00Z" }];
     h.state.tables.invoice_session_terms.push({ ...h.state.tables.invoice_session_terms[0], id: "ended", class_id: "class3", class: { class_name: "종강반" } });
 
     const view = await getSessionTermsView("2026-09");
@@ -544,8 +544,8 @@ describe("회차 확정 줄 = 월별 출석부 줄(원장 2026-09-18 \"행 개�
   it("🔴 계획 갱신은 줄 집합 안의 행(보강 방문으로 만든 행)을 지우지 않고 예정도 0으로 덮지 않는다 — 줄 밖 행만 지운다", async () => {
     h.state.tables.classes = [{ id: "class", class_name: "영어반", subject: "english" }, { id: "class2", class_name: "수학반", subject: "math" }, { id: "class3", class_name: "수학반3", subject: "math" }];
     h.state.tables.attendance_records = [
-      { student_id: "student", class_id: "class2", session_date: "2026-09-06", slot_start: null, status: "makeup", session_units: 1.5 },
-      { student_id: "student", class_id: "class3", session_date: "2026-09-07", slot_start: null, status: "present", session_units: 1 },
+      { id: "r2", student_id: "student", class_id: "class2", session_date: "2026-09-06", slot_start: null, status: "makeup", session_units: 1.5, recorded_at: "2026-09-01T00:00:00Z" },
+      { id: "r3", student_id: "student", class_id: "class3", session_date: "2026-09-07", slot_start: null, status: "present", session_units: 1, recorded_at: "2026-09-01T00:00:00Z" },
     ];
     h.state.tables.invoice_session_terms = [
       { id: "visit", invoice_id: "invoice", class_id: "class2", subject: "math", planned_sessions: null, confirmed_sessions: null, allocation_line_index: null, note: null },

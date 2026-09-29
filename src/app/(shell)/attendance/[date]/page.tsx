@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 // 🔴 날짜 라벨은 **KST 단일 소스**(date-kst) — 화면마다 `Intl.DateTimeFormat`을 만들면
 //    `timeZone`을 빠뜨린 곳이 런타임 시간대(서버=UTC)로 포맷된다.
 import { formatKoreanDateLong } from "@/lib/date-kst";
@@ -23,7 +24,7 @@ import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { isValidYmd } from "@/lib/date-kst";
 import { AbsentStudentsView } from "./_components/absent-students-view";
 
-export const metadata = { title: "출석부 — aywa" };
+export const metadata = { title: "출석부 — 에이와" };
 
 const STATUS_LABEL: Record<string, string> = {
   present: "출석",
@@ -94,7 +95,7 @@ export default async function AttendanceByDatePage({
   const present = records.filter((r) => r.status === "present").length;
   const absent = records.filter((r) => r.status === "absent").length;
   const late = records.filter((r) => r.status === "late").length;
-  const rate = total > 0 ? (present / total) * 100 : 0;
+  const rate = attendanceRate(attendedCount({ present, late }), total);
 
   return (
     <div className="space-y-6">

@@ -7,8 +7,8 @@ import { addAcademicConsultation } from "./consultation";
 import { recordKey } from "./consultation-link";
 import { saveUnifiedGrade } from "./actions";
 import { createClient } from "@/lib/supabase/server";
+import { isUuid } from "./uuid";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
@@ -24,7 +24,7 @@ export async function saveUnifiedRosterGrade(previous: GradeSaveState, formData:
     return { error: "상담일을 확인해 주세요" };
   }
   const existingId = String(formData.get("scoreId") ?? "");
-  if (UUID.test(existingId)) {
+  if (isUuid(existingId)) {
     let score: number | null;
     try { score = (JSON.parse(String(formData.get("entries") ?? "")) as { score: number | null }[])[0]?.score ?? null; }
     catch { return { error: "점수를 읽지 못했습니다" }; }
@@ -45,7 +45,7 @@ export async function saveUnifiedRosterGrade(previous: GradeSaveState, formData:
   let studentId: string;
   try { studentId = (JSON.parse(entries) as { studentId: string }[])[0]?.studentId ?? ""; }
   catch { return { error: "학생을 확인해 주세요" }; }
-  if (!UUID.test(studentId)) return { error: "학생을 확인해 주세요" };
+  if (!isUuid(studentId)) return { error: "학생을 확인해 주세요" };
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   const supabase = await createClient();

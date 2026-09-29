@@ -6,7 +6,7 @@ import { getEnrollmentConsultationById } from "@/features/enrollment/server/quer
 import { seatsLeft } from "@/features/enrollment/prep-brief";
 import { PrintActions } from "../print/print-actions";
 
-export const metadata = { title: "상담 준비 브리프 — aywa" };
+export const metadata = { title: "상담 준비 브리프 — 에이와" };
 
 /**
  * 상담 준비 브리프 A4 — 상담자가 **상담 전에 손에 들고 들어가는** 종이.
@@ -32,7 +32,7 @@ export default async function EnrollmentPrepPrintPage({
   const record = consult.prepBrief;
   const b = record.brief;
   const f = record.facts;
-  const printHeader = settings.notifications.printHeader || "aywa";
+  const printHeader = settings.notifications.printHeader || "에이와";
   const generated = new Date(record.generatedAt).toLocaleString("ko-KR", {
     timeZone: "Asia/Seoul",
     dateStyle: "long",

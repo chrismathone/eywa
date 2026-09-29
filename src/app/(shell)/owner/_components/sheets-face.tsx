@@ -54,7 +54,7 @@ export async function SheetsFace({
   if (!makeeduOn && !sheetsOn) {
     return (
       <div className="bg-card shadow-card w-full rounded-2xl p-6">
-        <p className="text-foreground text-sm font-bold">이 학원은 외부 연동을 쓰지 않습니다</p>
+        <p className="text-foreground text-sm font-bold">이 학원은 makeedu·구글 시트 연동을 쓰지 않습니다</p>
         <p className="text-text-dim mt-1 text-sm">
           makeedu 동기화·구글 시트 시간표 연동은 학원 설정의 &lsquo;기능&rsquo; 면에서 켤 수 있습니다.
         </p>
@@ -75,7 +75,7 @@ export async function SheetsFace({
   const runsTotalPages = Math.max(1, Math.ceil(runsPage.total / RUNS_PAGE_SIZE));
   // 실행 이력 페이저 href — ?tab=sheets(+embed) 보존, page>1일 때만 page 파라미터(1페이지는 생략).
   const runsHref = (p: number) => {
-    const params = new URLSearchParams({ tab: "sheets" });
+    const params = new URLSearchParams({ tab: "sheets", sub: "makeedu" }); // 연동 내부 탭(makeedu) 유지
     if (isEmbed) params.set("embed", "1");
     if (p > 1) params.set("page", String(p));
     return `/owner?${params.toString()}`;

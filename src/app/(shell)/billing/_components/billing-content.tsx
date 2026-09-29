@@ -16,7 +16,7 @@ import {
   summarizeInvoices,
   type SortKey,
 } from "@/features/billing/server/queries";
-import { invoiceOutstanding } from "@/features/billing/calc";
+import { invoiceOutstanding, paymentRateDisplay } from "@/features/billing/calc";
 import {
   isOverdue,
   isOutsideSyncWindow,
@@ -139,7 +139,12 @@ export async function BillingContent({ sp }: { sp: Sp }) {
       netBase) *
       100,
   );
-  const unpaidPct = Math.max(0, 100 - paidPct - partialPct);
+  // 🔴 '미납' 조각 = 전액 미납 청구의 남은 금액 — 예전엔 100 − 완납 − 부분납의 **나머지**로 그려 포인트 결제 잔차가
+  //    빨간 '미납'으로 보였다(옆 타일은 미수 0건, 점검 2026-09-28). 어디에도 안 속하는 나머지는 빈 트랙으로 둔다.
+  const unpaidPct = Math.min(
+    Math.max(0, 100 - paidPct - partialPct),
+    (monthRows.filter((r) => r.status === "unpaid").reduce((s, r) => s + invoiceOutstanding(r), 0) / netBase) * 100,
+  );
 
   // 모든 링크가 현재 필터 상태(기한 경과만 포함)를 보존한다 — 한쪽을 바꿔도 다른 쪽이 조용히 리셋되지 않게.
   const buildHref = (opts: {
@@ -174,7 +179,8 @@ export async function BillingContent({ sp }: { sp: Sp }) {
   };
 
   // 헤더 서브 라인(풀·컴팩트 공용) — 검색·페이지 상태까지 포함(헤더가 총 필터 결과 수의 유일한 표시처).
-  const periodSummary = `청구 ${summary.totalCount}건 · 수납률 ${summary.paymentRate.toFixed(1)}%${
+  // 수납률 글자는 정본 `paymentRateDisplay`(운영실과 같은 글자 — 미수가 남으면 100이라 적지 않고, 없으면 100).
+  const periodSummary = `청구 ${summary.totalCount}건 · 수납률 ${paymentRateDisplay(summary.paymentRate, summary.outstanding)}%${
     overdueOnly ? ` · 기한 경과만 ${total}건` : ""
   }${missingOnly ? ` · 동기화 누락만 ${total}건` : ""}${q ? ` · “${q}” 검색 결과 ${total}건` : ""}${
     totalPages > 1 ? ` · ${page}/${totalPages} 페이지` : ""
@@ -339,7 +345,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             />
             <BigStat
               label="수납률"
-              value={summary.paymentRate.toFixed(1)}
+              value={paymentRateDisplay(summary.paymentRate, summary.outstanding)}
               unit="%"
               tone="gold"
               icon={<Percent size={16} strokeWidth={1.8} />}
@@ -352,7 +358,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
             <div className="mb-1.5 flex items-baseline justify-between gap-3">
               <span className="text-foreground text-sm font-bold">수납 진행률</span>
               <span className="text-text-dim num text-sm">
-                수납 {paidPct.toFixed(1)}% · 부분납부 잔액 {partialPct.toFixed(1)}% · 미납 {unpaidPct.toFixed(1)}%
+                수납 {paymentRateDisplay(summary.paymentRate, summary.outstanding)}% · 부분납부 잔액 {partialPct.toFixed(1)}% · 미납 {unpaidPct.toFixed(1)}%
               </span>
             </div>
             <div className="bg-bg-soft flex h-2.5 overflow-hidden rounded-pill">

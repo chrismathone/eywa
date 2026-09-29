@@ -4,15 +4,17 @@ import { enrolledSubjectCounts } from "../enrolled-composition";
 import {
   countEnrolledStudents,
   getNotStartedStudentIds,
+  getSubjectFilterKeep,
   loadActiveEnrolledEnrollments,
 } from "./enrolled-programs";
+import { NO_SUBJECT, parseMulti } from "../list-filter-values";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { invoiceOutstanding } from "@/features/billing/calc";
 import { isExamSlot, type ExamSlotKey } from "@/features/grades/exam-slots";
 import { isTerm, type Term } from "@/features/grades/term";
@@ -114,10 +116,14 @@ export type SearchField = "all" | "name" | "school" | "phone" | "address" | "ema
 
 export type StudentListFilters = {
   status?: string; // "all" | "enrolled" | "consulted" | "on_hold" | "withdrawn"
-  subject?: string; // "all" | "math" | "english" | ...
+  /**
+   * "all" | "math" | "math,english" | "__none__"(미수강) … — 과목·학년·담임은 **쉼표 다중 값**(원장 2026-09-28, 합집합).
+   * 옛 단일 값은 원소 하나짜리 목록이다. 풀이는 `parseMulti`(list-filter-values.ts) 한 곳.
+   */
+  subject?: string;
   q?: string; // 검색어
-  grade?: string; // "all" | "초4" | "중2" | ... (고급)
-  teacherId?: string; // "all" | uuid (담임, 고급)
+  grade?: string; // "all" | "초4" | "중1,중2" | ... (다중)
+  teacherId?: string; // "all" | uuid | "uuid,uuid" (담임, 다중)
   excludeNoEnrollment?: boolean; // 활성 수강 없는 학생 제외 (고급)
   sort?: StudentSort; // 정렬 (고급) — 기본 grade
   searchField?: SearchField; // 검색 범위 필드 (고급) — 기본 all
@@ -226,12 +232,13 @@ function enrollmentEmbed(options?: StudentListFilters): {
   subjectFilter: boolean;
   teacherFilter: boolean;
 } {
-  const bySubject = !!options?.subject && options.subject !== "all";
+  // '미수강'이 섞이면 과목은 embed가 아니라 JS 판정(getSubjectFilterKeep)으로 건다 — "수강 없음"은 inner join으로 못 잡는다.
+  const { real, none } = subjectFilterOf(options);
+  const bySubject = real.length > 0 && !none;
   // 🔴 상태=퇴원 + 담당 강사 필터 — 퇴원생은 활성 수강이 없어 getTeacherScope(활성 기반) id 화이트리스트가
   //    전원을 걸러 항상 0명이었다(적대 리뷰 F4). 퇴원에선 같은 embed 조인에 teacher_id 조건을 실어
   //    **이력 포함**으로 매치한다(id 목록 URL 폭발도 없음 — 위 🔴 2026-07-29 수리와 같은 이유).
-  const byTeacher =
-    options?.status === "withdrawn" && !!options?.teacherId && options.teacherId !== "all";
+  const byTeacher = options?.status === "withdrawn" && parseMulti(options?.teacherId).length > 0;
   const classCols = [bySubject ? "subject" : null, byTeacher ? "teacher_id" : null]
     .filter(Boolean)
     .join(", ");
@@ -242,6 +249,17 @@ function enrollmentEmbed(options?: StudentListFilters): {
     subjectFilter: bySubject,
     teacherFilter: byTeacher,
   };
+}
+
+/**
+ * 과목 필터 값 풀이 — 과목 키들 + '미수강' 여부. 🔴 상태=퇴원이면 '미수강'을 무시한다(퇴원생은 정의상 활성 수강이 없어
+ * 전원이 '미수강' — '미수강 제외' 토글을 퇴원에서 무시하는 것과 같은 이유). 화면도 퇴원에선 그 선택지를 안 세운다.
+ */
+function subjectFilterOf(options?: StudentListFilters): { real: string[]; none: boolean; all: string[] } {
+  const all = parseMulti(options?.subject);
+  const none = all.includes(NO_SUBJECT) && options?.status !== "withdrawn";
+  const real = all.filter((s) => s !== NO_SUBJECT);
+  return { real, none, all: none ? all : real };
 }
 
 /**
@@ -286,6 +304,7 @@ export async function getStudentsList(
   const memoIds = searchesMemos(options?.q, options?.searchField)
     ? await memoMatchStudentIds(supabase, searchTerm(options?.q))
     : [];
+  const grades = parseMulti(options?.grade);
   // 학생 전건을 .range()로 페이지네이션 — export·반 상세가 전 학생을 받으므로 1000행 절단 방지.
   const all = await fetchAllPaged((from, to) => {
     let qb = supabase
@@ -294,7 +313,7 @@ export async function getStudentsList(
         `id, name, school, grade, status, enrolled_at, parent_phone, sync_added_at, dup_suspect, notes`,
       );
     if (options?.status && options.status !== "all") qb = qb.eq("status", options.status);
-    if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
+    if (grades.length > 0) qb = qb.in("grade", grades);
     // 강사 필터는 아래 in-memory(과목별 담당 강사 기준) — primary_teacher_id 제거로 쿼리단 필터 없음.
     qb = applySearch(qb, options?.q, options?.searchField, memoIds);
     const sorted =
@@ -379,17 +398,25 @@ export async function getStudentsList(
       }) satisfies StudentListRow,
   );
 
-  // 과목 필터 (in-memory — subjects가 enrollments에서 옴)
-  if (options?.subject && options.subject !== "all") {
-    rows = rows.filter((r) => r.subjects.includes(options.subject!));
+  // 과목 필터 (in-memory — subjects가 enrollments에서 옴). 여러 과목 = 합집합. '미수강'이 섞이면 화면 목록과
+  // **같은 판정**(getSubjectFilterKeep — 운영실 '미수강' 막대와 같은 activeStudentIds)으로 거른다(파일 행 = 목록 행).
+  const subjectFilter = subjectFilterOf(options);
+  const subjectKeep = subjectFilter.none
+    ? await getSubjectFilterKeep(subjectFilter.all, options?.status === "enrolled")
+    : null;
+  if (subjectKeep) {
+    rows = rows.filter((r) => subjectKeep(r.id));
+  } else if (subjectFilter.real.length > 0) {
+    rows = rows.filter((r) => subjectFilter.real.some((s) => r.subjects.includes(s)));
   }
-  // 담당 강사 필터 (in-memory — 그 강사 반에 수강 중인 학생만)
-  if (options?.teacherId && options.teacherId !== "all") {
-    rows = rows.filter((r) => teachersByStudent.get(r.id)?.has(options.teacherId!));
+  // 담당 강사 필터 (in-memory — 그 강사들 반에 수강 중인 학생만, 여러 명 = 합집합)
+  const teacherIds = parseMulti(options?.teacherId);
+  if (teacherIds.length > 0) {
+    rows = rows.filter((r) => teacherIds.some((t) => teachersByStudent.get(r.id)?.has(t)));
   }
   // 미수강 제외 (in-memory — 전건을 이미 받았으므로). 상태=퇴원이면 무시(getStudentsPage와 같은 이유 —
-  // 퇴원생은 활성 수강이 없어 전원 걸러져 "항상 0명"이 된다).
-  if (options?.excludeNoEnrollment && options?.status !== "withdrawn") {
+  // 퇴원생은 활성 수강이 없어 전원 걸러져 "항상 0명"이 된다). 수강 과목에 '미수강'을 골랐으면 무시(서로 반대라 늘 0명).
+  if (options?.excludeNoEnrollment && options?.status !== "withdrawn" && !subjectFilter.none) {
     rows = rows.filter((r) => enrolledSet.has(r.id));
   }
 
@@ -456,18 +483,32 @@ export async function getStudentsPage(
   const hiddenCount = hideNotStarted?.size ?? 0;
   // 담당 강사 필터 → 그 강사 반에 수강 중인 학생 id(getTeacherScope 재사용, primary_teacher_id 대체).
   // 퇴원 상태는 id 화이트리스트 대신 embed 조인(teacherFilter)으로 — enrollmentEmbed 주석의 F4 참조.
+  // 여러 강사 = 합집합(원장 2026-09-28 다중 선택). 🔴 한 명이면 종전대로 `.in("id")`(담당 학생 수라 URL이 짧다)지만,
+  //    여럿을 합치면 수백 명이 될 수 있어 URL에 싣지 않고 아래 restrict 경로(id 전건 → JS)로 건다(#53 414·헤더 초과).
+  const teacherIds = parseMulti(options?.teacherId);
   let teacherFilterIds: string[] | null = null;
-  if (options?.teacherId && options.teacherId !== "all" && !isWithdrawn) {
-    teacherFilterIds = (await getTeacherScope(options.teacherId)).studentIds;
-    if (teacherFilterIds.length === 0) return { rows: [], total: 0, hiddenNotStarted: 0 };
+  let teacherKeep: ReadonlySet<string> | null = null;
+  if (teacherIds.length > 0 && !isWithdrawn) {
+    const scopes = await Promise.all(teacherIds.map((id) => getTeacherScope(id)));
+    const union = [...new Set(scopes.flatMap((s) => s.studentIds))];
+    if (union.length === 0) return { rows: [], total: 0, hiddenNotStarted: 0 };
+    if (teacherIds.length === 1) teacherFilterIds = union;
+    else teacherKeep = new Set(union);
   }
 
   // 과목·'미수강 제외'는 **id 목록이 아니라 embed 조인**으로 건다(위 enrollmentEmbed 주석의 🔴 참조).
   // 🔴 상태=퇴원에선 '미수강 제외'를 무시한다 — 퇴원생은 정의상 활성 수강이 없어 inner join이 전원을
   //    걸러 "검색해도 항상 0명"이 된다(2026-08-18 실사고: 퇴원 처리된 엄채율이 목록 어디서도 안 보임.
   //    토글이 계정 귀속(ui_prefs)이라 켜둔 채 퇴원 필터로 넘어오면 반드시 재현).
-  const excludeNoEnrollment = !!options?.excludeNoEnrollment && !isWithdrawn;
+  // 수강 과목에 '미수강'을 골랐으면 '미수강 제외'는 무시한다 — 둘은 서로 반대라 함께 걸면 늘 0명(화면도 그땐 토글을 감춘다).
+  const subjectFilter = subjectFilterOf(options);
+  const excludeNoEnrollment = !!options?.excludeNoEnrollment && !isWithdrawn && !subjectFilter.none;
   const embed = enrollmentEmbed(options);
+  const grades = parseMulti(options?.grade);
+  // '미수강'이 섞인 과목 필터 — 운영실 '미수강' 막대와 같은 판정(getSubjectFilterKeep). 아래 restrict 경로(id 전건 → JS)로 건다.
+  const subjectKeep = subjectFilter.none
+    ? await getSubjectFilterKeep(subjectFilter.all, options?.status === "enrolled")
+    : null;
   const needEnrollmentJoin = excludeNoEnrollment || embed.subjectFilter || embed.teacherFilter;
   // 메모 내용까지 훑는 검색(0250a) — 위 전건 조회와 같은 규약.
   const memoIds = searchesMemos(options?.q, options?.searchField)
@@ -495,7 +536,7 @@ export async function getStudentsPage(
     if (hideNotStarted && hideNotStarted.size > 0) {
       qb = qb.not("id", "in", `(${[...hideNotStarted].join(",")})`);
     }
-    if (options?.grade && options.grade !== "all") qb = qb.eq("grade", options.grade);
+    if (grades.length > 0) qb = qb.in("grade", grades);
     qb = applySearch(qb, options?.q, options?.searchField, memoIds);
     if (needEnrollmentJoin) {
       // 공통: 종료되지 않은 수강. (휴원은 '수강 중'으로 본다 — 과목 필터일 때만 아래에서 더 좁힌다.)
@@ -504,9 +545,9 @@ export async function getStudentsPage(
       if (!isWithdrawn) qb = qb.is("enrollments.end_date", null);
       if (embed.subjectFilter) {
         if (!isWithdrawn) qb = qb.eq("enrollments.on_hold", false);
-        qb = qb.eq("enrollments.class.subject", options!.subject!);
+        qb = qb.in("enrollments.class.subject", subjectFilter.real);
       }
-      if (embed.teacherFilter) qb = qb.eq("enrollments.class.teacher_id", options!.teacherId!);
+      if (embed.teacherFilter) qb = qb.in("enrollments.class.teacher_id", teacherIds);
     }
     if (idWhitelist) qb = qb.in("id", idWhitelist);
     // 정렬 — 필터 적용(.eq/.or/.in/.not) 다음에 .order(이후엔 transform 빌더). 기본 grade.
@@ -519,13 +560,24 @@ export async function getStudentsPage(
 
   let pageData: StudentPageRecord[];
   let total: number;
-  const restrict = options?.restrictIds ?? null;
+  const restrictIds = options?.restrictIds ?? null;
+  // 운영실 집합(restrictIds)·'미수강' 판정(subjectKeep)·여러 담당 강사(teacherKeep) — 전부 "id 전건 → JS" 경로를 탄다.
+  const restrict =
+    restrictIds || subjectKeep || teacherKeep
+      ? {
+          has: (id: string) =>
+            (!restrictIds || restrictIds.has(id)) &&
+            (!subjectKeep || subjectKeep(id)) &&
+            (!teacherKeep || teacherKeep.has(id)),
+          empty: restrictIds?.size === 0,
+        }
+      : null;
   if (restrict) {
     // 🔑 운영실 KPI ↗(`program=`·`first=`)가 넘긴 학생 집합 — 수백 명이라 `.in("id", …)`에 싣지 않는다(URL 414·헤더
     //    초과, 위 enrollmentEmbed 🔴 2026-07-29 사고). 같은 필터·정렬로 **id 전건**을 받아(학생 수 규모 — 한두 쪽,
     //    unique tie-break `id`로 OFFSET 안정화) JS로 거른 뒤 자르고, 그 쪽(≤ pageSize명)만 다시 받는다.
     const ordered =
-      restrict.size === 0
+      restrict.empty
         ? []
         : await fetchAllPaged<{ id: string }>(
             (f, t) =>
@@ -1066,13 +1118,14 @@ export async function getStudentAttendanceStats(
   );
   const total = rows.length;
   const present = rows.filter((r) => r.status === "present").length;
+  const late = rows.filter((r) => r.status === "late").length;
   return {
     total,
     present,
     absent: rows.filter((r) => r.status === "absent").length,
-    late: rows.filter((r) => r.status === "late").length,
+    late,
     excused: rows.filter((r) => r.status === "excused").length,
-    rate: attendanceRate(present, total),
+    rate: attendanceRate(attendedCount({ present, late }), total),
   };
 }
 
@@ -1851,10 +1904,12 @@ export async function getStudentTimeline(studentId: string): Promise<TimelineEve
   if (student?.withdrawn_at && !isMergedStudent(student.notes)) {
     // 사유는 reasonDisplay — 표준 코드는 한글로, "반 이동" 같은 자유 텍스트는 그대로(reasonLabel은 '기타'로 뭉갠다).
     const md = student.withdrawal_metadata as { reason?: string | null; memo?: string | null } | null;
+    // 퇴원일이 오늘 뒤면 **퇴원 예약**이다(원장 2026-09-28 "퇴원당일전까지 재원") — 일어난 일처럼 '퇴원'이라 적지 않는다.
+    const wDate = String(student.withdrawn_at).slice(0, 10);
     events.push({
-      date: String(student.withdrawn_at).slice(0, 10),
+      date: wDate,
       kind: "status_change",
-      title: "퇴원",
+      title: wDate > kstToday() ? "퇴원 예정" : "퇴원",
       description: [reasonDisplay(md?.reason), md?.memo].filter(Boolean).join(" · ") || null,
     });
   }

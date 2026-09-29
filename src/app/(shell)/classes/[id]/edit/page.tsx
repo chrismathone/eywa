@@ -17,7 +17,7 @@ import { commonPeriod } from "@/features/classes/class-period";
 import { kstToday } from "@/lib/date-kst";
 import { ClassForm } from "../../_components/class-form";
 
-export const metadata = { title: "반 수정 — aywa" };
+export const metadata = { title: "반 수정 — 에이와" };
 
 export default async function EditClassPage({
   params,

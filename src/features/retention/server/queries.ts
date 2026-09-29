@@ -1,4 +1,5 @@
 import "server-only";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { visibleConsultationSummary } from "@/features/consultations/internal-link";
 import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -63,11 +64,11 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
 
   // 각 테이블을 student_id 청크로 병렬 조회(414·1000행 한도 회피, error throw). admin client라 RLS가
   // 없으므로 모든 쿼리에 .eq(tenant_id)를 직접 건다(방어적 — student_id는 이미 이 테넌트 학생이지만).
-  const [attendance, reportHomework, grades, consultations, invoices, enrollments] = await Promise.all([
+  const [rawAttendance, reportHomework, grades, consultations, invoices, enrollments] = await Promise.all([
     fetchAllPagedInChunks(ids, (c, from, to) =>
       admin
         .from("attendance_records")
-        .select("student_id, status, session_date, homework_required, homework_done")
+        .select("id, student_id, class_id, slot_start, recorded_at, status, session_date, homework_required, homework_done")
         .eq("tenant_id", tenantId)
         .in("student_id", c)
         .gte("session_date", since(ATTEND_WINDOW_DAYS))
@@ -130,7 +131,9 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
         .order("id", { ascending: true })
         .range(from, to),
     ),
-  ]);
+  ]);  // 🔴 정정 줄은 최신 하나만 — 고친 결석을 결석으로 세어 위험 점수가 오르던 것(점검 2026-09-28).
+  const attendance = effectiveAttendanceRecords(rawAttendance);
+
 
   // 과목별 담당 강사(단일 담임 대체) — 활성 수강(end_date null) 반의 teacher_id/이름 집계.
   const teacherNamesByStudent = new Map<string, Set<string>>();

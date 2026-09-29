@@ -1,6 +1,16 @@
 import { Pill } from "@/components/atoms/pill";
 import type { IjwExamResult } from "../contract";
-import { WEAK_NOTE, examHeadline, examPosRows, scoreBand, wrongRows, type AvgCompare, type ExamHeadline } from "../sheet-model";
+import {
+  WEAK_NOTE,
+  examExtras,
+  examHeadline,
+  examPosRows,
+  scoreBand,
+  wrongRows,
+  type AvgCompare,
+  type ExamExtra,
+  type ExamHeadline,
+} from "../sheet-model";
 import { JjScoreBand } from "./jj-score-band";
 import { BarList, EmptyNote, SheetFrame, SheetSection, WordTable } from "./jj-sheet-parts";
 import type { JjSheetLayout } from "./jj-study-sheet";
@@ -49,12 +59,29 @@ function ExamScore({ head }: { head: ExamHeadline }) {
   );
 }
 
+/** 등수·객관식/주관식 칸 — 인재원이 준 값이 있을 때만(없으면 줄 자체가 없다). */
+function ExamExtras({ extras }: { extras: ExamExtra[] }) {
+  if (!extras.length) return null;
+  return (
+    <div className="grid grid-cols-2 gap-2 @md:grid-cols-4">
+      {extras.map((x) => (
+        <div key={x.key} className="bg-bg-soft min-w-0 rounded-xl px-3 py-2.5">
+          <p className="text-text-dim text-xs font-medium">{x.label}</p>
+          <p className="num text-foreground text-xl leading-tight font-bold">{x.value}</p>
+          <p className="text-text-dim text-xs font-bold">{x.note}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function JjExamSheet({ exam, layout = "card" }: { exam: IjwExamResult; layout?: JjSheetLayout }) {
   const wide = layout === "wide";
   const head = examHeadline(exam);
   const band = scoreBand(head.score, exam.classAvg, exam.overallAvg);
   const pos = examPosRows(exam, wide ? 8 : 6);
   const wrong = wrongRows(exam, wide ? undefined : 12);
+  const extras = examExtras(exam);
   return (
     <SheetFrame
       kind="exam"
@@ -70,6 +97,8 @@ export function JjExamSheet({ exam, layout = "card" }: { exam: IjwExamResult; la
           <JjScoreBand band={band} score={head.score} />
         </SheetSection>
       </div>
+
+      <ExamExtras extras={extras} />
 
       <div className="grid gap-5 @2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <SheetSection title="품사별 점수" note={WEAK_NOTE}>

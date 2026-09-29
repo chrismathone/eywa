@@ -16,7 +16,7 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <a href="#main-content" className="skip">본문으로 이동</a>
       <header className="nav" id="nav">
         <div className="wrap in">
-          <a className="wm" href="#top" aria-label="AYWA 처음으로">aywa</a>
+          <a className="wm" href="#top" aria-label="에이와 처음으로">에이와</a>
           <nav aria-label="주요 메뉴">
             <a href="#scene-win">화면 구성</a><a href="#scene-consult">상담 기록</a><a href="#menus">메뉴</a>
             <a href="#scene-att">출석부</a><a href="#teachers">강사 화면</a>
@@ -28,8 +28,8 @@ export default function MarketingLayout({ children }: { children: ReactNode }) {
       <main id="main-content">{children}</main>
       <footer className="ft">
         <div className="wrap">
-          <span className="wm">aywa</span><span>학원 운영을 한곳에서, AYWA</span><span className="sp" />
-          <span>화면에 나오는 이름과 숫자는 모두 예시입니다.</span><span>© AYWA</span>
+          <span className="wm">에이와</span><span>학원 운영을 한곳에서, 에이와</span><span className="sp" />
+          <span>화면에 나오는 이름과 숫자는 모두 예시입니다.</span><span>© 에이와</span>
         </div>
       </footer>
     </div>

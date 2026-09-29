@@ -5,7 +5,7 @@ import { getAssignableStudents } from "@/features/shuttle/server/students";
 import { requireShuttleView } from "@/features/shuttle/server/access";
 import { ShuttleBoardClient } from "./_components/shuttle-board-client";
 
-export const metadata = { title: "셔틀 — aywa" };
+export const metadata = { title: "셔틀 — 에이와" };
 
 /**
  * 셔틀 노선 편성 — 원장 2026-08-19: makeedu 노랑버스에서 이관.

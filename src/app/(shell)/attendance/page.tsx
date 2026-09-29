@@ -78,9 +78,10 @@ import {
 import { classNameFor } from "@/features/teacher-view/class-name";
 import { periodWindowLabel } from "@/features/periods/window-label";
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "att.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "att.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 function currentMonthKey(): string {
@@ -731,8 +732,8 @@ export default async function AttendancePage({
   // 전체 영어 시수 도구는 강사·반을 고르기 전 요약 화면에서 연다.
   const showUnitsMaster = allGroups.length === 0 && canViewUnitsMaster(user.systemRole, myTeacherId);
   // 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼.
-  // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산
-  // 면은 invoice_teacher_splits가 비어 있어 표 자체가 안 그려진다). 원장 + 강사 전체 보기일 때만.
+  // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산 면도
+  // 2026-09-28부터 같은 계산 — 명세서 열람 명단에게 거기서도 명세서 버튼이 선다). 원장 + 강사 전체 보기일 때만.
   // 반별 A4 인쇄(감사 N1) — 반을 골라 표가 서 있을 때만. 화면과 같은 표를 찍도록 날짜축·강사 렌즈를 싣는다.
   const printClass = mode === "class" && effectiveClassId && selectedClass && matrix.students.length > 0 ? selectedClass : null;
   const sheetTools =

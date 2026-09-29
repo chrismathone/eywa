@@ -113,7 +113,7 @@ describe("모든 입구가 같은 창 id", () => {
 
   it("🔴 딥링크(주소 직접 입력)도 같은 창", () => {
     for (const f of PATH_FACES) {
-      expect(deepLinkWindow(f.href, "화면 — aywa")?.id, f.href).toBe(f.parent);
+      expect(deepLinkWindow(f.href, "화면 — 에이와")?.id, f.href).toBe(f.parent);
     }
   });
 

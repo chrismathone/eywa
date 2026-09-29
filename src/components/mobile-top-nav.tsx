@@ -35,7 +35,7 @@ export function MobileTopNav({
   systemRole,
   email,
   className,
-  brand = "AYWA",
+  brand = "에이와",
   logoSrc,
   permMatrix,
   menuLayout,

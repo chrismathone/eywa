@@ -19,7 +19,7 @@ import { LiveDatePicker } from "./_components/live-date-picker";
 import { LiveRefresher } from "./_components/live-refresher";
 import { AbsenceIntakeButton } from "../_components/absence-intake-button";
 
-export const metadata = { title: "오늘 출결 — aywa" };
+export const metadata = { title: "오늘 출결 — 에이와" };
 
 /**
  * 오늘 출결 — 좌석표(기본) + 데스크 확인 큐. 강사별 현황 보드는 폐기(좌석표가 시야가 낫다).

@@ -57,10 +57,22 @@ import { isValidYmd } from "@/lib/date-kst";
 import { parseProgram, programLabel, type Program } from "@/features/students/program";
 // 운영실 KPI ↗ 집합 — 엑셀 파일 라우트와 **같은 함수**(파일 행 = 목록 행).
 import { restrictIdsFor } from "@/features/students/server/restrict-ids";
+import {
+  NO_SUBJECT,
+  joinMulti,
+  levelLabel,
+  mixLabel,
+  parseLevels,
+  parseMixes,
+  parseMulti,
+  type StudentLevel,
+  type StudentMixFilter,
+} from "@/features/students/list-filter-values";
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
+import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
 export async function generateMetadata() {
-  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")} — aywa` };
+  return { title: `${sheetT(await getTeacherViewLang(), "stu.title")}${PAGE_TITLE_SUFFIX}` };
 }
 
 // 상태 — 디폴트(재원)는 파라미터가 없을 때다. "전체"는 명시적 status=all로만(HeaderFilter의 allValue=enrolled가 지운다).
@@ -85,6 +97,11 @@ const FIELD_OPTION_KEYS = [
 ] as const;
 const PAGE_SIZE = 50;
 
+/** 운영실 '재원생 구성' 칩 글자 — `초등 · 영어만·동시수강`(학교급·수강 구성 라벨은 list-filter-values 한 곳). */
+function compositionChipLabel(levels: readonly StudentLevel[], mixes: readonly StudentMixFilter[]): string {
+  return [levels.map(levelLabel).join("·"), mixes.map(mixLabel).join("·")].filter(Boolean).join(" · ");
+}
+
 export default async function StudentsPage({
   searchParams,
 }: {
@@ -100,6 +117,9 @@ export default async function StudentsPage({
     noenr?: string;
     program?: string;
     first?: string;
+    /** 운영실 '재원생 구성' 막대 조각 — 학교급(`elem,middle`)·수강 구성(`englishOnly,both`). 칩으로만 푼다. */
+    level?: string;
+    mix?: string;
     from?: string;
   }>;
 }) {
@@ -130,10 +150,12 @@ export default async function StudentsPage({
   // 운영실 KPI ↗ — 프로그램·첫 수업 집합. 모르는 값·달력에 없는 날짜는 무시(필터 없음, 칩도 없음).
   const program = parseProgram(sp.program);
   const firstDay = isValidYmd(sp.first) ? sp.first : null;
+  const levels = parseLevels(sp.level);
+  const mixes = parseMixes(sp.mix);
   // from=dashboard = 운영실 링크가 모든 축을 명시값(전체)으로 적은 **들어온 그 화면** — 그 렌더는 보기 설정을 저장하지 않는다
   // (저장하면 사용자가 골라 둔 학년·과목 필터가 운영실 링크 한 번에 지워진다). 필터를 바꾸면 from이 떨어진다(아래 exit·leave).
   const fromDashboard = sp.from === "dashboard";
-  const restrictPromise = restrictIdsFor(program, firstDay);
+  const restrictPromise = restrictIdsFor(program, firstDay, { levels, mixes });
 
   // 담임 필터 선택지 — 강사 스코프에선 **내 학생의 담당 과목 반 담당**만(고르면 결과가 0인 선택지 방지 +
   // 아래 '담당 강사' 열에 실제로 나오는 이름과 일치). 관리자면 종전 학원 전체 목록.
@@ -159,10 +181,15 @@ export default async function StudentsPage({
     (fromPrefs("subject") && subjectRaw !== "all")
   ) {
     const [teachersEarly, settingsEarly] = await optionsPromise;
-    if (fromPrefs("teacher") && !teachersEarly.some((t) => t.id === teacherRaw)) teacherId = "all";
-    if (fromPrefs("grade") && !settingsEarly.operations.gradeLevels.includes(gradeRaw)) grade = "all";
-    if (fromPrefs("subject") && !settingsEarly.operations.subjects.some((s) => s.key === subjectRaw)) subject = "all";
+    // 다중 선택(원장 2026-09-28)이라 **값마다** 본다 — 선택지 밖 값만 떨어지고 남은 게 없으면 "전체".
+    const keepKnown = (raw: string, known: (v: string) => boolean) => joinMulti(parseMulti(raw).filter(known));
+    if (fromPrefs("teacher")) teacherId = keepKnown(teacherRaw, (v) => teachersEarly.some((t) => t.id === v));
+    if (fromPrefs("grade")) grade = keepKnown(gradeRaw, (v) => settingsEarly.operations.gradeLevels.includes(v));
+    if (fromPrefs("subject"))
+      subject = keepKnown(subjectRaw, (v) => v === NO_SUBJECT || settingsEarly.operations.subjects.some((s) => s.key === v));
   }
+  // 수강 과목 = '미수강'(원장 2026-09-28) — 퇴원 목록에선 뜻이 없어(전원 미수강) 서버가 무시하고 선택지도 안 세운다.
+  const wantsNoSubject = status !== "withdrawn" && parseMulti(subject).includes(NO_SUBJECT);
 
   const [{ rows, total, hiddenNotStarted }, counts, [teachers, settings]] = await Promise.all([
     restrictPromise.then((restrictIds) =>
@@ -184,7 +211,11 @@ export default async function StudentsPage({
   // 과목·학년 필터·라벨·색은 학원설정(operations) 단일 소스 — 미등록 값은 드롭다운에 안 뜸.
   const subjects = buildSubjectMaps(settings.operations.subjects);
   // 강사 스코프면 과목 선택지도 담당 과목만. 고를 게 1개뿐이면 필터 자체를 감춘다(잡음).
-  const subjectOptions = narrowSubjectFilters(axis, subjects.filters).filter((f) => f.value !== "all");
+  // 맨 끝 '미수강' = 지금 수강 중인 과목이 하나도 없는 학생(운영실 '재원생 구성'의 미수강 막대와 같은 판정). 퇴원 목록엔 안 세운다.
+  const subjectOptions = [
+    ...narrowSubjectFilters(axis, subjects.filters).filter((f) => f.value !== "all"),
+    ...(status !== "withdrawn" ? [{ value: NO_SUBJECT, label: sheetT(lang, "stu.filter.subject.none") }] : []),
+  ];
   const statusOptions = STATUS_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
   const sortOptions = SORT_OPTION_KEYS.map((o) => ({ value: o.value, label: sheetT(lang, o.key) }));
   const hideSubjectFilter = !showSubjectFilter(axis);
@@ -213,7 +244,15 @@ export default async function StudentsPage({
   // 떼인 축은 다음 렌더에서 저장값으로 돌아가 RememberPrefs가 바꾼 축만 저장한다. 운영실에서 온 화면이 아니면 빈 목록.
   const exit = (param: string) => dashboardExitParams(fromDashboard, param);
   const listParams = (
-    patch: { page?: number; noenr?: boolean; program?: Program | null; first?: string | null; leave?: boolean } = {},
+    patch: {
+      page?: number;
+      noenr?: boolean;
+      program?: Program | null;
+      first?: string | null;
+      /** 운영실 '재원생 구성' 조각(학교급·수강 구성) — null이면 둘 다 푼다(칩 하나). */
+      composition?: null;
+      leave?: boolean;
+    } = {},
   ) => {
     const params = new URLSearchParams();
     // 🔑 필터를 바꾸는 링크(leave)는 운영실 방문 표식과 운영실이 적은 축을 뗀다(위 exit와 같은 규칙).
@@ -224,6 +263,10 @@ export default async function StudentsPage({
     if (programParam) params.set("program", programParam);
     const firstParam = patch.first === undefined ? firstDay : patch.first;
     if (firstParam) params.set("first", firstParam);
+    if (patch.composition !== null) {
+      if (levels.length > 0) params.set("level", levels.join(","));
+      if (mixes.length > 0) params.set("mix", mixes.join(","));
+    }
     if (fromDashboard && !leaving) params.set("from", "dashboard");
     if (status !== "enrolled") params.set("status", status);
     if (!leaving) {
@@ -259,6 +302,8 @@ export default async function StudentsPage({
     // 운영실 KPI 집합도 넘긴다 — 라우트가 같은 restrictIdsFor로 좁혀 파일 행 = 목록 행.
     ...(program ? { program } : {}),
     ...(firstDay ? { first: firstDay } : {}),
+    ...(levels.length > 0 ? { level: levels.join(",") } : {}),
+    ...(mixes.length > 0 ? { mix: mixes.join(",") } : {}),
   }).toString()}`;
 
   return (
@@ -329,6 +374,12 @@ export default async function StudentsPage({
               <EyIcon name="close" size={12} aria-hidden />
             </ToolbarChip>
           ) : null}
+          {levels.length > 0 || mixes.length > 0 ? (
+            <ToolbarChip active href={listParams({ composition: null, leave: true })}>
+              {sheetT(lang, "stu.filter.composition")}: {compositionChipLabel(levels, mixes)}
+              <EyIcon name="close" size={12} aria-hidden />
+            </ToolbarChip>
+          ) : null}
           {firstDay ? (
             <ToolbarChip active href={listParams({ first: null, leave: true })}>
               {sheetTf(lang, "stu.filter.first", {
@@ -340,7 +391,8 @@ export default async function StudentsPage({
           ) : null}
           {/* 상태=퇴원에선 숨김 — 퇴원생은 활성 수강이 없어 이 토글이 켜져 있으면 전원이 걸러져
               "검색해도 항상 0명"이 된다(2026-08-18 실사고). 서버(getStudentsPage)도 같은 조건에서 무시. */}
-          {status !== "withdrawn" ? (
+          {/* 수강 과목에 '미수강'을 골랐으면 감춘다 — 둘은 서로 반대라 함께 걸면 늘 0명이고, 서버도 그땐 이 토글을 무시한다. */}
+          {status !== "withdrawn" && !wantsNoSubject ? (
             <span data-help="st-unenrolled">
             <ToolbarChip active={excludeNoEnrollment} href={listParams({ noenr: !excludeNoEnrollment, leave: true })}>
               {sheetT(lang, "stu.filter.noEnr")}
@@ -413,6 +465,7 @@ export default async function StudentsPage({
                         axisLabel={sheetT(lang, "stu.filter.grade")}
                         allValue="all"
                         explicitAll
+                        multiple
                       />
                       <HeaderFilter
                         paramName="sort"
@@ -450,11 +503,13 @@ export default async function StudentsPage({
                       <HeaderFilter
                         paramName="subject"
                         clearParams={exit("subject")}
-                        value={subject}
+                        // 퇴원 목록엔 '미수강' 선택지가 없다 — 저장값에 남아 있어도(서버도 무시한다) '선택지에 없는 값'으로 세우지 않는다.
+                        value={status === "withdrawn" ? joinMulti(parseMulti(subject).filter((v) => v !== NO_SUBJECT)) : subject}
                         options={subjectOptions}
                         axisLabel={sheetT(lang, "stu.col.subjects")}
                         allValue="all"
                         explicitAll
+                        multiple
                       />
                       </span>
                     )}
@@ -473,6 +528,7 @@ export default async function StudentsPage({
                         allValue="all"
                         explicitAll
                         cap={200}
+                        multiple
                       />
                       </span>
                     )}

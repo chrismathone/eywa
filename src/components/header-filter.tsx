@@ -1,5 +1,6 @@
 import { FilterSelect, type FilterSelectOption } from "./filter-select";
 import { CONTROL_H_SM, CONTROL_LABEL_SM } from "./ui/control-scale";
+import { parseMulti } from "@/lib/multi-value";
 
 /**
  * **열 머리 필터** — 표의 열 제목 자리에 서는 드롭다운. 지시서 §10 *"필터·정렬은 목록 헤더 라벨을 눌러 호출"*
@@ -28,6 +29,7 @@ export function HeaderFilter({
   explicitAll = false,
   showAll = false,
   clearParams,
+  multiple = false,
 }: {
   paramName: string;
   value: string | null | undefined;
@@ -48,11 +50,15 @@ export function HeaderFilter({
   showAll?: boolean;
   /** 이 필터를 바꿀 때 함께 지울 파라미터(FilterSelect 주석) — 예: 운영실에서 온 원생목록의 `from`·운영실 명시 축. */
   clearParams?: string[];
+  /** 여러 값을 고른다(쉼표 URL) — FilterSelect `multiple` 주석. 🔴 서버가 여러 값을 읽는 화면에서만 켤 것. */
+  multiple?: boolean;
 }) {
   // 걸린 값이 선택지 밖이면(학원설정에서 지운 학년·퇴사한 담임·옛 링크) 그 값을 **보이는 항목**으로 세운다 — 안 그러면 트리거가 옅은
   // 축 이름(placeholder)이 되어 "안 걸림"으로 읽히는데 목록은 0건이다(적대적 리뷰 2026-09-04). 라벨이 값을 감추지 않으니 되돌릴 수 있다.
-  const known = value == null || value === "" || value === allValue || options.some((o) => o.value === value);
-  const shown = known ? options : [...options, { value: value as string, label: "(선택지에 없는 값)" }];
+  // 다중 선택이면 값마다 같은 규칙이다.
+  const current = multiple ? parseMulti(value, allValue) : value == null || value === "" || value === allValue ? [] : [value];
+  const unknown = current.filter((v) => !options.some((o) => o.value === v));
+  const shown = [...options, ...unknown.map((v) => ({ value: v, label: "(선택지에 없는 값)" }))];
   return (
     <FilterSelect
       paramName={paramName}
@@ -67,6 +73,7 @@ export function HeaderFilter({
       cap={cap}
       explicitAll={explicitAll}
       clearParams={clearParams}
+      multiple={multiple}
       className="inline-block w-auto align-middle"
       triggerClassName={HEADER_FILTER_TRIGGER}
     />

@@ -10,6 +10,12 @@
 import { programOf, type Program, type ProgramSubject } from "./program";
 import { axisHasSubject, subjectAxisOf } from "./scope-axis";
 import { subjectEnrollmentSummary } from "./subject-enrollment-summary";
+import {
+  mixMatches,
+  studentLevelOf,
+  type StudentLevel,
+  type StudentMixFilter,
+} from "./list-filter-values";
 
 type One<T> = T | T[] | null;
 
@@ -108,6 +114,42 @@ export type EnrolledComposition = {
   active: Set<string>;
 };
 
+/**
+ * **지금 수강 중**으로 치는 수강 줄 — 이미 시작했고(`today`) · 스코프 학생이고 · 표시 축 과목인 반.
+ * 🔑 운영실 '미수강' 막대(`composeEnrolled().active`의 여집합)와 원생목록 수강 과목 = '미수강'(`activeStudentIds`)이
+ *    **이 한 판정**을 지난다(원장 2026-09-28 "막대 숫자 = 열린 목록 건수").
+ */
+function* activeRows(
+  rows: readonly ActiveEnrollmentRow[],
+  scope: StudentScope,
+  today?: string,
+): Generator<[ActiveEnrollmentRow, { subject?: string | null; english_track?: string | null }]> {
+  const inScope = scope ? new Set(scope.studentIds) : null;
+  const axis = subjectAxisOf(scope);
+  for (const row of rows) {
+    if (!hasStarted(row, today)) continue;
+    if (inScope && !inScope.has(row.student_id)) continue;
+    const klass = classOf(row);
+    if (!klass || !axisHasSubject(axis, klass.subject)) continue;
+    yield [row, klass];
+  }
+}
+
+/**
+ * 지금 수강 중인 과목이 하나라도 있는 학생 — `composeEnrolled().active`와 **같은 판정**(activeRows).
+ * 원생목록 수강 과목 = '미수강'은 이 집합의 **여집합**이다(재원생이면 운영실 '미수강' 막대와 같은 사람들).
+ * `rows`는 활성 수강(end_date null · on_hold false)만 — 휴원 중인 수강은 '수강 중'이 아니다(막대와 같다).
+ */
+export function activeStudentIds(
+  rows: readonly ActiveEnrollmentRow[],
+  scope: StudentScope,
+  today?: string,
+): Set<string> {
+  const out = new Set<string>();
+  for (const [row] of activeRows(rows, scope, today)) out.add(row.student_id);
+  return out;
+}
+
 /** 재원생 구성 — 프로그램 판정은 programOf 한 벌. 원생목록 `program=` 필터와 운영실 팝업이 같은 결과를 쓴다. */
 export function composeEnrolled(input: {
   students: readonly EnrolledStudentRow[];
@@ -122,16 +164,11 @@ export function composeEnrolled(input: {
   today?: string;
 }): EnrolledComposition {
   const inScope = input.scope ? new Set(input.scope.studentIds) : null;
-  const axis = subjectAxisOf(input.scope);
   const programs = new Map<string, Set<Program>>();
   const active = new Set<string>();
   // 🔴 명단에서 뺄 학생 — 카드 숫자(총원)와 학년별·학교별 분해가 **같은 집합**을 보게 여기서 한 번 만든다.
   const pending = input.today ? notYetStartedStudentIds(input.rows, input.today) : null;
-  for (const row of input.rows) {
-    if (!hasStarted(row, input.today)) continue;
-    if (inScope && !inScope.has(row.student_id)) continue;
-    const klass = classOf(row);
-    if (!klass || !axisHasSubject(axis, klass.subject)) continue;
+  for (const [row, klass] of activeRows(input.rows, input.scope, input.today)) {
     active.add(row.student_id);
     const program = programOf({ subject: klass.subject ?? null, englishTrack: klass.english_track ?? null }, input.subjects);
     if (!program) continue;
@@ -232,4 +269,23 @@ export function gradeSplit(
     row[mix] += 1;
   }
   return { rows: [...rows.values(), other], neither };
+}
+
+/**
+ * 운영실 '재원생 구성' 막대 조각에 해당하는 재원생 id — 학교급 × 수강 구성. 원생목록 `level=`·`mix=`의 **단일 소스**.
+ * 🔑 막대 숫자(`levelSubjectSplit`)와 같은 재료(`composition`)·같은 분류(`studentLevelOf`·`subjectMixOf`)를 쓴다.
+ * 빈 조건은 그 축을 안 거른다.
+ */
+export function compositionStudentIds(
+  composition: EnrolledComposition,
+  filter: { levels: readonly StudentLevel[]; mixes: readonly StudentMixFilter[] },
+): Set<string> {
+  const out = new Set<string>();
+  for (const student of composition.students) {
+    if (filter.levels.length > 0 && !filter.levels.includes(studentLevelOf(student.grade))) continue;
+    const mix = subjectMixOf(composition.programs.get(student.id));
+    if (!mixMatches(mix, composition.active.has(student.id), filter.mixes)) continue;
+    out.add(student.id);
+  }
+  return out;
 }

@@ -94,7 +94,7 @@ export function BillingSection({
       </SettingsCard>
 
       {showEie ? (
-        <SettingsCard title="EiE 월 수강료" description="회차를 곱하지 않는 월 고정 금액입니다. 월 금액 확정 후 기존 공통 수수료와 배분율로 강사 정산에 반영되며, 수강료 계산기의 EiE 항목에도 적용됩니다.">
+        <SettingsCard title="EiE 월 수강료" description="회차를 곱하지 않는 월 고정 금액입니다. 월 금액을 확정하면 청구·분배에 쓰이고, 수강료 계산기의 EiE 항목에도 적용됩니다.">
           <div className="max-w-xs">
             <NumberField label="EiE 월 고정 금액" hint="원" value={b.eieMonthlyPrice} min={1} max={1_000_000_000} onChange={(eieMonthlyPrice) => set({ eieMonthlyPrice })} />
           </div>

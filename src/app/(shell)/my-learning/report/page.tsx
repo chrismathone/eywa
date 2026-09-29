@@ -5,7 +5,7 @@ import { DEMO_STUDENT } from "@/features/my-learning/data";
 import { findSession } from "@/features/my-learning/history";
 import { DailyReportView } from "@/features/my-learning/components/daily-report-view";
 
-export const metadata = { title: "데일리 리포트 — aywa" };
+export const metadata = { title: "데일리 리포트 — 에이와" };
 
 /**
  * 학생 데일리 리포트 — `?date=<M/D>`로 특정 세션. 없으면 최신(6/1).

@@ -14,7 +14,7 @@ import { TERM_OPTIONS, defaultTermOf, normalizeTerm, normalizeYear, termLabel, t
 import { GradeViewSwitch } from "../_components/view-switch";
 import { OverviewTable } from "./_components/overview-table";
 
-export const metadata = { title: "성적 확인 — aywa" };
+export const metadata = { title: "성적 확인 — 에이와" };
 
 /**
  * 성적 **확인 뷰** — 원장 2026-09-23: *"이 창은 기입창이고 확인하는 뷰페이지를 추가로 만들어야할듯"*.

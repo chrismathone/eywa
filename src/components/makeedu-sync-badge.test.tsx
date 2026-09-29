@@ -25,7 +25,7 @@ describe("동기화 경고의 확인 경로", () => {
     expect(container.querySelector("details")).not.toHaveAttribute("open");
     expect(container.textContent).toContain("학생 미매칭 4라인");
     expect(container.textContent).toContain("목록에 포함되지 않습니다");
-    expect(container.querySelector('a[href="/owner?tab=sheets"]')).toHaveTextContent("학원 설정 → 연동에서 확인");
+    expect(container.querySelector('a[href="/owner?tab=sheets&sub=makeedu"]')).toHaveTextContent("학원 설정 → 연동에서 확인");
   });
   it("설정 권한이 없는 사용자는 막힌 링크 대신 관리자 확인 경로를 읽는다", async () => {
     g.role = "teacher";

@@ -26,7 +26,7 @@ import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
-import { SheetsFace } from "./_components/sheets-face";
+import { IntegrationsFace } from "./_components/integrations-face";
 import { PopupsFace } from "./_components/popups-face";
 
 export const dynamic = "force-dynamic";
@@ -87,7 +87,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   // '기능' 면 판정에만 설정이 필요하다 — 그 외엔 종전처럼 조회 없이(요청 캐시라 본문과 같은 조회를 나눠 쓴다).
   const tab = sp.tab === "modules" ? effectiveTab(sp, await getTenantSettings()) : resolveTab(sp);
-  return { title: `학원 설정 · ${tab === "modules" ? MODULES_TAB_LABEL : TAB_LABEL[tab]} — aywa` };
+  return { title: `학원 설정 · ${tab === "modules" ? MODULES_TAB_LABEL : TAB_LABEL[tab]} — 에이와` };
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {
@@ -228,13 +228,17 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           </div>
         )
       ) : null}
+      {/* 연동 = 켜진 연동만 내부 탭(슬랙 · makeedu · 구글 시트) — 원장 2026-09-28 "세로 스크롤이 너무 길어짐". */}
       {tab === "sheets" ? (
-        <SheetsFace
-          subjects={settings.operations.subjects}
+        <IntegrationsFace
+          sub={sp.sub}
+          settings={settings}
+          modulesOn={{
+            makeedu: isModuleEnabled(settings.modules.disabled, "makeedu"),
+            sheets: isModuleEnabled(settings.modules.disabled, "sheet_sync"),
+          }}
           page={page}
           isEmbed={isEmbed}
-          makeeduOn={isModuleEnabled(settings.modules.disabled, "makeedu")}
-          sheetsOn={isModuleEnabled(settings.modules.disabled, "sheet_sync")}
         />
       ) : null}
     </div>

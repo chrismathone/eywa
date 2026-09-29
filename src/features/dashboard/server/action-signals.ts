@@ -1,4 +1,5 @@
 import "server-only";
+import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { createClient } from "@/lib/supabase/server";
 import { inclusiveDateWindowStart, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
@@ -21,6 +22,7 @@ import { getTestStudentIds } from "@/features/students/server/test-students";
 import {
   enrollmentAttendsOnDay,
   findMissingLessonReportPairs,
+  absentClassKeysOf,
   isEnrollmentActiveOn,
   type TodayActionsRaw,
   type TodaySignalSourceIssue,
@@ -143,9 +145,15 @@ type ScheduleRow = {
   class_id: string;
   start_time: string;
   class:
-    | { subject?: string; closed_at?: string | null; report_optout?: boolean | null }
-    | { subject?: string; closed_at?: string | null; report_optout?: boolean | null }[]
+    | ScheduleClass
+    | ScheduleClass[]
     | null;
+};
+type ScheduleClass = {
+  subject?: string;
+  closed_at?: string | null;
+  report_optout?: boolean | null;
+  teacher?: { display_name?: string | null; status?: string | null } | { display_name?: string | null; status?: string | null }[] | null;
 };
 
 type ClassRef = { id?: string; class_name?: string; subject?: string | null; closed_at?: string | null };
@@ -472,6 +480,7 @@ async function unwrittenReportsSignal(
   nowMinutes: number,
   db?: TenantScope,
   trackedSubjects?: readonly string[] | null,
+  exemptTeachers?: readonly string[] | null,
 ): Promise<TodayActionsRaw["unwrittenReportsToday"]> {
   const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
     new Date(`${today}T00:00:00Z`).getUTCDay()
@@ -481,7 +490,7 @@ async function unwrittenReportsSignal(
       .from("class_schedules")
       .select(
         `class_id, start_time,
-       class:class_id!inner ( subject, is_active, closed_at, report_optout )`,
+       class:class_id!inner ( subject, is_active, closed_at, report_optout, teacher:teacher_id ( display_name, status ) )`,
       )
       .eq("day_of_week", dayKey)
       .eq("class.is_active", true)
@@ -491,6 +500,7 @@ async function unwrittenReportsSignal(
     db,
   );
   const scheduleRows = rowsOrThrow(scheduleResult, "lesson report schedules") as unknown as ScheduleRow[];
+  const exempt = new Set((exemptTeachers ?? []).map((name) => name.trim()).filter(Boolean));
   const subjectByClass = new Map<string, string>();
   for (const row of scheduleRows) {
     const klass = (Array.isArray(row.class) ? row.class[0] : row.class) ?? undefined;
@@ -502,6 +512,11 @@ async function unwrittenReportsSignal(
     //    영어 강사는 ClassNote에 직접 쓰므로 lesson_reports가 늘 0건 — 세면 매일 140명이 '미작성'으로
     //    잡혀 진짜 미작성(수학 32명)이 그 안에 묻힌다. 축은 학원설정(report.classnoteSubjects).
     if (!isReportTrackedSubject(klass.subject, trackedSubjects)) continue;
+    // 🔴 작성 예외 강사(학원설정 report.writingExemptTeachers) · 퇴사한 담임의 반은 세지 않는다 — 작성률 카드와 같은 규칙
+    //    (점검 2026-09-28: 카드는 빼고 운영실은 세서 두 화면이 서로 다른 '미작성'을 말했다). 귀속은 반 담임.
+    const teacher = (Array.isArray(klass.teacher) ? klass.teacher[0] : klass.teacher) ?? null;
+    const teacherName = teacher?.display_name?.trim() ?? "";
+    if (teacher?.status === "inactive" || (teacherName && exempt.has(teacherName))) continue;
     const [hour, minute] = row.start_time.slice(0, 5).split(":").map(Number);
     const startMinutes = (hour ?? Number.NaN) * 60 + (minute ?? Number.NaN);
     if (!Number.isFinite(startMinutes) || nowMinutes < startMinutes) continue;
@@ -569,14 +584,22 @@ async function unwrittenReportsSignal(
   const studentIds = [...new Set(targets.map((target) => target.studentId))];
   if (studentIds.length === 0) return { count: 0, names: [], bySubject: [] };
 
-  const [attendanceRows, reportRows] = await Promise.all([
-    fetchInChunks<{ id: string; student_id: string; class_id: string; status: string; recorded_at: string }>(
+  const [attendanceRows, reportRows, optoutIds] = await Promise.all([
+    fetchInChunks<{
+      id: string;
+      student_id: string;
+      class_id: string;
+      session_date: string;
+      slot_start: string | null;
+      status: string;
+      recorded_at: string;
+    }>(
       studentIds,
       (chunk) =>
         scopeTenant(
           supabase
             .from("attendance_records")
-            .select("id, student_id, class_id, status, recorded_at")
+            .select("id, student_id, class_id, session_date, slot_start, status, recorded_at")
             .eq("session_date", today)
             .in("student_id", chunk)
             .order("recorded_at", { ascending: false })
@@ -584,32 +607,41 @@ async function unwrittenReportsSignal(
           db,
         ),
     ),
-    fetchInChunks<{ student_id: string; subject: string | null }>(studentIds, (chunk) =>
-      scopeTenant(
-        supabase
-          .from("lesson_reports")
-          .select("student_id, subject")
-          .eq("report_date", today)
-          .in("student_id", chunk),
-        db,
-      ),
+    // 오늘 쓴 보고서 + 다른 날 쓰고 오늘을 지정한 보고서(covers_date, 0136a) — 미리 쓴 보고서는 오늘 의무를 끝낸다.
+    fetchInChunks<{
+      student_id: string;
+      subject: string | null;
+      report_date: string;
+      covers_date: string | null;
+      class_id: string | null;
+    }>(
+      studentIds,
+      (chunk) =>
+        scopeTenant(
+          supabase
+            .from("lesson_reports")
+            .select("student_id, subject, report_date, covers_date, class_id")
+            .or(`report_date.eq.${today},covers_date.eq.${today}`)
+            .in("student_id", chunk),
+          db,
+        ),
     ),
+    fetchReportOptoutClassIds(supabase, db?.tenantId),
   ]);
 
-  // 중복 출결은 최신 기록만 채택한다. 다른 반의 결석은 이 수업 대상 판정에 영향을 주지 않는다.
-  const latestAttendance = new Map<string, string>();
-  for (const row of attendanceRows) {
-    if (!subjectByClass.has(row.class_id)) continue;
-    const key = `${row.student_id}::${row.class_id}`;
-    if (!latestAttendance.has(key)) latestAttendance.set(key, row.status);
-  }
-  const absentClassKeys = new Set(
-    [...latestAttendance].filter(([, status]) => status === "absent").map(([key]) => key),
-  );
+  // 결석한 반 = 최신 정정 기준 · 그 반 교시가 전부 결석(공용 `absentClassKeysOf`). 다른 반의 결석은 이 수업 대상과 무관하다.
+  const absentClassKeys = absentClassKeysOf(attendanceRows.filter((row) => subjectByClass.has(row.class_id)));
   const missingPairs = findMissingLessonReportPairs(
     targets,
     absentClassKeys,
-    reportRows.map((row) => ({ studentId: row.student_id, subject: row.subject })),
+    // 미발송 반(0174a) 보고서는 다른 반 의무를 채우거나 면제하지 않는다 — 작성률 카드와 같은 규약(class_id 없으면 둔다).
+    reportRows.filter((row) => !row.class_id || !optoutIds.has(row.class_id)).map((row) => ({
+      studentId: row.student_id,
+      subject: row.subject,
+      reportDate: String(row.report_date).slice(0, 10),
+      coversDate: row.covers_date ? String(row.covers_date).slice(0, 10) : null,
+    })),
+    today,
   );
   // 건수·명단은 예전과 같은 **학생 단위**(dedupe), 분해만 학생×과목 쌍으로 센다.
   const missingStudentIds = [...new Set(missingPairs.map((pair) => pair.studentId))];
@@ -657,11 +689,13 @@ export async function getTodayActionSignals(
   const enabled = (key: keyof TodayActionSignalScope) => scope[key] !== false;
   // 보고서 신호가 셀 과목(학원설정 report.classnoteSubjects). 🔴 fail-soft — 설정 조회가 실패해도
   //    신호를 죽이지 않는다. null이면 isReportTrackedSubject가 전부 센다(지금까지의 동작).
-  const trackedSubjects = enabled("lessonReports")
+  const reportSettings = enabled("lessonReports")
     ? await (db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings())
-        .then((st) => st.report.classnoteSubjects ?? null)
+        .then((st) => ({ tracked: st.report.classnoteSubjects ?? null, exempt: st.report.writingExemptTeachers ?? [] }))
         .catch(() => null)
     : null;
+  const trackedSubjects = reportSettings?.tracked ?? null;
+  const exemptTeachers = reportSettings?.exempt ?? null;
   /**
    * 🔴 **학원 휴일엔 재촉하지 않는다.** 이 두 신호("오늘 미작성 보고서"·"어제 출결 미기록")는
    *    시간표 슬롯만 보고 세므로 휴원일에도 그날 배정된 반을 전부 미작성으로 잡아 거짓 경보가 뜬다.
@@ -783,7 +817,7 @@ export async function getTodayActionSignals(
       {
         key: "makeedu-sync",
         label: "makeedu 동기화",
-        href: "/owner?tab=sheets",
+        href: "/owner?tab=sheets&sub=makeedu",
         menuKey: "owner",
         requiredAccess: "read",
       },
@@ -891,7 +925,7 @@ export async function getTodayActionSignals(
       () =>
         isHolidayOn(holidayMap, today)
           ? Promise.resolve({ count: 0, names: [], bySubject: [] })
-          : unwrittenReportsSignal(supabase, today, nowMinutes, db, trackedSubjects),
+          : unwrittenReportsSignal(supabase, today, nowMinutes, db, trackedSubjects, exemptTeachers),
     ),
     collectSignal(
       enabled("students"),

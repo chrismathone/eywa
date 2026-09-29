@@ -17,7 +17,7 @@ import {
   summarizeAbsenceReasons,
   type AbsenceReasonSummary,
 } from "@/features/dashboard/absence-reasons";
-import { attendanceRate } from "@/lib/calc/attendance";
+import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import type { SystemRole } from "@/lib/permissions";
 import { summarizeInvoices } from "@/features/billing/calc";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -289,7 +289,7 @@ async function snapshotForDate(date: string): Promise<AttendanceSnapshot | null>
     absent,
     late,
     excused,
-    rate: attendanceRate(present, total),
+    rate: attendanceRate(attendedCount({ present, late }), total),
   };
 }
 

@@ -5,6 +5,7 @@
 // ⚠️ 분모는 **기록이 있는 칸**뿐이다. 빈 칸은 결석이 아니라 "아직 안 찍음"이다(서버 marks에 키가 없는 것과 같은 규약).
 
 import { COUNTABLE_STATUSES } from "../session-units";
+import { attendedCount } from "@/lib/calc/attendance";
 
 /** 한 칸의 값 — 격자 저장소의 `GridValue`와 같은 모양. 순수 모듈이라 **구조로만** 받는다(순환 import 방지). */
 export type CountedCell = { s: string; u: number | null; g?: true } | null;
@@ -78,10 +79,10 @@ export function sumCounts(list: Iterable<Counted>): Counted {
  * ⚠️ 기록이 하나도 없으면 **null("—")** — 0%가 아니다. 출석률이 0인 것과 아직 아무도 안 찍은 것은 다른 사실이다.
  */
 export function ratePercent(c: Counted): number | null {
-  return c.recorded > 0 ? Math.round((c.present / c.recorded) * 100) : null;
+  return c.recorded > 0 ? Math.round((attendedCount(c) / c.recorded) * 100) : null;
 }
 
 /** 상단 스탯용 출석률(소수 한 자리). 기록이 없으면 0 — 호출부가 `recorded`로 "—"를 가른다. */
 export function rateDecimal(c: Counted): number {
-  return c.recorded > 0 ? Math.round((c.present / c.recorded) * 1000) / 10 : 0;
+  return c.recorded > 0 ? Math.round((attendedCount(c) / c.recorded) * 1000) / 10 : 0;
 }

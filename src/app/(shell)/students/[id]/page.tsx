@@ -20,6 +20,7 @@ import { getStudentUpcomingReservations } from "@/features/attendance/server/mak
 import { kstToday } from "@/lib/date-kst";
 import { isInternalPath } from "@/lib/navigation";
 import { StatusAction } from "./_components/status-action";
+import { CancelScheduledWithdrawal } from "./_components/scheduled-withdrawal";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { OverviewTab } from "./_tabs/overview-tab";
 import { ClassesTab } from "./_tabs/classes-tab";
@@ -34,7 +35,7 @@ import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 
-export const metadata = { title: "학생 상세 — aywa" };
+export const metadata = { title: "학생 상세 — 에이와" };
 
 
 export default async function StudentDetailPage({
@@ -170,6 +171,9 @@ export default async function StudentDetailPage({
     student.status === "withdrawn" ? canAccessTenant(user.systemRole, "withdrawals") : Promise.resolve(false),
   ]);
 
+  const scheduledWithdrawal =
+    student.status !== "withdrawn" && student.withdrawnAt ? String(student.withdrawnAt).slice(0, 10) : null;
+
   return (
     <div className="space-y-6">
       <BackLink href="/students" label="원생목록으로" />
@@ -197,11 +201,19 @@ export default async function StudentDetailPage({
               ⚠️ 크기는 Pill 기본을 그대로 쓴다. 처음엔 `className="px-2.5 py-1 text-xs"`를 얹었는데
               Pill이 tailwind-merge를 안 거쳐서 기본값(text-xs py-[3px])과 **충돌한 채 둘 다 남고**
               실제로는 기본값이 이겼다(계산값 11px/3px 실측) — 아무 효과 없는 거짓 클래스였다. */}
-          <Pill color={statusMeta?.color ?? "neutral"}>{statusMeta?.label ?? student.status}</Pill>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Pill color={statusMeta?.color ?? "neutral"}>{statusMeta?.label ?? student.status}</Pill>
+            {/* 퇴원 예약(원장 2026-09-28 *"퇴원당일전까지 '재원'"*) — 상태는 재원·휴원 그대로, 그날 00:05에 퇴원 처리된다.
+                표식 = 퇴원이 아닌데 퇴원일이 있다(`changeStudentStatus` 주석). */}
+            {scheduledWithdrawal ? <Pill color="amber">퇴원 예정 {scheduledWithdrawal}</Pill> : null}
+          </div>
           {/* ⚠️ 감기게 둔다 — 이 줄엔 상태 변경·수정·AI·삭제가 함께 서고, 라벨에 목적어를 붙이면
               (수정 → 학생 수정) 좁은 화면에서 가로로 넘친다. 넘치는 대신 다음 줄로 내려간다. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {/* 강사(scoped)는 열람 전용 — 상태 변경·학생 수정·AI 케어 전부 비노출(위 canManageStudent 주석). */}
+            {canManageStudent && scheduledWithdrawal ? (
+              <CancelScheduledWithdrawal studentId={student.id} date={scheduledWithdrawal} />
+            ) : null}
             {canManageStudent ? (
               <StatusAction
                 studentId={student.id}

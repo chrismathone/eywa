@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { getReservationsInRange } from "@/features/attendance/server/makeup-reservation-queries";
 import { getPeriodDefs } from "@/features/periods/server/queries";
 import { resolvePeriodWindow } from "@/features/periods/resolve";
@@ -132,7 +133,7 @@ export async function loadMonthRoster(
   const maxEnd = ends[ends.length - 1]!;
 
   // ⚠️ 학생 좁히기를 제네릭 헬퍼로 감싸면 supabase 빌더 타입이 재귀 인스턴스화돼 tsc가 TS2589로 멈춘다 — 조건을 그 자리에 쓴다.
-  const [enrollments, records, reservations] = await Promise.all([
+  const [enrollments, rawRecords, reservations] = await Promise.all([
     fetchAllPagedInChunks<{ student_id: string; class_id: string; start_date: string; end_date: string | null; on_hold: boolean }>(
       classIds,
       (chunk, from, to) => {
@@ -142,12 +143,12 @@ export async function loadMonthRoster(
       },
       ENROLLMENT_CHUNK,
     ),
-    fetchAllPagedInChunks<{ student_id: string; class_id: string; session_date: string; slot_start: string | null; status: string; session_units: number | null }>(
+    fetchAllPagedInChunks<{ id: string; student_id: string; class_id: string; session_date: string; slot_start: string | null; status: string; session_units: number | null; recorded_at: string }>(
       classIds,
       (chunk, from, to) => {
         let q = db
           .from("attendance_records")
-          .select("student_id, class_id, session_date, slot_start, status, session_units")
+          .select("id, student_id, class_id, session_date, slot_start, status, session_units, recorded_at")
           .in("class_id", chunk)
           .gte("session_date", minStart)
           .lte("session_date", maxEnd);
@@ -158,6 +159,9 @@ export async function loadMonthRoster(
     ),
     getReservationsInRange(minStart, maxEnd, classIds),
   ]);
+  // 🔴 정정 줄은 **기록 시각 순 최신 하나**만 — 공용 `effectiveAttendanceRecords`(0267a RPC·급여와 같은 규칙).
+  //    예전엔 id 순 마지막 줄을 골라(id는 UUID라 사실상 무작위) 정정 전 값이 '실 시수'로 나올 수 있었다(점검 2026-09-28).
+  const records = effectiveAttendanceRecords(rawRecords);
 
   // 반마다 제 창 안으로 거른다 — 출석부가 그 반을 그릴 때 받는 행과 같게(수강 `start_date ≤ 창 끝` · 기록·예약은 창 안).
   const inWindow = (classId: string, date: string) => {

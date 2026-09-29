@@ -11,8 +11,8 @@ import { canEditStudent } from "./scope";
 import { insertUnslottedGrade } from "@/features/grades/server/write";
 import type { UnifiedSaveState } from "./actions";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+import { isUuid } from "./uuid";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CREATE_KINDS = new Set<UnifiedKind>(["daily", "check", "admission", "other"]);
 
@@ -29,7 +29,7 @@ export async function createUnifiedGrade(_previous: UnifiedSaveState, formData: 
   const scoreRaw = String(formData.get("score") ?? "").trim();
   const maxScore = Number(formData.get("maxScore"));
   const score = scoreRaw ? Number(scoreRaw) : null;
-  if (!UUID.test(studentId) || !subject || subject.length > 64 || !CREATE_KINDS.has(kind)) return { error: "학생·과목·시험 종류를 확인해 주세요" };
+  if (!isUuid(studentId) || !subject || subject.length > 64 || !CREATE_KINDS.has(kind)) return { error: "학생·과목·시험 종류를 확인해 주세요" };
   const parsedDate = new Date(`${date}T00:00:00Z`);
   if (!ISO_DATE.test(date) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) return { error: "시험일을 확인해 주세요" };
   if (!Number.isFinite(maxScore) || maxScore <= 0 || maxScore > 1000 ||

@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { NewTenantForm } from "./_form";
 
-export const metadata = { title: "슈퍼관리자 · 신규 학원 발급 — aywa" };
+export const metadata = { title: "슈퍼관리자 · 신규 학원 발급 — 에이와" };
 
 export default function NewTenantPage() {
   return (
