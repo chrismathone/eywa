@@ -15,6 +15,12 @@ export async function writeClassBoardSnapshot(sql, tenant, plans) {
   const out = { classes: 0, ok: 0, hold: 0, cleared: 0 };
   for (const p of plans) {
     await sql.begin(async (tx) => {
+      if (p.board.deletedBoardId != null) {
+        // ClassNote에서 지운 보드 — 배정 기록만 지우고 연결 행은 남긴다(지우면 다음 날 같은 이름으로 다시 만들어진다).
+        const d1 = await tx`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id = ${p.classId}`;
+        out.cleared += d1.count;
+        return;
+      }
       if (p.board.action !== "exists") {
         // 보드가 없거나(생성 전) 특정 불가 — 이 반의 연결을 지운다(초록불이 남으면 거짓말이다).
         const d1 = await tx`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id = ${p.classId}`;

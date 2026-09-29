@@ -148,6 +148,10 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
       else if (exact.length || near.length)
         board = { action: "block", reason: `반 이름을 "${c.className}"(으)로 바꿔야 하는데 그 이름의 보드가 이미 있습니다` };
       else board = { action: "exists", id: linked.id, rename: { from: linked.name, to: c.className } };
+    } else if (linkedId != null) {
+      // 🔴 연결된 보드가 ClassNote에서 사라졌다 = 사람이 지웠다(2026-09-29 빈 반 JJ3E). 새로 만들면 지운 반이 매일 되살아난다.
+      // 연결 행은 남긴다(deletedBoardId) — 지우면 다음 날 이름 규칙으로 다시 만들어진다. 안 쓰는 반이면 aywa에서 종강하면 연결도 정리된다.
+      board = { action: "block", deletedBoardId: Number(linkedId), reason: `연결된 ClassNote 반(#${linkedId})이 삭제됐습니다 — 안 쓰는 반이면 aywa에서 종강하세요` };
     } else if (exact.length > 1) board = { action: "block", reason: `같은 이름 보드 ${exact.length}개` };
     else if (near.length) board = { action: "block", reason: `공백만 다른 보드가 있음(${near.map((b) => JSON.stringify(b.name)).join(", ")})` };
     else if (exact.length === 1 && classByLinkedBoard.has(Number(exact[0].id)) && classByLinkedBoard.get(Number(exact[0].id)) !== c.classId)

@@ -246,9 +246,16 @@ describe("planClassBoards — 반 단위", () => {
     const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c9", 80]]) });
     expect(p.board.action).toBe("block");
   });
-  it("연결된 보드가 ClassNote에서 사라졌으면 이름 규칙으로(새로 만든다)", () => {
+  it("🔴 연결된 보드가 ClassNote에서 사라졌으면 다시 만들지 않는다(사람이 지운 것 — 2026-09-29 JJ3E)", () => {
     const w = world();
     const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 999]]) });
-    expect(p.board).toEqual({ action: "create" });
+    expect(p.board.action).toBe("block");
+    expect(p.board.deletedBoardId).toBe(999);
+  });
+  it("지운 보드와 같은 이름의 보드가 새로 있어도 자동으로 갈아타지 않는다", () => {
+    const w = world();
+    w.boards.push({ id: 90, name: "중등M 중1 BS3E" });
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 999]]) });
+    expect(p.board.action).toBe("block");
   });
 });
