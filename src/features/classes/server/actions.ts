@@ -12,6 +12,7 @@ import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { parseSeatValue } from "@/features/timetable/lib/teacher-label";
 import { logAction } from "@/features/audit/server/log";
+import { normalizeClassName } from "@/features/classes/class-name";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -126,7 +127,8 @@ function readForm(formData: FormData, allowedSubjects: ReadonlySet<string>) {
   // 운영 기간(특강은 방학 한정 → 끝나면 시간표에서 자동으로 내려간다). periodProvided=1이면
   // 종료일을 **비운 것도 명시**(무기한으로 되돌리기)로 해석한다 — schedule-preserve.ts 참조.
   return {
-    className: get("className"),
+    // 공백 정리(연속 공백 한 칸) — ClassNote 반 보드 이름과 글자까지 같아야 한다(class-name.ts).
+    className: normalizeClassName(get("className")),
     // 허용 집합(설정 과목 ∪ 레거시)에 없는 값만 'etc'로 강등(쓰레기 입력 가드).
     subject: allowedSubjects.has(subject) ? subject : "etc",
     teacherId: get("teacherId") || null,
