@@ -1,7 +1,10 @@
 import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
+  // 로컬 메뉴 편집 체험: DB/로그인 없이 고정된 샘플만 쓴다. 프로덕션에서는 페이지도 404다.
+  if (process.env.NODE_ENV === "development" && request.nextUrl.pathname === "/dev/navigation") return NextResponse.next();
   return updateSession(request);
 }
 

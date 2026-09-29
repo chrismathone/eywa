@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { MenuPageTitle } from "@/features/owner/menu-page-title";
 
 /**
  * PageHeader — Editorial 문법 ①(eyebrow→헤드라인→서브)의 단일 소스.
@@ -60,7 +61,7 @@ export function PageHeader({
                 : "compact-chrome:text-text-dim compact-chrome:mt-0 compact-chrome:text-sm compact-chrome:font-medium compact-chrome:tracking-normal"
             }`}
           >
-            {title}
+            <Suspense fallback={title}><MenuPageTitle title={title} /></Suspense>
           </h2>
           {description ? (
             <div

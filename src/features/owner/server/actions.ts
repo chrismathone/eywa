@@ -15,6 +15,7 @@ import { diffSettingsSection } from "../settings-diff";
 import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey, type PermissionsSettings } from "../settings-types";
 import { prepareSectionForSave, presetOfStored } from "../preset";
+import { navigationRevision } from "../normalize-navigation";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
@@ -101,7 +102,7 @@ export async function saveOwnerSection(
   // 기존 문서 읽어 섹션만 교체(다른 섹션 보존). RLS로 자기 테넌트만.
   const { data: existing, error: readError } = await supabase
     .from("tenant_settings")
-    .select("data")
+    .select("data, updated_at")
     .eq("tenant_id", actor.tenantId)
     .maybeSingle();
   // 🔴 못 읽었으면 저장하지 않는다 — 빈 문서 위에 이 섹션만 얹으면 다른 섹션이 전부 지워진다(적대 리뷰 2026-09-22).
@@ -142,21 +143,30 @@ export async function saveOwnerSection(
     }
   }
   const base = (existing?.data as Record<string, unknown> | null) ?? {};
+  if (section === "navigation") {
+    const expected = formData.get("navigationBaseline");
+    if (typeof expected === "string" && expected !== navigationRevision(base.navigation)) {
+      return { error: "다른 창에서 메뉴 구성이 변경되었습니다. 현재 편집 내용은 유지했습니다. 최신 구성을 새로고침한 뒤 다시 저장해 주세요." };
+    }
+  }
   const sectionData = prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
   const nextData: Record<string, unknown> = { ...base, version: 1, [section]: sectionData };
   // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.
   if (preset === "generic") nextData.preset = "generic";
 
-  const { error } = await supabase.from("tenant_settings").upsert(
-    {
+  const write = {
       tenant_id: actor.tenantId,
       data: nextData,
       updated_by: actor.id,
       updated_at: new Date().toISOString(),
-    },
-    { onConflict: "tenant_id" },
-  );
+  };
+  // 조회 이후 다른 설정 섹션이 먼저 저장돼도 그 문서를 덮지 않는다. 초기 생성의 동시 충돌도 insert로 막는다.
+  const resultWrite = existing
+    ? await supabase.from("tenant_settings").update(write).eq("tenant_id", actor.tenantId).eq("updated_at", existing.updated_at).select("tenant_id")
+    : await supabase.from("tenant_settings").insert(write).select("tenant_id");
+  const { error } = resultWrite;
   if (error) return { error: error.message };
+  if (!resultWrite.data?.length) return { error: "다른 창에서 설정이 먼저 저장되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
 
   // 🔴 **무엇이 바뀌었는지**를 함께 남긴다(원장 점검 2026-08-27) — 종전엔 `{section}`뿐이라
   //    "누가 언제 운영 체계를 저장했다"만 남고 되짚을 근거가 없었다. 비밀값·미등록 필드는 실리지 않는다.

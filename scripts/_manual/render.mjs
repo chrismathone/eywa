@@ -88,7 +88,7 @@ export function faceBlocks({ crumb, title, page, shot, png, stamp, offNote }) {
     <div class="hl" style="left:${pct(b.x, shot.w)};top:${pct(b.y, shot.h)};width:${pct(b.w, shot.w)};height:${pct(b.h, shot.h)}"></div>
     <div class="badge" style="left:${pct(spots[i].cx, shot.w)};top:${pct(spots[i].cy, shot.h)}">${b.n}</div>`).join("") : "";
   const blocks = [
-    `<div class="top" data-keep><div><div class="crumb">${esc(crumb)}</div><h1>${esc(title)}</h1></div><div class="meta">aywa 사용 설명서<br>${esc(stamp)}</div></div>`,
+    `<div class="top" data-keep><div><div class="crumb">${esc(crumb)}</div><h1>${esc(title)}</h1></div><div class="meta">에이와 사용 설명서<br>${esc(stamp)}</div></div>`,
     `<p class="lead" data-keep>${esc(page.lead)}</p>`,
   ];
   if (offNote) blocks.push(`<div class="off" data-keep>${esc(offNote)}</div>`);
@@ -118,7 +118,7 @@ export function faceBlocks({ crumb, title, page, shot, png, stamp, offNote }) {
 export function documentHtml(sections) {
   const src = sections.map((s) => s.blocks.map((b, i) =>
     `<div class="blk" data-sec="${esc(s.id)}" data-foot="${esc(s.foot)}"${i === 0 && s.newPage ? " data-newpage" : ""}>${b}</div>`).join("")).join("");
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>${CSS}</style></head><body>
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>에이와 학원 운영 프로그램 사용 설명서</title><style>${CSS}</style></head><body>
 <div id="src">${src}</div>
 <script>
 function layout() {

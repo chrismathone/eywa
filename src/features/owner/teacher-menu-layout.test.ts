@@ -98,7 +98,7 @@ describe("감사로그 변경 목록(settings-diff)", () => {
 
   it("옛 행(키 없음)에 관리자뷰만 고쳐 저장 — 빈 강사뷰 목록이 처음 실리는 것은 변경이 아니다", () => {
     const out = diff({ menus: [] }, { menus: [{ href: "/students", hidden: true }], teacherMenus: [] });
-    expect(out.changes.map((c) => c.label)).toEqual(["관리자뷰 메뉴 표시·순서"]);
+    expect(out.changes.map((c) => c.label)).toEqual(["관리자뷰 메뉴 구성"]);
     expect(out.others).toBe(0);
   });
 

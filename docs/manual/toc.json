@@ -243,6 +243,11 @@
             {
               "slug": "staff-detail",
               "title": "직원 상세(이력서·근무 설정·계정)"
+            },
+            {
+              "slug": "payroll",
+              "title": "월별 급여",
+              "module": "payroll"
             }
           ]
         },
@@ -391,6 +396,17 @@
     {
       "title": "지원",
       "menus": [
+        {
+          "slug": "kiosk-settings",
+          "title": "출석 키오스크",
+          "module": "kiosk",
+          "faces": [
+            {
+              "slug": "settings",
+              "title": "출석 키오스크 설정"
+            }
+          ]
+        },
         {
           "slug": "help",
           "title": "도움말",

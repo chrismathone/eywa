@@ -1,8 +1,10 @@
 "use client";
 
+import { useNavigationSettings } from "@/features/owner/navigation-context";
+
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   Tooltip,
   TooltipContent,
@@ -21,6 +23,7 @@ import {
   SUPPORT_GROUPS,
   frequentFor,
   hubGroupOfPath,
+  hubDestinationForPath,
   hubGroupsFor,
   type HubGroup,
 } from "@/lib/menu-hub";
@@ -83,7 +86,7 @@ function isItemActive(href: string, pathname: string) {
 function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
   if (navPresentation(item) !== "window") return;
   const st = useWindowStore.getState();
-  st.open("route", { id: item.menuKey, title: item.label, href: item.href });
+  st.open("route", { id: item.menuKey, title: hubDestinationForPath(item.href)?.label ?? item.label, href: item.href });
   const winId = windowId("route", item.menuKey);
   const s2 = useWindowStore.getState();
   const win = s2.windows[winId];
@@ -158,6 +161,7 @@ export function AppSidebar({
   connectedApps?: readonly ConnectedApp[];
 }) {
   // 호칭(직책) — 직접 입력한 job_title 우선, 없으면 시스템 역할의 한글 라벨로 폴백.
+  const { groups: groupLayout } = useNavigationSettings();
   const title = jobTitle?.trim() || ROLE_LABEL[systemRole];
   // 이름이 비면(이론상 거의 없음) 이메일 앞부분으로 폴백해 빈 줄을 방지.
   const name = displayName?.trim() || email.split("@")[0];
@@ -230,12 +234,15 @@ export function AppSidebar({
     //    사람이 실제로 있다(결정 로그 2026-08-13 *"super_admin은 … 어떤 제한 명단·게이트도 자동 통과"*).
     isMaster: systemRole === "master" || isSuperAdmin,
     menuLayout,
+    groupLayout,
     isGenericTenant,
   };
   // 자주 방문한 메뉴 — 서버가 계정 기록에서 뽑아 순서대로 내려준다(없으면 기본값).
   const frequent = frequentFor(gate, frequentKeys);
-  const workGroups = hubGroupsFor(HUB_GROUPS, gate);
-  const supportGroups = hubGroupsFor(SUPPORT_GROUPS, gate);
+  const allGroups = hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], gate);
+  const supportIds = new Set(["support", "owner", ...(groupLayout.some((g) => g.id === "help" && g.order !== undefined) ? [] : ["help"])]);
+  const workGroups = allGroups.filter((g) => !supportIds.has(g.id));
+  const supportGroups = allGroups.filter((g) => supportIds.has(g.id));
   const hubOpenId = useMenuHub((s) => s.groupId);
   const toggleHub = useMenuHub((s) => s.toggle);
   const closeHub = useMenuHub((s) => s.close);
@@ -356,7 +363,7 @@ export function AppSidebar({
                 return item ? (
                   <MenuRail
                     key={d.href}
-                    item={item}
+                    item={{ ...item, ...d }}
                     isDesktop={windows}
                     expanded={expanded}
                     motion={motion}
@@ -378,6 +385,7 @@ export function AppSidebar({
               <GroupRail
                 key={g.id}
                 group={g}
+                allGroups={allGroups}
                 isDesktop={windows}
                 expanded={expanded}
                 motion={motion}
@@ -408,6 +416,7 @@ export function AppSidebar({
                 <GroupRail
                   key={g.id}
                   group={g}
+                allGroups={allGroups}
                   isDesktop={windows}
                   expanded={expanded}
                   motion={motion}
@@ -666,6 +675,7 @@ function MenuRail({
  */
 function GroupRail({
   group,
+  allGroups,
   isDesktop,
   expanded,
   motion,
@@ -678,6 +688,7 @@ function GroupRail({
   hasFocus,
 }: {
   group: HubGroup;
+  allGroups: HubGroup[];
   isDesktop: boolean;
   expanded: boolean;
   motion: boolean;
@@ -690,7 +701,10 @@ function GroupRail({
   focusedPath: string | null;
   hasFocus: boolean;
 }) {
-  const direct = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
+  const search = useSearchParams();
+  const currentHref = `${pathname}?${search.toString()}`;
+  const base = group.kind === "direct" ? navItemByKey(group.items[0]!.menuKey) : undefined;
+  const direct = base ? { ...base, ...group.items[0]!, label: group.label, icon: group.icon } : undefined;
   if (direct) {
     return (
       <MenuRail
@@ -713,8 +727,8 @@ function GroupRail({
   const hubOpen = hubOpenId === group.id;
   // 창 모드가 꺼진 지점(`isDesktop`=창 모드)은 포커스 창이 없다 — 본문 주소가 곧 "지금 보는 곳"이다(폰과 같은 판정).
   const focusedHere = isDesktop
-    ? hasFocus && hubOpenId === null && !!focusedPath && hubGroupOfPath(focusedPath)?.id === group.id
-    : hubOpenId === null && hubGroupOfPath(pathname)?.id === group.id;
+    ? hasFocus && hubOpenId === null && !!focusedPath && hubGroupOfPath(focusedPath, allGroups)?.id === group.id
+    : hubOpenId === null && hubGroupOfPath(currentHref, allGroups)?.id === group.id;
   const active = hubOpen || focusedHere;
   // 🔴 **열려 있는 창을 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
   //    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.
@@ -784,7 +798,7 @@ function RailItem({
       onShowDesktop();
       return;
     }
-    const params = { id: item.menuKey, title: item.label, href: item.href };
+    const params = { id: item.menuKey, title: hubDestinationForPath(item.href)?.label ?? item.label, href: item.href };
     // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼).
     if (e.shiftKey) {
       useWindowStore.getState().openNewInstance("route", params);

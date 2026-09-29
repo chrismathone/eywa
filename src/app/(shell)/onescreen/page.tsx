@@ -12,6 +12,8 @@ import { pickCnForClasses } from "@/features/onescreen/classnote-match";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
+import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
+import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
 
 export const metadata = { title: "선생님 원스크린 — 에이와" };
 
@@ -69,6 +71,7 @@ export default async function OneScreenPage({
   const initialClassName = classId ? (roster.todayClasses.find((c) => c.id === classId)?.name ?? null) : null;
   const initialStudentId =
     studentId && roster.students.some((s) => s.id === studentId) ? studentId : null;
+  const videoHomeworkMarks = await getVideoHomeworkMarks(user.tenantId, roster.students.map((student) => student.id), roster.date);
   return (
     <>
       {/* '다른 강사 뷰' 열람 배너 — 이 화면의 입력·발송은 서버가 전부 거절한다(perm-matrix 캡 +
@@ -85,6 +88,8 @@ export default async function OneScreenPage({
         <TodayAttendanceStrip />
       </Suspense>
       {/* key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만). */}
+      <VideoHomeworkProvider initial={videoHomeworkMarks} checkDate={roster.date}
+        policy={roster.reportSettings.videoHomeworkPolicy}>
       <OneScreenClient
       key={roster.date}
       initial={roster.students}
@@ -130,6 +135,7 @@ export default async function OneScreenPage({
         roster.students.flatMap((s) => s.subjects.map((su) => su.classId).filter((id): id is string => !!id)),
       )}
       />
+      </VideoHomeworkProvider>
     </>
   );
 }

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
-import type { HubDest } from "@/lib/menu-hub";
+import { hubDestinationForPath, type HubDest } from "@/lib/menu-hub";
 import { navItemByKey, navPresentation } from "@/lib/navigation";
 import { useWindowMode } from "./use-window-mode";
 import { useMenuHub } from "./menu-hub-store";
@@ -49,7 +49,7 @@ export function useOpenMenu(): (dest: HubDest, shift?: boolean) => void {
       }
       // 🔴 창 id는 **창 링크·알림 벨·딥링크와 같은 함수**로 정한다 — 경로로 갈리는 면(오늘 출결·셔틀 면)을 여기선
       //    부모 창, 링크에선 따로 된 창으로 열어 같은 화면이 두 벌 떴다(2026-09-11 전수검사). 면 = 부모 창(원장 결정).
-      const params = { id: windowIdForHref(dest.href)?.id ?? dest.menuKey, title: dest.label, href: dest.href };
+      const params = { id: windowIdForHref(dest.href)?.id ?? dest.menuKey, title: hubDestinationForPath(dest.href)?.label ?? dest.label, href: dest.href };
       if (shift) {
         useWindowStore.getState().openNewInstance("route", params);
         return;
@@ -92,7 +92,7 @@ export function HubGrid({
             <MenuGlyph name={d.icon} size={38} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="text-foreground block truncate text-2xl font-bold">{d.label}</span>
+            <span className="text-foreground block break-words text-2xl font-bold">{d.label}</span>
             {d.desc ? <span className="text-text-dim mt-0.5 block truncate text-sm">{d.desc}</span> : null}
           </span>
           <EyIcon name="arrowRight" size={20} className="text-text-faint shrink-0" />

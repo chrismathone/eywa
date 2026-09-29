@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MenuMentionText } from "@/components/menu-mention-text";
 import { fmtSupportDateTime } from "@/features/support/format";
 import { SUPPORT_STATUSES, SUPPORT_STATUS_META, type SupportRequestDetail } from "@/features/support/types";
 
@@ -33,7 +34,7 @@ export function SupportRequestDetailView({ item, showTenant = false }: { item: S
 
       <section className="bg-card shadow-card rounded-2xl p-5" aria-label="내용">
         <h2 className="text-foreground mb-2 text-base font-bold">내용</h2>
-        <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap">{item.body}</p>
+        <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap"><MenuMentionText text={item.body} defaultNames={showTenant} link={!showTenant} /></p>
       </section>
 
       <section className="bg-card shadow-card rounded-2xl p-5" aria-label="답변">
@@ -44,7 +45,7 @@ export function SupportRequestDetailView({ item, showTenant = false }: { item: S
           ) : null}
         </div>
         {item.answer ? (
-          <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap">{item.answer}</p>
+          <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap"><MenuMentionText text={item.answer} defaultNames={showTenant} link={!showTenant} /></p>
         ) : (
           <p className="text-text-dim text-sm">아직 답변이 없습니다. 운영팀이 확인하면 여기와 알림으로 알려 드립니다.</p>
         )}

@@ -8,6 +8,7 @@ import { WINDOW_BUSY_MESSAGE } from "./use-recording-lock";
 import { useWindowSignals } from "./use-window-signals";
 import { clearDirtyForNewDocument } from "./window-signals-core";
 import { Button } from "@/components/ui/button";
+import { useWindowPresentation } from "@/features/owner/navigation-context";
 
 /**
  * 라우트 창의 iframe 엘리먼트 레지스트리(런타임·모듈 전역). 타이틀바 뒤로(←) 버튼이
@@ -78,6 +79,10 @@ export function RouteWindow({ win }: { win: Win }) {
   const autoClosedRef = useRef(false);
   const href = win.params.href;
   const fallbackTitle = win.params.title;
+  const present = useWindowPresentation();
+  const currentHref = useWindowStore((s) => s.nav[win.id]?.at(-1));
+  const liveTitle = useWindowStore((s) => s.live[win.id]?.title);
+  const displayTitle = present(win, currentHref, liveTitle).title;
   // 메뉴가 이 창의 첫 화면을 바꾸면(open-menu-window) 새 문서의 첫 로드에서 nav 스택을 새로 시작한다 — 아래 effect.
   const prevHrefRef = useRef(href);
   const resetOnLoadRef = useRef(false);
@@ -290,7 +295,7 @@ export function RouteWindow({ win }: { win: Win }) {
       <iframe
         ref={iframeRef}
         src={activated ? withEmbed(href) : undefined}
-        title={win.params.title}
+        title={displayTitle}
         // 창 안 폼이 브라우저 마이크로 바로 녹음(회의록·등록상담·학생상담)할 수 있게 권한 위임.
         // same-origin이라도 일부 브라우저는 getUserMedia에 iframe allow를 요구 → 명시.
         allow="microphone"
@@ -320,7 +325,7 @@ export function RouteWindow({ win }: { win: Win }) {
       ) : null}
       {dragging ? (
         <div className="bg-card absolute inset-0 flex items-center justify-center" aria-hidden="true">
-          <span className="text-text-faint text-sm font-medium">{win.params.title}</span>
+          <span className="text-text-faint text-sm font-medium">{displayTitle}</span>
         </div>
       ) : null}
     </div>

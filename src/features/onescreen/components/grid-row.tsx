@@ -43,6 +43,7 @@ import {
 import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
+import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
@@ -604,6 +605,13 @@ export function GridBodyRow({
             nav={{ col: "homework", row: nav.row }}
           />
         </fieldset>
+          {subject.classId ? (
+            <VideoHomeworkCheck classId={subject.classId} studentId={student.id}
+              subjectKey={subject.subjectKey ?? "math"} grade={student.grade}
+              previousHomework={subject.prevReport?.homeworkToday}
+            homeworkDate={subject.prevReport?.date}
+            compact readOnly={!!gen.readonlyView} />
+        ) : null}
       </td>
       <td className={td}>
         <div className="flex flex-col gap-1">

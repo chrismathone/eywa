@@ -4,6 +4,12 @@ import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import {
   isMenuHiddenByLayout,
   sortByMenuLayout,
+  applyMenuPresentation,
+  normalizeMenuRows,
+  normalizeGroupRows,
+  FIXED_GROUP_IDS,
+  isFixedDestination,
+  type MenuGroupLayout,
   type MenuLayout,
 } from "@/features/owner/menu-layout";
 
@@ -43,6 +49,8 @@ export type HubDest = {
   tool?: boolean;
   /** 설명 줄 안에서의 묶음 제목(설정처럼 목적지가 많은 허브에서만). */
   section?: string;
+  /** 검색은 개명 전 이름으로도 찾을 수 있다. */
+  originalLabel?: string;
 };
 
 export type HubGroup = {
@@ -58,6 +66,7 @@ export type HubGroup = {
    */
   kind: "direct" | "hub";
   items: HubDest[];
+  hidden?: boolean;
 };
 
 /** NAV_GROUPS의 정의를 그대로 쓰되 설명만 더한다. 정의가 사라지면 그 목적지도 사라진다(조용한 죽은 링크 방지). */
@@ -293,6 +302,7 @@ type Gate = {
    * 비면(기본) 지금과 글자 그대로 같다 — 전부 표시·코드 순서. 규약 = [`menu-layout.ts`](@/features/owner/menu-layout).
    */
   menuLayout?: MenuLayout;
+  groupLayout?: MenuGroupLayout;
   /** 새 학원(일반판)인가 — `genericOnly` 목적지('기능' 면)의 노출. 모르면 false(침산처럼). */
   isGenericTenant?: boolean;
 };
@@ -312,12 +322,55 @@ function allowed(dest: HubDest, gate: Gate): boolean {
  * 업무군 **안**의 순서는 학원 설정을 따른다(`menuLayout`) — 저장값이 없으면 코드 순서 그대로.
  */
 export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
-  return groups
+  return configuredHubGroups(groups, gate.menuLayout, gate.groupLayout)
+    .filter((g) => !g.hidden)
     .map((g) => ({
       ...g,
       items: sortByMenuLayout(g.items.filter((d) => allowed(d, gate)), gate.menuLayout),
     }))
     .filter((g) => g.items.length > 0);
+}
+
+/** 모든 표면이 공유하는 배치 해석. 외부 입력으로 목적지/권한을 만들지 않는다. */
+export function configuredHubGroups(groups: readonly HubGroup[], menus?: MenuLayout, layout?: MenuGroupLayout, includeCustomGroups = groups.some((g) => g.id === "dashboard")): HubGroup[] {
+  const rows = normalizeMenuRows(menus);
+  const groupRows = normalizeGroupRows(layout);
+  const overrides = new Map(groupRows.map((r) => [r.id, r]));
+  const definitions = [...groups];
+  // 새 탭은 업무 영역에만 더한다. 지원 목록만 해석하는 호출에는 더하지 않는다.
+  if (includeCustomGroups) {
+    for (const row of groupRows) {
+      if (!definitions.some((g) => g.id === row.id) && row.id.startsWith("custom-") && row.label) {
+        definitions.push({ id: row.id, label: row.label, icon: row.icon ?? "folder", kind: "hub", items: [] });
+      }
+    }
+  }
+  const result = definitions.map((g) => {
+    const row = overrides.get(g.id);
+    return { ...g, label: row?.label ?? g.label, icon: row?.icon ?? g.icon,
+      ...(row?.label ? { note: undefined } : {}), hidden: row?.hidden, items: [] as HubDest[] };
+  });
+  const byId = new Map(result.map((g) => [g.id, g]));
+  for (const originalGroup of groups) for (const item of originalGroup.items) {
+    const row = rows.find((r) => r.href === item.href);
+    const target = !isFixedDestination(item.href) && row?.groupId && byId.has(row.groupId) && !FIXED_GROUP_IDS.has(row.groupId)
+      ? byId.get(row.groupId)! : byId.get(originalGroup.id)!;
+    const customized = applyMenuPresentation(item, rows);
+    // 명시적 재배치는 사용자가 지정한 목록 순서를 그대로 그린다(도구/범주 재분류 방지).
+    target.items.push({ ...customized, originalLabel: item.label,
+      ...(row?.groupId ? { tool: false, section: undefined } : {}) });
+  }
+  return result.map((g) => ({ ...g,
+    kind: g.kind === "direct" && (g.items.length !== 1 || g.items[0]?.href !== definitions.find((d) => d.id === g.id)?.items[0]?.href) ? "hub" as const : g.kind,
+    items: sortByMenuLayout(g.items, rows),
+  })).sort((a, b) => {
+    if (a.id === "dashboard") return -1;
+    if (b.id === "dashboard") return 1;
+    // 지원 고정 항목은 항상 아래에 남는다.
+    const supportRank = (id: string) => id === "support" ? 1 : id === "owner" ? 2 : id === "help" && overrides.get(id)?.order === undefined ? 3 : 0;
+    if (supportRank(a.id) !== supportRank(b.id)) return supportRank(a.id) - supportRank(b.id);
+    return (overrides.get(a.id)?.order ?? 199) - (overrides.get(b.id)?.order ?? 199);
+  });
 }
 
 /**
@@ -326,7 +379,11 @@ export function hubGroupsFor(groups: HubGroup[], gate: Gate): HubGroup[] {
  */
 export function frequentFor(gate: Gate, keys?: readonly MenuKey[]): HubDest[] {
   const source = keys && keys.length > 0 ? keys : DEFAULT_FREQUENT_KEYS;
-  return keep(source.map((k) => fromMenu(k)))
+  const configured = configuredHubGroups([...HUB_GROUPS, ...SUPPORT_GROUPS], gate.menuLayout, gate.groupLayout).filter((g) => !g.hidden).flatMap((g) => g.items);
+  return keep(source.map((k) => {
+    const original = fromMenu(k);
+    return original ? configured.find((d) => d.href === original.href) ?? null : null;
+  }))
     .filter((d) => allowed(d, gate))
     // 🔴 **메뉴에서 감춘 항목은 여기에도 안 뜬다** — 감추기 전에 쌓인 방문 기록이 남아 있어서,
     //    이 줄이 없으면 사이드바에서 뺀 메뉴가 '자주 방문한 메뉴'로 되살아난다(캘린더가 그랬다,
@@ -349,27 +406,30 @@ export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
   const item = navItemByKey(dest.menuKey);
   const own = item && item.href === dest.href ? menuSearchKeywords(item, groupLabel) : "";
   // 면은 제 라벨 + 업무군 + 부모 권한키로 찾는다(부모 라벨은 own이 있을 때만 실린다).
-  return `${dest.label} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();
+  return `${dest.label} ${dest.originalLabel ?? ""} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();
 }
-
-const routePath = (href: string): string => href.split(/[?#]/, 1)[0] ?? href;
 
 /**
  * 지금 보고 있는 주소가 속한 업무군 — 사이드바의 현재 위치 표시와 '← …으로 돌아가기'에 쓴다.
  * 접두가 겹치면 **더 긴 경로**가 이긴다(`/attendance` ⊂ `/attendance/live`, 사이드바 하부탭과 같은 규약).
  */
 export function hubGroupOfPath(pathname: string, groups: HubGroup[] = [...HUB_GROUPS, ...SUPPORT_GROUPS]): HubGroup | undefined {
-  const path = routePath(pathname);
-  let best: HubGroup | undefined;
-  let bestLen = -1;
-  for (const g of groups) {
-    for (const d of g.items) {
-      const p = routePath(d.href);
-      if ((path === p || path.startsWith(`${p}/`)) && p.length > bestLen) {
-        best = g;
-        bestLen = p.length;
-      }
-    }
+  const dest = hubDestinationForPath(pathname, groups.flatMap((g) => g.items));
+  return dest ? groups.find((g) => g.items.includes(dest)) : undefined;
+}
+
+/** query 면은 더 구체적인 목적지가 이긴다. embed·날짜·필터는 목적지 정체성을 바꾸지 않는다. */
+export function hubDestinationForPath(href: string, items: readonly HubDest[] = [...HUB_GROUPS, ...SUPPORT_GROUPS].flatMap((g) => g.items)): HubDest | undefined {
+  let url: URL;
+  try { url = new URL(href, "https://navigation.invalid"); } catch { return undefined; }
+  let best: HubDest | undefined;
+  let score = -1;
+  for (const item of items) {
+    const candidate = new URL(item.href, url.origin);
+    if (url.pathname !== candidate.pathname && !url.pathname.startsWith(`${candidate.pathname}/`)) continue;
+    if ([...candidate.searchParams].some(([k, v]) => url.searchParams.get(k) !== v)) continue;
+    const next = candidate.pathname.length * 100 + candidate.searchParams.size;
+    if (next > score) { best = item; score = next; }
   }
   return best;
 }

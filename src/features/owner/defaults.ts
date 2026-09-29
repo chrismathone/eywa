@@ -239,6 +239,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
     showTrendGraph: true, // 성적 추이 그래프(시험·과제) 기본 표시 — 데이터 2점 미만이면 자동 숨김
     showAttachments: true,
     allowTeacherTestMax: false, // 기본: 강사는 과목 설정값(문항수) 고정 사용. 켜면 원스크린에서 /N 직접 변경 가능.
+    videoHomeworkPolicy: { enabled: true, disabledSubjectKeys: [], disabledSchoolLevels: [], disabledClassIds: [] },
     writingExemptTeachers: [], // 작성률 예외 강사(빈=전원 집계) — 강사별 작성률 표에서 제외할 표시 이름.
     noticeMode: "A", // 기본: 단일 문단 멘트. B=수업내용+태도·특이사항 2문단 분리(0093a).
     classnoteSendEnabled: false, // 기본 OFF(dry-run) — 원장 승인 전까지 실제 발송 안 함(오발송 안전장치).
@@ -255,7 +256,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   // 사이드바 표시도 sparse(빈 배열) — **비면 지금과 글자 그대로 같다**(전부 표시·코드 순서).
   // 기본 목록을 여기 복제하지 말 것: 복제하면 메뉴를 새로 만들 때마다 두 곳을 고쳐야 하고,
   // 한쪽을 잊으면 새 메뉴가 조용히 안 보인다(이 기능이 애초에 풀려던 문제 그 자체).
-  navigation: { menus: [], teacherMenus: [] },
+  navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },
   // 기능 켜기·끄기도 sparse — 침산 프리셋은 **아무것도 끄지 않는다**(오늘과 같다). 일반판은 generic-defaults.ts.
   modules: { disabled: [] },
 };

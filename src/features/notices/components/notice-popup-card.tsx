@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useSheetT } from "@/features/teacher-view/lang-context";
 import { X } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
+import { MenuMentionText } from "@/components/menu-mention-text";
 import type { DismissMode } from "../dismiss";
 import { dismissNoticePopup, undismissNoticePopup } from "../server/dismiss-actions";
 import type { ActivePopup } from "../server/queries";
@@ -150,7 +151,7 @@ export function NoticePopupCard({ popup }: { popup: ActivePopup }) {
             )
           ) : null}
           {popup.body ? (
-            <p className="text-text-dim px-4 py-3 text-sm whitespace-pre-wrap">{popup.body}</p>
+            <p className="text-text-dim px-4 py-3 text-sm whitespace-pre-wrap"><MenuMentionText text={popup.body} onNavigate={close} /></p>
           ) : null}
           {popup.linkUrl ? (
             <div className="px-4 pb-3">

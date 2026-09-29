@@ -17,6 +17,7 @@ const ENABLED = process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC
 
 export function UsageTracker() {
   const pathname = usePathname();
+  // 화면 이름·폴더가 아닌 실제 주소만 계측한다. 관리자뷰/강사뷰 커스텀 이름이 달라도 같은 기능으로 집계.
   const searchParams = useSearchParams();
   const route = routeKeyOf(pathname ?? "/", searchParams);
   const initialRoute = useRef(route);

@@ -15,9 +15,11 @@
  *  · 최대 `MAX_CHANGES`개까지만 담고 나머지는 `others`로 — metadata가 무한정 커지지 않게.
  */
 import { MENU_LABEL } from "@/lib/permissions";
+import { TEACHER_NAV_GROUPS } from "@/lib/teacher-navigation";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { MODULES } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
+import { HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
 
 export type SettingChange = { label: string; from?: string; to?: string; note?: string };
 export type SettingsDiff = { changes: SettingChange[]; others: number };
@@ -81,10 +83,11 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     templates: "상담 양식",
   },
   navigation: {
-    // 줄마다 목적지 주소(href)라 이름이 없다 → diffArray가 "N개 → M개"까지만 남긴다.
-    // 주소를 감사로그에 그대로 싣지 않는 건 의도 — 화면에 raw 경로를 내보내지 않는다.
-    menus: "관리자뷰 메뉴 표시·순서",
+    // 기본 메뉴 표로 이름을 복원한다. 주소·그룹 식별자를 감사로그 표시 문구에 그대로 싣지 않는다.
+    menus: "관리자뷰 메뉴 구성",
+    groups: "관리자뷰 탭 구성",
     teacherMenus: "강사뷰 메뉴 표시·순서",
+    teacherGroups: "강사뷰 탭 구성",
   },
   modules: {
     // 끈 모듈 id 목록 — 아래 diffModules가 한국어 기능 이름으로 "켬/끔"을 적는다(영문 id를 싣지 않는다).
@@ -141,6 +144,30 @@ function diffArray(label: string, before: unknown[], after: unknown[]): SettingC
     to: `${after.length}개`,
     ...(parts.length ? { note: parts.join(" · ") } : {}),
   };
+}
+
+/** 탭/메뉴의 변경은 주소·UUID 대신 변경 전후 이름과 바뀐 속성으로 남긴다. */
+function diffNavigation(label: string, before: unknown[], after: unknown[], group: boolean, teacher = false): SettingChange {
+  const groups = teacher ? TEACHER_NAV_GROUPS : [...HUB_GROUPS, ...SUPPORT_GROUPS];
+  const key = group ? "id" : "href";
+  const b = new Map(before.filter(isObj).map((r) => [r[key], r]));
+  const a = new Map(after.filter(isObj).map((r) => [r[key], r]));
+  const notes: string[] = [];
+  for (const id of new Set([...b.keys(), ...a.keys()])) {
+    const prev = b.get(id); const next = a.get(id);
+    if (JSON.stringify(prev) === JSON.stringify(next)) continue;
+    const original = group ? groups.find((g) => g.id === id)?.label : groups.flatMap((g) => g.items).find((d) => d.href === id)?.label;
+    const name = next?.label ?? prev?.label ?? original;
+    if (typeof name !== "string") continue;
+    const changes: string[] = [];
+    if (prev?.label !== next?.label) changes.push(`이름 ${showValue(prev?.label ?? original)} → ${showValue(next?.label ?? original)}`);
+    if (prev?.icon !== next?.icon) changes.push("아이콘 변경");
+    if (prev?.groupId !== next?.groupId) changes.push("소속 탭 변경");
+    if (prev?.order !== next?.order) changes.push("순서 변경");
+    if (prev?.hidden !== next?.hidden) changes.push(next?.hidden ? "숨김" : "표시");
+    notes.push(`${name}: ${changes.join(", ") || (next ? "추가" : "기본 구성 복원")}`);
+  }
+  return { label, note: notes.length ? notes.slice(0, 5).join(" · ") + (notes.length > 5 ? ` 외 ${notes.length - 5}개` : "") : "내용 변경" };
 }
 
 /**
@@ -263,7 +290,7 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
     const a = after[key];
     // 강사뷰 구성(2026-09-22)은 옛 행에 키 자체가 없다 — 없음을 빈 목록으로 읽는다. 관리자뷰만 고쳐 저장해 빈 목록이
     // 처음 실리는 것은 변경이 아니고(아래 비교에서 같음), 처음 정하면 "없음 → 변경됨"이 아니라 "0개 → N개"로 적힌다.
-    const b = before[key] === undefined && section === "navigation" && key === "teacherMenus" ? [] : before[key];
+    const b = before[key] === undefined && section === "navigation" && (key === "teacherMenus" || key === "groups" || key === "teacherGroups") ? [] : before[key];
     if (JSON.stringify(b) === JSON.stringify(a)) continue;
     // 이 작업(2026-09-22 일반판 분리)이 새로 만든 칸이 **처음 저장되며 기본값 그대로** 실리는 것은 변경이 아니다 —
     // 침산이 운영 체계를 저장할 때마다 감사로그에 "외 1건"이 붙으면 침산 기록에 흔적이 남는다(원장: 아무 일도 없던 것처럼).
@@ -274,6 +301,14 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
       continue;
     }
     if (Array.isArray(a) && Array.isArray(b)) {
+      if (section === "navigation" && (key === "teacherGroups" || (key === "teacherMenus" && [...a, ...b].some((r) => isObj(r) && (r.label || r.icon || r.groupId))))) {
+        changes.push(diffNavigation(key === "teacherGroups" ? label : "강사뷰 메뉴 구성", b, a, key === "teacherGroups", true));
+        continue;
+      }
+      if (section === "navigation" && (key === "menus" || key === "groups")) {
+        changes.push(diffNavigation(label, b, a, key === "groups"));
+        continue;
+      }
       if (section === "modules" && key === "disabled") {
         changes.push(diffModules(label, b, a));
         continue;

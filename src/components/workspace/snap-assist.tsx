@@ -1,5 +1,7 @@
 "use client";
 
+import { useWindowPresentation } from "@/features/owner/navigation-context";
+
 import { useEffect } from "react";
 import { X } from "@/components/icons/aywa-icon-compat";
 import { useWindowStore } from "./window-store";
@@ -43,6 +45,9 @@ const LABEL: Record<LayoutTemplate, string> = {
 export function SnapAssist() {
   const assist = useWindowStore((s) => s.snapAssist);
   const windows = useWindowStore((s) => s.windows);
+  const nav = useWindowStore((s) => s.nav);
+  const live = useWindowStore((s) => s.live);
+  const present = useWindowPresentation();
   const order = useWindowStore((s) => s.order);
   const bounds = useWindowStore((s) => s.bounds);
   const applyLayout = useWindowStore((s) => s.applyLayout);
@@ -117,7 +122,7 @@ export function SnapAssist() {
                   >
                     {s.anchor ? (
                       <span className="text-primary max-w-full truncate px-0.5 text-xs leading-none font-bold">
-                        {anchor.params.title}
+                        {present(anchor, nav[anchor.id]?.at(-1), live[anchor.id]?.title).title}
                       </span>
                     ) : null}
                   </div>

@@ -54,6 +54,7 @@ export function toUsageRows(items: readonly UsageItem[]): UsageRow[] {
     } else {
       byRoute.set(it.route, {
         route_key: it.route,
+        // 클라이언트의 이름/폴더/메뉴 키는 받지 않는다. 서버가 기본 주소 표에서 분류를 결정한다.
         menu_key: menuKeyOfRoute(it.route),
         visits: it.visits,
         open_seconds: it.openSec,

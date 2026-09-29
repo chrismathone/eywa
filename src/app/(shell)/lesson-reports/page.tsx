@@ -1,7 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageHeader } from "@/components/page-header";
-import { FaceTabs, type Face } from "@/components/face-tabs";
+import { FaceTabs } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getBoardRosterCheck } from "@/features/report-admin/server/board-roster-queries";
 import { listReports } from "@/features/report-admin/server/actions";
@@ -25,6 +25,9 @@ import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 import { isModuleEnabled } from "@/lib/modules";
 import { isFeatureLicensed } from "@/lib/license/server";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { getVideoHomeworkClassOptions } from "@/features/video-homework/server/queries";
+import { redirect } from "next/navigation";
+import { isClassnoteReportTab, lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — 에이와" };
@@ -37,22 +40,20 @@ export const metadata = { title: "수업보고서 — 에이와" };
 export const maxDuration = 300;
 
 type Sp = Record<string, string | undefined>;
-// 관리 5면(작성률·반 구성·목록·공지·직접발송) + 설정 2면(보고서 표시·AI 멘트, owner 쓰기 권한 있을 때만).
+// 관리 면(영상 제출 현황·ClassNote 발송 큐·작성률·반 구성·목록·공지·직접발송) + 설정 면.
 // (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)
-type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "report" | "ai_ment";
+type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "queue" | "report" | "ai_ment";
 
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
 // 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
 // ClassNote 발송 PC에 기대는 면 — ClassNote 모듈이 꺼진 학원(새 학원 기본)에선 세우지 않는다(2026-09-22 방향 B).
-const CLASSNOTE_TABS: ReadonlySet<Tab> = new Set<Tab>(["boards", "notice", "compose", "recall"]);
-
 function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean): Tab {
   const t = sp.tab;
-  if (!classnoteOn && t && CLASSNOTE_TABS.has(t as Tab)) return "writing";
+  if (!classnoteOn && t && isClassnoteReportTab(t)) return "writing";
   // AI 라이선스가 꺼진 지점엔 'AI 멘트' 면이 없다(2026-09-30 "꺼지면 흔적 없이").
   if (!aiOn && t === "ai_ment") return "writing";
-  if (t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
+  if (t === "list" || t === "writing" || t === "notice" || t === "boards" || t === "queue") return t;
   // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
   // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
   if ((t === "compose" || t === "recall") && canSend) return t;
@@ -61,7 +62,7 @@ function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: bo
 }
 
 /**
- * 수업보고서(발송 관리) — ClassNote 큐는 관리 탭 상단 고정, 작성률·반 구성·목록은 내부 FaceTabs(스크롤 단축).
+ * 수업보고서(발송 관리) — ClassNote 큐는 독립 탭, 작성률·반 구성·목록은 내부 FaceTabs로 이동.
  * 보고서 표시·AI 멘트 설정(옛 학원설정 두 탭)은 뒤에 붙여 5탭 — owner 쓰기 권한이 있을 때만. 강사 작성은 /onescreen.
  * 활성 탭만 무거운 조회(서버 렌더).
  */
@@ -72,38 +73,21 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     canWriteTenant(viewer.systemRole, "lesson_reports"), // 목록 탭 관리자 발송 열 노출(viewer는 열람만)
   ]);
   const sp = await searchParams;
+  if (sp.tab === "video_homework") redirect("/lesson-reports/video-homework");
   // ClassNote 모듈 — 꺼진 학원은 발송 콘솔(큐·반 구성·반 공지·직접 발송·회수)을 세우지 않는다. 침산은 켜져 있어 종전과 같다.
   // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
   const [tenantSettings, aiOn] = await Promise.all([getTenantSettings(), isFeatureLicensed(viewer.tenantId, "ai_analysis")]);
   const classnoteOn = isModuleEnabled(tenantSettings.modules.disabled, "classnote");
   const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn, aiOn);
-  const isSettings = tab === "report" || tab === "ai_ment";
 
-  const FACES: Face[] = [
-    { key: "writing", label: "작성률", href: "/lesson-reports?tab=writing", group: "관리" },
-    { key: "boards", label: "반 구성", href: "/lesson-reports?tab=boards", group: "관리" },
-    { key: "list", label: "목록", href: "/lesson-reports?tab=list", group: "관리" },
-    { key: "notice", label: "반 공지", href: "/lesson-reports?tab=notice", group: "관리" },
-    ...(canSendReports
-      ? ([
-          { key: "compose", label: "직접 발송", href: "/lesson-reports?tab=compose", group: "관리" },
-          { key: "recall", label: "회수", href: "/lesson-reports?tab=recall", group: "관리" },
-        ] as Face[])
-      : []),
-  ].filter((f) => classnoteOn || !CLASSNOTE_TABS.has(f.key as Tab));
-  FACES.push(
-    ...(canOwner
-      ? ([
-          { key: "report", label: "보고서 설정", href: "/lesson-reports?tab=report", group: "설정" },
-          ...(aiOn ? [{ key: "ai_ment", label: "AI 멘트", href: "/lesson-reports?tab=ai_ment", group: "설정" }] : []),
-        ] as Face[])
-      : []),
-  );
+  const faces = lessonReportFaces({ canOwner, canSend: canSendReports, classnoteOn, aiOn });
 
-  // 큐는 관리 탭 공통(발송 오버사이트). 설정 탭에선 미표시(부하 0). 나머지는 활성 탭만.
-  const queueP = isSettings || !classnoteOn ? Promise.resolve(null) : getClassnoteQueue(3);
+  // 큐는 독립 탭에서만 조회·폴링한다. 다른 관리 면의 첫 화면을 차지하지 않는다.
+  const queueP = tab === "queue" && classnoteOn ? getClassnoteQueue(3) : Promise.resolve(null);
   const tabP =
-    tab === "writing"
+    tab === "queue"
+      ? Promise.resolve({ rates: null })
+      : tab === "writing"
       ? // 범위 = 기본 이번 주, `?rmonth=YYYY-MM`이면 그 달(월간 매트릭스). 파라미터 하나로 같은 쿼리를 재사용.
         getWeeklyWritingRates(/^\d{4}-\d{2}$/.test(sp.rmonth ?? "") ? sp.rmonth : undefined).then((rates) => ({
           rates,
@@ -111,10 +95,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       : tab === "boards"
           ? getBoardRosterCheck().then((boardRoster) => ({ boardRoster }))
         : tab === "report"
-          ? Promise.all([getTenantSettings(), getReportTeacherCandidates()]).then(([settings, cand]) => ({
+          ? Promise.all([getTenantSettings(), getReportTeacherCandidates(), getVideoHomeworkClassOptions(viewer.tenantId)]).then(([settings, cand, videoClasses]) => ({
               reportSettings: settings.report,
               teachers: cand.bySubject,
               staffNames: cand.staffNames,
+              videoClasses,
             }))
           : tab === "notice"
             ? Promise.all([getNoticeClassOptions(), listClassNotices(), listClassWideNotices()]).then(([cls, notices, wide]) => ({
@@ -173,15 +158,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
         }
       />
 
-      {!isSettings && classnoteOn ? (
-        queue ? (
-          <ClassnoteQueueCard view={queue} />
-        ) : (
-          <p className="text-text-faint text-sm">발송 현황을 불러올 수 없습니다.</p>
-        )
-      ) : null}
+      <FaceTabs faces={faces} active={tab} ariaLabel="수업보고서 면" />
 
-      <FaceTabs faces={FACES} active={tab} ariaLabel="수업보고서 면" />
+      {tab === "queue" ? (
+        queue ? <ClassnoteQueueCard view={queue} /> :
+          <p className="text-text-faint text-sm">발송 현황을 불러올 수 없습니다.</p>
+      ) : null}
 
       {tab === "writing" ? (
         "rates" in tabData && tabData.rates ? (
@@ -241,12 +223,8 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "report" && "reportSettings" in tabData ? (
-        <ReportSection
-          initial={tabData.reportSettings}
-          teachers={tabData.teachers}
-          staffNames={tabData.staffNames}
-          classnoteOn={classnoteOn}
-        />
+        <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers}
+          staffNames={tabData.staffNames} videoClasses={tabData.videoClasses} classnoteOn={classnoteOn} />
       ) : null}
 
       {tab === "ai_ment" && "aiPrompts" in tabData ? (

@@ -133,6 +133,19 @@ describe("침산 불변 — 저장 행이 있는 학원은 오늘과 같다", ()
   });
 });
 
+describe("보고서 설정의 영상 제출 대상", () => {
+  it("배포 전에 연 설정 폼이 새 칸 없이 저장해도 기존 제외 대상을 보존한다", () => {
+    const policy = { enabled: true, disabledSubjectKeys: ["english"],
+      disabledSchoolLevels: ["high"], disabledClassIds: ["11111111-1111-4111-8111-111111111111"] };
+    const stored = { ...DEFAULT_SETTINGS.report, videoHomeworkPolicy: policy };
+    const oldForm = { ...DEFAULT_SETTINGS.report } as Record<string, unknown>;
+    delete oldForm.videoHomeworkPolicy;
+    const parsed = { ...oldForm, videoHomeworkPolicy: DEFAULT_SETTINGS.report.videoHomeworkPolicy };
+    const saved = prepareSectionForSave("chinsan", "report", oldForm, parsed, stored) as Record<string, unknown>;
+    expect(saved.videoHomeworkPolicy).toEqual(policy);
+  });
+});
+
 describe("일반판 — 새로 연 학원", () => {
   // 학원 추가가 만드는 행 그대로
   const g = resolveSettings({ version: 1, preset: "generic" }, { name: "새학원" });
