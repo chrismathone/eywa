@@ -224,9 +224,15 @@ export async function processRecallsOnce(sql, browser, opts) {
       // 반 보드 자리(0302a) — 반별 발송분이 거기 있다. 매칭 기록의 원아 전부(보류 포함 — 지울 글을 찾는 쪽이라 넓게).
       // 표가 없으면(SQL 미적용) 반별 발송도 없었으니 null.
       let classLoc = null;
-      if (r.class_id) {
+      // 반 정보 없는 보강은 'ClassNote로 보낼 반'(0303a)으로 나갔다 — 칸이 없으면(SQL 전) 조회가 실패해 null.
+      const locClassId =
+        r.class_id ??
+        (await sql`select classnote_class_id from lesson_reports where id = ${r.id}`
+          .then((x) => x[0]?.classnote_class_id ?? null)
+          .catch(() => null));
+      if (locClassId) {
         const rows = await sql`select m.board_id, m.child_id from classnote_class_board_members m
-          where m.tenant_id = ${tenant} and m.class_id = ${r.class_id} and m.student_id = ${r.student_id} and m.child_id is not null`
+          where m.tenant_id = ${tenant} and m.class_id = ${locClassId} and m.student_id = ${r.student_id} and m.child_id is not null`
           .catch(() => []);
         if (rows.length) classLoc = { boardId: Number(rows[0].board_id), childIds: [...new Set(rows.map((x) => Number(x.child_id)))] };
       }

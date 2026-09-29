@@ -88,18 +88,33 @@ export function cnLabelFor(
 }
 
 /** 마우스오버 카드 재료(hover-tip `TipCard` 모양). */
-export function cnTipCard(label: { ok: boolean; match: CnMatch | null }, className: string | null | undefined) {
+/** 카드 문구 — 강사뷰 화면 언어(사전 `os.cn.*`)를 호출부가 넘긴다. 기본값은 한국어(테스트·서버용). */
+export type CnTipLabels = { title: string; ok: string; fail: string; cls: string; board: string; child: string; none: string };
+export const CN_TIP_KO: CnTipLabels = {
+  title: "ClassNote 반 매칭",
+  ok: "매칭됨",
+  fail: "매칭 실패",
+  cls: "반",
+  board: "반 보드",
+  child: "원아",
+  none: "이 반의 ClassNote 반 보드 연결 기록이 없습니다 — 다음 동기화 뒤에도 그대로면 관리자에게 알려 주세요",
+};
+
+export function cnTipCard(
+  label: { ok: boolean; match: CnMatch | null },
+  className: string | null | undefined,
+  L: CnTipLabels = CN_TIP_KO,
+) {
   const m = label.match;
   return {
-    title: "ClassNote 반 매칭",
-    meta: label.ok ? "매칭됨" : "매칭 실패",
+    title: L.title,
+    meta: label.ok ? L.ok : L.fail,
     rows: [
-      ["반", className ?? ""] as const,
-      ["반 보드", m?.boardName ?? ""] as const,
-      ["원아", m?.childNames.join(", ") ?? ""] as const,
+      [L.cls, className ?? ""] as const,
+      [L.board, m?.boardName ?? ""] as const,
+      [L.child, m?.childNames.join(", ") ?? ""] as const,
     ],
-    lines: m
-      ? m.reasons
-      : ["이 반의 ClassNote 반 보드 연결 기록이 없습니다 — 다음 동기화 뒤에도 그대로면 관리자에게 알려 주세요"],
+    // 사유 문장은 연동 PC가 적은 데이터(한국어) — 사전 밖.
+    lines: m ? m.reasons : [L.none],
   };
 }

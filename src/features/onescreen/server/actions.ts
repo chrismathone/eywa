@@ -63,6 +63,8 @@ import { mentStyleDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
+import { classRouteAppliesTo, needsSendClass } from "../send-class";
+import { resolveSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError } from "@/lib/supabase/db-error";
@@ -108,6 +110,11 @@ export type SaveLessonReportInput = {
    * 응시가 이 학생 것인지는 서버가 다시 확인한다(ijw/server/report-snapshot.ts).
    */
   jjExamPick?: string[] | null;
+  /**
+   * 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'(0303a) — 반별 발송 대상일 때 화면이 고른 반.
+   * 없으면 서버가 메인 수업을 정한다(send-class). 서버가 후보 안에 있는지 다시 확인한다.
+   */
+  classnoteClassId?: string | null;
 };
 
 /**
@@ -398,6 +405,8 @@ export async function saveAndQueueClassnote(
   sendWindowHint?: string;
   /** 저장 단계의 알림(영어 그림 자료를 못 묶음 — saveLessonReport `warning` 그대로). */
   warning?: string;
+  /** status="needs_class"일 때 — 고를 수 있는 반(반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'). */
+  candidates?: { id: string; name: string }[];
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -627,6 +636,66 @@ export async function saveAndQueueClassnote(
       })
       .eq("id", saved.id);
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict", ...warn };
+  }
+
+  // 반별 발송(보고서 설정 '수학 발송 경로') 대상인데 반이 없는 보강 보고서 — 'ClassNote로 보낼 반'을 정한다(A안, 0303a).
+  // 메인 수업을 정할 수 있으면 그 반, 못 정하면 **발송을 멈추고 후보를 돌려준다**(화면이 고르게 한다 — 원장
+  // *"보낼 곳이 없으면 '선택'"*). 후보가 아예 없으면(반 보드 대상 반이 없음) 멈추지 않는다 — 워커가 기존 1인 보드로 보낸다.
+  if (
+    needsSendClass(
+      { subject: input.subject, classId: input.classId },
+      classRouteAppliesTo(settings.report, user.displayName),
+    )
+  ) {
+    const unqueue = async () => {
+      if (prior?.classnote_status === "queued")
+        await supabase
+          .from("lesson_reports")
+          .update({ classnote_status: null, classnote_queued_at: null })
+          .eq("id", saved.id)
+          .eq("classnote_status", "queued");
+    };
+    let pick: Awaited<ReturnType<typeof resolveSendClass>>;
+    try {
+      pick = await resolveSendClass(user.tenantId, input.studentId, reportDate, input.classnoteClassId ?? null);
+    } catch {
+      await unqueue();
+      return {
+        ok: false,
+        id: saved.id,
+        shareToken: saved.shareToken,
+        error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",
+        ...warn,
+      };
+    }
+    if (!pick.ok && pick.reason === "choose") {
+      await unqueue();
+      return {
+        ok: false,
+        id: saved.id,
+        shareToken: saved.shareToken,
+        status: "needs_class",
+        candidates: pick.candidates,
+        error: "보낼 반을 골라 주세요 — 저장은 됐습니다",
+        ...warn,
+      };
+    }
+    if (pick.ok) {
+      const { error: scErr } = await supabase
+        .from("lesson_reports")
+        .update({ classnote_class_id: pick.classId })
+        .eq("id", saved.id);
+      if (scErr) {
+        await unqueue();
+        return {
+          ok: false,
+          id: saved.id,
+          shareToken: saved.shareToken,
+          error: "보낼 반을 저장하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 관리자에게 알려 주세요",
+          ...warn,
+        };
+      }
+    }
   }
 
   // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.

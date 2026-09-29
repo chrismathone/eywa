@@ -216,6 +216,7 @@ import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
 import { computeClientMentSource } from "../ment-source";
 import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
+import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
 
 /** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
 const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
@@ -449,6 +450,10 @@ export function OneScreenClient({
    * `mk`는 '추가'를 누른 시점의 조립 결과(반 필터 앵커 포함)라 그대로 들고 있다가 '분리'에 쓴다.
    */
   const [makeupSaving, setMakeupSaving] = useState(false);
+  // 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반' 고르기(A안) — 서버가 메인 수업을 못 정했을 때만 뜬다.
+  const [sendClassAsk, setSendClassAsk] = useState<SendClassAsk | null>(null);
+  const askSendClass = (studentName: string, candidates: { id: string; name: string }[]) =>
+    new Promise<string | null>((resolve) => setSendClassAsk({ studentName, candidates, resolve }));
   const [makeupAsk, setMakeupAsk] = useState<{
     studentId: string;
     studentName: string;
@@ -3205,7 +3210,12 @@ export function OneScreenClient({
     if (readonlyView) return { ok: false, error: READONLY_TEACHER_VIEW_ERROR };
     const waited = await refreshJjBeforeOutput(student, subjectName);
     const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
-    const res = await saveAndQueueClassnote(built.input);
+    let res = await saveAndQueueClassnote(built.input);
+    // 반별 발송인데 보강 보고서의 보낼 반을 서버가 못 정했다 — 강사가 고르면 그 반으로 다시 보낸다(저장은 이미 끝났다).
+    if (res.status === "needs_class" && res.candidates?.length) {
+      const picked = await askSendClass(student.name, res.candidates);
+      if (picked) res = await saveAndQueueClassnote({ ...built.input, classnoteClassId: picked });
+    }
     if (res.ok) {
       // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
       //    그중 `already_sent`를 그대로 배지 state에 넣으면 "success가 아니게" 되어 발송 가드가 스스로 풀린다
@@ -3993,6 +4003,7 @@ export function OneScreenClient({
     //    아래 3열이 남은 높이를 통째로 가져간 뒤 **열마다 따로** 스크롤한다(출석부 '한 화면 시트'와 같은 배치).
     //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
     <div className="flex h-full min-h-0 flex-col gap-4">
+      {sendClassAsk ? <SendClassDialog ask={sendClassAsk} onClose={() => setSendClassAsk(null)} /> : null}
       <OneScreenTopBar
         readonlyView={readonlyView}
         today={today}

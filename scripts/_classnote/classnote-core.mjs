@@ -423,6 +423,25 @@ async function hasDeadlineExemptColumn(sql) {
   return exemptColumn.present;
 }
 
+/**
+ * 'ClassNote로 보낼 반'(0303a `lesson_reports.classnote_class_id`) — 반 정보 없는 보강 보고서의 반별 발송 대상 반.
+ * 위 기한 예외 칸과 같은 방식으로 **칸이 있을 때만** 읽는다(zip이 SQL보다 먼저 가도 발송이 안 멈추게, [[#95]]).
+ */
+let sendClassColumn = { present: false, checkedAt: 0 };
+async function hasSendClassColumn(sql) {
+  if (sendClassColumn.present) return true;
+  if (Date.now() - sendClassColumn.checkedAt < EXEMPT_RECHECK_MS) return false;
+  try {
+    const rows = await sql`select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'lesson_reports'
+        and column_name = 'classnote_class_id' limit 1`;
+    sendClassColumn = { present: rows.length > 0, checkedAt: Date.now() };
+  } catch {
+    sendClassColumn = { present: false, checkedAt: Date.now() };
+  }
+  return sendClassColumn.present;
+}
+
 export async function processQueueOnce(sql, browser, opts) {
   const {
     tenant,
@@ -483,6 +502,7 @@ export async function processQueueOnce(sql, browser, opts) {
 
   // 2) 원자 클레임: queued → processing (FOR UPDATE SKIP LOCKED, tenant 격리)
   //    7일 창 밖은 원장이 지정한 예외 행만(위 hasDeadlineExemptColumn 주석).
+  const sendClassSel = (await hasSendClassColumn(sql)) ? sql`, lr.classnote_class_id` : sql``;
   const exemptClause = (await hasDeadlineExemptColumn(sql))
     ? sql`or classnote_deadline_exempt_at is not null`
     : sql``;
@@ -496,11 +516,14 @@ export async function processQueueOnce(sql, browser, opts) {
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes, lr.class_id`
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes, lr.class_id ${sendClassSel}`
     .catch((e) => {
       // 컬럼이 사라졌으면(0276a 되돌림 — 42703 undefined_column) 기억을 지워 다음 폴부터 예외 절 없이 돈다.
       // 안 지우면 "있다"는 기억 때문에 매 폴 같은 오류로 발송 전체가 멈춘다.
-      if (e?.code === "42703") exemptColumn = { present: false, checkedAt: 0 };
+      if (e?.code === "42703") {
+        exemptColumn = { present: false, checkedAt: 0 };
+        sendClassColumn = { present: false, checkedAt: 0 };
+      }
       throw e;
     });
   const summary = { stale: stale.length, claimed: claimed.length, success: 0, failed: 0, requeued: 0, blocked: 0 };
@@ -620,16 +643,22 @@ export async function processQueueOnce(sql, browser, opts) {
     const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
     let boardId = null; // Phase 2 내부 API 경로용 — 보드안전 게이트 통과 시 verdict.boardId
     // 수학 발송 경로(보고서 설정, 2026-09-29) — personal = 위 1인 보드 · class = 반 보드(0302a 매칭 원아에게 1:1).
-    // needs_class(반 정보 없는 보강 등) = 반을 추측하지 않는다. 원스크린에서 보낼 반을 고르는 화면(A안)이 생기기
-    // 전까지는 **기존 1인 보드**로 보낸다(학부모에게는 지금처럼 간다 — class-route-decide.mjs 주석).
+    // needs_class(반 정보 없는 보강) = 반을 추측하지 않는다 — 원스크린 발송이 정한 'ClassNote로 보낼 반'(0303a,
+    // 메인 수업 또는 강사가 고른 반)이 있으면 그 반 보드로, 없으면(관리자 재발송 등 그 단계를 안 지난 경로) 기존 1인 보드로.
     let route = post ? decideRoute(routeCfg, r) : "personal";
+    let routeClassId = r.class_id ?? null;
     if (route === "needs_class") {
-      log(`  · ${studentName}: 반 정보 없는 보고서 — 반별 대상 반을 정할 수 없어 기존 1인 보드로`);
-      route = "personal";
+      if (r.classnote_class_id) {
+        route = "class";
+        routeClassId = r.classnote_class_id;
+      } else {
+        log(`  · ${studentName}: 반 정보 없는 보고서 — 보낼 반이 정해지지 않아 기존 1인 보드로`);
+        route = "personal";
+      }
     }
     // 특강·종강·미발송 반은 반 보드를 만들지 않았다(대상 기준 = isClassRouteEligible) → 기존 1인 보드로.
     // 조회 실패는 아래 대상 확정에서 다시 드러나므로 여기선 반별로 둔다(조용히 1인 보드로 새지 않게).
-    if (route === "class" && !(await isClassRouteEligible(sql, tenant, r.class_id).catch(() => true))) {
+    if (route === "class" && !(await isClassRouteEligible(sql, tenant, routeClassId).catch(() => true))) {
       log(`  · ${studentName}: 반 보드 대상이 아닌 반(특강·종강 등) — 기존 1인 보드로`);
       route = "personal";
     }
@@ -653,7 +682,7 @@ export async function processQueueOnce(sql, browser, opts) {
       }
       let ct;
       try {
-        ct = await resolveClassTargets(sql, adminPage, { tenant, centerId, classId: r.class_id, studentId: r.student_id });
+        ct = await resolveClassTargets(sql, adminPage, { tenant, centerId, classId: routeClassId, studentId: r.student_id });
       } catch (e) {
         // 조회 실패(네트워크·표 없음)는 결정적이지 않다 — 재시도 카운트를 올려 재큐(3회면 failed).
         const msg = e instanceof Error ? e.message : String(e);

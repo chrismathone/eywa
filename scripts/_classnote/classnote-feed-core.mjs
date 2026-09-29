@@ -331,6 +331,24 @@ export async function boardsToStudents(sql, tenant, keys, prefix) {
   return { board, collisions: [...new Set(collisions)] };
 }
 
+/**
+ * 수학 **반 보드**(0302a, 2026-09-29) — `보드명|원아id` → 학생. 반 보드는 여러 가족이 한 보드에 있으므로 보드명만으로는
+ * 학생을 모른다 → **원아 id**로 확정한다(가드를 통과해 ok로 적힌 매칭만). 🔴 1인 보드 게이트(gateBoard)를 반 보드에 태우지 말 것 —
+ * 그 판정은 "보드 = 한 학생" 전제라 반 보드에선 무의미하다. 표가 없으면(SQL 전) 빈 지도 = 종전과 같다.
+ */
+async function loadClassBoardChildMap(sql, tenant) {
+  const rows = await sql`
+    select b.board_name, m.child_id, s.id as student_id, s.name, s.classnote_name
+    from classnote_class_board_members m
+    join classnote_class_boards b on b.tenant_id = m.tenant_id and b.class_id = m.class_id
+    join students s on s.id = m.student_id and s.tenant_id = m.tenant_id
+    where m.tenant_id = ${tenant} and m.status = 'ok' and m.child_id is not null`.catch(() => []);
+  const map = new Map();
+  for (const r of rows)
+    map.set(`${r.board_name}|${Number(r.child_id)}`, { id: r.student_id, name: (r.classnote_name || r.name || "").trim() });
+  return map;
+}
+
 /** 학생 → 담당 강사(활성 직원 · 활성 반 · 해당 과목). 학생 1명이 여러 반이면 강사 전원. */
 async function teachersFor(sql, tenant, studentIds, keys) {
   if (!studentIds.length) return new Map();
@@ -421,7 +439,13 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     // 기존 경로(담당 강사 벨)는 **수학 1인 보드 한정 유지** — 원장 결정 2026-07-15(영어는 강사들이
     // ClassNote를 양방향 채널로 쓰는 중이라 중복 알림 우려). 범위를 넓히는 건 별도 결정이다.
     const mathPicked = picked.filter((p) => String(p?.class_name ?? "").startsWith(group.prefix));
-    if (!mathPicked.length) {
+    // 수학 **반 보드** 글(2026-09-29) — 원아 id로 학생을 확정한 것만(loadClassBoardChildMap). 1인 보드 게이트는 안 탄다.
+    const others = picked.filter((p) => !String(p?.class_name ?? "").startsWith(group.prefix));
+    const classMap = others.length ? await loadClassBoardChildMap(sql, tenant) : new Map();
+    const classHits = others
+      .map((p) => ({ post: p, student: classMap.get(`${p.class_name}|${Number(p.child)}`) }))
+      .filter((h) => !!h.student);
+    if (!mathPicked.length && !classHits.length) {
       if (!dryRun && watermark > lastSeenId) await saveWatermark(sql, tenant, watermark);
       return { ran: true, detected: 0, notified: 0, tooOld: tooOld.length };
     }
@@ -448,6 +472,7 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
       }
       hits.push({ post: p, student: g.student });
     }
+    hits.push(...classHits);
     const byTeacher = await teachersFor(sql, tenant, [...new Set(hits.map((h) => h.student.id))], keys);
 
     const plan = [];
@@ -608,6 +633,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
 
     const held = [];
     const hits = [];
+    let classMap = null; // 수학 반 보드 `보드명|원아id` → 학생(처음 필요할 때 1회)
     const inbox = []; // 전 보드 학부모 댓글 원문(출결 분류용, 0184a) — 강사 벨 경로와 독립적으로 쌓인다
     let detected = 0;
     let tooOldCount = 0;
@@ -651,7 +677,13 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
         })),
       );
       // 강사 벨은 **수학 1인 보드 한정 유지**(원장 결정 2026-07-15) — 영어는 강사들이 ClassNote를 직접 쓴다.
-      if (!ch.className.startsWith(group.prefix)) continue;
+      if (!ch.className.startsWith(group.prefix)) {
+        // 수학 **반 보드**(2026-09-29) — 그 글의 원아 id로 학생을 확정한 것만(1인 보드 게이트는 반 보드에 무의미).
+        classMap ??= await loadClassBoardChildMap(sql, tenant);
+        const st = classMap.get(`${ch.className}|${Number(feedInfo.get(Number(ch.id))?.childId)}`);
+        if (st) for (const k of picked) hits.push({ comment: k, student: st, reportId: ch.id });
+        continue;
+      }
       const g = await gateBoard(gate, board, ch.className);
       if (!g.ok) {
         // 게이트 차단은 안정적인 판정이라 스냅샷은 그대로 전진시킨다(매 폴 재조회해도 결론이 같다).
