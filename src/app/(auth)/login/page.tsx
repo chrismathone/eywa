@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; inactive?: string | string[] }>;
 }) {
   // 🔴 학원·지점 표기(로고·"인재원 · 침산")를 두지 않는다 — 원장 2026-09-22 *"로그인 페이지에는 지점과 관련된거 전부
   //    삭제하고 그냥 로그인만. 어차피 로그인하면 지점 보일텐데"*. 로그인 전엔 누가 어느 지점인지 모르니 한 지점을
@@ -23,6 +23,8 @@ export default async function LoginPage({
   // 구성은 오늘 낮 판(ee7cc124) 그대로 — 원장 같은 날 저녁 *"이전 이 로그인이 좋고 색감만 좀 바꾸면 될거같고"*.
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : undefined;
+  // /home이 퇴사 처리된 계정의 세션을 끊고 보낸 경우(`?inactive=1`) — 이유를 알려 준다.
+  const inactive = params.inactive === "1";
 
   return (
     <div className={styles.site}>
@@ -50,6 +52,11 @@ export default async function LoginPage({
           <div className={styles.loginContent}>
             <h1>로그인</h1>
             <p className={styles.loginIntro}>발급받은 계정으로 접속해 주세요.<br />로그인하면 계정 권한에 맞는 업무 공간으로 연결됩니다.</p>
+            {inactive ? (
+              <p role="alert" className={styles.loginIntro}>
+                퇴사 처리된 계정이라 로그인할 수 없습니다. 다시 일하게 되셨다면 학원 원장님께 계정 복구를 요청해 주세요.
+              </p>
+            ) : null}
             <LoginForm next={next} />
             <details className={styles.loginHelp}>
               <summary>계정이나 비밀번호 확인이 필요한가요?<EyIcon name="chevronDown" size={17} /></summary>
