@@ -1,3 +1,4 @@
+import { shortDate } from "./short-date";
 import { activityChange } from "./activity-change";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
@@ -7,7 +8,7 @@ import { schoolGradeLabel } from "@/lib/format/school-grade";
  *
  * 🔴 metadata를 **통째로 넘기지 않는다** — 아래 허용 키만 꺼내 **확인된 이름·한글 라벨**로 바꾼다:
  *    학생 id → 이름·학교학년 · 반 id → 반 이름·과목 라벨 · 날짜·교시 시각 · 출결 상태 한글 · 인원 수.
- *    메모·전후 값·파일명·금액 같은 자유 글과 모르는 키는 싣지 않는다(돈 계열 `opaque`는 이것마저 안 싣는다 — render).
+ *    메모·전후 값·파일명·금액 같은 자유 글과 모르는 키는 싣지 않는다(돈 계열 `opaque`는 이것마저 안 싣는다 — render. 예외 = 지출결의서 분류·지출일·금액, `money-facts.ts`).
  *    이름을 못 찾은 id는 버린다(원문 id 노출 금지).
  * 순수 함수(Vitest) — 조회는 호출부(expand)가 한다.
  */
@@ -26,21 +27,13 @@ export type ActivityFacts = {
 };
 
 const EMPTY: ActivityFacts = { brief: [], rows: [], href: null };
-const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
-/** `2026-09-28` → `9/28(월)` — 모양이 틀리면 null(원문을 흘리지 않는다). */
-export function shortDate(v: unknown): string | null {
-  const s = str(v);
-  const m = s?.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
-  if (d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return null; // 2/31 같은 없는 날짜
-  return `${+m[2]}/${+m[3]}(${WEEK[d.getUTCDay()]})`;
-}
-
 const clock = (v: unknown) => str(v)?.match(/^([01]\d|2[0-3]):([0-5]\d)/)?.slice(1, 3).join(":") ?? null;
+
+/** 슬랙 문구 공용 날짜(`short-date.ts`) — 종전 import 경로 유지. */
+export { shortDate };
 
 export function activityFacts(action: string, metadata: unknown, lk: FactLookups): ActivityFacts {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return EMPTY;
