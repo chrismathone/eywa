@@ -1,4 +1,4 @@
--- 0302a — users 표 RLS 강화: 전 직원이 서로의 계정을 고치고·지우고·만들던 구멍을 닫는다 (보안 감사 2026-09-29, 초안).
+-- 0305a — users 표 RLS 강화: 전 직원이 서로의 계정을 고치고·지우고·만들던 구멍을 닫는다 (보안 감사 2026-09-29, 초안).
 --
 -- ── 왜 ───────────────────────────────────────────────────────────────────────────────────────────────
 -- users의 정책은 0001a의 `users_tenant_isolation` 하나뿐이었다:
@@ -32,7 +32,7 @@
 --     RLS는 행 단위라 컬럼을 못 가린다. 컬럼 권한(REVOKE)은 **원장에게도** 똑같이 걸리는데(권한은 roles 단위 =
 --     authenticated 전체), 앱이 지금 세션 클라이언트로 이 컬럼을 읽는 곳이 6군데(직원 상세·급여·정산·명세서·
 --     출석부 강사 금액) + `select("*", {head:true})` 카운트 2군데가 있어 **지금 REVOKE하면 그 화면이 즉시 죽는다**
---     (#95). → 앱이 그 읽기를 "앱 게이트 통과 후 admin 클라이언트"로 옮겨 배포한 **뒤** 별도 파일(0302b)로 잠근다.
+--     (#95). → 앱이 그 읽기를 "앱 게이트 통과 후 admin 클라이언트"로 옮겨 배포한 **뒤** 별도 파일(0305b)로 잠근다.
 --   · 같은 학원 직원 전원이 서로의 email·phone·memo·work_schedule·notion_user_id·ui_prefs를 읽는 것 —
 --     강사 드롭다운·회의 화자 연결·시간표 등 전 앱이 users를 읽어서 행 단위로는 좁힐 수 없다(0170a 주석과 같은 판단).
 --   · 직원관리 쓰기 권한자가 PostgREST 직결로 남의 **비권한** 칸(이름·색·메모 등)을 고치는 것 — 원래 그 사람의 권한이다.
@@ -69,45 +69,45 @@ set local statement_timeout = '60s';
 set local lock_timeout = '5s';
 
 -- ── 0. 사전 점검 — 전제가 빠졌으면 아무것도 바꾸지 않고 중단 ─────────────────────────────────────────────
-do $$
+do $chk$
 begin
   -- 미러 트리거(0075a)·auth_tenant_id() 등 security definer 함수는 "표 소유자는 RLS를 안 탄다"에 기대어
   -- INSERT·DELETE 정책 없이도 users를 쓴다. FORCE RLS가 걸려 있으면 그 전제가 깨져 신규 계정 생성이 막힌다.
   if (select c.relforcerowsecurity from pg_class c where c.oid = 'public.users'::regclass) then
-    raise exception '0302a 중단: public.users에 FORCE ROW LEVEL SECURITY가 걸려 있습니다 — 미러 트리거가 막힐 수 있어 적용하지 않습니다';
+    raise exception '0305a 중단: public.users에 FORCE ROW LEVEL SECURITY가 걸려 있습니다 — 미러 트리거가 막힐 수 있어 적용하지 않습니다';
   end if;
   if to_regprocedure('public.auth_menu_access(text)') is null then
-    raise exception '0302a 중단: auth_menu_access(text)가 없습니다 — 0158a·0170a를 먼저 적용하세요';
+    raise exception '0305a 중단: auth_menu_access(text)가 없습니다 — 0158a·0170a를 먼저 적용하세요';
   end if;
   if pg_get_functiondef('public.auth_menu_access(text)'::regprocedure) not like '%userOverrides%' then
-    raise exception '0302a 중단: auth_menu_access가 개인 예외(userOverrides)를 모릅니다 — 0170a를 먼저 적용하세요';
+    raise exception '0305a 중단: auth_menu_access가 개인 예외(userOverrides)를 모릅니다 — 0170a를 먼저 적용하세요';
   end if;
   if to_regprocedure('public.is_super_admin(uuid)') is null then
-    raise exception '0302a 중단: is_super_admin(uuid)가 없습니다 — 0021a를 먼저 적용하세요';
+    raise exception '0305a 중단: is_super_admin(uuid)가 없습니다 — 0021a를 먼저 적용하세요';
   end if;
   if to_regprocedure('public.auth_system_role()') is null then
-    raise exception '0302a 중단: auth_system_role()이 없습니다 — 0072a를 먼저 적용하세요';
+    raise exception '0305a 중단: auth_system_role()이 없습니다 — 0072a를 먼저 적용하세요';
   end if;
-end $$;
+end $chk$;
 
 -- ── 1. 게이트 함수 ─────────────────────────────────────────────────────────────────────────────────────
 -- 직원관리 쓰기 권한자 = 앱 canWriteTenant(role, "staff")의 DB 미러(개인 예외·역할 override·코드 기본값, master 상시 full)
 --   + super_admin(앱 perm-matrix가 mergeMostPermissive로 올려 주는 것과 같은 취지 — "새 게이트는 super_admin 자동 통과").
 -- ⚠️ '다른 강사 뷰'(열람 전용) 캡은 앱 전용 상태라 DB가 모른다 — 그 캡은 앱 게이트가 계속 맡는다.
 create or replace function public.auth_users_can_manage() returns boolean
-  language sql stable security definer set search_path = public as $$
+  language sql stable security definer set search_path = public as $fn$
   select coalesce(public.auth_menu_access('staff'), 'none') in ('full', 'scoped')
       or coalesce(public.is_super_admin(auth.uid()), false)
-$$;
+$fn$;
 revoke all on function public.auth_users_can_manage() from public, anon;
 grant execute on function public.auth_users_can_manage() to authenticated, service_role;
 
 -- 학원설정 쓰기 권한자 — 과목 흡수 RPC(absorb_subject_key)가 남의 users.subjects를 바꾸는 경로 전용.
 -- (앱 게이트 = subject-actions.ts requireOwnerWrite → canWriteTenant(role, "owner"). 원장은 위 함수로 이미 통과.)
 create or replace function public.auth_users_can_absorb_subjects() returns boolean
-  language sql stable security definer set search_path = public as $$
+  language sql stable security definer set search_path = public as $fn$
   select coalesce(public.auth_menu_access('owner'), 'none') in ('full', 'scoped')
-$$;
+$fn$;
 revoke all on function public.auth_users_can_absorb_subjects() from public, anon;
 grant execute on function public.auth_users_can_absorb_subjects() to authenticated, service_role;
 
@@ -143,7 +143,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   v_uid uuid := auth.uid();
   v_old jsonb;
@@ -255,7 +255,7 @@ begin
 
   raise exception '다른 직원 계정을 바꿀 권한이 없습니다' using errcode = '42501';
 end;
-$$;
+$fn$;
 -- (트리거 함수는 직접 호출이 불가하고 발화 시 EXECUTE 권한을 보지 않는다 — 0026a처럼 실행권은 건드리지 않는다.)
 
 drop trigger if exists tg_guard_user_privilege_columns on public.users;

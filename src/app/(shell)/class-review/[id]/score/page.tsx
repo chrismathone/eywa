@@ -6,7 +6,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getClassReview, getReviewViewer, myScoreSlot } from "@/features/class-review/server/queries";
 import { ScorePanel } from "../../_components/score-panel";
 
-export const metadata = { title: "수업 평가 채점 — 에이와" };
+export const metadata = { title: "직원 평가 채점 — 에이와" };
 
 /**
  * 채점 전용 페이지(원장 지시 2026-08-04) — 상세(보기)와 분리. 자격자만 진입(아니면 상세로 돌려보냄).
@@ -34,7 +34,7 @@ export default async function ClassReviewScorePage({ params }: { params: Promise
           <ArrowLeft className="size-3.5" /> 상세로 돌아가기
         </Link>
         <PageHeader
-          eyebrow="수업 평가"
+          eyebrow="직원 평가"
           title={`${mine.slot === "self" ? "본인 평가" : "채점"} — ${doc.header.teacherName} · ${doc.header.date}`}
           description="문항마다 1~4점을 누르고 마지막에 저장하세요. 저장하면 상세 화면으로 돌아갑니다."
           embedLabel={`채점 — ${doc.header.teacherName}`}

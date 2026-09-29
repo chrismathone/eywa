@@ -149,7 +149,7 @@ export const SHEET_DICT = {
   // 🔴 ECS 월간 보기의 `달력`(face.cal)과 **다른 것**이다 — 이쪽은 학원 공용 일정 탭이라 영어도 갈라 적는다.
   "menu.item.calendar": { ko: "캘린더", en: "Academy calendar" },
   "menu.item.approvals": { ko: "전자결재", en: "Approvals" },
-  "menu.item.class_review": { ko: "수업 평가", en: "Class review" },
+  "menu.item.class_review": { ko: "직원 평가", en: "Staff review" },
   "menu.item.documents": { ko: "데이터베이스", en: "Documents" },
 
   // ── 면 전환(주간 | 달력 | 진도표 | 계획) ──────────────────────────
@@ -3071,6 +3071,26 @@ export const SHEET_DICT = {
     ko: "첨부가 가득 찼습니다 — 아래 첨부에서 하나를 지우면 넣을 수 있습니다",
     en: "Attachments are full — delete one below to insert another",
   },
+  // ClassNote 반 보드 매칭 아이콘(2026-09-29) — 사유 문장은 연동 PC가 적은 데이터라 사전 밖이다.
+  // ⚠️ `os.cn.*`는 '반 서술'(class narrative)이 이미 쓴다 — 이 묶음은 `os.cnMatch.*`.
+  "os.cnMatch.title": { ko: "ClassNote 반 매칭", en: "ClassNote class match" },
+  "os.cnMatch.ok": { ko: "매칭됨", en: "Matched" },
+  "os.cnMatch.fail": { ko: "매칭 실패", en: "Not matched" },
+  "os.cnMatch.class": { ko: "반", en: "Class" },
+  "os.cnMatch.board": { ko: "반 보드", en: "Board" },
+  "os.cnMatch.child": { ko: "원아", en: "Child" },
+  "os.cnMatch.none": {
+    ko: "이 반의 ClassNote 반 보드 연결 기록이 없습니다 — 다음 동기화 뒤에도 그대로면 관리자에게 알려 주세요",
+    en: "This class has no ClassNote board link yet — tell an admin if it stays after the next sync",
+  },
+  // 반 정보 없는 보강 보고서의 '보낼 반' 고르기(A안, 원장 2026-09-29 *"보낼 곳이 없으면 '선택'"*).
+  "os.sendClass.title": { ko: "보낼 반 선택", en: "Choose the class to send to" },
+  "os.sendClass.desc": {
+    ko: "반 정보가 없는 보강 보고서입니다. ClassNote의 어느 반으로 보낼지 골라 주세요.",
+    en: "This make-up report has no class. Choose which ClassNote class to send it to.",
+  },
+  "os.sendClass.send": { ko: "이 반으로 보내기", en: "Send to this class" },
+  "os.sendClass.cancel": { ko: "보내지 않기", en: "Don't send" },
   "os.crop.title": { ko: "사진 자르기", en: "Crop the photo" },
   "os.crop.desc": {
     ko: "모서리를 끌어 남길 부분을 고르세요 · 가운데를 끌면 옮겨집니다 · 그대로 넣어도 됩니다",

@@ -1,4 +1,4 @@
--- 0303a: security definer 트리거의 교차 조회에 **같은 학원(tenant_id) 조건**을 더한다 (보안 감사 2026-09-29)
+-- 0306a: security definer 트리거의 교차 조회에 **같은 학원(tenant_id) 조건**을 더한다 (보안 감사 2026-09-29)
 --
 -- 목적: 아래 세 트리거 함수는 security definer라 RLS를 우회한다. 그런데 NEW 행이 가리키는 다른 표 행
 --   (학생·반·직원·수강)을 id만으로 조회하고 tenant_id를 확인하지 않았다. FK는 "그 id가 존재한다"만 보장하고
@@ -29,7 +29,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, auth
-as $$
+as $fn$
 declare
   v_ref jsonb;
   v_new jsonb;
@@ -141,7 +141,7 @@ begin
 exception when others then
   return null; -- ⚠️ 감사 실패가 원래 쓰기를 막지 않게(문장 롤백 방지). 절대 re-raise 금지.
 end;
-$$;
+$fn$;
 revoke all on function public.log_activity() from public;
 
 -- 2) 수업 보고서 발송 실패 알림 -------------------------------------------------
@@ -150,7 +150,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   v_recipient uuid;
   v_student text;
@@ -206,7 +206,7 @@ exception
   when others then
     return NEW;
 end;
-$$;
+$fn$;
 
 -- 3) 학부모 공지 발송 실패 알림 -------------------------------------------------
 create or replace function public.notify_notice_send_failed()
@@ -214,7 +214,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public
-as $$
+as $fn$
 declare
   v_fails jsonb;
   v_n int;
@@ -288,4 +288,4 @@ begin
 exception
   when others then return NEW; -- best-effort: 알림이 공지 상태 기록을 막지 않는다
 end;
-$$;
+$fn$;

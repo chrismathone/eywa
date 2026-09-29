@@ -66,7 +66,25 @@ export type ReviewDoc = {
   areas?: ChecklistArea[];
   /** 사용한 문항 세트 이름(표시용 스냅샷). */
   templateName?: string;
+  /**
+   * 최종 총평 — 평가지당 하나, 사무실(원장·지정 인원)이 채점을 다 본 뒤 쓴다(원장 2026-09-29
+   * "코멘트 말고도 총평란이 또 있어야할듯"). 평가자별 코멘트(submissions[].comment)와 **다른 칸**이다.
+   * 강사(자기 평가 전용)에겐 조회 초크포인트에서 잘린다(redactForSelfOnly).
+   */
+  finalReview?: FinalReview;
 };
+
+export type FinalReview = { text: string; updatedAt: string; by: { id: string; name: string } };
+
+function parseFinalReview(raw: unknown): FinalReview | undefined {
+  const f = raw as Partial<FinalReview> | null | undefined;
+  if (!f || typeof f.text !== "string" || !f.text.trim()) return undefined;
+  return {
+    text: f.text,
+    updatedAt: typeof f.updatedAt === "string" ? f.updatedAt : "",
+    by: { id: String(f.by?.id ?? ""), name: String(f.by?.name ?? "") },
+  };
+}
 
 export type ReviewListRow = ReviewDoc & {
   submittedCount: number;
@@ -105,6 +123,7 @@ function parseDoc(r: { id: string; created_at: string; form_data: unknown }): Re
     submissions: (d.submissions ?? {}) as Record<string, ScoreSheet>,
     areas: sanitizeAreas(d.areas) ?? undefined,
     templateName: typeof d.templateName === "string" && d.templateName ? d.templateName : undefined,
+    finalReview: parseFinalReview(d.finalReview),
   };
 }
 
@@ -151,7 +170,7 @@ export function myScoreSlot(
 async function requireRead() {
   const user = await getCurrentUser();
   if (!user || !(await canAccessTenant(user.systemRole, "class_review"))) {
-    throw new Error("수업 평가를 열람할 권한이 없습니다");
+    throw new Error("직원 평가를 열람할 권한이 없습니다");
   }
   return user;
 }
@@ -205,19 +224,24 @@ export const getReviewViewer = cache(async (): Promise<ReviewViewer> => {
  * 그 외(강사 등)는 평가자 이름이 '평가자 A/B/C'로 익명화된다.
  * 판정 주체는 `getReviewViewer()` — '다른 강사 뷰'에선 **대상 강사의 자격**이 그대로 재현된다.
  */
-export async function getReviewPrivileges(): Promise<{ seeNames: boolean; editTemplate: boolean }> {
+export async function getReviewPrivileges(): Promise<{
+  seeNames: boolean;
+  editTemplate: boolean;
+  /** 최종 총평 작성 — 실명 열람과 같은 사람들(평가자 전원을 보고 종합하는 자리라서). */
+  writeFinalReview: boolean;
+}> {
   const v = await getReviewViewer();
   // 강사 직급 = 자기 평가 전용(원장 2026-08-19) — 개인 예외로 full을 받아도 실명·문항 편집은 없다.
-  if (v.selfOnly) return { seeNames: false, editTemplate: false };
-  if (v.role === "master") return { seeNames: true, editTemplate: true };
+  if (v.selfOnly) return { seeNames: false, editTemplate: false, writeFinalReview: false };
+  if (v.role === "master") return { seeNames: true, editTemplate: true, writeFinalReview: true };
   try {
     const settings = await getTenantSettings();
     const mine = settings.permissions.userOverrides?.some(
       (o) => o.userId === v.id && o.menu === "class_review" && o.access !== "none",
     );
-    return { seeNames: !!mine, editTemplate: !!mine };
+    return { seeNames: !!mine, editTemplate: !!mine, writeFinalReview: !!mine };
   } catch {
-    return { seeNames: false, editTemplate: false };
+    return { seeNames: false, editTemplate: false, writeFinalReview: false };
   }
 }
 
@@ -286,7 +310,7 @@ export async function listClassReviews(): Promise<{ rows: ReviewListRow[]; areas
       .limit(200),
     getChecklistAreas(user.tenantId),
   ]);
-  if (error) throw new Error(`수업 평가 목록 조회 실패: ${error.message}`);
+  if (error) throw new Error(`직원 평가 목록 조회 실패: ${error.message}`);
   // 강사 직급 = 본인 평가지만, 그것도 본인 채점 한 장만(조회 초크포인트에서 자른다 — 화면 조건 아님, #77).
   // 판정 주체는 getReviewViewer — '다른 강사 뷰'면 그 강사가 보는 목록이 그대로 재현된다.
   const { id: viewerId, selfOnly } = await getReviewViewer();
@@ -322,7 +346,7 @@ export async function getClassReview(
       .maybeSingle(),
     getChecklistAreas(user.tenantId),
   ]);
-  if (error) throw new Error(`수업 평가 조회 실패: ${error.message}`);
+  if (error) throw new Error(`직원 평가 조회 실패: ${error.message}`);
   if (!data) return null;
   const doc = parseDoc(data);
   // 강사 직급은 **본인 평가지만** 존재한다 — 남의 건 id를 직접 쳐도 없는 것으로(강제 URL 차단, #77).

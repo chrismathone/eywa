@@ -101,7 +101,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   expense_requests: "지출결의서",
   meetings: "회의록",
   documents: "데이터베이스",
-  class_review: "수업 평가",
+  class_review: "직원 평가",
   approvals: "전자결재",
   calendar: "캘린더",
   shuttle: "셔틀",

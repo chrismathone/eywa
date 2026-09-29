@@ -17,6 +17,9 @@ import { humanizeClassnoteError } from "@/features/report-admin/classnote-error"
 import { noticeFailures } from "@/features/report-admin/notice-failures";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import type { ClassNoticeRow } from "@/features/report-admin/class-notice";
+import { ClassNoticePanel } from "./class-notice-panel";
 
 // 공지 상태 한글 라벨(raw 코드 UI 노출 금지) — 워커 처리 상태와 동기.
 const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
@@ -46,7 +49,44 @@ function fmtKst(iso: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * 반 공지 탭 — **원생 개별 공지**(학생마다 1:1 알림장, 아래 EachNoticeFace)와 **반 단체 공지**(ClassNote 반에 공지 1건,
+ * ClassNoticePanel)를 고른다(원장 2026-09-29 *"반 공지 혹은 원생 개별 공지로 구분"*). 반 단체 공지 재료가 없으면(0304a 전)
+ * 지금과 똑같이 원생 개별 공지만 보인다.
+ */
 export function NoticeFace({
+  classes,
+  initial,
+  canSend,
+  classWide,
+}: {
+  classes: NoticeClassOption[];
+  initial: NoticeRow[];
+  canSend: boolean;
+  classWide?: { rows: ClassNoticeRow[]; boardClassIds: string[] };
+}) {
+  const [mode, setMode] = useState<"each" | "class">("each");
+  if (!classWide) return <EachNoticeFace classes={classes} initial={initial} canSend={canSend} />;
+  return (
+    <div className="space-y-4">
+      <ToolbarSegment label="공지 방식">
+        <ToolbarSegmentItem active={mode === "each"} onClick={() => setMode("each")}>
+          원생 개별 공지
+        </ToolbarSegmentItem>
+        <ToolbarSegmentItem active={mode === "class"} onClick={() => setMode("class")}>
+          반 단체 공지
+        </ToolbarSegmentItem>
+      </ToolbarSegment>
+      {mode === "each" ? (
+        <EachNoticeFace classes={classes} initial={initial} canSend={canSend} />
+      ) : (
+        <ClassNoticePanel classes={classes} boardClassIds={classWide.boardClassIds} initial={classWide.rows} canSend={canSend} />
+      )}
+    </div>
+  );
+}
+
+function EachNoticeFace({
   classes,
   initial,
   canSend,

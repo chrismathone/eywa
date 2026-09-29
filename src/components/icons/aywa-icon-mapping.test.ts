@@ -67,6 +67,9 @@ const APPROVED_INLINE_SVG = [
   // 차트 눈금이지 아이콘이 아니다(sparkline과 같은 성격). 레일을 만든 커밋이 이 목록을 안 고쳐
   // 가드가 하루 동안 빨간 채였다 — 새 인라인 SVG는 **같은 커밋에서** 여기에 적을 것.
   "src/features/math-sheets/components/learning-rails.tsx",
+  // 2026-09-29 공개 랜딩의 대시보드 **개념도**(연결선 지도·추이 선, 둘 다 aria-hidden) — 장식 그림이지 아이콘이 아니다.
+  // eb3787b2가 이 목록을 안 고쳐 가드가 빨갰다(보안 감사 푸시에 함께 고침).
+  "src/app/(marketing)/_scroll/dashboard-mock.tsx",
 ] as const;
 
 // 이 파일의 검사 3개가 각각 src/ 전체를 훑는다 — 디렉터리 워크는 파일 목록이 같으므로 한 번만 한다

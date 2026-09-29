@@ -60,6 +60,15 @@ describe("자기 평가 전용(강사 직급)", () => {
     expect(Object.keys(doc.submissions)).toHaveLength(2);
   });
 
+  it("가림 — 사무실 최종 총평은 본인에게도 안 내려간다", () => {
+    const r = redactForSelfOnly({
+      ...doc,
+      finalReview: { text: "최종 총평 문장", updatedAt: "2026-09-29T00:00:00Z", by: { id: "M", name: "원장" } },
+    });
+    expect(r.finalReview).toBeUndefined();
+    expect(JSON.stringify(r)).not.toContain("최종 총평 문장");
+  });
+
   it("본인 채점이 아직 없으면 빈 제출", () => {
     const r = redactForSelfOnly({ ...doc, submissions: { O1: doc.submissions.O1! } });
     expect(r.submissions).toEqual({});

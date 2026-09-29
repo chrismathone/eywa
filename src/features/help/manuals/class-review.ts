@@ -2,12 +2,12 @@ import type { HelpManual } from "../types";
 
 export const classReview: HelpManual = {
   slug: "class-review",
-  title: "수업 평가",
+  title: "직원 평가",
   href: "/class-review",
   menuKey: "class_review",
   group: "지원",
   layout: "list",
-  summary: "수업 평가지입니다. 강사는 본인 평가지의 본인 채점만 봅니다. 개설·삭제는 사무실입니다.",
+  summary: "직원 평가지입니다. 강사는 본인 평가지의 본인 채점만 봅니다. 개설·삭제는 사무실입니다.",
   related: ["staff", "classes"],
   callouts: [
     {

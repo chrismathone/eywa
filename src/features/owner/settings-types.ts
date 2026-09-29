@@ -513,6 +513,13 @@ export const reportSchema = z.object({
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "HH:MM 형식(예 21:00)")
     .or(z.literal(""))
     .default(""),
+  // 수학 발송 경로(원장 2026-09-29) — personal = 기존 `(수학)학생명` 1인 보드 · class = aywa 반과 이름이 같은
+  // 반 보드(0302a 매칭 기록의 원아에게 1:1) · pilot = `classnoteMathRoutePilot`에 든 강사만 반 보드, 나머지는 1인 보드.
+  // 소비처 = ClassNote 워커(classnote-core.mjs `getClassnoteMathRoute`, raw SQL 직독 — allowlist와 같은 패턴).
+  // 🔴 기본 personal(지금 동작 그대로). 반 보드 경로는 이름으로 원아를 고르지 않는다(같은 반 동명이인).
+  classnoteMathRoute: z.enum(["personal", "class", "pilot"]).default("personal"),
+  // pilot 대상 강사 — 보고서의 작성 강사 표시 이름(lesson_reports.teacher_name, 작성률 예외 강사와 같은 키).
+  classnoteMathRoutePilot: z.array(z.string()).default([]),
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

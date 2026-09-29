@@ -620,6 +620,34 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 6. 소등 후 잔여물: `edutrix_archive`(영구 보험) · lesson_reports 풀 이력(운영) · `D:\edutrix` 로컬 소스
    (함수 원본 — 옵션 B 완료 전까지 보관 필수).
 
+## 10.5 수학 반 보드(반별 발송) — 2026-09-29
+
+> **한 줄 규칙: 반 보드 안에서는 원아를 이름으로 고르지 않는다.** 저장된 매칭(0302a)의 원아에게만 1:1로 보낸다.
+
+§3 "반(다인) 구조로 돌아가면 안 되는 이유"는 **화면 흉내(DOM) 봇 시절** 얘기다 — 2026-07-29부터 게시는 내부 API
+`POST /api/v1_2/reports/ {cls, child, enrollment}`로 원아를 지목하는 1:1 게시라, 다인 반에서도 그 집에만 간다
+(테스트반 #1317083에 학원이만 게시 → 학원삼·사·오·육 알림장 0건으로 확인).
+
+| 구성 | 파일 | 역할 |
+|---|---|---|
+| 계획(순수) | [`class-board-plan.mjs`](../scripts/_classnote/class-board-plan.mjs) | 가드 ①1인 보드 원아만 ②보호자 전화(운영관리 carer1 ↔ aywa 4칸) ③생년 ±1 ④역방향 유일성 ⑤같은 반 기본이름 겹침 = 보류 ⑥이름 연속성(형제 계정). 전부 AND, 모르면 보류 |
+| 생성·배정 | [`provision-math-class-boards.mjs`](../scripts/_classnote/provision-math-class-boards.mjs) | 드라이런 기본 · `--apply --only --limit` · 반마다 원아 정확히 대조 · 끝에 1인 보드 무변경 확인 · `--sync-db` = 0302a 기록 |
+| 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
+| 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 제외** · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고) |
+| 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 보고서 설정 `classnoteMathRoute` personal/class/pilot · 반별 = 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
+| 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 해제 필요는 로그만 |
+| C.N 라벨 | [`classnote-match.ts`](../src/features/onescreen/classnote-match.ts) · [`cn-badge.tsx`](../src/features/onescreen/components/cn-badge.tsx) | 원스크린 카드·표 모드. 초록 = 확인된 배정 |
+
+- **API(실측)**: 반 생성 = DOM '반 추가하기'(또는 `POST kapi…/v1/centers/{c}/classes`) · 반 이름 변경 = `PATCH /api/v1/centers/{c}/classes/{id}/ {name}` → 200 (`/api/v1/classes/{id}/` PATCH·PUT은 405) ·
+  반 삭제 = `DELETE /api/v1/classes/{id}/` → 204, **원아·선생님 0명일 때만**(선생님 있으면 400 `teacher_exists`) · 원아·선생님 **해제는 405**(화면에서 손으로) ·
+  반 단체 공지 = `POST https://kapi.classnote.com/v1_2/notices/ {classes_to:[반id…], title, content, is_comment_on, center, author_name, scheduled:""}` → 반마다 공지 1건. 🔴 `classes_to`가 비면 기관 전체일 수 있다 — 빈 목록·허용 밖 반이면 무조건 차단.
+- 🔴 **`"보드가 곧 매핑"` 폴백(`acceptBoardMembers`)은 반 보드 경로에서 절대 타지 않는다** — 생년만 보므로 같은 학년 반이면 전원이 통과한다(`sendReportViaApi targets`).
+- 🔴 회수(`classnote-recall-core.mjs`)는 1인 보드 **와** 반 보드를 함께 훑는다 — 한쪽만 보면 '이미 없습니다'로 거짓 성공.
+- 반 정보 없는 보강 보고서 = A안(0303a `classnote_class_id`) — `saveAndQueueClassnote`가 메인 수업(보낸 보고서 최다 → 출결 최다)을 정해 적고, 못 정하면 `needs_class`로 멈춰 원스크린이 고르게 한다. 그 칸이 빈 행(관리자 재발송 등)은 워커가 기존 1인 보드로 보낸다.
+- 학부모 **새 글·댓글 벨 알림**: 반 보드 글은 `보드명|원아id` → 학생(0302a ok)으로 확정한다(`loadClassBoardChildMap`). 🔴 1인 보드 게이트(`gateBoard`)를 반 보드에 태우지 말 것(보드 = 한 학생 전제).
+- 🔴 반 단체 공지 API `POST /api/v1_2/notices/`(www로도 됨)는 `classes_to`가 **필수가 아니다**(빈 요청 검증 응답에 없음) — 빠지면 기관 전체 공지일 수 있다. 발송 코드는 비었거나 허용 밖 반이면 무조건 차단.
+- 반 단체 공지 레일 = 0304a `classnote_class_notices`(쓰기 서버만) → [`classnote-class-notice-core.mjs`](../scripts/_classnote/classnote-class-notice-core.mjs): 보드 번호 재조회(0302a) · 보드 원아 ⊆ 그 반 재원생 ok 원아(반을 옮긴 학생이 남아 있으면 보류 — 해제는 손으로) · 요청은 [`class-notice-guard.mjs`](../scripts/_classnote/class-notice-guard.mjs)로만 조립 · 중복 게시 생략 · 게시 후 `is_center_notice` 확인. 원생 개별 공지(0099a)는 그대로.
+
 ## 11. 퇴원처리 안전 판정 — aywa 퇴원생을 ClassNote에서 내리기 (Phase 0: 판정+스캔만, 쓰기 0, 2026-07-30)
 
 > **한 줄 규칙: aywa 퇴원생을 ClassNote 명부에서 내리는 건 실질 비가역이다. "누구를 내려도 되는가"를
