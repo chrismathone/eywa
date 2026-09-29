@@ -34,7 +34,7 @@ describe("엑셀 가져오기 배선", () => {
     const files = walk(join(ROOT, "src", "app")).filter((f) => !f.includes("import-hub-face"));
     const src = files.map((f) => readFileSync(f, "utf8")).join("\n");
     for (const k of IMPORT_KINDS) {
-      const wired = src.includes(`kind="${k}"`) || src.includes(`kind: "${k}"`);
+      const wired = src.includes(`kind="${k}"`) || src.includes(`kind: "${k}"`) || new RegExp(`importKind=\{[^}]*"${k}"`).test(src);
       expect(wired, `${k} 버튼이 어느 탭에도 없다`).toBe(true);
     }
   });
