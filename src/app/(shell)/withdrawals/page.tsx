@@ -45,6 +45,8 @@ import { Pagination } from "@/components/pagination";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { WithdrawalTrendChart, type WithdrawalMonthPoint } from "./_components/trend-chart";
+import { scopeText, spanText } from "@/features/withdrawals/scope-text";
+import { loadWithdrawalTrendPrefs } from "@/features/withdrawals/server/trend-prefs";
 import { WithdrawalListLayout } from "./_components/list-layout";
 import { CustomRange } from "./_components/custom-range";
 import { withdrawalPage, withdrawalPageSize } from "@/features/withdrawals/list-pagination";
@@ -194,10 +196,11 @@ export default async function WithdrawalsPage({
   //    에선 아예 안 부른다(그 보기엔 수강종료 줄이 한 줄도 안 선다). `loading.tsx`는 두지 않는다 — 필터를 자주 바꾸는
   //    화면이라 바꿀 때마다 스켈레톤이 번쩍인다(CLAUDE.md B7 트레이드오프).
   const withSubjectEnded = type !== "withdrawn";
-  const [withdrawnRaw, subjectEndedRaw, settings] = await Promise.all([
+  const [withdrawnRaw, subjectEndedRaw, settings, trendPrefs] = await Promise.all([
     getWithdrawnStudents(),
     withSubjectEnded ? getSubjectEndedStudents() : Promise.resolve([]),
     getTenantSettings(),
+    loadWithdrawalTrendPrefs(),
   ]);
   // 과목 라벨은 학원설정(operations.subjects) 단일 소스 — 하드코딩 금지.
   const subjectMaps = buildSubjectMaps(settings.operations.subjects);
@@ -301,6 +304,36 @@ export default async function WithdrawalsPage({
   // 화면 말 — 유형에 따라 '퇴원' / '수강종료' / '퇴원·수강종료'.
   const noun = type === "withdrawn" ? "퇴원" : type === "subject-ended" ? "수강종료" : "퇴원·수강종료";
 
+  // 🔑 수치마다 **언제부터·누구를** 센 것인지 적는다(원장 2026-09-29 *"전체 퇴원 458명이 언제부터의 수치인지? 올 한 해 단위로 …
+  //    항상 수치에 관한 구체적인 언급이 필요"*). 위 카드 둘(올해 퇴원·올해 수강종료)은 **학원 전체**(필터 무관),
+  //    이번 달·상담 미완료·차트는 걸린 필터를 `scopeText`로 밝힌다.
+  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const inYear = (r: ExitRow) => !!r.date && r.date >= yearStart && r.date <= today;
+  const yearWithdrawn = all.filter((r) => r.kind === "withdrawn" && !r.systemBulk && inYear(r)).length;
+  const yearBulk = all.filter((r) => r.kind === "withdrawn" && r.systemBulk && inYear(r)).length;
+  const yearEnded = all.filter((r) => r.kind === "subject-ended" && inYear(r)).length;
+  const firstWithdrawn = all.reduce<string | null>((m, r) => (r.kind === "withdrawn" && r.date && (!m || r.date < m) ? r.date : m), null);
+  const scope = scopeText({
+    program: program ? programLabel(program, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")) : null,
+    subject: subject !== "all" ? subjectMaps.labelOf(subject) : null,
+    reason: reason === "all" ? null : reason === "unspecified" ? "미기재" : (REASON_LABEL[reason as WithdrawalReason] ?? null),
+    consult: consult === "all" ? null : (CONSULT_OPTIONS.find((o) => o.value === consult)?.label ?? null),
+    q: q || null,
+  });
+  // 상담 카드는 상담 축을 일부러 뺀 모집단이다 — 그 필터 라벨을 적으면 적용 안 한 필터를 적은 셈이 된다.
+  const consultScope = scopeText({
+    program: program ? programLabel(program, settings.operations.subjects, isModuleEnabled(settings.modules.disabled, "eie")) : null,
+    subject: subject !== "all" ? subjectMaps.labelOf(subject) : null,
+    reason: reason === "all" ? null : reason === "unspecified" ? "미기재" : (REASON_LABEL[reason as WithdrawalReason] ?? null),
+    q: q || null,
+  });
+  // 월별 추이의 **학원 전체** 막대(원장 *"과목별과는 별도로 전체 추이수치가 필요"*) — 유형만 따르고 다른 필터는 안 건다.
+  const typeRows = all.filter((r) => byType(r) && !r.systemBulk);
+  const narrowed = trendRows.filter((r) => !r.systemBulk).length !== typeRows.length;
+  const typeTrend = narrowed ? monthlyExits(typeRows) : null;
+  const trendData: WithdrawalMonthPoint[] = typeTrend ? trend.map((p, i) => ({ ...p, total: typeTrend[i]?.count ?? 0 })) : trend;
+  const sum = (xs: readonly { count: number }[]) => xs.reduce((a, x) => a + x.count, 0);
+
   // 통계는 전체 필터 결과를 유지하고, 명단만 오른쪽 카드 높이에 맞는 크기로 자른다.
   const total = rows.length;
   const { page, totalPages, start, end } = withdrawalPage(sp.page, total, size);
@@ -321,28 +354,42 @@ export default async function WithdrawalsPage({
       <PageHeader
         eyebrow="학생 케어"
         title="퇴원관리"
-        description={withSubjectEnded ? `퇴원 ${withdrawnTotal}명 · 수강종료 ${subjectEndedTotal}건` : `퇴원 ${withdrawnTotal}명`}
+        description={`누적 퇴원 ${withdrawnTotal}명${firstWithdrawn ? `(${firstWithdrawn.slice(0, 7).replace("-", ".")}~)` : ""}${withSubjectEnded ? ` · 수강종료 ${subjectEndedTotal}건` : ""}`}
       />
 
       {/* Stat strip — Editorial 문법 ②(공용 BigStat) */}
       <StatStrip>
-        <BigStat label="전체 퇴원" value={withdrawnTotal} unit="명" tone="rose" icon={<UserMinus size={16} strokeWidth={1.8} />} />
+        <BigStat
+          label="올해 퇴원"
+          value={yearWithdrawn}
+          unit="명"
+          sub={`${spanText(yearStart, today)} · 학원 전체${yearBulk ? ` · 날짜 미상 ${yearBulk}명 제외` : ""}`}
+          tone="rose"
+          icon={<UserMinus size={16} strokeWidth={1.8} />}
+        />
         {withSubjectEnded ? (
         <BigStat
-          label="수강종료"
-          value={subjectEndedTotal}
+          label="올해 수강종료"
+          value={yearEnded}
           unit="건"
-          sub="재원 중 한 과목을 끊음"
+          sub={`${spanText(yearStart, today)} · 학원 전체 · 재원 중 한 과목을 끊음`}
           tone="amber"
           icon={<BookOpen size={16} strokeWidth={1.8} />}
         />
         ) : null}
-        <BigStat label="이번 달" value={recent} unit="건" sub={noun} tone="danger" icon={<CalendarClock size={16} strokeWidth={1.8} />} />
+        <BigStat
+          label="이번 달"
+          value={recent}
+          unit="건"
+          sub={`${noun} · ${spanText(`${kstMonth()}-01`, today)} · ${scope}`}
+          tone="danger"
+          icon={<CalendarClock size={16} strokeWidth={1.8} />}
+        />
         <BigStat
           label="상담 미완료"
           value={consultPending}
           unit="명"
-          sub={`퇴원 사후상담 완료율 ${consultRate}%`}
+          sub={`퇴원 사후상담 완료율 ${consultRate}% · ${rangeWindow.kind === "all" ? "전체 기간" : spanText(rangeWindow.from, rangeWindow.to)} · ${consultScope}`}
           tone="amber"
           icon={<ListChecks size={16} strokeWidth={1.8} />}
         />
@@ -426,12 +473,12 @@ export default async function WithdrawalsPage({
               <h2 className="text-foreground text-base font-bold">월별 {noun} 추이</h2>
               <span className="text-text-faint text-xs">
                 {/* 무엇을 센 건지 말해 준다 — 필터가 걸렸는데 "전체"라고 적으면 화면이 거짓말을 한다. */}
-                최근 12개월 · {trendRows.length}건
+                최근 12개월 · {typeTrend ? `학원 전체 ${sum(typeTrend)}건 · ${scope} ${sum(trend)}건` : `${scope} ${sum(trend)}건`}
                 {range !== "all" ? " (기간 필터는 이 축이라 제외)" : ""}
                 {systemBulkCount > 0 ? ` (시스템 정리 ${systemBulkCount}명 제외 — 퇴원일 미상)` : ""}
               </span>
             </header>
-            <WithdrawalTrendChart data={trend} />
+            <WithdrawalTrendChart data={trendData} filterLabel={typeTrend ? scope : noun} initialPrefs={trendPrefs} unit={type === "withdrawn" ? "명" : "건"} />
           </section>
           <section className="bg-card shadow-card rounded-2xl p-5">
             <header className="mb-3">

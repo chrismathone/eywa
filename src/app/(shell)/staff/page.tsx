@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { AutoPageSize } from "@/components/auto-page-size";
+import { clampPageSize, pageSizeCookieName } from "@/components/page-size";
 import { Users, Wallet, CalendarClock } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -30,14 +33,13 @@ import {
   DEFAULT_STAFF_LIST_PREFS,
   parseStaffEmp,
   parseStaffListPrefs,
-  parseStaffPer,
   parseStaffRole,
   parseStaffSort,
   parseStaffStatus,
   pickStaffFilterPrefs,
   pickStaffViewPrefs,
-  STAFF_PER_DEFAULT,
-  STAFF_PER_OPTIONS,
+  STAFF_PAGE_SIZE_DEFAULT,
+  STAFF_PAGE_SIZE_KEY,
   STAFF_ROLE_OPTIONS,
   STAFF_SORT_OPTIONS,
   STAFF_STATUS_DEFAULT,
@@ -97,6 +99,9 @@ function sortStaff(rows: StaffRow[], sort: StaffSortKey): StaffRow[] {
   }
 }
 
+/** 표 한 행의 최소 높이(px, 테두리 포함) — AutoPageSize는 실제 첫 행이 더 크면 그 값을 쓴다(글자 크기 확대). */
+const STAFF_ROW_PX = 40;
+
 export default async function StaffPage({
   searchParams,
 }: {
@@ -109,7 +114,7 @@ export default async function StaffPage({
     emp?: string;
     q?: string;
     sort?: string;
-    per?: string;
+    size?: string;
     page?: string;
   }>;
 }) {
@@ -119,7 +124,7 @@ export default async function StaffPage({
   // 그리되 이번 렌더는 저장하지 않는다(다른 축을 기본값으로 덮지 않게). 서로 독립인 조회는 한 번에(B4) — 저장값은 메모리 필터에만
   // 쓰여 목록 쿼리와 무관하다(학생·수업목록은 저장값이 서버 페이징 쿼리에 들어가 순서가 있지만 여기는 전건을 받아 거른다).
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
-  const [prefsLoaded, rawAll, superAdminIds, settings, canManage, isSuperAdmin] = await Promise.all([
+  const [prefsLoaded, rawAll, superAdminIds, settings, canManage, isSuperAdmin, jar] = await Promise.all([
     loadStaffListPrefs(),
     getStaffList(),
     getSuperAdminIds(),
@@ -127,6 +132,7 @@ export default async function StaffPage({
     canWriteTenant(user.systemRole, "staff"),
     // 연차 관리 버튼 노출 판정용 — 판정 단일 소스(super-admin.ts)를 그대로 쓴다(요청 캐시 1회).
     isCurrentUserSuperAdmin(),
+    cookies(),
   ]);
   const prefs = prefsLoaded ?? DEFAULT_STAFF_LIST_PREFS;
   // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
@@ -138,7 +144,8 @@ export default async function StaffPage({
   const status = parseStaffStatus(sp.status);
   const q = sp.q ?? "";
   const sort = parseStaffSort(sp.sort ?? prefs.sort);
-  const per = parseStaffPer(sp.per ?? prefs.per);
+  // 한 쪽 행 수 = 창 높이(AutoPageSize가 재어 ?size=N · 기기 쿠키) → 기본값. 계정 설정이 아니라 이 창의 측정값이다(page-size.ts).
+  const size = clampPageSize(sp.size ?? jar.get(pageSizeCookieName(STAFF_PAGE_SIZE_KEY))?.value, STAFF_PAGE_SIZE_DEFAULT);
   const emp = parseStaffEmp(sp.emp ?? prefs.emp);
   const page = Math.max(1, Number(sp.page) || 1);
 
@@ -202,7 +209,6 @@ export default async function StaffPage({
       subject: sp.subject === undefined || subject === sp.subject ? subjectRaw : prefs.subject,
       emp: sp.emp === undefined || parseStaffEmp(sp.emp) === sp.emp ? emp : prefs.emp,
       sort: sp.sort === undefined || parseStaffSort(sp.sort) === sp.sort ? sort : prefs.sort,
-      per: sp.per === undefined || String(parseStaffPer(sp.per)) === sp.per ? per : prefs.per,
     }),
   );
   const savedFilters = prefsLoaded ? pickStaffFilterPrefs(prefsLoaded) : null;
@@ -210,10 +216,10 @@ export default async function StaffPage({
   // 따라다닌다). 쪽 넘김(pageHref)은 애초에 안 싣는다.
   const INVITE_PARAMS = ["invited", "tab"];
 
-  // 대시보드 집계는 전체(all) 기준 — 목록만 per명으로 슬라이스(메모리 페이지네이션, 기본 10).
+  // 대시보드 집계는 전체(all) 기준 — 목록만 size명으로 슬라이스(메모리 페이지네이션, 창 높이가 정한다).
   const total = staff.length;
-  const totalPages = Math.max(1, Math.ceil(total / per));
-  const pageStaff = staff.slice((page - 1) * per, page * per);
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  const pageStaff = staff.slice((page - 1) * size, page * size);
 
   /**
    * 쪽 넘김 링크가 들고 갈 파라미터 — 기본값과 다르거나 **URL이 명시한** 축은 그대로 적는다(URL 값은 보정하지 않고 원값).
@@ -230,8 +236,7 @@ export default async function StaffPage({
     else if (emp !== "all") params.set("emp", emp);
     if (sp.sort !== undefined) params.set("sort", sp.sort);
     else if (sort !== "role") params.set("sort", sort);
-    if (sp.per !== undefined) params.set("per", sp.per);
-    else if (per !== STAFF_PER_DEFAULT) params.set("per", String(per));
+    if (size !== STAFF_PAGE_SIZE_DEFAULT) params.set("size", String(size));
     if (q) params.set("q", q);
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
@@ -403,19 +408,6 @@ export default async function StaffPage({
           {q ? <span className="ml-1.5">· &ldquo;{q}&rdquo; 검색</span> : null}
         </p>
         <div className="flex flex-wrap items-center gap-2.5">
-          <FilterSelect
-            paramName="per"
-            clearParams={INVITE_PARAMS}
-            value={String(per)}
-            options={STAFF_PER_OPTIONS.filter((n) => n !== STAFF_PER_DEFAULT).map((n) => ({ value: String(n), label: `${n}명` }))}
-            axisLabel="표시"
-            ariaLabel="한 쪽에 보일 직원 수"
-            allValue={String(STAFF_PER_DEFAULT)}
-            allLabel={`${STAFF_PER_DEFAULT}명`}
-            explicitAll
-            className="w-auto"
-            triggerClassName={TOOLBAR_SELECT}
-          />
           {/* 표 글자 크기 −/+ · 볼 열 고르기(원장 지시 2026-07-31) — 둘 다 계정 설정(ui_prefs.staff). */}
           <div className="flex items-center gap-1.5">
             <span className="text-text-dim text-sm">글자</span>
@@ -445,11 +437,15 @@ export default async function StaffPage({
               소속 → 이름 → 직급 순. 글자 크기는 StaffTableScaleBox가 em 기준으로 한 번에 조절한다(기본 16px). */}
           {/* 넘치면 잡고 끌어서 가로 이동(원장 2026-09-04 *"가로스크롤이 제일 아래에 있어서 힘드니까 드래그 스크롤 가능하게"*) —
               행 클릭은 5px 안 움직임이면 그대로 산다(DragScrollArea가 실제로 끌었을 때만 뒤따르는 click 1회를 삼킨다). */}
-          <StaffTableScaleBox className="bg-card shadow-card rounded-2xl">
-            <DragScrollArea className="rounded-[inherit]">
-              <StaffTable rows={pageStaff} />
-            </DragScrollArea>
-          </StaffTableScaleBox>
+          {/* 행 수는 창 높이가 정한다(AutoPageSize → ?size=N, 원장 2026-09-29) — 표 몸통(`tbody[data-autopage-list]`)의
+              위치·첫 행 높이를 실제 DOM에서 재므로 글자 크기·가로 스크롤바도 그대로 반영된다. */}
+          <AutoPageSize size={size} rowPx={STAFF_ROW_PX} storageKey={STAFF_PAGE_SIZE_KEY}>
+            <StaffTableScaleBox className="bg-card shadow-card rounded-2xl">
+              <DragScrollArea className="rounded-[inherit]">
+                <StaffTable rows={pageStaff} />
+              </DragScrollArea>
+            </StaffTableScaleBox>
+          </AutoPageSize>
           {/* 눈에 띄는 번호형 페이저(원장 지시 2026-07-28 — 표준 컴팩트 페이저는 존재감이 약해 이 목록만 강조형) */}
           {totalPages > 1 ? (
             <nav className="flex flex-wrap items-center justify-center gap-1.5 pt-1" aria-label="페이지 이동">

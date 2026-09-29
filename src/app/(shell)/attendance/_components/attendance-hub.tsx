@@ -132,49 +132,50 @@ export function AttendanceHub({
         </div>
         <p className="text-text-faint mt-0.5 text-xs">{sheetT(lang, "att.hub.hint")}</p>
 
+        {seats.length > 0 ? (
+          <>
+            {/* 맨 위(원장 2026-09-29 *"랩실과 JJ실 출석부를 최상단으로"*) — 매일 여는 자리라 강사 목록 아래에 묻히지 않게.
+                자리 = 여러 반이 동시에 들어오는 방. 담임이 없어 강사 줄에 섞으면 사람으로 오해한다. */}
+            <p className="micro mt-4">{sheetT(lang, "att.hub.seats")}</p>
+            <ul className="mt-1.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {seats.map((s) => (
+                <li key={s.key}>
+                  <div
+                    className={`border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${s.open ? "" : "opacity-60"}`}
+                  >
+                    <EmbedLink href={s.href} className="hover:bg-bg-soft min-w-0 flex-1 rounded-lg">
+                      <span className="text-foreground block truncate text-sm font-bold">
+                        {s.name} <span className="text-text-faint font-medium">{s.room}</span>
+                      </span>
+                      <span className="text-text-dim block text-xs">
+                        {sheetT(lang, s.open ? "att.hub.seatOpen" : "att.hub.seatClosed")}
+                      </span>
+                    </EmbedLink>
+                    <EmbedLink
+                      href={s.monthHref}
+                      className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold"
+                    >
+                      {sheetT(lang, "att.hub.monthly")}
+                    </EmbedLink>
+                    <EmbedLink
+                      href={s.href}
+                      className={`rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold ${
+                        s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
+                      }`}
+                    >
+                      {sheetT(lang, s.open ? "att.hub.day" : "att.hub.prep")}
+                    </EmbedLink>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
         {teachers.length === 0 ? (
           <p className="text-text-dim mt-4 text-xs">{sheetT(lang, "att.hub.noHomeroom")}</p>
         ) : (
           <>
             <ul className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{active.map(row)}</ul>
-            {seats.length > 0 ? (
-              <>
-                {/* 자리 = 여러 반이 동시에 들어오는 방. 담임이 없어 강사 줄에 섞으면 사람으로 오해한다. */}
-                <p className="micro mt-4">{sheetT(lang, "att.hub.seats")}</p>
-                <ul className="mt-1.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {seats.map((s) => (
-                    <li key={s.key}>
-                      <div
-                        className={`border-line flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${s.open ? "" : "opacity-60"}`}
-                      >
-                        <EmbedLink href={s.href} className="hover:bg-bg-soft min-w-0 flex-1 rounded-lg">
-                          <span className="text-foreground block truncate text-sm font-bold">
-                            {s.name} <span className="text-text-faint font-medium">{s.room}</span>
-                          </span>
-                          <span className="text-text-dim block text-xs">
-                            {sheetT(lang, s.open ? "att.hub.seatOpen" : "att.hub.seatClosed")}
-                          </span>
-                        </EmbedLink>
-                        <EmbedLink
-                          href={s.monthHref}
-                          className="bg-bg-soft text-text-dim hover:text-foreground rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold"
-                        >
-                          {sheetT(lang, "att.hub.monthly")}
-                        </EmbedLink>
-                        <EmbedLink
-                          href={s.href}
-                          className={`rounded-pill shrink-0 px-2.5 py-1 text-xs font-bold ${
-                            s.open ? "bg-primary-soft text-primary" : "bg-bg-soft text-text-faint"
-                          }`}
-                        >
-                          {sheetT(lang, s.open ? "att.hub.day" : "att.hub.prep")}
-                        </EmbedLink>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : null}
             {retired.length > 0 ? (
               <>
                 {/* 퇴직 강사도 지난달 급여·기록 조회가 실제 용무라 숨기지 않는다 — 뒤로 밀고 흐리게만. */}

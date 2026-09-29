@@ -171,6 +171,9 @@
   align-items: center;
   /* ↗ 자리 — 라벨이 형제 링크 밑으로 들어가지 않게. */
   padding-right: 26px;
+  /* 기간 꼬리표(.kpiPeriod)가 좁은 칸에서 둘째 줄로 꺾이면 그 카드만 숫자가 내려앉는다 — 한 줄 고정, 모자라면 꼬리표만 말줄임. */
+  white-space: nowrap;
+  min-width: 0;
   color: var(--foreground);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -237,6 +240,37 @@
 }
 .wide {
   grid-column: span 2;
+}
+/* 한 줄 전체 — 넓은 추이(12개월)를 wide 옆에 두면 빈 칸이 남는다(재원생 추이). 좁은 폭 규칙보다 뒤에서도 이긴다(1/-1은 열 수와 무관). */
+.fullRow {
+  grid-column: 1 / -1;
+}
+/* 패널 머리 오른쪽 — 막대/꺾은선 토글 + '상세'. */
+.panelTools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.kindToggle {
+  display: inline-flex;
+  border: 1px solid #d6dfe9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.kindToggle button {
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  color: var(--text-dim);
+  background: white;
+}
+.kindToggle button + button {
+  border-left: 1px solid #d6dfe9;
+}
+.kindToggle button[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
 }
 .panelHeader {
   display: flex;
@@ -380,6 +414,9 @@
 .kpiPeriod {
   font-size: var(--text-xs);
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .subjectTrack {
   height: 12px;

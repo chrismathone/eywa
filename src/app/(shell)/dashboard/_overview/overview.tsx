@@ -1,6 +1,9 @@
 "use client";
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { DEFAULT_CHART_KINDS, type ChartKinds, type ChartPanel } from "@/features/dashboard/overview/chart-prefs";
+import { saveDashboardChartKind } from "@/features/dashboard/overview/chart-prefs-actions";
+import { ChartKindToggle } from "./chart-kind-toggle";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import {
@@ -87,6 +90,7 @@ function Panel({
   wide = false,
   className = "",
   helpKey,
+  tools,
 }: {
   id?: string;
   title: string;
@@ -97,6 +101,8 @@ function Panel({
   wide?: boolean;
   className?: string;
   helpKey?: string;
+  /** 머리 오른쪽 '상세' 앞에 붙는 조작(막대/꺾은선 토글). */
+  tools?: ReactNode;
 }) {
   const visible = sections.filter((v) => !!v);
   if (!visible.length) return null;
@@ -120,11 +126,16 @@ function Panel({
           <h2>{title}</h2>
           <p>{note}</p>
         </div>
-        {href && (
-          <Jump href={href}>
-            <span className={s.srOnly}>{title} </span>상세
-          </Jump>
-        )}
+        {tools || href ? (
+          <div className={s.panelTools}>
+            {tools}
+            {href && (
+              <Jump href={href}>
+                <span className={s.srOnly}>{title} </span>상세
+              </Jump>
+            )}
+          </div>
+        ) : null}
       </header>
       <div className={s.panelBody}>
         {available ? (
@@ -174,8 +185,11 @@ function InlineStat({
 export function Overview({
   initial,
   demoRoster = null,
+  chartKinds: initialKinds = DEFAULT_CHART_KINDS,
 }: {
   initial: OverviewSnapshot;
+  /** 추이 패널 막대/꺾은선 — 계정 귀속(`ui_prefs.dashboard`). */
+  chartKinds?: ChartKinds;
   /** 데모 지점 원장에게만. 다른 지점은 null이라 버튼이 없다. */
   demoRoster?: DemoRosterControl | null;
 }) {
@@ -185,10 +199,22 @@ export function Overview({
     () => false,
   );
   const query = useOverview(initial);
+  const [kinds, setKinds] = useState<ChartKinds>(initialKinds);
+  const kindTools = (panel: ChartPanel, label: string) => (
+    <ChartKindToggle
+      value={kinds[panel]}
+      label={label}
+      onChange={(k) => {
+        setKinds((prev) => ({ ...prev, [panel]: k }));
+        void saveDashboardChartKind(panel, k).catch(() => undefined); // 표시 취향 — 저장 실패해도 화면은 바뀐 그대로
+      }}
+    />
+  );
   const snapshot = query.data;
   const v = snapshot.sections;
   const student = v.students?.data;
   const change = v.changes?.data;
+  const enrolledTrend = v.enrolledTrend?.data;
   const currentChange = change?.at(-1);
   const billing = v.billing?.data;
   const bill = billing?.at(-1);
@@ -294,7 +320,7 @@ export function Overview({
         <div className={s.grid} data-overview="grid">
           <Panel
             title="재원생 구성"
-            note="초·중·고 · 영어·동시수강·수학"
+            note="현재 · 초·중·고 · 영어·동시수강·수학"
             href={studentsEnrolledHref()}
             sections={[v.students]}
           >
@@ -388,7 +414,7 @@ export function Overview({
           </Panel>
           <Panel
             title={`${thisMonth} 수납 현황`}
-            note="당월 청구서 · 취소 청구 제외"
+            note="이번 달 청구서 · 취소 청구 제외"
             href={`/billing?period=${snapshot.today.slice(0, 7)}`}
             sections={[v.billing]}
           >
@@ -487,6 +513,7 @@ export function Overview({
             href="/students"
             sections={[v.changes]}
             wide
+            tools={kindTools("changes", "등록 · 퇴원 추이")}
           >
             {change && (
               <>
@@ -504,6 +531,7 @@ export function Overview({
                   </b>
                 </div>
                 <Columns
+                  kind={kinds.changes}
                   labels={change.map((r) => axisMonth(r.month))}
                   axisFormat={(n) => (Number.isInteger(n) ? `${number(n)}명` : "")}
                   series={[
@@ -528,6 +556,7 @@ export function Overview({
             href="/billing"
             sections={[v.billing]}
             wide
+            tools={kindTools("billing", "6개월 청구 · 수납")}
           >
             {billing && (
               <>
@@ -549,6 +578,7 @@ export function Overview({
                   )}
                 </div>
                 <Columns
+                  kind={kinds.billing}
                   labels={billing.map((r) => axisMonth(r.period))}
                   series={[
                     {
@@ -566,6 +596,46 @@ export function Overview({
               </>
             )}
           </Panel>
+          {/* 재원생 추이(원장 2026-09-29 "재원생 수치: 연간, 월간 흐름을 볼 수 있도록") — 막대 = 달마다 말일(이번 달은 오늘) 재원생,
+              아래 줄 = 해마다 연말(올해는 오늘). 판정은 '재원생' 카드와 같은 뜻을 그날로 되감은 것(enrolled-trend.ts) — 오늘 칸 = 카드.
+              한 줄 전체 폭(원장 "우하단에 빈공간이 크게 남아") — wide 셋이면 넷째 칸이 빈다. */}
+          {/* 강사 스코프만 숨긴다 = 조회에 **성공한 적 있는데**(at) 값이 null. 갱신 실패는 옛 섹션에 error만 얹으므로
+              (model.ts mergeSnapshot) error로 가르면 강사에게 오류 패널이 드러난다. 첫 조회 실패·시간 초과(at=null)는 Panel이 알린다. */}
+          {!(v.enrolledTrend && v.enrolledTrend.data === null && v.enrolledTrend.at !== null) ? (
+            <Panel
+              title="재원생 추이"
+              note="최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외"
+              href={studentsEnrolledHref()}
+              sections={[v.enrolledTrend]}
+              className={s.fullRow}
+              tools={kindTools("enrolledTrend", "재원생 추이")}
+            >
+              {enrolledTrend && (
+                <>
+                  <div className={s.chartHeadline}>
+                    <b>
+                      오늘 재원생 <strong>{number(enrolledTrend.monthly.at(-1)?.count ?? 0)}명</strong>
+                    </b>
+                    <i className={s.chartHeadlineNote}>
+                      {enrolledTrend.yearly
+                        .map((y, i, all) => `${y.label}${i === all.length - 1 ? "(오늘)" : " 말"} ${number(y.count)}명`)
+                        .join(" · ")}
+                    </i>
+                  </div>
+                  <Columns
+                    kind={kinds.enrolledTrend}
+                    labels={enrolledTrend.monthly.map((p) => axisMonth(p.key))}
+                    axisFormat={(n) => (Number.isInteger(n) ? `${number(n)}명` : "")}
+                    valueLabels="all"
+                    series={[{ name: "재원생", color: COLORS[0], values: enrolledTrend.monthly.map((p) => p.count) }]}
+                  />
+                  {enrolledTrend.recordsFrom ? (
+                    <p className={s.footnote}>퇴원 기록은 {enrolledTrend.recordsFrom.slice(0, 4)}년 {Number(enrolledTrend.recordsFrom.slice(5, 7))}월부터 있어 연도별은 그 해부터 셉니다.</p>
+                  ) : null}
+                </>
+              )}
+            </Panel>
+          ) : null}
         </div>
 
         <div id="student-overview" className={s.sectionLine}>
@@ -575,7 +645,7 @@ export function Overview({
         <div className={s.grid} data-overview="grid">
           <Panel
             title="과목별 수강"
-            note="재원생 · 과목별 수강과 동시 수강"
+            note="현재 재원생 · 과목별 수강과 동시 수강"
             href={studentsEnrolledHref()}
             sections={[v.students]}
           >
@@ -629,7 +699,7 @@ export function Overview({
           </Panel>
           <Panel
             title="학년별 재원생"
-            note="학원설정 학년 순 · 영어·수학 수강 구성"
+            note="현재 재원생 · 학원설정 학년 순 · 영어·수학 수강 구성"
             href={studentsEnrolledHref()}
             sections={[v.students]}
           >
@@ -637,7 +707,7 @@ export function Overview({
           </Panel>
           <Panel
             title="학교별 학생"
-            note="재원생 · 초등·중등·고등"
+            note="현재 재원생 · 초등·중등·고등"
             className={s.schoolPanel}
             href={studentsEnrolledHref()}
             sections={[v.students]}
@@ -651,7 +721,7 @@ export function Overview({
           </Panel>
           <Panel
             title="콜&상담 전환"
-            note="지난달 · 이번 달 접수 기준"
+            note="지난달 · 이번 달 · 상담일 기준"
             sections={[v.admissions]}
           >
             {admissions && <AdmissionsComparison stats={admissions} today={snapshot.today} />}
@@ -670,7 +740,7 @@ export function Overview({
           </Panel>
           <Panel
             title="최근 14일 등원율"
-            note="(출석 + 지각) / 유효 출결 칸"
+            note="오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸"
             href="/attendance"
             sections={[v.attendanceTrend]}
           >
@@ -808,7 +878,7 @@ export function Overview({
               </Panel>
               <Panel
                 title="학생 상담"
-                note="전체 상담 기록 · 후속조치"
+                note="최근 7일 · 전체 기록 · 후속조치"
                 href="/consultations"
                 sections={[v.consultations]}
               >
@@ -860,7 +930,7 @@ export function Overview({
         <div className={s.grid} data-overview="grid">
           <Panel
             title="신규생 체크 진행"
-            note="필수 6항목 · 2개월 콜은 선택"
+            note="등록 후 90일 · 필수 6항목 · 2개월 콜은 선택"
             href="/newcomers"
             sections={[v.newcomers]}
           >
@@ -952,7 +1022,11 @@ export function Overview({
           </Panel>
           <Panel
             title="강사 시트 작성 현황"
-            note="현재 시트의 기간·보기 필터 기준"
+            // 영어 = 오늘이 속한 주 · 수학 = 이번 달 1일~오늘 — 볼 수 있는 줄만 적는다. 영어는 계정의 보기 필터(프로그램·담임)를 탄 반만 센다
+            // (수학은 권한 범위로만 거른다).
+            note={[v.englishSheet ? "영어 이번 주(보기 필터 기준)" : null, v.mathSheet ? "수학 이번 달" : null]
+              .filter(Boolean)
+              .join(" · ")}
             sections={[v.englishSheet, v.mathSheet]}
           >
             {(
@@ -1025,7 +1099,7 @@ export function Overview({
             helpKey="dash-now"
             note={
               v.schedule?.at
-                ? `${clock(v.schedule.at)} 기준 · 과목별`
+                ? `오늘 ${clock(v.schedule.at)} 기준 · 과목별`
                 : "오늘 시간표"
             }
             href="/timetable"
@@ -1060,7 +1134,7 @@ export function Overview({
           </Panel>
           <Panel
             title="직원 구성"
-            note="재직 중 · 운영 역할 기준"
+            note="현재 재직 중 · 운영 역할 기준"
             href="/staff"
             sections={[v.staff]}
           >
@@ -1103,7 +1177,7 @@ export function Overview({
           </Panel>
           <Panel
             title="행정 · 자산"
-            note="열람 가능한 업무 기준"
+            note="현재 · 누적 건수 · 열람 가능한 업무 기준"
             sections={[v.operations]}
           >
             <div className={s.operations}>
@@ -1132,8 +1206,8 @@ export function Overview({
             title={`${thisMonth} 지출 내역`}
             note={
               v.expenses?.data
-                ? `지출일 기준 · ${v.expenses.data.count}건`
-                : "당월 지출결의서 기준"
+                ? `이번 달 · 지출일 기준 · ${v.expenses.data.count}건`
+                : "이번 달 지출결의서 기준"
             }
             href={`/billing?tab=expenses&period=${snapshot.today.slice(0, 7)}`}
             sections={[v.expenses]}

@@ -30,8 +30,7 @@ import { ConnectedAppRail } from "@/components/connected-app-rail";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import { useMenuHub } from "./workspace/menu-hub-store";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
-import { TeacherViewToggle } from "@/components/view-mode-toggle";
-import { OtherTeacherViewPicker } from "@/components/other-teacher-view";
+import { TeacherViewSwitcher } from "@/components/other-teacher-view";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowMode } from "@/components/workspace/use-window-mode";
 import { usePrefs } from "@/components/workspace/use-prefs";
@@ -142,9 +141,9 @@ export function AppSidebar({
   logoText?: string;
   logoSrc?: string | null;
   permMatrix?: AccessMatrix;
-  /** 겸직(관리자 계열 + 담당 반 보유) → 하단에 '강사뷰로 전환' 노출. */
+  /** 겸직(관리자 계열 + 담당 반 보유) → 하단 '강사뷰 전환' 맨 위에 '나'. */
   canTeacherView?: boolean;
-  /** '다른 강사 뷰'(열람 전용) 자격(master·super_admin·강사뷰 접근 토글) → 하단에 강사 피커 노출. */
+  /** '다른 강사 뷰'(열람 전용) 자격(master·super_admin·강사뷰 접근 토글) → 하단 '강사뷰 전환'에 다른 강사 목록. */
   canOtherTeacherView?: boolean;
   /** 자주 방문한 메뉴(많이 → 최근 순, 권한 통과분). 비면 기본값으로 떨어진다. */
   frequentKeys?: MenuKey[];
@@ -462,11 +461,16 @@ export function AppSidebar({
           />
         </div>
 
-        {/* 겸직(관리자+담당반) 강사뷰 전환 + '다른 강사 뷰'(열람 전용) — user 줄 위, nav와 구분선으로 분리. */}
+        {/* '강사뷰 전환' 한 줄(원장 2026-09-29) — 맨 위 '나'(겸직·쓰기 가능) + 다른 강사(열람 전용). user 줄 위, nav와 구분선으로 분리. */}
         {canTeacherView || canOtherTeacherView ? (
           <div className="border-line shrink-0 border-t px-1 py-1.5">
-            {canTeacherView ? <TeacherViewToggle expanded={expanded} motion={motion} /> : null}
-            {canOtherTeacherView ? <OtherTeacherViewPicker expanded={expanded} motion={motion} /> : null}
+            <TeacherViewSwitcher
+              expanded={expanded}
+              motion={motion}
+              selfName={name}
+              canSelf={canTeacherView}
+              canOthers={canOtherTeacherView}
+            />
           </div>
         ) : null}
 

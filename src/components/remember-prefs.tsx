@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
  *
  * 서버가 URL(명시값) → 저장값 → 기본값 순으로 필터를 정하고 그 결과를 `current`로 내려 준다. 사용자가 열 머리에서 값을 고르면
  * URL이 바뀌어 다시 렌더되고, 그때 차이가 나면 여기서 저장한다 — 필터 컨트롤마다 저장 코드를 붙이지 않는다.
- * 학생목록(`ui_prefs.students`)·수업목록(`ui_prefs.classes`)·직원관리(`ui_prefs.staff`, 필터 5축만)가 같이 쓴다 — `save`는 그 화면의
+ * 학생목록(`ui_prefs.students`)·수업목록(`ui_prefs.classes`)·직원관리(`ui_prefs.staff`, 필터 4축만)가 같이 쓴다 — `save`는 그 화면의
  * 서버 액션(`saveXxxPrefs`) 또는 그 화면의 저장 큐(직원관리 `queueStaffPrefsSave` — 같은 키를 다른 컨트롤도 쓸 때).
  * 🔴 `current`엔 **이 컴포넌트가 주인인 축만** 싣는다 — 다른 컨트롤이 따로 저장하는 키(열·글자 크기)를 함께 실으면 서버 렌더
  *    시점의 사본이 방금 클릭한 값을 되돌려 쓴다(직원관리 적대적 리뷰 2026-09-04).

@@ -87,7 +87,13 @@ export function AutoPageSize({
       // Windows 125% 배율에서 1px 선이 0.8로 내림)라 `max()`로 rowPx 그대로 = 종전과 같고, 상수보다 작게 세는 일은 없다(반 그려진
       // 행·0행이면 rowPx). `--list-h`도 같은 값으로 잰다.
       const firstRow = list.firstElementChild as HTMLElement | null;
-      const rowH = Math.max(rowPx, firstRow ? firstRow.getBoundingClientRect().height : 0);
+      // 1단 목록은 **평균 행 높이**도 본다 — 직원 표처럼 줄바꿈되는 칸(계약조건)이 있으면 첫 행만 짧고 뒤 행이 두세 줄이라
+      // 첫 행 × 행 수가 실제보다 작아 창을 넘친다(적대 리뷰 2026-09-29). 다단은 높이를 우리가 적으므로(`--list-h`) 평균이 뜻이 없다.
+      // 🔴 **첫 쪽에서만** — 쪽마다 실린 행이 달라 평균이 달라지면, 2쪽으로 넘기는 순간 크기가 바뀌고 `page`가 지워져 1쪽으로 튕긴다(재리뷰 2026-09-29).
+      const firstPage = (searchParams?.get("page") ?? "1") === "1";
+      const oneCol = firstPage && columnCountOf(list) === 1 && list.children.length > 0;
+      const avgRow = oneCol ? list.getBoundingClientRect().height / list.children.length : 0;
+      const rowH = Math.max(rowPx, firstRow ? firstRow.getBoundingClientRect().height : 0, avgRow);
       const rows = Math.max(1, Math.floor(avail / rowH));
       const cols = columnCountOf(list);
       const fit = Math.min(PAGE_SIZE_MAX, Math.max(PAGE_SIZE_MIN, rows * cols));
@@ -132,9 +138,27 @@ export function AutoPageSize({
       timer = window.setTimeout(measure, 250);
     };
     window.addEventListener("resize", onResize);
+    // 창 크기가 그대로여도 **목록 자체의 크기**가 바뀌면 다시 잰다 — 글자 크기 −/+·열 켜고 끄기는 URL도 창도 안 바꾼다
+    // (적대 리뷰 2026-09-29: 150%로 키우면 표가 창 아래로 넘친 채 남았다). 사용자 resize가 아니라 진동 차단(lastRequest)은 유지한다.
+    // 우리가 적는 `--list-h`도 크기를 바꾸지만 같은 입력이면 같은 값이 나와 더 청하지 않는다.
+    const list = (el.querySelector("[data-autopage-list]") as HTMLElement | null) ?? (el.firstElementChild as HTMLElement | null);
+    let lastBox = "";
+    const ro =
+      list && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            const r = list.getBoundingClientRect();
+            const box = `${Math.round(r.width)}x${Math.round(r.height)}`;
+            if (box === lastBox) return;
+            lastBox = box;
+            window.clearTimeout(timer);
+            timer = window.setTimeout(measure, 250);
+          })
+        : null;
+    if (list && ro) ro.observe(list);
     return () => {
       window.removeEventListener("resize", onResize);
       window.clearTimeout(timer);
+      ro?.disconnect();
     };
   }, [size, rowPx, storageKey, param, pathname, searchParams, router]);
 
