@@ -110,7 +110,7 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
  * @param {Map<number,{phone:string|null, boardNames:string[]}>} p.admissions  운영관리 명부(원아 id → 보호자 전화·소속 보드)
  * @param {number} p.schoolYear
  */
-export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear }) {
+export function planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear, linkedBoardByClass = new Map() }) {
   // 1) 학생별 원아 판정(한 번씩)
   const byStudent = new Map();
   for (const c of classes)
@@ -134,12 +134,24 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
   }
 
   // 2) 반별
+  // 연결표(0302a)가 쥔 보드 → 반. 이름이 같은 보드라도 **다른 반에 연결된 보드**는 이 반 것으로 보지 않는다.
+  const classByLinkedBoard = new Map([...linkedBoardByClass].map(([cid, bid]) => [Number(bid), cid]));
   const plans = classes.map((c) => {
     const exact = (boards ?? []).filter((b) => b.name === c.className);
     const near = (boards ?? []).filter((b) => b.name !== c.className && normBoard(b.name) === normBoard(c.className));
+    const linkedId = linkedBoardByClass.get(c.classId);
+    const linked = linkedId != null ? (boards ?? []).find((b) => Number(b.id) === Number(linkedId)) : null;
     let board;
-    if (exact.length > 1) board = { action: "block", reason: `같은 이름 보드 ${exact.length}개` };
+    if (linked) {
+      // 🔑 반 연결은 **번호가 기준**이다(2026-09-29 동기화) — aywa에서 반 이름을 바꿔도 새 반을 만들지 않고 이름을 바꾼다.
+      if (linked.name === c.className) board = { action: "exists", id: linked.id };
+      else if (exact.length || near.length)
+        board = { action: "block", reason: `반 이름을 "${c.className}"(으)로 바꿔야 하는데 그 이름의 보드가 이미 있습니다` };
+      else board = { action: "exists", id: linked.id, rename: { from: linked.name, to: c.className } };
+    } else if (exact.length > 1) board = { action: "block", reason: `같은 이름 보드 ${exact.length}개` };
     else if (near.length) board = { action: "block", reason: `공백만 다른 보드가 있음(${near.map((b) => JSON.stringify(b.name)).join(", ")})` };
+    else if (exact.length === 1 && classByLinkedBoard.has(Number(exact[0].id)) && classByLinkedBoard.get(Number(exact[0].id)) !== c.classId)
+      board = { action: "block", reason: `같은 이름 보드가 다른 반에 연결돼 있습니다` };
     else if (exact.length === 1) board = { action: "exists", id: exact[0].id };
     else board = { action: "create" };
 

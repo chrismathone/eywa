@@ -10,7 +10,8 @@
 - 학부모 새 글·댓글 벨 알림이 반 보드 글도 본다 — 보드명이 아니라 **원아 id**로 학생 확정(0302a ok만, `loadClassBoardChildMap`).
 - 원장 *"c.n이 너무 직관적이지가 않네 … 노트 아이콘 … 활성화되면 컬러풀, 비활성화시 회색빛"* → codex 생성 스티커(`public/badges/cnNote.png`, 아이콘 파이프라인 후처리) · 실패 = 흑백·옅게. `public/icons/` 밖(메뉴 그림 가드 대상 아님).
 - 반 공지 탭 '공지 방식: 원생 개별 공지 | 반 단체 공지'. 반 단체 공지 = 0304a 큐(쓰기는 서버만) → 워커 `classnote-class-notice-core.mjs`: 보드 번호는 0302a에서 다시 · 보드 원아 = 그 반 재원생(ok ∩ 수강 중)이 아니면 그 반 보류 · `classes_to` 정확히 하나(`class-notice-guard.mjs`) · 같은 제목·내용 중복 게시 생략 · 게시 후 기관 전체 공지가 아닌지 확인. 테스트반 실발송 확인(notice 72779163). caps `classWideNotice`.
-- ⏳ 남은 것: aywa 반 변경 동기화(매일·신호) · 선생님 대응표 ID 매핑.
+- aywa 반 변경 **매일 동기화**(`math-class-boards-sync.mjs`, 연동 PC 워커 KST 05시 이후 하루 1회 · 반 보드를 쓰는 지점만): 새 반 보드 · 반 이름 변경(🔑 연결표 0302a **번호 기준** — 이름이 바뀌어도 새로 만들지 않고 `PATCH`로 이름만) · 원아 추가 배정(같은 가드) · 담임 연결(대응표 `math-class-teachers.mjs`) · 0302a 기록 갱신. 해제는 하지 않고 '해제 필요'로 로그. 수동 스크립트와 같은 실행 코드(`math-class-boards-apply.mjs`). caps `classBoardSync`.
+- ⏳ 남은 것: 신호로 즉시 반영(지금은 하루 1회) · 선생님 대응표 ID 매핑(`users.classnote_teacher_id`).
 
 ## 2026-09-29 — 슬랙 활동 메시지 '무엇을 했나' 요약 · 이름 중복 제거
 

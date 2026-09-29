@@ -17,17 +17,8 @@ import { fetchBoards, fetchCenterId, launchAdminBrowser, loginClassnote } from "
 import { resolveTenant } from "./classnote-core.mjs";
 import { loadAywa } from "./math-class-boards-load.mjs";
 
-/** aywa 직원 display_name → ClassNote 선생님 id (사람이 확인한 대응만). */
-export const TEACHER_MAP = {
-  이성우: 1716510,
-  허주연: 1770725,
-  남정화: 1763775,
-  김윤하: 1711761,
-  김은정: 1713039, // ClassNote '셀린'
-  이수진: 1713037, // ClassNote '수진T'
-  허은진: 1721116,
-  유형숙: 1765427,
-};
+// 대응표 = math-class-teachers.mjs(매일 동기화와 공용 — 한 곳만 고친다).
+import { TEACHER_MAP } from "./math-class-teachers.mjs";
 
 const arg = (k) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
 const APPLY = process.argv.includes("--apply");

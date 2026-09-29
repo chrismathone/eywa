@@ -635,6 +635,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 | 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
 | 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 제외** · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고) |
 | 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 보고서 설정 `classnoteMathRoute` personal/class/pilot · 반별 = 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
+| 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 해제 필요는 로그만 |
 | C.N 라벨 | [`classnote-match.ts`](../src/features/onescreen/classnote-match.ts) · [`cn-badge.tsx`](../src/features/onescreen/components/cn-badge.tsx) | 원스크린 카드·표 모드. 초록 = 확인된 배정 |
 
 - **API(실측)**: 반 생성 = DOM '반 추가하기'(또는 `POST kapi…/v1/centers/{c}/classes`) · 반 이름 변경 = `PATCH /api/v1/centers/{c}/classes/{id}/ {name}` → 200 (`/api/v1/classes/{id}/` PATCH·PUT은 405) ·
