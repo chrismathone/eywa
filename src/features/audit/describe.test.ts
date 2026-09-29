@@ -959,7 +959,7 @@ describe("auditTargetLabel — '대상' 열 한글화", () => {
 
 describe("auditActorName — '실행자' 열의 스크립트 식별자", () => {
   it("system:* 를 한글로, 사람 이름은 그대로", () => {
-    expect(auditActorName("system:grant-class-review")).toBe("시스템 · 수업 평가 권한 부여");
+    expect(auditActorName("system:grant-class-review")).toBe("시스템 · 직원 평가 권한 부여");
     expect(auditActorName("system:narrow-staff-menu")).toBe("시스템 · 직원관리 권한 조정");
     expect(auditActorName("박소선")).toBe("박소선");
     expect(auditActorName(null)).toBeNull();
@@ -971,7 +971,7 @@ describe("auditActorName — '실행자' 열의 스크립트 식별자", () => {
   });
 
   it("보이는 한글로 검색이 된다(액션 라벨 역인덱스와 같은 규약)", () => {
-    expect(systemActorMatches("수업 평가 권한").names).toEqual(["system:grant-class-review"]);
+    expect(systemActorMatches("직원 평가 권한").names).toEqual(["system:grant-class-review"]);
     expect(systemActorMatches("시스템").allSystem).toBe(true);
     expect(systemActorMatches("김승언")).toEqual({ names: [], allSystem: false });
   });

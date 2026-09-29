@@ -111,7 +111,7 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   },
   class_review: {
     id: "class_review",
-    label: "수업 평가",
+    label: "직원 평가",
     description: "수업 참관 체크리스트와 강사 자기 평가",
     menuKeys: ["class_review"],
   },

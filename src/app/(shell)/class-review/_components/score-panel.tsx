@@ -166,7 +166,7 @@ export function ScorePanel({
         name="comment"
         defaultValue={initialComment}
         rows={3}
-        placeholder="선택 — 종합 의견을 남기세요"
+        placeholder="선택 — 이 수업에 대한 의견을 남기세요 (최종 총평은 상세 화면에서 따로 씁니다)"
         className="border-line bg-card text-foreground placeholder:text-text-faint focus:border-primary w-full rounded-lg border px-3 py-2 text-sm outline-none transition"
       />
 

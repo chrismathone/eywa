@@ -226,4 +226,29 @@ describe("planClassBoards — 반 단위", () => {
     const [p] = planClassBoards({ ...w, classes: cls(["s1"], "중등M 개별  BS3R") });
     expect(p.board).toEqual({ action: "exists", id: 50 });
   });
+
+  it("🔑 연결표 기준 — aywa에서 반 이름을 바꾸면 새로 만들지 않고 이름 변경(rename)", () => {
+    const w = world();
+    w.boards.push({ id: 70, name: "중등M 중1 BS3E" });
+    w.membersByBoard.set(70, []);
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"], "중등M 중1 BS3E 새이름"), linkedBoardByClass: new Map([["c1", 70]]) });
+    expect(p.board).toEqual({ action: "exists", id: 70, rename: { from: "중등M 중1 BS3E", to: "중등M 중1 BS3E 새이름" } });
+  });
+  it("바꿀 이름의 보드가 이미 있으면 막는다", () => {
+    const w = world();
+    w.boards.push({ id: 70, name: "옛이름" }, { id: 71, name: "새이름" });
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"], "새이름"), linkedBoardByClass: new Map([["c1", 70]]) });
+    expect(p.board.action).toBe("block");
+  });
+  it("같은 이름 보드가 다른 반에 연결돼 있으면 이 반 것으로 보지 않는다", () => {
+    const w = world();
+    w.boards.push({ id: 80, name: "중등M 중1 BS3E" });
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c9", 80]]) });
+    expect(p.board.action).toBe("block");
+  });
+  it("연결된 보드가 ClassNote에서 사라졌으면 이름 규칙으로(새로 만든다)", () => {
+    const w = world();
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 999]]) });
+    expect(p.board).toEqual({ action: "create" });
+  });
 });

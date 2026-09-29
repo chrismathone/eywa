@@ -8,6 +8,7 @@ import { listReports } from "@/features/report-admin/server/actions";
 import { defaultReportFilters } from "@/features/report-admin/report-filters";
 import { kstToday } from "@/lib/date-kst";
 import { getNoticeClassOptions, listClassNotices } from "@/features/report-admin/server/notice-actions";
+import { listClassWideNotices } from "@/features/report-admin/server/class-notice-actions";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getStudentsList } from "@/features/students/server/queries";
 import { getActivePrompts } from "@/features/onescreen/server/prompt-actions";
@@ -111,9 +112,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
               staffNames: cand.staffNames,
             }))
           : tab === "notice"
-            ? Promise.all([getNoticeClassOptions(), listClassNotices()]).then(([cls, notices]) => ({
+            ? Promise.all([getNoticeClassOptions(), listClassNotices(), listClassWideNotices()]).then(([cls, notices, wide]) => ({
                 noticeClasses: cls.classes ?? [],
                 noticeRows: notices.rows ?? [],
+                // 반 단체 공지(0304a) — 표가 없거나 실패하면 빈 값(원생 개별 공지 화면은 그대로 산다).
+                classWide: { rows: wide.rows ?? [], boardClassIds: wide.boardClassIds ?? [] },
               }))
           : tab === "compose"
             ? Promise.all([getStudentsList({ status: "enrolled" }), getTenantSettings(), getNoticeClassOptions()]).then(
@@ -212,7 +215,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "notice" && "noticeClasses" in tabData && "noticeRows" in tabData ? (
-        <NoticeFace classes={tabData.noticeClasses} initial={tabData.noticeRows} canSend={canSendReports} />
+        <NoticeFace
+          classes={tabData.noticeClasses}
+          initial={tabData.noticeRows}
+          canSend={canSendReports}
+          classWide={"classWide" in tabData ? tabData.classWide : undefined}
+        />
       ) : null}
 
       {tab === "compose" && "composeStudents" in tabData ? (

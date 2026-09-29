@@ -17,7 +17,7 @@ export const HELP_TERMS: readonly { pattern: string; slug: string }[] = [
   { pattern: "출결 모드", slug: "attendance-quick" },
   { pattern: "보강 예약", slug: "attendance" },
   { pattern: "수업보고서", slug: "lesson-reports" },
-  { pattern: "수업 평가", slug: "class-review" },
+  { pattern: "직원 평가", slug: "class-review" },
   { pattern: "원생목록", slug: "students" },
   { pattern: "학생목록", slug: "students" },
   { pattern: "원생상담", slug: "consultations" },

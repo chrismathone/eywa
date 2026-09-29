@@ -31,6 +31,13 @@ describe("자기 평가 전용 배선", () => {
     expect(actions.match(/isSelfOnlyReviewer\(/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 
+  it("최종 총평 저장도 자기 평가 전용 판정 + 총평 자격을 지난다", () => {
+    const src = read("server/final-review-actions.ts");
+    expect(src).toContain("isSelfOnlyReviewer(");
+    expect(src).toContain("writeFinalReview");
+    expect(src).toContain("readonlyTeacherViewError");
+  });
+
   it("'다른 강사 뷰'는 대상 강사의 눈으로 본다 — 뷰어 판정이 한 곳에서만 난다", () => {
     const queries = read("server/queries.ts");
     // 원장 제보 2026-08-19: 뷰어의 실 역할로 판정하니 '다른 강사 뷰'에서 남의 점수·평가자 이름이 그대로 보였다.

@@ -7,6 +7,7 @@ import { CLASSNOTE_SENDABLE_SUBJECTS } from "@/features/onescreen/classnote-guar
 import { SectionForm, SettingsCard } from "./section-form";
 import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
+import { ClassnoteRouteField } from "./classnote-route-field";
 import { EyIcon } from "@/components/icons/aywa-icons";
 
 /**
@@ -197,6 +198,14 @@ export function ReportSection({
             </p>
           ) : null}
         </div>
+
+        {/* 수학 발송 경로(원장 2026-09-29) — 소비처 = 발송 워커(getClassnoteMathRoute). */}
+        <ClassnoteRouteField
+          route={r.classnoteMathRoute}
+          pilot={r.classnoteMathRoutePilot}
+          mathTeachers={[...new Set([...(teachers.math ?? []), ...(teachers.subject_1 ?? [])])].filter(inStaff)}
+          onChange={set}
+        />
       </div>
 
       {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려

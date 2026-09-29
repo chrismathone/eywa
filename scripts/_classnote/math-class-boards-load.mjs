@@ -67,8 +67,14 @@ export function personalBoardId(boards, studentName) {
   return hit.length === 1 ? hit[0].id : null;
 }
 
+/** 반 ↔ 보드 연결표(0302a) — 반 이름이 바뀌어도 이 번호로 같은 보드를 찾는다. 표가 없으면 빈 지도. */
+export async function loadLinkedBoards(sql, tenant) {
+  const rows = await sql`select class_id, board_id from classnote_class_boards where tenant_id = ${tenant}`.catch(() => []);
+  return new Map(rows.map((r) => [r.class_id, Number(r.board_id)]));
+}
+
 /** 전체 계획을 새로 만든다(매 실행 최신 — 계획을 파일에서 읽어 실행하지 않는다). */
-export async function loadPlan(page, centerId, { classes, students }) {
+export async function loadPlan(page, centerId, { classes, students }, { linkedBoardByClass = new Map() } = {}) {
   const boards = await fetchBoards(page, centerId);
   const admissions = await fetchAdmissions(page, centerId);
   const need = new Set();
@@ -77,6 +83,9 @@ export async function loadPlan(page, centerId, { classes, students }) {
     if (id != null) need.add(id);
   }
   for (const c of classes) for (const b of boards) if (b.name === c.className) need.add(b.id);
+  // 연결된 보드(이름이 바뀌었을 수 있다)도 원아를 읽는다 — 안 읽으면 '이미 배정' 판정이 비어 전원 다시 배정하려 든다.
+  const liveIds = new Set(boards.map((b) => Number(b.id)));
+  for (const id of linkedBoardByClass.values()) if (liveIds.has(Number(id))) need.add(Number(id));
   const membersByBoard = new Map();
   let failed = 0;
   for (const id of need) {
@@ -86,6 +95,6 @@ export async function loadPlan(page, centerId, { classes, students }) {
       failed++; // undefined로 남겨 "조회 실패" 보류가 되게 한다
     }
   }
-  const plans = planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear: kstSchoolYear() });
+  const plans = planClassBoards({ classes, students, boards, membersByBoard, admissions, schoolYear: kstSchoolYear(), linkedBoardByClass });
   return { plans, boards, membersByBoard, admissions, failed, lookedUp: need.size };
 }

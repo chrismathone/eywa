@@ -15,7 +15,7 @@ import {
 import { GRADE_CUTS, GRADE_FALLBACK } from "@/features/class-review/checklist";
 import { ReviewTable } from "./_components/review-table";
 
-export const metadata = { title: "수업 평가 — 에이와" };
+export const metadata = { title: "직원 평가 — 에이와" };
 
 /**
  * 수업 평가 체크리스트(참관) 목록 — 시트 "수업 상향화 체크리스트" 이식 초안(2026-08-04).
@@ -45,13 +45,13 @@ export default async function ClassReviewPage() {
     <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
       <PageHeader
         eyebrow="운영"
-        title="수업 평가 체크리스트"
+        title="직원 평가 체크리스트"
         description={
           selfOnly
-            ? "내 수업 평가에 본인 평가를 작성합니다. 평가자 채점·종합 결과는 사무실에서 관리합니다."
+            ? "내 직원 평가에 본인 평가를 작성합니다. 평가자 채점·종합 결과는 사무실에서 관리합니다."
             : "평가 문항(4점 척도)을 평가자와 본인이 각자 채점하고 나란히 비교합니다."
         }
-        embedLabel="수업 평가 체크리스트"
+        embedLabel="직원 평가 체크리스트"
         actions={
           <span className="flex items-center gap-2">
             {priv.seeNames ? (
@@ -78,7 +78,7 @@ export default async function ClassReviewPage() {
         <div className="border-line rounded-2xl border border-dashed p-10 text-center">
           <p className="text-text-dim text-sm">
             {selfOnly
-              ? "아직 내 수업 평가 건이 없습니다 — 사무실에서 평가 건을 만들면 여기에 표시됩니다."
+              ? "아직 내 직원 평가 건이 없습니다 — 사무실에서 평가 건을 만들면 여기에 표시됩니다."
               : "아직 평가 건이 없습니다 — ‘새 평가’로 시작하세요."}
           </p>
         </div>

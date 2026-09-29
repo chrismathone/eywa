@@ -10,6 +10,8 @@ import type { CellState, OneScreenStudent } from "../types";
 import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
 import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { CnBadge } from "./cn-badge";
+import type { CnMatch } from "../classnote-match";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
 
 /**
@@ -42,6 +44,7 @@ function StudentRow({
   active,
   reportCell,
   sendMark,
+  cn,
   onClick,
   testConfig,
 }: {
@@ -49,6 +52,8 @@ function StudentRow({
   active: boolean;
   reportCell?: CellState;
   sendMark?: SendMark;
+  /** ClassNote 반 보드 매칭(수학 행만 — 호출부가 cnLabelFor로 판정). null = 라벨 없음. */
+  cn?: { ok: boolean; match: CnMatch | null } | null;
   onClick: () => void;
   testConfig?: TestConfig;
 }) {
@@ -70,6 +75,7 @@ function StudentRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="text-foreground truncate text-sm font-bold">{st.name}</span>
+          <CnBadge label={cn ?? null} className={st.className} />
           {/* 발송 표시 — 라벨 색(보 셀)만으로는 '나갔는지'가 눈에 안 띈다는 원장 지적(2026-07-27).
               ⚠️ 표시는 **실제로 나간 행**에만 붙는다: 전부 나갔으면 채운 체크, 일부면 흐린 체크 + 남은 수.
                  아무것도 안 나갔으면 아무 표시도 없다(없음 = 미발송, 거짓 안심 금지). */}
@@ -159,7 +165,11 @@ export function StudentList({
   selId: string;
   onSelect: (id: string, subjectName?: string) => void;
   selectedSubjectName?: string;
-  statusForStudent?: (student: OneScreenStudent) => { reportCell: CellState; sendMark: SendMark };
+  statusForStudent?: (student: OneScreenStudent) => {
+    reportCell: CellState;
+    sendMark: SendMark;
+    cn?: { ok: boolean; match: CnMatch | null } | null;
+  };
   reportCellById?: Record<string, CellState>;
   /** 이름 옆 발송 표시 — 학생 id → {나간 행 수, 나갈 수 있는 행 수, 기준 라벨}. */
   sendMarkById?: Record<string, SendMark>;
@@ -278,6 +288,7 @@ export function StudentList({
                           active={st.id === selId && (!selectedSubjectName || st.subjects.some(su => su.name === selectedSubjectName))}
                           reportCell={rowStatus?.reportCell ?? reportCellById?.[st.id]}
                           sendMark={rowStatus?.sendMark ?? sendMarkById?.[st.id]}
+                          cn={rowStatus?.cn}
                           onClick={() => onSelect(st.id, st.subjects[0]?.name)}
                           testConfig={testConfig}
                         />
