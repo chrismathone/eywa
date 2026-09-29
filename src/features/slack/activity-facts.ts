@@ -1,4 +1,4 @@
-import { STATUS_TEXT, type AttendanceMark } from "@/features/attendance/cell-display";
+import { activityChange } from "./activity-change";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 /**
@@ -36,10 +36,11 @@ export function shortDate(v: unknown): string | null {
   const m = s?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
   const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return null; // 2/31 같은 없는 날짜
   return `${+m[2]}/${+m[3]}(${WEEK[d.getUTCDay()]})`;
 }
 
-const clock = (v: unknown) => str(v)?.match(/^(\d{2}):(\d{2})/)?.slice(1, 3).join(":") ?? null;
+const clock = (v: unknown) => str(v)?.match(/^([01]\d|2[0-3]):([0-5]\d)/)?.slice(1, 3).join(":") ?? null;
 
 export function activityFacts(action: string, metadata: unknown, lk: FactLookups): ActivityFacts {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return EMPTY;
@@ -80,18 +81,10 @@ export function activityFacts(action: string, metadata: unknown, lk: FactLookups
     rows.push({ label: "날짜", value: time ? `${date} ${time} 교시` : date });
   }
 
-  // 출결 상태만 한글로 — 다른 액션의 status(발송 상태 등)는 원문 enum이라 싣지 않는다.
-  if (action.startsWith("attendance") || action.startsWith("seat_attendance")) {
-    const st = str(m.status);
-    const label = st && Object.hasOwn(STATUS_TEXT, st) ? STATUS_TEXT[st as AttendanceMark] : null;
-    if (label) {
-      const text = st === "excused" ? "결석(사유)" : label;
-      brief.push(text);
-      rows.push({ label: "출결", value: text });
-    }
-  }
-  const count = typeof m.count === "number" && Number.isFinite(m.count) ? m.count : null;
-  if (count !== null && !many.length) rows.push({ label: "건수", value: `${count}건` });
+  // 무엇을 했나 — 출결 전후·상태 전환·작성/수정·칸 수정·건수(activity-change.ts, codex·grok 합의 2026-09-29).
+  const change = activityChange(action, m);
+  brief.push(...change.brief);
+  rows.push(...change.rows);
 
   return { brief, rows, href: sid && student ? `/students/${sid}` : null };
 }

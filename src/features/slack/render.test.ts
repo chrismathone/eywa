@@ -32,10 +32,10 @@ describe("활동", () => {
       "*[청구서 생성]* — 박소선",
     );
   });
-  it("자세히 = 누가·시각 줄 + 감사로그 링크 · 행위자 없으면 시스템", () => {
+  it("자세히 = 시각 · 감사로그 링크 · 이름은 첫 줄에 한 번만(원장 2026-09-29 중복 표기)", () => {
     const b = renderActivity({ ...ev, actorName: null }, { ...style, template: "detailed" }).body;
-    expect(b).toContain(">누가  시스템 · 09:05");
-    expect(b).toContain("/owner?tab=audit|감사로그에서 보기>");
+    expect(b).toBe("*[학생 등록]* 김하늘(중2) — 시스템\n_09:05_ · <https://www.aywa.co.kr/owner?tab=audit|감사로그에서 보기>");
+    expect(b.match(/시스템/g)).toHaveLength(1);
   });
   const facts = {
     brief: ["김하늘", "중등M 중1 A", "9/28(월) 17:15"],
