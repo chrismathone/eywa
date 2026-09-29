@@ -45,7 +45,7 @@ async function requireWrite() {
   const readonly = await readonlyTeacherViewError();
   if (readonly) return { error: readonly };
   if (!(await canWriteTenant(user.systemRole, "class_review"))) {
-    return { error: "수업 평가를 작성할 권한이 없습니다" as const };
+    return { error: "직원 평가를 작성할 권한이 없습니다" as const };
   }
   return { user };
 }
@@ -124,7 +124,7 @@ export async function createClassReview(_prev: ReviewActionState, formData: Form
     .from("academy_documents")
     .insert({
       tenant_id: gate.user.tenantId,
-      title: `수업평가 — ${teacher.display_name} ${date}`,
+      title: `직원평가 — ${teacher.display_name} ${date}`,
       category: "hr",
       kind: "form",
       form_type: CLASS_REVIEW_FORM_TYPE,
@@ -414,7 +414,7 @@ export async function saveChecklistTemplate(
   const admin = createAdminClient();
   const payload = {
     tenant_id: gate.user.tenantId,
-    title: `수업 평가 문항 세트${name ? ` — ${name}` : ""}`,
+    title: `직원 평가 문항 세트${name ? ` — ${name}` : ""}`,
     category: "hr",
     kind: "form",
     form_type: CLASS_REVIEW_TEMPLATE_FORM_TYPE,

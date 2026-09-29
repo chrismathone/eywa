@@ -30,6 +30,7 @@ export function isOwnReview(doc: Pick<ReviewDoc, "header">, viewerId: string): b
  * 이렇게 해야 상세·채점·목록·집계가 전부 같은 사실을 보고, 새 표면이 생겨도 남의 점수가 딸려 나가지 않는다.
  * - `submissions` = self 한 장(관찰자 채점·코멘트·제출 시각 전부 제거)
  * - `evaluators` = 본인 슬롯만(관찰자 **이름**도 인사 정보라 함께 제거)
+ * - `finalReview`(사무실 최종 총평) 제거 — 평가자 채점을 종합한 인사 판단이라 본인에게도 안 보인다.
  * - `observerMode`를 assigned로 되돌린다 — 선착순으로 두면 상세 화면이 빈 관찰자 칸(정원)을 그려
  *   "몇 명이 나를 평가하는지"가 새고, 정원 칸이 채점 대상처럼 보인다.
  */
@@ -40,5 +41,6 @@ export function redactForSelfOnly(doc: ReviewDoc): ReviewDoc {
     header: { ...doc.header, observerMode: "assigned", observerLimit: 1 },
     evaluators: doc.evaluators.filter((e) => e.kind === "self"),
     submissions: self ? { self } : {},
+    finalReview: undefined,
   };
 }

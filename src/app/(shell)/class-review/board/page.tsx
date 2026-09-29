@@ -9,7 +9,7 @@ import { getReviewPrivileges, listClassReviews } from "@/features/class-review/s
 import { gradeOf } from "@/features/class-review/checklist";
 import { BoardTable, type BoardGroup } from "../_components/board-table";
 
-export const metadata = { title: "수업 평가 종합 — 에이와" };
+export const metadata = { title: "직원 평가 종합 — 에이와" };
 
 /**
  * 종합 보기(원장 지시 2026-08-05) — "여러 결과지의 등급·점수를 한 화면에서".
@@ -74,10 +74,10 @@ export default async function ClassReviewBoardPage() {
           <ArrowLeft className="size-3.5" /> 목록으로
         </Link>
         <PageHeader
-          eyebrow="수업 평가"
+          eyebrow="직원 평가"
           title="종합 보기"
           description="강사별 평가 결과(영역 소계·총점·환산·등급)를 한 화면에서 비교합니다."
-          embedLabel="수업 평가 종합"
+          embedLabel="직원 평가 종합"
         />
       </div>
 

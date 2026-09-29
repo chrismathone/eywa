@@ -26,7 +26,7 @@ export default async function NewClassReviewPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
-      <PageHeader eyebrow="수업 평가" title="새 평가" description="평가 대상과 평가자 방식을 정합니다." embedLabel="새 평가" />
+      <PageHeader eyebrow="직원 평가" title="새 평가" description="평가 대상과 평가자 방식을 정합니다." embedLabel="새 평가" />
       <NewReviewForm
         staff={staff.map((s) => ({ value: s.id, label: s.jobTitle ? `${s.name} · ${s.jobTitle}` : s.name }))}
         subjects={subjects.options}

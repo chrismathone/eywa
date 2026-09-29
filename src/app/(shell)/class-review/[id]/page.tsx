@@ -11,6 +11,8 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { Button } from "@/components/ui/button";
 import { DeleteReviewButton } from "../_components/delete-review-button";
 import { ObserverManager } from "../_components/observer-manager";
+import { FinalReviewPanel } from "../_components/final-review-panel";
+import { kstDateOf } from "@/lib/date-kst";
 import { getStaffOptions } from "@/features/meetings/server/queries";
 import {
   getClassReview,
@@ -23,7 +25,7 @@ import {
 import { averageTotals, computeTotals, itemCountOf, normalizeScore } from "@/features/class-review/checklist";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 
-export const metadata = { title: "수업 평가 상세 — 에이와" };
+export const metadata = { title: "직원 평가 상세 — 에이와" };
 
 /**
  * 참관 상세 — 시트 모양의 문항×평가자 매트릭스 + 영역 소계 + 총점/환산/등급 + 내 채점.
@@ -114,10 +116,10 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           <ArrowLeft className="size-3.5" /> 목록으로
         </Link>
         <PageHeader
-          eyebrow="수업 평가"
+          eyebrow="직원 평가"
           title={`${doc.header.teacherName} · ${doc.header.date}`}
           description={headerBits.join(" · ")}
-          embedLabel={`수업 평가 — ${doc.header.teacherName}`}
+          embedLabel={`직원 평가 — ${doc.header.teacherName}`}
           actions={
             mine || canDelete ? (
               <span className="flex flex-wrap items-center gap-2">
@@ -331,6 +333,22 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
           </ul>
         </div>
       ) : null}
+
+      {/* 최종 총평 — 평가지당 하나(원장 2026-09-29). 작성 = 원장·지정 인원(서버 액션이 같은 판정을 재검증, #77).
+          작성자 이름은 실명 열람 자격자에게만(평가자 익명화와 같은 규칙).
+          강사에겐 조회 초크포인트에서 이미 잘려 오므로(redactForSelfOnly) 여기선 빈 값이라 안 그려진다. */}
+      <FinalReviewPanel
+        docId={doc.id}
+        initialText={doc.finalReview?.text ?? ""}
+        meta={
+          doc.finalReview
+            ? [priv.seeNames ? doc.finalReview.by.name || null : null, kstDateOf(doc.finalReview.updatedAt)]
+                .filter(Boolean)
+                .join(" · ") || null
+            : null
+        }
+        editable={canWrite && priv.writeFinalReview}
+      />
 
       {/* 채점은 별도 페이지(/score) — 상세는 보기 전용(원장 지시 2026-08-04). */}
       {mine ? (
