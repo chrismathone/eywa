@@ -1,5 +1,6 @@
 // 창 안 이동은 처음부터 embed를 싣는다(EmbedLink) — 맨 Link면 창 주소 되붙이기(EmbedUrlKeeper)에 기대게 되고,
 // 그 뒤 첫 새로고침이 라우터 트리와 어긋나 한 번 더 받는다(전수검사 리뷰 2026-09-11).
+import type { ReactNode } from "react";
 import { EmbedLink } from "@/components/embed-link";
 import { Pill } from "@/components/atoms/pill";
 import type { PillColor } from "@/components/atoms/pill";
@@ -41,6 +42,7 @@ export function AttendanceHub({
   labelOf,
   todayLabel,
   lang,
+  tools,
 }: {
   teachers: HubTeacher[];
   /** 강사 목록과 퇴직 사이에 놓이는 자리 묶음(원장 2026-08-14: 선생님 / LAB·JJ / 퇴직 순). */
@@ -54,6 +56,8 @@ export function AttendanceHub({
   todayLabel: string;
   /** 강사 미니셸이면 영어. 관리자 풀셸은 언제나 한국어(페이지가 판정). */
   lang: SheetLang;
+  /** 시수 마스터·결석 통보 접수. 요약 줄 오른쪽 — 툴바에 두면 빈 둘째 줄이 된다. */
+  tools?: ReactNode;
 }) {
   const active = teachers.filter((t) => !t.retired);
   const retired = teachers.filter((t) => t.retired);
@@ -109,26 +113,30 @@ export function AttendanceHub({
 
   return (
     <section className="min-h-0 flex-1 overflow-auto">
-      <div className="bg-card shadow-card rounded-2xl p-5">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className="text-foreground text-sm font-bold">{sheetT(lang, "att.hub.title")}</p>
-          {/* 오늘 입력 현황 한 줄 — "요약 화면"의 핵심 숫자. 오늘 수업이 없으면(일요일 등) 조용히 생략. */}
-          {todayTotal.classes > 0 ? (
-            <p className="text-text-dim text-xs">
-              {sheetTf(lang, "att.hub.today.a", { date: todayLabel })}
-              <span className="num font-bold">{todayTotal.classes}</span>
-              {sheetT(lang, "att.hub.today.b")}
-              <span className="num font-bold">{todayTotal.recorded}</span>/
-              <span className="num">{todayTotal.expected}</span>
-              {sheetT(lang, "att.hub.today.c")}
-              <span className="num font-bold">{todayTotal.done}</span>
-              {sheetT(lang, "att.hub.today.d")}
-            </p>
-          ) : (
-            <p className="text-text-faint text-xs">
-              {sheetTf(lang, "att.hub.noClasses", { date: todayLabel })}
-            </p>
-          )}
+      <div className="bg-card shadow-card rounded-2xl px-5 pt-2 pb-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {/* flex-1로 제목을 줄이면 좁은 화면에서 '출석부 요약'이 글자 단위로 꺾인다. 폭이 부족하면 버튼만 다음 줄로. */}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <p className="text-foreground shrink-0 text-sm font-bold">{sheetT(lang, "att.hub.title")}</p>
+            {/* 오늘 입력 현황 한 줄 — "요약 화면"의 핵심 숫자. 오늘 수업이 없으면(일요일 등) 조용히 생략. */}
+            {todayTotal.classes > 0 ? (
+              <p className="text-text-dim text-xs">
+                {sheetTf(lang, "att.hub.today.a", { date: todayLabel })}
+                <span className="num font-bold">{todayTotal.classes}</span>
+                {sheetT(lang, "att.hub.today.b")}
+                <span className="num font-bold">{todayTotal.recorded}</span>/
+                <span className="num">{todayTotal.expected}</span>
+                {sheetT(lang, "att.hub.today.c")}
+                <span className="num font-bold">{todayTotal.done}</span>
+                {sheetT(lang, "att.hub.today.d")}
+              </p>
+            ) : (
+              <p className="text-text-faint text-xs">
+                {sheetTf(lang, "att.hub.noClasses", { date: todayLabel })}
+              </p>
+            )}
+          </div>
+          {tools ? <div className="ml-auto flex shrink-0 items-center gap-2">{tools}</div> : null}
         </div>
         <p className="text-text-faint mt-0.5 text-xs">{sheetT(lang, "att.hub.hint")}</p>
 
