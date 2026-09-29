@@ -20,8 +20,10 @@ export function VideoHomeworkSettings({ policy, classes, onChange }: {
   const subjects = useSubjectMaps();
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const filtered = classes.filter((cls) =>
-    (cls.active || policy.disabledClassIds.includes(cls.id)) &&
+  const operatingClasses = classes.filter((cls) => cls.active);
+  const operatingClassIds = new Set(operatingClasses.map((cls) => cls.id));
+  const excludedCount = operatingClasses.filter((cls) => policy.disabledClassIds.includes(cls.id)).length;
+  const filtered = operatingClasses.filter((cls) =>
     `${cls.name} ${subjects.labelOf(cls.subjectKey)}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   const visible = showAll ? filtered : filtered.slice(0, 16);
 
@@ -72,9 +74,11 @@ export function VideoHomeworkSettings({ policy, classes, onChange }: {
       <div className="border-line border-t pt-4">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div><h4 className="text-sm font-bold">반별 사용</h4>
-            <p className="text-text-dim mt-0.5 text-xs">과목·학교급이 켜져 있어도 여기서 끈 반은 제외됩니다.</p></div>
-          {policy.disabledClassIds.length > 0 ? <button type="button" className="text-primary text-xs font-semibold underline"
-            onClick={() => onChange({ ...policy, disabledClassIds: [] })}>모든 반 사용</button> : null}
+            <p className="text-text-dim mt-0.5 text-xs">운영 중인 반만 표시합니다. 과목·학교급이 켜져 있어도 여기서 끈 반은 제외됩니다.</p></div>
+          {excludedCount > 0 ? <button type="button" className="text-primary text-xs font-semibold underline"
+            onClick={() => onChange({ ...policy,
+              disabledClassIds: policy.disabledClassIds.filter((id) => !operatingClassIds.has(id)),
+            })}>운영 중인 반 모두 사용</button> : null}
         </div>
         <input type="search" aria-label="영상 제출 반 검색" value={search} onChange={(event) => setSearch(event.target.value)}
           placeholder="반 이름·과목 검색" className="border-line bg-card mt-3 w-full max-w-sm rounded-lg border px-3 py-2 text-sm" />
@@ -87,7 +91,7 @@ export function VideoHomeworkSettings({ policy, classes, onChange }: {
               className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs ${excluded
                 ? "border-line bg-bg-soft text-text-dim"
                 : "border-primary/30 bg-primary/5 text-foreground"}`}>
-              <span className="min-w-0 truncate">{cls.name} <span className="text-text-faint">· {subjects.labelOf(cls.subjectKey)}{cls.active ? "" : " · 비활성"}</span></span>
+              <span className="min-w-0 truncate">{cls.name} <span className="text-text-faint">· {subjects.labelOf(cls.subjectKey)}</span></span>
               <strong className={excluded ? "text-text-dim" : "text-primary"}>{excluded ? "끔" : "사용"}</strong>
             </button>;
           })}
@@ -98,7 +102,7 @@ export function VideoHomeworkSettings({ policy, classes, onChange }: {
           나머지 {filtered.length - visible.length}개 반 보기</button> : null}
         {showAll && filtered.length > 16 ? <button type="button"
           className="text-primary mt-3 text-xs font-semibold underline" onClick={() => setShowAll(false)}>접기</button> : null}
-        <p className="text-text-faint mt-3 text-xs">제외한 반 {policy.disabledClassIds.length}개 · 저장을 누르면 강사 화면에도 반영됩니다.</p>
+        <p className="text-text-faint mt-3 text-xs">운영 중인 반 중 제외 {excludedCount}개 · 저장을 누르면 강사 화면에도 반영됩니다.</p>
       </div>
     </div>
   </SettingsCard>;

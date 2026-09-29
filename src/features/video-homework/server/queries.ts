@@ -14,7 +14,9 @@ export async function getVideoHomeworkClassOptions(tenantId: string): Promise<Vi
   const db = createAdminClient();
   const rows = await fetchAllPaged<{ id: string; class_name: string; subject: string; is_active: boolean }>(
     (from, to) => db.from("classes").select("id,class_name,subject,is_active")
-      .eq("tenant_id", tenantId).order("id").range(from, to),
+      // 수업목록의 '운영'과 동일: 활성 상태여도 종강한 반은 설정 선택지에서 제외한다.
+      .eq("tenant_id", tenantId).eq("is_active", true).is("closed_at", null)
+      .order("id").range(from, to),
   );
   return rows.map((row) => ({ id: row.id, name: row.class_name, subjectKey: row.subject, active: row.is_active }))
     .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, "ko"));
