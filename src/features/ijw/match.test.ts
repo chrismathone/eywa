@@ -149,3 +149,41 @@ describe("suggestLinks", () => {
     expect(r.map((x) => x.ijw.ijwId)).toEqual(["ijwgsy", "ijwzzz"]);
   });
 });
+
+describe("🔴 반이 같은 후보가 먼저 — 실제 오연결 재발 방지(원장 제보 2026-09-29)", () => {
+  /**
+   * 그날 일어난 일 그대로: 인재원 `박소윤(중등E_초등 브릿지 D)`의 후보가 둘인데 **근거가 둘 다
+   * '이름 같음'**이라 이름순(`박소윤` < `박소윤C`)으로 서서, 반이 정확히 일치하는 쪽이 두 번째로
+   * 밀렸고 사람이 첫 번째(경명여중1)를 골랐다.
+   */
+  const IJW = [{ ijwId: "박소윤", name: "박소윤", className: "중등E_초등 브릿지 D" }];
+  const POOL = [
+    aywa("wrong", "박소윤", null, ["중등E_중1 SKY", "중등E_중1 TOP"]),
+    aywa("right", "박소윤C", null, ["중등E_초등 브릿지 D"]),
+  ];
+
+  it("반이 일치하는 후보가 맨 앞에 선다", () => {
+    const [s] = suggestLinks(IJW, POOL);
+    expect(s!.candidates.map((c) => c.id)).toEqual(["right", "wrong"]);
+  });
+
+  it("반 일치 여부를 화면이 적을 수 있게 후보에 싣는다", () => {
+    const [s] = suggestLinks(IJW, POOL);
+    expect(s!.candidates.find((c) => c.id === "right")!.sameClass).toBe(true);
+    expect(s!.candidates.find((c) => c.id === "wrong")!.sameClass).toBe(false);
+  });
+
+  it("🔴 반이 같아도 동명이인이면 '한 번에 연결'은 여전히 안 된다 — 사람이 고른다", () => {
+    const [s] = suggestLinks(IJW, POOL, guardOf(["박소윤", "박소윤C"]));
+    expect(s!.unique).toBeNull();
+  });
+
+  it("⚠️ 반 일치 후보가 상한(6명)에 잘려 사라지지 않는다 — 정렬이 slice보다 앞", () => {
+    const many = [
+      ...Array.from({ length: 8 }, (_, i) => aywa(`x${i}`, "박소윤", null, ["다른 반"])),
+      aywa("right", "박소윤", null, ["중등E_초등 브릿지 D"]),
+    ];
+    const [s] = suggestLinks(IJW, many);
+    expect(s!.candidates[0]!.id).toBe("right");
+  });
+});

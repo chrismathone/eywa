@@ -27,7 +27,16 @@ export type LinkableAywaStudent = {
 };
 
 export type LinkReason = "name" | "id-class" | "id";
-export type LinkCandidate = LinkableAywaStudent & { reason: LinkReason };
+/**
+ * 후보 한 명. `sameClass` = **인재원 반과 같은 반을 지금 다닌다** — 동명이인을 가르는 가장 강한 단서다.
+ * 🔴 원장 제보 2026-09-29: 인재원 `박소윤(중등E_초등 브릿지 D)`을 **경명여중1 박소윤**에 잘못 이었다.
+ *    후보 둘 다 근거가 '이름 같음'이라 이름순으로 정렬됐고(`박소윤` < `박소윤C`), 반이 **정확히 일치하는**
+ *    `박소윤C · 칠성초6 · 중등E_초등 브릿지 D`가 **두 번째**로 밀려 있었다. 반은 적혀 있었지만 표식이
+ *    없어 눈에 안 띄었다. 그래서 이 값으로 **순서를 올리고 화면에 '반 일치'를 적는다.**
+ * ⚠️ `reason`에 섞지 말 것 — `id-class`는 "아이디 머리글자로 찾았는데 반도 같다"는 뜻이고, 이 축은
+ *    이름으로 찾은 후보에도 붙는다(두 축이 겹치지만 같은 것이 아니다).
+ */
+export type LinkCandidate = LinkableAywaStudent & { reason: LinkReason; sameClass: boolean };
 
 export type LinkSuggestion = {
   ijw: LinkableIjwStudent;
@@ -106,14 +115,25 @@ export function suggestLinks(
         core.length >= 2
           ? free.filter((s) => !byName.includes(s) && initialsOf.get(s.id)?.has(core))
           : [];
+      const sameClassOf = (s: LinkableAywaStudent) =>
+        !!(ijw.className && s.classNames?.includes(ijw.className));
       const candidates: LinkCandidate[] = [
-        ...byName.map((s) => ({ ...s, reason: "name" as const })),
+        ...byName.map((s) => ({ ...s, reason: "name" as const, sameClass: sameClassOf(s) })),
         ...byId.map((s) => ({
           ...s,
-          reason: (ijw.className && s.classNames?.includes(ijw.className) ? "id-class" : "id") as LinkReason,
+          reason: (sameClassOf(s) ? "id-class" : "id") as LinkReason,
+          sameClass: sameClassOf(s),
         })),
       ]
-        .sort((a, b) => REASON_RANK[a.reason] - REASON_RANK[b.reason] || a.name.localeCompare(b.name, "ko"))
+        // 🔴 **반이 같은 후보가 먼저** — 근거 등급이 같으면(둘 다 '이름 같음') 이름순이 아니라 반 일치가
+        //    앞선다. ⚠️ 정렬은 `slice` **앞에** 있어야 한다: 뒤로 밀린 반 일치 후보가 6명 상한에 잘려
+        //    화면에서 통째로 사라지는 것을 막는다.
+        .sort(
+          (a, b) =>
+            REASON_RANK[a.reason] - REASON_RANK[b.reason] ||
+            Number(b.sameClass) - Number(a.sameClass) ||
+            a.name.localeCompare(b.name, "ko"),
+        )
         .slice(0, CANDIDATE_MAX);
       const only = byName.length === 1 ? byName[0]! : null;
       const unique =
