@@ -32,6 +32,7 @@ import { isMergedStudent } from "@/features/students/merged";
 import { getIntakeOnDay } from "@/features/enrollment/server/intake-day";
 import { getFirstClassStudents } from "@/features/dashboard/server/day-arrivals-query";
 import { getEnrolledToday } from "@/features/dashboard/server/enrolled-today";
+import { loadEnrolledTrend } from "./enrolled-trend-server";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { absentKpiDate } from "./kpi-links";
 import { getUpcomingMakeupOverview } from "@/features/dashboard/server/makeup-upcoming";
@@ -574,6 +575,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   }
   add("students", ["students"], async () => students(await scopePromise, settingsPromise));
   add("changes", ["students"], async () => changes(today, await scopePromise, withdrawalRows));
+  add("enrolledTrend", ["students"], async () => ((await scopePromise) ? null : loadEnrolledTrend(user.tenantId, today)));
   // ── KPI 여섯 칸(원장 2026-09-11) — 카드·팝업·목적지 화면이 같은 함수를 부른다.
   add("withdrawals", ["withdrawals"], () => monthWithdrawals(withdrawalRows, today, settingsPromise));
   add("intake", ["enrollment"], async () =>
