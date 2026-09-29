@@ -90,6 +90,15 @@ describe("resolveStudentChildren — 가드 ①~④·⑥", () => {
     expect(resolveStudentChildren(w2.students.get("s1"), w2).reasons.join()).toContain("학년");
   });
 
+  it("③ 관리자 화면 생년(운영관리 child_date_birth)이 맞으면 학부모 프로필 생년이 틀려도 통과(2026-09-29 허다언)", () => {
+    const w = world();
+    w.membersByBoard.get(11)[0].date_birth = "2010-08-23";
+    w.admissions.get(101).birth = "2013-08-23";
+    expect(resolveStudentChildren(w.students.get("s1"), w).ok).toBe(true);
+    w.admissions.get(101).birth = "2010-08-23";
+    expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("생년 불일치");
+  });
+
   it("③ ±1년은 허용", () => {
     const w = world();
     w.membersByBoard.get(11)[0].date_birth = "2012-12-31";
