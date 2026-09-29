@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions } from "@/features/owner/server/queries";
@@ -28,6 +29,7 @@ import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { IntegrationsFace } from "./_components/integrations-face";
 import { PopupsFace } from "./_components/popups-face";
+import { ImportHubFace } from "./_components/import-hub-face";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +113,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const tab = effectiveTab(sp, settings);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
+  // 강의실 엑셀로 넣기 — 강의실 CRUD와 같은 메뉴(owner)의 full만(올리기 주소 `gateImport`와 같은 판정).
+  const canImportClassrooms = tab === "operations" ? await canManageTenant(viewer.systemRole, "owner") : false;
   // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
   const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
   // 개인 예외(userOverrides) 이름 매핑 — 역할·권한 면에서만 로드(다른 면 진입 비용 0).
@@ -149,7 +153,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
 
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (
-        <OperationsSection initial={settings.operations} classrooms={classrooms} />
+        <OperationsSection initial={settings.operations} classrooms={classrooms} canImportClassrooms={canImportClassrooms} />
       ) : null}
       {tab === "subjects" ? (
         <SubjectsSection
@@ -213,6 +217,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           <SameNameFace />
         </div>
       ) : null}
+      {tab === "import" ? <ImportHubFace /> : null}
       {/* 🔴 주소를 직접 쳐도 열리지 않는다 — 면을 감추기만 하면 그건 게이트가 아니다([[#77]]).
           권한이 없으면 조회 자체를 안 한다(빈 표를 보여 주고 "기록 없음"이라 적으면 거짓말이 된다). */}
       {tab === "audit" ? (

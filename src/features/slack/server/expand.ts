@@ -129,6 +129,9 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
   for (const a of audits) {
     const grade = activityGradeOf(a.action);
     if (grade === "forbid" || !keys.has(a.action)) continue;
+    // 엑셀 가져오기가 남긴 행별 기록(반 담임·강의실 변경 등, metadata.excelImport = true)은 보내지 않는다 — 한 파일로 반 80개를 고치면
+    // 80통이 된다(적대 리뷰 2026-09-29). 그 파일은 `excel_import` 한 줄로 알린다. 인박스는 아래에서 그대로 처리됨으로 넘어간다.
+    if (fromExcelImport(a.metadata)) continue;
     const opaque = grade === "opaque";
     const ev = {
       label: activityLabel(a.action),
@@ -230,4 +233,8 @@ async function factLookups(tenantId: string, audits: readonly AuditRow[]): Promi
     console.error("[slack] activity facts lookup failed", e);
     return { student: new Map(), klass: new Map(), subjectLabel: () => "" };
   }
+}
+
+function fromExcelImport(meta: unknown): boolean {
+  return !!meta && typeof meta === "object" && (meta as Record<string, unknown>).excelImport === true;
 }

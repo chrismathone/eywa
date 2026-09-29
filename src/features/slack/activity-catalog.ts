@@ -100,6 +100,8 @@ const RULES: readonly [string, string][] = [
   ["ment_style_", "settings"],
   ["sheets_sync_now", "settings"],
   ["demo_", "settings"],
+  // 공용 엑셀 가져오기 한 번 = 한 줄(무엇을·몇 줄). 행별 기록(excelImport 표식)은 발송기가 건너뛴다.
+  ["excel_import", "settings"],
 ];
 
 /** 고를 수 없는 액션 — 분류 통째(급여) + 개별 키. */

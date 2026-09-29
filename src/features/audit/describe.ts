@@ -1324,6 +1324,25 @@ export function auditDetail(
       const act = str(m.action);
       return join(code ? `「${code}」` : null, on, result || null, loc, act ? `조치 ${act}` : null);
     }
+    case "excel_import": {
+      const mode = str(m.mode);
+      const counts = arr(m.counts)
+        .map((c) => (c && typeof c === "object" ? (c as Record<string, unknown>) : null))
+        .filter((c): c is Record<string, unknown> => !!c)
+        .map((c) => {
+          const bits = [
+            num(c.insert) ? `추가 ${num(c.insert)}` : null,
+            num(c.update) ? `갱신 ${num(c.update)}` : null,
+            num(c.skip) ? `건너뜀 ${num(c.skip)}` : null,
+          ].filter(Boolean);
+          return bits.length ? `${str(c.label) ?? ""} ${bits.join(" · ")}`.trim() : null;
+        });
+      return join(
+        mode === "overwrite" ? "덮어쓰기" : mode === "append" ? "추가" : null,
+        ...counts,
+        str(m.error) ? `중간에 멈춤: ${str(m.error)}` : null,
+      );
+    }
     case "inventory_excel_import": {
       const mode = str(m.mode);
       const parts = [

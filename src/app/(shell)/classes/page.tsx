@@ -9,6 +9,7 @@ import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { Button } from "@/components/ui/button";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -283,6 +284,7 @@ export default async function ClassesPage({
             {canManageClasses ? (
               <>
                 <ClassroomAssignButton />
+                <ExcelImportButton kind="classes" variant="ghost" short />
                 <NewClassTrigger />
               </>
             ) : null}

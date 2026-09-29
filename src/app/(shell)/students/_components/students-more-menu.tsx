@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
-import { StudentImportDialog } from "./student-import-dialog";
+import { ExcelImportDialog } from "@/components/excel-import/excel-import-dialog";
 import { useSheetT } from "@/features/teacher-view/lang-context";
 
 /**
@@ -42,7 +42,7 @@ export function StudentsMoreMenu({ exportHref, canImport }: { exportHref: string
           {canImport ? <DropdownMenuItem onClick={() => setImportOpen(true)}>{t("stu.excelImport")}</DropdownMenuItem> : null}
         </DropdownMenuContent>
       </DropdownMenu>
-      {canImport ? <StudentImportDialog open={importOpen} onOpenChange={setImportOpen} /> : null}
+      {canImport ? <ExcelImportDialog kind="students" open={importOpen} onOpenChange={setImportOpen} /> : null}
     </>
   );
 }

@@ -12,6 +12,8 @@ import { EditingBadge } from "@/features/presence/editing-badge";
 import { Pill } from "@/components/atoms/pill";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { requireAccess } from "@/lib/auth/require-access";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import {
   followUpUrgency,
   getConsultationCounselorOptions,
@@ -139,7 +141,7 @@ export default async function ConsultationsPage({
     size?: string;
   }>;
 }) {
-  await requireAccess("consultations");
+  const user = await requireAccess("consultations");
   const sp = await searchParams;
   const range: RangeKey = (sp.range as RangeKey) ?? "all";
   const cat: CategoryKey = (sp.cat as CategoryKey) ?? "all";
@@ -156,7 +158,7 @@ export default async function ConsultationsPage({
   //    쿼리에 라벨을 함께 넘겨 키·라벨 둘 다로 맞춘다(queries.ts 주석).
   const settings = await getTenantSettings();
   const subjects = buildSubjectMaps(settings.operations.subjects);
-  const [{ rows: items, total }, counts, counselorOptions] = await Promise.all([
+  const [{ rows: items, total }, counts, counselorOptions, canImportExcel] = await Promise.all([
     getStudentConsultationsPage(
       { q, range, cat, urg, counselor: who || undefined, subject: subject || undefined, subjectLabel: subject ? subjects.labelOf(subject) : null },
       page,
@@ -164,6 +166,8 @@ export default async function ConsultationsPage({
     ),
     getStudentConsultationCounts(),
     getConsultationCounselorOptions(),
+    // 엑셀로 넣기 = 학원 전체 일괄 작업 → full만(올리기 주소도 같은 판정 — [[#77]]).
+    canManageTenant(user.systemRole, "consultations"),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / size));
   const { total: totalAll, lastWeek, pendingFollowUps, overdueFollowUps } = counts;
@@ -278,6 +282,7 @@ export default async function ConsultationsPage({
           >
             통계
           </WindowLink>
+          {canImportExcel ? <ExcelImportButton kind="student-consultations" variant="ghost" label="엑셀로 넣기" /> : null}
           <NewConsultationTrigger />
         </div>
       </div>
