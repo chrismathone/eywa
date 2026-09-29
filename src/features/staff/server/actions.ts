@@ -28,6 +28,7 @@ import { canEditLoginEmail, EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
+import { setStaffLoginBlocked } from "./auth-ban";
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
 const STATUSES = ["active", "inactive", "pending"] as const;
@@ -632,6 +633,9 @@ export async function deactivateStaff(
     targetLabel: target.displayName,
     metadata: { userId: id, from: target.status, to: next },
   });
+  // 로그인 계정도 함께 막고/푼다(원장 2026-09-29 — 퇴사자 로그인 차단). inactive가 아니면(active·pending)
+  // 항상 푼다 — pending으로 되돌렸는데 로그인만 계속 거절되는 어긋남을 막는다.
+  await setStaffLoginBlocked(id, next === "inactive");
 
   // 퇴사일 기록(원장 지시 2026-08-07) — users에 퇴사일 컬럼이 없어(SQL 접근 보류) **계약 이력 한 줄**로 남긴다.
   // kind='note'는 기간 없는 이력 줄이라 현재계약·차수 계산을 건드리지 않는다(contract.ts contractsOnly).
@@ -814,6 +818,7 @@ export async function handoverAndDeactivate(
     targetLabel: target.displayName,
     metadata: { userId: id, from: target.status, to: "inactive" },
   });
+  await setStaffLoginBlocked(id, true); // 퇴사자 로그인 차단(원장 2026-09-29)
   await recordResignNote(id, String(formData.get("resignDate") ?? ""), actor);
 
   // 인계 후에도 남은 담임 반(화면이 stale했거나 일부만 선택한 경우) — 막지 않고 사후 안내용. head:true(B2).

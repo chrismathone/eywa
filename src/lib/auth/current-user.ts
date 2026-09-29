@@ -46,11 +46,15 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const { data } = await supabase
     .from("users")
-    .select("id, tenant_id, email, display_name, job_title, system_role")
+    .select("id, tenant_id, email, display_name, job_title, system_role, status")
     .eq("id", sub)
     .single();
 
   if (!data) return null;
+  // 🔴 퇴사자(status='inactive')는 로그인 안 된 것으로 본다(원장 2026-09-29 *"퇴사자 당연히 로그인 차단 동반해야지"*).
+  //    세션이 살아 있어도(자동 로그인 = 무기한 세션) 셸·서버 액션·API가 전부 이 함수를 거치므로 한 곳에서 막힌다.
+  //    Supabase 로그인 계정 차단(ban)은 퇴사 처리 액션이 함께 건다(`setStaffLoginBlocked`, staff/server/auth-ban.ts) — 이건 이미 받은 토큰까지 막는 앱 쪽 벽.
+  if (data.status === "inactive") return null;
   return {
     id: data.id,
     tenantId: data.tenant_id,

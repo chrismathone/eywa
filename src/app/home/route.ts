@@ -23,6 +23,20 @@ async function signedInJustNow(): Promise<boolean> {
   }
 }
 
+/** 세션은 있는데 그 계정이 퇴사 처리(status='inactive')된 경우인가. 조회 실패는 false(일반 /login으로). */
+async function isSignedInAsInactive(): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getClaims();
+    const sub = data?.claims?.sub;
+    if (!sub) return false;
+    const { data: row } = await supabase.from("users").select("status").eq("id", sub).maybeSingle();
+    return row?.status === "inactive";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * `/home` — **역할·과목에 맞는 홈으로 보내주는 서버측 리다이렉터**. 화면을 그리지 않는다(라우트 핸들러).
  *
@@ -49,7 +63,14 @@ export async function GET(request: NextRequest) {
   // 기존 지점 사용자는 아래의 역할/과목 착지 경로를 그대로 쓴다.
   if (!user) {
     const sa = await getCurrentSuperAdmin();
-    if (!sa) redirect("/login");
+    if (!sa) {
+      // 퇴사 처리된 계정이 로그인한 경우 — 세션을 끊고 이유를 알려 준다(그냥 /login이면 "왜 안 되지"만 남는다).
+      if (await isSignedInAsInactive()) {
+        await (await createClient()).auth.signOut();
+        redirect("/login?inactive=1");
+      }
+      redirect("/login");
+    }
     redirect(isAdminAuthEmail(sa.email) ? "/admin" : "/super-admin");
   }
   if (isAdminAuthEmail(user.email) && (await getCurrentSuperAdmin())) redirect("/admin");
