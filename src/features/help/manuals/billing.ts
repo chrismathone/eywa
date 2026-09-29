@@ -13,7 +13,7 @@ export const billing: HelpManual = {
   callouts: [
     {
       n: 1,
-      label: "청구서 생성",
+      label: "청구서 만들기",
       zone: "header",
       body: "이번 달(또는 고른 달) 청구서를 만듭니다. 원생을 골라 한 번에 넣을 수 있습니다.",
     },

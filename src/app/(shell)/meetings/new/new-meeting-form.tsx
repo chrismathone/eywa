@@ -412,7 +412,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
                 disabled={busy}
                 className="text-muted-foreground hover:text-foreground text-xs disabled:opacity-40"
               >
-                폐기
+                녹음 지우기
               </button>
             </div>
           </div>

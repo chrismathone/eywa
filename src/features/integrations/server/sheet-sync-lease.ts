@@ -10,7 +10,7 @@ export type SheetSyncLease = "claimed" | "busy" | "norow";
 
 /** 선점 실패 시 사용자 안내 — 호출부 공용 문구(한글, raw 코드 노출 금지 규칙). */
 export const SHEET_SYNC_BUSY_MSG =
-  "다른 관리자가 이 시트를 작업 중입니다(시트 반영 또는 가져오기). 잠시 후 다시 시도하세요.";
+  "다른 관리자가 이 시트를 작업 중입니다(시트로 보내기 또는 가져오기). 잠시 후 다시 시도하세요.";
 
 /**
  * 시트 동기화 리스 claim — user_integrations(tenant×provider) 행의 sync_started_at을 **원자 UPDATE**로 선점.
@@ -48,7 +48,7 @@ export async function claimSheetSyncLease(
 
 /**
  * 저장된 `sync_started_at` 하나로 "지금 리스가 잡혀 있나"를 판정(순수) — 시간표 툴바가 폴링해
- * '시트 반영/가져오기' 버튼을 선제 비활성+안내한다(새벽 자동 반영·다른 관리자 수동 실행 모두 커버.
+ * '시트로 보내기/가져오기' 버튼을 선제 비활성+안내한다(새벽 자동 반영·다른 관리자 수동 실행 모두 커버.
  * 서버 액션의 리스 거부가 그대로 2차 방어).
  *
  * 🔴 stale 한도(3분)를 호출부에 복사하지 말 것 — 여기가 단일 소스다(claim 쪽과 같은 값이어야

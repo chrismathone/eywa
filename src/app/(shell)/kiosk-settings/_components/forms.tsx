@@ -85,7 +85,7 @@ export function RevokeDeviceButton({ deviceId }: { deviceId: string }) {
         disabled={pending}
         className="text-danger hover:bg-danger/5 rounded px-2 py-1 text-xs disabled:opacity-50"
       >
-        {pending ? "…" : "폐기"}
+        {pending ? "…" : "기기 차단"}
       </button>
       {state?.error ? <span className="text-danger ml-1 text-xs">{state.error}</span> : null}
     </form>

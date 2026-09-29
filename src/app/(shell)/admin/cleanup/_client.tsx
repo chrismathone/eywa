@@ -37,7 +37,7 @@ function CleanBtn() {
   return (
     <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Wrench className="size-4" />}
-      자동 종료 실행
+      남은 수강 종료
     </Button>
   );
 }

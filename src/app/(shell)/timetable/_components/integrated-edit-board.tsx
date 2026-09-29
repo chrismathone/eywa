@@ -133,12 +133,12 @@ export function IntegratedEditBoard({
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmApply, setConfirmApply] = useState(false);
   const [saving, startSave] = useTransition();
-  /** '실제 반영' 뒤 통합뷰로 떠나는 중 — 풀 문서 이동은 트랜지션 밖이라 `saving`이 먼저 풀린다(그 사이 재클릭 방지). */
+  /** '시간표 적용' 뒤 통합뷰로 떠나는 중 — 풀 문서 이동은 트랜지션 밖이라 `saving`이 먼저 풀린다(그 사이 재클릭 방지). */
   const [leaving, setLeaving] = useState(false);
   const [presetSaving, startPresetSave] = useTransition();
   const [presetError, setPresetError] = useState<string | null>(null);
-  // '1시간 단위'(줄별) — 보관함과 같은 **즉시 저장**이다. 하단 '실제 반영'에 묶으면 줄 배치를 안 바꾸고
-  // 이것만 켜러 온 사람이 "반영"까지 눌러야 하고, 안 누르면 조용히 사라진다.
+  // '1시간 단위'(줄별) — 보관함과 같은 **즉시 저장**이다. 하단 '시간표 적용'에 묶으면 줄 배치를 안 바꾸고
+  // 이것만 켜러 온 사람이 "적용"까지 눌러야 하고, 안 누르면 조용히 사라진다.
   const [compactKeys, setCompactKeys] = useState<number[]>(() =>
     [...new Set(initialCompactSections)].sort((a, b) => a - b),
   );
@@ -500,18 +500,18 @@ export function IntegratedEditBoard({
         <div className="sticky-save-bar border-line bg-card/95 sticky bottom-0 z-30 flex flex-wrap items-center gap-2 rounded-t-xl border-t px-3 py-2 backdrop-blur">
           {error ? <span className="text-danger text-xs">{error}</span> : null}
           {confirmLeave ? (
-            <span className="text-amber text-xs">아직 반영하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
+            <span className="text-amber text-xs">아직 적용하지 않은 변경이 있습니다 — 한 번 더 누르면 버립니다.</span>
           ) : null}
           <span className="text-text-faint text-xs">
             줄 {groups.length}개 · 반 {cards.length}개
           </span>
-          {/* 초기화 — 화면만 되돌린다(저장 전이라 DB 무변). 되돌릴 게 없으면 아예 안 보인다. */}
+          {/* 되돌리기 — 화면만 되돌린다(저장 전이라 DB 무변). 되돌릴 게 없으면 아예 안 보인다. */}
           {dirty ? (
             confirmReset ? (
               <span className="text-amber ml-auto inline-flex items-center gap-2 text-xs">
                 지금까지 옮긴 걸 버리고 처음 상태로?
                 <button type="button" onClick={resetToInitial} className="text-danger font-bold hover:underline">
-                  초기화
+                  되돌리기
                 </button>
                 <button
                   type="button"
@@ -525,11 +525,11 @@ export function IntegratedEditBoard({
               <button
                 type="button"
                 onClick={() => setConfirmReset(true)}
-                title="이 창을 열었을 때 보던 배치로 되돌립니다(통합뷰에는 아직 반영되지 않습니다)"
+                title="이 창을 열었을 때 보던 배치로 되돌립니다(시간표에는 아직 적용되지 않습니다)"
                 className="text-text-dim hover:text-foreground ml-auto inline-flex items-center gap-1 px-2 py-1 text-xs"
               >
                 <RotateCcw className="size-3" />
-                초기화
+                되돌리기
               </button>
             )
           ) : null}
@@ -541,11 +541,11 @@ export function IntegratedEditBoard({
             {confirmLeave ? "그냥 나가기" : "편집 끝내기"}
           </button>
           {/* 🔴 이름이 '저장'이면 위 보관함의 '저장'과 같은 말이 되어 헷갈린다(원장 2026-08-06) →
-              **'실제 반영'**. 이쪽만 통합뷰를 바꾸고, 위쪽은 보관함에만 넣는다. 되돌릴 수 없는
+              **'시간표 적용'**. 이쪽만 통합뷰를 바꾸고, 위쪽은 보관함에만 넣는다. 되돌릴 수 없는
               유일한 동작이라 확인을 한 번 받는다. */}
           {confirmApply ? (
             <span className="text-amber inline-flex items-center gap-2 text-xs">
-              이 배치를 통합뷰에 반영할까요?
+              이 배치를 시간표에 적용할까요?
               <button
                 type="button"
                 onClick={save}
@@ -553,7 +553,7 @@ export function IntegratedEditBoard({
                 className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
               >
                 {saving || leaving ? <Loader2 className="size-3 animate-spin" /> : null}
-                반영
+                적용
               </button>
               <button
                 type="button"
@@ -568,10 +568,10 @@ export function IntegratedEditBoard({
               type="button"
               onClick={() => setConfirmApply(true)}
               disabled={saving || leaving}
-              title="지금 화면의 배치를 실제 통합뷰에 반영합니다"
+              title="지금 화면의 배치를 시간표에 적용합니다"
               className="bg-foreground text-background inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition disabled:opacity-40"
             >
-              실제 반영
+              시간표 적용
             </button>
           )}
         </div>

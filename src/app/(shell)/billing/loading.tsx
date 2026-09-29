@@ -25,7 +25,7 @@ export default function BillingLoading() {
             <div className="bg-bg-soft mt-2 h-7 w-40 animate-pulse rounded compact-chrome:hidden" />
             <div className="bg-bg-soft mt-2 h-4 w-72 max-w-full animate-pulse rounded compact-chrome:mt-0 compact-chrome:w-56" />
           </div>
-          {/* 머리 상시 버튼 둘('엑셀 내보내기' 텍스트 + '청구서 생성' Primary) — compact에서만
+          {/* 머리 상시 버튼 둘('엑셀 내보내기' 텍스트 + '청구서 만들기' Primary) — compact에서만
               (넓은 화면은 위 3줄 옆에 붙어 높이를 안 늘린다). ⚠️ 옛 스켈레톤은 여기에 월 네비 32px 정사각 둘을
               그렸는데, 월 이동은 14단계에서 **툴바의 BillingMonthNav**로 내려갔다. */}
           <div className="hidden shrink-0 items-center gap-2 compact-chrome:flex">

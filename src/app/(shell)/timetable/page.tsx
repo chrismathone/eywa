@@ -319,7 +319,7 @@ export default async function TimetablePage({
     ? getTeacherScheduleBlocks(subject, referenceDate, teacherId)
     : Promise.resolve([]);
 
-  // '시트 반영' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
+  // '시트로 보내기' 버튼 = sheet_sync 권한(기본 원장·관리자·실장, owner에서 조정) + 지원 과목(math·english) + 연동 ON.
   // 상태는 **현재 보는 과목** 기준. (subject가 allSlots·설정에 의존하므로 위 Promise.all 뒤에 조회 —
   // 권한자 한정 1회 경량 쿼리. 서버 액션도 같은 canManageSheetSync로 이중 방어.)
   const sheetsStatus =

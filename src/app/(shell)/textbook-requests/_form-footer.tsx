@@ -36,7 +36,7 @@ export function TextbookFormFooter({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={onReset} disabled={sending}>
           <Eraser className="size-4" />
-          초기화
+          작성 지우기
         </Button>
         <Button
           type="button"

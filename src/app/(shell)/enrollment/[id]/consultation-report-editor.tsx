@@ -26,7 +26,7 @@ import { useStateDraft } from "@/components/forms/use-state-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 
 /**
- * 등록상담 AI 분석 — ijw ReportViewer식 아코디언(접기) + 섹션별 인라인 수정 + 재분석 + TXT 다운로드.
+ * 등록상담 AI 분석 — ijw ReportViewer식 아코디언(접기) + 섹션별 인라인 수정 + 다시 분석 + 텍스트 저장.
  * 섹션 순서·구성은 ijw 원본과 동일(상담자 대응 = teacherResponse 키 유지). 수형도는 트리로 렌더.
  */
 
@@ -226,7 +226,7 @@ export function ConsultationReportEditor({
         onRestore={restoreSectionDraft}
         onDiscard={localDraft.discard}
       />
-      {/* 헤더: 수정/생성 시각 + 재분석·TXT·모두펼치기 */}
+      {/* 헤더: 수정/생성 시각 + 다시 분석·텍스트 저장·모두펼치기 */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-text-faint inline-flex items-center gap-1 text-xs">
           {attribution ? (
@@ -251,14 +251,14 @@ export function ConsultationReportEditor({
             ) : (
               <RefreshCw className="size-3" />
             )}
-            재분석
+            다시 분석
           </button>
           <button
             type="button"
             onClick={downloadTxt}
             className="border-line text-text-dim hover:bg-bg-soft inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs transition"
           >
-            <Download className="size-3" /> TXT
+            <Download className="size-3" /> 텍스트 저장
           </button>
           {modelLabel ? (
             <span

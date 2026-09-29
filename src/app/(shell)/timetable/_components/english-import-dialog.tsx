@@ -259,7 +259,7 @@ export function EnglishImportDialog({
             </p>
             <p className="text-text-faint mt-1 flex items-start gap-1 text-xs">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <span>편집했으면 <b>‘시트 반영’을 다시 누르지 마세요</b>(전체 덮어쓰기라 편집분이 사라집니다).</span>
+              <span>편집했으면 <b>‘시트로 보내기’를 다시 누르지 마세요</b>(전체 덮어쓰기라 편집분이 사라집니다).</span>
             </p>
             {/* ⚠️ 적용 뒤에는 잠근다 — changeEffective가 resetResult를 부르는데, 거기 있는 snapshotId가
                 되돌리기의 **유일한 경로**라 날짜를 한 번 건드리면 되돌릴 길이 조용히 사라진다. */}

@@ -222,7 +222,7 @@ export function WeekdayGroupingEditor({
           선택한 요일 묶기
         </button>
         <button type="button" className={`border-line bg-card ${CHIP}`} onClick={addToList}>
-          목록에 넣기
+          묶음 추가
         </button>
         <button
           type="button"
@@ -233,7 +233,7 @@ export function WeekdayGroupingEditor({
             setNote("");
           }}
         >
-          다시
+          작성 지우기
         </button>
       </div>
       {note ? <p className="text-sm">{note}</p> : null}

@@ -123,7 +123,7 @@ export default async function MeetingDetailPage({
           </div>
         </div>
         {/* 상시 버튼은 둘(지시서 §10): Primary 'AI로 정리'(저장된 전사 + 메모장으로 8섹션 (재)생성 — 오디오·웹훅 불필요) +
-            텍스트 '더보기'(인쇄 미리보기 · TXT로 저장 · 전사부터 다시(원본 오디오 재제출) · 삭제). 옛 머리엔 버튼 다섯이 나란히 섰다. */}
+            텍스트 '더보기'(인쇄 미리보기 · 텍스트 저장 · 전사부터 다시(원본 오디오 재제출) · 삭제). 옛 머리엔 버튼 다섯이 나란히 섰다. */}
         {/* shrink-0 + nowrap — 최소 창(760)에서 왼쪽 참석자 줄이 길면 이 묶음이 감겨 '더보기'가 Primary 아래로 떨어졌다(실측). */}
         <div className="flex shrink-0 items-center gap-2">
           {canOrganize ? (

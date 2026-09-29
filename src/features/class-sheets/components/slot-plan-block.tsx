@@ -219,7 +219,7 @@ export const SlotPlanBlock = memo(function SlotPlanBlock({
             className="text-text-faint hover:text-foreground cursor-pointer"
             onClick={doc.dismissRecoverable}
           >
-            무시
+            복구 안 함
           </button>
         </div>
       ) : null}

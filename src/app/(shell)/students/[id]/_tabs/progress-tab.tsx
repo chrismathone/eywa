@@ -119,7 +119,7 @@ export async function ProgressTab({
             className="border-border bg-card text-foreground num h-(--control-h-sm) rounded-lg border px-2 text-sm"
           />
           <Button type="submit" size="sm">
-            조회
+            날짜 보기
           </Button>
           {filtered ? (
             <EmbedAnchor href={hrefWith({ p: 1, keepDates: false })} className="text-text-dim text-sm hover:underline">

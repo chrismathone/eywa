@@ -190,7 +190,7 @@ export async function BillingContent({ sp, canImport = false }: { sp: Sp; canImp
 
   return (
     <div className="space-y-3">
-      {/* Editorial 문법 ① — eyebrow→헤드라인→서브(청구·수납률 승격). 상시 버튼 = Primary '청구서 생성' 하나 — 엑셀 내보내기/가져오기는 검색 줄로(원장 2026-09-29 통일).
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브(청구·수납률 승격). 상시 버튼 = Primary '청구서 만들기' 하나 — 엑셀 내보내기/가져오기는 검색 줄로(원장 2026-09-29 통일).
           (디자인 v5 §10 — 종전엔 툴바 오른쪽에 outline 둘이었다). */}
       <PageHeader
         eyebrow="수납 관리"

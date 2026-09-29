@@ -169,7 +169,7 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
                   onClick={handleDiscardRecovery}
                   className="text-text-dim hover:text-foreground text-xs"
                 >
-                  폐기
+                  녹음 지우기
                 </button>
               </div>
             </div>

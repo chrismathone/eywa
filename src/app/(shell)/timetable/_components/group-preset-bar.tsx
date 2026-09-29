@@ -21,7 +21,7 @@ import {
  *
  * 규약(순수 로직은 [group-presets.ts](src/features/timetable/lib/group-presets.ts)):
  * · 불러오기 = 내용을 **지금 화면에 복사**(링크 아님) → 불러온 뒤 마음껏 고쳐도 보관본은 안 변한다.
- *   불러온 것도 하단 **'실제 반영'을 눌러야** 통합뷰에 적용된다(그 전엔 되돌릴 수 있다).
+ *   불러온 것도 하단 **'시간표 적용'을 눌러야** 통합뷰에 적용된다(그 전엔 되돌릴 수 있다).
  * · 같은 이름으로 저장 = **덮어쓰기**(목록에서 고르는 키가 이름이라 중복이 곧 고장).
  * · 🔴 보관함 추가·삭제는 **그 자리에서 바로 저장된다**(`onChange`가 서버에 쓴다). 버튼이 "저장"이라고
  *   말해 놓고 하단 버튼을 또 눌러야 남는 구조였더니, 이름만 짓고 나간 사용자에겐 **저장했다고
@@ -201,7 +201,7 @@ export function GroupPresetBar({
                       onLoad(loadPreset(p));
                       setListOpen(false);
                     }}
-                    title={`‘${p.name}’ 배치를 지금 화면에 불러옵니다(‘실제 반영’ 전이라 되돌릴 수 있습니다)`}
+                    title={`‘${p.name}’ 배치를 지금 화면에 불러옵니다(‘시간표 적용’ 전이라 되돌릴 수 있습니다)`}
                     className="border-primary text-primary hover:bg-primary hover:text-primary-foreground inline-flex items-center gap-0.5 rounded-full border px-2 py-px font-medium transition"
                   >
                     <Download className="size-2.5" />

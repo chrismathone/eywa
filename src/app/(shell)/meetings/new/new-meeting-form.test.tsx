@@ -225,12 +225,12 @@ describe("새 회의록 저장 뒤 이동(#102)", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
-  it("떠나는 동안엔 녹음 복구 배너의 [복구하기]·[폐기]를 잠근다", async () => {
+  it("떠나는 동안엔 녹음 복구 배너의 [복구하기]·[녹음 지우기]를 잠근다", async () => {
     m.checkRecovery.mockResolvedValue({ startedAt: Date.parse("2026-09-12T01:00:00Z"), chunkCount: 3 });
     m.createTextMeeting.mockResolvedValue({ id: "m1" });
     await submitTextMeeting();
     expect(screen.getByRole("button", { name: "복구하기" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "폐기" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "녹음 지우기" })).toBeDisabled();
   });
 
   it("저장이 실패하면 이동하지 않고 오류를 보인 채 다시 누를 수 있다", async () => {

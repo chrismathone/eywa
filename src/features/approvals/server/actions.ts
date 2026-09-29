@@ -294,7 +294,7 @@ async function createApprovalDocument(args: {
   return {
     ok: true,
     docId,
-    notice: `상신했습니다 — 결재 ${line.length}단계${refs.length > 0 ? ` · 참조 ${refs.length}명` : ""}`,
+    notice: `결재를 올렸습니다 — 결재 ${line.length}단계${refs.length > 0 ? ` · 참조 ${refs.length}명` : ""}`,
   };
 }
 

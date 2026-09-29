@@ -274,7 +274,7 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     expect(screen.getByText(/자동 갱신 중\(10초마다\)/)).toBeInTheDocument();
   });
 
-  it("멈춤복구 직전에 출발한 낡은 응답이 거짓 '완료'를 띄우지 않는다", async () => {
+  it("멈춤 재시도 직전에 출발한 낡은 응답이 거짓 '완료'를 띄우지 않는다", async () => {
     // 폴 응답을 붙잡아 둔다 — 이 응답에는 방금 재큐잉한 건이 아직 없다(재발송 전 시점의 스냅샷).
     let releasePoll: (v: ClassnoteQueueView) => void = () => {};
     refreshMock.mockImplementation(() => new Promise((resolve) => (releasePoll = resolve)));
@@ -287,9 +287,9 @@ describe("ClassnoteQueueCard 자동 갱신", () => {
     });
     expect(refreshMock).toHaveBeenCalledTimes(1);
 
-    // 그 사이 원장이 '멈춤복구'로 큐를 바꿨다.
+    // 그 사이 원장이 '멈춤 재시도'로 큐를 바꿨다.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /멈춤복구/ }));
+      fireEvent.click(screen.getByRole("button", { name: /멈춤 재시도/ }));
       await vi.advanceTimersByTimeAsync(0);
     });
 

@@ -116,7 +116,7 @@ export function SubjectSheetCard({
             시트 열기
           </a>
         ) : (
-          <span>대상 시트를 등록하면 &apos;시트 반영&apos; 버튼이 시간표에 나타납니다.</span>
+          <span>대상 시트를 등록하면 &apos;시트로 보내기&apos; 버튼이 시간표에 나타납니다.</span>
         )}
         {status.lastSyncedAt ? (
           <span>마지막 동기화 {new Date(status.lastSyncedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}</span>
@@ -125,10 +125,10 @@ export function SubjectSheetCard({
       </div>
 
       {/* 자동 반영 안내 — 연동 ON + 수동 반영 이력이 있으면 새벽 4시 cron이 자동 push(사람 편집 감지 시 건너뜀).
-          ⚠️ 재개 조건: '가져오기'(읽기)만으론 시트 최종수정자가 사람이라 계속 건너뜀 → '시트 반영'(쓰기)까지 해야 재개. */}
+          ⚠️ 재개 조건: '가져오기'(읽기)만으론 시트 최종수정자가 사람이라 계속 건너뜀 → '시트로 보내기'(쓰기)까지 해야 재개. */}
       <p className="text-text-faint text-xs">
         연동이 켜져 있으면 매일 새벽 4시에 자동 반영됩니다. 시트에 직접 편집한 내용이 있으면 그날 자동 반영은
-        건너뛰어 편집을 보호합니다. 편집분을 앱에 반영한 뒤(‘시트에서 가져오기’) ‘시트 반영’까지 하면 다음
+        건너뛰어 편집을 보호합니다. 편집분을 앱에 반영한 뒤(‘시트에서 가져오기’) ‘시트로 보내기’까지 하면 다음
         새벽부터 자동 반영이 재개됩니다.
       </p>
 

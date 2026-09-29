@@ -23,7 +23,7 @@ function SubmitBtn() {
   return (
     <Button type="submit" disabled={pending}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-      생성
+      만들기
     </Button>
   );
 }
@@ -60,7 +60,7 @@ function Dialog({
         <header className="mb-4 flex items-start justify-between">
           <div>
             <p className="eyebrow">수납 관리</p>
-            <h2 className="text-foreground mt-1 text-lg font-bold">청구서 생성</h2>
+            <h2 className="text-foreground mt-1 text-lg font-bold">청구서 만들기</h2>
           </div>
           <button type="button" onClick={onClose} className="text-text-dim hover:text-foreground" aria-label="닫기">
             <X className="size-4" />
@@ -142,7 +142,7 @@ export function CreateInvoiceTrigger({
   students,
   defaultPeriod,
   variant = "button",
-  label = "청구서 생성",
+  label = "청구서 만들기",
   prefill,
 }: {
   students: StudentOption[];

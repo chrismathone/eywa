@@ -43,7 +43,7 @@ export function ExamsToolbar({ from, to, subject, kind, missing, q, subjectOptio
     <FilterSelect paramName="missing" axisLabel="미입력" allLabel="숨김" value={missing ? "1" : ""} options={[{ value: "1", label: "표시" }]} />
     <SearchToggle placeholder="학생 이름" defaultValue={q} />
     <span className="ml-auto" />
-    <ToolbarButton onClick={() => window.location.assign(inFrame ? withEmbed(exportHref) : exportHref)}>엑셀</ToolbarButton>
+    <ToolbarButton onClick={() => window.location.assign(inFrame ? withEmbed(exportHref) : exportHref)}>엑셀 내보내기</ToolbarButton>
     <ToolbarDivider />
     {action}
   </Toolbar>;

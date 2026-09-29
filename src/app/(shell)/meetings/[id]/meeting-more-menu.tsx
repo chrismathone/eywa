@@ -15,7 +15,7 @@ import { MeetingDeleteConfirm, MeetingRetryButton } from "./meeting-actions";
 import { downloadMeetingTxt, type MeetingTxtSource } from "./meeting-txt";
 
 /**
- * 회의록 상세 머리의 **텍스트 Secondary 하나** — '더보기'(인쇄 미리보기 · TXT로 저장 · 전사부터 다시 · 삭제).
+ * 회의록 상세 머리의 **텍스트 Secondary 하나** — '더보기'(인쇄 미리보기 · 텍스트 저장 · 전사부터 다시 · 삭제).
  * 지시서 §10: 상시 버튼은 창당 둘까지(Primary 'AI로 정리' + 이것). 옛 머리엔 버튼이 다섯(인쇄·TXT·AI·전사·삭제) 섰다.
  * 학생목록 '엑셀' 메뉴와 같은 모양(읽히는 글자 + 꺾쇠, 아이콘 온리 `⋮` 아님).
  *
@@ -83,7 +83,7 @@ export function MeetingMoreMenu({
             인쇄 미리보기
           </DropdownMenuItem>
         ) : null}
-        {txt ? <DropdownMenuItem onClick={() => downloadMeetingTxt(txt)}>TXT로 저장</DropdownMenuItem> : null}
+        {txt ? <DropdownMenuItem onClick={() => downloadMeetingTxt(txt)}>텍스트 저장</DropdownMenuItem> : null}
         {canRetry ? <DropdownMenuItem onClick={() => setMode("retry")}>전사부터 다시</DropdownMenuItem> : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={() => setMode("delete")}>

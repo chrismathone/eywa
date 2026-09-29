@@ -24,7 +24,7 @@ function assertEditHeaders(colIndex: Record<string, number>): void {
   const missing = ([EDIT_HEADERS[0], EDIT_HEADERS[4]] as const).filter((h) => colIndex[h] === undefined);
   if (missing.length > 0) {
     throw new Error(
-      `'수강편집' 시트 헤더가 올바르지 않습니다(${missing.join(", ")} 열 없음). 헤더 행을 지우거나 바꾸지 말고, 다시 내보내(또는 '시트 반영')세요.`,
+      `'수강편집' 시트 헤더가 올바르지 않습니다(${missing.join(", ")} 열 없음). 헤더 행을 지우거나 바꾸지 말고, 다시 내보내(또는 '시트로 보내기')세요.`,
     );
   }
 }

@@ -307,7 +307,7 @@ export default async function TimetablePage({
   //    · '가져오기'(파일·시트) = `applySheetImport`/`applyStructureImport` → **실제 `class_schedules`를 쓴다**
   //      (개발중 화면에서 눌렀는데 프로덕션 시간표·출결·급여가 함께 움직인다 — 격리 가드
   //      `features/timetable-dev/isolation.test.ts` B2가 이 조합을 구조로 막는다).
-  //    · '엑셀 내보내기'·'시트 반영' = 화면은 9월 계획인데 파일·시트엔 **현재 시간표**가 담긴다(화면≠파일).
+  //    · '엑셀 내보내기'·'시트로 보내기' = 화면은 9월 계획인데 파일·시트엔 **현재 시간표**가 담긴다(화면≠파일).
   //    계획을 시트로 주고받아야 하면 timetable-dev 전용 액션을 따로 만들 것(원본 액션 재사용 금지).
   // 평일/주말은 WeekdayGroupTables가 알아서 분리 렌더(주말은 시작시각이 달라 별도 판). 여기선 과목만 필터.
   // 이어서 계정 뷰 설정의 학년 필터를 **학생 단위**로 건다 — 반 단위로 걸면 학제 혼합 반이 통째로

@@ -20,7 +20,7 @@ import { reportError } from "@/lib/observability/report-error";
 
 /**
  * 시간표 → 구글 시트 자동 반영 cron (매일 04:00 KST = 19:00 UTC, 원장 결정 2026-07-13).
- * 수동 '시트 반영'(syncSheetsNow)과 같은 빌더·리스를 공유하되, 세션이 없으므로 admin 클라이언트 +
+ * 수동 '시트로 보내기'(syncSheetsNow)와 같은 빌더·리스를 공유하되, 세션이 없으므로 admin 클라이언트 +
  * **명시 tenant 필터**(builders의 db 주입, edutrix-sync cron 선례)로 돈다.
  *
  * 안전판 3중 (시트=양방향 표면이라 무가드 자동 덮어쓰기는 시트 편집분 유실):
@@ -98,7 +98,7 @@ export async function GET(req: Request) {
 
     // ② 첫 반영 가드 — 수동 반영 이력이 없는 시트는 자동으로 건드리지 않는다.
     if (!row.last_synced_at) {
-      results[key] = "skip: 수동 '시트 반영' 이력이 없어 자동 반영 대상에서 제외(첫 반영은 수동으로)";
+      results[key] = "skip: 수동 '시트로 보내기' 이력이 없어 자동 반영 대상에서 제외(첫 반영은 수동으로)";
       continue;
     }
 
@@ -117,7 +117,7 @@ export async function GET(req: Request) {
       if (humanEditedSince(mod, saEmail, row.last_synced_at)) {
         const notice =
           "자동 반영 건너뜀(시트 보호) — 시트에 '가져오기'로 되읽지 않은 수동 편집이 감지되어 덮어쓰지 않았습니다. " +
-          "'시트에서 가져오기' 후 '시트 반영'을 실행하면 다음 새벽부터 자동 반영이 재개됩니다.";
+          "'시트에서 가져오기' 후 '시트로 보내기'를 실행하면 다음 새벽부터 자동 반영이 재개됩니다.";
         await admin
           .from("user_integrations")
           .update({ last_error: notice, sync_started_at: null })

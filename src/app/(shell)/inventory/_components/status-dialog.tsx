@@ -80,7 +80,7 @@ export function StatusDialog({
               {mismatch.reason} — <b>{assetStatusLabel(mismatch.expected)}</b>로 맞출 수 있습니다.
             </span>
             <Button type="button" variant="outline" disabled={busy} onClick={sync}>
-              맞추기
+              장부 맞추기
             </Button>
           </div>
         ) : null}

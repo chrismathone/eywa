@@ -24,14 +24,14 @@ const SYNC_BUSY_TITLE =
 /**
  * 정규 외 구분에서 내보내기를 막는 이유 — 엑셀·시트 익스포터는 **정규 주간표 전체**를 만든다(화면의
  * 정규/특강 필터를 받지 않는다). 그대로 열어 두면 특강만 보는 화면에서 정규가 통째로 담긴 파일이
- * 내려오고, '시트 반영'은 특강을 마스터 시트에 밀어 넣어 '시트에서 가져오기' 왕복에 굳는다.
+ * 내려오고, '시트로 보내기'는 특강을 마스터 시트에 밀어 넣어 '시트에서 가져오기' 왕복에 굳는다.
  */
 const KIND_EXPORT_TITLE =
   "내보내기는 정규 시간표 기준으로만 지원합니다 — 구분을 '정규'로 바꾼 뒤 사용하세요.";
 
 /** 시트 연동을 켠 과목이 하나도 없을 때 — 빈 메뉴 대신 갈 곳을 알려준다. */
 const NO_SHEET_SUBJECT_TITLE =
-  "시트 반영을 켠 과목이 없습니다 — 학원 설정 › 연동에서 과목별 시트를 등록하고 켜세요.";
+  "시트 연동을 켠 과목이 없습니다 — 학원 설정 › 연동에서 과목별 시트를 등록하고 켜세요.";
 
 /** 연동은 켰는데 대상 시트를 아직 안 적은 과목 — 눌러도 서버가 같은 이유로 거절하므로 미리 말한다. */
 const NO_SHEET_TARGET_TITLE =
@@ -94,7 +94,7 @@ export function TimetableToolbarActions({
   /** 실행 결과 한 줄. 성공/실패를 **문자열 비교가 아니라 플래그로** 가른다(문구가 과목마다 다르다). */
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   /**
-   * 과목별 '시트 반영' 줄 — 🔴 `null`(아직 못 불러옴)과 `[]`(켠 과목이 0개)를 **구분**한다.
+   * 과목별 '시트로 보내기' 줄 — 🔴 `null`(아직 못 불러옴)과 `[]`(켠 과목이 0개)를 **구분**한다.
    * 뭉치면 로딩 한 틱이 "연동이 없습니다"라는 거짓 결론으로 보인다.
    */
   const [rows, setRows] = useState<SheetSyncRow[] | null>(null);
@@ -256,17 +256,17 @@ export function TimetableToolbarActions({
       <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <Popover.Trigger
           className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} data-[popup-open]:bg-bg-soft`}
-          title={sheetSection ? "엑셀 내보내기·가져오기, 구글 시트 반영·가져오기" : "엑셀 내보내기·가져오기"}
+          title={sheetSection ? "엑셀 내보내기·가져오기, 시트로 보내기·가져오기" : "엑셀 내보내기·가져오기"}
         >
           {/* 진행 중이면 트리거에서 바로 보이게 — 접으면 안쪽 스피너가 안 보인다. */}
           {anyBusy ? <Loader2 className="size-3 animate-spin" /> : <FileSpreadsheet className="size-3" />}
-          {/* 이름은 모든 탭과 같은 한 벌(원장 2026-09-29 *"엑셀 내보내기/가져오기 로 통일"*) — 시트 반영·가져오기는 같은 메뉴 아래칸. */}
+          {/* 이름은 모든 탭과 같은 한 벌(원장 2026-09-29 *"엑셀 내보내기/가져오기 로 통일"*) — 시트로 보내기·가져오기는 같은 메뉴 아래칸. */}
           {EXCEL_MENU_LABEL}
           <ChevronDown className="size-3" />
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Positioner side="bottom" align="start" sideOffset={6} className="z-50">
-            {/* 폭 296px = '수학 시트 반영' + 'yy.mm.dd hh:mm'이 한 줄에 들어가는 값(줄바꿈되면 탭 타겟이 흔들린다). */}
+            {/* 폭 296px = '수학 시트로' + 'yy.mm.dd hh:mm'이 한 줄에 들어가는 값(줄바꿈되면 탭 타겟이 흔들린다). */}
             <Popover.Popup className="bg-card border-line shadow-card w-[296px] max-w-[calc(100vw-2rem)] rounded-xl border p-2 text-left outline-none">
               {exportsAllowed ? (
                 <a href={exportHref} className={itemCls} onClick={() => setMenuOpen(false)}>
@@ -299,14 +299,14 @@ export function TimetableToolbarActions({
 
               {sheetSection ? <div className="border-line my-1 border-t" /> : null}
 
-              {/* 과목별 '시트 반영' — 원장 2026-09-10 "영어/수학 과목별로 시트 반영. 우측에 최근 반영 날짜".
+              {/* 과목별 '시트로 보내기' — 원장 2026-09-10 "영어/수학 과목별로 시트 반영. 우측에 최근 반영 날짜".
                   ⚠️ 여기선 팝오버를 **닫지 않는다** — 닫으면 진행 스피너와 결과 문구를 볼 곳이 사라진다
                   (다이얼로그와 달리 이 동작은 제자리에서 끝난다). */}
               {sheetSection && rows === null ? (
                 <>
                   <button type="button" disabled className={itemCls}>
                     <Sheet className="size-3 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">시트 반영</span>
+                    <span className="min-w-0 flex-1 truncate">시트로 보내기</span>
                     <span className="text-text-faint shrink-0 text-xs">
                       {rowsFailed ? "상태 확인 실패" : "불러오는 중…"}
                     </span>
@@ -328,7 +328,7 @@ export function TimetableToolbarActions({
                         type="button"
                         onClick={() => pushToSheet(row, label)}
                         disabled={pending || row.busy || !exportsAllowed || !row.connected}
-                        title={`${label} 시간표 전체를 연결된 구글 시트에 반영합니다`}
+                        title={`${label} 시간표를 연결된 구글 시트로 보냅니다`}
                         className={itemCls}
                       >
                         {running === row.subject || row.busy ? (
@@ -336,7 +336,7 @@ export function TimetableToolbarActions({
                         ) : (
                           <Sheet className="size-3 shrink-0" />
                         )}
-                        <span className="min-w-0 flex-1 truncate">{label} 시트 반영</span>
+                        <span className="min-w-0 flex-1 truncate">{label} 시트로</span>
                         <span className="text-text-faint shrink-0 text-xs tabular-nums">{stampOf(row)}</span>
                       </button>
                     );

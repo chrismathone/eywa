@@ -144,8 +144,8 @@ export function NewcomerBoard({ view, canWrite, initialFilters = EMPTY_FILTERS }
     <header className={styles.header}>
       <div className={styles.fontToggle} role="group" aria-label="폰트 서식 비교">
         <span>폰트</span>
-        <button type="button" aria-pressed={previousFonts} onClick={() => setPreviousFonts(true)} title="이름 13px · 항목별 크기를 사용하던 서식">변경 전</button>
-        <button type="button" aria-pressed={!previousFonts} onClick={() => setPreviousFonts(false)} title="이름과 본문을 16px로 통일한 서식">변경 후</button>
+        <button type="button" aria-pressed={previousFonts} onClick={() => setPreviousFonts(true)} title="이름 13px · 항목별 크기를 사용하던 서식">작은 글자</button>
+        <button type="button" aria-pressed={!previousFonts} onClick={() => setPreviousFonts(false)} title="이름과 본문을 16px로 통일한 서식">큰 글자</button>
       </div>
       <div className="compact-chrome:hidden"><h1><EyIcon name="graduationCap" size={28} />신규생 90일 관리</h1><p>첫 수업부터 90일까지, 놓치지 않는 학생 관리.</p></div>
       <div className={styles.headerMeta}><EyIcon name="calendar" size={17} /><span>기준 날짜 <strong>{view.today.replaceAll("-", ". ")}</strong></span></div>

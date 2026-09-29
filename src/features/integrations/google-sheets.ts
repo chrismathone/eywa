@@ -296,7 +296,7 @@ export async function updateSheetRow(
 /**
  * 구글 시트의 한 탭(`tabName`) 전체 셀 값을 2D 문자열 배열로 읽는다(1행=헤더).
  * '시트에서 가져오기'(라운드트립 import) — 시트 편집분을 앱으로 되읽는 단방향 반대 경로.
- * 탭이 없으면(예: '시트 반영' 전) Sheets가 400(Unable to parse range)을 주므로 친절 메시지로 변환.
+ * 탭이 없으면(예: '시트로 보내기' 전) Sheets가 400(Unable to parse range)을 주므로 친절 메시지로 변환.
  */
 export async function readSheetTabRows(spreadsheetId: string, tabName: string): Promise<string[][]> {
   const auth = getServiceAccountAuth();
@@ -312,7 +312,7 @@ export async function readSheetTabRows(spreadsheetId: string, tabName: string): 
   } catch (e) {
     const msg = ((e as { message?: string })?.message || "").toLowerCase();
     if (msg.includes("unable to parse range") || msg.includes("not found")) {
-      throw new Error(`시트에 '${tabName}' 탭이 없습니다. 먼저 시간표에서 '시트 반영'을 한 번 누르세요.`);
+      throw new Error(`시트에 '${tabName}' 탭이 없습니다. 먼저 시간표에서 '시트로 보내기'를 한 번 누르세요.`);
     }
     throw new Error(translateSheetsError(e));
   }
@@ -384,7 +384,7 @@ export async function readSheetGridWithMerges(spreadsheetId: string, tabName: st
   } catch (e) {
     const msg = ((e as { message?: string })?.message || "").toLowerCase();
     if (msg.includes("unable to parse range") || msg.includes("not found")) {
-      throw new Error(`시트에 '${tabName}' 탭이 없습니다. 먼저 시간표에서 '시트 반영'을 한 번 누르세요.`);
+      throw new Error(`시트에 '${tabName}' 탭이 없습니다. 먼저 시간표에서 '시트로 보내기'를 한 번 누르세요.`);
     }
     throw new Error(translateSheetsError(e));
   }

@@ -135,7 +135,7 @@ export default async function KioskSettingsPage() {
       <section className="border-border bg-card rounded-lg border p-5">
         <h2 className="text-foreground text-sm font-bold">키오스크 기기</h2>
         <p className="text-text-dim mt-1 text-sm">
-          출석 체크에 쓸 태블릿(이 브라우저)을 등록합니다. 분실 시 폐기하면 즉시 차단됩니다.
+          출석 체크에 쓸 태블릿(이 브라우저)을 등록합니다. 분실하면 ‘기기 차단’으로 바로 막습니다.
         </p>
         {canWrite ? (
           <div className="mt-3">
@@ -156,7 +156,7 @@ export default async function KioskSettingsPage() {
                     {d.isActive ? (
                       <span className="text-primary shrink-0 text-xs">활성</span>
                     ) : (
-                      <span className="text-text-faint shrink-0 text-xs">폐기됨</span>
+                      <span className="text-text-faint shrink-0 text-xs">차단됨</span>
                     )}
                   </div>
                   <div className="text-text-faint mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">

@@ -169,7 +169,7 @@ export function DraftComposer({
   const over =
     inCurrentPeriod && !invalid && remaining !== null && days > remaining
       ? remaining <= 0
-        ? "남은 연차가 없어 상신할 수 없습니다"
+        ? "남은 연차가 없어 올릴 수 없습니다"
         : `잔여 연차 ${formatLeaveDays(remaining)}보다 많이 신청할 수 없습니다`
       : null;
 
@@ -248,7 +248,7 @@ export function DraftComposer({
                 </tr>
                 <tr>
                   <th>문서 번호</th>
-                  <td className="text-text-faint text-xs">상신하면 자동으로 부여됩니다</td>
+                  <td className="text-text-faint text-xs">올리면 자동으로 부여됩니다</td>
                   <th>기안 일시</th>
                   <td className="num text-text-dim text-xs">{today}</td>
                 </tr>
@@ -499,7 +499,7 @@ function useSubmitToast(state: ApprovalActionState) {
     seen.current = state;
     if (state.error) toast.error(state.error);
     else if (state.ok) {
-      toast.success(state.notice ?? "상신했습니다");
+      toast.success(state.notice ?? "결재를 올렸습니다");
       // 상신 성공 = 방금 만든 문서로 이동(원장 2026-08-18: "alert만 뜨니까 인지가 안 됨").
       // ⚠️ 서버 액션 직후의 router.push는 액션 응답 RSC 적용에 삼켜진다([[#102]]) — window.location.assign.
       // ⚠️ 창(iframe) 안이면 embed=1 유지(원생 삭제와 같은 규칙) — 빼면 방금 만든 문서가 창 안에 전체 셸로 뜬다.
@@ -516,7 +516,7 @@ function SubmitButton({ blocked }: { blocked: boolean }) {
   return (
     <Button type="submit" disabled={pending || blocked}>
       {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-      상신
+      결재 올리기
     </Button>
   );
 }
@@ -882,7 +882,7 @@ function StaffPickerDialog({
 
         <div className="mt-3 flex justify-end">
           <Button type="button" size="sm" onClick={onClose}>
-            완료
+            닫기
           </Button>
         </div>
       </div>

@@ -118,7 +118,7 @@ export async function SheetsFace({
             (실측: 같은 폭에서 pretty는 [763,128] 고아, balance는 [447,444] 균등). max-w-3xl 고정폭도 풀어(max-w-5xl)
             넓은 창에선 한 줄로 붙고 좁으면 균등 2줄로 접히게 — 창 폭에 따라 스마트하게. */}
         <p className="text-muted-foreground mt-1 max-w-5xl text-sm text-balance">
-          과목마다 <strong>전용 구글 시트</strong>를 등록하고 켜면 그 과목 시간표 화면에 ‘시트 반영’ 버튼이
+          과목마다 <strong>전용 구글 시트</strong>를 등록하고 켜면 그 과목 시간표 화면에 ‘시트로 보내기’ 버튼이
           생깁니다(원장 전용). 누르면 등록한 시트에 현재 시간표가 <strong>통째로 덮어쓰기</strong>됩니다.
         </p>
         <p className="text-muted-foreground mt-2 flex max-w-5xl items-start gap-1.5 text-sm text-balance">
@@ -148,7 +148,7 @@ export async function SheetsFace({
             <li>
               시트 URL의 <code>/d/</code> 뒤 ID를 오른쪽 과목 카드의 <strong>Google Sheets ID</strong>에 등록합니다.
             </li>
-            <li>토글을 켜고, 시간표 화면의 ‘시트 반영’ 버튼으로 동기화합니다.</li>
+            <li>토글을 켜고, 시간표 화면의 ‘시트로 보내기’ 버튼으로 동기화합니다.</li>
           </ol>
           <p className="text-text-faint mt-auto flex items-start gap-1.5 pt-3 text-xs text-balance">
             <EyIcon name="alert" size={14} className="mt-0.5 shrink-0" />

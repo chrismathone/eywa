@@ -64,7 +64,7 @@ export async function appendResumeToRoster(
   // 읽기→쓰기 사이 동시 저장 레이스는 이력서 작성 빈도(월 수 건)상 감수.
   const job = (async () => {
     const rows = await readSheetTabRows(spreadsheetId, tab).catch((e) => {
-      // readSheetTabRows의 "먼저 시간표에서 '시트 반영'…" 힌트는 시간표 전용 — 명부 맥락 메시지로 교체.
+      // readSheetTabRows의 "먼저 시간표에서 '시트로 보내기'…" 힌트는 시간표 전용 — 명부 맥락 메시지로 교체.
       const m = (e as Error)?.message || "";
       throw m.includes("탭이 없습니다")
         ? new Error(`시트에 '${tab}' 탭이 없습니다 — HR_ROSTER_SHEET_TAB 값을 확인하세요`)

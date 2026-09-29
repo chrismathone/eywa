@@ -1,6 +1,6 @@
 "use client";
 
-// 원장 보고서 관리 > ClassNote 발송 큐(5단계-2 Part A) — 상태 집계 + 주의 목록(재발송/멈춤복구) + 워커 상태.
+// 원장 보고서 관리 > ClassNote 발송 큐(5단계-2 Part A) — 상태 집계 + 주의 목록(재발송/멈춤 재시도) + 워커 상태.
 import { useEffect, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { toast } from "sonner";
@@ -190,7 +190,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   const [live, setLive] = useState<{ base: ClassnoteQueueView; data: ClassnoteQueueView } | null>(null);
   const [stalled, setStalled] = useState(false); // 상한 도달로 자동 갱신을 멈춘 상태
   const [failing, setFailing] = useState(false); // 조회가 연속 실패 중(화면은 직전 값 — '갱신 중'이라고 말하면 안 됨)
-  // 큐를 바꾼 시점 표식 — 재발송/멈춤복구를 누르면 올라간다. **이미 날아간 조회의 응답을 버리기 위한 것**:
+  // 큐를 바꾼 시점 표식 — 재발송/멈춤 재시도를 누르면 올라간다. **이미 날아간 조회의 응답을 버리기 위한 것**:
   // 재발송 직전에 출발한 응답에는 방금 큐잉한 건이 없어, 그대로 반영하면 "발송 대기가 모두 처리되었습니다"라는
   // 거짓 완료를 띄우고 자동 갱신까지 꺼 버린다(적대 검수 확정 결함).
   const [epoch, setEpoch] = useState(0);
@@ -302,7 +302,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
   // 아직 안 고쳐졌으면 안전하게 다시 막힌다 = 개별 재발송을 열어둬도 위험하지 않다.
   // ⚠️ 기한이 지난 건도 뺀다 — 눌러도 서버(too_old 게이트)가 거부해 헛돌 뿐이다. 개별 체크박스는
   //    그대로 열어 둔다(규칙·예외가 바뀌어도 화면이 길을 막지 않게. 최종 판단은 언제나 서버).
-  // ⚠️ 멈춘 '처리 중'은 재발송이 아니라 **멈춤복구**가 담당한다(서버 retryClassnote는 끝나지 못한 상태만 받는다 —
+  // ⚠️ 멈춘 '처리 중'은 재발송이 아니라 **멈춤 재시도**가 담당한다(서버 retryClassnote는 끝나지 못한 상태만 받는다 —
   //    게시 도중일 수 있는 행을 다시 큐에 올리면 학부모에게 두 번 나간다).
   const retriable = items.filter(
     (i) =>
@@ -343,7 +343,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
     if (res.ok) {
       toast.success(`멈춘 발송 ${res.reset ?? 0}건 복구(재처리 대기)`);
       resync();
-    } else toast.error(res.error ?? "멈춤복구에 실패했습니다");
+    } else toast.error(res.error ?? "멈춤 재시도에 실패했습니다");
   }
 
   // 큐를 바꾼 직후 / '다시 확인' — 폴링 캐시를 버리고(그게 이기면 방금 큐잉한 건이 안 보인다) 서버에서 다시 받는다.
@@ -477,7 +477,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
         </Button>
         {summary.stuck > 0 ? (
           <Button size="sm" variant="ghost" disabled={busy} onClick={doResetStuck}>
-            멈춤복구 ({summary.stuck})
+            멈춤 재시도 ({summary.stuck})
           </Button>
         ) : null}
       </div>
@@ -536,7 +536,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
                         checked={checked.has(it.id)}
                         onChange={() => toggle(it.id)}
                         disabled={it.status === "processing"}
-                        title={it.status === "processing" ? "처리 중에 멈춘 건은 '멈춤복구'로 되돌린 뒤 재발송합니다" : undefined}
+                        title={it.status === "processing" ? "처리 중에 멈춘 건은 '멈춤 재시도'로 되돌린 뒤 재발송합니다" : undefined}
                         aria-label={`${it.studentName} 선택`}
                       />
                     </td>

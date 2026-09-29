@@ -168,7 +168,7 @@ export function AudioRecorderField({
               </button>
               <span className="text-muted-foreground/40 text-xs">·</span>
               <button type="button" onClick={handleDiscardRecovery} className="text-muted-foreground hover:text-foreground text-xs">
-                폐기
+                녹음 지우기
               </button>
             </div>
           </div>
