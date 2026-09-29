@@ -179,7 +179,7 @@ describe("overview display contracts", () => {
     expect(html).toContain("레벨테스트");
     expect(html).not.toContain('href="/calendar"');
     // 금일입테 카드는 서지만 ↗(목적지 링크)가 없다.
-    expect(html).toContain('aria-label="금일입테 0건.');
+    expect(html).toContain('aria-label="금일 입테 0건.');
   });
   it("반복 결석 전체 목록은 별도 팝업에서 회 단위로 표시하고 학생 출결 상세로 연결한다", async () => {
     mocks.data = snapshot();
@@ -223,7 +223,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일입테", "금일 등록", "오늘첫수업", "전일 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일 입테", "금일 등록", "오늘첫수업", "전일 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -472,10 +472,10 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
   it("금일입테 = 오늘 레벨테스트만(첫 수업·내일 제외), ↗ 없음", () => {
     mocks.data = kpiSnapshot();
     const html = renderToStaticMarkup(<Overview initial={mocks.data} />);
-    expect(html).toContain('aria-label="금일입테 1건.');
+    expect(html).toContain('aria-label="금일 입테 1건.');
     expect(html).not.toContain('href="/calendar');
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^금일입테 1건\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^금일 입테 1건\./ }));
     const popup = screen.getByRole("dialog");
     expect(popup.textContent).toContain("영어 레테");
     expect(popup.textContent).not.toContain("수학 첫수업");
