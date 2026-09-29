@@ -294,7 +294,7 @@ const def: ImporterDef<Plan> = {
         .eq("tenant_id", ctx.tenantId);
       if (dbErr) {
         await admin.auth.admin.deleteUser(authData.user.id);
-        await admin.from("users").delete().eq("id", authData.user.id);
+        await admin.from("users").delete().eq("id", authData.user.id).eq("tenant_id", ctx.tenantId);
         return { error: `${r.rowNum}행 ${r.name}: 직원 정보를 저장하지 못했습니다 — ${dbErr.message}${done()}` };
       }
       created += 1;
