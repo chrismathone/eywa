@@ -16,6 +16,7 @@ import {
 import { readScheduledGroupPlan } from "@/features/timetable/scheduled-groups";
 import { applyScheduledGroupPlan } from "@/features/owner/server/scheduled-groups";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
+import { normalizeClassName } from "@/features/classes/class-name";
 
 /**
  * 예약 적용이 미뤄 둔 **담임·기본 강의실·반 이름·통합뷰 그룹 배치**를 기한이 된 날 반영하는 cron.
@@ -124,9 +125,10 @@ export async function GET(req: Request) {
         patch.classroom_id = u.classroomId!;
         changes.push({ field: "강의실", from: cur.classroom_id, to: u.classroomId! });
       }
-      if (shouldApplyName(u, cur.class_name)) {
-        patch.class_name = u.className!;
-        changes.push({ field: "반 이름", from: cur.class_name, to: u.className! });
+      if (shouldApplyName(u, cur.class_name) && normalizeClassName(u.className)) {
+        // 시트에서 온 이름이라 공백이 섞일 수 있다 — 저장값과 감사로그가 같은 글자이게 정리해서 쓴다(class-name.ts).
+        patch.class_name = normalizeClassName(u.className!);
+        changes.push({ field: "반 이름", from: cur.class_name, to: patch.class_name });
       }
       if (Object.keys(patch).length === 0) continue;
       const { error } = await supabase
