@@ -7,10 +7,11 @@ import { personalBoardName, planClassBoards } from "./class-board-plan.mjs";
 
 const norm = (s) => String(s ?? "").replace(/\s/g, "");
 
-/** aywa 대상 반·학생. 대상 반 = 활성 수학(math·subject_1) · 보고서 발송 반 · 특강 제외 · 종강 제외. */
+/** aywa 대상 반·학생. 대상 반 = 활성 수학(math·subject_1) · 보고서 발송 반 · 종강 제외(특강 포함 — 원장 2026-09-30). */
 export async function loadAywa(sql, tenant) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
-  // 특강 판정 = 앱 단일소스 isSpecialLecture(src/features/classes/special-lecture.ts)와 같다 — is_special 또는 이름에 '특강'.
+  // 특강도 반 보드를 만든다(원장 2026-09-30 *"특강도 그냥 클래스노트에 반을 만드는게 가장 베스트"*) — 가드(원아 출처·전화·생년·
+  // 동명이인)는 정규 반과 똑같이 탄다(class-board-plan.mjs). 보고서 제목은 앱이 '[특강] 수업보고서'로 붙인다.
   const classRows = await sql`
     select c.id, c.class_name,
       coalesce(array_agg(distinct e.student_id) filter (where e.student_id is not null), '{}') as student_ids
@@ -19,7 +20,6 @@ export async function loadAywa(sql, tenant) {
       and (e.end_date is null or e.end_date >= ${today}) and (e.start_date is null or e.start_date <= ${today})
       and exists (select 1 from students s where s.id = e.student_id and s.status = 'enrolled' and not coalesce(s.is_test, false))
     where c.tenant_id = ${tenant} and c.is_active and not c.report_optout and c.subject in ('math', 'subject_1')
-      and not coalesce(c.is_special, false) and strpos(c.class_name, '특강') = 0
       -- 🔴 종강 제외(원장 2026-09-29 — 종강 반 6개를 만들었다가 지웠다). aywa는 종강을 is_active가 아니라
       --    closed_at(종강일)에 적는다. 판정 = overlap.ts isLiveSlot과 같은 축(closed_at < 오늘이면 종강).
       and (c.closed_at is null or c.closed_at >= ${today})
@@ -68,9 +68,28 @@ export function personalBoardId(boards, studentName) {
   return hit.length === 1 ? hit[0].id : null;
 }
 
-/** 반 ↔ 보드 연결표(0302a) — 반 이름이 바뀌어도 이 번호로 같은 보드를 찾는다. 표가 없으면 빈 지도. */
-export async function loadLinkedBoards(sql, tenant) {
-  const rows = await sql`select class_id, board_id from classnote_class_boards where tenant_id = ${tenant}`.catch(() => []);
+/**
+ * 종강 반 중 **ClassNote 보드가 아직 살아 있어** 연결을 지킬 반(원장 2026-09-30 *"종강은 클래스노트에 반이 살아있는 한은
+ * 계속 보내고, 이후에 반이 사라지면 반 선택이 뜨도록"*). 새 보드는 만들지 않는다(종강 반 생성 제외는 그대로) — 이미 있는
+ * 연결만 남긴다. 판정은 순수 `closedClassesToKeep`(class-board-plan.mjs).
+ */
+export async function loadClosedLinked(sql, tenant) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  const rows = await sql`select c.id from classes c
+    join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id
+    where c.tenant_id = ${tenant} and c.is_active and not c.report_optout and c.subject in ('math', 'subject_1')
+      and c.closed_at is not null and c.closed_at < ${today}`;
+  // 🔴 조회 실패는 throw — 빈 목록으로 삼키면 동기화가 종강 반 연결을 **전부 지운다**(되돌릴 수 없다).
+  return rows.map((r) => r.id);
+}
+
+/**
+ * 반 ↔ 보드 연결표(0302a) — 반 이름이 바뀌어도 이 번호로 같은 보드를 찾는다. 표가 없으면 빈 지도.
+ * `strict` = 조회 실패를 throw(종강 반 연결 지키기처럼 **빈 지도가 삭제로 이어지는** 자리 — 삼키면 연결이 전부 지워진다).
+ */
+export async function loadLinkedBoards(sql, tenant, { strict = false } = {}) {
+  const q = sql`select class_id, board_id from classnote_class_boards where tenant_id = ${tenant}`;
+  const rows = strict ? await q : await q.catch(() => []);
   return new Map(rows.map((r) => [r.class_id, Number(r.board_id)]));
 }
 

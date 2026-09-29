@@ -348,6 +348,29 @@ aywa 쪽 특례는 같은 날 전부 걷어냈다.)
 ⚠️ v1_2 `employments`는 **DRF가 아니라 평배열**이다(실측 975건, 239KB) — `fetchAllDrf`로 읽으면 `.results`가
 없어 **조용히 0건**이 된다(처음 조사에서 실제로 그렇게 오판했다). 교사 목록 `/api/v1_2/centers/{c}/teachers`는 DRF다.
 
+### 수학 반별 발송의 '보낼 반' 규칙 (2026-09-30 원장)
+
+ClassNote 모듈이 켜져 있고 보고서 설정 '수학 발송 경로'가 반별(또는 시범 강사)일 때만 적용된다. 판정 = `classRouteActive`.
+모듈이 꺼진 학원은 아래가 전부 없다(예전 그대로).
+
+- **보고서 반에 살아 있는 반 보드가 있으면 그 반으로 보낸다.** 살아 있다 = 0302a 연결이 있고 그 학생의 원아가 ok로 매칭돼 있다(`classBoardLiveForStudent`).
+  - **특강**도 제 반 보드를 가진다. 매일 동기화가 특강 반 보드도 만든다(원장 *"특강도 그냥 클래스노트에 반을 만드는게 가장 베스트"*).
+  - 학부모 보고서 제목은 `[특강] 수업 보고서`다(`report-title.ts`, 모든 학원).
+- **종강 반**은 ClassNote 보드가 살아 있는 동안 연결을 지킨다(`closedClassesToKeep`). 보드가 지워지면 연결이 걷힌다.
+- **보낼 반 보드가 없으면 '보낼 반'을 정한다.** 반 없는 보강이나 연결이 걷힌 종강 반이 여기에 해당하고, 값은 `lesson_reports.classnote_class_id`(0303a)에 적는다.
+  - 원스크린: 메인 수업을 자동으로 고르고, 못 정하면 강사에게 고르게 한다.
+  - 관리자 직접 작성: 학생·과목을 고른 뒤 '보낼 반' 목록이 뜬다(`getAdminSendClassOptions`).
+  - 보고서에 **반이 있는데** 그 반 보드가 없으면(특강 반 보드가 아직 없음 등) 메인 수업을 자동으로 고르지 않고 **반 고르기**를 띄운다.
+  - 🔴 **후보가 없으면 발송하지 않는다**(`no_class`, 원장 *"담당 반이 없으면 보고서 발송 불가능하게"*). 예전엔 1인 보드로 갔다.
+  - 🔴 반 보드 확인이 실패하면(조회 오류) **발송하지 않는다**(fail-closed).
+  - 관리자 일괄 경로(미발송 일괄 발송·재발송·멈춤 복구)는 한 함수(`blockedForNoSendClass`)를 지난다. '보낼 반'이 이미 적혀 있고 살아 있는 행만 보낸다. 멈춤 복구에서 막힌 행은 queued 대신 `failed`(한글 사유)로 내린다.
+- 🔴 **'살아 있는 반 보드' 판정은 한 벌이다**: 연결(`classnote_class_boards`) + 그 학생의 원아 매칭 `ok`(`classnote_class_board_members`). 앱(`classBoardLiveForStudent`·보낼 반 후보)과 워커(`isClassRouteEligible(sql, tenant, classId, studentId)`)가 같다.
+- 종강 반 연결 지키기는 조회 실패를 삼키지 않는다(`loadClosedLinked` throw · `loadLinkedBoards({ strict: true })`). 삼키면 동기화가 연결을 전부 지운다.
+- **워커**(`pickRouteClass`)는 이렇게 고른다.
+  1. 보고서 반에 연결이 있으면(종강·특강 포함) 그 반
+  2. 없으면 '보낼 반'
+  3. 둘 다 없으면 1인 보드. 전환 전에 대기에 올라간 행 같은 1회성 폴백이다.
+
 ## 4. Cloud Run 함수(submitToClassNoteV2) 요점 — 소스: D:\edutrix\functions\index.js
 
 > 🔴 **2026-07-29 폐기 — 이 함수는 더 이상 발송 경로가 아니다.** 워커에서 Cloud Run 분기를 **코드로 제거**했고

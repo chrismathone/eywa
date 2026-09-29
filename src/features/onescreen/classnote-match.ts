@@ -30,7 +30,7 @@ export type CnMatch = {
 export type CnMatchMap = {
   available: boolean;
   byKey: Record<string, CnMatch>;
-  /** 반 보드 대상 반(수학·활성·보고서 발송·특강 아님·종강 전) — 이 밖의 반 행엔 라벨을 달지 않는다(특강 행 가짜 빨간불 방지). */
+  /** 반 보드 대상 반(수학·활성·보고서 발송 · 종강 전 또는 연결이 남은 종강 · 특강 포함 2026-09-30) — 이 밖의 반 행엔 라벨을 달지 않는다. */
   eligibleClassIds: string[];
 };
 
@@ -82,7 +82,7 @@ export function cnLabelFor(
 ): { ok: boolean; match: CnMatch | null } | null {
   if (!map?.available) return null;
   if (!row.classId || !row.subjectKey || !CN_SUBJECT_KEYS.has(row.subjectKey)) return null;
-  if (!map.eligibleClassIds.includes(row.classId)) return null; // 특강·종강·미발송 반 — 반 보드 대상이 아니다
+  if (!map.eligibleClassIds.includes(row.classId)) return null; // 연결이 걷힌 종강·미발송 반 — 반 보드 대상이 아니다
   const match = map.byKey[cnKey(row.classId, row.studentId)] ?? null;
   return { ok: match?.status === "ok", match };
 }

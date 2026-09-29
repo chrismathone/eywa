@@ -3735,6 +3735,21 @@ export const SHEET_DICT = {
     en: " · {n} out of scope (no progress, unmarked attendance, absent or already sent)",
   },
   "os.c.bulkFail": { ko: " · 실패 {n}건", en: " · {n} failed to send" },
+  // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가).
+  "os.c.bulkNoClass": { ko: " · 보낼 반 없음 {n}건(발송 안 함)", en: " · {n} not sent — no class to send to" },
+  // 반별 발송 '보낼 반' 단건 안내(원장 2026-09-30) — 서버 status로 고른다(서버 한국어 문장을 그대로 띄우지 않게).
+  "os.c.noSendClass": {
+    ko: "보낼 반이 없어 발송할 수 없습니다 — 이 학생의 반을 확인하세요(담당 반이 아니거나 반 보드가 없는 학생)",
+    en: "Can't send — this student has no class board to send to. Check the student's class (not your class, or no class board).",
+  },
+  "os.c.chooseSendClass": {
+    ko: "보낼 반을 골라 주세요 — 저장은 됐습니다",
+    en: "Pick the class to send to — the report is saved.",
+  },
+  "os.c.sendClassCheckFail": {
+    ko: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",
+    en: "Couldn't check which class to send to, so it wasn't sent — the report is saved. Please try again.",
+  },
   "os.c.revokeFail": { ko: "링크 취소에 실패했습니다", en: "The link could not be revoked" },
   "os.c.revoked": { ko: "{subject} 공유 링크를 취소했습니다 — 학부모 열람이 차단됩니다", en: "The {subject} share link was revoked — parents can no longer open it" },
   "os.c.reissueConfirm": {

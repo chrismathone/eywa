@@ -20,6 +20,8 @@ import { STUCK_MINUTES } from "../classnote-queue";
 import { IMPORT_FILTER, UNSENT_FILTER, reportOrderSpecs, type ReportListFilters, type ReportListRow } from "../report-filters";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
+import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
+import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
@@ -45,7 +47,16 @@ const RETRIABLE_STATUSES = ["failed", "too_old", "name_conflict", "blocked_share
 
 export async function retryClassnote(
   ids: string[],
-): Promise<{ ok: boolean; requeued?: number; skipped?: number; absentSkipped?: number; dryRun?: boolean; error?: string }> {
+): Promise<{
+  ok: boolean;
+  requeued?: number;
+  skipped?: number;
+  absentSkipped?: number;
+  /** 반별 발송인데 보낼 반이 없어 다시 올리지 않은 건수(원장 2026-09-30) — 원스크린·직접 작성에서 반을 골라 보낸다. */
+  noClass?: number;
+  dryRun?: boolean;
+  error?: string;
+}> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
@@ -66,7 +77,7 @@ export async function retryClassnote(
     rows = await fetchInChunks(ids.slice(0, 200), (chunk) =>
       supabase
         .from("lesson_reports")
-        .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
+        .select("id, report_date, subject, class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
         .in("id", chunk)
         // 🔴 재발송은 **끝나지 못한 행만**(적대적 리뷰) — 목록 스냅샷이 옛 '실패'를 들고 있는 사이 워커가 이미
         //    게시했거나(success) 게시 중(processing/queued)인 행을 다시 queued로 돌리면 학부모에게 **두 번** 나간다.
@@ -116,6 +127,22 @@ export async function retryClassnote(
   }
   if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
 
+  // 보낼 반 게이트(미발송 일괄 발송과 같은 함수) — 반별 발송인데 보낼 반이 없으면 다시 올리지 않는다(워커가 1인 보드로 흘리지 않게).
+  const requeueSet = new Set(requeueIds);
+  const routeRows = allowed.filter((r) => requeueSet.has(r.id as string) && isSendClassRouteRow(settings, r));
+  let noClassIds: Set<string>;
+  try {
+    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow));
+  } catch {
+    noClassIds = new Set(routeRows.map((r) => r.id as string));
+  }
+  const noClass = noClassIds.size;
+  if (noClass) requeueIds = requeueIds.filter((id) => !noClassIds.has(id));
+  if (requeueIds.length === 0)
+    return noClass && !absentSkipped && !skipped
+      ? { ok: false, requeued: 0, noClass, error: "보낼 반이 없어 다시 보내지 않았습니다 — 원스크린·직접 작성에서 반을 골라 보내세요" }
+      : { ok: true, requeued: 0, skipped, absentSkipped, noClass };
+
   const { data: requeuedRows, error } = await supabase
     .from("lesson_reports")
     .update({
@@ -132,7 +159,7 @@ export async function retryClassnote(
   if (error) return { ok: false, error: humanizeDbError(error.message, "재발송") };
   // 실제로 갱신된 행만 센다(사이에 워커가 집어 간 행은 빠진다 — 감사로그·토스트 숫자가 거짓이 되지 않게).
   requeueIds = (requeuedRows ?? []).map((r) => r.id as string);
-  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped };
+  if (requeueIds.length === 0) return { ok: true, requeued: 0, skipped, absentSkipped, noClass };
   // 🔴 학부모 게시판에 **글이 하나 더 붙는** 동작이라 반드시 남긴다. 일괄이므로 **한 줄 요약**
   //    (건별 N줄 금지) — 대신 되짚을 id·이름을 함께 담는다(재발송은 최대 200건이라 id는 50개로 자른다).
   const requeuedSet = new Set(requeueIds);
@@ -152,9 +179,10 @@ export async function retryClassnote(
       ...(requeueIds.length > 50 ? { reportIdsTruncated: requeueIds.length - 50 } : {}),
       skipped,
       absentSkipped,
+      ...(noClass ? { noClass } : {}),
     },
   });
-  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped };
+  return { ok: true, requeued: requeueIds.length, skipped, absentSkipped, noClass };
 }
 
 /**
@@ -178,6 +206,11 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   absentSkipped?: number;
   /** 멘트가 비어 큐잉하지 않은 건수 — 워커가 어차피 거절하므로 미리 거른다(사유를 화면에 밝힌다). */
   emptyMent?: number;
+  /**
+   * 반별 발송인데 **보낼 반이 정해지지 않아** 큐잉하지 않은 건수(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) —
+   * 보고서 반에 살아 있는 반 보드가 없고 '보낼 반'(0303a)도 비어 있는 행. 원스크린·직접 작성에서 반을 골라 보낸다.
+   */
+  noClass?: number;
   dryRun?: boolean;
   error?: string;
 }> {
@@ -196,7 +229,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
       supabase
         .from("lesson_reports")
         // 학생 이름은 감사로그 라벨용(위 retryClassnote와 같은 이유). 임베드엔 FK 이름 명시(#94).
-        .select("id, report_date, subject, class_id, student_id, makeup, notes, students!lesson_reports_student_id_fkey(name)")
+        .select("id, report_date, subject, class_id, student_id, makeup, notes, teacher_name, students!lesson_reports_student_id_fkey(name)")
         .in("id", chunk)
         .is("classnote_status", null)
         .or("source.is.null,source.neq.edutrix_import")
@@ -240,8 +273,20 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     return { ok: false, error: "출결 확인에 실패했습니다 — 다시 시도하세요" };
   }
   const absentSkipped = eligible.length - sendable.length;
+  // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 보낼 반 보드가 없는 행은 **큐에 올리지 않는다**(원스크린과 같은 규칙).
+  // 일괄에선 행마다 반을 고를 수 없으니 이미 정해진 '보낼 반'(0303a)이 있을 때만 보낸다. 판정 실패 = fail-closed(그 행 제외).
+  const routeRow = (r: (typeof sendable)[number]) => isSendClassRouteRow(settings, r);
+  // 판정 = blockedForNoSendClass(재발송·멈춤 복구와 같은 함수). 조회 실패는 throw → 대상 행 전부 제외(fail-closed).
+  let noClassIds: Set<string>;
+  try {
+    noClassIds = await blockedForNoSendClass(user.tenantId, sendable.filter(routeRow).map(sendClassRow));
+  } catch {
+    noClassIds = new Set(sendable.filter(routeRow).map((r) => r.id as string));
+  }
+  const noClass = noClassIds.size;
+  if (noClass) sendable = sendable.filter((r) => !noClassIds.has(r.id as string));
   if (sendable.length === 0)
-    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped, absentSkipped, emptyMent };
+    return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - absentSkipped - noClass, absentSkipped, emptyMent, noClass };
 
   // 동명이인 감지 — 학생별 1회(중복 제거), 25명 청크로 버스트 제한(학생당 3쿼리).
   const studentIds = [...new Set(sendable.map((r) => r.student_id as string))];
@@ -309,6 +354,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
         conflicts,
         absentSkipped,
         emptyMent,
+        ...(noClass ? { noClass } : {}),
       },
     });
   }
@@ -317,47 +363,98 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
     queued,
     conflicts,
     // E13 — 멘트 미작성(emptyMent)은 따로 세므로 "제외"에서 뺀다(같은 건이 두 사유로 두 번 세지던 것).
-    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped,
+    skipped: capped.length - emptyMent - queued - conflicts - absentSkipped - noClass,
     absentSkipped,
     emptyMent,
+    noClass,
   };
 }
 
 /**
  * 멈춤복구 — processing인데 STUCK_MINUTES 넘게 안 끝난 것(워커 크래시·PC 꺼짐)을 queued로 되돌려 재처리.
  */
-export async function resetStuckClassnote(): Promise<{ ok: boolean; reset?: number; error?: string }> {
+export async function resetStuckClassnote(): Promise<{
+  ok: boolean;
+  reset?: number;
+  /** 반별 발송인데 보낼 반이 없어 queued 대신 failed로 내린 건수(원장 2026-09-30). */
+  noClass?: number;
+  error?: string;
+}> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
   const supabase = await createClient();
   const cutoff = new Date(Date.now() - STUCK_MINUTES * 60_000).toISOString();
-  const { data, error } = await supabase
+  // 보낼 반 게이트(미발송 일괄 발송·재발송과 같은 함수) — 반별 발송인데 보낼 반이 없는 멈춘 행은 queued로 되돌리지 않고
+  // **failed + 한글 사유**로 내린다(재발송 카드에 뜨고, 반을 골라 보낼 때까지 1인 보드로 새지 않는다).
+  // processing에 그대로 두면 영영 멈춰 있으니 어느 쪽으로든 내려야 한다.
+  const { data: stuck, error: sErr } = await supabase
     .from("lesson_reports")
-    .update({
-      classnote_status: "queued",
-      classnote_queued_at: new Date().toISOString(),
-      classnote_processing_at: null,
-    })
+    .select("id, subject, class_id, student_id, teacher_name")
     .eq("classnote_status", "processing")
     .lt("classnote_processing_at", cutoff)
-    .select("id");
-  if (error) return { ok: false, error: humanizeDbError(error.message, "복구") };
-  const reset = (data ?? []).length;
+    .limit(500);
+  if (sErr) return { ok: false, error: humanizeDbError(sErr.message, "복구") };
+  const settings = await getTenantSettings();
+  const routeRows = (stuck ?? []).filter((r) => isSendClassRouteRow(settings, r));
+  let noClassIds: Set<string>;
+  try {
+    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow));
+  } catch {
+    noClassIds = new Set(routeRows.map((r) => r.id as string));
+  }
+  const toQueue = (stuck ?? []).map((r) => r.id as string).filter((id) => !noClassIds.has(id));
+  // B3 — 최대 500개 id라 100개씩 나눠 갱신한다(한 `.in()`에 실으면 414).
+  const data: { id: string }[] = [];
+  for (let i = 0; i < toQueue.length; i += 100) {
+    const res = await supabase
+      .from("lesson_reports")
+      .update({
+        classnote_status: "queued",
+        classnote_queued_at: new Date().toISOString(),
+        classnote_processing_at: null,
+      })
+      .in("id", toQueue.slice(i, i + 100))
+      // 조회와 갱신 사이에 워커가 끝낸 행은 건드리지 않는다(같은 조건을 갱신에도).
+      .eq("classnote_status", "processing")
+      .lt("classnote_processing_at", cutoff)
+      .select("id");
+    if (res.error) return { ok: false, error: humanizeDbError(res.error.message, "복구") };
+    data.push(...((res.data ?? []) as { id: string }[]));
+  }
+  let failedNoClass = 0;
+  const noClassList = [...noClassIds];
+  for (let i = 0; i < noClassList.length; i += 100) {
+    const { data: fRows, error: fErr } = await supabase
+      .from("lesson_reports")
+      .update({
+        classnote_status: "failed",
+        classnote_processing_at: null,
+        classnote_error: "보낼 반이 없어 발송하지 않았습니다 — 원스크린·직접 작성에서 반을 골라 보내세요",
+      })
+      .in("id", noClassList.slice(i, i + 100))
+      .eq("classnote_status", "processing")
+      .lt("classnote_processing_at", cutoff)
+      .select("id");
+    if (fErr) return { ok: false, error: humanizeDbError(fErr.message, "복구") };
+    failedNoClass += (fRows ?? []).length;
+  }
+  const reset = data.length;
   // 멈춘 건을 다시 큐에 올리는 일 = **워커가 다시 게시를 시도**한다(학부모 표면에 닿는다).
   // 되돌린 게 없으면 남기지 않는다(버튼을 눌러도 대상이 0이면 아무 일도 안 일어난 것이다).
-  if (reset > 0) {
+  if (reset > 0 || failedNoClass > 0) {
     await logAction({
       action: "classnote_stuck_reset",
       targetType: "lesson_report",
       metadata: {
         reportCount: reset,
-        reportIds: (data ?? []).slice(0, 50).map((r) => r.id as string),
+        reportIds: data.slice(0, 50).map((r) => r.id),
         stuckMinutes: STUCK_MINUTES,
+        ...(failedNoClass ? { noClass: failedNoClass } : {}),
       },
     });
   }
-  return { ok: true, reset };
+  return { ok: true, reset, noClass: failedNoClass };
 }
 
 /**

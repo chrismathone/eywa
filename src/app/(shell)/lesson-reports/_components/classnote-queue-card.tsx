@@ -329,7 +329,7 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
       setChecked(new Set());
     } else if (res.ok) {
       toast.success(
-        `${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}${res.absentSkipped ? ` · ${res.absentSkipped}건 결석 제외` : ""}`,
+        `${res.requeued ?? 0}건 재발송 대기${res.skipped ? ` · ${res.skipped}건 제외(오래된 보고서)` : ""}${res.absentSkipped ? ` · ${res.absentSkipped}건 결석 제외` : ""}${res.noClass ? ` · ${res.noClass}건 보낼 반 미지정 제외(원스크린·직접 작성에서 반을 골라 발송)` : ""}`,
       );
       setChecked(new Set());
       resync();
@@ -341,7 +341,9 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
     const res = await resetStuckClassnote();
     setBusy(false);
     if (res.ok) {
-      toast.success(`멈춘 발송 ${res.reset ?? 0}건 복구(재처리 대기)`);
+      toast.success(
+        `멈춘 발송 ${res.reset ?? 0}건 복구(재처리 대기)${res.noClass ? ` · ${res.noClass}건은 보낼 반이 없어 실패로 내림` : ""}`,
+      );
       resync();
     } else toast.error(res.error ?? "멈춤 재시도에 실패했습니다");
   }

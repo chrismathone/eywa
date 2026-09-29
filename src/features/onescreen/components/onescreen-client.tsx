@@ -3216,6 +3216,16 @@ export function OneScreenClient({
       const picked = await askSendClass(student.name, res.candidates);
       if (picked) res = await saveAndQueueClassnote({ ...built.input, classnoteClassId: picked });
     }
+    // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.
+    const sendClassKey =
+      res.status === "no_class"
+        ? "os.c.noSendClass"
+        : res.status === "needs_class"
+          ? "os.c.chooseSendClass"
+          : res.status === "class_check_failed"
+            ? "os.c.sendClassCheckFail"
+            : null;
+    if (!res.ok && sendClassKey) res = { ...res, error: t(sendClassKey) };
     if (res.ok) {
       // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
       //    그중 `already_sent`를 그대로 배지 state에 넣으면 "success가 아니게" 되어 발송 가드가 스스로 풀린다
@@ -3636,6 +3646,7 @@ export function OneScreenClient({
     let sentSkip = 0; // 서버 중복 게시 가드에 걸린 행(다른 창에서 먼저 보낸 경우 등)
     let dry = 0;
     let fail = 0;
+    let noClass = 0; // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가)
     let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
@@ -3643,8 +3654,10 @@ export function OneScreenClient({
         const student = latestRow(r.student.id, r.subject.name) ?? r.student;
         const res = await queueOne(student, r.subject.name);
         if (res.ok && res.warning) jjWarn++;
-        if (!res.ok) fail++;
-        else if (res.status === "queued") {
+        if (!res.ok) {
+          if (res.status === "no_class") noClass++;
+          else fail++;
+        } else if (res.status === "queued") {
           queued++;
           if (res.sendWindowHint) windowHint = res.sendWindowHint;
         } else if (res.status === "dry_run") dry++;
@@ -3675,6 +3688,7 @@ export function OneScreenClient({
         (skipped ? tf("os.c.bulkSkipped", { n: skipped }) : "") +
         (preSkipped ? tf("os.c.bulkPreSkipped", { n: preSkipped }) : "") +
         (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : "") +
+        (noClass ? tf("os.c.bulkNoClass", { n: noClass }) : "") +
         (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );
   }

@@ -15,15 +15,26 @@ export async function getClassnoteMathRoute(sql, tenant) {
 }
 
 /**
- * 이 반이 반 보드 대상인가 — 반 보드를 만든 기준(math-class-boards-load.mjs `loadAywa`)과 **같은 조건**.
- * 특강·종강·미발송·폐지 반은 반 보드가 없으므로 기존 1인 보드로 보낸다(멈추면 그 보고서가 영영 안 나간다).
+ * 이 학생을 이 반 보드로 게시할 수 있는가 — **반 보드 연결(0302a) + 그 학생의 원아 매칭이 ok**인 수학 반(원장 2026-09-30).
+ * 🔴 앱 `classBoardLiveForStudent`·보낼 반 후보와 **같은 규칙**이다 — 연결만 보면 앱은 다른 반을 고르게 했는데 여기선
+ *    원래 반으로 가서 "원아 매칭이 끝나지 않았습니다"로 실패한다.
+ * - 특강도 정규 반과 같다(*"특강도 그냥 클래스노트에 반을 만드는게 가장 베스트"* — 매일 동기화가 특강 반 보드도 만든다).
+ * - 종강 반도 연결이 남아 있으면 그대로 보낸다(*"클래스노트에 반이 살아있는 한은 계속 보내고"*) — 매일 동기화는 종강 반의
+ *   ClassNote 보드가 **실제로 남아 있을 때만** 연결을 지키고, 지워졌으면 연결을 걷는다(math-class-boards-db.mjs keep).
+ * - 미발송·폐지 반은 아니다. 연결이 없으면 앱이 정한 '보낼 반'(classnote_class_id)으로, 그것도 없으면 1인 보드로(pickRouteClass).
+ * ⚠️ 0302a 표가 없으면 throw — 호출부가 잡는다(예전처럼 "대상"으로 두고 대상 확정 단계가 실패로 드러낸다).
  */
-export async function isClassRouteEligible(sql, tenant, classId) {
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+export async function isClassRouteEligible(sql, tenant, classId, studentId) {
+  if (!classId || !studentId) return false;
   const [row] = await sql`select 1 as ok from classes c
+    join classnote_class_boards b on b.tenant_id = c.tenant_id and b.class_id = c.id
     where c.tenant_id = ${tenant} and c.id = ${classId} and c.is_active and not c.report_optout
-      and c.subject in ('math', 'subject_1') and not coalesce(c.is_special, false) and strpos(c.class_name, '특강') = 0
-      and (c.closed_at is null or c.closed_at >= ${today})`;
+      and c.subject in ('math', 'subject_1')
+      and exists (select 1 from classnote_class_board_members m
+        where m.tenant_id = c.tenant_id and m.class_id = c.id and m.student_id = ${studentId} and m.status = 'ok')
+      -- 보류 행이 하나라도 있으면 resolveClassTargets가 실패한다 — 게시할 수 있는 반이 아니다(앱 liveBoardClassIdsOf와 같다).
+      and not exists (select 1 from classnote_class_board_members m
+        where m.tenant_id = c.tenant_id and m.class_id = c.id and m.student_id = ${studentId} and m.status <> 'ok')`;
   return !!row;
 }
 

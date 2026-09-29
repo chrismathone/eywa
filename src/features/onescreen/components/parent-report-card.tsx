@@ -5,7 +5,7 @@ import { hasTrend, type TrendPoint } from "../report-trend";
 import { isImageAttachment, pickInlineAttachments } from "../attachment-utils";
 import { isSkipStatusProgress } from "../progress-status";
 import { collapseProgressRanges } from "../progress-range";
-import { makeupTitleSuffix } from "../makeup-label";
+import { reportTitleText } from "../report-title";
 import { ReportTrendGraph } from "./report-trend-graph";
 import { EMPTY_NOTES, FileLink, TemplateBody, type CardAttachment } from "./report-template-body";
 
@@ -66,6 +66,8 @@ export type ParentReportCardProps = {
      * 가른다 — 판정 규칙·근거는 [makeup-label.ts](../makeup-label.ts). 넘기지 않으면 "(보강)"로 본다.
      */
     hasClass?: boolean;
+    /** 특강 반 보고서 — 제목 앞에 "[특강]"(원장 2026-09-30, report-title.ts). 판정은 호출부가 `classKindMeta`로. */
+    special?: boolean;
   };
   student: { name: string | null; school: string | null; grade: string | null } | null;
   academyName: string;
@@ -142,7 +144,7 @@ export function ParentReportCard({
             보강이면 접미사를 덧붙여 같은 날 정규 보고서와 학부모가 구분(2026-07-24 원장).
             정규 수업까지 한 날의 보강은 "(정규+보강)"으로 합쳐 **한 번만** 나간다(2026-08-05 원장, makeup-label.ts). */}
         <h1 className="text-foreground text-2xl font-bold tracking-[0.05em]">
-          {[reportDate, `${rpt.title || "수업 보고서"}${makeupTitleSuffix(report)}`].filter(Boolean).join(" ")}
+          {[reportDate, reportTitleText(rpt.title, report)].filter(Boolean).join(" ")}
         </h1>
       </header>
 

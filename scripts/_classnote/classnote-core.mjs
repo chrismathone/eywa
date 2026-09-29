@@ -15,7 +15,7 @@ import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
-import { decideRoute } from "./class-route-decide.mjs";
+import { decideRoute, pickRouteClass } from "./class-route-decide.mjs";
 import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 
 /**
@@ -645,22 +645,24 @@ export async function processQueueOnce(sql, browser, opts) {
     // 수학 발송 경로(보고서 설정, 2026-09-29) — personal = 위 1인 보드 · class = 반 보드(0302a 매칭 원아에게 1:1).
     // needs_class(반 정보 없는 보강) = 반을 추측하지 않는다 — 원스크린 발송이 정한 'ClassNote로 보낼 반'(0303a,
     // 메인 수업 또는 강사가 고른 반)이 있으면 그 반 보드로, 없으면(관리자 재발송 등 그 단계를 안 지난 경로) 기존 1인 보드로.
-    let route = post ? decideRoute(routeCfg, r) : "personal";
+    // 🔴 실제로 올릴 반 보드(원장 2026-09-30, 순수 판정 = class-route-decide.mjs `pickRouteClass`):
+    //    보고서 반에 살아 있는 연결 → 그 반(특강·연결이 남은 종강 포함) · 없으면 앱이 정한 '보낼 반' · 둘 다 없으면 1인 보드.
+    //    조회 실패는 "대상"으로 둔다 — 아래 대상 확정에서 다시 드러난다(조용히 1인 보드로 새지 않게).
+    const decided = post ? decideRoute(routeCfg, r) : "personal";
+    let route = "personal";
     let routeClassId = r.class_id ?? null;
-    if (route === "needs_class") {
-      if (r.classnote_class_id) {
-        route = "class";
-        routeClassId = r.classnote_class_id;
-      } else {
-        log(`  · ${studentName}: 반 정보 없는 보고서 — 보낼 반이 정해지지 않아 기존 1인 보드로`);
-        route = "personal";
-      }
-    }
-    // 특강·종강·미발송 반은 반 보드를 만들지 않았다(대상 기준 = isClassRouteEligible) → 기존 1인 보드로.
-    // 조회 실패는 아래 대상 확정에서 다시 드러나므로 여기선 반별로 둔다(조용히 1인 보드로 새지 않게).
-    if (route === "class" && !(await isClassRouteEligible(sql, tenant, routeClassId).catch(() => true))) {
-      log(`  · ${studentName}: 반 보드 대상이 아닌 반(특강·종강 등) — 기존 1인 보드로`);
-      route = "personal";
+    if (decided !== "personal") {
+      const classEligible = r.class_id ? await isClassRouteEligible(sql, tenant, r.class_id, r.student_id).catch(() => true) : false;
+      const sendEligible =
+        !classEligible && r.classnote_class_id
+          ? await isClassRouteEligible(sql, tenant, r.classnote_class_id, r.student_id).catch(() => true)
+          : false;
+      const pick = pickRouteClass({ route: decided, classId: r.class_id ?? null, sendClassId: r.classnote_class_id ?? null, classEligible, sendEligible });
+      route = pick.route;
+      routeClassId = pick.classId;
+      if (route === "personal")
+        log(`  · ${studentName}: 보낼 반 보드가 없는 보고서(연결 없음·보낼 반 미지정) — 기존 1인 보드로`);
+      else if (routeClassId !== (r.class_id ?? null)) log(`  · ${studentName}: 보고서 반에 반 보드가 없어 '보낼 반'으로`);
     }
     let classTarget = null; // route=class일 때 { boardId, boardName, targets, others }
 

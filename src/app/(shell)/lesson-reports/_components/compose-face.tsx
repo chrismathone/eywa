@@ -7,7 +7,7 @@ import { homeworkRateClause } from "@/features/onescreen/homework-rate";
 import { formatTestScore } from "@/features/onescreen/report-comment";
 import { normalizeHomeworkPages } from "@/features/onescreen/homework-pages";
 import { ATTITUDE, attitudeClause } from "@/features/onescreen/attitude";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useStateDraft } from "@/components/forms/use-state-draft";
@@ -22,11 +22,13 @@ import { computeClientMentSource } from "@/features/onescreen/ment-source";
 import type { ReportCommentInput } from "@/features/onescreen/report-comment";
 import {
   getAdminComposeContext,
+  getAdminSendClassOptions,
   saveAdminReport,
   saveAndQueueAdminReport,
   type AdminComposeSubject,
   type AdminSaveReportInput,
 } from "@/features/report-admin/server/compose-actions";
+import { SendClassPicker, type SendClassOption } from "./send-class-picker";
 
 
 const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
@@ -91,6 +93,43 @@ export function ComposeFace({
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmSend, setConfirmSend] = useState(false);
+  // 보낼 반(원장 2026-09-30) — 학생·과목·날짜·표시 강사가 정해지면 서버에 묻는다(반별 발송일 때만 화면에 뜬다).
+  const [sendOpt, setSendOpt] = useState<SendClassOption | null>(null);
+  const [sendOptPending, setSendOptPending] = useState(false);
+  const [sendClassId, setSendClassId] = useState("");
+  useEffect(() => {
+    if (!studentId || !subject) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setSendOptPending(true);
+      void getAdminSendClassOptions({ studentId, reportDate, subject, teacherName: teacherName.trim() || undefined, makeup })
+        .then((res) => {
+          if (cancelled) return;
+          const opt: SendClassOption | null = res.ok
+            ? {
+                applies: !!res.applies,
+                needed: !!res.needed,
+                reportClassName: res.reportClassName ?? null,
+                candidates: res.candidates ?? [],
+                defaultId: res.defaultId ?? null,
+                blockedReason: res.blockedReason ?? null,
+              }
+            : null;
+          setSendOpt(opt);
+          // 기본값 = 메인 수업, 후보가 하나면 그 반(보이게 둔다).
+          setSendClassId(opt?.needed ? (opt.defaultId ?? (opt.candidates.length === 1 ? opt.candidates[0]!.id : "")) : "");
+        })
+        .finally(() => {
+          if (!cancelled) setSendOptPending(false);
+        });
+    }, 300); // 표시 강사명 타이핑마다 묻지 않게
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [studentId, subject, reportDate, teacherName, makeup]);
+  // 반별 발송인데 보낼 반이 필요하면 — 고르지 않았거나 고를 반이 없으면 발송을 막는다(서버가 최종 게이트).
+  const sendClassBlocked = !!sendOpt?.applies && sendOpt.needed && (!sendOpt.candidates.length || !sendClassId);
 
   // 로컬 초안 자동저장 — 길게 쓴 본문·진도·특이사항을 새로고침/창닫기에서 지킨다(저장·발송 성공 시 삭제).
   // 학생 id·이름도 스냅샷에 담는다(리뷰 지적) — 본문은 그 학생 이야기라, 복구가 학생 선택까지 같이
@@ -155,6 +194,8 @@ export function ComposeFace({
     setStudentId(id);
     setCtx(null);
     setSubject("");
+    setSendOpt(null);
+    setSendClassId("");
     setConfirmSend(false);
     if (!id) return;
     startCtx(async () => {
@@ -216,6 +257,8 @@ export function ComposeFace({
       trendNote: trend.trim() || undefined,
       // 멘트 작성 방식(0214a) — 자동작성 스냅샷과 비교(서버가 기존 라벨과 합쳐 최종 확정).
       mentSource: computeClientMentSource(body, autoBody),
+      // 보낼 반(원장 2026-09-30) — 반별 발송에서 보고서 반에 반 보드가 없을 때만. 서버가 후보 안인지 다시 확인한다.
+      classnoteClassId: sendOpt?.applies && sendOpt.needed && sendClassId ? sendClassId : null,
     };
   }
 
@@ -281,6 +324,10 @@ export function ComposeFace({
       toast.error("학부모 보고서 본문을 작성한 뒤 발송하세요");
       return;
     }
+    if (sendClassBlocked) {
+      toast.error(sendOpt?.candidates.length ? "보낼 반을 먼저 고르세요" : (sendOpt?.blockedReason ?? "보낼 반이 없어 발송할 수 없습니다"));
+      return;
+    }
     setConfirmSend(true);
   }
 
@@ -324,6 +371,11 @@ export function ComposeFace({
     setBusy(false);
     setConfirmSend(false);
     if (!res.ok) {
+      // 서버가 보낼 반을 다시 물으면(후보가 바뀜 등) 목록을 새로 채운다 — 저장은 이미 됐다.
+      if (res.status === "needs_class" && res.candidates?.length && sendOpt) {
+        setSendOpt({ ...sendOpt, needed: true, candidates: res.candidates, blockedReason: null });
+        setSendClassId("");
+      }
       toast.error(res.error ?? "발송에 실패했습니다");
       return;
     }
@@ -426,10 +478,16 @@ export function ComposeFace({
                 </div>
               </>
             )}
-            {curSubject?.board ? (
+            {/* 반별 발송이면 1인 보드 이름 대신 보낼 반을 보여 준다(원장 2026-09-30). */}
+            {curSubject?.board && !sendOpt?.applies ? (
               <p className="text-text-faint mt-1 text-xs">
                 발송 보드: <b className="text-text-dim">{curSubject.board}</b>
               </p>
+            ) : null}
+            {subject ? (
+              <div className="mt-1.5">
+                <SendClassPicker option={sendOpt} pending={sendOptPending} value={sendClassId} onChange={setSendClassId} />
+              </div>
             ) : null}
           </div>
 
@@ -541,7 +599,9 @@ export function ComposeFace({
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
               <span className="text-foreground text-xs">
                 <b>{ctx.student.name}</b>
-                {curSubject?.board ? <> · 보드 <b>{curSubject.board}</b></> : null} 에게 발송할까요?
+                {sendOpt?.applies
+                  ? <> · 반 <b>{sendOpt.needed ? (sendOpt.candidates.find((c) => c.id === sendClassId)?.name ?? "—") : (sendOpt.reportClassName ?? "보고서의 반")}</b></>
+                  : curSubject?.board ? <> · 보드 <b>{curSubject.board}</b></> : null} 에게 발송할까요?
                 {!sendEnabled ? " (실제 발송 OFF — 저장만 됨)" : ""}
               </span>
               <Button size="sm" onClick={doSend} disabled={busy}>
@@ -557,7 +617,7 @@ export function ComposeFace({
                 <Button size="sm" variant="outline" onClick={doSave} disabled={busy}>
                   저장만
                 </Button>
-                <Button size="sm" onClick={tryOpenConfirm} disabled={busy}>
+                <Button size="sm" onClick={tryOpenConfirm} disabled={busy || sendClassBlocked}>
                   ClassNote 발송
                 </Button>
               </div>

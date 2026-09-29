@@ -9,9 +9,10 @@
  * @param {import("postgres").Sql} sql
  * @param {string} tenant
  * @param {ReturnType<import("./class-board-plan.mjs").planClassBoards>} plans  — 최신 계획(보드 원아 조회 포함)
+ * @param {{ keepClassIds?: readonly string[] }} [opts]  — 걷지 않고 지킬 연결(ClassNote 보드가 살아 있는 종강 반, `closedClassesToKeep`)
  * @returns {Promise<{classes:number, ok:number, hold:number, cleared:number}>}
  */
-export async function writeClassBoardSnapshot(sql, tenant, plans) {
+export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds = [] } = {}) {
   const out = { classes: 0, ok: 0, hold: 0, cleared: 0 };
   for (const p of plans) {
     await sql.begin(async (tx) => {
@@ -55,8 +56,9 @@ export async function writeClassBoardSnapshot(sql, tenant, plans) {
       out.hold += rows.filter((r) => r.status === "hold").length;
     });
   }
-  // 대상에서 빠진 반(종강·특강 전환·미발송 지정·폐지)의 옛 연결 — 남아 있으면 그 반 행에 초록불이 거짓으로 남는다.
-  const live = plans.map((p) => p.classId);
+  // 대상에서 빠진 반(종강·미발송 지정·폐지)의 옛 연결 — 남아 있으면 그 반 행에 초록불이 거짓으로 남는다.
+  // 🔴 단, ClassNote 보드가 살아 있는 종강 반은 지킨다(원장 2026-09-30 — 반이 살아 있는 한 그 반으로 보낸다).
+  const live = [...plans.map((p) => p.classId), ...keepClassIds];
   if (live.length) {
     const d1 = await sql`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id not in ${sql(live)}`;
     const d2 = await sql`delete from classnote_class_boards where tenant_id = ${tenant} and class_id not in ${sql(live)}`;

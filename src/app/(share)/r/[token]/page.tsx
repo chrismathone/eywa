@@ -11,6 +11,7 @@ import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
+import { classKindMeta } from "@/features/classes/list-filters";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { ClosedReportScreen } from "./_closed";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
@@ -71,7 +72,7 @@ export default async function PublicLessonReportPage({
   const specialClassIds = await fetchSpecialClassIds(admin, report.tenant_id as string).catch(
     () => [] as string[],
   );
-  const [{ data: student }, settings, trendRows, sendName, jj] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName, jj, reportClass] = await Promise.all([
     admin.from("students").select("name, school, grade").eq("id", report.student_id).maybeSingle(),
     getTenantSettingsByTenantId(report.tenant_id as string),
     // 성적 추이 이력 — admin(service_role)이라 tenantId 필터로 테넌트 격리 필수(#B6 규약). 실패해도 페이지 안 깨짐.
@@ -87,6 +88,16 @@ export default async function PublicLessonReportPage({
     // 표가 없거나 실패하면 null = 그림 자리만 빈다(글은 그대로). 워커 캡처도 이 페이지라 ClassNote 이미지에 같이 실린다.
     report.subject === "english"
       ? loadReportJjSnapshot(report.tenant_id as string, report.id as string)
+      : Promise.resolve(null),
+    // 제목 "[특강]"(원장 2026-09-30) — 이 보고서 반이 특강인가(수업목록 '구분'과 같은 판정). admin이라 tenant 필터 필수.
+    report.class_id
+      ? admin
+          .from("classes")
+          .select("is_special, class_name")
+          .eq("tenant_id", report.tenant_id as string)
+          .eq("id", report.class_id as string)
+          .maybeSingle()
+          .then(({ data }) => data, () => null)
       : Promise.resolve(null),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
@@ -135,6 +146,9 @@ export default async function PublicLessonReportPage({
           trendNote: report.trend_note,
           makeup: report.makeup === true, // 보강이면 제목에 접미사 — 반이 붙었으면 "(정규+보강)"(makeup-label.ts)
           hasClass: report.class_id != null,
+          special: reportClass
+            ? classKindMeta({ isSpecial: reportClass.is_special as boolean | null, className: reportClass.class_name as string }).kind === "special"
+            : false,
         }}
         student={student ?? null}
         academyName={academyName}

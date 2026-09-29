@@ -171,6 +171,8 @@ export function BulkComposeFace({
     if (res.skippedExisting) parts.push(`${reportDate === kstToday() ? "오늘" : "해당 날짜"} 보고서 이미 있어 제외 ${res.skippedExisting}명`);
     if (res.absent) parts.push(`결석 기록이라 제외 ${res.absent}건`);
     if (res.tooOld) parts.push(`발송기한(전 달 1일) 지나 제외 ${res.tooOld}건`);
+    // 반별 발송인데 그 반에 반 보드가 없는 학생 — 작성만 됐다(원장 2026-09-30).
+    if (res.noClass) parts.push(`보낼 반 보드가 없어 작성만 함 ${res.noClass}건(원스크린·직접 작성에서 반을 골라 발송)`);
     if (res.subjectOff) parts.push(`발송 과목 아님 ${res.subjectOff}건`);
     // 목록에서 이미 빠져 있어 평소엔 0이지만, 화면 밖 경로로 실려 온 반은 서버가 걸러 사유를 밝힌다(#77).
     if (res.optoutSkipped) parts.push(`${REPORT_OPTOUT_LABEL} 반 제외 ${res.optoutSkipped}개`);

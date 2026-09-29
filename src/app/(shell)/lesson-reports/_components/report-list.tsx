@@ -206,6 +206,8 @@ export function ReportList({
       if (res.absentSkipped) parts.push(`${res.absentSkipped}건 결석 제외`);
       // 멘트가 비면 워커가 어차피 거절한다 — 큐에 올려 '실패'로 만들지 않고 사유를 여기서 밝힌다.
       if (res.emptyMent) parts.push(`${res.emptyMent}건 멘트 미작성 제외(강사가 작성 후 발송)`);
+      // 반별 발송인데 보낼 반이 안 정해진 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가) — 원스크린·직접 작성에서 반을 골라 보낸다.
+      if (res.noClass) parts.push(`${res.noClass}건 보낼 반 미지정 제외(원스크린·직접 작성에서 반을 골라 발송)`);
       if (res.skipped) parts.push(`${res.skipped}건 제외(이미 발송·과목 미허용·오래된 보고서)`);
       toast.success(parts.join(" · "));
       setChecked(new Set());
@@ -233,7 +235,9 @@ export function ReportList({
       toast.message(
         res.absentSkipped
           ? "그날 결석으로 기록된 학생이라 다시 보내지 않았습니다"
-          : "다시 보낼 수 없는 보고서입니다(멘트 미작성·과목 미허용·기한 지남)",
+          : res.noClass
+            ? "보낼 반이 없어 다시 보내지 않았습니다 — 원스크린·직접 작성에서 반을 골라 보내세요"
+            : "다시 보낼 수 없는 보고서입니다(멘트 미작성·과목 미허용·기한 지남)",
       );
     } else toast.error(res.error ?? "재발송에 실패했습니다");
   }

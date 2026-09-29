@@ -63,8 +63,8 @@ import { mentStyleDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
-import { classRouteAppliesTo, needsSendClass } from "../send-class";
-import { resolveSendClass } from "./send-class";
+import { classRouteActive, needsSendClass, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
+import { classBoardLiveForStudent, resolveSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError } from "@/lib/supabase/db-error";
@@ -646,15 +646,20 @@ export async function saveAndQueueClassnote(
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict", ...warn };
   }
 
-  // 반별 발송(보고서 설정 '수학 발송 경로') 대상인데 반이 없는 보강 보고서 — 'ClassNote로 보낼 반'을 정한다(A안, 0303a).
-  // 메인 수업을 정할 수 있으면 그 반, 못 정하면 **발송을 멈추고 후보를 돌려준다**(화면이 고르게 한다 — 원장
-  // *"보낼 곳이 없으면 '선택'"*). 후보가 아예 없으면(반 보드 대상 반이 없음) 멈추지 않는다 — 워커가 기존 1인 보드로 보낸다.
-  if (
-    needsSendClass(
-      { subject: input.subject, classId: input.classId },
-      classRouteAppliesTo(settings.report, user.displayName),
-    )
-  ) {
+  // 반별 발송(보고서 설정 '수학 발송 경로') 대상인데 **보낼 반 보드가 없는** 보고서 — 'ClassNote로 보낼 반'을 정한다(0303a).
+  //  · 반이 없는 보강(A안, 2026-09-29) · 반은 있지만 이 학생이 받을 반 보드가 없는 반 — ClassNote에서 사라진 종강 반 등
+  //    (원장 2026-09-30 *"종강은 클래스노트에 반이 살아있는 한은 계속 보내고, 이후에 반이 사라지면 반 선택이 뜨도록"*).
+  //    특강은 정규 반처럼 제 반 보드로 간다(원장 2026-09-30 — 특강 반 보드도 만든다).
+  // 메인 수업을 정할 수 있으면 그 반, 못 정하면 **발송을 멈추고 후보를 돌려준다**(화면이 고르게 한다).
+  // 🔴 후보가 아예 없으면 **발송하지 않는다**(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) — 예전엔 1인 보드로 보냈다.
+  const routeApplies = classRouteActive(settings, user.displayName); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
+  const classLive =
+    routeApplies && input.classId && SEND_CLASS_SUBJECTS.has(input.subject ?? "")
+      ? await classBoardLiveForStudent(user.tenantId, input.classId, input.studentId).catch(() => null)
+      : null;
+  // 반 보드 확인 실패(0302a 조회 오류 등) = **발송하지 않는다**(fail-closed) — 모르는 채로 보내면 워커가 1인 보드로 흘린다.
+  const classCheckFailed = routeApplies && !!input.classId && SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classLive === null;
+  if (classCheckFailed || needsSendClass({ subject: input.subject, classId: input.classId, classLive }, routeApplies)) {
     const unqueue = async () => {
       if (prior?.classnote_status === "queued")
         await supabase
@@ -663,23 +668,35 @@ export async function saveAndQueueClassnote(
           .eq("id", saved.id)
           .eq("classnote_status", "queued");
     };
+    // 화면 글자는 status로 강사뷰 사전(os.c.*)을 탄다 — error는 한국어 폴백.
+    const checkFail = {
+      ok: false,
+      id: saved.id,
+      shareToken: saved.shareToken,
+      status: "class_check_failed",
+      error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",
+      ...warn,
+    };
+    if (classCheckFailed) {
+      await unqueue();
+      return checkFail;
+    }
     let pick: Awaited<ReturnType<typeof resolveSendClass>>;
     try {
-      // 후보 = 작성 강사가 담당하는 반만(원장 2026-09-29) — 강사는 담당 반이 없으면 1인 보드로, 관리자는 담당 반이 없으면 전부.
+      // 후보 = 작성 강사가 담당하는 반만(원장 2026-09-29) — 강사는 담당 반이 없으면 발송 불가(no_class), 관리자는 담당 반이 없으면 전부.
       const restrict = (await accessLevelTenant(user.systemRole, "classes")) === "scoped";
-      pick = await resolveSendClass(user.tenantId, input.studentId, reportDate, input.classnoteClassId ?? null, {
-        userId: user.id,
-        restrict,
-      });
+      // 보고서에 반이 있는데 그 반 보드가 없으면(특강·종강 등) 다른 반으로 자동으로 보내지 않는다 — 고르게 한다.
+      pick = await resolveSendClass(
+        user.tenantId,
+        input.studentId,
+        reportDate,
+        input.classnoteClassId ?? null,
+        { userId: user.id, restrict },
+        { autoPick: !input.classId },
+      );
     } catch {
       await unqueue();
-      return {
-        ok: false,
-        id: saved.id,
-        shareToken: saved.shareToken,
-        error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",
-        ...warn,
-      };
+      return checkFail;
     }
     if (!pick.ok && pick.reason === "choose") {
       await unqueue();
@@ -693,11 +710,15 @@ export async function saveAndQueueClassnote(
         ...warn,
       };
     }
-    // 후보가 없으면(담당 반 아님 등) 1인 보드로 간다 — 예전 저장에서 남은 '보낼 반'은 비운다(옛 반으로 새지 않게).
-    if (pick.ok || pick.reason === "none") {
+    // 🔴 후보가 없으면(담당 반 아님·반 보드 있는 반이 없음) 발송 불가 — 저장은 그대로, 대기에 올리지 않는다.
+    if (!pick.ok) {
+      await unqueue();
+      return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "no_class", error: NO_SEND_CLASS_ERROR, ...warn };
+    }
+    {
       const { error: scErr } = await supabase
         .from("lesson_reports")
-        .update({ classnote_class_id: pick.ok ? pick.classId : null })
+        .update({ classnote_class_id: pick.classId })
         .eq("id", saved.id);
       if (scErr) {
         await unqueue();

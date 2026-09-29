@@ -3,7 +3,6 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
-import { isSpecialLecture } from "@/features/classes/special-lecture";
 import { buildCnMatchMap, CN_UNAVAILABLE, type CnMatchMap, type CnMemberRow } from "../classnote-match";
 
 /**
@@ -29,7 +28,7 @@ export async function getClassnoteMatchMap(): Promise<CnMatchMap> {
         supabase.from("classnote_class_boards").select("class_id, board_name").order("class_id").range(from, to),
       ),
       // 반 보드 대상 반 — 반 보드를 만든 기준(scripts/_classnote/math-class-boards-load.mjs)과 같은 조건.
-      // 특강 판정은 앱 단일소스 isSpecialLecture(토글 또는 이름에 '특강')와 같다.
+      // 특강도 대상(원장 2026-09-30 — 특강 반 보드도 만든다). 종강 반은 연결이 남아 있는 동안만(아래).
       fetchAllPaged<{ id: string; class_name: string; is_special: boolean | null; closed_at: string | null }>((from, to) =>
         supabase
           .from("classes")
@@ -43,10 +42,9 @@ export async function getClassnoteMatchMap(): Promise<CnMatchMap> {
     ]);
     // 반 보드 연결이 하나도 없으면 아직 동기화 전이다 — 전원 빨간불로 겁주지 않는다.
     if (boards.length === 0) return CN_UNAVAILABLE;
-    const eligibleIds = eligible
-      .filter((c) => !isSpecialLecture({ isSpecial: c.is_special, className: c.class_name }))
-      .filter((c) => !c.closed_at || c.closed_at >= today)
-      .map((c) => c.id);
+    // 종강 반 = 연결이 남아 있으면(ClassNote 보드가 살아 있으면 매일 동기화가 지킨다) 그대로 대상 — 워커 isClassRouteEligible과 같은 규칙.
+    const linked = new Set(boards.map((b) => b.class_id));
+    const eligibleIds = eligible.filter((c) => !c.closed_at || c.closed_at >= today || linked.has(c.id)).map((c) => c.id);
     return buildCnMatchMap(members, boards, eligibleIds);
   } catch {
     return CN_UNAVAILABLE;

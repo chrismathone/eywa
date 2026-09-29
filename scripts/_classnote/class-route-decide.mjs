@@ -35,3 +35,19 @@ export function decideRoute(cfg, report) {
   if (!wantsClass) return "personal";
   return report?.class_id ? "class" : "needs_class";
 }
+
+/**
+ * 반별 경로에서 **실제로 올릴 반 보드** 고르기(원장 2026-09-30).
+ * - 보고서 반(class_id)에 살아 있는 반 보드가 있으면 그 반(종강이어도 연결이 남아 있으면 — *"클래스노트에 반이 살아있는 한은 계속"*).
+ * - 없으면(반 없음·연결 없음·ClassNote에서 사라짐) 앱이 정한 '보낼 반'(0303a `classnote_class_id`)이 살아 있으면 그 반.
+ * - 둘 다 없으면 기존 1인 보드(전환 전 대기분 등 1회성 폴백 — 원장 "그대로 두기").
+ * @param {{ route: "personal"|"class"|"needs_class", classId: string|null, sendClassId: string|null|undefined,
+ *           classEligible: boolean, sendEligible: boolean }} a
+ * @returns {{ route: "personal"|"class", classId: string|null }}
+ */
+export function pickRouteClass(a) {
+  if (a.route === "personal") return { route: "personal", classId: a.classId ?? null };
+  if (a.route === "class" && a.classId && a.classEligible) return { route: "class", classId: a.classId };
+  if (a.sendClassId && a.sendEligible) return { route: "class", classId: a.sendClassId };
+  return { route: "personal", classId: a.classId ?? null };
+}

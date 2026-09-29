@@ -10,6 +10,7 @@ import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
 import { buildTrendPoints } from "@/features/onescreen/report-trend";
 import { ParentReportCard } from "@/features/onescreen/components/parent-report-card";
+import { classKindMeta } from "@/features/classes/list-filters";
 import { loadReportJjSnapshot } from "@/features/ijw/server/report-snapshot";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
@@ -61,7 +62,7 @@ export default async function LessonReportPrintPage({
   )
     notFound();
 
-  const [{ data: student }, settings, trendRows, sendName, jj] = await Promise.all([
+  const [{ data: student }, settings, trendRows, sendName, jj, reportClass] = await Promise.all([
     supabase.from("students").select("name, school, grade").eq("id", report.student_id).single(),
     getTenantSettings(),
     // 성적 추이 이력 — RLS 클라이언트라 테넌트 격리 자동(tenantId 불요). 실패해도 문서 안 깨짐.
@@ -81,6 +82,15 @@ export default async function LessonReportPrintPage({
     resolveReportAuthorName(user.tenantId, report.teacher_name as string | null),
     // 영어 보고서의 인재원 그림 재료(0261a) — /r과 같은 저장본을 **따로** 읽는다(SELECT 불변, #95). 실패 = 그림 자리만 빈다.
     report.subject === "english" ? loadReportJjSnapshot(user.tenantId, report.id as string) : Promise.resolve(null),
+    // 제목 "[특강]"(원장 2026-09-30) — /r과 같은 판정(수업목록 '구분'). RLS 클라이언트라 tenant 자동.
+    report.class_id
+      ? supabase
+          .from("classes")
+          .select("is_special, class_name")
+          .eq("id", report.class_id as string)
+          .maybeSingle()
+          .then(({ data }) => data, () => null)
+      : Promise.resolve(null),
   ]);
   const trend = buildTrendPoints(trendRows, report.id as string);
 
@@ -127,6 +137,9 @@ export default async function LessonReportPrintPage({
             trendNote: report.trend_note,
             makeup: report.makeup === true, // 보강이면 제목에 접미사 — 반이 붙었으면 "(정규+보강)"(makeup-label.ts)
             hasClass: report.class_id != null,
+            special: reportClass
+              ? classKindMeta({ isSpecial: reportClass.is_special as boolean | null, className: reportClass.class_name as string }).kind === "special"
+              : false,
           }}
           student={student ?? null}
           academyName={academyName}

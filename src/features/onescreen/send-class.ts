@@ -22,10 +22,73 @@ export function classRouteAppliesTo(
   return false;
 }
 
-/** 이 보고서에 '보낼 반'이 필요한가 — 수학 · 반 없음 · 반별 경로 대상 강사. */
-export function needsSendClass(input: { subject?: string | null; classId?: string | null }, routeApplies: boolean): boolean {
-  return routeApplies && !input.classId && SEND_CLASS_SUBJECTS.has(input.subject ?? "");
+/**
+ * 반별 발송이 **이 학원에서** 켜져 있는가 — ClassNote 기능(모듈)이 켜진 학원 + 보고서 설정 '수학 발송 경로'.
+ * 원장 2026-09-30: ClassNote 관련 기능은 ClassNote를 쓰는 학원에만. 모듈이 꺼져 있으면 반 고르기·'보낼 반 없음' 차단이
+ * **전부 없다**(예전 그대로). 발송 경로의 모든 판정은 이 함수를 지난다(원스크린·관리자 직접 작성·관리자 일괄 발송).
+ */
+export function classRouteActive(
+  settings: {
+    modules?: { disabled?: readonly string[] | null } | null;
+    report: { classnoteMathRoute?: string | null; classnoteMathRoutePilot?: readonly string[] | null };
+  },
+  teacherName: string | null | undefined,
+): boolean {
+  if ((settings.modules?.disabled ?? []).includes("classnote")) return false;
+  return classRouteAppliesTo(settings.report, teacherName);
 }
+
+/**
+ * 이 보고서에 '보낼 반'이 필요한가 — 수학 · 반별 경로 대상 강사이면서
+ *  · 반이 없거나(보강) — 원장 2026-09-29 A안
+ *  · 반은 있지만 이 학생이 받을 **살아 있는 반 보드가 없을 때**(`classLive === false`) — ClassNote에서 반이 사라진 종강 반 등.
+ *    원장 2026-09-30 *"종강은 클래스노트에 반이 살아있는 한은 계속 보내고, 이후에 반이 사라지면 반 선택이 뜨도록"*.
+ *    특강은 정규 반과 같다(특강 반 보드도 만든다).
+ * `classLive === null`(확인 못 함 — 0302a 표 없음 등, [[#95]])이면 반 있는 보고서는 **예전처럼** 둔다(워커가 판단).
+ */
+export function needsSendClass(
+  input: { subject?: string | null; classId?: string | null; classLive?: boolean | null },
+  routeApplies: boolean,
+): boolean {
+  if (!routeApplies || !SEND_CLASS_SUBJECTS.has(input.subject ?? "")) return false;
+  return !input.classId || input.classLive === false;
+}
+
+/**
+ * 이 학생을 **워커가 실제로 게시할 수 있는** 반(순수 — 서버 `liveBoardClassIds`와 워커 `isClassRouteEligible`의 판정).
+ * 반 대상(활성·발송·수학) ∩ 연결 있음 ∩ 그 학생의 멤버 행이 하나 이상 ok이고 ok 아닌 행이 없다.
+ */
+export function liveBoardClassIdsOf(
+  eligibleClassIds: readonly string[],
+  linkedClassIds: readonly string[],
+  members: readonly { classId: string; status: string | null }[],
+): string[] {
+  const linked = new Set(linkedClassIds);
+  const ok = new Set<string>();
+  const held = new Set<string>();
+  for (const m of members) (m.status === "ok" ? ok : held).add(m.classId);
+  return eligibleClassIds.filter((id) => linked.has(id) && ok.has(id) && !held.has(id));
+}
+
+/** 보낼 반 게이트(`blockedForNoSendClass`) 입력 모양 — 관리자 일괄 경로(미발송 일괄·재발송·멈춤 복구·대량 작성)가 같은 변환을 쓴다. */
+export function sendClassRow(r: { id: unknown; student_id: unknown; class_id: unknown }): {
+  id: string;
+  studentId: string;
+  classId: string | null;
+} {
+  return { id: r.id as string, studentId: r.student_id as string, classId: (r.class_id as string | null) ?? null };
+}
+
+/** 반별 발송 대상 수학 행인가(ClassNote 모듈 + '수학 발송 경로' + 작성 강사) — 보낼 반 게이트를 태울 행. */
+export function isSendClassRouteRow(
+  settings: Parameters<typeof classRouteActive>[0],
+  r: { subject?: unknown; teacher_name?: unknown },
+): boolean {
+  return SEND_CLASS_SUBJECTS.has((r.subject as string | null) ?? "") && classRouteActive(settings, (r.teacher_name as string | null) ?? null);
+}
+
+/** 보낼 반이 없어 발송을 막을 때의 안내(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) — 서버·화면 한 벌. */
+export const NO_SEND_CLASS_ERROR = "보낼 반이 없어 발송할 수 없습니다 — 이 학생의 반을 확인하세요(담당 반이 아니거나 반 보드가 없는 학생)";
 
 /**
  * 메인 수업 고르기. 정할 수 없으면 null(= 강사가 고른다).

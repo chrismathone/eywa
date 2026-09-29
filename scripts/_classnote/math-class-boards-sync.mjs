@@ -9,7 +9,8 @@
 import fs from "node:fs";
 import { fetchCenterId, loginClassnote } from "./classnote-admin-core.mjs";
 import { stateFile } from "./classnote-paths.mjs";
-import { loadAywa, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
+import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
+import { closedClassesToKeep } from "./class-board-plan.mjs";
 import { applyClassBoardPlans } from "./math-class-boards-apply.mjs";
 import { writeClassBoardSnapshot } from "./math-class-boards-db.mjs";
 import { connectTeachers, fetchEmployments, planTeacherLinks } from "./math-class-teachers.mjs";
@@ -77,7 +78,16 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   const { todo, skipped } = planTeacherLinks({ targets: teacherTargets, emps: await fetchEmployments(page, centerId) });
   const teachers = await connectTeachers(page, centerId, todo, log);
 
-  await writeClassBoardSnapshot(sql, tenant, fresh.plans);
+  // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30). 보드 목록은 방금 읽은 것(fresh.boards).
+  // strict — 조회 실패를 빈 목록으로 삼키면 아래 기록이 종강 반 연결을 전부 지운다(throw = 오늘 기록을 건너뛴다).
+  const linkedNow = await loadLinkedBoards(sql, tenant, { strict: true });
+  const keepClassIds = closedClassesToKeep({
+    closedIds: await loadClosedLinked(sql, tenant),
+    planClassIds: fresh.plans.map((p) => p.classId),
+    linkedBoardByClass: linkedNow,
+    liveBoardIds: fresh.boards.map((b) => Number(b.id)),
+  });
+  await writeClassBoardSnapshot(sql, tenant, fresh.plans, { keepClassIds });
   return {
     created: done.filter((d) => d.created).length,
     renamed: done.filter((d) => d.renamed).length,

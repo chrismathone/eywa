@@ -23,6 +23,20 @@ import { parseMentSource, resolveMentSource, type MentSource } from "@/features/
 import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-db";
 import { BOARD_PREFIX } from "../notice-targets";
 import { resolveReportClassId } from "./resolve-class";
+import {
+  classRouteActive,
+  isSendClassRouteRow,
+  needsSendClass,
+  NO_SEND_CLASS_ERROR,
+  SEND_CLASS_SUBJECTS,
+  sendClassRow,
+} from "@/features/onescreen/send-class";
+import {
+  blockedForNoSendClass,
+  classBoardLiveForStudent,
+  loadSendClassCandidates,
+  resolveSendClass,
+} from "@/features/onescreen/server/send-class";
 
 export type AdminSaveReportInput = {
   studentId: string;
@@ -33,6 +47,11 @@ export type AdminSaveReportInput = {
    * 개별 작성은 `resolveReportClassId`가 **모호하지 않을 때만** 채운다(모호하면 null = 과목 단위, 예전과 동일).
    */
   classId?: string | null;
+  /**
+   * 'ClassNote로 보낼 반'(0303a) — 반별 발송인데 보고서 반에 살아 있는 반 보드가 없을 때(보강·사라진 종강 반) 관리자가
+   * 고른 반(원장 2026-09-30 *"학생 고르고 난 후에 반 고르기"*). 서버가 후보 안에 있는지 다시 확인한다.
+   */
+  classnoteClassId?: string | null;
   teacherName?: string; // 학부모 카드에 표시할 강사명 — 기본=해당 과목 담당 강사, 미지정 시 관리자 본인
   textbook?: string;
   makeup?: boolean;
@@ -197,7 +216,15 @@ export async function saveAdminReport(
  */
 export async function saveAndQueueAdminReport(
   input: AdminSaveReportInput,
-): Promise<{ ok: boolean; id?: string; shareToken?: string; status?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  id?: string;
+  shareToken?: string;
+  status?: string;
+  error?: string;
+  /** status="needs_class"일 때 — 고를 수 있는 반. */
+  candidates?: { id: string; name: string }[];
+}> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
@@ -285,6 +312,68 @@ export async function saveAndQueueAdminReport(
       .eq("id", saved.id);
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict" };
   }
+  // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 보고서 반에 살아 있는 반 보드가 없으면 '보낼 반'을 정한다(원스크린과 같은 규칙).
+  // 원장 2026-09-30 *"관리자 화면은 반 선택해서 발송할 수 있게"* · *"담당 반이 없으면 보고서 발송 불가능하게"*.
+  // 관리자 = 담당 반이 있으면 그 반만, 없으면 그 학생의 반 보드 대상 반 전부(restrict=false). 후보가 없으면 발송 불가.
+  const shownTeacher = input.teacherName?.trim() || user.displayName; // 워커가 경로를 보는 teacher_name과 같은 값(upsertAdminReport)
+  const routeApplies = classRouteActive(settings, shownTeacher);
+  let sendClassId: string | null = null;
+  {
+    const classLive =
+      routeApplies && classId && SEND_CLASS_SUBJECTS.has(input.subject)
+        ? await classBoardLiveForStudent(user.tenantId, classId, input.studentId).catch(() => null)
+        : null;
+    // 반 보드 확인 실패 = 발송하지 않는다(fail-closed, 원스크린과 같은 규칙).
+    const classCheckFailed = routeApplies && !!classId && SEND_CLASS_SUBJECTS.has(input.subject) && classLive === null;
+    if (classCheckFailed || needsSendClass({ subject: input.subject, classId, classLive }, routeApplies)) {
+      const unqueue = async () => {
+        if (prior?.classnote_status === "queued")
+          await supabase
+            .from("lesson_reports")
+            .update({ classnote_status: null, classnote_queued_at: null })
+            .eq("id", saved.id)
+            .eq("classnote_status", "queued");
+      };
+      const checkFail = {
+        ok: false,
+        id: saved.id,
+        shareToken: saved.shareToken,
+        status: "class_check_failed",
+        error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",
+      };
+      if (classCheckFailed) {
+        await unqueue();
+        return checkFail;
+      }
+      let pick: Awaited<ReturnType<typeof resolveSendClass>>;
+      try {
+        // 보고서에 반이 있는데 그 반 보드가 없으면 자동으로 다른 반에 보내지 않는다 — 관리자가 고른다.
+        pick = await resolveSendClass(
+          user.tenantId,
+          input.studentId,
+          reportDate,
+          input.classnoteClassId ?? null,
+          { userId: user.id, restrict: false },
+          { autoPick: !classId },
+        );
+      } catch {
+        await unqueue();
+        return checkFail;
+      }
+      if (!pick.ok) {
+        await unqueue();
+        return pick.reason === "choose"
+          ? { ok: false, id: saved.id, shareToken: saved.shareToken, status: "needs_class", candidates: pick.candidates, error: "보낼 반을 골라 주세요 — 저장은 됐습니다" }
+          : { ok: false, id: saved.id, shareToken: saved.shareToken, status: "no_class", error: NO_SEND_CLASS_ERROR };
+      }
+      const { error: scErr } = await supabase.from("lesson_reports").update({ classnote_class_id: pick.classId }).eq("id", saved.id);
+      if (scErr) {
+        await unqueue();
+        return { ok: false, id: saved.id, shareToken: saved.shareToken, error: "보낼 반을 저장하지 못해 발송하지 않았습니다 — 저장은 됐습니다" };
+      }
+      sendClassId = pick.classId;
+    }
+  }
   // too_old(전 달 1일 이전) 아니면 queued. 오늘 저장은 항상 통과하나 규약상 명시.
   const allowed = isClassnoteAllowed(reportDate);
   const { error } = await supabase
@@ -308,6 +397,7 @@ export async function saveAndQueueAdminReport(
       date: reportDate,
       subject: input.subject,
       classId,
+      ...(sendClassId ? { sendClassId } : {}),
       via: "admin_compose",
       status: allowed ? "queued" : "too_old",
     },
@@ -355,6 +445,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   optoutSkipped?: number; // '수업보고서 미발송' 반이라 제외된 반 수(0174a) — 조용히 무시하지 않고 화면이 사유를 밝힌다
   overflow?: number; // 타깃 상한 초과로 잘린 수
   tooOld?: number; // 전 달 1일 이전 날짜라 발송 차단(too_old)된 수 — 개별/원스크린 경로와 동일 가드
+  /** 반별 발송인데 보낼 반 보드가 없어 작성만 하고 큐에 안 올린 수(원장 2026-09-30) — 원스크린·직접 작성에서 반을 골라 보낸다. */
+  noClass?: number;
   wouldSend?: number; // dry-run 시 발송 예정 인원(상한)
   dryRun?: boolean;
   error?: string;
@@ -553,12 +645,13 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   }));
   // teacher_name까지 되받는다 — 진도 점프 경고의 "같은 선생님" 축(2026-08-20). 대량은 반 담당강사가
   // 행마다 달라 입력값을 다시 짝지으면 어긋나기 쉽다 → 저장된 값을 그대로 쓴다.
-  const authored: { id: string; student_id: string; subject: string | null; teacher_name: string | null }[] = [];
+  const authored: { id: string; student_id: string; subject: string | null; teacher_name: string | null; class_id: string | null }[] = [];
   // ⚠️ 상태 확정 카운터를 **작성 루프보다 먼저** 선언한다 — 아래 감사로그 클로저가 중간 실패 경로에서도
   //    읽어야 하는데, 뒤에 선언하면 그 시점엔 TDZ라 로그 자체가 터진다.
   let conflicts = 0;
   let queued = 0;
   let tooOld = 0;
+  let noClass = 0;
   const queuedIds: string[] = [];
   /**
    * 🔴 한 번 눌러 **최대 400명의 학부모에게** 같은 카드가 나가는 자리다 — 되돌릴 수 없으니 반드시 남긴다.
@@ -592,6 +685,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
         studentNames: sentNames.slice(0, 20),
         conflicts,
         tooOld,
+        ...(noClass ? { noClass } : {}),
         skippedExisting,
         absent,
         subjectOff,
@@ -606,7 +700,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
     const { data, error } = await supabase
       .from("lesson_reports")
       .upsert(rowsToAuthor.slice(i, i + 100), { onConflict: "tenant_id,student_id,report_date,unit_key" })
-      .select("id, student_id, subject, teacher_name");
+      .select("id, student_id, subject, teacher_name, class_id");
     if (error) {
       // 앞 청크가 이미 행을 만들었을 수 있다(발송 상태는 아직 안 붙었지만 내용은 DB에 있다).
       await logBulkSend(humanizeDbError(error.message, "조회"));
@@ -616,7 +710,17 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   }
 
   const conflictIds = authored.filter((r) => conflicted.has(r.student_id)).map((r) => r.id);
-  const queueIds = authored.filter((r) => !conflicted.has(r.student_id)).map((r) => r.id);
+  // 보낼 반 게이트(미발송 일괄 발송·재발송과 같은 함수, 원장 2026-09-30) — 반별 발송인데 그 반에 이 학생이 받을 반 보드가
+  // 없으면 **작성만 하고 큐에 올리지 않는다**(워커가 1인 보드로 흘리지 않게). 조회 실패 = 대상 행 전부 제외(fail-closed).
+  const routeRows = authored.filter((r) => !conflicted.has(r.student_id) && isSendClassRouteRow(settings, r));
+  let noClassIds: Set<string>;
+  try {
+    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow));
+  } catch {
+    noClassIds = new Set(routeRows.map((r) => r.id));
+  }
+  noClass = noClassIds.size;
+  const queueIds = authored.filter((r) => !conflicted.has(r.student_id) && !noClassIds.has(r.id)).map((r) => r.id);
 
   // ── 6. 상태 확정 — 동명이인 name_conflict / too_old(전 달 1일 이전) / 나머지 queued. .is(null) 경합 이중방어. ──
   for (let i = 0; i < conflictIds.length; i += 100) {
@@ -676,7 +780,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   }
 
   await logBulkSend();
-  return { ok: true, queued, conflicts, skippedExisting, absent, subjectOff, optoutSkipped, overflow, tooOld };
+  return { ok: true, queued, conflicts, skippedExisting, absent, subjectOff, optoutSkipped, overflow, tooOld, noClass };
 }
 
 export type AdminComposeSubject = {
@@ -777,4 +881,66 @@ export async function getAdminComposeContext(studentId: string): Promise<{
     nameCollision,
     sendEnabled: settings.report.classnoteSendEnabled,
   };
+}
+
+/**
+ * 관리자 직접 작성의 **보낼 반 고르기** 재료(원장 2026-09-30 *"학생 고르고 난 후에 반 고르기 나오는 식으로"*).
+ * - `applies=false` = 반별 발송 대상이 아니다(ClassNote 모듈 꺼짐·경로 '기존'·수학 아님) — 화면에 아무것도 안 띄운다.
+ * - `needed=false` = 보고서 반에 살아 있는 반 보드가 있다 — 그 반으로 간다(`reportClassName`만 보여 준다).
+ * - `needed=true` = 고를 반 목록(`candidates`)과 기본값(`defaultId` = 메인 수업). 비어 있으면 발송 불가(`NO_SEND_CLASS_ERROR`).
+ * 서버 발송(saveAndQueueAdminReport)이 **같은 함수로 다시** 확인한다 — 이건 화면 안내일 뿐이다([[#77]]).
+ */
+export async function getAdminSendClassOptions(args: {
+  studentId: string;
+  reportDate?: string;
+  subject: string;
+  teacherName?: string;
+  makeup?: boolean;
+}): Promise<{
+  ok: boolean;
+  applies?: boolean;
+  needed?: boolean;
+  reportClassName?: string | null;
+  candidates?: { id: string; name: string }[];
+  defaultId?: string | null;
+  blockedReason?: string | null;
+  error?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  if (!(await canAccessTenant(user.systemRole, "lesson_reports"))) return { ok: false, error: "보고서 관리 권한이 없습니다" };
+  if (!args.studentId || !args.subject) return { ok: true, applies: false };
+  const settings = await getTenantSettings();
+  const routeApplies = classRouteActive(settings, args.teacherName?.trim() || user.displayName);
+  if (!routeApplies || !SEND_CLASS_SUBJECTS.has(args.subject)) return { ok: true, applies: false };
+  const supabase = await createClient();
+  const reportDate = resolveReportDate(args.reportDate);
+  try {
+    // 발송 경로와 같은 반 판정 — 발송이 쓰는 resolveReportClassId(보강 여부와 무관, saveAndQueueAdminReport와 동일).
+    const classId = await resolveReportClassId(supabase, {
+      studentId: args.studentId,
+      reportDate,
+      subject: args.subject,
+      teacherName: args.teacherName,
+    });
+    const classLive = classId ? await classBoardLiveForStudent(user.tenantId, classId, args.studentId) : null;
+    // 확인 실패 = 발송 불가로 안내(서버 발송도 같은 판정으로 막는다).
+    if (classId && classLive === null) return { ok: false, error: "보낼 반을 확인하지 못했습니다 — 다시 시도해 주세요" };
+    if (!needsSendClass({ subject: args.subject, classId, classLive }, true)) {
+      let reportClassName: string | null = null;
+      if (classId) {
+        const { data } = await supabase.from("classes").select("class_name").eq("id", classId).maybeSingle();
+        reportClassName = (data?.class_name as string | undefined) ?? null;
+      }
+      return { ok: true, applies: true, needed: false, reportClassName };
+    }
+    const teacher = { userId: user.id, restrict: false };
+    const candidates = await loadSendClassCandidates(user.tenantId, args.studentId, reportDate, teacher);
+    if (!candidates.length) return { ok: true, applies: true, needed: true, candidates: [], defaultId: null, blockedReason: NO_SEND_CLASS_ERROR };
+    // 기본값 = 메인 수업 — 반 없는 보강만. 보고서에 반이 있는데 그 반 보드가 없으면 기본값을 두지 않는다(자동으로 다른 반 금지).
+    const main = await resolveSendClass(user.tenantId, args.studentId, reportDate, null, teacher, { autoPick: !classId });
+    return { ok: true, applies: true, needed: true, candidates, defaultId: main.ok ? main.classId : null, blockedReason: null };
+  } catch {
+    return { ok: false, error: "보낼 반을 확인하지 못했습니다 — 다시 시도해 주세요" };
+  }
 }

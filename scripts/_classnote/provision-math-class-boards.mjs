@@ -1,7 +1,7 @@
 // scripts/_classnote/provision-math-class-boards.mjs — 수학 **반 보드** 생성·이름 변경·원아 추가 배정(수동 실행판).
 //
 // 원장 2026-09-29: 수학 발송을 aywa 반과 **이름까지 똑같은** 반 보드로 옮긴다. 1인 보드 `(수학)이름`은
-// 해제하지 않고 반 보드에 **추가 배정**한다. 반을 2~3개 다니면 모든 반에 따로. 특강·종강 제외.
+// 해제하지 않고 반 보드에 **추가 배정**한다. 반을 2~3개 다니면 모든 반에 따로. 종강 제외(특강은 포함 — 2026-09-30).
 // 가드(원아 출처·전화·생년·역방향·같은 반 동명이인·이름 연속성) = class-board-plan.mjs(순수·Vitest).
 // 실행 코드는 매일 동기화(math-class-boards-sync.mjs)와 **같은** math-class-boards-apply.mjs를 쓴다.
 //
@@ -16,8 +16,8 @@ import { writeFileSync } from "node:fs";
 import postgres from "postgres";
 import { fetchCenterId, launchAdminBrowser, loginClassnote } from "./classnote-admin-core.mjs";
 import { resolveTenant } from "./classnote-core.mjs";
-import { summarizePlan } from "./class-board-plan.mjs";
-import { loadAywa, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
+import { closedClassesToKeep, summarizePlan } from "./class-board-plan.mjs";
+import { loadAywa, loadClosedLinked, loadLinkedBoards, loadPlan } from "./math-class-boards-load.mjs";
 import { applyClassBoardPlans, ClassBoardStop } from "./math-class-boards-apply.mjs";
 import { writeClassBoardSnapshot } from "./math-class-boards-db.mjs";
 
@@ -69,7 +69,15 @@ try {
     // 실행으로 보드·원아가 바뀌었을 수 있으니 **다시 읽은 계획**으로 적는다(ok = ClassNote에서 확인된 배정만).
     const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: await loadLinkedBoards(sql, tenant) });
     if (fresh.failed) throw new ClassBoardStop(`원아 조회 실패 ${fresh.failed}건 — DB 기록을 건너뛴다(불완전한 판정으로 초록불을 켜지 않는다)`);
-    const w = await writeClassBoardSnapshot(sql, tenant, fresh.plans);
+    // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30, 매일 동기화와 같은 판정).
+    const keepClassIds = closedClassesToKeep({
+      closedIds: await loadClosedLinked(sql, tenant),
+      planClassIds: fresh.plans.map((p) => p.classId),
+      // strict — 조회 실패를 빈 목록으로 삼키면 종강 반 연결이 전부 지워진다(throw = 기록을 건너뛴다).
+      linkedBoardByClass: await loadLinkedBoards(sql, tenant, { strict: true }),
+      liveBoardIds: fresh.boards.map((b) => Number(b.id)),
+    });
+    const w = await writeClassBoardSnapshot(sql, tenant, fresh.plans, { keepClassIds });
     console.log(`\n[DB 기록] 반 ${w.classes}개 · 확인된 배정 ${w.ok} · 보류 ${w.hold} · 지운 옛 행 ${w.cleared}`);
   }
 } catch (e) {

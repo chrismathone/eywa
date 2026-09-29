@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { baseName, childNameConsistent, planClassBoards, resolveStudentChildren, summarizePlan } from "./class-board-plan.mjs";
+import { baseName, childNameConsistent, closedClassesToKeep, planClassBoards, resolveStudentChildren, summarizePlan } from "./class-board-plan.mjs";
 
 const SY = 2026; // 중1 = 2013생, 초6 = 2014생
 const P1 = "010-1111-1111";
@@ -266,5 +266,17 @@ describe("planClassBoards — 반 단위", () => {
     w.boards.push({ id: 90, name: "중등M 중1 BS3E" });
     const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 999]]) });
     expect(p.board.action).toBe("block");
+  });
+});
+
+describe("closedClassesToKeep — 종강 반 연결은 ClassNote 보드가 살아 있는 동안 지킨다(원장 2026-09-30)", () => {
+  const linked = new Map([["closedA", 11], ["closedB", 22], ["live", 33]]);
+  it("보드가 살아 있는 종강 반만 지킨다 · 계획 안의 반은 계획이 쓴다 · 연결 없는 반은 없다", () => {
+    expect(
+      closedClassesToKeep({ closedIds: ["closedA", "closedB", "live", "noLink"], planClassIds: ["live"], linkedBoardByClass: linked, liveBoardIds: [11, 33] }),
+    ).toEqual(["closedA"]);
+  });
+  it("🔴 ClassNote에서 보드가 지워졌으면 지키지 않는다(연결이 걷혀 앱이 보낼 반 고르기를 띄운다)", () => {
+    expect(closedClassesToKeep({ closedIds: ["closedB"], planClassIds: [], linkedBoardByClass: linked, liveBoardIds: [11] })).toEqual([]);
   });
 });

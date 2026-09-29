@@ -218,3 +218,15 @@ export function summarizePlan(plans) {
   }
   return s;
 }
+
+/**
+ * 동기화가 걷지 않고 **지킬** 종강 반 연결 — 종강 반이면서 연결된 ClassNote 보드가 지금 목록에 살아 있는 반(순수).
+ * 보드가 지워졌으면 지키지 않는다 → 연결이 걷히고 앱이 '보낼 반' 고르기를 띄운다(원장 2026-09-30).
+ * @param {{ closedIds: readonly string[], planClassIds: readonly string[], linkedBoardByClass: Map<string, number>, liveBoardIds: Iterable<number> }} a
+ * @returns {string[]}
+ */
+export function closedClassesToKeep({ closedIds, planClassIds, linkedBoardByClass, liveBoardIds }) {
+  const inPlan = new Set(planClassIds);
+  const live = new Set([...liveBoardIds].map(Number));
+  return closedIds.filter((id) => !inPlan.has(id) && linkedBoardByClass.has(id) && live.has(Number(linkedBoardByClass.get(id))));
+}

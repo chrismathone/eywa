@@ -19,6 +19,7 @@
  *    학습 추이 그래프는 지연 조회(`loadReportTrend`)로 채운다 — 지난 회차는 서버, 오늘 회차는 지금 입력값.
  */
 import { ParentReportCard } from "./parent-report-card";
+import { classKindMeta } from "@/features/classes/list-filters";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { buildReportFields } from "../report-fields";
 import { buildTrendPoints, type TrendReportRow } from "../report-trend";
@@ -142,6 +143,8 @@ export function ReportPreview({
             makeup: fields.makeup,
             // 반이 붙은 행의 보강 = 그날 정규까지 한 "(정규+보강)" — 저장될 값과 같은 판정(makeup-label.ts).
             hasClass: subject.classId != null,
+            // 특강 반이면 제목 앞 "[특강]"(원장 2026-09-30) — 수업목록 '구분'과 같은 판정.
+            special: classKindMeta({ isSpecial: subject.isSpecial, className: subject.className }).kind === "special",
           }}
           student={{ name: student.name, school: student.school ?? null, grade: student.grade }}
           academyName={ctx.academyName}
