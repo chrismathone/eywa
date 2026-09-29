@@ -5,7 +5,7 @@ import { preserveMakeupSessionEntries, type SessionProgress } from "../makeup-se
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
@@ -657,7 +657,12 @@ export async function saveAndQueueClassnote(
     };
     let pick: Awaited<ReturnType<typeof resolveSendClass>>;
     try {
-      pick = await resolveSendClass(user.tenantId, input.studentId, reportDate, input.classnoteClassId ?? null);
+      // 후보 = 작성 강사가 담당하는 반만(원장 2026-09-29) — 강사는 담당 반이 없으면 1인 보드로, 관리자는 담당 반이 없으면 전부.
+      const restrict = (await accessLevelTenant(user.systemRole, "classes")) === "scoped";
+      pick = await resolveSendClass(user.tenantId, input.studentId, reportDate, input.classnoteClassId ?? null, {
+        userId: user.id,
+        restrict,
+      });
     } catch {
       await unqueue();
       return {
@@ -680,10 +685,11 @@ export async function saveAndQueueClassnote(
         ...warn,
       };
     }
-    if (pick.ok) {
+    // 후보가 없으면(담당 반 아님 등) 1인 보드로 간다 — 예전 저장에서 남은 '보낼 반'은 비운다(옛 반으로 새지 않게).
+    if (pick.ok || pick.reason === "none") {
       const { error: scErr } = await supabase
         .from("lesson_reports")
-        .update({ classnote_class_id: pick.classId })
+        .update({ classnote_class_id: pick.ok ? pick.classId : null })
         .eq("id", saved.id);
       if (scErr) {
         await unqueue();

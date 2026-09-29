@@ -2,7 +2,9 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSpecialLecture } from "@/features/classes/special-lecture";
-import { pickMainClass } from "../send-class";
+import { createClient } from "@/lib/supabase/server";
+import { getTeachingClassIds } from "@/features/classes/server/delegation";
+import { mineOnly, pickMainClass } from "../send-class";
 
 export type SendClassResolution =
   | { ok: true; classId: string }
@@ -14,6 +16,7 @@ export type SendClassResolution =
  * 후보 = 그날 그 학생이 다니는 반 중 **반 보드 대상**(수학 · 활성 · 보고서 발송 · 특강 아님 · 종강 전)이면서
  * ClassNote 반 보드 연결(0302a)이 있는 반. `chosen`이 오면 후보 안에 있을 때만 받는다(화면 위조 차단).
  * 안 오면 메인 수업(send-class.ts `pickMainClass`) — 정할 수 없으면 `choose`로 후보를 돌려준다.
+ * 후보는 **작성 강사가 담당하는 반**(담임 ∪ 그날 위임)으로 좁힌다(`mineOnly`, 원장 2026-09-29 *"담당인 반만 뜨도록"*).
  *
  * ⚠️ admin 클라이언트 + tenant 필터 — 강사 RLS로는 **다른 강사 반**의 보고서·출결 수가 안 보여 메인 수업을 잘못 고른다.
  *    돌려주는 것은 그 학생의 반 이름뿐이다(보고서·출결 내용은 안 나간다).
@@ -23,7 +26,9 @@ export async function resolveSendClass(
   tenantId: string,
   studentId: string,
   reportDate: string,
-  chosen?: string | null,
+  chosen: string | null | undefined,
+  /** 작성 강사 — `restrict` = 강사(scoped)면 담당 반만, 아니면(관리자) 담당 반이 없을 때 전부. */
+  teacher: { userId: string; restrict: boolean },
 ): Promise<SendClassResolution> {
   const admin = createAdminClient();
   const { data: enr, error: enrErr } = await admin
@@ -41,24 +46,28 @@ export async function resolveSendClass(
   ];
   if (!live.length) return { ok: false, reason: "none", candidates: [] };
 
-  const [{ data: cls, error: clsErr }, { data: boards, error: bErr }] = await Promise.all([
+  const [{ data: cls, error: clsErr }, { data: boards, error: bErr }, teaching] = await Promise.all([
     admin
       .from("classes")
       .select("id, class_name, is_special, closed_at, subject, is_active, report_optout")
       .eq("tenant_id", tenantId)
       .in("id", live),
     admin.from("classnote_class_boards").select("class_id").eq("tenant_id", tenantId).in("class_id", live),
+    // 담당 반 = 원스크린 명단과 **같은 함수**(담임 ∪ 그날 위임) — 강사가 화면에서 보는 반과 고를 반이 같아야 한다.
+    createClient().then((sb) => getTeachingClassIds(sb, teacher.userId, reportDate)),
   ]);
   if (clsErr) throw new Error(clsErr.message);
   if (bErr) throw new Error(bErr.message);
+  const mine = new Set<string>(teaching.all);
   const hasBoard = new Set((boards ?? []).map((b) => b.class_id as string));
-  const candidates = (cls ?? [])
+  const all = (cls ?? [])
     .filter((c) => (c.subject === "math" || c.subject === "subject_1") && c.is_active && !c.report_optout)
     .filter((c) => !isSpecialLecture({ isSpecial: c.is_special, className: c.class_name }))
     .filter((c) => !c.closed_at || c.closed_at >= reportDate)
     .filter((c) => hasBoard.has(c.id as string))
     .map((c) => ({ id: c.id as string, name: c.class_name as string }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const candidates = mineOnly(all, mine, teacher.restrict);
   if (!candidates.length) return { ok: false, reason: "none", candidates: [] };
 
   if (chosen) {

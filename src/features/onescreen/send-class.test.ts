@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classRouteAppliesTo, needsSendClass, pickMainClass } from "./send-class";
+import { classRouteAppliesTo, mineOnly, needsSendClass, pickMainClass } from "./send-class";
 
 describe("classRouteAppliesTo — 워커 class-route-decide.mjs와 같은 규칙", () => {
   it("class = 전원 · pilot = 고른 강사(원문 일치)만 · 그 외 = 아니다", () => {
@@ -35,5 +35,19 @@ describe("pickMainClass", () => {
   it("🔴 그래도 동률이면 정하지 않는다(강사가 고른다)", () => {
     expect(pickMainClass(["a", "b"], { a: 5, b: 5 }, { a: 3, b: 3 })).toBeNull();
     expect(pickMainClass(["a", "b"], {}, {})).toBeNull();
+  });
+});
+
+describe("mineOnly — 작성 강사 담당 반만(원장 2026-09-29)", () => {
+  const cs = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  it("강사 = 담당 반만", () => {
+    expect(mineOnly(cs, new Set(["b"]), true)).toEqual([{ id: "b" }]);
+  });
+  it("강사가 담당 반이 없으면 빈 목록(1인 보드로 — 남의 반에 올리지 않는다)", () => {
+    expect(mineOnly(cs, new Set(), true)).toEqual([]);
+  });
+  it("관리자 = 담당 반이 있으면 그 반만, 없으면 전부", () => {
+    expect(mineOnly(cs, new Set(["a", "c"]), false)).toEqual([{ id: "a" }, { id: "c" }]);
+    expect(mineOnly(cs, new Set(), false)).toEqual(cs);
   });
 });

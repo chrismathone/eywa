@@ -49,3 +49,15 @@ export function pickMainClass(
   const byAtt = top((id) => attended[id] ?? 0, bySent);
   return byAtt.length === 1 ? byAtt[0]! : null;
 }
+
+/**
+ * 후보를 **작성 강사가 담당하는 반**으로 좁힌다(원장 2026-09-29 *"담당인 반만 뜨도록"*).
+ * 담당 = 담임 ∪ 그날 임시 위임 — 원스크린 명단과 같은 기준(`getTeachingClassIds`).
+ * - 강사(`restrict`) = 담당 반만. 하나도 없으면 빈 목록 → 반을 고르게 하지 않고 기존 1인 보드로 간다
+ *   (남의 반 학생 보강을 그 반 단체방에 올리지 않는다).
+ * - 관리자 계열 = 담당 반이 있으면 그 반만, 없으면 전부(사무실이 대신 보내는 경우).
+ */
+export function mineOnly<T extends { id: string }>(candidates: readonly T[], mine: ReadonlySet<string>, restrict: boolean): T[] {
+  const own = candidates.filter((c) => mine.has(c.id));
+  return own.length || restrict ? own : [...candidates];
+}
