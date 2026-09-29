@@ -24,7 +24,13 @@ export async function JjLinkSection({ viewer }: { viewer: JjViewer }) {
     className: s.ijw.className,
     uniqueId: s.unique?.id ?? null,
     uniqueLabel: s.unique ? labelOf(s.unique) : null,
-    candidates: s.candidates.map((c) => ({ id: c.id, label: labelOf(c), reason: c.reason })),
+    // `sameClass`(인재원 반과 같은 반)는 동명이인을 가르는 가장 강한 단서라 화면까지 그대로 나른다.
+    candidates: s.candidates.map((c) => ({
+      id: c.id,
+      label: labelOf(c),
+      reason: c.reason,
+      sameClass: c.sameClass,
+    })),
   }));
   const pool: JjPoolOption[] = res.pool.map((s) => ({ id: s.id, label: labelOf(s) }));
   return <JjLinkPanel rows={rows} pool={pool} />;

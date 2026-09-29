@@ -17,7 +17,7 @@ export type JjLinkRow = {
   /** 이름이 양쪽 전체에서 유일한 후보(한 번에 연결 대상)와 그 표시. */
   uniqueId: string | null;
   uniqueLabel: string | null;
-  candidates: { id: string; label: string; reason: LinkReason }[];
+  candidates: { id: string; label: string; reason: LinkReason; sameClass: boolean }[];
 };
 
 const REASON_TEXT: Record<LinkReason, string> = {
@@ -25,6 +25,17 @@ const REASON_TEXT: Record<LinkReason, string> = {
   "id-class": "아이디 머리글자 · 반 일치",
   id: "아이디 머리글자",
 };
+
+/**
+ * 후보 칩에 적는 근거. 🔴 **이름이 같은 후보끼리는 '반 일치'가 유일한 구분선**이라 반드시 적는다
+ * (원장 제보 2026-09-29: 근거가 둘 다 '이름 같음'이라 반이 다른 동명이인에 잘못 이었다).
+ * ⚠️ `id-class`는 문구에 이미 '반 일치'가 들어 있어 덧붙이지 않는다(같은 말을 두 번 적지 않는다).
+ */
+function reasonText(c: { reason: LinkReason; sameClass: boolean }): string {
+  return c.sameClass && c.reason !== "id-class"
+    ? `${REASON_TEXT[c.reason]} · 반 일치`
+    : REASON_TEXT[c.reason];
+}
 
 /** 인재원 쪽 표기 — 이름(반). 확인 줄·토스트·일괄 목록이 같은 문자열을 쓴다. */
 export function ijwSideLabel(row: Pick<JjLinkRow, "ijwName" | "className">): string {
@@ -60,10 +71,16 @@ export function JjLinkRowItem({
               disabled={pending}
               aria-pressed={on}
               onClick={() => setPick(on ? null : { id: c.id, label: c.label })}
-              title={REASON_TEXT[c.reason]}
+              title={reasonText(c)}
             >
               {c.label}
-              <span className={`ml-1 font-medium ${on ? "" : "text-text-faint"}`}>({REASON_TEXT[c.reason]})</span>
+              {/* 🔴 반이 같은 후보는 근거를 **흐리게 적지 않는다** — 동명이인 중 하나를 고르는 자리에서
+                  이 한 줄이 유일한 단서다(원장 제보 2026-09-29). 고른 칩은 배경이 이미 진해 그대로 둔다. */}
+              <span
+                className={`ml-1 ${on ? "font-medium" : c.sameClass ? "text-foreground font-bold" : "text-text-faint font-medium"}`}
+              >
+                ({reasonText(c)})
+              </span>
             </Button>
           );
         })}
