@@ -25,6 +25,7 @@ import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, prune
 import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
+import { processClassNoticesOnce } from "./classnote-class-notice-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
@@ -90,7 +91,7 @@ const recentIssues = [];
 // (2026-09-04). 이 키가 없으면 옛 워커라 실패 사유가 여전히 `스샷 kage 업로드 실패` 한 줄로만 남는다.
 // mathClassRoute=수학 반 보드 경로(보고서 설정 '수학 발송 경로', 2026-09-29)를 아는 버전인가. 이 키가 없는 옛 워커는
 // 설정을 반별로 바꿔도 **전부 1인 보드로** 보낸다 — 설정을 바꾸기 전에 이 키로 이관 여부를 확인할 것.
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true };
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -226,6 +227,13 @@ async function main() {
         log(`[notice] 공지 ${nres.processed}건 처리 완료`);
         noteResult("notice", nres);
       }
+      // 2-a) 반 단체 공지 큐(classnote_class_notices, 0304a) — 반 보드에 공지 1건. 원생 개별 공지(위)와 별개.
+      const cnres = await processClassNoticesOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
+        log(`[class-notice] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("classNotice", { error: e.message });
+        return { processed: 0 };
+      });
+      if (cnres.processed) noteResult("classNotice", cnres);
       // 2-b) 수업보고서 회수(recall_requested) — 학부모 게시글 삭제. 발송 큐와 독립(실패해도 발송은 계속).
       //      ⚠️ 발송 킬스위치엔 걸지 않는다(회수는 사고 수습이라 스위치를 내린 상황에서 가장 급하다).
       // ⚠️ 변수명은 `recallRes` — 아래 읽음 동기화가 이미 `rres`를 쓴다(같은 블록 스코프라 중복 선언 =
