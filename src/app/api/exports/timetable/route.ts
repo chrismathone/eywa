@@ -1,3 +1,4 @@
+import { logExportDownload } from "@/features/exports/server/log-export";
 import { NextResponse } from "next/server";
 import { kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -24,6 +25,7 @@ export async function GET(req: Request) {
   // 수학 = ijw 충실 익스포터(교시×강사요일 격자·요일그룹밴드·2D병합·반/강사/학생상태 색·진도메모).
   if (subject === "math") {
     const buf = await buildMathTimetableBuffer({ teacherId, includeEditSheet });
+    await logExportDownload(req, "시간표");
     return new NextResponse(Buffer.from(buf), {
       headers: {
         "Content-Type": XLSX_MIME,
@@ -39,6 +41,7 @@ export async function GET(req: Request) {
       (new URL(req.url).searchParams.get("compact1h") ?? "").split(",").map(Number).filter(Number.isFinite),
     );
     const { buffer } = await buildEnglishTimetableBuffer({ teacherId, compactSections, includeEditSheet });
+    await logExportDownload(req, "시간표");
     return new NextResponse(Buffer.from(buffer), {
       headers: {
         "Content-Type": XLSX_MIME,
@@ -51,6 +54,7 @@ export async function GET(req: Request) {
   // ⚠️ teacherId를 반드시 넘길 것 — 옛 코드는 안 넘겨서 이 폴백이 강사에게 전 강사·전 학생 명단을 줬다.
   const wb = await buildTimetableWorkbook({ teacherId, includeEditSheet });
   const buf = await wb.xlsx.writeBuffer();
+  await logExportDownload(req, "시간표");
   return new NextResponse(buf, {
     headers: {
       "Content-Type": XLSX_MIME,

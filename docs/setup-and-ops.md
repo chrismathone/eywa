@@ -141,12 +141,14 @@ pnpm build       # next build (Turbopack)
 
 ## 데모 로그인 계정 (현재 상태)
 
-| 이메일 | 비밀번호 | 역할 | 용도 |
-|---|---|---|---|
-| chrismathone@gmail.com | mbplaza2* | master (지점장) | 인재원 지점장. super_admin 아님. **원장용 투어** (12메뉴) |
-| st2000423@gmail.com | qkrthtjs1234@ | master + super_admin | SaaS 총괄 (전체 지점 관리) |
-| teacher@ijw-demo.com | ijwteacher1! | teacher (박지훈) | **강사용 투어** — 선생님 원스크린. 옛 seed가 만든 계정 |
-| student@ijw-demo.com | ijwstudent1! | student (김서연) | **학생용 투어** — 내 학습 현황 + 데일리 리포트. 옛 seed가 만든 계정 |
+> 🔴 **비밀번호는 문서에 적지 않는다**(보안 감사 2026-09-29 — 이 표에 평문으로 있던 비밀번호는 git 기록에 남아 있으니 **전부 바꿀 것**). 비밀번호는 원장이 따로 보관한다.
+
+| 이메일 | 역할 | 용도 |
+|---|---|---|
+| chrismathone@gmail.com | master (지점장) | 인재원 지점장. super_admin 아님. **원장용 투어** (12메뉴) |
+| st2000423@gmail.com | master + super_admin | SaaS 총괄 (전체 지점 관리) |
+| teacher@ijw-demo.com | teacher (박지훈) | **강사용 투어** — 선생님 원스크린. 옛 seed가 만든 계정 |
+| student@ijw-demo.com | student (김서연) | **학생용 투어** — 내 학습 현황 + 데일리 리포트. 옛 seed가 만든 계정 |
 
 두 master 모두 ijw-demo academy master지만 **super_admin은 st2000423만**. `display_name`은 김수진 / 석태선.
 데모 강사/학생 계정은 옛 `scripts/seed.ts`(2026-09-19 제거)가 만들었다 — 이제 되살리는 스크립트는 없다. 계정이

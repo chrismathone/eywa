@@ -78,7 +78,7 @@ describe("diffSettingsSection — 권한(역할×메뉴 한 칸 단위)", () => 
       { overrides: [], userOverrides: [] },
       { overrides: [{ role: "teacher", menu: "class_review", access: "readonly" }], userOverrides: [] },
     );
-    expect(d.changes).toEqual([{ label: "강사 · 수업 평가", from: "기본값", to: "조회" }]);
+    expect(d.changes).toEqual([{ label: "강사 · 직원 평가", from: "기본값", to: "조회" }]);
   });
 
   it("예외가 사라지면 '기본값(예외 해제)'로 남는다 — 조용히 닫히지 않게", () => {

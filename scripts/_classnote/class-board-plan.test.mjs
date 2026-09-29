@@ -90,6 +90,15 @@ describe("resolveStudentChildren — 가드 ①~④·⑥", () => {
     expect(resolveStudentChildren(w2.students.get("s1"), w2).reasons.join()).toContain("학년");
   });
 
+  it("③ 관리자 화면 생년(운영관리 child_date_birth)이 맞으면 학부모 프로필 생년이 틀려도 통과(2026-09-29 허다언)", () => {
+    const w = world();
+    w.membersByBoard.get(11)[0].date_birth = "2010-08-23";
+    w.admissions.get(101).birth = "2013-08-23";
+    expect(resolveStudentChildren(w.students.get("s1"), w).ok).toBe(true);
+    w.admissions.get(101).birth = "2010-08-23";
+    expect(resolveStudentChildren(w.students.get("s1"), w).reasons.join()).toContain("생년 불일치");
+  });
+
   it("③ ±1년은 허용", () => {
     const w = world();
     w.membersByBoard.get(11)[0].date_birth = "2012-12-31";
@@ -246,9 +255,16 @@ describe("planClassBoards — 반 단위", () => {
     const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c9", 80]]) });
     expect(p.board.action).toBe("block");
   });
-  it("연결된 보드가 ClassNote에서 사라졌으면 이름 규칙으로(새로 만든다)", () => {
+  it("🔴 연결된 보드가 ClassNote에서 사라졌으면 다시 만들지 않는다(사람이 지운 것 — 2026-09-29 JJ3E)", () => {
     const w = world();
     const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 999]]) });
-    expect(p.board).toEqual({ action: "create" });
+    expect(p.board.action).toBe("block");
+    expect(p.board.deletedBoardId).toBe(999);
+  });
+  it("지운 보드와 같은 이름의 보드가 새로 있어도 자동으로 갈아타지 않는다", () => {
+    const w = world();
+    w.boards.push({ id: 90, name: "중등M 중1 BS3E" });
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"]), linkedBoardByClass: new Map([["c1", 999]]) });
+    expect(p.board.action).toBe("block");
   });
 });

@@ -141,7 +141,7 @@ export async function collectPrepFacts(
           .eq("grade", grade)
       : Promise.resolve({ count: 0 }),
     // 형제자매 후보 — 학부모 연락처가 같은 재원생. 연락처가 없으면 조회 자체를 안 한다(전건 스캔 금지).
-    // ⚠️ QR 접수는 하이픈 없는 숫자("01067332180")로 들어오고 학생 DB는 하이픈 표기가 96%라
+    // ⚠️ QR 접수는 하이픈 없는 숫자("01000009100")로 들어오고 학생 DB는 하이픈 표기가 96%라
     //    원문 eq로는 형제를 못 찾는다(실측 QR 29건 중 8건 누락) → 포맷 변형을 함께 조회한다.
     phoneCandidates.length > 0
       ? supabase

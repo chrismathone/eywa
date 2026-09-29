@@ -394,7 +394,7 @@ export function normalizeSchool(school: string | null | undefined): string | nul
 }
 
 /**
- * 전화번호 → 숫자만. QR 접수는 "01067332180"(하이픈 없음), 학생 DB는 "010-6733-2180"(하이픈 96%)라
+ * 전화번호 → 숫자만. QR 접수는 "01000009100"(하이픈 없음), 학생 DB는 "010-0000-9100"(하이픈 96%)라
  * 원문 비교로는 형제자매를 못 찾는다(실측 QR 29건 중 8건이 실제 형제가 있는데 누락).
  */
 export function phoneDigits(phone: string | null | undefined): string | null {

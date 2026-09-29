@@ -66,6 +66,27 @@ export const getSuperAdminIds = cache(async (): Promise<Set<string>> => {
 });
 
 /**
+ * 대상이 super_admin인데 요청자는 아닌가 — 계정 탈취 보호선(보안 감사 2026-09-29).
+ * super_admin도 한 학원에 users 행(보통 master)을 갖기 때문에, 역할 위계(`canManageStaffMember`, 동급 허용)만
+ * 보면 **그 학원 원장이 super_admin 계정의 비밀번호·이메일을 바꿔 전 지점 총괄 권한을 가져갈 수 있다**.
+ * 비밀번호·이메일·이름·삭제 등 대상 계정을 바꾸는 서버 액션은 이 값이 true면 거절한다.
+ */
+export async function isProtectedSuperAdminTarget(actorId: string, targetId: string): Promise<boolean> {
+  if (actorId === targetId) return false;
+  // getSuperAdminIds(표시용)는 조회 실패를 빈 명단으로 삼킨다 — 보호선이 그걸 쓰면 실패하는 순간 조용히 꺼진다.
+  // 여기서는 두 사람만 직접 묻고, 조회가 실패하면 **막는 쪽**(true)으로 둔다.
+  const { data, error } = await createAdminClient()
+    .from("super_admins")
+    .select("id")
+    .in("id", [actorId, targetId]);
+  if (error) return true;
+  const ids = new Set((data ?? []).map((r) => r.id as string));
+  return ids.has(targetId) && !ids.has(actorId);
+}
+
+export const SUPER_ADMIN_TARGET_DENIED_MSG = "총괄 관리자 계정은 총괄 관리자만 변경할 수 있습니다";
+
+/**
  * super_admin 계정의 **표시** 역할을 '관리자(admin)'로 위장 — 실제 role/접근/권한은 불변.
  * super_admin은 학원 안에서 숨은 총괄이라 owner(master)로 노출되면 안 됨(사용자 결정 2026-07-02).
  * 역할·권한 매트릭스는 이미 getPermMatrix에서 우회되므로 여기선 "보이는 라벨"만 바꾼다.

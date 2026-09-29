@@ -50,7 +50,7 @@ describe("normalizeStatus", () => {
 
 describe("normalizePhone", () => {
   it("앞자리0 보정 + 하이픈", () => {
-    expect(normalizePhone("1065317203")).toBe("010-6531-7203");
+    expect(normalizePhone("1000009106")).toBe("010-0000-9106");
     expect(normalizePhone("010-1234-5678")).toBe("010-1234-5678");
     expect(normalizePhone("01012345678")).toBe("010-1234-5678");
   });

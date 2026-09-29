@@ -29,6 +29,8 @@ export const AUDIT_ACTIONS = {
   slack_resend: "슬랙 실패 건 다시 보내기",
   makeedu_paid_recovery: "수납 동기화 오류 복구",
   sheets_sync_now: "구글 시트 내보내기 실행",
+  // 파일 내보내기 접속기록(보안 감사 2026-09-29) — 원생목록·수납·지출 등 엑셀 다운로드·상담 반출 API. 슬랙으로는 안 나간다(forbid).
+  data_export_download: "엑셀 내보내기(파일 받음)",
   intake_push_enqueue: "makeedu 상담 역동기화",
   kiosk_device_register: "키오스크 기기 등록",
   kiosk_device_revoke: "키오스크 기기 폐기",

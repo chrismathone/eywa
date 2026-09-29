@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DEFAULT_EMAIL_DOMAIN, splitEmailForEdit } from "@/features/staff/email";
+import { AUTO_STAFF_EMAIL_DOMAIN, DEFAULT_EMAIL_DOMAIN, splitEmailForEdit } from "@/features/staff/email";
 
 /**
  * 로그인 이메일 입력 — **아이디만 고치고 도메인은 고정**(원장 지시 2026-07-30).
@@ -33,7 +33,10 @@ export function EmailIdField({
   // gmail이면 도메인을 고정 칩으로(대다수 — 아이디만 고치면 된다).
   // **gmail이 아니면 처음부터 열어 둔다**(원장 지시 2026-07-30) — 네이버 등을 쓰는 사람은
   // 도메인까지 손볼 일이 실제로 있는데, 고정해 두면 한 번 더 눌러야 해서 번거롭다.
-  const [editDomain, setEditDomain] = useState(initial.domain !== DEFAULT_EMAIL_DOMAIN);
+  // 자동 생성 로그인 도메인(AUTO_STAFF_EMAIL_DOMAIN)도 사람이 고를 일이 없는 값이라 칩으로 닫아 둔다.
+  const [editDomain, setEditDomain] = useState(
+    initial.domain !== DEFAULT_EMAIL_DOMAIN && initial.domain !== AUTO_STAFF_EMAIL_DOMAIN,
+  );
 
   const value = local.trim() && domain.trim() ? `${local.trim()}@${domain.trim()}` : "";
 

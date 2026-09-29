@@ -72,11 +72,14 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
   const expected = expectedBirthYear(student.grade, schoolYear);
   for (const m of members) {
     const who = `원아 "${m.name ?? "?"}"`;
-    // ③ 생년
-    const y = Number(String(m.date_birth ?? "").slice(0, 4));
+    // ③ 생년 — 관리자 화면의 생년월일(운영관리 명부 child_date_birth)이 먼저, 학부모 프로필(date_birth)은 보조.
+    //    둘 중 하나라도 맞으면 통과(원장 2026-09-29: 관리자 화면에서 고친 생년이 안 먹었다 — 두 값이 따로 산다).
+    const toYear = (v) => { const y = Number(String(v ?? "").slice(0, 4)); return Number.isFinite(y) && y >= 1900 ? y : null; };
+    const years = [toYear(admissions.get(m.id)?.birth), toYear(m.date_birth)].filter((y) => y != null);
     if (expected == null) reasons.push(`학년(${student.grade ?? "없음"})을 몰라 생년 대조 불가`);
-    else if (!Number.isFinite(y) || y < 1900) reasons.push(`${who} 생년 없음`);
-    else if (Math.abs(y - expected) > BIRTH_TOLERANCE) reasons.push(`${who} 생년 불일치(${y}년생, 기대 ${expected}년생)`);
+    else if (!years.length) reasons.push(`${who} 생년 없음`);
+    else if (!years.some((y) => Math.abs(y - expected) <= BIRTH_TOLERANCE))
+      reasons.push(`${who} 생년 불일치(${years[0]}년생, 기대 ${expected}년생)`);
     // ⑥ 이름 연속성
     if (!childNameConsistent(student.name, m.name)) reasons.push(`${who} 이름이 학생(${student.name})과 다름 — 형제 계정일 수 있어 확인 필요`);
     // ② 전화 — 값은 절대 사유에 싣지 않는다(일치 여부만)
@@ -148,6 +151,10 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
       else if (exact.length || near.length)
         board = { action: "block", reason: `반 이름을 "${c.className}"(으)로 바꿔야 하는데 그 이름의 보드가 이미 있습니다` };
       else board = { action: "exists", id: linked.id, rename: { from: linked.name, to: c.className } };
+    } else if (linkedId != null) {
+      // 🔴 연결된 보드가 ClassNote에서 사라졌다 = 사람이 지웠다(2026-09-29 빈 반 JJ3E). 새로 만들면 지운 반이 매일 되살아난다.
+      // 연결 행은 남긴다(deletedBoardId) — 지우면 다음 날 이름 규칙으로 다시 만들어진다. 안 쓰는 반이면 aywa에서 종강하면 연결도 정리된다.
+      board = { action: "block", deletedBoardId: Number(linkedId), reason: `연결된 ClassNote 반(#${linkedId})이 삭제됐습니다 — 안 쓰는 반이면 aywa에서 종강하세요` };
     } else if (exact.length > 1) board = { action: "block", reason: `같은 이름 보드 ${exact.length}개` };
     else if (near.length) board = { action: "block", reason: `공백만 다른 보드가 있음(${near.map((b) => JSON.stringify(b.name)).join(", ")})` };
     else if (exact.length === 1 && classByLinkedBoard.has(Number(exact[0].id)) && classByLinkedBoard.get(Number(exact[0].id)) !== c.classId)

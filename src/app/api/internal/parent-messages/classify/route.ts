@@ -1,3 +1,4 @@
+import { secretMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
 import { classifyPendingParentMessages } from "@/features/attendance/parent-alerts/server/classify";
 
@@ -21,7 +22,7 @@ export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  if (!secret || request.headers.get("x-eywa-internal") !== secret) {
+  if (!secretMatches(request.headers.get("x-eywa-internal"), secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {

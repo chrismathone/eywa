@@ -463,9 +463,9 @@ describe("2-pass 계약 — 미평가를 숨기지 않는다", () => {
 
 describe("전화 대조 — 최상위 신원 증거(원장 제안)", () => {
   it("정규화: 하이픈·공백·+82를 흡수한다", () => {
-    expect(normalizePhone("010-8577-6698")).toBe("01085776698");
-    expect(normalizePhone("010 8577 6698")).toBe("01085776698");
-    expect(normalizePhone("+82 10-8577-6698")).toBe("01085776698");
+    expect(normalizePhone("010-0000-9102")).toBe("01000009102");
+    expect(normalizePhone("010 0000 9102")).toBe("01000009102");
+    expect(normalizePhone("+82 10-0000-9102")).toBe("01000009102");
     expect(normalizePhone("")).toBe("");
     expect(normalizePhone("1234")).toBe("");
   });

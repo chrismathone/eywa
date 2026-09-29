@@ -52,13 +52,13 @@ type StudentStatus = (typeof STATUSES)[number];
 
 /**
  * 한국 전화번호 정규화 (F5). 숫자만 추출 후 휴대폰/지역번호 규칙으로 하이픈 삽입,
- * 앞자리 0 누락(예: "1065317203")도 보정. 인식 못 하는 길이는 원본 유지(과도한 변형 방지).
+ * 앞자리 0 누락(예: "1000009106")도 보정. 인식 못 하는 길이는 원본 유지(과도한 변형 방지).
  */
 function normalizePhone(raw: string | null): string | null {
   if (!raw) return null;
   let d = raw.replace(/\D/g, "");
   if (!d) return null;
-  if (d.length === 10 && d.startsWith("10")) d = "0" + d; // 1065317203 → 01065317203
+  if (d.length === 10 && d.startsWith("10")) d = "0" + d; // 1000009106 → 01000009106
   if (d.length === 11 && d.startsWith("010")) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
   if (d.length === 10 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}`;
   if (d.length === 9 && d.startsWith("02")) return `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}`;

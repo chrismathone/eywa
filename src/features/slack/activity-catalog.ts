@@ -99,6 +99,7 @@ const RULES: readonly [string, string][] = [
   ["ai_prompt_", "settings"],
   ["ment_style_", "settings"],
   ["sheets_sync_now", "settings"],
+  ["data_export_", "settings"],
   ["demo_", "settings"],
   // 공용 엑셀 가져오기 한 번 = 한 줄(무엇을·몇 줄). 행별 기록(excelImport 표식)은 발송기가 건너뛴다.
   ["excel_import", "settings"],
@@ -116,6 +117,8 @@ const FORBID_KEYS = new Set([
   "kiosk_device_register",
   "staff_roster_import",
   "staff_roster_import_revert",
+  // 누가 어떤 파일을 받았는지는 개인정보 접속기록이라 채널로 흘리지 않는다(보안 감사 2026-09-29).
+  "data_export_download",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);

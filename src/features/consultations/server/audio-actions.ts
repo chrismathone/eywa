@@ -66,10 +66,14 @@ export async function startStudentConsultationFromAudio(
   }
 
   const admin = createAdminClient();
-  const [{ data: counselor }, settings] = await Promise.all([
+  // 학생이 **이 학원** 학생인지 — 담당 범위 검사는 강사에게만 걸려서, 원장·관리자는 studentId를 검증 없이 넘겼다.
+  // admin client insert라 FK만 맞으면 다른 학원 학생 id로 상담 행이 생기고, 그 이름이 AI 분석·활동로그에 실린다(보안 감사 2026-09-29).
+  const [{ data: counselor }, settings, { data: ownStudent }] = await Promise.all([
     admin.from("users").select("subjects").eq("id", user.id).eq("tenant_id", user.tenantId).maybeSingle(),
     getTenantSettings(),
+    admin.from("students").select("id").eq("id", studentId).eq("tenant_id", user.tenantId).maybeSingle(),
   ]);
+  if (!ownStudent) return { error: "학생을 찾을 수 없습니다" };
   const subject = consultationSubject(null, counselor?.subjects, subjectLabelRecord(settings.operations.subjects));
 
   let audioUrl: string;

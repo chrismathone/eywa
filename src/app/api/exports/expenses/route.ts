@@ -1,3 +1,4 @@
+import { logExportDownload } from "@/features/exports/server/log-export";
 import { NextResponse } from "next/server";
 import { requireAccess } from "@/lib/auth/require-access";
 import { attachmentFilename } from "@/lib/http/content-disposition";
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
   const { buildExpensesWorkbook } = await import("@/features/exports/expenses-excel");
   const wb = await buildExpensesWorkbook(rows, period);
   const buf = await wb.xlsx.writeBuffer();
+  await logExportDownload(request, "지출");
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

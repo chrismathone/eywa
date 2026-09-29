@@ -104,7 +104,7 @@ describe("maskResidentRegNo", () => {
     expect(maskResidentRegNo("900101 - 1234567")).toBe("900101-*******");
   });
   it("전화번호·날짜는 건드리지 않는다", () => {
-    expect(maskResidentRegNo("010-2501-5783 / 2026-08-03")).toBe("010-2501-5783 / 2026-08-03");
+    expect(maskResidentRegNo("010-0000-9101 / 2026-08-03")).toBe("010-0000-9101 / 2026-08-03");
   });
 });
 

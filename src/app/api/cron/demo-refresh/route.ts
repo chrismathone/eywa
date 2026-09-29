@@ -1,3 +1,4 @@
+import { bearerMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
 import { reportError } from "@/lib/observability/report-error";
 import { refreshDemoMath } from "@/features/demo-history/math-refresh";
@@ -10,7 +11,7 @@ export const maxDuration = 60;
 /** 06:05 KST: refresh the fictional demo tenant only. Both writers assert its slug and roster tags. */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !bearerMatches(req.headers.get("authorization"), secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
