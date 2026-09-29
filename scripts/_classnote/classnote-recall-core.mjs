@@ -71,21 +71,33 @@ async function deleteReport(page, id) {
  * 회수 1건 — 보드·원아 해석 → 본문 완전 일치로 글 찾기 → 대조 → 삭제.
  * 반환 `{ ok, note, deletedIds }`. ok=false면 호출부가 `recall_failed` + note를 기록한다(한글 사유).
  */
-async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log }) {
+async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log, classLoc = null }) {
   if (!subjectLabel(subject))
     return { ok: false, note: `보드 매핑이 없는 과목이라 회수 대상을 찾을 수 없습니다`, deletedIds: [] };
+  // 🔴 글이 있을 수 있는 자리를 **전부** 훑는다(2026-09-29) — 1인 보드 `(수학)이름` + 반 보드(0302a, 반별 발송분).
+  //    1인 보드만 보면 반 보드로 나간 글을 못 찾고 아래 '이미 없습니다'로 **거짓 성공**한다(학부모 알림장엔 남는다).
+  const locs = [];
   const className = boardClassName(subject, studentName);
   const board = boards.find((b) => (b.name || "").trim() === className);
-  if (!board) return { ok: false, note: `학부모 게시판(${className})을 찾지 못했습니다`, deletedIds: [] };
-
-  // 이중 계정(부모·본인 각자 가입)이면 같은 글이 여러 원아에 붙어 있을 수 있어 전부 훑는다.
-  const enrolled = await resolveBoardChildEnrollments(page, board.id, studentName, children).catch(() => []);
-  if (!enrolled.length) return { ok: false, note: `게시판에 배정된 원아를 찾지 못했습니다`, deletedIds: [] };
+  if (board) {
+    // 이중 계정(부모·본인 각자 가입)이면 같은 글이 여러 원아에 붙어 있을 수 있어 전부 훑는다.
+    const enrolled = await resolveBoardChildEnrollments(page, board.id, studentName, children).catch(() => []);
+    if (enrolled.length) locs.push({ boardId: board.id, childIds: enrolled.map((e) => e.child.id) });
+  }
+  if (classLoc?.childIds?.length) locs.push(classLoc);
+  if (!locs.length)
+    return {
+      ok: false,
+      note: board ? `게시판에 배정된 원아를 찾지 못했습니다` : `학부모 게시판(${className})을 찾지 못했습니다`,
+      deletedIds: [],
+    };
 
   const deletedIds = [];
   let found = 0;
   let verifyFailed = 0;
-  for (const { child } of enrolled) {
+  for (const loc of locs)
+  for (const childId of loc.childIds) {
+    const child = { id: childId };
     // strict 일치 — content가 곧 공유 링크다(수업보고서 게시 본문 = shareUrl).
     // 🔴 주소 후보를 **전부** 대 본다(share-bases.mjs) — 글은 올린 때의 주소로 박혀 있어서, 도메인 이전 뒤 한 주소만 보면
     //    이전 전(또는 후) 글을 못 찾고 아래 '이미 없습니다'로 **거짓 성공**한다. 매칭은 여전히 글자까지 같은 본문뿐이다.
@@ -95,7 +107,7 @@ async function recallOne(page, centerId, boards, children, { studentName, subjec
     const hitIds = [];
     let lookupFailed = false;
     for (const shareUrl of shareUrls) {
-      const h = await findChildReportId(page, centerId, { cls: board.id, child: child.id, content: shareUrl });
+      const h = await findChildReportId(page, centerId, { cls: loc.boardId, child: child.id, content: shareUrl });
       if (!h.ok) {
         lookupFailed = true;
         continue;
@@ -114,7 +126,7 @@ async function recallOne(page, centerId, boards, children, { studentName, subjec
         deletedIds.push(hitId); // 이미 없음 = 목표 달성
         continue;
       }
-      if (chk.status !== 200 || String(chk.cls) !== String(board.id) || String(chk.child) !== String(child.id)) {
+      if (chk.status !== 200 || String(chk.cls) !== String(loc.boardId) || String(chk.child) !== String(child.id)) {
         verifyFailed++;
         log?.(`  · 대조 불일치(${chk.status}) — 삭제하지 않음 (report ${hitId})`);
         continue;
@@ -176,7 +188,7 @@ export async function processRecallsOnce(sql, browser, opts) {
     update lesson_reports lr set classnote_status='recalling', classnote_processing_at=now()
     from cte where lr.id=cte.id
     returning lr.id, lr.share_token, lr.subject, lr.student_id, lr.report_date::text as report_date,
-              cte.prev, lr.classnote_retry_count`;
+              cte.prev, lr.classnote_retry_count, lr.class_id`;
   const summary = { claimed: claimed.length, recalled: 0, failed: 0 };
   if (!claimed.length) return summary;
   log(`[recall] 클레임 ${claimed.length}건`);
@@ -209,11 +221,21 @@ export async function processRecallsOnce(sql, browser, opts) {
       const shareUrls = shareBases.map((b) => `${b}/r/${r.share_token}`);
       log(`[recall] ${studentName} ${r.report_date} — ${shareUrls.join(" | ")}`);
 
+      // 반 보드 자리(0302a) — 반별 발송분이 거기 있다. 매칭 기록의 원아 전부(보류 포함 — 지울 글을 찾는 쪽이라 넓게).
+      // 표가 없으면(SQL 미적용) 반별 발송도 없었으니 null.
+      let classLoc = null;
+      if (r.class_id) {
+        const rows = await sql`select m.board_id, m.child_id from classnote_class_board_members m
+          where m.tenant_id = ${tenant} and m.class_id = ${r.class_id} and m.student_id = ${r.student_id} and m.child_id is not null`
+          .catch(() => []);
+        if (rows.length) classLoc = { boardId: Number(rows[0].board_id), childIds: [...new Set(rows.map((x) => Number(x.child_id)))] };
+      }
       const res = await recallOne(page, centerId, boards, children, {
         studentName,
         subject: r.subject,
         shareUrls,
         log,
+        classLoc,
       }).catch((e) => ({ ok: false, note: `회수 중 오류: ${String(e?.message ?? e).slice(0, 120)}`, deletedIds: [] }));
 
       if (res.ok) {

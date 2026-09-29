@@ -215,6 +215,7 @@ import { hasRowOverrides, resolveRowFields, seedRowFields } from "../row-fields"
 import { detectClassNotices } from "../class-notice";
 import { shortDate } from "../makeup-absence-link";
 import { computeClientMentSource } from "../ment-source";
+import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
 
 /** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
 const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
@@ -321,6 +322,7 @@ export function OneScreenClient({
   academyName = "",
   logoSrc = null,
   canLinkIjw = false,
+  classnoteMatch,
 }: {
   initial: OneScreenStudent[];
   today?: string;
@@ -367,6 +369,8 @@ export function OneScreenClient({
    * 영어 칸 '인재원 미연결' 줄이 짝 잇기 자리로 가는 링크를 달지(아니면 관리자에게 요청하라고 적는다).
    */
   canLinkIjw?: boolean;
+  /** ClassNote 반 보드 매칭(0302a) — 카드·표 모드 이름 옆 'C.N'. 페이지가 fail-soft로 따로 읽어 내린다. */
+  classnoteMatch?: CnMatchMap;
 }) {
   const router = useRouter();
   // 🔴 화면 문구만 갈린다 — 저장값(태도·과제 '미제출'·보강 행 이름 `과목 (보강)`)은 한국어 그대로다.
@@ -4141,6 +4145,7 @@ export function OneScreenClient({
             // 멘트 모드는 카드 모드와 **같은 실효값**을 쓴다(강사 오버라이드 > 학원 기본) — 표 모드만
             // 단일 칸으로 남으면 토글을 B로 둔 강사가 "표에선 적용이 안 된다"고 느낀다(원장 제보 2026-07-21).
             noticeMode: noticeMode ?? academyNoticeMode,
+            classnoteMatch,
           }}
           fields={{
             onAttendance: setAttendanceFor,
@@ -4264,9 +4269,12 @@ export function OneScreenClient({
             const sent = sendable.filter(su => classnoteSendEnabled
               ? isAlreadySent(effectiveClassnoteStatus(reports[student.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))
               : reports[student.id]?.[su.name]?.sent === true).length;
+            // ClassNote 반 매칭 — 목록 행(반 그룹)의 수학 과목 줄 기준. 보강 행(classId 없음)은 라벨 없음.
+            const cnRow = rows.find(su => !!su.classId && CN_SUBJECT_KEYS.has(su.subjectKey ?? ""));
             return {
               reportCell: reportCell(rowReports, rows.length),
               sendMark: { sent, total: sendable.length, label: sendMarkLabel },
+              cn: cnRow ? cnLabelFor(classnoteMatch, { classId: cnRow.classId, subjectKey: cnRow.subjectKey, studentId: student.id }) : null,
             };
           }}
           reportCellById={reportCellById}

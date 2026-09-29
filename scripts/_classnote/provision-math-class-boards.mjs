@@ -11,7 +11,9 @@
 // 🔴 보호자 전화 값은 출력·파일에 싣지 않는다.
 //
 // 실행: CLASSNOTE_TENANT_ID=… node --env-file=.env.local scripts/_classnote/provision-math-class-boards.mjs
-//        [--apply] [--only="중등M 중3 BS3Q"] [--limit=1] [--json=계획.json]
+//        [--apply] [--only="중등M 중3 BS3Q"] [--limit=1] [--json=계획.json] [--sync-db]
+// --sync-db: 끝에서 계획을 **다시 읽어** 0302a 표(반↔보드, 학생↔원아 ok/hold)에 적는다 — C.N 라벨·발송 워커의 단일 소스.
+//            ClassNote에는 쓰지 않는다(aywa DB만). 드라이런에서도 동작한다.
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,17 +25,18 @@ import {
 import { resolveTenant } from "./classnote-core.mjs";
 import { summarizePlan } from "./class-board-plan.mjs";
 import { loadAywa, loadPlan, personalBoardId } from "./math-class-boards-load.mjs";
+import { writeClassBoardSnapshot } from "./math-class-boards-db.mjs";
 
 const arg = (k) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
 const APPLY = process.argv.includes("--apply");
 const ONLY = arg("only");
 const LIMIT = arg("limit") ? Number(arg("limit")) : Infinity;
 const jsonPath = arg("json");
+const SYNC_DB = process.argv.includes("--sync-db");
 
 const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
 const tenant = await resolveTenant(sql);
 const aywa = await loadAywa(sql, tenant);
-await sql.end();
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
 const ids = (list) => new Set((list ?? []).map((m) => m.id));
@@ -129,11 +132,20 @@ try {
     }
     console.log(`\n✅ 완료 — 반 ${log.length}개 · 원아 배정 ${log.reduce((n, e) => n + e.enrolled.length, 0)}건 · 1인 보드 ${personalBefore.size}개 그대로`);
   }
+  if (SYNC_DB) {
+    // 실행으로 보드·원아가 바뀌었을 수 있으니 **다시 읽은 계획**으로 적는다(ok = ClassNote에서 확인된 배정만).
+    const fresh = await loadPlan(page, centerId, aywa);
+    if (fresh.failed) throw new Stop(`원아 조회 실패 ${fresh.failed}건 — DB 기록을 건너뛴다(불완전한 판정으로 초록불을 켜지 않는다)`);
+    const w = await writeClassBoardSnapshot(sql, tenant, fresh.plans);
+    console.log(`
+[DB 기록] 반 ${w.classes}개 · 확인된 배정 ${w.ok} · 보류 ${w.hold} · 지운 옛 행 ${w.cleared}`);
+  }
 } catch (e) {
   exitCode = 1;
   console.error(`\n⛔ 중단: ${e instanceof Stop ? e.message : e?.stack ?? e}`);
 } finally {
   await browser.close();
+  await sql.end();
   if (APPLY && log.length) {
     const out = join(process.env.CLASSNOTE_OUT || tmpdir(), `math-class-boards-${Date.now()}.json`);
     writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), log }, null, 2));

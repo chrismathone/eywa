@@ -88,7 +88,9 @@ const recentIssues = [];
 // 안 올린 탓에, 옛 프로세스가 그대로 돌고 있는데도(started_at 7일 전) 하트비트만 보고는 알 수 없었다.
 // kageFailReasons=스샷 업로드 실패를 네 갈래(빈 캡처·첨부 칸 없음·kage 거부·무응답)로 갈라 담는 버전인가
 // (2026-09-04). 이 키가 없으면 옛 워커라 실패 사유가 여전히 `스샷 kage 업로드 실패` 한 줄로만 남는다.
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true };
+// mathClassRoute=수학 반 보드 경로(보고서 설정 '수학 발송 경로', 2026-09-29)를 아는 버전인가. 이 키가 없는 옛 워커는
+// 설정을 반별로 바꿔도 **전부 1인 보드로** 보낸다 — 설정을 바꾸기 전에 이 키로 이관 여부를 확인할 것.
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).

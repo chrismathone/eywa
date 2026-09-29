@@ -28,6 +28,8 @@ import { makeupBadgeLabel } from "../makeup-label";
 import { makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { resolveRowFields } from "../row-fields";
 import type { OneScreenStudent, Subject } from "../types";
+import { cnLabelFor, type CnMatchMap } from "../classnote-match";
+import { CnBadge } from "./cn-badge";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
 import {
@@ -123,6 +125,8 @@ export type GridConfig = {
   // 표 모드에도 내린다. B면 학부모 문구 칸이 2칸(수업 내용 / 태도·특이사항)으로 갈라진다.
   // ⚠️ 없으면 "A"로 보지 말 것 — 토글을 B로 둔 강사가 표 모드에서만 한 칸을 보게 된다(2026-07-21 원장 제보).
   noticeMode: "A" | "B";
+  /** ClassNote 반 보드 매칭(0302a) — 이름 옆 'C.N' 알약. 없거나 available=false면 알약을 안 그린다. */
+  classnoteMatch?: CnMatchMap;
 };
 
 /** 과목 진도 입력이 커리큘럼(math)인지. 미지정은 math로 간주(progress-card와 동일 규칙). */
@@ -373,6 +377,11 @@ export function GridBodyRow({
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span className={`size-1.5 shrink-0 rounded-full ${toneSolidClass(tone)}`} aria-hidden />
           <span className="text-foreground shrink-0 font-bold whitespace-nowrap">{student.name}</span>
+          {/* ClassNote 반 보드 매칭(원장 2026-09-29) — 카드 모드와 같은 부품·같은 판정. 수학 반 행만. */}
+          <CnBadge
+            label={cnLabelFor(config.classnoteMatch, { classId: subject.classId, subjectKey: subject.subjectKey, studentId: student.id })}
+            className={student.className}
+          />
           {/* 보강 배지 = **빼는 문**(원장 2026-08-18 *"다 삭제"*). 추가만 있고 빼는 길이 없어 잘못 추가한
               보강이 화면에 눌러앉았다(영어 ECS는 같은 칸을 이미 버튼으로 열어 뒀다). 확인 후에만 지운다. */}
           {student.isMakeup ? (

@@ -15,6 +15,8 @@ import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
+import { decideRoute } from "./class-route-decide.mjs";
+import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 
 /**
  * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
@@ -71,6 +73,12 @@ let preflightBackoffUntil = 0;
 // 발송 허용 시간대 로그 스로틀 — 매 폴(15초) "시간대 밖 대기"를 찍으면 밤새 수백 줄 스팸이 된다(2026-07-22 원장 제보).
 // 상태 전이(밖→안·안→밖)에서만 한 줄씩 남긴다. null=미확인(첫 폴은 항상 남김). true=창 안, false=창 밖.
 let sendWindowOpen = null;
+/**
+ * 반 보드 경로 **비상 정지**(2026-09-29) — 게시 후 교차 확인에서 같은 반 다른 원아에게 이 보고서 링크가 보이면 켜진다.
+ * 켜지면 이 프로세스가 사는 동안 반 보드 경로 게시를 전부 멈춘다(1인 보드 경로는 그대로). 워커를 다시 켜야 풀린다 —
+ * 사람이 원인을 확인하기 전에 저절로 풀리면 같은 사고가 이어진다.
+ */
+let classRouteHalted = false;
 
 async function getAdminSession(browser) {
   if (adminCache && adminCache.browser === browser && !adminCache.page.isClosed()) return adminCache;
@@ -195,7 +203,7 @@ const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
  *    → 이미지만 있는 리포트는 `fileAtts`가 비어 파일 첨부 없이 **스샷만** 게시된다(경로는 동일).
  */
-export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, log }) {
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, targets = null, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -292,13 +300,17 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   // 3) board → child → enrollment
   // 이름으로 못 찾으면 **보드가 곧 매핑** 폴백(생년 대조 통과분만) — 학부모가 ClassNote에서 원아 이름을
   // 바꿔도 배정이 살아 있으면 발송된다(2026-07-23 박서연E 사례).
+  // 🔴 반 보드 경로(targets)는 이미 확정된 원아만 쓴다 — 이름 해석·"보드가 곧 매핑" 폴백을 **절대 타지 않는다**
+  //    (반 보드는 다인 반이라 폴백이 돌면 같은 학년 반 전원이 통과한다 — classnote-class-route.mjs).
   let rejected = null;
-  const enrolled = await resolveBoardChildEnrollments(adminPage, boardId, studentName, children, {
-    ...(boardFallback ?? {}),
-    onReject: (v) => {
-      rejected = v;
-    },
-  });
+  const enrolled = targets
+    ? targets
+    : await resolveBoardChildEnrollments(adminPage, boardId, studentName, children, {
+        ...(boardFallback ?? {}),
+        onReject: (v) => {
+          rejected = v;
+        },
+      });
   if (!enrolled.length)
     return { ok: false, error: rejected?.reason ?? "원아·enrollment 해석 실패(미가입/미배정)" };
 
@@ -484,7 +496,7 @@ export async function processQueueOnce(sql, browser, opts) {
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes`
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes, lr.class_id`
     .catch((e) => {
       // 컬럼이 사라졌으면(0276a 되돌림 — 42703 undefined_column) 기억을 지워 다음 폴부터 예외 절 없이 돈다.
       // 안 지우면 "있다"는 기억 때문에 매 폴 같은 오류로 발송 전체가 멈춘다.
@@ -532,6 +544,7 @@ export async function processQueueOnce(sql, browser, opts) {
   let allNames = [];
   let showAttachments = false; // Phase 2: 파일 리포트를 내부 API로 보낼지 라우팅 게이트
   let childrenCache = null; // Phase 2: 파일 리포트 첫 만남에 fetchChildren 1회 캐시
+  let routeCfg = { route: "personal", pilot: new Set() }; // 수학 발송 경로(보고서 설정) — 준비 단계에서 읽는다
   if (post) {
     try {
       const admin = await getAdminSession(browser); // 세션 유지 — 폴마다 로그인하지 않는다(아래 주석)
@@ -550,6 +563,7 @@ export async function processQueueOnce(sql, browser, opts) {
       allowlist = a;
       allNames = nameRows.map((x) => (x.classnote_name || x.name || "").trim()).filter(Boolean);
       showAttachments = await isShowAttachmentsEnabled(sql, tenant);
+      routeCfg = await getClassnoteMathRoute(sql, tenant);
       preflightFails = 0;
       preflightBackoffUntil = 0;
     } catch (e) {
@@ -605,12 +619,62 @@ export async function processQueueOnce(sql, browser, opts) {
     }
     const className = boardClassName(r.subject, studentName); // 학생모드 보드 `(과목)학생명`
     let boardId = null; // Phase 2 내부 API 경로용 — 보드안전 게이트 통과 시 verdict.boardId
+    // 수학 발송 경로(보고서 설정, 2026-09-29) — personal = 위 1인 보드 · class = 반 보드(0302a 매칭 원아에게 1:1).
+    // needs_class(반 정보 없는 보강 등) = 반을 추측하지 않는다. 원스크린에서 보낼 반을 고르는 화면(A안)이 생기기
+    // 전까지는 **기존 1인 보드**로 보낸다(학부모에게는 지금처럼 간다 — class-route-decide.mjs 주석).
+    let route = post ? decideRoute(routeCfg, r) : "personal";
+    if (route === "needs_class") {
+      log(`  · ${studentName}: 반 정보 없는 보고서 — 반별 대상 반을 정할 수 없어 기존 1인 보드로`);
+      route = "personal";
+    }
+    // 특강·종강·미발송 반은 반 보드를 만들지 않았다(대상 기준 = isClassRouteEligible) → 기존 1인 보드로.
+    // 조회 실패는 아래 대상 확정에서 다시 드러나므로 여기선 반별로 둔다(조용히 1인 보드로 새지 않게).
+    if (route === "class" && !(await isClassRouteEligible(sql, tenant, r.class_id).catch(() => true))) {
+      log(`  · ${studentName}: 반 보드 대상이 아닌 반(특강·종강 등) — 기존 1인 보드로`);
+      route = "personal";
+    }
+    let classTarget = null; // route=class일 때 { boardId, boardName, targets, others }
 
     // ⛔ 프리플라이트 보드 안전 게이트(실게시 모드만) — **스크린샷·게시 전에** 판정(불필요한 캡처 회피).
     // 한 보드에 서로 다른 2가족+가 연결돼 있으면 이 학생 보고서가 남의 가족에게도 게시된다(실제 사고: 2026-07-15
     // `(수학)박서준`에 초6·중3 두 가족 동거 — 초6 보고서가 중3 집에 노출). aywa DB엔 보드 멤버십이 없어
     // **여기(ClassNote 조회 가능한 워커)가 유일한 차단 지점**. 판정=board-safety.mjs 순수함수(공지 워커와 공용).
-    if (post) {
+    if (post && route === "class") {
+      // 반 보드 경로 — 1인 보드 게이트(보드명 해석) 대신 **저장된 매칭 원아**를 쓰고 ClassNote로 실시간 재확인한다.
+      // 🔴 이름으로 원아를 찾지 않는다(같은 반 동명이인). 매칭이 없거나 보류면 1인 보드로 돌리지 않고 멈춘다
+      //    (설정을 반별로 바꿨는데 조용히 옛 경로로 가면 시험 결과를 오해한다 — 사유는 C.N 카드와 같은 말).
+      if (classRouteHalted) {
+        await sql`update lesson_reports set classnote_status='queued',
+          classnote_error=${"반별 발송 비상 정지 중 — 교차 확인 이상으로 워커가 반별 게시를 멈췄습니다(워커 재시작 전 원인 확인 필요)"}
+          where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: 반별 비상 정지 중 → 재큐`);
+        continue;
+      }
+      let ct;
+      try {
+        ct = await resolveClassTargets(sql, adminPage, { tenant, centerId, classId: r.class_id, studentId: r.student_id });
+      } catch (e) {
+        // 조회 실패(네트워크·표 없음)는 결정적이지 않다 — 재시도 카운트를 올려 재큐(3회면 failed).
+        const msg = e instanceof Error ? e.message : String(e);
+        await sql`update lesson_reports set
+          classnote_retry_count = classnote_retry_count + 1,
+          classnote_status = case when classnote_retry_count + 1 >= 3 then 'failed' else 'queued' end,
+          classnote_error = ${`반별 발송 준비 실패 — ${msg.slice(0, 160)}`}
+          where id=${r.id}`;
+        summary.requeued++;
+        log(`  · ${studentName}: 반별 대상 확인 실패(${msg}) → 재시도+1`);
+        continue;
+      }
+      if (!ct.ok) {
+        await sql`update lesson_reports set classnote_status='failed', classnote_error=${ct.error} where id=${r.id}`;
+        summary.failed++;
+        log(`  · ${studentName}: ${ct.error}`);
+        continue;
+      }
+      classTarget = ct;
+      boardId = ct.boardId;
+    } else if (post) {
       // 1차 = 보드 존재/중복 + 예외 등재 확인(보드 조회 캐시만 사용, 추가 요청 0).
       let verdict = evaluateBoardSafety({ className, boards, allowlist });
       // 2차 = **모호한 이름일 때만** 원아를 실시간 조회해 매핑 검증(생일 ↔ 학년). 모호하지 않으면 요청 0.
@@ -687,7 +751,7 @@ export async function processQueueOnce(sql, browser, opts) {
       }
       const buf = await card.screenshot({ type: "jpeg", quality: 90 });
       await ctx.close();
-      log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${className}" img=${buf.length}B`);
+      log(`  · ${studentName} (${r.subject ?? "-"}) 보드="${classTarget ? `${classTarget.boardName}(반별)` : className}" img=${buf.length}B`);
 
       if (!post) {
         // dry-run: 게시 안 하고 다시 queued로 반환(재처리 가능하게)
@@ -744,6 +808,8 @@ export async function processQueueOnce(sql, browser, opts) {
         // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드를 신뢰한다.
         verifyDedup: !r.classnote_sent_at,
         boardFallback: { centerId, grade: stu?.grade ?? null, schoolYear: kstSchoolYear() },
+        // 반 보드 경로 = 확정 원아만(이름 해석·폴백 없음).
+        targets: classTarget?.targets ?? null,
       }));
       if (result.timedOut) {
         await sql`update lesson_reports set classnote_status='failed',
@@ -753,10 +819,30 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`    → 타임아웃(${Math.round(POST_TIMEOUT_MS / 60000)}분) → failed 고정(자동 재시도 안 함 — 중복 게시 방지)`);
         continue;
       }
+      if (result.ok && classTarget) {
+        // 🔴 반 보드 경로 게시 후 교차 확인 — 같은 반 **다른** 원아의 알림장에 이 보고서 링크가 보이면 새어 나간 것.
+        //    보이면 비상 정지(이 프로세스에서 반별 게시 전부 멈춤) + 이 건은 failed + 사유. 조회 실패는 경고만.
+        const cc = await crossCheckOthers(adminPage, {
+          centerId,
+          boardId: classTarget.boardId,
+          others: classTarget.others,
+          contents: shareUrlVariants(`${shareBase}/r/${r.share_token}`, process.env.CLASSNOTE_SHARE_BASE, process.env.CLASSNOTE_LEGACY_SHARE_BASES),
+        }).catch(() => ({ ok: false, leakedTo: [], unknown: true }));
+        if (!cc.ok && cc.leakedTo.length) {
+          classRouteHalted = true;
+          await sql`update lesson_reports set classnote_status='failed', classnote_sent_at=now(),
+            classnote_error=${`🔴 반별 발송 교차 확인 이상 — 같은 반 다른 원아(${cc.leakedTo.length}명)의 알림장에서 이 보고서가 보입니다. 반별 발송을 멈췄습니다. ClassNote에서 확인하세요`}
+            where id=${r.id}`;
+          summary.failed++;
+          log(`    → 🔴 교차 확인 이상(다른 원아 ${cc.leakedTo.join(",")}) — 반별 비상 정지`);
+          continue;
+        }
+        if (!cc.ok) log(`    ⚠️ 교차 확인 조회 실패 — 게시는 성공으로 둔다(확인 못 함)`);
+      }
       if (result.ok) {
         await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
         summary.success++;
-        log(`    → success (내부 API${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""})`);
+        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""})`);
       } else if (result.partial) {
         // 🔴 이중 계정(부모·본인) 학생에서 **일부 원아는 이미 받았다**. 재시도하면 그 집에 같은 글이 또 간다
         // (ClassNote는 삭제·수정 불가) → 자동 재시도 없이 failed 고정, 사람이 알림장에서 확인 후 판단한다.
