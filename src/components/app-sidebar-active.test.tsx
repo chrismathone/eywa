@@ -8,8 +8,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
 vi.mock("@/features/notifications/components/notification-bell", () => ({ NotificationBell: () => null }));
-vi.mock("@/components/view-mode-toggle", () => ({ TeacherViewToggle: () => null }));
-vi.mock("@/components/other-teacher-view", () => ({ OtherTeacherViewPicker: () => null }));
+vi.mock("@/components/other-teacher-view", () => ({ TeacherViewSwitcher: () => null }));
 vi.mock("@/features/nav/server/visit-actions", () => ({ recordMenuVisit: vi.fn(async () => {}) }));
 vi.mock("@/components/workspace/use-is-desktop", () => ({ useIsDesktop: () => true }));
 vi.mock("@/components/workspace/use-sidebar-resize", () => ({
