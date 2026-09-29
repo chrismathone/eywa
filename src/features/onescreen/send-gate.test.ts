@@ -33,6 +33,17 @@ describe("evaluateSendGate", () => {
     expect(g.reasons).toEqual(["sent"]);
   });
 
+  // 원장 2026-09-29 — 누르면 워커 결과가 나올 때까지 다시 못 누른다(9/29 박세욱 재클릭 중복 게시).
+  it("🔴 발송 대기·게시 중이면 '발송 중'으로 잠근다 — 다른 입력 부족 사유를 덧붙이지 않는다", () => {
+    const g = gate({ sendInFlight: true, hasDraft: false });
+    expect(g.canSend).toBe(false);
+    expect(g.reasons).toEqual(["in_flight"]);
+    expect(g.label).toBe("발송 중 — 잠시 기다려 주세요");
+    expect(gate({ sendInFlight: true, lang: "en" }).label).toBe("Sending — please wait");
+    // 대기가 끝나면(실패 등) 다시 풀린다 — 이 게이트는 상태 하나만 본다.
+    expect(gate({ sendInFlight: false }).canSend).toBe(true);
+  });
+
   it("진도가 없으면 '진도 입력 필요'", () => {
     const g = gate({ hasProgress: false });
     expect(g.canSend).toBe(false);

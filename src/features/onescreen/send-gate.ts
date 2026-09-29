@@ -34,6 +34,8 @@ export type SendBlockReason =
   | "progress"
   | "ment"
   | "recall_pending"
+  /** 발송 대기·게시 중(queued/processing) — 워커 결과가 나올 때까지 다시 못 누른다(원장 2026-09-29). */
+  | "in_flight"
   | "readonly"
   /** '수업보고서 미발송' 반(0174a) — 발송이 없는 반. 출결만 찍는다(2026-08-19). */
   | "report_optout";
@@ -84,6 +86,13 @@ export function evaluateSendGate(args: {
    */
   recallPending?: boolean;
   /**
+   * 발송을 눌러 **대기·게시 중**(queued/processing)이다 — 워커가 성공·실패를 적을 때까지 버튼을 잠근다.
+   * 원장 2026-09-29 *"발송한번 누르면 실제 워커 발송체크 후에 … 한번 누르면 버튼 동시에 못누르게"* — 9/29 박세욱:
+   * 첨부를 넣고 0.3초 만에 다시 눌러 같은 글이 두 번 나갔다. 서버도 같은 경합을 막는다(조건부 적재) — 여기는 화면 게이트.
+   * 실패하면 상태가 failed로 바뀌어 다시 풀린다. 저장 버튼은 그대로라 대기 중에도 내용은 고칠 수 있다.
+   */
+  sendInFlight?: boolean;
+  /**
    * '다른 강사 뷰'(열람 전용, 2026-08-19) — 화면 전체가 발송 불가. 게이트 **밖**에서 canSend를 AND로
    * 꺾으면 "비활성인데 사유 라벨 없음"(이 모듈이 죽이려는 2026-07-30 문제)이 재발한다 — 사유도 여기서.
    * 옵셔널인 이유: 원스크린 열람 화면 전용 상태라 다른 소비처는 몰라도 된다(빼먹어도 기존 판정 그대로).
@@ -111,6 +120,14 @@ export function evaluateSendGate(args: {
       reasons: ["recall_pending"],
       label: t("os.gate.recall"),
       hint: t("os.gate.recallHint"),
+    };
+  }
+  if (args.sendInFlight) {
+    return {
+      canSend: false,
+      reasons: ["in_flight"],
+      label: t("os.gate.inFlight"),
+      hint: t("os.gate.inFlightHint"),
     };
   }
   // 🔴 이미 발송된 건이 있으면 그 사실이 먼저다 — "미발송 반"이라고만 하면 이미 나간 글을 못 본다.

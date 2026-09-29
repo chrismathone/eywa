@@ -263,6 +263,8 @@ export function ReportCard({
     lang, // 🔴 판정이 아니라 **글자**만 갈린다(canSend·reasons 불변, send-gate.ts)
     readonlyView, // 열람 전용 — 사유 라벨까지 게이트가 만든다(표뷰와 동일)
     recallPending: isRecallInFlight(liveStatus ?? null),
+    // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(표뷰와 같은 판정, 원장 2026-09-29).
+    sendInFlight: liveStatus === "queued" || liveStatus === "processing",
     alreadySent,
     reportOptout: optoutRow, // 미발송 반(0174a) — 표뷰와 같은 단일 소스
     isAbsent,

@@ -2752,6 +2752,11 @@ export const SHEET_DICT = {
     en: "You cannot send from another teacher's view (read-only) — send from the admin view or your own teacher view",
   },
   "os.gate.recall": { ko: "회수 처리 중", en: "Recall in progress" },
+  "os.gate.inFlight": { ko: "발송 중 — 잠시 기다려 주세요", en: "Sending — please wait" },
+  "os.gate.inFlightHint": {
+    ko: "ClassNote로 보내는 중입니다 — 끝나면 '발송됨'으로 바뀌고, 실패하면 다시 누를 수 있습니다(내용 저장은 그대로 됩니다)",
+    en: "Sending to ClassNote — it will show as sent when done, and you can press again if it fails (saving still works)",
+  },
   "os.gate.recallHint": {
     ko: "학부모 게시글을 지우는 중입니다 — 끝나면 수정해서 다시 보낼 수 있습니다",
     en: "The parent post is being deleted — once that finishes you can edit and send again",

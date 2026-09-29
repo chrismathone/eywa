@@ -68,6 +68,12 @@ import { resolveSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+
+/**
+ * 발송 대기에 올려도 되는 행 = 워커가 **집지도(processing) 보내지도(success) 않은** 행. 맨 위의 확인과 쓰기 사이에
+ * 워커가 끝낼 수 있어 쓰기 자체에 거는 조건(compare-and-set) — 9/29 박세욱 재클릭 중복 게시(ClassNote는 지울 수 없다).
+ */
+const CLASSNOTE_REQUEUE_OK = "classnote_status.is.null,classnote_status.not.in.(processing,success)";
 
 export type SaveLessonReportInput = {
   studentId: string;
@@ -634,7 +640,9 @@ export async function saveAndQueueClassnote(
         classnote_queued_at: null,
         classnote_error: "동명이인 감지 — 자동 발송 차단",
       })
-      .eq("id", saved.id);
+      .eq("id", saved.id)
+      // 그새 워커가 집었거나 보낸 행은 덮지 않는다(아래 적재와 같은 조건부 — 보낸 글을 '차단됨'으로 거짓 표시하지 않게).
+      .or(CLASSNOTE_REQUEUE_OK);
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict", ...warn };
   }
 
@@ -706,7 +714,10 @@ export async function saveAndQueueClassnote(
 
   // too_old(전 달 1일 이전) 아니면 queued로 재적재(재발송). 오늘 저장은 항상 통과하나 규약상 명시.
   const allowed = isClassnoteAllowed(reportDate);
-  const { error } = await supabase
+  // 🔴 **조건부 적재(compare-and-set)** — 맨 위의 processing·success 확인과 이 줄 사이에 워커가 첫 발송을 끝낼 수 있다.
+  //    9/29 박세욱: 발송 → 첨부 추가 → 0.3초 뒤 다시 발송 — 그 틈에 워커가 첫 글을 올렸는데 이 update가 success를 덮고
+  //    queued로 되돌려 **같은 글이 한 번 더** 올라갔다(ClassNote 글은 지울 수 없다). 그새 워커가 집었거나 보냈으면 0행.
+  const { data: queuedRows, error } = await supabase
     .from("lesson_reports")
     .update({
       classnote_status: allowed ? "queued" : "too_old",
@@ -714,8 +725,16 @@ export async function saveAndQueueClassnote(
       classnote_retry_count: 0,
       classnote_error: null,
     })
-    .eq("id", saved.id);
+    .eq("id", saved.id)
+    .or(CLASSNOTE_REQUEUE_OK)
+    .select("id");
   if (error) return { ok: false, error: humanizeDbError(error.message, "발송 요청") };
+  if (!queuedRows?.length) {
+    // 그새 워커가 집었거나(processing) 이미 보냈다(success) — 다시 올리지 않는다. 화면은 그 상태를 그대로 보여 준다.
+    const { data: now } = await supabase.from("lesson_reports").select("classnote_status").eq("id", saved.id).maybeSingle();
+    const st = (now?.classnote_status as string | null) ?? null;
+    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: st === "processing" ? "processing" : "already_sent", ...warn };
+  }
   /**
    * 🔴 **학부모에게 나가는 순간**이라 반드시 남긴다(ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없다).
    * ⚠️ 위 조기 반환들(dry_run·subject_off·report_optout·absent·no_attendance·already_sent·processing·

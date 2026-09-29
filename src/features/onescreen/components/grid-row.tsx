@@ -269,6 +269,8 @@ export function GridBodyRow({
   const sendGate = evaluateSendGate({
     lang,
     readonlyView: gen.readonlyView, // 열람 전용 — 사유 라벨("열람 전용")까지 게이트가 만든다
+    // 발송 대기·게시 중 — 워커 결과 전까지 다시 못 누른다(카드뷰와 같은 판정, 원장 2026-09-29).
+    sendInFlight: liveStatus === "queued" || liveStatus === "processing",
     alreadySent,
     reportOptout: isReportOptoutRow(subject), // 미발송 반(0174a) — 카드뷰와 같은 단일 소스
     isAbsent: subject.attendanceRaw === "absent",
