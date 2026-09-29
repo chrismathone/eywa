@@ -35,9 +35,14 @@ export const STAFF_SORT_OPTIONS: { value: StaffSortKey; label: string }[] = [
   { value: "emp", label: "근무형태순" },
   { value: "hire", label: "입사일순" },
 ];
-/** 한 쪽에 보일 직원 수(원장 2026-07-28: 기본 10, 창에서 10/30/50). */
-export const STAFF_PER_OPTIONS = [10, 30, 50] as const;
-export const STAFF_PER_DEFAULT = 10;
+/**
+ * 한 쪽의 직원 수는 **창이 정한다**(원장 2026-09-29 *"직원관리 페이지네이션도 창 크기 따라 적절하게"*) — 원생상담과 같은
+ * `AutoPageSize`(`?size=N` + 기기 쿠키). 옛 '표시 10/30/50명' 선택(2026-07-28)과 계정 저장값 `per`는 폐지했다.
+ * 이 값은 측정 전 첫 렌더의 기본값일 뿐이다.
+ */
+export const STAFF_PAGE_SIZE_DEFAULT = 10;
+/** 기기 쿠키 키(`pageSizeCookieName`). */
+export const STAFF_PAGE_SIZE_KEY = "staff";
 
 /** 표 글자 크기 허용 범위(%) — 기본 100 = 16px(v5 본문). 90은 14.4px로 xs 바닥(14) 위, 150은 열이 깨지기 직전. */
 export const TABLE_SCALE_MIN = 90;
@@ -51,7 +56,6 @@ export type StaffListPrefs = {
   /** "all" 또는 근무형태(정규직/아르바이트/프리랜서). */
   emp: string;
   sort: StaffSortKey;
-  per: number;
   /** 볼 열 순서(빈 배열 = 시트 기본 순서) · 숨긴 열 — columns.ts 주석(순서와 숨김을 따로 두는 이유). */
   columnOrder: string[];
   columnHidden: string[];
@@ -68,7 +72,6 @@ export const DEFAULT_STAFF_LIST_PREFS: StaffListPrefs = {
   subject: "all",
   emp: "all",
   sort: "role",
-  per: STAFF_PER_DEFAULT,
   columnOrder: [],
   columnHidden: [],
   tableScale: 100,
@@ -77,17 +80,17 @@ export const DEFAULT_STAFF_LIST_PREFS: StaffListPrefs = {
 
 /**
  * 저장 주체가 둘이라 조각도 둘이다(적대적 리뷰 2026-09-04) —
- * · **필터 5축**(`StaffFilterPrefs`) = URL이 진실, 서버 렌더 뒤 `RememberPrefs`가 차이 나면 저장.
+ * · **필터 4축**(`StaffFilterPrefs`) = URL이 진실, 서버 렌더 뒤 `RememberPrefs`가 차이 나면 저장.
  * · **표 보기 3키**(`StaffViewPrefs`) = 클릭 자리(−/+·열 고르기)가 진실, `StaffViewPrefsProvider`가 즉시 반영 + 저장.
  * 🔴 RememberPrefs에 `StaffListPrefs` 전체를 넘기지 말 것 — 서버 렌더 시점의 열·글자 사본이 방금 클릭한 값을 되돌려 쓴다
  *    (뒤로 가기 캐시·클릭 직후 필터 전환에서 실제로 난다). 두 조각은 키가 겹치지 않아 서버의 필드 단위 머지가 보호막이 된다.
  */
-export type StaffFilterPrefs = Pick<StaffListPrefs, "role" | "subject" | "emp" | "sort" | "per">;
+export type StaffFilterPrefs = Pick<StaffListPrefs, "role" | "subject" | "emp" | "sort">;
 export type StaffViewPrefs = Pick<StaffListPrefs, "columnOrder" | "columnHidden" | "tableScale" | "rev">;
 
 /** 필터 조각 — 키 순서를 여기서 고정한다(RememberPrefs가 JSON 문자열로 같음을 판정한다). */
 export function pickStaffFilterPrefs(p: StaffListPrefs): StaffFilterPrefs {
-  return { role: p.role, subject: p.subject, emp: p.emp, sort: p.sort, per: p.per };
+  return { role: p.role, subject: p.subject, emp: p.emp, sort: p.sort };
 }
 export function pickStaffViewPrefs(p: StaffListPrefs): StaffViewPrefs {
   return { columnOrder: p.columnOrder, columnHidden: p.columnHidden, tableScale: p.tableScale, rev: p.rev };
@@ -133,10 +136,6 @@ export function parseStaffSort(raw: unknown): StaffSortKey {
 export function parseStaffEmp(raw: unknown): string {
   return typeof raw === "string" && (EMPLOYMENT_TYPES as readonly string[]).includes(raw) ? raw : "all";
 }
-export function parseStaffPer(raw: unknown): number {
-  const n = Number(raw);
-  return (STAFF_PER_OPTIONS as readonly number[]).includes(n) ? n : STAFF_PER_DEFAULT;
-}
 /** 글자 크기 — 범위 안으로, 10 단위로 접는다. */
 export function clampTableScale(raw: unknown): number {
   const n = Number(raw);
@@ -159,7 +158,6 @@ export function parseStaffListPrefs(raw: unknown): StaffListPrefs {
     subject: str(o.subject, "all"),
     emp: parseStaffEmp(o.emp),
     sort: parseStaffSort(o.sort),
-    per: parseStaffPer(o.per),
     // 모르는 키(지운 열)만 버린다 — 빠진 새 열은 그릴 때 normalizeOrder가 뒤에 붙인다(columns.ts 주석).
     columnOrder: strList(o.columnOrder).filter((k) => known.has(k)),
     columnHidden: strList(o.columnHidden).filter((k) => known.has(k)),

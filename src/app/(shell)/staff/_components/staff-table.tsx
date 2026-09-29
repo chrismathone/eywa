@@ -148,7 +148,8 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
           ))}
         </tr>
       </thead>
-      <tbody>
+      {/* AutoPageSize가 이 몸통의 위치·첫 행 높이로 한 쪽 행 수를 잰다. */}
+      <tbody data-autopage-list>
         {rows.map((s) => (
           // 행 전체 클릭 → 직원 상세(기본정보에 이력서 내용 포함) — 원장 지시 2026-07-28.
           <StaffRowLink

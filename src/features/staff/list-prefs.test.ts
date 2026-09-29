@@ -7,7 +7,6 @@ import {
   DEFAULT_STAFF_LIST_PREFS,
   mergeStaffView,
   parseStaffListPrefs,
-  parseStaffPer,
   parseStaffRole,
   parseStaffSort,
   parseStaffStatus,
@@ -40,20 +39,19 @@ describe("직원목록 보기 설정(users.ui_prefs.staff)", () => {
       subject: "math",
       emp: "정규직",
       sort: "hire",
-      per: 30,
       columnHidden: ["email", "nope"],
       tableScale: 120,
       rev: 7,
     });
-    expect(p).toMatchObject({ role: "teacher", subject: "math", emp: "정규직", sort: "hire", per: 30, columnHidden: ["email"], tableScale: 120, rev: 7 });
+    expect(p).toMatchObject({ role: "teacher", subject: "math", emp: "정규직", sort: "hire", columnHidden: ["email"], tableScale: 120, rev: 7 });
     expect("status" in p).toBe(false);
   });
 
-  it("두 조각(필터 5축 · 표 보기 3키+rev)은 키가 겹치지 않고 합치면 전체다", () => {
-    const p = parseStaffListPrefs({ role: "admin", per: 50, tableScale: 130, columnHidden: ["phone"], rev: 3 });
+  it("두 조각(필터 4축 · 표 보기 3키+rev)은 키가 겹치지 않고 합치면 전체다", () => {
+    const p = parseStaffListPrefs({ role: "admin", tableScale: 130, columnHidden: ["phone"], rev: 3 });
     const f = pickStaffFilterPrefs(p);
     const v = pickStaffViewPrefs(p);
-    expect(Object.keys(f)).toEqual(["role", "subject", "emp", "sort", "per"]);
+    expect(Object.keys(f)).toEqual(["role", "subject", "emp", "sort"]);
     expect(Object.keys(v)).toEqual(["columnOrder", "columnHidden", "tableScale", "rev"]);
     expect({ ...f, ...v }).toEqual(p);
     // RememberPrefs는 JSON 문자열로 같음을 판정한다 — 같은 값이면 키 순서까지 같아야 한다.
@@ -65,7 +63,7 @@ describe("직원목록 보기 설정(users.ui_prefs.staff)", () => {
     expect(STAFF_ROLE_OPTIONS.some((o) => o.value === "counselor")).toBe(true);
   });
 
-  it("역할·상태·정렬·표시 수는 허용 목록 밖이면 기본값(상태 기본 = 재직)", () => {
+  it("역할·상태·정렬은 허용 목록 밖이면 기본값(상태 기본 = 재직)", () => {
     expect(parseStaffRole("admin")).toBe("admin");
     expect(parseStaffRole("owner")).toBe("all");
     expect(parseStaffStatus(undefined)).toBe("active");
@@ -73,8 +71,6 @@ describe("직원목록 보기 설정(users.ui_prefs.staff)", () => {
     expect(parseStaffStatus("fired")).toBe("active");
     expect(parseStaffSort("dept")).toBe("dept");
     expect(parseStaffSort("x")).toBe("role");
-    expect(parseStaffPer("50")).toBe(50);
-    expect(parseStaffPer("7")).toBe(10);
   });
 
   it("표 글자 크기는 90~150, 10 단위 — 90%는 14.4px로 v5 바닥(14) 위", () => {
@@ -113,11 +109,11 @@ describe("직원목록 배선", () => {
     expect(page).toContain("<FilterSelect");
     expect(page).not.toContain("TOOLBAR_SEG_ITEM");
     expect(page).not.toContain("buildStaffHref");
-    expect(page.match(/clearParams=\{INVITE_PARAMS\}/g)?.length).toBe(6);
+    expect(page.match(/clearParams=\{INVITE_PARAMS\}/g)?.length).toBe(5); // 역할·상태·과목·계약구분·정렬(표시 수는 창이 정한다)
     expect(page).toContain("resetParams={INVITE_PARAMS}");
   });
 
-  it("필터 5축은 RememberPrefs(단일 큐)로, 표 보기 3키는 Provider 서버 시드 — 전체 객체를 RememberPrefs에 싣지 않는다", () => {
+  it("필터 4축은 RememberPrefs(단일 큐)로, 표 보기 3키는 Provider 서버 시드 — 전체 객체를 RememberPrefs에 싣지 않는다", () => {
     expect(page).toContain("loadStaffListPrefs()");
     expect(page).toContain("<StaffRememberPrefs current={current} saved={savedFilters}");
     expect(page).toContain("pickStaffFilterPrefs(");
@@ -144,7 +140,8 @@ describe("직원목록 배선", () => {
 
   it("URL 축은 원값을 잇고(쪽 넘김) 선택지 밖 값은 저장하지 않는다 · 독립 조회는 Promise.all 하나(B4)", () => {
     expect(page).toContain('params.set("sort", sp.sort)');
-    expect(page).toContain('params.set("per", sp.per)');
+    expect(page).toContain('params.set("size", String(size))');
+    expect(page).toContain("<AutoPageSize");
     expect(page).toContain("subject === sp.subject ? subjectRaw : prefs.subject");
     expect(page.match(/await Promise\.all\(/g)?.length).toBe(1);
     expect(page).not.toContain("getCurrentUser");
