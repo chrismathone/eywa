@@ -53,11 +53,12 @@ export async function fetchAdmissions(page, centerId) {
     return (Array.isArray(j) ? j : (j.results ?? [])).map((x) => ({
       childId: x.child_id,
       phone: x.basic_info?.carer1_phone ?? null,
+      birth: x.basic_info?.child_date_birth ?? null, // 관리자 화면의 생년월일(학부모 프로필 date_birth와 따로 산다)
       boardNames: (x.enrollments ?? []).filter((e) => !e.date_left).map((e) => e.class_name ?? ""),
     }));
   }, centerId);
   if (!adm.length) throw new Error("운영관리 명부가 비었다 — 전화 대조 없이는 계획하지 않는다");
-  return new Map(adm.map((a) => [a.childId, { phone: a.phone, boardNames: a.boardNames }]));
+  return new Map(adm.map((a) => [a.childId, { phone: a.phone, birth: a.birth, boardNames: a.boardNames }]));
 }
 
 /** 1인 보드 id — 학생 유효이름으로(공백 무시 정확 일치). 0개·2개 이상이면 null. */
