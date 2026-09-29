@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireSuperAdmin } from "@/lib/auth/super-admin";
 
 export type SuperAdminAction =
   | "create_tenant"
@@ -58,6 +59,7 @@ export async function getAuditLogs(filter?: {
   action?: string;
   limit?: number;
 }): Promise<AuditLogRow[]> {
+  await requireSuperAdmin(); // 레이아웃 게이트에만 기대지 않는다(보안 감사 2026-09-29)
   const admin = createAdminClient();
   let q = admin
     .from("super_admin_audit_logs")
@@ -87,6 +89,7 @@ export async function getAuditLogsPage(
   page = 1,
   pageSize = 50,
 ): Promise<{ rows: AuditLogRow[]; total: number }> {
+  await requireSuperAdmin(); // 레이아웃 게이트에만 기대지 않는다(보안 감사 2026-09-29)
   const admin = createAdminClient();
   const from = (page - 1) * pageSize;
   let q = admin

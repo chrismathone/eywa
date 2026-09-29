@@ -8,7 +8,11 @@ import {
   ROLE_HIERARCHY,
 } from "@/lib/auth/role-hierarchy";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import {
+  isCurrentUserSuperAdmin,
+  isProtectedSuperAdminTarget,
+  SUPER_ADMIN_TARGET_DENIED_MSG,
+} from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
@@ -274,6 +278,15 @@ export async function updateStaff(
   // 이름 칸도 근무 설정엔 없다(이력서 성명이 단일 소스) — 없는 칸을 '필수 누락'으로 막으면 저장이 통째로 거부된다.
   if (!formData.has("displayName")) delete fieldErrors.displayName;
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
+
+  // 로그인 이메일을 바꾸는 건 계정 탈취 경로다 — account-actions(loadTarget)와 같은 보호선을 건다(보안 감사 2026-09-29):
+  // 자기보다 상위 계정·super_admin 계정의 이메일은 못 바꾼다(바꾼 뒤 공통 초기 비번으로 들어가는 경로).
+  if (emailChanged) {
+    if (!canManageStaffMember(actor.systemRole, target.system_role as SystemRole)) {
+      return { error: "본인보다 상위 권한 직원의 로그인 이메일은 변경할 수 없습니다" };
+    }
+    if (await isProtectedSuperAdminTarget(actor.id, id)) return { error: SUPER_ADMIN_TARGET_DENIED_MSG };
+  }
 
   const { data: authData } = emailChanged
     ? await admin.auth.admin.getUserById(id)
@@ -605,6 +618,8 @@ export async function deactivateStaff(
   if (!canManageStaffMember(actor.systemRole, target.role)) {
     return { error: "이 직원의 재직 상태를 바꿀 권한이 없습니다" };
   }
+  // super_admin 계정은 같은 지점 원장이라도 퇴사시키지 못한다(총괄이 그 지점에서 쫓겨난다 — 보안 감사 2026-09-29).
+  if (await isProtectedSuperAdminTarget(actor.id, id)) return { error: SUPER_ADMIN_TARGET_DENIED_MSG };
 
   const supabase = await createClient();
   // `.select` — RLS가 행을 거부하면 error 없이 0행이다. 그때 "변경됨"+감사로그를 남기면 거짓 기록이 된다.
@@ -681,6 +696,8 @@ export async function handoverAndDeactivate(
   if (!canManageStaffMember(actor.systemRole, target.role)) {
     return { error: "이 직원의 재직 상태를 바꿀 권한이 없습니다" };
   }
+  // super_admin 계정은 같은 지점 원장이라도 퇴사시키지 못한다(총괄이 그 지점에서 쫓겨난다 — 보안 감사 2026-09-29).
+  if (await isProtectedSuperAdminTarget(actor.id, id)) return { error: SUPER_ADMIN_TARGET_DENIED_MSG };
 
   const supabase = await createClient();
   const skip = String(formData.get("mode") ?? "") === "skip";

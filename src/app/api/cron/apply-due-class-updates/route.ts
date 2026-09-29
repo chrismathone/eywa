@@ -1,3 +1,4 @@
+import { bearerMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -40,7 +41,7 @@ const MAX_SNAPSHOTS = 50; // 하루 상한 — 무한 스캔 금지(B2). 예약�
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization") ?? "";
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!secret || !bearerMatches(auth, secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

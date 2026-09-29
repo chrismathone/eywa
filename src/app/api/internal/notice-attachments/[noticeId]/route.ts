@@ -1,3 +1,4 @@
+import { secretMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveTenantReadUrls } from "@/lib/storage/media-storage";
@@ -86,7 +87,7 @@ const asList = (v: unknown): NoticeAttachment[] =>
 
 export async function GET(request: Request, { params }: { params: Promise<{ noticeId: string }> }) {
   const secret = process.env.CLASSNOTE_INTERNAL_SECRET;
-  if (!secret || request.headers.get("x-eywa-internal") !== secret) {
+  if (!secretMatches(request.headers.get("x-eywa-internal"), secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const { noticeId } = await params;

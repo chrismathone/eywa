@@ -13,6 +13,7 @@ import { EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { logAction } from "@/features/audit/server/log";
+import { isProtectedSuperAdminTarget, SUPER_ADMIN_TARGET_DENIED_MSG } from "@/lib/auth/super-admin";
 
 export type AccountActionState =
   | { error?: string; ok?: boolean; tempPassword?: string }
@@ -38,6 +39,8 @@ function isMissingAuthUser(err: { status?: number; message: string }): boolean {
 async function loadTarget(
   id: string,
   actor: { id: string; tenantId: string; systemRole: SystemRole },
+  /** 로그인 자격을 바꾸는 작업(비밀번호·이메일·삭제)인가 — 그렇다면 super_admin 대상은 super_admin만. 이름·근무 설정은 false. */
+  opts: { credential: boolean } = { credential: true },
 ): Promise<TargetInfo | { error: string }> {
   if (!(await canWriteTenant(actor.systemRole, "staff"))) {
     return { error: "직원 계정을 관리할 권한이 없습니다" };
@@ -52,6 +55,8 @@ async function loadTarget(
   if (data.tenant_id !== actor.tenantId) return { error: "다른 지점의 계정은 변경할 수 없습니다" };
   // 과목 범위(원장 2026-09-23) — 목록에서 뺀 직원을 직접 POST로 고치지 못하게 여기서도 막는다(#77).
   if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
+  // super_admin 계정은 같은 학원 원장이라도 못 만진다(비밀번호 재설정 = 전 지점 총괄 탈취, 보안 감사 2026-09-29).
+  if (opts.credential && (await isProtectedSuperAdminTarget(actor.id, id))) return { error: SUPER_ADMIN_TARGET_DENIED_MSG };
   return {
     role: data.system_role as SystemRole,
     email: data.email as string,
@@ -236,7 +241,7 @@ export async function applyStaffNameChange(
   if (!id) return { error: "직원 ID가 누락되었습니다" };
   if (!name) return { error: "이름은 비울 수 없습니다" };
 
-  const target = await loadTarget(id, actor);
+  const target = await loadTarget(id, actor, { credential: false });
   if ("error" in target) return target;
   // 개명은 그 사람의 앱 정체성을 바꾼다 — 이메일·비밀번호와 같은 보호선(자신 권한 이하)으로 잡는다.
   if (!canManageStaffMember(actor.systemRole, target.role)) {
@@ -400,7 +405,7 @@ export async function updateWorkSchedule(
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "직원 ID가 누락되었습니다" };
 
-  const target = await loadTarget(id, actor);
+  const target = await loadTarget(id, actor, { credential: false });
   if ("error" in target) return target;
   // 비번/이메일/삭제와 동일하게 actor가 대상보다 엄격히 강해야 함(매니저가 마스터 일정 못 건드림).
   if (!canManageStaffMember(actor.systemRole, target.role)) {

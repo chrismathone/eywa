@@ -1,3 +1,4 @@
+import { bearerMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError, reportWarning } from "@/lib/observability/report-error";
@@ -26,7 +27,7 @@ const BATCH_PER_TABLE = 100; // 하루 100건/테이블 상한 — 초기 백로
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization") ?? "";
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!secret || !bearerMatches(auth, secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const admin = createAdminClient();

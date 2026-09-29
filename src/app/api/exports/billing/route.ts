@@ -1,3 +1,4 @@
+import { logExportDownload } from "@/features/exports/server/log-export";
 import { NextResponse } from "next/server";
 import { requireAccess } from "@/lib/auth/require-access";
 import { attachmentFilename } from "@/lib/http/content-disposition";
@@ -40,6 +41,7 @@ export async function GET(request: Request) {
   // '기한 경과만'은 화면처럼 **미납 라인만**(청구서 안의 완납 라인은 빼고) 내보낸다.
   const wb = await buildInvoicesWorkbook(invoices, periodLabel, { overdueOnly });
   const buf = await wb.xlsx.writeBuffer();
+  await logExportDownload(request, "수납");
   return new NextResponse(buf, {
     headers: {
       "Content-Type":
