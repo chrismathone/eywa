@@ -32,6 +32,8 @@ import { cnLabelFor, type CnMatchMap } from "../classnote-match";
 import { CnBadge } from "./cn-badge";
 import { classnoteBadge, readAtLabel, type SubjectReport } from "./report-card";
 import { GridAttachButton, useRowFileDrop } from "./grid-attach";
+import { useClassnoteOn } from "./classnote-on-context";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import {
   AttendancePills,
   SessionUnitsField,
@@ -239,6 +241,8 @@ export function GridBodyRow({
   const { student, subject, subjectIndex, key } = row;
   const lang = useSheetLang();
   const t = useSheetT();
+  const classnoteOn = useClassnoteOn();
+  const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30)
   const tf = useSheetTf();
   // 이 행에 적용되는 평가값(태도·점수·과제 수행률) — 행 값이 없으면 학생 값 폴백(row-fields.ts).
   const rowEval = resolveRowFields(student, subject);
@@ -251,7 +255,7 @@ export function GridBodyRow({
   const showProgressBadge = isMathRow && progressAnomalyBadge(student.progressSignal);
   // 학부모 읽음(G3)도 같은 게이트 — RPC가 학생의 **모든** 보고서를 세는데 발송분이 아직 전부 수학이라
   // (subject='english' 0건, 2026-07-29) 영어 행에 달면 "이 영어 보고서가 미확인"으로 읽힌다(거짓).
-  const unreadBadge = isMathRow ? parentUnreadBadge(student.parentRead) : null;
+  const unreadBadge = classnoteOn && isMathRow ? parentUnreadBadge(student.parentRead) : null;
   const att = student.attendance;
   const genRowBusy = gen.rowBusy;
   // 모드 B 편집용 분리값 — 라운드트립 불변식(split(join)===원본)은 comment-paragraphs가 보장.
@@ -782,6 +786,7 @@ export function GridBodyRow({
       <td className={td}>
         <div className="flex flex-col items-stretch gap-1">
           <div className="flex gap-1">
+            {aiOn ? (
             <button
               type="button"
               onClick={() => actions.onAutoWrite(student, subject.name)}
@@ -811,6 +816,7 @@ export function GridBodyRow({
                 t("os.row.gen")
               )}
             </button>
+            ) : null}
             <GridAttachButton
               // 발송 완료건은 첨부도 잠근다 — 첨부 변경은 classnote 상태를 리셋해 **재발송을 여는 뒷문**이었다
               // (수정 금지 규칙을 우회하는 경로가 되어버린다).
@@ -838,6 +844,9 @@ export function GridBodyRow({
               {t("os.row.card")}
             </button>
           </div>
+          {/* ClassNote 기능이 꺼진 학원엔 발송 버튼·발송 사유·상태·읽음 표시가 없다(2026-09-30). */}
+          {classnoteOn ? (
+          <>
           <Button
             size="sm"
             variant="outline"
@@ -867,6 +876,8 @@ export function GridBodyRow({
               {sendGate.label}
             </span>
           ) : null}
+          </>
+          ) : null}
           {/* 멘트와 기록이 어긋남 — 발송을 막지는 않는다(강사 판단). 무엇을 볼지만 짚어 준다. */}
           {mentWarnings.map((w) => (
             <span
@@ -878,11 +889,11 @@ export function GridBodyRow({
             </span>
           ))}
           {/* 발송 상태 배지(큐·실패 등) — 발송 완료 라벨은 위 게이트가 이미 말했으므로 중복 표시하지 않는다. */}
-          {!alreadySent && badge ? (
+          {classnoteOn && !alreadySent && badge ? (
             <span className={`text-center text-xs font-bold ${badge.cls}`}>{badge.label}</span>
           ) : null}
           {/* 학부모 읽음(0122a) — 양성 배지만(카드와 동일 규약, types.ts). 표는 세로 여유가 있어 풀 라벨. */}
-          {subject.classnoteReadAt ? (
+          {classnoteOn && subject.classnoteReadAt ? (
             <span
               className="text-primary text-center text-xs font-bold"
               title={tf("os.row.readTitle", { when: readAtLabel(subject.classnoteReadAt, lang) })}

@@ -1,4 +1,5 @@
 import "server-only";
+import { isModuleEnabled } from "@/lib/modules";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -383,7 +384,7 @@ export async function collectPrepFacts(
       academyName: settings.profile.name || "학원",
       dueDay: settings.billing.dueDay ?? null,
       latePolicy: settings.billing.latePolicy?.trim() || null,
-      shuttleEnabled: !!settings.operations.shuttle?.enabled,
+      shuttleEnabled: !!settings.operations.shuttle?.enabled && isModuleEnabled(settings.modules.disabled, "shuttle"),
       shuttleFee: settings.operations.shuttle?.fee?.trim() || null,
       shuttleRoutes: (settings.operations.shuttle?.routes ?? []).map((r) => r.label).filter(Boolean),
     },

@@ -1213,6 +1213,11 @@ export const SHEET_DICT = {
     ko: "학부모에게 나가는 수업보고서(클래스노트 게시·공유 링크·인쇄)에 표시할 이름입니다. 비워 두면 실명(",
     en: "The name shown on lesson reports that go to parents (ClassNote posts, share links, print). Leave it empty to send under your real name (",
   },
+  // ClassNote 기능이 꺼진 학원용(2026-09-30) — 같은 문장에서 ClassNote를 뺀다.
+  "me.reportName.desc.aLink": {
+    ko: "학부모에게 나가는 수업보고서(공유 링크·인쇄)에 표시할 이름입니다. 비워 두면 실명(",
+    en: "The name shown on lesson reports that go to parents (share links, print). Leave it empty to send under your real name (",
+  },
   "me.reportName.desc.b": { ko: ")으로 나갑니다.", en: ")." },
   "me.reportName.label": { ko: "발송에 표시할 이름", en: "Name to show on reports" },
   "me.reportName.ph": { ko: "예: 영어 이름", en: "e.g. your English name" },
@@ -1787,6 +1792,11 @@ export const SHEET_DICT = {
   "att.units.eie": {
     ko: "브릿지(40분 교시 기준) 및 EiE: 40분 수업 = 1, 60분 수업 = 1.5",
     en: "Bridge (40-minute periods) & EiE: 40 minutes = 1, 60 minutes = 1.5",
+  },
+  // EiE 구분(모듈)이 꺼진 학원 — 같은 규칙에서 EiE 이름을 뺀다(2026-09-30).
+  "att.units.bridge": {
+    ko: "브릿지(40분 교시 기준): 40분 수업 = 1, 60분 수업 = 1.5",
+    en: "Bridge (40-minute periods): 40 minutes = 1, 60 minutes = 1.5",
   },
   "att.units.injaewon": {
     ko: "인재원 수업: 1시간 수업 = 1, 2시간 수업 = 2, 3시간 수업 = 3 (50분 교시도 1시간)",
@@ -3603,6 +3613,13 @@ export const SHEET_DICT = {
   "os.c.printTitle": { ko: "수업 보고서", en: "Lesson report" },
   "os.c.savedPreview": { ko: "{subject} 보고서 저장 — 미리보기를 열었습니다", en: "{subject} report saved — the preview is open" },
   "os.c.savedRecord": { ko: "{subject} 보고서를 기록에 저장했습니다", en: "The {subject} report was saved to the record" },
+  "os.c.savedRow": { ko: "{name} — 보고서 저장됨", en: "{name} — report saved" },
+  // ClassNote 기능이 꺼진 학원용(2026-09-30) — 같은 안내에서 ClassNote를 뺀 문장.
+  "os.attach.offCLink": { ko: "가 꺼져 있어, 첨부해도 학부모 보고서에는 표시되지 않습니다.", en: " are turned off, so anything you attach will not appear in the parent report." },
+  "os.attach.dropCLink": { ko: " 바로 첨부됩니다. 첨부하면 학부모 링크에 함께 실립니다.", en: " to attach it. Attachments ride along on the parent link." },
+  "os.card.attachHintLink": { ko: "사진/파일을 추가하면 학부모 링크에 함께 실립니다.", en: "Anything you add rides along on the parent link." },
+  "os.c.attachDoneLink": { ko: "{n}개 첨부", en: "{n} attached" },
+  "os.c.bulkSavedOnly": { ko: "저장 {n}건 · ", en: "Saved {n} · " },
   "os.c.emptyMentSubject": {
     ko: "{subject} — 학부모 전달 멘트가 비어 있어 발송할 수 없습니다 (자동 작성 또는 직접 입력 후 발송)",
     en: "{subject} — the parent message is empty, so it cannot be sent (auto-write it or type it, then send)",

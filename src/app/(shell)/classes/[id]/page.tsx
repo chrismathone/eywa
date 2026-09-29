@@ -1,4 +1,5 @@
 import { reportError } from "@/lib/observability/report-error";
+import { isModuleEnabled } from "@/lib/modules";
 import { WindowLink } from "@/components/workspace/window-link";
 import { notFound } from "next/navigation";
 import { CalendarClock, ClipboardCheck, Info, MapPin, Pencil, User, Users } from "@/components/icons/aywa-icon-compat";
@@ -132,7 +133,10 @@ export default async function ClassDetailPage({
   const labSeparateSlots = klass.scheduleSlots.filter(isLiveLabSeparate);
   // EiE 토글(LAB '따로 수업(*LAB)' 학생 배정, 0271b) — **EiE 반이고 *LAB 교시가 있을 때만** 세운다(원장 2026-09-17
   // *"EiE 수업이 아니면 EiE 토글은 없어도"*). *LAB 교시가 없는 반에선 켜도 아무 일이 없어 거짓 약속이 된다(lab-split.ts).
-  const showLabSeparate = klass.subject === "english" && klass.englishTrack === "eie" && labSeparateSlots.length > 0;
+  // EiE 구분(모듈)이 꺼진 학원엔 토글이 없다(2026-09-30 "꺼지면 흔적 없이") — 저장된 english_track이 남아 있어도.
+  const showLabSeparate =
+    isModuleEnabled(settings.modules.disabled, "eie") &&
+    klass.subject === "english" && klass.englishTrack === "eie" && labSeparateSlots.length > 0;
   // 가져오기가 미뤄 둔 반 자체 변경(담임·강의실·**반 이름**) + 예약된 명단 변동 + EiE 토글의 켠 수강(따로·fail-soft,
   // null = 모름 → 토글을 안 세운다). 예약이 없으면 각각 쿼리 한 번으로 끝난다. 독립이라 병렬(B4).
   const [scheduledClass, scheduledRoster, labSeparateIds] = await Promise.all([
@@ -277,7 +281,8 @@ export default async function ClassDetailPage({
               {sheetT(lang, "cls.d.edit")}
             </Button>
           ) : null}
-          {klass.subject === "english" ? (
+          {/* 영어 강사 시트(ecs) 기능(모듈)이 꺼진 학원엔 버튼이 없다(2026-09-30 "꺼지면 흔적 없이"). 권한 판정은 종전대로 열린 뒤 게이트가. */}
+          {klass.subject === "english" && isModuleEnabled(settings.modules.disabled, "ecs") ? (
             // English Class Sheet — 영어 반만(진입 조건은 requireEcsClassAccess가 재검증: skillAreas 설정 기반)
             <Button
               variant="outline"

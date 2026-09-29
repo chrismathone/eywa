@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import {
   Check,
   ChevronDown,
@@ -73,6 +74,7 @@ export function ConsultationReportEditor({
   consultationDate?: string | null;
   transcript?: string | null;
 }) {
+  const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '다시 분석'이 없다(2026-09-30 "꺼지면 흔적 없이")
   const [report, setReport] = useState(initialReport);
   const [attribution, setAttribution] = useState<{ by: string; at: string } | null>(
     editedBy && editedAt ? { by: editedBy, at: editedAt } : null,
@@ -239,6 +241,7 @@ export function ConsultationReportEditor({
           ) : null}
         </span>
         <div className="flex items-center gap-1.5">
+          {aiOn ? (
           <button
             type="button"
             onClick={reanalyze}
@@ -253,6 +256,7 @@ export function ConsultationReportEditor({
             )}
             다시 분석
           </button>
+          ) : null}
           <button
             type="button"
             onClick={downloadTxt}

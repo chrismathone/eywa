@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   LICENSE_BLOCKED_MESSAGE,
@@ -59,6 +60,53 @@ export const isFeatureOptedIn = cache(async (tenantId: string, feature: OptInFea
   } catch (e) {
     console.error("[license] 조회 예외 — 꺼짐으로 둔다", feature, e);
     return false;
+  }
+});
+
+/** 화면(클라)에 내려 보내는 라이선스 표 — 켜고 끄는 기능 넷. */
+export type LicenseFlags = Record<LicensedFeature, boolean>;
+const LICENSED_FEATURES: readonly LicensedFeature[] = ["ai_analysis", "google_sheets", "meeting_recording", "window_mode"];
+const ALL_ON: LicenseFlags = { ai_analysis: true, google_sheets: true, meeting_recording: true, window_mode: true };
+
+/** 라이선스 표시용 캐시 태그(tenantId별) — 슈퍼관리자 라이선스 카드가 켜고 끌 때 `updateTag`로 비운다. */
+export function licenseFlagsTag(tenantId: string): string {
+  return `tenant-licenses:${tenantId}`;
+}
+
+/** 캐시 안 조회 — 실패는 던져서 **캐시하지 않는다**(설정 캐시 loadTenantSettingsRaw와 같은 규약). */
+const loadLicenseFlagsCached = (tenantId: string) =>
+  unstable_cache(
+    async (): Promise<LicenseFlags> => {
+      const { data, error } = await createAdminClient()
+        .from("tenant_licenses")
+        .select("feature, is_active, expires_at")
+        .eq("tenant_id", tenantId)
+        .in("feature", [...LICENSED_FEATURES]);
+      if (error) throw new Error(`tenant_licenses read failed: ${error.message}`);
+      const out: LicenseFlags = { ...ALL_ON };
+      for (const r of (data ?? []) as { feature: LicensedFeature; is_active: boolean; expires_at: string | null }[]) {
+        if (LICENSED_FEATURES.includes(r.feature)) out[r.feature] = licenseAllows(r);
+      }
+      return out;
+    },
+    ["tenant-license-flags-v1", tenantId],
+    // 셸이 창(iframe)마다 부르는 값이라 테넌트 캐시(B6). 만료는 표시에 영향이 없게 짧게 — 즉시 반영은 updateTag.
+    { tags: [licenseFlagsTag(tenantId)], revalidate: 300 },
+  )();
+
+/**
+ * 이 지점의 라이선스 넷을 **한 번에** — 셸이 화면 표시용으로 내려 보낸다(꺼진 기능의 버튼을 감추려고,
+ * 원장 2026-09-30 "꺼지면 있었는지조차 모르게"). 판정은 `isFeatureLicensed`와 같다(행 없음 = 켜짐 · 조회 실패 = 켜짐).
+ * ⚠️ 표시용이다 — 막는 것은 각 서버 경로의 `isFeatureLicensed`/`licenseBlockReason`이 따로 한다(캐시 없이).
+ * 🔑 tenantId별 `unstable_cache`(창마다 셸이 다시 돈다 — B6) + 요청 cache.
+ */
+export const getLicenseFlags = cache(async (tenantId: string): Promise<LicenseFlags> => {
+  if (!tenantId) return ALL_ON;
+  try {
+    return await loadLicenseFlagsCached(tenantId);
+  } catch (e) {
+    console.error("[license] 표 조회 실패 — 켜짐으로 둔다", e);
+    return ALL_ON;
   }
 });
 

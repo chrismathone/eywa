@@ -6,7 +6,7 @@ import { SearchToggle } from "@/components/search-toggle";
 import { WindowLink } from "@/components/workspace/window-link";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getShellView } from "@/lib/auth/view-mode";
-import { helpLinkOpens } from "@/features/help/access";
+import { helpManualOpens } from "@/features/help/access";
 import { canAskHelpBoard } from "@/features/help/board/access";
 import { getHelpPostsPage } from "@/features/help/board/server/queries";
 import { helpAttr } from "@/features/help/help-attr";
@@ -29,7 +29,7 @@ export default async function HelpPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const embed = sp.embed === "1";
   const [manualOpens, canAsk, board] = await Promise.all([
-    Promise.all(MANUALS.map((m) => helpLinkOpens(m.menuKey, user.systemRole, view))),
+    Promise.all(MANUALS.map((m) => helpManualOpens(m, user.systemRole, view))),
     canAskHelpBoard(user.systemRole),
     getHelpPostsPage({ q: q || undefined, page, pageSize: PAGE_SIZE }),
   ]);

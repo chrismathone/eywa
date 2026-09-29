@@ -38,11 +38,8 @@ export async function IntegrationsFace({
   if (available.length === 0) {
     return (
       <div className="border-border bg-card rounded-2xl border p-5">
+        {/* 꺼진 연동의 이름을 늘어놓지 않는다(원장 2026-09-30 "꺼지면 있었는지조차 모르게"). */}
         <p className="text-foreground text-sm font-bold">이 학원은 켜진 외부 연동이 없습니다</p>
-        <p className="text-text-dim mt-1 text-sm">
-          makeedu 동기화·구글 시트 시간표 연동은 학원 설정의 &lsquo;기능&rsquo; 면에서 켤 수 있습니다.{" "}
-          {"error" in gate ? `슬랙: ${gate.error}` : null}
-        </p>
       </div>
     );
   }

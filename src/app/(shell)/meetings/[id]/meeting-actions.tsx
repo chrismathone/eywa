@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { useFormStatus } from "react-dom";
 import { Loader2, RefreshCw, Sparkles, Trash2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ function RegenerateSubmit({ label }: { label: string }) {
  * 오디오·AssemblyAI·웹훅 불필요(원본 녹음이 없어도, 메모만으로도 동작). "전사부터 다시"(MeetingRetryButton)와 의미 분리.
  * label = 첫 정리면 "AI로 정리", 결과가 이미 있으면 "AI 분석 다시 생성".
  */
-export function MeetingRegenerateButton({
+function MeetingRegenerateButtonInner({
   meetingId,
   label = "AI 분석 다시 생성",
 }: {
@@ -94,7 +95,7 @@ export function MeetingRegenerateButton({
  * 재제출 시 status를 transcribing으로 리셋하므로 webhook의 'already completed' 가드를 자연 통과,
  * 8섹션 리포트가 새로 생성된다.
  */
-export function MeetingRetryButton({
+function MeetingRetryButtonInner({
   meetingId,
   label = "재시도",
   variant = "default",
@@ -116,4 +117,14 @@ export function MeetingRetryButton({
       {state?.error ? <span className="text-chart-4 text-xs">{state.error}</span> : null}
     </form>
   );
+}
+
+/** AI 라이선스가 꺼진 지점엔 이 버튼·카드가 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 generateJSON이 따로 막는다. */
+export function MeetingRegenerateButton(props: Parameters<typeof MeetingRegenerateButtonInner>[0]) {
+  return useLicenseOn("ai_analysis") ? <MeetingRegenerateButtonInner {...props} /> : null;
+}
+
+/** 녹음·전사 라이선스가 꺼진 지점엔 재전사 버튼이 없다(2026-09-30) — 서버 액션이 따로 막는다. */
+export function MeetingRetryButton(props: Parameters<typeof MeetingRetryButtonInner>[0]) {
+  return useLicenseOn("meeting_recording") ? <MeetingRetryButtonInner {...props} /> : null;
 }

@@ -19,6 +19,7 @@ import { getNewcomers } from "@/features/newcomers/server/queries";
 import { buildTodayActions } from "@/features/dashboard/today-actions";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
 import { getDailyBriefing, type DailyBriefingRow } from "@/features/dashboard/server/briefing";
 import {
@@ -108,6 +109,8 @@ export async function OneScreenDashboard({
     lessonReports: access.read.lessonReports,
   };
   const plan = buildDashboardPlan(areas);
+  // ClassNote 기능(모듈) — 꺼진 학원엔 '학부모 미확인'(ClassNote 읽음 기록) 칸이 없다. 설정은 요청 캐시라 아래 배치와 공유.
+  const classnoteOn = classnoteModuleOn(await getTenantSettings());
   if (plan.empty) {
     return (
       <p className="text-text-dim border-line rounded-2xl border border-dashed px-4 py-10 text-center text-sm">
@@ -190,7 +193,7 @@ export async function OneScreenDashboard({
     // 🔴 두 조회는 과목 축(학원설정)을 **자기 안에서** 읽는다 — 밖에서 설정을 기다렸다가 넘기면
     //    이 배치가 둘로 갈려 직렬 워터폴이 된다(B4). `getTenantSettings`는 요청 캐시라 왕복이 안 는다.
     need("risk") && access.read.lessonReports ? soft("숙제 위험", getHomeworkRisk()) : skip,
-    need("risk") && access.read.lessonReports ? soft("학부모 미확인", getUnreadReports()) : skip,
+    need("risk") && access.read.lessonReports && classnoteOn ? soft("학부모 미확인", getUnreadReports()) : skip,
   ]);
 
   // ── 오늘 출결 ────────────────────────────────────────────────────────────────
@@ -291,7 +294,8 @@ export async function OneScreenDashboard({
           ? undefined
           : `미제출 ${homework.notSubmitted}명 · 0% ${homework.zero}명 · 판정한 기록 ${homework.parsed}건(판정 불가 ${homework.unparsed}건 제외)`,
     });
-    riskRows.push({
+    // 학부모 미확인 = ClassNote 읽음이 소스 — ClassNote 기능이 꺼진 학원엔 이 줄이 없다(2026-09-30).
+    if (classnoteOn) riskRows.push({
       key: "unread",
       label: "학부모",
       value: unread === null ? null : String(unread.reports),

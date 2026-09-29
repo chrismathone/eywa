@@ -66,6 +66,7 @@ import {
   type SendDeadlineEvent,
   type UnsentReportEvent,
 } from "../events-core";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 type EventType =
   | "absence_alert"
@@ -543,7 +544,7 @@ async function detectUnsentReports(admin: SupabaseClient, tenantId: string): Pro
   const today = kstToday();
   const settings = await getTenantSettingsByTenantId(tenantId);
   // ⑥ 발송 자체가 꺼진 테넌트는 감지도 하지 않는다(시드도 남기지 않음 — 켜는 날 콜드스타트로 시작).
-  if (!settings.report.classnoteSendEnabled) return 0;
+  if (!classnoteSendOn(settings)) return 0;
 
   const dayMs = 86_400_000;
   const todayMs = Date.parse(`${today}T00:00:00Z`);
@@ -684,7 +685,7 @@ async function detectSendDeadline(admin: SupabaseClient, tenantId: string): Prom
   const today = kstToday();
   const settings = await getTenantSettingsByTenantId(tenantId);
   // ⑦ 발송이 꺼진 테넌트는 시드도 남기지 않는다(켜는 날 콜드스타트로 시작).
-  if (!settings.report.classnoteSendEnabled) return 0;
+  if (!classnoteSendOn(settings)) return 0;
 
   // ⚠️ 두 조회는 서로 독립이라 병렬(B4).
   const [{ data, error }, testStudentIds] = await Promise.all([

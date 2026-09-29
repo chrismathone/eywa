@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { regenerateDailyBriefing } from "@/features/dashboard/server/actions";
@@ -11,7 +12,7 @@ import { regenerateDailyBriefing } from "@/features/dashboard/server/actions";
  *   폴링은 analyzing일 때만 마운트돼 평상시 대시보드에 상시 폴링을 얹지 않는다.
  * - 성공 부수효과 없음(#67 회피): 완료 반영은 폴링(router.refresh)이 담당, 버튼은 시작만.
  */
-export function DailyBriefingRegen({ analyzing }: { analyzing: boolean }) {
+function DailyBriefingRegenInner({ analyzing }: { analyzing: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -56,4 +57,9 @@ export function DailyBriefingRegen({ analyzing }: { analyzing: boolean }) {
       {error ? <p className="text-danger max-w-56 text-right text-xs leading-snug">{error}</p> : null}
     </div>
   );
+}
+
+/** AI 라이선스가 꺼진 지점엔 이 버튼·카드가 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 generateJSON이 따로 막는다. */
+export function DailyBriefingRegen(props: Parameters<typeof DailyBriefingRegenInner>[0]) {
+  return useLicenseOn("ai_analysis") ? <DailyBriefingRegenInner {...props} /> : null;
 }

@@ -15,6 +15,7 @@ import { getClassNameAsOfIndex } from "@/features/classes/server/class-name-as-o
 import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
@@ -225,6 +226,9 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   const dow = dowKeyOf(date);
 
   const settings = await getTenantSettings();
+  // EiE 구분(모듈)이 꺼진 학원엔 EiE 표시가 없다(2026-09-30 "꺼지면 흔적 없이").
+  const eieOn = isModuleEnabled(settings.modules.disabled, "eie");
+  const classnoteOn = isModuleEnabled(settings.modules.disabled, "classnote");
   // 휴일 판정은 학원설정 하나뿐([[holiday.ts]]) — 내장 법정공휴일 표는 쓰지 않는다(학원이 공휴일에 수업한다).
   const holidayName = holidayNameOn(buildHolidayMap(settings.operations.holidays), date);
   const english = settings.operations.subjects.find((s) => s.key === "english");
@@ -826,8 +830,9 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         delegated: delegatedSet.has(classId) && cls.teacher_id !== user.id,
         // 🔴 **DB 이름 그대로** 넘긴다 — 이 값은 표시가 아니라 ClassNote **보드 매칭 키**다(classKey).
         //    미래 이름을 먹이면 그 반 보드를 못 찾아 배지가 조용히 '연동 없음'이 된다.
-        classnoteToday: classnoteStateOf(cls.class_name as string),
-        isEie: readEnglishTrack(cls) === "eie",
+        // ClassNote 기능이 꺼진 학원 = 알림장 배지 없음("untracked" = 미표시, 2026-09-30).
+        classnoteToday: classnoteOn ? classnoteStateOf(cls.class_name as string) : "untracked",
+        isEie: eieOn && readEnglishTrack(cls) === "eie",
         shoutingSlots: shoutingByClass.get(classId) ?? [],
         // 그 반의 오늘 계획 행 중 위 slots에 실리지 않은 것 = 안 그리는 기록(고아 시각 or 자리).
         hiddenLines:

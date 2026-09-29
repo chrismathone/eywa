@@ -153,7 +153,24 @@ export async function resolveTenant(sql) {
 export async function isClassnoteSendEnabled(sql, tenant) {
   const [row] = await sql`select (data->'report'->>'classnoteSendEnabled')::boolean as on
     from tenant_settings where tenant_id=${tenant}`;
-  return row?.on === true;
+  if (row?.on !== true) return false;
+  // 모듈이 꺼진 학원은 발송 스위치가 켜져 있어도 보내지 않는다(원장 2026-09-30 "꺼지면 있었는지조차 모르게").
+  return isClassnoteModuleEnabled(sql, tenant);
+}
+
+/**
+ * 이 학원에 ClassNote 기능(모듈)이 켜져 있나 — 앱 `isModuleEnabled(settings.modules.disabled, "classnote")`와 같은 판정.
+ * 저장은 `data.modules.disabled`(끈 것만). 칸이 없으면 프리셋을 따른다: 일반판(`preset:"generic"`)은 전부 꺼진 채
+ * 태어나고(GENERIC_DISABLED_MODULES), 그 밖(침산)은 전부 켜짐. 행이 없으면 침산 = 켜짐(앱 resolve와 같은 쪽으로 기운다).
+ * 꺼져 있으면 데몬은 이 학원의 ClassNote 일(발송·공지·회수·동기화·피드·읽음)을 **전부** 건너뛴다.
+ */
+export async function isClassnoteModuleEnabled(sql, tenant) {
+  const [row] = await sql`select case
+      when jsonb_typeof(data->'modules'->'disabled') = 'array' then (data->'modules'->'disabled') ? 'classnote'
+      else coalesce(data->>'preset', '') = 'generic'
+    end as off
+    from tenant_settings where tenant_id=${tenant}`;
+  return row?.off !== true;
 }
 
 /**

@@ -18,6 +18,8 @@ vi.mock("@/lib/auth/perm-matrix", () => ({
   canAccessTenant: async (role: string, menu: string) => ctx.allow(role, menu),
 }));
 vi.mock("@/lib/auth/view-mode", () => ({ getShellView: async () => ctx.view }));
+vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ tenantId: "t1" }) }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => false }));
 vi.mock("@/components/workspace/use-is-desktop", () => ({ useIsDesktop: () => true }));

@@ -9,6 +9,7 @@ import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { kstToday } from "@/lib/date-kst";
+import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
@@ -295,6 +296,9 @@ async function insertRecordingAndTranscribe(
     audioUrl: string;
   },
 ): Promise<string | null> {
+  // 녹음·전사 라이선스(슈퍼관리자) — 꺼진 지점은 전사 행을 만들지 않는다(회의 녹음과 같은 스위치, 2026-09-30).
+  const licenseErr = await licenseBlockReason(args.tenantId, "meeting_recording");
+  if (licenseErr) return licenseErr;
   const { data: rec, error: recErr } = await admin
     .from("consultation_recordings")
     .insert({

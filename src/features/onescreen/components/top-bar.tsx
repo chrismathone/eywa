@@ -14,7 +14,7 @@ import {
 } from "../font-size";
 import { CLASS_TAG_ALL } from "../class-tags";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import type { OneScreenView } from "../view";
+import { CLASSNOTE_ONLY_VIEWS, type OneScreenView } from "../view";
 import type { WriteFilter } from "../write-filter";
 import type { TodayClass } from "../server/roster";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
@@ -71,6 +71,7 @@ export function OneScreenTopBar({
   onFontSize,
   makeupAdder,
   readonlyView = false,
+  classnoteOn = true,
 }: {
   today: string;
   date: string; // 대상 날짜(YYYY-MM-DD)
@@ -96,6 +97,8 @@ export function OneScreenTopBar({
   makeupAdder?: ReactNode; // 보강 학생 추가 컨트롤(슬롯)
   /** '다른 강사 뷰'(열람 전용) — 공지 탭(순수 작성 화면)을 숨긴다(2026-08-19). */
   readonlyView?: boolean;
+  /** ClassNote 기능(모듈) 켜짐 — 꺼지면 발송 현황·월간 발송·공지 뷰를 목록에서 뺀다. */
+  classnoteOn?: boolean;
 }) {
   const lang = useSheetLang();
   const t = useSheetT();
@@ -305,7 +308,10 @@ export function OneScreenTopBar({
           options={(readonlyView
             ? (["card", "grid", "status", "history"] as const)
             : (["card", "grid", "status", "history", "notice"] as const)
-          ).map((v) => ({ value: v, label: t(VIEW_LABEL_KEY[v]) }))}
+          )
+            // ClassNote 기능이 꺼진 학원엔 발송 현황·월간 발송·공지 뷰가 없다(2026-09-30 "꺼지면 흔적 없이").
+            .filter((v) => classnoteOn || !CLASSNOTE_ONLY_VIEWS.has(v))
+            .map((v) => ({ value: v, label: t(VIEW_LABEL_KEY[v]) }))}
         />
         </span>
       </div>

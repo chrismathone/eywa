@@ -14,6 +14,7 @@ import { isPushableConsultation } from "@/features/integrations/push-eligibility
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled, type ModuleId } from "@/lib/modules";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { overwriteTimetableSheet, applySheetFormulas } from "@/features/integrations/google-sheets";
 import { buildMathTimetableBuffer } from "@/features/exports/math-timetable/build-buffer";
@@ -49,10 +50,20 @@ function freshBusyLock(): MakeeduSyncLock {
 export type ToggleState = { error?: string; enabled?: boolean } | undefined;
 
 /**
+ * 학원 기능(모듈)이 꺼졌나 — 꺼진 연동의 서버 액션은 아무것도 하지 않는다(원장 2026-09-30 "꺼지면 있었는지조차 모르게").
+ * 화면은 이미 입구를 감췄다 — 이건 직접 부른 요청의 뒷문을 닫는다(#77). 설정은 테넌트 캐시라 추가 왕복 없음.
+ */
+async function moduleOff(id: ModuleId): Promise<boolean> {
+  return !isModuleEnabled((await getTenantSettings()).modules.disabled, id);
+}
+const MODULE_OFF_MSG = "사용할 수 없는 기능입니다";
+
+/**
  * '지금 동기화' 버튼 공유 잠금 상태 폴링용 — 카드가 주기적으로 호출해 모든 사용자 버튼을 실시간 동기화.
  * (읽기 전용. 게이트 불필요 — 잠금 상태는 민감정보 아님, RLS로 테넌트 격리.)
  */
 export async function checkMakeeduSyncLock(): Promise<MakeeduSyncLock> {
+  if (await moduleOff("makeedu")) return { busyUntil: null, running: false };
   return getMakeeduSyncLock();
 }
 
@@ -63,6 +74,7 @@ export async function checkMakeeduSyncLock(): Promise<MakeeduSyncLock> {
  */
 export async function checkMakeeduSyncWorkers(): Promise<{ workers: MakeeduWorker[]; nowMs: number }> {
   const nowMs = Date.now();
+  if (await moduleOff("makeedu")) return { workers: [], nowMs };
   return { workers: await getMakeeduSyncWorkers(nowMs), nowMs };
 }
 
@@ -159,6 +171,7 @@ export async function setSheetsExportEnabled(
   if (!(await canWriteTenant(user.systemRole, "owner"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
+  if (await moduleOff("sheet_sync")) return { error: MODULE_OFF_MSG };
 
   const supabase = await createClient();
   const { error } = await supabase.from("user_integrations").upsert(
@@ -200,6 +213,7 @@ export async function setSubjectSheetTarget(
   if (!(await canWriteTenant(user.systemRole, "owner"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
+  if (await moduleOff("sheet_sync")) return { error: MODULE_OFF_MSG };
 
   const supabase = await createClient();
   const { error } = await supabase.from("user_integrations").upsert(
@@ -237,6 +251,7 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
   if (!(await canWriteTenant(user.systemRole, "owner"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
+  if (await moduleOff("makeedu")) return { error: MODULE_OFF_MSG };
 
   const supabase = await createClient();
   const { error } = await supabase.from("user_integrations").upsert(

@@ -24,6 +24,8 @@ import { getMyLeaveHistory } from "@/features/leave/server/my-history";
 import { AccountCard } from "./_components/account-card";
 import { LeaveCard } from "./_components/leave-card";
 import { ReportNameCard } from "./_components/report-name-card";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { SlackLinkCard } from "./_components/slack-link-card";
 import { getMySlackState } from "@/features/slack/server/queries";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
@@ -44,7 +46,7 @@ export default async function MyPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const [resume, me, reportName, resolvedSendName, balance, slack] = await Promise.all([
+  const [resume, me, reportName, resolvedSendName, balance, slack, settings] = await Promise.all([
     getResumeByStaffUser(user.id),
     getStaffById(user.id),
     // 수업보고서 발송용 이름(0217a) — fail-soft: 컬럼 미적용이면 null(빈 칸)이고 페이지는 그대로 산다.
@@ -57,6 +59,8 @@ export default async function MyPage() {
     user.systemRole === "student" ? Promise.resolve(null) : getMyLeaveBalance(user.id).catch(() => null),
     // 내 슬랙 연결 — 지점이 슬랙을 켜고 연결했을 때만 카드가 선다. 실패해도 카드만 빠진다.
     getMySlackState().catch(() => null),
+    // ClassNote 기능 켜짐 여부(보고서 이름 카드 설명) — 테넌트 캐시. 실패하면 종전 문구(켜짐)로.
+    getTenantSettings().catch(() => null),
   ]);
   // 내역은 구간이 있어야 물어볼 수 있다(입사일 미등록이면 구간 자체가 없다) — 잔여에 의존하는 조회라
   // 위 Promise.all에 못 넣는다. 여기서도 실패는 null(카드가 "못 불러왔다"를 그대로 적는다).
@@ -122,6 +126,7 @@ export default async function MyPage() {
           realName={user.displayName}
           initialName={reportName}
           mappingBlocked={!!reportName && resolvedSendName !== reportName}
+          classnoteOn={settings ? classnoteModuleOn(settings) : true}
         />
         {slack ? <SlackLinkCard linked={slack.linked} email={slack.email} /> : null}
       </div>

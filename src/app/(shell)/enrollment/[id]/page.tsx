@@ -23,6 +23,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import { COMMON_FIELDS, ENGLISH_GROUPS, GENDER_OPTIONS, SUBJECT_TABS } from "@/features/enrollment/form-config";
 import { outcomeBadge } from "@/features/enrollment/outcome-meta";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getClassesList } from "@/features/classes/server/queries";
 import { TranscriptSection } from "@/components/transcript-section";
@@ -399,7 +400,7 @@ export default async function EnrollmentDetailPage({
               ["보호자 연락처", consult.parentPhone, true],
               ["학생과의 관계", f.parentRelation],
             ]}
-            flags={[f.shuttleBusRequest ? "셔틀버스 신청" : null]}
+            flags={[f.shuttleBusRequest && isModuleEnabled(settings.modules.disabled, "shuttle") ? "셔틀버스 신청" : null]}
           />
 
           {/* 상담 내용 — 상담일/과목 + 자유서술(학부모 QR/상담사 입력). 세로공간 전부 채움. */}

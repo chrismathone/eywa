@@ -1,6 +1,7 @@
 "use server";
 
 import { normalizeNoneMarker } from "../none-marker";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 import { preserveMakeupSessionEntries, type SessionProgress } from "../makeup-session";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
@@ -490,7 +491,7 @@ export async function saveAndQueueClassnote(
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
   // 공유 DB + 라이브 워커라 승인 전 실발송 방지(classnote_status 미변경 → 워커가 안 잡음).
   const settings = await getTenantSettings();
-  if (!settings.report.classnoteSendEnabled) {
+  if (!classnoteSendOn(settings)) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "dry_run", ...warn };
   }
 

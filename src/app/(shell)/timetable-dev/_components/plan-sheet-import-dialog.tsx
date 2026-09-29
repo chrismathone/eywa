@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useLicenseOn, useModuleOn } from "@/features/owner/operations-context";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, Sheet, X } from "@/components/icons/aywa-icon-compat";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -28,7 +29,7 @@ const KO_DAY: Record<string, string> = { mon: "월", tue: "화", wed: "수", thu
 
 type Msg = { text: string; detail?: string };
 
-export function PlanSheetImportDialog({
+function PlanSheetImportDialogInner({
   month,
   canManage,
   open: openProp,
@@ -438,4 +439,11 @@ export function PlanSheetImportDialog({
       ) : null}
     </>
   );
+}
+
+/** 시트 연동 기능(모듈)이나 구글 시트 라이선스가 꺼진 학원엔 이 버튼이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 액션이 따로 막는다. */
+export function PlanSheetImportDialog(props: Parameters<typeof PlanSheetImportDialogInner>[0]) {
+  const moduleOn = useModuleOn("sheet_sync");
+  const licenseOn = useLicenseOn("google_sheets");
+  return moduleOn && licenseOn ? <PlanSheetImportDialogInner {...props} /> : null;
 }

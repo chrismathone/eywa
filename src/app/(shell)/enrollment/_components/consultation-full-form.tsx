@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useModuleOn } from "@/features/owner/operations-context";
 import {
   AlertCircle, AlertTriangle, ArrowRight, Banknote, BookOpen, Bus, Cake, Calendar,
   CheckCircle, ChevronDown, ChevronRight, Globe, GraduationCap, Hash, Home, Languages,
@@ -131,6 +132,7 @@ export function ConsultationFullForm({
 
   const inFrame = useInFrame();
   const isCreate = mode === "create";
+  const shuttleOn = useModuleOn("shuttle");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [recordingActive, setRecordingActive] = useState(false);
   const [phase, setPhase] = useState<"idle" | "uploading" | "submitting">("idle");
@@ -459,12 +461,16 @@ export function ConsultationFullForm({
                 <input name="zipCode" defaultValue={v.zipCode ?? ""} className={input} />
               </L>
             </Grid>
-            {/* 셔틀버스 신청 — 강조 단독 줄 */}
-            <label className="border-amber/40 bg-amber/5 text-amber flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-bold">
-              <input type="checkbox" name="shuttleBusRequest" value="true" defaultChecked={v.shuttleBusRequest} className="size-4" />
-              <Bus className="size-4" />
-              셔틀버스 신청
-            </label>
+            {/* 셔틀버스 신청 — 강조 단독 줄. 셔틀 기능이 꺼진 학원엔 칸이 없다(2026-09-30) — 저장값은 hidden으로 보존. */}
+            {shuttleOn ? (
+              <label className="border-amber/40 bg-amber/5 text-amber flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-bold">
+                <input type="checkbox" name="shuttleBusRequest" value="true" defaultChecked={v.shuttleBusRequest} className="size-4" />
+                <Bus className="size-4" />
+                셔틀버스 신청
+              </label>
+            ) : v.shuttleBusRequest ? (
+              <input type="hidden" name="shuttleBusRequest" value="true" />
+            ) : null}
             <Grid cols={2}>
               <L label="성별" icon={User}>
                 <select name="gender" defaultValue={v.gender ?? ""} className={input}>

@@ -11,7 +11,7 @@ import { kstToday } from "@/lib/date-kst";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
-import type { OneScreenView } from "../view";
+import { CLASSNOTE_ONLY_VIEWS, type OneScreenView } from "../view";
 import { buildSubjectReport, studentStatus } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 // 저장·미리보기 공용 필드 조립(단일 소스) — 미리보기가 발송본과 갈라지지 않게.
@@ -217,9 +217,12 @@ import { shortDate } from "../makeup-absence-link";
 import { computeClientMentSource } from "../ment-source";
 import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
 import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
+import { ClassnoteOnProvider } from "./classnote-on-context";
 
 /** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
 const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
+/** ClassNote 기능이 꺼진 학원 — 발송 상태 감시 대상 없음(참조 고정이라 감시 훅이 매 렌더 재시작하지 않는다). */
+const NO_PENDING: string[] = [];
 
 /**
  * 반 필터가 '전체'라 앵커가 없을 때의 **보조 앵커** — 합칠 정규 행(후보)의 반을 기준으로 삼는다.
@@ -306,6 +309,7 @@ export function OneScreenClient({
   noticeMode: initialNoticeMode = null,
   academyNoticeMode = "A",
   classnoteSendEnabled = false,
+  classnoteOn = true,
   sendWindow = null,
   showAttachments = true,
   canEditAttendance = true,
@@ -336,6 +340,8 @@ export function OneScreenClient({
   noticeMode?: "A" | "B" | null; // 강사 본인 멘트 모드 오버라이드(null=학원 기본) — 0104a
   academyNoticeMode?: "A" | "B"; // 학원 기본 멘트 모드(토글 '학원 기본' 라벨)
   classnoteSendEnabled?: boolean; // ClassNote 실제 발송 스위치 — 공지 dry-run 안내
+  /** ClassNote 기능(모듈) 켜짐 — 꺼지면 발송 현황·월간 발송·공지·발송 상태 감시를 감춘다(꺼지면 흔적 없이, 2026-09-30). */
+  classnoteOn?: boolean;
   /** 그 요일에 담당 수업이 없음 — 목록 대신 안내를 띄운다(폴백 금지, roster.ts 주석). */
   noClassesToday?: boolean;
   /** '담당 반 전체 보기'로 보는 중(요일 무시) — 화면이 그 사실을 밝힌다. */
@@ -438,7 +444,9 @@ export function OneScreenClient({
   // 토글 자체는 클라 state만 바꾼다(네비 없음) — 뷰 전환마다 서버 왕복하면 체감이 느려진다.
   // 열람 전용은 공지 뷰로 착지하지 않는다(?view=notice 북마크·날짜 내비 URL 잔존 대비) — 공지는 순수 작성 화면.
   const [view, setView] = useState<OneScreenView>(
-    readonlyView && initialView === "notice" ? "card" : initialView,
+    (readonlyView && initialView === "notice") || (!classnoteOn && CLASSNOTE_ONLY_VIEWS.has(initialView))
+      ? "card"
+      : initialView,
   );
   // 공지 컴포저 진입 시 초기 선택 학생(카드=1명, 표=선택/표시). null=진입 안 함.
   const [noticeSeed, setNoticeSeed] = useState<string[] | null>(null);
@@ -952,7 +960,7 @@ export function OneScreenClient({
   }
   // 대기·처리중인 학생이 있는 동안만 감시(없으면 조회 0회, 다 끝나면 저절로 멈춘다).
   const pendingSends = useMemo(() => pendingSendStudentIds(reports), [reports]);
-  useClassnoteStatusSync(date, pendingSends, applyClassnoteStatuses);
+  useClassnoteStatusSync(date, classnoteOn ? pendingSends : NO_PENDING, applyClassnoteStatuses);
 
   function patchReport(
     studentId: string,
@@ -3319,7 +3327,8 @@ export function OneScreenClient({
       return;
     }
     if (res.status === "dry_run") {
-      toast.message(tf("os.c.dryRunSubject", { subject: subjectName }));
+      // ClassNote 기능이 없는 학원 = 발송이라는 개념이 없다 → 그냥 "저장됨"(dry-run 문구 금지, 2026-09-30).
+      toast.message(classnoteOn ? tf("os.c.dryRunSubject", { subject: subjectName }) : tf("os.c.savedRecord", { subject: subjectName }));
       return;
     }
     // 발송 대상 과목이 아님(원장 설정 classnoteSubjects 밖) — 저장만 되고 큐에 안 들어감. 성공으로 오인 방지.
@@ -3397,7 +3406,7 @@ export function OneScreenClient({
     } else if (res.status === "too_old") {
       toast.message(tf("os.c.tooOldRow", { name: student.name }));
     } else if (res.status === "dry_run") {
-      toast.message(tf("os.c.dryRunRow", { name: student.name }));
+      toast.message(classnoteOn ? tf("os.c.dryRunRow", { name: student.name }) : tf("os.c.savedRow", { name: student.name }));
     } else if (res.status === "subject_off") {
       // 발송 대상 과목이 아님 — 저장만 됨. "발송 대기" 성공 오안내 방지(#2 확정).
       toast.message(tf("os.c.subjectOffRow", { name: student.name, subject: subjectName }));
@@ -3673,10 +3682,12 @@ export function OneScreenClient({
       setBulkBusy(null);
     }
     toast.success(
-      (dry ? tf("os.c.bulkDry", { n: dry }) : "") +
-        (windowHint
-          ? tf("os.c.bulkQueuedWindow", { n: queued, hint: windowHint })
-          : tf("os.c.bulkQueued", { n: queued })) +
+      (dry ? (classnoteOn ? tf("os.c.bulkDry", { n: dry }) : tf("os.c.bulkSavedOnly", { n: dry })) : "") +
+        (!classnoteOn && queued === 0
+          ? ""
+          : windowHint
+            ? tf("os.c.bulkQueuedWindow", { n: queued, hint: windowHint })
+            : tf("os.c.bulkQueued", { n: queued })) +
         (subjectOff ? tf("os.c.bulkSubjectOff", { n: subjectOff }) : "") +
         (absentSkip ? tf("os.c.bulkAbsent", { n: absentSkip }) : "") +
         (uncheckedSkip ? tf("os.c.bulkUnchecked", { n: uncheckedSkip }) : "") +
@@ -3877,7 +3888,7 @@ export function OneScreenClient({
         }));
       }
       if (added) {
-        if (!opts?.silent) toast.success(tf("os.c.attachDone", { n: added }));
+        if (!opts?.silent) toast.success(tf(classnoteOn ? "os.c.attachDone" : "os.c.attachDoneLink", { n: added }));
         void ensureAttachmentUrls(student, subjectName); // 표 팝오버 썸네일(카드는 아래 서명 이펙트가 갱신)
       }
     } finally {
@@ -4006,7 +4017,7 @@ export function OneScreenClient({
       toast.success(
         tf("os.c.attachBulk", { rows, n: added }) +
           (skipped ? tf("os.c.attachBulkSkip", { n: skipped }) : "") +
-          t("os.c.attachBulkTail"),
+          (classnoteOn ? t("os.c.attachBulkTail") : ""),
       );
     }
   }
@@ -4016,10 +4027,12 @@ export function OneScreenClient({
     //    각 섹션을 3개화"*. 셸 <main>이 이미 높이가 확정된 스크롤 컨테이너라 여기서 `h-full`로 그 높이를 받고,
     //    아래 3열이 남은 높이를 통째로 가져간 뒤 **열마다 따로** 스크롤한다(출석부 '한 화면 시트'와 같은 배치).
     //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
+    <ClassnoteOnProvider value={classnoteOn}>
     <div className="flex h-full min-h-0 flex-col gap-4">
       {sendClassAsk ? <SendClassDialog ask={sendClassAsk} onClose={() => setSendClassAsk(null)} /> : null}
       <OneScreenTopBar
         readonlyView={readonlyView}
+        classnoteOn={classnoteOn}
         today={today}
         date={activeDate}
         todayYmd={todayYmd}
@@ -4210,7 +4223,7 @@ export function OneScreenClient({
             onSaveAll: saveAllVisible,
             onSendAll: sendAllVisible,
             onAutoWriteAll: autoWriteAllVisible,
-            onClassNotice: openNoticeForRows,
+            onClassNotice: classnoteOn ? openNoticeForRows : undefined,
             onBulkApply: bulkApplyValues,
             onCopyFirstRow: copyFirstRowDown,
             onBulkImportPrev: bulkImportPrev,
@@ -4317,14 +4330,16 @@ export function OneScreenClient({
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-bold">{t("os.c.reportHeading")}</h2>
-                <button
-                  type="button"
-                  onClick={() => openNoticeForStudent(selected.id)}
-                  title={t("os.c.parentNoticeTitle")}
-                  className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-xs font-bold"
-                >
-                  {t("os.c.parentNotice")}
-                </button>
+                {classnoteOn ? (
+                  <button
+                    type="button"
+                    onClick={() => openNoticeForStudent(selected.id)}
+                    title={t("os.c.parentNoticeTitle")}
+                    className="border-line text-text-dim hover:bg-bg-soft ml-auto rounded-lg border px-2 py-0.5 text-xs font-bold"
+                  >
+                    {t("os.c.parentNotice")}
+                  </button>
+                ) : null}
               </header>
               <ReportCard
                 key={selected.id}
@@ -4544,5 +4559,6 @@ export function OneScreenClient({
         />
       ) : null}
     </div>
+    </ClassnoteOnProvider>
   );
 }

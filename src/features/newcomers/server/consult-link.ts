@@ -9,6 +9,8 @@ import { newcomerWindowStart } from "../onboarding-items";
 import { ANY_SUBJECT } from "../subject-rows";
 import { CONSULT_LINK_ITEM_KEYS, type NewcomerLinkTarget } from "../consult-link";
 import { getNewcomers } from "./queries";
+import { getTenantSettings, getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 /**
  * 상담 → 신규생 체크 **반자동 연결**의 조회·쓰기(0295a). 규칙은 [`consult-link.ts`](../consult-link.ts).
@@ -35,6 +37,8 @@ function isMissingColumn(message: string): boolean {
  * 체크 표를 못 읽으면 빈 목록(연결 칸을 안 띄운다 — 완료 여부를 모르고 제안하면 손 체크를 덮으려 든다).
  */
 export async function getNewcomerLinkTargets(consultationId?: string): Promise<NewcomerLinkTarget[]> {
+  // 신규생 관리 기능(모듈)이 꺼진 학원엔 상담 폼의 '신규생 체크' 칸이 없다(2026-09-30 "꺼지면 흔적 없이").
+  if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "newcomers")) return [];
   const view = await getNewcomers();
   if (!view.checksAvailable) return [];
   const linked = new Map<string, string[]>(); // `학생|과목` → 이 상담으로 한 항목
@@ -234,6 +238,8 @@ export type ConsultLinkInput = {
  *    대신 한글 사유를 돌려주고 호출부가 로그로 남긴다.
  */
 export async function applyConsultationNewcomerLinks(input: ConsultLinkInput): Promise<{ error?: string }> {
+  // 기능이 꺼진 학원은 아무것도 바꾸지 않는다(화면엔 칸이 없다 — 직접 보낸 요청의 뒷문, #77).
+  if (!isModuleEnabled((await getTenantSettingsByTenantId(input.tenantId)).modules.disabled, "newcomers")) return {};
   const admin = createAdminClient();
   const existing = await linkedRowsOf(admin, input.tenantId, input.consultationId);
   if (!existing) return { error: "신규생 체크 연결을 확인하지 못했습니다" };

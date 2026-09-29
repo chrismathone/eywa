@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { withEmbed } from "@/components/workspace/embed-context";
+import { useModuleOn } from "@/features/owner/operations-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import type { OperationsSettings } from "@/features/owner/settings-types";
 import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
@@ -30,6 +31,8 @@ export function OperationsSection({
 }) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
+  const shuttleOn = useModuleOn("shuttle");
+  const seatOn = useModuleOn("seat_attendance");
   const inFrame = useInFrame();
 
   return (
@@ -116,11 +119,16 @@ export function OperationsSection({
         <HolidayListEditor value={o.holidays} onChange={(v) => set({ holidays: v })} />
       </SettingsCard>
 
-      <SettingsCard title="셔틀버스" description="공개 접수(학부모 QR) 폼에 표시되는 셔틀 신청·요금·노선. 표시를 끄면 폼에서 숨겨집니다." span2>
-        <ShuttleEditor value={o.shuttle} onChange={(v) => set({ shuttle: v })} />
-      </SettingsCard>
+      {/* 꺼진 기능(셔틀·자리 출석부)의 카드는 세우지 않는다(2026-09-30 "꺼지면 흔적 없이") — 값은 state에 그대로 남아
+          저장해도 지워지지 않는다(섹션 저장은 o 전체를 싣는다). */}
+      {shuttleOn ? (
+        <SettingsCard title="셔틀버스" description="공개 접수(학부모 QR) 폼에 표시되는 셔틀 신청·요금·노선. 표시를 끄면 폼에서 숨겨집니다." span2>
+          <ShuttleEditor value={o.shuttle} onChange={(v) => set({ shuttle: v })} />
+        </SettingsCard>
+      ) : null}
 
       {/* 자리별로 비밀번호가 따로다 — 한 자리를 닫아도 다른 자리는 열려 있어야 하고, 담당자가 서로 다르다. */}
+      {seatOn ? (
       <SettingsCard
         title="자리 출석부 비밀번호"
         description="로그인 없이 태블릿으로 들어와 그 자리 오늘 출결을 찍을 때 쓰는 비밀번호입니다. 비우면 그 자리 공개 접속이 꺼집니다."
@@ -143,6 +151,7 @@ export function OperationsSection({
           />
         </div>
       </SettingsCard>
+      ) : null}
       </div>
     </SectionForm>
   );

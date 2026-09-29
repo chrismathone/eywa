@@ -44,6 +44,7 @@ import {
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { OneScreenStudent } from "../types";
 import { attendanceMarkOf } from "../attendance-mark";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
  * 선생님 원스크린 — 실데이터 로더(데모 스냅샷 대체).
@@ -115,6 +116,7 @@ export type TeacherRoster = {
   noticeMode: "A" | "B" | null; // 강사 본인의 AI 멘트 모드 오버라이드(null=학원 기본 따름) — 0104a
   academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드(report.noticeMode) — 토글 '학원 기본' 라벨 표시용
   classnoteSendEnabled: boolean; // ClassNote 실제 발송 스위치 — 공지 컴포저 dry-run 안내용
+  classnoteOn: boolean; // ClassNote 기능(모듈) 켜짐 — 꺼지면 발송 현황·달력·공지·C.N 표시를 감춘다(2026-09-30)
   // 발송 허용 시간창(HH:MM 원문, 무제한=null) — 원스크린 상단 강사 안내용. 활성 판정은
   // classnoteSendWindowLabel(워커 fail-open 규약 미러). **표시 여부는 클라가 현재 KST로 재판정**
   // (창 밖일 때만 노출, 원장 지시 2026-07-29)이라 라벨이 아니라 원문 시각을 내린다. 빈 로스터는 null 고정.
@@ -195,6 +197,7 @@ type RosterSettings = Pick<
   | "noticeMode"
   | "academyNoticeMode"
   | "classnoteSendEnabled"
+  | "classnoteOn"
   | "sendWindow"
   | "showAttachments"
   | "canEditAttendance"
@@ -291,6 +294,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     noticeMode: null,
     academyNoticeMode: "A",
     classnoteSendEnabled: false,
+    classnoteOn: false,
     sendWindow: null,
     showAttachments: true,
     canEditAttendance: false,
@@ -363,7 +367,8 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     showCheckTest,
     noticeMode,
     academyNoticeMode,
-    classnoteSendEnabled: settings.report.classnoteSendEnabled,
+    classnoteSendEnabled: classnoteSendOn(settings),
+    classnoteOn: classnoteModuleOn(settings),
     // 활성(둘 다 유효 HH:MM + 시작≠종료)일 때만 원문을 내린다 — 비활성이면 클라 배너 컴포넌트 자체가 안 뜬다.
     sendWindow: classnoteSendWindowLabel(
       settings.report.classnoteSendWindowStart,

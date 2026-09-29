@@ -107,6 +107,7 @@ export function ReportList({
   canSend,
   todayYmd,
   initialStatus,
+  classnoteOn = true,
 }: {
   options: ReportFilterOptions;
   initial: Result;
@@ -114,8 +115,12 @@ export function ReportList({
   todayYmd: string; // KST 오늘 — 서버가 넘긴다(클라에서 new Date()로 구하면 첫 렌더가 서버와 어긋난다)
   /** 주소로 받은 상태 필터(`?status=…`). 서버 첫 페인트와 **같은 값**을 초기 state에 넣는다. */
   initialStatus?: string;
+  /** ClassNote 기능(모듈) 켜짐 — 꺼지면 선택 발송·재발송·발송 상태 열이 없다(2026-09-30 "꺼지면 흔적 없이"). */
+  classnoteOn?: boolean;
 }) {
   const router = useRouter();
+  // 발송 열(체크박스·선택 발송·재발송)은 권한 **그리고** ClassNote 기능. 수업일 지정(CoversDateControl)은 발송과 무관 → canSend 그대로.
+  const sendOn = canSend && classnoteOn;
   const subjects = useSubjectMaps(); // 과목 표시는 한글 라벨(raw 키 노출 금지)
   const [filters, setFilters] = useState<ReportListFilters>(() => defaultReportFilters(todayYmd, initialStatus));
   const [result, setResult] = useState<Result>(initial);
@@ -297,7 +302,7 @@ export function ReportList({
         <ReportViewSettings options={options} filters={filters} todayYmd={todayYmd} onApply={run} />
         {/* 관리자 발송 — 미발송(native)만 대상. 이미 발송된 건은 선택 자체가 안 되고 서버도 거부(중복발송 차단).
             안내 문구는 비활성 체크박스의 title이 이미 같은 말을 하므로 줄을 따로 쓰지 않는다(공간 절약). */}
-        {canSend ? (
+        {sendOn ? (
           <Button
             size="sm"
             disabled={busy || pending || checked.size === 0}
@@ -316,7 +321,7 @@ export function ReportList({
         <table className={`w-full ${showMent ? "min-w-[720px]" : "min-w-[680px]"} text-left text-xs`}>
           <thead>
             <tr className="border-line text-text-faint group border-b">
-              {canSend ? (
+              {sendOn ? (
                 <th className="w-8 px-2 py-2">
                   <input
                     type="checkbox"
@@ -337,21 +342,21 @@ export function ReportList({
               <SortableTh sortKey="teacher" state={sortState} onSort={onSort}>강사</SortableTh>
               {/* 멘트 작성 방식(0214a) — 정렬 없음(값 3종 + 도입 전 "—"라 필터가 더 정확하다, 뷰 설정에서). */}
               {showMent ? <th className="px-3 py-2 font-bold" title="멘트를 누가 썼는가 — 직접 작성/자동작성(뷰 설정에서 필터)">멘트</th> : null}
-              <SortableTh sortKey="status" state={sortState} onSort={onSort}>발송 상태</SortableTh>
+              {classnoteOn ? <SortableTh sortKey="status" state={sortState} onSort={onSort}>발송 상태</SortableTh> : null}
               <SortableTh sortKey="read" state={sortState} onSort={onSort} align="right">열람</SortableTh>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={(canSend ? 7 : 6) + (showMent ? 1 : 0)} className="text-text-faint px-3 py-6 text-center">
+                <td colSpan={(sendOn ? 7 : 6) + (showMent ? 1 : 0) - (classnoteOn ? 0 : 1)} className="text-text-faint px-3 py-6 text-center">
                   조건에 맞는 보고서가 없습니다.
                 </td>
               </tr>
             ) : (
               rows.map((r) => (
                 <tr key={r.id} className="border-line hover:bg-bg-soft border-b last:border-b-0">
-                  {canSend ? (
+                  {sendOn ? (
                     <td className="px-2 py-2">
                       <input
                         type="checkbox"
@@ -397,13 +402,15 @@ export function ReportList({
                       <MentSourceCell value={r.mentSource} />
                     </td>
                   ) : null}
-                  <td className="px-3 py-2">
-                    <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} />
-                  </td>
+                  {classnoteOn ? (
+                    <td className="px-3 py-2">
+                      <StatusCell status={r.classnoteStatus} source={r.source} readAt={r.readAt} />
+                    </td>
+                  ) : null}
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <CoversDateControl row={r} canEdit={canSend} onSaved={() => run(filters)} />
-                      {canSend &&
+                      {sendOn &&
                       r.classnoteStatus &&
                       RETRY_STATUSES.has(r.classnoteStatus) &&
                       r.source !== "edutrix_import" &&

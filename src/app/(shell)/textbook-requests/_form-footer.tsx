@@ -27,8 +27,9 @@ export function TextbookFormFooter({
   pending: boolean;
   sending: boolean;
   onReset: () => void;
-  onSaveAndSend: () => void;
-  onSendCreated: (ids: string[]) => void;
+  /** 없으면(ClassNote 기능 꺼짐) '클래스노트 발송'·'학부모에게 발송' 버튼을 세우지 않는다. */
+  onSaveAndSend?: () => void;
+  onSendCreated?: (ids: string[]) => void;
 }) {
   const created = result?.ok ? result.created : undefined;
   return (
@@ -38,15 +39,17 @@ export function TextbookFormFooter({
           <Eraser className="size-4" />
           작성 지우기
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onSaveAndSend}
-          disabled={pending || sending || !canSubmit}
-        >
-          <EyIcon name="send" size={16} />
-          {sending ? "기록하는 중…" : "클래스노트 발송"}
-        </Button>
+        {onSaveAndSend ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSaveAndSend}
+            disabled={pending || sending || !canSubmit}
+          >
+            <EyIcon name="send" size={16} />
+            {sending ? "기록하는 중…" : "클래스노트 발송"}
+          </Button>
+        ) : null}
         <Button type="submit" disabled={pending || sending || !canSubmit}>
           <Save className="size-4" />
           {pending ? "저장 중…" : "이미지 저장 및 기록"}
@@ -68,7 +71,7 @@ export function TextbookFormFooter({
               : "기록되었습니다 — 요청서 이미지가 자동 저장됩니다. (아래 내역의 ‘요청서’로 다시 받을 수 있어요)"}
           </p>
           {/* 방금 만든 요청 그대로 학부모 알림장으로 — PNG 자동 저장 흐름은 그대로 두고 진입점만 추가. */}
-          {created && created.length > 0 ? (
+          {onSendCreated && created && created.length > 0 ? (
             <Button type="button" variant="outline" onClick={() => onSendCreated(created.map((c) => c.id))}>
               <EyIcon name="send" size={16} />
               학부모에게 발송

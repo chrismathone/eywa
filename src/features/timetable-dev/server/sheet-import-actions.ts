@@ -1,6 +1,8 @@
 "use server";
 
 import { licenseBlockReason } from "@/lib/license/server";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
@@ -150,6 +152,12 @@ async function resolveSpreadsheetId(
   return { id, gid: null, fromSettings: true };
 }
 
+/** 시트 연동 기능(모듈)이 꺼진 학원 — 라이선스와 함께 막는다(2026-09-30). 이 경로를 여는 화면이 없어 문구는 짧게. */
+async function sheetSyncModuleOff(): Promise<string | null> {
+  const settings = await getTenantSettings();
+  return isModuleEnabled(settings.modules.disabled, "sheet_sync") ? null : "사용할 수 없는 기능입니다";
+}
+
 // ── ① 탭 목록 ────────────────────────────────────────────────────────────────
 
 /**
@@ -161,7 +169,7 @@ export async function listPlanImportTabs(source?: string): Promise<PlanSheetTabs
   if (!gate.ok) return fail(gate.error);
   {
     // 지점 라이선스(google_sheets) — 끈 지점은 시트를 읽지 않는다(행 없음 = 허용).
-    const blocked = await licenseBlockReason(gate.access.tenantId, "google_sheets");
+    const blocked = (await licenseBlockReason(gate.access.tenantId, "google_sheets")) ?? (await sheetSyncModuleOff());
     if (blocked) return fail(blocked);
   }
 
@@ -340,7 +348,7 @@ export async function previewPlanSheetImport(args: {
   if (!gate.ok) return fail(gate.error);
   {
     // 지점 라이선스(google_sheets) — 끈 지점은 시트를 읽지 않는다(행 없음 = 허용).
-    const blocked = await licenseBlockReason(gate.access.tenantId, "google_sheets");
+    const blocked = (await licenseBlockReason(gate.access.tenantId, "google_sheets")) ?? (await sheetSyncModuleOff());
     if (blocked) return fail(blocked);
   }
   if (!isPlanMonth(args.month)) return fail("달 형식이 올바르지 않습니다(예: 2026-09)");
@@ -386,7 +394,7 @@ export async function applyPlanSheetImport(args: {
   if (!gate.ok) return fail(gate.error);
   {
     // 지점 라이선스(google_sheets) — 끈 지점은 시트를 읽지 않는다(행 없음 = 허용).
-    const blocked = await licenseBlockReason(gate.access.tenantId, "google_sheets");
+    const blocked = (await licenseBlockReason(gate.access.tenantId, "google_sheets")) ?? (await sheetSyncModuleOff());
     if (blocked) return fail(blocked);
   }
   const { month } = args;

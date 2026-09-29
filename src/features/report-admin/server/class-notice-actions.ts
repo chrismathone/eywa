@@ -8,6 +8,7 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { logAction } from "@/features/audit/server/log";
 import { CLASS_NOTICE_BODY_MAX, CLASS_NOTICE_TITLE_MAX, type ClassNoticeRow } from "../class-notice";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
  * **반 단체 공지** — ClassNote 반 보드에 공지 1건(원장 2026-09-29 *"반 공지 혹은 원생 개별 공지로 구분"*).
@@ -57,7 +58,7 @@ export async function sendClassWideNotice(input: {
 
   // 발송 안전 스위치 — 보고서·원생 개별 공지와 같은 스위치(OFF = 큐에 안 올린다).
   const settings = await getTenantSettings();
-  if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
+  if (!classnoteSendOn(settings)) return { ok: true, queued: 0, skipped, dryRun: true };
 
   const { data: inserted, error } = await admin
     .from("classnote_class_notices")

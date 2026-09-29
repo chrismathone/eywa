@@ -44,7 +44,9 @@ describe("창 모드 가드", () => {
   it("관리자 풀셸은 지점 설정(window_mode)으로 워크스페이스를 켜고 끈다", () => {
     const layout = FILES.find((f) => f.path === "src/app/(shell)/layout.tsx")!.src;
     // 연결 앱 조회와 함께 기다린다(Promise.all) — 이름(windowMode)과 판정 호출만 잠근다.
-    expect(layout).toMatch(/const \[windowMode[,\s\w]*\] = await Promise\.all\(\[\s*isFeatureLicensed\(user\.tenantId, "window_mode"\)/);
+    // 라이선스 넷은 한 조회(getLicenseFlags)로 받아 창 모드도 그 결과를 쓴다(2026-09-30).
+    expect(layout).toMatch(/const licensesPromise = getLicenseFlags\(user\.tenantId\)/);
+    expect(layout).toMatch(/const \[windowMode[,\s\w]*\] = await Promise\.all\(\[\s*licensesPromise\.then\(\(l\) => l\.window_mode\)/);
     expect(layout).toContain("<WorkspaceEnabledProvider enabled={windowMode}>");
     // 강사·학생 미니셸은 지금처럼 창 없음 고정.
     expect(layout).toContain("<WorkspaceEnabledProvider enabled={false}>");

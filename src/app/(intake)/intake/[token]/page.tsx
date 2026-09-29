@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isModuleEnabled } from "@/lib/modules";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { PublicIntakeForm } from "./public-intake-form";
@@ -67,7 +68,8 @@ export default async function PublicIntakePage({
       academyName={academyName}
       subjectOptions={subjects.options}
       gradeLevels={settings.operations.gradeLevels}
-      shuttle={settings.operations.shuttle}
+      // 셔틀 기능이 꺼진 학원은 셔틀 신청 칸이 없다(2026-09-30 "꺼지면 흔적 없이").
+      shuttle={isModuleEnabled(settings.modules.disabled, "shuttle") ? settings.operations.shuttle : { ...settings.operations.shuttle, enabled: false }}
       privacyTerms={settings.notifications.privacyTerms}
       serviceTerms={settings.notifications.serviceTerms}
       serverNow={serverNow}

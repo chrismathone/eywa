@@ -23,11 +23,14 @@ export function ReportNameCard({
   realName,
   initialName,
   mappingBlocked,
+  classnoteOn = true,
 }: {
   realName: string;
   initialName: string | null;
   /** 이름은 저장돼 있는데 발송 매핑이 안 걸리는 상태(동명 직원 등) — 카드가 사실을 밝힌다([[#89]]). */
   mappingBlocked: boolean;
+  /** ClassNote 기능(모듈) 켜짐 — 꺼진 학원엔 설명에서 ClassNote를 말하지 않는다(2026-09-30). */
+  classnoteOn?: boolean;
 }) {
   const t = useSheetT();
   const [state, action, pending] = useActionState<MeAccountState, FormData>(updateMyReportName, undefined);
@@ -44,7 +47,7 @@ export function ReportNameCard({
     <section className="border-line bg-card rounded-2xl border p-5 shadow-card">
       <h2 className="text-foreground text-sm font-bold">{t("me.reportName")}</h2>
       <p className="text-text-dim mt-1 text-xs">
-        {t("me.reportName.desc.a")}
+        {t(classnoteOn ? "me.reportName.desc.a" : "me.reportName.desc.aLink")}
         <b>{realName}</b>
         {t("me.reportName.desc.b")}
       </p>

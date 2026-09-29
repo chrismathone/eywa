@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { useModuleOn } from "@/features/owner/operations-context";
 import { TEXTAREA_AUTOSIZE } from "@/lib/ui/textarea";
 import { loadMyTextbookMent, saveMyTextbookMent } from "./server/textbook-notice-actions";
 import { DEFAULT_TEXTBOOK_MENT } from "./textbook-notice";
@@ -77,6 +78,9 @@ export function TextbookMentField({
   onChange: (v: string) => void;
   rows?: number;
 }) {
+  // 이 문구는 ClassNote 발송에만 쓰인다 — ClassNote 기능이 꺼진 학원엔 칸 자체가 없다(2026-09-30 "꺼지면 흔적 없이").
+  const classnoteOn = useModuleOn("classnote");
+  if (!classnoteOn) return null;
   return (
     <div className="space-y-1.5">
       <span className="text-foreground block text-sm font-medium">학부모에게 보낼 메시지</span>

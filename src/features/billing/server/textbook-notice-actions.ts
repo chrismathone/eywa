@@ -39,6 +39,7 @@ import {
   getStudentBoardSubjects,
   loadScopedOrders,
 } from "./textbook-notice-data";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 const MENT_MAX = 2000;
 
@@ -105,7 +106,7 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
     })),
     ment: resolveTextbookMent(savedMent),
     account: { bank: acc.bank, holder: acc.holder, number: acc.number },
-    sendEnabled: settings.report.classnoteSendEnabled,
+    sendEnabled: classnoteSendOn(settings),
     showAttachments: settings.report.showAttachments,
     workerError: worker.ok ? undefined : worker.error,
   };

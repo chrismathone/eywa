@@ -98,6 +98,7 @@ export default async function OneScreenPage({
       noticeMode={roster.noticeMode}
       academyNoticeMode={roster.academyNoticeMode}
       classnoteSendEnabled={roster.classnoteSendEnabled}
+      classnoteOn={roster.classnoteOn}
       sendWindow={roster.sendWindow}
       showAttachments={roster.showAttachments}
       canEditAttendance={roster.canEditAttendance}

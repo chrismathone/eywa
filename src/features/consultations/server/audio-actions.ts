@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { submitTranscript } from "@/lib/ai/assemblyai";
 import { getAssemblyaiWebhookUrl } from "@/lib/config/app-url";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { licenseBlockReason } from "@/lib/license/server";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -48,6 +49,9 @@ export async function startStudentConsultationFromAudio(
 ): Promise<StartStudentConsultationAudioState> {
   const { user, error } = await requireConsultationWrite();
   if (error || !user) return { error };
+  // 녹음·전사 라이선스(슈퍼관리자) — 꺼진 지점은 전사를 시작하지 않는다(회의 녹음과 같은 스위치, 2026-09-30).
+  const licenseErr = await licenseBlockReason(user.tenantId, "meeting_recording");
+  if (licenseErr) return { error: licenseErr };
 
   const studentId = String(formData.get("studentId") ?? "").trim();
   const audioPath = String(formData.get("audioPath") ?? "").trim();

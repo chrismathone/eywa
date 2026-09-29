@@ -24,7 +24,7 @@ const seat = strip(read("src", "features", "class-sheets", "server", "seat-day.t
 describe("🔴 반 이름이 키인 곳엔 미래 이름을 넣지 않는다", () => {
   it("classnoteStateOf는 DB 이름(cls.class_name)을 그대로 받는다", () => {
     // 이 값은 ClassNote **보드 매칭 키**(classKey)다. 표시용 이름을 먹이면 배지가 조용히 틀린다.
-    expect(today).toMatch(/classnoteToday: classnoteStateOf\(cls\.class_name as string\)/);
+    expect(today).toMatch(/classnoteToday: classnoteOn \? classnoteStateOf\(cls\.class_name as string\) : "untracked"/);
     // 해석된 표시 이름 변수를 여기 넣지 못하게 못박는다.
     expect(today).not.toMatch(/classnoteStateOf\(\s*renamed/);
   });

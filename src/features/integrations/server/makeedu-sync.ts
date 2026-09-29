@@ -1,6 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { createClient } from "@/lib/supabase/server";
 import { isPushableConsultation, pushEligibilityNote } from "../push-eligibility";
 
@@ -42,6 +44,8 @@ export const getMakeeduSyncState = cache(
   async (domain: MakeeduSyncDomain): Promise<MakeeduSyncState | null> => {
     const user = await getCurrentUser();
     if (!user) return null;
+    // makeedu 기능(모듈)이 꺼진 학원엔 동기화 배지·시각이 없다(원장 2026-09-30 "꺼지면 있었는지조차 모르게").
+    if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "makeedu")) return null;
     const supabase = await createClient();
     const { data } = await supabase
       .from("makeedu_sync_state")

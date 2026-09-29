@@ -4,10 +4,13 @@ import { useState } from "react";
 import type { NotificationsSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
 import { TextAreaField, TextField } from "./fields";
+import { useModuleOn } from "@/features/owner/operations-context";
 
 export function NotificationsSection({ initial }: { initial: NotificationsSettings }) {
   const [n, setN] = useState<NotificationsSettings>(initial);
   const set = (patch: Partial<NotificationsSettings>) => setN((prev) => ({ ...prev, ...patch }));
+  // 알림톡 발신키는 키오스크(등하원 알림) 기능의 폴백이다 — 키오스크가 꺼진 학원엔 카드가 없다(2026-09-30). 값은 state에 남는다.
+  const kioskOn = useModuleOn("kiosk");
 
   return (
     <SectionForm section="notifications" payload={n}>
@@ -15,6 +18,7 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
       {/* 폴백 소스: 전용 설정(키오스크 설정)이 비어 있으면 아래 값이 쓰인다(provider.ts).
           ⚠️ kakaoChannelId(@채널)는 발송 경로(pfId+템플릿)에서 안 쓰여 대응 DB 컬럼이 없으므로 입력 숨김(상태·저장은 보존).
           ⚠️ 구글 시트 ID는 연동 탭(?tab=sheets)으로 이전 — 여기서 편집하지 않음(연동 설정 단일 홈). */}
+      {kioskOn ? (
       <SettingsCard
         title="알림"
         description="비우면 키오스크 설정의 값을 사용합니다. 입력하면 키오스크 설정이 비어 있을 때 폴백으로 쓰입니다."
@@ -26,6 +30,7 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
           onChange={(v) => set({ alimtalkSenderKey: v })}
         />
       </SettingsCard>
+      ) : null}
 
       <SettingsCard title="인쇄물" description="청구서·성적표 등 인쇄물 상단 머리글.">
         <TextField

@@ -1,4 +1,5 @@
 import "server-only";
+import { isModuleEnabled } from "@/lib/modules";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canViewPayslip } from "../payslip-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -20,8 +21,10 @@ import type { SystemRole } from "@/lib/permissions";
  * ⚠️ 명단에 있으면 super_admin 조회 자체를 건너뛴다(대부분의 호출이 여기서 끝난다).
  */
 export async function canViewPayslipNow(user: { id: string; systemRole: SystemRole }): Promise<boolean> {
-  if (await isCurrentUserSuperAdmin()) return true;
+  // 급여 기능(모듈)이 꺼진 학원엔 급여 화면·단가·명세서가 없다 — 총괄도 예외 없음(기능이 없는 학원, 2026-09-30).
   const settings = await getTenantSettings();
+  if (!isModuleEnabled(settings.modules.disabled, "payroll")) return false;
+  if (await isCurrentUserSuperAdmin()) return true;
   return canViewPayslip(user, {
     isChinsanTenant: isChinsanTenant(settings),
     viewerIds: settings.permissions.specialAccess.payslipViewerIds,

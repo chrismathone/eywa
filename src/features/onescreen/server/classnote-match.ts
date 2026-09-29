@@ -3,6 +3,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { buildCnMatchMap, CN_UNAVAILABLE, type CnMatchMap, type CnMemberRow } from "../classnote-match";
 
 /**
@@ -14,6 +16,8 @@ import { buildCnMatchMap, CN_UNAVAILABLE, type CnMatchMap, type CnMemberRow } fr
  */
 export async function getClassnoteMatchMap(): Promise<CnMatchMap> {
   try {
+    // ClassNote 기능이 꺼진 학원은 라벨 자체가 없다(조회 0회 — 설정은 요청 캐시라 추가 비용 없음).
+    if (!classnoteModuleOn(await getTenantSettings())) return CN_UNAVAILABLE;
     const supabase = await createClient();
     const today = kstToday();
     const [members, boards, eligible] = await Promise.all([

@@ -7,6 +7,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { classnoteMinDate } from "../classnote-guard";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
  * 원스크린 "지난 보고서" 뷰 — 로그인 강사 **본인이 쓴** 보고서 이력(날짜 내림차순, 커서 페이징).
@@ -60,7 +61,7 @@ export async function getMyPastReports(input?: {
   // 🔴 ClassNote를 **안 쓰는 지점**(발송 스위치 OFF = 새 지점의 기본값)은 보낼 수 있는 보고서가 없다 — 과목 게이트가 비어 있으면
   //    아래 식이 '전부 보낼 수 있음'으로 열려서(fail-open), 카톡으로 링크를 보내는 지점의 강사에게 전건 '보낼 수 있음'이 떴다
   //    (감사 2026-09-21). 실제 발송 게이트(onescreen/server/actions.ts)와 같은 스위치를 먼저 본다(#77).
-  const sendSwitchOn = settings.report.classnoteSendEnabled === true;
+  const sendSwitchOn = classnoteSendOn(settings);
   const minDate = classnoteMinDate();
   let q = supabase
     .from("lesson_reports")

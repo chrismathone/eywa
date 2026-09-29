@@ -22,6 +22,7 @@ import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { getClassnoteQueue, type ClassnoteQueueView } from "./queries";
 import { isSendClassRouteRow, sendClassRow } from "@/features/onescreen/send-class";
 import { blockedForNoSendClass } from "@/features/onescreen/server/send-class";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
  * 실패/오래됨 보고서 재발송 — queued로 되돌려 워커가 다시 잡게 한다. retry_count·error 초기화.
@@ -100,7 +101,7 @@ export async function retryClassnote(
   if (allowed.length === 0) return { ok: true, requeued: 0, skipped };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장 승인 전까지 실제 재발송(queued) 안 함.
-  if (!settings.report.classnoteSendEnabled) {
+  if (!classnoteSendOn(settings)) {
     return { ok: true, requeued: 0, skipped, dryRun: true };
   }
 
@@ -250,7 +251,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   if (eligible.length === 0) return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent, emptyMent };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 어떤 행도 변경하지 않고 반환(동명이인 마킹도 안 함).
-  if (!settings.report.classnoteSendEnabled) {
+  if (!classnoteSendOn(settings)) {
     return { ok: true, queued: 0, conflicts: 0, skipped: capped.length - emptyMent - eligible.length, dryRun: true, emptyMent };
   }
 

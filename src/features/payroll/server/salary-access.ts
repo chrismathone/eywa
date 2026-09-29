@@ -1,4 +1,6 @@
 import "server-only";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 
@@ -13,5 +15,7 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 export async function canManageSalary(): Promise<boolean> {
   const user = await getCurrentUser();
   if (!user) return false;
+  // 급여 기능(모듈)이 꺼진 학원엔 급여 화면·단가·명세서가 없다 — 총괄도 예외 없음(기능이 없는 학원, 2026-09-30).
+  if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return false;
   return user.systemRole === "master" || (await isCurrentUserSuperAdmin());
 }

@@ -10,6 +10,7 @@ import { ProgressContainerPanel } from "@/features/progress/components/progress-
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteBadge } from "@/features/onescreen/classnote-badge";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { ReportOpenLink } from "./report-open-link";
 import { ProgressCell } from "./progress-cell";
 
@@ -80,6 +81,8 @@ export async function ProgressTab({
   const { rows: reports, total } =
     shownPage !== page ? await getStudentLessonReportsPage(studentId, { page: shownPage, from, to }) : first;
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  // ClassNote 기능이 꺼진 학원엔 발송 상태 열이 없다(2026-09-30 "꺼지면 흔적 없이").
+  const classnoteOn = classnoteModuleOn(settings);
   const filtered = !!(from || to);
   const hrefWith = (opts: { p: number; keepDates: boolean }) => {
     const q = new URLSearchParams({ tab: "progress" });
@@ -150,7 +153,7 @@ export async function ProgressTab({
                 <th className="micro px-4 py-2 text-left">진도</th>
                 <th className="micro px-4 py-2 text-center">시험</th>
                 <th className="micro px-4 py-2 text-center">숙제</th>
-                <th className="micro px-4 py-2 text-center">ClassNote</th>
+                {classnoteOn ? <th className="micro px-4 py-2 text-center">ClassNote</th> : null}
                 <th className="micro px-4 py-2 text-center">학부모 링크</th>
                 {/* 실제 수업보고서 바로가기(원장 2026-09-18). 🔴 학부모 링크(`/r/…`)로 보내지 말 것 — 그 페이지는
                     워커 밖의 **모든 방문을 학부모 열람으로 적는다**(바로 옆 '학부모 링크' 열이 "1회 열람"으로 오염된다).
@@ -171,9 +174,11 @@ export async function ProgressTab({
                     <td className="text-foreground break-keep px-4 py-2 text-xs">{r.progress ? <ProgressCell text={r.progress} /> : "—"}</td>
                     <td className="num px-4 py-2 text-center text-xs whitespace-nowrap">{r.examInfo ?? "—"}</td>
                     <td className="px-4 py-2 text-center text-xs whitespace-nowrap">{homeworkMark(r.homeworkScore)}</td>
-                    <td className={`px-4 py-2 text-center text-xs font-bold whitespace-nowrap ${cn.cls}`}>
-                      {cn.label}
-                    </td>
+                    {classnoteOn ? (
+                      <td className={`px-4 py-2 text-center text-xs font-bold whitespace-nowrap ${cn.cls}`}>
+                        {cn.label}
+                      </td>
+                    ) : null}
                     <td className={`px-4 py-2 text-center text-xs whitespace-nowrap ${link.cls}`}>{link.label}</td>
                     <td className="px-4 py-2 text-center text-xs whitespace-nowrap">
                       <ReportOpenLink reportId={r.id} reportDate={r.reportDate} />

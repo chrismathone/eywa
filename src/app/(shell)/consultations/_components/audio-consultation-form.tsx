@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { History, Loader2, Mic, Square, Upload } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { FilePickerButton } from "@/components/ui/file-picker-button";
@@ -28,7 +29,7 @@ const KIND = "student-consultation" as const;
  * 녹음은 이 폼이 든 플로팅 창 안에서 진행(별도 브라우저 창 없음) + IndexedDB 크래시 복구 + 녹음 중
  * 창 닫기/탭 새로고침 잠금(useRecordingLock) — 회의록·등록상담 폼과 동일.
  */
-export function AudioConsultationForm({ students }: { students: StudentOption[] }) {
+function AudioConsultationFormInner({ students }: { students: StudentOption[] }) {
   const [studentId, setStudentId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [recording, setRecording] = useState(false);
@@ -233,4 +234,9 @@ export function AudioConsultationForm({ students }: { students: StudentOption[] 
       </div>
     </details>
   );
+}
+
+/** 녹음·전사 라이선스가 꺼진 지점엔 녹음 칸이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 경로가 따로 막는다. */
+export function AudioConsultationForm(props: Parameters<typeof AudioConsultationFormInner>[0]) {
+  return useLicenseOn("meeting_recording") ? <AudioConsultationFormInner {...props} /> : null;
 }

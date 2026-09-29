@@ -1,4 +1,7 @@
+"use client";
+
 import { RefreshCw } from "@/components/icons/aywa-icon-compat";
+import { useModuleOn } from "@/features/owner/operations-context";
 
 /**
  * 목록 행에서 "이 항목은 **지난 동기화가 새로 추가**했다"를 표시하는 소형 배지.
@@ -7,6 +10,9 @@ import { RefreshCw } from "@/components/icons/aywa-icon-compat";
  * 상단 화면-레벨 MakeeduSyncBadge("↻ 동기화 N분 전")와 같은 ↻ 언어를 쓰되, 행마다 눈에 띄게 blue-soft로 대비를 준다.
  */
 export function MakeeduOriginTag({ className }: { className?: string }) {
+  // makeedu 기능이 꺼진 학원엔 이 표식이 없다(2026-09-30 "꺼지면 흔적 없이") — 지난 동기화 흔적이 행에 남아 있어도.
+  const makeeduOn = useModuleOn("makeedu");
+  if (!makeeduOn) return null;
   return (
     <span
       className={`bg-blue-soft text-blue inline-flex items-center gap-0.5 whitespace-nowrap rounded-full px-1 py-[1px] align-middle text-xs font-medium ${className ?? ""}`}

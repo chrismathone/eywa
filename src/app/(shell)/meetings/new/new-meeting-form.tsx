@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { kstDateTimeLocal } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
 import { useStateDraft } from "@/components/forms/use-state-draft";
@@ -38,6 +39,8 @@ const nowLocalIso = (): string => kstDateTimeLocal();
 const LEAVE_FALLBACK_MS = 5000;
 
 export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
+  // 녹음·전사 라이선스가 꺼진 지점엔 '음성' 칸이 없다 — 메모장만으로 회의록을 만든다(2026-09-30 "꺼지면 흔적 없이").
+  const recordingOn = useLicenseOn("meeting_recording");
   const router = useRouter();
   const inFrame = useInFrame();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -467,6 +470,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       </div>
 
       {/* Audio source */}
+      {recordingOn ? (
       <div className="space-y-2">
         <label className="text-foreground block text-sm font-medium">음성</label>
 
@@ -538,6 +542,7 @@ export function NewMeetingForm({ onSuccess }: { onSuccess?: () => void } = {}) {
           className="hidden"
         />
       </div>
+      ) : null}
 
       {/* 메모장 — 회의 중 메모(선택). 녹음과 함께 'AI로 정리'에 결합되며, 녹음 없이 메모만으로도 회의록 생성 가능. */}
       <div className="space-y-1.5">

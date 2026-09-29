@@ -53,6 +53,7 @@ export function AttendanceLegend({
   showToday,
   showMathUnits = false,
   showEnglishUnits = false,
+  eieOn = true,
 }: {
   lang?: SheetLang;
   /**
@@ -62,6 +63,8 @@ export function AttendanceLegend({
   showToday: boolean;
   showMathUnits?: boolean;
   showEnglishUnits?: boolean;
+  /** EiE 구분(모듈) 켜짐 — 꺼지면 범례에서 EiE 이름을 뺀다. */
+  eieOn?: boolean;
 }) {
   const t = (key: Parameters<typeof sheetT>[1]) => sheetT(lang, key);
   // 🔴 **한 줄**(원장 2026-09-21 *"상단에 굳이 2열로 두지말고 하나의 열로 공간 확보"*) — 시수 기준과 범례를
@@ -76,7 +79,7 @@ export function AttendanceLegend({
         {showMathUnits ? <span>{t("att.units.math")}</span> : null}
         {showEnglishUnits ? (
           <>
-            <span>{t("att.units.eie")}</span>
+            <span>{t(eieOn ? "att.units.eie" : "att.units.bridge")}</span>
             <span>{t("att.units.injaewon")}</span>
           </>
         ) : null}

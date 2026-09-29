@@ -1,5 +1,7 @@
 import "server-only";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { isFeatureLicensed } from "@/lib/license/server";
 import type { SystemRole } from "@/lib/permissions";
 
 export const SHEET_ACCESS_DENIED_MSG = "구글 시트 연동 권한이 없습니다";
@@ -16,5 +18,9 @@ export const SHEET_ACCESS_DENIED_MSG = "구글 시트 연동 권한이 없습니
  * 통과해야 한다(2단: 시트 경로 자격 + 시간표 변경 자격).
  */
 export async function canManageSheetSync(role: SystemRole): Promise<boolean> {
-  return (await accessLevelTenant(role, "sheet_sync")) === "full";
+  // 모듈(sheet_sync)이 꺼지면 권한 매트릭스 캡으로 none — 여기에 **지점 라이선스(google_sheets)**까지 건다
+  // (원장 2026-09-30 "꺼지면 있었는지조차 모르게" — 라이선스를 끈 지점에 '시트로 보내기' 버튼이 서 있었다).
+  if ((await accessLevelTenant(role, "sheet_sync")) !== "full") return false;
+  const user = await getCurrentUser();
+  return user ? isFeatureLicensed(user.tenantId, "google_sheets") : false;
 }

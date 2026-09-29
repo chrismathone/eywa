@@ -37,6 +37,7 @@ import {
   loadSendClassCandidates,
   resolveSendClass,
 } from "@/features/onescreen/server/send-class";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 export type AdminSaveReportInput = {
   studentId: string;
@@ -267,7 +268,7 @@ export async function saveAndQueueAdminReport(
 
   // 발송 안전 스위치(기본 OFF) — 원장 승인 전까지 저장만.
   const settings = await getTenantSettings();
-  if (!settings.report.classnoteSendEnabled) {
+  if (!classnoteSendOn(settings)) {
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "dry_run" };
   }
   // 과목 opt-in/화이트리스트 — 없으면 저장만.
@@ -551,7 +552,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   if (!targets.length) return { ok: true, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, optoutSkipped, overflow };
 
   // ── 2. 발송 안전 스위치(기본 OFF) — dry-run이면 저장/큐잉 없이 예정 인원만 반환 ──
-  if (!settings.report.classnoteSendEnabled) {
+  if (!classnoteSendOn(settings)) {
     return { ok: true, dryRun: true, wouldSend: targets.length, queued: 0, conflicts: 0, skippedExisting: 0, subjectOff, optoutSkipped, overflow };
   }
 
@@ -879,7 +880,7 @@ export async function getAdminComposeContext(studentId: string): Promise<{
     subjects,
     sendableSubjects,
     nameCollision,
-    sendEnabled: settings.report.classnoteSendEnabled,
+    sendEnabled: classnoteSendOn(settings),
   };
 }
 

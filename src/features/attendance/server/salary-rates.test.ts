@@ -5,6 +5,7 @@ vi.mock("@/lib/auth/perm-matrix", () => ({ canManageTenant: h.manage }));
 vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: h.scope }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: h.from }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
 vi.mock("./teacher-axis-queries", () => ({ loadClassAxisRows: h.classes }));
 import { getAttendanceSalaryRates } from "./salary-rates";
 import { saveAttendanceSalaryRates } from "./salary-rates-actions";

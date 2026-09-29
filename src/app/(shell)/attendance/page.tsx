@@ -18,6 +18,7 @@ import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getDailyProcessingStatus, getMonthlyAttendanceMatrix, type AttendanceMatrix } from "@/features/attendance/server/queries";
 import { getTeacherMoney } from "@/features/attendance/server/teacher-money";
@@ -243,11 +244,18 @@ export default async function AttendancePage({
 
   // 반 목록(경량) — classId 없이 부르면 무거운 출석 데이터는 안 불러온다(렉 방지). 과목→강사→반 계층·선택지 도출용.
   // 학원설정·보기설정과는 서로 독립이라 병렬로(B4 — 독립 await는 Promise.all).
-  const [base, { operations }, viewPrefs] = await Promise.all([
+  const [base, tenantSettings, viewPrefs] = await Promise.all([
     getMonthlyAttendanceMatrix(month, null),
     getTenantSettings(),
     loadAttendanceViewPrefs(),
   ]);
+  const { operations } = tenantSettings;
+  // 꺼진 기능(모듈)의 칸·버튼은 이 화면에 없다(원장 2026-09-30 "꺼지면 있었는지조차 모르게") —
+  // 자리 출석부(허브 카드·자리 선택) · 급여(실급여·단가·급여명세서) · 회차 정산(확정 회차·단가 칸) · EiE(범례 문구).
+  const seatOn = isModuleEnabled(tenantSettings.modules.disabled, "seat_attendance");
+  const payrollOn = isModuleEnabled(tenantSettings.modules.disabled, "payroll");
+  const sessionBillingOn = isModuleEnabled(tenantSettings.modules.disabled, "session_billing");
+  const eieOn = isModuleEnabled(tenantSettings.modules.disabled, "eie");
   const allClasses = base.classes; // { id, className, subject, teacherId, teacherName }
   // 특강 토글(0133a) — 표식 규칙이 반마다 읽는다. 목록 쪽 타입엔 없어 반 목록 원본에서 되짚는다.
   const matrixClassById = new Map(base.classes.map((c) => [c.id, c]));
@@ -298,7 +306,7 @@ export default async function AttendancePage({
    * 값은 uuid와 안 겹치는 `seat:` 접두사를 태우고, 고르면 아래에서 자리 화면으로 보낸다.
    * ⚠️ 과목 필터가 영어가 아닐 땐 자리를 숨긴다 — 자리는 영어관 운영이라 수학 화면에 뜨면 노이즈다.
    */
-  const showSeats = !effectiveSubject || effectiveSubject === "english";
+  const showSeats = seatOn && (!effectiveSubject || effectiveSubject === "english");
   const seatOptions = showSeats
     ? SEAT_KEYS.map((k) => ({
         value: seatFilterValue(k),
@@ -449,7 +457,7 @@ export default async function AttendancePage({
         .filter(({ c }) => c.teacherId === effectiveTeacher)
     : [];
   const money =
-    mode === "teacher" && user.systemRole === "master" && effectiveTeacher
+    mode === "teacher" && user.systemRole === "master" && effectiveTeacher && payrollOn
       ? await getTeacherMoney(
           month,
           effectiveTeacher,
@@ -522,7 +530,7 @@ export default async function AttendancePage({
     const billing = await getAttendanceClassBilledAmounts(month, [roster], { allowClassIds: [makeupPoolClassId] });
     return { classId: makeupPoolClassId, matrix: poolMatrix, roster, billing };
   };
-  const [workers, homeBilling, makeupPool, showActualAmount, salaryConfig] = await Promise.all([
+  const [workers, homeBilling, makeupPool, showActualAmountRaw, salaryConfigRaw] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
     getAttendanceClassBilledAmounts(month, homeBillingRoster, {
       teacherScope: (mode === "teacher" ? effectiveTeacher : classScopeTeacher) ? {
@@ -537,6 +545,9 @@ export default async function AttendancePage({
     canShowAttendanceActualAmount(mode === "teacher" ? effectiveTeacher : classScopeTeacher ?? classesForSubject.find((c) => c.id === effectiveClassId)?.teacherId ?? null),
     getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : null),
   ]);
+  // 급여 기능이 꺼진 학원 = 실급여 열·단가 버튼·토글 없음(조회는 이미 끝났지만 값을 버린다 — 표시 전용).
+  const showActualAmount = payrollOn && showActualAmountRaw;
+  const salaryConfig = payrollOn ? salaryConfigRaw : null;
   /** 청구 판정을 받은 **모든** 학생×반(담당 반 + 명단이 있는 보강 반) — `—` 줄 판정과 표의 청구 칸이 같은 목록·같은 판정을 본다. */
   const billingRoster = makeupPool.roster ? [...homeBillingRoster, makeupPool.roster] : homeBillingRoster;
   const classBilledAmounts = makeupPool.billing
@@ -1201,6 +1212,7 @@ export default async function AttendancePage({
                   showToday={visibleDays.some((d) => d.isToday)}
                   showMathUnits={allGroups.some((g) => g.unitSuffix === "T")}
                   showEnglishUnits={allGroups.some((g) => g.unitSuffix === "U")}
+                  eieOn={eieOn}
                 />
               </>
             }
@@ -1213,9 +1225,9 @@ export default async function AttendancePage({
                   프리랜서 강사 전체 보기)에서만. 켜고 끄는 건 계정 귀속 설정이다. */}
               {showActualAmount ? <ActualSalaryToggle checked={viewPrefs.showActualSalary} /> : null}
             </> : undefined}
-            termSessionsByRow={classBilledAmounts.confirmedSessions}
-            confirmedPricesByRow={classBilledAmounts.confirmedPrices}
-            priceConfirmedRows={classBilledAmounts.priceConfirmed}
+            termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : {}}
+            confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}
+            priceConfirmedRows={sessionBillingOn ? classBilledAmounts.priceConfirmed : []}
             noInvoiceRows={noInvoiceRows}
             money={money}
             moneyNote={moneyNote}

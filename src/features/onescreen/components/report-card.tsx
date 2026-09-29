@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import { useClassnoteOn } from "./classnote-on-context";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -218,6 +220,9 @@ export function ReportCard({
   // 🔴 훅은 아래 early return(`if (!subject) return null`)보다 **앞**에 — 조건부 호출 금지.
   const lang = useSheetLang();
   const t = useSheetT();
+  const classnoteOn = useClassnoteOn();
+  // AI 라이선스가 꺼진 지점엔 '자동 작성' 버튼이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 generateJSON이 따로 막는다.
+  const aiOn = useLicenseOn("ai_analysis");
   const tf = useSheetTf();
   const [ownIdx, setOwnIdx] = useState(0);
   const selIdx = subjectIndex ?? ownIdx;
@@ -294,7 +299,7 @@ export function ReportCard({
   // 학부모 읽음(G3)도 같은 게이트 — RPC는 학생의 **모든** 보고서를 세는데 발송분이 아직 전부 수학이라
   // (subject='english' 0건, 2026-07-29), 영어 강사 화면에 달면 "당신의 영어 보고서가 미확인"으로 읽힌다.
   // 📌 영어 발송이 시작되면 RPC에 과목을 넘겨 과목별로 세고 이 게이트를 그때 푼다.
-  const unreadBadge = hasMathSubject ? parentUnreadBadge(student.parentRead) : null;
+  const unreadBadge = classnoteOn && hasMathSubject ? parentUnreadBadge(student.parentRead) : null;
   // 멘트 모드 B = 초안을 2문단(수업 내용 / 태도·특이사항)으로 나눠 편집. 값은 단일 문자열 그대로 저장.
   // 영어 템플릿 글은 문단이 여럿이라 2칸으로 쪼개면 템플릿이 망가진다 → 영어 행은 늘 한 칸.
   const para = noticeMode === "B" && !isEnglishRow;
@@ -599,6 +604,7 @@ export function ReportCard({
                 </span>
               ) : null}
             </div>
+            {aiOn ? (
             <Button
               variant="ghost"
               size="sm"
@@ -618,6 +624,7 @@ export function ReportCard({
             >
               <EyIcon name="sparkle" size={13} /> {generating ? t("os.card.generating") : t("os.row.gen")}
             </Button>
+            ) : null}
           </div>
           {/* 영어 행 템플릿 칸(2026-09-10) — 배선은 onescreen-client, 카드는 자리만(todayInputs와 같은 슬롯 규약). */}
           {isEnglishRow ? templatePanel : null}
@@ -697,6 +704,8 @@ export function ReportCard({
 
         {/* ClassNote 자동 발송 — 저장 + 큐 적재(로컬 워커가 자동 게시). 상태는 배지로 표시.
             ⚠️ 결석 게이트는 표뷰와 동일(isRowActionable send) — 카드만 우회되는 구멍 방지(#77, 리뷰 확정). */}
+        {/* ClassNote 기능이 꺼진 학원엔 발송 줄 자체가 없다 — 저장·공유 링크(아래)만 남는다(2026-09-30). */}
+        {classnoteOn ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
@@ -751,11 +760,12 @@ export function ReportCard({
             </span>
           ) : null}
         </div>
+        ) : null}
 
         {/* ⚠️ 게시된 보고서는 재발송 차단(2026-07-22) — 수업보고서는 카드 '이미지'로 게시돼 텍스트 수정이 안 되고,
             다시 보내면 기존 글은 그대로 둔 채 새 글만 하나 더 붙는다(되돌릴 수단 없음). 그래서 버튼을 잠근다.
             정말 다시 보내야 하면 아래 '링크 재발급'(상태 리셋) 또는 관리자 발송 콘솔의 '재발송'을 쓴다. */}
-        {alreadySent ? (
+        {classnoteOn && alreadySent ? (
           <p className="border-amber/40 bg-amber-soft text-amber flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="alert" size={13} className="mt-0.5 shrink-0" />
             <span>
@@ -772,7 +782,7 @@ export function ReportCard({
 
         {/* 회수 완료 — '발송'이 곧 재발송이다(별도 버튼을 두지 않는다, 원장 2026-08-06:
             *"회수하고 클래스노트 발송 버튼 누르면 그게 재발송 아닌가"*). 발송 시 새 토큰이 발급된다. */}
-        {liveStatus === "recalled" ? (
+        {classnoteOn && liveStatus === "recalled" ? (
           <p className="border-line bg-bg-soft text-text-dim flex items-start gap-1 rounded-md border px-2.5 py-1.5 text-xs leading-relaxed">
             <EyIcon name="check" size={13} className="text-primary mt-0.5 shrink-0" />
             <span>
@@ -863,7 +873,7 @@ export function ReportCard({
               <p className="border-amber/40 bg-amber-soft text-amber mb-1.5 rounded border px-2 py-1.5 text-xs leading-snug">
                 {t("os.attach.offA")}
                 <b>{t("os.attach.offB")}</b>
-                {t("os.attach.offC")} {t("os.card.attachOffAsk")}
+                {t(classnoteOn ? "os.attach.offC" : "os.attach.offCLink")} {t("os.card.attachOffAsk")}
               </p>
             ) : null}
             {atts.length ? (
@@ -897,7 +907,7 @@ export function ReportCard({
               </div>
             ) : (
               <p className="text-text-faint text-xs">
-                {t("os.card.attachHint")}
+                {t(classnoteOn ? "os.card.attachHint" : "os.card.attachHintLink")}
               </p>
             )}
           </div>

@@ -12,6 +12,7 @@ import { Popover } from "@base-ui/react/popover";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { isImageAttachment } from "../attachment-utils";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useClassnoteOn } from "./classnote-on-context";
 
 export type GridAttachment = { path: string; name: string };
 
@@ -46,6 +47,7 @@ export function GridAttachButton({
   onOpen: () => void; // 열 때 썸네일 서명 요청(행마다 미리 서명하지 않는다)
 }) {
   const t = useSheetT();
+  const classnoteOn = useClassnoteOn();
   const tf = useSheetTf();
   const [open, setOpen] = useState(false);
   const count = attachments.length;
@@ -99,7 +101,7 @@ export function GridAttachButton({
               <p className="border-amber/40 bg-amber-soft text-amber rounded border px-2 py-1.5 text-xs leading-snug">
                 {t("os.attach.offA")}
                 <b>{t("os.attach.offB")}</b>
-                {t("os.attach.offC")}
+                {t(classnoteOn ? "os.attach.offC" : "os.attach.offCLink")}
               </p>
             ) : null}
             {count ? (
@@ -130,7 +132,7 @@ export function GridAttachButton({
               <p className="text-text-faint text-xs leading-snug">
                 {t("os.attach.dropA")}
                 <b>{t("os.attach.dropB")}</b>
-                {t("os.attach.dropC")}
+                {t(classnoteOn ? "os.attach.dropC" : "os.attach.dropCLink")}
               </p>
             )}
           </Popover.Popup>

@@ -25,6 +25,7 @@ import {
   type NoticeAttachment,
 } from "@/features/onescreen/notice-attachments";
 import { resolveNoticeTargets, type NoticeCandidate, type NoticeSkip, type NoticeTarget } from "../notice-targets";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 export type NoticeClassOption = {
   id: string;
@@ -208,7 +209,7 @@ export async function sendClassNotice(input: {
     };
 
   // 발송 안전 스위치 — OFF면 dry-run(큐 적재 안 함). 보고서 발송과 동일 스위치 공유.
-  if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
+  if (!classnoteSendOn(settings)) return { ok: true, queued: 0, skipped, dryRun: true };
 
   const { data: inserted, error } = await supabase
     .from("classnote_notices")

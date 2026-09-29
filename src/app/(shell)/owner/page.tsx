@@ -28,6 +28,7 @@ import { DuplicatesFace } from "./_components/duplicates-face";
 import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { IntegrationsFace } from "./_components/integrations-face";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { PopupsFace } from "./_components/popups-face";
 import { ImportHubFace } from "./_components/import-hub-face";
 
@@ -240,7 +241,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           settings={settings}
           modulesOn={{
             makeedu: isModuleEnabled(settings.modules.disabled, "makeedu"),
-            sheets: isModuleEnabled(settings.modules.disabled, "sheet_sync"),
+            // 구글 시트 = 기능(모듈) ∧ 지점 라이선스 — 라이선스가 꺼진 지점엔 탭이 없다(2026-09-30).
+            sheets: isModuleEnabled(settings.modules.disabled, "sheet_sync") && (await isFeatureLicensed(viewer.tenantId, "google_sheets")),
           }}
           page={page}
           isEmbed={isEmbed}

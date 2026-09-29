@@ -16,6 +16,8 @@ import { canonicalRoomName, resolveRoomName } from "@/features/attendance/live/s
 import { resolvePeriodLabel, tableToEntries } from "../lib/period-label";
 import { isWeekendDow } from "../lib/grid-rows";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { eieModuleOn } from "./eie-on";
+import { isModuleEnabled } from "@/lib/modules";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { shoutingKey, shoutingMapOf } from "../shouting";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
@@ -717,7 +719,8 @@ export async function getClassSheetWeek(
       fontSize: readEcsFontSize(myPrefsRes.data?.ui_prefs),
       showSelfStudy,
       collapsedRosterGroups: readEcsCollapsedRosterGroups(myPrefsRes.data?.ui_prefs),
-      isEie: access.englishTrack === "eie",
+      // EiE 구분(모듈)이 꺼진 학원엔 계획(MP) 면이 없다(2026-09-30).
+      isEie: access.englishTrack === "eie" && (await eieModuleOn()),
       // 0230a 미적용(또는 조회 실패)이면 빈 맵 — 체크가 안 보일 뿐 시트는 그대로 열린다([[#95]]).
       shoutingSlots: shoutingMapOf(shoutingRes.data ?? []),
       // 위임 배지 — 게이트와 **같은 소스**(cache라 추가 왕복 0). 담임이 나면 위임이 아니다.
@@ -885,7 +888,10 @@ export async function getSheetLanding(
         ).data?.ui_prefs
       : prefsRes.data?.ui_prefs,
   );
-  const trackFilter = readEcsEnglishTrack(prefsRes.data?.ui_prefs);
+  // EiE 구분(모듈)이 꺼진 학원은 프로그램 필터가 없다 — 저장된 옛 선택이 목록을 몰래 좁히지 않게 항상 '전체'(2026-09-30).
+  const trackFilter: EnglishTrackFilter = isModuleEnabled(settings.modules.disabled, "eie")
+    ? readEcsEnglishTrack(prefsRes.data?.ui_prefs)
+    : "all";
   const storedTeacher = readEcsTeacher(prefsRes.data?.ui_prefs);
   // 강사 스코프는 JS 교집합(스코프 id를 .in에 넣지 않는다 — 대량 .in 상한/silent cap 회피, B3).
   // 담당 반 ∪ 부담임 반 ∪ **임시 위임 반**(ecsVisibleClassFilter — 게이트 requireEcsClassAccess와 같은

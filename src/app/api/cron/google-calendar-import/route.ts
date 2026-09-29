@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { runGoogleCalendarImport } from "@/features/calendar/server/google-import";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 /**
  * **구글 캘린더 → aywa 한 방향 임포트** cron — 하루 2회(06:00 · 18:00 KST = 21:00 · 09:00 UTC).
@@ -64,6 +66,10 @@ export async function GET(req: Request) {
     tenantId = String(rows![0]!.id);
   }
 
+  // 학원 캘린더 기능(모듈)이 꺼진 학원은 가져오지 않는다(2026-09-30 "꺼지면 흔적 없이").
+  if (!isModuleEnabled((await getTenantSettingsByTenantId(tenantId)).modules.disabled, "calendar")) {
+    return NextResponse.json({ ok: true, skipped: "calendar module off" });
+  }
   try {
     const summary = await runGoogleCalendarImport(tenantId);
     // 캘린더 화면은 메뉴에서 뺐지만 라우트는 살아 있다 — 열었을 때 최신이 보이게.

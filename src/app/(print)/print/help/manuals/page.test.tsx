@@ -5,7 +5,7 @@ import { MANUALS } from "@/features/help/manuals";
 const mocks = vi.hoisted(() => ({ opens: vi.fn() }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: async () => ({ systemRole: "master" }) }));
 vi.mock("@/lib/auth/view-mode", () => ({ getShellView: async () => "full" }));
-vi.mock("@/features/help/access", () => ({ helpLinkOpens: mocks.opens }));
+vi.mock("@/features/help/access", () => ({ helpLinkOpens: mocks.opens, helpManualOpens: mocks.opens }));
 vi.mock("@/lib/date-kst", () => ({ kstToday: () => "2026-10-05" }));
 
 import ManualBundlePage from "./page";
@@ -24,7 +24,10 @@ describe("전체 화면 설명서 PDF 인쇄본", () => {
   });
 
   it("권한이 없는 설명서는 목차와 본문 양쪽에서 빠진다", async () => {
-    mocks.opens.mockImplementation(async (menuKey: string | null) => menuKey !== "mcs");
+    // helpManualOpens(manual, …)·helpLinkOpens(menuKey, …) 둘 다 같은 목 — 인자 모양에 맞춰 메뉴 키를 뽑는다.
+    mocks.opens.mockImplementation(
+      async (arg: { menuKey: string | null } | string | null) => (arg && typeof arg === "object" ? arg.menuKey : arg) !== "mcs",
+    );
     const html = renderToStaticMarkup(await ManualBundlePage());
     expect(html).not.toContain('id="manual-mcs"');
     expect(html).not.toContain('href="#manual-mcs"');

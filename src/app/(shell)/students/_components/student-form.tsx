@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { useModuleOn } from "@/features/owner/operations-context";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
@@ -110,6 +111,7 @@ export function StudentForm({
   /** 동시 편집 가드 스코프(예: `student:123`). 수정 모드에서만 전달 — 다른 창 저장 시 경고. */
   scope?: string;
 }) {
+  const kioskOn = useModuleOn("kiosk");
   const action = mode === "create" ? createStudent : updateStudent;
   const [state, formAction] = useActionState<StudentFormState, FormData>(
     action,
@@ -383,16 +385,22 @@ export function StudentForm({
                 placeholder="(선택)"
               />
             </Field>
-            <Field label="출결번호" htmlFor="attendanceCode">
-              <input
-                id="attendanceCode"
-                name="attendanceCode"
-                inputMode="numeric"
-                defaultValue={v.attendanceCode ?? ""}
-                className={inputClass}
-                placeholder="키오스크 체크인 번호"
-              />
-            </Field>
+            {/* 출결번호 = 키오스크 체크인 번호 — 키오스크 기능이 꺼진 학원엔 칸이 없다(2026-09-30 "꺼지면 흔적 없이").
+                🔴 숨겨도 저장값은 hidden으로 싣는다(칸이 빠지면 서버가 빈 값으로 지운다 — ClassNote 이름과 같은 규약). */}
+            {kioskOn ? (
+              <Field label="출결번호" htmlFor="attendanceCode">
+                <input
+                  id="attendanceCode"
+                  name="attendanceCode"
+                  inputMode="numeric"
+                  defaultValue={v.attendanceCode ?? ""}
+                  className={inputClass}
+                  placeholder="키오스크 체크인 번호"
+                />
+              </Field>
+            ) : (
+              <input type="hidden" name="attendanceCode" value={v.attendanceCode ?? ""} />
+            )}
             <Field label="성별" htmlFor="gender">
               <select
                 id="gender"

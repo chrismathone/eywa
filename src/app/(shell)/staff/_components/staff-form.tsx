@@ -17,7 +17,7 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
-import { useSubjectMaps } from "@/features/owner/operations-context";
+import { useModuleOn, useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
 
 type Mode = "create" | "edit";
@@ -108,6 +108,11 @@ export function StaffForm({
   // 담당 과목 = 학원설정(operations.subjects) 단일 소스 — 자유입력(쉼표 구분) 폐기, 설정 과목 토글 칩.
   // 값은 hidden input(name="subjects")에 쉼표 join으로 미러 → 서버 파싱(comma-split)·초안 캡처 불변.
   const subjectMaps = useSubjectMaps();
+  // 꺼진 기능(모듈)의 개인 토글은 세우지 않는다(2026-09-30 "꺼지면 흔적 없이"). 🔴 숨길 때도 저장값은 hidden으로
+  // 그대로 싣는다 — 체크박스가 폼에서 빠지면 서버가 "꺼짐"으로 읽어 다른 칸을 저장하는 순간 값이 지워진다.
+  const classnoteOn = useModuleOn("classnote");
+  const seatOn = useModuleOn("seat_attendance");
+  const shuttleOn = useModuleOn("shuttle");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(v.subjects);
   const subjectsInputRef = useRef<HTMLInputElement>(null);
   const toggleSubject = (key: string) => {
@@ -405,6 +410,9 @@ export function StaffForm({
 
       {/* 출결 알림 수신 — 담임에게 일일이 묻지 않고 모아 보게 하는 스위치(원장 2026-08-06).
           ⚠️ 이 계정에는 **전 학생**의 학부모 출결 연락이 들어온다. 반 담당과 무관하다. */}
+      {!classnoteOn ? (
+        v.attendanceAlertOptin === true ? <input type="hidden" name="attendanceAlertOptin" value="on" /> : null
+      ) : (
       <div className="border-border bg-surface-soft rounded-2xl border p-4">
         <label htmlFor="attendanceAlertOptin" className="flex cursor-pointer items-start gap-3">
           <input
@@ -423,6 +431,7 @@ export function StaffForm({
           </span>
         </label>
       </div>
+      )}
 
       <div className="border-border bg-surface-soft rounded-2xl border p-4">
         <label htmlFor="deskAttendanceOptin" className="flex cursor-pointer items-start gap-3">
@@ -443,6 +452,12 @@ export function StaffForm({
         </label>
       </div>
 
+      {!seatOn ? (
+        <>
+          {v.seatLabDuty === true ? <input type="hidden" name="seatLabDuty" value="on" /> : null}
+          {v.seatJjDuty === true ? <input type="hidden" name="seatJjDuty" value="on" /> : null}
+        </>
+      ) : (
       <div className="border-border bg-surface-soft space-y-3 rounded-2xl border p-4">
         <p className="text-foreground text-sm font-medium">자리 출석부 담당</p>
         <p className="text-muted-foreground text-xs">
@@ -470,10 +485,14 @@ export function StaffForm({
           <span className="text-foreground text-sm">JJ실 출석부 담당</span>
         </label>
       </div>
+      )}
 
       {/* '셔틀 담당'(0227a) — 역할을 올리지 않고 셔틀만 여는 개인 토글(원장 2026-08-19:
           "셔틀 선생님을 강사나 관리자 권한을 올리기엔 그렇고, 따로 토글시켜야겠어").
           ⚠️ 편성(정류장·회차·배정) 수정은 열리지 않는다 — 사무실 권한 그대로다. */}
+      {!shuttleOn ? (
+        v.shuttleDuty === true ? <input type="hidden" name="shuttleDuty" value="on" /> : null
+      ) : (
       <div className="border-border bg-surface-soft rounded-2xl border p-4">
         <label htmlFor="shuttleDuty" className="flex cursor-pointer items-start gap-3">
           <input
@@ -493,6 +512,7 @@ export function StaffForm({
           </span>
         </label>
       </div>
+      )}
 
       {/* '강사뷰 접근'(0224a) — 다른 강사의 강사뷰 열람(열람 전용). master(+super_admin)에게만 보이고
           서버 액션도 그 자격일 때만 이 컬럼을 저장한다(#77 — 화면에서만 숨긴 게 아니다). */}

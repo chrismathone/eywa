@@ -19,6 +19,10 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 const SHOW_ITEM_HINTS: Partial<Record<string, string>> = {
   showAttachments: "사진과 파일을 함께 켜고 끕니다 · 끄면 첨부해도 학부모 보고서·ClassNote에 안 실립니다",
 };
+/** ClassNote 기능이 꺼진 학원의 같은 부연 — ClassNote를 말하지 않는다(2026-09-30 "꺼지면 흔적 없이"). */
+const SHOW_ITEM_HINTS_NO_CN: Partial<Record<string, string>> = {
+  showAttachments: "사진과 파일을 함께 켜고 끕니다 · 끄면 첨부해도 학부모 보고서에 안 실립니다",
+};
 
 /**
  * 학원 운영 > 보고서 — 학부모 보고서(/r)·ClassNote 게시 이미지의 표시 설정.
@@ -28,12 +32,15 @@ export function ReportSection({
   initial,
   teachers = {},
   staffNames = [],
+  classnoteOn = true,
 }: {
   initial: ReportSettings;
   /** 과목별 강사 라벨(작성률 예외 강사 칩 선택지) — 활성 직원으로 이미 필터됨(getReportTeacherCandidates). */
   teachers?: Record<string, string[]>;
   /** 활성 직원(users status≠inactive) 표시 이름 — orphan·집계 카운트를 실재 직원으로 좁히는 데 사용. */
   staffNames?: string[];
+  /** ClassNote 기능(모듈) 켜짐 — 꺼지면 발송 스위치·발송 과목·시간대·경로·보류 예외 카드를 세우지 않는다. */
+  classnoteOn?: boolean;
 }) {
   const [r, setR] = useState<ReportSettings>(initial);
   const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
@@ -77,7 +84,9 @@ export function ReportSection({
   return (
     <SectionForm section="report" payload={r}>
       {/* ClassNote 실제 발송 스위치 — 오발송 안전장치. 기본 OFF(dry-run): 발송 버튼이 저장만 함.
-          원장이 켜야 학부모에게 실제 전송(공유 DB+라이브 워커·이관분 오발송 방지). */}
+          원장이 켜야 학부모에게 실제 전송(공유 DB+라이브 워커·이관분 오발송 방지).
+          ClassNote 기능이 꺼진 학원엔 이 상자 자체가 없다(값은 저장된 그대로 둔다 — 서버·워커가 모듈로 막는다). */}
+      {classnoteOn ? (
       <div
         className={`mb-4 rounded-md border px-4 py-3 ${
           r.classnoteSendEnabled ? "border-primary bg-primary/5" : "border-danger bg-danger/5"
@@ -207,6 +216,7 @@ export function ReportSection({
           onChange={set}
         />
       </div>
+      ) : null}
 
       {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려
           내용이 짧아도 카드가 열을 끝까지 채운다(우측 하단 빈 배경 제거). */}
@@ -321,7 +331,7 @@ export function ReportSection({
               <div key={key} className="px-3">
                 <ToggleField
                   label={label}
-                  hint={SHOW_ITEM_HINTS[key]}
+                  hint={(classnoteOn ? SHOW_ITEM_HINTS : SHOW_ITEM_HINTS_NO_CN)[key]}
                   value={r[key]}
                   onChange={(v) => set({ [key]: v } as Partial<ReportSettings>)}
                 />
@@ -392,6 +402,7 @@ export function ReportSection({
         {/* 발송 보류 예외 — 소비처: ClassNote 워커 프리플라이트 게이트(classnote-core.mjs getClassnoteBoardAllowlist).
             ⚠️ 2026-07-15 판정 기준 변경: '연결 가족 2+' → **동명이인 매핑 검증**(board-safety.mjs). 문구도 함께 갱신했다
             (계정 수는 위험과 겹치지 않았다 — 상세는 docs/classnote-integration.md §5.5). 여기 등재된 보드는 검증을 면제한다. */}
+        {classnoteOn ? (
         <SettingsCard
           title="발송 보류 예외 (동명이인 확인 완료)"
           description="이름이 같은 학생이 있으면(예: 홍길동 · 홍길동C) 클래스노트 보드는 둘 다 '홍길동'이라 어느 집인지 구분이 안 됩니다. 학부모가 가입할 때 이름 뒤 알파벳을 붙이지 않기 때문입니다. 그래서 그런 이름은 원아 생년월일이 그 학생 학년과 맞는지 대조해 보고, 안 맞으면 발송을 보류합니다. 클래스노트 운영관리에서 직접 확인해 맞는 집이 확실한 보드만 아래에 등록하면 그 보드는 검증 없이 발송됩니다."
@@ -410,6 +421,7 @@ export function ReportSection({
             </span>
           </p>
         </SettingsCard>
+        ) : null}
         </div>
       </div>
     </SectionForm>

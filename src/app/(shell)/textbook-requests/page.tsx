@@ -2,6 +2,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { textbookRequestStudentIds } from "@/features/billing/server/textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { accountForTarget } from "@/features/owner/settings-types";
 import { resolveBrandingSrc } from "@/lib/storage/media-storage";
 import { getCatalogOptions } from "@/features/billing/server/catalog-queries";
@@ -79,6 +80,7 @@ export default async function TextbookRequestsPage({
       // 소유 판정 합집합(0174a) — 이름을 다르게 적어도 본인이 만든 요청은 본인 것.
       viewerUserId={user.id}
       initialStudentIds={initialStudentIds}
+      classnoteOn={classnoteModuleOn(settings)}
     />
   );
 }

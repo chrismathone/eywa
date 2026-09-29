@@ -1,4 +1,5 @@
 import "server-only";
+import { isModuleEnabled, type ModuleId } from "@/lib/modules";
 import { fetchReportOptoutClassIds } from "@/features/classes/server/report-optout-ids";
 import { createClient } from "@/lib/supabase/server";
 import { inclusiveDateWindowStart, kstMinutesOfDay, kstToday } from "@/lib/date-kst";
@@ -689,8 +690,11 @@ export async function getTodayActionSignals(
   const enabled = (key: keyof TodayActionSignalScope) => scope[key] !== false;
   // 보고서 신호가 셀 과목(학원설정 report.classnoteSubjects). 🔴 fail-soft — 설정 조회가 실패해도
   //    신호를 죽이지 않는다. null이면 isReportTrackedSubject가 전부 센다(지금까지의 동작).
+  // 설정은 한 번만 읽는다(cron db 경로는 요청 캐시가 없다) — 아래 세 판정이 같은 약속을 나눠 쓴다.
+  const settingsP = db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings();
+  void settingsP.catch(() => undefined); // 소비처마다 catch — 처리 안 된 거절로 새지 않게
   const reportSettings = enabled("lessonReports")
-    ? await (db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings())
+    ? await settingsP
         .then((st) => ({ tracked: st.report.classnoteSubjects ?? null, exempt: st.report.writingExemptTeachers ?? [] }))
         .catch(() => null)
     : null;
@@ -706,10 +710,17 @@ export async function getTodayActionSignals(
    * ⚠️ fail-soft — 설정 조회가 실패하면 `null`이라 종전처럼 전부 평일로 본다(신호를 죽이지 않는다).
    * ⚠️ `getTenantSettings`는 요청 캐시 + 테넌트 캐시라 위 `trackedSubjects`와 같은 조회를 공유한다(왕복 0).
    */
-  const holidayMap = await (db ? getTenantSettingsByTenantId(db.tenantId) : getTenantSettings())
+  const holidayMap = await settingsP
     .then((st) => buildHolidayMap(st.operations.holidays))
     .catch(() => null);
-  const staffApprovalsEnabled = scope.staffApprovals ?? enabled("staff");
+  // 기능(모듈)이 꺼진 학원엔 그 기능의 신호가 없다(원장 2026-09-30 "꺼지면 있었는지조차 모르게").
+  // 메뉴를 가진 모듈은 권한 캡으로 이미 scope가 false다 — 여기는 **메뉴 없이 면만 가진** 모듈(ClassNote·기존 휴가·makeedu 배지).
+  // fail-soft: 설정 조회가 실패하면 빈 목록(= 전부 켜짐, 침산과 같은 쪽)으로 종전처럼 센다.
+  const disabledModules = await settingsP
+    .then((st) => st.modules.disabled)
+    .catch(() => [] as ModuleId[]);
+  const moduleOn = (id: ModuleId) => isModuleEnabled(disabledModules, id);
+  const staffApprovalsEnabled = (scope.staffApprovals ?? enabled("staff")) && moduleOn("staff_leaves");
   const attendanceNowEnabled = scope.attendanceNow ?? enabled("attendance");
 
   const failedCount = async (
@@ -813,7 +824,7 @@ export async function getTodayActionSignals(
       () => failedCount("student_consultations"),
     ),
     collectSignal(
-      enabled("owner"),
+      enabled("owner") && moduleOn("makeedu"),
       {
         key: "makeedu-sync",
         label: "makeedu 동기화",
@@ -889,7 +900,7 @@ export async function getTodayActionSignals(
       },
     ),
     collectSignal(
-      enabled("staff"),
+      enabled("staff") && moduleOn("staff_leaves"),
       {
         key: "today-leaves",
         label: "오늘 휴가",
@@ -943,7 +954,7 @@ export async function getTodayActionSignals(
       () => getUnassignedEnrolledStudents(30, db ? { supabase: db.supabase, tenantId: db.tenantId } : undefined),
     ),
     collectSignal(
-      enabled("lessonReports"),
+      enabled("lessonReports") && moduleOn("classnote"),
       {
         key: "classnote-attention",
         label: "리포트 발송 큐",

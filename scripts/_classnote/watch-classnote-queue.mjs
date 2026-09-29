@@ -22,7 +22,7 @@ import postgres from "postgres";
 import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
-import { BATCH, closeClassnoteAdminSession, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
+import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
 import { processClassNoticesOnce } from "./classnote-class-notice-core.mjs";
@@ -199,12 +199,23 @@ async function main() {
   // "이 줄을 지우면 예전 방식으로 복귀"라고 적어 둔 탓에, 담당자가 지우고 '롤백했다'고 오인할 수 있다.
   if (process.env.CLASSNOTE_PUBLISH_MODE)
     log(`[안내] CLASSNOTE_PUBLISH_MODE=${process.env.CLASSNOTE_PUBLISH_MODE} 는 무시됩니다 — 게시 경로는 워커 내장 하나뿐(2026-07-29 폴백 제거).`);
+  let moduleOffLogged = false; // 모듈 꺼짐 안내는 바뀔 때 한 번만
   let backlogFastPoll = false; // 직전 주기가 배치를 꽉 채워 성공했는가 = 밀린 큐 → 다음 주기 즉시 진행
   for (;;) {
     try {
       const tenant = await getTenant();
       // 0) 심장박동 — best-effort라 실패해도 처리 계속.
       await heartbeat(tenant).catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
+      // 0-a) 이 학원에서 ClassNote 기능(모듈)이 꺼져 있으면 아무것도 하지 않는다(발송·공지·회수·동기화·피드·읽음 전부).
+      //      원장 2026-09-30 "꺼지면 있었는지조차 모르게". 켜지면 다음 폴부터 그대로 이어서 처리한다(큐 보존).
+      if (!(await isClassnoteModuleEnabled(db(), tenant))) {
+        if (!moduleOffLogged) log("[안내] 이 학원의 ClassNote 기능이 꺼져 있어 쉽니다(큐 보존).");
+        moduleOffLogged = true;
+        backlogFastPoll = false;
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        continue;
+      }
+      moduleOffLogged = false;
       // 1) 큐 한 주기 처리(공용 코어).
       const b = await getBrowser();
       const s = await processQueueOnce(db(), b, { tenant, post: POST, log });

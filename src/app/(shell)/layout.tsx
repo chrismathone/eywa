@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { isFeatureLicensed } from "@/lib/license/server";
+import { getLicenseFlags } from "@/lib/license/server";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
 import { headers } from "next/headers";
@@ -72,6 +72,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const menuLayout = menuLayoutWithModules(settings.navigation.menus, settings.modules.disabled);
   // 새 학원(일반판)이면 설정 '기능' 면을 사이드바·메뉴 판·검색에도 세운다(설정 화면 탭과 같은 판정, F19).
   const genericTenant = isGenericTenant(settings);
+  // 지점 라이선스 넷(한 조회, 요청 캐시) — 꺼진 라이선스의 버튼·탭을 클라 화면이 감추는 데 쓴다(표시용 · 2026-09-30).
+  // 창 모드 판정도 같은 결과를 쓴다(아래 풀셸 분기) — 조회를 늘리지 않으려고 기능별 조회 대신 이것 하나로.
+  const licensesPromise = getLicenseFlags(user.tenantId);
 
   // Stage Manager 임베드(?embed=1 → proxy가 x-embed 주입): 사이드바·헤더·캔버스·팰릿 전부
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
@@ -84,7 +87,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <EmbedProvider embed>
         <TeacherNamesProvider names={await getTeacherEnglishNames()}>
         <SheetLangProvider lang={await getTeacherViewLang()}>
-        <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+        <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
               x-embed로 판정하면 내비마다 풀 헤더로 플립 — 적대 리뷰 major). */}
@@ -323,7 +326,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             찍으므로 본문 PageHeader의 eyebrow·21px 제목은 중복이다 — 강사 화면은 세로 1px이 곧 데이터다. */}
         {/* 강사 미니셸 — 원장이 "빠듯하다"고 짚은 화면(영어 강사 ECS 시트)이 여기다. */}
         <main className="compact-main flex-1 overflow-auto px-3 pt-4 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
-          <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+          <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
             <ScreenHelpOverlay />
             <Suspense fallback={null}>
               <UsageTracker />
@@ -357,7 +360,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 연결 앱(오늘의 수학 등) — 슈퍼관리자가 **켠 지점만** 왼쪽 '연결 앱'에 바로가기가 선다(기본 꺼짐, 원장 2026-09-26).
   // 영어 선생님(담당 과목이 영어뿐)에겐 켜도 안 선다(같은 날). 위에서 먼저 출발시킨 조회를 창 모드와 함께 기다린다(B4).
   const [windowMode, connectedApps] = await Promise.all([
-    isFeatureLicensed(user.tenantId, "window_mode"),
+    licensesPromise.then((l) => l.window_mode),
     connectedAppsPromise,
   ]);
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
@@ -374,7 +377,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     // useSubjectMaps()가 buildSubjectMaps([]) 폴백을 타 과목이 "수학" 대신 raw 키 `math`로 떴다
     // (2026-07-22 전수검사 — 학생 요약 peek 창, 진입=커맨드 팰릿 학생 검색).
     // 라우트 창(iframe)은 자식 문서가 위 embed 분기에서 다시 받으므로 무관했다.
-    <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
+    <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
     <WorkspaceEnabledProvider enabled={windowMode}>
     {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible desk:flex-row">

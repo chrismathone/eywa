@@ -638,7 +638,14 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   add("consultations", ["consultations"], getStudentConsultationCounts);
   add("newcomers", ["newcomers"], () => newcomers(settingsPromise));
   add("homework", ["lesson_reports"], getHomeworkRisk);
-  add("unread", ["lesson_reports"], getUnreadReports);
+  // 학부모 미열람 = ClassNote 읽음 기록이 소스 — ClassNote 기능이 꺼진 학원엔 이 카드가 없다(2026-09-30 "꺼지면 흔적 없이").
+  // 🔑 영역 등록을 설정 대기로 막지 않는다(뒤 영역들이 늦게 출발하지 않게) — 조회 안에서 판정하고,
+  //    꺼졌으면 조회 없이 빈 값을 돌린 뒤 아래 반환 직전에 영역째 뺀다.
+  add("unread", ["lesson_reports"], async () =>
+    isModuleEnabled((await settingsPromise).modules.disabled, "classnote")
+      ? getUnreadReports()
+      : (null as unknown as OverviewData["unread"]),
+  );
   // 이어지는 교시(같은 반·강사·교실)는 한 줄로 — 원장 2026-09-13, 규칙은 continuous-classes.ts.
   add("schedule", ["timetable"], async () =>
     mergeContinuousClasses(
@@ -807,6 +814,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   //    (`getTenantSettings`는 테넌트별 `unstable_cache`, 강사 스코프는 요청당 캐시라 대개 이미 끝나 있다).
   const settings = await settingsPromise;
   const teacherId = await teacherIdPromise;
+  if (!isModuleEnabled(settings.modules.disabled, "classnote")) delete sections.unread; // ClassNote 꺼짐 = 카드 없음
   return {
     scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}`,
     tenantId: user.tenantId,

@@ -46,6 +46,7 @@ export function TextbookRequestClient({
   requesterName,
   viewerUserId,
   initialStudentIds,
+  classnoteOn = true,
 }: {
   rows: TextbookOrderRow[];
   students: StudentOption[];
@@ -59,6 +60,8 @@ export function TextbookRequestClient({
   viewerUserId: string;
   /** `?studentId=`로 실려 온 학생(등록상담에서 수학 반 배정 직후 넘어온 링크). 없으면 빈 폼 그대로. */
   initialStudentIds?: string[];
+  /** ClassNote 기능(모듈) 켜짐 — 꺼진 학원엔 학부모 발송(클래스노트)·발송 문구 칸이 없다(2026-09-30 "꺼지면 흔적 없이"). */
+  classnoteOn?: boolean;
 }) {
   // 성공 시 목록은 서버 액션 revalidatePath로 자동 갱신. 폼 값은 유지(같은 학생 다른 교재 연속 요청에 편함).
   const [state, formAction, pending] = useActionState(requestTextbook, undefined);
@@ -408,7 +411,7 @@ export function TextbookRequestClient({
                 />
               </label>
               {/* 메모 바로 아래 = 학부모에게 실제로 나가는 문구(발송 시 그대로 쓰인다). */}
-              <TextbookMentField value={ment} onChange={editMent} />
+              {classnoteOn ? <TextbookMentField value={ment} onChange={editMent} /> : null}
             </div>
 
             <TextbookFormFooter
@@ -418,8 +421,8 @@ export function TextbookRequestClient({
               pending={pending}
               sending={sending}
               onReset={reset}
-              onSaveAndSend={saveAndSend}
-              onSendCreated={setSendIds}
+              onSaveAndSend={classnoteOn ? saveAndSend : undefined}
+              onSendCreated={classnoteOn ? setSendIds : undefined}
             />
           </section>
 
@@ -463,7 +466,7 @@ export function TextbookRequestClient({
       <RequestHistory
         rows={rows}
         onDownload={download}
-        onSend={(r) => setSendIds([r.id])}
+        onSend={classnoteOn ? (r) => setSendIds([r.id]) : undefined}
         capNote={isTeacher ? undefined : "최근 100건 기준 — 전체는 수납관리 › 교재"}
         // 강사일 때만 소유 판정 — 사무실(master/accountant)은 서버에서도 이 게이트를 안 탄다.
         ownerName={isTeacher ? requesterName : undefined}
@@ -471,7 +474,7 @@ export function TextbookRequestClient({
       />
 
       {/* 학부모 발송 — 다이얼로그가 요청서 카드를 숨김 렌더해 PNG로 캡처하므로 카드 렌더 재료(학원명·로고·계좌)를 넘긴다. */}
-      {sendIds ? (
+      {classnoteOn && sendIds ? (
         <TextbookSendDialog
           orderIds={sendIds}
           onClose={() => setSendIds(null)}

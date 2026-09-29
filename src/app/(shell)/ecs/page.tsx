@@ -87,14 +87,15 @@ export default async function EcsLandingPage({
   // IndexedDB 문서 24개와 realtime 채널 24개를 여는 셈이다(2026-08-07 적대적 리뷰).
   // 학원 전체의 하루를 보는 건 시간표의 일이다. `?view=today`를 손으로 넣어도 주간으로 떨어뜨린다.
   // 화면 언어(2026-09-03) — ECS 레이아웃이 이미 읽어 둔 값을 **요청 캐시에서 그대로** 받는다(왕복 0).
-  const [scoped, lang, viewAs, textbooksOn] = await Promise.all([
+  const [scoped, lang, viewAs, [textbooksOn, eieOn]] = await Promise.all([
     effectiveTeacherScope().then((s) => s !== null),
     getTeacherViewLang(),
     // '다른 강사 뷰'(열람 전용)면 순서 바꾸기를 **아예 안 만든다**(원장 2026-09-05
     // *"어차피 다른 강사 뷰는 읽음 전용이니까 드래그기능을 넣어주면 안되는 부분"*).
     viewAsTeacher(),
     // [계획 대비 현황] 입구 — 교재목록 모듈을 끈 학원엔 월간계획(교재 배정) 자체가 없다(요청 캐시라 왕복 0).
-    getTenantSettings().then((st) => isModuleEnabled(st.modules.disabled, "textbooks")),
+    // EiE 구분 — 꺼진 학원엔 프로그램 필터(EiE / 인재원 영어)가 없다(2026-09-30 "꺼지면 흔적 없이").
+    getTenantSettings().then((st) => [isModuleEnabled(st.modules.disabled, "textbooks"), isModuleEnabled(st.modules.disabled, "eie")] as const),
   ]);
   const canReorder = viewAs === null;
   // 305 면은 사무실도 연다(오늘 면의 24반 폭탄과 달리 타임 단위). view=room 은 스코프와 무관.
@@ -223,7 +224,7 @@ export default async function EcsLandingPage({
         <EcsFaceTabs face="week" showToday={scoped} lang={lang} />
         <WeekNav currentWeek={res.weekMonday} today={res.today} hrefForWeek={(monday) => `/ecs?view=week&week=${monday}`} />
         {/* 프로그램 필터(EiE / 인재원 영어) — 계정 귀속. 시트 가져오기 왼쪽에 붙여 주 네비와 한 줄. */}
-        <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} />
+        {eieOn ? <EcsTrackFilter value={res.trackFilter} counts={res.trackCounts} /> : null}
         {/* 담임 필터 — 프로그램 **다음**에 걸린다(둘은 곱해진다). 옵션이 프로그램 적용 후 집합이라
             순서가 화면과 같고, 담임이 한 명뿐인 화면(강사 본인)에선 컴포넌트가 스스로 사라진다. */}
         <EcsTeacherFilter

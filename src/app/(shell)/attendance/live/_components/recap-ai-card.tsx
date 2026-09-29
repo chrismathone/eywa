@@ -12,6 +12,7 @@
  *    반복하면 그때마다 보드 전체(교시 100여 개 × 수강 수백 행)를 다시 적재한다 — 3분이면 36번이다.
  */
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "@/components/icons/aywa-icon-compat";
@@ -31,7 +32,7 @@ const POLL_MS = 5000;
 /** 3분(36틱) 상한 — 정상 생성보다 훨씬 길게 두되, 죽은 생성 때문에 하루 종일 두드리지 않는다. */
 const MAX_TICKS = 36;
 
-export function RecapAiCard({ from, to, state }: { from: string; to: string; state: RecapAiState }) {
+function RecapAiCardInner({ from, to, state }: { from: string; to: string; state: RecapAiState }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -124,4 +125,9 @@ export function RecapAiCard({ from, to, state }: { from: string; to: string; sta
       </div>
     </section>
   );
+}
+
+/** AI 라이선스가 꺼진 지점엔 이 버튼·카드가 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 generateJSON이 따로 막는다. */
+export function RecapAiCard(props: Parameters<typeof RecapAiCardInner>[0]) {
+  return useLicenseOn("ai_analysis") ? <RecapAiCardInner {...props} /> : null;
 }

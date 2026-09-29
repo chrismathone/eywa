@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { eieModuleOn } from "./eie-on";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 // 슬롯 담당 해석 — 주간 시트(`queries.ts`)·시간표 3뷰와 **같은 두 함수**를 쓴다(갈리면 같은 교시가
 // 화면마다 다른 담당으로 보인다).
@@ -200,7 +201,8 @@ export async function getClassSheetMonth(
   const admin = createAdminClient();
   // 🔴 계획(MP)은 **EiE 반에만** 있다(원장 2026-09-01) — 판정은 `english_track` 컬럼 하나고 게이트가
   //    이미 읽어 왔다. EiE가 아니면 조회 자체를 안 한다(쓸데없는 왕복 0 + 화면에 탭도 안 선다).
-  const isEie = access.englishTrack === "eie";
+  // EiE 구분(모듈)이 꺼진 학원은 EiE 반도 인재원 영어처럼 연다(2026-09-30 "꺼지면 흔적 없이").
+  const isEie = access.englishTrack === "eie" && (await eieModuleOn());
 
   /**
    * 기간 축 — **EiE 반에서만** 세션을 쓴다(원장 2026-09-21). 인재원 영어의 달력·진도표는 월간 목표·메모가

@@ -36,6 +36,7 @@ import {
   type Dow,
   type EnglishClassInput,
 } from "../english-writing";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
  * 대상(분모) 산출용 수강 행 — **그 날 실제로 오는 학생만** 세려면 기간·휴원·분리등원을 다 봐야 한다.
@@ -383,7 +384,7 @@ export async function getClassnoteQueue(days = 3): Promise<ClassnoteQueueView | 
     nowMs,
     since,
     days,
-    sendEnabled: settings.report.classnoteSendEnabled,
+    sendEnabled: classnoteSendOn(settings),
     expiredUnsent: expiredUnsentCount ?? 0,
     todayKst: today,
     unsentSendable: unsent ? unsent.count : null,
@@ -445,6 +446,8 @@ async function getEnglishTeacherRates(
   until: string,
   dates: readonly string[],
 ): Promise<TeacherRateRow[]> {
+  // ClassNote 기능이 꺼진 학원 = 영어 알림장 소스가 없다 → 이 경로 자체를 세우지 않는다(2026-09-30 "꺼지면 흔적 없이").
+  if (!classnoteModuleOn(await getTenantSettings())) return [];
   const { data: classRows } = await supabase
     .from("classes")
     .select("id, class_name, teacher:teacher_id ( display_name ), class_schedules ( day_of_week, valid_from, valid_to )")

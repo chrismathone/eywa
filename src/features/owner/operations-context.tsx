@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useMemo, type ReactNode } from 
 import { buildSubjectMaps, type SubjectMaps } from "./subjects";
 import { jobTitlesForDepartment } from "@/features/staff/department-job-titles";
 import type { SubjectSetting } from "./settings-types";
+import { isModuleEnabled, type ModuleId } from "@/lib/modules";
 
 /**
  * 운영체계(operations) enum의 **클라이언트 단일 소스**.
@@ -19,6 +20,8 @@ type OperationsCtx = {
   gradeLevels: string[];
   jobTitles: string[];
   jobTitlesByDepartment: Record<string, string[]>;
+  disabledModules: readonly ModuleId[];
+  licenses: Partial<Record<LicenseKey, boolean>>;
 };
 
 const Ctx = createContext<OperationsCtx | null>(null);
@@ -28,17 +31,23 @@ export function OperationsProvider({
   gradeLevels,
   jobTitles = [],
   jobTitlesByDepartment = {},
+  disabledModules = NO_MODULES,
+  licenses = NO_LICENSES,
   children,
 }: {
   subjects: SubjectSetting[];
   gradeLevels: string[];
   jobTitles?: string[];
   jobTitlesByDepartment?: Record<string, string[]>;
+  /** 꺼진 기능(모듈) — `useModuleOn`이 읽는다. 꺼진 기능의 버튼·칸·문구를 클라 화면에서 감출 때(2026-09-30 "꺼지면 흔적 없이"). */
+  disabledModules?: readonly ModuleId[];
+  /** 지점 라이선스(슈퍼관리자) — `useLicenseOn`이 읽는다. 꺼진 라이선스의 버튼·탭을 감출 때. */
+  licenses?: Partial<Record<LicenseKey, boolean>>;
   children: ReactNode;
 }) {
   const value = useMemo<OperationsCtx>(
-    () => ({ subjects: buildSubjectMaps(subjects), gradeLevels, jobTitles, jobTitlesByDepartment }),
-    [subjects, gradeLevels, jobTitles, jobTitlesByDepartment],
+    () => ({ subjects: buildSubjectMaps(subjects), gradeLevels, jobTitles, jobTitlesByDepartment, disabledModules, licenses }),
+    [subjects, gradeLevels, jobTitles, jobTitlesByDepartment, disabledModules, licenses],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -75,4 +84,23 @@ export function useJobTitleResolver(): (department: string) => string[] {
   );
 }
 
+/**
+ * 이 학원에 그 기능(모듈)이 켜져 있나 — 클라 컴포넌트가 prop 배선 없이 읽는다(서버는 `isModuleEnabled(getTenantSettings…)`).
+ * 프로바이더 밖이면 **켜짐**(종전 그대로 — 침산과 같은 쪽). 게이트가 아니라 표시용이다: 서버 액션은 따로 모듈을 본다.
+ */
+export function useModuleOn(id: ModuleId): boolean {
+  return isModuleEnabled(useContext(Ctx)?.disabledModules, id);
+}
+
+/**
+ * 이 지점에 그 라이선스가 켜져 있나 — 표시용(서버 경로는 따로 막는다). 모르면(프로바이더 밖·값 없음) **켜짐**.
+ */
+export function useLicenseOn(feature: LicenseKey): boolean {
+  return useContext(Ctx)?.licenses[feature] !== false;
+}
+
+/** 라이선스 키(클라 공용 — `server-only` 모듈의 타입을 끌어오지 않으려고 여기 둔다. rule.ts `LicensedFeature`와 같은 값). */
+type LicenseKey = "ai_analysis" | "google_sheets" | "meeting_recording" | "window_mode";
+const NO_LICENSES: Partial<Record<LicenseKey, boolean>> = {};
+const NO_MODULES: readonly ModuleId[] = [];
 const EMPTY_SUBJECTS = buildSubjectMaps([]);

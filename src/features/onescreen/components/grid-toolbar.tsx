@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AttachPicker } from "./grid-attach";
+import { useClassnoteOn } from "./classnote-on-context";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { bulkPickLabel } from "../bulk-label";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { BulkAttendanceStatus } from "../bulk-attendance";
@@ -73,6 +75,8 @@ export function GridToolbar({
   const noticeStudents = new Set(selectedKeys.map((k) => k.split("::")[0])).size; // 공지=학생 단위(행 아님, #23)
   const lang = useSheetLang();
   const t = useSheetT();
+  const classnoteOn = useClassnoteOn();
+  const aiOn = useLicenseOn("ai_analysis"); // 꺼진 지점엔 '자동 작성' 일괄 버튼이 없다(2026-09-30)
   const tf = useSheetTf();
   return (
     <div data-help="os-save" className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
@@ -158,6 +162,7 @@ export function GridToolbar({
         ) : null}
         {/* 자동작성 = **멘트 없는 행만**. 이전값 가져오기로 멘트를 깔면 대상이 줄어드는 게 라벨에 바로 보이고,
             0이 되면 비활성 — "채운 문구를 재생성이 덮어쓰나?"를 화면에서 답해준다(보존 로직은 autoWriteAllVisible). */}
+        {aiOn ? (
         <Button
           variant="ghost"
           size="sm"
@@ -179,6 +184,7 @@ export function GridToolbar({
               ? tf("os.gen.pick", { pick: bulkPickLabel(selectedKeys.length, genTarget, lang) })
               : tf("os.gen.all", { n: genTarget })}
         </Button>
+        ) : null}
         {/* ⚠️ disabled는 **선택이 있으면 선택분 기준**이다(2026-07-21 수정). 예전엔 전체 `saveable`만 봐서,
             고른 37행이 전부 저장 대상이 아닌데도 버튼이 살아 있어 눌러도 아무 일이 없었다. */}
         <Button
@@ -196,6 +202,7 @@ export function GridToolbar({
             ? tf("os.save.pick", { pick: bulkPickLabel(selectedKeys.length, selectedSaveable, lang) })
             : t("os.save.all")}
         </Button>
+        {classnoteOn ? (
         <Button
           size="sm"
           onClick={() => actions.onSendAll(selectedKeys)}
@@ -210,6 +217,7 @@ export function GridToolbar({
             ? tf("os.send.pick", { pick: bulkPickLabel(selectedKeys.length, selectedSendReady, lang) })
             : t("os.send.all")}
         </Button>
+        ) : null}
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import "server-only";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -8,6 +10,8 @@ import { ATTENDANCE_RATE_LEVELS, emptyAttendanceRates, parseAttendanceRates } fr
 
 export async function requireAttendanceSalaryAdmin() {
   const user = await requireAccess("attendance");
+  // 급여 기능(모듈)이 꺼진 학원엔 급여 화면·단가·명세서가 없다 — 총괄도 예외 없음(기능이 없는 학원, 2026-09-30).
+  if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return null;
   if (!["master", "admin", "manager"].includes(user.systemRole) || await effectiveTeacherId()
     || !(await canManageTenant(user.systemRole, "attendance"))) return null;
   return user;

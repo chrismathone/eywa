@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { AlertTriangle, Loader2, Mic, Sparkles } from "@/components/icons/aywa-icon-compat";
@@ -50,7 +51,7 @@ function AnalyzeBtn({ hasAi, disabled }: { hasAi: boolean; disabled?: boolean })
   );
 }
 
-export function RecordingPanel({
+function RecordingPanelInner({
   id,
   processingStatus,
   transcription,
@@ -181,4 +182,9 @@ export function RecordingPanel({
       ) : null}
     </section>
   );
+}
+
+/** 녹음·전사 라이선스가 꺼진 지점엔 녹음 칸이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 경로가 따로 막는다. */
+export function RecordingPanel(props: Parameters<typeof RecordingPanelInner>[0]) {
+  return useLicenseOn("meeting_recording") ? <RecordingPanelInner {...props} /> : null;
 }

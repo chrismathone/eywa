@@ -42,6 +42,7 @@ import {
   type NoticeAttachment,
 } from "../notice-attachments";
 import { humanizeDbError } from "@/lib/supabase/db-error";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 const BODY_MAX = 4000;
 // 학원이(테스트 학생) 고정 타깃 — 실 학부모에게 안 가는 검증 경로(반 공지 TEST_TARGET과 동일 관례).
@@ -220,7 +221,7 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
     };
 
   // ── 2. 발송 안전 스위치(기본 OFF) — dry-run이면 적재 안 함 ──
-  if (!settings.report.classnoteSendEnabled) return { ok: true, queued: 0, skipped, dryRun: true };
+  if (!classnoteSendOn(settings)) return { ok: true, queued: 0, skipped, dryRun: true };
 
   const { data: inserted, error } = await supabase
     .from("classnote_notices")

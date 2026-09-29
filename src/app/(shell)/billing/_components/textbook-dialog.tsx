@@ -23,6 +23,7 @@ import type { StudentOption, TextbookOrderRow } from "@/features/billing/server/
 import type { CatalogOption } from "@/features/billing/server/catalog-queries";
 import type { AccountSetting } from "@/features/owner/settings-types";
 import { TextbookSendDialog } from "@/app/(shell)/textbook-requests/_send-dialog";
+import { useModuleOn } from "@/features/owner/operations-context";
 import { TextbookFields, type TextbookDraft } from "./textbook-dialog-fields";
 import { TextbookPreview } from "./textbook-dialog-preview";
 
@@ -54,6 +55,8 @@ export function TextbookDialog({
   onClose: (saved: boolean) => void;
 }) {
   const editing = !!order;
+  // ClassNote 기능이 꺼진 학원엔 '클래스노트 발송' 버튼·발송창이 없다(2026-09-30 "꺼지면 흔적 없이").
+  const classnoteOn = useModuleOn("classnote");
   const [state, formAction] = useActionState<TextbookState, FormData>(
     editing ? updateTextbookOrder : createTextbookOrder,
     undefined,
@@ -161,10 +164,12 @@ export function TextbookDialog({
               <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={sending}>
                 취소
               </Button>
-              <Button type="button" variant="outline" onClick={saveThenSend} disabled={sending}>
-                {sending ? <Loader2 className="size-4 animate-spin" /> : <EyIcon name="send" size={16} />}
-                클래스노트 발송
-              </Button>
+              {classnoteOn ? (
+                <Button type="button" variant="outline" onClick={saveThenSend} disabled={sending}>
+                  {sending ? <Loader2 className="size-4 animate-spin" /> : <EyIcon name="send" size={16} />}
+                  클래스노트 발송
+                </Button>
+              ) : null}
               <SubmitBtn disabled={sending} />
             </div>
           </form>

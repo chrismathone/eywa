@@ -23,6 +23,8 @@ import { BoardRosterCard } from "./_components/board-roster-card";
 import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 import { isModuleEnabled } from "@/lib/modules";
+import { isFeatureLicensed } from "@/lib/license/server";
+import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "수업보고서 — 에이와" };
@@ -45,9 +47,11 @@ type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "re
 // ClassNote 발송 PC에 기대는 면 — ClassNote 모듈이 꺼진 학원(새 학원 기본)에선 세우지 않는다(2026-09-22 방향 B).
 const CLASSNOTE_TABS: ReadonlySet<Tab> = new Set<Tab>(["boards", "notice", "compose", "recall"]);
 
-function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean): Tab {
+function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean): Tab {
   const t = sp.tab;
   if (!classnoteOn && t && CLASSNOTE_TABS.has(t as Tab)) return "writing";
+  // AI 라이선스가 꺼진 지점엔 'AI 멘트' 면이 없다(2026-09-30 "꺼지면 흔적 없이").
+  if (!aiOn && t === "ai_ment") return "writing";
   if (t === "list" || t === "writing" || t === "notice" || t === "boards") return t;
   // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
   // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
@@ -70,8 +74,9 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   const sp = await searchParams;
   // ClassNote 모듈 — 꺼진 학원은 발송 콘솔(큐·반 구성·반 공지·직접 발송·회수)을 세우지 않는다. 침산은 켜져 있어 종전과 같다.
   // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
-  const classnoteOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "classnote");
-  const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn);
+  const [tenantSettings, aiOn] = await Promise.all([getTenantSettings(), isFeatureLicensed(viewer.tenantId, "ai_analysis")]);
+  const classnoteOn = isModuleEnabled(tenantSettings.modules.disabled, "classnote");
+  const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn, aiOn);
   const isSettings = tab === "report" || tab === "ai_ment";
 
   const FACES: Face[] = [
@@ -90,7 +95,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     ...(canOwner
       ? ([
           { key: "report", label: "보고서 설정", href: "/lesson-reports?tab=report", group: "설정" },
-          { key: "ai_ment", label: "AI 멘트", href: "/lesson-reports?tab=ai_ment", group: "설정" },
+          ...(aiOn ? [{ key: "ai_ment", label: "AI 멘트", href: "/lesson-reports?tab=ai_ment", group: "설정" }] : []),
         ] as Face[])
       : []),
   );
@@ -123,7 +128,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                 ([rows, settings, cls]) => ({
                   composeStudents: rows.map((s) => ({ id: s.id, name: s.name, school: s.school, grade: s.grade })),
                   composeClasses: cls.classes ?? [],
-                  composeSendEnabled: settings.report.classnoteSendEnabled,
+                  composeSendEnabled: classnoteSendOn(settings),
                   composeShowDailyTest: settings.report.showDailyTest,
                   composeShowCheckTest: settings.report.showCheckTest,
                   composeShowAttachments: settings.report.showAttachments,
@@ -204,6 +209,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
           options={tabData.filterOptions}
           initial={tabData.initialList}
           canSend={canSendReports}
+          classnoteOn={classnoteOn}
           todayYmd={kstToday()}
           // 🔴 클라 초기 state가 서버 첫 페인트와 **같은 필터**여야 한다 — 안 맞추면 열자마자 목록이 한 번 바뀐다.
           initialStatus={sp.status}
@@ -235,7 +241,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "report" && "reportSettings" in tabData ? (
-        <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers} staffNames={tabData.staffNames} />
+        <ReportSection
+          initial={tabData.reportSettings}
+          teachers={tabData.teachers}
+          staffNames={tabData.staffNames}
+          classnoteOn={classnoteOn}
+        />
       ) : null}
 
       {tab === "ai_ment" && "aiPrompts" in tabData ? (

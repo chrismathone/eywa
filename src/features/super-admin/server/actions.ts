@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
+import { licenseFlagsTag } from "@/lib/license/server";
 import { SYSTEM_ROLES } from "@/lib/permissions";
 import { SEAT_FEATURES, TOGGLE_FEATURES } from "../labels";
 import { logSuperAdminAction } from "./audit";
@@ -331,6 +332,7 @@ export async function upsertTenantLicense(
     targetLabel: tenantName || null,
     metadata: { feature, maxSeats },
   });
+  updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(창 모드·꺼진 기능 버튼)
   revalidatePath(`/super-admin/tenants/${tenantId}`);
   return { ok: true };
 }
@@ -368,6 +370,7 @@ export async function toggleTenantLicense(
     targetLabel: tenantName || null,
     metadata: { feature, active: nextActive },
   });
+  updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(창 모드·꺼진 기능 버튼)
   revalidatePath(`/super-admin/tenants/${tenantId}`);
   return { ok: true };
 }

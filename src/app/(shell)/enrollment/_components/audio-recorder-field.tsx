@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { CircleStop, History, Mic, Upload, X } from "@/components/icons/aywa-icon-compat";
 import {
   checkRecovery,
@@ -27,7 +28,7 @@ import {
  * - 라이브 녹음(브라우저 마이크) + 파일 업로드 둘 다. 녹음 중엔 useRecordingLock이 창 닫기/탭 새로고침을 막음.
  * - 1초 청크를 IndexedDB에 저장(복구) + 정지 시 디스크 백스톱 다운로드(유실 3중 방어, recording-form과 동일).
  */
-export function AudioRecorderField({
+function AudioRecorderFieldInner({
   file,
   onChange,
   onRecordingChange,
@@ -244,4 +245,9 @@ export function AudioRecorderField({
       ) : null}
     </div>
   );
+}
+
+/** 녹음·전사 라이선스가 꺼진 지점엔 녹음 칸이 없다(2026-09-30 "꺼지면 흔적 없이") — 서버 경로가 따로 막는다. */
+export function AudioRecorderField(props: Parameters<typeof AudioRecorderFieldInner>[0]) {
+  return useLicenseOn("meeting_recording") ? <AudioRecorderFieldInner {...props} /> : null;
 }
