@@ -87,6 +87,8 @@ describe("① 출결 INSERT 경로는 전부 자동 시수 헬퍼를 지난다",
     const USES_HELPER = new Set([
       "features/attendance/server/actions.ts",
       "features/attendance/kiosk/server/checkin.ts",
+      // 엑셀 출결 가져오기 — 새 칸 + 시수 빈 칸만 자동값(출석부 저장과 같은 판정).
+      "features/excel-import/importers/attendance.ts",
     ]);
     const EXEMPT = new Map([
       // 자리(랩실·JJ) 출결 — 교시별 행(slot_start 있음)이라 "그날 전체" 자동값의 대상이 아니다.

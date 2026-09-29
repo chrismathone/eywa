@@ -35,7 +35,7 @@ export const dashboard: HelpManual = {
     {
       n: 4,
       key: "dash-leveltest",
-      label: "금일입테",
+      label: "금일 입테",
       zone: "header",
       body: "오늘 잡혀 있는 레벨테스트 일정입니다. 캘린더 메뉴는 숨겨 두어 ↗가 없습니다. 카드를 눌러 오늘 일정만 봅니다.",
     },

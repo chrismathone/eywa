@@ -240,7 +240,7 @@ describe("④-2 금일 등록 — 등록 완료로 옮긴 로그 한 벌, 반 �
   it("카드·팝업이 같은 서버 배열, 자리는 금일입테 오른쪽", () => {
     expect(SERVER).toContain('add("enrolledToday", ["enrollment"], () => getEnrolledToday(today));');
     expect(STRIP).toContain("<EnrolledTodayPopup rows={registered}");
-    expect(STRIP.indexOf('label="금일 등록"')).toBeGreaterThan(STRIP.indexOf('label="금일입테"'));
+    expect(STRIP.indexOf('label="금일 등록"')).toBeGreaterThan(STRIP.indexOf('label="금일 입테"'));
     expect(STRIP.indexOf('label="금일 등록"')).toBeLessThan(STRIP.indexOf('label="오늘첫수업"'));
   });
   it("등록 완료로 옮기는 두 경로(상태 변경·수업 배정)가 같은 로그를 남긴다", () => {

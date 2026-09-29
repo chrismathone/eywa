@@ -153,7 +153,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
       {v.calendar && (
         <KpiCard
           helpKey="dash-leveltest"
-          label="금일입테"
+          label="금일 입테"
           value={count(levelTests?.length)}
           unit="건"
           detail={

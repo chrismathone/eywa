@@ -12,6 +12,7 @@ import {
 } from "@/features/owner/server/classroom-actions";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SettingsCard } from "./section-form";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 
 const INPUT = "border-border bg-card text-foreground rounded-md border px-2.5 py-1.5 text-sm";
 
@@ -181,7 +182,7 @@ function RoomRow({ room }: { room: ClassroomRow }) {
   );
 }
 
-export function ClassroomManager({ rooms }: { rooms: ClassroomRow[] }) {
+export function ClassroomManager({ rooms, canImport = false }: { rooms: ClassroomRow[]; canImport?: boolean }) {
   const live = rooms.filter((r) => r.archivedAt == null);
   const archived = rooms.filter((r) => r.archivedAt != null);
   return (
@@ -190,7 +191,10 @@ export function ClassroomManager({ rooms }: { rooms: ClassroomRow[] }) {
       description="강의실명·정원을 등록·수정합니다(추가·수정·숨김은 즉시 반영 — 운영 설정 '저장' 버튼과 별개). 반/시간표의 강의실 선택지로 쓰입니다. 안 쓰는 강의실은 '숨기기'로 목록에서만 빼세요 — 이미 배정된 반·시간표는 그대로 남습니다. 삭제는 쓰는 곳이 하나도 없는 강의실만 가능합니다."
       span2
     >
-      <AddForm />
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <AddForm />
+        {canImport ? <ExcelImportButton kind="classrooms" label="엑셀로 넣기" /> : null}
+      </div>
       <ul className="divide-line mt-4 divide-y border-t pt-2">
         {live.length === 0 ? (
           <li className="text-text-faint py-3 text-center text-sm">아직 등록된 강의실이 없습니다</li>

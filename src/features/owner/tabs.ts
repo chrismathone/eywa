@@ -21,6 +21,7 @@ export type OwnerTab =
   | "navigation"
   | "popups"
   | "data"
+  | "import"
   | "audit"
   | "sheets";
 
@@ -54,6 +55,9 @@ export const OWNER_TABS: readonly OwnerTabDef[] = [
   // 관리 그룹(구 /admin 흡수) — 팝업 공지·데이터 정리(고아+중복 통합)·감사·연동.
   { key: "popups", label: "팝업 공지", href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: "데이터 정리", href: "/owner?tab=data", group: "관리" },
+  // 엑셀로 한꺼번에 넣기(원장 2026-09-29 *"다른 지점에서 업로드용 엑셀 양식을 다운로드 받고 업로드를 통해 모든 데이터 업로드"*) —
+  // 각 탭에 있는 '엑셀로 넣기'를 도입 순서대로 한 화면에 모은 허브. 올리는 기계는 탭과 같다(features/excel-import).
+  { key: "import", label: "데이터 가져오기", href: "/owner?tab=import", group: "관리" },
   { key: "audit", label: "감사로그", href: "/owner?tab=audit", group: "관리" },
   { key: "sheets", label: "연동", href: "/owner?tab=sheets", group: "관리" },
 ] as const;

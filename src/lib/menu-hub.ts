@@ -242,6 +242,9 @@ export const SUPPORT_GROUPS: HubGroup[] = [
       face("owner", "/owner?tab=popups", "팝업 공지", undefined, { section: "청구·안내", icon: "megaphone" }),
       face("owner", "/owner?tab=permissions", "역할·권한", undefined, { section: "계정·권한", icon: "key" }),
       face("owner", "/owner?tab=data", "데이터 정리", undefined, { section: "시스템", icon: "eraser" }),
+      // 엑셀로 한꺼번에 넣기 허브(원장 2026-09-29) — 데이터 정리와 같은 '시스템' 범주. 그림은 같은 메뉴(학원 설정)의 '연동'과 같은
+      // sync — 다른 메뉴와 겹치지 않는 남은 그림 중 "옮겨 오기"에 맞는 것이 없다(upload는 탭 그림 파일이 없다).
+      face("owner", "/owner?tab=import", "데이터 가져오기", undefined, { section: "시스템", icon: "sync" }),
       // 🔴 **원장 전용**(원장 2026-09-09 *"감사로그는 마스터 이상급으러만"*) — 같은 날 DB 정책도
       //    master·super_admin으로 좁혔다(0253a). 여기서 감추는 건 화면 정리일 뿐 게이트가 아니고,
       //    진짜 자물쇠는 RLS다([[#77]]) — 남에게 보여 봐야 빈 목록이라 입구를 아예 안 세운다.

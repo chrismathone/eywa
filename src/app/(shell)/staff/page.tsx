@@ -19,7 +19,8 @@ import { Toolbar } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAdjustLeave } from "@/features/leave/access";
 import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
@@ -124,7 +125,7 @@ export default async function StaffPage({
   // 그리되 이번 렌더는 저장하지 않는다(다른 축을 기본값으로 덮지 않게). 서로 독립인 조회는 한 번에(B4) — 저장값은 메모리 필터에만
   // 쓰여 목록 쿼리와 무관하다(학생·수업목록은 저장값이 서버 페이징 쿼리에 들어가 순서가 있지만 여기는 전건을 받아 거른다).
   // super_admin(숨은 총괄)은 학원 화면에서 '관리자'로 위장 표시(실제 role/접근 불변, displayRoleFor).
-  const [prefsLoaded, rawAll, superAdminIds, settings, canManage, isSuperAdmin, jar] = await Promise.all([
+  const [prefsLoaded, rawAll, superAdminIds, settings, canManage, isSuperAdmin, jar, canImport] = await Promise.all([
     loadStaffListPrefs(),
     getStaffList(),
     getSuperAdminIds(),
@@ -133,6 +134,8 @@ export default async function StaffPage({
     // 연차 관리 버튼 노출 판정용 — 판정 단일 소스(super-admin.ts)를 그대로 쓴다(요청 캐시 1회).
     isCurrentUserSuperAdmin(),
     cookies(),
+    // 엑셀로 넣기 = 직원 계정을 한꺼번에 만드는 관리 작업 → full만(올리기 주소 `gateImport`와 같은 판정).
+    canManageTenant(user.systemRole, "staff"),
   ]);
   const prefs = prefsLoaded ?? DEFAULT_STAFF_LIST_PREFS;
   // '직원 이력서' 면은 2026-07-28 목록에 통합(이름 클릭=이력서, 등록=이력서 작성) — 옛 링크는 목록으로.
@@ -284,6 +287,7 @@ export default async function StaffPage({
               </Button>
             ) : null}
             {canManage ? <StaffQrSection tenantId={user.tenantId} /> : null}
+            {canImport ? <ExcelImportButton kind="staff" label="엑셀로 넣기" /> : null}
             {canManage ? <NewStaffTrigger /> : null}
           </>
         }

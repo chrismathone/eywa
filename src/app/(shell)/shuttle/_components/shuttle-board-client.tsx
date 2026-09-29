@@ -18,6 +18,7 @@ import {
 import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_PHONE_CONTROLS, SHUTTLE_ROW_TEXT, SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_BOARD_PATH, shuttleFaces } from "@/features/shuttle/faces";
@@ -76,6 +77,7 @@ export function ShuttleBoardClient({
   students,
   selectedRunId,
   canWrite,
+  canImport = false,
   coordsReady,
 }: {
   season: Season;
@@ -85,6 +87,8 @@ export function ShuttleBoardClient({
   students: AssignableStudent[];
   selectedRunId: string | null;
   canWrite: boolean;
+  /** 엑셀로 넣기(정류장·승하차) — 서버가 올리기 주소와 같은 `canManageTenant`로 정한 값. */
+  canImport?: boolean;
   /** 0244a(정류장 좌표) 적용 여부 — 정류장 관리 다이얼로그가 위치 입력을 그릴지 판단한다([[#95]]). */
   coordsReady: boolean;
 }) {
@@ -214,6 +218,11 @@ export function ShuttleBoardClient({
             <span className="pointer-coarse:hidden">
               <ShuttlePrintMenu season={season} />
             </span>
+            {canImport ? (
+              <span className="pointer-coarse:hidden">
+                <ExcelImportButton kind="shuttle" variant="ghost" label="엑셀로 넣기" />
+              </span>
+            ) : null}
             {canWrite && <Button onClick={() => setStopDialogOpen(true)}>정류장 관리</Button>}
           </span>
         }

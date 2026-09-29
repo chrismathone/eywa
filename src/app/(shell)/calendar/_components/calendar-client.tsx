@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { PeriodNav } from "@/components/period-nav";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ export function CalendarClient({
   events,
   tags,
   canWrite,
+  canImport = false,
 }: {
   /** `보기: 월` 드롭다운 — 서버가 만든 노드(항목 href에 연도·태그가 실린다). */
   viewSelect: ReactNode;
@@ -42,6 +44,8 @@ export function CalendarClient({
   /** 태그 사전(0224a) — 다이얼로그 선택지 + 태그 관리 모달. 비면(마이그 전) 태그 UI가 접힌다. */
   tags: CalendarTag[];
   canWrite: boolean;
+  /** 엑셀로 넣기(일정 일괄) — 서버가 올리기 주소와 같은 `canManageTenant`로 정한 값. */
+  canImport?: boolean;
 }) {
   const [dialog, setDialog] = useState<DialogState>(null);
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
@@ -76,6 +80,7 @@ export function CalendarClient({
             <Button variant="ghost" className="text-primary" onClick={() => setTagManagerOpen(true)}>
               태그 관리
             </Button>
+            {canImport ? <ExcelImportButton kind="calendar" variant="ghost" label="엑셀로 넣기" /> : null}
             <Button onClick={() => setDialog({ mode: "create", date: isCurrentMonth ? today : `${month}-01` })}>
               <EyIcon name="plus" size={16} />
               일정 등록

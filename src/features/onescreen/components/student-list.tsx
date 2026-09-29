@@ -73,8 +73,13 @@ function StudentRow({
       }`}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-foreground truncate text-sm font-bold">{st.name}</span>
+        {/* 🔴 이름은 **절대 줄지 않는다**(원장 2026-09-29 *"카드뷰시에 이름 짤리는 학생 없도록"* — `이도…`·`이해…`).
+            ClassNote 배지·발송 체크가 뒤에 붙으면 그 폭만큼 이름이 잘렸다 → 이름 `shrink-0`(줄보다 길 때만 말줄임), 뒤 표식 묶음이
+            `min-w-0 overflow-hidden`으로 대신 줄어든다([[#111]] 같은 모양). */}
+        <div className="flex min-w-0 items-center gap-1.5">
+          {/* max-w-full + truncate = 이름 **혼자서도** 줄보다 길 때만(영어 화면의 긴 이름) 말줄임 — 배지 때문에 잘리지는 않는다. */}
+          <span className="text-foreground max-w-full shrink-0 truncate text-sm font-bold">{st.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           <CnBadge label={cn ?? null} className={st.className} />
           {/* 발송 표시 — 라벨 색(보 셀)만으로는 '나갔는지'가 눈에 안 띈다는 원장 지적(2026-07-27).
               ⚠️ 표시는 **실제로 나간 행**에만 붙는다: 전부 나갔으면 채운 체크, 일부면 흐린 체크 + 남은 수.
@@ -96,6 +101,7 @@ function StudentRow({
               ) : null}
             </span>
           ) : null}
+          </span>
         </div>
         {/* 둘째 줄 = 학년 · 과목 점 · **출결 배지**.
             🔴 배지가 여기로 내려온 이유(원장 2026-08-18 *"이거 왜 짤리지?"*): 목록 열은 **폭이 고정**이고
