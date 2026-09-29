@@ -109,8 +109,8 @@ function internalLiteral(expr: string | null): boolean {
  * 이유 없이 늘리지 말 것.
  */
 const TOP_LEVEL_ONLY: Record<string, string> = {
-  "src/components/view-mode-toggle.tsx": "사이드바 하단 '강사뷰로 전환' — 사이드바는 창 안에서 HideInFrame",
-  "src/components/other-teacher-view.tsx": "사이드바 '다른 강사 뷰' — 최상위 전용",
+  "src/components/view-mode-toggle.tsx": "사이드바 '강사뷰 전환'의 나 항목 — 사이드바는 창 안에서 HideInFrame",
+  "src/components/other-teacher-view.tsx": "사이드바 '강사뷰 전환' · 열람 종료 배지 — 최상위 전용",
   "src/components/teacher-menu.tsx": "강사 미니셸 '내 메뉴' — 미니셸엔 창이 없다",
   "src/components/workspace/embed-url-keeper.tsx":
     "최상위(새 탭)에 뜬 창 문서에서 embed를 **떼는** 자리 — 창 안에선 이 호출이 안 돈다(isFramed)",
