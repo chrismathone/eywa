@@ -1,5 +1,6 @@
 "use client";
 
+import { assignTop } from "@/lib/nav/assign-top";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -36,7 +37,7 @@ export function useOwnTeacherViewSwitch() {
       if (dest) {
         // 액션이 착지 경로를 반환 → window.location으로 **풀 문서 네비**(soft nav이 아님).
         // 이래야 라우터 캐시가 강사 미니셸로 오염되지 않아 뒤로가기 시 깨진 렌더가 나지 않는다(view-actions 주석 참조).
-        window.location.assign(dest);
+        assignTop(dest);
         return;
       }
       toast.error(REFUSED);
