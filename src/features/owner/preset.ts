@@ -86,6 +86,16 @@ export function prepareSectionForSave(
     else delete out.teacherMenus;
     return out;
   }
+  // 배포 전에 열어 둔 보고서 설정 폼은 영상 제출 칸을 보내지 않는다. 스키마 기본값(전체 사용)으로
+  // 저장된 제외 목록을 덮지 않도록, 요청에 없던 칸은 기존 저장값을 유지한다.
+  if (section === "report" && isPlainObject(parsed)) {
+    if (isPlainObject(rawInput) && "videoHomeworkPolicy" in rawInput) return parsed;
+    const out: Record<string, unknown> = { ...parsed };
+    if (isPlainObject(storedSection) && "videoHomeworkPolicy" in storedSection)
+      out.videoHomeworkPolicy = storedSection.videoHomeworkPolicy;
+    else delete out.videoHomeworkPolicy;
+    return out;
+  }
   if (section !== "operations" || !isPlainObject(parsed)) return parsed;
   const out: Record<string, unknown> = { ...parsed };
   for (const key of NEW_OPERATIONS_KEYS) {

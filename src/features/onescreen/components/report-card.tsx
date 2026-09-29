@@ -29,6 +29,7 @@ import {
 } from "./attendance-pills";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
+import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
@@ -905,6 +906,14 @@ export function ReportCard({
 
         {/* 저장 후 발급된 학부모 공개 링크 — 강사가 복사해 카톡/문자로 직접 전달(발송 시스템 P0). */}
         {/* P2a: 열람 수 배지 + 취소(열람 차단)/재발급(새 토큰). 취소된 링크는 재발급만 노출. */}
+          {subject.classId ? (
+            <VideoHomeworkCheck classId={subject.classId} studentId={student.id}
+              subjectKey={subject.subjectKey ?? "math"} grade={student.grade}
+              previousHomework={subject.prevReport?.homeworkToday}
+            homeworkDate={subject.prevReport?.date}
+            readOnly={readonlyView} />
+        ) : null}
+
         {rep.sent && sharePath ? (
           <div className="border-line bg-bg-soft rounded-md border px-3 py-2">
             <div className="mb-1 flex items-center justify-between gap-2">

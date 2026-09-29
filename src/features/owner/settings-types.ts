@@ -10,6 +10,7 @@ import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { MODULE_IDS } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
+import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
 import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
 
 const HHMM = /^\d{2}:\d{2}$/;
@@ -477,6 +478,14 @@ export const reportSchema = z.object({
   showTrendGraph: z.boolean().default(true), // 성적 추이 그래프(시험·과제 순수 SVG) — edutrix ReportPaper 그래프 이식
   showAttachments: z.boolean(), // 학생 사진 첨부(P2b) — /r·ClassNote 게시 이미지에 표시
   allowTeacherTestMax: z.boolean(), // 강사가 원스크린에서 테스트 문항수(/N)를 직접 변경 가능한지. off=과목 설정값 고정.
+  // 영상 제출 검사 대상 — 과목·학생 학교급·반 중 하나라도 꺼지면 강사 체크와 관리자 당일 명단에서 제외.
+  // 기존 검사 이력은 보존한다. 옛 설정에는 키가 없으므로 전체 사용으로 폴백한다.
+  videoHomeworkPolicy: z.object({
+    enabled: z.boolean(),
+    disabledSubjectKeys: z.array(z.string().min(1).max(24)).max(40),
+    disabledSchoolLevels: z.array(z.enum(["elem", "middle", "high", "preschool", "etc"])).max(5),
+    disabledClassIds: z.array(z.string().uuid()).max(1000),
+  }).default(DEFAULT_VIDEO_HOMEWORK_POLICY),
   // 🔴 테스트 점수 표기 모드(0148a `dailyTestScoreMode`/`checkTestScoreMode`)는 **제거됐다**(원장 2026-08-11
   //    "점은 제거하고 갯수로만"). 표기는 "20문제 중 18개 맞음" 하나뿐이다(report-comment.ts formatTestScore).
   //    저장된 jsonb에 옛 키가 남아 있어도 읽는 곳이 없다 — 다시 만들지 말 것.

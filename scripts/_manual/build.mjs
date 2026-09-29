@@ -70,7 +70,7 @@ for (const list of menus.values()) {
 if (!arg) {
   const all = flatFaces(toc).filter((f) => mats.has(f.id));
   const sections = [];
-  sections.push({ id: "cover", foot: "", blocks: [`<div class="cover"><div class="brand">aywa</div><h1>학원 운영 프로그램<br>사용 설명서</h1><p>처음 오신 원장님이 이 책만 보고 학원을 세팅할 수 있도록, 메뉴와 화면마다 나눠 설명했습니다.</p><p>${esc(stamp)}</p></div>`] });
+  sections.push({ id: "cover", foot: "", blocks: [`<div class="cover"><div class="brand">에이와</div><h1>학원 운영 프로그램<br>사용 설명서</h1><p>처음 오신 원장님이 이 책만 보고 학원을 세팅할 수 있도록, 메뉴와 화면마다 나눠 설명했습니다.</p><p>${esc(stamp)}</p></div>`] });
   // 목차 — 그룹 · 메뉴 · 면. 쪽 번호는 조립 뒤에 채워진다.
   const tocBlocks = [`<h2 data-keep style="padding-top:0;font-size:18pt;color:#121212">목차</h2>`,
     `<div class="toc-f"><span>처음 시작하기</span><span class="dots"></span><span class="pg" data-for="start">–</span></div>`];
@@ -100,7 +100,7 @@ if (!arg) {
     });
   });
   fs.mkdirSync(OUT, { recursive: true });
-  const r = await toPdf(browser, documentHtml(sections), path.join(OUT, process.env.MANUAL_BOOK ?? "aywa-사용설명서.pdf"));
+  const r = await toPdf(browser, documentHtml(sections), path.join(OUT, process.env.MANUAL_BOOK ?? "에이와-사용설명서.pdf"));
   report.push(r.ok ? `✓ 전체 한 권 — ${r.layout.length}쪽` : `✗ 전체 한 권 — ${r.bad.join(" / ")}`);
 }
 await browser.close();
@@ -113,7 +113,7 @@ function startBlocks(all) {
   const missing = steps.filter((s) => !start.steps[s.key]).map((s) => s.key);
   if (missing.length) throw new Error(`00-start.json 에 설명이 없는 시작 단계: ${missing.join(", ")} — 앱의 시작하기 카드가 바뀌었습니다.`);
   const blocks = [
-    `<div class="top" data-keep><div><div class="crumb">시작</div><h1>처음 시작하기</h1></div><div class="meta">aywa 사용 설명서<br>${esc(stamp)}</div></div>`,
+    `<div class="top" data-keep><div><div class="crumb">시작</div><h1>처음 시작하기</h1></div><div class="meta">에이와 사용 설명서<br>${esc(stamp)}</div></div>`,
     `<p class="lead">${esc(start.lead)}</p>`,
   ];
   steps.forEach((s, i) => {

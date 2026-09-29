@@ -9,6 +9,8 @@ import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
 import { ClassnoteRouteField } from "./classnote-route-field";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import type { VideoHomeworkClassOption } from "@/features/video-homework/server/queries";
+import { VideoHomeworkSettings } from "./video-homework-settings";
 
 /**
  * '표시 항목' 토글 중 부연이 필요한 것만. showAttachments는 사진과 파일(pdf·엑셀·hwp·오디오)을 **한 스위치로
@@ -28,12 +30,14 @@ export function ReportSection({
   initial,
   teachers = {},
   staffNames = [],
+  videoClasses = [],
 }: {
   initial: ReportSettings;
   /** 과목별 강사 라벨(작성률 예외 강사 칩 선택지) — 활성 직원으로 이미 필터됨(getReportTeacherCandidates). */
   teachers?: Record<string, string[]>;
   /** 활성 직원(users status≠inactive) 표시 이름 — orphan·집계 카운트를 실재 직원으로 좁히는 데 사용. */
   staffNames?: string[];
+  videoClasses?: VideoHomeworkClassOption[];
 }) {
   const [r, setR] = useState<ReportSettings>(initial);
   const set = (patch: Partial<ReportSettings>) => setR((prev) => ({ ...prev, ...patch }));
@@ -207,6 +211,9 @@ export function ReportSection({
           onChange={set}
         />
       </div>
+
+      <VideoHomeworkSettings policy={r.videoHomeworkPolicy} classes={videoClasses}
+        onChange={(videoHomeworkPolicy) => set({ videoHomeworkPolicy })} />
 
       {/* 좌열: 머리글+바닥글(세로 스택) · 우열: 표시 항목. items-stretch로 우측 카드를 좌측 높이에 맞춰 늘려
           내용이 짧아도 카드가 열을 끝까지 채운다(우측 하단 빈 배경 제거). */}
