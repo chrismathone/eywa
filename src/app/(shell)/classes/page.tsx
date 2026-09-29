@@ -9,7 +9,7 @@ import { Pill } from "@/components/atoms/pill";
 import { BigStat } from "@/components/atoms/big-stat";
 import { StatStrip } from "@/components/atoms/stat-strip";
 import { Button } from "@/components/ui/button";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
@@ -55,7 +55,6 @@ import {
   type ViewMode,
 } from "@/features/classes/list-filters";
 import { NewClassTrigger } from "./_components/new-class-trigger";
-import { ClassroomAssignButton } from "./_components/classroom-assign-dialog";
 import { HeaderDayFilter } from "./_components/header-day-filter";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
 
@@ -273,7 +272,7 @@ export default async function ClassesPage({
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격도 좁힌다(원장 지시 2026-08-06 "너무 남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
       {prefsLoaded ? <RememberPrefs current={current} saved={prefsLoaded} save={saveClassListPrefs} /> : null}
-      {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 반') + 텍스트 Secondary('강의실 자동배정') 둘. 설명 줄은 뺐다(바로 아래
+      {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 반') 하나(강의실 자동배정은 2026-09-29 걷음). 설명 줄은 뺐다(바로 아래
           스탯 네 칸이 같은 숫자를 말한다). 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader
         eyebrow={sheetT(lang, "cls.eyebrow")}
@@ -281,13 +280,8 @@ export default async function ClassesPage({
         actions={
           <>
             <MakeeduSyncBadge domain="classes" />
-            {canManageClasses ? (
-              <>
-                <ClassroomAssignButton />
-                <ExcelImportButton kind="classes" variant="ghost" short />
-                <NewClassTrigger />
-              </>
-            ) : null}
+            {/* 강의실 자동배정은 걷었다(원장 2026-09-29 *"강의실 자동 배정 제거"*) · 엑셀은 검색 줄의 한 버튼으로. */}
+            {canManageClasses ? <NewClassTrigger /> : null}
           </>
         }
       />
@@ -333,10 +327,8 @@ export default async function ClassesPage({
             triggerClassName={TOOLBAR_SELECT}
           />
           <SearchToggle placeholder={sheetT(lang, "cls.filter.searchPh")} defaultValue={q} />
-          {/* 화면과 같은 집합을 파일로(감사 N2) — 다운로드라 소프트 이동(Link)이 아니라 맨 `<a>`. */}
-          <Button variant="ghost" className="text-primary" render={<a href={exportHref} />}>
-            {sheetT(lang, "stu.excel")}
-          </Button>
+          {/* 화면과 같은 집합을 파일로(감사 N2) + 엑셀로 넣기 — 한 버튼(원장 2026-09-29 *"'엑셀 가져오기/내보내기'로 병합"*). */}
+          <ExcelMenu exportHref={exportHref} exportLabel={sheetT(lang, "stu.excel")} importKind={canManageClasses ? "classes" : null} />
         </div>
       </div>
 

@@ -149,9 +149,11 @@ describe("수업목록 배선", () => {
     expect(read("components/workspace/window-geometry.ts")).toMatch(/classes: \{ w: 1100, h: 700 \}/);
   });
 
-  it("상시 버튼은 Primary('새 반') + 텍스트('강의실 자동배정') 둘 — 결과 0개여도 표 머리가 남는다", () => {
+  it("상시 버튼은 Primary('새 반') 하나 · 엑셀은 검색 줄의 '가져오기/내보내기' 한 버튼 — 결과 0개여도 표 머리가 남는다", () => {
     expect(page).toContain("<NewClassTrigger");
-    expect(page).toContain("<ClassroomAssignButton");
+    // 원장 2026-09-29 *"강의실 자동 배정 제거"* · *"'엑셀 가져오기/내보내기'로 병합"*.
+    expect(page).not.toContain("<ClassroomAssignButton");
+    expect(page).toContain("<ExcelMenu");
     // 빈 상태는 표 본문(tbody) 안 — 표를 통째로 치우는 분기가 없다.
     expect(page).toMatch(/<tbody[\s\S]*\{empty \?/);
   });

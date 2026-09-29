@@ -42,8 +42,16 @@ export function AttendanceColumns({ children, columns, minWidth, dayCount, dayMi
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => { if (entry) setViewport(entry.contentRect.width); });
+    // 🔴 폭은 **표가 실제로 들어가는 스크롤 영역의 안쪽 폭**(clientWidth = 세로 스크롤바 뺀 폭)으로 잰다(원장 2026-09-29
+    //    *"출석부가 자꾸 가로스크롤이 생기네? 왼쪽 탭 on/off에 상관없이"*). 바깥 틀(el)의 폭으로 재면 세로 스크롤바만큼
+    //    표가 늘 넓어서 가로 스크롤이 생겼다. 스크롤바는 행 수에 따라 생겼다 사라지므로 스크롤 영역도 함께 지켜본다.
+    //    소수점 날짜 칸 폭이 합쳐 1px 넘치지 않게 내림.
+    const scroller = el.querySelector("table")?.parentElement ?? null;
+    const measure = () => setViewport(Math.floor(scroller ? scroller.clientWidth : el.clientWidth));
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
+    if (scroller) observer.observe(scroller);
+    measure();
     return () => observer.disconnect();
   }, []);
   const activeHidden = hidden.filter((key) => columns.some((c) => c.key === key));
