@@ -433,10 +433,10 @@ describe("실데이터 배선 가드 (감사 2026-07-29)", () => {
   });
 
   it("전화번호는 하이픈 유무 양쪽 포맷을 후보로 만든다", () => {
-    const v = phoneVariants("01067332180");
-    expect(v).toContain("01067332180");
-    expect(v).toContain("010-6733-2180");
-    expect(phoneVariants("010-6733-2180")).toContain("01067332180");
+    const v = phoneVariants("01000009100");
+    expect(v).toContain("01000009100");
+    expect(v).toContain("010-0000-9100");
+    expect(phoneVariants("010-0000-9100")).toContain("01000009100");
     expect(phoneVariants("정유진")).toEqual([]); // 이름이 들어간 레거시 행은 조회 자체를 안 한다
   });
 

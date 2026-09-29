@@ -1,3 +1,4 @@
+import { logExportDownload } from "@/features/exports/server/log-export";
 import { NextResponse } from "next/server";
 import { isValidYmd, kstToday } from "@/lib/date-kst";
 import { parseProgram } from "@/features/students/program";
@@ -71,6 +72,7 @@ export async function GET(request: Request) {
   const buf = await wb.xlsx.writeBuffer();
   // 파일명 날짜는 **KST 오늘** — UTC로 뽑으면 한국 새벽(00~09시)에 어제 날짜가 박힌다.
   const date = kstToday();
+  await logExportDownload(request, "원생목록");
   return new NextResponse(buf, {
     headers: {
       "Content-Type":

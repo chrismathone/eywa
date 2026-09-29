@@ -496,6 +496,9 @@ export function auditDetail(
     }
     case "integration_sync_now":
       return "지금 동기화 실행";
+    case "data_export_download":
+      // 조건(쿼리스트링) 원문은 영문 키라 문장에 싣지 않는다 — 뷰어 title 툴팁(원문 JSON)으로만.
+      return m.filtered === true ? "조건 걸어 받음" : "전체 받음";
     case "slack_connection_token": {
       // 토큰(비밀)은 애초에 metadata에 없다 — 연결된 워크스페이스 이름만.
       const team = str(m.team);

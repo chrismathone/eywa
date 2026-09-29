@@ -1,5 +1,17 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-29 — 판매 전 보안 감사 후속(코드로 닫을 수 있는 것)
+
+- 원장 *"타인에게 판매시에 문제 되는 부분 전체 검수 … 해결가능한건 해결 진행 병행"* → 6영역 감사(비밀·격리·첫 고객 데이터·라이선스·개인정보·상용화) 후 코드만으로 닫히는 것부터.
+- **직원 등록 QR 원장 계정 위조 차단** — 공개 제출이 토큰 행의 `role`을 믿어, 강사·학생이 PostgREST로 `role:'master'` 토큰 행을 넣으면 원장 계정이 생겼다. 역할은 `STAFF_INTAKE_ROLE`(teacher) 고정 · 토큰 목록 조회는 `"use server"` 밖(`intake-token.ts`)으로.
+- **super_admin 계정 보호** — 같은 지점 원장이 총괄 계정의 비밀번호·이메일·삭제·퇴사를 못 하게(`isProtectedSuperAdminTarget`, 조회 실패 = 막음). 이름·근무 설정은 그대로. `updateStaff` 이메일 변경에 위계 검사.
+- 크론 12·내부 API 3·상담 반출·오늘의 수학 비밀 비교 = 상수시간(`src/lib/http/secret-compare.ts`) · 자리 PIN 서명 키 전용 env `SEAT_PIN_SIGNING_SECRET` 우선.
+- **엑셀 내보내기 접속기록** — 원생목록·수납·지출·회차 확정·수업목록·시간표·상담 반출 API가 `data_export_download`를 남긴다(슬랙 금지).
+- 등록상담 AI 프롬프트에 학부모 전화번호 대신 '입력됨/미상' · 운영 문서 평문 비밀번호 열 삭제(🔴 git 기록엔 남아 있다 — 네 계정 비밀번호 교체 필요) · 공개 안내 이미지(`public/manuals`) 실명·이메일·전화 가상값으로.
+- (2차) 자동 생성 로그인 이메일 도메인 gmail → `login.aywa.co.kr`(남의 실제 gmail이 되어 비밀번호 재설정 메일로 계정이 넘어가던 구멍 — 기존 gmail 자동 계정은 그대로라 따로 옮겨야 한다) · 테스트·문서·주석의 실제 전화번호 19개 가상 번호로 · 녹음 상담 생성 전 같은 학원 학생인지 확인.
+- SQL 초안(🔴 원장 손 적용 전): `0305a` users RLS 분리 + 가드 트리거 확장 · `0306a` 트리거 교차 조회 tenant 조건(병합 때 0302a·0303a에서 번호 이동).
+- 보류(원장 결정·SQL 필요): 급여 칸 읽기 잠금 `0305b`(앱 먼저) · 역할별 restrictive 정책 · 자리 PIN 0000·공개 지점 목록 · `eywa123` · 처리방침·국외이전 · 테넌트 정지/해지.
+
 ## 2026-09-29 — 수학 ClassNote 반 보드(반별 발송) · C.N 라벨 · 발송 경로 설정 · 반 이름 공백 정리
 
 - 원장 *"반별 학생 배정해도 발송 가능한지"* → ClassNote 반 보드 56개(aywa 반 이름과 글자까지 같게, 특강·종강·미발송 제외)를 만들고 1인 보드 원아를 **추가 배정**(해제 없음, 292건 · 담임 연결 56). 가드 = 1인 보드 원아만 · 보호자 전화 · 생년 · 역방향 유일성 · 같은 반 동명이인 보류 · 이름 연속성(`scripts/_classnote/class-board-plan.mjs`). 결과는 0302a 표에 기록(`provision-math-class-boards.mjs --sync-db`) — 보류 10명(전화 불일치 6·생년 2·미가입 2).
@@ -3690,7 +3702,7 @@ JP1 목(14:20·16:20) · JP3 화/금 · LS4a 화 · LS4b 목 · LT6 목(16:20·1
 `이름·학년+학부모 연락처`). 동기화(`import-students-list.cjs uniqueName`)는 이름이 겹치면 뒤에 알파벳을
 붙여(`권민서` → `권민서A` → `권민서B`) 새 학생을 만들므로, **접미사가 붙는 순간 그 쌍은 영원히 후보가
 될 수 없었다.** 실측(injaewon, 비퇴원 367명): 후보 **0건** · 접미사가 붙은 학생 46명 · 접미사를 뗀 이름이
-같은 그룹 17개 · 그중 `dup_suspect`가 살아 있는 학생 **1명**(`권민서B` 초6·칠성초·010-8836-6267)의 짝
+같은 그룹 17개 · 그중 `dup_suspect`가 살아 있는 학생 **1명**(`권민서B` 초6·칠성초·010-0000-9104)의 짝
 `권민서A`는 **학년·학교·학부모 연락처가 전부 같은데도** 어느 화면에도 안 떴다.
 (곁가지: 신호 ①은 학생 자연키 유니크 인덱스와 차원이 같아 **비퇴원끼리는 원리적으로 못 걸린다** —
 그동안 이 화면을 사실상 신호 ②만 지탱하고 있었다.)
@@ -10958,7 +10970,7 @@ JJ 출결에 `seat_label`이 박히기 시작하고, **담임 시수 집계(tier
   아니라 **날짜별 편성**(드래그 배정 UI)이라 승/하차 체크 칸 자체가 없다 → **makeedu엔 탑승 이력이 존재하지 않는다**
   (aywa `shuttle_boardings`는 새 기능). 탑승변경요청·이력 0건 · 운행정보·자동종료 공란 · 푸시 42명 전원 '알리지 않음'.
   운전자배정은 사람이 아니라 **계정**(주영미 / '2호차 핸드폰(알바)')이라 aywa의 `attendance_alert_optin` 토글이 이미 그 자리다.
-  기사 연락처만 **차량대분류 라벨**에 있어 `shuttle_vehicles`에 반영(1호차=곽종래 010-8525-5831, 2호차·2호(19시~20시)=010-8588-2023).
+  기사 연락처만 **차량대분류 라벨**에 있어 `shuttle_vehicles`에 반영(1호차=곽종래 010-0000-9114, 2호차·2호(19시~20시)=010-0000-9113).
 - 🔑 **대조 검증**: 8/19(수) makeedu 일별탑승관리 = 1호차 57 + 2호차 24 + 2호(19~20) 2 = **83명** ↔ aywa '오늘 등하원'
   **예정 83명**. 1회차 정류장별 인원(1·3·6·3)까지 칸 단위로 일치.
 - 검증: typecheck 0(마케팅 `_img` 노이즈 제외) · lint 0 · vitest 45(shuttle+디자인 가드) · DB 대조(회차별 정류장·배정 수,
@@ -16114,7 +16126,7 @@ PostgREST로 전 직원 계약 132행을 읽을 수 있었다 — gotchas #77의
 ### 6) 데이터: 이승민 = **동명이인**이었다 (중복 아님)
 
 2026-03~06 청구가 두 학생에게 **금액까지 똑같이** 있어 중복을 의심했으나, 영어 반이 다르다(**Elsa** vs **Gina**)
-— 같은 등급 패키지라 금액이 같았을 뿐이다. 학생 연락처도 다르다(010-4939-5728 / 010-6272-7203).
+— 같은 등급 패키지라 금액이 같았을 뿐이다. 학생 연락처도 다르다(010-0000-9117 / 010-0000-9116).
 원장 확정으로 칠성고(edutrix 출신, makeedu_id 없음) 쪽 이름을 **이승민A**로 변경.
 `name_normalized`는 생성 컬럼이라 자동 갱신, ClassNote 연결·교재주문·견적서에 이름 사본 없음.
 
@@ -17719,7 +17731,7 @@ Fast Origin Transfer $0.63 · Fluid CPU/메모리 $0.65 · Function Invocations 
   추정되므로, 푸시를 뭉치면 그만큼 선형으로 준다. (07-23 오전에 "배포 자주 해도 된다"고 답한 건 직전 주기
   $3.33 기준이었고, 지금 구조에선 **틀렸다**.)
 ### 직원 이메일 오타를 화면에서 못 고치던 것 — "아직 로그인 전" 계정은 편집 허용 (2026-07-23) - tsc0/lint0/test2408/build✓
-원장: *"직원관리에서 이메일 수정 어케함? a01025015783@gmil.com → @gmail.com 로 수정하고 싶은데"*
+원장: *"직원관리에서 이메일 수정 어케함? a01000009101@gmil.com → @gmail.com 로 수정하고 싶은데"*
 - **원인**: 편집 허용 조건이 `isImportArtifactEmail`(형식불량·@imported.local) **하나뿐**이라, 방금 초대하며
   낸 **도메인 오타(gmil.com)** 는 형식이 멀쩡해 잠금 대상이 됐다. 화면에 통로가 아예 없었다.
 - **수정**: `canEditLoginEmail(email, everSignedIn)` — 임포트 산물 **또는 아직 한 번도 로그인하지 않은 계정**이면
@@ -20767,7 +20779,7 @@ Edutrix 반 생성·배정 자동화를 aywa DB 기준·Playwright·**dry-run �
 사용자 요청: ① 역동기화 표에 등록상담 진행 상태 표시 ② "경명여중 중1"→"경명여중1" 표기 통일("지침 사라졌나 체크").
 - **① 상담 상태 컬럼**([makeedu-push-card](../src/features/integrations/components/makeedu-push-card.tsx)): `getUnpushedIntakeConsultations`가 `outcome` 반환 → 칸반과 동일 Pill(대기/예약/상담완료/AI 완료…)로 "경로"와 "접수일" 사이 표시. 기존 "상태" 헤더는 **"전송 상태"**로 명확화. 단일 소스 유지 위해 [outcome-meta](../src/features/enrollment/outcome-meta.ts)를 `features/enrollment`로 승격(app 쪽 원위치는 re-export shim — features→app 역참조 회피).
 - **② 표기 지침 확인 결과**: `formatSchoolGrade(numberLast)`가 ijw 이식본으로 존재(시간표 셀·hover 카드 적용, changelog 2026-06-29 기록)했으나 **design-conventions에 규칙이 없어** 새 표면들이 공백 join으로 회귀. → [`schoolGradeLabel`](../src/lib/format/school-grade.ts)로 승격(원 파일 student-format.ts는 shim, Vitest 신규) + **7곳 일괄 통일**: 역동기화 카드·대시보드 등록상담 카드 meta·시간표 RosterRow·수업리포트 인쇄·수강료 견적서·저장 견적 목록·전역 검색 subtitle. **규칙 문서화**: design-conventions "학교·학년 표기" 절 + CLAUDE.md 디자인 인덱스 한 줄(⚠️ 전역 — 공백 join 새로 만들지 말 것).
-- **③ 이주아 역동기화 예측(DB 실측)**: outcome=ai_done·makeedu 미연결. 전송 시 makeedu 예비상담 폼 = 이주아/침산중/중1(코드 21)/보호자 사공향(모)/010-6619-4248/상담일 2026-07-08/제목 "[aywa 온라인 접수]"/노트(경로·희망과목 수학·셔틀 불필요·주소·형제·학부모 요청사항 전문).
+- **③ 이주아 역동기화 예측(DB 실측)**: outcome=ai_done·makeedu 미연결. 전송 시 makeedu 예비상담 폼 = 이주아/침산중/중1(코드 21)/보호자 사공향(모)/010-0000-9115/상담일 2026-07-08/제목 "[aywa 온라인 접수]"/노트(경로·희망과목 수학·셔틀 불필요·주소·형제·학부모 요청사항 전문).
 
 ### 활동 로그 커버리지 확장 — 출결·급여·휴가·카탈로그·공지 등 15테이블 추가(총 32) (2026-07-08) — ✅ 프로덕션 적용 + 트리거 실동작 스모크(INSERT/UPDATE/DELETE→원복 무오염) + tsc0/lint0 · 0084a **프로덕션 적용됨**
 사용자 요청: "지출탭이나 기타 등등 필요한 로그 추가". 조사 결과 지출(expenses)은 0081a에서 이미 부착 — 실제 공백 15테이블을 [0084a](../supabase/migrations/0084a_activity_log_expand.sql)로 부착: **attendance_records(출결)·lesson_reports(수업리포트)·student_memos·classrooms·textbook_catalog·tuition_catalog·tuition_quotes·notice_popups·announcements·staff_leaves(휴가)·payroll_records(급여)·reenrollment_campaign_targets·english_levels·intake_tokens(QR접수링크)·kiosk_devices**.

@@ -11,7 +11,14 @@ import { humanizeDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import type { StaffQrView } from "../intake-view";
 import { buildStaffQrView } from "./intake-qr";
-import { isTokenOpen, parseIntakeToken, STAFF_INTAKE_FORM_TYPE, type StaffIntakeToken } from "./intake-token";
+import {
+  isTokenOpen,
+  listStaffIntakeTokens,
+  parseIntakeToken,
+  STAFF_INTAKE_FORM_TYPE,
+  STAFF_INTAKE_ROLE,
+  type StaffIntakeToken,
+} from "./intake-token";
 
 // 직원 등록 QR 토큰 관리 — 게이트 = 직원관리 쓰기(개인 예외 반영) + admin client + tenant 필터.
 // ⚠️ 이 토큰을 아는 사람은 **로그인 없이 직원 계정을 만들 수 있다**(원장 결정 2026-08-07 '제출 즉시 생성').
@@ -25,8 +32,7 @@ import { isTokenOpen, parseIntakeToken, STAFF_INTAKE_FORM_TYPE, type StaffIntake
 //    새어 나갔으면 '새 링크'(토큰 교체), 그리고 링크당 등록 상한(public-intake-actions MAX_SUBMISSIONS)과
 //    동명 재등록 차단이 남용을 막는다. ⚠️ 만료를 다시 넣지 말 것(되돌리면 같은 함정).
 
-/** QR로 만들어지는 계정의 역할 — 고정. 다른 역할이 필요하면 등록 뒤 직원 상세에서 바꾼다(권한 상승 통로 차단). */
-const DEFAULT_ROLE: SystemRole = "teacher";
+const DEFAULT_ROLE: SystemRole = STAFF_INTAKE_ROLE;
 const TOKEN_NAME = "직원 등록";
 
 export type IntakeTokenActionState =
@@ -40,20 +46,6 @@ async function requireStaffWrite() {
     return { error: "직원 등록 QR을 관리할 권한이 없습니다" as const };
   }
   return { user };
-}
-
-/** 이 학원의 직원 등록 QR 전부(만든 순). */
-export async function listStaffIntakeTokens(tenantId: string): Promise<StaffIntakeToken[]> {
-  const { data } = await createAdminClient()
-    .from("academy_documents")
-    .select("id, created_at, form_data")
-    .eq("tenant_id", tenantId)
-    .eq("form_type", STAFF_INTAKE_FORM_TYPE)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  return (data ?? [])
-    .map((r) => parseIntakeToken(r.id as string, r.created_at as string, r.form_data))
-    .filter((t): t is StaffIntakeToken => t !== null);
 }
 
 /**

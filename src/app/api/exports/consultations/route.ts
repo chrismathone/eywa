@@ -1,3 +1,5 @@
+import { logExportDownloadAs } from "@/features/exports/server/log-export";
+import { secretMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { maskName, maskText, pseudonym } from "@/features/consultations/export-masking";
@@ -40,7 +42,7 @@ async function loadStaffNames(admin: ReturnType<typeof createAdminClient>, tenan
 export async function GET(req: Request) {
   const secret = process.env.CONSULT_EXPORT_TOKEN?.trim();
   if (!secret) return NextResponse.json({ error: "export disabled (CONSULT_EXPORT_TOKEN not set)" }, { status: 503 });
-  if ((req.headers.get("authorization") ?? "") !== `Bearer ${secret}`) {
+  if (!secretMatches(req.headers.get("authorization"), `Bearer ${secret}`)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -62,6 +64,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "multiple tenants — set CONSULT_EXPORT_TENANT_ID" }, { status: 503 });
     }
     tenantId = tenants[0].id as string;
+  }
+
+  // 반출 접속기록(보안 감사 2026-09-29) — **호출마다** 남긴다(첫 페이지만 남기면 offset을 1부터 줘서 기록을 피한다).
+  // 조건(offset·limit 포함)은 metadata.filters에 원문으로 남는다.
+  if (kind === "student" || kind === "enrollment") {
+    await logExportDownloadAs(tenantId, "상담 반출 API", req, kind === "student" ? "원생 상담 반출" : "콜&상담 반출");
   }
 
   if (kind === "student") {

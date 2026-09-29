@@ -1,3 +1,4 @@
+import { logExportDownload } from "@/features/exports/server/log-export";
 import { NextResponse } from "next/server";
 import { kstToday } from "@/lib/date-kst";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
   const subjects = buildSubjectMaps(settings.operations.subjects);
   const wb = await buildClassesWorkbook(rows, subjects.labelOf);
   const buf = await wb.xlsx.writeBuffer();
+  await logExportDownload(request, "수업목록");
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -659,7 +659,7 @@ async function analyzeConsultationAndPersist(
             `학생 이름(현재 입력값): ${consult.prospect_name}`,
             `학년: ${consult.prospect_grade ?? "미상"}`,
             `학교: ${consult.prospect_school ?? "미상"}`,
-            `학부모(현재 입력값): ${consult.parent_name ?? "미상"} / ${consult.parent_phone ?? "미상"}`,
+            `학부모(현재 입력값): ${consult.parent_name ?? "미상"} / 연락처 ${consult.parent_phone ? "입력됨" : "미상"}`,
             "",
             "섹션별 작성 지침:",
             "1. consultationType: 상담 성격 한 줄 (예: '등록 상담 - 진단 결과 설명 및 등록 유도', '초기 탐색', '환불/이탈 우려'). 등록/영업 상담이면 상담사가 등록을 유도하는 구조임을 명시.",

@@ -29,10 +29,19 @@ export function canEditLoginEmail(email: string, everSignedIn: boolean): boolean
 /** 이메일 편집 기본 도메인 — 학원 계정 대부분이 여기라 새로 만들 땐 이걸 고정으로 쓴다. */
 export const DEFAULT_EMAIL_DOMAIN = "gmail.com";
 
+/**
+ * **자동 생성** 로그인 이메일의 도메인 — 메일함이 없는 로그인 전용 도메인(관리자 `admin7099@login.aywa.co.kr`와 같은 자리).
+ * 🔴 예전엔 `gmail.com`이었다 — `kjh@gmail.com`은 대개 **남이 실제로 쓰는 주소**라, 비밀번호 재설정 메일이 그 사람에게
+ *    가면 계정이 통째로 넘어간다(보안 감사 2026-09-29). 아이디(이니셜 규칙)는 그대로, 도메인만 바꾼다.
+ *    본인 이메일을 적어 낸 직원은 그 주소를 그대로 쓴다(자동 생성은 비었을 때만).
+ */
+export const AUTO_STAFF_EMAIL_DOMAIN = "login.aywa.co.kr";
+
 // ── 이름 → 로그인 아이디(이니셜) 자동 생성 ────────────────────────────────
 // 원장 지시 2026-08-07: 직원 등록 시 "이메일·비밀번호는 자동 생성". 비밀번호는 INITIAL_STAFF_PASSWORD,
 // 이메일은 여기서 만든다. 규칙은 이관 스크립트(create-logins-for-staff.mjs)와 **같은 이니셜 표기**를
 // 쓴다 — 그때 만든 30명과 새 직원의 주소 모양이 달라지면 명부가 두 종류로 갈린다.
+// ⚠️ 도메인만은 2026-09-29부터 다르다(gmail → AUTO_STAFF_EMAIL_DOMAIN, 위 주석) — 아이디(이니셜) 규칙은 같다.
 // 초성 로마자(관용: 김=K, 최=C). ㅇ은 소리가 없어 중성(모음) 첫 글자를 쓴다(육→y, 원→w).
 const CHO = ["k", "k", "n", "d", "d", "r", "m", "b", "b", "s", "s", "", "j", "j", "c", "k", "t", "p", "h"];
 const JUNG = ["a", "a", "y", "y", "e", "e", "y", "y", "o", "w", "w", "o", "y", "u", "w", "w", "w", "y", "e", "e", "i"];
@@ -63,7 +72,7 @@ export function initialsOf(name: string): string {
 export function autoStaffEmail(name: string, taken: ReadonlySet<string>): string | null {
   const base = initialsOf(name);
   for (let n = 0; n < 50; n++) {
-    const candidate = `${base}${n === 0 ? "" : n + 1}@${DEFAULT_EMAIL_DOMAIN}`.toLowerCase();
+    const candidate = `${base}${n === 0 ? "" : n + 1}@${AUTO_STAFF_EMAIL_DOMAIN}`.toLowerCase();
     if (!taken.has(candidate)) return candidate;
   }
   return null; // 50개까지 다 찼다 = 사람이 개입할 상황(호출부가 경고).

@@ -69,7 +69,7 @@ const row = (over: Partial<ConsultationTableRow> = {}): ConsultationTableRow => 
   prospectName: "선혜주",
   prospectGrade: "중3",
   prospectSchool: "강북중",
-  parentPhone: "010-2848-6420",
+  parentPhone: "010-0000-9108",
   parentRequest: "◆25.7.4\n<수학>\n-칠곡에서 공통수학 1 진행",
   consultantName: "김초롱",
   consultantId: "u1",
@@ -254,7 +254,7 @@ describe("시트형 목록뷰 — 더블클릭 인라인 수정(엑셀식)", () 
   it("연락처 더블클릭 → 입력칸 → Enter = patchConsultationCells(id, { parentPhone })", async () => {
     render(<EnrollmentTable rows={[row()]} nowMs={0} canWrite={true} />);
     fireEvent.doubleClick(within(cellOf("연락처")).getByTitle(EDIT_CELL_TITLE));
-    const input = within(cellOf("연락처")).getByDisplayValue("010-2848-6420");
+    const input = within(cellOf("연락처")).getByDisplayValue("010-0000-9108");
     fireEvent.change(input, { target: { value: "010-1111-2222" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(patch).toHaveBeenCalledWith("c1", { parentPhone: "010-1111-2222" }));

@@ -1,4 +1,5 @@
 import "server-only";
+import { secretMatches } from "@/lib/http/secret-compare";
 
 /**
  * 오늘의수학(testautocreator) 진도 연계 — **계약의 순수 로직**.
@@ -71,7 +72,7 @@ export function decodeCursor(token: string | null): number | null {
  */
 export function isAuthorized(header: string | null, expectedKey: string | undefined): boolean {
   if (!expectedKey) return false;
-  return header === `Bearer ${expectedKey}`;
+  return secretMatches(header, `Bearer ${expectedKey}`);
 }
 
 /** 로스터 응답의 학생 한 행 — 계약 모양. 연락처·성적·상담·수납은 **없다**. */

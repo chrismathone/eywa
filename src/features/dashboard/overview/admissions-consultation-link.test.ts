@@ -20,15 +20,15 @@ const notNames = ["영어", "수학", "과학", "국어"];
 
 describe("matchAdmissionsConsultation — 일정 줄 ↔ 콜&상담", () => {
   it("전유솔: 상담이 나중에 생겨도 이름·날짜로 한 건이면 붙는다 — 보호자 번호가 제목과 달라도 떨어뜨리지 않는다(엄마·아빠 번호)", () => {
-    const event = { title: "[대표] 영수입테 전유솔(달성초4) 010-3558-2749", startDate: "2026-09-12" };
+    const event = { title: "[대표] 영수입테 전유솔(달성초4) 010-0000-9118", startDate: "2026-09-12" };
     expect(matchAdmissionsConsultation(event, [], notNames)).toBeNull(); // 상담 전 — 링크 없음
     const later = [c({ id: "yusol", name: "전유솔", school: "달성초", grade: "초4", phoneDigits: "01000001232" })];
     expect(matchAdmissionsConsultation(event, later, notNames)).toEqual({ id: "yusol", name: "전유솔" });
   });
   it("김근우: 제목엔 접미사 없는 이름 · 상담·원생은 '김근우A' → 그 상담으로, 이름은 정식 이름", () => {
-    const event = { title: "수학입테 김근우(일중1) 010-4666-2769", startDate: "2026-09-10" };
+    const event = { title: "수학입테 김근우(일중1) 010-0000-9103", startDate: "2026-09-10" };
     const rows = [
-      c({ id: "new", name: "김근우A", school: "대구일중", grade: "중1", phoneDigits: "01046662769", studentId: "sA", studentName: "김근우A", consultedOn: "2026-09-10" }),
+      c({ id: "new", name: "김근우A", school: "대구일중", grade: "중1", phoneDigits: "01000009103", studentId: "sA", studentName: "김근우A", consultedOn: "2026-09-10" }),
       c({ id: "old", name: "김근우", school: "달산초", grade: "6", phoneDigits: "01000003798", studentId: "s0", studentName: "김근우", consultedOn: "2026-02-22" }), // 60일 밖
     ];
     expect(matchAdmissionsConsultation(event, rows, notNames)).toEqual({ id: "new", name: "김근우A" });
@@ -38,11 +38,11 @@ describe("matchAdmissionsConsultation — 일정 줄 ↔ 콜&상담", () => {
   it("🔴 동명이인(원생 표에 이 아이 말고 같은 이름)이면 창 안 상담이 한 명이어도 직접 증거(번호 또는 이 아이만 맞는 학교)가 있어야 붙는다", () => {
     const k = schoolGradeKey("대구일중", "중1");
     const families = new Map([["김근우", [{ studentId: "s0", key: k }, { studentId: "sA", key: k }]]]);
-    const rows = [c({ id: "A", name: "김근우A", school: "대구일중", grade: "중1", phoneDigits: "01046662769", studentId: "sA", studentName: "김근우A", consultedOn: "2026-09-10" })];
+    const rows = [c({ id: "A", name: "김근우A", school: "대구일중", grade: "중1", phoneDigits: "01000009103", studentId: "sA", studentName: "김근우A", consultedOn: "2026-09-10" })];
     // 원래 원생 김근우의 레벨테스트 — 번호 없음, 학교·학년도 둘이 같다 → 김근우A로 바꾸면 거짓
     expect(matchAdmissionsConsultation({ title: "영어 레벨테스트 김근우 일중1", startDate: "2026-09-15" }, rows, notNames, { families })).toBeNull();
     // 제목 번호가 김근우A 상담 번호 → 붙는다
-    expect(matchAdmissionsConsultation({ title: "수학입테 김근우(일중1) 010-4666-2769", startDate: "2026-09-10" }, rows, notNames, { families })?.name).toBe("김근우A");
+    expect(matchAdmissionsConsultation({ title: "수학입테 김근우(일중1) 010-0000-9103", startDate: "2026-09-10" }, rows, notNames, { families })?.name).toBe("김근우A");
     // 다른 동명이인이 다른 학교면 학교 힌트가 증거가 된다
     const split = new Map([["김근우", [{ studentId: "s0", key: schoolGradeKey("달산초", "초6") }, { studentId: "sA", key: k }]]]);
     expect(matchAdmissionsConsultation({ title: "영어 레벨테스트 김근우 일중1", startDate: "2026-09-15" }, rows, notNames, { families: split })?.id).toBe("A");
@@ -61,7 +61,7 @@ describe("matchAdmissionsConsultation — 일정 줄 ↔ 콜&상담", () => {
     expect(matchAdmissionsConsultation({ title: "영어입테 김근우 일중1", startDate: "2026-09-12" }, qr, notNames, { families: new Map() })?.id).toBe("qr");
   });
   it("🔴 후보가 한 명이어도 제목의 학교·학년과 모순이면 안 붙인다 — 번호만 다른 건 모순이 아니다", () => {
-    const event = { title: "수학입테 김근우(일중1) 010-4666-2769", startDate: "2026-09-10" };
+    const event = { title: "수학입테 김근우(일중1) 010-0000-9103", startDate: "2026-09-10" };
     const other = [c({ id: "old", name: "김근우", school: "달산초", grade: "6", phoneDigits: "01000003798", studentId: "sB", studentName: "김근우B", consultedOn: "2026-08-20" })];
     expect(matchAdmissionsConsultation(event, other, notNames)).toBeNull();
     expect(matchAdmissionsConsultation(event, [c({ id: "blank", name: "김근우", phoneDigits: "01000003798" })], notNames)?.id).toBe("blank");
@@ -114,9 +114,9 @@ describe("matchAdmissionsConsultation — 일정 줄 ↔ 콜&상담", () => {
     expect(matchAdmissionsConsultation(event, rows, notNames)?.id).toBe("match");
   });
   it("같은 이름·학교·학년 원생이 둘(중복 등록)이면 번호가 가른다", () => {
-    const event = { title: "[대표님] 수학입테 김지유 칠성초5 01067684624", startDate: "2026-09-10" };
+    const event = { title: "[대표님] 수학입테 김지유 칠성초5 01000009105", startDate: "2026-09-10" };
     const rows = [
-      c({ id: "A", name: "김지유", school: "칠성", grade: "초5", phoneDigits: "01067684624", studentId: "sA", studentName: "김지유A" }),
+      c({ id: "A", name: "김지유", school: "칠성", grade: "초5", phoneDigits: "01000009105", studentId: "sA", studentName: "김지유A" }),
       c({ id: "B", name: "김지유", school: "칠성", grade: "초5", phoneDigits: "01099990000", studentId: "sB", studentName: "김지유B" }),
       c({ id: "loose", name: "김지유", school: "칠성", grade: "초5" }),
     ];
