@@ -1,5 +1,6 @@
 "use client";
 
+import { assignTop } from "@/lib/nav/assign-top";
 import { useState, useTransition } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import {
@@ -41,7 +42,7 @@ function TargetItems({ targets, loading }: { targets: TeacherViewTarget[] | null
     start(async () => {
       // 착지 경로 반환 → window.location 풀 문서 네비(라우터 캐시 오염 방지 — switchToTeacherView와 동일).
       const dest = await switchToOtherTeacherView(id);
-      if (dest) window.location.assign(dest);
+      if (dest) assignTop(dest);
     });
   if (loading || targets === null)
     return <div className="text-text-faint px-2 py-1.5 text-sm">불러오는 중…</div>;
@@ -163,7 +164,7 @@ export function ViewAsChip({ name, lang }: { name: string; lang: SheetLang }) {
       onClick={() =>
         start(async () => {
           const dest = await switchToAdminView();
-          window.location.assign(dest);
+          assignTop(dest);
         })
       }
       title={sheetT(lang, "chrome.viewAs.endTitle")}

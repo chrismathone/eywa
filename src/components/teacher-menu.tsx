@@ -1,5 +1,6 @@
 "use client";
 
+import { assignTop } from "@/lib/nav/assign-top";
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
@@ -149,7 +150,7 @@ export function TeacherMenu({
               className="cursor-pointer"
               onClick={async () => {
                 const dest = await switchToAdminView();
-                window.location.assign(dest);
+                assignTop(dest);
               }}
             >
               <EyIcon name="building" size={16} strokeWidth={1.8} /> {t("menu.toAdmin")}
