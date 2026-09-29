@@ -233,7 +233,8 @@ export function WritingRateCard({ view }: { view: WritingRatesView }) {
                   </td>
                   {r.daily.map((d) => (
                     <td key={d.date} className="px-2 py-2 text-center align-middle">
-                      {d.target == null ? (
+                      {/* 대상 0(rate null)도 "수업 없음" — "% 0/0"으로 새지 않게(월간 표와 같은 규칙). */}
+                      {d.target == null || d.rate == null ? (
                         d.holiday ? (
                           // 휴일은 "·"(수업 없음)와 구분해 표기 — 왜 분모에서 빠졌는지 화면에서 읽히게.
                           <span
