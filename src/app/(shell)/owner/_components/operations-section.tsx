@@ -21,9 +21,12 @@ const SUBJECTS_TAB = "/owner?tab=subjects";
 export function OperationsSection({
   initial,
   classrooms,
+  canImportClassrooms = false,
 }: {
   initial: OperationsSettings;
   classrooms: ClassroomRow[];
+  /** 강의실 엑셀로 넣기 버튼 — 서버가 canManageTenant(owner)로 정한 값. */
+  canImportClassrooms?: boolean;
 }) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
@@ -32,7 +35,7 @@ export function OperationsSection({
   return (
     // 강의실은 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(중첩 <form> 방지 위해 폼 밖).
     // footer로 넘겨 저장 바가 강의실 카드 아래(전체 콘텐츠 맨 끝)에 sticky로 붙게 한다(창 하단 고정).
-    <SectionForm section="operations" payload={o} footer={<ClassroomManager rooms={classrooms} />}>
+    <SectionForm section="operations" payload={o} footer={<ClassroomManager rooms={classrooms} canImport={canImportClassrooms} />}>
       {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장.
           카드 배치는 키가 비슷한 것끼리 짝(평일|주말 = 교시 목록, 학년|직급 = 칩 목록) — 2열 그리드 빈 구멍 방지. */}
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 min-[860px]:grid-cols-2 [&>section]:min-w-0 [&>section[data-span-all]]:col-span-full">

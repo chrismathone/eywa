@@ -15,7 +15,8 @@ import { getConsultationTotalCount } from "@/features/enrollment/server/poll-act
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
-import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import {
   getConsultantOptions,
   getConsultationFilteredCounts,
@@ -111,9 +112,11 @@ export default async function EnrollmentPage({
   // ⚠️ 이건 **화면을 줄이는 용도**일 뿐이고 진짜 게이트는 setEnrollmentOutcome 안에 있다([[#77]]).
   // 수강료 계산기 바로가기(감사 N14, 원장 2026-09-23) — 계산기는 수납관리의 한 면이라 **그 화면을 열 수 있는
   // 사람에게만** 링크를 세운다(권한은 바꾸지 않는다 — 못 여는 사람에게 링크를 주면 눌러도 거절된다).
-  const [canWriteEnrollment, canOpenCalculator] = await Promise.all([
+  // 엑셀로 넣기 = 학원 전체를 바꾸는 일괄 작업 → full만(`canManageTenant`, 올리기 주소도 같은 판정 — [[#77]]).
+  const [canWriteEnrollment, canOpenCalculator, canImportExcel] = await Promise.all([
     canWriteTenant(user.systemRole, "enrollment"),
     canAccessTenant(user.systemRole, "billing"),
+    canManageTenant(user.systemRole, "enrollment"),
   ]);
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
@@ -225,6 +228,7 @@ export default async function EnrollmentPage({
                 수강료 계산기
               </Button>
             ) : null}
+            {canImportExcel ? <ExcelImportButton kind="enrollment-consultations" variant="ghost" label="엑셀로 넣기" /> : null}
             <NewEnrollmentTrigger />
           </>
         }

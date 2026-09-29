@@ -115,6 +115,6 @@ describe("라이선스 배선 가드", () => {
     expect(seatCalls("src/features/students/server/actions.ts")).toBe(3); // 등록·수정·상태 복구
     expect(seatCalls("src/features/withdrawals/server/actions.ts")).toBe(1); // 퇴원 복구
     expect(seatCalls("src/features/enrollment/server/actions.ts")).toBe(1); // 상담 → 원생 전환
-    expect(seatCalls("src/features/students/server/import-actions.ts")).toBe(1); // 엑셀 가져오기
+    expect(seatCalls("src/features/excel-import/importers/students.ts")).toBe(2); // 엑셀 가져오기(미리보기 + 반영)
   });
 });

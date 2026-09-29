@@ -1,5 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { kstToday } from "@/lib/date-kst";
 import { FilterSelect } from "@/components/filter-select";
 import { HrefSelect } from "@/components/href-select";
@@ -83,7 +84,7 @@ export default async function CalendarPage({
   const searchAllYears = view === "list" && q.length > 0;
 
   // 태그 사전·일정·쓰기 판정은 서로 독립 — 함께 받는다(B4 직렬 워터폴 금지).
-  const [tags, data, canWrite] = await Promise.all([
+  const [tags, data, canWrite, canImport] = await Promise.all([
     getCalendarTags(),
     view === "month"
       ? getMonthEvents(month)
@@ -93,6 +94,8 @@ export default async function CalendarPage({
           ? searchEventsByTitle(q)
           : getYearEvents(year),
     canWriteTenant(user.systemRole, "calendar"),
+    // 엑셀로 넣기 = 학원 전체 일괄 작업 — 올리기 주소와 **같은 판정**(canManageTenant, full만 — #77).
+    canManageTenant(user.systemRole, "calendar"),
   ]);
 
   // 태그 필터 — 사전에 없는 id는 조용히 "전체"로(주소창 장난·삭제된 태그의 딥링크).
@@ -184,6 +187,7 @@ export default async function CalendarPage({
           {view === "list" || view === "year" ? <SearchToggle placeholder="일정 제목" defaultValue={q} /> : null}
           {/* 숫자의 뜻을 바꾸는 사실이라 접지 않는다 — 휴가(결재 문서) 오버레이는 월 보기에만 있다. */}
           <span className="text-text-faint ml-auto text-xs">휴가는 월 보기에서만 표시됩니다</span>
+          {canImport ? <ExcelImportButton kind="calendar" variant="ghost" label="엑셀로 넣기" /> : null}
         </div>
       ) : null}
 
@@ -207,6 +211,7 @@ export default async function CalendarPage({
           today={today}
           events={data.events}
           canWrite={canWrite}
+          canImport={canImport}
           tags={tags}
         />
       ) : view === "year" ? (

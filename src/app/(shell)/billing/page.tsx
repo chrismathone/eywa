@@ -13,6 +13,8 @@ import { SessionVerificationFace } from "./_components/session-verification-face
 import { TeacherSettlementFace } from "./_components/teacher-settlement-face";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { canManageTenant } from "@/lib/auth/perm-matrix";
 
 type Sp = Record<string, string | undefined>;
 type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify" | "payroll";
@@ -89,6 +91,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const faces = sessionOn ? baseFaces : baseFaces.filter((f) => !SESSION_FACE_KEYS.has(f.key));
   const effectiveTab =
     (tab === "payroll" && !isMaster) || (!sessionOn && SESSION_FACE_KEYS.has(tab)) ? "billing" : tab;
+  // 엑셀로 넣기(원장 2026-09-29) — 수납 면 = 청구서, 지출 면 = 지출. 일괄 작업이라 billing **full**만(올리기 주소도 같은 판정).
+  const importKind = effectiveTab === "billing" ? "invoices" : effectiveTab === "expenses" ? "expenses" : null;
+  const canImport = importKind !== null && (await canManageTenant(user.systemRole, "billing"));
 
   return (
     <div className="space-y-4 print:space-y-0">
@@ -100,8 +105,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "textbook_checks"} />
         </div>
       )}
-      <div className="print:hidden">
-        <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
+      <div className="flex items-center gap-2 print:hidden">
+        <div className="min-w-0 flex-1">
+          <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
+        </div>
+        {canImport && importKind === "invoices" ? <ExcelImportButton kind="invoices" /> : null}
+        {canImport && importKind === "expenses" ? <ExcelImportButton kind="expenses" /> : null}
       </div>
       {effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />

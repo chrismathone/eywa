@@ -1,4 +1,4 @@
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { getShuttleBoard } from "@/features/shuttle/server/queries";
 import { isSeason, type Season } from "@/features/shuttle/types";
 import { getAssignableStudents } from "@/features/shuttle/server/students";
@@ -26,9 +26,11 @@ export default async function ShuttlePage({
   const season: Season = isSeason(sp.season) ? sp.season : "term";
 
   // 서로 독립 — 함께 받는다(B4).
-  const [board, canWrite, students] = await Promise.all([
+  const [board, canWrite, canImport, students] = await Promise.all([
     getShuttleBoard(season),
     canWriteTenant(user.systemRole, "shuttle"),
+    // 엑셀로 넣기 = 학원 전체 일괄 작업 — 올리기 주소와 **같은 판정**(canManageTenant, full만 — #77).
+    canManageTenant(user.systemRole, "shuttle"),
     getAssignableStudents(),
   ]);
 
@@ -48,6 +50,7 @@ export default async function ShuttlePage({
           students={students}
           selectedRunId={sp.run ?? null}
           canWrite={canWrite}
+          canImport={canImport}
           // 0244a 적용 여부 — 좌표는 기존 select와 **따로** 받으므로 컬럼이 없어도 보드는 그대로 산다.
           coordsReady={board.coordsReady}
         />

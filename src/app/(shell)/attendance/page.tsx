@@ -37,6 +37,7 @@ import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { AbsenceIntakeButton } from "./_components/absence-intake-button";
+import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
@@ -755,6 +756,8 @@ export default async function AttendancePage({
         ) : null}
         {showUnitsMaster ? <UnitsMasterButton month={month} /> : null}
         {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
+        {/* 출결 엑셀로 넣기(원장 2026-09-29) — 결석 통보 접수와 같은 게이트(full). 올리기 주소도 같은 판정을 한다. */}
+        {canIntakeAbsence ? <ExcelImportButton kind="attendance" /> : null}
         {canOpenPayslip && effectiveTeacher ? (
           <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
         ) : null}
