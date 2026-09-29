@@ -6,7 +6,8 @@ import { splitSegmentKey, subjectGroupLabel } from "./segment";
 
 /**
  * 이용 분석 **표시 말** — 권한·메뉴·화면·시간을 한글로(raw 키 노출 금지 규칙). 순수 함수(Vitest).
- * 🔴 라벨 표를 여기 새로 적지 않는다 — 메뉴 = `MENU_LABEL`, 권한 = `ROLE_LABEL`, 하부 면 = `SUBTABS_BY_MENU`(사이드바와 같은 말).
+ * 🔴 /admin 통계는 항상 코드 기본 이름·분류다. 지점별 navigation 설정/표시 이름/폴더는 읽지 않는다.
+ * 메뉴 = `MENU_LABEL`, 권한 = `ROLE_LABEL`, 하부 면 = 기본 `SUBTABS_BY_MENU`.
  */
 
 /**

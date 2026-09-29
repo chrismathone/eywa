@@ -53,6 +53,7 @@ export default async function UsagePage({
       />
 
       <UsageFilters q={q} tenants={data.tenants} subjects={data.subjects} />
+      <p className="text-text-dim text-xs">메뉴 이름과 분류는 기본 구성을 기준으로 표시합니다. 지점에서 이름이나 폴더를 바꿔도 같은 기능으로 합산됩니다.</p>
 
       {data.ok ? (
         <>

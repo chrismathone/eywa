@@ -24,7 +24,21 @@
  * 역할·권한이 원장의 owner/admin 접근을 못 잠그게 막아 둔 것(`isPermissionLocked`)과 같은 결이다.
  * 설정 업무군은 자식이 하나도 없으면 아예 서지 않으므로, 이 한 줄이 그 업무군을 항상 세운다.
  */
-export const LAYOUT_LOCKED_HREFS: ReadonlySet<string> = new Set(["/owner"]);
+export const LAYOUT_LOCKED_HREFS: ReadonlySet<string> = new Set(["/dashboard", "/support", "/owner", "/owner?tab=navigation"]);
+
+import type { AywaIconName } from "@/components/icons/aywa-icons";
+import { hasMenuGlyph } from "@/components/icons/menu-glyph";
+
+export const FIXED_GROUP_IDS: ReadonlySet<string> = new Set(["dashboard", "owner", "support"]);
+export const MAX_NAV_GROUPS = 30;
+export type MenuGroupLayoutRow = {
+  id: string;
+  label?: string;
+  icon?: AywaIconName;
+  order?: number;
+  hidden?: boolean;
+};
+export type MenuGroupLayout = readonly MenuGroupLayoutRow[];
 
 /** 목적지 한 줄의 보기 설정(sparse) — 안 담긴 목적지는 "기본 그대로"라는 뜻이다. */
 export type MenuLayoutRow = {
@@ -34,9 +48,58 @@ export type MenuLayoutRow = {
   hidden?: boolean;
   /** 업무군 안 표시 순서(작을수록 앞). 없으면 코드 순서 뒤에 붙는다. */
   order?: number;
+  label?: string;
+  icon?: AywaIconName;
+  groupId?: string;
 };
 
 export type MenuLayout = readonly MenuLayoutRow[];
+
+/** 원본 목적지의 권한/주소는 건드리지 않고 이름과 그림만 바꾼다. */
+export function applyMenuPresentation<T extends { href: string; label: string; icon: AywaIconName }>(item: T, layout?: MenuLayout): T {
+  if (isFixedDestination(item.href)) return item;
+  const row = layout?.find((r) => r.href === item.href);
+  if (!row) return item;
+  return { ...item, label: row.label?.trim() || item.label, icon: row.icon && hasMenuGlyph(row.icon) ? row.icon : item.icon };
+}
+
+/** 고정 그룹에 속한 메뉴는 다른 탭으로 옮기거나 개명할 수 없다. */
+export function isFixedDestination(href: string): boolean {
+  return href === "/dashboard" || href === "/support" || href === "/owner" || href.startsWith("/owner?");
+}
+
+/** DB의 옛/손상된 행도 소비처에 안전한 형태로 전달한다. 새 코드의 목적지 목록 검사는 해석기가 한다. */
+export function normalizeMenuRows(raw: unknown): MenuLayoutRow[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  return raw.slice(0, 200).flatMap((r) => {
+    if (!r || typeof r.href !== "string" || !r.href.startsWith("/") || r.href.startsWith("//") || seen.has(r.href)) return [];
+    seen.add(r.href);
+    const fixed = isFixedDestination(r.href);
+    return [{ href: r.href,
+      ...(r.hidden === true && !isLayoutHideLocked(r.href) ? { hidden: true } : {}),
+      ...(Number.isInteger(r.order) && r.order >= 0 && r.order < 200 ? { order: r.order as number } : {}),
+      ...(!fixed && typeof r.label === "string" && r.label.trim() ? { label: r.label.trim().slice(0, 40) } : {}),
+      ...(!fixed && typeof r.icon === "string" && hasMenuGlyph(r.icon) ? { icon: r.icon as AywaIconName } : {}),
+      ...(!fixed && typeof r.groupId === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(r.groupId) && !FIXED_GROUP_IDS.has(r.groupId) ? { groupId: r.groupId } : {}),
+    }];
+  });
+}
+
+export function normalizeGroupRows(raw: unknown): MenuGroupLayoutRow[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  return raw.slice(0, MAX_NAV_GROUPS).flatMap((r) => {
+    if (!r || typeof r.id !== "string" || !/^[a-zA-Z0-9_-]{1,80}$/.test(r.id) || FIXED_GROUP_IDS.has(r.id) || seen.has(r.id)) return [];
+    seen.add(r.id);
+    return [{ id: r.id,
+      ...(typeof r.label === "string" && r.label.trim() ? { label: r.label.trim().slice(0, 24) } : {}),
+      ...(typeof r.icon === "string" && hasMenuGlyph(r.icon) ? { icon: r.icon as AywaIconName } : {}),
+      ...(Number.isInteger(r.order) && r.order >= 0 && r.order < MAX_NAV_GROUPS ? { order: r.order as number } : {}),
+      ...(r.hidden === true ? { hidden: true } : {}),
+    }];
+  });
+}
 
 /** 이 목적지는 감출 수 없다(설정으로 돌아올 길). 화면·스키마·적용 세 곳이 같은 함수를 본다. */
 export function isLayoutHideLocked(href: string): boolean {

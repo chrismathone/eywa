@@ -1,4 +1,5 @@
 import "server-only";
+import { sameMenuMentions } from "@/features/owner/menu-mentions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateJSON } from "@/lib/ai/generate";
 import { reportWarning } from "@/lib/observability/report-error";
@@ -40,6 +41,7 @@ function buildPrompt(src: NoticeSource): string {
     "- 화면에 실제로 있는 메뉴 이름(예: '내 메뉴', '내 정보')은 번역하되, 그것이 버튼 이름임을 알 수 있게 자연스럽게 쓴다.",
     "- 원문에 없는 내용을 덧붙이지 않는다. 문장 수와 뜻을 그대로 옮긴다.",
     "- 줄바꿈은 원문 그대로 유지한다.",
+    "- @[이름](menu:/주소) 형태의 메뉴 참조는 한 글자도 변경하거나 누락하지 않는다. 표시 이름은 읽는 지점에서 자동 변환된다.",
     "- 원문이 비어 있는 칸은 빈 문자열로 둔다.",
     "",
     "아래 JSON을 영어로 옮겨 같은 키의 JSON으로만 답한다(설명 문장 금지).",
@@ -127,6 +129,9 @@ export async function buildNoticeTranslation(
     const s = typeof v === "string" ? v.trim() : "";
     return s ? s : null;
   };
+  if (!sameMenuMentions(src.body ?? "", pick(out.body) ?? "")) {
+    return { ok: false, error: "번역 중 메뉴 참조가 변경되어 원문을 유지합니다. 다시 번역해 주세요." };
+  }
   const { error } = await admin.from("notice_popup_translations").upsert(
     {
       notice_id: noticeId,

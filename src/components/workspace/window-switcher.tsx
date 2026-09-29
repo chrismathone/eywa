@@ -1,5 +1,7 @@
 "use client";
 
+import { useWindowPresentation } from "@/features/owner/navigation-context";
+
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp, LayoutPanelTop, X } from "@/components/icons/aywa-icon-compat";
@@ -30,6 +32,9 @@ for (const g of NAV_GROUPS) for (const it of g.items) ICON_BY_MENU[it.menuKey] =
  */
 export function WindowSwitcher() {
   const windows = useWindowStore((s) => s.windows);
+  const nav = useWindowStore((s) => s.nav);
+  const live = useWindowStore((s) => s.live);
+  const present = useWindowPresentation();
   const order = useWindowStore((s) => s.order);
   const focusedId = useWindowStore((s) => s.focusedId);
   const restore = useWindowStore((s) => s.restore);
@@ -153,11 +158,9 @@ export function WindowSwitcher() {
               <div className="flex items-center gap-1.5">
                 {list.map((w) => {
                   const active = w.id === focusedId && !w.minimized;
-                  const iconName =
-                    w.kind === "route"
-                      ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]])
-                      : null;
-                  const label = instanceLabel(w.id, w.params.title);
+                  const display = present(w, nav[w.id]?.at(-1), live[w.id]?.title);
+                  const iconName = display.icon ?? (w.kind === "route" ? ICON_BY_MENU[w.params.id] : null);
+                  const label = instanceLabel(w.id, display.title);
                   return (
                     // ⚠️ 칩은 **버튼이 아니라 감싸개**다 — 안에 ✕ 버튼이 들어가므로(버튼 안 버튼 금지).
                     // 배경·테두리(활성/최소화 표시)는 감싸개가 지고, 안의 두 버튼은 투명하게 겹쳐 둔다.

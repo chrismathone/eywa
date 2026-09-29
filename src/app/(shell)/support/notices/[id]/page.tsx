@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { MenuMentionText } from "@/components/menu-mention-text";
 import { Pill } from "@/components/atoms/pill";
 import { PageHeader } from "@/components/page-header";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -38,7 +39,7 @@ export default async function SupportNoticePage({ params }: { params: Promise<{ 
             <Pill color={toneColor("critical")}>공지</Pill>
           </div>
         ) : null}
-        <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap">{n.body}</p>
+        <p className="text-foreground text-sm leading-relaxed break-keep whitespace-pre-wrap"><MenuMentionText text={n.body} /></p>
       </article>
       {back}
     </div>

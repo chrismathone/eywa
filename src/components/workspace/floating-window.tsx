@@ -1,5 +1,8 @@
 "use client";
 
+import { MenuGlyph } from "@/components/icons/menu-glyph";
+import { useWindowPresentation } from "@/features/owner/navigation-context";
+
 import { useEffect, useRef, useState } from "react";
 import { Minus, Square, Copy, CopyPlus, X, ArrowLeft, RotateCw, ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { useWindowStore, instanceLabel, type Win } from "./window-store";
@@ -49,6 +52,9 @@ export function FloatingWindow({
   // 라이브 제목/뒤로가능(RouteWindow가 iframe 관찰로 갱신). 라우트 창은 현재 서브뷰 제목을 표시하고,
   // 드릴인했으면(canBack) 크롬 뒤로(←) 버튼을 띄운다 — 인페이지 "← …로" 백을 대체(Idea A).
   const live = useWindowStore((s) => s.live[win.id]);
+  const currentHref = useWindowStore((s) => s.nav[win.id]?.at(-1));
+  const present = useWindowPresentation();
+  const display = present(win, currentHref, live?.title);
 
   // 녹음 등 "끊기면 유실" 작업이 이 창 안에서 진행 중이면 잠금 — 닫기(X)·새로고침·뒤로·Esc를 막아
   // 우발적 종료로 녹음을 날리지 않게 한다(use-recording-lock이 창 본문 iframe에서 부모에 postMessage →
@@ -131,7 +137,7 @@ export function FloatingWindow({
         role="dialog"
         data-window-dialog
         aria-modal={false}
-        aria-label={win.params.title}
+        aria-label={display.title}
         tabIndex={-1}
         onKeyDown={(e) => {
           if (e.key === "Escape" && !locked) requestClose();
@@ -205,7 +211,7 @@ export function FloatingWindow({
 
           {/* 정중앙: 창 이름 — 좌우 그룹 너비와 무관하게 바 한가운데 고정(absolute). 드래그 통과(pointer-events-none). */}
           <span className="pointer-events-none absolute inset-y-0 left-1/2 flex max-w-[46%] -translate-x-1/2 items-center justify-center gap-1.5">
-            <span className="text-foreground truncate text-xs font-bold">{instanceLabel(win.id, live?.title ?? win.params.title)}</span>
+            <span className="text-foreground truncate text-xs font-bold">{display.icon ? <MenuGlyph name={display.icon} size={16} className="mr-1.5 inline-block" /> : null}{instanceLabel(win.id, display.title)}</span>
             {win.params.subtitle ? <span className="text-text-faint shrink-0 truncate text-xs">{win.params.subtitle}</span> : null}
           </span>
 

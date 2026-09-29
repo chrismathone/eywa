@@ -1,5 +1,7 @@
 "use client";
 
+import { useWindowPresentation } from "@/features/owner/navigation-context";
+
 import { useEffect, useState } from "react";
 import { Layers, X } from "@/components/icons/aywa-icon-compat";
 import { NAV_GROUPS } from "@/lib/navigation";
@@ -158,6 +160,9 @@ function PageStack({
 export function SpotlightStrip() {
   const spotlight = useWindowStore((s) => s.spotlight);
   const windows = useWindowStore((s) => s.windows);
+  const nav = useWindowStore((s) => s.nav);
+  const live = useWindowStore((s) => s.live);
+  const present = useWindowPresentation();
   const order = useWindowStore((s) => s.order);
   const spotlightRaised = useWindowStore((s) => s.spotlightRaised);
   const raiseToSpotlight = useWindowStore((s) => s.raiseToSpotlight);
@@ -182,12 +187,12 @@ export function SpotlightStrip() {
     .reverse()
     .map((w) => ({
       key: w.id,
-      title: instanceLabel(w.id, w.params.title),
+      title: instanceLabel(w.id, present(w, nav[w.id]?.at(-1), live[w.id]?.title).title),
       subtitle: w.params.subtitle,
-      iconName:
+      iconName: present(w, nav[w.id]?.at(-1), live[w.id]?.title).icon ?? (
         w.kind === "route"
           ? (ICON_BY_MENU[w.params.id] ?? ICON_BY_MENU[w.params.id.split("/")[0]] ?? null)
-          : null,
+          : null),
       isBackground: false,
       onClick: () => raiseToSpotlight(w.id),
     }));

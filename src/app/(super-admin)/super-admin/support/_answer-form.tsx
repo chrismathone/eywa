@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { answerSupportRequest } from "@/features/support/server/admin-actions";
 import { SUPPORT_STATUSES, SUPPORT_STATUS_META, type SupportStatus } from "@/features/support/types";
@@ -62,17 +63,10 @@ export function SupportAnswerForm({
           className="border-line mt-1 h-(--control-h) w-full rounded-lg border px-3 text-sm"
         />
       </label>
-      <label className="block">
+      <div className="block">
         <span className="text-sm font-bold">답변</span>
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          maxLength={8000}
-          rows={10}
-          placeholder="안녕하세요. 에이와 운영팀입니다."
-          className="border-line mt-1 w-full rounded-lg border px-3 py-2 text-sm leading-relaxed"
-        />
-      </label>
+        <MenuMentionEditor defaultValue={initial.answer} onChange={setAnswer} ariaLabel="답변" maxLength={8000} minHeight={200} placeholder="안녕하세요. 에이와 운영팀입니다. @로 메뉴를 선택하세요." defaultNames />
+      </div>
       {msg ? <p className={`text-sm ${msg.ok ? "text-foreground" : "text-danger"}`}>{msg.text}</p> : null}
       <Button type="submit" disabled={pending}>
         {pending ? "저장 중…" : "저장"}

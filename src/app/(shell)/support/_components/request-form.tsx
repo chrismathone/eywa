@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 import { createSupportRequest, updateSupportRequest } from "@/features/support/server/actions";
 
@@ -80,18 +81,10 @@ export function SupportRequestForm({
           />
         </label>
       </div>
-      <label className="block">
+      <div className="block">
         <span className="text-sm font-bold">내용</span>
-        <textarea
-          value={form.body}
-          onChange={set("body")}
-          maxLength={8000}
-          required
-          rows={12}
-          placeholder="어느 화면에서, 무엇을, 어떻게 바꾸면 좋을지 적어 주세요."
-          className="border-line mt-1 w-full rounded-lg border px-3 py-2 text-sm leading-relaxed"
-        />
-      </label>
+        <MenuMentionEditor defaultValue={initial.body} onChange={(body) => setForm((f) => ({ ...f, body }))} maxLength={8000} minHeight={220} placeholder="어느 화면에서, 무엇을, 어떻게 바꾸면 좋을지 적어 주세요. @로 메뉴를 선택하세요." />
+      </div>
       {error ? <p className="text-danger text-sm">{error}</p> : null}
       <div className="flex gap-2">
         <Button type="submit" disabled={pending}>

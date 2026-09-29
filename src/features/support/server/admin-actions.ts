@@ -23,7 +23,8 @@ export async function answerSupportRequest(
   const status: SupportStatus = form.status;
   const dueDate = (form.dueDate ?? "").trim();
   if (dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return { error: "예정일 형식을 확인해 주세요" };
-  const answer = (form.answer ?? "").trim().slice(0, 8000);
+  const answer = (form.answer ?? "").trim();
+  if (answer.length > 8000) return { error: "답변은 메뉴 참조를 포함해 8,000자까지 입력해 주세요" };
   if (status === "done" && !answer) return { error: "완료로 바꾸려면 답변을 적어 주세요" };
 
   const admin = createAdminClient();
@@ -83,7 +84,8 @@ export async function saveSupportNotice(
 ): Promise<Result> {
   const sa = await requireSuperAdmin();
   const title = (form.title ?? "").trim().slice(0, 120);
-  const body = (form.body ?? "").trim().slice(0, 20000);
+  const body = (form.body ?? "").trim();
+  if (body.length > 20000) return { error: "내용은 메뉴 참조를 포함해 20,000자까지 입력해 주세요" };
   if (!title || !body) return { error: "제목과 내용을 적어 주세요" };
   const row = { title, body, pinned: Boolean(form.pinned) };
   const admin = createAdminClient();

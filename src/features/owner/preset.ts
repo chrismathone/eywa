@@ -80,10 +80,41 @@ export function prepareSectionForSave(
   // 탭 및 메뉴 구성 — 배포 순간 열린 옛 화면이 강사뷰 칸(teacherMenus) 없이 보내면 스키마 기본값([])이 채워진다.
   // 그대로 저장하면 원장이 정해 둔 강사뷰 구성이 조용히 지워지므로, 요청에 **없던** 칸은 저장돼 있던 값으로 둔다(프리셋 무관).
   if (section === "navigation" && isPlainObject(parsed)) {
-    if (isPlainObject(rawInput) && "teacherMenus" in rawInput) return parsed;
     const out: Record<string, unknown> = { ...parsed };
-    if (isPlainObject(storedSection) && "teacherMenus" in storedSection) out.teacherMenus = storedSection.teacherMenus;
-    else delete out.teacherMenus;
+    if (!isPlainObject(rawInput) || !("teacherMenus" in rawInput)) {
+      if (isPlainObject(storedSection) && "teacherMenus" in storedSection) out.teacherMenus = storedSection.teacherMenus;
+      else delete out.teacherMenus;
+    }
+    // groups를 모르는 구버전 화면은 이름·아이콘·배치를 지우지 못한다. 새 화면의 groups:[]는 명시적 초기화다.
+    if (!isPlainObject(rawInput) || !("groups" in rawInput)) {
+      if (isPlainObject(storedSection)) {
+        out.groups = storedSection.groups;
+        const previous = Array.isArray(storedSection.menus) ? storedSection.menus.filter(isPlainObject) : [];
+        const incoming = Array.isArray(parsed.menus) ? parsed.menus.filter(isPlainObject) : [];
+        const hrefs = new Set([...incoming, ...previous].map((r) => r.href));
+        out.menus = [...hrefs].map((href) => {
+          const old = previous.find((r) => r.href === href);
+          const next = incoming.find((r) => r.href === href);
+          return { href, ...(old?.label ? { label: old.label } : {}), ...(old?.icon ? { icon: old.icon } : {}),
+            ...(old?.groupId ? { groupId: old.groupId } : {}), ...next };
+        }).filter((row) => Object.keys(row).length > 1);
+      }
+    }
+    // 이전 강사 편집기의 숨김·순서 저장도 새 이름·아이콘·폴더 구성을 지우지 않는다.
+    if ((!isPlainObject(rawInput) || !("teacherGroups" in rawInput)) && isPlainObject(storedSection)) {
+      out.teacherGroups = storedSection.teacherGroups;
+      if (isPlainObject(rawInput) && "teacherMenus" in rawInput) {
+        const previous = Array.isArray(storedSection.teacherMenus) ? storedSection.teacherMenus.filter(isPlainObject) : [];
+        const incoming = Array.isArray(parsed.teacherMenus) ? parsed.teacherMenus.filter(isPlainObject) : [];
+        const hrefs = new Set([...incoming, ...previous].map((r) => r.href));
+        out.teacherMenus = [...hrefs].map((href) => {
+          const old = previous.find((r) => r.href === href);
+          const next = incoming.find((r) => r.href === href);
+          return { href, ...(old?.label ? { label: old.label } : {}), ...(old?.icon ? { icon: old.icon } : {}),
+            ...(old?.groupId ? { groupId: old.groupId } : {}), ...next };
+        }).filter((row) => Object.keys(row).length > 1);
+      }
+    }
     return out;
   }
   // 배포 전에 열어 둔 보고서 설정 폼은 영상 제출 칸을 보내지 않는다. 스키마 기본값(전체 사용)으로

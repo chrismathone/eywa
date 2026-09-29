@@ -3,6 +3,7 @@
 // 프리셋(preset.ts): 침산 = DEFAULT_SETTINGS(오늘과 같다), 새 학원 = GENERIC_SETTINGS.
 import { baseSettingsFor, presetOfStored } from "./preset";
 import { normalizeDisabledModules } from "@/lib/modules";
+import { normalizeNavigationSettings } from "./normalize-navigation";
 import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -107,6 +108,7 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
       holidays: normalizeHolidays(merged.operations.holidays),
     },
     billing: normalizeBilling(merged.billing),
+    navigation: normalizeNavigationSettings(merged.navigation),
     // 모르는 모듈 id는 버린다(유령 id가 게이트를 흔들지 않게).
     modules: { disabled: normalizeDisabledModules(merged.modules.disabled) },
   };

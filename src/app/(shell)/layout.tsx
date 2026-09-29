@@ -1,3 +1,5 @@
+import { NavigationProvider } from "@/features/owner/navigation-context";
+import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { redirect } from "next/navigation";
 import { isFeatureLicensed } from "@/lib/license/server";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
@@ -77,13 +79,16 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
+    const teacherEmbed = (await getShellView()) === "teacher";
+    const embedLang = await getTeacherViewLang();
     // 🔴 창(iframe)에도 **같은 언어**를 흘린다 — 안 흘리면 서버 컴포넌트(`getTeacherViewLang`)는 영어인데
     //    클라 컴포넌트는 provider가 없어 한국어인 **반반 화면**이 된다. 관리자에겐 이 값이 항상 한국어라
     //    (그 함수가 `getShellView()!=="teacher"`에서 조회 없이 즉시 반환) 풀셸 동작은 한 글자도 안 바뀐다.
     return (
+      <NavigationProvider menus={teacherEmbed ? settings.navigation.teacherMenus : menuLayout} groups={teacherEmbed ? settings.navigation.teacherGroups : settings.navigation.groups} source={teacherEmbed ? teacherNavigationSource(embedLang) : undefined} tenantId={user.tenantId}>
       <EmbedProvider embed>
         <TeacherNamesProvider names={await getTeacherEnglishNames()}>
-        <SheetLangProvider lang={await getTeacherViewLang()}>
+        <SheetLangProvider lang={embedLang}>
         <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}><OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
           {/* .embed-main = 창 컴팩트 마커 — PageHeader 등이 CSS 변형([.embed-main_&])으로 소비. soft nav에서
               layout(<main>)은 재렌더되지 않아 창 안 내비가 embed 파라미터를 흘려도 컴팩트가 유지된다(요청 단위
@@ -136,6 +141,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         </SheetLangProvider>
         </TeacherNamesProvider>
       </EmbedProvider>
+      </NavigationProvider>
     );
   }
 
@@ -250,6 +256,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           메뉴는 한글인데 본문만 영어가 된다(둘이 같은 값을 봐야 한다). 학생 미니셸에는 안 걸린다. */}
       <TeacherNamesProvider names={teacherNames}>
       <SheetLangProvider lang={teacherLang}>
+      <NavigationProvider menus={view === "teacher" ? settings.navigation.teacherMenus : []} groups={view === "teacher" ? settings.navigation.teacherGroups : []} source={teacherNavigationSource(teacherLang)} tenantId={user.tenantId}>
       <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible">
         {/* z-[60]: 공지 팝업 레이어(z-55)가 좁은 미니셸에선 헤더 버튼('내 메뉴'·사용자 메뉴)까지 덮어
             클릭이 팝업에 먹혔다(2026-08-04 실측) — 내비 크롬은 공지보다 항상 위. */}
@@ -305,6 +312,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
                 showMcs={mcsForTeacher}
                 home={teacherHome}
                 layout={settings.navigation.teacherMenus}
+                groups={settings.navigation.teacherGroups}
                 connectedApps={teacherConnectedApps}
               />
             ) : null}
@@ -333,6 +341,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         </main>
         <NoticePopupLayer popups={popups} />
       </div>
+      </NavigationProvider>
       </SheetLangProvider>
       </TeacherNamesProvider>
       </WorkspaceEnabledProvider>
@@ -374,6 +383,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     // useSubjectMaps()가 buildSubjectMaps([]) 폴백을 타 과목이 "수학" 대신 raw 키 `math`로 떴다
     // (2026-07-22 전수검사 — 학생 요약 peek 창, 진입=커맨드 팰릿 학생 검색).
     // 라우트 창(iframe)은 자식 문서가 위 embed 분기에서 다시 받으므로 무관했다.
+    <NavigationProvider menus={menuLayout} groups={settings.navigation.groups} tenantId={user.tenantId}>
     <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment}>
     <WorkspaceEnabledProvider enabled={windowMode}>
     {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
@@ -405,7 +415,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
       {/* 데스크톱이 아니면(좁은 폭·터치) 상단 horizontal nav / 데스크톱(≥1240 + 마우스, `desk:`): 숨김 */}
       <HideInFrame>
-        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} connectedApps={connectedApps} className="desk:hidden" />
+        <MobileTopNav systemRole={user.systemRole} email={user.email} brand={brand} logoSrc={logoSrc} permMatrix={permMatrix} menuLayout={menuLayout} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} isGenericTenant={genericTenant} connectedApps={connectedApps} className="desk:hidden" />
       </HideInFrame>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
@@ -454,5 +464,6 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     </div>
     </WorkspaceEnabledProvider>
     </OperationsProvider>
+    </NavigationProvider>
   );
 }

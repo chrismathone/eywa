@@ -23,6 +23,7 @@ import {
 import { issueBrandingUploadTicket } from "@/features/owner/server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import type { AdminPopup } from "@/features/notices/server/queries";
+import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
 
 const INPUT = "border-border bg-card text-foreground min-w-0 w-full rounded-md border px-2.5 py-1.5 text-sm";
 const LABEL = "text-text-dim text-xs font-medium";
@@ -262,7 +263,7 @@ export function PopupsManager({ items }: { items: AdminPopup[] }) {
 
           <div className="flex flex-col gap-1.5">
             <span className={LABEL}>본문</span>
-            <textarea name="body" rows={3} defaultValue={e?.body ?? ""} placeholder="공지 내용 (이미지만 쓰면 비워도 됩니다)" className={INPUT} />
+            <MenuMentionEditor name="body" defaultValue={e?.body ?? ""} ariaLabel="팝업 공지 본문" placeholder="공지 내용 (이미지만 쓰면 비워도 됩니다). @로 메뉴를 선택하세요." />
           </div>
 
           <PopupImageField value={imageUrl} onChange={setImageUrl} />

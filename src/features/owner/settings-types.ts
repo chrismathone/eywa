@@ -4,7 +4,11 @@
 import { z } from "zod";
 import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
 // 감출 수 없는 목적지 판정 — 스키마(저장 거부)와 적용(isMenuHiddenByLayout)이 **같은 함수**를 본다.
-import { isLayoutHideLocked } from "./menu-layout";
+import { isLayoutHideLocked, isFixedDestination, FIXED_GROUP_IDS, MAX_NAV_GROUPS } from "./menu-layout";
+import { hasMenuGlyph } from "@/components/icons/menu-glyph";
+import type { AywaIconName } from "@/components/icons/aywa-icons";
+import { HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
+import { TEACHER_NAV_GROUPS, TEACHER_DEFAULT_GROUP } from "@/lib/teacher-navigation";
 // 보관 가능한 배치 수는 **화면도 읽는 값**이라 zod 없는 순수 모듈에 산다(클라 번들에 zod 유입 방지).
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
@@ -599,38 +603,77 @@ export type PermissionsSettings = z.infer<typeof permissionsSchema>;
 // 규약·적용은 [`menu-layout.ts`](./menu-layout.ts) 단일 소스. 여기 담기는 건 **바뀐 줄만**(sparse)이고,
 // 비어 있으면 지금과 똑같이 동작한다(전부 표시·코드 순서). 판정 단위가 menuKey가 아니라 목적지 주소인
 // 이유도 그 파일에 적혀 있다(한 메뉴가 버튼 여럿을 갖는다 — 수납 7면·설정 11면…).
-export const menuLayoutRowSchema = z.object({
+const menuOrderSchema = z.object({
   href: z.string().min(1).max(120).regex(/^\//, "앱 안 주소여야 합니다"),
   hidden: z.boolean().optional(),
   order: z.number().int().min(0).max(199).optional(),
+});
+const menuIconSchema = z.custom<AywaIconName>((v) => typeof v === "string" && hasMenuGlyph(v), "목록에서 아이콘을 선택해 주세요");
+const groupIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/, "탭 식별자가 올바르지 않습니다");
+export const menuLayoutRowSchema = menuOrderSchema.extend({
+  label: z.string().trim().min(1, "메뉴 이름을 입력해 주세요").max(40).optional(),
+  icon: menuIconSchema.optional(),
+  groupId: groupIdSchema.optional(),
+});
+const menuGroupSchema = z.object({
+  id: groupIdSchema,
+  label: z.string().trim().min(1, "탭 이름을 입력해 주세요").max(24).optional(),
+  icon: menuIconSchema.optional(),
+  order: z.number().int().min(0).max(MAX_NAV_GROUPS - 1).optional(),
+  hidden: z.boolean().optional(),
 });
 export const navigationSchema = z
   .object({
     // 상한은 목적지 총수보다 넉넉히 — 목적지가 늘어도 저장이 막히지 않게(지금 47개).
     menus: z.array(menuLayoutRowSchema).max(200),
+    groups: z.array(menuGroupSchema).max(MAX_NAV_GROUPS).optional(),
     // 강사뷰 '내 메뉴' 구성(원장 2026-09-22 *"'관리자뷰' '강사뷰' 메뉴를 따로 구성할 수 있게"*) — 규약은 menus와 같다
-    // (sparse · 목적지 단위 · 권한 아님, 적용 = menu-layout.ts `applyTeacherMenuLayout`). 기본값이 있어 배포 순간 열린
+    // (sparse · 목적지 단위 · 권한 아님, 적용 = teacher-navigation.ts). 기본값이 있어 배포 순간 열린
     // 옛 화면이 이 칸 없이 저장해도 거절하지 않는다 — 그 경우 저장돼 있던 값을 지킨다(preset.ts `prepareSectionForSave`).
     teacherMenus: z.array(menuLayoutRowSchema).max(60).default([]),
+    teacherGroups: z.array(menuGroupSchema).max(MAX_NAV_GROUPS).optional(),
   })
   .superRefine((v, ctx) => {
+    const knownGroups = new Set([...HUB_GROUPS, ...SUPPORT_GROUPS].map((g) => g.id));
+    const knownHrefs = new Set([...HUB_GROUPS, ...SUPPORT_GROUPS].flatMap((g) => g.items.map((d) => d.href)));
+    const groupIds = new Set<string>();
+    for (const g of v.groups ?? []) {
+      if (groupIds.has(g.id)) ctx.addIssue({ code: "custom", message: "같은 탭이 두 번 담겼습니다" });
+      groupIds.add(g.id);
+      if (FIXED_GROUP_IDS.has(g.id)) ctx.addIssue({ code: "custom", message: "대시보드·설정·고객센터는 고정 탭입니다" });
+      if (!knownGroups.has(g.id) && (!g.id.startsWith("custom-") || !g.label)) ctx.addIssue({ code: "custom", message: "새 탭의 이름을 입력해 주세요" });
+    }
     const seen = new Set<string>();
     for (const r of v.menus) {
       if (seen.has(r.href)) {
         ctx.addIssue({ code: "custom", message: `같은 메뉴가 두 번 담겼습니다 (${r.href})` });
       }
       seen.add(r.href);
+      if ((r.label || r.icon || r.groupId) && !knownHrefs.has(r.href)) ctx.addIssue({ code: "custom", message: "현재 사용할 수 없는 메뉴입니다. 화면을 새로고침해 주세요" });
+      if (isFixedDestination(r.href) && (r.label || r.icon || r.groupId)) ctx.addIssue({ code: "custom", message: "기본 사용 메뉴는 이름·아이콘·탭을 바꿀 수 없습니다" });
+      if (r.groupId && (FIXED_GROUP_IDS.has(r.groupId) || (!knownGroups.has(r.groupId) && !groupIds.has(r.groupId)))) ctx.addIssue({ code: "custom", message: "메뉴를 넣을 탭을 다시 선택해 주세요" });
       // 자기잠금 방지 — 적용 단계(isMenuHiddenByLayout)와 이중 방어(DB 직접 변조 대비).
       if (r.hidden && isLayoutHideLocked(r.href)) {
         ctx.addIssue({ code: "custom", message: "학원 설정 자신은 사이드바에서 감출 수 없습니다" });
       }
     }
+    const teacherGroupIds = new Set([TEACHER_DEFAULT_GROUP]);
+    const seenTeacherGroups = new Set<string>();
+    for (const g of v.teacherGroups ?? []) {
+      if (seenTeacherGroups.has(g.id)) ctx.addIssue({ code: "custom", message: "강사뷰에 같은 탭이 두 번 담겼습니다" });
+      seenTeacherGroups.add(g.id);
+      teacherGroupIds.add(g.id);
+      if (g.id !== TEACHER_DEFAULT_GROUP && (!g.id.startsWith("custom-") || !g.label)) ctx.addIssue({ code: "custom", message: "강사뷰의 새 탭 이름을 입력해 주세요" });
+    }
+    const teacherHrefs = new Set(TEACHER_NAV_GROUPS.flatMap((g) => g.items.map((d) => d.href)));
     const seenTeacher = new Set<string>();
     for (const r of v.teacherMenus) {
       if (seenTeacher.has(r.href)) {
         ctx.addIssue({ code: "custom", message: `강사뷰에 같은 메뉴가 두 번 담겼습니다 (${r.href})` });
       }
       seenTeacher.add(r.href);
+      if ((r.label || r.icon || r.groupId) && !teacherHrefs.has(r.href)) ctx.addIssue({ code: "custom", message: "강사뷰에서 사용할 수 없는 메뉴입니다" });
+      if (r.groupId && !teacherGroupIds.has(r.groupId)) ctx.addIssue({ code: "custom", message: "강사뷰 메뉴를 넣을 탭을 다시 선택해 주세요" });
     }
   });
 export type NavigationSettings = z.infer<typeof navigationSchema>;

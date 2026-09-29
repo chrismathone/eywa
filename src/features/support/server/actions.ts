@@ -20,7 +20,8 @@ export type SupportRequestForm = {
 /** 폼 값 정리·검증 — 서버 액션 파일은 async만 export한다([[#119]]) 그래서 여기 안에 둔다. */
 function cleanForm(form: SupportRequestForm): { ok: true; row: Record<string, string | null> } | { error: string } {
   const title = (form.title ?? "").trim().slice(0, 120);
-  const body = (form.body ?? "").trim().slice(0, 8000);
+  const body = (form.body ?? "").trim();
+  if (body.length > 8000) return { error: "내용은 메뉴 참조를 포함해 8,000자까지 입력해 주세요" };
   const phone = (form.contactPhone ?? "").trim().slice(0, 40);
   const email = (form.contactEmail ?? "").trim().slice(0, 200);
   if (!title || !body) return { error: "제목과 내용을 적어 주세요" };

@@ -1,9 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const nav = vi.hoisted(() => ({ pathname: "/dashboard" }));
+const nav = vi.hoisted(() => ({ pathname: "/dashboard", search: "" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
@@ -18,6 +19,8 @@ vi.mock("@/components/workspace/use-sidebar-resize", () => ({
 import { AppSidebar } from "./app-sidebar";
 import { useWindowStore, windowId } from "./workspace/window-store";
 import { useMenuHub } from "./workspace/menu-hub-store";
+import { NavigationProvider } from "@/features/owner/navigation-context";
+import { WorkspaceEnabledProvider } from "./workspace/workspace-enabled";
 
 /**
  * 사이드바 **'지금 보는 곳' 표시는 포커스 창이 지금 보여 주는 주소로 판정한다** — 창 id가 아니라.
@@ -58,6 +61,7 @@ const rowCurrent = (label: string) =>
 describe("사이드바 '지금 보는 곳' — 포커스 창의 지금 주소로 판정", () => {
   beforeEach(() => {
     nav.pathname = "/dashboard";
+    nav.search = "";
     useMenuHub.setState({ groupId: null });
     useWindowStore.setState({ windows: {}, order: [], focusedId: null, nav: {}, live: {} });
   });
@@ -130,5 +134,18 @@ describe("사이드바 '지금 보는 곳' — 포커스 창의 지금 주소로
     expect(rowCurrent("대시보드")).toBe(true);
     expect(rowCurrent("출석부")).toBe(false);
     expect(groupActive("수업")).toBe(false);
+  });
+
+  it("창 모드를 꺼도 query 면을 옮긴 새 탭이 현재 위치로 표시된다", () => {
+    nav.pathname = "/billing";
+    nav.search = "tab=expenses&period=2026-09";
+    const menus = [{ href: "/billing?tab=expenses", groupId: "custom-office" }];
+    render(<NavigationProvider menus={menus} groups={[{ id: "custom-office", label: "교무실" }]}>
+      <WorkspaceEnabledProvider enabled={false}>
+        <AppSidebar systemRole="master" email="owner@example.com" displayName="원장" menuLayout={menus} />
+      </WorkspaceEnabledProvider>
+    </NavigationProvider>);
+    expect(groupActive("교무실")).toBe(true);
+    expect(groupActive("수납관리")).toBe(false);
   });
 });

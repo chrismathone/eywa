@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useMenuPresentation, useNavigationSettings } from "@/features/owner/navigation-context";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
+import { hubDestinationForPath } from "@/lib/menu-hub";
 import { useEffect, useRef, useState } from "react";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
 
@@ -29,6 +32,8 @@ export function FaceTabs({
   level?: "primary" | "secondary";
 }) {
   const embed = useEmbed();
+  const presentation = useMenuPresentation();
+  const { menus, source } = useNavigationSettings();
   const scrollerRef = useRef<HTMLElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -68,6 +73,13 @@ export function FaceTabs({
       >
         {faces.map((f, i) => {
           const on = f.key === active;
+          const destination = hubDestinationForPath(f.href, source.flatMap((g) => g.items));
+          const url = new URL(f.href, "https://navigation.invalid");
+          const base = destination ? new URL(destination.href, url.origin) : null;
+          // 날짜/필터가 붙은 같은 면은 개명하되 상세 레코드의 다른 면까지 부모 이름으로 덮지 않는다.
+          const sameFace = base?.pathname === url.pathname && (!url.searchParams.has("tab") || base.searchParams.get("tab") === url.searchParams.get("tab"));
+          const override = sameFace ? menus.find((r) => r.href === destination?.href) : undefined;
+          const custom = override ? presentation(f.href) : undefined;
           const newGroup = i > 0 && f.group !== faces[i - 1].group;
           return (
             <span key={f.key} className="flex shrink-0 items-center">
@@ -82,7 +94,8 @@ export function FaceTabs({
                     : "text-text-dim hover:text-foreground hover:bg-bg-soft font-medium"
                 }`}
               >
-                {f.label}
+                {override?.icon && custom ? <MenuGlyph name={custom.icon} size={16} className="mr-1.5" /> : null}
+                {override?.label && custom ? custom.label : f.label}
               </Link>
             </span>
           );

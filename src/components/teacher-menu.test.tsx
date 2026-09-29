@@ -36,6 +36,9 @@ vi.mock("@/components/ui/dropdown-menu", async () => {
     DropdownMenuContent: Pass,
     DropdownMenuLabel: Pass,
     DropdownMenuTrigger: Pass,
+    DropdownMenuSub: Pass,
+    DropdownMenuSubTrigger: Pass,
+    DropdownMenuSubContent: Pass,
     DropdownMenuSeparator: () => null,
     DropdownMenuItem: ({ render, children }: { render?: ReactElement; children?: ReactNode }) =>
       render ? React.cloneElement(render, undefined, children) : <div>{children}</div>,
@@ -149,6 +152,7 @@ describe("배선 — 레이아웃이 계산하고, 메뉴는 받은 것만 그�
   const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
   const layout = read("src", "app", "(shell)", "layout.tsx");
   const menu = read("src", "components", "teacher-menu.tsx");
+  const resolver = read("src", "lib", "teacher-navigation.ts");
 
   it("레이아웃이 **실제 역할**과 사용자 매트릭스로 계산해 넘긴다", () => {
     expect(layout).toMatch(/teacherMenuKeysFor\(user\.systemRole, permMatrix\)/);
@@ -157,7 +161,9 @@ describe("배선 — 레이아웃이 계산하고, 메뉴는 받은 것만 그�
 
   it("🔴 메뉴가 강사 행만으로 다시 거르지 않는다 — 그러면 튕기는 항목이 되살아난다", () => {
     expect(menu).not.toMatch(/canAccess\("teacher"/);
-    expect(menu).toMatch(/menus\.includes\(l\.menu\)/);
+    expect(resolver).not.toMatch(/canAccess\("teacher"/);
+    expect(menu).toMatch(/teacherNavigationFor\(\{ menus,/);
+    expect(resolver).toMatch(/menus\.includes\(key\)/);
   });
 });
 
@@ -209,6 +215,18 @@ describe("학원 설정 '탭 및 메뉴 구성 → 강사뷰'가 '내 메뉴'를
   it("홈은 감춰도 맨 위에 남는다", () => {
     cleanup();
     render(<TeacherMenu {...base} home="/onescreen" layout={[{ href: "/onescreen", hidden: true }]} />);
+    expect(hrefsOf()[0]).toBe("/onescreen");
+  });
+  it("강사 폴더와 내부 메뉴에 정한 이름·아이콘을 실제로 그린다", () => {
+    cleanup();
+    const { container } = render(<TeacherMenu {...base} home="/onescreen"
+      groups={[{ id: "custom-lesson", label: "수업 준비", icon: "folder" }]}
+      layout={[{ href: "/timetable", label: "우리 일정", icon: "star", groupId: "custom-lesson" }]} />);
+    expect(container.textContent).toContain("수업 준비");
+    const link = container.querySelector('a[href="/timetable"]');
+    expect(link?.textContent).toContain("우리 일정");
+    expect(link?.querySelector("img")).toHaveAttribute("src", "/icons/star.png");
+    expect(hrefsOf().filter((href) => href === "/timetable")).toHaveLength(1);
     expect(hrefsOf()[0]).toBe("/onescreen");
   });
 

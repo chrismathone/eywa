@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { MenuMentionEditor } from "@/components/editor/menu-mention-editor";
+import { MenuMentionText } from "@/components/menu-mention-text";
 import { deleteSupportNotice, saveSupportNotice } from "@/features/support/server/admin-actions";
 
 /** 공지 작성·수정 — 제목 · 내용 · 상단 고정. 저장·삭제 뒤엔 목록으로 하드 이동([[#102]]). */
@@ -42,17 +44,11 @@ export function SupportNoticeForm({
           className="border-line mt-1 h-(--control-h) w-full rounded-lg border px-3 text-sm"
         />
       </label>
-      <label className="block">
+      <div className="block">
         <span className="text-sm font-bold">내용</span>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          maxLength={20000}
-          required
-          rows={16}
-          className="border-line mt-1 w-full rounded-lg border px-3 py-2 text-sm leading-relaxed"
-        />
-      </label>
+        <MenuMentionEditor defaultValue={initial.body} onChange={setBody} maxLength={20000} minHeight={280} defaultNames />
+        <details className="mt-3 text-sm"><summary className="text-text-dim cursor-pointer">기본 이름으로 미리보기</summary><p className="mt-2 whitespace-pre-wrap"><MenuMentionText text={body} defaultNames link={false} /></p></details>
+      </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="size-4" />
         목록 맨 위에 고정(공지)

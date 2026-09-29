@@ -3,7 +3,6 @@
 import { assignTop } from "@/lib/nav/assign-top";
 import Link from "next/link";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { Button } from "@/components/ui/button";
 import { switchToAdminView } from "@/features/shell/view-actions";
 import {
@@ -16,10 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { MenuKey } from "@/lib/permissions";
 // 강사뷰 화면 언어(2026-09-03) — 라벨은 사전에서, 스위치는 이 드롭다운 **하나**(원장 지정 자리).
-import { useSheetT } from "@/features/teacher-view/lang-context";
+import { useSheetLang, useSheetT } from "@/features/teacher-view/lang-context";
 import { TeacherLangSwitch } from "@/features/teacher-view/lang-switch";
-import { applyTeacherMenuLayout, type MenuLayout } from "@/features/owner/menu-layout";
-import { TEACHER_MENU_LINKS } from "@/lib/teacher-menu-links";
+import { type MenuLayout, type MenuGroupLayout } from "@/features/owner/menu-layout";
+import { teacherNavigationFor } from "@/lib/teacher-navigation";
+import { TeacherNavigationItems } from "./teacher-navigation-items";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 
 /**
@@ -39,6 +39,7 @@ export function TeacherMenu({
   showMcs = true,
   home = null,
   layout,
+  groups,
   connectedApps = [],
 }: {
   /**
@@ -69,11 +70,12 @@ export function TeacherMenu({
    */
   home?: string | null;
   /**
-   * 학원 설정 '탭 및 메뉴 구성 → 강사뷰'(`navigation.teacherMenus`, 원장 2026-09-22) — 감춘 항목을 빼고 정한 순서로 세운다.
-   * **보기 설정이지 권한이 아니다**(위 `menus`가 먼저 거른다). 홈은 감춰도 남고 늘 맨 위다(`applyTeacherMenuLayout`).
+   * 학원 설정 '탭 및 메뉴 구성 → 강사뷰' — 이름·아이콘·숨김·순서를 적용하고 teacherGroups에 폴더를 담는다.
+   * **보기 설정이지 권한이 아니다**(위 `menus`가 먼저 거른다). 홈은 감춰도 남고 늘 맨 위다(`teacherNavigationFor`).
    * 비어 있으면(기본) 코드 순서 + 홈 맨 위 — 이 설정 이전과 같다.
    */
   layout?: MenuLayout;
+  groups?: MenuGroupLayout;
   /**
    * 연결 앱(오늘의 수학 등) — 레이아웃이 [`getMyConnectedApps`](@/features/connected-apps/server/visible)로 거른 목록
    * (지점 스위치 ∧ 담당 과목 — 영어 선생님에겐 비어 온다). 풀셸 사이드바 '연결 앱'과 같은 **보통 링크(새 탭)**다.
@@ -82,17 +84,11 @@ export function TeacherMenu({
 }) {
   // 화면 언어 — provider는 강사 미니셸에만 있다(관리자 풀셸은 한국어 고정, 원장 2026-09-03).
   const t = useSheetT();
+  const lang = useSheetLang();
   // 세울 메뉴는 레이아웃이 정해 내려준다(menus). 🔴 여기서 권한 매트릭스로 다시 거르지 말 것 — 강사 행만 보면
   // 겸직·'다른 강사 뷰'에서 누르면 강사 홈으로 튕기는 항목이 되살아난다(2026-09-11 전수검사).
   // 수업보고서 오버사이트(/lesson-reports)는 teacher=none — 작성은 /onescreen. 옛 Edutrix 외부링크는 제거됨.
-  const visible = TEACHER_MENU_LINKS.filter(
-    (l) =>
-      menus.includes(l.menu) &&
-      (l.menu !== "ecs" || showEcs) &&
-      (l.menu !== "mcs" || showMcs),
-  );
-  // 학원 설정 강사뷰 구성(감춤·순서) → 홈을 첫 줄로. 설정이 비면 원래 순서 + 홈만 맨 위(최소 변화).
-  const links = applyTeacherMenuLayout(visible, layout, home);
+  const navigation = teacherNavigationFor({ menus, layout, groups, home, showEcs, showMcs, lang });
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger
@@ -103,11 +99,7 @@ export function TeacherMenu({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="text-text-faint">{t("menu.heading")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {links.map(({ href, labelKey, icon }) => (
-          <DropdownMenuItem key={href} render={<Link href={href} className="cursor-pointer" />}>
-            <MenuGlyph name={icon} size={16} /> {t(labelKey)}
-          </DropdownMenuItem>
-        ))}
+        <TeacherNavigationItems navigation={navigation} />
         {/* 연결 앱 — aywa 밖의 앱이라 메뉴 줄과 구분선으로 떼고, 끝의 바깥 화살표가 "새 탭으로 나간다"를 말한다.
             🔴 `Link`가 아니라 맨 `<a target=_blank>` — 출발 라우트(자동 로그인 표)는 라우트 핸들러라 클라 이동으로 못 간다. */}
         {connectedApps.length > 0 ? (

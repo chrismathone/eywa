@@ -2,21 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { UserMenu } from "@/components/user-menu";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
-import { NAV_GROUPS, findNavItem, type NavItem } from "@/lib/navigation";
-import { isMenuHiddenByLayout, type MenuLayout } from "@/features/owner/menu-layout";
+import { findNavItem } from "@/lib/navigation";
+import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubDestinationForPath } from "@/lib/menu-hub";
+import { useNavigationSettings, useMenuPresentation } from "@/features/owner/navigation-context";
+import { type MenuLayout } from "@/features/owner/menu-layout";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
-import { canAccess, type AccessMatrix, type SystemRole } from "@/lib/permissions";
+import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
-
-function isItemActive(href: string, pathname: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 /**
  * 좁은 폭·터치(= 데스크톱이 아닌 모든 화면)에서 좌측 사이드바 대신 쓰는 **단일 상단 바**.
@@ -39,6 +36,9 @@ export function MobileTopNav({
   logoSrc,
   permMatrix,
   menuLayout,
+  canTeacherView = false,
+  isSuperAdmin = false,
+  isGenericTenant = false,
   connectedApps = [],
 }: {
   systemRole: SystemRole;
@@ -50,27 +50,28 @@ export function MobileTopNav({
   /**
    * 학원 설정 '왼쪽 탭'(보기 설정) — 🔴 **폰엔 사이드바가 없어 이 줄이 메뉴다.** 여기까지 안 보면
    *    원장이 감춘 메뉴가 PC에선 사라지고 폰에선 그대로 서서, 같은 설정이 기기마다 다른 말을 한다.
-   * ⚠️ 면(`?tab=`) 목적지는 이 줄에 애초에 없다(부모 메뉴만 그린다) — 감춰도 여기선 달라질 게 없다.
+   * 데스크톱과 같은 그룹·면(`?tab=`) 목적지를 그려 이동·숨김·개명을 함께 반영한다.
    */
   menuLayout?: MenuLayout;
+  canTeacherView?: boolean;
+  isSuperAdmin?: boolean;
+  isGenericTenant?: boolean;
   /** 켜진 연결 앱(오늘의 수학 등) — 폰엔 사이드바가 없어 메뉴 격자 끝에 바깥 링크로 둔다(새 탭). */
   connectedApps?: readonly ConnectedApp[];
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
-  const items: NavItem[] = NAV_GROUPS.flatMap((g) => g.items).filter(
-    (item) =>
-      !item.hidden &&
-      canAccess(systemRole, item.menuKey, permMatrix) &&
-      !isMenuHiddenByLayout(item.href, menuLayout),
-  );
-  // 현재 메뉴명 — 옛 AppHeader의 h1을 여기로. 모르는 경로(상세 페이지 등)는 브랜드만 두고 생략한다
-  // (지어내지 않는다 — 본문 PageHeader가 맥락을 이미 준다).
-  const currentLabel = findNavItem(pathname)?.label ?? null;
+  const { groups: groupLayout } = useNavigationSettings();
+  const presentation = useMenuPresentation();
+  const search = useSearchParams();
+  const currentHref = `${pathname}?${search.toString()}`;
+  const groups = hubGroupsFor([...HUB_GROUPS, ...SUPPORT_GROUPS], {
+    systemRole, permMatrix, menuLayout, groupLayout, canTeacherView,
+    isMaster: systemRole === "master" || isSuperAdmin, isGenericTenant,
+  });
+  const currentDest = hubDestinationForPath(currentHref, groups.flatMap((g) => g.items));
+  const currentLabel = presentation(currentHref)?.label ?? findNavItem(pathname)?.label ?? null;
 
-  // 표준 모바일 햄버거 패턴 — 기본 접힘(배너 한 줄만), 탭하면 그리드 펼침, 메뉴 선택하면 자동 닫힘.
-  // 14개 메뉴 그리드가 매 화면 상단 4줄을 차지하던 것 해소(2026-07-02 사용자 제보). transient state라
-  // SSR=닫힘·클라=닫힘으로 hydration 일치(영속 불필요 — 목적지는 breadcrumb·본문이 이미 보여줌).
   const [open, setOpen] = useState(false);
 
   return (
@@ -124,30 +125,17 @@ export function MobileTopNav({
           60px(= 96 − px-2 16 − 글리프 14 − gap 6)에 '선생님 원스크린'(≈102px)·'데이터베이스'(≈84px)가 잘렸다.
           140px이면 375·412px 폰 모두 2열(라벨 예산 141~160px ≥ 102px) — 대가는 격자가 5행→7행으로 길어지는 것뿐. */}
       {open ? (
-      <ul
-        className="grid max-h-[60dvh] gap-1 overflow-y-auto overscroll-contain px-2 py-1.5"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}
-      >
-        {items.map((item) => {
-          const active = isItemActive(item.href, pathname);
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                onClick={() => setOpen(false)}
-                aria-current={active ? "page" : undefined}
-                className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-bold transition ${
-                  active
-                    ? "bg-primary text-primary-foreground shadow-primary-glow"
-                    : "text-text-dim hover:text-foreground hover:bg-bg-soft"
-                }`}
-              >
-                <MenuGlyph name={item.icon} size={14} />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            </li>
-          );
-        })}
+      <div className="max-h-[70dvh] space-y-3 overflow-y-auto overscroll-contain px-3 py-3">
+        {groups.map((group) => <section key={group.id} aria-label={group.label}>
+          <h2 className="text-text-dim mb-1 flex items-center gap-2 text-xs font-bold"><MenuGlyph name={group.icon} size={16} />{group.label}</h2>
+          <ul className="grid grid-cols-2 gap-1">
+            {group.items.map((item) => <li key={item.href}><Link href={item.href} onClick={() => setOpen(false)} aria-current={currentDest?.href === item.href ? "page" : undefined}
+              className={`flex min-h-11 items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium ${currentDest?.href === item.href ? "bg-primary text-primary-foreground" : "hover:bg-bg-soft"}`}>
+              <MenuGlyph name={item.icon} size={18} /><span className="min-w-0 break-words">{item.label}</span>
+            </Link></li>)}
+          </ul>
+        </section>)}
+        <ul className="grid grid-cols-2 gap-1">
         {connectedApps.map((a) => (
           <li key={a.feature}>
             <a
@@ -163,7 +151,8 @@ export function MobileTopNav({
             </a>
           </li>
         ))}
-      </ul>
+        </ul>
+      </div>
       ) : null}
     </nav>
   );

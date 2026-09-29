@@ -5,6 +5,19 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push:
 
 import { RouteWindow, reloadTarget } from "./route-window";
 import { useWindowStore, windowId, type Win } from "./window-store";
+import { NavigationProvider } from "@/features/owner/navigation-context";
+
+it("메뉴 개명은 iframe 접근성 제목과 드래그 중 표시에도 반영되고 복원된다", () => {
+  useWindowStore.setState({ draggingId: ID });
+  const { container, rerender, unmount } = render(<NavigationProvider menus={[{ href: HREF, label: "우리 출결" }]}><RouteWindow win={makeWin()} /></NavigationProvider>);
+  expect(container.querySelector("iframe")).toHaveAttribute("title", "우리 출결");
+  expect(container.textContent).toContain("우리 출결");
+  rerender(<NavigationProvider menus={[]}><RouteWindow win={makeWin()} /></NavigationProvider>);
+  expect(container.querySelector("iframe")).toHaveAttribute("title", "출석부");
+  expect(container.textContent).not.toContain("우리 출결");
+  unmount();
+  useWindowStore.setState({ draggingId: null });
+});
 
 describe("reloadTarget — ⟳가 갈 주소", () => {
   it("embed가 있으면 null(그대로 reload), 없으면 붙인다 — 쿼리·해시는 보존", () => {

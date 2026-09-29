@@ -6,6 +6,8 @@ import type { SectionKey } from "@/features/owner/settings-types";
 import { useConcurrentEditGuard } from "@/components/workspace/use-concurrent-edit-guard";
 import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
+import { useNavigationSettings } from "@/features/owner/navigation-context";
+import { publishRecordSaved } from "@/lib/realtime/record-channel";
 
 /**
  * 섹션 폼 공통 래퍼 — 편집 상태(payload)를 hidden JSON으로 직렬화해 saveOwnerSection 호출.
@@ -15,6 +17,7 @@ export function SectionForm({
   section,
   payload,
   savedNonce,
+  navigationBaseline,
   footer,
   children,
 }: {
@@ -22,11 +25,13 @@ export function SectionForm({
   payload: unknown;
   /** 폼 밖에서 서버 확정된 변경(과목 흡수 삭제 등) 신호 — baseline 재스냅샷(거짓 '미저장' 확인 방지). */
   savedNonce?: number;
+  navigationBaseline?: string;
   /** 폼 밖 즉시저장 카드(예: 강의실 CRUD). 폼과 저장 바 사이에 렌더 — 중첩 <form> 없이 저장 바를 창 하단에 고정. */
   footer?: ReactNode;
   children: ReactNode;
 }) {
   const formId = useId();
+  const { tenantId } = useNavigationSettings();
   const [state, formAction, pending] = useActionState<OwnerSaveState, FormData>(
     saveOwnerSection,
     undefined,
@@ -48,6 +53,7 @@ export function SectionForm({
     const fd = new FormData();
     fd.set("section", section);
     fd.set("data", JSON.stringify(payload));
+    if (navigationBaseline !== undefined) fd.set("navigationBaseline", navigationBaseline);
     startTransition(() => formAction(fd));
   };
 
@@ -58,8 +64,9 @@ export function SectionForm({
       handledNonce.current = state.nonce;
       notifySaved();
       markSaved();
+      if (section === "navigation" && tenantId) publishRecordSaved(`navigation:${tenantId}`);
     }
-  }, [state, notifySaved, markSaved]);
+  }, [state, notifySaved, markSaved, section, tenantId]);
 
   // 버튼→state→hidden input 경로(행 추가/삭제 등)는 native input 이벤트가 없어 useUnsavedGuard가
   // dirty를 못 본다(적대리뷰 2026-07-06) → payload가 바뀔 때마다 폼에 input 이벤트를 쏴 재계산 유도.
@@ -97,7 +104,9 @@ export function SectionForm({
       >
         <input type="hidden" name="section" value={section} />
         <input type="hidden" name="data" value={JSON.stringify(payload)} />
-        {children}
+        <fieldset disabled={pending} className="min-w-0 space-y-6 border-0 p-0 disabled:opacity-70">
+          {children}
+        </fieldset>
       </form>
       {/* 폼 밖 즉시저장 카드(예: 강의실 CRUD)는 폼과 저장 바 사이에 둔다 — 중첩 <form> 방지 + 저장 바가
           전체 콘텐츠의 맨 아래(창 하단)에 sticky로 붙도록. 저장 버튼은 form 속성으로 위 폼과 연결. */}

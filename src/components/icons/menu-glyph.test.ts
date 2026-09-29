@@ -126,9 +126,9 @@ const PENDING_GLYPH = new Set<string>(["bookText"]);
   const TAB_SURFACES: [string[], number][] = [
     [["components", "app-sidebar.tsx"], 2], // 업무군 줄 + 메뉴 항목 줄
     [["components", "workspace", "menu-hub-grid.tsx"], 1],
-    [["components", "teacher-menu.tsx"], 1],
+    [["components", "teacher-navigation-items.tsx"], 2], // 폴더 + 내부 메뉴
     // 폰 상단 메뉴 줄도 같은 MENU_ICON을 그린다 — 사이드바가 없는 화면의 탭이라 같은 규약.
-    [["components", "mobile-top-nav.tsx"], 1],
+    [["components", "mobile-top-nav.tsx"], 2], // 큰 탭 + 내부 메뉴
   ];
 
   it("🔴 탭 표면은 MenuGlyph를 쓴다 — 선화(EyIcon)로 되돌리지 말 것", () => {

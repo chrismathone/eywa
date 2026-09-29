@@ -73,6 +73,7 @@ export async function createNoticePopup(
   const input = readForm(formData);
   if (!input.title) return { error: "제목을 입력해주세요" };
   if (!input.body && !input.imageUrl) return { error: "본문 또는 이미지를 입력해주세요" };
+  if ((input.body?.length ?? 0) > 8000) return { error: "본문은 메뉴 참조를 포함해 8,000자까지 입력해 주세요" };
 
   const supabase = await createClient();
   const { data: created, error } = await supabase.from("notice_popups").insert({
@@ -179,6 +180,7 @@ export async function updateNoticePopup(
   if (!input.id) return { error: "팝업 ID가 누락되었습니다" };
   if (!input.title) return { error: "제목을 입력해주세요" };
   if (!input.body && !input.imageUrl) return { error: "본문 또는 이미지를 입력해주세요" };
+  if ((input.body?.length ?? 0) > 8000) return { error: "본문은 메뉴 참조를 포함해 8,000자까지 입력해 주세요" };
 
   const supabase = await createClient();
   const { error } = await supabase

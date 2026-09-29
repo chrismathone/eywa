@@ -1,9 +1,12 @@
 "use client";
 
+import { useNavigationSettings } from "@/features/owner/navigation-context";
+
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog } from "@base-ui/react/dialog";
+import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDest } from "@/lib/menu-hub";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
@@ -54,8 +57,7 @@ const sectionOf = (item: Item): string => (item.kind === "menu" ? "menu" : item.
  * 🔴 메뉴 축의 출처는 **메뉴 화면·사이드바와 같은 목록**(`HUB_GROUPS`+`SUPPORT_GROUPS`)이고, 여는 방법도
  *    같은 함수(`useOpenMenu`)다 — 두 벌로 만들면 한쪽만 고쳐진다(예전엔 `NAV_GROUPS`만 읽어서 수학 강사
  *    시트·수납/설정 면들이 **검색으로 갈 길이 없었다**).
- * 🔴 학원 설정 '왼쪽 탭'(`menuLayout`)은 **여기에 안 건다** — 그건 왼쪽에 무엇을 세울지 정하는 보기 설정이고,
- *    검색은 "숨겨도 주소로는 열린다"와 같은 결의 발견성 경로다(감추면 그 메뉴로 갈 길이 통째로 사라진다).
+ * 검색도 학원의 표시·배치·이름·아이콘을 따른다. 원래 이름은 검색어로 함께 유지한다.
  */
 export function CommandPalette({
   systemRole,
@@ -83,6 +85,7 @@ export function CommandPalette({
   /** 새 학원(일반판) — 설정 '기능' 면 노출(사이드바·메뉴 판과 같은 값). */
   isGenericTenant?: boolean;
 }) {
+  const { groups: groupLayout } = useNavigationSettings();
   const router = useRouter();
   const isDesktop = useWindowMode(); // 창 모드가 아니면 결과를 본문으로 연다
   const openWindow = useWindowStore((s) => s.open);
@@ -102,6 +105,7 @@ export function CommandPalette({
         canTeacherView,
         isMaster: systemRole === "master" || isSuperAdmin,
         menuLayout,
+        groupLayout,
         isGenericTenant,
       }).flatMap((group) =>
         group.items.map((dest) => ({
@@ -113,7 +117,7 @@ export function CommandPalette({
           keywords: hubSearchKeywords(dest, group.label),
         })),
       ),
-    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, isGenericTenant],
+    [systemRole, permMatrix, canTeacherView, isSuperAdmin, menuLayout, groupLayout, isGenericTenant],
   );
 
   const q = query.trim().toLowerCase();
@@ -310,7 +314,7 @@ export function CommandPalette({
                             }`}
                           >
                             {item.kind === "menu" ? (
-                              <EyIcon name={item.cmd.dest.icon} size={14} strokeWidth={1.8} />
+                              <MenuGlyph name={item.cmd.dest.icon} size={18} />
                             ) : (
                               <EyIcon name={DATA_ICON[item.hit.kind]} size={14} />
                             )}

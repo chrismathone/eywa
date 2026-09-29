@@ -1,5 +1,7 @@
 "use client";
 
+import { useNavigationSettings } from "@/features/owner/navigation-context";
+
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { useEffect } from "react";
 
@@ -32,6 +34,7 @@ export function MenuHubPanel({
   /** 새 학원(일반판) — 설정 '기능' 면 노출. 사이드바와 같은 값을 받는다. */
   isGenericTenant?: boolean;
 }) {
+  const { groups: groupLayout } = useNavigationSettings();
   const groupId = useMenuHub((s) => s.groupId);
   const close = useMenuHub((s) => s.close);
   const isDesktop = useIsDesktop();
@@ -57,6 +60,7 @@ export function MenuHubPanel({
     // 🔴 총괄(super_admin)도 통과 — 사이드바 게이트와 같은 규약(한쪽만 고치면 입구가 갈린다).
     isMaster: systemRole === "master" || isSuperAdmin,
     menuLayout,
+    groupLayout,
     isGenericTenant,
   }).find((g) => g.id === groupId);
   if (!group) return null;
