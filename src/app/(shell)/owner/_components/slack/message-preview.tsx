@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 import type { ActivityOption } from "@/features/slack/activity-catalog";
 import { renderActivity, renderNotification } from "@/features/slack/render";
 import type { SlackRule } from "@/features/slack/rules";
-import { SAMPLE_ACTIVITY_FACTS, SAMPLE_NOTIFICATIONS, SAMPLE_RECIPIENTS } from "@/features/slack/samples";
+import { moneyFacts } from "@/features/slack/money-facts";
+import { SAMPLE_ACTIVITY_FACTS, SAMPLE_EXPENSE_META, SAMPLE_NOTIFICATIONS, SAMPLE_RECIPIENTS } from "@/features/slack/samples";
 
 /**
  * 규칙 미리보기 — **실제 발송과 같은 조립 함수**(render.ts)로 가상 데이터를 조립해 슬랙 말풍선처럼 보여 준다.
@@ -45,7 +46,17 @@ export function MessagePreview({ rule, activityOptions }: { rule: SlackRule; act
   } else {
     const o = activityOptions.find((a) => a.key === key);
     body = renderActivity(
-      { label: o?.label ?? "활동", opaque: o?.grade === "opaque", targetLabel: null, category: o?.category, facts: SAMPLE_ACTIVITY_FACTS, actorName: "박지현", createdAt: SAMPLE_AT },
+      {
+        label: o?.label ?? "활동",
+        opaque: o?.grade === "opaque",
+        targetLabel: null,
+        category: o?.category,
+        facts: SAMPLE_ACTIVITY_FACTS,
+        // 실제 발송과 같게 — 지출결의서는 분류·지출일·금액이 붙는다(다른 돈 계열은 undefined).
+        moneyFacts: o?.grade === "opaque" ? moneyFacts(key, SAMPLE_EXPENSE_META) : undefined,
+        actorName: "박지현",
+        createdAt: SAMPLE_AT,
+      },
       style,
     ).body;
   }

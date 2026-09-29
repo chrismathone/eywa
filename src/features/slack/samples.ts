@@ -94,6 +94,9 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
 
 export const SAMPLE_FOOTER = "_테스트 알림 · 가상 데이터_";
 
+/** 지출결의서(돈 계열) 미리보기·테스트 발송의 가상 기록 — 실제 발송처럼 `moneyFacts`를 지나게 한다. */
+export const SAMPLE_EXPENSE_META = { amount: 125000, currency: "KRW", category: "운영비", expenseDate: "2026-09-28" };
+
 /** 활동 미리보기·샘플의 가상 '누구의 무엇'(activity-facts 모양). */
 export const SAMPLE_ACTIVITY_FACTS = {
   brief: ["김하늘", "중등M 중1 A", "9/28(월) 17:15"],

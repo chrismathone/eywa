@@ -1,4 +1,9 @@
 import "server-only";
+import { moneyFacts } from "../money-facts";
+import { auditDetail } from "@/features/audit/describe";
+import { activityChange } from "../activity-change";
+import { contentLine } from "../activity-detail";
+import type { ActivityFacts } from "../activity-facts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -51,6 +56,23 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
     recipientNames(tenantId, [...new Set(notifs.map((n) => n.recipient_id))]),
     factLookups(tenantId, audits.filter((a) => activityGradeOf(a.action) === "safe" && keys.has(a.action))),
   ]);
+
+  // '자세히'의 **내용** 줄 = 감사로그 화면이 그 기록에 붙이는 한글 설명(`auditDetail`, 액션 350여 종의 단일 소스)
+  // (원장 2026-09-29 *"on/off 이런것도 말해야지 그냥 너무 단순함"* · *"필요한 정보들은 전부"*). 슬랙 쪽에서 전후를 직접
+  // 만든 액션(activity-change — 강사 시트 칸·출결 등)은 같은 말을 두 번 하지 않게 건너뛴다. 돈 계열(opaque)은 부르지 않는다.
+  const nameOf = (id: unknown) =>
+    typeof id === "string" ? (lookups.student.get(id)?.name ?? lookups.klass.get(id)?.name ?? null) : null;
+  const withDetail = (a: AuditRow, f: ActivityFacts): ActivityFacts => {
+    if (activityChange(a.action, a.metadata).rows.length) return f;
+    let d: string | null = null;
+    try {
+      d = auditDetail(a.action, (a.metadata ?? null) as Record<string, unknown> | null, { nameOf, subjectLabel: lookups.subjectLabel });
+    } catch {
+      d = null; // 설명을 못 만들면 줄만 뺀다(발송은 막지 않는다)
+    }
+    const t = contentLine(d, f); // uuid 조각·중복 조각을 빼고, 가린 뒤 자른다
+    return t ? { ...f, rows: [...f.rows, { label: "내용", value: t }] } : f;
+  };
 
   const rows: Outbox[] = [];
   const push = (rule: SlackRule, dedupe: string, inboxId: number | undefined, target: object, r: Rendered, at: string, dead?: string) => {
@@ -114,7 +136,8 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
       targetLabel: a.target_label,
       actorName: a.actor_name,
       category: activityCategoryOf(a.action),
-      facts: opaque ? undefined : activityFacts(a.action, a.metadata, lookups),
+      facts: opaque ? undefined : withDetail(a, activityFacts(a.action, a.metadata, lookups)),
+      moneyFacts: opaque ? moneyFacts(a.action, a.metadata) : undefined,
       createdAt: new Date(a.created_at),
     };
     for (const rule of rules) {

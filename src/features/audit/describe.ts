@@ -513,13 +513,50 @@ export function auditDetail(
       return join(dnd, m.weekendQuiet === true ? "주말 조용히" : null, str(m.digestAt) ? `요약 ${str(m.digestAt)}` : null);
     }
     case "slack_rule_save": {
-      const targets = arr(m.targets).map(str).filter((v): v is string => !!v);
+      // 켜짐·꺼짐을 늘 적고, 저장 전 모습(`before`, 2026-09-29~)이 있으면 **바뀐 것만** '전 → 후'로(원장 *"on/off 이런것도 말해야지"*).
+      const targetsOf = (v: unknown) => arr(v).map(str).filter((x): x is string => !!x);
+      const targetText = (t: string[]) => (t.length ? `${t.slice(0, 3).join(", ")}${t.length > 3 ? ` 외 ${t.length - 3}곳` : ""}` : "보낼 곳 없음");
+      const onOff = (v: unknown) => (v === false ? "꺼짐" : "켜짐");
+      const shapeText = (v: unknown) => (v === "detailed" ? "자세히" : "짧게");
+      const timingText = (v: unknown) => (v === "digest" ? "요약으로만" : "바로");
+      const b = m.before && typeof m.before === "object" ? (m.before as Meta) : null;
+      const diff = (label: string, before: string, after: string) => (before === after ? null : `${label} ${before} → ${after}`);
+      if (b) {
+        const pingText = (v: unknown) => (v === "here" ? "@here" : v === "channel" ? "@channel" : "호출 없음");
+        const changed2 = (x: unknown, y: unknown) => JSON.stringify(x ?? null) !== JSON.stringify(y ?? null);
+        const changes = [
+          diff("", onOff(b.enabled), onOff(m.enabled))?.trim() ?? null,
+          changed2(b.name, m.name) ? `이름 ${str(b.name) ?? "?"} → ${str(m.name) ?? "?"}` : null,
+          // 개수가 같아도 종류가 바뀌었을 수 있다(typeSig).
+          changed2(b.typeSig, m.typeSig) || changed2(b.typeCount, m.typeCount)
+            ? `종류 ${num(b.typeCount) ?? "?"}종 → ${num(m.typeCount) ?? "?"}종${num(b.typeCount) === num(m.typeCount) ? "(교체)" : ""}`
+            : null,
+          // 보낼 곳은 식별(targetSig)로 판정 — 채널 이름만 바뀐 것은 변경이 아니다.
+          (b.targetSig !== undefined ? changed2(b.targetSig, m.targetSig) : changed2(b.targets, m.targets))
+            ? `보낼 곳 ${targetText(targetsOf(b.targets))} → ${targetText(targetsOf(m.targets))}`
+            : null,
+          diff("모양", shapeText(b.template), shapeText(m.template)),
+          diff("언제", timingText(b.timing), timingText(m.timing)),
+          b.ping !== undefined ? diff("호출", pingText(b.ping), pingText(m.ping)) : null,
+          b.mention !== undefined && changed2(b.mention, m.mention) ? `담당자 멘션 ${m.mention === true ? "켬" : "끔"}` : null,
+          b.excludeCount !== undefined && changed2(b.excludeCount, m.excludeCount) ? `제외할 사람 ${num(b.excludeCount) ?? 0} → ${num(m.excludeCount) ?? 0}명` : null,
+          b.digestAt !== undefined && changed2(b.digestAt, m.digestAt) ? `요약 시각 ${str(b.digestAt) ?? "기본"} → ${str(m.digestAt) ?? "기본"}` : null,
+          b.honorDnd !== undefined && changed2(b.honorDnd, m.honorDnd) ? `방해금지 ${m.honorDnd === true ? "지킴" : "무시"}` : null,
+        ];
+        const changed = changes.filter((c): c is string => !!c);
+        return join(
+          changed.length ? `수정: ${changed.join(" · ")}` : "수정(설정 그대로)",
+          changes[0] ? null : onOff(m.enabled),
+        );
+      }
+      const targets = targetsOf(m.targets);
       return join(
         m.created === true ? "새 규칙" : "수정",
-        m.enabled === false ? "꺼짐" : null,
+        onOff(m.enabled),
         m.source === "activity" ? "활동 기록" : "알림",
         num(m.typeCount) !== null ? `${num(m.typeCount)}종` : null,
-        targets.length ? `→ ${targets.slice(0, 3).join(", ")}${targets.length > 3 ? " 외" : ""}` : null,
+        targets.length ? `→ ${targetText(targets)}` : null,
+        m.template === "detailed" ? "자세히" : m.template === "short" ? "짧게" : null,
         m.timing === "digest" ? "요약으로만" : null,
       );
     }

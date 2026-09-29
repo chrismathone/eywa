@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderActivity, renderAggregate, renderDigest, renderNotification, scrubSensitive } from "./render";
+import { moneyFacts } from "./money-facts";
 
 const at = (kst: string) => new Date(`${kst}+09:00`);
 const style = { template: "short" as const, appUrl: "https://www.aywa.co.kr", ping: "none" as const };
@@ -59,21 +60,49 @@ describe("활동", () => {
     const b = renderActivity({ ...ev, opaque: true, facts }, { ...style, template: "detailed" }).body;
     expect(b).not.toContain("김하늘");
   });
+  it("지출결의서는 분류·지출일·금액만(원장 2026-09-29 ③) — 제목은 여전히 안 싣는다", () => {
+    const money = moneyFacts("expense_create", { amount: 125000, currency: "KRW", category: "운영비", expenseDate: "2026-09-28", memo: "010-1234-5678" });
+    const e = { ...ev, label: "지출결의서 작성", opaque: true, targetLabel: "복사기 토너 구입", facts, moneyFacts: money };
+    expect(renderActivity(e, style).body).toBe("*[지출결의서 작성]* 운영비 · 지출일 9/28(월) · ₩125,000 — 박소선");
+    const d = renderActivity(e, { ...style, template: "detailed" }).body;
+    expect(d).toContain(">금액  ₩125,000");
+    expect(d).not.toContain("토너");
+    expect(d).not.toContain("김하늘");
+  });
+  it("공백·점으로 끊은 휴대폰 번호 · 하이픈 없는 긴 숫자(계좌)도 가린다 — 금액의 쉼표 숫자는 그대로", () => {
+    expect(scrubSensitive("010 1234 5678 / 010.1234.5678")).toBe("5678 / 5678");
+    expect(scrubSensitive("계좌 110123456789 · ₩1,234,567,890")).toBe("계좌 6789 · ₩1,234,567,890");
+  });
+  it("카드번호(공백) · 유선 번호도 뒤 4자리만", () => {
+    expect(scrubSensitive("카드 1234 5678 9012 3456 · 02 123 4567 · 053.123.4567")).toBe("카드 3456 · 4567 · 4567");
+  });
+  it("자세히의 메모 내용도 전화번호 모양은 가려서 나간다", () => {
+    const e = { ...ev, label: "특이사항 수정", facts: { brief: ["특이사항 입력"], rows: [{ label: "특이사항 후", value: "010-1234-5678 엄마 연락" }], href: null } };
+    const d = renderActivity(e, { ...style, template: "detailed" }).body;
+    expect(d).toContain("엄마 연락");
+    expect(d).not.toContain("010-1234-5678");
+  });
+  it("지출 금액 수정은 이전 → 이후 · 모르는 분류·다른 돈 계열은 열리지 않는다", () => {
+    expect(moneyFacts("expense_update", { amount: 90000, amountBefore: 100000, category: "매입" })?.brief).toEqual(["매입", "₩100,000 → ₩90,000"]);
+    expect(moneyFacts("expense_create", { category: "비밀", amount: -1 })).toBeUndefined();
+    expect(moneyFacts("invoice_create", { amount: 450000 })).toBeUndefined();
+    expect(moneyFacts("expense_delete", { amount: 450000 })).toBeUndefined();
+  });
 });
 
 describe("개인정보 가리기", () => {
   it("주민번호·계좌·전화번호 모양", () => {
-    expect(scrubSensitive("주민 900101-1234567 끝")).toBe("주민 ******-******* 끝");
-    expect(scrubSensitive("계좌 110-123-456789")).toBe("계좌 ***-***-******");
-    expect(scrubSensitive("연락처 010-1234-5678")).toBe("연락처 ***-****-****");
-    expect(scrubSensitive("연락처 01012345678 끝")).toBe("연락처 *********** 끝");
+    expect(scrubSensitive("주민 900101-1234567 끝")).toBe("주민 900101-1****** 끝");
+    expect(scrubSensitive("계좌 110-123-456789")).toBe("계좌 6789");
+    expect(scrubSensitive("연락처 010-1234-5678")).toBe("연락처 5678");
+    expect(scrubSensitive("연락처 01012345678 끝")).toBe("연락처 5678 끝");
     expect(scrubSensitive("2026-09-28 · 3-2반")).toBe("2026-09-28 · 3-2반"); // 날짜·짧은 숫자는 그대로
   });
   it("🔴 링크 줄은 가리지 않는다 — 숫자로만 된 uuid 조각이 있어도 주소가 안 깨진다", () => {
     const link = "/approvals/1a2b3c4d-1234-4123-8123-123456789012";
     const body = renderNotification({ ...notif, link, body: "연락처 010-1234-5678" }, style).body;
     expect(body).toContain(`<https://www.aywa.co.kr${link}|에이와에서 열기>`);
-    expect(body).toContain("연락처 ***-****-****");
+    expect(body).toContain("연락처 5678");
   });
 });
 

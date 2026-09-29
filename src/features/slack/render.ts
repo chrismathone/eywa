@@ -23,6 +23,8 @@ export type ActivityEvent = {
   /** 분류(activity-catalog) — 머리 이모지. */
   category?: string | null;
   facts?: ActivityFacts;
+  /** 돈 계열(opaque)에서도 싣기로 원장이 고른 칸(지출결의서 분류·지출일·금액, `money-facts.ts`). opaque가 아니면 안 쓴다. */
+  moneyFacts?: ActivityFacts;
   actorName: string | null;
   createdAt: Date;
 };
@@ -35,12 +37,23 @@ const DIGEST_LINES = 20;
 const AGGREGATE_LINES = 10;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-/** 주민번호(6-7) · 하이픈으로 이은 긴 숫자열(계좌·전화, 숫자 10자리 이상)을 가린다. */
+/**
+ * 전화·계좌 번호 = **뒤 4자리 숫자만** 남긴다(원장 2026-09-29 *"전화번호는 뒷자리 4개만 표시하고, 계좌번호도 마찬가지 뒷 4자리만"*
+ * → *"그냥 4자리만"* · *"5678 이렇게"*): `010-1234-5678` → `5678`. 누구 번호·어느 계좌인지 알아볼 단서는 남기되 번호 자체는 못 쓰게.
+ */
+const last4 = (m: string) => m.replace(/\D/g, "").slice(-4);
+
+/** 주민번호(앞 6자리 + 뒷자리 첫 숫자만 — `123456-1******`, 원장 2026-09-29) · 전화·계좌(하이픈으로 이은 숫자 10자리 이상 · 하이픈 없는 휴대폰 · 공백·점 휴대폰 · 11~16자리 숫자 — 뒤 4자리만). */
 export function scrubSensitive(text: string): string {
   return text
-    .replace(/\b\d{6}\s*-\s*[1-8]\d{6}\b/g, "******-*******")
-    .replace(/\b\d{2,6}(?:-\d{2,8}){1,4}\b/g, (m) => (m.replace(/-/g, "").length >= 10 ? m.replace(/\d/g, "*") : m))
-    .replace(/\b01[016789]\d{7,8}\b/g, (m) => "*".repeat(m.length)); // 하이픈 없는 휴대폰 번호(grok 2차)
+    .replace(/\b(\d{6})\s*-\s*([1-8])\d{6}\b/g, "$1-$2******")
+    .replace(/\b\d{2,6}(?:-\d{2,8}){1,4}\b/g, (m) => (m.replace(/-/g, "").length >= 10 ? last4(m) : m))
+    .replace(/\b01[016789]\d{7,8}\b/g, last4) // 하이픈 없는 휴대폰 번호(grok 2차)
+    // 메모 전문을 싣게 되면서(2026-09-29) 흔한 다른 모양도 — 공백·점으로 끊은 휴대폰 번호 · 하이픈 없는 11~16자리 숫자(계좌·카드).
+    .replace(/\b01[016789][ .]\d{3,4}[ .]\d{4}\b/g, last4)
+    .replace(/\b\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{4}\b/g, last4) // 카드번호(공백·하이픈)
+    .replace(/\b0\d{1,2}[ .)-]\d{3,4}[ .-]\d{4}\b/g, last4) // 유선 번호(02 123 4567 · 053.123.4567)
+    .replace(/\b\d{11,16}\b/g, last4);
 }
 
 function link(href: string | null, appUrl: string | null, text: string): string | null {
@@ -104,7 +117,8 @@ const CATEGORY_MARK: Record<string, string> = {
  */
 export function renderActivity(ev: ActivityEvent, style: Style): Rendered {
   const actor = ev.actorName ? escapeMrkdwn(ev.actorName) : "시스템";
-  const facts = ev.opaque ? undefined : ev.facts;
+  // 돈 계열은 일반 facts 대신 허용 목록을 통과한 `moneyFacts`만 — 대상 문구(제목)는 여전히 안 싣는다.
+  const facts = ev.opaque ? ev.moneyFacts : ev.facts;
   const target = !ev.opaque && ev.targetLabel ? clip(ev.targetLabel, 200) : null;
   // 대상 칸이 이미 이름을 담는 액션이 많다(`학생 · 반`) — 대상에 든 조각은 다시 붙이지 않는다(두 번 찍힘 방지).
   const pieces = [target, ...(facts?.brief ?? []).filter((b) => !target?.includes(b))]
@@ -113,7 +127,7 @@ export function renderActivity(ev: ActivityEvent, style: Style): Rendered {
   const mark = ev.category ? CATEGORY_MARK[ev.category] : undefined;
   const first = `${mark ? `${mark} ` : ""}*[${escapeMrkdwn(ev.label)}]*${pieces.length ? ` ${pieces.join(" · ")}` : ""} — ${actor}`;
   const detailed = style.template === "detailed";
-  const rows = detailed ? (facts?.rows ?? []).map((r) => `>${r.label}  ${escapeMrkdwn(r.value)}`) : [];
+  const rows = detailed ? (facts?.rows ?? []).map((r) => `>${escapeMrkdwn(r.label)}  ${escapeMrkdwn(r.value)}`) : [];
   const open = detailed ? link(facts?.href ?? "/owner?tab=audit", style.appUrl, facts?.href ? "에이와에서 열기" : "감사로그에서 보기") : null;
   const body = finish(
     [first, ...rows],
