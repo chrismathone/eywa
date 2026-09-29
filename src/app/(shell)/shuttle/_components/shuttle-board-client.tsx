@@ -18,7 +18,7 @@ import {
 import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { cn } from "@/lib/utils";
 import { SHUTTLE_PHONE_CONTROLS, SHUTTLE_ROW_TEXT, SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 import { SHUTTLE_BOARD_PATH, shuttleFaces } from "@/features/shuttle/faces";
@@ -218,11 +218,6 @@ export function ShuttleBoardClient({
             <span className="pointer-coarse:hidden">
               <ShuttlePrintMenu season={season} />
             </span>
-            {canImport ? (
-              <span className="pointer-coarse:hidden">
-                <ExcelImportButton kind="shuttle" variant="ghost" label="엑셀로 넣기" />
-              </span>
-            ) : null}
             {canWrite && <Button onClick={() => setStopDialogOpen(true)}>정류장 관리</Button>}
           </span>
         }
@@ -242,6 +237,12 @@ export function ShuttleBoardClient({
             열람 전용 — 편성은 사무실에서 수정합니다
           </span>
         )}
+        {/* 엑셀 가져오기(정류장·승하차) — 이 면엔 검색이 없어 툴바 줄 오른쪽 끝(원장 2026-09-29 통일). 인쇄처럼 손 기기에선 감춘다. */}
+        {canImport ? (
+          <span className="pointer-coarse:hidden">
+            <ExcelMenu importKind="shuttle" />
+          </span>
+        ) : null}
       </div>
 
       {error && (

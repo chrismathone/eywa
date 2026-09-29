@@ -4,7 +4,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_CURRENCY, roundMoney } from "@/features/billing/currencies";
 import { IMPORT_META } from "../kinds";
-import { type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
+import { parseOption, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
 
 /**
@@ -17,19 +17,23 @@ import type { ImporterDef } from "../server/types";
  *    **한 줄**(`excel_import`)만 남긴다(과거 지출 수백 건이 채널에 쏟아지지 않게).
  * 🔴 계좌·카드번호 칸은 받지 않는다(체크리스트: 전체 카드번호는 제출하지 않는다) — 은행·카드명·번호는 화면에서.
  */
-type K = "date" | "title" | "category" | "vendor" | "amount" | "method" | "memo";
+type K = "date" | "title" | "category" | "vendor" | "amount" | "method" | "memo" | "currency";
 const SHEET = "지출";
 const CATEGORIES = ["인건비", "운영비", "매입", "마케팅", "기타"] as const;
 const METHODS = ["카드결제", "현금", "계좌이체", "법인카드"] as const;
 
 const COLUMNS: ColumnSpec<K>[] = [
   { key: "date", header: "지출일", width: 12, required: true, aliases: ["일자", "날짜", "사용일"] },
-  { key: "title", header: "항목", width: 24, required: true, aliases: ["항목명", "내역", "적요", "내용"] },
+  // '제목' = 수납관리 › 지출 **엑셀 내보내기**의 제목 열. 그 파일엔 뒤쪽에 '항목'(세부 항목 목록) 열도 있는데, 열 제목은 **앞에 온 것**이
+  // 이겨서(mapHeaders) 제목이 먼저 잡힌다 — 세부 항목 열은 읽지 않는다.
+  { key: "title", header: "항목", width: 24, required: true, aliases: ["제목", "항목명", "내역", "적요", "내용"] },
   { key: "category", header: "분류", width: 9, options: CATEGORIES, strictOptions: true, hint: "비우면 기타" },
   { key: "vendor", header: "거래처", width: 16, aliases: ["사용처", "업체"] },
-  { key: "amount", header: "금액", width: 12, required: true, aliases: ["지출액", "지출금액"] },
+  { key: "amount", header: "금액", width: 12, required: true, aliases: ["지출액", "지출금액", "총액"] },
   { key: "method", header: "정산방법", width: 10, options: METHODS, strictOptions: true, aliases: ["결제수단", "지급수단"] },
   { key: "memo", header: "메모", width: 28, aliases: ["비고"] },
+  // 지출 **엑셀 내보내기** 파일에만 있는 열 — 이 열이 있으면 내보내기 파일로 보고 옛 분류·결제수단 글자도 그대로 받는다.
+  { key: "currency", header: "통화", exportOnly: true },
 ];
 const SPEC: SheetSpec<K> = { name: SHEET, columns: COLUMNS, keyHint: IMPORT_META.expenses.keyHint };
 
@@ -49,6 +53,7 @@ const def: ImporterDef<Plan> = {
   modeHelp: IMPORT_META.expenses.modeHelp,
   guide: [
     "· 한 줄 = 지출 한 건. 주황 칸(*)은 필수입니다. 금액은 원 단위 숫자.",
+    "· 지출의 '엑셀 내보내기'로 받은 파일을 고쳐 올려도 됩니다 — 제목·분류·총액·결제수단·거래처·메모를 읽고, 결재·증빙·세부 항목 열은 읽지 않습니다.",
     "· 같은 지출 판단: 지출일 + 항목 + 금액. 같은 지출이 여러 건이면 그 줄 수만큼 적으세요(간식 10,000원 ×2 = 두 줄).",
     "· '추가' = 이미 있는 건수만큼은 건너뛰고 남는 줄만 넣음 · '덮어쓰기' = 분류·거래처·정산방법·메모를 파일 값으로(빈 칸은 그대로 · 같은 지출이 여러 건이면 화면에서).",
     "· 분류: 인건비 · 운영비 · 매입 · 마케팅 · 기타 / 정산방법: 카드결제 · 현금 · 계좌이체 · 법인카드.",
@@ -64,20 +69,32 @@ const def: ImporterDef<Plan> = {
   async plan({ ctx, mode, sheets, issues }) {
     const sheet = sheets[SHEET];
     const today = kstToday();
+    /** 내보내기 파일(원장 2026-09-29 *"전부다 맞추기도 맞출것"*) — 저장된 값이 목록 밖(옛 분류·결제수단)이어도 그대로 되돌아와야 한다. */
+    const exportFile = !!sheet?.map.has("currency");
+    const lenient = <T extends string>(raw: string, table: ReadonlyArray<{ label: string; value: T; aliases?: readonly string[] }>): string | null =>
+      parseOption(raw, table) ?? (raw.trim() || null);
     const rows: Row[] = [];
     for (const row of sheet?.rows ?? []) {
       const date = row.date("date", true);
       if (date && date > today) row.fail("date", "오늘 이후 날짜는 넣을 수 없습니다(지출한 뒤에)");
       const title = row.text("title", { required: true, max: 200 });
-      const category = row.option("category", CATEGORIES.map((c) => ({ label: c, value: c })));
+      // 🔴 원화가 아닌 지출은 받지 않는다(적대 리뷰 2026-09-29) — 금액 소수·통화별 매칭·저장 통화를 이 가져오기가 다루지 않는다.
+      const currency = row.raw("currency").trim().toUpperCase();
+      if (currency && currency !== DEFAULT_CURRENCY) {
+        row.fail("currency", "원화가 아닌 지출은 화면에서 넣어 주세요(엑셀 가져오기는 원화만)");
+        continue;
+      }
+      const categoryTable = CATEGORIES.map((c) => ({ label: c, value: c as string }));
+      const category = exportFile ? lenient(row.raw("category"), categoryTable) : row.option("category", categoryTable);
       const vendor = row.text("vendor", { max: 120 });
       const amount = row.int("amount", { required: true, min: 0 });
-      const method = row.option("method", [
+      const methodTable = [
         { label: "카드결제", value: "카드결제", aliases: ["카드", "신용카드"] },
         { label: "현금", value: "현금" },
         { label: "계좌이체", value: "계좌이체", aliases: ["이체", "송금"] },
         { label: "법인카드", value: "법인카드" },
-      ]);
+      ];
+      const method = exportFile ? lenient(row.raw("method"), methodTable) : row.option("method", methodTable);
       const memo = row.text("memo", { max: 1000 });
       if (!row.ok || !date || !title || amount === null) continue;
       rows.push({ rowNum: row.rowNum, date, title, category, vendor, amount: roundMoney(amount, DEFAULT_CURRENCY), method, memo });
@@ -91,6 +108,8 @@ const def: ImporterDef<Plan> = {
             .from("expenses")
             .select("id, expense_date, title, amount, category, vendor, payment_method, memo")
             .eq("tenant_id", ctx.tenantId)
+            // 원화 지출끼리만 대조 — 같은 날·같은 제목·같은 숫자의 달러 지출과 섞이지 않게.
+            .eq("currency", DEFAULT_CURRENCY)
             .gte("expense_date", dates[0]!)
             .lte("expense_date", dates[dates.length - 1]!)
             .order("id")

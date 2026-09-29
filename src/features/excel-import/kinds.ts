@@ -57,7 +57,7 @@ export const IMPORT_META: Record<ImportKind, ImportMeta> = {
   classes: {
     title: "반",
     where: "수업목록",
-    templateNote: "시트: 반 · 시간표 · 반배정 · 안내. 필요한 시트만 채워도 됩니다(반 → 시간표 → 반배정 순서로 연결).",
+    templateNote: "시트: 반 · 시간표 · 반배정 · 안내. 필요한 시트만 채워도 됩니다(반 → 시간표 → 반배정 순서로 연결). 엑셀 내보내기로 받은 파일을 고쳐 올려도 됩니다.",
     keyHint: "반 이름 + 과목 / 시간표 = 반·요일·시작 시각 / 반배정 = 원생(이름·학교·학년) + 반",
     modeHelp: {
       append: "이미 있는 반·수업 시각·반 배정은 건너뛰고 새것만",
@@ -68,7 +68,7 @@ export const IMPORT_META: Record<ImportKind, ImportMeta> = {
   students: {
     title: "원생",
     where: "원생목록",
-    templateNote: "시트: 원생 · 안내. 지금 원생이 들어 있습니다(퇴원생 제외).",
+    templateNote: "시트: 원생 · 안내. 지금 원생이 들어 있습니다(퇴원생 제외). 엑셀 내보내기로 받은 파일을 고쳐 올려도 됩니다.",
     keyHint: "원생번호(적었으면) → 없으면 이름 + 학교 + 학년",
     modeHelp: { append: "이미 있는 원생은 건너뛰고 새 원생만", overwrite: "있는 원생은 파일에 적힌 칸을 바꾸고(빈 칸은 그대로) 새 원생도 넣기" },
     step: 3,
@@ -100,7 +100,7 @@ export const IMPORT_META: Record<ImportKind, ImportMeta> = {
   invoices: {
     title: "수납",
     where: "수납관리",
-    templateNote: "시트: 수납 · 안내. 빈 서식입니다(전환일 청구·납부 현황을 옮길 때). 원생이 먼저 있어야 합니다.",
+    templateNote: "시트: 수납 · 안내. 빈 서식입니다(전환일 청구·납부 현황을 옮길 때). 원생이 먼저 있어야 합니다. 엑셀 내보내기로 받은 파일을 고쳐 올려도 됩니다.",
     keyHint: "원생 + 청구월",
     modeHelp: { append: "그 달 청구서가 이미 있는 원생은 건너뛰고 새것만", overwrite: "그 달 청구서가 있으면 금액·납부를 파일 값으로 바꾸고 새것도 넣기" },
     step: 8,
@@ -108,7 +108,7 @@ export const IMPORT_META: Record<ImportKind, ImportMeta> = {
   expenses: {
     title: "지출",
     where: "수납관리 · 지출",
-    templateNote: "시트: 지출 · 안내. 빈 서식입니다(과거 지출 내역을 옮길 때).",
+    templateNote: "시트: 지출 · 안내. 빈 서식입니다(과거 지출 내역을 옮길 때). 엑셀 내보내기로 받은 파일을 고쳐 올려도 됩니다.",
     keyHint: "지출일 + 항목 + 금액",
     modeHelp: { append: "같은 날·같은 항목·같은 금액은 건너뛰고 새것만", overwrite: "같은 지출은 분류·거래처·메모를 파일 값으로 바꾸고 새것도 넣기" },
     step: 9,

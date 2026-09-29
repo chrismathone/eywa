@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { PeriodNav } from "@/components/period-nav";
 import { Button } from "@/components/ui/button";
@@ -80,7 +80,8 @@ export function CalendarClient({
             <Button variant="ghost" className="text-primary" onClick={() => setTagManagerOpen(true)}>
               태그 관리
             </Button>
-            {canImport ? <ExcelImportButton kind="calendar" variant="ghost" label="엑셀로 넣기" /> : null}
+            {/* 엑셀 가져오기(일정) — 월 보기엔 검색이 없어 툴바 오른쪽 끝(원장 2026-09-29 통일 — 이름은 ExcelMenu 한 곳). */}
+            {canImport ? <ExcelMenu importKind="calendar" /> : null}
             <Button onClick={() => setDialog({ mode: "create", date: isCurrentMonth ? today : `${month}-01` })}>
               <EyIcon name="plus" size={16} />
               일정 등록

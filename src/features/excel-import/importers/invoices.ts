@@ -6,7 +6,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { isManualInvoiceShape, PAYMENT_METHOD_LABEL } from "@/features/billing/invoice-lines";
 import { resolveDueDate } from "@/features/billing/tuition-calc";
 import { IMPORT_META } from "../kinds";
-import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
+import { duplicateKeyIssues, parseOption, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import { StudentIndex } from "../server/lookups";
 import type { ImporterDef } from "../server/types";
 
@@ -19,11 +19,15 @@ import type { ImporterDef } from "../server/types";
  * 🔴 덮어쓰기여도 고치지 않는 청구서: ⓪ 지난 달(청구월 < 이번 달 — 정산이 끝났을 수 있다) ① 메이크에듀에서 동기화된 청구서(다음 동기화가 덮는다 — 진실은 메이크에듀)
  *    ② 회차 확정·수납 배분이 걸린 청구서(급여 분배의 근거가 흔들린다) ③ 취소·환불된 청구서. 셋 다 건너뛰고 이유를 적는다.
  */
-type K = "code" | "name" | "school" | "grade" | "period" | "category" | "total" | "discount" | "paid" | "paidAt" | "method" | "dueDate" | "notes";
+type K =
+  | "code" | "name" | "school" | "grade" | "period" | "category" | "total" | "discount" | "paid" | "paidAt" | "method" | "dueDate" | "notes"
+  // ↓ 수납관리 **엑셀 내보내기** 파일에만 있는 열(원장 2026-09-29 *"전부다 맞추기도 맞출것"*) — 서식엔 안 싣는다.
+  | "description" | "points" | "unpaid" | "cardCompany" | "status" | "discountReason" | "billedOn";
 const SHEET = "수납";
 
 const CATEGORY_OPTIONS = [
-  { label: "수강료", value: "tuition", aliases: ["수업료", "교육비"] },
+  // '수업'은 내보내기 파일의 구분 글자(invoiceKindLabel: tuition → 수업).
+  { label: "수강료", value: "tuition", aliases: ["수업료", "교육비", "수업"] },
   { label: "교재", value: "material", aliases: ["교재비"] },
   { label: "시험", value: "exam", aliases: ["시험비", "모의고사"] },
   { label: "기타", value: "other" },
@@ -44,11 +48,19 @@ const COLUMNS: ColumnSpec<K>[] = [
   { key: "category", header: "구분", width: 8, options: CATEGORY_OPTIONS.map((c) => c.label), strictOptions: true, hint: "비우면 수강료" },
   { key: "total", header: "청구액", width: 12, required: true, aliases: ["청구금액", "금액"] },
   { key: "discount", header: "할인", width: 10, aliases: ["할인액"] },
-  { key: "paid", header: "납부액", width: 12, aliases: ["수납액", "입금액"] },
+  { key: "paid", header: "납부액", width: 12, aliases: ["수납액", "입금액", "실제낸금액"] },
   { key: "paidAt", header: "납부일", width: 12, aliases: ["수납일", "입금일"] },
   { key: "method", header: "결제수단", width: 9, options: Object.values(PAYMENT_METHOD_LABEL), strictOptions: true },
   { key: "dueDate", header: "납부기한", width: 12, aliases: ["마감일"], hint: "비우면 학원 설정의 납부일" },
   { key: "notes", header: "메모", width: 28, aliases: ["비고"] },
+  // 내보내기 파일 전용 — 수납명은 청구 줄 설명으로 쓰고(한 청구서 여러 줄을 다시 한 장으로 묶는다), 나머지는 읽기 전용 표시라 무시.
+  { key: "description", header: "수납명", exportOnly: true },
+  { key: "points", header: "적립금", exportOnly: true },
+  { key: "unpaid", header: "미납금액", exportOnly: true },
+  { key: "cardCompany", header: "카드사", exportOnly: true },
+  { key: "status", header: "상태", exportOnly: true },
+  { key: "discountReason", header: "할인 사유", exportOnly: true },
+  { key: "billedOn", header: "청구일", exportOnly: true },
 ];
 const SPEC: SheetSpec<K> = { name: SHEET, columns: COLUMNS, keyHint: IMPORT_META.invoices.keyHint };
 
@@ -63,6 +75,23 @@ function parsePeriod(raw: string): string | null | undefined {
   return `${m[1]}-${String(mo).padStart(2, "0")}`;
 }
 
+/** 저장된 청구 줄과 파일의 줄이 같은가(종류·설명·금액, 순서대로). 모양이 다르면 다르다고 본다. */
+function sameLines(stored: unknown, lines: readonly Line[]): boolean {
+  if (!Array.isArray(stored) || stored.length !== lines.length) return false;
+  return stored.every((li, i) => {
+    const o = (li ?? {}) as Record<string, unknown>;
+    const l = lines[i]!;
+    return String(o.kind ?? "") === l.kind && String(o.description ?? "") === l.description && Number(o.amount ?? NaN) === l.amount;
+  });
+}
+
+/** timestamptz → KST 날짜(YYYY-MM-DD). */
+function kstDay(iso: string | null): string | null {
+  if (!iso) return null;
+  const t = new Date(iso);
+  return Number.isNaN(t.getTime()) ? null : t.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+}
+
 function statusOf(total: number, discount: number, paid: number): "paid" | "partial" | "unpaid" {
   const net = Math.max(0, total - discount);
   if (paid > 0 && paid >= net) return "paid";
@@ -71,10 +100,18 @@ function statusOf(total: number, discount: number, paid: number): "paid" | "part
 }
 const STATUS_LABEL = { paid: "완납", partial: "부분납", unpaid: "미납" } as const;
 
-type Existing = { id: string; student_id: string; period: string; status: string; line_items: unknown; amount_total: number; amount_discount: number; amount_paid: number };
-type Fields = { category: string; total: number; discount: number; paid: number; paidAt: string | null; method: string | null; dueDate: string | null; notes: string | null };
+type Existing = {
+  id: string; student_id: string; period: string; status: string; line_items: unknown; amount_total: number; amount_discount: number; amount_paid: number;
+  payment_method: string | null; paid_at: string | null; notes: string | null; category: string | null;
+};
+type Line = { kind: string; description: string; amount: number };
+type Fields = {
+  category: string; total: number; discount: number; paid: number; paidAt: string | null; method: string | null;
+  /** 넣을 때 쓸 마감일(비었으면 학원 설정 납부일). `dueGiven` = 파일에 실제로 적혔나 — 고칠 때는 적힌 것만 바꾼다. */
+  dueDate: string | null; dueGiven: boolean; notes: string | null; lines: Line[];
+};
 type Ins = { rowNum: number; studentId: string; period: string; f: Fields };
-type Upd = { id: string; f: Fields; patchNotes: boolean };
+type Upd = { id: string; f: Fields; patchNotes: boolean; curCategory: string | null };
 type Plan = { inserts: Ins[]; updates: Upd[] };
 
 const def: ImporterDef<Plan> = {
@@ -86,6 +123,7 @@ const def: ImporterDef<Plan> = {
   modeHelp: IMPORT_META.invoices.modeHelp,
   guide: [
     "· 한 줄 = 원생 한 명의 한 달 청구서. 주황 칸(*)은 필수입니다. 한 원생의 같은 달은 한 줄만.",
+    "· 수납관리의 '엑셀 내보내기'로 받은 파일을 고쳐 올려도 됩니다 — 그 파일은 청구 줄 단위라 같은 원생·같은 달 줄을 한 청구서로 묶습니다(적립금·미납금액·카드사·상태 열은 읽지 않습니다).",
     "· 원생은 원생번호가 있으면 그 번호, 없으면 이름(+학교·학년)으로 찾습니다. 원생목록에 먼저 있어야 합니다.",
     "· 상태는 금액으로 정해집니다: 납부액 ≥ 청구액 − 할인 → 완납 · 납부액 > 0 → 부분납 · 그 밖 → 미납.",
     "· '추가' = 그 달 청구서가 이미 있으면 건너뜀 · '덮어쓰기' = 그 달 청구서의 금액·납부를 파일 값으로 바꿉니다.",
@@ -100,6 +138,8 @@ const def: ImporterDef<Plan> = {
 
   async plan({ ctx, mode, sheets, issues }) {
     const sheet = sheets[SHEET];
+    /** 수납관리 '엑셀 내보내기' 파일인가 — 그 파일에만 있는 '수납명' 열로 가린다(줄 단위 → 청구서로 묶기). */
+    const exportFile = !!sheet?.map.has("description");
     const db = await createClient();
     const [settings, students] = await Promise.all([getTenantSettings(), StudentIndex.load(db, ctx.tenantId, { includeWithdrawn: true })]);
 
@@ -110,15 +150,24 @@ const def: ImporterDef<Plan> = {
       const period = parsePeriod(row.raw("period"));
       if (period === undefined) row.fail("period", "청구월로 읽을 수 없습니다 — 2026-09 모양으로 적어 주세요");
       else if (period === null) row.fail("period", "청구월을 적어 주세요(필수)");
-      const category = row.option("category", CATEGORY_OPTIONS) ?? "tuition";
-      const total = row.int("total", { required: true, min: 1 });
+      // 내보내기 파일의 구분은 메이크에듀 청구 줄 글자(예: 특강비)일 수도 있다 — 거절하지 않고 그 글자를 줄 종류로 둔다.
+      const rawCategory = row.raw("category");
+      const known = exportFile ? parseOption(rawCategory, CATEGORY_OPTIONS) : row.option("category", CATEGORY_OPTIONS);
+      const category = known ?? (exportFile && rawCategory.trim() ? "other" : "tuition");
+      // 🔴 줄 kind는 **항상 영문 분류 키**(tuition/material/exam/other) — 한글 kind는 메이크에듀 모양으로 판정돼
+      //    (isManualInvoiceShape) 수정 불가가 되고 동기화 정리가 취소할 수 있다(적대 리뷰 2026-09-29). 모르는 글자는 other + 설명에 남긴다.
+      const lineKind = category;
+      // 내보내기 파일은 **줄 단위**라 0원 줄(무상 교재 등)이 있다 — 그 파일에선 0원도 받는다.
+      const total = row.int("total", { required: true, min: exportFile ? 0 : 1 });
       const discount = row.int("discount", { min: 0 }) ?? 0;
       const paid = row.int("paid", { min: 0 }) ?? 0;
       if (total !== null && discount > total) row.fail("discount", "할인이 청구액보다 클 수 없습니다");
       const paidAt = row.date("paidAt");
       const method = row.option("method", METHOD_OPTIONS);
       const dueDate = row.date("dueDate");
+      const dueGiven = dueDate !== null;
       const notes = row.text("notes", { max: 500 });
+      const description = row.text("description", { max: 200 });
       if (!row.ok || !st || !period || total === null) continue;
       parsed.push({
         rowNum: row.rowNum,
@@ -126,10 +175,36 @@ const def: ImporterDef<Plan> = {
         studentId: st.id,
         studentName: st.name,
         period,
-        f: { category, total, discount, paid, paidAt, method, dueDate: dueDate ?? (resolveDueDate(period, settings.billing.dueDay) || null), notes },
+        f: {
+          category, total, discount, paid, paidAt, method, dueDate: dueDate ?? (resolveDueDate(period, settings.billing.dueDay) || null), dueGiven, notes,
+          // 내보내기 파일의 빈 수납명은 빈 글자 그대로(저장값이 ""라 같다고 봐야 한다). 모르는 구분 글자는 설명으로.
+          lines: [{ kind: lineKind, description: exportFile ? (description ?? (known ? "" : rawCategory.trim())) : (description ?? CATEGORY_LABEL[category] ?? ""), amount: total }],
+        },
       });
     }
-    issues.push(...duplicateKeyIssues(SHEET, parsed, (p) => `${p.studentId}|${p.period}`, "원생·청구월"));
+    // 서식 파일 = 한 원생·한 달 한 줄(두 줄이면 오류). 내보내기 파일 = **청구 줄 단위**라 같은 원생·같은 달이 여러 줄 —
+    // 한 청구서로 다시 묶는다(금액·할인·납부는 합, 줄은 그대로, 결제수단·메모는 첫 값, 납부일은 가장 늦은 날).
+    if (exportFile) {
+      const merged = new Map<string, Parsed>();
+      for (const p of parsed) {
+        const key = `${p.studentId}|${p.period}`;
+        const m = merged.get(key);
+        if (!m) {
+          merged.set(key, { ...p, f: { ...p.f, lines: [...p.f.lines] } });
+          continue;
+        }
+        m.f.total += p.f.total;
+        m.f.discount += p.f.discount;
+        m.f.paid += p.f.paid;
+        m.f.lines.push(...p.f.lines);
+        m.f.method ??= p.f.method;
+        m.f.notes ??= p.f.notes;
+        if (p.f.paidAt && (!m.f.paidAt || p.f.paidAt > m.f.paidAt)) m.f.paidAt = p.f.paidAt;
+      }
+      parsed.splice(0, parsed.length, ...merged.values());
+    } else {
+      issues.push(...duplicateKeyIssues(SHEET, parsed, (p) => `${p.studentId}|${p.period}`, "원생·청구월"));
+    }
 
     const studentIds = [...new Set(parsed.map((p) => p.studentId))];
     const periods = [...new Set(parsed.map((p) => p.period))];
@@ -137,7 +212,7 @@ const def: ImporterDef<Plan> = {
       ? await fetchInChunks<Existing>(studentIds, (chunk) =>
           db
             .from("invoices")
-            .select("id, student_id, period, status, line_items, amount_total, amount_discount, amount_paid")
+            .select("id, student_id, period, status, line_items, amount_total, amount_discount, amount_paid, payment_method, paid_at, notes, category")
             .eq("tenant_id", ctx.tenantId)
             .in("student_id", chunk)
             .in("period", periods),
@@ -196,13 +271,19 @@ const def: ImporterDef<Plan> = {
         preview.push({ sheet: SHEET, rowNum: p.rowNum, key: p.studentName, action: "skip", summary: why });
         continue;
       }
-      const same = Number(cur.amount_total) === p.f.total && Number(cur.amount_discount) === p.f.discount && Number(cur.amount_paid) === p.f.paid && cur.status === st;
-      if (same && !p.f.notes && !p.f.method && !p.f.paidAt) {
+      // 바뀐 게 없으면 건너뛴다 — 내보낸 파일을 그대로 올리면 결제수단·납부일·메모가 **지금 값과 같아서** 채워져 있다(비었다고만 보면 전부 갱신이 된다).
+      const same =
+        Number(cur.amount_total) === p.f.total && Number(cur.amount_discount) === p.f.discount && Number(cur.amount_paid) === p.f.paid && cur.status === st &&
+        (!p.f.notes || p.f.notes === (cur.notes ?? "")) &&
+        (!p.f.method || p.f.method === cur.payment_method) &&
+        (!p.f.paidAt || p.f.paidAt === kstDay(cur.paid_at)) &&
+        sameLines(cur.line_items, p.f.lines);
+      if (same) {
         skip += 1;
         preview.push({ sheet: SHEET, rowNum: p.rowNum, key: p.studentName, action: "skip", summary: "바뀐 칸 없음" });
         continue;
       }
-      plan.updates.push({ id: cur.id, f: p.f, patchNotes: p.f.notes !== null });
+      plan.updates.push({ id: cur.id, f: p.f, patchNotes: p.f.notes !== null, curCategory: cur.category });
       preview.push({
         sheet: SHEET,
         rowNum: p.rowNum,
@@ -216,7 +297,7 @@ const def: ImporterDef<Plan> = {
 
   async apply({ ctx, plan }) {
     const db = await createClient();
-    const lineItems = (f: Fields) => [{ kind: f.category, description: CATEGORY_LABEL[f.category], amount: f.total }];
+    const lineItems = (f: Fields) => f.lines;
     const paidAtOf = (f: Fields, status: string) => (f.paidAt ? `${f.paidAt}T00:00:00+09:00` : status === "unpaid" ? null : undefined);
     let inserted = 0;
     for (let i = 0; i < plan.inserts.length; i += 200) {
@@ -251,7 +332,6 @@ const def: ImporterDef<Plan> = {
     for (const u of plan.updates) {
       const status = statusOf(u.f.total, u.f.discount, u.f.paid);
       const patch: Record<string, unknown> = {
-        category: u.f.category,
         amount_total: u.f.total,
         amount_discount: u.f.discount,
         amount_paid: u.f.paid,
@@ -261,7 +341,9 @@ const def: ImporterDef<Plan> = {
       const paidAt = paidAtOf(u.f, status);
       if (paidAt !== undefined) patch.paid_at = paidAt;
       if (u.f.method) patch.payment_method = u.f.method;
-      if (u.f.dueDate) patch.due_date = u.f.dueDate;
+      // 마감일은 파일에 적혔을 때만(내보내기 파일엔 없다 — 학원 기본값으로 덮으면 따로 정한 마감일이 사라진다).
+      if (u.f.dueGiven && u.f.dueDate) patch.due_date = u.f.dueDate;
+      if (u.f.category !== u.curCategory) patch.category = u.f.category;
       if (u.patchNotes) patch.notes = u.f.notes;
       // 🔴 수동 청구서·미취소일 때만(미리보기와 쓰기 사이에 동기화가 덮었거나 취소됐으면 0행 = 건너뜀).
       const { data, error } = await db

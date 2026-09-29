@@ -26,6 +26,7 @@ import {
 import { getStudentOptions } from "@/features/billing/server/textbook-queries";
 import { getMakeeduSyncState } from "@/features/integrations/server/makeedu-sync";
 import { SearchToggle } from "@/components/search-toggle";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { BillingTable } from "./billing-table";
 import { BillingMonthNav } from "./billing-month-nav";
 import { CreateInvoiceTrigger } from "./create-invoice-dialog";
@@ -66,7 +67,8 @@ type Sp = {
   missing?: string;
 };
 
-export async function BillingContent({ sp }: { sp: Sp }) {
+/** `canImport` = 엑셀 가져오기(청구서) 권한 — 페이지가 billing full(`canManageTenant`)로 정한 값. */
+export async function BillingContent({ sp, canImport = false }: { sp: Sp; canImport?: boolean }) {
   const period = sp.period ?? currentPeriod();
   const q = sp.q ?? "";
   const sort: SortKey = (sp.sort as SortKey) ?? "status";
@@ -188,7 +190,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
   return (
     <div className="space-y-3">
-      {/* Editorial 문법 ① — eyebrow→헤드라인→서브(청구·수납률 승격). 상시 버튼 = Primary '청구서 생성' + 텍스트 '엑셀 내보내기'
+      {/* Editorial 문법 ① — eyebrow→헤드라인→서브(청구·수납률 승격). 상시 버튼 = Primary '청구서 생성' 하나 — 엑셀 내보내기/가져오기는 검색 줄로(원장 2026-09-29 통일).
           (디자인 v5 §10 — 종전엔 툴바 오른쪽에 outline 둘이었다). */}
       <PageHeader
         eyebrow="수납 관리"
@@ -199,23 +201,6 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         embedLabel={`${formatPeriod(period)} · ${periodSummary}`}
         actions={
           <>
-            <Button
-              variant="ghost"
-              className="text-primary"
-              render={
-                <a
-                  // 화면과 같은 집합을 내보낸다 — 기한 경과 필터가 켜져 있으면 엑셀도 그 건들만.
-                  href={`/api/exports/billing?${new URLSearchParams({
-                    period,
-                    ...(q ? { q } : {}),
-                    ...(overdueOnly ? { overdue: "1" } : {}),
-                    ...(missingOnly ? { missing: "1" } : {}),
-                  }).toString()}`}
-                />
-              }
-            >
-              엑셀 내보내기
-            </Button>
             <CreateInvoiceTrigger students={students} defaultPeriod={period} />
           </>
         }
@@ -223,7 +208,7 @@ export async function BillingContent({ sp }: { sp: Sp }) {
 
       {/* 툴바 — 월 이동은 수납 면 공용 BillingMonthNav(앱 전역 PeriodNav + 월 직접 선택 라벨; 옛 '최근 6개월 알약 칩 줄'은
           §10 칩 줄 금지로 걷었다 — 화살표만으론 옛 달까지 여러 번 눌러야 한다) + 검색(눌러야 나온다).
-          항목 = 청구가 있는 달(최근 순). 신규 청구·엑셀은 머리로 올렸다(같은 동작 두 곳 금지). 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
+          항목 = 청구가 있는 달(최근 순). 신규 청구는 머리, 엑셀은 검색 옆(같은 동작 두 곳 금지). 🔴 툴바 카드 껍데기 없음(원장 2026-09-01). */}
       <div className="flex flex-wrap items-center gap-2.5 px-1 py-1">
         <BillingMonthNav
           period={period}
@@ -233,6 +218,16 @@ export async function BillingContent({ sp }: { sp: Sp }) {
         />
         <div className="ml-auto flex items-center gap-2">
           <SearchToggle placeholder="학생명·항목" defaultValue={q} />
+          {/* 엑셀 내보내기/가져오기 — 검색과 같은 줄(원장 2026-09-29 통일). 내보내기 = 화면과 같은 집합(기한 경과 필터 포함). */}
+          <ExcelMenu
+            exportHref={`/api/exports/billing?${new URLSearchParams({
+              period,
+              ...(q ? { q } : {}),
+              ...(overdueOnly ? { overdue: "1" } : {}),
+              ...(missingOnly ? { missing: "1" } : {}),
+            }).toString()}`}
+            importKind={canImport ? "invoices" : null}
+          />
         </div>
       </div>
 

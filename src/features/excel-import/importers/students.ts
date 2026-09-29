@@ -89,6 +89,7 @@ const def: ImporterDef<Plan> = {
   modeHelp: IMPORT_META.students.modeHelp,
   guide: [
     "· 한 줄 = 원생 한 명. 열 순서는 바꿔도 됩니다(제목으로 찾습니다). 주황 칸(*)은 필수입니다.",
+    "· 원생목록의 '엑셀 내보내기'로 받은 파일을 고쳐 올려도 됩니다(수강 과목·담당 강사 열은 읽지 않습니다).",
     "· '추가' = 이미 있는 원생은 건너뜀 · '덮어쓰기' = 있는 원생의 칸을 파일 값으로(빈 칸은 그대로 둡니다).",
     "· 같은 원생 판단: 원생번호가 있으면 원생번호, 없으면 이름 + 학교 + 학년.",
     "· 새 원생 이름이 기존 원생과 같으면 이름 뒤에 A·B·C가 붙습니다(동명이인 구분).",
@@ -125,6 +126,13 @@ const def: ImporterDef<Plan> = {
     );
     const byCode = new Map(existing.filter((s) => s.student_code).map((s) => [s.student_code!.trim(), s]));
     const byNatural = new Map(existing.filter((s) => s.status !== "withdrawn").map((s) => [naturalKey(s.name, s.school, s.grade), s]));
+    // 퇴원생 — 상태 칸이 '퇴원'인 줄(원생목록을 퇴원 필터로 내보낸 파일)만 이쪽에서 찾는다(적대 리뷰 2026-09-29).
+    //    같은 이름·학교·학년 퇴원생이 둘 이상이면 고르지 않는다(원생번호로).
+    const withdrawnByNatural = new Map<string, Existing | null>();
+    for (const s of existing.filter((x) => x.status === "withdrawn")) {
+      const k = naturalKey(s.name, s.school, s.grade);
+      withdrawnByNatural.set(k, withdrawnByNatural.has(k) ? null : s);
+    }
     const taken = new Set(existing.map((s) => s.name.trim()));
     const today = kstToday();
 
@@ -160,7 +168,20 @@ const def: ImporterDef<Plan> = {
       parsed.push({ rowNum: row.rowNum, key: code ? `#${code}` : naturalKey(name, school, grade) });
 
       const byCodeHit = code ? byCode.get(code) : undefined;
-      const cur = byCodeHit ?? byNatural.get(naturalKey(name, school, grade));
+      const nk = naturalKey(name, school, grade);
+      const wantsWithdrawn = status === "withdrawn";
+      if (!byCodeHit && wantsWithdrawn && withdrawnByNatural.get(nk) === null) {
+        row.fail("name", "이름·학교·학년이 같은 퇴원생이 여럿입니다 — 원생번호 칸을 채워 한 명으로 좁혀 주세요");
+        continue;
+      }
+      // 🔴 상태는 여전히 바꾸지 않는다 — 퇴원생 줄은 칸(연락처·메모 등)만 방식대로 다룬다.
+      // 🔴 '퇴원'으로 적힌 줄이 **지금 다니는** 같은 이름·학교·학년 원생에게 붙지 않게 — 그 아이의 빈 칸을 퇴원생 값으로
+      //    채울 수 있다(재리뷰 2026-09-29). 퇴원생이 없고 재원생만 있으면 멈추고 알린다.
+      if (!byCodeHit && wantsWithdrawn && !withdrawnByNatural.get(nk) && byNatural.get(nk)) {
+        row.fail("status", "상태가 퇴원인데 같은 이름·학교·학년의 원생이 지금 다니고 있습니다 — 같은 아이면 원생 화면에서 퇴원 처리하고, 다른 아이면 원생번호를 적어 주세요");
+        continue;
+      }
+      const cur = byCodeHit ?? (wantsWithdrawn ? withdrawnByNatural.get(nk) : byNatural.get(nk));
       const summary = [school, grade, fields.parentPhone].filter(Boolean).join(" · ") || "—";
       // 🔴 이름·학교·학년만 같고 **보호자 연락처가 다르면 다른 아이다**(0258a 김근우 건과 같은 증거) — 건너뛰지도 덮지도 않고 멈춘다.
       //    덮으면 남의 보호자 번호로 바뀌고 상담 자동 연결까지 딸려 간다(적대 리뷰 2026-09-29, [[#132]]).

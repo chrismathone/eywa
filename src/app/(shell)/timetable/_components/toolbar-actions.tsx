@@ -1,4 +1,5 @@
 "use client";
+import { EXCEL_MENU_LABEL } from "@/components/excel-import/excel-menu";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF } from "@/components/toolbar-controls";
 
 import { useEffect, useState, useTransition } from "react";
@@ -238,12 +239,12 @@ export function TimetableToolbarActions({
         {exportsAllowed ? (
           <a href={exportHref} className={btnCls}>
             <FileSpreadsheet className="size-3" />
-            엑셀
+            엑셀 내보내기
           </a>
         ) : (
           <button type="button" disabled title={KIND_EXPORT_TITLE} className={btnCls}>
             <FileSpreadsheet className="size-3" />
-            엑셀
+            엑셀 내보내기
           </button>
         )}
       </div>
@@ -255,11 +256,12 @@ export function TimetableToolbarActions({
       <Popover.Root open={menuOpen} onOpenChange={setMenuOpen}>
         <Popover.Trigger
           className={`${TOOLBAR_CHIP} gap-1.5 ${TOOLBAR_CHIP_OFF} data-[popup-open]:bg-bg-soft`}
-          title="엑셀 내보내기·가져오기, 구글 시트 반영·가져오기"
+          title={sheetSection ? "엑셀 내보내기·가져오기, 구글 시트 반영·가져오기" : "엑셀 내보내기·가져오기"}
         >
           {/* 진행 중이면 트리거에서 바로 보이게 — 접으면 안쪽 스피너가 안 보인다. */}
           {anyBusy ? <Loader2 className="size-3 animate-spin" /> : <FileSpreadsheet className="size-3" />}
-          엑셀·시트
+          {/* 이름은 모든 탭과 같은 한 벌(원장 2026-09-29 *"엑셀 내보내기/가져오기 로 통일"*) — 시트 반영·가져오기는 같은 메뉴 아래칸. */}
+          {EXCEL_MENU_LABEL}
           <ChevronDown className="size-3" />
         </Popover.Trigger>
         <Popover.Portal>
@@ -291,7 +293,7 @@ export function TimetableToolbarActions({
                   }}
                 >
                   <Upload className="size-3 shrink-0" />
-                  가져오기(파일)
+                  엑셀 가져오기
                 </button>
               ) : null}
 

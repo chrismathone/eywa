@@ -4,13 +4,13 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { Pagination } from "@/components/pagination";
 import { SessionTermGroups, RefreshPlanButton, type ClassGroup } from "./session-term-table";
 import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { SessionTermsState, SessionTermsConfirmedCount } from "./session-terms-state";
 import { NO_LESSON_LABEL } from "@/features/billing/session-terms/month-roster";
 import { confirmableTermRow, filterSessionTermRows } from "@/features/billing/session-terms/term-filter";
@@ -113,6 +113,16 @@ export async function SessionTermsFace({
           />
         ) : null}
         <SearchToggle placeholder="이름·반·학교·담임·메모" defaultValue={query} />
+        {/* 엑셀 내보내기(감사 N2 · 원장 2026-09-29 검색 줄 통일) — 이 표와 같은 줄 집합(과목·검색·미확정만·미배분만). 가져오기는 없다. */}
+        <ExcelMenu
+          exportHref={`/api/exports/session-terms?${new URLSearchParams({
+            period: p,
+            ...(activeSubject ? { subject: activeSubject } : {}),
+            ...(query ? { q: query } : {}),
+            ...(pendingOnly ? { allocation: "pending" } : {}),
+            ...(openOnly ? { confirmation: "open" } : {}),
+          }).toString()}`}
+        />
         <FilterSelect paramName="confirmation" value={openOnly ? "open" : ""} options={[{ value: "open", label: `미확정만 보기 (${openCount})` }]} axisLabel="확정" ariaLabel="확정 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <FilterSelect paramName="allocation" value={pendingOnly ? "pending" : ""} options={[{ value: "pending", label: `미배분만 보기 (${pendingCount})` }]} axisLabel="배분" ariaLabel="배분 상태 필터" className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <span className="text-text-dim text-sm whitespace-nowrap">
@@ -126,24 +136,6 @@ export async function SessionTermsFace({
           {duplicateCount > 0 ? ` · 청구서 중복 ${duplicateCount}` : null}
         </span>
         <div className="ml-auto flex items-center gap-1">
-          {/* 엑셀(감사 N2) — 이 표와 같은 줄 집합(과목·검색·미확정만·미배분만)을 내보낸다. */}
-          <Button
-            variant="ghost"
-            className="text-primary"
-            render={
-              <a
-                href={`/api/exports/session-terms?${new URLSearchParams({
-                  period: p,
-                  ...(activeSubject ? { subject: activeSubject } : {}),
-                  ...(query ? { q: query } : {}),
-                  ...(pendingOnly ? { allocation: "pending" } : {}),
-                  ...(openOnly ? { confirmation: "open" } : {}),
-                }).toString()}`}
-              />
-            }
-          >
-            엑셀 내보내기
-          </Button>
           <RefreshPlanButton period={p} />
         </div>
         <Link href="/owner?tab=billing" className="text-primary text-sm underline-offset-2 hover:underline">

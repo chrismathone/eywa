@@ -19,8 +19,8 @@ export const inventory: HelpManual = {
     },
     {
       n: 2,
-      label: "엑셀",
-      zone: "header",
+      label: "엑셀 내보내기/가져오기",
+      zone: "toolbar",
       body: "내려받는 서식 = 올리는 서식. 자산ID/품목ID로 맞춥니다. 오류 1건이면 전무입니다. 새 분류가 있으면 반영 전에 확인 창이 한 번 뜹니다.",
     },
     {

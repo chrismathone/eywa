@@ -20,7 +20,7 @@ import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAdjustLeave } from "@/features/leave/access";
 import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
@@ -287,7 +287,6 @@ export default async function StaffPage({
               </Button>
             ) : null}
             {canManage ? <StaffQrSection tenantId={user.tenantId} /> : null}
-            {canImport ? <ExcelImportButton kind="staff" label="엑셀로 넣기" /> : null}
             {canManage ? <NewStaffTrigger /> : null}
           </>
         }
@@ -420,6 +419,8 @@ export default async function StaffPage({
           <StaffColumnPicker />
         </div>
         <SearchToggle placeholder="이름·이메일·연락처" defaultValue={q} resetParams={INVITE_PARAMS} />
+        {/* 엑셀 가져오기(직원 계정) — 검색과 같은 줄(원장 2026-09-29 통일). */}
+        {canImport ? <ExcelMenu importKind="staff" /> : null}
         </div>
       </Toolbar>
 

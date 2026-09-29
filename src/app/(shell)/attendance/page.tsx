@@ -37,7 +37,7 @@ import { attendanceUnitSuffix } from "@/features/attendance/unit-suffix";
 import { ATTENDANCE_EDIT_WINDOW_DAYS } from "@/features/attendance/edit-window";
 import { accessLevelTenant, canManageTenant } from "@/lib/auth/perm-matrix";
 import { AbsenceIntakeButton } from "./_components/absence-intake-button";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
 import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
@@ -756,8 +756,6 @@ export default async function AttendancePage({
         ) : null}
         {showUnitsMaster ? <UnitsMasterButton month={month} /> : null}
         {canIntakeAbsence ? <AbsenceIntakeButton today={kstToday()} /> : null}
-        {/* 출결 엑셀로 넣기(원장 2026-09-29) — 결석 통보 접수와 같은 게이트(full). 올리기 주소도 같은 판정을 한다. */}
-        {canIntakeAbsence ? <ExcelImportButton kind="attendance" /> : null}
         {canOpenPayslip && effectiveTeacher ? (
           <PayslipWindowButton teacherId={effectiveTeacher} period={month} subjectFiltered={!!effectiveSubject} />
         ) : null}
@@ -1082,6 +1080,8 @@ export default async function AttendancePage({
             <span data-help="att-search" className="inline-flex flex-wrap items-center gap-2.5">
               <AttendanceSearchToggle />
             </span>
+            {/* 엑셀 가져오기(출결) — 검색과 같은 줄(원장 2026-09-29 버튼 통일). 결석 통보 접수와 같은 게이트(full). */}
+            {canIntakeAbsence ? <ExcelMenu importKind="attendance" /> : null}
           </>
         ) : (
           <>
@@ -1089,6 +1089,8 @@ export default async function AttendancePage({
                 결과를 누르면 그 강사 출석부가 **검색어를 들고** 열린다. 시트 검색과 자리가 겹치지 않도록
                 같은 칸에 둔다(둘 중 하나만 뜬다 = URL 씨앗을 적는 주인도 하나). */}
             <HubStudentSearch month={month} initialQuery={searchSeed} initialResult={hubSearchSeeded} />
+            {/* 반을 고르기 전·빈 달에도 엑셀 가져오기는 선다(같은 게이트 — 검색 줄). */}
+            {canIntakeAbsence ? <ExcelMenu importKind="attendance" /> : null}
           </>
         )}
 

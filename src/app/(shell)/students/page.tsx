@@ -312,8 +312,8 @@ export default async function StudentsPage({
       {prefsLoaded && !fromDashboard ? (
         <RememberPrefs current={current} saved={prefsLoaded} save={saveStudentListPrefs} />
       ) : null}
-      {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 학생') 하나 + 텍스트 Secondary('엑셀' 메뉴) 하나. 내보내기·가져오기는
-          그 메뉴(2차)로 내렸다. 동기화 배지는 읽기 전용 표식이라 그대로. */}
+      {/* 머리 — 지시서 §10: 상시 버튼은 Primary('새 학생') 하나. 엑셀 버튼은 **검색 줄**(공용 ExcelMenu)
+          (원장 2026-09-29 탭 통일). 동기화 배지는 읽기 전용 표식이라 그대로. */}
       <PageHeader
         eyebrow={sheetT(lang, "stu.eyebrow")}
         title={sheetT(lang, "stu.title")}
@@ -324,7 +324,6 @@ export default async function StudentsPage({
         actions={
           <>
             <MakeeduSyncBadge domain="students" />
-            <StudentsMoreMenu exportHref={exportHref} canImport={canManageStudent} />
             {canManageStudent ? <NewStudentTrigger /> : null}
           </>
         }
@@ -420,6 +419,8 @@ export default async function StudentsPage({
             }
           />
           </span>
+          {/* 엑셀(공용 ExcelMenu) — 검색과 같은 줄(원장 2026-09-29 통일). 가져오기는 full만. */}
+          <StudentsMoreMenu exportHref={exportHref} canImport={canManageStudent} />
         </div>
       </div>
 

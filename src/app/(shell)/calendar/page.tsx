@@ -1,6 +1,6 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { kstToday } from "@/lib/date-kst";
 import { FilterSelect } from "@/components/filter-select";
 import { HrefSelect } from "@/components/href-select";
@@ -185,9 +185,10 @@ export default async function CalendarPage({
           ) : null}
           {/* 제목 검색(N9) — 목록은 전체 연도, 연간은 이 해 안. 필요할 때만 펼친다(§10). */}
           {view === "list" || view === "year" ? <SearchToggle placeholder="일정 제목" defaultValue={q} /> : null}
+          {/* 엑셀 가져오기(일정) — 검색과 같은 줄(원장 2026-09-29 통일). */}
+          {canImport ? <ExcelMenu importKind="calendar" /> : null}
           {/* 숫자의 뜻을 바꾸는 사실이라 접지 않는다 — 휴가(결재 문서) 오버레이는 월 보기에만 있다. */}
           <span className="text-text-faint ml-auto text-xs">휴가는 월 보기에서만 표시됩니다</span>
-          {canImport ? <ExcelImportButton kind="calendar" variant="ghost" label="엑셀로 넣기" /> : null}
         </div>
       ) : null}
 

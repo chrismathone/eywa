@@ -12,6 +12,7 @@ import type { InventoryAsset, InventoryLoan } from "@/features/inventory/types";
 import { assetColumns } from "./asset-columns";
 import { AssetDialog } from "./asset-dialog";
 import { useCategoryMaps } from "./categories-context";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { ExcelDialog } from "./excel-dialog";
 import { HolderDialog } from "./holder-dialog";
 import { ListToolbar } from "./list-toolbar";
@@ -140,7 +141,9 @@ export function AssetsFace({
         summary={`${rows.length}건`}
         actions={
           <>
-            {canWrite ? <ToolbarButton onClick={() => setDialog({ kind: "excel" })}>엑셀</ToolbarButton> : null}
+            {/* 엑셀 내보내기/가져오기(원장 2026-09-29 탭 통일) — 검색과 같은 줄. 내보내기 = 서식(지금 자산·소모품, 열람 권한이면 받는다) ·
+                가져오기 = 재고 전용 창(쓰기 권한만). */}
+            <ExcelMenu exportHref="/api/inventory/excel" onImport={canWrite ? () => setDialog({ kind: "excel" }) : null} />
             {/* 치수는 공용 <Button> 기본(control-scale) 그대로 — 옛 `h-8 text-xs` 덮어쓰기가 옆 버튼과 크기를 갈랐다(원장 캡처). */}
             <PrintWindowButton id="print/inventory-qr" href="/inventory/qr/print" title="자산 QR 라벨 인쇄" variant="outline">
               인쇄

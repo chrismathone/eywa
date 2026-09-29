@@ -32,6 +32,10 @@ export type ColumnSpec<K extends string = string> = {
   options?: readonly string[];
   /** true면 목록 밖 값을 엑셀이 거절한다. */
   strictOptions?: boolean;
+  /**
+   * 서식엔 싣지 않고 **읽기만** 하는 열 — 그 탭의 엑셀 내보내기 파일에만 있는 열(예: 수업목록의 '상태'·'구분')을 알아보기 위해.
+   */
+  exportOnly?: boolean;
 };
 
 export type SheetSpec<K extends string = string> = {
@@ -41,6 +45,11 @@ export type SheetSpec<K extends string = string> = {
   keyHint?: string;
   /** 없어도 되는 시트(파일에 없으면 건너뛴다). */
   optional?: boolean;
+  /**
+   * 시트 이름의 다른 이름 — 그 탭의 **엑셀 내보내기** 파일 시트(예: 반 ← '수업목록')를 그대로 받게(원장 2026-09-29
+   * *"전부다 맞추기도 맞출것"*: 내보낸 파일을 고쳐 올려도 들어가야 한다).
+   */
+  aliases?: readonly string[];
 };
 
 /** 오류 한 건 — 어디(시트·행·열)에서 무엇이 틀렸나. 행·열이 없으면 시트 전체의 문제. */

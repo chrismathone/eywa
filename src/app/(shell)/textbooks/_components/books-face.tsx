@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Pill } from "@/components/atoms/pill";
 import { Toolbar, ToolbarButton, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { FIELD } from "./form-bits";
 import { TextbookDialog } from "./textbook-dialog";
 import { CoverThumb } from "./cover-thumb";
@@ -29,6 +30,7 @@ export function BooksFace({
   pageSize,
   skillAreas,
   canWrite,
+  canImport = false,
 }: {
   rows: TextbookListItem[];
   total: number | null;
@@ -36,6 +38,8 @@ export function BooksFace({
   pageSize: number;
   skillAreas: SkillAreaSetting[];
   canWrite: boolean;
+  /** 엑셀 가져오기(교재·차수) — 서버가 올리기 주소와 같은 `canManageTenant`로 정한 값. */
+  canImport?: boolean;
 }) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -76,6 +80,8 @@ export function BooksFace({
           />
           <ToolbarButton type="submit">검색</ToolbarButton>
         </form>
+        {/* 엑셀 가져오기 — 검색과 같은 줄(원장 2026-09-29 통일 — 이름은 ExcelMenu 한 곳). */}
+        {canImport ? <ExcelMenu importKind="textbooks" /> : null}
 
         <ToolbarSegment label="구분" wrap>
           <ToolbarSegmentItem active={area === ""} onClick={() => go({ area: null })}>

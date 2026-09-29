@@ -57,10 +57,11 @@ export function sheetGrid(ws: ExcelJS.Worksheet): string[][] {
   return out;
 }
 
-/** 시트 이름으로 찾기(공백 무시). 시트가 하나뿐인 가져오기면 첫 시트로 폴백. */
-export function findSheet(wb: ExcelJS.Workbook, name: string, fallbackFirst: boolean): ExcelJS.Worksheet | null {
-  const want = name.replace(/\s+/g, "");
-  const hit = wb.worksheets.find((w) => w.name.replace(/\s+/g, "") === want);
+/** 시트 이름(또는 별칭 — 내보내기 파일의 시트 이름)으로 찾기(공백 무시). 시트가 하나뿐인 가져오기면 첫 시트로 폴백. */
+export function findSheet(wb: ExcelJS.Workbook, name: string, fallbackFirst: boolean, aliases: readonly string[] = []): ExcelJS.Worksheet | null {
+  const squash = (s: string) => s.replace(/\s+/g, "");
+  const want = squash(name);
+  const hit = wb.worksheets.find((w) => squash(w.name) === want) ?? wb.worksheets.find((w) => aliases.some((a) => squash(a) === squash(w.name)));
   if (hit) return hit;
   if (!fallbackFirst) return null;
   return wb.worksheets.find((w) => w.name !== GUIDE_SHEET_NAME) ?? null;
@@ -78,10 +79,12 @@ export function buildTemplate(title: string, sheets: TemplateSheet[], guideLines
   wb.created = new Date();
   for (const { spec, rows } of sheets) {
     const ws = wb.addWorksheet(spec.name);
-    ws.columns = spec.columns.map((c) => ({ header: c.required ? `${c.header}*` : c.header, key: c.key, width: c.width ?? 14 }));
+    // 내보내기 파일 전용 열(exportOnly)은 서식에 싣지 않는다 — 읽을 줄만 안다.
+    const cols = spec.columns.filter((c) => !c.exportOnly);
+    ws.columns = cols.map((c) => ({ header: c.required ? `${c.header}*` : c.header, key: c.key, width: c.width ?? 14 }));
     const head = ws.getRow(1);
     head.font = { bold: true };
-    spec.columns.forEach((c, i) => {
+    cols.forEach((c, i) => {
       const cell = head.getCell(i + 1);
       cell.fill = c.required ? REQUIRED_FILL : HEADER_FILL;
       if (c.hint) cell.note = c.hint;
@@ -89,10 +92,10 @@ export function buildTemplate(title: string, sheets: TemplateSheet[], guideLines
     ws.views = [{ state: "frozen", ySplit: 1 }];
     for (const r of rows) ws.addRow(r);
     // 모든 칸을 글자로 — 전화번호 앞 0·긴 숫자가 엑셀에서 깨지지 않게
-    spec.columns.forEach((_, i) => {
+    cols.forEach((_, i) => {
       ws.getColumn(i + 1).numFmt = "@";
     });
-    spec.columns.forEach((c, i) => {
+    cols.forEach((c, i) => {
       if (!c.options?.length) return;
       const safe = c.options.filter((l) => !/[",]/.test(l));
       const joined = safe.join(",");
@@ -114,7 +117,7 @@ export function buildTemplate(title: string, sheets: TemplateSheet[], guideLines
   guide.addRow({ a: "시트", b: "열", c: "설명(* = 필수 · 주황 칸)" }).font = { bold: true };
   for (const { spec } of sheets) {
     if (spec.keyHint) guide.addRow({ a: spec.name, b: "(매칭 키)", c: spec.keyHint });
-    for (const c of spec.columns) {
+    for (const c of spec.columns.filter((x) => !x.exportOnly)) {
       const opts = c.options?.length ? ` 선택: ${c.options.join(" · ")}` : "";
       guide.addRow({ a: spec.name, b: c.required ? `${c.header}*` : c.header, c: `${c.hint ?? ""}${opts}`.trim() });
     }

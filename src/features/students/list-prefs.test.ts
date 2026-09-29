@@ -74,8 +74,10 @@ describe("학생목록 배선", () => {
     expect(read("src/components/workspace/window-geometry.ts")).toMatch(/\n\s*students: \{ w: 960, h: 680 \}/);
   });
 
-  it("상시 버튼은 Primary('새 학생') + 텍스트 메뉴('엑셀') 둘뿐 — 내보내기·가져오기 버튼이 머리에 없다", () => {
+  it("상시 버튼은 Primary('새 학생') 하나 — 엑셀 내보내기/가져오기는 검색 줄의 한 버튼(2026-09-29)", () => {
     expect(page).toContain("<StudentsMoreMenu");
+    // 검색(SearchToggle) 뒤에 선다 — 머리(PageHeader actions)가 아니다.
+    expect(page.indexOf("<StudentsMoreMenu")).toBeGreaterThan(page.indexOf("<SearchToggle"));
     expect(page).not.toContain("<StudentImportDialog");
     expect(page).not.toContain("엑셀 내보내기");
   });

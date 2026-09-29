@@ -63,7 +63,7 @@ export const timetable: HelpManual = {
     {
       n: 8,
       key: "tt-excel",
-      label: "엑셀 · 시트",
+      label: "엑셀 내보내기/가져오기",
       zone: "header",
       body: "정규 시간표만 내보내고 가져옵니다. 구분을 특강·보강으로 두면 버튼이 잠깁니다. 가져오기는 적용일을 고르고, 충돌 체크리스트를 통과해야 반영됩니다.",
     },

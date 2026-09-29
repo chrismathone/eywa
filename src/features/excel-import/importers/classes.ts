@@ -43,7 +43,7 @@ import {
  * 🔴 반배정은 한 명 배정과 같은 규칙: 재원·휴원 원생만(휴원이면 수강도 휴원으로 — 승계), 같은 반 기간 겹침 금지(GiST).
  *    이미 끝난 수강(종료일이 오늘 이전)은 과거 이력 이관이라 상태를 묻지 않는다. 담임 알림은 보내지 않는다(대량이라).
  */
-type ClassKey = "className" | "subject" | "teacher" | "classroom" | "active" | "special" | "closedAt" | "notes";
+type ClassKey = "className" | "subject" | "teacher" | "classroom" | "active" | "special" | "kind" | "status" | "closedAt" | "notes";
 type SlotKey = "className" | "subject" | "day" | "start" | "end" | "period" | "teacher" | "classroom" | "validFrom";
 type EnrollKey = "code" | "student" | "school" | "grade" | "className" | "subject" | "startDate" | "endDate" | "days" | "onHold";
 
@@ -62,6 +62,10 @@ function specs(subjectLabels: readonly string[]) {
     { key: "special", header: "특강", width: 6, options: ["예", "아니오"] },
     { key: "closedAt", header: "종강일", width: 12, hint: "새 반에만 씁니다(기존 반의 종강은 반 상세에서)." },
     { key: "notes", header: "메모", width: 24 },
+    // ↓ **엑셀 내보내기**(수업목록) 파일의 열 — 서식엔 안 싣지만 그 파일을 고쳐 올리면 알아본다(원장 2026-09-29 *"전부다 맞추기도 맞출것"*).
+    //    요일·학생 수는 읽기 전용 표시라 무시한다(시간표는 '시간표' 시트로).
+    { key: "kind", header: "구분", exportOnly: true, hint: "내보내기 파일의 정규/특강 — 새 반의 특강 여부로만 씁니다." },
+    { key: "status", header: "상태", exportOnly: true, hint: "내보내기 파일의 운영/종강/폐지 — '운영' 열과 같은 뜻(폐지 = 운영 아니오)." },
   ];
   const slotCols: ColumnSpec<SlotKey>[] = [
     { key: "className", header: "반이름", width: 18, required: true, aliases: ["반명", "반"] },
@@ -87,7 +91,7 @@ function specs(subjectLabels: readonly string[]) {
     { key: "onHold", header: "휴원", width: 6, options: ["예", "아니오"] },
   ];
   return {
-    classSpec: { name: CLASS_SHEET, columns: classCols, keyHint: "반이름 + 과목", optional: true } satisfies SheetSpec<ClassKey>,
+    classSpec: { name: CLASS_SHEET, columns: classCols, keyHint: "반이름 + 과목", optional: true, aliases: ["수업목록"] } satisfies SheetSpec<ClassKey>,
     slotSpec: { name: SLOT_SHEET, columns: slotCols, keyHint: "반 + 요일 + 시작", optional: true } satisfies SheetSpec<SlotKey>,
     enrollSpec: { name: ENROLL_SHEET, columns: enrollCols, keyHint: "원생 + 반 + 수강시작일", optional: true } satisfies SheetSpec<EnrollKey>,
   };
@@ -126,6 +130,15 @@ type RoomRow = { id: string; name: string; archived_at?: string | null };
 const hhmm = (t: string | null | undefined) => (t ? String(t).slice(0, 5) : "");
 const squash = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/\s+/g, "");
 
+/**
+ * 이름+과목이 같은 반이 여럿이면(종강한 반 + 지금 운영 중인 반) **운영 중인 반**을 고른다(적대 리뷰 2026-09-29) —
+ * 목록 순서가 고르게 두면 종강 반의 담당이 바뀌고 운영 반은 그대로다. 운영 중 → 종강 → 폐지 순.
+ */
+function pickClass<T extends { class_name: string; subject: string | null; is_active: boolean; closed_at: string | null }>(rows: readonly T[], name: string, subject: string): T | undefined {
+  const rank = (c: T) => (c.is_active && !c.closed_at ? 0 : c.is_active ? 1 : 2);
+  return rows.filter((c) => squash(c.class_name) === squash(name) && c.subject === subject).sort((a, b) => rank(a) - rank(b))[0];
+}
+
 async function loadAll(db: Awaited<ReturnType<typeof createClient>>, tenantId: string, today: string) {
   const [classes, staff, rooms, slots] = await Promise.all([
     ClassIndex.load(db, tenantId),
@@ -148,6 +161,7 @@ const def: ImporterDef<Plan> = {
   modeHelp: IMPORT_META.classes.modeHelp,
   guide: [
     "· 시트 세 장: '반'(반 목록) · '시간표'(요일·시각) · '반배정'(원생이 어느 반에). 필요한 시트만 채워도 됩니다.",
+    "· 수업목록의 '엑셀 내보내기'로 받은 파일을 고쳐 올려도 됩니다 — 그 파일의 시트는 '반'으로 읽고, 상태(운영/종강/폐지)·구분(정규/특강)도 알아봅니다. 요일·학생 수 열은 읽지 않습니다(시간표는 '시간표' 시트로).",
     "· 순서대로 들어갑니다: 반 → 시간표 → 반배정. 같은 파일 '반' 시트에 적은 새 반을 뒤 시트에서 바로 쓸 수 있습니다.",
     "· '추가' = 이미 있는 반·수업 시각·반 배정은 건너뜀. '덮어쓰기' = 반의 담당강사·강의실·특강·메모를 바꾸고, 시간표가 적힌 반은 그 반 시간표 전체를 파일대로 바꿉니다.",
     "· 시간표를 바꿀 때 이전 시간표는 지워지지 않고 적용시작일 전날까지로 닫혀 이력으로 남습니다. 파일이 지금 시간표와 같으면 아무것도 바꾸지 않습니다.",
@@ -263,11 +277,21 @@ const def: ImporterDef<Plan> = {
       const name = rawName ? normalizeClassName(rawName) : null;
       const subject = row.option("subject", subjectOpts, true);
       const teacher = staff.resolve(row, "teacher");
-      const curForRoom = rawName && subject ? classes.rows.find((c) => squash(c.class_name) === squash(normalizeClassName(rawName)) && c.subject === subject) : undefined;
+      const curForRoom = rawName && subject ? pickClass(classes.rows, normalizeClassName(rawName), subject) : undefined;
       const room = findRoom(row, "classroom", new Set([curForRoom?.classroom_id ?? null]));
       if (room === undefined) row.fail("classroom", "등록된 강의실이 아닙니다(보관된 강의실은 새로 배정할 수 없습니다) — 강의실을 먼저 만들거나(강의실 엑셀) 이름을 확인하세요");
-      const active = row.yesNo("active");
-      const special = row.yesNo("special");
+      // '운영'·'특강' 열이 우선, 없으면 내보내기 파일의 '상태'·'구분'(같은 뜻의 사람 글자).
+      const statusActive = row.option("status", [
+        { label: "운영", value: true },
+        { label: "종강", value: true },
+        { label: "폐지", value: false },
+      ]);
+      const active = row.yesNo("active") ?? statusActive;
+      const kindSpecial = row.option("kind", [
+        { label: "특강", value: true },
+        { label: "정규", value: false },
+      ]);
+      const specialCell = row.yesNo("special");
       const closedAt = row.date("closedAt");
       const notesText = row.text("notes", { max: 2000 });
       if (!row.ok || !name || !subject) continue;
@@ -278,7 +302,10 @@ const def: ImporterDef<Plan> = {
         continue;
       }
       seenClass.set(key, row.rowNum);
-      const cur = classes.rows.find((c) => squash(c.class_name) === squash(name) && c.subject === subject);
+      const cur = pickClass(classes.rows, name, subject);
+      // 🔑 '구분'은 화면 판정(`classKindMeta` — 표식 + 이름에 '특강')을 적은 글자라, 기존 반의 표식으로 되쓰지 않는다
+      //    (이름으로 특강인 반에 표식을 박으면 뜻이 바뀐다). 새 반에서만 특강 여부로 쓴다.
+      const special = specialCell ?? (cur ? null : kindSpecial);
       const label = `${name} (${subjects.labelOf(subject)})`;
       if (!cur) {
         const nc: NewClass = {
@@ -313,8 +340,8 @@ const def: ImporterDef<Plan> = {
         roomChange = { fromName: rooms.find((r) => r.id === cur.classroom_id)?.name ?? null, toName: room.name };
         finalRoom.set(cur.id, room.id);
       }
-      if (special !== null) patch.is_special = special;
-      if (notesText) patch.notes = notesText;
+      if (special !== null && special !== (cur.is_special ?? false)) patch.is_special = special;
+      if (notesText && notesText !== (cur.notes ?? "")) patch.notes = notesText;
       if (active === false && cur.is_active) notes.push(`${CLASS_SHEET} ${row.rowNum}행 ${label}: 폐지는 반 상세의 '반 폐지'로 해 주세요(수강 종료가 함께 움직입니다) — 파일에서는 바꾸지 않았습니다`);
       if (active === true && !cur.is_active) notes.push(`${CLASS_SHEET} ${row.rowNum}행 ${label}: 폐지된 반의 재운영은 반 상세에서 해 주세요 — 파일에서는 바꾸지 않았습니다`);
       if (closedAt) notes.push(`${CLASS_SHEET} ${row.rowNum}행 ${label}: 기존 반의 종강일은 반 상세의 '종강'으로 — 파일에서는 바꾸지 않았습니다`);

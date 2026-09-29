@@ -2106,7 +2106,6 @@ export const SHEET_DICT = {
   "stu.basis.settings": { ko: "학원설정 과목 기준", en: "the academy's subjects" },
   "stu.excel": { ko: "엑셀 내보내기", en: "Export to Excel" },
   // v5 §9·§10: 내보내기·가져오기가 텍스트 더보기 메뉴 하나로 묶였다 — 축 이름과 가져오기 항목이 새로 필요하다.
-  "stu.excelAxis": { ko: "엑셀", en: "Excel" },
   "stu.excelImport": { ko: "엑셀 가져오기", en: "Import from Excel" },
   "stu.count.pre": { ko: "결과 ", en: "Found " },
   "stu.count.post": { ko: "명", en: " students" },

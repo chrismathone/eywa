@@ -13,7 +13,7 @@ import { Pill } from "@/components/atoms/pill";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import {
   followUpUrgency,
   getConsultationCounselorOptions,
@@ -272,6 +272,8 @@ export default async function ConsultationsPage({
             triggerClassName={TOOLBAR_SELECT}
           />
           <SearchToggle placeholder="학생명·요약" defaultValue={q} />
+          {/* 엑셀 가져오기(원생상담) — 검색과 같은 줄(원장 2026-09-29 통일). */}
+          {canImportExcel ? <ExcelMenu importKind="student-consultations" /> : null}
         </div>
         <div className="ml-auto flex items-center gap-3">
           <MakeeduSyncBadge domain="consultations" />
@@ -282,7 +284,6 @@ export default async function ConsultationsPage({
           >
             통계
           </WindowLink>
-          {canImportExcel ? <ExcelImportButton kind="student-consultations" variant="ghost" label="엑셀로 넣기" /> : null}
           <NewConsultationTrigger />
         </div>
       </div>

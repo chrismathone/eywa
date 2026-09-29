@@ -52,7 +52,7 @@ export async function runImport(def: ImporterDef, fd: FormData): Promise<RunOutp
   let foundAny = false;
   const single = def.singleSheet ?? def.sheets.length === 1;
   for (const spec of def.sheets) {
-    const ws = findSheet(wb, spec.name, single);
+    const ws = findSheet(wb, spec.name, single, spec.aliases);
     if (!ws) {
       sheets[spec.name] = null;
       if (!spec.optional) {

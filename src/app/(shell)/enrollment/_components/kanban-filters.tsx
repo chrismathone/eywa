@@ -39,6 +39,8 @@ type Props = {
    * 이 필터는 월·기간보다 우선이라, 기간을 고르거나 월을 옮기면 함께 풀린다(clearParams·enrollmentHref).
    */
   receivedDay?: string | null;
+  /** 엑셀 내보내기/가져오기(ExcelMenu) — 검색과 같은 줄, 검색 바로 오른쪽(원장 2026-09-29 탭 통일). */
+  excel?: ReactNode;
 };
 
 /**
@@ -67,6 +69,7 @@ export function KanbanFilters({
   yearChips,
   stats,
   receivedDay,
+  excel,
 }: Props) {
   const displayMonth = selectedMonth ?? todayMonth;
   const base = {
@@ -202,6 +205,7 @@ export function KanbanFilters({
         {/* 🔴 검색은 **맨 오른쪽**(원장 2026-09-01 *"검색창 최우측으로"*)이되 **눌러야 나온다**(§10). 이름·전화·학교
             검색은 클라 내비(SearchForm)라 화면 깜빡 없이 결과만 교체된다(다른 param 자동 보존). */}
         {listFilters ? <SearchToggle placeholder="이름·전화·학교" defaultValue={searchQuery ?? undefined} /> : null}
+        {excel}
       </div>
     </div>
   );

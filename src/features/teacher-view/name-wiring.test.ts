@@ -694,9 +694,9 @@ describe("🔴 학생목록은 사전만 본다 — 화면 파일에 한글 리�
     expect(code.split(/\r?\n/).filter((l) => /[가-힣]/.test(l))).toEqual([]);
   });
 
-  it("엑셀 내보내기·가져오기 문구는 더보기 메뉴가 사전에서 가져온다(v5에서 머리 버튼 → 메뉴로 옮겼다)", () => {
+  it("엑셀 내보내기·가져오기 문구는 엑셀 버튼 조각이 사전에서 가져온다(2026-09-29 공용 ExcelMenu · 검색 줄)", () => {
     const src = read("app", "(shell)", "students", "_components", "students-more-menu.tsx");
-    for (const key of ["stu.excelAxis", "stu.excel", "stu.excelImport"]) expect(src).toContain(key);
+    for (const key of ["stu.excel", "stu.excelImport"]) expect(src).toContain(key);
   });
 
   it("🔴 학생 상태는 한·영 표가 같은 키 집합이다 — 빠진 키는 raw enum이 샌다", () => {

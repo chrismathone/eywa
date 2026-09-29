@@ -11,7 +11,7 @@ import {
 import { currencyMeta, formatMoney } from "@/features/billing/currencies";
 import { EXPENSE_FILTER_CATEGORIES, filterExpensesForView, normalizeExpenseCategoryFilter } from "@/features/billing/expense-search";
 import { SearchToggle } from "@/components/search-toggle";
-import { Button } from "@/components/ui/button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { kstMonth, monthLabel } from "@/lib/date-kst";
 import { BillingMonthNav } from "./billing-month-nav";
 import { ExpensesTable } from "./expenses-table";
@@ -24,7 +24,8 @@ function currentPeriod(): string {
 
 type Sp = { period?: string; cat?: string; q?: string };
 
-export async function ExpensesPanel({ sp }: { sp: Sp }) {
+/** `canImport` = 엑셀 가져오기(지출) 권한 — 페이지가 billing full로 정한 값. */
+export async function ExpensesPanel({ sp, canImport = false }: { sp: Sp; canImport?: boolean }) {
   const period = sp.period ?? currentPeriod();
   // ⚠️ 아는 분류만 받는다 — 손으로 친 `?cat=zzz`면 드롭다운은 "분류"(전체)로 보이는데 표만 비어
   //    화면이 스스로 모순됐고, 아래 빈 화면 문구가 그 쓰레기 값을 그대로 읊었다.
@@ -85,22 +86,15 @@ export async function ExpensesPanel({ sp }: { sp: Sp }) {
         {/* 수납·교재 면과 같은 공용 검색(눌러야 나온다). 대상 칸은 `expense-search.ts` 머리주석 —
             제목·거래처·성명·부서명·메모 + 라인 항목의 용도·거래처·사용내역. 금액·분류는 일부러 뺐다. */}
         <SearchToggle placeholder="제목·거래처·성명" defaultValue={q} />
-        {/* 엑셀(감사 N2) — 표와 같은 집합(월·분류·검색어)을 내보낸다. 수납 면 '엑셀 내보내기'와 같은 모양. */}
-        <Button
-          variant="ghost"
-          className="text-primary"
-          render={
-            <a
-              href={`/api/exports/expenses?${new URLSearchParams({
-                period,
-                ...(cat !== "all" ? { cat } : {}),
-                ...(q ? { q } : {}),
-              }).toString()}`}
-            />
-          }
-        >
-          엑셀 내보내기
-        </Button>
+        {/* 엑셀 내보내기/가져오기(감사 N2 · 원장 2026-09-29 통일) — 내보내기 = 표와 같은 집합(월·분류·검색어). */}
+        <ExcelMenu
+          exportHref={`/api/exports/expenses?${new URLSearchParams({
+            period,
+            ...(cat !== "all" ? { cat } : {}),
+            ...(q ? { q } : {}),
+          }).toString()}`}
+          importKind={canImport ? "expenses" : null}
+        />
         {months.length > 0 ? (
           <span className="text-text-faint num ml-auto text-sm whitespace-nowrap">지출 기록 {months.length}개월</span>
         ) : null}

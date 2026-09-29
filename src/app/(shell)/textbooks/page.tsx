@@ -1,6 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { FaceTabs } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -79,7 +78,6 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
         title="교재목록"
         description="교재 한 권 = 구분·페이지/시간·차수. 차수별 진도·과제를 적어 두면 영어 강사 시트의 월간계획에 차수대로 뜹니다."
         embedLabel="교재 · 차수별 진도·과제 · 반 배정"
-        actions={canImport && list.status === "ok" ? <ExcelImportButton kind="textbooks" variant="ghost" label="엑셀로 넣기" /> : null}
       />
       <NotReadyBanner status={status} />
       {/* ⚠️ 배지는 **거르지 않았을 때만** 숫자를 단다 — 검색 중에 `교재 6`이 뜨면 전체가 6권인 줄 안다. */}
@@ -101,6 +99,7 @@ export default async function TextbooksPage({ searchParams }: { searchParams: Pr
           pageSize={list.pageSize}
           skillAreas={skillAreas}
           canWrite={editable}
+          canImport={canImport && list.status === "ok"}
         />
       )}
     </div>

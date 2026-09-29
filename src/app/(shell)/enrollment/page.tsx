@@ -16,7 +16,7 @@ import { PhotoCard } from "@/components/atoms/photo-card";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
 import { requireAccess } from "@/lib/auth/require-access";
 import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import {
   getConsultantOptions,
   getConsultationFilteredCounts,
@@ -228,7 +228,6 @@ export default async function EnrollmentPage({
                 수강료 계산기
               </Button>
             ) : null}
-            {canImportExcel ? <ExcelImportButton kind="enrollment-consultations" variant="ghost" label="엑셀로 넣기" /> : null}
             <NewEnrollmentTrigger />
           </>
         }
@@ -239,6 +238,7 @@ export default async function EnrollmentPage({
 
       <KanbanFilters
         syncBadge={<MakeeduSyncBadge domain="prospects" />}
+        excel={canImportExcel ? <ExcelMenu importKind="enrollment-consultations" /> : null}
         stats={
           view === "stats" ? undefined : (
             // 🔴 헤더에 있던 숫자 줄 — 검색창 바로 왼쪽으로 옮겼다(원장 2026-09-01).

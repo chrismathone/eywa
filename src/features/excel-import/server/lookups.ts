@@ -101,13 +101,16 @@ export class StaffIndex {
   }
 }
 
-export type ClassLite = { id: string; class_name: string; subject: string | null; is_active: boolean; teacher_id: string | null; classroom_id: string | null };
+export type ClassLite = {
+  id: string; class_name: string; subject: string | null; is_active: boolean; is_special: boolean | null; teacher_id: string | null; classroom_id: string | null;
+  notes: string | null; closed_at: string | null;
+};
 
 export class ClassIndex {
   constructor(readonly rows: ClassLite[]) {}
   static async load(db: Db, tenantId: string): Promise<ClassIndex> {
     const rows = await fetchAllPaged<ClassLite>((from, to) =>
-      db.from("classes").select("id, class_name, subject, is_active, teacher_id, classroom_id").eq("tenant_id", tenantId).order("id").range(from, to),
+      db.from("classes").select("id, class_name, subject, is_active, is_special, teacher_id, classroom_id, notes, closed_at").eq("tenant_id", tenantId).order("id").range(from, to),
     );
     return new ClassIndex(rows);
   }

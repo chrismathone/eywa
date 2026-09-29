@@ -53,7 +53,7 @@ export const exams: HelpManual = {
     },
     {
       n: 7,
-      label: "엑셀 올리기",
+      label: "엑셀 내보내기/가져오기",
       zone: "toolbar",
       body: "값이 적힌 칸만 기입·갱신하고 빈 칸은 건드리지 않습니다. 학생ID 열이 없어 이름 → 반 → 학교 → 학년으로 맞추며, 둘 이상이면 그 줄은 오류로 남깁니다.",
     },

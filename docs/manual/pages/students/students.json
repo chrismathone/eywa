@@ -13,7 +13,7 @@
     },
     {
       "n": 2,
-      "label": "엑셀",
+      "label": "엑셀 내보내기/가져오기",
       "target": {
         "help": "st-excel"
       },

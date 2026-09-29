@@ -21,8 +21,8 @@ export const students: HelpManual = {
     {
       n: 2,
       key: "st-excel",
-      label: "엑셀",
-      zone: "header",
+      label: "엑셀 내보내기/가져오기",
+      zone: "toolbar",
       body: "내보내기 · 가져오기. 먼저 내보내 그 서식대로 고친 뒤 올립니다. 가져오기도 원생 기록이 바뀌는 일이라 강사에게는 없습니다.",
     },
     {

@@ -12,7 +12,7 @@ import {
 } from "@/features/owner/server/classroom-actions";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SettingsCard } from "./section-form";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
+import { ExcelMenu } from "@/components/excel-import/excel-menu";
 
 const INPUT = "border-border bg-card text-foreground rounded-md border px-2.5 py-1.5 text-sm";
 
@@ -193,7 +193,8 @@ export function ClassroomManager({ rooms, canImport = false }: { rooms: Classroo
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <AddForm />
-        {canImport ? <ExcelImportButton kind="classrooms" label="엑셀로 넣기" /> : null}
+        {/* 엑셀 가져오기(강의실) — 이 카드엔 검색이 없어 추가 줄 오른쪽 끝(원장 2026-09-29 통일 — 이름은 ExcelMenu 한 곳). */}
+        {canImport ? <ExcelMenu importKind="classrooms" /> : null}
       </div>
       <ul className="divide-line mt-4 divide-y border-t pt-2">
         {live.length === 0 ? (

@@ -13,7 +13,6 @@ import { SessionVerificationFace } from "./_components/session-verification-face
 import { TeacherSettlementFace } from "./_components/teacher-settlement-face";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
-import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { canManageTenant } from "@/lib/auth/perm-matrix";
 
 type Sp = Record<string, string | undefined>;
@@ -91,7 +90,8 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const faces = sessionOn ? baseFaces : baseFaces.filter((f) => !SESSION_FACE_KEYS.has(f.key));
   const effectiveTab =
     (tab === "payroll" && !isMaster) || (!sessionOn && SESSION_FACE_KEYS.has(tab)) ? "billing" : tab;
-  // 엑셀로 넣기(원장 2026-09-29) — 수납 면 = 청구서, 지출 면 = 지출. 일괄 작업이라 billing **full**만(올리기 주소도 같은 판정).
+  // 엑셀 가져오기(원장 2026-09-29) — 수납 면 = 청구서, 지출 면 = 지출. 일괄 작업이라 billing **full**만(올리기 주소도 같은 판정).
+  // 버튼은 각 면의 검색 줄(ExcelMenu — 내보내기와 한 버튼)에 선다.
   const importKind = effectiveTab === "billing" ? "invoices" : effectiveTab === "expenses" ? "expenses" : null;
   const canImport = importKind !== null && (await canManageTenant(user.systemRole, "billing"));
 
@@ -105,17 +105,13 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "textbook_checks"} />
         </div>
       )}
-      <div className="flex items-center gap-2 print:hidden">
-        <div className="min-w-0 flex-1">
-          <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
-        </div>
-        {canImport && importKind === "invoices" ? <ExcelImportButton kind="invoices" /> : null}
-        {canImport && importKind === "expenses" ? <ExcelImportButton kind="expenses" /> : null}
+      <div className="print:hidden">
+        <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
       </div>
       {effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />
       ) : effectiveTab === "expenses" ? (
-        <ExpensesPanel sp={sp} />
+        <ExpensesPanel sp={sp} canImport={canImport} />
       ) : effectiveTab === "calculator" ? (
         <CalculatorPanel sp={sp} />
       ) : effectiveTab === "refunds" ? (
@@ -127,7 +123,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       ) : effectiveTab === "payroll" ? (
         <TeacherSettlementFace period={sp.period} />
       ) : (
-        <BillingContent sp={sp} />
+        <BillingContent sp={sp} canImport={canImport} />
       )}
     </div>
   );
