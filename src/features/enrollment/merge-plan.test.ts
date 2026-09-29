@@ -72,7 +72,7 @@ describe("전화 — 판독 불가한 값은 묻지 않는다", () => {
   });
 
   it("진짜 다른 두 번호면 사람이 고른다", () => {
-    const d = dec([row({ id: "a", parent_phone: "010-8855-7380" }), row({ id: "b", parent_phone: "010-5025-8260" })], "parent_phone");
+    const d = dec([row({ id: "a", parent_phone: "010-0000-9111" }), row({ id: "b", parent_phone: "010-0000-9107" })], "parent_phone");
     expect(d.needsHuman).toBe(true);
   });
 });

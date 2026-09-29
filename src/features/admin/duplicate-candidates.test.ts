@@ -86,14 +86,14 @@ describe("(c) 접미사 신호 — 원장 제보 2026-09-10 '중복 병합으로
     name: "권민서A",
     grade: "초6",
     school: "칠성초",
-    parentPhone: "010-8836-6267",
+    parentPhone: "010-0000-9104",
   });
   const gwonB = student({
     id: "B",
     name: "권민서B",
     grade: "초6",
     school: "칠성초",
-    parentPhone: "010-8836-6267",
+    parentPhone: "010-0000-9104",
     dupSuspect: true,
   });
 
@@ -118,8 +118,8 @@ describe("(c) 접미사 신호 — 원장 제보 2026-09-10 '중복 병합으로
   it("🔴 진짜 동명이인(학교·학년이 다른 접미사 쌍)은 후보가 아니다 — 영구 노이즈 금지", () => {
     // 실측 17개 접미사 그룹 중 16개가 이 모양이다(`김나연` 중3 침산중 vs `김나연A` 초4 달성초).
     const rows = [
-      student({ id: "n1", name: "김나연", grade: "중3", school: "침산중", parentPhone: "010-9287-0663" }),
-      student({ id: "n2", name: "김나연A", grade: "초4", school: "달성초", parentPhone: "010-5025-8260" }),
+      student({ id: "n1", name: "김나연", grade: "중3", school: "침산중", parentPhone: "010-0000-9110" }),
+      student({ id: "n2", name: "김나연A", grade: "초4", school: "달성초", parentPhone: "010-0000-9107" }),
       student({ id: "j1", name: "이지호", grade: "초5", school: "칠성초" }),
       student({ id: "j2", name: "이지호A", grade: "초4", school: "옥산초" }),
       student({ id: "j3", name: "이지호B", grade: "중1", school: "달성초" }),

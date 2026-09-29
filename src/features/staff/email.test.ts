@@ -23,13 +23,13 @@ describe("initialsOf / autoStaffEmail (직원 등록 이메일 자동 생성, 20
   });
 
   it("이미 쓰는 주소는 피해 숫자를 붙인다", () => {
-    expect(autoStaffEmail("김주현", new Set())).toBe("kjh@gmail.com");
-    expect(autoStaffEmail("김주현", new Set(["kjh@gmail.com"]))).toBe("kjh2@gmail.com");
-    expect(autoStaffEmail("김주현", new Set(["kjh@gmail.com", "kjh2@gmail.com"]))).toBe("kjh3@gmail.com");
+    expect(autoStaffEmail("김주현", new Set())).toBe("kjh@login.aywa.co.kr");
+    expect(autoStaffEmail("김주현", new Set(["kjh@login.aywa.co.kr"]))).toBe("kjh2@login.aywa.co.kr");
+    expect(autoStaffEmail("김주현", new Set(["kjh@login.aywa.co.kr", "kjh2@login.aywa.co.kr"]))).toBe("kjh3@login.aywa.co.kr");
   });
 
   it("후보가 다 차면 null(사람이 개입)", () => {
-    const taken = new Set(["kjh@gmail.com", ...Array.from({ length: 49 }, (_, i) => `kjh${i + 2}@gmail.com`)]);
+    const taken = new Set(["kjh@login.aywa.co.kr", ...Array.from({ length: 49 }, (_, i) => `kjh${i + 2}@login.aywa.co.kr`)]);
     expect(autoStaffEmail("김주현", taken)).toBeNull();
   });
 });
@@ -44,12 +44,12 @@ describe("isImportArtifactEmail", () => {
 
 describe("canEditLoginEmail", () => {
   it("아직 로그인 전인 초대 계정은 오타를 고칠 수 있다", () => {
-    // 2026-07-23 실제 사례: 신규 직원 초대에 a01025015783@gmil.com(도메인 오타) → 화면에서 못 고쳤음.
-    expect(canEditLoginEmail("a01025015783@gmil.com", false)).toBe(true);
+    // 2026-07-23 실제 사례: 신규 직원 초대에 a01000009101@gmil.com(도메인 오타) → 화면에서 못 고쳤음.
+    expect(canEditLoginEmail("a01000009101@gmil.com", false)).toBe(true);
   });
 
   it("한 번이라도 로그인한 계정은 잠금 — 화면에서 남의 로그인을 갈아끼울 수 없다", () => {
-    expect(canEditLoginEmail("a01025015783@gmail.com", true)).toBe(false);
+    expect(canEditLoginEmail("a01000009101@gmail.com", true)).toBe(false);
   });
 
   it("임포트 산물은 로그인 이력과 무관하게 교정 허용(애초에 로그인용이 아니다)", () => {
