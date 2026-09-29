@@ -723,11 +723,12 @@ export default async function AttendancePage({
   // ⚠️ 화면 조건은 게이트가 아니다(#77) — 서버 액션이 같은 판정을 다시 한다.
   const canIntakeAbsence = await canManageTenant(user.systemRole, "attendance");
   /**
-   * 🔴 상단은 **툴바 한 줄 + 표 위 한 줄**이다(원장 2026-09-21 *"상단에 굳이 2열로 두지말고 하나의 열로 공간 확보"*).
-   * 실측(1,990px 창): 툴바 왼쪽 묶음 1,453px + 오른쪽 묶음 854px가 한 줄(1,968px)을 넘어 오른쪽이 통째로 둘째 줄로
-   * 떨어졌다. 그래서 **표가 서 있을 때는** 도구(결석 통보 접수·급여명세서)와 칸 안내(`칸 = 이 선생님 교시`)를 표 위
-   * 줄(범례·보기 옵션 줄)로 내린다 — 툴바에는 이동·필터와 살아 있는 합계만 남는다(1,908px).
-   * ⚠️ 표가 없을 때(허브·빈 반)는 표 위 줄 자체가 없으므로 종전대로 툴바에 둔다(버튼이 사라지면 안 된다).
+   * 🔴 상단은 **툴바 한 줄 + (표가 있으면) 표 위 한 줄**이다(원장 2026-09-21 *"상단에 굳이 2열로 두지말고
+   * 하나의 열로 공간 확보"*, 2026-09-30 *"상단 여백 최소화"*).
+   * 실측(1,990px 창): 왼쪽 묶음과 오른쪽 도구가 한 줄을 넘어 도구가 통째로 둘째 줄로 떨어졌다.
+   * · 표가 서 있을 때 — 도구·칸 안내는 표 위 줄(범례 줄).
+   * · 허브(강사 미선택) — 도구는 요약 줄 오른쪽. 툴바에 두면 왼쪽이 빈 둘째 줄이 된다.
+   * · 빈 반 — 요약 줄도 표 위 줄도 없으므로 툴바에 둔다(버튼이 사라지면 안 된다).
    */
   const gridShown = allGroups.length > 0 && totalStudents > 0;
   // 전체 영어 시수 도구는 강사·반을 고르기 전 요약 화면에서 연다.
@@ -942,7 +943,7 @@ export default async function AttendancePage({
       initialCollapsed={viewPrefs.collapsed}
       autoUnits={gridSource.autoUnits}
     >
-      <div className="flex h-full min-h-0 flex-col gap-2">
+      <div className="attendance-page flex h-full min-h-0 flex-col gap-1">
       {/* Toolbar — 월/범위/보기(+관리자 필터) 좌측, 살아있는 합계 우측. 이 화면의 유일한 크롬 줄. */}
       {/* 🔴 툴바를 감싸던 카드 껍데기를 뺐다(원장 2026-09-01) — 아래 격자가 자기 테두리를 갖고
           있어 선이 이중으로 겹쳐 보였다. `relative`는 남긴다(우측 '안내' 패널의 기준 상자).
@@ -1101,8 +1102,8 @@ export default async function AttendancePage({
 
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-3 [&>button]:shrink-0">
-          {/* 도구·칸 안내 — 표가 서 있으면 표 위 줄로 내려간다(위 `gridShown` 주석). */}
-          {!gridShown ? sheetTools : null}
+          {/* 도구·칸 안내 — 표는 표 위 줄, 허브는 요약 줄. 빈 반만 여기(위 `gridShown` 주석). */}
+          {!gridShown && allGroups.length > 0 ? sheetTools : null}
           {!gridShown ? scopeChip : null}
           {allGroups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (
@@ -1123,6 +1124,7 @@ export default async function AttendancePage({
         // 강사 미선택 허브 = **출석부 요약**(원장 2026-08-10). 무거운 매트릭스는 여전히 안 불러온다.
         // 강사를 고르면 바로 그 강사 전체 출석부(기본 보기 = 강사 전체, resolveViewMode).
         <AttendanceHub
+          tools={sheetTools}
           // 허브 카드도 같은 렌즈를 쓴다 — 드롭다운에선 감췄는데 카드로는 보이면 설정이 거짓말이 된다.
           teachers={(await buildHubTeachers(classesForFilters, subjectOptions)).filter(
             (t) => !viewPrefs.hideRetired || !t.retired,

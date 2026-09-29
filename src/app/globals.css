@@ -975,6 +975,13 @@ main.embed-main:has(.edge-to-edge) {
   scrollbar-gutter: auto;
 }
 
+/* 출석부 월별 — 풀셸만 `desk:pt-5`(20px)라 창(pt-2)보다 위가 비었다(원장 2026-09-30 "상단 여백 최소화").
+   창은 타이틀바 바로 위라 pt-2를 유지한다. 좌우 베젤은 건드리지 않는다(#114·리사이즈 핸들).
+   ⚠️ `:has(> …)`는 dev CSS에서 사라진다([[#127]]) — 자손 선택자 그대로. */
+main:not(.embed-main):has(.attendance-page) {
+  padding-top: 0.5rem;
+}
+
 /* ───────────────────────────────────────────────
  * 영어 강사 시트 **폭 안내 게이트**(.sheet-width-gate / .sheet-too-narrow) — 못 쓰는 폭에선
  * 시트 대신 "넓혀 주세요" 안내를 세운다

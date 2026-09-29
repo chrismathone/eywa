@@ -5,7 +5,7 @@
  */
 export default function AttendanceLoading() {
   return (
-    <div className="space-y-5">
+    <div className="attendance-page space-y-5">
       <div className="shrink-0 compact-chrome:hidden">
         <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
         <div className="bg-bg-soft mt-2 h-6 w-40 animate-pulse rounded" />
