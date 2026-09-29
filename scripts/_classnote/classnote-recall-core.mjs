@@ -71,7 +71,7 @@ async function deleteReport(page, id) {
  * 회수 1건 — 보드·원아 해석 → 본문 완전 일치로 글 찾기 → 대조 → 삭제.
  * 반환 `{ ok, note, deletedIds }`. ok=false면 호출부가 `recall_failed` + note를 기록한다(한글 사유).
  */
-async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log, classLoc = null }) {
+export async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log, classLoc = null }) {
   if (!subjectLabel(subject))
     return { ok: false, note: `보드 매핑이 없는 과목이라 회수 대상을 찾을 수 없습니다`, deletedIds: [] };
   // 🔴 글이 있을 수 있는 자리를 **전부** 훑는다(2026-09-29) — 1인 보드 `(수학)이름` + 반 보드(0302a, 반별 발송분).
