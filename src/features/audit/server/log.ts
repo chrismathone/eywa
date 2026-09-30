@@ -57,6 +57,7 @@ export const AUDIT_ACTIONS = {
   // (ecs_plan_* 4종은 아래 '진도 줄 구조 변경' 블록 — 같은 날 자리 PIN 감사 세션이 먼저 등록했다.)
   // 세션 없는 경로가 audit_logs에 **직접 insert**하는 키 — 레지스트리 가드가 `log…(` 호출만 봐서 밖이었다.
   calendar_google_import: "구글 캘린더 가져오기",
+  calendar_google_push_sync: "구글 캘린더 알림 반영",
   // 2026-09-01 일회성 스크립트가 남긴 행(각 1건) — 코드엔 더 이상 없지만 행이 남아 영문으로 떴다.
   enrollment_create: "수강 등록(스크립트)",
   attendance_update: "출결 수정(스크립트)",

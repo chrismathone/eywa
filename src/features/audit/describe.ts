@@ -1831,7 +1831,8 @@ export function auditDetail(
     }
 
     // ── 구글 캘린더 가져오기(시스템) ────────────────────────────────────────────────────
-    case "calendar_google_import": {
+    case "calendar_google_import":
+    case "calendar_google_push_sync": {
       const cnt = (v: unknown, label: string): string | null => {
         const n = num(v);
         return n ? `${label} ${n.toLocaleString("ko-KR")}건` : null;
