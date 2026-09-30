@@ -16,6 +16,8 @@ import { scanVideoHistory } from "./video-history.mjs";
 
 let running = null;
 let nextPoll = 0;
+/** 마지막으로 로그에 남긴 Drive 인증 실패 사유 — 풀리면 비운다. */
+let authFailure = null;
 
 /** 발송 루프는 전송을 기다리지 않는다. DB 선점은 여러 PC가 같은 영상을 동시에 처리하지 못하게 한다. */
 export function kickVideoWorker(browser, tenant, log = console.log) {
@@ -43,6 +45,19 @@ export async function processVideoJob(browser, tenant, log = console.log) {
   try {
     const rootId = process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID;
     const credentials = await videoDriveAuth();
+    // 인증이 죽은 채로 작업을 집으면 분마다 다운로드만 하고 실패한다 — 집기 전에 토큰부터 받아 보고, 사유를 로그에 남긴다.
+    // 단, 집을 작업이 있을 때만(아래 선점과 같은 조건) — 영상이 없는 평소엔 분마다 토큰 서버·gcloud를 부르지 않는다.
+    const [waiting] = await sql`select 1 as one from student_homework_videos where tenant_id = ${tenant}
+      and ((status in ('queued', 'failed') and available_at <= now())
+        or (status = 'processing' and locked_at < now() - interval '10 minutes')) limit 1`;
+    if (!waiting) return;
+    try { await credentials.accessToken(); authFailure = null; }
+    catch (error) {
+      const reason = credentials.kind === "oauth" && error?.message ? error.message : "연결을 다시 확인하세요.";
+      if (reason !== authFailure) log(`[영상] Drive 인증 실패 — ${reason}`); // 같은 사유는 한 번만(분마다 찍지 않는다)
+      authFailure = reason;
+      return;
+    }
     const auth = { ...credentials, fileRegistry: videoFileRegistry(sql, tenant), folderRegistry: videoFolderRegistry(sql, tenant, rootId), accessToken: async () => {
       if (leaseLost) throw new Error("영상 작업 연결이 끊겼습니다.");
       return credentials.accessToken();

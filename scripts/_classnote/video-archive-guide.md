@@ -45,9 +45,36 @@ node --env-file=.env.local scripts/_classnote/check-video-worker.mjs
 설정: `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_GCLOUD_ACCOUNT`, `GOOGLE_DRIVE_GCLOUD_PATH`.
 다른 Windows 사용자/PC에서는 한 번 다시 로그인해야 한다.
 
-자체 OAuth를 쓰는 환경은 `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`,
-`GOOGLE_DRIVE_REFRESH_TOKEN`도 지원한다. 서비스계정은 Workspace **공유 드라이브**만 지원한다.
+서비스계정은 Workspace **공유 드라이브**만 지원한다(개인 Drive에서는 저장 한도가 0이라 올리지 못한다).
 개인 Drive의 공유 폴더는 Workspace 공유 드라이브와 다르다.
+
+### 연동 PC에 Google 로그인·CLI를 두지 않는 길 — OAuth 값 파일 (2026-09-30)
+
+올린 파일의 주인은 허락한 계정 그대로다(gcloud 방식과 결과가 같다). 로그인은 **다른 PC**에서 한 번만 한다.
+
+1. 구글 클라우드 콘솔에서 한 번: Drive API 사용 → OAuth 동의 화면(대상 '외부', **게시 상태 '프로덕션'** — '테스트'면 7일 뒤 끊긴다)
+   → 클라이언트 만들기(유형 **데스크톱 앱**) → JSON 다운로드.
+2. 아무 PC의 저장소 루트에서(연동 PC가 아니어도 된다):
+
+   ```powershell
+   node scripts/_classnote/video-oauth-login.mjs --client=<client_secret_….json> --account=chrismathone@gmail.com --folder=1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK
+   ```
+
+   브라우저에서 그 계정으로 허용 → 계정·폴더 쓰기 권한을 확인한 뒤 다운로드 폴더에 `aywa-video-oauth.txt`가 생긴다.
+3. 그 파일을 연동 PC의 **다운로드 폴더**로 옮기고 `scripts/_classnote/발송PC-영상연결-OAuth.bat`을 더블클릭한다.
+   값으로 폴더를 다시 확인 → `.env.local` 백업·저장(gcloud 키는 지운다) → 값 파일 삭제 → 워커 재시작 → 적용 확인.
+   저장 뒤 재시작·확인에서 멈췄으면 같은 bat을 다시 누른다(값 파일 없이 이어 간다).
+
+설정: `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN`.
+우선순위는 gcloud 계정 > 갱신 토큰 > 서비스계정이다. 갱신은 `fetch`만 쓴다(연동 PC에 googleapis가 없어도 된다).
+
+- 🔴 값 파일·클라이언트 JSON을 저장소나 `scripts/_classnote`에 두지 말 것 — 워커 zip은 그 폴더를 통째로 담는다
+  (zip 빌드가 발견하면 멈추고, `.gitignore`도 두 이름을 막는다).
+- 🔴 저장 폴더를 바꾸지 말 것 — 영상마다 처음 정한 폴더를 기억해서, 바뀌면 대기 중인 영상이 전부 실패한다
+  (값 파일의 폴더가 지금 것과 다르면 적용을 거절한다. 정말 바꿀 때만 `-AllowFolderChange`).
+- 로그인 스크립트를 다시 돌려도 기존 연결은 그대로다. 스크립트는 허락을 자동으로 취소하지 않는다
+  (취소는 그 계정의 허락 전체를 없애 연동 PC가 쓰던 토큰까지 죽인다 — 필요 없는 허락은 myaccount.google.com/permissions 에서 직접).
+- 연결이 끊기면(허락 취소·만료) 워커 로그에 `[영상] Drive 인증 실패 — …`가 찍히고 영상 작업을 집지 않는다. 1~3을 다시 하면 된다.
 
 ## 수집·분류·중복 방지
 

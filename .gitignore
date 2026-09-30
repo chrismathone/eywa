@@ -39,6 +39,10 @@ yarn-error.log*
 !.env*.example
 !.env.example
 
+# 영상 보관 Drive OAuth — 비밀이 든 파일(값 파일 · 구글 클라이언트 JSON)
+aywa-video-oauth*.txt
+client_secret*.json
+
 # vercel
 .vercel
 
