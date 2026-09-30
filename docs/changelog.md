@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-30 — 원스크린 학생 출결 배지: 조퇴는 '조퇴'(파랑)
+
+- 원장 지시(조퇴를 결석으로 보이지 말 것) — 배지 축약([`attendance-mark.ts`](src/features/onescreen/attendance-mark.ts))이 조퇴를 빨간 '결석'으로 접었다. `AttendanceMark`에 '조퇴' 추가(영어 강사뷰 `Left early` = 앱 전역 `attendanceLabelOf`), 색은 의미색 캐논 info(파랑, `attendanceMarkBadgeClass` 한 곳 — 표·카드·현황판·좌측 목록 4곳의 사본 삼항을 대체).
+- 학생 배지 = 그날 칸 여럿을 **우선순위로** 모은다: **결석 > 조퇴 > 지각 > 출석**(`studentMarkOf`, 무기록은 안 셈). 예전엔 "마지막으로 찍은 칸"이 배지라 뒤 반 '출석'이 앞 반 결석을 가렸다. 로스터·낙관 반영·롤백·스트립 방송이 모두 `studentMarkFromRows`(행 raw + 행에 못 붙은 내 반 칸 `attendanceOffRow`)로 **행에서 다시 계산** — 따로 든 배지가 없어 `optimisticMarkFor`(09-30 임시 우회)·롤백 compare-and-swap을 걷어냈다.
+- 알약·일괄 출결은 원래 조퇴를 못 덮는다(3종 밖 잠금·`skippedSpecial`) — 배지는 표시일 뿐 누르는 자리가 아니다. 발송 게이트(`absence-gate`·`send-gate`·grid)는 배지가 아니라 raw를 봐서 동작 변화 없음(조퇴 = 발송 유지 그대로).
+
 ## 2026-09-30 — 보강 합침: 조퇴한 날도 합칠 수 있다(조퇴는 조퇴 그대로)
 
 - 원장 *"조퇴한 날도 합리적으로"* — 옛 보강 체크박스를 걷어낸 뒤 조퇴 날엔 합칠 길이 없었다. `MERGEABLE_RAW`에 `early_leave` 추가 · `mergeStatusOf`가 조퇴를 **조퇴로** 돌려주고 원스크린 쓰기(`setAttendanceFor`)가 그 값을 받는다(시수만 보내 조퇴 사유 메모는 서버가 그대로 둔다). 수업타임 = 조퇴 칸 기록 시수 + 보강 시수 · 🔴 보강 시수 **기본값**은 줄여 둔 조퇴 시수가 아니라 정규 1회분(`makeupBaseUnits` = 수학 자동 시수, 없으면 1). 확인창 = "합침 (정규(조퇴)+보강)" + "조퇴 기록은 그대로". 돈: 조퇴는 `COUNTABLE_STATUSES`라 정산(tier-rows)이 그 칸 시수를 그대로 센다(산식 무변경) · 출석률(`attendedCount`=출석+지각)엔 원래대로 안 든다. 결석·공결·보강 칸은 여전히 합치지 않는다. 🔴 조퇴 쓰기는 학생 배지를 다시 칠하지 않는다(`optimisticMarkFor` — 배지 축약이 조퇴를 '결석'으로 접어, 합침 직후 배지가 결석으로 뒤집히면 강사가 '출석'을 눌러 조퇴를 지울 수 있다 · 적대 리뷰). 가드 = `makeup-merge-plan.test.ts`·`makeup-confirm-dialog.test.tsx`.
