@@ -70,9 +70,9 @@ export async function collectTierRows(
   /** 학원설정 과목(`operations.subjects`) — 회차 단가를 붙일 **수학 반** 판정(`programOf`, 수학(심화) 포함). */
   subjects: readonly ProgramSubject[],
   /**
-   * 🔴 대신 보강(원장 결정 3, 2026-09-30) — 이 강사들이 **남의 반**에서 한 보강 칸(`taught_by`, 0315a)도 함께 조립한다.
+   * 🔴 대신 보강(원장 결정 3, 2026-09-30) — 이 강사들이 **남의 반**에서 한 보강 칸(`taught_by`, 0316a)도 함께 조립한다.
    * 줄마다 `taughtBy`가 실리므로 호출부는 `tierRowsOwnedBy`로 강사 몫만 고른다(반 담임 몫에서 빠지고 보강한 강사 몫으로 선다).
-   * 0315a 미적용이면 조용히 종전 그대로([[#95]]).
+   * 0316a 미적용이면 조용히 종전 그대로([[#95]]).
    */
   opts: { substituteTeacherIds?: readonly string[] } = {},
 ): Promise<TierRowsResult | null> {

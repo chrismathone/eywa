@@ -916,7 +916,7 @@ export async function getMonthlyAttendanceMatrix(
   const endIso = days[days.length - 1]!.date;
 
   // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 + 보강 예약 — 서로 독립이라 병렬로(B4).
-  // 대신 보강 귀속(`taught_by`, 0315a) — 칸이 있을 때만 읽는다([[#95]]). 강사 보기의 몫 판정만 쓰므로 반별 보기는 안 본다.
+  // 대신 보강 귀속(`taught_by`, 0316a) — 칸이 있을 때만 읽는다([[#95]]). 강사 보기의 몫 판정만 쓰므로 반별 보기는 안 본다.
   const withTaughtBy = scopeTeacherId ? await taughtByColumnReady().catch(() => false) : false;
   const [enrollRes, scheduleRes, recordedRows, reservedRows] = await Promise.all([
     supabase
@@ -1242,7 +1242,7 @@ export async function getMonthlyAttendanceMatrix(
       seat_label: string | null;
       /** 그 행을 쓴 문(0212a) — JJ는 라벨이 없어 `"seat"`가 유일한 자리 표식일 수 있다(리뷰 2026-09-12). */
       recorded_via: string | null;
-      /** 대신 보강 귀속 강사(0315a) — 있으면 그 강사 몫만(원장 결정 3). 칸이 없는 스키마면 안 읽는다. */
+      /** 대신 보강 귀속 강사(0316a) — 있으면 그 강사 몫만(원장 결정 3). 칸이 없는 스키마면 안 읽는다. */
       taught_by?: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase

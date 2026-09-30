@@ -59,7 +59,7 @@ export type TierSettlementInfo =
        */
       settlementLines: SettlementLineLike[];
       /**
-       * 반별 정산 시수(산정된 줄만) — 표에 없는 반(다른 반 **대신 보강**, `taught_by` 0315a)이 정산에 얼마 들었는지 화면이 밝히는 재료.
+       * 반별 정산 시수(산정된 줄만) — 표에 없는 반(다른 반 **대신 보강**, `taught_by` 0316a)이 정산에 얼마 들었는지 화면이 밝히는 재료.
        * 🔴 금액을 반에 나누는 데 쓰지 말 것(청구서는 반 몫이 아니다 — 위 머리 주석). 시수만이다.
        */
       unitsByClass?: Record<string, number>;

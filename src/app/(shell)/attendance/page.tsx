@@ -470,7 +470,7 @@ export default async function AttendancePage({
       : null;
   const slotOnlyCount = teacherClasses.length - homeroomClasses.length;
   /**
-   * 🔴 정산액에 든 **표에 없는 반**의 시수 — 다른 반 대신 보강(원장 결정 3, `taught_by` 0315a). 칸은 학생의 반에 있어 이 격자엔 없고
+   * 🔴 정산액에 든 **표에 없는 반**의 시수 — 다른 반 대신 보강(원장 결정 3, `taught_by` 0316a). 칸은 학생의 반에 있어 이 격자엔 없고
    *    표 아래 읽기 전용 목록(`SubstituteCellsNote`)으로 보인다. 말없이 정산액만 커지면 화면 시수와 금액이 갈려 보인다(적대 리뷰 2026-09-30).
    */
   const shownClassIds = new Set(teacherClasses.map((c) => c.id));

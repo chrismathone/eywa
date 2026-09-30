@@ -4,11 +4,11 @@ import "server-only";
  * **다른 반 대신 보강 칸** — 월별 출석부 강사 보기의 읽기 전용 목록 재료(적대 리뷰 2026-09-30, 원장 결정 3).
  *
  * 위임 없이 남의 반(B반) 학생을 대신 보강하면 칸은 **B반**에 서고(보고서 반 = 출석부 반) 시수는 **보강한 강사(A)** 몫이다
- * (`attendance_records.taught_by`, 0315a). 정산(명세서·출석부 정산액·수납 정산 면)은 그 칸을 A 몫으로 넣는데, A의 강사 보기
+ * (`attendance_records.taught_by`, 0316a). 정산(명세서·출석부 정산액·수납 정산 면)은 그 칸을 A 몫으로 넣는데, A의 강사 보기
  * 격자에는 B반이 없다 — 칸이 안 보이면 **화면 시수와 정산액이 말없이 갈린다**. 그래서 A의 강사 보기가 그 칸을 목록으로 보인다.
  * 🔴 판정 재료는 정산 조립(`collectTierRows`)과 같다 — 귀속 칸 `taught_by` · 교시별 유효 행(`effectiveAttendanceRecords`) ·
  *    결석·공결 0 · 자리 행 제외. 금액은 여기서 계산하지 않는다(정산 함수 한 벌).
- * ⚠️ 표시 전용이다 — 조회 실패·0315a 미적용이면 빈 목록(격자는 산다, [[#95]]). admin + `tenant_id` 필터([[#104]]).
+ * ⚠️ 표시 전용이다 — 조회 실패·0316a 미적용이면 빈 목록(격자는 산다, [[#95]]). admin + `tenant_id` 필터([[#104]]).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";

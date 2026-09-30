@@ -702,7 +702,7 @@ export async function setAttendanceCell(input: {
   const loadScopedDay = async (
     teacherId: string,
   ): Promise<{ error: string } | { rows: (DayTargetRow & { note?: string | null })[]; share: ScopeShare }> => {
-    // 대신 보강 귀속(0315a) — 칸이 있을 때만(#95). 반 담임 보기 저장이 남의 대신 보강 칸을 제 몫으로 덮지 않게.
+    // 대신 보강 귀속(0316a) — 칸이 있을 때만(#95). 반 담임 보기 저장이 남의 대신 보강 칸을 제 몫으로 덮지 않게.
     const withTaughtBy = await taughtByColumnReady().catch(() => false);
     const [{ data, error }, facts] = await Promise.all([
       supabase
@@ -915,7 +915,7 @@ export async function setAttendanceCell(input: {
   //    못 보고 새 행을 INSERT해 **같은 (학생·반·날짜)에 두 행이 살아남는다** — 화면은 교시 우선이라
   //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
   // 그날 기록과 스코프 판정 재료(반 담임·교시)는 서로 독립이라 병렬(B4).
-  // 대신 보강 귀속(0315a) — 강사 보기 저장의 몫 판정 재료. 칸이 있을 때만 읽는다(#95).
+  // 대신 보강 귀속(0316a) — 강사 보기 저장의 몫 판정 재료. 칸이 있을 때만 읽는다(#95).
   const cellTaughtBy = scopeTeacherId ? await taughtByColumnReady().catch(() => false) : false;
   const [{ data: rows }, scopeFacts] = await Promise.all([
     supabase
@@ -2083,7 +2083,7 @@ export async function setAttendanceRange(input: {
   //    PostgREST가 1000행에서 **조용히 자른다**(#54). 잘리면 있는 행을 못 찾아 update 대신 insert →
   //    같은 (학생·반·날짜)에 중복 출결이 쌓인다(시수·급여의 재료가 오염된다).
   //    페이지가 흔들리지 않도록 order에 unique tie-break(id)를 함께 건다.
-  // 대신 보강 귀속(0315a) — 강사 보기 범위 저장의 몫 판정 재료. 칸이 있을 때만(#95).
+  // 대신 보강 귀속(0316a) — 강사 보기 범위 저장의 몫 판정 재료. 칸이 있을 때만(#95).
   const rangeTaughtBy = scopedForFacts.length > 0 ? await taughtByColumnReady().catch(() => false) : false;
   const [existingRows, scopeFacts] = await Promise.all([
     fetchAllPagedInChunks<{
@@ -2102,7 +2102,7 @@ export async function setAttendanceRange(input: {
       session_units: number | null;
       /** 빗금 칸 입력(원장 2026-09-14)이 기존 메모 끝에 `대신 입력` 한 줄을 붙인다 — 덮지 않으려면 지금 메모가 필요하다. */
       note: string | null;
-      /** 대신 보강 귀속 강사(0315a) — 강사 보기 몫 판정 재료. 칸이 없으면 안 읽는다. */
+      /** 대신 보강 귀속 강사(0316a) — 강사 보기 몫 판정 재료. 칸이 없으면 안 읽는다. */
       taught_by?: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase

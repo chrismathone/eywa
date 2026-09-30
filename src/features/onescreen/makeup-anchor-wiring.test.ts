@@ -90,7 +90,7 @@ describe("경로 ⑤ 워커·일괄 게이트", () => {
   });
 });
 
-describe("원장 결정 3 — 대신 보강 칸의 귀속(taught_by, 0315a)", () => {
+describe("원장 결정 3 — 대신 보강 칸의 귀속(taught_by, 0316a)", () => {
   it("칸을 세울 때·옮길 때 보강한 강사가 그 반을 담당하지 않으면 귀속을 적는다(칸이 없는 스키마면 귀속만 뺀다)", () => {
     expect(SYNC).toContain("const taughtBy = substituteTaughtBy(input.ownerId, mine);");
     const cells = read("src/features/attendance/server/makeup-anchor-cells.ts");

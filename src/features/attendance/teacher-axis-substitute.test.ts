@@ -11,7 +11,7 @@ import { tierRowsOwnedBy, type TierRow } from "@/features/payroll/tier-settlemen
 
 /**
  * 🔴 원장 결정 3(2026-09-30): 위임 없이 남의 반(B반) 학생을 대신 보강하면 보고서·출석부 반은 B반이지만
- * **그 칸의 시수는 실제로 보강한 강사(A) 몫**이다 — 표식 = `attendance_records.taught_by`(0315a). 단일 소스 = teacher-axis.ts.
+ * **그 칸의 시수는 실제로 보강한 강사(A) 몫**이다 — 표식 = `attendance_records.taught_by`(0316a). 단일 소스 = teacher-axis.ts.
  */
 const D = "2026-09-30"; // 수요일
 const slots: AxisSlot[] = [
@@ -27,7 +27,7 @@ describe("ownsAttendanceSlot — 대신 보강 칸은 보강한 강사 렌즈에
   it("반별 보기(스코프 없음)는 종전 그대로 전부 그 반 몫", () => {
     expect(ownsAttendanceSlot({ ...base, scopeTeacherId: null, taughtBy: "A" })).toBe(true);
   });
-  it("귀속이 비었으면 종전 축(담임 폴백) 그대로 — 0315a 이전 행·칸 없는 스키마", () => {
+  it("귀속이 비었으면 종전 축(담임 폴백) 그대로 — 0316a 이전 행·칸 없는 스키마", () => {
     expect(ownsAttendanceSlot({ ...base, scopeTeacherId: "B" })).toBe(true);
     expect(ownsAttendanceSlot({ ...base, scopeTeacherId: "B", taughtBy: null })).toBe(true);
   });

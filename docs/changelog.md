@@ -1,13 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
-## 2026-09-30 — 보고서 반 = 출석부 반 = 발송 반(보강 반 단일 소스 · 대신 보강 귀속 0315a)
+## 2026-09-30 — 보고서 반 = 출석부 반 = 발송 반(보강 반 단일 소스 · 대신 보강 귀속 0316a)
 
 - 원장 *"보고서 반 = 출석부 반은 모든 곳에서 일치. 다르면 크리티컬"* · *"모든 기록에 동일한 반이 매핑되어야함"*. 단일 소스 = `lesson_reports.makeup_class_id` — 발송 반(`classnote_class_id` 복사본)·출석부 칸의 반·귀속이 여기서 나온다. 규칙 한 벌 `src/features/onescreen/makeup-anchor.ts`(불변식 `makeupInvariantViolations`), 서버 한 벌 `makeup-anchor-sync.ts`(`prepareMakeupAnchor`·`finishMakeupAnchor`·`changeMakeupAnchor`)·`attendance/server/makeup-anchor-cells.ts`, 액션 `setMakeupClass`.
 - 고친 구멍: C1 발송 다이얼로그·관리자 반 고르기가 '보낼 반'만 바꿈 → 고른 반 = 새 보강 반(칸 함께 이동) · C2 확인창이 칸을 안 기다리고 적고 실패 시 훅이 예약 반·보강 반에 칸 → `persistAnchorMakeup` 폐기, 서버가 앵커 반에만 기다려서(확인 즉시 등록 문 + 저장 훅, 같은 함수) · C3 앵커 거절이 조용한 폴백 → 저장 오류 · C4/결정 2 남의 반 학생 대신 보강 = 학생의 원래 반(후보 = 담당 반 ∪ 학생 수강 반) · C5/결정 4 정규 반 보드 없음 = 막고 안내 · C6 '반 없이'(수학 반 경로) 금지 · C7 출석부 쪽 지우기 게이트 · C8 관리자 작성 보강도 칸 생성 · C9 옛 보낼 반이 보강 반보다 우선 → 워커·일괄 게이트가 막는다.
-- 결정 3 대신 보강 귀속 = `attendance_records.taught_by`(0315a) — teacher-axis `ownsAttendanceSlot` `taughtBy`·정산 `tierRowsOwnedBy`(명세서·출석부 정산액·수납 정산 면)·월별 출석부 강사 렌즈·강사 보기 저장 판정. 칸 없는 스키마에서도 돈다(probe `taught-by-db.ts`).
+- 결정 3 대신 보강 귀속 = `attendance_records.taught_by`(0316a) — teacher-axis `ownsAttendanceSlot` `taughtBy`·정산 `tierRowsOwnedBy`(명세서·출석부 정산액·수납 정산 면)·월별 출석부 강사 렌즈·강사 보기 저장 판정. 칸 없는 스키마에서도 돈다(probe `taught-by-db.ts`).
 - 원스크린 보강 줄에 보강 반 이름(모르면 '반 지정됨')·'반 미정'(눌러서 고르기) — 로스터는 이미 읽는 명단 세션에서 이름을 채운다(새 조회 없음).
 - 드라이런 `scripts/_reports/makeup-class-drift.mts`(조회만 · `--apply`는 원장 승인 뒤): 2026-01-01 이후 반 없는 보강 280건 중 위반 253건(반 미정 225 — 그중 미발송 14 · 발송 완료 A 14 · 칸 없음 C 14 · 보낼 반 ≠ 보강 반 1).
-- 🔴 워커(`class-route-decide.mjs`·`classnote-core.mjs`) 변경 → 연동 PC zip 재적용 · 0315a SQL은 원장 적용(앱은 적용 전에도 돈다).
+- 🔴 워커(`class-route-decide.mjs`·`classnote-core.mjs`) 변경 → 연동 PC zip 재적용 · 0316a SQL은 원장 적용(앱은 적용 전에도 돈다).
 - 적대 리뷰 수리(같은 날): ① 보강 시수 유실 — 칸을 보고서 저장 때로만 미뤄 보고서 없는 보강(영어 등)·저장 실패의 시수가 사라졌다 → 확인창 등록 문(`registerMakeupEntries` `recordCell`)이 확인 즉시 앵커 반에 `syncAnchorCells`로 세우고(감사로그 `attendance_cell` via `makeup_register`), 보고서 전 반 바꾸기도 그 칸을 함께 옮긴다 · ② A 강사 보기에 정산에 든 B반 대신 보강 칸이 안 보였다 → 격자 아래 읽기 전용 목록 + 정산 주석(`unitsByClass`) · ③ 칸 이동 일부 실패 시 옮긴 행 되돌리기 · 옮긴 뒤 '세우기' 실패로 보고서만 되돌리던 것 · 저장의 반 바꾸기를 upsert 전 조건부 한 문장으로(워커 claim 경합) · ④ `taught_by` 확인의 없음 캐시 60초(쓰기는 매번) · 보드 없음 안내에 할 일(관리자 '지금 반 보드 동기화').
 
 ## 2026-09-30 — 학부모 글·댓글 벨 = 그 학생의 현재 담당 선생님(원장 정정) + 가드 8겹

@@ -6,7 +6,7 @@ import "server-only";
  *
  * 🔴 admin 클라이언트(RLS 우회)라 **모든 조회·쓰기에 `tenant_id` 필터**([[#104]]) — 대신 보강(남의 반 칸)은 강사 권한으로
  *    쓸 수 없어서 admin으로 쓴다. 호출부가 앵커를 `acceptMakeupAnchor`로 먼저 확인한다.
- * 🔴 `taught_by`(0315a)는 칸이 없으면 **귀속만 빼고** 쓴다([[#95]]) — 저장이 죽는 것보다 귀속이 비는 쪽이 낫다(드라이런이 센다).
+ * 🔴 `taught_by`(0316a)는 칸이 없으면 **귀속만 빼고** 쓴다([[#95]]) — 저장이 죽는 것보다 귀속이 비는 쪽이 낫다(드라이런이 센다).
  */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDelegationActiveOn } from "@/features/classes/delegation-window";

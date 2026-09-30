@@ -118,7 +118,7 @@ export type TierRow = {
   /** 반의 급여 과정(수동 지정 ?? 반 이름) — 회차 단가로 과정을 정할 때 특강 판정·폴백에만 쓴다. */
   classGroup?: SalaryGroup | null;
   /**
-   * **대신 보강 귀속 강사**(`attendance_records.taught_by`, 0315a) — 있으면 이 줄의 시수는 반 담임이 아니라 이 강사 몫이다
+   * **대신 보강 귀속 강사**(`attendance_records.taught_by`, 0316a) — 있으면 이 줄의 시수는 반 담임이 아니라 이 강사 몫이다
    * (원장 결정 3, 2026-09-30). null·생략 = 종전(반 담임 몫). 조립이 같은 학생·반이라도 귀속이 다르면 줄을 가른다.
    */
   taughtBy?: string | null;
