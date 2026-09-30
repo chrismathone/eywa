@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultHostClassId, hostChoicesFor, orderHostClasses } from "./makeup-host";
+import { defaultHostClassId, hostChoicesFor, isClassOpenOn, orderHostClasses } from "./makeup-host";
 
 const a = { classId: "a", className: "나반", subject: "math", enrolled: false };
 const b = { classId: "b", className: "가반", subject: "math", enrolled: false };
@@ -26,5 +26,13 @@ describe("보강 기록 수업 — 순서·기본값(원장 2026-09-21)", () => 
     expect(defaultHostClassId([a, b], null)).toBeNull();
     expect(defaultHostClassId([own, { ...a, enrolled: true }], null)).toBeNull();
     expect(defaultHostClassId([], null)).toBeNull();
+  });
+});
+
+describe("isClassOpenOn — 보강 기록 수업에서 종강 반 제외(원장 2026-09-30)", () => {
+  it("종강일이 없거나 그날 이후면 후보, 지났으면 아니다(종강일 당일은 아직 운영)", () => {
+    expect(isClassOpenOn(null, "2026-09-30")).toBe(true);
+    expect(isClassOpenOn("2026-09-30", "2026-09-30")).toBe(true);
+    expect(isClassOpenOn("2026-09-29", "2026-09-30")).toBe(false);
   });
 });

@@ -39,15 +39,21 @@ export function decideRoute(cfg, report) {
 /**
  * 반별 경로에서 **실제로 올릴 반 보드** 고르기(원장 2026-09-30).
  * - 보고서 반(class_id)에 살아 있는 반 보드가 있으면 그 반(종강이어도 연결이 남아 있으면 — *"클래스노트에 반이 살아있는 한은 계속"*).
- * - 없으면(반 없음·연결 없음·ClassNote에서 사라짐) 앱이 정한 '보낼 반'(0303a `classnote_class_id`)이 살아 있으면 그 반.
- * - 둘 다 없으면 기존 1인 보드(전환 전 대기분 등 1회성 폴백 — 원장 "그대로 두기").
+ * - 없으면 앱이 정해 **적어 둔** '보낼 반'(0303a `classnote_class_id`)이 살아 있으면 그 반 — 앱의 최종 결정을 따른다
+ *   (앱 `decideSendClass`가 보강 반을 1순위로 골라 적는다 · 강사가 경고를 보고 고른 반도 여기 적힌다).
+ * - 🔴 적힌 값이 없거나 죽었고 반 없는 보강이면 **보강 추가 때 고른 반**(0171a `makeup_class_id`)이 살아 있을 때 그 반
+ *   (원장 2026-09-30 *"애초에 보강 추가로 선택된 반에 보고서가 발송되면 되는거아닌가?"* — 적힌 값이 없던 옛 대기분).
+ *   관리자 일괄 게이트(`sendClassGateRow`)와 같은 순서.
+ * - 셋 다 없으면 기존 1인 보드(전환 전 대기분 등 1회성 폴백 — 원장 "그대로 두기").
  * @param {{ route: "personal"|"class"|"needs_class", classId: string|null, sendClassId: string|null|undefined,
- *           classEligible: boolean, sendEligible: boolean }} a
- * @returns {{ route: "personal"|"class", classId: string|null }}
+ *           classEligible: boolean, sendEligible: boolean,
+ *           makeupClassId?: string|null, makeupEligible?: boolean }} a
+ * @returns {{ route: "personal"|"class", classId: string|null, via: "personal"|"class"|"makeup"|"send" }}
  */
 export function pickRouteClass(a) {
-  if (a.route === "personal") return { route: "personal", classId: a.classId ?? null };
-  if (a.route === "class" && a.classId && a.classEligible) return { route: "class", classId: a.classId };
-  if (a.sendClassId && a.sendEligible) return { route: "class", classId: a.sendClassId };
-  return { route: "personal", classId: a.classId ?? null };
+  if (a.route === "personal") return { route: "personal", classId: a.classId ?? null, via: "personal" };
+  if (a.route === "class" && a.classId && a.classEligible) return { route: "class", classId: a.classId, via: "class" };
+  if (a.sendClassId && a.sendEligible) return { route: "class", classId: a.sendClassId, via: "send" };
+  if (!a.classId && a.makeupClassId && a.makeupEligible) return { route: "class", classId: a.makeupClassId, via: "makeup" };
+  return { route: "personal", classId: a.classId ?? null, via: "personal" };
 }

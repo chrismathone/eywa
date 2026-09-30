@@ -124,3 +124,80 @@ export function mineOnly<T extends { id: string }>(candidates: readonly T[], min
   const own = candidates.filter((c) => mine.has(c.id));
   return own.length || restrict ? own : [...candidates];
 }
+
+/**
+ * 보강 보고서의 **'보낼 반' 최종 판정**(순수 — 원장 2026-09-30 *"애초에 보강 추가로 선택된 반에 보고서가 발송되면 되는거아닌가?"*).
+ * **앱이 정하고 적는다**(`classnote_class_id`) — 워커 [`pickRouteClass`](../../../scripts/_classnote/class-route-decide.mjs)는
+ * 보고서 반 → **적힌 보낼 반** → 보강 반(적힌 값이 없는 옛 대기분) 순으로 따른다. 그래서 앱이 고른 반 = 실제로 간 반.
+ * 우선순위:
+ *  1. 보강 추가 때 고른 반(`makeupClassId`, 0171a `makeup_class_id`)에 이 학생의 **살아 있는 반 보드**가 있으면 그 반 — 묻지 않는다.
+ *     (살아 있는 반 보드 = 보고서 자기 반과 같은 판정 `liveBoardClassIdsOf`. 앵커 자체는 **저장할 때 서버가 확인한다** —
+ *     `saveLessonReport`가 `findMakeupAnchor`(그날 담당 반 · 같은 과목 · 종강 전)로 받은 값만 적는다. 여기서 담당 반으로 다시
+ *     좁히지 않는 이유 = 이미 적힌 앵커는 그 뒤 위임이 끝나거나 종강해도 그 수업을 한 반이라서다.)
+ *  2. 강사가 고른 반(`chosen`) — 후보 안에 있을 때만.
+ *  3. 🔴 보강 반이 있는데 보드가 없으면 **자동으로 다른 반에 보내지 않고 묻는다**(`makeupMismatch` — 화면이 경고 한 줄을 띄운다).
+ *     기본 선택 = 메인 수업(`main`).
+ *  4. 메인 수업(`main`, pickMainClass) → 없으면 묻는다.
+ * 후보가 없으면 `none`(발송 불가). 1은 후보 목록과 무관하다(앵커는 저장 때 확인됐다 — 위 1).
+ */
+export type SendClassDecision =
+  | { kind: "send"; classId: string; via: "makeup" | "chosen" | "auto" }
+  | { kind: "ask"; defaultId: string | null; makeupMismatch: boolean }
+  | { kind: "none"; makeupMismatch: boolean };
+
+export function decideSendClass(a: {
+  candidates: readonly string[];
+  makeupClassId: string | null | undefined;
+  makeupLive: boolean;
+  chosen: string | null | undefined;
+  /** 메인 수업(pickMainClass) — 자동 고르기를 하지 않는 경로(autoPick=false)는 null. */
+  main: string | null;
+}): SendClassDecision {
+  if (a.makeupClassId && a.makeupLive) return { kind: "send", classId: a.makeupClassId, via: "makeup" };
+  const mismatch = !!a.makeupClassId;
+  if (!a.candidates.length) return { kind: "none", makeupMismatch: mismatch };
+  if (a.chosen) {
+    return a.candidates.includes(a.chosen)
+      ? { kind: "send", classId: a.chosen, via: "chosen" }
+      : { kind: "ask", defaultId: a.main && a.candidates.includes(a.main) ? a.main : null, makeupMismatch: mismatch };
+  }
+  const main = a.main && a.candidates.includes(a.main) ? a.main : null;
+  if (mismatch) return { kind: "ask", defaultId: main, makeupMismatch: true };
+  return main ? { kind: "send", classId: main, via: "auto" } : { kind: "ask", defaultId: null, makeupMismatch: false };
+}
+
+/**
+ * 보낼 반 **후보**로 세울 수 있는 반인가(순수) — 원장 2026-09-30 *"종강이 아닌 담당 반에서 뜨는게 맞지? 학생과 접점이 있는"* ·
+ * *"보내는 반도 마찬가지고"*. = 수학 · 활성 · 보고서 발송 · **그날 종강 전**(`closed_at`이 없거나 그날 이후).
+ * ⚠️ 종강 반은 보고서 **자기 반**으로는 보드가 살아 있는 동안 계속 받는다(`classBoardLiveForStudent` — 여기와 무관).
+ *    다른 보고서가 고르는 **후보**로만 빠진다.
+ */
+export function isSendCandidateClass(
+  c: { subject: string | null; is_active: boolean | null; report_optout: boolean | null; closed_at: string | null },
+  date: string,
+): boolean {
+  if (!SEND_CLASS_SUBJECTS.has(c.subject ?? "") || !c.is_active || c.report_optout) return false;
+  return !c.closed_at || c.closed_at.slice(0, 10) >= date;
+}
+
+/**
+ * 관리자 일괄 경로의 **보낼 반 게이트 한 행**(순수 — 서버 `blockedForNoSendClass`). 워커 `pickRouteClass`와 **같은 순서**:
+ * 보고서 반(살아 있음) → 적힌 보낼 반(살아 있음) → 보강 반(반 없는 보강 · 살아 있음) → 막는다.
+ * 보강 반으로 통과하면 `rewriteTo` = 보강 반 — '보낼 반'을 그 반으로 적어 둔다(보강 반을 모르는 옛 워커도 같은 반으로 가게).
+ * 🔴 **이미 어딘가 게시된 행(`sentAt`)은 다시 적지 않는다** — 옛 위치 기록이 지워지면 회수가 글을 못 찾는다.
+ */
+export function sendClassGateRow(r: {
+  classId: string | null;
+  classLive: boolean;
+  storedId: string | null;
+  storedLive: boolean;
+  makeupClassId: string | null;
+  makeupLive: boolean;
+  sentAt: string | null;
+}): { pass: boolean; rewriteTo: string | null } {
+  if (r.classId && r.classLive) return { pass: true, rewriteTo: null };
+  if (r.storedId && r.storedLive) return { pass: true, rewriteTo: null };
+  if (!r.classId && r.makeupClassId && r.makeupLive)
+    return { pass: true, rewriteTo: r.sentAt || r.storedId === r.makeupClassId ? null : r.makeupClassId };
+  return { pass: false, rewriteTo: null };
+}

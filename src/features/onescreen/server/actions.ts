@@ -34,6 +34,7 @@ import { sameSessionRevision, sessionContentFromRow, sessionSaveDecision, type S
 import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
+import { findMakeupAnchor } from "@/features/attendance/makeup-host";
 import { hasAnyAttendance, isStudentAbsentForSend } from "./absence-gate";
 import { isReportOptout } from "@/features/classes/report-optout";
 import {
@@ -70,7 +71,8 @@ import { classBoardLiveForStudent, resolveSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError } from "@/lib/supabase/db-error";
-
+
+
 /**
  * 발송 대기에 올려도 되는 행 = 워커가 **집지도(processing) 보내지도(success) 않은** 행. 맨 위의 확인과 쓰기 사이에
  * 워커가 끝낼 수 있어 쓰기 자체에 거는 조건(compare-and-set) — 9/29 박세욱 재클릭 중복 게시(ClassNote는 지울 수 없다).
@@ -144,6 +146,8 @@ export async function saveLessonReport(
   error?: string;
   /** 저장은 됐지만 알릴 일 — 영어 그림 자리에 넣을 인재원 자료를 못 묶었다(jj-capture-plan.ts, 한국어 문장). */
   warning?: string;
+  /** 실제로 저장된 보강 앵커(`makeup_class_id`) — 서버가 확인한 값(발송의 '보낼 반' 판정이 이 값을 쓴다). */
+  makeupClassId?: string | null;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -203,7 +207,7 @@ export async function saveLessonReport(
   const gateBase = supabase
     .from("lesson_reports")
     // 멘트 작성 방식 판정 재료(notes, ment_source)를 게이트 pre-read에 **합승**시킨다 — 별도 왕복 없음(B4).
-    .select(mentReady ? "id, classnote_status, notes, ment_source" : "id, classnote_status")
+    .select(mentReady ? "id, classnote_status, makeup_class_id, notes, ment_source" : "id, classnote_status, makeup_class_id")
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
   const gateScoped = input.classId
@@ -231,7 +235,13 @@ export async function saveLessonReport(
       : Promise.resolve(false),
   ]);
   const priorRow = gateRows?.[0] as
-    | { id: string; classnote_status: string | null; notes?: string | null; ment_source?: string | null }
+    | {
+        id: string;
+        classnote_status: string | null;
+        makeup_class_id?: string | null;
+        notes?: string | null;
+        ment_source?: string | null;
+      }
     | undefined;
   if (priorRow?.classnote_status === "success") {
     return {
@@ -240,6 +250,19 @@ export async function saveLessonReport(
       error: "이미 학부모에게 발송된 보고서라 수정할 수 없습니다 — 고쳐야 하면 공유링크를 재발급하세요",
     };
   }
+
+  // 보강 앵커(`makeup_class_id`) 확인 — 클라가 준 반 id를 그대로 믿지 않는다. 이 앵커는 출석부 칸의 반이자
+  // ClassNote '보낼 반'의 1순위다(원장 2026-09-30) → 남의 반·다른 과목·종강 반 id를 실으면 엉뚱한 반 보드로 나간다.
+  // 판정 = 보강 등록 문과 같은 함수(`findMakeupAnchor`: 그날 담당 반 · 같은 과목 · 종강 전). 이미 저장돼 있던 앵커는
+  // 그대로 받는다(그 뒤 종강·위임 종료돼도 재저장이 앵커를 지우지 않게). 받을 수 없으면 **저장돼 있던 값을 유지**한다.
+  const wantedAnchor = input.makeup && !input.classId ? (input.makeupClassId ?? null) : null;
+  const priorAnchor = priorRow?.makeup_class_id ?? null;
+  let makeupAnchor: string | null = null;
+  if (wantedAnchor && wantedAnchor === priorAnchor) makeupAnchor = wantedAnchor;
+  else if (wantedAnchor) {
+    const teaching = await getTeachingClasses(supabase, user.id, reportDate).catch(() => []);
+    makeupAnchor = findMakeupAnchor(teaching, wantedAnchor, input.subject, reportDate)?.id ?? priorAnchor;
+  } else if (input.makeup && !input.classId) makeupAnchor = null; // '반 없이'를 고른 것 — 그대로 비운다
 
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
@@ -264,7 +287,7 @@ export async function saveLessonReport(
         exam_info: input.examInfo || null,
         homework_score: normalizeNoneMarker(input.homeworkScore),
         // 보강 행일 때만 앵커를 남긴다(정규 행에 들어가면 필터가 엉킨다). 미지정('전체'에서 추가)은 null.
-        makeup_class_id: input.makeup && !input.classId ? (input.makeupClassId ?? null) : null,
+        makeup_class_id: makeupAnchor,
         daily_test: input.dailyTest || null,
         check_test: input.checkTest || null,
         attitude: input.attitude || null,
@@ -362,7 +385,7 @@ export async function saveLessonReport(
           subject: input.subject || LEGACY_REPORT_SUBJECT,
           date: reportDate,
           // 확인창에서 고른 수업(또는 반 필터) — 그 반에 칸이 이미 서 있으면 보강 반을 만들지 않는다(시수 두 번 방지).
-          makeupClassId: input.makeupClassId ?? null,
+          makeupClassId: makeupAnchor,
         });
       }
     } catch {
@@ -394,7 +417,7 @@ export async function saveLessonReport(
   });
 
   const warning = jjCapture ? await jjCapture : null;
-  return { ok: true, id: data.id, shareToken: data.share_token, ...(warning ? { warning } : {}) };
+  return { ok: true, id: data.id, shareToken: data.share_token, makeupClassId: makeupAnchor, ...(warning ? { warning } : {}) };
 }
 
 /**
@@ -425,6 +448,10 @@ export async function saveAndQueueClassnote(
   warning?: string;
   /** status="needs_class"일 때 — 고를 수 있는 반(반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'). */
   candidates?: { id: string; name: string }[];
+  /** status="needs_class"일 때 — 처음 골라 둘 반(메인 수업). */
+  defaultClassId?: string | null;
+  /** status="needs_class"일 때 — 보강 추가한 반인데 이 학생의 반 보드가 없어 다른 반으로 가야 한다(경고 한 줄). */
+  makeupClassName?: string | null;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -665,6 +692,7 @@ export async function saveAndQueueClassnote(
   // 메인 수업을 정할 수 있으면 그 반, 못 정하면 **발송을 멈추고 후보를 돌려준다**(화면이 고르게 한다).
   // 🔴 후보가 아예 없으면 **발송하지 않는다**(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) — 예전엔 1인 보드로 보냈다.
   const routeApplies = classRouteActive(settings, user.displayName); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
+  let sendClassPick: { classId: string; via: string } | null = null; // 감사로그 — 어느 반으로, 왜(보강 반·고름·메인 수업)
   const classLive =
     routeApplies && input.classId && SEND_CLASS_SUBJECTS.has(input.subject ?? "")
       ? await classBoardLiveForStudent(user.tenantId, input.classId, input.studentId).catch(() => null)
@@ -698,13 +726,15 @@ export async function saveAndQueueClassnote(
       // 후보 = 작성 강사가 담당하는 반만(원장 2026-09-29) — 강사는 담당 반이 없으면 발송 불가(no_class), 관리자는 담당 반이 없으면 전부.
       const restrict = (await accessLevelTenant(user.systemRole, "classes")) === "scoped";
       // 보고서에 반이 있는데 그 반 보드가 없으면(특강·종강 등) 다른 반으로 자동으로 보내지 않는다 — 고르게 한다.
+      // 🔴 보강 추가 때 고른 반(`makeup_class_id`)에 반 보드가 있으면 그 반으로(원장 2026-09-30) — **저장된 값**
+      //    (saveLessonReport가 확인해 적은 앵커 — 반 없는 보강 행에만 남는다).
       pick = await resolveSendClass(
         user.tenantId,
         input.studentId,
         reportDate,
         input.classnoteClassId ?? null,
         { userId: user.id, restrict },
-        { autoPick: !input.classId },
+        { autoPick: !input.classId, makeupClassId: saved.makeupClassId ?? null },
       );
     } catch {
       await unqueue();
@@ -718,6 +748,8 @@ export async function saveAndQueueClassnote(
         shareToken: saved.shareToken,
         status: "needs_class",
         candidates: pick.candidates,
+        defaultClassId: pick.defaultId,
+        makeupClassName: pick.makeupClass?.name || null,
         error: "보낼 반을 골라 주세요 — 저장은 됐습니다",
         ...warn,
       };
@@ -742,6 +774,7 @@ export async function saveAndQueueClassnote(
           ...warn,
         };
       }
+      sendClassPick = { classId: pick.classId, via: pick.via };
     }
   }
 
@@ -786,6 +819,7 @@ export async function saveAndQueueClassnote(
       classId: input.classId || null,
       via: "teacher",
       status: allowed ? "queued" : "too_old",
+      ...(sendClassPick ? { sendClassId: sendClassPick.classId, sendClassVia: sendClassPick.via } : {}),
       // 회수했던 건을 다시 보낸 경우 — 위에서 공유 토큰을 새로 발급했다(옛 링크는 죽었다).
       ...(prior?.classnote_status === "recalled" ? { fromRecalled: true } : {}),
     },

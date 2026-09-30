@@ -1,5 +1,15 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-30 — 보강 보고서는 보강 추가한 반으로 · 다른 반으로 가면 경고 · 보강·보낼 반 후보에서 종강 반 제외
+
+- 원장 *"애초에 보강 추가로 선택된 반에 보고서가 발송되면 되는거아닌가?"* — 보강 보고서(반 없음)가 보강 추가 때 고른 반(`makeup_class_id`, 예: 고등M 개별 TP4E)이 아니라 다른 ClassNote 반(고등M_일 개별진도)으로 나갔다. 보낼 반 판정(`pickMainClass`)이 보강 반을 안 봤다.
+- **앱이 정해 적고 워커는 따른다:** 앱 판정 = 보고서 반 → **보강 반**(그 학생의 살아 있는 반 보드가 있으면 묻지 않고 그 반) → 강사가 고른 반 → 메인 수업([`decideSendClass`](src/features/onescreen/send-class.ts)) — 결과를 `classnote_class_id`에 적는다. 워커·관리자 일괄 게이트 = 보고서 반 → **적힌 보낼 반** → 보강 반(적힌 값이 없던 옛 대기분) → 1인 보드/차단([`pickRouteClass`](scripts/_classnote/class-route-decide.mjs) = [`sendClassGateRow`](src/features/onescreen/send-class.ts), 전 조합 표 테스트). 보강 반 조회 실패는 '대상 아님'. 워커는 보강 반으로 **게시한 뒤**, 비어 있을 때만 '보낼 반'을 적는다 · 일괄 게이트는 게시 기록(`classnote_sent_at`)이 있는 행을 다시 적지 않고, 적은 행은 감사로그 `makeupRewritten`. 회수는 보고서 반·보낼 반·보강 반을 전부 훑는다.
+- **보강 앵커 서버 확인:** `saveLessonReport`가 클라가 준 `makeupClassId`를 등록 문과 같은 함수(`findMakeupAnchor`: 그날 담당 반 · 같은 과목 · 종강 전)로 확인해 적는다. 이미 적혀 있던 앵커는 유지, 못 받으면 옛 값 유지.
+- **다른 반으로 갈 때:** 보강 반에 반 보드가 없으면 자동으로 보내지 않고 **경고 한 줄**("보강 추가한 반(X)은 … 다른 반으로 보냅니다")과 함께 묻는다(기본 선택 = 메인 수업). 원스크린 창(한/영)·관리자 직접 작성 반 고르기 둘 다.
+- **경로 전부:** 원스크린 발송 · 관리자 직접 작성(강사가 보강으로 추가해 둔 같은 행의 앵커) · 관리자 일괄/재발송/멈춤 복구 게이트(`blockedForNoSendClass`) · 워커.
+- **후보에서 종강 반 제외**(원장 *"종강이 아닌 담당 반에서 뜨는게 맞지? 학생과 접점이 있는"* · *"보내는 반도 마찬가지고"*): 보강 '기록할 수업'(`fetchMakeupHostClasses`·등록 문 `registerMakeupEntries` = `isClassOpenOn`)과 보낼 반 후보(`isSendCandidateClass`) 둘 다. 종강 반 **자기 보고서**는 보드가 살아 있는 동안 그대로 그 반으로 간다(09-30 결정 유지). 소속 판정에 `isEnrollmentEndedOn`(반이동 당일, [[#125]]).
+- ⚠️ 워커 변경 = 연동 PC에 새 zip 필요(`classnote-core.mjs`·`class-route-decide.mjs`·`classnote-recall-core.mjs`). zip 전까지 옛 워커는 저장된 '보낼 반'을 따르므로 원스크린·관리자 직접 작성 발송은 이미 새 규칙대로 간다(일괄 재발송만 zip 뒤부터).
+
 ## 2026-09-30 — 없는 주소는 그 사람의 홈으로(404 대신 리다이렉트)
 
 - 원장 *"말도 안되는 페이지 입력하는거 전부 대시보드로 리다이렉트"* — 루트 `app/not-found.tsx`(클라 전용): 엉뚱한 URL·지운 기록·꺼진 기능 모두 브라우저에서 `/home`으로 이동 → `landingPath`(강사는 원스크린·ECS)·비로그인 `/login`. 창 안이면 embed 유지(`/home`이 착지 주소에 싣는다). 공개 화면·`(print)`·`/home` 자신은 한글 404 문구 그대로. 🔴 루트 not-found는 매 요청 미리 렌더되므로 서버 조회 금지(첫 구현을 적대 리뷰가 잡음). 판정 = 순수 `notFoundTarget`(가드 `not-found-target.test.ts` — `(print)` 폴더 대조 포함).

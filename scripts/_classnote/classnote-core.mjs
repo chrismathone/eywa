@@ -537,7 +537,7 @@ export async function processQueueOnce(sql, browser, opts) {
     )
     update lesson_reports lr set classnote_status='processing', classnote_processing_at=now()
     from cte where lr.id=cte.id
-    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes, lr.class_id ${sendClassSel}`
+    returning lr.id, lr.share_token, lr.report_date::text as report_date, lr.subject, lr.teacher_name, lr.student_id, lr.attachments, lr.classnote_sent_at, lr.notes, lr.class_id, lr.makeup_class_id ${sendClassSel}`
     .catch((e) => {
       // 컬럼이 사라졌으면(0276a 되돌림 — 42703 undefined_column) 기억을 지워 다음 폴부터 예외 절 없이 돈다.
       // 안 지우면 "있다"는 기억 때문에 매 폴 같은 오류로 발송 전체가 멈춘다.
@@ -675,18 +675,38 @@ export async function processQueueOnce(sql, browser, opts) {
     const decided = post ? decideRoute(routeCfg, r) : "personal";
     let route = "personal";
     let routeClassId = r.class_id ?? null;
+    let makeupWriteBack = null; // 보강 반으로 게시했고 적힌 '보낼 반'이 없으면 게시 뒤 그 반을 적는다
     if (decided !== "personal") {
       const classEligible = r.class_id ? await isClassRouteEligible(sql, tenant, r.class_id, r.student_id).catch(() => true) : false;
+      // 순서 = 보고서 반 → 적힌 '보낼 반'(앱의 최종 결정) → 보강 반(0171a — 적힌 값이 없던 옛 대기분). pickRouteClass 참고.
       const sendEligible =
         !classEligible && r.classnote_class_id
           ? await isClassRouteEligible(sql, tenant, r.classnote_class_id, r.student_id).catch(() => true)
           : false;
-      const pick = pickRouteClass({ route: decided, classId: r.class_id ?? null, sendClassId: r.classnote_class_id ?? null, classEligible, sendEligible });
+      // 🔴 보강 반 조회 실패는 "대상 아님" — 대상으로 두면 확인도 못 한 반으로 게시를 시도한다(적힌 값이 없을 때만 보는 폴백이다).
+      const makeupEligible =
+        !r.class_id && !classEligible && !sendEligible && r.makeup_class_id
+          ? await isClassRouteEligible(sql, tenant, r.makeup_class_id, r.student_id).catch(() => false)
+          : false;
+      const pick = pickRouteClass({
+        route: decided,
+        classId: r.class_id ?? null,
+        sendClassId: r.classnote_class_id ?? null,
+        classEligible,
+        sendEligible,
+        makeupClassId: r.makeup_class_id ?? null,
+        makeupEligible,
+      });
       route = pick.route;
       routeClassId = pick.classId;
       if (route === "personal")
         log(`  · ${studentName}: 보낼 반 보드가 없는 보고서(연결 없음·보낼 반 미지정) — 기존 1인 보드로`);
-      else if (routeClassId !== (r.class_id ?? null)) log(`  · ${studentName}: 보고서 반에 반 보드가 없어 '보낼 반'으로`);
+      else if (pick.via === "makeup") {
+        log(`  · ${studentName}: 보강 추가한 반으로`);
+        // 적힌 '보낼 반'이 없을 때만 **게시가 끝난 뒤** 이 반을 적는다(아래 success/partial) — 게시 전에 적으면 실패해도 기록이 남고,
+        // 적힌 값이 있으면(강사가 고른 반 등) 덮지 않는다.
+        if (!r.classnote_class_id) makeupWriteBack = pick.classId;
+      } else if (routeClassId !== (r.class_id ?? null)) log(`  · ${studentName}: 보고서 반에 반 보드가 없어 '보낼 반'으로`);
     }
     let classTarget = null; // route=class일 때 { boardId, boardName, targets, others }
 
@@ -915,6 +935,10 @@ export async function processQueueOnce(sql, browser, opts) {
         }
         if (!cc.ok) log(`    ⚠️ 교차 확인 조회 실패 — 게시는 성공으로 둔다(확인 못 함)`);
       }
+      if ((result.ok || result.partial) && makeupWriteBack && (await hasSendClassColumn(sql)))
+        // 실제로 간 반을 '보낼 반'에 — 감사·회수가 같은 반을 본다. 비어 있을 때만(조건부) · 실패해도 게시 결과는 그대로.
+        await sql`update lesson_reports set classnote_class_id = ${makeupWriteBack}
+          where id = ${r.id} and classnote_class_id is null`.catch(() => {});
       if (result.ok) {
         await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
         summary.success++;
