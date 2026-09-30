@@ -24,6 +24,8 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
   /** 수강 기간·등원 요일·보강·기존 기록으로 확인되는 학생별 수업일. */
   lessonDates: string[];
   editable: boolean;
+  /** 조회 종료일 전 마지막 보고서의 영상 과제 값. 모르면 생략하며 검사 이력에는 영향을 주지 않는다. */
+  lastAssignment?: { beforeDate: string; assigned: boolean };
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

@@ -21,6 +21,13 @@ beforeEach(() => { vi.clearAllMocks(); mocks.save.mockResolvedValue({ ok: true }
 afterEach(cleanup);
 
 describe("영상숙제 필터·검색·저장 연결", () => {
+  it("지난 수업 과제 없음은 명시된 반에만 표시하고 기존 회차·기록은 유지한다", () => {
+    show(rows.map((row, index) => ({ ...row, lastAssignment: index < 2 ? { beforeDate: "2026-09-30", assigned: index === 1 } : undefined })));
+    expect(screen.getAllByText("지난 수업 영상 과제 없음")).toHaveLength(1);
+    expect(screen.getByText("지난 수업 영상 과제 없음")).toHaveAttribute("title", expect.stringContaining("2026-09-30 이전 마지막 수업 보고서"));
+    expect(screen.getByRole("button", { name: `김민준 2회 ${date} 미수행` })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `김민준 1회 ${date} 미확인` })).toBeInTheDocument();
+  });
   it("필터를 함께 적용하고 초기화하며 반 접기·펼치기가 동작한다", async () => {
     show();
     fireEvent.change(screen.getByRole("combobox", { name: "과목" }), { target: { value: "수학" } });

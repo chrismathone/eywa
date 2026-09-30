@@ -49,6 +49,18 @@ describe("규칙 정리", () => {
     expect(sanitizeRule({ source: "other" }, KEYS)).toBeNull();
   });
 
+  it("'누가'(0311a) — uuid만 · 중복 제거 · 50명까지 · 빼기와 겹치면 빼기가 이긴다", () => {
+    const U2 = "22222222-2222-4222-8222-222222222222";
+    const r = sanitizeRule({ source: "activity", actorIds: [U1, U1, "x", 3, U2], excludeActorIds: [U2] }, KEYS)!;
+    expect(r.actorIds).toEqual([U1]);
+    expect(r.excludeActorIds).toEqual([U2]);
+    expect(sanitizeRule({ source: "notification" }, KEYS)!.actorIds).toEqual([]);
+    // 겹쳐서 다 빠지면 '누구든'으로 넓어지지 않게 그대로 둔다(발송은 빼기가 먼저라 아무것도 안 나감).
+    expect(sanitizeRule({ source: "activity", actorIds: [U2], excludeActorIds: [U2] }, KEYS)!.actorIds).toEqual([U2]);
+    const many = Array.from({ length: 60 }, (_, i) => `${String(i).padStart(8, "0")}-1111-4111-8111-111111111111`);
+    expect(sanitizeRule({ source: "activity", actorIds: many }, KEYS)!.actorIds).toHaveLength(50);
+  });
+
   it("프리셋은 저장 정리를 그대로 통과한다", () => {
     for (const p of RULE_PRESETS) {
       const built = p.build();

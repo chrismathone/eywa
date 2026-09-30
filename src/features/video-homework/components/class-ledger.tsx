@@ -87,7 +87,11 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
             return <tr key={ledgerPairKey(row)} data-selected={selected.has(row.studentId) || undefined}>
               <td className={styles.selectCell}><input type="checkbox" aria-label={`${group.className} ${row.studentName} 선택`} disabled={busy || !row.editable} checked={selected.has(row.studentId)} onChange={() => toggleStudent(row.studentId)} /></td>
               <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}</th>
-              <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
+              <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span>
+                {row.lastAssignment?.assigned === false ? <small className={styles.assignmentNote}
+                  title={`${row.lastAssignment.beforeDate} 이전 마지막 수업 보고서 기준입니다. 이전 회차의 검사 기록은 그대로 유지됩니다.`}>
+                  지난 수업 영상 과제 없음</small> : null}
+              </td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
               {dates.map((date, index) => {
                 if (!row.lessonDates.includes(date)) return <td key={date}><span className={styles.notApplicable} title="이 날짜의 수업 대상이 아닙니다" aria-label="수업 대상 아님">—</span></td>;

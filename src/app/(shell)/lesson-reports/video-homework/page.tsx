@@ -6,7 +6,8 @@ import { getVideoHomeworkLedger } from "@/features/video-homework/server/queries
 import { VideoHomeworkManagement } from "@/features/video-homework/components/video-homework-management";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
-import { kstToday } from "@/lib/date-kst";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { getLastLessonAssignments } from "@/features/video-homework/server/assignments";
 import { isVideoHomeworkDate } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
@@ -60,6 +61,12 @@ export default async function VideoHomeworkPage({ searchParams }: {
     status: ["submitted", "missing", "unchecked"].includes(param("status")) ? param("status") as LedgerFilters["status"] : "all",
     sort: ["missing", "completion"].includes(param("sort")) ? param("sort") as LedgerFilters["sort"] : "name",
   };
+  // 종료일 전 마지막 보고서의 과제 표시만 보존한다. 과거 회차나 검사 대상 여부는 바꾸지 않는다.
+  const lastAssigned = await getLastLessonAssignments(user.tenantId, displayRows, toDate, addDays(toDate, -60));
+  const ledgerRows = displayRows.map((row) => ({ ...row,
+    lastAssignment: typeof lastAssigned[ledgerPairKey(row)] === "boolean"
+      ? { beforeDate: toDate, assigned: lastAssigned[ledgerPairKey(row)] } : undefined,
+  }));
   return <main className="mx-auto w-full max-w-7xl space-y-4">
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
       description="반별 장부에서 학생별 회차·수업 날짜·수행 여부를 확인합니다." />
@@ -72,7 +79,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
       현재 설정으로 {rows.length - displayRows.length}명·반이 검사 대상에서 제외되었습니다. 기존 기록은 장부에 남습니다.
     </p> : null}
     {rangeTooLong ? <p role="status" className="text-text-dim text-xs">한 번에 최대 366일을 조회할 수 있어 종료일이 속한 달을 표시했습니다.</p> : null}
-    <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={displayRows} initialMarks={marks}
+    <VideoHomeworkManagement key={`${fromDate}:${toDate}`} rows={ledgerRows} initialMarks={marks}
       fromDate={fromDate} toDate={toDate} today={today} initialFilters={initialFilters} />
   </main>;
 }

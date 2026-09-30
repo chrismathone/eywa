@@ -20,6 +20,7 @@ export type SlackRule = {
   template: "short" | "detailed";
   mentionRecipients: boolean;
   ping: "none" | "here" | "channel";
+  actorIds: string[]; // 0311a '누가' — 비면 누구든 · 채우면 이 사람이 한 일만(발동자 없는 시스템 알림·PIN 기록은 빠짐)
   excludeActorIds: string[];
   timing: "immediate" | "digest";
   digestAt: string | null; // "HH:MM" · null = 기본 요약 시각
@@ -44,6 +45,7 @@ export function emptyRule(source: SlackRule["source"] = "activity"): SlackRule {
     template: "short",
     mentionRecipients: false,
     ping: "none",
+    actorIds: [],
     excludeActorIds: [],
     timing: "immediate",
     digestAt: null,
@@ -52,6 +54,9 @@ export function emptyRule(source: SlackRule["source"] = "activity"): SlackRule {
   };
 }
 
+/** 사람 id 목록 — uuid 모양만 · 중복 제거 · 50명까지. */
+const uuidList = (v: unknown) =>
+  [...new Set((Array.isArray(v) ? v : []).filter((x): x is string => typeof x === "string" && UUID_RE.test(x)))].slice(0, 50);
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 
 export function normalizeTime(v: unknown): string | null {
@@ -97,6 +102,13 @@ export function sanitizeRule(input: unknown, activityKeys: ReadonlySet<string>):
     }
   }
 
+  // 같은 사람이 '누가'와 '빼기'에 다 있으면 빼기가 이긴다(보내지 말라는 쪽이 안전). 🔴 다 빠져 '누가'가 비면 '누구든'으로
+  // 넓어지므로 그땐 목록을 그대로 둔다 — 발송 판정(passesActorFilter)이 빼기를 먼저 보니 아무것도 안 나간다.
+  const excludeActorIds = uuidList(r.excludeActorIds);
+  const rawActors = uuidList(r.actorIds);
+  const keptActors = rawActors.filter((id) => !excludeActorIds.includes(id));
+  const actorIds = keptActors.length ? keptActors : rawActors;
+
   return {
     id: typeof r.id === "string" && UUID_RE.test(r.id) ? r.id : "",
     name: str(r.name, 60) || (source === "activity" ? "활동 피드" : "알림"),
@@ -107,9 +119,8 @@ export function sanitizeRule(input: unknown, activityKeys: ReadonlySet<string>):
     template: r.template === "detailed" ? "detailed" : "short",
     mentionRecipients: r.mentionRecipients === true && source === "notification",
     ping: r.ping === "here" || r.ping === "channel" ? r.ping : "none",
-    excludeActorIds: (Array.isArray(r.excludeActorIds) ? r.excludeActorIds : [])
-      .filter((v): v is string => typeof v === "string" && UUID_RE.test(v))
-      .slice(0, 50),
+    actorIds,
+    excludeActorIds,
     timing: r.timing === "digest" ? "digest" : "immediate",
     digestAt: normalizeTime(r.digestAt),
     honorDnd: r.honorDnd !== false,

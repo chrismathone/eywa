@@ -44,6 +44,7 @@
 .table thead .selectCell,.table thead .studentCell{z-index:5;background:#f5f7fb}
 .table tr[data-selected] td,.table tr[data-selected] th{background:#edf4fe}
 .schoolCell{overflow:hidden;text-overflow:ellipsis;color:var(--ledger-muted);font-size:11px}.schoolCell span{color:#48617e}
+.assignmentNote{display:block;font-size:10px;line-height:1.4;margin-top:2px;white-space:normal;word-break:keep-all}
 .countCell strong{color:var(--primary);font-size:13px}.countCell span{color:var(--ledger-muted);font-size:10px;margin-left:3px}
 .ledger .mark{width:100%;min-height:28px;border-radius:3px;font-size:11px;line-height:1.3;padding:4px 1px;border-color:transparent}
 .ledger .submitted{background:#edf8f2;color:var(--ledger-green)}.ledger .missing{background:#fff0f1;color:var(--ledger-red)}.ledger .unchecked{background:transparent;border-color:#dce3ed;border-style:dashed;color:#718198}
