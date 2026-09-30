@@ -30,12 +30,15 @@ export function UserActions({
   tenantName,
   currentRole,
   status,
+  locked,
 }: {
   userId: string;
   tenantId: string;
   tenantName: string;
   currentRole: string;
   status: string;
+  /** 보호 계정(슈퍼관리자 명단) — 역할·활성 조작을 세우지 않는다(원장 2026-09-30 "강력 가드"). unknown = 명단 조회 실패. */
+  locked?: "protected" | "unknown";
 }) {
   const [roleState, roleAction, rolePending] = useActionState(changeUserRole, undefined);
   const [pwState, pwAction, pwPending] = useActionState(resetUserPassword, undefined);
@@ -59,6 +62,15 @@ export function UserActions({
       {/* 🔴 검색형 드롭다운(SearchableSelect)을 쓰지 않는다(원장 2026-09-25 폰 캡처) — 팝업이 카드 안에 그려져
           카드의 overflow에 잘렸고([[#128]]), 열자마자 검색칸에 포커스가 가 폰 키보드가 화면 절반을 덮었다.
           역할은 7개뿐이라 검색이 필요 없다 → 포털로 뜨는 메뉴(잘리지 않음·키보드 없음). */}
+      {locked ? (
+        <span
+          className="text-text-dim text-xs"
+          title={locked === "protected" ? "슈퍼관리자 명단 계정 — 역할·상태는 운영자 SQL(원장 승인)로만 바꿉니다." : "슈퍼관리자 명단을 읽지 못했습니다 — 새로고침하세요."}
+        >
+          {locked === "protected" ? "보호 계정 · 역할·상태 변경 불가" : "보호 여부 확인 실패 · 새로고침"}
+        </span>
+      ) : (
+      <>
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label={`역할 변경: ${ASSIGNABLE_ROLES.find((r) => r.value === shownRole)?.label ?? "알 수 없음"}`}
@@ -93,6 +105,8 @@ export function UserActions({
           {isActive ? "비활성화" : "활성화"}
         </Button>
       </form>
+      </>
+      )}
 
       {confirmReset ? (
         <form

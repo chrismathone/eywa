@@ -638,6 +638,10 @@ export function auditDetail(
       const docs = num(m.docs);
       return join(r ? `삭제 당시 역할: ${r}` : null, docs ? `문서 ${docs}건 함께 삭제` : null);
     }
+    case "staff_protected_refused": {
+      const what = m.attempt === "role" ? "역할 변경" : m.attempt === "delete" ? "삭제" : "재직 상태 변경";
+      return `보호 계정 ${what} 시도 — 거절`;
+    }
     case "staff_status_change": {
       const label = (v: unknown) =>
         v === "active" ? "재직" : v === "inactive" ? "퇴사" : v === "pending" ? "대기" : null;
@@ -1845,7 +1849,8 @@ export function auditDetail(
     }
 
     // ── 구글 캘린더 가져오기(시스템) ────────────────────────────────────────────────────
-    case "calendar_google_import": {
+    case "calendar_google_import":
+    case "calendar_google_push_sync": {
       const cnt = (v: unknown, label: string): string | null => {
         const n = num(v);
         return n ? `${label} ${n.toLocaleString("ko-KR")}건` : null;

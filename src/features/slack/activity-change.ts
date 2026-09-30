@@ -136,7 +136,8 @@ export function activityChange(action: string, metadata: unknown): ActivityChang
       const n = count(m.planned);
       return one("계획", n !== null ? `${n}차수 계획` : null);
     }
-    case "calendar_google_import": {
+    case "calendar_google_import":
+    case "calendar_google_push_sync": {
       const bits = [["추가", m.inserted], ["갱신", m.updated], ["삭제", m.deleted]]
         .map(([l, v]) => [l, count(v)] as const)
         .filter(([, v]) => v !== null && v > 0)

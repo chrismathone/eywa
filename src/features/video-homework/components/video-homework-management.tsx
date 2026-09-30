@@ -1,259 +1,147 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { VideoHomeworkProvider, useVideoHomework } from "./video-homework-provider";
+import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { EmbedHiddenInput } from "@/components/embed-link";
-import type { VideoHomeworkMark, VideoHomeworkStatus } from "../types";
-import type { VideoHomeworkHistoryRow, VideoHomeworkRosterRow } from "../server/queries";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCsv, ledgerMarkKey, ledgerPairKey,
+  ledgerSummary, type LedgerFilters } from "../ledger";
+import { isVideoHomeworkRange } from "../ledger-roster";
+import type { VideoHomeworkLedgerRow, VideoHomeworkMark, VideoHomeworkStatus } from "../types";
+import { useLedgerMarks } from "./use-ledger-marks";
+import { ClassLedger, LEDGER_STATUS_OPTIONS, type ActiveCell, type SaveLedgerChanges } from "./class-ledger";
+import styles from "./video-homework-management.module.css";
 
-type Filter = "all" | "unchecked" | "submitted" | "missing";
-const PAGE_SIZE = 50;
-const CHOICES = [
-  { value: "submitted", label: "완료", symbol: "check", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  { value: "missing", label: "미제출", symbol: "close", tone: "border-rose-300 bg-rose-50 text-rose-700" },
-] as const;
-const STATUS_NAME: Record<VideoHomeworkStatus, string> = {
-  submitted: "완료", missing: "미제출",
-};
-const pairKey = (classId: string, studentId: string) => `${classId}:${studentId}`;
-
-function csvCell(value: string | number) {
-  const text = String(value);
-  const safe = /^[=+@\-\t\r]/.test(text) ? `'${text}` : text;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
-
-function downloadCsv(name: string, headers: string[], data: (string | number)[][]) {
-  const csv = "\uFEFF" + [headers, ...data].map((values) => values.map(csvCell).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function DownloadButton({ rows }: { rows: VideoHomeworkRosterRow[] }) {
-  const { checkDate, marks } = useVideoHomework();
-  return <button type="button" className="border-line bg-card hover:bg-bg-soft rounded-lg border px-3 py-2 text-xs font-semibold"
-    onClick={() => {
-      const byPair = new Map(marks.map((mark) => [pairKey(mark.classId, mark.studentId), mark]));
-      const header = ["검사일", "직전 보고서일", "반", "과목", "학생", "학교", "학년", "영상 제출 검사"];
-      const data = rows.map((row) => {
-        const mark = byPair.get(pairKey(row.classId, row.studentId));
-        return [checkDate, mark?.homeworkDate ?? "", row.className, row.subject, row.studentName,
-          row.school ?? "", row.grade ?? "", mark ? STATUS_NAME[mark.status] : "미확인"];
-      });
-      downloadCsv(`eywa-video-homework-${checkDate}.csv`, header, data);
-    }}>이 날짜 CSV</button>;
-}
-
-function ManagementTable({ rows, canEdit, today, lastAssigned }: {
-  rows: VideoHomeworkRosterRow[]; canEdit: boolean; today: string; lastAssigned: Record<string, boolean>;
+function FilterSelect({ label, name, value, options, disabled, onChange }: {
+  label: string; name: string; value: string; options: { value: string; label: string }[]; disabled: boolean; onChange: (value: string) => void;
 }) {
-  const { checkDate, marks, pending, change } = useVideoHomework();
-  const [classId, setClassId] = useState("all");
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [page, setPage] = useState(0);
-  const classes = useMemo(() => [...new Map(rows.map((row) => [row.classId, row.className])).entries()], [rows]);
-  const byPair = useMemo(() => new Map(marks.map((mark) => [pairKey(mark.classId, mark.studentId), mark])), [marks]);
-  const scoped = rows.filter((row) => {
-    if (classId !== "all" && row.classId !== classId) return false;
-    if (query && !`${row.studentName} ${row.className} ${row.school ?? ""} ${row.grade ?? ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())) return false;
-    return true;
-  });
-  const visible = scoped.filter((row) => {
-    const status = byPair.get(pairKey(row.classId, row.studentId))?.status;
-    return filter === "all" || (filter === "unchecked" && !status) ||
-      (filter === "submitted" && status === "submitted") || (filter === "missing" && status === "missing");
-  });
-  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount - 1);
-  const paged = visible.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const checkedCount = scoped.filter((row) => byPair.has(pairKey(row.classId, row.studentId))).length;
-  const submittedCount = scoped.filter((row) => {
-    const status = byPair.get(pairKey(row.classId, row.studentId))?.status;
-    return status === "submitted";
-  }).length;
+  const missing = value !== "all" && !options.some((option) => option.value === value);
+  return <label className={styles.filter}><span>{label}</span><select name={name} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+    <option value="all">전체 {label}</option>{missing ? <option value={value}>{value} (조회기간에 없음)</option> : null}
+    {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+  </select></label>;
+}
 
-  return <div className="space-y-4">
-    <div className="grid gap-3 sm:grid-cols-3">
-      <div className="border-line bg-card rounded-xl border p-4"><p className="text-text-dim text-xs">해당 수업일의 학생·반</p><strong className="text-2xl">{scoped.length}</strong><span className="text-text-dim ml-1 text-xs">건</span></div>
-      <div className="border-line bg-card rounded-xl border p-4"><p className="text-text-dim text-xs">영상 제출 검사</p><strong className="text-2xl">{checkedCount}</strong><span className="text-text-dim ml-1 text-xs">/ {scoped.length}건</span></div>
-      <div className="border-line bg-card rounded-xl border p-4"><p className="text-text-dim text-xs">확인한 숙제의 완료율</p><strong className="text-2xl">{checkedCount ? Math.round(submittedCount / checkedCount * 100) : 0}%</strong><span className="text-text-dim ml-1 text-xs">{submittedCount} / {checkedCount}</span></div>
-    </div>
-    <div className="border-line bg-card rounded-xl border p-3 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <form action="/lesson-reports/video-homework" method="get" className="flex items-center gap-1.5">
-          <EmbedHiddenInput />
-          <label htmlFor="video-homework-date" className="text-text-dim text-xs font-semibold">수업 날짜</label>
-          <input id="video-homework-date" type="date" name="date" defaultValue={checkDate} max={today} className="border-line bg-card rounded-lg border px-2 py-1.5 text-sm" />
-          <button type="submit" className="border-primary bg-primary text-white rounded-lg border px-3 py-1.5 text-xs font-semibold">날짜 보기</button>
-        </form>
-        <select aria-label="반 선택" value={classId} onChange={(event) => { setClassId(event.target.value); setPage(0); }} className="border-line bg-card rounded-lg border px-3 py-2 text-sm">
-          <option value="all">전체 반</option>{classes.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <input aria-label="학생 검색" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="학생·반·학교 검색" className="border-line bg-card min-w-40 flex-1 rounded-lg border px-3 py-2 text-sm" />
-        <select aria-label="검사 상태" value={filter} onChange={(event) => { setFilter(event.target.value as Filter); setPage(0); }} className="border-line bg-card rounded-lg border px-3 py-2 text-sm">
-          <option value="all">전체 상태</option><option value="unchecked">미확인</option><option value="submitted">완료</option><option value="missing">미제출</option>
-        </select>
-        <DownloadButton rows={visible} />
+function RecordEditor({ cell, mark, busy, save, onClose }: { cell: ActiveCell; mark?: VideoHomeworkMark; busy: boolean; save: SaveLedgerChanges; onClose: () => void }) {
+  const [status, setStatus] = useState<VideoHomeworkStatus | "unchecked">(mark?.status ?? "unchecked");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!cell.row.editable || busy) return;
+    const failed = await save([{ classId: cell.row.classId, studentId: cell.row.studentId, checkDate: cell.date,
+      homeworkDate: mark?.homeworkDate ?? null, status: status === "unchecked" ? null : status }]);
+    if (!failed.length) onClose();
+  }
+  return <form className={styles.editor} onSubmit={(event) => void submit(event)}>
+    <DialogHeader><DialogTitle>{cell.row.studentName} · {cell.round}회</DialogTitle>
+      <DialogDescription>{cell.row.className} · {cell.row.school} {cell.row.grade}</DialogDescription></DialogHeader>
+    <label>검사한 수업 날짜<input type="date" value={cell.date} readOnly /></label>
+    {mark?.homeworkDate ? <p className={styles.dim}>지난 숙제일 {mark.homeworkDate}</p> : null}
+    <div className={styles.statusOptions}>{LEDGER_STATUS_OPTIONS.map((option) => <button key={option.value} type="button" disabled={busy || !cell.row.editable}
+      aria-pressed={status === option.value} onClick={() => setStatus(option.value)}>{option.label}</button>)}</div>
+    <p className={styles.dim}>미확인으로 바꾸면 이 수업일의 검사 기록이 취소됩니다.</p>
+    {cell.row.editable ? <button type="submit" className={styles.primary} disabled={busy}>{busy ? "저장 중…" : "기록 저장"}</button> : <p className={styles.dim}>이 기록은 읽기 전용입니다.</p>}
+  </form>;
+}
+
+export function VideoHomeworkManagement({ rows, initialMarks, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS }: {
+  rows: VideoHomeworkLedgerRow[]; initialMarks: VideoHomeworkMark[]; fromDate: string; toDate: string; today: string; initialFilters?: LedgerFilters;
+}) {
+  const [filters, setFilters] = useState(initialFilters);
+  const query = useDeferredValue(filters.query);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [active, setActive] = useState<ActiveCell | null>(null);
+  const [rangeError, setRangeError] = useState("");
+  const { marks, progress, save } = useLedgerMarks(initialMarks);
+  const busy = progress !== null;
+  const groups = useMemo(() => groupLedgerRows(rows), [rows]);
+  const visible = useMemo(() => filterLedgerRows(rows, marks, { ...filters, query }), [rows, marks, filters, query]);
+  const tabCounts = useMemo(() => {
+    const matches = filterLedgerRows(rows, marks, { ...filters, query, classId: "all" });
+    const byClass = new Map<string, number>();
+    for (const row of matches) byClass.set(row.classId, (byClass.get(row.classId) ?? 0) + 1);
+    return { total: matches.length, byClass };
+  }, [rows, marks, filters, query]);
+  const visibleByClass = useMemo(() => {
+    const byClass = new Map<string, VideoHomeworkLedgerRow[]>();
+    for (const row of visible) { const entries = byClass.get(row.classId) ?? []; entries.push(row); byClass.set(row.classId, entries); }
+    return byClass;
+  }, [visible]);
+  const visibleGroups = groups.flatMap((group) => {
+    const matching = visibleByClass.get(group.classId);
+    return matching?.length ? [{ ...group, rows: matching }] : [];
+  });
+  const options = useMemo(() => {
+    const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b, "ko", { numeric: true })).map((value) => ({ value, label: value }));
+    return { subjects: unique(rows.map((row) => row.subject)), schools: unique(rows.map((row) => row.school || "미등록")), grades: unique(rows.map((row) => row.grade || "미등록")) };
+  }, [rows]);
+  const summary = ledgerSummary(visible, marks);
+  const filterKey = JSON.stringify(filters);
+  function update<K extends keyof LedgerFilters>(key: K, value: LedgerFilters[K]) { setFilters((current) => ({ ...current, [key]: value })); }
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const url = new URL(window.location.href);
+      const values = { class: filters.classId, subject: filters.subject, school: filters.school, grade: filters.grade, q: filters.query.trim(), status: filters.status, sort: filters.sort };
+      for (const [key, value] of Object.entries(values)) {
+        if (!value || value === "all" || key === "sort" && value === "name") url.searchParams.delete(key);
+        else url.searchParams.set(key, value);
+      }
+      url.searchParams.set("from", fromDate); url.searchParams.set("to", toDate);
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [filters, fromDate, toDate]);
+  function validateRange(event: FormEvent<HTMLFormElement>) {
+    const data = new FormData(event.currentTarget);
+    if (!isVideoHomeworkRange(String(data.get("from")), String(data.get("to")))) {
+      event.preventDefault(); setRangeError("시작일과 종료일을 확인해 주세요. 한 번에 최대 366일까지 조회할 수 있습니다.");
+    } else setRangeError("");
+  }
+  function download() {
+    const url = URL.createObjectURL(new Blob([ledgerCsv(visibleGroups, marks)], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = `영상숙제-${fromDate}-${toDate}.csv`; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return <div className={styles.ledger} aria-busy={busy}>
+    <form className={styles.filters} action="/lesson-reports/video-homework" method="get" onSubmit={validateRange}>
+      <EmbedHiddenInput />
+      <div className={styles.filterRow}>
+        <label className={styles.filter}><span>시작일</span><input aria-label="조회 시작일" name="from" type="date" defaultValue={fromDate} max={today} required disabled={busy} /></label>
+        <span className={styles.dateSeparator}>–</span>
+        <label className={styles.filter}><span>종료일</span><input aria-label="조회 종료일" name="to" type="date" defaultValue={toDate} max={today} required disabled={busy} /></label>
+        <button type="submit" className={styles.primary} disabled={busy}>기간 조회</button>
+        <label className={styles.search}><EyIcon name="search" size={16} /><input aria-label="학생·반·학교 통합 검색" name="q" placeholder="학생 · 반 · 학교 · 학년 검색" value={filters.query} disabled={busy} onChange={(event) => update("query", event.target.value)} /></label>
+        <button type="button" disabled={busy || !visible.length} onClick={download}>검색 결과 CSV</button>
       </div>
-      <p className="text-text-dim mt-2 text-xs">회차 번호 대신 수업 날짜로 기록합니다. 강사는 원스크린에서 지난 숙제를 이 날짜에 한 번 검사합니다.</p>
+      <div className={styles.filterRow}>
+        <FilterSelect label="반" name="class" value={filters.classId} options={groups.map((group) => ({ value: group.classId, label: group.className }))} disabled={busy} onChange={(value) => update("classId", value)} />
+        <FilterSelect label="과목" name="subject" value={filters.subject} options={options.subjects} disabled={busy} onChange={(value) => update("subject", value)} />
+        <FilterSelect label="학교" name="school" value={filters.school} options={options.schools} disabled={busy} onChange={(value) => update("school", value)} />
+        <FilterSelect label="학년" name="grade" value={filters.grade} options={options.grades} disabled={busy} onChange={(value) => update("grade", value)} />
+        <FilterSelect label="수행 상태" name="status" value={filters.status} options={LEDGER_STATUS_OPTIONS.map((option) => ({ value: option.value, label: `${option.label} 있음` }))} disabled={busy} onChange={(value) => update("status", value as LedgerFilters["status"])} />
+        <label className={styles.filter}><span>정렬</span><select aria-label="학생 정렬" name="sort" value={filters.sort} disabled={busy} onChange={(event) => update("sort", event.target.value as LedgerFilters["sort"])}>
+          <option value="name">이름순</option><option value="missing">미수행 많은 순</option><option value="completion">완료율 낮은 순</option>
+        </select></label>
+        <button type="button" className={styles.reset} disabled={busy} onClick={() => setFilters({ ...DEFAULT_LEDGER_FILTERS })}>필터 초기화</button>
+      </div>
+      {rangeError ? <p role="alert" className={styles.red}>{rangeError}</p> : null}
+    </form>
+    <div className={styles.classTabs} aria-label="반 바로 선택">
+      <button type="button" aria-pressed={filters.classId === "all"} disabled={busy} onClick={() => update("classId", "all")}>전체 반 <small>{tabCounts.total}</small></button>
+      {groups.map((group) => <button type="button" key={group.classId} aria-pressed={filters.classId === group.classId} disabled={busy} onClick={() => update("classId", group.classId)}>{group.className} <small>{tabCounts.byClass.get(group.classId) ?? 0}</small></button>)}
     </div>
-    <div className="border-line bg-card overflow-x-auto rounded-xl border shadow-sm">
-      <table className="w-full min-w-[650px] border-collapse text-left text-xs">
-        <thead className="bg-bg-soft text-text-dim border-line border-b"><tr>
-          <th className="px-3 py-3">학생</th><th className="px-3 py-3">반·과목</th>
-          <th className="px-3 py-3">직전 보고서일</th><th className="px-3 py-3">영상 제출 검사</th>
-        </tr></thead>
-        <tbody>{paged.map((row) => {
-          const key = pairKey(row.classId, row.studentId);
-          const mark = byPair.get(key);
-          const busy = pending.has(key);
-          return <tr key={key} className="border-line border-b last:border-b-0">
-            <td className="px-3 py-2"><strong className="block">{row.studentName}</strong><span className="text-text-dim">{row.school} {row.grade}</span></td>
-            <td className="px-3 py-2">{row.className} · {row.subject}</td>
-            <td className="text-text-dim px-3 py-2">{mark?.homeworkDate ?? "—"}</td>
-            <td className="px-3 py-2"><div className="flex flex-wrap items-center gap-1">
-              {CHOICES.map((choice) => <button key={choice.value} type="button" disabled={!canEdit || busy}
-                aria-pressed={mark?.status === choice.value}
-                onClick={() => void change(row.classId, row.studentId, mark?.status === choice.value ? null : choice.value)}
-                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 font-semibold disabled:opacity-50 ${mark?.status === choice.value ? choice.tone : "border-line bg-card text-text-dim hover:border-primary"}`}>
-                <EyIcon name={choice.symbol} size={14} /> {choice.label}
-              </button>)}
-              {!mark ? <span className="text-text-faint ml-1">미확인</span> : null}
-              {lastAssigned[key] === false ? <span className="border-line bg-bg-soft text-text-dim ml-1 rounded-full border px-2 py-0.5"
-                title="강사가 지난 수업 보고서에 '영상 과제 없음'으로 저장했습니다 — 원스크린에서는 이 검사가 뜨지 않습니다.">
-                지난 수업 영상 과제 없음</span> : null}
-            </div></td>
-          </tr>;
-        })}</tbody>
-      </table>
-      {!paged.length && <p className="text-text-dim px-4 py-8 text-center text-sm">조건에 맞는 학생이 없습니다.</p>}
+    <div className={styles.summary} aria-live="polite"><span>검색 결과 <strong>{visible.length}</strong>명·반 <span className={styles.dim}>/ {rows.length}</span></span>
+      <span className={styles.green}>완료 <strong>{summary.submitted}</strong>회</span><span className={styles.red}>미수행 <strong>{summary.missing}</strong>회</span><span className={styles.dim}>미확인 {summary.unchecked}회</span>
+      <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(groups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
-    <div className="flex items-center justify-between text-xs"><span className="text-text-dim">{visible.length}건 중 {paged.length}건 표시</span><div className="flex items-center gap-2">
-      <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} className="border-line rounded border px-2 py-1 disabled:opacity-40">이전</button>
-      <span>{currentPage + 1} / {pageCount}</span>
-      <button type="button" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)} className="border-line rounded border px-2 py-1 disabled:opacity-40">다음</button>
-    </div></div>
+    <p className={styles.hint}>조회 기간의 반별 수업일 순서가 회차입니다. <EyIcon name="check" size={12} className="inline-block align-middle" /> 완료 · × 미수행 · + 미확인 · — 수업 대상 아님. 수행 상태 필터는 해당 기록이 있는 학생을 찾습니다.</p>
+    {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
+    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} marks={marks} busy={busy} save={save} onEdit={setActive}
+      collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
+      : <div className={styles.empty}><strong>{rows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상숙제 대상 수업이 없습니다."}</strong><p>{rows.length ? "검색어와 필터를 조정해 주세요." : "조회 기간이나 보고서의 영상숙제 대상 설정을 확인해 주세요."}</p></div>}
+    <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
+      <DialogContent showCloseButton={!busy}>
+        {active ? <RecordEditor key={`${ledgerPairKey(active.row)}:${active.date}`} cell={active} mark={marks.get(ledgerMarkKey({ ...active.row, checkDate: active.date }))} busy={busy} save={save} onClose={() => setActive(null)} /> : null}
+      </DialogContent>
+    </Dialog>
   </div>;
-}
-
-function HistoryTable({ rows, history, fromDate, toDate, today }: {
-  rows: VideoHomeworkRosterRow[]; history: VideoHomeworkHistoryRow[]; fromDate: string; toDate: string; today: string;
-}) {
-  const { checkDate, marks } = useVideoHomework();
-  const [classId, setClassId] = useState("all");
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
-  const currentPair = useMemo(() => new Map(rows.map((row) => [pairKey(row.classId, row.studentId), row])), [rows]);
-  const periodMarks = useMemo(() => {
-    if (checkDate < fromDate || checkDate > toDate) return history;
-    return [...history.filter((row) => row.checkDate !== checkDate ||
-      !currentPair.has(pairKey(row.classId, row.studentId))), ...marks.flatMap((mark): VideoHomeworkHistoryRow[] => {
-      const row = currentPair.get(pairKey(mark.classId, mark.studentId));
-      return row ? [{ ...row, ...mark }] : [];
-    })];
-  }, [checkDate, currentPair, fromDate, history, marks, toDate]);
-  const groups = useMemo(() => {
-    const byPair = new Map<string, { row: VideoHomeworkHistoryRow; dates: VideoHomeworkHistoryRow[] }>();
-    for (const row of periodMarks) {
-      const key = pairKey(row.classId, row.studentId);
-      const group = byPair.get(key);
-      if (group) group.dates.push(row);
-      else byPair.set(key, { row, dates: [row] });
-    }
-    return [...byPair.values()].map((group) => ({
-      ...group, dates: group.dates.sort((a, b) => b.checkDate.localeCompare(a.checkDate)),
-    })).sort((a, b) => a.row.className.localeCompare(b.row.className, "ko") ||
-      a.row.studentName.localeCompare(b.row.studentName, "ko"));
-  }, [periodMarks]);
-  const classes = useMemo(() => [...new Map(groups.map(({ row }) => [row.classId, row.className])).entries()], [groups]);
-  const visible = groups.filter(({ row }) =>
-    (classId === "all" || row.classId === classId) &&
-    (!query || `${row.studentName} ${row.className} ${row.school ?? ""} ${row.grade ?? ""}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
-  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount - 1);
-  const paged = visible.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-  const completed = visible.reduce((sum, group) => sum + group.dates.filter((row) => row.status !== "missing").length, 0);
-  const checked = visible.reduce((sum, group) => sum + group.dates.length, 0);
-
-  return <section className="space-y-3" aria-label="기간별 영상 제출 집계">
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h2 className="text-lg font-bold">기간별 학생 집계</h2>
-        <p className="text-text-dim text-xs">검사일이 실제 수업 날짜입니다. 날짜별 결과를 펼쳐 볼 수 있습니다.</p></div>
-      <form action="/lesson-reports/video-homework" method="get" className="flex flex-wrap items-center gap-2">
-        <EmbedHiddenInput />
-        <input type="hidden" name="date" value={checkDate} />
-        <label className="text-text-dim text-xs font-semibold">시작일 <input type="date" name="from" defaultValue={fromDate} max={today}
-          className="border-line bg-card ml-1 rounded-lg border px-2 py-1.5 text-sm" /></label>
-        <label className="text-text-dim text-xs font-semibold">종료일 <input type="date" name="to" defaultValue={toDate} max={today}
-          className="border-line bg-card ml-1 rounded-lg border px-2 py-1.5 text-sm" /></label>
-        <button type="submit" className="border-primary bg-primary rounded-lg border px-3 py-1.5 text-xs font-semibold text-white">기간 조회</button>
-      </form>
-    </div>
-    <div className="border-line bg-card rounded-xl border p-3 shadow-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="기간 집계 반 선택" value={classId} onChange={(event) => { setClassId(event.target.value); setPage(0); }}
-          className="border-line bg-card rounded-lg border px-3 py-2 text-sm">
-          <option value="all">전체 반</option>{classes.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <input aria-label="기간 집계 학생 검색" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }}
-          placeholder="학생·반·학교 검색" className="border-line bg-card min-w-40 flex-1 rounded-lg border px-3 py-2 text-sm" />
-        <span className="text-text-dim text-xs">{visible.length}명·반 · 제출 {completed}/{checked}회 검사</span>
-        <button type="button" className="border-line bg-card hover:bg-bg-soft rounded-lg border px-3 py-2 text-xs font-semibold"
-          onClick={() => downloadCsv(`eywa-video-homework-summary-${fromDate}-${toDate}.csv`,
-            ["반", "과목", "학생", "학교", "학년", "검사 횟수", "완료", "미제출", "제출 합계"],
-            visible.map(({ row, dates }) => [row.className, row.subject, row.studentName, row.school ?? "", row.grade ?? "",
-              dates.length, dates.filter((item) => item.status === "submitted").length,
-              dates.filter((item) => item.status === "missing").length,
-              dates.filter((item) => item.status !== "missing").length]))}>집계 CSV</button>
-        <button type="button" className="border-line bg-card hover:bg-bg-soft rounded-lg border px-3 py-2 text-xs font-semibold"
-          onClick={() => downloadCsv(`eywa-video-homework-dates-${fromDate}-${toDate}.csv`,
-            ["검사일", "직전 보고서일", "반", "과목", "학생", "학교", "학년", "검사 결과"],
-            visible.flatMap(({ dates }) => dates.map((row) => [row.checkDate, row.homeworkDate ?? "", row.className,
-              row.subject, row.studentName, row.school ?? "", row.grade ?? "", STATUS_NAME[row.status]])))}>날짜별 CSV</button>
-      </div>
-    </div>
-    <div className="border-line bg-card overflow-x-auto rounded-xl border shadow-sm">
-      <table className="w-full min-w-[650px] border-collapse text-left text-xs">
-        <thead className="bg-bg-soft text-text-dim border-line border-b"><tr>
-          <th className="px-3 py-3">학생</th><th className="px-3 py-3">반·과목</th><th className="px-3 py-3">검사</th>
-          <th className="px-3 py-3">완료</th><th className="px-3 py-3">미제출</th><th className="px-3 py-3">날짜별 기록</th>
-        </tr></thead>
-        <tbody>{paged.map(({ row, dates }) => <tr key={pairKey(row.classId, row.studentId)} className="border-line border-b last:border-b-0">
-          <td className="px-3 py-2"><strong className="block">{row.studentName}</strong><span className="text-text-dim">{row.school} {row.grade}</span></td>
-          <td className="px-3 py-2">{row.className} · {row.subject}</td>
-          <td className="px-3 py-2 font-semibold">{dates.length}회</td>
-          <td className="px-3 py-2 text-emerald-700">{dates.filter((item) => item.status === "submitted").length}회</td>
-          <td className="px-3 py-2 text-rose-700">{dates.filter((item) => item.status === "missing").length}회</td>
-          <td className="px-3 py-2"><details><summary className="text-primary cursor-pointer font-semibold">날짜 보기</summary>
-            <ul className="mt-1 space-y-1">{dates.map((item) => <li key={item.checkDate}>
-              {item.checkDate} · {STATUS_NAME[item.status]}{item.homeworkDate ? ` · 직전 보고서 ${item.homeworkDate}` : ""}
-            </li>)}</ul></details></td>
-        </tr>)}</tbody>
-      </table>
-      {!visible.length && <p className="text-text-dim px-4 py-8 text-center text-sm">기간 내 검사 기록이 없습니다.</p>}
-    </div>
-    <div className="flex items-center justify-between text-xs"><span className="text-text-dim">{visible.length}명·반 중 {paged.length}명·반 표시</span><div className="flex items-center gap-2">
-      <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} className="border-line rounded border px-2 py-1 disabled:opacity-40">이전</button>
-      <span>{currentPage + 1} / {pageCount}</span>
-      <button type="button" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)} className="border-line rounded border px-2 py-1 disabled:opacity-40">다음</button>
-    </div></div>
-  </section>;
-}
-
-export function VideoHomeworkManagement({ rows, marks, history, lastAssigned = {}, checkDate, fromDate, toDate, today, canEdit }: {
-  rows: VideoHomeworkRosterRow[]; marks: VideoHomeworkMark[]; history: VideoHomeworkHistoryRow[];
-  /** `반:학생` → 지난 수업 영상 과제 있음/없음(0308a). 없으면 모름. */
-  lastAssigned?: Record<string, boolean>;
-  checkDate: string; fromDate: string; toDate: string; today: string; canEdit: boolean;
-}) {
-  return <VideoHomeworkProvider key={checkDate} initial={marks} checkDate={checkDate}>
-    <ManagementTable rows={rows} canEdit={canEdit} today={today} lastAssigned={lastAssigned} />
-    <HistoryTable key={`${fromDate}:${toDate}`} rows={rows} history={history} fromDate={fromDate} toDate={toDate} today={today} />
-  </VideoHomeworkProvider>;
 }

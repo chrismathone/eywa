@@ -21,6 +21,7 @@ import { moveLiveSlotTeacher, reassignHomeroom } from "@/features/classes/server
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
+import { refuseIfProtectedStaff } from "./protected-guard";
 import { canManageStaffMember } from "@/lib/auth/role-hierarchy";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { createClient } from "@/lib/supabase/server";
@@ -485,6 +486,9 @@ export async function changeStaffRole(
   if (target.tenant_id !== actor.tenantId) {
     return { error: "다른 지점의 계정은 변경할 수 없습니다" };
   }
+  // 보호 계정(슈퍼관리자)은 누가 해도 역할을 못 바꾼다(원장 2026-09-30 "강력 가드. 꼭 물어봐야").
+  const protectedMsg = await refuseIfProtectedStaff(id, "role", target.display_name as string | null);
+  if (protectedMsg) return { error: protectedMsg };
   const currentRole = target.system_role as SystemRole;
   if (!canAssignRole({ actor: actor.systemRole, targetCurrent: currentRole, newRole })) {
     return { error: "이 역할 변경은 본인 권한으로 허용되지 않습니다" };
@@ -619,8 +623,11 @@ export async function deactivateStaff(
   if (!canManageStaffMember(actor.systemRole, target.role)) {
     return { error: "이 직원의 재직 상태를 바꿀 권한이 없습니다" };
   }
-  // super_admin 계정은 같은 지점 원장이라도 퇴사시키지 못한다(총괄이 그 지점에서 쫓겨난다 — 보안 감사 2026-09-29).
-  if (await isProtectedSuperAdminTarget(actor.id, id)) return { error: SUPER_ADMIN_TARGET_DENIED_MSG };
+  // super_admin 계정은 **누구도**(원장·총괄 포함) 퇴사시키지 못한다 — 보안 감사 2026-09-29 → 원장 2026-09-30 "강력 가드".
+  {
+    const protectedMsg = await refuseIfProtectedStaff(id, "status", target.displayName);
+    if (protectedMsg) return { error: protectedMsg };
+  }
 
   const supabase = await createClient();
   // `.select` — RLS가 행을 거부하면 error 없이 0행이다. 그때 "변경됨"+감사로그를 남기면 거짓 기록이 된다.
@@ -700,8 +707,11 @@ export async function handoverAndDeactivate(
   if (!canManageStaffMember(actor.systemRole, target.role)) {
     return { error: "이 직원의 재직 상태를 바꿀 권한이 없습니다" };
   }
-  // super_admin 계정은 같은 지점 원장이라도 퇴사시키지 못한다(총괄이 그 지점에서 쫓겨난다 — 보안 감사 2026-09-29).
-  if (await isProtectedSuperAdminTarget(actor.id, id)) return { error: SUPER_ADMIN_TARGET_DENIED_MSG };
+  // super_admin 계정은 **누구도**(원장·총괄 포함) 퇴사시키지 못한다 — 보안 감사 2026-09-29 → 원장 2026-09-30 "강력 가드".
+  {
+    const protectedMsg = await refuseIfProtectedStaff(id, "status", target.displayName);
+    if (protectedMsg) return { error: protectedMsg };
+  }
 
   const supabase = await createClient();
   const skip = String(formData.get("mode") ?? "") === "skip";

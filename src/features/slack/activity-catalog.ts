@@ -80,6 +80,7 @@ const RULES: readonly [string, string][] = [
   ["resume_", "staff"],
   ["teacher_view_", "settings"],
   ["calendar_google_import", "settings"],
+  ["calendar_google_push_sync", "settings"],
   ["calendar_", "comms"],
   ["announcement_", "comms"],
   ["meeting_", "comms"],

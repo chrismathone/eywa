@@ -1188,6 +1188,13 @@ describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김�
     );
   });
 
+  it("구글 캘린더 알림 반영 — 가져오기와 같은 모양(추가·갱신·삭제 건수)", () => {
+    expect(
+      auditDetail("calendar_google_push_sync", { inserted: 0, updated: 1, deleted: 2, failed: [], changes: 3 }, ctx()),
+    ).toBe("갱신 1건 · 삭제 2건");
+    expect(auditDetail("calendar_google_push_sync", { inserted: 0, updated: 0, deleted: 0, failed: [] }, ctx())).toBe("변경 없음");
+  });
+
   it("대상 유형 calendar도 한글", () => {
     expect(AUDIT_TYPE_LABEL.calendar).toBe("캘린더");
   });

@@ -14,6 +14,7 @@ import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-emai
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { logAction } from "@/features/audit/server/log";
 import { isProtectedSuperAdminTarget, SUPER_ADMIN_TARGET_DENIED_MSG } from "@/lib/auth/super-admin";
+import { refuseIfProtectedStaff } from "./protected-guard";
 
 export type AccountActionState =
   | { error?: string; ok?: boolean; tempPassword?: string }
@@ -343,6 +344,9 @@ export async function deleteStaff(
   if (!canManageStaffMember(actor.systemRole, target.role)) {
     return { error: "이 직원을 삭제할 권한이 없습니다" };
   }
+  // 보호 계정(슈퍼관리자)은 총괄끼리도 지우지 못한다(원장 2026-09-30 "강력 가드") — loadTarget의 자격 보호선보다 강하다.
+  const protectedMsg = await refuseIfProtectedStaff(id, "delete", target.displayName);
+  if (protectedMsg) return { error: protectedMsg };
 
   const admin = createAdminClient();
 
