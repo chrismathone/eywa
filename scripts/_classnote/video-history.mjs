@@ -1,6 +1,13 @@
 import { videoFeedPage, allVideoComments } from "./video-feed-pages.mjs";
 import { enqueueParentVideos } from "./video-inbox.mjs";
 
+/**
+ * 한 바퀴를 다 돈 뒤 다시 처음부터 훑기까지의 간격(원장 2026-10-01 "7일로 바꿔").
+ * 다시 도는 이유 = 오래된 글에 뒤늦게 달린 댓글 영상. 최근 글의 새 댓글은 댓글 폴러가 따로 거두므로 하루마다 돌 필요가 없고,
+ * 전체를 실제로 한 바퀴 돌 수 있게 된 뒤로는 매일 도는 것이 ClassNote에 매일 몇 시간치 요청을 보낸다.
+ */
+export const RESCAN_AFTER_MS = 7 * 24 * 60 * 60_000;
+
 /** 볼 것이 없는 글 — 학부모가 올린 영상도 댓글도 없다(영상 후보 = 학부모 글의 `attached_video`뿐 — video-download `videoCandidate`).
  *  교사·기관이 영상을 붙인 글도 댓글이 없으면 여기 든다(큐에 들어갈 수 없다). */
 const nothingToRead = (post) => !(post.attached_video && post.author?.type === "parent") && !(Number(post.num_comments) > 0);
@@ -18,7 +25,7 @@ export async function scanVideoHistory(sql, page, tenant, centerId, { limit = 10
   await sql`insert into classnote_video_history (tenant_id,center_id) values (${tenant},${centerId}) on conflict do nothing`;
   let [row] = await sql`select state,revision from classnote_video_history where tenant_id=${tenant} and center_id=${centerId}`;
   let state = row.state;
-  if (state.completedAt && Date.now() - new Date(state.completedAt).getTime() < 24 * 60 * 60_000) return;
+  if (state.completedAt && Date.now() - new Date(state.completedAt).getTime() < RESCAN_AFTER_MS) return;
   if (state.completedAt) state = {};
   const persist = async () => {
     const updated = await sql`update classnote_video_history set state=${sql.json(state)}, revision=revision+1, updated_at=now()

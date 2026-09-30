@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({ feed: vi.fn(), comments: vi.fn(), enqueue: vi.fn() }));
 vi.mock("./video-feed-pages.mjs", () => ({ videoFeedPage: mock.feed, allVideoComments: mock.comments }));
 vi.mock("./video-inbox.mjs", () => ({ enqueueParentVideos: mock.enqueue }));
-import { scanVideoHistory } from "./video-history.mjs";
+import { RESCAN_AFTER_MS, scanVideoHistory } from "./video-history.mjs";
 function db(initial = {}) {
   let row = { state: structuredClone(initial), revision: 0 };
   let writes = 0;
@@ -125,7 +125,19 @@ describe("과거 영상 수집 속도 — 볼 것이 없는 글은 예산 없이
     expect(store.state()).toEqual({ cursor: "c3", scanned: 300 });
     expect(mock.feed.mock.calls.map((c) => c[2])).toEqual([undefined, "c1", "c2"]);
   });
-  it("마지막 쪽까지 읽으면 완료로 적고, 하루 안에는 다시 돌지 않는다", async () => {
+  it("한 바퀴를 돈 뒤 7일 안에는 다시 돌지 않고, 7일이 지나면 처음부터 다시 돈다", async () => {
+    expect(RESCAN_AFTER_MS).toBe(7 * 24 * 60 * 60_000);
+    const ago = (days) => new Date(Date.now() - days * 24 * 60 * 60_000).toISOString();
+    const recent = db({ scanned: 500, completedAt: ago(6.9) });
+    expect(await scanVideoHistory(recent.sql, {}, "tenant", "12", quiet)).toBeUndefined();
+    expect(mock.feed).not.toHaveBeenCalled();
+    expect(recent.writes()).toBe(0);
+    const old = db({ scanned: 500, completedAt: ago(7.1) });
+    mock.feed.mockResolvedValueOnce({ list: [plain(2), plain(1)], next: null });
+    expect(await scanVideoHistory(old.sql, {}, "tenant", "12", quiet)).toMatchObject({ scanned: 2, complete: true }); // 글 수는 0부터 다시
+    expect(mock.feed.mock.calls[0][2]).toBeUndefined(); // 처음(최신 글)부터
+  });
+  it("마지막 쪽까지 읽으면 완료로 적고, 곧바로 다시 돌지 않는다", async () => {
     const store = db();
     mock.feed.mockResolvedValueOnce({ list: [plain(2)], next: "c1" }).mockResolvedValueOnce({ list: [plain(1)], next: null });
     expect(await scanVideoHistory(store.sql, {}, "tenant", "12", quiet)).toMatchObject({ scanned: 2, complete: true });
