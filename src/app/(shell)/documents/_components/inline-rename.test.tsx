@@ -57,3 +57,15 @@ it("실패 시 편집값을 유지하고 읽기 전용에는 편집 입력을 �
   await user.dblClick(screen.getByRole("link"));
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 });
+
+it("holdClick=false(폴더)는 첫 클릭을 보류하지 않고, 더블클릭이면 편집을 열며 onBeginEdit으로 이동을 멈추게 한다", () => {
+  vi.useFakeTimers();
+  const open = vi.fn((e) => e.preventDefault());
+  const begin = vi.fn();
+  render(<InlineRename enabled holdClick={false} onBeginEdit={begin} name="중등" maxLength={20} onSave={vi.fn()}><a href="/folder" onClick={open}>중등</a></InlineRename>);
+  fireEvent.click(screen.getByRole("link"), { detail: 1 });
+  expect(open).toHaveBeenCalledOnce(); // 타이머 없이 곧바로
+  fireEvent.doubleClick(screen.getByRole("link"));
+  expect(begin).toHaveBeenCalledOnce();
+  expect(screen.getByRole("textbox", { name: "새 이름" })).toHaveValue("중등");
+});

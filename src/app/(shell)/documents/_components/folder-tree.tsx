@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Folder, FolderOpen } from "@/components/icon
 import { categoryPath, flattenCategories, type DocumentCategoryOption } from "@/features/documents/categories";
 import { FolderDropTarget, FolderName } from "./folder-interactions";
 import { FolderFavoriteToggle } from "./folder-favorite-toggle";
+import { useShownFolderKey } from "./folder-navigation";
 
 type FolderTreeProps = {
   categories: DocumentCategoryOption[];
@@ -14,14 +15,23 @@ type FolderTreeProps = {
   favoriteKeys: string[];
 };
 
-export function FolderTree(props: FolderTreeProps) {
-  const ancestors = props.activeKey ? categoryPath(props.categories, props.activeKey).slice(0, -1).map((c) => c.key) : [];
-  // 진입 경로가 바뀔 때만 조상 폴더를 펼친다. 열린 뒤에는 사용자가 자유롭게 접을 수 있다.
-  return <FolderTreeItems key={JSON.stringify([props.activeKey, ancestors])} {...props} ancestors={ancestors} />;
+function ancestorKeys(categories: DocumentCategoryOption[], key: string | null): string[] {
+  return key ? categoryPath(categories, key).slice(0, -1).map((c) => c.key) : [];
 }
 
-function FolderTreeItems({ categories, counts, activeKey, hrefs, favoriteKeys, ancestors }: FolderTreeProps & { ancestors: string[] }) {
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(ancestors));
+export function FolderTree({ categories, counts, activeKey: committedKey, hrefs, favoriteKeys }: FolderTreeProps) {
+  // 선택 표시는 누르는 즉시(탐색기 낙관 값) — 서버 응답을 기다리지 않는다.
+  const activeKey = useShownFolderKey(committedKey);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(ancestorKeys(categories, activeKey)));
+  // 진입 경로가 바뀌면 그 조상만 **더** 펼친다. 예전엔 트리를 통째로 다시 만들어(key 교체) 사용자가 펼쳐 둔 폴더가
+  // 접히고 줄이 위로 밀렸다 — 더블클릭의 두 번째 클릭이 다른 폴더에 떨어지고, 편집 중인 이름 칸도 사라졌다.
+  // 열린 뒤에는 여전히 자유롭게 접을 수 있다(같은 경로에선 다시 펼치지 않는다).
+  const [seenKey, setSeenKey] = useState(activeKey);
+  if (seenKey !== activeKey) {
+    setSeenKey(activeKey);
+    const missing = ancestorKeys(categories, activeKey).filter((k) => !expanded.has(k));
+    if (missing.length) setExpanded(new Set([...expanded, ...missing]));
+  }
   const parents = new Set(categories.map((c) => c.parentKey).filter(Boolean));
   const rows = flattenCategories(categories);
   const favorites = new Set(favoriteKeys);

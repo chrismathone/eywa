@@ -180,6 +180,8 @@ async function heartbeat(tenant) {
   const payload = {
     ...lastResults,
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
+    videoArchive: { enabled: !!process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID,
+      folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID || null },
     postMode: POST, // 실게시 PC 표식 — 지점당 한 대 임대(worker-lease.mjs)가 이 값을 센다(dry-run PC는 주인이 안 된다)
     env: {
       logDir: stateDirLabel(),

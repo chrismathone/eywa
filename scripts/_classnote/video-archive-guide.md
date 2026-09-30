@@ -17,16 +17,27 @@
 
 1. 새 ZIP의 `scripts/_classnote` 폴더 전체를 기존 저장소에 덮어쓴다. 기존 `.env.local`은 유지한다.
 2. 연동 PC에서 [Google Cloud CLI](https://cloud.google.com/sdk/docs/install)를 설치한다(이미 있으면 생략).
-3. 기존 워커를 실행하는 Windows 사용자로 PowerShell을 열고 저장소 루트에서 아래 명령을 실행한다.
-   Google 로그인 화면에서 해당 폴더에 쓰기 권한이 있는 계정으로 동의한다.
+3. 기존 워커를 실행하는 Windows 사용자로 `scripts/_classnote/발송PC-영상연결.bat`을 더블클릭한다.
+   Drive 최초 로그인 → 폴더 권한 확인 → 설정 저장 → 기존 워커 재시작 → 새 버전 적용 확인까지 진행한다.
+   이미 Drive가 연결돼 있으면 로그인을 다시 요구하지 않는다. Google 로그인 화면이 나오면 해당 계정으로 동의한다.
+4. 마지막에 **새 워커와 영상 저장 폴더 적용을 확인했습니다**가 나오면 완료다.
+   기존 워커가 등록되지 않은 PC나 다른 Windows 사용자로는 시작하지 않는다.
+
+직접 명령을 실행하려면 저장소 루트에서:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\_classnote\setup-video-drive.ps1 -Account chrismathone@gmail.com -FolderId 1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK
+powershell -ExecutionPolicy Bypass -File scripts\_classnote\setup-video-drive.ps1 -Account chrismathone@gmail.com -FolderId 1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK -RestartWorker
 ```
 
-4. 성공 후 기존 `발송PC-지정.bat`을 실행해 워커를 재시작한다. 별도 예약 작업은 만들지 않는다.
-5. DB 하트비트 `classnote_workers.last_results.caps.homeworkVideoArchive=true`와 새 `started_at`을 확인한다.
-   로그에는 `[영상 이력]`, `[영상] Drive 저장 완료`가 기록된다.
+별도 예약 작업을 만들지 않고 기존 지정 스크립트를 재사용한다.
+검사기는 DB의 새 `started_at`, 최근 심장박동, 영상 기능, 요청한 저장 폴더를 모두 확인한다.
+로그에는 `[영상 이력]`, `[영상] Drive 저장 완료`가 기록된다.
+
+설정 변경 없이 현재 적용 상태만 확인하려면:
+
+```powershell
+node --env-file=.env.local scripts/_classnote/check-video-worker.mjs
+```
 
 인증은 Google 공식 `gcloud auth login --enable-gdrive-access` 방식이다.
 토큰 저장소를 직접 복사하거나 읽지 않고, 공식 CLI가 갱신한 토큰으로 업로드한다.

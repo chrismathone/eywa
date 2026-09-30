@@ -1,13 +1,13 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, useTransition, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { categoryDescendants, type DocumentCategoryOption } from "@/features/documents/categories";
 import { renameDocumentCategory, reparentDocumentCategory } from "@/features/documents/server/category-actions";
 import { moveDocumentFile } from "@/features/documents/server/file-actions";
 import { InlineRename } from "./inline-rename";
+import { FolderNavLink, useFolderNavigation } from "./folder-navigation";
 
 const FOLDER_DRAG_TYPE = "application/x-aywa-document-folder";
 const FILE_DRAG_TYPE = "application/x-aywa-document-file";
@@ -118,13 +118,19 @@ export function useDocumentFileDrag(file: Omit<FileSource, "kind">, enabled: boo
   };
 }
 
+/**
+ * 폴더 이름 — 누르면 **즉시** 그 폴더로(보류 없음, 원장 2026-09-30 "한 번 누르고 기다려야 들어가진다").
+ * 더블클릭은 이름 변경이고, 첫 클릭이 시작한 이동은 편집이 열리는 순간 멈춘다(예전 500ms 보류와 같은 결과).
+ */
 export function FolderName({ folder, href, active, title }: {
   folder: DocumentCategoryOption; href: string; active?: boolean; title?: string;
 }) {
   const actions = useContext(FolderContext);
+  const nav = useFolderNavigation();
   return <InlineRename enabled={!!actions?.canManage && !actions.pending} name={folder.label} maxLength={20}
+    holdClick={false} onBeginEdit={() => nav?.cancel(folder.key)}
     onSave={(name) => { const data = new FormData(); data.set("key", folder.key); data.set("label", name); return renameDocumentCategory(undefined, data); }}>
-    <Link href={href} draggable={false} aria-current={active ? "page" : undefined} title={title ?? folder.label}
-      className="block min-w-0 truncate py-1.5 text-sm">{folder.label}</Link>
+    <FolderNavLink href={href} folderKey={folder.key} draggable={false} aria-current={active ? "page" : undefined} title={title ?? folder.label}
+      className="block min-w-0 truncate py-1.5 text-sm">{folder.label}</FolderNavLink>
   </InlineRename>;
 }
