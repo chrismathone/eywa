@@ -2437,7 +2437,7 @@ export const SHEET_DICT = {
   "os.col.check": { ko: "확인", en: "Check" },
   "os.col.attitude": { ko: "태도", en: "Attitude" },
   "os.col.homework": { ko: "과제 수행률", en: "Homework done" },
-  "os.col.book": { ko: "교재명 · 보강", en: "Book · makeup" },
+  "os.col.book": { ko: "교재명 · 보강 · 과제", en: "Book · makeup · homework" },
   "os.col.ment": { ko: "학부모 문구", en: "Parent message" },
   "os.col.send": { ko: "발송 · 편집", en: "Send · edit" },
   "os.row.up": { ko: "{name} 위로", en: "Move {name} up" },

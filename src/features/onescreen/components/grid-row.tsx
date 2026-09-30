@@ -615,6 +615,10 @@ export function GridBodyRow({
       </td>
       <td className={td}>
         <div className="flex flex-col gap-1">
+          {/* 칸마다 무엇인지 앞에 작은 아이콘(원장 2026-09-30 *"교재 / 과제 / 보강체크 알 수 있게"*) — 값이 차면
+              placeholder가 사라져 두 칸이 구분되지 않았다. 폭 140px라 글자 대신 아이콘 + 툴팁. */}
+          <div className="flex items-center gap-1" title={t("os.row.bookPh")}>
+          <EyIcon name="book" size={14} className="text-text-faint shrink-0" aria-hidden />
           <input
             type="text"
             value={subject.textbook ?? ""}
@@ -625,10 +629,13 @@ export function GridBodyRow({
             data-nav-col="textbook"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
-            className="border-line bg-card focus:border-primary h-8 w-full rounded-sm border px-2 text-xs outline-none"
+            className="border-line bg-card focus:border-primary h-8 w-full min-w-0 rounded-sm border px-2 text-xs outline-none"
           />
+          </div>
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
           {/* 진도 셀과 같은 처방 — 시트 초안은 교시마다 과제가 있어 한 줄 input이면 붙어 보인다(2026-08-07). */}
+          <div className="flex items-center gap-1">
+          <EyIcon name="clipboardList" size={14} className="text-text-faint shrink-0" aria-hidden />
           <textarea
             rows={1}
             value={subject.homeworkToday ?? ""}
@@ -656,8 +663,9 @@ export function GridBodyRow({
             data-nav-col="homeworkToday"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
-            className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none"
+            className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full min-w-0 resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none"
           />
+          </div>
           {/* 뜻이 행 종류에 따라 갈린다(2026-08-05) — 반이 붙은 행이면 "정규까지 하고 보강도 했다"라
               제목이 "(정규+보강)"이 된다. 켜는 사람이 무엇을 켜는지 알 수 있게 툴팁으로 밝힌다. */}
           <label
