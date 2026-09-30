@@ -22,7 +22,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type ComboOption } from "@/components/ui/searchable-select";
-import type { MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
+import { makeupBaseUnitsOf, type MergeCandidate } from "@/features/onescreen/makeup-merge-plan";
 import { absenceMemo, shortDate } from "@/features/onescreen/makeup-absence-link";
 import {
   absenceOptionLabel,
@@ -209,7 +209,10 @@ export function MakeupConfirmDialog({
   const regularContext = canMerge && (!!chosen || !asksHost || !hostValue);
   const effMode: "merge" | "separate" = regularContext ? mode : "separate";
   const chosenLabel = chosen ? (chosen.className ?? chosen.name) : "";
-  const baseUnits = chosen?.attendanceUnits ?? defaultUnits ?? 1;
+  // 🔴 조퇴 칸은 저장 시수가 줄여 둔 값일 수 있어 보강 기본값으로 쓰지 않는다(`makeupBaseUnitsOf`).
+  const baseUnits = (chosen ? makeupBaseUnitsOf(chosen) : null) ?? defaultUnits ?? 1;
+  /** 고른 정규 칸이 조퇴인가 — 합쳐도 조퇴는 조퇴로 남는다(원장 2026-09-30). 문구에 그 사실을 적는다. */
+  const chosenEarlyLeave = chosen?.attendanceRaw === "early_leave";
   // 고른 반이 바뀌면 기본값도 그 반 것을 따른다 — 강사가 직접 친 값이 있으면 그게 이긴다.
   const addUnits = addUnitsRaw.trim() ? parseAddUnits(addUnitsRaw) : baseUnits;
 
@@ -256,7 +259,7 @@ export function MakeupConfirmDialog({
     (canMerge && !asksHost && !chosen) || addUnits === null || customEmpty || customExpired || customWaiting || slotUnpicked || hostLoading || hostUnpicked;
   /** 수업 드롭다운 한 벌 — 오늘 정규 수업 → 학생이 다니는 다른 반 → '반 없이'(정규 수업이 없을 때만). */
   const hostSelectOptions: ComboOption[] = [
-    ...candidates.map((c) => ({ value: `${REGULAR_PREFIX}${c.name}`, label: c.className ?? c.name, hint: "오늘 정규" })),
+    ...candidates.map((c) => ({ value: `${REGULAR_PREFIX}${c.name}`, label: c.className ?? c.name, hint: c.attendanceRaw === "early_leave" ? "오늘 정규 · 조퇴" : "오늘 정규" })),
     ...(hostListLoading
       ? []
       : [
@@ -354,7 +357,7 @@ export function MakeupConfirmDialog({
           <div className="mt-4 flex gap-1.5" role="radiogroup" aria-label="보강 보고서 처리 방식">
             {(
               [
-                { v: "merge", label: "합침 (정규+보강)" },
+                { v: "merge", label: chosenEarlyLeave ? "합침 (정규(조퇴)+보강)" : "합침 (정규+보강)" },
                 { v: "separate", label: "분리 (보강 따로)" },
               ] as const
             ).map((o) => (
@@ -548,7 +551,7 @@ export function MakeupConfirmDialog({
             : addUnits === null
               ? "보강 시수는 0보다 큰 숫자로 적어 주세요(0.5 = 1시간)."
               : effMode === "merge" && chosen
-                ? `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. 출석부 수업타임은 ${chosenLabel} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${(chosen.attendanceUnits ?? 1) + addUnits}.`
+                ? `${chosen.name} 보고서 1건에 합쳐 "(정규+보강)"으로 한 번만 발송합니다. ${chosenEarlyLeave ? "정규 칸의 조퇴 기록(사유 메모 포함)은 그대로 두고 시수만 더합니다. " : ""}출석부 수업타임은 ${chosenLabel} 행에 ${chosen.attendanceUnits ?? 1} + 보강 ${addUnits} = ${(chosen.attendanceUnits ?? 1) + addUnits}.`
                 : !absentDate
                   ? `${separateLead}결석분 연결은 없고(추가 보강), ${shortDate(makeupDate)} 보강 수업타임은 ${addUnits}.`
                   : `${separateLead}출석부는 ${shortDate(absentDate)}${selectedOption ? ` ${selectedOption.className}` : ""} 칸에 "${absenceMemo(makeupDate, absentDate)}" 메모만 붙고(결석 0은 그대로), ${shortDate(makeupDate)} 칸 보강 수업타임은 ${addUnits}.${beforehand ? " 아직 지나지 않은 날이라 그 칸에 출결 기록이 없으면 메모는 남지 않습니다." : ""}`}
