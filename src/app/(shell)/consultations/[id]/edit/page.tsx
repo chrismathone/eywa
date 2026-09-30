@@ -56,6 +56,7 @@ export default async function EditConsultationPage({
         currentUserId={viewer.id}
         // 🔴 고를 수 있는 학생(담당 범위로 좁힌 목록)의 것만 내려보낸다 — 강사에게 전사 신입 명단이 새지 않게.
         newcomerTargets={newcomerTargets.filter((t) => students.some((s) => s.id === t.studentId))}
+        classSupported={item.classSupported}
         initialValue={{
           id: item.id,
           studentId: item.studentId,
@@ -68,6 +69,9 @@ export default async function EditConsultationPage({
           followUpAction: item.followUpAction,
           followUpDate: item.followUpDate,
           followUpDone: item.followUpDone,
+          classId: item.classId,
+          className: item.className,
+          classSource: item.classSource,
         }}
       />
     </div>

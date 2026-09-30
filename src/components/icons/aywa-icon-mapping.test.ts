@@ -67,6 +67,9 @@ const APPROVED_INLINE_SVG = [
   // 차트 눈금이지 아이콘이 아니다(sparkline과 같은 성격). 레일을 만든 커밋이 이 목록을 안 고쳐
   // 가드가 하루 동안 빨간 채였다 — 새 인라인 SVG는 **같은 커밋에서** 여기에 적을 것.
   "src/features/math-sheets/components/learning-rails.tsx",
+  // 2026-09-30 원생상담 통계 패널 분해 줄의 **작은 막대 12칸**(최근 12개월/12주 건수, aria-hidden) — 0부터 세는 막대라
+  // 운영실 선 스파크라인(최솟값~최댓값 정규화)을 못 쓴다. 차트이지 아이콘이 아니다(sparkline과 같은 성격).
+  "src/app/(shell)/consultations/_components/stats/stats-breakdown.tsx",
   // 2026-09-29 공개 랜딩의 대시보드 **개념도**(연결선 지도·추이 선, 둘 다 aria-hidden) — 장식 그림이지 아이콘이 아니다.
   // eb3787b2가 이 목록을 안 고쳐 가드가 빨갰다(보안 감사 푸시에 함께 고침).
   "src/app/(marketing)/_scroll/dashboard-mock.tsx",

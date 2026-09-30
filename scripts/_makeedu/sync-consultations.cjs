@@ -12,6 +12,21 @@
 const postgres = require("postgres");
 const L = require("./lib.cjs");
 const { makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects } = require("./consultation-counselor.cjs");
+// 반 매핑(0318a) — 앱과 같은 판정 한 벌. 칸이 없으면(SQL 적용 전) 반 없이 적재([[#95]]).
+const { assignClasses, hasClassColumns } = require("./consultation-class.cjs");
+
+/**
+ * 재동기화 upsert에서 **저장된 반을 그대로 둘 조건**(SQL 조각) — 이미 판정했고(auto·manual) 학생·상담일(KST)이 그대로이거나,
+ * 사람이 고른 '미매핑'(manual + 반 없음)일 때. 그 밖(아직 판정 안 함 · 학생/상담일이 바뀜)은 이번 판정(excluded)을 쓴다.
+ */
+function keepStoredClass(sql) {
+  return sql`(
+    (student_consultations.class_source = 'manual' and student_consultations.class_id is null)
+    or (student_consultations.class_source is not null
+      and student_consultations.student_id = excluded.student_id
+      and (student_consultations.consulted_at at time zone 'Asia/Seoul')::date = (excluded.consulted_at at time zone 'Asia/Seoul')::date)
+  )`;
+}
 
 let chromium;
 try {
@@ -148,6 +163,13 @@ function EXTRACT_DETAIL() {
       })?.label ?? null;
       delete r.counselor;
     }
+    // 반 — 과목을 정한 **뒤에**(과목으로 좁힌다). 이미 판정된 행(사람이 고른 manual 포함)은 아래 upsert가 건드리지 않는다.
+    const classOn = await hasClassColumns(sql);
+    if (classOn && matched.length) {
+      const items = matched.map((r) => ({ studentId: r.student_id, date: dayOf(r), counselorId: r.counselor_id, subject: r.subject }));
+      console.log("[반]", JSON.stringify(await assignClasses(sql, tenantId, items, subjectLabels)));
+      items.forEach((x, i) => { matched[i].class_id = x.classId; matched[i].class_source = x.classSource; });
+    }
     console.log(`matched(active students): ${matched.length} / ${all.length}`);
 
     if (!APPLY) {
@@ -183,13 +205,23 @@ function EXTRACT_DETAIL() {
     for (const r of matched) {
       const summary = r.content && r.content.length > 10 ? r.content : r.title || "상담";
       await sql`
-        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, subject, summary, consulted_at, sync_added_at)
-        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${r.subject}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`}, now())
+        insert into student_consultations (tenant_id, makeedu_id, student_id, counselor_id, subject, summary, consulted_at, sync_added_at
+          ${classOn ? sql`, class_id, class_source` : sql``})
+        values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${r.subject}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`}, now()
+          ${classOn ? sql`, ${r.class_id ?? null}, ${r.class_source ?? null}` : sql``})
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null
         do update set student_id = excluded.student_id,
           counselor_id = coalesce(student_consultations.counselor_id, excluded.counselor_id),
           subject = coalesce(nullif(btrim(student_consultations.subject), ''), excluded.subject),
-          summary = excluded.summary, consulted_at = excluded.consulted_at, updated_at = now()`;
+          summary = excluded.summary, consulted_at = excluded.consulted_at, updated_at = now()
+          ${classOn
+            // 반은 **아직 판정 안 한 행만** 채운다 — 사람이 고른 반(manual)·이미 판정한 반은 재동기화가 덮지 않는다.
+            // 🔴 단, makeedu에서 **학생이나 상담일(KST)이 바뀐 행**은 새 판정으로 갈아 끼운다 — 옛 반은 다른 학생의 반·그날 수강하지
+            //    않던 반이라 더는 사실이 아니다(사람이 고른 '미매핑'만은 그대로 — 비어 있는 값은 틀릴 수 없다).
+            //    ON CONFLICT의 SET 식에서 `student_consultations.*`는 **바뀌기 전** 값이다.
+            ? sql`, class_id = case when ${keepStoredClass(sql)} then student_consultations.class_id else excluded.class_id end,
+                  class_source = case when ${keepStoredClass(sql)} then student_consultations.class_source else excluded.class_source end`
+            : sql``}`;
       up++;
     }
     await L.recordSync(sql, tenantId, "consultations", up);

@@ -51,3 +51,24 @@ describe("lesson_reports → classes 임베드는 FK를 명시한다", () => {
     expect(src).toContain("classes!lesson_reports_class_id_fkey(class_name)");
   });
 });
+
+/**
+ * 0318a가 `student_consultations.class_id → classes` FK를 더했다 — 그 순간 student_consultations는 students↔classes·
+ * users↔classes 사이의 **또 하나의 연결 표**가 된다. 이 표에서 반을 끌어올 땐 FK 이름을 붙인다([[#94]] 같은 사고 예방).
+ */
+describe("student_consultations → classes 임베드는 FK를 명시한다(0318a)", () => {
+  it("상담을 읽는 파일에 힌트 없는 classes( 임베드가 없다", () => {
+    const offenders: string[] = [];
+    for (const file of sourceFiles(join(process.cwd(), "src"))) {
+      const src = stripComments(readFileSync(file, "utf8"));
+      if (!src.includes('from("student_consultations")')) continue;
+      if (/(?<!!)\bclasses\s*\(/.test(src)) offenders.push(file.replace(process.cwd(), ""));
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("목록 select가 실제로 FK 힌트를 달고 있다(스캔이 헛돌지 않는지 확인)", () => {
+    const src = readFileSync(join(process.cwd(), "src/features/consultations/server/queries.ts"), "utf8");
+    expect(src).toContain("classes!student_consultations_class_id_fkey");
+  });
+});

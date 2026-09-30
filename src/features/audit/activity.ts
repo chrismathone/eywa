@@ -91,6 +91,8 @@ const COLUMN_LABEL: Record<string, string> = {
   withdrawal_metadata: "퇴원정보", is_transferred: "반이동", classnote_name: "클래스노트이름",
   request_date: "신청일", transcription: "전사", speaker_labels: "화자구분", audio_path: "오디오",
   audio_duration_sec: "오디오길이(초)", audio_size_bytes: "오디오용량",
+  // 원생상담 반 매핑(0318a) — class_id는 uuid라 "반 변경"으로 축약된다(unreadableDiff).
+  class_id: "반", class_source: "반 정하는 방식",
   // redact 대상 컬럼(트리거 0081a·0084a) — "X 변경"으로만 뜨므로 라벨 없으면 영문 그대로 노출된다
   hourly_rate: "시급", monthly_base: "월급여", form_data: "서식내용", print_payload: "인쇄본",
   ai_summary: "AI요약", share_token: "공유링크", token: "토큰", token_hash: "토큰",
@@ -114,7 +116,7 @@ const VALUE_LABEL: Record<string, string> = {
   card: "카드", transfer: "계좌이체", cash: "현금", other: "기타",
   // 출결
   present: "출석", absent: "결석", late: "지각", excused: "인정결석", makeup: "보강", early_leave: "조퇴",
-  manual: "수동", kiosk: "키오스크",
+  manual: "수동", kiosk: "키오스크", auto: "자동",
   // 등록상담 outcome / 재등록 캠페인
   scheduled: "예약", ai_done: "AI 완료", declined: "거절", no_show: "노쇼", contacted: "연락완료",
   // 오디오 파이프라인(과거 행)

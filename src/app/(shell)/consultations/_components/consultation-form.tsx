@@ -28,6 +28,7 @@ import type { ConsultationTemplate } from "@/features/owner/settings-types";
 import { fillTemplate, formatConsultDate, type TemplateVars } from "@/features/consultations/template-vars";
 import type { NewcomerLinkTarget } from "@/features/newcomers/consult-link";
 import { NewcomerLinkField } from "./newcomer-link-field";
+import { ConsultationClassField } from "./class-field";
 
 type Mode = "create" | "edit";
 
@@ -43,6 +44,10 @@ export type ConsultationFormValue = {
   followUpAction: string | null;
   followUpDate: string | null;
   followUpDone: boolean;
+  /** 반 매핑(0318a) — 저장된 반·출처. 출처가 manual이면 폼도 '직접 고름'으로 연다. */
+  classId?: string | null;
+  className?: string | null;
+  classSource?: "auto" | "manual" | null;
 };
 
 const CATEGORY_OPTIONS: { value: StudentConsultationCategory; label: string }[] = [
@@ -92,6 +97,7 @@ export function ConsultationForm({
   templates,
   currentUserName,
   newcomerTargets,
+  classSupported = false,
 }: {
   mode: Mode;
   initialValue?: ConsultationFormValue;
@@ -105,6 +111,8 @@ export function ConsultationForm({
   currentUserName?: string;
   /** 90일 관리 신규생(0295a 반자동) — 고른 학생이 여기 있으면 '신규생 관리' 칸을 그린다. */
   newcomerTargets?: NewcomerLinkTarget[];
+  /** 0318a(반 칸)가 DB에 있나 — 없으면 '반' 칸을 그리지 않는다([[#95]]). */
+  classSupported?: boolean;
 }) {
   const action = mode === "create" ? createStudentConsultation : updateStudentConsultation;
   const [state, formAction] = useActionState<ConsultationFormState, FormData>(action, undefined);
@@ -253,7 +261,8 @@ export function ConsultationForm({
     scope: mode === "create" ? "student-consultation:new" : `student-consultation:${initialValue?.id ?? "edit"}`,
     formRef,
     // 신규생 관리 칸은 학생마다 선택지가 달라 초안으로 되살리면 엉뚱한 칸이 잡힌다.
-    exclude: ["studentId", "newcomerLink", "newcomerLinkRow"],
+    // 반(classId·classPick)도 학생·일시에 따라 선택지가 달라 초안으로 되살리지 않는다(자동 판정이 다시 잡는다).
+    exclude: ["studentId", "newcomerLink", "newcomerLinkRow", "classId", "classPick"],
     ignoreForBanner: ["consultedAt", "category", "audience"],
   });
   const clearDraft = draft.clear;
@@ -372,6 +381,19 @@ export function ConsultationForm({
               className={inputClass}
             />
           </Field>
+          {classSupported ? (
+            <ConsultationClassField
+              key={linkStudentId || "none"}
+              studentId={linkStudentId}
+              consultedAt={linkConsultedAt}
+              counselorId={linkCounselorId}
+              subject={linkSubject}
+              // 원래 학생으로 돌아오면 저장된 선택을 되살린다 — 다른 학생이면 새로 판정한다.
+              initialPick={linkStudentId === v.studentId && v.classSource === "manual" ? "manual" : "auto"}
+              initialClassId={linkStudentId === v.studentId ? (v.classId ?? null) : null}
+              initialClassName={linkStudentId === v.studentId ? (v.className ?? null) : null}
+            />
+          ) : null}
           {linkTarget ? (
             <NewcomerLinkField
               key={`${linkTarget.studentId}:${linkResetKey}`}

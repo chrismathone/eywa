@@ -24,6 +24,8 @@ const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
 const { makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects } = require("./consultation-counselor.cjs");
+// 반 매핑(0318a) — 앱·증분 동기화와 같은 판정 한 벌. 칸이 없으면(SQL 적용 전) 반 없이 적재([[#95]]).
+const { assignClasses, hasClassColumns } = require("./consultation-class.cjs");
 
 const APPLY = process.argv.includes("--apply");
 const SKIP_SAME_DAY = process.argv.includes("--skip-same-day");
@@ -224,6 +226,13 @@ function mapCategory(v) {
         labels: subjectLabels,
       })?.label ?? null;
     }
+    // 반 — 과목을 정한 뒤에(과목으로 좁힌다).
+    const classOn = await hasClassColumns(sql);
+    if (classOn && inserts.length) {
+      const items = inserts.map((it) => ({ studentId: it.studentId, date: it.dateStr, counselorId: it.counselorId, subject: it.subject }));
+      console.log("[반]", JSON.stringify(await assignClasses(sql, tenantId, items, subjectLabels)));
+      items.forEach((x, i) => { inserts[i].classId = x.classId; inserts[i].classSource = x.classSource; });
+    }
 
     console.log("\n[통계]", JSON.stringify(stats, null, 1));
     if (noStudentSamples.length) console.log("학생 미매칭 표본:", noStudentSamples.join(", "));
@@ -243,8 +252,10 @@ function mapCategory(v) {
     for (const it of inserts) {
       await sql`
         insert into student_consultations
-          (tenant_id, student_id, counselor_id, consulted_at, category, subject, summary)
-        values (${tenantId}, ${it.studentId}, ${it.counselorId}, ${it.consultedAt}, ${it.category}, ${it.subject}, ${it.summary})`;
+          (tenant_id, student_id, counselor_id, consulted_at, category, subject, summary
+           ${classOn ? sql`, class_id, class_source` : sql``})
+        values (${tenantId}, ${it.studentId}, ${it.counselorId}, ${it.consultedAt}, ${it.category}, ${it.subject}, ${it.summary}
+          ${classOn ? sql`, ${it.classId ?? null}, ${it.classSource ?? null}` : sql``})`;
       inserted++;
     }
     // 수동 부트스트랩도 동기화 시각으로 기록(학생상담 화면 '↻ 동기화' 배지). sync_added_at 배지는 자동 증분용이라 안 찍음.
