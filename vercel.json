@@ -43,11 +43,7 @@
     },
     {
       "path": "/api/cron/google-calendar-import",
-      "schedule": "0 21 * * *"
-    },
-    {
-      "path": "/api/cron/google-calendar-import",
-      "schedule": "0 9 * * *"
+      "schedule": "0 19 * * *"
     },
     {
       "path": "/api/cron/ment-style-rebuild",
