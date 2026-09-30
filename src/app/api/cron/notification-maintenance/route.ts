@@ -5,6 +5,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { detectAndNotifyEvents } from "@/features/notifications/server/events";
 import { pruneNotificationData } from "@/features/notifications/server/prune";
 import { sweepFailedReportNotifications } from "@/features/notifications/server/failed-notify-sweep";
+import { checkProtectedAccountIntegrity } from "@/features/super-admin/server/protected-integrity";
 
 /** Daily notification checks and cleanup. AI briefing generation was retired on 2026-09-30. */
 export const dynamic = "force-dynamic";
@@ -18,6 +19,22 @@ export async function GET(req: Request) {
   }
 
   const admin = createAdminClient();
+  // 보호 계정(super_admins 명단) 매일 점검 — 3선(원장 2026-09-30). 다른 단계 실패로 건너뛰지 않게 **맨 앞**에서 돈다.
+  let protectedCheck: { members: number; issues: number; triggersChecked: boolean } | string;
+  try {
+    // 맨 앞이라 멈추면 뒤 단계가 통째로 굶는다(supabase-js fetch엔 타임아웃이 없다) — 20초에서 끊고 넘어간다.
+    const r = await Promise.race([
+      checkProtectedAccountIntegrity(admin),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("보호 계정 점검 시간 초과(20초)")), 20_000),
+      ),
+    ]);
+    protectedCheck = { members: r.members, issues: r.issues.length, triggersChecked: r.triggersChecked };
+  } catch (e) {
+    reportError(e, { scope: "security.protected-integrity" });
+    protectedCheck = `실패: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
   const { data: masters, error } = await admin
     .from("users")
     .select("tenant_id")
@@ -25,7 +42,7 @@ export async function GET(req: Request) {
     .eq("status", "active");
   if (error) {
     reportError(error, { scope: "cron.notification-maintenance", step: "list-tenants" });
-    return NextResponse.json({ error: `대상 테넌트 조회 실패: ${error.message}` }, { status: 500 });
+    return NextResponse.json({ error: `대상 테넌트 조회 실패: ${error.message}`, protectedCheck }, { status: 500 });
   }
 
   const tenantIds = [...new Set((masters ?? []).map((row) => row.tenant_id as string))];
@@ -60,5 +77,5 @@ export async function GET(req: Request) {
     pruned = `실패: ${e instanceof Error ? e.message : String(e)}`;
   }
 
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, events, sweeps, pruned });
+  return NextResponse.json({ ok: true, tenants: tenantIds.length, events, sweeps, pruned, protectedCheck });
 }
