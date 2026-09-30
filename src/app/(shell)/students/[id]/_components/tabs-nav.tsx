@@ -11,6 +11,7 @@ export const STUDENT_TABS = [
   // 서면 "성적이 둘"로 읽혔다. 무엇을 담는지는 탭 안 제목이 말한다.
   { key: "srs", label: "SRS" },
   { key: "progress", label: "진도" },
+  { key: "homework-videos", label: "숙제 영상" },
   { key: "attendance", label: "출결" },
   { key: "consultations", label: "상담" },
   { key: "memos", label: "메모" },

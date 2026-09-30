@@ -31,8 +31,8 @@
  *    (classnoteSendEnabled)는 **따르지 않는다** — 이건 발송이 아니라 인바운드 감지다(provision-core와 같은 논리).
  */
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
-import { classBoardKeys, classBoardStudentOf } from "./class-board-keys.mjs";
-import { getClassnoteBoardAllowlist } from "./classnote-core.mjs";
+import { buildClassBoardChildMap, classBoardMatch } from "./class-board-keys.mjs";
+import { getClassnoteBoardAllowlist, isClassnoteModuleEnabled } from "./classnote-core.mjs";
 import {
   BOARD_GROUPS,
   fetchBoardChildren,
@@ -42,6 +42,17 @@ import {
   norm,
 } from "./classnote-admin-core.mjs";
 import { kickClassify, loadChildStudentMap, storeParentMessages } from "./classnote-inbox-store.mjs";
+import { enqueueParentVideos, videoArchiveEnabled } from "./video-inbox.mjs";
+import { incomingVideo } from "./video-inbox.mjs";
+import {
+  classBoardClassOf,
+  computeClassWideRecipients,
+  computeNotifyRecipients,
+  kstToday,
+  loadClassBoardClasses,
+  readOnlyWithTimeout,
+} from "./notify-recipients-db.mjs";
+import { NOTIFY_RECIPIENT_CAP, addBlocked, dedupePlanRows, eventDedupeKey, newGuardStats } from "./notify-recipients.mjs";
 import {
   buildCommentNotificationText,
   pruneCounts,
@@ -228,6 +239,15 @@ export async function fetchReadWindow(browser, { maxAgeDays = 14, label = "읽�
 }
 
 /**
+ * (8) 이 지점에서 학부모 글·댓글 알림 일을 해도 되나 — 지점을 알고, 그 지점의 ClassNote 기능이 켜져 있을 때만.
+ * 꺼져 있으면 피드 조회도 수신자 계산도 하지 않는다(원장 2026-09-30 "꺼지면 있었는지조차 모르게"). 조회 실패는 throw(다음 폴 재시도).
+ */
+async function classnoteFeedAllowed(sql, tenant) {
+  if (!tenant) return false;
+  return isClassnoteModuleEnabled(sql, tenant);
+}
+
+/**
  * 게이트 재료(보드 목록 · 예외 등재 · 동명 판정 우주) — **알릴 후보가 실제로 있을 때만** 부른다.
  * 두 폴러가 공유해서 한쪽만 취약해지는 구조를 막는다.
  */
@@ -299,16 +319,19 @@ async function duplicateNameCounts(sql, tenant) {
 
 /**
  * 보드명 → 학생.
- * - **대상 집합**(누구에게 보드가 있나) = provision `expectedFor`와 동일 쿼리(재원 + 활성 수강).
+ * - **대상 집합**(누구에게 보드가 있나) = 재원 + 아직 안 끝난 보드 과목 수강. provision `expectedFor`(`end_date is null`)보다
+ *   **퇴원 예약(미래 종료일)만큼 넓다** — 그 학생도 종료일까지는 다니는데, `end_date is null`로 자르면 1인 보드 학부모 글이
+ *   '재원·수강 아님'으로 보류돼 담당이 못 받았다(2026-09-30 원장 정정 때 바로잡음). 누가 받는지는 recipientsFor가 오늘 기준으로 다시 정한다.
  * - **신원 유일성**(그 보드가 정말 이 학생 건가) = **전 학생 우주**(위 duplicateNameCounts) — expectedFor에는
  *   없는 층이다(provision은 planChildMatches가 담당). ⚠️ "provision과 완전히 같다"고 쓰지 말 것 — 두 층은 다르다.
  */
-export async function boardsToStudents(sql, tenant, keys, prefix) {
+export async function boardsToStudents(sql, tenant, keys, prefix, today = kstToday()) {
   const [rows, dupCounts] = await Promise.all([
     sql`
       select distinct s.id, s.name, s.classnote_name, s.grade
       from students s
-      join enrollments e on e.student_id = s.id and e.end_date is null and e.tenant_id = ${tenant}
+      join enrollments e on e.student_id = s.id and e.tenant_id = ${tenant}
+        and (e.end_date is null or e.end_date >= ${today}::date)
       join classes c on c.id = e.class_id and c.tenant_id = ${tenant}
       where s.tenant_id = ${tenant}
         and s.status = 'enrolled'
@@ -333,47 +356,135 @@ export async function boardsToStudents(sql, tenant, keys, prefix) {
 }
 
 /**
- * 수학 **반 보드**(0302a, 2026-09-29) — `보드번호|원아id` → 학생(개명 감사 G4: 보드명 키는 반 이름이 바뀐 날 짝을 못 찾아
- * 학부모 글 알림이 **조용히 버려졌다** — 번호가 기준, 이름은 번호가 없는 행의 폴백). 반 보드는 여러 가족이 한 보드에 있으므로 보드명만으로는
+ * 수학 **반 보드**(0302a, 2026-09-29) — `#보드번호|원아id` → 학생. 반 보드는 여러 가족이 한 보드에 있으므로 보드명만으로는
  * 학생을 모른다 → **원아 id**로 확정한다(가드를 통과해 ok로 적힌 매칭만). 🔴 1인 보드 게이트(gateBoard)를 반 보드에 태우지 말 것 —
  * 그 판정은 "보드 = 한 학생" 전제라 반 보드에선 무의미하다. 표가 없으면(SQL 전) 빈 지도 = 종전과 같다.
+ * (1) 학생 확정 가드 — 보드 번호로만 찾고(이름 폴백 없음), 한 원아가 두 학생에 걸리면(원아 링크 0185a와 달라도) 학생 미확정
+ * (규칙 본체 = class-board-keys.mjs `buildClassBoardChildMap`).
  */
-async function loadClassBoardChildMap(sql, tenant) {
+async function loadClassBoardChildMap(sql, tenant, keys) {
+  // 보드 과목 = 반 과목 — 보드 그룹(수학) 반만 싣는다. 다른 과목 반 보드가 이 표에 생겨도 그 글이 수학 강사 벨로 새지 않게.
+  // 판정 행의 보드 번호가 지금 반 보드 번호와 같은 것만(반 보드를 갈아 끼운 뒤 남은 옛 판정으로 학생을 정하지 않게).
   const rows = await sql`
-    select b.board_id, b.board_name, m.child_id, s.id as student_id, s.name, s.classnote_name
+    select b.board_id, m.child_id, s.id as student_id, s.name, s.classnote_name, l.student_id as linked_student_id
     from classnote_class_board_members m
-    join classnote_class_boards b on b.tenant_id = m.tenant_id and b.class_id = m.class_id
+    join classnote_class_boards b on b.tenant_id = m.tenant_id and b.class_id = m.class_id and b.board_id = m.board_id
+    join classes c on c.id = b.class_id and c.tenant_id = b.tenant_id and c.subject in ${sql(keys)}
     join students s on s.id = m.student_id and s.tenant_id = m.tenant_id
+    left join classnote_child_links l on l.tenant_id = m.tenant_id and l.child_id = m.child_id
     where m.tenant_id = ${tenant} and m.status = 'ok' and m.child_id is not null`;
   // 🔴 조회 실패는 throw — 빈 지도로 삼키면 반 보드 학부모 글이 "매칭 없음"으로 지나가고 워터마크가 전진해 영영 사라진다.
   //    throw면 폴러가 워터마크·스냅샷을 저장하지 않고 끝나 다음 폴에 다시 본다.
-  const map = new Map();
-  for (const r of rows) {
-    const st = { id: r.student_id, name: (r.classnote_name || r.name || "").trim() };
-    for (const k of classBoardKeys({ boardId: r.board_id, boardName: r.board_name, childId: r.child_id })) map.set(k, st);
-  }
-  return map;
+  return buildClassBoardChildMap(
+    rows.map((r) => ({
+      boardId: r.board_id,
+      childId: r.child_id,
+      studentId: r.student_id,
+      name: (r.classnote_name || r.name || "").trim(),
+      linkedStudentId: r.linked_student_id ?? null,
+    })),
+  );
 }
 
 
-/** 학생 → 담당 강사(활성 직원 · 활성 반 · 해당 과목). 학생 1명이 여러 반이면 강사 전원. */
-async function teachersFor(sql, tenant, studentIds, keys) {
+/**
+ * 학생 → **지금 반 담임**(활성 · 학생 계정 아님 · 운영 반 · 보드 과목 · 오늘 다니는 수강). 학생 1명이 여러 반이면 담임 전원.
+ * (6) 폴백 가드 — `recipientsFor`의 새 계산이 실패했을 때**만** 쓴다. 넓히지 않는다(교시 담당·위임 없음).
+ * 수강 판정은 앱 `isEnrollmentEndedOn` 규약(반이동 = 종료일 당일부터 새 반만 · 일반 종료 = 종료일까지 다닌다)을 SQL로 적었다.
+ */
+async function teachersFor(sql, tenant, studentIds, keys, today = kstToday()) {
   if (!studentIds.length) return new Map();
   const rows = await sql`
     select distinct e.student_id, c.teacher_id
     from enrollments e
     join classes c on c.id = e.class_id and c.tenant_id = ${tenant} and c.is_active
-    join users u on u.id = c.teacher_id and u.tenant_id = ${tenant} and u.status = 'active'
+    join users u on u.id = c.teacher_id and u.tenant_id = ${tenant} and u.status = 'active' and u.system_role <> 'student'
     where e.tenant_id = ${tenant}
-      and e.end_date is null
       and e.student_id = any(${studentIds})
-      and c.subject in ${sql(keys)}`;
+      and c.subject in ${sql(keys)}
+      and e.start_date <= ${today}::date
+      and (e.end_date is null or e.end_date > ${today}::date or (e.end_date = ${today}::date and not e.is_transferred))`;
   const map = new Map();
   for (const r of rows) {
     if (!map.has(r.student_id)) map.set(r.student_id, []);
     map.get(r.student_id).push(r.teacher_id);
   }
   return map;
+}
+
+const NO_BLOCK = Object.freeze({ subject: 0, verify: 0, cap: 0 });
+
+/**
+ * 학생 → 벨 받을 사람 = 그 학생의 **지금 담당 선생님**(원장 2026-09-30 *"'현재 담당 중인 선생님'에게만 알림이 가면 되는 것"*) —
+ * 오늘 다니는 보드 과목 반의 담임 · 오늘 유효한 교시 담당 · 오늘 위임(notify-recipients.mjs). 재검증·상한 가드를 거친다.
+ * 🔴 (6) 새 계산이 실패·시간 초과면 **지금 반 담임에게만** 보낸다(사유를 로그에) — 결함으로 알림 자체를 잃지 않되 넓히지도 않는다.
+ *    느린 조회도 실패로 친다(`readOnlyWithTimeout` — 연결 하나짜리 데몬을 붙잡지 않게 서버 쪽에서 끊는다).
+ * @returns {Promise<{byStudent: Map<string,{ids:string[], blocked:object, narrowed:boolean}>, fallback: string|null}>}
+ */
+export async function recipientsFor(sql, tenant, studentIds, keys, log, { today = kstToday() } = {}) {
+  if (!studentIds.length) return { byStudent: new Map(), fallback: null };
+  try {
+    const byStudent = await readOnlyWithTimeout(sql, (tx) => computeNotifyRecipients(tx, tenant, studentIds, keys, { today }));
+    for (const [id, r] of byStudent) {
+      if (r.narrowed) log(`[알림 대상] ⚠️ 수신자가 ${NOTIFY_RECIPIENT_CAP}명을 넘어 지금 반 담임만으로 좁혔습니다(학생 ${String(id).slice(0, 8)})`);
+      // 재검증이 사람을 뺐다 = 두 계산이 어긋났다 — 조용한 유실이 되지 않게 경고로 남긴다(워커 카드 '최근 경고'에 뜬다).
+      if (r.blocked.verify) log(`[알림 대상] ⚠️ 재검증에서 ${r.blocked.verify}명 제외(학생 ${String(id).slice(0, 8)}) — 담당 계산과 확인 쿼리가 다릅니다`);
+    }
+    return { byStudent, fallback: null };
+  } catch (e) {
+    const reason = String(e?.message ?? e).slice(0, 200);
+    log(`[알림 대상] ⚠️ 담당 선생님 계산 실패 — 이번엔 지금 반 담임에게만 보냅니다(사유: ${reason})`);
+    const base = await teachersFor(sql, tenant, studentIds, keys, today);
+    return {
+      byStudent: new Map(studentIds.map((id) => [id, { ids: base.get(id) ?? [], blocked: NO_BLOCK, narrowed: false }])),
+      fallback: reason,
+    };
+  }
+}
+
+/**
+ * 학생을 정하지 못한 수학 **반 보드** 글·댓글(반 전체) → 그 반을 **지금** 맡은 사람만(재검증·상한 가드 포함).
+ * ClassNote가 그 반 담임에게는 이미 알리는 글이라 새로 드러나는 내용은 없다.
+ * `items` = [{ cls, className, ...원본 }] — 영어·그룹반 보드는 반 보드 지도에 없어 여기서 저절로 빠진다.
+ * (5) 반 전체 글 가드 — 보드 번호로 0302a 기록의 반 하나가 정해질 때만. 번호가 없거나 하나로 안 정해지면 알리지 않고 로그.
+ * 🔴 실패는 삼킨다(로그 + gFallback) — 여기 결함으로 다른 알림·워터마크를 세우지 않는다.
+ */
+export async function classWideTargets(sql, tenant, keys, items, log, stats = newGuardStats(), { today = kstToday() } = {}) {
+  if (!items.length) return [];
+  try {
+    return await readOnlyWithTimeout(sql, async (tx) => {
+      const boards = await loadClassBoardClasses(tx, tenant, keys);
+      const matched = [];
+      for (const it of items) {
+        const { board, blocked } = classBoardClassOf(boards, it);
+        if (board) matched.push({ ...it, board });
+        else if (blocked) {
+          stats.gWide++;
+          log(`[알림 대상] 반 전체 글 알리지 않음 — ${blocked}(${it.className})`);
+        }
+      }
+      if (!matched.length) return [];
+      const byClass = await computeClassWideRecipients(tx, tenant, [...new Set(matched.map((m) => m.board.classId))], keys, { today });
+      for (const [id, r] of byClass) {
+        if (r.narrowed) log(`[알림 대상] ⚠️ 반 전체 글 수신자가 ${NOTIFY_RECIPIENT_CAP}명을 넘어 담임만으로 좁혔습니다(반 ${String(id).slice(0, 8)})`);
+        if (r.blocked.verify) log(`[알림 대상] ⚠️ 반 전체 글 재검증에서 ${r.blocked.verify}명 제외(반 ${String(id).slice(0, 8)})`);
+      }
+      return matched.map((m) => ({ ...m, result: byClass.get(m.board.classId) ?? { ids: [], blocked: NO_BLOCK, narrowed: false } }));
+    });
+  } catch (e) {
+    stats.gFallback++;
+    log(`[알림 대상] ⚠️ 반 전체 글 담당 조회 실패 — 이번엔 건너뜁니다(사유: ${String(e?.message ?? e).slice(0, 200)})`);
+    return [];
+  }
+}
+
+/**
+ * (1) 1인 보드 교차 확인 — 게이트를 통과한 학생과 그 글 원아의 링크(0185a)가 **다른 학생**이면 학생을 정하지 않는다.
+ * 링크가 없으면(미가입·미연결) 게이트 판정을 그대로 믿는다(원아 링크가 비어 있는 것은 반증이 아니다).
+ */
+export function oneBoardChildConflict(childLinks, childId, studentId) {
+  const linked = childLinks.get(Number(childId));
+  return !!linked && linked !== studentId;
 }
 
 /**
@@ -388,11 +499,18 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     if (Date.now() - lastRunAt < POLL_INTERVAL_MS) return { ran: false };
   }
   lastRunAt = Date.now();
+  // (8) 기능 스위치·지점 가드 — 이 학원의 ClassNote가 꺼져 있거나 지점을 모르면 피드 조회도 수신자 계산도 하지 않는다
+  //     (데몬이 먼저 거르지만 수동 실행 process-parent-posts.mjs까지 막는다).
+  if (!(await classnoteFeedAllowed(sql, tenant))) {
+    log("[feed] 이 학원의 ClassNote 기능이 꺼져 있거나 지점을 알 수 없어 건너뜁니다");
+    return { ran: false, moduleOff: 1 };
+  }
 
   // 대상 = 수학 보드 그룹. 발송 opt-in(classnoteSubjects)에 **묶지 않는다** — 인바운드 감지는 발송이 아니고,
   // 보드가 있는 학생의 학부모 글은 발송 스위치와 무관하게 강사가 알아야 한다.
   const group = BOARD_GROUPS.math;
   const keys = group.subjectKeys;
+  const stats = newGuardStats(); // 가드별로 막은 건수(결과 요약에 실린다)
 
   const [state] = await sql`
     select last_seen_post_id from classnote_feed_state
@@ -407,6 +525,13 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     );
     const watermark = maxPostId(rows);
     if (watermark === null) return { ran: true, detected: 0, notified: 0 };
+
+    // [영상] 글: 알림의 나이·본문 유무와 별개로 이미 읽은 첨부를 보관 큐에 넣는다.
+    // 실패하면 워터마크를 전진시키지 않아 다음 폴에서 다시 등록한다.
+    if (!dryRun && videoArchiveEnabled()) {
+      const { centerId } = await getFeedPage(browser);
+      await enqueueParentVideos(sql, tenant, centerId, rows);
+    }
 
     // 콜드 스타트 — 과거 글 전체를 알림으로 쏟지 않는다. 현재 위치만 기록하고 다음 폴부터 진짜 새 글만.
     if (lastSeenId === null) {
@@ -446,15 +571,29 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     // 기존 경로(담당 강사 벨)는 **수학 1인 보드 한정 유지** — 원장 결정 2026-07-15(영어는 강사들이
     // ClassNote를 양방향 채널로 쓰는 중이라 중복 알림 우려). 범위를 넓히는 건 별도 결정이다.
     const mathPicked = picked.filter((p) => String(p?.class_name ?? "").startsWith(group.prefix));
-    // 수학 **반 보드** 글(2026-09-29) — 원아 id로 학생을 확정한 것만(loadClassBoardChildMap). 1인 보드 게이트는 안 탄다.
+    // 수학 **반 보드** 글(2026-09-29) — 보드 번호 + 원아 id로 학생을 확정한 것만(loadClassBoardChildMap). 1인 보드 게이트는 안 탄다.
     const others = picked.filter((p) => !String(p?.class_name ?? "").startsWith(group.prefix));
-    const classMap = others.length ? await loadClassBoardChildMap(sql, tenant) : new Map();
-    const classHits = others
-      .map((p) => ({ post: p, student: classBoardStudentOf(classMap, { cls: p.cls, className: p.class_name, childId: p.child }) }))
-      .filter((h) => !!h.student);
-    if (!mathPicked.length && !classHits.length) {
+    const classMap = others.length ? await loadClassBoardChildMap(sql, tenant, keys) : new Map();
+    const classHits = [];
+    const unmatched = []; // 학생을 못 정한 글 — 수학 반 보드면 그 반 담당에게(classWideTargets), 아니면 버린다(종전)
+    for (const p of others) {
+      const m = classBoardMatch(classMap, { cls: p.cls, childId: p.child });
+      if (m.student) {
+        classHits.push({ post: p, student: m.student });
+        continue;
+      }
+      if (m.blocked) {
+        // (1) 학생 확정 가드 — 누구 집 얘기인지 확실하지 않으면 학생 이름으로 알리지 않는다(반 전체 글로 간다).
+        stats.gStudent++;
+        log(`[feed] 학생 미확정(반 전체로) — ${m.blocked}(${p.class_name})`);
+      }
+      unmatched.push({ cls: p.cls, className: p.class_name, post: p });
+    }
+    const wideHits = await classWideTargets(sql, tenant, keys, unmatched, log, stats);
+    const detected = mathPicked.length + classHits.length + wideHits.length;
+    if (!detected) {
       if (!dryRun && watermark > lastSeenId) await saveWatermark(sql, tenant, watermark);
-      return { ran: true, detected: 0, notified: 0, tooOld: tooOld.length };
+      return { ran: true, detected: 0, notified: 0, tooOld: tooOld.length, ...stats };
     }
 
     // ⚠️ **보드 게이트**(공유보드·중복·동명이인 매핑) — 댓글 폴러·발송 워커와 **같은 판정**을 태운다(gateBoard 주석 참조).
@@ -466,10 +605,11 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     } catch (e) {
       // 보드 확인 실패 = 공유 보드인지 모름 → 알리지 않는다(오배달보다 미알림이 낫다). 워터마크도 안 전진 → 다음 폴 재시도.
       log(`[feed] ⚠️ 보드 안전 확인 실패 — 이번 폴은 알림 보류(다음 폴 재시도): ${e.message}`);
-      return { ran: true, detected: mathPicked.length, notified: 0, held: mathPicked.length };
+      return { ran: true, detected, notified: 0, held: detected, ...stats };
     }
 
     const { board, collisions } = await boardsToStudents(sql, tenant, keys, group.prefix);
+    const childLinks = mathPicked.length ? await loadChildStudentMap(sql, tenant) : new Map();
     const hits = [];
     for (const p of mathPicked) {
       const g = await gateBoard(gate, board, p.class_name);
@@ -477,36 +617,57 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
         held.push(g.reason);
         continue;
       }
+      if (oneBoardChildConflict(childLinks, p.child, g.student.id)) {
+        stats.gStudent++; // (1) 1인 보드인데 글 원아가 다른 학생에 연결돼 있다 — 학생을 정하지 않는다
+        held.push(`${p.class_name}(원아 연결이 다른 학생 — 학생 미확정)`);
+        continue;
+      }
       hits.push({ post: p, student: g.student });
     }
     hits.push(...classHits);
-    const byTeacher = await teachersFor(sql, tenant, [...new Set(hits.map((h) => h.student.id))], keys);
+    const rec = await recipientsFor(sql, tenant, [...new Set(hits.map((h) => h.student.id))], keys, log);
+    if (rec.fallback) stats.gFallback++;
 
-    const plan = [];
-    for (const h of hits) {
-      const teachers = byTeacher.get(h.student.id) ?? [];
-      if (!teachers.length) {
-        held.push(`${h.post.class_name}(활성 담당 강사 없음)`);
-        continue;
-      }
-      const { title, body } = buildNotificationText(h.post, h.student.name);
+    const planRows = [];
+    let noIdSeq = 0;
+    const pushPlan = (post, name, teachers) => {
+      const { title, body } = buildNotificationText(post, name);
+      const dedupeKey = eventDedupeKey("post", post?.id, ++noIdSeq);
       for (const t of teachers) {
-        plan.push({
+        planRows.push({
           tenant_id: tenant,
           recipient_id: t,
           type: "classnote_parent_post",
           title,
           body,
-          link: classnotePostUrl(h.post.id), // ClassNote 그 글로 직행(벨이 확인 팝업 후 새 창)
+          link: classnotePostUrl(post.id), // ClassNote 그 글로 직행(벨이 확인 팝업 후 새 창)
+          dedupeKey,
         });
       }
+    };
+    for (const h of hits) {
+      const r = rec.byStudent.get(h.student.id);
+      addBlocked(stats, r);
+      if (!r?.ids.length) {
+        held.push(`${h.post.class_name}(지금 담당 선생님 없음)`);
+        continue;
+      }
+      pushPlan(h.post, h.student.name, r.ids);
     }
+    // 반 전체 글(학생 미확정) — 제목엔 학생 대신 반 이름(누구 집 얘기인지 지어내지 않는다).
+    for (const w of wideHits) {
+      addBlocked(stats, w.result);
+      if (!w.result.ids.length) held.push(`${w.className}(반 담당 강사 없음)`);
+      else pushPlan(w.post, w.board.boardName, w.result.ids);
+    }
+    const { rows: plan, dropped } = dedupePlanRows(planRows); // (7) 같은 글·같은 사람 한 줄만
+    stats.gDup += dropped;
 
     if (dryRun) {
-      log(`[feed] (점검) 새 학부모 글 ${mathPicked.length}건 → 알림 ${plan.length}건 예정 · 보류 ${held.length}건`);
+      log(`[feed] (점검) 새 학부모 글 ${detected}건 → 알림 ${plan.length}건 예정 · 보류 ${held.length}건`);
       for (const h of held) log(`[feed]   보류: ${h}`);
       if (collisions.length) log(`[feed]   동명이인 보드(전역 보류): ${collisions.length}건`);
-      return { ran: true, detected: mathPicked.length, notified: 0, held: held.length, tooOld: tooOld.length, plan };
+      return { ran: true, detected, notified: 0, held: held.length, tooOld: tooOld.length, plan, ...stats };
     }
 
     // 알림 insert와 워터마크 전진을 **한 트랜잭션**으로 — 중간에 죽어도 같은 글을 두 번 알리지 않는다.
@@ -533,11 +694,11 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
 
     if (raced) {
       log(`[feed] 다른 러너가 이 구간을 이미 처리함 — 중복 알림 방지로 ${plan.length}건 생략(워터마크만 전진)`);
-      return { ran: true, detected: mathPicked.length, notified: 0, held: held.length, tooOld: tooOld.length };
+      return { ran: true, detected, notified: 0, held: held.length, tooOld: tooOld.length, ...stats };
     }
-    log(`[feed] 학부모 새 글 ${mathPicked.length}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
+    log(`[feed] 학부모 새 글 ${detected}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
     for (const h of held) log(`[feed]   보류: ${h}`);
-    return { ran: true, detected: mathPicked.length, notified: plan.length, held: held.length, tooOld: tooOld.length };
+    return { ran: true, detected, notified: plan.length, held: held.length, tooOld: tooOld.length, ...stats };
   } catch (e) {
     await dropFeedPage(); // 다음 폴은 깨끗한 세션으로
     throw e;
@@ -587,9 +748,15 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     if (Date.now() - lastCommentRunAt < COMMENT_POLL_INTERVAL_MS) return { ran: false };
   }
   lastCommentRunAt = Date.now();
+  // (8) 기능 스위치·지점 가드 — 글 폴러와 같다.
+  if (!(await classnoteFeedAllowed(sql, tenant))) {
+    log("[comment] 이 학원의 ClassNote 기능이 꺼져 있거나 지점을 알 수 없어 건너뜁니다");
+    return { ran: false, moduleOff: 1 };
+  }
 
   const group = BOARD_GROUPS.math;
   const keys = group.subjectKeys;
+  const stats = newGuardStats(); // 가드별로 막은 건수(결과 요약에 실린다)
 
   const [state] = await sql`
     select counts, updated_at from classnote_feed_state
@@ -634,13 +801,15 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     } catch (e) {
       // 보드 확인 실패 = 알려도 되는 보드인지 모름 → 알리지 않는다. 스냅샷도 안 갱신 → 다음 폴에 같은 글이 다시 잡힌다.
       log(`[comment] ⚠️ 보드 안전 확인 실패 — 이번 폴은 알림 보류(다음 폴 재시도): ${e.message}`);
-      return { ran: true, changed: changed.length, notified: 0, held: changed.length };
+      return { ran: true, changed: changed.length, notified: 0, held: changed.length, ...stats };
     }
     const { board } = await boardsToStudents(sql, tenant, keys, group.prefix);
 
     const held = [];
     const hits = [];
-    let classMap = null; // 수학 반 보드 `보드명|원아id` → 학생(처음 필요할 때 1회)
+    let classMap = null; // 수학 반 보드 `#보드번호|원아id` → 학생(처음 필요할 때 1회)
+    let childLinks = null; // 원아 → 학생 링크(0185a) — 1인 보드 교차 확인용(처음 필요할 때 1회)
+    const unmatched = []; // 학생을 못 정한 반 보드 댓글 — 수학 반 보드면 그 반 담당에게(classWideTargets)
     const inbox = []; // 전 보드 학부모 댓글 원문(출결 분류용, 0184a) — 강사 벨 경로와 독립적으로 쌓인다
     let detected = 0;
     let tooOldCount = 0;
@@ -666,6 +835,19 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
         continue;
       }
       tooOldCount += tooOld.length;
+      // [영상] 댓글: [영상] 문구를 만든 실제 첨부를 사용한다. 텍스트 없는 댓글도 포함.
+      if (!dryRun && videoArchiveEnabled()) {
+        const info = feedInfo.get(Number(ch.id));
+        try {
+          const { centerId } = await getFeedPage(browser);
+          await enqueueParentVideos(sql, tenant, centerId, list,
+            { id: ch.id, child: info?.childId, cls: info?.cls, class_name: ch.className });
+        } catch {
+          nextCounts[String(ch.id)] = ch.knownCount;
+          log("[영상] 댓글 저장 실패 — 다음 폴에서 재시도합니다.");
+          continue;
+        }
+      }
       // 강사 답글만 늘었거나 삭제된 경우 — 정상. 게이트(원아 조회)를 태울 이유가 없다.
       if (!picked.length) continue;
       detected += picked.length;
@@ -685,17 +867,30 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       );
       // 강사 벨은 **수학 1인 보드 한정 유지**(원장 결정 2026-07-15) — 영어는 강사들이 ClassNote를 직접 쓴다.
       if (!ch.className.startsWith(group.prefix)) {
-        // 수학 **반 보드**(2026-09-29) — 그 글의 원아 id로 학생을 확정한 것만(1인 보드 게이트는 반 보드에 무의미).
-        classMap ??= await loadClassBoardChildMap(sql, tenant);
+        // 수학 **반 보드**(2026-09-29) — 그 글의 보드 번호 + 원아 id로 학생을 확정한 것만(1인 보드 게이트는 반 보드에 무의미).
+        classMap ??= await loadClassBoardChildMap(sql, tenant, keys);
         const info = feedInfo.get(Number(ch.id));
-        const st = classBoardStudentOf(classMap, { cls: info?.cls, className: ch.className, childId: info?.childId });
-        if (st) for (const k of picked) hits.push({ comment: k, student: st, reportId: ch.id });
+        const m = classBoardMatch(classMap, { cls: info?.cls, childId: info?.childId });
+        if (m.student) for (const k of picked) hits.push({ comment: k, student: m.student, reportId: ch.id });
+        else {
+          if (m.blocked) {
+            stats.gStudent += picked.length; // (1) 학생 확정 가드 — 반 전체 댓글로 간다
+            log(`[comment] 학생 미확정(반 전체로) — ${m.blocked}(${ch.className})`);
+          }
+          for (const k of picked) unmatched.push({ cls: info?.cls, className: ch.className, comment: k, reportId: ch.id });
+        }
         continue;
       }
       const g = await gateBoard(gate, board, ch.className);
       if (!g.ok) {
         // 게이트 차단은 안정적인 판정이라 스냅샷은 그대로 전진시킨다(매 폴 재조회해도 결론이 같다).
         held.push(g.reason);
+        continue;
+      }
+      childLinks ??= await loadChildStudentMap(sql, tenant);
+      if (oneBoardChildConflict(childLinks, feedInfo.get(Number(ch.id))?.childId, g.student.id)) {
+        stats.gStudent += picked.length; // (1) 1인 보드인데 글 원아가 다른 학생에 연결돼 있다 — 학생을 정하지 않는다
+        held.push(`${ch.className}(원아 연결이 다른 학생 — 학생 미확정)`);
         continue;
       }
       for (const k of picked) hits.push({ comment: k, student: g.student, reportId: ch.id });
@@ -715,31 +910,48 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       }
     }
 
-    const byTeacher = await teachersFor(sql, tenant, [...new Set(hits.map((h) => h.student.id))], keys);
-    const plan = [];
-    for (const h of hits) {
-      const teachers = byTeacher.get(h.student.id) ?? [];
-      if (!teachers.length) {
-        held.push(`${group.prefix}${h.student.name}(활성 담당 강사 없음)`);
-        continue;
-      }
-      const { title, body } = buildCommentNotificationText(h.comment, h.student.name);
+    const rec = await recipientsFor(sql, tenant, [...new Set(hits.map((h) => h.student.id))], keys, log);
+    if (rec.fallback) stats.gFallback++;
+    const wideHits = await classWideTargets(sql, tenant, keys, unmatched, log, stats);
+    const planRows = [];
+    let noIdSeq = 0; // 댓글 id가 없으면 서로 다른 댓글이 한 키로 뭉쳐 지워지지 않게(중복 가드가 유실을 만들면 안 된다)
+    const pushPlan = (comment, name, reportId, teachers) => {
+      const { title, body } = buildCommentNotificationText(comment, name);
+      const dedupeKey = eventDedupeKey("comment", comment?.id, ++noIdSeq);
       for (const t of teachers) {
-        plan.push({
+        planRows.push({
           tenant_id: tenant,
           recipient_id: t,
           type: "classnote_parent_comment",
           title,
           body,
-          link: classnotePostUrl(h.reportId), // 댓글이 달린 그 글로 직행(벨이 확인 팝업 후 새 창)
+          link: classnotePostUrl(reportId), // 댓글이 달린 그 글로 직행(벨이 확인 팝업 후 새 창)
+          dedupeKey,
         });
       }
+    };
+    for (const h of hits) {
+      const r = rec.byStudent.get(h.student.id);
+      addBlocked(stats, r);
+      if (!r?.ids.length) {
+        held.push(`${group.prefix}${h.student.name}(지금 담당 선생님 없음)`);
+        continue;
+      }
+      pushPlan(h.comment, h.student.name, h.reportId, r.ids);
     }
+    // 반 전체 댓글(학생 미확정) — 제목엔 학생 대신 반 이름.
+    for (const w of wideHits) {
+      addBlocked(stats, w.result);
+      if (!w.result.ids.length) held.push(`${w.className}(반 담당 강사 없음)`);
+      else pushPlan(w.comment, w.board.boardName, w.reportId, w.result.ids);
+    }
+    const { rows: plan, dropped } = dedupePlanRows(planRows); // (7) 같은 댓글·같은 사람 한 줄만
+    stats.gDup += dropped;
 
     if (dryRun) {
       log(`[comment] (점검) 댓글 수 변한 글 ${changed.length}건 → 새 학부모 댓글 ${detected}건 → 알림 ${plan.length}건 예정 · 보류 ${held.length}건`);
       for (const h of held) log(`[comment]   보류: ${h}`);
-      return { ran: true, changed: changed.length, detected, notified: 0, held: held.length, tooOld: tooOldCount, plan };
+      return { ran: true, changed: changed.length, detected, notified: 0, held: held.length, tooOld: tooOldCount, plan, ...stats };
     }
 
     // 알림 insert와 스냅샷 갱신을 **한 트랜잭션**으로 — 중간에 죽어도 같은 댓글을 두 번 알리지 않는다.
@@ -766,16 +978,41 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
 
     if (raced) {
       log(`[comment] 다른 러너가 이 구간을 이미 처리함 — 중복 알림 방지로 ${plan.length}건 생략(다음 폴에서 새로 읽음)`);
-      return { ran: true, changed: changed.length, detected, notified: 0, held: held.length, tooOld: tooOldCount };
+      return { ran: true, changed: changed.length, detected, notified: 0, held: held.length, tooOld: tooOldCount, ...stats };
     }
     if (tooOldCount) log(`[comment] ${MAX_AGE_DAYS}일 지난 학부모 댓글 ${tooOldCount}건 건너뜀(밀린 알림 폭주 방지)`);
     if (plan.length || held.length) {
       log(`[comment] 새 학부모 댓글 ${detected}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
       for (const h of held) log(`[comment]   보류: ${h}`);
     }
-    return { ran: true, changed: changed.length, detected, notified: plan.length, held: held.length, tooOld: tooOldCount };
+    return { ran: true, changed: changed.length, detected, notified: plan.length, held: held.length, tooOld: tooOldCount, ...stats };
   } catch (e) {
     await dropFeedPage(); // 다음 폴은 깨끗한 세션으로
     throw e;
   }
+}
+
+/** 큐가 대기하는 동안 영상 변환·주소 갱신이 끝났을 수 있어 전송 직전에 원글/댓글을 다시 읽는다. */
+export async function videoFeedSession(browser) { return getFeedPage(browser); }
+
+export async function reloadArchivedVideo(browser, video) {
+  const { page, centerId } = await getFeedPage(browser);
+  if (String(centerId) !== String(video.centerId)) throw new Error("영상 기관과 로그인 기관이 다릅니다.");
+  let item;
+  let parent = null;
+  if (video.commentId) {
+    const { allVideoComments } = await import("./video-feed-pages.mjs");
+    const list = await allVideoComments(page, video.postId);
+    item = list.find((c) => String(c.id) === video.commentId);
+    parent = { id: video.postId, child: video.childId, cls: video.boardId, class_name: video.boardName };
+  } else {
+    item = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/v1/reports/${id}/`, { headers: { accept: "application/json" } });
+      if (!response.ok) throw new Error(`영상 원글 조회 HTTP ${response.status}`);
+      return response.json();
+    }, video.postId);
+  }
+  const fresh = incomingVideo(item, centerId, parent);
+  if (!fresh || fresh.videoId !== video.videoId) throw new Error("원글·댓글에서 같은 영상을 찾지 못했습니다.");
+  return { ...video, sources: fresh.sources };
 }
