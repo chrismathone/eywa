@@ -87,7 +87,8 @@ export async function loadClosedLinked(sql, tenant) {
  * 반 ↔ 보드 연결표(0302a) — 반 이름이 바뀌어도 이 번호로 같은 보드를 찾는다. 표가 없으면 빈 지도.
  * `strict` = 조회 실패를 throw(종강 반 연결 지키기처럼 **빈 지도가 삭제로 이어지는** 자리 — 삼키면 연결이 전부 지워진다).
  */
-export async function loadLinkedBoards(sql, tenant, { strict = false } = {}) {
+export async function loadLinkedBoards(sql, tenant, { strict = true } = {}) {
+  // 기본값 strict(개명 감사 G9) — 이 지도가 비면 계획이 이름으로 후퇴한다. 삼키고 싶은 호출자만 strict:false로.
   const q = sql`select class_id, board_id from classnote_class_boards where tenant_id = ${tenant}`;
   const rows = strict ? await q : await q.catch(() => []);
   return new Map(rows.map((r) => [r.class_id, Number(r.board_id)]));

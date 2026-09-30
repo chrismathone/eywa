@@ -22,6 +22,7 @@ import postgres from "postgres";
 import { isWorkerIssueLine } from "./worker-issue-filter.mjs";
 import { stateDirLabel, stateFile } from "./classnote-paths.mjs";
 import { DEFAULT_KEEP_DAYS, DEFAULT_MAX_BYTES, archiveName, needsRotation, pruneList, uniqueArchiveName } from "./log-rotation.mjs";
+import { LEASE_REFRESH_MS, LEASE_SECONDS, acquireLocalWorkerLock, touchLocalWorkerLock, decideWorkerLease } from "./worker-lease.mjs";
 import { BATCH, closeClassnoteAdminSession, isClassnoteModuleEnabled, launchBrowser, processQueueOnce, resolveTenant } from "./classnote-core.mjs";
 import { processNoticesOnce } from "./classnote-notice-core.mjs";
 import { processRecallsOnce } from "./classnote-recall-core.mjs";
@@ -174,6 +175,7 @@ async function heartbeat(tenant) {
   const payload = {
     ...lastResults,
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
+    postMode: POST, // 실게시 PC 표식 — 지점당 한 대 임대(worker-lease.mjs)가 이 값을 센다(dry-run PC는 주인이 안 된다)
     env: {
       logDir: stateDirLabel(),
       recent: recentIssues.slice(-RECENT_MAX),
@@ -189,6 +191,7 @@ async function heartbeat(tenant) {
       set last_seen = now(), started_at = excluded.started_at, last_results = excluded.last_results`;
 }
 
+let localLockHeld = true;
 async function main() {
   if (!process.env.DATABASE_URL) { console.error("DATABASE_URL 없음"); process.exit(1); }
   if (POST && (!process.env.CLASSNOTE_UPLOAD_ID || !process.env.CLASSNOTE_UPLOAD_PW)) {
@@ -200,12 +203,22 @@ async function main() {
   if (process.env.CLASSNOTE_PUBLISH_MODE)
     log(`[안내] CLASSNOTE_PUBLISH_MODE=${process.env.CLASSNOTE_PUBLISH_MODE} 는 무시됩니다 — 게시 경로는 워커 내장 하나뿐(2026-07-29 폴백 제거).`);
   let moduleOffLogged = false; // 모듈 꺼짐 안내는 바뀔 때 한 번만
+  let leaseHolderLogged = null; // "다른 PC가 담당" 안내는 바뀔 때 한 번만
+  // 임대 유지 — 한 폴이 몇 분 걸려도(매일 동기화·밀린 배치) 하트비트가 끊기지 않게 폴과 따로 last_seen만 갱신한다.
+  if (POST)
+    setInterval(() => {
+      if (!tenantId || !localLockHeld) return;
+      touchLocalWorkerLock(stateFile("worker.lock"));
+      db()`update classnote_workers set last_seen = now() where tenant_id = ${tenantId} and hostname = ${HOSTNAME}`.catch(() => {});
+    }, LEASE_REFRESH_MS).unref();
   let backlogFastPoll = false; // 직전 주기가 배치를 꽉 채워 성공했는가 = 밀린 큐 → 다음 주기 즉시 진행
   for (;;) {
     try {
       const tenant = await getTenant();
+      // 같은 PC 두 번째 워커 창은 하트비트도 쓰지 않는다(같은 행을 덮어 시작 시각이 바뀌면 PC 사이 순서가 흔들린다).
+      localLockHeld = acquireLocalWorkerLock(stateFile("worker.lock"));
       // 0) 심장박동 — best-effort라 실패해도 처리 계속.
-      await heartbeat(tenant).catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
+      if (localLockHeld) await heartbeat(tenant).catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
       // 0-a) 이 학원에서 ClassNote 기능(모듈)이 꺼져 있으면 아무것도 하지 않는다(발송·공지·회수·동기화·피드·읽음 전부).
       //      원장 2026-09-30 "꺼지면 있었는지조차 모르게". 켜지면 다음 폴부터 그대로 이어서 처리한다(큐 보존).
       if (!(await isClassnoteModuleEnabled(db(), tenant))) {
@@ -216,6 +229,26 @@ async function main() {
         continue;
       }
       moduleOffLogged = false;
+      // 0-b) 실게시 워커는 지점당 한 대(개명 감사 G6) — 다른 PC가 먼저 돌고 있으면 이 PC는 쉰다(그 PC가 멈추면 90초 뒤 이어받는다).
+      if (POST) {
+        // 같은 PC 두 번째 인스턴스(④) — 잠금 파일. PC 사이(③)는 DB 시계로 본 하트비트.
+        const localOk = localLockHeld;
+        const rows = localOk
+          ? await db()`select hostname, started_at, (last_results->>'postMode')::boolean as post_mode,
+              (now() - last_seen) <= make_interval(secs => ${LEASE_SECONDS}) as alive
+              from classnote_workers where tenant_id = ${tenant}`
+          : [];
+        const lease = localOk ? decideWorkerLease({ rows, me: HOSTNAME }) : { owner: false, holder: `${HOSTNAME}(같은 PC의 다른 워커 창)` };
+        if (!lease.owner) {
+          if (leaseHolderLogged !== lease.holder) log(`[안내] 다른 PC에서 워커가 이미 실행 중입니다(${lease.holder}) — 이 PC는 쉽니다. 한 대만 켜 두세요.`);
+          leaseHolderLogged = lease.holder;
+          backlogFastPoll = false;
+          await new Promise((r) => setTimeout(r, POLL_MS));
+          continue;
+        }
+        if (leaseHolderLogged) log("[안내] 이 PC가 발송 담당을 이어받았습니다.");
+        leaseHolderLogged = null;
+      }
       // 1) 큐 한 주기 처리(공용 코어).
       const b = await getBrowser();
       const s = await processQueueOnce(db(), b, { tenant, post: POST, log });

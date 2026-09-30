@@ -1,7 +1,8 @@
 import "server-only";
+import { DAILY_BRIEFING_DISABLED_MESSAGE, DAILY_BRIEFING_ENABLED } from "../briefing-status";
 /**
- * 일일 AI 브리핑 — 수집·생성·저장(0114a daily_briefings). cron(/api/cron/daily-briefing)과
- * '다시 생성' 서버 액션이 공유하는 단일 소스.
+ * 일일 AI 브리핑 — 2026-09-30 중단. 조회·생성·재생성은 공통 게이트에서 반환한다.
+ * 과거 수집·생성·저장(0114a daily_briefings) 구현을 보존하며 예약 생성은 제거했다.
  *
  * - 페이지 로드는 절대 이 파일의 generate를 부르지 않는다(CLAUDE.md AI 정책) — 저장분 렌더만.
  * - daily_briefings엔 RLS 정책이 없다(0114a 의도: payload가 master 관점 전신호, #77) —
@@ -60,6 +61,7 @@ function countOrThrow(res: { count: number | null; error: { message: string } | 
 
 /** 오늘 브리핑 행 — ⚠️ 호출부가 canManageStaff 게이트 통과 후에만 부를 것(admin 읽기). */
 export async function getDailyBriefing(tenantId: string, date: string): Promise<DailyBriefingRow | null> {
+  if (!DAILY_BRIEFING_ENABLED) return null;
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("daily_briefings")
@@ -73,11 +75,12 @@ export async function getDailyBriefing(tenantId: string, date: string): Promise<
 
 /**
  * 테넌트 1건의 브리핑 생성 → upsert(tenant×date 멱등). 실패도 행으로 남겨 카드가 정직하게 표시.
- * AI 멘트 생성·저장은 유지하되 폐지된 일일 브리핑 화면의 준비 알림은 발송하지 않는다.
+ * 2026-09-30 중단: 공통 게이트가 DB 조회·AI 호출보다 먼저 반환한다.
  */
 export async function generateDailyBriefing(
   tenantId: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!DAILY_BRIEFING_ENABLED) return { ok: false, error: DAILY_BRIEFING_DISABLED_MESSAGE };
   const admin = createAdminClient();
   const supabase = admin as unknown as Supabase;
   const db: DashboardSignalsDb = { supabase, tenantId };

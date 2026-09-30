@@ -12,6 +12,8 @@ import {
   findChildReportId,
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
+import { homonymPhoneGate } from "./homonym-phone-gate.mjs";
+import { fetchAdmissions } from "./math-class-boards-load.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
@@ -36,7 +38,8 @@ export const DEFAULT_SHARE_BASE = process.env.CLASSNOTE_SHARE_BASE || CURRENT_SH
 // 작성자 이름이 빈 글의 작성자 표기 — 워커는 PC(=지점)마다 하나라 env로 지점별 값을 준다. 기본값은 종전 그대로(침산 무변화).
 export const DEFAULT_AUTHOR_NAME = process.env.CLASSNOTE_AUTHOR_NAME?.trim() || "인재원 학원";
 export const BATCH = 2;
-export const STALE_MIN = 10;
+// 게시 1건 상한(POST_TIMEOUT_MS 10분)보다 **길어야** 한다(개명 감사 G6) — 같으면 아직 게시 중인 행을 stale로 되살려 다시 집는다.
+export const STALE_MIN = 15;
 // /r이 이 secret 헤더를 보면 조회로그(share_link_views)를 안 남김 — 워커 스크린샷을 "학부모 열람"으로 오집계 방지(P2a).
 const INTERNAL_SECRET = process.env.CLASSNOTE_INTERNAL_SECRET;
 
@@ -353,7 +356,8 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
   const dedupContents = shareUrlVariants(shareUrl, process.env.CLASSNOTE_SHARE_BASE, process.env.CLASSNOTE_LEGACY_SHARE_BASES);
   for (const { child, enrollment } of enrolled) {
     if (dedupOn) {
-      const pre = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: dedupContents });
+      // 🔑 보드를 가리지 않는다(cls: null) — 이 아이가 이 링크를 **어느 보드로든** 이미 받았으면 끝(개명 감사 G3).
+      const pre = await findChildReportId(adminPage, centerId, { cls: null, child: child.id, content: dedupContents });
       if (!pre.ok) return partialFail("게시 전 중복 확인 실패(ClassNote 조회 불가) — 안전상 보류");
       if (pre.id) {
         log(`  · ${studentName}: 이미 게시됨(report ${pre.id}, 원아 ${child.id}) — 재게시 생략(멱등)`);
@@ -371,7 +375,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
     if (res.status < 200 || res.status >= 300) {
       // ⓑ 실패 응답인데 실제로 올라갔나 — 올라가 있으면 성공 취급(재발송=학부모에게 중복, ClassNote는 비가역).
       if (dedupOn) {
-        const found = await findChildReportId(adminPage, centerId, { cls: boardId, child: child.id, content: shareUrl });
+        const found = await findChildReportId(adminPage, centerId, { cls: null, child: child.id, content: dedupContents });
         if (found.ok && found.id) {
           log(`  · ${studentName}: 게시 응답 HTTP ${res.status}였으나 실물 확인(report ${found.id}) — 성공 취급`);
           posted++;
@@ -406,7 +410,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
  *   blocked = 프리플라이트 보드 안전 게이트가 오발송 위험으로 보류한 건수(classnote_status='blocked_shared').
  */
 /**
- * stale 복구 주기(ms) — 데몬 폴(15초)보다 길게 둔다. 대상이 10분 초과 행이라 더 자주 볼 이유가 없다.
+ * stale 복구 주기(ms) — 데몬 폴(15초)보다 길게 둔다. 대상이 STALE_MIN(15분) 초과 행이라 더 자주 볼 이유가 없다.
  * one-shot 실행은 `lastStaleSweepAt=0`이라 **첫 호출에서 항상** 한 번 돈다(주기 건너뜀 없음).
  */
 const STALE_SWEEP_MS = 60_000;
@@ -502,8 +506,8 @@ export async function processQueueOnce(sql, browser, opts) {
     return { stale: 0, claimed: 0, success: 0, failed: 0, requeued: 0, blocked: 0 };
   }
 
-  // 1) stale 복구: processing 10분 초과 → queued (tenant 격리)
-  // ⚠️ **매 폴(15초)마다 돌리지 않는다**(2026-08-13 계측). 대상은 애초에 10분(STALE_MIN)을 넘긴 행이라
+  // 1) stale 복구: processing STALE_MIN(15분) 초과 → queued (tenant 격리)
+  // ⚠️ **매 폴(15초)마다 돌리지 않는다**(2026-08-13 계측). 대상은 애초에 STALE_MIN(15분)을 넘긴 행이라
   //    15초마다 물어봐야 답이 달라지지 않는데, 59일 실측에서 이 UPDATE 한 줄이 **148,186회·총 89분**으로
   //    DB 전체 1위였다(그때는 인덱스도 없어 매번 19,043행 전수 스캔). 1분 주기면 복구 지연은 최대 +45초고
   //    (이미 10분 기다린 건에 대해) 쿼리 수는 1/4로 준다. 인덱스(lesson_reports_status_idx)는 별도 적용됨.
@@ -582,6 +586,8 @@ export async function processQueueOnce(sql, browser, opts) {
   let boards = null;
   let allowlist = [];
   let allNames = [];
+  // 운영관리 명부(원아 → 보호자 전화) — 동명이인 전화 대조(G5)용. 이 폴에서 필요할 때 한 번만 읽는다(undefined = 아직 안 읽음).
+  let admissionsCache;
   let showAttachments = false; // Phase 2: 파일 리포트를 내부 API로 보낼지 라우팅 게이트
   let childrenCache = null; // Phase 2: 파일 리포트 첫 만남에 fetchChildren 1회 캐시
   let routeCfg = { route: "personal", pilot: new Set() }; // 수학 발송 경로(보고서 설정) — 준비 단계에서 읽는다
@@ -631,7 +637,8 @@ export async function processQueueOnce(sql, browser, opts) {
 
   try {
   for (const r of claimed) {
-    const [stu] = await sql`select name, classnote_name, grade from students where id=${r.student_id} and tenant_id=${tenant}`;
+    const [stu] = await sql`select name, classnote_name, grade, parent_phone, student_phone, home_phone, other_phone
+      from students where id=${r.student_id} and tenant_id=${tenant}`;
     // ClassNote 보드명·원아 = 유효이름(classnote_name 오버라이드 || name). 동명이인은 오버라이드로 구분(0088a).
     const studentName = (stu?.classnote_name?.trim() || stu?.name || "").trim();
     // 🔴 빈 멘트 절대 가드(원장 지시 2026-07-28) — 멘트(notes) 없는 보고서가 나가면 학부모 화면에
@@ -743,6 +750,18 @@ export async function processQueueOnce(sql, browser, opts) {
               code: "mapping_unknown",
               reason: `동명이인이 있는 이름이라 원아 확인이 필요한데 클래스노트 조회에 실패해 보류합니다(${className})`,
             };
+        // G5(2026-09-30) — 생년만으로는 같은 학년 동명이인을 못 가른다. 보호자 전화가 **확실히 다르면** 보류.
+        //   명부(운영관리)는 이 폴에서 한 번만 읽는다(모호한 이름일 때만 — 평소엔 요청 0).
+        // 원장이 '발송 보류 예외'에 등재한 보드는 사람이 확인한 것이라 전화 대조도 건너뛴다(등재 = 최종 판단).
+        if (verdict.ok && !verdict.allowlisted && Array.isArray(live)) {
+          if (admissionsCache === undefined) admissionsCache = await fetchAdmissions(adminPage, centerId).catch(() => null);
+          const pg = homonymPhoneGate({
+            studentPhones: [stu?.parent_phone, stu?.student_phone, stu?.home_phone, stu?.other_phone],
+            children: live,
+            admissions: admissionsCache,
+          });
+          if (!pg.ok) verdict = { ok: false, code: "phone_mismatch", reason: `${pg.reason}(${className})` };
+        }
         if (!verdict.ok && amb.siblings.length)
           verdict.reason = `${verdict.reason} (aywa 동명: ${amb.siblings.join(", ")}${amb.sameName > 1 ? ` · 같은 이름 ${amb.sameName}명` : ""})`;
       }
@@ -843,6 +862,15 @@ export async function processQueueOnce(sql, browser, opts) {
       }
       const sendFiles = showAttachments ? fileAtts : []; // 첨부 표시 OFF면 파일 안 실음(스샷만) — 기존 정책
       childrenCache ??= await fetchChildren(adminPage, centerId); // 배치 첫 건에 1회(전건이 이 경로)
+      // ⏱ 게시 직전에 처리 시각을 새로 찍는다(개명 감사 G6) — 스크린샷·앞 건이 오래 걸려도 게시 중인 이 행을
+      //    stale 복구(STALE_MIN)·앱 멈춤복구(STUCK_MINUTES)가 되살리지 못하게. 아직 이 워커가 쥔 processing일 때만.
+      //    그 사이 누가 되살렸으면(0행) 이 건은 게시하지 않는다 — 다른 쪽이 다시 집어 간다.
+      const kept = await sql`update lesson_reports set classnote_processing_at = now()
+        where id = ${r.id} and tenant_id = ${tenant} and classnote_status = 'processing' returning id`;
+      if (!kept.length) {
+        log(`  · ${studentName}: 게시 직전 확인 — 이미 다른 처리로 넘어간 행이라 게시 생략`);
+        continue;
+      }
       // ⏱ 게시 호출 상한 — Cloud Run 경로에 있던 AbortController(960s)를 제거하면서 **전건이 상한 없는 호출**이 됐다.
       // kage 업로드·API 응답이 영영 안 오면 데몬이 그 건에서 멈춰 큐 전체가 정지한다(폴이 다음으로 못 넘어감).
       // 🔴 타임아웃 시 **재큐하지 않고 failed로 고정**한다: POST가 이미 서버에 닿았을 수 있어(게시됐는지 불명)

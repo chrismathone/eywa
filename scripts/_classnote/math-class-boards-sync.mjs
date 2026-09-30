@@ -50,7 +50,9 @@ function releaseNeeded(plans) {
 export async function syncMathClassBoards(sql, page, { tenant, apply = false, log = console.log }) {
   const centerId = await fetchCenterId(page);
   const aywa = await loadAywa(sql, tenant);
-  const linkedBoardByClass = await loadLinkedBoards(sql, tenant);
+  // strict(개명 감사 G9) — 연결표 조회 실패를 빈 지도로 삼키면 계획이 **이름으로 후퇴**해 개명한 반은 새 보드를 만들고
+  // 같은 이름 보드를 채택하면서 다른 반 연결을 빼앗는다. 실패 = 오늘 동기화를 건너뛴다.
+  const linkedBoardByClass = await loadLinkedBoards(sql, tenant, { strict: true });
   const { plans, boards, membersByBoard, failed } = await loadPlan(page, centerId, aywa, { linkedBoardByClass });
   if (failed) throw new Error(`원아 조회 실패 ${failed}건 — 오늘 동기화를 건너뛴다`);
   const targets = plans.filter(
@@ -58,6 +60,7 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   );
   const held = plans.reduce((n, p) => n + p.hold.length, 0);
   for (const p of plans) if (p.board.action === "block") log(`  ⛔ ${p.className}: ${p.board.reason}`);
+  for (const p of plans) if (p.board.renameBlocked) log(`  ⚠️ ${p.className}: ${p.board.renameBlocked}`);
   if (!apply) {
     log(`[class-board] 계획 — 바꿀 반 ${targets.length}개 · 보류 학생×반 ${held}건`);
     return { created: 0, renamed: 0, enrolled: 0, teachers: 0, held, release: releaseNeeded(plans), skippedTeachers: [] };
@@ -66,7 +69,10 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   const done = await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log });
 
   // 담임 — 동기화 뒤 보드 번호로(새로 만든 반 포함).
-  const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: await loadLinkedBoards(sql, tenant) });
+  // 방금 만든 보드는 아직 연결표에 없다 — 번호로 얹어 준다(ClassNote가 이름을 다르게 적었어도 다음 날 또 만들지 않게, G8).
+  const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
+  for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
+  const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter });
   if (fresh.failed) throw new Error(`원아 재조회 실패 ${fresh.failed}건 — 기록 갱신을 건너뛴다`);
   const homeroom = new Map(
     (await sql`select c.id, u.display_name, u.status from classes c left join users u on u.id = c.teacher_id
@@ -90,6 +96,7 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   await writeClassBoardSnapshot(sql, tenant, fresh.plans, { keepClassIds });
   return {
     created: done.filter((d) => d.created).length,
+    skipped: done.filter((d) => d.skipped || d.renameFailed).map((d) => `${d.className}: ${d.skipped ?? `이름 변경 실패(${d.renameFailed})`}`),
     renamed: done.filter((d) => d.renamed).length,
     enrolled: done.reduce((n, d) => n + d.enrolled.length, 0),
     teachers,
@@ -107,7 +114,7 @@ export async function syncMathClassBoardsDaily(sql, browser, { tenant, post, log
     if (kstHour() < RUN_AFTER_HOUR_KST) return { ran: false };
     if (lastRun() === today) return { ran: false };
   }
-  const linked = await loadLinkedBoards(sql, tenant);
+  const linked = await loadLinkedBoards(sql, tenant, { strict: true });
   if (!linked.size) {
     markRun(today);
     return { ran: false };
@@ -122,6 +129,7 @@ export async function syncMathClassBoardsDaily(sql, browser, { tenant, post, log
         (r.release.length ? ` · 해제 필요 ${r.release.length}개 반` : ""),
     );
     for (const x of r.release) log(`[class-board]   해제 필요(ClassNote 화면에서): ${x}`);
+    for (const x of r.skipped ?? []) log(`[class-board]   보류(내일 다시): ${x}`);
     return { ran: true, ...r };
   } finally {
     await page.close().catch(() => {});

@@ -218,6 +218,8 @@ import { computeClientMentSource } from "../ment-source";
 import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
 import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
 import { ClassnoteOnProvider } from "./classnote-on-context";
+import { useVideoHomeworkPolicy, useVideoHomeworkSaveOk } from "@/features/video-homework/components/video-homework-provider";
+import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 
 /** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
 const EMPTY_ABSENCES: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
@@ -384,6 +386,9 @@ export function OneScreenClient({
   const lang = useSheetLang();
   const t = useSheetT();
   const tf = useSheetTf();
+  // 영상 숙제 정책(학원설정) — 저장할 때 '오늘 영상 과제'를 실을 행을 가른다. 공급자 밖이면 null(싣지 않음).
+  const videoHwPolicy = useVideoHomeworkPolicy();
+  const videoHwSaveOk = useVideoHomeworkSaveOk();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
   // 글씨 크기 — 화면은 즉시(클릭 반응), 계정 저장은 백그라운드(실패해도 이번 세션 크기는 유지).
@@ -687,6 +692,8 @@ export function OneScreenClient({
               textbook: su.textbook ?? "",
               makeup: su.makeup ?? false,
               homeworkToday: su.homeworkToday ?? "",
+              // 오늘 영상 과제 있음(0308a) — 켠 적 없는 행은 빼서 세션 모양을 그대로 둔다.
+              ...(su.videoHomework != null ? { videoHomework: su.videoHomework } : {}),
               // 영어 템플릿 모드(2026-09-10) — **영어 행만** 싣는다(수학 세션 모양 불변). 로스터가 같은 키로 복원한다.
               ...(su.subjectKey === "english"
                 ? {
@@ -2111,6 +2118,17 @@ export function OneScreenClient({
     if (!selected) return;
     toggleMakeupFor(selected.id, subjectName);
   }
+  // 오늘 영상 과제 있음/없음(0308a) — 과목(행)별. 자동저장에 실린다(보강 토글과 같은 길).
+  function toggleVideoHomeworkFor(studentId: string, subjectName: string) {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoHomework: !su.videoHomework } : su)),
+    }));
+  }
+  function toggleVideoHomework(subjectName: string) {
+    if (!selected) return;
+    toggleVideoHomeworkFor(selected.id, subjectName);
+  }
   // 오늘 과제(숙제 내용) — 과목별(0096a). 자동저장에 실리고 AI 멘트·학부모 카드 재료.
   function setHomeworkTodayFor(studentId: string, subjectName: string, text: string) {
     patch(studentId, (s) => ({
@@ -3147,6 +3165,13 @@ export function OneScreenClient({
         outOfClass: (student.isMakeup ?? false) || (!!su?.makeup && !su?.classId),
         // 보강 행의 소속(어느 수업 시간에 한 보강인가) — 반 필터 앵커(0171a). 정규 행이면 서버가 무시한다.
         makeupClassId: su?.makeupClassId ?? null,
+        // 오늘 영상 과제(0308a) — 🔴 **값이 있을 때만** 싣는다(DB·세션에서 읽었거나 강사가 눌렀을 때). 손대지 않은 행을
+        // false로 적으면 '모름'이 '없음'이 되어 다음 수업 검사가 조용히 사라진다(적대 리뷰 High). 정책이 끈 반·반 없는 행·
+        // 과제 값을 못 읽은 세션(videoHwSaveOk=false — 저장돼 있던 '있음'을 덮는다)도 싣지 않는다.
+        ...(videoHwSaveOk && typeof su?.videoHomework === "boolean" && su.classId && videoHwPolicy &&
+        isVideoHomeworkEnabled(videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey ?? "math", grade: student.grade })
+          ? { videoHomework: su.videoHomework }
+          : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
         // 영어 결과지 고르기(2026-09-28) — 이 화면이 아는 값만 싣는다. 모르면(안 받음) 빼서 서버가 저장해 둔 고르기를 따르게.
@@ -4202,6 +4227,7 @@ export function OneScreenClient({
             onTrendHidden: toggleTrendHiddenFor,
             onNote: setNoteFor,
             onMakeup: toggleMakeupFor,
+            onVideoHomework: toggleVideoHomeworkFor,
           }}
           rowActions={{
             onSendRow: sendRow,
@@ -4352,6 +4378,7 @@ export function OneScreenClient({
                 onTextbook={setTextbook}
                 onHomeworkToday={setHomeworkToday}
                 onMakeup={toggleMakeup}
+                onVideoHomework={toggleVideoHomework}
                 onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
                 canRemoveMakeup={(subjectName) =>
                   canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)

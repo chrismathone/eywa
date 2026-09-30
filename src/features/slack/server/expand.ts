@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { passesActorFilter } from "../actor-filter";
 import { activityCategoryOf, activityGradeOf } from "../activity-catalog";
 import { activityFacts, factIds, type FactLookups } from "../activity-facts";
 import { renderActivity, renderNotification, type Rendered } from "../render";
@@ -104,7 +105,8 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
     const ev = { type: head.type, title: head.title, body: head.body, link: head.link, createdAt: new Date(head.created_at) };
     for (const rule of rules) {
       if (rule.source !== "notification" || !rule.typeKeys.includes(head.type)) continue;
-      if (head.actor_id && rule.excludeActorIds.includes(head.actor_id)) continue;
+      // 빼기 · '누가'(0311a) — 고른 사람이 한 일만, 발동자 없는 알림(시스템 자동·PIN 화면)은 '누가'에 안 맞는다.
+      if (!passesActorFilter(rule, head.actor_id)) continue;
       const style = { template: rule.template, appUrl, ping: rule.ping };
       const inboxId = inboxBySource.get(`notification:${head.id}`);
       for (const t of rule.targets) {
@@ -145,7 +147,7 @@ export async function expandInbox(tenantId: string, conn: SlackConnection, appUr
     };
     for (const rule of rules) {
       if (rule.source !== "activity" || !rule.typeKeys.includes(a.action)) continue;
-      if (a.actor_id && rule.excludeActorIds.includes(a.actor_id)) continue;
+      if (!passesActorFilter(rule, a.actor_id)) continue;
       const rendered = renderActivity(ev, { template: rule.template, appUrl, ping: rule.ping });
       const inboxId = inboxBySource.get(`activity:${a.id}`);
       for (const t of rule.targets) {

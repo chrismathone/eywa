@@ -162,7 +162,8 @@ export function evaluateBoardSafety({ className, boards, allowlist = [], mapping
   // 원장이 육안 확인해 등재한 보드 = 검증 면제(사람 판단이 최종). 이 탈출구가 없으면 확인해도 못 푸는 막다른 길이 된다.
   // ⚠️ 옛 `보드명|N`(인원 지정) 입력이 남아 있어도 동작하게 숫자는 떼고 이름만 본다 — 계정 수 개념은 폐기됐다.
   const allowed = new Set((allowlist || []).map((e) => normBoard(String(e ?? "").replace(/\s*\|\s*\d+\s*$/, ""))));
-  if (allowed.has(key)) return { ok: true, code: "ok", boardId: board.id };
+  // allowlisted = 뒤따르는 추가 검증(동명이인 전화 대조 G5 등)도 이 사람 판단을 존중해 건너뛰게 표시한다.
+  if (allowed.has(key)) return { ok: true, code: "ok", boardId: board.id, allowlisted: true };
 
   if (mapping) {
     const v = evaluateBoardMapping(mapping);

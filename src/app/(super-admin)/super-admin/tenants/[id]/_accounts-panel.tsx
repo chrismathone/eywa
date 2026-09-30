@@ -20,12 +20,19 @@ export function AccountsPanel({
   tenantName,
   users,
   page,
+  protectedIds = [],
+  protectionUnknown = false,
 }: {
   tenantId: string;
   tenantName: string;
   users: User[];
   page: number;
+  /** 보호 계정(슈퍼관리자 명단) id — 이 줄은 역할·활성 조작을 세우지 않는다. */
+  protectedIds?: string[];
+  /** 명단 조회 실패 — 전 줄을 막고(모르면 안 바꾼다) '보호 계정' 대신 재시도 안내. */
+  protectionUnknown?: boolean;
 }) {
+  const locked = new Set(protectedIds);
   const roleCount = users.reduce<Record<string, number>>((acc, u) => {
     acc[u.systemRole] = (acc[u.systemRole] ?? 0) + 1;
     return acc;
@@ -83,7 +90,7 @@ export function AccountsPanel({
                       <Pill color={toneColor(status.tone)}>{status.label}</Pill>
                     </td>
                     <td data-cell="wide" className="px-3 py-2.5">
-                      <UserActions userId={u.id} tenantId={tenantId} tenantName={tenantName} currentRole={u.systemRole} status={u.status} />
+                      <UserActions userId={u.id} tenantId={tenantId} tenantName={tenantName} currentRole={u.systemRole} status={u.status} locked={protectionUnknown ? "unknown" : locked.has(u.id) ? "protected" : undefined} />
                     </td>
                   </tr>
                 );

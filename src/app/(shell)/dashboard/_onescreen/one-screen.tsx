@@ -22,6 +22,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { getTodayActionSignals } from "@/features/dashboard/server/action-signals";
 import { getDailyBriefing, type DailyBriefingRow } from "@/features/dashboard/server/briefing";
+import { DAILY_BRIEFING_ENABLED } from "@/features/dashboard/briefing-status";
 import {
   getAbsenceRiskCached,
   getDashboardAttendanceState,
@@ -96,7 +97,7 @@ export async function OneScreenDashboard({
   const sk = SKINS[skin];
   const access = resolveDashboardAccess(systemRole, permMatrix);
   // 브리핑은 payload가 master 관점 전신호(0114a)라 scoped 역할엔 통짜 서술이 새어 나간다 — 계속 제한한다.
-  const canSeeBriefing = canManageStaff(systemRole);
+  const canSeeBriefing = DAILY_BRIEFING_ENABLED && canManageStaff(systemRole);
   const areas: DashboardAreas = {
     attendance: access.read.attendance,
     billing: access.read.billing,

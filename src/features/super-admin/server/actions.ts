@@ -3,6 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
+import { protectionRefusal, protectionStatus } from "@/lib/auth/protected-accounts";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
@@ -206,6 +207,17 @@ export async function changeUserRole(
   if (String(owner.tenant_id) !== tenantId) {
     return { error: "계정의 지점과 요청한 지점이 다릅니다 — 화면을 새로고침한 뒤 다시 시도하세요" };
   }
+  // 보호 계정(슈퍼관리자 명단)은 총괄 콘솔에서도 역할을 못 바꾼다(원장 2026-09-30 "강력 가드. 꼭 물어봐야").
+  // 명단 조회 실패도 막는다(재시도 문구) — 거절 기록은 진짜 보호 계정일 때만.
+  const protection = await protectionStatus(userId);
+  if (protection === "protected") {
+    await logSuperAdminAction({
+      actorId: sa.id, actorEmail: sa.email, action: "protected_account_refused",
+      targetTenantId: tenantId, targetLabel: tenantName || null, metadata: { userId, attempt: "role", role },
+    });
+  }
+  const roleRefusal = protectionRefusal(protection);
+  if (roleRefusal) return { error: roleRefusal };
   // app_metadata 갱신 (RLS auth_tenant_id는 tenant_id, academy 권한은 system_role)
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     app_metadata: { system_role: role, tenant_id: tenantId },
@@ -277,6 +289,16 @@ export async function setUserActive(
   const { data: account, error: accountError } = await admin.from("users")
     .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
   if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
+  // 보호 계정(슈퍼관리자 명단)은 비활성·재활성도 못 한다(원장 2026-09-30 "강력 가드"). 조회 실패도 막는다.
+  const protection = await protectionStatus(userId);
+  if (protection === "protected") {
+    await logSuperAdminAction({
+      actorId: sa.id, actorEmail: sa.email, action: "protected_account_refused",
+      targetTenantId: tenantId, targetLabel: tenantName || null, metadata: { userId, attempt: "status", active },
+    });
+  }
+  const activeRefusal = protectionRefusal(protection);
+  if (activeRefusal) return { error: activeRefusal };
   // 비활성: 100년 ban / 활성: ban 해제(0)
   const { error: authErr } = await admin.auth.admin.updateUserById(userId, {
     ban_duration: active ? "none" : "876000h",

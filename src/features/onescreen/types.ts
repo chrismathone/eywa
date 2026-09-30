@@ -61,6 +61,11 @@ export type Subject = {
   // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티). 과목별. 학부모 카드 표시(showHomeworkToday)
   // + AI 멘트 마무리 문장("오늘 과제는 ~입니다")의 재료. homework(수행 상태)와 별개.
   homeworkToday?: string;
+  /**
+   * 오늘 영상 과제 있음(0308a, 원장 2026-09-30) — 행 단위. 켜면 다음 수업에서 '지난 수업 영상 숙제'를 검사한다.
+   * 학원설정 영상 숙제 정책이 이 반을 켠 행에서만 저장된다(끈 반은 undefined로 보내 값을 건드리지 않는다).
+   */
+  videoHomework?: boolean;
 
   // ── 행(수업) 단위 평가값 (2026-08-13) — 해석·폴백은 [row-fields.ts](./row-fields.ts) 단일 소스 ──
   /**

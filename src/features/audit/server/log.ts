@@ -68,6 +68,8 @@ export const AUDIT_ACTIONS = {
   staff_delete: "직원 삭제",
   // 재직 상태 변경(퇴사·복구·대기) — 2026-09-23 전수 점검 S1 전엔 기록이 한 줄도 안 남았다.
   staff_status_change: "직원 재직 상태 변경",
+  // 보호 계정(super_admins 명단) 역할·재직·삭제 시도 — 🔴 화면 문구엔 슈퍼관리자라 쓰지 않는다(위장, displayRoleFor) — 거절됐지만 누가 시도했는지 남긴다(원장 2026-09-30 "강력 가드").
+  staff_protected_refused: "보호 계정 변경 거절",
   staff_password_reset: "직원 비밀번호 재설정",
   staff_email_change: "직원 이메일 변경",
   staff_name_change: "직원 이름 변경",

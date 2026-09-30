@@ -747,6 +747,8 @@ export const lessonReports = pgTable(
     // 오늘 과제(숙제 내용) — 0096a(edutrix homework_today 패리티, 사용률 90%). homework_score(수행 상태)와 별개.
     // 학부모 카드 표시(showHomeworkToday) + AI 멘트 마무리("오늘 과제는 ~입니다") 재료.
     homeworkToday: text("homework_today"),
+    // 오늘 영상 과제 있음/없음 — 0308a. null=모름(기능 이전) → 다음 수업 영상 숙제 검사는 false일 때만 숨긴다.
+    videoHomework: boolean("video_homework"),
     // 학습 추세(종합분석) — 0091a(edutrix graph_eval 이식). 멘트(notes)와 별개. 자동작성 시 함께 생성, /r '학습 추세' 섹션.
     trendNote: text("trend_note"),
     // 멘트(notes) 작성 방식 — 0214a. auto(자동작성 그대로)/auto_edited(자동작성 후 수정)/manual(직접 작성)/

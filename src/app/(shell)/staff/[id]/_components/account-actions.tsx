@@ -214,6 +214,7 @@ export function AccountActions({
   homeroomClasses,
   assistClasses,
   handoverTeachers,
+  protection = "clear",
 }: {
   staffId: string;
   displayName: string;
@@ -227,15 +228,26 @@ export function AccountActions({
   assistClasses: AssistClassRow[];
   /** 퇴사 시 반을 넘겨받을 수 있는 재직 강사 후보 */
   handoverTeachers: HandoverTeacher[];
+  /** 보호 계정이면 역할 변경·퇴사·삭제를 세우지 않는다(원장 2026-09-30 "강력 가드"). unknown = 확인 실패(막고 재시도 안내). */
+  protection?: "protected" | "clear" | "unknown";
 }) {
   const [open, setOpen] = useState<"email" | "password" | "role" | "delete" | null>(null);
   const close = () => setOpen(null);
-  const canChangeRole = roleOptions.length > 0;
+  // 🔴 문구에 '슈퍼관리자'를 쓰지 않는다 — 지점에선 '관리자'로 위장한다(displayRoleFor).
+  const locked = protection !== "clear";
+  const canChangeRole = roleOptions.length > 0 && !locked;
 
   return (
     <div className="bg-card border-line shadow-card rounded-2xl border p-5">
       <p className="micro mb-1">계정 관리</p>
       <p className="text-text-dim mb-3 text-xs">로그인 계정의 역할·이메일·비밀번호 변경, 완전 삭제.</p>
+      {locked ? (
+        <p className="text-text-dim bg-bg-soft mb-3 rounded-lg px-3 py-2 text-xs">
+          {protection === "protected"
+            ? "보호된 계정입니다 — 역할·상태는 여기서 바꿀 수 없습니다. 운영자에게 요청하세요."
+            : "계정 보호 여부를 확인하지 못했습니다 — 잠시 뒤 새로고침하세요."}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {canChangeRole ? (
           <Button variant="outline" size="sm" onClick={() => setOpen("role")}>
@@ -251,18 +263,22 @@ export function AccountActions({
           <KeyRound className="size-3.5" />
           비밀번호 재설정
         </Button>
-        <DeactivateButton
-          staffId={staffId}
-          displayName={displayName}
-          currentStatus={currentStatus}
-          homeroomClasses={homeroomClasses}
-          assistClasses={assistClasses}
-          teacherOptions={handoverTeachers}
-        />
-        <Button variant="destructive" size="sm" onClick={() => setOpen("delete")}>
-          <Trash2 className="size-3.5" />
-          직원 삭제
-        </Button>
+        {locked ? null : (
+          <>
+            <DeactivateButton
+              staffId={staffId}
+              displayName={displayName}
+              currentStatus={currentStatus}
+              homeroomClasses={homeroomClasses}
+              assistClasses={assistClasses}
+              teacherOptions={handoverTeachers}
+            />
+            <Button variant="destructive" size="sm" onClick={() => setOpen("delete")}>
+              <Trash2 className="size-3.5" />
+              직원 삭제
+            </Button>
+          </>
+        )}
       </div>
 
       {open === "role" ? (

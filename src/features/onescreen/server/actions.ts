@@ -59,6 +59,7 @@ import {
 import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/report-subject";
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
+import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { loadTeacherMentStyle } from "./ment-style-db";
 import { mentStyleDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
@@ -81,6 +82,11 @@ export type SaveLessonReportInput = {
   textbook?: string; // 교재명 — 0089a(학부모 카드 showTextbook)
   makeup?: boolean; // 보강 수업 여부 — 0089a
   homeworkToday?: string; // 오늘 과제(숙제 내용) — 0096a(학부모 카드 showHomeworkToday, AI 멘트 재료)
+  /**
+   * 오늘 영상 과제 있음/없음(0308a) — `undefined`면 손대지 않는다(저장해 둔 값 유지 · 모르는 경로). 컬럼이 아직 없으면
+   * 서버가 조용히 뺀다(#95). 다음 수업의 '지난 수업 영상 숙제' 검사는 false일 때만 숨는다(assignment.ts).
+   */
+  videoHomework?: boolean;
   progress: string; // "영어 Unit 8 · p.90"
   examInfo: string; // "일일 18/20, 확인 19/20" (roster prev-score 파싱용 합본 — 보존)
   homeworkScore: string; // 과제 상태
@@ -189,7 +195,11 @@ export async function saveLessonReport(
   //    이 함수가 저장의 **단일 관문**이라 원스크린·카드·일괄·첨부 자동저장이 전부 여기서 막힌다.
   //    푸는 방법은 공유링크 재발급(reissueShareLink — 상태 리셋 = "이 건은 무효" 선언)뿐이다.
   // ment_source(0214a) 기록 가능 여부 — 컬럼이 아직 없으면(마이그 미적용) 마커만 생략(#95, probe 캐시로 평시 왕복 0).
-  const mentReady = await mentSourceColumnReady(supabase);
+  // 영상 과제(0308a)도 같은 결 — 값을 실은 저장만 probe한다(나란히, B4). 적용 후엔 캐시라 왕복 0.
+  const [mentReady, videoHwReady] = await Promise.all([
+    mentSourceColumnReady(supabase),
+    input.videoHomework === undefined ? Promise.resolve(false) : videoHomeworkColumnReady(),
+  ]);
   const gateBase = supabase
     .from("lesson_reports")
     // 멘트 작성 방식 판정 재료(notes, ment_source)를 게이트 pre-read에 **합승**시킨다 — 별도 왕복 없음(B4).
@@ -249,6 +259,7 @@ export async function saveLessonReport(
         // 자유입력 자리표시자(`-`·`X` 등)를 "없음" 하나로 표준화(none-marker.ts 규약, 원장 2026-07-23) —
         // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
         homework_today: normalizeNoneMarker(input.homeworkToday),
+        ...(videoHwReady && typeof input.videoHomework === "boolean" ? { video_homework: input.videoHomework } : {}),
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: normalizeNoneMarker(input.homeworkScore),
@@ -924,6 +935,8 @@ export type SaveOnescreenSessionInput = {
       textbook?: string;
       makeup?: boolean;
       homeworkToday?: string;
+      /** 오늘 영상 과제 있음(0308a) — 새로고침 뒤에도 켠 표시가 남게 세션에도 싣는다(로스터가 같은 키로 복원). */
+      videoHomework?: boolean;
       /**
        * 영어 템플릿 모드(2026-09-10) — 고른 템플릿 · 다음 시간 테스트 · 마지막 AI 인사말/코멘트.
        * **영어 행만** 싣는다(수학 세션 모양 불변). 로스터 복원(roster.ts `OnescreenSessionRow`)이 같은 키를 읽는다.

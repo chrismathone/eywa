@@ -12,6 +12,7 @@ import { reportError } from "@/lib/observability/report-error";
 import { logAction } from "@/features/audit/server/log";
 import { normalizeNoticeAudience } from "@/features/notices/audience";
 import { generateDailyBriefing } from "./briefing";
+import { DAILY_BRIEFING_DISABLED_MESSAGE, DAILY_BRIEFING_ENABLED } from "../briefing-status";
 
 export type AnnouncementActionState = { error?: string; ok?: boolean } | undefined;
 
@@ -157,6 +158,7 @@ export async function deleteAnnouncement(
  * 재생성은 벨 알림을 다시 쏘지 않는다(notified_at 게이트는 최초 생성 전용).
  */
 export async function regenerateDailyBriefing(): Promise<{ error?: string; ok?: boolean }> {
+  if (!DAILY_BRIEFING_ENABLED) return { error: DAILY_BRIEFING_DISABLED_MESSAGE };
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!canManageStaff(user.systemRole) || !(await canWriteTenant(user.systemRole, "dashboard"))) {

@@ -1,84 +1,14 @@
 import { bearerMatches } from "@/lib/http/secret-compare";
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { reportError } from "@/lib/observability/report-error";
-import { generateDailyBriefing } from "@/features/dashboard/server/briefing";
-import { detectAndNotifyEvents } from "@/features/notifications/server/events";
-import { pruneNotificationData } from "@/features/notifications/server/prune";
-import { sweepFailedReportNotifications } from "@/features/notifications/server/failed-notify-sweep";
+import { DAILY_BRIEFING_DISABLED_MESSAGE } from "@/features/dashboard/briefing-status";
 
-/**
- * 운영실 일일 AI 브리핑 cron (매일 07:00 KST = 22:00 UTC, 원장 승인 2026-07-16 — 새벽 동기화
- * 3종(03:00~04:00 KST) 이후 최신 데이터로 생성). 테넌트당 LLM ≤1콜/일(신호 0건 날은 스킵 —
- * shouldGenerateNarrative), 결과는 daily_briefings에 upsert(tenant×date 멱등, 재실행 안전).
- *
- * 대상 테넌트 = **활성 master가 1명 이상인 테넌트만**(수신자 없는 데모·휴면 테넌트에 매일
- * LLM 비용을 태우지 않는다). sheets-sync 선례: 테넌트별 try/catch로 부분 실패 허용 + 관측성 응답.
- * ⚠️ Vercel Hobby는 cron 슬롯 제한이 있어(문서상 2개, 현재 3개 등록) 4번째 배포가 거부되면
- * 외부 스케줄러(cron-job.org 등)가 Bearer CRON_SECRET로 이 라우트를 호출하는 대안을 쓴다.
- */
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // 이 프로젝트에서 배포 검증된 상한(sheets-sync 선례) — 테넌트당 LLM 1콜 + retention
 
+/** 외부에 남은 과거 스케줄도 브리핑 생성을 다시 시작할 수 없게 한다. */
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization") ?? "";
-  if (!secret || !bearerMatches(auth, secret)) {
+  if (!secret || !bearerMatches(req.headers.get("authorization") ?? "", secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-
-  const admin = createAdminClient();
-  const { data: masters, error } = await admin
-    .from("users")
-    .select("tenant_id")
-    .eq("system_role", "master")
-    .eq("status", "active");
-  if (error) {
-    reportError(error, { scope: "cron.daily-briefing", step: "list-tenants" });
-    return NextResponse.json({ error: `대상 테넌트 조회 실패: ${error.message}` }, { status: 500 });
-  }
-
-  const tenantIds = [...new Set((masters ?? []).map((row) => row.tenant_id as string))];
-  const results: Record<string, string> = {};
-  const events: Record<string, string> = {};
-  const sweeps: Record<string, string> = {}; // 발송 실패 알림 유실 보정 결과(테넌트별)
-  for (const tenantId of tenantIds) {
-    try {
-      const result = await generateDailyBriefing(tenantId);
-      results[tenantId] = result.ok ? "ok" : `실패: ${result.error}`;
-    } catch (e) {
-      // generateDailyBriefing이 자체 실패 처리를 하지만, 그 밖의 예외도 다음 테넌트를 막지 않는다.
-      reportError(e, { scope: "cron.daily-briefing", tenantId });
-      results[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
-    }
-    // Phase 3 이벤트 감지 — 브리핑과 **독립된 try/catch**(브리핑 실패해도 이벤트 알림은 돌아야 함).
-    try {
-      const detected = await detectAndNotifyEvents(tenantId);
-      events[tenantId] = `결석 ${detected.absence}·후속 ${detected.followup}·성적 ${detected.gradeDrop}·미수 ${detected.outstanding}·미발송 ${detected.unsentReport}·진도이상 ${detected.progressAnomaly}·재발송마감 ${detected.sendDeadline}`;
-    } catch (e) {
-      reportError(e, { scope: "cron.daily-briefing.events", tenantId });
-      events[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
-    }
-    // 발송 실패 알림 유실 보정 — 0143a 트리거가 예외를 삼켜 알림이 사라진 건을 메운다(failed-notify-sweep.ts).
-    // 브리핑·이벤트와 **독립된 try/catch**: 이건 "강사가 실패를 영영 모르는" 문제를 막는 마지막 그물이라
-    // 앞 단계가 실패해도 반드시 돌아야 한다. 새 cron 슬롯을 쓰지 않으려고 여기 얹었다(Vercel cron 제한).
-    try {
-      const swept = await sweepFailedReportNotifications(admin, tenantId);
-      sweeps[tenantId] = `확인 ${swept.checked}·보정 ${swept.created}`;
-    } catch (e) {
-      reportError(e, { scope: "cron.daily-briefing.failed-notify-sweep", tenantId });
-      sweeps[tenantId] = `실패: ${e instanceof Error ? e.message : String(e)}`;
-    }
-  }
-
-  // 오래된 dedup 이벤트·읽은 알림 정리 — 전 테넌트 공통 1회, 브리핑/이벤트와 독립(실패해도 무해).
-  let pruned: { events: number; notifications: number } | string;
-  try {
-    pruned = await pruneNotificationData();
-  } catch (e) {
-    reportError(e, { scope: "cron.daily-briefing.prune" });
-    pruned = `실패: ${e instanceof Error ? e.message : String(e)}`;
-  }
-
-  return NextResponse.json({ ok: true, tenants: tenantIds.length, results, events, sweeps, pruned });
+  return NextResponse.json({ ok: false, disabled: true, error: DAILY_BRIEFING_DISABLED_MESSAGE }, { status: 410 });
 }

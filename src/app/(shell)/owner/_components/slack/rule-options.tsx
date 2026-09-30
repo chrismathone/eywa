@@ -19,7 +19,37 @@ export function Row({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-export function RuleOptions({ rule, patch, staff }: { rule: SlackRule; patch: Patch; staff: { id: string; name: string }[] }) {
+type Staff = { id: string; name: string }[];
+const staffChips = (ids: string[], staff: Staff) =>
+  ids.map((id) => ({ key: id, label: staff.find((s) => s.id === id)?.name ?? "직원", icon: "user" as const }));
+
+/**
+ * '누가'(0311a) — 비면 누구든 · 고르면 그 사람이 한 일만 보낸다. 발동자가 없는 것(시스템 자동 알림·PIN 화면 기록)은 빠진다.
+ * '빼기'에 든 사람은 여기서 고를 수 없다(둘 다면 빼기가 이긴다 — rules.ts sanitizeRule과 같은 규칙).
+ */
+export function ActorRow({ rule, patch, staff }: { rule: SlackRule; patch: Patch; staff: Staff }) {
+  return (
+    <Row label="누가">
+      <ChipField
+        items={staffChips(rule.actorIds, staff)}
+        onRemove={(id) => patch({ actorIds: rule.actorIds.filter((x) => x !== id) })}
+        empty="누구든"
+        addLabel="이 사람이 한 일만"
+        picker={{
+          title: "이 사람이 한 일만 보내기",
+          description: "비워 두면 누가 했든 보냅니다. 시스템 자동 알림·PIN 화면 기록은 사람이 없어 빠집니다. '빼기'에 넣은 사람은 고를 수 없습니다.",
+          groups: [{ id: "x", label: "직원" }],
+          options: staff.map((s) => ({ key: s.id, label: s.name, group: "x", ...(rule.excludeActorIds.includes(s.id) ? { hint: "빼기에 있음" } : {}) })),
+          picked: rule.actorIds,
+          onApply: (ids) => patch({ actorIds: ids.filter((id) => !rule.excludeActorIds.includes(id)) }),
+        }}
+      />
+      <span className="text-text-faint w-full text-sm">이 사람이 한 일만 보내기 · 시스템 자동 알림·PIN 화면 기록은 빠짐</span>
+    </Row>
+  );
+}
+
+export function RuleOptions({ rule, patch, staff }: { rule: SlackRule; patch: Patch; staff: Staff }) {
   return (
     <>
       <Row label="모양">
@@ -64,7 +94,7 @@ export function RuleOptions({ rule, patch, staff }: { rule: SlackRule; patch: Pa
       </Row>
       <Row label="빼기">
         <ChipField
-          items={rule.excludeActorIds.map((id) => ({ key: id, label: staff.find((s) => s.id === id)?.name ?? "직원", icon: "user" }))}
+          items={staffChips(rule.excludeActorIds, staff)}
           onRemove={(id) => patch({ excludeActorIds: rule.excludeActorIds.filter((x) => x !== id) })}
           empty="모두 보냄"
           addLabel="이 사람이 한 일은 빼기"
@@ -72,9 +102,10 @@ export function RuleOptions({ rule, patch, staff }: { rule: SlackRule; patch: Pa
             title: "이 사람이 한 일은 보내지 않기",
             description: "예: 원장 본인이 한 일은 피드에서 빼기.",
             groups: [{ id: "x", label: "직원" }],
-            options: staff.map((s) => ({ key: s.id, label: s.name, group: "x" })),
+            options: staff.map((s) => ({ key: s.id, label: s.name, group: "x", ...(rule.actorIds.includes(s.id) ? { hint: "누가에 있음" } : {}) })),
             picked: rule.excludeActorIds,
-            onApply: (ids) => patch({ excludeActorIds: ids }),
+            // '누가'에 고른 사람은 빼기에 넣지 않는다 — 넣으면서 '누가'에서 내리면 목록이 비어 '누구든'으로 넓어질 수 있다.
+            onApply: (ids) => patch({ excludeActorIds: ids.filter((id) => !rule.actorIds.includes(id)) }),
           }}
         />
       </Row>

@@ -232,6 +232,14 @@ describe("auditDetail — 액션별 한글 상세", () => {
     expect(auditDetail("class_update", { changed: ["강의실"] }, ctx())).toBe("변경: 강의실");
   });
 
+  it("class_update: 예약 적용이 규칙 때문에 건너뛴 반 이름은 이유와 함께 적는다(2026-09-30)", () => {
+    const skipped = [{ field: "반 이름", to: "(수학)홍길동", reason: "개인 보드 이름과 겹침" }];
+    expect(auditDetail("class_update", { changed: [], changes: [], skipped }, ctx())).toBe("반 이름 (수학)홍길동 적용 안 함(개인 보드 이름과 겹침)");
+    const withChange = auditDetail("class_update", { changes: [{ field: "강의실", from: "302", to: "303" }], skipped }, ctx());
+    expect(withChange).toContain("변경: 강의실 302 → 303");
+    expect(withChange).toContain("적용 안 함");
+  });
+
   it("🔴 미등록 액션 폴백은 영문 키·값을 내보내지 않는다(2026-08-20 정책 변경)", () => {
     // 종전엔 `foo: bar`를 그대로 뱉었다 — 감사 화면 raw 코드 노출의 뿌리. 이제 모르는 키는 숨긴다
     // (원문 JSON은 뷰어 title 툴팁이 항상 보존).
@@ -1189,5 +1197,20 @@ describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김�
 
   it("대상 유형 calendar도 한글", () => {
     expect(AUDIT_TYPE_LABEL.calendar).toBe("캘린더");
+  });
+});
+
+describe("auditDetail — 슬랙 규칙 '누가'(0311a)", () => {
+  it("보낼 사람 인원이 바뀌면 전 → 후 · 같은 인원에 사람만 바뀌면 (교체)", () => {
+    const base = { enabled: true, actorCount: 0, actorSig: "" };
+    expect(auditDetail("slack_rule_save", { enabled: true, actorCount: 2, actorSig: "h1", before: base }, ctx())).toBe(
+      "수정: 보낼 사람(발동자) 0 → 2명 · 켜짐",
+    );
+    expect(
+      auditDetail("slack_rule_save", { enabled: true, actorCount: 1, actorSig: "h2", before: { enabled: true, actorCount: 1, actorSig: "h1" } }, ctx()),
+    ).toBe("수정: 보낼 사람(발동자) 1 → 1명(교체) · 켜짐");
+  });
+  it("옛 기록(before에 actorCount 없음)은 비교하지 않는다", () => {
+    expect(auditDetail("slack_rule_save", { enabled: true, actorCount: 2, before: { enabled: true } }, ctx())).not.toContain("보낼 사람");
   });
 });

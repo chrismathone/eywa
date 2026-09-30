@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { baseName, childNameConsistent, closedClassesToKeep, planClassBoards, resolveStudentChildren, summarizePlan } from "./class-board-plan.mjs";
+import { baseName, childNameConsistent, closedClassesToKeep, planClassBoards, reservedBoardName, resolveStudentChildren, summarizePlan } from "./class-board-plan.mjs";
 
 const SY = 2026; // 중1 = 2013생, 초6 = 2014생
 const P1 = "010-1111-1111";
@@ -209,8 +209,9 @@ describe("planClassBoards — 반 단위", () => {
     const w = world();
     w.boards.push({ id: 50, name: "중등M 중1 BS3E" });
     w.membersByBoard.set(50, [{ id: 101, name: "김근우" }, { id: 999, name: "남" }]);
-    const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
-    expect(p.board).toEqual({ action: "exists", id: 50 });
+    // 이미 연결된 반 보드(번호) — 계획 밖 원아는 '해제 필요'(extras)로만 남는다.
+    const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]), linkedBoardByClass: new Map([["c1", 50]]) });
+    expect(p.board).toEqual({ action: "exists", id: 50, name: "중등M 중1 BS3E" });
     expect(p.assign[0].children[0].already).toBe(true);
     expect(p.assign[1].children[0].already).toBe(false);
     expect(p.extras).toEqual(["남"]);
@@ -232,8 +233,9 @@ describe("planClassBoards — 반 단위", () => {
   it("연속 공백이 든 반 이름도 글자 그대로 요구한다", () => {
     const w = world();
     w.boards.push({ id: 50, name: "중등M 개별  BS3R" });
+    w.membersByBoard.set(50, []);
     const [p] = planClassBoards({ ...w, classes: cls(["s1"], "중등M 개별  BS3R") });
-    expect(p.board).toEqual({ action: "exists", id: 50 });
+    expect(p.board).toEqual({ action: "exists", id: 50, name: "중등M 개별  BS3R" });
   });
 
   it("🔑 연결표 기준 — aywa에서 반 이름을 바꾸면 새로 만들지 않고 이름 변경(rename)", () => {
@@ -241,13 +243,81 @@ describe("planClassBoards — 반 단위", () => {
     w.boards.push({ id: 70, name: "중등M 중1 BS3E" });
     w.membersByBoard.set(70, []);
     const [p] = planClassBoards({ ...w, classes: cls(["s1"], "중등M 중1 BS3E 새이름"), linkedBoardByClass: new Map([["c1", 70]]) });
-    expect(p.board).toEqual({ action: "exists", id: 70, rename: { from: "중등M 중1 BS3E", to: "중등M 중1 BS3E 새이름" } });
+    expect(p.board).toEqual({ action: "exists", id: 70, name: "중등M 중1 BS3E", rename: { from: "중등M 중1 BS3E", to: "중등M 중1 BS3E 새이름" } });
   });
-  it("바꿀 이름의 보드가 이미 있으면 막는다", () => {
+  it("🔴 G1 — 바꿀 이름의 보드가 이미 있으면 이름만 안 바꾸고 **연결은 지킨다**(번호로 계속 발송)", () => {
     const w = world();
     w.boards.push({ id: 70, name: "옛이름" }, { id: 71, name: "새이름" });
+    w.membersByBoard.set(70, [{ id: 101, name: "김근우" }]);
     const [p] = planClassBoards({ ...w, classes: cls(["s1"], "새이름"), linkedBoardByClass: new Map([["c1", 70]]) });
+    expect(p.board.action).toBe("exists");
+    expect(p.board.id).toBe(70);
+    expect(p.board.name).toBe("옛이름");
+    expect(p.board.rename).toBeUndefined();
+    expect(p.board.renameBlocked).toContain("이미 있습니다");
+    // 배정도 그대로 산다(보류로 떨어지지 않는다)
+    expect(p.assign.map((a) => a.studentId)).toEqual(["s1"]);
+    expect(p.assign[0].children[0].already).toBe(true);
+  });
+  it("🔴 G1 — 같은 날 두 반 이름을 맞바꿔도 둘 다 자기 보드(번호)를 지킨다", () => {
+    const w = world();
+    w.boards.push({ id: 70, name: "A반" }, { id: 71, name: "B반" });
+    w.membersByBoard.set(70, []);
+    w.membersByBoard.set(71, []);
+    const plans = planClassBoards({
+      ...w,
+      classes: [{ classId: "c1", className: "B반", studentIds: ["s1"] }, { classId: "c2", className: "A반", studentIds: ["s2"] }],
+      linkedBoardByClass: new Map([["c1", 70], ["c2", 71]]),
+    });
+    expect(plans.map((p) => [p.board.action, p.board.id, !!p.board.renameBlocked])).toEqual([["exists", 70, true], ["exists", 71, true]]);
+  });
+  it("G7 — 공백만 바꾼 개명은 자기 보드와 충돌로 보지 않고 이름을 바꾼다", () => {
+    const w = world();
+    w.boards.push({ id: 70, name: "중3 A" });
+    w.membersByBoard.set(70, []);
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"], "중3A"), linkedBoardByClass: new Map([["c1", 70]]) });
+    expect(p.board).toMatchObject({ action: "exists", id: 70, rename: { from: "중3 A", to: "중3A" } });
+    expect(p.board.renameBlocked).toBeUndefined();
+  });
+  it("🔴 G2 — 연결 없는 반이 이름만 같은 보드를 채택할 때 **남의 원아**가 있으면 보류", () => {
+    const w = world();
+    w.boards.push({ id: 50, name: "중등M 중1 BS3E" });
+    w.membersByBoard.set(50, [{ id: 101, name: "김근우" }, { id: 999, name: "남" }]);
+    const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
     expect(p.board.action).toBe("block");
+    expect(p.board.reason).toContain("아닌 원아 1명");
+    expect(p.assign).toEqual([]);
+  });
+  it("G2 — 채택할 보드의 원아를 못 읽었으면 보류(모르면 채택하지 않는다)", () => {
+    const w = world();
+    w.boards.push({ id: 50, name: "중등M 중1 BS3E" });
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"]) });
+    expect(p.board.action).toBe("block");
+    expect(p.board.reason).toContain("조회 실패");
+  });
+  it("G2 — 이 반 가족만 있는 같은 이름 보드는 채택한다(보류 학생의 원아도 가족)", () => {
+    const w = world();
+    w.boards.push({ id: 50, name: "중등M 중1 BS3E" });
+    w.membersByBoard.set(50, [{ id: 101, name: "김근우" }]);
+    const [p] = planClassBoards({ ...w, classes: cls(["s1", "s2"]) });
+    expect(p.board).toEqual({ action: "exists", id: 50, name: "중등M 중1 BS3E" });
+  });
+  it("🔴 G2 — (수학)·[ALL] 모양 반 이름은 반 보드로 쓰지 않는다(연결 없으면 보류 · 연결 있으면 이름만 안 바꿈)", () => {
+    expect(reservedBoardName("(수학)홍길동")).toBeTruthy();
+    expect(reservedBoardName(" (영어)홍길동")).toBeTruthy();
+    expect(reservedBoardName("[ALL] 인재원 전체방")).toBeTruthy();
+    expect(reservedBoardName("[특강] 고등개별")).toBeNull();
+    expect(reservedBoardName("중등M 중1 BS3E")).toBeNull();
+    const w = world();
+    const [p] = planClassBoards({ ...w, classes: cls(["s1"], "(수학)김근우A") });
+    expect(p.board.action).toBe("block");
+    const w2 = world();
+    w2.boards.push({ id: 70, name: "옛이름" });
+    w2.membersByBoard.set(70, []);
+    const [q] = planClassBoards({ ...w2, classes: cls(["s1"], "(수학)홍길동"), linkedBoardByClass: new Map([["c1", 70]]) });
+    expect(q.board).toMatchObject({ action: "exists", id: 70 });
+    expect(q.board.rename).toBeUndefined();
+    expect(q.board.renameBlocked).toBeTruthy();
   });
   it("같은 이름 보드가 다른 반에 연결돼 있으면 이 반 것으로 보지 않는다", () => {
     const w = world();
