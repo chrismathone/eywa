@@ -8,6 +8,13 @@
 
 - 원장 *"이벤트 발생할 때마다 동기화, 주기보다 웹훅같은걸로"* — '[취소]'로 바꾼 입테가 반나절 운영실에 남았다(임포트가 06:00·18:00뿐). 캘린더마다 구글 푸시 채널을 열고(`google-channels.ts`, 하루 2회 크론이 열기·갱신), `/api/calendar/google-push`가 알림을 받으면 그 캘린더의 바뀐 일정만(`updatedMin`) 반영한다(`google-incremental.ts`). 반영 규칙은 전체 임포트와 한 벌로 뽑았다(`google-sync-core.ts`). 410이면 그 캘린더만 전체 임포트. 한 캘린더 한 회차 잠금 + 도는 중 알림은 `dirty`로 한 번 더. 하루 2회 전체 임포트는 안전망으로 유지.
 - SQL 0310a `calendar_sync_state`(service_role 전용 — 사용자 정책 의도적 제외). SQL 전에도 앱은 안 죽는다(표 없으면 웹훅·채널이 조용히 꺼짐).
+- **새벽 크론 가볍게**(원장 *"하루 한번 새벽에 가볍게 돌려 필요하면."*): `vercel.json` 하루 2회(06·18시) → **04:00 KST 한 번**. 채널 열기·갱신 → 캘린더마다 증분 따라잡기(웹훅과 같은 함수·잠금, 최소 25시간 전부터) → 전체 임포트는 [`planCalendarCron`](src/features/calendar/cron-plan.ts)이 고른 캘린더만(시작점 없음·48시간 넘음·채널 없었음/만료/열기 실패·증분 실패·일요일 주간 안전망·`?full=1`) · 표 없으면(#95) 종전처럼 전체 · 응답 `calendars[].mode/reason` · 본체 [`google-cron.ts`](src/features/calendar/server/google-cron.ts).
+## 2026-09-30 — 보호 계정 가드 3중화(점검·보강)
+
+- 원장 *"방어가드가 확실한지만 더 체크 몇번 더해봐 2,3중이상으로 해도 되니까"*. 운영 DB에서 되돌림 트랜잭션으로 공격 13종 × 3계정을 쏴 봄 — 0309a는 **소프트 삭제(`deleted_at`)만 통과**. SQL 0312a가 그것·auth `role` 변경을 막고, super_admins 수정·삭제·비우기 권한을 API 역할에서 회수(트리거와 독립한 층), 트리거 상태 조회 `protected_guard_triggers()`를 둔다.
+- 3선 = 매일 점검: [`protected-integrity-core.ts`](src/lib/auth/protected-integrity-core.ts)(순수 판정 — 기준 명단 대비 추가·삭제, master·재직·로그인 역할·지점·차단·삭제, 가드 트리거 5개) → `notification-maintenance` 크론 맨 앞. 어긋나면 `reportError`(`security.protected-integrity`) + 총괄 감사로그 `protected_integrity_alert`. 읽기만 한다(고치지 않는다). 명단이 원장 승인으로 바뀌면 `BASELINE_PROTECTED_IDS`도 고칠 것.
+- 권한 매트릭스: super_admin에게 코드가 준 전자결재(full)를 저장된 개인 예외 `none`이 덮던 구멍을 막음(`getUserPermMatrix` — 코드 예외만 얹은 매트릭스도 병합).
+
 ## 2026-09-30 — 보호 계정(super_admins) 역할·재직·삭제 잠금
 
 - 원장 *"이승엽 superadmin 으로 등급업. 겉으로는 관리자. 박소선과 동일"* → *"강력 가드. 꼭 물어봐야하는걸로"*. 이승엽 system_role admin→master(스크립트·감사로그, 표시는 여전히 '관리자').

@@ -34,7 +34,7 @@ export type { ImportSummary } from "./google-sync-core";
  * **구글 캘린더 → aywa 한 방향 전체 임포트**(IO). 순수 변환·판정은 [`google-import.ts`](../google-import.ts),
  * 행 반영 규칙은 [`google-sync-core.ts`](./google-sync-core.ts)(웹훅 증분 동기화와 한 벌).
  *
- * 원장 2026-09-10: *"동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"* + 하루 2회(06:00·18:00 KST).
+ * 원장 2026-09-10: *"동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"* + 하루 2회(06:00·18:00 KST) → 2026-09-30 새벽 한 번, 필요할 때만 전체(google-cron.ts).
  * 2026-09-30부터 평소 반영은 **웹훅 + 증분**(google-incremental.ts)이 하고, 이 전체 임포트는 알림을 놓쳤을 때·창 밖으로
  * 옮겨진 일정 정리의 안전망이다.
  *
@@ -46,8 +46,18 @@ export type { ImportSummary } from "./google-sync-core";
  *    (`calendar_events_google_uniq`, 운영 DB에 있음)에 막혀 그 회차가 실패로 남는다.
  * ⚠️ admin 클라이언트 = RLS 우회 → 모든 쿼리에 **tenant_id 명시 필터**.
  */
-export async function runGoogleCalendarImport(tenantId: string): Promise<ImportSummary> {
-  const sources = parseCalendarSources(process.env.GOOGLE_CALENDAR_IDS);
+export async function runGoogleCalendarImport(
+  tenantId: string,
+  opts: {
+    /** 이 캘린더들만(새벽 크론이 "필요한" 캘린더만 전체로 돌 때). 없으면 전부. */
+    only?: ReadonlySet<string>;
+    /** 감사로그 metadata에 더할 것(새벽 크론의 사유 등). */
+    auditExtra?: Record<string, unknown>;
+  } = {},
+): Promise<ImportSummary> {
+  const all = parseCalendarSources(process.env.GOOGLE_CALENDAR_IDS);
+  const only = opts.only;
+  const sources = only ? all.filter((s) => only.has(s.calendarId)) : all;
   const api = calendarApi();
   const summary = emptySummary(tenantId, sources.length);
   if (sources.length === 0 || !api.ok) {
@@ -99,7 +109,7 @@ export async function runGoogleCalendarImport(tenantId: string): Promise<ImportS
     }
   }
 
-  await logSyncAudit(admin, summary, "full");
+  await logSyncAudit(admin, summary, "full", opts.auditExtra);
   return summary;
 }
 
@@ -128,7 +138,7 @@ export async function runCalendarFullImportLocked(
 
 /**
  * 캘린더 하나 전체 반영. `listed` = 구글 조회 성공(삭제 정리까지 돈 것) · `clean` = 쓰기 실패까지 0.
- * 하루 2회 크론은 `clean`일 때만 시작점을 옮기고, 410 폴백은 `listed`면 옮긴다(굳으면 고리가 된다).
+ * 크론 전체 임포트는 `clean`일 때만 시작점을 옮기고, 410 폴백은 `listed`면 옮긴다(굳으면 고리가 된다).
  */
 async function importOneCalendar(
   admin: Admin,
