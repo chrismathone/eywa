@@ -34,8 +34,10 @@ describe("ECS 출결 → 출석부 배선", () => {
     const actions = read("src", "features", "class-sheets", "server", "actions.ts");
     const start = actions.indexOf("export async function removeMakeupAttendee");
     expect(start).toBeGreaterThan(-1);
-    const body = actions.slice(start, start + 2500);
+    // 보강 보고서 반(앵커) 칸 게이트(2026-09-30)가 앞에 붙어 본문이 길어졌다.
+    const body = actions.slice(start, start + 4000);
     expect(body).toContain("이 반 수강생입니다");
+    expect(body).toContain("makeupAnchorDeleteBlock(");
     expect(body).toContain('.from("attendance_records")');
     expect(body).toContain(".delete()");
     expect(sheetClient).toContain("removeMakeupAttendee");

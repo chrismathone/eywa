@@ -1,5 +1,7 @@
 "use server";
 
+import { taughtByColumnReady } from "./taught-by-db";
+import { makeupAnchorDeleteBlock } from "./makeup-anchor-cells";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
@@ -700,12 +702,14 @@ export async function setAttendanceCell(input: {
   const loadScopedDay = async (
     teacherId: string,
   ): Promise<{ error: string } | { rows: (DayTargetRow & { note?: string | null })[]; share: ScopeShare }> => {
+    // 대신 보강 귀속(0315a) — 칸이 있을 때만(#95). 반 담임 보기 저장이 남의 대신 보강 칸을 제 몫으로 덮지 않게.
+    const withTaughtBy = await taughtByColumnReady().catch(() => false);
     const [{ data, error }, facts] = await Promise.all([
       supabase
         .from("attendance_records")
         // recorded_via = 자리 문 표식(0212a) — JJ는 `seat_label`이 없어 이게 유일한 자리 근거일 수 있다.
         // note = 메모만 저장이 **화면이 보여 준 메모의 행**을 고르는 재료(`noteTargetRow`, 적대 재리뷰 2026-09-14).
-        .select("id, slot_start, seat_label, recorded_via, note")
+        .select((withTaughtBy ? "id, slot_start, seat_label, recorded_via, note, taught_by" : "id, slot_start, seat_label, recorded_via, note") as "id, slot_start, seat_label, recorded_via, note")
         .eq("class_id", classId)
         .eq("student_id", studentId)
         .eq("session_date", sessionDate)
@@ -829,6 +833,10 @@ export async function setAttendanceCell(input: {
       source: input.source,
     });
     if ("error" in deskGate) return deskGate;
+    // 🔴 보강 보고서가 가리키는 반(앵커)의 칸은 지우지 않는다(원장 2026-09-30 *"보고서 반 = 출석부 반"*, 설계 g) — 지우면 보고서는
+    //    이 반을 가리키는데 출석부엔 칸이 없어 둘이 갈린다. 반을 바꾸려면 원스크린 '보강 반 바꾸기'(칸도 함께 옮긴다)·'보강 빼기'.
+    const anchoredBlock = await makeupAnchorDeleteBlock(user.tenantId, [{ studentId, classId, date: sessionDate }]);
+    if (anchoredBlock) return { error: anchoredBlock };
     // 강사 보기가 손대지 않고 남긴 자리(JJ·랩실) 행 수 — 감사로그(역검수)용.
     let skippedSeatRows = 0;
     if (scopeTeacherId) {
@@ -907,12 +915,16 @@ export async function setAttendanceCell(input: {
   //    못 보고 새 행을 INSERT해 **같은 (학생·반·날짜)에 두 행이 살아남는다** — 화면은 교시 우선이라
   //    멀쩡해 보이지만 급여·시수는 두 행을 다 합산해서, 정정이 돈에 반영되지 않거나 이중 계상된다.
   // 그날 기록과 스코프 판정 재료(반 담임·교시)는 서로 독립이라 병렬(B4).
+  // 대신 보강 귀속(0315a) — 강사 보기 저장의 몫 판정 재료. 칸이 있을 때만 읽는다(#95).
+  const cellTaughtBy = scopeTeacherId ? await taughtByColumnReady().catch(() => false) : false;
   const [{ data: rows }, scopeFacts] = await Promise.all([
     supabase
       .from("attendance_records")
       // seat_label = 자리 시수 행(0208a) · recorded_via = 자리 문 표식(0212a, JJ는 라벨이 없다) —
       // 강사 보기의 몫 판정(`ownsAttendanceSlot`)이 두 표식을 함께 본다.
-      .select("id, slot_start, seat_label, recorded_via, recorded_at, status, note, session_units")
+      .select(
+        (cellTaughtBy ? "id, slot_start, seat_label, recorded_via, recorded_at, status, note, session_units, taught_by" : "id, slot_start, seat_label, recorded_via, recorded_at, status, note, session_units") as "id, slot_start, seat_label, recorded_via, recorded_at, status, note, session_units",
+      )
       .eq("class_id", classId)
       .eq("student_id", studentId)
       .eq("session_date", sessionDate)
@@ -937,6 +949,7 @@ export async function setAttendanceCell(input: {
     slot_start: (rowById.get(id)?.slot_start as string | null | undefined) ?? null,
     seat_label: (rowById.get(id)?.seat_label as string | null | undefined) ?? null,
     recorded_via: (rowById.get(id)?.recorded_via as string | null | undefined) ?? null,
+    taught_by: ((rowById.get(id) as { taught_by?: string | null } | undefined)?.taught_by as string | null | undefined) ?? null,
   }));
   /**
    * 🔴 강사 보기 저장은 자리(JJ·랩실) 행을 **안 쓴다** — 상태·메모·입력자·시수 전부(원장 2026-09-12).
@@ -2070,6 +2083,8 @@ export async function setAttendanceRange(input: {
   //    PostgREST가 1000행에서 **조용히 자른다**(#54). 잘리면 있는 행을 못 찾아 update 대신 insert →
   //    같은 (학생·반·날짜)에 중복 출결이 쌓인다(시수·급여의 재료가 오염된다).
   //    페이지가 흔들리지 않도록 order에 unique tie-break(id)를 함께 건다.
+  // 대신 보강 귀속(0315a) — 강사 보기 범위 저장의 몫 판정 재료. 칸이 있을 때만(#95).
+  const rangeTaughtBy = scopedForFacts.length > 0 ? await taughtByColumnReady().catch(() => false) : false;
   const [existingRows, scopeFacts] = await Promise.all([
     fetchAllPagedInChunks<{
       id: string;
@@ -2087,11 +2102,13 @@ export async function setAttendanceRange(input: {
       session_units: number | null;
       /** 빗금 칸 입력(원장 2026-09-14)이 기존 메모 끝에 `대신 입력` 한 줄을 붙인다 — 덮지 않으려면 지금 메모가 필요하다. */
       note: string | null;
+      /** 대신 보강 귀속 강사(0315a) — 강사 보기 몫 판정 재료. 칸이 없으면 안 읽는다. */
+      taught_by?: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
         // ⚠️ **한 줄로 둘 것** — 구조 가드(`scoped-split-wiring.test.ts`)가 이 줄에서 자리 표식(seat_label)을 확인한다.
-        .select("id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units, note")
+        .select((rangeTaughtBy ? "id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units, note, taught_by" : "id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units, note") as "id, class_id, student_id, session_date, slot_start, seat_label, recorded_via, recorded_at, status, session_units, note")
         .in("session_date", dates)
         .in("class_id", classIds)
         .in("student_id", chunk)
@@ -2136,6 +2153,7 @@ export async function setAttendanceRange(input: {
       slot_start: r.slot_start,
       seat_label: r.seat_label,
       recorded_via: r.recorded_via,
+      taught_by: r.taught_by ?? null,
     });
   }
 
@@ -2188,6 +2206,13 @@ export async function setAttendanceRange(input: {
 
   // 지우기 — 그 칸의 기록을 전부(정정 이력 포함) 삭제. 셀 액션의 '지우기'와 같은 계약.
   if (status === null) {
+    // 🔴 보강 보고서가 가리키는 반(앵커)의 칸이 섞여 있으면 **범위 전체를** 지우지 않는다(셀 지우기와 같은 게이트, 설계 g) —
+    //    일부만 지우고 "몇 칸 빠졌다"고 하면 어느 칸이 보고서에 묶였는지 격자에서 알 수 없다.
+    const anchoredBlock = await makeupAnchorDeleteBlock(
+      user.tenantId,
+      allowed.map((c) => ({ studentId: c.studentId, classId: c.classId, date: c.sessionDate })),
+    );
+    if (anchoredBlock) return { error: anchoredBlock };
     /**
      * 🔴 강사 보기의 지우기는 **자리(JJ·랩실) 행을 남긴다**(원장 2026-09-12) — 그 행은 자리 출석부(JJ실)의 진실이다.
      *    본인 교시만 삭제한다. 빗금 칸은 채우기와 같은 문장으로 건너뛴다.

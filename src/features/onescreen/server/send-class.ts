@@ -1,14 +1,11 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import {
   decideSendClass,
   isSendCandidateClass,
   liveBoardClassIdsOf,
-  mineOnly,
   pickMainClass,
   sendClassGateRow,
 } from "../send-class";
@@ -74,40 +71,47 @@ async function liveBoardClassIds(tenantId: string, studentId: string, classIds: 
 }
 
 export type SendClassResolution =
-  | { ok: true; classId: string; via: "makeup" | "chosen" | "auto" }
+  | { ok: true; classId: string; via: "makeup" }
   | {
       ok: false;
       reason: "choose" | "none";
+      /** 고를 수 있는 반 — 고르면 그 반이 **새 보강 반**이 된다(출석부 칸도 함께 옮겨진다). */
       candidates: { id: string; name: string }[];
       /** 물을 때 처음 골라 둘 반(메인 수업) — 없으면 null. */
       defaultId: string | null;
-      /** 보강 추가 때 고른 반인데 이 학생의 반 보드가 없어 **다른 반으로 가야 할 때** 그 반(화면 경고 한 줄). */
+      /** 보강 반이 있는데 이 학생의 반 보드가 없어 **반을 바꿔야 할 때** 그 반(화면 경고 한 줄). */
       makeupClass: { id: string; name: string } | null;
     };
 
 /**
- * 보낼 반 **후보**(이름순) — resolveSendClass와 관리자 직접 작성의 반 고르기(원장 2026-09-30)가 **같은 목록**을 쓴다.
+ * 보강 반 **후보**(이름순) — 반 미정 보강의 반 고르기·보강 반 보드가 없을 때의 반 바꾸기(원스크린·관리자 직접 작성)가 **같은 목록**을 쓴다.
+ * = 그날 그 학생이 다니는 반 중 **같은 과목** · 반 보드 대상(수학 · 활성 · 보고서 발송 · 종강 전 — 특강 포함) · 이 학생의 살아 있는 반 보드.
+ * 🔴 원장 결정 2(2026-09-30): 위임 없이 남의 반 학생을 대신 보강하면 **학생의 원래 반(B반)**으로 — 작성 강사 담당 반으로 좁히지 않는다
+ *    (예전 `mineOnly`는 그 반을 빼서 '반 없이'밖에 고를 수 없었다). 학생과 접점이 없는 반은 반 보드도 없어 후보가 되지 않는다.
+ * 🔴 고른 반은 저장이 `acceptMakeupAnchor`로 다시 확인한다(같은 과목 · 학생이 다니는 반 · 종강 전) — 이 목록은 그 부분집합이다.
  * 비어 있으면 보낼 반이 없다(발송 불가 — `NO_SEND_CLASS_ERROR`).
  */
 export async function loadSendClassCandidates(
   tenantId: string,
   studentId: string,
   reportDate: string,
-  teacher: { userId: string; restrict: boolean },
+  subject: string | null | undefined,
 ): Promise<{ id: string; name: string }[]> {
   const admin = createAdminClient();
   const { data: enr, error: enrErr } = await admin
     .from("enrollments")
-    .select("class_id, start_date, end_date, is_transferred")
+    .select("class_id, start_date, end_date, is_transferred, on_hold")
     .eq("tenant_id", tenantId)
     .eq("student_id", studentId);
   if (enrErr) throw new Error(enrErr.message);
   // 학생과 접점 = 그날 다니는 반. 종료 규약은 단일 소스(isEnrollmentEndedOn — 반이동 당일 옛 반은 이미 아니다, [[#125]]).
+  // 휴원(on_hold)은 다니는 반이 아니다 — 보강 앵커 후보(loadMakeupAnchorCandidates)와 같은 기준.
   const live = [
     ...new Set(
       (enr ?? [])
         .filter(
           (e) =>
+            !e.on_hold &&
             (!e.start_date || e.start_date <= reportDate) &&
             !isEnrollmentEndedOn(e.end_date as string | null, reportDate, !!e.is_transferred),
         )
@@ -116,7 +120,7 @@ export async function loadSendClassCandidates(
   ];
   if (!live.length) return [];
 
-  const [{ data: cls, error: clsErr }, hasBoard, teaching] = await Promise.all([
+  const [{ data: cls, error: clsErr }, hasBoard] = await Promise.all([
     admin
       .from("classes")
       .select("id, class_name, subject, is_active, report_optout, closed_at")
@@ -124,15 +128,12 @@ export async function loadSendClassCandidates(
       .in("id", live),
     // 워커와 같은 판정(연결 + 이 학생 ok 멤버) — 연결만 보면 워커가 그 반에서 원아를 못 찾아 실패한다.
     liveBoardClassIds(tenantId, studentId, live),
-    // 담당 반 = 원스크린 명단과 **같은 함수**(담임 ∪ 그날 위임) — 강사가 화면에서 보는 반과 고를 반이 같아야 한다.
-    createClient().then((sb) => getTeachingClassIds(sb, teacher.userId, reportDate)),
   ]);
   if (clsErr) throw new Error(clsErr.message);
-  const mine = new Set<string>(teaching.all);
-  const all = (cls ?? [])
-    // 특강도 후보다(원장 2026-09-30 — 특강 반 보드도 만든다).
+  return (cls ?? [])
+    // 🔴 같은 과목만 — 보강 반은 보고서와 과목이 같아야 한다(`acceptMakeupAnchor`). 다른 과목 반을 고르면 저장이 거절한다.
+    .filter((c) => !subject || (c.subject as string | null) === subject)
     // 🔴 종강 반은 후보가 아니다(원장 2026-09-30 *"종강이 아닌 담당 반에서 뜨는게 맞지? 학생과 접점이 있는"* · *"보내는 반도 마찬가지"*).
-    //    종강 반 **자기 보고서**는 보드가 살아 있는 동안 그대로 그 반으로 간다(classBoardLiveForStudent — 후보 목록과 무관).
     .filter((c) =>
       isSendCandidateClass(
         {
@@ -147,47 +148,34 @@ export async function loadSendClassCandidates(
     .filter((c) => hasBoard.has(c.id as string))
     .map((c) => ({ id: c.id as string, name: c.class_name as string }))
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
-  return mineOnly(all, mine, teacher.restrict);
 }
 
 /**
- * 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'을 정한다(A안, 원장 2026-09-29).
+ * 보강 보고서의 'ClassNote로 보낼 반' — 🔴 원장 2026-09-30: **발송 반 = 보강 반**(출석부 칸의 반과 같다).
  *
- * 판정 순서 = 순수 [`decideSendClass`](../send-class.ts) (워커 `pickRouteClass`와 같은 순서):
- *  1. 🔴 **보강 추가 때 고른 반**(`makeupClassId`, 0171a)에 이 학생의 살아 있는 반 보드가 있으면 그 반 — 묻지 않는다
- *     (원장 2026-09-30 *"애초에 보강 추가로 선택된 반에 보고서가 발송되면 되는거아닌가?"*).
- *  2. `chosen`(강사가 고른 반) — 후보 안에 있을 때만 받는다(화면 위조 차단).
- *  3. 보강 반이 있는데 보드가 없으면 **묻는다**(기본 선택 = 메인 수업, `makeupClass`로 경고 한 줄).
- *  4. 메인 수업(send-class.ts `pickMainClass`) — 정할 수 없으면 `choose`로 후보를 돌려준다.
- * 후보 = 그날 그 학생이 다니는 반 중 반 보드 대상(수학 · 활성 · 보고서 발송 · **종강 전** — 특강 포함)이면서
- * 그 학생의 살아 있는 반 보드가 있는 반, 작성 강사가 담당하는 반(담임 ∪ 그날 위임)으로 좁힌다(`mineOnly`).
- *
- * ⚠️ admin 클라이언트 + tenant 필터 — 강사 RLS로는 **다른 강사 반**의 보고서·출결 수가 안 보여 메인 수업을 잘못 고른다.
+ * 판정 = 순수 [`decideSendClass`](../send-class.ts) (워커 `pickRouteClass`·일괄 게이트 `sendClassGateRow`와 한 규칙):
+ *  1. 보강 반(`makeupClassId`, 0171a)에 이 학생의 살아 있는 반 보드가 있으면 그 반 — 묻지 않는다.
+ *  2. 보강 반 보드가 없거나 보강 반이 없으면('반 미정') **묻는다** — 강사가 고른 반이 새 보강 반이 되고, 저장이 출석부 칸을
+ *     그 반으로 함께 옮긴다(`changeMakeupAnchor` 규칙). 기본 선택 = 메인 수업(보낸 보고서 → 출결이 가장 많은 반).
+ *  3. 후보가 없으면 `none`(발송 불가).
+ * ⚠️ 예전의 '고른 반을 `classnote_class_id`에만 적고 보내기'·'메인 수업 자동 발송'은 없앴다 — 보고서 반과 출석부 반이 갈리는 길이었다.
+ * ⚠️ admin 클라이언트 + tenant 필터 — 강사 RLS로는 다른 강사 반의 보고서·출결 수가 안 보여 메인 수업을 잘못 고른다.
  *    돌려주는 것은 그 학생의 반 이름뿐이다(보고서·출결 내용은 안 나간다).
- * ⚠️ 발송 경로에서만 돈다(반별 경로 대상 보강 보고서) — 페이지 렌더에는 안 얹힌다.
  */
-export async function resolveSendClass(
+export async function resolveMakeupSendClass(
   tenantId: string,
   studentId: string,
   reportDate: string,
-  chosen: string | null | undefined,
-  /** 작성 강사 — `restrict` = 강사(scoped)면 담당 반만, 아니면(관리자) 담당 반이 없을 때 전부. */
-  teacher: { userId: string; restrict: boolean },
-  /**
-   * `autoPick` — 메인 수업을 자동으로 고를까. 보고서에 **반이 있는데** 그 반 보드가 없는 경우(종강 반 등)는 false —
-   *   다른 반으로 자동으로 보내지 않고 사람이 고른다(원장 2026-09-30 적대 리뷰). 반 없는 보강만 자동.
-   * `makeupClassId` — 보고서의 보강 반(0171a `makeup_class_id`). 반 없는 보강에만 있다.
-   */
-  opts: { autoPick?: boolean; makeupClassId?: string | null } = {},
+  subject: string | null | undefined,
+  makeupClassId: string | null,
 ): Promise<SendClassResolution> {
   const admin = createAdminClient();
-  const makeupClassId = opts.makeupClassId ?? null;
   // 1. 보강 반에 살아 있는 반 보드가 있으면 후보를 읽을 것도 없다(조회 실패는 throw → 호출부 fail-closed).
   const makeupLive = makeupClassId ? (await liveBoardClassIds(tenantId, studentId, [makeupClassId])).has(makeupClassId) : false;
   if (makeupClassId && makeupLive) return { ok: true, classId: makeupClassId, via: "makeup" };
 
-  const [candidates, makeupClass] = await Promise.all([
-    loadSendClassCandidates(tenantId, studentId, reportDate, teacher),
+  const [all, makeupClass] = await Promise.all([
+    loadSendClassCandidates(tenantId, studentId, reportDate, subject),
     makeupClassId
       ? admin
           .from("classes")
@@ -201,11 +189,13 @@ export async function resolveSendClass(
           })
       : Promise.resolve(null),
   ]);
+  // 보드가 없는 보강 반을 다시 고르게 하지 않는다.
+  const candidates = all.filter((c) => c.id !== makeupClassId);
   const ids = candidates.map((c) => c.id);
 
-  // 메인 수업은 필요할 때만 센다(고른 반이 있거나 후보가 없거나 자동 고르기를 안 하면 안 센다).
-  let main: string | null = null;
-  if (ids.length && !chosen && opts.autoPick !== false) {
+  // 메인 수업(기본 선택) — 후보가 둘 이상일 때만 센다(하나면 그 반, 없으면 발송 불가).
+  let main: string | null = ids.length === 1 ? ids[0]! : null;
+  if (ids.length > 1) {
     const count = async (table: "lesson_reports" | "attendance_records", classId: string) => {
       let q = admin
         .from(table)
@@ -230,7 +220,7 @@ export async function resolveSendClass(
     );
   }
 
-  const d = decideSendClass({ candidates: ids, makeupClassId, makeupLive, chosen, main });
+  const d = decideSendClass({ candidates: ids, makeupClassId, makeupLive, main });
   if (d.kind === "send") return { ok: true, classId: d.classId, via: d.via };
   const mk = d.makeupMismatch ? makeupClass : null;
   if (d.kind === "none") return { ok: false, reason: "none", candidates: [], defaultId: null, makeupClass: mk };
@@ -240,13 +230,12 @@ export async function resolveSendClass(
 /**
  * 관리자 일괄 경로(미발송 일괄 발송·재발송·멈춤 복구·대량 작성)의 **보낼 반 게이트** — 원스크린·직접 작성과 같은 규칙을 행 묶음에.
  * 막을 행 id를 돌려준다(호출부가 반별 발송 대상 수학 행만 넘긴다). 한 행 판정 = 순수 [`sendClassGateRow`](../send-class.ts)
- * (워커 `pickRouteClass`와 같은 순서):
- *  · 보고서 반에 이 학생의 살아 있는 반 보드가 있으면 통과
- *  · 이미 정해 둔 '보낼 반'(0303a `classnote_class_id`)이 살아 있으면 통과(워커가 그 반으로 간다 — 앱이 적은 최종 결정)
- *  · 반 없는 보강이면 보강 추가 때 고른 반(0171a `makeup_class_id`)이 살아 있을 때 통과(원장 2026-09-30).
+ * (워커 `pickRouteClass`와 같은 판정 — 원장 2026-09-30 *"보고서 반 = 출석부 반"*):
+ *  · 정규 보고서 = 보고서 반에 이 학생의 살아 있는 반 보드가 있을 때만 통과(없으면 막는다 — 다른 반으로 보내지 않는다)
+ *  · 보강 보고서 = 보강 반(0171a `makeup_class_id`)이 살아 있고 적힌 '보낼 반'이 그 반과 같거나 비었을 때만 통과.
  *    ⚠️ 이때 '보낼 반'을 보강 반으로 **적는다**(부수 효과 · `out.rewritten`에 id) — 보강 반을 모르는 옛 워커도 같은 반으로 가게.
  *    🔴 이미 어딘가 게시된 행(`classnote_sent_at`)은 다시 적지 않는다(옛 위치 기록 보존 — 회수가 글을 찾는 자리).
- *  · 그 밖 = 막는다(워커가 1인 보드로 흘리지 않게 — 원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*)
+ *  · 반 미정 보강(보강 반 없음) = 막는다(반 없는 발송을 만들지 않는다)
  * 🔴 조회 실패는 throw — 호출부가 대상 행 전부를 막는다(fail-closed). '보낼 반'을 못 적은 행은 막는다.
  */
 export async function blockedForNoSendClass(

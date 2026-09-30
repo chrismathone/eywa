@@ -128,6 +128,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   const [settlement, metrics, resume] = await Promise.all([
     // 수업료 = 정산 면과 같은 함수(`computeTeacherTuition` — collectTierRows 조립 + computeTierSettlement).
     computeTeacherTuition(admin, {
+      teacherId,
       period,
       classIds,
       tenantId: user.tenantId,

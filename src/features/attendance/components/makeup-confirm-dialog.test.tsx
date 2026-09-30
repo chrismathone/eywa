@@ -151,7 +151,7 @@ describe("⑦ 보강을 기록할 수업을 고른다(원장 2026-09-21 — '반
   it("정규 수업이 없는 보강에서 기본값이 있으면 그 반으로 확인한다", async () => {
     const { onConfirm } = setup({ candidates: [], hostClasses: { options: hosts }, defaultHostClassId: "own" });
     expect(hostSelect()).toHaveAccessibleName("보강 기록 수업: 중등M 초6 TP2Q");
-    expect(screen.getByText(/출석부 중등M 초6 TP2Q 반에 보강으로 기록합니다/)).toBeInTheDocument();
+    expect(screen.getByText(/출석부 중등M 초6 TP2Q 반에 보강으로 기록하고, 보고서도 그 반으로 발송합니다/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ mode: "separate", candidate: null, hostClassId: "own" }));
   });
@@ -249,7 +249,7 @@ describe("⑦ 보강을 기록할 수업을 고른다(원장 2026-09-21 — '반
     await pickHost(/^중등M 초6 TP2Q/);
     expect(hostSelect()).toHaveAccessibleName("보강 기록 수업: 중등M 초6 TP2Q");
     expect(screen.queryByRole("radiogroup", { name: "보강 보고서 처리 방식" })).not.toBeInTheDocument();
-    expect(screen.getByText(/오늘 정규 보고서와 따로 보강 보고서가 나갑니다. 출석부 중등M 초6 TP2Q 반에 보강으로 기록합니다/)).toBeInTheDocument();
+    expect(screen.getByText(/오늘 정규 보고서와 따로 보강 보고서가 나갑니다. 출석부 중등M 초6 TP2Q 반에 보강으로 기록하고, 보고서도 그 반으로 발송합니다/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "보강 추가" }));
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ mode: "separate", candidate: null, hostClassId: "own" }));
   });

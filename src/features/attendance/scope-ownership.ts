@@ -100,6 +100,8 @@ function slotInputOf(teacherId: string, f: ScopeClassFacts, date: string, row: D
     seatLabel: row.seat_label ?? null,
     // 자리 문이 쓴 기록(JJ는 라벨이 없다) — 슬롯 매칭이 빠져도 자리로 잡히게(리뷰 2026-09-12).
     recordedVia: row.recorded_via ?? null,
+    // 대신 보강 칸(원장 결정 3) — 보강한 강사 몫만. 반 담임 보기 저장이 그 행을 제 몫으로 덮지 않게(화면과 같은 판정).
+    taughtBy: row.taught_by ?? null,
   };
 }
 

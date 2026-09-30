@@ -1,5 +1,6 @@
 "use server";
 
+import { makeupAnchorDeleteBlock } from "@/features/attendance/server/makeup-anchor-cells";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 // ECS 서버 액션 — 전부 requireEcsClassAccess(write) 공용 게이트(#77) 뒤. class_sheet_*는 deny-RLS라
@@ -665,6 +666,10 @@ export async function removeMakeupAttendee(input: {
     .eq("session_date", input.date);
   if (attErr) return { ok: false, error: `출결 확인에 실패했습니다: ${attErr.message}` };
   if ((count ?? 0) === 0) return { ok: false, error: "보강 출결 기록이 없습니다" };
+  // 🔴 보강 보고서가 가리키는 반(앵커)의 칸은 여기서 빼지 않는다(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 원스크린 '보강 빼기'가
+  //    보고서와 칸을 함께 지운다. 여기서 칸만 지우면 보고서는 이 반을 가리키는데 출석부엔 칸이 없다.
+  const anchoredBlock = await makeupAnchorDeleteBlock(tenantId, [{ studentId: input.studentId, classId: input.classId, date: input.date }]);
+  if (anchoredBlock) return { ok: false, error: anchoredBlock };
 
   const { error: delAtt } = await admin
     .from("attendance_records")

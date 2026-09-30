@@ -48,6 +48,7 @@ import { VideoHomeworkToggle } from "@/features/video-homework/components/video-
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
+import { MakeupClassTag } from "./makeup-class-tag";
 
 const TD_BASE = "px-2 py-1.5 align-top";
 // 학생 묶음 구분선 — 묶음 첫 행(참고행이 꺼져 있을 때는 이 행)의 위쪽만 굵고 진한 회색.
@@ -112,6 +113,8 @@ export type GridRowActions = {
   onRemoveMakeup?: (student: OneScreenStudent, subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false라 버튼을 열지 않는다(서버도 같은 판정으로 막는다). */
   canRemoveMakeup?: (studentId: string, subjectName: string) => boolean;
+  /** 보강 반 고르기(원장 2026-09-30 — 보고서 반 = 출석부 반) — 없으면 반 표시만. */
+  onPickMakeupClass?: (student: OneScreenStudent, subjectName: string) => void;
   /** 영어 행 경고 셋(칸 바뀜·AI 코멘트 옛 값·이름 없음) — 카드 칸·발송 확인과 같은 판정(english-draft.ts). */
   englishFlagsOf?: (
     student: OneScreenStudent,
@@ -445,6 +448,11 @@ export function GridBodyRow({
           <span className={`rounded-pill px-1.5 py-px text-xs font-bold ${toneSoftClass(tone)}`}>
             {subject.subjectLabel || subject.name}
           </span>
+          {/* 보강 줄의 보강 반(= 발송 반 = 출석부 칸의 반) — 반 미정이면 눌러서 고른다(원장 2026-09-30). */}
+          <MakeupClassTag
+            subject={subject}
+            onPick={actions.onPickMakeupClass ? () => actions.onPickMakeupClass?.(student, subject.name) : undefined}
+          />
           {/* 병합된 보강 행(classId 없음·makeup) — 알약엔 순수 과목 라벨('수학')만 칠해 정규 행과 똑같아 보이므로,
               행 단위 '보강' 배지로 구분한다(2026-07-24). 정규 반에 보강 토글만 켠 행(classId 있음)은 대상 아님.
               🔴 **학생 자체가 보강 추가분(isMakeup)이면 여기선 안 붙인다** — buildMakeupStudent가 학생에

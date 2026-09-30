@@ -1,6 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
-import { computeTierSettlement, type TierSettlementResult } from "@/features/payroll/tier-settlement";
+import { computeTierSettlement, tierRowsOwnedBy, type TierSettlementResult } from "@/features/payroll/tier-settlement";
 import { parseGroupRates, SALARY_GROUPS, type GroupRates } from "@/features/payroll/salary-group";
 import { collectTierRows } from "@/features/payroll/server/tier-rows";
 import { applyRatePenalty } from "@/features/payroll/payslip";
@@ -50,10 +50,19 @@ export async function computeTeacherTuition(
     tenantId: string;
     subjects: readonly ProgramSubject[];
     rates: { groupRates: GroupRates | null; defaultRate: number | null };
+    /**
+     * 그 강사 — 🔴 대신 보강(원장 결정 3): 담임 반의 **다른 강사 대신 보강 칸**은 빼고, 남의 반에서 **이 강사가 한 보강 칸**은 넣는다
+     * (`tierRowsOwnedBy`). 생략하면 종전(반 전체).
+     */
+    teacherId?: string;
   },
 ): Promise<TierSettlementResult | null> {
-  if (args.classIds.length === 0) return null;
-  const collected = await collectTierRows(db, args.period, args.classIds, args.tenantId, args.subjects);
+  if (args.classIds.length === 0 && !args.teacherId) return null;
+  const collected = await collectTierRows(db, args.period, args.classIds, args.tenantId, args.subjects, {
+    substituteTeacherIds: args.teacherId ? [args.teacherId] : [],
+  });
   if (!collected) return null;
-  return computeTierSettlement(collected.rows, collected.priceByTier, args.rates);
+  const rows = args.teacherId ? tierRowsOwnedBy(collected.rows, args.teacherId, new Set(args.classIds)) : collected.rows;
+  if (rows.length === 0) return null;
+  return computeTierSettlement(rows, collected.priceByTier, args.rates);
 }

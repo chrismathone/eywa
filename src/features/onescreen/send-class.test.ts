@@ -9,7 +9,6 @@ import {
   sendClassGateRow,
   isSendClassRouteRow,
   liveBoardClassIdsOf,
-  mineOnly,
   needsSendClass,
   pickMainClass,
   sendClassRow,
@@ -68,20 +67,6 @@ describe("pickMainClass", () => {
   });
 });
 
-describe("mineOnly — 작성 강사 담당 반만(원장 2026-09-29)", () => {
-  const cs = [{ id: "a" }, { id: "b" }, { id: "c" }];
-  it("강사 = 담당 반만", () => {
-    expect(mineOnly(cs, new Set(["b"]), true)).toEqual([{ id: "b" }]);
-  });
-  it("강사가 담당 반이 없으면 빈 목록(1인 보드로 — 남의 반에 올리지 않는다)", () => {
-    expect(mineOnly(cs, new Set(), true)).toEqual([]);
-  });
-  it("관리자 = 담당 반이 있으면 그 반만, 없으면 전부", () => {
-    expect(mineOnly(cs, new Set(["a", "c"]), false)).toEqual([{ id: "a" }, { id: "c" }]);
-    expect(mineOnly(cs, new Set(), false)).toEqual(cs);
-  });
-});
-
 describe("liveBoardClassIdsOf — 워커가 실제로 게시할 수 있는 반(앱·워커 한 규칙)", () => {
   it("대상 반 ∩ 연결 ∩ ok 멤버", () => {
     expect(liveBoardClassIdsOf(["a", "b", "c"], ["a", "b"], [{ classId: "a", status: "ok" }, { classId: "c", status: "ok" }])).toEqual(["a"]);
@@ -111,97 +96,68 @@ describe("관리자 일괄 경로 입력 변환", () => {
   });
 });
 
-describe("decideSendClass — 보강 추가한 반 우선(원장 2026-09-30 '애초에 보강 추가로 선택된 반에 보고서가 발송되면')", () => {
-  const base = { candidates: ["a", "b"], makeupClassId: null, makeupLive: false, chosen: null, main: null };
-  it("🔴 보강 반에 살아 있는 반 보드가 있으면 묻지 않고 그 반 — 후보·메인 수업·고른 반보다 먼저", () => {
+describe("decideSendClass — 🔴 보강 보고서의 발송 반 = 보강 반(원장 2026-09-30 '보고서 반 = 출석부 반')", () => {
+  const base = { candidates: ["a", "b"], makeupClassId: null as string | null, makeupLive: false, main: null as string | null };
+  it("보강 반에 살아 있는 반 보드가 있으면 묻지 않고 그 반 — 후보·메인 수업과 무관", () => {
     expect(decideSendClass({ ...base, makeupClassId: "m", makeupLive: true, main: "a" })).toEqual({ kind: "send", classId: "m", via: "makeup" });
-    // 후보에 없어도(담당·종강 여부는 보강 등록 때 이미 확인) · 고른 반이 달라도(옛 화면) 보강 반
     expect(decideSendClass({ ...base, candidates: [], makeupClassId: "m", makeupLive: true })).toEqual({ kind: "send", classId: "m", via: "makeup" });
-    expect(decideSendClass({ ...base, makeupClassId: "m", makeupLive: true, chosen: "a" })).toEqual({ kind: "send", classId: "m", via: "makeup" });
   });
-  it("🔴 보강 반에 반 보드가 없으면 메인 수업이 정해져도 자동으로 보내지 않고 경고와 함께 묻는다(기본 = 메인 수업)", () => {
+  it("🔴 보강 반 보드가 없으면 자동으로 다른 반에 보내지 않고 묻는다(기본 = 메인 수업) — 고른 반은 새 보강 반이 된다", () => {
     expect(decideSendClass({ ...base, makeupClassId: "m", main: "a" })).toEqual({ kind: "ask", defaultId: "a", makeupMismatch: true });
-    // 후보가 하나여도(pickMainClass가 그 반을 골라도) 묻는다
     expect(decideSendClass({ ...base, candidates: ["a"], makeupClassId: "m", main: "a" })).toEqual({ kind: "ask", defaultId: "a", makeupMismatch: true });
-    expect(decideSendClass({ ...base, makeupClassId: "m" })).toEqual({ kind: "ask", defaultId: null, makeupMismatch: true });
   });
-  it("경고를 본 뒤 고른 반은 받는다(후보 안에서만)", () => {
-    expect(decideSendClass({ ...base, makeupClassId: "m", chosen: "b" })).toEqual({ kind: "send", classId: "b", via: "chosen" });
-    expect(decideSendClass({ ...base, makeupClassId: "m", chosen: "x" }).kind).toBe("ask");
+  it("🔴 반 미정 보강(보강 반 없음)도 메인 수업이 정해져 있어도 **자동 발송하지 않는다** — 묻는다(C9 · 반 없는 발송 금지)", () => {
+    expect(decideSendClass({ ...base, main: "b" })).toEqual({ kind: "ask", defaultId: "b", makeupMismatch: false });
+    expect(decideSendClass(base)).toEqual({ kind: "ask", defaultId: null, makeupMismatch: false });
   });
   it("후보가 없으면 발송 불가(보강 반이 있었으면 그 사실도)", () => {
     expect(decideSendClass({ ...base, candidates: [], makeupClassId: "m" })).toEqual({ kind: "none", makeupMismatch: true });
     expect(decideSendClass({ ...base, candidates: [] })).toEqual({ kind: "none", makeupMismatch: false });
   });
-  it("보강 반이 없는 보고서 = 예전 규칙(메인 수업 → 없으면 묻기)", () => {
-    expect(decideSendClass({ ...base, main: "b" })).toEqual({ kind: "send", classId: "b", via: "auto" });
-    expect(decideSendClass(base)).toEqual({ kind: "ask", defaultId: null, makeupMismatch: false });
-    expect(decideSendClass({ ...base, chosen: "a", main: "b" })).toEqual({ kind: "send", classId: "a", via: "chosen" });
-  });
-  it("후보 밖 메인 수업은 쓰지 않는다", () => {
+  it("후보 밖 메인 수업은 기본값으로 쓰지 않는다", () => {
     expect(decideSendClass({ ...base, main: "z" })).toEqual({ kind: "ask", defaultId: null, makeupMismatch: false });
   });
 });
 
-describe("앱 ↔ 워커 한 규칙 — 앱이 적은 '보낼 반'과 워커가 실제로 올리는 반이 같다", () => {
-  // 앱(원스크린·직접 작성): decideSendClass → classnote_class_id에 적는다. 워커: pickRouteClass(보고서 반 → 적힌 반 → 보강 반).
-  const cases: { name: string; makeupLive: boolean; main?: string; chosen?: string }[] = [
-    { name: "보강 반 보드 살아 있음 → 보강 반", makeupLive: true, main: "a" },
-    { name: "보강 반 보드 없음 → 강사가 경고를 보고 b를 고름", makeupLive: false, chosen: "b" },
-    { name: "보강 반 보드 없음 → 강사가 메인 수업 a를 그대로", makeupLive: false, chosen: "a" },
-  ];
-  for (const c of cases) {
-    it(c.name, () => {
-      const app = decideSendClass({ candidates: ["a", "b"], makeupClassId: "m", makeupLive: c.makeupLive, chosen: c.chosen ?? null, main: c.main ?? null });
-      expect(app.kind).toBe("send");
-      const stored = app.kind === "send" ? app.classId : null;
-      // 워커가 게시할 때 보강 반이 살아났든 죽었든 적힌 값을 따른다.
-      for (const makeupEligible of [true, false]) {
-        const worker = pickRouteClass({
-          route: "needs_class",
-          classId: null,
-          sendClassId: stored,
-          classEligible: false,
-          sendEligible: true,
-          makeupClassId: "m",
-          makeupEligible,
-        });
-        expect(worker.classId).toBe(stored);
-      }
-    });
-  }
-  it("🔴 워커의 보강 반 조회 실패 = 대상 아님(적힌 값이 없으면 1인 보드로 두고 게이트가 막는다)", () => {
-    const worker = pickRouteClass({ route: "needs_class", classId: null, sendClassId: null, classEligible: false, sendEligible: false, makeupClassId: "m", makeupEligible: false });
-    expect(worker.route).toBe("personal");
-    expect(sendClassGateRow({ classId: null, classLive: false, storedId: null, storedLive: false, makeupClassId: "m", makeupLive: false, sentAt: null }).pass).toBe(false);
-  });
-});
-
-describe("sendClassGateRow — 관리자 일괄 게이트(워커와 같은 순서)", () => {
+describe("sendClassGateRow — 관리자 일괄 게이트(워커와 같은 판정 · 원장 2026-09-30)", () => {
   const row = { classId: null as string | null, classLive: false, storedId: null as string | null, storedLive: false, makeupClassId: null as string | null, makeupLive: false, sentAt: null as string | null };
-  it("보고서 반 → 적힌 보낼 반 → 보강 반 → 막기", () => {
+  it("정규 보고서 = 그 반 보드만 — 죽었으면 적힌 '보낼 반'이 살아 있어도 막는다(원장 결정 4: 다른 반으로 보내지 않는다)", () => {
     expect(sendClassGateRow({ ...row, classId: "c", classLive: true })).toEqual({ pass: true, rewriteTo: null });
-    expect(sendClassGateRow({ ...row, storedId: "s", storedLive: true, makeupClassId: "m", makeupLive: true })).toEqual({ pass: true, rewriteTo: null });
+    expect(sendClassGateRow({ ...row, classId: "c", classLive: false, storedId: "s", storedLive: true })).toEqual({ pass: false, rewriteTo: null });
+  });
+  it("보강 보고서 = 보강 반만 — 적힌 '보낼 반'을 보강 반으로 맞춘다", () => {
     expect(sendClassGateRow({ ...row, makeupClassId: "m", makeupLive: true })).toEqual({ pass: true, rewriteTo: "m" });
-    expect(sendClassGateRow({ ...row, storedId: "s", makeupClassId: "m", makeupLive: true })).toEqual({ pass: true, rewriteTo: "m" });
+    expect(sendClassGateRow({ ...row, storedId: "m", makeupClassId: "m", makeupLive: true })).toEqual({ pass: true, rewriteTo: null });
+  });
+  it("🔴 적힌 '보낼 반'이 보강 반과 다르면 막는다(보고서 반 ≠ 발송 반 — C9)", () => {
+    expect(sendClassGateRow({ ...row, storedId: "s", storedLive: true, makeupClassId: "m", makeupLive: true })).toEqual({ pass: false, rewriteTo: null });
+  });
+  it("🔴 반 미정 보강은 적힌 '보낼 반'이 살아 있어도 막는다", () => {
+    expect(sendClassGateRow({ ...row, storedId: "s", storedLive: true })).toEqual({ pass: false, rewriteTo: null });
     expect(sendClassGateRow(row)).toEqual({ pass: false, rewriteTo: null });
   });
   it("🔴 이미 게시된 행(classnote_sent_at)은 '보낼 반'을 다시 적지 않는다(옛 위치 보존 — 회수)", () => {
     expect(sendClassGateRow({ ...row, makeupClassId: "m", makeupLive: true, sentAt: "2026-09-29T10:00:00Z" })).toEqual({ pass: true, rewriteTo: null });
   });
-  it("보고서에 반이 있으면 보강 반을 보지 않는다", () => {
-    expect(sendClassGateRow({ ...row, classId: "c", makeupClassId: "m", makeupLive: true }).pass).toBe(false);
+  it("보강 반 보드가 없으면 막는다", () => {
+    expect(sendClassGateRow({ ...row, makeupClassId: "m", makeupLive: false }).pass).toBe(false);
   });
-  it("🔴 게이트가 통과시킨 행은 워커도 반 보드로, 같은 반으로 간다(적은 뒤 상태로 모든 조합)", () => {
+});
+
+describe("🔴 앱 ↔ 워커 한 규칙 — 게이트가 통과시킨 행만 워커가 반 보드로, **같은 반**으로 올린다(모든 조합 128)", () => {
+  it("통과 ⇔ 워커 class · 반 = (정규: 보고서 반 / 보강: 보강 반) · 막힘 ⇔ 워커 blocked(1인 보드로 흘리지 않는다)", () => {
     const B = [true, false];
-    for (const hasClass of B) for (const classLive of B) for (const hasStored of B) for (const storedLive of B) for (const hasMakeup of B) for (const makeupLive of B) for (const sent of B) {
+    let n = 0;
+    for (const hasClass of B) for (const classLive of B) for (const hasStored of B) for (const storedIsMakeup of B) for (const hasMakeup of B) for (const makeupLive of B) for (const sent of B) {
+      n++;
+      const makeupClassId = hasMakeup && !hasClass ? "m" : null;
       const r = {
         classId: hasClass ? "c" : null,
         classLive: hasClass && classLive,
-        storedId: hasStored ? "s" : null,
-        storedLive: hasStored && storedLive,
-        makeupClassId: hasMakeup && !hasClass ? "m" : null,
-        makeupLive: hasMakeup && !hasClass && makeupLive,
+        storedId: hasStored ? (storedIsMakeup && makeupClassId ? makeupClassId : "s") : null,
+        storedLive: hasStored,
+        makeupClassId,
+        makeupLive: !!makeupClassId && makeupLive,
         sentAt: sent ? "2026-09-29" : null,
       };
       const g = sendClassGateRow(r);
@@ -211,13 +167,21 @@ describe("sendClassGateRow — 관리자 일괄 게이트(워커와 같은 순�
         classId: r.classId,
         classEligible: r.classLive,
         sendClassId: storedAfter,
-        sendEligible: g.rewriteTo ? true : r.storedLive,
         makeupClassId: r.makeupClassId,
         makeupEligible: r.makeupLive,
       });
       expect(worker.route === "class").toBe(g.pass);
-      if (g.rewriteTo) expect(worker.classId).toBe(g.rewriteTo);
+      expect(worker.route === "personal").toBe(false); // 반별 경로에서 1인 보드로 새지 않는다
+      if (g.pass) expect(worker.classId).toBe(r.classId ?? r.makeupClassId);
     }
+    expect(n).toBe(128);
+  });
+  it("앱(decideSendClass)이 보내겠다고 한 반 = 워커가 올리는 반(보강 반)", () => {
+    const app = decideSendClass({ candidates: ["a"], makeupClassId: "m", makeupLive: true, main: "a" });
+    expect(app).toEqual({ kind: "send", classId: "m", via: "makeup" });
+    // 저장이 '보낼 반'을 보강 반의 복사본으로 적는다 → 워커는 같은 반
+    const worker = pickRouteClass({ route: "needs_class", classId: null, classEligible: false, sendClassId: "m", makeupClassId: "m", makeupEligible: true });
+    expect(worker).toEqual({ route: "class", classId: "m", via: "makeup" });
   });
 });
 

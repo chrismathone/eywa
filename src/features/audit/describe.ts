@@ -294,8 +294,11 @@ export function collectAuditNameIds(rows: Array<{ metadata: Meta | null }>): {
       const uid = str(m[key]);
       if (uid && UUID_RE.test(uid)) users.add(uid);
     }
-    const cid = str(m.classId);
-    if (cid && UUID_RE.test(cid)) classes.add(cid);
+    // fromClassId·toClassId = 보강 반 바꾸기(makeup_class_change, 2026-09-30)의 옛 반·새 반.
+    for (const key of ["classId", "fromClassId", "toClassId"]) {
+      const cid = str(m[key]);
+      if (cid && UUID_RE.test(cid)) classes.add(cid);
+    }
   }
   return { studentIds: [...students], userIds: [...users], classIds: [...classes] };
 }
@@ -1654,6 +1657,21 @@ export function auditDetail(
         m.attendanceRemoved === true ? "출결 보강 칸 삭제" : null,
         reports ? `수업보고서 ${reports}건 삭제` : null,
         progress ? `진도 ${progress}건 되돌림` : null,
+      );
+    }
+    // ── 보강 반 바꾸기(원장 2026-09-30 — 보고서 반 = 출석부 반) ──────────────────────
+    case "makeup_class_change": {
+      const subject = str(m.subject);
+      const from = ctx.nameOf(m.fromClassId);
+      const to = ctx.nameOf(m.toClassId);
+      const moved = num(m.movedCells);
+      return join(
+        str(m.date),
+        subject ? ctx.subjectLabel(subject) : null, // 과목은 학원설정 단일 소스(하드코딩 금지)
+        `${from ?? "반 없음"} → ${to ?? "반"}`,
+        moved ? `출석부 칸 ${moved}개 함께 옮김` : null,
+        m.createdCell === true ? "출석부 칸 새로 기록" : null,
+        m.substitute === true ? "대신 보강(학생의 원래 반)" : null,
       );
     }
     case "operating_periods_save": {

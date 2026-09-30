@@ -173,8 +173,9 @@ describe("강사 보기 시수 배분 — 배선", () => {
   });
 
   it("🔴 몫 판정 재료에 자리 표식(seat_label)을 함께 읽는다 — 셀·범위 조회 둘 다", () => {
-    expect(bodyOf(actions, "setAttendanceCell")).toMatch(/\.select\("id, slot_start, seat_label,/);
-    expect(bodyOf(actions, "setAttendanceRange")).toMatch(/\.select\("id, class_id, student_id, session_date, slot_start, seat_label,/);
+    // 대신 보강 귀속(taught_by, 0315a)은 칸이 있을 때만 붙는 **조건부 select**라 두 갈래 문자열 모두에 자리 표식이 있어야 한다.
+    expect(bodyOf(actions, "setAttendanceCell")).toMatch(/"id, slot_start, seat_label, recorded_via, recorded_at, status, note, session_units"/);
+    expect(bodyOf(actions, "setAttendanceRange")).toMatch(/\.select\(\(rangeTaughtBy \? "id, class_id, student_id, session_date, slot_start, seat_label,[^"]*taught_by" : "id, class_id, student_id, session_date, slot_start, seat_label,/);
   });
 
   it("🔴 클라는 보기(강사 id)만 보낸다 — 격자 단건·범위·팝오버 모두", () => {

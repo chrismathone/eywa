@@ -1,3 +1,4 @@
+import { taughtByColumnReady } from "./taught-by-db";
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -915,6 +916,8 @@ export async function getMonthlyAttendanceMatrix(
   const endIso = days[days.length - 1]!.date;
 
   // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 + 보강 예약 — 서로 독립이라 병렬로(B4).
+  // 대신 보강 귀속(`taught_by`, 0315a) — 칸이 있을 때만 읽는다([[#95]]). 강사 보기의 몫 판정만 쓰므로 반별 보기는 안 본다.
+  const withTaughtBy = scopeTeacherId ? await taughtByColumnReady().catch(() => false) : false;
   const [enrollRes, scheduleRes, recordedRows, reservedRows] = await Promise.all([
     supabase
       .from("enrollments")
@@ -950,11 +953,14 @@ export async function getMonthlyAttendanceMatrix(
       slot_start: string | null;
       seat_label: string | null;
       recorded_via: string | null;
+      taught_by?: string | null;
     }>((from, to) =>
       supabase
         .from("attendance_records")
         // 교시·자리 표식까지 — 강사 보기는 **이 보기에 보이는 기록**이 있는 방문자만 명단에 세운다(아래 `visitorRows`).
-        .select("student_id, session_date, slot_start, seat_label, recorded_via")
+        .select(
+          (withTaughtBy ? "student_id, session_date, slot_start, seat_label, recorded_via, taught_by" : "student_id, session_date, slot_start, seat_label, recorded_via") as "student_id, session_date, slot_start, seat_label, recorded_via",
+        )
         .eq("class_id", classId)
         .gte("session_date", startIso)
         .lte("session_date", endIso)
@@ -1011,6 +1017,7 @@ export async function getMonthlyAttendanceMatrix(
     slotStart: string | null,
     seatLabel: string | null,
     recordedVia: string | null,
+    taughtBy: string | null = null,
   ) => ({
     scopeTeacherId,
     homeroomTeacherId,
@@ -1025,13 +1032,16 @@ export async function getMonthlyAttendanceMatrix(
     //    · JJ실 = 라벨을 안 박으므로 **자리 문 표식**(`recorded_via="seat"`)이 유일한 근거일 수 있다
     seatLabel,
     recordedVia,
+    // 🔴 대신 보강 칸(원장 결정 3, 2026-09-30) — 반 담임이 아니라 보강한 강사 몫(`ownsAttendanceSlot` `taughtBy`).
+    taughtBy,
   });
   const ownsSlot = (
     date: string,
     slotStart: string | null,
     seatLabel: string | null = null,
     recordedVia: string | null = null,
-  ): boolean => ownsAttendanceSlot(slotInput(date, slotStart, seatLabel, recordedVia));
+    taughtBy: string | null = null,
+  ): boolean => ownsAttendanceSlot(slotInput(date, slotStart, seatLabel, recordedVia, taughtBy));
   /**
    * 강사 보기에서 그 강사가 **원래 수업하는 날**(`AttendanceMatrix.ownDates` 주석) — 색으로만 구분한다.
    * 🔴 **입력은 어느 날에도 막지 않는다**(원장 2026-09-17 *"다른 요일도 보강 등으로 수업할 수 있으니까 숫자 입력가능하게"*) —
@@ -1147,7 +1157,7 @@ export async function getMonthlyAttendanceMatrix(
    */
   const visitorRows =
     scopeTeacherId && homeroomTeacherId !== scopeTeacherId
-      ? recordedRows.filter((r) => ownsSlot(r.session_date, r.slot_start, r.seat_label, r.recorded_via))
+      ? recordedRows.filter((r) => ownsSlot(r.session_date, r.slot_start, r.seat_label, r.recorded_via, r.taught_by ?? null))
       : recordedRows;
   const extraIds = recordedOnlyStudentIds(
     [...visitorRows.map((r) => r.student_id), ...reservedRows.map((r) => r.studentId)],
@@ -1232,11 +1242,13 @@ export async function getMonthlyAttendanceMatrix(
       seat_label: string | null;
       /** 그 행을 쓴 문(0212a) — JJ는 라벨이 없어 `"seat"`가 유일한 자리 표식일 수 있다(리뷰 2026-09-12). */
       recorded_via: string | null;
+      /** 대신 보강 귀속 강사(0315a) — 있으면 그 강사 몫만(원장 결정 3). 칸이 없는 스키마면 안 읽는다. */
+      taught_by?: string | null;
     }>(studentIds, (chunk, from, to) =>
       supabase
         .from("attendance_records")
         .select(
-          "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via",
+          (withTaughtBy ? "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via, taught_by" : "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via") as "student_id, session_date, slot_start, status, note, session_units, seat_label, recorded_via",
         )
         .eq("class_id", classId)
         .in("student_id", chunk)
@@ -1288,7 +1300,7 @@ export async function getMonthlyAttendanceMatrix(
       // 시수(배수) — null=기본 1. numeric은 문자열로 올 수 있어 Number 변환.
       const raw = r.session_units === null || r.session_units === undefined ? null : Number(r.session_units);
       // 주인 몫이면 칸 값(marks/units/slots)으로. 반별 보기는 전부 몫이다(종전과 같은 숫자).
-      const mine = ownsSlot(r.session_date, slot, r.seat_label, r.recorded_via);
+      const mine = ownsSlot(r.session_date, slot, r.seat_label, r.recorded_via, r.taught_by ?? null);
       if (!mine) {
         // 🔴 이 표의 몫이 아닌 교시(다른 선생님 교시·자리 JJ·랩실·담임이 되기 전 기록)는 **보여 주지 않는다**
         //    (원장 2026-09-17 *"말그대로 내가 수업한 학생의 출석만 보고 싶은것"*). 그전엔 빗금 + 흐린 값 + 입력자·메모로
@@ -1297,7 +1309,7 @@ export async function getMonthlyAttendanceMatrix(
         // 첫 교시에 사유를 적고 ECS가 제 교시에 결석만 찍는다). 제 값이 있는 칸에서 제 메모가 없을 때만 보인다.
         // 🔴 자리(JJ·랩실) 행의 메모는 후보가 아니다 — 자리 담당이 적은 메모가 강사 칸에 서면 "jj는 개인강사 출석부에 넣음
         //    안되지"(원장 2026-09-12)와 부딪힌다(적대 재리뷰 2026-09-17). 판정은 저장과 같은 함수(`attendanceSlotShare`).
-        if (r.note && attendanceSlotShare(slotInput(r.session_date, slot, r.seat_label, r.recorded_via)) !== "seat") {
+        if (r.note && attendanceSlotShare(slotInput(r.session_date, slot, r.seat_label, r.recorded_via, r.taught_by ?? null)) !== "seat") {
           const hasReason = stripProxyMemo(r.note as string) !== "";
           if (cell.otherNote === null || (hasReason && stripProxyMemo(cell.otherNote) === "")) {
             cell.otherNote = r.note as string;

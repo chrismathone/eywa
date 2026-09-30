@@ -25,6 +25,8 @@ export type DayTargetRow = {
    *    빠지는 세 경우는 `ownsAttendanceSlot`의 `recordedVia` 주석). 비었으면(옛 기록) 자리 아님.
    */
   recorded_via?: string | null;
+  /** 대신 보강 귀속 강사(`taught_by`, 0315a) — 있으면 그 강사 몫만이다(원장 결정 3). 비었으면 종전 축. */
+  taught_by?: string | null;
 };
 
 export type DayUnitsPlan =

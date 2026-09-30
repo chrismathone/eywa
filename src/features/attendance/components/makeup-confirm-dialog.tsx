@@ -129,6 +129,11 @@ export function MakeupConfirmDialog({
      * ⚠️ 위임받은 반의 칸은 넣지 않는다 — 훅은 담임 축이라 그 칸을 못 보고 보강 반을 만든다(재리뷰 2026-09-21).
      */
     regularToday?: boolean;
+    /**
+     * 반별 발송 대상(수학 · ClassNote 반 경로)이라 **'반 없이'를 세우지 않는다**(원장 2026-09-30 *"보고서 반 = 출석부 반"* — 반 없는 보강은
+     * 보고서·출석부·발송 반이 갈린다). 서버(`fetchMakeupHostClasses`)가 정하고, 등록 문·보고서 저장도 같은 판정으로 막는다.
+     */
+    noneBlocked?: boolean;
   };
   /** 처음 고른 채로 여는 반(`defaultHostClassId` — 추측하지 않는다, null이면 고르기 전엔 확인이 막힌다). */
   defaultHostClassId?: string | null;
@@ -183,7 +188,7 @@ export function MakeupConfirmDialog({
    * '반 없이'를 세우는가 — 정규 수업(합칠 후보)이 없고, 오늘 이 선생님 반에 정규 칸도 없을 때만. 정규 칸이 있으면 보고서 저장 훅이
    * 보강 반을 안 만들어 시수가 아무 데도 안 선다(합칠 수 없는 결석 칸이어도 같다 — `regularToday`).
    */
-  const allowNone = !canMerge && !hostClasses?.regularToday;
+  const allowNone = !canMerge && !hostClasses?.regularToday && !hostClasses?.noneBlocked;
   /**
    * 기록할 곳이 하나도 없다 — 정규 칸은 있지만 합칠 수 없고(결석·다른 과목 등) 다른 소속 수업도 없다. 빈 드롭다운 대신 이유를 적고 막는다.
    * (예전엔 선생님의 다른 반을 고를 수 있었지만, 학생이 다니지 않는 반은 세우지 않는다 — 원장 2026-09-21.)
@@ -250,7 +255,7 @@ export function MakeupConfirmDialog({
   const hostLoading = asksHost && !canMerge && !chosen && !!hostClasses?.loading && !hostPick;
   const hostUnpicked = asksHost && !chosen && !hostValue;
   /** 요약 문장의 '어디에 기록하나' — 수업을 물었으면 고른 반 이름을 밝힌다. */
-  const recordWhere = !asksHost ? "출석부에 보강으로 기록합니다. " : hostChosen ? `출석부 ${hostChosen.className} 반에 보강으로 기록합니다. ` : "지금은 출결을 적지 않습니다(보고서를 저장할 때 반영). ";
+  const recordWhere = !asksHost ? "출석부에 보강으로 기록합니다. " : hostChosen ? `출석부 ${hostChosen.className} 반에 보강으로 기록하고, 보고서도 그 반으로 발송합니다. ` : "지금은 출결을 적지 않습니다(보고서를 저장할 때 반영). ";
   /** 분리(보강 보고서 따로) 요약의 앞머리 — 정규 수업이면 그 칸에 시수, 다른 반이면 그 반에 기록. */
   const separateLead = regularContext
     ? `보강 보고서를 따로 만듭니다 — 정규 1건 + 보강 1건, 모두 2건이 발송됩니다. ${chosen ? `보강 시수는 ${chosenLabel} 칸에 얹습니다. ` : ""}`
@@ -542,6 +547,8 @@ export function MakeupConfirmDialog({
               ? "결석 기록을 불러오는 중입니다 — 잠시 뒤 확인할 수 있습니다."
             : hostLoading
               ? "수업 목록을 불러오는 중입니다 — 잠시 뒤 확인할 수 있습니다."
+            : noHostChoice && hostClasses?.noneBlocked && !hostClasses?.regularToday
+              ? "이 학생이 다니는 같은 과목 반이 없어 보강을 기록할 반이 없습니다 — 반 없는 보강은 보고서·출석부 반이 갈려 추가할 수 없습니다(학생의 수강 반을 먼저 확인해 주세요)."
             : noHostChoice
               ? "이 학생은 오늘 선생님 반에 정규 칸이 있지만 합칠 수 없는 상태(결석·다른 과목 등)이고, 보강을 기록할 다른 소속 수업도 없습니다 — 그 칸의 출결을 먼저 확인해 주세요."
             : hostUnpicked

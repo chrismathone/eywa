@@ -17,7 +17,7 @@ import { fetchAdmissions } from "./math-class-boards-load.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
-import { decideRoute, pickRouteClass } from "./class-route-decide.mjs";
+import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
 import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 
 /**
@@ -677,36 +677,36 @@ export async function processQueueOnce(sql, browser, opts) {
     let routeClassId = r.class_id ?? null;
     let makeupWriteBack = null; // 보강 반으로 게시했고 적힌 '보낼 반'이 없으면 게시 뒤 그 반을 적는다
     if (decided !== "personal") {
+      // 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(순수 판정 = class-route-decide.mjs `pickRouteClass`, 앱 sendClassGateRow와 한 규칙).
+      //    정규 = 보고서 반 · 보강 = 보강 반(makeup_class_id). 적힌 '보낼 반'이 보강 반과 다르거나 보드가 없으면 **막는다**
+      //    (다른 반·1인 보드로 흘리지 않는다). 조회 실패는 "대상"으로 둔다 — 아래 대상 확정에서 다시 드러난다(재시도).
       const classEligible = r.class_id ? await isClassRouteEligible(sql, tenant, r.class_id, r.student_id).catch(() => true) : false;
-      // 순서 = 보고서 반 → 적힌 '보낼 반'(앱의 최종 결정) → 보강 반(0171a — 적힌 값이 없던 옛 대기분). pickRouteClass 참고.
-      const sendEligible =
-        !classEligible && r.classnote_class_id
-          ? await isClassRouteEligible(sql, tenant, r.classnote_class_id, r.student_id).catch(() => true)
-          : false;
-      // 🔴 보강 반 조회 실패는 "대상 아님" — 대상으로 두면 확인도 못 한 반으로 게시를 시도한다(적힌 값이 없을 때만 보는 폴백이다).
       const makeupEligible =
-        !r.class_id && !classEligible && !sendEligible && r.makeup_class_id
-          ? await isClassRouteEligible(sql, tenant, r.makeup_class_id, r.student_id).catch(() => false)
+        !r.class_id && r.makeup_class_id
+          ? await isClassRouteEligible(sql, tenant, r.makeup_class_id, r.student_id).catch(() => true)
           : false;
       const pick = pickRouteClass({
         route: decided,
         classId: r.class_id ?? null,
-        sendClassId: r.classnote_class_id ?? null,
         classEligible,
-        sendEligible,
+        sendClassId: r.classnote_class_id ?? null,
         makeupClassId: r.makeup_class_id ?? null,
         makeupEligible,
       });
+      if (pick.route === "blocked") {
+        const msg = ROUTE_BLOCKED_MESSAGE[pick.reason] ?? ROUTE_BLOCKED_MESSAGE.board_missing;
+        await sql`update lesson_reports set classnote_status='failed', classnote_error=${msg} where id=${r.id}`;
+        summary.failed++;
+        log(`  · ${studentName}: ${msg}`);
+        continue;
+      }
       route = pick.route;
       routeClassId = pick.classId;
-      if (route === "personal")
-        log(`  · ${studentName}: 보낼 반 보드가 없는 보고서(연결 없음·보낼 반 미지정) — 기존 1인 보드로`);
-      else if (pick.via === "makeup") {
-        log(`  · ${studentName}: 보강 추가한 반으로`);
-        // 적힌 '보낼 반'이 없을 때만 **게시가 끝난 뒤** 이 반을 적는다(아래 success/partial) — 게시 전에 적으면 실패해도 기록이 남고,
-        // 적힌 값이 있으면(강사가 고른 반 등) 덮지 않는다.
+      if (pick.via === "makeup") {
+        log(`  · ${studentName}: 보강 반으로`);
+        // 적힌 '보낼 반'이 없을 때만 **게시가 끝난 뒤** 이 반을 적는다(아래 success/partial) — 게시 전에 적으면 실패해도 기록이 남는다.
         if (!r.classnote_class_id) makeupWriteBack = pick.classId;
-      } else if (routeClassId !== (r.class_id ?? null)) log(`  · ${studentName}: 보고서 반에 반 보드가 없어 '보낼 반'으로`);
+      }
     }
     let classTarget = null; // route=class일 때 { boardId, boardName, targets, others }
 

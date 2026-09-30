@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { MakeupClassTag } from "./makeup-class-tag";
 import { useClassnoteOn } from "./classnote-on-context";
 import { useLicenseOn } from "@/features/owner/operations-context";
 import { toast } from "sonner";
@@ -135,6 +136,7 @@ export function ReportCard({
   onVideoHomework,
   onRemoveMakeup,
   canRemoveMakeup,
+  onPickMakeupClass,
   onSubjectDraft,
   onSubjectTrend,
   trendOptOut,
@@ -174,6 +176,8 @@ export function ReportCard({
   onRemoveMakeup?: (subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
   canRemoveMakeup?: (subjectName: string) => boolean;
+  /** 보강 반 고르기(원장 2026-09-30) — 없으면 반 표시만. */
+  onPickMakeupClass?: (subjectName: string) => void;
   onSubjectDraft: (subjectName: string, text: string) => void;
   onSubjectTrend: (subjectName: string, text: string) => void; // 학습 추세 초안 편집(4a)
   /** '학습 추세 미발송'(원장 2026-09-18) — 표와 **같은 상태**(계정 ui_prefs). 없으면 체크를 안 그린다. */
@@ -328,6 +332,8 @@ export function ReportCard({
               {/* 보강 빼기 — 표 모드와 같은 문(원장 2026-08-18 *"다 삭제"*). 확인 후 출결·보고서를 지운다. */}
               {/* 순수 보강 행이면 정규 학생 카드에서도 뺄 수 있어야 한다(적대 리뷰 M2) — 학생 단위
                   isMakeup만 보면 "정규 수업도 듣는 학생의 보강"에 문이 없다. 반이 붙은 '정규+보강'은 제외. */}
+              {/* 보강 반(= 발송 반 = 출석부 칸의 반) — 반 미정이면 눌러서 고른다(원장 2026-09-30). */}
+              <MakeupClassTag subject={subject} onPick={onPickMakeupClass ? () => onPickMakeupClass(subject.name) : undefined} />
               {(student.isMakeup || (subject.makeup && !subject.classId)) &&
               onRemoveMakeup &&
               (canRemoveMakeup?.(subject.name) ?? true) ? (

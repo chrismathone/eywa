@@ -13,6 +13,8 @@ export type SendClassAsk = {
   defaultId?: string | null;
   /** 보강 추가한 반인데 이 학생의 반 보드가 없어 **다른 반으로 가는** 경우 그 반 이름 — 경고 한 줄을 띄운다. */
   makeupClassName?: string | null;
+  /** 반만 바꾸고 보내지는 않는 자리(보강 반 고르기) — 확인 버튼 글자를 '이 반으로 정하기'로. */
+  pickOnly?: boolean;
   resolve: (classId: string | null) => void;
 };
 
@@ -66,7 +68,7 @@ export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: 
             {t("os.sendClass.cancel")}
           </Button>
           <Button type="button" disabled={!pick} onClick={() => finish(pick)}>
-            {t("os.sendClass.send")}
+            {ask.pickOnly ? t("os.sendClass.pick") : t("os.sendClass.send")}
           </Button>
         </div>
       </DialogContent>

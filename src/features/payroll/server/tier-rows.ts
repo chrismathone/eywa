@@ -2,6 +2,7 @@ import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
+import { taughtByColumnReady } from "@/features/attendance/server/taught-by-db";
 import { sessionPriceOf, type SessionPriceTerm, type TierRow } from "@/features/payroll/tier-settlement";
 import { autoSalaryGroup, isSalaryGroup, type SalaryGroup } from "@/features/payroll/salary-group";
 import { programOf, type ProgramSubject } from "@/features/students/program";
@@ -68,46 +69,72 @@ export async function collectTierRows(
   tenantId: string | undefined,
   /** 학원설정 과목(`operations.subjects`) — 회차 단가를 붙일 **수학 반** 판정(`programOf`, 수학(심화) 포함). */
   subjects: readonly ProgramSubject[],
+  /**
+   * 🔴 대신 보강(원장 결정 3, 2026-09-30) — 이 강사들이 **남의 반**에서 한 보강 칸(`taught_by`, 0315a)도 함께 조립한다.
+   * 줄마다 `taughtBy`가 실리므로 호출부는 `tierRowsOwnedBy`로 강사 몫만 고른다(반 담임 몫에서 빠지고 보강한 강사 몫으로 선다).
+   * 0315a 미적용이면 조용히 종전 그대로([[#95]]).
+   */
+  opts: { substituteTeacherIds?: readonly string[] } = {},
 ): Promise<TierRowsResult | null> {
-  if (classIds.length === 0) return null;
+  if (classIds.length === 0 && !opts.substituteTeacherIds?.length) return null;
   const { from, to } = monthBounds(month);
+  const withTaughtBy = await taughtByColumnReady().catch(() => false);
+  type RecordRow = {
+    id: string;
+    student_id: string;
+    class_id: string;
+    session_date: string;
+    slot_start: string | null;
+    status: string;
+    session_units: number | string | null;
+    salary_tier: string | null;
+    seat_label: string | null;
+    recorded_at: string;
+    taught_by?: string | null;
+  };
+  // 리터럴 두 벌(템플릿 문자열이면 PostgREST 타입 추론이 끊긴다) — 칸이 없으면 귀속 없이 읽는다([[#95]]).
+  const RECORD_COLS = (withTaughtBy ? "id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, seat_label, recorded_at, taught_by" : "id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, seat_label, recorded_at") as "id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, seat_label, recorded_at";
+  // 이 강사들의 **남의 반** 대신 보강 칸 — 그 반의 티어·단가 재료도 함께 읽어야 해서 먼저 받는다(대부분 0행).
+  const substituteRows: RecordRow[] = [];
+  if (withTaughtBy && opts.substituteTeacherIds?.length) {
+    const own = new Set(classIds);
+    const got = await fetchAllPagedInChunks<RecordRow>([...opts.substituteTeacherIds], (chunk, f, t) => {
+      const q = supabase
+        .from("attendance_records")
+        .select(RECORD_COLS)
+        .in("taught_by", chunk)
+        .gte("session_date", from)
+        .lte("session_date", to);
+      return (tenantId ? q.eq("tenant_id", tenantId) : q).order("id", { ascending: true }).range(f, t);
+    });
+    for (const r of got) if (!own.has(r.class_id)) substituteRows.push(r);
+  }
+  const allClassIds = [...new Set([...classIds, ...substituteRows.map((r) => r.class_id)])];
+  if (allClassIds.length === 0) return null;
 
   const tierQuery = supabase.from("salary_tiers").select("label, unit_price");
 
   const [tiers, tierEnrollments, records, dowSettings, classMeta, sessionTerms] = await Promise.all([
     tenantId ? tierQuery.eq("tenant_id", tenantId) : tierQuery,
-    fetchInChunks<{ student_id: string; class_id: string; salary_tier: string | null }>(classIds, (chunk) =>
+    fetchInChunks<{ student_id: string; class_id: string; salary_tier: string | null }>(allClassIds, (chunk) =>
       supabase.from("enrollments").select("student_id, class_id, salary_tier").in("class_id", chunk),
     ),
-    fetchAllPagedInChunks<{
-      id: string;
-      student_id: string;
-      class_id: string;
-      session_date: string;
-      slot_start: string | null;
-      status: string;
-      session_units: number | string | null;
-      salary_tier: string | null;
-      seat_label: string | null;
-      recorded_at: string;
-    }>(classIds, (chunk, f, t) =>
+    fetchAllPagedInChunks<RecordRow>(classIds, (chunk, f, t) =>
       supabase
         .from("attendance_records")
-        .select(
-          "id, student_id, class_id, session_date, slot_start, status, session_units, salary_tier, seat_label, recorded_at",
-        )
+        .select(RECORD_COLS)
         .in("class_id", chunk)
         .gte("session_date", from)
         .lte("session_date", to)
         .order("id", { ascending: true }) // OFFSET 페이지 안정용 unique 정렬(B2)
         .range(f, t),
     ),
-    fetchInChunks<{ class_id: string; applies_dows: string[] | null; salary_group: string | null }>(classIds, (chunk) =>
+    fetchInChunks<{ class_id: string; applies_dows: string[] | null; salary_group: string | null }>(allClassIds, (chunk) =>
       supabase.from("class_salary_settings").select("class_id, applies_dows, salary_group").in("class_id", chunk),
     ),
     // 반 과목·이름 — 수학 반 판정(회차 단가 대상)과 반 과정(특강 판정) 재료.
     fetchInChunks<{ id: string; class_name: string | null; subject: string | null; english_track: string | null }>(
-      classIds,
+      allClassIds,
       (chunk) => {
         const q = supabase.from("classes").select("id, class_name, subject, english_track").in("id", chunk);
         return tenantId ? q.eq("tenant_id", tenantId) : q;
@@ -120,7 +147,7 @@ export async function collectTierRows(
         class_id: string | null;
         invoice: { student_id: string } | { student_id: string }[] | null;
       }
-    >(classIds, (chunk, f, t) => {
+    >(allClassIds, (chunk, f, t) => {
       const q = supabase
         .from("invoice_session_terms")
         .select(
@@ -181,8 +208,11 @@ export async function collectTierRows(
     if (p !== null) sessionPriceByRow.set(k, p);
   }
 
-  const effective = effectiveAttendanceRecords(records);
-  const unitsByRow = new Map<string, { studentId: string; classId: string; tierLabel: string | null; units: number }>();
+  const effective = effectiveAttendanceRecords([...records, ...substituteRows]);
+  const unitsByRow = new Map<
+    string,
+    { studentId: string; classId: string; tierLabel: string | null; units: number; taughtBy: string | null }
+  >();
   for (const r of effective) {
     if (r.status === "absent" || r.status === "excused") continue;
     // 자리(랩실·JJ실) 수업은 **담임 시수가 아니다**(원장 2026-08-14 "담임 시수로 잡히는게 아니라 별도
@@ -195,8 +225,10 @@ export async function collectTierRows(
     if (!Number.isFinite(u) || u <= 0) continue;
     const tierLabel = r.salary_tier ?? enrollTier.get(`${r.student_id}|${r.class_id}`) ?? null;
     if (r.salary_tier) addTier(r.student_id, r.salary_tier); // 기록 예외(교시 분리 0.5T)도 표시에 포함
-    const key = `${r.student_id}|${r.class_id}|${tierLabel ?? ""}`;
-    const cur = unitsByRow.get(key) ?? { studentId: r.student_id, classId: r.class_id, tierLabel, units: 0 };
+    // 🔴 대신 보강 칸(`taught_by`)은 같은 학생·반이라도 **다른 줄** — 반 담임 몫과 보강한 강사 몫이 한 줄로 섞이면 가를 수 없다.
+    const taughtBy = r.taught_by ?? null;
+    const key = `${r.student_id}|${r.class_id}|${tierLabel ?? ""}|${taughtBy ?? ""}`;
+    const cur = unitsByRow.get(key) ?? { studentId: r.student_id, classId: r.class_id, tierLabel, units: 0, taughtBy };
     cur.units += u;
     unitsByRow.set(key, cur);
   }
@@ -223,6 +255,7 @@ export async function collectTierRows(
         units: r.units,
         sessionPrice: recordException ? null : (sessionPriceByRow.get(rowKey) ?? null),
         classGroup: classGroupOf.get(r.classId) ?? null,
+        ...(r.taughtBy ? { taughtBy: r.taughtBy } : {}),
       };
     }),
     priceByTier,

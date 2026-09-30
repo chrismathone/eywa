@@ -1472,6 +1472,18 @@ export const SHEET_DICT = {
     ko: "금액·정산액은 담임 반 {n}개 기준 — 교시 담당 {m}개 반은 빠져 있습니다",
     en: "Amounts and pay cover the {n} classes you are homeroom for — the {m} classes you only teach a period in are left out",
   },
+  // 다른 반 대신 보강(원장 결정 3, 2026-09-30 — 칸은 학생의 반, 시수는 보강한 강사 몫) — 강사 보기의 읽기 전용 목록·정산 주석.
+  "att.moneyNote.substitute": {
+    ko: "정산액에 다른 반 대신 보강 {units}시수가 들어 있습니다(표 아래 목록)",
+    en: "Pay includes {units} substitute makeup units taught in other classes (list below the table)",
+  },
+  "att.sub.title": { ko: "다른 반 대신 보강 {n}칸 · 시수 {units}", en: "Substitute makeups in other classes · {n} cells · {units} units" },
+  "att.sub.readonly": { ko: "읽기 전용", en: "Shown only — edit in that class" },
+  "att.sub.desc": {
+    ko: "위임 없이 다른 반 학생을 대신 보강한 칸입니다 — 칸은 그 학생의 반 출석부에 있고, 시수는 선생님 몫으로 정산에 들어갑니다. 고칠 때는 그 반 출석부(관리자)에서 고칩니다.",
+    en: "Makeups you taught for another class's student without a delegation — the cell lives in that student's class sheet and the units count toward your pay. Corrections are made in that class's sheet (admin).",
+  },
+  "att.sub.more": { ko: "외 {n}칸", en: "+{n} more" },
   // 반 머리행 끝의 "누가 수업했나"(2026-09-07) — 이름은 데이터, 여기 있는 건 꼬리말과 근거 설명뿐이다.
   "att.group.workerOthers": { ko: "{name} 외 {n}명", en: "{name} +{n}" },
   "att.group.workerReport": {
@@ -3124,17 +3136,33 @@ export const SHEET_DICT = {
     en: "This class has no ClassNote board link yet — tell an admin if it stays after the next sync",
   },
   // 반 정보 없는 보강 보고서의 '보낼 반' 고르기(A안, 원장 2026-09-29 *"보낼 곳이 없으면 '선택'"*).
-  "os.sendClass.title": { ko: "보낼 반 선택", en: "Choose the class to send to" },
+  // 보강 줄의 보강 반 표시(원장 2026-09-30 — 보고서 발송 반 = 출석부 보강 칸의 반).
+  "os.makeupClass.none": { ko: "반 미정", en: "Class not set" },
+  "os.makeupClass.set": { ko: "반 지정됨", en: "Class set" },
+  "os.makeupClass.noneTitle": {
+    ko: "보강 반이 정해지지 않았습니다 — 눌러서 반을 고르세요(반 미정 보강은 저장·발송할 수 없습니다)",
+    en: "No make-up class yet — click to choose one (a make-up without a class can't be saved or sent)",
+  },
+  "os.makeupClass.setTitle": {
+    ko: "보강 반 — 보고서가 이 반으로 발송되고 출석부 보강 칸도 이 반에 섭니다(누르면 바꿉니다)",
+    en: "Make-up class — the report goes to this class and the attendance is recorded here (click to change)",
+  },
+  "os.makeupClass.changed": { ko: "보강 반을 {name}(으)로 정했습니다", en: "Make-up class set to {name}" },
+  "os.makeupClass.noChoice": {
+    ko: "이 학생이 다니는 같은 과목 반이 없어 보강 반을 고를 수 없습니다",
+    en: "This student has no class in this subject to record the make-up in",
+  },
+  "os.sendClass.title": { ko: "보강 반 선택", en: "Choose the make-up class" },
   "os.sendClass.desc": {
-    ko: "반 정보가 없는 보강 보고서입니다. ClassNote의 어느 반으로 보낼지 골라 주세요.",
-    en: "This make-up report has no class. Choose which ClassNote class to send it to.",
+    ko: "이 보강을 어느 반 수업으로 기록할지 골라 주세요. 고른 반으로 보고서가 발송되고 출석부 보강 칸도 그 반에 섭니다.",
+    en: "Choose which class this make-up belongs to. The report goes to that class and the make-up is recorded in that class's attendance.",
   },
-  // 보강 추가한 반에 이 학생의 ClassNote 반 보드가 없어 다른 반으로 보낼 때(원장 2026-09-30 — 다른 반으로 가면 알린다).
   "os.sendClass.makeupMismatch": {
-    ko: "보강 추가한 반({name})은 이 학생의 ClassNote 반 보드가 없어 다른 반으로 보냅니다.",
-    en: "The make-up class ({name}) has no ClassNote board for this student, so the report goes to another class.",
+    ko: "보강 반({name})에 이 학생의 ClassNote 반 보드가 없습니다. 고른 반이 새 보강 반이 되고 출석부 칸도 함께 옮겨집니다.",
+    en: "The make-up class ({name}) has no ClassNote board for this student. The class you pick becomes the make-up class and the attendance moves with it.",
   },
-  "os.sendClass.send": { ko: "이 반으로 보내기", en: "Send to this class" },
+  "os.sendClass.send": { ko: "이 반으로 기록하고 보내기", en: "Record in this class and send" },
+  "os.sendClass.pick": { ko: "이 반으로 정하기", en: "Use this class" },
   "os.sendClass.cancel": { ko: "보내지 않기", en: "Don't send" },
   "os.crop.title": { ko: "사진 자르기", en: "Crop the photo" },
   "os.crop.desc": {
@@ -3790,9 +3818,14 @@ export const SHEET_DICT = {
     ko: "보낼 반이 없어 발송할 수 없습니다 — 이 학생의 반을 확인하세요(담당 반이 아니거나 반 보드가 없는 학생)",
     en: "Can't send — this student has no class board to send to. Check the student's class (not your class, or no class board).",
   },
+  // 정규 보고서의 반 보드가 없어졌을 때(원장 2026-09-30) — 다른 반으로 보내지 않고 막는다. 동기화 안내만.
+  "os.c.boardMissing": {
+    ko: "이 반의 ClassNote 반 보드가 없어 발송하지 않았습니다(다른 반으로 보내지 않습니다) — 관리자에게 '지금 반 보드 동기화'(수업보고서 발송 큐)를 부탁한 뒤 다시 보내 주세요. 저장은 됐습니다",
+    en: "Not sent — this class has no ClassNote class board (it won't go to another class). Ask an admin to press 'Sync class boards now' (report send queue), then send again. The report is saved.",
+  },
   "os.c.chooseSendClass": {
-    ko: "보낼 반을 골라 주세요 — 저장은 됐습니다",
-    en: "Pick the class to send to — the report is saved.",
+    ko: "보강 반을 골라 주세요 — 고른 반으로 발송되고 출석부 칸도 그 반에 섭니다",
+    en: "Pick the make-up class — the report goes there and the attendance is recorded there.",
   },
   "os.c.sendClassCheckFail": {
     ko: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",

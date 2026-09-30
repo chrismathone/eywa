@@ -1,5 +1,6 @@
 "use client";
 
+import { MakeupClassTag } from "./makeup-class-tag";
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
@@ -117,6 +118,10 @@ function StudentRow({
             ⚠️ 학년은 `min-w-0 truncate` — 긴 학교명이 와도 배지를 밀어내 다시 찌그러뜨리지 않게. */}
         <div className="text-text-faint mt-0.5 flex items-center gap-1.5 text-xs">
           <span className="min-w-0 truncate">{st.grade}</span>
+          {/* 보강 줄의 보강 반(원장 2026-09-30 — 보강 묶음에 서 있어도 어느 반으로 들어가는지). 표시만(이 줄 전체가 버튼이다). */}
+          {st.subjects.filter((su) => su.makeup && !su.classId).slice(0, 1).map((su) => (
+            <MakeupClassTag key={su.name} subject={su} />
+          ))}
           <span className="flex shrink-0 items-center gap-0.5">
             {st.subjects.map((su, i) => (
               <span

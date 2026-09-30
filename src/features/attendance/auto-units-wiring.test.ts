@@ -95,6 +95,8 @@ describe("① 출결 INSERT 경로는 전부 자동 시수 헬퍼를 지난다",
       ["features/attendance/seat/server/actions.ts", "자리 교시별 행"],
       // 보이지 않는 '보강' 반(0241a) — 배치가 없고 보고서 훅의 합산 규칙이 따로 있다(설계상 손대지 않음).
       ["features/attendance/server/makeup-pool.ts", "보강 반 훅"],
+      // 보강 보고서의 반(앵커) 칸(원장 2026-09-30 — 보고서 반 = 출석부 반) — 시수는 확인창이 명단 세션에 적은 **명시** 값(1이면 기본).
+      ["features/attendance/server/makeup-anchor-cells.ts", "보강 앵커 칸(확인창 시수 명시)"],
     ]);
     const found: string[] = [];
     for (const file of tsFiles(SRC)) {
@@ -175,10 +177,13 @@ describe("③ 숫자를 보여 준 보강 추가는 그 숫자를 명시로 보�
     expect(flow).toMatch(/^\s*units: String\(choice\.addUnits\),\s*$/m);
     expect(flow).not.toContain("choice.addUnits !== 1 ?");
   });
-  it("원스크린 앵커 보강 칸 — 안 넘기면 1(조건 없이)", () => {
+  it("원스크린 보강 칸 — 확인창이 칸을 직접 쓰지 않고, 저장 훅이 명단 세션의 시수(명시)로 앵커 반에 세운다(2026-09-30)", () => {
     const os = code(read("features/onescreen/components/onescreen-client.tsx"));
-    expect(os).toMatch(/^\s*units: String\(units \?\? 1\),\s*$/m);
-    expect(os).not.toContain("units && units !== 1 ?");
+    expect(os).not.toContain("persistAnchorMakeup(");
+    const sync = code(read("features/onescreen/server/makeup-anchor-sync.ts"));
+    expect(sync).toContain("units: entry?.units ?? null,");
+    // 자동 시수(수업 길이)를 타지 않는다 — 보강 시수는 강사가 확인창에서 고른 값이다.
+    expect(read("features/attendance/server/makeup-anchor-cells.ts")).not.toContain("resolveAutoUnits");
   });
   it("일별 폼 보강 행 — 확인창 숫자를 초안에 그대로", () => {
     expect(code(read("app/(shell)/attendance/[date]/[classId]/input-form.tsx"))).toContain(

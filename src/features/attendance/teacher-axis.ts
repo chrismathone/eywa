@@ -54,6 +54,9 @@ export type TeacherAxisSource =
 
 export type TeacherAxis = { teacherId: string | null; source: TeacherAxisSource };
 
+/** 행 단위 귀속 — 위 축 + **대신 보강**(`substitute` = 그 칸에 적힌 귀속 강사, `attendance_records.taught_by`, 0315a). */
+export type RecordTeacherAxis = { teacherId: string | null; source: TeacherAxisSource | "substitute" };
+
 /** "16:20:00" → "16:20". 형식이 아니면 그대로 돌려준다(비교는 문자열로 한다). */
 export function normalizeAxisTime(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -137,6 +140,33 @@ export function resolveTaughtBy(input: {
   if (named.length === 1) return { teacherId: named[0]!, source: "slot" };
   if (named.length > 1) return { teacherId: null, source: "ambiguous" };
   return fallback();
+}
+
+/**
+ * **출결 한 건(행)의 귀속** — 그 행에 **대신 보강 귀속**(`taught_by`, 0315a)이 적혀 있으면 그 사람, 아니면 `resolveTaughtBy`.
+ *
+ * 🔴 원장 결정 3(2026-09-30): *위임 없이 남의 반 학생을 대신 보강하면 보고서·출석부는 학생의 원래 반(B반)이지만,
+ *    그 칸의 시수(월별 출석부·정산·강사 보기)는 실제로 보강한 강사(A) 몫이다.* 반 축(`class_id`)을 B반에 두면서
+ *    귀속만 A로 돌리는 유일한 표식이 `taught_by`다 — 보강 보고서 저장 훅(`ensureMakeupAttendanceForReport`)이
+ *    **보강한 강사가 그 반을 담당하지 않을 때만** 적는다(`substituteTaughtBy`, makeup-anchor.ts).
+ * ⚠️ `recorded_by`(입력한 사람)와 다르다 — 데스크가 대신 찍어도 귀속은 안 바뀐다(위 파일 머리 주석 ③).
+ * ⚠️ 비어 있으면(전 행의 기본값) 종전 규칙 그대로다 — 0315a 이전 행·컬럼 없는 스키마도 같은 답([[#95]]).
+ */
+export function resolveRecordTaughtBy(
+  input: Parameters<typeof resolveTaughtBy>[0] & { taughtBy?: string | null },
+): RecordTeacherAxis {
+  if (input.taughtBy) return { teacherId: input.taughtBy, source: "substitute" };
+  return resolveTaughtBy(input);
+}
+
+/** 이 행이 **대신 보강 귀속**으로 다른 강사 몫인가 — 정산·렌즈가 반 담임에게서 빼는 판정(한 줄이지만 한 곳에 둔다). */
+export function isSubstituteRowOf(row: { taughtBy?: string | null }, teacherId: string | null | undefined): boolean {
+  return !!row.taughtBy && row.taughtBy === teacherId;
+}
+
+/** 반 담임(반 축) 정산에서 이 행을 빼야 하나 — 다른 강사의 대신 보강이다. */
+export function excludedFromHomeroom(row: { taughtBy?: string | null }, homeroomTeacherId: string | null | undefined): boolean {
+  return !!row.taughtBy && row.taughtBy !== homeroomTeacherId;
 }
 
 /**
@@ -334,8 +364,15 @@ export function ownsAttendanceSlot(input: {
    *    비었다고 자리로 보면 반대 방향으로 틀린다(반 출석부 기록이 통째로 누구 몫도 아니게 된다).
    */
   recordedVia?: string | null;
+  /**
+   * 그 행의 **대신 보강 귀속**(`attendance_records.taught_by`, 0315a) — 있으면 그 사람 몫**만**이다(원장 결정 3, 2026-09-30).
+   * 🔴 담임·교시 담당·담임 시작일보다 **먼저** 본다 — B반 칸이지만 A가 한 수업이라 B반 담임 렌즈에선 빠지고 A 렌즈에서만 선다.
+   * ⚠️ 비어 있으면(null·undefined) 종전 규칙 그대로(0315a 미적용 스키마·옛 행).
+   */
+  taughtBy?: string | null;
 }): boolean {
   if (!input.scopeTeacherId) return true;
+  if (input.taughtBy) return input.taughtBy === input.scopeTeacherId;
   if (input.seatLabel?.trim()) return false;
   if (input.recordedVia === SEAT_VIA) return false;
   if (!input.homeroomHistory?.length && input.homeroomSince && input.date < input.homeroomSince) return false;

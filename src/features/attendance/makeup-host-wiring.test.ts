@@ -29,27 +29,31 @@ describe("보강 기록 수업 선택 배선", () => {
     expect(client).toContain("pendingMakeupRows(cardNow, ask.mk, stopSubject).length === 0");
   });
 
-  it("보고서 저장 훅은 고른 수업을 받아, 그 반에 칸이 이미 있으면 보강 반을 만들지 않는다(시수 두 번 방지)", () => {
-    // 서버가 확인한 앵커(findMakeupAnchor — 등록 문과 같은 판정)만 훅에 넘긴다(원장 2026-09-30 적대 리뷰: 클라 값을 그대로 믿지 않는다).
-    expect(read("src/features/onescreen/server/actions.ts")).toMatch(/makeupClassId: makeupAnchor,/);
+  it("🔴 보고서 저장 훅은 고른 수업(앵커)에만 칸을 맞춘다 — 예약 반·보강 반으로 새지 않는다(원장 2026-09-30 '보고서 반 = 출석부 반')", () => {
+    // 서버가 확인한 앵커(prepareMakeupAnchor → acceptMakeupAnchor)만 쓰고, 저장 뒤 같은 앵커로 칸을 맞춘다(finishMakeupAnchor).
+    const os = read("src/features/onescreen/server/actions.ts");
+    expect(os).toContain("prepareMakeupAnchor(supabase, {");
+    expect(os).toContain("await finishMakeupAnchor(supabase, {");
+    expect(os).toMatch(/makeup_class_id: makeupAnchor,/);
+    // 보이지 않는 보강 반 훅은 앵커가 **없을 때만**(앵커를 넘기는 인자가 사라졌다).
     const pool = read("src/features/attendance/server/makeup-pool.ts");
     const fn = pool.slice(pool.indexOf("export async function ensureMakeupAttendanceForReport"));
-    const hostAt = fn.indexOf('.eq("class_id", input.makeupClassId)');
-    expect(hostAt).toBeGreaterThan(-1);
-    expect(hostAt).toBeLessThan(fn.indexOf("ensureMakeupPoolClass("));
-    expect(fn.slice(hostAt, fn.indexOf("ensureMakeupPoolClass("))).toMatch(/return \{ ok: true, classId: input\.makeupClassId \}/);
+    expect(fn).not.toContain("input.makeupClassId");
   });
 
-  it("🔴 후보는 보강 등록 문(registerMakeupEntries)과 같은 판정 — 그날 담당 반(담임 ∪ 위임) · 과목이 같은 반", () => {
+  it("🔴 후보는 보강 등록 문·보고서 저장·반 바꾸기와 같은 판정 — (담당 반 ∪ 학생이 다니는 반) · 같은 과목 · 종강 전(원장 결정 2)", () => {
     const actions = read("src/features/attendance/server/makeup-actions.ts");
     const fn = actions.slice(actions.indexOf("export async function fetchMakeupHostClasses"));
-    expect(fn).toContain("getTeachingClasses(supabase, user.id, makeupDate)");
+    expect(fn).toContain("loadMakeupAnchorCandidates(supabase, {");
     expect(fn).toContain("wanted.has(c.subject)");
+    expect(fn).toContain("(c.mine || c.enrolled)");
     const register = read("src/features/onescreen/server/makeup-register-actions.ts");
-    expect(register).toContain("getTeachingClasses(supabase, user.id, input.date)");
-    expect(register).toContain("findMakeupAnchor(classes, entry.makeupClassId, entry.subject, input.date)");
-    expect(read("src/features/attendance/makeup-host.ts")).toMatch(/c\.id === classId && c\.subject === subject && isClassOpenOn\(c\.closedAt, date\)/);
-    // 보강 반 컬럼(is_makeup_pool)을 새로 읽지 않는다([[#95]]) — getTeachingClasses가 활성 반만 준다.
+    expect(register).toContain("loadMakeupAnchorCandidates(supabase, {");
+    expect(register).toContain("acceptMakeupAnchor(cands, entry.makeupClassId, entry.subject, input.date)");
+    expect(read("src/features/onescreen/makeup-anchor.ts")).toMatch(
+      /c\.id === classId && c\.subject === subject && \(c\.mine \|\| c\.enrolled\) && isClassOpenOn\(c\.closedAt, date\)/,
+    );
+    // 보강 반 컬럼(is_makeup_pool)을 새로 읽지 않는다([[#95]]).
     expect(fn).not.toContain("is_makeup_pool");
   });
 
@@ -62,12 +66,11 @@ describe("보강 기록 수업 선택 배선", () => {
     const separateRows = code.indexOf("addSeparateMakeupRows(existing, ask.mk, true, choice.candidate!.subjectKey)");
     expect(noCandidate).toBeGreaterThan(-1);
     expect(separateRows).toBeGreaterThan(noCandidate);
-    expect(code.split("persistAnchorMakeup(").length - 1).toBe(2);
-    expect(code.lastIndexOf("persistAnchorMakeup(")).toBeGreaterThan(noCandidate);
-    expect(code.lastIndexOf("persistAnchorMakeup(")).toBeLessThan(separateRows);
+    // 🔴 2026-09-30: 확인창은 보강 칸을 **직접 쓰지 않는다** — 보고서 저장 훅이 앵커 반에 기다려서 적는다(`persistAnchorMakeup` 폐기).
+    expect(code.split("persistAnchorMakeup(").length - 1).toBe(0);
     // 후보 갈래는 보던 반에 직접 쓰지 않는다(시수는 합침·분리 헬퍼가 후보 반에만 얹는다).
-    const candidateBranch = code.slice(code.indexOf("return;", code.lastIndexOf("persistAnchorMakeup(")));
-    expect(candidateBranch).not.toContain("setAttendanceCell(");
+    const candidateBranch = code.slice(code.indexOf("return;", noCandidate));
+    expect(candidateBranch.slice(0, candidateBranch.indexOf("mergeMakeupIntoRegular("))).not.toContain("setAttendanceCell(");
     // 분리 보강 줄의 앵커 = 고른 후보 반(시수가 선 반) — 보고서 저장 훅이 보강 반을 또 만들지 않게. 등록·카드 행이 **같은** 목록(ask.mk)을 쓴다.
     expect(code).toMatch(/su\.subjectKey === target\.subjectKey\s*\?\s*\{\s*\.\.\.su,\s*makeupClassId:\s*target\.classId\s*\}/);
     // 앵커를 바꾼 목록(ask)을 만든 뒤엔 바꾸기 전 목록(hosted)을 쓰지 않는다 — 등록·카드 행이 갈리면 세션은 X, 카드·보고서는 Y가 된다.
