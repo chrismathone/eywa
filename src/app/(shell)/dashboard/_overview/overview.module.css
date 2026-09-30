@@ -10,8 +10,8 @@
 }
 .board {
   padding: 20px 22px 14px;
-  max-width: 2100px;
-  margin: auto;
+  width: 100%;
+  min-width: 0;
 }
 .header {
   display: flex;

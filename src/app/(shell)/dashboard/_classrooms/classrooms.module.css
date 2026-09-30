@@ -1,4 +1,4 @@
-.root { --navy: #173e76; --blue: #3284ad; --line: #dce5ee; --muted: #56697c; --green: #257356; color: #172b42; font-size: 13px; padding: 12px 20px; max-width: 1800px; margin: auto; container-type: inline-size; }
+.root { --navy: #173e76; --blue: #3284ad; --line: #dce5ee; --muted: #56697c; --green: #257356; color: #172b42; font-size: 13px; padding: 12px 20px; width: 100%; min-width: 0; container-type: inline-size; }
 .root button, .root input { font: inherit; }
 .root button { cursor: pointer; }
 .root button:disabled { cursor: wait; opacity: .65; }

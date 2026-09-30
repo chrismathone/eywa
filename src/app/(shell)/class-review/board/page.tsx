@@ -65,7 +65,7 @@ export default async function ClassReviewBoardPage() {
   }));
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] space-y-5 p-6">
+    <div className="w-full min-w-0 space-y-5 p-6">
       <div>
         <Link
           href="/class-review"

@@ -44,7 +44,7 @@ export default async function AttendanceInputPage({
   const subjectMaps = buildSubjectMaps(operations.subjects);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <BackLink href={`/attendance/${date}`} label={`${formatKoreanDateLong(date)}로`} />
 
       <header className="border-line space-y-1 border-b pb-5">
