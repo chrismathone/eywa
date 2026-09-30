@@ -131,7 +131,8 @@ describe("결석 행 — 보고서 입력은 잠긴다", () => {
     expect(screen.getByLabelText("학생 과제 수행률")).toBeDisabled();
     expect(screen.getByLabelText("학생 수학 교재명")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("학생 수학 오늘 과제")).toHaveAttribute("readonly");
-    expect(screen.getByLabelText("학생 수학 보강")).toBeDisabled();
+    // 옛 '보강' 체크박스는 없앴다(2026-09-30 — 보강은 '보강 추가'에서만 정한다). 되살아나면 여기서 잡힌다.
+    expect(screen.queryByLabelText("학생 수학 보강")).toBeNull();
     expect(screen.getByLabelText("학생 특이사항")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("학생 수학 학부모 문구")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("학생 수학 학습 추세")).toHaveAttribute("readonly");
