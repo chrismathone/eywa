@@ -405,6 +405,22 @@ describe("고른 결과를 문장으로 밝힌다", () => {
     expect(screen.getByLabelText("이번 보강 시수")).toHaveAttribute("placeholder", "1.5");
     expect(screen.getByText(/1건에 합쳐/)).toHaveTextContent("1.5 + 보강 1.5 = 3");
   });
+
+  it("🔴 조퇴 칸(원장 2026-09-30) — 합침에 '정규(조퇴)'라 적고 조퇴는 그대로 둔다고 밝힌다 · 보강 기본값은 줄인 조퇴 시수가 아니다", async () => {
+    const { onConfirm } = setup({
+      candidates: [cand({ attendanceRaw: "early_leave", attendanceUnits: 0.5, makeupBaseUnits: 1.5 })],
+    });
+
+    expect(screen.getByRole("radio", { name: "합침 (정규(조퇴)+보강)" })).toBeInTheDocument();
+    const line = screen.getByText(/1건에 합쳐/);
+    expect(line).toHaveTextContent("조퇴 기록(사유 메모 포함)은 그대로");
+    // 지금 값 = 조퇴 기록 시수 0.5, 보강 기본값 = 정규 1회분 1.5
+    expect(line).toHaveTextContent("0.5 + 보강 1.5 = 2");
+    await userEvent.click(screen.getByRole("button", { name: "합쳐서 발송" }));
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "merge", addUnits: 1.5, candidate: expect.objectContaining({ attendanceRaw: "early_leave" }) }),
+    );
+  });
 });
 
 describe("보강 시수 — 강사가 고칠 수 있다", () => {
