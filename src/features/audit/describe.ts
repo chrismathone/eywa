@@ -74,6 +74,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   intake_token: "QR 접수 링크",
   notice_popup: "팝업 공지",
   classnote_notice: "학부모 공지",
+  classnote_sync: "ClassNote 반 보드 동기화",
   operating_periods: "세션 기간",
   // 2026-08-17 원장 제보("대상이 attendance 등 날것으로 나옴") — 누락 유형 전수 추가(가드 테스트도 갱신).
   attendance: "출결",
@@ -243,6 +244,8 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "ment-style-rebuild": "강사 말투 주간 갱신",
   // 슬랙 발송기(/api/cron/slack-dispatch · 응답 뒤 poke) — 토큰이 죽어 연결을 '끊김'으로 바꿀 때.
   "slack-dispatch": "슬랙 발송기",
+  // ClassNote 지금 반 보드 동기화(0313a) — 연동 PC 워커가 실행 결과를 직접 남긴다.
+  "classnote-sync-now": "ClassNote 반 보드 동기화(연동 PC)",
 };
 const SYSTEM_ACTOR_FALLBACK = "시스템 스크립트";
 
@@ -1055,6 +1058,32 @@ export function auditDetail(
     case "classnote_notice_revoke": {
       const c = num(m.reportCount);
       return c === null ? "게시된 공지 게시취소(회수)" : `게시된 공지 ${c}건 게시취소(회수)`;
+    }
+    case "classnote_board_sync_request": {
+      const c = num(m.classCount);
+      const s = num(m.studentCount);
+      const what = m.full === false ? `지목한 반·학생만(반 ${c ?? 0} · 학생 ${s ?? 0})` : "바뀐 반 전부";
+      return m.joined === true ? `이미 요청된 동기화에 합류 — ${what}` : `${what} 동기화 요청`;
+    }
+    case "classnote_board_sync_run": {
+      if (m.ok === false) return join("동기화 실패", str(m.error));
+      if (m.noChange === true) return "바뀐 반 없음(ClassNote 변경 없음)";
+      const bits = (
+        [
+          ["반", num(m.classes)],
+          ["새 반", num(m.created)],
+          ["이름 변경", num(m.renamed)],
+          ["원아 배정", num(m.enrolled)],
+          ["담임 연결", num(m.teachers)],
+          ["1인 보드 생성", num(m.boardsCreated)],
+          ["1인 보드 배정", num(m.assigned)],
+          ["보류", num(m.held)],
+          ["남은 반", num(m.remaining)],
+        ] as const
+      )
+        .filter(([, v]) => v !== null && v > 0)
+        .map(([l, v]) => `${l} ${v}`);
+      return bits.length ? bits.join(" · ") : "동기화 완료(바뀐 것 없음)";
     }
     case "classnote_report_recall": {
       const c = num(m.reportCount);

@@ -33,6 +33,7 @@ import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
+import { processSyncRequestOnce } from "./classnote-sync-request.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -93,7 +94,9 @@ const recentIssues = [];
 // (2026-09-04). 이 키가 없으면 옛 워커라 실패 사유가 여전히 `스샷 kage 업로드 실패` 한 줄로만 남는다.
 // mathClassRoute=수학 반 보드 경로(보고서 설정 '수학 발송 경로', 2026-09-29)를 아는 버전인가. 이 키가 없는 옛 워커는
 // 설정을 반별로 바꿔도 **전부 1인 보드로** 보낸다 — 설정을 바꾸기 전에 이 키로 이관 여부를 확인할 것.
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true };
+// syncRequests=지금 반 보드 동기화 요청(0313a)을 집는 버전인가(2026-09-30). 앱은 이 키가 있는 실게시 PC가 살아 있을 때만 요청을 받는다
+// (옛 워커만 있으면 아무도 안 집는 '대기 중'이 생긴다).
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -292,6 +295,14 @@ async function main() {
         log(`[recall] 회수 ${recallRes.recalled}건 완료 · 실패 ${recallRes.failed}건`);
         noteResult("recall", recallRes);
       }
+      // 2-c) 지금 반 보드 동기화 요청(0313a) — 앱 버튼. `--post` 임대 주인만 집고, **바뀐 반만**(상한 15개) 돈다.
+      //      새벽 정기 동기화(아래 3·3-a)의 '오늘 함' 표식은 건드리지 않는다(한 폴 루프라 둘이 동시에 돌 수 없다).
+      const snres = await processSyncRequestOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
+        log(`[sync-now] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("syncNow", { error: e.message });
+        return { ran: false };
+      });
+      if (snres.ran) noteResult("syncNow", { ok: snres.ok ? 1 : 0 });
       // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
       const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[provision] 오류(내일 재시도): ${e.message}`);

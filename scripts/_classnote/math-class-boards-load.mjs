@@ -105,8 +105,13 @@ export async function loadPlan(page, centerId, { classes, students }, { linkedBo
   }
   for (const c of classes) for (const b of boards) if (b.name === c.className) need.add(b.id);
   // 연결된 보드(이름이 바뀌었을 수 있다)도 원아를 읽는다 — 안 읽으면 '이미 배정' 판정이 비어 전원 다시 배정하려 든다.
+  // 🔑 **이번 계획의 반**에 연결된 보드만 읽는다(2026-09-30 지금 동기화 — 반 하나를 볼 때 전 반 보드를 읽지 않게).
+  //    다른 반에 연결된 보드의 원아는 계획이 쓰지 않는다(같은 이름 보드가 남의 반 연결이면 원아와 무관하게 막는다).
   const liveIds = new Set(boards.map((b) => Number(b.id)));
-  for (const id of linkedBoardByClass.values()) if (liveIds.has(Number(id))) need.add(Number(id));
+  for (const c of classes) {
+    const id = linkedBoardByClass.get(c.classId);
+    if (id != null && liveIds.has(Number(id))) need.add(Number(id));
+  }
   const membersByBoard = new Map();
   let failed = 0;
   for (const id of need) {
