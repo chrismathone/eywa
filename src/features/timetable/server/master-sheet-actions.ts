@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canManageSheetSync } from "@/features/integrations/server/sheet-access";
 import { canManageTimetableImport } from "./import-access";
@@ -192,7 +192,7 @@ export async function applyMasterSheet(
       revalidatePath("/classes");
       revalidatePath("/students", "layout");
       revalidatePath("/ecs");
-      revalidateTag(tenantSettingsTag(user.tenantId), "max");
+      updateTag(tenantSettingsTag(user.tenantId));
     } catch (e) {
       console.error(
         "[english-master] cache refresh",

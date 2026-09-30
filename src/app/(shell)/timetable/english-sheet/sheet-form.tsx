@@ -726,7 +726,7 @@ export function MasterSheetForm({
               요일은 이어받습니다.
             </p>
           </section>
-          <div className="border-line bg-card sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t py-4">
+          <div className="sticky-save-bar border-line bg-card sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t py-4">
             <p className="text-sm">
               {dirty
                 ? "수정 내용 다시 검사를 실행해 주세요."
