@@ -17,6 +17,8 @@ import { ClassnoteQueueCard } from "./_components/classnote-queue-card";
 import { WritingRateCard } from "./_components/writing-rate-card";
 import { ReportList } from "./_components/report-list";
 import { RecallFace } from "./_components/recall-face";
+import { ParentRepliesFace } from "./_components/parent-replies-face";
+import { listParentThreads } from "@/features/classnote-reply/server/reply-queries";
 import { ComposeTab } from "./_components/compose-tab";
 import { NoticeFace } from "./_components/notice-face";
 import { BoardRosterCard } from "./_components/board-roster-card";
@@ -42,7 +44,7 @@ export const maxDuration = 300;
 type Sp = Record<string, string | undefined>;
 // 관리 면(영상 제출 현황·ClassNote 발송 큐·작성률·반 구성·목록·공지·직접발송) + 설정 면.
 // (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)
-type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "queue" | "report" | "ai_ment";
+type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "parent_replies" | "queue" | "report" | "ai_ment";
 
 // 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
@@ -56,7 +58,7 @@ function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: bo
   if (t === "list" || t === "writing" || t === "notice" || t === "boards" || t === "queue") return t;
   // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
   // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
-  if ((t === "compose" || t === "recall") && canSend) return t;
+  if ((t === "compose" || t === "recall" || t === "parent_replies") && canSend) return t;
   if ((t === "report" || t === "ai_ment") && canOwner) return t;
   return "writing";
 }
@@ -119,6 +121,9 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                   composeShowAttachments: settings.report.showAttachments,
                 }),
               )
+          : tab === "parent_replies"
+            ? // 학부모 글·답글(0317a) — 최근 14일 원문 + 답글 상태. 조회 실패는 빈 목록 대신 안내(아래).
+              listParentThreads().then((parentThreads) => ({ parentThreads }), () => ({ parentThreads: null }))
           : tab === "recall"
             ? // 회수는 **검색해서 찾는** 화면이라 첫 페인트에 목록을 싣지 않는다(전건을 띄우면 오클릭 거리만 는다).
               getReportFilterOptions().then((filterOptions) => ({ recallOptions: filterOptions }))
@@ -200,6 +205,14 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
 
       {tab === "recall" && "recallOptions" in tabData ? (
         <RecallFace options={tabData.recallOptions} todayYmd={kstToday()} />
+      ) : null}
+
+      {tab === "parent_replies" && "parentThreads" in tabData ? (
+        tabData.parentThreads ? (
+          <ParentRepliesFace view={tabData.parentThreads} />
+        ) : (
+          <p className="text-text-faint text-sm">학부모 글을 불러올 수 없습니다.</p>
+        )
       ) : null}
 
       {tab === "notice" && "noticeClasses" in tabData && "noticeRows" in tabData ? (

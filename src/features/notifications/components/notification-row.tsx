@@ -28,12 +28,15 @@ export function NotificationRow({
   onOpen,
   onArchive,
   onDelete,
+  onReply,
 }: {
   item: NotificationItem;
   archived: boolean;
   onOpen: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  /** 학부모 글·댓글에 답글(0317a) — 쓸 수 있는 알림에만 온다(없으면 버튼 없음). */
+  onReply?: () => void;
 }) {
   return (
     <div
@@ -77,6 +80,15 @@ export function NotificationRow({
           {relTime(item.createdAt)}
         </time>
         <div className="flex items-center gap-1">
+          {onReply ? (
+            <button
+              type="button"
+              onClick={onReply}
+              className="text-primary hover:bg-primary-soft focus-visible:outline-primary rounded-md px-2 py-1 text-xs font-bold"
+            >
+              답글 쓰기
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onArchive}

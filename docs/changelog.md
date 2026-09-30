@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-09-30 — ClassNote 학부모 글·댓글에 답글(0317a, dev 단계 · 학원이 전용)
+
+- 원장 *"이전 1인 반에서 작동하는 기능을 반 기준으로 바꿔도 작동하게"* — aywa(벨 '답글 쓰기'·수업보고서 '학부모 글·답글' 면)에서 쓰고 연동 PC 워커가 봇 계정으로 그 글에 댓글로 게시·수정·삭제. 게시 명의 `<반 이름> <강사 호칭>`, 본문 서명 없음.
+- 자격 = 원장·관리자·매니저 ∪ 그 학생을 지금 맡은 강사(벨 수신자와 같은 규칙). 중복 방어 = 재클릭 키 유니크 + 같은 글·같은 본문 부분 유니크 + 워커 게시 직전 재조회. 상세 = classnote-integration.md §10.8.
+- 🔴 모드는 코드 상수 `test`(학원이 테스트 보드 #1317083·#1291581 + 원아 5268389만) — 설정 모드는 main 반영 단계. 워커 zip·0317a SQL은 아직 운영에 안 나감.
+- 적대 리뷰 수리: 쓰기 함수가 **허가증**(대상 확인 결과 + 글 번호)을 받아 요청 직전에 다시 본다 · 2xx 뒤 글자 불일치로 다시 게시하던 길(최대 3회 중복) 차단 · 24시간 넘은 게시 요청은 올리지 않음 · 수정 본문 유니크 충돌 시 멈춤 루프 제거 · 표 유무를 HEAD로 묻던 자리([[#95]] — 표가 없어도 버튼이 섰다) 수정 · 같은 재클릭 키 + 다른 본문을 '이미 요청'으로 답하던 자리 수정 · 게시 명의에 확인 안 된 보드 이름 금지. 쓰기 경로는 가짜 ClassNote로 Vitest가 끝까지 돌린다(`parent-reply-run.test.mjs`).
+
 ## 2026-09-30 — 보고서 반 = 출석부 반 = 발송 반(보강 반 단일 소스 · 대신 보강 귀속 0316a)
 
 - 원장 *"보고서 반 = 출석부 반은 모든 곳에서 일치. 다르면 크리티컬"* · *"모든 기록에 동일한 반이 매핑되어야함"*. 단일 소스 = `lesson_reports.makeup_class_id` — 발송 반(`classnote_class_id` 복사본)·출석부 칸의 반·귀속이 여기서 나온다. 규칙 한 벌 `src/features/onescreen/makeup-anchor.ts`(불변식 `makeupInvariantViolations`), 서버 한 벌 `makeup-anchor-sync.ts`(`prepareMakeupAnchor`·`finishMakeupAnchor`·`changeMakeupAnchor`)·`attendance/server/makeup-anchor-cells.ts`, 액션 `setMakeupClass`.

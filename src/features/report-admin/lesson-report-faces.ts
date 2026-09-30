@@ -1,6 +1,6 @@
 import type { Face } from "@/components/face-tabs";
 
-const CLASSNOTE_TABS = new Set(["queue", "boards", "notice", "compose", "recall"]);
+const CLASSNOTE_TABS = new Set(["queue", "boards", "notice", "compose", "recall", "parent_replies"]);
 
 export function isClassnoteReportTab(key: string): boolean {
   return CLASSNOTE_TABS.has(key);
@@ -22,6 +22,8 @@ export function lessonReportFaces({ canOwner, canSend, classnoteOn, aiOn = true 
   if (canSend) faces.push(
     { key: "compose", label: "직접 발송", href: "/lesson-reports?tab=compose", group: "관리" },
     { key: "recall", label: "회수", href: "/lesson-reports?tab=recall", group: "관리" },
+    // 학부모 글·댓글 + 답글(0317a) — ClassNote 모듈 면(꺼지면 흔적 없이). 답글 자격은 창·서버 액션이 다시 본다.
+    { key: "parent_replies", label: "학부모 글·답글", href: "/lesson-reports?tab=parent_replies", group: "관리" },
   );
   if (canOwner) faces.push(
     { key: "report", label: "보고서 설정", href: "/lesson-reports?tab=report", group: "설정" },

@@ -721,6 +721,46 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - **감사로그**: `classnote_board_sync_request`(누른 사람 — 합류 포함) · `classnote_board_sync_run`(연동 PC 직접 insert, 실행자 `system:classnote-sync-now` — 반·배정·보류·남은 반 수, 실패 사유).
 - ⚠️ **워커 zip 교체 필요** — 옛 워커엔 `caps.syncRequests`가 없어 앱이 요청을 받지 않는다(버튼이 '연동 PC가 꺼져 있거나 옛 버전' 사유로 잠김).
 
+### 10.8 학부모 글·댓글에 답글 — 2026-09-30 (0317a, dev 단계 · 학원이 전용)
+
+원장 *"이전 1인 반에서 작동하는 기능을 반 기준으로 바꿔도 작동하게"* — 1인 보드 시절엔 보드에 연결된 강사가 ClassNote 앱에서 직접 답글을 달았다.
+반 보드엔 담임 한 명만 연결되므로, aywa에서 쓰고 **연동 PC 워커가 봇 계정으로 그 글에 댓글**을 올린다(게시·수정·삭제).
+
+| 구성 | 파일 | 역할 |
+|---|---|---|
+| 표 | `supabase/migrations/0317a_classnote_parent_replies.sql` | 답글 1행 = 요청·상태·ClassNote 댓글 번호·원문 보존(`edit_history`). 쓰기 = 서버 액션·워커만. 재클릭 = `client_key` 유니크 · 같은 글·같은 본문(살아 있는 것) = 부분 유니크(23505로 받음, [[#113]]) |
+| 앱 판정(순수) | [`reply-policy.ts`](../src/features/classnote-reply/reply-policy.ts) · [`reply-eligibility-rule.ts`](../src/features/classnote-reply/reply-eligibility-rule.ts) · [`notification-match.ts`](../src/features/classnote-reply/notification-match.ts) | 모드 가드 · 본문 1,000자 · 게시 명의 · 상태 라벨 · 연동 PC 준비(`caps.parentReply`) · 자격 · 벨 알림 → 원문 행 |
+| 서버 액션 | [`reply-actions.ts`](../src/features/classnote-reply/server/reply-actions.ts) (+ `reply-permission`·`reply-change`·`reply-data`·`reply-eligibility`) | 입력 = 메시지 행 id + 본문 + 재클릭 키. 글·원아·보드는 0184a 행으로 다시 찾는다 |
+| 화면 | 벨 알림 행 '답글 쓰기' → [`parent-reply-dialog.tsx`](../src/features/classnote-reply/components/parent-reply-dialog.tsx) · 수업보고서 '학부모 글·답글' 면 | 원문 · 답글 상태(10초 갱신) · 미리보기(학부모가 볼 이름표+본문) · 확인 창 · 보내는 동안 잠금 · 실패 사유 한글(원문은 툴팁) · 수정·삭제 |
+| 워커 | [`classnote-parent-reply-core.mjs`](../scripts/_classnote/classnote-parent-reply-core.mjs)(큐·DB) + [`parent-reply-run.mjs`](../scripts/_classnote/parent-reply-run.mjs)(**ClassNote 쓰기는 여기서만**) + 순수 [`parent-reply-guard.mjs`](../scripts/_classnote/parent-reply-guard.mjs) + [`parent-reply-api.mjs`](../scripts/_classnote/parent-reply-api.mjs) | 한 폴 한 건 · `skip locked` · 멈춤 15분 복구 · 감사로그 `classnote_parent_reply_run`(실행자 `system:classnote-parent-reply`) |
+| 1회 실행 | [`process-parent-replies.mjs`](../scripts/_classnote/process-parent-replies.mjs) `--id <답글> [--check \| --post]` | 개발 PC 시험·수동 복구. **하트비트를 쓰지 않는다**(실게시 임대를 가로채지 않게) |
+
+- **게시 명의** = `<반 이름> <강사 호칭>`(원장 결정 — 본문 서명 없음). 반 보드 = 보드 이름(= aywa 반 이름) — 단 **반 보드로 확인된 것만**(0302a 연결 · 시험 단계 테스트 보드). 확인 안 된 보드 이름은 학생 이름일 수 있어 싣지 않는다. 호칭이 비면 요청을 받지 않는다(반 이름만 남은 명의 금지). 1인 보드 `(수학)학생명`은 학생 이름이라 쓰지 않고
+  그 학생이 **오늘 다니는** 그 과목 반(내가 맡은 반 우선 — 벨 수신자와 같은 수강 판정, 미래 시작 반 제외) → 모르면 과목 라벨("수학 수진T"). 호칭 = 발송용 이름(0217a) > 표시 이름(보고서 작성자명과 같은 규약). 60자 상한.
+- **자격** = 원장·관리자·매니저 ∪ **학부모 글 벨 수신자와 같은 판정**(원장 2026-09-30 정정: 현재 담당만) — 워커 순수 함수
+  `planNotifyRecipients`·`classWideRecipients`·`finalizeRecipients`([notify-recipients.mjs](../scripts/_classnote/notify-recipients.mjs))를 앱이 **그대로** 부른다
+  ([`reply-eligibility-rule.ts`](../src/features/classnote-reply/reply-eligibility-rule.ts)는 행 → 입력 변환뿐). 수정·삭제 = 작성자 본인 또는 관리자급. 관리자급엔 보호된 계정(`isCurrentUserSuperAdmin`)이 자동 포함된다(decisions/staff.md).
+- **게이트 순서(서버)**: 로그인·학생 아님 → ClassNote 모듈 → 모드 → 발송 스위치 → '다른 강사 뷰'(열람 전용) → 자격 → 연동 PC(살아 있음 + 실게시 + `caps.parentReply`) → 본문·쿨다운 20초 → 감사로그.
+- **워커 안전장치**: ① `--post` + 모듈 + 발송 스위치 ② 모드 가드 — 행의 보드·원아가 허락 밖이면 **ClassNote에 접속(로그인)조차 하지 않는다** ③ 쓰기 직전 원글을 다시 읽어 보드·원아 대조 + 테스트 보드 원아가 전부 `학원*`
+  ④ 게시 직전 댓글을 다시 읽어 **같은 본문의 봇 댓글이 있으면 올리지 않고 성공** ⑤ 게시 뒤 다시 읽어 확인 — 같은 글자가 없으면 **쓰기 전엔 없던 봇 댓글** 중 응답이 준 번호(또는 공백만 다른 것)를 찾는다.
+  응답이 불확실하고(5xx·끊김) 새 댓글도 없을 때만 재시도(3회) — 다시 못 읽으면 쓰지 않는다 ⑥ 수정·삭제는 번호가 같고 학부모 것이 아니며 **내용이 aywa 기록과 같은** 댓글만(누가 ClassNote에서 고쳤으면 손대지 않는다).
+- 🔴 **쓰기 직전 마지막 문 = 허가증**(적대 리뷰 2026-09-30): `evaluateReplyTarget`이 통과시킨 결과(보드·원아·**글 번호**)를 쓰기 함수 `writeComment`·`deleteComment`가 인자로 받아 요청 직전에
+  `assertReplyWritePermit`으로 다시 본다 — 모드는 그 파일의 상수만 읽는다(인자·환경변수·실행 인자로 못 바꾼다). 호출부가 가드를 빼먹거나 다른 글 번호로 쓰려 하면 요청이 나가지 않는다.
+  쓰기 함수를 부르는 파일은 `parent-reply-run.mjs` 하나(가드 테스트 [`parent-reply-run.test.mjs`](../scripts/_classnote/parent-reply-run.test.mjs)가 가짜 ClassNote로 쓰기 경로 전체를 돌리고, 호출 파일·export 목록·뒷문 없음을 잠근다).
+- 🔴 **2xx 뒤 "같은 글자를 못 찾았다 → 다시 게시" 금지**: ClassNote가 본문을 다듬어 저장하면 글자 대조가 빗나가 같은 답글이 세 번 나간다. 2xx + 응답의 댓글 번호면 만들어진 것으로 적는다.
+  반대로 "새로 생긴 봇 댓글이 하나뿐이니 그것"으로 넓히지도 않는다(그 사이 사람이 직접 단 댓글을 내 것으로 적으면 답글은 안 나갔는데 '게시됨'이 된다) — 번호나 글자라는 증거가 있을 때만.
+- **묵은 요청**: 새 답글은 요청한 지 **24시간**이 넘으면 올리지 않는다(발송 스위치를 며칠 내렸다 올리거나 연동 PC가 오래 꺼져 있던 뒤 뒤늦게 나가는 것 방지). '이미 올라가 있나' 확인 **뒤**에 건다 — 수정·삭제엔 걸지 않는다.
+- **같은 본문 유니크와 수정**: 수정이 끝나면 aywa 본문이 바뀌어 유니크에 걸릴 수 있다 → 앱은 다른 답글의 본문·**수정 대기 본문**과 겹치면 받지 않고, 워커는 ClassNote에 접속하기 전에 한 번 더 본다.
+  그래도 기록 단계에서 걸리면(사이에 같은 본문이 들어옴) 던지지 않고 '게시됨 + 사유'로 끝낸다(안 그러면 15분마다 같은 자리에서 멈춘다).
+- **같은 재클릭 키 + 다른 본문**: 응답이 끊긴 뒤 글을 고쳐 다시 보내면 서버는 "앞서 보낸 답글이 이미 접수됐다"고 알린다("이미 요청"으로 성공 처리하면 화면은 고친 글이 나간 줄 안다). 작성기의 키는 **본문에 묶인다**(본문이 바뀌면 새 키). 실패·시간 초과 뒤엔 창이 목록을 다시 읽는다.
+- **API**: 작성 `POST /api/v1_1/reports/{글}/comments/`(없으면 `kapi…/v1_1/reports/{글}/comments`) · 수정 `PATCH …/v1/reports/{글}/comments/{댓글}` · 삭제 `DELETE` 같은 경로 · 목록 `GET /api/v1/reports/{글}/comments/`.
+  같은 출처가 404·405·리다이렉트일 때만 kapi로 넘긴다(그 밖은 이미 만들어졌을 수 있다). 리다이렉트는 따라가지 않는다(POST→GET 오판 방지).
+- 🔴 **dev 단계 하드 가드**: 모드 = 코드 상수 `test`(앱 `REPLY_MODE`·워커 `REPLY_MODE` — 패리티 테스트가 잠근다). 허락 = 보드 `[수학] 테스트반`(#1317083)·`(수학)학원이`(#1291581) **그리고** 원아 5268389.
+  설정 모드(꺼짐/테스트/시범 강사/켜짐, 기본 꺼짐)는 main 반영 단계에서 이 상수 자리를 학원설정으로 바꾸고, `pilot`·`on`에 반 보드 매칭(0302a)·1인 보드 게이트를 `evaluateReplyTarget`에 붙인다(지금은 `mode_not_ready`로 거절).
+- **SQL 전·옛 워커**: 표가 없으면 버튼·면의 답글 칸이 없다([[#95]]). 🔴 표 유무를 `head: true`(HEAD)로 묻지 말 것 — 표가 없을 때의 빈 본문 404를 postgrest-js가 **error 없는 204**로 바꿔 "표 있음"으로 읽힌다([`replyTableReady`](../src/features/classnote-reply/server/reply-data.ts)는 한 줄을 GET한다).
+  발송 스위치가 꺼져 있으면 벨의 '답글 쓰기' 버튼도 세우지 않는다(면은 남는다 — 대기 중 답글을 취소할 자리). 옛 워커(caps 없음)면 앱이 요청을 받지 않는다. 개발 서버에서만 `CLASSNOTE_REPLY_DEV_WORKER=1`로 연동 PC 확인을 건너뛴다(프로덕션 빌드는 읽지 않음).
+- ⚠️ 원문이 빈 학부모 글·댓글(사진·스티커만)은 0184a에 저장되지 않아 답글 버튼이 없다. 학원이는 재원생이 아니라 **벨 알림이 생기지 않는다** — 시험은 '학부모 글·답글' 면에서.
+
 ## 11. 퇴원처리 안전 판정 — aywa 퇴원생을 ClassNote에서 내리기 (Phase 0: 판정+스캔만, 쓰기 0, 2026-07-30)
 
 > **한 줄 규칙: aywa 퇴원생을 ClassNote 명부에서 내리는 건 실질 비가역이다. "누구를 내려도 되는가"를
