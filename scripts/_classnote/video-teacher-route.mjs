@@ -4,6 +4,14 @@ import { resolveTenant } from "./classnote-core.mjs";
 
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
+/**
+ * JJ 반인가 — 반 이름에 `JJ`가 든 개별 진도 반(예 "중등M 개별 JJ2K" · "초등M 초5 JJ1A" · "중등M 중2 JJPS").
+ * 원장 2026-10-01 *"JJ 반을 제외한 해당 학생의 에이와와 매칭되는 담임 이름으로 업로드"* — 수학 수강생 191명 중 127명이 수학 반을
+ * 둘 이상 다니는데 대부분 "정규반 + JJ 반"이다(JJ를 빼면 107명이 반 하나로 좁혀진다). 1인 보드 글에는 어느 반 숙제인지 없어서,
+ * JJ를 빼지 않으면 그 학생들의 영상이 전부 "반이 여러 개"로 보류됐다.
+ */
+export const isJjClass = (className) => /JJ/.test(String(className ?? ""));
+
 /** 이름으로 학생을 추측하지 않는다. 게시 반 우선, 1인 보드는 기존 과목 매핑 사용. */
 export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null }) {
   const studentId = unique(studentIds).length === 1 ? studentIds[0] : null;
@@ -22,6 +30,9 @@ export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds,
     // EIE는 기존 영어 보드 규약. 과목 내 담임이 하나일 때만 사용하고 임의 그룹반 이름은 추측하지 않는다.
     if (!group) return hold("게시 반의 aywa 연결을 확인해야 합니다.");
     matched = classes.filter((c) => group.subjectKeys.includes(c.subject));
+    // JJ 반은 담임 판정에서 뺀다 — 단 그 과목에 JJ 반뿐이면 그 반을 쓴다. 반 보드에 올라온 글(위 linked)은 그 반 그대로다.
+    const regular = matched.filter((c) => !isJjClass(c.class_name));
+    if (regular.length) matched = regular;
   }
   if (!matched.length) return hold("게시 반·과목에 현재 수강 중인 반이 없습니다.");
   const subjects = unique(matched.map((c) => c.subject));
