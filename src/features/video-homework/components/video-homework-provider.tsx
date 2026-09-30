@@ -9,7 +9,6 @@ import { DEFAULT_VIDEO_HOMEWORK_POLICY, isVideoHomeworkEnabled, type VideoHomewo
 
 const STATUS = [
   { value: "submitted", label: "완료", icon: "check", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  { value: "timed", label: "시간 표시", icon: "clock", tone: "border-amber-300 bg-amber-50 text-amber-700" },
   { value: "missing", label: "미제출", icon: "close", tone: "border-rose-300 bg-rose-50 text-rose-700" },
 ] as const;
 

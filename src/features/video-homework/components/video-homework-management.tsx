@@ -7,15 +7,14 @@ import { EmbedHiddenInput } from "@/components/embed-link";
 import type { VideoHomeworkMark, VideoHomeworkStatus } from "../types";
 import type { VideoHomeworkHistoryRow, VideoHomeworkRosterRow } from "../server/queries";
 
-type Filter = "all" | "unchecked" | "submitted" | "timed" | "missing";
+type Filter = "all" | "unchecked" | "submitted" | "missing";
 const PAGE_SIZE = 50;
 const CHOICES = [
   { value: "submitted", label: "완료", symbol: "check", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  { value: "timed", label: "시간 표시", symbol: "clock", tone: "border-amber-300 bg-amber-50 text-amber-700" },
   { value: "missing", label: "미제출", symbol: "close", tone: "border-rose-300 bg-rose-50 text-rose-700" },
 ] as const;
 const STATUS_NAME: Record<VideoHomeworkStatus, string> = {
-  submitted: "완료", timed: "시간 표시", missing: "미제출",
+  submitted: "완료", missing: "미제출",
 };
 const pairKey = (classId: string, studentId: string) => `${classId}:${studentId}`;
 
@@ -66,8 +65,7 @@ function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRo
   const visible = scoped.filter((row) => {
     const status = byPair.get(pairKey(row.classId, row.studentId))?.status;
     return filter === "all" || (filter === "unchecked" && !status) ||
-      (filter === "submitted" && status === "submitted") ||
-      (filter === "timed" && status === "timed") || (filter === "missing" && status === "missing");
+      (filter === "submitted" && status === "submitted") || (filter === "missing" && status === "missing");
   });
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
@@ -75,7 +73,7 @@ function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRo
   const checkedCount = scoped.filter((row) => byPair.has(pairKey(row.classId, row.studentId))).length;
   const submittedCount = scoped.filter((row) => {
     const status = byPair.get(pairKey(row.classId, row.studentId))?.status;
-    return status === "submitted" || status === "timed";
+    return status === "submitted";
   }).length;
 
   return <div className="space-y-4">
@@ -97,7 +95,7 @@ function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRo
         </select>
         <input aria-label="학생 검색" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="학생·반·학교 검색" className="border-line bg-card min-w-40 flex-1 rounded-lg border px-3 py-2 text-sm" />
         <select aria-label="검사 상태" value={filter} onChange={(event) => { setFilter(event.target.value as Filter); setPage(0); }} className="border-line bg-card rounded-lg border px-3 py-2 text-sm">
-          <option value="all">전체 상태</option><option value="unchecked">미확인</option><option value="submitted">완료</option><option value="timed">시간 표시</option><option value="missing">미제출</option>
+          <option value="all">전체 상태</option><option value="unchecked">미확인</option><option value="submitted">완료</option><option value="missing">미제출</option>
         </select>
         <DownloadButton rows={visible} />
       </div>
@@ -203,10 +201,9 @@ function HistoryTable({ rows, history, fromDate, toDate, today }: {
         <span className="text-text-dim text-xs">{visible.length}명·반 · 제출 {completed}/{checked}회 검사</span>
         <button type="button" className="border-line bg-card hover:bg-bg-soft rounded-lg border px-3 py-2 text-xs font-semibold"
           onClick={() => downloadCsv(`eywa-video-homework-summary-${fromDate}-${toDate}.csv`,
-            ["반", "과목", "학생", "학교", "학년", "검사 횟수", "완료", "시간 표시", "미제출", "제출 합계"],
+            ["반", "과목", "학생", "학교", "학년", "검사 횟수", "완료", "미제출", "제출 합계"],
             visible.map(({ row, dates }) => [row.className, row.subject, row.studentName, row.school ?? "", row.grade ?? "",
               dates.length, dates.filter((item) => item.status === "submitted").length,
-              dates.filter((item) => item.status === "timed").length,
               dates.filter((item) => item.status === "missing").length,
               dates.filter((item) => item.status !== "missing").length]))}>집계 CSV</button>
         <button type="button" className="border-line bg-card hover:bg-bg-soft rounded-lg border px-3 py-2 text-xs font-semibold"
@@ -220,14 +217,13 @@ function HistoryTable({ rows, history, fromDate, toDate, today }: {
       <table className="w-full min-w-[650px] border-collapse text-left text-xs">
         <thead className="bg-bg-soft text-text-dim border-line border-b"><tr>
           <th className="px-3 py-3">학생</th><th className="px-3 py-3">반·과목</th><th className="px-3 py-3">검사</th>
-          <th className="px-3 py-3">완료</th><th className="px-3 py-3">시간 표시</th><th className="px-3 py-3">미제출</th><th className="px-3 py-3">날짜별 기록</th>
+          <th className="px-3 py-3">완료</th><th className="px-3 py-3">미제출</th><th className="px-3 py-3">날짜별 기록</th>
         </tr></thead>
         <tbody>{paged.map(({ row, dates }) => <tr key={pairKey(row.classId, row.studentId)} className="border-line border-b last:border-b-0">
           <td className="px-3 py-2"><strong className="block">{row.studentName}</strong><span className="text-text-dim">{row.school} {row.grade}</span></td>
           <td className="px-3 py-2">{row.className} · {row.subject}</td>
           <td className="px-3 py-2 font-semibold">{dates.length}회</td>
           <td className="px-3 py-2 text-emerald-700">{dates.filter((item) => item.status === "submitted").length}회</td>
-          <td className="px-3 py-2 text-amber-700">{dates.filter((item) => item.status === "timed").length}회</td>
           <td className="px-3 py-2 text-rose-700">{dates.filter((item) => item.status === "missing").length}회</td>
           <td className="px-3 py-2"><details><summary className="text-primary cursor-pointer font-semibold">날짜 보기</summary>
             <ul className="mt-1 space-y-1">{dates.map((item) => <li key={item.checkDate}>

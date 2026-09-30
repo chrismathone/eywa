@@ -28,7 +28,7 @@ export async function setVideoHomeworkMark(input: {
   if (input.checkDate > kstToday()) return { ok: false, error: "미래 수업의 숙제는 검사할 수 없습니다." };
   if (input.homeworkDate && input.homeworkDate > input.checkDate)
     return { ok: false, error: "지난 숙제 날짜는 검사일보다 늦을 수 없습니다." };
-  if (input.status !== null && !(["submitted", "timed", "missing"] as const).includes(input.status))
+  if (input.status !== null && !(["submitted", "missing"] as const).includes(input.status))
     return { ok: false, error: "유효하지 않은 상태입니다." };
   const manager = (await accessLevelTenant(user.systemRole, "lesson_reports")) === "full";
   if (!manager) {

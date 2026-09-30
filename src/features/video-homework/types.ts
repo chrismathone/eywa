@@ -1,4 +1,4 @@
-export type VideoHomeworkStatus = "submitted" | "timed" | "missing";
+export type VideoHomeworkStatus = "submitted" | "missing";
 
 export type VideoHomeworkMark = {
   classId: string;
