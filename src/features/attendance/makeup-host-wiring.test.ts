@@ -30,7 +30,8 @@ describe("보강 기록 수업 선택 배선", () => {
   });
 
   it("보고서 저장 훅은 고른 수업을 받아, 그 반에 칸이 이미 있으면 보강 반을 만들지 않는다(시수 두 번 방지)", () => {
-    expect(read("src/features/onescreen/server/actions.ts")).toMatch(/makeupClassId: input\.makeupClassId \?\? null/);
+    // 서버가 확인한 앵커(findMakeupAnchor — 등록 문과 같은 판정)만 훅에 넘긴다(원장 2026-09-30 적대 리뷰: 클라 값을 그대로 믿지 않는다).
+    expect(read("src/features/onescreen/server/actions.ts")).toMatch(/makeupClassId: makeupAnchor,/);
     const pool = read("src/features/attendance/server/makeup-pool.ts");
     const fn = pool.slice(pool.indexOf("export async function ensureMakeupAttendanceForReport"));
     const hostAt = fn.indexOf('.eq("class_id", input.makeupClassId)');
@@ -46,7 +47,8 @@ describe("보강 기록 수업 선택 배선", () => {
     expect(fn).toContain("wanted.has(c.subject)");
     const register = read("src/features/onescreen/server/makeup-register-actions.ts");
     expect(register).toContain("getTeachingClasses(supabase, user.id, input.date)");
-    expect(register).toMatch(/c\.id === entry\.makeupClassId && c\.subject === entry\.subject/);
+    expect(register).toContain("findMakeupAnchor(classes, entry.makeupClassId, entry.subject, input.date)");
+    expect(read("src/features/attendance/makeup-host.ts")).toMatch(/c\.id === classId && c\.subject === subject && isClassOpenOn\(c\.closedAt, date\)/);
     // 보강 반 컬럼(is_makeup_pool)을 새로 읽지 않는다([[#95]]) — getTeachingClasses가 활성 반만 준다.
     expect(fn).not.toContain("is_makeup_pool");
   });

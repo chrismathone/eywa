@@ -35,6 +35,7 @@ import {
   blockedForNoSendClass,
   classBoardLiveForStudent,
   loadSendClassCandidates,
+  reportMakeupClassId,
   resolveSendClass,
 } from "@/features/onescreen/server/send-class";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -225,6 +226,10 @@ export async function saveAndQueueAdminReport(
   error?: string;
   /** status="needs_class"일 때 — 고를 수 있는 반. */
   candidates?: { id: string; name: string }[];
+  /** status="needs_class"일 때 — 처음 골라 둘 반(메인 수업). */
+  defaultClassId?: string | null;
+  /** status="needs_class"일 때 — 보강 추가한 반인데 반 보드가 없어 다른 반으로 가야 한다(경고). */
+  makeupClassName?: string | null;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -319,6 +324,7 @@ export async function saveAndQueueAdminReport(
   const shownTeacher = input.teacherName?.trim() || user.displayName; // 워커가 경로를 보는 teacher_name과 같은 값(upsertAdminReport)
   const routeApplies = classRouteActive(settings, shownTeacher);
   let sendClassId: string | null = null;
+  let sendClassVia: string | null = null;
   {
     const classLive =
       routeApplies && classId && SEND_CLASS_SUBJECTS.has(input.subject)
@@ -349,13 +355,15 @@ export async function saveAndQueueAdminReport(
       let pick: Awaited<ReturnType<typeof resolveSendClass>>;
       try {
         // 보고서에 반이 있는데 그 반 보드가 없으면 자동으로 다른 반에 보내지 않는다 — 관리자가 고른다.
+        // 🔴 강사가 원스크린에서 보강으로 추가해 둔 행이면 그 보강 반(0171a)에 반 보드가 있을 때 그 반으로(원장 2026-09-30).
+        const makeupClassId = classId ? null : await reportMakeupClassId(user.tenantId, { reportId: saved.id });
         pick = await resolveSendClass(
           user.tenantId,
           input.studentId,
           reportDate,
           input.classnoteClassId ?? null,
           { userId: user.id, restrict: false },
-          { autoPick: !classId },
+          { autoPick: !classId, makeupClassId },
         );
       } catch {
         await unqueue();
@@ -364,7 +372,18 @@ export async function saveAndQueueAdminReport(
       if (!pick.ok) {
         await unqueue();
         return pick.reason === "choose"
-          ? { ok: false, id: saved.id, shareToken: saved.shareToken, status: "needs_class", candidates: pick.candidates, error: "보낼 반을 골라 주세요 — 저장은 됐습니다" }
+          ? {
+              ok: false,
+              id: saved.id,
+              shareToken: saved.shareToken,
+              status: "needs_class",
+              candidates: pick.candidates,
+              defaultClassId: pick.defaultId,
+              makeupClassName: pick.makeupClass?.name || null,
+              error: pick.makeupClass
+                ? `보강 추가한 반(${pick.makeupClass.name || "이름 없음"})은 이 학생의 ClassNote 반 보드가 없습니다 — 보낼 반을 골라 주세요(저장은 됐습니다)`
+                : "보낼 반을 골라 주세요 — 저장은 됐습니다",
+            }
           : { ok: false, id: saved.id, shareToken: saved.shareToken, status: "no_class", error: NO_SEND_CLASS_ERROR };
       }
       const { error: scErr } = await supabase.from("lesson_reports").update({ classnote_class_id: pick.classId }).eq("id", saved.id);
@@ -373,6 +392,7 @@ export async function saveAndQueueAdminReport(
         return { ok: false, id: saved.id, shareToken: saved.shareToken, error: "보낼 반을 저장하지 못해 발송하지 않았습니다 — 저장은 됐습니다" };
       }
       sendClassId = pick.classId;
+      sendClassVia = pick.via;
     }
   }
   // too_old(전 달 1일 이전) 아니면 queued. 오늘 저장은 항상 통과하나 규약상 명시.
@@ -398,7 +418,7 @@ export async function saveAndQueueAdminReport(
       date: reportDate,
       subject: input.subject,
       classId,
-      ...(sendClassId ? { sendClassId } : {}),
+      ...(sendClassId ? { sendClassId, sendClassVia } : {}),
       via: "admin_compose",
       status: allowed ? "queued" : "too_old",
     },
@@ -663,6 +683,8 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
    * ⚠️ 본문(notes)은 담지 않는다(학부모에게 나간 문장 자체는 lesson_reports 행에 그대로 있다).
    */
   let bulkLogged = false;
+  // 보강 반으로 '보낼 반'을 적은 행(감사로그 · logBulkSend가 읽으니 그보다 먼저 선언 — 원장 2026-09-30).
+  const gateOut = { rewritten: [] as string[] };
   const logBulkSend = async (failed?: string) => {
     if (bulkLogged || authored.length === 0) return;
     bulkLogged = true;
@@ -687,6 +709,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
         conflicts,
         tooOld,
         ...(noClass ? { noClass } : {}),
+        ...(gateOut.rewritten.length ? { makeupRewritten: gateOut.rewritten.slice(0, 50) } : {}),
         skippedExisting,
         absent,
         subjectOff,
@@ -716,7 +739,7 @@ export async function sendBulkAdminReports(input: BulkAdminReportInput): Promise
   const routeRows = authored.filter((r) => !conflicted.has(r.student_id) && isSendClassRouteRow(settings, r));
   let noClassIds: Set<string>;
   try {
-    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow));
+    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow), gateOut);
   } catch {
     noClassIds = new Set(routeRows.map((r) => r.id));
   }
@@ -905,6 +928,10 @@ export async function getAdminSendClassOptions(args: {
   candidates?: { id: string; name: string }[];
   defaultId?: string | null;
   blockedReason?: string | null;
+  /** 보강 추가한 반(0171a)으로 간다 — `needed=false`와 함께(`reportClassName` = 그 반). */
+  viaMakeup?: boolean;
+  /** 보강 추가한 반인데 이 학생의 반 보드가 없어 다른 반으로 가야 한다 — 그 반 이름(경고 한 줄). */
+  makeupClassName?: string | null;
   error?: string;
 }> {
   const user = await getCurrentUser();
@@ -936,11 +963,29 @@ export async function getAdminSendClassOptions(args: {
       return { ok: true, applies: true, needed: false, reportClassName };
     }
     const teacher = { userId: user.id, restrict: false };
-    const candidates = await loadSendClassCandidates(user.tenantId, args.studentId, reportDate, teacher);
-    if (!candidates.length) return { ok: true, applies: true, needed: true, candidates: [], defaultId: null, blockedReason: NO_SEND_CLASS_ERROR };
+    // 강사가 원스크린에서 보강으로 추가해 둔 같은 행(반 없음)이면 그 보강 반 — 발송(saveAndQueueAdminReport)과 같은 판정.
+    const makeupClassId = classId
+      ? null
+      : await reportMakeupClassId(user.tenantId, { studentId: args.studentId, reportDate, subject: args.subject });
     // 기본값 = 메인 수업 — 반 없는 보강만. 보고서에 반이 있는데 그 반 보드가 없으면 기본값을 두지 않는다(자동으로 다른 반 금지).
-    const main = await resolveSendClass(user.tenantId, args.studentId, reportDate, null, teacher, { autoPick: !classId });
-    return { ok: true, applies: true, needed: true, candidates, defaultId: main.ok ? main.classId : null, blockedReason: null };
+    const main = await resolveSendClass(user.tenantId, args.studentId, reportDate, null, teacher, { autoPick: !classId, makeupClassId });
+    if (main.ok && main.via === "makeup") {
+      const { data } = await supabase.from("classes").select("class_name").eq("id", main.classId).maybeSingle();
+      return { ok: true, applies: true, needed: false, viaMakeup: true, reportClassName: (data?.class_name as string | undefined) ?? null };
+    }
+    const makeupClassName = main.ok ? null : main.makeupClass?.name || null;
+    const candidates = main.ok ? await loadSendClassCandidates(user.tenantId, args.studentId, reportDate, teacher) : main.candidates;
+    if (!candidates.length)
+      return { ok: true, applies: true, needed: true, candidates: [], defaultId: null, blockedReason: NO_SEND_CLASS_ERROR, makeupClassName };
+    return {
+      ok: true,
+      applies: true,
+      needed: true,
+      candidates,
+      defaultId: main.ok ? main.classId : main.defaultId,
+      blockedReason: null,
+      makeupClassName,
+    };
   } catch {
     return { ok: false, error: "보낼 반을 확인하지 못했습니다 — 다시 시도해 주세요" };
   }

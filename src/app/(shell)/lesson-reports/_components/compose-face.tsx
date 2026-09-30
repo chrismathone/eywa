@@ -113,6 +113,8 @@ export function ComposeFace({
                 candidates: res.candidates ?? [],
                 defaultId: res.defaultId ?? null,
                 blockedReason: res.blockedReason ?? null,
+                viaMakeup: !!res.viaMakeup,
+                makeupClassName: res.makeupClassName ?? null,
               }
             : null;
           setSendOpt(opt);
@@ -373,8 +375,16 @@ export function ComposeFace({
     if (!res.ok) {
       // 서버가 보낼 반을 다시 물으면(후보가 바뀜 등) 목록을 새로 채운다 — 저장은 이미 됐다.
       if (res.status === "needs_class" && res.candidates?.length && sendOpt) {
-        setSendOpt({ ...sendOpt, needed: true, candidates: res.candidates, blockedReason: null });
-        setSendClassId("");
+        setSendOpt({
+          ...sendOpt,
+          needed: true,
+          viaMakeup: false,
+          candidates: res.candidates,
+          defaultId: res.defaultClassId ?? null,
+          makeupClassName: res.makeupClassName ?? null,
+          blockedReason: null,
+        });
+        setSendClassId(res.defaultClassId && res.candidates.some((c) => c.id === res.defaultClassId) ? res.defaultClassId : "");
       }
       toast.error(res.error ?? "발송에 실패했습니다");
       return;

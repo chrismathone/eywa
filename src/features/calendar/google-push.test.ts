@@ -134,7 +134,9 @@ describe("배선 가드", () => {
     }
   });
   it("크론이 채널을 연다 · 표가 없으면 조용히 꺼진다(#95)", () => {
-    expect(read("src/app/api/cron/google-calendar-import/route.ts")).toMatch(/ensureCalendarChannels\(/);
+    // 크론 본체는 google-cron.ts(새벽 한 번, 가볍게) — 라우트는 그 함수를 부른다.
+    expect(read("src/app/api/cron/google-calendar-import/route.ts")).toMatch(/runCalendarCronLight\(/);
+    expect(read("src/features/calendar/server/google-cron.ts")).toMatch(/ensureCalendarChannels\(/);
     expect(read("src/features/calendar/server/sync-state.ts")).toMatch(/isMissingTable/);
   });
   it("🔴 전체 임포트도 증분과 같은 잠금(acquireLock)을 잡는다 — 겹치면 같은 일정 삽입이 부딪힌다", () => {
@@ -145,7 +147,8 @@ describe("배선 가드", () => {
   });
   it("🔴 바뀐 게 0건이면 시작점을 옮기지 않는다 · 취소는 시리즈 회차까지 지운다", () => {
     const src = read("src/features/calendar/server/google-incremental.ts");
-    expect(src).toMatch(/events\.length === 0\) return \{ ok: true, advance: false/);
+    // 웹훅 경로엔 advanceOnEmpty가 없다(새벽 크론만 넘긴다 — cron-plan.test.ts 가드).
+    expect(src).toMatch(/events\.length === 0\) return \{ ok: true, advance: opts\.advanceOnEmpty === true/);
     expect(src).toMatch(/expandCancelledSeries\(/);
   });
   it("🔴 잠금은 내 표식일 때만 푼다(5분 뒤 남이 가져간 잠금을 풀지 않게)", () => {

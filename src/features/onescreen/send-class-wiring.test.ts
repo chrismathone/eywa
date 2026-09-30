@@ -26,7 +26,7 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
     expect(BATCH).toContain("isSendClassRouteRow(settings"); // = classRouteActive + 수학(send-class.ts)
     expect(BATCH.match(/blockedForNoSendClass\(user\.tenantId/g)?.length).toBe(3);
     // 대량 작성(sendBulkAdminReports)도 같은 게이트.
-    expect(COMPOSE).toContain("blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow))");
+    expect(COMPOSE).toContain("blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow), gateOut)");
     expect(ONESCREEN).not.toContain("classRouteAppliesTo(settings.report");
   });
 
@@ -44,8 +44,42 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
   });
 
   it("보고서에 반이 있는데 반 보드가 없으면 메인 수업을 자동으로 고르지 않는다(autoPick)", () => {
-    expect(ONESCREEN).toContain("{ autoPick: !input.classId }");
-    expect(COMPOSE).toContain("{ autoPick: !classId }");
+    expect(ONESCREEN).toContain("{ autoPick: !input.classId, makeupClassId:");
+    expect(COMPOSE).toContain("{ autoPick: !classId, makeupClassId }");
+  });
+
+  it("🔴 보강 추가한 반(makeup_class_id)이 먼저 — 원스크린·관리자 직접 작성·일괄 게이트·워커가 모두 본다(원장 2026-09-30)", () => {
+    // 원스크린 = saveLessonReport가 확인해 **저장한** 앵커(클라 값을 그대로 믿지 않는다 — 등록 문과 같은 findMakeupAnchor)
+    expect(ONESCREEN).toContain("{ autoPick: !input.classId, makeupClassId: saved.makeupClassId ?? null }");
+    expect(ONESCREEN).toContain("findMakeupAnchor(teaching, wantedAnchor, input.subject, reportDate)");
+    expect(ONESCREEN).toContain("makeup_class_id: makeupAnchor,");
+    // 관리자 직접 작성 = 강사가 보강으로 추가해 둔 같은 행의 앵커(발송·반 고르기 재료 둘 다)
+    expect(COMPOSE.match(/reportMakeupClassId\(user\.tenantId/g)?.length).toBe(2);
+    const server = read("src/features/onescreen/server/send-class.ts");
+    expect(server).toContain("decideSendClass(");
+    expect(server).toContain('.select("id, classnote_class_id, makeup_class_id, classnote_sent_at")'); // 일괄 게이트
+    expect(server).toContain("sendClassGateRow(");
+    expect(server).toContain('.is("classnote_sent_at", null)'); // 게시된 행의 '보낼 반'을 덮지 않는다
+    // 일괄 경로 넷 모두 적은 행을 감사로그에
+    expect(BATCH.match(/makeupRewritten/g)?.length).toBe(3);
+    expect(COMPOSE).toContain("makeupRewritten");
+    const core = read("scripts/_classnote/classnote-core.mjs");
+    expect(core).toContain("lr.makeup_class_id");
+    expect(core).toContain("makeupEligible");
+    // 🔴 보강 반 조회 실패는 대상 아님 · '보낼 반'은 게시 뒤에만, 비어 있을 때만 적는다
+    expect(core).toContain("isClassRouteEligible(sql, tenant, r.makeup_class_id, r.student_id).catch(() => false)");
+    expect(core).toContain("and classnote_class_id is null");
+    // 회수 = 보고서 반·보낼 반·보강 반 전부
+    const recall = read("scripts/_classnote/classnote-recall-core.mjs");
+    expect(recall).toContain("select classnote_class_id, makeup_class_id from lesson_reports");
+    expect(recall).toContain("classLocs,");
+  });
+
+  it("🔴 다른 반으로 갈 때는 경고와 함께 묻는다 — 화면이 경고 재료를 받는다", () => {
+    expect(ONESCREEN).toContain("makeupClassName: pick.makeupClass?.name || null");
+    expect(COMPOSE).toContain("makeupClassName: pick.makeupClass?.name || null");
+    const dialog = read("src/features/onescreen/components/send-class-dialog.tsx");
+    expect(dialog).toContain('"os.sendClass.makeupMismatch"');
   });
 
   it("🔴 워커 판정도 '연결 + 그 학생 ok 멤버' — 앱과 한 규칙", () => {

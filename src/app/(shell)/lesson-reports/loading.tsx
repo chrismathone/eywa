@@ -2,7 +2,7 @@
 // Next가 이 loading을 Suspense fallback으로 즉시 스트리밍(창=iframe 첫 페인트 빈 화면 방지, B7).
 export default function LessonReportsLoading() {
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       {/* PageHeader 근사 스켈레톤 — 실제 헤더처럼 [.embed-main_&] CSS 변형으로 창=컴팩트 1줄 /
           최상위=풀 3줄을 가른다(높이 불일치 = 로드 완료 시 본문 점프, 적대 리뷰). loading.tsx는
           요청 컨텍스트를 못 읽지만 마커는 지속 layout <main> 클래스라 CSS만으로 정합. */}

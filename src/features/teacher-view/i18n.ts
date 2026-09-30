@@ -3129,6 +3129,11 @@ export const SHEET_DICT = {
     ko: "반 정보가 없는 보강 보고서입니다. ClassNote의 어느 반으로 보낼지 골라 주세요.",
     en: "This make-up report has no class. Choose which ClassNote class to send it to.",
   },
+  // 보강 추가한 반에 이 학생의 ClassNote 반 보드가 없어 다른 반으로 보낼 때(원장 2026-09-30 — 다른 반으로 가면 알린다).
+  "os.sendClass.makeupMismatch": {
+    ko: "보강 추가한 반({name})은 이 학생의 ClassNote 반 보드가 없어 다른 반으로 보냅니다.",
+    en: "The make-up class ({name}) has no ClassNote board for this student, so the report goes to another class.",
+  },
   "os.sendClass.send": { ko: "이 반으로 보내기", en: "Send to this class" },
   "os.sendClass.cancel": { ko: "보내지 않기", en: "Don't send" },
   "os.crop.title": { ko: "사진 자르기", en: "Crop the photo" },
