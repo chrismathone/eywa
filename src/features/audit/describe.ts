@@ -957,9 +957,18 @@ export function auditDetail(
           return `${field} ${str(o.from) ?? "없음"} → ${str(o.to) ?? "없음"}`;
         })
         .filter((v): v is string => !!v);
-      if (parts.length > 0) return `변경: ${parts.join(" · ")}`;
+      // 예약 적용이 규칙 때문에 건너뛴 항목(2026-09-30 — ClassNote 보드 이름 모양의 반 이름).
+      const skipped = (Array.isArray(m.skipped) ? m.skipped : [])
+        .map((c) => {
+          if (!c || typeof c !== "object") return null;
+          const o = c as Meta;
+          const field = str(o.field);
+          return field ? `${field} ${str(o.to) ?? ""} 적용 안 함(${str(o.reason) ?? "규칙 위반"})` : null;
+        })
+        .filter((v): v is string => !!v);
       const fields = Array.isArray(m.changed) ? m.changed.filter((v): v is string => typeof v === "string") : [];
-      return fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
+      const head = parts.length > 0 ? `변경: ${parts.join(" · ")}` : fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
+      return join(head, skipped.length ? skipped.join(" · ") : null);
     }
     case "class_handover_schedule": {
       const n = ctx.nameOf(m.newTeacherId);

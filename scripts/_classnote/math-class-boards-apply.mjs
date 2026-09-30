@@ -6,6 +6,8 @@
 // 🔴 해제(원아·선생님)는 하지 않는다 — ClassNote API가 막았다(405). 되돌리기는 ClassNote 화면에서 손으로.
 import { CLASSNOTE_BASE, createBoard, dismissHonorificDialog, enrollChild, fetchBoardChildren, fetchBoards } from "./classnote-admin-core.mjs";
 import { personalBoardId } from "./math-class-boards-load.mjs";
+import { normBoard } from "./board-safety.mjs";
+import { reservedBoardName } from "./class-board-plan.mjs";
 
 export class ClassBoardStop extends Error {}
 
@@ -42,31 +44,56 @@ export async function applyClassBoardPlans({ page, centerId, targets, boards, me
 
   const out = [];
   for (const p of targets) {
-    const entry = { className: p.className, boardId: p.board.id ?? null, created: false, renamed: null, enrolled: [], held: p.hold.length };
+    const entry = { classId: p.classId, className: p.className, boardId: p.board.id ?? null, created: false, renamed: null, enrolled: [], held: p.hold.length, skipped: null };
     out.push(entry);
     let boardId = p.board.id ?? null;
 
+    // 🔑 이름 검증 실패는 **그 반만** 보류한다(개명 감사 G8) — 전에는 한 반의 생성·개명 검증 실패가 ClassBoardStop으로
+    //    동기화 전체(다른 반 신입 배정·0302a 기록)를 매일 멈췄다. 원아 대조 실패는 여전히 전체를 멈춘다(오배정 위험).
     if (p.board.action === "create") {
       const before = await fetchBoards(page, centerId);
-      if (before.some((b) => b.name === p.className)) throw new ClassBoardStop(`${p.className}: 그 사이 같은 이름 보드가 생겼다 — 중단(계획 다시)`);
+      if (before.some((b) => b.name === p.className)) {
+        entry.skipped = "그 사이 같은 이름 보드가 생겼다 — 내일 다시 계획";
+        log(`  ⛔ ${p.className}: ${entry.skipped}`);
+        continue;
+      }
       await page.goto(`${CLASSNOTE_BASE}/service/setting/class`, { waitUntil: "domcontentloaded", timeout: 30000 });
       await page.waitForTimeout(2500);
       await dismissHonorificDialog(page);
       const res = await createBoard(page, p.className);
       const after = await fetchBoards(page, centerId);
       const added = after.filter((b) => !before.some((x) => x.id === b.id));
-      if (!res.ok || added.length !== 1 || added[0].name !== p.className || after.length !== before.length + 1)
-        throw new ClassBoardStop(`${p.className}: 반 생성 검증 실패 — ${res.reason ?? ""} · 새 보드 ${added.map((b) => JSON.stringify(b.name)).join(", ") || "없음"}`);
+      // 여러 개가 새로 생겼다 = 누가 동시에 만들고 있다 — 어느 게 우리 것인지 모르니 전체를 멈춘다.
+      if (added.length > 1 || after.length > before.length + 1)
+        throw new ClassBoardStop(`${p.className}: 반 생성 중 보드가 ${added.length}개 늘었다 — 중단(사람 확인)`);
+      if (added.length === 0) {
+        entry.skipped = `반 생성 실패 — ${res.reason ?? "새 보드 없음"}`;
+        log(`  ⛔ ${p.className}: ${entry.skipped}`);
+        continue;
+      }
+      // 🔴 새 보드는 **확인된 것만** 이 반으로 연결·배정한다 — 응답 성공 + 이름이 (공백만 빼고) 같음 + 예약된 모양 아님.
+      //    아니면 그 반만 보류하고 원아를 넣지 않는다(확인 안 된 보드에 가족을 넣지 않는다). 만들어진 보드는 사람이 본다.
+      const madeName = added[0].name;
+      if (!res.ok || normBoard(madeName) !== normBoard(p.className) || reservedBoardName(madeName)) {
+        entry.skipped = `반 생성 결과를 확인하지 못해 보류 — 새 보드 #${added[0].id} ${JSON.stringify(madeName)}(ClassNote에서 확인 필요)`;
+        log(`  ⛔ ${p.className}: ${entry.skipped}`);
+        continue;
+      }
       boardId = added[0].id;
       entry.created = true;
+      if (madeName !== p.className) log(`  ⚠️ ${p.className}: ClassNote 이름이 ${JSON.stringify(madeName)}(공백만 다름) — 번호(#${boardId})로 연결합니다`);
       log(`  반 생성 ${p.className} #${boardId}`);
     } else if (p.board.rename) {
       const st = await renameBoard(page, centerId, boardId, p.board.rename.to);
       const now = (await fetchBoards(page, centerId)).find((b) => b.id === boardId)?.name;
-      if (st !== 200 || now !== p.board.rename.to)
-        throw new ClassBoardStop(`${p.board.rename.from} → ${p.board.rename.to}: 반 이름 변경 검증 실패(HTTP ${st} · 지금 ${JSON.stringify(now)})`);
-      entry.renamed = p.board.rename.from;
-      log(`  반 이름 변경 ${JSON.stringify(p.board.rename.from)} → ${JSON.stringify(p.board.rename.to)}`);
+      if (st !== 200 || now !== p.board.rename.to) {
+        // 이름만 못 바꿨다 — 연결(번호)은 그대로라 발송은 계속된다. 원아 배정은 이어서 한다.
+        entry.renameFailed = `HTTP ${st} · 지금 ${JSON.stringify(now)}`;
+        log(`  ⚠️ ${JSON.stringify(p.board.rename.from)} → ${JSON.stringify(p.board.rename.to)}: 반 이름 변경 실패(${entry.renameFailed}) — 연결된 보드로 계속 보냅니다`);
+      } else {
+        entry.renamed = p.board.rename.from;
+        log(`  반 이름 변경 ${JSON.stringify(p.board.rename.from)} → ${JSON.stringify(p.board.rename.to)}`);
+      }
     }
     entry.boardId = boardId;
 

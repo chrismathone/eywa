@@ -232,6 +232,14 @@ describe("auditDetail — 액션별 한글 상세", () => {
     expect(auditDetail("class_update", { changed: ["강의실"] }, ctx())).toBe("변경: 강의실");
   });
 
+  it("class_update: 예약 적용이 규칙 때문에 건너뛴 반 이름은 이유와 함께 적는다(2026-09-30)", () => {
+    const skipped = [{ field: "반 이름", to: "(수학)홍길동", reason: "개인 보드 이름과 겹침" }];
+    expect(auditDetail("class_update", { changed: [], changes: [], skipped }, ctx())).toBe("반 이름 (수학)홍길동 적용 안 함(개인 보드 이름과 겹침)");
+    const withChange = auditDetail("class_update", { changes: [{ field: "강의실", from: "302", to: "303" }], skipped }, ctx());
+    expect(withChange).toContain("변경: 강의실 302 → 303");
+    expect(withChange).toContain("적용 안 함");
+  });
+
   it("🔴 미등록 액션 폴백은 영문 키·값을 내보내지 않는다(2026-08-20 정책 변경)", () => {
     // 종전엔 `foo: bar`를 그대로 뱉었다 — 감사 화면 raw 코드 노출의 뿌리. 이제 모르는 키는 숨긴다
     // (원문 JSON은 뷰어 title 툴팁이 항상 보존).

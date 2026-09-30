@@ -656,7 +656,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 | 계획(순수) | [`class-board-plan.mjs`](../scripts/_classnote/class-board-plan.mjs) | 가드 ①1인 보드 원아만 ②보호자 전화(운영관리 carer1 ↔ aywa 4칸) ③생년 ±1 ④역방향 유일성 ⑤같은 반 기본이름 겹침 = 보류 ⑥이름 연속성(형제 계정). 전부 AND, 모르면 보류 |
 | 생성·배정 | [`provision-math-class-boards.mjs`](../scripts/_classnote/provision-math-class-boards.mjs) | 드라이런 기본 · `--apply --only --limit` · 반마다 원아 정확히 대조 · 끝에 1인 보드 무변경 확인 · `--sync-db` = 0302a 기록 |
 | 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
-| 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 제외** · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고) |
+| 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 포함**(2026-09-30) · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고 — 이미 연결된 종강 반은 보드가 살아 있는 동안 연결 유지) |
 | 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 보고서 설정 `classnoteMathRoute` personal/class/pilot · 반별 = 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
 | 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 해제 필요는 로그만 |
 | C.N 라벨 | [`classnote-match.ts`](../src/features/onescreen/classnote-match.ts) · [`cn-badge.tsx`](../src/features/onescreen/components/cn-badge.tsx) | 원스크린 카드·표 모드. 초록 = 확인된 배정 |
@@ -667,9 +667,26 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - 🔴 **`"보드가 곧 매핑"` 폴백(`acceptBoardMembers`)은 반 보드 경로에서 절대 타지 않는다** — 생년만 보므로 같은 학년 반이면 전원이 통과한다(`sendReportViaApi targets`).
 - 🔴 회수(`classnote-recall-core.mjs`)는 1인 보드 **와** 반 보드를 함께 훑는다 — 한쪽만 보면 '이미 없습니다'로 거짓 성공.
 - 반 정보 없는 보강 보고서 = A안(0303a `classnote_class_id`) — `saveAndQueueClassnote`가 메인 수업(보낸 보고서 최다 → 출결 최다)을 정해 적고, 못 정하면 `needs_class`로 멈춰 원스크린이 고르게 한다. 그 칸이 빈 행(관리자 재발송 등)은 워커가 기존 1인 보드로 보낸다.
-- 학부모 **새 글·댓글 벨 알림**: 반 보드 글은 `보드명|원아id` → 학생(0302a ok)으로 확정한다(`loadClassBoardChildMap`). 🔴 1인 보드 게이트(`gateBoard`)를 반 보드에 태우지 말 것(보드 = 한 학생 전제).
+- 학부모 **새 글·댓글 벨 알림**: 반 보드 글은 `보드번호(cls)|원아id` → 학생(0302a ok)으로 확정한다(`loadClassBoardChildMap` · [`class-board-keys.mjs`](../scripts/_classnote/class-board-keys.mjs)). 보드명 키는 번호 없는 글의 폴백뿐(2026-09-30 — 반 이름이 바뀐 날 보드명 키는 짝을 못 찾아 알림이 조용히 버려졌다). 조회 실패는 throw(워터마크 안 전진). 🔴 1인 보드 게이트(`gateBoard`)를 반 보드에 태우지 말 것(보드 = 한 학생 전제).
 - 🔴 반 단체 공지 API `POST /api/v1_2/notices/`(www로도 됨)는 `classes_to`가 **필수가 아니다**(빈 요청 검증 응답에 없음) — 빠지면 기관 전체 공지일 수 있다. 발송 코드는 비었거나 허용 밖 반이면 무조건 차단.
 - 반 단체 공지 레일 = 0304a `classnote_class_notices`(쓰기 서버만) → [`classnote-class-notice-core.mjs`](../scripts/_classnote/classnote-class-notice-core.mjs): 보드 번호 재조회(0302a) · 보드 원아 ⊆ 그 반 재원생 ok 원아(반을 옮긴 학생이 남아 있으면 보류 — 해제는 손으로) · 요청은 [`class-notice-guard.mjs`](../scripts/_classnote/class-notice-guard.mjs)로만 조립 · 중복 게시 생략 · 게시 후 `is_center_notice` 확인. 원생 개별 공지(0099a)는 그대로.
+
+### 10.6 반 이름 변경 대비 — 개명 감사(2026-09-30)
+
+원장 *"클래스노트 발송중에 에이와가 반이름이 바뀌어서 동기화 전이면? 모든 가능성에 대비"* → 적대 감사 후 전부 수리.
+발송은 원래도 **번호**(`class_id`→`board_id`)로 가서 개명 자체로 남의 집에 가는 길은 없었다. 구멍은 **동기화가 이름 충돌을 만나면 연결을 지우던 설계**에서 이어졌다.
+
+| # | 구멍 | 고침 |
+|---|---|---|
+| G1 | 연결된 반의 새 이름이 다른 보드와 겹치면 연결·멤버를 지웠다(→ 다음 날 이름으로 엉뚱한 보드 채택·보드 중복) | 연결은 **지킨다**(`renameBlocked`, 번호로 계속 발송) — 이름만 안 바꾸고 로그 |
+| G7 | 공백만 바꾼 개명("중3 A"→"중3A")이 **자기 보드**와 '공백만 다름'으로 걸려 영구 보류 | 충돌 판정에서 연결된 자기 보드 제외 |
+| G2 | 연결 없는 반이 같은 이름 보드를 **원아 확인 없이** 채택(폐지 반 옛 보드·사람이 만든 보드·`(수학)이름` 모양) | 채택 전 그 보드 원아 ⊆ 이 반 가족 확인, 아니면 보류 · `(…)`·`[ALL]` 모양은 반 보드로 안 씀(`reservedBoardName`) · 앱도 그런 반 이름을 저장 거부(`reservedClassNameReason` — 반 수정·예약 적용 cron·엑셀·레벨 변경) |
+| G3 | 게시 전·실패 후 중복 확인이 **보드까지** 맞춰야 일치 — 그 사이 경로가 바뀌면 같은 집에 한 번 더 | 중복 확인은 원아 + 공유 링크(옛·새 주소)만(`findChildReportId` `cls:null`) |
+| G4 | 학부모 글·댓글 벨이 `보드명|원아` 키 — 개명 당일 조용히 버려짐, 조회 실패도 삼킴 | 보드 번호 키 + 실패 throw(워터마크 안 전진) |
+| G8 | 반 하나의 생성·개명 검증 실패가 **동기화 전체**를 매일 멈춤 | 그 반만 보류하고 나머지·기록은 계속 · 새 보드는 응답 성공 + 이름(공백만 무시) 일치 + 예약 모양 아님일 때만 번호로 연결, 아니면 그 반 보류(확인 안 된 보드에 원아를 넣지 않는다) · 예약 적용 cron이 규칙 때문에 건너뛴 반 이름은 감사로그(`skipped`)·표식(`skippedNames`)에 이유와 함께 |
+| G9 | 동기화의 연결표 조회가 실패를 빈 지도로 삼킴 → 이름으로 후퇴 | `loadLinkedBoards` 기본값 strict |
+| G5 | 1인 보드 레일의 동명이인 방어가 생년뿐(같은 학년 동명이인 통과) | 모호한 이름이면 보호자 전화도 대조 — **확실히 다를 때만** 보류(`homonym-phone-gate.mjs`, 모르면 종전대로 · 안은지·박세욱 2계정은 통과 · '발송 보류 예외' 등재 보드는 건너뜀 = 사람 판단이 최종) |
+| G6 | PC 두 대가 같은 지점을 돌면 게시 중인 행을 되살려 중복 게시 가능(stale 10분 = 게시 상한 10분) | 하트비트 표를 임대로 — 실게시 PC는 지점당 한 대(먼저 시작한 PC, **DB 시계로** 180초 무응답이면 이어받음, 하트비트는 폴과 따로 30초마다 갱신 · 같은 PC 두 번째 창은 잠금 파일 `worker.lock`, `worker-lease.mjs`) · stale·멈춤복구 15분 + **게시 직전 처리 시각 갱신**(되살아난 행이면 게시 생략) |
 
 ## 11. 퇴원처리 안전 판정 — aywa 퇴원생을 ClassNote에서 내리기 (Phase 0: 판정+스캔만, 쓰기 0, 2026-07-30)
 

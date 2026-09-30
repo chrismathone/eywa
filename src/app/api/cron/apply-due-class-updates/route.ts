@@ -17,7 +17,7 @@ import {
 import { readScheduledGroupPlan } from "@/features/timetable/scheduled-groups";
 import { applyScheduledGroupPlan } from "@/features/owner/server/scheduled-groups";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
-import { normalizeClassName } from "@/features/classes/class-name";
+import { normalizeClassName, reservedClassNameReason } from "@/features/classes/class-name";
 
 /**
  * 예약 적용이 미뤄 둔 **담임·기본 강의실·반 이름·통합뷰 그룹 배치**를 기한이 된 날 반영하는 cron.
@@ -105,6 +105,8 @@ export async function GET(req: Request) {
   for (const snap of due) {
     const tenantId = rows.find((r) => r.id === snap.snapshotId)!.tenant_id;
     let appliedHere = 0;
+    // 적용하지 않은 반 이름(규칙 위반) — 표식·감사로그에 **이유와 함께** 남긴다(조용히 '적용됨'으로 넘기지 않는다).
+    const skippedNames: { classId: string; name: string; reason: string }[] = [];
     for (const u of snap.updates) {
       if (!u?.classId) continue;
       // 현재 값을 읽어 "예약 시점 그대로인가"를 본다 — 사람이 손댄 반은 그대로 둔다.
@@ -126,12 +128,34 @@ export async function GET(req: Request) {
         patch.classroom_id = u.classroomId!;
         changes.push({ field: "강의실", from: cur.classroom_id, to: u.classroomId! });
       }
-      if (shouldApplyName(u, cur.class_name) && normalizeClassName(u.className)) {
+      // 예약 당시엔 없던 규칙(2026-09-30)에 걸리는 이름은 적용하지 않는다 — ClassNote 1인 보드·전체방 이름과 겹친다.
+      // 담임·강의실은 그대로 적용하고, 이름만 빠진 사실을 감사로그(`skipped`)·표식에 이유와 함께 남긴다.
+      const reservedName = shouldApplyName(u, cur.class_name) ? reservedClassNameReason(u.className) : null;
+      const skipped = reservedName ? [{ field: "반 이름", to: normalizeClassName(u.className), reason: reservedName }] : [];
+      if (reservedName) {
+        skippedNames.push({ classId: u.classId, name: normalizeClassName(u.className), reason: reservedName });
+        console.warn(`[예약 적용] 반 이름 변경 건너뜀 — "${normalizeClassName(u.className)}": ${reservedName}`);
+      }
+      if (shouldApplyName(u, cur.class_name) && normalizeClassName(u.className) && !reservedName) {
         // 시트에서 온 이름이라 공백이 섞일 수 있다 — 저장값과 감사로그가 같은 글자이게 정리해서 쓴다(class-name.ts).
         patch.class_name = normalizeClassName(u.className!);
         changes.push({ field: "반 이름", from: cur.class_name, to: patch.class_name });
       }
-      if (Object.keys(patch).length === 0) continue;
+      if (Object.keys(patch).length === 0) {
+        if (skipped.length) {
+          const { error: skipAuditErr } = await supabase.from("audit_logs").insert({
+            tenant_id: tenantId,
+            actor_id: null,
+            actor_name: "시스템(시간표 예약 적용)",
+            action: "class_update",
+            target_type: "class",
+            target_label: cur.class_name,
+            metadata: { classId: u.classId, changed: [], changes: [], skipped, scheduledFrom: snap.effectiveDate, snapshotId: snap.snapshotId },
+          });
+          if (skipAuditErr) reportError(skipAuditErr, { where: "apply-due-class-updates:audit-skip", classId: u.classId });
+        }
+        continue;
+      }
       const { error } = await supabase
         .from("classes")
         .update(patch)
@@ -159,6 +183,7 @@ export async function GET(req: Request) {
           changes,
           scheduledFrom: snap.effectiveDate,
           snapshotId: snap.snapshotId,
+          ...(skipped.length ? { skipped } : {}),
           ...(patch.teacher_id ? { newTeacherId: patch.teacher_id } : {}),
         },
       });
@@ -217,6 +242,7 @@ export async function GET(req: Request) {
         kind: CLASS_UPDATES_APPLIED_KIND,
         classes: snap.updates.length,
         applied: appliedHere,
+        ...(skippedNames.length ? { skippedNames } : {}),
         ...(groupResult ? { groups: groupResult } : {}),
       },
       actor_id: null,

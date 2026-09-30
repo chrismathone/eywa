@@ -31,6 +31,7 @@
  *    (classnoteSendEnabled)는 **따르지 않는다** — 이건 발송이 아니라 인바운드 감지다(provision-core와 같은 논리).
  */
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
+import { classBoardKeys, classBoardStudentOf } from "./class-board-keys.mjs";
 import { getClassnoteBoardAllowlist } from "./classnote-core.mjs";
 import {
   BOARD_GROUPS,
@@ -332,22 +333,28 @@ export async function boardsToStudents(sql, tenant, keys, prefix) {
 }
 
 /**
- * 수학 **반 보드**(0302a, 2026-09-29) — `보드명|원아id` → 학생. 반 보드는 여러 가족이 한 보드에 있으므로 보드명만으로는
+ * 수학 **반 보드**(0302a, 2026-09-29) — `보드번호|원아id` → 학생(개명 감사 G4: 보드명 키는 반 이름이 바뀐 날 짝을 못 찾아
+ * 학부모 글 알림이 **조용히 버려졌다** — 번호가 기준, 이름은 번호가 없는 행의 폴백). 반 보드는 여러 가족이 한 보드에 있으므로 보드명만으로는
  * 학생을 모른다 → **원아 id**로 확정한다(가드를 통과해 ok로 적힌 매칭만). 🔴 1인 보드 게이트(gateBoard)를 반 보드에 태우지 말 것 —
  * 그 판정은 "보드 = 한 학생" 전제라 반 보드에선 무의미하다. 표가 없으면(SQL 전) 빈 지도 = 종전과 같다.
  */
 async function loadClassBoardChildMap(sql, tenant) {
   const rows = await sql`
-    select b.board_name, m.child_id, s.id as student_id, s.name, s.classnote_name
+    select b.board_id, b.board_name, m.child_id, s.id as student_id, s.name, s.classnote_name
     from classnote_class_board_members m
     join classnote_class_boards b on b.tenant_id = m.tenant_id and b.class_id = m.class_id
     join students s on s.id = m.student_id and s.tenant_id = m.tenant_id
-    where m.tenant_id = ${tenant} and m.status = 'ok' and m.child_id is not null`.catch(() => []);
+    where m.tenant_id = ${tenant} and m.status = 'ok' and m.child_id is not null`;
+  // 🔴 조회 실패는 throw — 빈 지도로 삼키면 반 보드 학부모 글이 "매칭 없음"으로 지나가고 워터마크가 전진해 영영 사라진다.
+  //    throw면 폴러가 워터마크·스냅샷을 저장하지 않고 끝나 다음 폴에 다시 본다.
   const map = new Map();
-  for (const r of rows)
-    map.set(`${r.board_name}|${Number(r.child_id)}`, { id: r.student_id, name: (r.classnote_name || r.name || "").trim() });
+  for (const r of rows) {
+    const st = { id: r.student_id, name: (r.classnote_name || r.name || "").trim() };
+    for (const k of classBoardKeys({ boardId: r.board_id, boardName: r.board_name, childId: r.child_id })) map.set(k, st);
+  }
   return map;
 }
+
 
 /** 학생 → 담당 강사(활성 직원 · 활성 반 · 해당 과목). 학생 1명이 여러 반이면 강사 전원. */
 async function teachersFor(sql, tenant, studentIds, keys) {
@@ -443,7 +450,7 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     const others = picked.filter((p) => !String(p?.class_name ?? "").startsWith(group.prefix));
     const classMap = others.length ? await loadClassBoardChildMap(sql, tenant) : new Map();
     const classHits = others
-      .map((p) => ({ post: p, student: classMap.get(`${p.class_name}|${Number(p.child)}`) }))
+      .map((p) => ({ post: p, student: classBoardStudentOf(classMap, { cls: p.cls, className: p.class_name, childId: p.child }) }))
       .filter((h) => !!h.student);
     if (!mathPicked.length && !classHits.length) {
       if (!dryRun && watermark > lastSeenId) await saveWatermark(sql, tenant, watermark);
@@ -604,7 +611,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     const { changed, nextCounts, firstSeen } = selectChangedReports(rows, counts, {});
     // 피드 행에만 있는 정보(원아 id·보드명)를 글 id로 되찾는 표 — 댓글 자체엔 원아가 없다.
     const feedInfo = new Map(
-      rows.map((r) => [Number(r?.id), { childId: r?.child ?? null, className: String(r?.class_name ?? "") }]),
+      rows.map((r) => [Number(r?.id), { childId: r?.child ?? null, cls: r?.cls ?? null, className: String(r?.class_name ?? "") }]),
     );
 
     // 콜드 스타트 — 기준선만 잡고 알림 0건. 댓글 수가 피드 행에 이미 있어 **추가 요청 0**이다(글 폴러의 워터마크 초기화와 같은 역할).
@@ -680,7 +687,8 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       if (!ch.className.startsWith(group.prefix)) {
         // 수학 **반 보드**(2026-09-29) — 그 글의 원아 id로 학생을 확정한 것만(1인 보드 게이트는 반 보드에 무의미).
         classMap ??= await loadClassBoardChildMap(sql, tenant);
-        const st = classMap.get(`${ch.className}|${Number(feedInfo.get(Number(ch.id))?.childId)}`);
+        const info = feedInfo.get(Number(ch.id));
+        const st = classBoardStudentOf(classMap, { cls: info?.cls, className: ch.className, childId: info?.childId });
         if (st) for (const k of picked) hits.push({ comment: k, student: st, reportId: ch.id });
         continue;
       }

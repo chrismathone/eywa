@@ -1,6 +1,6 @@
 import "server-only";
 import { logAction } from "@/features/audit/server/log";
-import { normalizeClassName } from "@/features/classes/class-name";
+import { normalizeClassName, reservedClassNameReason } from "@/features/classes/class-name";
 import { enrollmentAssignBlockReason } from "@/features/enrollments/eligibility";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -275,6 +275,8 @@ const def: ImporterDef<Plan> = {
       classCount.total += 1;
       const rawName = row.text("className", { required: true, max: 60 });
       const name = rawName ? normalizeClassName(rawName) : null;
+      const reservedName = name ? reservedClassNameReason(name) : null;
+      if (reservedName) row.fail("className", reservedName);
       const subject = row.option("subject", subjectOpts, true);
       const teacher = staff.resolve(row, "teacher");
       const curForRoom = rawName && subject ? pickClass(classes.rows, normalizeClassName(rawName), subject) : undefined;

@@ -13,3 +13,17 @@
 export function normalizeClassName(name: string | null | undefined): string {
   return (name ?? "").replace(/\s+/g, " ").trim();
 }
+
+/**
+ * 반 이름으로 **쓸 수 없는 모양**(2026-09-30 ClassNote 개명 감사 G2) — `(수학)홍길동` 같은 괄호 접두는 ClassNote 1인 보드
+ * 이름이고 `[ALL]…`은 전체방이다. 반 이름이 이 모양이면 매일 동기화가 그 보드를 반 보드로 착각할 수 있다(워커
+ * class-board-plan.mjs `reservedBoardName`도 같은 모양을 반 보드로 쓰지 않는다 — 둘을 같이 고칠 것).
+ * `[특강] …`처럼 대괄호로 시작하는 보통 이름은 괜찮다.
+ * @returns 거절 이유(한글) — 괜찮으면 null
+ */
+export function reservedClassNameReason(name: string | null | undefined): string | null {
+  const n = normalizeClassName(name).replace(/\s/g, "");
+  if (/^\([^)]*\)/.test(n)) return "괄호로 시작하는 이름(예: (수학)홍길동)은 클래스노트 개인 보드 이름과 겹쳐 반 이름으로 쓸 수 없습니다";
+  if (/^\[ALL\]/i.test(n)) return "[ALL]로 시작하는 이름은 클래스노트 전체방 이름과 겹쳐 반 이름으로 쓸 수 없습니다";
+  return null;
+}
