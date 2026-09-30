@@ -42,6 +42,8 @@ import {
   norm,
 } from "./classnote-admin-core.mjs";
 import { kickClassify, loadChildStudentMap, storeParentMessages } from "./classnote-inbox-store.mjs";
+import { enqueueParentVideos, videoArchiveEnabled } from "./video-inbox.mjs";
+import { incomingVideo } from "./video-inbox.mjs";
 import {
   classBoardClassOf,
   loadClassBoardClasses,
@@ -462,6 +464,13 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     const watermark = maxPostId(rows);
     if (watermark === null) return { ran: true, detected: 0, notified: 0 };
 
+    // [영상] 글: 알림의 나이·본문 유무와 별개로 이미 읽은 첨부를 보관 큐에 넣는다.
+    // 실패하면 워터마크를 전진시키지 않아 다음 폴에서 다시 등록한다.
+    if (!dryRun && videoArchiveEnabled()) {
+      const { centerId } = await getFeedPage(browser);
+      await enqueueParentVideos(sql, tenant, centerId, rows);
+    }
+
     // 콜드 스타트 — 과거 글 전체를 알림으로 쏟지 않는다. 현재 위치만 기록하고 다음 폴부터 진짜 새 글만.
     if (lastSeenId === null) {
       if (!dryRun) await saveWatermark(sql, tenant, watermark);
@@ -735,6 +744,19 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
         continue;
       }
       tooOldCount += tooOld.length;
+      // [영상] 댓글: [영상] 문구를 만든 실제 첨부를 사용한다. 텍스트 없는 댓글도 포함.
+      if (!dryRun && videoArchiveEnabled()) {
+        const info = feedInfo.get(Number(ch.id));
+        try {
+          const { centerId } = await getFeedPage(browser);
+          await enqueueParentVideos(sql, tenant, centerId, list,
+            { id: ch.id, child: info?.childId, cls: info?.cls, class_name: ch.className });
+        } catch {
+          nextCounts[String(ch.id)] = ch.knownCount;
+          log("[영상] 댓글 저장 실패 — 다음 폴에서 재시도합니다.");
+          continue;
+        }
+      }
       // 강사 답글만 늘었거나 삭제된 경우 — 정상. 게이트(원아 조회)를 태울 이유가 없다.
       if (!picked.length) continue;
       detected += picked.length;
@@ -857,4 +879,29 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     await dropFeedPage(); // 다음 폴은 깨끗한 세션으로
     throw e;
   }
+}
+
+/** 큐가 대기하는 동안 영상 변환·주소 갱신이 끝났을 수 있어 전송 직전에 원글/댓글을 다시 읽는다. */
+export async function videoFeedSession(browser) { return getFeedPage(browser); }
+
+export async function reloadArchivedVideo(browser, video) {
+  const { page, centerId } = await getFeedPage(browser);
+  if (String(centerId) !== String(video.centerId)) throw new Error("영상 기관과 로그인 기관이 다릅니다.");
+  let item;
+  let parent = null;
+  if (video.commentId) {
+    const { allVideoComments } = await import("./video-feed-pages.mjs");
+    const list = await allVideoComments(page, video.postId);
+    item = list.find((c) => String(c.id) === video.commentId);
+    parent = { id: video.postId, child: video.childId, cls: video.boardId, class_name: video.boardName };
+  } else {
+    item = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/v1/reports/${id}/`, { headers: { accept: "application/json" } });
+      if (!response.ok) throw new Error(`영상 원글 조회 HTTP ${response.status}`);
+      return response.json();
+    }, video.postId);
+  }
+  const fresh = incomingVideo(item, centerId, parent);
+  if (!fresh || fresh.videoId !== video.videoId) throw new Error("원글·댓글에서 같은 영상을 찾지 못했습니다.");
+  return { ...video, sources: fresh.sources };
 }
