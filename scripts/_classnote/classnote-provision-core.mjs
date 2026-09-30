@@ -99,16 +99,21 @@ async function expectedFor(sql, tenant, keys, prefix) {
   const collisions = [];
   for (const [, students] of byName) {
     if (students.length > 1) collisions.push({ name: students[0].eff, count: students.length });
-    else targets.push({ student: students[0].eff, board: `${prefix}${students[0].eff}` });
+    else targets.push({ student: students[0].eff, board: `${prefix}${students[0].eff}`, studentId: students[0].id });
   }
   return { targets, collisions };
 }
 
 /**
  * 일일 1회 실행(가드 내장) — 데몬이 매 폴 불러도 대부분 즉시 no-op. force=true는 가드 무시(수동 점검용).
- * 반환: { ran, created?, assigned?, held? }.
+ * 반환: { ran, created?, assigned?, held?, remaining? }.
+ *
+ * 지금 동기화(0313a, 원장 2026-09-30 *"필요한것만 동기화하게"*) 옵션:
+ * - `studentIds` = 이 학생들만 본다(보드 생성·배정 대상). 동명이인·역방향 판정은 그대로 **전 학생 우주**로 한다.
+ * - `maxWrites` = 보드 생성 + 배정 합계 상한 — 넘으면 멈추고 `remaining`으로 남긴다(새벽 정기 실행이 마저 한다).
+ * 🔴 force 실행은 오늘 표식을 남기지 않는다 — 일부만 본 수동 실행이 새벽 전체 실행을 건너뛰게 하면 안 된다.
  */
-export async function provisionDailyOnce(sql, browser, { tenant, post, log = console.log, force = false }) {
+export async function provisionDailyOnce(sql, browser, { tenant, post, log = console.log, force = false, studentIds = null, maxWrites = Infinity }) {
   const today = kstDate();
   if (!force) {
     if (!post) return { ran: false };
@@ -124,9 +129,26 @@ export async function provisionDailyOnce(sql, browser, { tenant, post, log = con
     .map((g) => ({ ...g, keys: g.subjectKeys.filter((k) => optIn.includes(k)) }))
     .filter((g) => g.keys.length);
   if (!groups.length) {
-    markRun(today);
+    if (!force) markRun(today);
     log("[provision] 발송 허용 과목 없음 — 건너뜀");
     return { ran: true, created: 0, assigned: 0 };
+  }
+
+  // 기대 보드(aywa DB만) — ClassNote 로그인 **전에** 계산한다. 결과는 로그인 뒤에 계산하던 것과 같다(ClassNote 값을 안 쓴다).
+  const plans = [];
+  const held = [];
+  for (const g of groups) {
+    const { targets: all, collisions } = await expectedFor(sql, tenant, g.keys, g.prefix);
+    // 지금 동기화 범위 — 동명이인(collisions)은 애초에 targets에 없으므로 거르기만 해도 동명이인 방어는 그대로다.
+    const only = studentIds ? new Set(studentIds) : null;
+    const targets = only ? all.filter((t) => only.has(t.studentId)) : all;
+    plans.push({ group: g, targets });
+    if (!only) for (const c of collisions) held.push(`${g.prefix}${c.name}(동명이인 ${c.count}명)`);
+  }
+  // 지금 동기화(범위 지정)인데 대상이 하나도 없다(발송 과목이 아닌 학생뿐 등) — ClassNote에 로그인조차 하지 않는다(과부하 방지).
+  if (studentIds && !plans.some((p) => p.targets.length)) {
+    log("[provision] 지금 동기화 — 1인 보드 준비 대상 없음(ClassNote 조회 안 함)");
+    return { ran: true, created: 0, assigned: 0, held: 0, remaining: 0 };
   }
 
   const page = await browser.newPage();
@@ -136,22 +158,21 @@ export async function provisionDailyOnce(sql, browser, { tenant, post, log = con
     let boardByNorm = new Map((await fetchBoards(page, centerId)).map((b) => [norm(b.name), b]));
     const children = await fetchChildren(page, centerId);
 
-    const plans = [];
-    const held = [];
-    for (const g of groups) {
-      const { targets, collisions } = await expectedFor(sql, tenant, g.keys, g.prefix);
-      plans.push({ group: g, targets });
-      for (const c of collisions) held.push(`${g.prefix}${c.name}(동명이인 ${c.count}명)`);
-    }
-
     // ① 누락 보드 생성(DOM) — 있을 때만 반 정보 관리 진입
     let created = 0;
+    let writes = 0; // 보드 생성 + 배정(maxWrites 상한)
+    let remaining = 0;
     const missing = plans.flatMap((p) => p.targets.filter((t) => !boardByNorm.has(norm(t.board))));
     if (missing.length) {
       await page.goto(`${CLASSNOTE_BASE}/service/setting/class`, { waitUntil: "domcontentloaded", timeout: 30000 });
       await page.waitForTimeout(2500);
       await dismissHonorificDialog(page);
       for (const m of missing) {
+        if (writes >= maxWrites) {
+          remaining++;
+          continue;
+        }
+        writes++;
         const res = await createBoard(page, m.board);
         log(`[provision] 보드 생성 ${m.board} → ${res.ok ? "✅" : `❌ ${res.reason}`}`);
         if (res.ok) created++;
@@ -187,6 +208,11 @@ export async function provisionDailyOnce(sql, browser, { tenant, post, log = con
         if (live?.length) log(`[provision] ${t.board} — 실행 중 다른 원아 합류 감지, 배정 중단`);
         continue;
       }
+      if (writes >= maxWrites) {
+        remaining++;
+        continue;
+      }
+      writes++;
       const res = await enrollChild(page, child.id, board.id);
       log(`[provision] 배정 ${t.board} → ${res.status < 300 ? "✅" : `❌ HTTP ${res.status}`}`);
       if (res.status < 300) {
@@ -196,9 +222,10 @@ export async function provisionDailyOnce(sql, browser, { tenant, post, log = con
       }
     }
 
-    markRun(today);
+    if (!force) markRun(today);
     if (held.length) log(`[provision] 자동 처리 보류: ${held.join(", ")}`);
-    return { ran: true, created, assigned, held: held.length };
+    if (remaining) log(`[provision] 상한(${maxWrites}건)에 걸려 ${remaining}건은 다음 동기화로 넘김`);
+    return { ran: true, created, assigned, held: held.length, remaining };
   } finally {
     await page.close().catch(() => {});
   }

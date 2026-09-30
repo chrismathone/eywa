@@ -11,7 +11,7 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
-const { makeCounselorMatcher, loadSubjectLabels, singleCounselorSubject } = require("./consultation-counselor.cjs");
+const { makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects } = require("./consultation-counselor.cjs");
 
 let chromium;
 try {
@@ -95,7 +95,7 @@ function EXTRACT_DETAIL() {
     m2.set(`${n}|${s.grade || ""}`, s.id);
     m1.set(n, m1.has(n) ? null : s.id);
   }
-  const users = await sql`select id, display_name, english_name, subjects from users where tenant_id = ${tenantId}`;
+  const users = await sql`select id, display_name, english_name, subjects, status from users where tenant_id = ${tenantId} and system_role <> 'student'`;
   const matchCounselor = makeCounselorMatcher(users);
   const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
@@ -133,9 +133,20 @@ function EXTRACT_DETAIL() {
       const sid = m3.get(`${n}|${r.grade || ""}|${r.school || ""}`) || m2.get(`${n}|${r.grade || ""}`) || m1.get(n) || null;
       if (!sid) continue;
       r.student_id = sid;
-      r.counselor_id = matchCounselor(r.reg)?.id ?? null;
-      r.subject = singleCounselorSubject(matchCounselor(r.reg), subjectLabels);
+      r.counselor = matchCounselor(r.reg);
+      r.counselor_id = r.counselor?.id ?? null;
       matched.push(r);
+    }
+    // 과목 = 상담사 담당 과목 → 그날 학생 수강 과목(consultation-counselor.cjs resolveConsultationSubject — 추측 금지).
+    const dayOf = (r) => { const t = L.parseTimestamp(r.cdate); return t ? String(t).slice(0, 10) : null; };
+    const enrolledBy = await loadEnrolledSubjects(sql, tenantId, matched.map((r) => ({ studentId: r.student_id, date: dayOf(r) })));
+    for (const r of matched) {
+      r.subject = resolveConsultationSubject({
+        counselor: r.counselor,
+        enrolledSubjects: enrolledBy.get(`${r.student_id}|${dayOf(r)}`) || [],
+        labels: subjectLabels,
+      })?.label ?? null;
+      delete r.counselor;
     }
     console.log(`matched(active students): ${matched.length} / ${all.length}`);
 
@@ -176,7 +187,7 @@ function EXTRACT_DETAIL() {
         values (${tenantId}, ${r.seq}, ${r.student_id}, ${r.counselor_id}, ${r.subject}, ${summary}, ${L.parseTimestamp(r.cdate) ?? sql`now()`}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null
         do update set student_id = excluded.student_id,
-          counselor_id = coalesce(excluded.counselor_id, student_consultations.counselor_id),
+          counselor_id = coalesce(student_consultations.counselor_id, excluded.counselor_id),
           subject = coalesce(nullif(btrim(student_consultations.subject), ''), excluded.subject),
           summary = excluded.summary, consulted_at = excluded.consulted_at, updated_at = now()`;
       up++;

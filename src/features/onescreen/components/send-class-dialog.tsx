@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { ClassnoteSyncNowButton } from "@/features/report-admin/components/classnote-sync-now-button";
 
 export type SendClassAsk = {
   studentName: string;
@@ -58,6 +59,8 @@ export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: 
             </label>
           ))}
         </div>
+        {/* 반 보드가 새벽 동기화 전이라 없는 경우 — 지금 맞춘다(0313a). 끝나면 다시 발송을 누르면 된다. */}
+        <ClassnoteSyncNowButton source="onescreen_send_class" className="mt-2" />
         <div className="mt-3 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => finish(null)}>
             {t("os.sendClass.cancel")}

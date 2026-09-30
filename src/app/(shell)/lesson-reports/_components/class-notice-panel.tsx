@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ClassnoteSyncNowButton } from "@/features/report-admin/components/classnote-sync-now-button";
 import type { NoticeClassOption } from "@/features/report-admin/server/notice-actions";
 import { listClassWideNotices, sendClassWideNotice } from "@/features/report-admin/server/class-notice-actions";
 import {
@@ -95,6 +96,8 @@ export function ClassNoticePanel({
             반에 남아 있으면 그 반은 보내지 않습니다
           </p>
         </div>
+        {/* 새로 만든 반은 반 보드가 연결된 뒤에야 여기 뜬다 — 새벽 동기화를 기다리지 않고 지금 맞춘다(0313a). */}
+        <ClassnoteSyncNowButton source="class_notice" className="mb-2" />
         {options.length === 0 ? (
           <p className="text-text-faint text-sm">ClassNote 반 연결이 있는 반이 없습니다.</p>
         ) : (

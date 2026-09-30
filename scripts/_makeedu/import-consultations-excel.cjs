@@ -23,7 +23,7 @@ const fs = require("fs");
 const path = require("path");
 const postgres = require("postgres");
 const L = require("./lib.cjs");
-const { makeCounselorMatcher, loadSubjectLabels, singleCounselorSubject } = require("./consultation-counselor.cjs");
+const { makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects } = require("./consultation-counselor.cjs");
 
 const APPLY = process.argv.includes("--apply");
 const SKIP_SAME_DAY = process.argv.includes("--skip-same-day");
@@ -153,7 +153,7 @@ function mapCategory(v) {
     const dayKeys = new Set(existing.map((e) => `${e.student_id}|${e.d}`));
 
     // 상담사 매칭(best-effort): "이지은(Amy)" → 괄호 앞 이름 = users.display_name 유일 일치 시만.
-    const users = await sql`select id, display_name, english_name, subjects from users where tenant_id = ${tenantId}`;
+    const users = await sql`select id, display_name, english_name, subjects, status from users where tenant_id = ${tenantId} and system_role <> 'student'`;
     const matchCounselor = makeCounselorMatcher(users);
     const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
@@ -211,9 +211,18 @@ function mapCategory(v) {
         studentId, summary, name, dateStr,
         consultedAt: `${dateStr}T00:00:00+09:00`, // KST 자정(parseTimestamp 규약)
         category: mapCategory(ci.cat1 >= 0 ? r[ci.cat1] : null),
-        counselorId: matchCounselor(ci.writer >= 0 ? r[ci.writer] : null)?.id ?? null,
-        subject: singleCounselorSubject(matchCounselor(ci.writer >= 0 ? r[ci.writer] : null), subjectLabels),
+        counselor: matchCounselor(ci.writer >= 0 ? r[ci.writer] : null),
       });
+    }
+    // 상담사·과목 판정 — 증분 동기화와 같은 함수(consultation-counselor.cjs).
+    const enrolledBy = await loadEnrolledSubjects(sql, tenantId, inserts.map((it) => ({ studentId: it.studentId, date: it.dateStr })));
+    for (const it of inserts) {
+      it.counselorId = it.counselor?.id ?? null;
+      it.subject = resolveConsultationSubject({
+        counselor: it.counselor,
+        enrolledSubjects: enrolledBy.get(`${it.studentId}|${it.dateStr}`) || [],
+        labels: subjectLabels,
+      })?.label ?? null;
     }
 
     console.log("\n[통계]", JSON.stringify(stats, null, 1));

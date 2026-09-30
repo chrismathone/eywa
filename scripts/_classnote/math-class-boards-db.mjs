@@ -9,10 +9,11 @@
  * @param {import("postgres").Sql} sql
  * @param {string} tenant
  * @param {ReturnType<import("./class-board-plan.mjs").planClassBoards>} plans  — 최신 계획(보드 원아 조회 포함)
- * @param {{ keepClassIds?: readonly string[] }} [opts]  — 걷지 않고 지킬 연결(ClassNote 보드가 살아 있는 종강 반, `closedClassesToKeep`)
+ * @param {{ keepClassIds?: readonly string[], scoped?: boolean }} [opts]  — keepClassIds = 걷지 않고 지킬 연결(ClassNote 보드가 살아 있는
+ *   종강 반, `closedClassesToKeep`) · scoped = **일부 반만** 본 실행(지금 동기화) — 계획 밖 반의 연결을 걷지 않는다
  * @returns {Promise<{classes:number, ok:number, hold:number, cleared:number}>}
  */
-export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds = [] } = {}) {
+export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds = [], scoped = false } = {}) {
   const out = { classes: 0, ok: 0, hold: 0, cleared: 0 };
   for (const p of plans) {
     await sql.begin(async (tx) => {
@@ -60,6 +61,9 @@ export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds
   }
   // 대상에서 빠진 반(종강·미발송 지정·폐지)의 옛 연결 — 남아 있으면 그 반 행에 초록불이 거짓으로 남는다.
   // 🔴 단, ClassNote 보드가 살아 있는 종강 반은 지킨다(원장 2026-09-30 — 반이 살아 있는 한 그 반으로 보낸다).
+  // 🔴 일부 반만 본 실행(scoped)은 이 정리를 하지 않는다 — 계획에 없는 반 = "대상에서 빠진 반"이 아니라 "이번에 안 본 반"이다.
+  //    여기서 지우면 지금 동기화 한 번에 **다른 모든 반의 연결이 사라진다**(발송이 전부 '보낼 반 없음'으로 막힌다).
+  if (scoped) return out;
   const live = [...plans.map((p) => p.classId), ...keepClassIds];
   if (live.length) {
     const d1 = await sql`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id not in ${sql(live)}`;

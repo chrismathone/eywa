@@ -149,6 +149,9 @@ export const AUDIT_ACTIONS = {
   classnote_notice_delete: "학부모 공지 삭제",
   classnote_notice_revoke: "학부모 공지 게시취소",
   classnote_report_recall: "수업보고서 회수",
+  // 지금 반 보드 동기화(0313a, 2026-09-30) — 요청(사람)과 실행 결과(연동 PC가 직접 insert, 실행자 system:classnote-sync-now)를 따로 남긴다.
+  classnote_board_sync_request: "반 보드 지금 동기화 요청",
+  classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
   ecs_attendance_clear: "출석 취소(ECS)",
   operating_periods_save: "세션 기간 저장",
   calendar_event_create: "일정 등록",
@@ -258,6 +261,9 @@ export const AUDIT_ACTIONS = {
   student_consultation_update: "학생상담 기록 수정",
   student_consultation_delete: "학생상담 기록 삭제",
   student_consultation_follow_up: "학생상담 후속조치 처리",
+  // makeedu 동기화 워커·운영 스크립트가 직접 insert(scripts/_makeedu/sync-consultations-incremental.cjs · scripts/_oneoff/backfill-consultation-subjects.mjs).
+  student_consultation_sync_import: "학생상담 makeedu 동기화",
+  student_consultation_subject_backfill: "학생상담 과목·상담사 채우기",
   student_care_analysis: "AI 케어 분석 실행",
   // 시간표(개발중) 월별 계획(0232a) — class_schedules와 분리된 별도 표라, 본 시간표 감사 키와 섞이지
   // 않게 timetable_plan_ 접두로 갈라 둔다("계획"이라는 말을 라벨에 반드시 남길 것 — 원장이 감사로그에서
