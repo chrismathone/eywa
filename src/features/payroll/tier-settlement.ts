@@ -13,6 +13,7 @@
 // ⚠️ 돈 산식이다 — 시트 대조 실측치(김윤하 3,320,389 · 김은정 3,181,049 · 이수진 4,649,941)가
 //    테스트에 박혀 있다. 상수·라운딩을 바꾸려면 "왜 달라지는지" 설명이 먼저다(골든마스터 규율).
 
+import { excludedFromHomeroom, isSubstituteRowOf } from "@/features/attendance/teacher-axis";
 import { NET_MULTIPLIER } from "./settlement";
 import type { GroupRates, SalaryGroup } from "./salary-group";
 
@@ -116,7 +117,28 @@ export type TierRow = {
   sessionPrice?: number | null;
   /** 반의 급여 과정(수동 지정 ?? 반 이름) — 회차 단가로 과정을 정할 때 특강 판정·폴백에만 쓴다. */
   classGroup?: SalaryGroup | null;
+  /**
+   * **대신 보강 귀속 강사**(`attendance_records.taught_by`, 0316a) — 있으면 이 줄의 시수는 반 담임이 아니라 이 강사 몫이다
+   * (원장 결정 3, 2026-09-30). null·생략 = 종전(반 담임 몫). 조립이 같은 학생·반이라도 귀속이 다르면 줄을 가른다.
+   */
+  taughtBy?: string | null;
 };
+
+/**
+ * 강사 한 명의 정산 줄만 고른다 — 🔴 원장 결정 3(2026-09-30): 대신 보강 칸은 반 담임이 아니라 **보강한 강사** 몫.
+ *  · 담임 반의 줄 중 귀속이 비었거나 본인인 줄(다른 강사의 대신 보강은 뺀다 — `excludedFromHomeroom`)
+ *  · 남의 반이라도 귀속이 본인인 줄(`isSubstituteRowOf`)
+ * 판정은 축 단일 소스(`teacher-axis.ts`). 명세서·출석부 정산액·수납 정산 면이 같은 함수를 쓴다.
+ */
+export function tierRowsOwnedBy<T extends Pick<TierRow, "classId" | "taughtBy">>(
+  rows: readonly T[],
+  teacherId: string,
+  homeroomClassIds: ReadonlySet<string>,
+): T[] {
+  return rows.filter((r) =>
+    homeroomClassIds.has(r.classId) ? !excludedFromHomeroom(r, teacherId) : isSubstituteRowOf(r, teacherId),
+  );
+}
 
 /**
  * 산정된 1행의 내역 — **급여명세서의 '수업 내역'**과 매출액 산출에 쓴다.

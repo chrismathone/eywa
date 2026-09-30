@@ -45,14 +45,14 @@ describe("G4 — 반 보드 글은 보드 번호로 학생을 찾는다", () => 
   it("번호가 있으면 이름이 같아도 번호가 다르면 안 붙인다", () => {
     expect(classBoardStudentOf(map, { cls: 71, className: "옛이름", childId: 5 })).toBeNull();
   });
-  it("번호 없는 글만 이름으로 폴백", () => {
-    expect(classBoardStudentOf(map, { cls: null, className: "옛이름", childId: 5 })).toBe(st);
+  it("번호 없는 글은 이름으로 찾지 않는다(학생 확정 가드 2026-09-30 — 학생 미확정)", () => {
+    expect(classBoardStudentOf(map, { cls: null, className: "옛이름", childId: 5 })).toBeNull();
   });
   it("피드 코어는 반 보드 지도 조회 실패를 삼키지 않는다", () => {
     const src = read("classnote-feed-core.mjs");
     const fn = src.slice(src.indexOf("async function loadClassBoardChildMap"), src.indexOf("async function teachersFor"));
     expect(fn).not.toContain(".catch(");
-    expect(src).toContain("classBoardStudentOf(classMap, { cls: p.cls");
+    expect(src).toContain("classBoardMatch(classMap, { cls: p.cls");
   });
 });
 

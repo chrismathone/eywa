@@ -25,6 +25,7 @@ import { makeupDeadlineError } from "./makeup-deadline-gate";
 import { attendanceLockMessage, isWithinAttendanceEditWindow } from "../edit-window";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
 import { fetchAbsenceCells, pickAbsenceNoteTarget } from "./absence-cell";
+import { loadMakeupAnchorCandidates } from "@/features/onescreen/server/makeup-anchor-sync";
 import {
   absenceMemo,
   appendMemo,
@@ -66,7 +67,17 @@ export async function noteMakeupAgainstAbsence(input: {
       return { error: attendanceLockMessage(makeupDate, kstToday()) };
     }
     const teaching = await userTaughtClassSet(supabase, user.id, makeupDate);
-    if (!teaching.has(makeupClassId)) return { error: "담당 반이 아닙니다" };
+    // 대신 보강(원장 결정 2, 2026-09-30) — 위임 없이 남의 반 학생을 보강하면 그 학생의 **원래 반**이 보강 반이다.
+    // 그 반은 내 담당이 아니지만 보강 등록 문이 받은 반(학생이 다니는 반)이라 메모를 붙일 수 있어야 한다(같은 판정).
+    if (!teaching.has(makeupClassId)) {
+      const cands = await loadMakeupAnchorCandidates(supabase, {
+        tenantId: user.tenantId,
+        userId: user.id,
+        studentId,
+        date: makeupDate,
+      }).catch(() => []);
+      if (!cands.some((c) => c.id === makeupClassId && c.enrolled)) return { error: "담당 반이 아닙니다" };
+    }
   }
 
   /** 보강 칸 — 방금 연 그 칸(그날 그 반의 최신 1건). */

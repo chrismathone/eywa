@@ -81,6 +81,9 @@ import { classNameFor } from "@/features/teacher-view/class-name";
 import { periodWindowLabel } from "@/features/periods/window-label";
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
+import { loadSubstituteCells } from "@/features/attendance/server/substitute-cells";
+import { formatSessionUnits } from "@/features/attendance/session-units";
+import { SubstituteCellsNote } from "./_components/substitute-cells-note";
 
 export async function generateMetadata() {
   return { title: `${sheetT(await getTeacherViewLang(), "att.title")}${PAGE_TITLE_SUFFIX}` };
@@ -466,10 +469,22 @@ export default async function AttendancePage({
         )
       : null;
   const slotOnlyCount = teacherClasses.length - homeroomClasses.length;
+  /**
+   * 🔴 정산액에 든 **표에 없는 반**의 시수 — 다른 반 대신 보강(원장 결정 3, `taught_by` 0316a). 칸은 학생의 반에 있어 이 격자엔 없고
+   *    표 아래 읽기 전용 목록(`SubstituteCellsNote`)으로 보인다. 말없이 정산액만 커지면 화면 시수와 금액이 갈려 보인다(적대 리뷰 2026-09-30).
+   */
+  const shownClassIds = new Set(teacherClasses.map((c) => c.id));
+  const outsideUnits =
+    money?.tierSettlement.status === "ready"
+      ? Object.entries(money.tierSettlement.unitsByClass ?? {}).reduce((s, [cid, u]) => (shownClassIds.has(cid) ? s : s + u), 0)
+      : 0;
   const moneyNote =
-    money && slotOnlyCount > 0
-      ? sheetTf(lang, "att.moneyNote", { n: homeroomClasses.length, m: slotOnlyCount })
-      : null;
+    [
+      money && slotOnlyCount > 0 ? sheetTf(lang, "att.moneyNote", { n: homeroomClasses.length, m: slotOnlyCount }) : null,
+      money && outsideUnits > 0 ? sheetTf(lang, "att.moneyNote.substitute", { units: formatSessionUnits(outsideUnits) }) : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || null;
   // 매트릭스(무거운 출석 데이터)는 반을 골랐을 때만 로드. 미선택이면 base(빈 매트릭스) 재사용.
   const matrix =
     mode === "teacher"
@@ -530,7 +545,7 @@ export default async function AttendancePage({
     const billing = await getAttendanceClassBilledAmounts(month, [roster], { allowClassIds: [makeupPoolClassId] });
     return { classId: makeupPoolClassId, matrix: poolMatrix, roster, billing };
   };
-  const [workers, homeBilling, makeupPool, showActualAmountRaw, salaryConfigRaw] = await Promise.all([
+  const [workers, homeBilling, makeupPool, showActualAmountRaw, salaryConfigRaw, substituteCells] = await Promise.all([
     getMonthlyClassWorkers(user.tenantId, month, workerClassIds),
     getAttendanceClassBilledAmounts(month, homeBillingRoster, {
       teacherScope: (mode === "teacher" ? effectiveTeacher : classScopeTeacher) ? {
@@ -544,6 +559,10 @@ export default async function AttendancePage({
     loadMakeupPool(),
     canShowAttendanceActualAmount(mode === "teacher" ? effectiveTeacher : classScopeTeacher ?? classesForSubject.find((c) => c.id === effectiveClassId)?.teacherId ?? null),
     getAttendanceSalaryRates(mode === "teacher" ? effectiveTeacher : null),
+    // 다른 반 대신 보강 칸(읽기 전용 목록) — 강사 보기만. 격자에 선 반은 빼고 읽는다(그 칸은 격자가 보여 준다). 대부분 0행.
+    mode === "teacher" && effectiveTeacher
+      ? loadSubstituteCells({ tenantId: user.tenantId, teacherId: effectiveTeacher, month, excludeClassIds: teacherClasses.map((c) => c.id) })
+      : Promise.resolve([]),
   ]);
   // 급여 기능이 꺼진 학원 = 실급여 열·단가 버튼·토글 없음(조회는 이미 끝났지만 값을 버린다 — 표시 전용).
   const showActualAmount = payrollOn && showActualAmountRaw;
@@ -1236,6 +1255,8 @@ export default async function AttendancePage({
             // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.
             holidays={buildHolidayMap(operations.holidays)}
           />
+          {/* 다른 반 대신 보강(읽기 전용) — 정산엔 들었는데 이 격자엔 없는 칸을 밝힌다(원장 결정 3). 없으면 아무것도 안 그린다. */}
+          <SubstituteCellsNote cells={substituteCells} lang={lang} />
         </div>
       )}
       </div>

@@ -9,11 +9,12 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherScope, getShellView } from "@/lib/auth/view-mode";
 import { createClient } from "@/lib/supabase/server";
-import { getTeachingClasses } from "@/features/classes/server/delegation";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { classRouteActive, SEND_CLASS_SUBJECTS } from "@/features/onescreen/send-class";
+import { loadMakeupAnchorCandidates } from "@/features/onescreen/server/makeup-anchor-sync";
 import { getMakeupAbsenceOptions } from "./makeup-options";
 import type { MakeupAbsenceList } from "../makeup-options";
 import { isClassOpenOn, orderHostClasses, type MakeupHostClass } from "../makeup-host";
-import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 
 /** 권한이 없거나 못 불렀을 때 — 확인창은 이걸 받아 '직접 입력'으로 폴백한다. */
 const EMPTY: MakeupAbsenceList = { options: [], hiddenBySubject: 0 };
@@ -46,38 +47,37 @@ export async function fetchMakeupAbsences(
 }
 
 /**
- * 보강을 기록할 수 있는 **수업(반) 후보** — 원장 2026-09-21 *"보강 추가시에 '수업'을 선택할 수 있어야겠어"*.
- * 🔴 **보강 등록 문(`registerMakeupEntries`)과 같은 판정**(#77 — 보여 놓고 실패하면 안 된다): 그날 담당 반(`getTeachingClasses` —
- *    담임 ∪ 위임, 활성)이면서 **종강 전**(`isClassOpenOn`, 원장 2026-09-30)이고, `subjects`를 주면 그 과목의 반만.
- *    등록 문이 과목까지 맞춰 보기 때문이다.
- * 학생이 그날 다니는 반(휴원 제외)이 맨 앞(`orderHostClasses`) — 🔴 창은 그중 **다니는 반만** 세운다(`hostChoicesFor`). '반 없이'는 창이 따로 둔다.
- * ⚠️ 실패는 `failed: true` — 창은 그때 묻지 않고 종전 앵커(보던 반 필터)로 기록한다(보강 추가 자체가 막히면 더 나쁘다).
+ * 보강을 **기록할 수업** 후보 — 원장 결정 2(2026-09-30): 작성 강사의 그날 담당 반(담임 ∪ 위임) ∪ **그 학생이 다니는 반**
+ * (위임 없이 남의 반 학생을 대신 보강하면 학생의 원래 반으로). 종강 반·다른 과목은 뺀다. 창은 이 중 학생이 다니는 반만 세운다(`hostChoicesFor`).
+ * 🔴 받는 쪽(보강 등록 문·보고서 저장·반 바꾸기)이 같은 재료·같은 함수(`loadMakeupAnchorCandidates` → `acceptMakeupAnchor`)로 다시 본다.
+ * `noneBlocked` = 반별 발송 대상(수학 · ClassNote 반 경로)이라 '반 없이'를 세우지 않는다(원장 2026-09-30 — 반 없는 보강을 만들지 않는다).
  */
-export async function fetchMakeupHostClasses(studentId: string, makeupDate: string, subjects?: readonly string[]): Promise<{ options: MakeupHostClass[]; failed?: boolean }> {
+export async function fetchMakeupHostClasses(
+  studentId: string,
+  makeupDate: string,
+  subjects?: readonly string[],
+): Promise<{ options: MakeupHostClass[]; failed?: boolean; noneBlocked?: boolean }> {
   const user = await getCurrentUser();
   if (!user || !(await canWriteTenant(user.systemRole, "attendance"))) return { options: [], failed: true };
   if (typeof studentId !== "string" || !studentId || !/^\d{4}-\d{2}-\d{2}$/.test(makeupDate)) return { options: [], failed: true };
   try {
     const supabase = await createClient();
-    const [classes, enrollments] = await Promise.all([
-      getTeachingClasses(supabase, user.id, makeupDate),
-      supabase.from("enrollments").select("class_id, end_date, is_transferred").eq("student_id", studentId).eq("on_hold", false)
-        .or(`start_date.is.null,start_date.lte.${makeupDate}`)
-        .or(`end_date.is.null,end_date.gte.${makeupDate}`),
+    const [cands, settings] = await Promise.all([
+      loadMakeupAnchorCandidates(supabase, { tenantId: user.tenantId, userId: user.id, studentId, date: makeupDate }),
+      getTenantSettings(),
     ]);
-    if (enrollments.error) throw new Error(enrollments.error.message);
-    // 🔴 `end_date.gte`는 프리필터다([[#125]]) — 반이동은 [start,end)라 옮긴 날의 옛 반은 이미 소속이 아니다. 창은 다니는 반만 세우므로
-    //    (`hostChoicesFor`) 여기서 틀리면 옮긴 날 옛 반이 선택지로 선다.
-    const enrolled = new Set(
-      ((enrollments.data ?? []) as { class_id: string; end_date: string | null; is_transferred: boolean | null }[])
-        .filter((e) => !isEnrollmentEndedOn(e.end_date, makeupDate, !!e.is_transferred))
-        .map((e) => e.class_id),
-    );
     const wanted = subjects?.length ? new Set(subjects) : null;
-    // 종강 반은 빼고(원장 2026-09-30 *"종강이 아닌 담당 반"* — 등록 문도 같은 판정 isClassOpenOn) · 과목이 같은 반만.
-    return { options: orderHostClasses(classes.filter((c) => isClassOpenOn(c.closedAt, makeupDate) && (!wanted || wanted.has(c.subject))).map((c) => ({
-      classId: c.id, className: c.className, subject: c.subject, enrolled: enrolled.has(c.id),
-    }))) };
+    const noneBlocked =
+      classRouteActive(settings, user.displayName) && [...(wanted ?? SEND_CLASS_SUBJECTS)].some((k) => SEND_CLASS_SUBJECTS.has(k));
+    // 종강 반은 빼고(원장 2026-09-30 *"종강이 아닌 담당 반"*) · 과목이 같은 반만 · 담당 반이거나 학생이 다니는 반(`acceptMakeupAnchor`와 같은 조건).
+    return {
+      options: orderHostClasses(
+        cands
+          .filter((c) => (c.mine || c.enrolled) && isClassOpenOn(c.closedAt, makeupDate) && (!wanted || wanted.has(c.subject)))
+          .map((c) => ({ classId: c.id, className: c.className, subject: c.subject, enrolled: c.enrolled })),
+      ),
+      noneBlocked,
+    };
   } catch (e) {
     console.error("[makeup-host] 반 후보 조회 실패", e instanceof Error ? e.message : e);
     return { options: [], failed: true };

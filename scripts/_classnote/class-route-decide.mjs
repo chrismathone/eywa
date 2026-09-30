@@ -37,23 +37,38 @@ export function decideRoute(cfg, report) {
 }
 
 /**
- * 반별 경로에서 **실제로 올릴 반 보드** 고르기(원장 2026-09-30).
- * - 보고서 반(class_id)에 살아 있는 반 보드가 있으면 그 반(종강이어도 연결이 남아 있으면 — *"클래스노트에 반이 살아있는 한은 계속"*).
- * - 없으면 앱이 정해 **적어 둔** '보낼 반'(0303a `classnote_class_id`)이 살아 있으면 그 반 — 앱의 최종 결정을 따른다
- *   (앱 `decideSendClass`가 보강 반을 1순위로 골라 적는다 · 강사가 경고를 보고 고른 반도 여기 적힌다).
- * - 🔴 적힌 값이 없거나 죽었고 반 없는 보강이면 **보강 추가 때 고른 반**(0171a `makeup_class_id`)이 살아 있을 때 그 반
- *   (원장 2026-09-30 *"애초에 보강 추가로 선택된 반에 보고서가 발송되면 되는거아닌가?"* — 적힌 값이 없던 옛 대기분).
- *   관리자 일괄 게이트(`sendClassGateRow`)와 같은 순서.
- * - 셋 다 없으면 기존 1인 보드(전환 전 대기분 등 1회성 폴백 — 원장 "그대로 두기").
- * @param {{ route: "personal"|"class"|"needs_class", classId: string|null, sendClassId: string|null|undefined,
- *           classEligible: boolean, sendEligible: boolean,
- *           makeupClassId?: string|null, makeupEligible?: boolean }} a
- * @returns {{ route: "personal"|"class", classId: string|null, via: "personal"|"class"|"makeup"|"send" }}
+ * 반별 경로에서 **실제로 올릴 반 보드** 고르기 — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반.
+ * 앱 [`sendClassGateRow`](../../src/features/onescreen/send-class.ts)와 **같은 판정**(앱·워커 일치 표가 잠근다):
+ * - 정규 보고서(`class_id` 있음) = 그 반 보드가 살아 있으면 그 반. 죽었으면 **막는다**(`board_missing`) — 다른 반·1인 보드로
+ *   보내지 않는다(원장 결정 4 · 반 보드 동기화가 필요하다).
+ * - 보강 보고서(반 없음) = **보강 반**(0171a `makeup_class_id`)이 곧 발송 반이다.
+ *   · 적힌 '보낼 반'(0303a `classnote_class_id`)이 보강 반과 다르면 **막는다**(`send_class_differs`) — 보고서 반 ≠ 발송 반.
+ *   · 보강 반 보드가 살아 있으면 그 반. 죽었으면 막는다(`board_missing`).
+ *   · 보강 반이 없으면('반 미정') 막는다(`no_anchor`) — 반을 추측하지 않는다.
+ * 막힌 행은 워커가 failed + 한국어 사유로 둔다(`ROUTE_BLOCKED_MESSAGE`).
+ * @param {{ route: "personal"|"class"|"needs_class", classId: string|null, classEligible: boolean,
+ *           sendClassId?: string|null, makeupClassId?: string|null, makeupEligible?: boolean }} a
+ * @returns {{ route: "personal"|"class"|"blocked", classId: string|null, via: "personal"|"class"|"makeup"|"blocked",
+ *             reason?: "board_missing"|"send_class_differs"|"no_anchor" }}
  */
 export function pickRouteClass(a) {
   if (a.route === "personal") return { route: "personal", classId: a.classId ?? null, via: "personal" };
-  if (a.route === "class" && a.classId && a.classEligible) return { route: "class", classId: a.classId, via: "class" };
-  if (a.sendClassId && a.sendEligible) return { route: "class", classId: a.sendClassId, via: "send" };
-  if (!a.classId && a.makeupClassId && a.makeupEligible) return { route: "class", classId: a.makeupClassId, via: "makeup" };
-  return { route: "personal", classId: a.classId ?? null, via: "personal" };
+  if (a.classId) {
+    return a.classEligible
+      ? { route: "class", classId: a.classId, via: "class" }
+      : { route: "blocked", classId: a.classId, via: "blocked", reason: "board_missing" };
+  }
+  if (!a.makeupClassId) return { route: "blocked", classId: null, via: "blocked", reason: "no_anchor" };
+  if (a.sendClassId && a.sendClassId !== a.makeupClassId)
+    return { route: "blocked", classId: a.makeupClassId, via: "blocked", reason: "send_class_differs" };
+  return a.makeupEligible
+    ? { route: "class", classId: a.makeupClassId, via: "makeup" }
+    : { route: "blocked", classId: a.makeupClassId, via: "blocked", reason: "board_missing" };
 }
+
+/** 막힌 행의 사유(한국어) — 발송 콘솔·원스크린 C.N 카드가 그대로 보여 준다. */
+export const ROUTE_BLOCKED_MESSAGE = {
+  board_missing: "반 보드가 없어 발송하지 않았습니다(다른 반으로 보내지 않습니다) — '지금 반 보드 동기화'(수업보고서 발송 큐)를 누른 뒤 다시 보내 주세요",
+  send_class_differs: "보낼 반이 보강 반과 달라 발송하지 않았습니다 — 원스크린에서 보강 반을 확인해 주세요",
+  no_anchor: "보강 반이 정해지지 않아 발송하지 않았습니다 — 원스크린에서 보강 반을 골라 주세요",
+};

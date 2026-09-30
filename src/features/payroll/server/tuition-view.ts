@@ -109,13 +109,16 @@ export async function getTeacherTuitionView(period: string): Promise<TuitionView
   let collected: Awaited<ReturnType<typeof collectTierRows>> = null;
   let collectFailed = false;
   try {
-    collected = await collectTierRows(db, period, [...teacherOfClass.keys()], tenantId, settings.operations.subjects);
+    collected = await collectTierRows(db, period, [...teacherOfClass.keys()], tenantId, settings.operations.subjects, {
+      substituteTeacherIds: teacherIds,
+    });
   } catch {
     collectFailed = true; // 0199a 미적용 등 — 면은 살리고 행마다 '조회 실패'로 밝힌다.
   }
   const tierRowsByTeacher = new Map<string, NonNullable<typeof collected>["rows"]>();
   for (const row of collected?.rows ?? []) {
-    const t = teacherOfClass.get(row.classId);
+    // 🔴 대신 보강 칸은 반 담임이 아니라 **보강한 강사** 몫(원장 결정 3) — 명세서(`tierRowsOwnedBy`)와 같은 귀속.
+    const t = row.taughtBy ?? teacherOfClass.get(row.classId);
     if (!t) continue;
     const list = tierRowsByTeacher.get(t) ?? [];
     list.push(row);

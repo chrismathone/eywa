@@ -31,6 +31,7 @@ import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
+import { kickVideoWorker } from "./video-worker.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
 import { processSyncRequestOnce } from "./classnote-sync-request.mjs";
@@ -96,7 +97,7 @@ const recentIssues = [];
 // 설정을 반별로 바꿔도 **전부 1인 보드로** 보낸다 — 설정을 바꾸기 전에 이 키로 이관 여부를 확인할 것.
 // syncRequests=지금 반 보드 동기화 요청(0313a)을 집는 버전인가(2026-09-30). 앱은 이 키가 있는 실게시 PC가 살아 있을 때만 요청을 받는다
 // (옛 워커만 있으면 아무도 안 집는 '대기 중'이 생긴다).
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true };
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -178,6 +179,8 @@ async function heartbeat(tenant) {
   const payload = {
     ...lastResults,
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
+    videoArchive: { enabled: !!process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID,
+      folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID || null },
     postMode: POST, // 실게시 PC 표식 — 지점당 한 대 임대(worker-lease.mjs)가 이 값을 센다(dry-run PC는 주인이 안 된다)
     env: {
       logDir: stateDirLabel(),
@@ -346,6 +349,7 @@ async function main() {
         return { ran: false };
       });
       if (cres.ran) noteResult("comments", cres);
+      if (POST) kickVideoWorker(b, tenant, log);
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.

@@ -273,11 +273,20 @@ async function fetchMyMakeupReports(
     ownsMakeupReport({ createdBy: r.created_by, teacherName: r.teacher_name }, userId, teacherName),
   );
   // 보고서가 없는 '추가만 한 보강'도 같은 복원 경로에 넣는다. 본인·날짜가 다른 세션은 읽지 않는다.
-  return [...reports, ...(sessions.data ?? []).flatMap(row => makeupSessionEntries(row.subject_progress).map(entry => ({
+  const sessionRows = (sessions.data ?? []).flatMap(row => makeupSessionEntries(row.subject_progress).map(entry => ({
     student_id: row.student_id as string, subject: entry.subject,
     makeup_class_id: entry.makeupClassId ?? null, makeup_class_name: entry.makeupClassName,
     created_by: userId, teacher_name: teacherName,
-  })))];
+  })));
+  // 보고서 행의 보강 반 **이름** — 대신 보강(학생의 원래 반, 원장 2026-09-30)은 내 반 목록 밖이라 이름을 모른다. 같은 조회로 이미 받은
+  // 명단 세션(확인창이 반 이름을 함께 적어 둔다)에서 채운다 — 새 조회·새 컬럼 없음([[#95]] 핫패스).
+  const sessionName = new Map(sessionRows.filter((r) => r.makeup_class_id && r.makeup_class_name).map((r) => [`${r.student_id}|${r.subject}|${r.makeup_class_id}`, r.makeup_class_name]));
+  for (const r of reports) {
+    if (!r.makeup_class_id || r.makeup_class_name) continue;
+    const name = sessionName.get(`${r.student_id}|${(r.subject ?? "").trim() || LEGACY_REPORT_SUBJECT}|${r.makeup_class_id}`);
+    if (name) r.makeup_class_name = name;
+  }
+  return [...reports, ...sessionRows];
 }
 
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {

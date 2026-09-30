@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { computeTierSettlement } from "@/features/payroll/tier-settlement";
+import { computeTierSettlement, tierRowsOwnedBy } from "@/features/payroll/tier-settlement";
 import { collectTierRows } from "@/features/payroll/server/tier-rows";
 import { parseGroupRates } from "@/features/payroll/salary-group";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -58,6 +58,11 @@ export type TierSettlementInfo =
        * ⚠️ 단가·이름은 안 싣는다 — 이 화면이 필요한 건 "이 학생 몫이 얼마인가"뿐이다.
        */
       settlementLines: SettlementLineLike[];
+      /**
+       * 반별 정산 시수(산정된 줄만) — 표에 없는 반(다른 반 **대신 보강**, `taught_by` 0316a)이 정산에 얼마 들었는지 화면이 밝히는 재료.
+       * 🔴 금액을 반에 나누는 데 쓰지 말 것(청구서는 반 몫이 아니다 — 위 머리 주석). 시수만이다.
+       */
+      unitsByClass?: Record<string, number>;
       /** 제외된 행 — "단가 미지정 N명 · N시수 제외" 경고를 검색 모수로 다시 세기 위한 재료. */
       excludedLines: ExcludedLineLike[];
     }
@@ -175,7 +180,7 @@ export async function getTeacherMoney(
         comp.data?.commission_rate === null || comp.data?.commission_rate === undefined
           ? null
           : Number(comp.data.commission_rate),
-    }),
+    }, teacherId),
   };
 }
 
@@ -194,15 +199,21 @@ async function computeTierSettlementInfo(
   month: string,
   classIds: string[],
   rates: { groupRates: ReturnType<typeof parseGroupRates>; defaultRate: number | null },
+  /** 이 정산액의 주인 — 대신 보강 칸 귀속(`tierRowsOwnedBy`). */
+  teacherId?: string,
 ): Promise<TierSettlementInfo> {
   try {
     // 행 조립은 공용 모듈이 단일 소스 — 급여명세서(payslip-queries)와 **같은 코드**로 같은 숫자를 낸다.
     // 과목 설정은 요청 캐시(페이지가 이미 읽었다) — 회차 단가를 붙일 수학 반 판정 재료.
     const settings = await getTenantSettings();
-    const collected = await collectTierRows(supabase, month, classIds, undefined, settings.operations.subjects);
+    // 🔴 대신 보강(원장 결정 3) — 담임 반의 다른 강사 대신 보강 칸은 빼고, 남의 반에서 이 강사가 한 보강 칸은 넣는다(명세서와 같은 함수).
+    const collected = await collectTierRows(supabase, month, classIds, undefined, settings.operations.subjects, {
+      substituteTeacherIds: teacherId ? [teacherId] : [],
+    });
     if (!collected) return { status: "unwired" };
+    const rows = teacherId ? tierRowsOwnedBy(collected.rows, teacherId, new Set(classIds)) : collected.rows;
 
-    const result = computeTierSettlement(collected.rows, collected.priceByTier, rates);
+    const result = computeTierSettlement(rows, collected.priceByTier, rates);
     const tierByStudent = collected.tierByStudent;
     if (result.total === null)
       return {
@@ -228,6 +239,10 @@ async function computeTierSettlementInfo(
       // ⚠️ 행 순서를 **그대로** 넘긴다 — 정렬하거나 학생별로 미리 접으면 전체 합의 부동소수 결합순서가
       //    달라져 `total`과 1원이 흔들릴 수 있다(search-totals.ts `scopedSettlement` 주석).
       settlementLines: result.lines.map((l) => ({ studentId: l.studentId, units: l.units, amount: l.amount })),
+      unitsByClass: result.lines.reduce<Record<string, number>>((acc, l) => {
+        acc[l.classId] = (acc[l.classId] ?? 0) + l.units;
+        return acc;
+      }, {}),
       excludedLines: result.excludedLines,
     };
   } catch {

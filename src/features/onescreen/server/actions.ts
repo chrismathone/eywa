@@ -6,7 +6,7 @@ import { preserveMakeupSessionEntries, type SessionProgress } from "../makeup-se
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { addDays, kstToday, resolveReportDate } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
@@ -34,13 +34,13 @@ import { sameSessionRevision, sessionContentFromRow, sessionSaveDecision, type S
 import { isRecallInFlight } from "@/features/report-admin/report-recall";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds, getTeachingClasses } from "@/features/classes/server/delegation";
-import { findMakeupAnchor } from "@/features/attendance/makeup-host";
 import { hasAnyAttendance, isStudentAbsentForSend } from "./absence-gate";
 import { isReportOptout } from "@/features/classes/report-optout";
 import {
   ensureMakeupAttendanceForReport,
   resolveMakeupOwner,
 } from "@/features/attendance/server/makeup-pool";
+import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "./makeup-anchor-sync";
 import { ingestReport } from "@/features/progress/server/ingest";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -66,8 +66,8 @@ import { mentStyleDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
-import { classRouteActive, needsSendClass, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
-import { classBoardLiveForStudent, resolveSendClass } from "./send-class";
+import { BOARD_MISSING_ERROR, classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
+import { classBoardLiveForStudent, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError } from "@/lib/supabase/db-error";
@@ -126,8 +126,9 @@ export type SaveLessonReportInput = {
    */
   jjExamPick?: string[] | null;
   /**
-   * 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'(0303a) — 반별 발송 대상일 때 화면이 고른 반.
-   * 없으면 서버가 메인 수업을 정한다(send-class). 서버가 후보 안에 있는지 다시 확인한다.
+   * ⚠️ **새 화면은 보내지 않는다**(2026-09-30) — 보강 보고서의 '보낼 반'은 보강 반의 복사본이고 따로 고르지 않는다
+   * (원장 *"보고서 반 = 출석부 반"*). 옛 화면(배포 중 열린 탭)의 발송 다이얼로그가 보내면 **보강 반으로 받는다**(같은 수용 판정 ·
+   * 칸도 함께 옮긴다) — 옛 탭이 '보낼 반'만 바꾸던 길을 새 규칙으로 흡수한다.
    */
   classnoteClassId?: string | null;
 };
@@ -148,6 +149,8 @@ export async function saveLessonReport(
   warning?: string;
   /** 실제로 저장된 보강 앵커(`makeup_class_id`) — 서버가 확인한 값(발송의 '보낼 반' 판정이 이 값을 쓴다). */
   makeupClassId?: string | null;
+  /** 반 미정 보강이라 저장을 막았다(`MAKEUP_ANCHOR_REQUIRED_ERROR`) — 화면이 보강 반을 고르게 한다. */
+  needsAnchor?: boolean;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -207,7 +210,12 @@ export async function saveLessonReport(
   const gateBase = supabase
     .from("lesson_reports")
     // 멘트 작성 방식 판정 재료(notes, ment_source)를 게이트 pre-read에 **합승**시킨다 — 별도 왕복 없음(B4).
-    .select(mentReady ? "id, classnote_status, makeup_class_id, notes, ment_source" : "id, classnote_status, makeup_class_id")
+    // 보강 앵커 판정 재료(옛 앵커·게시 기록·소유자)도 같은 pre-read에 합승한다 — 반을 옮길 때 칸을 먼저 확인해야 해서.
+    .select(
+      mentReady
+        ? "id, classnote_status, classnote_sent_at, makeup_class_id, created_by, notes, ment_source"
+        : "id, classnote_status, classnote_sent_at, makeup_class_id, created_by",
+    )
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
   const gateScoped = input.classId
@@ -238,7 +246,9 @@ export async function saveLessonReport(
     | {
         id: string;
         classnote_status: string | null;
+        classnote_sent_at?: string | null;
         makeup_class_id?: string | null;
+        created_by?: string | null;
         notes?: string | null;
         ment_source?: string | null;
       }
@@ -251,18 +261,54 @@ export async function saveLessonReport(
     };
   }
 
-  // 보강 앵커(`makeup_class_id`) 확인 — 클라가 준 반 id를 그대로 믿지 않는다. 이 앵커는 출석부 칸의 반이자
-  // ClassNote '보낼 반'의 1순위다(원장 2026-09-30) → 남의 반·다른 과목·종강 반 id를 실으면 엉뚱한 반 보드로 나간다.
-  // 판정 = 보강 등록 문과 같은 함수(`findMakeupAnchor`: 그날 담당 반 · 같은 과목 · 종강 전). 이미 저장돼 있던 앵커는
-  // 그대로 받는다(그 뒤 종강·위임 종료돼도 재저장이 앵커를 지우지 않게). 받을 수 없으면 **저장돼 있던 값을 유지**한다.
-  const wantedAnchor = input.makeup && !input.classId ? (input.makeupClassId ?? null) : null;
-  const priorAnchor = priorRow?.makeup_class_id ?? null;
+  /**
+   * 🔴 보강 앵커(`makeup_class_id`) — **보고서 반 = 출석부 반 = 발송 반**의 단일 소스(원장 2026-09-30, [`makeup-anchor.ts`](../makeup-anchor.ts)).
+   *  · 클라가 준 반 id를 그대로 믿지 않는다 — 받을 반 = 담당 반 ∪ 학생이 다니는 반 · 같은 과목 · 종강 전(`acceptMakeupAnchor`,
+   *    원장 결정 2: 위임 없이 남의 반 학생을 대신 보강하면 **학생의 원래 반**으로).
+   *  · 받을 수 없으면 **저장 오류**다(예전엔 조용히 옛 값으로 두어 화면과 DB가 갈렸다 — C3).
+   *  · 이미 저장된 앵커는 그대로 받는다(그 뒤 종강·위임 종료돼도 재저장이 앵커를 지우거나 막지 않게). 비워 보내도 지우지 않는다.
+   *  · 반별 발송 대상(수학 · ClassNote 반 경로)인데 앵커가 없으면('반 미정') 저장을 막는다 — 반 없는 기록을 만들지 않는다(설계 f).
+   *  · 앵커가 바뀌면 출결 칸을 **함께** 옮긴다 — 칸에서 막힐 일은 **저장 전에** 확인한다(보고서만 바뀌면 둘이 갈린다).
+   */
+  const isMakeupRow = !!input.makeup && !input.classId;
   let makeupAnchor: string | null = null;
-  if (wantedAnchor && wantedAnchor === priorAnchor) makeupAnchor = wantedAnchor;
-  else if (wantedAnchor) {
-    const teaching = await getTeachingClasses(supabase, user.id, reportDate).catch(() => []);
-    makeupAnchor = findMakeupAnchor(teaching, wantedAnchor, input.subject, reportDate)?.id ?? priorAnchor;
-  } else if (input.makeup && !input.classId) makeupAnchor = null; // '반 없이'를 고른 것 — 그대로 비운다
+  let priorAnchor: string | null = null;
+  let anchorMove: Extract<Awaited<ReturnType<typeof prepareMakeupAnchor>>, { ok: true }>["move"] = null;
+  if (isMakeupRow) {
+    const prepared = await prepareMakeupAnchor(supabase, {
+      tenantId: user.tenantId,
+      candidatesFor: user.id,
+      studentId: input.studentId,
+      date: reportDate,
+      subject: input.subject,
+      wanted: input.classnoteClassId ?? input.makeupClassId ?? null,
+      prior: priorRow
+        ? {
+            makeupClassId: priorRow.makeup_class_id ?? null,
+            classnoteStatus: priorRow.classnote_status,
+            classnoteSentAt: priorRow.classnote_sent_at ?? null,
+            createdBy: priorRow.created_by ?? null,
+          }
+        : null,
+      anchorRequired: async () =>
+        SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classRouteActive(await getTenantSettings(), user.displayName),
+    });
+    if (!prepared.ok)
+      return {
+        ok: false,
+        ...(priorRow ? { id: priorRow.id } : {}),
+        error: prepared.error,
+        ...(prepared.needsAnchor ? { needsAnchor: true } : {}),
+      };
+    makeupAnchor = prepared.anchor;
+    priorAnchor = prepared.priorAnchor;
+    anchorMove = prepared.move;
+    // 옛 행의 반이 바뀌면 upsert 전에 조건부로 먼저 바꾼다 — 사이에 워커가 집으면(옛 반으로 게시 중) 둘 중 하나만 이긴다.
+    if (priorRow && makeupAnchor && makeupAnchor !== priorAnchor) {
+      const claimed = await claimMakeupAnchorChange({ tenantId: user.tenantId, reportId: priorRow.id, from: priorAnchor, to: makeupAnchor });
+      if (!claimed.ok) return { ok: false, id: priorRow.id, error: claimed.error };
+    }
+  }
 
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
@@ -288,6 +334,9 @@ export async function saveLessonReport(
         homework_score: normalizeNoneMarker(input.homeworkScore),
         // 보강 행일 때만 앵커를 남긴다(정규 행에 들어가면 필터가 엉킨다). 미지정('전체'에서 추가)은 null.
         makeup_class_id: makeupAnchor,
+        // 🔴 보강 행의 '보낼 반'(0303a)은 앵커의 **복사본**이다 — 따로 정하지 않는다(발송 반 = 보고서 반, 원장 2026-09-30).
+        //    이미 어딘가 게시된 행(`classnote_sent_at`)은 다시 적지 않는다 — 회수가 그 기록으로 글을 찾는다.
+        ...(isMakeupRow && makeupAnchor && !priorRow?.classnote_sent_at ? { classnote_class_id: makeupAnchor } : {}),
         daily_test: input.dailyTest || null,
         check_test: input.checkTest || null,
         attitude: input.attitude || null,
@@ -319,7 +368,12 @@ export async function saveLessonReport(
     // created_by도 되받는다 — 보강 출석부 칸의 **귀속 강사**(아래 훅)는 저장자가 아니라 이 소유 계정이다.
     .select("id, share_token, teacher_name, created_by")
     .single();
-  if (error || !data) return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
+  if (error || !data) {
+    // 먼저 바꿔 둔 반(claimMakeupAnchorChange)을 되돌린다 — 저장이 안 됐는데 반만 바뀌면 칸과 갈린다.
+    if (priorRow && makeupAnchor && makeupAnchor !== priorAnchor)
+      await claimMakeupAnchorChange({ tenantId: user.tenantId, reportId: priorRow.id, from: makeupAnchor, to: priorAnchor }).catch(() => undefined);
+    return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
+  }
 
   /**
    * 영어 템플릿 글에 **그림 자리 줄**이 있으면 그날 인재원 자료를 받아 이 보고서에 묶는다(0261a, 2026-09-11) —
@@ -354,42 +408,67 @@ export async function saveLessonReport(
   }
 
   /**
-   * **보강 보고서를 쓰면 출석부에 칸이 선다**(원장 2026-09-02: *"보고서 발송건에 대해서는 자동 입력
-   * 되어야지"* · *"실제로 수업을 했는데 출석부에 시수가 없으면 이상하지"*).
+   * **보강 보고서를 쓰면 출석부에 칸이 선다**(원장 2026-09-02 *"보고서 발송건에 대해서는 자동 입력 되어야지"*).
    *
-   * 🔴 **반 없는 보강만**이다(`makeup && !classId`). 반이 붙은 보고서는 그 반 출석부에 이미 칸이 있다.
-   * 🔴 ~~어느 반에서 했는지는 묻지 않는다~~ → **2026-09-21 원장이 뒤집었다**(*"보강 추가시에 '수업'을 선택할 수 있어야겠어.
-   *    그냥 보강으로 추가되니까 출석부에 행만 자꾸 생기네"*): 확인창이 수업을 묻고 그 반이 `makeupClassId`로 온다 — 그 반에 칸이
-   *    이미 서 있으면 여기서 아무것도 안 만든다. '반 없이'를 고르면 종전대로 그 강사의 **보이지 않는 '보강' 반**
-   *    ([`makeup-pool.ts`](@/features/classes/makeup-pool))에 앉힌다. 그래야 시수 주인이 생긴다.
-   * 🔴 **귀속은 저장자가 아니라 보고서의 소유자**(저장된 행의 `created_by` → `teacher_name`, 규칙은
-   *    `pickMakeupOwner`). 사무실이 강사 대신 저장하면 저장자로 귀속했을 때 보강 반이 사무실 계정 앞으로
-   *    생겨 그 강사 출석부엔 안 뜬다(2026-09-02 점검 — 실측 0건이라 예방). 소유자를 계정으로 못 풀면
-   *    (동명이인·미등록) **훅을 건너뛴다** — 소급 스크립트가 같은 규칙으로 채울 수 있다.
-   * ⚠️ 있는 칸은 안 덮는다 · 실패해도 보고서 저장은 그대로다(출결은 보고서 위의 기록이다).
+   * 🔴 **앵커가 있으면 앵커 반에만**(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 예약 반·보이지 않는 보강 반으로 새지 않는다.
+   *    옛 앵커(또는 보이지 않는 보강 반)에 있던 칸은 **옮기고**(시수·메모 보존), 그래도 없으면 새로 세운다. 대신 보강(보강한 강사가
+   *    그 반 담당이 아니다)이면 그 칸만 강사 몫으로 적는다(`taught_by`, 원장 결정 3).
+   *    예전엔 확인창이 칸을 **기다리지 않고** 먼저 적었고(`persistAnchorMakeup`) 실패하면 이 훅이 다른 반에 칸을 세웠다(C2) —
+   *    이제 칸은 서버의 이 훅 하나가 **기다려서** 적는다. 실패하면 저장 오류로 돌려준다(발송도 멈춘다).
+   * 🔴 시수·결석분 메모는 확인창이 명단 세션에 적어 둔 값(`registerMakeupEntries`)을 그대로 쓴다 — 칸을 **새로 세울 때만**.
+   * ⚠️ 앵커가 없는 보강(반별 발송 대상이 아닌 과목·학원)은 종전대로 보이지 않는 보강 반(`ensureMakeupAttendanceForReport`)에 앉는다.
+   * 🔴 **귀속은 저장자가 아니라 보고서의 소유자**(저장된 행의 `created_by` → `teacher_name`, `pickMakeupOwner`) — 사무실 대리 저장 예방.
    */
-  if (input.makeup && !input.classId) {
-    try {
-      const owner = await resolveMakeupOwner({
+  if (isMakeupRow) {
+    const owner = await resolveMakeupOwner({
+      tenantId: user.tenantId,
+      createdBy: (data.created_by as string | null | undefined) ?? null,
+      teacherName: data.teacher_name ?? null,
+      saver: { id: user.id, name: user.displayName ?? null },
+    }).catch(() => null);
+    if (makeupAnchor) {
+      const fin = await finishMakeupAnchor(supabase, {
         tenantId: user.tenantId,
-        createdBy: (data.created_by as string | null | undefined) ?? null,
-        teacherName: data.teacher_name ?? null,
-        saver: { id: user.id, name: user.displayName ?? null },
+        reportId: data.id,
+        studentId: input.studentId,
+        date: reportDate,
+        subject: input.subject || LEGACY_REPORT_SUBJECT,
+        anchor: makeupAnchor,
+        priorAnchor,
+        move: anchorMove,
+        ownerId: owner?.id ?? null,
+        via: "report_save",
       });
-      if (owner) {
-        await ensureMakeupAttendanceForReport({
+      if (!fin.ok)
+        return {
+          ok: false,
+          id: data.id,
+          shareToken: data.share_token,
+          makeupClassId: anchorMove ? priorAnchor : makeupAnchor,
+          error: fin.error,
+        };
+    } else if (owner) {
+      try {
+        const placed = await ensureMakeupAttendanceForReport({
           tenantId: user.tenantId,
           teacherId: owner.id,
           teacherName: owner.name,
           studentId: input.studentId,
           subject: input.subject || LEGACY_REPORT_SUBJECT,
           date: reportDate,
-          // 확인창에서 고른 수업(또는 반 필터) — 그 반에 칸이 이미 서 있으면 보강 반을 만들지 않는다(시수 두 번 방지).
-          makeupClassId: makeupAnchor,
         });
+        // 그날 **보강 예약의 반**에 앉혔으면 그 반이 곧 이 보강의 반이다 — 보고서에도 적는다(보고서 반 = 출석부 반, 원장 2026-09-30).
+        // 조건부(아직 비어 있을 때만) — 그새 누가 반을 정했으면 덮지 않는다.
+        if (placed.reserved && placed.classId)
+          await createAdminClient()
+            .from("lesson_reports")
+            .update({ makeup_class_id: placed.classId })
+            .eq("tenant_id", user.tenantId)
+            .eq("id", data.id)
+            .is("makeup_class_id", null);
+      } catch {
+        /* 앵커 없는 보강(보이지 않는 보강 반)의 칸 생성 실패는 종전대로 저장을 막지 않는다(로그는 헬퍼가 남긴다) */
       }
-    } catch {
-      /* 출결 칸 생성 실패는 보고서 저장을 막지 않는다(로그는 헬퍼가 남긴다) */
     }
   }
 
@@ -413,6 +492,7 @@ export async function saveLessonReport(
       via: "teacher",
       created: !priorRow,
       ...(input.makeup ? { makeup: true } : {}),
+      ...(isMakeupRow ? { makeupClassId: makeupAnchor } : {}),
     },
   });
 
@@ -522,6 +602,22 @@ export async function saveAndQueueClassnote(
 
   // 저장(upsert) — 권한 재검증(getCurrentUser+담당 활성수강생)은 saveLessonReport 내부.
   const saved = await saveLessonReport(input);
+  // 반 미정 보강(원장 2026-09-30) — 저장이 막혔다. 보낼 수 있는 반을 후보로 돌려주면 화면이 고르게 하고, 고른 반을 보강 반으로
+  // 실어 다시 보낸다(그 저장이 출석부 칸을 그 반에 세운다). 후보 조회 실패는 저장 오류 문장 그대로.
+  if (!saved.ok && saved.needsAnchor) {
+    const pick = await resolveMakeupSendClass(user.tenantId, input.studentId, reportDate, input.subject, null).catch(() => null);
+    if (pick && !pick.ok && pick.reason === "choose")
+      return {
+        ok: false,
+        ...(saved.id ? { id: saved.id } : {}),
+        status: "needs_class",
+        candidates: pick.candidates,
+        defaultClassId: pick.defaultId,
+        makeupClassName: null,
+        error: saved.error,
+      };
+    return { ok: false, status: pick && !pick.ok ? "no_class" : undefined, error: pick && !pick.ok ? NO_SEND_CLASS_ERROR : saved.error };
+  }
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
   // 저장 단계 알림(영어 그림 자료) — 아래 어느 결과로 끝나든 함께 돌려준다(저장은 이미 끝났다).
   const warn = saved.warning ? { warning: saved.warning } : {};
@@ -685,21 +781,18 @@ export async function saveAndQueueClassnote(
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict", ...warn };
   }
 
-  // 반별 발송(보고서 설정 '수학 발송 경로') 대상인데 **보낼 반 보드가 없는** 보고서 — 'ClassNote로 보낼 반'을 정한다(0303a).
-  //  · 반이 없는 보강(A안, 2026-09-29) · 반은 있지만 이 학생이 받을 반 보드가 없는 반 — ClassNote에서 사라진 종강 반 등
-  //    (원장 2026-09-30 *"종강은 클래스노트에 반이 살아있는 한은 계속 보내고, 이후에 반이 사라지면 반 선택이 뜨도록"*).
-  //    특강은 정규 반처럼 제 반 보드로 간다(원장 2026-09-30 — 특강 반 보드도 만든다).
-  // 메인 수업을 정할 수 있으면 그 반, 못 정하면 **발송을 멈추고 후보를 돌려준다**(화면이 고르게 한다).
-  // 🔴 후보가 아예 없으면 **발송하지 않는다**(원장 2026-09-30 *"담당 반이 없으면 보고서 발송 불가능하게"*) — 예전엔 1인 보드로 보냈다.
+  /**
+   * 반별 발송(ClassNote 모듈 + 보고서 설정 '수학 발송 경로') — 🔴 원장 2026-09-30: **보고서 반 = 출석부 반 = 발송 반**.
+   *  · 정규 보고서 = 보고서 반의 반 보드로만. 이 학생이 받을 반 보드가 없으면 **막고 안내**한다 — 다른 반으로 보내지 않는다
+   *    (원장 결정 4 · 반 보드 동기화가 필요하다). 예전엔 다른 반을 고르게 했다(C5).
+   *  · 보강 보고서 = **보강 반**(저장이 확인해 적은 `makeup_class_id`)의 반 보드로만. 보드가 없으면 반을 고르게 하고, 고른 반은
+   *    다시 저장을 지나 **새 보강 반**이 된다(출석부 칸도 함께 옮겨진다). '보낼 반'만 따로 적는 길은 없앴다(C1·C9).
+   *  · 반 정보가 없는 정규 행(옛 과목 단위 행)은 반별로 보낼 곳이 없다 — 막는다.
+   * 🔴 확인 실패는 **발송하지 않는다**(fail-closed) — 모르는 채로 보내면 워커가 막거나 엉뚱한 곳을 시도한다.
+   */
   const routeApplies = classRouteActive(settings, user.displayName); // ClassNote 모듈이 꺼진 학원은 언제나 false(예전 그대로)
-  let sendClassPick: { classId: string; via: string } | null = null; // 감사로그 — 어느 반으로, 왜(보강 반·고름·메인 수업)
-  const classLive =
-    routeApplies && input.classId && SEND_CLASS_SUBJECTS.has(input.subject ?? "")
-      ? await classBoardLiveForStudent(user.tenantId, input.classId, input.studentId).catch(() => null)
-      : null;
-  // 반 보드 확인 실패(0302a 조회 오류 등) = **발송하지 않는다**(fail-closed) — 모르는 채로 보내면 워커가 1인 보드로 흘린다.
-  const classCheckFailed = routeApplies && !!input.classId && SEND_CLASS_SUBJECTS.has(input.subject ?? "") && classLive === null;
-  if (classCheckFailed || needsSendClass({ subject: input.subject, classId: input.classId, classLive }, routeApplies)) {
+  let sendClassPick: { classId: string; via: string } | null = null; // 감사로그 — 어느 반으로
+  if (routeApplies && SEND_CLASS_SUBJECTS.has(input.subject ?? "")) {
     const unqueue = async () => {
       if (prior?.classnote_status === "queued")
         await supabase
@@ -717,63 +810,49 @@ export async function saveAndQueueClassnote(
       error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 다시 시도해 주세요",
       ...warn,
     };
-    if (classCheckFailed) {
-      await unqueue();
-      return checkFail;
-    }
-    let pick: Awaited<ReturnType<typeof resolveSendClass>>;
-    try {
-      // 후보 = 작성 강사가 담당하는 반만(원장 2026-09-29) — 강사는 담당 반이 없으면 발송 불가(no_class), 관리자는 담당 반이 없으면 전부.
-      const restrict = (await accessLevelTenant(user.systemRole, "classes")) === "scoped";
-      // 보고서에 반이 있는데 그 반 보드가 없으면(특강·종강 등) 다른 반으로 자동으로 보내지 않는다 — 고르게 한다.
-      // 🔴 보강 추가 때 고른 반(`makeup_class_id`)에 반 보드가 있으면 그 반으로(원장 2026-09-30) — **저장된 값**
-      //    (saveLessonReport가 확인해 적은 앵커 — 반 없는 보강 행에만 남는다).
-      pick = await resolveSendClass(
-        user.tenantId,
-        input.studentId,
-        reportDate,
-        input.classnoteClassId ?? null,
-        { userId: user.id, restrict },
-        { autoPick: !input.classId, makeupClassId: saved.makeupClassId ?? null },
-      );
-    } catch {
-      await unqueue();
-      return checkFail;
-    }
-    if (!pick.ok && pick.reason === "choose") {
-      await unqueue();
-      return {
-        ok: false,
-        id: saved.id,
-        shareToken: saved.shareToken,
-        status: "needs_class",
-        candidates: pick.candidates,
-        defaultClassId: pick.defaultId,
-        makeupClassName: pick.makeupClass?.name || null,
-        error: "보낼 반을 골라 주세요 — 저장은 됐습니다",
-        ...warn,
-      };
-    }
-    // 🔴 후보가 없으면(담당 반 아님·반 보드 있는 반이 없음) 발송 불가 — 저장은 그대로, 대기에 올리지 않는다.
-    if (!pick.ok) {
+    if (input.classId) {
+      const classLive = await classBoardLiveForStudent(user.tenantId, input.classId, input.studentId).catch(() => null);
+      if (classLive === null) {
+        await unqueue();
+        return checkFail;
+      }
+      if (!classLive) {
+        await unqueue();
+        return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "board_missing", error: BOARD_MISSING_ERROR, ...warn };
+      }
+    } else if (!input.makeup) {
       await unqueue();
       return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "no_class", error: NO_SEND_CLASS_ERROR, ...warn };
-    }
-    {
-      const { error: scErr } = await supabase
-        .from("lesson_reports")
-        .update({ classnote_class_id: pick.classId })
-        .eq("id", saved.id);
-      if (scErr) {
+    } else {
+      let pick: Awaited<ReturnType<typeof resolveMakeupSendClass>>;
+      try {
+        pick = await resolveMakeupSendClass(user.tenantId, input.studentId, reportDate, input.subject, saved.makeupClassId ?? null);
+      } catch {
+        await unqueue();
+        return checkFail;
+      }
+      if (!pick.ok && pick.reason === "choose") {
         await unqueue();
         return {
           ok: false,
           id: saved.id,
           shareToken: saved.shareToken,
-          error: "보낼 반을 저장하지 못해 발송하지 않았습니다 — 저장은 됐습니다. 관리자에게 알려 주세요",
+          status: "needs_class",
+          candidates: pick.candidates,
+          defaultClassId: pick.defaultId,
+          makeupClassName: pick.makeupClass?.name || null,
+          error: pick.makeupClass
+            ? `보강 반(${pick.makeupClass.name || "이름 없음"})에 이 학생의 ClassNote 반 보드가 없습니다 — 보강 반을 바꿔 주세요(저장은 됐습니다)`
+            : "보강 반을 골라 주세요 — 저장은 됐습니다",
           ...warn,
         };
       }
+      // 🔴 후보가 없으면(이 학생의 반 보드가 있는 같은 과목 반이 없음) 발송 불가 — 저장은 그대로, 대기에 올리지 않는다.
+      if (!pick.ok) {
+        await unqueue();
+        return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "no_class", error: NO_SEND_CLASS_ERROR, ...warn };
+      }
+      // '보낼 반'(0303a)은 저장이 이미 보강 반으로 적었다(복사본) — 여기서 따로 적지 않는다.
       sendClassPick = { classId: pick.classId, via: pick.via };
     }
   }

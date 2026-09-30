@@ -1,6 +1,7 @@
 "use client";
 
 import { registerMakeupEntries } from "../server/makeup-register-actions";
+import { setMakeupClass } from "../server/makeup-class-actions";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
@@ -483,7 +484,7 @@ export function OneScreenClient({
      * 보강을 기록할 수업 후보(원장 2026-09-21 *"보강 추가시에 '수업'을 선택할 수 있어야겠어"* → 같은 날 *"항상 다른 수업을
      * 고를 수 있게"*) — 원스크린의 모든 보강 추가가 싣는다(합칠 정규 수업이 있어도). 없으면 창이 묻지 않는다(종전 앵커 그대로).
      */
-    hostClasses?: { options: MakeupHostClass[]; loading: boolean; failed?: boolean };
+    hostClasses?: { options: MakeupHostClass[]; loading: boolean; failed?: boolean; noneBlocked?: boolean };
   } | null>(null);
   /**
    * 결석 조회 응답 순서 가드(옆 두 화면 `input-form`·`makeup-add-flow`와 같은 규약).
@@ -1041,31 +1042,11 @@ export function OneScreenClient({
     if (!res.ok) toast.error(t("os.c.fontSizeFail"));
   }
   /**
-   * 보강을 그 수업 출석부에 남긴다 — ECS·출석부 명단이 같은 학생을 보게. 이미 그 반 수강이면 건너뛴다.
-   * 🔴 **정규 수업에 기록하지 않는 보강에만** 부른다(정규 수업이 없거나, 있어도 창에서 다른 반을 골랐다) — 정규 수업을 고르면
-   *    시수는 그 칸에 얹힌다(합침·분리 둘 다).
+   * 🔴 보강 칸은 **서버가 앵커 반에** 적는다(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 확인하는 순간 등록 문(`registerMakeupEntries`,
+   *    `recordCell`)이, 보고서를 저장할 때 저장 훅(`saveLessonReport`)이 **같은 함수**(`syncAnchorCells`)로 기다려서 적는다(이미 있으면 그대로).
+   *    예전엔 확인창이 여기서 칸을 **기다리지 않고** 먼저 적었고(`persistAnchorMakeup`), 실패하면 저장 훅이 다른 반(예약 반·보강 반)에
+   *    칸을 세워 보고서 반과 출석부 반이 갈렸다(C2). 확인 때 적어 두는 이유 = 보고서를 안 쓰는 보강(영어 등)·저장 실패에도 시수가 남게.
    */
-  function persistAnchorMakeup(
-    studentId: string,
-    classId: string | null,
-    enrolledInAnchor: boolean,
-    units?: number,
-  ) {
-    if (!classId || enrolledInAnchor) return;
-    void setAttendanceCell({
-      studentId,
-      classId,
-      sessionDate: activeDate,
-      status: "makeup",
-      allowMakeup: true,
-      // 확인창에서 고른 시수를 그 칸에 그대로 적는다(1이면 서버가 접는다) — 급여가 이 값을 읽는다.
-      // 🔴 1도 **명시로** 보낸다(2026-09-11) — 안 보내면 '기본'이라 수학 반에선 서버가 수업 길이 자동 시수를
-      //    넣는다(auto-units.ts). 이 칸은 보강이고 시수는 강사가 확인창에서 고른 값이다(종전 저장값 그대로 1=null).
-      units: String(units ?? 1),
-    }).then((r) => {
-      if ("error" in r) toast.error(tf("os.c.anchorFail", { error: r.error }));
-    });
-  }
   // 보강(수업외) 학생 추가 — 서버에서 OneScreenStudent 조립(담당 과목·교재 기본값).
   //
   // ⚠️ 정규/특강으로 **이미 목록에 있는 학생**도 보강 추가가 돼야 한다(2026-07-24 원장: 특강+정규외 보강).
@@ -1203,7 +1184,7 @@ export function OneScreenClient({
   }
   /**
    * 창에 보일 수업 후보 — 🔴 **그 학생이 다니는 반만**(원장 2026-09-21 *"해당 학생의 소속 수업만 띄워"*) · 그 학생이 **오늘 이 화면에
-   * 정규 행이 있는 반은 뺀다**: 그 반은 정규 칸이 이미 있어 `persistAnchorMakeup`이 보강을 안 적는다(합칠 수 없는 결석 등) — 보이면
+   * 정규 행이 있는 반은 뺀다**: 그 반은 정규 칸이 이미 있어 저장 훅이 보강 칸을 따로 세우지 않는다(합칠 수 없는 결석 등) — 보이면
    * "그 반에 기록합니다"가 지킬 수 없는 약속이 된다. 판정은 [`hostChoicesFor`] 한 곳(확인창도 같은 함수 · 기본값도 이 목록으로 본다).
    */
   function hostChoicesOf(ask: NonNullable<typeof makeupAsk>) {
@@ -1215,6 +1196,7 @@ export function OneScreenClient({
     // 재리뷰 2026-09-21). 오늘 반 목록에 없는 반은 담임 반으로 친다(모르면 막는 쪽 — 시수가 사라지는 것보다 낫다).
     const ownRegular = rows.some((su) => !todayClasses.find((c) => c.id === su.classId)?.delegated);
     return { ...ask.hostClasses, options: hostChoicesFor(ask.hostClasses.options, regular), regularToday: ownRegular };
+    // ⚠️ `noneBlocked`(반별 발송 대상 — '반 없이' 금지)는 `ask.hostClasses`에 실려 그대로 넘어간다.
   }
   /** 보강을 기록할 수업 후보를 뒤늦게 채운다 — 창은 먼저 열고 목록만 갈아 끼운다(결석 조회와 같은 모양). */
   async function loadHostClasses(studentId: string, rows: readonly Subject[]) {
@@ -1225,9 +1207,49 @@ export function OneScreenClient({
     if (mine !== hostSeq.current) return;
     setMakeupAsk((prev) =>
       prev && prev.studentId === studentId && prev.hostClasses
-        ? { ...prev, hostClasses: { options: res.options, loading: false, failed: res.failed } }
+        ? { ...prev, hostClasses: { options: res.options, loading: false, failed: res.failed, noneBlocked: "noneBlocked" in res ? res.noneBlocked : false } }
         : prev,
     );
+  }
+  /**
+   * **보강 반 고르기·바꾸기**(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 후보 = 이 학생이 다니는 같은 과목 반(확인창과 같은 목록·같은 함수).
+   * 고르면 서버 [`setMakeupClass`]가 보고서의 보강 반·보낼 반과 출석부 칸을 **함께** 옮긴다(보고서 전이면 명단 세션의 보강 반만).
+   * 이미 발송된 보강은 서버가 거절한다(회수가 옛 반 기록으로 글을 찾는다).
+   */
+  async function pickMakeupClass(student: OneScreenStudent, subjectName: string) {
+    if (readonlyBlocked()) return;
+    const su = student.subjects.find((x) => x.name === subjectName);
+    const subjectKey = su?.subjectKey || null;
+    if (!su || !su.makeup || su.classId || !subjectKey) return;
+    const res = await fetchMakeupHostClasses(student.id, activeDate, [subjectKey]).catch(() => ({ options: [], failed: true }));
+    if (res.failed) {
+      toast.error(t("os.c.sendClassCheckFail"));
+      return;
+    }
+    const regular = student.subjects.filter((x) => !x.makeup && x.classId).map((x) => x.classId!);
+    const options = hostChoicesFor(res.options, regular).filter((o) => o.subject === subjectKey);
+    if (!options.length) {
+      toast.error(t("os.makeupClass.noChoice"));
+      return;
+    }
+    const picked = await askSendClass({
+      studentName: student.name,
+      candidates: options.map((o) => ({ id: o.classId, name: o.className })),
+      defaultId: su.makeupClassId ?? null,
+      makeupClassName: null,
+      pickOnly: true,
+    });
+    if (!picked || picked === su.makeupClassId) return;
+    const r = await setMakeupClass({ studentId: student.id, date: activeDate, subject: subjectKey, classId: picked });
+    if (!r.ok) {
+      toast.error(r.error);
+      return;
+    }
+    patch(student.id, (s) => ({
+      ...s,
+      subjects: s.subjects.map((x) => (x.name === subjectName ? { ...x, makeupClassId: picked, makeupClassName: r.className } : x)),
+    }));
+    toast.success(tf("os.makeupClass.changed", { name: r.className }));
   }
   /**
    * 결석 후보(이전 반 포함)를 뒤늦게 채운다 — 창은 먼저 열고 목록만 도착하면 갈아 끼운다.
@@ -1412,9 +1434,14 @@ export function OneScreenClient({
           entries: rows.map(su => ({
             subject: su.subjectKey || su.name, makeupClassId: su.makeupClassId,
             absentDate: choice.absentDate, absentClassId: choice.absentClassId, units: choice.addUnits,
+            // 🔴 정규 수업에 기록하지 않는 보강이면 **지금** 앵커 반에 칸을 세운다(서버가 저장 훅과 같은 함수로) — 보고서를 안 쓰거나
+            //    저장이 실패해도 시수가 남게(적대 리뷰 2026-09-30). 후보 반에 얹는 분리 보강·그 반에 오늘 정규 줄이 있는 학생은 끈다
+            //    (그 칸은 화면이 직접 얹는다 — 옛 `persistAnchorMakeup`과 같은 조건).
+            recordCell: !choice.candidate && !!su.makeupClassId && !existing?.subjects.some((x) => x.classId === su.makeupClassId && !x.makeup),
           })),
         });
         if (!result.ok) { toast.error(result.error); return; }
+        if (result.cellError) toast.error(tf("os.c.anchorFail", { error: result.cellError }));
         // 내 리비전에 명단만 더한 경우에만 자동저장 기준도 전진시킨다. 다른 창의 내용에는 소유권을 얻지 않는다.
         if (existing && (existing.sessionUpdatedAt ?? null) === result.previousUpdatedAt) {
           applySessionSaveResult(existing.id, result);
@@ -1436,7 +1463,6 @@ export function OneScreenClient({
       setStudents((prev) => (prev.some((s) => s.id === mk.id) ? prev : [...prev, mk]));
       setReports((prev) => ({ ...prev, [mk.id]: initReports([mk])[mk.id] ?? {} }));
       setSelId(mk.id);
-      persistAnchorMakeup(mk.id, anchorIdNew, false, choice.addUnits);
       if (choice.absentDate && anchorIdNew) {
         void linkMakeupToAbsenceCell(mk.id, anchorIdNew, choice, mk.name, hostNote);
       } else {
@@ -1460,12 +1486,6 @@ export function OneScreenClient({
       // 🔴 이미 보강 행이 있으면(같은 학생을 다시 추가) **여기서 멈춘다** — 계속 가면 고른 반에 칸이 하나 더 서서 시수가 두 번 잡히고,
       //    카드 행의 앵커는 옛 값이라 보강 빼기가 그 칸을 못 지운다(적대 리뷰 2026-09-21). 반을 바꾸려면 보강 빼기 → 다시 추가.
       if (!addSeparateMakeupRows(existing, ask.mk)) return;
-      persistAnchorMakeup(
-        existing.id,
-        anchorIdNew,
-        existing.subjects.some((su) => su.classId === anchorIdNew && !su.makeup),
-        choice.addUnits,
-      );
       if (choice.absentDate && anchorIdNew) {
         void linkMakeupToAbsenceCell(existing.id, anchorIdNew, choice, existing.name, hostNote);
       } else {
@@ -1514,7 +1534,7 @@ export function OneScreenClient({
     /** 성공 안내 끝에 붙일 한 줄(새로고침 뒤 옮겨 가는 반) — 실패하면 안 붙는다. */
     note?: string,
   ) {
-    // 🔴 시수는 `persistAnchorMakeup`이 그 칸에 이미 적었다 — 여기선 **메모만**(합산 액션을 쓰면 두 번 더해진다).
+    // 🔴 시수는 등록 문(`registerMakeupEntries` — 못 세웠으면 보고서 저장 훅)이 그 반 칸을 세울 때 적었다 — 여기선 **메모만**(합산 액션을 쓰면 두 번 더해진다).
     const res = await noteMakeupAgainstAbsence({
       studentId,
       makeupClassId,
@@ -3266,11 +3286,27 @@ export function OneScreenClient({
         defaultId: res.defaultClassId ?? null,
         makeupClassName: res.makeupClassName ?? null,
       });
-      if (picked) res = await saveAndQueueClassnote({ ...built.input, classnoteClassId: picked });
+      // 🔴 고른 반 = **새 보강 반**(원장 2026-09-30 *"보고서 반 = 출석부 반"*) — 저장이 출석부 칸도 그 반으로 옮기고 그 반으로 보낸다.
+      //    '보낼 반'만 따로 적는 길(`classnoteClassId`)은 없앴다 — 보고서 반과 출석부 반이 갈렸다.
+      if (picked) {
+        const pickedName = res.candidates.find((c) => c.id === picked)?.name ?? null;
+        res = await saveAndQueueClassnote({ ...built.input, makeupClassId: picked });
+        // 저장이 받아들였을 때만(반을 거절하면 오류 문장만 돌아온다 — id가 없거나 ok=false + 그 문장) 카드의 보강 반을 바꾼다.
+        if (res.ok || (res.id && res.status !== undefined)) {
+          patch(student.id, (s) => ({
+            ...s,
+            subjects: s.subjects.map((x) =>
+              x.name === subjectName ? { ...x, makeupClassId: picked, makeupClassName: pickedName ?? x.makeupClassName ?? null } : x,
+            ),
+          }));
+        }
+      }
     }
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.
     const sendClassKey =
-      res.status === "no_class"
+      res.status === "board_missing"
+        ? "os.c.boardMissing"
+        : res.status === "no_class"
         ? "os.c.noSendClass"
         : res.status === "needs_class"
           ? "os.c.chooseSendClass"
@@ -4259,6 +4295,7 @@ export function OneScreenClient({
             onOpenAttachments: (student, subjectName) => void ensureAttachmentUrls(student, subjectName),
             // 발송분은 버튼을 아예 열지 않는다(서버도 막지만 화면에서 먼저 알린다).
             onRemoveMakeup: (student, subjectName) => void removeMakeupRow(student, subjectName),
+            onPickMakeupClass: (student, subjectName) => void pickMakeupClass(student, subjectName),
             canRemoveMakeup: (studentId, subjectName) =>
               canRemoveMakeupRow(reports[studentId]?.[subjectName]?.classnoteStatus ?? null),
             // 영어 행 경고 칩 — 카드 칸·발송 확인과 같은 판정(english-draft.ts).
@@ -4399,6 +4436,7 @@ export function OneScreenClient({
                 onMakeup={toggleMakeup}
                 onVideoHomework={toggleVideoHomework}
                 onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
+                onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
                 canRemoveMakeup={(subjectName) =>
                   canRemoveMakeupRow(reports[selected.id]?.[subjectName]?.classnoteStatus ?? null)
                 }

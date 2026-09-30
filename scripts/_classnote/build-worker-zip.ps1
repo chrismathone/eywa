@@ -46,7 +46,15 @@ try {
   Copy-Item -Recurse -Force "$src\*" $stageInner
   Compress-Archive -Path (Join-Path $stage "scripts") -DestinationPath $zip
 } finally {
-  if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+  if (Test-Path -LiteralPath $stage) {
+    $resolvedStage = [IO.Path]::GetFullPath($stage)
+    $tempRoot = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\') + '\'
+    if (-not $resolvedStage.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        (Split-Path -Leaf $resolvedStage) -notmatch '^eywa-worker-zip-[0-9a-f]{32}$') {
+      throw "스테이징 정리 경로가 임시 폴더 범위를 벗어났습니다."
+    }
+    Remove-Item -LiteralPath $resolvedStage -Recurse -Force
+  }
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem

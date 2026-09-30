@@ -175,6 +175,9 @@ export async function findMakeupPoolClass(tenantId: string, teacherId: string): 
  * ⚠️ 시수는 기본 1이다 — 확인창에서 고른 시수는 그 경로(원스크린)가 따로 넘긴다. 여기 오는 건
  *    "보고서만 쓰고 출결은 안 찍은" 경우라 기본값이 맞다(고치는 건 사람 몫).
  * ⚠️ 실패해도 **보고서 저장을 되돌리지 않는다** — 보고서가 본 일이고 출결은 그 위의 기록이다.
+ * 🔴 **보강 반(앵커)이 없는 보강만** 여기 온다(원장 2026-09-30) — 앵커가 있으면 저장 훅이 앵커 반에만 칸을 맞춘다
+ *    ([`syncAnchorCells`](@/features/onescreen/server/makeup-anchor-sync)). 예전엔 앵커가 있어도 이 함수가 예약 반·보강 반에 칸을 세워
+ *    보고서 반과 출석부 반이 갈렸다(C2).
  */
 export async function ensureMakeupAttendanceForReport(input: {
   tenantId: string;
@@ -185,13 +188,7 @@ export async function ensureMakeupAttendanceForReport(input: {
   date: string;
   /** 확인창에서 고른 시수(원스크린 경로) — 없으면 기본 1(컬럼을 비워 둔다). */
   units?: number | null;
-  /**
-   * 보강 보고서의 앵커 반(`makeup_class_id`) — 원스크린 확인창에서 **고른 수업**(원장 2026-09-21)이거나 반 필터다.
-   * 그 반에 그날 칸이 이미 있으면(확인창이 `persistAnchorMakeup`으로 먼저 적는다) 보강 반을 만들지 않는다 —
-   * 그 반의 담임이 이 강사가 아니어도(교시 담당·위임) 같은 수업이다. 안 보면 시수가 두 번 선다.
-   */
-  makeupClassId?: string | null;
-}): Promise<{ ok: boolean; classId?: string }> {
+}): Promise<{ ok: boolean; classId?: string; reserved?: boolean }> {
   const admin = createAdminClient();
 
 
@@ -225,24 +222,6 @@ export async function ensureMakeupAttendanceForReport(input: {
     return row?.teacher_id === input.teacherId;
   });
   if (alreadyByThisTeacher) return { ok: true }; // 그 강사가 이미 찍었다 — 그대로 둔다.
-
-  // ②-b 확인창에서 **고른 수업**(또는 반 필터 앵커)에 그날 칸이 이미 섰으면 만들지 않는다(원장 2026-09-21 — 수업 선택).
-  //    그 반 담임이 이 강사가 아닐 수 있어(교시 담당·위임) 위 판정이 못 잡는다 — 안 보면 시수가 두 번 선다.
-  if (input.makeupClassId) {
-    const { data: hosted, error: hostErr } = await admin
-      .from("attendance_records")
-      .select("id")
-      .eq("tenant_id", input.tenantId)
-      .eq("class_id", input.makeupClassId)
-      .eq("student_id", input.studentId)
-      .eq("session_date", input.date)
-      .limit(1);
-    if (hostErr) {
-      console.error("[makeup-pool] 앵커 반 출결 조회 실패", hostErr.message);
-      return { ok: false };
-    }
-    if ((hosted ?? []).length > 0) return { ok: true, classId: input.makeupClassId }; // 고른 수업에 이미 섰다.
-  }
 
   /**
    * 🔴 그날 **보강 예약**(0264a)이 있으면 풀 반이 아니라 **예약의 반(원반)** 칸에 앉힌다 — 예약된 학생은 그 반에 오기로 한
@@ -284,7 +263,8 @@ export async function ensureMakeupAttendanceForReport(input: {
     await completeMakeupReservations({ tenantId: input.tenantId }, [
       { studentId: input.studentId, classId: reserved.classId, date: input.date, status: "makeup", unitsExplicit: input.units != null, created },
     ]);
-    return { ok: true, classId: reserved.classId };
+    // 예약의 반에 앉혔다 — 호출부가 그 반을 보고서의 보강 반으로 적는다(보고서 반 = 출석부 반).
+    return { ok: true, classId: reserved.classId, reserved: true };
   }
 
   const classId = await ensureMakeupPoolClass({

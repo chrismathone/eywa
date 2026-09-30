@@ -19,8 +19,10 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
   it("모두 classRouteActive(ClassNote 모듈 + 경로 설정)로 판정한다 — 모듈이 꺼진 학원은 예전 그대로", () => {
     for (const src of [ONESCREEN, COMPOSE]) {
       expect(src).toContain("classRouteActive(settings");
-      expect(src).toContain("needsSendClass(");
+      expect(src).toContain("SEND_CLASS_SUBJECTS.has(");
       expect(src).toContain("classBoardLiveForStudent(");
+      // 🔴 정규 보고서 반 보드가 없으면 막는다(원장 결정 4) — 다른 반을 고르게 하지 않는다.
+      expect(src).toContain('status: "board_missing", error: BOARD_MISSING_ERROR');
     }
     // 관리자 일괄 경로 셋(미발송 일괄 발송·재발송·멈춤 복구)은 한 함수(blockedForNoSendClass)를 지난다.
     expect(BATCH).toContain("isSendClassRouteRow(settings"); // = classRouteActive + 수학(send-class.ts)
@@ -43,18 +45,23 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
     expect(ONESCREEN).toContain('status: "class_check_failed"');
   });
 
-  it("보고서에 반이 있는데 반 보드가 없으면 메인 수업을 자동으로 고르지 않는다(autoPick)", () => {
-    expect(ONESCREEN).toContain("{ autoPick: !input.classId, makeupClassId:");
-    expect(COMPOSE).toContain("{ autoPick: !classId, makeupClassId }");
+  it("🔴 정규 보고서는 보고서 반으로만 — '보낼 반' 후보를 세우지 않는다(원장 결정 4)", () => {
+    for (const src of [ONESCREEN, COMPOSE]) expect(src).not.toContain("needsSendClass(");
+    expect(ONESCREEN).not.toContain("classnoteClassId ?? null,"); // 강사가 고른 '보낼 반'을 따로 받던 길(C1)
   });
 
   it("🔴 보강 추가한 반(makeup_class_id)이 먼저 — 원스크린·관리자 직접 작성·일괄 게이트·워커가 모두 본다(원장 2026-09-30)", () => {
-    // 원스크린 = saveLessonReport가 확인해 **저장한** 앵커(클라 값을 그대로 믿지 않는다 — 등록 문과 같은 findMakeupAnchor)
-    expect(ONESCREEN).toContain("{ autoPick: !input.classId, makeupClassId: saved.makeupClassId ?? null }");
-    expect(ONESCREEN).toContain("findMakeupAnchor(teaching, wantedAnchor, input.subject, reportDate)");
+    // 원스크린 = saveLessonReport가 확인해 **저장한** 앵커(클라 값을 그대로 믿지 않는다 — prepareMakeupAnchor → acceptMakeupAnchor)
+    expect(ONESCREEN).toContain("resolveMakeupSendClass(user.tenantId, input.studentId, reportDate, input.subject, saved.makeupClassId ?? null)");
+    expect(ONESCREEN).toContain("prepareMakeupAnchor(supabase, {");
     expect(ONESCREEN).toContain("makeup_class_id: makeupAnchor,");
-    // 관리자 직접 작성 = 강사가 보강으로 추가해 둔 같은 행의 앵커(발송·반 고르기 재료 둘 다)
-    expect(COMPOSE.match(/reportMakeupClassId\(user\.tenantId/g)?.length).toBe(2);
+    // 🔴 '보낼 반'은 앵커의 복사본 — 저장이 같은 값으로 적는다(따로 고른 반을 적는 길 없음)
+    expect(ONESCREEN).toContain("{ classnote_class_id: makeupAnchor }");
+    expect(ONESCREEN).not.toContain("update({ classnote_class_id: pick.classId })");
+    // 관리자 직접 작성 = 같은 앵커 함수 + 반 고르기 재료는 저장된 앵커
+    expect(COMPOSE).toContain("prepareMakeupAnchor(supabase, {");
+    expect(COMPOSE).not.toContain("update({ classnote_class_id: pick.classId })");
+    expect(COMPOSE.match(/reportMakeupClassId\(user\.tenantId/g)?.length).toBe(1);
     const server = read("src/features/onescreen/server/send-class.ts");
     expect(server).toContain("decideSendClass(");
     expect(server).toContain('.select("id, classnote_class_id, makeup_class_id, classnote_sent_at")'); // 일괄 게이트
@@ -66,8 +73,11 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
     const core = read("scripts/_classnote/classnote-core.mjs");
     expect(core).toContain("lr.makeup_class_id");
     expect(core).toContain("makeupEligible");
-    // 🔴 보강 반 조회 실패는 대상 아님 · '보낼 반'은 게시 뒤에만, 비어 있을 때만 적는다
-    expect(core).toContain("isClassRouteEligible(sql, tenant, r.makeup_class_id, r.student_id).catch(() => false)");
+    // 보강 반 조회 실패는 "대상"(아래 대상 확정이 재시도로 드러낸다 — 막힌 것으로 영구 실패시키지 않는다) · '보낼 반'은 게시 뒤에만, 비어 있을 때만 적는다
+    expect(core).toContain("isClassRouteEligible(sql, tenant, r.makeup_class_id, r.student_id).catch(() => true)");
+    // 🔴 막힌 행(보드 없음·보낼 반 ≠ 보강 반·반 미정)은 1인 보드로 흘리지 않고 failed + 한국어 사유
+    expect(core).toContain('if (pick.route === "blocked") {');
+    expect(core).toContain("ROUTE_BLOCKED_MESSAGE[pick.reason]");
     expect(core).toContain("and classnote_class_id is null");
     // 회수 = 보고서 반·보낼 반·보강 반 전부
     const recall = read("scripts/_classnote/classnote-recall-core.mjs");
@@ -99,8 +109,8 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
       expect(read(f)).toContain("loadLinkedBoards(sql, tenant, { strict: true })");
   });
 
-  it("관리자 직접 작성은 고른 반을 서버가 후보 안에서 다시 확인한다(resolveSendClass에 classnoteClassId)", () => {
-    expect(COMPOSE).toMatch(/resolveSendClass\(\s*user\.tenantId,\s*input\.studentId,\s*reportDate,\s*input\.classnoteClassId \?\? null/);
+  it("관리자 직접 작성은 고른 반을 **보강 반**으로 받는다 — 서버가 같은 함수(acceptMakeupAnchor)로 다시 확인한다", () => {
+    expect(COMPOSE).toContain("wanted: input.makeupClassId ?? input.classnoteClassId ?? null,");
     expect(COMPOSE).toContain("export async function getAdminSendClassOptions(");
   });
 });

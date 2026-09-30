@@ -7,6 +7,8 @@
  * - 보고서 반(또는 강사가 보강 추가 때 고른 반 — 원장 2026-09-30)에 살아 있는 반 보드가 있으면 그 반을 알려만 준다.
  * - 🔴 보강 추가한 반에 이 학생의 반 보드가 없어 다른 반으로 가야 하면 경고 한 줄을 띄운다.
  * - 없으면 반 고르기(기본 = 메인 수업) · 고를 반이 없으면 발송 불가 사유.
+ * 🔴 원장 2026-09-30 *"보고서 반 = 출석부 반"*: 반 없는 보강에서 고른 반은 **보강 반**이 된다 — 그 반으로 발송되고 출석부 보강 칸도
+ *    그 반에 선다(서버 `prepareMakeupAnchor`). 정규 보고서의 반 보드가 없으면 고르지 않고 막는다(`blockedReason`).
  */
 export type SendClassOption = {
   applies: boolean;
@@ -41,14 +43,14 @@ export function SendClassPicker({
     return (
       <p className="text-text-faint text-xs">
         보낼 반: <b className="text-text-dim">{option.reportClassName ?? "보고서의 반"}</b>{" "}
-        {option.viaMakeup ? "(보강 추가한 반 · ClassNote 반 보드)" : "(ClassNote 반 보드)"}
+        {option.viaMakeup ? "(보강 반 · ClassNote 반 보드 · 출석부 보강 칸도 이 반)" : "(ClassNote 반 보드)"}
       </p>
     );
   }
   // 보강 추가한 반과 다른 반으로 간다(그 반에 이 학생의 반 보드가 없다) — 원장 2026-09-30.
   const mismatch = option.makeupClassName ? (
     <p role="alert" className="bg-amber-soft text-foreground mb-1 rounded-md px-3 py-2 text-xs font-bold">
-      보강 추가한 반({option.makeupClassName})은 이 학생의 ClassNote 반 보드가 없어 다른 반으로 보냅니다.
+      보강 반({option.makeupClassName})에 이 학생의 ClassNote 반 보드가 없습니다 — 보강 반을 바꿔 주세요(고른 반으로 출석부 보강 칸도 옮겨집니다).
     </p>
   ) : null;
   if (!option.candidates.length) {
@@ -64,8 +66,8 @@ export function SendClassPicker({
   return (
     <div className="max-w-sm">
       {mismatch}
-      <div className={LABEL}>보낼 반(ClassNote 반 보드)</div>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={INPUT} aria-label="보낼 반">
+      <div className={LABEL}>보강 반(ClassNote 반 보드)</div>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={INPUT} aria-label="보강 반">
         {value ? null : <option value="">반을 고르세요</option>}
         {option.candidates.map((c) => (
           <option key={c.id} value={c.id}>
@@ -74,7 +76,7 @@ export function SendClassPicker({
           </option>
         ))}
       </select>
-      <p className="text-text-faint mt-0.5 text-xs">이 보고서의 반에 ClassNote 반 보드가 없어 보낼 반을 정합니다(보강 등).</p>
+      <p className="text-text-faint mt-0.5 text-xs">반 없는 보강입니다 — 고른 반으로 보고서가 발송되고 출석부 보강 칸도 그 반에 섭니다.</p>
     </div>
   );
 }

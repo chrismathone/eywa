@@ -105,7 +105,8 @@ describe("보이지 않는 '보강' 반", () => {
     expect(call).not.toContain("teacherId: user.id"); // 저장자 귀속으로 되돌리지 말 것
     expect(call).toContain("teacherId: owner.id");
     // 소유자를 못 풀면 훅을 건너뛴다(잘못된 반을 만드는 것보다 안 만드는 게 낫다).
-    expect(os).toMatch(/if \(owner\) \{\s*await ensureMakeupAttendanceForReport/);
+    // 앵커(보강 반)가 없을 때만 이 훅 — 앵커가 있으면 앵커 반에만 칸을 맞춘다(원장 2026-09-30, finishMakeupAnchor).
+    expect(os).toMatch(/else if \(owner\) \{\s*try \{\s*const placed = await ensureMakeupAttendanceForReport/);
     // 서버 해석은 created_by가 비었을 때만 이름을 보고, 활성·학생 제외로 좁힌다(resolveReportAuthorName 규약).
     expect(server).toContain('.eq("status", "active")');
     expect(server).toContain('.neq("system_role", "student")');
