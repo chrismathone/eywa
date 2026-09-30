@@ -10,6 +10,26 @@
 - **후보에서 종강 반 제외**(원장 *"종강이 아닌 담당 반에서 뜨는게 맞지? 학생과 접점이 있는"* · *"보내는 반도 마찬가지고"*): 보강 '기록할 수업'(`fetchMakeupHostClasses`·등록 문 `registerMakeupEntries` = `isClassOpenOn`)과 보낼 반 후보(`isSendCandidateClass`) 둘 다. 종강 반 **자기 보고서**는 보드가 살아 있는 동안 그대로 그 반으로 간다(09-30 결정 유지). 소속 판정에 `isEnrollmentEndedOn`(반이동 당일, [[#125]]).
 - ⚠️ 워커 변경 = 연동 PC에 새 zip 필요(`classnote-core.mjs`·`class-route-decide.mjs`·`classnote-recall-core.mjs`). zip 전까지 옛 워커는 저장된 '보낼 반'을 따르므로 원스크린·관리자 직접 작성 발송은 이미 새 규칙대로 간다(일괄 재발송만 zip 뒤부터).
 
+## 2026-09-30 — 보강 합침: 조퇴한 날도 합칠 수 있다(조퇴는 조퇴 그대로)
+
+- 원장 *"조퇴한 날도 합리적으로"* — 옛 보강 체크박스를 걷어낸 뒤 조퇴 날엔 합칠 길이 없었다. `MERGEABLE_RAW`에 `early_leave` 추가 · `mergeStatusOf`가 조퇴를 **조퇴로** 돌려주고 원스크린 쓰기(`setAttendanceFor`)가 그 값을 받는다(시수만 보내 조퇴 사유 메모는 서버가 그대로 둔다). 수업타임 = 조퇴 칸 기록 시수 + 보강 시수 · 🔴 보강 시수 **기본값**은 줄여 둔 조퇴 시수가 아니라 정규 1회분(`makeupBaseUnits` = 수학 자동 시수, 없으면 1). 확인창 = "합침 (정규(조퇴)+보강)" + "조퇴 기록은 그대로". 돈: 조퇴는 `COUNTABLE_STATUSES`라 정산(tier-rows)이 그 칸 시수를 그대로 센다(산식 무변경) · 출석률(`attendedCount`=출석+지각)엔 원래대로 안 든다. 결석·공결·보강 칸은 여전히 합치지 않는다. 🔴 조퇴 쓰기는 학생 배지를 다시 칠하지 않는다(`optimisticMarkFor` — 배지 축약이 조퇴를 '결석'으로 접어, 합침 직후 배지가 결석으로 뒤집히면 강사가 '출석'을 눌러 조퇴를 지울 수 있다 · 적대 리뷰). 가드 = `makeup-merge-plan.test.ts`·`makeup-confirm-dialog.test.tsx`.
+
+## 2026-09-30 — 구글 캘린더 푸시(웹훅) + 증분 동기화
+
+- 원장 *"이벤트 발생할 때마다 동기화, 주기보다 웹훅같은걸로"* — '[취소]'로 바꾼 입테가 반나절 운영실에 남았다(임포트가 06:00·18:00뿐). 캘린더마다 구글 푸시 채널을 열고(`google-channels.ts`, 하루 2회 크론이 열기·갱신), `/api/calendar/google-push`가 알림을 받으면 그 캘린더의 바뀐 일정만(`updatedMin`) 반영한다(`google-incremental.ts`). 반영 규칙은 전체 임포트와 한 벌로 뽑았다(`google-sync-core.ts`). 410이면 그 캘린더만 전체 임포트. 한 캘린더 한 회차 잠금 + 도는 중 알림은 `dirty`로 한 번 더. 하루 2회 전체 임포트는 안전망으로 유지.
+- SQL 0310a `calendar_sync_state`(service_role 전용 — 사용자 정책 의도적 제외). SQL 전에도 앱은 안 죽는다(표 없으면 웹훅·채널이 조용히 꺼짐).
+- **새벽 크론 가볍게**(원장 *"하루 한번 새벽에 가볍게 돌려 필요하면."*): `vercel.json` 하루 2회(06·18시) → **04:00 KST 한 번**. 채널 열기·갱신 → 캘린더마다 증분 따라잡기(웹훅과 같은 함수·잠금, 최소 25시간 전부터) → 전체 임포트는 [`planCalendarCron`](src/features/calendar/cron-plan.ts)이 고른 캘린더만(시작점 없음·48시간 넘음·채널 없었음/만료/열기 실패·증분 실패·일요일 주간 안전망·`?full=1`) · 표 없으면(#95) 종전처럼 전체 · 응답 `calendars[].mode/reason` · 본체 [`google-cron.ts`](src/features/calendar/server/google-cron.ts).
+## 2026-09-30 — 보호 계정 가드 3중화(점검·보강)
+
+- 원장 *"방어가드가 확실한지만 더 체크 몇번 더해봐 2,3중이상으로 해도 되니까"*. 운영 DB에서 되돌림 트랜잭션으로 공격 13종 × 3계정을 쏴 봄 — 0309a는 **소프트 삭제(`deleted_at`)만 통과**. SQL 0312a가 그것·auth `role` 변경을 막고, super_admins 수정·삭제·비우기 권한을 API 역할에서 회수(트리거와 독립한 층), 트리거 상태 조회 `protected_guard_triggers()`를 둔다.
+- 3선 = 매일 점검: [`protected-integrity-core.ts`](src/lib/auth/protected-integrity-core.ts)(순수 판정 — 기준 명단 대비 추가·삭제, master·재직·로그인 역할·지점·차단·삭제, 가드 트리거 5개) → `notification-maintenance` 크론 맨 앞. 어긋나면 `reportError`(`security.protected-integrity`) + 총괄 감사로그 `protected_integrity_alert`. 읽기만 한다(고치지 않는다). 명단이 원장 승인으로 바뀌면 `BASELINE_PROTECTED_IDS`도 고칠 것.
+- 권한 매트릭스: super_admin에게 코드가 준 전자결재(full)를 저장된 개인 예외 `none`이 덮던 구멍을 막음(`getUserPermMatrix` — 코드 예외만 얹은 매트릭스도 병합).
+
+## 2026-09-30 — 보호 계정(super_admins) 역할·재직·삭제 잠금
+
+- 원장 *"이승엽 superadmin 으로 등급업. 겉으로는 관리자. 박소선과 동일"* → *"강력 가드. 꼭 물어봐야하는걸로"*. 이승엽 system_role admin→master(스크립트·감사로그, 표시는 여전히 '관리자').
+- 앱: [`protected-accounts.ts`](src/lib/auth/protected-accounts.ts) — `super_admins` 명단 계정은 **누가 해도** 역할 변경·퇴사·인계 후 퇴사·삭제·총괄 콘솔 역할·활성 거절(조회 실패 = 거절). 거절 시도 감사로그. 직원 상세 '계정 관리'·총괄 콘솔 계정 줄에서 해당 버튼을 세우지 않는다.
+- DB: 0309a 트리거(users·auth.users·super_admins) — 값이 실제로 바뀔 때만 막아 로그인·이름 변경(미러 트리거)은 통과. 우회는 원장 승인 후 `set local app.allow_protected_change = 'on'`.
 ## 2026-09-30 — 없는 주소는 그 사람의 홈으로(404 대신 리다이렉트)
 
 - 원장 *"말도 안되는 페이지 입력하는거 전부 대시보드로 리다이렉트"* — 루트 `app/not-found.tsx`(클라 전용): 엉뚱한 URL·지운 기록·꺼진 기능 모두 브라우저에서 `/home`으로 이동 → `landingPath`(강사는 원스크린·ECS)·비로그인 `/login`. 창 안이면 embed 유지(`/home`이 착지 주소에 싣는다). 공개 화면·`(print)`·`/home` 자신은 한글 404 문구 그대로. 🔴 루트 not-found는 매 요청 미리 렌더되므로 서버 조회 금지(첫 구현을 적대 리뷰가 잡음). 판정 = 순수 `notFoundTarget`(가드 `not-found-target.test.ts` — `(print)` 폴더 대조 포함).

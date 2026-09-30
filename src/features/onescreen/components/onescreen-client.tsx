@@ -197,7 +197,7 @@ import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow 
 import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
 import { applyAppliedAttendance } from "../apply-applied-attendance";
-import { attendanceMarkOf, MARK_PRESENT } from "../attendance-mark";
+import { attendanceMarkOf, MARK_PRESENT, optimisticMarkFor } from "../attendance-mark";
 import { STATUS_TEXT, statusTextOf } from "@/features/attendance/cell-display";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
@@ -1558,9 +1558,15 @@ export function OneScreenClient({
     }
     // 화면의 그 행 시수도 서버 결과로 맞춘다(1이면 서버가 null로 접으므로 같은 규칙으로).
     // ⚠️ 기록이 없던 날엔 서버가 '출석'으로 열었다 — 화면 raw도 같이 present로 맞춰야 표시가 안 갈린다.
-    applyAttendanceLocal(existing.id, target.classId, target.attendanceRaw ?? "present", {
-      units: res.units === 1 ? null : res.units,
-    });
+    // 조퇴 칸이면 배지는 그대로(`optimisticMarkFor` — 축약이 조퇴를 '결석'으로 접는다).
+    const linkedRaw = target.attendanceRaw ?? "present";
+    applyAttendanceLocal(
+      existing.id,
+      target.classId,
+      linkedRaw,
+      { units: res.units === 1 ? null : res.units },
+      optimisticMarkFor(linkedRaw, studentsRef.current.find((s) => s.id === existing.id)?.attendance ?? existing.attendance),
+    );
     if (res.alreadyLinked) {
       toast.message(withNote(tf("os.c.makeupAlreadyLinked", { date: shortDate(absentDate) })));
       return;
@@ -1623,6 +1629,7 @@ export function OneScreenClient({
       subjects: s.subjects.map((x) => (x.name === merge.name ? { ...x, makeup: true } : x)),
     }));
     // 수업타임 = 지금 값(미입력=1) + 강사가 고른 보강 시수. 출결이 비어 있으면 '출석'으로 함께 찍힌다.
+    // 🔴 조퇴 칸은 **조퇴 그대로**(`mergeStatusOf`) — 메모(조퇴 사유)는 안 보내므로 서버가 그대로 둔다(원장 2026-09-30).
     // 🔴 보강 시수를 1로 박지 않는다 — 수학은 0.5당 1시간이라 3시간 반의 1회는 1.5다(원장 2026-08-06).
     const units = (merge.attendanceUnits ?? 1) + addUnits;
     void setAttendanceFor(
@@ -1802,7 +1809,8 @@ export function OneScreenClient({
   async function setAttendanceFor(
     studentId: string,
     classId: string,
-    status: BasicAttendance,
+    /** 알약은 3종만 보낸다 — `early_leave`는 보강 합침이 **조퇴 칸을 조퇴로 보존**하며 시수만 올릴 때뿐(`mergeStatusOf`). */
+    status: BasicAttendance | "early_leave",
     extra?: { note?: string | null; units?: string },
     opts?: {
       /**
@@ -1825,7 +1833,8 @@ export function OneScreenClient({
     const prevMark = stu?.attendance ?? MARK_PRESENT;
     const changesExtra = extra !== undefined && ("note" in extra || "units" in extra);
     if (prev.raw === status && !changesExtra) return; // 상태 재클릭 no-op(삭제는 출석부에서)
-    const myMark = markOf(status);
+    // 🔴 조퇴 쓰기(보강 합침)는 배지를 그대로 둔다 — 축약이 조퇴를 '결석'으로 접는다(`optimisticMarkFor`).
+    const myMark = optimisticMarkFor(status, prevMark);
     setAttPending((p) => new Set(p).add(key));
     /**
      * 🔴 **첫 기록 + 숫자 안 고름** = 서버가 수학 수업 길이 자동 시수를 넣는다(auto-units.ts, 2026-09-11).
@@ -1845,10 +1854,16 @@ export function OneScreenClient({
         : autoOnInsert
           ? (row?.attendanceAutoUnits ?? null)
           : undefined;
-    applyAttendanceLocal(studentId, classId, status, {
-      ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
-      ...(optimisticUnits !== undefined ? { units: optimisticUnits } : {}),
-    });
+    applyAttendanceLocal(
+      studentId,
+      classId,
+      status,
+      {
+        ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
+        ...(optimisticUnits !== undefined ? { units: optimisticUnits } : {}),
+      },
+      myMark,
+    );
     try {
       const res = await setAttendanceCell({
         studentId,
@@ -1884,7 +1899,7 @@ export function OneScreenClient({
         );
       } else if (autoOnInsert && res.autoUnits !== undefined) {
         // 서버가 실제로 넣은 시수로 맞춘다(자동값 또는 조회 실패 시 null=1) — 낙관값이 기록과 갈리지 않게.
-        applyAttendanceLocal(studentId, classId, status, { units: res.autoUnits });
+        applyAttendanceLocal(studentId, classId, status, { units: res.autoUnits }, myMark);
       }
     } catch {
       rollbackAttendance(studentId, classId, prev, myMark, prevMark);

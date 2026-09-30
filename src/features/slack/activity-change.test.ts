@@ -96,6 +96,8 @@ describe("슬랙 활동 — 무엇을 했나(원장 2026-09-29, codex·grok 합�
     expect(activityChange("attendance_bulk", { status: "present", count: 7, created: 0 }).brief).toEqual(["출석 7명"]); // 덮어쓰기면 created 0
     expect(activityChange("classnote_notice_send", { targetCount: "3" }).brief).toEqual([]);
     expect(activityChange("calendar_google_import", { inserted: 0, updated: 0, deleted: 0 }).brief).toEqual(["변경 없음"]);
+    // 알림(웹훅) 반영도 같은 모양으로 읽힌다(2026-09-30).
+    expect(activityChange("calendar_google_push_sync", { inserted: 0, updated: 0, deleted: 0 }).brief).toEqual(["변경 없음"]);
   });
   it("발송 상태 원문(queued)은 싣지 않는다", () => {
     expect(activityChange("classnote_send", { status: "queued" }).brief).toEqual([]);

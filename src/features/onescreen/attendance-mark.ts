@@ -39,3 +39,14 @@ const MARK_STATUS: Record<AttendanceMark, string> = {
 export function attendanceMarkLabel(mark: AttendanceMark, lang: "ko" | "en" = "ko"): string {
   return attendanceLabelOf(MARK_STATUS[mark], lang) ?? mark;
 }
+
+/**
+ * 칸 하나를 **화면에서 먼저 칠할 때**(낙관 반영) 학생 배지를 무엇으로 둘까.
+ * 🔴 **조퇴 쓰기는 배지를 건드리지 않는다**(적대 리뷰 2026-09-30) — 보강 합침이 조퇴 칸을 조퇴로 보존하며 시수만
+ *    올리는데, 배지 축약(`attendanceMarkOf`)은 조퇴를 빨간 '결석'으로 접는다. 영어 출석 + 수학 조퇴 학생에게 합침을
+ *    하면 배지가 '출석'에서 '결석'으로 뒤집히고, 그걸 본 강사가 수학 칸 '출석'을 누르면 조퇴가 조용히 지워진다.
+ *    그 밖의 상태는 종전대로 그 상태의 배지.
+ */
+export function optimisticMarkFor(status: string, prevMark: AttendanceMark): AttendanceMark {
+  return status === "early_leave" ? prevMark : attendanceMarkOf(status);
+}

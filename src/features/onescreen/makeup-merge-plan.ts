@@ -27,16 +27,27 @@ export type MergeCandidate = {
   attendanceUnits: number | null;
   /** 반 이름 — **표시 전용**(확인창 선택지·요약 문장). 판정은 `classId`로만 한다. 호출부가 채우고, 없으면 행 이름(`name`)을 쓴다. */
   className?: string | null;
+  /**
+   * 이번 **보강 시수의 기본값**(확인창 입력칸) — 그 반 정규 1회분. 보통 `attendanceUnits`와 같지만
+   * 🔴 **조퇴 행은 다르다**: 조퇴 칸의 저장 시수는 일찍 가서 줄여 둔 값(예: 0.5)일 수 있어, 그걸 보강 기본값으로 쓰면
+   *    보강 1회가 조퇴분만큼 깎여 들어간다(급여 과소). 조퇴면 수학 자동 시수(수업 길이), 없으면 null(=확인창 기본 1).
+   *    키가 없으면(옛 호출부) `attendanceUnits`를 쓴다.
+   */
+  makeupBaseUnits?: number | null;
 };
 
 /**
- * 합치기(정규+보강)로 **시수를 올려도 되는 출결 상태** — 기록 없음 · 출석 · 지각뿐이다.
+ * 합치기(정규+보강)로 **시수를 올려도 되는 출결 상태** — 기록 없음 · 출석 · 지각 · 조퇴.
  *  · 결석·공결: 정규를 빠지고 보강만 한 것이라 "정규+보강"이 아니고, 애초에 시수 소비 대상도 아니다.
- *  · 조퇴 등 3종 밖 raw: 시수를 올리려면 status를 함께 써야 하는데 pill 3종으로는 그 값을 되쓸 수 없다 —
- *    되쓰면 조퇴가 출석으로 조용히 바뀐다(이 코드베이스가 반복해 막아 온 '축약 되쓰기').
+ *  · 보강(makeup) raw: 이미 보강 칸이다 — 또 얹으면 한 번의 보강이 두 번 잡힌다.
+ *  · 조퇴(원장 2026-09-30 *"조퇴한 날도 합리적으로"*): 예전엔 뺐다 — 합칠 때 status를 pill 3종으로 되쓰면
+ *    조퇴가 출석으로 조용히 바뀌기 때문이었다('축약 되쓰기'). 이제 `mergeStatusOf`가 **조퇴를 조퇴로 돌려주고**
+ *    쓰기 경로(setAttendanceCell)가 조퇴를 받으므로 보존된다. 조퇴는 시수 소비 상태(COUNTABLE_STATUSES)라
+ *    급여·정산(tier-rows)이 그 칸의 시수를 그대로 센다 — 보강분 +N이 사라지지도 두 번 잡히지도 않는다.
+ *    옛 체크박스 경로가 없어진 뒤로 조퇴 날엔 합칠 길이 아예 없었다.
  * 대상에서 빠지면 **묻지 않고 별도 보강 행**이 생긴다(합치기만 안 될 뿐 기록은 남는다).
  */
-export const MERGEABLE_RAW: ReadonlySet<string> = new Set(["", "present", "late"]);
+export const MERGEABLE_RAW: ReadonlySet<string> = new Set(["", "present", "late", "early_leave"]);
 
 /** 판정 입력 — 화면 state에서 필요한 필드만. */
 export type PlanSubject = {
@@ -77,13 +88,26 @@ export function planMakeupMerge(
       // 🔴 출결이 **없는** 행의 '지금 값'은 처음 찍으면 들어갈 수학 자동 시수다(화면 '타임' 칸이 보여 주는 값,
       //    2026-09-11). 안 그러면 확인창·합산이 1을 기준으로 삼아 화면(1.5)과 저장(1+보강)이 갈린다.
       attendanceUnits: su.attendanceRaw ? (su.attendanceUnits ?? null) : (su.attendanceAutoUnits ?? su.attendanceUnits ?? null),
+      // 조퇴 칸의 저장 시수는 줄여 둔 값일 수 있다 — 보강 기본값은 정규 1회분(자동 시수, 없으면 확인창 기본값).
+      ...(su.attendanceRaw === "early_leave" ? { makeupBaseUnits: su.attendanceAutoUnits ?? null } : {}),
     }));
   return candidates.length > 0 ? { kind: "ask", candidates } : { kind: "separate" };
 }
 
-/** 합칠 때 되쓸 출결 상태 — 지각은 지각으로 보존하고, 그 밖(기록 없음·출석)은 출석으로 찍는다. */
-export function mergeStatusOf(raw: string | null | undefined): "present" | "late" {
-  return raw === "late" ? "late" : "present";
+/** 합칠 출결 상태 = 합칠 수 있는 출결 상태 중 **지금 칸에 적힌 것**(기록 없음은 출석으로 연다). */
+export type MergeStatus = "present" | "late" | "early_leave";
+
+/**
+ * 합칠 때 되쓸 출결 상태 — 지각은 지각, **조퇴는 조퇴로 보존**하고, 그 밖(기록 없음·출석)은 출석으로 찍는다.
+ * 🔴 조퇴를 출석으로 접지 말 것 — 조퇴 칸에 보강을 합쳐도 그날 조퇴한 사실은 그대로다(원장 2026-09-30).
+ */
+export function mergeStatusOf(raw: string | null | undefined): MergeStatus {
+  return raw === "late" ? "late" : raw === "early_leave" ? "early_leave" : "present";
+}
+
+/** 확인창 보강 시수 기본값 — `makeupBaseUnits`가 실려 있으면(조퇴) 그것, 아니면 그 칸의 지금 시수. null = 호출부 기본값. */
+export function makeupBaseUnitsOf(c: Pick<MergeCandidate, "attendanceUnits" | "makeupBaseUnits">): number | null {
+  return c.makeupBaseUnits !== undefined ? c.makeupBaseUnits : c.attendanceUnits;
 }
 
 /** 합친 뒤의 수업타임 = 지금 값(미입력=1) + 1. 정규 1 + 보강 1 = 2가 기본. */

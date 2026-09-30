@@ -14,6 +14,7 @@ import { getClassTeacherOptions } from "@/features/classes/server/queries";
 import type { ResumeDetail } from "@/features/staff/server/resume-queries";
 import { RESUME_CHECKS, WORKDAYS } from "@/features/staff/resume";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { protectionStatus } from "@/lib/auth/protected-accounts";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { ResumePhotoSlide } from "../_components/resume-photo-slide";
 import { ContractStatus } from "../_components/contract-status";
@@ -88,13 +89,15 @@ export async function BasicInfoTab({
 }) {
   // 독립 조회 병렬(B4). 담임 반 목록·인계 후보는 계정 관리 패널(퇴사 경고·일괄 인계)에서만 쓰여
   // canManageThis일 때만 조회한다. 계약서 파일은 계약현황 카드용(2026-08-03).
-  const [settings, homeroomClasses, contracts, contractFiles, handoverTeachers, assistClasses] = await Promise.all([
+  const [settings, homeroomClasses, contracts, contractFiles, handoverTeachers, assistClasses, protection] = await Promise.all([
     getTenantSettings(),
     canManageThis ? getActiveHomeroomClasses(staff.id) : Promise.resolve([]),
     getStaffContracts(staff.id),
     getStaffContractFiles(staff.id),
     canManageThis ? getClassTeacherOptions() : Promise.resolve([]),
     canManageThis ? getActiveAssistSlotClasses(staff.id) : Promise.resolve([]),
+    // 보호 계정이면 역할·퇴사·삭제 버튼을 세우지 않는다 — 막는 건 서버 액션·DB(0309a)가 한다.
+    canManageThis ? protectionStatus(staff.id) : Promise.resolve("clear" as const),
   ]);
   // 오늘 날짜는 **서버에서** 확정해 내려보낸다 — 클라에서 new Date()를 쓰면 시간대·하이드레이션이 어긋난다.
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
@@ -347,6 +350,7 @@ export async function BasicInfoTab({
           homeroomClasses={homeroomClasses}
           assistClasses={assistClasses}
           handoverTeachers={handoverTeachers}
+          protection={protection}
         />
       ) : null}
     </div>

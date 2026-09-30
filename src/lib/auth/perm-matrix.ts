@@ -80,17 +80,21 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     // 명단 자체는 침산 전용이다. 일반 프리셋은 저장된 개인 예외만 사용한다.
     // 요청 캐시된 PK 조회 1회이고, override가 있는 테넌트는 getPermMatrix에서 이미 부른 그 캐시다.
     const isSuperAdmin = await isCurrentUserSuperAdmin();
-    const userOverrides = [
-      ...approvalMenuOverridesFor(user.id, isSuperAdmin, isChinsanTenant(settings)),
-      ...settings.permissions.userOverrides,
-    ];
+    const codeOverrides = approvalMenuOverridesFor(user.id, isSuperAdmin, isChinsanTenant(settings));
+    const userOverrides = [...codeOverrides, ...settings.permissions.userOverrides];
     if (userOverrides.length === 0) return base;
     const applied = applyUserOverrides(base, user.id, user.systemRole, userOverrides);
     // super_admin도 **부여는 받는다**(예전엔 base로 되돌려 개인 예외가 통째로 날아갔다 — 2026-08-13
     // 수업 평가 실종의 절반). 개인 예외로 잠그는(낮추는) 것만 무시하려고 높은 쪽을 취한다.
     // 🔴 개인 예외가 꺼진 모듈 메뉴를 다시 열 수 있으니 한 번 더 누른다(base는 이미 눌려 있다).
     const disabled = settings.modules.disabled;
-    if (isSuperAdmin) return capDisabledModules(mergeMostPermissive(base, applied), disabled);
+    // 🔴 저장된 개인 예외는 코드 예외 **뒤**에 얹혀 이긴다 — super_admin에게 코드가 준 전자결재(full)를 저장된
+    //    `none` 한 줄이 덮으면 기본값도 none이라 잠긴다(보호 계정 점검 2026-09-30). 코드 예외만 얹은 매트릭스도
+    //    함께 병합해 **어느 쪽이 준 부여든** 남긴다(낮추는 것만 무시 — 위 원칙 그대로).
+    if (isSuperAdmin) {
+      const codeOnly = applyUserOverrides(base, user.id, user.systemRole, codeOverrides);
+      return capDisabledModules(mergeMostPermissive(mergeMostPermissive(base, applied), codeOnly), disabled);
+    }
     return capDisabledModules(applied, disabled);
   } catch (e) {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
