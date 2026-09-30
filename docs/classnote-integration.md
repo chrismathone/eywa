@@ -212,6 +212,8 @@ assign_teacher_to_classnote)을 aywa DB 기준·Playwright·**dry-run 기본**�
   [`pollParentPostsOnce`](../scripts/_classnote/classnote-feed-core.mjs)(**1분 가드**) → 기관 피드 **요청 1개** →
   [순수 필터](../scripts/_classnote/parent-post-filter.mjs)(`selectNewParentPosts`/`buildNotificationText`, Vitest 16) →
   학생 → 활성 수학 담당 강사 → `notifications` insert **+ 워터마크 전진(같은 트랜잭션)**.
+  **받는 사람(2026-09-30~)** = 지금 담당 ∪ 그 학생을 한 번이라도 가르친 강사([`notify-recipients.mjs`](../scripts/_classnote/notify-recipients.mjs) —
+  반 보드엔 담임 한 명만 연결돼 1인 보드 시절 ClassNote 알림 범위가 줄어든 것을 aywa 벨이 채운다. 규칙 = decisions/reports-ai.md).
   수동 1회 = [`process-parent-posts.mjs`](../scripts/_classnote/process-parent-posts.mjs)(기본 점검모드, `--apply`로 실행).
 - **워터마크 = 0108a `classnote_feed_state`**(tenant×scope 1행). ⚠️ 프로비저닝처럼 **파일 마커로 하면 안 된다** —
   프로비저닝은 diff 기반이라 마커가 유실돼도 멱등하지만, **알림은 누적**이라 워터마크가 날아가면 과거 글이
