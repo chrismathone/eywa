@@ -21,6 +21,8 @@ import {
   scopedConsultationUserId,
 } from "./write-scope";
 import { preserveConsultationLink, visibleConsultationSummary } from "../internal-link";
+import { decideClassForSave, type ClassDecision } from "./class-save";
+import { classSchemaWorthTrying, isMissingClassSchema, noteClassSchema } from "./class-support";
 import { decodeLinkPick } from "@/features/newcomers/consult-link";
 import {
   applyConsultationNewcomerLinks,
@@ -210,7 +212,11 @@ function readConsultationForm(formData: FormData) {
   };
   const category = get("category");
   const audience = get("audience");
+  const classPick = get("classPick");
   return {
+    // 반(0318a) — 폼이 '반' 칸을 그렸을 때만 온다. auto = 서버가 판정 · manual = 사람이 고름(빈 값 = 미매핑) · 없음 = 칸이 없었다.
+    classPick: classPick === "auto" || classPick === "manual" ? classPick : null,
+    classId: get("classId") || null,
     studentId: get("studentId"),
     counselorId: get("counselorId") || null,
     consultedAt: get("consultedAt"),
@@ -244,7 +250,8 @@ async function linkNewcomerChecks(
   formData: FormData,
 ) {
   const links = readNewcomerLinks(formData);
-  const consultedOn = kstDateOf(input.consultedAt) ?? kstToday();
+  // 폼 값은 타임존 없는 KST 벽시계 — 서버(UTC)가 그대로 읽으면 오후 3시 이후 상담이 다음 날로 넘어간다(kstLocalToIso 주석).
+  const consultedOn = kstDateOf(kstLocalToIso(input.consultedAt)) ?? kstToday();
   const res = await applyConsultationNewcomerLinks({
     tenantId: user.tenantId,
     userId: user.id,
@@ -284,6 +291,18 @@ async function subjectForConsultation(
   };
 }
 
+/** 저장 행에 싣는 반 칸 — 0318a가 없으면(판정 불가) 아무것도 싣지 않는다([[#95]]). */
+function classColumns(decision: ClassDecision | null): { class_id?: string | null; class_source?: string } {
+  if (!decision || !decision.supported || "error" in decision) return {};
+  return { class_id: decision.classId, class_source: decision.source };
+}
+
+/** 감사 metadata의 반 — 판정했을 때만(칸이 없으면 반 이야기를 지어내지 않는다). */
+function classAudit(decision: ClassDecision | null): Record<string, unknown> {
+  if (!decision || !decision.supported || "error" in decision) return {};
+  return { classId: decision.classId, className: decision.className, classPick: decision.source };
+}
+
 export async function createStudentConsultation(
   _prev: ConsultationFormState,
   formData: FormData,
@@ -307,15 +326,29 @@ export async function createStudentConsultation(
   const counselorId = input.counselorId ?? user.id;
   const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
   if (resolved.error) return { error: resolved.error };
-  const { data, error } = await supabase
-    .from("student_consultations")
-    .insert({
+  // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**다(아래 consulted_at 주석).
+  const consultedIso = kstLocalToIso(input.consultedAt) ?? new Date().toISOString();
+  const consultedOn = kstDateOf(consultedIso);
+  // 반(0318a) — 사람이 고른 값은 그대로, 아니면 서버가 판정한다(폼 미리보기와 같은 함수 · class-save.ts).
+  const decision = await decideClassForSave({
+    studentId: input.studentId,
+    date: consultedOn,
+    counselorId,
+    subject: resolved.subject,
+    pick: input.classPick ?? "auto",
+    pickedClassId: input.classId,
+  }).catch((e) => {
+    console.error("[consultation] 반 판정 실패(반 없이 저장):", e instanceof Error ? e.message : e);
+    return null;
+  });
+  if (decision && decision.supported && "error" in decision) return { error: decision.error };
+  const row = {
       tenant_id: user.tenantId,
       student_id: input.studentId,
       counselor_id: counselorId,
       // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**라 서버(UTC)가
       //    그대로 읽으면 9시간 뒤로 앉는다(원장 제보 2026-09-09, date-kst `kstLocalToIso` 주석).
-      consulted_at: kstLocalToIso(input.consultedAt) ?? new Date().toISOString(),
+      consulted_at: consultedIso,
       category: input.category,
       subject: resolved.subject,
       audience: input.audience,
@@ -324,9 +357,21 @@ export async function createStudentConsultation(
       follow_up_action: input.followUpAction,
       follow_up_date: input.followUpDate,
       follow_up_done: input.followUpDone,
-    })
-    .select("id")
-    .single();
+  };
+  const insert = (withClass: boolean) =>
+    supabase
+      .from("student_consultations")
+      .insert({ ...row, ...(withClass ? classColumns(decision) : {}) })
+      .select("id")
+      .single();
+  let savedClass = !!decision && decision.supported;
+  let { data, error } = await insert(savedClass);
+  if (savedClass && error && isMissingClassSchema(error)) {
+    // 판정 RPC는 있는데 칸이 아직 없는 틈(스키마 캐시) — 반 없이 저장한다(상담 기록이 우선).
+    noteClassSchema(false);
+    savedClass = false;
+    ({ data, error } = await insert(false));
+  }
 
   if (error || !data) return { error: error?.message ?? "상담 저장 실패" };
 
@@ -341,11 +386,12 @@ export async function createStudentConsultation(
       consultationId: data.id as string,
       studentId: input.studentId,
       // 저장되는 값과 같은 식으로 KST 날짜를 뽑는다 — 감사로그가 상담 목록 화면과 같은 날을 말해야 한다.
-      consultedAt: kstDateOf(input.consultedAt),
+      consultedAt: consultedOn,
       category: input.category,
       audience: input.audience,
       hasFollowUp: !!input.followUpAction,
       followUpDate: input.followUpDate,
+      ...(savedClass ? classAudit(decision) : {}),
     },
   });
 
@@ -391,22 +437,81 @@ export async function updateStudentConsultation(
   const counselorId = input.counselorId ?? user.id;
   const resolved = await subjectForConsultation(supabase, user.tenantId, counselorId, input.subject);
   if (resolved.error) return { error: resolved.error };
-  const { data: stored, error: readError } = await supabase.from("student_consultations")
-    .select("summary, student_id, subject, category").eq("id", id).eq("tenant_id", user.tenantId).maybeSingle();
-  if (readError || !stored) return { error: "상담 기록을 찾지 못했습니다" };
+  // 반 칸(0318a)까지 함께 읽는다 — 없으면 그 조각을 빼고 다시(반은 건드리지 않고 저장, [[#95]]).
+  const readStored = (withClass: boolean) =>
+    supabase
+      .from("student_consultations")
+      .select(
+        withClass
+          ? "summary, student_id, subject, category, consulted_at, class_id, class_source, cls:classes!student_consultations_class_id_fkey ( class_name )"
+          : "summary, student_id, subject, category, consulted_at",
+      )
+      .eq("id", id)
+      .eq("tenant_id", user.tenantId)
+      .maybeSingle();
+  let classReadable = classSchemaWorthTrying();
+  let { data: storedRaw, error: readError } = await readStored(classReadable);
+  if (classReadable && readError && isMissingClassSchema(readError)) {
+    noteClassSchema(false);
+    classReadable = false;
+    ({ data: storedRaw, error: readError } = await readStored(false));
+  }
+  if (readError || !storedRaw) return { error: "상담 기록을 찾지 못했습니다" };
+  const stored = storedRaw as unknown as {
+    summary: string | null;
+    student_id: string;
+    subject: string | null;
+    category: string | null;
+    consulted_at: string | null;
+    class_id?: string | null;
+    class_source?: string | null;
+    cls?: { class_name?: string | null } | { class_name?: string | null }[] | null;
+  };
+  const storedCls = Array.isArray(stored.cls) ? stored.cls[0] : stored.cls;
+  const prevClass = { id: stored.class_id ?? null, name: storedCls?.class_name ?? null, source: stored.class_source ?? null };
+
+  // 반 — 폼이 칸을 그렸으면 그 선택대로(자동 = 서버 판정), 칸이 없었으면(0318a 전에 연 화면) 사람이 고른 값은 두고 나머지는 판정.
+  const consultedIso = kstLocalToIso(input.consultedAt) ?? new Date().toISOString();
+  const consultedOn = kstDateOf(consultedIso);
+  // 🔴 학생·상담일이 바뀌면 저장된 반은 더는 그 상담의 사실이 아니다(다른 학생의 반·그날 수강하지 않던 반) — 사람이 고른 값이어도
+  //    그대로 들고 가지 않는다(폼이 칸을 그렸으면 서버가 어차피 다시 검증하고, 칸이 없던 화면이면 아래에서 다시 판정한다).
+  const contextChanged = stored.student_id !== input.studentId || kstDateOf(stored.consulted_at) !== consultedOn;
+  const keepManual = !input.classPick && prevClass.source === "manual" && !contextChanged;
+  const decision =
+    !classReadable || keepManual
+      ? null
+      : await decideClassForSave({
+          studentId: input.studentId,
+          date: consultedOn,
+          counselorId,
+          subject: resolved.subject,
+          pick: input.classPick ?? "auto",
+          pickedClassId: input.classId,
+        }).catch((e) => {
+          console.error("[consultation] 반 판정 실패(반은 그대로 두고 저장):", e instanceof Error ? e.message : e);
+          return null;
+        });
+  if (decision && decision.supported && "error" in decision) return { error: decision.error };
+  const judged = decision && decision.supported && !("error" in decision) ? decision : null;
+  // 반을 다시 정하지 못했는데(판정 실패·후보 조회 불가) 학생·상담일이 바뀌었으면 옛 반을 **비우고 '아직 판정 안 함'으로** 되돌린다 —
+  // 그대로 두면 다른 학생의 반이 붙은 채 남고(stale), '자동'·'직접 고름' 표식 때문에 목록·백필이 다시 판정하지도 않는다.
+  const resetStale = classReadable && !judged && contextChanged && (prevClass.id !== null || prevClass.source !== null);
+  const classPatch: { class_id?: string | null; class_source?: string | null } = judged
+    ? classColumns(judged)
+    : resetStale
+      ? { class_id: null, class_source: null }
+      : {};
   const cleanSummary = stripPastedMarkup(input.summary) ?? "";
   const summary = stored.student_id === input.studentId && stored.subject === resolved.subject &&
     stored.category === "academic" && input.category === "academic"
     ? preserveConsultationLink(cleanSummary, stored.summary ?? "")
     : cleanSummary;
-  const { error } = await supabase
-    .from("student_consultations")
-    .update({
+  const patch = {
       student_id: input.studentId,
       counselor_id: counselorId,
       // 🔴 `new Date(값)`으로 읽지 말 것 — 폼이 보내는 건 **타임존 없는 KST 벽시계**라 서버(UTC)가
       //    그대로 읽으면 9시간 뒤로 앉는다(원장 제보 2026-09-09, date-kst `kstLocalToIso` 주석).
-      consulted_at: kstLocalToIso(input.consultedAt) ?? new Date().toISOString(),
+      consulted_at: consultedIso,
       category: input.category,
       subject: resolved.subject,
       audience: input.audience,
@@ -415,8 +520,20 @@ export async function updateStudentConsultation(
       follow_up_action: input.followUpAction,
       follow_up_date: input.followUpDate,
       follow_up_done: input.followUpDone,
-    })
-    .eq("id", id).eq("tenant_id", user.tenantId);
+  };
+  const update = (withClass: boolean) =>
+    supabase
+      .from("student_consultations")
+      .update({ ...patch, ...(withClass ? classPatch : {}) })
+      .eq("id", id)
+      .eq("tenant_id", user.tenantId);
+  let savedClass = !!judged || resetStale;
+  let { error } = await update(savedClass);
+  if (savedClass && error && isMissingClassSchema(error)) {
+    noteClassSchema(false);
+    savedClass = false;
+    ({ error } = await update(false));
+  }
 
   if (error) return { error: error.message };
   await linkNewcomerChecks(user, id, input, formData);
@@ -427,11 +544,19 @@ export async function updateStudentConsultation(
     metadata: {
       consultationId: id,
       studentId: input.studentId,
-      consultedAt: kstDateOf(input.consultedAt),
+      consultedAt: consultedOn,
       category: input.category,
       audience: input.audience,
       hasFollowUp: !!input.followUpAction,
       followUpDate: input.followUpDate,
+      // 반이 **바뀐 경우에만** 이전 값을 함께 남긴다(원장 *"기능 추가·변동은 모두 감사로그"* — 반 변경이 수정 기록에 보여야 한다).
+      // 이전에 판정한 적이 없던 옛 행(출처 없음)의 첫 판정은 '변경'이 아니다 — 이전 값을 '미매핑'으로 적으면 거짓이 된다.
+      ...(savedClass && judged ? classAudit(judged) : {}),
+      // 판정은 못 했지만 옛 반을 비운 저장(위 resetStale) — 반이 빠졌다는 사실은 남긴다.
+      ...(savedClass && !judged ? { classId: null, className: null } : {}),
+      ...(savedClass && prevClass.source !== null && (judged ? judged.classId : null) !== prevClass.id
+        ? { prevClassId: prevClass.id, prevClassName: prevClass.name }
+        : {}),
     },
   });
 

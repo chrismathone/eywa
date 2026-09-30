@@ -769,6 +769,20 @@ describe("auditDetail — 2026-08-20 신규 case (실데이터 metadata 표본)"
     expect(auditDetail("student_consultation_follow_up", { consultationId: DOC, studentId: SID, done: true }, ctx())).toBe(
       "완료로 표시",
     );
+    // 반(0318a) — 판정한 저장만 반을 말한다. 바뀌면 이전 → 지금, 사람이 고른 미매핑은 '직접 고름'.
+    expect(
+      auditDetail("student_consultation_create", { ...meta, classId: CID, className: "초등M 초4 BS1J", classPick: "auto" }, ctx(names)),
+    ).toBe("상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지 · 반 초등M 초4 BS1J(자동)");
+    expect(
+      auditDetail(
+        "student_consultation_update",
+        { ...meta, classId: null, className: null, classPick: "manual", prevClassId: CID, prevClassName: null },
+        ctx(names),
+      ),
+    ).toBe("상담일 2026-08-25 · 학습 · 대상 학부모 · 후속조치 2026-09-01까지 · 반 초등M 초4 BS1J → 미매핑(직접 고름)");
+    expect(
+      auditDetail("student_consultation_class_backfill", { count: 1902, mapped: 678, reasons: { "반 하나로 좁혀짐": 678, "상담사가 가르치는 반 없음": 990 } }, ctx()),
+    ).toBe("상담 1902건 판정 · 반 연결 678건 · 반 하나로 좁혀짐 678, 상담사가 가르치는 반 없음 990");
     expect(auditDetail("student_consultation_follow_up", { consultationId: DOC, studentId: SID, done: false }, ctx())).toBe(
       "완료 해제",
     );
@@ -885,6 +899,8 @@ describe("🔴 감사 상세에 영문이 새지 않는다(실표본 전수)", (
     { action: "student_consultation_update", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-25", category: "social", audience: "student", hasFollowUp: false, followUpDate: null }, banned: ["social", "student", "category", "audience", "hasFollowUp", "consultedAt", "false"] },
     { action: "student_consultation_delete", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-11", category: "emotional", audience: "both", hasFollowUp: false }, banned: ["emotional", "both", "consultedAt", "category", "audience", "hasFollowUp"] },
     { action: "student_consultation_follow_up", meta: { consultationId: DOC, studentId: SID, done: true }, banned: ["done", "true", "consultationId", "studentId"] },
+    { action: "student_consultation_update", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-09-30", category: "general", audience: "parent", hasFollowUp: false, followUpDate: null, classId: CID, className: "초등M 초4 BS1J", classPick: "manual", prevClassId: null, prevClassName: null }, banned: ["manual", "classPick", "classId", "prevClassId", CID] },
+    { action: "student_consultation_class_backfill", meta: { count: 3, mapped: 1, reasons: { "반 하나로 좁혀짐": 1, not_teaching: 2 } }, banned: ["not_teaching", "reasons", "mapped"] },
     { action: "student_care_analysis", meta: { studentId: SID, model: "claude-sonnet-5", focus: 3 }, banned: ["claude-sonnet-5", "model", "focus", "studentId"] },
     // 재고 관리(0242a) — 호출부가 실제로 넘기는 모양 그대로. 영문 enum(on_loan·laptop·missing)이 새면 안 된다.
     { action: "inventory_asset_create", meta: { assetId: DOC, assetCode: "NB-019", category: "laptop", status: "in_use" }, banned: ["laptop", "in_use", "category", "status"] },
@@ -931,6 +947,7 @@ describe("🔴 회의록·학생상담 상세는 빈 칸이 아니다(실호출 
     { action: "student_consultation_update", meta: { consultationId: DOC, studentId: SID, consultedAt: null, category: "career", audience: "both", hasFollowUp: true, followUpDate: null } },
     { action: "student_consultation_delete", meta: { consultationId: DOC, studentId: SID, consultedAt: "2026-08-11", category: null, audience: null, hasFollowUp: false } },
     { action: "student_consultation_follow_up", meta: { consultationId: DOC, studentId: SID, done: false } },
+    { action: "student_consultation_class_backfill", meta: { count: 0, mapped: 0, reasons: {} } },
     { action: "student_care_analysis", meta: { studentId: SID, model: "deepseek-v4-pro", focus: 0 } },
   ];
   for (const s of LIVE) {

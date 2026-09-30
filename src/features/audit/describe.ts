@@ -193,6 +193,19 @@ const consultAudienceKo = (v: unknown): string | null => {
   const label = s ? CONSULTATION_AUDIENCE_LABEL[s] : null;
   return label ? `대상 ${label}` : null;
 };
+/**
+ * 학생상담 저장의 반(0318a) — `classId` 키가 metadata에 **있을 때만** 말한다(없으면 그 저장은 반을 다루지 않았다).
+ * 바뀌었으면 `반 A → B`, 사람이 고른 미매핑은 `반 미매핑(직접 고름)`. 이름은 저장 시점 이름(`className`)을 먼저 쓴다.
+ */
+const consultClassKo = (m: Meta, nameOf: AuditNameOf): string | null => {
+  if (!("classId" in m)) return null;
+  const name = (id: unknown, label: unknown) => str(label) ?? (str(id) ? nameOf(id) : null);
+  const now = name(m.classId, m.className) ?? "미매핑";
+  const how = m.classPick === "manual" ? "직접 고름" : m.classPick === "auto" ? "자동" : null;
+  const tail = how ? `(${how})` : "";
+  if ("prevClassId" in m) return `반 ${name(m.prevClassId, m.prevClassName) ?? "미매핑"} → ${now}${tail}`;
+  return `반 ${now}${tail}`;
+};
 
 /**
  * 미등록 액션 폴백에서 **뜻이 분명한** 공통 키만 한글로 옮긴다. 값이 ""면 라벨 없이 값만.
@@ -2058,6 +2071,7 @@ export function auditDetail(
         consultCategoryKo(m.category),
         consultAudienceKo(m.audience),
         follow,
+        consultClassKo(m, ctx.nameOf),
       );
     }
     case "student_consultation_delete": {
@@ -2072,6 +2086,19 @@ export function auditDetail(
     case "student_consultation_follow_up": {
       return m.done === true ? "완료로 표시" : m.done === false ? "완료 해제" : null;
     }
+    case "student_consultation_class_backfill": {
+      // reasons = { 한글 판정 이유: 건수 } (consultation-class.cjs CLASS_REASON_LABEL — 키가 이미 한글).
+      const n = num(m.count);
+      const mapped = num(m.mapped);
+      const reasons =
+        m.reasons && typeof m.reasons === "object"
+          ? Object.entries(m.reasons as Record<string, unknown>)
+              .filter(([k, v]) => /[가-힣]/.test(k) && typeof v === "number")
+              .map(([k, v]) => `${k} ${v}`)
+              .join(", ")
+          : "";
+      return join(n === null ? null : `상담 ${n}건 판정`, mapped === null ? null : `반 연결 ${mapped}건`, reasons || null);
+    }
     case "student_consultation_sync_import":
     case "student_consultation_subject_backfill": {
       // subjects = { 한글 판정 이유: 건수 } (consultation-counselor.cjs SUBJECT_REASON_LABEL — 키가 이미 한글).
@@ -2084,10 +2111,12 @@ export function auditDetail(
               .map(([k, v]) => `${k} ${v}`)
               .join(", ")
           : "";
+      const classMapped = num(m.classMapped);
       return join(
         n === null ? null : `상담 ${n}건`,
         linked === null ? null : `상담사 연결 ${linked}건`,
         reasons ? `과목: ${reasons}` : null,
+        classMapped === null ? null : `반 연결 ${classMapped}건`,
       );
     }
     case "student_care_analysis": {

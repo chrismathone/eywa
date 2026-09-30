@@ -270,6 +270,8 @@ export const AUDIT_ACTIONS = {
   // makeedu 동기화 워커·운영 스크립트가 직접 insert(scripts/_makeedu/sync-consultations-incremental.cjs · scripts/_oneoff/backfill-consultation-subjects.mjs).
   student_consultation_sync_import: "학생상담 makeedu 동기화",
   student_consultation_subject_backfill: "학생상담 과목·상담사 채우기",
+  // 0318a 반 매핑 백필(scripts/_oneoff/backfill-consultation-classes.mjs --apply).
+  student_consultation_class_backfill: "학생상담 반 채우기",
   student_care_analysis: "AI 케어 분석 실행",
   // 시간표(개발중) 월별 계획(0232a) — class_schedules와 분리된 별도 표라, 본 시간표 감사 키와 섞이지
   // 않게 timetable_plan_ 접두로 갈라 둔다("계획"이라는 말을 라벨에 반드시 남길 것 — 원장이 감사로그에서

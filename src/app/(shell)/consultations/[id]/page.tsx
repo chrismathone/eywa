@@ -113,6 +113,14 @@ export default async function ConsultationDetailPage({
         {item.counselorName ? (
           <span className="whitespace-nowrap">상담사 {item.counselorName}</span>
         ) : null}
+        {/* 반(0318a) — 저장된 반. 아직 판정 안 한 옛 기록은 목록과 같은 판정을 **표시만** 한다(getStudentConsultationById — 목록엔 반이
+            보이는데 상세는 '—'면 두 화면이 다른 말을 한다). 칸이 없던 때(적용 전)는 줄 자체를 안 그린다. */}
+        {item.classSupported ? (
+          <span className="whitespace-nowrap">
+            반 {item.className ?? "—"}
+            {item.classSource === "manual" ? " (직접 고름)" : null}
+          </span>
+        ) : null}
       </div>
 
       {/* 상담 내용 */}
