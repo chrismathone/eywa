@@ -74,10 +74,39 @@ describe("applyAppliedAttendance — 스트립이 기록한 칸만 화면에 반
       applyAppliedAttendance(before, [{ studentId: "s1", classId: "c1" }], "late", NONE)[0]!
         .attendance,
     ).toBe("지각");
+    // 조퇴는 조퇴(원장 2026-09-30) — 예전엔 빨간 '결석'으로 접었다.
     expect(
       applyAppliedAttendance(before, [{ studentId: "s1", classId: "c1" }], "early_leave", NONE)[0]!
         .attendance,
+    ).toBe("조퇴");
+  });
+
+  it("🔴 배지는 방금 쓴 칸이 아니라 **행 전체의 우선순위**다 — 다른 반 결석·조퇴를 '출석' 방송이 가리지 않는다", () => {
+    const absentElsewhere = [
+      stu("s1", [row({ classId: "c1" }), row({ classId: "c2", name: "영어", attendanceRaw: "absent" })], {
+        attendance: "결석",
+      }),
+    ];
+    expect(
+      applyAppliedAttendance(absentElsewhere, [{ studentId: "s1", classId: "c1" }], "present", NONE)[0]!.attendance,
     ).toBe("결석");
+    const leftEarly = [
+      stu("s1", [row({ classId: "c1" }), row({ classId: "c2", name: "영어", attendanceRaw: "early_leave" })], {
+        attendance: "조퇴",
+      }),
+    ];
+    expect(
+      applyAppliedAttendance(leftEarly, [{ studentId: "s1", classId: "c1" }], "late", NONE)[0]!.attendance,
+    ).toBe("조퇴");
+  });
+
+  it("🔴 행에 못 붙은 내 반 칸(attendanceOffRow)의 정정도 반영한다 — 결석→출석이면 배지가 즉시 출석", () => {
+    const before = [stu("s1", [row({ classId: "c1" })], { attendance: "결석", attendanceOffRow: { mk: "absent" } })];
+    const after = applyAppliedAttendance(before, [{ studentId: "s1", classId: "mk" }], "present", NONE)[0]!;
+    expect(after.attendanceOffRow).toEqual({ mk: "present" });
+    expect(after.attendance).toBe("출석");
+    // 키가 없는 반(내 반인지 모른다)은 새로 만들지 않는다 — 참조 그대로.
+    expect(applyAppliedAttendance(before, [{ studentId: "s1", classId: "zz" }], "absent", NONE)).toBe(before);
   });
 
   it("units 키가 없는 칸(갱신 — 기존 시수 보존)은 메모·시수를 건드리지 않는다", () => {

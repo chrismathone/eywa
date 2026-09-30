@@ -8,6 +8,7 @@ const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const CELL_CLASS: Record<string, string> = {
   출석: `${ATT_SOFT.present} font-bold`,
   지각: `${ATT_SOFT.late} font-bold`,
+  조퇴: `${ATT_SOFT.early_leave} font-bold`,
   결석: `${ATT_SOFT.absent} font-bold`,
 };
 

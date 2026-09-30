@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
-import { todayLevelTests } from "@/features/dashboard/overview/display";
+import { todayLevelTestList } from "@/features/dashboard/overview/display";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { formatShortKoreanDate } from "@/lib/date-kst";
 import {
@@ -68,7 +68,8 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
   const wd = withdrawals ? countWithdrawalPrograms(withdrawals.rows) : null;
   const month = withdrawals?.month ?? today.slice(0, 7);
   const intake = v.intake?.data;
-  const levelTests = v.calendar?.data ? todayLevelTests(v.calendar.data, today) : null;
+  // 숫자 = 살아 있는 입테만, 팝업 = 취소된 것도 취소선으로(원장 2026-09-30) — 한 번 계산해 카드·팝업이 같이 쓴다.
+  const levelTests = v.calendar?.data ? todayLevelTestList(v.calendar.data, today) : null;
   // 금일 등록 = 오늘 콜&상담 '등록 완료'로 옮긴 상담(원장 2026-09-23). 보조 줄은 반 배정 완료 / 배정 전.
   const registered = v.enrolledToday?.data;
   const registeredAssigned = registered?.filter((row) => row.assigned).length ?? 0;
@@ -154,13 +155,21 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
         <KpiCard
           helpKey="dash-leveltest"
           label="금일 입테"
-          value={count(levelTests?.length)}
+          value={count(levelTests?.active.length)}
           unit="건"
           detail={
             levelTests
-              ? levelTests.length
-                ? `첫 일정 ${levelTests[0]?.startTime?.slice(0, 5) ?? "종일"}`
-                : "오늘 일정 없음"
+              ? [
+                  levelTests.active.length
+                    ? `첫 일정 ${levelTests.active[0]?.startTime?.slice(0, 5) ?? "종일"}`
+                    : levelTests.cancelled
+                      ? null
+                      : "오늘 일정 없음",
+                  // 0건이 수수께끼가 되지 않게 — 취소된 입테가 있으면 "취소 N"을 보조 줄에(원장 2026-09-30).
+                  levelTests.cancelled ? `취소 ${number(levelTests.cancelled)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
               : "학원 일정 기준"
           }
           icon={<MenuGlyph name="exam" size={20} />}
@@ -168,7 +177,7 @@ export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
           popupTitle="오늘 레벨테스트"
           jump={null}
         >
-          <LevelTestPopup events={levelTests} />
+          <LevelTestPopup list={levelTests} />
         </KpiCard>
       )}
       {v.enrolledToday && (

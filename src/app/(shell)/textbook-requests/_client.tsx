@@ -230,7 +230,7 @@ export function TextbookRequestClient({
   const canSubmit = studentIds.length > 0 && bookName.trim() !== "";
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+    <div className="w-full min-w-0 space-y-6 p-4 md:p-6">
       {/* ⚠️ 수제 헤더가 아니라 공용 PageHeader — 창(embed)·모바일 컴팩트 행과 구분선이 여기 한 곳에서 온다. */}
       <PageHeader
         eyebrow="운영"

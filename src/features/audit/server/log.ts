@@ -149,6 +149,9 @@ export const AUDIT_ACTIONS = {
   classnote_notice_delete: "학부모 공지 삭제",
   classnote_notice_revoke: "학부모 공지 게시취소",
   classnote_report_recall: "수업보고서 회수",
+  // 지금 반 보드 동기화(0313a, 2026-09-30) — 요청(사람)과 실행 결과(연동 PC가 직접 insert, 실행자 system:classnote-sync-now)를 따로 남긴다.
+  classnote_board_sync_request: "반 보드 지금 동기화 요청",
+  classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
   ecs_attendance_clear: "출석 취소(ECS)",
   operating_periods_save: "세션 기간 저장",
   calendar_event_create: "일정 등록",

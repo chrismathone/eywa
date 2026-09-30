@@ -20,7 +20,7 @@ export default async function MyLearningPage() {
   const subjectNames = student.subjects.map((s) => s.name);
   const subjectKeys = [...new Set(student.subjects.map((s) => subjectTone(s.name).key))];
   const att = student.attendance;
-  const attColor = att === "지각" ? "amber" : att === "결석" ? "danger" : "primary";
+  const attColor = att === "지각" ? "amber" : att === "조퇴" ? "blue" : att === "결석" ? "danger" : "primary";
 
   return (
     <div className="mx-auto max-w-[680px] space-y-4">

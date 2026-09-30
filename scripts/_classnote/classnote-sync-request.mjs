@@ -1,0 +1,217 @@
+// scripts/_classnote/classnote-sync-request.mjs — **지금 반 보드 동기화** 요청 처리(0313a, 연동 PC 워커가 매 폴 부른다).
+//
+// 원장 2026-09-30 *"지금 반 보드 동기화 버튼을 만들자 … 중복 발동 방지"* · *"너무 과부하 일어나지 않게 필요한것만 동기화하게"*.
+// 앱 버튼 → classnote_sync_requests 행(지점당 살아 있는 요청 하나 — 부분 유니크) → 이 워커가 집어 **바뀐 반만** 동기화한다.
+//
+// - 집기 = `update … where id = (select … for update skip locked) and status='pending'` — 워커 두 대가 동시에 봐도 한 대만 집는다
+//   (실게시 워커는 임대로 지점당 한 대 — worker-lease.mjs, 이 판정은 그 위의 두 번째 자물쇠).
+// - 🔴 `--post` 워커만 집는다 — dry-run PC가 집으면 "동기화했다"면서 아무것도 안 한 결과가 남는다(앱도 postMode PC가 있을 때만 받는다).
+// - 🔴 새벽 정기 동기화의 '오늘 함' 표식을 건드리지 않는다 — 일부 반만 본 수동 실행이 새벽 전체 실행을 건너뛰게 하면 안 된다.
+//   같은 폴 루프(단일 스레드)라 둘이 동시에 돌 수는 없다(한 폴 안에서 차례로).
+// - 달라진 게 없으면 ClassNote에 로그인조차 하지 않는다(aywa DB만 본다 — sync-request-plan.mjs).
+// - 상한: 반 15개·신입 준비 20건 — 남은 건 결과에 적고 새벽(또는 다시 누름)이 한다.
+// - 표가 없으면(0313a 적용 전) 조용히 쉰다([[#95]]).
+import { loginClassnote } from "./classnote-admin-core.mjs";
+import { provisionDailyOnce } from "./classnote-provision-core.mjs";
+import { loadAywa } from "./math-class-boards-load.mjs";
+import { syncMathClassBoards } from "./math-class-boards-sync.mjs";
+import {
+  MAX_PROVISION_WRITES,
+  PENDING_STALE_MIN,
+  RECENT_DAYS,
+  RESTARTED_MSG,
+  RUNNING_STALE_MIN,
+  STALE_PENDING_MSG,
+  STALE_RUNNING_MSG,
+  normalizeScope,
+  provisionCandidates,
+  selectClassesToSync,
+  summarizeSync,
+  syncErrorLabel,
+} from "./sync-request-plan.mjs";
+
+// 표가 없으면(0313a 적용 전) 10분 동안 다시 묻지 않는다 — 영구 포기로 두면 SQL을 적용해도 워커를 재시작할 때까지 요청이
+// 아무도 안 집는 '대기 중'으로 남는다(앱은 caps만 보고 받는다).
+const MISSING_RECHECK_MS = 10 * 60_000;
+let tableMissingAt = 0;
+let restartSwept = false;
+
+const isMissing = (e) => e?.code === "42P01" || /classnote_sync_requests.*does not exist/i.test(String(e?.message ?? ""));
+
+/** 멈춘 요청 정리 + (프로세스 첫 폴에) 이 PC가 들고 있던 실행 중 요청 정리. */
+async function sweep(sql, tenant, host) {
+  const timedOut = sql.json({ timedOut: true });
+  await sql`update classnote_sync_requests set status = 'failed', finished_at = now(), error = ${STALE_PENDING_MSG}, result = ${timedOut}
+    where tenant_id = ${tenant} and status = 'pending' and requested_at < now() - make_interval(secs => ${PENDING_STALE_MIN * 60})`;
+  await sql`update classnote_sync_requests set status = 'failed', finished_at = now(), error = ${STALE_RUNNING_MSG}, result = ${timedOut}
+    where tenant_id = ${tenant} and status = 'running' and coalesce(started_at, requested_at) < now() - make_interval(secs => ${RUNNING_STALE_MIN * 60})`;
+  if (!restartSwept) {
+    // 이 PC가 실행 중에 죽었다(재시작) — 그 요청은 끝나지 않는다. 한 폴 루프라 지금 이 PC에서 도는 실행은 없다.
+    await sql`update classnote_sync_requests set status = 'failed', finished_at = now(), error = ${RESTARTED_MSG}, result = ${timedOut}
+      where tenant_id = ${tenant} and status = 'running' and worker_id = ${host}`;
+    restartSwept = true;
+  }
+}
+
+/** 대기 중 요청 하나를 집는다(원자적). 없으면 null. */
+async function claim(sql, tenant, host) {
+  const [row] = await sql`
+    update classnote_sync_requests set status = 'running', started_at = now(), worker_id = ${host}
+    where id = (
+      select id from classnote_sync_requests
+      where tenant_id = ${tenant} and status = 'pending'
+      order by requested_at limit 1
+      for update skip locked
+    ) and status = 'pending'
+    returning id, scope, requested_at`;
+  return row ?? null;
+}
+
+/**
+ * 바뀐 반만 동기화 — ClassNote 쓰기는 새벽 동기화와 같은 코드·같은 가드(class-board-plan.mjs · math-class-boards-apply.mjs ·
+ * classnote-provision-core.mjs)를 탄다. 여기서 새로 하는 일은 **대상 고르기**뿐이다.
+ */
+export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log = console.log }) {
+  const scope = normalizeScope(rawScope);
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  const [aywa, linkRows, members, recentRows, childLinks] = await Promise.all([
+    loadAywa(sql, tenant),
+    sql`select class_id, board_name from classnote_class_boards where tenant_id = ${tenant}`,
+    sql`select class_id, student_id, status, reason from classnote_class_board_members where tenant_id = ${tenant}`,
+    sql`select distinct e.student_id from enrollments e join students s on s.id = e.student_id
+      where e.tenant_id = ${tenant} and s.status = 'enrolled' and not coalesce(s.is_test, false)
+        and (e.end_date is null or e.end_date >= ${today})
+        and (e.start_date >= (${today}::date - ${RECENT_DAYS}::int) or e.created_at >= now() - make_interval(secs => ${RECENT_DAYS * 86400}))`,
+    sql`select distinct student_id from classnote_child_links where tenant_id = ${tenant}`,
+  ]);
+  // 반 보드를 한 번도 연결하지 않은 지점 — 새벽 동기화와 같이 반 보드는 만들지 않는다(이 기능을 켠 적 없는 곳).
+  const links = new Map(linkRows.map((r) => [r.class_id, { boardName: r.board_name }]));
+  const recent = new Set(recentRows.map((r) => r.student_id));
+  const { picked, remaining } = links.size
+    ? selectClassesToSync({ classes: aywa.classes, links, members, recentStudentIds: recent, scope })
+    : { picked: [], remaining: 0 };
+  // 지목한 학생은 지점 학생만(다른 지점 id가 섞여 와도 무시 — 대상 반 목록이 이미 이 지점 것뿐).
+  const tenantStudents = new Set(aywa.students.keys());
+  const provIds = provisionCandidates({
+    recentStudentIds: recent,
+    childLinkedStudentIds: new Set(childLinks.map((r) => r.student_id)),
+    scope: { ...scope, studentIds: scope.studentIds.filter((s) => tenantStudents.has(s)) },
+  });
+
+  if (!picked.length && !provIds.length) {
+    log("[sync-now] 바뀐 반 없음 — ClassNote는 건드리지 않음");
+    return { noChange: true, classes: 0, enrolled: 0, summary: summarizeSync({ noChange: true }) };
+  }
+  log(`[sync-now] 대상 반 ${picked.length}개${remaining ? `(남은 ${remaining}개는 다음에)` : ""} · 신입 준비 후보 ${provIds.length}명`);
+  for (const p of picked) log(`[sync-now]   ${p.className}: ${p.reasons.join(", ")}`);
+
+  const out = { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, boardsCreated: 0, assigned: 0, remaining, provisionRemaining: 0 };
+  // ① 신입 1인 보드 준비 먼저 — 반 보드 배정은 1인 보드의 원아를 출처로 쓴다(class-board-plan.mjs ①).
+  if (provIds.length) {
+    const pr = await provisionDailyOnce(sql, browser, { tenant, post: true, log, force: true, studentIds: provIds, maxWrites: MAX_PROVISION_WRITES });
+    out.boardsCreated = pr.created ?? 0;
+    out.assigned = pr.assigned ?? 0;
+    out.provisionRemaining = pr.remaining ?? 0;
+  }
+  // ② 고른 반만 반 보드 동기화. 실패하면 ①에서 이미 한 일을 오류에 실어 보낸다(부분 실패 기록).
+  if (picked.length) {
+    const page = await browser.newPage();
+    try {
+      await loginClassnote(page);
+      const r = await syncMathClassBoards(sql, page, { tenant, apply: true, log, onlyClassIds: new Set(picked.map((p) => p.classId)) });
+      Object.assign(out, { classes: r.classes, created: r.created, renamed: r.renamed, enrolled: r.enrolled, teachers: r.teachers, held: r.held });
+      for (const x of r.release ?? []) log(`[sync-now]   해제 필요(ClassNote 화면에서): ${x}`);
+      for (const x of r.skipped ?? []) log(`[sync-now]   보류: ${x}`);
+    } catch (e) {
+      if (e && typeof e === "object") e.partial = { ...out };
+      throw e;
+    } finally {
+      await page.close().catch(() => {});
+    }
+  }
+  return { ...out, pickedClasses: picked.map((p) => p.className).slice(0, 20), summary: summarizeSync(out) };
+}
+
+/**
+ * 실행 중 요청을 끝낸다 — 그 사이 다른 화면이 합류해 적은 범위(`next_scope`)가 있으면 **같은 트랜잭션에서** 새 대기 요청을
+ * 만든다(다음 폴에 이어서 돈다). 조건부(`status='running'`)라 그 사이 시간 초과로 정리된 요청은 건드리지 않는다.
+ * ⚠️ 부분 유니크(지점당 살아 있는 요청 하나)는 `on conflict` 타깃이 안 된다([[#113]]) — 타깃 없는 `do nothing`만 쓴다.
+ * @returns {Promise<{finished:boolean, requeued:boolean}>}
+ */
+async function finish(sql, tenant, id, { status, result, error }) {
+  return sql.begin(async (tx) => {
+    const [row] = await tx`update classnote_sync_requests set status = ${status}, finished_at = now(), result = ${sql.json(result)}, error = ${error}
+      where id = ${id} and status = 'running' returning next_scope`;
+    if (!row) return { finished: false, requeued: false };
+    if (!row.next_scope || typeof row.next_scope !== "object") return { finished: true, requeued: false };
+    const next = normalizeScope(row.next_scope);
+    const ins = await tx`insert into classnote_sync_requests (tenant_id, scope) values (${tenant}, ${sql.json(next)})
+      on conflict do nothing returning id`;
+    return { finished: true, requeued: ins.length > 0 };
+  });
+}
+
+/** 감사로그 머리 — 🔴 `action: "…"` 리터럴로 둔다(감사로그 레지스트리 가드가 scripts/의 직접 insert를 이 모양으로 스캔한다). */
+const RUN_AUDIT = { action: "classnote_board_sync_run", actor_name: "system:classnote-sync-now" };
+
+/** 감사로그(0313a) — 사람 세션이 없어 직접 넣는다. 액션 키는 앱 AUDIT_ACTIONS에 등록돼 있다. best-effort. */
+async function audit(sql, tenant, requestId, result, error) {
+  const metadata = {
+    requestId,
+    ok: !error,
+    noChange: result?.noChange === true,
+    classes: result?.classes ?? 0,
+    created: result?.created ?? 0,
+    renamed: result?.renamed ?? 0,
+    enrolled: result?.enrolled ?? 0,
+    teachers: result?.teachers ?? 0,
+    held: result?.held ?? 0,
+    boardsCreated: result?.boardsCreated ?? 0,
+    assigned: result?.assigned ?? 0,
+    remaining: result?.remaining ?? 0,
+    ...(error ? { error } : {}),
+  };
+  await sql`insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
+    values (${tenant}, null, ${RUN_AUDIT.actor_name}, ${RUN_AUDIT.action}, ${"classnote_sync"},
+      ${error ? "반 보드 지금 동기화 실패" : "반 보드 지금 동기화"}, ${sql.json(metadata)})`.catch(() => {});
+}
+
+/**
+ * 폴 1회 — 대기 요청이 있으면 집어 실행하고 끝낸다. `post`가 아니면 아무것도 안 한다.
+ * @returns {Promise<{ran:boolean, ok?:boolean, noChange?:boolean, summary?:string}>}
+ */
+export async function processSyncRequestOnce(sql, browser, { tenant, post, host, log = console.log }) {
+  if (!post || (tableMissingAt && Date.now() - tableMissingAt < MISSING_RECHECK_MS)) return { ran: false };
+  let row;
+  try {
+    await sweep(sql, tenant, host);
+    row = await claim(sql, tenant, host);
+  } catch (e) {
+    if (isMissing(e)) {
+      tableMissingAt = Date.now(); // 0313a 적용 전 — 조용히 쉰다(10분 뒤 다시 본다)
+      return { ran: false };
+    }
+    throw e;
+  }
+  tableMissingAt = 0;
+  if (!row) return { ran: false };
+  log(`[sync-now] 요청 ${row.id} 시작`);
+  try {
+    const result = await runScopedSync(sql, browser, { tenant, scope: row.scope, log });
+    const fin = await finish(sql, tenant, row.id, { status: "done", result, error: null });
+    if (!fin.finished) log(`[sync-now] 요청 ${row.id}는 그 사이 시간 초과로 정리됐습니다(결과만 로그에 남김) — ${result.summary}`);
+    else log(`[sync-now] 완료 — ${result.summary}${fin.requeued ? " · 실행 중에 들어온 요청을 이어서 합니다" : ""}`);
+    await audit(sql, tenant, row.id, result, null);
+    return { ran: true, ok: true, noChange: !!result.noChange, summary: result.summary };
+  } catch (e) {
+    const raw = String(e?.message ?? e).slice(0, 300);
+    const label = syncErrorLabel(raw);
+    log(`[sync-now] 실패 — ${label} (${raw})`);
+    // 부분 실패도 기록한다 — ClassNote에 이미 한 일(배정 등)은 되돌릴 수 없으므로, 0302a는 그 반만 다시 적는 다음 실행이 맞춘다.
+    const partial = e && typeof e === "object" && e.partial ? e.partial : null;
+    await finish(sql, tenant, row.id, { status: "failed", result: { raw, ...(partial ? { partial } : {}) }, error: label }).catch(() => {});
+    await audit(sql, tenant, row.id, partial, label);
+    return { ran: true, ok: false, summary: label };
+  }
+}
+

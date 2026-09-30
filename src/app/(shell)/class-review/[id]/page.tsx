@@ -106,8 +106,7 @@ export default async function ClassReviewDetailPage({ params }: { params: Promis
   ].filter(Boolean);
 
   return (
-    // 폭 1000px 중앙 고정(원장 2026-08-04 — 넓은 창에서 좌측에 쏠려 휑함), 좁은 창은 그대로 반응형 축소.
-    <div className="mx-auto w-full max-w-[1000px] space-y-5 p-6">
+    <div className="w-full min-w-0 space-y-5 p-6">
       <div>
         <Link
           href="/class-review"

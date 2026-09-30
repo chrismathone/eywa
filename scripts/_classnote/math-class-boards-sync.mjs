@@ -45,11 +45,17 @@ function releaseNeeded(plans) {
 
 /**
  * 동기화 1회. `apply=false`면 계획만 돌려준다(ClassNote·DB 쓰기 0).
- * @returns {Promise<{created:number, renamed:number, enrolled:number, teachers:number, held:number, release:string[], skippedTeachers:string[]}>}
+ * `onlyClassIds`(Set) = **이 반들만** 본다(지금 동기화, 0313a) — 그 반 학생의 1인 보드·그 반 보드만 읽고, 0302a는 그 반들만 다시
+ * 적는다(계획 밖 반의 연결은 건드리지 않는다 — `writeClassBoardSnapshot` scoped). 종강 반 연결 지키기는 전체 실행의 몫이라 건너뛴다.
+ * @returns {Promise<{classes:number, created:number, renamed:number, enrolled:number, teachers:number, held:number, release:string[], skippedTeachers:string[]}>}
  */
-export async function syncMathClassBoards(sql, page, { tenant, apply = false, log = console.log }) {
+export async function syncMathClassBoards(sql, page, { tenant, apply = false, log = console.log, onlyClassIds = null }) {
+  const all = await loadAywa(sql, tenant);
+  const aywa = onlyClassIds ? { ...all, classes: all.classes.filter((c) => onlyClassIds.has(c.classId)) } : all;
+  // 범위 안 반이 대상 밖(종강·수학 아님·미발송 반)이면 할 일이 없다 — ClassNote를 읽지 않는다.
+  if (onlyClassIds && !aywa.classes.length)
+    return { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, release: [], skippedTeachers: [], skipped: [] };
   const centerId = await fetchCenterId(page);
-  const aywa = await loadAywa(sql, tenant);
   // strict(개명 감사 G9) — 연결표 조회 실패를 빈 지도로 삼키면 계획이 **이름으로 후퇴**해 개명한 반은 새 보드를 만들고
   // 같은 이름 보드를 채택하면서 다른 반 연결을 빼앗는다. 실패 = 오늘 동기화를 건너뛴다.
   const linkedBoardByClass = await loadLinkedBoards(sql, tenant, { strict: true });
@@ -63,7 +69,7 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   for (const p of plans) if (p.board.renameBlocked) log(`  ⚠️ ${p.className}: ${p.board.renameBlocked}`);
   if (!apply) {
     log(`[class-board] 계획 — 바꿀 반 ${targets.length}개 · 보류 학생×반 ${held}건`);
-    return { created: 0, renamed: 0, enrolled: 0, teachers: 0, held, release: releaseNeeded(plans), skippedTeachers: [] };
+    return { classes: plans.length, created: 0, renamed: 0, enrolled: 0, teachers: 0, held, release: releaseNeeded(plans), skippedTeachers: [] };
   }
 
   const done = await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log });
@@ -84,17 +90,23 @@ export async function syncMathClassBoards(sql, page, { tenant, apply = false, lo
   const { todo, skipped } = planTeacherLinks({ targets: teacherTargets, emps: await fetchEmployments(page, centerId) });
   const teachers = await connectTeachers(page, centerId, todo, log);
 
-  // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30). 보드 목록은 방금 읽은 것(fresh.boards).
-  // strict — 조회 실패를 빈 목록으로 삼키면 아래 기록이 종강 반 연결을 전부 지운다(throw = 오늘 기록을 건너뛴다).
-  const linkedNow = await loadLinkedBoards(sql, tenant, { strict: true });
-  const keepClassIds = closedClassesToKeep({
-    closedIds: await loadClosedLinked(sql, tenant),
-    planClassIds: fresh.plans.map((p) => p.classId),
-    linkedBoardByClass: linkedNow,
-    liveBoardIds: fresh.boards.map((b) => Number(b.id)),
-  });
-  await writeClassBoardSnapshot(sql, tenant, fresh.plans, { keepClassIds });
+  if (onlyClassIds) {
+    // 일부 반만 본 실행 — 그 반들만 다시 적는다(계획 밖 반·종강 반 연결은 그대로 둔다).
+    await writeClassBoardSnapshot(sql, tenant, fresh.plans, { scoped: true });
+  } else {
+    // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30). 보드 목록은 방금 읽은 것(fresh.boards).
+    // strict — 조회 실패를 빈 목록으로 삼키면 아래 기록이 종강 반 연결을 전부 지운다(throw = 오늘 기록을 건너뛴다).
+    const linkedNow = await loadLinkedBoards(sql, tenant, { strict: true });
+    const keepClassIds = closedClassesToKeep({
+      closedIds: await loadClosedLinked(sql, tenant),
+      planClassIds: fresh.plans.map((p) => p.classId),
+      linkedBoardByClass: linkedNow,
+      liveBoardIds: fresh.boards.map((b) => Number(b.id)),
+    });
+    await writeClassBoardSnapshot(sql, tenant, fresh.plans, { keepClassIds });
+  }
   return {
+    classes: fresh.plans.length,
     created: done.filter((d) => d.created).length,
     skipped: done.filter((d) => d.skipped || d.renameFailed).map((d) => `${d.className}: ${d.skipped ?? `이름 변경 실패(${d.renameFailed})`}`),
     renamed: done.filter((d) => d.renamed).length,

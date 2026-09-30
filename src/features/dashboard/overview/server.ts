@@ -99,10 +99,12 @@ import {
 } from "./admissions-consultation-link";
 import { reportError } from "@/lib/observability/report-error";
 import {
+  admissionsEventBaseKind,
   admissionsEventKind,
   staffDisplayRole,
   upcomingAdmissionsEvents,
 } from "./display";
+import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 import { monthAheadWindow } from "./upcoming-window";
 import { consultProgress } from "./consultation-progress-server";
 import { staffComposition } from "./staff-subjects";
@@ -694,7 +696,9 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     // 휴가 오버레이는 안 받는다: 분류기(`admissionsEventKind`)가 `source !== "manual"`을 전부 버린다.
     const result = await getDateRangeEvents(today, end);
     if (!result.ready) throw new Error("학원 일정 연결 확인 필요");
+    // 취소된 일정도 목록에 취소선으로 남는다(원장 2026-09-30) — 반·상담 연결과 그 조회는 **살아 있는 일정만**(`live`).
     const upcoming = upcomingAdmissionsEvents(result.events, today, end);
+    const live = upcoming.filter((e) => !isCancelledEventTitle(e.title));
     let candidates: Awaited<ReturnType<typeof firstClassCandidates>> = [];
     let classSlots: Awaited<ReturnType<typeof firstClassScheduleCandidates>> =
       [];
@@ -704,7 +708,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
         if (
           !allowed.includes("students") ||
           !allowed.includes("classes") ||
-          !upcoming.some((e) => /첫\s*수업/.test(`${e.title} ${e.tag?.name ?? ""}`))
+          !live.some((e) => /첫\s*수업/.test(`${e.title} ${e.tag?.name ?? ""}`))
         )
           return;
         try {
@@ -723,7 +727,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     const notNames = Object.values(subjectLabels);
     // 동명이인 가족(같은 이름의 재원·대기 원생들) — 창 안 상담이 한 명뿐이어도 원생 표엔 같은 이름이 더 있을 수 있다(김근우/김근우A).
     // 제목에 걸린 이름만 좁혀 조회하고, 조회가 실패하면 상담 연결을 통째로 끈다(모르는 채 붙이면 다른 아이 이름으로 바뀐다).
-    const bases = consultationBasesInTitles(upcoming, consultations, notNames);
+    const bases = consultationBasesInTitles(live, consultations, notNames);
     let families: Awaited<ReturnType<typeof homonymFamilies>> | null = new Map();
     if (bases.length) {
       try {
@@ -734,6 +738,22 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
       }
     }
     return upcoming.map((event) => {
+      // 취소된 일정 = 목록에 취소선으로만(원장 2026-09-30). 반·콜&상담 링크·이름 바로잡기·단계 칩을 붙이지 않고
+      // `kind`는 null(금일입테·열 건수에서 빠진다), 원래 종류는 `cancelledKind`로만 싣는다.
+      if (isCancelledEventTitle(event.title)) {
+        return {
+          id: event.id,
+          title: event.title,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          startTime: event.startTime,
+          source: event.source,
+          kind: null,
+          cancelledKind: admissionsEventBaseKind(event),
+          matchedClass: null,
+          matchedConsultation: null,
+        };
+      }
       // 학생으로 확정된 반 연결만 원생 이름을 준다(시간표 슬롯으로 찾은 반은 학생이 없다).
       const byStudent = matchFirstClass(event, candidates, subjectLabels);
       const matchedClass =

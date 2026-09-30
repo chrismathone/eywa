@@ -1,5 +1,6 @@
 import { EventRow } from "./event-row";
 import { type CalendarEvent } from "@/features/calendar/types";
+import { countEvents, cancelledSuffix } from "@/features/calendar/cancelled";
 
 /**
  * 분석 뷰의 **일정 제목 연대기** — 원장 2026-08-19: *"갯수로 나오지말고 각각 그 제목들 쭈루룩 뜨게."*
@@ -27,7 +28,8 @@ function YearBlock({ year, events }: { year: number; events: CalendarEvent[] }) 
           <span className="num">{year}</span>년
         </h3>
         <span className="text-text-dim text-sm">
-          일정 <span className="num text-foreground font-semibold">{events.length}</span>건
+          일정 <span className="num text-foreground font-semibold">{countEvents(events).active}</span>건
+          {cancelledSuffix(countEvents(events).cancelled)}
         </span>
       </header>
       {events.length === 0 ? (

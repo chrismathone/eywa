@@ -35,7 +35,7 @@ export default async function AnnualLeavePage() {
     : `직원 ${overview.rows.length}명 · 조정 있음 ${adjusted}명`;
 
   return (
-    <div className="mx-auto w-full max-w-[1100px] space-y-5 p-4 md:p-6">
+    <div className="w-full min-w-0 space-y-5 p-4 md:p-6">
       {/* 뒤로 링크는 형제 라우트(급여·휴가)와 **같은 부품**으로 — 창(iframe) 안에서는 크롬이 ←·제목을
           주므로 스스로 사라진다. 맨 `<Link>`를 헤더에 두면 창 안에서 뒤로가 둘이 되고, 눌렀을 때 그 창이
           "제목은 연차 관리인데 내용은 직원 목록"으로 바뀐다(back-link.tsx 주석). */}

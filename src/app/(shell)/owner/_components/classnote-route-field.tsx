@@ -1,6 +1,7 @@
 "use client";
 
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { ClassnoteSyncNowButton } from "@/features/report-admin/components/classnote-sync-now-button";
 
 type Route = "personal" | "class" | "pilot";
 
@@ -54,6 +55,9 @@ export function ClassnoteRouteField({
           </label>
         ))}
       </div>
+      {/* 지금 반 보드 동기화(0313a) — 반별 발송을 쓸 때만. 새 반·신입이 새벽 동기화 전이라 '보낼 반 없음'일 때 바로 맞춘다.
+          모듈이 꺼졌거나 권한·SQL·반 보드가 없으면 버튼이 스스로 아무것도 안 그린다. */}
+      {route !== "personal" ? <ClassnoteSyncNowButton source="owner_report_route" className="mt-2" /> : null}
       {route === "pilot" ? (
         <div className="mt-2">
           <div className="flex flex-wrap gap-2">

@@ -6,6 +6,7 @@ import { dotProps } from "@/features/calendar/color";
 import type { CalendarTag } from "@/features/calendar/types";
 import type { EventRowData } from "./event-row";
 import { StatsCellDialog, type CellGroup, type PickedCell } from "./stats-cell-dialog";
+import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 
 /**
  * 분석 요약표(태그 × 연도 × 월 건수) — **숫자를 누르면 그 칸의 일정이 모달로 열린다**
@@ -117,6 +118,8 @@ export function StatsMatrix({
     const map = new Map<string, Map<number, number[]>>();
     for (const e of events) {
       if (!years.includes(yearOf(e))) continue;
+      // 취소된 일정은 건수에서 뺀다 — 칸을 눌러 여는 목록엔 취소선으로 남는다(원장 2026-09-30).
+      if (isCancelledEventTitle(e.title)) continue;
       const key = e.tag?.id ?? NONE_KEY;
       const byYear = map.get(key) ?? new Map<number, number[]>();
       const arr = byYear.get(yearOf(e)) ?? emptyMonths();

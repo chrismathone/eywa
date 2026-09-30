@@ -6,6 +6,7 @@ import type { Session } from "../history";
 const ATT_CLASS: Record<string, string> = {
   출석: ATT_SOFT.present,
   지각: ATT_SOFT.late,
+  조퇴: ATT_SOFT.early_leave,
   결석: ATT_SOFT.absent,
 };
 

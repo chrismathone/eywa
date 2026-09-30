@@ -17,11 +17,12 @@
  *     거짓이 됐다 — 방송 뒤 '타임' 칸이 1로 보이고, 이어지는 보강 합침이 1 + 보강으로 **1.5 기록을 덮어**
  *     정규 몫 0.5가 사라졌다(적대 리뷰 2026-09-11). 키가 없는 칸(갱신 — 기존 시수 보존)은 그대로 둔다.
  *     ⚠️ `attendanceNote`는 여전히 건드리지 않는다 — 스트립은 메모를 안 보낸다.
- *  5. 학생 배지(`attendance`)는 [attendance-mark.ts](./attendance-mark.ts) 단일 소스로 갱신한다
- *     — 로스터도 "그 학생의 가장 최근 기록"으로 배지를 만들고, 방금 쓴 행이 그 최신이다.
+ *  5. 학생 배지(`attendance`)는 [attendance-mark.ts](./attendance-mark.ts) `studentMarkFromRows`로 **행에서 다시
+ *     계산**한다 — 로스터와 같은 함수·같은 우선순위(결석 > 조퇴 > 지각 > 출석). 방금 쓴 칸이 배지를 통째로
+ *     덮지 않는다(다른 반의 결석·조퇴가 '출석' 방송 한 번에 가려지면 안 된다).
  *  6. 바뀐 게 없으면 **입력 배열을 그대로 반환**(참조 동일) — 불필요한 리렌더 0.
  */
-import { attendanceMarkOf } from "./attendance-mark";
+import { studentMarkFromRows } from "./attendance-mark";
 import type { OneScreenStudent } from "./types";
 
 /** 방송 칸(`AttendanceAppliedDetail.cells`)과 같은 모양 — `units`는 새로 만든 칸에만 온다(규칙 4). */
@@ -44,7 +45,6 @@ export function applyAppliedAttendance(
   }
   if (byStudent.size === 0) return students as OneScreenStudent[];
 
-  const mark = attendanceMarkOf(status);
   let touched = false;
   const next = students.map((s) => {
     const byClass = byStudent.get(s.id);
@@ -62,10 +62,22 @@ export function applyAppliedAttendance(
         ? { ...su, attendanceRaw: status, attendanceUnits: cell.units ?? null }
         : { ...su, attendanceRaw: status };
     });
+    // 행에 못 붙은 내 반 칸(`attendanceOffRow`)도 **같은 반 키로** 고친다 — 안 고치면 출석부에서 결석을 출석으로
+    // 정정해도 배지가 옛 결석을 계속 센다(적대 리뷰 2026-09-30). 새 키는 만들지 않는다(내 반인지 클라는 모른다).
+    let attendanceOffRow = s.attendanceOffRow;
+    if (attendanceOffRow) {
+      for (const cid of byClass.keys()) {
+        if (cid in attendanceOffRow && attendanceOffRow[cid] !== status) {
+          attendanceOffRow = { ...attendanceOffRow, [cid]: status };
+          rowChanged = true;
+        }
+      }
+    }
     // 행이 하나도 안 바뀌었으면 배지도 손대지 않는다 — 이미 그 값이라 새로 알릴 것이 없다.
     if (!rowChanged) return s;
     touched = true;
-    return { ...s, attendance: mark, subjects };
+    const nextStudent = { ...s, subjects, ...(attendanceOffRow ? { attendanceOffRow } : {}) };
+    return { ...nextStudent, attendance: studentMarkFromRows(nextStudent) };
   });
   return touched ? next : (students as OneScreenStudent[]);
 }

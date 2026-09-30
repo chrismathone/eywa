@@ -20,6 +20,7 @@ import { attentionCount, queuePollIntervalMs, shouldAutoRefreshQueue } from "@/f
 import { classnoteRetryDeadline } from "@/features/onescreen/classnote-guard";
 import type { ClassnoteQueueView } from "@/features/report-admin/server/queries";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { ClassnoteSyncNowButton } from "@/features/report-admin/components/classnote-sync-now-button";
 
 // 자동 갱신 상한 — **"변화가 없는 채로" 10분**이면 중지(창을 열어둔 채 밤새 폴링 금지).
 // ⚠️ 총 시간이 아니라 '무변화 시간'인 게 핵심 — 100건 일괄 발송처럼 오래 걸리는 정상 드레인 중에
@@ -482,6 +483,8 @@ export function ClassnoteQueueCard({ view: served }: { view: ClassnoteQueueView 
             멈춤 재시도 ({summary.stuck})
           </Button>
         ) : null}
+        {/* 지금 반 보드 동기화(0313a) — '보낼 반 없음'으로 막힌 행은 대개 새벽 동기화 전의 새 반·신입이다. */}
+        <ClassnoteSyncNowButton source="lesson_reports_queue" className="ml-auto" />
       </div>
 
       {/* 기한을 넘겨 잃은 건 — 되살릴 수 없으므로 목록이 아니라 한 줄 경고로만(원장이 볼 곳은 위 주의 목록).

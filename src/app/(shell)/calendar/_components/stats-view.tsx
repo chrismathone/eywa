@@ -2,6 +2,7 @@ import { type CalendarEvent, type CalendarTag } from "@/features/calendar/types"
 import type { EventRowData } from "./event-row";
 import { StatsMatrix } from "./stats-matrix";
 import { StatsTimeline } from "./stats-timeline";
+import { countEvents, cancelledSuffix } from "@/features/calendar/cancelled";
 
 /**
  * 분석 뷰 — **요약표(태그 × 연도 × 월 건수) + 제목 연대기**(0224a 다중 뷰, 2026-08-19 개편).
@@ -74,7 +75,8 @@ export function StatsView({
         <span className="num text-foreground font-bold">
           {years[0]}~{years[years.length - 1]}
         </span>
-        년 일정 <span className="num text-foreground font-bold">{inWindow.length}</span>건 · 태그{" "}
+        년 일정 <span className="num text-foreground font-bold">{countEvents(inWindow).active}</span>건
+        {cancelledSuffix(countEvents(inWindow).cancelled)} · 태그{" "}
         <span className="num text-foreground font-bold">{tags.length}</span>종
         {filterName ? (
           <span className="text-text-faint">
