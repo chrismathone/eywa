@@ -58,6 +58,9 @@ async function isSignedInAsInactive(): Promise<boolean> {
  * 세션이 없으면 `/login`으로 — 보호된 페이지와 같은 취급이라 새로 만드는 실패 모드가 없다.
  */
 export async function GET(request: NextRequest) {
+  // 창(iframe) 안에서 왔으면(없는 주소 착지 등) 착지 주소에도 embed=1 — 빠지면 창 안에 전체 셸이 뜬다(#133).
+  const embed = request.nextUrl.searchParams.get("embed") === "1";
+  const withEmbed = (href: string) => (embed ? `${href}${href.includes("?") ? "&" : "?"}embed=1` : href);
   const user = await getCurrentUser();
   // 지점 소속 없이 만든 SaaS 관리자 계정은 public.users 행이 없다.
   // 기존 지점 사용자는 아래의 역할/과목 착지 경로를 그대로 쓴다.
@@ -71,9 +74,9 @@ export async function GET(request: NextRequest) {
       }
       redirect("/login");
     }
-    redirect(isAdminAuthEmail(sa.email) ? "/admin" : "/super-admin");
+    redirect(withEmbed(isAdminAuthEmail(sa.email) ? "/admin" : "/super-admin"));
   }
-  if (isAdminAuthEmail(user.email) && (await getCurrentSuperAdmin())) redirect("/admin");
+  if (isAdminAuthEmail(user.email) && (await getCurrentSuperAdmin())) redirect(withEmbed("/admin"));
   const params = request.nextUrl.searchParams;
   // 🔴 `?login=1`만으로 기록하지 않는다(적대적 리뷰) — 새로고침·북마크·남이 보낸 링크마다 로그인 기록이 한 줄씩
   //    쌓여 감사 기록이 흐려진다. JWT의 `amr` 로그인 시각이 **방금(2분 이내)**일 때만 진짜 로그인으로 본다.
@@ -88,5 +91,5 @@ export async function GET(request: NextRequest) {
   if (next) redirect(next);
   const home = await landingPath(user.systemRole, await getPermMatrix());
   // landingPath가 "/"를 돌려주는 엣지(권한 override로 대시보드가 막힌 역할)에선 랜딩으로 — 루프 없음.
-  redirect(home);
+  redirect(withEmbed(home));
 }
