@@ -2,14 +2,15 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { setVideoHomeworkMark } from "../server/actions";
 import type { VideoHomeworkMark, VideoHomeworkStatus } from "../types";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY, isVideoHomeworkEnabled, type VideoHomeworkPolicy } from "../policy";
 
 const STATUS = [
-  { value: "submitted", label: "완료", icon: "✓", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  { value: "timed", label: "시간 표시", icon: "◷", tone: "border-amber-300 bg-amber-50 text-amber-700" },
-  { value: "missing", label: "미제출", icon: "×", tone: "border-rose-300 bg-rose-50 text-rose-700" },
+  { value: "submitted", label: "완료", icon: "check", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
+  { value: "timed", label: "시간 표시", icon: "clock", tone: "border-amber-300 bg-amber-50 text-amber-700" },
+  { value: "missing", label: "미제출", icon: "close", tone: "border-rose-300 bg-rose-50 text-rose-700" },
 ] as const;
 
 type Store = {
@@ -64,7 +65,10 @@ export function VideoHomeworkCheck({ classId, studentId, subjectKey, grade, prev
   previousHomework?: string | null; homeworkDate?: string | null;
   compact?: boolean; readOnly?: boolean;
 }) {
-  const { checkDate, marks, pending, policy, change } = useVideoHomework();
+  // 공급자 밖(원스크린 행을 다른 화면·테스트가 그릴 때)에서는 검사 칸을 그리지 않는다 — 화면 전체를 죽이지 않게.
+  const store = useContext(Context);
+  if (!store) return null;
+  const { checkDate, marks, pending, policy, change } = store;
   if (!isVideoHomeworkEnabled(policy, { classId, subjectKey, grade })) return null;
   const mark = marks.find((item) => item.classId === classId && item.studentId === studentId);
   const busy = pending.has(keyOf(classId, studentId));
@@ -75,12 +79,12 @@ export function VideoHomeworkCheck({ classId, studentId, subjectKey, grade, prev
       aria-label={`영상 숙제 ${option.label}`}
       title={mark?.status === option.value ? `${option.label} 취소` : option.label}
       onClick={() => void change(classId, studentId, mark?.status === option.value ? null : option.value, homeworkDate)}
-      className={`rounded-md border px-2 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${mark?.status === option.value ? option.tone : "border-line bg-card text-text-dim hover:border-primary"}`}>
-      {option.icon} {option.label}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${mark?.status === option.value ? option.tone : "border-line bg-card text-text-dim hover:border-primary"}`}>
+      <EyIcon name={option.icon} size={14} /> {option.label}
     </button>)}
   </div>;
 
-  if (compact) return <div className="border-line mt-1 rounded border bg-card px-1.5 py-1.5 text-[10px]">
+  if (compact) return <div className="border-line mt-1 rounded border bg-card px-1.5 py-1.5 text-xs">
     <div className="text-text-dim mb-1 font-semibold">지난 영상 숙제 · {checkDate.slice(5)} 검사</div>
     {previousHomework ? <p title={previousHomework} className="text-text-faint mb-1 truncate">과제: {previousHomework}</p> : null}
     {statusButtons}
@@ -94,6 +98,6 @@ export function VideoHomeworkCheck({ classId, studentId, subjectKey, grade, prev
       {homeworkDate ? `지난 수업 ${homeworkDate} · ` : ""}{previousHomework?.trim() || "지난 과제 기록 없음"}
     </p>
     {statusButtons}
-    <p className="text-text-faint mt-2 text-[11px]">학생·반·수업 날짜당 한 번 기록됩니다. 선택한 상태를 다시 누르면 취소됩니다.</p>
+    <p className="text-text-faint mt-2 text-xs">학생·반·수업 날짜당 한 번 기록됩니다. 선택한 상태를 다시 누르면 취소됩니다.</p>
   </section>;
 }

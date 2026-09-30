@@ -2,15 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { VideoHomeworkProvider, useVideoHomework } from "./video-homework-provider";
+import { EyIcon } from "@/components/icons/aywa-icons";
+import { EmbedHiddenInput } from "@/components/embed-link";
 import type { VideoHomeworkMark, VideoHomeworkStatus } from "../types";
 import type { VideoHomeworkHistoryRow, VideoHomeworkRosterRow } from "../server/queries";
 
 type Filter = "all" | "unchecked" | "submitted" | "timed" | "missing";
 const PAGE_SIZE = 50;
 const CHOICES = [
-  { value: "submitted", label: "완료", symbol: "✓", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  { value: "timed", label: "시간 표시", symbol: "◷", tone: "border-amber-300 bg-amber-50 text-amber-700" },
-  { value: "missing", label: "미제출", symbol: "×", tone: "border-rose-300 bg-rose-50 text-rose-700" },
+  { value: "submitted", label: "완료", symbol: "check", tone: "border-emerald-300 bg-emerald-50 text-emerald-700" },
+  { value: "timed", label: "시간 표시", symbol: "clock", tone: "border-amber-300 bg-amber-50 text-amber-700" },
+  { value: "missing", label: "미제출", symbol: "close", tone: "border-rose-300 bg-rose-50 text-rose-700" },
 ] as const;
 const STATUS_NAME: Record<VideoHomeworkStatus, string> = {
   submitted: "완료", timed: "시간 표시", missing: "미제출",
@@ -85,6 +87,7 @@ function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRo
     <div className="border-line bg-card rounded-xl border p-3 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <form action="/lesson-reports/video-homework" method="get" className="flex items-center gap-1.5">
+          <EmbedHiddenInput />
           <label htmlFor="video-homework-date" className="text-text-dim text-xs font-semibold">수업 날짜</label>
           <input id="video-homework-date" type="date" name="date" defaultValue={checkDate} max={today} className="border-line bg-card rounded-lg border px-2 py-1.5 text-sm" />
           <button type="submit" className="border-primary bg-primary text-white rounded-lg border px-3 py-1.5 text-xs font-semibold">날짜 보기</button>
@@ -118,8 +121,8 @@ function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRo
               {CHOICES.map((choice) => <button key={choice.value} type="button" disabled={!canEdit || busy}
                 aria-pressed={mark?.status === choice.value}
                 onClick={() => void change(row.classId, row.studentId, mark?.status === choice.value ? null : choice.value)}
-                className={`rounded-md border px-2 py-1.5 font-semibold disabled:opacity-50 ${mark?.status === choice.value ? choice.tone : "border-line bg-card text-text-dim hover:border-primary"}`}>
-                {choice.symbol} {choice.label}
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 font-semibold disabled:opacity-50 ${mark?.status === choice.value ? choice.tone : "border-line bg-card text-text-dim hover:border-primary"}`}>
+                <EyIcon name={choice.symbol} size={14} /> {choice.label}
               </button>)}
               {!mark ? <span className="text-text-faint ml-1">미확인</span> : null}
             </div></td>
@@ -180,6 +183,7 @@ function HistoryTable({ rows, history, fromDate, toDate, today }: {
       <div><h2 className="text-lg font-bold">기간별 학생 집계</h2>
         <p className="text-text-dim text-xs">검사일이 실제 수업 날짜입니다. 날짜별 결과를 펼쳐 볼 수 있습니다.</p></div>
       <form action="/lesson-reports/video-homework" method="get" className="flex flex-wrap items-center gap-2">
+        <EmbedHiddenInput />
         <input type="hidden" name="date" value={checkDate} />
         <label className="text-text-dim text-xs font-semibold">시작일 <input type="date" name="from" defaultValue={fromDate} max={today}
           className="border-line bg-card ml-1 rounded-lg border px-2 py-1.5 text-sm" /></label>

@@ -10,7 +10,7 @@ const ctx = vi.hoisted(() => ({
 const board = vi.hoisted(() => ({
   getHelpPostsPage: vi.fn(async () => ({ ready: true, rows: [], total: 0 })),
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/help", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/help", useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/auth/require-access", () => ({
   requireAccess: async () => ({ id: "u1", tenantId: "t1", systemRole: ctx.role }),
 }));

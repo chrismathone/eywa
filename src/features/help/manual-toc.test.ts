@@ -15,7 +15,9 @@ const toc = JSON.parse(fs.readFileSync(path.join(MANUAL, "toc.json"), "utf8")) a
 };
 const faces = toc.groups.flatMap((g) => g.menus.flatMap((m) => m.faces.map((f) => ({ id: `${m.slug}/${f.slug}`, file: path.join(MANUAL, "pages", m.slug, `${f.slug}.json`) }))));
 const pages = faces.filter((f) => fs.existsSync(f.file)).map((f) => ({ ...f, page: JSON.parse(fs.readFileSync(f.file, "utf8")) as { href: string } }));
-const hrefs = new Set(pages.map((p) => p.page.href));
+// 면 파일이 메뉴의 한 면(`/exams?tab=records`)을 찍으면 그 메뉴 입구(`/exams`)도 설명서가 다룬 것으로 본다 —
+// 사이드바에 하부탭이 없는 메뉴가 안쪽 면(FaceTabs)을 골라 설명하는 경우(2026-09-30 성적관리).
+const hrefs = new Set(pages.flatMap((p) => [p.page.href, p.page.href.split("?")[0]]));
 
 /** 설명서가 일부러 다루지 않는 입구 — 이유와 함께. */
 const NOT_IN_MANUAL = new Map<string, string>([

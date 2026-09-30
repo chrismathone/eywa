@@ -18,6 +18,8 @@ describe("강사 '내 메뉴' — 수학 강사 시트 진입로", () => {
   const src = read("src", "components", "teacher-menu.tsx");
   // 항목 표는 2026-09-22부터 순수 모듈 한 곳(학원 설정 '강사뷰' 편집기와 공유) — 항목 자체는 그 표에서 본다.
   const links = read("src", "lib", "teacher-menu-links.ts");
+  // 2026-09-30 학원별 메뉴 구성(@메뉴)부터 드롭다운은 `teacherNavigationFor`가 표를 묶어 내린다.
+  const nav = read("src", "lib", "teacher-navigation.ts");
 
   it("🔴 `/mcs` 항목이 있다(이게 강사의 유일한 진입로다)", () => {
     expect(links).toMatch(/href:\s*"\/mcs"/);
@@ -26,13 +28,15 @@ describe("강사 '내 메뉴' — 수학 강사 시트 진입로", () => {
     // 🔴 배선만 보면 그 키가 빈 문자열이어도 통과해서, 항목이 **글자 없는 아이콘**으로 남는다.
     expect(links).toContain('labelKey: "menu.item.mcs"');
     // 드롭다운이 그 표를 실제로 그린다(표만 있고 안 쓰면 항목이 사라진다)
-    expect(src).toContain("TEACHER_MENU_LINKS");
+    expect(nav).toContain("TEACHER_MENU_LINKS");
+    expect(src).toContain("teacherNavigationFor(");
     expect(SHEET_DICT["menu.item.mcs"].ko).toBe("수학 강사 시트");
   });
 
   it("노출은 담당 과목으로 가른다 — 영어(`showEcs`)와 대칭인 `showMcs`", () => {
     expect(src).toContain("showMcs");
-    expect(src).toMatch(/l\.menu !== "mcs" \|\| showMcs/);
+    expect(src).toMatch(/teacherNavigationFor\(\{[^}]*showMcs/);
+    expect(nav).toMatch(/key !== "mcs" \|\| showMcs/);
   });
 });
 

@@ -3,7 +3,7 @@
 import { useDraggable, useDroppable, type DraggableAttributes, type DraggableSyntheticListeners, type KeyboardCoordinateGetter } from "@dnd-kit/core";
 import { GripVertical } from "@/components/icons/aywa-icon-compat";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
-import type { AywaIconName } from "@/components/icons/aywa-icons";
+import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
 import type { ReactNode } from "react";
 import type { PlacementEdge } from "@/features/owner/navigation-placement";
 
@@ -98,6 +98,6 @@ export function LibraryMenu({ drag, location, present, onAdd }: {
     <span data-menu-drag-grip className="text-text-faint flex h-8 w-5 shrink-0 touch-none items-center justify-center"><GripVertical className="size-3.5" /></span>
     <MenuGlyph name={drag.icon} size={22} />
     <span className="min-w-0 flex-1"><span className="block break-words text-sm font-semibold">{drag.label}</span><span className="text-text-faint block text-xs">{location}</span></span>
-    <span aria-hidden className={`shrink-0 text-xs ${present ? "text-primary" : "text-text-faint"}`}>{present ? "✓" : "+"}</span>
+    <span aria-hidden className={`shrink-0 text-xs ${present ? "text-primary" : "text-text-faint"}`}>{present ? <EyIcon name="check" size={14} /> : <EyIcon name="plus" size={14} />}</span>
   </button>;
 }

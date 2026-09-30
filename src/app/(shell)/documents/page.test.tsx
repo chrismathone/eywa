@@ -7,7 +7,7 @@ import { join } from "node:path";
 const mocks = vi.hoisted(() => ({ documents: vi.fn().mockResolvedValue({ rows: [], total: 0 }), access: vi.fn().mockResolvedValue(true),
   favorites: vi.fn().mockResolvedValue([]) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ "x-embed": "1" }) }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => "/documents", useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: async () => ({ systemRole: "master" }) }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: mocks.access, canAccessTenant: async () => true }));
 vi.mock("@/features/documents/server/queries", () => ({
