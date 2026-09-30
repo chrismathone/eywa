@@ -1,6 +1,7 @@
 import { formatShortKoreanDate } from "@/lib/date-kst";
 import { chipProps } from "@/features/calendar/color";
 import { eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
+import { cancelledTitleClass } from "@/features/calendar/cancelled";
 
 /**
  * 분석 화면의 **일정 한 줄** — 연대기(StatsTimeline)와 숫자 칸 모달(StatsMatrix)이 공유한다.
@@ -38,7 +39,7 @@ export function EventRow({ event }: { event: EventRowData }) {
       <span className="num text-text-dim w-24 shrink-0 text-sm whitespace-nowrap">
         {shortDate(event.startDate)}
       </span>
-      <span className="text-foreground min-w-0 flex-1 text-sm font-medium break-keep">
+      <span className={`text-foreground min-w-0 flex-1 text-sm font-medium break-keep ${cancelledTitleClass(event.title)}`}>
         {event.title}
       </span>
       {event.endDate !== event.startDate ? (

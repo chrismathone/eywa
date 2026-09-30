@@ -1,6 +1,7 @@
 import { chipProps } from "@/features/calendar/color";
 import { eventDisplayColor, type CalendarEvent } from "@/features/calendar/types";
 import { EventOpenButton } from "./event-open";
+import { cancelledSuffix, cancelledTitleClass, countEvents } from "@/features/calendar/cancelled";
 
 /**
  * 연간 뷰 — 12개월 카드 격자(0224a 다중 뷰). "행사 태그 연간보기": 태그 필터는 page가 URL로
@@ -37,7 +38,9 @@ export function YearView({ year, events }: { year: number; events: CalendarEvent
             <h3 className="text-foreground mb-2 flex items-baseline justify-between text-base font-bold">
               {m}월
               {list.length > 0 ? (
-                <span className="num text-text-faint text-xs font-normal">{list.length}건</span>
+                <span className="num text-text-faint text-xs font-normal">
+                  {countEvents(list).active}건{cancelledSuffix(countEvents(list).cancelled)}
+                </span>
               ) : null}
             </h3>
             {list.length === 0 ? (
@@ -60,7 +63,7 @@ export function YearView({ year, events }: { year: number; events: CalendarEvent
                         // 유일하게 "이 색이 무슨 태그인지"를 말한다(월 그리드와 같은 `[태그] 제목` 규약, 적대 리뷰 2026-09-04).
                         title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
                       >
-                        {e.title}
+                        <span className={cancelledTitleClass(e.title)}>{e.title}</span>
                       </span>
                       </EventOpenButton>
                     </li>

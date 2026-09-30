@@ -2,6 +2,7 @@ import { weekdayIndexOf } from "@/lib/date-kst";
 import { holidayFor, holidayShortName } from "@/features/calendar/holidays";
 import { chipProps } from "@/features/calendar/color";
 import { eventDisplayColor, type CalendarEvent } from "@/features/calendar/types";
+import { cancelledTitleClass } from "@/features/calendar/cancelled";
 
 /**
  * 월 그리드 — 일~토 7열(한국 달력 관행: 일=빨강·토=파랑), 앞뒤 달 날짜는 흐리게, 오늘은 primary 원 배지.
@@ -167,7 +168,7 @@ export function MonthGrid({
                         title={e.tag ? `[${e.tag.name}] ${e.title}` : e.title}
                       >
                         {e.startTime ? <span className="num mr-0.5">{e.startTime}</span> : null}
-                        {e.title}
+                        <span className={cancelledTitleClass(e.title)}>{e.title}</span>
                       </button>
                     );
                   })}

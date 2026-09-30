@@ -4,6 +4,7 @@ import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/feature
 // 날짜 표기는 분석 화면과 **같은 함수**를 쓴다 — 같은 일정이 화면마다 다른 모양이면 안 된다.
 import { shortDate } from "./event-row";
 import { EventOpenButton } from "./event-open";
+import { cancelledSuffix, cancelledTitleClass, countEvents } from "@/features/calendar/cancelled";
 
 /**
  * 목록(표) 뷰 — 조건(연도·태그)에 맞는 일정을 표로 조사한다(0224a 다중 뷰).
@@ -74,7 +75,9 @@ export function ListView({ events, searchAllYears = false }: { events: CalendarE
                 </td>
                 {/* 제목을 누르면 월 보기와 같은 일정 창이 열린다(N9) — 쓰기 권한이면 수정, 아니면 읽기. */}
                 <td className="px-3 py-2 text-left text-sm font-medium break-keep">
-                  <EventOpenButton id={e.id}>{e.title}</EventOpenButton>
+                  <EventOpenButton id={e.id}>
+                    <span className={cancelledTitleClass(e.title)}>{e.title}</span>
+                  </EventOpenButton>
                 </td>
                 <td className="text-text-dim px-3 py-2 text-sm whitespace-nowrap">
                   {e.createdByName ?? <span className="text-text-faint">—</span>}
@@ -86,7 +89,8 @@ export function ListView({ events, searchAllYears = false }: { events: CalendarE
       </table>
       <p className="text-text-dim border-line border-t px-3 py-2 text-right text-sm">
         {searchAllYears ? "전체 연도에서 " : "총 "}
-        <span className="num font-semibold">{events.length}</span>건
+        <span className="num font-semibold">{countEvents(events).active}</span>건
+        {cancelledSuffix(countEvents(events).cancelled)}
       </p>
     </DragScrollArea>
   );

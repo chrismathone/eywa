@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { eventDisplayColor, eventTimeLabel, type CalendarEvent } from "@/features/calendar/types";
 import { chipProps } from "@/features/calendar/color";
 import { eventsOn } from "./month-grid";
+import { cancelledSuffix, cancelledTitleClass, countEvents } from "@/features/calendar/cancelled";
 
 /**
  * 하루 일정 전체 보기 — 월 그리드는 칸당 3건까지만 칩을 그리므로("+N개 더") 넘친 날은 여기서
@@ -53,7 +54,7 @@ export function DayListDialog({
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-foreground text-base font-bold">{dayTitle(date)}</h2>
           <span className="bg-bg-soft text-text-dim rounded-full px-2 py-0.5 text-xs font-semibold">
-            {dayEvents.length}건
+            {countEvents(dayEvents).active}건{cancelledSuffix(countEvents(dayEvents).cancelled)}
           </span>
         </div>
 
@@ -78,7 +79,7 @@ export function DayListDialog({
                   ) : (
                     <span className="mr-1.5 opacity-70">종일</span>
                   )}
-                  {e.title}
+                  <span className={cancelledTitleClass(e.title)}>{e.title}</span>
                 </button>
               );
             })
