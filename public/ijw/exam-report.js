@@ -150,14 +150,17 @@
   const scoreColor = (pct) => (pct >= 80 ? C.good : pct >= 60 ? C.primary : C.bad);
 
   /** 로고 — data: URI만 들어 있는 SVG라 캔버스를 오염시키지 않는다(toDataURL 가능) */
-  function loadLogo() {
+  function loadLogo(src) {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => resolve(img);
       img.onerror = () => resolve(null); // 못 불러와도 결과지는 나와야 한다
-      img.src = "/ijw/logo.svg?v=4"; // aywa: 인재원 로고를 /ijw 아래에 둔다(이 줄만 원본과 다르다)
+      img.src = src || "/ijw/logo.svg?v=4" /* aywa: 로고 경로만 원본과 다르다 */;
     });
   }
+  // 지점 브랜드 (2026-09-30) — data.brandName/brandLogo > 이 화면의 brand.js > 기본(인재원). 같은 주소(origin)의 이미지라 캔버스가 오염되지 않는다
+  const brandNameOf = (data) => (data && data.brandName) || (window.IjwBrand && window.IjwBrand.name()) || "인재원";
+  const brandLogoOf = (data) => (data && data.brandLogo) || (window.IjwBrand && window.IjwBrand.logo()) || "/ijw/logo.svg?v=4" /* aywa: 로고 경로만 원본과 다르다 */;
 
   // ── 분석 도우미 ──────────────────────────────────────────────────────────
   // 영어인 쪽(문제·정답 중 알파벳이 많은 쪽)의 낱말 수로 단어·숙어·문장을 가른다.
@@ -275,7 +278,8 @@
 
     // 글꼴이 준비되기 전에 그리면 대체 글꼴로 그려져 자간이 어긋난다
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) { /* 무시 */ } }
-    const logo = await loadLogo();
+    const logo = await loadLogo(brandLogoOf(data));
+    const brandName = brandNameOf(data);
 
     // 다시 봐야 할 문항이 넘치면 아래에서 더 긴 캔버스로 갈아탄다 — 그래서 const가 아니다.
     // (아래 도우미들은 ctx 이름을 그대로 부르므로 갈아끼우면 새 ctx에 그려진다)
@@ -316,8 +320,9 @@
       ctx.drawImage(logo, M, 28, lw, lh);
       lx = M + lw + 22;
     }
-    txt(ctx, "인재원", lx, 80, { size: 40, weight: 900, color: C.ink });
-    txt(ctx, "INJAEWON  ·  영어 학습 시스템", lx, 110, { size: 18, weight: 600, color: C.muted });
+    txt(ctx, brandName, lx, 80, { size: 40, weight: 900, color: C.ink });
+    // 영문 표기는 기본 브랜드(인재원)일 때만 — 지점이 이름을 바꿨는데 INJAEWON이 남으면 어색하다
+    txt(ctx, brandName === "인재원" ? "INJAEWON  ·  영어 학습 시스템" : "영어 학습 시스템", lx, 110, { size: 18, weight: 600, color: C.muted });
     txt(ctx, "시험 결과지", W - M, 78, { size: 30, weight: 800, color: C.primaryDeep, align: "right" });
     txt(ctx, `결과 발행 ${issuedAt}`, W - M, 110, { size: 18, weight: 600, color: C.muted, align: "right" });
     // 180×6 밑줄은 "선택된 탭"처럼 보였다 — 80×4 브랜드 선으로 줄인다 (코덱스 검토)

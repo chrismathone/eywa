@@ -24,7 +24,7 @@
 
 ## 2026-09-28 (11) — 영어 보고서 결과지 = **인재원 SRS 결과지 그대로**(캔버스 원본 복사)
 - 원장 *"srs에 있는 결과지 … 이거 자체를 받아서 넣을 수도 있음?"* → 방식 2 *"SRS 모양을 aywa가 그대로"*. 9/11의 aywa식 결과지를 대신한다.
-- **그리는 코드는 인재원 것 한 벌** — `public/ijw/exam-report.js` = 인재원 `server/web/exam-report.js` 복사본(로고 경로 한 줄만 다르다, 로고 = `public/ijw/logo.svg`).
+- **그리는 코드는 인재원 것 한 벌** — `public/ijw/exam-report.js` = 인재원 `server/web/exam-report.js` 복사본(로고 경로만 다르다 — 원본 ce1a05d부터 두 곳, 로고 = `public/ijw/logo.svg`).
   인재원 쪽 주석도 "EYWA가 복사해 쓴다 — 모양을 바꾸면 알릴 것"으로 바뀌었다. 🔴 **이 파일을 aywa에서 고치지 말 것**(원본과 갈라진다 · 린트 제외).
 - 데이터 = [`srsSheetDataOf`](../src/features/ijw/srs-sheet.ts)(인재원 관리자 `examRepDataOf`와 같은 모양). 인재원 API가 같은 날 **`items`(전 문항)**를 더했다
   (anki-main 배포 · 관리자 결과지와 200문항 값 대조 0차). 🔴 이름은 **aywa 이름**(인재원 이름은 대개 로그인 아이디) · 칸은 전부 켬(SRS 기본).
