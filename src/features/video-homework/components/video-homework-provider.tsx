@@ -83,9 +83,13 @@ export function VideoHomeworkCheck({ classId, studentId, subjectKey, grade, prev
     </button>)}
   </div>;
 
+  // 표 모드는 '오늘 과제' 입력 바로 아래에 붙는다 — 오늘 날짜(검사일)를 앞세우면 오늘 숙제로 읽힌다(원장 2026-09-30).
+  // 그래서 머리글은 숙제를 낸 **지난 수업 날짜**를 적고, 과제 줄도 '지난 과제'로 못박는다.
   if (compact) return <div className="border-line mt-1 rounded border bg-card px-1.5 py-1.5 text-xs">
-    <div className="text-text-dim mb-1 font-semibold">지난 영상 숙제 · {checkDate.slice(5)} 검사</div>
-    {previousHomework ? <p title={previousHomework} className="text-text-faint mb-1 truncate">과제: {previousHomework}</p> : null}
+    <div className="text-text-dim mb-1 font-semibold">
+      지난 수업{homeworkDate ? `(${homeworkDate.slice(5)})` : ""} 숙제 · 영상 제출 확인
+    </div>
+    {previousHomework ? <p title={previousHomework} className="text-text-faint mb-1 truncate">지난 과제: {previousHomework}</p> : null}
     {statusButtons}
   </div>;
   return <section className="border-line bg-bg-soft rounded-md border px-3 py-2" aria-label="지난 영상 숙제 검사">
