@@ -55,6 +55,8 @@ export async function saveSlackRule(input: unknown): Promise<Result> {
     template: r.template,
     ping: r.ping,
     mention: r.mentionRecipients,
+    actorCount: r.actorIds.length,
+    actorSig: r.actorIds.length ? hash(sig(r.actorIds)) : "", // 인원이 같아도 사람이 바뀌었는지(id 원문은 싣지 않는다)
     excludeCount: r.excludeActorIds.length,
     digestAt: r.digestAt,
     honorDnd: r.honorDnd,

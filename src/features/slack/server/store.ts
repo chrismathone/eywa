@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { nextKeySince, normalizeTime, sanitizeRule, type SlackRule } from "../rules";
+import { ACTOR_COL_MISSING_MESSAGE, hasActorIdsColumn, isMissingActorCol } from "./actor-col";
 
 /**
  * 슬랙 저장소 — 연결(0297a·0298a `slack_connections`) · 규칙(`slack_rules`) · 사람 연결(`slack_user_links`). 서버 전용.
@@ -83,8 +84,9 @@ export async function saveConnection(
 }
 
 // ── 규칙 ────────────────────────────────────────────────────────────────
-const RULE_COLS =
+const RULE_COLS_BASE =
   "id, name, enabled, source, type_keys, targets, template, mention_recipients, ping, exclude_actor_ids, timing, digest_at, honor_dnd, version";
+const RULE_COLS = `${RULE_COLS_BASE}, actor_ids`; // 0311a 전이면 actor_ids 없이 다시 읽는다(loadRules)
 
 export function ruleFromRow(d: Record<string, unknown>, activityKeys: ReadonlySet<string>): SlackRule | null {
   return sanitizeRule(
@@ -98,6 +100,7 @@ export function ruleFromRow(d: Record<string, unknown>, activityKeys: ReadonlySe
       template: d.template,
       mentionRecipients: d.mention_recipients,
       ping: d.ping,
+      actorIds: d.actor_ids,
       excludeActorIds: d.exclude_actor_ids,
       timing: d.timing,
       digestAt: d.digest_at,
@@ -109,21 +112,20 @@ export function ruleFromRow(d: Record<string, unknown>, activityKeys: ReadonlySe
 }
 
 export async function loadRules(tenantId: string, activityKeys: ReadonlySet<string>): Promise<Load<SlackRule[]>> {
-  const { data, error } = await createAdminClient()
-    .from("slack_rules")
-    .select(RULE_COLS)
-    .eq("tenant_id", tenantId)
-    .order("sort_order")
-    .order("created_at");
+  const read = (cols: string) =>
+    createAdminClient().from("slack_rules").select(cols).eq("tenant_id", tenantId).order("sort_order").order("created_at");
+  let { data, error } = await read(RULE_COLS);
+  if (error && isMissingActorCol(error)) ({ data, error } = await read(RULE_COLS_BASE)); // 0311a 전 = '누가' 없음(누구든)
   if (error) return isMissingTable(error) ? { status: "missing_table" } : { status: "error" };
   const rules = (data ?? [])
-    .map((d) => ruleFromRow(d as Record<string, unknown>, activityKeys))
+    .map((d) => ruleFromRow(d as unknown as Record<string, unknown>, activityKeys))
     .filter((r): r is SlackRule => !!r);
   return { status: "ok", value: rules };
 }
 
-function ruleToRow(rule: SlackRule) {
+function ruleToRow(rule: SlackRule, hasActorCol: boolean) {
   return {
+    ...(hasActorCol ? { actor_ids: rule.actorIds } : {}),
     name: rule.name,
     enabled: rule.enabled,
     source: rule.source,
@@ -147,6 +149,9 @@ export async function upsertRule(
 ): Promise<{ id?: string; version?: number; error?: string; conflict?: boolean }> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
+  // 0311a 전이면 actor_ids 칸이 없다 — '누가'가 비었으면 빼고 저장, 채웠으면 거절(필터 없이 저장되면 원장이 원치 않은 발송이 나간다).
+  const hasActorCol = await hasActorIdsColumn(tenantId);
+  if (!hasActorCol && rule.actorIds.length) return { error: ACTOR_COL_MISSING_MESSAGE };
   // 0300a 전이면 key_since 칸이 없다 — 그땐 빼고 저장한다(규칙 저장이 SQL 순서에 묶이지 않게, [[#95]]).
   const { data: prevRow, error: prevErr } = rule.id
     ? await admin.from("slack_rules").select("key_since, enabled").eq("tenant_id", tenantId).eq("id", rule.id).maybeSingle()
@@ -159,7 +164,7 @@ export async function upsertRule(
   if (!rule.id) {
     const { data, error } = await admin
       .from("slack_rules")
-      .insert({ tenant_id: tenantId, ...ruleToRow(rule), ...keySince, updated_by: userId, updated_at: now })
+      .insert({ tenant_id: tenantId, ...ruleToRow(rule, hasActorCol), ...keySince, updated_by: userId, updated_at: now })
       .select("id, version")
       .single();
     if (error) return { error: isMissingTable(error) ? SLACK_TABLE_MISSING_MESSAGE : "규칙을 저장하지 못했습니다" };
@@ -167,7 +172,7 @@ export async function upsertRule(
   }
   const { data, error } = await admin
     .from("slack_rules")
-    .update({ ...ruleToRow(rule), ...keySince, version: rule.version + 1, updated_by: userId, updated_at: now })
+    .update({ ...ruleToRow(rule, hasActorCol), ...keySince, version: rule.version + 1, updated_by: userId, updated_at: now })
     .eq("tenant_id", tenantId)
     .eq("id", rule.id)
     .eq("version", rule.version)
