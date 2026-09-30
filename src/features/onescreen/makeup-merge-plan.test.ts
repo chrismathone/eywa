@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { optimisticMarkFor } from "./attendance-mark";
+import { studentMarkFromRows } from "./attendance-mark";
+import type { Subject } from "./types";
 import { makeupBaseUnitsOf, mergeStatusOf, mergedUnits, planMakeupMerge, type PlanSubject } from "./makeup-merge-plan";
 
 const MINE = new Set(["math"]);
@@ -130,25 +131,29 @@ describe("조퇴 칸 합침 배선 — 조퇴가 출석으로 되쓰이지 않�
   });
 });
 
-describe("조퇴 쓰기는 학생 배지를 뒤집지 않는다(적대 리뷰 2026-09-30)", () => {
-  it("🔴 영어 출석 + 수학 조퇴 학생에 합침 — 배지는 '출석' 그대로(조퇴를 '결석'으로 접지 않는다)", () => {
-    expect(optimisticMarkFor("early_leave", "출석")).toBe("출석");
-    expect(optimisticMarkFor("early_leave", "지각")).toBe("지각");
+describe("조퇴 쓰기와 학생 배지(원장 2026-09-30 — 조퇴는 조퇴)", () => {
+  const stu = (raws: (string | null)[]) => ({
+    subjects: raws.map((r, i) => ({ classId: `c${i}`, attendanceRaw: r }) as Subject),
   });
 
-  it("그 밖의 상태는 종전대로 그 상태의 배지", () => {
-    expect(optimisticMarkFor("present", "결석")).toBe("출석");
-    expect(optimisticMarkFor("late", "출석")).toBe("지각");
-    expect(optimisticMarkFor("absent", "출석")).toBe("결석");
+  it("🔴 영어 출석 + 수학 조퇴(보강 합침 후에도 조퇴 보존) — 배지는 '조퇴'(빨간 '결석'으로 접지 않는다)", () => {
+    expect(studentMarkFromRows(stu(["present", "early_leave"]))).toBe("조퇴");
+    expect(studentMarkFromRows(stu(["late", "early_leave"]))).toBe("조퇴");
+    expect(studentMarkFromRows(stu(["early_leave", "absent"]))).toBe("결석");
   });
 
-  it("원스크린 쓰기·결석분 연결이 낙관 반영에 이 배지를 싣는다", () => {
+  it("그 밖의 상태는 행에서 그대로 — 무기록은 셈에 안 넣는다", () => {
+    expect(studentMarkFromRows(stu(["present"]))).toBe("출석");
+    expect(studentMarkFromRows(stu(["late", null]))).toBe("지각");
+    expect(studentMarkFromRows(stu(["absent"]))).toBe("결석");
+    expect(studentMarkFromRows(stu([null, null]))).toBe("출석");
+  });
+
+  it("원스크린 쓰기·롤백·결석분 연결이 배지를 행에서 다시 계산한다(따로 든 배지 없음)", () => {
     const client = readFileSync(join(process.cwd(), "src/features/onescreen/components/onescreen-client.tsx"), "utf8");
-    const write = client.slice(client.indexOf("async function setAttendanceFor("), client.indexOf("async function applyQuickPresent("));
-    expect(write).toContain("const myMark = optimisticMarkFor(status, prevMark);");
-    expect(write).toMatch(/applyAttendanceLocal\([\s\S]*?\s+myMark,\s*\);/);
-    expect(write).toContain("{ units: res.autoUnits }, myMark)");
-    const link = client.slice(client.indexOf("async function linkMakeupAbsence("), client.indexOf("function addMakeupUnitsOnly("));
-    expect(link).toContain("optimisticMarkFor(linkedRaw,");
+    expect(client).toContain("attendance: studentMarkFromRows(s)");
+    const local = client.slice(client.indexOf("function applyAttendanceLocal("), client.indexOf("async function setAttendanceFor("));
+    expect(local.match(/patch\(studentId, \(s\) => withMark\(/g)?.length).toBe(2); // 낙관 반영 + 롤백
+    expect(client).not.toMatch(/optimisticMarkFor|prevMark|myMark/);
   });
 });

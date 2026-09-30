@@ -145,6 +145,11 @@ export type OverviewData = {
     source: string;
     /** 입학 일정 종류(단일 분류기 `admissionsEventKind`) — KPI '금일입테'는 levelTest만. */
     kind: AdmissionsKind | null;
+    /**
+     * 취소된 일정(제목에 '취소', `isCancelledEventTitle`)의 원래 종류 — 이 값이 있으면 `kind`는 null이다.
+     * 목록엔 취소선으로 남고(원장 2026-09-30) 건수·링크엔 안 든다. 옛 스냅샷엔 없다(= 취소 줄 없음).
+     */
+    cancelledKind?: AdmissionsKind | null;
     matchedClass?: { id: string; name: string; studentName?: string } | null;
     /** 이 일정의 콜&상담(이름·날짜·번호·학교로 한 건 확정될 때만) — 콜&상담 열람 권한이 있을 때만 싣는다. */
     matchedConsultation?: { id: string; name: string } | null;

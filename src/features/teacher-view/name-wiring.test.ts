@@ -47,6 +47,7 @@ import { CLASS_GROUP_NONE, CLASS_GROUP_OTHER, CLASS_TAG_ALL } from "@/features/o
 import {
   attendanceMarkLabel,
   MARK_ABSENT,
+  MARK_EARLY_LEAVE,
   MARK_LATE,
   MARK_PRESENT,
 } from "@/features/onescreen/attendance-mark";
@@ -828,9 +829,11 @@ describe("🔴 원스크린 상단 바·격자·출결 알약·발송 현황은 
   });
 
   it("🔴 출결 배지 값은 비교용이라 안 바뀐다 — 글자만 언어를 탄다", () => {
-    expect([MARK_PRESENT, MARK_LATE, MARK_ABSENT]).toEqual(["출석", "지각", "결석"]);
+    expect([MARK_PRESENT, MARK_LATE, MARK_EARLY_LEAVE, MARK_ABSENT]).toEqual(["출석", "지각", "조퇴", "결석"]);
     expect(attendanceMarkLabel(MARK_PRESENT)).toBe("출석");
     expect(attendanceMarkLabel(MARK_LATE, "en")).toBe("Late");
+    expect(attendanceMarkLabel(MARK_EARLY_LEAVE)).toBe("조퇴");
+    expect(attendanceMarkLabel(MARK_EARLY_LEAVE, "en")).toBe("Left early");
     expect(attendanceMarkLabel(MARK_ABSENT, "en")).toBe("Absent");
   });
 
