@@ -542,6 +542,10 @@ export function auditDetail(
           diff("언제", timingText(b.timing), timingText(m.timing)),
           b.ping !== undefined ? diff("호출", pingText(b.ping), pingText(m.ping)) : null,
           b.mention !== undefined && changed2(b.mention, m.mention) ? `담당자 멘션 ${m.mention === true ? "켬" : "끔"}` : null,
+          // '누가'(0311a) — 옛 기록(before에 actorCount 없음)은 비교하지 않는다.
+          b.actorCount !== undefined && (changed2(b.actorCount, m.actorCount) || changed2(b.actorSig, m.actorSig))
+            ? `보낼 사람(발동자) ${num(b.actorCount) ?? 0} → ${num(m.actorCount) ?? 0}명${num(b.actorCount) === num(m.actorCount) ? "(교체)" : ""}`
+            : null,
           b.excludeCount !== undefined && changed2(b.excludeCount, m.excludeCount) ? `제외할 사람 ${num(b.excludeCount) ?? 0} → ${num(m.excludeCount) ?? 0}명` : null,
           b.digestAt !== undefined && changed2(b.digestAt, m.digestAt) ? `요약 시각 ${str(b.digestAt) ?? "기본"} → ${str(m.digestAt) ?? "기본"}` : null,
           b.honorDnd !== undefined && changed2(b.honorDnd, m.honorDnd) ? `방해금지 ${m.honorDnd === true ? "지킴" : "무시"}` : null,
@@ -558,6 +562,7 @@ export function auditDetail(
         onOff(m.enabled),
         m.source === "activity" ? "활동 기록" : "알림",
         num(m.typeCount) !== null ? `${num(m.typeCount)}종` : null,
+        num(m.actorCount) ? `보낼 사람(발동자) ${num(m.actorCount)}명` : null,
         targets.length ? `→ ${targetText(targets)}` : null,
         m.template === "detailed" ? "자세히" : m.template === "short" ? "짧게" : null,
         m.timing === "digest" ? "요약으로만" : null,
@@ -957,9 +962,18 @@ export function auditDetail(
           return `${field} ${str(o.from) ?? "없음"} → ${str(o.to) ?? "없음"}`;
         })
         .filter((v): v is string => !!v);
-      if (parts.length > 0) return `변경: ${parts.join(" · ")}`;
+      // 예약 적용이 규칙 때문에 건너뛴 항목(2026-09-30 — ClassNote 보드 이름 모양의 반 이름).
+      const skipped = (Array.isArray(m.skipped) ? m.skipped : [])
+        .map((c) => {
+          if (!c || typeof c !== "object") return null;
+          const o = c as Meta;
+          const field = str(o.field);
+          return field ? `${field} ${str(o.to) ?? ""} 적용 안 함(${str(o.reason) ?? "규칙 위반"})` : null;
+        })
+        .filter((v): v is string => !!v);
       const fields = Array.isArray(m.changed) ? m.changed.filter((v): v is string => typeof v === "string") : [];
-      return fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
+      const head = parts.length > 0 ? `변경: ${parts.join(" · ")}` : fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
+      return join(head, skipped.length ? skipped.join(" · ") : null);
     }
     case "class_handover_schedule": {
       const n = ctx.nameOf(m.newTeacherId);

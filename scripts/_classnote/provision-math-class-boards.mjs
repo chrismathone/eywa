@@ -38,7 +38,8 @@ try {
   const page = await (await browser.newContext()).newPage();
   await loginClassnote(page);
   const centerId = await fetchCenterId(page);
-  const linkedBoardByClass = await loadLinkedBoards(sql, tenant);
+  // strict(개명 감사 G9) — 조회 실패를 빈 지도로 삼키면 이름으로 후퇴해 개명한 반을 새로 만든다.
+  const linkedBoardByClass = await loadLinkedBoards(sql, tenant, { strict: true });
   const { plans, boards, membersByBoard, failed, lookedUp } = await loadPlan(page, centerId, aywa, { linkedBoardByClass });
   console.log(`센터 ${centerId} · 보드 ${boards.length}개 · 원아 조회 보드 ${lookedUp}개(실패 ${failed}) · 연결표 ${linkedBoardByClass.size}개 반`);
 
@@ -47,6 +48,7 @@ try {
   for (const p of plans) {
     if (p.board.action === "block") console.log(`  ⛔ ${JSON.stringify(p.className)}: ${p.board.reason}`);
     if (p.board.rename) console.log(`  ✎ 이름 변경 ${JSON.stringify(p.board.rename.from)} → ${JSON.stringify(p.className)}`);
+    if (p.board.renameBlocked) console.log(`  ⚠️ ${JSON.stringify(p.className)}: ${p.board.renameBlocked}`);
     for (const h of p.hold) console.log(`  ⛔ ${JSON.stringify(p.className)} ${h.name}: ${h.reasons.join(" / ")}`);
     if (p.extras.length) console.log(`  ⚠️ ${JSON.stringify(p.className)} 해제 필요(계획 밖 원아): ${p.extras.join(", ")}`);
   }
@@ -57,17 +59,21 @@ try {
   targets = targets.slice(0, LIMIT);
   if (ONLY && !targets.length) throw new ClassBoardStop(`--only 반을 찾지 못함: ${JSON.stringify(ONLY)}`);
   console.log(`\n이번 실행 대상 반 ${targets.length}개 · 모드=${APPLY ? "🔴 실행" : "드라이런"}`);
+  let done = [];
   if (!APPLY) {
     console.log("드라이런 — ClassNote 변경 없음. 실행하려면 --apply");
   } else {
-    const done = await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log: console.log });
+    done = await applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students: aywa.students, log: console.log });
     console.log(
       `\n✅ 완료 — 반 ${done.length}개 · 생성 ${done.filter((d) => d.created).length} · 이름 변경 ${done.filter((d) => d.renamed).length} · 원아 배정 ${done.reduce((n, d) => n + d.enrolled.length, 0)}건 · 1인 보드 그대로`,
     );
   }
   if (SYNC_DB) {
     // 실행으로 보드·원아가 바뀌었을 수 있으니 **다시 읽은 계획**으로 적는다(ok = ClassNote에서 확인된 배정만).
-    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: await loadLinkedBoards(sql, tenant) });
+    // 방금 만든 보드는 번호로 얹는다(이름이 달라도 연결 — 매일 동기화와 같은 규약, G8).
+    const linkedAfter = await loadLinkedBoards(sql, tenant, { strict: true });
+    for (const d of done) if (d.created && d.boardId != null) linkedAfter.set(d.classId, Number(d.boardId));
+    const fresh = await loadPlan(page, centerId, aywa, { linkedBoardByClass: linkedAfter });
     if (fresh.failed) throw new ClassBoardStop(`원아 조회 실패 ${fresh.failed}건 — DB 기록을 건너뛴다(불완전한 판정으로 초록불을 켜지 않는다)`);
     // 종강 반 연결 — ClassNote 보드가 살아 있으면 지킨다(원장 2026-09-30, 매일 동기화와 같은 판정).
     const keepClassIds = closedClassesToKeep({

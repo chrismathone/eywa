@@ -104,6 +104,19 @@ export function resolveStudentChildren(student, { boards, membersByBoard, admiss
 }
 
 /**
+ * 반 보드로 **쓰면 안 되는 이름**(개명 감사 G2) — 1인 보드 `(수학)…`·`(영어)…` 같은 `(과목)` 접두, 전체방 `[ALL]…`.
+ * 반 이름이 이 모양이면 그 이름의 보드를 채택·생성·개명하지 않는다 — 1인 보드와 이름이 겹치는 순간 1인 보드 발송의
+ * "보드가 곧 매핑" 폴백이 이 반 가족 전원을 통과시킬 수 있다. 앱은 이런 반 이름을 저장 단계에서 막는다(class-name.ts).
+ * @returns {string|null} 이유(한글) — 해당 없으면 null
+ */
+export function reservedBoardName(name) {
+  const n = normBoard(name);
+  if (/^\([^)]*\)/.test(n)) return "괄호 과목 접두로 시작하는 1인 보드 이름 모양입니다";
+  if (/^\[ALL\]/i.test(n)) return "전체방([ALL]) 이름 모양입니다";
+  return null;
+}
+
+/**
  * 반 보드 계획.
  * @param {object} p
  * @param {Array<{classId:string, className:string, studentIds:string[]}>} p.classes  대상 aywa 수학 반
@@ -139,28 +152,50 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
   // 2) 반별
   // 연결표(0302a)가 쥔 보드 → 반. 이름이 같은 보드라도 **다른 반에 연결된 보드**는 이 반 것으로 보지 않는다.
   const classByLinkedBoard = new Map([...linkedBoardByClass].map(([cid, bid]) => [Number(bid), cid]));
+  // 이 반 누구의 원아인가 — 보류된 학생 원아도 "그 반 가족"이다(아래 extras와 같은 축).
+  const plannedOf = (c) => new Set(c.studentIds.flatMap((sid) => byStudent.get(sid).children.map((ch) => ch.id)));
   const plans = classes.map((c) => {
-    const exact = (boards ?? []).filter((b) => b.name === c.className);
-    const near = (boards ?? []).filter((b) => b.name !== c.className && normBoard(b.name) === normBoard(c.className));
     const linkedId = linkedBoardByClass.get(c.classId);
     const linked = linkedId != null ? (boards ?? []).find((b) => Number(b.id) === Number(linkedId)) : null;
+    // 🔑 이름 충돌은 **다른 보드**와의 충돌만 센다 — 연결된 자기 보드는 빼고 본다(개명 감사 G7: "중3 A"→"중3A"처럼
+    //    공백만 바꾼 개명이 자기 보드와 '공백만 다름'으로 잡혀 영구 보류되던 것).
+    const others = (boards ?? []).filter((b) => !linked || Number(b.id) !== Number(linked.id));
+    const exact = others.filter((b) => b.name === c.className);
+    const near = others.filter((b) => b.name !== c.className && normBoard(b.name) === normBoard(c.className));
+    const reserved = reservedBoardName(c.className);
     let board;
     if (linked) {
       // 🔑 반 연결은 **번호가 기준**이다(2026-09-29 동기화) — aywa에서 반 이름을 바꿔도 새 반을 만들지 않고 이름을 바꾼다.
-      if (linked.name === c.className) board = { action: "exists", id: linked.id };
+      // 🔴 이름을 못 바꾸는 사정(같은 이름 보드가 이미 있음·예약된 이름)이 있어도 **연결은 지킨다**(개명 감사 G1) —
+      //    번호로 계속 보내면 되고, 연결을 지우면 다음 날 이름으로 엉뚱한 보드를 채택하거나 새 보드를 만든다.
+      if (linked.name === c.className) board = { action: "exists", id: linked.id, name: linked.name };
+      else if (reserved)
+        board = { action: "exists", id: linked.id, name: linked.name, renameBlocked: `반 이름 "${c.className}"은(는) ${reserved} — 보드 이름을 바꾸지 않습니다` };
       else if (exact.length || near.length)
-        board = { action: "block", reason: `반 이름을 "${c.className}"(으)로 바꿔야 하는데 그 이름의 보드가 이미 있습니다` };
-      else board = { action: "exists", id: linked.id, rename: { from: linked.name, to: c.className } };
+        board = { action: "exists", id: linked.id, name: linked.name, renameBlocked: `반 이름을 "${c.className}"(으)로 바꿔야 하는데 그 이름의 보드가 이미 있습니다 — 발송은 연결된 보드(#${linked.id})로 계속합니다` };
+      else board = { action: "exists", id: linked.id, name: linked.name, rename: { from: linked.name, to: c.className } };
     } else if (linkedId != null) {
       // 🔴 연결된 보드가 ClassNote에서 사라졌다 = 사람이 지웠다(2026-09-29 빈 반 JJ3E). 새로 만들면 지운 반이 매일 되살아난다.
       // 연결 행은 남긴다(deletedBoardId) — 지우면 다음 날 이름 규칙으로 다시 만들어진다. 안 쓰는 반이면 aywa에서 종강하면 연결도 정리된다.
       board = { action: "block", deletedBoardId: Number(linkedId), reason: `연결된 ClassNote 반(#${linkedId})이 삭제됐습니다 — 안 쓰는 반이면 aywa에서 종강하세요` };
-    } else if (exact.length > 1) board = { action: "block", reason: `같은 이름 보드 ${exact.length}개` };
+    } else if (reserved) board = { action: "block", reason: `반 이름 "${c.className}"은(는) ${reserved} — 반 보드로 쓰지 않습니다` };
+    else if (exact.length > 1) board = { action: "block", reason: `같은 이름 보드 ${exact.length}개` };
     else if (near.length) board = { action: "block", reason: `공백만 다른 보드가 있음(${near.map((b) => JSON.stringify(b.name)).join(", ")})` };
     else if (exact.length === 1 && classByLinkedBoard.has(Number(exact[0].id)) && classByLinkedBoard.get(Number(exact[0].id)) !== c.classId)
       board = { action: "block", reason: `같은 이름 보드가 다른 반에 연결돼 있습니다` };
-    else if (exact.length === 1) board = { action: "exists", id: exact[0].id };
-    else board = { action: "create" };
+    else if (exact.length === 1) {
+      // 🔴 이름만 같은 기존 보드를 처음 채택할 때는 **그 보드의 원아가 전부 이 반 가족**이어야 한다(개명 감사 G2) —
+      //    폐지 반의 옛 보드·사람이 만든 보드에 남의 집이 있으면 우리 가족을 거기 섞게 된다.
+      const members = membersByBoard.get(exact[0].id);
+      const planned = plannedOf(c);
+      if (!Array.isArray(members)) board = { action: "block", reason: `같은 이름 보드(#${exact[0].id}) 원아 조회 실패 — 채택 보류` };
+      else {
+        const strangers = members.filter((m) => !planned.has(m.id));
+        board = strangers.length
+          ? { action: "block", reason: `같은 이름 보드(#${exact[0].id})에 이 반 학생이 아닌 원아 ${strangers.length}명이 있습니다 — 채택하지 않습니다(사람 확인)` }
+          : { action: "exists", id: exact[0].id, name: exact[0].name };
+      }
+    } else board = { action: "create" };
 
     // ⑤ 같은 반 기본이름 겹침
     const groups = new Map();

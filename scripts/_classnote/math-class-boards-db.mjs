@@ -24,17 +24,19 @@ export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds
       }
       if (p.board.action !== "exists") {
         // 보드가 없거나(생성 전) 특정 불가 — 이 반의 연결을 지운다(초록불이 남으면 거짓말이다).
+        // ⚠️ 연결된 보드가 살아 있는 반은 여기 오지 않는다 — 이름 충돌이 있어도 계획이 exists(renameBlocked)로 지킨다(개명 감사 G1).
         const d1 = await tx`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id = ${p.classId}`;
         const d2 = await tx`delete from classnote_class_boards where tenant_id = ${tenant} and class_id = ${p.classId}`;
         out.cleared += d1.count + d2.count;
         return;
       }
-      // 같은 보드를 다른 반이 들고 있으면(반 이름을 서로 바꾼 경우 등) 그 연결을 먼저 푼다 — 유니크(board_id) 충돌 방지.
+      // 같은 보드를 다른 반이 들고 있으면 그 연결을 먼저 푼다 — 유니크(board_id) 충돌 방지.
+      // board_name = **ClassNote에 지금 붙은 이름**(개명이 막혔거나 실패하면 옛 이름) — 학부모 글 매칭·로그가 실제 보드를 가리키게.
       await tx`delete from classnote_class_board_members where tenant_id = ${tenant} and board_id = ${p.board.id} and class_id <> ${p.classId}`;
       await tx`delete from classnote_class_boards where tenant_id = ${tenant} and board_id = ${p.board.id} and class_id <> ${p.classId}`;
       await tx`
         insert into classnote_class_boards (tenant_id, class_id, board_id, board_name, synced_at)
-        values (${tenant}, ${p.classId}, ${p.board.id}, ${p.className}, now())
+        values (${tenant}, ${p.classId}, ${p.board.id}, ${p.board.name ?? p.className}, now())
         on conflict (tenant_id, class_id) do update set board_id = excluded.board_id, board_name = excluded.board_name, synced_at = now()`;
       await tx`delete from classnote_class_board_members where tenant_id = ${tenant} and class_id = ${p.classId}`;
       const rows = [];

@@ -6,7 +6,7 @@ import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canWriteClassRecord } from "@/features/classes/class-write-scope";
-import { normalizeClassName } from "@/features/classes/class-name";
+import { normalizeClassName, reservedClassNameReason } from "@/features/classes/class-name";
 import {
   applyLevelChange,
   DEFAULT_ENGLISH_LEVELS,
@@ -65,6 +65,8 @@ export async function changeClassLevel(
   const leveled = applyLevelChange(klass.class_name, change, order);
   const newName = leveled ? normalizeClassName(leveled) : leveled;
   if (!newName) return { error: "이 반은 레벨 규칙(예: DP3)이 아니거나 더 올릴/내릴 수 없습니다" };
+  const reserved = reservedClassNameReason(newName);
+  if (reserved) return { error: reserved };
 
   const { error } = await supabase
     .from("classes")

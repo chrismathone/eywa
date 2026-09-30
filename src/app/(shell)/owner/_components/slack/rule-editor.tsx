@@ -11,13 +11,13 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { deleteSlackRule, saveSlackRule, sendSlackRuleSample } from "@/features/slack/server/rule-actions";
 import { ChipField } from "./chip-field";
 import { MessagePreview } from "./message-preview";
-import { Row, RuleOptions } from "./rule-options";
+import { ActorRow, Row, RuleOptions } from "./rule-options";
 import { TargetPicker, type ChannelOption } from "./target-picker";
 
 /**
  * 규칙 한 줄 — 접힌 줄 = 켜기 · 이름 · 종류 · 요약(무엇을 N종 · 어디로 · 언제), 누르면 그 자리에서 편집 칸이 펼쳐진다
  * (원장 2026-09-28 *"슬랙 규칙을 게시판화 시켜서 너무 크게 보드처럼 보이지 않게. 깔끔하게."*).
- * 펼친 칸 = 이름·보낼 거리 · 무엇을 · 어디로 · 모양 · 언제 · 빼기 · 미리보기 · 저장/샘플/삭제. 새 규칙은 펼친 채로 시작한다.
+ * 펼친 칸 = 이름·보낼 거리 · 무엇을 · 누가 · 어디로 · 모양 · 언제 · 빼기 · 미리보기 · 저장/샘플/삭제. 새 규칙은 펼친 채로 시작한다.
  * 접힌 줄의 켜기 스위치는 **바로 저장**한다(편집 칸을 열지 않고 끄고 켜게) — 저장 안 된 변경이 있으면 편집 칸에서 함께 저장.
  */
 const NOTIF_GROUPS = [...new Set(FORWARD_EVENT_OPTIONS.map((o) => o.group))].map((g) => ({ id: g, label: g }));
@@ -103,6 +103,7 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
 
   const summary = [
     rule.typeKeys.length ? `${isNotif ? "알림" : "활동"} ${rule.typeKeys.length}종` : "고른 것 없음",
+    ...(rule.actorIds.length ? [`누가 ${rule.actorIds.length}명`] : []),
     rule.targets.length ? rule.targets.map(targetLabel).join(", ") : "보낼 곳 없음",
     // 방해금지는 '바로' 보낼 때만 적용된다(expand.ts `quiet = honorDnd && immediate`).
     rule.timing === "digest" ? `요약으로${rule.digestAt ? ` ${rule.digestAt}` : ""}` : `바로${rule.honorDnd ? " · 방해금지 지킴" : ""}`,
@@ -172,6 +173,7 @@ export function RuleEditor({ initial, channels, staff, activityOptions, onSaved,
             }}
           />
         </Row>
+        <ActorRow rule={rule} patch={patch} staff={staff} />
         <Row label="어디로">
           <TargetPicker targets={rule.targets} onChange={(t) => patch({ targets: t })} channels={channels} staff={staff} allowRecipient={isNotif} />
         </Row>

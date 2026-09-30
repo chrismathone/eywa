@@ -5,7 +5,9 @@
  */
 
 // processing인데 이 분(minutes)을 넘게 안 끝나면 멈춤(워커 크래시·PC 꺼짐 등) → 멈춤복구 대상.
-export const STUCK_MINUTES = 10;
+// 🔴 워커 게시 1건 상한(POST_TIMEOUT_MS 10분)보다 길어야 한다 — 같으면 아직 게시 중인 행을 되살려 한 번 더 올린다(2026-09-30 개명 감사 G6).
+//    워커 STALE_MIN(classnote-core.mjs)과 같은 값.
+export const STUCK_MINUTES = 15;
 
 /** processing 상태인데 처리 시작 후 STUCK_MINUTES 경과 = 멈춤. */
 export function isStuck(status: string | null, processingAtIso: string | null, nowMs: number): boolean {

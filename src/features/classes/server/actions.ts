@@ -12,7 +12,7 @@ import { isHexColor, readableTextColor } from "@/lib/color-utils";
 import { isAssignableTeacherRole } from "@/lib/permissions";
 import { parseSeatValue } from "@/features/timetable/lib/teacher-label";
 import { logAction } from "@/features/audit/server/log";
-import { normalizeClassName } from "@/features/classes/class-name";
+import { normalizeClassName, reservedClassNameReason } from "@/features/classes/class-name";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { notifyUsers } from "@/features/notifications/server/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -207,6 +207,10 @@ function parseSchedules(formData: FormData): ScheduleInput[] {
 function validate(input: ReturnType<typeof readForm>): Record<string, string> | null {
   const errors: Record<string, string> = {};
   if (!input.className) errors.className = "반 이름은 필수입니다";
+  else {
+    const reserved = reservedClassNameReason(input.className);
+    if (reserved) errors.className = reserved;
+  }
   if (!input.subject) errors.subject = "과목을 선택해주세요";
   for (const s of input.schedules) {
     if (s.startTime >= s.endTime) {
