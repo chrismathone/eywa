@@ -24,6 +24,7 @@ import { splitFileName } from "@/features/documents/file-name";
 import { renameDocumentFile } from "@/features/documents/server/file-actions";
 import { InlineRename } from "./inline-rename";
 import { useDocumentFileDrag } from "./folder-interactions";
+import { DOC_COL } from "./document-columns";
 
 export type DocumentRowData = {
   id: string;
@@ -103,14 +104,15 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
     <tr data-document-id={doc.id} draggable={drag.draggable} data-no-drag-scroll={drag.draggable || undefined}
       onDragStart={drag.onDragStart} onDragEnd={drag.onDragEnd}
       className={`border-line hover:bg-bg-soft/50 border-t transition-colors ${doc.pinned ? "bg-gold-soft/30" : ""} ${drag.dragging ? "opacity-50" : ""}`}>
-      <td className="max-w-0 px-4 py-2" title={doc.categoryLabel}>
+      <td className="px-4 py-2" title={doc.categoryLabel}>
+        {/* 한 줄 = [고정][유형 아이콘][이름…][미리보기] — 배지는 이름 **바로 옆**, 길면 이름만 말줄임(배지는 안 밀린다, #111). */}
         <div className="group/name flex min-w-0 items-center gap-2">
           {doc.pinned ? <Pin className="text-gold size-3.5 shrink-0 fill-current" strokeWidth={1.8} /> : null}
           <TypeIcon typeLabel={doc.typeLabel} kind={doc.kind} />
           {/* 이름 클릭 — file=내부 창 미리보기 / text=상세 / form=이력서 뷰(href는 페이지가 계산).
               link=외부 사이트라 창(iframe) 시스템에 못 태운다(구글드라이브 등은 X-Frame-Options로 차단) → 새 탭. */}
           {doc.kind === "file" && doc.fileName ? (
-            <InlineRename enabled={canWrite && !disabled} name={renameBase} suffix={extension} maxLength={180}
+            <InlineRename enabled={canWrite && !disabled} name={renameBase} suffix={extension} maxLength={180} className="min-w-0"
               onSave={(name) => renameDocumentFile(doc.id, name, { title: doc.title, fileName: doc.fileName! })}>
               <WindowLink href={doc.href} title={doc.title} className="text-foreground hover:text-primary block min-w-0 truncate font-medium hover:underline">{doc.title}</WindowLink>
             </InlineRename>
@@ -146,13 +148,15 @@ export function DocumentRow({ doc, canWrite }: { doc: DocumentRowData; canWrite:
         </div>
         {doc.description ? <p className="text-text-faint mt-0.5 truncate pl-6 text-xs">{doc.description}</p> : null}
       </td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.typeLabel}</td>
+      {/* 열 폭은 document-table.tsx colgroup이 정한다 — 넘칠 수 있는 칸(유형·등록자)은 안쪽 span에서 자른다(#97). */}
+      <td className={`${DOC_COL.type} text-text-dim px-3 py-2`}><span className="block truncate" title={doc.typeLabel}>{doc.typeLabel}</span></td>
       <td className="text-text-dim num px-3 py-2 text-right whitespace-nowrap">{doc.sizeLabel}</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.updatedAt ? new Date(doc.updatedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(doc.createdAt)}</td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.uploaderName ?? "—"}</td>
-      <td className="px-3 py-2 text-right whitespace-nowrap">
-        <span className="inline-flex items-center gap-2">
+      <td className={`${DOC_COL.created} text-text-dim px-3 py-2 whitespace-nowrap`}>{dateLabel(doc.createdAt)}</td>
+      <td className={`${DOC_COL.uploader} text-text-dim px-3 py-2`}><span className="block truncate" title={doc.uploaderName ?? undefined}>{doc.uploaderName ?? "—"}</span></td>
+      <td className="px-3 py-2">
+        {/* 고정 폭 칸 — 삭제 확인(삭제·취소)처럼 넓어지면 아래로 접는다(design-conventions: 고정 폭 칸의 가로 나열은 flex-wrap). */}
+        <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
           {doc.kind === "file" ? (
             <button
               type="button"

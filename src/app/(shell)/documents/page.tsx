@@ -12,27 +12,18 @@ import {
 import { getLinkedCounts, getLinkedPage } from "@/features/documents/server/linked-queries";
 import { getDocumentCategories } from "@/features/documents/server/category-queries";
 import { getDocumentFolderFavorites } from "@/features/documents/server/favorite-queries";
-import {
-  categoryPath,
-  categoryPathLabel,
-  categoryTreeCounts,
-  fileTypeLabel,
-  formatFileSize,
-  formViewHref,
-} from "@/features/documents/categories";
+import { categoryPath, categoryTreeCounts } from "@/features/documents/categories";
 import { isLinkedSource, LINKED_LABEL, LINKED_SOURCES, type LinkedSourceKey } from "@/features/documents/linked";
 import { parseDocumentSort, type DocumentSortKey } from "@/features/documents/document-sort";
-import { SortableThLink } from "@/components/table/sortable-th-link";
 import type { SortState } from "@/lib/table/sort";
 import { DocumentToolbar } from "./_components/document-toolbar";
-import { DocumentRow } from "./_components/document-row";
-import { LinkedDocumentRow } from "./_components/linked-row";
+import { DocumentTable } from "./_components/document-table";
 import { FolderNav, type FolderItem } from "./_components/folder-nav";
-import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { NewFolderButton } from "./_components/category-manager";
 import { FolderBreadcrumbs } from "./_components/folder-breadcrumbs";
 import { FolderDropTarget, FolderInteractionProvider, FolderName } from "./_components/folder-interactions";
 import { FolderFavoriteToggle } from "./_components/folder-favorite-toggle";
+import { FolderListSection, FolderNavigationProvider } from "./_components/folder-navigation";
 
 export const metadata = { title: "데이터베이스 — 에이와" };
 
@@ -55,14 +46,15 @@ export default async function DocumentsPage({
   // 잃으면 창 안에서 풀셸 분기가 서버에서 돌아(크롬은 HideInFrame self-heal) 클릭마다 셸 쿼리 낭비(face-tabs 관례).
   const embed = (await headers()).get("x-embed") === "1";
 
+  // 권한(요청 캐시 — requireAccess가 이미 매트릭스를 읽었다)·분류(테넌트 캐시)는 사실상 왕복이 없어 먼저 받는다 —
+  // 폴더 키를 분류 목록으로 검증해야 목록 조회를 시작할 수 있다.
   // 연동 폴더(교재 요청서·수강료 견적서)는 billing 접근권한이 있어야 노출·조회 —
   // 강사는 담당 학생 스코프 밖 전체 목록을 보면 안 됨(전용 면 /textbook-requests 사용).
-  const [canWrite, canBilling, categories, favoriteKeys] = await Promise.all([
+  const [canWrite, canBilling, categories] = await Promise.all([
     canWriteTenant(user.systemRole, "documents"),
     canAccessTenant(user.systemRole, "billing"),
     // 분류는 학원장이 관리하는 테넌트 데이터(0161a) — 코드 상수가 아니라 DB가 단일 소스.
     getDocumentCategories(),
-    getDocumentFolderFavorites(),
   ]);
   const linked: LinkedSourceKey | null = canBilling && isLinkedSource(catRaw) ? catRaw : null;
   const cat = !linked && categories.some((c) => c.key === catRaw) ? catRaw : null;
@@ -70,7 +62,10 @@ export default async function DocumentsPage({
   const children = linked ? [] : categories.filter((c) => (c.parentKey ?? null) === cat);
   const path = cat ? categoryPath(categories, cat) : [];
 
-  const [docPage, linkedPage, counts, linkedCounts] = await Promise.all([
+  // 실제 조회는 한 번에(B4) — 예전엔 즐겨찾기가 위 단계에서 왕복 하나를 따로 기다린 뒤에야 목록이 출발했다
+  // (폴더를 누를 때마다 직렬 왕복 +1, 2026-09-30 측정).
+  const [favoriteKeys, docPage, linkedPage, counts, linkedCounts] = await Promise.all([
+    getDocumentFolderFavorites(),
     linked ? null : getDocumentsPage({ category: cat ?? undefined, q, sort }, page, PAGE_SIZE),
     linked ? getLinkedPage(linked, { q }, page, PAGE_SIZE) : null,
     getDocumentCategoryCounts(),
@@ -102,13 +97,10 @@ export default async function DocumentsPage({
   const pageHref = (p: number) => buildHref({ page: p });
   const sortHref = (next: SortState<DocumentSortKey>) => buildHref({ sort: next });
 
-  const folders: FolderItem[] = [
-    { key: null, label: "전체 문서", count: counts?.all ?? null },
-    // 문서가 0건인 분류는 RPC가 행을 안 주므로 0으로 채운다(폴더 자체는 항상 보인다).
-    ...categories.map((c) => ({ key: c.key, label: c.label, count: counts ? counts[c.key] ?? 0 : null })),
-  ];
+  // 폴더 팬 맨 위 '전체 문서' — 분류 폴더는 트리가 categories·counts·hrefs로 직접 그린다(클라로 넘기는 양을 줄이려 한 항목만).
+  const folders: FolderItem[] = [{ key: null, label: "전체 문서", count: counts?.all ?? null, href: folderHref(null) }];
   const linkedFolders: FolderItem[] = linkedCounts
-    ? LINKED_SOURCES.map((s) => ({ key: s.key as string, label: s.label, count: linkedCounts[s.key] }))
+    ? LINKED_SOURCES.map((s) => ({ key: s.key as string, label: s.label, count: linkedCounts[s.key], href: folderHref(s.key) }))
     : [];
 
   const empty = linked
@@ -145,21 +137,22 @@ export default async function DocumentsPage({
         }
       />
 
-      {/* 탐색기 레이아웃 — 넓은 창: 좌 폴더 팬 + 우 상세 테이블 / 좁은 창: 폴더가 상단 칩으로 접힘 */}
+      {/* 탐색기 레이아웃 — 넓은 창: 좌 폴더 팬 + 우 상세 테이블 / 좁은 창: 폴더가 상단 칩으로 접힘.
+          폴더 이동은 누르는 즉시 선택 표시 + 목록 흐림(FolderNavigationProvider) — 데이터는 여전히 이 서버 렌더 한 경로. */}
       <FolderInteractionProvider categories={categories} canManage={canWrite}>
-      <div className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:items-start lg:gap-4">
+      <FolderNavigationProvider activeKey={activeKey} className="lg:grid lg:grid-cols-[230px_minmax(0,1fr)] lg:items-start lg:gap-4">
         <FolderNav
           folders={folders}
           linkedFolders={linkedFolders}
           activeKey={activeKey}
-          hrefFor={folderHref}
+          hrefs={Object.fromEntries(categories.map((c) => [c.key, folderHref(c.key)]))}
           categories={categories}
           counts={counts}
           canManage={canWrite}
           favoriteKeys={favoriteKeys}
         />
 
-        <section className="bg-card border-line min-w-0 rounded-2xl border">
+        <FolderListSection className="bg-card border-line min-w-0 rounded-2xl border">
           {!linked ? <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
             <FolderBreadcrumbs rootHref={folderHref(null)} path={path.map((c) => ({ key: c.key, label: c.label, href: folderHref(c.key) }))} />
             <div className="flex items-center gap-2">
@@ -209,92 +202,18 @@ export default async function DocumentsPage({
             children.length && !q ? <p className="px-4 py-8 text-center text-sm text-text-faint">{cat ? "이 폴더에 직접 저장된 문서가 없습니다. 하위 폴더를 열거나 문서를 추가하세요." : "폴더를 열어 문서를 추가하세요."}</p>
               : <EmptyState image={q ? "search" : "documents"} title={empty.title} description={empty.description} />
           ) : (
-            <DragScrollArea>
-              <table className="min-w-[860px] w-full text-sm">
-                <thead>
-                  {/* 헤더 클릭 정렬 — 서버 정렬(URL `?sort=&dir=`)이라 페이지를 넘겨도 전체 기준으로 줄 선다.
-                      ⚠️ 연동 폴더(교재 요청서·수강료 견적서)는 원본 테이블을 따로 조회해 정렬 배선이 없다 →
-                         누를 수 있게 두면 "눌렀는데 안 바뀐다"가 된다. 그 폴더에선 정적 헤더로 되돌린다.
-                      ⚠️ '유형'은 의도적으로 정렬 대상이 아니다(사유 = document-sort.ts). */}
-                  <tr className="text-text-dim border-line border-b text-left text-xs">
-                    {linked ? (
-                      <>
-                        <th className="w-[30%] px-4 py-2 font-medium">이름</th>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
-                        <th className="px-3 py-2 text-right font-medium whitespace-nowrap">크기</th>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">수정일</th>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">등록일</th>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">등록자</th>
-                      </>
-                    ) : (
-                      <>
-                        <SortableThLink sortKey="name" state={sort} hrefFor={sortHref} padClassName="px-4 py-2" className="w-[30%]">
-                          이름
-                        </SortableThLink>
-                        <th className="px-3 py-2 font-medium whitespace-nowrap">유형</th>
-                        <SortableThLink
-                          sortKey="size"
-                          state={sort}
-                          hrefFor={sortHref}
-                          align="right"
-                          className="whitespace-nowrap"
-                        >
-                          크기
-                        </SortableThLink>
-                        <SortableThLink sortKey="modified" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
-                          수정일
-                        </SortableThLink>
-                        <SortableThLink sortKey="date" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
-                          등록일
-                        </SortableThLink>
-                        <SortableThLink sortKey="uploader" state={sort} hrefFor={sortHref} className="whitespace-nowrap">
-                          등록자
-                        </SortableThLink>
-                      </>
-                    )}
-                    <th className="px-3 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {linked
-                    ? (linkedPage?.rows ?? []).map((r) => <LinkedDocumentRow key={r.id} doc={r} />)
-                    : (docPage?.rows ?? []).map((r) => (
-                        <DocumentRow
-                          key={r.id}
-                          doc={{
-                            id: r.id,
-                            title: r.title,
-                            kind: r.kind,
-                            description: r.description,
-                            category: r.category,
-                            categoryLabel: categoryPathLabel(categories, r.category),
-                            typeLabel: fileTypeLabel(r.kind, r.fileName, r.mimeType, r.formType, r.linkUrl),
-                            sizeLabel: r.kind === "file" ? formatFileSize(r.fileSize) : "—",
-                            createdAt: r.createdAt,
-                            updatedAt: r.updatedAt,
-                            fileName: r.fileName,
-                            uploaderName: r.uploaderName,
-                            pinned: r.pinned,
-                            // 링크 문서는 외부 주소로 직행(새 탭) — 값이 비면 상세로 폴백해 죽은 링크를 안 만든다.
-                            href:
-                              r.kind === "link"
-                                ? (r.linkUrl ?? `/documents/${r.id}`)
-                                : r.kind === "file"
-                                  ? `/documents/${r.id}/preview`
-                                  : r.kind === "form"
-                                    ? formViewHref(r.formType, r.id)
-                                    : `/documents/${r.id}`,
-                            external: r.kind === "link" && !!r.linkUrl,
-                          }}
-                          canWrite={canWrite}
-                        />
-                      ))}
-                </tbody>
-              </table>
-            </DragScrollArea>
+            <DocumentTable
+              linked={!!linked}
+              sort={sort}
+              sortHref={sortHref}
+              rows={docPage?.rows ?? []}
+              linkedRows={linkedPage?.rows ?? []}
+              categories={categories}
+              canWrite={canWrite}
+            />
           )}
-        </section>
-      </div>
+        </FolderListSection>
+      </FolderNavigationProvider>
       </FolderInteractionProvider>
 
       <div className="lg:pl-[246px]">

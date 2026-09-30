@@ -34,6 +34,9 @@ vi.mock("./_components/document-row", () => ({ DocumentRow: () => null }));
 vi.mock("@/features/documents/server/file-actions", () => ({ moveDocumentFile: vi.fn() }));
 vi.mock("./_components/linked-row", () => ({ LinkedDocumentRow: () => null }));
 import DocumentsPage from "./page";
+// ⚠️ 숨김 규칙 문자열을 테스트에 그대로 적으면 Tailwind가 그것도 클래스로 주워 조건 없는 규칙을 만든다 — 상수로 비교.
+import { HIDE_WHEN_NARROW } from "./_components/document-table";
+import { DOC_COL } from "./_components/document-columns";
 
 afterEach(() => { cleanup(); mocks.access.mockResolvedValue(true); mocks.favorites.mockResolvedValue([]); });
 
@@ -101,4 +104,40 @@ it("전체 문서 37건은 첫 20건만 조회하고 2페이지 이동 링크를
   render(await DocumentsPage({ searchParams: Promise.resolve({}) }));
   expect(mocks.documents).toHaveBeenLastCalledWith({ category: undefined, q: "", sort: null }, 1, 20);
   expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/documents?page=2&embed=1")).toBe(true);
+});
+
+it("표는 이름 열이 남는 폭을 전부 갖고 나머지는 고정 폭 — 좁으면 등록일·등록자·유형 순으로 숨기되 정렬 중인 열은 남긴다", async () => {
+  mocks.documents.mockResolvedValueOnce({ rows: [], total: 1 });
+  const view = render(await DocumentsPage({ searchParams: Promise.resolve({ cat: "middle" }) }));
+  const table = view.container.querySelector("table")!;
+  expect(table).toHaveClass("table-fixed");
+  const cols = [...table.querySelectorAll("col")];
+  expect(cols).toHaveLength(7);
+  expect(cols[0].className).toBe(""); // 이름 = 남는 폭 전부
+  expect(cols.slice(1).every((c) => /^w-\d+$/.test(c.className.split(" ").at(-1) ?? ""))).toBe(true);
+  // 머리·칸·열이 같은 표식을 달아야 한꺼번에 숨는다.
+  for (const marker of Object.values(DOC_COL)) {
+    expect(table.querySelectorAll(`col.${marker}`)).toHaveLength(1);
+    expect(table.querySelectorAll(`th.${marker}`)).toHaveLength(1);
+  }
+  const wrap = table.closest(".\\@container")!;
+  expect(wrap.className).toContain(HIDE_WHEN_NARROW.created);
+  expect(wrap.className).toContain(HIDE_WHEN_NARROW.uploader);
+  view.unmount();
+  mocks.documents.mockResolvedValueOnce({ rows: [], total: 1 });
+  const sorted = render(await DocumentsPage({ searchParams: Promise.resolve({ cat: "middle", sort: "date", dir: "desc" }) }));
+  const sortedWrap = sorted.container.querySelector("table")!.closest(".\\@container")!;
+  expect(sortedWrap.className).not.toContain(HIDE_WHEN_NARROW.created); // 등록일로 줄 선 동안엔 등록일을 숨기지 않는다
+  expect(sortedWrap.className).toContain(HIDE_WHEN_NARROW.uploader);
+});
+
+it("즐겨찾기 조회를 기다리지 않고 목록 조회가 함께 출발한다(직렬 왕복 제거, B4)", async () => {
+  let release!: (keys: string[]) => void;
+  mocks.favorites.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  mocks.documents.mockClear();
+  const pending = DocumentsPage({ searchParams: Promise.resolve({ cat: "middle" }) });
+  await vi.waitFor(() => expect(mocks.documents).toHaveBeenCalled());
+  release([]);
+  render(await pending);
+  expect(screen.getByRole("navigation", { name: "문서 폴더" })).toBeInTheDocument();
 });
