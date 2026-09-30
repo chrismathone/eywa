@@ -83,15 +83,23 @@ export function VideoHomeworkCheck({ classId, studentId, subjectKey, grade, prev
     </button>)}
   </div>;
 
-  // 표 모드는 '오늘 과제' 입력 바로 아래에 붙는다 — 오늘 날짜(검사일)를 앞세우면 오늘 숙제로 읽힌다(원장 2026-09-30).
-  // 그래서 머리글은 숙제를 낸 **지난 수업 날짜**를 적고, 과제 줄도 '지난 과제'로 못박는다.
-  if (compact) return <div className="border-line mt-1 rounded border bg-card px-1.5 py-1.5 text-xs">
-    <div className="text-text-dim mb-1 font-semibold">
-      지난 수업{homeworkDate ? `(${homeworkDate.slice(5)})` : ""} 숙제 · 영상 제출 확인
-    </div>
-    {previousHomework ? <p title={previousHomework} className="text-text-faint mb-1 truncate">지난 과제: {previousHomework}</p> : null}
-    {statusButtons}
-  </div>;
+  // 표 모드 = 한 줄 체크만(원장 2026-09-30 *"간략하게 체크만"*). 칸이 좁아 설명 글은 빼고 툴팁으로 —
+  // 🔴 툴팁은 **지난 수업** 숙제임을 밝힌다(바로 위 '오늘 과제' 입력과 헷갈리지 않게).
+  if (compact) {
+    const detail = `지난 수업${homeworkDate ? `(${homeworkDate.slice(5)})` : ""} 영상 숙제${previousHomework?.trim() ? ` · 지난 과제: ${previousHomework.trim()}` : ""}`;
+    // 원장 2026-09-30 *"표 모드에서는 그냥 체크랑 엑스만"* — 글자 라벨 없이 ✓ / ✕ 두 버튼. 뜻은 툴팁·aria로.
+    return <div className="mt-1 flex items-center gap-1 text-xs" title={detail}>
+      {STATUS.map((option) => <button key={option.value} type="button"
+        disabled={readOnly || busy}
+        aria-pressed={mark?.status === option.value}
+        aria-label={`지난 수업 영상 숙제 ${option.label}`}
+        title={`${detail} — ${mark?.status === option.value ? `${option.label} 취소` : option.label}`}
+        onClick={() => void change(classId, studentId, mark?.status === option.value ? null : option.value, homeworkDate)}
+        className={`inline-flex size-6 items-center justify-center rounded-md border disabled:cursor-not-allowed disabled:opacity-50 ${mark?.status === option.value ? option.tone : "border-line bg-card text-text-faint hover:border-primary"}`}>
+        <EyIcon name={option.icon} size={14} />
+      </button>)}
+    </div>;
+  }
   return <section className="border-line bg-bg-soft rounded-md border px-3 py-2" aria-label="지난 영상 숙제 검사">
     <div className="mb-1 flex flex-wrap items-center justify-between gap-1">
       <strong className="text-xs">지난 영상 숙제 검사</strong>
