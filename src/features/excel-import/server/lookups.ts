@@ -71,13 +71,17 @@ export class StudentIndex {
   }
 }
 
-export type StaffLite = { id: string; display_name: string | null; email: string | null; english_name: string | null; status: string | null; system_role: string };
+export type StaffLite = {
+  id: string; display_name: string | null; email: string | null; english_name: string | null; status: string | null; system_role: string;
+  /** 담당 과목 키 — 상담 과목 자동 채움(consultationSubject)이 쓴다. */
+  subjects: string[] | null;
+};
 
 export class StaffIndex {
   constructor(readonly rows: StaffLite[]) {}
   static async load(db: Db, tenantId: string): Promise<StaffIndex> {
     const rows = await fetchAllPaged<StaffLite>((from, to) =>
-      db.from("users").select("id, display_name, email, english_name, status, system_role").eq("tenant_id", tenantId).order("id").range(from, to),
+      db.from("users").select("id, display_name, email, english_name, status, system_role, subjects").eq("tenant_id", tenantId).order("id").range(from, to),
     );
     return new StaffIndex(rows);
   }

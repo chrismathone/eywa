@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { CONSULTATION_AUDIENCE_LABEL, CONSULTATION_CATEGORY_LABEL } from "@/features/consultations/labels";
 import { stripPastedMarkup } from "@/features/consultations/paste-cleanup";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildSubjectMaps } from "@/features/owner/subjects";
+import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
+import { consultationSubject } from "@/features/consultations/subject";
 import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import { StaffIndex, StudentIndex } from "../server/lookups";
@@ -94,6 +95,7 @@ const def: ImporterDef<Plan> = {
     const sheet = sheets[SHEET];
     const [settings, db] = await Promise.all([getTenantSettings(), createClient()]);
     const subjects = buildSubjectMaps(settings.operations.subjects);
+    const labelRecord = subjectLabelRecord(settings.operations.subjects);
     const [students, staff, existing] = await Promise.all([
       StudentIndex.load(db, ctx.tenantId, { includeWithdrawn: true }),
       StaffIndex.load(db, ctx.tenantId),
@@ -125,20 +127,30 @@ const def: ImporterDef<Plan> = {
       const summary = stripPastedMarkup(summaryRaw);
       if (summaryRaw && (!summary || summary.trim().length < 5)) row.fail("summary", "상담내용을 5자 이상 적어 주세요");
       let counselorId: string | null = null;
+      let counselorSubjects: string[] | null = null;
       const counselorLabel = row.text("counselor", { max: 60 });
       if (counselorLabel) {
         const c = staff.match(counselorLabel);
-        if (c.length === 1) counselorId = c[0]!.id;
-        else if (c.length > 1) row.fail("counselor", `'${counselorLabel}' 이름의 직원이 ${c.length}명입니다 — 로그인 이메일로 적어 주세요`);
+        if (c.length === 1) {
+          counselorId = c[0]!.id;
+          counselorSubjects = c[0]!.subjects;
+        } else if (c.length > 1) row.fail("counselor", `'${counselorLabel}' 이름의 직원이 ${c.length}명입니다 — 로그인 이메일로 적어 주세요`);
         else notes.push(`${row.rowNum}행: 상담자 '${counselorLabel}'을(를) 직원 목록에서 찾지 못해 비워 둡니다`);
       }
       const subjectText = row.text("subject", { max: 40 });
-      // 저장값은 한글 라벨(상담 폼과 같다) — 키(math)로 적었으면 라벨로 바꾼다.
-      const subject = subjectText ? (subjects.options.find((o) => o.value === subjectText)?.label ?? subjectText) : null;
+      // 저장값은 한글 라벨(상담 폼과 같다) — 키(math)·라벨을 대소문자·공백 무시로 맞춰 라벨로 바꾼다.
+      const squashed = subjectText?.replace(/\s+/g, "").toLowerCase();
+      const known = squashed
+        ? subjects.options.find((o) => o.value.toLowerCase() === squashed || o.label.replace(/\s+/g, "").toLowerCase() === squashed)
+        : undefined;
+      const entered = subjectText ? (known?.label ?? subjectText) : null;
+      // 과목 칸이 비었으면 **새로 넣는 행만** 상담사 담당 과목(하나일 때)으로 채운다 — 상담 폼과 같은 함수.
+      // 이미 있는 행은 빈 칸이 "안 바꿈"이라(아래 patch가 null을 건너뜀) 채우지 않는다.
+      const autoSubject = entered ? null : consultationSubject(null, counselorSubjects, labelRecord);
       const fields: Row = {
         category: row.option("category", CATEGORY_OPTIONS),
         audience: row.option("audience", AUDIENCE_OPTIONS),
-        subject,
+        subject: entered,
         follow_up_action: row.text("action", { max: 2000 }),
         follow_up_date: row.date("followUpDate"),
         follow_up_done: row.yesNo("followUpDone"),
@@ -177,6 +189,7 @@ const def: ImporterDef<Plan> = {
         consulted_at: kstLocalToIso(`${date}T${time ?? "12:00"}`) ?? new Date().toISOString(),
         summary,
         ...fields,
+        subject: fields.subject ?? autoSubject,
         follow_up_done: fields.follow_up_done ?? false,
       });
       preview.push({ sheet: SHEET, rowNum: row.rowNum, key: who, action: "insert", summary: `${date} · ${head}` });

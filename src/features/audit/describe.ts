@@ -2010,6 +2010,24 @@ export function auditDetail(
     case "student_consultation_follow_up": {
       return m.done === true ? "완료로 표시" : m.done === false ? "완료 해제" : null;
     }
+    case "student_consultation_sync_import":
+    case "student_consultation_subject_backfill": {
+      // subjects = { 한글 판정 이유: 건수 } (consultation-counselor.cjs SUBJECT_REASON_LABEL — 키가 이미 한글).
+      const n = num(m.inserted) ?? num(m.count);
+      const linked = num(m.counselorLinked) ?? num(m.counselorMatched);
+      const reasons =
+        m.subjects && typeof m.subjects === "object"
+          ? Object.entries(m.subjects as Record<string, unknown>)
+              .filter(([k, v]) => /[가-힣]/.test(k) && typeof v === "number")
+              .map(([k, v]) => `${k} ${v}`)
+              .join(", ")
+          : "";
+      return join(
+        n === null ? null : `상담 ${n}건`,
+        linked === null ? null : `상담사 연결 ${linked}건`,
+        reasons ? `과목: ${reasons}` : null,
+      );
+    }
     case "student_care_analysis": {
       // 대상 열이 학생 이름을 보여준다 — 여기선 무엇이 얼마나 나왔는지 + 어떤 모델이었는지.
       const focus = num(m.focus);

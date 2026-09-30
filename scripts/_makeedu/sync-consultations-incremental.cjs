@@ -26,7 +26,9 @@
  */
 const postgres = require("postgres");
 const L = require("./lib.cjs");
-const { makeCounselorMatcher, loadSubjectLabels, singleCounselorSubject } = require("./consultation-counselor.cjs");
+const {
+  makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects, SUBJECT_REASON_LABEL,
+} = require("./consultation-counselor.cjs");
 
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
@@ -200,7 +202,7 @@ function EXTRACT_DETAIL() {
     }
 
     // 상담사 매칭(등록자 "이지은(Amy)" → 한글명/영문명 유일 일치 — sync-consultations 로직 + 유일성 가드).
-    const users = await sql`select id, display_name, english_name, subjects from users where tenant_id = ${tenantId}`;
+    const users = await sql`select id, display_name, english_name, subjects, status from users where tenant_id = ${tenantId} and system_role <> 'student'`;
     const matchCounselor = makeCounselorMatcher(users);
     const subjectLabels = await loadSubjectLabels(sql, tenantId);
 
@@ -321,6 +323,26 @@ function EXTRACT_DETAIL() {
     for (const it of toInsert.slice(0, 10)) console.log(` + ${it.name} ${it.dateStr}: ${it.summary.slice(0, 60).replace(/\n/g, "⏎")}`);
     for (const b of toBackfill.slice(0, 10)) console.log(` ↺ 백필: ${b.label} → seq ${b.seq}`);
 
+    // 상담사·과목 판정(2026-09-30 원장 *"동기화로 들어와도 알아서 과목 매핑"*) — makeedu 목록엔 과목 칸이 없어
+    // 상담사 담당 과목 → 그날 학생 수강 과목 순으로 좁힌다. 하나로 안 좁혀지면 비운다(추측 금지).
+    const enrolledBy = await loadEnrolledSubjects(sql, tenantId, toInsert.map((it) => ({ studentId: it.studentId, date: it.dateStr })));
+    const subjectReasons = {};
+    let counselorMatched = 0;
+    for (const it of toInsert) {
+      const counselor = matchCounselor(it.reg);
+      it.counselorId = counselor?.id ?? null;
+      if (counselor) counselorMatched++;
+      const pick = resolveConsultationSubject({
+        counselor,
+        enrolledSubjects: enrolledBy.get(`${it.studentId}|${it.dateStr}`) || [],
+        labels: subjectLabels,
+      });
+      it.subject = pick?.label ?? null;
+      const why = pick ? SUBJECT_REASON_LABEL[pick.reason] : "비움(근거 부족)";
+      subjectReasons[why] = (subjectReasons[why] || 0) + 1;
+    }
+    if (toInsert.length) console.log(`[상담사] 연결 ${counselorMatched}/${toInsert.length} · [과목]`, JSON.stringify(subjectReasons));
+
     // 서킷브레이커 — 가드 붕괴 시 대량 오적재 방지.
     if (toInsert.length > MAX_NEW && !ALLOW_LARGE) {
       throw new Error(`신규 ${toInsert.length} > ${MAX_NEW} — 비정상 급증(서킷브레이커). dry-run 검토 후 --allow-large로만 우회.`);
@@ -346,13 +368,25 @@ function EXTRACT_DETAIL() {
       const res = await sql`
         insert into student_consultations
           (tenant_id, makeedu_id, student_id, counselor_id, consulted_at, category, subject, summary, sync_added_at)
-        values (${tenantId}, ${it.seq}, ${it.studentId}, ${matchCounselor(it.reg)?.id ?? null},
+        values (${tenantId}, ${it.seq}, ${it.studentId}, ${it.counselorId},
                 ${`${it.dateStr}T00:00:00+09:00`}, ${mapCategory(it.cat)},
-                ${singleCounselorSubject(matchCounselor(it.reg), subjectLabels)}, ${it.summary}, now())
+                ${it.subject}, ${it.summary}, now())
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
       inserted += res.count;
     }
     await L.recordSync(sql, tenantId, "consultations", inserted + backfilled);
+    // 감사로그 — 동기화가 상담을 새로 넣은 실행만(0건 실행은 남기지 않는다). 실패해도 동기화는 성공으로 둔다.
+    if (inserted > 0) {
+      const audit = {
+        action: "student_consultation_sync_import",
+        targetType: "student_consultation",
+        metadata: { inserted, counselorMatched, subjects: subjectReasons },
+      };
+      await sql`
+        insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
+        values (${tenantId}, null, ${"makeedu 동기화"}, ${audit.action}, ${audit.targetType}, ${`상담 ${inserted}건`}, ${sql.json(audit.metadata)})`
+        .catch((e) => console.warn("감사로그 기록 실패(동기화는 완료):", e.message));
+    }
     console.log(`\n✅ inserted: ${inserted} | seq 백필: ${backfilled}`);
   } finally {
     if (browser) await browser.close();
