@@ -36,10 +36,16 @@ describe("영상 담임 분류", () => {
     expect(chooseVideoTeacher({ ...base, classes: [jj, regular, english] })).toMatchObject({ teacherId: "a", classId: "ms2a", className: "중등M 초6 MS2A", folderName: "수학담임 선생님" });
     // 그 과목에 JJ 반뿐이면 그 반을 쓴다
     expect(chooseVideoTeacher({ ...base, classes: [jj, english] })).toMatchObject({ teacherId: "j", classId: "jj2a" });
-    // JJ를 빼고도 반이 둘이면 여전히 추측하지 않는다
-    const held = chooseVideoTeacher({ ...base, classes: [jj, regular, { ...regular, class_id: "bs1d", class_name: "초등M 개별 BS1D" }] });
-    expect(held).toMatchObject({ teacherId: null, classId: null, folderName: "담임 확인 필요" });
-    expect(held.reason).toContain("여러 개");
+    // JJ를 빼고도 반이 둘이면 반 이름은 추측하지 않는다 — 담임이 같으면 그 담임 폴더, 다르면 확인 폴더(둘 다 올라가기는 한다)
+    const other = { ...regular, class_id: "bs1d", class_name: "초등M 개별 BS1D" };
+    const same = chooseVideoTeacher({ ...base, classes: [jj, regular, other] });
+    expect(same).toMatchObject({ teacherId: "a", classId: null, className: null, folderName: "수학담임 선생님", studentId: "student" });
+    expect(same.reason).toContain("여러 개");
+    for (const variant of [{ teacher_id: "c", teacher_name: "다른담임" }, { teacher_id: null }, { teacher_status: "inactive" }]) {
+      const held = chooseVideoTeacher({ ...base, classes: [jj, regular, { ...other, ...variant }] });
+      expect(held).toMatchObject({ teacherId: null, classId: null, folderName: "담임 확인 필요", studentId: "student" });
+      expect(held.reason).toContain("여러 개");
+    }
     // 반 보드에 올라온 글은 그 반이 JJ여도 그 반 그대로다(JJ 제외는 1인 보드 글에만)
     expect(chooseVideoTeacher({ ...base, boardClassIds: ["jj2a"], classes: [jj, regular] })).toMatchObject({ teacherId: "j", classId: "jj2a" });
   });

@@ -37,17 +37,23 @@ export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds,
   if (!matched.length) return hold("게시 반·과목에 현재 수강 중인 반이 없습니다.");
   const subjects = unique(matched.map((c) => c.subject));
   subject = subjects.length === 1 ? subjects[0] : null;
-  if (unique(matched.map((c) => c.class_id)).length !== 1) return hold("에이와 반 연결이 여러 개여서 반 이름을 확정할 수 없습니다.");
-  identity.classId = matched[0].class_id;
-  identity.className = matched[0].class_name ?? null;
+  // 반이 하나일 때만 반 이름을 쓴다(여러 개면 추측하지 않는다 — 파일명은 '반미정'). 보류(hold)도 올라가기는 한다:
+  // 원장 2026-10-01 *"보류되는 건은 그냥 반 없이 올려 … 어차피 수집하는데 의미가 있기 때문 … 반_미정으로 업로드"*.
+  const single = unique(matched.map((c) => c.class_id)).length === 1;
+  if (single) {
+    identity.classId = matched[0].class_id;
+    identity.className = matched[0].class_name ?? null;
+  }
+  const several = "에이와 반 연결이 여러 개여서 반 이름을 확정할 수 없습니다.";
   if (matched.some((c) => !c.teacher_id || c.teacher_status !== "active" || !c.teacher_name?.trim()))
-    return hold("현재 담임이 미지정이거나 비활성 상태입니다.");
+    return hold(single ? "현재 담임이 미지정이거나 비활성 상태입니다." : several);
   const teachers = unique(matched.map((c) => c.teacher_id));
-  if (teachers.length !== 1) return hold("해당 반·과목의 담임이 여러 명입니다.");
+  if (teachers.length !== 1) return hold(single ? "해당 반·과목의 담임이 여러 명입니다." : several);
   const teacher = matched[0];
   const suffix = Number(teacher.same_name_count) > 1 ? ` (${teacher.teacher_id.slice(0, 8)})` : "";
+  // 반은 여러 개여도 담임이 한 사람이면 그 담임 폴더로 보낸다(반 이름만 비운다).
   return { tenantId, studentId, subject, ...identity, teacherId: teacher.teacher_id, folderName: `${teacher.teacher_name.trim()} 선생님${suffix}`,
-    reason: linked.length ? "게시 반의 현재 담임" : "게시 과목의 현재 담임" };
+    reason: !single ? "담임이 같은 반이 여러 개 — 반 이름 없이 담임 폴더" : linked.length ? "게시 반의 현재 담임" : "게시 과목의 현재 담임" };
 }
 
 /** DB는 SELECT만. 모든 조인은 지점으로 제한한다. DB 오류를 미분류로 숨기지 않는다. */
