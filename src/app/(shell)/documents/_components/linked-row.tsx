@@ -4,6 +4,7 @@ import { ClipboardList } from "@/components/icons/aywa-icon-compat";
 import { WindowLink } from "@/components/workspace/window-link";
 import { usePrintWindow } from "@/components/workspace/print-window";
 import type { LinkedDocRow } from "@/features/documents/linked";
+import { DOC_COL } from "./document-columns";
 
 // 연동 폴더(교재 요청서·수강료 견적서) 행 — DocumentRow와 같은 컬럼 구성의 읽기 전용 링크 행.
 // 원본은 다른 테이블 소유라 고정/삭제/다운로드 없음. 클릭 = printId 있으면 A4 인쇄 창, 없으면 일반 창.
@@ -18,7 +19,7 @@ export function LinkedDocumentRow({ doc }: { doc: LinkedDocRow }) {
   const openPrint = usePrintWindow();
   return (
     <tr className="border-line hover:bg-bg-soft/50 border-t transition-colors">
-      <td className="max-w-0 px-4 py-2">
+      <td className="px-4 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <ClipboardList className="text-rose size-4 shrink-0" />
           {doc.printId ? (
@@ -38,11 +39,12 @@ export function LinkedDocumentRow({ doc }: { doc: LinkedDocRow }) {
         </div>
         {doc.description ? <p className="text-text-faint mt-0.5 truncate pl-6 text-xs">{doc.description}</p> : null}
       </td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.typeLabel}</td>
+      {/* 열 폭·좁은 표에서 숨기는 열은 문서 행과 같은 규칙(document-table.tsx) — 같은 표를 쓴다. */}
+      <td className={`${DOC_COL.type} text-text-dim px-3 py-2`}><span className="block truncate" title={doc.typeLabel}>{doc.typeLabel}</span></td>
       <td className="text-text-dim num px-3 py-2 text-right whitespace-nowrap">—</td>
       <td className="text-text-dim px-3 py-2 whitespace-nowrap">—</td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{dateLabel(doc.createdAt)}</td>
-      <td className="text-text-dim px-3 py-2 whitespace-nowrap">{doc.byName ?? "—"}</td>
+      <td className={`${DOC_COL.created} text-text-dim px-3 py-2 whitespace-nowrap`}>{dateLabel(doc.createdAt)}</td>
+      <td className={`${DOC_COL.uploader} text-text-dim px-3 py-2`}><span className="block truncate" title={doc.byName ?? undefined}>{doc.byName ?? "—"}</span></td>
       <td className="px-3 py-2" />
     </tr>
   );

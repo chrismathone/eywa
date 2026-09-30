@@ -4,11 +4,22 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { useRouter } from "next/navigation";
 import { Check, X } from "@/components/icons/aywa-icon-compat";
 
-/** 첫 클릭 이동을 잠시 보류해 더블클릭 이름 변경과 충돌하지 않게 한다. */
-export function InlineRename({ enabled, name, suffix = "", maxLength, onSave, children }: {
+/**
+ * 더블클릭(또는 F2)으로 이름을 고치는 칸.
+ * · `holdClick`(기본) — 첫 클릭 이동을 500ms 보류해 더블클릭과 안 겹치게 한다. 파일 행처럼 **첫 클릭이 새 창을 여는**
+ *   자리용(더블클릭하면 창이 먼저 열려 버린다).
+ * · `holdClick={false}` — 폴더처럼 **같은 창 안 이동**은 즉시 보낸다(원장 2026-09-30 "한 번 누르고 기다려야 들어가진다").
+ *   더블클릭이면 `onBeginEdit`이 첫 클릭의 이동을 멈춘다(탐색기 `FolderNavigationProvider.cancel`).
+ */
+export function InlineRename({ enabled, name, suffix = "", maxLength, onSave, children, holdClick = true, onBeginEdit,
+  className = "min-w-0 flex-1" }: {
   enabled: boolean; name: string; suffix?: string; maxLength: number;
   onSave: (name: string) => Promise<{ ok?: boolean; error?: string } | undefined>;
   children: ReactNode;
+  holdClick?: boolean;
+  onBeginEdit?: () => void;
+  /** 바깥 칸 — 기본은 남는 폭을 다 쓴다(폴더 줄의 건수·별이 오른쪽에 붙게). 옆에 배지가 붙는 자리는 `min-w-0`. */
+  className?: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -27,6 +38,7 @@ export function InlineRename({ enabled, name, suffix = "", maxLength, onSave, ch
     if (!enabled || busy.current) return;
     cancelled.current = false;
     setDraft(name); setError(null); setEditing(true);
+    onBeginEdit?.();
   }
   function cancel() { if (!busy.current) { cancelled.current = true; setEditing(false); setError(null); } }
   function save() {
@@ -47,9 +59,10 @@ export function InlineRename({ enabled, name, suffix = "", maxLength, onSave, ch
     });
   }
 
-  return <div className="min-w-0 flex-1" onDragStartCapture={cancelClick}
+  // 편집 중엔 남는 폭을 쓴다 — 배지 옆에 붙는 좁은 칸(`min-w-0`)이어도 오류 문구가 입력칸 폭으로 조각나지 않게.
+  return <div className={editing ? `${className} flex-1` : className} onDragStartCapture={cancelClick}
     onClickCapture={(e) => {
-      if (!enabled || editing || replaying.current || e.detail === 0 || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      if (!holdClick || !enabled || editing || replaying.current || e.detail === 0 || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       const link = (e.target as Element).closest("a");
       if (!link) return;
       e.preventDefault(); e.stopPropagation(); cancelClick();
