@@ -40,6 +40,8 @@ export function AutoPageSize({
   storageKey,
   param = "size",
   className,
+  maxCols,
+  pageCols,
   children,
 }: {
   /** 서버가 지금 쓴 쪽 크기. */
@@ -51,6 +53,17 @@ export function AutoPageSize({
   param?: string;
   /** 루트 div 클래스 — 제목·테두리 격자를 안에 함께 둘 때 `relative` 등. */
   className?: string;
+  /**
+   * 단 수 상한 — 폭이 더 허락해도 이 이상 세우지 않는다(목록의 `column-count`도 같은 값을 상한으로 둘 것).
+   * 원생상담은 2(원장 2026-09-30 *"상담을 2단으로 줄이고"* — 오른쪽은 통계 패널 자리).
+   */
+  maxCols?: number;
+  /**
+   * 쪽 크기를 **실제 단 수와 무관하게** `한 단 행 수 × pageCols`로 청한다(원장 2026-09-30 *"페이지당 건수는 단 수와 무관하게 일정"*) —
+   * 창 폭이 단 경계를 넘나들 때 쪽 크기가 바뀌면 `page`가 지워져 1쪽으로 튕기고 같은 번호가 다른 행을 가리킨다. 단이 적을 땐
+   * 목록이 그만큼 길어지고(스크롤) 쪽 내용은 그대로다. 없으면 종전처럼 `행 수 × 단 수`.
+   */
+  pageCols?: number;
   /** 목록(`<ul>`)엔 `data-autopage-list`를 단다(없으면 첫 자식) — 단 수·항목 수를 거기서 읽는다. */
   children: ReactNode;
 }) {
@@ -77,8 +90,12 @@ export function AutoPageSize({
       // 목록 아래에 실제로 있는 것(쪽 넘김·바닥 여백)의 높이 = 스크롤러 직계 자식(페이지 루트)의 바닥 − 목록 바닥 + 스크롤러
       // 바닥 패딩. 🔴 scrollHeight로 재면 안 된다 — 내용이 짧을 때 빈 공간까지 '아래'로 잡혀 행 수가 최소값으로 떨어지고
       // 창을 키워도 안 늘어난다(실브라우저 측정 2026-09-03에서 났다).
-      let root: HTMLElement = el;
-      while (root.parentElement && root.parentElement !== scroller) root = root.parentElement;
+      // `data-autopage-root`가 있으면 그 상자가 '목록 쪽'이다 — 목록 옆·아래에 다른 덩어리(원생상담 통계 패널)가 있으면 페이지 루트
+      // 바닥은 그 덩어리의 바닥이라, 거기서 재면 패널이 길수록 행이 줄어든다(패널이 목록 아래로 접힌 폭에선 패널 높이 전체가 '아래'로 잡힌다).
+      let root: HTMLElement = (el.closest("[data-autopage-root]") as HTMLElement | null) ?? el;
+      if (!root.hasAttribute("data-autopage-root")) {
+        while (root.parentElement && root.parentElement !== scroller) root = root.parentElement;
+      }
       const padBottom = Number.parseFloat(getComputedStyle(scroller).paddingBottom) || 0;
       const below = Math.max(0, root.getBoundingClientRect().bottom - elRect.bottom) + padBottom;
       const avail = scroller.clientHeight - topInScroller - below - 4; // 4px = 반올림 여유
@@ -91,12 +108,13 @@ export function AutoPageSize({
       // 첫 행 × 행 수가 실제보다 작아 창을 넘친다(적대 리뷰 2026-09-29). 다단은 높이를 우리가 적으므로(`--list-h`) 평균이 뜻이 없다.
       // 🔴 **첫 쪽에서만** — 쪽마다 실린 행이 달라 평균이 달라지면, 2쪽으로 넘기는 순간 크기가 바뀌고 `page`가 지워져 1쪽으로 튕긴다(재리뷰 2026-09-29).
       const firstPage = (searchParams?.get("page") ?? "1") === "1";
-      const oneCol = firstPage && columnCountOf(list) === 1 && list.children.length > 0;
+      const cols = Math.min(columnCountOf(list), maxCols ?? Number.POSITIVE_INFINITY);
+      // 평균 행 높이는 '창 높이만큼만 담는 1단'에서만 뜻이 있다 — pageCols로 1단에 두 단 몫을 담으면 목록이 창보다 길어 평균이 무의미하다(행 높이는 같다).
+      const oneCol = firstPage && cols === 1 && !pageCols && list.children.length > 0;
       const avgRow = oneCol ? list.getBoundingClientRect().height / list.children.length : 0;
       const rowH = Math.max(rowPx, firstRow ? firstRow.getBoundingClientRect().height : 0, avgRow);
       const rows = Math.max(1, Math.floor(avail / rowH));
-      const cols = columnCountOf(list);
-      const fit = Math.min(PAGE_SIZE_MAX, Math.max(PAGE_SIZE_MIN, rows * cols));
+      const fit = Math.min(PAGE_SIZE_MAX, Math.max(PAGE_SIZE_MIN, rows * (pageCols ?? cols)));
       writeCookie(pageSizeCookieName(storageKey), fit);
       // 단 채우기(위 주석) — 지금 실린 항목으로 채울 수 있는 단만 세우고, 2단 이상이면 한 단 높이를 고정해 column-fill:auto가 듣게 한다
       // (+2px = 반올림 여유; 모자라면 마지막 행이 넘침 단으로 새어 나간다). DOM 스타일만 만진다(상태 아님, [[#25]]).
@@ -160,7 +178,7 @@ export function AutoPageSize({
       window.clearTimeout(timer);
       ro?.disconnect();
     };
-  }, [size, rowPx, storageKey, param, pathname, searchParams, router]);
+  }, [size, rowPx, storageKey, param, maxCols, pageCols, pathname, searchParams, router]);
 
   return (
     <div ref={ref} className={className}>

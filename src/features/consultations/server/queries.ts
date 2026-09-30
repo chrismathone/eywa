@@ -5,11 +5,14 @@ import {
   followUpUrgency,
   type FollowUpUrgency,
 } from "@/features/consultations/follow-up-urgency";
-import { kstDateOf, kstMonth, kstMonthStartIso, kstToday, shiftMonth } from "@/lib/date-kst";
+import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId, effectiveTeacherScope } from "@/lib/auth/view-mode";
 import { visibleConsultationSummary } from "../internal-link";
+import type { ClassSource } from "../class-mapping";
+import { classSchemaWorthTrying, isMissingClassSchema, noteClassSchema } from "./class-support";
+import { annotateAutoClasses } from "./list-classes";
 
 export { followUpUrgency, type FollowUpUrgency };
 
@@ -62,10 +65,21 @@ export type StudentConsultationRow = {
   hasAudio: boolean;
   hasAi: boolean;
   syncAddedAt: string | null; // 지난 동기화가 새로 추가(다음 동기화 성공 시 해제) → ↻ 동기화 배지
+  counselorId: string | null;
+  /**
+   * 반 매핑(0318a) — 저장된 값. `classSource`가 null이면 아직 판정 안 한 옛 행이라 목록은 화면에서만 자동 판정해 보여 준다
+   * (`classAuto: true`). 0318a 전이면 전부 null이고 목록은 '반 이름' 열을 숨긴다.
+   */
+  classId: string | null;
+  className: string | null;
+  classSource: ClassSource | null;
+  /** true = 저장값이 아니라 목록을 그리며 판정한 값(저장은 안 됐다 — 백필·다음 저장 때 굳는다). */
+  classAuto: boolean;
 };
 
 export type StudentConsultationDetail = StudentConsultationRow & {
-  counselorId: string | null;
+  /** 0318a 칸이 있나 — 없으면 폼이 '반' 칸을 숨기고 저장도 반을 건드리지 않는다([[#95]]). */
+  classSupported: boolean;
   transcription: string | null;
   audioDurationSec: number | null;
   processingError: string | null;
@@ -81,8 +95,16 @@ const SELECT_COLUMNS = `id, consulted_at, summary, follow_up_action,
   student:student_id ( id, name, grade ),
   counselor:counselor_id ( display_name )`;
 
+/**
+ * 반 매핑 칸(0318a). 🔴 임베드는 **FK 이름을 명시**한다([[#94]]) — 이 FK가 생기면서 student_consultations가 students↔classes·
+ * users↔classes 사이의 또 하나의 연결 표가 됐다. 없으면 SQL 적용 전이라 이 조각을 빼고 다시 묻는다([[#95]]).
+ */
+const CLASS_COLUMNS = `,
+  class_id, class_source,
+  cls:classes!student_consultations_class_id_fkey ( class_name )`;
+
 // 상세는 무거운 컬럼(전사·ai_report)까지 — 목록 SELECT_COLUMNS에는 미포함(낭비 회피).
-const DETAIL_SELECT = `${SELECT_COLUMNS},
+const DETAIL_EXTRA = `,
   transcription, audio_duration_sec, processing_error,
   ai_report, ai_model_version, ai_generated_at`;
 
@@ -101,6 +123,9 @@ function mapRow(r: {
   audio_path?: string | null;
   ai_summary?: string | null;
   sync_added_at?: string | null;
+  class_id?: string | null;
+  class_source?: string | null;
+  cls?: unknown;
   student: unknown;
   counselor: unknown;
 }): StudentConsultationRow {
@@ -110,6 +135,8 @@ function mapRow(r: {
   const counselor = (Array.isArray(r.counselor) ? r.counselor[0] : r.counselor) as
     | { display_name?: string }
     | undefined;
+  const cls = (Array.isArray(r.cls) ? r.cls[0] : r.cls) as { class_name?: string | null } | undefined;
+  const source = r.class_source === "auto" || r.class_source === "manual" ? r.class_source : null;
   return {
     id: r.id,
     studentId: student?.id ?? "",
@@ -128,6 +155,11 @@ function mapRow(r: {
     hasAudio: !!r.audio_path,
     hasAi: !!r.ai_summary,
     syncAddedAt: r.sync_added_at ?? null,
+    counselorId: r.counselor_id ?? null,
+    classId: r.class_id ?? null,
+    className: r.class_id ? (cls?.class_name ?? null) : null,
+    classSource: source,
+    classAuto: false,
   };
 }
 
@@ -138,14 +170,29 @@ export async function getStudentConsultationById(
   // 강사 스코프: 강사는 **본인이 등록한 상담**만 열람 — 남의 상담은 URL 직접 진입해도 null(notFound).
   // (RLS는 테넌트만 격리하므로 역할·작성자 스코프는 앱 레벨에서 강제 #58. 목록/검색과 동일 불변식.)
   const tId = await effectiveTeacherId();
-  let qb = supabase.from("student_consultations").select(DETAIL_SELECT).eq("id", id);
-  if (tId) qb = qb.eq("counselor_id", tId);
-  const { data } = await qb.maybeSingle();
+  const read = (withClass: boolean) => {
+    let qb = supabase
+      .from("student_consultations")
+      .select(`${SELECT_COLUMNS}${withClass ? CLASS_COLUMNS : ""}${DETAIL_EXTRA}`)
+      .eq("id", id);
+    if (tId) qb = qb.eq("counselor_id", tId);
+    return qb.maybeSingle();
+  };
+  let withClass = classSchemaWorthTrying();
+  let { data, error } = await read(withClass);
+  if (withClass && error && isMissingClassSchema(error)) {
+    noteClassSchema(false);
+    withClass = false;
+    ({ data, error } = await read(false));
+  } else if (withClass && !error) noteClassSchema(true);
   if (!data) return null;
-  const d = data as Record<string, unknown>;
+  const d = data as unknown as Record<string, unknown>;
+  const row = mapRow(data as unknown as Parameters<typeof mapRow>[0]);
+  // 아직 판정 안 한 옛 행이면 목록과 같은 판정을 보여 준다(목록은 반이 보이는데 상세는 '—'면 두 화면이 다른 말을 한다).
+  const [shown] = withClass && row.classSource === null ? await annotateAutoClasses([row]) : [row];
   return {
-    ...mapRow(data),
-    counselorId: (d.counselor_id as string | null) ?? null,
+    ...shown,
+    classSupported: withClass,
     transcription: (d.transcription as string | null) ?? null,
     audioDurationSec: (d.audio_duration_sec as number | null) ?? null,
     processingError: (d.processing_error as string | null) ?? null,
@@ -158,6 +205,11 @@ export async function getStudentConsultationById(
 
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
+/** 목록 기간 필터의 시작 시각(ISO) — 통계 패널이 목록과 **같은 창**을 쓰게. 전체면 null. */
+export function rangeSinceIso(range: ConsultationListFilters["range"]): string | null {
+  return range === "7d" ? isoDaysAgo(7) : range === "30d" ? isoDaysAgo(30) : null;
 }
 
 export type StudentConsultationCounts = {
@@ -226,63 +278,16 @@ export async function getStudentConsultationsPage(
   filters: ConsultationListFilters,
   page = 1,
   pageSize = 50,
-): Promise<{ rows: StudentConsultationRow[]; total: number }> {
+): Promise<{ rows: StudentConsultationRow[]; total: number; classSupported: boolean }> {
   const supabase = await createClient();
 
   // 강사 스코프: teacher면 **본인이 등록한 상담(counselor_id=나)** 만 — 담당 학생이어도 남이 쓴 상담은 제외.
   // (사용자 요청 "내가 한 것만 보이게". 담당 학생 기준이던 것에서 작성자 기준으로 전환.)
   const teacherId = await effectiveTeacherId();
 
-  let qb = supabase.from("student_consultations").select(SELECT_COLUMNS, { count: "exact" });
-  if (teacherId) qb = qb.eq("counselor_id", teacherId);
-
-  // 기간
-  if (filters.range === "7d") qb = qb.gte("consulted_at", isoDaysAgo(7));
-  else if (filters.range === "30d") qb = qb.gte("consulted_at", isoDaysAgo(30));
-
-  // 카테고리
-  if (filters.cat && filters.cat !== "all") qb = qb.eq("category", filters.cat);
-
-  // 상담사(작성자) — 강사 스코프가 이미 자기 것만 남겼으면 이 필터는 사실상 무동작이다(같은 조건).
-  if (filters.counselor && filters.counselor !== "all") qb = qb.eq("counselor_id", filters.counselor);
-
-  // 과목 — 저장값이 한글 라벨이라 키·라벨 둘 다 허용(위 타입 주석).
-  if (filters.subject && filters.subject !== "all") {
-    const wanted = [filters.subject, filters.subjectLabel].filter((v): v is string => !!v);
-    qb = qb.in("subject", [...new Set(wanted)]);
-  }
-
-  // 후속 긴급도 — followUpUrgency()와 동일 의미를 SQL로
-  const today = kstToday();
-  const in3 = addIsoDateDays(today, 3);
-  switch (filters.urg) {
-    case "done":
-      qb = qb.eq("follow_up_done", true);
-      break;
-    case "overdue":
-      qb = qb
-        .eq("follow_up_done", false)
-        .not("follow_up_date", "is", null)
-        .lt("follow_up_date", today);
-      break;
-    case "today":
-      qb = qb.eq("follow_up_done", false).eq("follow_up_date", today);
-      break;
-    case "soon":
-      qb = qb
-        .eq("follow_up_done", false)
-        .gt("follow_up_date", today)
-        .lte("follow_up_date", in3);
-      break;
-    case "later":
-      qb = qb.eq("follow_up_done", false).gt("follow_up_date", in3);
-      break;
-    default:
-      break;
-  }
-
-  // 검색 — 요약(base) OR 학생명(조인). 학생명은 id 해석 후 in.(...)으로 OR.
+  // 검색 — 요약(base) OR 학생명(조인). 학생명은 id 해석 후 in.(...)으로 OR. (재시도해도 같은 값이라 한 번만 푼다.)
   const term = filters.q?.trim();
+  let orClause: string | null = null;
   if (term) {
     const { data: stu } = await supabase
       .from("students")
@@ -292,15 +297,94 @@ export async function getStudentConsultationsPage(
     const safe = term.replace(/[(),]/g, " "); // PostgREST .or 파서 보호
     const orParts = [`summary.ilike.%${safe}%`];
     if (ids.length) orParts.push(`student_id.in.(${ids.join(",")})`);
-    qb = qb.or(orParts.join(","));
+    orClause = orParts.join(",");
   }
 
   const from = (page - 1) * pageSize;
-  const { data, count } = await qb
-    .order("consulted_at", { ascending: false })
-    .range(from, from + pageSize - 1);
+  const build = (withClass: boolean) => {
+    let qb = filteredConsultations(
+      supabase.from("student_consultations").select(`${SELECT_COLUMNS}${withClass ? CLASS_COLUMNS : ""}`, { count: "exact" }),
+      filters,
+      teacherId,
+    );
+    if (orClause) qb = qb.or(orClause);
+    return qb.order("consulted_at", { ascending: false }).range(from, from + pageSize - 1);
+  };
 
-  return { rows: (data ?? []).map(mapRow), total: count ?? 0 };
+  // 반 칸(0318a)이 없으면 그 조각을 빼고 다시 묻는다([[#95]] — 목록은 '반 이름' 열만 숨긴다).
+  let classSupported = classSchemaWorthTrying();
+  let { data, count, error } = await build(classSupported);
+  if (classSupported && error && isMissingClassSchema(error)) {
+    noteClassSchema(false);
+    classSupported = false;
+    ({ data, count, error } = await build(false));
+  } else if (classSupported && !error) noteClassSchema(true);
+  if (error) console.error("[consultations] 목록 조회 실패:", error.message);
+
+  const rows = ((data ?? []) as unknown as Parameters<typeof mapRow>[0][]).map(mapRow);
+  // 아직 판정 안 한 옛 행(class_source 비어 있음)은 화면에서만 판정해 보여 준다 — 쪽 하나를 RPC 한 번으로(N+1 없음).
+  const shown = classSupported ? await annotateAutoClasses(rows) : rows;
+  return { rows: shown, total: count ?? 0, classSupported };
+}
+
+/**
+ * 목록 필터(기간·카테고리·상담사·과목·후속 긴급도) + 강사 스코프를 건다 — **목록과 통계 패널이 같은 함수**를 탄다
+ * (두 벌이면 한쪽만 고쳐 패널 수치와 목록 건수가 갈린다). 검색어(q)는 목록 전용이라 여기 없다.
+ * 후속 긴급도는 followUpUrgency()와 같은 뜻을 SQL로 적은 것이다(0318a `consultation_stats`도 같은 식).
+ */
+export function filteredConsultations<Q>(builder: Q, filters: ConsultationListFilters, teacherId: string | null): Q {
+  // PostgREST 빌더 타입은 select 문자열을 파싱한 결과라 제네릭으로 넘기면 인스턴스화가 폭주한다(TS2589) — 쓰는 메서드만 가진
+  // 구조 타입으로 보고 끝에 원래 타입으로 돌린다.
+  let qb = builder as unknown as ConsultationFilterable;
+  if (teacherId) qb = qb.eq("counselor_id", teacherId);
+  if (filters.range === "7d") qb = qb.gte("consulted_at", isoDaysAgo(7));
+  else if (filters.range === "30d") qb = qb.gte("consulted_at", isoDaysAgo(30));
+  if (filters.cat && filters.cat !== "all") qb = qb.eq("category", filters.cat);
+  // 상담사(작성자) — 강사 스코프가 이미 자기 것만 남겼으면 이 필터는 사실상 무동작이다(같은 조건).
+  if (filters.counselor && filters.counselor !== "all") qb = qb.eq("counselor_id", filters.counselor);
+  // 과목 — 저장값이 한글 라벨이라 키·라벨 둘 다 허용(위 타입 주석).
+  const wanted = consultationSubjectValues(filters);
+  if (wanted) qb = qb.in("subject", wanted);
+  const today = kstToday();
+  const in3 = addIsoDateDays(today, 3);
+  switch (filters.urg) {
+    case "done":
+      qb = qb.eq("follow_up_done", true);
+      break;
+    case "overdue":
+      qb = qb.eq("follow_up_done", false).not("follow_up_date", "is", null).lt("follow_up_date", today);
+      break;
+    case "today":
+      qb = qb.eq("follow_up_done", false).eq("follow_up_date", today);
+      break;
+    case "soon":
+      qb = qb.eq("follow_up_done", false).gt("follow_up_date", today).lte("follow_up_date", in3);
+      break;
+    case "later":
+      qb = qb.eq("follow_up_done", false).gt("follow_up_date", in3);
+      break;
+    default:
+      break;
+  }
+  return qb as unknown as Q;
+}
+
+/** `filteredConsultations`가 쓰는 PostgREST 필터 메서드만 — 목록(select+count)·통계(head count) 빌더를 같이 받으려고. */
+type ConsultationFilterable = {
+  eq(column: string, value: unknown): ConsultationFilterable;
+  gte(column: string, value: unknown): ConsultationFilterable;
+  gt(column: string, value: unknown): ConsultationFilterable;
+  lt(column: string, value: unknown): ConsultationFilterable;
+  lte(column: string, value: unknown): ConsultationFilterable;
+  in(column: string, values: readonly unknown[]): ConsultationFilterable;
+  not(column: string, operator: string, value: unknown): ConsultationFilterable;
+};
+
+/** 과목 필터의 저장값 후보(키·라벨) — 목록·통계가 같은 값으로 거른다. 필터가 없으면 null. */
+export function consultationSubjectValues(filters: Pick<ConsultationListFilters, "subject" | "subjectLabel">): string[] | null {
+  if (!filters.subject || filters.subject === "all") return null;
+  const wanted = [filters.subject, filters.subjectLabel].filter((v): v is string => !!v);
+  return [...new Set(wanted)];
 }
 
 /**
@@ -473,173 +557,6 @@ export async function getStudentsNeedingConsultation(
   return { rows: all.slice(0, limit), total: all.length };
 }
 
-// ────────────────────── 통계뷰 ──────────────────────
-//
-// 🔴 **통계도 목록과 같은 스코프를 탄다** (2026-08-06 원장 제보로 수리 — 그 전엔 스코프가 아예 없었다).
-//    실 강사 계정에서 목록은 110건인데 통계는 1313건(학원 전체)·'상담 필요 학생'엔 담당도 아닌 전교생
-//    230명 명단이 떴다. 한 화면이 서로 다른 두 우주를 보여준 것이자, 담당 밖 학생 정보의 노출이다
-//    (#77 "한 표면만 잠갔다"의 전형 — 목록/카운트만 좁히고 통계 4함수를 빠뜨렸다).
-// ⚠️ 새 통계 함수를 추가하면 **여기 스코프 규약을 반드시 태울 것.**
-//    · 학생상담 = `counselor_id = 나`(목록·Stat 카드와 동일 기준 — "내가 한 것만")
-//    · 상담 필요 학생 = **담당 학생(scope.studentIds)** 안에서만
-//    · 등록상담·전환율 = 강사 도메인이 아니다 → 강사 스코프에선 0으로 내리고 화면에서도 감춘다
-//      (`consultant_id`는 상담실 담당자라 강사와 무관하다. 0을 그냥 그리면 "전환율 0%"라는 거짓말이 된다.)
-
-/**
- * 강사 본인이 작성한 상담(category·consulted_at만) — 카테고리 분포·월별 추세가 공유한다.
- * RPC(`consultation_category_counts`/`consultation_monthly_trend`)는 **상담자 인자가 없어** 강사 경로에
- * 못 쓴다. RPC에 인자를 추가하려면 마이그레이션이 필요한데, aywa는 SQL을 손으로 적용하므로 앱을 먼저
- * 배포하면 그 화면이 죽는다(#95) → 강사 경로만 앱에서 집계한다.
- * ⚠️ 본인 것만이라 행 수가 작다(실측 110건). 그래도 bare select 금지 규약대로 `fetchAllPaged`(#54).
- * React cache로 요청당 1회 — 두 함수가 같은 데이터를 두 번 읽지 않는다.
- */
-const teacherOwnConsultations = cache(
-  async (teacherId: string, sinceIso: string): Promise<{ category: string | null; consulted_at: string }[]> => {
-    const supabase = await createClient();
-    return fetchAllPaged<{ category: string | null; consulted_at: string }>((from, to) =>
-      supabase
-        .from("student_consultations")
-        .select("category, consulted_at")
-        .eq("counselor_id", teacherId)
-        .gte("consulted_at", sinceIso)
-        .order("consulted_at", { ascending: false })
-        .range(from, to),
-    );
-  },
-);
-
-export type ConsultationFunnelPoint = {
-  enrollmentConsultations: number; // 등록상담 전체
-  studentConsultations: number; // 학생상담 전체
-  enrolled: number; // 등록상담 → 학생전환된 수 (linked_student_id 채워진 row)
-  conversionRate: number; // enrolled / enrollmentConsultations
-  /** 강사 스코프라 등록상담·전환 지표가 성립하지 않음 — 화면은 그 카드를 감춘다(0을 그리면 거짓말). */
-  teacherScoped: boolean;
-};
-
-export async function getConsultationFunnel(
-  monthCount = 6,
-): Promise<ConsultationFunnelPoint> {
-  const supabase = await createClient();
-  // 🔴 **KST 달 경계** — 로컬 자정(서버=UTC)으로 자르면 KST 오전 9시가 되어 그 9시간이 앞 달로 샌다.
-  const sinceIso = kstMonthStartIso(shiftMonth(kstMonth(), -monthCount));
-  const teacherId = await effectiveTeacherId();
-
-  // 강사: 자기가 쓴 학생상담 건수만. 등록상담·전환은 상담실 지표라 **조회 자체를 안 한다**(노출 0).
-  if (teacherId) {
-    const { count: sc } = await supabase
-      .from("student_consultations")
-      .select("*", { count: "exact", head: true })
-      .eq("counselor_id", teacherId)
-      .gte("consulted_at", sinceIso);
-    return {
-      enrollmentConsultations: 0,
-      studentConsultations: sc ?? 0,
-      enrolled: 0,
-      conversionRate: 0,
-      teacherScoped: true,
-    };
-  }
-
-  const [
-    { count: ec },
-    { count: sc },
-    { count: enr },
-  ] = await Promise.all([
-    supabase
-      .from("enrollment_consultations")
-      .select("*", { count: "exact", head: true })
-      .gte("consulted_at", sinceIso),
-    supabase
-      .from("student_consultations")
-      .select("*", { count: "exact", head: true })
-      .gte("consulted_at", sinceIso),
-    supabase
-      .from("enrollment_consultations")
-      .select("*", { count: "exact", head: true })
-      .gte("consulted_at", sinceIso)
-      .not("student_id", "is", null),
-  ]);
-
-  const enrollmentConsultations = ec ?? 0;
-  const enrolled = enr ?? 0;
-  return {
-    enrollmentConsultations,
-    studentConsultations: sc ?? 0,
-    enrolled,
-    conversionRate:
-      enrollmentConsultations > 0 ? (enrolled / enrollmentConsultations) * 100 : 0,
-    teacherScoped: false,
-  };
-}
-
-export type CategoryBucket = { category: string; count: number };
-
-export async function getConsultationByCategory(
-  monthCount = 6,
-): Promise<CategoryBucket[]> {
-  const supabase = await createClient();
-  // 🔴 **KST 달 경계** — 위 퍼널과 같은 규약(로컬 자정으로 자르면 KST 오전 9시가 되어 9시간이 앞 달로 샌다).
-  const sinceIso = kstMonthStartIso(shiftMonth(kstMonth(), -monthCount));
-  const teacherId = await effectiveTeacherId();
-
-  // 강사: 본인 상담만 집계(RPC는 상담자 인자가 없다 — 위 teacherOwnConsultations 주석 참조).
-  if (teacherId) {
-    const counts = new Map<string, number>();
-    for (const r of await teacherOwnConsultations(teacherId, sinceIso)) {
-      const k = r.category ?? "other";
-      counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-    return [...counts].map(([category, count]) => ({ category, count }));
-  }
-
-  // DB group-by RPC(0040a) — 전건 fetch + JS Map 집계는 PostgREST ~1000행에서 잘려(#54) 데모 상담 1340행 중
-  // 340행을 잃고 카테고리 분포가 과소집계됐다. 집계를 DB로 내려 1쿼리·무절단.
-  const { data } = await supabase.rpc("consultation_category_counts", {
-    p_since: sinceIso,
-  });
-  return (data ?? []).map((r: { category: string; count: number }) => ({
-    category: r.category ?? "other",
-    count: Number(r.count),
-  }));
-}
-
-export type MonthlyBucket = { month: string; enrollment: number; student: number };
-
-export async function getConsultationTrend(monthCount = 6): Promise<MonthlyBucket[]> {
-  const supabase = await createClient();
-  // 🔴 달 축은 전부 **KST** — 경계도 버킷 키도(섞이면 경계 근처 건이 옆 달로 샌다).
-  const thisMonth = kstMonth();
-  const startMonth = shiftMonth(thisMonth, -(monthCount - 1));
-  const startIso = kstMonthStartIso(startMonth);
-  const teacherId = await effectiveTeacherId();
-
-  const byMonth = new Map<string, { enrollment: number; student: number }>();
-  if (teacherId) {
-    // 강사: 본인 학생상담만. 등록상담 라인은 강사 도메인이 아니라 0으로 남긴다(조회도 안 한다).
-    for (const r of await teacherOwnConsultations(teacherId, startIso)) {
-      const k = kstDateOf(r.consulted_at)?.slice(0, 7);
-      if (!k) continue;
-      const cur = byMonth.get(k) ?? { enrollment: 0, student: 0 };
-      byMonth.set(k, { enrollment: 0, student: cur.student + 1 });
-    }
-  } else {
-    // DB group-by RPC(0040a) — 양 테이블 전건 fetch + JS 버킷팅은 ~1000행에서 잘려(#54) 추세 student 라인이
-    // 과소집계됐다(데모 student_consultations 1340행/6개월). 월별 집계를 DB로 내려 무절단.
-    const { data } = await supabase.rpc("consultation_monthly_trend", {
-      p_start: startIso,
-    });
-    for (const r of (data ?? []) as { month: string; enrollment: number; student: number }[]) {
-      byMonth.set(r.month, { enrollment: Number(r.enrollment), student: Number(r.student) });
-    }
-  }
-
-  // 데이터 없는 달도 0으로 채워 monthCount개 버킷 유지(기존 출력 형태 보존).
-  const buckets: MonthlyBucket[] = [];
-  for (let i = 0; i < monthCount; i++) {
-    const k = shiftMonth(startMonth, i);
-    const hit = byMonth.get(k);
-    buckets.push({ month: k, enrollment: hit?.enrollment ?? 0, student: hit?.student ?? 0 });
-  }
-  return buckets;
-}
+// 통계는 목록 오른쪽 패널로 옮겼다(원장 2026-09-30) — 집계는 [stats.ts](./stats.ts)(0318a RPC). 옛 통계 화면의 함수
+// (전환 퍼널·카테고리 분포·월별 추세)는 그 화면과 함께 걷었다. 🔴 스코프 규약은 그대로다: 학생상담 = `counselor_id = 나`,
+// 상담 공백 = 담당 학생 안에서만(옛 화면이 한 번 어긋났던 자리 — 목록과 다른 우주를 보여 주면 안 된다).

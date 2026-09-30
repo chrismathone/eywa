@@ -29,6 +29,8 @@ const L = require("./lib.cjs");
 const {
   makeCounselorMatcher, loadSubjectLabels, resolveConsultationSubject, loadEnrolledSubjects, SUBJECT_REASON_LABEL,
 } = require("./consultation-counselor.cjs");
+// 반 매핑(0318a) — 앱과 같은 판정 한 벌. 칸이 아직 없으면(SQL 적용 전) 반 없이 적재한다([[#95]]).
+const { assignClasses, hasClassColumns } = require("./consultation-class.cjs");
 
 let chromium;
 try { ({ chromium } = require("playwright")); } catch { ({ chromium } = require("@playwright/test")); }
@@ -343,6 +345,16 @@ function EXTRACT_DETAIL() {
     }
     if (toInsert.length) console.log(`[상담사] 연결 ${counselorMatched}/${toInsert.length} · [과목]`, JSON.stringify(subjectReasons));
 
+    // 반 — 상담사가 그날 가르치는 학생의 수강 반이 하나일 때만(consultation-class.cjs). 과목을 정한 **뒤에** 판정한다(과목으로 좁히므로).
+    const classOn = await hasClassColumns(sql);
+    let classReasons = null;
+    if (classOn && toInsert.length) {
+      const items = toInsert.map((it) => ({ studentId: it.studentId, date: it.dateStr, counselorId: it.counselorId, subject: it.subject }));
+      classReasons = await assignClasses(sql, tenantId, items, subjectLabels);
+      items.forEach((x, i) => { toInsert[i].classId = x.classId; toInsert[i].classSource = x.classSource; });
+      console.log("[반]", JSON.stringify(classReasons));
+    }
+
     // 서킷브레이커 — 가드 붕괴 시 대량 오적재 방지.
     if (toInsert.length > MAX_NEW && !ALLOW_LARGE) {
       throw new Error(`신규 ${toInsert.length} > ${MAX_NEW} — 비정상 급증(서킷브레이커). dry-run 검토 후 --allow-large로만 우회.`);
@@ -356,7 +368,7 @@ function EXTRACT_DETAIL() {
       where tenant_id = ${tenantId} and sync_added_at is not null`;
     if (cleared.count) console.log(`지난 동기화 라벨 클리어: ${cleared.count}`);
 
-    let inserted = 0, backfilled = 0;
+    let inserted = 0, backfilled = 0, classMapped = 0;
     for (const b of toBackfill) {
       const res = await sql`
         update student_consultations set makeedu_id = ${b.seq}, updated_at = now()
@@ -367,12 +379,15 @@ function EXTRACT_DETAIL() {
       // insert-only + ON CONFLICT DO NOTHING: 동시 실행(스케줄+워처 겹침)에도 같은 seq 이중 insert 불가.
       const res = await sql`
         insert into student_consultations
-          (tenant_id, makeedu_id, student_id, counselor_id, consulted_at, category, subject, summary, sync_added_at)
+          (tenant_id, makeedu_id, student_id, counselor_id, consulted_at, category, subject, summary, sync_added_at
+           ${classOn ? sql`, class_id, class_source` : sql``})
         values (${tenantId}, ${it.seq}, ${it.studentId}, ${it.counselorId},
                 ${`${it.dateStr}T00:00:00+09:00`}, ${mapCategory(it.cat)},
-                ${it.subject}, ${it.summary}, now())
+                ${it.subject}, ${it.summary}, now()
+                ${classOn ? sql`, ${it.classId ?? null}, ${it.classSource ?? null}` : sql``})
         on conflict (tenant_id, makeedu_id) where makeedu_id is not null do nothing`;
       inserted += res.count;
+      if (it.classId) classMapped += res.count;
     }
     await L.recordSync(sql, tenantId, "consultations", inserted + backfilled);
     // 감사로그 — 동기화가 상담을 새로 넣은 실행만(0건 실행은 남기지 않는다). 실패해도 동기화는 성공으로 둔다.
@@ -380,7 +395,13 @@ function EXTRACT_DETAIL() {
       const audit = {
         action: "student_consultation_sync_import",
         targetType: "student_consultation",
-        metadata: { inserted, counselorMatched, subjects: subjectReasons },
+        metadata: {
+          inserted,
+          counselorMatched,
+          subjects: subjectReasons,
+          // 반을 판정했을 때만(칸이 없으면 반 이야기를 지어내지 않는다). 새로 넣은 행 중 반에 붙은 수.
+          ...(classOn ? { classMapped } : {}),
+        },
       };
       await sql`
         insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)

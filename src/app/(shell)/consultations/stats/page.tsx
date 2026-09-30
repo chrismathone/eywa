@@ -1,136 +1,22 @@
-import { BackLink } from "@/components/back-link";
-import { WindowLink } from "@/components/workspace/window-link";
-import { Pill } from "@/components/atoms/pill";
-import { EyIcon } from "@/components/icons/aywa-icons";
+import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
-import { relativeTimeKo } from "@/lib/relative-time";
-import {
-  getConsultationByCategory,
-  getConsultationFunnel,
-  getConsultationTrend,
-  getStudentsNeedingConsultation,
-} from "@/features/consultations/server/queries";
-import { StatsCharts } from "./_charts";
 
-export const metadata = { title: "상담 통계 — 에이와" };
-
-export default async function ConsultationStatsPage() {
-  await requireAccess("consultations");
-
-  const [funnel, byCategory, trend, needed] = await Promise.all([
-    getConsultationFunnel(6),
-    getConsultationByCategory(6),
-    getConsultationTrend(6),
-    getStudentsNeedingConsultation(30),
-  ]);
-
-  return (
-    <div className="space-y-6">
-      <BackLink href="/consultations" label="원생상담으로" />
-
-      {/* 스코프를 화면에 밝힌다 — 같은 제목 아래 사람마다 다른 수치가 나오면 "숫자가 틀렸다"로 읽힌다. */}
-      <header className="border-border border-b pb-5">
-        <p className="eyebrow">상담 통계</p>
-        <h1 className="font-bold tracking-tight text-foreground text-2xl">최근 6개월</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          {funnel.teacherScoped
-            ? "내가 기록한 상담 · 담당 학생 기준"
-            : "전환율 · 사유 분포 · 월별 추세"}
-        </p>
-      </header>
-
-      {/* ⚠️ 강사 스코프에선 등록상담·전환 카드를 **감춘다** — 상담실 지표라 강사에겐 늘 0인데, 0을 그리면
-          "전환율 0%"라는 거짓 사실이 된다(쿼리도 아예 조회하지 않는다 — 화면과 데이터 양쪽에서 차단). */}
-      <section className={`grid gap-3 ${funnel.teacherScoped ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-4"}`}>
-        {funnel.teacherScoped ? null : (
-          <Stat label="콜&상담" value={funnel.enrollmentConsultations} unit="건" />
-        )}
-        <Stat label={funnel.teacherScoped ? "내 원생상담" : "원생상담"} value={funnel.studentConsultations} unit="건" />
-        {funnel.teacherScoped ? null : (
-          <>
-            <Stat label="학생 전환" value={funnel.enrolled} unit="건" highlight="text-chart-2" />
-            <Stat
-              label="전환율"
-              value={Math.round(funnel.conversionRate * 10) / 10}
-              unit="%"
-              highlight="text-chart-2"
-            />
-          </>
-        )}
-      </section>
-
-      <StatsCharts byCategory={byCategory} trend={trend} />
-
-      {/* 상담 필요 학생 — 30일 이상 미상담(또는 미상담 이력) 재원생 워크리스트 */}
-      <section className="bg-card border-border rounded-2xl border p-5">
-        <header className="mb-3 flex items-baseline justify-between">
-          <h2 className="text-foreground text-sm font-bold">
-            {funnel.teacherScoped ? "상담 필요 학생 (담당)" : "상담 필요 학생"}
-            <span className="text-muted-foreground num ml-2 text-xs font-normal">
-              30일+ 미상담 {needed.total}명
-            </span>
-          </h2>
-        </header>
-        {needed.rows.length === 0 ? (
-          <p className="text-muted-foreground flex items-center justify-center gap-1.5 py-6 text-center text-sm">
-            <EyIcon name="success" size={16} className="text-primary" />
-            최근 30일 내 모든 재원생을 상담했습니다
-          </p>
-        ) : (
-          <ul className="divide-border divide-y">
-            {needed.rows.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                <div className="flex items-center gap-2">
-                  <WindowLink
-                    href={`/students/${s.id}`}
-                    title={s.name}
-                    className="text-foreground text-sm font-medium hover:underline"
-                  >
-                    {s.name}
-                  </WindowLink>
-                  {s.grade ? <span className="text-text-dim text-xs">{s.grade}</span> : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  {s.lastConsultedAt === null ? (
-                    <Pill color="danger">상담 이력 없음</Pill>
-                  ) : (
-                    <span className="text-text-dim num text-xs">{relativeTimeKo(s.lastConsultedAt)} 상담</span>
-                  )}
-                  <WindowLink
-                    href={`/consultations/new?studentId=${s.id}`}
-                    title="새 상담"
-                    className="text-chart-1 text-xs hover:underline"
-                  >
-                    상담 기록 +
-                  </WindowLink>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  unit,
-  highlight,
+/**
+ * 옛 '상담 통계' 화면 — 원생상담 목록 오른쪽 **통계 패널**로 흡수됐다(원장 2026-09-30 *"우측에 상담 통계 고도화"* · 중복 화면 금지).
+ * 저장된 창·즐겨찾기가 이 주소를 열 수 있어 목록으로 돌려보낸다. 🔴 쿼리(`embed=1` 포함)를 그대로 넘긴다 — 빠지면 창 안에 전체 셸이 뜬다([[#133]]).
+ */
+export default async function ConsultationStatsRedirect({
+  searchParams,
 }: {
-  label: string;
-  value: number;
-  unit: string;
-  highlight?: string;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return (
-    <div className="bg-card border-border rounded-2xl border p-4">
-      <p className="eyebrow">{label}</p>
-      <p className={`num text-foreground mt-1 text-2xl font-bold ${highlight ?? ""}`}>
-        {value}
-        <span className="text-muted-foreground ml-1 text-xs font-normal">{unit}</span>
-      </p>
-    </div>
-  );
+  await requireAccess("consultations");
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") params.set(k, v);
+    else if (Array.isArray(v)) for (const x of v) params.append(k, x);
+  }
+  const qs = params.toString();
+  redirect(qs ? `/consultations?${qs}` : "/consultations");
 }
