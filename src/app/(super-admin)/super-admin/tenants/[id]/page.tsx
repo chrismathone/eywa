@@ -17,6 +17,7 @@ import {
 import { UpdateTenantForm } from "./_update-form";
 import { LicenseSection } from "./_license-section";
 import { AccountsPanel } from "./_accounts-panel";
+import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { TenantTabs, parseTenantTab } from "./_tabs";
 
 export const metadata = { title: "슈퍼관리자 · 학원 상세 — 에이와" };
@@ -37,6 +38,8 @@ export default async function TenantDetailPage({
     tab === "license" ? getTenantLicenses(id) : null,
   ]);
   if (!detail) notFound();
+  // 보호 계정(슈퍼관리자 명단) — 계정 탭에서 역할·활성 조작을 세우지 않는다(원장 2026-09-30). 막는 건 서버 액션·DB.
+  const protection = tab === "accounts" ? await protectedAccountIds(detail.users.map((u) => u.id)) : null;
 
   return (
     <>
@@ -104,6 +107,8 @@ export default async function TenantDetailPage({
           tenantName={detail.name}
           users={detail.users}
           page={Number(upage) || 1}
+          protectedIds={protection ? [...protection.protectedIds] : []}
+          protectionUnknown={protection?.lookupFailed ?? false}
         />
       ) : null}
 
