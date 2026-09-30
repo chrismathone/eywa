@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ledgerCounts, ledgerMarkKey, ledgerPairKey, ledgerSummary, type LedgerGroup } from "../ledger";
 import type { VideoHomeworkLedgerRow, VideoHomeworkMark, VideoHomeworkStatus } from "../types";
+import { isVideoHomeworkDate } from "../types";
 import type { LedgerChange } from "./use-ledger-marks";
 import styles from "./video-homework-management.module.css";
 
@@ -16,8 +17,8 @@ export const LEDGER_STATUS_OPTIONS = [{ value: "submitted", label: "완료" }, {
 export type ActiveCell = { row: VideoHomeworkLedgerRow; date: string; round: number };
 export type SaveLedgerChanges = (changes: LedgerChange[]) => Promise<string[]>;
 
-export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onToggle }: {
-  group: LedgerGroup; marks: ReadonlyMap<string, VideoHomeworkMark>; busy: boolean; save: SaveLedgerChanges;
+export function ClassLedger({ group, marks, today, busy, save, onEdit, collapsed, onToggle }: {
+  group: LedgerGroup; marks: ReadonlyMap<string, VideoHomeworkMark>; today: string; busy: boolean; save: SaveLedgerChanges;
   onEdit: (cell: ActiveCell) => void; collapsed: boolean; onToggle: () => void;
 }) {
   const [page, setPage] = useState(0);
@@ -25,6 +26,8 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchDate, setBatchDate] = useState(group.dates.at(-1) ?? "");
   const [batchStatus, setBatchStatus] = useState<VideoHomeworkStatus | "unchecked">("submitted");
+  const [submittedDate, setSubmittedDate] = useState(today);
+  const validSubmission = batchStatus !== "submitted" || isVideoHomeworkDate(submittedDate) && submittedDate <= today;
   const pages = Math.max(1, Math.ceil(group.rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pages - 1);
   const paged = group.rows.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
@@ -42,8 +45,10 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
     setSelected((current) => { const next = new Set(current); if (next.has(studentId)) next.delete(studentId); else next.add(studentId); return next; });
   }
   async function saveBatch() {
+    if (busy || !validSubmission) return;
     const changes = applicable.map((row): LedgerChange => ({ classId: row.classId, studentId: row.studentId, checkDate: batchDate,
       homeworkDate: marks.get(ledgerMarkKey({ ...row, checkDate: batchDate }))?.homeworkDate ?? null,
+      submittedDate: batchStatus === "submitted" ? submittedDate : null,
       status: batchStatus === "unchecked" ? null : batchStatus }));
     const failures = new Set(await save(changes));
     setSelected(new Set(applicable.filter((row) => failures.has(ledgerMarkKey({ ...row, checkDate: batchDate }))).map((row) => row.studentId)));
@@ -64,7 +69,9 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
           <select aria-label={`${group.className} 일괄 수행 상태`} value={batchStatus} disabled={busy} onChange={(event) => setBatchStatus(event.target.value as typeof batchStatus)}>
             {LEDGER_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          <button type="button" className={styles.primary} disabled={busy || !applicable.length} onClick={() => void saveBatch()}>선택 {applicable.length}명 적용</button>
+          {batchStatus === "submitted" ? <label className={styles.batchSubmission}>제출일 <input type="date" aria-label={`${group.className} 일괄 제출일`}
+            value={submittedDate} min="2000-01-01" max={today} disabled={busy} onChange={(event) => setSubmittedDate(event.target.value)} /></label> : null}
+          <button type="button" className={styles.primary} disabled={busy || !applicable.length || !validSubmission} onClick={() => void saveBatch()}>선택 {applicable.length}명 적용</button>
           {selectedRows.length > applicable.length ? <span className={styles.dim}>해당 수업 대상 아닌 {selectedRows.length - applicable.length}명 제외</span> : null}
         </div> : <span className={styles.dim}>읽기 전용</span>}
         <div className={styles.roundPager}>
@@ -103,16 +110,16 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
                 const label = status === "submitted" ? "완료" : status === "missing" ? "미수행" : "미확인";
                 return <td key={date}><button type="button" className={`${styles.mark} ${styles[status]}`} disabled={busy}
                   aria-label={`${row.studentName} ${roundOffset + index + 1}회 ${date} ${label}`}
-                  title={`${date} 검사 · ${label}${mark?.homeworkDate ? ` · 지난 숙제 ${mark.homeworkDate}` : ""}`}
+                  title={`${date} 검사 · ${label}${status === "submitted" ? ` · 제출일 ${mark?.submittedDate ?? "미입력"}` : ""}${mark?.homeworkDate ? ` · 지난 숙제 ${mark.homeworkDate}` : ""}`}
                   onClick={() => onEdit({ row, date, round: roundOffset + index + 1 })}>
-                  {status === "submitted" ? <><EyIcon name="check" size={12} className="inline-block align-middle" /> {shortDate(date)}</> : status === "missing" ? "× 미수행" : "+ 확인"}
+                  {status === "submitted" ? <><EyIcon name="check" size={12} className="inline-block align-middle" /> {mark?.submittedDate ? shortDate(mark.submittedDate) : "완료"}</> : status === "missing" ? "× 미수행" : "+ 확인"}
                 </button></td>;
               })}
             </tr>;
           })}</tbody>
         </table>
       </div>
-      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 날짜는 검사한 수업일</span>
+      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 열 머리: 수업일 · 완료 칸: 제출일</span>
         {pages > 1 ? <div className={styles.roundPager}>
           <button type="button" disabled={busy || currentPage === 0} onClick={() => { setPage(currentPage - 1); setSelected(new Set()); }} aria-label={`${group.className} 이전 학생`}>이전</button>
           <span>{currentPage + 1} / {pages}</span>

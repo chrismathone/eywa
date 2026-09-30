@@ -9,7 +9,7 @@ const rows: VideoHomeworkLedgerRow[] = [base,
   { ...base, classId: "b", className: "영어 B", subject: "영어", grade: "중2", lessonDates: [dates[0]] },
 ];
 const records: VideoHomeworkMark[] = [
-  { classId: "a", studentId: "1", checkDate: dates[0], status: "submitted", homeworkDate: "2026-08-28" },
+  { classId: "a", studentId: "1", checkDate: dates[0], status: "submitted", homeworkDate: "2026-08-28", submittedDate: "2026-09-02" },
   { classId: "a", studentId: "1", checkDate: dates[1], status: "missing", homeworkDate: dates[0] },
   { classId: "b", studentId: "1", checkDate: dates[0], status: "missing", homeworkDate: null },
 ];
@@ -32,15 +32,15 @@ describe("반별 압축 장부", () => {
     const filtered = { ...group, rows: filterLedgerRows(group.rows, marks, { ...DEFAULT_LEDGER_FILTERS, query: "이서연" }) };
     expect(filtered.dates).toEqual(dates);
     const csv = ledgerCsv([filtered], marks);
-    expect(csv).toContain('"1회 수업일","1회 상태","1회 지난 숙제일"');
-    expect(csv).toContain('"2026-09-01","대상 아님","","2026-09-03","미확인"');
+    expect(csv).toContain('"1회 수업일","1회 상태","1회 지난 숙제일","1회 제출일"');
+    expect(csv).toContain('"2026-09-01","대상 아님","","","2026-09-03","미확인"');
     expect(csv).not.toContain("김민준");
     expect(ledgerSummary(filtered.rows, marks)).toEqual({ submitted: 0, missing: 0, unchecked: 2 });
   });
-  it("CSV는 지난 숙제 날짜를 보존하고 수식으로 읽힐 이름을 이스케이프한다", () => {
+  it("CSV는 수업일·지난 숙제일·제출일을 구분하고 수식으로 읽힐 이름을 이스케이프한다", () => {
     const csv = ledgerCsv(groupLedgerRows([{ ...base, studentName: '=HYPERLINK("bad")' }]), marks);
     expect(csv).toContain("'=");
-    expect(csv).toContain('"2026-09-01","완료","2026-08-28"');
+    expect(csv).toContain('"2026-09-01","완료","2026-08-28","2026-09-02"');
     expect(csv.startsWith("\uFEFF")).toBe(true);
   });
   it("정렬은 조회 결과에만 적용하고 원본을 변경하지 않는다", () => {

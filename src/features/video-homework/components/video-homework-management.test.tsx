@@ -14,8 +14,8 @@ const rows: VideoHomeworkLedgerRow[] = [
   { classId: "b", className: "영어 B", subject: "영어", studentId: "one", studentName: "김민준", school: "한빛중", grade: "중1", editable: false, lessonDates: [date] },
 ];
 const marks: VideoHomeworkMark[] = [{ classId: "a", studentId: "one", checkDate: date, status: "missing", homeworkDate: "2026-09-01" }];
-function show(inputRows = rows) {
-  return render(<VideoHomeworkManagement rows={inputRows} initialMarks={marks} fromDate="2026-09-01" toDate="2026-09-30" today="2026-09-30" />);
+function show(inputRows = rows, inputMarks = marks) {
+  return render(<VideoHomeworkManagement rows={inputRows} initialMarks={inputMarks} fromDate="2026-09-01" toDate="2026-09-30" today="2026-09-30" />);
 }
 beforeEach(() => { vi.clearAllMocks(); mocks.save.mockResolvedValue({ ok: true }); });
 afterEach(cleanup);
@@ -51,7 +51,7 @@ describe("영상숙제 필터·검색·저장 연결", () => {
     fireEvent.click(screen.getByRole("button", { name: "선택 1명 적용" }));
     await waitFor(() => expect(mocks.success).toHaveBeenCalled());
     expect(mocks.save).toHaveBeenCalledTimes(1);
-    expect(mocks.save).toHaveBeenCalledWith({ classId: "a", studentId: "two", checkDate: date, status: "submitted", homeworkDate: null });
+    expect(mocks.save).toHaveBeenCalledWith({ classId: "a", studentId: "two", checkDate: date, status: "submitted", homeworkDate: null, submittedDate: "2026-09-30" });
     expect(screen.getByRole("button", { name: `이서연 2회 ${date} 완료` })).toBeInTheDocument();
   });
   it("일괄 입력에서 해당 날짜 수업이 없는 학생은 제외한다", async () => {
@@ -80,9 +80,54 @@ describe("영상숙제 필터·검색·저장 연결", () => {
     fireEvent.click(screen.getByRole("button", { name: `김민준 2회 ${date} 미수행` }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "완료" }));
+    fireEvent.change(within(dialog).getByLabelText("제출일"), { target: { value: "2026-09-05" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
     await waitFor(() => expect(mocks.success).toHaveBeenCalled());
-    expect(mocks.save).toHaveBeenCalledWith({ classId: "a", studentId: "one", checkDate: date, homeworkDate: "2026-09-01", status: "submitted" });
+    expect(mocks.save).toHaveBeenCalledWith({ classId: "a", studentId: "one", checkDate: date, homeworkDate: "2026-09-01", status: "submitted", submittedDate: "2026-09-05" });
+    expect(screen.getByRole("button", { name: `김민준 2회 ${date} 완료` })).toHaveTextContent("09.05");
+    fireEvent.click(screen.getByRole("button", { name: `김민준 2회 ${date} 완료` }));
+    expect(within(await screen.findByRole("dialog")).getByLabelText("제출일")).toHaveValue("2026-09-05");
+  });
+  it("일괄 제출일을 선택하면 모든 대상에게 저장하고 빈 날짜·미래 날짜는 적용하지 않는다", async () => {
+    show();
+    fireEvent.click(screen.getByRole("checkbox", { name: "수학 A 현재 페이지 학생 전체 선택" }));
+    const input = screen.getByLabelText("수학 A 일괄 제출일");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "선택 2명 적용" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "2026-10-01" } });
+    expect(screen.getByRole("button", { name: "선택 2명 적용" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "2026-09-04" } });
+    fireEvent.click(screen.getByRole("button", { name: "선택 2명 적용" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalled());
+    expect(mocks.save).toHaveBeenCalledTimes(2);
+    expect(mocks.save.mock.calls.map(([input]) => input.submittedDate)).toEqual(["2026-09-04", "2026-09-04"]);
+  });
+  it("저장된 제출일을 다시 읽고 실패한 날짜 수정은 원래 날짜로 복구한다", async () => {
+    show(rows, [{ ...marks[0], status: "submitted", submittedDate: "2026-09-02" }]);
+    const cell = screen.getByRole("button", { name: `김민준 2회 ${date} 완료` });
+    expect(cell).toHaveTextContent("09.02");
+    fireEvent.click(cell);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("제출일")).toHaveValue("2026-09-02");
+    mocks.save.mockResolvedValueOnce({ ok: false, error: "저장 실패" });
+    fireEvent.change(within(dialog).getByLabelText("제출일"), { target: { value: "2026-09-05" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
+    await waitFor(() => expect(mocks.error).toHaveBeenCalled());
+    expect(cell).toHaveTextContent("09.02");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+  it("옛 완료 기록에는 수업일을 제출일로 지어 넣지 않으며 미수행 전환은 날짜를 지운다", async () => {
+    show(rows, [{ ...marks[0], status: "submitted" }]);
+    const cell = screen.getByRole("button", { name: `김민준 2회 ${date} 완료` });
+    expect(cell).toHaveTextContent("완료");
+    expect(cell).not.toHaveTextContent("09.03");
+    fireEvent.click(cell);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("제출일")).toHaveValue("");
+    fireEvent.click(within(dialog).getByRole("button", { name: "미수행" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "기록 저장" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalled());
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ status: "missing", submittedDate: null }));
   });
   it("읽기 전용 반에는 일괄 입력과 저장을 제공하지 않는다", async () => {
     show([rows[2]]);
@@ -91,6 +136,7 @@ describe("영상숙제 필터·검색·저장 연결", () => {
     fireEvent.click(screen.getByRole("button", { name: `김민준 1회 ${date} 미확인` }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("button", { name: "기록 저장" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "미확인" })).toHaveAttribute("aria-pressed", "true");
     expect(mocks.save).not.toHaveBeenCalled();
   });
 });

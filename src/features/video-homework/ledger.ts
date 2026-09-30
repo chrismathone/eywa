@@ -68,16 +68,17 @@ export function ledgerSummary(rows: VideoHomeworkLedgerRow[], marks: ReadonlyMap
 export function ledgerCsv(groups: LedgerGroup[], marks: ReadonlyMap<string, VideoHomeworkMark>) {
   const rounds = Math.max(0, ...groups.map((group) => group.dates.length));
   const header = ["반", "과목", "학생", "학교", "학년", "완료", "미수행", "미확인",
-    ...Array.from({ length: rounds }, (_, i) => [`${i + 1}회 수업일`, `${i + 1}회 상태`, `${i + 1}회 지난 숙제일`]).flat()];
+    ...Array.from({ length: rounds }, (_, i) => [`${i + 1}회 수업일`, `${i + 1}회 상태`, `${i + 1}회 지난 숙제일`, `${i + 1}회 제출일`]).flat()];
   const values = groups.flatMap((group) => group.rows.map((row) => {
     const counts = ledgerCounts(row, marks);
     return [row.className, row.subject, row.studentName, row.school ?? "", row.grade ?? "", counts.submitted, counts.missing, counts.unchecked,
       ...Array.from({ length: rounds }, (_, i) => {
         const checkDate = group.dates[i];
-        if (!checkDate) return ["", "", ""];
-        if (!row.lessonDates.includes(checkDate)) return [checkDate, "대상 아님", ""];
+        if (!checkDate) return ["", "", "", ""];
+        if (!row.lessonDates.includes(checkDate)) return [checkDate, "대상 아님", "", ""];
         const mark = marks.get(ledgerMarkKey({ ...row, checkDate }));
-        return [checkDate, mark?.status === "submitted" ? "완료" : mark?.status === "missing" ? "미수행" : "미확인", mark?.homeworkDate ?? ""];
+        return [checkDate, mark?.status === "submitted" ? "완료" : mark?.status === "missing" ? "미수행" : "미확인", mark?.homeworkDate ?? "",
+          mark?.status === "submitted" ? mark.submittedDate ?? "" : ""];
       }).flat()];
   }));
   const escape = (value: string | number) => {

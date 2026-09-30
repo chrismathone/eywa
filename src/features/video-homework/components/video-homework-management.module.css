@@ -30,7 +30,9 @@
 .groupToolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .batch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--text-sm)}
 .batch strong{font-weight:600}
-.batch select,.batch button,.roundPager button{height:var(--control-h-sm);font-size:var(--control-label-sm);line-height:1;border:1px solid var(--line);border-radius:var(--radius-md);padding:0 8px;background:var(--card);cursor:pointer}
+.batch select,.batch input,.batch button,.roundPager button{height:var(--control-h-sm);font-size:var(--control-label-sm);line-height:1;border:1px solid var(--line);border-radius:var(--radius-md);padding:0 8px;background:var(--card);cursor:pointer}
+.batchSubmission{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.batchSubmission input{width:150px;line-height:normal}
 .batch select{max-width:230px}
 .batch .primary,.editor .primary{color:var(--primary-foreground);background:var(--primary);border-color:var(--primary);font-weight:600}
 .roundPager{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:var(--text-sm);margin-left:auto}

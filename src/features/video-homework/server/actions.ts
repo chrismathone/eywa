@@ -17,6 +17,7 @@ export async function setVideoHomeworkMark(input: {
   studentId: string;
   checkDate: string;
   homeworkDate: string | null;
+  submittedDate?: string | null;
   status: VideoHomeworkStatus | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
@@ -26,6 +27,8 @@ export async function setVideoHomeworkMark(input: {
   if (!isVideoHomeworkDate(input.checkDate) || (input.homeworkDate !== null && !isVideoHomeworkDate(input.homeworkDate)))
     return { ok: false, error: "수업 날짜가 올바르지 않습니다." };
   if (input.checkDate > kstToday()) return { ok: false, error: "미래 수업의 숙제는 검사할 수 없습니다." };
+  if (input.submittedDate != null && (!isVideoHomeworkDate(input.submittedDate) || input.submittedDate > kstToday()))
+    return { ok: false, error: "제출일은 오늘까지의 올바른 날짜로 입력해 주세요." };
   if (input.homeworkDate && input.homeworkDate > input.checkDate)
     return { ok: false, error: "지난 숙제 날짜는 검사일보다 늦을 수 없습니다." };
   if (input.status !== null && !(["submitted", "missing"] as const).includes(input.status))
@@ -98,6 +101,9 @@ export async function setVideoHomeworkMark(input: {
     student_id: input.studentId,
     check_date: input.checkDate,
     homework_date: input.homeworkDate,
+    // 제출일을 입력하지 않는 기존 강사 체크는 저장된 날짜를 덮어쓰지 않는다.
+    ...(input.status === "missing" ? { submitted_date: null }
+      : input.submittedDate !== undefined ? { submitted_date: input.submittedDate } : {}),
     status: input.status,
     updated_by: user.id,
     updated_at: new Date().toISOString(),

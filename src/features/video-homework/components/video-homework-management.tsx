@@ -10,6 +10,7 @@ import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCsv, l
   ledgerSummary, type LedgerFilters } from "../ledger";
 import { isVideoHomeworkRange } from "../ledger-roster";
 import type { VideoHomeworkLedgerRow, VideoHomeworkMark, VideoHomeworkStatus } from "../types";
+import { isVideoHomeworkDate } from "../types";
 import { useLedgerMarks } from "./use-ledger-marks";
 import { ClassLedger, LEDGER_STATUS_OPTIONS, type ActiveCell, type SaveLedgerChanges } from "./class-ledger";
 import styles from "./video-homework-management.module.css";
@@ -24,13 +25,20 @@ function FilterSelect({ label, name, value, options, disabled, onChange }: {
   </select></label>;
 }
 
-function RecordEditor({ cell, mark, busy, save, onClose }: { cell: ActiveCell; mark?: VideoHomeworkMark; busy: boolean; save: SaveLedgerChanges; onClose: () => void }) {
-  const [status, setStatus] = useState<VideoHomeworkStatus | "unchecked">(mark?.status ?? "unchecked");
+function RecordEditor({ cell, mark, today, busy, save, onClose }: { cell: ActiveCell; mark?: VideoHomeworkMark; today: string; busy: boolean; save: SaveLedgerChanges; onClose: () => void }) {
+  const [status, setStatus] = useState<VideoHomeworkStatus | "unchecked">(mark?.status ?? (cell.row.editable ? "submitted" : "unchecked"));
+  const [submittedDate, setSubmittedDate] = useState(mark?.submittedDate ?? (mark?.status === "submitted" ? "" : today));
+  const [error, setError] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!cell.row.editable || busy) return;
+    if (status === "submitted" && (!isVideoHomeworkDate(submittedDate) || submittedDate > today)) {
+      setError("제출일은 오늘까지의 올바른 날짜로 입력해 주세요."); return;
+    }
+    setError("");
     const failed = await save([{ classId: cell.row.classId, studentId: cell.row.studentId, checkDate: cell.date,
-      homeworkDate: mark?.homeworkDate ?? null, status: status === "unchecked" ? null : status }]);
+      homeworkDate: mark?.homeworkDate ?? null, submittedDate: status === "submitted" ? submittedDate : null,
+      status: status === "unchecked" ? null : status }]);
     if (!failed.length) onClose();
   }
   return <form className={styles.editor} onSubmit={(event) => void submit(event)}>
@@ -40,6 +48,9 @@ function RecordEditor({ cell, mark, busy, save, onClose }: { cell: ActiveCell; m
     {mark?.homeworkDate ? <p className={styles.dim}>지난 숙제일 {mark.homeworkDate}</p> : null}
     <div className={styles.statusOptions}>{LEDGER_STATUS_OPTIONS.map((option) => <button key={option.value} type="button" disabled={busy || !cell.row.editable}
       aria-pressed={status === option.value} onClick={() => setStatus(option.value)}>{option.label}</button>)}</div>
+    {status === "submitted" ? <label>제출일<input type="date" value={submittedDate} min="2000-01-01" max={today} required
+      disabled={busy || !cell.row.editable} onChange={(event) => { setSubmittedDate(event.target.value); setError(""); }} /></label> : null}
+    {error ? <p role="alert" className={styles.red}>{error}</p> : null}
     <p className={styles.dim}>미확인으로 바꾸면 이 수업일의 검사 기록이 취소됩니다.</p>
     {cell.row.editable ? <button type="submit" className={styles.primary} disabled={busy}>{busy ? "저장 중…" : "기록 저장"}</button> : <p className={styles.dim}>이 기록은 읽기 전용입니다.</p>}
   </form>;
@@ -133,14 +144,14 @@ export function VideoHomeworkManagement({ rows, initialMarks, fromDate, toDate, 
       <span className={styles.green}>완료 <strong>{summary.submitted}</strong>회</span><span className={styles.red}>미수행 <strong>{summary.missing}</strong>회</span><span className={styles.dim}>미확인 {summary.unchecked}회</span>
       <div className={styles.expandActions}><button type="button" onClick={() => setCollapsed(new Set())}>모두 펼치기</button><button type="button" onClick={() => setCollapsed(new Set(groups.map((group) => group.classId)))}>모두 접기</button></div>
     </div>
-    <p className={styles.hint}>조회 기간의 반별 수업일 순서가 회차입니다. <EyIcon name="check" size={12} className="inline-block align-middle" /> 완료 · × 미수행 · + 미확인 · — 수업 대상 아님. 수행 상태 필터는 해당 기록이 있는 학생을 찾습니다.</p>
+    <p className={styles.hint}>조회 기간의 반별 수업일 순서가 회차입니다. <EyIcon name="check" size={12} className="inline-block align-middle" /> 뒤 날짜는 제출일 · × 미수행 · + 미확인 · — 수업 대상 아님. 수행 상태 필터는 해당 기록이 있는 학생을 찾습니다.</p>
     {progress ? <p className={styles.saving} role="status">기록 저장 중 {progress.done} / {progress.total}건</p> : null}
-    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} marks={marks} busy={busy} save={save} onEdit={setActive}
+    {visibleGroups.length ? visibleGroups.map((group) => <ClassLedger key={`${group.classId}:${filterKey}`} group={group} marks={marks} today={today} busy={busy} save={save} onEdit={setActive}
       collapsed={collapsed.has(group.classId)} onToggle={() => setCollapsed((current) => { const next = new Set(current); if (next.has(group.classId)) next.delete(group.classId); else next.add(group.classId); return next; })} />)
       : <div className={styles.empty}><strong>{rows.length ? "조건에 맞는 학생이 없습니다." : "조회 기간에 영상숙제 대상 수업이 없습니다."}</strong><p>{rows.length ? "검색어와 필터를 조정해 주세요." : "조회 기간이나 보고서의 영상숙제 대상 설정을 확인해 주세요."}</p></div>}
     <Dialog open={active !== null} onOpenChange={(open) => { if (!open && !busy) setActive(null); }}>
       <DialogContent showCloseButton={!busy}>
-        {active ? <RecordEditor key={`${ledgerPairKey(active.row)}:${active.date}`} cell={active} mark={marks.get(ledgerMarkKey({ ...active.row, checkDate: active.date }))} busy={busy} save={save} onClose={() => setActive(null)} /> : null}
+        {active ? <RecordEditor key={`${ledgerPairKey(active.row)}:${active.date}`} cell={active} mark={marks.get(ledgerMarkKey({ ...active.row, checkDate: active.date }))} today={today} busy={busy} save={save} onClose={() => setActive(null)} /> : null}
       </DialogContent>
     </Dialog>
   </div>;

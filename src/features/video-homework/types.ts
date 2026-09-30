@@ -5,6 +5,8 @@ export type VideoHomeworkMark = {
   studentId: string;
   checkDate: string;
   homeworkDate: string | null;
+  /** 실제 제출일. 기존 기록·제출일을 조회하지 않는 강사 체크 화면에서는 비어 있을 수 있다. */
+  submittedDate?: string | null;
   status: VideoHomeworkStatus;
 };
 
@@ -29,7 +31,7 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
 };
 
 export function isVideoHomeworkDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
     Number(value.slice(0, 4)) >= 2000 && Number(value.slice(0, 4)) <= 2100 &&
     !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
     new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;

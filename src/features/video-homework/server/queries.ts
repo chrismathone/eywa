@@ -8,7 +8,7 @@ import type { VideoHomeworkHistoryRow, VideoHomeworkLedgerRow, VideoHomeworkMark
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
 export type { VideoHomeworkHistoryRow, VideoHomeworkRosterRow } from "../types";
 
-type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null; status: string };
+type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null; submitted_date?: string | null; status: string };
 
 export type VideoHomeworkClassOption = { id: string; name: string; subjectKey: string; active: boolean };
 
@@ -157,7 +157,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
       .select("class_id,student_id,makeup_date").eq("tenant_id", tenantId).eq("status", "reserved")
       .gte("makeup_date", fromDate).lte("makeup_date", toDate).order("id").range(from, to)),
     fetchAllPaged<DbMark>((from, to) => db.from("video_homework_marks")
-      .select("class_id,student_id,check_date,homework_date,status").eq("tenant_id", tenantId)
+      .select("class_id,student_id,check_date,homework_date,submitted_date,status").eq("tenant_id", tenantId)
       .gte("check_date", fromDate).lte("check_date", toDate).order("id").range(from, to)),
   ]);
   const pairs = buildVideoHomeworkLessonPairs({ classes, enrollments, schedules, fromDate, toDate, today: kstToday(),
@@ -180,6 +180,6 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
       studentName: student.name, school: student.school, grade: student.grade, editable: true }] : [];
   });
   const marks = markRows.map((row): VideoHomeworkMark => ({ classId: row.class_id, studentId: row.student_id,
-    checkDate: row.check_date, homeworkDate: row.homework_date, status: row.status as VideoHomeworkStatus }));
+    checkDate: row.check_date, homeworkDate: row.homework_date, submittedDate: row.submitted_date ?? null, status: row.status as VideoHomeworkStatus }));
   return { rows, marks };
 }
