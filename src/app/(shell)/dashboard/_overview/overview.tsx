@@ -19,6 +19,8 @@ import { foldExpenseTotals } from "@/features/dashboard/overview/expense-total";
 import { paymentRateDisplay } from "@/features/billing/calc";
 import { monthDayLabel } from "@/lib/date-kst";
 import { monthAheadNote, monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
+import { admissionsListKind, isCancelledAdmissionsRow } from "@/features/dashboard/overview/display";
+import { cancelledSuffix } from "@/features/calendar/cancelled";
 import { useOverview } from "./use-overview";
 import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
@@ -1123,10 +1125,11 @@ export function Overview({
                 오늘부터 {windowUntilLabel(admissionsRange)} 레벨테스트·첫 수업 일정이 없습니다.
               </p>
             )}
-            {(["levelTest", "firstClass"] as const).some((kind) => (v.calendar?.data?.filter((event) => event.kind === kind).length ?? 0) > 3) && (
+            {(["levelTest", "firstClass"] as const).some((kind) => (v.calendar?.data?.filter((event) => admissionsListKind(event) === kind).length ?? 0) > 3) && (
               <DetailPopup
                 title="레벨테스트 및 첫수업 일정"
-                label={`전체 ${v.calendar!.data!.length}개 일정 보기`}
+                // 열 머리·금일입테와 같은 축 — 숫자는 살아 있는 일정만, 취소는 " · 취소 N"으로 따로(원장 2026-09-30).
+                label={`전체 ${v.calendar!.data!.filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(v.calendar!.data!.filter(isCancelledAdmissionsRow).length)}`}
               >
                 <AdmissionsSchedule events={v.calendar!.data!} />
               </DetailPopup>

@@ -222,11 +222,35 @@ describe("③ 신규문의 — 같은 KST 하루 경계", () => {
 });
 
 describe("④ 금일입테 — 분류기 한 벌, ↗ 없음", () => {
-  it("서버가 단일 분류기로 종류를 싣고, 카드·팝업은 todayLevelTests 한 번의 결과를 같이 쓴다", () => {
+  it("서버가 단일 분류기로 종류를 싣고, 카드·팝업은 todayLevelTestList 한 번의 결과를 같이 쓴다", () => {
     expect(SERVER).toContain("kind: admissionsEventKind(event)");
-    expect(count(STRIP, "todayLevelTests(")).toBe(1);
-    expect(STRIP).toContain("<LevelTestPopup events={levelTests} />");
+    expect(count(STRIP, "todayLevelTestList(")).toBe(1);
+    expect(STRIP).not.toContain("todayLevelTests(");
+    expect(STRIP).toContain("<LevelTestPopup list={levelTests} />");
     expect(STRIP).not.toContain("/calendar");
+  });
+
+  // 원장 2026-09-30 — 취소된 입테는 목록엔 취소선, 숫자엔 없다.
+  it("카드 숫자 = 살아 있는 입테(active), 취소는 보조 줄 '취소 N'으로만", () => {
+    expect(STRIP).toContain("value={count(levelTests?.active.length)}");
+    expect(STRIP).toContain("`취소 ${number(levelTests.cancelled)}`");
+    const POPUPS_DAY = src("src/app/(shell)/dashboard/_overview/kpi-popups-day.tsx");
+    expect(POPUPS_DAY).toContain('<PopupTotal label="오늘 레벨테스트" value={list.active.length} unit="건" />');
+  });
+
+  it("취소된 일정은 서버가 kind=null + cancelledKind로 싣고 반·콜&상담 연결을 붙이지 않는다", () => {
+    const cancelledBranch = SERVER.slice(SERVER.indexOf("if (isCancelledEventTitle(event.title)) {"));
+    expect(cancelledBranch.slice(0, 600)).toContain("kind: null,");
+    expect(cancelledBranch.slice(0, 600)).toContain("cancelledKind: admissionsEventBaseKind(event),");
+    expect(cancelledBranch.slice(0, 600)).toContain("matchedConsultation: null,");
+    // 반·상담 연결 조회는 살아 있는 일정만.
+    expect(SERVER).toContain("consultationBasesInTitles(live, consultations, notNames)");
+  });
+
+  it("'전체 N개 일정 보기'도 같은 축 — 살아 있는 일정만 세고 취소는 ' · 취소 N'으로 따로", () => {
+    const OVERVIEW_SRC = src("src/app/(shell)/dashboard/_overview/overview.tsx");
+    expect(OVERVIEW_SRC).toContain("filter((event) => !isCancelledAdmissionsRow(event)).length}개 일정 보기${cancelledSuffix(");
+    expect(OVERVIEW_SRC).not.toContain("전체 ${v.calendar!.data!.length}개 일정 보기");
   });
 });
 

@@ -6,8 +6,12 @@ import type { OverviewData } from "@/features/dashboard/overview/model";
 import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { ABSENT_STATUS_LABEL } from "@/features/dashboard/absent-students";
 import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
+import { isCancelledAdmissionsRow, type todayLevelTestList } from "@/features/dashboard/overview/display";
 import { ConsultStageChip } from "./consult-progress";
+import { CancelledMark } from "./cancelled-mark";
 import s from "./overview.module.css";
+
+type LevelTestList = ReturnType<typeof todayLevelTestList<OverviewData["calendar"][number]>>;
 
 /** 신규문의 팝업 — 오늘 접수(시각 · 이름). */
 export function IntakePopup({
@@ -147,11 +151,13 @@ const originalTitleNote = (event: OverviewData["calendar"][number]) =>
  * 금일입테 팝업 — 오늘 레벨테스트(시각 · 제목). 캘린더 메뉴가 숨김이라 일정 자체로 가는 링크는 없고, 그 일정의 콜&상담이
  * 한 건으로 확정된 줄만 상담 상세로 간다(서버가 콜&상담 권한이 있을 때만 싣는다). 제목은 운영실 일정 카드와 같은 표시용.
  */
-export function LevelTestPopup({ events }: { events: OverviewData["calendar"] | null }) {
-  if (!events) return <PopupEmpty>일정을 불러오지 못했습니다.</PopupEmpty>;
+export function LevelTestPopup({ list }: { list: LevelTestList | null }) {
+  if (!list) return <PopupEmpty>일정을 불러오지 못했습니다.</PopupEmpty>;
+  const events = list.rows;
   return (
     <>
-      <PopupTotal label="오늘 레벨테스트" value={events.length} unit="건" />
+      {/* 합계 = 살아 있는 입테만(카드 숫자와 같다). 취소된 일정은 목록에 시간 순서 그대로 줄을 그어 남긴다(원장 2026-09-30). */}
+      <PopupTotal label="오늘 레벨테스트" value={list.active.length} unit="건" />
       {events.length === 0 ? (
         <PopupEmpty>오늘 레벨테스트 일정이 없습니다.</PopupEmpty>
       ) : (
@@ -159,7 +165,12 @@ export function LevelTestPopup({ events }: { events: OverviewData["calendar"] | 
           {events.map((event) => (
             <li key={event.id} className={s.kpiListRow}>
               <time className={s.kpiTime}>{event.startTime?.slice(0, 5) ?? "종일"}</time>
-              {event.matchedConsultation ? (
+              {isCancelledAdmissionsRow(event) ? (
+                <>
+                  <span className={`${s.kpiListMeta} ${s.eventCancelled}`}>{event.title}</span>
+                  <CancelledMark />
+                </>
+              ) : event.matchedConsultation ? (
                 // 🔴 WindowLink의 title = 창 제목(영속) — 일정 원문(전화번호)을 싣지 않고 상담 이름만.
                 <WindowLink
                   href={`/enrollment/${event.matchedConsultation.id}`}

@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { dotProps } from "@/features/calendar/color";
 import type { CalendarColor } from "@/features/calendar/types";
 import { EventRow, type EventRowData } from "./event-row";
+import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 
 /**
  * 분석 요약표의 **칸 상세 모달** — 그 칸(태그 × 연도 × 월)을 만든 일정 전건.
  * 줄 모양은 연대기와 같은 [EventRow] 공용(같은 일정이 두 곳에서 다르면 같은 건인지 되짚게 된다).
  *
  * ⚠️ 목록을 다시 세지 않는다 — 호출부가 **표 건수와 같은 필터**로 뽑아 넘긴다(둘이 갈리면 거짓말).
+ *    단 취소된 일정은 표 건수에 안 들고 목록에만 취소선으로 있다 — 머리 건수도 취소를 빼고 "취소 N"을 따로 적는다.
  */
 
 /** 표의 한 행 머리(태그·태그없음·전체) — 모달 제목이 어느 칸에서 왔는지 말한다. */
@@ -40,6 +42,9 @@ export function StatsCellDialog({
   const dot = picked.group.color ? dotProps(picked.group.color) : null;
   const where =
     picked.month === null ? `${picked.year}년 전체` : `${picked.year}년 ${picked.month}월`;
+  // 건수 = 표 칸과 같은 수(취소 제외) · 목록엔 취소도 줄을 그어 남긴다(원장 2026-09-30).
+  const cancelledCount = events.filter((e) => isCancelledEventTitle(e.title)).length;
+  const activeCount = events.length - cancelledCount;
 
   return (
     <div
@@ -67,7 +72,8 @@ export function StatsCellDialog({
             <span className="text-text-dim num font-normal">· {where}</span>
           </h2>
           <span className="text-text-dim text-xs">
-            일정 <span className="num text-foreground font-semibold">{events.length}</span>건
+            일정 <span className="num text-foreground font-semibold">{activeCount}</span>건
+            {cancelledCount > 0 ? <span className="num"> · 취소 {cancelledCount}</span> : null}
           </span>
         </div>
 

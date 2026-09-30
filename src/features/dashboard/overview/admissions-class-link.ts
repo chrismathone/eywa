@@ -1,3 +1,4 @@
+import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { getGradeLevel, schoolGradeLabel } from "@/lib/format/school-grade";
 import { normalizeSchoolName } from "@/features/schools/school-name";
@@ -61,7 +62,7 @@ export function matchFirstClass(
 ): { id: string; name: string; studentName?: string } | null {
   if (
     !/첫\s*수업/.test(`${event.title} ${event.tag?.name ?? ""}`) ||
-    /취소/.test(event.title)
+    isCancelledEventTitle(event.title)
   )
     return null;
   const active = candidates.filter(
@@ -135,7 +136,7 @@ export function matchFirstClassSchedule(
 ): { id: string; name: string } | null {
   if (
     !/첫\s*수업/.test(`${event.title} ${event.tag?.name ?? ""}`) ||
-    /취소/.test(event.title)
+    isCancelledEventTitle(event.title)
   )
     return null;
   const subjectKeys = Object.entries(subjects)
