@@ -55,9 +55,9 @@ const SECTIONS: { title: string; note: string; panels: PanelShape[]; followups?:
       { title: "학년별 재원생", note: "현재 재원생 · 학원설정 학년 순 · 영어·수학 수강 구성", body: 300 },
       { title: "학교별 학생", note: "현재 재원생 · 초등·중등·고등", body: 520, className: s.schoolPanel },
       { title: "콜&상담 전환", note: "지난달 · 이번 달 · 상담일 기준", body: 170 },
-      { title: "상담 진행", note: "상담일 기준 최근 30일 · 접수 → 수업 시작", body: 230 },
-      { title: "최근 14일 등원율", note: "오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸", body: 200 },
       { title: "반복 결석 학생", note: "최근 14일 · 사전 통보 제외", body: 180 },
+      { title: "최근 14일 등원율", note: "오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸", body: 200 },
+      { title: "상담 진행", note: "상담일 기준 최근 30일 · 접수 → 수업 시작", body: 230 },
     ],
     followups: [
       { title: "학습 · 학부모 보고", note: "수업보고서 기준", body: 200 },

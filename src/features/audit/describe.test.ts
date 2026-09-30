@@ -1192,3 +1192,18 @@ describe("auditDetail — 등록상담·강사 시트·캘린더(2026-09-10 김�
     expect(AUDIT_TYPE_LABEL.calendar).toBe("캘린더");
   });
 });
+
+describe("auditDetail — 슬랙 규칙 '누가'(0311a)", () => {
+  it("보낼 사람 인원이 바뀌면 전 → 후 · 같은 인원에 사람만 바뀌면 (교체)", () => {
+    const base = { enabled: true, actorCount: 0, actorSig: "" };
+    expect(auditDetail("slack_rule_save", { enabled: true, actorCount: 2, actorSig: "h1", before: base }, ctx())).toBe(
+      "수정: 보낼 사람(발동자) 0 → 2명 · 켜짐",
+    );
+    expect(
+      auditDetail("slack_rule_save", { enabled: true, actorCount: 1, actorSig: "h2", before: { enabled: true, actorCount: 1, actorSig: "h1" } }, ctx()),
+    ).toBe("수정: 보낼 사람(발동자) 1 → 1명(교체) · 켜짐");
+  });
+  it("옛 기록(before에 actorCount 없음)은 비교하지 않는다", () => {
+    expect(auditDetail("slack_rule_save", { enabled: true, actorCount: 2, before: { enabled: true } }, ctx())).not.toContain("보낼 사람");
+  });
+});

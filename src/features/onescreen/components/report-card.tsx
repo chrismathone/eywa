@@ -9,6 +9,7 @@ import { RecallButton } from "@/features/report-admin/components/recall-button";
 import { isRecallInFlight, isRecallable } from "@/features/report-admin/report-recall";
 import { normalizeHomeworkPages } from "../homework-pages";
 import { makeupRemoveBlockReason } from "../makeup-remove-plan";
+import { makeupBadgeLabel } from "../makeup-label";
 import {
   effectiveClassnoteStatus,
   isAlreadySent,
@@ -32,6 +33,7 @@ import {
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
+import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
@@ -130,6 +132,7 @@ export function ReportCard({
   onTextbook,
   onHomeworkToday,
   onMakeup,
+  onVideoHomework,
   onRemoveMakeup,
   canRemoveMakeup,
   onSubjectDraft,
@@ -163,7 +166,10 @@ export function ReportCard({
   onHomework: (h: string) => void;
   onTextbook: (subjectName: string, text: string) => void; // 교재명(과목별) — 0089a
   onHomeworkToday: (subjectName: string, text: string) => void; // 오늘 과제(숙제 내용, 과목별) — 0096a
-  onMakeup: (subjectName: string) => void; // 보강 토글(과목별) — 0089a
+  /** 합침 취소(정규+보강 → 정규) — '정규+보강' 버튼에서만(옛 보강 토글은 2026-09-30 제거). */
+  onMakeup: (subjectName: string) => void;
+  /** 오늘 영상 과제 있음/없음(0308a). 없으면 버튼이 잠긴다. */
+  onVideoHomework?: (subjectName: string) => void;
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
@@ -497,21 +503,39 @@ export function ReportCard({
               aria-label={tf("os.card.bookAria", { subject: subjectName })}
               className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
             />
-            <button
-              type="button"
-              onClick={() => onMakeup(subjectName)}
-              aria-pressed={!!subject.makeup}
-              title={
-                subject.classId
-                  ? t("os.row.makeupBoth")
-                  : t("os.row.makeupOnly")
-              }
-              className={`shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold transition ${
-                subject.makeup ? "bg-amber-soft text-amber" : "border-line text-text-dim hover:bg-bg-soft border"
-              }`}
-            >
-              {t("os.card.makeup")}
-            </button>
+            {/* 🔴 옛 '보강' 켜고 끄기 알약은 없앴다(원장 2026-09-30 — 표 모드 체크박스와 같은 이유: 손으로 켜면 타임 없는
+                '(정규+보강)'이 생겼다). 보강은 '보강 추가'에서 정해지고, 여기엔 **합침 취소**만 남긴다. */}
+            {subject.makeup && subject.classId && locked ? (
+              // 잠긴 행(결석·발송 완료·열람)은 합침 취소도 못 한다 — 표 모드와 같게 표시 배지만.
+              <span className="bg-amber-soft text-amber shrink-0 rounded-pill px-2.5 py-1 text-xs font-bold">
+                {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
+              </span>
+            ) : subject.makeup && subject.classId ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(tf("os.row.makeupUnmergeConfirm", { name: student.name, subject: subjectName })))
+                    onMakeup(subjectName);
+                }}
+                title={t("os.row.makeupUnmerge")}
+                aria-label={tf("os.row.makeupUnmergeAria", { name: student.name, subject: subjectName })}
+                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 items-center gap-1 rounded-pill px-2.5 py-1 text-xs font-bold transition hover:text-white"
+              >
+                {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
+                <EyIcon name="close" size={10} />
+              </button>
+            ) : null}
+            <VideoHomeworkToggle
+              size="pill"
+              checked={!!subject.videoHomework}
+              onToggle={() => onVideoHomework?.(subjectName)}
+              disabled={!onVideoHomework || locked}
+              classId={subject.classId}
+              subjectKey={subject.subjectKey}
+              grade={student.grade}
+              studentName={student.name}
+              subjectName={subjectName}
+            />
           </div>
           {/* 출결·수업타임은 **카드 헤더(이름 아래)**로 올렸다(2026-08-05) — 여기 두면 교재명 블록에 묻혀
               강사가 못 찾는다(원장 제보). 같은 값을 두 번 보여주지 않는다. */}

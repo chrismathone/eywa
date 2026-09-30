@@ -727,30 +727,6 @@ export function Overview({
             {admissions && <AdmissionsComparison stats={admissions} today={snapshot.today} />}
           </Panel>
           <Panel
-            title="상담 진행"
-            note={
-              v.consultProgress?.data
-                ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
-                : "상담일 기준 최근 30일 · 접수 → 수업 시작"
-            }
-            href="/enrollment"
-            sections={[v.consultProgress]}
-          >
-            {v.consultProgress?.data && <ConsultProgressBody data={v.consultProgress.data} subjects={snapshot.subjects} />}
-          </Panel>
-          <Panel
-            title="최근 14일 등원율"
-            note="오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸"
-            href="/attendance"
-            sections={[v.attendanceTrend]}
-          >
-            {v.attendanceTrend?.data && (
-              <>
-                <AttendanceHistory points={v.attendanceTrend.data} />
-              </>
-            )}
-          </Panel>
-          <Panel
             id="repeated-absences"
             title="반복 결석 학생"
             note={
@@ -818,6 +794,30 @@ export function Overview({
                 )}
               </>
             )}
+          </Panel>
+          <Panel
+            title="최근 14일 등원율"
+            note="오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸"
+            href="/attendance"
+            sections={[v.attendanceTrend]}
+          >
+            {v.attendanceTrend?.data && (
+              <>
+                <AttendanceHistory points={v.attendanceTrend.data} />
+              </>
+            )}
+          </Panel>
+          <Panel
+            title="상담 진행"
+            note={
+              v.consultProgress?.data
+                ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
+                : "상담일 기준 최근 30일 · 접수 → 수업 시작"
+            }
+            href="/enrollment"
+            sections={[v.consultProgress]}
+          >
+            {v.consultProgress?.data && <ConsultProgressBody data={v.consultProgress.data} subjects={snapshot.subjects} />}
           </Panel>
           {(v.homework || v.unread || v.consultations) && (
             <div className={s.followupPanels}>

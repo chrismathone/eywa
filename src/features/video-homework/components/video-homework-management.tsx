@@ -49,7 +49,9 @@ function DownloadButton({ rows }: { rows: VideoHomeworkRosterRow[] }) {
     }}>이 날짜 CSV</button>;
 }
 
-function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRow[]; canEdit: boolean; today: string }) {
+function ManagementTable({ rows, canEdit, today, lastAssigned }: {
+  rows: VideoHomeworkRosterRow[]; canEdit: boolean; today: string; lastAssigned: Record<string, boolean>;
+}) {
   const { checkDate, marks, pending, change } = useVideoHomework();
   const [classId, setClassId] = useState("all");
   const [query, setQuery] = useState("");
@@ -123,6 +125,9 @@ function ManagementTable({ rows, canEdit, today }: { rows: VideoHomeworkRosterRo
                 <EyIcon name={choice.symbol} size={14} /> {choice.label}
               </button>)}
               {!mark ? <span className="text-text-faint ml-1">미확인</span> : null}
+              {lastAssigned[key] === false ? <span className="border-line bg-bg-soft text-text-dim ml-1 rounded-full border px-2 py-0.5"
+                title="강사가 지난 수업 보고서에 '영상 과제 없음'으로 저장했습니다 — 원스크린에서는 이 검사가 뜨지 않습니다.">
+                지난 수업 영상 과제 없음</span> : null}
             </div></td>
           </tr>;
         })}</tbody>
@@ -241,12 +246,14 @@ function HistoryTable({ rows, history, fromDate, toDate, today }: {
   </section>;
 }
 
-export function VideoHomeworkManagement({ rows, marks, history, checkDate, fromDate, toDate, today, canEdit }: {
+export function VideoHomeworkManagement({ rows, marks, history, lastAssigned = {}, checkDate, fromDate, toDate, today, canEdit }: {
   rows: VideoHomeworkRosterRow[]; marks: VideoHomeworkMark[]; history: VideoHomeworkHistoryRow[];
+  /** `반:학생` → 지난 수업 영상 과제 있음/없음(0308a). 없으면 모름. */
+  lastAssigned?: Record<string, boolean>;
   checkDate: string; fromDate: string; toDate: string; today: string; canEdit: boolean;
 }) {
   return <VideoHomeworkProvider key={checkDate} initial={marks} checkDate={checkDate}>
-    <ManagementTable rows={rows} canEdit={canEdit} today={today} />
+    <ManagementTable rows={rows} canEdit={canEdit} today={today} lastAssigned={lastAssigned} />
     <HistoryTable key={`${fromDate}:${toDate}`} rows={rows} history={history} fromDate={fromDate} toDate={toDate} today={today} />
   </VideoHomeworkProvider>;
 }
