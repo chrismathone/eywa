@@ -34,6 +34,7 @@ import { AttendanceTab } from "./_tabs/attendance-tab";
 import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
+import { HomeworkVideosTab } from "./_tabs/homework-videos-tab";
 
 export const metadata = { title: "학생 상세 — 에이와" };
 
@@ -290,6 +291,8 @@ export default async function StudentDetailPage({
             // 쪽 링크가 다시 싣는 값이라 **검증된 내부 경로만** 넘긴다(위 backHref와 같은 판정).
             back={isInternalPath(backParam) ? backParam : null}
           />
+        ) : tab === "homework-videos" ? (
+          <HomeworkVideosTab studentId={student.id} />
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (
