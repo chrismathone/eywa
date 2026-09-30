@@ -36,15 +36,29 @@ describe("pickRouteClass — 실제로 올릴 반 보드(원장 2026-09-30)", ()
   const base = { classId: "c1", sendClassId: null, classEligible: true, sendEligible: false };
   it("personal은 그대로", () => expect(pickRouteClass({ ...base, route: "personal" }).route).toBe("personal"));
   it("보고서 반에 살아 있는 반 보드가 있으면 그 반(종강이어도)", () =>
-    expect(pickRouteClass({ ...base, route: "class" })).toEqual({ route: "class", classId: "c1" }));
+    expect(pickRouteClass({ ...base, route: "class" })).toMatchObject({ route: "class", classId: "c1" }));
   it("🔴 보고서 반의 보드가 사라졌으면(종강 뒤 삭제 등) 앱이 정한 보낼 반으로", () =>
-    expect(pickRouteClass({ ...base, route: "class", classEligible: false, sendClassId: "c2", sendEligible: true })).toEqual({ route: "class", classId: "c2" }));
+    expect(pickRouteClass({ ...base, route: "class", classEligible: false, sendClassId: "c2", sendEligible: true })).toMatchObject({ route: "class", classId: "c2" }));
   it("반 없는 보강 = 보낼 반", () =>
-    expect(pickRouteClass({ route: "needs_class", classId: null, sendClassId: "c2", classEligible: false, sendEligible: true })).toEqual({ route: "class", classId: "c2" }));
+    expect(pickRouteClass({ route: "needs_class", classId: null, sendClassId: "c2", classEligible: false, sendEligible: true })).toMatchObject({ route: "class", classId: "c2" }));
   it("둘 다 없으면 기존 1인 보드(1회성 폴백)", () => {
     expect(pickRouteClass({ ...base, route: "class", classEligible: false }).route).toBe("personal");
     expect(pickRouteClass({ route: "needs_class", classId: null, sendClassId: null, classEligible: false, sendEligible: false }).route).toBe("personal");
     // 보낼 반도 사라졌으면 1인 보드
     expect(pickRouteClass({ ...base, route: "class", classEligible: false, sendClassId: "c2", sendEligible: false }).route).toBe("personal");
   });
+});
+
+describe("pickRouteClass — 보강 추가한 반(0171a makeup_class_id, 원장 2026-09-30)", () => {
+  const nc = { route: "needs_class", classId: null, classEligible: false };
+  it("🔴 적힌 '보낼 반'(앱의 최종 결정)이 살아 있으면 그 반 — 보강 반보다 먼저(강사가 경고를 보고 고른 반을 덮지 않는다)", () =>
+    expect(pickRouteClass({ ...nc, makeupClassId: "m", makeupEligible: true, sendClassId: "c2", sendEligible: true })).toEqual({ route: "class", classId: "c2", via: "send" }));
+  it("적힌 값이 없는 옛 대기분 = 보강 반이 살아 있으면 그 반", () =>
+    expect(pickRouteClass({ ...nc, makeupClassId: "m", makeupEligible: true, sendClassId: null, sendEligible: false })).toEqual({ route: "class", classId: "m", via: "makeup" }));
+  it("적힌 반이 죽었으면 보강 반(살아 있을 때)", () =>
+    expect(pickRouteClass({ ...nc, makeupClassId: "m", makeupEligible: true, sendClassId: "c2", sendEligible: false })).toEqual({ route: "class", classId: "m", via: "makeup" }));
+  it("보고서에 반이 있으면 보강 반은 보지 않는다(반 없는 보강에만 앵커가 있다)", () =>
+    expect(pickRouteClass({ route: "class", classId: "c1", classEligible: false, makeupClassId: "m", makeupEligible: true, sendClassId: null, sendEligible: false }).route).toBe("personal"));
+  it("셋 다 없으면 1인 보드", () =>
+    expect(pickRouteClass({ ...nc, makeupClassId: "m", makeupEligible: false, sendClassId: null, sendEligible: false })).toEqual({ route: "personal", classId: null, via: "personal" }));
 });

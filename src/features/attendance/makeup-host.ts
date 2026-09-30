@@ -17,6 +17,29 @@ export type MakeupHostClass = {
   enrolled: boolean;
 };
 
+/**
+ * 그날 **종강 전**인 반인가(`closed_at`이 없거나 그날 이후 — 시간표 `isLiveSlot`과 같은 경계).
+ * 🔴 보강을 기록할 수업 후보에서 종강 반을 뺀다(원장 2026-09-30 *"애초에 보강 반 리스트가, 종강이 아닌 담당 반에서 뜨는게 맞지?
+ *    학생과 접점이 있는"*). 선택지(`fetchMakeupHostClasses`)와 등록 문(`registerMakeupEntries`)이 같은 함수를 쓴다(#77).
+ */
+export function isClassOpenOn(closedAt: string | null | undefined, date: string): boolean {
+  return !closedAt || closedAt.slice(0, 10) >= date;
+}
+
+/**
+ * 보강 앵커(`makeup_class_id`)로 **받아 줄 반**을 찾는다 — 그날 담당 반(`getTeachingClasses` 결과) 중 id가 같고 과목이 같고 종강 전인 반.
+ * 🔴 판정 한 벌: 보강 등록 문(`registerMakeupEntries`)과 보고서 저장(`saveLessonReport` — 앵커가 곧 ClassNote 보낼 반이 된다)이 같이 쓴다.
+ */
+export function findMakeupAnchor<T extends { id: string; subject: string; closedAt?: string | null }>(
+  classes: readonly T[],
+  classId: string | null | undefined,
+  subject: string | null | undefined,
+  date: string,
+): T | null {
+  if (!classId || !subject) return null;
+  return classes.find((c) => c.id === classId && c.subject === subject && isClassOpenOn(c.closedAt, date)) ?? null;
+}
+
 /** '반 없이'(보강 반에 기록) 선택 값 — 반 id와 섞이지 않는 토큰. */
 export const HOST_NONE = "__makeup_pool__";
 

@@ -3,15 +3,21 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
-import { runGoogleCalendarImport } from "@/features/calendar/server/google-import";
-import { ensureCalendarChannels } from "@/features/calendar/server/google-channels";
+import { runCalendarCronLight } from "@/features/calendar/server/google-cron";
+import { isForceFull } from "@/features/calendar/cron-plan";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
 
 /**
- * **구글 캘린더 → aywa 한 방향 임포트** cron — 하루 2회(06:00 · 18:00 KST = 21:00 · 09:00 UTC).
- * 2026-09-30부터 평소 반영은 **푸시 알림(웹훅) + 증분**(`/api/calendar/google-push`)이 하고, 이 크론은 ① 알림을 놓쳐도
- * 12시간 안에 맞추는 **안전망**(전체 임포트) ② 푸시 채널 **열기·갱신**(만료 36시간 전)을 맡는다.
+ * **구글 캘린더 → aywa 한 방향 임포트** cron — **하루 한 번 새벽 04:00 KST**(= 19:00 UTC, 원장 2026-09-30
+ * *"하루 한번 새벽에 가볍게 돌려 필요하면."* — 종전 하루 2회 전체 임포트를 대체).
+ * 평소 반영은 **푸시 알림(웹훅) + 증분**(`/api/calendar/google-push`)이 하고, 이 크론은 **가볍게**
+ * ① 푸시 채널 **열기·갱신**(만료 36시간 전 갱신 · 없거나 실패한 채널 다시 열기) ② 캘린더마다 **증분 따라잡기**(웹훅과
+ * 같은 함수·같은 잠금 — 놓친 알림을 메운다)만 하고, **전체 임포트는 필요할 때만** 돈다
+ * ([`planCalendarCron`](../../../../features/calendar/cron-plan.ts): 시작점 없음·48시간 넘음·채널이 없었거나 만료·열기 실패·
+ * 증분 실패 · **일요일 주간 안전망**(창 밖으로 옮겨진 일정 정리, 비용 ≈ 0) · 손으로 `?full=1`).
+ * 🔴 `calendar_sync_state` 표가 없으면(#95) **종전과 똑같이 전체 임포트**. 응답 JSON의 `calendars[].mode/reason`이 캘린더별
+ * 실제 경로다. 감사로그는 그대로 — 전체 = `calendar_google_import` · 증분 = `calendar_google_push_sync`(`trigger: "cron"`).
  *
  * 원장 2026-09-10: *"캘린더 탭은 메뉴에서 제외시켜. 그냥 내부 구글 달력용으로 사용할예정임."* →
  * *"즉, 동기화하지만 외부로 보여주지않고 내부 끌어오기 참고용으로만 할것"* → *"하루 2회 정도, 오전 오후 6시쯤"*.
@@ -74,21 +80,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, skipped: "calendar module off" });
   }
   try {
-    const summary = await runGoogleCalendarImport(tenantId);
+    const result = await runCalendarCronLight(tenantId, { forceFull: isForceFull(req.url) });
     // 캘린더 화면은 메뉴에서 뺐지만 라우트는 살아 있다 — 열었을 때 최신이 보이게.
     revalidatePath("/calendar");
-    // 푸시 채널 열기·갱신 — 실패해도 임포트 결과는 그대로(다음 크론이 다시 연다). 채널이 없으면 12시간 주기로만 맞춰진다.
-    let channels: Awaited<ReturnType<typeof ensureCalendarChannels>> | { error: string };
-    try {
-      channels = await ensureCalendarChannels(tenantId);
-      if ("failed" in channels && channels.failed.length > 0) {
-        reportError(new Error(`구글 캘린더 알림 채널 ${channels.failed.length}개 열기 실패`), { where: "google-calendar-channels" });
-      }
-    } catch (e) {
-      reportError(e, { where: "google-calendar-channels" });
-      channels = { error: "알림 채널 갱신 실패" };
-    }
-    return NextResponse.json({ ok: true, ...summary, channels });
+    return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     reportError(e, { where: "google-calendar-import" });
     return NextResponse.json({ error: "임포트 실패" }, { status: 500 });

@@ -465,8 +465,8 @@ export function OneScreenClient({
   const [makeupSaving, setMakeupSaving] = useState(false);
   // 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반' 고르기(A안) — 서버가 메인 수업을 못 정했을 때만 뜬다.
   const [sendClassAsk, setSendClassAsk] = useState<SendClassAsk | null>(null);
-  const askSendClass = (studentName: string, candidates: { id: string; name: string }[]) =>
-    new Promise<string | null>((resolve) => setSendClassAsk({ studentName, candidates, resolve }));
+  const askSendClass = (ask: Omit<SendClassAsk, "resolve">) =>
+    new Promise<string | null>((resolve) => setSendClassAsk({ ...ask, resolve }));
   const [makeupAsk, setMakeupAsk] = useState<{
     studentId: string;
     studentName: string;
@@ -3257,9 +3257,15 @@ export function OneScreenClient({
     const waited = await refreshJjBeforeOutput(student, subjectName);
     const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     let res = await saveAndQueueClassnote(built.input);
-    // 반별 발송인데 보강 보고서의 보낼 반을 서버가 못 정했다 — 강사가 고르면 그 반으로 다시 보낸다(저장은 이미 끝났다).
+    // 반별 발송인데 보강 보고서의 보낼 반을 서버가 못 정했다(또는 보강 추가한 반에 반 보드가 없어 다른 반으로 가야 한다 —
+    // 경고 한 줄과 함께 묻는다) — 강사가 고르면 그 반으로 다시 보낸다(저장은 이미 끝났다).
     if (res.status === "needs_class" && res.candidates?.length) {
-      const picked = await askSendClass(student.name, res.candidates);
+      const picked = await askSendClass({
+        studentName: student.name,
+        candidates: res.candidates,
+        defaultId: res.defaultClassId ?? null,
+        makeupClassName: res.makeupClassName ?? null,
+      });
       if (picked) res = await saveAndQueueClassnote({ ...built.input, classnoteClassId: picked });
     }
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.

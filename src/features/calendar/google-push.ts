@@ -4,7 +4,7 @@
  * 원장 2026-09-30: *"캘린더에서 이벤트 발생할 때마다 동기화 — 주기보다 웹훅같은걸로"* · *"비용 최소화, 없음 더 좋고"*.
  * 구조 = 구글이 "이 캘린더가 바뀌었다"만 알려 주면(푸시 채널) 그 캘린더의 **바뀐 일정만**(updatedMin) 가져와
  * 전체 임포트와 **같은 규칙**(사람이 고친 행 안 덮기 · 지운 행 묘비 · 손으로 만든 일정 불가침)으로 반영한다.
- * 하루 2회 전체 임포트는 그대로 둔다 — 알림을 놓쳐도 12시간 안에 맞춰지는 안전망.
+ * 새벽 크론(하루 한 번, cron-plan.ts)이 놓친 알림을 증분으로 메우고, 필요할 때·주 1회만 전체 임포트로 맞춘다.
  *
  * 🔴 syncToken이 아니라 updatedMin을 쓰는 이유: syncToken은 timeMin/timeMax와 같이 못 쓰고(구글 규칙), 창 없이
  *    `singleEvents`로 첫 토큰을 받으면 끝없는 반복 일정이 끝없이 펼쳐진다. updatedMin은 창(과거 30일·미래 400일)과
@@ -40,7 +40,7 @@ export function isChangeNotification(state: string | null): boolean {
   return state === "exists" || state === "not_exists";
 }
 
-/** 채널을 새로 만들어야 하나 — 없거나, 만료가 `marginMs` 안으로 다가왔으면. (크론이 12시간마다 본다.) */
+/** 채널을 새로 만들어야 하나 — 없거나, 만료가 `marginMs` 안으로 다가왔으면. (새벽 크론이 하루 한 번 본다 — 여유 36시간 > 주기 24시간.) */
 export function needsChannelRenewal(expiresAt: string | null, now: number, marginMs = 36 * 3600_000): boolean {
   if (!expiresAt) return true;
   const t = Date.parse(expiresAt);
@@ -51,7 +51,7 @@ export function needsChannelRenewal(expiresAt: string | null, now: number, margi
 /**
  * 증분 조회의 시작점. 🔴 지난 동기화 시각에서 **여유를 두고 뒤로** — 구글 `updated`와 우리 시계가 어긋나거나
  * 조회 도중 바뀐 일정을 놓치지 않게(같은 일정을 두 번 받아도 적용은 멱등이다). 기록이 없으면 하루 전
- * (전체 임포트가 12시간마다 돈다).
+ * (새벽 크론이 하루 한 번 따라잡는다).
  */
 export function incrementalSince(lastSyncedAt: string | null, now: number, slackMs = 5 * 60_000): string {
   const t = lastSyncedAt ? Date.parse(lastSyncedAt) : NaN;

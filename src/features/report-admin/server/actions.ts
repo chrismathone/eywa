@@ -131,9 +131,11 @@ export async function retryClassnote(
   // 보낼 반 게이트(미발송 일괄 발송과 같은 함수) — 반별 발송인데 보낼 반이 없으면 다시 올리지 않는다(워커가 1인 보드로 흘리지 않게).
   const requeueSet = new Set(requeueIds);
   const routeRows = allowed.filter((r) => requeueSet.has(r.id as string) && isSendClassRouteRow(settings, r));
+  // 보강 반으로 '보낼 반'을 적은 행(감사로그 — 원장 2026-09-30).
+  const gateOut = { rewritten: [] as string[] };
   let noClassIds: Set<string>;
   try {
-    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow));
+    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow), gateOut);
   } catch {
     noClassIds = new Set(routeRows.map((r) => r.id as string));
   }
@@ -181,6 +183,7 @@ export async function retryClassnote(
       skipped,
       absentSkipped,
       ...(noClass ? { noClass } : {}),
+      ...(gateOut.rewritten.length ? { makeupRewritten: gateOut.rewritten.slice(0, 50) } : {}),
     },
   });
   return { ok: true, requeued: requeueIds.length, skipped, absentSkipped, noClass };
@@ -278,9 +281,11 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
   // 일괄에선 행마다 반을 고를 수 없으니 이미 정해진 '보낼 반'(0303a)이 있을 때만 보낸다. 판정 실패 = fail-closed(그 행 제외).
   const routeRow = (r: (typeof sendable)[number]) => isSendClassRouteRow(settings, r);
   // 판정 = blockedForNoSendClass(재발송·멈춤 복구와 같은 함수). 조회 실패는 throw → 대상 행 전부 제외(fail-closed).
+  // 보강 반으로 '보낼 반'을 적은 행(감사로그 — 원장 2026-09-30).
+  const gateOut = { rewritten: [] as string[] };
   let noClassIds: Set<string>;
   try {
-    noClassIds = await blockedForNoSendClass(user.tenantId, sendable.filter(routeRow).map(sendClassRow));
+    noClassIds = await blockedForNoSendClass(user.tenantId, sendable.filter(routeRow).map(sendClassRow), gateOut);
   } catch {
     noClassIds = new Set(sendable.filter(routeRow).map((r) => r.id as string));
   }
@@ -356,6 +361,7 @@ export async function sendClassnoteForUnsent(ids: string[]): Promise<{
         absentSkipped,
         emptyMent,
         ...(noClass ? { noClass } : {}),
+        ...(gateOut.rewritten.length ? { makeupRewritten: gateOut.rewritten.slice(0, 50) } : {}),
       },
     });
   }
@@ -398,9 +404,11 @@ export async function resetStuckClassnote(): Promise<{
   if (sErr) return { ok: false, error: humanizeDbError(sErr.message, "복구") };
   const settings = await getTenantSettings();
   const routeRows = (stuck ?? []).filter((r) => isSendClassRouteRow(settings, r));
+  // 보강 반으로 '보낼 반'을 적은 행(감사로그 — 원장 2026-09-30).
+  const gateOut = { rewritten: [] as string[] };
   let noClassIds: Set<string>;
   try {
-    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow));
+    noClassIds = await blockedForNoSendClass(user.tenantId, routeRows.map(sendClassRow), gateOut);
   } catch {
     noClassIds = new Set(routeRows.map((r) => r.id as string));
   }
@@ -452,6 +460,7 @@ export async function resetStuckClassnote(): Promise<{
         reportIds: data.slice(0, 50).map((r) => r.id),
         stuckMinutes: STUCK_MINUTES,
         ...(failedNoClass ? { noClass: failedNoClass } : {}),
+        ...(gateOut.rewritten.length ? { makeupRewritten: gateOut.rewritten.slice(0, 50) } : {}),
       },
     });
   }

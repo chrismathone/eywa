@@ -71,7 +71,7 @@ async function deleteReport(page, id) {
  * 회수 1건 — 보드·원아 해석 → 본문 완전 일치로 글 찾기 → 대조 → 삭제.
  * 반환 `{ ok, note, deletedIds }`. ok=false면 호출부가 `recall_failed` + note를 기록한다(한글 사유).
  */
-export async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log, classLoc = null }) {
+export async function recallOne(page, centerId, boards, children, { studentName, subject, shareUrls, log, classLoc = null, classLocs = [] }) {
   if (!subjectLabel(subject))
     return { ok: false, note: `보드 매핑이 없는 과목이라 회수 대상을 찾을 수 없습니다`, deletedIds: [] };
   // 🔴 글이 있을 수 있는 자리를 **전부** 훑는다(2026-09-29) — 1인 보드 `(수학)이름` + 반 보드(0302a, 반별 발송분).
@@ -84,7 +84,13 @@ export async function recallOne(page, centerId, boards, children, { studentName,
     const enrolled = await resolveBoardChildEnrollments(page, board.id, studentName, children).catch(() => []);
     if (enrolled.length) locs.push({ boardId: board.id, childIds: enrolled.map((e) => e.child.id) });
   }
-  if (classLoc?.childIds?.length) locs.push(classLoc);
+  // 반 보드 자리 — 보고서 반·보낼 반·보강 반 중 어디로 갔을지 모르니 전부(같은 보드는 한 번만).
+  for (const loc of [classLoc, ...classLocs]) {
+    if (!loc?.childIds?.length) continue;
+    const same = locs.find((l) => l.boardId === loc.boardId);
+    if (same) same.childIds = [...new Set([...same.childIds, ...loc.childIds])];
+    else locs.push({ boardId: loc.boardId, childIds: [...loc.childIds] });
+  }
   if (!locs.length)
     return {
       ok: false,
@@ -222,26 +228,26 @@ export async function processRecallsOnce(sql, browser, opts) {
       log(`[recall] ${studentName} ${r.report_date} — ${shareUrls.join(" | ")}`);
 
       // 반 보드 자리(0302a) — 반별 발송분이 거기 있다. 매칭 기록의 원아 전부(보류 포함 — 지울 글을 찾는 쪽이라 넓게).
-      // 표가 없으면(SQL 미적용) 반별 발송도 없었으니 null.
-      let classLoc = null;
-      // 반 정보 없는 보강은 'ClassNote로 보낼 반'(0303a)으로 나갔다 — 칸이 없으면(SQL 전) 조회가 실패해 null.
-      const locClassId =
-        r.class_id ??
-        (await sql`select classnote_class_id from lesson_reports where id = ${r.id}`
-          .then((x) => x[0]?.classnote_class_id ?? null)
-          .catch(() => null));
-      if (locClassId) {
+      // 표가 없으면(SQL 미적용) 반별 발송도 없었으니 빈 목록.
+      // 글이 갈 수 있었던 반 **전부**를 훑는다(보고서 반 · 'ClassNote로 보낼 반'(0303a) · 보강 추가한 반(0171a)) — 첫 값만 보면
+      // 순서가 바뀐 판정(원장 2026-09-30)이나 덮어쓴 기록 때문에 실제 자리를 놓치고 '이미 없습니다'로 거짓 성공할 수 있다.
+      // 칸이 없으면(SQL 전) 조회가 실패해 보고서 반만 본다. 찾는 자리를 더할 뿐이라 넓게 잡아도 안전하다(본문 완전 일치로 찾는다).
+      const extraIds = await sql`select classnote_class_id, makeup_class_id from lesson_reports where id = ${r.id}`
+        .then((x) => [x[0]?.classnote_class_id ?? null, x[0]?.makeup_class_id ?? null])
+        .catch(() => []);
+      const classLocs = [];
+      for (const locClassId of [...new Set([r.class_id ?? null, ...extraIds].filter(Boolean))]) {
         const rows = await sql`select m.board_id, m.child_id from classnote_class_board_members m
           where m.tenant_id = ${tenant} and m.class_id = ${locClassId} and m.student_id = ${r.student_id} and m.child_id is not null`
           .catch(() => []);
-        if (rows.length) classLoc = { boardId: Number(rows[0].board_id), childIds: [...new Set(rows.map((x) => Number(x.child_id)))] };
+        if (rows.length) classLocs.push({ boardId: Number(rows[0].board_id), childIds: [...new Set(rows.map((x) => Number(x.child_id)))] });
       }
       const res = await recallOne(page, centerId, boards, children, {
         studentName,
         subject: r.subject,
         shareUrls,
         log,
-        classLoc,
+        classLocs,
       }).catch((e) => ({ ok: false, note: `회수 중 오류: ${String(e?.message ?? e).slice(0, 120)}`, deletedIds: [] }));
 
       if (res.ok) {

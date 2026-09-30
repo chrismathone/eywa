@@ -119,6 +119,8 @@ export const AUDIT_ACTIONS = {
   set_user_active: { label: "계정 활성·비활성", tone: "caution" },
   // 보호 계정(슈퍼관리자 명단) 역할·상태 변경 시도 — 거절됐지만 시도 자체를 남긴다(원장 2026-09-30).
   protected_account_refused: { label: "보호 계정 변경 거절", tone: "critical" },
+  // 보호 계정 매일 점검(3선)이 어긋남을 찾았다 — 행위자는 사람이 아니라 크론(system:daily-integrity-check).
+  protected_integrity_alert: { label: "보호 계정 점검 이상", tone: "critical" },
   // 고객센터(0294a) — 개선요청 처리·공지사항.
   support_request_answer: { label: "개선요청 처리", tone: "info" },
   support_notice_create: { label: "공지 등록", tone: "positive" },
@@ -179,6 +181,10 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       return m.active === true ? "활성화" : "비활성화";
     case "protected_account_refused":
       return m.attempt === "role" ? "보호 계정 역할 변경 시도 — 거절" : "보호 계정 활성·비활성 시도 — 거절";
+    case "protected_integrity_alert": {
+      const n = Array.isArray(m.issues) ? m.issues.length : 0;
+      return n ? `매일 점검 — 어긋남 ${n}건` : "매일 점검 — 어긋남";
+    }
     case "support_request_answer": {
       const st = str(m.status);
       const label = st ? supportStatusLabel(st) : null;

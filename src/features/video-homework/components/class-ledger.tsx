@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ledgerCounts, ledgerMarkKey, ledgerPairKey, ledgerSummary, type LedgerGroup } from "../ledger";
 import type { VideoHomeworkLedgerRow, VideoHomeworkMark, VideoHomeworkStatus } from "../types";
@@ -9,6 +9,8 @@ import styles from "./video-homework-management.module.css";
 
 const PAGE_SIZE = 50;
 const ROUND_SIZE = 10;
+// 반의 회차 수나 창 폭이 달라도 같은 열은 항상 같은 너비를 쓴다. 나머지 폭은 빈 공간이다.
+const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 88 } as const;
 const shortDate = (date: string) => date.slice(5).replace("-", ".");
 export const LEDGER_STATUS_OPTIONS = [{ value: "submitted", label: "완료" }, { value: "missing", label: "미수행" }, { value: "unchecked", label: "미확인" }] as const;
 export type ActiveCell = { row: VideoHomeworkLedgerRow; date: string; round: number };
@@ -48,7 +50,7 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
   }
   return <section className={styles.group} aria-label={`${group.className} 장부`}>
     <button type="button" className={styles.groupHeading} onClick={onToggle} aria-expanded={!collapsed} aria-controls={panelId}>
-      <span aria-hidden="true" className={styles.chevron}>{collapsed ? "▸" : "▾"}</span><strong>{group.className}</strong>
+      <EyIcon name={collapsed ? "chevronRight" : "chevronDown"} size={18} /><strong>{group.className}</strong>
       <span className={styles.groupMeta}>{group.subject} · {group.rows.length}명</span>
       <span className={styles.groupTotals}><span className={styles.green}>완료 {summary.submitted}</span><span className={styles.red}>미수행 {summary.missing}</span><span>미확인 {summary.unchecked}</span></span>
     </button>
@@ -72,9 +74,10 @@ export function ClassLedger({ group, marks, busy, save, onEdit, collapsed, onTog
         </div>
       </div>
       <div className={styles.tableScroll} tabIndex={0} role="region" aria-label={`${group.className} 회차별 수행 기록, 가로 스크롤 가능`}>
-        <table className={styles.table} style={{ minWidth: 366 + dates.length * 84 }}>
+        <table className={styles.table} style={{ width: COLUMN_WIDTH.select + COLUMN_WIDTH.student + COLUMN_WIDTH.school + COLUMN_WIDTH.count + dates.length * COLUMN_WIDTH.round,
+          "--ledger-select-width": `${COLUMN_WIDTH.select}px` } as CSSProperties}>
           <caption className="sr-only">{group.className} 학생별 영상숙제 장부</caption>
-          <colgroup><col style={{ width: 36 }} /><col style={{ width: 128 }} /><col style={{ width: 142 }} /><col style={{ width: 60 }} />{dates.map((date) => <col key={date} />)}</colgroup>
+          <colgroup><col style={{ width: COLUMN_WIDTH.select }} /><col style={{ width: COLUMN_WIDTH.student }} /><col style={{ width: COLUMN_WIDTH.school }} /><col style={{ width: COLUMN_WIDTH.count }} />{dates.map((date) => <col key={date} style={{ width: COLUMN_WIDTH.round }} />)}</colgroup>
           <thead><tr>
             <th className={styles.selectCell}><input type="checkbox" aria-label={`${group.className} 현재 페이지 학생 전체 선택`} disabled={busy || !editable.length} checked={allSelected}
               ref={(node) => { if (node) node.indeterminate = selectedRows.length > 0 && !allSelected; }}

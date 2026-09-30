@@ -4,7 +4,8 @@
  * 관리자 직접 작성의 **보낼 반** — 원장 2026-09-30 *"관리자 화면은 반 선택해서 발송할 수 있게 반 선택 추가. (학생 고르고 난 후에
  * 반 고르기 나오는 식으로)"*. 재료는 서버 `getAdminSendClassOptions`(발송과 같은 판정) — 여긴 보여 주고 고르게만 한다.
  * - 반별 발송이 아니면(ClassNote 모듈 꺼짐·경로 '기존'·수학 아님) 아무것도 안 그린다(예전 그대로).
- * - 보고서 반에 살아 있는 반 보드가 있으면 그 반을 알려만 준다.
+ * - 보고서 반(또는 강사가 보강 추가 때 고른 반 — 원장 2026-09-30)에 살아 있는 반 보드가 있으면 그 반을 알려만 준다.
+ * - 🔴 보강 추가한 반에 이 학생의 반 보드가 없어 다른 반으로 가야 하면 경고 한 줄을 띄운다.
  * - 없으면 반 고르기(기본 = 메인 수업) · 고를 반이 없으면 발송 불가 사유.
  */
 export type SendClassOption = {
@@ -14,6 +15,10 @@ export type SendClassOption = {
   candidates: { id: string; name: string }[];
   defaultId: string | null;
   blockedReason: string | null;
+  /** 보강 추가한 반으로 간다(needed=false, reportClassName = 그 반). */
+  viaMakeup?: boolean;
+  /** 보강 추가한 반인데 반 보드가 없어 다른 반으로 가야 한다 — 그 반 이름. */
+  makeupClassName?: string | null;
 };
 
 const LABEL = "text-text-dim text-xs font-medium";
@@ -35,19 +40,30 @@ export function SendClassPicker({
   if (!option.needed) {
     return (
       <p className="text-text-faint text-xs">
-        보낼 반: <b className="text-text-dim">{option.reportClassName ?? "보고서의 반"}</b> (ClassNote 반 보드)
+        보낼 반: <b className="text-text-dim">{option.reportClassName ?? "보고서의 반"}</b>{" "}
+        {option.viaMakeup ? "(보강 추가한 반 · ClassNote 반 보드)" : "(ClassNote 반 보드)"}
       </p>
     );
   }
+  // 보강 추가한 반과 다른 반으로 간다(그 반에 이 학생의 반 보드가 없다) — 원장 2026-09-30.
+  const mismatch = option.makeupClassName ? (
+    <p role="alert" className="bg-amber-soft text-foreground mb-1 rounded-md px-3 py-2 text-xs font-bold">
+      보강 추가한 반({option.makeupClassName})은 이 학생의 ClassNote 반 보드가 없어 다른 반으로 보냅니다.
+    </p>
+  ) : null;
   if (!option.candidates.length) {
     return (
-      <p role="alert" className="border-danger/30 bg-danger-soft/40 text-danger rounded-md border px-3 py-2 text-xs">
-        {option.blockedReason}
-      </p>
+      <>
+        {mismatch}
+        <p role="alert" className="border-danger/30 bg-danger-soft/40 text-danger rounded-md border px-3 py-2 text-xs">
+          {option.blockedReason}
+        </p>
+      </>
     );
   }
   return (
     <div className="max-w-sm">
+      {mismatch}
       <div className={LABEL}>보낼 반(ClassNote 반 보드)</div>
       <select value={value} onChange={(e) => onChange(e.target.value)} className={INPUT} aria-label="보낼 반">
         {value ? null : <option value="">반을 고르세요</option>}

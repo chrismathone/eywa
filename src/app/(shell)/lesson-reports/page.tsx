@@ -146,7 +146,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   const [queue, tabData] = await Promise.all([queueP, tabP]);
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-3">
+    <div className="w-full min-w-0 space-y-3">
       {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행으로 접힌다(제목은 창 타이틀바). */}
       <PageHeader
         eyebrow={classnoteOn ? "발송 관리" : "보고서 관리"}
