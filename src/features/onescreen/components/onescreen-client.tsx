@@ -46,7 +46,7 @@ import {
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, uniqueAttachmentName } from "../attachment-utils";
-import type { AttendanceMark, CellState, OneScreenStudent, Subject } from "../types";
+import type { CellState, OneScreenStudent, Subject } from "../types";
 import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
 import { CLASS_TAG_ALL } from "../class-tags";
@@ -197,7 +197,7 @@ import { mergeClassnoteStatuses, pendingSendStudentIds, type ClassnoteStatusRow 
 import { linkMakeupToAbsence, setAttendanceBulk, setAttendanceCell } from "@/features/attendance/server/actions";
 import { subscribeAttendanceApplied } from "@/features/attendance/live/attendance-applied-bus";
 import { applyAppliedAttendance } from "../apply-applied-attendance";
-import { attendanceMarkOf, MARK_PRESENT, optimisticMarkFor } from "../attendance-mark";
+import { studentMarkFromRows } from "../attendance-mark";
 import { STATUS_TEXT, statusTextOf } from "@/features/attendance/cell-display";
 import type { BasicAttendance } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
@@ -465,8 +465,8 @@ export function OneScreenClient({
   const [makeupSaving, setMakeupSaving] = useState(false);
   // 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반' 고르기(A안) — 서버가 메인 수업을 못 정했을 때만 뜬다.
   const [sendClassAsk, setSendClassAsk] = useState<SendClassAsk | null>(null);
-  const askSendClass = (studentName: string, candidates: { id: string; name: string }[]) =>
-    new Promise<string | null>((resolve) => setSendClassAsk({ studentName, candidates, resolve }));
+  const askSendClass = (ask: Omit<SendClassAsk, "resolve">) =>
+    new Promise<string | null>((resolve) => setSendClassAsk({ ...ask, resolve }));
   const [makeupAsk, setMakeupAsk] = useState<{
     studentId: string;
     studentName: string;
@@ -1293,7 +1293,18 @@ export function OneScreenClient({
       prev
         .map((s) =>
           s.id === student.id
-            ? { ...s, subjects: s.subjects.filter((x) => x.name !== subjectName) }
+            ? withMark({
+                ...s,
+                subjects: s.subjects.filter((x) => x.name !== subjectName),
+                // 지운 보강 칸이 배지 재료(`attendanceOffRow`)에 남아 있으면 없는 기록이 배지에 계속 선다.
+                ...(!anchorIsRegular && su.makeupClassId && s.attendanceOffRow && su.makeupClassId in s.attendanceOffRow
+                  ? {
+                      attendanceOffRow: Object.fromEntries(
+                        Object.entries(s.attendanceOffRow).filter(([cid]) => cid !== su.makeupClassId),
+                      ),
+                    }
+                  : {}),
+              })
             : s,
         )
         .filter((s) => !(s.id === student.id && s.subjects.length === 0)),
@@ -1558,15 +1569,9 @@ export function OneScreenClient({
     }
     // 화면의 그 행 시수도 서버 결과로 맞춘다(1이면 서버가 null로 접으므로 같은 규칙으로).
     // ⚠️ 기록이 없던 날엔 서버가 '출석'으로 열었다 — 화면 raw도 같이 present로 맞춰야 표시가 안 갈린다.
-    // 조퇴 칸이면 배지는 그대로(`optimisticMarkFor` — 축약이 조퇴를 '결석'으로 접는다).
+    // 조퇴 칸이면 raw는 조퇴 그대로 — 배지는 행에서 다시 계산한다(`studentMarkFromRows`, 조퇴는 '조퇴').
     const linkedRaw = target.attendanceRaw ?? "present";
-    applyAttendanceLocal(
-      existing.id,
-      target.classId,
-      linkedRaw,
-      { units: res.units === 1 ? null : res.units },
-      optimisticMarkFor(linkedRaw, studentsRef.current.find((s) => s.id === existing.id)?.attendance ?? existing.attendance),
-    );
+    applyAttendanceLocal(existing.id, target.classId, linkedRaw, { units: res.units === 1 ? null : res.units });
     if (res.alreadyLinked) {
       toast.message(withNote(tf("os.c.makeupAlreadyLinked", { date: shortDate(absentDate) })));
       return;
@@ -1755,18 +1760,18 @@ export function OneScreenClient({
     });
   }
   // ── 출결 인라인 입력(2-2) — 출석부와 같은 기록(setAttendanceCell 재사용). 행(반) 단위 raw 보존 ──
-  // 배지 축약 표는 [attendance-mark.ts](../attendance-mark.ts) 단일 소스 — 로스터·스트립 반영과 같은 표를 쓴다.
-  const markOf = attendanceMarkOf;
+  // 학생 배지는 **행 raw에서 계산**한다([attendance-mark.ts](../attendance-mark.ts) `studentMarkFromRows` 단일 소스 —
+  // 로스터·스트립 반영과 같은 함수, 우선순위 결석 > 조퇴 > 지각 > 출석). 배지를 따로 들고 다니지 않으므로
+  // 롤백·응답 역전이 와도 배지가 행과 갈리지 않는다(예전 compare-and-swap 롤백이 필요 없어졌다).
+  const withMark = (s: OneScreenStudent): OneScreenStudent => ({ ...s, attendance: studentMarkFromRows(s) });
   function applyAttendanceLocal(
     studentId: string,
     classId: string,
     raw: string | null,
     extra?: { note?: string | null; units?: number | null },
-    mark?: AttendanceMark,
   ) {
-    patch(studentId, (s) => ({
+    patch(studentId, (s) => withMark({
       ...s,
-      attendance: mark ?? (raw ? markOf(raw) : s.attendance),
       subjects: s.subjects.map((su) =>
         su.classId === classId
           ? {
@@ -1781,18 +1786,15 @@ export function OneScreenClient({
       ),
     }));
   }
-  // 실패 롤백 — 행 raw는 되돌리되, 배지(학생단위)는 **내 낙관값이 아직 살아있을 때만** 복원(compare-and-swap).
-  // 그 사이 다른 반 pill 갱신이 배지를 바꿨으면 그걸 보존한다(#17: 앞 요청 롤백이 뒤 성공 배지를 지우던 문제).
+  // 실패 롤백 — 이 행 raw만 되돌리고 배지는 행에서 다시 계산한다. 그 사이 다른 반 pill 갱신은 그 행 raw에
+  // 남아 있으므로 배지에 그대로 반영된다(#17: 앞 요청 롤백이 뒤 성공 배지를 지우던 문제 — 구조로 해소).
   function rollbackAttendance(
     studentId: string,
     classId: string,
     prev: { raw: string | null; note: string | null; units: number | null },
-    myMark: AttendanceMark,
-    prevMark: AttendanceMark,
   ) {
-    patch(studentId, (s) => ({
+    patch(studentId, (s) => withMark({
       ...s,
-      attendance: s.attendance === myMark ? prevMark : s.attendance,
       subjects: s.subjects.map((su) =>
         su.classId === classId
           ? { ...su, attendanceRaw: prev.raw, attendanceNote: prev.note, attendanceUnits: prev.units }
@@ -1830,11 +1832,8 @@ export function OneScreenClient({
       note: row?.attendanceNote ?? null,
       units: row?.attendanceUnits ?? null,
     };
-    const prevMark = stu?.attendance ?? MARK_PRESENT;
     const changesExtra = extra !== undefined && ("note" in extra || "units" in extra);
     if (prev.raw === status && !changesExtra) return; // 상태 재클릭 no-op(삭제는 출석부에서)
-    // 🔴 조퇴 쓰기(보강 합침)는 배지를 그대로 둔다 — 축약이 조퇴를 '결석'으로 접는다(`optimisticMarkFor`).
-    const myMark = optimisticMarkFor(status, prevMark);
     setAttPending((p) => new Set(p).add(key));
     /**
      * 🔴 **첫 기록 + 숫자 안 고름** = 서버가 수학 수업 길이 자동 시수를 넣는다(auto-units.ts, 2026-09-11).
@@ -1862,7 +1861,6 @@ export function OneScreenClient({
         ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
         ...(optimisticUnits !== undefined ? { units: optimisticUnits } : {}),
       },
-      myMark,
     );
     try {
       const res = await setAttendanceCell({
@@ -1879,7 +1877,7 @@ export function OneScreenClient({
         onlyIfEmpty: prev.raw === null && !opts?.overwrite,
       });
       if ("error" in res) {
-        rollbackAttendance(studentId, classId, prev, myMark, prevMark);
+        rollbackAttendance(studentId, classId, prev);
         toast.error(res.error);
       } else if (res.conflict) {
         // 서버 진실로 화면을 맞춘다(낙관값 폐기) — 다시 누르면 그때는 보이는 상태를 바꾸는 정상 편집.
@@ -1899,10 +1897,10 @@ export function OneScreenClient({
         );
       } else if (autoOnInsert && res.autoUnits !== undefined) {
         // 서버가 실제로 넣은 시수로 맞춘다(자동값 또는 조회 실패 시 null=1) — 낙관값이 기록과 갈리지 않게.
-        applyAttendanceLocal(studentId, classId, status, { units: res.autoUnits }, myMark);
+        applyAttendanceLocal(studentId, classId, status, { units: res.autoUnits });
       }
     } catch {
-      rollbackAttendance(studentId, classId, prev, myMark, prevMark);
+      rollbackAttendance(studentId, classId, prev);
       toast.error(t("os.c.attFail"));
     } finally {
       setAttPending((p) => {
@@ -3259,9 +3257,15 @@ export function OneScreenClient({
     const waited = await refreshJjBeforeOutput(student, subjectName);
     const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     let res = await saveAndQueueClassnote(built.input);
-    // 반별 발송인데 보강 보고서의 보낼 반을 서버가 못 정했다 — 강사가 고르면 그 반으로 다시 보낸다(저장은 이미 끝났다).
+    // 반별 발송인데 보강 보고서의 보낼 반을 서버가 못 정했다(또는 보강 추가한 반에 반 보드가 없어 다른 반으로 가야 한다 —
+    // 경고 한 줄과 함께 묻는다) — 강사가 고르면 그 반으로 다시 보낸다(저장은 이미 끝났다).
     if (res.status === "needs_class" && res.candidates?.length) {
-      const picked = await askSendClass(student.name, res.candidates);
+      const picked = await askSendClass({
+        studentName: student.name,
+        candidates: res.candidates,
+        defaultId: res.defaultClassId ?? null,
+        makeupClassName: res.makeupClassName ?? null,
+      });
       if (picked) res = await saveAndQueueClassnote({ ...built.input, classnoteClassId: picked });
     }
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.

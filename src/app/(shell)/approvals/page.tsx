@@ -128,7 +128,7 @@ export default async function ApprovalsPage({
   const period = balance.period;
 
   return (
-    <div className="mx-auto w-full max-w-[1000px] space-y-5 p-4 md:p-6">
+    <div className="w-full min-w-0 space-y-5 p-4 md:p-6">
       {/* 설명 문장 대신 값(§4) — 결재함 건수. 상시 버튼 = Primary '기안하기' 하나(§10). */}
       <PageHeader
         eyebrow="운영"

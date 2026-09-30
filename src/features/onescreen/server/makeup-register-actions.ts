@@ -8,6 +8,7 @@ import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { addMakeupSessionEntries, type MakeupSessionEntry } from "../makeup-session";
 import { changeMakeupSession } from "./makeup-session-store";
 import { makeupDeadlineError } from "@/features/attendance/server/makeup-deadline-gate";
+import { findMakeupAnchor } from "@/features/attendance/makeup-host";
 
 /** 확인 버튼은 이 저장이 끝난 뒤에만 성공한다. 보고서 생성·발송은 하지 않는다. */
 export async function registerMakeupEntries(input: {
@@ -28,7 +29,8 @@ export async function registerMakeupEntries(input: {
   if (student.error || !student.data) return { ok: false, error: "학원 학생을 확인하지 못했습니다" };
   const entries: MakeupSessionEntry[] = [];
   for (const entry of input.entries) {
-    const anchor = entry.makeupClassId ? classes.find(c => c.id === entry.makeupClassId && c.subject === entry.subject) : null;
+    // 앵커 = 담당 반 · 같은 과목 · 종강 전(선택지 fetchMakeupHostClasses·보고서 저장과 같은 판정 — 원장 2026-09-30 *"종강이 아닌 담당 반"*).
+    const anchor = findMakeupAnchor(classes, entry.makeupClassId, entry.subject, input.date);
     if (!classes.some(c => c.subject === entry.subject) || (entry.makeupClassId && !anchor)) {
       return { ok: false, error: "담당 과목과 보강 수업을 확인해 주세요" };
     }

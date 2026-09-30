@@ -39,7 +39,7 @@ import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type ClassnoteBadge } from "../classnote-badge";
-import { attendanceMarkLabel, MARK_ABSENT, MARK_LATE } from "../attendance-mark";
+import { attendanceMarkBadgeClass, attendanceMarkLabel } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetLang } from "@/features/teacher-view/i18n";
 
@@ -413,13 +413,9 @@ export function ReportCard({
             </>
           ) : (
             <span
-              className={`rounded-pill px-2 py-0.5 text-xs font-bold ${
-                student.attendance === MARK_LATE
-                  ? "bg-amber-soft text-amber"
-                  : student.attendance === MARK_ABSENT
-                    ? "bg-danger text-white"
-                    : "bg-bg-soft text-text-dim"
-              }`}
+              className={`rounded-pill px-2 py-0.5 text-xs font-bold ${attendanceMarkBadgeClass(student.attendance, {
+                strongAbsent: true,
+              })}`}
               title={
                 student.isMakeup || !subject.classId
                   ? t("os.card.noClassAttendance")

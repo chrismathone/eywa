@@ -1,3 +1,4 @@
+import { isCancelledEventTitle } from "@/features/calendar/cancelled";
 import { addDays } from "@/lib/date-kst";
 import { baseNameOf } from "@/features/students/name-suffix";
 import { containsWord, schoolGradeKey, titleSchoolHints } from "./admissions-class-link";
@@ -97,7 +98,7 @@ export function consultationBasesInTitles(
   notNames: readonly string[] = [],
 ): string[] {
   const stop = new Set(notNames.map(squash));
-  const titles = events.filter((e) => !/취소/.test(e.title)).map((e) => stripStaffTags(e.title));
+  const titles = events.filter((e) => !isCancelledEventTitle(e.title)).map((e) => stripStaffTags(e.title));
   return [...new Set(candidates.filter((c) => titles.some((t) => nameHits(t, c, stop))).map(baseOf))];
 }
 
@@ -112,7 +113,7 @@ export function matchAdmissionsConsultation(
   notNames: readonly string[] = [],
   opts: { since?: string; families?: HomonymFamilies } = {},
 ): { id: string; name: string } | null {
-  if (/취소/.test(event.title)) return null;
+  if (isCancelledEventTitle(event.title)) return null;
   const title = stripStaffTags(event.title);
   const windowFloor = addDays(event.startDate, -CONSULTATION_LINK_WINDOW_DAYS);
   const floor = opts.since && opts.since > windowFloor ? opts.since : windowFloor;

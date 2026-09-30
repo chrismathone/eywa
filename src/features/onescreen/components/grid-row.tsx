@@ -21,7 +21,7 @@ import { evaluateSendGate } from "../send-gate";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
 import { checkMentConsistency, MENT_WARNING_HINT, MENT_WARNING_LABEL } from "../ment-consistency";
-import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
+import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../attendance-mark";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { parentUnreadBadge, progressAnomalyBadge } from "../roster-signals";
 import { makeupBadgeLabel } from "../makeup-label";
@@ -518,9 +518,7 @@ export function GridBodyRow({
             />
           ) : att !== MARK_PRESENT ? (
             <span
-              className={`rounded-pill px-1.5 py-px text-xs font-bold ${
-                att === MARK_LATE ? "bg-amber-soft text-amber" : "bg-danger text-white"
-              }`}
+              className={`rounded-pill px-1.5 py-px text-xs font-bold ${attendanceMarkBadgeClass(att, { strongAbsent: true })}`}
             >
               {attendanceMarkLabel(att, lang)}
             </span>

@@ -2,6 +2,7 @@
  * 캘린더(학원 공용 일정) 공용 타입·라벨. server-only 아님(클라 컴포넌트도 import).
  * aywa DB가 일정의 단일 진실(0218a 머리 주석 — 구글 상시 동기화 없음).
  */
+import { isCancelledEventTitle } from "./cancelled";
 
 /** 일정 표시 색 — Pill/soft 팔레트 키의 부분집합. DB는 안 잠그고 코드가 검증한다(0218a). */
 export const EVENT_COLORS = ["primary", "blue", "green", "amber", "purple", "rose", "neutral"] as const;
@@ -37,8 +38,12 @@ export type CalendarTag = {
 /**
  * 표시색 단일 규칙 — **태그가 있으면 태그색, 없으면 일정 자체 색**.
  * 월 그리드·하루 상세·연간/목록/분석 뷰가 전부 이걸 지나야 색이 갈리지 않는다.
+ * 🔑 **취소된 일정(제목에 '취소')은 무채색**(원장 2026-09-30 *"취소 일정은 표시해주는게 더 합리적"*) — 지우지 않고
+ *    회색 칩 + 제목 취소선(`CANCELLED_TITLE_CLASS`)으로 남긴다. 판정은 [`isCancelledEventTitle`](./cancelled.ts) 한 벌.
+ *    저장된 색(`color`·태그색)은 그대로다 — 표시만 바뀌고, 편집 창의 색 선택은 원래 값을 보인다.
  */
-export function eventDisplayColor(e: Pick<CalendarEvent, "color" | "tag">): CalendarColor {
+export function eventDisplayColor(e: Pick<CalendarEvent, "color" | "tag" | "title">): CalendarColor {
+  if (isCancelledEventTitle(e.title)) return "neutral";
   return e.tag?.color ?? e.color;
 }
 

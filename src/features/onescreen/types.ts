@@ -199,7 +199,8 @@ export type Tests = {
   check: TestScore; // 확인테스트 (오늘 진도 범위)
 };
 
-export type AttendanceMark = "출석" | "지각" | "결석";
+/** 학생 배지(축약) — 모으는 규칙·우선순위는 [attendance-mark.ts](./attendance-mark.ts) `studentMarkOf`. */
+export type AttendanceMark = "출석" | "지각" | "조퇴" | "결석";
 
 export type OneScreenStudent = {
   id: string;
@@ -221,7 +222,14 @@ export type OneScreenStudent = {
    * 이 창이 마지막 저장자라 칸을 비워도 되고, 다르면 덜 쓴 창의 저장은 서버가 무시한다.
    */
   sessionUpdatedAt?: string;
+  /** 학생 배지 — 행 raw에서 계산한다(`studentMarkFromRows`). 직접 고치지 말 것. */
   attendance: AttendanceMark;
+  /**
+   * 내 반의 그날 출결인데 **반이 있는 행에 못 붙은** 칸의 raw 상태들(반 모호 행 등) — 배지 계산 재료로만 쓴다.
+   * 반 id → 그 반의 그날 최신 raw. 로스터가 채우고, 스트립 방송·보강 삭제가 **같은 반 키로** 고친다
+   * (키가 없으면 정정이 와도 옛 결석이 배지에 영원히 남는다 — 적대 리뷰 2026-09-30). 없으면 빈 것.
+   */
+  attendanceOffRow?: Record<string, string>;
   subjects: Subject[];
   tests: Tests;
   attitude: string | null; // "매우 좋음"~"매우 안좋음"(attitude.ts) | null. 옛 기록엔 "최고"·"아주 좋음"도 있다.

@@ -67,7 +67,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
     lastAssignment: typeof lastAssigned[ledgerPairKey(row)] === "boolean"
       ? { beforeDate: toDate, assigned: lastAssigned[ledgerPairKey(row)] } : undefined,
   }));
-  return <main className="mx-auto w-full max-w-7xl space-y-4">
+  return <main className="w-full min-w-0 space-y-4">
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
       description="반별 장부에서 학생별 회차·수업 날짜·수행 여부를 확인합니다." />
     <FaceTabs faces={lessonReportFaces({ canOwner, canSend: canEdit,

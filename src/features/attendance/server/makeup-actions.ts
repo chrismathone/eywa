@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTeachingClasses } from "@/features/classes/server/delegation";
 import { getMakeupAbsenceOptions } from "./makeup-options";
 import type { MakeupAbsenceList } from "../makeup-options";
-import { orderHostClasses, type MakeupHostClass } from "../makeup-host";
+import { isClassOpenOn, orderHostClasses, type MakeupHostClass } from "../makeup-host";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 
 /** 권한이 없거나 못 불렀을 때 — 확인창은 이걸 받아 '직접 입력'으로 폴백한다. */
@@ -48,7 +48,8 @@ export async function fetchMakeupAbsences(
 /**
  * 보강을 기록할 수 있는 **수업(반) 후보** — 원장 2026-09-21 *"보강 추가시에 '수업'을 선택할 수 있어야겠어"*.
  * 🔴 **보강 등록 문(`registerMakeupEntries`)과 같은 판정**(#77 — 보여 놓고 실패하면 안 된다): 그날 담당 반(`getTeachingClasses` —
- *    담임 ∪ 위임, 활성)이고, `subjects`를 주면 그 과목의 반만. 등록 문이 과목까지 맞춰 보기 때문이다.
+ *    담임 ∪ 위임, 활성)이면서 **종강 전**(`isClassOpenOn`, 원장 2026-09-30)이고, `subjects`를 주면 그 과목의 반만.
+ *    등록 문이 과목까지 맞춰 보기 때문이다.
  * 학생이 그날 다니는 반(휴원 제외)이 맨 앞(`orderHostClasses`) — 🔴 창은 그중 **다니는 반만** 세운다(`hostChoicesFor`). '반 없이'는 창이 따로 둔다.
  * ⚠️ 실패는 `failed: true` — 창은 그때 묻지 않고 종전 앵커(보던 반 필터)로 기록한다(보강 추가 자체가 막히면 더 나쁘다).
  */
@@ -73,7 +74,8 @@ export async function fetchMakeupHostClasses(studentId: string, makeupDate: stri
         .map((e) => e.class_id),
     );
     const wanted = subjects?.length ? new Set(subjects) : null;
-    return { options: orderHostClasses(classes.filter((c) => !wanted || wanted.has(c.subject)).map((c) => ({
+    // 종강 반은 빼고(원장 2026-09-30 *"종강이 아닌 담당 반"* — 등록 문도 같은 판정 isClassOpenOn) · 과목이 같은 반만.
+    return { options: orderHostClasses(classes.filter((c) => isClassOpenOn(c.closedAt, makeupDate) && (!wanted || wanted.has(c.subject))).map((c) => ({
       classId: c.id, className: c.className, subject: c.subject, enrolled: enrolled.has(c.id),
     }))) };
   } catch (e) {

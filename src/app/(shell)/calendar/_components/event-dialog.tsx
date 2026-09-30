@@ -21,6 +21,7 @@ import {
   type CalendarEvent,
   type CalendarTag,
 } from "@/features/calendar/types";
+import { cancelledTitleClass } from "@/features/calendar/cancelled";
 import { EventColorField, TagLegend } from "./event-color-fields";
 
 /**
@@ -202,7 +203,7 @@ function ViewBody({
             style={dotProps(eventDisplayColor(event)).style}
             aria-hidden
           />
-          {event.title}
+          <span className={cancelledTitleClass(event.title)}>{event.title}</span>
         </h2>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${dday.cls}`}>
           {dday.label}

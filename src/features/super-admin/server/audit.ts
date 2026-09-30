@@ -12,6 +12,7 @@ export type SuperAdminAction =
   | "reset_user_password"
   | "set_user_active"
   | "protected_account_refused"
+  | "protected_integrity_alert"
   | "support_request_answer"
   | "support_notice_create"
   | "support_notice_update"

@@ -2,6 +2,8 @@
 
 import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { Toolbar, ToolbarButton, ToolbarChip } from "@/components/toolbar";
+import { TOOLBAR_SEARCH_BOX, TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { EmbedHiddenInput } from "@/components/embed-link";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCsv, ledgerMarkKey, ledgerPairKey,
@@ -16,7 +18,7 @@ function FilterSelect({ label, name, value, options, disabled, onChange }: {
   label: string; name: string; value: string; options: { value: string; label: string }[]; disabled: boolean; onChange: (value: string) => void;
 }) {
   const missing = value !== "all" && !options.some((option) => option.value === value);
-  return <label className={styles.filter}><span>{label}</span><select name={name} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+  return <label className={styles.filter}><span className="sr-only">{label}</span><select className={TOOLBAR_SELECT} name={name} aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
     <option value="all">전체 {label}</option>{missing ? <option value={value}>{value} (조회기간에 없음)</option> : null}
     {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
   </select></label>;
@@ -104,30 +106,28 @@ export function VideoHomeworkManagement({ rows, initialMarks, fromDate, toDate, 
   return <div className={styles.ledger} aria-busy={busy}>
     <form className={styles.filters} action="/lesson-reports/video-homework" method="get" onSubmit={validateRange}>
       <EmbedHiddenInput />
-      <div className={styles.filterRow}>
-        <label className={styles.filter}><span>시작일</span><input aria-label="조회 시작일" name="from" type="date" defaultValue={fromDate} max={today} required disabled={busy} /></label>
+      <Toolbar className={styles.filterRow} gap="gap-2" rail={false}>
+        <label className={styles.dateFilter}><span className="sr-only">시작일</span><input className={TOOLBAR_SELECT} aria-label="조회 시작일" name="from" type="date" defaultValue={fromDate} max={today} required disabled={busy} /></label>
         <span className={styles.dateSeparator}>–</span>
-        <label className={styles.filter}><span>종료일</span><input aria-label="조회 종료일" name="to" type="date" defaultValue={toDate} max={today} required disabled={busy} /></label>
-        <button type="submit" className={styles.primary} disabled={busy}>기간 조회</button>
-        <label className={styles.search}><EyIcon name="search" size={16} /><input aria-label="학생·반·학교 통합 검색" name="q" placeholder="학생 · 반 · 학교 · 학년 검색" value={filters.query} disabled={busy} onChange={(event) => update("query", event.target.value)} /></label>
-        <button type="button" disabled={busy || !visible.length} onClick={download}>검색 결과 CSV</button>
-      </div>
-      <div className={styles.filterRow}>
+        <label className={styles.dateFilter}><span className="sr-only">종료일</span><input className={TOOLBAR_SELECT} aria-label="조회 종료일" name="to" type="date" defaultValue={toDate} max={today} required disabled={busy} /></label>
+        <ToolbarButton type="submit" variant="primary" disabled={busy}>기간 조회</ToolbarButton>
+        <label className={`${TOOLBAR_SEARCH_BOX} ${styles.search}`}><EyIcon name="search" size={18} /><input aria-label="학생·반·학교 통합 검색" name="q" placeholder="학생·반·학교 검색" value={filters.query} disabled={busy} onChange={(event) => update("query", event.target.value)} /></label>
         <FilterSelect label="반" name="class" value={filters.classId} options={groups.map((group) => ({ value: group.classId, label: group.className }))} disabled={busy} onChange={(value) => update("classId", value)} />
         <FilterSelect label="과목" name="subject" value={filters.subject} options={options.subjects} disabled={busy} onChange={(value) => update("subject", value)} />
         <FilterSelect label="학교" name="school" value={filters.school} options={options.schools} disabled={busy} onChange={(value) => update("school", value)} />
         <FilterSelect label="학년" name="grade" value={filters.grade} options={options.grades} disabled={busy} onChange={(value) => update("grade", value)} />
         <FilterSelect label="수행 상태" name="status" value={filters.status} options={LEDGER_STATUS_OPTIONS.map((option) => ({ value: option.value, label: `${option.label} 있음` }))} disabled={busy} onChange={(value) => update("status", value as LedgerFilters["status"])} />
-        <label className={styles.filter}><span>정렬</span><select aria-label="학생 정렬" name="sort" value={filters.sort} disabled={busy} onChange={(event) => update("sort", event.target.value as LedgerFilters["sort"])}>
+        <label className={styles.filter}><span className="sr-only">정렬</span><select className={TOOLBAR_SELECT} aria-label="학생 정렬" name="sort" value={filters.sort} disabled={busy} onChange={(event) => update("sort", event.target.value as LedgerFilters["sort"])}>
           <option value="name">이름순</option><option value="missing">미수행 많은 순</option><option value="completion">완료율 낮은 순</option>
         </select></label>
-        <button type="button" className={styles.reset} disabled={busy} onClick={() => setFilters({ ...DEFAULT_LEDGER_FILTERS })}>필터 초기화</button>
-      </div>
+        <ToolbarButton aria-label="필터 초기화" disabled={busy} onClick={() => setFilters({ ...DEFAULT_LEDGER_FILTERS })}>초기화</ToolbarButton>
+        <ToolbarButton disabled={busy || !visible.length} onClick={download}>검색 결과 CSV</ToolbarButton>
+      </Toolbar>
       {rangeError ? <p role="alert" className={styles.red}>{rangeError}</p> : null}
     </form>
     <div className={styles.classTabs} aria-label="반 바로 선택">
-      <button type="button" aria-pressed={filters.classId === "all"} disabled={busy} onClick={() => update("classId", "all")}>전체 반 <small>{tabCounts.total}</small></button>
-      {groups.map((group) => <button type="button" key={group.classId} aria-pressed={filters.classId === group.classId} disabled={busy} onClick={() => update("classId", group.classId)}>{group.className} <small>{tabCounts.byClass.get(group.classId) ?? 0}</small></button>)}
+      <ToolbarChip active={filters.classId === "all"} disabled={busy} onClick={() => update("classId", "all")}>전체 반 <small>{tabCounts.total}</small></ToolbarChip>
+      {groups.map((group) => <ToolbarChip key={group.classId} active={filters.classId === group.classId} disabled={busy} onClick={() => update("classId", group.classId)}>{group.className} <small>{tabCounts.byClass.get(group.classId) ?? 0}</small></ToolbarChip>)}
     </div>
     <div className={styles.summary} aria-live="polite"><span>검색 결과 <strong>{visible.length}</strong>명·반 <span className={styles.dim}>/ {rows.length}</span></span>
       <span className={styles.green}>완료 <strong>{summary.submitted}</strong>회</span><span className={styles.red}>미수행 <strong>{summary.missing}</strong>회</span><span className={styles.dim}>미확인 {summary.unchecked}회</span>

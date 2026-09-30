@@ -10,8 +10,8 @@
 }
 .board {
   padding: 20px 22px 14px;
-  max-width: 2100px;
-  margin: auto;
+  width: 100%;
+  min-width: 0;
 }
 .header {
   display: flex;
@@ -1264,6 +1264,12 @@ a.kpiCountRow:hover > span {
 .kpiTagMuted {
   background: #f1f4f7;
   color: var(--foreground);
+}
+/* 취소된 일정 제목 — 목록엔 남기고 줄을 긋는다(원장 2026-09-30). 글자색은 한 값이라 색 대신 선 + '취소' 표식이 뜻을 나른다. */
+.eventCancelled {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  overflow-wrap: anywhere;
 }
 /* 학년별 재원생 — 영어만·영어+수학·수학만 세 조각 막대(글자 없음, 색만). */
 .gradeSplit {

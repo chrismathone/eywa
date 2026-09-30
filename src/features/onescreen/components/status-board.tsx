@@ -11,7 +11,7 @@ import { TONE_SOFT } from "@/lib/design/semantic-color";
 import { rowSendStatus, summarizeSend, type SendStatus } from "../status";
 import type { OneScreenStudent } from "../types";
 import { classnoteBadge, type SubjectReport } from "./report-card";
-import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
+import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../attendance-mark";
 import { CLASS_GROUP_NONE } from "../class-tags";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
@@ -231,11 +231,10 @@ export function StatusBoard({
                         </span>
                         {r.student.attendance !== MARK_PRESENT ? (
                           <span
-                            className={`ml-1.5 rounded-pill px-1.5 py-px text-xs font-bold ${
-                              r.student.attendance === MARK_LATE
-                                ? "bg-amber-soft text-amber"
-                                : "bg-danger text-white"
-                            }`}
+                            className={`ml-1.5 rounded-pill px-1.5 py-px text-xs font-bold ${attendanceMarkBadgeClass(
+                              r.student.attendance,
+                              { strongAbsent: true },
+                            )}`}
                           >
                             {attendanceMarkLabel(r.student.attendance, lang)}
                           </span>

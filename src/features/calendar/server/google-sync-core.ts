@@ -5,7 +5,7 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { canOverwrite, googleEventKey, type ImportedEventRow } from "../google-import";
 
 /**
- * 구글 캘린더 → aywa 반영의 **공용 부품** — 하루 2회 전체 임포트(google-import.ts)와 웹훅 증분 동기화
+ * 구글 캘린더 → aywa 반영의 **공용 부품** — 전체 임포트(google-import.ts)와 웹훅 증분 동기화
  * (google-incremental.ts)가 **같은 규칙**으로 쓰게 한 곳에 모았다(두 벌이면 한쪽만 고쳐진다).
  * 🔴 읽기만 한다 · 손으로 만든 일정 불가침(`google_event_id` 있는 행만) · 사람이 고친 행 안 덮음 · 지운 행 묘비.
  * ⚠️ admin 클라이언트 = RLS 우회 → 모든 쿼리에 **tenant_id 명시 필터**.

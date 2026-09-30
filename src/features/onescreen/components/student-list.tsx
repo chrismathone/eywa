@@ -7,7 +7,7 @@ import { EyIcon } from "@/components/icons/aywa-icons";
 import { studentStatus, type TestConfig } from "../report";
 import { subjectTone, toneSolidClass } from "../data";
 import type { CellState, OneScreenStudent } from "../types";
-import { attendanceMarkLabel, MARK_LATE, MARK_PRESENT } from "../attendance-mark";
+import { attendanceMarkBadgeClass, attendanceMarkLabel, MARK_PRESENT } from "../attendance-mark";
 import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { CnBadge } from "./cn-badge";
@@ -128,9 +128,7 @@ function StudentRow({
           </span>
           {st.attendance !== MARK_PRESENT ? (
             <span
-              className={`shrink-0 rounded-full px-1 py-px text-xs font-bold whitespace-nowrap ${
-                st.attendance === MARK_LATE ? "bg-amber-soft text-amber" : "bg-danger-soft text-danger"
-              }`}
+              className={`shrink-0 rounded-full px-1 py-px text-xs font-bold whitespace-nowrap ${attendanceMarkBadgeClass(st.attendance)}`}
             >
               {attendanceMarkLabel(st.attendance, lang)}
             </span>

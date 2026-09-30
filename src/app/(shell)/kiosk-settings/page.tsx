@@ -91,7 +91,7 @@ export default async function KioskSettingsPage() {
   const live = !kakao.failed && kakao.value.live;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-5 py-6">
+    <div className="w-full min-w-0 space-y-6 px-5 py-6">
       <header>
         <h1 className="text-foreground text-xl font-bold">출석 키오스크 설정</h1>
         <p className="text-text-dim mt-1 text-sm leading-relaxed">

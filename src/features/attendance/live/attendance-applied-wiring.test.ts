@@ -71,7 +71,8 @@ describe("attendance applied broadcast wiring", () => {
       "src/features/onescreen/server/roster.ts",
       "src/features/onescreen/components/onescreen-client.tsx",
     ]) {
-      expect(read(file), file).toMatch(/attendanceMarkOf/);
+      // 배지는 행 raw에서 같은 함수로 계산한다(우선순위 결석 > 조퇴 > 지각 > 출석, attendance-mark.ts).
+      expect(read(file), file).toMatch(/studentMarkFromRows/);
       expect(read(file), file).not.toMatch(/"late" \? "지각"/);
     }
   });

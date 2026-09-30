@@ -43,7 +43,7 @@ import {
 } from "../font-size";
 import { getTextbookOrdersForStudents } from "@/features/billing/server/textbook-queries";
 import type { OneScreenStudent } from "../types";
-import { attendanceMarkOf } from "../attendance-mark";
+import { studentMarkFromRows } from "../attendance-mark";
 import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 
 /**
@@ -1216,12 +1216,16 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   );
   for (const v of viewRows)
     viewCountByReport.set(v.lesson_report_id, (viewCountByReport.get(v.lesson_report_id) ?? 0) + 1);
-  // student별 오늘 최신 출결 status(recorded_at desc라 첫 건이 최신) — 학생 배지 표시용(축약).
+  // student별 오늘 출결이 있는 **내 반** — 행에 못 붙은 칸(반 모호 행 등)을 배지 재료로 넘기기 위해(아래 attendanceOffRow).
   // ⚠️ 강사 담당 반 기록만(myClassIdSet) — 타 강사·타 반의 그날 기록을 집으면 이 화면 배지가 행 pill과 모순된다.
   const myClassIdSet = new Set(allIds); // 강사 담당 전 반
-  const attById = new Map<string, string>();
-  for (const a of attRows)
-    if (myClassIdSet.has(a.class_id) && !attById.has(a.student_id)) attById.set(a.student_id, a.status);
+  const myAttClassesByStudent = new Map<string, Set<string>>();
+  for (const a of attRows) {
+    if (!myClassIdSet.has(a.class_id)) continue;
+    const set = myAttClassesByStudent.get(a.student_id);
+    if (set) set.add(a.class_id);
+    else myAttClassesByStudent.set(a.student_id, new Set([a.class_id]));
+  }
   // (학생×반) 최신 raw — 출결 pill(2단계)의 행 단위 값. 축약(toMark)과 별개로 raw 보존(조퇴·보강 되쓰기 방지).
   // 메모·시수도 **같은 최신 행에서** 함께 집는다(2026-08-05) — 상태만 최신 행에서, 메모는 다른 행에서
   // 집으면 화면이 존재하지 않는 조합을 보여주고, 그걸 저장하면 실제 기록이 뒤섞인다.
@@ -1233,9 +1237,6 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const u = a.session_units == null ? null : Number(a.session_units);
     attByRow.set(k, { status: a.status, note: a.note ?? null, units: Number.isFinite(u) ? u : null });
   }
-  // 배지 축약 표는 [attendance-mark.ts](../attendance-mark.ts) 단일 소스 — 클라(원스크린·스트립 반영)와
-  // 같은 표를 쓴다. 사본을 두면 한쪽만 고쳐져 새로고침 전후 배지가 달라진다.
-  const toMark = attendanceMarkOf;
 
   for (const os of byStudent.values()) {
     os.reportSent = sentToday.has(os.id);
@@ -1291,7 +1292,6 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       if (t.notes) su.draft = t.notes;
       if (t.trend_note) su.trendDraft = t.trend_note;
     });
-    os.attendance = toMark(attById.get(os.id));
     // 행(반) 단위 raw 출결 — 출결 pill(2단계). classId 모호(null)면 미채움=pill 숨김.
     for (const su of os.subjects) {
       if (!su.classId) continue;
@@ -1304,6 +1304,22 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       const autoUnits = autoUnitsByClass.get(su.classId);
       if (autoUnits !== undefined) su.attendanceAutoUnits = autoUnits;
     }
+    // 학생 배지 — 행 raw + 행에 못 붙은 내 반 칸을 **우선순위로** 모은다(결석 > 조퇴 > 지각 > 출석).
+    // 표는 [attendance-mark.ts](../attendance-mark.ts) `studentMarkFromRows` 단일 소스 — 클라(낙관 반영·스트립 반영)가
+    // 같은 함수로 다시 계산하므로 새로고침 전후 배지가 같다.
+    const rowClassIds = new Set(os.subjects.map((su) => su.classId).filter(Boolean));
+    const offRow: Record<string, string> = {};
+    let offRowCount = 0;
+    for (const cid of myAttClassesByStudent.get(os.id) ?? []) {
+      if (rowClassIds.has(cid)) continue;
+      const rec = attByRow.get(`${os.id}::${cid}`);
+      if (rec) {
+        offRow[cid] = rec.status;
+        offRowCount += 1;
+      }
+    }
+    if (offRowCount) os.attendanceOffRow = offRow;
+    os.attendance = studentMarkFromRows(os);
     const pr = priorReport.get(os.id);
     // 🔴 이 폴백은 **학생 단위**(반 무관) 직전 회차다 — 정규/특강을 구분하지 못한다(원장 2026-07-23).
     //    특강 행만 있는 학생은 없으므로(특강은 정규와 함께 듣는다) 특강 행에 이 값이 들어가면

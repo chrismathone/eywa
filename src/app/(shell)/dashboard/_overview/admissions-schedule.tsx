@@ -1,15 +1,21 @@
 "use client";
 
 import type { OverviewData } from "@/features/dashboard/overview/model";
-import { dashboardDate } from "@/features/dashboard/overview/display";
+import {
+  admissionsListKind,
+  dashboardDate,
+  isCancelledAdmissionsRow,
+} from "@/features/dashboard/overview/display";
 import { WindowLink } from "@/components/workspace/window-link";
 import { ExternalLink } from "@/components/icons/aywa-icon-compat";
+import { CancelledMark } from "./cancelled-mark";
 import { ConsultStageChip } from "./consult-progress";
 import s from "./overview.module.css";
 
 /**
  * 레벨테스트 및 첫수업 일정 — 제목은 표시용(`displayTitle`: 연결된 원생의 정식 이름으로 바로잡은 것)을 쓰고, 바로잡았으면
  * 마우스 오버에 원래 제목을 남긴다. 링크는 반(첫 수업)이 먼저, 없으면 그 일정의 콜&상담(원장 2026-09-13).
+ * 취소된 일정은 **시간 순서 그대로** 줄을 긋고 '취소' 표식을 단다(원장 2026-09-30) — 열 머리 건수엔 안 들고 옆에 "취소 N"만.
  */
 export function AdmissionsSchedule({
   events,
@@ -25,10 +31,15 @@ export function AdmissionsSchedule({
   return (
     <div className={s.admissionsColumns}>
       {columns.map(({ kind, label }) => {
-        const items = events.filter((event) => event.kind === kind);
+        const items = events.filter((event) => admissionsListKind(event) === kind);
+        const cancelled = items.filter(isCancelledAdmissionsRow).length;
+        const active = items.length - cancelled;
         return (
           <section key={kind} aria-label={label} className={s.admissionsColumn}>
-            <h3 className={s.admissionsHeading}>{label}<span>{items.length}건</span></h3>
+            <h3 className={s.admissionsHeading}>
+              {label}
+              <span>{active}건{cancelled > 0 ? ` · 취소 ${cancelled}` : ""}</span>
+            </h3>
             <AdmissionEvents events={limit === undefined ? items : items.slice(0, limit)} />
             {items.length === 0 && events.length > 0 ? <p className={s.empty}>예정된 {label}이 없습니다.</p> : null}
             {limit !== undefined && items.length > limit ? <p className={s.admissionsMore}>외 {items.length - limit}건</p> : null}
@@ -43,6 +54,19 @@ function AdmissionEvents({ events }: { events: OverviewData["calendar"] }) {
   return (
     <div className={s.notices}>
       {events.map((event) => {
+        if (isCancelledAdmissionsRow(event)) {
+          // 취소 = 목록에 줄만 긋는다. 반·콜&상담 링크와 단계 칩은 붙이지 않는다(서버도 싣지 않는다).
+          return (
+            <div key={event.id} className={s.calendarEvent} data-cancelled="">
+              <time dateTime={event.startDate}>
+                {dashboardDate(event.startDate)}
+                <small>{event.startTime?.slice(0, 5) ?? "종일"}</small>
+                <CancelledMark />
+              </time>
+              <span className={s.eventCancelled}>{event.title}</span>
+            </div>
+          );
+        }
         const shown = event.displayTitle ?? event.title;
         const original = shown !== event.title ? `원래 제목: ${event.title}` : undefined;
         const link = event.matchedClass

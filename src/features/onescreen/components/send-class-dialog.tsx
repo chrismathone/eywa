@@ -3,23 +3,30 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useSheetT } from "@/features/teacher-view/lang-context";
+import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { ClassnoteSyncNowButton } from "@/features/report-admin/components/classnote-sync-now-button";
 
 export type SendClassAsk = {
   studentName: string;
   candidates: { id: string; name: string }[];
+  /** 처음 골라 둘 반(서버가 정한 메인 수업) — 없거나 후보 밖이면 첫 반. */
+  defaultId?: string | null;
+  /** 보강 추가한 반인데 이 학생의 반 보드가 없어 **다른 반으로 가는** 경우 그 반 이름 — 경고 한 줄을 띄운다. */
+  makeupClassName?: string | null;
   resolve: (classId: string | null) => void;
 };
 
 /**
  * 반 정보 없는 보강 보고서의 'ClassNote로 보낼 반' 고르기(A안, 원장 2026-09-29 *"보낼 곳이 없으면 '선택'"*).
- * 서버가 메인 수업을 정하지 못했을 때만 뜬다(send-class.ts). 고르면 그 반 보드로 보낸다 — 저장은 이미 끝났다.
+ * 서버가 메인 수업을 정하지 못했을 때, 또는 🔴 **보강 추가한 반과 다른 반으로 가야 할 때**(그 반에 이 학생의 반 보드가 없다 —
+ * 원장 2026-09-30) 뜬다(send-class.ts `decideSendClass`). 고르면 그 반 보드로 보낸다 — 저장은 이미 끝났다.
  * ⚠️ 반 이름은 aywa 반 이름 그대로(원스크린은 학부모 보고서를 짓는 표면 — student-list.tsx 반 헤더와 같은 규약).
  */
 export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: () => void }) {
   const t = useSheetT();
-  const [pick, setPick] = useState<string>(ask.candidates[0]?.id ?? "");
+  const tf = useSheetTf();
+  const preset = ask.defaultId && ask.candidates.some((c) => c.id === ask.defaultId) ? ask.defaultId : null;
+  const [pick, setPick] = useState<string>(preset ?? ask.candidates[0]?.id ?? "");
   const finish = (id: string | null) => {
     ask.resolve(id);
     onClose();
@@ -33,6 +40,11 @@ export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: 
           </DialogTitle>
           <DialogDescription>{t("os.sendClass.desc")}</DialogDescription>
         </DialogHeader>
+        {ask.makeupClassName ? (
+          <p role="alert" className="bg-amber-soft text-foreground rounded-lg px-3 py-2 text-sm font-bold">
+            {tf("os.sendClass.makeupMismatch", { name: ask.makeupClassName })}
+          </p>
+        ) : null}
         <div className="flex flex-col gap-1.5">
           {ask.candidates.map((c) => (
             <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm">

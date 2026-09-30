@@ -61,7 +61,7 @@ export function ExpenseRequestsClient({
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 p-4 md:p-6">
+    <div className="w-full min-w-0 space-y-5 p-4 md:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Receipt className="text-primary size-5" />

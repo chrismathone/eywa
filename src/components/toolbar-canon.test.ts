@@ -204,6 +204,7 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  *    통째로 비교하면 정당한 색 변경까지 막혀서 곧 지워진다.
  */
 const CANON_SURFACES = [
+  "src/features/video-homework/components/video-homework-management.tsx",
   "src/app/(shell)/exams/_components/exams-toolbar.tsx",
   "src/app/(shell)/exams/view/page.tsx",
   "src/app/(shell)/exams/_components/view-switch.tsx",

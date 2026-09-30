@@ -6,6 +6,26 @@
 - 중복 방지 = 지점당 살아 있는 요청 하나(부분 유니크, 23505 = 합류) · 5분 쿨다운(서버 강제) · 대기 30분·실행 20분 멈춤은 실패로 내리고 다시 받음 · 연동 PC가 꺼졌거나 옛 버전(caps.syncRequests 없음)이면 요청을 받지 않음. 권한 = 보고서 쓰기 + 강사(열람 전용 강사 뷰 제외). 모듈 꺼짐·SQL 전·반 보드 없는 지점 = 버튼 없음.
 - 자리 4곳: 보고서 설정 '수학 발송 경로'(반별·시범일 때) · 발송 관리 'ClassNote 발송 큐' · 반 단체 공지 · 원스크린 '보낼 반' 고르기. 감사로그 `classnote_board_sync_request`(사람) · `classnote_board_sync_run`(연동 PC). 새벽 정기 동기화의 '오늘 함' 표식은 수동 실행이 건드리지 않는다. ⏳ SQL 0313a 적용 + 워커 zip 교체 필요. 상세 `docs/classnote-integration.md` §10.7.
 
+## 2026-09-30 — 운영실 취소된 일정 = 목록엔 취소선, 숫자엔 없음
+
+- 원장 *"취소건에 대해서는 목록에는 띄워놓고 취소바를 그어서 표시하자. 일정도 마찬가지"* — '레벨테스트 및 첫수업 일정' 카드·금일입테 팝업이 제목에 '취소'가 붙은 일정을 시간 순서 그대로 취소선 + '취소' 표식으로 보인다. 숫자는 살아 있는 것만(카드 보조 줄 "취소 N"), 반·콜&상담 링크·상담 진행은 계속 제외. 판정 단일 소스 [`isCancelledEventTitle`](src/features/calendar/cancelled.ts) · 캘린더 탭(월·하루·연간·목록·분석)도 같은 판정으로 무채색 칩 + 취소선 + 건수 제외. 규칙 = `docs/decisions/dashboard.md` 운영실 카드 표시 규칙 ⑩.
+
+## 2026-09-30 — 보강 보고서는 보강 추가한 반으로 · 다른 반으로 가면 경고 · 보강·보낼 반 후보에서 종강 반 제외
+
+- 원장 *"애초에 보강 추가로 선택된 반에 보고서가 발송되면 되는거아닌가?"* — 보강 보고서(반 없음)가 보강 추가 때 고른 반(`makeup_class_id`, 예: 고등M 개별 TP4E)이 아니라 다른 ClassNote 반(고등M_일 개별진도)으로 나갔다. 보낼 반 판정(`pickMainClass`)이 보강 반을 안 봤다.
+- **앱이 정해 적고 워커는 따른다:** 앱 판정 = 보고서 반 → **보강 반**(그 학생의 살아 있는 반 보드가 있으면 묻지 않고 그 반) → 강사가 고른 반 → 메인 수업([`decideSendClass`](src/features/onescreen/send-class.ts)) — 결과를 `classnote_class_id`에 적는다. 워커·관리자 일괄 게이트 = 보고서 반 → **적힌 보낼 반** → 보강 반(적힌 값이 없던 옛 대기분) → 1인 보드/차단([`pickRouteClass`](scripts/_classnote/class-route-decide.mjs) = [`sendClassGateRow`](src/features/onescreen/send-class.ts), 전 조합 표 테스트). 보강 반 조회 실패는 '대상 아님'. 워커는 보강 반으로 **게시한 뒤**, 비어 있을 때만 '보낼 반'을 적는다 · 일괄 게이트는 게시 기록(`classnote_sent_at`)이 있는 행을 다시 적지 않고, 적은 행은 감사로그 `makeupRewritten`. 회수는 보고서 반·보낼 반·보강 반을 전부 훑는다.
+- **보강 앵커 서버 확인:** `saveLessonReport`가 클라가 준 `makeupClassId`를 등록 문과 같은 함수(`findMakeupAnchor`: 그날 담당 반 · 같은 과목 · 종강 전)로 확인해 적는다. 이미 적혀 있던 앵커는 유지, 못 받으면 옛 값 유지.
+- **다른 반으로 갈 때:** 보강 반에 반 보드가 없으면 자동으로 보내지 않고 **경고 한 줄**("보강 추가한 반(X)은 … 다른 반으로 보냅니다")과 함께 묻는다(기본 선택 = 메인 수업). 원스크린 창(한/영)·관리자 직접 작성 반 고르기 둘 다.
+- **경로 전부:** 원스크린 발송 · 관리자 직접 작성(강사가 보강으로 추가해 둔 같은 행의 앵커) · 관리자 일괄/재발송/멈춤 복구 게이트(`blockedForNoSendClass`) · 워커.
+- **후보에서 종강 반 제외**(원장 *"종강이 아닌 담당 반에서 뜨는게 맞지? 학생과 접점이 있는"* · *"보내는 반도 마찬가지고"*): 보강 '기록할 수업'(`fetchMakeupHostClasses`·등록 문 `registerMakeupEntries` = `isClassOpenOn`)과 보낼 반 후보(`isSendCandidateClass`) 둘 다. 종강 반 **자기 보고서**는 보드가 살아 있는 동안 그대로 그 반으로 간다(09-30 결정 유지). 소속 판정에 `isEnrollmentEndedOn`(반이동 당일, [[#125]]).
+- ⚠️ 워커 변경 = 연동 PC에 새 zip 필요(`classnote-core.mjs`·`class-route-decide.mjs`·`classnote-recall-core.mjs`). zip 전까지 옛 워커는 저장된 '보낼 반'을 따르므로 원스크린·관리자 직접 작성 발송은 이미 새 규칙대로 간다(일괄 재발송만 zip 뒤부터).
+
+## 2026-09-30 — 원스크린 학생 출결 배지: 조퇴는 '조퇴'(파랑)
+
+- 원장 지시(조퇴를 결석으로 보이지 말 것) — 배지 축약([`attendance-mark.ts`](src/features/onescreen/attendance-mark.ts))이 조퇴를 빨간 '결석'으로 접었다. `AttendanceMark`에 '조퇴' 추가(영어 강사뷰 `Left early` = 앱 전역 `attendanceLabelOf`), 색은 의미색 캐논 info(파랑, `attendanceMarkBadgeClass` 한 곳 — 표·카드·현황판·좌측 목록 4곳의 사본 삼항을 대체).
+- 학생 배지 = 그날 칸 여럿을 **우선순위로** 모은다: **결석 > 조퇴 > 지각 > 출석**(`studentMarkOf`, 무기록은 안 셈). 예전엔 "마지막으로 찍은 칸"이 배지라 뒤 반 '출석'이 앞 반 결석을 가렸다. 로스터·낙관 반영·롤백·스트립 방송이 모두 `studentMarkFromRows`(행 raw + 행에 못 붙은 내 반 칸 `attendanceOffRow`)로 **행에서 다시 계산** — 따로 든 배지가 없어 `optimisticMarkFor`(09-30 임시 우회)·롤백 compare-and-swap을 걷어냈다.
+- 알약·일괄 출결은 원래 조퇴를 못 덮는다(3종 밖 잠금·`skippedSpecial`) — 배지는 표시일 뿐 누르는 자리가 아니다. 발송 게이트(`absence-gate`·`send-gate`·grid)는 배지가 아니라 raw를 봐서 동작 변화 없음(조퇴 = 발송 유지 그대로).
+
 ## 2026-09-30 — 보강 합침: 조퇴한 날도 합칠 수 있다(조퇴는 조퇴 그대로)
 
 - 원장 *"조퇴한 날도 합리적으로"* — 옛 보강 체크박스를 걷어낸 뒤 조퇴 날엔 합칠 길이 없었다. `MERGEABLE_RAW`에 `early_leave` 추가 · `mergeStatusOf`가 조퇴를 **조퇴로** 돌려주고 원스크린 쓰기(`setAttendanceFor`)가 그 값을 받는다(시수만 보내 조퇴 사유 메모는 서버가 그대로 둔다). 수업타임 = 조퇴 칸 기록 시수 + 보강 시수 · 🔴 보강 시수 **기본값**은 줄여 둔 조퇴 시수가 아니라 정규 1회분(`makeupBaseUnits` = 수학 자동 시수, 없으면 1). 확인창 = "합침 (정규(조퇴)+보강)" + "조퇴 기록은 그대로". 돈: 조퇴는 `COUNTABLE_STATUSES`라 정산(tier-rows)이 그 칸 시수를 그대로 센다(산식 무변경) · 출석률(`attendedCount`=출석+지각)엔 원래대로 안 든다. 결석·공결·보강 칸은 여전히 합치지 않는다. 🔴 조퇴 쓰기는 학생 배지를 다시 칠하지 않는다(`optimisticMarkFor` — 배지 축약이 조퇴를 '결석'으로 접어, 합침 직후 배지가 결석으로 뒤집히면 강사가 '출석'을 눌러 조퇴를 지울 수 있다 · 적대 리뷰). 가드 = `makeup-merge-plan.test.ts`·`makeup-confirm-dialog.test.tsx`.
@@ -14,6 +34,13 @@
 
 - 원장 *"이벤트 발생할 때마다 동기화, 주기보다 웹훅같은걸로"* — '[취소]'로 바꾼 입테가 반나절 운영실에 남았다(임포트가 06:00·18:00뿐). 캘린더마다 구글 푸시 채널을 열고(`google-channels.ts`, 하루 2회 크론이 열기·갱신), `/api/calendar/google-push`가 알림을 받으면 그 캘린더의 바뀐 일정만(`updatedMin`) 반영한다(`google-incremental.ts`). 반영 규칙은 전체 임포트와 한 벌로 뽑았다(`google-sync-core.ts`). 410이면 그 캘린더만 전체 임포트. 한 캘린더 한 회차 잠금 + 도는 중 알림은 `dirty`로 한 번 더. 하루 2회 전체 임포트는 안전망으로 유지.
 - SQL 0310a `calendar_sync_state`(service_role 전용 — 사용자 정책 의도적 제외). SQL 전에도 앱은 안 죽는다(표 없으면 웹훅·채널이 조용히 꺼짐).
+- **새벽 크론 가볍게**(원장 *"하루 한번 새벽에 가볍게 돌려 필요하면."*): `vercel.json` 하루 2회(06·18시) → **04:00 KST 한 번**. 채널 열기·갱신 → 캘린더마다 증분 따라잡기(웹훅과 같은 함수·잠금, 최소 25시간 전부터) → 전체 임포트는 [`planCalendarCron`](src/features/calendar/cron-plan.ts)이 고른 캘린더만(시작점 없음·48시간 넘음·채널 없었음/만료/열기 실패·증분 실패·일요일 주간 안전망·`?full=1`) · 표 없으면(#95) 종전처럼 전체 · 응답 `calendars[].mode/reason` · 본체 [`google-cron.ts`](src/features/calendar/server/google-cron.ts).
+## 2026-09-30 — 보호 계정 가드 3중화(점검·보강)
+
+- 원장 *"방어가드가 확실한지만 더 체크 몇번 더해봐 2,3중이상으로 해도 되니까"*. 운영 DB에서 되돌림 트랜잭션으로 공격 13종 × 3계정을 쏴 봄 — 0309a는 **소프트 삭제(`deleted_at`)만 통과**. SQL 0312a가 그것·auth `role` 변경을 막고, super_admins 수정·삭제·비우기 권한을 API 역할에서 회수(트리거와 독립한 층), 트리거 상태 조회 `protected_guard_triggers()`를 둔다.
+- 3선 = 매일 점검: [`protected-integrity-core.ts`](src/lib/auth/protected-integrity-core.ts)(순수 판정 — 기준 명단 대비 추가·삭제, master·재직·로그인 역할·지점·차단·삭제, 가드 트리거 5개) → `notification-maintenance` 크론 맨 앞. 어긋나면 `reportError`(`security.protected-integrity`) + 총괄 감사로그 `protected_integrity_alert`. 읽기만 한다(고치지 않는다). 명단이 원장 승인으로 바뀌면 `BASELINE_PROTECTED_IDS`도 고칠 것.
+- 권한 매트릭스: super_admin에게 코드가 준 전자결재(full)를 저장된 개인 예외 `none`이 덮던 구멍을 막음(`getUserPermMatrix` — 코드 예외만 얹은 매트릭스도 병합).
+
 ## 2026-09-30 — 보호 계정(super_admins) 역할·재직·삭제 잠금
 
 - 원장 *"이승엽 superadmin 으로 등급업. 겉으로는 관리자. 박소선과 동일"* → *"강력 가드. 꼭 물어봐야하는걸로"*. 이승엽 system_role admin→master(스크립트·감사로그, 표시는 여전히 '관리자').
