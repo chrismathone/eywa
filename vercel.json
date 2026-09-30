@@ -38,7 +38,7 @@
       "schedule": "20 19 * * *"
     },
     {
-      "path": "/api/cron/daily-briefing",
+      "path": "/api/cron/notification-maintenance",
       "schedule": "0 22 * * *"
     },
     {
