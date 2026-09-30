@@ -44,6 +44,7 @@ import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
+import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
@@ -91,7 +92,10 @@ export type GridFieldHandlers = {
   trendHidden?: (studentId: string, subjectName: string) => boolean;
   onTrendHidden?: (studentId: string, subjectName: string) => void;
   onNote: (studentId: string, subjectName: string, text: string) => void; // 특이사항(강사 메모) — AI 멘트 입력(4c). **행별**.
-  onMakeup: (studentId: string, subjectName: string) => void; // 보강 토글
+  /** 합침 취소(정규+보강 → 정규) — '정규+보강' 배지에서만 부른다(체크박스는 2026-09-30 제거). */
+  onMakeup: (studentId: string, subjectName: string) => void;
+  /** 오늘 영상 과제 있음/없음 켜고 끄기(0308a). 없으면 칸이 잠긴다(읽기 전용·테스트). */
+  onVideoHomework?: (studentId: string, subjectName: string) => void;
 };
 
 /** 행 단위 액션. */
@@ -451,7 +455,7 @@ export function GridBodyRow({
               강사가 "왜 보강인데 보고서가 하나지?"를 화면에서 바로 이해한다. 판정은 makeup-label.ts 단일 소스. */}
           {/* 🔴 정규 학생 카드에 섞여 들어온 **순수 보강 행**(classId 없음)도 빼는 문이 있어야 한다
               (적대 리뷰 M2 — 버튼을 학생 단위 `isMakeup`에만 달면 최근 60일 67건 중 12건이 못 뺀다).
-              반이 붙은 '정규+보강'은 대상 아님(그건 체크박스로 끈다 — 지우면 정규 보고서가 날아간다). */}
+              반이 붙은 '정규+보강'은 대상 아님(그건 아래 배지로 **합침만 취소**한다 — 지우면 정규 보고서가 날아간다). */}
           {subject.makeup && !student.isMakeup ? (
             actions.onRemoveMakeup &&
             !subject.classId &&
@@ -464,6 +468,22 @@ export function GridBodyRow({
                 className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-xs font-bold transition hover:text-white"
               >
                 {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
+                <EyIcon name="close" size={8} />
+              </button>
+            ) : subject.classId && !rowLocked ? (
+              // 합침 취소(정규+보강 → 정규) — 옛 '보강' 체크박스의 유일한 정당한 쓰임(잘못 합친 것 되돌리기)을 여기로 옮겼다.
+              // 올려 둔 타임(보강 시수)은 건드리지 않는다(얼마를 올렸는지 모른다) — 확인창이 그 사실을 알린다.
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(tf("os.row.makeupUnmergeConfirm", { name: student.name, subject: subject.name })))
+                    fields.onMakeup(student.id, subject.name);
+                }}
+                title={t("os.row.makeupUnmerge")}
+                aria-label={tf("os.row.makeupUnmergeAria", { name: student.name, subject: subject.name })}
+                className="bg-amber-soft text-amber hover:bg-amber inline-flex shrink-0 cursor-pointer items-center gap-0.5 rounded-pill px-1 py-px text-xs font-bold transition hover:text-white"
+              >
+                {makeupBadgeLabel({ makeup: true, hasClass: true }, lang)}
                 <EyIcon name="close" size={8} />
               </button>
             ) : (
@@ -617,8 +637,8 @@ export function GridBodyRow({
         <div className="flex flex-col gap-1">
           {/* 칸마다 무엇인지 앞에 작은 아이콘(원장 2026-09-30 *"교재 / 과제 / 보강체크 알 수 있게"*) — 값이 차면
               placeholder가 사라져 두 칸이 구분되지 않았다. 폭 140px라 글자 대신 아이콘 + 툴팁. */}
-          <div className="flex items-center gap-1" title={t("os.row.bookPh")}>
-          <EyIcon name="book" size={14} className="text-text-faint shrink-0" aria-hidden />
+          <div className="flex items-center gap-1">
+          <span title={t("os.row.bookPh")} className="text-text-faint inline-flex shrink-0"><EyIcon name="book" size={14} aria-hidden /></span>
           <input
             type="text"
             value={subject.textbook ?? ""}
@@ -635,7 +655,7 @@ export function GridBodyRow({
           {/* 오늘 과제(숙제 내용) — 0096a. 과제 셀렉트(수행 상태)와 별개, AI 멘트·학부모 카드 재료. */}
           {/* 진도 셀과 같은 처방 — 시트 초안은 교시마다 과제가 있어 한 줄 input이면 붙어 보인다(2026-08-07). */}
           <div className="flex items-center gap-1">
-          <EyIcon name="clipboardList" size={14} className="text-text-faint shrink-0" aria-hidden />
+          <span title={t("os.row.hwTodayPh")} className="text-text-faint inline-flex shrink-0"><EyIcon name="clipboardList" size={14} aria-hidden /></span>
           <textarea
             rows={1}
             value={subject.homeworkToday ?? ""}
@@ -666,26 +686,20 @@ export function GridBodyRow({
             className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full min-w-0 resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none"
           />
           </div>
-          {/* 뜻이 행 종류에 따라 갈린다(2026-08-05) — 반이 붙은 행이면 "정규까지 하고 보강도 했다"라
-              제목이 "(정규+보강)"이 된다. 켜는 사람이 무엇을 켜는지 알 수 있게 툴팁으로 밝힌다. */}
-          <label
-            className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-xs"
-            title={
-              subject.classId
-                ? t("os.row.makeupBoth")
-                : t("os.row.makeupOnly")
-            }
-          >
-            <input
-              type="checkbox"
-              checked={!!subject.makeup}
-              onChange={() => fields.onMakeup(student.id, subject.name)}
-              disabled={rowLocked}
-              className="accent-primary size-3.5 disabled:opacity-50"
-              aria-label={tf("os.row.makeupAria", { name: student.name, subject: subject.name })}
-            />
-            {makeupBadgeLabel({ makeup: true, hasClass: false }, lang)}
-          </label>
+          {/* 🔴 '보강' 체크박스는 없앴다(원장 2026-09-30 *"옛 기능이 필요있는지 철저히 검수하고 필요없으면 제거"*).
+              보강은 **보강 추가**(합침 = 정규+보강·타임 합산 / 분리 = 보강 행)에서 정해진다 — 손으로 켜면 타임은 그대로인
+              '(정규+보강)' 제목만 생겨 출석부와 어긋났다. 되돌리기(합침 취소)는 이름 옆 '정규+보강' 배지가 맡는다. */}
+          {/* 오늘 영상 과제 있음/없음(0308a) — 정책이 이 반을 켠 행에서만 보인다. */}
+          <VideoHomeworkToggle
+            checked={!!subject.videoHomework}
+            onToggle={() => fields.onVideoHomework?.(student.id, subject.name)}
+            disabled={rowLocked || !fields.onVideoHomework}
+            classId={subject.classId}
+            subjectKey={subject.subjectKey}
+            grade={student.grade}
+            studentName={student.name}
+            subjectName={subject.name}
+          />
         </div>
       </td>
       <td className={td}>
