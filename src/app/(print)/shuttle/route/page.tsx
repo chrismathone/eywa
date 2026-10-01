@@ -174,11 +174,12 @@ export default async function ShuttleRoutePrintPage({
                             <td className="py-1">
                               {planned
                                 ? (riders as PlannedRide[]).map((p, k) => (
-                                    <span key={p.rider.id} className={p.dayKind === "skipped" ? "line-through" : ""}>
+                                    <span key={p.rider.id} className={p.dayKind === "skipped" || p.dayKind === "replaced" ? "line-through" : ""}>
                                       {k > 0 && "  "}
                                       {p.rider.studentName}
                                       {p.dayKind === "added" && <b className="font-bold">(오늘만)</b>}
                                       {p.dayKind === "skipped" && <span>(오늘 안 탐)</span>}
+                                      {p.dayKind === "replaced" && <span>(오늘은 다른 정류장)</span>}
                                     </span>
                                   ))
                                 : (riders as ShuttleRider[])

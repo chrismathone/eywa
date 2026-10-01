@@ -129,9 +129,15 @@ export const SUBTABS_BY_MENU: Partial<Record<MenuKey, SubTab[]>> = {
   shuttle: [
     { label: "노선 편성", href: "/shuttle" },
     { label: "오늘 등하원", href: "/shuttle/today" },
+    // 학부모 등하원 — 오늘 등하원을 **학부모가 보는 말**로 바꿔 아이별로 확인하는 면(관리자 뷰).
+    // 학부모 본인은 셸 밖 `/parent`에서 자기 아이 것만 본다. 두 화면이 같은 판정(parent-rides.ts)을 쓴다.
+    { label: "학부모 등하원", href: "/shuttle/parent-rides" },
     // 관제(2026-09-02) — '오늘 등하원'이 **찍는 화면**이라면 이쪽은 **보는 화면**이다. 관리자는
     // 회차를 펼쳐 한 줄씩 다루는 게 아니라 차 전체를 한눈에 보고 이상한 것만 짚는다.
     { label: "운행 현황", href: "/shuttle/live" },
+    // ⚠️ '학부모 관리 현황'(/shuttle/parents)은 **여기 두지 않는다** — 이 배열은 셔틀을 보는 모든 역할의
+    //    탭 줄(shuttleFaces)이 되는데, 그 면은 원장·관리자 전용이다. 입구는 학원운영 메뉴판(menu-hub
+    //    `adminOnly`) 하나이고, 그 화면에서만 탭 줄에 끼워 넣는다.
     // 실시간 위치(2026-09-03, 원장 *"운행현황 옆에 버튼하나 더해서 실시간 위치"*) — 아직 **자리만**
     // 잡아 둔 면이다(위치 송신 기능·지도 키가 둘 다 없다). 화면이 그 사실을 정직하게 말한다.
     { label: "실시간 위치", href: "/shuttle/track" },

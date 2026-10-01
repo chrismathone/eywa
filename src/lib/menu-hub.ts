@@ -12,6 +12,7 @@ import {
   type MenuGroupLayout,
   type MenuLayout,
 } from "@/features/owner/menu-layout";
+import { canManageParentAccountsRole, SHUTTLE_PARENTS_PATH } from "@/features/shuttle/parent-access";
 
 /**
  * 버튼형 메뉴 — **왼쪽에서 업무군을 고르면 본문에 그 업무의 메뉴 버튼이 뜬다**(원장 2026-09-07 확정:
@@ -45,6 +46,11 @@ export type HubDest = {
    * 같아야 해서(원장 2026-09-22) 게이트가 모르면(`isGenericTenant` 미지정) **안 세운다**(침산 쪽으로 기운다).
    */
   genericOnly?: boolean;
+  /**
+   * 원장·관리자(+총괄) 전용 목적지(예: 학부모 관리 현황) — 판정은 화면·서버와 같은
+   * `canManageParentAccountsRole` 한 벌이다. 메뉴 권한(menuKey)은 그대로 먼저 본다.
+   */
+  adminOnly?: boolean;
   /** 부차 도구 — 큰 버튼이 아니라 아래 작은 줄로 그린다(자주 쓰는 것과 가끔 쓰는 것을 가른다). */
   tool?: boolean;
   /** 설명 줄 안에서의 묶음 제목(설정처럼 목적지가 많은 허브에서만). */
@@ -183,7 +189,13 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("shuttle", "노선 편성·등하원 기록"),
       fromMenu("inventory", "자산·대여·실사·소모품"),
       face("shuttle", "/shuttle/today", "오늘 등하원", undefined, { tool: true, icon: "busStop" }),
+      // 학부모가 보는 말로 본 오늘 등하원(관리자 뷰). 아이콘은 셔틀 그림을 물려받는다(남은 스티커에 맞는 그림 없음).
+      face("shuttle", "/shuttle/parent-rides", "학부모 등하원", undefined, { tool: true }),
       face("shuttle", "/shuttle/live", "운행 현황", undefined, { tool: true, icon: "steering" }),
+      // 원장·관리자 전용 — 셔틀 탭 줄에는 없고 입구는 여기 하나다(navigation.ts 주석).
+      // ⚠️ 아이콘을 따로 안 준다 — 남은 스티커 중 '학부모'에 맞는 그림이 없어 셔틀 그림을 물려받는다
+      //    (다른 그림을 빌려 쓰면 뜻이 다른데 같은 그림이 되는 것을 가드가 막는다).
+      face("shuttle", SHUTTLE_PARENTS_PATH, "학부모 관리 현황", undefined, { tool: true, adminOnly: true }),
       // ⚠️ 실시간 위치는 아직 준비 화면이다(인수인계 §7) — 그래도 **입구는 남긴다**(사이드바 하부탭에 있던 자리).
       face("shuttle", "/shuttle/track", "실시간 위치", undefined, { tool: true, icon: "mapPin" }),
     ]),
@@ -312,6 +324,8 @@ function allowed(dest: HubDest, gate: Gate): boolean {
   if (dest.teacherOnly && !gate.canTeacherView) return false;
   if (dest.masterOnly && !gate.isMaster) return false;
   if (dest.genericOnly && !gate.isGenericTenant) return false;
+  // isMaster = master ∪ 총괄 — 총괄을 넘기는 자리가 그것뿐이라 그대로 싣는다.
+  if (dest.adminOnly && !canManageParentAccountsRole(gate.systemRole, !!gate.isMaster)) return false;
   // 🔴 권한 **뒤에** 본다 — 순서를 바꿔도 결과는 같지만, "권한이 먼저 거른다"가 이 설정의 정의다.
   if (isMenuHiddenByLayout(dest.href, gate.menuLayout)) return false;
   return true;

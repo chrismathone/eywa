@@ -15,6 +15,7 @@ import {
   type DayCode,
 } from "../types";
 import { canRecordBoarding } from "./record-gate";
+import { runNotOpenMessage } from "./trip-open-guard";
 
 /**
  * 셔틀 쓰기 — 정류장·차량·회차·노선·배정·등하원 기록.
@@ -40,7 +41,7 @@ const MAX_VEHICLE_NAME = 40;
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-type Ctx = { tenantId: string; userId: string };
+type Ctx = { tenantId: string; userId: string; userName: string };
 
 /** 공용 게이트 — 통과하면 tenant/user, 아니면 한글 사유. */
 async function gate(): Promise<Ctx | { error: string }> {
@@ -49,7 +50,7 @@ async function gate(): Promise<Ctx | { error: string }> {
   if (!(await canWriteTenant(user.systemRole, "shuttle"))) {
     return { error: "셔틀 편성을 수정할 권한이 없습니다" };
   }
-  return { tenantId: user.tenantId, userId: user.id };
+  return { tenantId: user.tenantId, userId: user.id, userName: user.displayName };
 }
 
 /**
@@ -62,7 +63,7 @@ async function recordGate(): Promise<Ctx | { error: string }> {
   if (!(await canRecordBoarding())) {
     return { error: "셔틀 등하원을 기록할 권한이 없습니다" };
   }
-  return { tenantId: user.tenantId, userId: user.id };
+  return { tenantId: user.tenantId, userId: user.id, userName: user.displayName };
 }
 
 function refresh() {
@@ -560,7 +561,9 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
 
   const admin = createAdminClient();
   // 스냅샷 재료 — 회차(차량 이름·회차번호)와 정류장 이름. 없으면 null로 두고 기록은 남긴다.
-  const [runRes, stopRes] = await Promise.all([
+  // ⚡ 출발 10분 전 규칙(trip-open-guard)도 **같이** 묻는다 — 학생마다 누르는 버튼이라 따로 한 번 더 기다리지 않게.
+  const [notOpen, runRes, stopRes] = await Promise.all([
+    runNotOpenMessage(admin, ctx.tenantId, runId, boardedOn),
     admin
       .from("shuttle_runs")
       .select("run_no, vehicle:shuttle_vehicles!shuttle_runs_vehicle_id_fkey(name)")
@@ -576,6 +579,7 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
+  if (notOpen) return { error: notOpen };
   if (!runRes.data) return { error: "회차를 찾지 못했습니다" };
 
   const vehicle = runRes.data.vehicle as { name?: string } | null;
@@ -587,9 +591,11 @@ export async function recordBoarding(formData: FormData): Promise<ShuttleActionS
       boarded_on: boardedOn,
       student_id: studentId,
       run_id: runId,
-      stop_id: stopRow?.stop_id ?? null,
+      // 🔴 노선 칸을 모르는 줄('예정에 없던 탑승')에서 누르면 정류장을 **보내지 않는다** — null로 보내면
+      //    이미 적혀 있던 정류장 이름(그날 어디서 탔나)을 지운다(2026-09-27 실제로 지워졌다).
+      //    upsert는 보낸 칸만 덮으므로 빼면 기존 값이 남는다(새 줄이면 원래대로 비어 있다).
+      ...(runStopId ? { stop_id: stopRow?.stop_id ?? null, stop_label: stopRow?.stop?.name ?? null } : {}),
       vehicle_label: vehicle?.name ?? null,
-      stop_label: stopRow?.stop?.name ?? null,
       run_no: runRes.data.run_no,
       io_kind: ioKind,
       status,
@@ -674,6 +680,10 @@ export async function setRideException(formData: FormData): Promise<ShuttleActio
       run_stop_id: kind === "add" ? runStopId : null,
       memo,
       created_by: ctx.userId,
+      // 마지막으로 바꾼 사람(0314a) — 트리거가 이력 장부에 그대로 옮긴다. 학부모가 걸었던 줄을 덮으면 직원으로 바뀐다.
+      actor_kind: "staff",
+      actor_name: ctx.userName,
+      parent_account_id: null,
     },
     // ⚠️ 0229a의 유니크가 **부분 인덱스가 아니라서** 이 추론이 된다([[#113]]) — 술어를 붙이면 42P10.
     { onConflict: "tenant_id,on_date,student_id,kind,io_kind" },
@@ -714,11 +724,14 @@ export async function clearRideException(formData: FormData): Promise<ShuttleAct
     return { error: "지난 날짜의 변경은 지울 수 없습니다 — 그날의 기록입니다" };
   }
 
-  const { error } = await admin
-    .from("shuttle_ride_exceptions")
-    .delete()
-    .eq("id", id)
-    .eq("tenant_id", ctx.tenantId);
+  // 🔑 직접 delete하지 않고 함수로 지운다(0314a) — 그래야 이력 장부에 **누가 취소했는지**가 남는다.
+  const { error } = await admin.rpc("cancel_shuttle_ride_exception", {
+    p_tenant_id: ctx.tenantId,
+    p_id: id,
+    p_actor_kind: "staff",
+    p_actor_id: ctx.userId,
+    p_actor_name: ctx.userName,
+  });
   if (error) return { error: friendly(error, "오늘 탑승 변경을 되돌리지 못했습니다") };
 
   await logAction({
@@ -776,15 +789,21 @@ export async function startTrip(formData: FormData): Promise<ShuttleActionState>
 
   const admin = createAdminClient();
   // 스냅샷 재료 — 회차를 지워도 "그날 1호차 3회차가 돌았다"는 남아야 한다(boardings와 같은 규약).
-  const { data: run } = await admin
-    .from("shuttle_runs")
-    .select("run_no, vehicle:shuttle_vehicles!shuttle_runs_vehicle_id_fkey(name)")
-    .eq("id", runId)
-    .eq("tenant_id", ctx.tenantId)
-    .maybeSingle();
+  // ⚡ 회차 · 출발 10분 전 규칙 · 이미 찍힌 운행은 서로 독립이라 함께 묻는다(B4).
+  const [runRes, notOpen, existing] = await Promise.all([
+    admin
+      .from("shuttle_runs")
+      .select("run_no, vehicle:shuttle_vehicles!shuttle_runs_vehicle_id_fkey(name)")
+      .eq("id", runId)
+      .eq("tenant_id", ctx.tenantId)
+      .maybeSingle(),
+    runNotOpenMessage(admin, ctx.tenantId, runId, ranOn),
+    loadTrip(admin, ctx.tenantId, ranOn, runId),
+  ]);
+  const run = runRes.data;
   if (!run) return { error: "회차를 찾지 못했습니다" };
+  if (notOpen) return { error: notOpen };
 
-  const existing = await loadTrip(admin, ctx.tenantId, ranOn, runId);
   // 이미 출발했으면 그대로 둔다(먼저 찍힌 시각이 사실). 종료된 것도 여기서 되살리지 않는다 — 그건 reopenTrip.
   if (existing?.started_at) return { ok: true, notice: "이미 출발로 찍혀 있습니다" };
 

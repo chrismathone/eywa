@@ -5,6 +5,8 @@ import type { Season } from "./types";
 /** 셔틀의 면들 — 경로가 곧 면 키다(FaceTabs active). 착지·게이트도 이 상수를 쓴다. */
 export const SHUTTLE_BOARD_PATH = "/shuttle";
 export const SHUTTLE_TODAY_PATH = "/shuttle/today";
+/** 학부모 등하원 — 학부모에게 보이는 오늘 등하원을 관리자가 아이별로 확인하는 면. */
+export const SHUTTLE_PARENT_RIDES_PATH = "/shuttle/parent-rides";
 /** 관제(2026-09-02) — '오늘 등하원'이 찍는 화면이면 이쪽은 보는 화면이다. */
 export const SHUTTLE_LIVE_PATH = "/shuttle/live";
 /** 실시간 위치(2026-09-03) — 차량이 지도에 뜰 **자리**. 위치 송신·지도 키가 아직 둘 다 없다. */

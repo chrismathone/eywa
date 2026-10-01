@@ -17,7 +17,7 @@ import {
   RIDE_EXCEPTION_LABEL,
   type BoardingStatus,
 } from "@/features/shuttle/types";
-import type { RideRow } from "@/features/shuttle/roster";
+import { isInactiveDay, type RideRow } from "@/features/shuttle/roster";
 import { clearBoarding, clearRideException, recordBoarding } from "@/features/shuttle/server/actions";
 
 /**
@@ -109,7 +109,10 @@ export function RideRowItem({
     });
   }
 
-  const skipped = row.dayKind === "skipped";
+  // 오늘 태울 줄이 아님 — '오늘 안 탐'(skipped) 또는 '오늘만 승하차'로 대체된 평소 줄(replaced).
+  // 🔴 대체된 줄에 탑승/미탑승을 두면 같은 회차 기록을 **덮어써** 실제 탄 곳이 사라진다 — 버튼을 안 띄운다.
+  const skipped = isInactiveDay(row.dayKind);
+  const replaced = row.dayKind === "replaced";
   // 🔴 오늘 안 타는 줄은 **회색**이다 — 지우지 않는 대신 "할 일이 아님"이 한눈에 보여야 한다
   //    (tone 캐논의 inert = 지나간 것). 기록 색(초록·빨강)보다 이 판정이 앞선다.
   const tone = skipped
@@ -144,7 +147,7 @@ export function RideRowItem({
         )}
         {skipped && (
           <>
-            <Pill color={TONE_COLOR.inert}>오늘 안 탐</Pill>
+            <Pill color={TONE_COLOR.inert}>{replaced ? "오늘은 다른 정류장" : "오늘 안 탐"}</Pill>
             {row.exceptionMemo && (
               <span className="text-text-dim text-xs">{row.exceptionMemo}</span>
             )}
@@ -165,7 +168,11 @@ export function RideRowItem({
       {skipped ? (
         <span className="flex shrink-0 items-center gap-1.5">
           <span className="text-text-faint text-xs">
-            {row.status ? `기록: ${BOARDING_STATUS_LABEL[row.status]}` : "오늘은 태우지 않습니다"}
+            {row.status
+              ? `기록: ${BOARDING_STATUS_LABEL[row.status]}`
+              : replaced
+                ? "오늘만 승하차 줄에서 찍습니다"
+                : "오늘은 태우지 않습니다"}
           </span>
           {canWrite && canEditException && row.exceptionId && (
             <Button

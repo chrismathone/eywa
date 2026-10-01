@@ -309,6 +309,8 @@ export type BoardingLog = {
   ioKind: Direction;
   status: BoardingStatus;
   memo: string | null;
+  /** 찍은 시각(ISO) — 학부모 등하원이 "몇 시에 탔는지"로 읽는다(0225a부터 있던 칸). */
+  recordedAt: string | null;
 };
 
 /**
@@ -322,7 +324,7 @@ export async function getBoardingsOn(ymd: string): Promise<{ ready: boolean; log
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("shuttle_boardings")
-    .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo")
+    .select("id, student_id, run_id, stop_id, vehicle_label, stop_label, run_no, io_kind, status, memo, recorded_at")
     .eq("boarded_on", ymd)
     .limit(2000);
 
@@ -347,6 +349,7 @@ export async function getBoardingsOn(ymd: string): Promise<{ ready: boolean; log
       ioKind: r.io_kind,
       status: r.status,
       memo: r.memo,
+      recordedAt: r.recorded_at,
     });
   }
   return { ready: true, logs };

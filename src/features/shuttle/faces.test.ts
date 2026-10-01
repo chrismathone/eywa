@@ -2,26 +2,35 @@ import { describe, expect, it } from "vitest";
 import {
   SHUTTLE_BOARD_PATH,
   SHUTTLE_LIVE_PATH,
+  SHUTTLE_PARENT_RIDES_PATH,
   SHUTTLE_TODAY_PATH,
   SHUTTLE_TRACK_PATH,
   shuttleFaces,
 } from "./faces";
+import { SHUTTLE_PARENTS_PATH } from "./parent-access";
 
 describe("셔틀 면 전환", () => {
-  it("네 면이 사이드바 하부탭에서 파생된다", () => {
+  it("다섯 면이 사이드바 하부탭에서 파생된다 — 학부모 등하원은 오늘 등하원 바로 뒤", () => {
     const faces = shuttleFaces("term");
     expect(faces.map((f) => f.key)).toEqual([
       SHUTTLE_BOARD_PATH,
       SHUTTLE_TODAY_PATH,
+      SHUTTLE_PARENT_RIDES_PATH,
       SHUTTLE_LIVE_PATH,
       SHUTTLE_TRACK_PATH,
     ]);
     expect(faces.map((f) => f.label)).toEqual([
       "노선 편성",
       "오늘 등하원",
+      "학부모 등하원",
       "운행 현황",
       "실시간 위치",
     ]);
+  });
+
+  it("원장·관리자 전용 '학부모 관리 현황'은 공용 탭 줄에 없다", () => {
+    // 이 줄은 셔틀을 보는 모든 역할의 탭 줄이다 — 여기 있으면 강사·뷰어에게도 탭이 선다.
+    expect(shuttleFaces("term").map((f) => f.key)).not.toContain(SHUTTLE_PARENTS_PATH);
   });
 
   it("면을 옮겨도 시즌이 유지된다", () => {
@@ -29,6 +38,7 @@ describe("셔틀 면 전환", () => {
     expect(shuttleFaces("vacation").map((f) => f.href)).toEqual([
       "/shuttle?season=vacation",
       "/shuttle/today?season=vacation",
+      "/shuttle/parent-rides?season=vacation",
       "/shuttle/live?season=vacation",
       "/shuttle/track?season=vacation",
     ]);
@@ -39,6 +49,7 @@ describe("셔틀 면 전환", () => {
     const keys = shuttleFaces("term").map((f) => f.key);
     expect(keys).toContain(SHUTTLE_BOARD_PATH);
     expect(keys).toContain(SHUTTLE_TODAY_PATH);
+    expect(keys).toContain(SHUTTLE_PARENT_RIDES_PATH);
     expect(keys).toContain(SHUTTLE_LIVE_PATH);
     expect(keys).toContain(SHUTTLE_TRACK_PATH);
   });

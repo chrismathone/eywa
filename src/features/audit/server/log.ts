@@ -232,6 +232,11 @@ export const AUDIT_ACTIONS = {
   shuttle_trip_end: "셔틀 운행 종료",
   shuttle_trip_reopen: "셔틀 운행 종료 되돌림",
   shuttle_stop_location: "셔틀 정류장 위치 지정",
+  // 변경 내역 확인(0316a) — 화면에서만 내리고 장부는 그대로. 누가 무엇을 내렸는지의 역검수 근거.
+  shuttle_history_ack: "셔틀 변경 내역 확인",
+  // 학부모 계정(0313a) — 원장·관리자 전용. 로그인 계정을 만들고 지우는 일이라 역검수 근거를 남긴다.
+  parent_account_create: "학부모 계정 발급",
+  parent_account_delete: "학부모 계정 삭제",
   // '다른 강사 뷰'(열람 전용, 2026-08-19) — 누가 누구의 강사뷰를 열람했는지. 대상 강사에겐 안 보이는
   // 기능이라(원장 지시) 이 로그가 유일한 역검수 근거다.
   teacher_view_impersonate: "다른 강사 뷰 열람",

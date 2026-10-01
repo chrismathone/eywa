@@ -36,6 +36,7 @@ async function isSignedInAsInactive(): Promise<boolean> {
     return false;
   }
 }
+import { getParentViewer } from "@/features/shuttle/server/parent-viewer";
 
 /**
  * `/home` — **역할·과목에 맞는 홈으로 보내주는 서버측 리다이렉터**. 화면을 그리지 않는다(라우트 핸들러).
@@ -67,6 +68,9 @@ export async function GET(request: NextRequest) {
   if (!user) {
     const sa = await getCurrentSuperAdmin();
     if (!sa) {
+      // 학부모 계정은 직원 표(users)에 없어 user가 null이다 — 로그인은 됐으니 학부모 화면으로 보낸다.
+      // (그냥 /login으로 보내면 로그인한 학부모가 로그인 화면에 갇힌다.)
+      if (await getParentViewer()) redirect("/parent");
       // 퇴사 처리된 계정이 로그인한 경우 — 세션을 끊고 이유를 알려 준다(그냥 /login이면 "왜 안 되지"만 남는다).
       if (await isSignedInAsInactive()) {
         await (await createClient()).auth.signOut();

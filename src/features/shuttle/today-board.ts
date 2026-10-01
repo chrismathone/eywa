@@ -9,7 +9,7 @@
  *    `unmarked`를 따로 세고 `missed`와 절대 합치지 않는다.
  */
 import type { Direction, ShuttleRun, ShuttleVehicle } from "./types";
-import type { RideRow } from "./roster";
+import { isInactiveDay, type RideRow } from "./roster";
 
 /** 화면이 넘겨주는 회차 한 덩이(회차 + 그날 줄). */
 export type RunRows = { run: ShuttleRun; rows: RideRow[] };
@@ -53,7 +53,8 @@ export function countProgress(rows: readonly RideRow[]): Progress {
   let boarded = 0;
   let missed = 0;
   for (const r of rows) {
-    if (r.dayKind === "skipped") continue;
+    // '오늘만 승하차'로 대체된 평소 줄(replaced)도 같다 — 그 아이는 대체한 줄에서 센다.
+    if (isInactiveDay(r.dayKind)) continue;
     planned += 1;
     // 'extra'(예정에 없던 탑승)도 탄 것이다 — 남은 일에서 빼야 "완료"가 맞는다.
     if (r.status === "boarded" || r.status === "extra") boarded += 1;
