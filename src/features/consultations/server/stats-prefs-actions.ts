@@ -4,7 +4,7 @@ import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { STATS_DIMS, STATS_METRICS, type StatsDimKey, type StatsMetric, type StatsUnit } from "../stats-model";
 
 /**
- * 원생상담 통계 패널 보기 저장 — 누르는 순간([[#90]]) 본인 계정에(`users.ui_prefs.consultations`, 원장 *"모든 뷰 세팅은 계정 귀속"*).
+ * 원생상담 통계 화면 보기 저장 — 누르는 순간([[#90]]) 본인 계정에(`users.ui_prefs.consultations`, 원장 *"모든 뷰 세팅은 계정 귀속"*).
  * 본인 표시 취향이라 로그인만 본다. 기본값(월·건수·상담사)이면 키를 지운다(빈 값이 쌓이지 않게).
  */
 export async function saveConsultationStatsPrefs(p: {

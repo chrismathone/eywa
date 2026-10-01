@@ -21,7 +21,8 @@ export function StatsTrendChartImpl({ series, metric }: { series: MetricSeries; 
   const percent = series.unit === "%";
   const colors = COLOR[metric];
   return (
-    <ResponsiveContainer width="100%" height={180}>
+    // 높이 = 바깥 상자(stats-trend-chart.tsx — 카드 남는 높이, 최소 180px).
+    <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={series.points} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
         <XAxis dataKey="label" tick={{ fontSize: 14, fill: "var(--color-muted-foreground)" }} interval="preserveStartEnd" minTickGap={8} />

@@ -8,21 +8,30 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { enqueueConsultationPush } from "@/features/integrations/server/actions";
 import type { UnpushedIntakeConsultation } from "@/features/integrations/server/makeedu-sync";
+import { isPushInFlight } from "@/features/integrations/push-eligibility";
 import { outcomePill } from "@/features/enrollment/outcome-meta";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 
 /**
  * 역동기화(aywa→makeedu) 카드 — QR 공개접수로 들어온 신규 상담 중 makeedu에 아직 없는 것을
  * 골라 "makeedu로 보내기"로 큐잉. 실제 등록은 동기화 PC 워처가 신뢰 IP에서 수행(~1-2분).
- * 소비처 2곳: owner 연동 면(항상 표시, 빈 상태 포함) + 등록상담 화면(후보 있을 때만 — 부모가 판단).
- * 서버 액션 게이트 = `integrations` 권한 키(기본 master/admin/manager) — 부모도 같은 키로 노출 판단.
+ * 소비처 2곳: owner 연동 면(항상 표시, 빈 상태 포함 — 실패 건 재전송) + 콜&상담 머리글 'makeedu 보내기'
+ * 버튼이 여는 다이얼로그(`inDialog` — 원장 2026-10-01, 카드 껍데기는 다이얼로그가 맡는다).
+ * 서버 액션 게이트 = `canPushToMakeedu`(integrations 쓰기) — 버튼도 같은 함수로 노출을 판단한다.
  */
-export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeConsultation[] }) {
+export function MakeeduPushCard({
+  candidates,
+  inDialog = false,
+}: {
+  candidates: UnpushedIntakeConsultation[];
+  /** 다이얼로그 안 — 테두리·배경·안쪽 여백을 빼고(다이얼로그 표면이 대신) 오른쪽 위 닫기 단추 자리를 비운다. */
+  inDialog?: boolean;
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const allSelectable = candidates.filter((c) => c.pushStatus !== "pending" && c.pushStatus !== "running");
+  const allSelectable = candidates.filter((c) => !isPushInFlight(c.pushStatus));
   const allChecked = allSelectable.length > 0 && allSelectable.every((c) => selected.has(c.id));
 
   function toggle(id: string) {
@@ -52,13 +61,19 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
   }
 
   return (
-    <section className="bg-card border-border space-y-4 rounded-2xl border p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className={inDialog ? "space-y-4" : "bg-card border-border space-y-4 rounded-2xl border p-6"}>
+      <div className={`flex flex-wrap items-start justify-between gap-3 ${inDialog ? "pr-8" : ""}`}>
         <div className="min-w-0">
           <h2 className="text-foreground text-base font-bold">makeedu로 상담 보내기 (역동기화)</h2>
           <p className="text-muted-foreground mt-1 text-sm">
             QR 공개접수로 들어온 신규 상담 중 <strong>makeedu에 아직 없는 건</strong>입니다. 선택해서 보내면
             동기화 PC가 makeedu 예비상담으로 등록합니다(1~2분). 전송된 건은 목록에서 사라집니다.
+          </p>
+          {/* 운영 사실 — 상주 워처가 매주 일요일 06:00(KST)에 남은 후보를 같은 큐로 넣는다(scripts/_makeedu/weekly-push.cjs).
+              여기서 고르는 건 그 전에 먼저 보내고 싶은 건·실패 건 재전송이다. */}
+          <p className="text-muted-foreground mt-1 text-sm">
+            매주 일요일 06:00에 남은 건을 자동으로도 보냅니다(연동 PC가 꺼져 있었으면 켜질 때) — 그 전에 보내야
+            하는 건만 골라 보내세요.
           </p>
         </div>
         <Button onClick={push} disabled={pending || selected.size === 0}>
@@ -104,7 +119,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
           </thead>
           <tbody className="divide-border divide-y">
             {candidates.map((c) => {
-              const locked = c.pushStatus === "pending" || c.pushStatus === "running";
+              const locked = isPushInFlight(c.pushStatus);
               return (
                 <tr key={c.id} className={selected.has(c.id) ? "bg-primary-soft/40" : undefined}>
                   <td className="px-3 py-2">
@@ -146,7 +161,7 @@ export function MakeeduPushCard({ candidates }: { candidates: UnpushedIntakeCons
                     })}
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap">
-                    {c.pushStatus === "pending" || c.pushStatus === "running" ? (
+                    {locked ? (
                       <Pill color="blue">전송 대기</Pill>
                     ) : c.pushStatus === "error" ? (
                       <Pill color="danger" className="cursor-help" >전송 실패</Pill>

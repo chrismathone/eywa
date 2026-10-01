@@ -14,7 +14,33 @@ const L = require_("./lib.cjs") as {
     failed: { domain: string; reason?: string }[] | null | undefined,
     opts?: { maxReason?: number; maxError?: number },
   ) => { domains: string[]; reasons: Record<string, string>; error: string | null };
+  splitDuplicatePushRequests: (
+    reqs: { requestId: string; consultationId: string }[] | null | undefined,
+  ) => {
+    unique: { requestId: string; consultationId: string }[];
+    duplicates: { requestId: string; consultationId: string }[];
+  };
 };
+
+// 화면 두 곳(연동 면 · 콜&상담 머리글)에서 같은 상담을 거의 동시에 보내면 대기 행이 둘 생길 수 있다 —
+// 워커는 상담 행을 묶음 시작 때 한 번만 읽어 둘 다 제출하므로, 묶음 안에서 첫 요청만 남긴다(2026-10-01).
+describe("splitDuplicatePushRequests — 같은 상담은 한 묶음에서 한 번만 제출", () => {
+  it("첫 요청만 남기고 순서를 유지한다", () => {
+    const { unique, duplicates } = L.splitDuplicatePushRequests([
+      { requestId: "r1", consultationId: "c1" },
+      { requestId: "r2", consultationId: "c2" },
+      { requestId: "r3", consultationId: "c1" },
+      { requestId: "r4", consultationId: "c1" },
+    ]);
+    expect(unique.map((r) => r.requestId)).toEqual(["r1", "r2"]);
+    expect(duplicates.map((r) => r.requestId)).toEqual(["r3", "r4"]);
+  });
+
+  it("겹침이 없으면 그대로 · 빈 입력도 안전", () => {
+    expect(L.splitDuplicatePushRequests([{ requestId: "r1", consultationId: "c1" }]).duplicates).toEqual([]);
+    expect(L.splitDuplicatePushRequests(null)).toEqual({ unique: [], duplicates: [] });
+  });
+});
 
 // 실패했는데 **왜인지 안 남으면** 그 실패는 다음에 또 난다(2026-08-03 06:00 partial 실행 = 원인 추적 불가).
 describe("summarizeFailures — 부분 실패의 사유를 DB로 실어 보낸다", () => {

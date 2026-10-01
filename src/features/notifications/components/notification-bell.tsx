@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -47,7 +47,7 @@ import { useMenuHub } from "@/components/workspace/menu-hub-store";
 import { NotificationRow } from "./notification-row";
 import { NotificationAlertDialog } from "./notification-alert-dialog";
 import { MobilePushRow } from "./mobile-push-row";
-import { ParentReplyDialog } from "@/features/classnote-reply/components/parent-reply-dialog";
+import { BELL_ANCHOR_ATTR, ParentReplyOverlay } from "@/features/classnote-reply/components/parent-reply-overlay";
 import { useReplyTargets } from "@/features/classnote-reply/components/use-reply-targets";
 import { ParentNotificationRow } from "@/features/classnote-reply/components/parent-notification-row";
 
@@ -96,8 +96,15 @@ export function NotificationBell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingLink, setPendingLink] = useState<string | null>(null); // 확인 대기 중인 외부 링크
   // 학부모 글·댓글 답글 창(0317a) — 답글을 쓸 수 있는 알림(알림 id → 메시지 id)은 벨이 열릴 때만 묻는다.
-  const [replyMessageId, setReplyMessageId] = useState<string | null>(null);
-  const { targets: replyTargets, reactions: replyReactions, vague: replyVague } = useReplyTargets(items, menuOpen);
+  // 열 때의 '공감 숨김'(같은 문구 댓글 둘이라 어느 댓글인지 모를 때)을 함께 붙들어 둔다 — 메뉴가 닫히면 목록 조회 결과(vague)가 비워진다.
+  const [replyOpen, setReplyOpen] = useState<{ id: string; hideReaction: boolean } | null>(null);
+  const bellId = useId(); // 답글 오버레이가 붙을 **이** 벨 단추(화면에 벨이 둘이어도 연 그 벨 자리에 뜬다)
+  const { targets: replyTargets, reactions: replyReactions, vague: replyVague, counts: replyCounts } = useReplyTargets(items, menuOpen);
+  // 답글 오버레이를 닫고 목록으로 돌아올 때 읽던 자리(스크롤)를 되돌린다 — 드롭다운은 닫히며 언마운트돼 위치가 사라진다.
+  const listScrollRef = useRef(0);
+  const restoreScroll = useCallback((el: HTMLDivElement | null) => {
+    if (el && listScrollRef.current) el.scrollTop = listScrollRef.current;
+  }, []);
   // 받은함/보관함(0125a) — 보관은 벨에서 치우되 나중에 볼 수 있는 안전판(삭제는 영구).
   const [view, setView] = useState<NotificationView>("active");
   const viewRef = useRef<NotificationView>("active");
@@ -279,7 +286,10 @@ export function NotificationBell() {
         open={menuOpen}
         onOpenChange={(open) => {
           setMenuOpen(open);
-          if (open) refresh();
+          if (open) {
+            listScrollRef.current = 0; // 새로 여는 목록은 맨 위부터(오버레이에서 돌아올 때만 읽던 자리로)
+            refresh();
+          }
         }}
       >
         <DropdownMenuTrigger
@@ -287,6 +297,7 @@ export function NotificationBell() {
             <button
               type="button"
               aria-label={unread > 0 ? `알림 ${unread}개` : "알림"}
+              {...{ [BELL_ANCHOR_ATTR]: bellId }}
               className={`group relative flex size-9 items-center justify-center rounded-lg border bg-card transition-all duration-200 hover:bg-surface-hi hover:shadow-card-hover active:scale-95 ${
                 unread > 0
                   ? "border-danger/30 text-danger"
@@ -379,7 +390,7 @@ export function NotificationBell() {
                 : "새 알림이 없습니다"}
             </div>
           ) : (
-            <div className="scrollbar-thin max-h-[min(480px,60dvh)] overflow-y-auto py-1">
+            <div ref={restoreScroll} onScroll={(e) => { listScrollRef.current = e.currentTarget.scrollTop; }} className="scrollbar-thin max-h-[min(480px,60dvh)] overflow-y-auto py-1">
               {items.map((n) => {
                 // 학부모 글·댓글 알림 중 답글을 쓸 수 있는 줄에는 공감 조작(0319a)을 얹는다 — 공감 기능이 없으면 보통 알림 행 그대로.
                 const messageId = replyTargets[n.id];
@@ -388,10 +399,11 @@ export function NotificationBell() {
                   item: n,
                   archived: view === "archived",
                   onOpen: () => openItem(n),
+                  replyCount: messageId ? (replyCounts[messageId] ?? 0) : 0,
                   onReply: messageId
                     ? () => {
                         setMenuOpen(false);
-                        setReplyMessageId(messageId);
+                        setReplyOpen({ id: messageId, hideReaction: replyVague.includes(messageId) });
                       }
                     : undefined,
                   onArchive: () =>
@@ -438,9 +450,22 @@ export function NotificationBell() {
         }}
         onCancel={() => setPendingLink(null)}
       />
-      {/* 학부모 답글 창도 드롭다운 **밖**(위 확인창과 같은 이유). key = 다른 글을 열면 새 상태로. */}
-      {replyMessageId ? (
-        <ParentReplyDialog key={replyMessageId} messageId={replyMessageId} hideReaction={replyVague.includes(replyMessageId)} onClose={() => setReplyMessageId(null)} />
+      {/* 학부모 답글 창 = 벨 목록이 있던 자리에 겹치는 오버레이(드롭다운 **밖** — 위 확인창과 같은 이유). key = 다른 글을 열면 새 상태로.
+        닫기·Esc = 목록으로 돌아감(메뉴 다시 열기) · 바깥 클릭 = 그냥 닫음. */}
+      {replyOpen ? (
+        <ParentReplyOverlay
+          key={replyOpen.id}
+          messageId={replyOpen.id}
+          anchorId={bellId}
+          hideReaction={replyOpen.hideReaction}
+          onClose={(how) => {
+            setReplyOpen(null);
+            if (how === "back") {
+              setMenuOpen(true);
+              refresh();
+            }
+          }}
+        />
       ) : null}
       {/* 중요 알림 화면 중앙 팝업 — 벨 드롭다운을 안 열어도 확실히 보이게(원장 2026-07-15).
         '바로 가기'는 openItem을 태워 외부 링크(ClassNote 글)면 위 ConfirmDialog로 이어진다. */}

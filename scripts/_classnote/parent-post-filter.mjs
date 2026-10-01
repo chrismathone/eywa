@@ -152,9 +152,13 @@ export function countByEffectiveName(rows, normFn) {
  *
  * @param {number} postId
  * @param {string} [base] - 도메인(테스트 주입용). 기본 = classnote.com.
+ * @param {number | string | null} [commentId] - 댓글 알림이면 그 댓글 번호(`?comment=`) — 앱 벨이 번호로 정확히 짝짓는다.
  */
-export function classnotePostUrl(postId, base = "https://www.classnote.com") {
-  return `${base}/service/report/${postId}`;
+export function classnotePostUrl(postId, base = "https://www.classnote.com", commentId = null) {
+  // 댓글 알림은 `?comment=<댓글 번호>`를 싣는다 — 앱 벨이 알림 ↔ 저장된 댓글을 번호로 정확히 짝짓는다(본문이 "(내용 없이 첨부만)"인
+  // 댓글은 글자 비교가 불가능하다). ClassNote SPA는 모르는 쿼리를 무시한다(그 글 상세가 그대로 열린다).
+  const c = Number(commentId);
+  return `${base}/service/report/${postId}${Number.isFinite(c) && c > 0 ? `?comment=${c}` : ""}`;
 }
 
 export function buildNotificationText(post, studentName) {
