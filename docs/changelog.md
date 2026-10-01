@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-01 — 'This page couldn't load'(Next 기본 오류 화면) 수리
+
+- 원인([[#137]]): 대시보드 권한이 없는 사람이 `/dashboard`를 새로 열면 loading 아래에서 redirect가 나는데, 그 순간 알림 벨이 서버 액션으로 목록을 부르고 있으면 Next 라우터가 React #310으로 죽었다(최소 앱 재현 약 23/100). 창 모드를 끈 뒤 모든 문서 로드가 벨이 있는 맨 위 셸에서 일어나 드러났다.
+- 고침: ① 벨 목록 = GET `/api/notifications` + `fetch`(인증·격리는 같은 `getMyNotifications`, `no-store`) — 옛 `fetchMyNotifications` 액션 삭제 ② `dashboard/layout.tsx`에서 `requireAccess("dashboard")`(loading 앞 → 문서 요청 307) ③ 로고·모바일 로고·바탕 보기 = 권한을 본 홈(`ShellHomeProvider`/`useShellHome`), 관리자뷰 전환 = `roleHome(role, getUserPermMatrix())`, `/home`·루트 착지 = `getUserPermMatrix`(개인 예외 반영).
+- 총괄 화면에서 튕긴 일반 사용자도 코드 기본 권한의 `/dashboard` 대신 착지 단일 소스 `/home`으로(`requireSuperAdmin`).
+- 가드: `shell-autocall-server-actions.test.ts`(셸에서 닿는 서버 액션 허용 목록 · 대시보드 게이트 · 홈 경로) + `/api/notifications` 라우트 테스트 + `use-show-desktop` 홈=/menu 케이스. 재현 앱으로 고친 구조 재확인(문서 로드 기본 화면 `/dashboard` 0/40 · loading 아래 redirect 페이지 0/40).
+- 남은 것(경합 원인은 사라짐, 목록만): loading.tsx 아래에서 redirect하는 페이지 10곳(`/attendance?seat` · `/attendance/seat` · `/attendance/seat/[seat]`(·`/month`) 비로그인 · `/billing/refunds/new` · `/dashboard/briefing` · `/exams` · `/lesson-reports?tab=video_homework` · `/mcs/progress-map` · `/timetable/english-sheet` 비로그인) + 각 페이지 `requireAccess` 거부 · 사용자 동작 뒤에만 도는 서버 액션 폴링(답글 대화창·공감 처리 중·벨이 열린 동안 답글 대상) · 페이지 단위 주기 서버 액션(출결 실시간·신규 상담 감시·원스크린 상태 동기화 등).
+
 ## 2026-10-01 — 영어 시트 EiE 자동 진급·분류별 확인
 
 - EiE 진급은 기존 반과 시트 양쪽 명단의 과반수가 유일하게 일치하면 자동 연결한다(최소 2명, 학생 연결 전부 확정). 반 ID·이력은 보존하고 수동 선택은 우선한다. 동점·분반 경쟁·프로그램 불일치·근거 부족은 사유를 표시하고 수동 연결한다.

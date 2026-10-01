@@ -2175,3 +2175,40 @@ iframe `load`에서 덮개를 걷었는데, `load`는 HTML 스트림 끝 + 이�
 **교훈**: "내 것" 목록이 비어 있는 것은 **없다**는 뜻이 아닐 수 있다 — 서버가 "나"를 무엇으로 정하는지(계정? 요청에 실은 값?) 먼저 확인할 것.
 빈 목록을 근거로 정리·삭제 단계를 건너뛰는 코드는 **조용히 아무것도 안 한다**(정리 뒤에는 반대쪽 지표 — 여기선 `reaction_counts`·공감한 사람 목록 — 로 0인지 확인).
 시험으로 실제 외부 서비스에 쓴 것은 **만든 번호를 응답에서 받아 적어 두고** 그 번호로 지운다.
+
+## #137 셸이 마운트하자마자 부르는 **서버 액션** × loading.tsx 아래 redirect = Router가 React #310으로 죽고 **Next 기본 오류 화면** (2026-10-01)
+
+**증상**: 운영(창 모드 끈 침산)에서 직원 화면에 간헐적으로 영어 기본 화면 **"This page couldn't load / Reload to try again, or go back."**
+(Reload·Back 버튼). 우리 `global-error.tsx`(한글)도 `(shell)/error.tsx`도 안 뜨고, digest가 없다(= 클라 오류). Reload를 누르면 또 뜬다.
+원장 관찰: "대시보드 권한이 꺼진 관리자뷰 사람" · "창 모드를 끈 뒤부터".
+
+**원인(최소 앱으로 재현 — Next 16.2.6 프로덕션 빌드)**: 대시보드 권한이 없는 사람이 `/dashboard`를 **문서로** 연다(북마크·새로고침·로그인
+`next`·관리자뷰 전환의 `window.location`).
+1. `/dashboard`는 `loading.tsx`가 페이지를 Suspense로 감싸고, 권한 거부는 페이지 안(`loadOverview` → `requireAccess`)에서 났다 → 응답이 이미
+   흐른 **뒤** redirect라 Next가 `<meta id="__next-page-redirect" http-equiv="refresh">`를 끼우고 스트림에 redirect 오류를 싣는다.
+2. 화면이 붙자마자 사이드바 알림 벨이 **서버 액션**(`fetchMyNotifications`)을 보낸다 — 라우터 작업 큐에 들어간다.
+3. 그 액션이 끝나기 전에 스트림의 redirect가 처리되면, meta가 있어서 `navigate-reducer`가 `completeHardNavigation` → `Router`가 렌더 중
+   `throw unresolvedThenable` → **React #310**(`useActionQueue`의 `useOptimistic`) → 오류가 우리 global-error **바깥**(`AppRouter`의 최외곽 기본
+   경계)으로 나가 Next 기본 화면. 곧이어 meta refresh가 `/menu`로 옮기지만, 운영의 무거운 셸에선 그 사이 화면이 남고 Reload는 같은
+   `/dashboard`를 다시 연다(로그의 1.5초 간격 `GET /dashboard` 반복).
+
+| 조건(문서 로드) | 기본 오류 화면 |
+|---|---|
+| 서버 액션 벨 + loading 아래 redirect | **약 23/100**(회차마다 0~44% — "간헐적") |
+| 벨 없음 / 사이드바(프리페치)만 | 0/30 · 0/20 |
+| 벨을 일반 `fetch`(GET 라우트)로 | 0/70 |
+| 클라 이동(로고 클릭)으로 같은 튕김 | 0/18 |
+| 게이트를 loading **앞**(레이아웃)으로 → 문서 요청이 HTTP 307 | 0/20 |
+
+창 모드가 켜져 있을 땐 메뉴 화면이 전부 iframe(창 셸 = 벨 없음)에서 열리고 맨 위는 `/menu`에 머물러 경합이 안 났다 — 끄자 모든 문서 로드가
+벨이 있는 맨 위 셸에서 일어났다(이 연결은 부분적으로만 증명).
+
+**고침(2026-10-01)**: ① 셸에서 **저절로(마운트·이동·포커스·주기) 도는 조회는 서버 액션 금지** — 벨 목록은 GET `/api/notifications` + `fetch`
+(인증·격리는 같은 `getMyNotifications`, `no-store`). ② `/dashboard` 권한 게이트를 `dashboard/layout.tsx`로(loading 앞 → 307).
+③ "처음으로"(로고·바탕 보기·관리자뷰 전환·`/home`·루트 착지)는 권한을 본 홈(`ShellHomeProvider`·`roleHome(role, getUserPermMatrix())`).
+가드 = [`shell-autocall-server-actions.test.ts`](<src/app/(shell)/shell-autocall-server-actions.test.ts>)(셸에서 닿는 서버 액션은 허용 목록뿐).
+
+**교훈**: Next 기본 화면(`This page couldn't load`)이 **우리 global-error가 있는데도** 떴다면 앱 컴포넌트가 아니라 **라우터 자체**가 죽은 것이다 —
+"하드 이동 + 진행 중인 라우터 작업(서버 액션)"을 먼저 의심할 것. ⚠️ loading.tsx 아래에서 redirect하는 페이지는 아직 여럿 있다(`/exams`·
+`/attendance/seat`·`/dashboard/briefing`·`/lesson-reports?tab=video_homework` 등 10곳 + 각 페이지의 `requireAccess` 거부) — ①로 경합 원인은
+사라졌지만, 새 권한 게이트는 가능하면 loading 앞(레이아웃)에 둘 것. ⚠️ 재현은 **문서 로드**로 할 것(클라 이동은 meta가 없어 안 터진다).

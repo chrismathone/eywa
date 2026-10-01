@@ -15,10 +15,12 @@ import { Archive } from "@/components/icons/aywa-icon-compat";
 import {
   archiveNotification,
   deleteNotification,
-  fetchMyNotifications,
   markNotificationsRead,
   unarchiveNotification,
 } from "@/features/notifications/server/actions";
+// 목록 조회(마운트·이동·포커스·60초 폴링)는 서버 액션이 아니라 GET 라우트 — 라우터 작업 큐 경합으로 Next 기본 오류
+// 화면이 떴다(gotchas #137). 위 액션들은 **누를 때만** 부르므로 그대로 둔다.
+import { fetchMyNotificationsList } from "@/features/notifications/fetch-my-notifications";
 import type { NotificationView } from "@/features/notifications/server/queries";
 import {
   NOTIFICATION_LIST_LIMIT,
@@ -172,7 +174,7 @@ export function NotificationBell() {
     viewRef.current = view;
   }, [view]);
   const refresh = useCallback(
-    () => run(() => fetchMyNotifications(view, limit)),
+    () => run(() => fetchMyNotificationsList(view, limit)),
     [run, view, limit],
   );
 
