@@ -170,7 +170,9 @@ describe("공감 정책(순수)", () => {
     const dialog = read("src/features/classnote-reply/components/use-reply-thread.ts");
     expect(dialog).toMatch(/getParentReplyContext\(id, \{ noReaction: hideReaction \}\)/);
     expect(read("src/features/classnote-reply/server/reply-actions.ts")).toMatch(/opts\?\.noReaction === true \? Promise\.resolve\(false\)/);
-    expect(read("src/features/notifications/components/notification-bell.tsx")).toMatch(/hideReaction: replyVague\.includes\(messageId\)/);
+    const notification = read("src/features/classnote-reply/server/notification-reply.ts");
+    expect(notification).toMatch(/const hideReaction = commentNotificationAmbiguous\(note, messages\)/);
+    expect(notification).toMatch(/getParentReplyContext\(id, \{ noReaction: hideReaction \}\)/);
     // 답글: 연동 PC가 집은 적 있는 대기 행은 조건부 쓰기에서도 막는다.
     expect(read("src/features/classnote-reply/server/reply-change.ts")).toMatch(/write = write\.eq\("retry_count", 0\)\.is\("worker_host", null\)/);
     expect(src).toMatch(/if \(row\.status === "queued" && row\.unconfirmed\)\s*return \{ ok: false/);

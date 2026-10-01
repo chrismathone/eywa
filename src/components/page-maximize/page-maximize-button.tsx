@@ -10,7 +10,8 @@ import { usePageMaximize } from "./page-maximize-context";
  * **'화면 최대화' ↔ '화면 원래대로'** — 한 버튼이 상태에 따라 라벨·아이콘만 바뀐다(원장 2026-10-01 *"화면 최대화 버튼과
  * 최소화 버튼을 같은 위치에 놔둬야지 이거 위치 못찾겠는데? 그리고 파란색으로 버튼하고. 헤더 우측에 끼워넣어"*).
  * 공용 `PageHeader`(와 그 스켈레톤)가 오른쪽 끝에 그리므로 헤더를 쓰는 모든 메뉴에 저절로 서고, 최대화 중에도 머리글 한 줄이
- * 남아 **같은 자리**에 그대로 있다. 색 = 공용 `<Button>` 기본(primary 파랑) · 크기 = 기본(머리글 동작 버튼과 같은 높이).
+ * 남아 같은 자리에 있다. 설정·시간표는 2026-10-02 지시에 따라 제목을 접고 `PageMaximizeToolbar`의 첫 조작 행으로 이동한다.
+ * 색 = 공용 `<Button>` 기본(primary 파랑) · 크기 = 기본(머리글 동작 버튼과 같은 높이).
  *
  * 안 보이는 곳 — 판정은 여기 한 곳:
  * - 공급자가 없는 셸(창 안 · 강사·학생 미니셸 · 슈퍼관리자) · 창 모드가 켜진 지점 → `usePageMaximize()`가 `null`.
@@ -63,7 +64,17 @@ function Toggle({
       data-page-maximize-toggle=""
       {...(marker === "header" ? { "data-page-maximize-button": "" } : {})}
       data-usage-chrome=""
-      onClick={(e) => onToggle(!maximized, e.currentTarget)}
+      onClick={(e) => {
+        const from = e.currentTarget;
+        const scope = from.closest("[data-page-maximize]");
+        onToggle(!maximized, from);
+        // 제목 행이 접혀 버튼 자리가 바뀌어도 키보드 초점은 보이는 복원/최대화 버튼에 둔다(유지 화면 포함).
+        requestAnimationFrame(() => {
+          const target = from.getClientRects().length ? from : [...(scope?.querySelectorAll<HTMLElement>("[data-page-maximize-toggle]") ?? [])]
+            .find((el) => el.getClientRects().length > 0);
+          target?.focus({ preventScroll: true });
+        });
+      }}
       className="hidden print:hidden desk:inline-flex"
     >
       <EyIcon name={maximized ? "copy" : "square"} />

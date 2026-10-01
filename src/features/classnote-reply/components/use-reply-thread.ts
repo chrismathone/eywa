@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getParentReplyContext } from "../server/reply-actions";
+import { getNotificationReplyContext } from "../server/notification-reply";
 import type { ReplyActionResult, ReplyContext, ThreadEntry, ThreadVideo } from "../reply-types";
 
 /** 연동 PC가 처리 중인 답글이 있으면 이 간격으로 다시 읽는다(지금 반 보드 동기화 버튼과 같은 10초). */
@@ -26,7 +27,7 @@ export function applyVideoOverrides(thread: ThreadEntry[], over: Record<string, 
  * 🔴 영상 폴링은 서버 액션이 아니라 GET 라우트(`/api/classnote/reply-videos`)다 — 주기 호출은 라우터 작업 큐를 지나지 않게(#137).
  * ⚠️ 호출부는 `key={messageId}`로 마운트할 것 — 다른 글을 열 때 이전 글의 상태가 남지 않게(effect 안 setState 금지, #25).
  */
-export function useReplyThread(messageId: string | null, hideReaction: boolean) {
+export function useReplyThread(initialMessageId: string | null, hideReaction: boolean, notificationId?: string) {
   const [ctx, setCtx] = useState<ReplyContext | null>(null);
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
@@ -35,16 +36,19 @@ export function useReplyThread(messageId: string | null, hideReaction: boolean) 
 
   const load = useCallback(async (id: string) => {
     const seq = ++seqRef.current;
-    const res: ReplyContext = await getParentReplyContext(id, { noReaction: hideReaction }).catch(() => ({ ok: false, error: "답글 정보를 불러오지 못했습니다" }));
+    const res: ReplyContext = await (notificationId ? getNotificationReplyContext(notificationId) : getParentReplyContext(id, { noReaction: hideReaction }))
+      .catch(() => ({ ok: false, error: "답글 정보를 불러오지 못했습니다" }));
     if (seq === seqRef.current) {
       setCtx(res);
       setVideoOver({}); // 새로 읽은 쓰레드가 가장 최신이다
     }
-  }, [hideReaction]);
+  }, [hideReaction, notificationId]);
 
   useEffect(() => {
-    if (messageId) void load(messageId);
-  }, [messageId, load]);
+    if (initialMessageId || notificationId) void load(initialMessageId ?? "");
+  }, [initialMessageId, notificationId, load]);
+
+  const messageId = ctx?.ok ? ctx.message.id : initialMessageId;
 
   const thread = useMemo(() => (ctx?.ok ? applyVideoOverrides(ctx.thread, videoOver) : []), [ctx, videoOver]);
   const busy = thread.some((e) => e.kind === "reply" && e.reply.busy);
@@ -97,7 +101,7 @@ export function useReplyThread(messageId: string | null, hideReaction: boolean) 
         return false;
       }
       if (opts?.reload) reload();
-      else setCtx(res.context);
+      else setCtx((prev) => res.context.ok && prev?.ok ? { ...res.context, hideReaction: prev.hideReaction } : res.context);
       setNote({ text: res.message, error: false });
       return true;
     } catch {

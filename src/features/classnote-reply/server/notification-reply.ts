@@ -1,0 +1,32 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { commentNotificationAmbiguous, isParentMessageNotification, pickMessageForNotification, postIdFromClassnoteLink } from "../notification-match";
+import type { ReplyContext } from "../reply-types";
+import { loadMessagesByPosts } from "./reply-data";
+import { replyGate } from "./reply-gate";
+import { getParentReplyContext } from "./reply-actions";
+
+/** 목록의 버튼 조회가 끝나기 전·중앙 알림에서도 같은 창으로 진입. 알림 소유권과 원문 매칭은 서버에서 확인한다. */
+export async function getNotificationReplyContext(notificationId: string): Promise<ReplyContext> {
+  const g = await replyGate();
+  if (!g.ok) return g;
+  try {
+    const db = await createClient();
+    const { data: n, error } = await db.from("notifications").select("type, link, body, created_at")
+      .eq("tenant_id", g.user.tenantId).eq("recipient_id", g.user.id).eq("id", notificationId).maybeSingle();
+    if (error || !n || !isParentMessageNotification(n.type)) return { ok: false, error: "알림을 찾지 못했습니다" };
+    const postId = postIdFromClassnoteLink(n.link);
+    if (!postId) return { ok: false, error: "학부모 글 원문을 찾지 못했습니다" };
+    const messages = await loadMessagesByPosts(createAdminClient(), g.user.tenantId, [postId]);
+    const note = { ...n, createdAt: n.created_at };
+    const id = pickMessageForNotification(note, messages);
+    if (!id) return { ok: false, error: "학부모 글 원문을 찾지 못했습니다" };
+    const hideReaction = commentNotificationAmbiguous(note, messages);
+    const context = await getParentReplyContext(id, { noReaction: hideReaction });
+    return context.ok ? { ...context, hideReaction } : context;
+  } catch {
+    return { ok: false, error: "답글 정보를 불러오지 못했습니다 — 잠시 뒤 다시 시도하세요" };
+  }
+}

@@ -62,14 +62,15 @@ const samePos = (a: Pos, b: Pos) => a.left === b.left && a.width === b.width && 
  * 플로팅 창(iframe) 안을 누르면 바깥 클릭으로 본다(그 문서의 pointerdown은 여기 안 온다 — 이 문서의 blur로 안다).
  * ⚠️ 호출부는 `key={messageId}`로 마운트할 것(effect 안 setState 금지, #25).
  */
-export function ParentReplyOverlay({ messageId, anchorId, onClose, hideReaction = false }: {
-  messageId: string;
+export function ParentReplyOverlay({ messageId = null, notificationId, anchorId, onClose, hideReaction = false }: {
+  messageId?: string | null;
+  notificationId?: string;
   /** 이 창을 연 벨의 id(`BELL_ANCHOR_ATTR` 값) — 화면에 벨이 둘이어도 연 그 벨에 붙는다 */
   anchorId?: string;
   onClose: (how: "back" | "dismiss") => void;
   hideReaction?: boolean;
 }) {
-  const view = useReplyThread(messageId, hideReaction);
+  const view = useReplyThread(messageId, hideReaction, notificationId);
   const [pos, setPos] = useState<Pos>(() => overlayPos(bellRect(anchorId), window.innerWidth, window.innerHeight));
   const panelRef = useRef<HTMLDivElement | null>(null);
   // 호출부(벨)는 렌더마다 새 onClose를 넘긴다(벨은 알림 폴링으로 자주 다시 그린다) — 리스너·포커스 effect가 그때마다 다시 돌면

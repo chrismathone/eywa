@@ -10,6 +10,7 @@ import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { PageHeader } from "@/components/page-header";
+import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-toolbar";
 import { ProfileSection } from "./_components/profile-section";
 import { OperationsSection } from "./_components/operations-section";
 import { SubjectsSection } from "./_components/subjects-section";
@@ -139,9 +140,10 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const isEmbed = sp.embed === "1";
 
   return (
-    <div className="w-full min-w-0 space-y-6">
+    <div data-maximize-toolbar-page="" className="w-full min-w-0 space-y-6">
       {/* 수제 헤더 → PageHeader 수렴(2026-07-19) — 창(embed)에선 컴팩트 1행으로 접힌다(제목은 창 타이틀바).
           '최근 저장' 메타는 actions 슬롯(우측) — 컴팩트 행에서도 유지된다. */}
+      <div data-maximize-title-row="">
       <PageHeader
         eyebrow="학원 설정"
         title={`${settings.profile.name || "학원"} 설정`}
@@ -152,7 +154,10 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         actions={<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
       />
 
-      <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+      </div>
+      <PageMaximizeToolbar>
+        <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+      </PageMaximizeToolbar>
 
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (

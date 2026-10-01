@@ -60,7 +60,10 @@ export function ReplyThread({ view, ctx, hideReaction }: { view: Thread; ctx: Ex
       {/* 공감·입력·미리보기 — 줄지 않되 화면 높이의 45%를 넘으면 그 안에서 스크롤(낮은 화면에서 쓰레드가 0으로 접히거나 미리보기가 잘리지 않게). */}
       <div className="max-h-[45dvh] shrink-0 space-y-2 overflow-y-auto px-1 py-0.5">
         {/* 공감(0319a) — 공감 기능이 없는 자리(0319a 전·옛 워커)는 아무것도 그리지 않는다. 공감은 지금 답글 대상 글에 건다. */}
-        <ReactionControl view={hideReaction ? null : ctx.reaction} />
+        <div className="flex items-center justify-between gap-2">
+          {ctx.classnoteUrl ? <a href={ctx.classnoteUrl} target="_blank" rel="noopener noreferrer" className="text-primary shrink-0 text-xs font-bold">ClassNote 이동 ↗</a> : null}
+          <div className="ml-auto"><ReactionControl view={hideReaction || ctx.hideReaction ? null : ctx.reaction} /></div>
+        </div>
         {ctx.canReply && ctx.authorLabel ? (
           <ReplyComposer
             authorLabel={ctx.authorLabel}

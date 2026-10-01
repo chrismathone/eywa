@@ -115,6 +115,10 @@ export type ReplyContext =
       maxLength: number;
       /** 공감 상태 — 공감 기능이 없는 자리(0319a 전·옛 워커)면 null */
       reaction: ReactionView | null;
+      /** 서버가 현재 담임 배정을 확인한 경우에만 외부 이동을 제공한다. */
+      classnoteUrl?: string | null;
+      /** 같은 문구의 옛 댓글 알림 — 답글 후에도 공감 대상의 모호함을 유지한다. */
+      hideReaction?: boolean;
     }
   | { ok: false; error: string };
 

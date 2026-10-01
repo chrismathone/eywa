@@ -15,6 +15,13 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   mark: vi.fn(),
   fetch: vi.fn(),
+  targets: vi.fn(),
+  context: vi.fn(),
+}));
+vi.mock("@/features/classnote-reply/server/notification-reply", () => ({ getNotificationReplyContext: mocks.context }));
+vi.mock("@/features/classnote-reply/server/reply-actions", () => ({
+  getReplyTargetsForNotifications: mocks.targets, getParentReplyContext: vi.fn(),
+  requestParentReply: vi.fn(), requestParentReplyDelete: vi.fn(), requestParentReplyEdit: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push }),
@@ -61,6 +68,8 @@ vi.mock("@/features/notifications/server/actions", () => ({
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.targets.mockResolvedValue({ targets: {}, reactions: null, vague: [], counts: {} });
+  mocks.context.mockResolvedValue({ ok: false, error: "원문 조회 결과" });
   const response = {
     unread: 1,
     items: [
@@ -112,4 +121,23 @@ it("보관함 알림을 읽을 때 받은함 응답으로 바뀌지 않는다", 
     }),
   );
   expect(mocks.mark).toHaveBeenCalledWith(["n1"], "archived", 20);
+});
+
+it.each(["classnote_parent_post", "classnote_parent_comment"])("%s 본문 클릭은 대상 목록 조회 전에도 답글창을 즉시 열고 읽음 처리한다", async (type) => {
+  const item = { id: "parent", type, title: "학부모 알림", body: "알림 내용", link: "https://www.classnote.com/service/report/123", read: false, createdAt: "2026-10-01T00:00:00Z" };
+  mocks.fetch.mockResolvedValue({ unread: 1, items: [item] });
+  mocks.mark.mockResolvedValue({ unread: 0, items: [{ ...item, read: true }] });
+  mocks.targets.mockReturnValue(new Promise(() => {})); // 이 조회에 진입을 의존하지 않는다.
+  const external = vi.spyOn(window, "open").mockImplementation(() => null);
+  render(<NotificationBell />);
+  fireEvent.click(await screen.findByRole("button", { name: "알림 1개" }));
+  fireEvent.click(await screen.findByRole("button", { name: /학부모 알림 안 읽음/ }));
+  expect(await screen.findByText("원문 조회 결과")).toBeTruthy();
+  expect(mocks.context).toHaveBeenCalledWith("parent");
+  expect(mocks.mark).toHaveBeenCalledWith(["parent"], "active", 20);
+  expect(screen.queryByText("ClassNote로 이동")).toBeNull();
+  expect(external).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "← 알림 목록" }));
+  expect(await screen.findByRole("button", { name: /학부모 알림.*알림 내용/ })).toBeTruthy();
+  external.mockRestore();
 });

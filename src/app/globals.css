@@ -988,8 +988,8 @@ main:not(.embed-main):has(.attendance-page) {
  * 표식 = 관리자 풀셸을 감싼 `[data-page-maximize="on"]`(PageMaximizeRoot — 서버가 계정 설정을 읽어 첫 HTML에 싣는다).
  * 숨기는 것 — 전부 **요소에 직접 단 표식**이다(부모를 자식으로 고르는 `:has(> …)`는 dev CSS에서 사라진다, [[#127]]):
  *   `data-maximize-hide`(왼쪽 사이드바) · `data-page-header-extra`(머리글의 eyebrow·구분자·설명 — PageHeader와 그 스켈레톤).
- * 🔴 **머리글 줄은 남는다**(`data-page-header` — 구분선·아래 여백만 뺀다): 제목 + 동작(날짜 이동·새 항목·인쇄)·KPI +
- *    '화면 최대화'↔'화면 원래대로' 한 버튼. 머리글·제목·버튼을 숨기는 규칙 금지(가드).
+ * 기본 화면은 머리글 줄(`data-page-header`)을 남겨 제목·동작·KPI·복원 버튼을 보존한다.
+ * 설정·시간표는 2026-10-02 지시에 따라 `data-maximize-title-row`를 접고 `PageMaximizeToolbar`의 첫 조작 행으로 복원 버튼을 옮긴다.
  * 🔴 **버튼은 픽셀 그대로**(원장 *"같은 위치에"* — 누른 손이 그 자리에서 다시 누를 수 있게): 본문 위 여백은 줄이지 않고,
  *    좌우 여백을 줄인 만큼 머리글 줄 오른쪽 여백을 늘린다(1.5rem → 0.375rem, 시간표 `.edge-to-edge`는 0 — 스크롤바 거터는 둘 다 그대로).
  *    머리글 오른쪽 묶음은 관리자 풀셸에서 위 정렬 + 제목 한 줄 높이(아래 `[data-page-header-actions]`) — 설명이 접혀
@@ -1050,6 +1050,16 @@ main:not(.embed-main):has(.attendance-page) {
   [data-page-maximize] main:not(.embed-main):not(main main) [data-page-header-actions] {
     align-self: flex-start;
     min-height: calc(var(--text-xl) * var(--text-xl--line-height));
+  }
+  /* 첫 조작 행으로 통합한 화면(설정·시간표): 제목·메타 행과 위 여백을 접고, 같은 파란 토글을 조작 행 오른쪽에 둔다. */
+  [data-page-maximize="on"] [data-maximize-title-row] {
+    display: none;
+  }
+  [data-page-maximize="on"] [data-maximize-toolbar-toggle] {
+    display: flex;
+  }
+  [data-page-maximize="on"] main:not(.embed-main):not(main main):has([data-maximize-toolbar-page]) {
+    padding-top: 0.375rem;
   }
 }
 

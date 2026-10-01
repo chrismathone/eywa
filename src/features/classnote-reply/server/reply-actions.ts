@@ -14,6 +14,7 @@ import { decideReplyPermission, type PermissionMemo } from "./reply-permission";
 import { buildMinimalThread, buildThread } from "./thread-data";
 import { changeReply } from "./reply-change";
 import { replyGate } from "./reply-gate";
+import { classnoteLinkForHomeroom } from "./classnote-link";
 import { loadReaction, loadReactions, reactionReady, toReactionView } from "./reaction-data";
 
 /**
@@ -122,11 +123,12 @@ export async function getParentReplyContext(messageId: string, opts?: { noReacti
     ]);
     // 공감 버튼 — 답글을 쓸 수 있는 사람에게만(같은 자격). 이미 눌린 공감의 상태는 누구에게나 보인다.
     // 쓰레드 — 답글 자격이 있는 사람만 같은 글의 학부모 댓글·영상까지(자격이 없으면 그 글 하나와 그 답글뿐, 종전과 같다).
-    const [thread, reactionRow] = await Promise.all([
+    const [thread, reactionRow, classnoteUrl] = await Promise.all([
       perm.canReply
         ? buildThread(admin, { user: g.user, manager: g.manager, focus: message, studentId: perm.studentId ?? message.studentId })
         : buildMinimalThread(admin, { user: g.user, manager: g.manager, focus: message }),
       canReact ? loadReaction(admin, g.user.tenantId, message.id).catch(() => null) : Promise.resolve(null),
+      readonly ? Promise.resolve(null) : classnoteLinkForHomeroom(admin, g.user, message),
     ]);
     const reaction = canReact && (perm.canReply || reactionRow) ? toReactionView(message.id, reactionRow, g.user, g.manager, !!readonly || !perm.canReply) : null;
     return {
@@ -139,6 +141,7 @@ export async function getParentReplyContext(messageId: string, opts?: { noReacti
       workerReady,
       maxLength: REPLY_BODY_MAX,
       reaction,
+      classnoteUrl,
     };
   } catch (e) {
     if (isMissingReplyTable(e)) return { ok: false, error: "사용할 수 없는 기능입니다" };

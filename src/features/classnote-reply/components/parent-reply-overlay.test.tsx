@@ -4,12 +4,14 @@ import type { ReplyContext, ReplyView, ThreadEntry } from "../reply-types";
 import { BELL_ANCHOR_ATTR, overlayPos, ParentReplyOverlay } from "./parent-reply-overlay";
 
 const actions = vi.hoisted(() => ({
+  getNotificationReplyContext: vi.fn(),
   getParentReplyContext: vi.fn(),
   requestParentReply: vi.fn(),
   requestParentReplyDelete: vi.fn(),
   requestParentReplyEdit: vi.fn(),
 }));
 vi.mock("../server/reply-actions", () => actions);
+vi.mock("../server/notification-reply", () => ({ getNotificationReplyContext: actions.getNotificationReplyContext }));
 vi.mock("../server/reaction-actions", () => ({ requestParentReaction: vi.fn(), requestParentReactionRemove: vi.fn(), getParentReactionState: vi.fn() }));
 vi.mock("@/features/students/components/homework-video-player", () => ({ HomeworkVideoPlayer: ({ preview }: { preview: string }) => <iframe title="영상" src={preview} /> }));
 
@@ -188,6 +190,23 @@ describe("벨 답글 오버레이", () => {
     await act(async () => { window.dispatchEvent(new Event("blur")); await new Promise((r) => setTimeout(r, 5)); });
     expect(onClose).toHaveBeenLastCalledWith("dismiss");
     active.mockRestore();
+  });
+
+  it("알림 id로 직접 연 창에도 같은 쓰레드·답글 입력과 담임 전용 이동이 있다", async () => {
+    actions.getNotificationReplyContext.mockResolvedValue(ctx({ classnoteUrl: "https://www.classnote.com/service/report/123" }));
+    await act(async () => { render(<ParentReplyOverlay notificationId="n" onClose={() => {}} />); });
+    expect(actions.getNotificationReplyContext).toHaveBeenCalledWith("n");
+    expect(screen.getByRole("list", { name: "이 글의 쓰레드" })).toBeVisible();
+    expect(screen.getByPlaceholderText("학부모님께 보낼 답글")).toBeVisible();
+    const link = screen.getByRole("link", { name: "ClassNote 이동 ↗" });
+    expect(link).toHaveAttribute("href", "https://www.classnote.com/service/report/123");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("서버에서 담임 주소를 주지 않으면 답글이 가능해도 이동 버튼은 없다", async () => {
+    await act(async () => { render(<ParentReplyOverlay messageId="p" onClose={() => {}} />); });
+    expect(screen.getByPlaceholderText("학부모님께 보낼 답글")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "ClassNote 이동 ↗" })).toBeNull();
   });
 
   it("답글 자격이 없으면 입력 대신 사유 — 쓰레드는 그대로 읽힌다", async () => {

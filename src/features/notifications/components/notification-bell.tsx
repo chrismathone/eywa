@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +49,7 @@ import { MobilePushRow } from "./mobile-push-row";
 import { BELL_ANCHOR_ATTR, ParentReplyOverlay } from "@/features/classnote-reply/components/parent-reply-overlay";
 import { useReplyTargets } from "@/features/classnote-reply/components/use-reply-targets";
 import { ParentNotificationRow } from "@/features/classnote-reply/components/parent-notification-row";
+import { isParentMessageNotification } from "@/features/classnote-reply/notification-match";
 
 const POLL_MS = 60_000;
 
@@ -94,12 +94,11 @@ export function NotificationBell() {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pendingLink, setPendingLink] = useState<string | null>(null); // 확인 대기 중인 외부 링크
   // 학부모 글·댓글 답글 창(0317a) — 답글을 쓸 수 있는 알림(알림 id → 메시지 id)은 벨이 열릴 때만 묻는다.
-  // 열 때의 '공감 숨김'(같은 문구 댓글 둘이라 어느 댓글인지 모를 때)을 함께 붙들어 둔다 — 메뉴가 닫히면 목록 조회 결과(vague)가 비워진다.
-  const [replyOpen, setReplyOpen] = useState<{ id: string; hideReaction: boolean } | null>(null);
+  // 공감 대상이 모호한 옛 댓글은 창을 열 때 서버에서 다시 판정한다.
+  const [replyOpen, setReplyOpen] = useState<string | null>(null); // 알림 id — 본문·답글 버튼 모두 같은 창
   const bellId = useId(); // 답글 오버레이가 붙을 **이** 벨 단추(화면에 벨이 둘이어도 연 그 벨 자리에 뜬다)
-  const { targets: replyTargets, reactions: replyReactions, vague: replyVague, counts: replyCounts } = useReplyTargets(items, menuOpen);
+  const { targets: replyTargets, reactions: replyReactions, counts: replyCounts } = useReplyTargets(items, menuOpen);
   // 답글 오버레이를 닫고 목록으로 돌아올 때 읽던 자리(스크롤)를 되돌린다 — 드롭다운은 닫히며 언마운트돼 위치가 사라진다.
   const listScrollRef = useRef(0);
   const restoreScroll = useCallback((el: HTMLDivElement | null) => {
@@ -135,7 +134,7 @@ export function NotificationBell() {
    * (닫아도 벨엔 안 읽음으로 남음). 여러 건이면 최신 1건만 띄우고 나머지는 "외 N건".
    * ⚠️ 최상위 프레임에서만 — iframe(창) 중복 발사 방어(현 구조상 임베드엔 벨이 없지만 방어로 유지).
    * OS 알림 클릭은 **창 포커스까지만** — 실제 이동은 중앙 팝업의 '바로 가기'가 openItem으로 처리한다
-   * (외부 링크 확인창·새 탭 로직을 한 곳에만 두려고. router.push는 절대 URL에 안 먹는다).
+   * (학부모 글은 같은 답글창, 앱 내부 링크는 해당 작업 화면으로 보낸다).
    */
   const maybeAlert = useCallback((list: NotificationItem[]) => {
     if (!isTopFrame()) return;
@@ -236,12 +235,16 @@ export function NotificationBell() {
       setUnread((u) => Math.max(0, u - 1));
       run(() => markNotificationsRead([n.id], view, limit));
     }
+    // 목록의 답글 자격 조회 전에도 즉시 창을 연다. 서버가 내 알림 → 원문·첨부·답글 권한을 확인한다.
+    if (isParentMessageNotification(n.type)) {
+      setReplyOpen(n.id);
+      return;
+    }
     if (!n.link) return;
     const link = n.link;
-    // 외부 링크(ClassNote 학부모 글 등)는 aywa를 벗어나므로 먼저 확인받는다 — router.push는 앱 내부 경로 전용이라
-    // 절대 URL을 넘기면 동작하지 않는다. 확인 후 새 탭으로 열어 작업 중이던 aywa 화면을 잃지 않게 한다.
+    // 학부모 알림 외의 외부 링크. 학부모 글의 이동 버튼은 답글창에서 실제 담임에게만 제공한다.
     if (isExternal(link)) {
-      setPendingLink(link);
+      window.open(link, "_blank", "noopener,noreferrer");
       return;
     }
     // ⚠️ 앱 내부 경로는 **플로팅 창**으로 연다 — router.push는 창 뒤 배경 프레임만 바꾼다(2026-07-27 원장 제보
@@ -400,12 +403,7 @@ export function NotificationBell() {
                   archived: view === "archived",
                   onOpen: () => openItem(n),
                   replyCount: messageId ? (replyCounts[messageId] ?? 0) : 0,
-                  onReply: messageId
-                    ? () => {
-                        setMenuOpen(false);
-                        setReplyOpen({ id: messageId, hideReaction: replyVague.includes(messageId) });
-                      }
-                    : undefined,
+                  onReply: messageId ? () => openItem(n) : undefined,
                   onArchive: () =>
                     removeThen(n.id, () =>
                       view === "active"
@@ -436,28 +434,13 @@ export function NotificationBell() {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      {/* 드롭다운 **밖**에 둔다 — 안에 두면 메뉴가 닫힐 때 같이 언마운트돼 확인창이 뜨자마자 사라진다. */}
-      <ConfirmDialog
-        open={pendingLink !== null}
-        title="ClassNote로 이동"
-        message="해당 글로 이동하시겠습니까? ClassNote가 새 탭에서 열립니다."
-        confirmLabel="이동"
-        onConfirm={() => {
-          const url = pendingLink;
-          setPendingLink(null);
-          // noopener/noreferrer — 새 탭이 window.opener로 aywa 세션 창을 건드리지 못하게(탭내빙 방지).
-          if (url) window.open(url, "_blank", "noopener,noreferrer");
-        }}
-        onCancel={() => setPendingLink(null)}
-      />
-      {/* 학부모 답글 창 = 벨 목록이 있던 자리에 겹치는 오버레이(드롭다운 **밖** — 위 확인창과 같은 이유). key = 다른 글을 열면 새 상태로.
+      {/* 학부모 답글 창 = 벨 목록이 있던 자리에 겹치는 오버레이(드롭다운 밖이라 목록을 닫아도 유지). key = 다른 알림을 열면 새 상태로.
         닫기·Esc = 목록으로 돌아감(메뉴 다시 열기) · 바깥 클릭 = 그냥 닫음. */}
       {replyOpen ? (
         <ParentReplyOverlay
-          key={replyOpen.id}
-          messageId={replyOpen.id}
+          key={replyOpen}
+          notificationId={replyOpen}
           anchorId={bellId}
-          hideReaction={replyOpen.hideReaction}
           onClose={(how) => {
             setReplyOpen(null);
             if (how === "back") {
@@ -468,7 +451,7 @@ export function NotificationBell() {
         />
       ) : null}
       {/* 중요 알림 화면 중앙 팝업 — 벨 드롭다운을 안 열어도 확실히 보이게(원장 2026-07-15).
-        '바로 가기'는 openItem을 태워 외부 링크(ClassNote 글)면 위 ConfirmDialog로 이어진다. */}
+        '바로 가기'도 openItem을 태워 같은 답글창으로 이어진다. */}
       <NotificationAlertDialog
         item={popup?.item ?? null}
         extraCount={popup?.extra ?? 0}

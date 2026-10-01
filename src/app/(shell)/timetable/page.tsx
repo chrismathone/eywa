@@ -5,6 +5,7 @@ import { Layers } from "@/components/icons/aywa-icon-compat";
 import { PhotoCard } from "@/components/atoms/photo-card";
 import { Toolbar, ToolbarRow } from "@/components/toolbar";
 import { PageHeader } from "@/components/page-header";
+import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-toolbar";
 import { TOOLBAR_CHIP, TOOLBAR_CHIP_OFF, TOOLBAR_CHIP_ON } from "@/components/toolbar-controls";
 import { cookies } from "next/headers";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -690,7 +691,7 @@ export default async function TimetablePage({
       {/* `.edge-to-edge` — 창(임베드)에선 셸 <main>의 좌우·아래 베젤과 스크롤바 거터를 0으로(globals.css
           `main.embed-main:has(.edge-to-edge)`, 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*).
           ⚠️ loading.tsx 루트와 **같은 className**이어야 한다(스켈레톤→본문에서 폭이 튀지 않게, 가드 window-bezel). */}
-      <div className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
+      <div data-maximize-toolbar-page="" className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* 표시 선호('미사용 요일'·'빈 교시 접기'·'1시간 단위')를 **계정에** 기억(0146a) + 쿠키 폴백 —
           창은 깨끗한 URL로 열려 파라미터만으론 매번 초기화된다. 셋을 한 컴포넌트로 합친 이유(동시 쓰기
           충돌)는 prefs-sync.tsx 주석 참조. */}
@@ -714,7 +715,7 @@ export default async function TimetablePage({
       {/* Editorial 문법 ① — 헤더 위계. 시간표는 세로 공간이 가장 귀한 화면이라 **창(임베드)에선 이 줄을
           통째로 접는다**(컴팩트 1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지.
           (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
-      <div className="shrink-0 compact-chrome:hidden">
+      <div data-maximize-title-row="" className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title="시간표"
@@ -726,6 +727,7 @@ export default async function TimetablePage({
       </div>
       {/* Toolbar — 좁은 화면(compact-chrome)에선 여백·구분선을 조인다. 구분선(1px)은 그 자체보다
           양옆 gap 때문에 줄바꿈을 앞당겨, 폰에서 툴바를 한 줄 더 밀어내는 값이 컸다. */}
+      <PageMaximizeToolbar>
       <Toolbar rail={false} gap="gap-3 compact-chrome:gap-1">
         <ToolbarRow>
         {/* 모바일에서는 주간 이동을 필터와 별도의 짧은 레일에 둔다. */}
@@ -1082,6 +1084,7 @@ export default async function TimetablePage({
         </div>
         </ToolbarRow>
       </Toolbar>
+      </PageMaximizeToolbar>
 
       {/* 검색 결과 0건 — 빈 격자만 남기면 "시간표가 고장났다"로 읽힌다. 왜 비었는지(어느 주·어느 과목에
           없는지)를 한 줄로 말하고, 그 자리에서 지울 수 있게 한다. */}

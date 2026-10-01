@@ -12,8 +12,7 @@ import { PageMaximizeContext } from "./page-maximize-context";
  *
  * 숨기는 일은 전부 globals.css 한 곳이 한다(`[data-page-maximize="on"] …`): 왼쪽 사이드바(`data-maximize-hide`) ·
  * 머리글의 eyebrow·구분자·설명(`data-page-header-extra`) · 머리글 구분선·아래 여백 · 본문 위·좌우 여백.
- * 🔴 **머리글 한 줄(제목 + 동작 + '화면 원래대로')은 남는다** — 원장 *"화면 최대화 버튼과 최소화 버튼을 같은 위치에 놔둬야지"*.
- *    켜고 끄는 버튼은 하나([`PageMaximizeButton`](./page-maximize-button.tsx))이고 최대화 전후 같은 줄 오른쪽 끝이다.
+ * 기본 화면은 머리글을 남긴다. 설정·시간표는 `PageMaximizeToolbar`를 사용해 최대화 때 제목 행을 접고 첫 조작 행에서 복원한다(2026-10-02).
  * 🔴 **출구 보장** — PageHeader가 없는 화면(자체 머리)에서 최대화 상태면 본문 위에 출구 줄(`PageMaximizeFallbackBar`)이 선다
  *    (머리글 버튼이 있으면 CSS가 끈다). 떠 있는 모서리 버튼은 없앴다(원장 *"위치 못찾겠는데"*).
  * 사이드바·헤더 컴포넌트에 prop을 내리지 않는다(표식만 직접 단다 — `:has(> …)`는 dev CSS에서 사라진다, [[#127]]).
@@ -66,7 +65,7 @@ export function PageMaximizeRoot({ initial, children }: { initial: boolean; chil
       // 유지 화면(iframe)에서 누르면 부모 DOM 버튼이 없다. 부모 출구로 초점을 빼앗지 않는다.
       if (!t.from) return;
       const target =
-        t.from && t.from.isConnected
+        t.from && t.from.isConnected && t.from.getClientRects().length > 0
           ? t.from
           : [...document.querySelectorAll<HTMLElement>("[data-page-maximize-toggle]")].find((el) => el.getClientRects().length > 0);
       if (target && document.activeElement !== target) target.focus({ preventScroll: true });
