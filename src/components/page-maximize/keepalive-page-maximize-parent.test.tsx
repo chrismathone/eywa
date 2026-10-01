@@ -74,6 +74,22 @@ describe("PageMaximizeRoot — 방식별 켜짐", () => {
 });
 
 describe("이전 화면 유지 — 화면(iframe)과의 메시지", () => {
+  it("화면에서 보낸 최대화 신호는 부모 버튼으로 초점을 빼앗지 않는다", async () => {
+    const f = fakeFrame();
+    const { container } = render(<Shell mode="keepalive" />);
+    const toggle = container.querySelector<HTMLButtonElement>("[data-page-maximize-toggle]")!;
+    const focus = vi.spyOn(toggle, "focus");
+    const rects = vi.spyOn(toggle, "getClientRects").mockReturnValue([{}] as unknown as DOMRectList);
+    const resize = vi.fn();
+    window.addEventListener("resize", resize);
+    message({ type: PAGE_MAXIMIZE_SET_MESSAGE, on: true }, f.win);
+    await waitFor(() => expect(resize).toHaveBeenCalled());
+    expect(focus).not.toHaveBeenCalled();
+    window.removeEventListener("resize", resize);
+    focus.mockRestore();
+    rects.mockRestore();
+  });
+
   it("등록된 화면이 누른 '최대화'를 받아 저장하고, 모든 화면에 새 상태를 알린다", async () => {
     const f = fakeFrame();
     const { container } = render(<Shell mode="keepalive" />);

@@ -6,6 +6,7 @@ import { EmbedProvider } from "./embed-context";
 import { BackLink } from "@/components/back-link";
 import { KeepalivePageMaximize } from "@/components/page-maximize/keepalive-page-maximize";
 import { PageMaximizeButton } from "@/components/page-maximize/page-maximize-button";
+import { KeepaliveFrameShell } from "./keepalive-frame-shell";
 import { PAGE_MAXIMIZE_SET_MESSAGE, PAGE_MAXIMIZE_STATE_MESSAGE } from "./keepalive-frame";
 import { useWindowStore, windowId } from "./window-store";
 
@@ -124,5 +125,18 @@ describe("KeepalivePageMaximize — 부모 셸과 상태를 맞춘다", () => {
     act(() => btn!.click());
     expect(post).toHaveBeenCalledWith({ type: PAGE_MAXIMIZE_SET_MESSAGE, on: true }, window.location.origin);
     expect(marker(container)).toBe("on");
+    expect(screen.getByRole("button", { name: "화면 원래대로" })).toBe(btn);
+    act(() => btn!.click());
+    expect(post).toHaveBeenCalledWith({ type: PAGE_MAXIMIZE_SET_MESSAGE, on: false }, window.location.origin);
+    expect(marker(container)).toBe("off");
+  });
+
+  it("머리글 없는 유지 화면도 iframe 안에서 원래대로 돌아갈 출구를 갖는다", () => {
+    vi.spyOn(window, "top", "get").mockReturnValue(fakeParent);
+    const { container } = render(<KeepaliveFrameShell active maximized><main>운영실</main></KeepaliveFrameShell>);
+    const restore = screen.getByRole("button", { name: "화면 원래대로" });
+    act(() => restore.click());
+    expect(marker(container)).toBe("off");
+    expect(post).toHaveBeenCalledWith({ type: PAGE_MAXIMIZE_SET_MESSAGE, on: false }, window.location.origin);
   });
 });

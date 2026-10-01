@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { KeepalivePageMaximize } from "@/components/page-maximize/keepalive-page-maximize";
+import { PageMaximizeFallbackBar } from "@/components/page-maximize/page-maximize-button";
 import { KeepaliveFrameProvider } from "./shell-mode";
 import { KEEPALIVE_RAIL_SCRIPT, KEEPALIVE_RAIL_VAR, KEEPALIVE_ROOT_ATTR } from "./keepalive-frame";
 
@@ -27,12 +28,13 @@ export function KeepaliveFrameShell({
         {/* suppressHydrationWarning — 아래 인라인 스크립트가 이 div의 style에 변수를 먼저 단다(서버 HTML엔 없는 속성 하나). */}
         <div
           {...{ [KEEPALIVE_ROOT_ATTR]: "" }}
-          className="h-screen"
+          className="flex h-screen flex-col"
           style={{ paddingLeft: `var(${KEEPALIVE_RAIL_VAR}, 0px)` }}
           suppressHydrationWarning
         >
           {/* 문서 파싱 중 실행 — 하이드레이션을 기다리면 본문이 한 번 왼쪽으로 쏠렸다 밀린다. */}
           <script dangerouslySetInnerHTML={{ __html: KEEPALIVE_RAIL_SCRIPT }} />
+          <PageMaximizeFallbackBar />
           {children}
         </div>
       </KeepalivePageMaximize>

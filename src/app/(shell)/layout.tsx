@@ -51,6 +51,7 @@ import { KEEPALIVE_MAIN_CLASS } from "@/components/workspace/keepalive-frame";
 import { KeepaliveMainGate } from "@/components/workspace/keepalive-main-gate";
 import { ShellHomeProvider } from "@/components/workspace/shell-home";
 import { PageMaximizeShell } from "@/components/page-maximize/page-maximize-shell";
+import { PageMaximizeFallbackBar } from "@/components/page-maximize/page-maximize-button";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
@@ -468,6 +469,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
         {/* pt-2(모바일) — 상단 바 바로 아래라 여백을 조인다. 데스크톱은 종전 pt-5. */}
         {/* `relative` = 본문 안의 absolute(특히 `sr-only` 접근성 문구)의 기준점. 없으면 그 요소가 본문 스크롤 밖으로 빠져
             **문서 전체**가 늘어나 사이드바보다 아래까지 빈 스크롤이 생긴다([[#79]] — 2026-10-01 창 모드를 끈 지점의 영상 제출 현황). */}
+        {/* 화면 최대화 출구 줄 — 최대화 중 PageHeader가 없는 화면에서만 선다(본문 스크롤 밖 · 본문 높이를 밀지 않게 <main> 위). */}
+        <PageMaximizeFallbackBar />
         <main className="relative flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}

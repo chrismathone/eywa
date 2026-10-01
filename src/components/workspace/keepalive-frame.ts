@@ -31,7 +31,7 @@ export const KEEPALIVE_RAIL_SCRIPT = `try{var a=parent.document.querySelector('[
 /**
  * 이전 화면 유지 화면의 `<main>` — **단일 화면의 셸 `<main>`과 같은 클래스**다(`embed-main`이 아니다): `.embed-main`이 붙으면 페이지 머리글이
  * 창용 한 줄로 접히고 폰 배치·좁은 폭 규칙이 달라진다. 🔴 `embed-main`을 붙이지 말 것(겉모습이 단일 화면과 달라진다).
- * `hasPainted`(첫 페인트 판정)는 이 클래스도 본문 도착으로 읽는다. 높이는 창 문서 전체(`h-screen`)다.
+ * `hasPainted`(첫 페인트 판정)는 이 클래스도 본문 도착으로 읽는다. 출구 줄을 뺀 문서 높이를 채운다.
  */
 export const KEEPALIVE_MAIN_CLASS =
-  "keepalive-main relative bg-background text-foreground h-screen overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]";
+  "keepalive-main relative bg-background text-foreground min-h-0 flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]";

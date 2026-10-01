@@ -10,7 +10,8 @@ import { createContext, useContext } from "react";
  */
 export type PageMaximizeState = {
   maximized: boolean;
-  setMaximized: (on: boolean) => void;
+  /** `from` = 누른 버튼 — 전환 뒤 포커스를 그 버튼에 돌려준다(같은 자리 토글이라 대개 그 버튼이 그대로 있다). */
+  setMaximized: (on: boolean, from?: HTMLElement | null) => void;
 };
 
 export const PageMaximizeContext = createContext<PageMaximizeState | null>(null);

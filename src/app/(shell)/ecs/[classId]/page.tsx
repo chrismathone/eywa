@@ -59,7 +59,7 @@ export default async function EcsSheetPage({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       {/* 그리드 화면이라 세로 공간 우선 — 창(embed)에선 헤더 통째 숨김(timetable 선례) */}
-      <div data-page-header-slot="" className="shrink-0 compact-chrome:hidden">
+      <div className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title={`영어 강사 시트 — ${res.data.className}`}
