@@ -7,6 +7,7 @@ import { logAction } from "@/features/audit/server/log";
 import { canAnswerHelpBoard, canAskHelpBoard } from "../access";
 import { HELP_BOARD_NOT_READY, isMissingHelpBoard } from "../missing";
 import { notifyHelpAnswer, notifyHelpQuestion } from "./notify";
+import { logDbError } from "@/lib/supabase/db-error";
 
 type Result = { ok: true; id: string } | { error: string };
 
@@ -64,7 +65,10 @@ export async function updateHelpPost(postId: string, form: { title: string; body
   if (!row) return { error: "글을 찾지 못했습니다" };
   if (row.author_id !== user.id) return { error: "자기 글만 고칠 수 있습니다" };
   const { error } = await admin.from("help_posts").update({ title, body }).eq("id", postId).eq("tenant_id", user.tenantId);
-  if (error) return { error: "수정하지 못했습니다" };
+  if (error) {
+    logDbError(error, "help.board.updateHelpPost");
+    return { error: "수정하지 못했습니다" };
+  }
   await logAction({
     action: "help_post_update",
     targetType: "help_post",
@@ -94,7 +98,10 @@ export async function deleteHelpPost(postId: string): Promise<Result> {
   if (!row) return { error: "글을 찾지 못했습니다" };
   if (row.author_id !== user.id) return { error: "자기 글만 지울 수 있습니다" };
   const { error } = await admin.from("help_posts").delete().eq("id", postId).eq("tenant_id", user.tenantId);
-  if (error) return { error: "삭제하지 못했습니다" };
+  if (error) {
+    logDbError(error, "help.board.deleteHelpPost");
+    return { error: "삭제하지 못했습니다" };
+  }
   await logAction({
     action: "help_post_delete",
     targetType: "help_post",
@@ -177,7 +184,10 @@ export async function closeHelpPost(postId: string): Promise<Result> {
     .update({ status: "closed" })
     .eq("id", postId)
     .eq("tenant_id", user.tenantId);
-  if (error) return { error: "닫지 못했습니다" };
+  if (error) {
+    logDbError(error, "help.board.closeHelpPost");
+    return { error: "닫지 못했습니다" };
+  }
   await logAction({
     action: "help_post_close",
     targetType: "help_post",

@@ -16,6 +16,7 @@ import {
   type WithdrawalMetadata,
   type WithdrawalReason,
 } from "../types";
+import { logDbError } from "@/lib/supabase/db-error";
 
 const REASONS: WithdrawalReason[] = [
   "graduated",
@@ -141,7 +142,10 @@ export async function toggleConsultationStep(
     .update({ withdrawal_metadata: updated })
     .eq("id", studentId);
 
-  if (error) return { error: "상담 추적을 저장하지 못했습니다" };
+  if (error) {
+    logDbError(error, "withdrawals.toggleConsultationStep");
+    return { error: "상담 추적을 저장하지 못했습니다" };
+  }
 
   // 누가 학부모 통화를 켜고 껐는지 남긴다(감사 M3 — 사유 저장·신규생 체크와 같은 결).
   await logAction({
@@ -198,7 +202,10 @@ export async function reactivateStudent(
     })
     .eq("id", studentId);
 
-  if (error) return { error: "재원 복구에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+  if (error) {
+    logDbError(error, "withdrawals.reactivateStudent");
+    return { error: "재원 복구에 실패했습니다. 잠시 후 다시 시도해 주세요." };
+  }
 
   // ⚠️ students만 되돌리면 수강은 종료된 채로 남아 시간표 셀 '퇴원' 섹션에 계속 뜨고 휴원도 안 풀린다.
   // 학생 상세(changeStudentStatus)의 재원 전환과 **같은 불변식**을 공유해야 한다 — 예전엔 이 경로에만

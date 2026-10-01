@@ -1717,6 +1717,11 @@ cron은 다음 날 다시 시도하지도 않는다.
 ② [`free-class-name.mts`](../scripts/_english_sync/free-class-name.mts)로 폐지 반 이름을 보관 접미사로 비운다
 (`PJ2` → `PJ2 (~2026-07)`). 반 id가 키라 수강·성적·출결은 그대로 붙어 있다.
 
+③ (2026-10-01) **반 수정·생성 화면은 앱이 알린다** — 23505면 `같은 과목에 중복되는 반 이름이 있습니다. (종강 처리된 반)`처럼
+그 반의 상태를 반 이름 칸에 적고, 종강·폐지 반이면 "그 반 이름을 'PL5 (~2026-07)'로 바꾸고 저장" 버튼(관리자만)을 누를 때만
+앱이 그 반 이름을 비운다([`class-name-guard.ts`](../src/features/classes/server/class-name-guard.ts)). 🔴 말없이 자동으로 비우지 않는다(원장).
+⚠️ cron·시간표 가져오기는 그대로 — 화면이 없어 여전히 실패하고 Vercel 함수 로그(`reportError`, where=`apply-due-class-updates:update`)에만 남는다.
+
 ⚠️ **근본 해결은 부분 유니크 인덱스**(`WHERE is_active`)지만 보류 — 그러면 활성/비활성 동명이 가능해져
 이름으로 반을 찾는 곳(컷오버의 폐지 반 재활성 조회 등)이 **어느 행을 집을지 모호**해진다. 전수 감사 후 결정.
 (⚠️ 다행히 그 인덱스를 `on conflict` 타겟으로 쓰는 upsert는 없다 — [[#113]] 위험은 없음.)
@@ -2175,3 +2180,66 @@ iframe `load`에서 덮개를 걷었는데, `load`는 HTML 스트림 끝 + 이�
 **교훈**: "내 것" 목록이 비어 있는 것은 **없다**는 뜻이 아닐 수 있다 — 서버가 "나"를 무엇으로 정하는지(계정? 요청에 실은 값?) 먼저 확인할 것.
 빈 목록을 근거로 정리·삭제 단계를 건너뛰는 코드는 **조용히 아무것도 안 한다**(정리 뒤에는 반대쪽 지표 — 여기선 `reaction_counts`·공감한 사람 목록 — 로 0인지 확인).
 시험으로 실제 외부 서비스에 쓴 것은 **만든 번호를 응답에서 받아 적어 두고** 그 번호로 지운다.
+
+## #137 셸이 마운트하자마자 부르는 **서버 액션** × loading.tsx 아래 redirect = Router가 React #310으로 죽고 **Next 기본 오류 화면** (2026-10-01)
+
+**증상**: 운영(창 모드 끈 침산)에서 직원 화면에 간헐적으로 영어 기본 화면 **"This page couldn't load / Reload to try again, or go back."**
+(Reload·Back 버튼). 우리 `global-error.tsx`(한글)도 `(shell)/error.tsx`도 안 뜨고, digest가 없다(= 클라 오류). Reload를 누르면 또 뜬다.
+원장 관찰: "대시보드 권한이 꺼진 관리자뷰 사람" · "창 모드를 끈 뒤부터".
+
+**원인(최소 앱으로 재현 — Next 16.2.6 프로덕션 빌드)**: 대시보드 권한이 없는 사람이 `/dashboard`를 **문서로** 연다(북마크·새로고침·로그인
+`next`·관리자뷰 전환의 `window.location`).
+1. `/dashboard`는 `loading.tsx`가 페이지를 Suspense로 감싸고, 권한 거부는 페이지 안(`loadOverview` → `requireAccess`)에서 났다 → 응답이 이미
+   흐른 **뒤** redirect라 Next가 `<meta id="__next-page-redirect" http-equiv="refresh">`를 끼우고 스트림에 redirect 오류를 싣는다.
+2. 화면이 붙자마자 사이드바 알림 벨이 **서버 액션**(`fetchMyNotifications`)을 보낸다 — 라우터 작업 큐에 들어간다.
+3. 그 액션이 끝나기 전에 스트림의 redirect가 처리되면, meta가 있어서 `navigate-reducer`가 `completeHardNavigation` → `Router`가 렌더 중
+   `throw unresolvedThenable` → **React #310**(`useActionQueue`의 `useOptimistic`) → 오류가 우리 global-error **바깥**(`AppRouter`의 최외곽 기본
+   경계)으로 나가 Next 기본 화면. 곧이어 meta refresh가 `/menu`로 옮기지만, 운영의 무거운 셸에선 그 사이 화면이 남고 Reload는 같은
+   `/dashboard`를 다시 연다(로그의 1.5초 간격 `GET /dashboard` 반복).
+
+| 조건(문서 로드) | 기본 오류 화면 |
+|---|---|
+| 서버 액션 벨 + loading 아래 redirect | **약 23/100**(회차마다 0~44% — "간헐적") |
+| 벨 없음 / 사이드바(프리페치)만 | 0/30 · 0/20 |
+| 벨을 일반 `fetch`(GET 라우트)로 | 0/70 |
+| 클라 이동(로고 클릭)으로 같은 튕김 | 0/18 |
+| 게이트를 loading **앞**(레이아웃)으로 → 문서 요청이 HTTP 307 | 0/20 |
+
+창 모드가 켜져 있을 땐 메뉴 화면이 전부 iframe(창 셸 = 벨 없음)에서 열리고 맨 위는 `/menu`에 머물러 경합이 안 났다 — 끄자 모든 문서 로드가
+벨이 있는 맨 위 셸에서 일어났다(이 연결은 부분적으로만 증명).
+
+**고침(2026-10-01)**: ① 셸에서 **저절로(마운트·이동·포커스·주기) 도는 조회는 서버 액션 금지** — 벨 목록은 GET `/api/notifications` + `fetch`
+(인증·격리는 같은 `getMyNotifications`, `no-store`). ② `/dashboard` 권한 게이트를 `dashboard/layout.tsx`로(loading 앞 → 307).
+③ "처음으로"(로고·바탕 보기·관리자뷰 전환·`/home`·루트 착지)는 권한을 본 홈(`ShellHomeProvider`·`roleHome(role, getUserPermMatrix())`).
+가드 = [`shell-autocall-server-actions.test.ts`](<src/app/(shell)/shell-autocall-server-actions.test.ts>)(셸에서 닿는 서버 액션은 허용 목록뿐).
+
+**교훈**: Next 기본 화면(`This page couldn't load`)이 **우리 global-error가 있는데도** 떴다면 앱 컴포넌트가 아니라 **라우터 자체**가 죽은 것이다 —
+"하드 이동 + 진행 중인 라우터 작업(서버 액션)"을 먼저 의심할 것. ⚠️ loading.tsx 아래에서 redirect하는 페이지는 아직 여럿 있다(`/exams`·
+`/attendance/seat`·`/dashboard/briefing`·`/lesson-reports?tab=video_homework` 등 10곳 + 각 페이지의 `requireAccess` 거부) — ①로 경합 원인은
+사라졌지만, 새 권한 게이트는 가능하면 loading 앞(레이아웃)에 둘 것. ⚠️ 재현은 **문서 로드**로 할 것(클라 이동은 meta가 없어 안 터진다).
+
+## #138 **DB 오류를 일반 문구로 삼키면 원인이 사라진다** — 화면엔 "저장에 실패했습니다", 로그엔 0줄 (2026-10-01)
+
+**증상**: 반 이름 PL4→PL5 개명이 *"저장에 실패했습니다. 잠시 후 다시 시도해주세요."*로만 실패했다. 다시 눌러도 같았다. 원인은 23505
+(`classes_tenant_name_subject_idx` — 종강·폐지된 반이 그 이름을 쥐고 있었다)였는데, 서버 액션이 **모든 DB 오류를 같은 문구로 바꾸고 로그도
+안 남겨** 원장도 개발자도 이유를 알 길이 없었다. "잠시 후 다시 시도"는 거짓 안내였다(시간이 지나도 낫지 않는 오류).
+
+**전수 검수**(548파일 · 1,070곳, [`docs/_audit/error-messages-2026-10-01.md`](_audit/error-messages-2026-10-01.md)): 쓰기 616곳 중 **563곳이 로그 없음**.
+반대 방향의 실패도 많았다 — **영문 원문을 그대로 돌려주는 곳이 213곳**(`duplicate key value violates unique constraint …`가 토스트에).
+그리고 "번역"한 곳에서도 **같은 코드, 다른 원인**이 틀린 이유를 말했다:
+- 학생 저장이 **모든 23505**를 "같은 이름·학교·학년"으로 말했다 — 학생 표엔 유니크가 셋(자연키·출결번호·makeedu)이라 출결번호 중복에 이름 칸을 고치게 했다.
+- 42501은 RLS 거부만이 아니다 — `users` 보호 트리거가 42501로 *"급여 항목은 원장만 바꿀 수 있습니다"* 같은 한글 이유를 RAISE한다.
+- 23503은 방향에 따라 뜻이 반대다 — 지울 때 = "다른 기록이 쓰고 있다", 넣을 때 = "연결할 대상이 없다"(같은 제약 이름이 둘 다에 나온다).
+- P0001은 반은 한글 문장(수납 배분 RPC), 반은 코드(`folder_cycle`·`ECS_BAD_TERM`)다.
+
+**규칙**:
+- 서버 액션의 `if (error)` 자리는 **`explainDbError(error, { scope, fallback, op })`**([`src/lib/supabase/db-error.ts`](../src/lib/supabase/db-error.ts)) —
+  판정은 **오류 코드 + 제약 이름**(원문 따옴표 속 식별자)으로, 문구는 제약 표([`db-error-constraints.ts`](../src/lib/supabase/db-error-constraints.ts),
+  운영 DB `pg_indexes`·`pg_constraint`에서 확인한 이름만) → 코드 기본 문구 → 모르면 **지금 쓰던 일반 문구(fallback)**. 로그는 scope와 함께 한 줄
+  (입력 때문인 오류는 warn, 나머지는 error · details의 키 값·실패 행은 가린다 — 학생 이름·연락처가 들어간다).
+- 지우기 동작은 `op: "delete"`를 넘긴다(23503의 뜻이 바뀐다). 폼 칸에 붙일 수 있는 이유는 `info.field`로 그 칸에(학생 이름·출결번호·직원 이메일).
+- 이유를 보이기 이른 자리(조회 실패·학부모가 보는 공개 화면·부분 실패 안내)는 **`logDbError(error, scope)`로 로그만** — 문구는 그대로.
+- 🔴 영문 원문(`error.message`)을 화면에 돌려주지 말 것. 새 유니크·CHECK·RESTRICT FK를 만들면 **제약 표에 한 줄**(없으면 코드 기본 문구로 떨어진다 — 단 CHECK는 이름 **규약**(`_len`·`_range_ordered` 등)으로 고르므로 규약과 정의가 다른 CHECK는 반드시 표에 직접 적을 것).
+- ⚠️ NOT NULL(23502)·형식 오류(22P02 등)는 폼 검증을 지난 뒤라 대개 **코드 버그** — 사용자를 탓하는 문구 대신 지금 문구 + 에러 로그.
+- ⚠️ 유니크가 여럿인 표에서 "23505 = 이 중복"이라고 한 문장으로 말하지 말 것 — 제약 이름으로 가른다.
+- ⚠️ 쿼리 빌더를 변수에 담았다가 실행하는 자리(`const { error } = await del`)는 "`.from()` 결과를 받은 오류 변수" 검색에 안 잡힌다 — 전수 검수 땐 따로 볼 것.

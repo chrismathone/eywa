@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { normalizeTermNote, TERM_NOTE_MAX } from "../term-note";
 import { isVirtualTermId } from "../month-roster";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 회차 확정 표의 메모(특이사항) 저장 — 원장 2026-09-17 *"메모(특이사항) … 없는 건 추가"*.
@@ -35,13 +36,19 @@ export async function updateSessionTermNote(id: string, raw: string): Promise<{ 
     .select("class_id, note, invoice:invoice_id ( student_id )")
     .eq("id", id)
     .maybeSingle();
-  if (readError) return { error: "메모를 저장하지 못했습니다. 다시 시도해 주세요" };
+  if (readError) {
+    logDbError(readError, "billing.session-terms.updateSessionTermNote");
+    return { error: "메모를 저장하지 못했습니다. 다시 시도해 주세요" };
+  }
   if (!before) return { error: "대상을 찾을 수 없습니다" };
   const noteBefore = normalizeTermNote(before.note ?? "");
   if (noteBefore === note) return { note };
 
   const { data: saved, error } = await db.from("invoice_session_terms").update({ note }).eq("id", id).select("id").maybeSingle();
-  if (error) return { error: "메모를 저장하지 못했습니다. 다시 시도해 주세요" };
+  if (error) {
+    logDbError(error, "billing.session-terms.updateSessionTermNote");
+    return { error: "메모를 저장하지 못했습니다. 다시 시도해 주세요" };
+  }
   if (!saved) return { error: "저장할 대상을 찾을 수 없습니다" };
 
   const invoice = Array.isArray(before.invoice) ? before.invoice[0] : before.invoice;

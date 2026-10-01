@@ -714,7 +714,7 @@ export default async function TimetablePage({
       {/* Editorial 문법 ① — 헤더 위계. 시간표는 세로 공간이 가장 귀한 화면이라 **창(임베드)에선 이 줄을
           통째로 접는다**(컴팩트 1행조차 아까움 — 2026-07-20 원장 "여전히 많은 공간"). 최상위 프레임은 풀 헤더 유지.
           (우측 학생 인원 집계는 2026-09-28 삭제 — 원장 "헷갈리니까".) */}
-      <div className="shrink-0 compact-chrome:hidden">
+      <div data-page-header-slot="" className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title="시간표"

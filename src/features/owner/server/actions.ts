@@ -16,6 +16,7 @@ import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey, type PermissionsSettings } from "../settings-types";
 import { prepareSectionForSave, presetOfStored } from "../preset";
 import { navigationRevision } from "../normalize-navigation";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
@@ -131,7 +132,10 @@ export async function saveOwnerSection(
         .eq("tenant_id", actor.tenantId)
         .in("id", ids)
         .limit(250);
-      if (peopleError) return { error: "권한 대상 직원을 확인하지 못했습니다" };
+      if (peopleError) {
+        logDbError(peopleError, "owner.saveOwnerSection");
+        return { error: "권한 대상 직원을 확인하지 못했습니다" };
+      }
       const validIds = new Set((people ?? [])
         .filter((u) => u.system_role !== "student" && u.status !== "inactive")
         .map((u) => u.id));

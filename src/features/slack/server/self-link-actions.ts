@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { describeSlackError } from "../format";
 import { slackLookupByEmail, slackPostDm } from "./client";
 import { slackSelfGate } from "./gate";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 본인 슬랙 연결(내 정보) — 슬랙 봇이 **그 슬랙 계정의 1:1로 6자리 코드**를 보내고, aywa에 로그인한 본인이 입력해야 연결된다.
@@ -50,7 +51,10 @@ export async function startSlackSelfLink(slackEmail: string): Promise<{ error?: 
     },
     { onConflict: "tenant_id,aywa_user_id" },
   );
-  if (error) return { error: "코드를 만들지 못했습니다" };
+  if (error) {
+    logDbError(error, "slack.startSlackSelfLink");
+    return { error: "코드를 만들지 못했습니다" };
+  }
   const sent = await slackPostDm(
     g.token,
     who.userId,
@@ -91,7 +95,10 @@ export async function confirmSlackSelfLink(rawCode: string): Promise<{ error?: s
     .from("slack_user_links")
     .insert({ tenant_id: g.tenantId, aywa_user_id: g.userId, slack_user_id: slackUserId, method: "code", linked_by: g.userId });
   await admin.from("slack_link_codes").delete().eq("tenant_id", g.tenantId).eq("aywa_user_id", g.userId);
-  if (error) return { error: "연결하지 못했습니다" };
+  if (error) {
+    logDbError(error, "slack.confirmSlackSelfLink");
+    return { error: "연결하지 못했습니다" };
+  }
   await logAction({ action: "slack_link_self", targetType: "integration", targetLabel: "내 슬랙 계정" });
   revalidatePath("/me");
   return { message: "슬랙 계정을 연결했습니다" };
@@ -101,7 +108,10 @@ export async function unlinkMySlack(): Promise<{ error?: string; message?: strin
   const g = await slackSelfGate();
   if ("error" in g) return g;
   const { error } = await createAdminClient().from("slack_user_links").delete().eq("tenant_id", g.tenantId).eq("aywa_user_id", g.userId);
-  if (error) return { error: "연결을 해제하지 못했습니다" };
+  if (error) {
+    logDbError(error, "slack.unlinkMySlack");
+    return { error: "연결을 해제하지 못했습니다" };
+  }
   await logAction({ action: "slack_unlink", targetType: "integration", targetLabel: "내 슬랙 계정" });
   revalidatePath("/me");
   return { message: "슬랙 연결을 해제했습니다" };

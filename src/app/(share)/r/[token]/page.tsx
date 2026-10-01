@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { resolveBrandingSrc, resolveTenantReadUrls } from "@/lib/storage/media-storage";
 import { parseForwardedFor } from "@/features/attendance/kiosk/device-info";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { expiredLinkHref } from "@/features/link-expired/kinds";
 import { visibleAttachments } from "@/features/onescreen/attachment-utils";
 import { fetchReportTrendRows, fetchSpecialClassIds } from "@/features/onescreen/server/score-history";
 import { resolveReportAuthorName } from "@/features/onescreen/server/report-author-name";
@@ -43,9 +44,13 @@ export default async function PublicLessonReportPage({
   // 순간 DB 오류를 "링크 없음(404)"으로 보이면 학부모는 링크가 없어졌다고 받아들인다(E8) — 다시 열어 달라고 안내한다.
   if (reportError) return <ClosedReportScreen reason="unavailable" />;
   if (!report) notFound();
-  // 취소(강사가 열람 차단) → 취소화면. 만료(보고서일+90일 경과) → 만료화면. 둘 다 생 404 대신 친화 안내.
+  // 취소(강사가 열람 차단) → 그 자리 취소화면. 만료와 뜻이 달라 만료 페이지로 보내지 않는다(취소된 사흘 전 보고서에
+  // "90일 동안 열 수 있습니다"는 거짓이다). 취소가 만료보다 먼저 — 둘 다면 강사의 차단이 사실이다.
   if (report.revoked_at) return <ClosedReportScreen reason="revoked" />;
-  if (isShareExpired(report.report_date as string)) return <ClosedReportScreen reason="expired" />;
+  // 만료(보고서일+90일 경과, 90일째 당일은 유효) → 공용 '링크 만료' 페이지로 307(원장 2026-10-01).
+  // 🔴 주소엔 종류만 — 토큰을 싣지 않는다. 조회 로그(share_link_views)보다 앞이라 만료 열람은 적지 않는다(종전과 같다).
+  // ⚠️ redirect()는 throw로 끝난다 — try 안에 넣지 말 것. ClassNote 워커 캡처는 이동 뒤 `.report-capture`가 없어 게시하지 않는다.
+  if (isShareExpired(report.report_date as string)) redirect(expiredLinkHref("report"));
 
   // 조회 로그(0086a, best-effort) — 부모 열람 1회 = 1행. 워커 스크린샷(x-eywa-internal secret 일치)은 제외해 과집계 방지.
   const hdrs = await headers();

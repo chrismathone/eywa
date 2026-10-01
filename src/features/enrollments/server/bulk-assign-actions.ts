@@ -108,7 +108,7 @@ export async function createEnrollmentsBulk(input: {
           error: await describeOverlapConflict(supabase, studentId, classId, startDate, endDate),
         };
       }
-      return { studentId, ok: false, error: toKoreanDbError(error, "수강 배정에 실패했습니다.") };
+      return { studentId, ok: false, error: toKoreanDbError(error, "수강 배정에 실패했습니다.", "enrollments.bulkAssign") };
     }
     return { studentId, ok: true, enrollmentId: data.id };
   };

@@ -26,7 +26,6 @@ import { detectOverlaps } from "./overlap-detect";
 import {
   ARCHIVE_REASON,
   CLOSE_TERM_REASON,
-  closeClassEnrollments,
   reopenClassEnrollments,
 } from "./enrollment-lifecycle";
 import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
@@ -46,6 +45,10 @@ import {
   subjectWeekendPeriods,
 } from "@/features/timetable/lib/periods";
 import { normalizeEnglishTrack } from "../english-track";
+import { readFreeClosedNameRequest, type ClassNameConflict } from "../class-name-conflict";
+import { freedLeftNotice, rollbackFreedClassName, writeWithClassNameGuard } from "./class-name-guard";
+import { ClassTermError, endClassWithName } from "./class-term-store";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type ClassFormState =
   | {
@@ -63,6 +66,11 @@ export type ClassFormState =
        * UI는 `overlaps`로 옮기고 이 필드와 `ignoreTeacherConflict` 우회 버튼을 지울 것.
        */
       teacherConflict?: string;
+      /**
+       * 반 이름이 같은 과목의 다른 반과 겹쳐 저장하지 않았다(원장 2026-10-01). 문구는 `fieldErrors.className`에도 같이 온다.
+       * `freeTo`가 있으면(겹친 반이 종강·폐지) 화면이 "그 반 이름을 바꾸고 저장" 버튼을 준다 — class-name-conflict.ts.
+       */
+      nameConflict?: ClassNameConflict;
       ok?: true;
       redirectTo?: string;
       nonce?: number;
@@ -89,6 +97,11 @@ type ScheduleInput = {
 
 /** DB 오류를 화면 문구로 — 영문 원문(PostgREST 메시지)을 그대로 내보내지 않는다(UI raw 노출 금지). */
 const SAVE_FAILED = "저장에 실패했습니다. 잠시 후 다시 시도해주세요.";
+
+/** 반 이름 충돌 → 반 이름 칸의 오류 + (종강·폐지 반이면) 버튼 정보. ⚠️ export 금지 — "use server" 파일은 async만([[#119]]). */
+function nameConflictState(conflict: ClassNameConflict): ClassFormState {
+  return { fieldErrors: { className: conflict.message }, nameConflict: conflict };
+}
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 // 레거시 기본 과목 — owner 설정의 과목 key와 합쳐 허용 집합을 만든다(설정에 추가한 과목도 저장 허용).
@@ -252,31 +265,49 @@ export async function createClass(
   // 겹침은 사고가 아니라 정상 업무다. 상세 경고만 결과에 실어 화면이 알린다.
   const overlaps = await collectOverlaps(supabase, input);
 
-  const { data, error } = await supabase
-    .from("classes")
-    .insert({
-      tenant_id: user.tenantId,
-      class_name: input.className,
-      subject: input.subject,
-      teacher_id: input.teacherId,
-      classroom_id: input.classroomId,
-      // 새 반은 **항상 활성**. 끄는 것은 반 상세의 '반 폐지'뿐이다(2026-07-21) — 폐지만이 그 반 활성
-      // 수강까지 함께 종료해 학생목록·학생상세와 어긋나지 않는다. 폼에서 끄는 문은 폐지했다.
-      is_active: true,
-      is_special: input.isSpecial,
-      report_optout: input.reportOptout,
-      // 영어 프로그램 구분(0176a) — 영어가 아니면 normalizeEnglishTrack이 이미 null로 만든다.
-      english_track: input.englishTrack,
-      notes: input.notes,
-      bg_color: input.bgColor,
-      text_color: input.textColor,
-    })
-    .select("id")
-    .single();
+  // 🔴 반 이름이 같은 과목의 다른 반(종강·폐지 반 포함 — 유니크 인덱스에 is_active 조건이 없다, [[#120]])과 겹치면
+  //    저장하지 않고 그 반의 상태를 알린다. 종강·폐지 반 이름을 비우는 건 화면 버튼을 누른 요청뿐(class-name-guard.ts).
+  const nameTarget = { tenantId: user.tenantId, subject: input.subject, name: input.className };
+  const guarded = await writeWithClassNameGuard({
+    db: supabase,
+    target: nameTarget,
+    today: kstToday(),
+    request: readFreeClosedNameRequest(formData),
+    // 새 반 만들기 자체가 관리자 전용(requireClassManage)이라 비울 권한도 이미 있다.
+    canFree: async () => true,
+    write: async () => {
+      const { data, error } = await supabase
+        .from("classes")
+        .insert({
+          tenant_id: user.tenantId,
+          class_name: input.className,
+          subject: input.subject,
+          teacher_id: input.teacherId,
+          classroom_id: input.classroomId,
+          // 새 반은 **항상 활성**. 끄는 것은 반 상세의 '반 폐지'뿐이다(2026-07-21) — 폐지만이 그 반 활성
+          // 수강까지 함께 종료해 학생목록·학생상세와 어긋나지 않는다. 폼에서 끄는 문은 폐지했다.
+          is_active: true,
+          is_special: input.isSpecial,
+          report_optout: input.reportOptout,
+          // 영어 프로그램 구분(0176a) — 영어가 아니면 normalizeEnglishTrack이 이미 null로 만든다.
+          english_track: input.englishTrack,
+          notes: input.notes,
+          bg_color: input.bgColor,
+          text_color: input.textColor,
+        })
+        .select("id")
+        .single();
+      return { data: data as { id: string } | null, error };
+    },
+    savedClassId: (d) => d?.id ?? null,
+    failMessage: SAVE_FAILED,
+  });
+  if (!guarded.ok) return "conflict" in guarded ? nameConflictState(guarded.conflict) : { error: guarded.error };
 
   // ⚠️ 원문(PostgREST 영문)을 화면에 내보내지 않는다. 배포 순서가 어긋나 0133a(`is_special`)가 아직
   // 안 올라갔을 때도 여기로 떨어진다 — 마이그레이션은 **코드보다 먼저** 적용할 것(0133a 헤더 참조).
-  if (error || !data) return { error: SAVE_FAILED };
+  const data = guarded.data;
+  if (!data) return { error: SAVE_FAILED };
 
   if (input.schedules.length > 0) {
     // valid_from은 NOT NULL(기본값 없음) — 반드시 채워야 insert 성공(없으면 전 스케줄 저장이 조용히 실패).
@@ -297,8 +328,17 @@ export async function createClass(
     const { error: schedErr } = await supabase.from("class_schedules").insert(rows);
     if (schedErr) {
       // 반은 생성됐지만 스케줄 실패 - 반 삭제 후 에러 반환
-      await supabase.from("classes").delete().eq("id", data.id);
-      return { error: "스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요." };
+      const { error: delErr } = await supabase.from("classes").delete().eq("id", data.id);
+      // ⚠️ 삭제도 실패하면 반은 **남아 있다**(그 이름도 쥔 채) — "다시 시도"라고 하면 다음 생성이 그 반과 겹친다.
+      if (delErr) {
+        return { error: "수업 시간 저장에 실패했습니다. 반은 만들어졌지만 수업 시간이 비어 있습니다 — 반 목록에서 그 반을 열어 수업 시간을 다시 저장해주세요." };
+      }
+      // 이 반을 위해 종강·폐지 반 이름을 비웠다면 되돌린다(반이 사라졌으니 비울 이유도 사라졌다).
+      const freed = guarded.freed;
+      const kept = freed ? !(await rollbackFreedClassName(supabase, nameTarget, freed)) : false;
+      return {
+        error: `스케줄 저장에 실패했습니다. 잠시 후 다시 시도해주세요.${kept && freed ? freedLeftNotice(freed.to) : ""}`,
+      };
     }
   }
 
@@ -381,30 +421,45 @@ export async function updateClass(
   }
   const labCol = (v: boolean | undefined) => (labSupported ? { lab_separate: v ?? false } : {});
 
-  const { error } = await supabase
-    .from("classes")
-    .update({
-      class_name: input.className,
-      subject: input.subject,
-      teacher_id: input.teacherId,
-      classroom_id: input.classroomId,
-      // ⚠️ **is_active를 여기서 건드리지 않는다**(2026-07-21). 예전엔 폼 체크박스가 이 값을 썼는데,
-      // 폐지 버튼과 달리 **그 반 활성 수강을 종료하지 않아** 시간표·출석부에선 사라지고 학생목록엔
-      // "수강중"으로 남는 사각지대가 생겼다. 폐지/재운영은 archiveClass 단일 경로.
-      // 특강 토글은 **폼이 그 필드를 보냈을 때만** 쓴다 — 안 보내는 폼(구 폼·부분 저장)이 조용히 false로 되돌리지 않게.
-      ...(input.isSpecialProvided ? { is_special: input.isSpecial } : {}),
-      // '수업보고서 미발송'(0174a)도 같은 계약 — 안 보내는 폼이 조용히 false로 되돌리지 않게.
-      ...(input.reportOptoutProvided ? { report_optout: input.reportOptout } : {}),
-      // 영어 프로그램 구분(0176a) — 같은 계약(폼이 보냈을 때만). 과목을 영어에서 바꾸면 값은 null로
-      // 정리된다(normalizeEnglishTrack) — 수학 반에 남은 'eie'는 필터에서 거짓 분류가 된다.
-      ...(input.trackProvided ? { english_track: input.englishTrack } : {}),
-      notes: input.notes,
-      bg_color: input.bgColor,
-      text_color: input.textColor,
-    })
-    .eq("id", id);
-
-  if (error) return { error: SAVE_FAILED };
+  // 🔴 반 이름 충돌(같은 과목의 다른 반 — 종강·폐지 반 포함, [[#120]])은 일반 실패가 아니라 **무엇과 겹쳤는지** 알린다
+  //    (원장 2026-10-01, PL4 → PL5가 7월 종강한 PL5 때문에 "저장에 실패했습니다"만 떴다). 종강·폐지 반 이름을
+  //    비우는 건 화면 버튼을 누른 요청뿐이고, 남의 반을 바꾸는 일이라 관리자(full)만 할 수 있다.
+  //    ⚠️ 이 쓰기가 첫 쓰기다 — 여기서 돌아가도 교시는 아직 안 지웠다(아래 delete보다 앞).
+  const guarded = await writeWithClassNameGuard({
+    db: supabase,
+    target: { tenantId: user.tenantId, subject: input.subject, name: input.className, excludeId: id },
+    today,
+    request: readFreeClosedNameRequest(formData),
+    canFree: () => canManageTenant(user.systemRole, "classes"),
+    write: async () => {
+      const { error } = await supabase
+        .from("classes")
+        .update({
+          class_name: input.className,
+          subject: input.subject,
+          teacher_id: input.teacherId,
+          classroom_id: input.classroomId,
+          // ⚠️ **is_active를 여기서 건드리지 않는다**(2026-07-21). 예전엔 폼 체크박스가 이 값을 썼는데,
+          // 폐지 버튼과 달리 **그 반 활성 수강을 종료하지 않아** 시간표·출석부에선 사라지고 학생목록엔
+          // "수강중"으로 남는 사각지대가 생겼다. 폐지/재운영은 archiveClass 단일 경로.
+          // 특강 토글은 **폼이 그 필드를 보냈을 때만** 쓴다 — 안 보내는 폼(구 폼·부분 저장)이 조용히 false로 되돌리지 않게.
+          ...(input.isSpecialProvided ? { is_special: input.isSpecial } : {}),
+          // '수업보고서 미발송'(0174a)도 같은 계약 — 안 보내는 폼이 조용히 false로 되돌리지 않게.
+          ...(input.reportOptoutProvided ? { report_optout: input.reportOptout } : {}),
+          // 영어 프로그램 구분(0176a) — 같은 계약(폼이 보냈을 때만). 과목을 영어에서 바꾸면 값은 null로
+          // 정리된다(normalizeEnglishTrack) — 수학 반에 남은 'eie'는 필터에서 거짓 분류가 된다.
+          ...(input.trackProvided ? { english_track: input.englishTrack } : {}),
+          notes: input.notes,
+          bg_color: input.bgColor,
+          text_color: input.textColor,
+        })
+        .eq("id", id);
+      return { data: true, error };
+    },
+    savedClassId: () => id,
+    failMessage: SAVE_FAILED,
+  });
+  if (!guarded.ok) return "conflict" in guarded ? nameConflictState(guarded.conflict) : { error: guarded.error };
 
   // 스케줄 동기화 = **현재 유효한 행만** delete 후 재삽입. 만료 행(valid_to 지난 = 지난 배치 이력)은
   // 건드리지 않는다 — 옛 코드의 무조건 전삭제는 반 메모 한 줄 수정에도 3~6월 배치 기록을 영구 삭제했다.
@@ -667,6 +722,21 @@ export async function archiveClass(
   const next = String(formData.get("isActive") ?? "false") === "true";
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
+  if (!next) {
+    try {
+      await endClassWithName(user, { classId: id, date: kstToday(), archive: true });
+    } catch (error) {
+      return { error: explainDbError(error, { scope: "classes.archiveClass", op: "write",
+        fallback: error instanceof ClassTermError ? error.message : "반 폐지를 저장하지 못했습니다. 반 이름과 수강 정보가 변경됐는지 확인하고 다시 시도해 주세요." }).message };
+    }
+    revalidatePath("/classes");
+    revalidatePath(`/classes/${id}`);
+    revalidatePath("/timetable");
+    revalidatePath("/students");
+    revalidatePath("/");
+    return undefined;
+  }
+
   const supabase = await createClient();
   const { data: klass } = await supabase
     .from("classes")
@@ -682,13 +752,11 @@ export async function archiveClass(
   if (error) return { error: error.message };
 
   // 수강 동기화는 classes 갱신이 성공한 뒤 — 실패해도 반 상태와 수강이 어긋나지 않게 순서를 고정.
-  const sync = next
-    ? await reopenClassEnrollments(supabase, id, ARCHIVE_REASON)
-    : await closeClassEnrollments(supabase, id, kstToday(), ARCHIVE_REASON);
+  const sync = await reopenClassEnrollments(supabase, id, ARCHIVE_REASON);
   if (sync.error) return { error: sync.error };
 
   await logAction({
-    action: next ? "class_unarchive" : "class_archive",
+    action: "class_unarchive",
     targetType: "class",
     targetLabel: klass?.class_name,
     metadata: { classId: id, affectedStudents: sync.studentIds.length },
@@ -717,22 +785,12 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
   const date = String(formData.get("date") ?? "").trim() || kstToday();
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
-  const { data: klass } = await supabase.from("classes").select("class_name").eq("id", id).single();
-  const { error: updErr } = await supabase.from("classes").update({ closed_at: date }).eq("id", id);
-  if (updErr) return { error: updErr.message };
-
-  // 종강 = 그 반 활성 수강도 종강일로 종료(reason='종강'). 종강일 이전 주 시간표엔 그대로 남는다
-  // (enrollment가 그 시점엔 활성이었으므로) → 수강이력 보존이라는 종강의 성격과 일치.
-  const sync = await closeClassEnrollments(supabase, id, date, CLOSE_TERM_REASON);
-  if (sync.error) return { error: sync.error };
-
-  await logAction({
-    action: "class_end_term",
-    targetType: "class",
-    targetLabel: klass?.class_name,
-    metadata: { classId: id, closedAt: date, affectedStudents: sync.studentIds.length },
-  });
+  try {
+    await endClassWithName(user, { classId: id, date });
+  } catch (error) {
+    return { error: explainDbError(error, { scope: "classes.endClassTerm", op: "write",
+      fallback: error instanceof ClassTermError ? error.message : "종강을 저장하지 못했습니다. 종강일·반 이름·수강 정보를 확인하고 다시 시도해 주세요." }).message };
+  }
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");

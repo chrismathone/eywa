@@ -1,3 +1,5 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
+
 /**
  * ECS 랜딩 스켈레톤(B7) — 실표면과 동일 라운드(rounded-2xl)·**한 장 시트** 정합.
  * 2026-08-11 랜딩이 카드 그리드에서 단일 패널 목록으로 바뀌어 스켈레톤도 같이 옮겼다
@@ -6,11 +8,7 @@
 export default function EcsLandingLoading() {
   return (
     <div className="space-y-4">
-      <div className="shrink-0 compact-chrome:hidden">
-        <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-4 w-72 animate-pulse rounded" />
-      </div>
+      <PageHeaderSkeleton />
       {/* 면 탭(주간/오늘) — 실화면은 헤더 바로 아래 `EcsFaceTabs` 한 줄이다. */}
       <div className="bg-bg-soft h-(--control-h) w-40 animate-pulse rounded-lg" />
       {/* 툴바 스켈레톤 — 실제 툴바는 카드 껍데기가 없고 컨트롤 높이는 `--control-h`다(v5 control-scale;

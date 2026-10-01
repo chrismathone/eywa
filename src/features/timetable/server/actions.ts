@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canWriteClassRecord } from "@/features/classes/class-write-scope";
 import { normalizeClassName, reservedClassNameReason } from "@/features/classes/class-name";
+import { writeWithClassNameGuard } from "@/features/classes/server/class-name-guard";
+import { classNameConflictHint } from "@/features/classes/class-name-conflict";
+import { logAction } from "@/features/audit/server/log";
+import { kstToday } from "@/lib/date-kst";
 import {
   applyLevelChange,
   DEFAULT_ENGLISH_LEVELS,
@@ -68,16 +72,45 @@ export async function changeClassLevel(
   const reserved = reservedClassNameReason(newName);
   if (reserved) return { error: reserved };
 
-  const { error } = await supabase
-    .from("classes")
-    .update({ class_name: newName })
-    .eq("id", classId);
-  if (error) {
-    if (error.message?.includes("classes_tenant_name_subject")) {
-      return { error: `이미 "${newName}" 반이 있습니다` };
-    }
-    return { error: error.message };
+  // 🔴 같은 과목의 다른 반(종강·폐지 반 포함 — 유니크 인덱스에 is_active 조건이 없다, [[#120]])과 겹치면 무엇과
+  //    겹쳤는지 알린다. 판정·문구는 반 수정·생성과 한 벌(class-name-guard). 여기엔 확인 버튼이 없어 비우지 않는다 —
+  //    종강·폐지 반이면 반 수정 화면에서 버튼으로 비우고 저장하도록 안내한다(말없이 남의 반 이름을 바꾸지 않는다).
+  const failMessage = "반 이름을 바꾸지 못했습니다. 잠시 후 다시 시도해주세요.";
+  const guarded = await writeWithClassNameGuard({
+    db: supabase,
+    target: { tenantId: user.tenantId, subject: klass.subject as string, name: newName, excludeId: classId },
+    today: kstToday(),
+    // 요청(null)이 없으니 여기서 비우는 일은 없다 — 권한은 안내 문구(반 수정 화면 vs 관리자에게 요청)를 가르는 데만 쓴다.
+    request: null,
+    canFree: () => canManageTenant(user.systemRole, "classes"),
+    write: async () => {
+      const { error } = await supabase.from("classes").update({ class_name: newName }).eq("id", classId);
+      return { data: true, error };
+    },
+    savedClassId: () => classId,
+    failMessage,
+  });
+  if (!guarded.ok) {
+    if (!("conflict" in guarded)) return { error: guarded.error };
+    const c = guarded.conflict;
+    const hint = c.freeTo
+      ? `반 수정 화면에서 '${newName}'(으)로 저장하면 그 반 이름을 비울지 묻습니다.`
+      : classNameConflictHint(c);
+    return { error: hint ? `${c.message} ${hint}` : c.message };
   }
+
+  // 반 이름은 시간 축이 없어 "그때는 무엇이었나"가 감사로그에만 남는다 — 반 수정 폼과 같은 모양(field/from/to).
+  await logAction({
+    action: "class_update",
+    targetType: "class",
+    targetLabel: newName,
+    metadata: {
+      classId,
+      changed: ["반 이름"],
+      changes: [{ field: "반 이름", from: klass.class_name as string, to: newName }],
+      note: "레벨 변경",
+    },
+  });
 
   revalidatePath("/timetable");
   revalidatePath(`/classes/${classId}`);

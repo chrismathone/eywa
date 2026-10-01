@@ -25,6 +25,7 @@ import { resolveSettings } from "../resolve";
 import { isValidSubjectKey } from "../subject-absorb";
 import type { IntegrationGroupPresetSetting } from "../settings-types";
 import { saveOwnerSection } from "./actions";
+import { logDbError } from "@/lib/supabase/db-error";
 
 const SCALAR_TABLES = [
   { table: "classes", label: "반" },
@@ -218,6 +219,7 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
     if (error) {
       // 사전점검~UPDATE 레이스로 유니크 충돌이 뚫린 경우 raw 23505 대신 친절 안내
       if (error.code === "23505") {
+        logDbError(error, "owner.absorbSubject");
         return { error: "그 사이 같은 이름의 반이 생겨 흡수할 수 없습니다 — 반 이름을 바꾼 뒤 다시 시도해 주세요." };
       }
       return { error: `${table}: ${error.message}` };

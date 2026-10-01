@@ -40,6 +40,7 @@ import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarWidth } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
 import { useShowDesktop } from "@/components/workspace/use-show-desktop";
+import { useShellHome } from "@/components/workspace/shell-home";
 import { openMenuWindow } from "@/components/workspace/open-menu-window";
 import {
   cancelScheduledPrefetch,
@@ -171,6 +172,8 @@ export function AppSidebar({
   const isDesktop = useIsDesktop();
   const windows = useWindowMode();
   const showDesktop = useShowDesktop();
+  // 로고가 가는 첫 화면 — 권한을 본 홈(`/dashboard` | `/menu`). `/dashboard`를 직접 적지 말 것(gotchas #137).
+  const home = useShellHome();
   // 폭은 고정이다(원장 2026-09-07) — 접기/펴기만.
   const { expanded, width } = useSidebarWidth();
   const animations = usePrefs((s) => s.animations);
@@ -258,6 +261,8 @@ export function AppSidebar({
         // data-usage-chrome — 이용 분석이 사이드바 입력을 **배경 화면의 활동**으로 세지 않는다(메뉴를 여는 손이지
         // 배경을 쓰는 손이 아니다, features/usage/session.ts).
         data-usage-chrome=""
+        // data-maximize-hide — '화면 최대화' 중엔 숨는다(globals.css `[data-page-maximize="on"]`, 원장 2026-10-01).
+        data-maximize-hide=""
         style={{ width }}
         className={`bg-sidebar border-line sticky top-0 z-[45] flex h-screen shrink-0 flex-col border-r ${
           motion ? `transition-[width] duration-200 ${EASE}` : ""
@@ -268,8 +273,8 @@ export function AppSidebar({
             펼침에선 우측 가장자리(Claude 패턴). 하단 배치는 계정 줄과 겹쳐 실패했던 이력(#57) — 상단 고정. */}
         <div className="border-line relative flex h-12 shrink-0 items-center overflow-hidden border-b pr-3 pl-3">
           <Link
-            href="/dashboard"
-            aria-label="대시보드로"
+            href={home}
+            aria-label={home === "/dashboard" ? "대시보드로" : "첫 화면으로"}
             onClick={(e) => {
               if (!windows || e.metaKey || e.ctrlKey || e.altKey) return;
               e.preventDefault();

@@ -10,6 +10,7 @@ import { licenseBlockReason } from "@/lib/license/server";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { isTenantAudioPath } from "@/lib/storage/audio-path";
 import {
   removeObject,
@@ -108,7 +109,7 @@ export async function startStudentConsultationFromAudio(
     })
     .select("id")
     .single();
-  if (insertErr || !row) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
+  if (insertErr || !row) return { error: explainDbError(insertErr, { scope: "consultations.createFromAudio", fallback: "상담을 만들지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   const webhookUrl = getAssemblyaiWebhookUrl();
 
@@ -201,7 +202,7 @@ export async function runStudentConsultationAnalysis(
         processing_status: "completed",
       })
       .eq("id", id);
-    if (updErr) return { error: updErr.message };
+    if (updErr) return { error: explainDbError(updErr, { scope: "consultations.analysis.save", fallback: "분석 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { error: `AI 분석 실패: ${msg}` };

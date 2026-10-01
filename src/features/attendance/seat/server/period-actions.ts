@@ -10,6 +10,7 @@ import { gateSeatMoveWrite } from "./move-gate";
 import { getSeatDay } from "./queries";
 import { applySeatDayChoices, getSeatPeriodChoices, seatDowKey } from "./period-choice";
 import { getSeatStudentClasses } from "./next-destination";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 자리 **교시 선택** 쓰기 — 0255a `seat_period_moves`/`seat_period_pins`.
@@ -37,11 +38,12 @@ function periodError(err: { code?: string; message?: string }): string {
   if (
     err.code === "42P01" ||
     err.code === "PGRST205" ||
-    /seat_period_(moves|pins)/i.test(err.message ?? "")
+    // 🔴 표 이름만 보면 안 된다 — 제약 위반(23505·23503·23514) 원문에도 표 이름이 들어가 "기능이 안 켜졌다"로 오판했다([[#138]] 리뷰).
+    (/seat_period_(moves|pins)/i.test(err.message ?? "") && /does not exist|schema cache|Could not find/i.test(err.message ?? ""))
   ) {
     return "자리 교시 선택 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0255a 미적용).";
   }
-  return "교시를 옮기지 못했습니다 — 다시 시도해 주세요";
+  return explainDbError(err, { scope: "attendance.seat.period", fallback: "교시를 옮기지 못했습니다 — 다시 시도해 주세요" }).message;
 }
 
 /**
@@ -150,7 +152,10 @@ export async function moveSeatStudentPeriod(input: {
       { onConflict: "tenant_id,seat,day_of_week,class_id,student_id" },
     );
     // ⚠️ 고정만 실패해도 **그날 이동은 이미 됐다** — 되돌리지 않고 사실대로 알린다(사람이 다시 누르면 된다).
-    if (pinErr) return { error: "교시는 옮겼지만 고정에 실패했습니다 — 다시 시도해 주세요" };
+    if (pinErr) {
+      logDbError(pinErr, "attendance.seat.moveSeatStudentPeriod");
+      return { error: "교시는 옮겼지만 고정에 실패했습니다 — 다시 시도해 주세요" };
+    }
     pinned = true;
   }
 

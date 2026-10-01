@@ -1,0 +1,175 @@
+/**
+ * 영상 과제 **회차** — 판정 한 벌(순수 · 서버/화면/CSV 공용).
+ *
+ * 원장 2026-10-01: *"횟수를 강제 지정하지말고 … 1회가 서로 다른 날짜일 수 있음"* · *"숙제 나간 날만 횟수가 늘어나는걸로"* ·
+ * *"숙제로 나간 경우에 체크가 안되어있으면 미확인"* · *"영상 제출 현황 카운트도 스마트하게"*.
+ *
+ * 회차 = (반 × 학생)에게 **영상 과제가 나간 수업**(보고서 `video_homework = true`)을 날짜순으로 센 것.
+ *  · 옛 기록은 버리지 않는다 — 보고서 표시가 없어도 검사 기록이 있으면 회차다(지난 숙제일 자리).
+ *  · 숙제일 없는 옛 기록(옛 장부·원스크린이 직전 수업을 몰랐던 검사)은 **검사일 직전 숙제**(14일 안)의 기록으로 본다 —
+ *    그 검사가 그 숙제를 본 것이라 따로 세면 한 숙제가 두 번 센다. 직전 숙제에 이미 기록이 있거나 14일 안에 숙제가 없으면
+ *    검사일 자리(`c:`)에 홀로 선다(더 옛날 숙제로 건너뛰면 기간 밖으로 사라진다 — 재리뷰 2026-10-01).
+ *  · 기록이 없고 숙제가 나갔으면 미확인. 단 학부모 영상이 도착했으면 **저장 없이** 완료로 센다(아래 자동 집계).
+ *
+ * 자동 집계(반 × 학생 단위 — 원장 2026-10-01 *"반 매칭 되는 영상에 한해서 횟수 체크"*):
+ *  ⓪ 워커가 **그 반으로 분류한 영상**(`route.classId`)만 센다. 반을 못 정했거나 아직 분류 전인 영상은 어느 줄에도 찍지 않는다 —
+ *     같은 과목 반을 둘 다니는 학생의 영상 하나가 두 반에 동시에 찍히지 않는다.
+ *  ① 같은 날 올라온 영상은 한 번으로 센다.
+ *  ② 영상은 게시일순으로, **그날까지 나간 숙제 중 아직 영상을 못 받은 가장 오래된 것**에 하나씩 간다.
+ *     받는 쪽 = 기록 없는 숙제(→ 완료(영상)) 또는 직접 찍은 '완료'(→ 표시는 그대로, 그 영상은 다른 칸으로 안 간다).
+ *     그래서 영상으로 센 칸을 확정해도, 미확인 칸을 한 번 눌러 완료로 바꿔도 **다른 칸의 판정이 흔들리지 않는다**.
+ *     직접 찍은 '완료'는 그 기록이 볼 수 있었던 영상만 받는다(제출일까지 · 날짜 없는 원스크린 체크는 체크한 시각까지).
+ *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 직접 찍은 기록(완료·미수행)이 늘 이긴다.
+ */
+import { addDays, kstDateOf } from "@/lib/date-kst";
+import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "./types";
+
+/**
+ * 숙제가 나간 뒤 이 일수 안에 올라온 영상까지 그 숙제로 센다.
+ * 2주: 숙제는 보통 다음 수업 전에 낸다. 30일로 두면 검사를 안 찍은 오래된 숙제가 4주 뒤 영상까지 가져갔다(운영 데이터 재현 2026-10-01).
+ */
+export const VIDEO_MATCH_WINDOW_DAYS = 14;
+/** 짝 맞추기를 시작하는 자리 = **오늘에서 이만큼 전**(조회 기간과 무관) — 기간을 바꿔도 같은 칸 판정이 같게. */
+export const VIDEO_MATCH_HISTORY_DAYS = 60;
+
+/**
+ * 서버가 숙제·기록·영상을 읽을 범위. 시작점이 조회 시작일이 아니라 오늘 기준 고정 창이라, 최근 60일 안의 어떤 기간을 봐도
+ * 같은 재료로 짝을 맞춘다(오래된 미확인 숙제부터 채우는 규칙은 과거로 이어지므로 시작점이 기간을 따라 움직이면 판정이 바뀐다 — 리뷰 2026-10-01).
+ * ⚠️ 한계: 60일보다 오래된 기간은 시작점이 그 기간을 따라가므로, 검사를 안 찍은 숙제가 줄줄이 이어진 학생은 드물게 판정이 다를 수 있다
+ *    (고정 도입일부터 다 읽으면 정확하지만 읽는 양이 계속 는다 — 필요해지면 그때 RPC로).
+ */
+export function videoMatchRange(fromDate: string, toDate: string, today: string): { from: string; to: string } {
+  const anchor = addDays(today, -VIDEO_MATCH_HISTORY_DAYS);
+  return { from: addDays(fromDate < anchor ? fromDate : anchor, -VIDEO_MATCH_WINDOW_DAYS), to: addDays(toDate, VIDEO_MATCH_WINDOW_DAYS) };
+}
+
+export type RoundStatus = "submitted" | "missing" | "unchecked";
+export type LedgerRound = {
+  /** 회차 식별 — `h:숙제일` 또는(붙일 숙제가 없는 숙제일 없는 옛 기록) `c:검사일`. */
+  key: string;
+  /** 정렬·표시 기준일 = 숙제가 나간 날(없으면 검사일). */
+  date: string;
+  homeworkDate: string | null;
+  /** 보고서에 '영상 과제 있음'으로 남은 수업인가(아니면 기록만 있는 회차). */
+  assigned: boolean;
+  mark: VideoHomeworkMark | null;
+  status: RoundStatus;
+  /** 완료일 — 기록의 제출일, 없으면 짝지어진 영상 게시일. */
+  submittedDate: string | null;
+  /** 직접 찍은 기록 없이 영상 도착만으로 완료로 센 칸. */
+  auto: boolean;
+  /** 짝지어진 영상의 게시일(KST). */
+  videoDate: string | null;
+  /**
+   * 짝지어진 영상의 id(그날 가장 먼저 올라온 영상) — 장부 칸의 ▶가 학생 상세 '숙제 영상' 탭으로 바로 가는 데 쓴다.
+   * 영상이 짝지어진 칸은 **직접 찍은 '완료'여도 영상 쪽이 이긴다**(▶ 표시): 영상은 그 칸이 받은 증거이고(②), 손 기록은 영상 없이 찍은 칸만 '수동'이다.
+   */
+  videoId: string | null;
+};
+
+type PairRow = Pick<VideoHomeworkLedgerRow, "classId" | "studentId" | "assignedDates" | "tracked">;
+export const roundPairKey = (row: { classId: string; studentId: string }) => `${row.classId}:${row.studentId}`;
+export const markRoundKey = (mark: Pick<VideoHomeworkMark, "homeworkDate" | "checkDate">) =>
+  mark.homeworkDate ? `h:${mark.homeworkDate}` : `c:${mark.checkDate}`;
+/** 기록 하나의 자리 — (반 · 학생 · 회차). 같은 숙제의 기록은 어느 화면에서 찍었든 같은 자리다. */
+export const markIdentity = (mark: Pick<VideoHomeworkMark, "classId" | "studentId" | "homeworkDate" | "checkDate">) =>
+  `${roundPairKey(mark)}:${markRoundKey(mark)}`;
+/** 그 칸을 저장할 때 서버에 보낼 회차 — 기록이 있으면 **그 기록의 자리**(숙제일 없는 옛 기록이 숙제 칸에 붙어 있어도 그 줄을 고친다). */
+export const roundWriteKey = (round: Pick<LedgerRound, "key" | "mark">) => (round.mark ? markRoundKey(round.mark) : round.key);
+/** 같은 자리의 기록이 둘(옛 중복·동시 첫 기록)이면 나중에 찍은 쪽. */
+export const newerMark = (a: VideoHomeworkMark, b: VideoHomeworkMark) =>
+  (a.updatedAt ?? "") > (b.updatedAt ?? "") || (a.updatedAt ?? "") === (b.updatedAt ?? "") && a.checkDate >= b.checkDate ? a : b;
+
+type VideoDay = { day: string; firstAt: number; id: string };
+
+function videoDays(videos: VideoArrival[]): Map<string, VideoDay[]> {
+  const byPair = new Map<string, Map<string, VideoDay>>();
+  for (const video of videos) {
+    const day = kstDateOf(video.postedAt);
+    // 반이 확인되지 않은 영상은 세지 않는다 — 어느 반 숙제인지 모르는 채로 칸을 채우지 않는다.
+    if (!video.classId || !day) continue;
+    const key = roundPairKey({ classId: video.classId, studentId: video.studentId });
+    const days = byPair.get(key) ?? new Map<string, VideoDay>();
+    const at = Date.parse(video.postedAt);
+    const seen = days.get(day);
+    if (seen) { if (at < seen.firstAt) Object.assign(seen, { firstAt: at, id: video.id }); }
+    else days.set(day, { day, firstAt: at, id: video.id });
+    byPair.set(key, days);
+  }
+  return new Map([...byPair].map(([key, days]) => [key, [...days.values()].sort((a, b) => a.day.localeCompare(b.day))]));
+}
+
+const fresh = (key: string, date: string, homeworkDate: string | null, assigned: boolean): LedgerRound =>
+  ({ key, date, homeworkDate, assigned, mark: null, status: "unchecked", submittedDate: null, auto: false, videoDate: null, videoId: null });
+function attach(round: LedgerRound, mark: VideoHomeworkMark) {
+  round.mark = round.mark ? newerMark(mark, round.mark) : mark;
+  round.status = round.mark.status;
+  round.submittedDate = round.mark.status === "submitted" ? round.mark.submittedDate ?? null : null;
+}
+
+/** 이 영상을 이 칸이 받을 수 있나 — 기록 없는 숙제거나, 그 영상을 볼 수 있었던 직접 '완료'. */
+function canTake(round: LedgerRound, video: VideoDay): boolean {
+  if (round.videoDate || round.date > video.day || video.day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)) return false;
+  const mark = round.mark;
+  if (!mark) return round.assigned;
+  if (mark.status !== "submitted") return false;
+  if (mark.submittedDate) return video.day <= mark.submittedDate;
+  const seenBy = mark.updatedAt ? Date.parse(mark.updatedAt) : Date.parse(`${addDays(mark.checkDate, 1)}T00:00:00+09:00`);
+  return video.firstAt <= seenBy;
+}
+
+/** (반 × 학생)별 회차 — 조회 기간 밖 여유분까지 넣어 짝을 맞춘 뒤, 기간 안의 회차만 돌려준다. */
+export function buildLedgerRounds(input: {
+  rows: PairRow[]; marks: Iterable<VideoHomeworkMark>; videos: VideoArrival[]; fromDate: string; toDate: string;
+}): Map<string, LedgerRound[]> {
+  const all = new Map<string, Map<string, LedgerRound>>();
+  const tracked = new Set<string>();
+  for (const row of input.rows) {
+    const rounds = new Map<string, LedgerRound>();
+    if (row.tracked) for (const date of row.assignedDates) rounds.set(`h:${date}`, fresh(`h:${date}`, date, date, true));
+    all.set(roundPairKey(row), rounds);
+    if (row.tracked) tracked.add(roundPairKey(row));
+  }
+  const legacy: VideoHomeworkMark[] = [];
+  for (const mark of input.marks) {
+    const rounds = all.get(roundPairKey(mark));
+    if (!rounds) continue;
+    if (!mark.homeworkDate) { legacy.push(mark); continue; }
+    const key = markRoundKey(mark);
+    const round = rounds.get(key) ?? fresh(key, mark.homeworkDate, mark.homeworkDate, false);
+    attach(round, mark);
+    rounds.set(key, round);
+  }
+  for (const mark of legacy.sort((a, b) => a.checkDate.localeCompare(b.checkDate))) {
+    const rounds = all.get(roundPairKey(mark))!;
+    const latest = [...rounds.values()].filter((r) => r.assigned && r.date < mark.checkDate).sort((a, b) => b.date.localeCompare(a.date))[0];
+    const before = latest && !latest.mark && mark.checkDate <= addDays(latest.date, VIDEO_MATCH_WINDOW_DAYS) ? latest : undefined;
+    const key = markRoundKey(mark);
+    const round = before ?? rounds.get(key) ?? fresh(key, mark.checkDate, null, false);
+    attach(round, mark);
+    if (!before) rounds.set(key, round);
+  }
+  const days = videoDays(input.videos);
+  for (const [pair, rounds] of all) {
+    const available = tracked.has(pair) ? days.get(pair) : undefined;
+    if (!available?.length) continue;
+    const queue = [...rounds.values()].sort((a, b) => a.date.localeCompare(b.date));
+    for (const video of available) {
+      const round = queue.find((r) => canTake(r, video));
+      if (!round) continue;
+      round.videoDate = video.day;
+      round.videoId = video.id;
+      if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: video.day });
+    }
+  }
+  return new Map([...all].map(([pair, rounds]) => [pair, [...rounds.values()]
+    .filter((round) => round.date >= input.fromDate && round.date <= input.toDate)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key))]));
+}
+
+export type RoundCounts = { submitted: number; missing: number; unchecked: number; total: number };
+export function roundCounts(rounds: readonly LedgerRound[]): RoundCounts {
+  const counts = { submitted: 0, missing: 0, unchecked: 0, total: rounds.length };
+  for (const round of rounds) counts[round.status]++;
+  return counts;
+}

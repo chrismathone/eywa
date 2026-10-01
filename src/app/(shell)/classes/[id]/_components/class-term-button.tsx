@@ -83,6 +83,7 @@ export function ClassTermButton({
       <Button type="submit" disabled={endPending}>
         종강 확정
       </Button>
+      <span className="text-text-dim text-xs">반 이름에 종료일을 붙입니다. 예: (~26.10.01)</span>
       <button
         type="button"
         onClick={() => setOpen(false)}

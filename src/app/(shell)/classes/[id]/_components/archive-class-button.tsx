@@ -41,7 +41,7 @@ export function ArchiveClassButton({
             ? `\n\n재원생 ${enrolledCount}명의 수강이 오늘 날짜로 종료됩니다. 다른 과목 수강이 없는 학생은 '수업 없는 재원생'으로 남아 대시보드에서 반을 다시 배정할 수 있습니다.`
             : "";
         const msg = isActive
-          ? `"${className}" 반을 폐지할까요? 시간표·목록에서 종료 처리됩니다 (기록은 보존).${impact}\n\n재운영하면 되돌아갑니다.`
+          ? `"${className}" 반을 폐지할까요? 시간표·목록에서 종료 처리되고 반 이름에 오늘 날짜가 붙습니다 (기록은 보존).${impact}\n\n재운영하면 수강을 복원합니다. 날짜가 붙은 반 이름은 유지됩니다.`
           : `"${className}" 반을 다시 운영할까요? 폐지 때 종료된 수강도 함께 복원됩니다.`;
         if (!confirm(msg)) e.preventDefault();
       }}

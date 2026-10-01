@@ -29,7 +29,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 import { kstToday } from "@/lib/date-kst";
 import { LEGACY_REPORT_SUBJECT } from "@/features/timetable/lib/report-subject";
 import { logAction } from "@/features/audit/server/log";
@@ -192,7 +192,10 @@ export async function removeMakeupEntry(input: {
   const { data: draftRows, error: draftError } = await supabase.from("onescreen_daily_sessions")
     .select("student_id, updated_by, subject_progress")
     .eq("tenant_id", tenantId).eq("student_id", input.studentId).eq("session_date", input.date);
-  if (draftError) return { ok: false, error: "보강 임시 명단을 조회하지 못했습니다" };
+  if (draftError) {
+    logDbError(draftError, "onescreen.removeMakeupEntry");
+    return { ok: false, error: "보강 임시 명단을 조회하지 못했습니다" };
+  }
   let rosterRemoved = false;
   for (const row of draftRows ?? []) {
     if (!row.updated_by || (!isAdmin && row.updated_by !== user.id)) continue;

@@ -68,7 +68,7 @@ export default async function McsMonthPage({
     : [{ id: classId, name: data.className }, ...options];
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="shrink-0 compact-chrome:hidden">
+      <div data-page-header-slot="" className="shrink-0 compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title={`수학 강사 시트 · 월간 — ${data.className}`}

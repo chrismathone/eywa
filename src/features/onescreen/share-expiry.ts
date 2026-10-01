@@ -8,8 +8,14 @@ import { kstToday } from "@/lib/date-kst";
  * **UTC date 산술**이 정답(date-kst.ts 주석 — Vercel 자정/월초 경계 오류 없음). YYYY-MM-DD 사전순 비교(classnote-guard.ts 동형).
  */
 
+/**
+ * 학부모 보고서 링크가 열리는 기간(일) — **단일 소스**(원장 2026-07-07 결정, 2026-10-01 재확정).
+ * 판정(아래 두 함수)과 '링크 만료' 페이지(`/expired?kind=report`) 안내 문구가 같이 이 값을 읽는다.
+ */
+export const REPORT_SHARE_LINK_DAYS = 90;
+
 /** report_date(YYYY-MM-DD) + 90일을 YYYY-MM-DD로. UTC date 산술(경계 안전). */
-export function shareExpiryDate(reportDate: string, days = 90): string {
+export function shareExpiryDate(reportDate: string, days = REPORT_SHARE_LINK_DAYS): string {
   // `${date}T00:00:00Z`로 UTC 자정 고정 → +days일 → ISO 앞 10자. 로컬 타임존·DST 무관.
   const base = new Date(`${reportDate}T00:00:00Z`);
   base.setUTCDate(base.getUTCDate() + days);

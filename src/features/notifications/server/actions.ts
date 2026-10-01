@@ -13,13 +13,9 @@ import type { NotificationItem } from "../types";
 // 🔴 **남에게 알림을 보내는 쪽**(notify.ts·events.ts)은 이 규칙 밖이다 — 거긴 남의 화면을 바꾼다.
 // 🔴 알림 영구 삭제도 여기선 본인 것뿐이라 뺐다. 남의 알림을 지우는 경로가 새로 생기면 그건 남길 것.
 
-/** 벨 데이터 새로고침(클라 NotificationBell가 마운트·열기·폴링에서 호출). view=받은함/보관함. */
-export async function fetchMyNotifications(
-  view: NotificationView = "active",
-  limit?: number,
-): Promise<{ unread: number; items: NotificationItem[] }> {
-  return getMyNotifications(view, limit);
-}
+// 🔴 벨 목록 **조회**(마운트·이동·포커스·60초 폴링)는 여기 없다 — GET 라우트 `/api/notifications`가 같은
+//    `getMyNotifications`를 부른다(2026-10-01). 저절로 도는 조회를 서버 액션으로 두면 라우터 작업 큐 경합으로
+//    Next 기본 오류 화면이 떴다(gotchas #137). 이 파일엔 **누를 때만** 부르는 쓰기 액션만 둔다.
 
 /**
  * 알림 읽음 처리 — ids 지정 시 그것만, 없으면 내 안 읽은 알림 전체. RLS로 본인 것만 갱신되므로

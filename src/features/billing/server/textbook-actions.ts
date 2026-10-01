@@ -7,6 +7,7 @@ import { textbookRequestStudentIds } from "./textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import {
   TEXTBOOK_CHECK_LABEL,
@@ -129,7 +130,7 @@ export async function createTextbookOrder(_prev: TextbookState, formData: FormDa
     })
     .select("id")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.create", fallback: "교재 주문을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await logAction({
     action: "textbook_order_create",
@@ -198,7 +199,7 @@ export async function requestTextbook(_prev: TextbookState, formData: FormData):
     .from("textbook_orders")
     .insert(rows)
     .select("id, student_name");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookRequest.create", fallback: "교재 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await logAction({
     action: "textbook_order_create",
@@ -290,7 +291,7 @@ export async function updateTextbookRequest(_prev: TextbookState, formData: Form
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookRequest.update", fallback: "교재 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   const changes = diffTextbookOrder(gate.before, {
     bookName: f.bookName,
     bookDetail: f.bookDetail,
@@ -326,7 +327,7 @@ export async function deleteTextbookRequest(_prev: TextbookState, formData: Form
   //    예전엔 error만 보고 ok를 돌려줘서, 권한에 막힌 삭제가 "성공했는데 목록은 그대로"로 보였다
   //    (원장 2026-08-03 "삭제가 안 되는 것 같은데"). 지운 행 수를 직접 확인해야 진실을 말할 수 있다.
   const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookRequest.delete", fallback: "교재 요청을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
   const deletedTarget = textbookAuditTarget(gate.before);
   await logAction({
@@ -373,7 +374,7 @@ export async function updateTextbookOrder(_prev: TextbookState, formData: FormDa
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.update", fallback: "교재 주문을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   const changes = diffTextbookOrder(before, {
     studentName,
@@ -440,7 +441,7 @@ export async function toggleTextbookCheck(_prev: TextbookState, formData: FormDa
   if (!checked && (col === "registered_at" || col === "paid_at")) patch.check_dismissed_at = now;
 
   const { error } = await supabase.from("textbook_orders").update(patch).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.check", fallback: "체크를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   const checkTarget = textbookAuditTarget(snapshotOf(row as AuditRow));
   await logAction({
@@ -477,7 +478,7 @@ export async function deleteTextbookOrder(_prev: TextbookState, formData: FormDa
     .single();
   // 위와 같은 이유로 지운 행 수를 확인한다(0행 = 권한에 막힘, 에러는 안 난다).
   const { data: gone, error } = await supabase.from("textbook_orders").delete().eq("id", id).select("id");
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "billing.textbookOrder.delete", fallback: "교재 주문을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   if (!gone?.length) return { error: DELETE_BLOCKED_MSG };
 
   const before = snapshotOf(beforeRow as AuditRow | null);

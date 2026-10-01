@@ -1,3 +1,4 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
 import { TODAY_PLAN_W } from "@/features/class-sheets/lib/today-columns";
 
 /** ECS 주간 시트 스켈레톤(B7) — 툴바 1줄 + 계획 패널 300px + 요일 컬럼(실표면과 **같은 상수** 폭·라운드
@@ -5,11 +6,7 @@ import { TODAY_PLAN_W } from "@/features/class-sheets/lib/today-columns";
 export default function EcsSheetLoading() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="shrink-0 compact-chrome:hidden">
-        <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-6 w-72 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-4 w-56 animate-pulse rounded" />
-      </div>
+      <PageHeaderSkeleton hideCompact />
       {/* 상단 바 — 실표면은 **카드 껍데기가 없다**(`SHEET_BAR`, 원장 2026-09-01 "모든 헤더 스타일 일관성") —
           옛 스켈레톤은 `bg-card shadow-card` 띠를 그려 로딩→본문에서 카드가 사라지며 화면이 튀었다.
           높이는 컨트롤과 같은 변수(`--control-h`, v5 control-scale)라 고정 px로 적지 않는다. */}
