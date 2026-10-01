@@ -3,6 +3,24 @@
 > 원장 2026-10-01 밤 *"작업 전체 중단하고 handoff 남겨서 커밋하고 밀어"*. 아래는 중단 시점 그대로다.
 > 개인정보·비밀값은 적지 않았다. 다음 세션은 이 파일 → 각 워크트리 `git log` 순서로 이어받을 것.
 
+## 0. 다른 컴퓨터에서 이어받기
+
+멈춘 작업 3개는 **태그**로 원격에 있다(브랜치로 올리면 Vercel 미리보기 배포가 생겨 태그로 둠 — 태그는 배포·CI 안 탄다).
+
+| 태그 | 커밋 | 작업 |
+|---|---|---|
+| `wip/2026-10-01/single-view-keepalive` | `00444b6f9` | 단일 화면(이전 화면 유지) — 2-1 |
+| `wip/2026-10-01/dashboard-builder` | `d00d3f5c1` | 대시보드 관리 편집기 WIP — 2-2 |
+| `wip/2026-10-01/dashboard-role-drafts` | `9d49c5f7c` | 역할별 대시보드 시안 — 2-3 |
+
+```
+git fetch origin --tags
+git worktree add <리포 밖 경로> -b feat/dashboard-builder wip/2026-10-01/dashboard-builder
+```
+- 워크트리에서 개발 서버를 띄우려면 실제 `pnpm install`(정션은 Turbopack에서 죽는다, #81) + `.env.local` 복사(git에 없다).
+- 🔴 이 브랜치들을 `git push origin <브랜치>`로 올리지 말 것(미리보기 배포). 끝나면 main에만 푸시하고 태그는 `git push origin :refs/tags/<태그>`로 지운다.
+- Claude 기억(`~/.claude/.../memory`)은 PC마다 따로라 다른 컴퓨터엔 없다 — 이 문서가 인계의 전부다.
+
 ## 1. 오늘 main에 올라가 배포까지 끝난 것
 
 | 커밋 | 내용 |
