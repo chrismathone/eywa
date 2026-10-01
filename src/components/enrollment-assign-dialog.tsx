@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { kstToday } from "@/lib/date-kst";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,8 @@ import { BulkAssignFailures, EnrollmentBulkPicker } from "@/components/enrollmen
 import { useBulkAssign } from "@/components/use-bulk-assign";
 import { useBulkTransfer } from "@/components/use-bulk-transfer";
 import { EnrollmentTransferPicker } from "@/components/enrollment-transfer-picker";
+import { useClassFirstTransfer } from "@/components/use-class-first-transfer";
+import { EnrollmentClassFirstTransferPicker } from "@/components/enrollment-class-first-transfer-picker";
 import { isTransferDate, TRANSFER_UNKNOWN } from "@/features/enrollments/bulk-transfer";
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -204,7 +206,22 @@ export function EnrollmentAssignDialog({
     movableFor && movableFor === transferStudentId
       ? (movable ?? []).filter((m) => m.classId !== targetClassId)
       : [];
-  const fromEnrollment = fromOptions.find((m) => m.enrollmentId === fromEnrollmentId) ?? null;
+  /**
+   * 반 상세(반 → 학생)의 반이동은 **옮겨 올 반을 먼저, 그 반 명단에서 학생을 그다음**에 고른다(원장 2026-10-01).
+   * 학생 상세(학생 고정)는 종전 그대로 그 학생의 수강에서 출발지를 고른다. 어느 쪽이든 출발지는 같은 모양이다.
+   * 🔑 "이미 이 반에 있는 학생" 막기는 종전 규칙 그대로 — 배정 후보(`studentOptions`) 밖의 학생은 고를 수 없다.
+   */
+  const allowedStudentIds = useMemo(() => new Set((studentOptions ?? []).map((s) => s.id)), [studentOptions]);
+  const classFirst = useClassFirstTransfer({
+    targetClassId: isStudentMode ? "" : fixedClass?.id ?? "",
+    targetSubject: fixedClass?.subject ?? "",
+    date: transferDate,
+    allowedStudentIds,
+  });
+  const resetClassFirst = classFirst.reset;
+  const fromEnrollment = isStudentMode
+    ? fromOptions.find((m) => m.enrollmentId === fromEnrollmentId) ?? null
+    : classFirst.source;
   const transfer = useBulkTransfer(open && transferMode ? fromEnrollment?.enrollmentId ?? "" : "", transferDate, () => onClose(true));
   const saving = transferPending || bulk.pending || transfer.pending;
   const sourceLocked = transfer.completed.length > 0 || transfer.uncertain;
@@ -260,7 +277,9 @@ export function EnrollmentAssignDialog({
     setTransferError(null);
     if (next) {
       bulk.setMode(false);
-      loadMovable(transferStudentId);
+      // 반 상세는 반부터 고르므로 반 목록을 부르고, 학생 상세는 그 학생의 수강을 부른다.
+      if (isStudentMode) loadMovable(transferStudentId);
+      else classFirst.start();
     }
   };
   const toggleBulk = () => {
@@ -300,7 +319,7 @@ export function EnrollmentAssignDialog({
         ? attendingDays
         : [];
     if (transfer.on) { void transfer.run(targetClassId, narrowedDays); return; }
-    if (!transferStudentId) {
+    if (isStudentMode && !transferStudentId) {
       setTransferError("학생을 먼저 선택해 주세요.");
       return;
     }
@@ -308,8 +327,17 @@ export function EnrollmentAssignDialog({
       setTransferError("옮겨 갈 반을 선택해 주세요.");
       return;
     }
-    if (!fromEnrollment || movableFor !== transferStudentId) {
+    if (!isStudentMode && classFirst.classId && !fromEnrollment) {
+      setTransferError("옮길 학생을 선택해 주세요.");
+      return;
+    }
+    if (!fromEnrollment || (isStudentMode && movableFor !== transferStudentId)) {
       setTransferError("어느 반에서 옮길지 선택해 주세요.");
+      return;
+    }
+    // 반 먼저 흐름: 고른 학생이 이동일 명단·배정 후보에서 빠졌으면 한 명 이동을 막는다(출발지는 남겨 둔다).
+    if (!isStudentMode && !classFirst.chosenEligible) {
+      setTransferError("선택한 학생은 이 날짜에 이 반에서 옮길 수 없습니다. 날짜나 학생을 다시 선택해 주세요.");
       return;
     }
     if (!isTransferDate(transferDate) || transferDate < today) {
@@ -400,11 +428,12 @@ export function EnrollmentAssignDialog({
       setPickedStudentId("");
       setLoadingMovable(false);
       resetBulk();
+      resetClassFirst();
       // 닫기 전에 걸어 둔 조회가 다시 연 창을 덮지 않게 — 옛 요청을 무효로 만든다.
       latestMovableRequest.current = "";
     }
     prevOpenForReset.current = open;
-  }, [open, resetBulk]);
+  }, [open, resetBulk, resetClassFirst]);
 
   if (!open) return null;
 
@@ -442,7 +471,9 @@ export function EnrollmentAssignDialog({
                 ? "배정할 반을 선택하세요"
                 : bulk.on
                   ? "배정할 학생을 여러 명 선택하세요"
-                  : "배정할 학생을 선택하세요"}
+                  : transferMode
+                    ? "옮겨 올 반을 먼저 고르고, 그 반의 학생을 선택하세요"
+                    : "배정할 학생을 선택하세요"}
             </p>
           </div>
           <button
@@ -503,17 +534,14 @@ export function EnrollmentAssignDialog({
             />
           ) : null}
 
-          {!isStudentMode && studentOptions && !bulk.on ? (
+          {/* 반이동일 땐 학생을 여기서 고르지 않는다 — 아래 '어느 반에서 옮기나요'를 먼저, 학생은 그 반 명단에서. */}
+          {!isStudentMode && studentOptions && !bulk.on && !transferMode ? (
             <fieldset disabled={sourceLocked} className="min-w-0 space-y-1.5">
               <label className="text-foreground block text-sm font-medium">학생 선택</label>
               <SearchableSelect
                 name="studentId"
                 value={pickedStudentId}
-                onValueChange={(id) => {
-                  setPickedStudentId(id);
-                  // 🔴 학생이 바뀌면 후보를 다시 부른다 — 안 부르면 앞 학생의 수강 id가 그대로 남는다.
-                  if (transferMode) loadMovable(id);
-                }}
+                onValueChange={setPickedStudentId}
                 placeholder="학생 선택..."
                 searchPlaceholder="학생 이름 검색..."
                 options={studentOptions.map((s) => ({
@@ -529,6 +557,18 @@ export function EnrollmentAssignDialog({
               (이동일이 곧 새 수업의 첫날이고, 옛 수업은 그 전날까지다.) */}
           {transferMode ? (
             <div className="space-y-3">
+              {!isStudentMode ? (
+                <EnrollmentClassFirstTransferPicker
+                  flow={classFirst}
+                  date={transferDate}
+                  locked={sourceLocked}
+                  bulkOn={transfer.on}
+                  onPickStudent={(id) => {
+                    setPickedStudentId(id);
+                    setTransferError(null);
+                  }}
+                />
+              ) : (
               <fieldset disabled={sourceLocked} className="min-w-0 space-y-1.5">
                 <label className="text-foreground block text-sm font-medium">어느 반에서 옮기나요</label>
                 {movable === null || loadingMovable ? (
@@ -560,6 +600,7 @@ export function EnrollmentAssignDialog({
                   />
                 )}
               </fieldset>
+              )}
               {fromEnrollment ? <EnrollmentTransferPicker transfer={transfer} /> : null}
               <div className="space-y-1">
                 <label className="text-muted-foreground block text-xs font-medium">반이동 날짜</label>
@@ -590,7 +631,8 @@ export function EnrollmentAssignDialog({
                 </p>
                 {/* 🔴 끝날 날짜가 정해진 수강을 더 뒤로 옮기면 그 수강이 **이동일까지 늘어난다**(RPC가
                     옛 행의 종료일을 이동일로 덮는다) — 조용히 늘리지 말고 먼저 말한다. */}
-                {!transfer.on && fromEnrollment?.endDate && fromEnrollment.endDate < transferDate ? (
+                {!transfer.on && (isStudentMode || classFirst.chosenEligible) &&
+                fromEnrollment?.endDate && fromEnrollment.endDate < transferDate ? (
                   <p className="text-chart-4 text-xs">
                     {fromEnrollment.className}은 <span className="num">{fromEnrollment.endDate}</span>에 끝날
                     예정입니다 — 이동일로 바꾸면 그날까지 늘어납니다.
@@ -755,6 +797,7 @@ export function EnrollmentAssignDialog({
                   type="button"
                   onClick={runTransfer}
                   disabled={saving || loadingMovable || overlapping.length > 0 || !fromEnrollment ||
+                    (!isStudentMode && !transfer.on && !classFirst.chosenEligible) ||
                     (transfer.on && (transfer.loading || transfer.uncertain || transfer.ids.length === 0 || transfer.invalidSelection))}
                 >
                   {transferPending || transfer.pending ? (
