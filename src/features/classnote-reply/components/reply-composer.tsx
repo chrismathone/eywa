@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
@@ -16,12 +16,16 @@ export function ReplyComposer({
   maxLength,
   pending,
   onSend,
+  actions,
+  actionPanel,
 }: {
   authorLabel: string;
   maxLength: number;
   pending: boolean;
   /** 성공하면 true를 돌려준다(입력을 비운다). */
   onSend: (body: string, clientKey: string) => Promise<boolean>;
+  actions?: ReactNode;
+  actionPanel?: ReactNode;
 }) {
   const [text, setText] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -50,14 +54,6 @@ export function ReplyComposer({
         className="border-line bg-background focus-visible:outline-primary w-full rounded-lg border p-2 text-sm leading-relaxed disabled:opacity-60"
         aria-label="답글 내용"
       />
-      <div className="flex items-center justify-between gap-2">
-        <span className={`text-xs tabular-nums ${tooLong ? "text-danger" : "text-text-faint"}`}>
-          {body.length}/{maxLength}
-        </span>
-        <Button type="button" size="sm" disabled={pending || !body || tooLong} onClick={() => setConfirming(true)} aria-busy={pending}>
-          {pending ? "보내는 중…" : "보내기"}
-        </Button>
-      </div>
       {body ? (
         <div className="bg-bg-soft rounded-lg p-3">
           <p className="text-text-faint mb-1 text-xs">학부모에게 이렇게 보입니다</p>
@@ -65,6 +61,16 @@ export function ReplyComposer({
           <p className="text-foreground mt-1 text-sm leading-relaxed whitespace-pre-wrap break-keep [overflow-wrap:anywhere]">{body}</p>
         </div>
       ) : null}
+      {actionPanel}
+      <div className="flex min-w-0 items-center gap-2" aria-label="답글 조작">
+        {actions}
+        <span className={`ml-auto shrink-0 text-xs tabular-nums ${tooLong ? "text-danger" : "text-text-faint"}`}>
+          {body.length}/{maxLength}
+        </span>
+        <Button type="button" size="sm" className="shrink-0" disabled={pending || !body || tooLong} onClick={() => setConfirming(true)} aria-busy={pending}>
+          {pending ? "보내는 중…" : "보내기"}
+        </Button>
+      </div>
       <ConfirmDialog
         open={confirming}
         title="ClassNote에 답글 올리기"

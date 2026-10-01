@@ -529,7 +529,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   const requestedAt = Date.now();
   const user = await requireAccess("dashboard");
   // 역할 판정(총괄 여부·관리자의 담당 과목)은 권한 매트릭스와 독립 — 먼저 띄워 둔다(B4, 30초 갱신마다 왕복이 붙지 않게).
-  const viewerPromise = options.full ? Promise.resolve({ bundle: "owner" as const, subjects: [] as string[] }) : loadViewerBundle(user);
+  const viewerPromise = options.full ? Promise.resolve({ bundle: "owner" as const, subjects: [] as string[], subjectScoped: false }) : loadViewerBundle(user);
   void viewerPromise.catch(() => undefined);
   const matrix = await getUserPermMatrix();
   const allowed = MENU_KEYS.filter((key) =>
@@ -553,6 +553,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
     // 원장 시점 원본(full)·역할 판정 실패(degraded)는 저장값을 안 쓴다 — 실패면 코드 기본(민감 칸 없음·옵션 가림)으로.
     stored: options.full || ("degraded" in viewer && viewer.degraded) ? EMPTY_DASHBOARD : settingsNow.dashboard,
     bundle: viewer.bundle,
+    subjectScoped: viewer.subjectScoped,
     menus: new Set(allowed),
     subjectLabels: viewer.subjects.flatMap((k) => (subjectLabels[k] ? [subjectLabels[k]] : [])),
   });

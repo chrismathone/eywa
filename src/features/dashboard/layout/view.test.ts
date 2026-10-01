@@ -57,14 +57,14 @@ describe("resolveView — 보는 사람의 배치", () => {
 });
 
 describe("loadPlan — 서버가 조회할 영역(배치에 없으면 미조회 · 메뉴 권한이 상한)", () => {
-  const plan = (b: Bundle, menus = ALL) => loadPlan(resolveView({ stored: EMPTY_DASHBOARD, bundle: b, menus }), menus);
+  const plan = (b: Bundle, menus = ALL) => loadPlan(resolveView({ stored: EMPTY_DASHBOARD, bundle: b, menus, subjectLabels: ["수학"] }), menus);
 
   it("원장 기본은 전 영역", () => {
     expect([...plan("owner")]).toEqual(expect.arrayContaining(["billing", "expenses", "staff", "students", "calendar"]));
   });
 
   it("원장 밖 기본은 지출·직원 영역을 읽지 않는다", () => {
-    for (const b of BUNDLES.filter((x) => x !== "owner")) {
+    for (const b of BUNDLES.filter((x) => x !== "owner" && x !== "super")) {
       expect(plan(b).has("expenses")).toBe(false);
       expect(plan(b).has("staff")).toBe(false);
     }

@@ -261,5 +261,5 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   // 기능 켜기·끄기도 sparse — 침산 프리셋은 **아무것도 끄지 않는다**(오늘과 같다). 일반판은 generic-defaults.ts.
   modules: { disabled: [] },
   // 운영실 배치 — 저장값 없음 = 역할마다 코드의 기본 배치(features/dashboard/layout/defaults.ts). 원장은 지금 운영실 그대로.
-  dashboard: { version: 1, layouts: [] },
+  dashboard: { version: 1, layouts: [], assignments: [] },
 };

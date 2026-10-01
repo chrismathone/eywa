@@ -49,6 +49,16 @@ export function useReplyThread(initialMessageId: string | null, hideReaction: bo
   }, [initialMessageId, notificationId, load]);
 
   const messageId = ctx?.ok ? ctx.message.id : initialMessageId;
+  const awaitingOriginal = ctx?.ok && ctx.awaitingOriginal === true;
+  useEffect(() => {
+    if (!notificationId || !awaitingOriginal) return;
+    let polls = 0;
+    const timer = setInterval(() => {
+      if (++polls > VIDEO_POLL_MAX) return clearInterval(timer);
+      void load("");
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [notificationId, awaitingOriginal, load]);
 
   const thread = useMemo(() => (ctx?.ok ? applyVideoOverrides(ctx.thread, videoOver) : []), [ctx, videoOver]);
   const busy = thread.some((e) => e.kind === "reply" && e.reply.busy);
@@ -60,7 +70,7 @@ export function useReplyThread(initialMessageId: string | null, hideReaction: bo
 
   const videoPending = thread.some((e) => e.kind === "parent" && e.videos.some((v) => v.pending));
   useEffect(() => {
-    if (!messageId || !videoPending) return;
+    if (!messageId || !videoPending || awaitingOriginal) return;
     let n = 0;
     let alive = true;
     const t = setInterval(() => {
@@ -76,7 +86,7 @@ export function useReplyThread(initialMessageId: string | null, hideReaction: bo
       alive = false;
       clearInterval(t);
     };
-  }, [messageId, videoPending]);
+  }, [messageId, videoPending, awaitingOriginal]);
 
   /** `reload` = 응답의 컨텍스트 대신 이 글을 다시 읽는다(수정·삭제는 쓰레드의 다른 글에 달린 답글일 수 있어 응답 컨텍스트의 대상 글이 다르다). */
   const run = useCallback(async (fn: () => Promise<ReplyActionResult>, opts?: { reload?: boolean }): Promise<boolean> => {

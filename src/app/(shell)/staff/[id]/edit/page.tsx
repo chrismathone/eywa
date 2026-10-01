@@ -7,11 +7,12 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getStaffById } from "@/features/staff/server/queries";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { getSuperAdminIds, isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { DashboardAssignmentForm } from "../../_components/dashboard-assignment-form";
 
 export const metadata = { title: "근무 설정 — 에이와" };
 
@@ -35,8 +36,9 @@ export default async function EditStaffPage({
   // 이 창이 한 번 덜 왕복한다.
   // '강사뷰 접근' 토글(0224a) — master(+super_admin)에게만 노출(서버 액션이 같은 자격으로 이중 게이트).
   // 강사·학생 역할에겐 소비처가 없어(풀셸 전용) 숨긴다 — 서버도 같은 조건으로 거절(이중 게이트).
-  const canGrantTeacherView =
-    (user.systemRole === "master" || (await isCurrentUserSuperAdmin())) &&
+  const canAssignDashboard = user.systemRole === "master" || (await isCurrentUserSuperAdmin());
+  const superIds = canAssignDashboard ? await getSuperAdminIds() : new Set<string>();
+  const canGrantTeacherView = canAssignDashboard &&
     isFullShellRole(staff.systemRole);
 
   return (
@@ -76,6 +78,12 @@ export default async function EditStaffPage({
         </div>
       </header>
 
+      {canAssignDashboard ? <DashboardAssignmentForm
+        key={staff.id}
+        user={{ id: staff.id, systemRole: staff.systemRole, subjects: staff.subjects, isSuperAdmin: superIds.has(staff.id) }}
+        initial={settings.dashboard.assignments?.find((a) => a.userId === staff.id)}
+        subjects={settings.operations.subjects}
+      /> : null}
       <StaffForm
         mode="edit"
         scope={`staff:${id}`}

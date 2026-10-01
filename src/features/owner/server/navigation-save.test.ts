@@ -5,7 +5,7 @@ const m = vi.hoisted(() => ({
   actor: { id: "actor", tenantId: "tenant-a", systemRole: "master" }, allowed: true,
   stored: { data: { profile: { name: "학원" }, navigation: { menus: [], groups: [], teacherMenus: [] } }, updated_at: "2026-09-29T12:00:00Z" } as unknown,
   error: null as unknown, rows: [{ tenant_id: "tenant-a" }] as unknown[],
-  write: vi.fn(), filters: vi.fn(), audit: vi.fn(), updateTag: vi.fn(), revalidatePath: vi.fn(),
+  write: vi.fn(), filters: vi.fn(), audit: vi.fn(), updateTag: vi.fn(), revalidatePath: vi.fn(), assignments: vi.fn(),
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.actor }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => m.allowed }));
@@ -14,6 +14,7 @@ vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("./queries", () => ({ tenantSettingsTag: (id: string) => `settings:${id}` }));
 vi.mock("next/cache", () => ({ updateTag: m.updateTag, revalidatePath: m.revalidatePath }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: m.assignments }));
 vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () => {
   const writer = { eq: (...args: unknown[]) => { m.filters(...args); return writer; }, select: async () => ({ data: m.rows, error: m.error }) };
@@ -32,9 +33,29 @@ function form(value = configuration, baseline = navigationRevision(empty)) {
 }
 beforeEach(() => {
   vi.clearAllMocks(); m.actor.systemRole = "master"; m.allowed = true; m.error = null; m.rows = [{ tenant_id: "tenant-a" }];
+  m.assignments.mockResolvedValue(null);
   m.stored = { data: { profile: { name: "학원" }, navigation: empty }, updated_at: "2026-09-29T12:00:00Z" };
 });
 describe("실제 학원 설정 저장 액션", () => {
+  const assignment = { userId: "11111111-1111-4111-8111-111111111111", scope: "subjects", subjects: ["math"], adminLayout: "desk" };
+  it("배치 편집만 저장하면 직원관리에서 지정한 과목·배정을 보존한다", async () => {
+    m.stored = { data: { dashboard: { version: 1, layouts: [], assignments: [assignment] } }, updated_at: "now" };
+    const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [] }));
+    expect((await saveOwnerSection(undefined, fd))?.ok).toBe(true);
+    expect(m.write).toHaveBeenCalledWith("update", expect.objectContaining({ data: expect.objectContaining({ dashboard: { version: 1, layouts: [], assignments: [assignment] } }) }));
+  });
+  it("다른 창이 바꾼 배정·배치를 옛 폼으로 덮지 않는다", async () => {
+    const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [] })); fd.set("dashboardBaseline", JSON.stringify({ version: 1, layouts: [], assignments: [assignment] }));
+    expect((await saveOwnerSection(undefined, fd))?.error).toContain("다른 창");
+    expect(m.write).not.toHaveBeenCalled();
+  });
+  it("다른 지점 직원 배정은 서버 검증에서 거절하고 저장하지 않는다", async () => {
+    m.assignments.mockResolvedValue("현재 지점의 직원만 대시보드에 배정할 수 있습니다");
+    const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [], assignments: [assignment] }));
+    expect((await saveOwnerSection(undefined, fd))?.error).toContain("현재 지점");
+    expect(m.assignments).toHaveBeenCalledWith("tenant-a", [assignment]);
+    expect(m.write).not.toHaveBeenCalled();
+  });
   it("owner를 위임받았어도 역할별 대시보드 공개 설정은 바꿀 수 없다", async () => {
     m.actor.systemRole = "admin";
     const fd = new FormData();
@@ -44,7 +65,7 @@ describe("실제 학원 설정 저장 액션", () => {
     expect(m.write).not.toHaveBeenCalled();
   });
   it("원장의 대시보드 배치를 정리해 현재 지점에 저장하고 운영실을 갱신한다", async () => {
-    const dashboard = { version: 1, layouts: [{ role: "desk", items: [{ id: "panel:notices", w: 6, h: 1 }] }] };
+    const dashboard = { version: 1, layouts: [{ role: "desk", items: [{ id: "panel:notices", w: 6, h: 1 }] }], assignments: [] };
     const fd = new FormData();
     fd.set("section", "dashboard");
     fd.set("data", JSON.stringify(dashboard));

@@ -13,11 +13,12 @@ describe("기본 배치", () => {
     expect(usesClassicDefault("owner")).toBe(true);
     expect(classicDefault("owner")).toBe(DEFAULT_LAYOUT);
     expect(defaultItems("owner")).toEqual(classicToItems(DEFAULT_LAYOUT));
-    expect(BUNDLES.filter((b) => b !== "owner").every((b) => classicDefault(b) === null)).toBe(true);
+    expect(classicDefault("super")).toBe(DEFAULT_LAYOUT);
+    expect(BUNDLES.filter((b) => b !== "owner" && b !== "super").every((b) => classicDefault(b) === null)).toBe(true);
   });
 
   it("원장 밖 역할 기본엔 금액 내역·직원 구성이 없다(민감 기본 빠짐)", () => {
-    for (const b of BUNDLES.filter((x) => x !== "owner")) {
+    for (const b of BUNDLES.filter((x) => x !== "owner" && x !== "super")) {
       const ids = placedIds(defaultItems(b));
       expect(ids).not.toContain("panel:billing6");
       expect(ids).not.toContain("panel:expenses");
@@ -44,19 +45,20 @@ describe("기본 배치", () => {
 
   it("민감 옵션의 역할 기본 = 원장만 보임", () => {
     expect(optionDefault("owner")).toBe(true);
-    expect(BUNDLES.filter((b) => b !== "owner").some((b) => optionDefault(b))).toBe(false);
+    expect(optionDefault("super")).toBe(true);
+    expect(BUNDLES.filter((b) => b !== "owner" && b !== "super").some((b) => optionDefault(b))).toBe(false);
   });
 });
 
 describe("역할 판정(dashboardBundleOf)", () => {
   it("원장·총괄 → 원장 · 관리자+담당 과목 → 과목 관리자 · 관리자 → 데스크 · 매니저 → 실장 · 그 밖 → 그 밖의 직책", () => {
     expect(dashboardBundleOf({ systemRole: "master", isSuperAdmin: false, subjects: ["math"] })).toBe("owner");
-    expect(dashboardBundleOf({ systemRole: "admin", isSuperAdmin: true, subjects: ["math"] })).toBe("owner");
+    expect(dashboardBundleOf({ systemRole: "admin", isSuperAdmin: true, subjects: ["math"] })).toBe("super");
     expect(dashboardBundleOf({ systemRole: "admin", isSuperAdmin: false, subjects: ["math"] })).toBe("subject");
     expect(dashboardBundleOf({ systemRole: "admin", isSuperAdmin: false, subjects: [] })).toBe("desk");
     expect(dashboardBundleOf({ systemRole: "manager", isSuperAdmin: false, subjects: ["english"] })).toBe("manager");
-    expect(dashboardBundleOf({ systemRole: "counselor", isSuperAdmin: false, subjects: [] })).toBe("other");
-    expect(dashboardBundleOf({ systemRole: "viewer", isSuperAdmin: false, subjects: [] })).toBe("other");
+    expect(dashboardBundleOf({ systemRole: "counselor", isSuperAdmin: false, subjects: [] })).toBe("counselor");
+    expect(dashboardBundleOf({ systemRole: "viewer", isSuperAdmin: false, subjects: [] })).toBe("viewer");
   });
 });
 

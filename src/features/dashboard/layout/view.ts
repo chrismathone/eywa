@@ -23,6 +23,7 @@ export type ResolvedView = {
   items?: Item[];
   /** 과목 관리자 — 담당 과목 이름(맨 위 제목 뒤 "(수학)"). */
   scopeLabel?: string;
+  subjectScoped?: boolean;
   /** 학원 전체 값이 섞인 카드 id(과목 관리자 화면에서 '(학원 전체)'를 붙인다). */
   academyWide: string[];
   /** 수납 영역에 금액이 실리는가(데이터) — 6개월 카드가 있거나 이번 달 카드의 금액 옵션이 켜졌을 때. */
@@ -74,9 +75,10 @@ export type ResolveInput = {
   menus: ReadonlySet<MenuKey>;
   /** 과목 관리자의 담당 과목 라벨(표시용). */
   subjectLabels?: readonly string[];
+  subjectScoped?: boolean;
 };
 
-export function resolveView({ stored, bundle, menus, subjectLabels = [] }: ResolveInput): ResolvedView {
+export function resolveView({ stored, bundle, menus, subjectLabels = [], subjectScoped = bundle === "subject" }: ResolveInput): ResolvedView {
   const role = stored.layouts.find((l) => l.role === bundle);
   const classic = role ? null : classicDefault(bundle);
   let items: Item[] | undefined;
@@ -84,6 +86,8 @@ export function resolveView({ stored, bundle, menus, subjectLabels = [] }: Resol
     const base = role ? sanitizeItems(role.items) : defaultItems(bundle);
     // 권한 상한 — 못 보는 카드는 빠지고(흐름이라 뒤 카드가 앞으로 당겨진다), 카드가 없어진 구역의 머리줄도 뺀다.
     items = dropEmptyHeadings(base.filter((i) => isHeadingId(i.id) || (cardDef(i.id) && canSeeCard(cardDef(i.id)!, menus))));
+    // 미지정은 학원 전체 집계로 폴백하지 않는다. 범위를 정할 때까지 공지만 표시한다.
+    if (subjectScoped && !subjectLabels.length) items = items.filter((i) => cardDef(i.id)?.subjectScope === "none");
   }
   const placed = (items ?? []).filter((i) => !isHeadingId(i.id));
   const flag = (key: "amounts" | "phones", it: Item) => it[key] ?? optionDefault(bundle);
@@ -92,9 +96,9 @@ export function resolveView({ stored, bundle, menus, subjectLabels = [] }: Resol
   const amounts = classic ? true : placed.some((i) => i.id === "panel:billing6") || monthAmounts;
   const phoneCards = placed.filter((i) => cardDef(i.id)?.options.includes("phones"));
   const phones = classic ? true : phoneCards.length > 0 && phoneCards.every((i) => flag("phones", i));
-  const scopeLabel = bundle === "subject" && subjectLabels.length ? subjectLabels.join("·") : undefined;
-  const academyWide = bundle === "subject" ? placed.filter((i) => cardDef(i.id)?.subjectScope === "academy").map((i) => i.id) : [];
-  const body = { bundle, mode: classic ? ("classic" as const) : ("grid" as const), amounts, monthAmounts, phones, academyWide };
+  const scopeLabel = subjectScoped ? subjectLabels.join("·") || "담당 범위 미지정" : undefined;
+  const academyWide = subjectScoped ? placed.filter((i) => cardDef(i.id)?.subjectScope === "academy").map((i) => i.id) : [];
+  const body = { bundle, mode: classic ? ("classic" as const) : ("grid" as const), amounts, monthAmounts, phones, academyWide, subjectScoped };
   return {
     ...body,
     ...(classic ? { classic } : { items }),

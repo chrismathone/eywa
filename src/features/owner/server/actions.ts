@@ -16,6 +16,7 @@ import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey, type PermissionsSettings } from "../settings-types";
 import { prepareSectionForSave, presetOfStored } from "../preset";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
+import { validateDashboardAssignments } from "./dashboard-assignments";
 import { navigationRevision } from "../normalize-navigation";
 import { logDbError } from "@/lib/supabase/db-error";
 
@@ -154,6 +155,17 @@ export async function saveOwnerSection(
     }
   }
   const base = (existing?.data as Record<string, unknown> | null) ?? {};
+  if (section === "dashboard") {
+    const expected = formData.get("dashboardBaseline");
+    if (typeof expected === "string" && expected !== JSON.stringify(normalizeDashboard(base.dashboard))) {
+      return { error: "다른 창에서 대시보드 설정이 변경되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
+    }
+    const assignments = normalizeDashboard(result.data).assignments;
+    if ((result.data as { assignments?: unknown }).assignments !== undefined && assignments?.length) {
+      const error = await validateDashboardAssignments(actor.tenantId, assignments);
+      if (error) return { error };
+    }
+  }
   if (section === "navigation") {
     const expected = formData.get("navigationBaseline");
     if (typeof expected === "string" && expected !== navigationRevision(base.navigation)) {
@@ -163,7 +175,7 @@ export async function saveOwnerSection(
   // 대시보드 배치는 걸러서(모르는 카드·이탈 좌표) 저장하고, 기본 배치와 같은 역할은 저장값을 만들지 않는다(기본 개선이 따라오게).
   const sectionData =
     section === "dashboard"
-      ? normalizeDashboard(result.data, { dropDefaults: true })
+      ? normalizeDashboard({ ...result.data, assignments: (result.data as { assignments?: unknown }).assignments ?? normalizeDashboard(base.dashboard).assignments }, { dropDefaults: true })
       : prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
   const nextData: Record<string, unknown> = { ...base, version: 1, [section]: sectionData };
   // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.

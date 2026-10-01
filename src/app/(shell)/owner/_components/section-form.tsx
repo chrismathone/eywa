@@ -8,6 +8,7 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
+import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 
 /**
  * 섹션 폼 공통 래퍼 — 편집 상태(payload)를 hidden JSON으로 직렬화해 saveOwnerSection 호출.
@@ -18,6 +19,7 @@ export function SectionForm({
   payload,
   savedNonce,
   navigationBaseline,
+  dashboardBaseline,
   footer,
   children,
 }: {
@@ -26,6 +28,7 @@ export function SectionForm({
   /** 폼 밖에서 서버 확정된 변경(과목 흡수 삭제 등) 신호 — baseline 재스냅샷(거짓 '미저장' 확인 방지). */
   savedNonce?: number;
   navigationBaseline?: string;
+  dashboardBaseline?: string;
   /** 폼 밖 즉시저장 카드(예: 강의실 CRUD). 폼과 저장 바 사이에 렌더 — 중첩 <form> 없이 저장 바를 창 하단에 고정. */
   footer?: ReactNode;
   children: ReactNode;
@@ -37,6 +40,8 @@ export function SectionForm({
     undefined,
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const dashboardRevision = useRef(dashboardBaseline);
+  const dashboardSubmitted = useRef(dashboardBaseline);
   const { notifySaved } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
   const { markSaved } = useUnsavedGuard({ formRef });
 
@@ -54,6 +59,12 @@ export function SectionForm({
     fd.set("section", section);
     fd.set("data", JSON.stringify(payload));
     if (navigationBaseline !== undefined) fd.set("navigationBaseline", navigationBaseline);
+    if (dashboardRevision.current !== undefined) {
+      fd.set("dashboardBaseline", dashboardRevision.current);
+      const saved = normalizeDashboard(payload, { dropDefaults: true });
+      const previous = JSON.parse(dashboardRevision.current) as { assignments?: unknown };
+      dashboardSubmitted.current = JSON.stringify(normalizeDashboard({ ...saved, assignments: previous.assignments }));
+    }
     startTransition(() => formAction(fd));
   };
 
@@ -62,6 +73,7 @@ export function SectionForm({
   useEffect(() => {
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
       handledNonce.current = state.nonce;
+      dashboardRevision.current = dashboardSubmitted.current;
       notifySaved();
       markSaved();
       if (section === "navigation" && tenantId) publishRecordSaved(`navigation:${tenantId}`);

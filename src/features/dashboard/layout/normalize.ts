@@ -8,6 +8,7 @@
  * ⚠️ 순수 모듈(zod 없음) — 서버·클라 공용.
  */
 import { defaultItems } from "./defaults";
+import { normalizeAssignments } from "./assignment";
 import { placedIds, sameItems, sanitizeItems } from "./engine";
 import { BUNDLES, DASHBOARD_VERSION, EMPTY_DASHBOARD, type Bundle, type DashboardSettings, type RoleLayout } from "./types";
 
@@ -15,10 +16,15 @@ const isBundle = (v: unknown): v is Bundle => typeof v === "string" && (BUNDLES 
 
 export function normalizeDashboard(raw: unknown, opts?: { dropDefaults?: boolean }): DashboardSettings {
   if (typeof raw !== "object" || raw === null) return EMPTY_DASHBOARD;
-  const r = raw as { version?: unknown; layouts?: unknown };
+  const r = raw as { version?: unknown; layouts?: unknown; assignments?: unknown };
   if (r.version !== DASHBOARD_VERSION || !Array.isArray(r.layouts)) return EMPTY_DASHBOARD;
   const byRole = new Map<Bundle, RoleLayout>();
-  for (const entry of r.layouts) {
+  const layouts = r.layouts;
+  const entries = layouts.flatMap((entry) => {
+    if (entry?.role === "other") return ["counselor", "accountant", "viewer"].filter((role) => !layouts.some((v: { role?: unknown }) => v?.role === role)).map((role) => ({ ...entry, role }));
+    return [entry];
+  });
+  for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
     const { role, items: rawItems } = entry as { role?: unknown; items?: unknown };
     if (!isBundle(role) || byRole.has(role) || !Array.isArray(rawItems)) continue;
@@ -29,7 +35,8 @@ export function normalizeDashboard(raw: unknown, opts?: { dropDefaults?: boolean
     byRole.set(role, { role, items });
   }
   // 정의 순서로 — 저장·비교가 흔들리지 않게.
-  return { version: DASHBOARD_VERSION, layouts: BUNDLES.flatMap((b) => (byRole.has(b) ? [byRole.get(b)!] : [])) };
+  const assignments = normalizeAssignments(r.assignments);
+  return { version: DASHBOARD_VERSION, layouts: BUNDLES.flatMap((b) => (byRole.has(b) ? [byRole.get(b)!] : [])), assignments };
 }
 
 /** 이 역할이 지금 쓰는 배치(저장값 → 없으면 기본). 편집기 시작값. */

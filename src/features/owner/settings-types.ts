@@ -714,16 +714,28 @@ export const dashboardRoleLayoutSchema = z.object({
   role: z.enum(BUNDLES),
   items: z.array(dashboardItemSchema).max(MAX_ITEMS),
 });
+export const dashboardAssignmentSchema = z.object({
+  userId: z.string().uuid(),
+  scope: z.enum(["all", "subjects", "unassigned"]),
+  subjects: z.array(z.string().trim().min(1).max(64)).max(100),
+  adminLayout: z.enum(["subject", "desk"]),
+}).refine((v) => v.scope !== "subjects" || v.subjects.length > 0, "담당 과목을 하나 이상 선택하세요");
 export const dashboardSchema = z
   .object({
     version: z.literal(DASHBOARD_VERSION),
     layouts: z.array(dashboardRoleLayoutSchema).max(BUNDLES.length),
+    assignments: z.array(dashboardAssignmentSchema).max(1000).optional(),
   })
   .superRefine((value, ctx) => {
     const roles = new Set<string>();
     value.layouts.forEach((layout, i) => {
       if (roles.has(layout.role)) ctx.addIssue({ code: "custom", path: ["layouts", i, "role"], message: "같은 역할의 배치가 두 번 들어 있습니다" });
       roles.add(layout.role);
+    });
+    const users = new Set<string>();
+    value.assignments?.forEach((assignment, i) => {
+      if (users.has(assignment.userId)) ctx.addIssue({ code: "custom", path: ["assignments", i, "userId"], message: "같은 직원의 배정이 두 번 들어 있습니다" });
+      users.add(assignment.userId);
     });
   });
 export type DashboardSettingsData = z.infer<typeof dashboardSchema>;

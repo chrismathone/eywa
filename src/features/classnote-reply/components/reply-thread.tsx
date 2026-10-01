@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { requestParentReply, requestParentReplyDelete, requestParentReplyEdit } from "../server/reply-actions";
 import type { ReplyContext } from "../reply-types";
-import { ReactionControl } from "./reaction-control";
+import { useReactionControl } from "./reaction-control";
 import { ReplyComposer } from "./reply-composer";
 import { ReplyItem } from "./reply-item";
 import { ThreadMedia } from "./thread-media";
@@ -23,6 +23,11 @@ type Thread = ReturnType<typeof useReplyThread>;
  */
 export function ReplyThread({ view, ctx, hideReaction }: { view: Thread; ctx: Extract<ReplyContext, { ok: true }>; hideReaction: boolean }) {
   const { thread, pending, note, run } = view;
+  const reaction = useReactionControl(hideReaction || ctx.hideReaction ? null : ctx.reaction);
+  const actions = <>
+    {ctx.classnoteUrl ? <a href={ctx.classnoteUrl} target="_blank" rel="noopener noreferrer" className="text-primary shrink-0 text-xs font-bold">ClassNote 이동 ↗</a> : null}
+    <div className="min-w-0 [&>button]:max-w-full [&>button]:truncate [&>span]:block [&>span]:truncate">{reaction.trigger}</div>
+  </>;
   const focusRef = useRef<HTMLLIElement | null>(null);
   const first = useRef(true);
   useEffect(() => {
@@ -59,20 +64,21 @@ export function ReplyThread({ view, ctx, hideReaction }: { view: Thread; ctx: Ex
       </ul>
       {/* 공감·입력·미리보기 — 줄지 않되 화면 높이의 45%를 넘으면 그 안에서 스크롤(낮은 화면에서 쓰레드가 0으로 접히거나 미리보기가 잘리지 않게). */}
       <div className="max-h-[45dvh] shrink-0 space-y-2 overflow-y-auto px-1 py-0.5">
-        {/* 공감(0319a) — 공감 기능이 없는 자리(0319a 전·옛 워커)는 아무것도 그리지 않는다. 공감은 지금 답글 대상 글에 건다. */}
-        <div className="flex items-center justify-between gap-2">
-          {ctx.classnoteUrl ? <a href={ctx.classnoteUrl} target="_blank" rel="noopener noreferrer" className="text-primary shrink-0 text-xs font-bold">ClassNote 이동 ↗</a> : null}
-          <div className="ml-auto"><ReactionControl view={hideReaction || ctx.hideReaction ? null : ctx.reaction} /></div>
-        </div>
         {ctx.canReply && ctx.authorLabel ? (
           <ReplyComposer
             authorLabel={ctx.authorLabel}
             maxLength={ctx.maxLength}
             pending={pending}
+            actions={actions}
+            actionPanel={reaction.panel}
             onSend={(body, clientKey) => run(() => requestParentReply({ messageId: ctx.message.id, body, clientKey }))}
           />
         ) : (
-          <p className="text-text-dim text-xs break-keep">{ctx.reason ?? "지금은 답글을 쓸 수 없습니다"}</p>
+          <>
+            <p className="text-text-dim text-xs break-keep">{ctx.reason ?? "지금은 답글을 쓸 수 없습니다"}</p>
+            {reaction.panel}
+            <div className="flex min-w-0 items-center gap-2" aria-label="답글 조작">{actions}</div>
+          </>
         )}
         {note ? (
           <p role="status" className={`text-xs break-keep ${note.error ? "text-danger" : "text-text-dim"}`}>

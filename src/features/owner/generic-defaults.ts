@@ -56,5 +56,5 @@ export const GENERIC_SETTINGS: TenantSettings = {
   permissions: { overrides: [], userOverrides: [], specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } },
   navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },
   modules: { disabled: [...GENERIC_DISABLED_MODULES] },
-  dashboard: { version: 1, layouts: [] },
+  dashboard: { version: 1, layouts: [], assignments: [] },
 };

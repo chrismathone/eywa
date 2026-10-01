@@ -7,6 +7,7 @@ import type { ReplyContext } from "../reply-types";
 import { loadMessagesByPosts } from "./reply-data";
 import { replyGate } from "./reply-gate";
 import { getParentReplyContext } from "./reply-actions";
+import { archivedNotificationContext } from "./archived-notification";
 
 /** 목록의 버튼 조회가 끝나기 전·중앙 알림에서도 같은 창으로 진입. 알림 소유권과 원문 매칭은 서버에서 확인한다. */
 export async function getNotificationReplyContext(notificationId: string): Promise<ReplyContext> {
@@ -22,7 +23,10 @@ export async function getNotificationReplyContext(notificationId: string): Promi
     const messages = await loadMessagesByPosts(createAdminClient(), g.user.tenantId, [postId]);
     const note = { ...n, createdAt: n.created_at };
     const id = pickMessageForNotification(note, messages);
-    if (!id) return { ok: false, error: "학부모 글 원문을 찾지 못했습니다" };
+    if (!id) {
+      if (g.mode !== "on" || !n.body?.includes("(내용 없이 첨부만)")) return { ok: false, error: "학부모 글 원문을 찾지 못했습니다" };
+      return archivedNotificationContext(createAdminClient(), g.user, { notificationId, postId, ...note });
+    }
     const hideReaction = commentNotificationAmbiguous(note, messages);
     const context = await getParentReplyContext(id, { noReaction: hideReaction });
     return context.ok ? { ...context, hideReaction } : context;

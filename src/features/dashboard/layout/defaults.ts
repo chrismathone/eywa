@@ -15,10 +15,10 @@ import { packLayout } from "./pack";
 import type { Bundle, Item } from "./types";
 
 /** 저장값이 없을 때 옛 CSS 격자(지금 운영실)로 그리는 역할 — 원장뿐. */
-export const usesClassicDefault = (bundle: Bundle) => bundle === "owner";
+export const usesClassicDefault = (bundle: Bundle) => bundle === "owner" || bundle === "super";
 
 /** 민감 옵션(금액·전화번호)의 역할 기본 — 원장만 보임, 나머지는 가림(원장이 카드마다 켠다). */
-export const optionDefault = (bundle: Bundle): boolean => bundle === "owner";
+export const optionDefault = (bundle: Bundle): boolean => bundle === "owner" || bundle === "super";
 
 /** 원장 밖 역할에서 기본으로 빼는 칸 — 금액 내역·직원(원장 전용 정보). */
 export const SENSITIVE_PANELS: readonly PanelId[] = ["billing6", "expenses", "staff"];
@@ -54,6 +54,7 @@ const SUBJECT_ITEMS: readonly Item[] = [
 /** 편집기가 시작하는 값이자 저장값이 없는 역할의 배치 — 모든 역할에 있다. */
 export function defaultItems(bundle: Bundle): Item[] {
   switch (bundle) {
+    case "super":
     case "owner":
       return classicToItems(DEFAULT_LAYOUT);
     case "subject":
@@ -61,8 +62,17 @@ export function defaultItems(bundle: Bundle): Item[] {
     case "desk":
       return classicToItems(packLayout(without(DESK_DROP)));
     case "manager":
-    case "other":
       return classicToItems(packLayout(without(SENSITIVE_PANELS)));
+    case "counselor":
+      return ["kpi:intake", "kpi:calendar", "kpi:enrolledToday", "panel:admissions", "panel:newcomerStages", "panel:consultProgress", "panel:admissionsSchedule", "panel:notices"].map((id) => newItem(id));
+    case "accountant":
+      return ["panel:billingMonth", "panel:operations", "panel:notices"].map((id) => newItem(id));
+    case "viewer":
+      return ["kpi:students", "panel:subjects", "panel:nowClasses", "panel:notices"].map((id) => newItem(id));
+    case "teacher":
+      return ["panel:nowClasses", "panel:reports", "panel:notices"].map((id) => newItem(id));
+    case "student":
+      return [newItem("panel:notices")];
   }
 }
 

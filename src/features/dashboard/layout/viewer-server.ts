@@ -3,17 +3,17 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createClient } from "@/lib/supabase/server";
 import { reportError } from "@/lib/observability/report-error";
 import type { CurrentUser } from "@/lib/auth/current-user";
-import { dashboardBundleOf } from "./bundle";
+import { dashboardAssignmentOf } from "./assignment";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import type { Bundle } from "./types";
 
 /**
  * 운영실을 여는 사람의 묶음 + 담당 과목. 판정은 `dashboardBundleOf` 한 곳(순수) — 여기는 그 재료만 모은다.
- * 🔴 master는 조회 없이 원장. 그 밖은 총괄 여부와(관리자만) 본인 `users.subjects`를 **함께** 읽는다(B4 — 직렬로 기다리지 않게).
+ * 총괄 여부·저장된 배정과(관리자만) 기존 `users.subjects`를 함께 읽는다.
  *    담당 과목을 못 읽으면 "과목 없음"(= 데스크, 학원 전체 화면)으로 **넓히지 않고**, 담당 과목이 비어 있는 과목 관리자의
  *    **코드 기본** 배치로 좁힌다(`degraded` — 과목으로 좁히는 칸은 비고 화면은 산다, 30초 갱신이 다시 읽는다).
  */
-export async function loadViewerBundle(user: CurrentUser): Promise<{ bundle: Bundle; subjects: string[]; degraded?: true }> {
-  if (user.systemRole === "master") return { bundle: "owner", subjects: [] };
+export async function loadViewerBundle(user: CurrentUser): Promise<{ bundle: Bundle; subjects: string[]; subjectScoped: boolean; degraded?: true }> {
   const subjectsPromise =
     user.systemRole === "admin"
       ? createClient().then(async (db) => {
@@ -26,9 +26,10 @@ export async function loadViewerBundle(user: CurrentUser): Promise<{ bundle: Bun
     reportError(error, { scope: "dashboard.viewer-subjects" });
     return null;
   });
-  const [isSuperAdmin, subjects] = await Promise.all([isCurrentUserSuperAdmin(), safeSubjects]);
+  const [isSuperAdmin, subjects, settings] = await Promise.all([isCurrentUserSuperAdmin(), safeSubjects, getTenantSettings()]);
   // 🔴 저장된 과목 관리자 배치(원장이 과목 관리자에게만 켠 금액·번호 옵션 포함)를 쓰지 않는다 — 데스크 관리자일 수도 있다.
   //    `degraded`면 호출부가 코드의 기본 과목 관리자 배치(민감 칸 없음·옵션 가림)로 그린다(적대 재리뷰 2026-10-01).
-  if (subjects === null) return isSuperAdmin ? { bundle: "owner", subjects: [] } : { bundle: "subject", subjects: [], degraded: true };
-  return { bundle: dashboardBundleOf({ systemRole: user.systemRole, isSuperAdmin, subjects }), subjects: isSuperAdmin ? [] : subjects };
+  if (subjects === null) return isSuperAdmin ? { bundle: "super", subjects: [], subjectScoped: false } : { bundle: "subject", subjects: [], subjectScoped: true, degraded: true };
+  const { bundle, subjects: assigned, subjectScoped } = dashboardAssignmentOf({ id: user.id, systemRole: user.systemRole, isSuperAdmin, subjects }, settings.dashboard.assignments?.find((a) => a.userId === user.id));
+  return { bundle, subjects: assigned, subjectScoped };
 }

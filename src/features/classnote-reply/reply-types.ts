@@ -119,6 +119,7 @@ export type ReplyContext =
       classnoteUrl?: string | null;
       /** 같은 문구의 옛 댓글 알림 — 답글 후에도 공감 대상의 모호함을 유지한다. */
       hideReaction?: boolean;
+      awaitingOriginal?: boolean;
     }
   | { ok: false; error: string };
 

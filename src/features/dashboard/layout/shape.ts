@@ -41,7 +41,7 @@ export function shapeSections(full: Sections, view: ResolvedView, ctx: ShapeCont
     }));
     sections = { ...sections, calendar: { ...calendar, data: events } };
   }
-  if (view.bundle === "subject") {
+  if (view.subjectScoped ?? view.bundle === "subject") {
     // 학년·학교·수준 구성은 과목으로 못 나뉜다 — 그 칸이 놓였을 때만 학원 전체 값을 싣는다(안 쓰는 값을 내려보내지 않는다).
     const keepAcademyWide = ["panel:studentsComp", "panel:grades", "panel:schools"].some((id) => placed.has(id));
     sections = narrowBySubject(sections, ctx.groups, ctx.groupOf, keepAcademyWide);

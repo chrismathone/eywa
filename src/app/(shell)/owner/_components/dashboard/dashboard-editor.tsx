@@ -19,6 +19,8 @@ import { RolePreview } from "./role-preview";
 import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useDashboardEditor } from "./use-editor";
 import { WidgetGallery } from "./widget-gallery";
+import { AssignedStaff } from "./assigned-staff";
+import type { DashboardMembers } from "@/features/dashboard/layout/members";
 import e from "./editor.module.css";
 
 export type DashboardEditorProps = {
@@ -28,7 +30,7 @@ export type DashboardEditorProps = {
   /** 과목 관리자 미리보기 과목(운영실 과목 묶음마다 하나). */
   subjects: { key: string; label: string }[];
   /** 역할마다 지금 해당하는 직원 수. */
-  counts: Record<Bundle, number>;
+  members: DashboardMembers;
   /** 원장 시점 원본 스냅샷 — 서버가 흘려 보낸다(첫 화면을 막지 않게, B7). 실패하면 null. */
   preview: Promise<OverviewSnapshot | null>;
 };
@@ -43,7 +45,7 @@ const LIST_BELOW = 720;
  * 학원 설정 '대시보드 관리' — 역할마다 운영실에 무엇을 어디에 얼마나 크게 놓을지(원장 2026-10-01 *"카드 및 위치, 카드 크기 등등 다양하게"*).
  * 처음엔 그 역할의 **실데이터 미리보기**, '편집'을 누르면 위젯 편집(끌기·크기·서랍·갤러리), '완료'로 돌아온다. 저장은 아래 저장 바(다섯 역할 한 번에).
  */
-export function DashboardEditor({ initial, roleMenus, subjects, counts, preview }: DashboardEditorProps) {
+export function DashboardEditor({ initial, roleMenus, subjects, members, preview }: DashboardEditorProps) {
   const ed = useDashboardEditor(initial);
   const { role, items, editing, selected, commit, select, restore, undo, redo } = ed;
   const [full, setFull] = useState<OverviewSnapshot | null | "failed">(null);
@@ -123,13 +125,15 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
 
   const listMode = width < LIST_BELOW;
   return (
-    <SectionForm section="dashboard" payload={ed.payload}>
+    <SectionForm section="dashboard" payload={ed.payload} dashboardBaseline={JSON.stringify(initial)}>
       <div ref={rootRef} className={e.editor} style={{ "--spring-linear": SPRING } as CSSProperties}>
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
+        <div className="flex min-w-0 flex-col gap-3">
         <RoleBar role={role} status={ed.status} onRole={ed.setRole} />
         <p className={e.roleInfo}>
           <b>{BUNDLE_LABELS[role]}</b>
           <span>{BUNDLE_RULES[role]}</span>
-          <span>지금 {counts[role]}명</span>
+          <span>{members.failed ? "직원 조회 실패" : `지금 ${members.people.filter((p) => p.bundle === role && p.canOpen).length}명`}</span>
           <span>{ed.status[role].isDefault ? "기본 배치 사용 중" : "직접 구성한 배치"}</span>
         </p>
         <EditorActions
@@ -155,6 +159,9 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
           }}
           onSubject={setSubject}
         />
+        </div>
+        <AssignedStaff members={members} bundle={role} />
+        </div>
         {editing ? (
           <div className={e.stage} data-inspector={selectedItem ? "" : undefined}>
             <div className="flex min-w-0 flex-col gap-3">

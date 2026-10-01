@@ -44,6 +44,7 @@ import {
 import { kickClassify, loadChildStudentMap, storeParentMessages } from "./classnote-inbox-store.mjs";
 import { enqueueParentVideos, videoArchiveEnabled } from "./video-inbox.mjs";
 import { incomingVideo } from "./video-inbox.mjs";
+import { kickAttachmentRepair } from "./repair-attachment-messages.mjs";
 import {
   classBoardClassOf,
   computeClassWideRecipients,
@@ -508,6 +509,7 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     return { ran: false, moduleOff: 1 };
   }
 
+
   // 대상 = 수학 보드 그룹. 발송 opt-in(classnoteSubjects)에 **묶지 않는다** — 인바운드 감지는 발송이 아니고,
   // 보드가 있는 학생의 학부모 글은 발송 스위치와 무관하게 강사가 알아야 한다.
   const group = BOARD_GROUPS.math;
@@ -526,6 +528,8 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
       log,
     );
     const watermark = maxPostId(rows);
+    // 피드 로그인 완료 후 같은 읽기 세션을 재사용한다. 복구는 발송 루프를 기다리게 하지 않는다.
+    if (!dryRun) kickAttachmentRepair(sql, tenant, () => getFeedPage(browser), log);
     if (watermark === null) return { ran: true, detected: 0, notified: 0 };
 
     // [영상] 글: 알림의 나이·본문 유무와 별개로 이미 읽은 첨부를 보관 큐에 넣는다.

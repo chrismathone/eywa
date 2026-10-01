@@ -8,6 +8,7 @@ import { DashboardEditorLazy } from "@/app/(shell)/owner/_components/dashboard/d
 import { Overview } from "@/app/(shell)/dashboard/_overview/overview";
 import { previewSnapshot } from "@/features/dashboard/layout/preview";
 import { defaultItems } from "@/features/dashboard/layout/defaults";
+import { ReplyHarness } from "./reply-harness";
 
 const ok = <T,>(data: T) => ({ data, at: Date.now(), error: false });
 const bill = (period: string, k: number) => ({ period, totalCount: 300, paidCount: 240 - k, partialCount: 10, unpaidCount: 50 + k, totalBilled: 98_000_000 + k * 1_000_000, totalCollected: 80_000_000, totalDiscount: 2_000_000, outstanding: 16_340_000, paymentRate: 82.3 });
@@ -65,6 +66,7 @@ export const FIXTURE = {
 const menus = Object.fromEntries(BUNDLES.map((b) => [b, b === "owner" ? [...MENU_KEYS] : MENU_KEYS.filter((m) => m !== "staff" && m !== "owner")])) as Record<Bundle, MenuKey[]>;
 
 export function Harness({ mode, role }: { mode: string; role: string }) {
+  if (mode === "reply") return <ReplyHarness />;
   if (mode === "view") {
     const r = (BUNDLES as readonly string[]).includes(role) ? (role as Bundle) : "desk";
     const snap = previewSnapshot(FIXTURE, { role: r, items: defaultItems(r), menus: new Set(menus[r]), subject: r === "subject" ? { key: "math", label: "수학" } : null });
@@ -77,7 +79,11 @@ export function Harness({ mode, role }: { mode: string; role: string }) {
         initial={{ version: 1, layouts: [] }}
         roleMenus={menus}
         subjects={[{ key: "math", label: "수학" }, { key: "english", label: "영어" }]}
-        counts={{ owner: 4, subject: 5, manager: 2, desk: 2, other: 0 }}
+        members={{ failed: false, people: [
+          { id: "sample-owner", name: "원장 예시", role: "master", bundle: "owner", scopeLabel: "전 과목", canOpen: true, inherited: true },
+          { id: "sample-math", name: "수학 담당 예시", role: "admin", bundle: "subject", scopeLabel: "수학", canOpen: true, inherited: false },
+          { id: "sample-desk", name: "경영지원 예시", role: "admin", bundle: "desk", scopeLabel: "전 과목", canOpen: true, inherited: false },
+        ] }}
         preview={Promise.resolve(FIXTURE)}
       />
     </div>

@@ -5,6 +5,7 @@ import { Toolbar, ToolbarButton, ToolbarDivider, ToolbarSegment, ToolbarSegmentI
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { BUNDLE_LABELS, BUNDLES, type Bundle } from "@/features/dashboard/layout/types";
+import { DASHBOARD_ROLES, DASHBOARD_ROLE_LABELS, ROLE_BUNDLE, roleOfBundle } from "@/features/dashboard/layout/roles";
 
 /** 역할 고르기 — 저장 안 한 편집이 있는 역할엔 점(●), 직접 구성한 역할엔 '직접'. */
 export function RoleBar({
@@ -19,13 +20,19 @@ export function RoleBar({
   return (
     <Toolbar>
       <ToolbarSegment label="역할" wrap>
-        {BUNDLES.map((b) => (
-          <ToolbarSegmentItem key={b} active={role === b} onClick={() => onRole(b)} aria-label={`${BUNDLE_LABELS[b]} 배치${status[b].dirty ? " (저장 안 한 변경 있음)" : ""}`}>
-            {BUNDLE_LABELS[b]}
-            {status[b].dirty ? <span aria-hidden> ●</span> : !status[b].isDefault ? <span aria-hidden className="opacity-70"> · 직접</span> : null}
+        {DASHBOARD_ROLES.map((r) => {
+          const b = ROLE_BUNDLE[r];
+          const dirty = status[b].dirty || (r === "admin" && status.desk.dirty);
+          return <ToolbarSegmentItem key={r} active={roleOfBundle(role) === r} onClick={() => onRole(b)} aria-label={`${DASHBOARD_ROLE_LABELS[r]} 배치${dirty ? " (저장 안 한 변경 있음)" : ""}`}>
+            {DASHBOARD_ROLE_LABELS[r]}
+            {dirty ? <span aria-hidden> ●</span> : !status[b].isDefault ? <span aria-hidden className="opacity-70"> · 직접</span> : null}
           </ToolbarSegmentItem>
-        ))}
+        })}
       </ToolbarSegment>
+      {roleOfBundle(role) === "admin" ? <ToolbarSegment label="관리자 배치">
+        <ToolbarSegmentItem active={role === "subject"} onClick={() => onRole("subject")}>과목 운영형</ToolbarSegmentItem>
+        <ToolbarSegmentItem active={role === "desk"} onClick={() => onRole("desk")}>경영지원형</ToolbarSegmentItem>
+      </ToolbarSegment> : null}
     </Toolbar>
   );
 }

@@ -11,24 +11,30 @@ export const MAX_ROW_SPAN = 2;
 export const MAX_ITEMS = 80;
 
 /** 역할 묶음 — 설계 메모(2026-10-01)의 판정 + 그 밖에 운영실을 여는 계정(상담·회계·열람). */
-export const BUNDLES = ["owner", "subject", "manager", "desk", "other"] as const;
+export const BUNDLES = ["super", "owner", "subject", "desk", "manager", "teacher", "counselor", "accountant", "viewer", "student"] as const;
 export type Bundle = (typeof BUNDLES)[number];
 
 export const BUNDLE_LABELS: Record<Bundle, string> = {
+  super: "슈퍼관리자",
   owner: "원장",
-  subject: "과목 관리자",
-  manager: "실장(매니저)",
-  desk: "경영지원 · 데스크",
-  other: "그 밖의 직책",
+  subject: "관리자 · 과목 운영형",
+  manager: "실장",
+  desk: "관리자 · 경영지원형",
+  teacher: "강사", counselor: "상담", accountant: "회계", viewer: "열람", student: "학생",
 };
 
 /** 편집기에 적는 한 줄 — 어떤 사람들인가(판정 기준 = `bundle.ts`). */
 export const BUNDLE_RULES: Record<Bundle, string> = {
-  owner: "원장 + 슈퍼관리자",
-  subject: "관리자 중 담당 과목이 있는 직원 — 담당 과목 데이터만 보입니다",
-  manager: "매니저(실장)",
-  desk: "관리자 중 담당 과목이 없는 직원",
-  other: "상담·회계·열람 등 그 밖에 운영실을 열 수 있는 계정",
+  super: "총괄 자격을 가진 계정",
+  owner: "원장 역할 계정",
+  subject: "과목 운영 중심 · 집계 범위는 직원별 담당 범위를 따릅니다",
+  manager: "학원 운영·출결·상담 중심",
+  desk: "경영지원 중심 · 집계 범위는 직원별 담당 범위를 따릅니다",
+  teacher: "강사 전용 화면을 사용합니다 · 현재 대시보드 접근은 잠겨 있습니다",
+  counselor: "등록상담·신규생·상담 일정 중심",
+  accountant: "수납·행정 중심 · 금액은 카드 설정과 메뉴 권한을 따릅니다",
+  viewer: "재원·수업·공지 중심 · 읽기 권한을 따릅니다",
+  student: "내 학습 화면을 사용합니다 · 현재 대시보드 접근은 잠겨 있습니다",
 };
 
 /**
@@ -48,10 +54,11 @@ export type Item = {
 };
 
 export type RoleLayout = { role: Bundle; items: Item[] };
-export type DashboardSettings = { version: 1; layouts: RoleLayout[] };
+export type DashboardAssignment = { userId: string; scope: "all" | "subjects" | "unassigned"; subjects: string[]; adminLayout: "subject" | "desk" };
+export type DashboardSettings = { version: 1; layouts: RoleLayout[]; assignments?: DashboardAssignment[] };
 
 export const DASHBOARD_VERSION = 1 as const;
-export const EMPTY_DASHBOARD: DashboardSettings = { version: DASHBOARD_VERSION, layouts: [] };
+export const EMPTY_DASHBOARD: DashboardSettings = { version: DASHBOARD_VERSION, layouts: [], assignments: [] };
 
 export const isHeadingId = (id: string) => id.startsWith("heading:");
 export const isKpiId = (id: string) => id.startsWith("kpi:");

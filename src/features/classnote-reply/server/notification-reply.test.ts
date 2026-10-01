@@ -1,10 +1,11 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { getNotificationReplyContext } from "./notification-reply";
 
-const mocks = vi.hoisted(() => ({ gate: vi.fn(), messages: vi.fn(), context: vi.fn(), eq: vi.fn(), note: vi.fn() }));
+const mocks = vi.hoisted(() => ({ gate: vi.fn(), messages: vi.fn(), context: vi.fn(), eq: vi.fn(), note: vi.fn(), archived: vi.fn() }));
 vi.mock("./reply-gate", () => ({ replyGate: mocks.gate }));
 vi.mock("./reply-data", () => ({ loadMessagesByPosts: mocks.messages }));
 vi.mock("./reply-actions", () => ({ getParentReplyContext: mocks.context }));
+vi.mock("./archived-notification", () => ({ archivedNotificationContext: mocks.archived }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => "admin" }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () => {
   const q = { select: () => q, eq: (k: string, v: unknown) => { mocks.eq(k, v); return q; }, maybeSingle: mocks.note };
@@ -37,6 +38,23 @@ it.each([{ data: null }, { data: { type: "absence_alert" } }, { error: new Error
 it("원문을 못 찾으면 외부 주소로 보내지 않고 창 안에서 오류를 보여 준다", async () => {
   mocks.messages.mockResolvedValue([]);
   expect(await getNotificationReplyContext("n")).toEqual({ ok: false, error: "학부모 글 원문을 찾지 못했습니다" });
+});
+it("첨부 전용 옛 알림은 보관 영상으로 진입하고 원문 복구 후 같은 알림에서 답글 대상을 연다", async () => {
+  mocks.gate.mockResolvedValue({ ok: true, mode: "on", user: { id: "me", tenantId: "tenant" } });
+  mocks.note.mockResolvedValue({ data: { type: "classnote_parent_post", link: "/service/report/123", body: "[영상] (내용 없이 첨부만)", created_at: null } });
+  mocks.messages.mockResolvedValue([]);
+  mocks.archived.mockResolvedValue({ ok: true, awaitingOriginal: true, canReply: false });
+  expect(await getNotificationReplyContext("n")).toMatchObject({ awaitingOriginal: true });
+  mocks.messages.mockResolvedValue([{ ...post, content: "[영상] (내용 없이 첨부만)" }]);
+  expect(await getNotificationReplyContext("n")).toMatchObject({ ok: true, hideReaction: false });
+  expect(mocks.context).toHaveBeenCalledWith("m", { noReaction: false });
+});
+it("시험 모드에서는 보드가 불명확한 보관 영상으로 우회하지 않는다", async () => {
+  mocks.gate.mockResolvedValue({ ok: true, mode: "test", user: { id: "me", tenantId: "tenant" } });
+  mocks.note.mockResolvedValue({ data: { type: "classnote_parent_post", link: "/service/report/123", body: "[영상] (내용 없이 첨부만)", created_at: null } });
+  mocks.messages.mockResolvedValue([]);
+  expect((await getNotificationReplyContext("n")).ok).toBe(false);
+  expect(mocks.archived).not.toHaveBeenCalled();
 });
 it("같은 문구의 옛 댓글 둘은 원문을 열되 공감을 계속 숨긴다", async () => {
   mocks.note.mockResolvedValue({ data: { type: "classnote_parent_comment", link: "/service/report/123", body: "안녕하세요", created_at: null } });

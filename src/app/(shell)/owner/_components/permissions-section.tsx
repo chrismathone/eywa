@@ -1,4 +1,5 @@
 "use client";
+import { DASHBOARD_ROLE_LABELS } from "@/features/dashboard/layout/roles";
 
 import { useMemo, useRef, useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
@@ -26,16 +27,7 @@ import { isTeacherMenuEntranceOpen } from "@/lib/navigation";
 // (2026-09-11 리뷰). 그 탭의 페이지 접근은 아래 '역할별 메뉴 권한' 표에서 그대로 조정된다.
 const TEACHER_TOGGLE_KEYS = TEACHER_MENU_KEYS.filter(isTeacherMenuEntranceOpen);
 
-const ROLE_LABEL: Record<SystemRole, string> = {
-  master: "원장",
-  admin: "관리자",
-  manager: "실장",
-  teacher: "강사",
-  counselor: "상담",
-  accountant: "회계",
-  viewer: "열람",
-  student: "학생",
-};
+const ROLE_LABEL: Record<SystemRole, string> = DASHBOARD_ROLE_LABELS;
 
 const CYCLE: Access[] = ["full", "scoped", "readonly", "none"];
 const ACCESS_LABEL: Record<Access, string> = { full: "전체", scoped: "담당", readonly: "읽기", none: "없음" };
