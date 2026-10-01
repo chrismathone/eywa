@@ -38,6 +38,7 @@ import type {
 } from "./types";
 import type { RosterDesiredRow } from "../roster/roster-diff";
 import { masterStudentConflicts } from "./student-conflicts";
+import { planAttendanceMigration } from "./attendance-migration";
 import { buildClassMappings } from "./class-mappings";
 import { buildTeacherMappings } from "./teacher-mappings";
 const MANUAL_CLASS_FIX =
@@ -645,44 +646,6 @@ export function buildMasterPlan(
           href: `/students/${g.studentId}`,
         });
     }
-  for (const p of report.planItems.filter(
-    (p) => p.action === "remove" || p.action === "update",
-  )) {
-    const old = live.find((s) => s.id === p.scheduleId);
-    if (!old) continue;
-    const stuck = ctx.attendance.filter(
-      (a) =>
-        a.classId === old.classId &&
-        a.startTime === old.startTime &&
-        ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][
-          new Date(`${a.date}T12:00:00Z`).getUTCDay()
-        ] === old.day,
-    );
-    if (stuck.length)
-      issue({
-        key: `attendance:${old.id}`,
-        severity: "error",
-        target: `${old.className} ${old.startTime}`,
-        reason: `${stuck[0]!.date}부터 해당 교시의 출결 ${stuck.length}건이 이미 기록되어 있습니다.`,
-        fix: "적용일을 기록 이후로 옮기거나 해당 출결을 확인·정리한 뒤 다시 검사해 주세요.",
-        href: `/classes/${old.classId}`,
-      });
-  }
-  for (const m of diff.moves) {
-    const e = ctx.enrollments.find((e) => e.id === m.enrollmentId)!;
-    const stuck = ctx.attendance.filter(
-      (a) => a.classId === e.classId && a.studentId === e.studentId,
-    );
-    if (stuck.length)
-      issue({
-        key: `student-attendance:${e.id}`,
-        severity: "error",
-        target: m.studentName,
-        reason: `적용일 이후 이전 반의 출결 ${stuck.length}건이 있습니다.`,
-        fix: "적용일 또는 학생 출결을 먼저 확인해 주세요.",
-        href: `/students/${e.studentId}`,
-      });
-  }
   const updates = buildClassUpdates(
     match,
     structureCtx,
@@ -757,7 +720,16 @@ export function buildMasterPlan(
       fix: "통합 탭의 반 머리글과 병합을 확인해 주세요.",
       tab: input.rosterTab,
     });
+  const attendanceMigration = planAttendanceMigration(
+    { report, roster: diff, mappings, effectiveDate: input.effectiveDate },
+    ctx,
+  );
+  for (const item of attendanceMigration.issues) issue(item);
   const plan = {
+    attendanceMigration: {
+      moves: attendanceMigration.moves,
+      retainedCells: attendanceMigration.retainedCells,
+    },
     report,
     roster: diff,
     issues,
