@@ -197,7 +197,7 @@ export default async function MeetingsPage({
   return (
     // 컴팩트 크롬(창·모바일·강사 미니셸)에선 섹션 간격을 좁힌다(원장 지시 2026-08-06 "남는 공간 많음").
     <div className="space-y-5 compact-chrome:space-y-3">
-      <div className="compact-chrome:hidden">
+      <div data-page-header-slot="" className="compact-chrome:hidden">
         <PageHeader eyebrow="운영" title="회의록" />
       </div>
 

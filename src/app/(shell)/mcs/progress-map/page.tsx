@@ -33,7 +33,7 @@ export default async function ProgressMapPage({ searchParams }: {
   const progress = buildSampleProgress();
   return (
     <div className="flex flex-col gap-4">
-      <div className="compact-chrome:hidden">
+      <div data-page-header-slot="" className="compact-chrome:hidden">
         <PageHeader
           eyebrow="수업 운영"
           title="수학 학습 진도맵"
