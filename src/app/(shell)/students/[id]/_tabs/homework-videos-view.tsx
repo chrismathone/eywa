@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { homeworkVideoLinks, homeworkVideoOrigin, HOMEWORK_VIDEO_STATUS, type HomeworkVideo } from "@/features/students/homework-videos";
-import { HomeworkVideoPlayer } from "./homework-video-player";
+import { HomeworkVideoPlayer } from "@/features/students/components/homework-video-player";
 
 const dateLabel = (value: string | null, dateOnly = false) => value
   ? new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",

@@ -123,8 +123,10 @@ const ALLOWED: Record<string, string[]> = {
   "src/features/classnote-reply/components/use-reply-targets.ts -> src/features/classnote-reply/server/reply-actions.ts": [
     "getReplyTargetsForNotifications",
   ],
-  "src/features/classnote-reply/components/parent-reply-dialog.tsx -> src/features/classnote-reply/server/reply-actions.ts": [
+  "src/features/classnote-reply/components/use-reply-thread.ts -> src/features/classnote-reply/server/reply-actions.ts": [
     "getParentReplyContext",
+  ],
+  "src/features/classnote-reply/components/reply-thread.tsx -> src/features/classnote-reply/server/reply-actions.ts": [
     "requestParentReply",
     "requestParentReplyDelete",
     "requestParentReplyEdit",

@@ -8,6 +8,7 @@ import { fetchInChunks } from "@/lib/supabase/batch";
 import { isReplyManager, replyBoardKnown, replyStatusView, replyTargetAllowed, type ReplyMode, type ReplyStatus } from "../reply-policy";
 import type { ParentThreadRow, ParentThreadsView } from "../reply-types";
 import { toMessage, uniqueClassBoardNames } from "./reply-data";
+import { countThreadMedia } from "./thread-media-counts";
 import { loadReactions, reactionReady, toReactionView, type ReactionRow } from "./reaction-data";
 
 /**
@@ -32,7 +33,7 @@ export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser 
   const ids = messages.map((m) => m.id);
   const studentIds = [...new Set(messages.map((m) => m.studentId).filter((x): x is string => !!x))];
   const admin = createAdminClient();
-  const [replies, students, reactions, manager, readonly, classBoards] = await Promise.all([
+  const [replies, students, reactions, manager, readonly, classBoards, media] = await Promise.all([
     fetchInChunks<{ message_id: string; status: ReplyStatus; edited_at: string | null; error: string | null; failed_action: string | null; created_at: string }>(ids, (chunk) =>
       supabase.from("classnote_parent_replies").select("message_id, status, edited_at, error, failed_action, created_at").in("message_id", chunk),
     ).then((rows) => ({ ok: true as const, rows }), () => ({ ok: false as const, rows: [] })),
@@ -47,6 +48,8 @@ export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser 
     readonlyTeacherViewError().then((r) => !!r, () => true),
     // 전체 모드 — aywa가 아는 보드(0302a 반 보드·1인 보드)의 글에만 버튼을 세운다(영어 그룹반 등은 어차피 받지 않는다).
     a.mode === "on" ? uniqueClassBoardNames(admin, a.user.tenantId, messages.map((m) => m.boardName)).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
+    // 첨부 개수(영상·사진) — 개수만이라 열람 게이트는 필요 없다(원문 줄은 이미 같은 직원에게 보인다). 못 세면 0.
+    countThreadMedia(admin, a.user.tenantId, messages),
   ]);
   const nameOf = new Map(students.map((s) => [s.id, (s.classnote_name || s.name || "").trim() || null]));
   const byMessage = new Map<string, typeof replies.rows>();
@@ -63,6 +66,7 @@ export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser 
       content: m.content.length > 200 ? `${m.content.slice(0, 200)}…` : m.content, postedAt: m.postedAt,
       replyCount: list.filter((r) => r.status !== "deleted").length, latest: v ? { label: v.label, tone: v.tone } : null,
       replyable,
+      media: media.get(m.id) ?? { videos: 0, photos: 0 },
       reaction: replyable && reactions ? toReactionView(m.id, reactions.get(m.id) ?? null, a.user, manager, readonly) : null,
     };
   });

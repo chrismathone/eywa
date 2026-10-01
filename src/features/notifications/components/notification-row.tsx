@@ -30,6 +30,7 @@ export function NotificationRow({
   onArchive,
   onDelete,
   onReply,
+  replyCount = 0,
   actionSlot,
   belowSlot,
 }: {
@@ -40,6 +41,8 @@ export function NotificationRow({
   onDelete: () => void;
   /** 학부모 글·댓글에 답글(0317a) — 쓸 수 있는 알림에만 온다(없으면 버튼 없음). */
   onReply?: () => void;
+  /** 이미 달린 우리 답글 수 — 있으면 '답글 N'으로 쓰레드에 다시 들어간다. */
+  replyCount?: number;
   /** 버튼 줄 맨 앞에 놓을 조작(학부모 글 공감 버튼, 0319a) — 없으면 아무것도 없다. */
   actionSlot?: ReactNode;
   /** 버튼 줄 아래 한 줄(공감 종류 고르기·사유) — 없으면 줄 자체가 없다. */
@@ -94,7 +97,7 @@ export function NotificationRow({
               onClick={onReply}
               className="text-primary hover:bg-primary-soft focus-visible:outline-primary rounded-md px-2 py-1 text-xs font-bold"
             >
-              답글 쓰기
+              {replyCount > 0 ? `답글 ${replyCount}` : "답글 쓰기"}
             </button>
           ) : null}
           <button

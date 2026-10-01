@@ -98,7 +98,7 @@ describe("끔이면 흔적이 없다", () => {
 
   it("벨의 버튼 조회는 끔·발송 꺼짐이면 서버에서 빈 값을 돌려준다(버튼·공감 둘 다 없다)", () => {
     const src = read("src/features/classnote-reply/server/reply-actions.ts");
-    expect(src).toMatch(/const none: ReplyTargets = \{ targets: \{\}, reactions: null, vague: \[\] \};/);
+    expect(src).toMatch(/const none: ReplyTargets = \{ targets: \{\}, reactions: null, vague: \[\], counts: \{\} \};/);
     expect(src).toMatch(/if \(!g\.ok \|\| !g\.sendOn \|\|[^\n]*\) return none;/);
   });
 });
@@ -167,10 +167,10 @@ describe("공감 정책(순수)", () => {
     expect(recheck).not.toMatch(/ok: true/);
     expect(recheck).toMatch(/return \{ ok: false, error: `앞서 요청한 공감/);
     // 벨의 모호한 알림에서 연 창은 서버가 공감 상태를 싣지 않는다(화면에서 숨기기만 하는 게 아니다).
-    const dialog = read("src/features/classnote-reply/components/parent-reply-dialog.tsx");
+    const dialog = read("src/features/classnote-reply/components/use-reply-thread.ts");
     expect(dialog).toMatch(/getParentReplyContext\(id, \{ noReaction: hideReaction \}\)/);
     expect(read("src/features/classnote-reply/server/reply-actions.ts")).toMatch(/opts\?\.noReaction === true \? Promise\.resolve\(false\)/);
-    expect(read("src/features/notifications/components/notification-bell.tsx")).toMatch(/hideReaction=\{replyVague\.includes\(replyMessageId\)\}/);
+    expect(read("src/features/notifications/components/notification-bell.tsx")).toMatch(/hideReaction: replyVague\.includes\(messageId\)/);
     // 답글: 연동 PC가 집은 적 있는 대기 행은 조건부 쓰기에서도 막는다.
     expect(read("src/features/classnote-reply/server/reply-change.ts")).toMatch(/write = write\.eq\("retry_count", 0\)\.is\("worker_host", null\)/);
     expect(src).toMatch(/if \(row\.status === "queued" && row\.unconfirmed\)\s*return \{ ok: false/);
