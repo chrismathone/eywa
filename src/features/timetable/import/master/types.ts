@@ -77,6 +77,8 @@ export type ClassMapping = {
   suggestedName: string | null;
   evidence: string;
   explicit: boolean;
+  method: "manual" | "name" | "roster" | "unmapped";
+  manualReason: string | null;
 };
 export type MasterPlan = {
   report: DryRunReport;
@@ -89,6 +91,8 @@ export type MasterPlan = {
     teacherId: string | null;
     suggestedId: string | null;
     suggestedName: string | null;
+    method: "manual" | "name" | "header" | "unmapped";
+    manualReason: string | null;
   }[];
   omittedClasses: { id: string; name: string; slots: number }[];
   classUpdates: ApplyClassUpdate[];

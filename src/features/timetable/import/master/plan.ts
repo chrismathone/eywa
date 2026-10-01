@@ -6,7 +6,7 @@ import {
 import { matchRosterStudent } from "../roster/match-roster";
 import { needsRosterConfirmation, rosterMatchReason } from "./roster-review";
 import { computeRosterDiff } from "../roster/roster-diff";
-import { matchStructure, resolveTeacher } from "../structure/match";
+import { matchStructure } from "../structure/match";
 import { computeStructureDiff } from "../structure/diff";
 import { buildClassUpdates } from "../structure/class-updates";
 import {
@@ -35,10 +35,13 @@ import type {
   MasterInput,
   MasterIssue,
   MasterPlan,
-  ClassMapping,
 } from "./types";
 import type { RosterDesiredRow } from "../roster/roster-diff";
 import { masterStudentConflicts } from "./student-conflicts";
+import { buildClassMappings } from "./class-mappings";
+import { buildTeacherMappings } from "./teacher-mappings";
+const MANUAL_CLASS_FIX =
+  "아래 ‘반 연결’에서 명단을 비교하고 기존 반을 직접 선택한 뒤 다시 검사하세요. 실제 신설 반이면 반 관리에서 프로그램 구분·담임을 지정해 먼저 만들어 주세요.";
 
 export function columnName(index: number): string {
   let n = index + 1,
@@ -111,46 +114,23 @@ export function buildMasterPlan(
   };
   const roster = parseIntegratedRoster(grids.roster.cells);
   const raw = parseTeacherGrid(clipMasterGrid(grids.teacher, input.maxColumn));
-  const teacherMappings = raw.teachers
-    .filter(
-      (t, i, all) =>
-        !!t.name.trim() &&
-        all.findIndex((v) => v.name === t.name) === i &&
-        !t.reserve &&
-        !specialSlotLabel(t.name),
-    )
-    .map((t) => {
-      const label = canonicalSlotTeacherLabel(t.name) ?? t.name;
-      const teacherId =
-        input.teacherBindings?.[t.name] ??
-        resolveTeacher(label, ctx.teachers).ref?.id ??
-        null;
-      const suggestions = ctx.teachers.filter((v) =>
-        t.header.split(/\s+/).includes(v.displayName),
-      );
-      const suggestion = suggestions.length === 1 ? suggestions[0] : null;
-      if (
-        (Object.hasOwn(input.teacherBindings ?? {}, t.name) || teacherId) &&
-        !ctx.teachers.some((v) => v.id === teacherId)
-      )
-        issue({
-          key: `teacher-binding:${t.name}`,
-          severity: "error",
-          target: t.name,
-          reason:
-            "강사를 선택하지 않았거나 연결한 계정이 활성 상태가 아닙니다.",
-          fix: "강사 연결을 다시 선택해 주세요.",
-        });
-      return {
-        sheetName: t.name,
-        header: t.header,
-        teacherId,
-        suggestedId: suggestion?.id ?? null,
-        suggestedName: suggestion?.displayName ?? null,
-      };
-    });
+  const teacherMappings = buildTeacherMappings(
+    raw.teachers,
+    ctx.teachers,
+    input.teacherBindings,
+  );
+  for (const t of teacherMappings)
+    if (Object.hasOwn(input.teacherBindings ?? {}, t.sheetName) && !t.teacherId)
+      issue({
+        key: `teacher-binding:${t.sheetName}`,
+        severity: "error",
+        target: t.sheetName,
+        reason: t.manualReason!,
+        fix: "아래 ‘강사 연결’에서 활성 강사를 선택하고 다시 검사하세요.",
+      });
+  const teacherByLabel = new Map(teacherMappings.map((m) => [m.sheetName, m]));
   const teacherLabel = (name: string) => {
-    const id = input.teacherBindings?.[name];
+    const id = teacherByLabel.get(name)?.teacherId;
     const teacher = id ? ctx.teachers.find((t) => t.id === id) : null;
     return teacher
       ? teacher.englishName || teacher.displayName
@@ -159,7 +139,8 @@ export function buildMasterPlan(
   const memoSlots = raw.slots.filter(
     (s) =>
       /^\d+(\.\d+)?$/.test(s.className) ||
-      /^EiE\s+(LAB|JJ)$/i.test(s.className),
+      (/^EiE\s+/i.test(s.className) &&
+        !!specialSlotLabel(s.className.replace(/^EiE\s+/i, ""))),
   );
   const sourceSlots = raw.slots.filter((s) => !memoSlots.includes(s));
   const parsed = {
@@ -326,61 +307,25 @@ export function buildMasterPlan(
       ...roster.blocks.map((b) => b.className),
     ]),
   ].sort((a, b) => a.localeCompare(b, "ko"));
-  const mappings: ClassMapping[] = sheetNames.map((sheetName) => {
-    const explicit = Object.hasOwn(input.classBindings, sheetName);
-    const exact = active.filter((c) => norm(c.className) === norm(sheetName));
-    const id = explicit
-      ? input.classBindings[sheetName] || null
-      : exact.length === 1
-        ? exact[0]!.id
-        : null;
-    const klass = active.find((c) => c.id === id);
-    const students = new Set(resolvedStudents.get(sheetName) ?? []);
-    const scores = active
-      .map((c) => ({
-        c,
-        n: new Set(
-          englishCurrent
-            .filter((e) => e.classId === c.id && students.has(e.studentId))
-            .map((e) => e.studentId),
-        ).size,
-      }))
-      .filter((x) => x.n)
-      .sort((a, b) => b.n - a.n);
-    const best = scores[0];
-    const suggested =
-      best && best.n >= 2 && (!scores[1] || scores[1].n < best.n) ? best : null;
-    if (!klass && !(suggested && !explicit))
+  const mappings = buildClassMappings(
+    sheetNames,
+    active,
+    englishCurrent,
+    resolvedStudents,
+    new Map(roster.blocks.map((b) => [b.className, b.entries.length])),
+    input.classBindings,
+  );
+  for (const m of mappings)
+    if (m.manualReason)
       issue({
-        key: `class:${sheetName}`,
+        key: `${m.suggestedId ? "identity" : "class"}:${m.sheetName}`,
         severity: "error",
-        target: sheetName,
-        reason: "연결할 활성 영어 반이 없습니다.",
-        fix: "아래 ‘반 연결’에서 진급 전 반을 선택하세요. 실제 신설 반이면 반 관리에서 프로그램 구분·담임을 지정해 만든 뒤 다시 검사하세요.",
+        target: m.sheetName,
+        reason: m.manualReason,
+        fix: MANUAL_CLASS_FIX,
         href: "/classes",
-        ...ref(sheetName),
+        ...ref(m.sheetName),
       });
-    if (suggested && suggested.c.id !== id && !explicit)
-      issue({
-        key: `identity:${sheetName}`,
-        severity: "error",
-        target: sheetName,
-        reason: `명단 ${students.size}명 중 ${suggested.n}명이 현재 ${suggested.c.className}에 있습니다. ${klass ? "동명 반을 그대로 연결하면 다른 반 이력에 붙을 수 있습니다." : "진급 전 반을 아직 연결하지 않았습니다."}`,
-        fix: "아래 ‘반 연결’에서 두 명단을 비교한 뒤 추천 반 연결 또는 직접 선택으로 확정해 주세요. 실제 신설 반이면 반 관리에서 먼저 만들어 주세요.",
-        ...ref(sheetName),
-      });
-    return {
-      sheetName,
-      classId: klass?.id ?? null,
-      currentName: klass?.className ?? null,
-      explicit,
-      suggestedId: suggested?.c.id ?? null,
-      suggestedName: suggested?.c.className ?? null,
-      evidence: suggested
-        ? `명단 ${students.size}명 중 ${suggested.n}명 일치`
-        : "",
-    };
-  });
   const renamed = mappings.filter(
     (m) => m.classId && m.currentName !== m.sheetName,
   );
@@ -431,9 +376,9 @@ export function buildMasterPlan(
   };
   const match = matchStructure(parsed, structureCtx);
   for (const [i, s] of match.resolved.entries()) {
-    const binding = input.teacherBindings?.[sourceSlots[i]!.teacherName];
-    if (binding !== undefined && !specialSlotLabel(s.teacherName))
-      s.teacherId = ctx.teachers.find((t) => t.id === binding)?.id ?? null;
+    const binding = teacherByLabel.get(sourceSlots[i]!.teacherName);
+    if (binding && !specialSlotLabel(s.teacherName))
+      s.teacherId = binding.teacherId;
   }
   for (const [i, s] of match.resolved.entries()) {
     const other = match.resolved
@@ -460,7 +405,7 @@ export function buildMasterPlan(
         cell: `${columnName(s.grid.c1)}${s.grid.r1 + 1}`,
       });
   }
-  for (const s of match.resolved) {
+  for (const [i, s] of match.resolved.entries()) {
     const where = {
       tab: input.teacherTab,
       cell: `${columnName(s.grid.c1)}${s.grid.r1 + 1}`,
@@ -470,7 +415,9 @@ export function buildMasterPlan(
         key: `teacher:${s.teacherName}`,
         severity: "error",
         target: `${s.className} · ${s.teacherName}`,
-        reason: "활성 강사 계정과 연결되지 않습니다.",
+        reason:
+          teacherByLabel.get(sourceSlots[i]!.teacherName)?.manualReason ??
+          "활성 강사 계정과 연결되지 않습니다.",
         fix: "아래 ‘강사 연결’에서 담당자를 선택한 뒤 다시 검사하세요. 원본의 한글 이름과 일치하는 추천도 확인할 수 있습니다. LAB·JJ는 자리로 처리합니다.",
         ...where,
       });

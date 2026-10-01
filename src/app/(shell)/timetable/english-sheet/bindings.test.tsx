@@ -39,6 +39,8 @@ function fixture() {
         suggestedName: "LS6",
         evidence: "명단 2명 중 1명 일치",
         explicit: false,
+        method: "name",
+        manualReason: null,
       },
     ],
     classes: [
@@ -74,6 +76,8 @@ function fixture() {
         teacherId: null,
         suggestedId: "teacher",
         suggestedName: "송지혜",
+        method: "unmapped",
+        manualReason: "담당자를 선택하세요.",
       },
     ],
   } satisfies Pick<

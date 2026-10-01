@@ -46,7 +46,13 @@ export function ClassBindings({
       <h2 className="text-lg font-semibold">반 연결 · 이름 변경 · 명단 비교</h2>
       <p className="mt-1 text-sm text-text-dim">
         진급한 반은 기존 반을 선택하면 같은 반의 이름만 바뀌며 수강·출결 이력이
-        이어집니다. 추천은 명단을 확인한 뒤 연결해 주세요.
+        이어집니다. EiE 반은 양쪽 명단의 과반수가 유일하게 일치하면 자동
+        연결합니다. 나머지는 직접 선택해 주세요.
+      </p>
+      <p className="mt-2 text-sm">
+        EiE 진급 자동 연결{" "}
+        {preview.mappings.filter((m) => m.method === "roster").length}반 · 수동
+        연결 필요 {preview.mappings.filter((m) => m.manualReason).length}반
       </p>
       <p className="mt-1 text-xs text-text-dim">
         기존 명단 기준일: {preview.effectiveDate}. 연결을 바꾸면 다시 검사해야
@@ -69,11 +75,27 @@ export function ClassBindings({
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold">{m.sheetName}</h3>
+                  <p className="mt-1 text-sm text-primary">
+                    {explicit
+                      ? selected
+                        ? "직접 선택"
+                        : "수동 연결 필요"
+                      : m.method === "roster"
+                        ? `EiE 진급 자동 연결 · ${m.currentName} → ${m.sheetName}`
+                        : m.manualReason
+                          ? "수동 연결 필요"
+                          : "이름 일치 자동 연결"}
+                  </p>
                   <p className="mt-1 text-xs text-text-dim">
                     {m.suggestedName
-                      ? `추천 ${m.suggestedName} · ${m.evidence}`
+                      ? `${m.method === "roster" ? "연결 근거" : `추천 ${m.suggestedName}`} · ${m.evidence}`
                       : "이름 또는 학생 정보 확인"}
                   </p>
+                  {!explicit && m.manualReason ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      {m.manualReason}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="w-full space-y-2 sm:w-72">
                   <select
