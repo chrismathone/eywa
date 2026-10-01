@@ -9,7 +9,7 @@
  *    거기서 서버 조회·`headers()`·`redirect()`를 하면 모든 화면·창이 그 비용을 낸다(B6).
  *
  * 🔴 보내지 않는 곳(= 404 문구 그대로):
- *  - 로그인 없이 여는 공개 화면(학부모 보고서 링크 `/r`·키오스크·접수·자리 출석부·학원 랜딩·자산 QR·로그인) —
+ *  - 로그인 없이 여는 공개 화면(학부모 보고서 링크 `/r`·링크 만료 안내 `/expired`·키오스크·접수·자리 출석부·학원 랜딩·자산 QR·로그인) —
  *    학부모·기기를 로그인 화면으로 보내면 안 된다.
  *  - 인쇄 화면(`(print)` 그룹) — 인쇄 창에 앱 셸이 뜨면 안 된다.
  *  - `/home` 자신(루프 방지).
@@ -17,6 +17,8 @@
  */
 
 const PUBLIC_PREFIXES = ["/r", "/kiosk", "/intake", "/staff-intake", "/seat", "/academy", "/inventory/asset", "/login"];
+/** 하위 경로가 없는 공개 화면 — 프록시(`lib/supabase/proxy.ts`)와 같은 **정확 매칭**. */
+const PUBLIC_EXACT = ["/", "/expired"];
 
 /**
  * `src/app/(print)` 라우트의 주소 모양. 🔴 새 인쇄 라우트를 만들면 여기에도 — 가드가 폴더를 세어 대조한다.
@@ -50,7 +52,7 @@ export function isPrintPath(pathname: string): boolean {
 }
 
 export function isPublicPath(pathname: string): boolean {
-  return pathname === "/" || PUBLIC_PREFIXES.some((p) => underPrefix(pathname, p));
+  return PUBLIC_EXACT.includes(pathname) || PUBLIC_PREFIXES.some((p) => underPrefix(pathname, p));
 }
 
 /** 보낼 곳. null = 리다이렉트하지 않고 404 문구를 보여 준다. */

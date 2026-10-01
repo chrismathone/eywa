@@ -31,3 +31,17 @@ describe("login return destination", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 });
+
+describe("공용 '링크 만료' 페이지는 비로그인 통과(원장 2026-10-01)", () => {
+  it("🔴 쿠키 없는 학부모가 /expired를 열어도 로그인 화면으로 가지 않는다", async () => {
+    for (const path of ["/expired", "/expired?kind=report", "/expired?kind=video", "/r/abc"]) {
+      const response = await updateSession(new NextRequest(`http://localhost:3032${path}`));
+      expect(response.headers.get("location"), path).toBeNull();
+    }
+  });
+
+  it("정확 매칭 — 비슷한 이름의 다른 경로는 그대로 로그인 게이트", async () => {
+    const response = await updateSession(new NextRequest("http://localhost:3032/expired-reports"));
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/login");
+  });
+});

@@ -1,3 +1,5 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
+
 // 수납관리 초기 로드 스트리밍(B7) — BillingContent가 그 달 청구서 전건(2026-07 기준 385행·419KB)과
 // 월 목록·학생 옵션·동기화 상태를 await하는 동안 Next가 이 loading을 Suspense fallback으로 즉시
 // 스트리밍한다. 예전엔 이 라우트에 loading이 없어 **창=iframe으로 열면 응답이 올 때까지 흰 화면**이었다
@@ -15,24 +17,21 @@ export default function BillingLoading() {
           옛 스켈레톤은 알약 7개를 따로 그려(32px) 로딩→본문에서 모양과 높이가 함께 바뀌었다. */}
       <div className="bg-bg-soft h-(--control-h) w-[30rem] max-w-full animate-pulse rounded-lg" />
       <div className="space-y-5">
-        {/* PageHeader — ⚠️ 컴팩트(창·모바일)에서 **통째로 숨기면 안 된다**. 수납 헤더는 embedLabel과
-            actions(월 네비 size-8)를 넘기므로 compact에서도 32px 한 줄이 실제로 렌더된다(page-header.tsx).
-            숨기면 데이터 도착 때 본문이 통째로 52px 밀린다(적대 리뷰). 시간표는 PageHeader 자체를
-            compact-chrome:hidden 래퍼로 감싸 진짜 사라지므로 거기 스켈레톤만 보고 베끼면 틀린다. */}
-        <header className="px-1 compact-chrome:flex compact-chrome:items-center compact-chrome:justify-between compact-chrome:gap-3">
-          <div className="min-w-0">
-            <div className="bg-bg-soft h-3 w-16 animate-pulse rounded compact-chrome:hidden" />
-            <div className="bg-bg-soft mt-2 h-7 w-40 animate-pulse rounded compact-chrome:hidden" />
-            <div className="bg-bg-soft mt-2 h-4 w-72 max-w-full animate-pulse rounded compact-chrome:mt-0 compact-chrome:w-56" />
-          </div>
-          {/* 머리 상시 버튼 둘('엑셀 내보내기' 텍스트 + '청구서 만들기' Primary) — compact에서만
-              (넓은 화면은 위 3줄 옆에 붙어 높이를 안 늘린다). ⚠️ 옛 스켈레톤은 여기에 월 네비 32px 정사각 둘을
-              그렸는데, 월 이동은 14단계에서 **툴바의 BillingMonthNav**로 내려갔다. */}
-          <div className="hidden shrink-0 items-center gap-2 compact-chrome:flex">
-            <div className="bg-bg-soft h-(--control-h) w-24 animate-pulse rounded-lg" />
-            <div className="bg-bg-soft h-(--control-h-lg) w-28 animate-pulse rounded-lg" />
-          </div>
-        </header>
+        {/* PageHeader — 한 줄(데스크톱) · 컴팩트(창·모바일)에서도 **통째로 숨기면 안 된다**. 수납 헤더는 embedLabel과
+            actions(머리 상시 버튼 둘)를 넘기므로 compact에서도 한 줄이 실제로 렌더된다(page-header.tsx).
+            숨기면 데이터 도착 때 본문이 통째로 밀린다(적대 리뷰). 시간표는 PageHeader 자체를
+            compact-chrome:hidden 래퍼로 감싸 진짜 사라지므로 거기 스켈레톤만 보고 베끼면 틀린다.
+            오른쪽 = 머리 상시 버튼 둘('엑셀 내보내기' 텍스트 + '청구서 만들기' Primary) — 2026-10-01부터 헤더가 한 줄이라
+            넓은 화면에서도 제목과 같은 줄에 선다. ⚠️ 옛 스켈레톤은 여기에 월 네비 32px 정사각 둘을 그렸는데,
+            월 이동은 14단계에서 **툴바의 BillingMonthNav**로 내려갔다. */}
+        <PageHeaderSkeleton
+          actions={
+            <>
+              <div className="bg-bg-soft h-(--control-h) w-24 animate-pulse rounded-lg" />
+              <div className="bg-bg-soft h-(--control-h-lg) w-28 animate-pulse rounded-lg" />
+            </>
+          }
+        />
         {/* 툴바 — 실제는 `BillingMonthNav`(PeriodNav 한 상자 + `월:` 드롭다운) + 오른쪽 끝 검색 토글이다.
             ⚠️ 옛 스켈레톤은 **최근 6개월 알약 칩 줄**을 그렸는데 그 줄은 14단계에서 걷혔다(§10 칩 줄 금지) —
             스켈레톤만 남으면 데이터 도착 때 줄이 통째로 바뀌어 스켈레톤이 없느니만 못하다.
