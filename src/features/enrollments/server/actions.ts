@@ -42,6 +42,7 @@ import {
   describeOverlapConflict,
   normalizeAttendanceDays,
 } from "./assign-helpers";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 학생을 반에 배정.
@@ -119,7 +120,7 @@ export async function createEnrollment(
     if (isOverlapConflict(error)) {
       return { error: await describeOverlapConflict(supabase, studentId, classId, startDate, endDate) };
     }
-    return { error: toKoreanDbError(error, "수강 배정에 실패했습니다. 잠시 후 다시 시도해 주세요.") };
+    return { error: toKoreanDbError(error, "수강 배정에 실패했습니다. 잠시 후 다시 시도해 주세요.", "enrollments.assign") };
   }
 
   // 담당 강사(반 담임)에게 인앱 알림 — best-effort(실패해도 배정은 성공).
@@ -220,7 +221,7 @@ export async function moveEnrollmentsBatch(
     ? await supabase.rpc("move_class_enrollments_batch", { ...payload, p_source_class_id: sourceClassId })
     : await supabase.rpc("move_enrollments_batch", payload);
 
-  if (error) return { error: toKoreanDbError(error, "반 이동을 저장하지 못했습니다") };
+  if (error) return { error: toKoreanDbError(error, "반 이동을 저장하지 못했습니다", "enrollments.moveBatch") };
 
   const results = (data ?? []) as BatchMoveResult[];
 
@@ -318,7 +319,7 @@ export async function updateEnrollmentsAttendanceBatch(
       .maybeSingle();
     if (error) {
       await writeDaysLog();
-      return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다"), count: applied.length };
+      return { error: toKoreanDbError(error, "등원 요일을 저장하지 못했습니다", "enrollments.days"), count: applied.length };
     }
     // row=null이면 매치 0행(남의 테넌트·삭제된 수강) = 아무것도 안 바뀜 — 기록·카운트에서 제외.
     if (row) applied.push({ enrollmentId, days, studentId: (row.student_id as string | null) ?? null });
@@ -434,7 +435,10 @@ export async function updateEnrollmentDates(
     .select("start_date, end_date, student_id, class_id, is_transferred, is_transferred_in, withdrawal_reason")
     .eq("id", enrollmentId)
     .single();
-  if (fetchErr || !current) return { error: "수강 정보를 찾을 수 없습니다" };
+  if (fetchErr || !current) {
+    logDbError(fetchErr, "enrollments.updateEnrollmentDates");
+    return { error: "수강 정보를 찾을 수 없습니다" };
+  }
 
   // 형식·시작≤종료 검증은 순수 함수 한 곳에서(Vitest로 잠금) — 문구는 종전 그대로다.
   const prevWindow: EnrollmentWindow & { isTransferredIn: boolean } = {
@@ -525,7 +529,7 @@ export async function updateEnrollmentDates(
         ),
       };
     }
-    return { error: toKoreanDbError(error, "날짜를 저장하지 못했습니다") };
+    return { error: toKoreanDbError(error, "날짜를 저장하지 못했습니다", "enrollments.dates") };
   }
 
   await logAction({
@@ -739,7 +743,7 @@ export async function deleteEnrollment(
     )
     .eq("id", enrollmentId)
     .maybeSingle();
-  if (selErr) return { error: toKoreanDbError(selErr, "수강 정보를 불러오지 못했습니다") };
+  if (selErr) return { error: toKoreanDbError(selErr, "수강 정보를 불러오지 못했습니다", "enrollments.history.read") };
   if (!enr) return { error: "수강 정보를 찾을 수 없습니다" };
   // RLS가 이미 테넌트로 좁히지만, 파괴적 작업이라 명시적으로 한 번 더 본다.
   if (enr.tenant_id !== user.tenantId) return { error: "수강 정보를 찾을 수 없습니다" };
@@ -793,7 +797,7 @@ export async function deleteEnrollment(
     .delete()
     .eq("id", enrollmentId)
     .select("id");
-  if (delErr) return { error: toKoreanDbError(delErr, "수업 이력을 삭제하지 못했습니다") };
+  if (delErr) return { error: toKoreanDbError(delErr, "수업 이력을 삭제하지 못했습니다", "enrollments.history.delete") };
   if (!deleted || deleted.length === 0) {
     return { error: "수업 이력을 삭제할 권한이 없거나 이미 삭제된 행입니다" };
   }

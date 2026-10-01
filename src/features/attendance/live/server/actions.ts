@@ -31,6 +31,7 @@ import {
   axisSlotFromRow,
   type AxisSlotRow,
 } from "@/features/attendance/teacher-axis";
+import { logDbError } from "@/lib/supabase/db-error";
 
 const STATES = ["open", "resolved", "dismissed"] as const;
 const OUTCOMES = ["coming", "absent_today", "sick", "already_here", "no_answer", "other"] as const;
@@ -253,7 +254,10 @@ export async function requestAttendanceInput(input: {
       { onConflict: "tenant_id,event_type,subject_key,bucket", ignoreDuplicates: true },
     )
     .select("bucket");
-  if (dedupError) return { error: "요청을 기록하지 못했습니다" };
+  if (dedupError) {
+    logDbError(dedupError, "attendance.live.requestAttendanceInput");
+    return { error: "요청을 기록하지 못했습니다" };
+  }
   // 이미 보낸 건이면 다시 보내지 않는다(강사에게 같은 알림이 쌓이지 않게) — 화면엔 '요청함'으로 남는다.
   if (!fresh?.length) return { ok: true, sent: false };
 
@@ -403,7 +407,10 @@ export async function requestDeskConfirm(input: {
       { onConflict: "tenant_id,event_type,subject_key,bucket", ignoreDuplicates: true },
     )
     .select("bucket");
-  if (dedupError) return { error: "요청을 기록하지 못했습니다" };
+  if (dedupError) {
+    logDbError(dedupError, "attendance.live.requestDeskConfirm");
+    return { error: "요청을 기록하지 못했습니다" };
+  }
   // 이미 보낸 건이면 다시 보내지 않는다 — 화면엔 '요청함'으로 남는다(requestAttendanceInput과 같은 규약).
   if (!fresh?.length) return { ok: true, sent: false };
 

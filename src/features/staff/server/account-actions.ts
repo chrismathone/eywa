@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { sanitizeWorkSchedule } from "@/features/staff/work-schedule";
 import { EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
@@ -52,7 +53,10 @@ async function loadTarget(
     .select("tenant_id, system_role, email, display_name")
     .eq("id", id)
     .single();
-  if (error || !data) return { error: "대상 직원을 찾을 수 없습니다" };
+  if (error || !data) {
+    logDbError(error, "staff.loadTarget");
+    return { error: "대상 직원을 찾을 수 없습니다" };
+  }
   if (data.tenant_id !== actor.tenantId) return { error: "다른 지점의 계정은 변경할 수 없습니다" };
   // 과목 범위(원장 2026-09-23) — 목록에서 뺀 직원을 직접 POST로 고치지 못하게 여기서도 막는다(#77).
   if (!(await canSeeStaffMember(actor, id))) return { error: STAFF_SCOPE_DENIED_MSG };
@@ -174,7 +178,7 @@ export async function applyStaffEmailChange(
     .eq("tenant_id", actor.tenantId);
   if (dbErr) {
     if (dbErr.code === "23505") return { error: "이미 사용 중인 이메일입니다" };
-    return { error: dbErr.message };
+    return { error: explainDbError(dbErr, { scope: "staff.account.email", fallback: "이메일을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   }
 
   // 2) auth.users — 실패하면 public.users를 원래 이메일로 롤백해 불일치를 방지.
@@ -266,7 +270,7 @@ export async function applyStaffNameChange(
     .update({ display_name: name })
     .eq("id", id)
     .eq("tenant_id", actor.tenantId);
-  if (dbErr) return { error: dbErr.message };
+  if (dbErr) return { error: explainDbError(dbErr, { scope: "staff.account.name", fallback: "이름을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   // 옛 이름을 키로 쓰던 행 이전(모호하지 않고, 옛 이름이 있을 때만).
   // ⚠️ 여기서 에러를 삼키면 "이름은 바뀌었는데 연결은 안 옮겨진" 상태가 조용히 남는다([[#53]]) —
@@ -378,11 +382,12 @@ export async function deleteStaff(
     .eq("tenant_id", actor.tenantId);
   if (dbErr) {
     // 여기 도달은 드묾(restrict FK는 ①에서 차단). 도달 시 auth는 이미 삭제 → 치명적 불일치라 로깅.
-    console.error(`[deleteStaff] auth 삭제 후 public.users 삭제 실패(${id}):`, dbErr.message);
+    // 로그인 계정은 이미 지워졌다 = 치명적 불일치 — 23503(입력 원인)이라도 에러 등급으로 남긴다([[#137]] 리뷰).
+    const why = explainDbError(dbErr, { scope: "staff.delete.users", op: "delete", level: "error", fallback: "직원 기록을 지우지 못했습니다. 관리자에게 문의하세요.", context: { staffId: id } });
     if (dbErr.code === "23503") {
-      return { error: "연결된 데이터가 있어 삭제를 완료하지 못했습니다. 관리자에게 문의하세요." };
+      return { error: `${why.message} — 로그인 계정은 이미 지워졌습니다. 관리자에게 문의하세요.` };
     }
-    return { error: dbErr.message };
+    return { error: why.message };
   }
 
   await logAction({
@@ -432,7 +437,7 @@ export async function updateWorkSchedule(
     .update({ work_schedule: value })
     .eq("id", id)
     .eq("tenant_id", actor.tenantId);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "staff.account.workSchedule", fallback: "근무 설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   revalidatePath(`/staff/${id}`);
   return { ok: true };

@@ -7,6 +7,7 @@ import { describeSlackError } from "../format";
 import { slackListMembers } from "./client";
 import { slackGate } from "./gate";
 import { loadConnection, loadLinks } from "./store";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 사람 연결(원장용) — aywa 직원 ↔ 슬랙 사람. codex·grok 합의: **이메일 일치는 후보일 뿐**이다(aywa 이메일은 본인이 바꿀 수
@@ -77,7 +78,10 @@ export async function linkSlackByEmail(userIds: string[]): Promise<{ error?: str
         linked_by: g.userId,
       })),
     );
-  if (error) return { error: "연결하지 못했습니다 — 이미 다른 직원에 연결된 슬랙 계정이 있을 수 있습니다" };
+  if (error) {
+    logDbError(error, "slack.linkSlackByEmail");
+    return { error: "연결하지 못했습니다 — 이미 다른 직원에 연결된 슬랙 계정이 있을 수 있습니다" };
+  }
   await logAction({ action: "slack_link_owner", targetType: "integration", targetLabel: `${picks.length}명`, metadata: { count: picks.length } });
   revalidatePath("/owner");
   return { message: `${picks.length}명을 연결했습니다` };
@@ -87,7 +91,10 @@ export async function unlinkSlackUser(userId: string, name: string): Promise<{ e
   const g = await slackGate();
   if ("error" in g) return g;
   const { error } = await createAdminClient().from("slack_user_links").delete().eq("tenant_id", g.tenantId).eq("aywa_user_id", userId);
-  if (error) return { error: "연결을 해제하지 못했습니다" };
+  if (error) {
+    logDbError(error, "slack.unlinkSlackUser");
+    return { error: "연결을 해제하지 못했습니다" };
+  }
   await logAction({ action: "slack_unlink", targetType: "integration", targetLabel: name.slice(0, 40) });
   revalidatePath("/owner");
   return { message: `${name} 연결을 해제했습니다` };

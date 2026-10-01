@@ -17,6 +17,7 @@ import {
 } from "../lib/learning-plan";
 import { logAction } from "@/features/audit/server/log";
 import { readMathLearningTrack } from "./learning-track";
+import { logDbError } from "@/lib/supabase/db-error";
 
 const inputSchema = z.object({
   classId: z.string().uuid(),
@@ -208,7 +209,10 @@ export async function setMathClassLearningTrack(input: { classId: string; track:
   if (!gate.ok) return { ok: false, error: gate.error };
   const { error, data } = await createAdminClient().from("classes").update({ math_learning_track: parsed.data.track })
     .eq("tenant_id", gate.access.tenantId).eq("id", gate.access.classId).select("id");
-  if (error || !data?.length) return { ok: false, error: "수업 유형을 저장하지 못했습니다. 다시 시도해 주세요." };
+  if (error || !data?.length) {
+    logDbError(error, "math-sheets.setMathClassLearningTrack");
+    return { ok: false, error: "수업 유형을 저장하지 못했습니다. 다시 시도해 주세요." };
+  }
   await logAction({ action: "mcs_class_learning_track", targetType: "class", targetLabel: gate.access.className, metadata: parsed.data });
   revalidatePath(`/mcs/${gate.access.classId}/month`);
   revalidatePath("/mcs");

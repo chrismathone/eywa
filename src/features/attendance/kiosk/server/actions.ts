@@ -12,6 +12,7 @@ import { resolveKakaoChannel, sendAttendanceNotification } from "@/lib/messaging
 import { assignAttendanceCode } from "../codes";
 import { KIOSK_COOKIE } from "../constants";
 import { parseForwardedFor } from "../device-info";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 // 키오스크 설정 mutation 게이트 = 쓰기 권한(canWriteTenant, #58 — readonly 누수 방지).
 // 기본 matrix는 master만 full이나, 원장이 역할·권한에서 admin/manager에게 kiosk_settings를 위임하면 열림.
@@ -26,8 +27,8 @@ async function requireKioskWrite() {
 
 /** DB 오류 원문을 화면에 내보내지 않는다(raw 노출 금지) — 원문은 서버 로그로. */
 function friendly(error: { message?: string } | null | undefined, fallback: string): string {
-  if (error) console.error("[kiosk-settings]", error.message ?? error);
-  return fallback;
+  // 판정·로그는 공용([[#137]]) — scope 없는 console.error 한 줄은 Vercel 로그에서 못 찾았다.
+  return error ? explainDbError(error, { scope: "attendance.kiosk", fallback, context: { action: fallback } }).message : fallback;
 }
 
 export type KioskActionState = { error?: string; ok?: string } | undefined;

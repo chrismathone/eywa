@@ -25,6 +25,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { COUNTABLE_STATUSES, isDefaultUnitsRaw, parseSessionUnits, round1 } from "../session-units";
@@ -105,6 +106,14 @@ function backdatedFlag(dates: readonly string[], today: string): { backdated?: t
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
+/**
+ * 출결 쓰기의 DB 오류 → 화면용 한글 이유 + 로그([[#137]]). 예전엔 영문 원문이 출석부 토스트에 그대로 떴다
+ * (예: 시수 범위 CHECK `attendance_session_units_range`). 모르는 오류는 일반 문구, 원문은 로그로만.
+ */
+function attendanceDbWhy(error: unknown, scope: string, op?: "write" | "delete"): string {
+  return explainDbError(error, { scope, op, fallback: "출결을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message;
+}
+
 /** 0212a 컬럼이 없으면 빼고 재시도 — 출결 저장을 죽이지 않는다(#95).
  *  `scope`(선택) — id 목록에 **소유 술어를 덧건다**(반·학생·날짜). 🔴 클라이언트가 보낸 행 id를 그대로
  *  믿는 경로(saveAttendance 폼)는 반드시 걸 것: id만으로 update하면 폼의 담당 반·7일창 게이트가 판정한
@@ -128,11 +137,11 @@ async function updateWithVia(
   };
   const { error } = await run(patch);
   if (!error) return { error: null };
-  if (!isMissingViaColumn(error.message)) return { error: error.message };
+  if (!isMissingViaColumn(error.message)) return { error: attendanceDbWhy(error, "attendance.update") };
   const rest = { ...patch };
   delete rest.recorded_via;
   const retry = await run(rest);
-  return { error: retry.error?.message ?? null };
+  return { error: retry.error ? attendanceDbWhy(retry.error, "attendance.update.retry") : null };
 }
 
 async function insertWithVia(
@@ -141,11 +150,11 @@ async function insertWithVia(
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.from("attendance_records").insert(row);
   if (!error) return { error: null };
-  if (!isMissingViaColumn(error.message)) return { error: error.message };
+  if (!isMissingViaColumn(error.message)) return { error: attendanceDbWhy(error, "attendance.insert") };
   const rest = { ...row };
   delete rest.recorded_via;
   const retry = await supabase.from("attendance_records").insert(rest);
-  return { error: retry.error?.message ?? null };
+  return { error: retry.error ? attendanceDbWhy(retry.error, "attendance.insert.retry") : null };
 }
 
 async function insertManyWithVia(
@@ -154,7 +163,7 @@ async function insertManyWithVia(
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.from("attendance_records").insert(rows);
   if (!error) return { error: null };
-  if (!isMissingViaColumn(error.message)) return { error: error.message };
+  if (!isMissingViaColumn(error.message)) return { error: attendanceDbWhy(error, "attendance.insertMany") };
   const retry = await supabase.from("attendance_records").insert(
     rows.map((r) => {
       const rest = { ...r };
@@ -162,7 +171,7 @@ async function insertManyWithVia(
       return rest;
     }),
   );
-  return { error: retry.error?.message ?? null };
+  return { error: retry.error ? attendanceDbWhy(retry.error, "attendance.insertMany.retry") : null };
 }
 
 /**
@@ -198,7 +207,7 @@ async function writeProxyRows(
         delete rest.recorded_via;
         res = await run(rest);
       }
-      if (res.error) return { error: res.error.message, written };
+      if (res.error) return { error: attendanceDbWhy(res.error, "attendance.proxyWrite"), written };
       const done = new Set(((res.data ?? []) as { id: string }[]).map((d) => d.id));
       written += done.size;
       for (const id of ids) if (!done.has(id)) missed.push(id);
@@ -206,7 +215,7 @@ async function writeProxyRows(
     if (missed.length === 0) return { error: null, written };
     const missedSet = new Set(missed);
     const { data, error } = await supabase.from("attendance_records").select("id, note").in("id", missed);
-    if (error) return { error: error.message, written };
+    if (error) return { error: attendanceDbWhy(error, "attendance.proxyWrite.reread"), written };
     pending = ((data ?? []) as { id: string; note: string | null }[])
       .filter((d) => missedSet.has(d.id))
       .map((d) => ({ id: d.id, note: d.note ?? null }));
@@ -794,7 +803,7 @@ export async function setAttendanceCell(input: {
       rowIds.length > 1
         ? await supabase.from("attendance_records").update({ note: noteVal }).in("id", rowIds)
         : await supabase.from("attendance_records").update({ note: noteVal }).eq("id", rowId);
-    if (error) return { error: error.message };
+    if (error) return { error: attendanceDbWhy(error, "attendance.cell.note") };
     /**
      * 감사로그 — 이 경로만 **7일 편집창을 면제**받는다(원장 2026-08-06). 면제된 문은 언제 열렸는지가
      * 남아야 하므로 상태 변경과 같은 급으로 기록한다.
@@ -869,7 +878,7 @@ export async function setAttendanceCell(input: {
             "id",
             write.map((r) => r.id),
           );
-        if (error) return { error: error.message };
+        if (error) return { error: attendanceDbWhy(error, "attendance.cell.update") };
       }
     } else {
       let del = supabase
@@ -880,7 +889,7 @@ export async function setAttendanceCell(input: {
         .eq("session_date", sessionDate);
       if (slot !== null) del = del.eq("slot_start", slot);
       const { error } = await del;
-      if (error) return { error: error.message };
+      if (error) return { error: attendanceDbWhy(error, "attendance.cell.clear", "delete") };
     }
     /**
      * 감사로그 — **지우기가 이 파일에서 가장 값진 줄**이다. 출결 행은 스스로 `recorded_by`·`recorded_at`을
@@ -1478,7 +1487,7 @@ export async function linkMakeupToAbsence(input: {
   }
 
   for (const res of await Promise.all(writes)) {
-    if (res.error) return { error: res.error.message };
+    if (res.error) return { error: attendanceDbWhy(res.error, "attendance.linkMakeup") };
   }
   /**
    * 감사로그 — 이 액션은 보강한 날 칸의 **시수를 올린다**(급여 재료). 멱등 가드가 깨지면 조용한 과지급이라
@@ -2245,7 +2254,7 @@ export async function setAttendanceRange(input: {
     }
     for (let i = 0; i < ids.length; i += CHUNK) {
       const { error } = await supabase.from("attendance_records").delete().in("id", ids.slice(i, i + CHUNK));
-      if (error) return { error: error.message };
+      if (error) return { error: attendanceDbWhy(error, "attendance.range.clear", "delete") };
     }
     /**
      * 감사로그 — **범위 지우기**. 단건 지우기와 같은 이유로 이 파일에서 가장 값진 줄이고, 규모까지 크다

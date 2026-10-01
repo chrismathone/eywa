@@ -21,6 +21,7 @@
  */
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { mpStructuralChange, type MpSaveIntent } from "../lib/edit-audit";
 import { MP_ALL_COLUMNS, type MpColKind } from "../lib/month-plan";
@@ -85,7 +86,7 @@ export async function saveMonthPlanCells(input: {
   const saveError = (e: { code?: string; message: string }) =>
     e.code === "42P01" || e.code === "PGRST205"
       ? "월간 계획서 기능이 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요"
-      : `저장에 실패했습니다: ${e.message}`;
+      : explainDbError(e, { scope: "class-sheets.monthPlan", fallback: "저장에 실패했습니다. 잠시 후 다시 시도해 주세요." }).message;
 
   // 삭제는 **칸 종류별로 묶어** 한 번씩(한 달치라도 날짜가 ≤31개라 `.in()` 길이 걱정이 없다 — B3).
   const byKind = new Map<MpColKind, string[]>();

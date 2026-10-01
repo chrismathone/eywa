@@ -6,6 +6,7 @@ import { addDays, kstToday } from "@/lib/date-kst";
 import { createClient } from "@/lib/supabase/server";
 import { getDelegatedClassIdsInRange } from "./delegation";
 import { CLASS_NOT_MINE_ERROR, canWriteClassRecord } from "../class-write-scope";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 반(class) 공용 접근 게이트 — **반을 바꾸는 모든 서버 액션과 반 상세를 여는 모든 화면이
@@ -51,6 +52,7 @@ export async function requireClassWrite(classId: string): Promise<ClassWriteGate
     .select("teacher_id")
     .eq("id", classId)
     .maybeSingle();
+  logDbError(error, "classes.requireClassWrite"); // 오류가 없으면 아무것도 안 한다 — fail-closed 줄 모양은 가드가 잠근다.
   if (error) return { user: null, error: "권한을 확인하지 못했습니다. 잠시 후 다시 시도해주세요" };
   if (!klass) return { user: null, error: "반을 찾을 수 없습니다" };
   if (

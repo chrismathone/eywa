@@ -10,7 +10,7 @@ import { logAction } from "@/features/audit/server/log";
 import { canEditStudent } from "./scope";
 import { insertUnslottedGrade } from "@/features/grades/server/write";
 import type { UnifiedSaveState } from "./actions";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 import { isUuid } from "./uuid";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,13 +42,19 @@ export async function createUnifiedGrade(_previous: UnifiedSaveState, formData: 
   const { data: existing, error: lookupError } = await supabase.from("student_grades")
     .select("id").eq("tenant_id", user.tenantId).eq("student_id", studentId)
     .eq("subject", subject).eq("exam_name", examName).eq("taken_on", date).limit(1);
-  if (lookupError) return { error: "기존 기록을 확인하지 못했습니다" };
+  if (lookupError) {
+    logDbError(lookupError, "grades.unified.createUnifiedGrade");
+    return { error: "기존 기록을 확인하지 못했습니다" };
+  }
   if (existing?.length) return { error: "같은 날짜의 시험 기록이 이미 있습니다. 아래 원장에서 수정해 주세요" };
   if (kind === "daily" || kind === "check") {
     const { data: reports, error: reportError } = await supabase.from("lesson_reports")
       .select("daily_test, check_test, exam_info").eq("tenant_id", user.tenantId)
       .eq("student_id", studentId).eq("subject", subject).eq("report_date", date).limit(30);
-    if (reportError) return { error: "수업보고서 기록을 확인하지 못했습니다" };
+    if (reportError) {
+      logDbError(reportError, "grades.unified.createUnifiedGrade");
+      return { error: "수업보고서 기록을 확인하지 못했습니다" };
+    }
     if (reports?.some((report) => testScoresOf({ dailyTest: report.daily_test, checkTest: report.check_test,
       examInfo: report.exam_info }).some((test) => test.kind === kind))) {
       return { error: "같은 날짜의 수업보고서 시험이 있습니다. 아래 원장에서 수정해 주세요" };
@@ -58,7 +64,10 @@ export async function createUnifiedGrade(_previous: UnifiedSaveState, formData: 
     const { data: levels, error: levelError } = await supabase.from("level_tests")
       .select("id").eq("tenant_id", user.tenantId).eq("student_id", studentId)
       .eq("subject", subject).eq("test_type", "placement").eq("tested_on", date).limit(1);
-    if (levelError) return { error: "입학테스트 기록을 확인하지 못했습니다" };
+    if (levelError) {
+      logDbError(levelError, "grades.unified.createUnifiedGrade");
+      return { error: "입학테스트 기록을 확인하지 못했습니다" };
+    }
     if (levels?.length) return { error: "같은 날짜의 입학테스트가 있습니다. 아래 원장에서 수정해 주세요" };
   }
   // 쓰기는 write.ts 한 모듈에서(성적 저장 단일 경로 가드) — 이 기록엔 학기·시험 칸 축이 없다.

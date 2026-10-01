@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { canonicalSchoolName } from "@/features/schools/school-name";
@@ -56,7 +57,7 @@ export async function createIntakeToken(
     expires_at: intakeExpiryIso(expiresRaw || null),
     created_by: user.id,
   });
-  if (insErr) return { error: "접수 링크를 만들지 못했습니다" };
+  if (insErr) return { error: explainDbError(insErr, { scope: "enrollment.intakeToken.create", fallback: "접수 링크를 만들지 못했습니다" }).message };
 
   await logAction({ action: "intake_token_create", targetType: "intake_token", targetLabel: name });
   revalidatePath("/enrollment");
@@ -81,7 +82,7 @@ export async function setIntakeTokenActive(
   const label = (tok.name as string | null) ?? null;
   if (action === "delete") {
     const { error: delErr } = await supabase.from("intake_tokens").delete().eq("id", id);
-    if (delErr) return { error: "접수 링크를 삭제하지 못했습니다" };
+    if (delErr) return { error: explainDbError(delErr, { scope: "enrollment.intakeToken.delete", fallback: "접수 링크를 삭제하지 못했습니다", op: "delete" }).message };
     await logAction({ action: "intake_token_delete", targetType: "intake_token", targetLabel: label });
   } else if (action === "expire") {
     // 만료일 변경(연장) — 기본 90일이 지나 죽은 QR도 새로 인쇄하지 않고 되살린다(감사 F14).
@@ -92,7 +93,7 @@ export async function setIntakeTokenActive(
       .from("intake_tokens")
       .update({ expires_at: expiresAt })
       .eq("id", id);
-    if (updErr) return { error: "만료일을 바꾸지 못했습니다" };
+    if (updErr) return { error: explainDbError(updErr, { scope: "enrollment.intakeToken.expiry", fallback: "만료일을 바꾸지 못했습니다" }).message };
     await logAction({
       action: "intake_token_toggle",
       targetType: "intake_token",
@@ -105,7 +106,7 @@ export async function setIntakeTokenActive(
       .from("intake_tokens")
       .update({ is_active: active })
       .eq("id", id);
-    if (updErr) return { error: "접수 링크 상태를 바꾸지 못했습니다" };
+    if (updErr) return { error: explainDbError(updErr, { scope: "enrollment.intakeToken.toggle", fallback: "접수 링크 상태를 바꾸지 못했습니다" }).message };
     await logAction({
       action: "intake_token_toggle",
       targetType: "intake_token",
@@ -297,7 +298,11 @@ export async function submitPublicIntake(
     intake_token_id: tok.id,
     consultant_id: null,
   }).select("id").single();
-  if (insErr) return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
+  if (insErr) {
+    // 학부모가 보는 공개 화면 — 내부 이유(권한·연결 등)는 보이지 않고 로그로만 남긴다([[#137]]).
+    explainDbError(insErr, { scope: "enrollment.intake.submit", fallback: "" });
+    return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
+  }
 
   // 상담 준비 브리프 **자동 생성**(원장 지시 2026-07-29) — 학부모가 제출한 순간 상담지가 만들어져
   // 있어야 상담사가 버튼을 누르러 들어올 필요가 없다. 백그라운드(after)라 학부모 화면은 즉시 완료되고,

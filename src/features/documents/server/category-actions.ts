@@ -4,6 +4,7 @@ import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { FALLBACK_CATEGORY } from "../categories";
 import { logAction } from "@/features/audit/server/log";
 import { documentCategoriesTag } from "./category-queries";
@@ -20,7 +21,7 @@ function folderError(error: { message: string; code?: string }): string {
   if (error.message.includes("folder_missing")) return "폴더를 찾을 수 없습니다. 이미 삭제되었을 수 있습니다.";
   if (error.message.includes("folder_label")) return "폴더 이름은 1~20자로 입력해 주세요.";
   if (error.code === "23503") return "연결된 문서나 하위 폴더가 있어 삭제하지 못했습니다. 이동 가능한 문서와 권한을 확인해 주세요.";
-  return "폴더 변경을 저장하지 못했습니다. 목록을 확인한 뒤 다시 시도해 주세요.";
+  return explainDbError(error, { scope: "documents.folder", fallback: "폴더 변경을 저장하지 못했습니다. 목록을 확인한 뒤 다시 시도해 주세요." }).message;
 }
 
 async function mutate(operation: Operation, input: {

@@ -15,6 +15,7 @@ import {
   type DayCode,
 } from "../types";
 import { canRecordBoarding } from "./record-gate";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 셔틀 쓰기 — 정류장·차량·회차·노선·배정·등하원 기록.
@@ -74,9 +75,12 @@ function refresh() {
 
 /** PostgREST 에러를 한글로 — raw 원문을 화면에 그대로 내보내지 않는다(CLAUDE.md 반복 지적). */
 function friendly(error: { code?: string; message?: string }, fallback: string): string {
+  // 제약 이름별 이유(정류장 이름·회차 번호 등)·로그는 공용 판정([[#137]]). 모르는 제약의 중복·참조는 예전 문구 그대로.
+  const why = explainDbError(error, { scope: "shuttle", fallback, context: { action: fallback } });
+  if (why.specific) return why.message;
   if (error.code === "23505") return "이미 같은 이름/자리가 있습니다";
   if (error.code === "23503") return "다른 곳에서 쓰고 있어 처리할 수 없습니다";
-  return fallback;
+  return why.message;
 }
 
 // ── 정류장 마스터 ──────────────────────────────────────────────────────────────────────
@@ -139,7 +143,10 @@ export async function archiveStop(formData: FormData): Promise<ShuttleActionStat
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", ctx.tenantId)
     .eq("stop_id", id);
-  if (cntErr) return { error: "정류장 사용 여부를 확인하지 못했습니다" };
+  if (cntErr) {
+    logDbError(cntErr, "shuttle.archiveStop");
+    return { error: "정류장 사용 여부를 확인하지 못했습니다" };
+  }
   if ((count ?? 0) > 0) {
     return { error: `아직 ${count}개 노선이 이 정류장을 씁니다 — 노선에서 먼저 빼세요` };
   }
@@ -208,7 +215,10 @@ export async function createRun(formData: FormData): Promise<ShuttleActionState>
     .eq("season", season)
     .order("run_no", { ascending: false })
     .limit(1);
-  if (lastErr) return { error: "회차 번호를 계산하지 못했습니다" };
+  if (lastErr) {
+    logDbError(lastErr, "shuttle.createRun");
+    return { error: "회차 번호를 계산하지 못했습니다" };
+  }
   const runNo = (last?.[0]?.run_no ?? 0) + 1;
   if (runNo > 30) return { error: "회차는 30개까지입니다" };
 
@@ -231,7 +241,10 @@ export async function createRun(formData: FormData): Promise<ShuttleActionState>
     { tenant_id: ctx.tenantId, run_id: data.id, kind: "depart", sort_order: 0 },
     { tenant_id: ctx.tenantId, run_id: data.id, kind: "arrive", sort_order: 1 },
   ]);
-  if (seedErr) return { error: "회차는 만들었지만 학원 출발/도착 칸을 넣지 못했습니다" };
+  if (seedErr) {
+    logDbError(seedErr, "shuttle.createRun");
+    return { error: "회차는 만들었지만 학원 출발/도착 칸을 넣지 못했습니다" };
+  }
 
   await logAction({ action: "shuttle_run_create", targetType: "shuttle", metadata: { vehicleId, season, runNo } });
   refresh();
@@ -299,7 +312,10 @@ export async function addRunStop(formData: FormData): Promise<ShuttleActionState
     .eq("run_id", runId)
     .order("sort_order")
     .limit(200);
-  if (readErr) return { error: "노선을 읽지 못했습니다" };
+  if (readErr) {
+    logDbError(readErr, "shuttle.addRunStop");
+    return { error: "노선을 읽지 못했습니다" };
+  }
 
   const arrive = (rows ?? []).find((r) => r.kind === "arrive");
   const insertAt = arrive ? arrive.sort_order : (rows?.length ?? 0);
@@ -389,7 +405,10 @@ export async function reorderRunStops(runId: string, orderedIds: string[]): Prom
     .eq("tenant_id", ctx.tenantId)
     .eq("run_id", runId)
     .limit(200);
-  if (readErr) return { error: "노선을 읽지 못했습니다" };
+  if (readErr) {
+    logDbError(readErr, "shuttle.reorderRunStops");
+    return { error: "노선을 읽지 못했습니다" };
+  }
   const ownedSet = new Set((owned ?? []).map((r) => r.id));
   if (orderedIds.some((id) => !ownedSet.has(id))) return { error: "이 회차의 노선이 아닙니다" };
 
@@ -443,7 +462,10 @@ export async function assignRider(formData: FormData): Promise<ShuttleActionStat
     .eq("id", runStopId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
-  if (readErr || !target) return { error: "정류장을 찾지 못했습니다" };
+  if (readErr || !target) {
+    logDbError(readErr, "shuttle.assignRider");
+    return { error: "정류장을 찾지 못했습니다" };
+  }
   if (target.kind !== "stop") return { error: "학원 출발·도착 칸에는 학생을 배정하지 않습니다" };
 
   const { error } = await admin.from("shuttle_riders").upsert(
@@ -516,7 +538,10 @@ export async function moveRider(riderId: string, toRunStopId: string): Promise<S
     .eq("id", toRunStopId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
-  if (readErr || !target) return { error: "정류장을 찾지 못했습니다" };
+  if (readErr || !target) {
+    logDbError(readErr, "shuttle.moveRider");
+    return { error: "정류장을 찾지 못했습니다" };
+  }
   if (target.kind !== "stop") return { error: "학원 출발·도착 칸에는 학생을 배정하지 않습니다" };
 
   const { error } = await admin
@@ -708,7 +733,10 @@ export async function clearRideException(formData: FormData): Promise<ShuttleAct
     .eq("id", id)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
-  if (readErr) return { error: "변경 내역을 읽지 못했습니다" };
+  if (readErr) {
+    logDbError(readErr, "shuttle.clearRideException");
+    return { error: "변경 내역을 읽지 못했습니다" };
+  }
   if (!target) return { error: "변경 내역을 찾지 못했습니다" };
   if (String(target.on_date).slice(0, 10) < kstToday()) {
     return { error: "지난 날짜의 변경은 지울 수 없습니다 — 그날의 기록입니다" };

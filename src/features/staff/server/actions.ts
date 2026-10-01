@@ -23,13 +23,19 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { refuseIfProtectedStaff } from "./protected-guard";
 import { canManageStaffMember } from "@/lib/auth/role-hierarchy";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { explainDbError, humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 import { createClient } from "@/lib/supabase/server";
 import { canEditLoginEmail, EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
 import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
 import { setStaffLoginBlocked } from "./auth-ban";
+
+/** 직원 저장의 DB 오류 → 이유(+이메일 중복이면 그 칸) + 로그([[#137]]). 보호 트리거(42501·P0001)의 한글 이유는 그대로 보인다. */
+function staffSaveError(error: unknown, scope: string): StaffFormState {
+  const why = explainDbError(error, { scope, fallback: "직원 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." });
+  return why.field ? { error: why.message, fieldErrors: { [why.field]: why.message } } : { error: why.message };
+}
 
 const ROLES = Object.keys(ROLE_HIERARCHY) as SystemRole[];
 const STATUSES = ["active", "inactive", "pending"] as const;
@@ -211,13 +217,13 @@ export async function createStaff(
     if (retryErr) {
       await admin.auth.admin.deleteUser(authData.user.id);
       await admin.from("users").delete().eq("id", authData.user.id);
-      return { error: `직원 정보 저장 실패: ${retryErr.message}` };
+      return staffSaveError(retryErr, "staff.create.retry");
     }
   } else if (dbErr) {
     // 롤백 — auth user + 트리거가 만든 public.users 행 둘 다 정리(deleteUser는 public.users를 안 지움 = 고아 방지).
     await admin.auth.admin.deleteUser(authData.user.id);
     await admin.from("users").delete().eq("id", authData.user.id);
-    return { error: `직원 정보 저장 실패: ${dbErr.message}` };
+    return staffSaveError(dbErr, "staff.create");
   }
   if (!dbErr && canGrantTeacherView && input.teacherViewAccess) {
     // '강사뷰 접근' 부여는 감사 대상(다른 강사 화면을 여는 권한) — 등록과 동시 부여도 남긴다.
@@ -264,7 +270,10 @@ export async function updateStaff(
     .select("tenant_id, email, system_role, display_name")
     .eq("id", id)
     .single();
-  if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
+  if (targetErr || !target) {
+    logDbError(targetErr, "staff.updateStaff");
+    return { error: "대상 직원을 찾을 수 없습니다" };
+  }
   if (target.tenant_id !== actor.tenantId) {
     return { error: "다른 지점의 계정은 변경할 수 없습니다" };
   }
@@ -416,12 +425,12 @@ export async function updateStaff(
     // 0209a/0212a/0224a/0227a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
     if (/seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access|teacher_view_lang/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
-      if (retry) return { error: retry.message };
+      if (retry) return staffSaveError(retry, "staff.update.retry");
       if (input.seatLabDuty || input.seatJjDuty || input.shuttleDuty || input.deskAttendanceOptin) {
         return { error: "일부 알림·담당 토글은 아직 저장할 수 없습니다. 관리자에게 문의하세요." };
       }
     } else {
-      return { error: error.message };
+      return staffSaveError(error, "staff.update");
     }
   } else {
     // 🔴 **두 로그는 서로 배타가 아니다** — `else if`로 묶으면 한 번의 저장에서 둘 다 바뀐 날
@@ -481,7 +490,10 @@ export async function changeStaffRole(
     .select("tenant_id, system_role, display_name")
     .eq("id", id)
     .single();
-  if (targetErr || !target) return { error: "대상 직원을 찾을 수 없습니다" };
+  if (targetErr || !target) {
+    logDbError(targetErr, "staff.changeStaffRole");
+    return { error: "대상 직원을 찾을 수 없습니다" };
+  }
   // 크로스테넌트 차단 — 다른 지점 계정은 건드릴 수 없다.
   if (target.tenant_id !== actor.tenantId) {
     return { error: "다른 지점의 계정은 변경할 수 없습니다" };
@@ -499,7 +511,7 @@ export async function changeStaffRole(
     .from("users")
     .update({ system_role: newRole })
     .eq("id", id);
-  if (dbErr) return { error: dbErr.message };
+  if (dbErr) return { error: explainDbError(dbErr, { scope: "staff.changeRole", fallback: "역할을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   // 2) auth.users app_metadata sync — tenant_id는 대상의 기존 값 유지(세션값으로 재기록해 이동시키지 않음).
   const { error: authErr } = await admin.auth.admin.updateUserById(id, {
@@ -749,7 +761,7 @@ export async function handoverAndDeactivate(
       .eq("tenant_id", actor.tenantId)
       .eq("teacher_id", id)
       .eq("is_active", true);
-    if (ownErr) return { error: ownErr.message };
+    if (ownErr) return { error: explainDbError(ownErr, { scope: "staff.handover.read", fallback: "담당 반을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
     const owned = new Set((ownRows ?? []).map((c) => c.id as string));
     const selected = [...new Set(formData.getAll("classIds").map(String))].filter((c) =>
       owned.has(c),

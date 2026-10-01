@@ -7,6 +7,7 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { INITIAL_STAFF_PASSWORD, parseResumeForm, resumeTitle, RESUME_FORM_TYPE } from "../resume";
 import { findIntakeTokenByToken, isTokenOpen, STAFF_INTAKE_FORM_TYPE } from "./intake-token";
+import { logDbError } from "@/lib/supabase/db-error";
 
 // 직원 등록 QR 공개 제출(원장 지시 2026-08-07) — **비인증**. 게이트는 오직 토큰이다:
 // 유효·활성·미만료 토큰이어야 하고, 역할은 토큰에 박힌 값을 쓴다(신청자가 못 고른다 = 권한 상승 차단).
@@ -88,7 +89,10 @@ export async function submitPublicStaffIntake(
     })
     .select("id")
     .single();
-  if (docErr || !doc) return { error: "등록 처리에 실패했습니다 — 학원에 문의해 주세요" };
+  if (docErr || !doc) {
+    logDbError(docErr, "staff.submitPublicStaffIntake");
+    return { error: "등록 처리에 실패했습니다 — 학원에 문의해 주세요" };
+  }
 
   // 2) 계정 생성(auth → users 보강). 실패하면 이력서만 남기고 안내(사무실이 직원관리에서 마무리 가능).
   const { data: authData, error: authErr } = await admin.auth.admin.createUser({
@@ -98,6 +102,7 @@ export async function submitPublicStaffIntake(
     app_metadata: { tenant_id: tok.tenantId, system_role: tok.role },
   });
   if (authErr || !authData?.user) {
+    logDbError(authErr, "staff.submitPublicStaffIntake");
     await bumpSubmission(tok.id, tok.submissionCount);
     return { error: "이미 등록된 이메일이거나 계정 생성에 실패했습니다 — 학원에 문의해 주세요" };
   }
@@ -122,6 +127,7 @@ export async function submitPublicStaffIntake(
     })
     .eq("id", authData.user.id);
   if (dbErr) {
+    logDbError(dbErr, "staff.submitPublicStaffIntake");
     await admin.auth.admin.deleteUser(authData.user.id);
     await admin.from("users").delete().eq("id", authData.user.id);
     await bumpSubmission(tok.id, tok.submissionCount);

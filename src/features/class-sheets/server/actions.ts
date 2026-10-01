@@ -9,6 +9,7 @@ import { after } from "next/server";
 // (슬롯 advisory xact 락·재번호 원자성). 출석은 체크(ecs_mark_present_if_absent) + 취소(ecs_clear_present,
 // 0169a — plain present만) 두 경로뿐. 결석·지각·시수 편집은 여전히 /attendance 전용(§E 완화판).
 import { createAdminClient } from "@/lib/supabase/admin";
+import { explainDbError } from "@/lib/supabase/db-error";
 // ui_prefs 부분 병합은 **단일 구현**(화면마다 복붙하면 형제 키를 날린다 — CLAUDE.md).
 import { patchMyUiPrefs } from "@/lib/ui-prefs/patch";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -488,7 +489,7 @@ export async function setSlotShouting(input: {
   const saveError = (e: { code?: string; message: string }) =>
     e.code === "42P01" || e.code === "PGRST205"
       ? "Shouting 체크 기능이 아직 준비되지 않았습니다(DB 갱신 필요) — 관리자에게 알려주세요"
-      : `저장에 실패했습니다: ${e.message}`;
+      : explainDbError(e, { scope: "class-sheets.shouting", fallback: "저장에 실패했습니다. 잠시 후 다시 시도해 주세요." }).message;
   if (!input.value) {
     const { data: removed, error } = await admin
       .from("class_sheet_slot_flags")
