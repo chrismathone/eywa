@@ -7,6 +7,7 @@ import { axisDowOf } from "@/features/attendance/teacher-axis";
 import { specialSlotLabel } from "../../lib/teacher-label";
 import type { AttendanceMigration, MasterAttendance } from "./attendance-types";
 import type { MasterContext, MasterPlan, MasterIssue } from "./types";
+import { planWholeAbsences } from "./attendance-absence";
 
 type Plan = Pick<
   MasterPlan,
@@ -24,9 +25,12 @@ export function planAttendanceMigration(
     issues: [],
   };
   const { before, after } = attendanceSchedules(plan, ctx);
+  result.moves = planWholeAbsences(plan, ctx, before, after);
+  const regrouped = new Set(result.moves.flatMap((m) => m.ids));
   const cells = new Map<string, MasterAttendance[]>();
   for (const a of ctx.attendance) {
     if (
+      regrouped.has(a.id) ||
       a.date < plan.effectiveDate ||
       !ctx.classes.some((c) => c.id === a.classId)
     )
@@ -140,7 +144,7 @@ export function planAttendanceMigration(
       toTime,
     });
   }
-  // Two source cells must never collapse into one destination, including legacy day-wide cells.
+  // Unrelated cells must never collapse. Uniform full-day absences were grouped explicitly above.
   const conflicts = result.moves.filter((m, i, all) =>
     all.some(
       (v, j) =>
@@ -166,9 +170,9 @@ export function planAttendanceMigration(
     result.issues.push({
       key: "attendance-migration",
       severity: "confirm",
-      target: `기존 출결 ${result.moves.length}칸 자동 이관`,
+      target: `새 반·교시로 출결 ${result.moves.length}칸 자동 이관`,
       reason:
-        "반이동·시간표 변경과 함께 적용일 이후 출결을 새 반·교시로 옮깁니다. 상태·시수·메모·입력자·정정 이력은 보존합니다.",
+        "반이동·시간표 변경과 함께 적용일 이후 출결을 새 반·교시로 옮깁니다. 전교시가 같은 사유로 미리 결석 처리된 날은 새 교시 수에 맞춰 결석을 재배치합니다. 상태·시수·메모·입력자·원본 기록은 보존합니다.",
       fix: "아래 ‘기존 출결 이관’에서 학생별 이전 반·교시와 변경된 반·교시를 확인해 주세요.",
     });
   return result;

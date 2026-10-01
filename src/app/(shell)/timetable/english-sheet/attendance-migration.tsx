@@ -7,6 +7,16 @@ export function AttendanceMigrationPreview({
   migration: AttendanceMigration;
 }) {
   const { moves, retainedCells } = migration;
+  const entries = [
+    ...new Map(
+      moves.map((m) => [
+        m.absenceDay
+          ? JSON.stringify([m.studentId, m.date, m.fromClassId, m.toClassId])
+          : m.ids[0],
+        m,
+      ]),
+    ).values(),
+  ];
   if (!moves.length && !retainedCells) return null;
   return (
     <section aria-label="기존 출결 이관" className="space-y-3">
@@ -31,7 +41,7 @@ export function AttendanceMigrationPreview({
               </tr>
             </thead>
             <tbody>
-              {moves.map((m) => (
+              {entries.map((m) => (
                 <tr key={m.ids[0]} className="border-t border-line">
                   <td className="whitespace-nowrap px-3 py-2">
                     <Link
@@ -44,10 +54,23 @@ export function AttendanceMigrationPreview({
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">{m.date}</td>
                   <td className="px-3 py-2">
-                    {m.fromClassName} · {m.fromTime ?? "하루 전체"}
+                    {m.fromClassName} ·{" "}
+                    {m.absenceDay?.fromTimes.join(" · ") ??
+                      m.fromTime ??
+                      "하루 전체"}
                   </td>
                   <td className="px-3 py-2">
-                    {m.toClassName} · {m.toTime ?? "하루 전체"}
+                    {m.toClassName} ·{" "}
+                    {m.absenceDay?.toTimes.join(" · ") ??
+                      m.toTime ??
+                      "하루 전체"}
+                    {m.absenceDay ? (
+                      <p className="mt-1 text-xs text-text-dim">
+                        전교시 사전 결석 {m.absenceDay.fromTimes.length}칸 →{" "}
+                        {m.absenceDay.toTimes.length}칸. 같은 결석·메모를 새
+                        반의 각 교시에 연결하며 원본 기록은 모두 보존합니다.
+                      </p>
+                    ) : null}
                   </td>
                 </tr>
               ))}

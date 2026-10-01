@@ -14,6 +14,8 @@ import { videoFolderRegistry, videoFileRegistry } from "./video-folder-registry.
 import { videoFilename } from "./video-filename.mjs";
 import { scanVideoHistory } from "./video-history.mjs";
 import { runManualDriveScan } from "./video-manual-scan.mjs";
+import { archiveUploadPreparer, removeArchiveLeftovers } from "./video-compress.mjs";
+import { driveQuotaPaused } from "./video-drive-quota.mjs";
 
 let running = null;
 let nextPoll = 0;
@@ -62,6 +64,7 @@ export async function processVideoJob(browser, tenant, log = console.log) {
       authFailure = reason;
       return;
     }
+    if (await driveQuotaPaused(credentials, { log })) return; // Drive 남은 공간이 문턱 아래 — 큐는 그대로 대기
     const auth = { ...credentials, fileRegistry: videoFileRegistry(sql, tenant), folderRegistry: videoFolderRegistry(sql, tenant, rootId), accessToken: async () => {
       if (leaseLost) throw new Error("영상 작업 연결이 끊겼습니다.");
       return credentials.accessToken();
@@ -97,9 +100,9 @@ export async function processVideoJob(browser, tenant, log = console.log) {
     const [duplicate] = await sql`select drive_file_id from student_homework_videos where tenant_id=${tenant}
       and status='uploaded' and post_id is not null and drive_folder_id=${folder.id} and md5=${local.md5} and bytes=${local.bytes}
       order by uploaded_at limit 1`;
-    const saved = await uploadVideoToDrive({ ...local, name: displayName }, folder.id, { ...auth, existingFileId: duplicate?.drive_file_id });
+    const saved = await uploadVideoToDrive({ ...local, name: displayName }, folder.id, { ...auth, existingFileId: duplicate?.drive_file_id, prepareUpload: archiveUploadPreparer({ log }) });
     const completed = await sql`update student_homework_videos set status = 'uploaded', drive_file_id = ${saved.id},
-      drive_folder_id = ${folder.id}, bytes = ${local.bytes}, md5 = ${local.md5}, payload = '{}'::jsonb,
+      drive_folder_id = ${folder.id}, bytes = ${local.bytes}, md5 = ${local.md5}, payload = '{}'::jsonb, route = ${sql.json({ ...route, archive: { driveBytes: saved.bytes, compression: saved.compression ?? null } })},
       uploaded_at = now(), updated_at = now(), error = null, lock_token = null, locked_at = null
       where id = ${job.id} and tenant_id = ${tenant} and lock_token = ${token} returning id`;
     if (!completed.length) throw new Error("영상 작업 소유권이 변경되었습니다.");
@@ -110,6 +113,7 @@ export async function processVideoJob(browser, tenant, log = console.log) {
       try { await unlink(file); }
       catch (error) { if (error.code !== "ENOENT") log("[영상] 임시 파일 정리 실패 — Drive 보관은 완료됐습니다."); }
     }
+    await removeArchiveLeftovers(local.filePath); // 압축본·판단 기록·업로드 재개 기록(없으면 아무것도 안 함)
   } catch {
     if (job) await sql`update student_homework_videos set status = 'failed',
       error = '영상 전송을 완료하지 못했습니다. 워커 인증·원본·폴더 설정을 확인하세요.',

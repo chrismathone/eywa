@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("@/lib/auth/super-admin", () => ({ getCurrentSuperAdmin: vi.fn() }));
-vi.mock("@/lib/auth/perm-matrix", () => ({ getPermMatrix: vi.fn() }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ getUserPermMatrix: vi.fn() }));
 vi.mock("@/lib/auth/teacher-home", () => ({ landingPath: vi.fn() }));
 vi.mock("@/features/audit/server/login-log", () => ({ pickClientIp: vi.fn(), recordLoginEvent: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));

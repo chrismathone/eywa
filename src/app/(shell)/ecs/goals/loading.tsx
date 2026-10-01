@@ -1,14 +1,12 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
+
 /**
  * 반 계획 보기 스켈레톤(B7) — 실화면과 같은 골격(머리 · 툴바 · 통계 4칸 · 표)이라 로딩→본문에서 안 튄다.
  */
 export default function EcsGoalsLoading() {
   return (
     <div className="space-y-4">
-      <div className="shrink-0 compact-chrome:hidden">
-        <div className="bg-bg-soft h-4 w-24 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-6 w-40 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-4 w-80 animate-pulse rounded" />
-      </div>
+      <PageHeaderSkeleton />
       <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <div className="bg-bg-soft h-(--control-h) w-24 animate-pulse rounded-lg" />
         <div className="bg-bg-soft h-(--control-h) w-60 animate-pulse rounded-lg" />

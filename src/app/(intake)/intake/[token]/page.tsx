@@ -1,9 +1,11 @@
+import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isModuleEnabled } from "@/lib/modules";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { PublicIntakeForm } from "./public-intake-form";
 import { isIntakeExpired } from "@/features/enrollment/intake-expiry";
+import { expiredLinkHref } from "@/features/link-expired/kinds";
 
 export const metadata = { title: "입학 상담 신청" };
 
@@ -39,9 +41,9 @@ export default async function PublicIntakePage({
   if (!tok || !tok.is_active) {
     return <ClosedScreen message="유효하지 않거나 종료된 접수 링크입니다." />;
   }
-  if (isIntakeExpired(tok.expires_at as string | null)) {
-    return <ClosedScreen message="접수 기간이 만료되었습니다." />;
-  }
+  // 기간 만료 → 공용 '링크 만료' 페이지로 307(원장 2026-10-01). 주소엔 종류만(토큰 금지). 학원이 끈 링크(is_active)·
+  // 없는 토큰은 뜻이 달라 위 화면 그대로다. 조회수(usage_count) 집계보다 앞이라 만료 열람은 세지 않는다(종전과 같다).
+  if (isIntakeExpired(tok.expires_at as string | null)) redirect(expiredLinkHref("intake"));
 
   // 조회수 집계 — 유효한 공개 폼 노출 1회 = usage_count +1(제출수와 분리해 전환율 파악).
   await admin

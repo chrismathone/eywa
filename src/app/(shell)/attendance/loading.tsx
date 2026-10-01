@@ -6,11 +6,7 @@
 export default function AttendanceLoading() {
   return (
     <div className="attendance-page space-y-5">
-      <div className="shrink-0 compact-chrome:hidden">
-        <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-6 w-40 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-4 w-64 animate-pulse rounded" />
-      </div>
+      {/* 헤더 자리 없음 — 월별 출석부는 PageHeader를 걷어냈다(2026-08-06, page.tsx "상단 공간낭비" 주석). 그리던 막대는 데이터 도착 때 본문을 끌어올렸다. */}
       {/* 툴바 */}
       <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         {/* 실제 툴바는 카드 껍데기가 없고 컨트롤 높이는 `--control-h`다(v5 control-scale, 2026-09-03 —

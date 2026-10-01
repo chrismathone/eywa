@@ -3,14 +3,14 @@
  * 첫 페인트를 막지 않게 즉시 흘려보낸다(B7). 창(iframe)으로 열면 빈 화면이 특히 길게 보인다.
  * 모양은 실제 3열 레이아웃과 같은 라운드(2xl)·같은 열 폭이라 로드 후 튀지 않는다.
  */
+import { PageHeaderSkeleton } from "@/components/page-header";
 import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 
 export default function Loading() {
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
-      {/* 공용 PageHeader 제목 줄의 자리.
-          size-guard-ok: 이건 컨트롤이 아니라 제목 텍스트 자리라 44px 탭 타겟 규칙 대상이 아니다. */}
-      <div className="bg-muted h-9 w-40 animate-pulse rounded-lg" />
+      {/* 공용 PageHeader 자리(동작 = 정류장 관리·인쇄). */}
+      <PageHeaderSkeleton actions={<div className="bg-bg-soft h-(--control-h) w-64 animate-pulse rounded-lg" />} />
       {/* 실표면과 같은 한 줄 — 면 탭 + 시즌 드롭다운. 높이는 컨트롤과 같은 변수(폰 44 / 데스크톱 --control-h, FaceTabs도 같은 변수). */}
       <div className={SHUTTLE_TOOLBAR}>
         <div className="bg-muted h-(--control-h) w-56 animate-pulse rounded-lg" />

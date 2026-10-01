@@ -32,6 +32,7 @@ import { syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { kickVideoWorker } from "./video-worker.mjs";
+import { videoStorageStatus } from "./video-drive-quota.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
 import { processSyncRequestOnce } from "./classnote-sync-request.mjs";
@@ -186,6 +187,7 @@ async function heartbeat(tenant) {
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
     videoArchive: { enabled: !!process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID,
       folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID || null },
+    videoStorage: videoStorageStatus(), // Drive 남은 공간·업로드 멈춤·압축 결과(앱 '영상 보관' 줄)
     postMode: POST, // 실게시 PC 표식 — 지점당 한 대 임대(worker-lease.mjs)가 이 값을 센다(dry-run PC는 주인이 안 된다)
     env: {
       logDir: stateDirLabel(),
