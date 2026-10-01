@@ -67,9 +67,13 @@ export type ReplyRow = {
   id: string; messageId: string | null; classnotePostId: number; authorUserId: string | null; authorLabel: string; body: string;
   pendingBody: string | null; status: ReplyStatus; processingAction: string | null; error: string | null; errorRaw: string | null;
   failedAction: string | null; commentId: number | null; editedAt: string | null; createdAt: string; editHistory: { body: string; replaced_at: string }[];
+  /** 연동 PC가 이 행을 시도한 횟수(성공하면 0) — 0보다 크면 대기 행이어도 ClassNote에 올라갔을 수 있다 */
+  retryCount: number;
+  /** 연동 PC가 이 행을 한 번이라도 집었다(`worker_host`가 적혔다) — 멈춤 복구로 대기에 돌아온 행도 잡는다 */
+  claimed: boolean;
 };
 const REPLY_COLS =
-  "id, message_id, classnote_post_id, author_user_id, author_label, body, pending_body, status, processing_action, error, error_raw, failed_action, classnote_comment_id, edited_at, created_at, edit_history";
+  "id, message_id, classnote_post_id, author_user_id, author_label, body, pending_body, status, processing_action, error, error_raw, failed_action, classnote_comment_id, edited_at, created_at, edit_history, retry_count, worker_host";
 export function toReply(r: Record<string, unknown>): ReplyRow {
   return {
     id: String(r.id), messageId: (r.message_id as string | null) ?? null, classnotePostId: Number(r.classnote_post_id),
@@ -78,6 +82,7 @@ export function toReply(r: Record<string, unknown>): ReplyRow {
     error: (r.error as string | null) ?? null, errorRaw: (r.error_raw as string | null) ?? null, failedAction: (r.failed_action as string | null) ?? null,
     commentId: r.classnote_comment_id == null ? null : Number(r.classnote_comment_id), editedAt: (r.edited_at as string | null) ?? null,
     createdAt: String(r.created_at), editHistory: Array.isArray(r.edit_history) ? (r.edit_history as ReplyRow["editHistory"]) : [],
+    retryCount: Number(r.retry_count ?? 0) || 0, claimed: r.worker_host != null,
   };
 }
 
@@ -95,15 +100,45 @@ export async function loadReply(admin: Admin, tenantId: string, replyId: string)
 }
 
 /**
- * 답글을 받을 연동 PC가 있나(심장박동 + 실게시 + `caps.parentReply`). 조회 실패 = 없다고 본다.
+ * 답글(`parentReply`)·공감(`parentReaction`)을 받을 연동 PC가 있나(심장박동 + 실게시 + 그 기능 표식). 조회 실패 = 없다고 본다.
  * 🔧 개발 서버 한정 우회 — `CLASSNOTE_REPLY_DEV_WORKER=1` + NODE_ENV≠production이면 통과(개발 PC 1회 실행 스크립트로 처리하는 시험용).
- *    프로덕션 빌드에선 이 값을 절대 읽지 않는다.
+ *    프로덕션 빌드에선 이 값을 절대 읽지 않는다. (연동 PC 확인만 건너뛴다 — 모드·자격·가드는 그대로다.)
  */
-export async function workerAcceptsReplies(admin: Admin, tenantId: string): Promise<boolean> {
+export async function workerAcceptsReplies(admin: Admin, tenantId: string, cap: "parentReply" | "parentReaction" = "parentReply"): Promise<boolean> {
   if (process.env.NODE_ENV !== "production" && process.env.CLASSNOTE_REPLY_DEV_WORKER === "1") return true;
   const { data, error } = await admin.from("classnote_workers").select("last_seen, last_results").eq("tenant_id", tenantId);
   if (error) return false;
-  return workerReadyForReplies((data ?? []) as { last_seen: string | null; last_results: unknown }[], Date.now());
+  return workerReadyForReplies((data ?? []) as { last_seen: string | null; last_results: unknown }[], Date.now(), cap);
+}
+
+/**
+ * 그 원아의 **확정 연결**이 가리키는 학생 — 전체 모드에서 워커가 다시 보는 것과 같은 기록(가드 ⑤).
+ *   반 보드(`classId` 있음) = 그 반 보드의 원아 매칭(0302a ok)이 한 줄이고, 원아 링크(0185a)가 있으면 그것도 같은 학생일 때.
+ *   1인 보드 = 원아 링크(0185a). 모르거나 어긋나면 null(이름으로 짐작하지 않는다). 조회 실패도 null(받지 않는 쪽).
+ * `boardName` = 그 학생의 1인 보드 이름에 쓰이는 이름(발송 규칙과 같이 ClassNote용 이름 > 이름) — 1인 보드 글이 그 학생 보드의 것인지 대조한다.
+ */
+export async function confirmedStudentOf(admin: Admin, tenantId: string, a: { classId: string | null; childId: number | null }): Promise<{ studentId: string; boardName: string | null } | null> {
+  const studentId = await confirmedStudentId(admin, tenantId, a);
+  if (!studentId) return null;
+  if (a.classId) return { studentId, boardName: null };
+  const { data } = await admin.from("students").select("name, classnote_name").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle();
+  return { studentId, boardName: ((data?.classnote_name as string | null) || (data?.name as string | null) || "").trim() || null };
+}
+
+async function confirmedStudentId(admin: Admin, tenantId: string, a: { classId: string | null; childId: number | null }): Promise<string | null> {
+  if (a.childId == null) return null;
+  const [link, members] = await Promise.all([
+    admin.from("classnote_child_links").select("student_id").eq("tenant_id", tenantId).eq("child_id", a.childId).limit(2),
+    a.classId
+      ? admin.from("classnote_class_board_members").select("student_id").eq("tenant_id", tenantId).eq("class_id", a.classId).eq("child_id", a.childId).eq("status", "ok").limit(2)
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  if (link.error || members.error) return null;
+  const linked = (link.data ?? []).length === 1 ? (link.data![0]!.student_id as string) : null;
+  if (!a.classId) return linked;
+  const rows = (members.data ?? []) as { student_id: string }[];
+  if (rows.length !== 1) return null;
+  return linked && linked !== rows[0]!.student_id ? null : rows[0]!.student_id;
 }
 
 const MATH_KEYS = ["math", "subject_1"];
@@ -125,6 +160,20 @@ export async function resolveBoard(admin: Admin, tenantId: string, boardName: st
   const s = (cls?.subject as string | null) ?? null;
   if (!s) return fallback;
   return { keys: MATH_KEYS.includes(s) ? MATH_KEYS : [s], classId, className: (cls?.class_name as string | null) ?? null };
+}
+
+/**
+ * 보드 이름들 가운데 **0302a에 하나로 연결된 반 보드**인 것 — 목록(벨·면)이 전체 모드에서 버튼을 세울 글을 고를 때 쓴다(`resolveBoard`와 같은 규칙:
+ * `(과목)`·`[과목]` 모양은 반 보드로 보지 않고, 같은 이름이 둘이면 짐작하지 않는다). 조회 실패는 던진다(호출부가 빈 집합으로 받는다).
+ */
+export async function uniqueClassBoardNames(admin: Admin, tenantId: string, boardNames: (string | null)[]): Promise<Set<string>> {
+  const names = [...new Set(boardNames.map((n) => (n ?? "").trim()).filter((n) => n && !/^[([]/.test(n)))];
+  const rows = await fetchInChunks<{ board_name: string }>(names, (chunk) =>
+    admin.from("classnote_class_boards").select("board_name").eq("tenant_id", tenantId).in("board_name", chunk),
+  );
+  const count = new Map<string, number>();
+  for (const r of rows) count.set(r.board_name, (count.get(r.board_name) ?? 0) + 1);
+  return new Set([...count].filter(([, n]) => n === 1).map(([name]) => name));
 }
 
 /**

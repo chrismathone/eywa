@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getParentReplyContext, requestParentReply, requestParentReplyDelete, requestParentReplyEdit } from "../server/reply-actions";
 import type { ReplyActionResult, ReplyContext } from "../reply-types";
+import { ReactionControl } from "./reaction-control";
 import { ReplyComposer } from "./reply-composer";
 import { ReplyItem } from "./reply-item";
 
@@ -26,7 +27,12 @@ function withTimeout<T>(p: Promise<T>): Promise<T | "timeout"> {
  * 학부모 글·댓글 답글 창(0317a) — 원문 · 이 글의 답글과 상태 · 쓰기(미리보기·확인·잠금). 벨과 수업보고서 '학부모 글' 면이 같이 쓴다.
  * ⚠️ 호출부는 `key={messageId}`로 마운트할 것 — 다른 글을 열 때 이전 글의 상태가 남지 않게(effect 안 setState 금지, #25).
  */
-export function ParentReplyDialog({ messageId, onClose }: { messageId: string | null; onClose: () => void }) {
+export function ParentReplyDialog({ messageId, onClose, hideReaction = false }: {
+  messageId: string | null;
+  onClose: () => void;
+  /** 공감 조작을 세우지 않는다 — 벨의 알림이 같은 문구의 댓글 둘 중 어느 것인지 가릴 수 없을 때(공감은 댓글 단위라 엉뚱한 댓글에 눌린다) */
+  hideReaction?: boolean;
+}) {
   const [ctx, setCtx] = useState<ReplyContext | null>(null);
   const [pending, setPending] = useState(false);
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
@@ -34,9 +40,9 @@ export function ParentReplyDialog({ messageId, onClose }: { messageId: string | 
 
   const load = useCallback(async (id: string) => {
     const seq = ++seqRef.current;
-    const res: ReplyContext = await getParentReplyContext(id).catch(() => ({ ok: false, error: "답글 정보를 불러오지 못했습니다" }));
+    const res: ReplyContext = await getParentReplyContext(id, { noReaction: hideReaction }).catch(() => ({ ok: false, error: "답글 정보를 불러오지 못했습니다" }));
     if (seq === seqRef.current) setCtx(res);
-  }, []);
+  }, [hideReaction]);
 
   useEffect(() => {
     if (messageId) void load(messageId);
@@ -101,6 +107,8 @@ export function ParentReplyDialog({ messageId, onClose }: { messageId: string | 
             <blockquote className="bg-bg-soft text-foreground rounded-lg p-3 text-sm leading-relaxed whitespace-pre-wrap break-keep [overflow-wrap:anywhere]">
               {ctx.message.content}
             </blockquote>
+            {/* 공감(0319a) — 공감 기능이 없는 자리(0319a 전·옛 워커)는 아무것도 그리지 않는다. */}
+            <ReactionControl view={hideReaction ? null : ctx.reaction} />
             {ctx.replies.length ? (
               <ul className="space-y-2" aria-label="이 글의 답글">
                 {ctx.replies.map((r) => (

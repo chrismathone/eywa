@@ -36,6 +36,7 @@ import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
 import { processSyncRequestOnce } from "./classnote-sync-request.mjs";
 import { processParentRepliesOnce } from "./classnote-parent-reply-core.mjs";
+import { processParentReactionsOnce } from "./classnote-parent-reaction-core.mjs";
 
 const POLL_MS = 15_000;
 const POST = process.argv.includes("--post");
@@ -98,7 +99,10 @@ const recentIssues = [];
 // 설정을 반별로 바꿔도 **전부 1인 보드로** 보낸다 — 설정을 바꾸기 전에 이 키로 이관 여부를 확인할 것.
 // syncRequests=지금 반 보드 동기화 요청(0313a)을 집는 버전인가(2026-09-30). 앱은 이 키가 있는 실게시 PC가 살아 있을 때만 요청을 받는다
 // (옛 워커만 있으면 아무도 안 집는 '대기 중'이 생긴다).
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true };
+// parentReply=학부모 글 답글(0317a) · parentReaction=학부모 글 공감(0319a)을 집는 버전인가. 앱은 그 키가 있을 때만 요청을 받는다.
+// parentReplySettings=답글 모드를 **학원 설정**(끔·시험·전체)에서 읽는 버전인가(2026-10-01). 이 키가 없는 옛 판은 모드가 코드 상수(시험)라
+// 설정을 '전체'로 바꿔도 실제 학부모 글의 요청을 전부 실패시킨다 — 앱은 이 키가 없으면 답글 요청을 받지 않는다.
+const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true, parentReplySettings: true, parentReaction: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -308,13 +312,20 @@ async function main() {
       });
       if (snres.ran) noteResult("syncNow", { ok: snres.ok ? 1 : 0 });
       // 2-d) 학부모 글·댓글 답글(0317a) — 앱에서 쓴 답글을 그 글에 댓글로 게시·수정·삭제. 한 폴에 한 건(드물다).
-      //      발송 킬스위치·모듈을 따르고, 지금은 코드 상수 모드(test = 학원이 테스트 보드만)라 그 밖은 ClassNote를 읽지도 않는다.
+      //      발송 킬스위치·모듈을 따르고, 모드(학원 설정 '학부모 글 답글·공감' — 끔·시험·전체)는 코어가 폴마다 DB에서 다시 읽는다(끔이면 아무것도 안 집는다).
       const rpres = await processParentRepliesOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
         log(`[reply] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("parentReply", { error: e.message });
         return { ran: false };
       });
       if (rpres.ran) noteResult("parentReply", { ok: rpres.ok ? 1 : 0 });
+      // 2-e) 학부모 글·댓글 공감(0319a) — 앱에서 누른 공감을 그 글·댓글에 누르거나 푼다. 답글과 같은 모드·가드·허가증. 한 폴에 한 건.
+      const rxres = await processParentReactionsOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
+        log(`[reaction] 처리 오류(다음 폴에서 재시도): ${e.message}`);
+        noteResult("parentReaction", { error: e.message });
+        return { ran: false };
+      });
+      if (rxres.ran) noteResult("parentReaction", { ok: rxres.ok ? 1 : 0 });
       // 3) 일일 프로비저닝(신규생 보드 생성 + 가입자 자동 배정) — KST 05시 이후 하루 1회(가드 내장).
       const pres = await provisionDailyOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
         log(`[provision] 오류(내일 재시도): ${e.message}`);

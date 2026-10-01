@@ -80,7 +80,7 @@ function fakeClassnote({ post = { cls: BOARD, child: CHILD }, comments = [], onW
   return { page, calls, writes, state };
 }
 
-const deps = (kids = KIDS, claimed = new Set()) => ({ claimed, loadBoardChildren: async () => kids });
+const deps = (kids = KIDS, claimed = new Set()) => ({ mode: "test", claimed, loadBoardChildren: async () => kids });
 const bot = (id, content, author_name = AUTHOR) => ({ id, author: { type: "admin" }, author_name, content });
 const parent = (id, content) => ({ id, author: { type: "parent" }, content });
 
@@ -113,7 +113,7 @@ describe("가드에 걸리면 ClassNote에 쓰기 요청이 한 건도 나가지
     expect(await runReplyOnce(polluted.page, ROW, "post", deps([...KIDS, { id: 1, name: "김철수" }]))).toMatchObject({ kind: "blocked", code: "test_board_polluted" });
     expect(polluted.writes()).toEqual([]);
     const unknown = fakeClassnote();
-    const failing = { claimed: new Set(), loadBoardChildren: async () => { throw new Error("children 500"); } };
+    const failing = { mode: "test", claimed: new Set(), loadBoardChildren: async () => { throw new Error("children 500"); } };
     expect(await runReplyOnce(unknown.page, ROW, "post", failing)).toMatchObject({ kind: "retryable", code: "board_check_failed" });
     expect(unknown.writes()).toEqual([]);
   });
@@ -139,7 +139,7 @@ describe("가드에 걸리면 ClassNote에 쓰기 요청이 한 건도 나가지
   it("하루 넘게 묵은 게시 요청은 올리지 않는다 — 단 이미 올라가 있으면 그 댓글로 성공 처리(놓친 기록 복구)", async () => {
     const old = { ...ROW, created_at: new Date(Date.now() - 25 * 3_600_000) };
     const cn = fakeClassnote();
-    expect(await runReplyOnce(cn.page, old, "post", deps())).toEqual({ kind: "blocked", code: "expired", boardId: BOARD });
+    expect(await runReplyOnce(cn.page, old, "post", deps())).toEqual({ kind: "blocked", code: "expired", boardId: BOARD, absent: true });
     expect(cn.writes()).toEqual([]);
     const noDate = fakeClassnote();
     expect(await runReplyOnce(noDate.page, { ...ROW, created_at: null }, "post", deps())).toMatchObject({ kind: "blocked", code: "expired" });
@@ -158,48 +158,80 @@ describe("가드에 걸리면 ClassNote에 쓰기 요청이 한 건도 나가지
 });
 
 describe("쓰기 함수는 허가증 없이는 요청을 보내지 않는다(마지막 문)", () => {
-  const permit = evaluateReplyTarget({ row: ROW, post: { status: 200, cls: BOARD, child: CHILD }, boardChildren: KIDS });
+  const permit = evaluateReplyTarget({ mode: "test", row: ROW, post: { status: 200, cls: BOARD, child: CHILD }, boardChildren: KIDS });
 
-  it("허가증 없음·거절 결과·다른 글·테스트 대상 아님 → 던지고 요청 0건", async () => {
+  it("허가증 없음·거절 결과·다른 글·손으로 만든 것·복사본 → 던지고 요청 0건(댓글·공감 쓰기 전부)", async () => {
     const cn = fakeClassnote({ comments: [bot(40, "확인했습니다")] });
-    const bad = [null, { ok: false, code: "x" }, { ok: true, boardId: 1234567, childId: CHILD, postId: POST }, { ...permit, postId: POST + 1 }];
+    const forged = { ok: true, mode: "test", basis: "test", boardId: BOARD, childId: CHILD, postId: POST, studentId: null, messageId: null };
+    const bad = [null, { ok: false, code: "x" }, { ok: true, boardId: 1234567, childId: CHILD, postId: POST }, { ...permit, postId: POST + 1 }, forged, { ...permit }];
     for (const p of bad) {
-      await expect(api.writeComment(cn.page, p, { postId: POST }, { content: "x" })).rejects.toThrow(/쓰기 가드/);
-      await expect(api.writeComment(cn.page, p, { postId: POST, commentId: 40 }, { content: "x" })).rejects.toThrow(/쓰기 가드/);
-      await expect(api.deleteComment(cn.page, p, { postId: POST, commentId: 40 })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.writeComment(cn.page, p, { postId: POST, mode: "test" }, { content: "x" })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.writeComment(cn.page, p, { postId: POST, commentId: 40, mode: "test" }, { content: "x" })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.deleteComment(cn.page, p, { postId: POST, commentId: 40, mode: "test" })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.writeReaction(cn.page, p, { postId: POST, mode: "test" }, { reaction_type: "like", author_name: "x" })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.deleteReaction(cn.page, p, { postId: POST, reactionId: 1, mode: "test" })).rejects.toThrow(/쓰기 가드/);
     }
-    await expect(api.deleteComment(cn.page, permit, { postId: POST, commentId: null })).rejects.toThrow(/쓰기 가드/);
+    await expect(api.deleteComment(cn.page, permit, { postId: POST, commentId: null, mode: "test" })).rejects.toThrow(/쓰기 가드/);
+    await expect(api.deleteReaction(cn.page, permit, { postId: POST, reactionId: null, mode: "test" })).rejects.toThrow(/쓰기 가드/);
     expect(cn.calls).toEqual([]);
     expect(cn.state.comments).toHaveLength(1);
   });
 
-  it("쓰기 함수는 이 둘뿐이고, ClassNote에 쓰는 자리는 실행 모듈 하나뿐이다", () => {
-    expect(Object.keys(api).sort()).toEqual(["commentPaths", "deleteComment", "getPost", "listComments", "writeComment"]);
-    const src = readFileSync(join(HERE, "parent-reply-api.mjs"), "utf8");
-    for (const fn of ["writeComment", "deleteComment"]) {
-      const body = src.slice(src.indexOf(`export async function ${fn}(`));
-      expect(body.indexOf("assertReplyWritePermit(permit, postId)")).toBeGreaterThan(0);
-      expect(body.indexOf("assertReplyWritePermit(permit, postId)")).toBeLessThan(body.indexOf("return send("));
+  it("🔴 진짜 허가증이어도 쓰기 직전 모드가 끔·다른 모드·안 넘김이면 요청 0건", async () => {
+    const cn = fakeClassnote({ comments: [bot(40, "확인했습니다")] });
+    for (const mode of ["off", "on", undefined, "pilot"]) {
+      await expect(api.writeComment(cn.page, permit, { postId: POST, mode }, { content: "x" })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.deleteComment(cn.page, permit, { postId: POST, commentId: 40, mode })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.writeReaction(cn.page, permit, { postId: POST, mode }, { reaction_type: "like", author_name: "x" })).rejects.toThrow(/쓰기 가드/);
+      await expect(api.deleteReaction(cn.page, permit, { postId: POST, reactionId: 1, mode })).rejects.toThrow(/쓰기 가드/);
     }
-    expect(src).not.toMatch(/export (async )?function send\b/);
-    const users = readdirSync(HERE)
-      .filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs") && f !== "parent-reply-api.mjs")
-      .filter((f) => /\b(writeComment|deleteComment)\s*\(/.test(readFileSync(join(HERE, f), "utf8")));
-    expect(users).toEqual(["parent-reply-run.mjs"]);
+    expect(cn.calls).toEqual([]);
   });
 
-  it("모드·대상은 환경변수나 실행 인자로 바뀌지 않는다(뒷문 없음)", () => {
-    for (const f of ["parent-reply-guard.mjs", "parent-reply-api.mjs", "parent-reply-run.mjs", "classnote-parent-reply-core.mjs"]) {
-      const src = readFileSync(join(HERE, f), "utf8");
-      expect(src, f).not.toMatch(/process\.env|process\.argv/);
+  it("쓰기 함수는 이 넷뿐이고, ClassNote에 쓰는 자리는 실행 모듈 둘(댓글·공감)뿐이다", () => {
+    expect(Object.keys(api).sort()).toEqual([
+      "commentPaths", "deleteComment", "deleteReaction", "getPost", "listComments", "listReactionTypes", "reactionPaths", "writeComment", "writeReaction",
+    ]);
+    const src = readFileSync(join(HERE, "parent-reply-api.mjs"), "utf8");
+    for (const fn of ["writeComment", "deleteComment", "writeReaction", "deleteReaction"]) {
+      const body = src.slice(src.indexOf(`export async function ${fn}(`));
+      // 함수의 **첫 문장**이 허가증 확인이다(요청을 만들기 전에).
+      expect(body.slice(body.indexOf("{\n", body.indexOf(")")) + 2).trimStart().startsWith("assertReplyWritePermit(permit, postId, mode);"), fn).toBe(true);
+      expect(body.indexOf("assertReplyWritePermit(permit, postId, mode)")).toBeLessThan(body.indexOf("return send("));
     }
-    const guard = readFileSync(join(HERE, "parent-reply-guard.mjs"), "utf8");
-    expect(guard).toMatch(/export const REPLY_MODE = "test";/);
-    // 실행 모듈·코어는 모드를 상수로만 넘긴다(다른 값을 적지 않는다)
-    for (const f of ["parent-reply-run.mjs", "classnote-parent-reply-core.mjs", "process-parent-replies.mjs"]) {
-      const src = readFileSync(join(HERE, f), "utf8");
-      for (const m of src.matchAll(/mode:\s*([A-Za-z_"']+)/g)) expect(m[1], f).toBe("REPLY_MODE");
+    expect(src).not.toMatch(/export (async )?function send\b/);
+    // `send(`를 부르는 자리는 위 네 함수뿐이다(가드 없는 쓰기 경로가 없다).
+    expect(src.match(/return send\(page/g)).toHaveLength(4);
+    const others = readdirSync(HERE).filter((f) => f.endsWith(".mjs") && !f.endsWith(".test.mjs") && f !== "parent-reply-api.mjs");
+    const callers = (re) => others.filter((f) => re.test(readFileSync(join(HERE, f), "utf8")));
+    expect(callers(/\b(writeComment|deleteComment)\s*\(/)).toEqual(["parent-reply-run.mjs"]);
+    expect(callers(/\b(writeReaction|deleteReaction)\s*\(/)).toEqual(["parent-reaction-run.mjs"]);
+  });
+
+  it("모드·대상은 환경변수·실행 인자·코드 상수로 바뀌지 않는다 — 모드를 정하는 자리는 DB를 읽는 `loadReplyMode` 하나(뒷문 없음)", () => {
+    const pure = ["parent-reply-guard.mjs", "parent-reply-api.mjs", "parent-reply-run.mjs", "classnote-parent-reply-core.mjs", "parent-reaction-guard.mjs", "parent-reaction-run.mjs", "classnote-parent-reaction-core.mjs"];
+    const all = [...pure, "process-parent-replies.mjs", "process-parent-reactions.mjs"];
+    for (const f of pure) expect(readFileSync(join(HERE, f), "utf8"), f).not.toMatch(/process\.env|process\.argv/);
+    for (const f of all) {
+      const src = readFileSync(join(HERE, f), "utf8").replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+      // 모드 상수가 없고, 모드 자리에 글자 값("test"·"on")을 직접 넘기는 호출이 없다.
+      expect(src, f).not.toMatch(/\bREPLY_MODE\b\s*=/);
+      expect(src, f).not.toMatch(/\bmode\s*[:=]\s*["'`](test|on)["'`]/);
+      // 설정 칸을 읽는 곳은 코어 한 곳뿐 — 그 밖의 파일이 따로 읽어 다른 값을 만들지 않는다.
+      if (f !== "classnote-parent-reply-core.mjs") expect(src, f).not.toMatch(/classnoteParentReplyMode/);
     }
+    const core = readFileSync(join(HERE, "classnote-parent-reply-core.mjs"), "utf8");
+    const load = core.slice(core.indexOf("export async function loadReplyMode("), core.indexOf("export async function loadReplyFacts("));
+    expect(load).toMatch(/data->'report'->>'classnoteParentReplyMode'/);
+    expect(load).toMatch(/normalizeReplyMode\(/);
+    expect(load).toMatch(/isClassnoteModuleEnabled\(sql, tenant\)/);
+    expect(load).toMatch(/catch \{\s*return "off";/); // 못 읽으면 끔
+    // 실행 모듈이 받는 모드는 코어가 읽은 값, 쓰기 직전 재확인도 같은 함수.
+    expect(core).toMatch(/mode = await loadReplyMode\(sql, tenant\);\s*if \(mode === "off"\) return \{ ran: false \};/);
+    expect(core).toMatch(/recheckMode: \(\) => loadReplyMode\(sql, tenant\)/);
+    const rx = readFileSync(join(HERE, "classnote-parent-reaction-core.mjs"), "utf8");
+    expect(rx).toMatch(/mode = await loadReplyMode\(sql, tenant\);\s*if \(mode === "off"\) return \{ ran: false \};/);
+    expect(rx).toMatch(/recheckMode: \(\) => loadReplyMode\(sql, tenant\)/);
   });
 
   it("데몬·1회 실행 스크립트는 코어 한 곳만 부른다(따로 쓰는 길이 없다)", () => {
@@ -210,7 +242,86 @@ describe("쓰기 함수는 허가증 없이는 요청을 보내지 않는다(마
     expect(once).not.toMatch(/parent-reply-run|method:\s*["'](POST|PATCH|DELETE)/);
     const core = readFileSync(join(HERE, "classnote-parent-reply-core.mjs"), "utf8");
     expect(core).toMatch(/if \(!post \|\|/); // dry-run 데몬은 아무것도 하지 않는다
-    expect(core.indexOf("await precheck(sql, tenant, row, action)")).toBeLessThan(core.indexOf("await loginClassnote(page)"));
+    expect(core.indexOf("await precheck(sql, tenant, row, action, mode)")).toBeGreaterThan(0);
+    expect(core.indexOf("await precheck(sql, tenant, row, action, mode)")).toBeLessThan(core.indexOf("await loginClassnote(page)"));
+    // 공감도 같은 모양 — 데몬·1회 실행은 코어만 부르고, 코어는 사전 판정 뒤에야 로그인한다.
+    expect(daemon).toMatch(/processParentReactionsOnce\(db\(\), b, \{ tenant, post: POST, host: HOSTNAME, log \}\)/);
+    const rxOnce = readFileSync(join(HERE, "process-parent-reactions.mjs"), "utf8");
+    expect(rxOnce).toMatch(/processParentReactionsOnce\(sql, browser, \{/);
+    expect(rxOnce).not.toMatch(/parent-reaction-run|method:\s*["'](POST|PATCH|DELETE)/);
+    const rx = readFileSync(join(HERE, "classnote-parent-reaction-core.mjs"), "utf8");
+    expect(rx).toMatch(/if \(!post \|\|/);
+    expect(rx.indexOf("preflightReactionRow({ mode, row })")).toBeLessThan(rx.indexOf("await loginClassnote(page)"));
+  });
+});
+
+describe("전체(on) 모드 — 쓰기 경로", () => {
+  const ON_BOARD = 2000001;
+  const ON_CHILD = 777;
+  const ON_ROW = { id: "r9", message_id: "m1", student_id: "s1", child_id: ON_CHILD, board_id: null, classnote_post_id: POST, reply_to_comment_id: null, author_label: "BS3Q 수진T", body: "네 확인했습니다", created_at: new Date() };
+  const FACTS = {
+    message: { id: "m1", source: "post", classnote_post_id: POST, classnote_comment_id: null, child_id: ON_CHILD },
+    classBoards: [{ class_id: "c1" }], memberStudentIds: ["s1"], childLinkStudentId: "s1", studentNames: ["김하나"],
+  };
+  const onPost = { cls: ON_BOARD, child: ON_CHILD, class_name: "BS3Q" };
+  const onDeps = (over = {}) => ({ mode: "on", claimed: new Set(), loadBoardChildren: async () => [{ id: ON_CHILD, name: "김하나" }], loadFacts: async () => FACTS, ...over });
+
+  it("확정 연결이 전부 맞으면 한 번 쓴다(글에서 읽은 보드 번호를 돌려준다)", async () => {
+    const cn = fakeClassnote({ post: onPost });
+    expect(await runReplyOnce(cn.page, ON_ROW, "post", onDeps())).toEqual({ kind: "done", commentId: 5000, boardId: ON_BOARD });
+    expect(cn.writes()).toHaveLength(1);
+    expect(cn.writes()[0]).toMatchObject({ method: "POST", body: { author_name: "BS3Q 수진T", content: "네 확인했습니다" } });
+  });
+
+  it("🔴 같은 행을 시험 모드·끔으로 돌리면 ClassNote를 읽지도 않는다", async () => {
+    for (const [mode, code] of [["test", "not_test_target"], ["off", "mode_off"], [undefined, "mode_off"]]) {
+      const cn = fakeClassnote({ post: onPost });
+      expect(await runReplyOnce(cn.page, ON_ROW, "post", onDeps({ mode }))).toEqual({ kind: "blocked", code });
+      expect(cn.calls).toEqual([]);
+    }
+  });
+
+  it("연결 기록이 하나라도 어긋나면 쓰기 0건 — 못 읽으면 다시 시도, 어긋나면 거절", async () => {
+    const cases = [
+      [{ loadFacts: async () => { throw new Error("db down"); } }, "retryable", "facts_unavailable"],
+      [{ loadFacts: null }, "retryable", "facts_unavailable"],
+      [{ loadFacts: async () => ({ ...FACTS, message: null }) }, "blocked", "message_mismatch"],
+      [{ loadFacts: async () => ({ ...FACTS, classBoards: [] }) }, "blocked", "board_unknown"],
+      [{ loadFacts: async () => ({ ...FACTS, memberStudentIds: ["s2"] }) }, "blocked", "student_mismatch"],
+      [{ loadBoardChildren: async () => [{ id: 778, name: "이두리" }] }, "blocked", "child_not_in_board"],
+      [{ loadBoardChildren: async () => { throw new Error("500"); } }, "retryable", "board_check_failed"],
+    ];
+    for (const [over, kind, code] of cases) {
+      const cn = fakeClassnote({ post: onPost });
+      expect(await runReplyOnce(cn.page, ON_ROW, "post", onDeps(over)), code).toMatchObject({ kind, code });
+      expect(cn.writes(), code).toEqual([]);
+    }
+    const other = fakeClassnote({ post: { ...onPost, child: 778 } });
+    expect(await runReplyOnce(other.page, ON_ROW, "post", onDeps())).toMatchObject({ kind: "blocked", code: "child_mismatch" });
+    expect(other.writes()).toEqual([]);
+  });
+
+  it("🔴 쓰기 직전에 설정을 다시 읽는다 — 그 사이 끔·시험으로 내렸거나 못 읽으면 쓰지 않고 요청은 남긴다(게시·수정·삭제 전부)", async () => {
+    const posted = { ...ON_ROW, classnote_comment_id: 40 };
+    const rechecks = [async () => "off", async () => "test", async () => { throw new Error("db"); }, async () => undefined];
+    for (const recheckMode of rechecks) {
+      for (const [action, row] of [["post", ON_ROW], ["edit", { ...posted, processing_action: "edit", pending_body: "고침" }], ["delete", { ...posted, processing_action: "delete" }]]) {
+        const cn = fakeClassnote({ post: onPost, comments: action === "post" ? [] : [bot(40, "네 확인했습니다", "BS3Q 수진T")] });
+        expect(await runReplyOnce(cn.page, row, action, onDeps({ recheckMode }))).toMatchObject({ kind: "retryable", code: "mode_changed", boardId: ON_BOARD });
+        expect(cn.writes()).toEqual([]);
+      }
+    }
+    // 다시 읽어도 같은 모드면 그대로 쓴다.
+    const cn = fakeClassnote({ post: onPost });
+    expect((await runReplyOnce(cn.page, ON_ROW, "post", onDeps({ recheckMode: async () => "on" }))).kind).toBe("done");
+  });
+
+  it("시험 보드 행은 전체 모드에서도 시험 규칙으로 간다(연결 기록을 읽지 않는다)", async () => {
+    const cn = fakeClassnote();
+    let asked = 0;
+    const r = await runReplyOnce(cn.page, ROW, "post", { mode: "on", claimed: new Set(), loadBoardChildren: async () => KIDS, loadFacts: async () => { asked++; return null; } });
+    expect(r.kind).toBe("done");
+    expect(asked).toBe(0);
   });
 });
 
@@ -291,7 +402,73 @@ describe("게시 — 중복 없이", () => {
 
   it("2xx인데 JSON도 새 댓글도 없다(엉뚱한 200) — 성공으로 적지 않는다", async () => {
     const cn = fakeClassnote({ onWrite: ({ method }) => (method === "POST" ? reply(200, "<html></html>") : null) });
-    expect(await runReplyOnce(cn.page, ROW, "post", deps())).toMatchObject({ kind: "retryable", code: "uncertain" });
+    expect(await runReplyOnce(cn.page, ROW, "post", deps())).toMatchObject({ kind: "retryable", code: "uncertain", sent: true });
+  });
+
+  it("🔴 요청은 나갔는데 결과를 모른다(sent) — 다시 못 읽었거나 브라우저가 던졌다 · 다시 읽어 없음을 확인했으면 표식 없음", async () => {
+    // 응답이 끊겼고(실제로는 만들어짐) 다시 읽기도 실패 — ClassNote에 올라갔을 수 있다.
+    const cut = fakeClassnote({
+      onList: (n) => (n >= 2 ? reply(500) : null),
+      onWrite: ({ method, body, state }) => {
+        if (method !== "POST") return null;
+        state.comments.push({ id: state.nextId++, author: { type: "admin" }, author_name: body.author_name, content: body.content });
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    expect(await runReplyOnce(cut.page, ROW, "post", deps())).toMatchObject({ kind: "retryable", code: "comments_unavailable", sent: true });
+    // 쓰는 중에 브라우저가 던져도 '결과 모름'으로 받아 다시 읽는다(코어의 예외 처리로 새지 않는다).
+    const thrown = fakeClassnote();
+    const evaluate = thrown.page.evaluate;
+    let n = 0;
+    thrown.page.evaluate = async (fn, arg) => {
+      if (++n === 3) throw new Error("Target page, context or browser has been closed"); // 원글(1) · 댓글(2) · 쓰기(3)
+      return evaluate(fn, arg);
+    };
+    expect(await runReplyOnce(thrown.page, ROW, "post", deps())).toMatchObject({ kind: "retryable", code: "uncertain", sent: false });
+    // 5xx였고 다시 읽어 없음을 확인 — 올라가지 않았다.
+    const none = fakeClassnote({ onWrite: ({ method }) => (method === "POST" ? reply(502, "bad gateway") : null) });
+    expect(await runReplyOnce(none.page, ROW, "post", deps())).toMatchObject({ kind: "retryable", code: "uncertain", sent: false });
+    // 쓰기 전에 끝난 결과에는 표식이 없다.
+    const before = fakeClassnote({ onList: () => reply(500) });
+    expect((await runReplyOnce(before.page, ROW, "post", deps())).sent).toBeUndefined();
+    // 쓰는 중에 브라우저가 죽어 다시 읽기까지 던져도 '보냈는데 모름'으로 받는다(예외로 새지 않는다).
+    const dead = fakeClassnote();
+    const ev = dead.page.evaluate;
+    let k = 0;
+    dead.page.evaluate = async (fn, arg) => {
+      if (++k >= 3) throw new Error("Target page, context or browser has been closed");
+      return ev(fn, arg);
+    };
+    expect(await runReplyOnce(dead.page, ROW, "post", deps())).toMatchObject({ kind: "retryable", code: "comments_unavailable", sent: true });
+    // 댓글 목록을 읽어 없음을 확인한 뒤 끝난 결과는 absent(앞선 시도의 표식을 내린다) — 읽기도 전에 끝난 결과는 아니다.
+    expect(await runReplyOnce(none.page, ROW, "post", deps())).toMatchObject({ absent: true });
+    const rejected = fakeClassnote({ onWrite: ({ method }) => (method === "POST" ? reply(400, { detail: "금칙어" }) : null) });
+    expect(await runReplyOnce(rejected.page, ROW, "post", deps())).toMatchObject({ kind: "blocked", code: "rejected", absent: true });
+    expect((await runReplyOnce(before.page, ROW, "post", deps())).absent).toBeUndefined();
+    const nopost = fakeClassnote({ post: 502 });
+    expect((await runReplyOnce(nopost.page, ROW, "post", deps())).absent).toBeUndefined();
+  });
+
+  it("🔴 게시 요청을 보낸 순간 progress.sent가 선다(그 뒤 던져도 코어가 표식을 남긴다) · 쓰기 전엔 서지 않는다", async () => {
+    const p1 = { sent: false };
+    await runReplyOnce(fakeClassnote().page, ROW, "post", { ...deps(), progress: p1 });
+    expect(p1.sent).toBe(true);
+    const p2 = { sent: false };
+    await runReplyOnce(fakeClassnote({ comments: [bot(40, "확인했습니다")] }).page, ROW, "post", { ...deps(), progress: p2 }); // 이미 있음 — 안 보낸다
+    expect(p2.sent).toBe(false);
+    const p3 = { sent: false };
+    await runReplyOnce(fakeClassnote({ onList: () => reply(500) }).page, ROW, "post", { ...deps(), progress: p3 });
+    expect(p3.sent).toBe(false);
+  });
+
+  it("댓글 목록을 읽은 직후 코어에 넘긴다(onComments) — 되찾은 댓글은 이 행의 것으로 또 적지 않는다 · 콜백이 실패해도 게시는 간다", async () => {
+    const cn = fakeClassnote({ comments: [parent(10, "질문"), bot(40, "확인했습니다")] });
+    let seen = null;
+    const r = await runReplyOnce(cn.page, ROW, "post", { ...deps(), onComments: async (list) => { seen = list.map((c) => c.id); return [40]; } });
+    expect(seen).toEqual([40, 10]);
+    expect(r).toMatchObject({ kind: "done", commentId: 5000 }); // 40은 다른 행이 되찾아 갔다 → 새로 올린다
+    const failing = fakeClassnote();
+    expect((await runReplyOnce(failing.page, ROW, "post", { ...deps(), onComments: async () => { throw new Error("db"); } })).kind).toBe("done");
   });
 
   it("같은 출처에 엔드포인트가 없으면(404·405) kapi로 한 번 — 400은 넘기지 않는다", async () => {

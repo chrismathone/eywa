@@ -3,9 +3,10 @@
  *
  * 원장 2026-09-30 *"이전 1인 반에서 작동하는 기능을 반 기준으로 바꿔도 작동하게"* — aywa에서 쓴 답글을 연동 PC 워커가
  * ClassNote 그 글에 댓글로 올린다. 게시 명의 = `<반 이름> <강사 호칭>`(예 "BS3Q 수진T"), 본문엔 서명을 넣지 않는다(원장 결정).
- * 🔴 dev 단계 하드 가드 = `REPLY_MODE`(코드 상수 "test") — 학원이 테스트 보드의 학원이 글만. 설정 모드(꺼짐/테스트/시범 강사/켜짐)는
- *    main 반영 단계에서 이 상수 자리를 학원설정 읽기로 바꾼다.
- * 🔴 워커가 같은 값을 `scripts/_classnote/parent-reply-guard.mjs`에 따로 든다(런타임이 달라서) — 한쪽을 바꾸면 다른 쪽도
+ * 🔴 모드 = 학원 설정 `report.classnoteParentReplyMode`(끔·시험·전체, 기본 끔) — 읽는 자리는 [`classnoteReplyMode`](../owner/classnote-gate.ts)
+ *    하나다(모듈이 꺼지면 끔). 이 파일의 함수는 모드를 **인자로** 받는다(상수 없음).
+ *    끔 = 없는 기능(버튼·면·서버 전부) · 시험 = 학원이 테스트 보드의 학원이 글만 · 전체 = 답글 자격이 있는 글(워커가 확정 연결을 다시 본다).
+ * 🔴 워커가 길이·테스트 대상을 `scripts/_classnote/parent-reply-guard.mjs`에 따로 든다(런타임이 달라서) — 한쪽을 바꾸면 다른 쪽도
  *    (가드: reply-guard-parity.test.ts).
  */
 
@@ -13,9 +14,7 @@ import type { SemanticTone } from "@/lib/design/semantic-color";
 
 export const REPLY_BODY_MAX = 1000;
 export const REPLY_AUTHOR_MAX = 60;
-export type ReplyMode = "off" | "test" | "pilot" | "on";
-/** 🔴 하드 가드 — 설정으로 바꾸지 않는다(dev 단계). */
-export const REPLY_MODE: ReplyMode = "test";
+export type ReplyMode = "off" | "test" | "on";
 export const REPLY_TEST_TARGETS = {
   boards: [
     { id: 1317083, name: "[수학] 테스트반" },
@@ -44,17 +43,55 @@ export function testTargetBoardId({ boardName, childId }: { boardName: string | 
   return board.id;
 }
 
-/** 지금 모드에서 이 메시지에 답글을 받을 수 있나. 통과하면 워커가 대조할 보드 번호(알면). */
+/**
+ * 지금 모드에서 이 메시지에 답글·공감을 받을 수 있나. 통과하면 워커가 대조할 보드 번호(알면 — 시험 보드만 안다).
+ * 전체(on)는 여기서 다 통과시키고, 누가 쓸 수 있는지(자격)·대상이 확정됐는지는 서버 `decideReplyPermission`이 본다.
+ * 🔴 모르는 모드 값은 끔으로 읽는다(타입 밖 값이 와도 열리지 않는다).
+ */
 export function replyTargetAllowed(
   mode: ReplyMode,
   target: { boardName: string | null; childId: number | null },
 ): { ok: true; boardId: number | null } | { ok: false; reason: string } {
-  if (mode === "off") return { ok: false, reason: "답글 기능이 꺼져 있습니다" };
-  if (mode === "test") {
-    const boardId = testTargetBoardId(target);
-    return boardId ? { ok: true, boardId } : { ok: false, reason: "시험 단계라 학원이 테스트 보드의 글에만 답글을 쓸 수 있습니다" };
-  }
-  return { ok: false, reason: "아직 이 보드에는 답글을 쓸 수 없습니다(시험 단계)" };
+  const boardId = testTargetBoardId(target);
+  if (mode === "on") return { ok: true, boardId };
+  if (mode === "test") return boardId ? { ok: true, boardId } : { ok: false, reason: "시험 단계라 학원이 테스트 보드의 글에만 답글을 쓸 수 있습니다" };
+  return { ok: false, reason: "사용할 수 없는 기능입니다" };
+}
+
+/** 발송용 1인 보드 `(수학)홍길동`·`(영어)홍길동`의 학생 이름 부분(공백 무시) — 그 모양이 아니면 null. 워커 `personalBoardOf`와 같은 규칙. */
+export function personalBoardStudentName(boardName: string | null): string | null {
+  const m = /^\((수학|영어)\)(.+)$/.exec((boardName ?? "").replace(/\s/g, ""));
+  return m ? m[2]! : null;
+}
+
+/**
+ * 전체(on) 모드에서 그 보드가 aywa가 아는 **모양**인가 — 0302a에 하나로 연결된 반 보드(`boardIsClass`)이거나 1인 보드 `(수학|영어)이름`.
+ * 목록(벨·'학부모 글·답글' 면)이 버튼을 세울지 정할 때 쓴다: 영어 그룹반처럼 어차피 받지 않는 글에 "눌러도 안 되는 버튼"을 세우지 않는다.
+ * 시험 보드·시험 모드는 그대로 통과(그쪽은 `replyTargetAllowed`가 이미 걸렀다).
+ */
+export function replyBoardKnown(a: { mode: ReplyMode; testBoardId: number | null; boardIsClass: boolean; boardName: string | null }): boolean {
+  if (a.mode !== "on" || a.testBoardId !== null) return true;
+  return a.boardIsClass || personalBoardStudentName(a.boardName) !== null;
+}
+
+/**
+ * 전체(on) 모드에서 워커가 통과시킬 수 있는 자리인가 — 앱이 **요청을 받기 전에** 같은 조건을 미리 본다(받아 놓고 실패로 끝나지 않게).
+ * 워커 `evaluateReplyTarget`의 ③·⑤에 해당: 보드가 0302a에 하나로 연결된 반 보드이거나, 1인 보드 `(과목)이름`이고 그 이름이
+ * **확정 연결된 학생의 보드 이름**(`studentBoardName` = ClassNote용 이름 > 이름)과 같다. 그리고 학생·원아가 확정돼 있다.
+ * 시험 보드(boardId 있음)는 그대로 통과. 최종 판정은 워커가 ClassNote를 다시 읽어 한다(여기는 안내용 사전 확인).
+ */
+export function replyPlaceConfirmed(a: {
+  mode: ReplyMode; testBoardId: number | null; boardIsClass: boolean; boardName: string | null; studentId: string | null; childId: number | null;
+  /** 1인 보드일 때만 본다 — 확정 연결된 학생의 보드 이름에 쓰이는 이름 */
+  studentBoardName?: string | null;
+}): { ok: true } | { ok: false; reason: string } {
+  if (a.mode !== "on" || a.testBoardId !== null) return { ok: true };
+  const personal = a.boardIsClass ? null : personalBoardStudentName(a.boardName);
+  if (!replyBoardKnown(a)) return { ok: false, reason: "aywa에 연결된 반 보드나 1인 보드의 글이 아니라 답글을 올릴 수 없습니다" };
+  if (!a.studentId || a.childId == null) return { ok: false, reason: "이 글의 학생을 확정하지 못해 답글을 올릴 수 없습니다" };
+  if (personal && personal !== (a.studentBoardName ?? "").replace(/\s/g, ""))
+    return { ok: false, reason: "보드 이름이 이 학생의 1인 보드와 달라 답글을 올릴 수 없습니다" };
+  return { ok: true };
 }
 
 /** 본문 검사 — 앞뒤 공백·줄바꿈 표기만 정리(워커 `normalizeReplyText`와 같은 규칙). */
@@ -97,9 +134,13 @@ export function buildReplyAuthorName(a: { boardName: string | null; boardIsClass
 /**
  * 수정·삭제할 수 있나 — 작성자 본인 또는 관리자급, 그리고 손댈 수 있는 상태(대기·게시됨).
  * `manager` = 서버가 정한 관리자급 여부(역할 + 보호된 계정 자동 통과) — 주면 역할 판정에 더한다.
+ * 🔴 연동 PC가 **한 번이라도 집은**(`claimed` — 재시도로 돌아왔든 멈춤 복구로 돌아왔든) 대기 행은 "아직 ClassNote에 없다"고 볼 수 없다 —
+ *    게시 요청이 나갔는데 응답이 끊겼을 수 있어서다. 그 상태에서 aywa 기록만 고치면 워커가 고친 본문을 못 찾아 **한 번 더 게시**한다(댓글 2개).
+ *    연동 PC가 확정할 때까지 막는다(`retryCount` > 0도 같은 뜻).
  */
-export function canChangeReply(a: { userId: string; role: string; authorUserId: string | null; status: ReplyStatus; manager?: boolean }): boolean {
+export function canChangeReply(a: { userId: string; role: string; authorUserId: string | null; status: ReplyStatus; manager?: boolean; retryCount?: number; claimed?: boolean }): boolean {
   if (a.status !== "queued" && a.status !== "success") return false;
+  if (a.status === "queued" && ((a.retryCount ?? 0) > 0 || a.claimed === true)) return false;
   return a.manager === true || isReplyManager(a.role) || (!!a.authorUserId && a.authorUserId === a.userId);
 }
 
@@ -128,13 +169,21 @@ export function replyStatusView(r: { status: ReplyStatus; editedAt?: string | nu
   }
 }
 
-/** 연동 PC가 답글을 받을 수 있나 — 살아 있고 · 실게시 PC이고 · 이 기능을 아는 버전(`caps.parentReply`). */
-export function workerReadyForReplies(rows: { last_seen: string | null; last_results: unknown }[], nowMs: number): boolean {
-  return rows.some((r) => {
+/** 기능별로 워커가 실어야 하는 표식. 답글은 **설정 모드를 읽는 판**(`parentReplySettings`)이어야 한다 — 옛 판은 모드가 코드 상수(시험)다. */
+const REQUIRED_CAPS = { parentReply: ["parentReply", "parentReplySettings"], parentReaction: ["parentReaction"] } as const;
+
+/**
+ * 연동 PC가 답글(`parentReply`)·공감(`parentReaction`)을 받을 수 있나 — 살아 있는 실게시 PC가 있고, 그 PC가 **전부** 그 기능을 아는 버전이다.
+ * 🔴 "한 대라도 알면"이 아니다: 실게시는 지점당 한 대(먼저 시작한 PC)만 돌아, 옛 판 PC가 담당이고 새 판 PC가 대기 중이면
+ *    요청을 받아도 아무도 집지 않는다(24시간 뒤 만료). 살아 있는 실게시 PC 중 하나라도 옛 판이면 받지 않는다.
+ */
+export function workerReadyForReplies(rows: { last_seen: string | null; last_results: unknown }[], nowMs: number, cap: "parentReply" | "parentReaction" = "parentReply"): boolean {
+  const live = rows.flatMap((r) => {
     const seen = r.last_seen ? Date.parse(r.last_seen) : NaN;
-    if (!Number.isFinite(seen) || nowMs - seen > REPLY_WORKER_ALIVE_MIN * 60_000) return false;
+    if (!Number.isFinite(seen) || nowMs - seen > REPLY_WORKER_ALIVE_MIN * 60_000) return [];
     const o = r.last_results && typeof r.last_results === "object" && !Array.isArray(r.last_results) ? (r.last_results as Record<string, unknown>) : null;
-    const caps = o?.caps && typeof o.caps === "object" && !Array.isArray(o.caps) ? (o.caps as Record<string, unknown>) : {};
-    return o?.postMode === true && caps.parentReply === true;
+    if (o?.postMode !== true) return [];
+    return [o.caps && typeof o.caps === "object" && !Array.isArray(o.caps) ? (o.caps as Record<string, unknown>) : {}];
   });
+  return live.length > 0 && live.every((caps) => REQUIRED_CAPS[cap].every((k) => caps[k] === true));
 }

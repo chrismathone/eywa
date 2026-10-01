@@ -26,7 +26,7 @@ import { ReportSection } from "@/app/(shell)/owner/_components/report-section";
 import { AiMentSection } from "@/app/(shell)/owner/_components/ai-ment-section";
 import { isModuleEnabled } from "@/lib/modules";
 import { isFeatureLicensed } from "@/lib/license/server";
-import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { classnoteReplyMode, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { getVideoHomeworkClassOptions } from "@/features/video-homework/server/queries";
 import { redirect } from "next/navigation";
 import { isClassnoteReportTab, lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
@@ -50,9 +50,11 @@ type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "pa
 // 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
 // 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
 // ClassNote 발송 PC에 기대는 면 — ClassNote 모듈이 꺼진 학원(새 학원 기본)에선 세우지 않는다(2026-09-22 방향 B).
-function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean): Tab {
+function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean, replyOn: boolean): Tab {
   const t = sp.tab;
   if (!classnoteOn && t && isClassnoteReportTab(t)) return "writing";
+  // 학부모 글 답글·공감이 끔인 지점엔 그 면이 없다 — 주소를 직접 쳐도 없는 면과 똑같이 첫 면으로(있었는지조차 모르게).
+  if (!replyOn && t === "parent_replies") return "writing";
   // AI 라이선스가 꺼진 지점엔 'AI 멘트' 면이 없다(2026-09-30 "꺼지면 흔적 없이").
   if (!aiOn && t === "ai_ment") return "writing";
   if (t === "list" || t === "writing" || t === "notice" || t === "boards" || t === "queue") return t;
@@ -80,9 +82,11 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
   const [tenantSettings, aiOn] = await Promise.all([getTenantSettings(), isFeatureLicensed(viewer.tenantId, "ai_analysis")]);
   const classnoteOn = isModuleEnabled(tenantSettings.modules.disabled, "classnote");
-  const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn, aiOn);
+  // 학부모 글 답글·공감 모드(학원 설정, 기본 끔 — 모듈이 꺼지면 끔). 끔이면 면도 조회도 없다.
+  const replyMode = classnoteReplyMode(tenantSettings);
+  const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn, aiOn, replyMode !== "off");
 
-  const faces = lessonReportFaces({ canOwner, canSend: canSendReports, classnoteOn, aiOn });
+  const faces = lessonReportFaces({ canOwner, canSend: canSendReports, classnoteOn, aiOn, replyOn: replyMode !== "off" });
 
   // 큐는 독립 탭에서만 조회·폴링한다. 다른 관리 면의 첫 화면을 차지하지 않는다.
   const queueP = tab === "queue" && classnoteOn ? getClassnoteQueue(3) : Promise.resolve(null);
@@ -123,7 +127,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
               )
           : tab === "parent_replies"
             ? // 학부모 글·답글(0317a) — 최근 14일 원문 + 답글 상태. 조회 실패는 빈 목록 대신 안내(아래).
-              listParentThreads().then((parentThreads) => ({ parentThreads }), () => ({ parentThreads: null }))
+              listParentThreads({ mode: replyMode, user: viewer }).then((parentThreads) => ({ parentThreads }), () => ({ parentThreads: null }))
           : tab === "recall"
             ? // 회수는 **검색해서 찾는** 화면이라 첫 페인트에 목록을 싣지 않는다(전건을 띄우면 오클릭 거리만 는다).
               getReportFilterOptions().then((filterOptions) => ({ recallOptions: filterOptions }))

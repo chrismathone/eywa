@@ -721,7 +721,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - **감사로그**: `classnote_board_sync_request`(누른 사람 — 합류 포함) · `classnote_board_sync_run`(연동 PC 직접 insert, 실행자 `system:classnote-sync-now` — 반·배정·보류·남은 반 수, 실패 사유).
 - ⚠️ **워커 zip 교체 필요** — 옛 워커엔 `caps.syncRequests`가 없어 앱이 요청을 받지 않는다(버튼이 '연동 PC가 꺼져 있거나 옛 버전' 사유로 잠김).
 
-### 10.8 학부모 글·댓글에 답글 — 2026-09-30 (0317a, dev 단계 · 학원이 전용)
+### 10.8 학부모 글·댓글에 답글 — 2026-09-30 (0317a) · 2026-10-01 학원 설정 모드(끔·시험·전체)
 
 원장 *"이전 1인 반에서 작동하는 기능을 반 기준으로 바꿔도 작동하게"* — 1인 보드 시절엔 보드에 연결된 강사가 ClassNote 앱에서 직접 답글을 달았다.
 반 보드엔 담임 한 명만 연결되므로, aywa에서 쓰고 **연동 PC 워커가 봇 계정으로 그 글에 댓글**을 올린다(게시·수정·삭제).
@@ -729,8 +729,9 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 | 구성 | 파일 | 역할 |
 |---|---|---|
 | 표 | `supabase/migrations/0317a_classnote_parent_replies.sql` | 답글 1행 = 요청·상태·ClassNote 댓글 번호·원문 보존(`edit_history`). 쓰기 = 서버 액션·워커만. 재클릭 = `client_key` 유니크 · 같은 글·같은 본문(살아 있는 것) = 부분 유니크(23505로 받음, [[#113]]) |
-| 앱 판정(순수) | [`reply-policy.ts`](../src/features/classnote-reply/reply-policy.ts) · [`reply-eligibility-rule.ts`](../src/features/classnote-reply/reply-eligibility-rule.ts) · [`notification-match.ts`](../src/features/classnote-reply/notification-match.ts) | 모드 가드 · 본문 1,000자 · 게시 명의 · 상태 라벨 · 연동 PC 준비(`caps.parentReply`) · 자격 · 벨 알림 → 원문 행 |
-| 서버 액션 | [`reply-actions.ts`](../src/features/classnote-reply/server/reply-actions.ts) (+ `reply-permission`·`reply-change`·`reply-data`·`reply-eligibility`) | 입력 = 메시지 행 id + 본문 + 재클릭 키. 글·원아·보드는 0184a 행으로 다시 찾는다 |
+| 설정 | 수업보고서 > 보고서 설정 > 발송 탭 '학부모 글 답글·공감'([`classnote-reply-mode-field.tsx`](../src/app/(shell)/owner/_components/classnote-reply-mode-field.tsx)) | `report.classnoteParentReplyMode` = 끔(기본)·시험·전체. 저장 = `saveOwnerSection`. 읽기 = 앱 [`classnoteReplyMode`](../src/features/owner/classnote-gate.ts)(모듈이 꺼지면 끔) · 워커 `loadReplyMode`(DB 직결, 폴마다) |
+| 앱 판정(순수) | [`reply-policy.ts`](../src/features/classnote-reply/reply-policy.ts) · [`reply-eligibility-rule.ts`](../src/features/classnote-reply/reply-eligibility-rule.ts) · [`notification-match.ts`](../src/features/classnote-reply/notification-match.ts) | 모드별 대상 · 전체 모드 사전 확인 · 본문 1,000자 · 게시 명의 · 상태 라벨 · 연동 PC 준비(`caps.parentReply`) · 자격 · 벨 알림 → 원문 행 |
+| 서버 액션 | [`reply-actions.ts`](../src/features/classnote-reply/server/reply-actions.ts) (+ 첫 문 [`reply-gate`](../src/features/classnote-reply/server/reply-gate.ts) · `reply-permission`·`reply-change`·`reply-data`·`reply-eligibility`) | 입력 = 메시지 행 id + 본문 + 재클릭 키. 글·원아·보드는 0184a 행으로 다시 찾는다 |
 | 화면 | 벨 알림 행 '답글 쓰기' → [`parent-reply-dialog.tsx`](../src/features/classnote-reply/components/parent-reply-dialog.tsx) · 수업보고서 '학부모 글·답글' 면 | 원문 · 답글 상태(10초 갱신) · 미리보기(학부모가 볼 이름표+본문) · 확인 창 · 보내는 동안 잠금 · 실패 사유 한글(원문은 툴팁) · 수정·삭제 |
 | 워커 | [`classnote-parent-reply-core.mjs`](../scripts/_classnote/classnote-parent-reply-core.mjs)(큐·DB) + [`parent-reply-run.mjs`](../scripts/_classnote/parent-reply-run.mjs)(**ClassNote 쓰기는 여기서만**) + 순수 [`parent-reply-guard.mjs`](../scripts/_classnote/parent-reply-guard.mjs) + [`parent-reply-api.mjs`](../scripts/_classnote/parent-reply-api.mjs) | 한 폴 한 건 · `skip locked` · 멈춤 15분 복구 · 감사로그 `classnote_parent_reply_run`(실행자 `system:classnote-parent-reply`) |
 | 1회 실행 | [`process-parent-replies.mjs`](../scripts/_classnote/process-parent-replies.mjs) `--id <답글> [--check \| --post]` | 개발 PC 시험·수동 복구. **하트비트를 쓰지 않는다**(실게시 임대를 가로채지 않게) |
@@ -740,13 +741,16 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - **자격** = 원장·관리자·매니저 ∪ **학부모 글 벨 수신자와 같은 판정**(원장 2026-09-30 정정: 현재 담당만) — 워커 순수 함수
   `planNotifyRecipients`·`classWideRecipients`·`finalizeRecipients`([notify-recipients.mjs](../scripts/_classnote/notify-recipients.mjs))를 앱이 **그대로** 부른다
   ([`reply-eligibility-rule.ts`](../src/features/classnote-reply/reply-eligibility-rule.ts)는 행 → 입력 변환뿐). 수정·삭제 = 작성자 본인 또는 관리자급. 관리자급엔 보호된 계정(`isCurrentUserSuperAdmin`)이 자동 포함된다(decisions/staff.md).
-- **게이트 순서(서버)**: 로그인·학생 아님 → ClassNote 모듈 → 모드 → 발송 스위치 → '다른 강사 뷰'(열람 전용) → 자격 → 연동 PC(살아 있음 + 실게시 + `caps.parentReply`) → 본문·쿨다운 20초 → 감사로그.
-- **워커 안전장치**: ① `--post` + 모듈 + 발송 스위치 ② 모드 가드 — 행의 보드·원아가 허락 밖이면 **ClassNote에 접속(로그인)조차 하지 않는다** ③ 쓰기 직전 원글을 다시 읽어 보드·원아 대조 + 테스트 보드 원아가 전부 `학원*`
+- **게이트 순서(서버)**: 로그인·학생 아님 → 모드(학원 설정 — ClassNote 모듈이 꺼지면 끔. **끔이면 '사용할 수 없는 기능입니다'** = 모듈 꺼진 학원과 같은 답) → 발송 스위치 → '다른 강사 뷰'(열람 전용) → 자격 → 전체 모드의 대상 확정 → 연동 PC(살아 있음 + 실게시 + `caps.parentReply`) → 본문·쿨다운 20초 → 감사로그.
+  모든 서버 액션(답글·공감)의 첫 줄이 [`replyGate`](../src/features/classnote-reply/server/reply-gate.ts)다(가드 `reply-mode-wiring.test.ts`가 새 액션이 그 문을 빼먹으면 잡는다).
+- **워커 안전장치**: ① `--post` + 모듈 + 발송 스위치 ② 모드 가드 — 모드는 **폴마다 DB에서 다시 읽는다**(끔이면 아무것도 집지 않는다 — 큐 보존·로그 없음). 행이 허락 밖이면 **ClassNote에 접속(로그인)조차 하지 않는다** ③ 쓰기 직전 원글을 다시 읽어 보드·원아 대조 + (시험) 테스트 보드 원아가 전부 `학원*` / (전체) 아래 확정 연결 규칙
   ④ 게시 직전 댓글을 다시 읽어 **같은 본문의 봇 댓글이 있으면 올리지 않고 성공** ⑤ 게시 뒤 다시 읽어 확인 — 같은 글자가 없으면 **쓰기 전엔 없던 봇 댓글** 중 응답이 준 번호(또는 공백만 다른 것)를 찾는다.
   응답이 불확실하고(5xx·끊김) 새 댓글도 없을 때만 재시도(3회) — 다시 못 읽으면 쓰지 않는다 ⑥ 수정·삭제는 번호가 같고 학부모 것이 아니며 **내용이 aywa 기록과 같은** 댓글만(누가 ClassNote에서 고쳤으면 손대지 않는다).
-- 🔴 **쓰기 직전 마지막 문 = 허가증**(적대 리뷰 2026-09-30): `evaluateReplyTarget`이 통과시킨 결과(보드·원아·**글 번호**)를 쓰기 함수 `writeComment`·`deleteComment`가 인자로 받아 요청 직전에
-  `assertReplyWritePermit`으로 다시 본다 — 모드는 그 파일의 상수만 읽는다(인자·환경변수·실행 인자로 못 바꾼다). 호출부가 가드를 빼먹거나 다른 글 번호로 쓰려 하면 요청이 나가지 않는다.
-  쓰기 함수를 부르는 파일은 `parent-reply-run.mjs` 하나(가드 테스트 [`parent-reply-run.test.mjs`](../scripts/_classnote/parent-reply-run.test.mjs)가 가짜 ClassNote로 쓰기 경로 전체를 돌리고, 호출 파일·export 목록·뒷문 없음을 잠근다).
+- 🔴 **쓰기 직전 마지막 문 = 허가증**(적대 리뷰 2026-09-30 · 2026-10-01 강화): `evaluateReplyTarget`이 **발급한 그 객체**(보드·원아·**글 번호**·모드·근거)를 쓰기 함수
+  `writeComment`·`deleteComment`·`writeReaction`·`deleteReaction`이 인자로 받아 요청 직전에 `assertReplyWritePermit(permit, 글, 모드)`로 다시 본다 — 손으로 만든 객체·복사본은 값이 맞아도
+  통과하지 못한다(발급 목록 WeakSet · 고칠 수 없게 동결). 🔴 **모드는 쓰기 직전에 DB에서 한 번 더 읽는다**(`recheckMode`) — 대상을 확인한 뒤 끔·시험으로 내렸으면 쓰지 않고
+  요청은 대기로 남긴다(다시 켜면 이어서 간다, 24시간 상한은 그대로). 모드를 정하는 자리는 코어 `loadReplyMode` 하나다(환경변수·실행 인자·코드 상수 없음 — 가드 테스트가 잠근다).
+  쓰기 함수를 부르는 파일은 `parent-reply-run.mjs`(댓글)·`parent-reaction-run.mjs`(공감) 둘(가드 테스트 [`parent-reply-run.test.mjs`](../scripts/_classnote/parent-reply-run.test.mjs)가 가짜 ClassNote로 쓰기 경로 전체를 돌리고, 호출 파일·export 목록·뒷문 없음을 잠근다).
 - 🔴 **2xx 뒤 "같은 글자를 못 찾았다 → 다시 게시" 금지**: ClassNote가 본문을 다듬어 저장하면 글자 대조가 빗나가 같은 답글이 세 번 나간다. 2xx + 응답의 댓글 번호면 만들어진 것으로 적는다.
   반대로 "새로 생긴 봇 댓글이 하나뿐이니 그것"으로 넓히지도 않는다(그 사이 사람이 직접 단 댓글을 내 것으로 적으면 답글은 안 나갔는데 '게시됨'이 된다) — 번호나 글자라는 증거가 있을 때만.
 - **묵은 요청**: 새 답글은 요청한 지 **24시간**이 넘으면 올리지 않는다(발송 스위치를 며칠 내렸다 올리거나 연동 PC가 오래 꺼져 있던 뒤 뒤늦게 나가는 것 방지). '이미 올라가 있나' 확인 **뒤**에 건다 — 수정·삭제엔 걸지 않는다.
@@ -755,11 +759,73 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 - **같은 재클릭 키 + 다른 본문**: 응답이 끊긴 뒤 글을 고쳐 다시 보내면 서버는 "앞서 보낸 답글이 이미 접수됐다"고 알린다("이미 요청"으로 성공 처리하면 화면은 고친 글이 나간 줄 안다). 작성기의 키는 **본문에 묶인다**(본문이 바뀌면 새 키). 실패·시간 초과 뒤엔 창이 목록을 다시 읽는다.
 - **API**: 작성 `POST /api/v1_1/reports/{글}/comments/`(없으면 `kapi…/v1_1/reports/{글}/comments`) · 수정 `PATCH …/v1/reports/{글}/comments/{댓글}` · 삭제 `DELETE` 같은 경로 · 목록 `GET /api/v1/reports/{글}/comments/`.
   같은 출처가 404·405·리다이렉트일 때만 kapi로 넘긴다(그 밖은 이미 만들어졌을 수 있다). 리다이렉트는 따라가지 않는다(POST→GET 오판 방지).
-- 🔴 **dev 단계 하드 가드**: 모드 = 코드 상수 `test`(앱 `REPLY_MODE`·워커 `REPLY_MODE` — 패리티 테스트가 잠근다). 허락 = 보드 `[수학] 테스트반`(#1317083)·`(수학)학원이`(#1291581) **그리고** 원아 5268389.
-  설정 모드(꺼짐/테스트/시범 강사/켜짐, 기본 꺼짐)는 main 반영 단계에서 이 상수 자리를 학원설정으로 바꾸고, `pilot`·`on`에 반 보드 매칭(0302a)·1인 보드 게이트를 `evaluateReplyTarget`에 붙인다(지금은 `mode_not_ready`로 거절).
+- 🔴 **모드 = 학원 설정 세 단계(2026-10-01)** — `report.classnoteParentReplyMode`. 값은 **셋뿐**(그 밖·빈 값·옛 `pilot`은 끔으로 읽는다).
+  · **끔(off, 기본)** = 없는 기능. 벨 버튼·수업보고서 '학부모 글·답글' 면(주소를 직접 쳐도 첫 면으로)·서버 액션(모듈 꺼진 학원과 같은 답)·워커(집지 않음·로그 없음) 전부.
+  · **시험(test)** = 보드 `[수학] 테스트반`(#1317083)·`(수학)학원이`(#1291581) **그리고** 원아 5268389의 글만(침산 ClassNote 센터의 번호다 — 다른 지점엔 통과할 글이 없다).
+  · **전체(on)** = 아래 조건을 **전부** 통과한 글만. 하나라도 모르면 거절 + 한글 사유(행의 `error`). 시험 보드는 전체에서도 시험 규칙으로 통과한다.
+  앱과 워커가 같은 값을 본다: 앱은 `getTenantSettings` → `classnoteReplyMode`, 워커는 `loadReplyMode`(postgres 직결 — 발송 스위치와 같은 방식이라 저장 즉시 반영). 워커는 못 읽으면 끔.
+- 🔴 **전체(on) 모드 대상 확인**(워커 `evaluateReplyTarget` — 쓰기마다 매번): ① 행이 학부모 메시지(0184a)에 묶여 있고 그 메시지의 글·댓글·원아가 행과 같다(메시지는 **이 지점 것**으로 읽는다)
+  ② 글을 다시 읽어 HTTP 200 · 글의 원아 = 행의 원아 · 보드 번호가 행과 같다(행이 비어 있으면 글에서 읽은 값으로 채운다 — 앱은 시험 보드 밖의 보드 번호를 모른다)
+  ③ 보드가 aywa가 아는 보드 — (a) 0302a에 **그 보드 번호로 하나** 연결된 반 보드, 또는 (b) 1인 보드 `(수학|영어)이름`이고 그 원아의 확정 연결(0185a)이 있으며
+  **보드 이름 = 그 학생의 보드 이름**(ClassNote용 이름 > 이름 — 발송 워커 `boardClassName`과 같은 규칙. 이름으로 학생을 **찾지** 않는다, 확정 연결을 되짚어 볼 뿐)
+  ④ 그 원아가 그 보드의 지금 원아 목록에 있다(`fetchBoardChildren`) ⑤ 행의 학생 = 확정 연결이 가리키는 학생(반 보드 = 0302a 원아 매칭 `ok` 한 줄 + 0185a가 있으면 그것도 같은 학생 · 1인 보드 = 0185a)
+  ⑥ 시험 보드는 통과. 확정 연결 조회(`loadReplyFacts`)가 실패하면 쓰지 않고 다시 시도한다(3회 뒤 실패). 앱은 요청을 받기 전에 같은 조건을 미리 본다
+  ([`replyPlaceConfirmed`](../src/features/classnote-reply/reply-policy.ts) · `confirmedStudentOf` — 받아 놓고 실패로 끝나지 않게, 패리티 테스트가 앱·워커 규칙을 대조).
+  ⚠️ **실데이터(2026-10-01, 최근 14일 글 30개 읽기 전용 드라이런)**: 통과 11(1인 보드 10 · 반 보드 1) / 거절 19 = `[EIE] …` 보드 10 · 접두 없는 보드 6(0302a 연결 없음 — 영어 그룹반으로 보인다) ·
+  1인 보드인데 보드 이름이 확정 연결 학생의 이름과 전혀 다른 글 3. → **영어 그룹반 글에는 전체 모드에서도 답글·공감이 안 된다**(0302a가 수학 반 보드만 담는다). 넓히려면 영어 그룹 보드↔반 연결 기록이 먼저다.
+  최근 30일 1인 보드 글 144건 가운데 이름 일치 136 · 전혀 다른 이름 4 · 원아 링크 없음 4.
+- **버튼 노출**: 시험 = 학원이 글 · 전체 = **aywa가 아는 보드**(0302a에 하나로 연결된 반 보드 · 1인 보드 모양 — `replyBoardKnown`)의 글만. 영어 그룹반처럼 어차피 받지 않는 글엔 "눌러도 안 되는 버튼"을 세우지 않는다.
+  벨: 관리자급은 그 보드 확인만(학생 확정 여부는 창에서 사유로), 강사는 알림마다 `decideReplyPermission`(**자격 + 대상 확정**까지 — 같은 조회는 한 번만(memo), 메시지 30개 상한).
+  면('학부모 글·답글')도 같은 보드 확인. 자격 판정 자체는 그대로다(벨 수신자와 같은 규칙).
 - **SQL 전·옛 워커**: 표가 없으면 버튼·면의 답글 칸이 없다([[#95]]). 🔴 표 유무를 `head: true`(HEAD)로 묻지 말 것 — 표가 없을 때의 빈 본문 404를 postgrest-js가 **error 없는 204**로 바꿔 "표 있음"으로 읽힌다([`replyTableReady`](../src/features/classnote-reply/server/reply-data.ts)는 한 줄을 GET한다).
-  발송 스위치가 꺼져 있으면 벨의 '답글 쓰기' 버튼도 세우지 않는다(면은 남는다 — 대기 중 답글을 취소할 자리). 옛 워커(caps 없음)면 앱이 요청을 받지 않는다. 개발 서버에서만 `CLASSNOTE_REPLY_DEV_WORKER=1`로 연동 PC 확인을 건너뛴다(프로덕션 빌드는 읽지 않음).
+  발송 스위치가 꺼져 있으면 벨의 '답글 쓰기' 버튼도 세우지 않는다(면은 남는다 — 대기 중 답글을 취소할 자리). 옛 워커(caps 없음)면 앱이 요청을 받지 않는다. 개발 서버에서만 `CLASSNOTE_REPLY_DEV_WORKER=1`로 연동 PC 확인을 건너뛴다(프로덕션 빌드는 읽지 않음 · 모드·자격·가드는 건너뛰지 않는다).
+- ⚠️ **옛 워커 zip**(2026-09-30 판 — 모드가 코드 상수 `test`, 설정을 모른다): 앱이 요청을 **받지 않는다**. 답글 요청은 하트비트에 `caps.parentReply` **와** `caps.parentReplySettings`(설정 모드를 읽는 판)가
+  둘 다 있어야 받고, 공감은 `caps.parentReaction`. 🔴 살아 있는 실게시 PC가 여럿이면 **전부** 새 판이어야 한다(`workerReadyForReplies` — 실게시는 지점당 한 대(먼저 시작한 PC)만 돌아,
+  옛 판이 담당이면 새 판이 대기 중이어도 아무도 집지 않는다). 옛 워커가 집어도 실제 학부모 글은 접속 없이 실패시키므로 쓰기는 안전하다. → **새 zip을 연동 PC에 적용해야 기능이 켜진다.**
+- 🔴 **'대기'·'실패'는 "ClassNote에 아직 없다"는 뜻이 아닐 수 있다**(적대 리뷰 2026-10-01) — 게시 요청이 나갔는데 응답이 끊기고 다시 읽기도 실패하면 행은 대기(다시 시도)로 돌아온다. 그래서:
+  ① 앱은 **연동 PC가 한 번 이상 시도한(`retry_count > 0`) 대기 답글**의 수정·취소를 받지 않는다(그 사이 aywa 본문만 고치면 워커가 고친 본문을 못 찾아 한 번 더 올린다 — 조건부 쓰기에도 `retry_count = 0`).
+  ② 워커는 요청이 나간 적 있는 행(쓰기 뒤 결과 모름 · 쓰는 중 브라우저가 죽음 — 게시 직전에 세우는 `progress.sent`로 예외 경로도 잡는다 · 게시하다 멈춰 멈춤 복구로 돌아옴)에
+  **전용 사유**("ClassNote에 올라갔는지 확인하지 못했습니다")를 남기고(로그인 실패 같은 '안 보낸 실패'와 글자가 다르다), 그 행이 실패로 끝나면(재시도 소진이든 가드 거절이든)
+  **"올라갔는지 알 수 없습니다 — ClassNote에서 확인하세요"**로 적는다. 댓글 목록을 읽어 없음을 확인하면 표식을 내린다. 앱의 수정·취소 금지는 `retry_count > 0` **또는 연동 PC가 한 번이라도 집은 행**(`worker_host`)이다(멈춤 복구 포함).
+  ③ 그렇게 끝난 같은 글의 답글은 다음에 그 글을 처리할 때 댓글 목록에서 **되찾는다**(`recoverLostReplies` — 같은 본문이고 게시 명의가 **적혀 있고 같은** 봇 댓글이 있으면 게시됨으로 되돌려
+  aywa에서 수정·삭제할 수 있게. 명의 칸이 없는 댓글(사람이 직접 쓴 것)은 되찾지 않는다. 감사로그 `kind: recovered`).
+  같은 본문으로 다시 보낸 답글은 그 댓글을 '이미 있음'으로 받는다(새로 올리지 않는다). ⚠️ 쓰기 전 단계 실패(로그인·원글 읽기)도 재시도 횟수에 든다 — 빼면 ClassNote가 죽은 동안 15초마다 로그인을 시도한다.
 - ⚠️ 원문이 빈 학부모 글·댓글(사진·스티커만)은 0184a에 저장되지 않아 답글 버튼이 없다. 학원이는 재원생이 아니라 **벨 알림이 생기지 않는다** — 시험은 '학부모 글·답글' 면에서.
+
+### 10.9 학부모 글·댓글에 공감 — 2026-10-01 (0319a)
+
+원장 *"댓글 공감 누르기 버튼도 가능하면 기능 배선"* — 답글과 같은 길: aywa에서 누르면 요청 행이 생기고 연동 PC 워커가 봇 계정으로 그 글(학부모 새 글) 또는 그 댓글(학부모 댓글)에 공감을 누르거나 푼다.
+모드·자격·대상 확인·쓰기 허가증은 **답글과 같은 것**이다(따로 만든 가드가 없다).
+
+| 구성 | 파일 | 역할 |
+|---|---|---|
+| 표 | `supabase/migrations/0319a_classnote_parent_reactions.sql` | **학부모 메시지 하나에 공감 하나**(지점 단위 일반 유니크 — 부분 유니크 아님, [[#113]]). 풀었거나 못 눌렀으면 **같은 행을 다시 쓴다**. 쓰기 = 서버 액션·워커만 |
+| 앱 판정(순수) | [`reaction-policy.ts`](../src/features/classnote-reply/reaction-policy.ts) | 종류 6 + 한글 라벨 · 상태 라벨 · 누를 수 있나/풀 수 있나 |
+| 서버 액션 | [`reaction-actions.ts`](../src/features/classnote-reply/server/reaction-actions.ts) (+ `reaction-data`) | 입력 = 메시지 행 id(+ 종류). 첫 문 `replyGate` → `decideReplyPermission`(답글과 같은 자격·명의) → 연동 PC(`caps.parentReaction`) → 조건부 쓰기 → 감사로그 |
+| 화면 | [`reaction-control.tsx`](../src/features/classnote-reply/components/reaction-control.tsx) — 벨 알림 행('답글 쓰기' 옆, 종류는 그 아래 줄) · '학부모 글·답글' 면 · 답글 창 | '공감' → 종류 여섯(좋아요·감사해요·확인했어요·기쁨·놀람·슬픔) → 요청. 눌려 있으면 `확인했어요 · 공감함`(누른 사람·관리자급은 눌러서 푼다). 처리 중 잠금 + 10초 갱신 |
+| 워커 | [`classnote-parent-reaction-core.mjs`](../scripts/_classnote/classnote-parent-reaction-core.mjs)(큐·DB) + [`parent-reaction-run.mjs`](../scripts/_classnote/parent-reaction-run.mjs)(**공감 쓰기는 여기서만**) + 순수 [`parent-reaction-guard.mjs`](../scripts/_classnote/parent-reaction-guard.mjs) | 데몬 2-e · 한 폴 한 건 · `skip locked` · 멈춤 15분 복구 · 감사로그 `classnote_parent_reaction_run`(실행자 `system:classnote-parent-reaction`) |
+| 1회 실행 | [`process-parent-reactions.mjs`](../scripts/_classnote/process-parent-reactions.mjs) `--id <공감 행> [--post]` | 개발 PC 시험·수동 복구(하트비트를 쓰지 않는다) |
+
+- **API(2026-10-01 번들 조사 + 학원이 글 실측)**: 글 `POST /api/v1_2/reports/{글}/reactions/` · 댓글 `POST /api/v1/reports/{글}/comments/{댓글}/reactions/` — 본문 `{reaction_type, author_name}` → 201 `{id, reaction_type, author_name, created}`.
+  풀기 `DELETE …/reactions/{공감 번호}/` → 204(없는 번호 404). 종류 `GET /api/v1_2/reactions/types/`. 공감한 사람 `GET …/reactions/users/`.
+- 🔑 **ClassNote에는 보낸 명의(`author_name`)가 '공감한 사람'으로 보인다**(봇 계정 이름이 아니다 · 사진 없음). 그리고 공감은 **(계정·명의·종류)당 하나**다 — 같은 명의·같은 종류를 다시 보내면
+  **같은 번호가 돌아온다**(멱등, 수는 그대로). 명의가 다르면 같은 봇 계정이어도 **새 공감**이 생긴다(실측: 다른 명의로 `like` 2개). 같은 명의로 다른 종류도 따로 눌린다.
+  → 강사 여럿이 각자 명의로 누르는 것도 ClassNote는 받는다. aywa는 **메시지당 하나**만 둔다(먼저 누른 사람의 명의 — 학부모 폰에 공감 알림이 여러 번 가지 않게). 넓히려면 0319a 유니크를 (메시지, 누른 사람)으로 바꾸면 된다(원장 결정 사항).
+- 🔴 **`my_reactions`는 그 명의로 읽어야 나온다**(`?author_name=` — 안 붙이면 늘 빈 배열, [[#136]]). 워커는 누르기 전에 그 명의의 공감을 읽어 이미 있으면 쓰지 않고, 풀 때는 **그 명의의 공감 목록에 그 번호가 있을 때만** 지운다(남이 누른 공감을 풀지 않는다).
+- **누르기**: 댓글 공감이면 그 댓글이 아직 있고 학부모가 쓴 것이어야 한다(전체 모드) · ClassNote 종류 목록에 그 종류가 아직 있어야 한다 · 요청한 지 24시간이 넘으면 누르지 않는다.
+  그 명의로 **다른 종류**가 눌려 있으면 그것부터 풀고 누른다(메시지당 하나 — 그 명의의 공감 목록에 있는 것만 푼다).
+- **풀기**: 풀었다는 응답(204·404)을 받아도 **다시 읽어 사라졌을 때만** 풀림으로 적는다(남아 있으면 다시 시도).
+- 🔴 **'확인 필요'(`unconfirmed`)**: 누르기 요청이 나갔는데 결과를 확정하지 못하면(응답 끊김 + 다시 읽기 실패 · 쓰는 중 브라우저가 죽음 · 누르다 멈춰 멈춤 복구로 돌아옴) 워커가 이 표식을 세운다.
+  표식이 선 행은 앱이 **취소하지 않고, 다른 명의·종류로 덮어쓰지도 않는다**(덮어쓰면 ClassNote에 눌려 있을 수 있는 공감을 aywa가 잊어 풀 길이 없고, 다른 명의로 하나 더 눌린다).
+  다시 누르면 그 행을 **확인만** 시킨다(요청 시각은 그대로 · 지금 고른 종류는 싣지 않는다 · 화면엔 안내문) — 워커는 그 명의로 읽어 눌려 있으면 성공, 없으면 **누르지 않고** 표식을 내려 실패로 끝낸다
+  ("눌리지 않은 것을 확인했습니다 — 다시 눌러 주세요"). 그 뒤 다시 누르면 새 요청이다. (재리뷰 2026-10-01 — 확인이 옛 요청을 뒤늦게 누르던 길을 막았다.)
+- **벨에서의 모호한 댓글**: 같은 글에 같은 문구의 학부모 댓글이 둘이면(알림은 본문으로 댓글을 찾는다) 벨에는 공감 버튼을 세우지 않고, 그 알림에서 연 답글 창에도 서버가 공감 상태를 싣지 않는다
+  (`getParentReplyContext(…, { noReaction })`) — 공감은 댓글 단위라 엉뚱한 댓글에 눌린다. 면에서는 댓글마다 줄이 따로라 그대로 누른다.
+- **명의** = 답글 게시 명의와 같은 규칙(`<반 이름> <강사 호칭>`). **자격** = 답글과 같다. 풀기 = 누른 사람 본인 또는 관리자급.
+- **SQL 전·옛 워커**: 표가 없거나(0319a 전) `caps.parentReaction`을 아는 실게시 PC가 없으면 공감 버튼이 **없다**(답글은 그대로 돈다). 표 유무는 한 줄을 GET해서 확인한다(HEAD 금지, [[#95]]).
+  워커는 표가 없으면 10분마다 다시 확인하며 조용히 쉰다.
+- **끝-끝 확인 범위(2026-10-01)**: ClassNote API는 학원이 글 #1457933394 / 댓글 #793757838에서 실제로 누르고 풀어 확인했고(뒤에 공감 0개로 정리), 큐·DB는 내장 Postgres(PGlite)에 0319a를 적용해 가짜 ClassNote로 돌렸다.
+  🔴 **운영 DB에 0319a를 적용한 뒤 워커 경로의 실제 끝-끝(앱 버튼 → 연동 PC → ClassNote)은 아직 안 돌렸다** — 설정을 '시험'으로 두고 학원이 글에서 한 번 눌러 볼 것.
 
 ## 11. 퇴원처리 안전 판정 — aywa 퇴원생을 ClassNote에서 내리기 (Phase 0: 판정+스캔만, 쓰기 0, 2026-07-30)
 

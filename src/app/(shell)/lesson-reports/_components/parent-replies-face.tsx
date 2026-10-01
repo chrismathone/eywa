@@ -6,7 +6,7 @@ import { Pill } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
 import { toneColor } from "@/lib/design/semantic-color";
 import { ParentReplyDialog } from "@/features/classnote-reply/components/parent-reply-dialog";
-import { REPLY_MODE } from "@/features/classnote-reply/reply-policy";
+import { ReactionControl } from "@/features/classnote-reply/components/reaction-control";
 import type { ParentThreadsView } from "@/features/classnote-reply/reply-types";
 
 function kstDateTime(iso: string | null): string {
@@ -16,8 +16,9 @@ function kstDateTime(iso: string | null): string {
 }
 
 /**
- * 수업보고서 '학부모 글·답글' 면(0317a) — 최근 학부모 글·댓글과 답글 상태. '답글'은 벨과 **같은 창**을 연다.
- * 창을 닫으면 목록을 다시 받는다(상태 칸이 서버 조회라서).
+ * 수업보고서 '학부모 글·답글' 면(0317a·0319a) — 최근 학부모 글·댓글과 답글·공감 상태. '답글'은 벨과 **같은 창**을 연다.
+ * 창을 닫으면 목록을 다시 받는다(상태 칸이 서버 조회라서). 공감 버튼은 공감 기능이 있는 줄에만 선다(0319a 전·옛 워커면 없다).
+ * 이 면은 학원 설정 '학부모 글 답글·공감'이 끔이면 세워지지 않는다(페이지가 막는다).
  */
 export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
   const router = useRouter();
@@ -27,7 +28,7 @@ export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
     <section className="space-y-3">
       <p className="text-text-dim text-xs break-keep">
         최근 {view.days}일 학부모 글·댓글 {view.total}건{view.total > shown ? ` 중 최근 ${shown}건` : ""} · 답글은 연동 PC가 ClassNote 그 글에 댓글로 올립니다.
-        {view.replyReady && REPLY_MODE === "test" ? " 지금은 시험 단계라 학원이 테스트 보드의 글에만 답글을 쓸 수 있습니다." : ""}
+        {view.replyReady && view.testOnly ? " 지금은 시험 단계라 학원이 테스트 보드의 글에만 답글을 쓸 수 있습니다." : ""}
       </p>
       {shown === 0 ? (
         <p className="text-text-faint py-8 text-center text-sm">최근 {view.days}일 동안 들어온 학부모 글·댓글이 없습니다.</p>
@@ -44,8 +45,9 @@ export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
                 </div>
                 <p className="text-foreground mt-1 text-sm leading-relaxed break-keep [overflow-wrap:anywhere]">{r.content}</p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-start gap-2">
                 {r.latest ? <Pill color={toneColor(r.latest.tone)}>{r.replyCount > 1 ? `${r.latest.label} 외 ${r.replyCount - 1}` : r.latest.label}</Pill> : null}
+                <ReactionControl view={r.reaction} />
                 {r.replyable ? (
                   <Button type="button" size="sm" variant="outline" onClick={() => setOpen(r.messageId)}>
                     답글

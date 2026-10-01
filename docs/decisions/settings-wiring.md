@@ -9,6 +9,9 @@
   profile `representativeName`·`phone`·`email`·`address` + billing `latePolicy`(등록 인쇄물 푸터/안내,
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
+  - **(2026-10-01) report `classnoteParentReplyMode`**(학부모 글 답글·공감 — 끔 기본·시험·전체): 폼 = 수업보고서 > 보고서 설정 > 발송(`classnote-reply-mode-field.tsx`).
+    소비처 = 앱 [`classnoteReplyMode`](src/features/owner/classnote-gate.ts)(→ 벨 버튼 `getReplyTargetsForNotifications` · '학부모 글·답글' 면 `lessonReportFaces({replyOn})` · 서버 액션 첫 문 `replyGate`)
+    + 연동 PC 워커 `loadReplyMode`(raw SQL 직독, 폴마다). 🔴 원시값 `report.classnoteParentReplyMode`를 다른 파일이 직접 읽지 말 것 — 모듈 꺼짐을 놓친다(가드 `reply-mode-wiring.test.ts`).
   - ~~⚠️ 영어 교시는 여전히 `ENGLISH_PERIODS` 하드코딩~~ → **✅ 해소(2026-07-06)**: 과목 운영 탭 `subjects[].weekdayPeriods`로 과목별 설정 가능(미설정=english 내장→전역 폴백).
   - **(2026-07-20) 비로그인(pre-auth) 표면도 배선 완료** — 로그인 화면·루트 탭 제목이 제품 기본값/하드코딩 "인재원"이던 것을
     [`getPublicBranding()`](src/features/owner/server/public-branding.ts)로 전환(profile `logoUrl`·`logoText`·`name`·`branchLabel` 소비).

@@ -76,6 +76,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   classnote_notice: "학부모 공지",
   classnote_sync: "ClassNote 반 보드 동기화",
   classnote_parent_reply: "ClassNote 학부모 답글",
+  classnote_parent_reaction: "ClassNote 학부모 글 공감",
   operating_periods: "세션 기간",
   // 2026-08-17 원장 제보("대상이 attendance 등 날것으로 나옴") — 누락 유형 전수 추가(가드 테스트도 갱신).
   attendance: "출결",
@@ -1095,6 +1096,15 @@ export function auditDetail(
       const verb = m.action === "edit" ? "수정" : m.action === "delete" ? "삭제" : "게시";
       if (m.ok === false) return join(`ClassNote 댓글 ${verb} 실패`, str(m.error));
       return join(`ClassNote 댓글 ${verb}`, num(m.commentId) === null ? null : `댓글 ${num(m.commentId)}`, str(m.author));
+    }
+    case "classnote_parent_reaction_request":
+      return join(str(m.reaction) ? `공감 '${str(m.reaction)}'` : "공감", `명의 ${str(m.author) ?? "?"}`);
+    case "classnote_parent_reaction_remove_request":
+      return join(m.own === false ? "다른 사람 공감 풀기(관리자)" : "내 공감 풀기", str(m.author));
+    case "classnote_parent_reaction_run": {
+      const verb = m.action === "remove" ? "풀기" : "누르기";
+      if (m.ok === false) return join(`ClassNote 공감 ${verb} 실패`, str(m.error));
+      return join(`ClassNote 공감 ${verb}`, str(m.author));
     }
     case "classnote_board_sync_run": {
       if (m.ok === false) return join("동기화 실패", str(m.error));

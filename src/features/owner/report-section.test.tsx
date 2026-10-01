@@ -63,6 +63,30 @@ describe("보고서 설정 탭", () => {
     expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
   });
 
+  it("학부모 글 답글·공감 — 기본 끔, 끔·시험·전체 셋만 고르고 저장값에 실린다", () => {
+    render(<ReportSection initial={structuredClone(DEFAULT_SETTINGS.report)} />);
+    const group = screen.getByRole("radiogroup", { name: "학부모 글 답글·공감" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios).toHaveLength(3);
+    expect(within(group).getByRole("radio", { name: /^끔/ })).toBeChecked();
+    expect(within(group).queryByText(/바로 알림이 갑니다/)).not.toBeInTheDocument();
+    fireEvent.click(within(group).getByRole("radio", { name: /^전체/ }));
+    expect(screen.getByText(/답글은 학부모에게 바로 알림이 갑니다/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ classnoteParentReplyMode: "on" }));
+    fireEvent.click(within(group).getByRole("radio", { name: /^시험/ }));
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ classnoteParentReplyMode: "test" }));
+    // 화면에 영문 코드가 보이지 않는다.
+    expect(group.textContent).not.toMatch(/\b(off|test|on|pilot)\b/);
+  });
+
+  it("ClassNote 기능이 꺼진 학원엔 그 칸이 없다(발송 탭째 없다)", () => {
+    render(<ReportSection initial={structuredClone(DEFAULT_SETTINGS.report)} classnoteOn={false} />);
+    expect(screen.queryByRole("radiogroup", { name: "학부모 글 답글·공감" })).not.toBeInTheDocument();
+    expect(screen.queryByText("학부모 글 답글·공감")).not.toBeInTheDocument();
+  });
+
   it("비활성 반을 숨기고 운영 중인 반의 일괄 변경에만 적용한다", () => {
     const initial = structuredClone(DEFAULT_SETTINGS.report);
     initial.videoHomeworkPolicy.disabledClassIds = ["open", "retired"];

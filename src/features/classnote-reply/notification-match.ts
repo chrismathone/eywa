@@ -45,6 +45,18 @@ export function pickMessageForNotification(
   return hits[0]?.id ?? null;
 }
 
+/**
+ * 댓글 알림이 같은 글의 **여러** 학부모 댓글에 맞는가(같은 문구의 댓글이 둘 — "감사합니다" 등).
+ * 답글은 어느 쪽이든 같은 글에 달려 무해하지만, **공감은 댓글 단위**라 옛 알림에서 눌러도 최근 댓글에 눌린다 — 이런 알림엔 벨의 공감 버튼을 세우지 않는다
+ * (수업보고서 '학부모 글·답글' 면에서는 댓글마다 줄이 따로라 그대로 누른다).
+ */
+export function commentNotificationAmbiguous(n: { type: string; link: string | null; body: string | null }, messages: MessageCandidate[]): boolean {
+  if (n.type !== "classnote_parent_comment") return false;
+  const postId = postIdFromClassnoteLink(n.link);
+  if (!postId) return false;
+  return messages.filter((m) => m.classnotePostId === postId && m.source === "comment" && notificationBodyMatches(n.body, m.content)).length > 1;
+}
+
 export const PARENT_MESSAGE_NOTIFICATION_TYPES = ["classnote_parent_post", "classnote_parent_comment"] as const;
 export function isParentMessageNotification(type: string): boolean {
   return (PARENT_MESSAGE_NOTIFICATION_TYPES as readonly string[]).includes(type);

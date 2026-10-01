@@ -4,18 +4,20 @@
 // 봇 계정으로 ClassNote 그 글에 **댓글**로 올린다(게시·수정·삭제). 여기는 "올려도 되나 · 이미 올렸나 · 다음 상태" 판정만.
 // ⚠️ 의존성 0 — playwright·postgres를 import하지 말 것(테스트가 끌어오면 안 된다).
 //
-// 🔴 dev 단계 하드 가드(원장 2026-09-30 *"학원이 계정으로 테스트, dev에서 철저히 구현하고 밀어야"*):
-//    `REPLY_MODE`는 코드 상수 "test"다 — **학원이 테스트 보드 두 개 + 원아 5268389**가 아니면 쓰기·수정·삭제를 전부 거절한다.
-//    설정 모드(꺼짐/테스트/시범 강사/켜짐, 기본 꺼짐)로 바꾸는 건 main 반영 단계 — 그때 `pilot`·`on`에 반 보드 매칭(0302a)·
-//    1인 보드 게이트(board-safety)를 이 파일의 `evaluateReplyTarget`에 붙인다. 지금은 두 모드 모두 `mode_not_ready`로 거절.
-// 🔴 앱(src/features/classnote-reply/reply-policy.ts)이 같은 상수를 한 벌 더 든다(런타임이 달라서) —
+// 🔴 모드 = 학원 설정 `report.classnoteParentReplyMode`(끔 off · 시험 test · 전체 on, 기본 끔). 이 파일은 모드를 **인자로만** 받는다
+//    (상수·환경변수·실행 인자 없음) — 읽는 자리는 코어 `loadReplyMode` 하나(DB 직결, 못 읽으면 끔).
+//    · test = **학원이 테스트 보드 두 개 + 원아 5268389**만.
+//    · on   = 아래 `evaluateReplyTarget`의 조건을 전부 통과한 글만(하나라도 모르면 거절). 시험 보드는 on에서도 통과한다.
+// 🔴 앱(src/features/classnote-reply/reply-policy.ts)이 같은 값을 한 벌 더 든다(런타임이 달라서) —
 //    한쪽을 바꾸면 다른 쪽도(가드: reply-guard-parity.test.ts가 두 파일의 값을 대조한다).
 
 export const REPLY_BODY_MAX = 1000;
 export const REPLY_AUTHOR_MAX = 60;
-export const REPLY_MODES = Object.freeze(["off", "test", "pilot", "on"]);
-/** 🔴 하드 가드 — 설정으로 바꾸지 않는다(dev 단계). */
-export const REPLY_MODE = "test";
+/** 설정에 노출하는 값 셋뿐이다. 그 밖(빈 값·옛 `pilot`·오타)은 전부 끔으로 읽는다. */
+export const REPLY_MODES = Object.freeze(["off", "test", "on"]);
+export function normalizeReplyMode(raw) {
+  return raw === "test" || raw === "on" ? raw : "off";
+}
 export const REPLY_TEST_TARGETS = Object.freeze({
   boards: Object.freeze([
     Object.freeze({ id: 1317083, name: "[수학] 테스트반" }),
@@ -50,10 +52,11 @@ const toNum = (v) => (v === null || v === undefined || v === "" ? null : Number(
 /**
  * ClassNote를 **읽기도 전에** — 요청 행만 보고 지금 모드에서 손댈 수 있는 자리인가.
  * test 모드는 행에 적힌 보드·원아가 테스트 목록이어야 한다(서버가 테스트 대상이면 보드 번호를 채워 넣는다) —
- * 그래야 다른 보드의 글을 조사 목적 없이 GET하지 않는다. 본문·작성자 이름도 여기서 한 번 더 본다.
+ * 그래야 다른 보드의 글을 조사 목적 없이 GET하지 않는다. on 모드는 행이 **학부모 메시지(0184a)·원아·학생**에 묶여 있어야 한다
+ * (묶이지 않은 행은 대상 확인을 통과할 길이 없으니 접속조차 하지 않는다). 본문·작성자 이름도 여기서 한 번 더 본다.
  */
-export function preflightReplyRow({ mode = REPLY_MODE, row }) {
-  if (!REPLY_MODES.includes(mode) || mode === "off") return { ok: false, code: "mode_off" };
+export function preflightReplyRow({ mode, row }) {
+  if (normalizeReplyMode(mode) === "off") return { ok: false, code: "mode_off" };
   const action = row?.processing_action ?? "post";
   const body = normalizeReplyText(action === "edit" ? row?.pending_body : row?.body);
   if (!body || body.length > REPLY_BODY_MAX) return { ok: false, code: "invalid" };
@@ -61,8 +64,16 @@ export function preflightReplyRow({ mode = REPLY_MODE, row }) {
   if (!author || author.length > REPLY_AUTHOR_MAX) return { ok: false, code: "invalid" };
   if (!Number.isFinite(Number(row?.classnote_post_id)) || Number(row.classnote_post_id) <= 0) return { ok: false, code: "invalid" };
   if (action !== "post" && !Number.isFinite(toNum(row?.classnote_comment_id))) return { ok: false, code: "gone" };
-  if (mode === "test" && !isReplyTestTarget({ boardId: row?.board_id, childId: row?.child_id })) return { ok: false, code: "not_test_target" };
-  if (mode === "pilot" || mode === "on") return { ok: false, code: "mode_not_ready" };
+  return preflightReplyPlace({ mode, row });
+}
+
+/** 사전 판정의 '자리' 부분만 — 공감(0319a)도 같은 규칙으로 쓴다(본문·명의 검사는 각자). */
+export function preflightReplyPlace({ mode, row }) {
+  const m = normalizeReplyMode(mode);
+  if (m === "off") return { ok: false, code: "mode_off" };
+  if (isReplyTestTarget({ boardId: row?.board_id, childId: row?.child_id })) return { ok: true };
+  if (m === "test") return { ok: false, code: "not_test_target" };
+  if (!row?.message_id || !row?.student_id || !Number.isFinite(toNum(row?.child_id))) return { ok: false, code: "target_unconfirmed" };
   return { ok: true };
 }
 
@@ -76,48 +87,109 @@ export function isReplyPostExpired(row, now = Date.now()) {
   return !Number.isFinite(at) || now - at > REPLY_POST_MAX_AGE_HOURS * 3_600_000;
 }
 
+/** 1인 보드 이름 `(수학)홍길동` → { subject:"수학", name:"홍길동" }(공백 무시). 그 모양이 아니면 null. */
+export function personalBoardOf(boardName) {
+  const m = /^\((수학|영어)\)(.+)$/.exec(String(boardName ?? "").replace(/\s/g, ""));
+  return m ? { subject: m[1], name: m[2] } : null;
+}
+
+// 통과 결과(허가증)는 **이 파일이 발급한 그 객체**만 쓰기 함수가 받는다 — 손으로 만든 객체·복사본은 거절된다.
+const ISSUED = new WeakSet();
+function issuePermit(fields) {
+  const permit = Object.freeze({ ok: true, ...fields });
+  ISSUED.add(permit);
+  return permit;
+}
+const no = (code, retry = false) => ({ ok: false, code, retry });
+
 /**
  * 게시·수정·삭제 직전 — ClassNote에서 **다시 읽은 글**이 요청 때와 같은 자리인가, 지금 모드에서 허락된 자리인가.
- * @param {{ mode?: string, row: {board_id?:number|null, child_id?:number|null, classnote_post_id?:number|string|null}, post: {status:number, cls?:unknown, child?:unknown}|null,
- *           boardChildren?: Array<{id:number, name?:string}>|null }} p
- * @returns {{ ok: true, boardId: number, childId: number, postId: number|null } | { ok: false, code: string, retry: boolean }}
+ *
+ * 공통: 글 HTTP 200 · 보드 번호가 행과 같다(행이 비어 있으면 글에서 읽은 값을 쓴다) · 원아가 행과 같다.
+ * test: 학원이 테스트 보드의 학원이 글 + 그 보드 원아가 전부 `학원*`.
+ * on(전부 통과해야 한다 — 하나라도 모르면 거절):
+ *   ① 행이 학부모 메시지(0184a)에 묶여 있고 그 메시지의 글·댓글·원아가 행과 같다
+ *   ② 글의 원아 = 행의 원아(행에 원아가 없으면 거절)
+ *   ③ 보드가 aywa가 아는 보드다 — (a) 0302a에 **하나로** 연결된 반 보드, 또는 (b) 1인 보드 `(과목)이름`이고
+ *      그 원아의 확정 연결(0185a)이 있으며 보드 이름이 그 학생의 보드 이름과 같다(이름으로 **찾지** 않는다 — 확정 연결을 되짚어 볼 뿐)
+ *   ④ 그 원아가 그 보드의 지금 원아 목록에 있다
+ *   ⑤ 행의 학생 = 확정 연결이 가리키는 학생(반 보드 = 0302a 원아 매칭 ok 한 줄, 0185a가 있으면 그것도 같아야 한다 · 1인 보드 = 0185a)
+ *   ⑥ 시험 보드는 on에서도 test 규칙으로 통과한다(메시지 없이도)
+ *
+ * @param {{ mode: string, row: object, post: {status:number, cls?:unknown, child?:unknown, className?:unknown}|null,
+ *           boardChildren?: Array<{id:number, name?:string}>|null,
+ *           facts?: null|{ message: null|{id:string, source:string, classnote_post_id:unknown, classnote_comment_id:unknown, child_id:unknown},
+ *                          classBoards: Array<{class_id:string}>, memberStudentIds: string[], childLinkStudentId: string|null, studentNames: string[] } }} p
+ * @returns {Readonly<{ ok: true, mode: string, basis: "test"|"class"|"personal", boardId: number, childId: number, postId: number|null,
+ *             studentId: string|null, messageId: string|null }> | { ok: false, code: string, retry: boolean }}
  */
-export function evaluateReplyTarget({ mode = REPLY_MODE, row, post, boardChildren = null }) {
-  if (!REPLY_MODES.includes(mode) || mode === "off") return { ok: false, code: "mode_off", retry: false };
-  if (!post || post.status !== 200) {
-    return post?.status === 404 ? { ok: false, code: "post_gone", retry: false } : { ok: false, code: "post_unavailable", retry: true };
-  }
+export function evaluateReplyTarget({ mode, row, post, boardChildren = null, facts = null }) {
+  const m = normalizeReplyMode(mode);
+  if (m === "off") return no("mode_off");
+  if (!post || post.status !== 200) return post?.status === 404 ? no("post_gone") : no("post_unavailable", true);
   const boardId = toNum(post.cls);
   const childId = toNum(post.child);
-  if (!Number.isFinite(boardId)) return { ok: false, code: "post_unavailable", retry: true };
-  if (toNum(row?.board_id) !== null && toNum(row.board_id) !== boardId) return { ok: false, code: "board_mismatch", retry: false };
-  if (toNum(row?.child_id) !== null && toNum(row.child_id) !== childId) return { ok: false, code: "child_mismatch", retry: false };
-  if (mode === "test") {
-    if (!isReplyTestTarget({ boardId, childId })) return { ok: false, code: "not_test_target", retry: false };
-    if (!Array.isArray(boardChildren)) return { ok: false, code: "board_check_failed", retry: true };
-    if (!isTestOnlyChildren(boardChildren)) return { ok: false, code: "test_board_polluted", retry: false };
-    return { ok: true, boardId, childId, postId: toNum(row?.classnote_post_id) }; // = 쓰기 허가증(assertReplyWritePermit)
+  if (!Number.isFinite(boardId)) return no("post_unavailable", true);
+  if (toNum(row?.board_id) !== null && toNum(row.board_id) !== boardId) return no("board_mismatch");
+  if (toNum(row?.child_id) !== null && toNum(row.child_id) !== childId) return no("child_mismatch");
+  const postId = toNum(row?.classnote_post_id);
+  if (isReplyTestTarget({ boardId, childId })) {
+    if (!Array.isArray(boardChildren)) return no("board_check_failed", true);
+    if (!isTestOnlyChildren(boardChildren)) return no("test_board_polluted");
+    return issuePermit({ mode: m, basis: "test", boardId, childId, postId, studentId: row?.student_id ?? null, messageId: row?.message_id ?? null });
   }
-  // pilot·on — main 반영 단계에서 반 보드 매칭(0302a)·1인 보드 게이트를 여기에 붙인다. 그 전엔 절대 통과시키지 않는다.
-  return { ok: false, code: "mode_not_ready", retry: false };
+  if (m === "test") return no("not_test_target");
+
+  // ── on ──
+  if (!Number.isFinite(childId) || toNum(row?.child_id) === null) return no("target_unconfirmed"); // ②
+  if (!row?.message_id || !row?.student_id) return no("target_unconfirmed");
+  if (!facts) return no("facts_unavailable", true);
+  const msg = facts.message; // ①
+  if (!msg || String(msg.id) !== String(row.message_id)) return no("message_mismatch");
+  if (toNum(msg.classnote_post_id) !== postId || toNum(msg.child_id) !== childId) return no("message_mismatch");
+  const wantComment = msg.source === "comment" ? toNum(msg.classnote_comment_id) : null;
+  if (msg.source === "comment" && !Number.isFinite(wantComment)) return no("message_mismatch");
+  if (toNum(row?.reply_to_comment_id) !== wantComment) return no("message_mismatch");
+  const personal = personalBoardOf(post.className); // ③
+  const classBoards = Array.isArray(facts.classBoards) ? facts.classBoards : [];
+  const asClass = !personal && classBoards.length === 1;
+  const names = (Array.isArray(facts.studentNames) ? facts.studentNames : []).map((n) => String(n ?? "").replace(/\s/g, "")).filter(Boolean);
+  const asPersonal = !!personal && classBoards.length === 0 && !!facts.childLinkStudentId && names.includes(personal.name);
+  if (!asClass && !asPersonal) return no("board_unknown");
+  if (!Array.isArray(boardChildren)) return no("board_check_failed", true); // ④
+  if (!boardChildren.some((c) => toNum(c?.id) === childId)) return no("child_not_in_board");
+  const student = String(row.student_id); // ⑤
+  if (asClass) {
+    const members = Array.isArray(facts.memberStudentIds) ? facts.memberStudentIds : [];
+    if (members.length !== 1 || String(members[0]) !== student) return no("student_mismatch");
+    if (facts.childLinkStudentId && String(facts.childLinkStudentId) !== student) return no("student_mismatch");
+  } else if (String(facts.childLinkStudentId) !== student) return no("student_mismatch");
+  return issuePermit({ mode: m, basis: asClass ? "class" : "personal", boardId, childId, postId, studentId: student, messageId: String(row.message_id) });
 }
 
 /**
- * 🔴 **쓰기 직전 마지막 문** — ClassNote에 쓰는 함수(parent-reply-api `writeComment`·`deleteComment`)가 요청을 보내기 전에 부른다.
- * `evaluateReplyTarget`이 통과시킨 결과(허가증)가 아니면 던진다. 모드는 **이 파일의 상수**만 본다(인자로 못 바꾼다) —
- * 호출부가 사전 판정·재대조를 빼먹거나 다른 모드를 넘겨도 dev 단계엔 학원이 테스트 보드의 학원이 글이 아니면 요청이 나가지 않는다.
- * pilot·on을 여는 날엔 이 함수에도 그 모드의 조건을 같이 적어야 한다(안 적으면 전부 막힌다 = 안전한 쪽).
+ * 🔴 **쓰기 직전 마지막 문** — ClassNote에 쓰는 함수(parent-reply-api `writeComment`·`deleteComment`·`writeReaction`·`deleteReaction`)가
+ * 요청을 보내기 전에 부른다. `evaluateReplyTarget`이 **발급한 그 객체**(허가증)가 아니면 던진다 — 손으로 만든 객체·복사본은 통과하지 못한다.
+ * `mode` = 쓰기 직전에 다시 읽은 설정값. 확인한 때와 다르면(그 사이 끔·시험으로 내렸으면) 던진다.
+ * 호출부가 사전 판정·재대조를 빼먹거나 다른 글 번호로 쓰려 해도 요청이 나가지 않는다.
  */
-export function assertReplyWritePermit(permit, postId) {
+export function assertReplyWritePermit(permit, postId, mode) {
   const fail = (why) => {
     throw replyWriteGuardError(why);
   };
-  if (!permit || permit.ok !== true) fail("대상 확인(evaluateReplyTarget)을 통과하지 않았습니다");
+  if (!permit || permit.ok !== true || !ISSUED.has(permit)) fail("대상 확인(evaluateReplyTarget)을 통과하지 않았습니다");
   // 허가증은 **그 글** 것이다 — 다른 글 번호로 쓰려 하면 거절(확인한 글과 쓰는 글이 갈라지지 않게).
   if (!Number.isFinite(toNum(postId)) || toNum(permit.postId) !== toNum(postId)) fail("확인한 글과 쓰려는 글이 다릅니다");
   if (!Number.isFinite(toNum(permit.boardId)) || !Number.isFinite(toNum(permit.childId))) fail("보드·원아를 확인하지 못했습니다");
-  if (REPLY_MODE !== "test") fail(`모드 ${REPLY_MODE}는 아직 쓰기를 열지 않았습니다`);
-  if (!isReplyTestTarget({ boardId: permit.boardId, childId: permit.childId })) fail("학원이 테스트 보드의 학원이 글이 아닙니다");
+  const m = normalizeReplyMode(mode);
+  if (m === "off") fail("답글 기능이 꺼져 있습니다");
+  if (permit.mode !== m) fail("대상을 확인한 뒤 설정이 바뀌었습니다");
+  if (permit.basis === "test") {
+    if (!isReplyTestTarget({ boardId: permit.boardId, childId: permit.childId })) fail("학원이 테스트 보드의 학원이 글이 아닙니다");
+    return true;
+  }
+  if (m !== "on") fail("시험 단계라 학원이 테스트 보드의 학원이 글에만 씁니다");
+  if ((permit.basis !== "class" && permit.basis !== "personal") || !permit.studentId || !permit.messageId) fail("학생·학부모 글 연결을 확인하지 못했습니다");
   return true;
 }
 
@@ -236,9 +308,15 @@ export function replyNextState({ action, kind, retryCount = 0 }) {
 
 const LABELS = {
   mode_off: "답글 기능이 꺼져 있습니다",
-  mode_not_ready: "아직 이 보드에는 답글을 올릴 수 없습니다(시험 단계)",
+  mode_changed: "처리하는 사이 설정이 바뀌어 올리지 않았습니다",
   not_test_target: "시험 단계라 학원이 테스트 보드의 학원이 글에만 답글을 올립니다",
   test_board_polluted: "테스트 보드에 학원* 테스트 원아가 아닌 원아가 있어 올리지 않았습니다",
+  target_unconfirmed: "이 글의 학생·원아를 확정하지 못해 올리지 않았습니다",
+  facts_unavailable: "학생 연결 기록을 확인하지 못했습니다 — 잠시 뒤 다시 시도합니다",
+  message_mismatch: "학부모 글 기록과 요청이 달라 올리지 않았습니다",
+  board_unknown: "aywa가 아는 보드(연결된 반 보드·확인된 1인 보드)가 아니라 올리지 않았습니다",
+  child_not_in_board: "그 원아가 지금 그 보드에 없어 올리지 않았습니다",
+  student_mismatch: "원아와 학생의 확정 연결이 요청과 달라 올리지 않았습니다",
   board_mismatch: "원글의 보드가 요청 때와 달라 올리지 않았습니다",
   child_mismatch: "원글의 원아가 요청 때와 달라 올리지 않았습니다",
   post_gone: "원글이 ClassNote에서 지워져 답글을 올릴 수 없습니다",
@@ -247,10 +325,12 @@ const LABELS = {
   comments_unavailable: "ClassNote 댓글 목록을 확인하지 못했습니다 — 잠시 뒤 다시 시도합니다",
   rejected: "ClassNote가 요청을 거부했습니다",
   uncertain: "ClassNote 응답이 불확실해 다시 확인 후 재시도합니다",
+  sent_unsure: "ClassNote에 올라갔는지 확인하지 못했습니다 — 잠시 뒤 다시 확인합니다",
+  uncertain_final: "여러 번 확인했지만 ClassNote에 올라갔는지 알 수 없습니다 — ClassNote에서 확인하세요",
   gone: "ClassNote에서 이미 지워진 댓글입니다",
   not_ours: "ClassNote 댓글이 aywa 기록과 달라 손대지 않았습니다(ClassNote에서 직접 고쳤을 수 있습니다)",
   invalid: "답글 내용이 올바르지 않습니다",
-  write_guard: "쓰기 가드가 막았습니다 — 시험 단계 대상(학원이 테스트 보드의 학원이 글)이 아닙니다",
+  write_guard: "쓰기 가드가 막았습니다 — 대상 확인을 통과하지 않은 글입니다",
   expired: "요청한 지 하루가 넘어 올리지 않았습니다 — 필요하면 다시 써 주세요",
   duplicate_body: "같은 글에 같은 내용의 답글이 이미 있어 고치지 않았습니다",
   record_conflict: "ClassNote 댓글은 고쳤지만 같은 내용의 답글이 이미 있어 aywa 기록을 바꾸지 못했습니다 — ClassNote에서 확인하세요",

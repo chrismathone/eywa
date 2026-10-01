@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCommentNotificationText } from "../../../scripts/_classnote/parent-comment-filter.mjs";
 import { buildNotificationText, classnotePostUrl } from "../../../scripts/_classnote/parent-post-filter.mjs";
-import { notificationBodyMatches, pickMessageForNotification, postIdFromClassnoteLink, type MessageCandidate } from "./notification-match";
+import { commentNotificationAmbiguous, notificationBodyMatches, pickMessageForNotification, postIdFromClassnoteLink, type MessageCandidate } from "./notification-match";
 
 describe("벨 알림 → 학부모 메시지 원문", () => {
   it("링크에서 글 번호(워커 classnotePostUrl과 같은 모양)", () => {
@@ -33,6 +33,15 @@ describe("벨 알림 → 학부모 메시지 원문", () => {
     expect(pickMessageForNotification({ type: "classnote_parent_post", link: classnotePostUrl(10), body: "새 글" }, msgs)).toBe("p");
     expect(pickMessageForNotification({ type: "classnote_parent_comment", link: classnotePostUrl(20), body: "감사합니다" }, msgs)).toBe("c2");
     expect(pickMessageForNotification({ type: "classnote_parent_comment", link: classnotePostUrl(20), body: "내일 결석" }, msgs)).toBe("c3");
+  });
+
+  it("같은 글에 같은 문구의 댓글이 둘이면 '모호' — 공감은 댓글 단위라 벨에서 세우지 않는다", () => {
+    const thanks = { type: "classnote_parent_comment", link: classnotePostUrl(20), body: "감사합니다" };
+    expect(commentNotificationAmbiguous(thanks, msgs)).toBe(true);
+    expect(commentNotificationAmbiguous({ ...thanks, body: "내일 결석" }, msgs)).toBe(false);
+    expect(commentNotificationAmbiguous({ type: "classnote_parent_post", link: classnotePostUrl(10), body: "새 글" }, msgs)).toBe(false);
+    expect(commentNotificationAmbiguous({ ...thanks, link: classnotePostUrl(99) }, msgs)).toBe(false);
+    expect(commentNotificationAmbiguous({ ...thanks, link: null }, msgs)).toBe(false);
   });
 
   it("못 찾으면 null — 다른 글·다른 유형·원문 없는 첨부만 댓글", () => {
