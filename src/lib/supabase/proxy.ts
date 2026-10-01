@@ -110,6 +110,10 @@ export async function updateSession(request: NextRequest) {
   //    그대로 로그인+권한이어야 하므로 `"/inventory/asset/"` **접두**로만 매칭한다("/inventory"로 열면
   //    자산 대장 전체가 공개된다). `/api/*`는 위에서 이미 빠지지만 QR 이미지 라우트는 자체 게이트가 있다.
   const isAssetPublic = pathname === "/inventory/asset" || pathname.startsWith("/inventory/asset/");
+  // /expired (공용 '링크 만료' 안내, 원장 2026-10-01) — 기간이 지난 학부모 링크(/r·/intake…)가 307로 보내는 곳이라
+  // 비로그인 통과가 **필수**다(막히면 만료 링크를 연 학부모가 로그인 화면으로 간다). 안내문뿐이고 데이터·쓰기 경로는 없다.
+  // ⚠️ 정확 매칭 — 하위 경로는 없다(`/expired-…` 같은 다른 경로가 딸려오지 않게).
+  const isLinkExpiredPublic = pathname === "/expired";
   if (
     PUBLIC_PATHS.has(pathname) ||
     isKioskPublic ||
@@ -118,7 +122,8 @@ export async function updateSession(request: NextRequest) {
     isStaffIntakePublic ||
     isSeatPublic ||
     isAcademyPublic ||
-    isAssetPublic
+    isAssetPublic ||
+    isLinkExpiredPublic
   ) {
     return response;
   }
