@@ -45,19 +45,48 @@ node --env-file=.env.local scripts/_classnote/check-video-worker.mjs
 설정: `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_GCLOUD_ACCOUNT`, `GOOGLE_DRIVE_GCLOUD_PATH`.
 다른 Windows 사용자/PC에서는 한 번 다시 로그인해야 한다.
 
-자체 OAuth를 쓰는 환경은 `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`,
-`GOOGLE_DRIVE_REFRESH_TOKEN`도 지원한다. 서비스계정은 Workspace **공유 드라이브**만 지원한다.
+서비스계정은 Workspace **공유 드라이브**만 지원한다(개인 Drive에서는 저장 한도가 0이라 올리지 못한다).
 개인 Drive의 공유 폴더는 Workspace 공유 드라이브와 다르다.
+
+### 연동 PC에 Google 로그인·CLI를 두지 않는 길 — OAuth 값 파일 (2026-09-30)
+
+올린 파일의 주인은 허락한 계정 그대로다(gcloud 방식과 결과가 같다). 로그인은 **다른 PC**에서 한 번만 한다.
+
+1. 구글 클라우드 콘솔에서 한 번: Drive API 사용 → OAuth 동의 화면(대상 '외부', **게시 상태 '프로덕션'** — '테스트'면 7일 뒤 끊긴다)
+   → 클라이언트 만들기(유형 **데스크톱 앱**) → JSON 다운로드.
+2. 아무 PC의 저장소 루트에서(연동 PC가 아니어도 된다):
+
+   ```powershell
+   node scripts/_classnote/video-oauth-login.mjs --client=<client_secret_….json> --account=chrismathone@gmail.com --folder=1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK
+   ```
+
+   브라우저에서 그 계정으로 허용 → 계정·폴더 쓰기 권한을 확인한 뒤 다운로드 폴더에 `aywa-video-oauth.txt`가 생긴다.
+3. 그 파일을 연동 PC의 **다운로드 폴더**로 옮기고 `scripts/_classnote/발송PC-영상연결-OAuth.bat`을 더블클릭한다.
+   값으로 폴더를 다시 확인 → `.env.local` 백업·저장(gcloud 키는 지운다) → 값 파일 삭제 → 워커 재시작 → 적용 확인.
+   저장 뒤 재시작·확인에서 멈췄으면 같은 bat을 다시 누른다(값 파일 없이 이어 간다).
+
+설정: `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN`.
+우선순위는 gcloud 계정 > 갱신 토큰 > 서비스계정이다. 갱신은 `fetch`만 쓴다(연동 PC에 googleapis가 없어도 된다).
+
+- 🔴 값 파일·클라이언트 JSON을 저장소나 `scripts/_classnote`에 두지 말 것 — 워커 zip은 그 폴더를 통째로 담는다
+  (zip 빌드가 발견하면 멈추고, `.gitignore`도 두 이름을 막는다).
+- 🔴 저장 폴더를 바꾸지 말 것 — 영상마다 처음 정한 폴더를 기억해서, 바뀌면 대기 중인 영상이 전부 실패한다
+  (값 파일의 폴더가 지금 것과 다르면 적용을 거절한다. 정말 바꿀 때만 `-AllowFolderChange`).
+- 로그인 스크립트를 다시 돌려도 기존 연결은 그대로다. 스크립트는 허락을 자동으로 취소하지 않는다
+  (취소는 그 계정의 허락 전체를 없애 연동 PC가 쓰던 토큰까지 죽인다 — 필요 없는 허락은 myaccount.google.com/permissions 에서 직접).
+- 연결이 끊기면(허락 취소·만료) 워커 로그에 `[영상] Drive 인증 실패 — …`가 찍히고 영상 작업을 집지 않는다. 1~3을 다시 하면 된다.
 
 ## 수집·분류·중복 방지
 
 - 학부모 글·댓글의 실제 `attached_video`를 수집한다. 본문이 비어도 포함하고, `[영상]` 글자만 있으면 제외한다.
 - 기존 새 글·댓글 감지와 함께, 전체 이력을 날짜 제한 없이 조금씩 순회한다. 댓글도 100개 이후까지 페이지를 읽는다.
-- 진행 상태는 DB에 저장한다. 중단 시 그 위치부터 재개하고 전체 순회 완료 후 하루 뒤 다시 순회해 오래된 글의 새 댓글도 회수한다.
+- 진행 상태는 DB에 저장한다. 중단 시 그 위치부터 재개하고 전체 순회 완료 후 7일 뒤 다시 순회해 오래된 글의 새 댓글도 회수한다(최근 글의 새 댓글은 댓글 감지가 따로 거둔다).
 - 과거 이관은 **클래스노트에서 접근 가능한 과거 글·댓글 영상**이다. 기존 다른 Drive 폴더의 보관 영상은 이동하지 않는다.
 - 학생은 기존 확정 ClassNote↔에이와 번호 연결을 사용한다. 학생명으로 추측하지 않는다.
 - 에이와 반 연결 우선, 학생별 과목 보드는 해당 과목의 수강 이력으로 반을 정한다. 영상 작성일의 수강 기간을 사용한다.
-- 에이와 학생·반이 미연결이거나 여러 반으로 모호하면 업로드를 보류한다. 현재 담임이 없으면 확인 폴더로 분류한다.
+- 반을 못 정해도 올린다(원장 2026-10-01 — 수집이 목적). 1인 보드 글은 JJ 반을 빼고 반을 정하고, 그래도 반이 여러 개이거나 없으면
+  파일명의 반 자리를 `반미정`으로 둔다. 담임이 한 사람으로 정해지면 그 담임 폴더, 아니면 `담임 확인 필요` 폴더.
+  에이와 학생 연결이 없으면 학생 자리를 `미연결 <ClassNote 보드 이름>`으로 두고 `담임 확인 필요` 폴더에 올린다.
 - 담임 폴더는 담임 ID를 DB에서 한 번만 선점한다. 최초 저장한 폴더를 유지한다.
 - 영상 큐는 기관+원본 영상 ID로 중복 제거한다. 같은 폴더의 같은 크기·MD5 파일은 같은 Drive 파일 ID를 사용한다.
 - 생성 ID를 먼저 보존하고 전송을 재개한다. 업로드 후 Drive 파일의 부모·크기·MD5를 검증한다.

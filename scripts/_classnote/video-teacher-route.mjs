@@ -4,6 +4,14 @@ import { resolveTenant } from "./classnote-core.mjs";
 
 const unique = (items) => [...new Set(items.filter(Boolean))];
 
+/**
+ * JJ 반인가 — 반 이름에 `JJ`가 든 개별 진도 반(예 "중등M 개별 JJ2K" · "초등M 초5 JJ1A" · "중등M 중2 JJPS").
+ * 원장 2026-10-01 *"JJ 반을 제외한 해당 학생의 에이와와 매칭되는 담임 이름으로 업로드"* — 수학 수강생 191명 중 127명이 수학 반을
+ * 둘 이상 다니는데 대부분 "정규반 + JJ 반"이다(JJ를 빼면 107명이 반 하나로 좁혀진다). 1인 보드 글에는 어느 반 숙제인지 없어서,
+ * JJ를 빼지 않으면 그 학생들의 영상이 전부 "반이 여러 개"로 보류됐다.
+ */
+export const isJjClass = (className) => /JJ/.test(String(className ?? ""));
+
 /** 이름으로 학생을 추측하지 않는다. 게시 반 우선, 1인 보드는 기존 과목 매핑 사용. */
 export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds, classes, student = null }) {
   const studentId = unique(studentIds).length === 1 ? studentIds[0] : null;
@@ -22,21 +30,30 @@ export function chooseVideoTeacher({ video, tenantId, studentIds, boardClassIds,
     // EIE는 기존 영어 보드 규약. 과목 내 담임이 하나일 때만 사용하고 임의 그룹반 이름은 추측하지 않는다.
     if (!group) return hold("게시 반의 aywa 연결을 확인해야 합니다.");
     matched = classes.filter((c) => group.subjectKeys.includes(c.subject));
+    // JJ 반은 담임 판정에서 뺀다 — 단 그 과목에 JJ 반뿐이면 그 반을 쓴다. 반 보드에 올라온 글(위 linked)은 그 반 그대로다.
+    const regular = matched.filter((c) => !isJjClass(c.class_name));
+    if (regular.length) matched = regular;
   }
   if (!matched.length) return hold("게시 반·과목에 현재 수강 중인 반이 없습니다.");
   const subjects = unique(matched.map((c) => c.subject));
   subject = subjects.length === 1 ? subjects[0] : null;
-  if (unique(matched.map((c) => c.class_id)).length !== 1) return hold("에이와 반 연결이 여러 개여서 반 이름을 확정할 수 없습니다.");
-  identity.classId = matched[0].class_id;
-  identity.className = matched[0].class_name ?? null;
+  // 반이 하나일 때만 반 이름을 쓴다(여러 개면 추측하지 않는다 — 파일명은 '반미정'). 보류(hold)도 올라가기는 한다:
+  // 원장 2026-10-01 *"보류되는 건은 그냥 반 없이 올려 … 어차피 수집하는데 의미가 있기 때문 … 반_미정으로 업로드"*.
+  const single = unique(matched.map((c) => c.class_id)).length === 1;
+  if (single) {
+    identity.classId = matched[0].class_id;
+    identity.className = matched[0].class_name ?? null;
+  }
+  const several = "에이와 반 연결이 여러 개여서 반 이름을 확정할 수 없습니다.";
   if (matched.some((c) => !c.teacher_id || c.teacher_status !== "active" || !c.teacher_name?.trim()))
-    return hold("현재 담임이 미지정이거나 비활성 상태입니다.");
+    return hold(single ? "현재 담임이 미지정이거나 비활성 상태입니다." : several);
   const teachers = unique(matched.map((c) => c.teacher_id));
-  if (teachers.length !== 1) return hold("해당 반·과목의 담임이 여러 명입니다.");
+  if (teachers.length !== 1) return hold(single ? "해당 반·과목의 담임이 여러 명입니다." : several);
   const teacher = matched[0];
   const suffix = Number(teacher.same_name_count) > 1 ? ` (${teacher.teacher_id.slice(0, 8)})` : "";
+  // 반은 여러 개여도 담임이 한 사람이면 그 담임 폴더로 보낸다(반 이름만 비운다).
   return { tenantId, studentId, subject, ...identity, teacherId: teacher.teacher_id, folderName: `${teacher.teacher_name.trim()} 선생님${suffix}`,
-    reason: linked.length ? "게시 반의 현재 담임" : "게시 과목의 현재 담임" };
+    reason: !single ? "담임이 같은 반이 여러 개 — 반 이름 없이 담임 폴더" : linked.length ? "게시 반의 현재 담임" : "게시 과목의 현재 담임" };
 }
 
 /** DB는 SELECT만. 모든 조인은 지점으로 제한한다. DB 오류를 미분류로 숨기지 않는다. */

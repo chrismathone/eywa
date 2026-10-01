@@ -330,9 +330,10 @@ export default async function TimetablePage({
   // '가져오기'(파일 업로드) 버튼 = classes "full"만. 서버 액션도 같은 canManageTimetableImport로 이중 방어
   // (업로드 시트가 테넌트 전체 수강이라 담당 개념이 없다 — 시트 경로와 동일 규약).
   const canManageImport = await canManageTimetableImport(user.systemRole);
+  const canMasterImport = subject === "english" && canManageImport && await canManageSheetSync(user.systemRole);
   // 미래 날짜로 적용해 둔 가져오기(예약) — 툴바 배지의 재료. 예약이 없으면 0행이라 비용이 사실상 없고,
   // 권한자에게만 도는 쿼리다(배지의 × 가 권한자 전용이라 남에게 보여줄 이유가 없다).
-  const scheduled = canSync && canManageImport ? await getScheduledImports() : [];
+  const scheduled = (canSync && canManageImport) || canMasterImport ? await getScheduledImports() : [];
   // 위에서 미리 띄워 둔 근무 블록(판정 재료·강사뷰 격자) — 여기서 한 번 기다린다.
   const scheduleBlocks = await scheduleBlocksPromise;
   // 구글 시트 URL — 대상 시트가 설정돼 있을 때만(그 과목 전용 시트).
@@ -746,7 +747,7 @@ export default async function TimetablePage({
             effectiveDate={g.effectiveDate}
             today={today}
             sheetUrl={sheetUrl}
-            canCancel={canSync && canManageImport}
+            canCancel={(canSync && canManageImport) || canMasterImport}
           />
         ))}
         </ToolbarRow>
@@ -1043,6 +1044,7 @@ export default async function TimetablePage({
           kind={kind}
           canSync={canSync}
           canManageImport={canManageImport}
+          canMasterImport={canMasterImport}
           sheetUrl={sheetUrl}
           compact1h={compactList}
         />

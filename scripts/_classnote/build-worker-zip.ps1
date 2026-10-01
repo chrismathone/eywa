@@ -44,6 +44,9 @@ try {
   $stageInner = Join-Path $stage "scripts\_classnote"
   New-Item -ItemType Directory -Force $stageInner | Out-Null
   Copy-Item -Recurse -Force "$src\*" $stageInner
+  # 비밀이 든 파일(Drive OAuth 값 파일·클라이언트 JSON)이 워커 폴더에 놓여 있으면 zip에 실려 나간다 — 담지 않고 멈춘다.
+  $secrets = @(Get-ChildItem -LiteralPath $stageInner -Recurse -File | Where-Object { $_.Name -like 'aywa-video-oauth*' -or $_.Name -like 'client_secret*.json' })
+  if ($secrets.Count -gt 0) { throw "비밀이 든 파일이 워커 폴더에 있습니다. 지운 뒤 다시 빌드하세요: $($secrets.Name -join ', ')" }
   Compress-Archive -Path (Join-Path $stage "scripts") -DestinationPath $zip
 } finally {
   if (Test-Path -LiteralPath $stage) {

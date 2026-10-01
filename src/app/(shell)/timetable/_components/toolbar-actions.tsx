@@ -7,6 +7,7 @@ import { Popover } from "@base-ui/react/popover";
 import { ChevronDown, ExternalLink, FileSpreadsheet, Loader2, Sheet, Upload } from "@/components/icons/aywa-icon-compat";
 import { TimetableImportDialog } from "./import-dialog";
 import { EnglishImportDialog } from "./english-import-dialog";
+import Link from "next/link";
 import {
   getSheetSyncRows,
   syncSheetsNow,
@@ -65,6 +66,7 @@ export function TimetableToolbarActions({
   kind = DEFAULT_TIMETABLE_KIND,
   canSync = false,
   canManageImport = false,
+  canMasterImport = false,
   sheetUrl = null,
   compact1h = [],
 }: {
@@ -83,6 +85,7 @@ export function TimetableToolbarActions({
    * 페이지가 계산해 내려준다. 화면에서만 숨기는 건 게이트가 아니므로 서버 액션도 같은 함수로 막는다(#77).
    */
   canManageImport?: boolean;
+  canMasterImport?: boolean;
   /** 연결된 구글 시트 URL(설정돼 있을 때만). 있으면 '시트 열기' 노출. */
   sheetUrl?: string | null;
   /** 현재 화면의 '1시간 단위' 압축 섹션(sectionKey) — 엑셀·시트 내보내기에 그대로 반영. */
@@ -182,7 +185,8 @@ export function TimetableToolbarActions({
   // 팝오버에 담을 항목 수 — 권한이 없어 '엑셀' 하나뿐이면 접는 게 순손해라 평면으로 둔다.
   const canFileImport = canImport && exportsAllowed;
   const canSheetImport = canSync && (canStructureImport || canImport);
-  const itemCount = 1 + (canFileImport ? 1 : 0) + (canSync ? 1 : 0) + (canSheetImport ? 1 : 0) + (sheetUrl ? 1 : 0);
+  const showMasterImport = subjectKey === "english" && canMasterImport;
+  const itemCount = 1 + (canFileImport ? 1 : 0) + (canSync ? 1 : 0) + (canSheetImport ? 1 : 0) + (sheetUrl ? 1 : 0) + (showMasterImport ? 1 : 0);
   // 진행 중 표시(트리거) — 내 실행 + 남의 실행(리스) 둘 다. 접었을 때 안쪽 스피너가 안 보이므로 트리거에 올린다.
   const anyBusy = pending || (rows ?? []).some((r) => r.busy);
 
@@ -298,6 +302,7 @@ export function TimetableToolbarActions({
               ) : null}
 
               {sheetSection ? <div className="border-line my-1 border-t" /> : null}
+              {showMasterImport ? <Link href="/timetable/english-sheet" className={itemCls} onClick={() => setMenuOpen(false)}><Sheet className="size-3 shrink-0" />영어 시트 반영</Link> : null}
 
               {/* 과목별 '시트로 보내기' — 원장 2026-09-10 "영어/수학 과목별로 시트 반영. 우측에 최근 반영 날짜".
                   ⚠️ 여기선 팝오버를 **닫지 않는다** — 닫으면 진행 스피너와 결과 문구를 볼 곳이 사라진다
