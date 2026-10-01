@@ -2,13 +2,20 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { homeworkVideoLinks, HOMEWORK_VIDEO_STATUS, type HomeworkVideo } from "@/features/students/homework-videos";
+import { homeworkVideoLinks, homeworkVideoOrigin, HOMEWORK_VIDEO_STATUS, type HomeworkVideo } from "@/features/students/homework-videos";
+import { HomeworkVideoPlayer } from "./homework-video-player";
 
-const dateLabel = (value: string | null) => value
-  ? new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+const dateLabel = (value: string | null, dateOnly = false) => value
+  ? new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+    ...(dateOnly ? {} : { hour: "2-digit", minute: "2-digit" }) })
   : "제출일 미확인";
+/** 직접 제출 영상의 게시 시각은 파일 이름의 날짜(정오로 둔 값)뿐이라 시각을 보이지 않는다. */
+const rowDate = (row: Pick<HomeworkVideo, "posted_at" | "source">) => dateLabel(row.posted_at, row.source === "drive");
 
-export function HomeworkVideosView({ rows, subjectLabels }: { rows: HomeworkVideo[]; subjectLabels: Record<string, string> }) {
+/** `showDriveLink` = 관리자뷰일 때만 'Drive 열기'(원장 2026-10-01 *"drive 열기는 관리자뷰에서만"*). */
+export function HomeworkVideosView({ rows, subjectLabels, showDriveLink }: {
+  rows: HomeworkVideo[]; subjectLabels: Record<string, string>; showDriveLink: boolean;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = rows.find((row) => row.id === selectedId) ?? null;
   const links = homeworkVideoLinks(selected?.drive_file_id ?? null);
@@ -21,7 +28,7 @@ export function HomeworkVideosView({ rows, subjectLabels }: { rows: HomeworkVide
   const subjectLabel = (key: string | null) => key ? subjectLabels[key] ?? "기타 과목" : "과목 미분류";
   if (!rows.length) return <div className="border-line rounded-xl border p-6 text-sm">
     <p className="font-bold">아직 보관된 숙제 영상이 없습니다.</p>
-    <p className="mt-2">클래스노트에 올린 학부모 영상이 수집되면 과목별로 표시됩니다.</p>
+    <p className="mt-2">클래스노트에 올린 학부모 영상이나 담임 폴더에 직접 올린 영상이 들어오면 과목별로 표시됩니다.</p>
   </div>;
   return <div className="space-y-4">
     <p className="text-sm">숙제 영상 <strong className="num">{rows.length}</strong>개 · 영상을 선택하면 바로 볼 수 있습니다.</p>
@@ -36,10 +43,10 @@ export function HomeworkVideosView({ rows, subjectLabels }: { rows: HomeworkVide
               return <li key={row.id} className="flex items-center gap-3 py-3">
                 <button type="button" disabled={!playable} onClick={() => setSelectedId(row.id)} aria-pressed={selectedId === row.id}
                   className={`min-w-0 flex-1 rounded-lg p-2 text-left focus-visible:outline-2 focus-visible:outline-primary ${selectedId === row.id ? "bg-primary/10" : "hover:bg-muted"}`}>
-                  <span className="block text-sm font-bold">{dateLabel(row.posted_at)}</span>
-                  <span className="mt-1 block text-xs">{row.comment_id ? "학부모 댓글" : "학부모 글"} · {HOMEWORK_VIDEO_STATUS[row.status]}</span>
+                  <span className="block text-sm font-bold">{rowDate(row)}</span>
+                  <span className="mt-1 block text-xs">{homeworkVideoOrigin(row)} · {HOMEWORK_VIDEO_STATUS[row.status] ?? "확인 중"}</span>
                 </button>
-                {playable ? <a href={rowLinks.view} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm text-primary underline underline-offset-4">Drive 열기</a> : null}
+                {playable && showDriveLink ? <a href={rowLinks.view} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm text-primary underline underline-offset-4">Drive 열기</a> : null}
               </li>;
             })}
           </ul>
@@ -48,12 +55,11 @@ export function HomeworkVideosView({ rows, subjectLabels }: { rows: HomeworkVide
       <div className="min-w-0 lg:sticky lg:top-4">
         {selected && links ? <section className="space-y-3" aria-label="숙제 영상 뷰어">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-base font-bold">{subjectLabel(selected.subject)} · {dateLabel(selected.posted_at)}</h3>
+            <h3 className="text-base font-bold">{subjectLabel(selected.subject)} · {rowDate(selected)}</h3>
             <Button type="button" variant="outline" onClick={() => setSelectedId(null)}>닫기</Button>
           </div>
-          <iframe key={selected.id} src={links.preview} title={`${subjectLabel(selected.subject)} 숙제 영상 ${dateLabel(selected.posted_at)}`}
-            allow="fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" className="aspect-video w-full rounded-xl border border-line" />
-          <p className="text-xs">재생되지 않으면 ‘Drive 열기’에서 영상 접근 권한이 있는 Google 계정으로 로그인해 주세요.</p>
+          <HomeworkVideoPlayer key={selected.id} preview={links.preview} thumbnail={links.thumbnail} uploadedAt={selected.uploaded_at}
+            title={`${subjectLabel(selected.subject)} 숙제 영상 ${rowDate(selected)}`} />
         </section> : <div className="border-line flex aspect-video items-center justify-center rounded-xl border bg-muted/30 p-6 text-sm">목록에서 재생할 영상을 선택하세요.</div>}
       </div>
     </div>

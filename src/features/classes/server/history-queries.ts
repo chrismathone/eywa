@@ -6,6 +6,7 @@ import { auditActorName, auditDetail } from "@/features/audit/describe";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { historyWindowStart } from "../teacher-as-of";
+import { postgrestQuoted } from "../class-name-conflict";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import {
@@ -93,9 +94,12 @@ export async function getClassHistory(classId: string): Promise<ClassHistoryEntr
       )
         .eq("target_type", "class")
         // 이름이 비면 classId만으로 — 빈 문자열을 or에 넣으면 라벨이 빈 남의 로그가 딸려온다.
+        // 🔴 이름 매칭은 **classId가 없는 옛 로그만**(2026-10-01) — 종강·폐지 반 이름을 비우고 새 반이 그 이름을 쓰면,
+        //    옛 반의 로그(classId 있음)가 이름만으로 새 반 이력에 섞였다. 이름은 큰따옴표로 감싼다 — 비운 이름
+        //    `PL5 (~2026-07)`의 `)`에서 식이 끊겨 400 → 이력이 통째로 "못 읽음"이 됐다(class-name-conflict.ts).
         .or(
           className
-            ? `metadata->>classId.eq.${classId},target_label.eq.${className}`
+            ? `metadata->>classId.eq.${classId},and(metadata->>classId.is.null,target_label.eq.${postgrestQuoted(className)})`
             : `metadata->>classId.eq.${classId}`,
         )
         .order("created_at", { ascending: false })

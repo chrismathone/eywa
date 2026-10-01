@@ -19,21 +19,42 @@ describe("유지 배치와 명시적 연결", () => {
     const f = fixture();
     f.ctx.students[0]!.name = "김하윤C";
     f.grids.roster.cells[2]![2] = "김하윤C";
-    f.ctx.students.push({ ...f.ctx.students[0]!, studentId: "sibling", name: "김하윤A", school: "칠성초", grade: "초3" });
+    f.ctx.students.push({
+      ...f.ctx.students[0]!,
+      studentId: "sibling",
+      name: "김하윤A",
+      school: "칠성초",
+      grade: "초3",
+    });
     let p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.issues.some((i) => i.key === "match:PL2:s1")).toBe(false);
     f.grids.roster.cells[2]![2] = "김하윤";
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
-    expect(p.issues.find((i) => i.key === "match:PL2:s1")?.severity).toBe("confirm");
+    expect(p.issues.find((i) => i.key === "match:PL2:s1")?.severity).toBe(
+      "confirm",
+    );
   });
   it("EiE 진급은 반 ID와 수강을 보존하며 자동으로 이름을 바꿀 계획을 만든다", () => {
     const f = fixture();
     f.ctx.classes[0]!.className = "PL1";
-    f.ctx.enrollments = [enrollment("e1", "s1", "c1"), enrollment("e2", "s2", "c1")];
+    f.ctx.enrollments = [
+      enrollment("e1", "s1", "c1"),
+      enrollment("e2", "s2", "c1"),
+    ];
     const p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.issues.some((i) => i.key === "class:PL2")).toBe(false);
-    expect(p.mappings[0]).toMatchObject({ classId: "c1", method: "roster", explicit: false });
-    expect(p.classUpdates).toContainEqual(expect.objectContaining({ classId: "c1", prevClassName: "PL1", className: "PL2" }));
+    expect(p.mappings[0]).toMatchObject({
+      classId: "c1",
+      method: "roster",
+      explicit: false,
+    });
+    expect(p.classUpdates).toContainEqual(
+      expect.objectContaining({
+        classId: "c1",
+        prevClassName: "PL1",
+        className: "PL2",
+      }),
+    );
     expect(p.roster.moves).toEqual([]);
     expect(p.roster.unchanged).toBe(2);
   });
@@ -88,6 +109,8 @@ describe("유지 배치와 명시적 연결", () => {
     ];
     f.ctx.attendance = [
       {
+        id: "attendance",
+        record: { id: "attendance", status: "present" },
         classId: "other",
         studentId: "s1",
         date: "2026-10-01",
@@ -101,7 +124,7 @@ describe("유지 배치와 명시적 연결", () => {
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.report.plan.remove).toBe(1);
     expect(
-      p.issues.find((i) => i.key === "attendance:other-slot")?.severity,
+      p.issues.find((i) => i.key.startsWith("attendance:"))?.severity,
     ).toBe("error");
   });
   it("원본 한글 이름이 유일한 강사는 자동 연결하고 수동 수정도 받는다", () => {
