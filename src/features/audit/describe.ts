@@ -372,6 +372,15 @@ export function auditDetail(
 ): string | null {
   const m = metadata ?? {};
   switch (action) {
+    // 숙제 영상 제출 링크(0325a) — 어느 반 · 어디서 만든 링크 · 언제까지 / 몇 개 끊었나 / 어느 폴더에 얼마나.
+    case "lesson_report_video_link_issue":
+      return join(ctx.nameOf(m.classId), m.origin === "report" ? "수업보고서 발송용" : "학생 상세에서 복사", str(m.lastDay) ? `${str(m.lastDay)}까지` : null);
+    case "lesson_report_video_link_revoke":
+      return join(ctx.nameOf(m.classId), `쓰는 중인 링크 ${num(m.revoked) ?? 0}개 끊음`);
+    case "lesson_report_video_link_upload": {
+      const bytes = num(m.bytes);
+      return join(ctx.nameOf(m.classId), str(m.folder), bytes === null ? null : `${Math.max(1, Math.round(bytes / 1048576))}MB`);
+    }
     case "session_term_delete": {
       const sessions = num(m.sessionsBefore);
       return join(str(m.period), ctx.nameOf(m.classId), sessions === null ? "미확정 회차 삭제" : `확정 ${sessions}시수 삭제`, won(m.amountBefore), str(m.note) ? `메모: ${str(m.note)}` : null);

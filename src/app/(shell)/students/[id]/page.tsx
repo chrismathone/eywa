@@ -35,6 +35,7 @@ import { ConsultationsTab } from "./_tabs/consultations-tab";
 import { MemosTab } from "./_tabs/memos-tab";
 import { TimelineTab } from "./_tabs/timeline-tab";
 import { HomeworkVideosTab } from "./_tabs/homework-videos-tab";
+import { HomeworkVideoLinks } from "./_tabs/homework-video-links";
 
 export const metadata = { title: "학생 상세 — 에이와" };
 
@@ -292,7 +293,11 @@ export default async function StudentDetailPage({
             back={isInternalPath(backParam) ? backParam : null}
           />
         ) : tab === "homework-videos" ? (
-          <HomeworkVideosTab studentId={student.id} />
+          // 위 = 영상 제출 링크(복사·끊기, 쓸 수 없는 학원에선 안 그린다) · 아래 = 보관된 영상 목록.
+          <div className="space-y-6">
+            <HomeworkVideoLinks studentId={student.id} />
+            <HomeworkVideosTab studentId={student.id} />
+          </div>
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (

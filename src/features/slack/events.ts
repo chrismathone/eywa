@@ -28,6 +28,7 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "progress_anomaly", label: "진도 기록 이상", group: "학생 관리" },
   { type: "classnote_parent_post", label: "학부모 ClassNote 글", group: "학부모·발송" },
   { type: "classnote_parent_comment", label: "학부모 ClassNote 댓글", group: "학부모·발송" },
+  { type: "homework_video_link", label: "제출 링크로 숙제 영상 올림", group: "학부모·발송" },
   { type: "report_send_failed", label: "보고서 발송 실패", group: "학부모·발송" },
   { type: "notice_send_failed", label: "학부모 공지 게시 실패", group: "학부모·발송" },
   { type: "approval_requested", label: "결재 요청", group: "전자결재" },

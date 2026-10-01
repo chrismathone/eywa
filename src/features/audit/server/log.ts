@@ -387,6 +387,10 @@ export const AUDIT_ACTIONS = {
   lesson_report_save: "수업보고서 저장",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
+  // 숙제 영상 제출 링크(0325a) — 발급(학생 상세 복사·수업보고서 글) · 끊기 · 학부모 업로드 완료.
+  lesson_report_video_link_issue: "영상 제출 링크 발급",
+  lesson_report_video_link_revoke: "영상 제출 링크 끊기",
+  lesson_report_video_link_upload: "영상 제출 링크로 영상 올림",
   report_attachment_add: "수업보고서 첨부 추가",
   report_attachment_remove: "수업보고서 첨부 삭제",
   report_covers_date: "수업보고서 대상일 변경",
