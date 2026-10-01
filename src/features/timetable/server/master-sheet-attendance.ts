@@ -60,12 +60,18 @@ export function attendanceBackups(
           ...row.record,
           class_id: m.toClassId,
           slot_start: m.toTime ? `${m.toTime}:00` : null,
+          ...(m.seatChange ? {
+            seat_label: m.seatChange.to,
+            // The import reassigns ownership. Preserve the original entry channel in the snapshot.
+            recorded_via: m.seatChange.to === null && row.record.recorded_via === "seat"
+              ? null : row.record.recorded_via ?? null,
+          } : {}),
         },
       };
     }),
   );
 }
-/** Only the anchor changes. IDs, correction chains, notes, units and recording provenance stay intact. */
+/** Move anchors/seat ownership together; preserve IDs, corrections, notes, units and the full before snapshot. */
 export async function applyAttendanceMoves(
   tx: postgres.TransactionSql,
   tenant: string,
@@ -73,7 +79,9 @@ export async function applyAttendanceMoves(
 ) {
   if (!backups.length) return 0;
   const updated = await tx`
-    update attendance_records a set class_id=(b->'after'->>'class_id')::uuid,slot_start=(b->'after'->>'slot_start')::time
+    update attendance_records a set class_id=(b->'after'->>'class_id')::uuid,slot_start=(b->'after'->>'slot_start')::time,
+      seat_label=case when b->'after' ? 'seat_label' then b->'after'->>'seat_label' else a.seat_label end,
+      recorded_via=case when b->'after' ? 'recorded_via' then b->'after'->>'recorded_via' else a.recorded_via end
     from jsonb_array_elements(${tx.json(backups as never)}::jsonb) b
     where a.tenant_id=${tenant} and a.id=(b->'before'->>'id')::uuid and a is not distinct from jsonb_populate_record(null::attendance_records,b->'before') returning a.id`;
   if (updated.length !== backups.length)

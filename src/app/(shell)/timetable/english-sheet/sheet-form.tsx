@@ -18,6 +18,7 @@ import { IssuesPanel } from "./issues-panel";
 import { ClassBindings } from "./class-bindings";
 import { TeacherBindings } from "./teacher-bindings";
 import { AttendanceMigrationPreview } from "./attendance-migration";
+import { OmittedClasses } from "./omitted-classes";
 import { DAY_LABEL_KO } from "@/features/classes/overlap";
 
 const field =
@@ -25,13 +26,13 @@ const field =
 const actionLabel = {
   create: "추가",
   update: "변경",
-  remove: "마감",
+  remove: "시간표 제외",
   keep: "유지",
 };
 const emptyBindings = {
   classBindings: {},
   teacherBindings: {},
-  closeClassIds: [],
+  closeClassIds: undefined,
 };
 export function MasterSheetForm({
   today,
@@ -303,7 +304,7 @@ export function MasterSheetForm({
               : `${success.result.effectiveDate}부터 적용했습니다.`}
           </p>
           <p className="mt-1 text-sm">
-            배치 마감 {success.result.closed}건 · 배치 추가{" "}
+            종강 {success.result.closedClasses ?? 0}개 반 · 시간표 반영{" "}
             {success.result.inserted}건 · 학생 이동 {success.result.moved}명 ·
             수강 추가 {success.result.added}건 · 출결 이관{" "}
             {success.result.attendanceCells}칸
@@ -354,42 +355,13 @@ export function MasterSheetForm({
             onChange={change}
           />
           <AttendanceMigrationPreview migration={preview.attendanceMigration} />
-          {preview.omittedClasses.length ? (
-            <section aria-label="시트에 없는 반" id="omitted-classes">
-              <h2 className="text-lg font-semibold">시트에 없는 반</h2>
-              <p className="mt-1 text-sm text-text-dim">
-                기본적으로 기존 배치를 유지합니다. 적용일부터 수업 배치를 마감할
-                반만 선택하세요. 반 자체와 수강은 보존됩니다.
-              </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {preview.omittedClasses.map((c) => (
-                  <label key={c.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      disabled={pending}
-                      checked={input.closeClassIds?.includes(c.id) ?? false}
-                      onChange={(e) =>
-                        change({
-                          closeClassIds: e.target.checked
-                            ? [...(input.closeClassIds ?? []), c.id]
-                            : (input.closeClassIds ?? []).filter(
-                                (id) => id !== c.id,
-                              ),
-                        })
-                      }
-                    />
-                    {c.name} · {c.slots}개 배치 마감
-                  </label>
-                ))}
-              </div>
-            </section>
-          ) : null}
+          <OmittedClasses preview={preview} input={input} pending={pending} onChange={change} />
           <section aria-label="변경 내역" className="space-y-3">
             <h2 className="text-lg font-semibold">변경 내역</h2>
             <details>
               <summary className="cursor-pointer text-sm">
                 수업 배치: 추가 {preview.report.plan.create} · 변경{" "}
-                {preview.report.plan.update} · 마감 {preview.report.plan.remove}{" "}
+                {preview.report.plan.update} · 시간표 제외 {preview.report.plan.remove}{" "}
                 · 유지 {preview.report.plan.keep}
               </summary>
               <div className="mt-2 max-h-96 overflow-auto">

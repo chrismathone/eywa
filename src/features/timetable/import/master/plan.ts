@@ -39,6 +39,7 @@ import type {
 import type { RosterDesiredRow } from "../roster/roster-diff";
 import { masterStudentConflicts } from "./student-conflicts";
 import { planAttendanceMigration } from "./attendance-migration";
+import { planClassTerms } from "./class-terms";
 import { buildClassMappings } from "./class-mappings";
 import { buildTeacherMappings } from "./teacher-mappings";
 const MANUAL_CLASS_FIX =
@@ -459,17 +460,18 @@ export function buildMasterPlan(
       name: c.className,
       slots: allLive.filter((s) => s.classId === c.id).length,
     }));
-  for (const id of input.closeClassIds ?? [])
+  const closeClassIds = input.closeClassIds ?? omittedClasses.map((c) => c.id);
+  for (const id of closeClassIds)
     if (!omittedClasses.some((c) => c.id === id))
       issue({
         key: `close:${id}`,
         severity: "error",
-        target: "배치 마감 선택",
-        reason: "마감 대상 반이 변경되었습니다.",
+        target: "종강할 반 선택",
+        reason: "종강 대상 반이 변경되었습니다.",
         fix: "시트에 없는 반 목록을 다시 확인하고 선택을 정리해 주세요.",
       });
   const live = allLive.filter(
-    (s) => covered.has(s.classId) || input.closeClassIds?.includes(s.classId),
+    (s) => covered.has(s.classId) || closeClassIds.includes(s.classId),
   );
   const report = computeStructureDiff(
     match,
@@ -549,15 +551,15 @@ export function buildMasterPlan(
       tab: input.teacherTab,
     });
   for (const c of omittedClasses) {
-    const close = input.closeClassIds?.includes(c.id);
+    const close = closeClassIds.includes(c.id);
     issue({
       key: `vanished:${c.id}`,
       severity: close ? "confirm" : "warning",
       target: c.name,
       reason: close
-        ? `이 반의 기존 수업 ${c.slots}개를 적용일 전날까지 마감합니다.`
+        ? `적용일 전날로 종강합니다. 남아 있는 수강은 종강 처리하고, 반 이름에 종료일을 붙입니다.`
         : `시트에 없어 이 반의 기존 수업 ${c.slots}개를 유지합니다.`,
-      fix: "진급이면 반 연결에서 원래 반을 선택하세요. 수업을 없앨 반은 아래 마감 대상에서 선택하고 학생 명단도 확인하세요.",
+      fix: "진급이면 반 연결에서 원래 반을 선택하세요. 아래 ‘시트에 없는 반’에서 종강일·변경될 반 이름·수강 종료 명단을 확인해 주세요. 기존 수강·출결 이력은 보존됩니다.",
       href: `/classes/${c.id}`,
     });
   }
@@ -726,6 +728,7 @@ export function buildMasterPlan(
   );
   for (const item of attendanceMigration.issues) issue(item);
   const plan = {
+    termClosures: planClassTerms(closeClassIds.filter((id) => omittedClasses.some((c) => c.id === id)), input.effectiveDate, ctx, diff.moves),
     attendanceMigration: {
       moves: attendanceMigration.moves,
       retainedCells: attendanceMigration.retainedCells,

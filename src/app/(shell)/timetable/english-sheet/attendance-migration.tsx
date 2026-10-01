@@ -71,6 +71,10 @@ export function AttendanceMigrationPreview({
                         반의 각 교시에 연결하며 원본 기록은 모두 보존합니다.
                       </p>
                     ) : null}
+                    {m.seatChange ? <p className="mt-1 text-xs text-text-dim">
+                      {m.seatChange.from} → {m.seatChange.to ?? "일반 수업"}.
+                      적용일부터 새 시간표의 수업 구분으로 출결을 연결합니다.
+                    </p> : null}
                   </td>
                 </tr>
               ))}

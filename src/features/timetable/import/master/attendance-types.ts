@@ -26,6 +26,7 @@ export type AttendanceMove = {
   toTime: string | null;
   /** Complete, uniform pre-entered absence redistributed over the new day's periods. */
   absenceDay?: { fromTimes: string[]; toTimes: string[] };
+  seatChange?: { from: string; to: "LAB" | "JJ" | null };
 };
 export type AttendanceMigration = {
   moves: AttendanceMove[];

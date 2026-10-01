@@ -111,6 +111,7 @@ export function database(
   ctx: MasterContext,
   moveFails = false,
   attendanceWriteCount?: number,
+  classWriteFails = false,
 ) {
   const statements: { query: string; args: unknown[] }[] = [];
   const state = { committed: false, aborted: false };
@@ -121,6 +122,13 @@ export function database(
       if (query.includes("select id from users where id"))
         return [{ id: "actor" }];
       if (query.includes("as today")) return [{ today: "2026-10-01" }];
+      if (query.includes("select id,class_name,closed_at::text,is_active,subject"))
+        return ctx.classes.map((c) => ({ id: c.id, class_name: c.className, closed_at: c.closedAt, is_active: c.active, subject: c.subject }));
+      if (query.includes("from enrollments") && query.includes("for update"))
+        return ctx.enrollments.filter((e) => e.classId === args[1] && !e.endDate && !(args[2] as string[]).includes(e.id))
+          .map((e) => ({ id: e.id, student_id: e.studentId, start_date: e.startDate, end_date: e.endDate, withdrawal_reason: null }));
+      if (query.includes("update classes set class_name")) return classWriteFails ? [] : [{ id: args[4] }];
+      if (query.includes("update enrollments e set end_date")) return (args[0] as unknown[]).map((_, i) => ({ id: String(i) }));
       if (query.includes("from classes where")) return ctx.classes;
       if (query.includes("from users where")) return ctx.teachers;
       if (query.includes("from classrooms where")) return ctx.classrooms;

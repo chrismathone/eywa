@@ -26,7 +26,6 @@ import { detectOverlaps } from "./overlap-detect";
 import {
   ARCHIVE_REASON,
   CLOSE_TERM_REASON,
-  closeClassEnrollments,
   reopenClassEnrollments,
 } from "./enrollment-lifecycle";
 import { deleteCurrentSlots, loadCurrentSlots } from "./schedule-sync";
@@ -48,6 +47,7 @@ import {
 import { normalizeEnglishTrack } from "../english-track";
 import { readFreeClosedNameRequest, type ClassNameConflict } from "../class-name-conflict";
 import { freedLeftNotice, rollbackFreedClassName, writeWithClassNameGuard } from "./class-name-guard";
+import { endClassWithName } from "./class-term-store";
 
 export type ClassFormState =
   | {
@@ -721,6 +721,21 @@ export async function archiveClass(
   const next = String(formData.get("isActive") ?? "false") === "true";
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
+  if (!next) {
+    try {
+      await endClassWithName(user, { classId: id, date: kstToday(), archive: true });
+    } catch (error) {
+      console.error("[class-archive]", error);
+      return { error: "반 폐지를 저장하지 못했습니다. 반 이름과 수강 정보가 변경됐는지 확인하고 다시 시도해 주세요." };
+    }
+    revalidatePath("/classes");
+    revalidatePath(`/classes/${id}`);
+    revalidatePath("/timetable");
+    revalidatePath("/students");
+    revalidatePath("/");
+    return undefined;
+  }
+
   const supabase = await createClient();
   const { data: klass } = await supabase
     .from("classes")
@@ -736,13 +751,11 @@ export async function archiveClass(
   if (error) return { error: error.message };
 
   // 수강 동기화는 classes 갱신이 성공한 뒤 — 실패해도 반 상태와 수강이 어긋나지 않게 순서를 고정.
-  const sync = next
-    ? await reopenClassEnrollments(supabase, id, ARCHIVE_REASON)
-    : await closeClassEnrollments(supabase, id, kstToday(), ARCHIVE_REASON);
+  const sync = await reopenClassEnrollments(supabase, id, ARCHIVE_REASON);
   if (sync.error) return { error: sync.error };
 
   await logAction({
-    action: next ? "class_unarchive" : "class_archive",
+    action: "class_unarchive",
     targetType: "class",
     targetLabel: klass?.class_name,
     metadata: { classId: id, affectedStudents: sync.studentIds.length },
@@ -771,22 +784,12 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
   const date = String(formData.get("date") ?? "").trim() || kstToday();
   if (!id) return { error: "반 ID가 누락되었습니다" };
 
-  const supabase = await createClient();
-  const { data: klass } = await supabase.from("classes").select("class_name").eq("id", id).single();
-  const { error: updErr } = await supabase.from("classes").update({ closed_at: date }).eq("id", id);
-  if (updErr) return { error: updErr.message };
-
-  // 종강 = 그 반 활성 수강도 종강일로 종료(reason='종강'). 종강일 이전 주 시간표엔 그대로 남는다
-  // (enrollment가 그 시점엔 활성이었으므로) → 수강이력 보존이라는 종강의 성격과 일치.
-  const sync = await closeClassEnrollments(supabase, id, date, CLOSE_TERM_REASON);
-  if (sync.error) return { error: sync.error };
-
-  await logAction({
-    action: "class_end_term",
-    targetType: "class",
-    targetLabel: klass?.class_name,
-    metadata: { classId: id, closedAt: date, affectedStudents: sync.studentIds.length },
-  });
+  try {
+    await endClassWithName(user, { classId: id, date });
+  } catch (error) {
+    console.error("[class-end-term]", error);
+    return { error: "종강을 저장하지 못했습니다. 종강일·반 이름·수강 정보를 확인하고 다시 시도해 주세요." };
+  }
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
   revalidatePath("/timetable");

@@ -10,6 +10,7 @@ import type { RosterStudentRef } from "../roster/match-roster";
 import type { ImportDiff } from "../types";
 import type { ScheduledGroup } from "../../scheduled-groups";
 import type { MasterRosterReview } from "./roster-review";
+import type { MasterClassTerm } from "./class-terms";
 import type {
   MasterAttendance,
   AttendanceLink,
@@ -82,6 +83,7 @@ export type ClassMapping = {
   manualReason: string | null;
 };
 export type MasterPlan = {
+  termClosures?: MasterClassTerm[];
   attendanceMigration: AttendanceMigration;
   report: DryRunReport;
   roster: ImportDiff;

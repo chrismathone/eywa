@@ -22,6 +22,7 @@ it("학생별 이전 반·교시와 변경 반·교시, 유지 건수를 구분�
             toClassId: "new",
             toClassName: "PL2",
             toTime: "15:00",
+            seatChange: { from: "LAB", to: null },
           },
         ],
       }}
@@ -38,6 +39,8 @@ it("학생별 이전 반·교시와 변경 반·교시, 유지 건수를 구분�
     "/students/s1",
   );
   expect(within(section).getAllByRole("row")).toHaveLength(2);
+  expect(within(section).getByText(/LAB → 일반 수업/)).toBeVisible();
+  expect(within(section).getByText(/적용일부터 새 시간표/)).toBeVisible();
 });
 
 it("전교시 사전 결석은 이전 3칸과 새 2칸을 하나의 묶음으로 설명한다", () => {
