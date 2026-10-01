@@ -68,11 +68,11 @@ export function isCanonicalRouteKey(key: string): boolean {
 }
 
 /**
- * 메뉴 표(`menuKeyForPath`)에 없지만 셸에 있는 화면 — 내 정보·메뉴 판·권한 안내.
+ * 메뉴 표(`menuKeyForPath`)에 없지만 셸에 있는 화면 — 내 정보·메뉴 판·권한 안내 · 원장 전용 숨은 시안(`drafts`).
  * 🔴 셸(`src/app/(shell)`)에 첫 칸이 새로 생기면 메뉴 표나 여기에 넣을 것 — 안 넣으면 그 화면 이용이 **조용히 버려진다**
  *    (가드 `labels-query.test.ts`가 잡는다).
  */
-export const NON_MENU_SHELL_SEGMENTS: ReadonlySet<string> = new Set(["me", "menu"]);
+export const NON_MENU_SHELL_SEGMENTS: ReadonlySet<string> = new Set(["me", "menu", "drafts"]);
 
 /** 화면 식별자가 속한 메뉴 — 메뉴 표에 없는 주소(내 정보·메뉴 판 등)는 `other`. */
 export type UsageMenuKey = MenuKey | "other";
