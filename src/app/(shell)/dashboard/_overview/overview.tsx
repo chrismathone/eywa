@@ -192,8 +192,14 @@ export function Overview({
   layout = DEFAULT_LAYOUT,
   billingAmounts = true,
   refresh,
+  titleSuffix,
+  billingScopeNote,
 }: {
   initial: OverviewSnapshot;
+  /** 맨 위 제목 뒤에 붙는 말 — 과목 관리자 시안의 "(수학)". 기본(원장·운영실)은 없다. */
+  titleSuffix?: string;
+  /** 수납 현황 제목 뒤에 붙는 말 — 학원 전체 값이 섞였을 때 "(학원 전체)". */
+  billingScopeNote?: string;
   /** 카드 배치 — 기본 = 지금 운영실 그대로. 역할별 시안만 다른 값을 넘긴다(`layout.ts`). */
   layout?: OverviewLayout;
   /** false = 수납 칸이 금액 없이 건수만(역할별 시안) — 기본 true라 지금 화면은 그대로. */
@@ -365,7 +371,7 @@ export function Overview({
     ),
     billingMonth: (
     <Panel
-      title={`${thisMonth} 수납 현황`}
+      title={`${thisMonth} 수납 현황${billingScopeNote ? ` (${billingScopeNote})` : ""}`}
       note="이번 달 청구서 · 취소 청구 제외"
       href={`/billing?period=${snapshot.today.slice(0, 7)}`}
       sections={[v.billing]}
@@ -1293,7 +1299,7 @@ export function Overview({
   return (
     // 콜&상담 진행 칩(원장 2026-09-22) — 신규문의·금일입테 팝업과 입학 일정 줄이 상담 id로 같은 표를 읽는다.
     <ConsultChipsProvider chips={v.consultProgress?.data?.chips ?? null}>
-    <div className={layout.compact ? `${appearance.dashboard} ${appearance.compact}` : appearance.dashboard}>
+    <div className={[appearance.dashboard, layout.compact && appearance.compact, layout.evenGap && appearance.even].filter(Boolean).join(" ")}>
     <div className={s.root} data-overview="root">
       <div className={s.board} data-overview="board">
         {layout.hideHeader ? null : (
@@ -1303,7 +1309,7 @@ export function Overview({
               {snapshot.academy || "에이와"} · ACADEMY OVERVIEW
             </span>
             <h1>
-              학원 전체 현황<span>{snapshot.today.replaceAll("-", ".")}</span>
+              학원 전체 현황{titleSuffix ? ` ${titleSuffix}` : ""}<span>{snapshot.today.replaceAll("-", ".")}</span>
             </h1>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element -- static 19KB pre-rendered artwork */}
@@ -1364,7 +1370,11 @@ export function Overview({
                   <p>{section.note}</p>
                 </div>
               ) : null}
-              <div className={s.grid} data-overview="grid" style={gridStyle}>
+              <div
+                className={section.thin ? `${s.grid} ${s.thinRow}` : s.grid}
+                data-overview="grid"
+                style={section.columns ? ({ "--cols": section.columns } as CSSProperties) : gridStyle}
+              >
                 {slots}
               </div>
             </Fragment>

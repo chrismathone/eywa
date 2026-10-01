@@ -66,7 +66,7 @@ export function RoleControls({
       </Toolbar>
       <p className="text-sm">{ROLE_RULES[role]}</p>
       <fieldset className="flex flex-col gap-1.5">
-        <legend className="micro mb-1">원장이 정할 6가지 — 켜면 허용 · 기본은 전부 가림 · 저장 안 됨</legend>
+        <legend className="micro mb-1">원장이 정할 6가지 — 켜면 허용 · 기본은 전부 가림 · 시안에선 저장 안 됨 — 실제 적용 시 학원 설정에서 켜고 끕니다</legend>
         <div className="grid gap-x-6 gap-y-1.5 md:grid-cols-2 xl:grid-cols-3">
           {TOGGLES.map((t) => {
             const mine = t.role === "all" || t.role === role || (t.role === "manager" && role === "desk");

@@ -35,7 +35,8 @@ export function RoleBoard({
   initialSubject: string;
   initialToggles: Toggles;
 }) {
-  const options = useSubjectMaps().options;
+  const maps = useSubjectMaps();
+  const options = maps.options;
   const [role, setRole] = useState(initialRole);
   const [layout, setLayout] = useState(initialLayout);
   const [toggles, setToggles] = useState(initialToggles);
@@ -95,6 +96,8 @@ export function RoleBoard({
           billingAmounts={view.billingAmounts}
           chartKinds={chartKinds}
           refresh={refresh}
+          titleSuffix={role === "subject" && subject ? `(${maps.labelOf(subject)})` : undefined}
+          billingScopeNote={role === "subject" && view.billingAmounts ? "학원 전체" : undefined}
         />
       </div>
     </div>

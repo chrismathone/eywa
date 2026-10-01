@@ -90,6 +90,19 @@ KPI 8칸 = 재원생 · 퇴원생 · 신규문의 · 금일 입테 · 금일 등
 8. 마이그레이션 없음(DB 변경 없음 → #95 순서 문제 없음). 새 설정 필드를 학원 설정에 노출한다면 5단계(스키마·기본값·폼·소비처·검증)를 따를 것 — 6가지 토글을 영구 설정으로 만들 때만 해당.
 9. 테스트: 묶음 × 영역 매트릭스 표 테스트(시안 `apply.test.ts`가 시안 버전의 전수 — 64개 토글 조합 × 3개 역할 × 3안에서 지출·6개월 수납·직원 영역 부재를 확인), 영역 등록 ↔ 정책표 가드, 슈퍼관리자 통과.
 
+### 5-1. 6가지는 학원 설정의 켜기/끄기로 (원장 결정, A안 — 기본 모두 가림)
+
+시안의 체크박스 6개 = 실제 적용 땐 **학원 설정(`/owner`)의 스위치 6개**. 코드로 만드는 건 이 시안 단계 밖이고, 만들 때 CLAUDE.md "설정 5단계"를 이렇게 둔다.
+
+- **자리**: `operations` 섹션 안의 하위 객체 `operations.dashboardExposure`(새 섹션을 만들면 `SECTION_SCHEMAS`·폼 탭·저장 배선이 늘어 가볍지 않다). 저장은 기존 `saveOwnerSection`(master 게이트 · 섹션 머지 · 감사로그) 그대로.
+- **키 이름 제안**(시안 `Toggles`와 1:1): `deskSeesOutstandingAmount`(①) · `subjectAdminSeesBilling`(②) · `subjectAdminSeesSheetCompletion`(③) · `subjectAdminSeesWithdrawals`(④) · `showPhonesInSchedule`(⑤) · `staffCompositionForManagers`(⑥). 전부 boolean.
+1. **스키마** — `src/features/owner/settings-types.ts`의 `operationsSchema`에 `dashboardExposure: z.object({ …6개 boolean })`.
+2. **기본값** — `src/features/owner/defaults.ts`의 `DEFAULT_SETTINGS.operations.dashboardExposure`에 6개 모두 `false`(= 가림). 없으면 deep-merge 폴백이 깨져 `undefined`가 새 칸을 **열어** 버린다 — 기본이 닫힘이어야 fail-closed.
+3. **폼** — `/owner` 운영 탭에 "운영실 공개 범위" 카드(체크 6개, 각 줄에 "누구에게 무엇이 열리나" 한 줄). 폼은 `saveOwnerSection("operations")`에 이미 배선. master만(슈퍼관리자 포함).
+4. **소비처(필수)** — 서버 `loadOverview()`의 **역할 묶음 정책**: `dashboardPolicy(bundle, settings.operations.dashboardExposure)`가 영역별 허용·필드 가림을 돌려주고 `add()`가 읽는다(①②→수납 `amounts`, ③→`sheets` 영역, ④→`withdrawals` 영역(과목 스코프), ⑤→`calendar` 제목 마스킹, ⑥→`staff` 영역). 화면(`buildLayout`)도 같은 정책 값을 읽어 놓을 카드를 정한다 — **UI 조건만 두면 게이트가 아니다(#77)**. 설정은 테넌트 단위 캐시(`getTenantSettings`)라 창마다 도는 셸에도 비용이 없고, 저장 시 `updateTag`로 즉시 반영(기존 경로).
+5. **검증** — `grep "dashboardExposure\.<필드>"`가 소비처 ≥1(서버 정책표). 값을 바꿔 저장 → 해당 역할 계정(또는 `?t=` 시안)에서 칸이 열리고 닫히는지. 가드 테스트: 6개 키가 정책표에서 모두 쓰이고(write-only-orphan 방지), 기본값이 전부 false.
+- 지점 라이선스(`modules`/기능 스위치)와는 별개다 — 켜진 기능 안에서 **누구에게 보이나**만 정한다. 새 지점은 기본 가림에서 시작.
+
 ## 6. 시안 코드가 남기는 것 / 지우는 법
 
 - 남는 것(실제 적용에도 쓴다): `src/features/dashboard/overview/layout.ts`(배치 타입) · `overview.tsx`의 `layout`·`billingAmounts` prop · `KpiStrip`의 `only`.
@@ -105,3 +118,12 @@ KPI 8칸 = 재원생 · 퇴원생 · 신규문의 · 금일 입테 · 금일 등
 - 전화번호 가림은 정규식 한 벌이라 **모르는 표기는 가려지지 않은 채** 나간다(하이픈·점·슬래시·괄호·공백·en/em 대시·+82·0505는 처리. 붙어 쓴 두 번호·전각 숫자는 미처리). 시각 범위(1500-1600)·연도 범위는 일부러 안 가려서 둘 다 시각처럼 읽히는 번호(1544-1234)도 그대로다. 실제 적용 땐 일정 제목에 번호를 적지 않게 하는 쪽이 근본 해결이다.
 - 시안의 카드 링크(↗)는 원장 권한으로 열려 **전 과목·전체 데이터 화면**이 열린다(예: 과목 관리자 시안의 재원생 ↗ → 원생목록 전 과목). 실제 적용 땐 목적지 화면의 권한·스코프도 같은 묶음 기준으로 맞춰야 한다.
 - 영어 담당의 재원생 수는 과목 막대 합(학생 단위)이고, 수학은 수학 프로그램 수다 — 영어·수학 밖 과목(국어 등)은 퇴원 귀속·강사 시트가 없어 ③·④를 켜도 비어 있다.
+
+## 8. 시안 배치 규칙 (원장 피드백 2026-10-01 — 공간 낭비 / 여백 / 과목 표시)
+
+- **구역 합치기**: 카드가 한 줄을 못 채우는 구역은 제목줄 없이 이웃 구역과 한 흐름으로(`_lib/pack.ts`, 순수 함수 · 카드 1·2·3·5장·빈 카드 섞임 테스트).
+- **열 수 = 카드 수**: 3장이면 3열, 2장이면 2열, 넘치면 마지막 줄이 가장 덜 비는 열 수. 줄 전체 카드(학습·학부모 보고 묶음·재원생 추이)는 구역 맨 끝.
+- **빈 상태 카드**(공지·행정·일정·수업 0건)는 맨 뒤 **얇은 줄**로 모은다.
+- **간격 한 값**(`--dash-gap` 16px, C안 12px): KPI↔카드·가로·세로·구역 사이·얇은 줄 모두, 카드 안쪽 여백도 한 값. 기본 운영실에는 적용하지 않는다(`layout.evenGap`).
+- **현재 수업 현황**: 시안에서만 과목이 여럿이면 과목별 열, 하나면 카드 폭 전체(`auto-fit`). 운영실 공용 컴포넌트는 `data-overview="schedule-grid"` 표식만 추가했다.
+- **과목 표시**: 과목 관리자 시안은 맨 위 제목 한 곳에 `학원 전체 현황 (수학)`(과목 라벨은 학원 설정), 카드·숫자 라벨은 원래 이름 그대로. ②를 켜서 학원 전체 값이 섞인 수납 칸만 제목에 `(학원 전체)`.
