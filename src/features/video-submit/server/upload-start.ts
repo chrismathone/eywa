@@ -1,0 +1,100 @@
+import "server-only";
+import { randomUUID } from "node:crypto";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { checkVideoFile } from "../rules";
+import { linkVideoFilename, teacherFolderKey } from "../route";
+import { UPLOAD_STARTS_PER_DAY, UPLOAD_STARTS_PER_HOUR, uploadOrigin } from "../upload-checks";
+import { videoSubmitAvailability } from "./availability";
+import { driveRequest, generateDriveId, startResumableSession } from "./drive-api";
+import { linkFolderRegistry } from "./folder-registry";
+import { ensureLinkTeacherFolder } from "./folders";
+import { resolveSubmitToken } from "./links";
+import { reconcileLinkUploads, type CompletedUpload } from "./upload-complete";
+import { loadLinkRoute } from "./upload-context";
+
+export type StartUploadResult =
+  | { ok: true; uploadId: string; sessionUrl: string }
+  | { ok: false; code: "invalid" | "expired" | "unavailable" | "file" | "limit" | "error"; error: string };
+
+const UNAVAILABLE = "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요.";
+const FAILED = "영상 올리기를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+const LIMITED = "잠시 동안 너무 많이 올렸습니다. 한 시간 뒤에 다시 시도해 주세요.";
+
+/**
+ * 업로드 시작 — 토큰·파일 검사 → 담임 폴더 확보 → Drive 번호를 미리 받아 기록 → 재개 가능 세션 주소만 돌려준다.
+ * 🔴 영상 바이트는 서버를 지나지 않는다(Vercel 함수 본문 4.5MB 한도). 브라우저가 세션 주소로 Google에 직접 보낸다.
+ * 🔴 실패 원문(Drive 상태·DB 오류)은 서버 로그에만 — 학부모 화면엔 한글 한 줄(raw 노출 금지).
+ * `followUp` = 횟수 제한을 통과한 시작이면, 지난번에 못 알린 업로드를 **응답 뒤에** 대신 마무리하는 일(라우트가 `after()`로 돌리고
+ *   새로 생긴 줄마다 알림·감사로그). 응답을 기다리게 하지 않고, 제한에 걸린 요청은 Drive를 부르지 않는다(재리뷰 2026-10-01).
+ */
+export async function startLinkUpload(input: {
+  token: unknown; file: { name?: unknown; size?: unknown; type?: unknown }; origin: string | null; host: string | null;
+}): Promise<{ result: StartUploadResult; followUp: (() => Promise<CompletedUpload[]>) | null }> {
+  let followUp: (() => Promise<CompletedUpload[]>) | null = null;
+  const fail = (code: Exclude<StartUploadResult, { ok: true }>["code"], error: string) =>
+    ({ result: { ok: false as const, code, error }, followUp });
+  const origin = uploadOrigin(input.origin, input.host);
+  if (!origin) return fail("error", FAILED);
+  const db = createAdminClient();
+  try {
+    const resolved = await resolveSubmitToken(db, input.token);
+    if (resolved.state === "expired") return fail("expired", "만료된 링크입니다.");
+    if (resolved.state !== "ok") return fail("invalid", "사용할 수 없는 링크입니다.");
+    const link = resolved.link;
+    const file = checkVideoFile(input.file);
+    if (!file.ok) return fail("file", file.error);
+    const availability = await videoSubmitAvailability(link.tenant_id, await getTenantSettingsByTenantId(link.tenant_id), db);
+    if (!availability.ok) return fail("unavailable", UNAVAILABLE);
+    const { drive, centerId } = availability;
+    const request = driveRequest(drive.accessToken);
+
+    // 횟수 제한 — 먼저 가볍게 세고(대부분 여기서 끝), 기록을 넣은 **뒤에 다시 센다**: 동시에 수십 개를 보내도
+    // 각자 자기 기록까지 센 수를 보므로 한도를 넘는 시작은 세션을 열지 못한다(세기와 넣기 사이의 틈, 적대 리뷰 2026-10-01).
+    const now = Date.now();
+    const count = (ms: number) => db.from("homework_video_link_uploads").select("id", { count: "exact", head: true })
+      .eq("tenant_id", link.tenant_id).eq("link_id", link.id).gte("created_at", new Date(now - ms).toISOString());
+    const overLimit = async (extra: number) => {
+      const [hour, day] = await Promise.all([count(3_600_000), count(86_400_000)]);
+      if (hour.error || day.error) throw new Error("업로드 횟수 확인 실패");
+      return (hour.count ?? 0) + extra > UPLOAD_STARTS_PER_HOUR || (day.count ?? 0) + extra > UPLOAD_STARTS_PER_DAY;
+    };
+    if (await overLimit(1)) return fail("limit", LIMITED);
+    followUp = () => reconcileLinkUploads(db, request, link).catch(() => []);
+
+    const route = await loadLinkRoute(db, link, drive.rootId);
+    if (!route) return fail("invalid", "사용할 수 없는 링크입니다.");
+    const folder = await ensureLinkTeacherFolder({
+      request, registry: linkFolderRegistry(db, link.tenant_id, drive.rootId), rootId: drive.rootId,
+      key: teacherFolderKey(route, centerId), folderName: route.folderName,
+    });
+    const fileId = await generateDriveId(request);
+    const uploadId = randomUUID();
+    const startedAt = new Date();
+    const fileName = linkVideoFilename(route, startedAt, file.ext);
+    const bytes = Number(input.file.size);
+    const markFailed = (error: string) => db.from("homework_video_link_uploads").update({ status: "failed", error })
+      .eq("tenant_id", link.tenant_id).eq("id", uploadId);
+    const inserted = await db.from("homework_video_link_uploads").insert({
+      id: uploadId, tenant_id: link.tenant_id, link_id: link.id, drive_file_id: fileId, drive_folder_id: folder.id,
+      file_name: fileName, bytes, mime_type: file.mimeType, route, created_at: startedAt.toISOString(),
+    });
+    if (inserted.error) throw new Error("업로드 기록 실패");
+    if (await overLimit(0)) {
+      await markFailed("횟수 제한");
+      return fail("limit", LIMITED);
+    }
+    let sessionUrl: string;
+    try {
+      sessionUrl = await startResumableSession(request, { fileId, name: fileName, mimeType: file.mimeType, bytes, folderId: folder.id, origin, uploadId });
+    } catch (error) {
+      await markFailed("Drive 업로드를 시작하지 못했습니다.");
+      throw error;
+    }
+    await db.from("homework_video_links").update({ last_used_at: startedAt.toISOString() }).eq("tenant_id", link.tenant_id).eq("id", link.id);
+    return { result: { ok: true, uploadId, sessionUrl }, followUp };
+  } catch (error) {
+    console.error(JSON.stringify({ level: "error", scope: "videoSubmit.start", message: error instanceof Error ? error.message : "unknown" }));
+    return fail("error", FAILED);
+  }
+}

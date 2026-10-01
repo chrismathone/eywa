@@ -79,6 +79,7 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
   },
   classnote_parent_post: { title: "학부모 새 글 — 이서준", body: "이번 주 숙제 범위를 다시 알려주실 수 있을까요?", link: "/onescreen" },
   classnote_parent_comment: { title: "학부모 댓글 — 박지우", body: "알림장 확인했습니다. 감사합니다!", link: "/onescreen" },
+  homework_video_link: { title: "박지우 학생 숙제 영상이 제출 링크로 올라왔습니다", body: "중등M 중2 A", link: "/students" },
   report_send_failed: { title: "수업 보고서 발송 실패", body: "김하늘 · 09-26 — 학부모 보드를 찾지 못했습니다", link: "/lesson-reports" },
   notice_send_failed: { title: "학부모 공지 게시 실패", body: "10월 휴원 안내 — 3명에게 게시하지 못했습니다", link: "/lesson-reports" },
   makeedu_login_failed: {

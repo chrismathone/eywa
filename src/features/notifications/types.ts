@@ -15,6 +15,7 @@ export type NotificationType =
   | "teacher_handover" // 강사 인수인계로 내가 새 담임 지정
   | "classnote_parent_post" // 학부모가 ClassNote에 새 글 → 그 학생 담당 강사(연동 PC 워커가 insert)
   | "classnote_parent_comment" // 학부모가 ClassNote 알림장에 댓글 → 그 학생 담당 강사(위와 같은 워커)
+  | "homework_video_link" // 학부모가 aywa 제출 링크로 숙제 영상을 올림 → 그 반 담임(0325a, 업로드 완료 확인 뒤)
   | "daily_briefing" // 과거 저장 데이터 호환용. 생성 중단, 벨 목록·미확인 수에서 제외.
   | "absence_alert" // 학생이 반복 결석 마일스톤(14일 3/5/10회) 도달 → master(Phase 3, cron)
   | "followup_due" // 상담 후속조치 기한 당일/지남 → 담당 상담사 폴백 master(Phase 3, cron)
@@ -75,6 +76,7 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   teacher_handover: "userCheck",
   classnote_parent_post: "message",
   classnote_parent_comment: "message",
+  homework_video_link: "message",
   daily_briefing: "sparkle",
   absence_alert: "userMinus",
   followup_due: "clock",

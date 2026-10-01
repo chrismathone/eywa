@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { isPushableConsultation, pushEligibilityNote } from "./push-eligibility";
+import { isPushableConsultation, isPushInFlight, pushEligibilityNote } from "./push-eligibility";
+
+describe("isPushInFlight", () => {
+  it("대기·제출 중만 '이미 큐에 있음' — 실패·미전송은 다시 고를 수 있다", () => {
+    expect(isPushInFlight("pending")).toBe(true);
+    expect(isPushInFlight("running")).toBe(true);
+    expect(isPushInFlight("error")).toBe(false);
+    expect(isPushInFlight(null)).toBe(false);
+    expect(isPushInFlight(undefined)).toBe(false);
+  });
+});
 
 describe("isPushableConsultation", () => {
   it("enrolled가 아니면 원래대로 보낼 수 있다", () => {

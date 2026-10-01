@@ -17,6 +17,7 @@ import { fetchAdmissions } from "./math-class-boards-load.mjs";
 import { resolveSendWindow, isWithinSendWindow, formatSendWindow } from "./send-window.mjs";
 import { hasMentText } from "./ment-text.mjs";
 import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
+import { fetchVideoSubmitLine, reportPostContent } from "./report-video-line.mjs";
 import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
 import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 
@@ -223,7 +224,7 @@ const IMG_ATTACHMENT_RE = /\.(jpe?g|png|webp|gif)(\?|$)/i;
  *    완결(ParentReportCard). ClassNote가 attached_images를 가로로 나열해 세로가 안 됐던 문제를 스샷 내 배치로 우회.
  *    → 이미지만 있는 리포트는 `fileAtts`가 비어 파일 첨부 없이 **스샷만** 게시된다(경로는 동일).
  */
-export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, targets = null, log }) {
+export async function sendReportViaApi(adminPage, { report, studentName, boardId, centerId = null, screenshot, shareUrl, videoUrl = null, base, fileAtts = [], children, boardFallback = null, verifyDedup = true, targets = null, log }) {
   // kage 업로드는 작성폼 네이티브 file input 경유(수동 FormData는 415) → adminPage를 add 폼으로 이동.
   // 이후 API 호출(resolve·post)은 same-origin이라 add 폼에서도 그대로 유효.
   await adminPage.goto(`${CLASSNOTE_BASE}/service/report/add`, { waitUntil: "domcontentloaded", timeout: 30000 });
@@ -366,7 +367,8 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       }
     }
     const res = await postClassnoteReport(adminPage, {
-      cls: boardId, child: child.id, enrollment: enrollment.id, content: shareUrl,
+      // 본문 = 공유 링크 한 줄, 앱이 제출 토큰을 줬으면 '영상 제출' 줄을 더한다(report-video-line.mjs). 아래 확인들은 둘 다 알아본다.
+      cls: boardId, child: child.id, enrollment: enrollment.id, content: reportPostContent(shareUrl, videoUrl),
       dateWritten: report.report_date, authorName: report.teacher_name || DEFAULT_AUTHOR_NAME,
       attachedImages, attachedFiles,
     });
@@ -891,6 +893,9 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`  · ${studentName}: 게시 직전 확인 — 이미 다른 처리로 넘어간 행이라 게시 생략`);
         continue;
       }
+      // '영상 제출' 줄(원장 2026-10-01) — 앱이 정한다(영상 과제 있음 + 검사 대상 반 + 지점 기능·Drive·SQL). 못 받으면 줄 없이 보낸다
+      // (10초 상한 · 실패해도 발송은 그대로). 게시 시도마다 새 7일 토큰 — 같은 보고서 재시도의 중복 판정은 첫 줄(공유 링크)로 한다.
+      const videoUrl = await fetchVideoSubmitLine({ base, shareBase, reportId: r.id, secret: INTERNAL_SECRET });
       // ⏱ 게시 호출 상한 — Cloud Run 경로에 있던 AbortController(960s)를 제거하면서 **전건이 상한 없는 호출**이 됐다.
       // kage 업로드·API 응답이 영영 안 오면 데몬이 그 건에서 멈춰 큐 전체가 정지한다(폴이 다음으로 못 넘어감).
       // 🔴 타임아웃 시 **재큐하지 않고 failed로 고정**한다: POST가 이미 서버에 닿았을 수 있어(게시됐는지 불명)
@@ -898,7 +903,7 @@ export async function processQueueOnce(sql, browser, opts) {
       const result = await withPostTimeout(sendReportViaApi(adminPage, {
         // 발송용 이름(0217a) — 게시 작성자명만 바꾼다. DB의 teacher_name(귀속 축)은 불변(2-b 주석).
         report: { ...r, teacher_name: authorNameFor(r) },
-        studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`,
+        studentName, boardId, centerId, screenshot: buf, shareUrl: `${shareBase}/r/${r.share_token}`, videoUrl,
         base, fileAtts: sendFiles, children: childrenCache, log,
         // 첫 발송만 3중 방어(멱등·사후확인) — classnote_sent_at 있는 행 = 의도적 재발송이라 content 판정이
         // 옛 게시물에 오염된다(sendReportViaApi 4) 주석). 재발송은 status 코드를 신뢰한다.
@@ -942,7 +947,7 @@ export async function processQueueOnce(sql, browser, opts) {
       if (result.ok) {
         await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
         summary.success++;
-        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""})`);
+        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${videoUrl ? " · 영상 제출 줄" : ""})`);
       } else if (result.partial) {
         // 🔴 이중 계정(부모·본인) 학생에서 **일부 원아는 이미 받았다**. 재시도하면 그 집에 같은 글이 또 간다
         // (ClassNote는 삭제·수정 불가) → 자동 재시도 없이 failed 고정, 사람이 알림장에서 확인 후 판단한다.

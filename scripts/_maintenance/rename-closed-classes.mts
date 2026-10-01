@@ -2,6 +2,7 @@
  * node --env-file=.env.local node_modules/tsx/dist/cli.mjs scripts/_maintenance/rename-closed-classes.mts
  *   --tenant=<uuid> --plan=output/closed-class-names.json [--undated=YYYY-MM-DD] [--apply]
  * Undated is a user-approved name housekeeping date, never a synthetic classes.closed_at.
+ * Hidden makeup pools are ongoing system containers, not retired classes; never rename them here.
  */
 import postgres from "postgres";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -21,6 +22,7 @@ type Row = {
   class_name: string;
   subject: string;
   is_active: boolean;
+  is_makeup_pool: boolean;
   closed_at: string | null;
   audit_date: string | null;
   enrollment_date: string | null;
@@ -43,7 +45,7 @@ try {
         { today: string }[]
       >`select (now() at time zone 'Asia/Seoul')::date::text as today`;
       if (apply) await tx`select id from classes where tenant_id=${tenant} order by id for update`;
-      const rows = await tx<Row[]>`select c.id,c.class_name,c.subject,c.is_active,c.closed_at::text,
+      const rows = await tx<Row[]>`select c.id,c.class_name,c.subject,c.is_active,c.is_makeup_pool,c.closed_at::text,
       (select to_char(max(a.created_at) at time zone 'Asia/Seoul','YYYY-MM-DD') from audit_logs a
         where a.tenant_id=c.tenant_id and a.metadata->>'classId'=c.id::text
           and a.action in ('class_archive','class_end_term')) as audit_date,
@@ -51,7 +53,7 @@ try {
         and e.withdrawal_reason in ('종강','반 폐지')) as enrollment_date
       from classes c where c.tenant_id=${tenant} order by c.id`;
       const inactive = rows.filter(
-        (r) => !r.is_active || (r.closed_at && r.closed_at <= clock!.today),
+        (r) => !r.is_makeup_pool && (!r.is_active || (r.closed_at && r.closed_at <= clock!.today)),
       );
       const changes: Change[] = [],
         missing: string[] = [];
@@ -91,6 +93,7 @@ try {
         tenant,
         today: clock!.today,
         total: rows.length,
+        excludedMakeupPools: rows.filter((r) => r.is_makeup_pool).length,
         inactive: inactive.length,
         changes,
         missing,
@@ -114,7 +117,7 @@ try {
         for (const c of changes) {
           const updated = await tx`update classes set class_name=${c.to}
           where tenant_id=${tenant} and id=${c.id} and subject=${c.subject} and class_name=${c.from}
-            and (not is_active or closed_at <= ${clock!.today}::date) returning id`;
+            and not is_makeup_pool and (not is_active or closed_at <= ${clock!.today}::date) returning id`;
           if (updated.length !== 1) throw new Error(`Concurrent change: ${c.id}`);
           await tx`insert into audit_logs(tenant_id,actor_name,action,target_type,target_label,metadata)
           values(${tenant},'시스템(요청한 반 이름 정리)','class_update','class',${c.to},
@@ -138,6 +141,7 @@ try {
         JSON.stringify({
           applied: apply,
           total: plan.total,
+          excludedMakeupPools: plan.excludedMakeupPools,
           inactive: plan.inactive,
           renamed: changes.length,
           missingDates: missing.length,

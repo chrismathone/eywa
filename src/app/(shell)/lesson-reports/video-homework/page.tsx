@@ -11,7 +11,9 @@ import { parseMulti } from "@/lib/multi-value";
 import { isVideoHomeworkDate } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
+import { Suspense } from "react";
 import { isModuleEnabled } from "@/lib/modules";
+import { ManualDriveReviewNote } from "@/features/video-homework/components/manual-drive-review-note";
 import { classnoteReplyMode } from "@/features/owner/classnote-gate";
 import { DEFAULT_LEDGER_FILTERS, ledgerPairKey, type LedgerFilters } from "@/features/video-homework/ledger";
 import { isVideoHomeworkRange } from "@/features/video-homework/ledger-roster";
@@ -68,6 +70,8 @@ export default async function VideoHomeworkPage({ searchParams }: {
     <FaceTabs faces={lessonReportFaces({ canOwner, canSend: canEdit,
       classnoteOn: isModuleEnabled(settings.modules.disabled, "classnote"), replyOn: classnoteReplyMode(settings) !== "off" })}
       active="video_homework" ariaLabel="수업보고서 면" />
+    {/* 담임 폴더에 직접 올렸지만 세지 못한 영상(0324a) — ClassNote 기능이 꺼진 지점엔 흔적도 없게. */}
+    {isModuleEnabled(settings.modules.disabled, "classnote") ? <Suspense fallback={null}><ManualDriveReviewNote tenantId={user.tenantId} /></Suspense> : null}
     {!settings.report.videoHomeworkPolicy.enabled ? <p className={NOTE}>
       영상 제출 검사가 꺼져 있습니다. 지난 기록은 장부에서 읽기 전용으로 확인할 수 있습니다.
     </p> : ledger.rows.length > displayRows.length ? <p className={NOTE}>

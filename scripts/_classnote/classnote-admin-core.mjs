@@ -13,6 +13,7 @@ import { acceptBoardMembers, kstSchoolYear } from "./board-safety.mjs";
 import { childKeys } from "./identity-keys.mjs";
 // 실패 사유 문장은 순수 모듈에(테스트가 playwright를 끌지 않게 — 위 두 import와 같은 이유).
 import { kageFailureReason } from "./kage-failure.mjs";
+import { sameReportContent } from "./report-video-line.mjs";
 
 export const CLASSNOTE_BASE = "https://www.classnote.com";
 
@@ -594,7 +595,9 @@ export async function postClassnoteReport(page, { cls, child, enrollment, conten
  */
 export async function findChildReportId(page, centerId, { cls, child, content }) {
   // content는 문자열 하나 또는 후보 배열(같은 보고서의 옛·새 주소 표기 — share-bases.mjs `shareUrlVariants`).
-  // 어느 쪽이든 **글자까지 같은** 본문만 일치로 본다(strict 유지).
+  // 어느 쪽이든 **글자까지 같은** 본문만 일치로 본다(strict 유지). 예외는 하나 — 첫 줄이 그 링크 그대로이고 둘째 줄이
+  // 정확히 '영상 제출: …/v/<토큰>'인 글(2026-10-01, report-video-line.mjs `sameReportContent`). 이걸 모르면 줄이 붙은 글을
+  // 못 알아봐 재시도가 같은 글을 또 올리고 회수가 "이미 없음"으로 거짓 성공한다.
   // `cls`가 null이면 **보드를 가리지 않는다**(2026-09-30 개명 감사 G3) — 게시와 기록 사이에 동기화가 경로를 바꾸면
   // (반 보드 ↔ 1인 보드, 반 이름 맞바꿈) 새 보드에서만 찾다가 옛 보드의 같은 글을 못 알아보고 한 번 더 올린다.
   // 공유 링크는 보고서마다 고유하므로 원아 + 링크만으로 "이미 받았다"를 판정해도 충분하다.
@@ -619,7 +622,8 @@ export async function findChildReportId(page, centerId, { cls, child, content })
     ok: true,
     id:
       list.find(
-        (r) => (cls == null || String(r.cls) === String(cls)) && String(r.child) === String(child) && wanted.includes(r.content),
+        (r) => (cls == null || String(r.cls) === String(cls)) && String(r.child) === String(child) &&
+          wanted.some((w) => sameReportContent(r.content, w)),
       )?.id ?? null,
   };
 }

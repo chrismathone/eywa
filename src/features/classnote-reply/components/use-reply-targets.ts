@@ -6,7 +6,7 @@ import { isParentMessageNotification } from "../notification-match";
 import type { ReplyTargets } from "../reply-types";
 import { getReplyTargetsForNotifications } from "../server/reply-actions";
 
-const NONE: ReplyTargets = { targets: {}, reactions: null, vague: [] };
+const NONE: ReplyTargets = { targets: {}, reactions: null, vague: [], counts: {} };
 
 /**
  * 벨이 열려 있을 때 — 학부모 글·댓글 알림 중 '답글 쓰기'·'공감'을 달 수 있는 것(알림 id → 메시지 id)과 그 메시지의 공감 상태.
