@@ -1,6 +1,6 @@
 import "server-only";
 import { getSheetsApi } from "@/features/integrations/google-sheets";
-import { parseSheetUrl } from "@/features/timetable-dev/lib/sheet-plan";
+import { parseSheetUrl } from "@/features/integrations/sheet-url";
 import type {
   MasterGrids,
   MasterInput,

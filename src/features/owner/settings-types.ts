@@ -533,6 +533,12 @@ export const reportSchema = z.object({
   classnoteMathRoute: z.enum(["personal", "class", "pilot"]).default("personal"),
   // pilot 대상 강사 — 보고서의 작성 강사 표시 이름(lesson_reports.teacher_name, 작성률 예외 강사와 같은 키).
   classnoteMathRoutePilot: z.array(z.string()).default([]),
+  // 학부모 글·댓글에 답글·공감(0317a·0319a, 원장 2026-10-01) — aywa에서 쓰면 연동 PC가 ClassNote 그 글에 올린다.
+  // off = 없는 기능(버튼·면·서버·워커 전부) · test = 학원이 테스트 보드의 학원이 글에만 · on = 확정 연결이 맞는 모든 글.
+  // 🔴 기본 off(학부모에게 바로 알림이 가는 쓰기라 원장이 켜기 전엔 아무것도 안 나간다). 값은 이 셋뿐이다.
+  // 소비처 = 앱 `classnoteReplyMode`(classnote-gate.ts — 모듈이 꺼지면 off) + 워커 `loadReplyMode`
+  // (classnote-parent-reply-core.mjs, raw SQL 직독 — 폴마다 다시 읽어 끄면 곧 멈춘다).
+  classnoteParentReplyMode: z.enum(["off", "test", "on"]).default("off"),
 });
 export type ReportSettings = z.infer<typeof reportSchema>;
 

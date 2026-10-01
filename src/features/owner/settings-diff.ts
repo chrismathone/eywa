@@ -97,9 +97,15 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     allowTeacherTestMax: "강사 문항수 변경 허용",
     classnoteSendWindowStart: "발송 시작 시각",
     classnoteSendWindowEnd: "발송 종료 시각",
+    classnoteParentReplyMode: "학부모 글 답글·공감",
     noticeMode: "공지 방식",
     subjects: "대상 과목",
   },
+};
+
+/** 값이 코드(영문)인 칸의 한글 표기 — 섹션 → 칸 → 값. */
+const VALUE_LABELS: Record<string, Record<string, Record<string, string>>> = {
+  report: { classnoteParentReplyMode: { off: "끔", test: "시험(학원이만)", on: "전체" } },
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -180,6 +186,8 @@ function isFirstSaveOfNewDefault(section: string, key: string, after: unknown): 
     return s === JSON.stringify(CHINSAN_SCHOOL_SAVE_ALIASES) || s === "[]";
   }
   if (section === "operations" && key === "periodStyle") return after === "chinsan" || after === "plain";
+  // 학부모 글 답글·공감(2026-10-01) — 옛 행엔 칸이 없다. 다른 칸을 고쳐 저장하며 기본값(끔)이 처음 실리는 것은 변경이 아니다.
+  if (section === "report" && key === "classnoteParentReplyMode") return after === "off";
   return false;
 }
 
@@ -328,7 +336,9 @@ export function diffSettingsSection(section: string, before: unknown, after: unk
       changes.push({ label, note: a === null || a === "" ? "지움" : "변경됨" });
       continue;
     }
-    changes.push({ label, from: showValue(b), to: showValue(a) });
+    // 값이 코드인 칸은 한글로 옮겨 적는다(영문 코드를 감사로그 문구에 싣지 않는다).
+    const ko = VALUE_LABELS[section]?.[key];
+    changes.push({ label, from: ko ? (ko[String(b ?? "off")] ?? "없음") : showValue(b), to: ko ? (ko[String(a)] ?? "변경됨") : showValue(a) });
   }
   // ⚠️ **사라진 키**도 변경이다(선택 필드를 비우면 키 자체가 없어진다) — after만 훑으면 조용히 놓친다.
   for (const key of Object.keys(before)) {

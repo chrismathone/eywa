@@ -8,6 +8,7 @@ import { SectionForm, SettingsCard } from "./section-form";
 import { StringListEditor } from "./list-editors";
 import { TextField, ToggleField } from "./fields";
 import { ClassnoteRouteField } from "./classnote-route-field";
+import { ClassnoteReplyModeField } from "./classnote-reply-mode-field";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import type { VideoHomeworkClassOption } from "@/features/video-homework/server/queries";
 import { VideoHomeworkSettings } from "./video-homework-settings";
@@ -266,6 +267,9 @@ export function ReportSection({
               mathTeachers={[...new Set([...(teachers.math ?? []), ...(teachers.subject_1 ?? [])])].filter(inStaff)}
               onChange={set}
             />
+
+            {/* 학부모 글 답글·공감(원장 2026-10-01) — 소비처 = 앱 classnoteReplyMode + 워커 loadReplyMode. 기본 끔. */}
+            <ClassnoteReplyModeField mode={r.classnoteParentReplyMode} onChange={set} />
           </div>
         </ReportSettingsPanel>
         ) : null}

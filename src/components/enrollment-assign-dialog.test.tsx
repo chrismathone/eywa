@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { kstToday } from "@/lib/date-kst";
 
 /**
  * 수강 배정 창의 **'반이동' 토글**(원장 2026-09-18) — 켜면 새 배정이 아니라 *옛 반 종료 + 새 반 시작*
@@ -12,6 +13,8 @@ const createEnrollment = vi.fn();
 const listMovable = vi.fn();
 const createBulk = vi.fn();
 const listClassCandidates = vi.fn();
+const listSourceClasses = vi.fn();
+const listRoster = vi.fn();
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/features/owner/operations-context", () => ({
@@ -31,6 +34,10 @@ vi.mock("@/features/enrollments/server/movable-actions", () => ({
 }));
 vi.mock("@/features/enrollments/server/bulk-assign-actions", () => ({
   createEnrollmentsBulk: (...a: unknown[]) => createBulk(...a),
+}));
+vi.mock("@/features/enrollments/server/transfer-source-actions", () => ({
+  listTransferSourceClasses: (...a: unknown[]) => listSourceClasses(...a),
+  listClassTransferRoster: (...a: unknown[]) => listRoster(...a),
 }));
 
 import { EnrollmentAssignDialog } from "./enrollment-assign-dialog";
@@ -68,6 +75,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   moveBatch.mockResolvedValue({ results: [{ enrollmentId: "e-old", ok: true }] });
   listMovable.mockResolvedValue({ ok: true, items: MOVABLE });
+  listSourceClasses.mockResolvedValue({ ok: true, items: [] });
+  listRoster.mockResolvedValue({ ok: true, items: [] });
 });
 
 describe("수강 배정 창의 '반이동' 토글", () => {
@@ -196,40 +205,6 @@ describe("수강 배정 창의 '반이동' 토글", () => {
     expect(moveBatch.mock.calls[0]![0][0].enrollmentId).toBe("e-old");
   });
 
-  it("🔴 반 상세에서 학생을 빠르게 바꿔도 **앞 학생의 수강**으로 이동하지 않는다(응답 순서 뒤집힘)", async () => {
-    // A의 조회가 늦게, B의 조회가 먼저 돌아온다 → 늦게 온 A 목록이 B 화면에 서면 A가 옮겨진다.
-    let resolveA!: (v: unknown) => void;
-    listMovable.mockImplementation((id: string) =>
-      id === "s-a"
-        ? new Promise((r) => (resolveA = r))
-        : Promise.resolve({ ok: true, items: [{ ...MOVABLE[0]!, enrollmentId: "e-b" }] }),
-    );
-    const user = userEvent.setup();
-    render(
-      <EnrollmentAssignDialog
-        open
-        onClose={() => {}}
-        mode="add-student-to-class"
-        fixedClass={CLASSES[0]}
-        studentOptions={[
-          { id: "s-a", name: "가학생", grade: "고1" },
-          { id: "s-b", name: "나학생", grade: "고1" },
-        ]}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "반이동" }));
-    await user.click(screen.getByText("학생 선택..."));
-    await user.click(screen.getByText("가학생"));
-    await user.click(screen.getByText("가학생"));
-    await user.click(screen.getByText("나학생"));
-    await waitFor(() => expect(listMovable).toHaveBeenCalledWith("s-b"));
-    // 이제서야 A의 늦은 응답이 도착한다.
-    resolveA({ ok: true, items: [{ ...MOVABLE[0]!, enrollmentId: "e-a" }] });
-    await user.click(screen.getByRole("button", { name: "배정" }));
-    await waitFor(() => expect(moveBatch).toHaveBeenCalled());
-    expect(moveBatch.mock.calls[0]![0][0].enrollmentId).toBe("e-b");
-  });
-
   it("실패는 성공처럼 닫지 않고 사유를 적는다", async () => {
     moveBatch.mockResolvedValue({ results: [{ enrollmentId: "e-old", ok: false, error: "시간이 겹칩니다" }] });
     const user = userEvent.setup();
@@ -240,6 +215,185 @@ describe("수강 배정 창의 '반이동' 토글", () => {
     await user.click(screen.getByText("고등M 고1 BS4F 수"));
     await user.click(screen.getByRole("button", { name: /배정/ }));
     await waitFor(() => expect(screen.getByText("시간이 겹칩니다")).toBeInTheDocument());
+  });
+});
+
+/**
+ * 반 상세(반 → 학생)의 반이동 = **옮겨 올 반을 먼저, 그 반 명단에서 학생을 그다음**(원장 2026-10-01
+ * *"반이동시에 학생이름을 먼저 고르지 않고 반을 골라서 할 수 있게 먼저 하는게 나을듯. 순서상으로도."*).
+ * 🔴 저장 계약은 그대로다 — 고른 학생의 출발 반 수강 id가 종전처럼 `moveEnrollmentsBatch(moves, 이동일)`로 간다.
+ */
+describe("반 상세 반이동 — 반을 먼저, 학생은 그 반 명단에서", () => {
+  const today = kstToday();
+  const plus = (n: number) => {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const SNAP = { startDate: "2026-03-01", endDate: null as string | null, onHold: false, isTransferred: false, attendanceDays: [] as string[] };
+  const row = (id: string, studentId: string, name: string, extra: Partial<typeof SNAP> = {}) => ({
+    id, name, grade: "고1", school: "경명여고", snapshot: { ...SNAP, studentId, ...extra },
+  });
+  // 배정 후보 = 이 반에 아직 없는 재원생(반 상세 page.tsx가 거른 그대로). s-in은 이미 이 반에 있어 빠져 있다.
+  const PEOPLE = [
+    { id: "s-a", name: "가학생", grade: "고1" },
+    { id: "s-b", name: "나학생", grade: "고1" },
+    { id: "s-c", name: "다학생", grade: "고1" },
+    { id: "s-late", name: "라학생", grade: "고1" },
+  ];
+  const SOURCES = [
+    { id: "c-a", className: "출발 A반", subject: "math", teacherName: "이성우" },
+    { id: "c-b", className: "출발 B반", subject: "math", teacherName: "박강사" },
+  ];
+  const ROSTERS: Record<string, unknown[]> = {
+    "c-a": [
+      row("e-a", "s-a", "가학생"),
+      row("e-b", "s-b", "나학생"),
+      row("e-in", "s-in", "이미있음"),
+      row("e-res", "s-c", "다학생", { isTransferred: true, endDate: plus(30) }),
+      row("e-late", "s-late", "라학생", { startDate: plus(5) }),
+    ],
+    "c-b": [row("e-c", "s-c", "다학생")],
+  };
+  function openClassTransfer(people = PEOPLE) {
+    return render(
+      <EnrollmentAssignDialog open onClose={() => {}} mode="add-student-to-class" fixedClass={CLASSES[0]} studentOptions={people} />,
+    );
+  }
+  async function pickSource(user: ReturnType<typeof userEvent.setup>, name: string) {
+    await user.click(await screen.findByText("기존 반 선택..."));
+    await user.click(screen.getByText(name));
+  }
+
+  beforeEach(() => {
+    listSourceClasses.mockResolvedValue({ ok: true, items: SOURCES });
+    listRoster.mockImplementation(async (id: string) => ({ ok: true, items: ROSTERS[id] ?? [] }));
+  });
+
+  it("반을 고르기 전엔 학생을 못 고른다 — '어느 반에서 옮기나요'가 학생 칸보다 위에 선다", async () => {
+    const user = userEvent.setup();
+    openClassTransfer();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await screen.findByText("기존 반 선택...");
+    expect(listSourceClasses).toHaveBeenCalledWith("c-new");
+    const classLabel = screen.getByText("어느 반에서 옮기나요");
+    const studentLabel = screen.getByText("학생 선택");
+    expect(classLabel.compareDocumentPosition(studentLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "먼저 반을 선택해 주세요." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "배정" })).toBeDisabled();
+    // 학생 기준 조회(종전 흐름)도, 명단 조회도 아직 안 나간다.
+    expect(listMovable).not.toHaveBeenCalled();
+    expect(listRoster).not.toHaveBeenCalled();
+  });
+
+  it("고른 반의 학생만 나온다 — 이미 이 반에 있는 학생·반이동 예약·이동일 뒤 시작은 빠지고, 저장은 종전 계약 그대로", async () => {
+    const user = userEvent.setup();
+    openClassTransfer();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await pickSource(user, "출발 A반");
+    expect(listRoster).toHaveBeenCalledWith("c-a");
+    await user.click(await screen.findByText("학생 선택..."));
+    const list = screen.getByRole("list");
+    expect(within(list).getByText("가학생")).toBeInTheDocument();
+    expect(within(list).getByText("나학생")).toBeInTheDocument();
+    expect(within(list).queryByText("다학생")).toBeNull(); // B반 학생 + A반의 예약된 이동
+    expect(within(list).queryByText("이미있음")).toBeNull();
+    expect(within(list).queryByText("라학생")).toBeNull();
+    expect(
+      screen.getByText(/반이동이 이미 걸린 1명 · 이 반에 이미 있거나 배정할 수 없는 1명 · 이동일 뒤에 수업을 시작하는 1명은 목록에서 뺐습니다/),
+    ).toBeInTheDocument();
+    await user.click(within(list).getByText("나학생"));
+    // 출발지가 정해지면 같은 반 단체 이동 입구도 종전처럼 선다.
+    expect(screen.getByRole("button", { name: "단체 반 이동" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "배정" }));
+    await waitFor(() => expect(moveBatch).toHaveBeenCalledTimes(1));
+    expect(moveBatch.mock.calls[0]).toEqual([[{ enrollmentId: "e-b", newClassId: "c-new", attendanceDays: [] }], plus(1)]);
+    expect(createEnrollment).not.toHaveBeenCalled();
+  });
+
+  it("반이동 날짜를 바꾸면 그날 명단으로 다시 계산한다(그날부터 다니는 학생이 들어온다)", async () => {
+    const user = userEvent.setup();
+    openClassTransfer();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await pickSource(user, "출발 A반");
+    await screen.findByText("학생 선택...");
+    fireEvent.change(screen.getByDisplayValue(plus(1)), { target: { value: plus(5) } });
+    await user.click(screen.getByText("학생 선택..."));
+    expect(within(screen.getByRole("list")).getByText("라학생")).toBeInTheDocument();
+  });
+
+  it("🔴 단체 반 이동이 일부 성공한 뒤 화면이 갱신돼(배정 후보에서 그 학생이 빠져도) 결과와 잠금이 남는다", async () => {
+    const snapshot = { ...SNAP, studentId: "s-b" };
+    listClassCandidates.mockResolvedValue({ ok: true, classId: "c-a", className: "출발 A반", items: [
+      { id: "e-b", name: "나학생", grade: "고1", snapshot },
+      { id: "e-a", name: "가학생", grade: "고1", snapshot: { ...snapshot, studentId: "s-a" } },
+    ] });
+    moveBatch.mockResolvedValue({ results: [{ enrollmentId: "e-b", ok: true }, { enrollmentId: "e-a", ok: false, error: "overlap" }] });
+    const user = userEvent.setup();
+    const view = openClassTransfer();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await pickSource(user, "출발 A반");
+    await user.click(await screen.findByText("학생 선택..."));
+    await user.click(within(screen.getByRole("list")).getByText("나학생"));
+    await user.click(screen.getByRole("button", { name: "단체 반 이동" }));
+    expect(listClassCandidates).toHaveBeenCalledWith("e-b");
+    await user.click(await screen.findByRole("button", { name: "보이는 2명 모두 선택" }));
+    await user.click(screen.getByRole("button", { name: "2명 반 이동" }));
+    await screen.findByText(/1명 이동 완료/);
+    expect(moveBatch.mock.calls[0][2]).toBe("c-a");
+    // 이동한 나학생이 배경 RSC 갱신으로 이 반의 배정 후보에서 빠진다.
+    view.rerender(
+      <EnrollmentAssignDialog
+        open
+        onClose={() => {}}
+        mode="add-student-to-class"
+        fixedClass={CLASSES[0]}
+        studentOptions={PEOPLE.filter((p) => p.id !== "s-b")}
+      />,
+    );
+    expect(screen.getByText(/1명 이동 완료 · 1명 확인 필요/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "반이동" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "나학생" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "1명 반 이동" })).toBeEnabled();
+  });
+
+  it("이동일을 바꿔 고른 학생이 그날 명단에서 빠지면, 이름은 남기고 한 명 이동만 막는다", async () => {
+    const user = userEvent.setup();
+    openClassTransfer();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await pickSource(user, "출발 A반");
+    fireEvent.change(screen.getByDisplayValue(plus(1)), { target: { value: plus(5) } });
+    await user.click(await screen.findByText("학생 선택..."));
+    await user.click(within(screen.getByRole("list")).getByText("라학생"));
+    expect(screen.getByRole("button", { name: "배정" })).toBeEnabled();
+    fireEvent.change(screen.getByDisplayValue(plus(5)), { target: { value: plus(1) } });
+    expect(screen.getByRole("button", { name: "라학생" })).toBeInTheDocument();
+    expect(screen.getByText(/라학생 학생은/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "배정" })).toBeDisabled();
+    // 목록에 이름을 남긴 학생을 '뺐다'고 세지 않는다.
+    expect(screen.getByText(/목록에서 뺐습니다/)).toBeInTheDocument();
+    expect(screen.queryByText(/이동일 뒤에 수업을 시작하는/)).toBeNull();
+  });
+
+  it("🔴 반을 빠르게 바꿔도 앞 반의 늦은 명단이 화면을 덮지 않는다(남의 수강으로 이동 금지)", async () => {
+    let resolveA!: (v: unknown) => void;
+    listRoster.mockImplementation((id: string) =>
+      id === "c-a" ? new Promise((r) => (resolveA = r)) : Promise.resolve({ ok: true, items: ROSTERS[id] }),
+    );
+    const user = userEvent.setup();
+    openClassTransfer();
+    await user.click(screen.getByRole("button", { name: "반이동" }));
+    await pickSource(user, "출발 A반");
+    await user.click(screen.getByText("출발 A반")); // 다시 열고
+    await user.click(screen.getByText("출발 B반")); // B로 바꾼다
+    await user.click(await screen.findByText("학생 선택..."));
+    await user.click(within(screen.getByRole("list")).getByText("다학생"));
+    // 이제서야 A의 늦은 응답이 도착한다.
+    await act(async () => resolveA({ ok: true, items: ROSTERS["c-a"] }));
+    expect(screen.getByRole("button", { name: "다학생" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "배정" }));
+    await waitFor(() => expect(moveBatch).toHaveBeenCalled());
+    expect(moveBatch.mock.calls[0]![0][0].enrollmentId).toBe("e-c");
   });
 });
 

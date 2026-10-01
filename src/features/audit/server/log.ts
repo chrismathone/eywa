@@ -152,6 +152,15 @@ export const AUDIT_ACTIONS = {
   // 지금 반 보드 동기화(0313a, 2026-09-30) — 요청(사람)과 실행 결과(연동 PC가 직접 insert, 실행자 system:classnote-sync-now)를 따로 남긴다.
   classnote_board_sync_request: "반 보드 지금 동기화 요청",
   classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
+  // 학부모 글·댓글 답글(0317a) — 앱이 요청·수정·삭제를 남기고, 연동 PC 워커가 ClassNote 반영 결과를 직접 남긴다.
+  classnote_parent_reply_request: "학부모 글 답글 요청",
+  classnote_parent_reply_edit_request: "학부모 글 답글 수정 요청",
+  classnote_parent_reply_delete_request: "학부모 글 답글 삭제 요청",
+  classnote_parent_reply_run: "학부모 글 답글 ClassNote 반영(연동 PC)",
+  // 학부모 글·댓글 공감(0319a) — 답글과 같은 모양(앱이 누르기·풀기 요청을, 연동 PC 워커가 ClassNote 반영 결과를 남긴다).
+  classnote_parent_reaction_request: "학부모 글 공감 요청",
+  classnote_parent_reaction_remove_request: "학부모 글 공감 풀기 요청",
+  classnote_parent_reaction_run: "학부모 글 공감 ClassNote 반영(연동 PC)",
   ecs_attendance_clear: "출석 취소(ECS)",
   operating_periods_save: "세션 기간 저장",
   calendar_event_create: "일정 등록",
@@ -376,6 +385,8 @@ export const AUDIT_ACTIONS = {
 
   // 수업보고서·발송 — 학부모에게 **나간 것**이라 되짚기가 가장 절실하다.
   lesson_report_save: "수업보고서 저장",
+  // 영상 제출 현황(장부)에서 회차 한 칸을 찍음 — 완료·미수행·미확인으로 되돌림(원장 2026-10-01).
+  lesson_report_video_homework_mark: "영상 과제 제출 기록",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
   report_attachment_add: "수업보고서 첨부 추가",
