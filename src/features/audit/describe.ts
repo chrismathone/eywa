@@ -1000,7 +1000,8 @@ export function auditDetail(
         .filter((v): v is string => !!v);
       const fields = Array.isArray(m.changed) ? m.changed.filter((v): v is string => typeof v === "string") : [];
       const head = parts.length > 0 ? `변경: ${parts.join(" · ")}` : fields.length > 0 ? `변경: ${fields.join(", ")}` : null;
-      return join(head, skipped.length ? skipped.join(" · ") : null);
+      // 왜 바뀌었나(2026-10-01) — 종강·폐지 반 이름을 비운 기록·레벨 변경처럼 화면 저장이 아닌 변경의 사유.
+      return join(head, skipped.length ? skipped.join(" · ") : null, str(m.note));
     }
     case "class_handover_schedule": {
       const n = ctx.nameOf(m.newTeacherId);
