@@ -111,7 +111,7 @@ export function VideoSubmitForm(props: {
       const done = await postJson("/api/video-submit/complete", { token: props.token, uploadId: started.uploadId });
       if (settled(done)) writePending(props.token, readPending(props.token).filter((id) => id !== started.uploadId));
       if (done?.ok) return setPhase({ kind: "done" });
-      if (settled(done))
+      if (done && settled(done))
         return setPhase({ kind: "error", message: typeof done.error === "string" ? done.error : "올린 영상을 확인하지 못했습니다.", file: null });
       await sleep(1500 * (attempt + 1));
     }
