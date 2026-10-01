@@ -242,6 +242,21 @@
 .wide {
   grid-column: span 2;
 }
+/* 빈 상태 카드를 모아 놓는 얇은 줄(역할별 시안) — 높이를 늘리지 않고 빈 문구도 한 줄만. */
+.thinRow {
+  align-items: start;
+  margin-top: 10px;
+}
+.thinRow .empty {
+  min-height: 0;
+  padding: 2px 0;
+}
+.thinRow .panelHeader {
+  margin-bottom: 6px;
+}
+.thinRow .panelBody > p {
+  margin: 0;
+}
 /* 한 줄 전체 — 넓은 추이(12개월)를 wide 옆에 두면 빈 칸이 남는다(재원생 추이). 좁은 폭 규칙보다 뒤에서도 이긴다(1/-1은 열 수와 무관). */
 .fullRow {
   grid-column: 1 / -1;

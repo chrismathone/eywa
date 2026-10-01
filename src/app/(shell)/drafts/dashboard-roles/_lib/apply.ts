@@ -7,13 +7,14 @@
  * 서버가 스냅샷을 만들 때 걸어 **클라이언트에 아예 안 내려보낸다**(설계 메모).
  */
 import type { BillingSummary } from "@/features/billing/calc";
-import { KPI_KEYS, type OverviewLayout } from "@/features/dashboard/overview/layout";
+import { KPI_KEYS, type OverviewLayout, type PanelId } from "@/features/dashboard/overview/layout";
 import type { OverviewSnapshot, Section, Sections } from "@/features/dashboard/overview/model";
 import { noticesForRole } from "@/features/notices/audience";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
 import type { MenuKey } from "@/lib/permissions";
 import { maskPhones } from "./mask";
 import { narrowBySubject } from "./narrow";
+import { packLayout } from "./pack";
 import { PANEL_AREAS, billingAmountsFor, buildLayout, toggleParam, type LayoutId, type RoleId, type Toggles } from "./roles";
 
 export type RoleViewInput = { role: RoleId; layout: LayoutId; subject: string; toggles: Toggles };
@@ -87,7 +88,15 @@ export function applyRoleView(full: OverviewSnapshot, input: RoleViewInput): Rol
     sections = narrowBySubject(sections, groupOf(input.subject), groupOf);
   }
 
+  // 데이터가 0건인 카드는 얇은 줄로 — 큰 빈 상자가 줄 높이를 늘리지 않게(원장 2026-10-01 공간 낭비 지적).
+  const empty = new Set<PanelId>();
+  if (sections.notices?.data?.length === 0) empty.add("notices");
+  if (sections.operations?.data?.length === 0) empty.add("operations");
+  if (sections.calendar?.data?.length === 0) empty.add("admissionsSchedule");
+  if (sections.schedule?.data?.length === 0) empty.add("nowClasses");
+  const packed = packLayout(layout, empty);
+
   const denied = new Set<MenuKey>([...ALWAYS_DENIED, ...(billingAmounts ? [] : (["billing"] as const))]);
   const allowed = full.allowed.filter((menu) => !denied.has(menu));
-  return { snapshot: { ...full, scope, allowed, sections }, layout, billingAmounts };
+  return { snapshot: { ...full, scope, allowed, sections }, layout: packed, billingAmounts };
 }

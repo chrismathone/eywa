@@ -174,7 +174,7 @@ const C_PANELS: Record<Exclude<RoleId, "owner">, { panels: readonly PanelSlot[];
     panels: ["consultProgress", "admissionsSchedule", "billingMonth", "repeatAbsence", "attendance", "newcomerChecks", "operations", "notices"],
     columns: 4,
   },
-  subject: { panels: ["nowClasses", "subjects", "sheets", "billingMonth", "notices"], columns: 3 },
+  subject: { panels: ["nowClasses", "subjects", "sheets", "billingMonth", "notices"], columns: 4 },
 };
 
 function keepAllowed(panels: readonly PanelSlot[], allowed: readonly PanelId[]): PanelSlot[] {
@@ -200,7 +200,8 @@ export function buildLayout(role: RoleId, layout: LayoutId, t: Toggles): Overvie
   return {
     kpis,
     compact: true,
-    hideHeader: true,
+    // 과목 관리자는 제목에 담당 과목이 붙으므로 머리를 남긴다(실장·데스크만 숨김).
+    hideHeader: role !== "subject",
     columns: c.columns,
     sections: toSections([sec("c-one", "", "", c.panels)]),
   };

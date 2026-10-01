@@ -90,3 +90,25 @@
 .compact :global([data-overview="panel"]) { padding: 10px 12px 8px; }
 .compact :global([data-overview="panel-header"]) { padding-bottom: 6px; margin-bottom: 8px; }
 .compact :global([data-overview="panel-header"]) p { display: none; }
+/* 역할별 시안(layout.evenGap) — **카드 사이 간격은 한 값**(--dash-gap): KPI↔카드, 가로, 줄 사이, 구역 사이, 얇은 줄 모두.
+   카드 안쪽 여백도 한 값. 기본 운영실(원장)엔 이 클래스가 붙지 않는다. 특이도(.even.dashboard)로 기본·compact 규칙을 이긴다. */
+.even { --dash-gap: 16px; }
+.even.compact { --dash-gap: 12px; }
+.even.dashboard :global([data-overview="kpis"]) { gap: var(--dash-gap); margin-bottom: 0; }
+.even.dashboard :global([data-overview="grid"]) { gap: var(--dash-gap); margin-top: var(--dash-gap); }
+.even.dashboard :global([data-overview="board"] > [id]) { margin: var(--dash-gap) 0 0; padding-bottom: 8px; }
+.even.dashboard :global([data-overview="board"] > [id] + [data-overview="grid"]) { margin-top: 10px; }
+.even.dashboard :global([data-overview="panel"]) { padding: 16px; }
+.even.dashboard :global([data-overview="panel-header"]) { padding-bottom: 10px; margin-bottom: 12px; }
+.even.compact.dashboard :global([data-overview="panel"]) { padding: 12px; }
+.even.compact.dashboard :global([data-overview="panel-header"]) { padding-bottom: 6px; margin-bottom: 8px; }
+.even.dashboard :global([data-overview="header"]) { margin-bottom: var(--dash-gap); }
+/* 현재 수업 현황 — 넓은 카드에서 과목이 여럿이면 과목별 열로, 하나면 카드 폭을 다 쓴다(기본은 늘 2열이라 하나일 때 왼쪽 절반만 썼다). */
+.even.dashboard :global([data-overview="schedule-grid"]) { grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); }
+/* 역할별 시안 — 구역마다 카드 수에 맞춘 열 수(--cols)가 좁은 창의 접힘 규칙(literal 3/2/1열)에 덮여 줄이 비지 않게 상한만 건다. */
+@container dashboard (max-width: 1280px) { .even.dashboard :global([data-overview="grid"]) { grid-template-columns: repeat(min(var(--cols, 4), 3), minmax(0, 1fr)); } }
+@container dashboard (max-width: 900px) { .even.dashboard :global([data-overview="grid"]) { grid-template-columns: repeat(min(var(--cols, 4), 2), minmax(0, 1fr)); } }
+@container dashboard (max-width: 560px) { .even.dashboard :global([data-overview="grid"]) { grid-template-columns: minmax(0, 1fr); } }
+/* 여덟 칸 KPI의 조인 간격(8px)을 간격 한 값이 덮지 않게 — 위 일곱·여덟 칸 규칙 구간만. */
+@container dashboard (width > 1100px) and (width <= 1500px) { .even.dashboard :global([data-overview="kpis"][data-kpi-n="8"]) { gap: 8px; } }
+@container dashboard (max-width: 580px) { .even.dashboard :global([data-overview="kpis"]) { gap: 8px; } }

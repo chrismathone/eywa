@@ -95,7 +95,7 @@ export function CurrentClasses({
     return <p className={s.empty}>오늘 예정된 수업이 없습니다.</p>;
   return (
     <div className={s.currentClasses}>
-      <div className={s.scheduleGrid}>
+      <div className={s.scheduleGrid} data-overview="schedule-grid">
         {keys.map((key) => {
           const all = schedule.filter((slot) => slot.subject === key);
           const ongoing = all.filter((slot) => slot.status === "ongoing");

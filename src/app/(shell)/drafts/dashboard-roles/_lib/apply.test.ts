@@ -150,6 +150,17 @@ describe("역할별 운영실 걸러내기", () => {
     expect(view("owner").snapshot.sections.operations?.data?.map((r) => r.href)).toContain("/approvals");
   });
 
+  it("0건 카드(공지·행정)는 맨 뒤 얇은 줄 — 원장 배치는 그대로", () => {
+    const base = fullSnapshot();
+    const empty = { ...base, sections: { ...base.sections, notices: ok([]), operations: ok([]) } } as unknown as OverviewSnapshot;
+    const v = applyRoleView(empty, { role: "desk", layout: "a", subject: "math", toggles: NO_TOGGLES });
+    const last = v.layout.sections.at(-1);
+    expect(last).toMatchObject({ thin: true });
+    expect(last?.panels).toEqual(expect.arrayContaining(["notices", "operations"]));
+    expect(applyRoleView(empty, { role: "owner", layout: "a", subject: "math", toggles: NO_TOGGLES }).layout.sections.some((s) => s.thin)).toBe(false);
+    expect(v.layout.evenGap).toBe(true);
+  });
+
   it("공지는 역할 대상만(강사 전용 공지가 새지 않는다)", () => {
     expect(view("desk").snapshot.sections.notices?.data?.map((n) => n.id)).toEqual(["n1"]);
   });
@@ -248,7 +259,7 @@ describe("배치", () => {
     for (const role of roles) {
       const l = buildLayout(role, "c", NO_TOGGLES);
       expect(l.compact).toBe(true);
-      expect(l.hideHeader).toBe(true);
+      expect(l.hideHeader).toBe(role !== "subject"); // 과목 관리자는 제목에 담당 과목이 붙어 머리를 남긴다
       expect(l.sections).toHaveLength(1);
       expect(l.sections[0]?.title).toBe("");
     }

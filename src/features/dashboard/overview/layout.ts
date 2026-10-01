@@ -65,6 +65,10 @@ export type LayoutSection = {
   title: string;
   note: string;
   panels: readonly PanelSlot[];
+  /** 이 구역만의 열 수 — 없으면 `OverviewLayout.columns`(기본 4). 카드 수에 맞춰 줄을 채운다(`pack.ts`). */
+  columns?: number;
+  /** 빈 상태 카드를 얇게 모아 놓는 줄 — 높이를 늘리지 않는다. */
+  thin?: boolean;
 };
 
 export type OverviewLayout = {
@@ -73,6 +77,8 @@ export type OverviewLayout = {
   sections: readonly LayoutSection[];
   /** 넓은 화면의 카드 열 수(기본 4). 좁은 폭의 접힘 규칙은 CSS가 그대로 맡는다. */
   columns?: number;
+  /** 카드 사이 간격·카드 안쪽 여백을 한 값으로(역할별 시안) — 기본 운영실은 false. */
+  evenGap?: boolean;
   /** 한 화면용 — 여백·머리를 줄인다. */
   compact?: boolean;
   /** 머리(학원 이름·새로고침 줄)를 그리지 않는다. */
