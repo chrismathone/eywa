@@ -1,0 +1,213 @@
+"use client";
+
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { toast } from "sonner";
+import type { MenuKey } from "@/lib/permissions";
+import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
+import { defaultItems } from "@/features/dashboard/layout/defaults";
+import { insertAt, newItem } from "@/features/dashboard/layout/engine";
+import { CARDS, cardDef, type SizePreset } from "@/features/dashboard/layout/registry";
+import { previewSnapshot } from "@/features/dashboard/layout/preview";
+import { BUNDLE_LABELS, BUNDLE_RULES, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
+import { SectionForm } from "../section-form";
+import { CardInspector } from "./card-inspector";
+import { EditBoard } from "./edit-board";
+import { EditorActions, RoleBar } from "./editor-toolbar";
+import { SPRING } from "./geometry";
+import { ListBoard, UnusedList } from "./list-board";
+import { RolePreview } from "./role-preview";
+import { useDashboardEditor } from "./use-editor";
+import { WidgetGallery } from "./widget-gallery";
+import e from "./editor.module.css";
+
+export type DashboardEditorProps = {
+  initial: DashboardSettings;
+  /** 역할 묶음이 열 수 있는 메뉴(그 학원의 역할 권한 + 꺼진 기능) — 서버가 계산(`bundleMenus`). */
+  roleMenus: Record<Bundle, MenuKey[]>;
+  /** 과목 관리자 미리보기 과목(운영실 과목 묶음마다 하나). */
+  subjects: { key: string; label: string }[];
+  /** 역할마다 지금 해당하는 직원 수. */
+  counts: Record<Bundle, number>;
+  /** 원장 시점 원본 스냅샷 — 서버가 흘려 보낸다(첫 화면을 막지 않게, B7). 실패하면 null. */
+  preview: Promise<OverviewSnapshot | null>;
+};
+
+/** 갤러리·편집 얼굴용 — 모든 카드를 기본 크기로 놓은 배치. */
+const ALL_ITEMS: Item[] = CARDS.map((c) => newItem(c.id));
+
+/** 캔버스로 끌어 편집하기엔 좁은 폭 — 이 아래는 한 줄 목록 편집. */
+const LIST_BELOW = 720;
+
+/**
+ * 학원 설정 '대시보드 관리' — 역할마다 운영실에 무엇을 어디에 얼마나 크게 놓을지(원장 2026-10-01 *"카드 및 위치, 카드 크기 등등 다양하게"*).
+ * 처음엔 그 역할의 **실데이터 미리보기**, '편집'을 누르면 위젯 편집(끌기·크기·서랍·갤러리), '완료'로 돌아온다. 저장은 아래 저장 바(다섯 역할 한 번에).
+ */
+export function DashboardEditor({ initial, roleMenus, subjects, counts, preview }: DashboardEditorProps) {
+  const ed = useDashboardEditor(initial);
+  const { role, items, editing, selected, commit, select, restore, undo, redo } = ed;
+  const [full, setFull] = useState<OverviewSnapshot | null | "failed">(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [subject, setSubject] = useState<string | null>(subjects[0]?.key ?? null);
+  const [width, setWidth] = useState(1200);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  });
+
+  useEffect(() => {
+    let alive = true;
+    preview.then(
+      (s) => alive && setFull(s ?? "failed"),
+      () => alive && setFull("failed"),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [preview]);
+
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? 1200));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const menus = useMemo(() => new Set(roleMenus[role]), [roleMenus, role]);
+  const subjectChoice = subjects.find((s) => s.key === subject) ?? null;
+  const original = full && full !== "failed" ? full : null;
+  const previewSubject = role === "subject" ? subjectChoice : null;
+  // 편집 얼굴·갤러리의 값 — 모든 카드를 놓았다고 치고 이 역할로 다듬은 스냅샷(권한 밖 영역 제거 · 담당 과목으로 좁힘).
+  // 금액은 카드 옵션(이번 달 수납 '금액 보이기')을 따라 얼굴이 고른다(`summaryOf`의 amounts).
+  const snapshot = useMemo(
+    () => (original ? previewSnapshot(original, { role, items: ALL_ITEMS, menus, subject: previewSubject }) : null),
+    [original, role, menus, previewSubject],
+  );
+  const unused = useMemo(() => CARDS.filter((c) => !items.some((i) => i.id === c.id)).map((c) => c.id), [items]);
+  const selectedItem = items.find((i) => i.id === selected) ?? null;
+
+  const onRemoved = useCallback(
+    (id: string, before: Item[]) => {
+      const at = before.findIndex((i) => i.id === id);
+      const removed = before[at];
+      if (!removed) return;
+      const name = removed.title ?? cardDef(id)?.label ?? "구역 제목";
+      toast(`'${name}'을(를) 뺐습니다`, {
+        action: { label: "되돌리기", onClick: () => restore(role, removed, at) },
+      });
+    },
+    [restore, role],
+  );
+  const add = useCallback(
+    (id: string, z?: SizePreset) => {
+      const cur = itemsRef.current;
+      if (cur.some((i) => i.id === id)) return;
+      commit([...cur, newItem(id, z)]);
+      toast(`'${cardDef(id)?.label}'을(를) 맨 뒤에 넣었습니다`);
+    },
+    [commit],
+  );
+  const addHeading = useCallback(() => {
+    const id = `heading:${Date.now().toString(36)}`;
+    const cur = itemsRef.current;
+    const at = selected ? cur.findIndex((i) => i.id === selected) : cur.length;
+    commit(insertAt(cur, newItem(id, undefined, "새 구역"), at < 0 ? cur.length : at));
+    select(id);
+  }, [commit, select, selected]);
+
+  // 되돌리기·다시 하기 단축키 — 편집 중이고 글자 칸에 있지 않을 때만.
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (ev: KeyboardEvent) => {
+      const t = ev.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (!(ev.ctrlKey || ev.metaKey)) return;
+      const k = ev.key.toLowerCase();
+      if (k === "z" && !ev.shiftKey) {
+        ev.preventDefault();
+        undo();
+      } else if ((k === "z" && ev.shiftKey) || k === "y") {
+        ev.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, undo, redo]);
+
+  const listMode = width < LIST_BELOW;
+  return (
+    <SectionForm section="dashboard" payload={ed.payload}>
+      <div ref={rootRef} className={e.editor} style={{ "--spring-linear": SPRING } as CSSProperties}>
+        <RoleBar role={role} status={ed.status} onRole={ed.setRole} />
+        <p className={e.roleInfo}>
+          <b>{BUNDLE_LABELS[role]}</b>
+          <span>{BUNDLE_RULES[role]}</span>
+          <span>지금 {counts[role]}명</span>
+          <span>{ed.status[role].isDefault ? "기본 배치 사용 중(코드의 기본이 바뀌면 따라갑니다)" : "직접 구성한 배치"}</span>
+        </p>
+        <EditorActions
+          role={role}
+          editing={editing}
+          canUndo={ed.canUndo}
+          canRedo={ed.canRedo}
+          isDefault={ed.status[role].isDefault}
+          subjects={subjects}
+          subject={subject}
+          onEditing={ed.setEditing}
+          onGallery={() => setGalleryOpen(true)}
+          onHeading={addHeading}
+          onUndo={undo}
+          onRedo={redo}
+          onCopy={(from) => {
+            commit(ed.draftOf(from).map((i) => ({ ...i })));
+            toast(`${BUNDLE_LABELS[from]} 배치를 가져왔습니다 · 되돌리기로 취소할 수 있습니다`);
+          }}
+          onReset={() => {
+            commit(defaultItems(role));
+            toast(`${BUNDLE_LABELS[role]} 배치를 기본값으로 되돌렸습니다`);
+          }}
+          onSubject={setSubject}
+        />
+        {editing ? (
+          <div className={e.stage} data-inspector={selectedItem ? "" : undefined}>
+            <div className="flex min-w-0 flex-col gap-3">
+              {listMode ? (
+                <>
+                  <ListBoard items={items} role={role} menus={menus} selected={selected} onSelect={select} onCommit={commit} onRemoved={onRemoved} />
+                  <UnusedList ids={unused} onAdd={(id) => add(id)} />
+                </>
+              ) : (
+                <EditBoard
+                  items={items}
+                  role={role}
+                  menus={menus}
+                  snapshot={snapshot}
+                  selected={selected}
+                  unused={unused}
+                  onSelect={select}
+                  onCommit={commit}
+                  onRemoved={onRemoved}
+                  onAdd={(id) => add(id)}
+                />
+              )}
+            </div>
+            {selectedItem ? (
+              <CardInspector key={selectedItem.id} item={selectedItem} items={items} role={role} menus={menus} onCommit={commit} onRemoved={onRemoved} onClose={() => select(null)} />
+            ) : null}
+          </div>
+        ) : full === null ? (
+          <p className={e.note}>실데이터 미리보기를 불러오는 중입니다… 그동안 ‘편집’을 눌러 배치를 바꿀 수 있습니다.</p>
+        ) : full === "failed" ? (
+          <p className={e.note} data-tone="danger">
+            미리보기 데이터를 불러오지 못했습니다. 배치 편집·저장은 그대로 할 수 있습니다(새로고침하면 다시 불러옵니다).
+          </p>
+        ) : (
+          <RolePreview full={full} role={role} items={items} menus={menus} subject={previewSubject} />
+        )}
+        <WidgetGallery open={galleryOpen} onOpenChange={setGalleryOpen} items={items} role={role} menus={menus} snapshot={snapshot} onAdd={add} />
+      </div>
+    </SectionForm>
+  );
+}

@@ -26,6 +26,7 @@ export function KpiCard({
   popupTitle,
   jump,
   helpKey,
+  rename,
   children,
 }: {
   label: string;
@@ -46,22 +47,28 @@ export function KpiCard({
   jump: KpiJump;
   /** F1 겹침 키 — manuals/dashboard.ts callouts[].key */
   helpKey?: string;
+  /**
+   * 학원 설정 '대시보드 관리'에서 바꾼 이름 — 보이는 이름만 바꾼다. 칸의 정체(`data-kpi` = 원래 `label`)는 그대로라
+   * 전일 결석의 붉은 색 같은 칸 규칙이 이름을 바꿔도 따라간다.
+   */
+  rename?: string;
   children: ReactNode;
 }) {
   const missing = value === "—";
   const body = error ? (missing ? "조회 실패 · 다시 확인 필요" : "갱신 실패 · 이전 확인값") : detail;
   const text = detailPrefix ? `${detailPrefix} · ${body}` : body;
+  const name = rename ?? label;
   return (
     <div className={s.kpi} data-overview="kpi" data-kpi={label} data-help={helpKey}>
       <DetailPopup
         title={popupTitle}
-        ariaLabel={`${label} ${value}${missing ? "" : unit}. ${text}. 자세히 보기`}
+        ariaLabel={`${name} ${value}${missing ? "" : unit}. ${text}. 자세히 보기`}
         trigger={<button type="button" className={s.kpiBody} />}
         label={
           <>
             <span className={s.kpiLabel} data-overview="kpi-label">
               <span className={s.kpiIcon}>{icon}</span>
-              <span>{label}</span>
+              <span>{name}</span>
               {labelNote && <small className={s.kpiPeriod}>{labelNote}</small>}
               {error && <span className={s.textDanger} title={body} aria-hidden>!</span>}
             </span>

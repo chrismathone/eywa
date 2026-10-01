@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useState, useSyncExternalStore, type ReactNode } from "react";
 import { DEFAULT_CHART_KINDS, type ChartKinds, type ChartPanel } from "@/features/dashboard/overview/chart-prefs";
 import { saveDashboardChartKind } from "@/features/dashboard/overview/chart-prefs-actions";
-import { DEFAULT_LAYOUT, type OverviewLayout, type PanelId } from "@/features/dashboard/overview/layout";
+import { DEFAULT_LAYOUT, type PanelId } from "@/features/dashboard/overview/layout";
 import { ChartKindToggle } from "./chart-kind-toggle";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
@@ -27,7 +27,8 @@ import { DetailPopup } from "./detail-popup";
 import { CurrentClasses } from "./current-classes";
 import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
-import { KpiStrip } from "./kpi-strip";
+import { KpiStrip, kpiCards } from "./kpi-strip";
+import { GridBoard } from "./grid-board";
 import { GradeSplitChart } from "./grade-split";
 import { LevelSplitChart } from "./level-split";
 import { AdmissionsComparison } from "./admissions-comparison";
@@ -189,34 +190,22 @@ export function Overview({
   initial,
   demoRoster = null,
   chartKinds: initialKinds = DEFAULT_CHART_KINDS,
-  layout = DEFAULT_LAYOUT,
-  billingAmounts = true,
-  refresh,
-  titleSuffix,
-  billingScopeNote,
+  preview = false,
 }: {
   initial: OverviewSnapshot;
-  /** 맨 위 제목 뒤에 붙는 말 — 과목 관리자 시안의 "(수학)". 기본(원장·운영실)은 없다. */
-  titleSuffix?: string;
-  /** 수납 현황 제목 뒤에 붙는 말 — 학원 전체 값이 섞였을 때 "(학원 전체)". */
-  billingScopeNote?: string;
-  /** 카드 배치 — 기본 = 지금 운영실 그대로. 역할별 시안만 다른 값을 넘긴다(`layout.ts`). */
-  layout?: OverviewLayout;
-  /** false = 수납 칸이 금액 없이 건수만(역할별 시안) — 기본 true라 지금 화면은 그대로. */
-  billingAmounts?: boolean;
-  /** 갱신 함수 — 기본은 운영실 서버 액션. 시안은 같은 결과에 역할 필터를 씌워 넘긴다. */
-  refresh?: () => Promise<OverviewSnapshot>;
   /** 추이 패널 막대/꺾은선 — 계정 귀속(`ui_prefs.dashboard`). */
   chartKinds?: ChartKinds;
   /** 데모 지점 원장에게만. 다른 지점은 null이라 버튼이 없다. */
   demoRoster?: DemoRosterControl | null;
+  /** 학원 설정 '대시보드 관리'의 미리보기 — 갱신·실시간 구독을 끈다(역할로 다듬은 고정 스냅샷). */
+  preview?: boolean;
 }) {
   const hydrated = useSyncExternalStore(
     subscribeHydration,
     () => true,
     () => false,
   );
-  const query = useOverview(initial, refresh);
+  const query = useOverview(initial, { live: !preview });
   const [kinds, setKinds] = useState<ChartKinds>(initialKinds);
   const kindTools = (panel: ChartPanel, label: string) => (
     <ChartKindToggle
@@ -230,6 +219,14 @@ export function Overview({
   );
   const snapshot = query.data;
   const v = snapshot.sections;
+  // 보는 사람의 배치(서버가 정한다) — 없으면(옛 스냅샷) 지금 운영실 그대로. 원장 기본만 옛 CSS 격자, 그 밖은 흐름 배치.
+  const view = snapshot.view;
+  const classic = !view ? DEFAULT_LAYOUT : view.mode === "classic" ? (view.classic ?? DEFAULT_LAYOUT) : null;
+  const custom = new Map((view?.items ?? []).flatMap((i) => (i.title ? [[i.id, i.title] as const] : [])));
+  const academyWide = new Set(view?.academyWide ?? []);
+  // 카드 제목 = 편집기에서 바꾼 이름(없으면 기본) + 과목 관리자 화면에서 학원 전체 값이면 '(학원 전체)'.
+  const t = (id: PanelId, base: string) => `${custom.get(`panel:${id}`) ?? base}${academyWide.has(`panel:${id}`) ? " (학원 전체)" : ""}`;
+  const billingAmounts = view?.monthAmounts ?? true;
   const student = v.students?.data;
   const change = v.changes?.data;
   const enrolledTrend = v.enrolledTrend?.data;
@@ -273,7 +270,7 @@ export function Overview({
   const panels: Partial<Record<PanelId, ReactNode>> = {
     studentsComp: (
     <Panel
-      title="재원생 구성"
+      title={t("studentsComp", "재원생 구성")}
       note="현재 · 초·중·고 · 영어·동시수강·수학"
       href={studentsEnrolledHref()}
       sections={[v.students]}
@@ -288,7 +285,7 @@ export function Overview({
     게이트는 월별과 같은 `attendance` 키라 숨김 조건이 따로 없다. 14일 추이(아래 '최근 14일 등원율')는 월별 그대로. */
     attendance: (
     <Panel
-      title="출결 현황"
+      title={t("attendance", "출결 현황")}
       note="오늘 · 학생·반·교시별 출결 칸"
       href="/attendance/live"
       sections={[v.attendance, v.processing]}
@@ -371,7 +368,7 @@ export function Overview({
     ),
     billingMonth: (
     <Panel
-      title={`${thisMonth} 수납 현황${billingScopeNote ? ` (${billingScopeNote})` : ""}`}
+      title={t("billingMonth", `${thisMonth} 수납 현황`)}
       note="이번 달 청구서 · 취소 청구 제외"
       href={`/billing?period=${snapshot.today.slice(0, 7)}`}
       sections={[v.billing]}
@@ -420,7 +417,7 @@ export function Overview({
                 danger={bill.outstanding > 0}
               />
             ) : (
-              // 역할별 시안 — 금액 없이 건수만(미납 + 부분납). 금액 필드는 스냅샷에서도 이미 0으로 비워 온다.
+              // 금액을 가린 역할(학원 설정 '대시보드 관리' — 원장 밖 역할 기본) — 건수만(미납 + 부분납). 금액 필드는 서버가 이미 0으로 비워 보냈다(shape.ts).
               <InlineStat
                 label="미납·부분납 건수"
                 value={
@@ -439,7 +436,7 @@ export function Overview({
     ),
     newcomerStages: (
     <Panel
-      title="신규생 단계별 관리"
+      title={t("newcomerStages", "신규생 단계별 관리")}
       note="등록 후 90일 · 재원·휴원 학생"
       href="/newcomers"
       sections={[v.newcomers]}
@@ -484,7 +481,7 @@ export function Overview({
     ),
     changes: (
     <Panel
-      title="등록 · 퇴원 추이"
+      title={t("changes", "등록 · 퇴원 추이")}
       note="최근 6개월 · 당월은 오늘까지"
       href="/students"
       sections={[v.changes]}
@@ -529,7 +526,7 @@ export function Overview({
     ),
     billing6: (
     <Panel
-      title="6개월 청구 · 수납"
+      title={t("billing6", "6개월 청구 · 수납")}
       note="최근 6개월 · 청구월 기준 실청구액(청구 − 할인)"
       href="/billing"
       sections={[v.billing]}
@@ -583,7 +580,7 @@ export function Overview({
     enrolledTrend: (
     !(v.enrolledTrend && v.enrolledTrend.data === null && v.enrolledTrend.at !== null) ? (
       <Panel
-        title="재원생 추이"
+        title={t("enrolledTrend", "재원생 추이")}
         note="최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외"
         href={studentsEnrolledHref()}
         sections={[v.enrolledTrend]}
@@ -619,7 +616,7 @@ export function Overview({
     ),
     subjects: (
     <Panel
-      title="과목별 수강"
+      title={t("subjects", "과목별 수강")}
       note="현재 재원생 · 과목별 수강과 동시 수강"
       href={studentsEnrolledHref()}
       sections={[v.students]}
@@ -675,7 +672,7 @@ export function Overview({
     ),
     grades: (
     <Panel
-      title="학년별 재원생"
+      title={t("grades", "학년별 재원생")}
       note="현재 재원생 · 학원설정 학년 순 · 영어·수학 수강 구성"
       href={studentsEnrolledHref()}
       sections={[v.students]}
@@ -685,7 +682,7 @@ export function Overview({
     ),
     schools: (
     <Panel
-      title="학교별 학생"
+      title={t("schools", "학교별 학생")}
       note="현재 재원생 · 초등·중등·고등"
       className={s.schoolPanel}
       href={studentsEnrolledHref()}
@@ -701,7 +698,7 @@ export function Overview({
     ),
     admissions: (
     <Panel
-      title="콜&상담 전환"
+      title={t("admissions", "콜&상담 전환")}
       note="지난달 · 이번 달 · 상담일 기준"
       sections={[v.admissions]}
     >
@@ -711,7 +708,7 @@ export function Overview({
     repeatAbsence: (
     <Panel
       id="repeated-absences"
-      title="반복 결석 학생"
+      title={t("repeatAbsence", "반복 결석 학생")}
       note={
         v.absences?.data?.anchor
           ? `${monthDayLabel(v.absences.data.anchor)}까지 14일 · 사전 통보 제외 3회 이상`
@@ -781,7 +778,7 @@ export function Overview({
     ),
     attendance14: (
     <Panel
-      title="최근 14일 등원율"
+      title={t("attendance14", "최근 14일 등원율")}
       note="오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸"
       href="/attendance"
       sections={[v.attendanceTrend]}
@@ -795,7 +792,7 @@ export function Overview({
     ),
     consultProgress: (
     <Panel
-      title="상담 진행"
+      title={t("consultProgress", "상담 진행")}
       note={
         v.consultProgress?.data
           ? `상담일 기준 ${monthDayLabel(v.consultProgress.data.summary.from)}부터 · 접수 → 수업 시작`
@@ -809,7 +806,7 @@ export function Overview({
     ),
     reports: (
     <Panel
-      title="학습 · 학부모 보고"
+      title={t("reports", "학습 · 학부모 보고")}
       note={
         homework
           ? `최근 ${homework.windowDays}일 숙제 · ${subjects(homework.subjects)}`
@@ -866,7 +863,7 @@ export function Overview({
     ),
     studentConsult: (
     <Panel
-      title="학생 상담"
+      title={t("studentConsult", "학생 상담")}
       note="최근 7일 · 전체 기록 · 후속조치"
       href="/consultations"
       sections={[v.consultations]}
@@ -911,7 +908,7 @@ export function Overview({
     ),
     newcomerChecks: (
     <Panel
-      title="신규생 체크 진행"
+      title={t("newcomerChecks", "신규생 체크 진행")}
       note="등록 후 90일 · 필수 6항목 · 2개월 콜은 선택"
       href="/newcomers"
       sections={[v.newcomers]}
@@ -1005,7 +1002,7 @@ export function Overview({
     ),
     sheets: (
     <Panel
-      title="강사 시트 작성 현황"
+      title={t("sheets", "강사 시트 작성 현황")}
       // 영어 = 오늘이 속한 주 · 수학 = 이번 달 1일~오늘 — 볼 수 있는 줄만 적는다. 영어는 계정의 보기 필터(프로그램·담임)를 탄 반만 센다
       // (수학은 권한 범위로만 거른다).
       note={[v.englishSheet ? "영어 이번 주(보기 필터 기준)" : null, v.mathSheet ? "수학 이번 달" : null]
@@ -1081,7 +1078,7 @@ export function Overview({
     ),
     nowClasses: (
     <Panel
-      title="현재 수업 현황"
+      title={t("nowClasses", "현재 수업 현황")}
       helpKey="dash-now"
       note={
         v.schedule?.at
@@ -1101,7 +1098,7 @@ export function Overview({
     ),
     admissionsSchedule: (
     <Panel
-      title="레벨테스트 및 첫수업 일정"
+      title={t("admissionsSchedule", "레벨테스트 및 첫수업 일정")}
       note={monthAheadNote(admissionsRange)}
       sections={[v.calendar]}
     >
@@ -1124,7 +1121,7 @@ export function Overview({
     ),
     staff: (
     <Panel
-      title="직원 구성"
+      title={t("staff", "직원 구성")}
       note="현재 재직 중 · 운영 역할 기준"
       href="/staff"
       sections={[v.staff]}
@@ -1169,7 +1166,7 @@ export function Overview({
     ),
     operations: (
     <Panel
-      title="행정 · 자산"
+      title={t("operations", "행정 · 자산")}
       note="현재 · 누적 건수 · 열람 가능한 업무 기준"
       sections={[v.operations]}
     >
@@ -1198,7 +1195,7 @@ export function Overview({
     ),
     expenses: (
     <Panel
-      title={`${thisMonth} 지출 내역`}
+      title={t("expenses", `${thisMonth} 지출 내역`)}
       note={
         v.expenses?.data
           ? `이번 달 · 지출일 기준 · ${v.expenses.data.count}건`
@@ -1253,7 +1250,7 @@ export function Overview({
     ),
     notices: (
     <Panel
-      title="학원 공지"
+      title={t("notices", "학원 공지")}
       note="최근 공지 · 대상 권한 반영"
       href="/dashboard/announcements"
       sections={[v.notices]}
@@ -1294,22 +1291,21 @@ export function Overview({
         {panels.studentConsult}
       </div>
     ) : null;
-  const gridStyle = layout.columns ? ({ "--cols": layout.columns } as CSSProperties) : undefined;
 
   return (
     // 콜&상담 진행 칩(원장 2026-09-22) — 신규문의·금일입테 팝업과 입학 일정 줄이 상담 id로 같은 표를 읽는다.
     <ConsultChipsProvider chips={v.consultProgress?.data?.chips ?? null}>
-    <div className={[appearance.dashboard, layout.compact && appearance.compact, layout.evenGap && appearance.even].filter(Boolean).join(" ")}>
+    <div className={appearance.dashboard}>
     <div className={s.root} data-overview="root">
       <div className={s.board} data-overview="board">
-        {layout.hideHeader ? null : (
         <header className={s.header} data-overview="header">
           <div className={s.identity}>
             <span className={s.eyebrow}>
               {snapshot.academy || "에이와"} · ACADEMY OVERVIEW
             </span>
             <h1>
-              학원 전체 현황{titleSuffix ? ` ${titleSuffix}` : ""}<span>{snapshot.today.replaceAll("-", ".")}</span>
+              {/* 과목 관리자 = 맨 위 제목 한 곳에 담당 과목(원장 2026-10-01 `학원 전체 현황 (수학)`) — 카드·숫자 라벨은 원래 이름 그대로. */}
+              학원 전체 현황{view?.scopeLabel ? ` (${view.scopeLabel})` : ""}<span>{snapshot.today.replaceAll("-", ".")}</span>
             </h1>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element -- static 19KB pre-rendered artwork */}
@@ -1327,18 +1323,21 @@ export function Overview({
             >
               <i className={failed ? s.dotWarning : s.dotLive} />
               <span>
-                {hydrated && query.isFetching
+                {preview
+                  ? "미리보기"
+                  : hydrated && query.isFetching
                   ? "최신 정보 확인 중"
                   : failed
                     ? "일부 정보 갱신 필요"
                     : "자동 갱신"}
                 <small>
                   {lastTime.length
-                    ? `${clock(Math.min(...lastTime))} 확인 · 30초 주기`
+                    ? `${clock(Math.min(...lastTime))} 확인${preview ? "" : " · 30초 주기"}`
                     : "조회 대기"}
                 </small>
               </span>
             </div>
+            {preview ? null : (
             <button
               className={s.refresh}
               type="button"
@@ -1352,34 +1351,37 @@ export function Overview({
                 className={hydrated && query.isFetching ? s.spinning : ""}
               />
             </button>
+            )}
           </div>
         </header>
-        )}
 
-
-        {/* KPI 여덟 칸(원장 2026-09-11 여섯 칸 → 보강예정 → 2026-09-23 금일 등록) — 카드 = 팝업, ↗ = 목적지 창. 카드·팝업·목적지가 같은 함수를 부른다. */}
-        <KpiStrip snapshot={snapshot} only={layout.kpis} />
-
-        {layout.sections.map((section) => {
-          const slots = section.panels.map((slot) => <Fragment key={slot}>{slot === "followup" ? followup : panels[slot]}</Fragment>);
-          return (
-            <Fragment key={section.id}>
-              {section.title ? (
-                <div id={section.id} className={s.sectionLine}>
-                  <span>{section.title}</span>
-                  <p>{section.note}</p>
+        {classic ? (
+          <>
+            {/* KPI 여덟 칸(원장 2026-09-11 여섯 칸 → 보강예정 → 2026-09-23 금일 등록) — 카드 = 팝업, ↗ = 목적지 창. 카드·팝업·목적지가 같은 함수를 부른다. */}
+            <KpiStrip snapshot={snapshot} only={classic.kpis} />
+            {classic.sections.map((section) => (
+              <Fragment key={section.id}>
+                {section.title ? (
+                  <div id={section.id} className={s.sectionLine}>
+                    <span>{section.title}</span>
+                    <p>{section.note}</p>
+                  </div>
+                ) : null}
+                <div className={s.grid} data-overview="grid">
+                  {section.panels.map((slot) => <Fragment key={slot}>{slot === "followup" ? followup : panels[slot]}</Fragment>)}
                 </div>
-              ) : null}
-              <div
-                className={section.thin ? `${s.grid} ${s.thinRow}` : s.grid}
-                data-overview="grid"
-                style={section.columns ? ({ "--cols": section.columns } as CSSProperties) : gridStyle}
-              >
-                {slots}
-              </div>
-            </Fragment>
-          );
-        })}
+              </Fragment>
+            ))}
+          </>
+        ) : (
+          // 역할별 배치(학원 설정 '대시보드 관리') — 순서 + 크기의 흐름 격자. 줄의 남는 칸은 그 줄 카드들이 나눠 채운다.
+          <GridBoard
+            items={view?.items ?? []}
+            snapshot={snapshot}
+            panels={panels}
+            kpis={kpiCards(snapshot, { titles: Object.fromEntries(custom), academyWide: [...academyWide] }).cards}
+          />
+        )}
         <footer className={s.footer}>
           <span>에이와 / OVERVIEW</span>
         </footer>

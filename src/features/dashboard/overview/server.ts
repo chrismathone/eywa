@@ -98,6 +98,11 @@ import {
   matchAdmissionsConsultation,
 } from "./admissions-consultation-link";
 import { reportError } from "@/lib/observability/report-error";
+import { loadViewerBundle } from "@/features/dashboard/layout/viewer-server";
+import { loadPlan, resolveView, type ResolvedView } from "@/features/dashboard/layout/view";
+import { shapeSections } from "@/features/dashboard/layout/shape";
+import { EMPTY_DASHBOARD } from "@/features/dashboard/layout/types";
+import { programSubjectsOf, subjectGroupOf } from "@/features/students/program";
 import {
   admissionsEventBaseKind,
   admissionsEventKind,
@@ -513,10 +518,19 @@ async function operations(
   return (await Promise.all(jobs)).flat();
 }
 
+/**
+ * 운영실 스냅샷을 만드는 옵션. `full` = **학원 설정 '대시보드 관리' 미리보기 원본 전용** — 역할 배치를 안 걸고 원장 시점의 모든 영역을 읽는다.
+ * 🔴 호출부(`owner/page.tsx`)가 원장·총괄 게이트를 지난 뒤에만 넘긴다. 서버 액션 `refreshOverview`는 인자를 받지 않아 이 옵션을 못 넘긴다.
+ */
+export type LoadOverviewOptions = { full?: boolean };
+
 /** Authoritative, permission-gated snapshot. No cross-user server cache, no fallback zeros. */
-export async function loadOverview(): Promise<OverviewSnapshot> {
+export async function loadOverview(options: LoadOverviewOptions = {}): Promise<OverviewSnapshot> {
   const requestedAt = Date.now();
   const user = await requireAccess("dashboard");
+  // 역할 판정(총괄 여부·관리자의 담당 과목)은 권한 매트릭스와 독립 — 먼저 띄워 둔다(B4, 30초 갱신마다 왕복이 붙지 않게).
+  const viewerPromise = options.full ? Promise.resolve({ bundle: "owner" as const, subjects: [] as string[] }) : loadViewerBundle(user);
+  void viewerPromise.catch(() => undefined);
   const matrix = await getUserPermMatrix();
   const allowed = MENU_KEYS.filter((key) =>
     canAccess(user.systemRole, key, matrix),
@@ -530,20 +544,35 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   //    getCurrentUser가 그만큼 users를 다시 읽는다. 영역엔 푼 값을 넘긴다.
   const teacherIdPromise = effectiveTeacherId();
   const scopePromise = teacherIdPromise.then((id) => (id ? getTeacherScope(id) : null));
+  // 🔴 역할별 배치(학원 설정 '대시보드 관리') — **어느 영역을 읽을지**를 보는 사람의 배치가 정한다. 배치에 없는 카드의 영역은
+  //    조회 자체를 하지 않는다(데이터가 만들어지지 않으면 샌 데이터도 없다). 메뉴 권한은 여전히 상한이다(`add`의 menus).
+  //    설정(테넌트 캐시)과 역할 판정(총괄 여부·관리자의 담당 과목)은 서로 독립이라 함께 기다린다(B4).
+  const [settingsNow, viewer] = await Promise.all([settingsPromise, viewerPromise]);
+  const subjectLabels = subjectLabelRecord(settingsNow.operations.subjects);
+  const view: ResolvedView = resolveView({
+    // 원장 시점 원본(full)·역할 판정 실패(degraded)는 저장값을 안 쓴다 — 실패면 코드 기본(민감 칸 없음·옵션 가림)으로.
+    stored: options.full || ("degraded" in viewer && viewer.degraded) ? EMPTY_DASHBOARD : settingsNow.dashboard,
+    bundle: viewer.bundle,
+    menus: new Set(allowed),
+    subjectLabels: viewer.subjects.flatMap((k) => (subjectLabels[k] ? [subjectLabels[k]] : [])),
+  });
+  // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
+  const needed = loadPlan(view, new Set(allowed));
+  const needs = (...areas: Area[]) => areas.some((a) => needed.has(a));
   // 이번 달 퇴원(KPI)과 등록·퇴원 추이(6개월)가 **같은 행**을 쓴다 — 한 번만 받는다(카드 = 패널 이번 달 칸).
   const withdrawalRows =
-    allowed.includes("withdrawals") || allowed.includes("students")
+    (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes")
       ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today)
       : Promise.resolve([] as WindowWithdrawal[]);
   // 최근 60일 콜&상담 — 일정 카드(일정↔상담 연결)와 '상담 진행' 카드가 **같은 한 번의 조회**를 쓴다(두 카드가 같은 상담 집합을
   // 보고, 30초 갱신마다 같은 표를 두 번 읽지 않게). 실패 처리는 영역마다 다르다: 일정 카드는 링크만 빼고 살고, 상담 진행은 실패를 알린다.
   const consultationSince = shiftDate(today, -CONSULTATION_LINK_WINDOW_DAYS);
-  const consultationRows = allowed.includes("enrollment")
+  const consultationRows = allowed.includes("enrollment") && needs("calendar", "consultProgress")
     ? admissionsConsultationCandidates(consultationSince)
     : null;
   // 공유 약속이 영역보다 먼저 거절돼도 '처리 안 된 거절'로 새지 않게 — 각 영역은 자기 try/catch에서 다시 받는다.
   for (const shared of [teacherIdPromise, scopePromise, withdrawalRows, consultationRows]) void shared?.catch(() => undefined);
-  const history = allowed.includes("attendance")
+  const history = allowed.includes("attendance") && needs("attendance", "attendanceTrend")
     ? attendanceHistory(today)
     : null;
   // 🔴 **예산은 여기서부터** 잰다 — `requestedAt`(함수 진입)으로 재면 인증·권한 조회가 느린 날 남은 예산이
@@ -559,6 +588,7 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     menus: MenuKey[],
     load: () => Promise<OverviewData[K]>,
   ) {
+    if (!needed.has(area)) return; // 배치에 없는 카드의 영역 — 조회하지 않는다
     if (!menus.every((key) => allowed.includes(key))) return;
     pending.add(area);
     jobs.push(
@@ -835,8 +865,14 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
   const settings = await settingsPromise;
   const teacherId = await teacherIdPromise;
   if (!isModuleEnabled(settings.modules.disabled, "classnote")) delete sections.unread; // ClassNote 꺼짐 = 카드 없음
+  // 🔴 값 정리는 서버에서 — 금액·전화번호·담당 과목 밖 값은 직렬화되기 전에 여기서 비운다(브라우저가 가리는 게 아니다).
+  //    `full`(설정 '대시보드 관리'의 미리보기 원본, 원장·총괄만)은 원장 시점 그대로 — 편집기가 역할마다 같은 함수를 다시 돌린다.
+  const programSubjects = programSubjectsOf(subjectLabelRecord(settings.operations.subjects));
+  const groupOf = (key: string | null | undefined) => subjectGroupOf(key, programSubjects);
+  const groups = [...new Set(viewer.subjects.map(groupOf).filter((g): g is string => g !== null))];
+  const shaped = options.full ? sections : shapeSections({ ...sections }, view, { groups, groupOf });
   return {
-    scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}`,
+    scope: `${user.tenantId}:${user.id}:${user.systemRole}:${teacherId ?? "all"}:${view.rev}${options.full ? ":full" : ""}`,
     tenantId: user.tenantId,
     academy: settings.profile.name,
     today,
@@ -844,8 +880,9 @@ export async function loadOverview(): Promise<OverviewSnapshot> {
     allowed,
     subjects: subjectLabelRecord(settings.operations.subjects),
     ...(isModuleEnabled(settings.modules.disabled, "eie") ? {} : { eie: false as const }),
+    view,
     // 🔑 **복사해서** 돌려준다 — 마감 뒤 늦게 끝난 조회가 직렬화 도중 같은 객체를 고치면 한 렌더 안에서
     //    카드가 실패 → 성공으로 뒤집힌다(그 결과는 이미 화면에 못 실린다).
-    sections: { ...sections },
+    sections: { ...shaped },
   };
 }

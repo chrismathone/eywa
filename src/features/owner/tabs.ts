@@ -19,6 +19,7 @@ export type OwnerTab =
   | "consultations"
   | "permissions"
   | "navigation"
+  | "dashboard"
   | "popups"
   | "data"
   | "import"
@@ -52,6 +53,9 @@ export const OWNER_TABS: readonly OwnerTabDef[] = [
   // 왼쪽 탭 설정이 있으면 좋겠네"*). 역할·권한 바로 뒤에 두는 건 둘이 같은 물음("누가 무엇을 보나")에
   // 답해서다 — 단 이쪽은 **규칙이 아니라 취향**이고, 권한을 대체하지 않는다(menu-layout.ts 참조).
   { key: "navigation", label: "탭 및 메뉴 구성", href: "/owner?tab=navigation", group: "설정" },
+  // 대시보드 관리 = 역할마다 운영실에 **무엇을 어디에 얼마나 크게**(원장 2026-10-01 *"설정에 대시보드 관리 전용 탭을 추가하고
+  // 각 역할별로 넣을 항목 커스터마이징"*). 권한처럼 "누가 무엇을 보나"라 원장·총괄만 편집한다(위임 계정엔 안내 문구 — page.tsx).
+  { key: "dashboard", label: "대시보드 관리", href: "/owner?tab=dashboard", group: "설정" },
   // 관리 그룹(구 /admin 흡수) — 팝업 공지·데이터 정리(고아+중복 통합)·감사·연동.
   { key: "popups", label: "팝업 공지", href: "/owner?tab=popups", group: "관리" },
   { key: "data", label: "데이터 정리", href: "/owner?tab=data", group: "관리" },

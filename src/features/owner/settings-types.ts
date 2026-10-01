@@ -13,6 +13,7 @@ import { TEACHER_NAV_GROUPS, TEACHER_DEFAULT_GROUP } from "@/lib/teacher-navigat
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { MODULE_IDS } from "@/lib/modules";
+import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN } from "@/features/dashboard/layout/types";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
 import { parseWeekdayPartition, weekdayPartitionKey } from "@/features/timetable/lib/weekday-partition";
@@ -694,6 +695,40 @@ export const modulesSchema = z.object({
 export type ModulesSettings = z.infer<typeof modulesSchema>;
 
 /**
+ * 운영실 배치(학원 설정 '대시보드 관리') — 역할 묶음별 카드 배치(**순서 + 크기**, 좌표 없음 — `features/dashboard/layout/types.ts`).
+ * **저장값이 있는 역할만** 담는다(없으면 코드의 기본 배치를 따른다 — 저장 경로가 기본과 같은 역할을 지운다).
+ * 배열 그릇인 이유는 navigation·modules와 같다(deepMerge가 base 키만 돌아 record 새 키가 탈락한다 — 배열은 통째 교체).
+ * 모르는 카드 id·크기 이탈은 읽을 때·저장할 때 걸러 낸다(`normalize.ts`) — 스키마는 모양과 한도만 본다.
+ */
+export const dashboardItemSchema = z.object({
+  id: z.string().min(1).max(64),
+  w: z.number().int().min(1).max(GRID_COLS),
+  h: z.number().int().min(1).max(MAX_ROW_SPAN),
+  mode: z.literal("summary").optional(),
+  title: z.string().trim().max(40).optional(),
+  note: z.string().trim().max(80).optional(),
+  amounts: z.boolean().optional(),
+  phones: z.boolean().optional(),
+});
+export const dashboardRoleLayoutSchema = z.object({
+  role: z.enum(BUNDLES),
+  items: z.array(dashboardItemSchema).max(MAX_ITEMS),
+});
+export const dashboardSchema = z
+  .object({
+    version: z.literal(DASHBOARD_VERSION),
+    layouts: z.array(dashboardRoleLayoutSchema).max(BUNDLES.length),
+  })
+  .superRefine((value, ctx) => {
+    const roles = new Set<string>();
+    value.layouts.forEach((layout, i) => {
+      if (roles.has(layout.role)) ctx.addIssue({ code: "custom", path: ["layouts", i, "role"], message: "같은 역할의 배치가 두 번 들어 있습니다" });
+      roles.add(layout.role);
+    });
+  });
+export type DashboardSettingsData = z.infer<typeof dashboardSchema>;
+
+/**
  * 학원 출발점(프리셋) — `chinsan` = 첫 학원(인재원 침산)의 운영 방식 그대로 / `generic` = 새로 여는 학원의 중립 기본값.
  * 원장 2026-09-22: *"'침산'은 그대로 두고 나머지 모든 지점, 새로 시작하는 지점 포함 … 일반화"* (방향 B).
  * 판정·기본값은 `preset.ts` 한 곳이고, 🔴 다른 코드는 이 값을 직접 읽지 않는다(풀린 설정·모듈·수업 규칙만 본다).
@@ -713,6 +748,7 @@ export const tenantSettingsSchema = z.object({
   permissions: permissionsSchema,
   navigation: navigationSchema,
   modules: modulesSchema,
+  dashboard: dashboardSchema,
 });
 export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
 
@@ -727,6 +763,7 @@ export const SECTION_SCHEMAS = {
   permissions: permissionsSchema,
   navigation: navigationSchema,
   modules: modulesSchema,
+  dashboard: dashboardSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;
 
@@ -741,4 +778,5 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   permissions: "역할별 메뉴 권한",
   navigation: "탭 및 메뉴 구성",
   modules: "기능 켜기·끄기",
+  dashboard: "대시보드 배치",
 };

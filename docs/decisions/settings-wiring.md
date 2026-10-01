@@ -9,6 +9,9 @@
   profile `representativeName`·`phone`·`email`·`address` + billing `latePolicy`(등록 인쇄물 푸터/안내,
   `(print)/enrollment/[id]/print`), notifications `alimtalkSenderKey`(kakao `pf_id` 지연 폴백, `messaging/provider.ts`)·
   `googleSheetId`(시트 동기 폴백, `integrations/server/{actions,queries}.ts`).
+  - **(2026-10-01) `dashboard` 섹션(역할별 운영실 배치)**: 폼 = 학원 설정 > 대시보드 관리(`owner/_components/dashboard/*`, 원장·총괄만 · 저장 = `saveOwnerSection("dashboard")` → `normalizeDashboard({ dropDefaults })` · 감사로그 `diffDashboard` 역할마다 한 줄).
+    소비처 = 운영실 서버 [`loadOverview`](src/features/dashboard/overview/server.ts)(`resolveView` → `loadPlan`이 조회할 영역을 정하고 `shapeSections`가 금액·전화번호·담당 과목을 비운다) + 화면 `Overview`/`GridBoard`(스냅샷의 `view`로 그린다).
+    🔴 다른 파일이 `settings.dashboard`를 직접 읽지 말 것 — 권한 상한·기본 배치 폴백을 놓친다(`resolveView` 한 길). 기본 = 저장값 없음(`{ version: 1, layouts: [] }`).
   - **(2026-10-01) report `classnoteParentReplyMode`**(학부모 글 답글·공감 — 끔 기본·시험·전체): 폼 = 수업보고서 > 보고서 설정 > 발송(`classnote-reply-mode-field.tsx`).
     소비처 = 앱 [`classnoteReplyMode`](src/features/owner/classnote-gate.ts)(→ 벨 버튼 `getReplyTargetsForNotifications` · '학부모 글·답글' 면 `lessonReportFaces({replyOn})` · 서버 액션 첫 문 `replyGate`)
     + 연동 PC 워커 `loadReplyMode`(raw SQL 직독, 폴마다). 🔴 원시값 `report.classnoteParentReplyMode`를 다른 파일이 직접 읽지 말 것 — 모듈 꺼짐을 놓친다(가드 `reply-mode-wiring.test.ts`).
@@ -49,4 +52,4 @@
   `…data.permissions` jsonb + 편집 UI(RLS와의 경계 설계 필요).
 
 ---
-
+

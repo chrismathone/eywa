@@ -1,0 +1,82 @@
+/* 위젯 갤러리 — 묶음별 카드 목록. 미리보기는 24열 격자 비율 그대로 줄여 그린다(가로 = 열/12 × 칸 폭, 세로 = 1줄 66 · 2줄 140). */
+.dialog {
+  max-height: min(86dvh, 860px);
+  display: flex;
+  flex-direction: column;
+}
+.scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.group h4 {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+.card[data-placed] .stage {
+  opacity: 0.6;
+}
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--bg-soft);
+}
+.preview {
+  display: flex;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+.sizeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--text-xs);
+}
+.arrow {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--bg-soft);
+  cursor: pointer;
+}
+.arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-sm);
+}

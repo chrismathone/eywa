@@ -20,6 +20,7 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { MODULES } from "@/lib/modules";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { HUB_GROUPS, SUPPORT_GROUPS } from "@/lib/menu-hub";
+import { BUNDLES, BUNDLE_LABELS } from "@/features/dashboard/layout/types";
 
 export type SettingChange = { label: string; from?: string; to?: string; note?: string };
 export type SettingsDiff = { changes: SettingChange[]; others: number };
@@ -285,11 +286,38 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
 }
 
 /**
+ * 운영실 배치 변경 — 역할마다 한 줄("실장(매니저) 운영실 배치: 기본 배치 → 직접 구성 21장"). 카드 id·크기는 싣지 않는다
+ * (영문 키 노출 금지 · 감사로그가 배치 사본이 되지 않게). 저장값이 있는 역할만 `layouts`에 들어 있다(없으면 기본을 따른다).
+ */
+function diffDashboard(before: unknown, after: unknown): SettingsDiff {
+  const rows = (v: unknown): Map<string, unknown[]> => {
+    const out = new Map<string, unknown[]>();
+    const layouts = isObj(v) && Array.isArray(v.layouts) ? v.layouts : [];
+    for (const l of layouts) if (isObj(l) && typeof l.role === "string") out.set(l.role, Array.isArray(l.items) ? l.items : []);
+    return out;
+  };
+  const was = rows(before);
+  const now = rows(after);
+  const cards = (items: unknown[]) => items.filter((i) => isObj(i) && typeof i.id === "string" && !i.id.startsWith("heading:")).length;
+  const changes: SettingChange[] = [];
+  for (const role of BUNDLES) {
+    const b = was.get(role);
+    const a = now.get(role);
+    if (JSON.stringify(b ?? null) === JSON.stringify(a ?? null)) continue;
+    const from = b ? `직접 구성 ${cards(b)}장` : "기본 배치";
+    const to = a ? `직접 구성 ${cards(a)}장` : "기본 배치";
+    changes.push({ label: `${BUNDLE_LABELS[role]} 운영실 배치`, from, to, ...(from === to ? { note: "순서·크기·제목·공개 범위 변경" } : {}) });
+  }
+  return { changes, others: 0 };
+}
+
+/**
  * 섹션 저장 전/후를 비교해 사람이 읽는 변경 목록을 만든다.
  * ⚠️ `before`가 없으면(첫 저장) 빈 목록 — 전 필드가 "없음 → 값"으로 쏟아지면 소음이 된다.
  */
 export function diffSettingsSection(section: string, before: unknown, after: unknown): SettingsDiff {
   if (section === "permissions") return diffPermissions(before, after);
+  if (section === "dashboard") return diffDashboard(before, after);
   if (!isObj(before) || !isObj(after)) return { changes: [], others: 0 };
   const labels = FIELD_LABELS[section] ?? {};
   const changes: SettingChange[] = [];

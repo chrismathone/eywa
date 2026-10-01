@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import type { OverviewSnapshot, Sections } from "@/features/dashboard/overview/model";
 import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
@@ -51,8 +51,21 @@ export function kpiGridVars(n: number): CSSProperties {
  * **산정 기간**은 라벨 옆 꼬리표로(원장 2026-09-29 *"현 재원생, 이번달 퇴원 등 모두 기간 명시"* · *"날짜라기보다 이번달,
  * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(금일입테·금일 등록·오늘첫수업·전일 결석)은 같은 말을 덧붙이지 않는다.
  */
-export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?: readonly KpiKey[] }) {
-  // `only` = 역할별 시안이 놓을 칸만 — 없으면 영역이 온 칸 전부(지금 화면). 영역 이름이 곧 칸 이름이다.
+export type KpiCardOptions = {
+  /** 놓을 칸 — 없으면 영역이 온 칸 전부(지금 화면). */
+  only?: readonly KpiKey[];
+  /** 칸 이름 바꾸기(편집기에서 정한 제목) — id는 `kpi:<칸>`. */
+  titles?: Readonly<Record<string, string>>;
+  /** 학원 전체 값이 섞인 칸 id — 과목 관리자 화면에서 '학원 전체' 꼬리표를 단다. */
+  academyWide?: readonly string[];
+};
+
+/**
+ * KPI 칸을 **하나씩** 만든다 — 띠(`KpiStrip`)가 한 줄로 늘어놓고, 자유 배치 격자(`free-grid`)가 칸마다 제 자리에 놓는다.
+ * 카드 숫자·팝업·목적지가 같은 값을 읽는 규약은 그대로다(둘 다 이 함수 한 곳).
+ */
+export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}): { cards: Partial<Record<KpiKey, ReactNode>>; total: number } {
+  const { only } = opts;
   const v: Sections = only
     ? Object.fromEntries(
         Object.entries(snapshot.sections).filter(
@@ -60,9 +73,11 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         ),
       )
     : snapshot.sections;
-  // '보강예정'(원장 2026-09-14 *"보강 예정은 가장 끝으로"*)이 맨 뒤 — 앞 여섯은 2026-09-11 확정 순서 그대로.
-  const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.enrolledToday, v.firstClass, v.absent, v.makeup].filter(Boolean).length;
-  if (shown === 0) return null;
+  const cards: Partial<Record<KpiKey, ReactNode>> = {};
+  const noteOf = (key: KpiKey, note?: string) => {
+    const wide = opts.academyWide?.includes(`kpi:${key}`);
+    return wide ? (note ? `${note} · 학원 전체` : "학원 전체") : note;
+  };
   const today = snapshot.today;
   const can = (menu: MenuKey) => snapshot.allowed.includes(menu);
   const subjects = programSubjectsOf(snapshot.subjects);
@@ -99,13 +114,12 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
   const makeupToday = makeup?.rows.filter((r) => r.makeupDate === today).length ?? 0;
   const makeupOverdue = makeup?.rows.filter((r) => r.overdue).length ?? 0;
 
-  return (
-    <div className={s.kpis} style={kpiGridVars(shown)} data-overview="kpis" data-kpi-n={shown}>
-      {v.students && (
+  if (v.students) cards.students = (
         <KpiCard
           helpKey="dash-enrolled"
           label="재원생"
-          labelNote="현재"
+          rename={opts.titles?.["kpi:students"]}
+          labelNote={noteOf("students", "현재")}
           value={count(student?.enrolled)}
           unit="명"
           detail={student ? programLine(student.programs) : "재원 상태 기준"}
@@ -116,12 +130,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <StudentsPopup data={student} subjects={subjects} canOpen={can("students")} eieOn={eieOn} />
         </KpiCard>
-      )}
-      {v.withdrawals && (
+  );
+  if (v.withdrawals) cards.withdrawals = (
         <KpiCard
           helpKey="dash-withdrawn"
           label="퇴원생"
-          labelNote="이번 달"
+          rename={opts.titles?.["kpi:withdrawals"]}
+          labelNote={noteOf("withdrawals", "이번 달")}
           value={count(wd?.total)}
           unit="명"
           detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원 기준"}
@@ -142,12 +157,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
             eieOn={eieOn}
           />
         </KpiCard>
-      )}
-      {v.intake && (
+  );
+  if (v.intake) cards.intake = (
         <KpiCard
           helpKey="dash-intake"
           label="신규문의"
-          labelNote="오늘"
+          rename={opts.titles?.["kpi:intake"]}
+          labelNote={noteOf("intake", "오늘")}
           value={count(intake?.length)}
           unit="건"
           detail={intake ? (intake.length ? `마지막 접수 ${intake[0]?.time ?? "—"}` : "오늘 접수 없음") : "오늘 접수 기준"}
@@ -158,11 +174,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <IntakePopup rows={intake} canOpen={can("enrollment")} />
         </KpiCard>
-      )}
-      {v.calendar && (
+  );
+  if (v.calendar) cards.calendar = (
         <KpiCard
           helpKey="dash-leveltest"
           label="금일 입테"
+          rename={opts.titles?.["kpi:calendar"]}
+          labelNote={noteOf("calendar")}
           value={count(levelTests?.active.length)}
           unit="건"
           detail={
@@ -187,11 +205,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <LevelTestPopup list={levelTests} />
         </KpiCard>
-      )}
-      {v.enrolledToday && (
+  );
+  if (v.enrolledToday) cards.enrolledToday = (
         <KpiCard
           helpKey="dash-enrolled-today"
           label="금일 등록"
+          rename={opts.titles?.["kpi:enrolledToday"]}
+          labelNote={noteOf("enrolledToday")}
           value={count(registered?.length)}
           unit="명"
           detail={
@@ -206,11 +226,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <EnrolledTodayPopup rows={registered} canOpen={can("enrollment")} />
         </KpiCard>
-      )}
-      {v.firstClass && (
+  );
+  if (v.firstClass) cards.firstClass = (
         <KpiCard
           helpKey="dash-first"
           label="오늘첫수업"
+          rename={opts.titles?.["kpi:firstClass"]}
+          labelNote={noteOf("firstClass")}
           value={count(firsts?.length)}
           unit="명"
           detail={firsts ? `첫 등원 ${firstCount} · 새 과목 ${firsts.length - firstCount}` : "수강 시작일 기준"}
@@ -223,11 +245,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <FirstClassPopup rows={firsts} subjectLabels={snapshot.subjects} canOpen={can("students")} />
         </KpiCard>
-      )}
-      {v.absent && (
+  );
+  if (v.absent) cards.absent = (
         <KpiCard
           helpKey="dash-absent"
           label="전일 결석"
+          rename={opts.titles?.["kpi:absent"]}
+          labelNote={noteOf("absent")}
           value={count(absent?.length)}
           unit="명"
           detail={
@@ -248,12 +272,13 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <AbsentPopup day={absentDay} subjectLabels={snapshot.subjects} canOpen={can("students")} />
         </KpiCard>
-      )}
-      {v.makeup && (
+  );
+  if (v.makeup) cards.makeup = (
         <KpiCard
           helpKey="dash-makeup"
           label="보강예정"
-          labelNote="한 달"
+          rename={opts.titles?.["kpi:makeup"]}
+          labelNote={noteOf("makeup", "한 달")}
           value={count(makeup?.rows.length)}
           unit="건"
           detail={
@@ -271,7 +296,16 @@ export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?
         >
           <MakeupPopup data={makeup} today={today} canOpen={can("students")} />
         </KpiCard>
-      )}
+  );
+  return { cards, total: KPI_KEYS.filter((k) => cards[k]).length };
+}
+
+export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?: readonly KpiKey[] }) {
+  const { cards, total: shown } = kpiCards(snapshot, { only });
+  if (shown === 0) return null;
+  return (
+    <div className={s.kpis} style={kpiGridVars(shown)} data-overview="kpis" data-kpi-n={shown}>
+      {KPI_KEYS.map((k) => (cards[k] ? <Fragment key={k}>{cards[k]}</Fragment> : null))}
     </div>
   );
 }

@@ -184,6 +184,11 @@ export type OverviewSnapshot = {
   subjects: Record<string, string>;
   /** EiE 구분을 **쓰지 않는** 학원이면 false(EiE 모듈 꺼짐 — 새 학원 기본). 없으면 씀(침산 — 키 자체가 없어 스냅샷이 종전과 같다). */
   eie?: false;
+  /**
+   * 이 사람이 보는 배치(역할 묶음별) — 서버가 정한다. 없으면(옛 스냅샷·테스트) 지금 운영실 그대로의 기본 배치.
+   * 갱신 스냅샷에도 실려 와서 설정에서 배치를 바꾸면 다음 갱신에 화면이 따라온다(scope에 배치 판이 섞여 있다).
+   */
+  view?: import("@/features/dashboard/layout/view").ResolvedView;
   sections: Sections;
 };
 

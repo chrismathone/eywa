@@ -15,6 +15,7 @@ import { diffSettingsSection } from "../settings-diff";
 import { tenantSettingsTag } from "./queries";
 import { SECTION_SCHEMAS, SECTION_LABELS, type SectionKey, type PermissionsSettings } from "../settings-types";
 import { prepareSectionForSave, presetOfStored } from "../preset";
+import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { navigationRevision } from "../normalize-navigation";
 import { logDbError } from "@/lib/supabase/db-error";
 
@@ -85,6 +86,12 @@ export async function saveOwnerSection(
     return { error: "기능 켜기·끄기는 원장만 바꿀 수 있습니다" };
   }
 
+  // '대시보드 관리'(역할별 운영실 배치) = 누가 무엇을 보나를 정하는 층이라 권한처럼 **원장 + 총괄**만(위임 계정 불가).
+  // 비원장에게 배치를 열면 자기 화면에 원장 전용 칸(금액·직원)을 넣을 수 있다 — 편집 화면만 감추는 건 게이트가 아니다([[#77]]).
+  if (section === "dashboard" && actor.systemRole !== "master" && !(await isCurrentUserSuperAdmin())) {
+    return { error: "대시보드 배치는 원장만 바꿀 수 있습니다" };
+  }
+
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(String(formData.get("data") ?? "null"));
@@ -153,7 +160,11 @@ export async function saveOwnerSection(
       return { error: "다른 창에서 메뉴 구성이 변경되었습니다. 현재 편집 내용은 유지했습니다. 최신 구성을 새로고침한 뒤 다시 저장해 주세요." };
     }
   }
-  const sectionData = prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
+  // 대시보드 배치는 걸러서(모르는 카드·이탈 좌표) 저장하고, 기본 배치와 같은 역할은 저장값을 만들지 않는다(기본 개선이 따라오게).
+  const sectionData =
+    section === "dashboard"
+      ? normalizeDashboard(result.data, { dropDefaults: true })
+      : prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
   const nextData: Record<string, unknown> = { ...base, version: 1, [section]: sectionData };
   // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.
   if (preset === "generic") nextData.preset = "generic";
@@ -194,6 +205,8 @@ export async function saveOwnerSection(
   revalidatePath("/", "layout");
   revalidatePath("/owner");
   if (section === "billing") revalidatePath("/billing");
+  // 운영실은 저장 직후 새 배치로 보여야 한다(셸 전역 갱신에 더해 명시).
+  if (section === "dashboard") revalidatePath("/dashboard");
   // 보고서·AI 멘트 설정 면은 /lesson-reports로 이관됨 — 그 라우트도 명시 갱신해야 저장 직후 값이 반영된다
   // (안 하면 report 섹션 저장 후 화면이 stale하게 옛 값으로 되돌아 보임 — 예: '강사 문항수 변경 허용' 체크 풀림).
   revalidatePath("/lesson-reports");

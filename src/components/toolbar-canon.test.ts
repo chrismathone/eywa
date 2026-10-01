@@ -204,6 +204,8 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  *    통째로 비교하면 정당한 색 변경까지 막혀서 곧 지워진다.
  */
 const CANON_SURFACES = [
+  // 학원 설정 '대시보드 관리'(2026-10-01) — 역할 고르기·편집 동작 줄.
+  "src/app/(shell)/owner/_components/dashboard/editor-toolbar.tsx",
   // 영상 제출 현황(2026-10-01) — 툴바가 화면 파일에서 ledger-toolbar.tsx로 갈라졌다(반 다중 선택).
   "src/features/video-homework/components/ledger-toolbar.tsx",
   "src/app/(shell)/exams/_components/exams-toolbar.tsx",

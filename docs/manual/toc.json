@@ -468,6 +468,10 @@
               "title": "탭 및 메뉴 구성"
             },
             {
+              "slug": "dashboard",
+              "title": "대시보드 관리"
+            },
+            {
               "slug": "modules",
               "title": "기능(켜기·끄기)",
               "generic": true

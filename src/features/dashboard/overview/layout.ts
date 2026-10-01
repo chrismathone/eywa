@@ -2,9 +2,9 @@
  * 운영실(`Overview`) 화면 배치 — **카드 정의는 그대로**, 어떤 카드를 어떤 순서·열 수로 놓을지만 값으로 받는다.
  *
  * 기본 배치(`DEFAULT_LAYOUT`)는 이 파일이 생기기 전 `overview.tsx`가 손으로 적던 순서와 **같다**(3개 구역).
- * 역할별 시안(`/drafts/dashboard-roles`)이 같은 카드를 다른 순서·부분집합으로 놓을 때만 다른 값을 넘긴다.
- * 🔴 이 배치는 **보여 주는 순서**일 뿐 권한이 아니다 — 카드를 빼도 데이터는 스냅샷에 남는다(#77: UI 조건은 게이트가 아님).
- *    권한(데이터 자체를 빼는 것)은 서버가 스냅샷을 만들 때 건다.
+ * 이 옛 CSS 격자(구역 + 4열)는 **원장 기본 배치**(저장값 없음)만 그린다 — 그 밖의 역할·저장된 배치는 흐름 격자(`features/dashboard/layout`)로 그린다.
+ * 🔴 화면 배치는 게이트가 아니다(#77) — 데이터를 빼는 일은 서버가 스냅샷을 만들 때 한다(`loadOverview`: 배치에 없는 카드의
+ *    영역은 조회하지 않고 `loadPlan`, 금액·전화번호는 `shapeSections`가 비운다).
  */
 
 /** 카드 한 칸의 식별자 — 운영실 패널 24개(학습·학부모 보고 / 학생 상담은 둘로 센다). */
@@ -65,24 +65,12 @@ export type LayoutSection = {
   title: string;
   note: string;
   panels: readonly PanelSlot[];
-  /** 이 구역만의 열 수 — 없으면 `OverviewLayout.columns`(기본 4). 카드 수에 맞춰 줄을 채운다(`pack.ts`). */
-  columns?: number;
-  /** 빈 상태 카드를 얇게 모아 놓는 줄 — 높이를 늘리지 않는다. */
-  thin?: boolean;
 };
 
 export type OverviewLayout = {
   /** 놓을 KPI 칸(순서는 고정) — 없으면 영역이 온 칸 전부. */
   kpis?: readonly KpiKey[];
   sections: readonly LayoutSection[];
-  /** 넓은 화면의 카드 열 수(기본 4). 좁은 폭의 접힘 규칙은 CSS가 그대로 맡는다. */
-  columns?: number;
-  /** 카드 사이 간격·카드 안쪽 여백을 한 값으로(역할별 시안) — 기본 운영실은 false. */
-  evenGap?: boolean;
-  /** 한 화면용 — 여백·머리를 줄인다. */
-  compact?: boolean;
-  /** 머리(학원 이름·새로고침 줄)를 그리지 않는다. */
-  hideHeader?: boolean;
 };
 
 export const DEFAULT_LAYOUT: OverviewLayout = {

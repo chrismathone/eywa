@@ -150,6 +150,7 @@ export function Donut({
     <div className={s.donutLayout}>
       <svg
         className={s.donut}
+        data-chart="donut"
         viewBox="0 0 160 160"
         role="img"
         aria-label={`${label} ${number(total)}${unit}. ${data.map((d) => `${d.label} ${d.value}${unit}`).join(", ")}`}

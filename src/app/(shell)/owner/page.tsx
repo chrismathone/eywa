@@ -31,6 +31,7 @@ import { IntegrationsFace } from "./_components/integrations-face";
 import { isFeatureLicensed } from "@/lib/license/server";
 import { PopupsFace } from "./_components/popups-face";
 import { ImportHubFace } from "./_components/import-hub-face";
+import { DashboardFace } from "./_components/dashboard/dashboard-face";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,8 @@ const TAB_LABEL = Object.fromEntries(OWNER_TABS.map((t) => [t.key, t.label])) as
  *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
  */
 function facesFor(canReadAudit: boolean, showModules: boolean): Face[] {
-  const faces: Face[] = OWNER_TABS.filter((t) => t.key !== "audit" || canReadAudit).map((t) => ({
+  // 감사로그·대시보드 관리 = 원장·총괄만(위임 계정엔 면 자체를 세우지 않는다 — 주소로 와도 안내 문구, 아래 본문).
+  const faces: Face[] = OWNER_TABS.filter((t) => (t.key !== "audit" && t.key !== "dashboard") || canReadAudit).map((t) => ({
     key: t.key,
     label: t.label,
     href: t.href,
@@ -206,6 +208,20 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
             <p className="text-foreground text-sm font-bold">기능 켜기·끄기는 원장만 바꿀 수 있습니다</p>
             <p className="text-text-dim mt-1 text-sm">
               어떤 기능을 쓸지는 원장 계정에서 정합니다. 나머지 설정 면은 그대로 편집할 수 있습니다.
+            </p>
+          </div>
+        )
+      ) : null}
+      {/* 대시보드 관리 = 원장·총괄만(saveOwnerSection이 같은 선을 서버에서 긋는다 — [[#77]]). 위임 계정엔 실데이터 미리보기 원본
+          (원장 시점 전체 스냅샷)을 **읽지도 않는다** — 면을 감추는 게 아니라 조회 자체를 안 한다. */}
+      {tab === "dashboard" ? (
+        canReadAudit ? (
+          <DashboardFace settings={settings} />
+        ) : (
+          <div className="bg-card border-line rounded-2xl border p-6">
+            <p className="text-foreground text-sm font-bold">대시보드 관리는 원장만 바꿀 수 있습니다</p>
+            <p className="text-text-dim mt-1 text-sm">
+              역할마다 운영실에 무엇을 보일지는 원장 계정에서 정합니다. 나머지 설정 면은 그대로 편집할 수 있습니다.
             </p>
           </div>
         )
