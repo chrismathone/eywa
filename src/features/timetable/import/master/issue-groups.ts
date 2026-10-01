@@ -40,6 +40,7 @@ const categories = [
       "period",
       "attendance",
       "student-attendance",
+      "attendance-migration",
     ],
   },
   {

@@ -93,6 +93,7 @@ export function fixture() {
     groups: [],
     blocks: [],
     attendance: [],
+    attendanceLinks: [],
     pending: [],
   };
   const source: MasterPlan["source"] = {

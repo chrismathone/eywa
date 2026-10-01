@@ -9,6 +9,8 @@ export type HomeworkVideo = {
   bytes: number | null;
   /** 영상 출처(0324a). 칸이 없던 때 읽은 행은 비어 있다 = ClassNote 수집분. */
   source?: HomeworkVideoSource | null;
+  /** Drive에 올라간 시각 — 막 올라간 영상은 재생기가 접근 확인(썸네일)을 건너뛴다. */
+  uploaded_at: string | null;
 };
 
 /** 0324a `student_homework_videos.source` — 화면엔 아래 라벨로만 보인다(원시값 노출 금지). */
@@ -50,7 +52,12 @@ export function dedupeHomeworkVideos(rows: readonly (HomeworkVideo & { md5?: str
 
 export function homeworkVideoLinks(fileId: string | null) {
   if (!fileId || !/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return null;
-  return { view: `https://drive.google.com/file/d/${fileId}/view`, preview: `https://drive.google.com/file/d/${fileId}/preview` };
+  return {
+    view: `https://drive.google.com/file/d/${fileId}/view`,
+    preview: `https://drive.google.com/file/d/${fileId}/preview`,
+    // 재생 전 접근 확인용(homework-video-player) — 권한이 있는 구글 계정에만 이미지가 온다.
+    thumbnail: `https://drive.google.com/thumbnail?id=${fileId}&sz=w64`,
+  };
 }
 
 export const HOMEWORK_VIDEO_STATUS = {

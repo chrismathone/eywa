@@ -6,7 +6,7 @@ import { getStudentById } from "./queries";
 import { dedupeHomeworkVideos, type HomeworkVideo } from "../homework-videos";
 
 // md5는 같은 영상 두 줄을 접는 데만 쓴다(dedupeHomeworkVideos가 화면으로 내보내기 전에 뺀다). 0315a부터 있는 칸.
-const COLUMNS = "id,subject,posted_at,created_at,comment_id,status,drive_file_id,bytes,md5";
+const COLUMNS = "id,subject,posted_at,created_at,comment_id,status,drive_file_id,bytes,uploaded_at,md5";
 
 export async function getStudentHomeworkVideos(studentId: string): Promise<{ ready: boolean; rows: HomeworkVideo[] }> {
   const user = await requireAccess("students");
