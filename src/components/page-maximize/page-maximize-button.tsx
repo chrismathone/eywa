@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useInFrame } from "@/components/workspace/use-in-frame";
+import { useKeepaliveFrame } from "@/components/workspace/shell-mode";
 import { usePageMaximize } from "./page-maximize-context";
 
 /**
@@ -18,8 +19,10 @@ import { usePageMaximize } from "./page-maximize-context";
 export function PageMaximizeButton() {
   const ctx = usePageMaximize();
   const inFrame = useInFrame();
+  // 이전 화면 유지 방식의 화면(iframe)은 창이 아니라 **한 화면**이다 — 공급자(KeepalivePageMaximize)가 있으니 그대로 보인다.
+  const keepaliveFrame = useKeepaliveFrame();
   // 최대화 중엔 이 버튼이 설 자리가 없다(제목 묶음이 숨고, 출구는 '화면 원래대로' 하나) — 동작만 남은 헤더 줄에 끼지 않게.
-  if (!ctx || inFrame || ctx.maximized) return null;
+  if (!ctx || (inFrame && !keepaliveFrame) || ctx.maximized) return null;
   return (
     <Button
       type="button"

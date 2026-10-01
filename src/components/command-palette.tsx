@@ -12,6 +12,7 @@ import { HUB_GROUPS, SUPPORT_GROUPS, hubGroupsFor, hubSearchKeywords, type HubDe
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import type { MenuLayout } from "@/features/owner/menu-layout";
 import { useWindowMode } from "@/components/workspace/use-window-mode";
+import { useKeepaliveMode } from "@/components/workspace/shell-mode";
 import { useWindowStore } from "@/components/workspace/window-store";
 import { useMenuHub } from "@/components/workspace/menu-hub-store";
 import { useOpenMenu } from "@/components/workspace/menu-hub-grid";
@@ -89,6 +90,7 @@ export function CommandPalette({
   const router = useRouter();
   const isDesktop = useWindowMode(); // 창 모드가 아니면 결과를 본문으로 연다
   const openWindow = useWindowStore((s) => s.open);
+  const keepalive = useKeepaliveMode(); // 이전 화면 유지 방식엔 원생 요약 창(peek)이 없다 — 원생 화면 하나를 연다
   const openMenu = useOpenMenu();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -198,8 +200,11 @@ export function CommandPalette({
     useMenuHub.getState().close();
     const hit = item.hit;
     if (hit.kind === "student") {
-      // 학생은 요약 창(StudentWindow) 재사용
-      if (isDesktop) openWindow("student", { id: hit.id, title: hit.title, subtitle: hit.subtitle ?? undefined });
+      // 학생은 요약 창(StudentWindow) 재사용 — 이전 화면 유지 방식은 요약 창 대신 원생 상세 화면(다른 검색 결과와 같은 길)
+      if (isDesktop && keepalive) {
+        const href = `/students/${hit.id}`;
+        openWindow("route", { id: windowIdForHref(href)?.id ?? `students/${hit.id}`, title: hit.title, href });
+      } else if (isDesktop) openWindow("student", { id: hit.id, title: hit.title, subtitle: hit.subtitle ?? undefined });
       else router.push(`/students/${hit.id}`);
       return;
     }

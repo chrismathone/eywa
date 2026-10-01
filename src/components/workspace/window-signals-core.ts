@@ -43,7 +43,8 @@ export function refreshRank(order: string[], id: string): number {
  */
 export function hasPainted(doc: Document | null, shown: Document | null): boolean {
   if (!doc || doc === shown) return false;
-  return !!doc.querySelector("main.embed-main");
+  // `.keepalive-main` = 이전 화면 유지 방식의 창 문서 본문(embed-main이 아닌 단일 화면 모양 — keepalive-frame.ts).
+  return !!doc.querySelector("main.embed-main, main.keepalive-main");
 }
 
 /** 창별 "미저장 표식을 올린 문서" — 표식은 문서의 것이다. 약한 참조라 닫힌 창의 옛 문서를 붙들지 않는다. */

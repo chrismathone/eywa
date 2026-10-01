@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  useSelectedLayoutSegments: () => [], // 이전 화면 유지 방식의 바탕 판정용(창 모드에선 안 쓴다)
 }));
 // 녹음 방송(BroadcastChannel) — 구독 콜백을 붙잡아 다른 문서(다른 창·다른 탭)가 보낸 신호를 흉내 낸다.
 type BusyMsg = { type: "busy"; winId: string; active: boolean };

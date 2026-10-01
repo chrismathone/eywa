@@ -2,6 +2,8 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { useKeepaliveMode } from "@/components/workspace/shell-mode";
+import { useShellHome } from "@/components/workspace/shell-home";
 import { routeKeyOf } from "./route-key";
 import { startUsageSession, type UsageSession } from "./session";
 
@@ -19,7 +21,12 @@ export function UsageTracker() {
   const pathname = usePathname();
   // 화면 이름·폴더가 아닌 실제 주소만 계측한다. 관리자뷰/강사뷰 커스텀 이름이 달라도 같은 기능으로 집계.
   const searchParams = useSearchParams();
-  const route = routeKeyOf(pathname ?? "/", searchParams);
+  // 🔴 이전 화면 유지 방식: 바탕 문서의 주소는 보이는 화면을 따라가지만(주소창 규칙) 그 화면은 **자기 iframe 문서가 따로 센다** —
+  //    여기서도 세면 화면 하나가 두 번 잡힌다. 바탕 문서는 늘 첫 화면(바탕)으로 센다(창 모드에서 주소가 바탕에 머무는 것과 같은 결과).
+  //    🔴 데스크톱일 때만 — 폰·좁은 폭에선 본문 <main>이 실제 라우트를 그리므로 종전대로 주소를 센다(`useKeepaliveMode`는 폭까지 본다).
+  const keepalive = useKeepaliveMode();
+  const home = useShellHome();
+  const route = keepalive ? routeKeyOf(home, new URLSearchParams()) : routeKeyOf(pathname ?? "/", searchParams);
   const initialRoute = useRef(route);
   const session = useRef<UsageSession | null>(null);
 

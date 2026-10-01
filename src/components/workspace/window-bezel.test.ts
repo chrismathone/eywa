@@ -30,7 +30,8 @@ const TIMETABLE_PAGE = readFileSync(join(ROOT, "src/app/(shell)/timetable/page.t
 const TIMETABLE_LOADING = readFileSync(join(ROOT, "src/app/(shell)/timetable/loading.tsx"), "utf8");
 
 /** `embed-main` 클래스를 단 `<main>` 한 줄. */
-const EMBED_MAIN = /<main[^>]*className="embed-main[^"]*"/.exec(LAYOUT)?.[0] ?? "";
+// (이전 화면 유지 방식의 창 문서는 같은 <main>의 className이 `keepaliveFrame ? KEEPALIVE_MAIN_CLASS : "embed-main …"` 삼항이다 — 창 모드 쪽 문자열을 가드한다.)
+const EMBED_MAIN = /<main[^>]*className=(?:\{keepaliveFrame \? KEEPALIVE_MAIN_CLASS : )?"embed-main[^"]*"/.exec(LAYOUT)?.[0] ?? "";
 
 function pxOf(cls: string, prefix: string): number | null {
   // Tailwind 간격 단위 = 0.25rem = 4px. `px-1` → 4, `px-1.5` → 6, `px-3` → 12.

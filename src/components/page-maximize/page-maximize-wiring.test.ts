@@ -75,7 +75,7 @@ describe("화면 최대화 배선", () => {
   it("관리자 풀셸만 감싼다 — 창 모드 스위치 안쪽 · 창(embed)·강사·학생 미니셸엔 없다", () => {
     const layout = read("src/app/(shell)/layout.tsx");
     expect(layout.match(/<PageMaximizeShell>/g)).toHaveLength(1);
-    expect(layout).toMatch(/<WorkspaceEnabledProvider enabled=\{windowMode\}>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<PageMaximizeShell>/);
+    expect(layout).toMatch(/<WorkspaceEnabledProvider enabled=\{windowMode\}>\s*<ShellModeProvider mode=\{shellMode\} epoch=\{shellInfo\.epoch\}>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<PageMaximizeShell>/);
     expect(layout.indexOf("<PageMaximizeShell>")).toBeGreaterThan(layout.indexOf("<WorkspaceEnabledProvider enabled={false}>"));
   });
 

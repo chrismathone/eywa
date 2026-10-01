@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useInFrame } from "@/components/workspace/use-in-frame";
 import { useWorkspaceEnabled } from "@/components/workspace/workspace-enabled";
+import { useShellMode } from "@/components/workspace/shell-mode";
 import { setMyPageMaximized } from "@/features/page-maximize/server/actions";
 import { PageMaximizeContext } from "./page-maximize-context";
 import {
@@ -35,7 +36,11 @@ import {
  *   Esc는 쓰지 않는다(다이얼로그·팝오버가 먼저 쓴다).
  */
 export function PageMaximizeRoot({ initial, children }: { initial: boolean; children: ReactNode }) {
-  const windowMode = useWorkspaceEnabled();
+  // 🔴 **창 모드만** 최대화가 없다 — 이전 화면 유지 방식은 창 엔진이 있어도(enabled) 한 화면씩이라 사이드바를 감춰도 입구를 잃지 않는다
+  //    (화면은 iframe이지만 눌림·상태는 이 문서가 갖는다 — 화면과의 메시지는 `KeepaliveMaximizeSync`).
+  const engine = useWorkspaceEnabled();
+  const shellMode = useShellMode();
+  const windowMode = engine && shellMode !== "keepalive";
   const [maximized, setState] = useState(initial);
   // 저장은 누른 순서대로(빠르게 두 번 누르면 나중 값이 이겨야 한다) — 앞 저장이 끝난 뒤 다음을 보낸다.
   const queue = useRef<Promise<unknown>>(Promise.resolve());

@@ -6,6 +6,7 @@ import { useWindowStore, type Win } from "./window-store";
 import { withEmbed } from "./embed-context";
 import { WINDOW_BUSY_MESSAGE } from "./use-recording-lock";
 import { useWindowSignals } from "./use-window-signals";
+import { useShellMode } from "./shell-mode";
 import { clearDirtyForNewDocument } from "./window-signals-core";
 import { Button } from "@/components/ui/button";
 import { useWindowPresentation } from "@/features/owner/navigation-context";
@@ -74,6 +75,9 @@ export function RouteWindow({ win }: { win: Win }) {
   const isFocused = useWindowStore((s) => s.focusedId === win.id);
   const order = useWindowStore((s) => s.order);
   const router = useRouter();
+  // 이전 화면 유지 방식: 바탕 문서의 주소가 보이는 화면을 따라가므로 `router.refresh()`는 **그 화면을 바탕에 또 렌더**해 첫 화면 자리에 남긴다 —
+  // 생성폼이 끝날 때의 바탕 갱신은 하지 않는다(소스 목록 창은 아래 reloadWindow가 따로 새로 연다).
+  const keepalive = useShellMode() === "keepalive";
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // autoClose 창이 이미 닫힘을 1회만 트리거(navigate-away 관찰이 여러 번 들어와도 중복 close 방지).
   const autoClosedRef = useRef(false);
@@ -97,12 +101,25 @@ export function RouteWindow({ win }: { win: Win }) {
   //    ⚠️ 이미 활성화된 창은 activated가 유지돼 최소화해도 문서·스크롤이 보존된다(BL3 warm 풀 포함) —
   //    보존 대상은 "열어봤던 창"이고, 여기서 막는 건 "한 번도 안 연 채 최소화로 복원된 창"이다.
   const [activated, setActivated] = useState(isFocused && !win.minimized);
+  // 이전 화면 유지 방식: iframe의 `src` 속성은 **처음 실은 주소로 고정**한다. src를 바꾸면 그 이동이 탭의 합동 세션 기록에 한 칸을 쌓아
+  // 뒤로가기를 두 번 눌러야 이전 화면으로 갔다(적대 리뷰) — 이 방식에선 뒤로가기 = 이전 화면이라 그 칸이 죽은 칸이 된다. 이미 연 화면을
+  // 다른 주소로 옮기는 것은 아래 주소 변경 효과가 `location.replace`로 한다(창 크롬 ←·첫 화면과 같은 길). 창 모드는 종전대로 src가 따라간다.
+  const [pinnedHref, setPinnedHref] = useState<string | undefined>(() => (isFocused && !win.minimized ? href : undefined));
   useEffect(() => {
     if (activated || win.minimized) return;
     const delay = isFocused ? 0 : 250 + Math.max(0, order.indexOf(win.id)) * 250;
-    const t = setTimeout(() => setActivated(true), delay);
+    const t = setTimeout(() => {
+      setActivated(true);
+      setPinnedHref((p) => p ?? href);
+    }, delay);
     return () => clearTimeout(t);
-  }, [activated, win.minimized, isFocused, order, win.id]);
+  }, [activated, win.minimized, isFocused, order, win.id, href]);
+  const frameSrc = activated ? withEmbed((keepalive ? pinnedHref : undefined) ?? href ?? "/") : undefined;
+  // 아래 주소 변경 효과가 '이미 문서를 실었나'를 본다(그 효과의 의존성을 늘리면 활성화될 때마다 iframe 등록이 다시 돈다).
+  const activatedRef = useRef(activated);
+  useEffect(() => {
+    activatedRef.current = activated;
+  }, [activated]);
 
   // 타이틀바 새로고침 버튼 → 이 창 iframe만 현재 URL로 reload(전체 F5 대신 = 셸·다른 창 재실행 없음).
   // nonce가 bump되면 스켈레톤을 다시 띄우고(리로드 중 빈 깜빡임 방지) 현재 문서를 reload(드릴인 URL 보존).
@@ -206,6 +223,15 @@ export function RouteWindow({ win }: { win: Win }) {
       if (!sameDoc && dirtyNow) {
         el.contentWindow?.addEventListener("pagehide", () => setLoaded(false), { once: true });
       }
+      // 이전 화면 유지: src는 고정이라(위 pinnedHref) 여기서 직접 옮긴다 — replace라 합동 세션 기록에 칸이 안 생긴다.
+      // 아직 실린 문서가 없으면(활성화 전) 활성화 때 이 주소로 뜬다(pinnedHref가 그때의 href).
+      if (keepalive && href && activatedRef.current) {
+        try {
+          el.contentWindow?.location.replace(withEmbed(href));
+        } catch {
+          /* 접근 불가 — 무시(같은 출처라 정상 도달) */
+        }
+      }
     }
     let obs: MutationObserver | null = null;
     // 새 문서의 첫 로드 보고인가 — onLoad만 켠다. 미저장 창의 이동 의도(← · 첫 화면)는 이 보고에서만 소비된다
@@ -228,7 +254,7 @@ export function RouteWindow({ win }: { win: Win }) {
           if (initialPath && path !== initialPath) {
             autoClosedRef.current = true;
             close(win.id);
-            router.refresh(); // 배경(최상위 프레임) 목록 갱신
+            if (!keepalive) router.refresh(); // 배경(최상위 프레임) 목록 갱신
             // 소스가 플로팅 창(iframe 안 "새 X")이면 그 창은 별도 문서라 router.refresh가 안 닿음 → 직접 reload
             // (신규 항목이 소스 리스트 창에 즉시 보이게). 이미 닫힌 창이면 no-op.
             if (win.params.spawnedBy) reloadWindow(win.params.spawnedBy);
@@ -283,7 +309,7 @@ export function RouteWindow({ win }: { win: Win }) {
       obs?.disconnect();
       iframeRegistry.delete(win.id);
     };
-  }, [win.id, fallbackTitle, observeIframe, href, win.params.autoClose, win.params.spawnedBy, close, reloadWindow, router]);
+  }, [win.id, fallbackTitle, observeIframe, href, win.params.autoClose, win.params.spawnedBy, close, reloadWindow, router, keepalive]);
 
   // 첫 페인트에서 스켈레톤 걷기 · 숨김을 창 문서에 · 다시 보일 때 새로고침 · 느린 첫 화면 · 키보드 초점(use-window-signals.ts).
   const { slow, retry } = useWindowSignals({ win, iframeRef, activated, loaded, setLoaded, isFocused });
@@ -294,18 +320,21 @@ export function RouteWindow({ win }: { win: Win }) {
     <div className="bg-card relative h-full w-full">
       <iframe
         ref={iframeRef}
-        src={activated ? withEmbed(href) : undefined}
+        src={frameSrc}
         title={displayTitle}
         // 창 안 폼이 브라우저 마이크로 바로 녹음(회의록·등록상담·학생상담)할 수 있게 권한 위임.
         // same-origin이라도 일부 브라우저는 getUserMedia에 iframe allow를 요구 → 명시.
         allow="microphone"
         className="h-full w-full border-0"
-        style={{ visibility: dragging ? "hidden" : "visible" }}
+        // 🔴 숨길 때만 값을 준다 — `visible`을 못박으면 조상이 `visibility:hidden`(이전 화면 유지 방식의 숨은 화면)이어도 이 iframe만
+        //    남아 그려진다(자식의 visible이 이긴다). 안 줘도 기본은 상속이라 종전 모양은 그대로다.
+        style={dragging ? { visibility: "hidden" } : undefined}
         // 활성화 전(src 미설정) about:blank load는 무시 — 활성화 후 실제 콘텐츠 로드만 스켈레톤 해제.
         onLoad={() => { if (activated) setLoaded(true); }}
       />
       {(!activated || !loaded) && !dragging ? (
-        <div className="bg-card absolute inset-0 p-5" aria-hidden={slow ? undefined : true}>
+        // paddingLeft = 이전 화면 유지 방식의 창은 사이드바 밑까지 깔려 있어 그 폭만큼 비켜 그린다(창 모드엔 변수가 없어 p-5 그대로).
+        <div className="bg-card absolute inset-0 p-5" style={{ paddingLeft: "calc(var(--keepalive-rail-parent, 0px) + 1.25rem)" }} aria-hidden={slow ? undefined : true}>
           <div className="animate-pulse space-y-3">
             <div className="bg-bg-soft h-6 w-40 rounded" />
             <div className="bg-bg-soft h-24 w-full rounded" />
