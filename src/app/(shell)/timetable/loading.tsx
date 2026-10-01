@@ -1,3 +1,4 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
 import { Toolbar, ToolbarRow } from "@/components/toolbar";
 
 // 시간표 초기 로드 스트리밍 — 무거운 getWeeklyScheduleWithStudents(전 슬롯·학생·교재·진도)가 도는
@@ -8,13 +9,9 @@ import { Toolbar, ToolbarRow } from "@/components/toolbar";
 export default function TimetableLoading() {
   return (
     <div className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
-      {/* PageHeader 근사 스켈레톤 — 창(임베드)은 헤더 줄을 통째로 접으므로(집계=툴바 우측) 스켈레톤도
-          통째 숨김, 최상위 프레임만 풀 3줄(스켈레톤↔실렌더 높이 정합). */}
-      <header className="shrink-0 px-1 compact-chrome:hidden">
-        <div className="bg-bg-soft h-3 w-16 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-6 w-32 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-4 w-48 animate-pulse rounded" />
-      </header>
+      {/* PageHeader 스켈레톤 — 창(임베드)은 헤더 줄을 통째로 접으므로(집계=툴바 우측) 스켈레톤도
+          통째 숨김, 최상위 프레임만 한 줄(스켈레톤↔실렌더 높이 정합 · 화면 최대화 중엔 실 헤더와 함께 숨는다). */}
+      <PageHeaderSkeleton hideCompact />
       {/* 툴바 스켈레톤 — 실제 툴바는 **왼쪽 묶음 / 오른쪽 묶음** 두 상자다(11·12단계): 왼쪽 = 주 이동 ·
           `축: 값` 드롭다운 넷(과목·구분·프로그램·뷰) · 검색 토글 · 설정/엑셀, 오른쪽 = 집계·ECS·편집.
           창을 줄이면 **묶음 단위로** 줄이 바뀌므로 스켈레톤도 같은 묶음이라야 데이터 도착 때 안 튄다.
