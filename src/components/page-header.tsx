@@ -1,13 +1,16 @@
 import { Suspense, type ReactNode } from "react";
 import { MenuPageTitle } from "@/features/owner/menu-page-title";
+import { PageMaximizeButton } from "@/components/page-maximize/page-maximize-button";
 
 /**
- * PageHeader — Editorial 문법 ①의 단일 소스. **한 줄**: `eyebrow - 제목 - 설명 ………… [actions]`.
+ * PageHeader — Editorial 문법 ①의 단일 소스. **한 줄**: `eyebrow - 제목 - 설명 ………… [actions] [화면 최대화]`.
  * 🔴 원장 2026-10-01 *"구조도 3행이 아니라 1행으로 — 수업운영 - 시간표 - 주간 시간표"* — 옛 3행(eyebrow / 24px 제목 /
  *    설명)을 한 줄로 눕혔다. 구분자는 원장이 적은 대로 ` - `. 제목(24px Bold)이 가장 먼저 읽히고 앞뒤(16px Medium)는 작게 —
  *    글자색은 한 값(#121212)이라 "흐리게"는 크기·굵기로만 낸다(연한 회색 글자를 새로 만들지 않는다, 디자인 v5).
  *    설명이 길면 제목 옆 남는 폭에서 접힌다(줄 전체를 아래로 내리지 않는다).
- * 오른쪽 끝 = 화면 동작(`actions`). 동작이 없으면 오른쪽 칸은 `empty:hidden`으로 접힌다.
+ * 오른쪽 끝 = 화면 동작(`actions`) + **'화면 최대화'**([`PageMaximizeButton`](./page-maximize/page-maximize-button.tsx) —
+ * 관리자 풀셸·창 모드 꺼짐·데스크톱에서만 스스로 보인다). 최대화 중에는 제목 묶음이 숨고(동작·스탯이 없으면 헤더 통째로),
+ * 동작·스탯은 남는다(`data-page-header`, globals.css).
  * stats에는 BigStat 그리드(문법 ②)를 끼운다.
  *
  * ⚠️ 임베드(플로팅 창, ?embed=1) 컴팩트 모드(2026-07-19 원장 지적 — "창 안 헤더가 본문을 잠식 +
@@ -52,14 +55,18 @@ export function PageHeader({
     //    ⚠️ 종전 규약은 "구분선 대신 여백 리듬"이었다 — 원장이 명시로 뒤집은 것이라, 화면마다 자기
     //    선을 새로 긋지 말고 **여기 한 줄**만 쓴다(굵기·색이 갈리면 통일이 아니다).
     //    가장 옅은 선(`--line-faint`)이다: 존재를 알리되 칸 테두리·표 선보다 앞서지 않는다.
+    // `data-page-header` = 화면 최대화 표식(globals.css). 동작·스탯이 없으면 `bare` — 헤더 통째로 숨는다.
+    //   있으면 `tools` — 제목 묶음(`data-page-header-title`)만 숨고 동작(날짜 이동·새 항목 등)·스탯은 남는다
+    //   (최대화가 화면 조작까지 가져가면 안 된다 — 자리 출석부는 날짜 이동이 여기 있다, 적대 리뷰).
     <header
+      data-page-header={actions || stats ? "tools" : "bare"}
       className="border-line-faint flex flex-col gap-4 border-b pb-3 compact-chrome:gap-3 compact-chrome:pb-2"
     >
-      <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between compact-chrome:flex-row compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-3 compact-chrome:gap-y-1">
+      <div data-page-header-row="" className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between compact-chrome:flex-row compact-chrome:flex-wrap compact-chrome:items-baseline compact-chrome:gap-x-3 compact-chrome:gap-y-1">
         {/* 구분자는 **뒤 항목과 한 덩어리**다 — 줄이 꺾여도 ` - `가 앞 줄 끝에 홀로 남지 않는다.
             `flex-1`·설명 최소 폭·Medium은 데스크톱 한 줄에만(컴팩트 1행은 종전 모양 그대로 — 라벨이 버튼을 밀어내지 않게). */}
         <div
-         
+          data-page-header-title=""
           className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1 compact-chrome:flex-initial compact-chrome:gap-y-0"
         >
           {eyebrow ? (
@@ -95,9 +102,10 @@ export function PageHeader({
         </div>
         {/* 임베드에선 shrink/wrap 허용 — actions로 들어온 툴바(문서 검색 등)의 내부 flex-wrap이
             좁은 창에서 실제로 발동하게(shrink-0 고정이면 max-content 폭이 창을 뚫음, 적대 리뷰).
-            `empty:hidden` — 동작이 없으면 빈 칸을 남기지 않는다. */}
+            `empty:hidden` — 동작도 없고 최대화 버튼도 안 서는 셸(창·미니셸·슈퍼관리자)에선 빈 칸을 남기지 않는다. */}
         <div className="flex shrink-0 items-center gap-2 empty:hidden compact-chrome:min-w-0 compact-chrome:shrink compact-chrome:flex-wrap">
           {actions}
+          <PageMaximizeButton />
         </div>
       </div>
       {stats ?? null}
@@ -115,19 +123,23 @@ function Separator() {
 }
 
 /**
- * PageHeader 자리 스켈레톤(`loading.tsx`) — 실 헤더와 **같은 한 줄 높이·같은 구분선**.
+ * PageHeader 자리 스켈레톤(`loading.tsx`) — 실 헤더와 **같은 한 줄 높이·같은 구분선·같은 표식**.
+ * 🔴 표식(`data-page-header`)이 빠지면 화면 최대화 중에 스켈레톤만 헤더 높이로 섰다가 본문이 도착하는 순간 통째로 위로 튄다.
+ *    동작 자리를 넘기면 실 헤더처럼 `tools`(최대화 때 제목 막대만 숨고 동작 막대는 남는다).
  * - `hideCompact` — 실 화면이 헤더를 `compact-chrome:hidden` 래퍼로 감싸 창·모바일에서 아예 없앨 때(시간표·강사 시트 주간·월간).
+ * - `withStats` — 실 헤더가 `stats`(KPI)를 남기는 화면이면 켠다(최대화 때 실 헤더와 같은 `tools`로 판정되게).
  * - `actions` — 실 헤더 오른쪽 동작 자리(높이를 그 컨트롤과 같은 변수로 — 스켈레톤 캐논).
  */
-export function PageHeaderSkeleton({ hideCompact = false, actions }: { hideCompact?: boolean; actions?: ReactNode }) {
+export function PageHeaderSkeleton({ hideCompact = false, actions, withStats = false }: { hideCompact?: boolean; actions?: ReactNode; withStats?: boolean }) {
   return (
     <header
+      data-page-header={actions || withStats ? "tools" : "bare"}
       aria-hidden
       className={`border-line-faint shrink-0 border-b pb-3 compact-chrome:pb-2 ${hideCompact ? "compact-chrome:hidden" : ""}`}
     >
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div data-page-header-row="" className="flex items-center justify-between gap-3 px-1">
         {/* 줄 높이 = 실 제목 줄(text-xl 한 줄 = 1lh). 컴팩트(창·모바일)에선 제목이 접히고 16px 라벨 한 줄(h-6)만 남는다. */}
-        <div className="flex min-w-0 items-center gap-2 text-xl">
+        <div data-page-header-title="" className="flex min-w-0 items-center gap-2 text-xl">
           <div className="bg-bg-soft h-4 w-16 shrink-0 animate-pulse rounded compact-chrome:hidden" />
           <div className="bg-bg-soft h-[1lh] w-40 shrink-0 animate-pulse rounded compact-chrome:hidden" />
           <div className="flex h-6 min-w-0 items-center">
