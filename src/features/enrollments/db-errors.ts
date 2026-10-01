@@ -35,7 +35,7 @@ export function toKoreanDbError(error: DbError, fallback: string, scope = "enrol
   if (msg.includes("range lower bound")) {
     return "종료일이 시작일보다 빠릅니다. 날짜를 확인해 주세요.";
   }
-  // 그 밖은 공용 판정(오류 코드·제약 이름) + 로그([[#137]]) — 예전엔 console.error 한 줄에 scope가 없어
+  // 그 밖은 공용 판정(오류 코드·제약 이름) + 로그([[#138]]) — 예전엔 console.error 한 줄에 scope가 없어
   // Vercel 로그에서 어느 화면 실패인지 못 찾았고, 반·학생이 지워진 경우(23503)도 일반 문구로 뭉개졌다.
   return explainDbError(error, { scope, fallback }).message;
 }

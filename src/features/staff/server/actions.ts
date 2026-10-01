@@ -31,7 +31,7 @@ import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
 import { setStaffLoginBlocked } from "./auth-ban";
 
-/** 직원 저장의 DB 오류 → 이유(+이메일 중복이면 그 칸) + 로그([[#137]]). 보호 트리거(42501·P0001)의 한글 이유는 그대로 보인다. */
+/** 직원 저장의 DB 오류 → 이유(+이메일 중복이면 그 칸) + 로그([[#138]]). 보호 트리거(42501·P0001)의 한글 이유는 그대로 보인다. */
 function staffSaveError(error: unknown, scope: string): StaffFormState {
   const why = explainDbError(error, { scope, fallback: "직원 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." });
   return why.field ? { error: why.message, fieldErrors: { [why.field]: why.message } } : { error: why.message };

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getPermMatrix } from "@/lib/auth/perm-matrix";
+import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { LandingClosing } from "./_scroll/closing";
 import { LandingHero } from "./_scroll/landing-hero";
@@ -21,7 +21,8 @@ export default async function LandingPage() {
   // 권한 override로 홈이 '/'가 되는 엣지에선 리다이렉트를 건너뛰어 무한루프를 막는다.
   const user = await getCurrentUser();
   if (user) {
-    const home = await landingPath(user.systemRole, await getPermMatrix());
+    // 개인 예외까지 얹은 사용자 유효 매트릭스 — 페이지 게이트와 같은 판정이라 착지했다가 튕기지 않는다(gotchas #137).
+    const home = await landingPath(user.systemRole, await getUserPermMatrix());
     if (home !== "/") redirect(home);
   }
 

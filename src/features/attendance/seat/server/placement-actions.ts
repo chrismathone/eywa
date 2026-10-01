@@ -150,7 +150,7 @@ export async function resetSeatPlacements(input: {
 
 /** 저장 실패 문구 — 표가 없는 것(SQL 미적용)과 그냥 실패를 가른다(원인을 단정하지 않는다). */
 function placementError(err: { code?: string; message?: string }): string {
-  // 🔴 표 이름만 보면 제약 위반 원문(표 이름이 들어 있다)까지 "기능이 안 켜졌다"로 오판한다([[#137]] 리뷰) — 표 없음 신호와 함께만.
+  // 🔴 표 이름만 보면 제약 위반 원문(표 이름이 들어 있다)까지 "기능이 안 켜졌다"로 오판한다([[#138]] 리뷰) — 표 없음 신호와 함께만.
   const msg = err.message ?? "";
   if (err.code === "42P01" || err.code === "PGRST205" || (/seat_placements/i.test(msg) && /does not exist|schema cache|Could not find/i.test(msg))) {
     return "자리 배치 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0254a 미적용).";

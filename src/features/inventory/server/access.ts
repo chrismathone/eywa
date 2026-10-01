@@ -43,10 +43,10 @@ export function friendlyInventoryError(
   if (isMissingInventoryTable(error)) {
     return "재고관리 표가 아직 만들어지지 않았습니다 — 마이그레이션 0242a를 적용해 주세요";
   }
-  // 판정·로그는 공용([[#137]]) — 예전엔 로그가 없어 일반 문구로 떨어진 실패의 원인을 찾을 길이 없었다.
+  // 판정·로그는 공용([[#138]]) — 예전엔 로그가 없어 일반 문구로 떨어진 실패의 원인을 찾을 길이 없었다.
   const why = explainDbError(error, { scope: "inventory", fallback, context: { action: fallback } });
   // 중복은 **호출부가 넘긴 문구가 먼저**(값·다음 행동까지 담는다 — "이미 같은 품목ID(X)가 있습니다", "미리보기를 다시 받아 주세요").
-  // 안 넘겼을 때만 제약 이름 표의 이유(같은 표 유니크가 여럿이면 어느 칸인지)를 쓴다([[#137]] 리뷰).
+  // 안 넘겼을 때만 제약 이름 표의 이유(같은 표 유니크가 여럿이면 어느 칸인지)를 쓴다([[#138]] 리뷰).
   if (error.code === "23505") return duplicate ?? (why.specific ? why.message : "이미 같은 값이 있습니다");
   if (why.specific) return why.message;
   if (error.code === "23503") return "다른 기록이 참조하고 있어 처리할 수 없습니다";

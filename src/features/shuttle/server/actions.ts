@@ -75,7 +75,7 @@ function refresh() {
 
 /** PostgREST 에러를 한글로 — raw 원문을 화면에 그대로 내보내지 않는다(CLAUDE.md 반복 지적). */
 function friendly(error: { code?: string; message?: string }, fallback: string): string {
-  // 제약 이름별 이유(정류장 이름·회차 번호 등)·로그는 공용 판정([[#137]]). 모르는 제약의 중복·참조는 예전 문구 그대로.
+  // 제약 이름별 이유(정류장 이름·회차 번호 등)·로그는 공용 판정([[#138]]). 모르는 제약의 중복·참조는 예전 문구 그대로.
   const why = explainDbError(error, { scope: "shuttle", fallback, context: { action: fallback } });
   if (why.specific) return why.message;
   if (error.code === "23505") return "이미 같은 이름/자리가 있습니다";

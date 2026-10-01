@@ -1,7 +1,7 @@
 # DB 오류 문구 전수 검수 (2026-10-01)
 
 > 원장 지시: *"다른 오류들도 이러한 경우가 더 있는지 검수하고 오류 고도화"* — 반 이름 PL4→PL5 개명이 23505(`classes_tenant_name_subject_idx`, 종강 반이 이름을 쥠)로 실패했는데 화면엔 "저장에 실패했습니다"만, 로그는 0줄이었다.
-> 공용 판정 = [`src/lib/supabase/db-error.ts`](../../src/lib/supabase/db-error.ts) `describeDbError`/`explainDbError`/`logDbError` + 제약 문구표 [`db-error-constraints.ts`](../../src/lib/supabase/db-error-constraints.ts). 함정 기록 = gotchas #137.
+> 공용 판정 = [`src/lib/supabase/db-error.ts`](../../src/lib/supabase/db-error.ts) `describeDbError`/`explainDbError`/`logDbError` + 제약 문구표 [`db-error-constraints.ts`](../../src/lib/supabase/db-error-constraints.ts). 함정 기록 = gotchas #138.
 
 ## 방법
 

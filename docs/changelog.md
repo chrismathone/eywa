@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-01 — 'This page couldn't load'(Next 기본 오류 화면) 수리
+
+- 원인([[#137]]): 대시보드 권한이 없는 사람이 `/dashboard`를 새로 열면 loading 아래에서 redirect가 나는데, 그 순간 알림 벨이 서버 액션으로 목록을 부르고 있으면 Next 라우터가 React #310으로 죽었다(최소 앱 재현 약 23/100). 창 모드를 끈 뒤 모든 문서 로드가 벨이 있는 맨 위 셸에서 일어나 드러났다.
+- 고침: ① 벨 목록 = GET `/api/notifications` + `fetch`(인증·격리는 같은 `getMyNotifications`, `no-store`) — 옛 `fetchMyNotifications` 액션 삭제 ② `dashboard/layout.tsx`에서 `requireAccess("dashboard")`(loading 앞 → 문서 요청 307) ③ 로고·모바일 로고·바탕 보기 = 권한을 본 홈(`ShellHomeProvider`/`useShellHome`), 관리자뷰 전환 = `roleHome(role, getUserPermMatrix())`, `/home`·루트 착지 = `getUserPermMatrix`(개인 예외 반영).
+- 총괄 화면에서 튕긴 일반 사용자도 코드 기본 권한의 `/dashboard` 대신 착지 단일 소스 `/home`으로(`requireSuperAdmin`).
+- 가드: `shell-autocall-server-actions.test.ts`(셸에서 닿는 서버 액션 허용 목록 · 대시보드 게이트 · 홈 경로) + `/api/notifications` 라우트 테스트 + `use-show-desktop` 홈=/menu 케이스. 재현 앱으로 고친 구조 재확인(문서 로드 기본 화면 `/dashboard` 0/40 · loading 아래 redirect 페이지 0/40).
+- 남은 것(경합 원인은 사라짐, 목록만): loading.tsx 아래에서 redirect하는 페이지 10곳(`/attendance?seat` · `/attendance/seat` · `/attendance/seat/[seat]`(·`/month`) 비로그인 · `/billing/refunds/new` · `/dashboard/briefing` · `/exams` · `/lesson-reports?tab=video_homework` · `/mcs/progress-map` · `/timetable/english-sheet` 비로그인) + 각 페이지 `requireAccess` 거부 · 사용자 동작 뒤에만 도는 서버 액션 폴링(답글 대화창·공감 처리 중·벨이 열린 동안 답글 대상) · 페이지 단위 주기 서버 액션(출결 실시간·신규 상담 감시·원스크린 상태 동기화 등).
+
 ## 2026-10-01 — 반 이름 충돌을 정확히 알린다 + 종강·폐지 반 이름은 확인 버튼으로 비우고 저장
 
 - 원장 *"이런 오류를 명확히 알 수 있게 '중복되는 반이름이 있습니다. (종강처리된 반)' 같은 식으로"* — 침산 영어 PL4 → PL5가 7/2 종강·폐지된 PL5 때문에 "저장에 실패했습니다"만 떴다([[#120]]). 반 수정·생성은 이제 반 이름 칸에 `같은 과목에 중복되는 반 이름이 있습니다. (운영 중인 반 / 종강 처리된 반 / 폐지된 반)`. 판정은 오류 코드(23505)로만, 문구 = [`class-name-conflict.ts`](../src/features/classes/class-name-conflict.ts) 한 벌.
@@ -23184,4 +23192,4 @@ FK가 `on delete set null`이라 지우면 그 반·슬롯이 **전부 미지정
 
 ## 2026-10-01 — DB 오류를 "이유"로: 공용 판정(`explainDbError`) + 전수 검수
 
-- 반 개명 23505가 "저장에 실패했습니다"·로그 0줄이던 것의 전수 검수(1,070곳, `docs/_audit/error-messages-2026-10-01.md`) → `src/lib/supabase/db-error.ts`(코드+제약 이름 판정·scope 로그·`logDbError`) + `db-error-constraints.ts`로 원생·수강·콜&상담·QR 접수·원생상담·직원·강의실·출석부·교재 요청·강사 시트·영역 번역기를 고치고 나머지 일반 문구 83곳은 로그만 · `classes`·`timetable` 액션은 `fix/class-name-free` 뒤로(보고만) · gotchas #137.
+- 반 개명 23505가 "저장에 실패했습니다"·로그 0줄이던 것의 전수 검수(1,070곳, `docs/_audit/error-messages-2026-10-01.md`) → `src/lib/supabase/db-error.ts`(코드+제약 이름 판정·scope 로그·`logDbError`) + `db-error-constraints.ts`로 원생·수강·콜&상담·QR 접수·원생상담·직원·강의실·출석부·교재 요청·강사 시트·영역 번역기를 고치고 나머지 일반 문구 83곳은 로그만 · `classes`·`timetable` 액션은 `fix/class-name-free` 뒤로(보고만) · gotchas #138.

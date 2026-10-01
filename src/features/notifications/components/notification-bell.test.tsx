@@ -49,8 +49,11 @@ vi.mock("./mobile-push-row", () => ({ MobilePushRow: () => null }));
 vi.mock("./notification-alert-dialog", () => ({
   NotificationAlertDialog: () => null,
 }));
+// 목록 조회는 GET 라우트 fetch(gotchas #137) — 쓰기 액션만 서버 액션이다.
+vi.mock("@/features/notifications/fetch-my-notifications", () => ({
+  fetchMyNotificationsList: mocks.fetch,
+}));
 vi.mock("@/features/notifications/server/actions", () => ({
-  fetchMyNotifications: mocks.fetch,
   markNotificationsRead: mocks.mark,
   archiveNotification: vi.fn(),
   unarchiveNotification: vi.fn(),

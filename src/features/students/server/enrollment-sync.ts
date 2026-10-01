@@ -13,7 +13,7 @@ import { explainDbError } from "@/lib/supabase/db-error";
  */
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
-/** DB 오류 → 화면용 한글 이유 + 로그([[#137]]). 이 모듈의 문자열 오류는 학생 상세·퇴원관리 화면에 그대로 뜬다. */
+/** DB 오류 → 화면용 한글 이유 + 로그([[#138]]). 이 모듈의 문자열 오류는 학생 상세·퇴원관리 화면에 그대로 뜬다. */
 function why(error: unknown, step: string, context: Record<string, unknown>): string {
   return explainDbError(error, {
     scope: `students.enrollmentSync.${step}`,

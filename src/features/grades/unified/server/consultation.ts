@@ -10,7 +10,7 @@ function nextDay(date: string): string {
   return next.toISOString().slice(0, 10);
 }
 
-/** 실패 이유(한글) 또는 null — 원문은 로그로만([[#137]]). 호출부는 "점수는 저장됐지만 상담일을 저장하지 못했습니다 — {이유}"로 붙인다. */
+/** 실패 이유(한글) 또는 null — 원문은 로그로만([[#138]]). 호출부는 "점수는 저장됐지만 상담일을 저장하지 못했습니다 — {이유}"로 붙인다. */
 export async function addAcademicConsultation(tenantId: string, link: ConsultationLink): Promise<string | null> {
   const supabase = await createClient();
   const { studentId, subject, date } = link;

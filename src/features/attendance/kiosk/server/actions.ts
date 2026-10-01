@@ -27,7 +27,7 @@ async function requireKioskWrite() {
 
 /** DB 오류 원문을 화면에 내보내지 않는다(raw 노출 금지) — 원문은 서버 로그로. */
 function friendly(error: { message?: string } | null | undefined, fallback: string): string {
-  // 판정·로그는 공용([[#137]]) — scope 없는 console.error 한 줄은 Vercel 로그에서 못 찾았다.
+  // 판정·로그는 공용([[#138]]) — scope 없는 console.error 한 줄은 Vercel 로그에서 못 찾았다.
   return error ? explainDbError(error, { scope: "attendance.kiosk", fallback, context: { action: fallback } }).message : fallback;
 }
 

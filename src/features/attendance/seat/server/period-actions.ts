@@ -38,7 +38,7 @@ function periodError(err: { code?: string; message?: string }): string {
   if (
     err.code === "42P01" ||
     err.code === "PGRST205" ||
-    // 🔴 표 이름만 보면 안 된다 — 제약 위반(23505·23503·23514) 원문에도 표 이름이 들어가 "기능이 안 켜졌다"로 오판했다([[#137]] 리뷰).
+    // 🔴 표 이름만 보면 안 된다 — 제약 위반(23505·23503·23514) 원문에도 표 이름이 들어가 "기능이 안 켜졌다"로 오판했다([[#138]] 리뷰).
     (/seat_period_(moves|pins)/i.test(err.message ?? "") && /does not exist|schema cache|Could not find/i.test(err.message ?? ""))
   ) {
     return "자리 교시 선택 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0255a 미적용).";

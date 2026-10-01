@@ -33,7 +33,7 @@ import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
 
-/** DB 오류 → 화면용 한글 이유 + 로그(scope로 Vercel 로그 검색, [[#137]]). 모르는 오류면 fallback 그대로 — 영문 원문은 안 내보낸다. */
+/** DB 오류 → 화면용 한글 이유 + 로그(scope로 Vercel 로그 검색, [[#138]]). 모르는 오류면 fallback 그대로 — 영문 원문은 안 내보낸다. */
 function dbWhy(error: unknown, scope: string, fallback: string, op?: "write" | "delete"): string {
   return explainDbError(error, { scope, fallback, op }).message;
 }

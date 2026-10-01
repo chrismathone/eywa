@@ -299,7 +299,7 @@ export async function submitPublicIntake(
     consultant_id: null,
   }).select("id").single();
   if (insErr) {
-    // 학부모가 보는 공개 화면 — 내부 이유(권한·연결 등)는 보이지 않고 로그로만 남긴다([[#137]]).
+    // 학부모가 보는 공개 화면 — 내부 이유(권한·연결 등)는 보이지 않고 로그로만 남긴다([[#138]]).
     explainDbError(insErr, { scope: "enrollment.intake.submit", fallback: "" });
     return { error: "제출에 실패했습니다. 잠시 후 다시 시도해주세요" };
   }

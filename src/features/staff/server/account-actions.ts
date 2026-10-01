@@ -382,7 +382,7 @@ export async function deleteStaff(
     .eq("tenant_id", actor.tenantId);
   if (dbErr) {
     // 여기 도달은 드묾(restrict FK는 ①에서 차단). 도달 시 auth는 이미 삭제 → 치명적 불일치라 로깅.
-    // 로그인 계정은 이미 지워졌다 = 치명적 불일치 — 23503(입력 원인)이라도 에러 등급으로 남긴다([[#137]] 리뷰).
+    // 로그인 계정은 이미 지워졌다 = 치명적 불일치 — 23503(입력 원인)이라도 에러 등급으로 남긴다([[#138]] 리뷰).
     const why = explainDbError(dbErr, { scope: "staff.delete.users", op: "delete", level: "error", fallback: "직원 기록을 지우지 못했습니다. 관리자에게 문의하세요.", context: { staffId: id } });
     if (dbErr.code === "23503") {
       return { error: `${why.message} — 로그인 계정은 이미 지워졌습니다. 관리자에게 문의하세요.` };

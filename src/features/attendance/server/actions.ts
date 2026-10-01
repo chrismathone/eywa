@@ -107,7 +107,7 @@ function backdatedFlag(dates: readonly string[], today: string): { backdated?: t
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * 출결 쓰기의 DB 오류 → 화면용 한글 이유 + 로그([[#137]]). 예전엔 영문 원문이 출석부 토스트에 그대로 떴다
+ * 출결 쓰기의 DB 오류 → 화면용 한글 이유 + 로그([[#138]]). 예전엔 영문 원문이 출석부 토스트에 그대로 떴다
  * (예: 시수 범위 CHECK `attendance_session_units_range`). 모르는 오류는 일반 문구, 원문은 로그로만.
  */
 function attendanceDbWhy(error: unknown, scope: string, op?: "write" | "delete"): string {

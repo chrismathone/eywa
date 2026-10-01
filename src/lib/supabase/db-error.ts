@@ -31,7 +31,7 @@ export function humanizeDbError(raw: string | null | undefined, action = "저장
 
 // ───────────────────────── 코드·제약 이름 판정(2026-10-01) ─────────────────────────
 // 배경: 반 이름 PL4→PL5 개명이 "저장에 실패했습니다"로만 실패했다 — 실제 원인은 23505(종강 반이 이름을 쥠)인데
-// 액션이 모든 DB 오류를 같은 문구로 바꾸고 로그도 안 남겨 원장도 개발자도 이유를 몰랐다([[#137]]).
+// 액션이 모든 DB 오류를 같은 문구로 바꾸고 로그도 안 남겨 원장도 개발자도 이유를 몰랐다([[#138]]).
 // 🔴 판정은 **오류 코드 + 제약 이름**으로만 한다(영문 문장의 단어를 보고 뜻을 짐작하지 않는다). 제약 이름은
 //    PostgREST가 따로 주지 않아 원문의 따옴표 식별자(`constraint "이름"`)에서만 읽는다 — 식별자 추출일 뿐 문구 해석이 아니다.
 
@@ -102,7 +102,7 @@ export function describeDbError(error: unknown, opts: DescribeDbErrorOptions): D
       return hit("invalid", byName ?? "입력한 값이 허용 범위를 벗어났습니다 — 날짜·숫자·선택 값을 확인해 주세요", usable?.field);
     }
     case "23502":
-      // NOT NULL 위반은 폼 검증을 지난 뒤라 대개 **코드 버그**다 — 사용자를 탓하지 않고 지금 문구 + 에러 로그([[#137]] 리뷰).
+      // NOT NULL 위반은 폼 검증을 지난 뒤라 대개 **코드 버그**다 — 사용자를 탓하지 않고 지금 문구 + 에러 로그([[#138]] 리뷰).
       return { ...base, kind: "required", known: false, specific: false, message: opts.fallback };
     case "22001":
       return hit("too_long", "입력한 글이 너무 깁니다 — 줄여서 다시 저장해 주세요");

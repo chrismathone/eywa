@@ -1,4 +1,4 @@
-// explainDbError·logDbError의 로그(등급·scope·값 가림) — 2026-10-01, [[#137]].
+// explainDbError·logDbError의 로그(등급·scope·값 가림) — 2026-10-01, [[#138]].
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { explainDbError, maskDbDetails } from "./db-error";
 

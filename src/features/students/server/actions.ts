@@ -118,7 +118,7 @@ function validate(input: ReturnType<typeof readForm>): Record<string, string> | 
 }
 
 /**
- * 학생 저장의 DB 오류 → 이유 + 그 칸 표시([[#137]]). 🔴 23505를 한 문장으로 뭉치지 말 것 — 예전 `translateDbError`는
+ * 학생 저장의 DB 오류 → 이유 + 그 칸 표시([[#138]]). 🔴 23505를 한 문장으로 뭉치지 말 것 — 예전 `translateDbError`는
  * 모든 중복을 "이름·학교·학년 중복"으로 말해 **출결번호 중복**도 이름 칸을 고치게 만들었다. 제약 이름으로 가른다.
  */
 function studentSaveError(error: unknown, scope: string, fallback: string): StudentFormState {

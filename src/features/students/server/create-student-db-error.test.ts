@@ -1,4 +1,4 @@
-// 학생 등록의 23505를 제약별로 가른다([[#137]]) — 예전 translateDbError는 모든 중복을 "이름·학교·학년 중복"으로 말해
+// 학생 등록의 23505를 제약별로 가른다([[#138]]) — 예전 translateDbError는 모든 중복을 "이름·학교·학년 중복"으로 말해
 // 출결번호가 겹친 경우에도 이름 칸을 고치게 만들었다.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 

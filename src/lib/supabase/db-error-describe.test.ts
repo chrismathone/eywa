@@ -1,4 +1,4 @@
-// 코드·제약 이름 판정(describeDbError) — 2026-10-01, [[#137]]. 로그(등급·값 가림)는 db-error-log.test.ts.
+// 코드·제약 이름 판정(describeDbError) — 2026-10-01, [[#138]]. 로그(등급·값 가림)는 db-error-log.test.ts.
 import { describe, expect, it } from "vitest";
 import { describeDbError, dbConstraintName } from "./db-error";
 

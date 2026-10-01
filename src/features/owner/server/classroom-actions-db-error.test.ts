@@ -1,4 +1,4 @@
-// 강의실 저장의 DB 오류가 "이유"로 보이는지([[#137]]) — 예전엔 23505 외엔 영문 원문이 그대로 떴다.
+// 강의실 저장의 DB 오류가 "이유"로 보이는지([[#138]]) — 예전엔 23505 외엔 영문 원문이 그대로 떴다.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ user: vi.fn(), write: vi.fn(), insert: vi.fn(), log: vi.fn() }));

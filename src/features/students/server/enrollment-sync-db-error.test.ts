@@ -1,4 +1,4 @@
-// 퇴원·재원 복구가 공유하는 수강 정리의 DB 오류가 "이유"로 보이는지([[#137]]).
+// 퇴원·재원 복구가 공유하는 수강 정리의 DB 오류가 "이유"로 보이는지([[#138]]).
 // 예전엔 원문(`conflicting key value violates exclusion constraint "enrollments_no_overlap"`)이 학생 상세에 그대로 떴다.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { closeActiveEnrollmentsClamped, reopenEnrollmentsClosedByWithdrawal } from "./enrollment-sync";
