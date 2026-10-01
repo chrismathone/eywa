@@ -14,12 +14,12 @@ import {
 } from "@/features/dashboard/overview/realtime";
 import { subscribeRecordSaved } from "@/lib/realtime/record-channel";
 
-export function useOverview(initial: OverviewSnapshot) {
+export function useOverview(initial: OverviewSnapshot, load: () => Promise<OverviewSnapshot> = refreshOverview) {
   const client = useQueryClient();
   const query = useQuery({
     queryKey: ["dashboard-overview", initial.scope],
     queryFn: async () => {
-      const next = await refreshOverview();
+      const next = await load();
       return mergeSnapshot(
         client.getQueryData<OverviewSnapshot>([
           "dashboard-overview",

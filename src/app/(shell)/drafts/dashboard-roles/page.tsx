@@ -1,42 +1,47 @@
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
-import { RoleDraftBoard } from "./_components/board";
-import { BundleSummary } from "./_components/bundle-summary";
-import { Research } from "./_components/research";
-import { BUNDLES, type BundleId } from "./_data/bundles";
-import { getDraftViewer } from "./_server/access";
+import { loadDashboardChartKinds } from "@/features/dashboard/overview/chart-prefs-server";
+import { loadOverview } from "@/features/dashboard/overview/server";
+import { RoleBoard } from "./_components/role-board";
+import { LAYOUT_IDS, NO_TOGGLES, ROLE_IDS, parseToggles, type LayoutId, type RoleId } from "./_lib/roles";
+import { canOpenDraft } from "./_server/access";
+
+export const metadata = { title: "역할별 운영실 시안 — 에이와" };
+export const maxDuration = 60;
+
+type Params = { role?: string; layout?: string; subject?: string; t?: string };
 
 /**
- * 역할별 운영실 시안 — 원장 지시(2026-10-01) *"원장 이외에 보면 안되는 세부 데이터들을 관리자나 실장 등
- * 일부 직원에게 노출하면 안되기 때문"*. 목적은 **노출 통제**다(모양만 다른 대시보드가 아니다).
+ * 역할별 운영실 시안 — 원장 지시(2026-10-01) *"원장 이외에 보면 안되는 세부 데이터들을 관리자나 실장 등 일부 직원에게
+ * 노출하면 안되기 때문"* · *"원장은 현재 대시보드를 그대로 … 그걸 바탕으로 관리자/실장 등 시안을 다시"*.
  *
- * 🔴 숨은 시안: 원장 + 슈퍼관리자만(범위 밖은 없는 주소와 똑같이 `notFound()`), 메뉴·사이드바 미노출.
- * 🔴 업무 데이터를 읽지 않는다 — 시안 숫자·이름은 `_data/fake.ts`의 가짜 값. 조사 요약(`_data/research.ts`,
- *    server-only)은 침산 실측 건수라 침산 원장·슈퍼관리자에게만, 서버가 그려서 넘긴다.
+ * 🔴 숨은 시안: 원장 + 슈퍼관리자만(범위 밖은 없는 주소처럼 `notFound()`), 메뉴·사이드바 미노출.
+ * 🔴 **실제 운영실 데이터를 읽는다**(가짜 숫자 없음) — 읽기 전에 게이트를 한 번 더 지난다(레이아웃과 이중).
+ *    역할 걸러내기는 화면(클라이언트)에서 하지만 보는 사람이 원장이라 새는 게 아니다. 실제 적용 땐 서버가 건다.
+ * 🔴 저장하지 않는다 — 고른 역할·안·체크는 주소 쿼리에만 있다(시안 전용 상태).
  */
-export default async function DashboardRoleDraftsPage() {
-  const viewer = await getDraftViewer();
-  if (!viewer) notFound();
-  const summaries = Object.fromEntries(
-    BUNDLES.map((b) => [b.id, <BundleSummary key={b.id} bundle={b} viewer={viewer} />]),
-  ) as Record<BundleId, ReactNode>;
-  const research = viewer.research ? (
-    <Research superAdmin={viewer.superAdmin} />
-  ) : (
-    <p className="bg-card shadow-card rounded-2xl px-4 py-3 text-sm">
-      조사 요약은 다른 지점의 실측 자료라 이 지점에선 보이지 않는다. 위에서 역할 묶음을 골라 시안을 본다.
-    </p>
-  );
+export default async function DashboardRoleDraftsPage({ searchParams }: { searchParams: Promise<Params> }) {
+  if (!(await canOpenDraft())) notFound();
+  const params = await searchParams;
+  const [full, chartKinds] = await Promise.all([loadOverview(), loadDashboardChartKinds()]);
+  const role = ROLE_IDS.find((r) => r === params.role) ?? "owner";
+  const layout = LAYOUT_IDS.find((l) => l === params.layout) ?? "a";
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <PageHeader
         eyebrow="숨은 시안 · 원장 · 슈퍼관리자만"
         title="역할별 운영실 시안"
-        description="원장만 볼 세부 데이터가 다른 직원에게 새지 않게 — 역할과 담당 과목에 맞춘 운영실 시안 20개. 시안의 숫자·이름은 전부 가짜다."
-        embedLabel="역할별 운영실 시안 · 가짜 데이터"
+        description="지금 운영실의 실제 카드와 실제 데이터를, 역할에 보이면 안 되는 칸만 빼고 다시 놓은 시안. 역할·체크 선택은 저장되지 않는다."
+        embedLabel="역할별 운영실 시안 · 실제 데이터"
       />
-      <RoleDraftBoard research={research} summaries={summaries} />
+      <RoleBoard
+        full={full}
+        chartKinds={chartKinds}
+        initialRole={role satisfies RoleId}
+        initialLayout={layout satisfies LayoutId}
+        initialSubject={params.subject ?? ""}
+        initialToggles={params.t ? parseToggles(params.t) : NO_TOGGLES}
+      />
     </div>
   );
 }

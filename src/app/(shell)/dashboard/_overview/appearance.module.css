@@ -80,3 +80,13 @@
   .dashboard :global([data-overview="kpi-value"]) { font-size: var(--text-3xl); }
   .dashboard :global([data-overview="board"] > [id]) { flex-wrap: wrap; gap: 5px; }
 }
+/* 한 화면용(역할별 시안 C안, layout.compact) — 여백·머리·카드 안쪽을 줄여 1,920×1,080에서 스크롤 없이 들어가게.
+   기본 배치엔 이 클래스가 붙지 않는다. 구역 제목줄은 layout이 비워서 안 그린다. */
+.compact :global([data-overview="board"]) { padding: 12px 14px 8px; }
+.compact :global([data-overview="kpis"]) { gap: 8px; margin-bottom: 10px; }
+.compact :global([data-overview="kpi"]) > button { padding: 10px 12px 8px; }
+.compact :global([data-overview="kpi-value"]) { font-size: var(--text-3xl); margin-top: 6px; margin-bottom: 4px; }
+.compact :global([data-overview="grid"]) { gap: 10px; margin-top: 10px; }
+.compact :global([data-overview="panel"]) { padding: 10px 12px 8px; }
+.compact :global([data-overview="panel-header"]) { padding-bottom: 6px; margin-bottom: 8px; }
+.compact :global([data-overview="panel-header"]) p { display: none; }

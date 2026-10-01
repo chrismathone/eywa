@@ -224,7 +224,8 @@
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* --cols = 역할별 시안(layout.columns)이 넘기는 열 수 — 없으면 4. 좁은 폭의 접힘 규칙(아래 @media)은 그대로 이긴다. */
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
 }

@@ -2,7 +2,8 @@
 
 import type { CSSProperties } from "react";
 import { MenuGlyph } from "@/components/icons/menu-glyph";
-import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
+import type { OverviewSnapshot, Sections } from "@/features/dashboard/overview/model";
+import { KPI_KEYS, type KpiKey } from "@/features/dashboard/overview/layout";
 import { todayLevelTestList } from "@/features/dashboard/overview/display";
 import { monthAheadWindow, windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { formatShortKoreanDate } from "@/lib/date-kst";
@@ -50,8 +51,15 @@ export function kpiGridVars(n: number): CSSProperties {
  * **산정 기간**은 라벨 옆 꼬리표로(원장 2026-09-29 *"현 재원생, 이번달 퇴원 등 모두 기간 명시"* · *"날짜라기보다 이번달,
  * 이번주 같은 산정기간"*) — 라벨이 이미 기간을 말하는 칸(금일입테·금일 등록·오늘첫수업·전일 결석)은 같은 말을 덧붙이지 않는다.
  */
-export function KpiStrip({ snapshot }: { snapshot: OverviewSnapshot }) {
-  const v = snapshot.sections;
+export function KpiStrip({ snapshot, only }: { snapshot: OverviewSnapshot; only?: readonly KpiKey[] }) {
+  // `only` = 역할별 시안이 놓을 칸만 — 없으면 영역이 온 칸 전부(지금 화면). 영역 이름이 곧 칸 이름이다.
+  const v: Sections = only
+    ? Object.fromEntries(
+        Object.entries(snapshot.sections).filter(
+          ([key]) => !(KPI_KEYS as readonly string[]).includes(key) || (only as readonly string[]).includes(key),
+        ),
+      )
+    : snapshot.sections;
   // '보강예정'(원장 2026-09-14 *"보강 예정은 가장 끝으로"*)이 맨 뒤 — 앞 여섯은 2026-09-11 확정 순서 그대로.
   const shown = [v.students, v.withdrawals, v.intake, v.calendar, v.enrolledToday, v.firstClass, v.absent, v.makeup].filter(Boolean).length;
   if (shown === 0) return null;
