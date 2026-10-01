@@ -240,6 +240,13 @@ describe("auditDetail — 액션별 한글 상세", () => {
     expect(withChange).toContain("적용 안 함");
   });
 
+  it("class_update: 사유(note)가 있으면 뒤에 붙인다 — 종강·폐지 반 이름 비우기(2026-10-01)", () => {
+    const note = "종강 처리된 반이 쥔 이름을 비움";
+    expect(
+      auditDetail("class_update", { changes: [{ field: "반 이름", from: "PL5", to: "PL5 (~2026-07)" }], note }, ctx()),
+    ).toBe(`변경: 반 이름 PL5 → PL5 (~2026-07) · ${note}`);
+  });
+
   it("🔴 미등록 액션 폴백은 영문 키·값을 내보내지 않는다(2026-08-20 정책 변경)", () => {
     // 종전엔 `foo: bar`를 그대로 뱉었다 — 감사 화면 raw 코드 노출의 뿌리. 이제 모르는 키는 숨긴다
     // (원문 JSON은 뷰어 title 툴팁이 항상 보존).

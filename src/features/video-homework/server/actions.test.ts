@@ -1,65 +1,152 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setVideoHomeworkMark } from "./actions";
+import { setVideoHomeworkMark, setVideoHomeworkRound } from "./actions";
 
+type Call = { table: string; op: "select" | "update" | "delete" | "upsert"; filters: unknown[][]; payload?: unknown; opts?: unknown };
 const mocks = vi.hoisted(() => ({
-  user: vi.fn(), readonly: vi.fn(), access: vi.fn(), canWrite: vi.fn(), upsert: vi.fn(), from: vi.fn(),
+  user: vi.fn(), readonly: vi.fn(), access: vi.fn(), canWrite: vi.fn(), log: vi.fn(),
+  calls: [] as Call[], respond: (() => ({ data: null, error: null })) as (call: Call) => { data: unknown; error: unknown },
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: mocks.readonly }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ accessLevelTenant: mocks.access, canWriteTenant: mocks.canWrite }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: mocks.from }) }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/features/classes/server/delegation", () => ({ getTeachingClassIds: vi.fn() }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ report: { videoHomeworkPolicy: {} } }) }));
+vi.mock("@/features/audit/server/log", () => ({ logAction: mocks.log }));
+vi.mock("./assignments", () => ({ videoHomeworkColumnReady: async () => true }));
 vi.mock("../policy", () => ({ isVideoHomeworkEnabled: () => true }));
-vi.mock("@/lib/date-kst", () => ({ kstToday: () => "2026-09-30" }));
+vi.mock("@/lib/date-kst", async (load) => ({ ...(await load<typeof import("@/lib/date-kst")>()), kstToday: () => "2026-09-30" }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from(table: string) {
+      const call: Call = { table, op: "select", filters: [] };
+      const finish = () => { mocks.calls.push(call); return Promise.resolve(mocks.respond(call)); };
+      const query: Record<string, unknown> = {};
+      for (const name of ["select", "eq", "or", "is", "in", "neq", "limit", "not"])
+        query[name] = (...args: unknown[]) => { if (name !== "select") call.filters.push([name, ...args]); return query; };
+      query.update = (payload: unknown) => { call.op = "update"; call.payload = payload; return query; };
+      query.delete = () => { call.op = "delete"; return query; };
+      query.upsert = (payload: unknown, opts: unknown) => { call.op = "upsert"; call.payload = payload; call.opts = opts; return finish(); };
+      query.maybeSingle = finish;
+      query.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) => finish().then(resolve, reject);
+      return query;
+    },
+  }),
+}));
 
-const input = { classId: "class-a", studentId: "student-a", checkDate: "2026-09-03", homeworkDate: "2026-09-01", status: "submitted" as const };
+const has = (call: Call, ...filter: unknown[]) => call.filters.some((f) => JSON.stringify(f) === JSON.stringify(filter));
+const writes = () => mocks.calls.filter((call) => call.op !== "select");
+/** 기본 세계: 반·학생이 있고 정규 수강 중 · 같은 숙제 기록 없음 · 그날 보고서에 '영상 과제 있음'. */
+function world(over: { sameHomework?: { id: string }[]; assigned?: boolean } = {}) {
+  mocks.respond = (call) => {
+    if (call.op !== "select") return { data: null, error: null };
+    if (call.table === "classes") return { data: { subject: "math", class_name: "수학 A" }, error: null };
+    if (call.table === "students") return { data: { grade: "중1", name: "김민준" }, error: null };
+    if (call.table === "enrollments") return { data: [{ start_date: "2026-01-01", end_date: null, on_hold: false, is_transferred: false }], error: null };
+    if (call.table === "lesson_reports") return { data: over.assigned === false ? [] : [{ id: "r1" }], error: null };
+    if (call.table === "video_homework_marks") return { data: call.filters.some((f) => f[1] === "homework_date") ? over.sameHomework ?? [] : [], error: null };
+    return { data: [], error: null };
+  };
+}
 
 beforeEach(() => {
-  vi.resetAllMocks();
+  vi.clearAllMocks();
+  mocks.calls = [];
   mocks.user.mockResolvedValue({ id: "staff-a", tenantId: "tenant-a", systemRole: "master" });
   mocks.readonly.mockResolvedValue(null);
   mocks.access.mockResolvedValue("full");
-  mocks.upsert.mockResolvedValue({ error: null });
-  mocks.from.mockImplementation((table: string) => {
-    const data = table === "classes" ? { subject: "math" } : table === "students" ? { grade: "중1" }
-      : [{ start_date: "2026-01-01", end_date: null, on_hold: false, is_transferred: false }];
-    const result = { data, error: null };
-    const query = {
-      select: vi.fn(), eq: vi.fn(), or: vi.fn(), maybeSingle: async () => result,
-      upsert: mocks.upsert, then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
-    };
-    query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.or.mockReturnValue(query);
-    return query;
+  world();
+});
+
+const onescreen = { classId: "class-a", studentId: "student-a", checkDate: "2026-09-03", homeworkDate: "2026-09-01", status: "submitted" as const };
+
+describe("원스크린 검사(setVideoHomeworkMark) — 같은 숙제 = 한 줄", () => {
+  it("같은 숙제의 기록이 다른 자리에 이미 있으면(영상 제출 현황에서 찍음) 새 줄을 만들지 않고 그 줄을 고친다", async () => {
+    world({ sameHomework: [{ id: "m1" }] });
+    expect(await setVideoHomeworkMark(onescreen)).toEqual({ ok: true });
+    expect(writes().map((c) => c.op)).toEqual(["update"]);
+    expect(has(writes()[0], "in", "id", ["m1"])).toBe(true);
+    expect(writes()[0].payload).not.toHaveProperty("submitted_date");
+  });
+  it("없으면 검사한 수업일 자리에 넣는다 — 지점·반·학생·검사일 키 그대로, 날짜를 안 보내면 제출일을 건드리지 않는다", async () => {
+    expect((await setVideoHomeworkMark(onescreen)).ok).toBe(true);
+    expect(writes()).toHaveLength(1);
+    expect(writes()[0]).toMatchObject({ op: "upsert", opts: { onConflict: "tenant_id,class_id,student_id,check_date" },
+      payload: { tenant_id: "tenant-a", class_id: "class-a", student_id: "student-a", check_date: "2026-09-03", homework_date: "2026-09-01", status: "submitted" } });
+    expect(writes()[0].payload).not.toHaveProperty("submitted_date");
+  });
+  it("미수행은 제출일을 비우고 · 되돌리기는 같은 숙제 기록과 그날 칸의 기록을 지운다(그날 칸에 선 기록 = 지울 기록, 예전 동작)", async () => {
+    await setVideoHomeworkMark({ ...onescreen, status: "missing" });
+    expect(writes()[0].payload).toHaveProperty("submitted_date", null);
+    mocks.calls = [];
+    world({ sameHomework: [{ id: "m1" }] });
+    expect((await setVideoHomeworkMark({ ...onescreen, status: null })).ok).toBe(true);
+    const slot = mocks.calls.find((c) => c.table === "video_homework_marks" && has(c, "eq", "check_date", "2026-09-03"))!;
+    expect(slot.filters.some((f) => f[0] === "or")).toBe(false);
+    expect(writes().map((c) => c.op)).toEqual(["delete"]);
+  });
+  it.each(["2026-10-01", "2026-02-30", "", "2026-9-2"])("잘못된 제출일 %s는 DB에 쓰지 않는다", async (submittedDate) => {
+    expect((await setVideoHomeworkMark({ ...onescreen, submittedDate })).ok).toBe(false);
+    expect(mocks.calls).toEqual([]);
+  });
+  it("읽기 전용과 수정 권한 없는 계정은 아무것도 쓰지 않는다", async () => {
+    mocks.readonly.mockResolvedValueOnce("읽기 전용입니다.");
+    expect((await setVideoHomeworkMark(onescreen)).ok).toBe(false);
+    mocks.access.mockResolvedValue("read"); mocks.canWrite.mockResolvedValue(false);
+    expect((await setVideoHomeworkMark(onescreen)).ok).toBe(false);
+    expect(mocks.calls).toEqual([]);
+  });
+  it("원스크린 검사는 감사로그를 따로 남기지 않는다(예전 동작 그대로)", async () => {
+    await setVideoHomeworkMark(onescreen);
+    expect(mocks.log).not.toHaveBeenCalled();
   });
 });
 
-describe("영상숙제 제출일 저장", () => {
-  it("수업일 이후의 지연 제출도 실제 제출일에 저장하며 테넌트와 회차 키를 유지한다", async () => {
-    expect(await setVideoHomeworkMark({ ...input, submittedDate: "2026-09-05" })).toEqual({ ok: true });
-    expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      tenant_id: "tenant-a", class_id: "class-a", student_id: "student-a",
-      check_date: "2026-09-03", homework_date: "2026-09-01", submitted_date: "2026-09-05",
-    }), { onConflict: "tenant_id,class_id,student_id,check_date" });
+const round = { classId: "class-a", studentId: "student-a", roundKey: "h:2026-09-29", status: "submitted" as const, submittedDate: "2026-09-30" };
+
+describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
+  it("새 기록의 자리는 서버가 정한다(숙제일 다음 날) · 그날 보고서의 영상 과제를 확인하고 감사로그를 남긴다", async () => {
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
+    expect(mocks.calls.some((c) => c.table === "lesson_reports" && has(c, "eq", "report_date", "2026-09-29") && has(c, "eq", "video_homework", true))).toBe(true);
+    expect(writes()[0]).toMatchObject({ op: "upsert", payload: { check_date: "2026-09-30", homework_date: "2026-09-29", submitted_date: "2026-09-30", updated_by: "staff-a" } });
+    expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ action: "lesson_report_video_homework_mark", targetType: "video_homework",
+      targetLabel: "김민준 · 수학 A", metadata: expect.objectContaining({ homeworkDate: "2026-09-29", status: "submitted", submittedDate: "2026-09-30" }) }));
   });
-  it.each(["2026-10-01", "2026-02-30", "", "2026-9-2"])("잘못된 제출일 %s는 DB에 쓰지 않는다", async (submittedDate) => {
-    expect((await setVideoHomeworkMark({ ...input, submittedDate })).ok).toBe(false);
-    expect(mocks.from).not.toHaveBeenCalled();
+  it("장부의 되돌리기는 숙제일 다음 날 자리에서 같은 숙제·숙제일 없는 줄만 지운다(그 자리의 다른 숙제 기록은 그대로)", async () => {
+    world({ sameHomework: [{ id: "m9" }] });
+    expect((await setVideoHomeworkRound({ ...round, status: null, submittedDate: null })).ok).toBe(true);
+    const slot = mocks.calls.find((c) => c.table === "video_homework_marks" && has(c, "eq", "check_date", "2026-09-30"))!;
+    expect(has(slot, "or", "homework_date.is.null,homework_date.eq.2026-09-29")).toBe(true);
+    expect(writes().map((c) => c.op)).toEqual(["delete"]);
   });
-  it("날짜를 보내지 않는 기존 강사 체크는 저장된 제출일을 덮어쓰지 않는다", async () => {
-    expect((await setVideoHomeworkMark(input)).ok).toBe(true);
-    expect(mocks.upsert.mock.calls[0][0]).not.toHaveProperty("submitted_date");
+  it("이미 찍힌 같은 숙제는 그 줄을 고친다(원스크린이 찍은 기록도)", async () => {
+    world({ sameHomework: [{ id: "m9" }] });
+    expect((await setVideoHomeworkRound({ ...round, status: "missing", submittedDate: null })).ok).toBe(true);
+    expect(writes().map((c) => c.op)).toEqual(["update"]);
+    expect(writes()[0].payload).toMatchObject({ status: "missing", submitted_date: null });
   });
-  it("미수행으로 바꾸면 제출일을 비운다", async () => {
-    expect((await setVideoHomeworkMark({ ...input, status: "missing" })).ok).toBe(true);
-    expect(mocks.upsert.mock.calls[0][0]).toHaveProperty("submitted_date", null);
+  it("보고서에도 기록에도 없는 숙제는 거절하고 아무것도 쓰지 않는다", async () => {
+    world({ assigned: false });
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "그날 이 학생에게 나간 영상 과제를 찾을 수 없습니다." });
+    expect(writes()).toEqual([]);
+    expect(mocks.log).not.toHaveBeenCalled();
   });
-  it("읽기 전용과 수정 권한 없는 계정은 날짜도 수정하지 못한다", async () => {
-    mocks.readonly.mockResolvedValueOnce("읽기 전용입니다.");
-    expect((await setVideoHomeworkMark({ ...input, submittedDate: "2026-09-05" })).ok).toBe(false);
-    mocks.access.mockResolvedValue("read"); mocks.canWrite.mockResolvedValue(false);
-    expect((await setVideoHomeworkMark({ ...input, submittedDate: "2026-09-05" })).ok).toBe(false);
-    expect(mocks.from).not.toHaveBeenCalled();
+  it.each([
+    [{ submittedDate: "2026-09-28" }, "제출일은 숙제가 나간 날보다 빠를 수 없습니다."],
+    [{ roundKey: "h:2026-10-01" }, "아직 나가지 않은 숙제는 기록할 수 없습니다."],
+    [{ roundKey: "x:2026-09-01" }, "회차를 확인할 수 없습니다."],
+    [{ submittedDate: "2026-10-02" }, "제출일은 오늘까지의 올바른 날짜로 입력해 주세요."],
+  ])("%o → 거절", async (patch, error) => {
+    expect(await setVideoHomeworkRound({ ...round, ...patch })).toEqual({ ok: false, error });
+    expect(writes()).toEqual([]);
+  });
+  it("숙제일 없는 옛 기록(c:검사일)은 그 검사일 자리 그대로 · 미확인으로 되돌리면 지운다", async () => {
+    mocks.respond = (call) => call.table === "video_homework_marks" && call.op === "select" ? { data: [{ id: "old" }], error: null }
+      : call.table === "classes" ? { data: { subject: "math", class_name: "수학 A" }, error: null }
+      : call.table === "students" ? { data: { grade: "중1", name: "김민준" }, error: null } : { data: null, error: null };
+    expect((await setVideoHomeworkRound({ ...round, roundKey: "c:2026-09-05", status: null, submittedDate: null })).ok).toBe(true);
+    expect(mocks.calls.some((c) => c.table === "video_homework_marks" && has(c, "is", "homework_date", null))).toBe(true);
+    expect(writes().map((c) => c.op)).toEqual(["delete"]);
+    expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ checkDate: "2026-09-05", status: "cleared" }) }));
   });
 });
