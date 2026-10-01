@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTeacherScope } from "@/lib/auth/teacher-scope";
 import { roleHome } from "@/lib/permissions";
+import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { canUseTeacherView, isFullShellRole, VIEW_MODE_COOKIE } from "@/lib/auth/view-mode";
 import { canUseOtherTeacherView, loadViewAsTarget, VIEW_AS_COOKIE } from "@/lib/auth/view-as";
 import { teacherHomeForSubjects } from "@/lib/auth/teacher-home";
@@ -80,7 +81,10 @@ export async function switchToAdminView(): Promise<string> {
   const jar = await cookies();
   jar.delete(VIEW_MODE_COOKIE);
   jar.delete(VIEW_AS_COOKIE); // '다른 강사 뷰' 열람도 여기서 끝난다 — 대상 쿠키를 남기지 않는다
-  return roleHome(user.systemRole);
+  // 🔴 매트릭스를 **반드시** 넘긴다(2026-10-01, gotchas #137) — 빼면 코드 기본값으로 판정해 대시보드를 원장이 꺼 둔
+  //    역할(뷰어·회계 등)도 늘 `/dashboard`를 받고, 그 문서 이동이 곧장 튕기면서 Next 기본 오류 화면의 입구가 됐다.
+  //    `landingPath`는 쓰지 않는다: 강사뷰 쿠키를 **이 응답에서** 지웠지만 요청 쿠키엔 남아 있어 강사 홈을 돌려준다.
+  return roleHome(user.systemRole, await getUserPermMatrix());
 }
 
 /**

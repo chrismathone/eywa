@@ -3,7 +3,7 @@ import { after, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getCurrentSuperAdmin } from "@/lib/auth/super-admin";
 import { isAdminAuthEmail } from "@/lib/auth/admin-login";
-import { getPermMatrix } from "@/lib/auth/perm-matrix";
+import { getUserPermMatrix } from "@/lib/auth/perm-matrix";
 import { landingPath } from "@/lib/auth/teacher-home";
 import { safeLoginNext } from "@/lib/auth/login-next";
 import { pickClientIp, recordLoginEvent } from "@/features/audit/server/login-log";
@@ -89,7 +89,9 @@ export async function GET(request: NextRequest) {
   }
   const next = safeLoginNext(params.get("next"));
   if (next) redirect(next);
-  const home = await landingPath(user.systemRole, await getPermMatrix());
+  // 개인 예외까지 얹은 **사용자 유효 매트릭스**로 판정한다 — 페이지 게이트(requireAccess)와 같은 매트릭스라야
+  // 개인 예외로 대시보드를 끈 사람이 `/dashboard`로 착지했다가 튕기지 않는다(2026-10-01, gotchas #137).
+  const home = await landingPath(user.systemRole, await getUserPermMatrix());
   // landingPath가 "/"를 돌려주는 엣지(권한 override로 대시보드가 막힌 역할)에선 랜딩으로 — 루프 없음.
   redirect(withEmbed(home));
 }

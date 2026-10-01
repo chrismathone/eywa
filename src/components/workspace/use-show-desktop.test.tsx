@@ -11,8 +11,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: navigation.push }),
 }));
 
+import type { ReactNode } from "react";
 import { useWindowStore, windowId } from "./window-store";
 import { useShowDesktop } from "./use-show-desktop";
+import { ShellHomeProvider } from "./shell-home";
 
 describe("useShowDesktop", () => {
   beforeEach(() => {
@@ -53,6 +55,21 @@ describe("useShowDesktop", () => {
 
     expect(navigation.push).toHaveBeenCalledOnce();
     expect(navigation.push).toHaveBeenCalledWith("/dashboard");
+  });
+
+  // 대시보드를 꺼 둔 역할의 홈은 /menu — /dashboard로 보내 튕기게 하지 않는다(gotchas #137).
+  it("홈이 /menu면 /menu에선 push하지 않고, 다른 라우트에선 /menu로 간다", () => {
+    const wrapper = ({ children }: { children: ReactNode }) => <ShellHomeProvider href="/menu">{children}</ShellHomeProvider>;
+    navigation.pathname = "/menu";
+    const atHome = renderHook(() => useShowDesktop(), { wrapper });
+    act(() => atHome.result.current());
+    expect(navigation.push).not.toHaveBeenCalled();
+
+    navigation.pathname = "/students";
+    const elsewhere = renderHook(() => useShowDesktop(), { wrapper });
+    act(() => elsewhere.result.current());
+    expect(navigation.push).toHaveBeenCalledOnce();
+    expect(navigation.push).toHaveBeenCalledWith("/menu");
   });
 
   it("🔴 열린 창을 지우지 않는다 — 최소화만(옛 'dashboard 창 제거' 정리를 걷어냈다)", () => {

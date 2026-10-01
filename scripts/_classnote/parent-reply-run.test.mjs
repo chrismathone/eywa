@@ -192,7 +192,8 @@ describe("쓰기 함수는 허가증 없이는 요청을 보내지 않는다(마
     expect(Object.keys(api).sort()).toEqual([
       "commentPaths", "deleteComment", "deleteReaction", "getPost", "listComments", "listReactionTypes", "reactionPaths", "writeComment", "writeReaction",
     ]);
-    const src = readFileSync(join(HERE, "parent-reply-api.mjs"), "utf8");
+    // 윈도우 체크아웃(core.autocrlf=true)은 작업 트리가 CRLF라 아래 `"{\n"` 검색이 빗나간다 — 줄바꿈을 먼저 맞춘다.
+    const src = readFileSync(join(HERE, "parent-reply-api.mjs"), "utf8").replace(/\r\n/g, "\n");
     for (const fn of ["writeComment", "deleteComment", "writeReaction", "deleteReaction"]) {
       const body = src.slice(src.indexOf(`export async function ${fn}(`));
       // 함수의 **첫 문장**이 허가증 확인이다(요청을 만들기 전에).

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "./current-user";
-import { canAccess, type SystemRole } from "@/lib/permissions";
+import type { SystemRole } from "@/lib/permissions";
 
 export type CurrentSuperAdmin = {
   id: string;
@@ -106,9 +106,11 @@ export async function requireSuperAdmin(): Promise<CurrentSuperAdmin> {
   const sa = await getCurrentSuperAdmin();
   if (sa) return sa;
 
-  // 세션 유무에 따라 분기 (F10): 비로그인 → /login, 로그인했으나 super_admin 아님 → 대시보드
-  // (대시보드 미접근 role은 공개 랜딩으로 — 루프 방지). require-access와 동일 정책.
+  // 세션 유무에 따라 분기 (F10): 비로그인 → /login, 로그인했으나 super_admin 아님 → 그 사람의 홈.
+  // 홈은 착지 단일 소스 `/home`(landingPath + 개인 예외까지 얹은 매트릭스)이 정한다 — 예전엔 코드 기본 권한으로
+  // `/dashboard`를 골라, 원장이 대시보드를 꺼 둔 역할이 한 번 더 튕겼다(gotchas #137). 여기서 landingPath를 직접
+  // 부르지 않는 이유: teacher-home → perm-matrix → 이 파일로 도는 순환 import가 생긴다.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  redirect(canAccess(user.systemRole, "dashboard") ? "/dashboard" : "/");
+  redirect("/home");
 }

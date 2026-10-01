@@ -46,6 +46,7 @@ export function SearchableSelect({
   sideColumns,
   requireQuery = false,
   multiValues,
+  multiSummary,
 }: {
   options: ComboOption[];
   value?: string;
@@ -119,6 +120,11 @@ export function SearchableSelect({
    * 트리거는 고른 이름을 `·`로 잇는다(셋부터 `수학·영어 외 1`). 안 주면 종전 단일 선택 그대로.
    */
   multiValues?: readonly string[];
+  /**
+   * 다중 선택에서 **둘 이상** 골랐을 때 트리거에 적을 짧은 요약(원장 2026-10-01 영상 제출 현황 *"반 3개"처럼*). 안 주면 `수학 외 1`.
+   * 고른 이름 전체는 그대로 트리거 `title`·낭독 이름에 남는다.
+   */
+  multiSummary?: (count: number) => string;
 }) {
   const isControlled = value !== undefined;
   const [internal, setInternal] = useState(defaultValue);
@@ -142,7 +148,8 @@ export function SearchableSelect({
       ? {
           value: picked.map((o) => o.value).join(","),
           // 둘부터 `수학 외 1` — 열 머리(고정 폭 칸)에서 이름을 잇대면 옆 칸으로 넘친다. 전체 목록은 트리거 `title`·낭독 이름에.
-          label: picked.length === 1 ? picked[0].label : `${picked[0].label} 외 ${picked.length - 1}`,
+          label: picked.length === 1 ? picked[0].label
+            : multiSummary ? multiSummary(picked.length) : `${picked[0].label} 외 ${picked.length - 1}`,
         }
       : (options.find((o) => o.value === current) ?? null);
   const filtered = useMemo(() => {
