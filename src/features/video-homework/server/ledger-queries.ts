@@ -7,10 +7,12 @@ import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment,
 import { videoMatchRange } from "../rounds";
 import type { VideoArrival, VideoHomeworkMark, VideoHomeworkRosterRow, VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
+import { loadBlankFacts } from "./blank-facts";
+import type { BlankFacts } from "../no-homework";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
-type DbVideo = { student_id: string; posted_at: string; class_id: string | null };
+type DbVideo = { id: string; student_id: string; posted_at: string; class_id: string | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[] };
 
 /**
@@ -23,12 +25,12 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
     const db = createAdminClient();
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
       .from("student_homework_videos")
-      .select("student_id,posted_at,class_id:route->>classId")
+      .select("id,student_id,posted_at,class_id:route->>classId")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .not("route->>classId", "is", null)
       .gte("posted_at", `${fromDate}T00:00:00+09:00`).lt("posted_at", `${addDays(toDate, 1)}T00:00:00+09:00`)
       .order("id", { ascending: true }).range(from, to));
-    return rows.map((row) => ({ studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at }));
+    return rows.map((row) => ({ id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at }));
   } catch (e) {
     console.warn(JSON.stringify({ level: "warn", scope: "videoHomeworkLedger.videos", message: e instanceof Error ? e.message : String(e) }));
     return null;
@@ -42,6 +44,8 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
  */
 export async function getVideoHomeworkLedger(tenantId: string, fromDate: string, toDate: string): Promise<{
   rows: VideoHomeworkLedgerBaseRow[]; marks: VideoHomeworkMark[]; videos: VideoArrival[];
+  /** 빈 칸 사유(결석·숙제없음) — `classId:studentId` → 날짜 → 사유. 못 읽었으면 빈 객체(그 칸은 '—'). */
+  blankFacts: BlankFacts;
   /** 보고서의 '영상 과제' 값을 읽었나 — 못 읽었으면 기록이 있는 회차만 보인다. */
   assignedKnown: boolean;
   /** 학부모 영상을 읽었나 — 못 읽었으면 자동 집계가 빠진다. */
@@ -86,14 +90,27 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     const key = `${row.classId}:${row.studentId}`;
     assignedByPair.set(key, [...(assignedByPair.get(key) ?? []), row.date]);
   }
+  const shownPairs = new Set(pairs.map((pair) => `${pair.classId}:${pair.studentId}`));
   const studentIds = [...new Set(pairs.map((row) => row.studentId))];
   // 영상은 숙제가 나간 적이 있는 학생만 — 숙제가 없으면 채울 칸도 없다.
   const homeworkStudents = [...new Set(pairs.filter((row) => assignedByPair.has(`${row.classId}:${row.studentId}`)).map((row) => row.studentId))];
-  const [students, videos] = await Promise.all([
+  // 빈 칸 사유 재료 — 반별 숙제 날짜(기간 안) · 학생별 이미 있는 회차 날짜. 출결은 반·기간 범위로 한 번에(blank-facts.ts).
+  const classDates = new Map<string, Set<string>>();
+  const ownDates = new Map<string, Set<string>>();
+  const addDate = (classId: string, studentId: string, date: string) => {
+    if (date < fromDate || date > toDate) return;
+    (classDates.get(classId) ?? classDates.set(classId, new Set()).get(classId)!).add(date);
+    (ownDates.get(`${classId}:${studentId}`) ?? ownDates.set(`${classId}:${studentId}`, new Set()).get(`${classId}:${studentId}`)!).add(date);
+  };
+  for (const row of assigned ?? []) addDate(row.classId, row.studentId, row.date);
+  for (const mark of marks) if (mark.homeworkDate) addDate(mark.classId, mark.studentId, mark.homeworkDate);
+  for (const pair of pairs) ownDates.set(`${pair.classId}:${pair.studentId}`, ownDates.get(`${pair.classId}:${pair.studentId}`) ?? new Set());
+  const [students, videos, blankFacts] = await Promise.all([
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
     loadClassVideos(tenantId, homeworkStudents, wideFrom, wideTo),
+    loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
   ]);
   const byClass = new Map(classes.map((row) => [row.id, row]));
   const byStudent = new Map(students.map((row) => [row.id, row]));
@@ -106,6 +123,6 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   });
   // 화면으로는 명단에 선 (반 × 학생)의 기록만 — 넓혀 읽은 지점 전체 기록을 내려보내지 않는다.
   const shown = new Set(rows.map((row) => `${row.classId}:${row.studentId}`));
-  return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)), videos: videos ?? [],
+  return { rows, marks: marks.filter((mark) => shown.has(`${mark.classId}:${mark.studentId}`)), videos: videos ?? [], blankFacts: blankFacts ?? {},
     assignedKnown: assigned !== null, videosKnown: videos !== null };
 }

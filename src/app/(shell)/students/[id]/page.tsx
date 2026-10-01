@@ -48,6 +48,8 @@ export default async function StudentDetailPage({
   // page·from·to = 진도 탭 쪽·보고서 날짜 조회(원장 2026-09-18). 탭 링크가 `?tab=`만 싣기 때문에 탭을 옮기면 초기화된다.
   searchParams: Promise<{
     tab?: string;
+    // 숙제 영상 탭에서 미리 골라 둘 영상 id(영상 제출 현황의 ▶) — 이 학생의 영상이 아니면 뷰어가 무시한다.
+    video?: string;
     back?: string;
     jjFrom?: string;
     jjTo?: string;
@@ -292,7 +294,7 @@ export default async function StudentDetailPage({
             back={isInternalPath(backParam) ? backParam : null}
           />
         ) : tab === "homework-videos" ? (
-          <HomeworkVideosTab studentId={student.id} />
+          <HomeworkVideosTab studentId={student.id} videoId={typeof sp.video === "string" ? sp.video : null} />
         ) : tab === "attendance" ? (
           <AttendanceTab studentId={student.id} />
         ) : tab === "consultations" ? (

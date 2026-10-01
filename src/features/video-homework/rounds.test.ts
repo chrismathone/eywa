@@ -9,7 +9,7 @@ const mark = (studentId: string, homeworkDate: string | null, status: VideoHomew
 // 원스크린 체크는 실제 검사 시각이 남는다 — 기본은 한참 뒤(영상 게시 이후)라 '그 검사가 본 영상' 판정이 켜지지 않는다.
 const kst = (day: string, time = "20:00") => `${day}T${time}:00+09:00`;
 const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string } = {}): VideoArrival =>
-  ({ studentId, classId: extra.classId === undefined ? "A" : extra.classId, postedAt: kst(day, extra.time) });
+  ({ id: `v-${studentId}-${day}-${extra.time ?? "20:00"}`, studentId, classId: extra.classId === undefined ? "A" : extra.classId, postedAt: kst(day, extra.time) });
 const build = (input: { rows: ReturnType<typeof row>[]; marks?: VideoHomeworkMark[]; videos?: VideoArrival[]; from?: string; to?: string }) =>
   buildLedgerRounds({ rows: input.rows, marks: input.marks ?? [], videos: input.videos ?? [], fromDate: input.from ?? "2026-10-01", toDate: input.to ?? "2026-10-31" });
 const view = (rounds: ReturnType<typeof build>, pair = "A:s1") =>
@@ -142,6 +142,17 @@ describe("영상 도착 자동 집계 — 반이 확인된 영상만", () => {
     expect(statusOf924("2026-09-20")).toBe("unchecked");
     // 오래된 기간은 그 기간 앞 2주부터 읽는다.
     expect(videoMatchRange("2026-05-01", "2026-05-31", today)).toEqual({ from: "2026-04-17", to: "2026-06-14" });
+  });
+  it("짝지어진 영상 id를 칸에 싣는다 — 같은 날 여러 영상이면 가장 먼저 올라온 것, 영상 없는 칸은 null(= 수동 후보)", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-08", "2026-10-20"])];
+    const videos = [video("s1", "2026-10-02", { time: "21:00" }), video("s1", "2026-10-02", { time: "09:00" }), video("s1", "2026-10-09")];
+    const rounds = build({ rows, videos, marks: [mark("s1", "2026-10-20", "submitted", { submittedDate: "2026-10-21" })] }).get("A:s1")!;
+    expect(rounds.map((r) => r.videoId)).toEqual(["v-s1-2026-10-02-09:00", "v-s1-2026-10-09-20:00", null]);
+  });
+  it("🔴 직접 찍은 완료라도 그 칸이 볼 수 있던 영상이 짝지어졌으면 영상 쪽(videoId 있음) — 영상 없이 찍은 칸만 videoId null", () => {
+    const rounds = build({ rows: [row("s1", ["2026-10-01"])], videos: [video("s1", "2026-10-02")],
+      marks: [mark("s1", "2026-10-01", "submitted", { submittedDate: "2026-10-03" })] }).get("A:s1")!;
+    expect(rounds[0]).toMatchObject({ status: "submitted", auto: false, videoId: "v-s1-2026-10-02-20:00" });
   });
   it("기록의 자리 = (반 · 학생 · 숙제일) — 어느 화면에서 찍었든 같은 숙제는 같은 자리", () => {
     expect(markIdentity(mark("s1", "2026-10-01", "missing", { checkDate: "2026-10-02" })))

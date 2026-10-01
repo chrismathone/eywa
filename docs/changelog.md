@@ -1,5 +1,10 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-01 — 영상 제출 현황: ▶ 영상 바로가기 · '수동' · 빈 칸에 결석/숙제없음
+
+- 원장 *"재생은 아니고 학생의 '영상 숙제' 탭으로 바로 이동"* · *"수기로 찍은 건 '수동'"* · *"결석이면 -말고 '결석', 숙제가 없었으면 '숙제없음'"*. ① 영상으로 완료된 칸에 ▶(별도 링크, 칸 버튼과 분리) → `/students/<id>?tab=homework-videos&video=<영상 id>`, 뷰어가 **그 학생 영상 목록에 있는 id만** 미리 고른다. ② 영상 짝(`round.videoId`, 그날 가장 먼저 올라온 영상)이 없는 완료는 '수동' — 직접 찍은 완료라도 영상이 짝지어졌으면 ▶(영상 우선, rounds.ts ②). ③ 반에 숙제가 나간 날 중 이 학생에게 회차가 없는 날을 빈 칸에 날짜순으로 "MM.DD 결석/숙제없음"(입반 전·퇴원 후·분리등원 밖·휴원이면 '—').
+- 출결 판정은 새로 만들지 않았다: `effectiveAttendanceRecords`(교시별 최신 정정본) → `rollupDay`(출석부 하루 접기) → 결석·공결만 결석, 보강은 결석을 메우지 않음. 수강 판정 = `rosterIncludesEnrollment`. 🔴 사유 칸은 **회차가 아니다**(n/m의 m·열 수·필터·CSV 불변). 출결은 반 × 기간 범위로 한 번에(`server/blank-facts.ts`, `fetchAllPagedInChunks`) · 장부 조회와 `Promise.all` · 실패 시 사유 칸만 '—'. 순수 함수 `no-homework.ts`, 칸 `components/round-cell.tsx`.
+
 ## 2026-10-01 — 공용 '링크 만료' 페이지(`/expired`) + 만료 링크 배선
 
 - 원장 *"보고서 등의 링크 만료시에 따로 연결될 수 있는 '링크 만료' 페이지도 만들고 배선해놓을것"* — 비로그인 공개 `/expired?kind=report|video|intake|staff`(모르는 값·없음 = 일반 문구) · noindex · **학원 이름 없음**(주소에 토큰이 없어 어느 지점 링크인지 모른다 — 회사 브랜드를 적으면 대표 지점 이름이 다른 지점 학부모에게 선다, 로그인 화면과 같은 이유 · 페이지는 DB를 안 읽는다). 문구·종류는 [`link-expired/kinds.ts`](../src/features/link-expired/kinds.ts) 한 곳, 기간은 상수(`REPORT_SHARE_LINK_DAYS`=90 · `VIDEO_SUBMIT_LINK_DAYS`=7 — `/v` 판정이 읽을 자리).

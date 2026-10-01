@@ -60,6 +60,11 @@ export type LedgerRound = {
   auto: boolean;
   /** 짝지어진 영상의 게시일(KST). */
   videoDate: string | null;
+  /**
+   * 짝지어진 영상의 id(그날 가장 먼저 올라온 영상) — 장부 칸의 ▶가 학생 상세 '숙제 영상' 탭으로 바로 가는 데 쓴다.
+   * 영상이 짝지어진 칸은 **직접 찍은 '완료'여도 영상 쪽이 이긴다**(▶ 표시): 영상은 그 칸이 받은 증거이고(②), 손 기록은 영상 없이 찍은 칸만 '수동'이다.
+   */
+  videoId: string | null;
 };
 
 type PairRow = Pick<VideoHomeworkLedgerRow, "classId" | "studentId" | "assignedDates" | "tracked">;
@@ -75,7 +80,7 @@ export const roundWriteKey = (round: Pick<LedgerRound, "key" | "mark">) => (roun
 export const newerMark = (a: VideoHomeworkMark, b: VideoHomeworkMark) =>
   (a.updatedAt ?? "") > (b.updatedAt ?? "") || (a.updatedAt ?? "") === (b.updatedAt ?? "") && a.checkDate >= b.checkDate ? a : b;
 
-type VideoDay = { day: string; firstAt: number };
+type VideoDay = { day: string; firstAt: number; id: string };
 
 function videoDays(videos: VideoArrival[]): Map<string, VideoDay[]> {
   const byPair = new Map<string, Map<string, VideoDay>>();
@@ -87,15 +92,15 @@ function videoDays(videos: VideoArrival[]): Map<string, VideoDay[]> {
     const days = byPair.get(key) ?? new Map<string, VideoDay>();
     const at = Date.parse(video.postedAt);
     const seen = days.get(day);
-    if (seen) seen.firstAt = Math.min(seen.firstAt, at);
-    else days.set(day, { day, firstAt: at });
+    if (seen) { if (at < seen.firstAt) Object.assign(seen, { firstAt: at, id: video.id }); }
+    else days.set(day, { day, firstAt: at, id: video.id });
     byPair.set(key, days);
   }
   return new Map([...byPair].map(([key, days]) => [key, [...days.values()].sort((a, b) => a.day.localeCompare(b.day))]));
 }
 
 const fresh = (key: string, date: string, homeworkDate: string | null, assigned: boolean): LedgerRound =>
-  ({ key, date, homeworkDate, assigned, mark: null, status: "unchecked", submittedDate: null, auto: false, videoDate: null });
+  ({ key, date, homeworkDate, assigned, mark: null, status: "unchecked", submittedDate: null, auto: false, videoDate: null, videoId: null });
 function attach(round: LedgerRound, mark: VideoHomeworkMark) {
   round.mark = round.mark ? newerMark(mark, round.mark) : mark;
   round.status = round.mark.status;
@@ -153,6 +158,7 @@ export function buildLedgerRounds(input: {
       const round = queue.find((r) => canTake(r, video));
       if (!round) continue;
       round.videoDate = video.day;
+      round.videoId = video.id;
       if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: video.day });
     }
   }
