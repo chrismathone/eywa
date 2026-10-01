@@ -10,7 +10,7 @@ describe("없는 주소 → /home(그 사람의 홈, 원장 2026-09-30)", () => 
     expect(notFoundTarget("/super-admin/zzz", false)).toBe("/home");
   });
   it("🔴 보내지 않는 곳 — 공개 화면·인쇄·/home 자신(루프)", () => {
-    for (const p of ["/r/abc", "/kiosk", "/intake/t", "/staff-intake/x", "/seat/lab", "/academy", "/inventory/asset/A1", "/login", "/"]) {
+    for (const p of ["/r/abc", "/expired", "/kiosk", "/intake/t", "/staff-intake/x", "/seat/lab", "/academy", "/inventory/asset/A1", "/login", "/"]) {
       expect(notFoundTarget(p, false)).toBeNull();
     }
     for (const p of ["/lesson_reports/x/print", "/enrollment/x/prep", "/payroll/t1/payslip", "/shuttle/route", "/print/help/manuals"]) {
@@ -23,6 +23,8 @@ describe("없는 주소 → /home(그 사람의 홈, 원장 2026-09-30)", () => 
       expect(notFoundTarget(p, false)).toBe("/home");
     }
     expect(isPrintPath("/shuttle/route/x")).toBe(true);
+    // /expired는 하위 경로가 없다 — 프록시와 같이 정확 매칭
+    expect(notFoundTarget("/expired/x", false)).toBe("/home");
   });
   it("가드 — (print) 라우트 폴더 전부가 PRINT_ROUTES에 있다", () => {
     const root = path.join(process.cwd(), "src/app/(print)");

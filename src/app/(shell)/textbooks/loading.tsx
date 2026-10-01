@@ -1,3 +1,5 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
+
 /**
  * 교재목록 스켈레톤 — 목록·표지 서명 URL·차수 집계를 함께 받으므로 첫 페인트를 막지 않게 즉시
  * 흘려보낸다(B7). 모양은 실제 배치(헤더 → 면 탭 → 툴바 → 표)와 같은 높이·라운드라 로드 후 튀지 않는다.
@@ -5,7 +7,7 @@
 export default function Loading() {
   return (
     <div className="flex min-h-full w-full flex-col gap-4 p-3 md:px-5 md:py-4">
-      <div className="bg-muted h-9 w-40 animate-pulse rounded-lg" />
+      <PageHeaderSkeleton />
       {/* 면 탭 — 실제 `FaceTabs`와 같은 높이·라운드(`--control-h` · rounded-lg). */}
       <div className="bg-muted h-(--control-h) w-40 animate-pulse rounded-lg" />
       <div className="flex gap-2">

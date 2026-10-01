@@ -1,3 +1,5 @@
+import { PageHeaderSkeleton } from "@/components/page-header";
+
 /**
  * 진도맵 스켈레톤(B7) — 학생 줄 · 툴바 · [원형 지도 | 요약 카드] · 상세. 실표면과 같은 배치라 도착해도 안 튄다.
  * 부모(`/mcs/loading.tsx`)는 반 카드 격자라 모양이 달라 따로 둔다.
@@ -5,10 +7,7 @@
 export default function ProgressMapLoading() {
   return (
     <div className="flex flex-col gap-4">
-      <div className="compact-chrome:hidden">
-        <div className="bg-bg-soft h-4 w-20 animate-pulse rounded" />
-        <div className="bg-bg-soft mt-2 h-6 w-56 animate-pulse rounded" />
-      </div>
+      <PageHeaderSkeleton hideCompact />
       <div className="bg-bg-soft h-16 animate-pulse rounded-2xl" />
       <div className="flex items-center gap-2">
         <div className="bg-bg-soft h-(--control-h) w-72 animate-pulse rounded-lg" />

@@ -433,7 +433,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             (원장 2026-07-30 "모바일뷰에서 시간표가 상단 헤더 때문에 거의 보이지 않음"). 제목·벨은
             MobileTopNav 한 줄로 흡수. 데스크톱은 원래 이 헤더가 숨겨져 있어 영향 없음. */}
         {/* pt-2(모바일) — 상단 바 바로 아래라 여백을 조인다. 데스크톱은 종전 pt-5. */}
-        <main className="flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
+        {/* `relative` = 본문 안의 absolute(특히 `sr-only` 접근성 문구)의 기준점. 없으면 그 요소가 본문 스크롤 밖으로 빠져
+            **문서 전체**가 늘어나 사이드바보다 아래까지 빈 스크롤이 생긴다([[#79]] — 2026-10-01 창 모드를 끈 지점의 영상 제출 현황). */}
+        <main className="relative flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />

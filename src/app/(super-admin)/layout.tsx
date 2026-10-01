@@ -20,7 +20,8 @@ export default async function SuperAdminLayout({ children }: { children: ReactNo
       <SuperAdminSidebar email={sa.email} displayName={sa.displayName} className="hidden desk:flex" />
       <SuperAdminMobileBar email={sa.email} className="desk:hidden" />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-auto px-3 pt-2 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
+        {/* `relative` = 본문 안 absolute(`sr-only` 등)의 기준점 — 없으면 문서 전체에 빈 스크롤([[#79]], 셸 main과 같은 이유). */}
+        <main className="relative flex-1 overflow-auto px-3 pt-2 pb-8 lg:px-6 lg:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           <div className="mx-auto max-w-[1400px] space-y-5">{children}</div>
         </main>
       </div>
