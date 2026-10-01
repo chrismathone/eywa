@@ -13,7 +13,7 @@ export async function getStudentHomeworkVideos(studentId: string): Promise<{ rea
   try {
     const rows = await fetchAllPaged<HomeworkVideo>(async (from, to) => {
       const result = await db.from("student_homework_videos")
-        .select("id,subject,posted_at,created_at,comment_id,status,drive_file_id,bytes")
+        .select("id,subject,posted_at,created_at,comment_id,status,drive_file_id,bytes,uploaded_at")
         .eq("tenant_id", user.tenantId).eq("student_id", studentId)
         .order("posted_at", { ascending: false, nullsFirst: false }).order("id").range(from, to);
       if (result.error) throw result.error;

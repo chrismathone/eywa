@@ -38,7 +38,7 @@ describe("핫패스 가드 — 로스터는 video_homework를 모른다", () => 
   });
   it("원스크린 조회는 probe 뒤 · 실패·미적용은 null(모름) — 빈 지도(값 없음)와 구별한다", () => {
     const code = stripComments(read("src", "features", "video-homework", "server", "assignments.ts"));
-    const body = code.slice(code.indexOf("export async function getVideoHomeworkAssignments"), code.indexOf("export async function getLastLessonAssignments"));
+    const body = code.slice(code.indexOf("export async function getVideoHomeworkAssignments"), code.indexOf("export async function getAssignedVideoHomework"));
     expect(body).toMatch(/videoHomeworkColumnReady\(db\)\)\) return null/);
     expect(body).toMatch(/catch \(e\)[\s\S]*return null;/);
     // 핫패스 — 60일 창이 아니라 필요한 날짜만

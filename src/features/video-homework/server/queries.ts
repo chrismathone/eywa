@@ -4,8 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { rosterIncludesEnrollment } from "@/features/onescreen/roster-filter";
-import type { VideoHomeworkHistoryRow, VideoHomeworkLedgerRow, VideoHomeworkMark, VideoHomeworkRosterRow, VideoHomeworkStatus } from "../types";
-import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
+import type { VideoHomeworkHistoryRow, VideoHomeworkMark, VideoHomeworkRosterRow, VideoHomeworkStatus } from "../types";
 export type { VideoHomeworkHistoryRow, VideoHomeworkRosterRow } from "../types";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null; submitted_date?: string | null; status: string };
@@ -24,15 +23,31 @@ export async function getVideoHomeworkClassOptions(tenantId: string): Promise<Vi
     .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, "ko"));
 }
 
-export async function getVideoHomeworkMarks(tenantId: string, studentIds: string[], checkDate: string): Promise<VideoHomeworkMark[]> {
+/**
+ * 원스크린용 — 그날(`checkDate`) 찍은 검사 + **같은 숙제를 다른 자리에서 이미 찍은 기록**(`homeworkDates` = 각 행의 직전 수업일).
+ * 영상 제출 현황에서 먼저 찍은 기록은 검사일이 오늘이 아니라서, 숙제일로도 찾아야 강사 화면에 같은 칸으로 뜬다(같은 숙제 = 한 칸).
+ * 어느 기록이 어느 행 것인지는 `lesson-marks.ts` `pickLessonMarks`가 가른다.
+ * 🔴 숙제일 조회는 **덧붙는 조회**다 — 실패해도 그날 검사는 그대로 돌려준다(전원 핫패스, 예전 동작으로 떨어진다).
+ */
+export async function getVideoHomeworkMarks(tenantId: string, studentIds: string[], checkDate: string, homeworkDates: string[] = []): Promise<VideoHomeworkMark[]> {
   if (!studentIds.length) return [];
   const db = createAdminClient();
-  const rows = await fetchAllPagedInChunks<DbMark>(studentIds, (chunk, from, to) => db
-    .from("video_homework_marks")
-    .select("class_id,student_id,check_date,homework_date,status")
-    .eq("tenant_id", tenantId).eq("check_date", checkDate).in("student_id", chunk)
-    .order("id", { ascending: true }).range(from, to));
-  return rows.map((row) => ({ classId: row.class_id, studentId: row.student_id,
+  const days = [...new Set(homeworkDates.filter(Boolean))];
+  const columns = "class_id,student_id,check_date,homework_date,status";
+  const [today, sameHomework] = await Promise.all([
+    fetchAllPagedInChunks<DbMark>(studentIds, (chunk, from, to) => db
+      .from("video_homework_marks").select(columns)
+      .eq("tenant_id", tenantId).eq("check_date", checkDate).in("student_id", chunk)
+      .order("id", { ascending: true }).range(from, to)),
+    days.length ? fetchAllPagedInChunks<DbMark>(studentIds, (chunk, from, to) => db
+      .from("video_homework_marks").select(columns)
+      .eq("tenant_id", tenantId).neq("check_date", checkDate).in("homework_date", days).in("student_id", chunk)
+      .order("id", { ascending: true }).range(from, to)).catch((e) => {
+      console.warn(JSON.stringify({ level: "warn", scope: "getVideoHomeworkMarks.byHomework", message: e instanceof Error ? e.message : String(e) }));
+      return [] as DbMark[];
+    }) : Promise.resolve([] as DbMark[]),
+  ]);
+  return [...today, ...sameHomework].map((row) => ({ classId: row.class_id, studentId: row.student_id,
     checkDate: row.check_date, homeworkDate: row.homework_date, status: row.status as VideoHomeworkStatus }));
 }
 
@@ -131,55 +146,5 @@ export async function getVideoHomeworkRoster(tenantId: string, checkDate: string
       studentId: student.id, studentName: student.name, school: student.school, grade: student.grade }] : [];
   });
   rows.sort((a, b) => a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"));
-  return { rows, marks };
-}
-
-/** 기간 전체의 수업 명단과 검사 결과를 함께 읽는다. 미확인 학생·다른 요일 반도 포함한다. */
-export async function getVideoHomeworkLedger(tenantId: string, fromDate: string, toDate: string): Promise<{
-  rows: VideoHomeworkLedgerRow[]; marks: VideoHomeworkMark[];
-}> {
-  const db = createAdminClient();
-  const [classes, enrollments, schedules, attendance, reservations, markRows] = await Promise.all([
-    fetchAllPaged<LedgerClass>((from, to) => db.from("classes")
-      .select("id,class_name,subject,is_active,closed_at").eq("tenant_id", tenantId).order("id").range(from, to)),
-    fetchAllPaged<LedgerEnrollment>((from, to) => db.from("enrollments")
-      .select("class_id,student_id,start_date,end_date,on_hold,is_transferred,attendance_days")
-      .eq("tenant_id", tenantId).or(`start_date.is.null,start_date.lte.${toDate}`)
-      .or(`end_date.is.null,end_date.gte.${fromDate}`).order("id").range(from, to)),
-    fetchAllPaged<LedgerSchedule>((from, to) => db.from("class_schedules")
-      .select("class_id,day_of_week,valid_from,valid_to").eq("tenant_id", tenantId)
-      .or(`valid_from.is.null,valid_from.lte.${toDate}`).or(`valid_to.is.null,valid_to.gte.${fromDate}`)
-      .order("id").range(from, to)),
-    fetchAllPaged<{ class_id: string; student_id: string; session_date: string }>((from, to) => db.from("attendance_records")
-      .select("class_id,student_id,session_date").eq("tenant_id", tenantId)
-      .gte("session_date", fromDate).lte("session_date", toDate).order("id").range(from, to)),
-    fetchAllPaged<{ class_id: string; student_id: string; makeup_date: string }>((from, to) => db.from("makeup_reservations")
-      .select("class_id,student_id,makeup_date").eq("tenant_id", tenantId).eq("status", "reserved")
-      .gte("makeup_date", fromDate).lte("makeup_date", toDate).order("id").range(from, to)),
-    fetchAllPaged<DbMark>((from, to) => db.from("video_homework_marks")
-      .select("class_id,student_id,check_date,homework_date,submitted_date,status").eq("tenant_id", tenantId)
-      .gte("check_date", fromDate).lte("check_date", toDate).order("id").range(from, to)),
-  ]);
-  const pairs = buildVideoHomeworkLessonPairs({ classes, enrollments, schedules, fromDate, toDate, today: kstToday(),
-    occurrences: [
-      ...attendance.map((row) => ({ ...row, date: row.session_date })),
-      ...reservations.map((row) => ({ ...row, date: row.makeup_date })),
-      ...markRows.map((row) => ({ ...row, date: row.check_date })),
-    ],
-  });
-  const studentIds = [...new Set(pairs.map((row) => row.studentId))];
-  const students = await fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
-    (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
-      .in("id", chunk).order("id").range(from, to));
-  const byClass = new Map(classes.map((row) => [row.id, row]));
-  const byStudent = new Map(students.map((row) => [row.id, row]));
-  const rows = pairs.flatMap((pair): VideoHomeworkLedgerRow[] => {
-    const cls = byClass.get(pair.classId);
-    const student = byStudent.get(pair.studentId);
-    return cls && student ? [{ ...pair, className: cls.class_name, subject: cls.subject,
-      studentName: student.name, school: student.school, grade: student.grade, editable: true }] : [];
-  });
-  const marks = markRows.map((row): VideoHomeworkMark => ({ classId: row.class_id, studentId: row.student_id,
-    checkDate: row.check_date, homeworkDate: row.homework_date, submittedDate: row.submitted_date ?? null, status: row.status as VideoHomeworkStatus }));
   return { rows, marks };
 }
