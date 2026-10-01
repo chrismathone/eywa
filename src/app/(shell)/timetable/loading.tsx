@@ -10,7 +10,7 @@ export default function TimetableLoading() {
   return (
     <div className="edge-to-edge flex h-full min-h-0 flex-col gap-4 compact-chrome:gap-3">
       {/* PageHeader 스켈레톤 — 창(임베드)은 헤더 줄을 통째로 접으므로(집계=툴바 우측) 스켈레톤도
-          통째 숨김, 최상위 프레임만 한 줄(스켈레톤↔실렌더 높이 정합 · 화면 최대화 중엔 실 헤더와 함께 숨는다). */}
+          통째 숨김, 최상위 프레임만 한 줄(스켈레톤↔실렌더 높이 정합). */}
       <PageHeaderSkeleton hideCompact />
       {/* 툴바 스켈레톤 — 실제 툴바는 **왼쪽 묶음 / 오른쪽 묶음** 두 상자다(11·12단계): 왼쪽 = 주 이동 ·
           `축: 값` 드롭다운 넷(과목·구분·프로그램·뷰) · 검색 토글 · 설정/엑셀, 오른쪽 = 집계·ECS·편집.

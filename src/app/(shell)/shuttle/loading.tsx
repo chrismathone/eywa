@@ -9,7 +9,7 @@ import { SHUTTLE_TOOLBAR } from "@/features/shuttle/control-size";
 export default function Loading() {
   return (
     <div className="flex min-h-full w-full flex-col gap-3 p-3 md:px-5 md:py-4">
-      {/* 공용 PageHeader 자리(동작 = 정류장 관리·인쇄 — 화면 최대화 중엔 제목 막대만 숨는다). */}
+      {/* 공용 PageHeader 자리(동작 = 정류장 관리·인쇄). */}
       <PageHeaderSkeleton actions={<div className="bg-bg-soft h-(--control-h) w-64 animate-pulse rounded-lg" />} />
       {/* 실표면과 같은 한 줄 — 면 탭 + 시즌 드롭다운. 높이는 컨트롤과 같은 변수(폰 44 / 데스크톱 --control-h, FaceTabs도 같은 변수). */}
       <div className={SHUTTLE_TOOLBAR}>

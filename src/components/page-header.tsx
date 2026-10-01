@@ -60,7 +60,7 @@ export function PageHeader({
             `flex-1`·설명 최소 폭·Medium은 데스크톱 한 줄에만(컴팩트 1행은 종전 모양 그대로 — 라벨이 버튼을 밀어내지 않게). */}
         <div
          
-          className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1 compact-chrome:flex-initial"
+          className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1 compact-chrome:flex-initial compact-chrome:gap-y-0"
         >
           {eyebrow ? (
             <p className="text-foreground text-sm font-medium whitespace-nowrap compact-chrome:hidden">{eyebrow}</p>
@@ -81,7 +81,7 @@ export function PageHeader({
           </div>
           {description ? (
             <div
-              className={`flex min-w-[10rem] flex-1 items-baseline gap-x-2 compact-chrome:min-w-0 compact-chrome:flex-initial ${
+              className={`flex min-w-[min(100%,20rem)] flex-1 items-baseline gap-x-2 compact-chrome:min-w-0 compact-chrome:flex-initial ${
                 embedLabel ? "compact-chrome:hidden" : ""
               }`}
             >
