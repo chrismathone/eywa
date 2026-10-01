@@ -10,6 +10,11 @@ import type { RosterStudentRef } from "../roster/match-roster";
 import type { ImportDiff } from "../types";
 import type { ScheduledGroup } from "../../scheduled-groups";
 import type { MasterRosterReview } from "./roster-review";
+import type {
+  MasterAttendance,
+  AttendanceLink,
+  AttendanceMigration,
+} from "./attendance-types";
 
 export const MASTER_SHEET_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
 export type MasterInput = {
@@ -61,12 +66,8 @@ export type MasterContext = {
     validFrom: string;
     validTo: string | null;
   })[];
-  attendance: {
-    classId: string;
-    studentId: string;
-    date: string;
-    startTime: string | null;
-  }[];
+  attendance: MasterAttendance[];
+  attendanceLinks: AttendanceLink[];
   pending: { id: string; date: string; label: string }[];
 };
 export type ClassMapping = {
@@ -77,8 +78,11 @@ export type ClassMapping = {
   suggestedName: string | null;
   evidence: string;
   explicit: boolean;
+  method: "manual" | "name" | "roster" | "unmapped";
+  manualReason: string | null;
 };
 export type MasterPlan = {
+  attendanceMigration: AttendanceMigration;
   report: DryRunReport;
   roster: ImportDiff;
   issues: MasterIssue[];
@@ -89,6 +93,8 @@ export type MasterPlan = {
     teacherId: string | null;
     suggestedId: string | null;
     suggestedName: string | null;
+    method: "manual" | "name" | "header" | "unmapped";
+    manualReason: string | null;
   }[];
   omittedClasses: { id: string; name: string; slots: number }[];
   classUpdates: ApplyClassUpdate[];

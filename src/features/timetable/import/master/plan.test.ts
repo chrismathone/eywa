@@ -1,112 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildMasterPlan, clipMasterGrid, orderRenames } from "./plan";
 import { masterStudentConflicts } from "./student-conflicts";
-import type {
-  MasterContext,
-  MasterGrids,
-  MasterInput,
-  MasterPlan,
-} from "./types";
+import { fixture } from "./test-fixture";
 
-export function fixture() {
-  const input: MasterInput = {
-    source: "sheet",
-    teacherTab: "강사별(10월)",
-    rosterTab: " 통합(10월)",
-    effectiveDate: "2026-10-01",
-    maxColumn: "",
-    classBindings: {},
-  };
-  const teacher = {
-    cells: [
-      ["", "1"],
-      ["", "Anna 육소희 605"],
-      ["", ""],
-      ["", "월"],
-      ["2:20~3:00", "PL2/605"],
-    ],
-    merges: [],
-  };
-  const cells = Array.from({ length: 7 }, () => Array<string>(7).fill(""));
-  cells[0]![0] = "오후 2:20";
-  cells[0]![2] = "PL2 매일 2:20~3:00 (Anna)";
-  cells[2]![1] = "1";
-  cells[2]![2] = "김하나";
-  cells[2]![5] = "침산초1";
-  cells[3]![1] = "2";
-  cells[3]![2] = "김두나";
-  cells[3]![5] = "침산초1";
-  cells[4]![1] = "정원";
-  cells[5]![1] = "인원";
-  cells[5]![2] = "2";
-  const grids: MasterGrids = {
-    teacher,
-    roster: {
-      cells,
-      merges: [
-        {
-          startRowIndex: 0,
-          endRowIndex: 1,
-          startColumnIndex: 2,
-          endColumnIndex: 7,
-        },
-      ],
-    },
-  };
-  const ctx: MasterContext = {
-    classes: [
-      {
-        id: "c1",
-        className: "PL2",
-        subject: "english",
-        teacherId: "t1",
-        classroomId: "r1",
-        active: true,
-        closedAt: null,
-        track: "eie",
-      },
-    ],
-    teachers: [
-      {
-        id: "t1",
-        displayName: "육소희",
-        englishName: "Anna",
-        systemRole: "teacher",
-      },
-    ],
-    classrooms: [{ id: "r1", name: "본원605" }],
-    students: [
-      {
-        studentId: "s1",
-        name: "김하나",
-        school: "침산초",
-        grade: "초1",
-        status: "enrolled",
-      },
-      {
-        studentId: "s2",
-        name: "김두나",
-        school: "침산초",
-        grade: "초1",
-        status: "enrolled",
-      },
-    ],
-    schedules: [],
-    enrollments: [],
-    groups: [],
-    blocks: [],
-    attendance: [],
-    pending: [],
-  };
-  const source: MasterPlan["source"] = {
-    spreadsheetId: "sheet",
-    teacherTab: input.teacherTab,
-    rosterTab: input.rosterTab,
-    teacherGid: 1,
-    rosterGid: 2,
-  };
-  return { input, grids, ctx, source };
-}
 const enrollment = (id: string, studentId: string, classId: string) => ({
   id,
   studentId,
@@ -123,20 +19,44 @@ describe("유지 배치와 명시적 연결", () => {
     const f = fixture();
     f.ctx.students[0]!.name = "김하윤C";
     f.grids.roster.cells[2]![2] = "김하윤C";
-    f.ctx.students.push({ ...f.ctx.students[0]!, studentId: "sibling", name: "김하윤A", school: "칠성초", grade: "초3" });
+    f.ctx.students.push({
+      ...f.ctx.students[0]!,
+      studentId: "sibling",
+      name: "김하윤A",
+      school: "칠성초",
+      grade: "초3",
+    });
     let p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.issues.some((i) => i.key === "match:PL2:s1")).toBe(false);
     f.grids.roster.cells[2]![2] = "김하윤";
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
-    expect(p.issues.find((i) => i.key === "match:PL2:s1")?.severity).toBe("confirm");
+    expect(p.issues.find((i) => i.key === "match:PL2:s1")?.severity).toBe(
+      "confirm",
+    );
   });
-  it("기존 이름이 없는 진급 후보는 중복 오류 없이 한 번만 연결을 요청한다", () => {
+  it("EiE 진급은 반 ID와 수강을 보존하며 자동으로 이름을 바꿀 계획을 만든다", () => {
     const f = fixture();
     f.ctx.classes[0]!.className = "PL1";
-    f.ctx.enrollments = [enrollment("e1", "s1", "c1"), enrollment("e2", "s2", "c1")];
+    f.ctx.enrollments = [
+      enrollment("e1", "s1", "c1"),
+      enrollment("e2", "s2", "c1"),
+    ];
     const p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.issues.some((i) => i.key === "class:PL2")).toBe(false);
-    expect(p.issues.find((i) => i.key === "identity:PL2")).toMatchObject({ severity: "error", reason: expect.stringContaining("진급 전 반을 아직 연결하지 않았습니다") });
+    expect(p.mappings[0]).toMatchObject({
+      classId: "c1",
+      method: "roster",
+      explicit: false,
+    });
+    expect(p.classUpdates).toContainEqual(
+      expect.objectContaining({
+        classId: "c1",
+        prevClassName: "PL1",
+        className: "PL2",
+      }),
+    );
+    expect(p.roster.moves).toEqual([]);
+    expect(p.roster.unchanged).toBe(2);
   });
   const slot = {
     id: "keep",
@@ -189,6 +109,8 @@ describe("유지 배치와 명시적 연결", () => {
     ];
     f.ctx.attendance = [
       {
+        id: "attendance",
+        record: { id: "attendance", status: "present" },
         classId: "other",
         studentId: "s1",
         date: "2026-10-01",
@@ -202,18 +124,20 @@ describe("유지 배치와 명시적 연결", () => {
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.report.plan.remove).toBe(1);
     expect(
-      p.issues.find((i) => i.key === "attendance:other-slot")?.severity,
+      p.issues.find((i) => i.key.startsWith("attendance:"))?.severity,
     ).toBe("error");
   });
-  it("원본 한글 이름으로 후보를 보여주되 강사 별칭은 직접 연결해야 한다", () => {
+  it("원본 한글 이름이 유일한 강사는 자동 연결하고 수동 수정도 받는다", () => {
     const f = fixture();
     f.grids.teacher.cells[1]![1] = "Jennifer 육소희 605";
     let p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.teacherMappings[0]).toMatchObject({
-      teacherId: null,
+      teacherId: "t1",
       suggestedId: "t1",
+      method: "header",
     });
-    expect(p.issues.some((i) => i.key === "teacher:Jennifer")).toBe(true);
+    expect(p.report.planItems[0]?.teacherId).toBe("t1");
+    expect(p.issues.some((i) => i.key === "teacher:Jennifer")).toBe(false);
     f.input.teacherBindings = { Jennifer: "t1" };
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.report.planItems[0]?.teacherId).toBe("t1");
@@ -278,7 +202,7 @@ describe("영어 마스터 시트 에이와 규칙", () => {
     expect(p.issues.some((i) => i.key === "status:s1")).toBe(false);
     expect(p.roster.adds.some((a) => a.studentId === "s1")).toBe(true);
   });
-  it("명단으로 다른 기존 반을 가리키면 동명 반 자동 연결을 막는다", () => {
+  it("EiE 명단으로 진급을 연결해도 다른 반이 이름을 점유하면 적용을 막는다", () => {
     const f = fixture();
     f.ctx.classes.push({ ...f.ctx.classes[0]!, id: "c2", className: "PL1" });
     f.ctx.enrollments = [
@@ -286,7 +210,8 @@ describe("영어 마스터 시트 에이와 규칙", () => {
       enrollment("e2", "s2", "c2"),
     ];
     let p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
-    expect(p.issues.some((i) => i.key === "identity:PL2")).toBe(true);
+    expect(p.mappings[0]).toMatchObject({ classId: "c2", method: "roster" });
+    expect(p.issues.some((i) => i.key === "held:PL2")).toBe(true);
     f.input.classBindings.PL2 = "c2";
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.issues.some((i) => i.key === "held:PL2")).toBe(true);

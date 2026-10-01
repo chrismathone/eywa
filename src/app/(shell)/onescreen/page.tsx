@@ -15,6 +15,7 @@ import { TodayAttendanceStrip } from "@/features/attendance/live/components/toda
 import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
 import { getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
+import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
 import { assignmentOf } from "@/features/video-homework/assignment";
 
 export const metadata = { title: "선생님 원스크린 — 에이와" };
@@ -78,12 +79,17 @@ export default async function OneScreenPage({
   const rosterStudentIds = roster.students.map((student) => student.id);
   const videoHwPolicy = roster.reportSettings.videoHomeworkPolicy;
   const videoHwDates = [roster.date, ...roster.students.flatMap((st) => st.subjects.map((su) => su.prevReport?.date ?? ""))];
-  const [videoHomeworkMarks, loadedAssignments] = await Promise.all([
-    getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date),
+  // 영상 제출 현황에서 먼저 찍은 같은 숙제의 기록도 이 칸 것이다(같은 숙제 = 한 칸) — 행마다 지난 수업일로 찾는다.
+  const videoHwTargets = roster.students.flatMap((st) => st.subjects.flatMap((su) =>
+    su.classId ? [{ classId: su.classId, studentId: st.id, homeworkDate: su.prevReport?.date ?? null }] : []));
+  const [loadedMarks, loadedAssignments] = await Promise.all([
+    getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date,
+      videoHwPolicy.enabled ? videoHwTargets.flatMap((t) => (t.homeworkDate ? [t.homeworkDate] : [])) : []),
     videoHwPolicy.enabled ? getVideoHomeworkAssignments(user.tenantId, rosterStudentIds, videoHwDates) : Promise.resolve({}),
   ]);
   // null = 못 읽음 → 그 세션 동안 '영상 과제' 값을 보내지 않는다(저장돼 있던 '있음'을 '없음'으로 덮지 않게, 공급자 known=false).
   const videoHomeworkAssignments = loadedAssignments ?? {};
+  const videoHomeworkMarks = pickLessonMarks(loadedMarks, videoHwTargets, roster.date);
   // 오늘 이미 저장한 보고서의 '영상 과제' — 세션에 값이 없을 때만 되채운다(세션 = 작업 중 편집이 이긴다, roster ⑤ 규약).
   for (const st of roster.students) {
     for (const su of st.subjects) {

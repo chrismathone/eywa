@@ -80,6 +80,7 @@ export const AUDIT_TYPE_LABEL: Record<string, string> = {
   operating_periods: "세션 기간",
   // 2026-08-17 원장 제보("대상이 attendance 등 날것으로 나옴") — 누락 유형 전수 추가(가드 테스트도 갱신).
   attendance: "출결",
+  video_homework: "영상 과제",
   lesson_report: "수업보고서",
   approval_document: "결재 문서",
   enrollment_consultations: "콜&상담",
@@ -2159,6 +2160,15 @@ export function auditDetail(
     case "support_request_update":
     case "support_request_delete":
       return str(m.title) ?? null;
+
+    case "lesson_report_video_homework_mark": {
+      // 영상 제출 현황 한 칸 — 어느 숙제(숙제일, 모르는 옛 기록은 검사일)를 무엇으로 바꿨나.
+      const status = str(m.status);
+      const label = status === "submitted" ? "완료" : status === "missing" ? "미수행" : status === "cleared" ? "미확인으로 되돌림" : null;
+      const hw = str(m.homeworkDate);
+      const checked = str(m.checkDate);
+      return join(hw ? `숙제 ${hw}` : checked ? `검사 ${checked}` : null, label, str(m.submittedDate) ? `제출 ${str(m.submittedDate)}` : null);
+    }
 
     case "demo_roster_apply": {
       const label = str(m.label);
