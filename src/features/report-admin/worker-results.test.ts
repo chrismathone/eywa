@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractWorkerEnv,
+  formatVideoStorage,
   formatWorkerResults,
   workerSupportsNativePublish,
   workerSupportsNoticeAttachments,
@@ -114,5 +115,29 @@ describe("workerSupportsNativePublish", () => {
 
   it("truthy 문자열은 인정하지 않는다(엄격 비교)", () => {
     expect(workerSupportsNativePublish({ caps: { nativePublish: "true" } })).toBe(false);
+  });
+});
+
+describe("formatVideoStorage — '영상 보관' 줄(2026-10-01)", () => {
+  const GB = 1024 ** 3;
+  it("Drive 남은 공간과 압축 상태를 한 줄로, 업로드가 멈췄으면 붉게", () => {
+    expect(formatVideoStorage({ checkedAt: AT, freeBytes: 980 * GB, paused: false, ffmpeg: "ok" }))
+      .toEqual({ key: "video", label: "영상 보관", text: "12:30 · Drive 남은 980GB · 압축 켜짐", error: false });
+    expect(formatVideoStorage({ checkedAt: AT, freeBytes: 18.2 * GB, paused: true, ffmpeg: "missing" }))
+      .toEqual({ key: "video", label: "영상 보관", text: "12:30 · 업로드 멈춤 — Drive 남은 18.2GB · 압축 꺼짐(ffmpeg 없음)", error: true });
+  });
+  it("용량 조회 실패는 붉게 알리고, 아무것도 안 해 봤으면(대기 영상 없음·구워커) 줄이 없다", () => {
+    expect(formatVideoStorage({ checkedAt: AT, freeBytes: null, quotaError: true, ffmpeg: null })?.text).toBe("12:30 · 용량 확인 실패");
+    expect(formatVideoStorage({ checkedAt: AT, freeBytes: 30 * GB, quotaError: true })?.text).toBe("12:30 · 용량 확인 실패 · Drive 남은 30.0GB");
+    expect(formatVideoStorage({ checkedAt: null, freeBytes: null, paused: false, ffmpeg: null })).toBeNull();
+    expect(formatVideoStorage(undefined)).toBeNull();
+    expect(formatVideoStorage({ ffmpeg: "raw_code" })).toBeNull(); // 모르는 값은 그대로 내보내지 않는다
+  });
+  it("발송 큐 카드 결과 줄 끝에 붙고, 멈췄으면 맨 앞(카드 줄이 잘려도 보이게)", () => {
+    const rows = formatWorkerResults({ queue: { at: AT, success: 1 }, videoStorage: { checkedAt: AT, freeBytes: 500 * GB, ffmpeg: "off" } });
+    expect(rows.map((r) => r.label)).toEqual(["발송", "영상 보관"]);
+    expect(rows[1].text).toBe("12:30 · Drive 남은 500GB · 압축 꺼짐(설정)");
+    const paused = formatWorkerResults({ queue: { at: AT, success: 1 }, videoStorage: { checkedAt: AT, freeBytes: 5 * GB, paused: true } });
+    expect(paused.map((r) => r.label)).toEqual(["영상 보관", "발송"]);
   });
 });

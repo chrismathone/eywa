@@ -118,7 +118,40 @@ export function formatWorkerResults(raw: unknown): WorkerResultRow[] {
     }
     rows.push({ key, label, text: parts.length ? `${at} · ${parts.join(" · ")}` : at, error: false });
   }
+  // 업로드 멈춤·용량 확인 실패는 **맨 앞** — 카드의 결과 줄은 300px에서 잘려서 끝에 붙이면 경고가 보이지 않는다.
+  const video = formatVideoStorage(results.videoStorage);
+  if (video) rows[video.error ? "unshift" : "push"](video);
   return rows;
+}
+
+const GB = 1024 ** 3; // Drive 화면의 'GB'와 같은 단위
+const COMPRESS_LABEL: Readonly<Record<string, string>> = {
+  ok: "압축 켜짐",
+  missing: "압축 꺼짐(ffmpeg 없음)",
+  off: "압축 꺼짐(설정)",
+};
+
+/**
+ * '영상 보관' 줄 — 워커 하트비트 `last_results.videoStorage`(2026-10-01, video-drive-quota.mjs).
+ * Drive 남은 공간이 문턱 아래면 워커가 영상 업로드를 멈추므로 붉게 알린다. 대기 영상이 없어 용량을 아직 안 봤고
+ * 압축도 안 해 봤으면 줄이 없다(구워커도 키가 없어 없음). 압축 건수는 싣지 않는다 — 워커 재시작마다 0이 되는 수라 기간이 거짓이 된다.
+ */
+export function formatVideoStorage(raw: unknown): WorkerResultRow | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const v = raw as Record<string, unknown>;
+  const at = typeof v.checkedAt === "string" ? kstHHMM(v.checkedAt) : "";
+  const free = typeof v.freeBytes === "number" && Number.isFinite(v.freeBytes) ? v.freeBytes : null;
+  const gb = (n: number) => `${(n / GB).toFixed(n >= 100 * GB ? 0 : 1)}GB`;
+  const paused = v.paused === true && free !== null;
+  // 조치가 필요한 상태어를 시각 바로 뒤에 — 카드 줄이 잘려도 보이게. 확인 실패 때의 남은 공간은 직전 값이라 뒤로.
+  const parts: string[] = [];
+  if (paused) parts.push(`업로드 멈춤 — Drive 남은 ${gb(free)}`);
+  if (v.quotaError === true) parts.push("용량 확인 실패");
+  if (!paused && free !== null) parts.push(`Drive 남은 ${gb(free)}`);
+  const compress = typeof v.ffmpeg === "string" && Object.hasOwn(COMPRESS_LABEL, v.ffmpeg) ? COMPRESS_LABEL[v.ffmpeg] : undefined;
+  if (compress) parts.push(compress);
+  if (!parts.length) return null;
+  return { key: "video", label: "영상 보관", text: [at, ...parts].filter(Boolean).join(" · "), error: paused || v.quotaError === true };
 }
 
 /**
