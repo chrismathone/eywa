@@ -31,6 +31,15 @@ export function isPushableConsultation(input: PushEligibilityInput): boolean {
   return !input.studentMakeeduId;
 }
 
+/**
+ * 이 후보가 **이미 큐에 들어가 있나**(pending = 연동 PC 대기 · running = 제출 중). 그렇다면 다시 고를 수 없다 —
+ * 전송 카드의 체크박스 잠금과 콜&상담 머리글 'makeedu 보내기' 배지(지금 보낼 수 있는 건수)가 같은 판정을 쓴다.
+ * 실패(`error`)는 다시 골라 보낼 수 있으니 여기 들지 않는다. 서버 쪽 중복 큐잉 방지는 enqueueConsultationPush가 따로 본다.
+ */
+export function isPushInFlight(pushStatus: string | null | undefined): boolean {
+  return pushStatus === "pending" || pushStatus === "running";
+}
+
 /** 목록에 "왜 이 건이 특별한지" 한 줄로 밝힌다 — 아니면 등록된 학생이 신규 문의처럼 보인다. */
 export function pushEligibilityNote(input: PushEligibilityInput): string | null {
   return input.outcome === "enrolled" && !input.studentMakeeduId
