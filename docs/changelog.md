@@ -1,5 +1,12 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-01 — 원생상담 통계: 목록 옆 패널 → '통계 보기' 전용 화면 + 목록 위 한 줄 요약 띠
+
+- 원장 캡처 *"상담 통계를 옆으로 두지말고 … 따로 통계 보기 버튼 만들고 이동시키던가"* · *"스크롤이 따로 놀게 아니면 맞추든가"* → 9-30 옆 패널(`consultations-layout.module.css`) 삭제. 목록은 폭을 다 쓴다(최대 2단). 결정 = docs/decisions/students.md 원생상담 항목.
+- 요약 띠 [`stats-summary.tsx`](<src/app/(shell)/consultations/_components/stats-summary.tsx>) = 한 줄 고정 높이(h-9, 스켈레톤 같은 값) — 늦게 흘러와도 AutoPageSize가 잰 목록이 안 밀린다. 좁으면 `@container/band` 경계로 지표를 덜 싣고 기간·범위는 말줄임, '검색어 제외'는 따로 잘리지 않는 자리에. 툴바 '통계 보기'(텍스트 보조, `EmbedLink`) → `/consultations/stats`(옛 리다이렉트를 화면으로 되살림).
+- 통계 화면 = '목록으로'(`BackToListButton`, embed 유지) + 목록과 같은 필터 드롭다운(`ConsultationFilters` 한 벌) + 1·2·3칸 격자(지표|추이 2칸 · 분해 2칸|공백) + `loading.tsx`. 분해 줄은 통계 안에서 거르기, '지연 N건'은 검색어 없이 목록으로(센 숫자와 같게). 통계 주소도 목록과 같은 규칙(검색어·쪽·쪽 크기까지 실어 '목록으로'는 보던 쪽으로). 추이 그래프는 늘어난 카드 높이를 채우고(`absolute inset-0`), 넓은 분해 카드엔 비율 막대 열.
+- 숫자·문구 한 벌: `buildKpiLines`(stats-kpi.ts — 0318a 전 대체 경로 포함) · `statsScopeText`(stats-scope.ts, 검색어가 걸리면 '검색어 제외') · 주소 `consultationsStatsHref`·`CONSULT_DEFAULT_PAGE_SIZE`(list-href.ts). 새 조회·RPC 없음.
+
 ## 2026-10-01 — 숙제 영상 제출 링크(학부모가 aywa로 바로 올리기, 0325a)
 
 - 원장 *"가장 베스트네"* · *"영상 제출 링크를 함께 붙이자. 링크는 일주일 후에 소멸."* · *"기존 클래스노트는 1기가까지 제한이었는데"* — 학부모가 로그인 없이 `/v/<토큰>`에서 영상을 고르면 **그 반 지금 담임의 Drive 폴더**(워커와 같은 등록부·같은 이름 규칙 + 원본 확장자)에 들어가고 `student_homework_videos`(출처 `link`, 0324a 칸)에 한 줄 → 학생 상세 '숙제 영상' 탭·영상 제출 현황 자동 집계에 바로 잡힌다.

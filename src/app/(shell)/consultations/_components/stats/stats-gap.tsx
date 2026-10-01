@@ -6,7 +6,7 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 /**
  * 상담 공백 재원생 — 옛 통계 화면의 '상담 필요 학생'을 옮겨 온 것(원장 *"학생당 상담 빈도"* — 오래 상담이 없는 재원생 수).
- * 🔴 기준을 적는다: 오늘 기준 · 재원생(테스트 학생 제외) · **목록 필터와 무관**(마지막 상담은 누가 했든 마지막이다).
+ * 🔴 기준을 적는다: 오늘 기준 · 재원생(테스트 학생 제외) · **위 필터와 무관**(마지막 상담은 누가 했든 마지막이다).
  * 강사는 담당 학생만(옛 화면에서 전교생 명단이 샌 자리 — queries.ts 주석).
  */
 export function StatsGap({ gap, teacherScoped }: { gap: GapStats; teacherScoped: boolean }) {
@@ -17,7 +17,7 @@ export function StatsGap({ gap, teacherScoped }: { gap: GapStats; teacherScoped:
       <div>
         <p className="text-foreground text-sm font-bold">상담 공백</p>
         <p className="text-muted-foreground text-xs break-keep">
-          오늘({today}) 기준 · {gap.full ? `${who} ${fmt(gap.enrolled)}명 중` : who} · 목록 필터와 무관
+          오늘({today}) 기준 · {gap.full ? `${who} ${fmt(gap.enrolled)}명 중` : who} · 위 필터와 무관
         </p>
       </div>
       {gap.full ? (

@@ -207,7 +207,7 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-/** 목록 기간 필터의 시작 시각(ISO) — 통계 패널이 목록과 **같은 창**을 쓰게. 전체면 null. */
+/** 목록 기간 필터의 시작 시각(ISO) — 통계(목록 위 요약 띠·통계 화면)가 목록과 **같은 창**을 쓰게. 전체면 null. */
 export function rangeSinceIso(range: ConsultationListFilters["range"]): string | null {
   return range === "7d" ? isoDaysAgo(7) : range === "30d" ? isoDaysAgo(30) : null;
 }
@@ -328,8 +328,8 @@ export async function getStudentConsultationsPage(
 }
 
 /**
- * 목록 필터(기간·카테고리·상담사·과목·후속 긴급도) + 강사 스코프를 건다 — **목록과 통계 패널이 같은 함수**를 탄다
- * (두 벌이면 한쪽만 고쳐 패널 수치와 목록 건수가 갈린다). 검색어(q)는 목록 전용이라 여기 없다.
+ * 목록 필터(기간·카테고리·상담사·과목·후속 긴급도) + 강사 스코프를 건다 — **목록과 통계(요약 띠·통계 화면)가 같은 함수**를 탄다
+ * (두 벌이면 한쪽만 고쳐 통계 수치와 목록 건수가 갈린다). 검색어(q)는 목록 전용이라 여기 없다.
  * 후속 긴급도는 followUpUrgency()와 같은 뜻을 SQL로 적은 것이다(0318a `consultation_stats`도 같은 식).
  */
 export function filteredConsultations<Q>(builder: Q, filters: ConsultationListFilters, teacherId: string | null): Q {
@@ -557,6 +557,6 @@ export async function getStudentsNeedingConsultation(
   return { rows: all.slice(0, limit), total: all.length };
 }
 
-// 통계는 목록 오른쪽 패널로 옮겼다(원장 2026-09-30) — 집계는 [stats.ts](./stats.ts)(0318a RPC). 옛 통계 화면의 함수
+// 통계는 목록 오른쪽 패널로 옮겼다가(원장 2026-09-30) 전용 화면 `/consultations/stats`로 다시 나갔다(2026-10-01) — 집계는 [stats.ts](./stats.ts)(0318a RPC). 옛 통계 화면의 함수
 // (전환 퍼널·카테고리 분포·월별 추세)는 그 화면과 함께 걷었다. 🔴 스코프 규약은 그대로다: 학생상담 = `counselor_id = 나`,
 // 상담 공백 = 담당 학생 안에서만(옛 화면이 한 번 어긋났던 자리 — 목록과 다른 우주를 보여 주면 안 된다).
