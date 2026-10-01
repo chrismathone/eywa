@@ -1,5 +1,6 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 학생 상태 ↔ 수강(enrollments) 정합성 헬퍼.
@@ -11,6 +12,15 @@ import type { createClient } from "@/lib/supabase/server";
  * 여기 한 곳에 둔다.
  */
 type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/** DB 오류 → 화면용 한글 이유 + 로그([[#138]]). 이 모듈의 문자열 오류는 학생 상세·퇴원관리 화면에 그대로 뜬다. */
+function why(error: unknown, step: string, context: Record<string, unknown>): string {
+  return explainDbError(error, {
+    scope: `students.enrollmentSync.${step}`,
+    context, // 퇴원 예약 크론은 이 한글 문구만 받으니 어느 학생인지는 여기서 남긴다
+    fallback: "수강 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  }).message;
+}
 
 /**
  * 재원 복구 시, 그 퇴원(withdrawnDate)이 닫은 enrollment를 다시 연다.
@@ -29,7 +39,7 @@ export async function reopenEnrollmentsClosedByWithdrawal(
     .update({ end_date: null, withdrawal_reason: null, on_hold: false })
     .eq("student_id", studentId)
     .eq("end_date", withdrawnDate);
-  return error?.message ?? null;
+  return error ? why(error, "reopen", { studentId }) : null;
 }
 
 /**
@@ -45,7 +55,7 @@ export async function clearOnHoldForActiveEnrollments(
     .update({ on_hold: false })
     .eq("student_id", studentId)
     .is("end_date", null);
-  return error?.message ?? null;
+  return error ? why(error, "clearOnHold", { studentId }) : null;
 }
 
 /**
@@ -77,14 +87,14 @@ export async function endEnrollmentById(
     .select("start_date, class_id, student_id")
     .eq("id", enrollmentId)
     .maybeSingle();
-  if (selErr) return { error: selErr.message };
+  if (selErr) return { error: why(selErr, "endOne.read", { enrollmentId }) };
 
   const endDate = enr && String(enr.start_date) > date ? String(enr.start_date) : date;
   const { error } = await supabase
     .from("enrollments")
     .update({ end_date: endDate, withdrawal_reason: reason })
     .eq("id", enrollmentId);
-  if (error) return { error: error.message };
+  if (error) return { error: why(error, "endOne", { enrollmentId }) };
 
   return {
     error: null,
@@ -112,7 +122,7 @@ export async function listOpenEnrollments(
     .eq("student_id", studentId)
     .is("end_date", null)
     .limit(200);
-  if (error) return { error: error.message, rows: [] };
+  if (error) return { error: why(error, "listOpen", { studentId }), rows: [] };
   return {
     error: null,
     rows: (data ?? []).map((r) => ({
@@ -142,7 +152,7 @@ export async function closeActiveEnrollmentsClamped(
       .update({ end_date: null, ...extra })
       .eq("student_id", studentId)
       .is("end_date", null);
-    return error?.message ?? null;
+    return error ? why(error, "closeActive.reopen", { studentId }) : null;
   }
   // 정상(시작일 ≤ date): 일괄 end_date=date.
   const { error } = await supabase
@@ -151,7 +161,7 @@ export async function closeActiveEnrollmentsClamped(
     .eq("student_id", studentId)
     .is("end_date", null)
     .lte("start_date", date);
-  if (error) return error.message;
+  if (error) return why(error, "closeActive", { studentId });
   // 미래 시작(배정 예정): 행마다 start_date가 달라 개별 종료(end_date = 그 수강의 start_date).
   const { data: future, error: fErr } = await supabase
     .from("enrollments")
@@ -159,13 +169,13 @@ export async function closeActiveEnrollmentsClamped(
     .eq("student_id", studentId)
     .is("end_date", null)
     .gt("start_date", date);
-  if (fErr) return fErr.message;
+  if (fErr) return why(fErr, "closeActive.future.read", { studentId });
   for (const e of future ?? []) {
     const { error: uErr } = await supabase
       .from("enrollments")
       .update({ end_date: e.start_date, ...extra })
       .eq("id", e.id);
-    if (uErr) return uErr.message;
+    if (uErr) return why(uErr, "closeActive.future", { studentId });
   }
   return null;
 }

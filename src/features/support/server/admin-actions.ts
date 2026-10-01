@@ -7,6 +7,7 @@ import { logSuperAdminAction } from "@/features/super-admin/server/audit";
 import { isMissingSupportTables, SUPPORT_NOT_READY } from "../missing";
 import { asSupportStatus, isSupportStatus, SUPPORT_STATUS_META, type SupportStatus } from "../types";
 import { notifySupportAnswer } from "./notify";
+import { logDbError } from "@/lib/supabase/db-error";
 
 type Result = { ok: true; id: string } | { error: string };
 
@@ -48,7 +49,10 @@ export async function answerSupportRequest(
     })
     .eq("id", requestId)
     .select("id");
-  if (error) return { error: "저장하지 못했습니다" };
+  if (error) {
+    logDbError(error, "support.answerSupportRequest");
+    return { error: "저장하지 못했습니다" };
+  }
   // 폼을 연 사이 작성자가 '접수' 글을 지웠으면 0행 — 저장된 척하거나 404 링크 알림을 보내지 않는다.
   if (!saved?.length) return { error: "글이 지워졌습니다 — 목록으로 돌아가 주세요" };
 

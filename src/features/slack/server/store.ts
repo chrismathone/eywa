@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { nextKeySince, normalizeTime, sanitizeRule, type SlackRule } from "../rules";
 import { ACTOR_COL_MISSING_MESSAGE, hasActorIdsColumn, isMissingActorCol } from "./actor-col";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 슬랙 저장소 — 연결(0297a·0298a `slack_connections`) · 규칙(`slack_rules`) · 사람 연결(`slack_user_links`). 서버 전용.
@@ -177,7 +178,10 @@ export async function upsertRule(
     .eq("id", rule.id)
     .eq("version", rule.version)
     .select("id, version");
-  if (error) return { error: "규칙을 저장하지 못했습니다" };
+  if (error) {
+    logDbError(error, "slack.upsertRule");
+    return { error: "규칙을 저장하지 못했습니다" };
+  }
   if (!data || data.length === 0) return { conflict: true, error: "다른 사람이 먼저 이 규칙을 고쳤습니다 — 새로고침한 뒤 다시 저장해 주세요" };
   return { id: data[0].id as string, version: data[0].version as number };
 }

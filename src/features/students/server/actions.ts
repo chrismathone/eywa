@@ -13,6 +13,7 @@ import {
 } from "./enrollment-sync";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { accessLevelTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
@@ -116,11 +117,18 @@ function validate(input: ReturnType<typeof readForm>): Record<string, string> | 
   return Object.keys(errors).length > 0 ? errors : null;
 }
 
-function translateDbError(message: string): string {
-  if (/duplicate key/i.test(message) || /students_natural_key/i.test(message)) {
-    return "동일한 이름·학교·학년의 재원 학생이 이미 있습니다";
-  }
-  return message;
+/**
+ * 학생 저장의 DB 오류 → 이유 + 그 칸 표시([[#138]]). 🔴 23505를 한 문장으로 뭉치지 말 것 — 예전 `translateDbError`는
+ * 모든 중복을 "이름·학교·학년 중복"으로 말해 **출결번호 중복**도 이름 칸을 고치게 만들었다. 제약 이름으로 가른다.
+ */
+function studentSaveError(error: unknown, scope: string, fallback: string): StudentFormState {
+  const why = explainDbError(error, { scope, fallback });
+  return why.field ? { error: why.message, fieldErrors: { [why.field]: why.message } } : { error: why.message };
+}
+
+/** DB 오류 → 화면용 한글 이유 + 로그(scope로 Vercel 로그 검색). 모르는 오류면 fallback 그대로. */
+function dbWhy(error: unknown, scope: string, fallback: string, op?: "write" | "delete"): string {
+  return explainDbError(error, { scope, fallback, op }).message;
 }
 
 /**
@@ -198,7 +206,7 @@ export async function createStudent(
     .single();
 
   if (error || !data) {
-    return { error: translateDbError(error?.message ?? "학생 등록 실패") };
+    return studentSaveError(error, "students.create", "학생을 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   }
 
   await logAction({
@@ -249,7 +257,7 @@ export async function deleteStudent(_prev: DeleteStudentState, formData: FormDat
   }
 
   const { error, count: deleted } = await supabase.from("students").delete({ count: "exact" }).eq("id", id);
-  if (error) return { error: translateDbError(error.message) };
+  if (error) return { error: dbWhy(error, "students.delete", "학생을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
   if (!deleted) return { error: "학생을 찾을 수 없거나 권한이 없습니다" };
 
   await logAction({
@@ -384,7 +392,7 @@ export async function updateStudent(
     })
     .eq("id", id);
 
-  if (error) return { error: translateDbError(error.message) };
+  if (error) return studentSaveError(error, "students.update", "학생 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
 
   // 상태 전환에 맞춰 활성 enrollment 정합성 유지 (changeStudentStatus와 동일 불변식).
   // 편집 폼 경로가 enrollment를 안 닫던 누수(F8) 보강 — 퇴원 시 종료, 복구/재원 시 on_hold 해제.
@@ -405,7 +413,7 @@ export async function updateStudent(
       .update({ on_hold: true })
       .eq("student_id", id)
       .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    if (enrErr) return { error: dbWhy(enrErr, "students.update.holdEnrollments", "수강을 휴원으로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   }
 
   await logAction({
@@ -542,7 +550,7 @@ export async function changeStudentStatus(
         // 예약은 **재원·휴원**만(학생 폼과 같은 규칙 — withdrawal-plan.ts) · 이미 퇴원이면 0행.
         .in("status", ["enrolled", "on_hold"])
         .select("id");
-      if (schErr) return { error: schErr.message };
+      if (schErr) return { error: dbWhy(schErr, "students.status.scheduleWithdrawal", "퇴원 예약을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
       if (!schRows || schRows.length === 0)
         return { error: "재원·휴원 학생만 퇴원 예약을 걸 수 있습니다. 화면을 새로고침해 주세요." };
       await writeStatusLog({ scheduled: true });
@@ -564,7 +572,7 @@ export async function changeStudentStatus(
         withdrawal_metadata: metadata,
       })
       .eq("id", id);
-    if (stuErr) return { error: stuErr.message };
+    if (stuErr) return { error: dbWhy(stuErr, "students.status.withdraw", "퇴원 처리를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
     await writeStatusLog({
       enrollmentIds: closingRows.map((r) => r.id),
       classIds: closingRows.map((r) => r.classId),
@@ -578,7 +586,7 @@ export async function changeStudentStatus(
       .from("students")
       .update({ status: "on_hold" })
       .eq("id", id);
-    if (stuErr) return { error: stuErr.message };
+    if (stuErr) return { error: dbWhy(stuErr, "students.status.hold", "휴원 처리를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
     await writeStatusLog();
 
     const { error: enrErr } = await supabase
@@ -586,7 +594,7 @@ export async function changeStudentStatus(
       .update({ on_hold: true })
       .eq("student_id", id)
       .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    if (enrErr) return { error: dbWhy(enrErr, "students.status.hold.enrollments", "수강을 휴원으로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   } else if (target === "enrolled") {
     // 복구 전에 이 학생의 퇴원일(withdrawn_at)을 먼저 읽는다 — 그 날짜로 닫힌 enrollment가 이번 퇴원이 종료시킨 것.
     const { data: before } = await supabase
@@ -608,7 +616,7 @@ export async function changeStudentStatus(
           : { status: "enrolled" },
       )
       .eq("id", id);
-    if (stuErr) return { error: stuErr.message };
+    if (stuErr) return { error: dbWhy(stuErr, "students.status.restore", "재원 복구를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
     await writeStatusLog();
 
     // ⚠️ 퇴원이 닫은 enrollment(end_date=퇴원일)를 다시 연다 — 안 하면 재원인데 수강이 종료로 남아 시간표 '퇴원'에 뜬다.
@@ -621,7 +629,7 @@ export async function changeStudentStatus(
       .update({ on_hold: false })
       .eq("student_id", id)
       .is("end_date", null);
-    if (enrErr) return { error: enrErr.message };
+    if (enrErr) return { error: dbWhy(enrErr, "students.status.restore.enrollments", "수강을 다시 열지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   }
 
   revalidatePath(`/students/${id}`);
@@ -654,7 +662,7 @@ export async function cancelScheduledWithdrawal(
     .neq("status", "withdrawn")
     .not("withdrawn_at", "is", null)
     .select("id, name");
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.cancelScheduledWithdrawal", "퇴원 예약을 취소하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   if (!data || data.length === 0) return { error: "취소할 퇴원 예약이 없습니다. 화면을 새로고침해 주세요." };
   const before = cur?.withdrawn_at ? String(cur.withdrawn_at).slice(0, 10) : null;
   await logAction({
@@ -799,7 +807,7 @@ export async function setStudentEnrollmentHolds(
 
   for (const r of toHold) {
     const { error } = await supabase.from("enrollments").update({ on_hold: true }).eq("id", r.id);
-    if (error) return { error: "수강을 대기로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    if (error) return { error: dbWhy(error, "students.enrollmentHolds.hold", "수강을 대기로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
     // 수강을 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18). 시간표 드래그(holdSingleEnrollment)와 같은 키.
     await logAction({
       action: "enrollment_hold",
@@ -809,7 +817,7 @@ export async function setStudentEnrollmentHolds(
   }
   for (const r of toResume) {
     const { error } = await supabase.from("enrollments").update({ on_hold: false }).eq("id", r.id);
-    if (error) return { error: "수강을 되돌리지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    if (error) return { error: dbWhy(error, "students.enrollmentHolds.resume", "수강을 되돌리지 못했습니다. 잠시 후 다시 시도해 주세요.") };
     await logAction({
       action: "enrollment_resume",
       targetType: "student",
@@ -858,13 +866,13 @@ export async function holdSingleEnrollment(
     .select("id, class_id, student_id, end_date, on_hold")
     .eq("id", enrollmentId)
     .maybeSingle();
-  if (readErr) return { error: readErr.message };
+  if (readErr) return { error: dbWhy(readErr, "students.holdSingleEnrollment.read", "수강 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   if (!row) return { error: "수강 기록을 찾을 수 없습니다" };
   if (row.end_date) return { error: "이미 종료된 수강입니다" };
 
   if (!row.on_hold) {
     const { error } = await supabase.from("enrollments").update({ on_hold: true }).eq("id", enrollmentId);
-    if (error) return { error: error.message };
+    if (error) return { error: dbWhy(error, "students.holdSingleEnrollment", "수강을 대기로 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
     await logAction({
       action: "enrollment_hold",
       targetType: "student",
@@ -1000,7 +1008,7 @@ export async function createStudentMemo(
     created_by: user.id,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.memo.create", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   revalidatePath(`/students/${studentId}`);
   // 성공을 undefined로 돌리면 useActionState 소비처가 성공을 감지할 수 없다(성공 시 reset·초안 삭제가 죽는다).
@@ -1025,7 +1033,7 @@ export async function deleteStudentMemo(
 
   const supabase = await createClient();
   const { error } = await supabase.from("student_memos").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.memo.delete", "메모를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1056,7 +1064,7 @@ export async function updateStudentMemo(
     .from("student_memos")
     .update({ category, content, searchable, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.memo.update", "메모를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1084,7 +1092,7 @@ export async function toggleStudentMemoPin(
     .from("student_memos")
     .update({ pinned, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.memo.pin", "메모 고정을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1170,7 +1178,7 @@ export async function deleteStudentGrade(
 
   const supabase = await createClient();
   const { error } = await supabase.from("student_grades").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.grade.delete", "성적을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1226,7 +1234,7 @@ export async function createStudentLevelTest(
     notes,
     created_by: user.id,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.levelTest.create", "레벨테스트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1248,7 +1256,7 @@ export async function deleteStudentLevelTest(
 
   const supabase = await createClient();
   const { error } = await supabase.from("level_tests").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.levelTest.delete", "레벨테스트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1300,7 +1308,7 @@ export async function createStudentGoal(_prev: GoalState, formData: FormData): P
   const { data: existing, error: findErr } = await supabase.from("grade_goals").select("id")
     .eq("tenant_id", user.tenantId).eq("student_id", studentId).eq("subject", axis.subject)
     .eq("school_year", axis.year).eq("term", axis.term).eq("exam_slot", axis.slot).eq("exam_month", axis.month).limit(1);
-  if (findErr) return { error: `목표를 확인하지 못했습니다: ${findErr.message}` };
+  if (findErr) return { error: dbWhy(findErr, "students.goal.create.read", "목표를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   if (existing?.length) return { error: GOAL_DUPLICATE };
 
   const { error: insErr } = await supabase.from("grade_goals").insert({
@@ -1318,7 +1326,14 @@ export async function createStudentGoal(_prev: GoalState, formData: FormData): P
     reason,
     created_by: user.id,
   });
-  if (insErr) return { error: (insErr as { code?: string }).code === "23505" ? GOAL_DUPLICATE : insErr.message };
+  if (insErr) {
+    const why = explainDbError(insErr, {
+      scope: "students.goal.create",
+      fallback: "목표를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      constraints: { ux_grade_goals_cell: { message: GOAL_DUPLICATE } },
+    });
+    return { error: why.message };
+  }
 
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/exams");
@@ -1337,7 +1352,7 @@ export async function deleteStudentGoal(_prev: GoalState, formData: FormData): P
 
   const supabase = await createClient();
   const { error: delErr } = await supabase.from("grade_goals").delete().eq("id", id);
-  if (delErr) return { error: delErr.message };
+  if (delErr) return { error: dbWhy(delErr, "students.goal.delete", "목표를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   revalidatePath("/exams");
@@ -1382,7 +1397,7 @@ export async function createStudentGradeComment(
     shared_with_parent: f.sharedWithParent,
     author_id: user.id,
   });
-  if (insErr) return { error: insErr.message };
+  if (insErr) return { error: dbWhy(insErr, "students.gradeComment.create", "코멘트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1415,7 +1430,7 @@ export async function updateStudentGradeComment(
       shared_with_parent: f.sharedWithParent,
     })
     .eq("id", id);
-  if (updErr) return { error: updErr.message };
+  if (updErr) return { error: dbWhy(updErr, "students.gradeComment.update", "코멘트를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return { ok: true };
@@ -1436,7 +1451,7 @@ export async function deleteStudentGradeComment(
 
   const supabase = await createClient();
   const { error: delErr } = await supabase.from("grade_comments").delete().eq("id", id);
-  if (delErr) return { error: delErr.message };
+  if (delErr) return { error: dbWhy(delErr, "students.gradeComment.delete", "코멘트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   if (studentId) revalidatePath(`/students/${studentId}`);
   return undefined;
@@ -1458,7 +1473,7 @@ export async function clearDupSuspect(
 
   const supabase = await createClient();
   const { error } = await supabase.from("students").update({ dup_suspect: false }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "students.clearDupSuspect", "저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 학생 레코드를 바꾸는 모든 경로는 감사로그 필수(원장 2026-08-18). 이 해제는 **통합 후보를 없애는**
   // 판단이기도 하다(중복 병합의 접미사 신호가 이 표식을 본다) — 누가 "다른 사람이 맞다"고 확정했는지

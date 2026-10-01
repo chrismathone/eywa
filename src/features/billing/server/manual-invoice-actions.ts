@@ -12,7 +12,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { isManualInvoiceShape, PAYMENT_METHOD_LABEL } from "../invoice-lines";
 
@@ -55,7 +55,10 @@ export async function voidManualInvoice(invoiceId: string): Promise<ManualInvoic
     .eq("tenant_id", user.tenantId)
     .eq("invoice_id", inv.id)
     .or("confirmed_sessions.not.is.null,allocation_amount.not.is.null");
-  if (termErr) return { error: "회차 확정 연결을 확인하지 못했습니다. 다시 시도해 주세요" };
+  if (termErr) {
+    logDbError(termErr, "billing.voidManualInvoice");
+    return { error: "회차 확정 연결을 확인하지 못했습니다. 다시 시도해 주세요" };
+  }
   if ((count ?? 0) > 0) return { error: "회차 확정·수납 배분이 걸린 청구서입니다 — 회차 확정 면에서 먼저 해제한 뒤 취소해 주세요" };
 
   const { data: updated, error } = await supabase

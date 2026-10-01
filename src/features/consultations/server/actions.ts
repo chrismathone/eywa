@@ -8,6 +8,7 @@ import { generateJSON } from "@/lib/ai/generate";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant, accessLevelTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { addDays, kstDateOf, kstLocalToIso, kstToday } from "@/lib/date-kst";
 import { stripPastedMarkup } from "../paste-cleanup";
@@ -175,7 +176,7 @@ export async function runStudentCareAnalysis(
     })
     .eq("id", studentId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "consultations.careAnalysis.save", fallback: "분석 결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   // 유료 AI 호출이라 누가 돌렸는지를 남긴다(비용). 🔴 분석 **본문**(summary·recommendation)은 안 담는다 —
   // 감사로그는 요약이지 사본이 아니고, 학생 서술이 이력 표에 복제되면 안 된다.
@@ -373,7 +374,7 @@ export async function createStudentConsultation(
     ({ data, error } = await insert(false));
   }
 
-  if (error || !data) return { error: error?.message ?? "상담 저장 실패" };
+  if (error || !data) return { error: explainDbError(error, { scope: "consultations.create", fallback: "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await linkNewcomerChecks(user, data.id as string, input, formData);
 
@@ -426,7 +427,10 @@ export async function updateStudentConsultation(
       .select("student_id, counselor_id")
       .eq("id", id)
       .maybeSingle();
-    if (curErr) return { error: "상담을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    if (curErr) {
+      logDbError(curErr, "consultations.updateStudentConsultation");
+      return { error: "상담을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    }
     if (!current) return { error: "상담을 찾을 수 없습니다" };
     if (current.counselor_id !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
     if (input.counselorId && input.counselorId !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
@@ -535,7 +539,7 @@ export async function updateStudentConsultation(
     ({ error } = await update(false));
   }
 
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "consultations.update", fallback: "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   await linkNewcomerChecks(user, id, input, formData);
 
   await logAction({
@@ -588,7 +592,7 @@ export async function toggleConsultationFollowUp(
   let upd = supabase.from("student_consultations").update({ follow_up_done: done }).eq("id", id);
   if (scopedId) upd = upd.eq("counselor_id", scopedId);
   const { data: row, error } = await upd.select("student_id").maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "consultations.followUp", fallback: "후속조치를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   // 강사 범위에서 0행 = 남의 상담(또는 없는 상담) — 조용히 성공으로 보이지 않게 알린다.
   if (scopedId && !row) return { error: OUT_OF_SCOPE_CONSULTATION };
 
@@ -629,7 +633,10 @@ export async function deleteStudentConsultation(
   const scopedId = await scopedConsultationUserId(user);
   let del = supabase.from("student_consultations").delete().eq("id", id);
   if (scopedId) {
-    if (beforeErr) return { error: "상담을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    if (beforeErr) {
+      logDbError(beforeErr, "consultations.deleteStudentConsultation");
+      return { error: "상담을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+    }
     if (!before || before.counselor_id !== scopedId) return { error: OUT_OF_SCOPE_CONSULTATION };
     del = del.eq("counselor_id", scopedId);
   }
@@ -638,7 +645,7 @@ export async function deleteStudentConsultation(
   const unlink = await prepareConsultationUnlink(user.tenantId, id);
   if (unlink.error) return { error: `${unlink.error} — 상담을 지우지 않았습니다` };
   const { error } = await del;
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "consultations.delete", fallback: "상담을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", op: "delete" }).message };
   await unlink.apply();
 
   await logAction({

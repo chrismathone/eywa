@@ -13,7 +13,7 @@ import {
   verifyUploadedObject,
 } from "@/lib/storage/media-storage";
 import { isTenantDocumentPath } from "@/lib/storage/legacy-audio-path";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 import type { UploadTicket } from "@/lib/storage/types";
 import { RESUME_FORM_TYPE } from "@/features/staff/resume";
 import { canViewResume, RESUME_LOCKED_MSG } from "@/features/staff/server/resume-access";
@@ -252,7 +252,10 @@ export async function updateDocument(
     .eq("tenant_id", gate.user.tenantId)
     .is("staff_user_id", null)
     .maybeSingle();
-  if (currentError || !current) return { error: "문서를 찾을 수 없습니다" };
+  if (currentError || !current) {
+    logDbError(currentError, "documents.updateDocument");
+    return { error: "문서를 찾을 수 없습니다" };
+  }
   const savedTitle = current.kind === "file"
     ? titleWithFileExtension(title, current.file_name ?? current.file_path?.split("/").pop() ?? null)
     : title;

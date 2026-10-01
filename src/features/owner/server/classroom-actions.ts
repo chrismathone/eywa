@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 
 // 강의실(classrooms 테이블) CRUD — 운영 체계 "강의실" 카드에서 호출. 학원 설정(owner 메뉴)과 동일 게이트.
@@ -50,7 +51,7 @@ export async function createClassroom(
   const { error } = await supabase
     .from("classrooms")
     .insert({ tenant_id: g.user.tenantId, name, capacity });
-  if (error) return { error: error.code === "23505" ? "같은 이름의 강의실이 이미 있습니다" : error.message };
+  if (error) return { error: explainDbError(error, { scope: "owner.classroom.create", fallback: "강의실을 추가하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await logAction({ action: "classroom_create", targetType: "classroom", targetLabel: name });
   refresh();
@@ -82,7 +83,7 @@ export async function updateClassroom(
     .update({ name, capacity })
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
-  if (error) return { error: error.code === "23505" ? "같은 이름의 강의실이 이미 있습니다" : error.message };
+  if (error) return { error: explainDbError(error, { scope: "owner.classroom.update", fallback: "강의실을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await logAction({
     action: "classroom_update",
@@ -126,7 +127,7 @@ export async function updateClassroomCapacity(
     .update({ capacity })
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "owner.classroom.capacity", fallback: "정원을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   if (before?.capacity !== capacity) {
     await logAction({
@@ -175,7 +176,7 @@ export async function deleteClassroom(
     .delete()
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "owner.classroom.delete", op: "delete", fallback: "강의실을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await logAction({
     action: "classroom_delete",
@@ -227,7 +228,7 @@ export async function setClassroomArchived(
     .update({ archived_at: archive ? new Date().toISOString() : null })
     .eq("id", id)
     .eq("tenant_id", g.user.tenantId);
-  if (error) return { error: error.message };
+  if (error) return { error: explainDbError(error, { scope: "owner.classroom.archive", fallback: "강의실 보관 상태를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
 
   await logAction({
     action: archive ? "classroom_archive" : "classroom_restore",

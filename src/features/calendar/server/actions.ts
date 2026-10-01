@@ -9,6 +9,7 @@ import { normalizeCalendarColor } from "../color";
 import { googleEventKey } from "../google-import";
 import type { CalendarEvent } from "../types";
 import { getCalendarEventById } from "./queries";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 캘린더 쓰기 — 일정 등록·수정·삭제. 게이트는 화면과 같은 `canWriteTenant("calendar")`(사무실 full,
@@ -170,7 +171,10 @@ export async function saveCalendarEvent(
         .eq("id", tagId)
         .eq("tenant_id", user.tenantId)
         .maybeSingle();
-      if (tagErr || !tagRow) return { error: "태그를 찾을 수 없습니다 — 새로고침 후 다시 시도하세요" };
+      if (tagErr || !tagRow) {
+        logDbError(tagErr, "calendar.saveCalendarEvent");
+        return { error: "태그를 찾을 수 없습니다 — 새로고침 후 다시 시도하세요" };
+      }
       tagPatch = { tag_id: tagId };
     } else {
       tagPatch = { tag_id: null }; // "태그 없음"으로 해제

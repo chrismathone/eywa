@@ -70,7 +70,7 @@ import { BOARD_MISSING_ERROR, classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_
 import { classBoardLiveForStudent, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
-import { humanizeDbError } from "@/lib/supabase/db-error";
+import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
 
 
 /**
@@ -1140,7 +1140,10 @@ export async function saveOnescreenSession(
     .eq("session_date", sessionDate)
     .eq("updated_by", user.id)
     .maybeSingle();
-  if (priorError) return { ok: false, error: "임시저장을 확인하지 못했습니다" };
+  if (priorError) {
+    logDbError(priorError, "onescreen.saveOnescreenSession");
+    return { ok: false, error: "임시저장을 확인하지 못했습니다" };
+  }
   const incoming: SessionContent = {
     subjectProgress: input.subjectProgress ?? {},
     attitude: input.attitude ?? null,
@@ -1482,7 +1485,10 @@ export async function setMyTrendOptOut(input: {
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId)
     .maybeSingle();
-  if (readErr) return { ok: false, error: "설정을 불러오지 못했습니다" };
+  if (readErr) {
+    logDbError(readErr, "onescreen.setMyTrendOptOut");
+    return { ok: false, error: "설정을 불러오지 못했습니다" };
+  }
   const raw =
     row?.ui_prefs && typeof row.ui_prefs === "object" && !Array.isArray(row.ui_prefs)
       ? (row.ui_prefs as Record<string, unknown>)
@@ -1502,7 +1508,10 @@ export async function setMyTrendOptOut(input: {
     .update({ ui_prefs: merged })
     .eq("id", user.id)
     .eq("tenant_id", user.tenantId);
-  if (error) return { ok: false, error: "설정을 저장하지 못했습니다" };
+  if (error) {
+    logDbError(error, "onescreen.setMyTrendOptOut");
+    return { ok: false, error: "설정을 저장하지 못했습니다" };
+  }
 
   if (!input.on) return { ok: true, cleared: 0 };
   // 아직 안 나간 내 보고서의 추세 비우기 — RLS 클라이언트(테넌트 격리) + 내 행만.

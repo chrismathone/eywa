@@ -10,10 +10,12 @@ const dateLabel = (value: string | null) => value
   : "제출일 미확인";
 
 /** `showDriveLink` = 관리자뷰일 때만 'Drive 열기'(원장 2026-10-01 *"drive 열기는 관리자뷰에서만"*). */
-export function HomeworkVideosView({ rows, subjectLabels, showDriveLink }: {
+export function HomeworkVideosView({ rows, subjectLabels, showDriveLink, initialVideoId = null }: {
   rows: HomeworkVideo[]; subjectLabels: Record<string, string>; showDriveLink: boolean;
+  /** 영상 제출 현황의 ▶가 넘긴 `?video=` — 이 학생의 영상 목록에 있는 id만 미리 고른다(없는 id·남의 영상 id는 무시). */
+  initialVideoId?: string | null;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => rows.some((row) => row.id === initialVideoId) ? initialVideoId : null);
   const selected = rows.find((row) => row.id === selectedId) ?? null;
   const links = homeworkVideoLinks(selected?.drive_file_id ?? null);
   const groups = new Map<string, HomeworkVideo[]>();

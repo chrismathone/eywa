@@ -12,6 +12,7 @@ import { kstToday } from "@/lib/date-kst";
 import { licenseBlockReason } from "@/lib/license/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
 import { resolveUniqueStudentNameFor } from "@/features/students/server/unique-name";
 import { after } from "next/server";
 import { ENROLLED_REVERT_BLOCKED } from "@/features/enrollment/board-stages";
@@ -31,6 +32,11 @@ import { notifyClassAssignment } from "@/features/notifications/server/notify";
 import { logAction } from "@/features/audit/server/log";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { summarizeConsultationChanges } from "@/features/enrollment/consultation-audit";
+
+/** DB 오류 → 화면용 한글 이유 + 로그(scope로 Vercel 로그 검색, [[#138]]). 모르는 오류면 fallback 그대로 — 영문 원문은 안 내보낸다. */
+function dbWhy(error: unknown, scope: string, fallback: string, op?: "write" | "delete"): string {
+  return explainDbError(error, { scope, fallback, op }).message;
+}
 
 const opt = z.string().optional().nullable();
 const createSchema = z.object({
@@ -198,7 +204,7 @@ export async function createEnrollmentConsultation(
     .select("id")
     .single();
 
-  if (error || !data) return { error: error?.message ?? "저장 실패" };
+  if (error || !data) return { error: dbWhy(error, "enrollment.create", "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 등록상담 전수 감사로그(2026-09-10 김근우 건) — 등록상담은 작성·수정·상태·삭제 어느 것도 흔적이 없었다.
   await logAction({
@@ -254,7 +260,7 @@ async function createConsultationWithAudio(
     })
     .select("id")
     .single();
-  if (insertErr || !consult) return { error: `상담 생성 실패: ${insertErr?.message ?? "unknown"}` };
+  if (insertErr || !consult) return { error: dbWhy(insertErr, "enrollment.createWithAudio", "상담을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 전사 제출이 실패해도 상담 행은 이미 생겼다 — 생성 사실은 여기서 남긴다(2026-09-10 김근우 건).
   await logAction({
@@ -311,7 +317,7 @@ async function insertRecordingAndTranscribe(
     })
     .select("id")
     .single();
-  if (recErr || !rec) return `녹음 행 생성 실패: ${recErr?.message ?? "unknown"}`;
+  if (recErr || !rec) return dbWhy(recErr, "enrollment.recording.insert", "녹음을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
 
   const webhookUrl = getAssemblyaiWebhookUrl();
   try {
@@ -391,7 +397,7 @@ async function attachAudioAndTranscribe(
     .eq("tenant_id", user.tenantId)
     .select("id")
     .maybeSingle();
-  if (updErr) return `음성 첨부 실패: ${updErr.message}`;
+  if (updErr) return dbWhy(updErr, "enrollment.recording.attach", "음성을 첨부하지 못했습니다. 잠시 후 다시 시도해 주세요.");
   if (!mirrored) {
     // 소유권 불일치(타 테넌트 id 변조 등) — 방금 올린 객체 정리 후 거부.
     await removeObject(audioPath, { bucket: "consultation-recordings" }).catch(() => {});
@@ -465,7 +471,7 @@ export async function updateEnrollmentConsultation(
     })
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "enrollment.update", "상담을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 감사로그(2026-09-10 김근우 건) — 이름·학교·학년·보호자는 자동 연결의 키라 전후 값까지, 연락처·상담 내용은
   // 항목 이름만. 아무것도 안 바뀐 저장(그냥 '저장'을 누름)은 남기지 않는다(감사로그가 소음에 묻힌다).
@@ -556,7 +562,7 @@ export async function setEnrollmentOutcome(
     .from("enrollment_consultations")
     .update({ outcome, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "enrollment.outcome", "상담 상태를 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   // 감사로그(2026-09-10 김근우 건 — 누가 '재원생 등록'으로 바꿨는지 되짚을 수 없었다). 칸반 드래그도 이 액션이다.
   // 같은 상태로 다시 저장한 건 바뀐 게 없으니 남기지 않는다.
@@ -674,7 +680,7 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
     .eq("id", id)
     .select("id")
     .maybeSingle();
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "enrollment.patchCells", "상담 칸을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
   if (!updated) return { error: "상담을 찾을 수 없습니다" };
 
   const summary = summarizeConsultationChanges(before, row);
@@ -738,7 +744,7 @@ export async function deleteEnrollmentConsultation(
 
   // 2) row 삭제(RLS). consultation_ai_analysis·consultation_recordings는 FK cascade.
   const { error } = await supabase.from("enrollment_consultations").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "enrollment.delete", "상담을 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", "delete") };
 
   // 감사로그(2026-09-10) — 삭제는 녹음·전사·AI 분석이 통째로 사라지는 일이라 누가 지웠는지가 유일한 근거다.
   await logAction({
@@ -856,7 +862,10 @@ export async function convertConsultationToStudent(
     .eq("id", consultationId)
     .single();
 
-  if (cErr || !c) return { error: "상담 정보를 불러오지 못했습니다" };
+  if (cErr || !c) {
+    logDbError(cErr, "enrollment.convertConsultationToStudent");
+    return { error: "상담 정보를 불러오지 못했습니다" };
+  }
 
   if (c.student_id) {
     // 이미 연결된 학생이 있으면 그 학생으로 이동
@@ -1133,7 +1142,7 @@ export async function updateConsultationReportSection(
       report_edited_at: now,
     })
     .eq("id", analysisId);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "enrollment.reportSection", "분석 내용을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   if (consultationId) revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");
@@ -1319,7 +1328,7 @@ export async function appendAiSummaryToConsultationContent(
     .from("enrollment_consultations")
     .update({ parent_request: next, updated_at: new Date().toISOString() })
     .eq("id", consultationId);
-  if (error) return { error: error.message };
+  if (error) return { error: dbWhy(error, "enrollment.appendAiSummary", "상담 내용에 요약을 붙이지 못했습니다. 잠시 후 다시 시도해 주세요.") };
 
   revalidatePath(`/enrollment/${consultationId}`);
   revalidatePath("/enrollment");

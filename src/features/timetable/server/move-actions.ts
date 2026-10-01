@@ -24,6 +24,7 @@ import {
   type PlacedWindow,
 } from "../lib/class-move";
 import { getTeacherScheduleBlocks, getWeeklyScheduleWithStudents } from "./queries";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 반 블록(화면의 한 칸 = 배치 여러 줄)을 **다른 요일·교시로 옮긴다** — 시간표에서 반 이름 머리를 끌어 놓았을 때의 저장 경로.
@@ -282,6 +283,7 @@ export async function moveClassSlots(input: {
       .select("id")
       .single();
     if (insErr || !created) {
+      logDbError(insErr, "timetable.moveClassSlots");
       await undo();
       return { ok: false, error: "새 배치를 넣지 못해 되돌렸습니다. 잠시 후 다시 시도해 주세요" };
     }

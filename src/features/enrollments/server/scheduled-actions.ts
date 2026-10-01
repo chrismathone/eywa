@@ -8,6 +8,8 @@ import { kstToday } from "@/lib/date-kst";
 import { logAction } from "@/features/audit/server/log";
 // 겹침·기간 오류의 한글 매핑은 배정 경로와 **같은 함수**를 쓴다(화면마다 문구가 갈리지 않게).
 import { toKoreanDbError } from "../db-errors";
+import { reportError } from "@/lib/observability/report-error";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * **예약된 수강 변경의 수정·취소** — 학생 상세·반 상세 배너의 버튼이 부른다.
@@ -52,7 +54,10 @@ async function loadUpcoming(
     .select("id, student_id, class_id, start_date, end_date, is_transferred")
     .eq("id", enrollmentId)
     .maybeSingle();
-  if (error || !data) return { error: "수강 정보를 찾을 수 없습니다" as const };
+  if (error || !data) {
+    logDbError(error, "enrollments.loadUpcoming");
+    return { error: "수강 정보를 찾을 수 없습니다" as const };
+  }
   if (String(data.start_date) <= kstToday()) {
     return { error: "이미 시작된 수강은 예약으로 수정할 수 없습니다" as const };
   }
@@ -92,7 +97,7 @@ export async function rescheduleEnrollment(input: {
 
   const patch: Record<string, string> = { start_date: nextDate, class_id: nextClassId };
   const { error: upErr } = await supabase.from("enrollments").update(patch).eq("id", row.id);
-  if (upErr) return { error: toKoreanDbError(upErr, "예약을 수정하지 못했습니다") };
+  if (upErr) return { error: toKoreanDbError(upErr, "예약을 수정하지 못했습니다", "enrollments.scheduled.update") };
 
   // 짝(출발지)의 종료일을 같은 날로. ⚠️ 이 행도 '아직 안 끝난 반이동'일 때만 건드린다 —
   // 그 사이 진짜 퇴원 처리됐으면 종료일을 옮겨 퇴원을 미루는 셈이 된다.
@@ -110,6 +115,7 @@ export async function rescheduleEnrollment(input: {
     // 🔴 **0행도 실패다.** PostgREST는 매치 0을 에러 없이 돌려주므로, 건수를 안 보면 새 시작일만
     //    바뀌고 옛 종료일은 그대로 남는다 — 다른 반이라 GiST가 안 막아 구멍·이중 등록이 된다.
     if (pairErr || (paired ?? []).length === 0) {
+      reportError(pairErr ?? new Error("이전 반 종료일 갱신 0행"), { scope: "enrollments.scheduled.update.pairEnd" });
       return {
         error:
           "새 반의 시작일은 바꿨지만 이전 반의 종료일을 못 바꿨습니다 — 두 날짜가 어긋났습니다. " +
@@ -157,7 +163,7 @@ export async function cancelScheduledEnrollment(input: {
   const row = found.row;
 
   const { error: delErr } = await supabase.from("enrollments").delete().eq("id", row.id);
-  if (delErr) return { error: toKoreanDbError(delErr, "예약을 취소하지 못했습니다") };
+  if (delErr) return { error: toKoreanDbError(delErr, "예약을 취소하지 못했습니다", "enrollments.scheduled.cancel") };
 
   if (input.pairedEnrollmentId) {
     const { data: reopened, error: reopenErr } = await supabase
@@ -173,6 +179,7 @@ export async function cancelScheduledEnrollment(input: {
     // 🔴 0행도 실패로 본다(위와 같은 이유) — 새 수강만 지우고 옛 반이 닫힌 채 남으면 그 학생은
     //    9/1부터 **어느 반에도 없다**. 그건 취소가 아니라 새로운 사고다.
     if (reopenErr || (reopened ?? []).length === 0) {
+      reportError(reopenErr ?? new Error("이전 반 되살리기 0행"), { scope: "enrollments.scheduled.cancel.reopen" });
       return {
         error:
           "예약은 지웠지만 이전 반을 되살리지 못했습니다 — 그대로 두면 그 날짜부터 반이 없습니다. " +

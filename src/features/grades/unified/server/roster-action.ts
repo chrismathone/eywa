@@ -8,6 +8,7 @@ import { recordKey } from "./consultation-link";
 import { saveUnifiedGrade } from "./actions";
 import { createClient } from "@/lib/supabase/server";
 import { isUuid } from "./uuid";
+import { logDbError } from "@/lib/supabase/db-error";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function validIsoDate(value: string): boolean {
@@ -55,11 +56,14 @@ export async function saveUnifiedRosterGrade(previous: GradeSaveState, formData:
     .eq("school_year", Number(formData.get("year"))).eq("term", Number(formData.get("term")))
     .eq("exam_slot", String(formData.get("slot") ?? ""))
     .eq("taken_on", String(formData.get("date") ?? "")).limit(2);
-  if (lookupError || grades?.length !== 1) return { error: "점수는 저장됐지만 상담을 연결할 시험 기록을 찾지 못했습니다" };
+  if (lookupError || grades?.length !== 1) {
+    logDbError(lookupError, "grades.unified.saveUnifiedRosterGrade");
+    return { error: "점수는 저장됐지만 상담을 연결할 시험 기록을 찾지 못했습니다" };
+  }
   const error = await addAcademicConsultation(user.tenantId, {
     studentId, subject: grades[0].subject, recordKey: recordKey("grade", grades[0].id), date: consultationDate,
   });
-  if (error) return { error: `점수는 저장됐지만 상담일을 저장하지 못했습니다: ${error}` };
+  if (error) return { error: `점수는 저장됐지만 상담일을 저장하지 못했습니다 — ${error}` };
   revalidatePath("/exams");
   return result;
 }

@@ -7,6 +7,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { classnoteMinDate } from "../classnote-guard";
 import { monthRange, type SendStatRow } from "../send-calendar";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 원스크린 "월간 발송" 달력 데이터 — 로그인 강사 **본인이 쓴** 보고서를 (날짜 × 발송상태)로 집계.
@@ -38,7 +39,10 @@ export async function getMySendCalendar(input: {
     p_subjects: settings.report.classnoteSubjects ?? null,
     p_min_date: classnoteMinDate(),
   });
-  if (error) return { ok: false, error: "달력을 불러오지 못했습니다" };
+  if (error) {
+    logDbError(error, "onescreen.getMySendCalendar");
+    return { ok: false, error: "달력을 불러오지 못했습니다" };
+  }
 
   // 🔴 발송 스위치를 **먼저** 본다 — RPC(0128a)는 과목 게이트가 비면 전건 sendable=true로 연다(fail-open). ClassNote를 안 쓰는
   //    지점(스위치 OFF = 새 지점 기본값)의 강사에게 "보낼 수 있음 N건"이 뜨고, 같은 화면의 날짜 상세(history-actions)는 0건이라
