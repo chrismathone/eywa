@@ -5,6 +5,7 @@ import {
   RotateCcw,
   Trash2,
 } from "@/components/icons/aywa-icon-compat";
+import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { NOTIFICATION_ICON, type NotificationItem } from "../types";
 
@@ -28,12 +29,21 @@ export function NotificationRow({
   onOpen,
   onArchive,
   onDelete,
+  onReply,
+  actionSlot,
+  belowSlot,
 }: {
   item: NotificationItem;
   archived: boolean;
   onOpen: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  /** 학부모 글·댓글에 답글(0317a) — 쓸 수 있는 알림에만 온다(없으면 버튼 없음). */
+  onReply?: () => void;
+  /** 버튼 줄 맨 앞에 놓을 조작(학부모 글 공감 버튼, 0319a) — 없으면 아무것도 없다. */
+  actionSlot?: ReactNode;
+  /** 버튼 줄 아래 한 줄(공감 종류 고르기·사유) — 없으면 줄 자체가 없다. */
+  belowSlot?: ReactNode;
 }) {
   return (
     <div
@@ -77,6 +87,16 @@ export function NotificationRow({
           {relTime(item.createdAt)}
         </time>
         <div className="flex items-center gap-1">
+          {actionSlot}
+          {onReply ? (
+            <button
+              type="button"
+              onClick={onReply}
+              className="text-primary hover:bg-primary-soft focus-visible:outline-primary rounded-md px-2 py-1 text-xs font-bold"
+            >
+              답글 쓰기
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onArchive}
@@ -101,6 +121,7 @@ export function NotificationRow({
           </button>
         </div>
       </div>
+      {belowSlot ? <div className="pr-3 pb-2 pl-[42px]">{belowSlot}</div> : null}
     </div>
   );
 }

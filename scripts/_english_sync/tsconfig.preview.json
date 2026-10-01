@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../../src/*"],
+      "server-only": ["../_oneoff/_server-only-shim.ts"]
+    }
+  }
+}

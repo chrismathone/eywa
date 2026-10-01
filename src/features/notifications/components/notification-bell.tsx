@@ -45,6 +45,9 @@ import { useMenuHub } from "@/components/workspace/menu-hub-store";
 import { NotificationRow } from "./notification-row";
 import { NotificationAlertDialog } from "./notification-alert-dialog";
 import { MobilePushRow } from "./mobile-push-row";
+import { ParentReplyDialog } from "@/features/classnote-reply/components/parent-reply-dialog";
+import { useReplyTargets } from "@/features/classnote-reply/components/use-reply-targets";
+import { ParentNotificationRow } from "@/features/classnote-reply/components/parent-notification-row";
 
 const POLL_MS = 60_000;
 
@@ -90,6 +93,9 @@ export function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingLink, setPendingLink] = useState<string | null>(null); // 확인 대기 중인 외부 링크
+  // 학부모 글·댓글 답글 창(0317a) — 답글을 쓸 수 있는 알림(알림 id → 메시지 id)은 벨이 열릴 때만 묻는다.
+  const [replyMessageId, setReplyMessageId] = useState<string | null>(null);
+  const { targets: replyTargets, reactions: replyReactions, vague: replyVague } = useReplyTargets(items, menuOpen);
   // 받은함/보관함(0125a) — 보관은 벨에서 치우되 나중에 볼 수 있는 안전판(삭제는 영구).
   const [view, setView] = useState<NotificationView>("active");
   const viewRef = useRef<NotificationView>("active");
@@ -372,24 +378,30 @@ export function NotificationBell() {
             </div>
           ) : (
             <div className="scrollbar-thin max-h-[min(480px,60dvh)] overflow-y-auto py-1">
-              {items.map((n) => (
-                <NotificationRow
-                  key={n.id}
-                  item={n}
-                  archived={view === "archived"}
-                  onOpen={() => openItem(n)}
-                  onArchive={() =>
+              {items.map((n) => {
+                // 학부모 글·댓글 알림 중 답글을 쓸 수 있는 줄에는 공감 조작(0319a)을 얹는다 — 공감 기능이 없으면 보통 알림 행 그대로.
+                const messageId = replyTargets[n.id];
+                const reaction = messageId ? (replyReactions?.[messageId] ?? null) : null;
+                const row = {
+                  item: n,
+                  archived: view === "archived",
+                  onOpen: () => openItem(n),
+                  onReply: messageId
+                    ? () => {
+                        setMenuOpen(false);
+                        setReplyMessageId(messageId);
+                      }
+                    : undefined,
+                  onArchive: () =>
                     removeThen(n.id, () =>
                       view === "active"
                         ? archiveNotification(n.id, "active", limit)
                         : unarchiveNotification(n.id, "archived", limit),
-                    )
-                  }
-                  onDelete={() =>
-                    removeThen(n.id, () => deleteNotification(n.id, view, limit))
-                  }
-                />
-              ))}
+                    ),
+                  onDelete: () => removeThen(n.id, () => deleteNotification(n.id, view, limit)),
+                };
+                return reaction ? <ParentNotificationRow key={n.id} reaction={reaction} {...row} /> : <NotificationRow key={n.id} {...row} />;
+              })}
               {/* 더 보기(F17) — 목록이 꽉 찼으면 더 있을 수 있다. 목록 밖 안 읽은 알림 수를 함께 밝힌다. */}
               {items.length >= limit && limit < NOTIFICATION_LIST_MAX ? (
                 <button
@@ -424,6 +436,10 @@ export function NotificationBell() {
         }}
         onCancel={() => setPendingLink(null)}
       />
+      {/* 학부모 답글 창도 드롭다운 **밖**(위 확인창과 같은 이유). key = 다른 글을 열면 새 상태로. */}
+      {replyMessageId ? (
+        <ParentReplyDialog key={replyMessageId} messageId={replyMessageId} hideReaction={replyVague.includes(replyMessageId)} onClose={() => setReplyMessageId(null)} />
+      ) : null}
       {/* 중요 알림 화면 중앙 팝업 — 벨 드롭다운을 안 열어도 확실히 보이게(원장 2026-07-15).
         '바로 가기'는 openItem을 태워 외부 링크(ClassNote 글)면 위 ConfirmDialog로 이어진다. */}
       <NotificationAlertDialog

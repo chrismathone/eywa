@@ -7,6 +7,7 @@ import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrat
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { getScheduledImports } from "./scheduled-import-queries";
+import { canManageTimetableImport } from "./import-access";
 
 export type CancelScheduledState = {
   error?: string;
@@ -38,6 +39,26 @@ export async function cancelScheduledImport(effectiveDate: string): Promise<Canc
   if (!group) return { error: "그 날짜에 예약된 변경이 없습니다(이미 취소됐을 수 있습니다)." };
 
   const supabase = await createClient();
+
+  // Master-sheet batches include teacher blocks. Cancel the entire date atomically,
+  // including those blocks, instead of leaving a half-restored timetable.
+  const { data: masterRows, error: masterError } = await supabase.from("timetable_snapshots")
+    .select("source:payload->apply->masterSource").in("id", group.snapshotIds);
+  if (masterError) return { error: "예약 내용을 확인하지 못했습니다. 다시 시도해 주세요." };
+  if (masterRows?.some(r => r.source)) {
+    if (!(await canManageTimetableImport(user.systemRole))) return { error: "반 일괄 관리 권한이 필요합니다." };
+    const { openMasterDb, cancelMasterDate } = await import("./master-sheet-store");
+    let sql: ReturnType<typeof openMasterDb> | undefined;
+    try {
+      sql = openMasterDb();
+      const reverted = await cancelMasterDate(sql, user, date);
+      try { revalidatePath("/timetable"); } catch(e) {console.error('[master-sheet] cache refresh',e instanceof Error?e.message:'failed');}
+      return { reverted };
+    } catch (e) {
+      console.error("[master-sheet] cancel", e instanceof Error ? e.message : "failed");
+      return { error: e instanceof Error && /[가-힣]/.test(e.message) ? e.message : "예약을 취소하지 못했습니다. 전체 변경은 유지되었습니다. 다시 확인해 주세요." };
+    } finally { await sql?.end().catch(() => console.error('[master-sheet] DB cleanup failed')); }
+  }
   let done = 0;
   // 되돌리지 못하고 남긴 수강 수(이미 시작된 것) — 0이 아니면 취소가 부분적이다.
   let leftover = 0;
