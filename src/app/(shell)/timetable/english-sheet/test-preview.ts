@@ -4,6 +4,7 @@ import type {
 } from "@/features/timetable/import/master/types";
 export function preview(issues: MasterIssue[] = []): MasterPreview {
   return {
+    attendanceMigration: { moves: [], retainedCells: 0 },
     hash: "a".repeat(64),
     effectiveDate: "2026-10-01",
     source: {

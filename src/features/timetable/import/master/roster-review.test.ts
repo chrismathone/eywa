@@ -135,6 +135,7 @@ describe("반 명단 비교", () => {
       groups: [],
       blocks: [],
       attendance: [],
+      attendanceLinks: [],
       pending: [],
     };
     const input: MasterInput = {

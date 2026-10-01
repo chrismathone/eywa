@@ -1,47 +1,43 @@
-import type { VideoHomeworkLedgerRow, VideoHomeworkMark } from "./types";
+import { roundCounts, roundPairKey, type LedgerRound, type RoundStatus } from "./rounds";
+import type { VideoHomeworkLedgerRow } from "./types";
 
 export type LedgerFilters = {
-  classId: string; subject: string; school: string; grade: string; query: string;
-  status: "all" | "submitted" | "missing" | "unchecked";
+  /** 고른 반들 — 비어 있으면 전체 반. */
+  classIds: string[]; subject: string; school: string; grade: string; query: string;
+  status: "all" | RoundStatus;
   sort: "name" | "missing" | "completion";
 };
 export const DEFAULT_LEDGER_FILTERS: LedgerFilters = {
-  classId: "all", subject: "all", school: "all", grade: "all", query: "", status: "all", sort: "name",
+  classIds: [], subject: "all", school: "all", grade: "all", query: "", status: "all", sort: "name",
 };
-export const ledgerPairKey = (row: { classId: string; studentId: string }) => `${row.classId}:${row.studentId}`;
-export const ledgerMarkKey = (row: { classId: string; studentId: string; checkDate: string }) => `${ledgerPairKey(row)}:${row.checkDate}`;
-export const ledgerMarkMap = (marks: VideoHomeworkMark[]) => new Map(marks.map((mark) => [ledgerMarkKey(mark), mark]));
+export const ledgerPairKey = roundPairKey;
+/** (반 × 학생) → 그 학생의 회차 목록(`buildLedgerRounds` 결과). 요약·필터·표·CSV가 전부 이 한 벌을 읽는다. */
+export type LedgerRounds = ReadonlyMap<string, LedgerRound[]>;
+const NO_ROUNDS: LedgerRound[] = [];
+export const roundsOf = (rounds: LedgerRounds, row: { classId: string; studentId: string }) => rounds.get(roundPairKey(row)) ?? NO_ROUNDS;
+export const ledgerCounts = (row: VideoHomeworkLedgerRow, rounds: LedgerRounds) => roundCounts(roundsOf(rounds, row));
+/** 칸·CSV·읽어 주는 이름이 같이 쓰는 상태 글자. */
+export const roundStatusLabel = (round: Pick<LedgerRound, "status" | "auto">) =>
+  round.status === "submitted" ? (round.auto ? "완료(영상)" : "완료") : round.status === "missing" ? "미수행" : "미확인";
 
-export function ledgerCounts(row: VideoHomeworkLedgerRow, marks: ReadonlyMap<string, VideoHomeworkMark>) {
-  let submitted = 0;
-  let missing = 0;
-  for (const checkDate of row.lessonDates) {
-    const mark = marks.get(ledgerMarkKey({ ...row, checkDate }));
-    if (mark?.status === "submitted") submitted++;
-    if (mark?.status === "missing") missing++;
-  }
-  return { submitted, missing, unchecked: row.lessonDates.length - submitted - missing, total: row.lessonDates.length };
-}
-
-export function groupLedgerRows(rows: VideoHomeworkLedgerRow[]) {
-  const groups = new Map<string, { classId: string; className: string; subject: string; rows: VideoHomeworkLedgerRow[]; dates: Set<string> }>();
+export function groupLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds) {
+  const groups = new Map<string, { classId: string; className: string; subject: string; rows: VideoHomeworkLedgerRow[]; roundCount: number }>();
   for (const row of rows) {
-    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, rows: [], dates: new Set<string>() };
+    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, rows: [], roundCount: 0 };
     group.rows.push(row);
-    row.lessonDates.forEach((date) => group.dates.add(date));
+    // 열 수 = 그 반에서 회차가 가장 많은 학생. 검색으로 학생이 가려져도 열은 그대로다.
+    group.roundCount = Math.max(group.roundCount, roundsOf(rounds, row).length);
     groups.set(row.classId, group);
   }
-  return [...groups.values()].sort((a, b) => a.className.localeCompare(b.className, "ko"))
-    .map(({ dates, ...group }) => ({ ...group, dates: [...dates].sort() }));
+  return [...groups.values()].sort((a, b) => a.className.localeCompare(b.className, "ko"));
 }
 export type LedgerGroup = ReturnType<typeof groupLedgerRows>[number];
 
-/** 필터링은 회차의 날짜 축을 만든 뒤 적용한다. 검색으로 학생이 사라져도 회차 번호는 바뀌지 않는다. */
-export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], marks: ReadonlyMap<string, VideoHomeworkMark>, filters: LedgerFilters) {
+export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds, filters: LedgerFilters) {
   const words = filters.query.trim().toLocaleLowerCase("ko").split(/\s+/).filter(Boolean);
-  const counts = new Map(rows.map((row) => [ledgerPairKey(row), ledgerCounts(row, marks)]));
+  const counts = new Map(rows.map((row) => [ledgerPairKey(row), ledgerCounts(row, rounds)]));
   return rows.filter((row) => {
-    if (filters.classId !== "all" && row.classId !== filters.classId || filters.subject !== "all" && row.subject !== filters.subject ||
+    if (filters.classIds.length && !filters.classIds.includes(row.classId) || filters.subject !== "all" && row.subject !== filters.subject ||
       filters.school !== "all" && (row.school || "미등록") !== filters.school || filters.grade !== "all" && (row.grade || "미등록") !== filters.grade) return false;
     const haystack = `${row.studentName} ${row.className} ${row.school ?? ""} ${row.grade ?? ""} ${row.subject}`.toLocaleLowerCase("ko");
     if (!words.every((word) => haystack.includes(word))) return false;
@@ -58,27 +54,25 @@ export function filterLedgerRows(rows: VideoHomeworkLedgerRow[], marks: Readonly
   });
 }
 
-export function ledgerSummary(rows: VideoHomeworkLedgerRow[], marks: ReadonlyMap<string, VideoHomeworkMark>) {
+export function ledgerSummary(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds) {
   return rows.reduce((sum, row) => {
-    const counts = ledgerCounts(row, marks);
+    const counts = ledgerCounts(row, rounds);
     return { submitted: sum.submitted + counts.submitted, missing: sum.missing + counts.missing, unchecked: sum.unchecked + counts.unchecked };
   }, { submitted: 0, missing: 0, unchecked: 0 });
 }
 
-export function ledgerCsv(groups: LedgerGroup[], marks: ReadonlyMap<string, VideoHomeworkMark>) {
-  const rounds = Math.max(0, ...groups.map((group) => group.dates.length));
+export function ledgerCsv(groups: LedgerGroup[], rounds: LedgerRounds) {
+  const width = Math.max(0, ...groups.map((group) => group.roundCount));
   const header = ["반", "과목", "학생", "학교", "학년", "완료", "미수행", "미확인",
-    ...Array.from({ length: rounds }, (_, i) => [`${i + 1}회 수업일`, `${i + 1}회 상태`, `${i + 1}회 지난 숙제일`, `${i + 1}회 제출일`]).flat()];
+    ...Array.from({ length: width }, (_, i) => [`${i + 1}회 숙제일`, `${i + 1}회 상태`, `${i + 1}회 제출일`]).flat()];
   const values = groups.flatMap((group) => group.rows.map((row) => {
-    const counts = ledgerCounts(row, marks);
+    const counts = ledgerCounts(row, rounds);
+    const own = roundsOf(rounds, row);
     return [row.className, row.subject, row.studentName, row.school ?? "", row.grade ?? "", counts.submitted, counts.missing, counts.unchecked,
-      ...Array.from({ length: rounds }, (_, i) => {
-        const checkDate = group.dates[i];
-        if (!checkDate) return ["", "", "", ""];
-        if (!row.lessonDates.includes(checkDate)) return [checkDate, "대상 아님", "", ""];
-        const mark = marks.get(ledgerMarkKey({ ...row, checkDate }));
-        return [checkDate, mark?.status === "submitted" ? "완료" : mark?.status === "missing" ? "미수행" : "미확인", mark?.homeworkDate ?? "",
-          mark?.status === "submitted" ? mark.submittedDate ?? "" : ""];
+      ...Array.from({ length: width }, (_, i) => {
+        const round = own[i];
+        // 숙제일을 모르는 옛 기록은 검사한 날을 적는다(없는 숙제일을 지어내지 않는다).
+        return round ? [round.homeworkDate ?? `검사 ${round.date}`, roundStatusLabel(round), round.submittedDate ?? ""] : ["", "", ""];
       }).flat()];
   }));
   const escape = (value: string | number) => {
@@ -86,5 +80,5 @@ export function ledgerCsv(groups: LedgerGroup[], marks: ReadonlyMap<string, Vide
     const safe = /^[=+@\-\t\r]/.test(text) ? `'${text}` : text;
     return `"${safe.replaceAll('"', '""')}"`;
   };
-  return "\uFEFF" + [header, ...values].map((row) => row.map(escape).join(",")).join("\r\n");
+  return "﻿" + [header, ...values].map((row) => row.map(escape).join(",")).join("\r\n");
 }

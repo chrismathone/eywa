@@ -1,17 +1,20 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
-import { kstToday } from "@/lib/date-kst";
-import { getTenantSettings } from "@/features/owner/server/queries";
-import { isVideoHomeworkEnabled } from "../policy";
+import { logAction } from "@/features/audit/server/log";
+import { addDays, kstToday } from "@/lib/date-kst";
 import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
+import { videoHomeworkColumnReady } from "./assignments";
+import { loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
 
+const STATUSES: readonly (VideoHomeworkStatus | null)[] = ["submitted", "missing", null];
+const badSubmittedDate = (value: string | null | undefined) =>
+  value != null && (!isVideoHomeworkDate(value) || value > kstToday());
+
+/** 원스크린 '지난 수업 영상 숙제' 검사 — 검사한 수업일 자리에 적는다(같은 숙제의 기록이 이미 있으면 그 줄을 고친다). */
 export async function setVideoHomeworkMark(input: {
   classId: string;
   studentId: string;
@@ -19,7 +22,7 @@ export async function setVideoHomeworkMark(input: {
   homeworkDate: string | null;
   submittedDate?: string | null;
   status: VideoHomeworkStatus | null;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<MarkWriteResult> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다." };
   const readonlyError = await readonlyTeacherViewError();
@@ -27,34 +30,18 @@ export async function setVideoHomeworkMark(input: {
   if (!isVideoHomeworkDate(input.checkDate) || (input.homeworkDate !== null && !isVideoHomeworkDate(input.homeworkDate)))
     return { ok: false, error: "수업 날짜가 올바르지 않습니다." };
   if (input.checkDate > kstToday()) return { ok: false, error: "미래 수업의 숙제는 검사할 수 없습니다." };
-  if (input.submittedDate != null && (!isVideoHomeworkDate(input.submittedDate) || input.submittedDate > kstToday()))
-    return { ok: false, error: "제출일은 오늘까지의 올바른 날짜로 입력해 주세요." };
+  if (badSubmittedDate(input.submittedDate)) return { ok: false, error: "제출일은 오늘까지의 올바른 날짜로 입력해 주세요." };
   if (input.homeworkDate && input.homeworkDate > input.checkDate)
     return { ok: false, error: "지난 숙제 날짜는 검사일보다 늦을 수 없습니다." };
-  if (input.status !== null && !(["submitted", "missing"] as const).includes(input.status))
-    return { ok: false, error: "유효하지 않은 상태입니다." };
-  const manager = (await accessLevelTenant(user.systemRole, "lesson_reports")) === "full";
-  if (!manager) {
-    if (!(await canWriteTenant(user.systemRole, "teacher_onescreen")))
-      return { ok: false, error: "수정 권한이 없습니다." };
-    const classes = await getTeachingClassIds(await createClient(), user.id, input.checkDate);
-    if (!classes.all.includes(input.classId)) return { ok: false, error: "담당 반만 수정할 수 있습니다." };
-  }
+  if (!STATUSES.includes(input.status)) return { ok: false, error: "유효하지 않은 상태입니다." };
+  const denied = await videoHomeworkWriteError(user, input.classId, input.checkDate);
+  if (denied) return { ok: false, error: denied };
 
   const db = createAdminClient();
   if (input.status !== null) {
-    const [classResult, studentResult, settings] = await Promise.all([
-      db.from("classes").select("subject").eq("tenant_id", user.tenantId).eq("id", input.classId).maybeSingle(),
-      db.from("students").select("grade").eq("tenant_id", user.tenantId).eq("id", input.studentId).maybeSingle(),
-      getTenantSettings(),
-    ]);
-    if (classResult.error || studentResult.error)
-      return { ok: false, error: classResult.error?.message ?? studentResult.error?.message };
-    if (!classResult.data || !studentResult.data)
-      return { ok: false, error: "해당 반이나 학생을 찾을 수 없습니다." };
-    if (!isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, {
-      classId: input.classId, subjectKey: classResult.data.subject, grade: studentResult.data.grade,
-    })) return { ok: false, error: "영상 제출 검사 대상이 아닙니다. 보고서 설정을 확인해 주세요." };
+    const target = await loadVideoHomeworkTarget(db, user.tenantId, input.classId, input.studentId);
+    if (target.error !== null) return { ok: false, error: target.error };
+    if (!target.enabled) return { ok: false, error: "영상 제출 검사 대상이 아닙니다. 보고서 설정을 확인해 주세요." };
   }
   const { data: enrollments, error: enrollmentError } = await db
     .from("enrollments")
@@ -71,42 +58,74 @@ export async function setVideoHomeworkMark(input: {
   }, input.checkDate));
   if (!enrolledOnDate) {
     // 보강 학생은 해당 반의 정규 수강이 없어도 출결이나 예약으로 강사 명단에 나타난다.
+    const scope = (table: string) => db.from(table).select("id")
+      .eq("tenant_id", user.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId);
     const [attendance, reservation, existing] = await Promise.all([
-      db.from("attendance_records").select("id")
-        .eq("tenant_id", user.tenantId).eq("class_id", input.classId)
-        .eq("student_id", input.studentId).eq("session_date", input.checkDate).limit(1),
-      db.from("makeup_reservations").select("id")
-        .eq("tenant_id", user.tenantId).eq("class_id", input.classId)
-        .eq("student_id", input.studentId).eq("makeup_date", input.checkDate)
-        .eq("status", "reserved").limit(1),
-      db.from("video_homework_marks").select("id")
-        .eq("tenant_id", user.tenantId).eq("class_id", input.classId)
-        .eq("student_id", input.studentId).eq("check_date", input.checkDate).limit(1),
+      scope("attendance_records").eq("session_date", input.checkDate).limit(1),
+      scope("makeup_reservations").eq("makeup_date", input.checkDate).eq("status", "reserved").limit(1),
+      scope("video_homework_marks").eq("check_date", input.checkDate).limit(1),
     ]);
     if (attendance.error || reservation.error || existing.error)
       return { ok: false, error: attendance.error?.message ?? reservation.error?.message ?? existing.error?.message };
     if (!attendance.data?.length && !reservation.data?.length && !existing.data?.length)
       return { ok: false, error: "해당 수업 날짜의 학생을 찾을 수 없습니다." };
   }
+  return writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId, studentId: input.studentId,
+    slotDate: input.checkDate, slotIsMine: true, homeworkDate: input.homeworkDate, submittedDate: input.submittedDate, status: input.status });
+}
 
-  if (input.status === null) {
-    const { error } = await db.from("video_homework_marks").delete()
-      .eq("tenant_id", user.tenantId).eq("class_id", input.classId)
-      .eq("student_id", input.studentId).eq("check_date", input.checkDate);
-    return error ? { ok: false, error: error.message } : { ok: true };
+/**
+ * 영상 제출 현황(장부) — **회차 한 칸**을 찍는다. 회차 = `h:숙제일`(숙제가 나간 수업) 또는 `c:검사일`(숙제일 없는 옛 기록).
+ * 새 기록의 자리는 서버가 정한다(숙제일 다음 날 — `writeVideoHomeworkMark`) — 화면이 보낸 날짜를 저장 키로 믿지 않는다.
+ */
+export async function setVideoHomeworkRound(input: {
+  classId: string;
+  studentId: string;
+  roundKey: string;
+  submittedDate?: string | null;
+  status: VideoHomeworkStatus | null;
+}): Promise<MarkWriteResult> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "로그인이 필요합니다." };
+  const readonlyError = await readonlyTeacherViewError();
+  if (readonlyError) return { ok: false, error: readonlyError };
+  const [kind, date] = [input.roundKey.slice(0, 2), input.roundKey.slice(2)];
+  if ((kind !== "h:" && kind !== "c:") || !isVideoHomeworkDate(date)) return { ok: false, error: "회차를 확인할 수 없습니다." };
+  if (date > kstToday()) return { ok: false, error: "아직 나가지 않은 숙제는 기록할 수 없습니다." };
+  if (!STATUSES.includes(input.status)) return { ok: false, error: "유효하지 않은 상태입니다." };
+  if (badSubmittedDate(input.submittedDate)) return { ok: false, error: "제출일은 오늘까지의 올바른 날짜로 입력해 주세요." };
+  const homeworkDate = kind === "h:" ? date : null;
+  if (homeworkDate && input.submittedDate && input.submittedDate < homeworkDate)
+    return { ok: false, error: "제출일은 숙제가 나간 날보다 빠를 수 없습니다." };
+  const denied = await videoHomeworkWriteError(user, input.classId, date);
+  if (denied) return { ok: false, error: denied };
+
+  const db = createAdminClient();
+  const target = await loadVideoHomeworkTarget(db, user.tenantId, input.classId, input.studentId);
+  if (target.error !== null) return { ok: false, error: target.error };
+  if (input.status !== null && !target.enabled)
+    return { ok: false, error: "영상 제출 검사 대상이 아닙니다. 보고서 설정을 확인해 주세요." };
+  // 그 회차가 실제로 있나 — 이미 찍힌 기록이거나, 그날 그 반 보고서에 '영상 과제 있음'이 남아 있어야 한다.
+  const marks = db.from("video_homework_marks").select("id")
+    .eq("tenant_id", user.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId);
+  const recorded = await (homeworkDate ? marks.eq("homework_date", homeworkDate) : marks.eq("check_date", date).is("homework_date", null)).limit(1);
+  if (recorded.error) return { ok: false, error: recorded.error.message };
+  if (!recorded.data?.length) {
+    const assigned = homeworkDate && (await videoHomeworkColumnReady(db)) ? await db.from("lesson_reports").select("id")
+      .eq("tenant_id", user.tenantId).eq("class_id", input.classId).eq("student_id", input.studentId)
+      .eq("report_date", homeworkDate).eq("video_homework", true).limit(1) : null;
+    if (assigned?.error) return { ok: false, error: assigned.error.message };
+    if (!assigned?.data?.length) return { ok: false, error: "그날 이 학생에게 나간 영상 과제를 찾을 수 없습니다." };
   }
-  const { error } = await db.from("video_homework_marks").upsert({
-    tenant_id: user.tenantId,
-    class_id: input.classId,
-    student_id: input.studentId,
-    check_date: input.checkDate,
-    homework_date: input.homeworkDate,
-    // 제출일을 입력하지 않는 기존 강사 체크는 저장된 날짜를 덮어쓰지 않는다.
-    ...(input.status === "missing" ? { submitted_date: null }
-      : input.submittedDate !== undefined ? { submitted_date: input.submittedDate } : {}),
-    status: input.status,
-    updated_by: user.id,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "tenant_id,class_id,student_id,check_date" });
-  return error ? { ok: false, error: error.message } : { ok: true };
+  const result = await writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId,
+    studentId: input.studentId, slotDate: homeworkDate ? addDays(homeworkDate, 1) : date, homeworkDate,
+    submittedDate: input.submittedDate, status: input.status });
+  if (result.ok) await logAction({
+    action: "lesson_report_video_homework_mark",
+    targetType: "video_homework",
+    targetLabel: [target.studentName, target.className].filter(Boolean).join(" · ") || null,
+    metadata: { classId: input.classId, studentId: input.studentId, homeworkDate, checkDate: homeworkDate ? null : date,
+      status: input.status ?? "cleared", submittedDate: input.status === "submitted" ? input.submittedDate ?? null : null },
+  });
+  return result;
 }
