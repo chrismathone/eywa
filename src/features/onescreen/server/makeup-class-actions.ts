@@ -24,6 +24,7 @@ import { acceptMakeupAnchor, MAKEUP_ANCHOR_REJECTED_ERROR } from "../makeup-anch
 import { changeMakeupSession } from "./makeup-session-store";
 import { changeMakeupAnchor, loadMakeupAnchorCandidates, planReportAnchorMove, syncAnchorCells } from "./makeup-anchor-sync";
 import { makeupMemo } from "../makeup-absence-link";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type SetMakeupClassResult =
   | { ok: true; className: string; moved: number; created: boolean; reportless: boolean }
@@ -58,7 +59,10 @@ export async function setMakeupClass(input: {
     .eq("report_date", input.date)
     .eq("makeup", true)
     .is("class_id", null);
-  if (error) return { ok: false, error: "보강 보고서를 확인하지 못했습니다 — 다시 시도해 주세요" };
+  if (error) {
+    logDbError(error, "onescreen.setMakeupClass");
+    return { ok: false, error: "보강 보고서를 확인하지 못했습니다 — 다시 시도해 주세요" };
+  }
   const report = (rows ?? []).find(
     (r) => (((r.subject as string | null) ?? "").trim() || LEGACY_REPORT_SUBJECT) === input.subject,
   );

@@ -3,6 +3,7 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { dismissUntil, type DismissMode } from "../dismiss";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type DismissResult = { ok: true } | { error: string };
 
@@ -41,7 +42,10 @@ export async function dismissNoticePopup(
     },
     { onConflict: "user_id,popup_id" },
   );
-  if (error) return { error: "설정을 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
+  if (error) {
+    logDbError(error, "notices.dismissNoticePopup");
+    return { error: "설정을 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
+  }
 
   return { ok: true };
 }
@@ -58,7 +62,10 @@ export async function undismissNoticePopup(popupId: string): Promise<DismissResu
     .delete()
     .eq("user_id", user.id)
     .eq("popup_id", popupId);
-  if (error) return { error: "설정을 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
+  if (error) {
+    logDbError(error, "notices.undismissNoticePopup");
+    return { error: "설정을 저장하지 못했습니다. 잠시 후 다시 시도해주세요." };
+  }
 
   return { ok: true };
 }

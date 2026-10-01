@@ -19,6 +19,7 @@ import { isTuitionReceipt } from "../tuition-receipt";
 import { unlinkedZeroBlockers } from "../unlinked-zero";
 import { isVirtualTermId } from "../month-roster";
 import { materializeVirtualTerms } from "./term-materialize";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * `terms`엔 회차 행이 없는 줄(가상 id, `termState: "missing"`)도 선다 — 이 학생의 그 달 출석부 줄인데 행이 없는 반(보강 방문 등).
@@ -113,7 +114,10 @@ export async function saveReceiptAllocation(invoiceId: string, source: unknown, 
   const virtualIds = input.map((row) => row.termId).filter(isVirtualTermId);
   if (virtualIds.length > 0) {
     const { data: invoice, error: invoiceError } = await db.from("invoices").select("period, status").eq("id", invoiceId).maybeSingle();
-    if (invoiceError || !invoice) return { error: "청구서를 찾을 수 없습니다" };
+    if (invoiceError || !invoice) {
+      logDbError(invoiceError, "billing.session-terms.saveReceiptAllocation");
+      return { error: "청구서를 찾을 수 없습니다" };
+    }
     if (invoice.status === "void") return { error: "취소된 청구서에는 배분할 수 없습니다" };
     if (!monthRange(invoice.period)) return { error: "청구월을 확인해 주세요" };
     const made = await materializeVirtualTerms(db, { tenantId: user.tenantId, period: invoice.period, reason: "allocate", invoiceId }, virtualIds);
@@ -128,7 +132,10 @@ export async function saveReceiptAllocation(invoiceId: string, source: unknown, 
       .from("invoice_session_terms")
       .select("id, class_id, confirmed_sessions, class:class_id ( class_name )")
       .eq("invoice_id", invoiceId);
-    if (termError || !termRows) return { error: "반 정보를 읽지 못했습니다. 다시 시도해 주세요" };
+    if (termError || !termRows) {
+      logDbError(termError, "billing.session-terms.saveReceiptAllocation");
+      return { error: "반 정보를 읽지 못했습니다. 다시 시도해 주세요" };
+    }
     const terms = (termRows as { id: string; class_id: string | null; confirmed_sessions: number | null; class: { class_name?: string | null } | { class_name?: string | null }[] | null }[]).map((t) => {
       const cls = Array.isArray(t.class) ? t.class[0] : t.class;
       return { id: t.id, classId: t.class_id, className: cls?.class_name ?? null, confirmedSessions: t.confirmed_sessions };

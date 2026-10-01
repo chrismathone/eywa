@@ -12,6 +12,7 @@ import { recordKey } from "./consultation-link";
 import { canEditStudent } from "./scope";
 import { reportScorePatch } from "../report-patch";
 import { isUuid } from "./uuid";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type UnifiedSaveState = { ok?: boolean; error?: string } | undefined;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -53,7 +54,10 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     const { data, error } = await supabase.from("student_grades")
       .select("id, student_id, subject, school_year, term, exam_slot, score, max_score, taken_on")
       .eq("id", id).eq("tenant_id", user.tenantId).single();
-    if (error || !data) return { error: "성적 기록을 찾지 못했습니다" };
+    if (error || !data) {
+      logDbError(error, "grades.unified.saveUnifiedGrade");
+      return { error: "성적 기록을 찾지 못했습니다" };
+    }
     studentId = data.student_id;
     subject = data.subject;
     consultationRecordKey = recordKey("grade", id);
@@ -79,7 +83,10 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     const { data, error } = await supabase.from("lesson_reports")
       .select("id, student_id, class_id, subject, report_date, daily_test, check_test, exam_info")
       .eq("id", id).eq("tenant_id", user.tenantId).single();
-    if (error || !data) return { error: "수업보고서 기록을 찾지 못했습니다" };
+    if (error || !data) {
+      logDbError(error, "grades.unified.saveUnifiedGrade");
+      return { error: "수업보고서 기록을 찾지 못했습니다" };
+    }
     studentId = data.student_id;
     subject = data.subject ?? "";
     consultationRecordKey = recordKey("report", id, kind as "daily" | "check" | "other");
@@ -102,7 +109,10 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     const { data, error } = await supabase.from("level_tests")
       .select("id, student_id, subject, tested_on, subscores")
       .eq("id", id).eq("tenant_id", user.tenantId).single();
-    if (error || !data) return { error: "입학테스트 기록을 찾지 못했습니다" };
+    if (error || !data) {
+      logDbError(error, "grades.unified.saveUnifiedGrade");
+      return { error: "입학테스트 기록을 찾지 못했습니다" };
+    }
     studentId = data.student_id;
     subject = data.subject;
     consultationRecordKey = recordKey("level", id);
@@ -128,7 +138,8 @@ export async function saveUnifiedGrade(_previous: UnifiedSaveState, formData: Fo
     const error = await addAcademicConsultation(user.tenantId, {
       studentId, subject, recordKey: consultationRecordKey, date: consultationDate,
     });
-    if (error) return { error: `점수는 저장됐지만 상담일을 저장하지 못했습니다: ${error}` };
+    // error = 이미 한글 이유(로그는 addAcademicConsultation 안에서 남겼다).
+    if (error) return { error: `점수는 저장됐지만 상담일을 저장하지 못했습니다 — ${error}` };
   }
   await logAction({ action: "exam_scores", targetType: "grades", targetLabel: `${subject} 성적 · ${date}`,
     metadata: { source, sourceId: id, studentId, subject, date, score, maxScore } });

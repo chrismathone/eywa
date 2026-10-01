@@ -7,6 +7,7 @@ import { logAction } from "@/features/audit/server/log";
 import { canWriteSupportRequest } from "../access";
 import { isMissingSupportTables, SUPPORT_NOT_READY } from "../missing";
 import { asSupportStatus, canAuthorEditRequest } from "../types";
+import { logDbError } from "@/lib/supabase/db-error";
 
 type Result = { ok: true; id: string } | { error: string };
 
@@ -99,7 +100,10 @@ export async function updateSupportRequest(requestId: string, form: SupportReque
     .is("answer", null)
     .is("author_locked_at", null)
     .select("id");
-  if (error) return { error: "수정하지 못했습니다" };
+  if (error) {
+    logDbError(error, "support.updateSupportRequest");
+    return { error: "수정하지 못했습니다" };
+  }
   // 읽는 사이 운영자가 처리를 시작했으면 0행 — 저장된 척하지 않는다.
   if (!data?.length) return { error: "처리가 시작된 요청은 고칠 수 없습니다 — 새로고침해 보세요" };
   await logAction({

@@ -14,6 +14,7 @@
 //    수강이 남아있으면 이탈 아님, 하나도 없으면 그 과목 이탈이 맞다(원장 확정). 별도 제외 장치 없음.
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import type { createClient } from "@/lib/supabase/server";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
@@ -23,7 +24,8 @@ export const ARCHIVE_REASON = "반 폐지";
 export const CLOSE_TERM_REASON = "종강";
 
 /** GiST enrollments_no_overlap 등 DB 원문 에러를 한글로. UI에 raw 노출 금지(작업 선호). */
-function toKorean(message: string): string {
+function toKorean(error: { message?: string; code?: string }, step: string): string {
+  const message = error.message ?? "";
   if (message.includes("conflicting_period")) {
     return "같은 학생의 다른 수강과 기간이 겹쳐 복원할 수 없습니다. 학생 상세에서 수강을 직접 정리해 주세요.";
   }
@@ -33,9 +35,11 @@ function toKorean(message: string): string {
   if (/enrollments_no_overlap|exclusion constraint/i.test(message)) {
     return "같은 반에 기간이 겹치는 수강이 있어 처리할 수 없습니다. 학생 상세 '수업' 탭에서 수강 기간을 정리해 주세요.";
   }
-  // 매핑 못 한 원문은 화면에 그대로 내보내지 않는다(영문 DB 에러 노출 금지) — 로그로만 남긴다.
-  console.error("[enrollment-lifecycle] 미매핑 DB 에러:", message);
-  return "수강 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  // 매핑 못 한 원문은 화면에 그대로 내보내지 않는다(영문 DB 에러 노출 금지) — 공용 판정 + scope 로그([[#138]]).
+  return explainDbError(error, {
+    scope: `classes.enrollmentLifecycle.${step}`,
+    fallback: "수강 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  }).message;
 }
 
 /**
@@ -72,7 +76,7 @@ export async function closeClassEnrollments(
     .eq("class_id", classId)
     .is("end_date", null)
     .lte("start_date", date);
-  if (bulkErr) return { error: toKorean(bulkErr.message), studentIds: [] };
+  if (bulkErr) return { error: toKorean(bulkErr, "close"), studentIds: [] };
 
   // 미래 시작(배정 예정) = 행마다 start_date가 달라 개별 종료.
   for (const row of open.filter((r) => r.start_date > date)) {
@@ -80,7 +84,7 @@ export async function closeClassEnrollments(
       .from("enrollments")
       .update({ end_date: row.start_date, withdrawal_reason: reason })
       .eq("id", row.id);
-    if (error) return { error: toKorean(error.message), studentIds: [] };
+    if (error) return { error: toKorean(error, "close.future"), studentIds: [] };
   }
 
   return { studentIds: [...new Set(open.map((r) => r.student_id))] };
@@ -113,7 +117,7 @@ export async function reopenClassEnrollments(
     .eq("class_id", classId)
     .eq("withdrawal_reason", reason)
     .not("end_date", "is", null);
-  if (error) return { error: toKorean(error.message), studentIds: [] };
+  if (error) return { error: toKorean(error, "reopen"), studentIds: [] };
 
   return { studentIds: [...new Set(closed.map((r) => r.student_id))] };
 }

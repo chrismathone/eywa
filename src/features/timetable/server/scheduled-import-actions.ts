@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { getScheduledImports } from "./scheduled-import-queries";
 import { canManageTimetableImport } from "./import-access";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type CancelScheduledState = {
   error?: string;
@@ -63,8 +64,10 @@ export async function cancelScheduledImport(
     .from("timetable_snapshots")
     .select("source:payload->apply->masterSource")
     .in("id", group.snapshotIds);
-  if (masterError)
+  if (masterError) {
+    logDbError(masterError, "timetable.cancelScheduledImport");
     return { error: "예약 내용을 확인하지 못했습니다. 다시 시도해 주세요." };
+  }
   if (masterRows?.some((r) => r.source)) {
     if (!(await canManageTimetableImport(user.systemRole)))
       return { error: "반 일괄 관리 권한이 필요합니다." };

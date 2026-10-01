@@ -1,6 +1,7 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 /**
  * 교재목록 **쓰기** 게이트 — 교재·차수를 바꾸는 서버 액션이 첫 줄에서 이걸 지난다([[#77]]).
@@ -56,11 +57,15 @@ export const TEXTBOOKS_NOT_READY = "교재목록 표가 아직 만들어지지 �
 export function friendlyTextbookError(
   error: { code?: string; message?: string },
   fallback: string,
-  duplicate = "이미 같은 이름의 교재가 있습니다",
+  duplicate?: string,
 ): string {
   if (isMissingTextbookTable(error)) return TEXTBOOKS_NOT_READY;
-  if (error.code === "23505") return duplicate;
+  // 판정·로그는 공용([[#138]]) — 예전엔 로그가 없어 일반 문구로 떨어진 실패의 원인을 찾을 길이 없었다.
+  const why = explainDbError(error, { scope: "textbooks", fallback, context: { action: fallback } });
+  // 중복은 **호출부가 넘긴 문구가 먼저**(다음 행동까지 담는다). 안 넘겼을 때만 제약 이름 표의 이유(교재 이름·차수 구분)를 쓴다([[#138]] 리뷰).
+  if (error.code === "23505") return duplicate ?? (why.specific ? why.message : "이미 같은 이름의 교재가 있습니다");
+  if (why.specific) return why.message;
   if (error.code === "23503") return "다른 기록이 참조하고 있어 처리할 수 없습니다";
   if (error.code === "23514") return "입력 값이 규칙에 맞지 않습니다(길이·형식을 확인하세요)";
-  return fallback;
+  return why.message;
 }

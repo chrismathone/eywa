@@ -23218,3 +23218,7 @@ FK가 `on delete set null`이라 지우면 그 반·슬롯이 **전부 미지정
   ③ 주간 시트 교시 칸 [계획 비교] 모달 + 달력 칸 판정 칩(`compareCell` 단일 소스)
   ④ `/ecs/plan-gap` 월별·선생님별 원래 계획 ↔ 실제 집계(지난 칸만 분모).
 - 새 표·마이그레이션 없음. 판정 = `src/features/textbooks/plan-compare.ts`, 펼치기 = `plan-expand.ts`.
+
+## 2026-10-01 — DB 오류를 "이유"로: 공용 판정(`explainDbError`) + 전수 검수
+
+- 반 개명 23505가 "저장에 실패했습니다"·로그 0줄이던 것의 전수 검수(1,070곳, `docs/_audit/error-messages-2026-10-01.md`) → `src/lib/supabase/db-error.ts`(코드+제약 이름 판정·scope 로그·`logDbError`) + `db-error-constraints.ts`로 원생·수강·콜&상담·QR 접수·원생상담·직원·강의실·출석부·교재 요청·강사 시트·영역 번역기를 고치고 나머지 일반 문구 83곳은 로그만 · `classes`·`timetable` 액션은 `fix/class-name-free` 뒤로(보고만) · gotchas #138.
