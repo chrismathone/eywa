@@ -54,7 +54,9 @@ import {
 } from "./notify-recipients-db.mjs";
 import { NOTIFY_RECIPIENT_CAP, addBlocked, dedupePlanRows, eventDedupeKey, newGuardStats } from "./notify-recipients.mjs";
 import {
+  attachOnlyText,
   buildCommentNotificationText,
+  imageAttachments,
   pruneCounts,
   selectChangedReports,
   selectNewComments,
@@ -178,7 +180,7 @@ async function fetchFeedPage(page, centerId, cursor) {
 }
 
 /** 그 글의 댓글 전건 — id **내림차순**(최신 먼저)이 API 계약. 순서 의존 판단은 순수 모듈이 asc로 다시 정렬해서 한다. */
-async function fetchComments(page, reportId) {
+export async function fetchComments(page, reportId) {
   return page.evaluate(
     async ([id]) => {
       const r = await fetch(`/api/v1/reports/${id}/comments/?page_size=100`, { headers: { accept: "application/json" } });
@@ -558,6 +560,8 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
           childId: p.child,
           className: p.class_name,
           content: p.content,
+          attachOnly: attachOnlyText(p), // 글자 없이 첨부만 — 답글·공감 대상으로 저장(분류는 안 탄다)
+          attachments: imageAttachments(p), // 사진 주소(0326a) — 답글 창 쓰레드에서 바로 보여 준다
           postedAt: p.created,
         })),
         childToStudent,
@@ -862,6 +866,8 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
           childId: feedInfo.get(Number(ch.id))?.childId ?? null,
           className: ch.className,
           content: k.content,
+          attachOnly: attachOnlyText(k),
+          attachments: imageAttachments(k),
           postedAt: k.created,
         })),
       );
@@ -925,7 +931,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
           type: "classnote_parent_comment",
           title,
           body,
-          link: classnotePostUrl(reportId), // 댓글이 달린 그 글로 직행(벨이 확인 팝업 후 새 창)
+          link: classnotePostUrl(reportId, undefined, comment?.id), // 댓글이 달린 그 글로 직행(벨이 확인 팝업 후 새 창) — 댓글 번호를 실어 앱이 정확히 짝짓는다
           dedupeKey,
         });
       }

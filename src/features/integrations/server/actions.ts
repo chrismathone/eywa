@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
+import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { isPushableConsultation } from "@/features/integrations/push-eligibility";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -443,14 +444,15 @@ export type PushState = { error?: string; ok?: boolean; message?: string } | und
 
 /**
  * 역동기화(aywa→makeedu) — 선택한 QR 공개접수 상담을 makeedu 예비상담 등록 큐(makeedu_push_requests)에 넣는다.
- * 게이트 = `integrations` 권한 키(canWriteTenant — 기본 master/admin/manager, 역할·권한 면에서 조정 가능).
+ * 게이트 = `canPushToMakeedu`(integrations 쓰기 — 기본 master/admin/manager, 역할·권한 면에서 조정 가능 ·
+ * makeedu 모듈이 꺼지면 권한 캡으로 막힘). 콜&상담 머리글 'makeedu 보내기' 버튼이 같은 함수로 노출을 정한다(#77).
  * 실제 makeedu 쓰기는 동기화 PC 워처(watch-sync-requests.cjs → push-consultations.cjs)가 신뢰 IP에서 수행.
  * 멱등: 이미 pending/running 요청이 있거나 이미 푸시된(makeedu_id/makeedu_pushed_at) 상담은 큐잉하지 않는다.
  */
 export async function enqueueConsultationPush(ids: string[]): Promise<PushState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "integrations"))) {
+  if (!(await canPushToMakeedu(user.systemRole))) {
     return { error: "makeedu 전송 권한이 없습니다 — 학원 설정 › 역할·권한의 'makeedu 연동'에서 조정할 수 있습니다" };
   }
   const clean = [...new Set((ids ?? []).map((s) => String(s)).filter(Boolean))];
@@ -508,7 +510,8 @@ export async function enqueueConsultationPush(ids: string[]): Promise<PushState>
   });
 
   revalidatePath("/owner");
-  revalidatePath("/enrollment"); // 전송 카드가 등록상담 화면에도 뜬다(2026-07-03)
+  // 콜&상담 머리글 'makeedu 보내기'(다이얼로그 목록·건수 배지)가 이 재검증으로 갱신된다(2026-10-01).
+  revalidatePath("/enrollment");
   return {
     ok: true,
     message:

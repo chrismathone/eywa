@@ -7,6 +7,16 @@
 - 통계 화면 = '목록으로'(`BackToListButton`, embed 유지) + 목록과 같은 필터 드롭다운(`ConsultationFilters` 한 벌) + 1·2·3칸 격자(지표|추이 2칸 · 분해 2칸|공백) + `loading.tsx`. 분해 줄은 통계 안에서 거르기, '지연 N건'은 검색어 없이 목록으로(센 숫자와 같게). 통계 주소도 목록과 같은 규칙(검색어·쪽·쪽 크기까지 실어 '목록으로'는 보던 쪽으로). 추이 그래프는 늘어난 카드 높이를 채우고(`absolute inset-0`), 넓은 분해 카드엔 비율 막대 열.
 - 숫자·문구 한 벌: `buildKpiLines`(stats-kpi.ts — 0318a 전 대체 경로 포함) · `statsScopeText`(stats-scope.ts, 검색어가 걸리면 '검색어 제외') · 주소 `consultationsStatsHref`·`CONSULT_DEFAULT_PAGE_SIZE`(list-href.ts). 새 조회·RPC 없음.
 
+## 2026-10-01 밤 — 학부모 답글 창 = 쓰레드 · 첨부만 글 · 영상·사진 · 벨 오버레이
+
+- 워커가 글자 없이 첨부만 있는 학부모 글·댓글도 대체 원문(`[영상] (내용 없이 첨부만)`)으로 저장하되 분류 끝(`category='none'`)으로 찍어 AI·출결 알림을 안 타고, 댓글 알림 링크에 `?comment=<번호>`를 싣는다(옛 알림은 같은 표시 댓글이 하나일 때 본문으로 · 둘이면 공감 숨김) · 답글 창 = 같은 글·같은 원아의 학부모 글·댓글 + 우리 답글 시간순 쓰레드(수정·삭제 그대로, 벨 줄 '답글 N') · 영상·사진은 한 줄 썸네일 칸(영상 = iframe 팝업, 보관 중이면 안내 + GET `/api/classnote/reply-videos` 확인 · 사진 = ClassNote CDN 만료 없는 주소, 서버 전용 표 0326a) — 주소는 학생 '숙제 영상' 탭과 같은 문(students + `getStudentById`) 뒤에서만 · 벨 답글 창 = 벨 목록 자리에 겹치는 오버레이(데스크톱 사이드바 벨은 위로) · 백필 `backfill-attach-only-messages.mjs`(드라이런 기본, 7일 창 14건) · 🔴 워커 zip + SQL 0326a 필요.
+
+## 2026-10-01 — 콜&상담 머리글 'makeedu 보내기'(역동기화 수동 선택 전송)
+
+- 원장 *"메이크에듀 역동기화 상단에 버튼 만들고 누르면 [makeedu로 상담 보내기 (역동기화) 카드] 나오고 지정해서 보낼 수 있게"* — 콜&상담 머리글 동작 줄('공개 접수 QR' 옆)에 ghost 버튼 `makeedu 보내기` + 지금 보낼 수 있는 건수 배지(대기·제출 중 제외, 실패 포함 — `isPushInFlight` 한 판정). 누르면 연동 면과 **같은 카드**(`MakeeduPushCard inDialog`)가 넓은 다이얼로그로 뜬다. 새 조회·전송 경로 없음(후보 `getUnpushedIntakeConsultations` · 전송 `enqueueConsultationPush` → `makeedu_push_requests` → 연동 PC) · 보낸 뒤 갱신은 그 액션의 `revalidatePath("/enrollment")`.
+- 게이트 = 새 공용 [`canPushToMakeedu`](../src/features/integrations/server/makeedu-push-access.ts)(integrations 쓰기 — 모듈 꺼짐은 권한 캡이 막는다) — 페이지·섹션·전송 액션이 같은 함수. 못 지나면 잠긴 대체 버튼조차 안 그린다. 후보 조회는 Suspense 섹션(첫 페인트 안 막음, 셸 자동 서버 액션 없음 #137). 카드에 "매주 일요일 06:00에 남은 건을 자동으로도 보냅니다" 한 줄. 연동 면 카드는 그대로(실패 건 재전송).
+- 적대 리뷰 수리: 화면 두 곳(또는 주간 자동)이 거의 동시에 같은 상담을 큐에 넣으면 앱의 "이미 대기 중" 확인(조회→삽입)을 둘 다 통과하고, 워커가 상담 행을 묶음 시작 때 한 번만 읽어 **makeedu에 두 건** 제출하던 구멍(원래 있던 결함, 버튼이 늘며 노출 증가) — 워커가 한 묶음에서 같은 상담은 첫 요청만 제출하고 나머지는 큐에서 지운다(dry-run은 대기로 되돌림). ⏳ 연동 PC 워커 zip 적용 필요(`push-consultations.cjs`·`lib.cjs`).
+
 ## 2026-10-01 — 숙제 영상 제출 링크(학부모가 aywa로 바로 올리기, 0325a)
 
 - 원장 *"가장 베스트네"* · *"영상 제출 링크를 함께 붙이자. 링크는 일주일 후에 소멸."* · *"기존 클래스노트는 1기가까지 제한이었는데"* — 학부모가 로그인 없이 `/v/<토큰>`에서 영상을 고르면 **그 반 지금 담임의 Drive 폴더**(워커와 같은 등록부·같은 이름 규칙 + 원본 확장자)에 들어가고 `student_homework_videos`(출처 `link`, 0324a 칸)에 한 줄 → 학생 상세 '숙제 영상' 탭·영상 제출 현황 자동 집계에 바로 잡힌다.

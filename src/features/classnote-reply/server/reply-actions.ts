@@ -10,7 +10,8 @@ import {
   isMissingReplyTable, liveBodiesOnPost, loadMessage, loadMessagesByPosts, loadRepliesForMessages, replyTableReady, uniqueClassBoardNames, workerAcceptsReplies, type ParentMessage,
 } from "./reply-data";
 import type { ReactionView, ReplyActionResult, ReplyContext, ReplyTargets } from "../reply-types";
-import { decideReplyPermission, toReplyView, type PermissionMemo } from "./reply-permission";
+import { decideReplyPermission, type PermissionMemo } from "./reply-permission";
+import { buildMinimalThread, buildThread } from "./thread-data";
 import { changeReply } from "./reply-change";
 import { replyGate } from "./reply-gate";
 import { loadReaction, loadReactions, reactionReady, toReactionView } from "./reaction-data";
@@ -29,13 +30,13 @@ const BELL_PERMISSION_CAP = 30;
  *   시험 = 학원이 테스트 보드의 글만 · 전체 = **답글 자격이 있는 글만**(관리자급은 전부, 그 밖은 그 학생을 지금 맡은 사람 — 벨 수신자와 같은 규칙).
  */
 export async function getReplyTargetsForNotifications(notificationIds: string[]): Promise<ReplyTargets> {
-  const none: ReplyTargets = { targets: {}, reactions: null, vague: [] };
+  const none: ReplyTargets = { targets: {}, reactions: null, vague: [], counts: {} };
   const g = await replyGate(false);
   // 발송 스위치가 꺼져 있으면 버튼을 세우지 않는다(눌러도 "보낼 수 없습니다"뿐인 버튼 — 벨은 전원이 매일 여는 자리다).
   if (!g.ok || !g.sendOn || !Array.isArray(notificationIds) || !notificationIds.length) return none;
   const ids = notificationIds.filter((x) => typeof x === "string").slice(0, 100);
   const supabase = await createClient(); // RLS = 내 알림만
-  const { data: notes } = await supabase.from("notifications").select("id, type, link, body").in("id", ids).in("type", [...PARENT_MESSAGE_NOTIFICATION_TYPES]);
+  const { data: notes } = await supabase.from("notifications").select("id, type, link, body, created_at").in("id", ids).in("type", [...PARENT_MESSAGE_NOTIFICATION_TYPES]);
   const postIds = (notes ?? []).map((n) => postIdFromClassnoteLink(n.link as string | null)).filter((x): x is number => x !== null);
   if (!postIds.length) return none;
   const admin = createAdminClient();
@@ -45,7 +46,7 @@ export async function getReplyTargetsForNotifications(notificationIds: string[])
     const picked: [string, ParentMessage][] = [];
     const vague = new Set<string>(); // 같은 글에 같은 문구의 댓글이 둘 — 공감은 어느 댓글인지 알 수 없어 벨에서는 세우지 않는다
     for (const n of notes ?? []) {
-      const note = { type: n.type as string, link: n.link as string | null, body: n.body as string | null };
+      const note = { type: n.type as string, link: n.link as string | null, body: n.body as string | null, createdAt: (n.created_at as string | null) ?? null };
       const mid = pickMessageForNotification(note, messages);
       const m = mid ? messages.find((x) => x.id === mid) : null;
       if (!m || !replyTargetAllowed(g.mode, { boardName: m.boardName, childId: m.childId }).ok) continue;
@@ -72,9 +73,22 @@ export async function getReplyTargetsForNotifications(notificationIds: string[])
     }
     const targets = Object.fromEntries(allowed.map(([nid, m]) => [nid, m.id]));
     const shown = [...new Set(Object.values(targets))];
-    return { targets, reactions: await reactionViews(admin, g, shown.filter((id) => !vague.has(id))), vague: shown.filter((id) => vague.has(id)) };
+    const [reactions, counts] = await Promise.all([reactionViews(admin, g, shown.filter((id) => !vague.has(id))), replyCountsOf(admin, g.user.tenantId, shown)]);
+    return { targets, reactions, vague: shown.filter((id) => vague.has(id)), counts };
   } catch {
     return none;
+  }
+}
+
+/** 메시지별 살아 있는 답글 수 — 못 읽으면 빈 지도(벨 버튼은 그대로, 숫자만 빠진다). */
+async function replyCountsOf(admin: ReturnType<typeof createAdminClient>, tenantId: string, messageIds: string[]): Promise<Record<string, number>> {
+  try {
+    const rows = await loadRepliesForMessages(admin, tenantId, messageIds);
+    const counts: Record<string, number> = {};
+    for (const r of rows) if (r.messageId && r.status !== "deleted") counts[r.messageId] = (counts[r.messageId] ?? 0) + 1;
+    return counts;
+  } catch {
+    return {};
   }
 }
 
@@ -100,20 +114,25 @@ export async function getParentReplyContext(messageId: string, opts?: { noReacti
   try {
     const message = await loadMessage(admin, g.user.tenantId, String(messageId));
     if (!message) return { ok: false, error: "학부모 글 원문을 찾지 못했습니다" };
-    const [replies, perm, workerReady, readonly, canReact] = await Promise.all([
-      loadRepliesForMessages(admin, g.user.tenantId, [message.id]),
+    const [perm, workerReady, readonly, canReact] = await Promise.all([
       decideReplyPermission(admin, { user: g.user, manager: g.manager, message, sendOn: g.sendOn, mode: g.mode }),
       workerAcceptsReplies(admin, g.user.tenantId),
       readonlyTeacherViewError(), // '다른 강사 뷰'(열람 전용) — 수정·삭제 버튼도 세우지 않는다(서버 액션이 어차피 거절한다)
       opts?.noReaction === true ? Promise.resolve(false) : reactionReady(admin, g.user.tenantId).catch(() => false),
     ]);
     // 공감 버튼 — 답글을 쓸 수 있는 사람에게만(같은 자격). 이미 눌린 공감의 상태는 누구에게나 보인다.
-    const reactionRow = canReact ? await loadReaction(admin, g.user.tenantId, message.id).catch(() => null) : null;
+    // 쓰레드 — 답글 자격이 있는 사람만 같은 글의 학부모 댓글·영상까지(자격이 없으면 그 글 하나와 그 답글뿐, 종전과 같다).
+    const [thread, reactionRow] = await Promise.all([
+      perm.canReply
+        ? buildThread(admin, { user: g.user, manager: g.manager, focus: message, studentId: perm.studentId ?? message.studentId })
+        : buildMinimalThread(admin, { user: g.user, manager: g.manager, focus: message }),
+      canReact ? loadReaction(admin, g.user.tenantId, message.id).catch(() => null) : Promise.resolve(null),
+    ]);
     const reaction = canReact && (perm.canReply || reactionRow) ? toReactionView(message.id, reactionRow, g.user, g.manager, !!readonly || !perm.canReply) : null;
     return {
       ok: true,
       message: { id: message.id, source: message.source, content: message.content, boardName: message.boardName, postedAt: message.postedAt },
-      replies: replies.map((r) => toReplyView(r, g.user, g.manager)).map((r) => (readonly ? { ...r, canChange: false } : r)),
+      thread: readonly ? thread.map((e) => (e.kind === "reply" ? { ...e, reply: { ...e.reply, canChange: false } } : e)) : thread,
       canReply: perm.canReply && workerReady,
       reason: perm.reason ?? (workerReady ? null : "연동 PC가 꺼져 있거나 옛 버전이라 지금 답글을 받을 수 없습니다"),
       authorLabel: perm.authorLabel,

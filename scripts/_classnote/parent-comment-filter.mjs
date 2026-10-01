@@ -149,3 +149,49 @@ export function buildCommentNotificationText(comment, studentName) {
       : "학부모님이 댓글을 남겼습니다";
   return { title: `${studentName} 학부모 댓글`, body };
 }
+
+/**
+ * 글자 없이 첨부만 있는 학부모 글·댓글의 **저장용 대체 원문**(예 `[영상] (내용 없이 첨부만)`) — 없으면(글자가 있거나 첨부도 없으면) null.
+ * 알림 본문(`buildCommentNotificationText`)과 **같은 문구**라 벨 알림 ↔ 저장 행 짝짓기(`notificationBodyMatches`)가 글자 그대로 맞는다.
+ * 🔴 이 값은 원문이 아니라 "첨부가 있다"는 **사실 표시**다 — AI 출결 분류에 보내지 않는다(저장 시 분류 끝 처리, classnote-inbox-store).
+ * @param {Comment & { emoticon_content?: unknown }} item
+ * @returns {string | null}
+ */
+export function attachOnlyText(item) {
+  const text = String(item?.content ?? "").replace(/\s+/g, " ").trim();
+  if (text) return null;
+  const { body } = buildCommentNotificationText(item, "");
+  return body.endsWith("(내용 없이 첨부만)") ? body : null;
+}
+
+/** 사진 주소로 받아들이는 호스트 — ClassNote 업로드 CDN(kage = kakao). 그 밖의 주소는 저장하지 않는다(화면이 `<img>`로 불러오는 주소라 임의 주소를 들이지 않는다). */
+const IMAGE_HOST = /(^|\.)(kakao\.com|kakaocdn\.net)$/i;
+const MAX_IMAGES = 10;
+
+/**
+ * 학부모 글·댓글의 **사진 주소**(`attached_images[]` — 2026-10-01 실측: 항목에 `original·large·small` 주소, 서명·만료 쿼리 없음·무로그인 GET 206·max-age 10년).
+ * 화면은 작은 것(`small`)을 격자로, 누르면 큰 것(`large`)을 띄운다. 원본(`original`)은 크기가 커서 저장하지 않는다.
+ * @param {{ attached_images?: unknown[] }} item
+ * @returns {{ small: string, large: string, width: number | null, height: number | null }[]}
+ */
+export function imageAttachments(item) {
+  const ok = (v) => {
+    try {
+      const u = new URL(String(v));
+      return u.protocol === "https:" && !u.username && !u.password && IMAGE_HOST.test(u.hostname) ? u.href : null;
+    } catch {
+      return null;
+    }
+  };
+  const out = [];
+  for (const img of Array.isArray(item?.attached_images) ? item.attached_images : []) {
+    const large = ok(img?.large) ?? ok(img?.large_resize) ?? ok(img?.original);
+    const small = ok(img?.small) ?? ok(img?.small_resize) ?? large;
+    if (!large || !small) continue;
+    const w = Number(img?.width);
+    const h = Number(img?.height);
+    out.push({ small, large, width: Number.isFinite(w) && w > 0 ? w : null, height: Number.isFinite(h) && h > 0 ? h : null });
+    if (out.length >= MAX_IMAGES) break;
+  }
+  return out;
+}

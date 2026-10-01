@@ -39,9 +39,13 @@ export async function loadChildStudentMap(sql, tenant) {
 export async function storeParentMessages(sql, tenant, items, childToStudent) {
   const rows = [];
   for (const it of items ?? []) {
-    const content = String(it?.content ?? "").trim();
-    // 내용이 아예 없는 건(사진·스티커만) 출결 판단 재료가 없다 → 저장하지 않는다(분류 비용만 든다).
-    // 강사 벨엔 기존 경로가 "[사진 1장] (내용 없이 첨부만)"으로 그대로 알린다.
+    const text = String(it?.content ?? "").trim();
+    // 글자가 없는 건(사진·영상·스티커만): 출결 판단 재료는 없지만 **답글·공감 대상**이다(원장 2026-10-01 — 영상 숙제 글).
+    // 그래서 저장은 하되 대체 문구("[영상] (내용 없이 첨부만)" — 벨 알림 본문과 같은 글자)를 넣고, **분류는 끝난 것으로** 찍는다
+    // (category 'none' + classified_at). 그러면 AI 분류 큐(`classified_at is null`)·출결 알림(`category <> 'none'`)에 안 걸려
+    // 분류 비용도 알림 중복도 없다. 첨부 표시가 없는 빈 글은 예전처럼 저장하지 않는다.
+    const attachOnly = text ? null : (typeof it?.attachOnly === "string" && it.attachOnly.trim() ? it.attachOnly.trim() : null);
+    const content = text || attachOnly;
     if (!content) continue;
     const childId = Number(it?.childId);
     rows.push({
@@ -54,6 +58,8 @@ export async function storeParentMessages(sql, tenant, items, childToStudent) {
       class_name: it.className ?? null,
       content,
       posted_at: it.postedAt ?? null,
+      classified_at: attachOnly ? new Date().toISOString() : null,
+      category: attachOnly ? "none" : null,
     });
   }
   if (!rows.length) return 0;
@@ -69,10 +75,46 @@ export async function storeParentMessages(sql, tenant, items, childToStudent) {
       "class_name",
       "content",
       "posted_at",
+      "classified_at",
+      "category",
     )}
     on conflict do nothing
     returning id`;
+  await storeAttachments(sql, tenant, items);
   return inserted.length;
+}
+
+/** 사진 주소 표(0326a)가 아직 없는 DB — 알린 뒤 10분간은 시도하지 않고 다시 본다(워커는 SQL 전에도 돌고, SQL을 적용해도 재시작이 필요 없다, #95). */
+let attachmentsMissingUntil = 0;
+
+/**
+ * 사진 주소를 따로 저장한다(`classnote_parent_message_attachments`, 0326a) — 삽입과 **따로** 쓴다(표가 없는 DB에서도 원문 저장은 그대로 돌아야 한다).
+ * 🔴 원문 표(`classnote_parent_messages`)의 칸이 아니라 **서버 전용 별도 표**다 — 원문 표는 지점 직원 전원이 읽는 표라, 주소를 거기 두면
+ * 강사가 담당 아닌 학생의 사진을 PostgREST 직결로 읽는다(#77). 별도 표는 사용자 정책이 없어 앱 서버(열람 게이트 뒤)만 읽는다.
+ * 멱등: 메시지당 한 줄(`on conflict do nothing`) — 같은 글을 다음 폴이 다시 잡아도 덮지 않는다. 실패는 삼킨다(원문·알림과 독립).
+ * @param {Array<{source:string, postId:number, commentId?:number|null, attachments?: unknown[]}>} items
+ */
+export async function storeAttachments(sql, tenant, items) {
+  if (Date.now() < attachmentsMissingUntil) return;
+  for (const it of items ?? []) {
+    const list = Array.isArray(it?.attachments) ? it.attachments : [];
+    if (!list.length) continue;
+    try {
+      await sql`
+        insert into classnote_parent_message_attachments (tenant_id, message_id, attachments)
+        select tenant_id, id, ${sql.json(list)} from classnote_parent_messages
+        where tenant_id = ${tenant} and source = ${it.source} and classnote_post_id = ${Number(it.postId)}
+          and coalesce(classnote_comment_id, 0) = ${it.commentId == null ? 0 : Number(it.commentId)}
+        on conflict (message_id) do nothing`;
+    } catch (e) {
+      if (e?.code === "42P01") {
+        attachmentsMissingUntil = Date.now() + 10 * 60_000;
+        console.log("[출결] 사진 주소 표(0326a)가 아직 없어 사진은 저장하지 않습니다 — SQL 적용 뒤 10분 안에 자동으로 시작됩니다");
+        return;
+      }
+      console.log(`[출결] 사진 주소 저장 실패(원문은 저장됨): ${e?.message}`);
+    }
+  }
 }
 
 /**
