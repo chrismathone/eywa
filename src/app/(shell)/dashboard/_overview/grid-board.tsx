@@ -84,7 +84,7 @@ export function GridBoard({
         } as CSSProperties;
         if (isHeadingId(item.id)) {
           return (
-            <div key={item.id} className={`${g.cell} ${g.heading}`} style={vars} data-cell="heading">
+            <div key={item.id} className={`${g.cell} ${g.heading}`} style={vars} data-cell="heading" data-dashboard-card={item.id}>
               <span>{item.title}</span>
               {item.note ? <p>{item.note}</p> : null}
             </div>
@@ -99,6 +99,7 @@ export function GridBoard({
             className={g.cell}
             style={vars}
             data-cell={def.kind}
+            data-dashboard-card={item.id}
             data-wide-cell={d.w >= 12 || undefined}
             data-cell-empty={isEmptyCard(item.id, snapshot) || undefined}
           >

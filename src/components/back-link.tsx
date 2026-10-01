@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "@/components/icons/aywa-icon-compat";
 import { useEmbed } from "@/components/workspace/embed-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
+import { useKeepaliveFrame } from "@/components/workspace/shell-mode";
 
 /**
  * 페이지 상단 "← …로" 뒤로 링크. 플로팅 창(임베드) 안에서는 창 크롬이 뒤로(←)·제목을 제공하므로
@@ -25,7 +26,9 @@ export function BackLink({
 }) {
   const embed = useEmbed();
   const inFrame = useInFrame();
-  if (embed || inFrame) return null;
+  // 이전 화면 유지 방식의 화면은 창 크롬(← 뒤로)이 없다 — 단일 화면처럼 인페이지 뒤로 링크가 서야 한다.
+  const keepaliveFrame = useKeepaliveFrame();
+  if ((embed || inFrame) && !keepaliveFrame) return null;
   return (
     <Link
       href={href}

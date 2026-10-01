@@ -158,7 +158,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
         {editing ? (
           <div className={e.stage} data-inspector={selectedItem ? "" : undefined}>
             <div className="flex min-w-0 flex-col gap-3">
-              {listMode ? (
+              {listMode || !original ? (
                 <>
                   <ListBoard items={items} role={role} menus={menus} selected={selected} onSelect={select} onCommit={commit} onRemoved={onRemoved} />
                   <UnusedList ids={unused} onAdd={(id) => add(id)} />
@@ -167,11 +167,8 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
                 <EditBoard
                   key={role}
                   items={items}
-                  role={role}
-                  menus={menus}
-                  snapshot={snapshot}
                   selected={selected}
-                  unused={unused}
+                  renderPreview={(next) => <RolePreview full={original} role={role} items={next} menus={menus} subject={previewSubject} />}
                   onSelect={select}
                   onCommit={commit}
                   onRemoved={onRemoved}

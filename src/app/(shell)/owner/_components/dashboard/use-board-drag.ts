@@ -13,10 +13,10 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { insertAt, newItem, placedIds, removeItem } from "@/features/dashboard/layout/engine";
-import { MAX_ITEMS, isHeadingId, type Item, type Placed } from "@/features/dashboard/layout/types";
-import { insertionIndex, rectOf, type Metrics, type Rect } from "./geometry";
+import { MAX_ITEMS, isHeadingId, type Item } from "@/features/dashboard/layout/types";
+import { insertionIndex, rectOf, type BoardLayout } from "./geometry";
 
-import { useDragPointer } from "./use-drag-pointer";
+import { startPoint, useDragPointer } from "./use-drag-pointer";
 
 export type DropTarget = "canvas" | "drawer" | "trash";
 export type DragState = {
@@ -41,15 +41,6 @@ export const boardCollision: CollisionDetection = (args) => {
   return hit ? [hit] : [];
 };
 
-function startPoint(ev: Event | null): { x: number; y: number } {
-  if (ev && "touches" in ev && (ev as TouchEvent).touches.length) {
-    const t = (ev as TouchEvent).touches[0]!;
-    return { x: t.clientX, y: t.clientY };
-  }
-  const m = ev as MouseEvent | null;
-  return { x: m?.clientX ?? 0, y: m?.clientY ?? 0 };
-}
-
 /**
  * 캔버스·서랍 끌기 — 카드를 들면 다른 카드가 **실시간으로 비켜 흐르고**(미리보기 순서), 놓으면 되돌리기 이력 한 칸이 된다.
  * 서랍·휴지통 위에서 놓으면 빠진다(마지막 카드 한 장은 못 뺀다). 캔버스·서랍 밖에서 놓으면 제자리(아무 일도 없음).
@@ -57,12 +48,11 @@ function startPoint(ev: Event | null): { x: number; y: number } {
 export function useBoardDrag(opts: {
   items: readonly Item[];
   canvasRef: RefObject<HTMLElement | null>;
-  layoutRef: RefObject<{ placed: Placed[]; metrics: Metrics } | null>;
+  layoutRef: RefObject<BoardLayout | null>;
   onCommit: (next: Item[]) => void;
   onRemoved: (id: string, before: Item[]) => void;
-  onDropped: (id: string, from: Rect) => void;
 }) {
-  const { items, canvasRef, layoutRef, onCommit, onRemoved, onDropped } = opts;
+  const { items, canvasRef, layoutRef, onCommit, onRemoved } = opts;
   const [drag, setDragState] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const pending = useRef<{ index: number; timer: ReturnType<typeof setTimeout> } | null>(null);
@@ -119,9 +109,15 @@ export function useBoardDrag(opts: {
       if (!layout || !box) return;
       const at = pointer.current ?? { x: d.start.x + ev.delta.x, y: d.start.y + ev.delta.y };
       const p = { x: at.x - box.left, y: at.y - box.top };
-      const others = layout.placed.filter((pl) => pl.id !== d.id).map((pl) => ({ id: pl.id, rect: rectOf(pl, layout.metrics), full: pl.w >= 24 }));
+      const rect = (pl: BoardLayout["placed"][number]) => layout.rects?.get(pl.id) ?? rectOf(pl, layout.metrics);
+      const others = layout.placed.filter((pl) => pl.id !== d.id).map((pl) => ({ id: pl.id, rect: rect(pl), full: layout.rects ? rect(pl).width >= box.width * 0.85 : pl.w >= 24 }));
       const me = d.target === "canvas" ? layout.placed.find((pl) => pl.id === d.id) : undefined;
-      const want = insertionIndex(others, p, me ? rectOf(me, layout.metrics) : null, d.target === "canvas" ? d.index : null);
+      const own = me ? rect(me) : null;
+      if (own && p.x >= own.left && p.x <= own.left + own.width && p.y >= own.top && p.y <= own.top + own.height) return clearPending();
+      const visibleIndex = insertionIndex(others, p, null, null);
+      const base = items.filter((it) => it.id !== d.id);
+      // 데이터·권한 때문에 안 그려진 카드도 저장 목록에서는 보존한다.
+      const want = visibleIndex < others.length ? base.findIndex((it) => it.id === others[visibleIndex].id) : base.length;
       // 캔버스에 처음 들어올 때는 바로, 그다음부터는 잠깐 머물러야 자리가 바뀐다.
       if (d.target !== "canvas" || d.index === null) {
         clearPending();
@@ -140,7 +136,7 @@ export function useBoardDrag(opts: {
         }, DWELL_MS),
       };
     },
-    [canvasRef, layoutRef, pointer, clearPending, setDrag],
+    [items, canvasRef, layoutRef, pointer, clearPending, setDrag],
   );
 
   const finish = useCallback(
@@ -156,8 +152,6 @@ export function useBoardDrag(opts: {
         if (d.kind === "chip" && items.length >= MAX_ITEMS) return;
         const base = d.kind === "tile" ? items.filter((i) => i.id !== d.id) : [...items];
         onCommit(insertAt(base, d.item, settled ?? d.index ?? base.length));
-        const from = ev.active.rect.current.translated;
-        if (from) onDropped(d.id, { left: from.left, top: from.top, width: from.width, height: from.height });
         return;
       }
       if (d.kind === "tile" && (target === "drawer" || target === "trash") && (canRemove || isHeadingId(d.id))) {
@@ -166,7 +160,7 @@ export function useBoardDrag(opts: {
         onRemoved(d.id, before);
       }
     },
-    [items, canRemove, onCommit, onDropped, onRemoved, clearPending, setDrag, stop],
+    [items, canRemove, onCommit, onRemoved, clearPending, setDrag, stop],
   );
 
   /** 끄는 동안 보여 줄 순서 — 캔버스 위면 끼운 자리, 서랍·휴지통 위면 빠진 모습, 그 밖이면 원래대로. */

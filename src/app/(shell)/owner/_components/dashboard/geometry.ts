@@ -14,6 +14,7 @@ export const SPRING =
 
 export type Rect = { left: number; top: number; width: number; height: number };
 export type Metrics = { colStep: number; rowTops: number[]; rowHeights: number[]; height: number };
+export type BoardLayout = { placed: Placed[]; metrics: Metrics; rects?: ReadonlyMap<string, Rect>; columnScale?: number };
 
 /** 줄마다 높이(머리줄만 있는 줄은 낮게) → 줄의 위치. `extraRows`만큼 빈 줄을 더 둔다(끄는 동안 맨 아래에 놓을 자리). */
 export function metricsOf(placed: readonly Placed[], width: number, extraRows = 0): Metrics {

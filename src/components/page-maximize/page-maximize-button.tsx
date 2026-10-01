@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useInFrame } from "@/components/workspace/use-in-frame";
+import { useKeepaliveFrame } from "@/components/workspace/shell-mode";
 import { usePageMaximize } from "./page-maximize-context";
 
 /**
@@ -21,7 +22,9 @@ import { usePageMaximize } from "./page-maximize-context";
 export function PageMaximizeButton() {
   const ctx = usePageMaximize();
   const inFrame = useInFrame();
-  if (!ctx || inFrame) return null;
+  // 이전 화면 유지 방식의 화면(iframe)은 창이 아니라 **한 화면**이다 — 공급자(KeepalivePageMaximize)가 있으니 그대로 보인다.
+  const keepaliveFrame = useKeepaliveFrame();
+  if (!ctx || (inFrame && !keepaliveFrame)) return null;
   return <Toggle maximized={ctx.maximized} onToggle={ctx.setMaximized} marker="header" />;
 }
 
@@ -34,7 +37,8 @@ export function PageMaximizeButton() {
 export function PageMaximizeFallbackBar() {
   const ctx = usePageMaximize();
   const inFrame = useInFrame();
-  if (!ctx || inFrame || !ctx.maximized) return null;
+  const keepaliveFrame = useKeepaliveFrame();
+  if (!ctx || (inFrame && !keepaliveFrame) || !ctx.maximized) return null;
   return (
     // 셸 크롬 층 — 이용 분석이 이 줄의 입력을 화면 활동으로 세지 않게(결정 tenant.md "새 크롬 층을 만들면 표식").
     // 여백은 globals.css가 준다 — 버튼이 머리글 버튼과 **같은 자리**(위·오른쪽)에 서게(로딩 스켈레톤 → 머리글 없는 화면으로 넘어가도 안 움직인다).

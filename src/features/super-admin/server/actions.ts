@@ -9,8 +9,9 @@ import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-emai
 import { PUBLIC_BRANDING_TENANTS_TAG } from "@/features/owner/server/public-branding";
 import { tenantSettingsTag } from "@/features/owner/server/queries";
 import { licenseFlagsTag } from "@/lib/license/server";
+import { flagsFromMode, isShellMode } from "@/lib/license/shell-mode";
 import { SYSTEM_ROLES } from "@/lib/permissions";
-import { SEAT_FEATURES, TOGGLE_FEATURES } from "../labels";
+import { SEAT_FEATURES, TOGGLE_FEATURES, WINDOW_KEEPALIVE_KEY } from "../labels";
 import { logSuperAdminAction } from "./audit";
 import { logDbError } from "@/lib/supabase/db-error";
 
@@ -365,6 +366,44 @@ export async function upsertTenantLicense(
     metadata: { feature, maxSeats },
   });
   updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(창 모드·꺼진 기능 버튼)
+  revalidatePath(`/super-admin/tenants/${tenantId}`);
+  return { ok: true };
+}
+
+/**
+ * 지점 **화면 방식** 설정(창 모드 / 단일 화면(이전 화면 유지) / 단일 화면) — 라이선스 행 둘(`window_mode`·`window_keepalive`)을 **한 번에** 쓴다.
+ * 🔴 항상 둘 다 쓴다 — 반쪽만 남으면 뜻이 갈린다(예: 창 모드를 껐는데 keepalive 행만 켜진 채 남음 → 판정은 단일 화면이라 무해하지만 카드가 거짓말).
+ * 기존 `window_mode` 행의 뜻은 그대로("창 엔진을 쓰나")이고 새 행은 opt-in이라 SQL·마이그레이션이 없다(shell-mode.ts).
+ */
+export async function setTenantWindowMode(_prev: LicenseState, formData: FormData): Promise<LicenseState> {
+  const sa = await requireSuperAdmin();
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const tenantName = String(formData.get("tenantName") ?? "").trim();
+  const mode = String(formData.get("mode") ?? "");
+  if (!tenantId) return { error: "필수 값 누락" };
+  if (!isShellMode(mode)) return { error: "지원하지 않는 화면 방식입니다" };
+  const { windowMode, keepalive } = flagsFromMode(mode);
+
+  const admin = createAdminClient();
+  // 만료일도 지운다 — 만료된 행을 켜 봐야 판정(`licenseAllows`)은 여전히 막아 카드만 켜진 척한다(토글과 같은 이유).
+  const { error } = await admin.from("tenant_licenses").upsert(
+    [
+      { tenant_id: tenantId, feature: "window_mode", is_active: windowMode, expires_at: null },
+      { tenant_id: tenantId, feature: WINDOW_KEEPALIVE_KEY, is_active: keepalive, expires_at: null },
+    ],
+    { onConflict: "tenant_id,feature" },
+  );
+  if (error) return { error: error.message };
+
+  await logSuperAdminAction({
+    actorId: sa.id,
+    actorEmail: sa.email,
+    action: "toggle_license",
+    targetTenantId: tenantId,
+    targetLabel: tenantName || null,
+    metadata: { feature: "window_mode", active: windowMode, mode },
+  });
+  updateTag(licenseFlagsTag(tenantId)); // 셸 표시용 라이선스 캐시(화면 방식)
   revalidatePath(`/super-admin/tenants/${tenantId}`);
   return { ok: true };
 }

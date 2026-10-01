@@ -36,6 +36,7 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { TeacherViewSwitcher } from "@/components/other-teacher-view";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowMode } from "@/components/workspace/use-window-mode";
+import { useKeepaliveMode } from "@/components/workspace/shell-mode";
 import { usePrefs } from "@/components/workspace/use-prefs";
 import { useSidebarWidth } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
@@ -171,6 +172,8 @@ export function AppSidebar({
   //    지점 설정으로 창 모드를 끈 PC는 isDesktop=true · windows=false다(사이드바는 그대로, 메뉴는 본문 이동).
   const isDesktop = useIsDesktop();
   const windows = useWindowMode();
+  // 단일 화면(이전 화면 유지)엔 '같은 화면을 새 창으로 하나 더'(복제)가 없다 — 그 단축키 안내를 세우지 않는다(원장 2026-10-01).
+  const keepalive = useKeepaliveMode();
   const showDesktop = useShowDesktop();
   // 로고가 가는 첫 화면 — 권한을 본 홈(`/dashboard` | `/menu`). `/dashboard`를 직접 적지 말 것(gotchas #137).
   const home = useShellHome();
@@ -263,6 +266,8 @@ export function AppSidebar({
         data-usage-chrome=""
         // data-maximize-hide — '화면 최대화' 중엔 숨는다(globals.css `[data-page-maximize="on"]`, 원장 2026-10-01).
         data-maximize-hide=""
+        // data-shell-sidebar — 이전 화면 유지 방식의 화면(iframe)이 이 폭을 재서 왼쪽 안쪽 여백으로 쓴다(keepalive-frame-bridge.tsx).
+        data-shell-sidebar=""
         style={{ width }}
         className={`bg-sidebar border-line sticky top-0 z-[45] flex h-screen shrink-0 flex-col border-r ${
           motion ? `transition-[width] duration-200 ${EASE}` : ""
@@ -449,7 +454,7 @@ export function AppSidebar({
                 </kbd>{" "}
                 검색(메뉴·학생·수업 점프)
               </span>
-              {windows ? (
+              {windows && !keepalive ? (
                 <span className="block">
                   <kbd className="border-line bg-bg-soft text-text-dim rounded border px-1 py-px font-mono text-xs">
                     Shift

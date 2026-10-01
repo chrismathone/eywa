@@ -15,6 +15,7 @@ import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import type { SystemRole } from "@/lib/permissions";
 import type { SemanticTone } from "@/lib/design/semantic-color";
 import { isSupportStatus, SUPPORT_STATUS_META } from "@/features/support/types";
+import { isShellMode, SHELL_MODE_LABEL } from "@/lib/license/shell-mode";
 
 function supportStatusLabel(v: string): string {
   return isSupportStatus(v) ? SUPPORT_STATUS_META[v].label : "알 수 없는 상태";
@@ -97,8 +98,18 @@ export const TOGGLE_FEATURES = [
   { key: "slack", label: "슬랙 알림 연결", defaultOn: false },
 ] as const;
 
+/**
+ * 화면 방식(창 모드 / 단일 화면(이전 화면 유지) / 단일 화면)의 라이선스 행 둘 — **한 스위치 셋 중 하나**로 같이 쓰므로 켜기·끄기 목록(TOGGLE_FEATURES)에
+ * 따로 넣지 않는다(읽는 곳은 (shell)/layout.tsx → `shellModeFromLicenses`). `window_mode`는 위 TOGGLE_FEATURES 그대로(기존 행의 뜻 불변).
+ */
+export const WINDOW_KEEPALIVE_KEY = "window_keepalive";
+
 export function featureLabel(key: unknown): string {
-  const hit = [...SEAT_FEATURES, ...TOGGLE_FEATURES].find((f) => f.key === key);
+  const hit = [
+    ...SEAT_FEATURES,
+    ...TOGGLE_FEATURES,
+    { key: WINDOW_KEEPALIVE_KEY, label: "단일 화면(이전 화면 유지)" },
+  ].find((f) => f.key === key);
   return hit ? hit.label : "기타 기능";
 }
 
@@ -169,8 +180,11 @@ export function auditDetail(action: string, metadata: Record<string, unknown> | 
       const limit = typeof seats === "number" ? `최대 ${seats.toLocaleString("ko-KR")}석` : "제한 없음";
       return `${featureLabel(m.feature)} ${limit}`;
     }
-    case "toggle_license":
+    case "toggle_license": {
+      // 화면 방식 변경은 셋 중 무엇으로 바꿨는지가 사실이다(켬/끔으로는 안 읽힌다).
+      if (m.feature === "window_mode" && isShellMode(m.mode)) return `화면 방식 → ${SHELL_MODE_LABEL[m.mode]}`;
       return `${featureLabel(m.feature)} ${m.active === true ? "켬" : "끔"}`;
+    }
     case "change_user_role": {
       const role = str(m.role);
       return role ? `역할 → ${ROLE_LABEL[role as SystemRole] ?? "알 수 없는 역할"}` : "—";

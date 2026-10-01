@@ -1,10 +1,12 @@
 import { NavigationProvider } from "@/features/owner/navigation-context";
 import { teacherNavigationSource } from "@/lib/teacher-navigation";
 import { redirect } from "next/navigation";
-import { getLicenseFlags } from "@/lib/license/server";
+import { getLicenseSnapshot } from "@/lib/license/server";
+import { isShellMode, SHELL_MODE_COOKIE, shellModeInfoFromLicenses } from "@/lib/license/shell-mode";
+import { getMyPageMaximized } from "@/features/page-maximize/server/queries";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Suspense, type ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
@@ -42,6 +44,11 @@ import { getMyMenuVisits } from "@/features/nav/server/visits";
 import { topVisitedMenus } from "@/features/nav/menu-visits";
 import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
+import { ShellModeProvider } from "@/components/workspace/shell-mode";
+import { KeepaliveFrameShell } from "@/components/workspace/keepalive-frame-shell";
+import { KeepaliveFrameBridge } from "@/components/workspace/keepalive-frame-bridge";
+import { KEEPALIVE_MAIN_CLASS } from "@/components/workspace/keepalive-frame";
+import { KeepaliveMainGate } from "@/components/workspace/keepalive-main-gate";
 import { ShellHomeProvider } from "@/components/workspace/shell-home";
 import { PageMaximizeShell } from "@/components/page-maximize/page-maximize-shell";
 import { PageMaximizeFallbackBar } from "@/components/page-maximize/page-maximize-button";
@@ -79,14 +86,31 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const genericTenant = isGenericTenant(settings);
   // 지점 라이선스 넷(한 조회, 요청 캐시) — 꺼진 라이선스의 버튼·탭을 클라 화면이 감추는 데 쓴다(표시용 · 2026-09-30).
   // 창 모드 판정도 같은 결과를 쓴다(아래 풀셸 분기) — 조회를 늘리지 않으려고 기능별 조회 대신 이것 하나로.
-  const licensesPromise = getLicenseFlags(user.tenantId);
+  const licenseSnapshotPromise = getLicenseSnapshot(user.tenantId);
+  const licensesPromise = licenseSnapshotPromise.then((s) => s.flags);
+  // 지점 화면 방식(창 모드 / 단일 화면(이전 화면 유지) / 단일 화면) + 그 판(epoch) — 같은 라이선스 조회에서 판정한다(조회를 늘리지 않는다).
+  // 개발 전용 덮어쓰기 `NEXT_PUBLIC_DEV_WINDOW_MODE_OVERRIDE`는 운영 빌드에서 무시된다(shell-mode.ts).
+  const shellModePromise = licenseSnapshotPromise.then((s) =>
+    shellModeInfoFromLicenses(s, { override: process.env.NEXT_PUBLIC_DEV_WINDOW_MODE_OVERRIDE, nodeEnv: process.env.NODE_ENV }),
+  );
 
   // Stage Manager 임베드(?embed=1 → proxy가 x-embed 주입): 사이드바·헤더·캔버스·팰릿 전부
   // 생략하고 본문만(크롬리스). 창 안엔 캔버스가 없으니 무한중첩 불가. RLS는 페이지가 자체 게이트.
   const embed = (await headers()).get("x-embed") === "1";
   if (embed) {
     const teacherEmbed = (await getShellView()) === "teacher";
-    const embedLang = await getTeacherViewLang();
+    // 이전 화면 유지 방식이면 이 창 문서는 **한 화면**이다 — 단일 화면과 같은 모양(머리글 한 줄·여백)으로 그린다(keepalive-frame.ts).
+    // 🔴 판정은 **부모 셸이 이 문서에서 쓰는 방식**(쿠키 `SHELL_MODE_COOKIE` — 셸 공급자가 적는다)을 먼저 따른다. 부모는 문서를 연 순간의
+    //    방식을 끝까지 쓰므로, DB를 다시 읽으면 그 사이 방식 전환·라이선스 조회 실패(fail-open) 때 새 화면만 다른 모양이 된다(적대 리뷰).
+    //    쿠키가 없으면(부모를 거치지 않은 문서) 서버 판정. 쿼리가 아니라 쿠키라 하드 이동·새로고침에도 같다. 강사 창 문서엔 걸지 않는다.
+    const parentMode = (await cookies()).get(SHELL_MODE_COOKIE)?.value;
+    const frameMode = isShellMode(parentMode) ? parentMode : (await shellModePromise).mode;
+    const keepaliveFrame = !teacherEmbed && frameMode === "keepalive";
+    // 독립 조회라 언어 조회와 함께 기다린다(B4) — 이전 화면 유지 화면만 읽는다.
+    const [keepaliveMaximized, embedLang] = await Promise.all([
+      keepaliveFrame ? getMyPageMaximized() : Promise.resolve(false),
+      getTeacherViewLang(),
+    ]);
     // 🔴 창(iframe)에도 **같은 언어**를 흘린다 — 안 흘리면 서버 컴포넌트(`getTeacherViewLang`)는 영어인데
     //    클라 컴포넌트는 provider가 없어 한국어인 **반반 화면**이 된다. 관리자에겐 이 값이 항상 한국어라
     //    (그 함수가 `getShellView()!=="teacher"`에서 조회 없이 즉시 반환) 풀셸 동작은 한 글자도 안 바뀐다.
@@ -122,7 +146,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
               🔑 **베젤이 아예 필요 없는 화면은 여기가 아니라 화면이 말한다** — 페이지 루트에 `.edge-to-edge`를 달면
                  globals.css `main.embed-main:has(.edge-to-edge)`가 그 창만 좌우·아래 0 + 거터 해제로 만든다
                  (`.sticky-save-bar`와 같은 결, 시간표 선례 — 원장 2026-09-08 *"좌우와 하단 여백이 거의 느껴지지 않도록 딱"*). */}
-          <main style={brandStyle} className="embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]">
+          <KeepaliveFrameShell active={keepaliveFrame} maximized={keepaliveMaximized}>
+          <main style={brandStyle} className={keepaliveFrame ? KEEPALIVE_MAIN_CLASS : "embed-main bg-background text-foreground h-screen overflow-auto px-1.5 pt-2 pb-8 lg:pb-10 [scrollbar-gutter:stable]"}>
+            {keepaliveFrame ? <KeepaliveFrameBridge /> : null}
             <EmbedFocusSignal />
             {/* 부모의 소프트 새로고침 명령(숨어 있던 사이 데이터가 바뀐 창이 다시 보일 때) — router.refresh. */}
             <EmbedRefreshListener />
@@ -139,10 +165,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             {/* 창 안에서도 Shift+F/Ctrl·Cmd+K로 검색 팰릿 — keydown은 프레임을 못 넘어 postMessage 포워딩. */}
             <PaletteHotkeyForward />
             {/* 창이 그 메뉴의 최소 크기(ROUTE_WINDOW_SIZE)보다 작으면 맨 위에 안내 — 화면은 접지 않는다(원장 2026-09-03). */}
-            <WindowMinSizeNotice />
+            {keepaliveFrame ? null : <WindowMinSizeNotice />}
             <ScreenHelpOverlay />
             {children}
           </main>
+          </KeepaliveFrameShell>
         </OperationsProvider></EditPresenceProvider>
         </SheetLangProvider>
         </TeacherNamesProvider>
@@ -371,10 +398,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // 서버에서 읽어 첫 페인트부터 정해진다(깜빡임 없음). 요청 캐시 · 창(iframe) 안은 위 embed 분기라 여기 안 온다.
   // 연결 앱(오늘의 수학 등) — 슈퍼관리자가 **켠 지점만** 왼쪽 '연결 앱'에 바로가기가 선다(기본 꺼짐, 원장 2026-09-26).
   // 영어 선생님(담당 과목이 영어뿐)에겐 켜도 안 선다(같은 날). 위에서 먼저 출발시킨 조회를 창 모드와 함께 기다린다(B4).
-  const [windowMode, connectedApps] = await Promise.all([
-    licensesPromise.then((l) => l.window_mode),
-    connectedAppsPromise,
-  ]);
+  // 방식은 셋이다(창 모드 / 단일 화면(이전 화면 유지) / 단일 화면 — 원장 2026-10-01) — `windowMode` = "창 엔진이 있나"(앞 둘).
+  //   · 창 엔진이 켜진 방식(창 모드·이전 화면 유지)만 WorkspaceEnabledProvider가 true, 그 안에서 `ShellModeProvider`가 한 화면씩을 고른다.
+  //   · 행이 없으면 창 모드(기존 지점 그대로) — 이전 화면 유지는 `window_keepalive` 행을 **명시로 켠** 지점만(shell-mode.ts).
+  const [shellInfo, connectedApps] = await Promise.all([shellModePromise, connectedAppsPromise]);
+  const shellMode = shellInfo.mode;
+  const windowMode = shellMode !== "single";
   // 왼쪽 '자주 방문한 메뉴' — 계정 기록에서 많이→최근 순 4개(권한 있는 메뉴만). 기록이 없으면 빈 배열이라
   // 사이드바가 기본값으로 떨어진다. ⚠️ 실패해도 화면을 막지 않는다(조회는 fail-soft).
   const frequentKeys = topVisitedMenus(
@@ -395,6 +424,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     <NavigationProvider menus={menuLayout} groups={settings.navigation.groups} tenantId={user.tenantId}>
     <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
     <WorkspaceEnabledProvider enabled={windowMode}>
+    <ShellModeProvider mode={shellMode} epoch={shellInfo.epoch}>
     {/* 첫 화면(홈) 주소 — 로고·'바탕 보기'·빈 작업면이 같은 값을 쓴다(대시보드를 꺼 둔 역할은 /menu, gotchas #137). */}
     <ShellHomeProvider href={shellHome}>
     {/* 화면 최대화(원장 2026-10-01) — 계정 설정을 서버에서 읽어 표식 하나만 단다(숨기는 일은 globals.css). */}
@@ -451,7 +481,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
           <EditPresenceProvider trackDisabled={!!viewAs} user={{ id: user.id, displayName: user.displayName, tenantId: user.tenantId }}>
             {/* 배경(운영실) F1 은 창(z-40) 아래 — 창을 보고 있는데 대시보드 설명이 덮이지 않게. */}
             <ScreenHelpOverlay beneathWindows />
-            {children}
+            {/* 이전 화면 유지 방식: 화면이 바탕을 덮는 동안 바탕 본문을 잠재운다(효과·폴링 정지 — keepalive-main-gate.tsx). 다른 방식은 그대로. */}
+            {shellMode === "keepalive" ? <KeepaliveMainGate>{children}</KeepaliveMainGate> : children}
           </EditPresenceProvider>
         </main>
       </div>
@@ -481,6 +512,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     </div>
     </PageMaximizeShell>
     </ShellHomeProvider>
+    </ShellModeProvider>
     </WorkspaceEnabledProvider>
     </OperationsProvider>
     </NavigationProvider>

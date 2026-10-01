@@ -7,6 +7,9 @@ import { useWindowStore } from "./window-store";
 import { usePrefs } from "./use-prefs";
 import { railWidth } from "./use-sidebar-resize";
 import { useWindowMode } from "./use-window-mode";
+import { useShellMode, useShellModeEpoch } from "./shell-mode";
+import { KeepaliveStage } from "./keepalive-stage";
+import { useKeepaliveFollow } from "./use-keepalive-follow";
 import { FloatingWindow } from "./floating-window";
 import { iframeRegistry } from "./route-window";
 import { noteDirtyOwner } from "./window-signals-core";
@@ -35,6 +38,10 @@ const HEADER = 0;
 export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: string; homeHref?: string }) {
   // 창 모드가 꺼진 지점(또는 미니셸)에선 캔버스가 없다 — 본문(<main>)이 모바일처럼 유일한 화면이 된다.
   const isDesktop = useWindowMode();
+  // 단일 화면(이전 화면 유지) 방식 — 같은 창 엔진을 쓰되 창 크롬 없이 한 화면씩 그린다(원장 2026-10-01). 아래 분기 몇 곳만 다르다.
+  const shellMode = useShellMode();
+  const shellEpoch = useShellModeEpoch();
+  const keepalive = isDesktop && shellMode === "keepalive";
   const pathname = usePathname();
   // 대시보드가 작업 배경이다. /menu는 접근 제한 계정의 안내 화면만 남긴다.
   const isDesktopSurface = pathname === "/dashboard" || pathname === "/menu";
@@ -89,20 +96,31 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
     // 영속 레이아웃 복원(rehydrate)은 window-store 모듈 로드 시점에서 처리한다(다른 effect의 set보다
     // 먼저 도록 — 안 그러면 빈 상태가 persist에 써져 영속 창이 파괴됨). 여기선 하이드레이션 완료 후
     // owner 채택(다른 계정/테넌트면 초기화). 이미 하이드레이션됐으면 즉시, 아니면 완료 시점에.
+    // 🔴 지점 방식(`shellMode`)과 그 판(`shellEpoch`)도 함께 채택한다 — 영속본이 다른 방식·다른 판으로 쌓은 것이면 전부 닫고 빈 상태로
+    //    시작(원장 2026-10-01 "창모드 전환 시에 이전의 창 모드들은 모두 종료시킨 채로"). 이 효과는 창 모드를 끈 지점·폰에서도 돈다(캔버스는
+    //    늘 마운트) — 그래서 어느 방향 전환이든 잡힌다. 판을 모르면(라이선스 조회 실패 — 이 요청은 fail-open 창 모드) 방식은 채택하지 않는다
+    //    (일시 장애 한 번에 유지 화면이 지워지지 않게 — 계정만 본다).
+    const adopt = () => (shellEpoch === null ? adoptOwner(owner) : adoptOwner(owner, shellMode, shellEpoch));
     if (useWindowStore.persist.hasHydrated()) {
-      adoptOwner(owner);
+      adopt();
       return;
     }
-    const unsub = useWindowStore.persist.onFinishHydration(() => adoptOwner(owner));
+    const unsub = useWindowStore.persist.onFinishHydration(adopt);
     return unsub;
-  }, [owner, adoptOwner]);
+  }, [owner, shellMode, shellEpoch, adoptOwner]);
 
   // 딥링크(주소창·외부 링크·북마크)로 들어온 라우트를 창으로 열어 준다(원장 지시 2026-09-01).
   // 조건은 **아래 바탕이 main을 덮는 조건과 같다** — 안 덮는 화면(운영실)에서 열면 배경과 겹친다.
   // ⚠️ adoptOwner(영속 복원·계정 채택) **뒤**에 두는 것이 중요하다 — 먼저 열면 다른 계정의 레이아웃을
   //    지우는 초기화가 방금 연 창까지 함께 쓸어간다(효과·하이드레이션 리스너 둘 다 선언 순서로 돈다).
-  useDeepLinkWindow(isDesktop && !isDesktopSurface);
-  useEmptyWorkspaceHome(isDesktop && !isDesktopSurface, homeHref);
+  // 🔴 이전 화면 유지 방식은 이 둘 대신 `useKeepaliveFollow`가 주소와 화면을 양방향으로 맞춘다(딥링크도 거기서 연다).
+  // 스토어 규칙(복제 금지·사용 도장)이 볼 '지금 그려진 방식' — 영속본의 방식과 갈릴 수 있다(라이선스 조회 실패로 이 요청만 창 모드).
+  useEffect(() => {
+    if (useWindowStore.getState().kaActive !== keepalive) useWindowStore.setState({ kaActive: keepalive });
+  }, [keepalive]);
+  useDeepLinkWindow(isDesktop && !isDesktopSurface && !keepalive);
+  useEmptyWorkspaceHome(isDesktop && !isDesktopSurface && !keepalive, homeHref);
+  useKeepaliveFollow(keepalive, homeHref);
 
   // 창 안에서 녹음 등 끊기면 안 되는 작업이 진행 중이면 탭 전체 새로고침/이탈을 막는다(부모 탭은
   // iframe의 beforeunload가 못 막으므로 최상위 프레임에서 별도 가드). 마지막 busy 해제 시 제거.
@@ -167,6 +185,13 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
       const st = useWindowStore.getState();
       if (data.type === "eywa-window-focus") {
         if (st.focusedId !== sourceWinId) st.focus(sourceWinId);
+        // 이전 화면 유지: 화면 안 클릭 = 사용 중 — 2시간 만료 기준(keepalive-rules). 판정은 **지금 그려진 방식**(kaActive — 위 효과가 맞춘다).
+        if (st.kaActive) st.applyKeepalive(Date.now(), { touch: sourceWinId });
+        return;
+      }
+      if (data.type === "eywa-activity") {
+        // 이전 화면 유지 화면의 입력·스크롤 신호(KeepaliveFrameBridge) — 클릭 없이 읽고 치는 사용도 '사용 중'이다.
+        if (st.kaActive) st.applyKeepalive(Date.now(), { touch: sourceWinId });
         return;
       }
       if (data.type === WINDOW_DIRTY_MESSAGE) {
@@ -212,6 +237,16 @@ export function WorkspaceCanvas({ owner, homeHref = "/dashboard" }: { owner: str
   }, []);
 
   if (!isDesktop) return null;
+
+  // 이전 화면 유지 — 창 크롬·스냅·앨범·하단 독 없이 화면 가득. 바탕 가림막(바탕이 작업면이 아닐 때)만 창 모드와 같다.
+  if (keepalive) {
+    return (
+      <div className="pointer-events-none fixed inset-0 z-40 print:hidden" data-usage-chrome="">
+        {!isDesktopSurface ? <div className="pointer-events-auto bg-background absolute inset-0 z-0" aria-hidden="true" /> : null}
+        <KeepaliveStage />
+      </div>
+    );
+  }
 
   // 드래그 중 레이아웃 바 호버 시 전체 배치 고스트(선택 슬롯 강조), 아니면 단일 스냅 프리뷰.
   // (스포트라이트 중엔 드래그/스냅 비활성이라 고스트 없음.)

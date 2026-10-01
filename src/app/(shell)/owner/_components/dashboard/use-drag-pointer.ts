@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
+export function startPoint(ev: Event | null): { x: number; y: number } {
+  if (ev && "touches" in ev && (ev as TouchEvent).touches.length) {
+    const t = (ev as TouchEvent).touches[0]!;
+    return { x: t.clientX, y: t.clientY };
+  }
+  const m = ev as MouseEvent | null;
+  return { x: m?.clientX ?? 0, y: m?.clientY ?? 0 };
+}
+
 /** 현재 화면 좌표를 센서보다 먼저 받는다. 스크롤 보정이 든 dnd delta를 좌표로 쓰지 않는다. */
 export function useDragPointer() {
   const pointer = useRef<{ x: number; y: number } | null>(null);

@@ -27,7 +27,7 @@ export function RolePreview({
   const snapshot = useMemo(() => previewSnapshot(full, { role, items, menus, subject }), [full, role, items, menus, subject]);
   return (
     <div aria-label="운영실 미리보기" className="overflow-hidden rounded-2xl shadow-card">
-      <Overview key={snapshot.scope} initial={snapshot} preview />
+      <Overview initial={snapshot} preview />
     </div>
   );
 }

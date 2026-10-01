@@ -110,6 +110,7 @@ describe("배선 — 캔버스가 실제로 이 훅을 부르는가", () => {
       join(process.cwd(), "src/components/workspace/workspace-canvas.tsx"),
       "utf8",
     );
-    expect(src).toContain("useDeepLinkWindow(isDesktop && !isDesktopSurface)");
+    // 이전 화면 유지 방식은 이 훅 대신 주소 동기화(useKeepaliveFollow)가 딥링크를 연다 — 조건에서 그 방식만 뺀다(keepalive-wiring.test.ts).
+    expect(src).toContain("useDeepLinkWindow(isDesktop && !isDesktopSurface && !keepalive)");
   });
 });

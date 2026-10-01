@@ -4,7 +4,8 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, fmtNum } from "@/components/super-admin/parts";
-import { SEAT_FEATURES, TOGGLE_FEATURES } from "@/features/super-admin/labels";
+import { SEAT_FEATURES, TOGGLE_FEATURES, WINDOW_KEEPALIVE_KEY } from "@/features/super-admin/labels";
+import { WindowModeRow } from "./_window-mode-row";
 import { upsertTenantLicense, toggleTenantLicense } from "@/features/super-admin/server/actions";
 import type { TenantLicenseRow } from "@/features/super-admin/server/queries";
 import { licenseAllows, seatLimitOf } from "@/lib/license/rule";
@@ -41,17 +42,28 @@ export function LicenseSection({
             enrolledCount={enrolledCount}
           />
         ))}
-        {TOGGLE_FEATURES.map((f) => (
-          <ToggleRow
-            key={f.key}
-            tenantId={tenantId}
-            tenantName={tenantName}
-            feature={f.key}
-            label={f.label}
-            license={byFeature.get(f.key)}
-            defaultOn={f.defaultOn}
-          />
-        ))}
+        {TOGGLE_FEATURES.map((f) =>
+          // 화면 방식은 켜기·끄기가 아니라 셋 중 하나 — 창 모드 행(window_mode)과 이전 화면 유지 행(window_keepalive)을 한 줄로 합쳐 고른다.
+          f.key === "window_mode" ? (
+            <WindowModeRow
+              key={f.key}
+              tenantId={tenantId}
+              tenantName={tenantName}
+              windowModeRow={byFeature.get("window_mode")}
+              keepaliveRow={byFeature.get(WINDOW_KEEPALIVE_KEY)}
+            />
+          ) : (
+            <ToggleRow
+              key={f.key}
+              tenantId={tenantId}
+              tenantName={tenantName}
+              feature={f.key}
+              label={f.label}
+              license={byFeature.get(f.key)}
+              defaultOn={f.defaultOn}
+            />
+          ),
+        )}
       </ul>
     </Panel>
   );

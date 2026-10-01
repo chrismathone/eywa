@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { WindowLink } from "@/components/workspace/window-link";
 import { DetailPopup } from "./detail-popup";
+import { useDashboardCardId } from "./card-id";
 import s from "./overview.module.css";
 
 /** ↗(목적지 창) — 목적지 메뉴를 열 수 없으면 null. */
@@ -54,12 +55,13 @@ export function KpiCard({
   rename?: string;
   children: ReactNode;
 }) {
+  const cardId = useDashboardCardId();
   const missing = value === "—";
   const body = error ? (missing ? "조회 실패 · 다시 확인 필요" : "갱신 실패 · 이전 확인값") : detail;
   const text = detailPrefix ? `${detailPrefix} · ${body}` : body;
   const name = rename ?? label;
   return (
-    <div className={s.kpi} data-overview="kpi" data-kpi={label} data-help={helpKey}>
+    <div className={s.kpi} data-overview="kpi" data-kpi={label} data-help={helpKey} data-dashboard-card={cardId}>
       <DetailPopup
         title={popupTitle}
         ariaLabel={`${name} ${value}${missing ? "" : unit}. ${text}. 자세히 보기`}

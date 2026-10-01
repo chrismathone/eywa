@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  useSelectedLayoutSegments: () => [], // 이전 화면 유지 방식의 바탕 판정용(창 모드에선 안 쓴다)
 }));
 
 import { WorkspaceCanvas } from "./workspace-canvas";

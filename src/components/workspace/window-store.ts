@@ -20,6 +20,8 @@ import {
   type ResizeHandle,
   type SnapZone,
 } from "./window-geometry";
+import type { ShellMode } from "@/lib/license/shell-mode";
+import { needsModeReset, planKeepalive, type KeepaliveOpts } from "./keepalive-rules";
 
 export type WindowKind = "student" | "route"; // student=요약 peek, route=메뉴 풀화면(iframe)
 export type WindowParams = {
@@ -153,6 +155,24 @@ const CORNER_COMPLEMENT: Record<"tl" | "tr" | "bl" | "br", "tl" | "tr" | "bl" | 
 
 type State = {
   owner: string | null;
+  /**
+   * 이 영속본이 어느 지점 방식(창 모드/단일 화면(이전 화면 유지)/단일 화면)으로 쌓였나(영속). 방식이 바뀌면 `adoptOwner`가 전부 닫고
+   * 빈 상태로 시작한다(원장 2026-10-01). null = 이 기능 이전의 영속본(= 창 모드로 읽는다 — keepalive-rules `needsModeReset`).
+   */
+  shellMode: ShellMode | null;
+  /** 그 방식의 판(영속) — 방식 행이 마지막으로 바뀐 시각. 방식이 같아도 판이 다르면(바꿨다 되돌림) 초기화한다(`needsModeReset`). */
+  shellEpoch: string | null;
+  /** 이전 화면 유지 방식 — 화면별 마지막 사용 시각(영속, ms). 숨은 화면의 2시간 만료 기준. 창 모드에선 비어 있다. */
+  lastUsed: Record<string, number>;
+  /** 이전 화면 유지 방식 — 지난 판정 때 보이던 화면(런타임). 보이는 화면이 바뀐 순간을 '사용 시각'으로 찍는 데 쓴다. */
+  kaVisible: string | null;
+  /** 이전 화면 유지 방식 — 지금 보이는 화면 앞에 보이던 화면(런타임, null = 첫 화면). 보이던 화면이 닫히면 여기로 돌아간다. */
+  kaBack: string | null;
+  /**
+   * 이 문서가 **지금 이전 화면 유지 방식으로 그려지고 있나**(런타임 — 캔버스가 렌더된 방식에서 맞춘다). 복제 금지·사용 도장 같은 규칙은 영속본의
+   * `shellMode`가 아니라 이것을 본다: 라이선스 조회 실패로 이 요청만 창 모드로 그려질 땐 영속본은 그대로라 규칙이 섞였다(적대 리뷰).
+   */
+  kaActive: boolean;
   windows: Record<string, Win>;
   order: string[]; // back→front, 마지막 = 최상단
   focusedId: string | null;
@@ -222,6 +242,7 @@ type Slice = Pick<
   | "reloadNonce"
   | "pendingNav"
   | "homeNonce"
+  | "lastUsed"
 >;
 
 function sliceOf(s: State): Slice {
@@ -239,6 +260,7 @@ function sliceOf(s: State): Slice {
     reloadNonce: s.reloadNonce,
     pendingNav: s.pendingNav,
     homeNonce: s.homeNonce,
+    lastUsed: s.lastUsed,
   };
 }
 
@@ -276,6 +298,7 @@ function withoutWindow(s: Slice, id: string): Slice {
     reloadNonce: omitKey(s.reloadNonce, id),
     pendingNav: omitKey(s.pendingNav, id),
     homeNonce: omitKey(s.homeNonce, id),
+    lastUsed: omitKey(s.lastUsed, id),
   };
 }
 
@@ -374,13 +397,30 @@ type Actions = {
   lowerFromSpotlight: (id: string) => void; // 상단 타일 창 → 스트립으로 내림(마지막 1개는 유지)
   /** `/dashboard` main을 전면에 보이도록 모든 일반 창을 최소화하고 옛 dashboard iframe은 제거한다. */
   showDesktop: () => void;
-  adoptOwner: (owner: string) => void;
+  /**
+   * 복원 직후 호출 — 다른 계정이면, 그리고 `mode`가 주어졌는데 영속본의 방식·판과 다르면(`needsModeReset`) 전부 닫고 빈 상태로 시작한다.
+   * 방식은 문서를 열 때 한 번 정해진다(`ShellModeProvider`가 고정) — 그래서 이 판정은 페이지를 새로 연 때만 의미가 있다(입력·녹음 표식은
+   * 런타임이라 그때 남은 것이 없다). `mode` 생략 = 종전 동작(계정만 본다 — 방식을 모를 때도 이 길).
+   */
+  adoptOwner: (owner: string, mode?: ShellMode, epoch?: string | null) => void;
+  /**
+   * 이전 화면 유지 방식의 한 번 판정 — 보이는 화면은 하나(나머지 숨김) · 개수 상한 · 2시간 만료 · 닫힌 보관분 폐기 · 사용 시각 도장.
+   * 규칙은 순수 함수(`planKeepalive`)가 정하고 여기선 그 결과를 적용만 한다. **멱등**이어야 한다(바뀔 게 없으면 상태를 안 건드린다 —
+   * 구독 루프가 끝난다).
+   */
+  applyKeepalive: (now: number, opts?: KeepaliveOpts) => void;
 };
 
 export const useWindowStore = create<State & Actions>()(
   persist(
     (set, get) => ({
       owner: null,
+      shellMode: null,
+      shellEpoch: null,
+      lastUsed: {},
+      kaVisible: null,
+      kaBack: null,
+      kaActive: false,
       windows: {},
       order: [],
       focusedId: null,
@@ -674,6 +714,8 @@ export const useWindowStore = create<State & Actions>()(
       // primary, 이미 있으면 다음 빈 #n. 반복 shift+클릭 = 듀얼/멀티 창.
       openNewInstance: (kind, params, anchor) => {
         const s = get();
+        // 이전 화면 유지 방식엔 '같은 화면 한 벌 더'(듀얼 창)가 없다 — Shift+클릭도 그 화면을 연다(복제 금지, 원장 2026-10-01).
+        if (s.kaActive) return get().open(kind, params, anchor);
         const primary = windowId(kind, params.id);
         // 원본이 보관(닫힘) 중이면 새 번호 대신 원본을 되살린다 — 숨은 원본을 두고 '(2)'가 뜨던 것(리뷰 2026-09-11).
         // 되살리기는 open()이 한다(창 개수 한도·첫 화면 규칙 포함).
@@ -711,7 +753,7 @@ export const useWindowStore = create<State & Actions>()(
       duplicate: (winId) => {
         const s = get();
         const w = s.windows[winId];
-        if (!w || w.kind !== "route") return false;
+        if (!w || w.kind !== "route" || s.kaActive) return false;
         const base = baseWindowId(winId); // "route:students" — instance 스캔 전용(params.id 아님)
         let n = 1;
         while (s.windows[`${base}#${n}`]) n += 1; // 닫힌 번호 재사용
@@ -1016,11 +1058,23 @@ export const useWindowStore = create<State & Actions>()(
 
       // 복원 직후 호출: 다른 계정/테넌트 레이아웃이면 초기화(메타 누수 방지), 같으면 옛 dashboard
       // iframe을 제거하고 viewport clamp. 이 정리는 영속 마이그레이션 역할도 해 숨은 중복 fetch를 막는다.
-      adoptOwner: (owner) =>
+      adoptOwner: (owner, mode, epoch = null) =>
         set((s) => {
-          if (s.owner && s.owner !== owner) {
+          const ownerChanged = !!s.owner && s.owner !== owner;
+          // 방식이 바뀐 영속본(창 모드 ↔ 이전 화면 유지 ↔ 단일 화면 · 같은 방식이라도 판이 다름)도 **전부 닫고 빈 상태로** — 어느
+          // 방향이든(원장 2026-10-01). 🔴 같은 방식·같은 판의 새로고침은 그대로 복원한다(이 가지가 아님).
+          const modeChanged =
+            mode !== undefined && needsModeReset({ mode: s.shellMode, epoch: s.shellEpoch }, { mode, epoch });
+          const shellMode = mode ?? s.shellMode;
+          const shellEpoch = mode !== undefined ? (epoch ?? s.shellEpoch) : s.shellEpoch;
+          if (ownerChanged || modeChanged) {
             return {
               owner,
+              shellMode,
+              shellEpoch,
+              lastUsed: {},
+              kaVisible: null,
+              kaBack: null,
               windows: {},
               order: [],
               focusedId: null,
@@ -1043,7 +1097,48 @@ export const useWindowStore = create<State & Actions>()(
               rect: clampRect(w.maximized ? snapTarget("max", s.bounds)! : w.rect, s.bounds),
             };
           }
-          return { owner, windows };
+          return { owner, windows, shellMode, shellEpoch };
+        }),
+
+      applyKeepalive: (now, opts) =>
+        set((s) => {
+          const plan = planKeepalive(
+            {
+              windows: s.windows,
+              focusedId: s.focusedId,
+              cached: s.cached,
+              dirty: s.dirty,
+              busy: s.busy,
+              lastUsed: s.lastUsed,
+              spotlight: s.spotlight,
+              prevVisible: s.kaVisible,
+              back: s.kaBack,
+            },
+            now,
+            opts,
+          );
+          if (!plan.changed) return s;
+          // 파괴는 흔적(제목·뒤로 기록·미저장·잠금·사용 시각)까지 한 함수로 — close()·상한 축출과 같은 길.
+          let room = sliceOf(s);
+          for (const id of plan.discard) room = withoutWindow(room, id);
+          const windows = { ...room.windows };
+          const hidden = new Set(plan.hide);
+          for (const id of Object.keys(windows)) {
+            const w = windows[id]!;
+            if (id === plan.show) windows[id] = { ...w, minimized: false };
+            else if (hidden.has(id)) windows[id] = { ...w, minimized: true };
+          }
+          return {
+            ...room,
+            windows,
+            // 보이던 화면이 닫히거나 버려졌으면 열기 전에 보이던 화면(없으면 첫 화면)으로 — withoutWindow가 고른 '다음 창'은 숨은 화면이다.
+            focusedId: plan.focus !== undefined ? plan.focus : room.focusedId,
+            lastUsed: plan.lastUsed,
+            kaVisible: plan.visible,
+            kaBack: plan.back,
+            ...(plan.spotlightOff ? { spotlight: false, spotlightRaised: [] } : {}),
+            ...(plan.discard.length > 0 ? { snapAssist: null } : {}),
+          };
         }),
     }),
     {
@@ -1062,9 +1157,13 @@ export const useWindowStore = create<State & Actions>()(
         );
         return {
           owner: s.owner,
+          shellMode: s.shellMode,
+          shellEpoch: s.shellEpoch,
           windows: persisted,
           order: s.order.filter((id) => persisted[id]),
           focusedId: s.focusedId && persisted[s.focusedId] ? s.focusedId : null,
+          // 사용 시각은 남아 있는 화면 것만 — 2시간 만료가 브라우저를 껐다 켜도 같은 기준이어야 한다.
+          lastUsed: Object.fromEntries(Object.entries(s.lastUsed).filter(([id]) => persisted[id])),
         };
       },
     },

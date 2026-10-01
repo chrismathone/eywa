@@ -29,6 +29,7 @@ import { SchoolDistribution } from "./school-distribution";
 import { AdmissionsSchedule } from "./admissions-schedule";
 import { KpiStrip, kpiCards } from "./kpi-strip";
 import { GridBoard } from "./grid-board";
+import { identifyCard, useDashboardCardId } from "./card-id";
 import { GradeSplitChart } from "./grade-split";
 import { LevelSplitChart } from "./level-split";
 import { AdmissionsComparison } from "./admissions-comparison";
@@ -108,6 +109,7 @@ function Panel({
   /** 머리 오른쪽 '상세' 앞에 붙는 조작(막대/꺾은선 토글). */
   tools?: ReactNode;
 }) {
+  const cardId = useDashboardCardId();
   const visible = sections.filter((v) => !!v);
   if (!visible.length) return null;
   const failed = visible.some((v) => v.error);
@@ -119,6 +121,7 @@ function Panel({
     <section
       id={id}
       data-overview="panel"
+      data-dashboard-card={cardId}
       data-panel-title={title}
       data-wide={wide || undefined}
       data-help={helpKey}
@@ -1283,6 +1286,8 @@ export function Overview({
     ),
   };
 
+  for (const key of Object.keys(panels) as PanelId[]) panels[key] = identifyCard(`panel:${key}`, panels[key]);
+
   // 학습·학부모 보고 + 학생 상담은 기본 배치에서 한 묶음(2열) — 둘 다 영역이 없으면 묶음 자체가 없다.
   const followup =
     v.homework || v.unread || v.consultations ? (
@@ -1362,7 +1367,7 @@ export function Overview({
             {classic.sections.map((section) => (
               <Fragment key={section.id}>
                 {section.title ? (
-                  <div id={section.id} className={s.sectionLine}>
+                  <div id={section.id} className={s.sectionLine} data-dashboard-card={`heading:${section.id}`}>
                     <span>{section.title}</span>
                     <p>{section.note}</p>
                   </div>

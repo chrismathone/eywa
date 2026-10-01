@@ -63,51 +63,79 @@ export const isFeatureOptedIn = cache(async (tenantId: string, feature: OptInFea
   }
 });
 
-/** 화면(클라)에 내려 보내는 라이선스 표 — 켜고 끄는 기능 넷. */
-export type LicenseFlags = Record<LicensedFeature, boolean>;
+/**
+ * 화면(클라)에 내려 보내는 라이선스 표 — 켜고 끄는 기능 넷 + **창 모드의 '이전 화면 유지'**(`window_keepalive`).
+ * 🔴 `window_keepalive`는 나머지 넷과 **반대 기본값**이다(행 없음 = 꺼짐, opt-in) — 행이 없으면 지금까지의 창 모드 그대로(shell-mode.ts).
+ */
+export type LicenseFlags = Record<LicensedFeature, boolean> & { window_keepalive: boolean };
 const LICENSED_FEATURES: readonly LicensedFeature[] = ["ai_analysis", "google_sheets", "meeting_recording", "window_mode"];
-const ALL_ON: LicenseFlags = { ai_analysis: true, google_sheets: true, meeting_recording: true, window_mode: true };
+/** 창 모드 안에서 한 화면씩 쓰는 방식(opt-in 행) — `LicensedFeature`가 아니라 별도 키(게이트 가드·차단 문구 표를 안 건드린다). */
+export const WINDOW_KEEPALIVE_FEATURE = "window_keepalive";
+const ALL_ON: LicenseFlags = { ai_analysis: true, google_sheets: true, meeting_recording: true, window_mode: true, window_keepalive: false };
 
 /** 라이선스 표시용 캐시 태그(tenantId별) — 슈퍼관리자 라이선스 카드가 켜고 끌 때 `updateTag`로 비운다. */
 export function licenseFlagsTag(tenantId: string): string {
   return `tenant-licenses:${tenantId}`;
 }
 
+/**
+ * 라이선스 표 + **화면 방식의 판**(방식 행 둘 중 마지막으로 바뀐 `updated_at`, 행이 없으면 `"none"`) — 같은 한 조회에서 나온다.
+ * `windowModeEpoch: null` = 조회 실패(모른다) — 브라우저의 창 배치를 그 값으로 초기화하지 않는다(shell-mode.ts `ShellModeInfo`).
+ */
+export type LicenseSnapshot = { flags: LicenseFlags; windowModeEpoch: string | null };
+const WINDOW_MODE_ROWS: readonly string[] = ["window_mode", WINDOW_KEEPALIVE_FEATURE];
+
 /** 캐시 안 조회 — 실패는 던져서 **캐시하지 않는다**(설정 캐시 loadTenantSettingsRaw와 같은 규약). */
-const loadLicenseFlagsCached = (tenantId: string) =>
+const loadLicenseSnapshotCached = (tenantId: string) =>
   unstable_cache(
-    async (): Promise<LicenseFlags> => {
+    async (): Promise<LicenseSnapshot> => {
       const { data, error } = await createAdminClient()
         .from("tenant_licenses")
-        .select("feature, is_active, expires_at")
+        .select("feature, is_active, expires_at, updated_at")
         .eq("tenant_id", tenantId)
-        .in("feature", [...LICENSED_FEATURES]);
+        .in("feature", [...LICENSED_FEATURES, WINDOW_KEEPALIVE_FEATURE]);
       if (error) throw new Error(`tenant_licenses read failed: ${error.message}`);
       const out: LicenseFlags = { ...ALL_ON };
-      for (const r of (data ?? []) as { feature: LicensedFeature; is_active: boolean; expires_at: string | null }[]) {
-        if (LICENSED_FEATURES.includes(r.feature)) out[r.feature] = licenseAllows(r);
+      let epoch = "none";
+      for (const r of (data ?? []) as {
+        feature: string;
+        is_active: boolean;
+        expires_at: string | null;
+        updated_at: string | null;
+      }[]) {
+        if (r.feature === WINDOW_KEEPALIVE_FEATURE) out.window_keepalive = licenseExplicitlyOn(r);
+        else if ((LICENSED_FEATURES as readonly string[]).includes(r.feature)) out[r.feature as LicensedFeature] = licenseAllows(r);
+        // 판 = 방식 행이 마지막으로 바뀐 시각(updated_at 트리거, 0023a) — ISO 문자열이라 사전순 = 시간순.
+        if (WINDOW_MODE_ROWS.includes(r.feature) && r.updated_at && (epoch === "none" || r.updated_at > epoch)) epoch = r.updated_at;
       }
-      return out;
+      return { flags: out, windowModeEpoch: epoch };
     },
-    ["tenant-license-flags-v1", tenantId],
+    ["tenant-license-flags-v3", tenantId],
     // 셸이 창(iframe)마다 부르는 값이라 테넌트 캐시(B6). 만료는 표시에 영향이 없게 짧게 — 즉시 반영은 updateTag.
     { tags: [licenseFlagsTag(tenantId)], revalidate: 300 },
   )();
 
 /**
+ * 라이선스 표 + 화면 방식의 판을 **한 번에**(한 조회) — 셸 레이아웃이 부른다. 실패하면 표는 전부 켜짐(fail-open), 판은 null(모름).
+ * 🔑 tenantId별 `unstable_cache`(창마다 셸이 다시 돈다 — B6) + 요청 cache.
+ */
+export const getLicenseSnapshot = cache(async (tenantId: string): Promise<LicenseSnapshot> => {
+  if (!tenantId) return { flags: ALL_ON, windowModeEpoch: null };
+  try {
+    return await loadLicenseSnapshotCached(tenantId);
+  } catch (e) {
+    console.error("[license] 표 조회 실패 — 켜짐으로 둔다", e);
+    return { flags: ALL_ON, windowModeEpoch: null };
+  }
+});
+
+/**
  * 이 지점의 라이선스 넷을 **한 번에** — 셸이 화면 표시용으로 내려 보낸다(꺼진 기능의 버튼을 감추려고,
  * 원장 2026-09-30 "꺼지면 있었는지조차 모르게"). 판정은 `isFeatureLicensed`와 같다(행 없음 = 켜짐 · 조회 실패 = 켜짐).
  * ⚠️ 표시용이다 — 막는 것은 각 서버 경로의 `isFeatureLicensed`/`licenseBlockReason`이 따로 한다(캐시 없이).
- * 🔑 tenantId별 `unstable_cache`(창마다 셸이 다시 돈다 — B6) + 요청 cache.
  */
 export const getLicenseFlags = cache(async (tenantId: string): Promise<LicenseFlags> => {
-  if (!tenantId) return ALL_ON;
-  try {
-    return await loadLicenseFlagsCached(tenantId);
-  } catch (e) {
-    console.error("[license] 표 조회 실패 — 켜짐으로 둔다", e);
-    return ALL_ON;
-  }
+  return (await getLicenseSnapshot(tenantId)).flags;
 });
 
 /** 막혔으면 한글 사유, 아니면 null — 서버 액션이 `{ error }`로 그대로 돌려준다. */

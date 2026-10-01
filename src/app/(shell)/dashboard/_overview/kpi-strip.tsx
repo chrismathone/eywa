@@ -21,6 +21,7 @@ import { programLabel, programSubjectsOf, visiblePrograms, type Program } from "
 import type { MenuKey } from "@/lib/permissions";
 import { number } from "./charts";
 import { KpiCard } from "./kpi-card";
+import { identifyCard } from "./card-id";
 import { FirstClassPopup, StudentsPopup, WithdrawalsPopup } from "./kpi-popups";
 import { AbsentPopup, EnrolledTodayPopup, IntakePopup, LevelTestPopup, MakeupPopup } from "./kpi-popups-day";
 import s from "./overview.module.css";
@@ -297,6 +298,7 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
           <MakeupPopup data={makeup} today={today} canOpen={can("students")} />
         </KpiCard>
   );
+  for (const key of KPI_KEYS) if (cards[key]) cards[key] = identifyCard(`kpi:${key}`, cards[key]);
   return { cards, total: KPI_KEYS.filter((k) => cards[k]).length };
 }
 

@@ -1054,6 +1054,31 @@ main:not(.embed-main):has(.attendance-page) {
 }
 
 /* ───────────────────────────────────────────────
+ * 단일 화면(이전 화면 유지) 화면 문서 — **뷰포트 기준 레이어를 사이드바 밖으로**(원장 2026-10-01).
+ * 이 방식의 화면(iframe)은 뷰포트 **전체 폭**으로 깔리고 왼쪽은 부모 문서의 사이드바(z-45)가 덮는다 — 폭 기준 반응형(`desk:`·
+ * compact-chrome)이 단일 화면과 똑같이 판정되게(keepalive-stage.tsx). 본문은 사이드바 폭만큼 안쪽 여백(`--keepalive-rail`)으로 비키지만,
+ * 뷰포트 기준인 `position:fixed` 레이어는 그대로 두면 **왼쪽이 사이드바 밑에 깔린다**(넓은 다이얼로그는 1,240~1,366px 폭에서 실제로 잘린다).
+ * 그래서 **가운데에 놓이는 레이어만** 같은 폭만큼 비킨다 — 가운데 정렬 덮개(flex·grid)·`inset-0 m-auto` 상자·네이티브 모달 `<dialog>`는
+ * 사이드바 오른쪽 영역에서 가운데로, `left-1/2` 팝업(공용 다이얼로그)은 그 영역의 가운데로, 전폭 하단 바는 사이드바 오른쪽부터.
+ * 표식 `html[data-keepalive-frame]`과 변수는 화면 문서가 **하이드레이션 뒤에** 단다(KeepaliveFrameBridge) — 다이얼로그는 그 뒤에야 열린다.
+ * 🔴 일부러 안 건드리는 것: 자식을 뷰포트 좌표로 직접 놓는 덮개(F1 도움말 `fixed inset-0 overflow-hidden` — 옮기면 번호 알약이 표시 대상에서
+ *    어긋난다) · 클릭 받이 투명 덮개 · 앵커 기준 팝오버(인라인 style로 위치를 정한다 — 앵커가 이미 본문 안이다).
+ * ⚠️ 사이드바는 부모 문서라 화면 안 다이얼로그의 어두운 막이 사이드바까지는 안 덮는다(단일 화면과 다른 점 — 그 사이 사이드바를 누르면
+ *    그 화면은 다이얼로그를 연 채로 숨는다, 돌아오면 그대로).
+ * ⚠️ 창 모드의 창 문서엔 표식이 없다(종전 그대로).
+ * ─────────────────────────────────────────────── */
+html[data-keepalive-frame] .fixed.inset-0.flex,
+html[data-keepalive-frame] .fixed.inset-0.grid,
+html[data-keepalive-frame] .fixed.inset-0.m-auto,
+html[data-keepalive-frame] .fixed.inset-x-0,
+html[data-keepalive-frame] dialog:modal {
+  left: var(--keepalive-rail, 0px);
+}
+html[data-keepalive-frame] .fixed.left-1\/2 {
+  left: calc(50% + var(--keepalive-rail, 0px) / 2);
+}
+
+/* ───────────────────────────────────────────────
  * 영어 강사 시트 **폭 안내 게이트**(.sheet-width-gate / .sheet-too-narrow) — 못 쓰는 폭에선
  * 시트 대신 "넓혀 주세요" 안내를 세운다
  * (원장 2026-09-01: *"폭을 너무 좁힐 경우 일정 폭 이상 크게하라고 안내하는 화면으로"*).

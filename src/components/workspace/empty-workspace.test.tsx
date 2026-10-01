@@ -2,7 +2,8 @@ import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const nav = vi.hoisted(() => ({ pathname: "/students", replace: vi.fn(), push: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname, useRouter: () => nav }));
+// useSelectedLayoutSegments — 이전 화면 유지 방식의 바탕 판정용(창 모드에선 안 쓴다).
+vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname, useRouter: () => nav, useSelectedLayoutSegments: () => [] }));
 import { WorkspaceCanvas } from "./workspace-canvas";
 import { useWindowStore, windowId } from "./window-store";
 

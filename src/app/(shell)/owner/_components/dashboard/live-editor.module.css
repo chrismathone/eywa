@@ -1,0 +1,17 @@
+.canvas { position: relative; }
+/* 카드·차트는 실제 운영실이 그린다. 편집 손잡이는 크기 없는 별도 층에 둔다. */
+.surface > div { padding: 0; background: none; box-shadow: none; }
+.surface [data-tile-id] {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 12px;
+  transition: none;
+}
+.surface [data-tile-id]:hover,
+.surface [data-tile-id]:focus-visible,
+.surface [data-tile-id][data-selected] { outline: 2px solid var(--primary); outline-offset: 2px; }
+.hiddenCards { padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; font-size: var(--text-xs); }
+.hiddenCards summary { cursor: pointer; font-weight: 700; }
+.hiddenCards p { margin: 8px 0; }
+.hiddenCards div { display: flex; flex-wrap: wrap; gap: 8px; }
+.hiddenCards button { border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
