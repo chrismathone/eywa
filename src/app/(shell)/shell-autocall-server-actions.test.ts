@@ -105,6 +105,10 @@ const ALLOWED: Record<string, string[]> = {
   "src/components/view-mode-toggle.tsx -> src/features/shell/view-actions.ts": ["switchToTeacherView"],
   "src/components/user-menu.tsx -> src/app/(auth)/login/actions.ts": ["signOut"],
   "src/features/teacher-view/lang-switch.tsx -> src/features/teacher-view/server/actions.ts": ["setMyTeacherLang"],
+  // 화면 최대화 저장 — '화면 최대화'·'화면 원래대로'를 누를 때만(setMaximized). 첫 값은 서버가 initial로 내려준다.
+  "src/components/page-maximize/page-maximize-root.tsx -> src/features/page-maximize/server/actions.ts": [
+    "setMyPageMaximized",
+  ],
   // 공지 팝업 닫기 — 클릭
   "src/features/notices/components/notice-popup-card.tsx -> src/features/notices/server/dismiss-actions.ts": [
     "dismissNoticePopup",
