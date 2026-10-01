@@ -66,6 +66,14 @@
 .autoTag{display:inline-block;font-size:var(--text-xs);line-height:1.2;font-weight:700;padding:0 4px;border-radius:var(--radius-sm);border:1px solid currentColor;vertical-align:middle}
 .autoNote{background:var(--green-soft);color:var(--green);border-radius:var(--radius-lg);padding:8px 10px;font-size:var(--text-xs);line-height:1.5}
 .notApplicable{color:var(--text-dim)}
+/* 결석·숙제없음 = 회차가 아닌 사유 칸 — 미확인(주황)과 구분되는 옅은 회색(의미색 캐논 neutral). */
+.blank{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:100%;min-height:var(--control-h-sm);border-radius:var(--radius-sm);font-size:var(--text-sm);line-height:1.25;padding:2px 0;background:var(--bg-soft);color:var(--text-dim)}
+.cellWrap{position:relative}
+/* 완료 칸 모서리 — ▶ 영상 바로가기(링크) / 수동(영상 없이 직접 찍음). 칸 버튼과 겹치지 않게 별도 요소. */
+.videoLink{position:absolute;top:1px;right:1px;display:inline-flex}
+.videoLink a{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:var(--radius-sm);color:var(--green);background:var(--card)}
+.videoLink a:hover{outline:1px solid var(--green)}
+.manualTag{position:absolute;top:1px;right:2px;font-size:var(--text-xs);line-height:1.2;color:var(--text-dim);pointer-events:none}
 .groupFooter{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 10px;border-top:1px solid var(--line);font-size:var(--text-xs)}
 .empty{text-align:center;padding:40px 16px;border:1px solid var(--line);border-radius:var(--radius-xl)}
 .empty strong{font-size:var(--text-base)}.empty p{margin-top:8px;font-size:var(--text-sm)}

@@ -2,38 +2,22 @@
 
 import { useState, type CSSProperties } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { ledgerCounts, ledgerPairKey, ledgerSummary, roundStatusLabel, roundsOf, type LedgerGroup, type LedgerRounds } from "../ledger";
+import { ledgerCounts, ledgerPairKey, ledgerSummary, roundsOf, type LedgerGroup, type LedgerRounds } from "../ledger";
+import { blankCells, type BlankFacts } from "../no-homework";
 import type { LedgerRound } from "../rounds";
 import type { VideoHomeworkLedgerRow, VideoHomeworkStatus } from "../types";
 import { isVideoHomeworkDate } from "../types";
-import { LEDGER_STATUS_OPTIONS, roundDateText, type ActiveCell, type SaveLedgerChanges } from "./round-editor";
+import { LEDGER_STATUS_OPTIONS, type ActiveCell, type SaveLedgerChanges } from "./round-editor";
+import { RoundCell } from "./round-cell";
 import { changeKey, type LedgerChange } from "./use-ledger-marks";
 import styles from "./video-homework-management.module.css";
 
 const PAGE_SIZE = 50;
 const ROUND_SIZE = 10;
 // 반의 회차 수나 창 폭이 달라도 같은 열은 항상 같은 너비를 쓴다. 나머지 폭은 빈 공간이다.
-const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 88 } as const;
-const shortDate = (date: string) => date.slice(5).replace("-", ".");
-
-function RoundCell({ row, round, number, busy, onOpen }: {
-  row: VideoHomeworkLedgerRow; round: LedgerRound | undefined; number: number; busy: boolean; onOpen: (round: LedgerRound) => void;
-}) {
-  if (!round) return <td><span className={styles.notApplicable} title="이 회차의 숙제가 없습니다" aria-label="숙제 없음">—</span></td>;
-  const label = roundStatusLabel(round);
-  const tip = [roundDateText(round), label, round.submittedDate ? `제출 ${round.submittedDate}` : null,
-    round.auto ? `이 반으로 올라온 학부모 영상 ${round.videoDate} — 자동으로 셈` : null].filter(Boolean).join(" · ");
-  return <td><button type="button" className={`${styles.mark} ${styles[round.status]} ${round.auto ? styles.auto : ""}`} disabled={busy}
-    aria-label={`${row.studentName} ${number}회 ${round.homeworkDate ?? round.date} ${label}`} title={tip} onClick={() => onOpen(round)}>
-    <small className={styles.markDate}>{shortDate(round.date)}</small>
-    <span>{round.status === "submitted"
-      ? <>{round.auto ? <span className={styles.autoTag}>영상</span> : <EyIcon name="check" size={12} className="inline-block align-middle" />} {round.submittedDate ? shortDate(round.submittedDate) : "완료"}</>
-      : round.status === "missing" ? "× 미수행" : "미확인"}</span>
-  </button></td>;
-}
-
-export function ClassLedger({ group, rounds, today, busy, save, onEdit, collapsed, onToggle }: {
-  group: LedgerGroup; rounds: LedgerRounds; today: string; busy: boolean; save: SaveLedgerChanges;
+const COLUMN_WIDTH = { select: 32, student: 112, school: 132, count: 64, round: 96 } as const;
+export function ClassLedger({ group, rounds, blankFacts, videosKnown = true, today, busy, save, onEdit, collapsed, onToggle }: {
+  group: LedgerGroup; rounds: LedgerRounds; blankFacts: BlankFacts; videosKnown?: boolean; today: string; busy: boolean; save: SaveLedgerChanges;
   onEdit: (cell: ActiveCell) => void; collapsed: boolean; onToggle: () => void;
 }) {
   const [page, setPage] = useState(0);
@@ -119,17 +103,19 @@ export function ClassLedger({ group, rounds, today, busy, save, onEdit, collapse
           <tbody>{paged.map((row) => {
             const counts = ledgerCounts(row, rounds);
             const own = roundsOf(rounds, row);
+            // 회차 밖 빈 칸 — 반에 숙제가 나간 날 중 이 학생에게 없는 날을 결석·숙제없음으로(회차 수에는 안 들어간다).
+            const blanks = blankCells({ classDates: group.homeworkDates, own, facts: blankFacts[ledgerPairKey(row)], slots: group.roundCount - own.length });
             return <tr key={ledgerPairKey(row)} data-selected={selected.has(row.studentId) || undefined}>
               <td className={styles.selectCell}><input type="checkbox" aria-label={`${group.className} ${row.studentName} 선택`} disabled={busy || !row.editable} checked={selected.has(row.studentId)} onChange={() => toggleStudent(row.studentId)} /></td>
               <th scope="row" className={styles.studentCell}><span title={row.studentName}>{row.studentName}</span>{!row.editable ? <small title="읽기 전용">조회</small> : null}</th>
               <td className={styles.schoolCell} title={`${row.school ?? "학교 미등록"} ${row.grade ?? ""}`}>{row.school || "미등록"} <span>{row.grade}</span></td>
               <td className={styles.countCell}><strong>{counts.submitted}</strong><span>/{counts.total}</span></td>
-              {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} number={n} busy={busy} onOpen={(round) => open(row, round, n)} />)}
+              {numbers.map((n) => <RoundCell key={n} row={row} round={own[n - 1]} blank={blanks[n - 1 - own.length]} number={n} busy={busy} videosKnown={videosKnown} onOpen={(round) => open(row, round, n)} />)}
             </tr>;
           })}</tbody>
         </table>
       </div>
-      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 칸 위: 숙제가 나간 날 · 아래: 제출일</span>
+      <div className={styles.groupFooter}><span>{group.rows.length}명 중 {currentPage * PAGE_SIZE + 1}–{currentPage * PAGE_SIZE + paged.length}명 · 칸 위: 숙제가 나간 날 · 아래: 제출일 · ▶ 영상 · 수동 · 결석 · 숙제없음</span>
         {pages > 1 ? <div className={styles.roundPager}>
           <button type="button" disabled={busy || currentPage === 0} onClick={() => { setPage(currentPage - 1); setSelected(new Set()); }} aria-label={`${group.className} 이전 학생`}>이전</button>
           <span>{currentPage + 1} / {pages}</span>

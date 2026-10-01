@@ -17,18 +17,24 @@ const NO_ROUNDS: LedgerRound[] = [];
 export const roundsOf = (rounds: LedgerRounds, row: { classId: string; studentId: string }) => rounds.get(roundPairKey(row)) ?? NO_ROUNDS;
 export const ledgerCounts = (row: VideoHomeworkLedgerRow, rounds: LedgerRounds) => roundCounts(roundsOf(rounds, row));
 /** 칸·CSV·읽어 주는 이름이 같이 쓰는 상태 글자. */
+/** ▶(영상 바로가기)·'수동' 표시 — 완료 칸만. 영상이 짝지어졌으면 영상, 없으면 사람이 영상 없이 찍은 손 기록('수동'). */
+export const roundSource = (round: Pick<LedgerRound, "status" | "videoId">): "video" | "manual" | null =>
+  round.status !== "submitted" ? null : round.videoId ? "video" : "manual";
 export const roundStatusLabel = (round: Pick<LedgerRound, "status" | "auto">) =>
   round.status === "submitted" ? (round.auto ? "완료(영상)" : "완료") : round.status === "missing" ? "미수행" : "미확인";
 
 export function groupLedgerRows(rows: VideoHomeworkLedgerRow[], rounds: LedgerRounds) {
-  const groups = new Map<string, { classId: string; className: string; subject: string; rows: VideoHomeworkLedgerRow[]; roundCount: number }>();
+  const groups = new Map<string, { classId: string; className: string; subject: string; rows: VideoHomeworkLedgerRow[]; roundCount: number; homeworkDates: string[] }>();
   for (const row of rows) {
-    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, rows: [], roundCount: 0 };
+    const group = groups.get(row.classId) ?? { classId: row.classId, className: row.className, subject: row.subject, rows: [], roundCount: 0, homeworkDates: [] };
     group.rows.push(row);
     // 열 수 = 그 반에서 회차가 가장 많은 학생. 검색으로 학생이 가려져도 열은 그대로다.
     group.roundCount = Math.max(group.roundCount, roundsOf(rounds, row).length);
+    // 반에 숙제가 나간 날 = 그 반 학생들의 숙제 날짜 합 — 빈 칸에 결석·숙제없음을 채우는 기준(no-homework.ts).
+    for (const round of roundsOf(rounds, row)) if (round.homeworkDate && !group.homeworkDates.includes(round.homeworkDate)) group.homeworkDates.push(round.homeworkDate);
     groups.set(row.classId, group);
   }
+  for (const group of groups.values()) group.homeworkDates.sort();
   return [...groups.values()].sort((a, b) => a.className.localeCompare(b.className, "ko"));
 }
 export type LedgerGroup = ReturnType<typeof groupLedgerRows>[number];
