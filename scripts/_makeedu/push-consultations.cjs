@@ -239,10 +239,27 @@ async function captureCounselSeq(page, c) {
         update makeedu_push_requests set status = 'running', started_at = now()
         where status = 'pending' and tenant_id = ${tenantId} returning id, consultation_id`;
       if (reqs.length === 0) { console.log("pending 푸시 요청 없음."); return; }
-      const cids = reqs.map((r) => r.consultation_id);
+      // 같은 상담이 한 묶음에 둘(화면 두 곳에서 동시에 눌러 대기 행이 겹침) — 첫 요청만 제출하고 나머지는 큐에서 지운다.
+      // 상담 행을 아래에서 한 번만 읽어 두 번째도 미전송으로 보이므로, 거르지 않으면 makeedu에 두 건 등록된다(lib 주석).
+      const { unique, duplicates } = L.splitDuplicatePushRequests(
+        reqs.map((r) => ({ requestId: r.id, consultationId: r.consultation_id })),
+      );
+      if (duplicates.length > 0) {
+        const dupIds = duplicates.map((d) => d.requestId);
+        // dry-run은 큐를 그대로 돌려놓는 모드라(아래 루프가 pending으로 되돌린다) 지우지 않고 대기로만 되돌린다.
+        if (APPLY) {
+          await sql`delete from makeedu_push_requests
+                     where id in ${sql(dupIds)} and tenant_id = ${tenantId} and status = 'running'`;
+        } else {
+          await sql`update makeedu_push_requests set status = 'pending', started_at = null
+                     where id in ${sql(dupIds)} and tenant_id = ${tenantId} and status = 'running'`;
+        }
+        console.log(`⏭  같은 상담 중복 요청 ${duplicates.length}건 — 한 번만 보냅니다`);
+      }
+      const cids = unique.map((r) => r.consultationId);
       const rows = await fetchConsultations(sql, cids, tenantId);
       const byId = new Map(rows.map((c) => [c.id, c]));
-      targets = reqs.map((r) => ({ requestId: r.id, consultation: byId.get(r.consultation_id) }));
+      targets = unique.map((r) => ({ requestId: r.requestId, consultation: byId.get(r.consultationId) }));
     }
 
     console.log(`대상 ${targets.length}건 · 모드: ${APPLY ? "APPLY(실제 제출)" : "DRY-RUN(제출 안 함)"}`);
