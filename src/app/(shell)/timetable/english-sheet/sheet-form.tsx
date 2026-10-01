@@ -12,9 +12,9 @@ import {
 import type {
   MasterInput,
   MasterPreview,
-  MasterIssue,
 } from "@/features/timetable/import/master/types";
 import type { MasterTab } from "@/features/timetable/server/master-sheet-source";
+import { IssuesPanel } from "./issues-panel";
 import { ClassBindings } from "./class-bindings";
 import { TeacherBindings } from "./teacher-bindings";
 import { DAY_LABEL_KO } from "@/features/classes/overlap";
@@ -159,70 +159,12 @@ export function MasterSheetForm({
   const errors = preview?.issues.filter((i) => i.severity === "error") ?? [];
   const confirmations =
     preview?.issues.filter((i) => i.severity === "confirm") ?? [];
-  const warnings =
-    preview?.issues.filter((i) => i.severity === "warning") ?? [];
   const canApply =
     !!preview &&
     !dirty &&
     !errors.length &&
     confirmations.every((i) => checks.includes(i.key)) &&
     !success;
-  const sourceHref = (issue: MasterIssue) => {
-    if (!preview || !issue.tab) return null;
-    const gid =
-      issue.tab === preview.source.teacherTab
-        ? preview.source.teacherGid
-        : preview.source.rosterGid;
-    return `https://docs.google.com/spreadsheets/d/${preview.source.spreadsheetId}/edit#gid=${gid}${issue.cell ? `&range=${encodeURIComponent(issue.cell)}` : ""}`;
-  };
-  function issueRow(i: MasterIssue) {
-    const source = sourceHref(i);
-    return (
-      <li key={i.key} className="border-line border-t py-3 first:border-t-0">
-        <div className="flex gap-3">
-          {i.severity === "confirm" ? (
-            <input
-              type="checkbox"
-              aria-label={`${i.target} 확인`}
-              checked={checks.includes(i.key)}
-              disabled={pending || dirty}
-              onChange={(e) =>
-                setChecks((v) =>
-                  e.target.checked
-                    ? [...v, i.key]
-                    : v.filter((k) => k !== i.key),
-                )
-              }
-              className="mt-1 size-4 shrink-0"
-            />
-          ) : null}
-          <div className="min-w-0">
-            <p className="text-sm font-medium">{i.target}</p>
-            <p className="mt-1 text-sm">{i.reason}</p>
-            <p className="mt-1 text-sm text-text-dim">{i.fix}</p>
-            <div className="mt-2 flex flex-wrap gap-4 text-xs text-primary">
-              {source ? (
-                <a
-                  href={source}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline"
-                >
-                  {i.tab}
-                  {i.cell ? ` · ${i.cell}` : ""} 열기
-                </a>
-              ) : null}
-              {i.href ? (
-                <Link href={i.href} target="_blank" className="underline">
-                  에이와에서 수정
-                </Link>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </li>
-    );
-  }
   return (
     <div className="space-y-6">
       <section
@@ -374,59 +316,13 @@ export function MasterSheetForm({
       ) : null}
       {preview ? (
         <>
-          <section aria-label="검사 결과">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-semibold">
-                {dirty
-                  ? "입력 변경 · 다시 검사 필요"
-                  : errors.length
-                    ? `적용 불가 ${errors.length}건`
-                    : confirmations.some((i) => !checks.includes(i.key))
-                      ? `확인 필요 ${confirmations.length}건`
-                      : "적용 가능"}
-              </h2>
-              <span className="text-sm text-text-dim">
-                수업 {preview.report.targetSchedules}개 · 연결된 반{" "}
-                {
-                  new Set(
-                    preview.mappings.map((m) => m.classId).filter(Boolean),
-                  ).size
-                }
-                개
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-text-dim">
-              적용 불가 항목은 수정해야 합니다. 확인 항목은 에이와의 가져오기
-              규칙에 따라 개별 확인 후 진행할 수 있습니다.
-            </p>
-            {errors.length ? (
-              <ul
-                className="mt-4 max-h-96 overflow-y-auto border-line rounded-lg border px-4"
-                aria-label="적용 불가 항목"
-              >
-                {errors.map(issueRow)}
-              </ul>
-            ) : null}
-            {confirmations.length ? (
-              <div className="mt-5">
-                <h3 className="text-sm font-semibold">확인 후 적용할 항목</h3>
-                <ul
-                  className="mt-2 max-h-96 overflow-y-auto border-line rounded-lg border px-4"
-                  aria-label="개별 확인 항목"
-                >
-                  {confirmations.map(issueRow)}
-                </ul>
-              </div>
-            ) : null}
-            {warnings.length ? (
-              <details className="mt-4">
-                <summary className="cursor-pointer text-sm">
-                  참고·기존 수강 유지 {warnings.length}건
-                </summary>
-                <ul>{warnings.map(issueRow)}</ul>
-              </details>
-            ) : null}
-          </section>
+          <IssuesPanel
+            preview={preview}
+            dirty={dirty}
+            pending={pending}
+            checks={checks}
+            onChecks={setChecks}
+          />
           <nav
             aria-label="수정 항목 이동"
             className="flex flex-wrap gap-4 text-sm text-primary"

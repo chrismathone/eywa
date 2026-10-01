@@ -115,7 +115,7 @@ export function masterPreview(
 ): MasterPreview {
   const plan = buildMasterPlan(input, grids, ctx, source);
   const hash = createHash("sha256")
-    .update(JSON.stringify(stable({ input, grids, ctx })))
+    .update(JSON.stringify(stable({ rulesVersion: 2, input, grids, ctx })))
     .digest("hex");
   return {
     ...plan,

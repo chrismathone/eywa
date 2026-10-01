@@ -9,10 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { MasterSheetForm } from "./sheet-form";
-import type {
-  MasterPreview,
-  MasterIssue,
-} from "@/features/timetable/import/master/types";
+import { preview } from "./test-preview";
 const api = vi.hoisted(() => ({
   tabs: vi.fn(),
   preview: vi.fn(),
@@ -23,42 +20,7 @@ vi.mock("@/features/timetable/server/master-sheet-actions", () => ({
   previewMasterSheet: api.preview,
   applyMasterSheet: api.apply,
 }));
-function preview(issues: MasterIssue[] = []): MasterPreview {
-  return {
-    hash: "a".repeat(64),
-    effectiveDate: "2026-10-01",
-    source: {
-      spreadsheetId: "sheet",
-      teacherTab: "강사별(10월)",
-      rosterTab: " 통합(10월)",
-      teacherGid: 1,
-      rosterGid: 2,
-    },
-    report: {
-      slotsParsed: 1,
-      targetSchedules: 1,
-      entitiesToCreate: { teachers: [], classes: [], rooms: [] },
-      matched: { classes: 1, teachers: 1, rooms: 1 },
-      plan: { create: 1, update: 0, keep: 0, remove: 0 },
-      planItems: [],
-      conflicts: [],
-      warnings: [],
-      hash: "x",
-    },
-    roster: { moves: [], adds: [], removes: [], unchanged: 0, warnings: [] },
-    issues,
-    mappings: [],
-    rosterReview: { sheet: [], existing: [] },
-    teacherMappings: [],
-    omittedClasses: [],
-    classUpdates: [],
-    blocks: [],
-    groups: [],
-    classes: [],
-    teachers: [],
-    classrooms: [],
-  };
-}
+
 beforeEach(() => {
   vi.resetAllMocks();
   api.tabs.mockResolvedValue({
@@ -114,7 +76,7 @@ describe("영어 시트 화면의 실제 버튼 배선", () => {
     expect(api.apply).not.toHaveBeenCalled();
     expect(api.preview.mock.calls[0]?.[0].rosterTab).toBe(" 통합(10월)");
   });
-  it("충돌 개별 확인 후 적용하며 서버가 바뀐 결과를 돌려주면 다시 차단한다", async () => {
+  it("전체 확인이 적용 서버에 전달되고 바뀐 결과를 받으면 다시 차단한다", async () => {
     const p = preview([
       {
         key: "conflict",
@@ -143,7 +105,17 @@ describe("영어 시트 화면의 실제 버튼 배선", () => {
     await user.click(screen.getByRole("button", { name: "미리보기" }));
     const apply = await screen.findByRole("button", { name: "적용" });
     expect(apply).toBeDisabled();
-    await user.click(screen.getByRole("checkbox", { name: "시간 겹침 확인" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "확인 항목 전체 확인" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "확인 항목 전체 확인" }),
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "시간 겹침 확인" }),
+    ).toBeChecked();
     expect(apply).toBeEnabled();
     await user.click(apply);
     expect(await screen.findByText("반 연결이 변경되었습니다.")).toBeVisible();
