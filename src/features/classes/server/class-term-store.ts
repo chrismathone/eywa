@@ -103,8 +103,13 @@ export async function applyClassTerms(
       if (updated.length !== b.enrollments.length)
         throw new ClassTermError("수강 정보가 변경되어 종강 처리를 중단했습니다.");
     }
+    const action = restoring
+      ? "class_reopen_term"
+      : b.before.closed_at !== b.after.closed_at || b.after.is_active
+        ? "class_end_term"
+        : "class_archive";
     await tx`insert into audit_logs(tenant_id,actor_id,actor_name,action,target_type,target_label,metadata)
-      values(${actor.tenantId},${actor.id},${actor.displayName},${restoring ? "class_reopen_term" : b.after.is_active ? "class_end_term" : "class_archive"},'class',${b.after.class_name},
+      values(${actor.tenantId},${actor.id},${actor.displayName},${action},'class',${b.after.class_name},
         ${tx.json({
           classId: b.before.id,
           closedAt: b.after.closed_at,
