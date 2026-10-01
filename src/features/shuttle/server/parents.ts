@@ -43,7 +43,7 @@ type StudentRow = {
 };
 
 export async function getParentAccounts(): Promise<ParentAccount[]> {
-  // 원장·관리자만 — 화면 게이트와 같은 판정. DB 정책(0313a)도 같은 역할로 막는다.
+  // 원장·관리자만 — 화면 게이트와 같은 판정. DB 정책(0320a)도 같은 역할로 막는다.
   if (!(await parentAccountsActor())) return [];
   const supabase = await createClient();
   const { data: accounts, error } = await supabase

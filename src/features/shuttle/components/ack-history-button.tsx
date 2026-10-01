@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { ackShuttleHistory } from "../server/history-ack-actions";
 
 /**
- * 변경 내역 한 줄의 [확인] — 누르면 그 줄이 직원 화면에서 내려간다(장부는 그대로, 0316a · 사용자 2026-09-30).
+ * 변경 내역 한 줄의 [확인] — 누르면 그 줄이 직원 화면에서 내려간다(장부는 그대로, 0323a · 사용자 2026-09-30).
  * 서버가 권한·학원을 다시 본다([[#77]]) — 못 누르는 사람에겐 이유가 이 자리에 선다.
  */
 export function AckHistoryButton({ kind, historyId }: { kind: "ride" | "regular"; historyId: string }) {

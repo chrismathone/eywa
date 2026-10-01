@@ -18,7 +18,7 @@ export type ParentViewer = {
 /**
  * 로그인한 사람이 **학부모 계정**이면 그 학부모와 연결된 아이들, 아니면 null.
  *
- * 🔑 학부모는 직원 표(`public.users`)에 없다(0313a) — 그래서 `getCurrentUser()`는 null이고, DB 정책의
+ * 🔑 학부모는 직원 표(`public.users`)에 없다(0320a) — 그래서 `getCurrentUser()`는 null이고, DB 정책의
  *    `auth_tenant_id()`도 null이라 학부모 세션으로는 **어떤 표도 직접 못 읽는다**. 그래서 여기서만
  *    service_role로 읽되, 반드시 **이 세션의 학부모 → 그 학부모에게 연결된 아이**로만 좁힌다.
  * 🔴 아이 목록은 `parent_account_students`에서만 온다 — 주소·폼으로 받은 학생 id를 믿지 않는다([[#77]]).

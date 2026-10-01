@@ -27,7 +27,7 @@ export const metadata = { title: "학부모 등하원 — aywa" };
  *
  * 🔑 재료는 오늘 등하원과 같은 조회 4개(세션 클라이언트 + RLS) — 셔틀을 보는 직원이면 누구나 연다.
  *    학부모 계정 정보는 '연결됨' 여부만 싣는다(이메일·연락처는 학부모 관리 현황, 원장·관리자 전용).
- * 🔑 카드 맨 아래 **변경 내역**(누가·언제·어디서 어디로, 0314a 장부)은 직원 화면에만 있다 — 학부모 화면엔 없다.
+ * 🔑 카드 맨 아래 **변경 내역**(누가·언제·어디서 어디로, 0321a 장부)은 직원 화면에만 있다 — 학부모 화면엔 없다.
  * 🔑 오른쪽 [학부모 관리 현황] 버튼(모달: 계정 목록 + 발급)은 **원장·관리자에게만** 선다 — 그 데이터
  *    조회 둘은 스스로 같은 판정을 보고 다른 역할엔 빈 배열을 돌려주므로, 함께 병렬로 부른다(B4).
  */
@@ -49,9 +49,9 @@ export default async function ShuttleParentRidesPage({
     getBoardingsOn(date),
     getRideExceptionsOn(date),
     getTripsOn(date),
-    // 변경 내역(0314a 장부) — 직원 전용. 학부모 화면엔 없다(사용자 2026-09-29).
+    // 변경 내역(0321a 장부) — 직원 전용. 학부모 화면엔 없다(사용자 2026-09-29).
     getRideChangesOn(date),
-    // 고정(매주) 시간 변경 — 최근 60일(0315a 장부), 직원 전용.
+    // 고정(매주) 시간 변경 — 최근 60일(0322a 장부), 직원 전용.
     getRegularChanges(),
     getParentLinkedStudentIds(user.tenantId),
     parentAccountsActor(),

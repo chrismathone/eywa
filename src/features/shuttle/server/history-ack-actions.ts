@@ -10,15 +10,15 @@ import { canRecordBoarding } from "./record-gate";
 type AckState = { ok: true } | { error: string };
 
 /**
- * 변경 내역 한 줄을 **확인** — 관리자 '학부모 등하원' 화면에서 내린다(0316a, 사용자 2026-09-30 "실제 디비는 남지만 더이상
- * 화면 뷰에서 나오지 않게"). 장부(0314a·0315a)는 추가만 되는 표라 건드리지 않고 **확인 표식만 따로** 쌓는다
+ * 변경 내역 한 줄을 **확인** — 관리자 '학부모 등하원' 화면에서 내린다(0323a, 사용자 2026-09-30 "실제 디비는 남지만 더이상
+ * 화면 뷰에서 나오지 않게"). 장부(0321a·0322a)는 추가만 되는 표라 건드리지 않고 **확인 표식만 따로** 쌓는다
  * (`shuttle_history_acks`). 화면은 `queries.ts`의 `ackedHistoryIds`가 표식 있는 줄을 빼고 그린다.
  *
  * 🔑 게이트 = 등하원 **기록 축**(`canRecordBoarding` — 사무실 ∪ 셔틀 담당 ∪ super_admin) — 셔틀 담당·데스크가 처리하는
  *    일이다(열람 전용은 못 누른다). 편성 게이트(`canWriteTenant("shuttle")`)를 쓰면 정작 셔틀 선생님이 못 누른다.
  * 🔑 학원 공용 — 한 사람이 확인하면 모두의 화면에서 내려간다. 다시 눌러도 같다(멱등 · 먼저 누른 사람이 남는다).
  * 🔴 우리 학원의 장부 줄인지 먼저 확인한다 — admin은 RLS 우회라 남의 학원 id를 받아 적을 수 있다([[#104]]).
- * ⚠️ 0316a 전이면 한글 안내로 돌려준다([[#95]] — 화면은 표가 없어도 산다: 아무것도 숨기지 않는다).
+ * ⚠️ 0323a 전이면 한글 안내로 돌려준다([[#95]] — 화면은 표가 없어도 산다: 아무것도 숨기지 않는다).
  */
 export async function ackShuttleHistory(kind: string, historyId: string): Promise<AckState> {
   const user = await getCurrentUser();

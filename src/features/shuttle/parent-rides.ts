@@ -178,7 +178,7 @@ export type VehicleRoute = {
 };
 
 /**
- * 그날 그 방향의 변경 한 건 — 이력 장부(0314a)에서 온다. 🔑 전/후는 저장 당시 **글자 스냅샷**(null = 평소대로).
+ * 그날 그 방향의 변경 한 건 — 이력 장부(0321a)에서 온다. 🔑 전/후는 저장 당시 **글자 스냅샷**(null = 평소대로).
  * 학부모에게도 **학원이 바꾼 것**까지 보인다(누가 바꿨는지 알아야 "왜 바뀌었지"가 풀린다).
  */
 export type RideChange = {
@@ -194,7 +194,7 @@ export type RideChange = {
   at: string;
 };
 
-/** 고정(정기) 시간 변경 한 건 — 0315a 장부. 🔴 직원 화면 전용. */
+/** 고정(정기) 시간 변경 한 건 — 0322a 장부. 🔴 직원 화면 전용. */
 export type RegularChange = {
   id: string;
   direction: Direction;

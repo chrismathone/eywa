@@ -49,7 +49,7 @@ type Admin = ReturnType<typeof createAdminClient>;
  *    실제 기록·운행 상태는 `live`(오늘)일 때만 — 다른 날은 아직 일어나지 않았다.
  * 🔑 `withVehicleRoutes`면 **학원의 모든 호차 노선**(정류장 이름·시각)도 읽는다 — 역시 다른 아이 배정은 읽지 않는다.
  *    학부모가 모달에서 호차를 바꿔 가며 다른 차의 노선도 본다.
- * 🔴 변경 내역(0314a 장부)은 **읽지 않는다** — 직원 전용이다(사용자 2026-09-29 "관리자나 셔틀 선생님만").
+ * 🔴 변경 내역(0321a 장부)은 **읽지 않는다** — 직원 전용이다(사용자 2026-09-29 "관리자나 셔틀 선생님만").
  *    직원 화면은 `getRideChangesOn`(queries.ts, 세션 + RLS)으로 따로 읽는다.
  * 실패하면 빈 결과로 접고 계측만 남긴다 — 학부모 화면을 500으로 죽이지 않는다.
  */
@@ -84,7 +84,7 @@ async function load(
   const [ridersRes, exceptionsRes, logsRes] = await Promise.all([
     admin.from("shuttle_riders").select("id, run_stop_id, student_id, io_kind, weekdays, memo")
       .eq("tenant_id", tenantId).in("student_id", studentIds).limit(200),
-    // 그날만 변경은 **어느 날짜든** 읽는다 — 학부모가 이번 주 다른 요일을 미리 바꿀 수 있어서(0314a).
+    // 그날만 변경은 **어느 날짜든** 읽는다 — 학부모가 이번 주 다른 요일을 미리 바꿀 수 있어서(0321a).
     admin.from("shuttle_ride_exceptions").select("id, student_id, kind, io_kind, run_stop_id, memo")
       .eq("tenant_id", tenantId).eq("on_date", ymd).in("student_id", studentIds).limit(100),
     live

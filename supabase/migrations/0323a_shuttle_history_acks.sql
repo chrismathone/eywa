@@ -1,6 +1,6 @@
--- 0316a — 셔틀 변경 내역 '확인' 표식 (사용자 2026-09-30)
+-- 0323a — 셔틀 변경 내역 '확인' 표식 (사용자 2026-09-30)
 --
--- 관리자 '학부모 등하원' 카드의 변경 내역(0314a 그날 변경 · 0315a 고정 변경)에 [확인] 버튼을 두고,
+-- 관리자 '학부모 등하원' 카드의 변경 내역(0321a 그날 변경 · 0322a 고정 변경)에 [확인] 버튼을 두고,
 -- 확인한 줄은 **화면에서만** 내린다. "실제 디비는 남지만 더이상 화면 뷰에서 나오지 않게".
 --
 -- 🔑 장부 두 표는 **추가만 되는 표**다(트리거가 service_role의 수정·삭제까지 막는다) — 그래서 장부 줄에
@@ -17,7 +17,7 @@ set local statement_timeout = '60s';
 create table if not exists public.shuttle_history_acks (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null,
-  -- ride = shuttle_ride_exception_history(0314a) · regular = shuttle_rider_history(0315a)
+  -- ride = shuttle_ride_exception_history(0321a) · regular = shuttle_rider_history(0322a)
   history_kind text not null constraint shuttle_history_acks_kind check (history_kind in ('ride', 'regular')),
   history_id uuid not null,
   acked_by uuid,
@@ -26,7 +26,7 @@ create table if not exists public.shuttle_history_acks (
 );
 
 comment on table public.shuttle_history_acks is
-  '셔틀 변경 내역 확인 표식(0316a) — 확인한 장부 줄은 직원 화면에서 내린다. 장부(0314a·0315a)는 그대로.';
+  '셔틀 변경 내역 확인 표식(0323a) — 확인한 장부 줄은 직원 화면에서 내린다. 장부(0321a·0322a)는 그대로.';
 
 -- 🔴 부분 유니크(WHERE) 금지 — 이 축으로 upsert한다([[#113]]).
 create unique index if not exists shuttle_history_acks_uniq

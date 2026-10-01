@@ -52,11 +52,11 @@ export function ParentRideCard({
   /** 오늘 이후면 true — 지난 날짜는 모달이 보기만. */
   editable?: boolean;
   /**
-   * 이 아이의 그날 변경 내역(0314a 장부, 최신 먼저) — 🔴 **직원 뷰(`staff`)에서만** 그린다
+   * 이 아이의 그날 변경 내역(0321a 장부, 최신 먼저) — 🔴 **직원 뷰(`staff`)에서만** 그린다
    * (사용자 2026-09-29 "관리자나 셔틀 선생님만"). 학부모 화면은 애초에 넘기지 않는다.
    */
   changes?: readonly RideChange[];
-  /** 이 아이의 최근 고정(매주) 시간 변경(0315a 장부) — 🔴 직원 뷰에서만 그린다. */
+  /** 이 아이의 최근 고정(매주) 시간 변경(0322a 장부) — 🔴 직원 뷰에서만 그린다. */
   regularChanges?: readonly RegularChange[];
   /**
    * 학부모 뷰 — 구간 문장 옆에 '등원만 타지 않기'/'하원만 타지 않기' 버튼(**수정 모드에서만**).
@@ -171,7 +171,7 @@ export function ParentRideCard({
 }
 
 /**
- * 변경 내역(직원 전용) — 누가 · 언제 · 어디서 어디로. 학부모·직원이 바꾼 것, 취소한 것 모두(0314a 장부).
+ * 변경 내역(직원 전용) — 누가 · 언제 · 어디서 어디로. 학부모·직원이 바꾼 것, 취소한 것 모두(0321a 장부).
  * 🔑 전/후는 저장 당시 글자 스냅샷이다(노선이 나중에 바뀌어도 그때의 자리가 남는다). null = 평소대로.
  */
 function StaffChangeList({ changes }: { changes: readonly RideChange[] }) {
@@ -187,7 +187,7 @@ function StaffChangeList({ changes }: { changes: readonly RideChange[] }) {
                 <span className="bg-bg-soft rounded-full px-1.5 py-0.5 text-xs font-bold">{DIRECTION_LABEL[c.direction]}</span>{" "}
                 <span className="num text-text-dim">{c.at}</span> <span className="font-bold">{c.actorName}</span>
               </span>
-              {/* 확인하면 이 줄은 화면에서 내려간다(장부는 그대로, 0316a · 사용자 2026-09-30). */}
+              {/* 확인하면 이 줄은 화면에서 내려간다(장부는 그대로, 0323a · 사용자 2026-09-30). */}
               <AckHistoryButton kind="ride" historyId={c.id} />
             </div>
             <span className="text-text-dim block pl-1">
@@ -204,7 +204,7 @@ function StaffChangeList({ changes }: { changes: readonly RideChange[] }) {
   );
 }
 
-/** 고정(매주) 시간 변경 내역(직원 전용, 0315a 장부) — 최근 60일. 요일·전/후·사유·누가. */
+/** 고정(매주) 시간 변경 내역(직원 전용, 0322a 장부) — 최근 60일. 요일·전/후·사유·누가. */
 function StaffRegularChangeList({ changes }: { changes: readonly RegularChange[] }) {
   return (
     <section className="border-line mt-3 border-t pt-2">

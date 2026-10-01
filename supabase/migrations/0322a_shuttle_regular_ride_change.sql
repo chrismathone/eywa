@@ -1,4 +1,4 @@
--- 0315a — 학부모 **고정 시간 변경**(요일마다 반복되는 정기 배정) + 그 이력 장부.
+-- 0322a — 학부모 **고정 시간 변경**(요일마다 반복되는 정기 배정) + 그 이력 장부.
 --
 -- 사용자(2026-09-29): *"고정시간 변경하기 … 셀렉된 요일마다 기존 고정시간을 알려주고 다른 바꿀 시간을 선택하면
 -- 그 시간으로 고정으로 바꿀 수 있게 … 무슨 이유로 바꾸는지 내용을 받도록"*.
@@ -8,7 +8,7 @@
 -- 🔑 요일 **하나만** 옮긴다. 배정 한 줄은 여러 요일을 가진다(월~금 등) — 그 줄에서 그 요일을 빼고(그 요일만 있던 줄은
 --    지운다: 빈 요일 배열은 0225a 제약 위반), 새 칸의 줄에 그 요일을 더한다(없으면 새 줄).
 --    여러 단계라 **함수 하나 = 트랜잭션 하나**로 한다(중간에 끊기면 그 요일에 타는 곳이 사라진다).
--- 🔑 이력은 같은 함수가 쓴다 — 전/후 자리를 글자 스냅샷으로, 사유·행위자와 함께(추가만, 0314a와 같은 규칙).
+-- 🔑 이력은 같은 함수가 쓴다 — 전/후 자리를 글자 스냅샷으로, 사유·행위자와 함께(추가만, 0321a와 같은 규칙).
 -- ⚠️ 날짜 하루짜리 변경이 걸린 날은 그 변경이 여전히 이긴다(정기 − 안 탐 + 여기서 탐) — 정기를 바꿔도 그날은 그대로.
 --
 -- 롤백:
@@ -36,7 +36,7 @@ create table if not exists public.shuttle_rider_history (
 );
 
 comment on table public.shuttle_rider_history is
-  '셔틀 고정(정기) 배정 변경 이력(0315a) — 요일 하나의 타는 곳을 바꿀 때마다 한 줄. 추가만 된다.';
+  '셔틀 고정(정기) 배정 변경 이력(0322a) — 요일 하나의 타는 곳을 바꿀 때마다 한 줄. 추가만 된다.';
 
 create index if not exists shuttle_rider_history_student_idx
   on public.shuttle_rider_history (tenant_id, student_id, created_at desc);
@@ -46,7 +46,7 @@ drop policy if exists shuttle_rider_history_tenant_read on public.shuttle_rider_
 create policy shuttle_rider_history_tenant_read on public.shuttle_rider_history
   for select using (tenant_id = public.auth_tenant_id());
 
--- 추가만 — 0314a의 막는 함수를 같이 쓴다.
+-- 추가만 — 0321a의 막는 함수를 같이 쓴다.
 drop trigger if exists tg_shuttle_rider_history_append_only on public.shuttle_rider_history;
 create trigger tg_shuttle_rider_history_append_only
   before update or delete on public.shuttle_rider_history

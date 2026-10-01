@@ -680,7 +680,7 @@ export async function setRideException(formData: FormData): Promise<ShuttleActio
       run_stop_id: kind === "add" ? runStopId : null,
       memo,
       created_by: ctx.userId,
-      // 마지막으로 바꾼 사람(0314a) — 트리거가 이력 장부에 그대로 옮긴다. 학부모가 걸었던 줄을 덮으면 직원으로 바뀐다.
+      // 마지막으로 바꾼 사람(0321a) — 트리거가 이력 장부에 그대로 옮긴다. 학부모가 걸었던 줄을 덮으면 직원으로 바뀐다.
       actor_kind: "staff",
       actor_name: ctx.userName,
       parent_account_id: null,
@@ -724,7 +724,7 @@ export async function clearRideException(formData: FormData): Promise<ShuttleAct
     return { error: "지난 날짜의 변경은 지울 수 없습니다 — 그날의 기록입니다" };
   }
 
-  // 🔑 직접 delete하지 않고 함수로 지운다(0314a) — 그래야 이력 장부에 **누가 취소했는지**가 남는다.
+  // 🔑 직접 delete하지 않고 함수로 지운다(0321a) — 그래야 이력 장부에 **누가 취소했는지**가 남는다.
   const { error } = await admin.rpc("cancel_shuttle_ride_exception", {
     p_tenant_id: ctx.tenantId,
     p_id: id,

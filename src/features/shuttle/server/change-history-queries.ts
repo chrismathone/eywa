@@ -9,9 +9,9 @@ import type { RegularChange, RideChange } from "../parent-rides";
 import { isDirection, type DayCode } from "../types";
 
 /**
- * 관리자 '학부모 등하원' 화면의 **변경 내역** 조회 — 그날 변경(0314a 장부) · 고정 시간 변경(0315a 장부).
+ * 관리자 '학부모 등하원' 화면의 **변경 내역** 조회 — 그날 변경(0321a 장부) · 고정 시간 변경(0322a 장부).
  * 🔴 **직원 전용**(사용자 2026-09-29 "관리자나 셔틀 선생님만") — 세션 + RLS(테넌트 직원)로 읽는다. 학부모 화면 로더는
- *    이 장부를 읽지 않는다. 직원이 [확인]한 줄(0316a)은 여기서 뺀다(장부는 그대로).
+ *    이 장부를 읽지 않는다. 직원이 [확인]한 줄(0323a)은 여기서 뺀다(장부는 그대로).
  * ⚠️ 장부·확인 표가 없거나(마이그레이션 전) 읽기에 실패해도 화면은 산다 — 내역만 비거나, 아무것도 안 숨긴다([[#95]]).
  * (`queries.ts`에서 떼어 냈다 — 셔틀 조회 파일이 600줄을 넘어서.)
  */
@@ -27,8 +27,8 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
 }
 
 /**
- * 직원이 **확인**한 장부 줄 id(0316a) — 화면에서만 내린다(장부는 그대로, 사용자 2026-09-30).
- * ⚠️ 표가 없거나(0316a 전) 읽기에 실패하면 **빈 집합** — 아무것도 안 숨긴다(모르는 것을 '확인했다'로 읽지 않는다).
+ * 직원이 **확인**한 장부 줄 id(0323a) — 화면에서만 내린다(장부는 그대로, 사용자 2026-09-30).
+ * ⚠️ 표가 없거나(0323a 전) 읽기에 실패하면 **빈 집합** — 아무것도 안 숨긴다(모르는 것을 '확인했다'로 읽지 않는다).
  */
 async function ackedHistoryIds(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -53,7 +53,7 @@ function shortStamp(iso: string): string {
 }
 
 /**
- * 최근 **고정 시간 변경**(0315a 장부) — 학생 id → 최신 먼저. 🔴 직원 전용(세션 + RLS).
+ * 최근 **고정 시간 변경**(0322a 장부) — 학생 id → 최신 먼저. 🔴 직원 전용(세션 + RLS).
  * 고정 변경은 날짜가 아니라 요일에 걸리므로 '그날'로 거르지 않고 최근 60일을 보인다.
  */
 export async function getRegularChanges(): Promise<Map<string, RegularChange[]>> {
@@ -92,9 +92,9 @@ export async function getRegularChanges(): Promise<Map<string, RegularChange[]>>
 }
 
 /**
- * 그날 **변경 내역**(0314a 이력 장부) — 학생 id → 최신 먼저. 🔴 **직원 전용**(사용자 2026-09-29 "관리자나
+ * 그날 **변경 내역**(0321a 이력 장부) — 학생 id → 최신 먼저. 🔴 **직원 전용**(사용자 2026-09-29 "관리자나
  * 셔틀 선생님만") — 세션 + RLS(테넌트 직원)로 읽는다. 학부모 화면 로더는 이 장부를 읽지 않는다.
- * ⚠️ 장부가 없거나(0314a 전) 읽기에 실패해도 화면은 산다 — 내역만 빈다.
+ * ⚠️ 장부가 없거나(0321a 전) 읽기에 실패해도 화면은 산다 — 내역만 빈다.
  */
 export async function getRideChangesOn(ymd: string): Promise<Map<string, RideChange[]>> {
   const out = new Map<string, RideChange[]>();

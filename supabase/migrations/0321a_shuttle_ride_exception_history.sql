@@ -1,10 +1,10 @@
--- 0314a — 셔틀 '그날만 변경'(0229a)을 **학부모도** 바꾸고, 누가·언제·어떻게 바꿨는지 **이력 장부**에 남긴다.
+-- 0321a — 셔틀 '그날만 변경'(0229a)을 **학부모도** 바꾸고, 누가·언제·어떻게 바꿨는지 **이력 장부**에 남긴다.
 --
 -- 사용자(2026-09-29): *"학부모가 내용을 바꾸면 디비도 바뀌게"* + *"누가 언제 어떻게 수정했는지도 기록에 남기고 싶다"*.
 --
 -- 🔑 무엇이 바뀌나
 --    ① `shuttle_ride_exceptions`에 **마지막으로 바꾼 사람** — `actor_kind`(staff|parent|system) · `actor_name`
---       · `parent_account_id`. `created_by`는 직원 표(`public.users`)만 가리켜서 학부모를 적을 수 없었다(0313a:
+--       · `parent_account_id`. `created_by`는 직원 표(`public.users`)만 가리켜서 학부모를 적을 수 없었다(0320a:
 --       학부모는 직원 표에 없다).
 --    ② `shuttle_ride_exception_history` — **추가만 되는 장부**. 생성·변경·취소마다 한 줄, 전/후 자리를
 --       **글자로 스냅샷**한다(노선 칸이 나중에 지워져도 "1호차 1회차 · 침산초 후문"이 남는다).
@@ -78,7 +78,7 @@ create table if not exists public.shuttle_ride_exception_history (
 );
 
 comment on table public.shuttle_ride_exception_history is
-  '셔틀 그날만 변경(0229a)의 이력 장부(0314a) — 트리거가 생성·변경·취소마다 한 줄. 추가만 된다(수정·삭제 금지).';
+  '셔틀 그날만 변경(0229a)의 이력 장부(0321a) — 트리거가 생성·변경·취소마다 한 줄. 추가만 된다(수정·삭제 금지).';
 
 create index if not exists shuttle_ride_exception_history_student_idx
   on public.shuttle_ride_exception_history (tenant_id, student_id, on_date);

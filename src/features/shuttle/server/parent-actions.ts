@@ -103,7 +103,7 @@ function refreshParentScreens() {
  *
  * 후속 처리(순서대로):
  *   ① 로그인 계정(auth.users) 삭제 → 그 학부모의 **모든 세션이 끊기고** 다시 로그인할 수 없다.
- *      0313a의 `on delete cascade`로 학부모 정보(parent_accounts)와 원생 연결(parent_account_students)이 함께 지워진다.
+ *      0320a의 `on delete cascade`로 학부모 정보(parent_accounts)와 원생 연결(parent_account_students)이 함께 지워진다.
  *   ② 혹시 남은 학부모 정보 행을 한 번 더 지운다(로그인 계정이 이미 없던 경우 등 — 멱등).
  *   ③ 감사로그 · 두 화면 재검증.
  * 🔑 **원생·셔틀 배정·탑승 기록은 건드리지 않는다** — 그건 아이의 사실이지 학부모 계정의 것이 아니다.

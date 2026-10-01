@@ -89,7 +89,7 @@ export function effectiveStopId(state: RideState): string | null {
   return state.add?.run_stop_id ?? state.regularStopIds[0] ?? null;
 }
 
-/** 변경 줄 하나 취소 — 취소 함수로 지워야 이력 장부에 학부모로 남는다(0314a). */
+/** 변경 줄 하나 취소 — 취소 함수로 지워야 이력 장부에 학부모로 남는다(0321a). */
 async function cancel(admin: Admin, ctx: Ctx, exceptionId: string) {
   const { error } = await admin.rpc("cancel_shuttle_ride_exception", {
     p_tenant_id: ctx.viewer.tenantId,
