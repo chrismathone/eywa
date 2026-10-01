@@ -2,6 +2,8 @@ import "server-only";
 import postgres from "postgres";
 import { nextClosedClassName } from "../closed-name";
 
+export class ClassTermError extends Error {}
+
 export type TermActor = { id: string | null; tenantId: string; displayName: string };
 export type TermRequest = { classId: string; date: string; name?: string; archive?: boolean };
 type ClassState = { id: string; class_name: string; closed_at: string | null; is_active: boolean };
@@ -34,13 +36,13 @@ export async function prepareClassTerms(
   const result: TermBackup[] = [];
   for (const request of requests) {
     const c = classes.find((c) => c.id === request.classId);
-    if (!c) throw new Error("종강할 반을 찾지 못했습니다. 다시 확인해 주세요.");
+    if (!c) throw new ClassTermError("종강할 반을 찾지 못했습니다. 다시 확인해 주세요.");
     const names = classes
       .filter((v) => v.subject === c.subject && v.id !== c.id)
       .map((v) => v.class_name);
     const name = nextClosedClassName(c.class_name, request.date, names);
     if (request.name && request.name !== name)
-      throw new Error("종강 후 반 이름이 변경되었습니다. 다시 검사해 주세요.");
+      throw new ClassTermError("종강 후 반 이름이 변경되었습니다. 다시 검사해 주세요.");
     // Future closure is visible on the class now; the nightly job ends enrollments only when due.
     const rows =
       !request.archive && request.date > clock!.today
@@ -89,7 +91,7 @@ export async function applyClassTerms(
       where tenant_id=${actor.tenantId} and id=${b.before.id} and class_name=${b.before.class_name}
         and closed_at is not distinct from ${b.before.closed_at}::date and is_active=${b.before.is_active} returning id`;
     if (changed.length !== 1)
-      throw new Error("반 정보가 변경되어 종강 처리를 중단했습니다. 다시 검사해 주세요.");
+      throw new ClassTermError("반 정보가 변경되어 종강 처리를 중단했습니다. 다시 검사해 주세요.");
     if (b.enrollments.length) {
       const updated = await tx`
         update enrollments e set end_date=(x->'after'->>'end_date')::date,withdrawal_reason=x->'after'->>'withdrawal_reason'
@@ -99,7 +101,7 @@ export async function applyClassTerms(
           and e.end_date is not distinct from (x->'before'->>'end_date')::date
           and e.withdrawal_reason is not distinct from x->'before'->>'withdrawal_reason' returning e.id`;
       if (updated.length !== b.enrollments.length)
-        throw new Error("수강 정보가 변경되어 종강 처리를 중단했습니다.");
+        throw new ClassTermError("수강 정보가 변경되어 종강 처리를 중단했습니다.");
     }
     await tx`insert into audit_logs(tenant_id,actor_id,actor_name,action,target_type,target_label,metadata)
       values(${actor.tenantId},${actor.id},${actor.displayName},${restoring ? "class_reopen_term" : b.after.is_active ? "class_end_term" : "class_archive"},'class',${b.after.class_name},

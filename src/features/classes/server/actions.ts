@@ -47,7 +47,8 @@ import {
 import { normalizeEnglishTrack } from "../english-track";
 import { readFreeClosedNameRequest, type ClassNameConflict } from "../class-name-conflict";
 import { freedLeftNotice, rollbackFreedClassName, writeWithClassNameGuard } from "./class-name-guard";
-import { endClassWithName } from "./class-term-store";
+import { ClassTermError, endClassWithName } from "./class-term-store";
+import { explainDbError } from "@/lib/supabase/db-error";
 
 export type ClassFormState =
   | {
@@ -725,8 +726,8 @@ export async function archiveClass(
     try {
       await endClassWithName(user, { classId: id, date: kstToday(), archive: true });
     } catch (error) {
-      console.error("[class-archive]", error);
-      return { error: "반 폐지를 저장하지 못했습니다. 반 이름과 수강 정보가 변경됐는지 확인하고 다시 시도해 주세요." };
+      return { error: explainDbError(error, { scope: "classes.archiveClass", op: "write",
+        fallback: error instanceof ClassTermError ? error.message : "반 폐지를 저장하지 못했습니다. 반 이름과 수강 정보가 변경됐는지 확인하고 다시 시도해 주세요." }).message };
     }
     revalidatePath("/classes");
     revalidatePath(`/classes/${id}`);
@@ -787,8 +788,8 @@ export async function endClassTerm(_prev: ClassTermState, formData: FormData): P
   try {
     await endClassWithName(user, { classId: id, date });
   } catch (error) {
-    console.error("[class-end-term]", error);
-    return { error: "종강을 저장하지 못했습니다. 종강일·반 이름·수강 정보를 확인하고 다시 시도해 주세요." };
+    return { error: explainDbError(error, { scope: "classes.endClassTerm", op: "write",
+      fallback: error instanceof ClassTermError ? error.message : "종강을 저장하지 못했습니다. 종강일·반 이름·수강 정보를 확인하고 다시 시도해 주세요." }).message };
   }
   revalidatePath("/classes");
   revalidatePath(`/classes/${id}`);
