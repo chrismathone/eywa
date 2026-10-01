@@ -9,6 +9,8 @@ export function videoSchoolGrade(school, grade) {
 
 const part = (value) => String(value).normalize("NFC").replace(/[<>:"/\\|?*\x00-\x1f_]/g, " ")
   .replace(/\s+/g, " ").trim().replace(/[. ]+$/g, "").slice(0, 80);
+/** 파일명 한 칸 정규화 — 직접 올린 파일 이름을 읽을 때(video-manual-name)도 같은 규칙으로 비교한다. */
+export const filenamePart = part;
 
 /** 반을 하나로 못 정한 영상의 반 자리 — 파일명 구분자(`_`)를 넣지 않는다. */
 export const UNKNOWN_CLASS = "반미정";

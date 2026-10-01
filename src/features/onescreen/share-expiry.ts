@@ -25,8 +25,10 @@ export function shareExpiryDate(reportDate: string, days = REPORT_SHARE_LINK_DAY
 /**
  * 링크가 만료됐는가 — 오늘(KST)이 (report_date+90일)을 **지났으면** 만료.
  * 경계: 90일째 당일은 유효(`kstToday() === expiry` → false), 그 다음날부터 만료(`>` 비교).
+ * `days`는 같은 산술을 다른 기간에 쓰는 자리(숙제 영상 제출 링크 7일 — video-submit/rules.ts)를 위한 것이다.
+ * 보고서 링크의 90일은 기본값 그대로다(이 값을 바꾸지 말 것).
  */
-export function isShareExpired(reportDate: string, todayKst: string = kstToday()): boolean {
+export function isShareExpired(reportDate: string, todayKst: string = kstToday(), days = REPORT_SHARE_LINK_DAYS): boolean {
   if (!reportDate) return false;
-  return todayKst > shareExpiryDate(reportDate);
+  return todayKst > shareExpiryDate(reportDate, days);
 }

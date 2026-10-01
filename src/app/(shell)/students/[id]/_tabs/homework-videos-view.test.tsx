@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { HomeworkVideosView } from "./homework-videos-view";
-import { homeworkVideoLinks, type HomeworkVideo } from "@/features/students/homework-videos";
+import { dedupeHomeworkVideos, homeworkVideoLinks, type HomeworkVideo } from "@/features/students/homework-videos";
 
 const row: HomeworkVideo = { id: "video", subject: "english", posted_at: "2026-09-30T04:36:00Z", created_at: "2026-09-30T04:36:00Z",
   comment_id: 12, status: "uploaded", drive_file_id: "drivefile12345", bytes: 7873117, uploaded_at: "2026-09-30T05:00:00Z" };
@@ -38,6 +38,25 @@ describe("학생 숙제 영상 뷰어", () => {
     expect(screen.queryByText(/Google 계정으로 로그인/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
     expect(container.querySelector("iframe")).toBeNull();
+  });
+  it("담임 폴더에 직접 올린 영상은 '직접 제출'·날짜만, 제출 링크는 '제출 링크'로 보인다(원시값 노출 없음)", () => {
+    render(<HomeworkVideosView rows={[
+      { ...row, id: "drive", source: "drive", comment_id: null, posted_at: "2026-09-30T03:00:00Z", drive_file_id: "drivefile99999" },
+      { ...row, id: "link", source: "link", comment_id: null },
+    ]} subjectLabels={{ english: "영어" }} showDriveLink={false} />);
+    const drive = screen.getByRole("button", { name: /직접 제출/ });
+    expect(drive).toHaveTextContent("2026. 09. 30.");
+    expect(drive).not.toHaveTextContent(/오후|오전/);
+    expect(screen.getByRole("button", { name: /제출 링크/ })).toBeInTheDocument();
+    expect(screen.queryByText(/drive ·|link ·/)).toBeNull();
+  });
+  it("같은 영상(MD5·크기) 두 줄은 과목이 정해진 쪽 하나만 — 지문은 화면으로 내보내지 않는다", () => {
+    const classnote = { ...row, id: "cn", subject: null, md5: "a".repeat(32) };
+    const manual = { ...row, id: "dr", source: "drive" as const, md5: "a".repeat(32) };
+    const other = { ...row, id: "x", md5: "b".repeat(32) };
+    const result = dedupeHomeworkVideos([classnote, manual, other, { ...row, id: "nomd5" }]);
+    expect(result.map((r) => r.id)).toEqual(["dr", "x", "nomd5"]);
+    expect(result.every((r) => !("md5" in r))).toBe(true);
   });
   it("구글 계정에 권한이 없으면 영상 자리에 권한 없음 안내를 띄운다", () => {
     const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink={false} />);
