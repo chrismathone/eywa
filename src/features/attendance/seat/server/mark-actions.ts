@@ -23,6 +23,7 @@ import {
 } from "../jj-fields";
 import { hhmm, type SeatKey } from "../seat";
 import { gateSeatWrite, rosterKeys } from "./gate";
+import { logDbError } from "@/lib/supabase/db-error";
 
 // 충돌 축은 `jj-fields.ts` 한 곳에서 온다 — 이 칸을 쓰는 문이 셋이라(손입력·영어 시트·인재원 자동) 갈리면 행이 쪼개진다.
 const ON_CONFLICT = JJ_MARK_ON_CONFLICT;
@@ -87,7 +88,10 @@ export async function setSeatJjField(input: {
     .eq("mark_date", input.date)
     .eq("slot_start", slot)
     .maybeSingle();
-  if (readErr) return { error: "저장에 실패했습니다" };
+  if (readErr) {
+    logDbError(readErr, "attendance.seat.setSeatJjField");
+    return { error: "저장에 실패했습니다" };
+  }
   if (!existing && value === null) return { ok: true };
 
   const now = new Date().toISOString();

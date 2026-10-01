@@ -91,7 +91,7 @@ describe("유지 배치와 명시적 연결", () => {
     expect(p.report.plan.keep).toBe(1);
     expect(p.issues.some((i) => i.key.startsWith("student-time:"))).toBe(true);
   });
-  it("빠진 반은 유지하고 사용자가 마감 선택한 경우에만 출결 보호를 검사한다", () => {
+  it("빠진 반은 기본 종강 대상이고 선택 해제하면 유지한다", () => {
     const f = fixture();
     f.ctx.classes.push({
       ...f.ctx.classes[0]!,
@@ -118,8 +118,13 @@ describe("유지 배치와 명시적 연결", () => {
       },
     ];
     let p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
-    expect(p.report.plan.remove).toBe(0);
+    expect(p.report.plan.remove).toBe(1);
     expect(p.omittedClasses).toHaveLength(1);
+    expect(p.termClosures?.[0]).toMatchObject({ classId: "other", closedAt: "2026-09-30", toName: "유지반 (~26.09.30)" });
+    f.input.closeClassIds = [];
+    p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
+    expect(p.report.plan.remove).toBe(0);
+    expect(p.termClosures).toEqual([]);
     f.input.closeClassIds = ["other"];
     p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
     expect(p.report.plan.remove).toBe(1);
@@ -145,6 +150,7 @@ describe("유지 배치와 명시적 연결", () => {
   });
   it("시트에 없는 유지 반과 새 배치의 강의실 충돌도 확인받는다", () => {
     const f = fixture();
+    f.input.closeClassIds = [];
     f.ctx.classes.push({
       ...f.ctx.classes[0]!,
       id: "other",

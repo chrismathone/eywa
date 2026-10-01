@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
 import { logActionAs } from "@/features/audit/server/log";
 import { isMissingFunction } from "@/features/classes/server/period-enrollments";
+import { finishEndedClassNames } from "@/features/classes/server/class-period-names";
 
 /**
  * **운영 기간이 끝난 반**의 열린 수강을 그 운영 종료일로 닫는 cron(매일 00:35 KST — 전날로 끝난 기간을 자정 직후에).
@@ -54,10 +55,18 @@ export async function GET(req: Request) {
       },
     );
   }
-  if (rows.length > 0) {
+  let renamed: number;
+  try {
+    renamed = await finishEndedClassNames();
+  } catch (error) {
+    reportError(error, { where: "close-ended-class-periods:names" });
+    return NextResponse.json({ ok: false, error: "종강 반 이름 정리에 실패했습니다. 다음 실행에서 다시 시도합니다." }, { status: 500 });
+  }
+  if (rows.length > 0 || renamed > 0) {
     revalidatePath("/classes", "layout");
     revalidatePath("/students", "layout");
     revalidatePath("/attendance", "layout");
+    revalidatePath("/timetable", "layout");
   }
-  return NextResponse.json({ ok: true, classes: rows.length, closed: rows.reduce((a, r) => a + r.closed, 0) });
+  return NextResponse.json({ ok: true, classes: rows.length, renamed, closed: rows.reduce((a, r) => a + r.closed, 0) });
 }

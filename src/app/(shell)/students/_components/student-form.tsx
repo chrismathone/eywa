@@ -388,7 +388,7 @@ export function StudentForm({
             {/* 출결번호 = 키오스크 체크인 번호 — 키오스크 기능이 꺼진 학원엔 칸이 없다(2026-09-30 "꺼지면 흔적 없이").
                 🔴 숨겨도 저장값은 hidden으로 싣는다(칸이 빠지면 서버가 빈 값으로 지운다 — ClassNote 이름과 같은 규약). */}
             {kioskOn ? (
-              <Field label="출결번호" htmlFor="attendanceCode">
+              <Field label="출결번호" htmlFor="attendanceCode" error={errors.attendanceCode}>
                 <input
                   id="attendanceCode"
                   name="attendanceCode"

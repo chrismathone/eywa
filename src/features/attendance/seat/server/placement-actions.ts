@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { ambiguousClassIds, hhmm, type SeatKey } from "../seat";
 import { applySeatPlacements, seatResetTargets, type SeatPlacement } from "../placement";
@@ -149,8 +150,10 @@ export async function resetSeatPlacements(input: {
 
 /** 저장 실패 문구 — 표가 없는 것(SQL 미적용)과 그냥 실패를 가른다(원인을 단정하지 않는다). */
 function placementError(err: { code?: string; message?: string }): string {
-  if (err.code === "42P01" || err.code === "PGRST205" || /seat_placements/i.test(err.message ?? "")) {
+  // 🔴 표 이름만 보면 제약 위반 원문(표 이름이 들어 있다)까지 "기능이 안 켜졌다"로 오판한다([[#138]] 리뷰) — 표 없음 신호와 함께만.
+  const msg = err.message ?? "";
+  if (err.code === "42P01" || err.code === "PGRST205" || (/seat_placements/i.test(msg) && /does not exist|schema cache|Could not find/i.test(msg))) {
     return "자리 배치 기능이 아직 켜지지 않았습니다 — 관리자에게 문의하세요(0254a 미적용).";
   }
-  return "자리 이동을 저장하지 못했습니다 — 다시 시도해 주세요";
+  return explainDbError(err, { scope: "attendance.seat.placement", fallback: "자리 이동을 저장하지 못했습니다 — 다시 시도해 주세요" }).message;
 }

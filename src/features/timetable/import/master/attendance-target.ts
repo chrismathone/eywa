@@ -102,14 +102,5 @@ export function attendanceTarget(
     return {
       error: "기존 출결 교시에 대응하는 새 교시를 하나로 확정하지 못했습니다.",
     };
-  if (
-    old.length === 1 &&
-    specialSlotLabel(old[0]!.label ?? "") !==
-      specialSlotLabel(target.label ?? "")
-  )
-    return {
-      error:
-        "기존 교시와 새 교시의 LAB·JJ 자리 구분이 달라 출결 귀속을 확인해야 합니다.",
-    };
-  return { time: target.startTime };
+  return { time: target.startTime, seatLabel: specialSlotLabel(target.label ?? "") };
 }

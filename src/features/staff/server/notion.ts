@@ -23,6 +23,7 @@ import {
 } from "@/features/staff/notion-tasks";
 import { monthRange, shiftMonth } from "@/lib/month-grid";
 import { kstMonth } from "@/lib/date-kst";
+import { logDbError } from "@/lib/supabase/db-error";
 
 // Notion 업무 DB → 직원 상세 '월간일정' 조회 + 직원↔Notion 사용자 매핑. 권한 게이트는 호출부(notion-actions.ts).
 // 토큰/DB id/연동 학원은 env(lib/notion/client.ts `notionConfigFor`). notion_user_id는 users 컬럼(0100a).
@@ -301,7 +302,10 @@ export async function setStaffNotionUserIdRow(
     .select("tenant_id")
     .eq("id", staffId)
     .single();
-  if (readErr || !target) return { ok: false, error: "대상 직원을 찾을 수 없습니다" };
+  if (readErr || !target) {
+    logDbError(readErr, "staff.setStaffNotionUserIdRow");
+    return { ok: false, error: "대상 직원을 찾을 수 없습니다" };
+  }
   if ((target as { tenant_id: string }).tenant_id !== actorTenantId)
     return { ok: false, error: "다른 지점의 계정은 변경할 수 없습니다" };
 
@@ -318,6 +322,9 @@ export async function setStaffNotionUserIdRow(
   }
 
   const { error } = await admin.from("users").update({ notion_user_id: notionUserId }).eq("id", staffId);
-  if (error) return { ok: false, error: "매핑 저장에 실패했습니다" };
+  if (error) {
+    logDbError(error, "staff.setStaffNotionUserIdRow");
+    return { ok: false, error: "매핑 저장에 실패했습니다" };
+  }
   return { ok: true };
 }

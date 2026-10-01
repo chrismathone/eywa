@@ -261,6 +261,8 @@ export function AppSidebar({
         // data-usage-chrome — 이용 분석이 사이드바 입력을 **배경 화면의 활동**으로 세지 않는다(메뉴를 여는 손이지
         // 배경을 쓰는 손이 아니다, features/usage/session.ts).
         data-usage-chrome=""
+        // data-maximize-hide — '화면 최대화' 중엔 숨는다(globals.css `[data-page-maximize="on"]`, 원장 2026-10-01).
+        data-maximize-hide=""
         style={{ width }}
         className={`bg-sidebar border-line sticky top-0 z-[45] flex h-screen shrink-0 flex-col border-r ${
           motion ? `transition-[width] duration-200 ${EASE}` : ""

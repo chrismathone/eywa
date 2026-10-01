@@ -52,16 +52,16 @@ describe("반 이름 충돌 — 그 반의 상태", () => {
 });
 
 describe("반 이름 충돌 — 비울 때 붙이는 이름", () => {
-  it("종강월 접미사 — 손으로 하던 스크립트와 같은 모양(PJ2 → PJ2 (~2026-07))", () => {
-    expect(archivedClassNameBase("PL5", "2026-07-02")).toBe("PL5 (~2026-07)");
+  it("종강월 접미사 — 손으로 하던 스크립트와 같은 모양(PJ2 → PJ2 (~26.07.02))", () => {
+    expect(archivedClassNameBase("PL5", "2026-07-02")).toBe("PL5 (~26.07.02)");
     // 종강일이 없는 폐지 반은 스크립트 규칙 그대로 '(~종강)'
     expect(archivedClassNameBase("PL5", null)).toBe("PL5 (~종강)");
   });
 
   it("접미사 이름까지 있으면 ' 2', ' 3' … — 겹치지 않는 첫 이름", () => {
-    expect(pickArchivedClassName("PL5", "2026-07-02", [])).toBe("PL5 (~2026-07)");
-    expect(pickArchivedClassName("PL5", "2026-07-02", ["PL5 (~2026-07)"])).toBe("PL5 (~2026-07) 2");
-    expect(pickArchivedClassName("PL5", "2026-07-02", ["PL5 (~2026-07)", "PL5 (~2026-07) 2"])).toBe("PL5 (~2026-07) 3");
+    expect(pickArchivedClassName("PL5", "2026-07-02", [])).toBe("PL5 (~26.07.02)");
+    expect(pickArchivedClassName("PL5", "2026-07-02", ["PL5 (~26.07.02)"])).toBe("PL5 (~26.07.02) 2");
+    expect(pickArchivedClassName("PL5", "2026-07-02", ["PL5 (~26.07.02)", "PL5 (~26.07.02) 2"])).toBe("PL5 (~26.07.02) 3");
   });
 
   it("후보가 바닥나면 null — 사람이 정한다(버튼을 주지 않는다)", () => {
@@ -72,14 +72,14 @@ describe("반 이름 충돌 — 비울 때 붙이는 이름", () => {
   });
 
   it("공백이 섞인 이름도 DB 트리거와 같은 정규화를 거친 모양으로 만든다", () => {
-    expect(archivedClassNameBase("중등M 개별 BS3R", "2026-08-31")).toBe("중등M 개별 BS3R (~2026-08)");
+    expect(archivedClassNameBase("중등M 개별 BS3R", "2026-08-31")).toBe("중등M 개별 BS3R (~26.08.31)");
   });
 });
 
 describe("반 이름 충돌 — 버튼이 없을 때의 안내", () => {
   it("운영 중이거나 버튼이 있으면 안내 없음", () => {
     expect(classNameConflictHint({ status: "operating", freeTo: null, allowFree: true })).toBeNull();
-    expect(classNameConflictHint({ status: "closed", freeTo: "PL5 (~2026-07)", allowFree: true })).toBeNull();
+    expect(classNameConflictHint({ status: "closed", freeTo: "PL5 (~26.07.02)", allowFree: true })).toBeNull();
   });
 
   it("권한이 없으면 관리자에게, 권한은 있는데 새 이름을 못 정했으면 직접 바꾸라고 — 관리자에게 '관리자에게 요청'을 띄우지 않는다", () => {
@@ -92,7 +92,7 @@ describe("반 이름 충돌 — 버튼이 없을 때의 안내", () => {
 
 describe("PostgREST or() 값 인용", () => {
   it("괄호·쉼표가 든 반 이름을 큰따옴표로 감싸고 \\·\"를 이스케이프", () => {
-    expect(postgrestQuoted("PL5 (~2026-07)")).toBe('"PL5 (~2026-07)"');
+    expect(postgrestQuoted("PL5 (~26.07.02)")).toBe('"PL5 (~26.07.02)"');
     expect(postgrestQuoted('A"B\\C')).toBe('"A\\"B\\\\C"');
   });
 });
@@ -116,11 +116,11 @@ describe("반 이름 충돌 — 비우기 요청은 버튼을 누른 것만", ()
     [FREE_CLOSED_NAME_FIELDS.flag]: "1",
     [FREE_CLOSED_NAME_FIELDS.name]: " PL5 ",
     [FREE_CLOSED_NAME_FIELDS.holderId]: "holder-1",
-    [FREE_CLOSED_NAME_FIELDS.to]: "PL5  (~2026-07)",
+    [FREE_CLOSED_NAME_FIELDS.to]: "PL5  (~26.07.02)",
   };
 
   it("플래그 + 이름 + 그 반 + 새 이름이 다 있어야 요청으로 본다(이름은 정규화)", () => {
-    expect(readFreeClosedNameRequest(form(full))).toEqual({ name: "PL5", holderId: "holder-1", to: "PL5 (~2026-07)" });
+    expect(readFreeClosedNameRequest(form(full))).toEqual({ name: "PL5", holderId: "holder-1", to: "PL5 (~26.07.02)" });
   });
 
   it("플래그가 없거나 칸이 하나라도 비면 요청이 아니다", () => {

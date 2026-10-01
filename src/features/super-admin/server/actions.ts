@@ -12,6 +12,7 @@ import { licenseFlagsTag } from "@/lib/license/server";
 import { SYSTEM_ROLES } from "@/lib/permissions";
 import { SEAT_FEATURES, TOGGLE_FEATURES } from "../labels";
 import { logSuperAdminAction } from "./audit";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type CreateTenantState =
   | { error?: string; fieldErrors?: Record<string, string> }
@@ -203,7 +204,10 @@ export async function changeUserRole(
   // 🔴 계정 = 지점 1:1 — 폼이 보낸 tenantId를 그대로 app_metadata에 쓰면 `users.tenant_id`와 갈릴 수 있다(로그인은 B 지점 RLS,
   //    직원 행은 A 지점). 계정의 실제 지점과 같을 때만 진행한다. 지점을 옮기는 기능이 아니다(옮기기 = 새 지점에 계정 하나 더).
   const { data: owner, error: ownerErr } = await admin.from("users").select("tenant_id").eq("id", userId).maybeSingle();
-  if (ownerErr || !owner?.tenant_id) return { error: "대상 계정을 찾을 수 없습니다" };
+  if (ownerErr || !owner?.tenant_id) {
+    logDbError(ownerErr, "super-admin.changeUserRole");
+    return { error: "대상 계정을 찾을 수 없습니다" };
+  }
   if (String(owner.tenant_id) !== tenantId) {
     return { error: "계정의 지점과 요청한 지점이 다릅니다 — 화면을 새로고침한 뒤 다시 시도하세요" };
   }
@@ -252,7 +256,10 @@ export async function resetUserPassword(
   const admin = createAdminClient();
   const { data: account, error: accountError } = await admin.from("users")
     .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
-  if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
+  if (accountError || !account) {
+    logDbError(accountError, "super-admin.resetUserPassword");
+    return { error: "해당 지점의 계정을 찾을 수 없습니다" };
+  }
 
   // 임시 비번 생성 (영숫자 12자)
   const tempPassword = Array.from(crypto.getRandomValues(new Uint8Array(9)))
@@ -288,7 +295,10 @@ export async function setUserActive(
   const admin = createAdminClient();
   const { data: account, error: accountError } = await admin.from("users")
     .select("id").eq("id", userId).eq("tenant_id", tenantId).maybeSingle();
-  if (accountError || !account) return { error: "해당 지점의 계정을 찾을 수 없습니다" };
+  if (accountError || !account) {
+    logDbError(accountError, "super-admin.setUserActive");
+    return { error: "해당 지점의 계정을 찾을 수 없습니다" };
+  }
   // 보호 계정(슈퍼관리자 명단)은 비활성·재활성도 못 한다(원장 2026-09-30 "강력 가드"). 조회 실패도 막는다.
   const protection = await protectionStatus(userId);
   if (protection === "protected") {

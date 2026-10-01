@@ -3,13 +3,13 @@ import { attendanceFixture, record } from "./attendance-test-fixture";
 import { planAttendanceMigration } from "./attendance-migration";
 
 describe("시트 반이동의 기존 출결", () => {
-  it("기존 배치가 없더라도 기록된 LAB 자리 출결을 일반 교시로 바꾸지 않는다", () => {
+  it("적용일 이후 LAB 출결도 새 반의 확정된 일반 교시로 이관한다", () => {
     const { plan, ctx } = attendanceFixture();
     ctx.schedules = ctx.schedules.filter((s) => s.classId !== "old");
     ctx.attendance[0]!.record.seat_label = "LAB";
-    expect(planAttendanceMigration(plan, ctx).issues[0]?.reason).toContain(
-      "기록된 LAB",
-    );
+    const r = planAttendanceMigration(plan, ctx);
+    expect(r.issues.map((i) => i.severity)).toEqual(["confirm"]);
+    expect(r.moves[0]?.seatChange).toEqual({ from: "LAB", to: null });
   });
   it("시각이 바뀌었고 같은 강사 교시가 여러 개면 자동 선택하지 않는다", () => {
     const { plan, ctx } = attendanceFixture();
@@ -103,12 +103,10 @@ describe("시트 반이동의 기존 출결", () => {
       "해당 날짜",
     );
   });
-  it("LAB과 일반 교시 사이의 이동은 자동으로 강사에게 귀속시키지 않는다", () => {
+  it("일반 교시에서 LAB으로 바뀌면 새 자리 구분을 이관 계획에 포함한다", () => {
     const { plan, ctx } = attendanceFixture();
     ctx.schedules[1]!.slotTeacherLabel = "LAB";
-    expect(planAttendanceMigration(plan, ctx).issues[0]?.reason).toContain(
-      "LAB",
-    );
+    expect(planAttendanceMigration(plan, ctx).moves[0]?.seatChange).toEqual({ from: "일반 수업", to: "LAB" });
   });
   it("같은 교시의 강사·강의실 변경은 기존 출결을 유지한다", () => {
     const { plan, ctx } = attendanceFixture();

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { explainDbError } from "@/lib/supabase/db-error";
 import { logAction } from "@/features/audit/server/log";
 import { EMAIL_RE } from "@/features/staff/email";
 import { EMAIL_TAKEN_MESSAGE, isEmailTakenAuthError } from "@/lib/auth/auth-email-error";
@@ -59,7 +60,7 @@ export async function updateMyEmail(_prev: MeAccountState, formData: FormData): 
   if (dbErr) {
     // auth는 바뀌고 users만 실패 = 로그인은 새 주소, 화면은 옛 주소. 되돌려 한쪽으로 통일한다.
     await admin.auth.admin.updateUserById(user.id, { email: user.email, email_confirm: true });
-    return { error: `이메일 변경 실패 — ${dbErr.message}` };
+    return { error: explainDbError(dbErr, { scope: "staff.me.email", fallback: "이메일을 바꾸지 못했습니다. 잠시 후 다시 시도해 주세요." }).message };
   }
 
   await logAction({

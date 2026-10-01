@@ -11,6 +11,7 @@ import { logAction } from "@/features/audit/server/log";
 import { shiftMonth } from "@/lib/date-kst";
 import { monthRange } from "../plan";
 import { isVirtualTermId } from "../month-roster";
+import { logDbError } from "@/lib/supabase/db-error";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHANGED = "회차가 변경되었거나 이미 삭제되었습니다. 창을 닫고 다시 열어 확인해 주세요";
@@ -42,7 +43,10 @@ async function deletionContext(id: string, period: string) {
   const { data, error } = await db.from("invoice_session_terms")
     .select("id, invoice_id, class_id, updated_at, confirmed_sessions, unit_price, amount, planned_sessions, pricing_mode, note, allocation_amount, allocation_line_index, allocation_carry_out, carryover_in, carryover_out, invoice:invoice_id!inner ( period, student_id )")
     .eq("tenant_id", user.tenantId).eq("id", id).eq("invoice.period", period).maybeSingle();
-  if (error) return { error: "회차 정보를 불러오지 못했습니다. 다시 시도해 주세요" } as const;
+  if (error) {
+    logDbError(error, "billing.session-terms.deletionContext");
+    return { error: "회차 정보를 불러오지 못했습니다. 다시 시도해 주세요" } as const;
+  }
   if (!data) return { error: CHANGED } as const;
   const term = data as unknown as StoredTerm;
   const invoice = Array.isArray(term.invoice) ? term.invoice[0] : term.invoice;
@@ -61,7 +65,10 @@ async function deletionContext(id: string, period: string) {
       .eq("tenant_id", user.tenantId).eq("allocation_carry_class_id", term.class_id)
       .gt("allocation_carry_out", 0).eq("invoice.period", shiftMonth(period, -1))
       .eq("invoice.student_id", invoice.student_id).limit(1);
-    if (incoming.error) return { error: "이월 내역을 확인하지 못했습니다. 다시 시도해 주세요" } as const;
+    if (incoming.error) {
+      logDbError(incoming.error, "billing.session-terms.deletionContext");
+      return { error: "이월 내역을 확인하지 못했습니다. 다시 시도해 주세요" } as const;
+    }
     if (incoming.data?.length) blockedReason = "지난 달에서 받은 금액 이월이 있습니다. 보내는 달에서 이월을 취소한 뒤 삭제해 주세요";
   }
   return { db, user, term, invoice, blockedReason } as const;
@@ -91,7 +98,10 @@ export async function deleteSessionTerm(id: string, period: string, expectedUpda
     .or("allocation_amount.is.null,allocation_amount.eq.0")
     .eq("allocation_carry_out", 0).eq("carryover_in", 0).eq("carryover_out", 0)
     .select("id").maybeSingle();
-  if (error) return { error: "회차를 삭제하지 못했습니다. 다시 시도해 주세요" };
+  if (error) {
+    logDbError(error, "billing.session-terms.deleteSessionTerm");
+    return { error: "회차를 삭제하지 못했습니다. 다시 시도해 주세요" };
+  }
   if (!deleted) return { error: CHANGED };
 
   after(async () => {

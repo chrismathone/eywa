@@ -14,7 +14,7 @@ const records: VideoHomeworkMark[] = [
   { classId: "a", studentId: "1", checkDate: "2026-09-08", homeworkDate: "2026-09-03", status: "missing" },
   { classId: "b", studentId: "1", checkDate: "2026-09-04", homeworkDate: "2026-09-02", status: "missing" },
 ];
-const videos: VideoArrival[] = [{ studentId: "2", classId: "a", postedAt: "2026-09-04T10:00:00+09:00" }];
+const videos: VideoArrival[] = [{ id: "v1", studentId: "2", classId: "a", postedAt: "2026-09-04T10:00:00+09:00" }];
 const rounds = buildLedgerRounds({ rows, marks: records, videos, fromDate: "2026-09-01", toDate: "2026-09-30" });
 
 describe("반별 장부 — 회차는 학생마다", () => {

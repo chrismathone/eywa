@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import type { TransferCandidate } from "../bulk-transfer";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * **반이동 예약의 출발지 후보** — 그 학생이 지금(또는 앞으로) 다니는 수강 한 줄.
@@ -55,7 +56,10 @@ export async function listMovableEnrollments(
     .eq("is_transferred", false)
     .or(`end_date.is.null,end_date.gt.${today}`)
     .order("start_date", { ascending: true });
-  if (error) return { ok: false, error: "수강 목록을 불러오지 못했습니다" };
+  if (error) {
+    logDbError(error, "enrollments.listMovableEnrollments");
+    return { ok: false, error: "수강 목록을 불러오지 못했습니다" };
+  }
   const rows = data ?? [];
   if (!rows.length) return { ok: true, items: [] };
 
@@ -101,7 +105,10 @@ export async function listClassTransferCandidates(enrollmentId: string): Promise
   try {
     const { data: source, error } = await db.from("enrollments").select("class_id")
       .eq("tenant_id", user.tenantId).eq("id", enrollmentId).maybeSingle();
-    if (error || !source) return { ok: false, error: "기존 수강을 찾을 수 없습니다" };
+    if (error || !source) {
+      logDbError(error, "enrollments.listClassTransferCandidates");
+      return { ok: false, error: "기존 수강을 찾을 수 없습니다" };
+    }
     const [klass, rows] = await Promise.all([
       db.from("classes").select("class_name").eq("tenant_id", user.tenantId).eq("id", source.class_id).single(),
       fetchAllPaged((from, to) => db.from("enrollments")

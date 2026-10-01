@@ -60,7 +60,7 @@ function form(entries: Record<string, string>) {
 const editForm = (extra: Record<string, string> = {}) =>
   form({ id: "pl4", className: "PL5", subject: "english", teacherId: "", classroomId: "", ...extra });
 
-const pressFreeButton = (to = "PL5 (~2026-07)") => ({
+const pressFreeButton = (to = "PL5 (~26.07.02)") => ({
   [FREE_CLOSED_NAME_FIELDS.flag]: "1",
   [FREE_CLOSED_NAME_FIELDS.name]: "PL5",
   [FREE_CLOSED_NAME_FIELDS.holderId]: "old-pl5",
@@ -83,19 +83,19 @@ describe("반 수정 — 종강·폐지 반이 쥔 이름으로 개명", () => {
     const res = await updateClass(undefined, editForm());
     expect(res?.error).toBeUndefined();
     expect(res?.fieldErrors?.className).toBe("같은 과목에 중복되는 반 이름이 있습니다. (종강 처리된 반)");
-    expect(res?.nameConflict).toMatchObject({ holderId: "old-pl5", freeTo: "PL5 (~2026-07)" });
+    expect(res?.nameConflict).toMatchObject({ holderId: "old-pl5", freeTo: "PL5 (~26.07.02)" });
     expect(byId(db, "old-pl5").class_name).toBe("PL5");
     expect(byId(db, "pl4").class_name).toBe("PL4");
   });
 
-  it("버튼을 누른 요청 → 그 반을 'PL5 (~2026-07)'로 비우고 저장 + 두 반 모두 감사로그", async () => {
+  it("버튼을 누른 요청 → 그 반을 'PL5 (~26.07.02)'로 비우고 저장 + 두 반 모두 감사로그", async () => {
     const res = await updateClass(undefined, editForm(pressFreeButton()));
     expect(res?.ok).toBe(true);
-    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~2026-07)");
+    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~26.07.02)");
     expect(byId(db, "pl4").class_name).toBe("PL5");
     const calls = vi.mocked(logAction).mock.calls.map((c) => c[0]);
     expect(calls).toEqual([
-      expect.objectContaining({ targetLabel: "PL5 (~2026-07)", metadata: expect.objectContaining({ classId: "old-pl5", freedForClassId: "pl4" }) }),
+      expect.objectContaining({ targetLabel: "PL5 (~26.07.02)", metadata: expect.objectContaining({ classId: "old-pl5", freedForClassId: "pl4" }) }),
       expect.objectContaining({
         targetLabel: "PL5",
         metadata: expect.objectContaining({ classId: "pl4", changes: [{ field: "반 이름", from: "PL4", to: "PL5" }] }),
@@ -125,12 +125,12 @@ describe("반 생성 — 같은 이름", () => {
   it("종강 반 이름으로 새 반 → 버튼 정보, 누르면 비우고 생성", async () => {
     const base = { className: "PL5", subject: "english", teacherId: "", classroomId: "" };
     const first = await createClass(undefined, form(base));
-    expect(first?.nameConflict).toMatchObject({ status: "closed", freeTo: "PL5 (~2026-07)" });
+    expect(first?.nameConflict).toMatchObject({ status: "closed", freeTo: "PL5 (~26.07.02)" });
     expect(db.rows.filter((r) => r.class_name === "PL5")).toHaveLength(1);
 
     const second = await createClass(undefined, form({ ...base, ...pressFreeButton() }));
     expect(second?.ok).toBe(true);
-    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~2026-07)");
+    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~26.07.02)");
     expect(db.rows.filter((r) => r.class_name === "PL5")).toHaveLength(1);
     expect(logAction).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ classId: "old-pl5" }) }));
   });

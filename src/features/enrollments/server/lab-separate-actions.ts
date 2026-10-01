@@ -41,7 +41,7 @@ export async function setEnrollmentLabSeparate(
     .select("id, class_id, student_id")
     .eq("id", id)
     .maybeSingle();
-  if (readErr) return { error: toKoreanDbError(readErr, "수강 정보를 불러오지 못했습니다") };
+  if (readErr) return { error: toKoreanDbError(readErr, "수강 정보를 불러오지 못했습니다", "enrollments.labSeparate.read") };
   if (!enrollment) return { error: "수강 정보를 찾지 못했습니다" };
   const classId = enrollment.class_id as string;
 
@@ -51,7 +51,7 @@ export async function setEnrollmentLabSeparate(
       .select("subject, english_track")
       .eq("id", classId)
       .maybeSingle();
-    if (classErr) return { error: toKoreanDbError(classErr, "반 정보를 불러오지 못했습니다") };
+    if (classErr) return { error: toKoreanDbError(classErr, "반 정보를 불러오지 못했습니다", "enrollments.labSeparate.class") };
     const track = klass ? readEnglishTrack(klass as { english_track?: string | null }) : null;
     if (!klass || klass.subject !== "english" || track !== "eie")
       return { error: "따로 수업(*LAB) 배정은 EiE 반에서만 할 수 있습니다" };
@@ -66,7 +66,7 @@ export async function setEnrollmentLabSeparate(
   if (error) {
     if (isMissingColumnError(error))
       return { error: "따로 수업(*LAB) 배정 칸이 아직 없습니다 — 관리자에게 문의하세요(0271b 미적용)" };
-    return { error: toKoreanDbError(error, "따로 수업(*LAB) 배정을 저장하지 못했습니다") };
+    return { error: toKoreanDbError(error, "따로 수업(*LAB) 배정을 저장하지 못했습니다", "enrollments.labSeparate") };
   }
   // 매치 0행(남의 테넌트·삭제된 수강) = 아무것도 안 바뀜.
   if (!updated) return { error: "수강 정보를 찾지 못했습니다" };

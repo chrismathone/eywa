@@ -21,6 +21,7 @@ import { applySeatDayChoices, getSeatPeriodChoices } from "./period-choice";
 import { getPublicSeatDay, getSeatDay } from "./queries";
 import { getSeatPlacements } from "./placements";
 import { completeMakeupReservations } from "../../server/makeup-reservation-complete";
+import { logDbError } from "@/lib/supabase/db-error";
 
 export type SeatStatus = "present" | "absent" | "late";
 /** 런타임 검증용 — 자리판이 쓰는 상태 3종(`SeatStatus`와 같은 집합). 타입은 클라가 보낸 값을 막지 못한다. */
@@ -417,7 +418,10 @@ async function insertSeatFill(
     // 1000행 silent 절단으로 뚫린다(#54). 이 필터면 상한 ≈ 명단 × 2라 절단 불가.
     .or(`slot_start.eq.${p.slot},slot_start.is.null`);
   // 🔴 확인 실패 = 안 쓴다(B3 — error 삼키고 blind insert하면 이 가드가 정확히 막으려던 중복이 난다).
-  if (dupErr) return { error: "기존 기록 확인에 실패해 저장하지 않았습니다 — 다시 시도해 주세요" };
+  if (dupErr) {
+    logDbError(dupErr, "attendance.seat.insertSeatFill");
+    return { error: "기존 기록 확인에 실패해 저장하지 않았습니다 — 다시 시도해 주세요" };
+  }
   const taken = new Set(
     (existingDup ?? [])
       .filter((r) => hhmm(r.slot_start) === p.slot || (!isPayrollSeat(p.seat) && r.slot_start == null))

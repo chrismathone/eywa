@@ -64,10 +64,20 @@ export function planAttendanceMigration(
           ? target.error
           : null;
     const toTime = "time" in target ? target.time! : null;
-    const changes = toClassId !== a.classId || toTime !== a.startTime;
+    const newSeat = "seatLabel" in target ? target.seatLabel : undefined;
+    const oldSeat = specialSlotLabel(oldSlots.find((s) => s.startTime === a.startTime)?.label ?? "");
+    const seatChanged = newSeat !== undefined && (
+      oldSeat !== newSeat || rows.some((r) => {
+        const recordedSeat = specialSlotLabel(String(r.record.seat_label ?? ""));
+        return (!!recordedSeat && recordedSeat !== newSeat) ||
+          (r.record.recorded_via === "seat" && newSeat === null);
+      })
+    );
+    const changes = toClassId !== a.classId || toTime !== a.startTime || seatChanged;
     if (
       !reason &&
       changes &&
+      newSeat === undefined &&
       rows.some((r) => {
         const seat = specialSlotLabel(String(r.record.seat_label ?? ""));
         return (
@@ -142,6 +152,10 @@ export function planAttendanceMigration(
       toClassId,
       toClassName,
       toTime,
+      ...(seatChanged ? { seatChange: {
+        from: oldSeat ?? rows.map((r) => specialSlotLabel(String(r.record.seat_label ?? ""))).find(Boolean) ?? "일반 수업",
+        to: newSeat!,
+      } } : {}),
     });
   }
   // Unrelated cells must never collapse. Uniform full-day absences were grouped explicitly above.

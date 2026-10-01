@@ -12,7 +12,7 @@
 전 화면의 구성 표준. **새 화면·섹션은 이 7문법을 기본으로 조립**한다.
 | # | 문법 | 적용 |
 |---|---|---|
-| ① | eyebrow→헤드라인→서브 | [`PageHeader`](../src/components/page-header.tsx) 단일 소스(eyebrow 12px/타이틀 21px/서브 13px + actions·stats 슬롯). 섹션 소라벨은 `.editorial-eyebrow`(한글 전제) — 기존 `.eyebrow`(uppercase 영문 전제)는 호환용, 신규 사용 금지 |
+| ① | eyebrow→헤드라인→서브 | [`PageHeader`](../src/components/page-header.tsx) 단일 소스 — **2026-10-01부터 한 줄** `eyebrow - 제목 - 설명`(16/24/16px) + 오른쪽 actions·'화면 최대화', stats 슬롯은 아래(아래 '페이지 헤더 = 한 줄' 절). 섹션 소라벨은 `.editorial-eyebrow`(한글 전제) — 기존 `.eyebrow`(uppercase 영문 전제)는 호환용, 신규 사용 금지 |
 | ② | 빅 스탯 | [`BigStat`](../src/components/atoms/big-stat.tsx)(label/value/unit/sub/icon/tone/size). **화면 로컬 Stat 신설 금지** — 이걸 쓴다 |
 | ③ | 소프트 패널 | 카드·필터바 = `bg-card shadow-card rounded-2xl`(보더 제거). 대형 구획은 rounded-3xl |
 | ④ | 사진 캡션 카드 | [`PhotoCard`](../src/components/atoms/photo-card.tsx)(Server, `alt`·`sizes` 필수, LCP만 `preload` — Next16에서 `priority` 폐기). 이미지 = `public/photos/*.webp`(placeholder→실사 덮어쓰기, [photo-generation-prompts.md](photo-generation-prompts.md)) |
@@ -129,8 +129,8 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
 **모바일·터치도 같은 이유로 같은 처리를 받는다**(2026-07-30 원장 "모바일뷰에서 시간표가 상단 헤더 때문에
 거의 보이지 않음") — 상단 바(MobileTopNav)가 제목을 갖는다. 변형 이름이 `compact-chrome`인 이유다.
 - `PageHeader`가 단독 처리: 임베드 셸 `<main>`의 **`.embed-main` 마커 + `compact-chrome:` CSS 변형**으로
-  창 안에선 **컴팩트 1행**(`embedLabel ?? description ?? title` 13px dim + actions 우측 + stats 슬롯 유지)으로
-  접힌다. 최상위 프레임(모바일 라우트·직접 방문)은 마커가 없어 Editorial 풀 헤더 — 소비처는 아무것도 안 한다.
+  창 안에선 **컴팩트 1행**(`embedLabel ?? description ?? title` 16px + actions 우측 + stats 슬롯 유지)으로
+  접힌다. 최상위 프레임(모바일 라우트·직접 방문)은 마커가 없어 데스크톱 **한 줄 헤더**(아래 2026-10-01 절) — 소비처는 아무것도 안 한다.
 - ⚠️ **판정을 요청 단위(x-embed 헤더/searchParams)로 하지 말 것** — 창 안 내비(주 이동·월 칩 등) 대다수
   href 빌더가 `embed=1`을 안 실어, 요청 판정이면 **클릭 한 번에 풀 헤더로 플립**한다(적대 리뷰 major).
   layout의 임베드 `<main>`은 soft nav에서 재렌더되지 않아 마커가 유지된다. 같은 이유로 loading.tsx
@@ -162,6 +162,40 @@ sm = 본문·목록 1차 라벨·컨트롤 / base = 강조 본문·섹션 제목
   layout의 `lg:pointer-fine:`을 **함께** 고칠 것(와이드 터치 태블릿이 갈라지면 크롬만 바뀌고 헤더는 안 접힌다).
 - ⚠️ **JS로 마커를 붙이지 말 것** — 첫 페인트에 풀 헤더가 떴다가 접히는 CLS가 매 페이지 발생한다. 순수 CSS.
 > 한 줄 규칙: 좁은 화면에선 제목을 크롬 한 줄이 갖고 본문 헤더는 접는다. 칩 툴바는 감지 말고 `.toolbar-rail`로 눕혀라.
+
+### 페이지 헤더 = 한 줄 + 전체 페이지 최대화 (⚠️ 전 메뉴 기본값, 2026-10-01)
+원장 *"내부를 최대화 할 수 있도록 전체 페이지에 최대화 버튼 추가. 최대화 버튼을 누르면 왼쪽 탭 및 상단 빈공간 여백 헤더를
+숨겨버리고 내부 탭 화면만"* → *"'화면 최대화'로 이름 변경. 후에 '화면 원래대로' 버튼을 눌러야 돌아옴"* · *"구조도 3행이 아니라
+1행으로 — 수업운영 - 시간표 - 주간 시간표"*. 첫 소비자 = 창 모드를 끈 지점의 데스크톱 시간표(사이드바·3행 헤더가 격자 폭·높이를 먹었다).
+- **헤더 한 줄**: [`PageHeader`](../src/components/page-header.tsx) = `eyebrow - 제목 - 설명 ……… [actions] [화면 최대화]`. 구분자는 원장이
+  적은 ` - `(창·모바일 컴팩트 1행은 원래 라벨 하나라 구분자가 없다 — 그 줄은 그대로). 제목 24px Bold · 앞뒤 16px Medium —
+  글자색은 한 값(#121212)이라 "흐리게"는 크기·굵기로만(회색 글자 신설 금지). 설명이 길면 제목 옆 남은 폭에서 접힌다.
+  옛 eyebrow의 브랜드색(`.editorial-eyebrow`)은 헤더에선 걷었다(섹션 소라벨용 클래스는 그대로).
+- **스켈레톤** = [`PageHeaderSkeleton`](../src/components/page-header.tsx)(같은 한 줄 높이·같은 구분선·같은 표식). `loading.tsx`에서
+  헤더 막대를 손으로 쌓지 말 것 — 가드 [`page-maximize-wiring.test.ts`](../src/components/page-maximize/page-maximize-wiring.test.ts)가
+  "page.tsx가 `<PageHeader`를 쓰면 같은 폴더 loading.tsx는 `PageHeaderSkeleton`"과 옛 3단 근사(`mt-2 h-6`)를 잡는다(손으로 쌓은 막대는
+  최대화 중에 혼자 서서 본문을 튀게 한다). 실 화면이 헤더를 `compact-chrome:hidden` 래퍼로 감쌀 때만 `hideCompact`, 실 헤더에 동작이 있으면 `actions`.
+- **'화면 최대화'**(헤더 오른쪽 끝, 작은 글자 버튼 — ⚠️ '버튼 크기' 절의 "헤더 액션은 기본 크기"의 **예외**: 원장 *"작게"*, 테두리 없는 ghost라
+  옆 동작 버튼과 높이 차가 안 보인다) → 셸을 감싼 표식 `[data-page-maximize="on"]` 하나가 켜지고 **globals.css 한 곳**이 숨긴다:
+  왼쪽 사이드바(`data-maximize-hide`) · 페이지 헤더 — 동작·스탯이 없으면(`data-page-header="bare"`) 통째로, 있으면(`"tools"`) **제목 묶음
+  (`data-page-header-title`)만** 숨기고 동작(날짜 이동·새 항목·인쇄)·KPI는 원래 자리(오른쪽)에 남긴다(최대화가 화면 조작까지 가져가면 안 된다 —
+  자리 출석부는 날짜 이동이 헤더에 있다) · 헤더만 감싼 래퍼(`data-page-header-slot` → `display:contents` — 빈 래퍼가 gap·space-y 한 칸을
+  남기지 않게) · 본문 위·좌우 여백(창과 같은 0.5rem·0.375rem, `.edge-to-edge`면 0).
+  🔴 **표식은 요소에 직접** — `:has(> …)`로 부모를 고르지 않는다([[#127]]). 🔴 **PageHeader 하나만 감싼 새 래퍼엔 `data-page-header-slot`**
+  (가드가 잡는다). 아래 여백(`pb-8 lg:pb-10`)·`.sticky-save-bar` 밀착([[#110]])은 그대로다.
+- **'화면 원래대로'**(최대화 중 유일한 출구 — 메뉴를 옮겨도 최대화는 유지, Esc 안 씀): 본문 위에 떠 있는 작은 반투명 버튼. **기본 오른쪽 위**,
+  그 밑에 누를 것(버튼·링크·입력)이 있으면 오른쪽 아래 → 왼쪽 아래 → 왼쪽 위로 비킨다([`restore-corner.ts`](../src/components/page-maximize/restore-corner.ts) —
+  시간표는 오른쪽 위가 '편집'이다). 다 막히면 제자리. 판정 = 이동·창 크기 변경·1.5초마다 점 다섯 개 — 무언가 버튼 위에 떠 있으면
+  (다이얼로그 배경·토스트) 그 판정은 건너뛴다. 전환 직후 `resize`를 한 번 쏘고(창 높이로 행 수를 정하는 `AutoPageSize` 목록) 포커스를 반대쪽 버튼으로.
+- **서는 곳**: 관리자 풀셸 ∧ 창 모드 꺼짐 ∧ 데스크톱(`desk`). 창 모드 켜진 지점(플로팅 창마다 제 최대화가 있고, 사이드바를 감추면 창 입구가 사라진다) ·
+  창 안 · 강사·학생 미니셸('강사뷰'·'열람 종료' 배지는 상시 표시 결정) · 슈퍼관리자 화면 · 모바일 셸엔 없다. 판정은 공급자([`PageMaximizeRoot`](../src/components/page-maximize/page-maximize-root.tsx))
+  와 버튼 한 곳 — 화면 파일은 아무것도 안 한다. 창을 좁혀 모바일 셸이 되면 최대화는 잠든다(CSS가 `desk`와 같은 미디어쿼리 안).
+- **저장 = 계정**(`users.ui_prefs.shell.maximized`, 전 페이지 공통 한 키, 누르는 순간 저장 [[#90]]) · 셸 레이아웃(서버)이 읽어 **첫 HTML에 표식을 싣는다**
+  (사이드바 깜빡임 없음 · localStorage 금지 [[#75]]) · `ui_prefs` 행은 '자주 방문한 메뉴'와 같은 요청 캐시(`readMyUiPrefs`, 왕복 0).
+- ⚠️ 최대화 중엔 사이드바의 알림 벨·계정 메뉴·연결 앱도 숨는다(사이드바째 — 원장 *"왼쪽 탭 … 숨겨버리고"*) — 검색 팰릿은 단축키(Shift+F·Ctrl+K)로 그대로 열린다.
+- ⚠️ **PageHeader가 없는 화면엔 버튼이 없다**(운영실·월별 출석부·원생상담·캘린더·신규생·수학 강사 시트 랜딩·상세 화면들 — 자체 머리) —
+  다른 화면에서 최대화한 채 오면 사이드바만 숨고 그 화면의 자체 머리는 남는다. 넓히려면 그 머리에 `PageMaximizeButton`과 숨김 표식을 단다.
+> 한 줄 규칙: 헤더는 PageHeader 한 줄(PageHeader를 쓰는 화면의 스켈레톤은 PageHeaderSkeleton — 가드). 최대화는 표식 하나 + globals.css — 숨길 요소엔 표식을 직접 달고, 헤더만 감싼 래퍼엔 `data-page-header-slot`, 헤더의 동작·KPI는 숨기지 않는다.
 
 ### 상세 화면 헤더의 동작 버튼은 **여는 대상을 라벨에 적는다** (⚠️ 새 상세 화면 기본값, 2026-08-07)
 원장 제보(모바일 직원 상세) *"수정이 너무 많은데? 어떤 수정인지 라벨 명확화가 필요하겠어"*. 한 화면에

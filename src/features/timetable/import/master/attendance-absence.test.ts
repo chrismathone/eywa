@@ -85,7 +85,9 @@ describe("전교시 사전 결석의 반이동", () => {
   it.each(["17:20", null, "22:00"])("새 반의 기존 %s 기록과 섞지 않는다", (startTime) => {
     const { plan, ctx } = wholeAbsenceFixture();
     ctx.attendance.push({ ...ctx.attendance[0]!, id: "occupied", classId: "c1", startTime });
-    expect(planAttendanceMigration(plan, ctx).moves).toEqual([]);
+    const result = planAttendanceMigration(plan, ctx);
+    expect(result.moves.some((m) => m.absenceDay)).toBe(false);
+    expect(result.issues.some((i) => i.severity === "error")).toBe(true);
   });
   it("새 교시가 더 많거나 당일 수업이 없거나 배치가 중복되면 추정하지 않는다", () => {
     for (const mode of ["extra", "missing", "duplicate"]) {

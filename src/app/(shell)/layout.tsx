@@ -43,6 +43,7 @@ import { topVisitedMenus } from "@/features/nav/menu-visits";
 import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
 import { ShellHomeProvider } from "@/components/workspace/shell-home";
+import { PageMaximizeShell } from "@/components/page-maximize/page-maximize-shell";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
@@ -395,6 +396,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     <WorkspaceEnabledProvider enabled={windowMode}>
     {/* 첫 화면(홈) 주소 — 로고·'바탕 보기'·빈 작업면이 같은 값을 쓴다(대시보드를 꺼 둔 역할은 /menu, gotchas #137). */}
     <ShellHomeProvider href={shellHome}>
+    {/* 화면 최대화(원장 2026-10-01) — 계정 설정을 서버에서 읽어 표식 하나만 단다(숨기는 일은 globals.css). */}
+    <PageMaximizeShell>
     {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible desk:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
@@ -473,6 +476,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />
     </div>
+    </PageMaximizeShell>
     </ShellHomeProvider>
     </WorkspaceEnabledProvider>
     </OperationsProvider>

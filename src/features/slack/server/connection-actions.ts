@@ -9,6 +9,7 @@ import { normalizeTime } from "../rules";
 import { slackAuthTest, slackListChannels, type SlackChannel } from "./client";
 import { slackGate } from "./gate";
 import { loadConnection, saveConnection, SLACK_TABLE_MISSING_MESSAGE } from "./store";
+import { logDbError } from "@/lib/supabase/db-error";
 
 /**
  * 슬랙 연결 · 발송 시간 설정(학원 설정 '연동' 면) — 원장·총괄만, 슈퍼관리자가 '슬랙 알림 연결'을 켠 지점만(`slackGate`).
@@ -106,7 +107,10 @@ export async function resendSlackFailures(): Promise<SlackActionResult> {
     .eq("status", "dead")
     .gte("created_at", since)
     .select("id");
-  if (error) return { error: "다시 보내지 못했습니다" };
+  if (error) {
+    logDbError(error, "slack.resendSlackFailures");
+    return { error: "다시 보내지 못했습니다" };
+  }
   const n = data?.length ?? 0;
   if (n === 0) return { message: "다시 보낼 실패 건이 없습니다" };
   await logAction({ action: "slack_resend", targetType: "integration", targetLabel: "슬랙 알림 연결", metadata: { count: n } });

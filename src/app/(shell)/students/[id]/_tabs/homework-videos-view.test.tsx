@@ -79,6 +79,16 @@ describe("학생 숙제 영상 뷰어", () => {
     render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink />);
     expect(screen.getByText("Drive 열기")).toHaveAttribute("href", "https://drive.google.com/file/d/drivefile12345/view");
   });
+  it("영상 제출 현황의 ▶ — `video`로 넘어온 id의 영상이 미리 골라진 채 열린다(이 학생 영상이 아닌 id는 무시)", () => {
+    const other: HomeworkVideo = { ...row, id: "video-2", posted_at: "2026-09-29T04:36:00Z", drive_file_id: "otherfile12345" };
+    const { container, unmount } = render(<HomeworkVideosView rows={[row, other]} subjectLabels={{ english: "영어" }} showDriveLink initialVideoId="video-2" />);
+    expect(screen.getByRole("region", { name: "숙제 영상 뷰어" })).toBeInTheDocument();
+    expect(container.querySelector("img")?.getAttribute("src")).toContain("otherfile12345");
+    unmount();
+    render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink initialVideoId="남의-영상-id" />);
+    expect(screen.queryByRole("region", { name: "숙제 영상 뷰어" })).toBeNull();
+    expect(screen.getByText("목록에서 재생할 영상을 선택하세요.")).toBeInTheDocument();
+  });
   it("전송 대기 중인 영상은 재생 링크를 만들지 않는다", () => {
     render(<HomeworkVideosView rows={[{ ...row, status: "queued", drive_file_id: null }]} subjectLabels={{ english: "영어" }} showDriveLink />);
     expect(screen.getByRole("button", { name: /업로드 대기/ })).toBeDisabled();

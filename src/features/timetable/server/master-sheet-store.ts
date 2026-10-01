@@ -1,4 +1,5 @@
 import "server-only";
+import { prepareClassTerms, applyClassTerms, rollbackClassTerms, type TermBackup } from "@/features/classes/server/class-term-store";
 import postgres from "postgres";
 import { createHash, randomUUID } from "node:crypto";
 import { buildMasterPlan } from "../import/master/plan";
@@ -125,7 +126,7 @@ export function masterPreview(
 ): MasterPreview {
   const plan = buildMasterPlan(input, grids, ctx, source);
   const hash = createHash("sha256")
-    .update(JSON.stringify(stable({ rulesVersion: 4, input, grids, ctx })))
+    .update(JSON.stringify(stable({ rulesVersion: 5, input, grids, ctx })))
     .digest("hex");
   return {
     ...plan,
@@ -250,6 +251,9 @@ export async function applyMasterTransaction(
       plan.attendanceMigration.moves,
       ctx.attendance,
     );
+    const terms = await prepareClassTerms(tx, actor.tenantId,
+      (plan.termClosures ?? []).map((t) => ({ classId: t.classId, date: t.closedAt, name: t.toName })),
+      plan.roster.moves.map((m) => m.enrollmentId));
     const payload = {
       label: `영어 시트 반영 ${date} (${input.teacherTab})`,
       hash,
@@ -266,13 +270,15 @@ export async function applyMasterTransaction(
       },
       masterSource: {
         ...source,
-        version: 2,
+        version: 3,
+        terms,
         attendance,
         beforeBlocks,
         blockIds,
         acknowledgements,
       },
     };
+    await applyClassTerms(tx, actor, terms);
     const [applied] = await tx<
       { r: { snapshotId: string; closed: number; inserted: number } }[]
     >`select public.apply_english_structure(${tx.json(payload as never)}::jsonb,${date}::date) as r`;
@@ -373,6 +379,7 @@ export async function applyMasterTransaction(
       moved: diff.moves.length,
       added: diff.adds.length,
       attendanceCells: plan.attendanceMigration.moves.length,
+      closedClasses: terms.length,
     };
   });
 }
@@ -382,6 +389,7 @@ export async function rollbackMasterBlocks(
   tx: postgres.TransactionSql,
   tenant: string,
   snapshotId: string,
+  actor?: MasterActor,
 ) {
   const [snap] = await tx<
     {
@@ -389,6 +397,7 @@ export async function rollbackMasterBlocks(
         blockIds: string[];
         beforeBlocks: postgres.Row[];
         attendance?: AttendanceBackup[];
+        terms?: TermBackup[];
       } | null;
     }[]
   >`select payload->'apply'->'masterSource' as source from timetable_snapshots where id=${snapshotId} and tenant_id=${tenant}`;
@@ -396,6 +405,10 @@ export async function rollbackMasterBlocks(
   const [restored] =
     await tx`select id from timetable_import_logs where tenant_id=${tenant} and snapshot_id=${snapshotId} and restored_at is not null`;
   if (restored) return;
+  if (snap.source.terms?.length) {
+    if (!actor) throw new Error("종강 예약을 취소할 사용자 정보를 확인해 주세요.");
+    await rollbackClassTerms(tx, actor, snap.source.terms);
+  }
   await rollbackAttendanceMoves(tx, tenant, snap.source.attendance ?? []);
   if (snap.source.blockIds.length)
     await tx`delete from teacher_schedule_blocks where tenant_id=${tenant} and id=any(${snap.source.blockIds}::uuid[])`;
@@ -427,7 +440,7 @@ export async function cancelMasterDate(
     >`select s.id,s.payload->>'kind' as kind from timetable_snapshots s where s.tenant_id=${actor.tenantId} and s.reference_date=${date}::date and not exists(select 1 from timetable_import_logs l where l.tenant_id=${actor.tenantId} and l.snapshot_id=s.id and l.restored_at is not null) order by s.created_at desc,(s.payload ? 'kind') asc,s.id desc`;
     for (const snap of snapshots) {
       if (snap.kind) {
-        await rollbackMasterBlocks(tx, actor.tenantId, snap.id);
+        await rollbackMasterBlocks(tx, actor.tenantId, snap.id, actor);
         await tx`select rollback_english_structure(${snap.id}::uuid)`;
       } else {
         const [r] = await tx<

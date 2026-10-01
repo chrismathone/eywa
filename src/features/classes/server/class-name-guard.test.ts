@@ -47,7 +47,7 @@ function rename(db: Db, opts: { name?: string; request?: { name: string; holderI
   });
 }
 
-const REQUEST = { name: "PL5", holderId: "old-pl5", to: "PL5 (~2026-07)" };
+const REQUEST = { name: "PL5", holderId: "old-pl5", to: "PL5 (~26.07.02)" };
 
 beforeEach(() => vi.mocked(logAction).mockClear());
 
@@ -70,7 +70,7 @@ describe("반 이름 충돌 가드 — 버튼 없이는 남의 반을 건드리�
         status: "closed",
         message: "같은 과목에 중복되는 반 이름이 있습니다. (종강 처리된 반)",
         holderId: "old-pl5",
-        freeTo: "PL5 (~2026-07)",
+        freeTo: "PL5 (~26.07.02)",
         allowFree: true,
       },
     });
@@ -104,18 +104,18 @@ describe("반 이름 충돌 가드 — 버튼을 누른 요청", () => {
   it("그 반 이름을 접미사로 비우고 저장한다 + 비운 반을 대상으로 감사로그", async () => {
     const db = seed();
     const r = await rename(db, { request: REQUEST });
-    expect(r).toMatchObject({ ok: true, freed: { id: "old-pl5", from: "PL5", to: "PL5 (~2026-07)", status: "closed" } });
-    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~2026-07)");
+    expect(r).toMatchObject({ ok: true, freed: { id: "old-pl5", from: "PL5", to: "PL5 (~26.07.02)", status: "closed" } });
+    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~26.07.02)");
     expect(byId(db, "pl4").class_name).toBe("PL5");
     expect(logAction).toHaveBeenCalledTimes(1);
     expect(logAction).toHaveBeenCalledWith({
       action: "class_update",
       targetType: "class",
-      targetLabel: "PL5 (~2026-07)",
+      targetLabel: "PL5 (~26.07.02)",
       metadata: expect.objectContaining({
         classId: "old-pl5",
         changed: ["반 이름"],
-        changes: [{ field: "반 이름", from: "PL5", to: "PL5 (~2026-07)" }],
+        changes: [{ field: "반 이름", from: "PL5", to: "PL5 (~26.07.02)" }],
         note: expect.stringContaining("종강 처리된 반이 쥔 이름을 비움"),
         freedForClassId: "pl4",
       }),
@@ -123,13 +123,13 @@ describe("반 이름 충돌 가드 — 버튼을 누른 요청", () => {
   });
 
   it("접미사 이름까지 있으면 ' 2'를 붙여 겹치지 않게", async () => {
-    const db = seed([row({ id: "older", class_name: "PL5 (~2026-07)", is_active: false, closed_at: "2026-07-01" })]);
+    const db = seed([row({ id: "older", class_name: "PL5 (~26.07.02)", is_active: false, closed_at: "2026-07-01" })]);
     const first = await rename(db);
-    expect(first).toMatchObject({ ok: false, conflict: { freeTo: "PL5 (~2026-07) 2" } });
-    const r = await rename(db, { request: { ...REQUEST, to: "PL5 (~2026-07) 2" } });
+    expect(first).toMatchObject({ ok: false, conflict: { freeTo: "PL5 (~26.07.02) 2" } });
+    const r = await rename(db, { request: { ...REQUEST, to: "PL5 (~26.07.02) 2" } });
     expect(r).toMatchObject({ ok: true });
-    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~2026-07) 2");
-    expect(byId(db, "older").class_name).toBe("PL5 (~2026-07)");
+    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~26.07.02) 2");
+    expect(byId(db, "older").class_name).toBe("PL5 (~26.07.02)");
   });
 
   it("동의한 내용과 지금이 다르면(그 사이 재운영됨) 비우지 않고 다시 묻는다", async () => {
@@ -142,9 +142,9 @@ describe("반 이름 충돌 가드 — 버튼을 누른 요청", () => {
   });
 
   it("버튼에 적힌 새 이름이 그새 달라졌으면 비우지 않고 새 이름으로 다시 묻는다", async () => {
-    const db = seed([row({ id: "older", class_name: "PL5 (~2026-07)", is_active: false, closed_at: "2026-07-01" })]);
+    const db = seed([row({ id: "older", class_name: "PL5 (~26.07.02)", is_active: false, closed_at: "2026-07-01" })]);
     const r = await rename(db, { request: REQUEST });
-    expect(r).toMatchObject({ ok: false, conflict: { freeTo: "PL5 (~2026-07) 2" } });
+    expect(r).toMatchObject({ ok: false, conflict: { freeTo: "PL5 (~26.07.02) 2" } });
     expect(byId(db, "old-pl5").class_name).toBe("PL5");
   });
 
@@ -179,16 +179,16 @@ describe("반 이름 충돌 가드 — 버튼을 누른 요청", () => {
     // 화면은 '운영 중인 반'과 겹쳤다는 것 + 비우려던 반 이름이 바뀐 채 남았다는 것을 함께 말한다.
     expect(r).toMatchObject({
       ok: false,
-      conflict: { status: "operating", holderId: "rival", message: expect.stringContaining("'PL5 (~2026-07)'(으)로 바뀐 채 남았습니다") },
+      conflict: { status: "operating", holderId: "rival", message: expect.stringContaining("'PL5 (~26.07.02)'(으)로 바뀐 채 남았습니다") },
     });
-    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~2026-07)");
+    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~26.07.02)");
     expect(logAction).toHaveBeenCalledTimes(1);
     const meta = vi.mocked(logAction).mock.calls[0]![0].metadata!;
     expect(meta).toMatchObject({
       classId: "old-pl5",
       note: expect.stringContaining("되돌리지 못함(그사이 다른 반이 그 이름을 씀)"),
       // 이 경로에선 이 줄이 그 변경의 유일한 기록이다 — 변경 내역을 함께 남긴다.
-      changes: [{ field: "반 이름", from: "PL5", to: "PL5 (~2026-07)" }],
+      changes: [{ field: "반 이름", from: "PL5", to: "PL5 (~26.07.02)" }],
     });
     // 그 저장은 실패했다 — "누구를 위해 비웠나"를 지어내지 않는다.
     expect(meta).not.toHaveProperty("freedForClassId");
@@ -209,7 +209,7 @@ describe("반 이름 충돌 가드 — 다른 지점·다른 과목은 건드리
       row({ id: "other-tenant", tenant_id: "tenant-b", class_name: "PL5", is_active: false, closed_at: "2026-07-02" }),
       row({ id: "other-subject", subject: "math", class_name: "PL5", is_active: false, closed_at: "2026-07-02" }),
     );
-    const r = await rename(db, { request: { name: "PL5", holderId: "other-tenant", to: "PL5 (~2026-07)" } });
+    const r = await rename(db, { request: { name: "PL5", holderId: "other-tenant", to: "PL5 (~26.07.02)" } });
     expect(r).toMatchObject({ ok: true, freed: null });
     expect(byId(db, "pl4").class_name).toBe("PL5");
     expect(byId(db, "other-tenant").class_name).toBe("PL5");
@@ -217,8 +217,8 @@ describe("반 이름 충돌 가드 — 다른 지점·다른 과목은 건드리
   });
 
   it("다른 과목에 같은 접미사 이름이 있어도 이 과목 후보는 첫 이름 그대로", async () => {
-    const db = seed([row({ id: "m", subject: "math", class_name: "PL5 (~2026-07)", is_active: false })]);
-    expect(await rename(db)).toMatchObject({ ok: false, conflict: { freeTo: "PL5 (~2026-07)" } });
+    const db = seed([row({ id: "m", subject: "math", class_name: "PL5 (~26.07.02)", is_active: false })]);
+    expect(await rename(db)).toMatchObject({ ok: false, conflict: { freeTo: "PL5 (~26.07.02)" } });
   });
 });
 
@@ -234,32 +234,32 @@ describe("반 이름 충돌 가드 — 감사로그 문구", () => {
 describe("반 이름 충돌 가드 — 나중에 무르기(새 반 교시 저장 실패)", () => {
   it("비운 이름을 되돌리고 되돌린 것도 감사로그에 남긴다", async () => {
     const db = seed();
-    byId(db, "old-pl5").class_name = "PL5 (~2026-07)";
+    byId(db, "old-pl5").class_name = "PL5 (~26.07.02)";
     const ok = await rollbackFreedClassName(
       asDb(db),
       { tenantId: A, subject: "english", name: "PL5" },
-      { id: "old-pl5", from: "PL5", to: "PL5 (~2026-07)", status: "closed" },
+      { id: "old-pl5", from: "PL5", to: "PL5 (~26.07.02)", status: "closed" },
     );
     expect(ok).toBe(true);
     expect(byId(db, "old-pl5").class_name).toBe("PL5");
     expect(logAction).toHaveBeenCalledWith(
       expect.objectContaining({
         targetLabel: "PL5",
-        metadata: expect.objectContaining({ changes: [{ field: "반 이름", from: "PL5 (~2026-07)", to: "PL5" }] }),
+        metadata: expect.objectContaining({ changes: [{ field: "반 이름", from: "PL5 (~26.07.02)", to: "PL5" }] }),
       }),
     );
   });
 
   it("되돌리지 못하면 사유만 남긴다 — '비움' 로그가 이미 있어 이름 변경을 두 번 찍지 않는다", async () => {
     const db = seed([row({ id: "taker", class_name: "PL5" })]); // 그사이 다른 반이 PL5를 가져갔다
-    byId(db, "old-pl5").class_name = "PL5 (~2026-07)";
+    byId(db, "old-pl5").class_name = "PL5 (~26.07.02)";
     const ok = await rollbackFreedClassName(
       asDb(db),
       { tenantId: A, subject: "english", name: "PL5" },
-      { id: "old-pl5", from: "PL5", to: "PL5 (~2026-07)", status: "closed" },
+      { id: "old-pl5", from: "PL5", to: "PL5 (~26.07.02)", status: "closed" },
     );
     expect(ok).toBe(false);
-    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~2026-07)");
+    expect(byId(db, "old-pl5").class_name).toBe("PL5 (~26.07.02)");
     const meta = vi.mocked(logAction).mock.calls[0]![0].metadata!;
     expect(meta).toMatchObject({ classId: "old-pl5", changes: [], changed: [], note: expect.stringContaining("되돌리지 못함") });
   });

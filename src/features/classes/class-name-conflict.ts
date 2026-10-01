@@ -13,6 +13,7 @@
  * 같은 판정을 반 수정·반 생성·레벨 변경이 함께 쓴다 — 경로마다 문구·상태 판정이 갈리지 않게.
  */
 import { normalizeClassName } from "./class-name";
+import { closedClassNameBase } from "./closed-name";
 
 /** 이름을 쥐고 있는 반 — 판정에 필요한 칸만. */
 export type ClassNameHolder = { id: string; isActive: boolean; closedAt: string | null };
@@ -73,12 +74,11 @@ export function canFreeClassName(status: ClassNameHolderStatus): boolean {
 }
 
 /**
- * 비울 때 붙이는 보관 접미사의 바탕 — `PL5` → `PL5 (~2026-07)`(종강월).
+ * 비울 때 붙이는 보관 접미사의 바탕 — `PL5` → `PL5 (~26.07.02)`(종강일).
  * 종강일이 없는 폐지 반은 손으로 하던 스크립트(`scripts/_english_sync/free-class-name.mts`)와 같이 `(~종강)`.
  */
 export function archivedClassNameBase(name: string, closedAt: string | null): string {
-  const month = (closedAt ?? "").slice(0, 7);
-  return normalizeClassName(`${name} (~${month || "종강"})`);
+  return closedClassNameBase(name, closedAt);
 }
 
 /** 접미사 이름까지 이미 있으면 ` 2`, ` 3` … 을 붙인다. 이 개수를 넘으면 사람이 정해야 한다(버튼을 안 준다). */
