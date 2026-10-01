@@ -376,6 +376,8 @@ export const AUDIT_ACTIONS = {
 
   // 수업보고서·발송 — 학부모에게 **나간 것**이라 되짚기가 가장 절실하다.
   lesson_report_save: "수업보고서 저장",
+  // 영상 제출 현황(장부)에서 회차 한 칸을 찍음 — 완료·미수행·미확인으로 되돌림(원장 2026-10-01).
+  lesson_report_video_homework_mark: "영상 과제 제출 기록",
   share_link_revoke: "학부모 공유 링크 회수",
   share_link_reissue: "학부모 공유 링크 재발급",
   report_attachment_add: "수업보고서 첨부 추가",
