@@ -17,6 +17,7 @@ import type { MasterTab } from "@/features/timetable/server/master-sheet-source"
 import { IssuesPanel } from "./issues-panel";
 import { ClassBindings } from "./class-bindings";
 import { TeacherBindings } from "./teacher-bindings";
+import { AttendanceMigrationPreview } from "./attendance-migration";
 import { DAY_LABEL_KO } from "@/features/classes/overlap";
 
 const field =
@@ -304,7 +305,8 @@ export function MasterSheetForm({
           <p className="mt-1 text-sm">
             배치 마감 {success.result.closed}건 · 배치 추가{" "}
             {success.result.inserted}건 · 학생 이동 {success.result.moved}명 ·
-            수강 추가 {success.result.added}건
+            수강 추가 {success.result.added}건 · 출결 이관{" "}
+            {success.result.attendanceCells}칸
           </p>
           <Link
             href={`/timetable?subject=english&week=${success.result.effectiveDate}`}
@@ -351,6 +353,7 @@ export function MasterSheetForm({
             pending={pending}
             onChange={change}
           />
+          <AttendanceMigrationPreview migration={preview.attendanceMigration} />
           {preview.omittedClasses.length ? (
             <section aria-label="시트에 없는 반" id="omitted-classes">
               <h2 className="text-lg font-semibold">시트에 없는 반</h2>

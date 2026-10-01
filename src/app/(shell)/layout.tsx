@@ -42,6 +42,7 @@ import { getMyMenuVisits } from "@/features/nav/server/visits";
 import { topVisitedMenus } from "@/features/nav/menu-visits";
 import { MENU_KEYS } from "@/lib/permissions";
 import { WorkspaceEnabledProvider } from "@/components/workspace/workspace-enabled";
+import { ShellHomeProvider } from "@/components/workspace/shell-home";
 import { EmbedProvider } from "@/components/workspace/embed-context";
 import { EmbedMainMarker } from "@/components/workspace/embed-main-marker";
 import { PaletteHotkeyForward } from "@/components/workspace/palette-hotkey-forward";
@@ -379,6 +380,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     MENU_KEYS.filter((k) => canAccess(user.systemRole, k, permMatrix)),
     4,
   );
+  // 풀셸의 첫 화면 — 대시보드 권한(사용자 유효 매트릭스)이 있으면 /dashboard, 원장이 꺼 둔 역할이면 /menu.
+  // 로고·'바탕 보기'(ShellHomeProvider)와 빈 작업면 착지(WorkspaceCanvas)가 **이 한 값**을 쓴다(gotchas #137).
+  const shellHome = canAccess(user.systemRole, "dashboard", permMatrix) ? "/dashboard" : "/menu";
 
   return (
     // ⚠️ OperationsProvider는 **셸 전체**를 감싼다 — 예전엔 <main> 안 {children}만 감쌌더니
@@ -389,6 +393,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     <NavigationProvider menus={menuLayout} groups={settings.navigation.groups} tenantId={user.tenantId}>
     <OperationsProvider subjects={settings.operations.subjects} gradeLevels={settings.operations.gradeLevels} jobTitles={settings.operations.jobTitles} jobTitlesByDepartment={settings.operations.jobTitlesByDepartment} disabledModules={settings.modules.disabled} licenses={await licensesPromise}>
     <WorkspaceEnabledProvider enabled={windowMode}>
+    {/* 첫 화면(홈) 주소 — 로고·'바탕 보기'·빈 작업면이 같은 값을 쓴다(대시보드를 꺼 둔 역할은 /menu, gotchas #137). */}
+    <ShellHomeProvider href={shellHome}>
     {/* print:h-auto/overflow-visible — 인쇄 클리핑 방지(위 미니멀 셸 래퍼와 동일). */}
     <div style={brandStyle} className="bg-background text-foreground flex h-screen flex-col overflow-hidden print:h-auto print:overflow-visible desk:flex-row">
       {/* 셸 크롬(사이드바·모바일내비·헤더)은 iframe(플로팅 창) 안에선 숨긴다 — 드릴인으로 embed가
@@ -427,7 +433,9 @@ export default async function ShellLayout({ children }: { children: ReactNode })
             (원장 2026-07-30 "모바일뷰에서 시간표가 상단 헤더 때문에 거의 보이지 않음"). 제목·벨은
             MobileTopNav 한 줄로 흡수. 데스크톱은 원래 이 헤더가 숨겨져 있어 영향 없음. */}
         {/* pt-2(모바일) — 상단 바 바로 아래라 여백을 조인다. 데스크톱은 종전 pt-5. */}
-        <main className="flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
+        {/* `relative` = 본문 안의 absolute(특히 `sr-only` 접근성 문구)의 기준점. 없으면 그 요소가 본문 스크롤 밖으로 빠져
+            **문서 전체**가 늘어나 사이드바보다 아래까지 빈 스크롤이 생긴다([[#79]] — 2026-10-01 창 모드를 끈 지점의 영상 제출 현황). */}
+        <main className="relative flex-1 overflow-auto px-3 pt-2 pb-8 desk:px-6 desk:pt-5 lg:pb-10 [scrollbar-gutter:stable]">
           {/* 드릴인 등으로 embed 파라미터가 떨어진 하드 내비가 창(iframe) 안에서 풀 셸을 렌더하면
               물리 프레임 판정으로 .embed-main 마커를 재부착 — PageHeader 컴팩트의 HideInFrame판. */}
           <EmbedMainMarker />
@@ -446,7 +454,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       <CommandPalette systemRole={user.systemRole} permMatrix={permMatrix} canTeacherView={canTeacherView} isSuperAdmin={isSuperAdmin} menuLayout={menuLayout} isGenericTenant={genericTenant} />
 
       {/* Stage Manager 워크스페이스 — 데스크톱에서만 자체 마운트(모바일/미니셸 무영향) */}
-      <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={canAccess(user.systemRole, "dashboard", permMatrix) ? "/dashboard" : "/menu"} />
+      <WorkspaceCanvas owner={`${user.tenantId}:${user.id}`} homeHref={shellHome} />
 
       {/* 업무군 메뉴 허브(버튼형, 원장 2026-09-07) — 사이드바에서 업무군을 고르면 본문에 메뉴 버튼이 뜬다.
           ⚠️ 캔버스와 **형제**로 둔다(캔버스 안에 넣으면 창들과 같은 층에 갇혀 z·포인터가 얽힌다).
@@ -465,6 +473,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       {/* 공지 팝업 — 셸 진입 시 창처럼 노출(데스크톱/모바일 공용, 임베드 제외) */}
       <NoticePopupLayer popups={popups} />
     </div>
+    </ShellHomeProvider>
     </WorkspaceEnabledProvider>
     </OperationsProvider>
     </NavigationProvider>

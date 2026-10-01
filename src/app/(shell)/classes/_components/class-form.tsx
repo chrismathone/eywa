@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,8 @@ import { ClassEnglishTrackField } from "./class-english-track-field";
 import { DEFAULT_ENGLISH_TRACK, normalizeEnglishTrack, type EnglishTrack } from "@/features/classes/english-track";
 import { CUSTOM_SLOTS_ANCHOR_ID, CustomTimeSlots } from "./custom-time-slots";
 import { OverlapNotice } from "./overlap-notice";
+import { ClassNameConflictNotice } from "./class-name-conflict-notice";
+import { FREE_CLOSED_NAME_FIELDS } from "@/features/classes/class-name-conflict";
 import { useSubjectMaps } from "@/features/owner/operations-context";
 
 type Schedule = {
@@ -273,11 +275,29 @@ export function ClassForm({
       conflictToast(state.error);
       return;
     }
+    // 반 이름 충돌 — 칸은 폼 맨 위라 저장 바에서 누른 사람이 못 볼 수 있다. 같은 문구를 가운데 알림으로도.
+    if (state?.nameConflict) {
+      conflictToast(state.nameConflict.message);
+      return;
+    }
     const saved = state?.ok ? (state.overlaps ?? []) : [];
     if (saved.length > 0) conflictToast(`저장했습니다 — ${overlapSummary(saved)}`);
   }, [state]);
 
   const fieldErrs = state?.fieldErrors ?? {};
+  const nameConflict = state?.nameConflict ?? null;
+  // "그 반 이름을 바꾸고 저장" — **누른 경우에만** 플래그를 실어 같은 폼을 다시 보낸다(서버가 그 반을 다시 확인한다).
+  // ⚠️ submitAction과 같은 이유로 직접 디스패치(#83) — 폼 자동 리셋이 없어 입력값이 그대로 남는다.
+  const freeClosedName = () => {
+    const form = formRef.current;
+    if (!form || !nameConflict?.freeTo) return;
+    const fd = new FormData(form);
+    fd.set(FREE_CLOSED_NAME_FIELDS.flag, "1");
+    fd.set(FREE_CLOSED_NAME_FIELDS.name, nameConflict.name);
+    fd.set(FREE_CLOSED_NAME_FIELDS.holderId, nameConflict.holderId);
+    fd.set(FREE_CLOSED_NAME_FIELDS.to, nameConflict.freeTo);
+    startTransition(() => formAction(fd));
+  };
   const confirmOverlaps = () => {
     setAckedNonce(state?.nonce);
     if (state?.redirectTo) router.push(state.redirectTo);
@@ -291,7 +311,8 @@ export function ClassForm({
       {defaults?.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="반 이름" error={fieldErrs.className}>
+        {/* 이름 충돌이면 문구·버튼을 ClassNameConflictNotice가 함께 그린다(같은 문구가 두 번 뜨지 않게 Field 오류는 비운다). */}
+        <Field label="반 이름" {...(nameConflict || !fieldErrs.className ? {} : { error: fieldErrs.className })}>
           <input
             name="className"
             required
@@ -299,6 +320,9 @@ export function ClassForm({
             placeholder="예: 중3 수학 심화반"
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           />
+          {nameConflict ? (
+            <ClassNameConflictNotice conflict={nameConflict} pending={pending} onFree={freeClosedName} />
+          ) : null}
         </Field>
 
         <Field label="과목" error={fieldErrs.subject}>

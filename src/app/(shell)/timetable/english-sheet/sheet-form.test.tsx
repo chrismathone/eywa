@@ -137,6 +137,7 @@ describe("영어 시트 화면의 실제 버튼 배선", () => {
         inserted: 1,
         moved: 0,
         added: 0,
+        attendanceCells: 0,
         snapshotId: "s",
         rosterSnapshotId: null,
       },

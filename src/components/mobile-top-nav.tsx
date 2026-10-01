@@ -14,6 +14,7 @@ import { type MenuLayout } from "@/features/owner/menu-layout";
 import type { ConnectedApp } from "@/features/connected-apps/apps";
 import { type AccessMatrix, type SystemRole } from "@/lib/permissions";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
+import { useShellHome } from "@/components/workspace/shell-home";
 
 /**
  * 좁은 폭·터치(= 데스크톱이 아닌 모든 화면)에서 좌측 사이드바 대신 쓰는 **단일 상단 바**.
@@ -61,6 +62,7 @@ export function MobileTopNav({
 }) {
   const pathname = usePathname();
   const isDesktop = useIsDesktop();
+  const home = useShellHome();
   const { groups: groupLayout } = useNavigationSettings();
   const presentation = useMenuPresentation();
   const search = useSearchParams();
@@ -82,7 +84,8 @@ export function MobileTopNav({
       {/* 단일 바 — 브랜드 · 현재 메뉴명 … 알림 · 햄버거 · 계정 (옛 AppHeader 흡수) */}
       <div className="border-line/60 flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Link href="/dashboard" className="flex shrink-0 items-center gap-2">
+          {/* 첫 화면 = 권한을 본 홈(`/dashboard` | `/menu`) — `/dashboard`를 직접 적지 말 것(gotchas #137). */}
+          <Link href={home} className="flex shrink-0 items-center gap-2">
             {logoSrc ? (
               // eslint-disable-next-line @next/next/no-img-element -- 학원 로고(GCS/외부 이미지), next/image 최적화 불필요
               <img src={logoSrc} alt={brand} className="size-5 shrink-0 rounded-[3px] object-contain" />

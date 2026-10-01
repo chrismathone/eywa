@@ -85,7 +85,7 @@ function failure(e: unknown, stage: string): MasterFailure {
       ? "같은 학생·반의 수강 기간이 겹칩니다. 학생 상세에서 기존·예약 수강을 확인해 주세요."
       : err.code === "23505"
         ? "반 이름 또는 배치가 중복됩니다. 보관된 반까지 확인한 뒤 다시 검사해 주세요."
-        : err.code === "40001"
+        : ["40001", "40P01", "55P03"].includes(err.code ?? "")
           ? "다른 사용자가 같은 데이터를 변경했습니다. 다시 검사한 뒤 적용해 주세요."
           : err.code === "23503"
             ? "연결한 반·학생·강사·강의실이 변경되었습니다. 다시 검사해 주세요."
@@ -128,7 +128,9 @@ export async function previewMasterSheet(raw: MasterInput) {
         preview: masterPreview(input, grids, ctx, source),
       };
     } finally {
-      await sql.end().catch(() => console.error('[english-master] DB cleanup failed'));
+      await sql
+        .end()
+        .catch(() => console.error("[english-master] DB cleanup failed"));
     }
   } catch (e) {
     return failure(e, stage);
@@ -172,7 +174,9 @@ export async function applyMasterSheet(
           acknowledgements,
         );
       } finally {
-        await sql.end().catch(() => console.error('[english-master] DB cleanup failed'));
+        await sql
+          .end()
+          .catch(() => console.error("[english-master] DB cleanup failed"));
       }
     } finally {
       if (lease === "claimed") {
@@ -192,6 +196,7 @@ export async function applyMasterSheet(
       revalidatePath("/classes");
       revalidatePath("/students", "layout");
       revalidatePath("/ecs");
+      revalidatePath("/attendance");
       updateTag(tenantSettingsTag(user.tenantId));
     } catch (e) {
       console.error(
