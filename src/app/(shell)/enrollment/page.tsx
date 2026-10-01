@@ -41,6 +41,9 @@ import { EnrollmentKanban } from "./_components/enrollment-kanban";
 import { parseBoardStage } from "@/features/enrollment/board-stages";
 import { EnrollmentTable } from "./_components/enrollment-table";
 import { IntakeQrSection } from "./_components/intake-qr-section";
+import { MakeeduPushSection } from "./_components/makeedu-push-section";
+import { MakeeduPushButton } from "./_components/makeedu-push-button";
+import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 
 export const metadata = { title: "콜&상담 — 에이와" };
 
@@ -113,10 +116,13 @@ export default async function EnrollmentPage({
   // 수강료 계산기 바로가기(감사 N14, 원장 2026-09-23) — 계산기는 수납관리의 한 면이라 **그 화면을 열 수 있는
   // 사람에게만** 링크를 세운다(권한은 바꾸지 않는다 — 못 여는 사람에게 링크를 주면 눌러도 거절된다).
   // 엑셀로 넣기 = 학원 전체를 바꾸는 일괄 작업 → full만(`canManageTenant`, 올리기 주소도 같은 판정 — [[#77]]).
-  const [canWriteEnrollment, canOpenCalculator, canImportExcel] = await Promise.all([
+  // makeedu 보내기(원장 2026-10-01) = 전송 액션과 **같은 게이트**(`canPushToMakeedu`) — 권한이 없거나 makeedu 모듈이
+  // 꺼진 지점이면 버튼 자리째 없다(잠긴 대체 화면도 안 그린다).
+  const [canWriteEnrollment, canOpenCalculator, canImportExcel, canPushMakeedu] = await Promise.all([
     canWriteTenant(user.systemRole, "enrollment"),
     canAccessTenant(user.systemRole, "billing"),
     canManageTenant(user.systemRole, "enrollment"),
+    canPushToMakeedu(user.systemRole),
   ]);
   // 🔴 뷰마다 **가져오는 양이 다르다**. 목록은 한 페이지(50행)만 — 옛 시트 이관으로 2,251행이 되어
   // 전건 로드는 라운드트립 3회 + 배지 청크 20여 회로 불어난다(B2·B4). 칸반은 열별 집계가 필요해
@@ -219,6 +225,13 @@ export default async function EnrollmentPage({
             >
               <IntakeQrSection />
             </Suspense>
+            {/* makeedu 보내기 — 후보 조회는 Suspense로 첫 페인트에서 뗀다(B7). 누르면 연동 면과 같은 전송 카드가
+                다이얼로그로 뜬다. 연동 면(/owner 연동 탭)의 카드는 그대로(실패 건 재전송). */}
+            {canPushMakeedu ? (
+              <Suspense fallback={<MakeeduPushButton candidates={null} />}>
+                <MakeeduPushSection />
+              </Suspense>
+            ) : null}
             {canOpenCalculator ? (
               <Button
                 variant="ghost"
@@ -311,10 +324,9 @@ export default async function EnrollmentPage({
         receivedDay={view === "stats" ? null : receivedDay}
       />
 
-      {/* 🔴 makeedu '보내기' 수동 카드는 **감췄다**(원장 2026-09-01) — 이제 매주 일요일 06:00(KST)에
-          동기화 PC 워처가 같은 큐(makeedu_push_requests)로 자동 전송한다(scripts/_makeedu/weekly-push.cjs).
-          카드 자체는 지우지 않았다: 연동 면(/owner 시트·연동 탭)에 그대로 있어 실패 건 재전송·수동
-          처리는 거기서 한다. 동기화 상태 배지는 위 필터 바에 그대로 있다. */}
+      {/* 🔴 makeedu '보내기' 카드를 본문에 펼쳐 두지 않는다(원장 2026-09-01) — 매주 일요일 06:00(KST)에 동기화 PC
+          워처가 같은 큐(makeedu_push_requests)로 자동 전송한다(scripts/_makeedu/weekly-push.cjs). 그 전에 골라
+          보낼 건은 머리글 'makeedu 보내기' 버튼이 같은 카드를 다이얼로그로 연다(원장 2026-10-01). */}
 
       {/* 통계뷰는 빈 상태 사진 대신 자기 안에서 "집계할 상담이 없습니다"를 말한다(연도 선택을 남겨야 하므로). */}
       {view === "stats" && stats && dist && schoolPrefs ? (

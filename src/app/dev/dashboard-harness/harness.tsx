@@ -1,6 +1,6 @@
 "use client";
 
-// ⚠️ 임시 검증 하네스 — 커밋하지 않는다.
+// 개발 전용 샘플: 로그인 없이 동작하며 저장은 서버로 보내지 않는다.
 import { MENU_KEYS, type MenuKey } from "@/lib/permissions";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { BUNDLES, type Bundle } from "@/features/dashboard/layout/types";
@@ -71,7 +71,8 @@ export function Harness({ mode, role }: { mode: string; role: string }) {
     return <Overview initial={snap} preview />;
   }
   return (
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: 16 }} onSubmitCapture={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+      <p role="status" className="mb-4 text-sm">샘플 데이터로 편집 동작을 확인하는 화면입니다. 변경 내용은 저장되지 않습니다.</p>
       <DashboardEditorLazy
         initial={{ version: 1, layouts: [] }}
         roleMenus={menus}

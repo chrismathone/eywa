@@ -37,6 +37,15 @@ const sections = {
 describe("과목 관리자 — 담당 과목으로 좁히기(서버)", () => {
   const math = narrowBySubject(sections, ["math"], groupOf, false);
 
+  it("담당 과목이 여럿이어도 동시 수강 학생은 재원생 한 명으로 센다", () => {
+    const full: Sections = { ...sections, students: ok({ ...sections.students!.data!, subjectCombinations: [
+      { subjects: ["math"], value: 140 }, { subjects: ["english"], value: 90 },
+      { subjects: ["math", "english"], value: 60 }, { subjects: ["korean"], value: 20 },
+    ] }) };
+    expect(narrowBySubject(full, ["math", "english"], groupOf, false).students?.data?.enrolled).toBe(290);
+    expect(narrowBySubject(full, ["english"], groupOf, false).students?.data?.enrolled).toBe(150);
+  });
+
   it("재원생 수 = 수학 프로그램, 과목 막대·조합은 수학만, 학년·학교 구성은 놓이지 않았으면 비운다", () => {
     expect(math.students?.data?.enrolled).toBe(200);
     expect(math.students?.data?.subjects.map((r) => r.label)).toEqual(["math"]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   MouseSensor,
   TouchSensor,
@@ -13,8 +13,10 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { insertAt, newItem, placedIds, removeItem } from "@/features/dashboard/layout/engine";
-import { MAX_ITEMS, type Item, type Placed } from "@/features/dashboard/layout/types";
+import { MAX_ITEMS, isHeadingId, type Item, type Placed } from "@/features/dashboard/layout/types";
 import { insertionIndex, rectOf, type Metrics, type Rect } from "./geometry";
+
+import { useDragPointer } from "./use-drag-pointer";
 
 export type DropTarget = "canvas" | "drawer" | "trash";
 export type DragState = {
@@ -64,12 +66,7 @@ export function useBoardDrag(opts: {
   const [drag, setDragState] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const pending = useRef<{ index: number; timer: ReturnType<typeof setTimeout> } | null>(null);
-  /**
-   * 포인터의 **지금 화면 좌표** — 이벤트에서 직접 읽는다. 🔴 dnd-kit의 `delta`는 끄는 동안 생긴 스크롤 변화까지 이미 품고 있어,
-   * 시작 좌표 + delta에서 지금 캔버스 위치(스크롤 뒤)를 또 빼면 스크롤한 만큼이 두 번 들어가 끼울 자리가 밀린다(적대 리뷰 2026-10-01).
-   */
-  const pointer = useRef<{ x: number; y: number } | null>(null);
-  const stopTracking = useRef<(() => void) | null>(null);
+  const { pointer, track, stop } = useDragPointer();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -80,35 +77,12 @@ export function useBoardDrag(opts: {
     dragRef.current = next;
     setDragState(next);
   }, []);
-  const track = useCallback((activator: Event | null) => {
-    // 주 포인터만(두 번째 손가락이 좌표를 덮어쓰지 않게) · 터치는 시작한 손가락만.
-    const onPointer = (ev: PointerEvent | MouseEvent) => {
-      if ("isPrimary" in ev && !ev.isPrimary) return;
-      pointer.current = { x: ev.clientX, y: ev.clientY };
-    };
-    const touchId = activator && "changedTouches" in activator ? (activator as TouchEvent).changedTouches[0]?.identifier : undefined;
-    const onTouch = (ev: TouchEvent) => {
-      const t = [...ev.touches].find((x) => touchId === undefined || x.identifier === touchId);
-      if (t) pointer.current = { x: t.clientX, y: t.clientY };
-    };
-    // 🔑 터치는 시작한 요소에도 건다 — 끄는 카드가 미리보기에서 빠져 문서에서 떨어지면 그 요소의 touchmove는 window까지 안 올라온다.
-    const target = activator?.target instanceof EventTarget ? activator.target : null;
-    window.addEventListener("pointermove", onPointer, { passive: true });
-    window.addEventListener("mousemove", onPointer, { passive: true });
-    window.addEventListener("touchmove", onTouch, { passive: true });
-    target?.addEventListener("touchmove", onTouch as EventListener, { passive: true });
-    stopTracking.current = () => {
-      window.removeEventListener("pointermove", onPointer);
-      window.removeEventListener("mousemove", onPointer);
-      window.removeEventListener("touchmove", onTouch);
-      target?.removeEventListener("touchmove", onTouch as EventListener);
-      pointer.current = null;
-    };
-  }, []);
   const clearPending = useCallback(() => {
     if (pending.current) clearTimeout(pending.current.timer);
     pending.current = null;
   }, []);
+
+  useEffect(() => clearPending, [clearPending]);
 
   const onDragStart = useCallback(
     (ev: DragStartEvent) => {
@@ -166,7 +140,7 @@ export function useBoardDrag(opts: {
         }, DWELL_MS),
       };
     },
-    [canvasRef, layoutRef, clearPending, setDrag],
+    [canvasRef, layoutRef, pointer, clearPending, setDrag],
   );
 
   const finish = useCallback(
@@ -174,8 +148,7 @@ export function useBoardDrag(opts: {
       const d = dragRef.current;
       const settled = pending.current?.index;
       clearPending();
-      stopTracking.current?.();
-      stopTracking.current = null;
+      stop();
       setDrag(null);
       if (!d || !ev) return;
       const target = (ev.over?.id as DropTarget | undefined) ?? null;
@@ -187,13 +160,13 @@ export function useBoardDrag(opts: {
         if (from) onDropped(d.id, { left: from.left, top: from.top, width: from.width, height: from.height });
         return;
       }
-      if (d.kind === "tile" && (target === "drawer" || target === "trash") && canRemove) {
+      if (d.kind === "tile" && (target === "drawer" || target === "trash") && (canRemove || isHeadingId(d.id))) {
         const before = [...items];
         onCommit(removeItem(items, d.id));
         onRemoved(d.id, before);
       }
     },
-    [items, canRemove, onCommit, onDropped, onRemoved, clearPending, setDrag],
+    [items, canRemove, onCommit, onDropped, onRemoved, clearPending, setDrag, stop],
   );
 
   /** 끄는 동안 보여 줄 순서 — 캔버스 위면 끼운 자리, 서랍·휴지통 위면 빠진 모습, 그 밖이면 원래대로. */
@@ -204,7 +177,7 @@ export function useBoardDrag(opts: {
       const base = drag.kind === "tile" ? items.filter((i) => i.id !== drag.id) : [...items];
       return insertAt(base, drag.item, drag.index);
     }
-    if (drag.kind === "tile" && (drag.target === "drawer" || drag.target === "trash") && canRemove) return removeItem(items, drag.id);
+    if (drag.kind === "tile" && (drag.target === "drawer" || drag.target === "trash") && (canRemove || isHeadingId(drag.id))) return removeItem(items, drag.id);
     return null;
   }, [drag, items, canRemove]);
 
@@ -213,6 +186,6 @@ export function useBoardDrag(opts: {
     preview,
     sensors,
     canRemove,
-    handlers: { onDragStart, onDragMove, onDragEnd: finish, onDragCancel: () => finish(null) },
+    handlers: { onDragStart, onDragMove, onDragOver: onDragMove, onDragEnd: finish, onDragCancel: () => finish(null) },
   };
 }

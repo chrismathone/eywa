@@ -55,7 +55,7 @@ export function AutoPageSize({
   className?: string;
   /**
    * 단 수 상한 — 폭이 더 허락해도 이 이상 세우지 않는다(목록의 `column-count`도 같은 값을 상한으로 둘 것).
-   * 원생상담은 2(원장 2026-09-30 *"상담을 2단으로 줄이고"* — 오른쪽은 통계 패널 자리).
+   * 원생상담은 2(원장 2026-09-30 *"상담을 2단으로 줄이고"*).
    */
   maxCols?: number;
   /**
@@ -90,7 +90,7 @@ export function AutoPageSize({
       // 목록 아래에 실제로 있는 것(쪽 넘김·바닥 여백)의 높이 = 스크롤러 직계 자식(페이지 루트)의 바닥 − 목록 바닥 + 스크롤러
       // 바닥 패딩. 🔴 scrollHeight로 재면 안 된다 — 내용이 짧을 때 빈 공간까지 '아래'로 잡혀 행 수가 최소값으로 떨어지고
       // 창을 키워도 안 늘어난다(실브라우저 측정 2026-09-03에서 났다).
-      // `data-autopage-root`가 있으면 그 상자가 '목록 쪽'이다 — 목록 옆·아래에 다른 덩어리(원생상담 통계 패널)가 있으면 페이지 루트
+      // `data-autopage-root`가 있으면 그 상자가 '목록 쪽'이다 — 목록 옆·아래에 다른 덩어리가 있으면 페이지 루트
       // 바닥은 그 덩어리의 바닥이라, 거기서 재면 패널이 길수록 행이 줄어든다(패널이 목록 아래로 접힌 폭에선 패널 높이 전체가 '아래'로 잡힌다).
       let root: HTMLElement = (el.closest("[data-autopage-root]") as HTMLElement | null) ?? el;
       if (!root.hasAttribute("data-autopage-root")) {

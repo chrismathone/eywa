@@ -93,6 +93,13 @@ export async function loadRepliesForMessages(admin: Admin, tenantId: string, mes
   return rows.map(toReply);
 }
 
+/** 한 글(ClassNote 글 번호)에 달린 우리 답글 전부 — 쓰레드용. 한 글의 답글은 수십 건 안쪽이라 `limit(200)`이면 충분하다. */
+export async function loadRepliesForPost(admin: Admin, tenantId: string, postId: number): Promise<ReplyRow[]> {
+  const { data, error } = await admin.from("classnote_parent_replies").select(REPLY_COLS).eq("tenant_id", tenantId).eq("classnote_post_id", postId).order("created_at").limit(200);
+  if (error) throw error;
+  return (data ?? []).map((r) => toReply(r as Record<string, unknown>));
+}
+
 export async function loadReply(admin: Admin, tenantId: string, replyId: string): Promise<ReplyRow | null> {
   const { data, error } = await admin.from("classnote_parent_replies").select(REPLY_COLS).eq("tenant_id", tenantId).eq("id", replyId).maybeSingle();
   if (error) throw error;

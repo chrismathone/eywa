@@ -18,10 +18,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const NOBODY = "00000000-0000-0000-0000-000000000000";
 
 /**
- * 원생상담 **통계 패널**의 집계(원장 2026-09-30 *"우측에 상담 통계 고도화. 모든 것을 관리 통계 추이 가능하게."*).
+ * 원생상담 **통계**의 집계(원장 2026-09-30 *"우측에 상담 통계 고도화. 모든 것을 관리 통계 추이 가능하게."* → 2026-10-01 목록 위 요약 띠 +
+ * `/consultations/stats` 전용 화면 — 둘 다 이 함수 하나를 같은 필터로 부른다).
  *
  * 🔴 목록과 **같은 조건**을 탄다 — 강사 스코프(본인 상담만) · 기간 · 카테고리 · 후속 · 상담사 · 과목(키·라벨). 검색어는 목록 전용.
- *    같은 필터를 두 곳이 따로 풀면 패널 수치와 목록 건수가 갈린다(queries.ts `filteredConsultations` 한 벌 + RPC는 같은 식).
+ *    같은 필터를 두 곳이 따로 풀면 통계 수치와 목록 건수가 갈린다(queries.ts `filteredConsultations` 한 벌 + RPC는 같은 식).
  * 🔴 집계는 DB에서(0318a `consultation_stats` group-by RPC, B2) — 행을 끌어와 JS로 세지 않는다.
  * [[#95]] RPC가 없으면(SQL 적용 전) **건수 카드만** 헤드 카운트로 채운다(추이·분해는 빈 채로 — 가능한 지표만).
  */
@@ -30,7 +31,7 @@ export async function getConsultationStats(filters: ConsultationListFilters): Pr
   const teacherId = await effectiveTeacherId();
   const today = kstToday();
   // 상담사 조건 — 목록(`filteredConsultations`)은 강사 스코프와 상담사 필터를 **둘 다** 건다. 강사가 남의 id를 주소에 넣으면
-  // 목록은 0건이다 — 패널이 그때 자기 통계를 보여 주면 두 숫자가 갈린다. uuid가 아닌 값도 목록은 0건(조회 오류)이라 같은 0으로 맞춘다.
+  // 목록은 0건이다 — 통계가 그때 자기 통계를 보여 주면 두 숫자가 갈린다. uuid가 아닌 값도 목록은 0건(조회 오류)이라 같은 0으로 맞춘다.
   const wanted = filters.counselor && filters.counselor !== "all" ? filters.counselor : null;
   const wantedId = wanted === null ? null : UUID_RE.test(wanted) ? wanted : NOBODY;
   const counselor = teacherId ? (wantedId && wantedId !== teacherId ? NOBODY : teacherId) : wantedId;

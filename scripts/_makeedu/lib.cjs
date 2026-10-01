@@ -164,6 +164,31 @@ function isPushableConsultation(outcome, studentMakeeduId) {
   return !studentMakeeduId;
 }
 
+/**
+ * 역동기화 워커가 한 번에 집은 대기 요청에서 **같은 상담이 두 번 이상** 나오면 첫 요청만 남긴다(순서 유지).
+ *
+ * 대기 행이 겹치는 길: 연동 면 카드 · 콜&상담 머리글 'makeedu 보내기'(2026-10-01) · 주간 자동 적재가 **거의 같은
+ * 순간** 같은 상담을 큐에 넣으면, 앱의 "이미 대기 중이면 안 넣음"은 조회→삽입 두 단계라 둘 다 통과한다(DB 유니크 없음).
+ * 워커는 상담 행을 묶음 시작 때 한 번만 읽으므로 두 번째도 `makeedu_pushed_at`이 비어 보여 **makeedu 예비상담이 두 건**
+ * 생긴다(외부 기록). 여기서 거른 나머지는 워커가 큐에서 지운다(목록의 '최신 요청 상태'를 흐리지 않게 —
+ * skipped로 남기면 첫 요청이 실패해도 '미전송'으로 보인다). dry-run은 지우지 않고 대기로 되돌린다.
+ * 순수 함수(lib.test.ts) — 입력 = [{ requestId, consultationId }].
+ */
+function splitDuplicatePushRequests(reqs) {
+  const seen = new Set();
+  const unique = [];
+  const duplicates = [];
+  for (const r of reqs || []) {
+    if (r.consultationId && seen.has(r.consultationId)) {
+      duplicates.push(r);
+      continue;
+    }
+    if (r.consultationId) seen.add(r.consultationId);
+    unique.push(r);
+  }
+  return { unique, duplicates };
+}
+
 // 테넌트 해석 — env MAKEEDU_TENANT_ID(침산 id)가 있으면 그 학원, 없으면 학원이 **정확히 1개일 때만** 그 학원.
 // 🔴 둘 이상인데 env가 없으면 멈춘다(ClassNote 워커 `resolveTenant`와 같은 fail-closed). 종전 "created_at 첫 학원"은
 //    둘째 지점이 생기는 날 makeedu 데이터를 조용히 남의 학원에 붓는 규칙이었다(원장 2026-09-18 "전부 침산 테넌트로").
@@ -279,5 +304,6 @@ module.exports = {
   paymentMethod,
   resolveTenantId,
   isPushableConsultation,
+  splitDuplicatePushRequests,
   billingMonthRange,
 };

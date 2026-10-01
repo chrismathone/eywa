@@ -213,7 +213,7 @@ export function Overview({
       label={label}
       onChange={(k) => {
         setKinds((prev) => ({ ...prev, [panel]: k }));
-        void saveDashboardChartKind(panel, k).catch(() => undefined); // 표시 취향 — 저장 실패해도 화면은 바뀐 그대로
+        if (!preview) void saveDashboardChartKind(panel, k).catch(() => undefined); // 미리보기 조작은 계정 설정을 바꾸지 않는다
       }}
     />
   );

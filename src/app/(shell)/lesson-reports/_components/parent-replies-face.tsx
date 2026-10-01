@@ -44,6 +44,9 @@ export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
                   <span className="text-text-faint">{r.source === "comment" ? "댓글" : "새 글"}</span>
                 </div>
                 <p className="text-foreground mt-1 text-sm leading-relaxed break-keep [overflow-wrap:anywhere]">{r.content}</p>
+                {r.media.videos || r.media.photos ? (
+                  <p className="text-text-dim mt-1 text-xs">첨부 {[r.media.videos ? `영상 ${r.media.videos}` : "", r.media.photos ? `사진 ${r.media.photos}` : ""].filter(Boolean).join(" · ")}</p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-start gap-2">
                 {r.latest ? <Pill color={toneColor(r.latest.tone)}>{r.replyCount > 1 ? `${r.latest.label} 외 ${r.replyCount - 1}` : r.latest.label}</Pill> : null}

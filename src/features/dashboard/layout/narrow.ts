@@ -31,10 +31,12 @@ function narrowStudents(st: OverviewData["students"], groups: readonly string[],
     noEnrollment: 0,
     otherOnly: 0,
   };
-  // 재원생 수: 수학 하나만 맡으면 수학 프로그램(학생 단위), 그 밖 = 과목별 막대 합.
-  // 🔴 영어를 `eie + injaewon`으로 더하면 두 트랙을 모두 듣는 학생이 두 번 세어진다 — 영어 과목 막대(`subjects`)는 학생 단위라 그쪽을 쓴다.
-  // (과목을 둘 이상 맡으면 막대 합이라 두 과목을 다 듣는 학생은 겹쳐 센다 — 한계.)
-  const enrolled = groups.length === 1 && has("math") ? p.math : subjects.reduce((sum, r) => sum + r.value, 0);
+  // 과목 조합은 학생마다 한 행에만 센다. 여러 과목·같은 묶음의 여러 트랙을 맡아도 중복 합산하지 않는다.
+  // 수학 단독은 기존 프로그램 집계와 같은 축, 조합이 없는 옛 스냅샷만 과목 막대로 폴백한다.
+  const enrolled = groups.length === 1 && has("math") ? p.math
+    : st.subjectCombinations
+      ? st.subjectCombinations.filter((c) => c.subjects.some(mine)).reduce((sum, c) => sum + c.value, 0)
+      : subjects.reduce((sum, r) => sum + r.value, 0);
   const narrowed: OverviewData["students"] = {
     ...st,
     enrolled,

@@ -17,7 +17,7 @@ export function useResize(opts: {
 }) {
   const { items, layoutRef, onCommit } = opts;
   const [resize, setResize] = useState<{ id: string; z: SizePreset } | null>(null);
-  const live = useRef<{ id: string; z: SizePreset; start: { x: number; y: number; w: number; h: number } } | null>(null);
+  const live = useRef<{ id: string; pointerId: number; z: SizePreset; start: { x: number; y: number; w: number; h: number } } | null>(null);
   const itemsRef = useRef(items);
   useEffect(() => {
     itemsRef.current = items;
@@ -42,7 +42,7 @@ export function useResize(opts: {
       const cur = live.current;
       const layout = layoutRef.current;
       const def = cur && cardDef(cur.id);
-      if (!cur || !layout || !def) return;
+      if (!cur || !layout || !def || ev.pointerId !== cur.pointerId) return;
       const want = gridSizeFromPixels(cur.start.w + ev.clientX - cur.start.x, cur.start.h + ev.clientY - cur.start.y, layout.metrics);
       const item = itemsRef.current.find((i) => i.id === cur.id);
       const z = nearestPreset(def, want.w, want.h, want.w < 4.5 ? "summary" : item?.mode);
@@ -51,24 +51,30 @@ export function useResize(opts: {
         setResize({ id: cur.id, z });
       }
     };
-    const up = () => end(true);
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId === live.current?.pointerId) end(true);
+    };
+    const cancel = (ev: PointerEvent) => {
+      if (ev.pointerId === live.current?.pointerId) end(false);
+    };
     const key = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") end(false);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", up);
+    window.addEventListener("pointercancel", cancel);
     window.addEventListener("keydown", key);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", up);
+      window.removeEventListener("pointercancel", cancel);
       window.removeEventListener("keydown", key);
     };
   }, [resize, layoutRef, end]);
 
   const start = useCallback(
     (id: string, ev: ReactPointerEvent<HTMLElement>) => {
+      if (ev.button !== 0 || !ev.isPrimary || live.current) return;
       const layout = layoutRef.current;
       const item = itemsRef.current.find((i) => i.id === id);
       const def = cardDef(id);
@@ -78,7 +84,7 @@ export function useResize(opts: {
       // 🔑 시작 크기 = **저장된 프리셋**의 크기 — 줄 채우기로 넓어진 화면 폭에서 재면 1px만 움직여도 한 단계 커진다(적대 리뷰 2026-10-01).
       const r = rectOf({ x: 0, y: 0, w: item.w, h: item.h }, { ...layout.metrics, rowHeights: [ROW_H, ROW_H], rowTops: [0, ROW_H + GAP] });
       const z = presetOf(def, item) ?? nearestPreset(def, item.w, item.h, item.mode);
-      live.current = { id, z, start: { x: ev.clientX, y: ev.clientY, w: r.width, h: r.height } };
+      live.current = { id, pointerId: ev.pointerId, z, start: { x: ev.clientX, y: ev.clientY, w: r.width, h: r.height } };
       setResize({ id, z });
     },
     [layoutRef],

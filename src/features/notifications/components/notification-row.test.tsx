@@ -36,3 +36,12 @@ it("열기·보관·삭제를 독립된 버튼으로 제공해 보관 시 상세
   );
   expect(onOpen).toHaveBeenCalledOnce();
 });
+it("학부모 글 알림 — 답글이 없으면 '답글 쓰기', 이미 달았으면 '답글 N'으로 쓰레드에 다시 들어간다", () => {
+  const onReply = vi.fn();
+  const item = { id: "n2", type: "classnote_parent_comment", title: "홍길동 학부모 댓글", body: "[영상] (내용 없이 첨부만)", link: "https://www.classnote.com/service/report/1?comment=2", read: true, createdAt: "2026-10-01T00:00:00Z" };
+  const { rerender } = render(<NotificationRow item={item} archived={false} onOpen={() => {}} onArchive={() => {}} onDelete={() => {}} onReply={onReply} />);
+  expect(screen.getByRole("button", { name: "답글 쓰기" })).toBeTruthy();
+  rerender(<NotificationRow item={item} archived={false} onOpen={() => {}} onArchive={() => {}} onDelete={() => {}} onReply={onReply} replyCount={2} />);
+  fireEvent.click(screen.getByRole("button", { name: "답글 2" }));
+  expect(onReply).toHaveBeenCalledOnce();
+});

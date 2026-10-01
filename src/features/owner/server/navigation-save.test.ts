@@ -31,10 +31,27 @@ function form(value = configuration, baseline = navigationRevision(empty)) {
   const fd = new FormData(); fd.set("section", "navigation"); fd.set("data", JSON.stringify(value)); fd.set("navigationBaseline", baseline); return fd;
 }
 beforeEach(() => {
-  vi.clearAllMocks(); m.allowed = true; m.error = null; m.rows = [{ tenant_id: "tenant-a" }];
+  vi.clearAllMocks(); m.actor.systemRole = "master"; m.allowed = true; m.error = null; m.rows = [{ tenant_id: "tenant-a" }];
   m.stored = { data: { profile: { name: "학원" }, navigation: empty }, updated_at: "2026-09-29T12:00:00Z" };
 });
 describe("실제 학원 설정 저장 액션", () => {
+  it("owner를 위임받았어도 역할별 대시보드 공개 설정은 바꿀 수 없다", async () => {
+    m.actor.systemRole = "admin";
+    const fd = new FormData();
+    fd.set("section", "dashboard");
+    fd.set("data", JSON.stringify({ version: 1, layouts: [] }));
+    expect((await saveOwnerSection(undefined, fd))?.error).toContain("원장");
+    expect(m.write).not.toHaveBeenCalled();
+  });
+  it("원장의 대시보드 배치를 정리해 현재 지점에 저장하고 운영실을 갱신한다", async () => {
+    const dashboard = { version: 1, layouts: [{ role: "desk", items: [{ id: "panel:notices", w: 6, h: 1 }] }] };
+    const fd = new FormData();
+    fd.set("section", "dashboard");
+    fd.set("data", JSON.stringify(dashboard));
+    expect((await saveOwnerSection(undefined, fd))?.ok).toBe(true);
+    expect(m.write).toHaveBeenCalledWith("update", expect.objectContaining({ data: expect.objectContaining({ dashboard }) }));
+    expect(m.revalidatePath).toHaveBeenCalledWith("/dashboard");
+  });
   it("owner 쓰기 권한이 없는 계정은 저장할 수 없다", async () => {
     m.allowed = false;
     expect((await saveOwnerSection(undefined, form()))?.error).toContain("권한");

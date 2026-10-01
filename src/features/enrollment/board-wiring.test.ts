@@ -70,12 +70,50 @@ describe("월 이동은 앱 전역 PeriodNav", () => {
   });
 });
 
-describe("makeedu 역동기화 — 수동 카드는 감추고 주간 자동으로", () => {
-  it("등록상담 화면은 'makeedu 보내기' 카드를 그리지 않는다", () => {
+describe("makeedu 역동기화 — 본문 카드 대신 머리글 버튼 + 주간 자동", () => {
+  const SECTION = "src/app/(shell)/enrollment/_components/makeedu-push-section.tsx";
+  const BUTTON = "src/app/(shell)/enrollment/_components/makeedu-push-button.tsx";
+  const PUSH_ACTIONS = "src/features/integrations/server/actions.ts";
+  const ACCESS = "src/features/integrations/server/makeedu-push-access.ts";
+
+  it("콜&상담 본문엔 카드를 펼치지 않는다 — 페이지가 후보를 직접 조회하지도 않는다(원장 2026-09-01)", () => {
     const page = read(PAGE);
     expect(page).not.toContain("MakeeduPushCard");
-    // 후보 조회까지 함께 걷어냈는지(안 그리면서 쿼리만 남으면 순수 낭비다).
+    // 조회는 머리글 섹션(Suspense 안)에서만 — 페이지 본문 await에 끼면 첫 페인트가 막힌다(B7).
     expect(page).not.toContain("getUnpushedIntakeConsultations");
+  });
+
+  it("머리글 'makeedu 보내기'(원장 2026-10-01)는 전송 액션과 같은 게이트 뒤 · Suspense 안에 선다", () => {
+    const page = read(PAGE);
+    expect(page).toContain("canPushToMakeedu(user.systemRole)");
+    // 게이트를 못 지나면 대체 화면(잠긴 버튼)조차 안 그린다 — 권한 없음·모듈 꺼짐 = 흔적 없이.
+    expect(page).toMatch(/canPushMakeedu \? \(\s*<Suspense fallback=\{<MakeeduPushButton candidates=\{null\} \/>\}>\s*<MakeeduPushSection \/>/);
+    // 섹션도 같은 게이트를 **조회보다 먼저** 본다.
+    const section = read(SECTION);
+    const gate = section.indexOf("canPushToMakeedu(");
+    expect(gate).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(section.indexOf("getUnpushedIntakeConsultations("));
+  });
+
+  it("게이트는 한 함수 — 전송 액션도 그것을 지나고, 그 함수는 integrations 쓰기 권한(모듈 꺼짐 캡 포함)이다", () => {
+    expect(read(PUSH_ACTIONS)).toMatch(/enqueueConsultationPush[\s\S]{0,600}canPushToMakeedu\(user\.systemRole\)/);
+    expect(read(ACCESS)).toContain('canWriteTenant(role, "integrations")');
+  });
+
+  it("버튼은 연동 면과 같은 카드를 다이얼로그로 연다 — 새 조회·전송 경로를 만들지 않는다", () => {
+    const button = read(BUTTON);
+    expect(button).toContain("@/features/integrations/components/makeedu-push-card");
+    expect(button).toContain("<MakeeduPushCard");
+    // 전송은 카드 안의 enqueueConsultationPush 하나뿐 — 버튼이 액션·fetch를 따로 부르지 않는다(#137: 저절로 도는 서버 액션 금지).
+    expect(button).not.toMatch(/from "@\/features\/integrations\/server\/actions"/);
+    expect(button).not.toContain("fetch(");
+    // 보낸 뒤 갱신 = 액션의 재검증이 이 화면을 다시 그린다.
+    expect(read(PUSH_ACTIONS)).toContain('revalidatePath("/enrollment")');
+  });
+
+  it("연동 면의 카드는 그대로 둔다(실패 건 재전송)", () => {
+    const face = read("src/app/(shell)/owner/_components/sheets-face.tsx");
+    expect(face).toContain("<MakeeduPushCard candidates={pushCandidates} />");
   });
 
   it("동기화 상태 배지는 그대로 둔다(지시 범위 밖)", () => {

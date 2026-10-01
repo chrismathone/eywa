@@ -1,63 +1,26 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { DndContext, DragOverlay, MeasuringStrategy, getClientRect, useDroppable } from "@dnd-kit/core";
+import { DndContext, DragOverlay, MeasuringStrategy, getClientRect } from "@dnd-kit/core";
 import type { MenuKey } from "@/lib/permissions";
 import type { OverviewSnapshot } from "@/features/dashboard/overview/model";
 import { holesOf, layoutAt } from "@/features/dashboard/layout/flow";
-import { moveTo, placedIds, removeItem, resizeItem } from "@/features/dashboard/layout/engine";
-import { cardDef, presetOf } from "@/features/dashboard/layout/registry";
+import { placedIds, removeItem } from "@/features/dashboard/layout/engine";
+import { cardDef } from "@/features/dashboard/layout/registry";
 import { summaryOf } from "@/features/dashboard/layout/summary";
 import { isHeadingId, type Bundle, type Item } from "@/features/dashboard/layout/types";
 import { badgesFor, exposureOf, optionOn } from "./badges";
+import { ACCESSIBILITY, CanvasDrop, Trash } from "./board-drop-targets";
+import { useBoardKeyboard } from "./use-board-keyboard";
 import { CanvasTile } from "./canvas-tile";
-import { metricsOf, rectOf, SPRING, verticalNeighbor, type Rect } from "./geometry";
+import { metricsOf, rectOf, SPRING, type Rect } from "./geometry";
 import { boardCollision, useBoardDrag } from "./use-board-drag";
 import { useResize } from "./use-resize";
 import { WidgetDrawer } from "./widget-drawer";
 import { WidgetFace } from "./widget-face";
 import { WidgetThumb } from "./widget-thumb";
 import e from "./editor.module.css";
-
-const ACCESSIBILITY = {
-  screenReaderInstructions: { draggable: "마우스로 끌거나 길게 눌러 옮깁니다. 키보드는 화살표로 순서, Shift와 화살표로 크기, Delete로 뺍니다." },
-  announcements: {
-    onDragStart: () => "카드를 들었습니다.",
-    onDragOver: () => undefined,
-    onDragEnd: () => "카드를 놓았습니다.",
-    onDragCancel: () => "옮기기를 취소했습니다.",
-  },
-};
-
-/**
- * 캔버스 = 놓을 곳 'canvas'. 🔴 `useDroppable`은 **DndContext 안쪽 자식**에서 불러야 등록된다 — DndContext를 그리는 컴포넌트에서
- * 부르면 컨텍스트 밖이라 조용히 안 잡힌다(2026-10-01 실측: 충돌 후보에 drawer·trash만 있었다).
- */
-function CanvasDrop({ over, children, onBackground }: { over: boolean; children: ReactNode; onBackground: () => void }) {
-  const { setNodeRef } = useDroppable({ id: "canvas" });
-  return (
-    <div
-      ref={setNodeRef}
-      className={e.canvasWrap}
-      data-over={over || undefined}
-      onClick={(ev) => {
-        if (ev.target === ev.currentTarget) onBackground();
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Trash({ over, blocked }: { over: boolean; blocked: boolean }) {
-  const { setNodeRef } = useDroppable({ id: "trash" });
-  return (
-    <div ref={setNodeRef} className={e.trash} data-over={(over && !blocked) || undefined} role="status">
-      {blocked ? "마지막 카드는 뺄 수 없습니다" : over ? "놓으면 뺍니다" : "여기로 끌어 놓으면 뺍니다"}
-    </div>
-  );
-}
 
 /**
  * 편집 캔버스 + 아래 서랍 — iOS 홈 화면 위젯 편집처럼: 들면 살짝 커지고(그림자), 다른 카드는 **스프링으로 비켜 흐르고**,
@@ -142,46 +105,7 @@ export function EditBoard(props: {
     }
   }, [items, drag]);
 
-  const onKey = useCallback(
-    (id: string, ev: KeyboardEvent<HTMLDivElement>) => {
-      const idx = items.findIndex((i) => i.id === id);
-      const item = items[idx];
-      if (!item) return;
-      const say = (next: Item[], what: string) => {
-        onCommit(next);
-        setAnnounce(`${label(id)} ${what}`);
-      };
-      if (ev.key === "Delete" || ev.key === "Backspace") {
-        ev.preventDefault();
-        if (!canRemove && !isHeadingId(id)) return setAnnounce("마지막 카드는 뺄 수 없습니다");
-        const before = [...items];
-        onCommit(removeItem(items, id));
-        onRemoved(id, before);
-        return;
-      }
-      if (ev.key === "Escape") return onSelect(null);
-      if (!ev.key.startsWith("Arrow")) return;
-      ev.preventDefault();
-      const def = cardDef(id);
-      if (ev.shiftKey && def && (ev.key === "ArrowLeft" || ev.key === "ArrowRight")) {
-        const at = def.sizes.findIndex((z) => z.key === presetOf(def, item)?.key);
-        const z = def.sizes[Math.max(0, Math.min(def.sizes.length - 1, at + (ev.key === "ArrowRight" ? 1 : -1)))];
-        if (z) say(resizeItem(items, id, z), `크기 ${z.label}`);
-        return;
-      }
-      if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
-        const to = Math.max(0, Math.min(items.length - 1, idx + (ev.key === "ArrowRight" ? 1 : -1)));
-        if (to !== idx) say(moveTo(items, id, to), `${to + 1}번째 자리로`);
-        return;
-      }
-      const neighbor = verticalNeighbor(placed, id, ev.key === "ArrowUp" ? -1 : 1);
-      if (!neighbor) return;
-      const rest = items.filter((i) => i.id !== id);
-      const at = rest.findIndex((i) => i.id === neighbor) + (ev.key === "ArrowDown" ? 1 : 0);
-      say(moveTo(items, id, at), ev.key === "ArrowUp" ? "윗줄로" : "아랫줄로");
-    },
-    [items, placed, canRemove, label, onCommit, onRemoved, onSelect],
-  );
+  const onKey = useBoardKeyboard({ items, placed, canRemove, label, onCommit, onRemoved, onSelect, setAnnounce });
 
   const ghost = drag && drag.target === "canvas" ? placed.find((p) => p.id === drag.id) : null;
   const blocked = !!drag && drag.target === null;

@@ -34,7 +34,7 @@ function reduce(state: State, a: Action): State {
     case "commit": {
       const role = a.role ?? state.role;
       const next = pushHistory(state.drafts[role], a.items);
-      const selected = state.selected && a.items.some((i) => i.id === state.selected) ? state.selected : null;
+      const selected = role !== state.role ? state.selected : state.selected && a.items.some((i) => i.id === state.selected) ? state.selected : null;
       return next === state.drafts[role] ? state : { ...state, selected, drafts: { ...state.drafts, [role]: next } };
     }
     case "restore": {
@@ -82,7 +82,7 @@ export function useDashboardEditor(initial: DashboardSettings) {
     setRole: useCallback((role: Bundle) => dispatch({ type: "role", role }), []),
     setEditing: useCallback((on: boolean) => dispatch({ type: "editing", on }), []),
     select: useCallback((id: string | null) => dispatch({ type: "select", id }), []),
-    commit: useCallback((next: Item[]) => dispatch({ type: "commit", items: next }), []),
+    commit: useCallback((next: Item[]) => dispatch({ type: "commit", role: state.role, items: next }), [state.role]),
     restore: useCallback((role: Bundle, item: Item, index: number) => dispatch({ type: "restore", role, item, index }), []),
     undo: useCallback(() => dispatch({ type: "undo" }), []),
     redo: useCallback(() => dispatch({ type: "redo" }), []),

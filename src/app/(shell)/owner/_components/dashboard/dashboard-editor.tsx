@@ -8,7 +8,7 @@ import { defaultItems } from "@/features/dashboard/layout/defaults";
 import { insertAt, newItem } from "@/features/dashboard/layout/engine";
 import { CARDS, cardDef, type SizePreset } from "@/features/dashboard/layout/registry";
 import { previewSnapshot } from "@/features/dashboard/layout/preview";
-import { BUNDLE_LABELS, BUNDLE_RULES, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
+import { BUNDLE_LABELS, BUNDLE_RULES, MAX_ITEMS, type Bundle, type DashboardSettings, type Item } from "@/features/dashboard/layout/types";
 import { SectionForm } from "../section-form";
 import { CardInspector } from "./card-inspector";
 import { EditBoard } from "./edit-board";
@@ -16,6 +16,7 @@ import { EditorActions, RoleBar } from "./editor-toolbar";
 import { SPRING } from "./geometry";
 import { ListBoard, UnusedList } from "./list-board";
 import { RolePreview } from "./role-preview";
+import { useEditorShortcuts } from "./use-editor-shortcuts";
 import { useDashboardEditor } from "./use-editor";
 import { WidgetGallery } from "./widget-gallery";
 import e from "./editor.module.css";
@@ -103,6 +104,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
     (id: string, z?: SizePreset) => {
       const cur = itemsRef.current;
       if (cur.some((i) => i.id === id)) return;
+      if (cur.length >= MAX_ITEMS) return toast.info(`카드와 구역 제목은 ${MAX_ITEMS}개까지 넣을 수 있습니다`);
       commit([...cur, newItem(id, z)]);
       toast(`'${cardDef(id)?.label}'을(를) 맨 뒤에 넣었습니다`);
     },
@@ -111,30 +113,13 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
   const addHeading = useCallback(() => {
     const id = `heading:${Date.now().toString(36)}`;
     const cur = itemsRef.current;
+    if (cur.length >= MAX_ITEMS) return toast.info(`카드와 구역 제목은 ${MAX_ITEMS}개까지 넣을 수 있습니다`);
     const at = selected ? cur.findIndex((i) => i.id === selected) : cur.length;
     commit(insertAt(cur, newItem(id, undefined, "새 구역"), at < 0 ? cur.length : at));
     select(id);
   }, [commit, select, selected]);
 
-  // 되돌리기·다시 하기 단축키 — 편집 중이고 글자 칸에 있지 않을 때만.
-  useEffect(() => {
-    if (!editing) return;
-    const onKey = (ev: KeyboardEvent) => {
-      const t = ev.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      if (!(ev.ctrlKey || ev.metaKey)) return;
-      const k = ev.key.toLowerCase();
-      if (k === "z" && !ev.shiftKey) {
-        ev.preventDefault();
-        undo();
-      } else if ((k === "z" && ev.shiftKey) || k === "y") {
-        ev.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editing, undo, redo]);
+  useEditorShortcuts(editing, undo, redo);
 
   const listMode = width < LIST_BELOW;
   return (
@@ -145,7 +130,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
           <b>{BUNDLE_LABELS[role]}</b>
           <span>{BUNDLE_RULES[role]}</span>
           <span>지금 {counts[role]}명</span>
-          <span>{ed.status[role].isDefault ? "기본 배치 사용 중(코드의 기본이 바뀌면 따라갑니다)" : "직접 구성한 배치"}</span>
+          <span>{ed.status[role].isDefault ? "기본 배치 사용 중" : "직접 구성한 배치"}</span>
         </p>
         <EditorActions
           role={role}
@@ -180,6 +165,7 @@ export function DashboardEditor({ initial, roleMenus, subjects, counts, preview 
                 </>
               ) : (
                 <EditBoard
+                  key={role}
                   items={items}
                   role={role}
                   menus={menus}

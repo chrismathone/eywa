@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Harness } from "./harness";
 
-// ⚠️ 임시 검증 하네스 — 커밋하지 않는다.
+// 샘플 전용 경로. 운영 빌드에서는 열리지 않는다.
 export default async function Page({ searchParams }: { searchParams: Promise<{ mode?: string; role?: string }> }) {
   if (process.env.NODE_ENV !== "development") notFound();
   const sp = await searchParams;

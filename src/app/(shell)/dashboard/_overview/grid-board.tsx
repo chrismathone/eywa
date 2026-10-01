@@ -28,12 +28,11 @@ function drawable(id: string, snap: OverviewSnapshot): boolean {
 function SummaryTile({ item, snap, full, amounts }: { item: Item; snap: OverviewSnapshot; full: ReactNode; amounts: boolean }) {
   const def = cardDef(item.id)!;
   const sum = summaryOf(item.id, snap, { amounts });
-  const title = item.title ?? def.label;
+  const title = `${item.title ?? def.label}${snap.view?.academyWide.includes(item.id) ? " (학원 전체)" : ""}`;
   const failed = def.areas.some((a) => snap.sections[a]?.error);
   return (
     <KpiCard
-      label={def.label}
-      rename={item.title}
+      label={title}
       value={sum?.value ?? "—"}
       unit={sum?.unit ?? ""}
       detail={sum?.detail ?? "정보를 불러오지 못했습니다"}
