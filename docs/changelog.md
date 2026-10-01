@@ -6,6 +6,7 @@
 - 링크 = 학생 × 반 · 7일(보고서 줄 = 보고서일 기준, 학생 상세 복사 = 만든 날 기준, `shareExpiryDate` 산술 재사용 — 보고서 90일 기본값 불변) · 토큰은 해시만 저장 · 만료 → `/expired?kind=video`(토큰 안 실음) · 끊김·없는 토큰 → "사용할 수 없는 링크".
 - 영상은 서버를 지나지 않는다: 서버가 토큰·형식·1GB(`HOMEWORK_VIDEO_MAX_BYTES` 한 값)·시간당 10번/하루 30번을 보고 Drive 재개 가능 세션(이름·폴더·번호·크기·표식을 서버가 못박음)만 열어 주고, 브라우저가 16MiB 조각으로 올린다. 완료는 서버가 미리 받은 Drive 번호로 **다시 읽어** 폴더·크기·표식·해시가 맞을 때만 줄을 만든다.
 - 나눠 주는 길: 학생 상세 '숙제 영상' 탭 위 반마다 '제출 링크 복사'·'링크 끊기'(볼 수 있는 사람 = 강사는 담당 학생) · 수업보고서 ClassNote 글 둘째 줄 `영상 제출: …`(영상 과제 있음 + 검사 대상 반일 때만, 영어·공지·직접 발송 제외 — 워커가 게시 직전 `POST /api/internal/video-submit-link`로 물어 받고 못 받으면 줄 없이 보낸다). 중복 게시 방지·반별 교차 확인·회수는 `sameReportContent`(첫 줄 = 공유 링크)로 두 모양을 다 알아본다.
+- 링크 만료 페이지 배선(2026-10-01): `/v/[token]` 만료 갈래는 `redirect(expiredLinkHref("video"))`, 7일은 `VIDEO_SUBMIT_LINK_DAYS`(link-expired/kinds.ts) 한 상수(판정·생성·대신 마무리 창·안내 문구가 같은 값). 끊김·없는 토큰·일시 오류는 만료 페이지로 보내지 않는다.
 - 켜는 조건(하나라도 없으면 흔적 없이): ClassNote 모듈 · Vercel env 5개(`CLASSNOTE_VIDEO_TENANT_ID`·`CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`·`GOOGLE_DRIVE_CLIENT_ID`·`GOOGLE_DRIVE_CLIENT_SECRET`·`GOOGLE_DRIVE_REFRESH_TOKEN`) · 0324a + 0325a · 워커가 남긴 기관 번호. 보고서 줄은 추가로 `VIDEO_SUBMIT_REPORT_LINE`(test=학원이만 → on) + 새 워커 zip.
 - 담임 벨 `homework_video_link` · 감사로그 `lesson_report_video_link_issue`·`_revoke`·`_upload`.
 - 적대 리뷰 수리: 목록 밖 영상 형식에 파일 이름 확장자(`.exe` 등)를 쓰던 것 · 동시 시작으로 횟수 제한을 넘던 것(넣은 뒤 다시 센다) · 확인 실패·끊긴 링크 파일이 담임 폴더에 남던 것(지운다) + 못 알린 업로드 대신 마무리 · 보고서 열람 차단·회수·재발급 뒤에도 그 글의 링크가 살던 것(`report_share_hash`) · 끊기 전에 연 세션을 받던 것 · 업로드 표 지점 전원 읽기(서버 전용으로) · 해시 미채움을 실패로 보던 것 · 본문 저장 모양(`<br>`·공백)에 너그러운 판정.

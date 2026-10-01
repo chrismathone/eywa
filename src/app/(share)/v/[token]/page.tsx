@@ -4,7 +4,8 @@ import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
 import { formatShortKoreanDate, kstDateOf } from "@/lib/date-kst";
 import { HOMEWORK_VIDEO_MAX_LABEL } from "@/features/students/homework-video-limits";
-import { maskStudentName, VIDEO_LINK_EXPIRED_URL } from "@/features/video-submit/rules";
+import { maskStudentName } from "@/features/video-submit/rules";
+import { expiredLinkHref } from "@/features/link-expired/kinds";
 import { videoSubmitAvailability } from "@/features/video-submit/server/availability";
 import { resolveSubmitToken } from "@/features/video-submit/server/links";
 import { VideoSubmitForm } from "./video-submit-form";
@@ -39,7 +40,7 @@ export default async function VideoSubmitPage({ params }: { params: Promise<{ to
   } catch {
     return UNAVAILABLE; // 표가 아직 없거나(0325a 전) 순간 DB 오류
   }
-  if (resolved.state === "expired") redirect(VIDEO_LINK_EXPIRED_URL);
+  if (resolved.state === "expired") redirect(expiredLinkHref("video"));
   if (resolved.state !== "ok")
     return <Closed title="사용할 수 없는 링크입니다" message="이 링크로는 더 이상 영상을 올릴 수 없습니다. 담당 선생님께 새 링크를 받아 주세요." />;
   const { link } = resolved;

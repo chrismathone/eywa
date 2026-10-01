@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HOMEWORK_VIDEO_MAX_BYTES } from "@/features/students/homework-video-limits";
 import { isShareExpired } from "@/features/onescreen/share-expiry";
+import { expiredLinkHref, VIDEO_SUBMIT_LINK_DAYS } from "@/features/link-expired/kinds";
 import {
   checkVideoFile, isSubmitTokenShape, isVideoLinkExpired, maskStudentName, videoLinkExpiresAt, videoLinkLastDay,
 } from "./rules";
@@ -76,5 +77,13 @@ describe("7일 만료 — 보고서 링크와 같은 산술(7일째 당일까지
     expect(isVideoLinkExpired("2026-10-08T15:00:00+00:00", Date.parse("2026-10-09T00:00:01+09:00"))).toBe(true);
     expect(isVideoLinkExpired(null)).toBe(true);
     expect(isVideoLinkExpired("모름")).toBe(true);
+  });
+});
+
+describe("공용 링크 만료 페이지와 한 값", () => {
+  it("기간은 만료 페이지의 상수 하나(7일)이고, 만료 갈래는 /expired?kind=video 다", () => {
+    expect(VIDEO_SUBMIT_LINK_DAYS).toBe(7);
+    expect(videoLinkLastDay("2026-10-01")).toBe("2026-10-08");
+    expect(expiredLinkHref("video")).toBe("/expired?kind=video");
   });
 });

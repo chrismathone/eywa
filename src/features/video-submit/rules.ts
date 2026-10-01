@@ -6,6 +6,7 @@
  */
 import { HOMEWORK_VIDEO_MAX_BYTES, HOMEWORK_VIDEO_MAX_LABEL } from "@/features/students/homework-video-limits";
 import { shareExpiryDate } from "@/features/onescreen/share-expiry";
+import { VIDEO_SUBMIT_LINK_DAYS } from "@/features/link-expired/kinds";
 
 /** 토큰 = 32바이트 난수의 base64url(43자). 모양이 다르면 DB를 묻지도 않는다. */
 export const SUBMIT_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -64,26 +65,17 @@ export function checkVideoFile(file: { size?: unknown; type?: unknown; name?: un
   return { ok: true, mimeType, ext: EXT_BY_MIME[mimeType]! };
 }
 
-/** 링크 유효 기간(일) — 원장 2026-10-01 *"링크는 일주일 후에 소멸"*. */
-export const VIDEO_LINK_DAYS = 7;
-
-/**
- * 만료된 제출 링크가 보내는 곳 — 공용 '링크 만료' 화면(다른 브랜치 `feat/link-expired-page`의 `/expired?kind=<종류>`).
- * 🔴 토큰을 싣지 않는다(주소만으로 어떤 링크였는지 알 수 없게). 그 화면 경로가 바뀌면 이 한 줄만 고친다.
- */
-export const VIDEO_LINK_EXPIRED_URL = "/expired?kind=video";
-
 /**
  * 링크가 끝나는 순간 = 기준일 + 7일째 **하루가 끝난 뒤**(그날 자정, KST). 기준일 = 보고서에 붙는 링크는 보고서일,
  * 학생 상세에서 만든 링크는 만든 날(KST). 날짜 산술은 공유 보고서 링크(`shareExpiryDate`, UTC date 산술)와 같다 —
  * 7일째 당일까지 쓸 수 있고 그다음 날부터 만료(`isShareExpired(기준일, 오늘, 7)`과 같은 경계).
  */
 export function videoLinkExpiresAt(baseDate: string): string {
-  return `${shareExpiryDate(baseDate, VIDEO_LINK_DAYS + 1)}T00:00:00+09:00`;
+  return `${shareExpiryDate(baseDate, VIDEO_SUBMIT_LINK_DAYS + 1)}T00:00:00+09:00`;
 }
 
 /** 마지막으로 쓸 수 있는 날(KST, 화면 표기용). */
-export const videoLinkLastDay = (baseDate: string): string => shareExpiryDate(baseDate, VIDEO_LINK_DAYS);
+export const videoLinkLastDay = (baseDate: string): string => shareExpiryDate(baseDate, VIDEO_SUBMIT_LINK_DAYS);
 
 /** 만료됐나 — 끝나는 순간을 못 읽으면 만료로 본다(모르는 링크를 열어 두지 않는다). */
 export function isVideoLinkExpired(expiresAt: string | null | undefined, nowMs: number = Date.now()): boolean {

@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { VIDEO_SUBMIT_LINK_DAYS } from "@/features/link-expired/kinds";
 import { startedWhileLinkOpen, UPLOAD_NOT_READY, verifyUploadedFile, type StartedUpload } from "../upload-checks";
 import type { LinkVideoRoute } from "../route";
 import { videoSubmitAvailability } from "./availability";
@@ -146,7 +147,7 @@ export async function reconcileLinkUploads(db: Db, request: DriveRequest, link: 
   const now = Date.now();
   const { data, error } = await db.from("homework_video_link_uploads").select(UPLOAD_COLUMNS)
     .eq("tenant_id", link.tenant_id).eq("link_id", link.id).eq("status", "started")
-    .gte("created_at", new Date(now - 7 * 86_400_000).toISOString()).lt("created_at", new Date(now - 120_000).toISOString())
+    .gte("created_at", new Date(now - VIDEO_SUBMIT_LINK_DAYS * 86_400_000).toISOString()).lt("created_at", new Date(now - 120_000).toISOString())
     .order("created_at", { ascending: true }).limit(3);
   if (error || !data?.length) return [];
   const results = await Promise.all((data as UploadRow[]).map((upload) =>
