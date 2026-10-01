@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { assignmentKey, type VideoHomeworkAssignments } from "../assignment";
 
 /**
@@ -79,45 +79,27 @@ export async function getVideoHomeworkAssignments(
 }
 
 /**
- * 관리 화면용 — (학생, 반)의 **기준일 전 마지막 보고서**(값 유무와 무관 — 원스크린 prevReport와 같은 축)의 영상 과제 값.
- * `반:학생 → true/false` · 마지막 보고서가 null(모름)이거나 창(60일) 안에 보고서가 없으면 키가 없다. 실패는 빈 지도(표시만 빠짐).
+ * 영상 제출 현황용 — 기간 안에 **영상 과제가 나간 수업**(`video_homework = true`, 반이 있는 보고서만)을 (반, 학생, 날짜)로.
+ * 이 목록이 곧 회차다(원장 2026-10-01 *"숙제 나간 날만 횟수가 늘어나는걸로"*) — 없음(false)·모름(null)인 수업은 회차가 아니다.
+ * 컬럼 미적용·probe 실패는 **null**(= 모른다) — 화면이 "기록만 보인다"고 알린다. 조회 자체의 오류는 그대로 던진다
+ * (숙제가 없는 것처럼 조용히 비우면 미확인이 통째로 사라진다).
  */
-export async function getLastLessonAssignments(
+export async function getAssignedVideoHomework(
   tenantId: string,
-  pairs: { classId: string; studentId: string }[],
-  beforeDate: string,
   fromDate: string,
-): Promise<Record<string, boolean>> {
-  if (!pairs.length) return {};
-  try {
-    const db = createAdminClient();
-    if (!(await videoHomeworkColumnReady(db))) return {};
-    const wanted = new Set(pairs.map((p) => `${p.classId}:${p.studentId}`));
-    const rows = await fetchAllPagedInChunks<ReportRow>(
-      [...new Set(pairs.map((p) => p.studentId))],
-      (chunk, from, to) => db
-        .from("lesson_reports")
-        .select("student_id,class_id,report_date,video_homework")
-        .eq("tenant_id", tenantId)
-        .in("student_id", chunk)
-        .gte("report_date", fromDate)
-        .lt("report_date", beforeDate)
-        .not("class_id", "is", null)
-        .order("id", { ascending: true })
-        .range(from, to),
-    );
-    const latest = new Map<string, ReportRow>();
-    for (const r of rows) {
-      const key = `${r.class_id}:${r.student_id}`;
-      if (!wanted.has(key)) continue;
-      const cur = latest.get(key);
-      if (!cur || r.report_date > cur.report_date) latest.set(key, r);
-    }
-    const out: Record<string, boolean> = {};
-    for (const [key, r] of latest) if (typeof r.video_homework === "boolean") out[key] = r.video_homework;
-    return out;
-  } catch (e) {
-    console.warn(JSON.stringify({ level: "warn", scope: "getLastLessonAssignments", message: e instanceof Error ? e.message : String(e) }));
-    return {};
-  }
+  toDate: string,
+): Promise<{ classId: string; studentId: string; date: string }[] | null> {
+  const db = createAdminClient();
+  if (!(await videoHomeworkColumnReady(db))) return null;
+  const rows = await fetchAllPaged<ReportRow>((from, to) => db
+    .from("lesson_reports")
+    .select("student_id,class_id,report_date,video_homework")
+    .eq("tenant_id", tenantId)
+    .eq("video_homework", true)
+    .not("class_id", "is", null)
+    .gte("report_date", fromDate)
+    .lte("report_date", toDate)
+    .order("id", { ascending: true })
+    .range(from, to));
+  return rows.flatMap((r) => (r.class_id ? [{ classId: r.class_id, studentId: r.student_id, date: r.report_date }] : []));
 }

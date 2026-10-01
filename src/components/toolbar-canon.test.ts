@@ -204,7 +204,8 @@ describe("툴바 규약 — <Toolbar> 구역", () => {
  *    통째로 비교하면 정당한 색 변경까지 막혀서 곧 지워진다.
  */
 const CANON_SURFACES = [
-  "src/features/video-homework/components/video-homework-management.tsx",
+  // 영상 제출 현황(2026-10-01) — 툴바가 화면 파일에서 ledger-toolbar.tsx로 갈라졌다(반 다중 선택).
+  "src/features/video-homework/components/ledger-toolbar.tsx",
   "src/app/(shell)/exams/_components/exams-toolbar.tsx",
   "src/app/(shell)/exams/view/page.tsx",
   "src/app/(shell)/exams/_components/view-switch.tsx",
