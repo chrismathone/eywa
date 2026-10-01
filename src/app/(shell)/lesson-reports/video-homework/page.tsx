@@ -12,6 +12,7 @@ import { isVideoHomeworkDate } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
 import { isModuleEnabled } from "@/lib/modules";
+import { classnoteReplyMode } from "@/features/owner/classnote-gate";
 import { DEFAULT_LEDGER_FILTERS, ledgerPairKey, type LedgerFilters } from "@/features/video-homework/ledger";
 import { isVideoHomeworkRange } from "@/features/video-homework/ledger-roster";
 
@@ -71,7 +72,7 @@ export default async function VideoHomeworkPage({ searchParams }: {
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
       description="반별 장부에서 학생별 회차·수업 날짜·수행 여부를 확인합니다." />
     <FaceTabs faces={lessonReportFaces({ canOwner, canSend: canEdit,
-      classnoteOn: isModuleEnabled(settings.modules.disabled, "classnote") })}
+      classnoteOn: isModuleEnabled(settings.modules.disabled, "classnote"), replyOn: classnoteReplyMode(settings) !== "off" })}
       active="video_homework" ariaLabel="수업보고서 면" />
     {!settings.report.videoHomeworkPolicy.enabled ? <p className="border-line bg-bg-soft rounded-lg border px-3 py-2 text-xs">
       영상 제출 검사가 꺼져 있습니다. 지난 기록은 장부에서 읽기 전용으로 확인할 수 있습니다.
