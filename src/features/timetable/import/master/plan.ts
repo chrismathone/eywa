@@ -4,6 +4,7 @@ import {
   classNameFromHeader,
 } from "../roster/parse-roster";
 import { matchRosterStudent } from "../roster/match-roster";
+import { needsRosterConfirmation, rosterMatchReason } from "./roster-review";
 import { computeRosterDiff } from "../roster/roster-diff";
 import { matchStructure, resolveTeacher } from "../structure/match";
 import { computeStructureDiff } from "../structure/diff";
@@ -304,12 +305,12 @@ export function buildMasterPlan(
           tab: input.rosterTab,
           href: `/students/${student.studentId}`,
         });
-      if (match.basis !== "unique" || match.viaSuffix)
+      if (needsRosterConfirmation(entry.name, match, ctx.students))
         issue({
           key: `match:${block.className}:${student.studentId}`,
           severity: "confirm",
           target: `${block.className} · ${entry.name} → ${student.name}`,
-          reason: `학교·학년·재원 상태로 연결했습니다 (${student.school ?? "학교 없음"} ${student.grade ?? ""}).`,
+          reason: `${match.viaSuffix ? "시트와 에이와의 이름 표기가 다릅니다." : "동일한 이름의 학생 기록이 여러 개입니다."} 연결 근거: ${rosterMatchReason(match)} (${student.school ?? "학교 없음"} ${student.grade ?? ""}).`,
           fix: "같은 학생인지 확인해 주세요. 다르면 학생 정보 또는 원본 이름을 수정해 주세요.",
           href: `/students/${student.studentId}`,
           tab: input.rosterTab,
@@ -349,7 +350,7 @@ export function buildMasterPlan(
     const best = scores[0];
     const suggested =
       best && best.n >= 2 && (!scores[1] || scores[1].n < best.n) ? best : null;
-    if (!klass)
+    if (!klass && !(suggested && !explicit))
       issue({
         key: `class:${sheetName}`,
         severity: "error",
@@ -364,8 +365,8 @@ export function buildMasterPlan(
         key: `identity:${sheetName}`,
         severity: "error",
         target: sheetName,
-        reason: `명단 ${students.size}명 중 ${suggested.n}명이 현재 ${suggested.c.className}에 있습니다. 동명 반을 그대로 연결하면 다른 반 이력에 붙을 수 있습니다.`,
-        fix: "아래 ‘반 연결’에서 원래 반을 직접 선택해 확정해 주세요. 이름 숫자로 진급을 추정하지 않습니다.",
+        reason: `명단 ${students.size}명 중 ${suggested.n}명이 현재 ${suggested.c.className}에 있습니다. ${klass ? "동명 반을 그대로 연결하면 다른 반 이력에 붙을 수 있습니다." : "진급 전 반을 아직 연결하지 않았습니다."}`,
+        fix: "아래 ‘반 연결’에서 두 명단을 비교한 뒤 추천 반 연결 또는 직접 선택으로 확정해 주세요. 실제 신설 반이면 반 관리에서 먼저 만들어 주세요.",
         ...ref(sheetName),
       });
     return {
@@ -470,7 +471,7 @@ export function buildMasterPlan(
         severity: "error",
         target: `${s.className} · ${s.teacherName}`,
         reason: "활성 강사 계정과 연결되지 않습니다.",
-        fix: "교직원 정보의 영어 이름과 원본 강사 머리글을 맞춰 주세요. LAB·JJ는 자리로 처리합니다.",
+        fix: "아래 ‘강사 연결’에서 담당자를 선택한 뒤 다시 검사하세요. 원본의 한글 이름과 일치하는 추천도 확인할 수 있습니다. LAB·JJ는 자리로 처리합니다.",
         ...where,
       });
     if (s.room && !s.classroomId && !specialSlotLabel(s.room))

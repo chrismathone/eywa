@@ -2,6 +2,7 @@ import "server-only";
 import postgres from "postgres";
 import { createHash, randomUUID } from "node:crypto";
 import { buildMasterPlan } from "../import/master/plan";
+import { buildRosterReview } from "../import/master/roster-review";
 import { enrollmentOnHoldForStatus } from "@/features/enrollments/eligibility";
 import { shiftDays } from "../lib/week";
 import type {
@@ -119,6 +120,7 @@ export function masterPreview(
   return {
     ...plan,
     hash,
+    rosterReview: buildRosterReview(input, grids, ctx),
     classes: ctx.classes
       .filter(
         (c) => c.active && (!c.closedAt || c.closedAt >= input.effectiveDate),

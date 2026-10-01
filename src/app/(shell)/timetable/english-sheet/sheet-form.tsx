@@ -15,6 +15,8 @@ import type {
   MasterIssue,
 } from "@/features/timetable/import/master/types";
 import type { MasterTab } from "@/features/timetable/server/master-sheet-source";
+import { ClassBindings } from "./class-bindings";
+import { TeacherBindings } from "./teacher-bindings";
 import { DAY_LABEL_KO } from "@/features/classes/overlap";
 
 const field =
@@ -441,107 +443,18 @@ export function MasterSheetForm({
               </a>
             ) : null}
           </nav>
-          <section aria-label="반 연결" id="class-bindings">
-            <h2 className="text-lg font-semibold">반 연결 · 이름 변경</h2>
-            <p className="mt-1 text-sm text-text-dim">
-              진급한 반은 기존 반을 선택하면 같은 반의 이름만 바뀝니다.
-              수강·출결 이력이 이어집니다. 명단 일치는 추천 근거이며 직접 확인해
-              선택해 주세요.
-            </p>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-bg-soft">
-                  <tr>
-                    <th className="p-2">시트 반 이름</th>
-                    <th className="p-2">연결할 에이와 반</th>
-                    <th className="p-2">명단 비교</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.mappings.map((m) => (
-                    <tr key={m.sheetName} className="border-line border-b">
-                      <td className="p-2 font-medium">{m.sheetName}</td>
-                      <td className="min-w-64 p-2">
-                        <select
-                          aria-label={`${m.sheetName} 반 연결`}
-                          value={
-                            input.classBindings[m.sheetName] ?? m.classId ?? ""
-                          }
-                          disabled={pending}
-                          className={field}
-                          onChange={(e) =>
-                            change({
-                              classBindings: {
-                                ...input.classBindings,
-                                [m.sheetName]: e.target.value,
-                              },
-                            })
-                          }
-                        >
-                          <option value="">반을 선택해 주세요</option>
-                          {preview.classes.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                              {c.name !== m.sheetName
-                                ? ` → ${m.sheetName}`
-                                : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="p-2 text-text-dim">
-                        {m.suggestedName
-                          ? `${m.suggestedName} · ${m.evidence}`
-                          : "이름 또는 학생 정보 확인"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <section aria-label="강사 연결" id="teacher-bindings">
-            <h2 className="text-lg font-semibold">강사 연결</h2>
-            <p className="mt-1 text-sm text-text-dim">
-              시트의 영어 이름이 에이와와 다르면 실제 담당 강사를 선택하세요.
-              원본이나 교직원 정보를 바꾸지 않고 이번 반영에 사용할 수 있습니다.
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {preview.teacherMappings.map((m) => (
-                <label key={m.sheetName} className="space-y-1 text-sm">
-                  <span>{m.header}</span>
-                  <select
-                    className={field}
-                    aria-label={`${m.sheetName} 강사 연결`}
-                    disabled={pending}
-                    value={
-                      input.teacherBindings?.[m.sheetName] ?? m.teacherId ?? ""
-                    }
-                    onChange={(e) =>
-                      change({
-                        teacherBindings: {
-                          ...input.teacherBindings,
-                          [m.sheetName]: e.target.value,
-                        },
-                      })
-                    }
-                  >
-                    <option value="">강사를 선택해 주세요</option>
-                    {preview.teachers.map((t) => (
-                      <option value={t.id} key={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                  {m.suggestedId && m.suggestedId !== m.teacherId ? (
-                    <span className="text-xs text-text-dim">
-                      원본의 한글 이름과 일치: {m.suggestedName}
-                    </span>
-                  ) : null}
-                </label>
-              ))}
-            </div>
-          </section>
+          <ClassBindings
+            preview={preview}
+            input={input}
+            pending={pending}
+            onChange={change}
+          />
+          <TeacherBindings
+            preview={preview}
+            input={input}
+            pending={pending}
+            onChange={change}
+          />
           {preview.omittedClasses.length ? (
             <section aria-label="시트에 없는 반" id="omitted-classes">
               <h2 className="text-lg font-semibold">시트에 없는 반</h2>

@@ -9,6 +9,7 @@ import type {
 import type { RosterStudentRef } from "../roster/match-roster";
 import type { ImportDiff } from "../types";
 import type { ScheduledGroup } from "../../scheduled-groups";
+import type { MasterRosterReview } from "./roster-review";
 
 export const MASTER_SHEET_ID = "1-1JHCw36iWPku782DXMhqYbEMBUFL7bElfJjSQekoWA";
 export type MasterInput = {
@@ -104,6 +105,7 @@ export type MasterPlan = {
 };
 export type MasterPreview = MasterPlan & {
   hash: string;
+  rosterReview: MasterRosterReview;
   classes: { id: string; name: string }[];
   teachers: { id: string; name: string }[];
   classrooms: { id: string; name: string }[];

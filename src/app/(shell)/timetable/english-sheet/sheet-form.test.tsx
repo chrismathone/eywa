@@ -48,6 +48,7 @@ function preview(issues: MasterIssue[] = []): MasterPreview {
     roster: { moves: [], adds: [], removes: [], unchanged: 0, warnings: [] },
     issues,
     mappings: [],
+    rosterReview: { sheet: [], existing: [] },
     teacherMappings: [],
     omittedClasses: [],
     classUpdates: [],

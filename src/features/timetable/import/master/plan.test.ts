@@ -119,6 +119,25 @@ const enrollment = (id: string, studentId: string, classId: string) => ({
 });
 
 describe("유지 배치와 명시적 연결", () => {
+  it("접미사까지 일치하는 유일한 이름은 확인 항목을 만들지 않되 실제 이름 변경은 확인한다", () => {
+    const f = fixture();
+    f.ctx.students[0]!.name = "김하윤C";
+    f.grids.roster.cells[2]![2] = "김하윤C";
+    f.ctx.students.push({ ...f.ctx.students[0]!, studentId: "sibling", name: "김하윤A", school: "칠성초", grade: "초3" });
+    let p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
+    expect(p.issues.some((i) => i.key === "match:PL2:s1")).toBe(false);
+    f.grids.roster.cells[2]![2] = "김하윤";
+    p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
+    expect(p.issues.find((i) => i.key === "match:PL2:s1")?.severity).toBe("confirm");
+  });
+  it("기존 이름이 없는 진급 후보는 중복 오류 없이 한 번만 연결을 요청한다", () => {
+    const f = fixture();
+    f.ctx.classes[0]!.className = "PL1";
+    f.ctx.enrollments = [enrollment("e1", "s1", "c1"), enrollment("e2", "s2", "c1")];
+    const p = buildMasterPlan(f.input, f.grids, f.ctx, f.source);
+    expect(p.issues.some((i) => i.key === "class:PL2")).toBe(false);
+    expect(p.issues.find((i) => i.key === "identity:PL2")).toMatchObject({ severity: "error", reason: expect.stringContaining("진급 전 반을 아직 연결하지 않았습니다") });
+  });
   const slot = {
     id: "keep",
     classId: "c1",
