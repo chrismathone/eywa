@@ -13,6 +13,7 @@ import { reloadArchivedVideo, videoFeedSession } from "./classnote-feed-core.mjs
 import { videoFolderRegistry, videoFileRegistry } from "./video-folder-registry.mjs";
 import { videoFilename } from "./video-filename.mjs";
 import { scanVideoHistory } from "./video-history.mjs";
+import { runManualDriveScan } from "./video-manual-scan.mjs";
 
 let running = null;
 let nextPoll = 0;
@@ -30,6 +31,8 @@ export function kickVideoWorker(browser, tenant, log = console.log) {
       await scanVideoHistory(sql, page, tenant, centerId, { log });
     } catch { log("[영상 이력] 수집 재시도 대기 — 저장된 위치부터 이어갑니다."); }
     finally { await sql.end(); }
+    // 담임 폴더에 사람이 직접 올린 영상(10분마다·Drive는 읽기만). 실패해도 던지지 않는다 — 아래 ClassNote 영상 작업을 막지 않게.
+    await runManualDriveScan(tenant, { log });
     await processVideoJob(browser, tenant, log);
   })()
     .catch(() => log("[영상] 업로드 연결 확인 필요 — 다음 주기에 재시도합니다."))
@@ -47,7 +50,8 @@ export async function processVideoJob(browser, tenant, log = console.log) {
     const credentials = await videoDriveAuth();
     // 인증이 죽은 채로 작업을 집으면 분마다 다운로드만 하고 실패한다 — 집기 전에 토큰부터 받아 보고, 사유를 로그에 남긴다.
     // 단, 집을 작업이 있을 때만(아래 선점과 같은 조건) — 영상이 없는 평소엔 분마다 토큰 서버·gcloud를 부르지 않는다.
-    const [waiting] = await sql`select 1 as one from student_homework_videos where tenant_id = ${tenant}
+    // ClassNote 수집분(post_id 있음)만 집는다 — 직접 업로드·제출 링크 행(0324a)은 ClassNote에서 다시 받을 원본이 없다.
+    const [waiting] = await sql`select 1 as one from student_homework_videos where tenant_id = ${tenant} and post_id is not null
       and ((status in ('queued', 'failed') and available_at <= now())
         or (status = 'processing' and locked_at < now() - interval '10 minutes')) limit 1`;
     if (!waiting) return;
@@ -64,7 +68,7 @@ export async function processVideoJob(browser, tenant, log = console.log) {
     } };
     [job] = await sql`update student_homework_videos set status = 'processing', lock_token = ${token},
         locked_at = now(), attempts = attempts + 1, updated_at = now()
-      where id = (select id from student_homework_videos where tenant_id = ${tenant}
+      where id = (select id from student_homework_videos where tenant_id = ${tenant} and post_id is not null
         and ((status in ('queued', 'failed') and available_at <= now())
           or (status = 'processing' and locked_at < now() - interval '10 minutes'))
         order by available_at, id for update skip locked limit 1)
@@ -88,8 +92,10 @@ export async function processVideoJob(browser, tenant, log = console.log) {
       subject = ${route.subject}, teacher_id = ${route.teacherId} where id = ${job.id} and tenant_id = ${tenant} and lock_token = ${token}`;
     const local = await downloadVideo(candidate, out);
     const folder = await ensureTeacherFolder(rootId, route, candidate.centerId, out, auth);
+    // 같은 폴더의 같은 내용은 그 Drive 파일을 다시 쓴다 — 단 ClassNote 수집분(post_id 있음)끼리만. 사람이 직접 올린 파일(0324a)을
+    // 가져다 쓰면 그 파일을 지우는 순간 이 영상까지 사라진다(post_id 조건은 0324a 전후 둘 다에서 돈다).
     const [duplicate] = await sql`select drive_file_id from student_homework_videos where tenant_id=${tenant}
-      and status='uploaded' and drive_folder_id=${folder.id} and md5=${local.md5} and bytes=${local.bytes}
+      and status='uploaded' and post_id is not null and drive_folder_id=${folder.id} and md5=${local.md5} and bytes=${local.bytes}
       order by uploaded_at limit 1`;
     const saved = await uploadVideoToDrive({ ...local, name: displayName }, folder.id, { ...auth, existingFileId: duplicate?.drive_file_id });
     const completed = await sql`update student_homework_videos set status = 'uploaded', drive_file_id = ${saved.id},
