@@ -983,46 +983,73 @@ main:not(.embed-main):has(.attendance-page) {
 }
 
 /* ───────────────────────────────────────────────
- * 화면 최대화(원장 2026-10-01 *"최대화 버튼을 누르면 왼쪽 탭 및 상단 빈공간 여백 헤더를 숨겨버리고 내부 탭 화면만"*).
+ * 화면 최대화(원장 2026-10-01 *"최대화 버튼을 누르면 왼쪽 탭 및 상단 빈공간 여백 헤더를 숨겨버리고 내부 탭 화면만"* →
+ * 같은 날 밤 *"화면 최대화 버튼과 최소화 버튼을 같은 위치에 놔둬야지 … 헤더 우측에 끼워넣어"*).
  * 표식 = 관리자 풀셸을 감싼 `[data-page-maximize="on"]`(PageMaximizeRoot — 서버가 계정 설정을 읽어 첫 HTML에 싣는다).
  * 숨기는 것 — 전부 **요소에 직접 단 표식**이다(부모를 자식으로 고르는 `:has(> …)`는 dev CSS에서 사라진다, [[#127]]):
- *   `data-maximize-hide`(왼쪽 사이드바) · `data-page-header="bare"`(동작·스탯 없는 PageHeader·그 스켈레톤 — 통째로) ·
- *   `data-page-header-title`(동작·스탯이 있는 헤더 = `tools`의 제목 묶음만 — 날짜 이동·새 항목 버튼·KPI는 화면 조작이라 남긴다,
- *   적대 리뷰: 자리 출석부는 날짜 이동이 헤더에 있다) · `data-page-header-slot`(헤더만 감싼 래퍼 — `display:contents`로 상자를 지워
- *   안의 헤더가 숨으면 부모 gap·space-y 한 칸도 같이 사라지고, `tools` 헤더면 그 헤더가 그대로 줄에 선다).
- * 본문 여백: 위는 창(.embed-main)과 같은 0.5rem, 좌우는 창과 같은 0.375rem(0이면 카드 링 좌우가 잘린다 [[#114]]).
- *   아래(pb-8/lg:pb-10)는 그대로 — '본문 하단 여백' 규약 · `.sticky-save-bar` 밀착([[#110]])이 계속 이긴다.
- *   `.edge-to-edge`(시간표)는 창에서처럼 좌우·아래 0 + 거터 해제.
+ *   `data-maximize-hide`(왼쪽 사이드바) · `data-page-header-extra`(머리글의 eyebrow·구분자·설명 — PageHeader와 그 스켈레톤).
+ * 🔴 **머리글 줄은 남는다**(`data-page-header` — 구분선·아래 여백만 뺀다): 제목 + 동작(날짜 이동·새 항목·인쇄)·KPI +
+ *    '화면 최대화'↔'화면 원래대로' 한 버튼. 머리글·제목·버튼을 숨기는 규칙 금지(가드).
+ * 🔴 **버튼은 픽셀 그대로**(원장 *"같은 위치에"* — 누른 손이 그 자리에서 다시 누를 수 있게): 본문 위 여백은 줄이지 않고,
+ *    좌우 여백을 줄인 만큼 머리글 줄 오른쪽 여백을 늘린다(1.5rem → 0.375rem, 시간표 `.edge-to-edge`는 0 — 스크롤바 거터는 둘 다 그대로).
+ *    머리글 오른쪽 묶음은 관리자 풀셸에서 위 정렬 + 제목 한 줄 높이(아래 `[data-page-header-actions]`) — 설명이 접혀
+ *    줄이 두 줄이던 화면도 최대화로 한 줄이 될 때 버튼이 위로 뜨지 않는다.
+ * 🔴 **출구 보장**: PageHeader가 없는 화면(자체 머리)은 본문 위 출구 줄(`data-maximize-fallback`)이 서고, 그 버튼은 머리글 버튼과
+ *    같은 자리(위·오른쪽 여백을 같은 값으로)다. 그 화면에 머리글 버튼(`data-page-maximize-button`)이 있으면 끈다.
+ *    `:has()` 인자는 표식 하나(`>` 없음 — [[#127]]), 규칙마다 따로 적는다.
+ *    ⚠️ Next `cacheComponents`(이전 화면을 `<Activity>`로 DOM에 숨겨 남긴다)를 켜면 숨은 화면의 머리글 버튼이 `:has`를 참으로 만들어
+ *    출구 줄이 꺼진다 — 켤 때 이 판정을 다시 볼 것(2026-10-01 현재 꺼짐).
+ * 아래 여백(pb-8/lg:pb-10)은 그대로 — '본문 하단 여백' 규약 · `.sticky-save-bar` 밀착([[#110]])이 계속 이긴다.
  * ⚠️ **데스크톱 셸에서만**(`desk` 변형과 같은 미디어쿼리) — 좁은 폭·터치는 모바일 셸이라 최대화가 잠든다(상단 바가 그대로 산다).
  *    `screen` 한정 — 인쇄엔 안 걸린다.
  * ⚠️ `main:not(main main)` — 셸 <main> 하나만. 화면 안에 <main>을 또 쓴 곳(영상 숙제)에 여백을 덧씌우지 않는다.
- * ⚠️ 레이어 밖(unlayered) — Tailwind 유틸(`desk:flex`·`flex`·`desk:px-6`)을 `!important` 없이 덮는다.
+ * ⚠️ 레이어 밖(unlayered) — Tailwind 유틸(`desk:flex`·`flex`·`desk:px-6`·`hidden`)을 `!important` 없이 덮는다.
  * ─────────────────────────────────────────────── */
 @media screen and (min-width: 1240px) and (pointer: fine) {
-  [data-page-maximize="on"] [data-maximize-hide],
-  [data-page-maximize="on"] [data-page-header="bare"],
-  [data-page-maximize="on"] [data-page-header-title] {
+  [data-page-maximize="on"] [data-maximize-hide] {
     display: none;
   }
-  [data-page-maximize="on"] [data-page-header-slot] {
-    display: contents;
+  [data-page-maximize="on"] [data-page-header-extra] {
+    display: none;
   }
-  [data-page-maximize="on"] [data-page-header="tools"] {
+  [data-page-maximize="on"] [data-page-header] {
     border-bottom-width: 0;
     padding-bottom: 0;
   }
-  /* 제목 묶음이 빠지면 justify-between 줄에 동작만 남아 왼쪽으로 쏠린다 — 원래 자리(오른쪽)를 지킨다. */
-  [data-page-maximize="on"] [data-page-header-row] {
-    justify-content: flex-end;
+  /* 출구 줄의 버튼 = 머리글 버튼과 같은 자리: 위 = 본문 위 여백(desk:pt-5) + 제목 한 줄 안 가운데 · 오른쪽 = 본문 오른쪽 여백(desk:px-6) +
+     머리글 줄 px-1 + **본문과 같은 스크롤바 거터**(숫자로 적지 않는다 — 전역 `scrollbar-width: thin`이라 브라우저마다 폭이 다르다, 실측 10px). */
+  [data-page-maximize="on"] [data-maximize-fallback] {
+    display: flex;
+    overflow: hidden;
+    scrollbar-gutter: stable;
+    padding: calc(1.25rem + (var(--text-xl) * var(--text-xl--line-height) - var(--control-h)) / 2) 1.75rem 0 0.375rem;
+  }
+  [data-page-maximize="on"]:has([data-page-maximize-button]) [data-maximize-fallback] {
+    display: none;
   }
   [data-page-maximize="on"] main:not(.embed-main):not(main main) {
-    padding-top: 0.5rem;
     padding-inline: 0.375rem;
   }
+  [data-page-maximize="on"] main:not(.embed-main):not(main main) [data-page-header-row] {
+    padding-right: 1.375rem;
+  }
+  /* 시간표: 좌우·아래 0. 거터는 stable 그대로(풀면 그 폭만큼 버튼이 움직이고, 폭은 브라우저마다 달라 상쇄를 숫자로 못 적는다). */
   [data-page-maximize="on"] main:not(.embed-main):not(main main):has(.edge-to-edge) {
     padding-inline: 0;
     padding-bottom: 0;
-    scrollbar-gutter: auto;
+  }
+  [data-page-maximize="on"] main:not(.embed-main):not(main main):has(.edge-to-edge) [data-page-header-row] {
+    padding-right: 1.75rem;
+  }
+  /* 출구 줄이 선 화면은 그 줄이 위 여백을 이미 가졌다 — 본문 위 여백을 창과 같은 0.5rem으로. */
+  [data-page-maximize="on"]:not(:has([data-page-maximize-button])) main:not(.embed-main):not(main main) {
+    padding-top: 0.5rem;
+  }
+  /* 머리글 오른쪽 묶음(동작 + 토글) — 관리자 풀셸(표식 `data-page-maximize`가 있는 곳)의 셸 본문에서만, 최대화와 상관없이
+     (최대화 전후 같은 자리여야 하므로). 창·미니셸·슈퍼관리자·화면 안 <main>엔 안 걸린다. */
+  [data-page-maximize] main:not(.embed-main):not(main main) [data-page-header-actions] {
+    align-self: flex-start;
+    min-height: calc(var(--text-xl) * var(--text-xl--line-height));
   }
 }
 

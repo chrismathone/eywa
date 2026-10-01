@@ -131,7 +131,7 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
 
   return <div className="space-y-5 pb-12">
     {/* 시간표처럼 창(임베드)에선 헤더 줄을 접어 탭 줄이 맨 위에 선다. */}
-    <div data-page-header-slot="" className="compact-chrome:hidden"><PageHeader eyebrow="학생 관리" title="통합 성적관리" /></div>
+    <div className="compact-chrome:hidden"><PageHeader eyebrow="학생 관리" title="통합 성적관리" /></div>
     <FaceTabs ariaLabel="성적관리 면" active={tab} faces={TABS.map(([key, label]) => ({ key, label, href: href({ tab: key, page: "1" }) }))} />
     <ExamsToolbar from={from} to={to} subject={subject} kind={kind} missing={showMissing} q={q} exportHref={exportHref} subjectOptions={subjectOptions}
       action={<GradeEntryDialog canWrite={!writeError} today={today} subjects={axisOptionsFrom(subjectMaps.options)}
