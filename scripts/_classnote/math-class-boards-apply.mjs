@@ -3,7 +3,8 @@
 // 한 반씩: ① 반 만들기(DOM '반 추가하기') 또는 ② 반 이름 바꾸기(PATCH — aywa에서 반 이름이 바뀐 경우) →
 // ③ 원아 추가 배정(직전에 1인 보드를 다시 읽어 계획과 같은지 확인) → ④ 반 원아가 계획과 정확히 같은지 확인.
 // 끝에 건드린 1인 보드가 **하나도 안 바뀌었는지** 확인한다. 이상하면 `ClassBoardStop`을 던진다(다음 반으로 넘어가지 않는다).
-// 🔴 해제(원아·선생님)는 하지 않는다 — ClassNote API가 막았다(405). 되돌리기는 ClassNote 화면에서 손으로.
+// 🔴 해제(원아·선생님)는 하지 않는다 — 지금은 사람이 ClassNote 화면에서 한다(해제 API는 있다: classnote-admin-core.mjs `enrollChild` 주석,
+//    2026-10-02 실측. 자동 해제는 원장 결정 뒤).
 import { CLASSNOTE_BASE, createBoard, dismissHonorificDialog, enrollChild, fetchBoardChildren, fetchBoards } from "./classnote-admin-core.mjs";
 import { personalBoardId } from "./math-class-boards-load.mjs";
 import { normBoard } from "./board-safety.mjs";
@@ -30,11 +31,12 @@ async function renameBoard(page, centerId, boardId, name) {
 }
 
 /**
- * @param {{ page, centerId, targets, boards, membersByBoard, students, log? }} p
+ * @param {{ page, centerId, targets, boards, membersByBoard, students, log?, out? }} p
  *   targets = 실행할 반 계획(보류 반 제외) · students = aywa 학생 지도(유효이름)
+ *   out = 반별 결과를 담을 배열(호출자가 넘기면 **도중에 멈춰도** 그때까지 한 일이 호출자에게 남는다 — 동기화 보고서 0329a)
  * @returns {Promise<Array<{className, boardId, created:boolean, renamed:string|null, enrolled:Array<{name,childId}>, held:number}>>}
  */
-export async function applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students, log = console.log }) {
+export async function applyClassBoardPlans({ page, centerId, targets, boards, membersByBoard, students, log = console.log, out = [] }) {
   const personalBefore = new Map();
   for (const p of targets)
     for (const a of p.assign) {
@@ -42,7 +44,6 @@ export async function applyClassBoardPlans({ page, centerId, targets, boards, me
       if (pid != null && !personalBefore.has(pid)) personalBefore.set(pid, ids(membersByBoard.get(pid)));
     }
 
-  const out = [];
   for (const p of targets) {
     const entry = { classId: p.classId, className: p.className, boardId: p.board.id ?? null, created: false, renamed: null, enrolled: [], held: p.hold.length, skipped: null };
     out.push(entry);
@@ -108,7 +109,7 @@ export async function applyClassBoardPlans({ page, centerId, targets, boards, me
         if (c.already) continue;
         const r = await enrollChild(page, c.id, boardId);
         if (r.status !== 201) throw new ClassBoardStop(`${a.name}: 배정 실패 HTTP ${r.status}`);
-        entry.enrolled.push({ name: a.name, childId: c.id });
+        entry.enrolled.push({ name: a.name, childId: c.id, studentId: a.studentId });
         await page.waitForTimeout(300);
       }
     }

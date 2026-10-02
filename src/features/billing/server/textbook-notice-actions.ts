@@ -25,6 +25,7 @@ import { BOARD_PREFIX } from "@/features/report-admin/notice-targets";
 import { sendOnescreenNotice } from "@/features/onescreen/server/notice-actions";
 import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 import { DEFAULT_TEXTBOOK_MENT, resolveTextbookMent, textbookNoticeCommon } from "../textbook-notice";
+import { defaultNoticeSubject } from "../textbook-notice-subject";
 import { groupTextbookNoticeStudents } from "../textbook-notice-group";
 // 중복 발송 차단 규칙(0174a) — 순수함수 단일 소스.
 import { isDeadNoticeStatus, partitionAlreadySent, textbookSendKey } from "../textbook-send-dedup";
@@ -37,6 +38,7 @@ import {
   getMyTextbookMent,
   getNoticeAttachmentWorkerGate,
   getStudentBoardSubjects,
+  loadNoticeOwners,
   loadScopedOrders,
 } from "./textbook-notice-data";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
@@ -83,9 +85,10 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
   const loaded = await loadScopedOrders(ids);
   if ("error" in loaded) return { ok: false, error: loaded.error };
   const studentIds = loaded.rows.map((r) => r.student_id).filter(Boolean) as string[];
-  // 서로 독립인 조회 4건 — 직렬 워터폴 금지(B4).
-  const [subjects, savedMent, settings, worker] = await Promise.all([
+  // 서로 독립인 조회 5건 — 직렬 워터폴 금지(B4).
+  const [boards, owners, savedMent, settings, worker] = await Promise.all([
     getStudentBoardSubjects(studentIds),
+    loadNoticeOwners(loaded.rows),
     getMyTextbookMent(),
     getTenantSettings(),
     getNoticeAttachmentWorkerGate(),
@@ -93,17 +96,27 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
   const acc = accountForTarget(settings.billing, "textbook");
   return {
     ok: true,
-    orders: loaded.rows.map((r) => ({
-      id: r.id,
-      studentId: r.student_id,
-      studentName: r.student_name,
-      teacherName: r.teacher_name,
-      bookName: r.book_name,
-      bookDetail: r.book_detail,
-      price: Number(r.price),
-      requestDate: r.request_date,
-      subjects: (r.student_id ? subjects[r.student_id] : undefined) ?? [],
-    })),
+    orders: loaded.rows.map((r) => {
+      const subjects = (r.student_id ? boards.subjects[r.student_id] : undefined) ?? [];
+      return {
+        id: r.id,
+        studentId: r.student_id,
+        studentName: r.student_name,
+        teacherName: r.teacher_name,
+        bookName: r.book_name,
+        bookDetail: r.book_detail,
+        price: Number(r.price),
+        requestDate: r.request_date,
+        subjects,
+        // 두 과목을 다 듣는 학생의 알림장 기본값 = 이 요청을 낸 선생님이 그 학생을 가르치는 과목(못 정하면 null — 화면이 고르게 한다).
+        defaultSubject: defaultNoticeSubject({
+          subjects,
+          classes: (r.student_id ? boards.classes[r.student_id] : undefined) ?? [],
+          owners: owners[r.id] ?? [],
+          boardOf: (s) => BOARD_PREFIX[s],
+        }),
+      };
+    }),
     ment: resolveTextbookMent(savedMent),
     account: { bank: acc.bank, holder: acc.holder, number: acc.number },
     sendEnabled: classnoteSendOn(settings),

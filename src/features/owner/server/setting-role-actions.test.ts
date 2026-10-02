@@ -39,7 +39,7 @@ beforeEach(() => {
 
 it.each(["admin", "manager", "teacher", "accountant", "student"])("%s는 요청을 직접 보내도 역할을 올릴 수 없다", async (role) => {
   m.actor!.systemRole = role;
-  expect((await saveSettingRoles("lesson_reports", selection(), baseline())).error).toContain("원장");
+  expect((await saveSettingRoles("lesson_reports", selection(), baseline())).error).toContain("권한이 없습니다");
   expect(m.from).not.toHaveBeenCalled();
 });
 it("로그인하지 않으면 조회도 하지 않는다", async () => {

@@ -26,6 +26,22 @@ export async function loadChildStudentMap(sql, tenant) {
   return new Map(rows.map((r) => [Number(r.child_id), r.student_id]));
 }
 
+const MESSAGE_COLUMNS = [
+  "tenant_id",
+  "source",
+  "classnote_post_id",
+  "classnote_comment_id",
+  "child_id",
+  "student_id",
+  "class_name",
+  "content",
+  "posted_at",
+  "classified_at",
+  "category",
+];
+/** `cross_teacher_ids` 칸(0331a)이 없는 DB — 알린 뒤 10분간은 그 칸 없이 넣는다. */
+let crossColumnMissingUntil = 0;
+
 /**
  * 학부모 연락 원문 저장(멱등 — 유니크 인덱스가 같은 글·댓글의 재삽입을 흡수한다).
  *
@@ -60,26 +76,29 @@ export async function storeParentMessages(sql, tenant, items, childToStudent) {
       posted_at: it.postedAt ?? null,
       classified_at: attachOnly ? new Date().toISOString() : null,
       category: attachOnly ? "none" : null,
+      // 다른 과목 지금 담당(0331a, cross-subject-teachers.mjs) — 앱이 출결 연락으로 분류했을 때 이 사람들에게도 벨을 넣는다.
+      cross_teacher_ids: Array.isArray(it?.crossTeacherIds) && it.crossTeacherIds.length ? sql.json(it.crossTeacherIds) : null,
     });
   }
   if (!rows.length) return 0;
-  const inserted = await sql`
-    insert into classnote_parent_messages ${sql(
-      rows,
-      "tenant_id",
-      "source",
-      "classnote_post_id",
-      "classnote_comment_id",
-      "child_id",
-      "student_id",
-      "class_name",
-      "content",
-      "posted_at",
-      "classified_at",
-      "category",
-    )}
+  // 🔴 칸(0331a)이 아직 없는 DB에서도 원문 저장은 그대로 돌아야 한다(#95 — 워커는 SQL 전에도 돈다). 칸이 없으면 빼고 다시 넣고,
+  //    10분 뒤에 다시 본다(SQL을 적용해도 워커 재시작이 필요 없다).
+  const insert = (cols) => sql`
+    insert into classnote_parent_messages ${sql(rows, ...cols)}
     on conflict do nothing
     returning id`;
+  let inserted;
+  if (Date.now() < crossColumnMissingUntil) inserted = await insert(MESSAGE_COLUMNS);
+  else {
+    try {
+      inserted = await insert([...MESSAGE_COLUMNS, "cross_teacher_ids"]);
+    } catch (e) {
+      if (e?.code !== "42703") throw e;
+      crossColumnMissingUntil = Date.now() + 10 * 60_000;
+      console.log("[출결] 다른 과목 담당 칸(0331a)이 아직 없어 그 정보는 저장하지 않습니다 — SQL 적용 뒤 10분 안에 자동으로 시작됩니다");
+      inserted = await insert(MESSAGE_COLUMNS);
+    }
+  }
   await storeAttachments(sql, tenant, items);
   return inserted.length;
 }

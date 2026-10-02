@@ -23,7 +23,7 @@ export function SettingRolesButton({ group, initial, hidden = [] }: { group: Set
     <Dialog open={open} onOpenChange={value => { if (!pending) setOpen(value); }}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
         <DialogTitle>설정을 보여줄 직급</DialogTitle>
-        <DialogDescription>항목마다 사용할 직급을 선택하세요. 슈퍼관리자는 항상 사용할 수 있습니다. 개인별 예외와 기존 조회 전용 권한은 유지됩니다.</DialogDescription>
+        <DialogDescription>항목마다 사용할 직급을 선택하세요. 개인별 예외와 기존 조회 전용 권한은 유지됩니다.</DialogDescription>
         <form onSubmit={event => {
           event.preventDefault();
           startTransition(async () => {

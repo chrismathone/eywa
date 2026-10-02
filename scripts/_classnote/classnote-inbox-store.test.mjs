@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { storeParentMessages } from "./classnote-inbox-store.mjs";
 import { attachOnlyText, imageAttachments } from "./parent-comment-filter.mjs";
 
@@ -72,6 +72,55 @@ describe("학부모 연락 원문 저장 — 글자 없이 첨부만 있는 글�
     const missing = fakeSql({ updateError: Object.assign(new Error("relation does not exist"), { code: "42P01" }) });
     expect(await storeParentMessages(missing.sql, T, [item, { ...item, postId: 301 }], map)).toBe(2); // 원문은 저장됨
     expect(missing.updates).toHaveLength(1); // 첫 실패 뒤로는 시도하지 않는다
+  });
+
+  it("다른 과목 담당(0331a) — 목록이 있으면 jsonb로 싣고, 없으면 null · 칸 목록에 그 칸이 들어간다", async () => {
+    const calls = [];
+    const sql = (first, ...rest) => {
+      if (first && Array.isArray(first) && "raw" in first) {
+        if (/classnote_parent_message_attachments/.test(first.join("?"))) return Promise.resolve([]);
+        const helper = rest.find((v) => v && v.__rows);
+        calls.push(helper);
+        return Promise.resolve(helper.__rows.map((_, i) => ({ id: String(i) })));
+      }
+      return { __rows: first, __cols: rest };
+    };
+    sql.json = (v) => ({ __json: v });
+    await storeParentMessages(sql, T, [
+      { source: "comment", postId: 1, commentId: 2, childId: 7, content: "오늘 쉽니다", crossTeacherIds: ["u1", "u2"] },
+      { source: "comment", postId: 1, commentId: 3, childId: 7, content: "감사합니다", crossTeacherIds: [] },
+    ], map);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].__cols).toContain("cross_teacher_ids");
+    expect(calls[0].__rows.map((r) => r.cross_teacher_ids)).toEqual([{ __json: ["u1", "u2"] }, null]);
+  });
+
+  it("🔴 칸이 아직 없는 DB(0331a 전, 42703) — 그 칸을 빼고 다시 넣는다(원문 저장은 멈추지 않는다) · 그 뒤로는 바로 칸 없이", async () => {
+    vi.resetModules();
+    const fresh = await import("./classnote-inbox-store.mjs");
+    const attempts = [];
+    const sql = (first, ...rest) => {
+      if (first && Array.isArray(first) && "raw" in first) {
+        if (/classnote_parent_message_attachments/.test(first.join("?"))) return Promise.resolve([]);
+        const helper = rest.find((v) => v && v.__rows);
+        attempts.push(helper.__cols);
+        if (helper.__cols.includes("cross_teacher_ids")) return Promise.reject(Object.assign(new Error('column "cross_teacher_ids" does not exist'), { code: "42703" }));
+        return Promise.resolve(helper.__rows.map((_, i) => ({ id: String(i) })));
+      }
+      return { __rows: first, __cols: rest };
+    };
+    sql.json = (v) => ({ __json: v });
+    const item = { source: "post", postId: 500, childId: 7, content: "내일 결석합니다", crossTeacherIds: ["u1"] };
+    expect(await fresh.storeParentMessages(sql, T, [item], map)).toBe(1);
+    expect(attempts.map((c) => c.includes("cross_teacher_ids"))).toEqual([true, false]);
+    expect(await fresh.storeParentMessages(sql, T, [{ ...item, postId: 501 }], map)).toBe(1);
+    expect(attempts.map((c) => c.includes("cross_teacher_ids"))).toEqual([true, false, false]);
+    // 다른 오류는 그대로 던진다
+    const boom = (first, ...rest) => (first && Array.isArray(first) && "raw" in first ? Promise.reject(Object.assign(new Error("boom"), { code: "XX000" })) : { __rows: first, __cols: rest });
+    boom.json = (v) => v;
+    vi.resetModules();
+    const again = await import("./classnote-inbox-store.mjs");
+    await expect(again.storeParentMessages(boom, T, [item], map)).rejects.toThrow("boom");
   });
 
   it("사진 주소 추출 — 업로드 CDN 호스트만, 작은 것·큰 것·크기, 이상한 주소는 버린다", () => {
