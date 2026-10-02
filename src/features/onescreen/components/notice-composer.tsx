@@ -3,6 +3,12 @@
 // 원스크린 학부모 공지 컴포저 — 선택 학생(카드=1명 seed) 또는 표에서 넘어온 학생들에게 ClassNote 개별 보드로
 // **독립 공지**를 발송(classnote_notices). 보고서와 별개 글이라 누적·공존. 게시는 연동 PC 워커가 순차 처리.
 // Phase 1 = 일반 공지만(개인화 {{태그}}는 워커 per-target 지원 후 해제). 대기(미게시) 공지는 여기서 수정/삭제.
+//
+// 🔴 공지 방식은 둘이다(원장 2026-10-02 *"반인지 개별인지를 선택하는 토글"*):
+//    · 원생 개별 공지 = 학생마다 1:1 알림장(이 파일 — 수학은 반 보드의 그 학생 원아에게, 그 밖은 1인 보드).
+//    · 반 공지 = ClassNote 공지사항으로 반에 1건(notice-class-composer.tsx — 그 반 학부모 모두가 본다).
+//    두 방식은 **큐도 워커도 다르다**(classnote_notices / classnote_class_notices) — 한 화면에서 섞어 보내지 않는다.
+//    반 공지를 보낼 수 있는 반(ClassNote 반 보드가 연결된 담당 반)이 없으면 토글 자체를 보이지 않는다.
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,6 +26,19 @@ import {
   type OnescreenNoticeRow,
 } from "../server/notice-actions";
 import { NoticeAttachmentPicker } from "./notice-attachment-picker";
+import { NoticeClassComposer, type ClassNoticeTarget } from "./notice-class-composer";
+import { loadMyClassWideNotice } from "@/features/report-admin/server/class-notice-actions";
+import type { ClassNoticeRow } from "@/features/report-admin/class-notice";
+import type { NoticeSkip } from "@/features/report-admin/notice-targets";
+
+/** 제외 사유 → 사전 키(한·영 한 벌 — raw 코드 노출 금지). */
+const SKIP_KEY: Record<NoticeSkip["reason"], SheetDictKey> = {
+  subject_off: "os.n.skip.subject_off",
+  name_collision: "os.n.skip.name_collision",
+  no_name: "os.n.skip.no_name",
+  no_class_board: "os.n.skip.no_class_board",
+  not_my_class: "os.n.skip.not_my_class",
+};
 import type { NoticeAttachment } from "../notice-attachments";
 import type { OneScreenStudent } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -96,6 +115,11 @@ export function NoticeComposer({
   const [loadingAll, setLoadingAll] = useState(false);
   const [atts, setAtts] = useState<NoticeAttachment[]>([]); // 전원 공통 이미지
   const [uploading, setUploading] = useState(false);
+  // 공지 방식 — 기본은 원생 개별(지금까지의 화면). 반 공지 재료(보낼 수 있는 반)는 한 번 받아 두고, 반이 있을 때만 토글을 보인다.
+  const [mode, setMode] = useState<"each" | "class">("each");
+  // 마지막 발송에서 제외된 학생(누가·왜) — 토스트의 수만으로는 다시 보낼 수 없어 화면에 남긴다. 다음 발송 때 갈아 끼운다.
+  const [lastSkipped, setLastSkipped] = useState<NoticeSkip[]>([]);
+  const [classWide, setClassWide] = useState<{ classes: ClassNoticeTarget[]; rows: ClassNoticeRow[] } | null>(null);
   // seed 초기 선택은 useState 초기화로만 반영 — 진입 시 부모가 key로 remount해 새 seed를 적용(effect 동기 setState 회피).
 
   async function refreshHistory() {
@@ -105,9 +129,14 @@ export function NoticeComposer({
   // 최초 1회 이력 로드 — setState는 await 뒤(가드) async IIFE로(effect 동기 setState 금지 규칙).
   useEffect(() => {
     let cancelled = false;
+    // 이력을 먼저 그린다 — 반 공지 재료는 따로 받아(실패해도·늦어도) 이력 표시를 붙잡지 않는다.
     void (async () => {
       const res = await listMyOnescreenNotices();
       if (!cancelled && res.ok && res.rows) setRows(res.rows);
+    })();
+    void (async () => {
+      const cw = await loadMyClassWideNotice().catch(() => null);
+      if (!cancelled && cw?.ok && cw.classes?.length) setClassWide({ classes: cw.classes, rows: cw.rows ?? [] });
     })();
     return () => {
       cancelled = true;
@@ -132,6 +161,7 @@ export function NoticeComposer({
     grade: s.grade,
     className: s.className ?? "",
     subject: s.subjects[0]?.subjectKey ?? s.subjects[0]?.name ?? null,
+    classId: s.classId,
   }));
   const candidates: Candidate[] = scope === "all" ? (allStudents ?? []) : todayCandidates;
 
@@ -173,6 +203,7 @@ export function NoticeComposer({
       .map((s) => ({
         studentId: s.id,
         subject: s.subject,
+        classId: s.classId ?? null,
         individualBody: individual[s.id]?.trim() || undefined,
       }));
   }
@@ -196,6 +227,8 @@ export function NoticeComposer({
     });
     setBusy(false);
     setConfirmSend(false);
+    // 제외된 학생은 성공·실패와 무관하게 남긴다("발송 가능한 학생이 없습니다"만 뜨면 왜인지 알 수 없다).
+    setLastSkipped(res.skipped ?? []);
     if (!res.ok) {
       toast.error(res.error ?? t("os.n.sendFail"));
       return;
@@ -217,7 +250,8 @@ export function NoticeComposer({
       setShowIndividual(false);
       setAtts([]);
       void refreshHistory();
-      onSent?.();
+      // 🔴 제외된 학생이 있으면 부모에게 '끝났다'를 알리지 않는다 — 부모가 화면을 새로 그려(seed 초기화) 방금 띄운 제외 목록이 사라진다.
+      if (!(res.skipped?.length)) onSent?.();
     } else {
       void refreshHistory();
     }
@@ -263,8 +297,41 @@ export function NoticeComposer({
   const selectedCount = candidates.filter((s) => checked.has(s.id)).length;
   const indivCount = candidates.filter((s) => checked.has(s.id) && (individual[s.id] ?? "").trim()).length;
 
+  // 공지 방식 토글 — 반 공지를 보낼 수 있는 반이 있을 때만(없으면 지금까지처럼 원생 개별 공지 한 가지).
+  const modeToggle = classWide ? (
+    <div className="border-line inline-flex rounded-full border p-0.5 text-sm" role="group" aria-label={t("os.n.mode")}>
+      {(
+        [
+          { key: "each", label: t("os.n.modeEach") },
+          { key: "class", label: t("os.n.modeClass") },
+        ] as const
+      ).map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          aria-pressed={mode === o.key}
+          onClick={() => {
+            setMode(o.key);
+            setConfirmSend(false);
+          }}
+          className={`rounded-full px-3 py-1 font-medium ${mode === o.key ? "bg-primary text-white" : "text-text-dim hover:bg-bg-soft"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
   return (
-    <div className="grid items-stretch gap-4 lg:grid-cols-[300px_1fr]">
+    <div className="space-y-3">
+    {modeToggle}
+    {/* 반 공지 — 방식만 바꿔도 쓰던 제목·내용이 사라지지 않게 늘 그려 두고 감춘다. 받을 반은 미리 골라 두지 않는다(강사가 직접 고른다). */}
+    {classWide ? (
+      <div hidden={mode !== "class"}>
+        <NoticeClassComposer classes={classWide.classes} initialRows={classWide.rows} sendEnabled={sendEnabled} />
+      </div>
+    ) : null}
+    <div className="grid items-stretch gap-4 lg:grid-cols-[300px_1fr]" hidden={mode === "class" && !!classWide}>
       {/* 대상 선택 — 데스크톱에선 우측(작성+이력)이 길어지면 함께 늘어 목록 내부 스크롤(높이 균형), 모바일은 520px 캡. */}
       <div className="lg:relative lg:min-h-[320px]">
         <div className="bg-card border-line shadow-card flex max-h-[520px] flex-col rounded-2xl border lg:absolute lg:inset-0 lg:max-h-none">
@@ -416,6 +483,18 @@ export function NoticeComposer({
             onUploadingChange={setUploading}
           />
 
+          {lastSkipped.length ? (
+            <div className="border-line rounded-md border px-3 py-2" role="status">
+              <p className="text-danger text-xs font-medium">{tf("os.n.skip.title", { n: lastSkipped.length })}</p>
+              <ul className="text-text-dim mt-1 space-y-0.5 text-xs">
+                {lastSkipped.map((s, i) => (
+                  <li key={`${s.name}-${s.reason}-${i}`} className="break-keep">
+                    {s.name} — {t(SKIP_KEY[s.reason] ?? "os.n.skip.no_name")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {confirmSend ? (
             <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-md border px-3 py-2">
               <span className="text-foreground text-xs">
@@ -483,6 +562,8 @@ export function NoticeComposer({
                           <span className={st.cls}>{st.key ? t(st.key) : st.raw}</span>
                           {tf("os.n.rowTargets", { n: r.targetCount })}
                         </p>
+                        {/* 공지 단위 사유(교차 확인 이상·전 대상 실패·회수 실패 등) — 워커가 한글로 적는다. 상태 색과 무관하게 항상 보인다. */}
+                        {r.error ? <p className="text-danger mt-0.5 text-xs break-keep">{r.error}</p> : null}
                         {/* 게시된 리포트 — **학생 이름**으로 링크(원장 요청: #1 #2로는 누구 글인지 알 수 없음).
                             많으면 앞 8명만 이름으로, 나머지는 수만 표시. */}
                         {r.reportLinks.length ? (
@@ -563,6 +644,7 @@ export function NoticeComposer({
           )}
         </section>
       </div>
+    </div>
     </div>
   );
 }

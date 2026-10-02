@@ -1,0 +1,111 @@
+// scripts/_classnote/notice-class-route.mjs — **원생 개별 공지·교재요청서의 반 보드 경로**(수학) 대상 확정(워커 전용).
+//
+// 원장 2026-10-02: *"수학은 더 이상 1인 보드 안쓰는 방향"* · *"개인 공지는 수업보고서와 동일하게 일인발송으로 배선"* ·
+//   *"해당 선생님 반 학생 삼자 일치를 기준으로 발송"* · *"배선이 철저해야 오발송 일어나지 않음"*.
+// 앱이 (보내는 선생님 – 반 – 학생) 삼자 일치로 **반(`target.classId`)**을 정해 큐에 싣는다(report-admin/server/notice-class-route.ts).
+// 워커는 그 반을 **그대로 믿지 않고** 게시 직전에 다시 확인한다:
+//   ① 그 학생이 오늘 그 반에 다닌다(수강 — 반이동 당일 옛 반은 아니다, notify-axis.mjs `isCurrentEnrollment`)
+//   ② 그 반이 반 보드 대상(활성·수학·보고서 발송)이고 연결(0302a)이 있고 그 학생의 원아 매칭이 전부 ok다(`isClassRouteEligible`)
+//   ③ 그 원아가 **지금** ClassNote 그 반에 배정돼 있다(`resolveClassTargets` — 실시간 재조회 + 배정 번호)
+// 원아는 이름으로 찾지 않는다 — 0302a에 가드를 통과해 적힌 원아 번호만 쓴다(수업보고서 반 보드 경로와 같은 함수).
+// 🔴 하나라도 어긋나면 **보내지 않는다** — 1인 보드로 되돌리지 않는다(조용히 옛 경로로 가면 어느 보드로 갔는지 아무도 모른다).
+import { isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
+import { isCurrentEnrollment } from "./notify-axis.mjs";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const kstToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+
+/** 이 타깃이 반 보드 경로인가 — 앱이 `classId`를 실었을 때만. */
+export const isClassRouteTarget = (target) => typeof target?.classId === "string" && target.classId.length > 0;
+
+/**
+ * 반 보드 경로 타깃의 게시 대상 확정.
+ * @returns {Promise<{ok:true, boardId:number, boardName:string, enrolled:Array<{child:{id:number,name:string}, enrollment:{id:number}}>, others:number[]}
+ *                 | {ok:false, note:string}>}  note = 화면에 그대로 나가는 한글 사유 · others = 그 반 보드의 **다른** 원아(교차 확인용)
+ */
+export async function resolveNoticeClassTarget(sql, page, { tenant, centerId, target }) {
+  const classId = String(target?.classId ?? "");
+  const studentId = String(target?.studentId ?? "");
+  if (!UUID.test(classId) || !UUID.test(studentId)) return { ok: false, note: "발송 대상 정보가 올바르지 않습니다(반·학생 번호) — 다시 발송해 주세요" };
+
+  // ① 오늘 그 반에 다니는가(큐에 오른 뒤 반이 바뀌었을 수 있다).
+  const rows = await sql`select start_date::text as start_date, end_date::text as end_date, is_transferred
+    from enrollments where tenant_id = ${tenant} and class_id = ${classId} and student_id = ${studentId}`;
+  const today = kstToday();
+  const attending = rows.some((e) => isCurrentEnrollment({ startDate: e.start_date, endDate: e.end_date, isTransferred: e.is_transferred === true }, today));
+  if (!attending) return { ok: false, note: "이 학생은 지금 그 반에 다니지 않습니다 — 반을 확인한 뒤 다시 발송해 주세요" };
+
+  // ② 반 보드 대상 + 연결 + 원아 매칭 ok.
+  if (!(await isClassRouteEligible(sql, tenant, classId, studentId)))
+    return { ok: false, note: "이 학생의 ClassNote 반 보드 연결이 확인되지 않습니다(C.N 빨강) — '지금 반 보드 동기화' 뒤 다시 발송해 주세요" };
+
+  // ③ 실시간 재확인 + 배정 번호.
+  const resolved = await resolveClassTargets(sql, page, { tenant, centerId, classId, studentId });
+  if (!resolved.ok) return { ok: false, note: resolved.error };
+  if (!resolved.targets.length) return { ok: false, note: "이 학생의 ClassNote 원아를 찾지 못했습니다 — 반 매칭 후 다시 발송해 주세요" };
+  return { ok: true, boardId: resolved.boardId, boardName: resolved.boardName, enrolled: resolved.targets, others: resolved.others ?? [] };
+}
+
+/** 한 공지에서 한 반 보드의 교차 확인이 훑는 원아 상한(반 보드는 보통 20명 안쪽 — 넘으면 앞에서부터). */
+export const LEAK_CHECK_MAX = 60;
+
+/** 원아 한 명의 최근 알림장 글(20건) — 실패하면 null. */
+async function recentReports(page, centerId, child) {
+  const list = await page
+    .evaluate(
+      async ([center, ch]) => {
+        const res = await fetch(`/api/v1_2/centers/${center}/reports/?page_size=20&child=${ch}&tz=Asia/Seoul&center_id=${center}`, { headers: { accept: "application/json" } });
+        if (!res.ok) return null;
+        const j = await res.json().catch(() => null);
+        return (Array.isArray(j) ? j : j && Array.isArray(j.results) ? j.results : []).map((r) => ({ id: r.id, cls: r.cls, child: r.child, content: r.content }));
+      },
+      [centerId, child],
+    )
+    .catch(() => null);
+  return Array.isArray(list) ? list : null;
+}
+
+/**
+ * 교차 확인의 **기준선** — 이 공지를 그 반 보드에 올리기 **전에**, 그 반의 다른 원아들이 지금 갖고 있는 글 번호를 적어 둔다.
+ * 공지 본문은 보고서 링크처럼 고유하지 않다(같은 문장을 어제·방금 다른 공지로 그 반 다른 학생에게 보냈을 수 있다) — 그래서
+ * "같은 본문이 있다"가 아니라 **"올리기 전엔 없던 글이 생겼다"**로 판정한다(시계·글 번호 순서에 기대지 않는다).
+ * @returns {Promise<Map<number, Set<number>|null>>} 원아 → 그때 있던 글 번호(조회 실패한 원아는 null — 그 원아는 확인하지 못한다)
+ */
+export async function snapshotChildReports(page, centerId, children) {
+  const out = new Map();
+  for (const child of children.slice(0, LEAK_CHECK_MAX)) {
+    const list = await recentReports(page, centerId, child);
+    out.set(Number(child), list ? new Set(list.map((r) => Number(r.id))) : null);
+  }
+  return out;
+}
+
+/**
+ * 게시 후 **교차 확인** — 그 반 보드에서 **대상이 아닌 원아**에게, 올리기 전엔 없던 이 공지의 글(같은 반 · 같은 본문)이 생겼으면 새어 나간 것이다.
+ * 수업보고서의 교차 확인(classnote-class-route.mjs `crossCheckOthers`)과 같은 목적.
+ * @param {{ centerId:number, boardId:number, others:number[], contents:string[], baseline:Map<number, Set<number>|null> }} a
+ *   others = 대상이 아닌 원아(기준선이 있는 원아만 본다) · contents = 이 공지가 그 반 보드에 올린 본문들
+ * @returns {Promise<{ leakedTo:number[], unknown:boolean }>}  unknown = 확인하지 못한 원아가 있다(조회 실패·기준선 없음)
+ */
+export async function findNoticeLeaks(page, { centerId, boardId, others, contents, baseline }) {
+  const wanted = [...new Set(contents)].filter((c) => typeof c === "string" && c.length > 0);
+  const leakedTo = [];
+  let unknown = false;
+  for (const child of others) {
+    const before = baseline.get(Number(child));
+    if (!before) {
+      unknown = true; // 기준선이 없다(그때 조회 실패·그 뒤 반에 들어온 원아) — 새었다고도 아니라고도 못 한다
+      continue;
+    }
+    const list = await recentReports(page, centerId, child);
+    if (!list) {
+      unknown = true;
+      continue;
+    }
+    const hit = list.some(
+      (r) => String(r.cls) === String(boardId) && String(r.child) === String(child) && wanted.includes(r.content) && !before.has(Number(r.id)),
+    );
+    if (hit) leakedTo.push(Number(child));
+  }
+  return { leakedTo, unknown };
+}

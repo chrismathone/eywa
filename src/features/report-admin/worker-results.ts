@@ -83,6 +83,18 @@ export function workerSupportsNoticeAttachments(raw: unknown): boolean {
   return (caps as Record<string, unknown>).noticeAttachments === true;
 }
 
+/**
+ * 이 워커가 **공지의 반 보드 경로**(수학 개별 공지·교재요청서를 반 보드의 그 학생 원아에게 1:1로)를 지원하는 버전인가 —
+ * 하트비트 `last_results.caps.noticeClassRoute`(2026-10-02). 구버전은 `classId`를 모르고 반 보드 이름을 1인 보드처럼 찾다가
+ * 막힌다(발송 실패) — 그래서 앱은 이 값이 참일 때만 반 보드 경로로 큐에 싣는다. 키가 없으면 미지원(fail-safe = 기존 1인 보드 경로).
+ */
+export function workerSupportsNoticeClassRoute(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const caps = (raw as Record<string, unknown>).caps;
+  if (!caps || typeof caps !== "object" || Array.isArray(caps)) return false;
+  return (caps as Record<string, unknown>).noticeClassRoute === true;
+}
+
 function kstHHMM(iso: string): string {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "";

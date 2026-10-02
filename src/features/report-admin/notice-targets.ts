@@ -25,14 +25,31 @@ export type NoticeCandidate = {
 // body?: 학생별 개별 내용(공통과 다르게 쓴 학생만). 워커는 target.body ?? notice.body(공통)를 게시.
 // ⚠️ body는 resolveNoticeTargets **이후** studentId lookup으로 붙일 것(target↔student 고정 — 오발송 방지).
 // attachments = 그 학생에게만 붙는 이미지/파일(0130a, 예: 학생별 교재요청서 PNG). 공통 첨부는 큐 행(classnote_notices.attachments).
+// classId·className = **반 보드 경로**(수학, 2026-10-02) — 있으면 워커가 1인 보드가 아니라 그 반 보드의 그 학생 원아에게 1:1로 올린다
+//   (server/notice-class-route.ts가 삼자 일치로 정한다). 이때 `board`는 보드를 찾는 값이 아니라 결과↔대상을 맞추는 표시 키다(classTargetKey).
 export type NoticeTarget = {
   studentId: string;
   studentName: string;
   board: string;
   body?: string;
   attachments?: NoticeAttachment[];
+  classId?: string;
+  className?: string;
 };
-export type NoticeSkip = { name: string; reason: "subject_off" | "name_collision" | "no_name" };
+/**
+ * 제외 사유. `no_class_board` = 반 보드 경로인데 이 학생이 받을 반 보드가 없다(연결 없음·원아 매칭 보류) ·
+ * `not_my_class` = 반 보드는 있지만 보내는 선생님이 맡은 반이 아니다(삼자 일치 실패). 화면 문구 = NOTICE_SKIP_LABEL.
+ */
+export type NoticeSkip = { name: string; reason: "subject_off" | "name_collision" | "no_name" | "no_class_board" | "not_my_class" };
+
+/** 제외 사유 한글 문구 — 화면은 이 표만 쓴다(raw 코드 노출 금지). */
+export const NOTICE_SKIP_LABEL: Record<NoticeSkip["reason"], string> = {
+  name_collision: "동명이인 — 오발송 방지로 제외",
+  subject_off: "학원설정에서 발송하지 않는 과목",
+  no_name: "이름 없음",
+  no_class_board: "ClassNote 반 보드에 연결된 원아가 없음 — '지금 반 보드 동기화' 뒤 다시",
+  not_my_class: "보내는 선생님의 담당 반이 아님",
+};
 
 /**
  * 후보(선택된 반들의 재원생) → 발송 타깃 + 제외 목록.

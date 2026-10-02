@@ -42,6 +42,28 @@ import {
   loadScopedOrders,
 } from "./textbook-notice-data";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { SEND_CLASS_SUBJECTS, classRouteActive } from "@/features/onescreen/send-class";
+import { noticeClassRouteWorkerReady, resolveNoticeClasses } from "@/features/report-admin/server/notice-class-route";
+import type { NoticeOwner } from "../textbook-notice-subject";
+
+/**
+ * 학생별 **보내는 선생님**(수학 반 보드 경로의 삼자 일치용) — 강사 본인이 보내면 본인, 사무실이 보내면 그 학생 요청서들의 주인.
+ * 미리 보기(prepare)와 실제 발송(send)이 같은 규칙을 쓰게 한 곳에 둔다.
+ */
+function teachersByStudent(
+  rows: ReadonlyArray<{ id: string; student_id: string | null }>,
+  owners: Record<string, NoticeOwner[]>,
+  senderTeacherId: string | null,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const r of rows) {
+    if (!r.student_id) continue;
+    const list = (out[r.student_id] ??= []);
+    for (const id of senderTeacherId ? [senderTeacherId] : (owners[r.id] ?? []).map((o) => o.id)) if (!list.includes(id)) list.push(id);
+  }
+  return out;
+}
 
 const MENT_MAX = 2000;
 
@@ -94,8 +116,29 @@ export async function prepareTextbookNotice(orderIds: string[]): Promise<Prepare
     getNoticeAttachmentWorkerGate(),
   ]);
   const acc = accountForTarget(settings.billing, "textbook");
+  // 수학 알림장이 어느 반 보드로 가는지 미리 정해 보여 준다(발송 액션과 같은 함수 — 화면에 보인 반으로 나간다).
+  // 경로가 꺼져 있거나 연동 PC가 아직 못 하면 비운다(= 지금까지처럼 1인 보드). 판정 실패는 화면을 세우지 않는다 — 발송 때 다시 판정한다.
+  let mathRoute: PreparedTextbookNotice["mathRoute"];
+  try {
+    const supabase = await createClient();
+    const senderTeacherId = await effectiveTeacherId();
+    if (classRouteActive(settings, senderTeacherId ? user.displayName : null) && (await noticeClassRouteWorkerReady(supabase))) {
+      const teachers = teachersByStudent(loaded.rows, owners, senderTeacherId);
+      const mathStudents = [...new Set(studentIds)].filter((id) => (boards.subjects[id] ?? []).some((k) => SEND_CLASS_SUBJECTS.has(k)));
+      const picks = await resolveNoticeClasses(
+        user.tenantId,
+        mathStudents.map((id) => ({ studentId: id, teacherIds: teachers[id] ?? [], teacherStrict: !!senderTeacherId })),
+      );
+      mathRoute = {};
+      for (const [id, p] of picks) mathRoute[id] = p.ok ? { className: p.className } : { reason: p.reason };
+    }
+  } catch (e) {
+    console.error("[textbook] 반 보드 미리 보기 판정 실패 — 발송 때 다시 판정합니다", e instanceof Error ? e.message : e);
+    mathRoute = undefined;
+  }
   return {
     ok: true,
+    mathRoute,
     orders: loaded.rows.map((r) => {
       const subjects = (r.student_id ? boards.subjects[r.student_id] : undefined) ?? [];
       return {
@@ -251,6 +294,10 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
   if (!students.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
 
   const common = input.commonAttachments ?? [];
+  // 수학 반 보드 경로의 삼자 일치(선생님 – 반 – 학생)에 쓸 선생님 — 사무실이 대신 보낼 때의 요청서 주인.
+  // (강사 본인이 보내면 공지 레일이 본인을 쓴다.) 못 읽으면 선생님 없는 발송으로 떨어진다(반이 하나면 그 반).
+  // 🔴 미리 보기(prepare)와 **같은 행 집합**(고른 요청서 전부)으로 주인을 모은다 — 다르면 화면에 보인 반과 다른 반 보드로 갈 수 있다.
+  const teacherIdsByStudent = teachersByStudent(loaded.rows, await loadNoticeOwners(loaded.rows), null);
   // 테스트 발송: 학원이 보드 1곳이므로 첫 학생 글·첨부를 합본으로 만들어 공통 자리에 통째로 싣는다(위 함정 주석).
   const res = input.test
     ? await sendOnescreenNotice({
@@ -259,7 +306,7 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
         attachments: [...common, ...(students[0]!.attachments ?? [])],
         test: true,
       })
-    : await sendOnescreenNotice({ body: textbookNoticeCommon(ment), students, attachments: common });
+    : await sendOnescreenNotice({ body: textbookNoticeCommon(ment), students, attachments: common, teacherIdsByStudent });
   const merged: TextbookNoticeSkip[] = [
     ...dedup.skipped,
     ...skipped,
@@ -272,8 +319,12 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
   //    ⚠️ dry-run(발송 스위치 OFF)은 큐에 안 올라갔으므로 **연결하지 않는다** — 연결하면 실제로 안 나간 글이
   //       "이미 발송함"으로 굳어 진짜 발송을 막는다.
   //    ⚠️ 테스트 발송('학원이' 보드)도 연결하지 않는다 — 실 학부모에게 간 글이 아니다.
-  if (res.noticeId && !res.dryRun && !input.test) {
-    const linkIds = [...sendableIds];
+  // 🔴 **실제로 큐에 오른 학생의 요청서만** 연결한다 — 공지 레일이 제외한 학생(반 보드 없음·동명이인 등)의 요청서까지 '발송함'으로
+  //    적으면 그 학생은 다시 보낼 길이 막힌다(푸는 길이 다른 학생에게 간 글까지 지우는 게시취소뿐).
+  const queuedStudents = new Set(res.queuedStudentIds ?? []);
+  const linkedIds = sendableRows.filter((r) => r.student_id && queuedStudents.has(r.student_id)).map((r) => r.id);
+  if (res.noticeId && !res.dryRun && !input.test && linkedIds.length) {
+    const linkIds = linkedIds;
     const admin = createAdminClient(); // RLS 우회 → tenant_id 명시 필터 필수
     const { error: linkErr } = await admin
       .from("textbook_orders")
@@ -296,9 +347,14 @@ export async function sendTextbookNotice(input: SendTextbookNoticeInput): Promis
   await logAction({
     action: "textbook_notice_send",
     targetType: "textbook_order",
-    targetLabel: `학생 ${students.length}명 · 요청서 ${sendableIds.size}건`,
+    // 실제로 나간 수(테스트·dry-run은 고른 수) — 제외된 학생을 '보냈다'로 적지 않는다.
+    targetLabel:
+      res.dryRun || input.test
+        ? `학생 ${students.length}명 · 요청서 ${sendableIds.size}건`
+        : `학생 ${res.queued ?? 0}명 · 요청서 ${linkedIds.length}건`,
     metadata: {
-      orderIds: [...sendableIds],
+      // 실제로 나간 요청서(큐에 오른 학생의 것) — 제외된 학생의 요청서는 싣지 않는다. 테스트·dry-run은 연결이 없어 고른 것 그대로.
+      orderIds: res.dryRun || input.test ? [...sendableIds] : linkedIds,
       studentCount: students.length,
       queued: res.queued ?? 0,
       noticeId: res.noticeId ?? null,

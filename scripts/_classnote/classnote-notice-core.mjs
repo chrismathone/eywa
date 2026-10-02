@@ -15,6 +15,10 @@
  * 첨부 0건이면 기존 글자 전용 `postReport` 경로 그대로(회귀 격리). 준비 헬퍼는 notice-attachments.mjs.
  *
  * 안전장치: 실게시·회수는 --post + classnoteSendEnabled(킬스위치) 확인. 타깃별 실패는 그 타깃만 기록(results).
+ *
+ * **반 보드 경로(수학, 원장 2026-10-02)**: 타깃에 `classId`가 있으면 1인 보드 `(수학)이름`이 아니라 **그 반 보드의 그 학생 원아**에게
+ * 1:1로 올린다(수업보고서 반 보드 경로와 같은 대상 확정 — notice-class-route.mjs). 원아는 이름으로 찾지 않는다(0302a 원아 번호).
+ * `classId`가 없는 타깃(영어·옛 큐 행)은 지금까지와 똑같이 1인 보드로 간다. 게시·중복 확인·409 재시도·회수·수정은 두 경로가 같은 코드다.
  */
 import { isClassnoteSendEnabled, getClassnoteBoardAllowlist, DEFAULT_BASE, DEFAULT_AUTHOR_NAME } from "./classnote-core.mjs";
 import {
@@ -32,6 +36,8 @@ import {
 } from "./classnote-admin-core.mjs";
 import { boardNameAmbiguity, evaluateBoardSafety, kstSchoolYear } from "./board-safety.mjs";
 import { createNoticeMediaUploader, fetchNoticeMedia, mediaForNoticeTarget } from "./notice-attachments.mjs";
+import { findNoticeLeaks, isClassRouteTarget, resolveNoticeClassTarget, snapshotChildReports } from "./notice-class-route.mjs";
+import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
 
 // 내부 첨부 라우트 게이트(보고서 첨부·/r 스샷과 동일 시크릿). 없으면 라우트가 401 → 한글 사유로 보고된다.
 const INTERNAL_SECRET = process.env.CLASSNOTE_INTERNAL_SECRET;
@@ -173,8 +179,42 @@ async function openAddForm(page) {
   await page.waitForTimeout(1500);
 }
 
-/** 타깃 1건 처리 — 보드·원아·enrollment 해석 후 게시 + 리포트 id 캡처. 실패 사유는 한글 note. */
-async function processTarget(page, ctx, target, index = 0) {
+/**
+ * 타깃 1건 처리 — 보드·원아·enrollment 해석 후 게시 + 리포트 id 캡처. 실패 사유는 한글 note.
+ * 🔴 `classId`가 실린 타깃은 **반 보드 경로만** 탄다 — 대상 확정에 실패해도 아래 1인 보드 경로로 떨어지지 않는다
+ *    (조용히 옛 보드로 가면 화면의 "반 보드로 보냄"이 거짓이 된다).
+ */
+export async function processTarget(page, ctx, target, index = 0) {
+  if (isClassRouteTarget(target)) {
+    // 비상 정지 — 반 보드에서 글이 다른 원아에게 보인 적이 있으면(보고서·공지 어느 쪽이든) 원인을 볼 때까지 올리지 않는다.
+    if (classRouteHaltReason())
+      return { board: target.board, ok: false, note: "반 보드 발송이 비상 정지 중입니다 — 교차 확인 이상으로 멈췄습니다(연동 PC를 다시 켜기 전에 원인 확인 필요)" };
+    const resolved = await resolveNoticeClassTarget(ctx.sql, page, { tenant: ctx.tenant, centerId: ctx.centerId, target });
+    if (!resolved.ok) return { board: target.board, ok: false, note: resolved.note };
+    // 교차 확인 준비 — 이 공지가 그 반 보드에 **처음** 올리기 전에, 그 반의 다른 원아들이 지금 갖고 있는 글을 적어 둔다(기준선).
+    // 이 대상의 원아는 올리기 **전에** '대상'으로 적는다 — 게시 확인에 실패해도 제 글이 '다른 원아에게 샌 글'로 세이지 않게.
+    let post = ctx.classPosts?.get(resolved.boardId) ?? null;
+    if (ctx.classPosts && !post) {
+      const baseline = await snapshotChildReports(page, ctx.centerId, resolved.others).catch(() => new Map());
+      post = { baseline, targeted: new Set(), contents: new Set(), posted: 0, checked: 0 };
+      ctx.classPosts.set(resolved.boardId, post);
+    }
+    if (post) {
+      for (const e of resolved.enrolled) post.targeted.add(Number(e.child.id));
+      post.contents.add(target.body != null ? target.body : ctx.body);
+    }
+    const res = await postToChildren(page, ctx, target, index, { boardId: resolved.boardId, enrolled: resolved.enrolled });
+    if (post && res.reports?.length) {
+      post.posted += 1;
+      // 그 반 보드의 **첫 게시 직후** 한 번 확인한다 — 새는 구조라면 나머지 대상(개인 본문·요청서 이미지)을 올리기 전에 멈춘다.
+      if (post.posted === 1) {
+        const alert = await checkBoardLeak(page, { centerId: ctx.centerId, boardId: resolved.boardId, post, log: ctx.log }).catch(() => null);
+        post.checked = post.posted;
+        if (alert) ctx.leakAlert = alert;
+      }
+    }
+    return res;
+  }
   const board = ctx.boardByNorm.get(norm(target.board));
   if (!board) return { board: target.board, ok: false, note: "보드 없음(프로비저닝 필요)" };
 
@@ -216,7 +256,16 @@ async function processTarget(page, ctx, target, index = 0) {
   });
   if (enrolled.length === 0)
     return { board: target.board, ok: false, note: rejected?.reason ?? "학부모 미가입 또는 보드 미배정" };
+  return postToChildren(page, ctx, target, index, { boardId: board.id, enrolled });
+}
 
+/**
+ * 확정된 원아들에게 게시 — 1인 보드 경로와 반 보드 경로가 **같이 쓰는** 뒷부분(첨부 준비·게시·중복 확인·409 재시도·id 캡처).
+ * `boardId` = 글이 올라갈 ClassNote 반(1인 보드든 반 보드든) · `enrolled` = [{child:{id}, enrollment:{id}}] (그 반에서의 배정).
+ * 🔴 글은 `child`를 지정해 올라가므로 반 보드에 다른 원아가 있어도 그 원아에게만 보인다(수업보고서 반 보드 발송과 같은 방식).
+ */
+async function postToChildren(page, ctx, target, index, { boardId, enrolled }) {
+  const board = { id: boardId };
   // 개인화 본문(target.body, 학생별) 우선, 없으면 공통 본문(ctx.body).
   // 공유 보드 차단은 위 프리플라이트 게이트가 담당(개인화·공통 **둘 다**) — 옛 개인화-only 체크는 이름 매칭
   // 기반이라 이름 다른 제3 가족을 못 잡아 폐기했다.
@@ -340,6 +389,40 @@ async function processTarget(page, ctx, target, index = 0) {
     reports.push({ id: id ?? null, url: id ? `${CLASSNOTE_BASE}/service/report/${id}` : null, cls: board.id, child: child.id });
   }
   return { board: target.board, ok: true, reports };
+}
+
+/**
+ * 한 반 보드의 교차 확인 — 대상이 아닌 원아에게, 올리기 전엔 없던 이 공지의 글이 생겼으면 새어 나간 것이다.
+ * 새었으면 반 보드 게시를 전부 멈추고(class-route-halt.mjs — 수업보고서와 같은 표식) 한글 사유를 돌려준다.
+ * 조회 실패는 새었다고 단정하지 않는다(로그만).
+ * @returns {Promise<string|null>} 새었을 때의 한글 사유(공지 행의 error에 적는다 — 화면에 그대로 나간다)
+ */
+async function checkBoardLeak(page, { centerId, boardId, post, log }) {
+  const others = [...post.baseline.keys()].filter((id) => !post.targeted.has(id));
+  if (!others.length) return null;
+  const { leakedTo, unknown } = await findNoticeLeaks(page, { centerId, boardId, others, contents: [...post.contents], baseline: post.baseline });
+  if (leakedTo.length) {
+    haltClassRoute("공지 교차 확인 이상");
+    log?.(`[notice] 🔴 교차 확인 이상 — 반 보드 #${boardId} 다른 원아 ${leakedTo.join(",")} · 반 보드 발송 비상 정지`);
+    return `🔴 반 보드 교차 확인 이상 — 이 공지가 대상이 아닌 원아(${leakedTo.length}명)의 알림장에서 보입니다. 반 보드 발송을 멈췄습니다(ClassNote에서 확인한 뒤 게시취소해 주세요)`;
+  }
+  if (unknown) log?.(`[notice] ⚠️ 반 보드 #${boardId} 교차 확인을 다 하지 못했습니다(조회 실패) — 게시는 성공으로 둔다`);
+  return null;
+}
+
+/**
+ * 공지 1건의 **마지막 교차 확인** — 한 반 보드에 여러 대상을 올렸으면(첫 게시 직후 확인 뒤에도 더 올렸으면) 끝에서 한 번 더 본다.
+ * @returns {Promise<string|null>} 새었을 때의 한글 사유(첫 게시 직후 확인에서 이미 잡혔으면 그 사유)
+ */
+export async function crossCheckNoticeBoards(page, { centerId, classPosts, leakAlert = null, log }) {
+  let alert = leakAlert;
+  for (const [boardId, post] of classPosts ?? []) {
+    if (post.posted <= post.checked) continue;
+    const found = await checkBoardLeak(page, { centerId, boardId, post, log }).catch(() => null);
+    post.checked = post.posted;
+    if (found) alert = alert ?? found;
+  }
+  return alert;
 }
 
 /** 게시취소(회수) 1건 — 저장된 reports[].id를 GET 대조(cls/child) 후 DELETE. results를 회수 결과로 갱신. */
@@ -530,7 +613,8 @@ export async function processNoticesOnce(
         }
 
         log(`[notice] ${notice.id} 게시 시작 — 타깃 ${targets.length}건`);
-        const ctx = { ...ctxBase, body: notice.body, mediaFor, log };
+        // classPosts = 반 보드별 교차 확인 재료(올리기 전 기준선 · 대상 원아 · 올린 본문) — processTarget의 반 보드 분기가 채운다.
+        const ctx = { ...ctxBase, sql, tenant, body: notice.body, mediaFor, log, classPosts: new Map(), leakAlert: null };
         const results = [];
         for (const [idx, t] of targets.entries()) {
           // 첨부를 실어야 하는데 목록 자체를 못 받았으면 **한 건도 게시하지 않는다**(요청서 빠진 글 방지).
@@ -549,9 +633,12 @@ export async function processNoticesOnce(
           }
         }
         const okCount = results.filter((x) => x.ok).length;
-        const status = okCount === results.length ? "success" : okCount > 0 ? "partial" : "failed";
+        // 반 보드 경로 — 대상이 아닌 원아에게 보이지 않는지 확인한다(새었으면 사유를 공지 행에 적고 반 보드 발송을 멈춘다).
+        const leak = await crossCheckNoticeBoards(page, { centerId, classPosts: ctx.classPosts, leakAlert: ctx.leakAlert, log }).catch(() => ctx.leakAlert);
+        // 🔴 새었으면 '발송 완료'로 두지 않는다 — 초록 상태만 보고 지나치지 않게 '일부 실패'로 올리고 사유를 error에 적는다(화면이 항상 빨갛게 그린다).
+        const status = okCount === 0 ? "failed" : okCount === results.length && !leak ? "success" : "partial";
         await sql`update classnote_notices set status=${status}, results=${sql.json(results)},
-          processed_at=now(), error=${status === "failed" ? "전 타깃 실패 — results 참조" : null}
+          processed_at=now(), error=${leak ?? (status === "failed" ? "전 타깃 실패 — results 참조" : null)}
           where id=${notice.id}`;
         log(`[notice] ${notice.id} → ${status} (성공 ${okCount}/${results.length})`);
         processed++;

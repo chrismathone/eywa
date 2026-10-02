@@ -4,15 +4,29 @@
 // 과목 1개=자동 확정 표시, 2개+=선택, 0개=발송 불가(비활성). 학생 연결이 없는 요청도 사유와 함께 드러낸다.
 
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import type { TextbookNoticeOrder, TextbookNoticeSkip } from "@/features/billing/textbook-notice-types";
+import type { PreparedTextbookNotice, TextbookNoticeOrder, TextbookNoticeSkip } from "@/features/billing/textbook-notice-types";
+import { NOTICE_SKIP_LABEL } from "@/features/report-admin/notice-targets";
+import { SEND_CLASS_SUBJECTS } from "@/features/onescreen/send-class";
+
+type MathRoute = NonNullable<PreparedTextbookNotice["mathRoute"]>;
+
+/**
+ * 이 학생의 수학 알림장이 가는 곳 — 반 보드 경로가 켜져 있을 때만 값이 있다(없으면 지금까지처럼 1인 보드).
+ * `blocked`면 수학 알림장으로는 보낼 수 없다(받을 반 보드가 없다 · 보내는 선생님의 반이 아니다).
+ */
+export function mathRouteOf(route: MathRoute | undefined, studentId: string, subject: string | undefined) {
+  if (!route || !subject || !SEND_CLASS_SUBJECTS.has(subject)) return null;
+  const r = route[studentId];
+  if (!r) return { blocked: "no_class_board" as const };
+  return "className" in r ? { className: r.className } : { blocked: r.reason };
+}
 
 /** 제외 사유 한글 라벨 — raw 영문 코드는 화면에 절대 노출하지 않는다. */
 const SKIP_LABEL: Record<TextbookNoticeSkip["reason"], string> = {
   no_subject: "수강 과목 없음",
   no_student: "학생 연결 없음",
-  name_collision: "동명이인 — 오발송 방지로 제외",
-  subject_off: "학원설정에서 발송하지 않는 과목",
-  no_name: "이름 없음",
+  // 공지 레일의 제외 사유는 한 벌(notice-targets.ts) — 수학 반 보드 경로의 사유 포함.
+  ...NOTICE_SKIP_LABEL,
   // 중복 발송 차단(0174a) — 수업보고서가 이미 발송된 건을 다시 못 보내게 하는 것과 같은 규약.
   already_sent: "이미 발송한 요청서 — 다시 보내려면 학부모 공지를 게시취소하세요",
   same_book_sent: "같은 교재가 이미 발송됨 — 중복 요청서입니다",
@@ -72,6 +86,7 @@ export function SendTargetList({
   pick,
   onPick,
   labelOf,
+  mathRoute,
 }: {
   targets: SendTarget[];
   orphans: TextbookNoticeOrder[];
@@ -80,7 +95,18 @@ export function SendTargetList({
   onPick: (studentId: string, subject: string) => void;
   /** 과목 라벨(학원설정 단일 소스 — 하드코딩 금지) */
   labelOf: (key: string) => string;
+  /** 수학 알림장이 가는 반 보드(서버 판정) — 없으면 지금까지처럼 1인 보드. */
+  mathRoute?: MathRoute;
 }) {
+  // 알림장 라벨 — 수학 반 보드 경로면 어느 반으로 가는지까지 적는다("수학 알림장 · 중등M 중2 BS3O").
+  const boardLabel = (studentId: string, subject: string) => {
+    const r = mathRouteOf(mathRoute, studentId, subject);
+    return `${labelOf(subject)} 알림장${r && "className" in r ? ` · ${r.className}` : ""}`;
+  };
+  const blockedOf = (studentId: string, subject: string | undefined) => {
+    const r = mathRouteOf(mathRoute, studentId, subject);
+    return r && "blocked" in r ? r.blocked : null;
+  };
   return (
     <ul className="divide-line border-line divide-y rounded-2xl border">
       {targets.map((t) => (
@@ -94,17 +120,24 @@ export function SendTargetList({
               발송 불가 — 수강 과목이 없어 학부모 보드를 찾을 수 없습니다
             </span>
           ) : t.subjects.length === 1 ? (
-            <span className="text-text-dim shrink-0 text-xs">{labelOf(t.subjects[0]!)} 알림장</span>
+            <span className="text-text-dim shrink-0 text-xs">{boardLabel(t.studentId, t.subjects[0]!)}</span>
           ) : (
             <SearchableSelect
-              className="w-36 shrink-0"
+              className="w-48 shrink-0"
               value={pick[t.studentId] ?? ""}
-              options={t.subjects.map((s) => ({ value: s, label: `${labelOf(s)} 알림장` }))}
+              options={t.subjects.map((s) => ({ value: s, label: boardLabel(t.studentId, s) }))}
               onValueChange={(v) => onPick(t.studentId, v)}
               placeholder="알림장 선택"
               ariaLabel={`${t.name} 알림장 과목 선택`}
             />
           )}
+          {/* 수학 반 보드 경로인데 받을 반 보드가 없는 학생 — 보내기 전에 알린다(보낸 뒤 '제외'로만 알면 늦다). */}
+          {blockedOf(t.studentId, pick[t.studentId] ?? (t.subjects.length === 1 ? t.subjects[0] : undefined)) ? (
+            <span className="text-danger w-full text-xs break-keep">
+              발송 불가 —{" "}
+              {NOTICE_SKIP_LABEL[blockedOf(t.studentId, pick[t.studentId] ?? (t.subjects.length === 1 ? t.subjects[0] : undefined))!]}
+            </span>
+          ) : null}
         </li>
       ))}
       {orphans.map((o) => (

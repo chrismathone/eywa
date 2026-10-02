@@ -691,6 +691,7 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
   지금 담당이 아닌 선생님. 이 반 학생의 원아일 수 있거나 누구 원아인지 모르는 원아는 보류해 해제 리스트(0329a)에 사유와 함께 남긴다.
   해제된 선생님 연결 줄은 `is_approved:false`로 남으므로 연결 여부는 살아 있는 줄만 본다. 상세 = `docs/decisions/reports-ai.md` '자동 해제'. ·
   반 단체 공지 = `POST https://kapi.classnote.com/v1_2/notices/ {classes_to:[반id…], title, content, is_comment_on, center, author_name, scheduled:""}` → 반마다 공지 1건. 🔴 `classes_to`가 비면 기관 전체일 수 있다 — 빈 목록·허용 밖 반이면 무조건 차단.
+- **공지(원생 개별·교재요청서)도 수학은 반 보드 경로(2026-10-02)**: 큐 대상에 `classId`가 있으면 [`notice-class-route.mjs`](../scripts/_classnote/notice-class-route.mjs)가 수업보고서와 같은 함수(`isClassRouteEligible`·`resolveClassTargets`)로 대상을 확정해 그 반 보드의 그 원아에게 1:1로 올린다. 실패하면 그 대상만 실패 — 1인 보드 분기로 떨어지지 않는다. `classId`가 없는 대상(영어·옛 큐 행)은 기존 1인 보드 경로. 앱은 워커가 `caps.noticeClassRoute`를 알릴 때만 이 경로로 싣는다. 상세 = `docs/decisions/reports-ai.md` '수학 공지'.
 - 🔴 **`"보드가 곧 매핑"` 폴백(`acceptBoardMembers`)은 반 보드 경로에서 절대 타지 않는다** — 생년만 보므로 같은 학년 반이면 전원이 통과한다(`sendReportViaApi targets`).
 - 🔴 회수(`classnote-recall-core.mjs`)는 1인 보드 **와** 반 보드를 함께 훑는다 — 한쪽만 보면 '이미 없습니다'로 거짓 성공.
 - 반 정보 없는 보강 보고서 = A안(0303a `classnote_class_id`) — `saveAndQueueClassnote`가 메인 수업(보낸 보고서 최다 → 출결 최다)을 정해 적고, 못 정하면 `needs_class`로 멈춰 원스크린이 고르게 한다. 그 칸이 빈 행(관리자 재발송 등)은 워커가 기존 1인 보드로 보낸다.
