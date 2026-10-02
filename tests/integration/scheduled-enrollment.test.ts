@@ -11,7 +11,7 @@ it.skipIf(!process.env.DATABASE_URL)("예약 수정·취소는 두 반을 함께
   const rollback = new Error("rollback_scheduled_enrollment_test");
   try {
     await expect(db.begin(async (tx) => {
-      await tx.unsafe(readFileSync("supabase/migrations/20261002050926_scheduled_enrollment_atomic.sql", "utf8"));
+      await tx.unsafe(readFileSync("supabase/migrations/0334a_scheduled_enrollment_atomic.sql", "utf8"));
       const tag = randomUUID();
       const [tenant] = await tx`insert into tenants (slug, name) values (${`scheduled-${tag}`}, 'Scheduled test') returning id`;
       const owner = randomUUID();

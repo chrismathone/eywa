@@ -17,6 +17,7 @@ import { useOpenMenu } from "./menu-hub-grid";
 import { HUB_GROUPS, SUPPORT_GROUPS, type HubDest } from "@/lib/menu-hub";
 import { SUBTABS_BY_MENU, navItemByKey, navPresentation } from "@/lib/navigation";
 import type { MenuKey } from "@/lib/permissions";
+import { SETTINGS_ROLE_GROUPS, settingMenuForHref } from "@/lib/settings-role-catalog";
 
 /**
  * **같은 화면 = 같은 창** — 어느 입구(메뉴 판·검색 팰릿 / 창 링크·알림 벨·주소 직접 입력)로 열어도.
@@ -28,6 +29,20 @@ import type { MenuKey } from "@/lib/permissions";
 
 const ALL_DESTS: HubDest[] = [...HUB_GROUPS, ...SUPPORT_GROUPS].flatMap((g) => g.items);
 const routePath = (href: string) => href.split(/[?#]/, 1)[0] ?? href;
+
+/**
+ * 이 목적지가 열어야 하는 **창의 주인 메뉴**.
+ *
+ * 2026-10-02부터 설정 면(`/owner?tab=…`·`/lesson-reports?tab=report` 등)의 `menuKey`는 부모 메뉴가 아니라
+ * **개별 권한키**(`navigation_settings`·`report_settings`)다 — 권한을 면마다 따로 주기 위해서다.
+ * 창은 여전히 부모 메뉴 하나여야 하므로(같은 화면 = 같은 창), 권한키를 그 면이 놓인 부모 메뉴로 되돌려 비교한다.
+ * 🔴 `windowIdForHref`와 같은 조회를 쓰지 않는다 — 같은 함수로 기대값을 만들면 검사가 스스로를 확인할 뿐이다.
+ */
+function ownerMenuOf(d: HubDest): string {
+  if (settingMenuForHref(d.href) !== d.menuKey) return d.menuKey;
+  const parent = (Object.keys(SETTINGS_ROLE_GROUPS) as MenuKey[]).find((k) => navItemByKey(k)?.href === routePath(d.href));
+  return parent ?? d.menuKey;
+}
 
 /** 하부탭 중 **경로로 갈리는 면**(부모 루트와 다른 경로, 독립 메뉴 아님) — SUBTABS_BY_MENU에서 파생한다. */
 const PATH_FACES = Object.entries(SUBTABS_BY_MENU).flatMap(([parent, tabs]) =>
@@ -106,9 +121,18 @@ describe("모든 입구가 같은 창 id", () => {
       const item = navItemByKey(d.menuKey);
       // 운영실 = 셸 본문이 곧 작업면(창이 아니다).
       if (item && item.href === d.href && navPresentation(item) === "desktop") return false;
-      return windowIdForHref(d.href)?.id !== d.menuKey;
+      return windowIdForHref(d.href)?.id !== ownerMenuOf(d);
     }).map((d) => d.href);
     expect(mismatched).toEqual([]);
+    // 설정 면이 실제로 부모 창으로 접히는지 — 위 비교가 빈 목록으로 통과하는 것만으로는 대상이 있었는지 알 수 없다.
+    const settingFaces = ALL_DESTS.filter((d) => settingMenuForHref(d.href) === d.menuKey);
+    expect(settingFaces.length).toBeGreaterThan(0);
+    // 창 id는 권한키(`report_settings`)가 아니라 **그 면이 놓인 메뉴**여야 한다 — 권한키로 열리면 같은 화면이 두 벌 뜬다.
+    for (const d of settingFaces) {
+      const id = windowIdForHref(d.href)?.id;
+      expect(id, d.href).not.toBe(d.menuKey);
+      expect(navItemByKey(id as MenuKey)?.href, d.href).toBe(routePath(d.href));
+    }
   });
 
   it("🔴 딥링크(주소 직접 입력)도 같은 창", () => {

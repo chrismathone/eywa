@@ -118,7 +118,9 @@ describe("조퇴 칸 합침 배선 — 조퇴가 출석으로 되쓰이지 않�
     const client = read("src/features/onescreen/components/onescreen-client.tsx");
     expect(client).toContain("mergeStatusOf(merge.attendanceRaw)");
     expect(client).toContain("mergeStatusOf(target.attendanceRaw)");
-    expect(client).toMatch(/status: BasicAttendance \| "early_leave"/);
+    // 2026-10-02 출결 취소(null)를 같은 저장 경로로 받으며 타입 이름이 AttendanceSelection으로 바뀌었다 —
+    // 잠그는 것은 이름이 아니라 **쓰기 함수가 조퇴를 받는다**는 사실이다.
+    expect(client).toMatch(/status: (?:BasicAttendance|AttendanceSelection) \| "early_leave"/);
     // 합침 쓰기는 시수만 보낸다 — note 키를 싣는 순간 조퇴 사유 메모가 지워진다.
     const merge = client.slice(client.indexOf("function mergeMakeupIntoRegular("), client.indexOf("function pendingMakeupRows("));
     expect(merge).toContain("{ units: String(units) }");
