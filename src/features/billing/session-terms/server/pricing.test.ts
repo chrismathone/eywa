@@ -79,7 +79,12 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.client }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => resolveSettings({ billing: h.state.billing }, { name: "학원" }) }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => ({ id: "owner", tenantId: "tenant", systemRole: "master" }) }));
-vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => true }));
+// 급여 게이트(salary-access)가 payroll_settings 권한을 perm-matrix로 묻는다(2026-10-02) — 이 테스트의 행위자는 원장이다.
+vi.mock("@/lib/auth/perm-matrix", () => ({
+  canWriteTenant: async () => true,
+  canAccessTenant: async () => true,
+  canManageTenant: async () => true,
+}));
 vi.mock("@/features/audit/server/log", () => ({ logAction: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // 세션 기간 정의 없음 = 달력월(줄 집합의 기간 창).
