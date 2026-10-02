@@ -1,5 +1,13 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-02 — ClassNote 반 보드 동기화 보고서 · 해제 API 실측
+
+- **동기화 보고서 다운로드(0329a)**: '지금 반 보드 동기화' 버튼 옆 **'동기화 보고서 다운로드'**(보고서 쓰기 권한만 — 강사 제외). 가장 최근 동기화의 **변동 · 변동 실패 · 보류를 이유와 함께** 줄 단위로, 그리고 전 반의 **직접 해제해야 할 원아**를 txt로 받는다. 가장 최근 회차가 '지금 동기화'(바뀐 반만)면 가장 최근 전체 동기화도 뒤에 붙인다.
+- 재료: 워커가 회차마다 `classnote_board_sync_runs`(변동·실패·보류 줄 = 한글 한 줄)와 `classnote_class_boards.release_names`(반 보드별 해제 대상)를 적는다([`class-board-sync-report.mjs`](../scripts/_classnote/class-board-sync-report.mjs)). **멈춘 회차도 적는다**(그때까지 한 일 포함). 글은 [`classnote-sync-report.ts`](../src/features/report-admin/classnote-sync-report.ts)가 만든다. 회차 표는 정책 0개(서버 액션만 읽음).
+- **감사로그**: 원아 배정마다 `classnote_board_enroll`(학생 기록) · 매일 정기 동기화 `classnote_board_sync_daily` · 보고서 내려받기 `classnote_board_sync_report_export`. ('지금 동기화'는 기존 `classnote_board_sync_run` 그대로.)
+- **SQL·워커 적용 전후 모두 돈다(#95)**: 표·칸이 없으면 워커는 그 기록만 건너뛰고 앱은 버튼을 그리지 않는다. **연동 PC 워커 zip 적용 + 0329a 실행 + 동기화 1회** 뒤부터 버튼이 뜬다.
+- 🔑 **해제 API 실측(그동안의 "405라 화면에서 손으로"를 정정)**: 원아 = `POST kapi…/v1/enrollments/{배정번호}/out` · 선생님 = `POST kapi…/v1/employments/{연결번호}/out` → 200(테스트 학생 '학원이'·테스트반에서 내보냄 → 확인 → 다시 배정). 반 생성·이름 변경·삭제 + 원아·선생님 배정·해제가 전부 API로 된다. **자동 해제는 아직 켜지 않았다**(해제 대상만 보고서에 싣는다) — 상세 = `docs/classnote-integration.md` 'API(실측)'.
+
 ## 2026-10-02 — 지점 설정과 슈퍼관리자 운영 설정 분리
 
 - 지점에서는 지점 관리만 하고 슈퍼관리자 관리는 `/admin`으로 진입하는 운영자 콘솔에서 한다. 대시보드 적용 직원·근무 설정의 대시보드 배정·개인별 권한 예외·민감 기능 담당자 선택에서 운영자 계정을 제외한다.

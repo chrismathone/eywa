@@ -151,6 +151,11 @@ export const AUDIT_ACTIONS = {
   classnote_report_recall: "수업보고서 회수",
   // 지금 반 보드 동기화(0313a, 2026-09-30) — 요청(사람)과 실행 결과(연동 PC가 직접 insert, 실행자 system:classnote-sync-now)를 따로 남긴다.
   classnote_board_sync_request: "반 보드 지금 동기화 요청",
+  // 반 보드 동기화 보고서(0329a) — 변동·실패·보류와 전 반의 해제 대상을 txt로 내려받음.
+  classnote_board_sync_report_export: "반 보드 동기화 보고서 내려받기",
+  // 연동 PC 워커가 직접 남기는 것 — 매일 정기 동기화 한 회차 · 동기화가 원아를 반 보드에 배정함(학생 기록).
+  classnote_board_sync_daily: "반 보드 정기 동기화",
+  classnote_board_enroll: "ClassNote 반 보드 배정",
   classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
   // 학부모 글·댓글 답글(0317a) — 앱이 요청·수정·삭제를 남기고, 연동 PC 워커가 ClassNote 반영 결과를 직접 남긴다.
   classnote_parent_reply_request: "학부모 글 답글 요청",

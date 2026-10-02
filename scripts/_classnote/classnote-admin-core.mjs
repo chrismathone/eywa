@@ -206,7 +206,10 @@ export async function fetchChildDetail(page, childId) {
 /**
  * 원아→반 배정(쓰기) — `POST /api/v1/enrollments/ {child, belong_to_class}` (2026-07-13 학원이로 실검증,
  * 201 + is_approved:true 즉시). ID 기반이라 동명이인 안전. CSRF 쿠키 헤더 필요.
- * ⚠️ 제거는 DELETE/PATCH 전부 405 — 해제는 ClassNote UI에서만(현재 미자동화).
+ * ⚠️ 제거: 이 주소의 DELETE/PATCH는 전부 405다. 🔑 **그래도 해제는 된다**(2026-10-02 실측) — ClassNote 화면의 '소속 반 → 삭제'는
+ *    `POST https://kapi.classnote.com/v1/enrollments/{배정번호}/out`(본문 없음)을 부른다 → 200, 그 반에서만 빠지고 다른 반 배정은 그대로
+ *    (테스트 학생 '학원이'·테스트반: 내보냄 → 반 원아 목록에서 사라짐 → 다시 배정 201). 선생님도 같은 모양(`/v1/employments/{번호}/out`).
+ *    아직 워커는 해제하지 않는다(해제 리스트만 남긴다, 0329a) — 자동 해제는 원장 결정 뒤. 상세 = docs/classnote-integration.md 'API(실측)'.
  */
 export async function enrollChild(page, childId, classId) {
   return page.evaluate(
