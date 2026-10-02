@@ -64,6 +64,8 @@ describe("수납 연결·배분", () => {
     vi.mocked(mergeReceiptItems).mockResolvedValueOnce({ data: { ...data, source: [merged], lines: [{ ...merged, index: 0, source: merged }] }, committed: true });
     fireEvent.click(screen.getByRole("button", { name: "선택 항목 합산" }));
     await screen.findByRole("status");
+    // 합산을 처리하는 동안 저장 버튼의 글자는 '저장 중…'이다 — 안내가 뜬 것만 보고 바로 찾으면 처리 중에 걸려 가끔 못 찾는다.
+    await screen.findByRole("button", { name: "배분 저장" });
     expect(mergeReceiptItems).toHaveBeenCalledWith("invoice", originals, [0, 1], "이전 반 + 현재 반", undefined);
     expect(screen.getByLabelText("수학1반 배분금액")).toHaveValue(120000);
     expect(screen.getByLabelText("수학2반 배분금액")).toHaveValue(180000);

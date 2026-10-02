@@ -12,6 +12,8 @@ import {
   classNoticeStatusLabel,
   type ClassNoticeRow,
 } from "@/features/report-admin/class-notice";
+import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
+import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 
 const fmt = (iso: string) =>
   new Intl.DateTimeFormat("ko-KR", {
@@ -47,6 +49,9 @@ export function ClassNoticePanel({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<ClassNoticeRow[]>(initial);
+  // 그 반 학부모 모두가 보는 이미지(선택) — 원생 개별 공지와 같은 업로드 부품(규칙이 두 벌로 갈라지지 않게).
+  const [atts, setAtts] = useState<NoticeAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -65,7 +70,7 @@ export function ClassNoticePanel({
     if (!test && !window.confirm(`선택한 ${checked.size}개 반의 ClassNote 반에 공지를 1건씩 올립니다. 반에 있는 학부모 모두가 봅니다. 보낼까요?`))
       return;
     setBusy(true);
-    const res = await sendClassWideNotice({ classIds: [...checked], title, body, test });
+    const res = await sendClassWideNotice({ classIds: [...checked], title, body, test, ...(atts.length ? { attachments: atts } : {}) });
     setBusy(false);
     if (res.ok && res.dryRun) {
       toast.message("dry-run — '보고서 설정' 탭에서 'ClassNote 실제 발송'을 켜야 큐에 올라갑니다");
@@ -81,11 +86,13 @@ export function ClassNoticePanel({
       setChecked(new Set());
       setTitle("");
       setBody("");
+      setAtts([]);
     }
     void refresh();
   }
 
-  const ready = !!title.trim() && !!body.trim() && canSend && !busy;
+  // 이미지가 올라가는 중에는 보내지 않는다 — 올리던 이미지가 빠진 채 나간다.
+  const ready = !!title.trim() && !!body.trim() && canSend && !busy && !uploading;
   return (
     <div className="space-y-6">
       <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
@@ -138,12 +145,24 @@ export function ClassNoticePanel({
             className="border-line focus:border-primary rounded-md border bg-white px-3 py-2 text-sm outline-none"
           />
         </div>
+        {canSend ? (
+          <div className="mt-3">
+            <NoticeAttachmentPicker
+              attachments={atts}
+              onChange={setAtts}
+              uploading={uploading}
+              onUploadingChange={setUploading}
+              disabled={busy}
+              label="이미지 첨부 (그 반 학부모 모두에게)"
+            />
+          </div>
+        ) : null}
         <div className="mt-3 flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={!ready} onClick={() => send(true)}>
             테스트 발송(테스트반)
           </Button>
           <Button type="button" disabled={!ready || checked.size === 0} onClick={() => send(false)}>
-            {checked.size ? `${checked.size}개 반에 보내기` : "반을 고르세요"}
+            {checked.size ? `${checked.size}개 반에 보내기${atts.length ? ` · 이미지 ${atts.length}` : ""}` : "반을 고르세요"}
           </Button>
         </div>
       </section>
@@ -161,7 +180,10 @@ export function ClassNoticePanel({
                   <span className="text-text-dim text-xs">{classNoticeStatusLabel(r.status)}</span>
                   <span className="text-text-faint ml-auto text-xs">{fmt(r.createdAt)}</span>
                 </div>
-                <p className="text-text-dim text-xs">{r.classNames.join(", ")}</p>
+                <p className="text-text-dim text-xs">
+                  {r.classNames.join(", ")}
+                  {r.imageCount ? ` · 이미지 ${r.imageCount}장` : ""}
+                </p>
                 {r.failures.map((f) => (
                   <p key={f} className="text-danger text-xs">
                     {f}

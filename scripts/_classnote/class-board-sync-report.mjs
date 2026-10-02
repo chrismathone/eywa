@@ -6,7 +6,8 @@
 // 동기화가 한 일을 **줄 단위**로 모아(이유 포함) 회차 행(classnote_board_sync_runs)에 적고, 학생 기록에 남을 일(원아 배정)은
 // 감사로그에도 한 줄씩 남긴다. 앱의 '동기화 보고서 다운로드'가 이 행을 글(txt)로 만든다(src/features/report-admin/classnote-sync-report.ts).
 //
-// 줄 묶음(group): changed = 실제로 바뀐 것 · failed = 하려다 안 된 것 · held = 가드에 걸려 보류한 것 · release = 사람이 ClassNote에서 해제할 것.
+// 줄 묶음(group): changed = 실제로 바뀐 것(원아·담임 **해제** 포함) · failed = 하려다 안 된 것 · held = 가드에 걸려 보류한 것 ·
+//   release = 자동 해제 뒤에도 반 보드에 남은 명단 밖 원아(자동 해제가 보류한 것 — 사유는 held 줄에 원아마다 적는다).
 // 🔴 줄 글(text)은 **한글 문장**으로 여기서 완성한다 — 앱은 코드를 풀어 쓰지 않는다(워커가 줄 종류를 늘려도 앱은 그대로).
 // 🔴 보호자 전화 **값**은 넣지 않는다(계획의 보류 사유는 일치 여부만 담는다 — class-board-plan.mjs).
 // 🔴 어떤 기록 실패도 동기화를 막지 않는다(표·칸이 아직 없으면 그 기록만 건너뛴다, #95).
@@ -49,11 +50,29 @@ export function teacherEvents(todo, skipped) {
   ];
 }
 
-/** 해제 대상 — 보드가 확인된 반의 "그 반 누구의 원아도 아닌 원아". */
+/** 해제 대상 — 보드가 확인된 반의 "그 반 누구의 원아도 아닌 원아"(자동 해제 뒤에도 남은 것 — 사유는 '보류' 줄에 있다). */
 export function releaseEvents(plans) {
   return (plans ?? [])
     .filter((p) => p.board?.action === "exists" && (p.extras ?? []).length)
     .map((p) => line("release", p.className, `해제 필요: ${p.extras.join(", ")}`));
+}
+
+/** 원아 해제 — 실제로 내보낸 것(사유 포함) · 그 건만 실패한 것 · 자동으로 해제하지 않고 보류한 것(왜 — 사람이 확인한다). */
+export function childReleaseEvents(done, failed, held) {
+  return [
+    ...(done ?? []).map((r) => line("changed", r.className, `원아 해제: ${r.childName ?? "?"} — ${r.reason ?? "이 반 수강이 끝났습니다"}`, { name: r.studentName ?? r.childName ?? null })),
+    ...(failed ?? []).map((r) => line("failed", r.className, `원아 해제 실패: ${r.childName ?? "?"} — ${r.why ?? "사유 없음"}`, { name: r.childName ?? null })),
+    ...(held ?? []).map((h) => line("held", h.className, h.text, { name: h.childName ?? null })),
+  ];
+}
+
+/** 담임 해제 — 해제한 것 · 그 건만 실패한 것 · 보류한 것(사유). */
+export function teacherReleaseEvents(done, failed, held) {
+  return [
+    ...(done ?? []).map((r) => line("changed", r.className, `담임 해제: ${r.teacher ?? "?"} — 지금 이 반 담당이 아닙니다`)),
+    ...(failed ?? []).map((r) => line("failed", r.className, `담임 해제 실패: ${r.teacher ?? "?"} — ${r.why ?? "사유 없음"}`)),
+    ...(held ?? []).map((h) => line("held", h.className, h.text)),
+  ];
 }
 
 /**
@@ -107,6 +126,8 @@ export async function writeSyncRun(sql, run) {
 /** 감사로그 머리 — 🔴 `action: "…"` 리터럴로 둔다(감사로그 레지스트리 가드가 scripts/의 직접 insert를 이 모양으로 스캔한다). */
 const ENROLL_AUDIT = { action: "classnote_board_enroll", actor_name: "system:classnote-board-sync" };
 const DAILY_AUDIT = { action: "classnote_board_sync_daily", actor_name: "system:classnote-board-sync" };
+const RELEASE_AUDIT = { action: "classnote_board_release", actor_name: "system:classnote-board-sync" };
+const TEACHER_RELEASE_AUDIT = { action: "classnote_board_teacher_release", actor_name: "system:classnote-board-sync" };
 
 /**
  * 원아 배정을 **학생 기록**으로 남긴다 — 감사로그에 학생 한 명당 한 줄(어느 반 보드에 배정됐나).
@@ -119,6 +140,23 @@ export async function auditEnrollments(sql, tenant, done, { kind }) {
       await sql`insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
         values (${tenant}, null, ${ENROLL_AUDIT.actor_name}, ${ENROLL_AUDIT.action}, ${"student"}, ${e.name ?? "학생"}, ${sql.json(metadata)})`.catch(() => {});
     }
+  }
+}
+
+/**
+ * 원아·담임 **해제**를 기록으로 남긴다 — 감사로그에 한 건당 한 줄(어느 반 보드에서 누가 빠졌나 · 왜). best-effort.
+ * @param {{children?:Array, teachers?:Array}} released  class-board-release-apply.mjs가 실제로 해제한 것
+ */
+export async function auditReleases(sql, tenant, released, { kind }) {
+  for (const r of released?.children ?? []) {
+    const metadata = { studentId: r.studentId ?? null, className: r.className, boardId: r.boardId ?? null, childId: r.childId ?? null, reason: r.reason ?? null, kind };
+    await sql`insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
+      values (${tenant}, null, ${RELEASE_AUDIT.actor_name}, ${RELEASE_AUDIT.action}, ${"student"}, ${r.studentName ?? r.childName ?? "학생"}, ${sql.json(metadata)})`.catch(() => {});
+  }
+  for (const r of released?.teachers ?? []) {
+    const metadata = { className: r.className, boardId: r.boardId ?? null, teacher: r.teacher ?? null, kind };
+    await sql`insert into audit_logs (tenant_id, actor_id, actor_name, action, target_type, target_label, metadata)
+      values (${tenant}, null, ${TEACHER_RELEASE_AUDIT.actor_name}, ${TEACHER_RELEASE_AUDIT.action}, ${"class"}, ${r.className ?? "반"}, ${sql.json(metadata)})`.catch(() => {});
   }
 }
 

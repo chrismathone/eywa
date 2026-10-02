@@ -1,7 +1,8 @@
 "use server";
 
-// 반 공지 — aywa 반에서 학생을 골라 각 학생의 ClassNote 개별 보드로 일괄 게시(큐 적재까지만 담당).
+// 반 공지(원생 개별 공지) — aywa 반에서 학생을 골라 학생마다 1:1 알림장으로 일괄 게시(큐 적재까지만 담당).
 // 실제 게시는 연동 PC 워커가 내부 API(POST /api/v1_2/reports/)로 처리. Edutrix NoticeWriteModal 패턴 계승.
+// 🔴 수학은 **반 보드 경로**(원장 2026-10-02): 고른 반의 반 보드에서 그 학생 원아에게 1:1로(수업보고서와 같은 방식). 그 밖(영어)은 1인 보드.
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -24,8 +25,9 @@ import {
   sanitizeNoticeAttachments,
   type NoticeAttachment,
 } from "@/features/onescreen/notice-attachments";
-import { resolveNoticeTargets, type NoticeCandidate, type NoticeSkip, type NoticeTarget } from "../notice-targets";
+import { resolveNoticeTargets, type NoticeSkip, type NoticeTarget } from "../notice-targets";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+import { routeNoticeCandidates, type RoutedCandidate } from "./notice-class-route";
 
 export type NoticeClassOption = {
   id: string;
@@ -125,7 +127,7 @@ export async function sendClassNotice(input: {
   const settings = await getTenantSettings();
 
   // body?: 개별 내용을 담을 수 있음. 테스트 타깃은 studentId null이라 유니온.
-  let targets: { studentId: string | null; studentName: string; board: string; body?: string }[] = [];
+  let targets: { studentId: string | null; studentName: string; board: string; body?: string; classId?: string; className?: string }[] = [];
   let skipped: NoticeSkip[] = [];
   if (input.test) {
     // 테스트 학생은 탈원 처리라 반 해석 경로로 못 뽑힘 — 고정 타깃(보드·학부모 연결 실존 확인됨). 개별 내용 없음.
@@ -148,7 +150,7 @@ export async function sendClassNotice(input: {
       (chunk) => supabase.from("students").select("id, name, classnote_name, status").in("id", chunk),
     );
     const studentById = new Map(students.map((s) => [s.id, s]));
-    const candidates: NoticeCandidate[] = [];
+    const candidates: RoutedCandidate[] = [];
     for (const e of enr) {
       const s = studentById.get(e.student_id);
       if (!s || s.status !== "enrolled") continue; // 재원생만
@@ -157,10 +159,21 @@ export async function sendClassNotice(input: {
         name: s.name,
         classnoteName: s.classnote_name,
         subject: subjectByClass.get(e.class_id) ?? null,
+        // 사무실 발송 = 선생님 다리 대신 **고른 반**(그 반 명단에서 뽑은 학생)으로 보낸다.
+        hints: [e.class_id],
+        teacherIds: null,
       });
     }
-    const resolved = resolveNoticeTargets(candidates, settings.report.classnoteSubjects);
-    skipped = resolved.skipped;
+    // 수학은 반 보드 경로(맞는 반 보드가 없으면 제외 — 1인 보드로 되돌리지 않는다). 조회 실패는 발송을 막는다.
+    let routed: Awaited<ReturnType<typeof routeNoticeCandidates>>;
+    try {
+      routed = await routeNoticeCandidates({ supabase, tenantId: user.tenantId, settings, senderName: null, candidates });
+    } catch (e) {
+      console.error("[notice] 반 보드 경로 판정 실패", e instanceof Error ? e.message : e);
+      return { ok: false, error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 잠시 뒤 다시 시도해 주세요" };
+    }
+    const resolved = resolveNoticeTargets(routed.rest, settings.report.classnoteSubjects);
+    skipped = [...routed.skipped, ...resolved.skipped];
 
     // ⚠️ 학원 전체 동명이인 가드(원스크린 발송과 동일 강도) — resolveNoticeTargets는 배치-로컬 동명이인만 잡아
     // 배치 밖 동명이인(선택 안 한 반의 같은 이름)이면 엉뚱한 보드로 갈 수 있음. 개별 내용이 붙으면 오발송=개인정보
@@ -174,7 +187,8 @@ export async function sendClassNotice(input: {
         else survivors.push(t);
       });
     }
-    targets = survivors;
+    // 반 보드 경로 대상은 이름 가드를 타지 않는다(원아 번호로 올린다 — 같은 반 동명이인은 0302a가 보류로 둔다).
+    targets = [...routed.classTargets, ...survivors];
   }
   if (!targets.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
 
@@ -234,6 +248,7 @@ export async function sendClassNotice(input: {
       targetCount: targets.length,
       source: "class",
       commonAttachments: commonAttachments.length,
+      classRouteTargets: targets.filter((t) => t.classId).length,
     },
   });
 

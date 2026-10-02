@@ -4,7 +4,10 @@
 //    2026-09-29 근거: 이름 일치 + 그 선생님 반 학생들의 1인 보드에 실제로 연결된 ClassNote 선생님(다수결).
 //    이름이 다른 둘 — 김은정(Celine)=셀린(46건) · 이수진=수진T(46건). 표에 없는 새 선생님은 건너뛰고 로그만 남긴다.
 // 🔴 쓰기 = `POST /api/v1/employments/ {teacher, class_in_charge}`(한 건 추가). 배열 교체형은 다른 반을 지울 수 있어 안 쓴다.
-//    매 실행 뒤 **선생님별 연결 수가 정확히 +추가 수**인지 확인(줄었으면 배열 교체가 일어난 것 — 중단). 해제는 REST 없음(405).
+//    매 실행 뒤 **선생님별 연결 수가 정확히 +추가 수**인지 확인(줄었으면 배열 교체가 일어난 것 — 중단).
+// 🔑 해제 = `POST kapi…/v1/employments/{연결번호}/out`(2026-10-02 실측, class-board-release-apply.mjs). 해제한 줄은 지워지지 않고
+//    `is_approved:false`로 **남는다** — 다시 연결하면 새 줄이 생긴다. 그래서 "이미 연결됨"·연결 수는 **살아 있는 줄(is_approved:true)만** 센다
+//    (남은 줄까지 세면 한 번 해제한 선생님을 다시는 그 반에 연결하지 않는다).
 
 /** aywa 직원 display_name → ClassNote 선생님 id. */
 export const TEACHER_MAP = {
@@ -26,9 +29,12 @@ export async function fetchEmployments(page, centerId) {
   }, centerId);
 }
 
+/** 살아 있는 연결인가 — 해제한 줄(`is_approved:false`)은 남아 있어도 연결이 아니다. 칸이 없으면(옛 응답 모양) 살아 있는 것으로 본다. */
+export const isLiveEmployment = (e) => e?.is_approved !== false;
+
 /** 담임 연결 계획 — 이미 연결된 것·대응 없는 것·퇴직은 건너뛴다. */
 export function planTeacherLinks({ targets, emps }) {
-  const has = new Set(emps.map((e) => `${e.teacher_id}|${e.class_in_charge}`));
+  const has = new Set(emps.filter(isLiveEmployment).map((e) => `${e.teacher_id}|${e.class_in_charge}`));
   const todo = [];
   const skipped = [];
   for (const t of targets) {
@@ -52,7 +58,7 @@ export async function connectTeachers(page, centerId, todo, log = console.log, l
   const before = await fetchEmployments(page, centerId);
   const count = (list) => {
     const m = new Map();
-    for (const e of list) m.set(e.teacher_id, (m.get(e.teacher_id) ?? 0) + 1);
+    for (const e of list.filter(isLiveEmployment)) m.set(e.teacher_id, (m.get(e.teacher_id) ?? 0) + 1);
     return m;
   };
   const added = new Map();

@@ -103,7 +103,7 @@ const recentIssues = [];
 // parentReply=학부모 글 답글(0317a) · parentReaction=학부모 글 공감(0319a)을 집는 버전인가. 앱은 그 키가 있을 때만 요청을 받는다.
 // parentReplySettings=답글 모드를 **학원 설정**(끔·시험·전체)에서 읽는 버전인가(2026-10-01). 이 키가 없는 옛 판은 모드가 코드 상수(시험)라
 // 설정을 '전체'로 바꿔도 실제 학부모 글의 요청을 전부 실패시킨다 — 앱은 이 키가 없으면 답글 요청을 받지 않는다.
-const WORKER_CAPS = { noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+const WORKER_CAPS = { classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).

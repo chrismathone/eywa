@@ -75,7 +75,8 @@ export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds
 
 /**
  * 반 보드별 **해제 리스트**(0329a, 원장 2026-10-02) — 그 보드엔 있는데 aywa 그 반 누구의 원아도 아닌 원아 이름(`plan.extras`).
- * 동기화는 배정만 하고 해제는 사람이 ClassNote 화면에서 한다 → 지금까지 로그에만 남던 목록을 반 보드 행에 적어 앱이 내려받게 한다.
+ * 자동 해제(class-board-release.mjs)가 **보류한** 원아가 여기 남는다 — 사람이 확인하고 ClassNote 화면에서 정리한다. `held`를 넘기면
+ * 이름 뒤에 **왜 자동으로 해제하지 않았는지**를 붙인다(전 반 최신 목록에서도 사유가 보이게).
  *  · 보드가 확인된 반(`exists`)만 적는다 — 방금 읽은 원아 목록이 근거라 그 반의 목록을 통째로 갈아 끼운다(없으면 빈 배열).
  *  · 🔴 어떤 실패도 동기화를 막지 않는다 — 칸이 아직 없으면(0329a 전, #95) 이 기록만 건너뛴다. 값은 `sql.json`으로(문자열로 넣으면 이중 인코딩, #82).
  * @param {import("postgres").Sql} sql
@@ -98,7 +99,14 @@ export function releaseLabel(childName, hold) {
   return twin ? `${name} (확인 필요 — 이 반 보류 학생 '${twin.name}'의 원아일 수 있음)` : name;
 }
 
-export async function writeReleaseNames(sql, tenant, plans, log = console.log) {
+export async function writeReleaseNames(sql, tenant, plans, log = console.log, held = []) {
+  // (반, 원아 이름) → 보류 사유. 같은 이름이 둘이면 앞에서부터 하나씩 쓴다.
+  const whyOf = (p, name) => {
+    const at = held.findIndex((h) => h && !h.used && h.className === p.className && h.childName === name && h.why);
+    if (at < 0) return null;
+    held[at] = { ...held[at], used: true };
+    return held[at].why;
+  };
   const out = { classes: 0, names: 0, skipped: false };
   try {
     for (const p of plans) {
@@ -109,7 +117,10 @@ export async function writeReleaseNames(sql, tenant, plans, log = console.log) {
         continue;
       }
       if (p.board.action !== "exists" || p.board.id == null) continue;
-      const names = [...new Set((p.extras ?? []).map((n) => releaseLabel(n, p.hold)).filter(Boolean))];
+      const names = [...new Set((p.extras ?? []).map((n) => {
+        const why = String(n ?? "").trim() ? whyOf(p, n) : null;
+        return why ? `${String(n).trim()} (자동 해제 보류 — ${why})` : releaseLabel(n, p.hold);
+      }).filter(Boolean))];
       await sql`
         update classnote_class_boards set release_names = ${sql.json(names)}, release_checked_at = now()
         where tenant_id = ${tenant} and class_id = ${p.classId} and board_id = ${p.board.id}`;

@@ -32,6 +32,9 @@ export type TextbookNoticeSkip = {
     | "subject_off"
     | "name_collision"
     | "no_name"
+    // 수학 반 보드 경로(2026-10-02) — 받을 반 보드가 없다 / 보내는 선생님의 담당 반이 아니다.
+    | "no_class_board"
+    | "not_my_class"
     | "already_sent"
     | "same_book_sent"
     | "dup_in_batch";
@@ -52,6 +55,12 @@ export type PreparedTextbookNotice = {
    * 🔴 공지 워커는 이 설정을 읽지 않는다 — 방침을 지키는 지점은 발송 액션 한 곳뿐이다.
    */
   showAttachments?: boolean;
+  /**
+   * 수학 알림장이 **어느 반 보드로 가는지**(studentId → 반 이름 또는 못 보내는 사유) — 수학 반 보드 경로가 켜져 있을 때만 있다
+   * (꺼져 있으면 undefined = 지금까지처럼 1인 보드). 발송 액션과 **같은 함수**로 정한 값이라 화면에 보인 반으로 실제로 나간다.
+   * 사유가 든 학생은 수학 알림장으로 보낼 수 없다(화면이 미리 알리고 대상 수에서 뺀다).
+   */
+  mathRoute?: Record<string, { className: string } | { reason: "no_class_board" | "not_my_class" }>;
   /**
    * 연동 PC 워커가 **이미지 첨부를 아직 지원하지 않을 때의 한글 사유**(지원하면 undefined).
    * 구버전 워커는 첨부를 무시하고 글자만 게시한 뒤 성공으로 기록하므로 발송 전에 막는다.

@@ -20,6 +20,7 @@ import { CURRENT_SHARE_BASE, shareUrlVariants } from "./share-bases.mjs";
 import { fetchVideoSubmitLine, reportPostContent } from "./report-video-line.mjs";
 import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
 import { crossCheckOthers, getClassnoteMathRoute, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
+import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
 
 /**
  * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
@@ -720,7 +721,8 @@ export async function processQueueOnce(sql, browser, opts) {
       // 반 보드 경로 — 1인 보드 게이트(보드명 해석) 대신 **저장된 매칭 원아**를 쓰고 ClassNote로 실시간 재확인한다.
       // 🔴 이름으로 원아를 찾지 않는다(같은 반 동명이인). 매칭이 없거나 보류면 1인 보드로 돌리지 않고 멈춘다
       //    (설정을 반별로 바꿨는데 조용히 옛 경로로 가면 시험 결과를 오해한다 — 사유는 C.N 카드와 같은 말).
-      if (classRouteHalted) {
+      // 공지 쪽 교차 확인이 멈춘 것도 함께 본다(class-route-halt.mjs — 반 보드 경로는 보고서·공지가 같은 표식을 쓴다).
+      if (classRouteHalted || classRouteHaltReason()) {
         await sql`update lesson_reports set classnote_status='queued',
           classnote_error=${"반별 발송 비상 정지 중 — 교차 확인 이상으로 워커가 반별 게시를 멈췄습니다(워커 재시작 전 원인 확인 필요)"}
           where id=${r.id}`;
@@ -931,6 +933,7 @@ export async function processQueueOnce(sql, browser, opts) {
         }).catch(() => ({ ok: false, leakedTo: [], unknown: true }));
         if (!cc.ok && cc.leakedTo.length) {
           classRouteHalted = true;
+          haltClassRoute("수업보고서 교차 확인 이상"); // 공지의 반 보드 경로도 함께 멈춘다
           await sql`update lesson_reports set classnote_status='failed', classnote_sent_at=now(),
             classnote_error=${`🔴 반별 발송 교차 확인 이상 — 같은 반 다른 원아(${cc.leakedTo.length}명)의 알림장에서 이 보고서가 보입니다. 반별 발송을 멈췄습니다. ClassNote에서 확인하세요`}
             where id=${r.id}`;

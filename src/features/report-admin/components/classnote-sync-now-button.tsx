@@ -134,7 +134,7 @@ export function ClassnoteSyncNowButton({
   const report = status?.report ?? null;
   const reportTitle = report
     ? `가장 최근 동기화(${kstHhmm(report.finishedAt)}${report.ok ? "" : " · 도중에 멈춤"}) — 변동 ${report.changed}건 · 실패 ${report.failed}건 · 보류 ${report.held}건 · ` +
-      `직접 해제할 원아 ${report.releaseNames}명(${report.releaseClasses}개 반).` +
+      `해제 확인이 필요한 원아 ${report.releaseNames}명(${report.releaseClasses}개 반).` +
       (report.dailyFailed || report.dailyStopped
         ? ` 가장 최근 전체 동기화: ${report.dailyStopped ? "도중에 멈춤 · " : ""}실패 ${report.dailyFailed}건.`
         : "") +

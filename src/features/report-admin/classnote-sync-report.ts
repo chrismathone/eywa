@@ -7,7 +7,7 @@
  * 재료 둘:
  *  · 동기화 회차(`classnote_board_sync_runs`) — 워커가 그 회차의 변동·실패·보류를 **한글 한 줄(이유 포함)** 로 적어 둔다
  *    (scripts/_classnote/class-board-sync-report.mjs). 여기서는 줄을 풀어 쓰지 않고 묶어 싣기만 한다.
- *  · 반 보드별 해제 대상(`classnote_class_boards.release_names`) — '지금 동기화'는 바뀐 반만 보므로 **전 반의 최신 목록**은 이쪽이다
+ *  · 반 보드별 해제 확인 대상(`classnote_class_boards.release_names` — 자동 해제가 보류한 원아) — '지금 동기화'는 바뀐 반만 보므로 **전 반의 최신 목록**은 이쪽이다
  *    (classnote-release-list.ts).
  * ⚠️ 순수 모듈 — `server-only` 금지(#61).
  */
@@ -26,6 +26,8 @@ export type SyncRunHead = {
   counts: { changed: number; failed: number; held: number };
   /** 줄이 상한을 넘어 잘렸나(워커 `summary.truncated`). */
   truncated: boolean;
+  /** 이 회차가 자동 해제를 했나(워커 `summary.autoRelease`) — 옛 워커·꺼짐·멈춤이면 false. 해제 확인 목록의 안내 문구를 고른다. */
+  autoRelease: boolean;
 };
 export type SyncRun = SyncRunHead & { events: SyncRunEvent[] };
 
@@ -58,6 +60,7 @@ export function toSyncRunHead(row: Record<string, unknown> | null | undefined, e
     error: typeof row.error === "string" && row.error.trim() ? row.error.trim() : null,
     counts: { changed: count("changed"), failed: count("failed"), held: count("held") },
     truncated: summary.truncated === true,
+    autoRelease: summary.autoRelease === true,
   };
 }
 
@@ -102,7 +105,7 @@ export function summarizeSyncReport(latest: SyncRunHead, boards: readonly Releas
   };
 }
 
-/** 사람이 봐야 할 것의 수 — 실패·멈춤·직접 해제(가장 최근 전체 동기화의 실패·멈춤 포함). 버튼 숫자가 이것이다. */
+/** 사람이 봐야 할 것의 수 — 실패·멈춤·해제 확인(가장 최근 전체 동기화의 실패·멈춤 포함). 버튼 숫자가 이것이다. */
 export function reportAttention(s: SyncReportSummary): number {
   return s.failed + (s.ok ? 0 : 1) + s.releaseNames + s.dailyFailed + (s.dailyStopped ? 1 : 0);
 }
@@ -168,21 +171,36 @@ function runBlock(run: SyncRun): string[] {
   return lines;
 }
 
-/** 전 반의 해제 대상 — 반은 보드 이름순, 원아는 이름순. 확인한 날이 기준일과 다른 반은 그 날짜를 밝힌다. */
-function releaseBlock(boards: readonly ReleaseBoard[]): string[] {
+/**
+ * 전 반의 해제 확인 대상 — 반은 보드 이름순, 원아는 이름순. 확인한 날이 기준일과 다른 반은 그 날짜를 밝힌다.
+ * `auto` = 가장 최근 동기화가 **자동 해제를 했는가**. 했다면 여기 남은 것은 워커가 일부러 보류한 원아라 "확인해 주세요"로 안내하고,
+ * 안 했다면(옛 워커·꺼짐·멈춤) 수강이 끝난 원아도 그대로 남아 있으므로 예전처럼 "직접 해제해 주세요"로 안내한다.
+ */
+function releaseBlock(boards: readonly ReleaseBoard[], auto: boolean): string[] {
   const summary = summarizeRelease(boards);
-  const head = `■ 직접 해제해야 할 원아 (${summary.names}명 · ${summary.classes}개 반) — ClassNote 반 보드엔 남아 있는데 aywa 그 반 명단엔 없는 원아(전 반 최신)`;
+  const what = auto ? "자동으로 해제하지 않은 원아" : "aywa 그 반 명단엔 없는 원아";
+  const head = `■ 해제 확인이 필요한 원아 (${summary.names}명 · ${summary.classes}개 반) — ClassNote 반 보드엔 남아 있는데 ${what}(전 반 최신)`;
   const targets = boards.filter((b) => b.names.length).sort((a, b) => a.boardName.localeCompare(b.boardName, "ko"));
   if (!targets.length) return [head, "  없음"];
   const base = summary.checkedAt ? kstParts(summary.checkedAt) : null;
-  const out = [
-    head,
-    "  ClassNote 화면(기관설정 → 학생 관리 → 학생 → 소속 반 정보 → 삭제)에서 그 반만 해제해 주세요. 이름은 ClassNote에 등록된 원아 이름입니다.",
-    // 🔴 이 목록은 "aywa가 그 반 학생의 원아로 확인하지 못한 원아"다 — 반을 옮긴 학생이 대부분이지만, 지금 다니는 학생의 원아가
-    //    섞일 수 있다(1인 보드가 없거나 이름이 달라 못 맞춘 경우). 그대로 해제하면 그 학생이 반 보드 발송에서 빠진다.
-    "  ⚠️ 해제 전에 그 반에 지금 다니는 학생이 아닌지 꼭 확인해 주세요. aywa가 누구 원아인지 확인하지 못한 원아가 섞여 있을 수 있습니다",
-    "     ('확인 필요'가 붙은 이름은 그 반 보류 학생과 이름이 비슷한 원아입니다 — 해제하면 그 학생이 반 보드에서 빠집니다).",
-  ];
+  const out = auto
+    ? [
+        head,
+        // 🔴 수강이 끝난 것이 확인된 원아는 동기화가 **스스로 해제한다**(위 '변동된 것'의 '원아 해제' 줄). 여기 남은 것은 동기화가 **일부러 해제하지 않은**
+        //    원아다 — 그 반에 지금 다니는 학생의 원아일 수 있거나 누구 원아인지 확인하지 못한 경우(이름 뒤에 사유). 그대로 해제하면 그 학생이
+        //    반 보드 발송에서 빠진다. 그래서 "해제해 주세요"가 아니라 "확인해 주세요"로 안내한다.
+        "  수강이 끝난 것이 확인된 원아는 동기화가 자동으로 해제합니다. 아래는 자동으로 해제하지 않은 원아입니다(이름 뒤 괄호가 그 이유).",
+        "  ⚠️ 그 반에 지금 다니는 학생의 원아일 수 있습니다 — 그 반 학생이 아닌 것을 확인한 뒤에만",
+        "     ClassNote 화면(기관설정 → 학생 관리 → 학생 → 소속 반 정보 → 삭제)에서 그 반만 해제해 주세요. 이름은 ClassNote에 등록된 원아 이름입니다.",
+      ]
+    : [
+        head,
+        "  ClassNote 화면(기관설정 → 학생 관리 → 학생 → 소속 반 정보 → 삭제)에서 그 반만 해제해 주세요. 이름은 ClassNote에 등록된 원아 이름입니다.",
+        // 🔴 이 목록은 "aywa가 그 반 학생의 원아로 확인하지 못한 원아"다 — 반을 옮긴 학생이 대부분이지만, 지금 다니는 학생의 원아가
+        //    섞일 수 있다(1인 보드가 없거나 이름이 달라 못 맞춘 경우). 그대로 해제하면 그 학생이 반 보드 발송에서 빠진다.
+        "  ⚠️ 해제 전에 그 반에 지금 다니는 학생이 아닌지 꼭 확인해 주세요. aywa가 누구 원아인지 확인하지 못한 원아가 섞여 있을 수 있습니다",
+        "     ('확인 필요'가 붙은 이름은 그 반 보류 학생과 이름이 비슷한 원아입니다 — 해제하면 그 학생이 반 보드에서 빠집니다).",
+      ];
   for (const b of targets) {
     const at = kstParts(b.checkedAt);
     const stale = at && base && at.date !== base.date ? ` · 확인 ${at.date} ${at.time}` : "";
@@ -208,12 +226,14 @@ export function buildSyncReportText(input: {
   const s = summarizeSyncReport(latest, boards, lastDaily);
   const lines: string[] = [
     `${input.academyName?.trim() ? `${input.academyName.trim()} ` : ""}ClassNote 반 보드 동기화 보고서`,
-    `요약: 변동 ${s.changed}건 · 실패 ${s.failed}건 · 보류 ${s.held}건 · 직접 해제 ${s.releaseNames}명(${s.releaseClasses}개 반)`,
+    `요약: 변동 ${s.changed}건 · 실패 ${s.failed}건 · 보류 ${s.held}건 · 해제 확인 ${s.releaseNames}명(${s.releaseClasses}개 반)`,
   ];
   // 바뀐 반만 본 회차가 맨 위일 때 — 전체 동기화의 실패·멈춤을 요약에서부터 밝힌다(아래 '참고'까지 내려가야 보이면 놓친다).
   if (lastDaily && (s.dailyFailed || s.dailyStopped))
     lines.push(`⚠️ 가장 최근 전체 동기화(${when(lastDaily.finishedAt)}): ${s.dailyStopped ? "도중에 멈춤 · " : ""}실패 ${s.dailyFailed}건 — 아래 '참고'를 함께 보세요`);
-  lines.push("", ...runBlock(latest), "", ...releaseBlock(boards));
+  // 해제 확인 목록의 안내는 **전 반을 본 회차**가 자동 해제를 했는지로 고른다(바뀐 반만 본 회차뿐이면 그 회차 값).
+  const auto = lastDaily ? lastDaily.autoRelease : latest.autoRelease;
+  lines.push("", ...runBlock(latest), "", ...releaseBlock(boards, auto));
   if (lastDaily) {
     lines.push("", "────────────────────────────────────────", "참고 — 가장 최근 전체 동기화(바뀐 반만 본 위 회차에는 다른 반의 실패·보류가 없습니다)", ...runBlock(lastDaily));
   }

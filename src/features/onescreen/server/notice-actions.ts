@@ -19,12 +19,7 @@ import { effectiveTeacherId, readonlyTeacherViewError } from "@/lib/auth/view-mo
 import { hasClassnoteNameCollision } from "./scope";
 // 담당 반 판정 단일 소스(담당 반 ∪ 그날 위임 반) — classes.teacher_id를 직접 비교하지 말 것(0173a).
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
-import {
-  resolveNoticeTargets,
-  type NoticeCandidate,
-  type NoticeSkip,
-  type NoticeTarget,
-} from "@/features/report-admin/notice-targets";
+import { resolveNoticeTargets, type NoticeSkip, type NoticeTarget } from "@/features/report-admin/notice-targets";
 import { logAction } from "@/features/audit/server/log";
 import {
   flattenNoticeReportLinks,
@@ -43,6 +38,8 @@ import {
 } from "../notice-attachments";
 import { humanizeDbError } from "@/lib/supabase/db-error";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
+// 수학 개별 공지의 반 보드 경로(삼자 일치) — 세 발송 표면이 같이 쓰는 한 벌.
+import { routeNoticeCandidates, type RoutedCandidate } from "@/features/report-admin/server/notice-class-route";
 
 const BODY_MAX = 4000;
 // 학원이(테스트 학생) 고정 타깃 — 실 학부모에게 안 가는 검증 경로(반 공지 TEST_TARGET과 동일 관례).
@@ -52,7 +49,14 @@ export type OnescreenNoticeInput = {
   body: string; // 공통 내용(모든 대상 공통). 개별 내용이 없는 학생은 이 본문으로 발송.
   // (학생, 과목) — 과목이 보드 prefix 결정. individualBody = 그 학생에게만 공통 뒤에 덧붙일 개별 내용(선택).
   // attachments = 그 학생에게만 붙는 이미지(예: 학생별 교재요청서 PNG). 업로드가 끝난 {path,name,size}.
-  students: { studentId: string; subject: string | null; individualBody?: string; attachments?: NoticeAttachment[] }[];
+  // classId = 화면이 그 학생을 뽑은 반(선택) — 수학 반 보드 경로에서 **같은 선생님 반이 여럿일 때의 선택**으로만 쓴다.
+  //   서버가 삼자 일치(보내는 선생님 – 반 – 학생)를 다시 판정하므로, 후보 밖의 반을 적어 보내도 무시된다.
+  students: { studentId: string; subject: string | null; classId?: string | null; individualBody?: string; attachments?: NoticeAttachment[] }[];
+  /**
+   * studentId → 그 학생에게 보내는 선생님(교재요청서의 주인) — **사무실이 대신 보낼 때만** 쓰인다(강사 본인이 보내면 본인이 그 선생님이다).
+   * 수학 반 보드 경로의 삼자 일치(선생님 – 반 – 학생)에 쓴다. 고르는 범위는 그 학생이 다니는 자기 반 보드 안이라 권한을 넓히지 않는다.
+   */
+  teacherIdsByStudent?: Record<string, string[]>;
   test?: boolean; // 학원이 1명에게만(파이프라인 검증)
   /**
    * 전원 공통 첨부(선택, 0130a) — 예: 교재 표지. 워커가 "공통 + 타깃별"을 합쳐 한 글에 올린다.
@@ -73,7 +77,20 @@ export type OnescreenNoticeResult = {
    * 삭제 시 학부모 글 되짚기 + 중복 발송 차단 표식). dry-run이면 적재를 안 하므로 없다.
    */
   noticeId?: string | null;
+  /**
+   * **실제로 큐에 오른 학생**(제외된 학생은 없다). 호출부가 "이 학생 것은 나갔다"를 적을 때는 반드시 이 목록으로 좁힌다 —
+   * `ok:true`는 "한 명이라도 올랐다"일 뿐이라, 제외된 학생의 요청서까지 '발송함'으로 적으면 다시 보낼 길이 막힌다.
+   */
+  queuedStudentIds?: string[];
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** 클라가 넣을 수 있는 인자라 모양을 믿지 않는다 — 배열·UUID만, 학생당 5명까지. */
+function senderTeachers(map: unknown, studentId: string): string[] {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return [];
+  const list = (map as Record<string, unknown>)[studentId];
+  return Array.isArray(list) ? list.filter((x): x is string => typeof x === "string" && UUID_RE.test(x)).slice(0, 5) : [];
+}
 
 /**
  * 강사 공지 발송 — 선택 (학생, 과목) 대상에게 같은 본문을 개별 보드로 게시.
@@ -144,15 +161,39 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       supabase.from("students").select("id, name, classnote_name, status").in("id", chunk),
     );
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const candidates: NoticeCandidate[] = [];
+    const candidates: RoutedCandidate[] = [];
     for (const s of students) {
       if (!allowedIds.has(s.studentId)) continue;
       const stu = byId.get(s.studentId);
       if (!stu || stu.status !== "enrolled") continue; // 재원생만
-      candidates.push({ studentId: stu.id, name: stu.name, classnoteName: stu.classnote_name, subject: s.subject });
+      candidates.push({
+        studentId: stu.id,
+        name: stu.name,
+        classnoteName: stu.classnote_name,
+        subject: s.subject,
+        hints: s.classId ? [s.classId] : [],
+        // 선생님 다리 — 강사 본인이 보내면 본인. 사무실이 보내면 호출부가 알려 준 주인(교재요청서), 없으면 선생님 없는 발송.
+        teacherIds: teacherId ? [teacherId] : senderTeachers(input.teacherIdsByStudent, stu.id),
+        teacherStrict: !!teacherId, // 강사 본인 발송만 문 — 남의 반 보드로는 보내지 않는다
+      });
     }
-    const resolved = resolveNoticeTargets(candidates, settings.report.classnoteSubjects);
-    skipped = resolved.skipped;
+    // 🔴 수학은 **반 보드 경로**(원장 2026-10-02) — 삼자 일치로 반을 정해 그 반 보드의 그 학생 원아에게 1:1로. 맞는 반이 없으면 제외한다
+    //    (1인 보드로 되돌리지 않는다). 경로가 꺼져 있거나 연동 PC가 아직 못 하면 전원 기존 경로(rest). 조회 실패는 발송을 막는다.
+    let routed: Awaited<ReturnType<typeof routeNoticeCandidates>>;
+    try {
+      routed = await routeNoticeCandidates({
+        supabase,
+        tenantId: user.tenantId,
+        settings,
+        senderName: teacherId ? user.displayName : null,
+        candidates,
+      });
+    } catch (e) {
+      console.error("[notice] 반 보드 경로 판정 실패", e instanceof Error ? e.message : e);
+      return { ok: false, error: "보낼 반을 확인하지 못해 발송하지 않았습니다 — 잠시 뒤 다시 시도해 주세요" };
+    }
+    const resolved = resolveNoticeTargets(routed.rest, settings.report.classnoteSubjects);
+    skipped = [...routed.skipped, ...resolved.skipped];
 
     // ⚠️ 학원 전체 동명이인 가드(적대검증 critical) — 배치 밖 동명이인이 있으면 엉뚱한 보드로 갈 수 있어 재검(청크 25).
     const survivors: NoticeTarget[] = [];
@@ -164,7 +205,9 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
         else survivors.push(t);
       });
     }
-    targets = survivors;
+    // 반 보드 경로 대상은 이름 가드를 타지 않는다 — 원아를 이름으로 찾지 않고 0302a에 가드를 통과해 적힌 원아 번호로 올린다
+    // (같은 반 동명이인은 그 표가 애초에 보류로 둔다 → 위에서 '반 보드 없음'으로 제외됐다).
+    targets = [...routed.classTargets, ...survivors];
   }
   if (!targets.length) return { ok: false, error: "발송 가능한 학생이 없습니다", skipped };
 
@@ -247,10 +290,18 @@ export async function sendOnescreenNotice(input: OnescreenNoticeInput): Promise<
       source: "onescreen",
       commonAttachments: commonAttachments.length,
       targetAttachments: targets.reduce((n, t) => n + (t.attachments?.length ?? 0), 0),
+      // 반 보드로 간 대상 수(나머지는 1인 보드) — 어느 경로로 나갔는지 기록에 남긴다.
+      classRouteTargets: targets.filter((t) => t.classId).length,
     },
   });
 
-  return { ok: true, queued: targets.length, skipped, noticeId: inserted?.id ?? null };
+  return {
+    ok: true,
+    queued: targets.length,
+    skipped,
+    noticeId: inserted?.id ?? null,
+    queuedStudentIds: targets.map((t) => t.studentId).filter(Boolean),
+  };
 }
 
 export type NoticeStudent = {
@@ -259,6 +310,7 @@ export type NoticeStudent = {
   grade: string | null;
   className: string;
   subject: string | null; // 반 과목 키 — 보드 prefix 결정(발송 과목만 담기므로 항상 발송 가능한 값)
+  classId?: string; // 그 학생을 뽑은 반 — 수학 반 보드 경로의 선택 힌트(서버가 삼자 일치로 다시 판정한다)
 };
 
 /**
@@ -343,6 +395,7 @@ export async function listMyNoticeStudents(): Promise<{
       grade: s.grade,
       className: c.class_name as string,
       subject: (c.subject as string | null) ?? null,
+      classId: c.id as string,
     });
   }
   out.sort((a, b) => a.className.localeCompare(b.className, "ko") || a.name.localeCompare(b.name, "ko"));

@@ -224,6 +224,9 @@ function EachNoticeFace({
     if (!test && indivCount) parts.push(`개별 내용 ${indivCount}명`);
     const collisions = (res.skipped ?? []).filter((s) => s.reason === "name_collision");
     if (collisions.length) parts.push(`동명이인 제외 ${collisions.length}명(${collisions.map((s) => s.name).join(", ")})`);
+    // 수학 반 보드 경로 — 받을 반 보드가 없는 학생은 빠진다(1인 보드로 되돌리지 않는다). 누가 빠졌는지 그대로 알린다.
+    const noBoard = (res.skipped ?? []).filter((s) => s.reason === "no_class_board" || s.reason === "not_my_class");
+    if (noBoard.length) parts.push(`반 보드 없음 제외 ${noBoard.length}명(${noBoard.map((s) => s.name).join(", ")})`);
     toast.success(parts.join(" · "));
     if (!test) {
       setBody("");
@@ -251,7 +254,7 @@ function EachNoticeFace({
         <div className="mb-3">
           <h2 className="text-foreground text-base font-bold">반 공지 발송</h2>
           <p className="text-text-faint text-xs">
-            선택한 반의 재원생 각자의 ClassNote 알림장으로 같은 내용이 발송됩니다 · 학부모 미가입 학생은 수신 불가
+            선택한 반의 재원생 각자의 ClassNote 알림장으로 같은 내용이 발송됩니다(수학은 그 반 보드에서 학생마다 따로) · 학부모 미가입 학생은 수신 불가
           </p>
         </div>
 
@@ -458,12 +461,12 @@ function EachNoticeFace({
                           >
                             실패 {failNotes.length}
                           </span>
-                        ) : r.error ? (
-                          // 🔴 타깃별 실패가 없어도 **공지 단위 오류**는 있을 수 있다(회수 실패 N건 등).
-                          //    실패 집계를 `ok` 있는 것만으로 좁힌 뒤엔 이걸 안 보여주면 조용히 사라진다.
-                          // ⚠️ 여기 그대로 나가므로 워커가 쓰는 `error`는 **한글 요약**을 유지할 것
-                          //    (현재 "회수 실패 N건"·"수정 실패 N건" — raw 기술 원문 UI 노출 금지 규약).
-                          <span className="text-text-faint ml-1.5 text-xs" title={r.error}>
+                        ) : null}
+                        {/* 🔴 **공지 단위 사유**(교차 확인 이상·회수 실패 N건 등)는 타깃별 실패가 있든 없든 **항상** 보인다 —
+                            예전엔 실패가 하나라도 있으면 가려졌고 흐린 글자였다(교차 확인 이상이 '일부 실패' 뒤에 숨는다).
+                            ⚠️ 여기 그대로 나가므로 워커가 쓰는 `error`는 **한글 요약**을 유지할 것(raw 기술 원문 UI 노출 금지 규약). */}
+                        {r.error ? (
+                          <span className="text-danger mt-0.5 block text-xs break-keep" title={r.error}>
                             {r.error}
                           </span>
                         ) : null}

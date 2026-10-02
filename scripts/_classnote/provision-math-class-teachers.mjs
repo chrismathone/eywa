@@ -8,7 +8,7 @@
 //    2026-09-29 근거: 이름 일치 + 그 선생님 반 학생들의 1인 보드에 실제로 연결된 ClassNote 선생님(다수결)이 같은 사람.
 //    이름이 다른 둘 — 김은정(Celine)=셀린(46건) · 이수진=수진T(46건, 문서 §3 "수진T(이수진)").
 // 🔴 쓰기 = `POST /api/v1/employments/ {teacher, class_in_charge}`(한 건 추가). 배열 교체형 `/v1_2/teachers/{id}/employments`는
-//    그 선생님의 다른 반을 지울 수 있어 쓰지 않는다. 해제 REST 없음(405) — 되돌리기는 ClassNote 화면에서.
+//    그 선생님의 다른 반을 지울 수 있어 쓰지 않는다. 해제 = `POST kapi…/v1/employments/{번호}/out`(매일 동기화가 한다 — class-board-release-apply.mjs).
 // 🔴 매 실행 뒤 **선생님별 연결 수가 정확히 +배정 수**인지 확인(줄었으면 배열 교체가 일어난 것 — 중단).
 //
 // 실행: CLASSNOTE_TENANT_ID=… node --env-file=.env.local scripts/_classnote/provision-math-class-teachers.mjs [--apply] [--only="반"] [--limit=N]
@@ -18,7 +18,7 @@ import { resolveTenant } from "./classnote-core.mjs";
 import { loadAywa } from "./math-class-boards-load.mjs";
 
 // 대응표 = math-class-teachers.mjs(매일 동기화와 공용 — 한 곳만 고친다).
-import { TEACHER_MAP } from "./math-class-teachers.mjs";
+import { TEACHER_MAP, isLiveEmployment } from "./math-class-teachers.mjs";
 
 const arg = (k) => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
 const APPLY = process.argv.includes("--apply");
@@ -42,7 +42,7 @@ const getEmps = (page, c) =>
   }, c);
 const countBy = (emps) => {
   const m = new Map();
-  for (const e of emps) m.set(e.teacher_id, (m.get(e.teacher_id) ?? 0) + 1);
+  for (const e of emps.filter(isLiveEmployment)) m.set(e.teacher_id, (m.get(e.teacher_id) ?? 0) + 1); // 해제된 줄(is_approved:false)은 세지 않는다
   return m;
 };
 
@@ -54,7 +54,7 @@ try {
   const centerId = await fetchCenterId(page);
   const boards = await fetchBoards(page, centerId);
   const emps = await getEmps(page, centerId);
-  const has = new Set(emps.map((e) => `${e.teacher_id}|${e.class_in_charge}`));
+  const has = new Set(emps.filter(isLiveEmployment).map((e) => `${e.teacher_id}|${e.class_in_charge}`));
 
   const todo = [];
   const skipped = [];

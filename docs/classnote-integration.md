@@ -687,15 +687,22 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
   선생님 1763863 × 테스트반: 연결(201) → 해제(200) → '담당 반'에 없음. 배정번호는 `GET kapi…/v1_2/children/{원아}/enrollments`,
   연결번호는 `GET kapi…/v1_2/teachers/{선생님}/employments/`에서 읽는다.
   = **반 생성·이름 변경·삭제 + 원아·선생님 배정·해제가 전부 API로 된다** → ClassNote 화면에서 손으로 하던 정리를 자동화할 수 있다.
-  🔴 아직 워커는 해제하지 않는다 — 해제 리스트(0329a)만 적는다. 자동 해제는 원장 결정 뒤에 켠다: 동기화의 '잉여 원아'에는
-  aywa가 누구 원아인지 **모르는** 원아(이름이 달라 못 맞춘 재원생 · 사람이 손으로 넣은 원아)가 섞일 수 있어, 그대로 내보내면 정상 학생이 빠진다. ·
+  ✅ **2026-10-02부터 반 보드 동기화가 자동으로 해제한다**(반 보드만 — 1인 보드·보드 삭제는 안 함): 그 반 수강이 끝난 것이 확인된 원아와
+  지금 담당이 아닌 선생님. 이 반 학생의 원아일 수 있거나 누구 원아인지 모르는 원아는 보류해 해제 리스트(0329a)에 사유와 함께 남긴다.
+  해제된 선생님 연결 줄은 `is_approved:false`로 남으므로 연결 여부는 살아 있는 줄만 본다. 상세 = `docs/decisions/reports-ai.md` '자동 해제'. ·
   반 단체 공지 = `POST https://kapi.classnote.com/v1_2/notices/ {classes_to:[반id…], title, content, is_comment_on, center, author_name, scheduled:""}` → 반마다 공지 1건. 🔴 `classes_to`가 비면 기관 전체일 수 있다 — 빈 목록·허용 밖 반이면 무조건 차단.
+- **공지(원생 개별·교재요청서)도 수학은 반 보드 경로(2026-10-02)**: 큐 대상에 `classId`가 있으면 [`notice-class-route.mjs`](../scripts/_classnote/notice-class-route.mjs)가 수업보고서와 같은 함수(`isClassRouteEligible`·`resolveClassTargets`)로 대상을 확정해 그 반 보드의 그 원아에게 1:1로 올린다. 실패하면 그 대상만 실패 — 1인 보드 분기로 떨어지지 않는다. `classId`가 없는 대상(영어·옛 큐 행)은 기존 1인 보드 경로. 앱은 워커가 `caps.noticeClassRoute`를 알릴 때만 이 경로로 싣는다. 상세 = `docs/decisions/reports-ai.md` '수학 공지'.
 - 🔴 **`"보드가 곧 매핑"` 폴백(`acceptBoardMembers`)은 반 보드 경로에서 절대 타지 않는다** — 생년만 보므로 같은 학년 반이면 전원이 통과한다(`sendReportViaApi targets`).
 - 🔴 회수(`classnote-recall-core.mjs`)는 1인 보드 **와** 반 보드를 함께 훑는다 — 한쪽만 보면 '이미 없습니다'로 거짓 성공.
 - 반 정보 없는 보강 보고서 = A안(0303a `classnote_class_id`) — `saveAndQueueClassnote`가 메인 수업(보낸 보고서 최다 → 출결 최다)을 정해 적고, 못 정하면 `needs_class`로 멈춰 원스크린이 고르게 한다. 그 칸이 빈 행(관리자 재발송 등)은 워커가 기존 1인 보드로 보낸다.
 - 학부모 **새 글·댓글 벨 알림**: 반 보드 글은 `보드번호(cls)|원아id` → 학생(0302a ok)으로 확정한다(`loadClassBoardChildMap` · [`class-board-keys.mjs`](../scripts/_classnote/class-board-keys.mjs)). 보드명 키는 번호 없는 글의 폴백뿐(2026-09-30 — 반 이름이 바뀐 날 보드명 키는 짝을 못 찾아 알림이 조용히 버려졌다). 조회 실패는 throw(워터마크 안 전진). 🔴 1인 보드 게이트(`gateBoard`)를 반 보드에 태우지 말 것(보드 = 한 학생 전제).
 - 🔴 반 단체 공지 API `POST /api/v1_2/notices/`(www로도 됨)는 `classes_to`가 **필수가 아니다**(빈 요청 검증 응답에 없음) — 빠지면 기관 전체 공지일 수 있다. 발송 코드는 비었거나 허용 밖 반이면 무조건 차단.
 - 반 단체 공지 레일 = 0304a `classnote_class_notices`(쓰기 서버만) → [`classnote-class-notice-core.mjs`](../scripts/_classnote/classnote-class-notice-core.mjs): 보드 번호 재조회(0302a) · 보드 원아 ⊆ 그 반 재원생 ok 원아(반을 옮긴 학생이 남아 있으면 보류 — 해제는 손으로) · 요청은 [`class-notice-guard.mjs`](../scripts/_classnote/class-notice-guard.mjs)로만 조립 · 중복 게시 생략 · 게시 후 `is_center_notice` 확인. 원생 개별 공지(0099a)는 그대로.
+- **반 단체 공지 이미지(2026-10-03)**: 공지 API가 `attached_images`를 받는다 — 모양은 알림장과 같다(`{access_key, original_file_name, file_size, width, height}`). 올리는 길은 알림장 작성폼(`/service/report/add`)의 이미지 입력(`media-attachment-add-input`)뿐이다(공지 작성 화면에는 처음부터 떠 있는 파일 입력이 없다) — 거기서 받은 키를 공지에 실어도 붙는다(테스트반 실측: 2장 게시 → 공지 단건·목록의 `attached_images` 2장 → `DELETE /api/v1_2/notices/{id}/` 204로 정리). 큐 행에는 `targets[].attachments`로 실리고(새 칸 없음), 워커가 내부 라우트 `class-notice-attachments/[noticeId]`에서 서명 주소·서명 전 장수(`expected`)·서명 실패 이름(`missing`)을 받는다. 순서 = 보드 원아 대조 → 중복 확인 → **이미지 올리기** → 게시 → 붙은 장수 확인. 하나라도 못 올리면 그 반엔 게시하지 않는다. 워커 지원 표식 = `caps.classNoticeImages`(앱은 최근 7일 안에 보인 연동 PC가 전부 이 값을 알릴 때만 이미지를 받는다).
+  - 준비기 = `createClassNoticeImagePreparer`: 내려받기는 공지당 한 번 · 올리기는 반마다 새로(작성폼을 새로 열고 한 번 다시 해 본다) · 실패하면 남은 반은 시도하지 않고 같은 사유로 보류. 2026-10-03 테스트반 실측: 같은 페이지에서 이미지 공지를 연달아 2건 올려도 각 2장이 붙는다(건당 5~6초).
+  - 중복 확인 = 기관 공지 최근 **100건**(`page_size=100`이 받아들여진다 — 실측) 안에서 같은 반·제목·내용. 글만인 공지는 "이미 올라가 있음(성공)". **이미지 공지는 이 큐 행이 올린 공지일 때만** 성공으로 넘긴다 — 워커가 반마다 `results`에 진행 기록을 남기고(상태는 `processing` 그대로), 다시 집을 때 `c.results`에서 `ok && images === 장수`인 공지 번호를 뽑아 대조한다. 그 밖(글만 먼저 보냄 · 이미지를 바꿔 다시 보냄 · 올린 직후 기록 전에 죽음)은 보류(실측: 글만 올린 뒤 같은 글 + 이미지 → 보류 · 같은 글·이미지를 새 행으로 다시 → 보류 · 진행 기록이 있는 행 → 이미 올라가 있음).
+  - ⚠️ 한계: 창이 기관 전체 최근 100건이라 대상 반이 100에 가까운 공지가 도중에 죽으면 앞쪽 반이 창 밖으로 밀릴 수 있다(지금 반 수에서는 해당 없음). 이미지 공지는 반마다 새로 올리므로 성공 경로도 건당 5~6초 + 장수만큼 걸린다 — 그동안 같은 루프의 다른 발송이 기다린다(10장 × 20개 반이면 분 단위).
+  - 게시 응답 본문에 번호·`attached_images`가 오면 사후 확인의 둘째 근거로 쓴다(목록에서 못 찾았거나 목록에 이미지 칸이 없을 때).
 
 ### 10.6 반 이름 변경 대비 — 개명 감사(2026-09-30)
 

@@ -14,8 +14,8 @@
 import { loginClassnote } from "./classnote-admin-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { loadAywa } from "./math-class-boards-load.mjs";
-import { syncMathClassBoards } from "./math-class-boards-sync.mjs";
-import { auditEnrollments, writeSyncRun } from "./class-board-sync-report.mjs";
+import { autoReleaseEnabled, releaseHaltReason, syncMathClassBoards } from "./math-class-boards-sync.mjs";
+import { auditEnrollments, auditReleases, writeSyncRun } from "./class-board-sync-report.mjs";
 import {
   MAX_PROVISION_WRITES,
   PENDING_STALE_MIN,
@@ -73,7 +73,7 @@ async function claim(sql, tenant, host) {
  * classnote-provision-core.mjs)를 탄다. 여기서 새로 하는 일은 **대상 고르기**뿐이다.
  * `events`·`applied` = 동기화 보고서(0329a)용 빈 배열 — 이 회차의 변동·실패·보류 줄과 반별 실행 결과가 담긴다(멈춰도 남는다).
  */
-export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log = console.log, events = [], applied = [] }) {
+export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log = console.log, events = [], applied = [], released = { children: [], teachers: [] } }) {
   const scope = normalizeScope(rawScope);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
   const [aywa, linkRows, members, recentRows, childLinks] = await Promise.all([
@@ -107,7 +107,7 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
   log(`[sync-now] 대상 반 ${picked.length}개${remaining ? `(남은 ${remaining}개는 다음에)` : ""} · 신입 준비 후보 ${provIds.length}명`);
   for (const p of picked) log(`[sync-now]   ${p.className}: ${p.reasons.join(", ")}`);
 
-  const out = { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, boardsCreated: 0, assigned: 0, remaining, provisionRemaining: 0 };
+  const out = { classes: 0, created: 0, renamed: 0, enrolled: 0, teachers: 0, held: 0, boardsCreated: 0, assigned: 0, remaining, provisionRemaining: 0, releasedChildren: 0, releasedTeachers: 0 };
   // ① 신입 1인 보드 준비 먼저 — 반 보드 배정은 1인 보드의 원아를 출처로 쓴다(class-board-plan.mjs ①).
   if (provIds.length) {
     const pr = await provisionDailyOnce(sql, browser, { tenant, post: true, log, force: true, studentIds: provIds, maxWrites: MAX_PROVISION_WRITES });
@@ -125,12 +125,13 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
     const page = await browser.newPage();
     try {
       await loginClassnote(page);
-      const r = await syncMathClassBoards(sql, page, { tenant, apply: true, log, onlyClassIds: new Set(picked.map((p) => p.classId)), events, applied });
-      Object.assign(out, { classes: r.classes, created: r.created, renamed: r.renamed, enrolled: r.enrolled, teachers: r.teachers, held: r.held });
-      for (const x of r.release ?? []) log(`[sync-now]   해제 필요(ClassNote 화면에서): ${x}`);
+      const r = await syncMathClassBoards(sql, page, { tenant, apply: true, log, onlyClassIds: new Set(picked.map((p) => p.classId)), events, applied, released });
+      Object.assign(out, { classes: r.classes, created: r.created, renamed: r.renamed, enrolled: r.enrolled, teachers: r.teachers, held: r.held, releasedChildren: r.releasedChildren ?? 0, releasedTeachers: r.releasedTeachers ?? 0 });
+      for (const x of r.release ?? []) log(`[sync-now]   해제 필요(사람 확인): ${x}`);
       for (const x of r.skipped ?? []) log(`[sync-now]   보류: ${x}`);
     } catch (e) {
-      if (e && typeof e === "object") e.partial = { ...out };
+      // 멈추기 전에 이미 해제한 것은 되돌릴 수 없다 — 부분 결과에 실어 보낸다.
+      if (e && typeof e === "object") e.partial = { ...out, releasedChildren: released.children.length, releasedTeachers: released.teachers.length };
       throw e;
     } finally {
       await page.close().catch(() => {});
@@ -173,6 +174,8 @@ async function audit(sql, tenant, requestId, result, error) {
     enrolled: result?.enrolled ?? 0,
     teachers: result?.teachers ?? 0,
     held: result?.held ?? 0,
+    releasedChildren: result?.releasedChildren ?? 0,
+    releasedTeachers: result?.releasedTeachers ?? 0,
     boardsCreated: result?.boardsCreated ?? 0,
     assigned: result?.assigned ?? 0,
     remaining: result?.remaining ?? 0,
@@ -207,13 +210,15 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
   const startedAt = new Date();
   const events = [];
   const applied = [];
+  const released = { children: [], teachers: [] };
   let recorded = false; // 회차·배정 기록은 한 번만 — 성공을 적은 뒤 요청 마무리(finish)가 던져도 '멈춘 회차'를 한 번 더 적지 않는다
   try {
-    const result = await runScopedSync(sql, browser, { tenant, scope: row.scope, log, events, applied });
-    const { classes, created, renamed, enrolled, teachers } = result;
+    const result = await runScopedSync(sql, browser, { tenant, scope: row.scope, log, events, applied, released });
+    const { classes, created, renamed, enrolled, teachers, releasedChildren, releasedTeachers } = result;
     await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: true, events, log,
-      summary: { classes, created, renamed, enrolled, teachers, noChange: result.noChange === true } });
+      summary: { classes, created, renamed, enrolled, teachers, releasedChildren, releasedTeachers, noChange: result.noChange === true, autoRelease: autoReleaseEnabled() && !releaseHaltReason() } });
     await auditEnrollments(sql, tenant, applied, { kind: "request" });
+    await auditReleases(sql, tenant, released, { kind: "request" });
     recorded = true;
     const fin = await finish(sql, tenant, row.id, { status: "done", result, error: null });
     if (!fin.finished) log(`[sync-now] 요청 ${row.id}는 그 사이 시간 초과로 정리됐습니다(결과만 로그에 남김) — ${result.summary}`);
@@ -230,6 +235,7 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
     if (!recorded) {
       await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: false, error: label, events, log });
       await auditEnrollments(sql, tenant, applied, { kind: "request" }); // 멈추기 전에 이미 배정한 원아도 기록에 남긴다
+      await auditReleases(sql, tenant, released, { kind: "request" }); // 이미 해제한 원아·담임도
     }
     await finish(sql, tenant, row.id, { status: "failed", result: { raw, ...(partial ? { partial } : {}) }, error: label }).catch(() => {});
     await audit(sql, tenant, row.id, partial, label);

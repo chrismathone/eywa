@@ -113,6 +113,8 @@ export function summarizeSync(r) {
   if (r.renamed) bits.push(`이름 변경 ${r.renamed}`);
   bits.push(`원아 배정 ${r.enrolled ?? 0}`);
   if (r.teachers) bits.push(`담임 연결 ${r.teachers}`);
+  if (r.releasedChildren) bits.push(`원아 해제 ${r.releasedChildren}`);
+  if (r.releasedTeachers) bits.push(`담임 해제 ${r.releasedTeachers}`);
   if (r.boardsCreated) bits.push(`1인 보드 생성 ${r.boardsCreated}`);
   if (r.assigned) bits.push(`1인 보드 배정 ${r.assigned}`);
   if (r.held) bits.push(`보류 ${r.held}(사유는 원스크린 노트 아이콘)`);
@@ -126,7 +128,8 @@ export function syncErrorLabel(message) {
   const m = String(message ?? "");
   if (/원아 (재)?조회 실패/.test(m)) return "ClassNote 원아 조회가 실패해 이번 동기화를 멈췄습니다 — 잠시 뒤 다시 시도하세요";
   if (/로그인|login/i.test(m)) return "ClassNote 로그인에 실패했습니다 — 연동 PC의 계정 설정을 확인하세요";
-  if (/계획과 다르다|바뀌었다|늘었다/.test(m)) return "동기화 중 ClassNote 반 구성이 예상과 달라 안전하게 멈췄습니다 — 새벽 정기 동기화가 다시 봅니다";
+  if (/함께 사라졌다|다시 읽지 못했다/.test(m)) return "자동 해제 중 ClassNote 배정이 예상과 달라 안전하게 멈췄습니다 — ClassNote에서 그 원아·선생님의 배정을 확인해 주세요";
+  if (/계획과 다르다|예상과 다르다|바뀌었다|늘었다|그대로다/.test(m)) return "동기화 중 ClassNote 반 구성이 예상과 달라 안전하게 멈췄습니다 — 새벽 정기 동기화가 다시 봅니다";
   if (/timeout|timed out/i.test(m)) return "ClassNote 응답이 늦어 멈췄습니다 — 잠시 뒤 다시 시도하세요";
   return "동기화 중 오류로 멈췄습니다 — 잠시 뒤 다시 시도하세요";
 }

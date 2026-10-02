@@ -156,6 +156,8 @@ export const AUDIT_ACTIONS = {
   // 연동 PC 워커가 직접 남기는 것 — 매일 정기 동기화 한 회차 · 동기화가 원아를 반 보드에 배정함(학생 기록).
   classnote_board_sync_daily: "반 보드 정기 동기화",
   classnote_board_enroll: "ClassNote 반 보드 배정",
+  classnote_board_release: "ClassNote 반 보드 원아 해제",
+  classnote_board_teacher_release: "ClassNote 반 보드 담임 해제",
   classnote_board_sync_run: "반 보드 지금 동기화 실행(연동 PC)",
   // 학부모 글·댓글 답글(0317a) — 앱이 요청·수정·삭제를 남기고, 연동 PC 워커가 ClassNote 반영 결과를 직접 남긴다.
   classnote_parent_reply_request: "학부모 글 답글 요청",
