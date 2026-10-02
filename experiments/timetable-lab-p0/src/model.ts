@@ -1,10 +1,14 @@
-// P0 synthetic fixture only. No production identities, persistence or publish API.
+// Browser draft only. Imported IDs are retained; no production mutation API exists here.
 export type Cell = { text: string; bold?: boolean; formula?: string; format?: Record<string, unknown>; richText?: Record<string, unknown> };
-export type Placement = { id: string; sourceScheduleId: string; classId: string; row: number };
-export type Draft = { cells: Cell[][]; placements: Placement[]; students: Record<string, string[]> };
+export type Placement = { id: string; sourceScheduleId: string | null; classId: string; row: number;
+  teacherId?: string | null; roomId?: string | null; kind?: 'lesson' | 'seat' | 'block'; studentIds?: string[] };
+export type Draft = { cells: Cell[][]; placements: Placement[]; students: Record<string, string[]>;
+  people?: Record<string, string>; outside?: Lesson[]; source?: { kind: 'live'; date: string; tenantId: string; loadedAt: string; academy: string; notices: string[]; uncertainties?: string[]; step: number; teacherOrder: string[] } };
 export const headers = ['수업', '요일', '시작', '종료', '강사', '강의실'];
-export const days = ['월', '화', '수', '목', '금'];
+export const days = ['월', '화', '수', '목', '금', '토', '일'];
 export const studentLabels: Record<string, string> = { s1: '학생 가', s2: '학생 나', s3: '학생 다' };
+export const labelsOf = (draft: Draft) => draft.people ?? studentLabels;
+export function emptyDraft(): Draft { return { cells: [headers.map(text => ({ text, bold: true }))], placements: [], students: {}, people: {}, outside: [] }; }
 export const makeFixture = (): Draft => ({
   cells: [headers, ['영어 A', '월', '18:00', '19:00', '강사 가', '201'],
     ['영어 B', '화', '18:00', '19:00', '강사 나', '202'],
@@ -22,7 +26,7 @@ export function patchCells(draft: Draft, patches: Patch[]): Draft {
   return next;
 }
 export function assignStudent(draft: Draft, studentId: string, classId: string): Draft {
-  if (!studentLabels[studentId] || !draft.placements.some(p => p.classId === classId)) throw new Error('학생 또는 수업을 확인하세요.');
+  if (!labelsOf(draft)[studentId] || !draft.placements.some(p => p.classId === classId)) throw new Error('학생 또는 수업을 확인하세요.');
   const next = structuredClone(draft);
   for (const key of Object.keys(next.students)) next.students[key] = next.students[key].filter(id => id !== studentId);
   next.students[classId].push(studentId);
@@ -37,14 +41,15 @@ export type Lesson = Placement & { name: string; day: string; start: number; end
 export function lessons(draft: Draft): { items: Lesson[]; incomplete: string[] } {
   const items: Lesson[] = [], incomplete: string[] = [];
   for (const p of draft.placements) {
-    const row = draft.cells[p.row];
+    const row = draft.cells[p.row] ?? [];
     const [name, day, startText, endText, teacher, room] = row.map(c => c.text);
     const start = timeMinutes(startText), end = timeMinutes(endText);
-    if (!name || !days.includes(day) || start === null || end === null || start >= end || !teacher || !room) {
+    if (!name || !days.includes(day) || start === null || end === null || start >= end) {
       incomplete.push(`${name || p.id}: 요일·시간·강사·방의 확정된 값을 확인하세요.`);
       continue;
     }
-    items.push({ ...p, name, day, start, end, teacher, room, students: draft.students[p.classId] });
+    if (!teacher || teacher === '담당 미정' || (!room && p.kind !== 'block' && p.kind !== 'seat')) incomplete.push(`${name}: 강사 또는 강의실 미정 — 배치는 유지되지만 검사를 완료할 수 없습니다.`);
+    items.push({ ...p, name, day, start, end, teacher: teacher || '담당 미정', room, students: p.studentIds ?? draft.students[p.classId] ?? [] });
   }
   return { items, incomplete };
 }

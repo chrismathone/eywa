@@ -2,6 +2,8 @@
 
 2026-10-02 · [통합 결정](decisions.md)을 반영한 실행 순서. [P0 첫 비교 프로토타입](P0-results.md)을 구현·검증했다. P0 전체 통과와 P1 진입은 아직 보류다.
 
+사용자 후속 지시 반영: 기존 자료 불러오기와 넓은 수업 블록 화면을 먼저 연결했다. 엑셀 모양의 셀 표는 비교용 주소로 옮겼다. 이는 P2/P3의 일부 동작을 확인하기 위한 독립 미리보기이며, P0 전체 통과나 P1 저장 완료를 뜻하지 않는다. [변경 범위와 검증](native-workspace-results.md).
+
 ## 작업 환경
 
 - 워크트리: `C:/Users/user/orca/workspaces/eywa_refactoring/timetable-lab`

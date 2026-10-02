@@ -468,6 +468,11 @@ export async function getWeeklySchedule(): Promise<ScheduleSlot[]> {
   return fetchSlots(todayStr());
 }
 
+/** Read-only practice snapshot: week placements without report/roster payloads. RLS stays enabled. */
+export async function getScheduleSlotsForWeek(referenceDate: string): Promise<ScheduleSlot[]> {
+  return fetchSlots(referenceDate, undefined, { skipCounts: true, futureNames: true });
+}
+
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
 
 export type StudentLine = {

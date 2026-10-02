@@ -9,7 +9,7 @@ async function address(page: Page, range: string) {
   const box = page.locator('.univer-host [data-u-comp="defined-name"] input');
   await box.fill(range); await box.press('Enter'); await expect(box).toHaveValue(range);
 }
-test.beforeEach(async ({ page }) => { await page.goto('/'); });
+test.beforeEach(async ({ page }) => { await page.goto('/?compare=1'); });
 
 test('DOM values-only paste retains destination formatting and Undo restores the value', async ({ page }) => {
   await cell(page, 5, 0).click(); await page.keyboard.press('Control+b');

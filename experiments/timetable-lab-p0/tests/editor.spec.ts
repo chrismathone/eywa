@@ -9,7 +9,7 @@ async function address(page: Page, range: string) {
   const box = page.locator('.univer-host [data-u-comp="defined-name"] input');
   await box.fill(range); await box.press('Enter'); await expect(box).toHaveValue(range);
 }
-test.beforeEach(async ({ page }) => { await page.goto('/'); await expect(page.getByRole('heading', { name: '영어 시간표 연습실' })).toBeVisible(); });
+test.beforeEach(async ({ page }) => { await page.goto('/?compare=1'); await expect(page.getByRole('heading', { name: '영어 시간표 연습실' })).toBeVisible(); });
 
 test('DOM: teacher edit -> projection -> student assignment -> shared Undo/Redo', async ({ page }) => {
   const initial = await snapshot(page);
