@@ -33,10 +33,12 @@ export function App() {
   }, [savedDraft]);
   useEffect(() => {
     const save = (e: KeyboardEvent) => { if (!e.isComposing && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-      e.preventDefault(); if (!loading && !comparison) showLibrary(true);
+      e.preventDefault(); if (loading || comparison || library) return;
+      // 반 합치기·나누기 같은 창이 열려 있으면 그 위에 보관함을 겹쳐 띄우지 않는다.
+      if (document.querySelector('dialog[open]')) announce('열려 있는 창을 먼저 닫은 뒤 저장해 주세요.'); else showLibrary(true);
     } };
     window.addEventListener('keydown', save); return () => window.removeEventListener('keydown', save);
-  }, [loading, comparison]);
+  }, [loading, comparison, library, announce]);
   function loaded(next: Draft) {
     store.commit('기존 시간표 불러오기', next); select([]);
     showLoad(false); announce('기존 시간표를 연습안으로 복사했습니다. 원본과 별개로 자유롭게 옮겨 보세요.');

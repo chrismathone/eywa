@@ -7,7 +7,8 @@ async function univer(page: Page) {
 }
 async function address(page: Page, range: string) {
   const box = page.locator('.univer-host [data-u-comp="defined-name"] input');
-  await box.fill(range); await box.press('Enter'); await expect(box).toHaveValue(range);
+  // The name box mounts slightly after univerProbe under load; an early Enter is ignored and the box stays on A1.
+  await expect(async () => { await box.fill(range); await box.press('Enter'); await expect(box).toHaveValue(range, { timeout: 1200 }); }).toPass({ timeout: 15_000 });
 }
 test.beforeEach(async ({ page }) => { await page.goto('/?compare=1'); await expect(page.getByRole('heading', { name: '영어 시간표 연습실' })).toBeVisible(); });
 

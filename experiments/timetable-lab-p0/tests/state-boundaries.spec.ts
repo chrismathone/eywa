@@ -7,9 +7,11 @@ async function univer(page: Page) {
 }
 async function address(page: Page, range: string) {
   const box = page.locator('.univer-host [data-u-comp="defined-name"] input');
-  await box.fill(range); await box.press('Enter'); await expect(box).toHaveValue(range);
+  // The name box mounts slightly after univerProbe under load; an early Enter is ignored and the box stays on A1.
+  await expect(async () => { await box.fill(range); await box.press('Enter'); await expect(box).toHaveValue(range, { timeout: 1200 }); }).toPass({ timeout: 15_000 });
 }
-test.beforeEach(async ({ page }) => { await page.goto('/?compare=1'); });
+// labProbe is assigned by a lazily loaded module, i.e. after the load event that goto() waits for.
+test.beforeEach(async ({ page }) => { await page.goto('/?compare=1'); await page.waitForFunction(() => !!window.labProbe); });
 
 test('DOM values-only paste retains destination formatting and Undo restores the value', async ({ page }) => {
   await cell(page, 5, 0).click(); await page.keyboard.press('Control+b');

@@ -72,3 +72,12 @@ test('an imported operating snapshot and moved-student marks survive the shared 
   await library.getByRole('button', { name: '불러오기 불러온 시간표 연습', exact: true }).click(); await page.getByRole('tab', { name: '통합뷰' }).click();
   await expect(page.locator('[data-class-id="class-1"] [data-student-id="s1"]')).toHaveCSS('background-color', 'rgb(187, 247, 208)');
 });
+test('Ctrl+S opens the library, but never stacks it on top of an open class dialog', async ({ page }) => {
+  await page.route('**/api/timetable/lab/drafts**', route => route.fulfill({ json: { items: [], nextOffset: null } }));
+  await page.goto('/?sample=1'); await page.getByRole('tab', { name: '통합뷰' }).click(); await page.locator('[data-class-id="class-1"] .class-name-row').click();
+  await page.getByRole('button', { name: '다른 반과 합치기', exact: true }).click();
+  const merge = page.getByRole('dialog', { name: '다른 반과 합치기' }), library = page.getByRole('dialog', { name: '연습본 저장·불러오기' });
+  await expect(merge).toBeVisible(); await page.keyboard.press('Control+s');
+  await expect(page.locator('.lab-status [role="status"]')).toContainText('먼저 닫은 뒤'); await expect(library).toHaveCount(0); await expect(merge).toBeVisible();
+  await merge.getByRole('button', { name: '취소' }).click(); await page.keyboard.press('Control+s'); await expect(library).toBeVisible();
+});
