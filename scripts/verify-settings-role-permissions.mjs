@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const db = postgres(process.env.DATABASE_URL, { ssl:'require', max:1, prepare:false });
-const migration = await readFile('supabase/migrations/20261002075120_report_settings_menu_permissions.sql','utf8');
+const migration = await readFile('supabase/migrations/0335a_report_settings_menu_permissions.sql','utf8');
 const tenant = process.argv[2];
 if (!tenant || !/^[0-9a-f-]{36}$/i.test(tenant)) throw new Error('Usage: node --env-file=.env.local scripts/verify-settings-role-permissions.mjs TENANT_UUID');
 const results = [];
