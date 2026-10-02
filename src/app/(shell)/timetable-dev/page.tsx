@@ -89,7 +89,8 @@ import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
 import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-size-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
-import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
+import { getTimetableEntryPreferences } from "@/features/timetable/server/view-prefs-queries";
+import { resolveTimetableSubject } from "@/features/timetable/lib/subject-default";
 import { StudentTally } from "./_components/student-tally";
 import { WeekdayGroupTables } from "./_components/weekday-group-tables";
 import { TeacherGridView } from "./_components/teacher-grid";
@@ -194,7 +195,7 @@ export default async function TimetablePage({
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, planMonths, planSlots] =
+  const [allSlots, settings, teacherColors, entryPrefs, classroomsForMap, planMonths, planSlots] =
     await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
@@ -207,7 +208,7 @@ export default async function TimetablePage({
     paramView !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
     // 계정 귀속 뷰 설정(0146a) — 서버 첫 렌더에서 읽어야 필터 없는 화면을 그렸다가 학생이 사라지는
     // 깜빡임이 없다. 미로그인·깨진 값은 '설정 없음'으로 떨어져 무중단.
-    getMyTimetableViewPrefs(),
+    getTimetableEntryPreferences(),
     // 강의실 목록(교실뷰 컬럼 축) — 그 뷰일 때만(소형 참조 쿼리, B4로 병렬).
     // 교실뷰는 과목의 기본 뷰가 될 수 없으므로(전 과목 지도) 파라미터로만 들어온다 = 여기서 확정 가능.
     paramView === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
@@ -223,6 +224,7 @@ export default async function TimetablePage({
       ? getPlanSlots(month).catch((e) => planLoadFailed<PlanSlot>(e))
       : Promise.resolve([] as PlanSlot[]),
   ]);
+  const { viewPrefs, subjects: staffSubjects } = entryPrefs;
   // 계획 칸 → 기존 격자가 먹는 모양. 반 메타·명단은 위 현재 시간표(allSlots)에서 빌려 온다(plan-adapter 주석).
   const plan = planSlotsToScheduleSlots(planSlots, allSlots);
   const hasPlan = plan.slots.length > 0 || plan.unresolvedSlots > 0;
@@ -258,9 +260,9 @@ export default async function TimetablePage({
   const available = subjectMaps.options
     .map((o) => o.value)
     .filter((k) => kindSlots.some((s) => s.subject === k));
-  const defaultSubject = available[0] ?? "";
-  const subject =
-    subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+  // 첫 과목은 본 시간표와 같은 규칙 — 링크의 과목 → 담당 과목 → 첫 과목(영어 담당에게 수학을 먼저 열지 않는다).
+  const defaultSubject = resolveTimetableSubject(available, staffSubjects);
+  const subject = resolveTimetableSubject(available, staffSubjects, subjectParam);
   // 영어 프로그램 보기 필터(전체/EiE/인재원 영어, 0176a `classes.english_track`).
   // 🔴 **영어에만 있는 축이다** — 다른 과목 반은 english_track이 항상 null이라 'eie'를 걸면 화면이 통째로
   //    빈다. 그래서 칩도 안 띄우고 값도 'all'로 못박는다(과목 칩으로 옮겨가도 필터가 따라붙지 않는다).
@@ -1090,7 +1092,8 @@ function buildHref(opts: {
   //    되돌아온다 = **기본뷰를 영영 못 고른다**(과목 칩의 defaultSubject 생략과 같은 규약).
   if (shouldSerializeView(opts.view, opts.defaultView ?? "basic")) params.set("view", opts.view);
   if (opts.kind !== DEFAULT_TIMETABLE_KIND) params.set("kind", opts.kind);
-  if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
+  // 기본 과목이 사람마다 다르므로 링크에는 현재 과목을 남긴다(본 시간표와 같은 규약).
+  if (opts.subject) params.set("subject", opts.subject);
   if (opts.month !== opts.thisMonth) params.set("month", opts.month);
   if (opts.compact1h && opts.compact1h.length)
     params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));

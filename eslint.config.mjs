@@ -22,6 +22,11 @@ const eslintConfig = defineConfig([
     "scripts/_poc_migration/**",
     // 수동 실행 CJS 운영 도구(CORS 설정 등) — 앱 빌드 비포함, require 사용.
     "scripts/**/*.cjs",
+    // Standalone timetable experiment: lint source, not generated bundles/browser artifacts.
+    "experiments/timetable-lab-p0/dist/**",
+    "experiments/timetable-lab-p0/.artifacts/**",
+    "experiments/timetable-lab-p0/test-results/**",
+    "experiments/timetable-lab-p0/playwright-report/**",
   ]),
 ]);
 
