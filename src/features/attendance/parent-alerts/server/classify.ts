@@ -13,6 +13,7 @@ import {
   normalizeIntent,
   type ParentIntent,
 } from "../intent";
+import { crossTeacherIds, mergeAlertTargets } from "../alert-targets";
 
 /**
  * 학부모 연락(클래스노트) 중 **출결 통보만 골라** 토글 켠 계정에 알린다.
@@ -46,6 +47,15 @@ type PendingRow = {
   posted_at: string | null;
   created_at: string;
   student_id: string | null;
+};
+
+/** 알림 스윕이 읽는 행 — 분류 결과 + 함께 알릴 다른 과목 담당(0331a, 칸이 없는 DB에선 undefined). */
+type NotifyRow = PendingRow & {
+  category: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  detail: string | null;
+  cross_teacher_ids?: unknown;
 };
 
 type ModelResult = { results?: Array<Record<string, unknown>> };
@@ -160,15 +170,21 @@ export async function classifyPendingParentMessages(): Promise<ClassifyOutcome> 
  *  ③ **벨 폭탄**: 아래 age 가드 — 토글을 나중에 켜면 과거분이 통째로 쏟아지는 것을 막는다.
  */
 async function notifyPending(db: ReturnType<typeof createAdminClient>): Promise<number> {
-  const { data: pending } = await db
-    .from("classnote_parent_messages")
-    .select("id, tenant_id, content, posted_at, created_at, student_id, category, starts_on, ends_on, detail")
-    .not("classified_at", "is", null)
-    .is("notified_at", null)
-    .neq("category", "none")
-    .order("created_at", { ascending: true })
-    .limit(MAX_PER_RUN);
-  const rows = (pending ?? []) as Array<PendingRow & { category: string; starts_on: string | null; ends_on: string | null; detail: string | null }>;
+  const COLUMNS = "id, tenant_id, content, posted_at, created_at, student_id, category, starts_on, ends_on, detail";
+  const pendingRows = (columns: string) =>
+    db
+      .from("classnote_parent_messages")
+      .select(columns)
+      .not("classified_at", "is", null)
+      .is("notified_at", null)
+      .neq("category", "none")
+      .order("created_at", { ascending: true })
+      .limit(MAX_PER_RUN);
+  // 🔴 `cross_teacher_ids`(0331a)는 SQL을 손으로 적용하기 전에도 앱이 돈다(#95) — 그 칸이 없어서 실패한 것이면(42703) 그 칸 없이 다시 읽는다.
+  //    여기서 그냥 실패하면 출결 알림 전체가 조용히 멈춘다. 다른 실패는 종전대로 이번 킥을 건너뛴다(다음 킥이 이어받는다).
+  let res = await pendingRows(`${COLUMNS}, cross_teacher_ids`);
+  if (res.error?.code === "42703" || res.error?.code === "PGRST204") res = await pendingRows(COLUMNS);
+  const rows = (res.data ?? []) as unknown as NotifyRow[];
   if (!rows.length) return 0;
 
   const studentIds = [...new Set(rows.map((r) => r.student_id).filter((v): v is string => !!v))];
@@ -201,7 +217,7 @@ async function notifyPending(db: ReturnType<typeof createAdminClient>): Promise<
       // 저장된 값에서 되살릴 땐 추정 여부를 알 수 없다 — **없는 표시를 지어내지 않는다**(제목이 조용히 달라질 뿐).
       dateAssumed: false,
     };
-    const count = await notifyOptedIn(db, row, intent, nameOf.get(row.student_id ?? "") ?? "");
+    const count = await notifyRecipients(db, row, intent, nameOf.get(row.student_id ?? "") ?? "");
     // 아무에게도 못 보냈으면(토글 켠 사람 0명·학생 미상) 선점을 **되돌린다** — 나중에 토글을 켜면
     // 그때 최근 건은 정상적으로 간다(오래된 건 위 age 가드가 걸러낸다).
     if (count === 0) {
@@ -219,13 +235,18 @@ async function notifyPending(db: ReturnType<typeof createAdminClient>): Promise<
  * 원장 2026-08-06: *"직원설정에서 '학생 출결 알림 (클래스노트) 받기' 토글 켜놓으면 그 계정에 모든 알림
  * 가는걸로"* — **담당 반과 무관하게 전 학생**이다(셔틀 기사가 담임에게 묻지 않게 하는 게 목적).
  *
- * ⚠️ 담당 강사 벨은 여기서 만들지 않는다 — 기존 인바운드 알림(`classnote_parent_post/comment`)이 이미
+ * ⚠️ **같은 과목** 담당 강사 벨은 여기서 만들지 않는다 — 기존 인바운드 알림(`classnote_parent_post/comment`)이 이미
  *    담당 강사에게 원문을 보낸다. 여기서 또 넣으면 담임 벨에 같은 얘기가 두 번 쌓인다.
+ *
+ * **다른 과목 담당 선생님**(0331a, 원장 2026-10-02 김근호 건)은 여기서 함께 알린다 — 아버지가 영어 반 글에 단 "오늘 학원 쉽니다"를
+ * 그날 수업을 하는 수학 선생님이 알 길이 없었다. 누구인지는 연동 PC가 원문 행에 적어 둔다(`cross_teacher_ids` — 그 학생의, 글이
+ * 올라온 보드 과목이 아닌 과목의 지금 담당). 여기서는 **같은 지점·재직·학생 계정 아님**만 다시 확인하고 벨에 더한다.
+ * 🔴 출결로 분류된 연락만 여기 온다(인사 댓글은 다른 과목 담당에게 가지 않는다). 휴대폰 푸시는 종전대로 토글 켠 계정만(0188a 결정).
  * ⚠️ `notified_at` 선점은 **호출부(notifyPending)**가 한다 — 여기서 또 찍으면 선점 규약이 두 군데로 갈린다.
  */
-async function notifyOptedIn(
+async function notifyRecipients(
   db: ReturnType<typeof createAdminClient>,
-  row: PendingRow,
+  row: NotifyRow,
   intent: ParentIntent,
   studentName: string,
 ): Promise<number> {
@@ -234,13 +255,15 @@ async function notifyOptedIn(
     return 0;
   }
   // ⚠️ admin client는 RLS를 우회한다 → tenant 필터 필수(다른 학원 직원에게 새면 대형 사고).
-  const { data: recipients } = await db
-    .from("users")
-    .select("id")
-    .eq("tenant_id", row.tenant_id)
-    .eq("status", "active")
-    .eq("attendance_alert_optin", true);
-  const targets = (recipients ?? []).map((u) => u.id as string);
+  const cross = crossTeacherIds(row.cross_teacher_ids);
+  const [{ data: recipients }, { data: crossUsers }] = await Promise.all([
+    db.from("users").select("id").eq("tenant_id", row.tenant_id).eq("status", "active").eq("attendance_alert_optin", true),
+    cross.length
+      ? db.from("users").select("id").eq("tenant_id", row.tenant_id).eq("status", "active").neq("system_role", "student").in("id", cross)
+      : Promise.resolve({ data: [] as Array<{ id: string }> }),
+  ]);
+  const optedIn = (recipients ?? []).map((u) => u.id as string);
+  const targets = mergeAlertTargets(optedIn, (crossUsers ?? []).map((u) => u.id as string));
   if (!targets.length) return 0;
 
   const { title, body } = buildAttendanceAlert({
@@ -264,6 +287,6 @@ async function notifyOptedIn(
   if (error) return 0;
   // 휴대폰(웹 푸시) — 셔틀은 사무실 PC 앞에 없다(0188a). 벨이 진실이고 이건 "빨리 알려주는 수단"이라
   // **best-effort**다: 키·구독·표가 없으면 조용히 0을 돌려주고 절대 throw하지 않는다.
-  await sendPushToUsers(row.tenant_id, targets, { title, body, link, tag: row.id });
+  if (optedIn.length) await sendPushToUsers(row.tenant_id, optedIn, { title, body, link, tag: row.id });
   return targets.length;
 }

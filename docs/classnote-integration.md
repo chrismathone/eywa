@@ -279,6 +279,15 @@ assign_teacher_to_classnote)을 aywa DB 기준·Playwright·**dry-run 기본**�
   보이는 글에 그냥 말을 건다** → 지연이 "응답 속도"가 아니라 **"그 아이 알림장이 얼마나 뜸한가"** 다. 보고서가
   뜸한 보드일수록 **오래된 글에 급한 용건**이 달린다(가장 늦은 두 건 169.6h·209.9h가 둘 다 급건 = 결석·상담요청).
   수학 댓글 54건: 3일 93%·4일 96%. → **감시 창 10일**(`COMMENT_WINDOW_DAYS`). "늦게 달린 건 인사겠지"는 **틀린 가설**.
+- **창 밖 글(30일까지)·방금 올라온 글 = 알림 목록 신호**(2026-10-02, [parent-comment-events.mjs](../scripts/_classnote/parent-comment-events.mjs)):
+  위 "전용 피드가 없다"는 **글·댓글 주소**에 한한 얘기였다. 학원 계정의 **알림 목록** `GET /api/v1/me/notifications/?page_size=100`
+  (다음 쪽 = `page=<next 토큰>`)에는 전 보드의 댓글 알림이 온다 — 줄 모양 `{id, created, code, summary, author_name, cls_id, child:{id,name}, object_id, count}`,
+  `code` = `report_comment`(알림장 댓글, `object_id` = 글 번호) · `notice_comment`(공지사항 댓글, `object_id` = 공지 번호 · `cls_id`·`child` 없음) ·
+  `report`(새 글, 전체의 ~90%) · `child_requested` · `notice`. 실측(이틀치 600줄): 전 종류 합쳐 하루 ~300줄.
+  ⚠️ **글 하나에 댓글 알림은 한 줄**이다 — 새 댓글이 달리면 그 줄이 `count`를 올리고 **새 번호로 맨 위에** 선다(`summary`·`author_name`은 마지막 댓글 것).
+  그래서 줄의 내용은 믿지 않고 **"그 글에 새 댓글이 있다"는 신호**로만 쓴 뒤 댓글 목록을 다시 연다. 알림 시각은 댓글 시각보다 십여 초 늦을 수 있다(실측 11~12초).
+  ⚠️ 작성자 종류가 없다(`author_name` 글자뿐) — 학부모 여부는 댓글 목록의 `author.type`으로 본다. 학원 계정이 직접 단 댓글은 알림이 오지 않는다.
+  글 하나 조회 = `GET /api/v1/reports/{id}/`(피드 행과 같은 칸 + `modified` = 마지막 댓글 시각). 공지 댓글 = `GET /api/v1/notices/{id}/comments/`(작성자 `author.id` = 학부모 계정).
 - **주기 10분**(`COMMENT_POLL_INTERVAL_MS` — 원장이 명시 수용한 지연). 새 글(1분)보다 느린 이유 = 창 전체를 매번
   다시 읽어야 한다(워터마크로 일찍 못 멈춤). ⚠️ **백스톱(`COMMENT_MAX_PAGES=30`)은 창(10일)보다 넉넉히 커야**
   age 컷오프가 먼저 걸린다 — 방학 피크엔 최근 10일=1,913행=20페이지라, 20으로 잡으면 창과 겹쳐 매 폴 경고가 뜬다.
@@ -662,11 +671,24 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 | 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
 | 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 포함**(2026-09-30) · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고 — 이미 연결된 종강 반은 보드가 살아 있는 동안 연결 유지) |
 | 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 보고서 설정 `classnoteMathRoute` personal/class/pilot · 반별 = 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
-| 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 해제 필요는 로그만 |
+| 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 회차마다 **동기화 보고서**(0329a — 변동·실패·보류 + 이유, 해제 대상)를 남긴다 → 앱 '동기화 보고서 다운로드' |
 | C.N 라벨 | [`classnote-match.ts`](../src/features/onescreen/classnote-match.ts) · [`cn-badge.tsx`](../src/features/onescreen/components/cn-badge.tsx) | 원스크린 카드·표 모드. 초록 = 확인된 배정 |
 
 - **API(실측)**: 반 생성 = DOM '반 추가하기'(또는 `POST kapi…/v1/centers/{c}/classes`) · 반 이름 변경 = `PATCH /api/v1/centers/{c}/classes/{id}/ {name}` → 200 (`/api/v1/classes/{id}/` PATCH·PUT은 405) ·
-  반 삭제 = `DELETE /api/v1/classes/{id}/` → 204, **원아·선생님 0명일 때만**(선생님 있으면 400 `teacher_exists`) · 원아·선생님 **해제는 405**(화면에서 손으로) ·
+  반 삭제 = `DELETE /api/v1/classes/{id}/` → 204, **원아·선생님 0명일 때만**(선생님 있으면 400 `teacher_exists`) ·
+  🔑 **원아·선생님 해제는 된다(2026-10-02 실측 — 그동안 "405라 화면에서 손으로"라고 적었던 것을 정정)**: 405였던 것은
+  `/api/v1/enrollments/{id}/`·`/api/v1/employments/{id}/`의 **DELETE·PATCH**였고, ClassNote 화면이 실제로 부르는 주소는 따로 있다
+  (화면 JS에서 찾음 — 원아 '소속 반 → 삭제' · 선생님 '담당 반 → 삭제'):
+  원아 해제 = `POST https://kapi.classnote.com/v1/enrollments/{배정번호}/out`(본문 없음, 쿠키 인증) → **200** · 그 반에서만 빠지고 다른 반 배정은 그대로 ·
+  다시 넣기 = 기존 `POST /api/v1/enrollments/ {child, belong_to_class}` → 201(배정번호는 새로 생긴다, 원아 번호는 그대로).
+  선생님 해제 = `POST https://kapi.classnote.com/v1/employments/{연결번호}/out` → **200** · '담당 반'에서 사라진다(연결 줄은 `is_approved:false`로 남는다 —
+  ClassNote 화면에서 지워도 같은 흔적이 남는다 · 승인 대기로 뜨지 않는다).
+  실측 대상 = 테스트 학생 '학원이'(원아 5268389) × `[수학] 테스트반`(1317083): 내보냄 → 확인 → 다시 배정(반 8개 그대로) ·
+  선생님 1763863 × 테스트반: 연결(201) → 해제(200) → '담당 반'에 없음. 배정번호는 `GET kapi…/v1_2/children/{원아}/enrollments`,
+  연결번호는 `GET kapi…/v1_2/teachers/{선생님}/employments/`에서 읽는다.
+  = **반 생성·이름 변경·삭제 + 원아·선생님 배정·해제가 전부 API로 된다** → ClassNote 화면에서 손으로 하던 정리를 자동화할 수 있다.
+  🔴 아직 워커는 해제하지 않는다 — 해제 리스트(0329a)만 적는다. 자동 해제는 원장 결정 뒤에 켠다: 동기화의 '잉여 원아'에는
+  aywa가 누구 원아인지 **모르는** 원아(이름이 달라 못 맞춘 재원생 · 사람이 손으로 넣은 원아)가 섞일 수 있어, 그대로 내보내면 정상 학생이 빠진다. ·
   반 단체 공지 = `POST https://kapi.classnote.com/v1_2/notices/ {classes_to:[반id…], title, content, is_comment_on, center, author_name, scheduled:""}` → 반마다 공지 1건. 🔴 `classes_to`가 비면 기관 전체일 수 있다 — 빈 목록·허용 밖 반이면 무조건 차단.
 - 🔴 **`"보드가 곧 매핑"` 폴백(`acceptBoardMembers`)은 반 보드 경로에서 절대 타지 않는다** — 생년만 보므로 같은 학년 반이면 전원이 통과한다(`sendReportViaApi targets`).
 - 🔴 회수(`classnote-recall-core.mjs`)는 1인 보드 **와** 반 보드를 함께 훑는다 — 한쪽만 보면 '이미 없습니다'로 거짓 성공.

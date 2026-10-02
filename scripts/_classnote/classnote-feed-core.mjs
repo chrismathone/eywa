@@ -11,6 +11,8 @@
  *     1분 주기 · 보통 페이지 1개.
  *  ② `pollParentCommentsOnce` — 학부모 **댓글**(2026-07-16 추가). 전용 피드가 없어 기존 행의 `num_comments`
  *     증가로만 드러난다 → **댓글 수 스냅샷 대조**. 10분 주기 · 감시 창 최대 20페이지.
+ *     창 밖 글(30일까지)·방금 올라온 글은 스냅샷이 못 본다 → **ClassNote 알림 목록**을 신호로 같은 폴에서 함께 잡는다
+ *     (2026-10-02, parent-comment-events.mjs — 판정은 스냅샷 경로와 같은 함수를 탄다).
  *
  * 왜 댓글까지: 실측(최근 5~6일) **새 글 4.2건/일 vs 학부모 댓글 12건/일** — 학부모 연락의 다수가 댓글로 온다.
  * ClassNote의 자연스러운 흐름이 "강사가 알림장 → 학부모가 댓글로 답"이라 새 글이 오히려 예외다.
@@ -54,6 +56,20 @@ import {
   readOnlyWithTimeout,
 } from "./notify-recipients-db.mjs";
 import { NOTIFY_RECIPIENT_CAP, addBlocked, dedupePlanRows, eventDedupeKey, newGuardStats } from "./notify-recipients.mjs";
+import {
+  EVENT_POST_MAX_AGE_DAYS,
+  EVENT_SCOPE,
+  EVENT_SLACK_MS,
+  collectEvents,
+  dropAlreadyBelled,
+  fetchReport,
+  markAfterFailures,
+  pickEventComments,
+  postTooOld,
+  selectCommentEvents,
+  settleFirstSeen,
+} from "./parent-comment-events.mjs";
+import { attachCrossTeachers } from "./cross-subject-teachers.mjs";
 import {
   attachOnlyText,
   buildCommentNotificationText,
@@ -555,21 +571,19 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     //    매핑은 **원아 id**(그룹반 보드명엔 학생이 없다). 학생 미확정이어도 원문은 남긴다.
     if (picked.length && !dryRun) {
       const childToStudent = await loadChildStudentMap(sql, tenant);
-      const stored = await storeParentMessages(
-        sql,
-        tenant,
-        picked.map((p) => ({
-          source: "post",
-          postId: p.id,
-          childId: p.child,
-          className: p.class_name,
-          content: p.content,
-          attachOnly: attachOnlyText(p), // 글자 없이 첨부만 — 답글·공감 대상으로 저장(분류는 안 탄다)
-          attachments: imageAttachments(p), // 사진 주소(0326a) — 답글 창 쓰레드에서 바로 보여 준다
-          postedAt: p.created,
-        })),
-        childToStudent,
-      );
+      const postItems = picked.map((p) => ({
+        source: "post",
+        postId: p.id,
+        childId: p.child,
+        cls: p.cls ?? null, // 보드 번호 — 어느 과목 보드인지(다른 과목 담당 계산)에 쓴다
+        className: p.class_name,
+        content: p.content,
+        attachOnly: attachOnlyText(p), // 글자 없이 첨부만 — 답글·공감 대상으로 저장(분류는 안 탄다)
+        attachments: imageAttachments(p), // 사진 주소(0326a) — 답글 창 쓰레드에서 바로 보여 준다
+        postedAt: p.created,
+      }));
+      await attachCrossTeachers(sql, tenant, postItems, childToStudent, { recipientsFor, log });
+      const stored = await storeParentMessages(sql, tenant, postItems, childToStudent);
       if (stored) {
         log(`[출결] 학부모 글 ${stored}건 저장(전 보드) — 분류 요청`);
         await kickClassify(log);
@@ -739,6 +753,104 @@ async function saveCounts(sql, tenant, counts) {
       counts = excluded.counts, last_polled_at = now(), status = 'ok', error = null, updated_at = now()`;
 }
 
+/** 알림 목록 워터마크 저장(scope=parent_comment_events) — 번호는 단조증가만, 시각은 그 번호의 줄 것(더 작은 번호가 오면 그대로 둔다). */
+async function saveEventMark(sql, tenant, top) {
+  await sql`
+    insert into classnote_feed_state (tenant_id, scope, last_seen_post_id, counts, last_polled_at, status, error, updated_at)
+    values (${tenant}, ${EVENT_SCOPE}, ${top.id}, ${sql.json({ lastCreated: top.created })}, now(), 'ok', null, now())
+    on conflict (tenant_id, scope) do update set
+      counts = case when excluded.last_seen_post_id >= coalesce(classnote_feed_state.last_seen_post_id, 0)
+                    then excluded.counts else classnote_feed_state.counts end,
+      last_seen_post_id = greatest(coalesce(classnote_feed_state.last_seen_post_id, 0), excluded.last_seen_post_id),
+      last_polled_at = now(), status = 'ok', error = null, updated_at = now()`;
+}
+
+/**
+ * 스냅샷 대조가 못 보는 글의 새 학부모 댓글 — **감시 창(10일) 밖 글**(30일까지)과 **이번 폴에 처음 본 글**(parent-comment-events.mjs).
+ * 신호 = ClassNote 알림 목록(글 하나에 한 줄, 새 댓글이 달리면 새 번호로 맨 위에 선다). 읽기 전용(GET).
+ *
+ * 왜 '처음 본 글'도 여기인가: 스냅샷 경로는 처음 본 글의 댓글을 기준선으로만 잡는다(콜드 스타트 방어) — 그래서 글이 올라온 지
+ * 10분(폴 주기) 안에 달린 댓글은 그 경로로는 영영 안 잡힌다. 그 글도 알림 목록에는 줄이 서 있으므로 여기서 받는다.
+ *
+ * 🔴 실패는 삼킨다(로그) — 보조 경로의 결함으로 종전 스냅샷 경로를 세우지 않는다. 그때는 워터마크(`mark`)를 돌려주지 않아
+ *    다음 폴이 같은 줄을 다시 본다.
+ * @returns {Promise<{ items: Array<{ch:object, info:object, picked:Array}>, mark: {id:number, created:string}|null,
+ *                     read: Map<number,number>, pending: Set<number> }>}
+ *   read = 댓글을 실제로 읽은 글 → 읽은 댓글 수 · pending = 아직 못 읽은 글(둘 다 `settleFirstSeen`이 처음 본 글의 기준선에 쓴다).
+ */
+async function collectOldPostComments(sql, browser, tenant, { rows, counts, log }) {
+  const none = { items: [], mark: null, read: new Map(), pending: new Set(), failed: false };
+  try {
+    const [state] = await sql`
+      select last_seen_post_id, counts from classnote_feed_state
+      where tenant_id = ${tenant} and scope = ${EVENT_SCOPE}`;
+    const lastId = state?.last_seen_post_id == null ? null : Number(state.last_seen_post_id);
+    const lastCreated = state?.counts?.lastCreated ?? null;
+    const { page, centerId } = await getFeedPage(browser);
+    const events = await collectEvents(page, { lastId, maxAgeDays: MAX_AGE_DAYS, log });
+    // 스냅샷 경로가 맡는 글 = 창 안에 있고 지난 스냅샷에도 있던 글. 그 밖(창 밖 · 이번에 처음 본 글)은 여기서 맡는다.
+    const rowById = new Map((rows ?? []).map((r) => [Number(r?.id), r]));
+    const snapshotIds = new Set([...rowById.keys()].filter((id) => counts?.[String(id)] !== undefined));
+    const sel = selectCommentEvents(events, { lastId, lastCreated, windowIds: snapshotIds, maxAgeDays: MAX_AGE_DAYS });
+    if (!sel.top) return none;
+    if (lastId === null) {
+      // 첫 실행의 기준선은 **실제 맨 위 줄**이다 — 상한에 걸린 워터마크(sel.top)를 쓰면 남은 글의 지난 댓글이 다음 폴에 쏟아진다.
+      log(`[comment] 알림 목록 첫 실행 — ${sel.head.id}번부터 봅니다(지난 댓글은 알리지 않음)`);
+      return { ...none, mark: sel.head };
+    }
+    if (sel.overflow) log(`[comment] 스냅샷 밖 글의 댓글 신호가 많아 ${sel.overflow}건은 다음 폴로 넘깁니다(오래된 것부터 처리)`);
+    const lastCreatedMs = Date.parse(lastCreated ?? "");
+    const sinceMs = Number.isFinite(lastCreatedMs) ? lastCreatedMs - EVENT_SLACK_MS : NaN;
+    const items = [];
+    const read = new Map(); // 댓글을 실제로 읽은 글 → 읽은 댓글 수(처음 본 글의 기준선)
+    const pending = new Set(sel.pending); // 아직 못 읽은 글(상한에 밀림 · 조회 실패)
+    const failed = [];
+    let tooOldPosts = 0;
+    for (const ev of sel.picked) {
+      const id = ev.reportId;
+      // 글 하나의 실패로 묶음 전체를 버리지 않는다 — 한 번 더 해 보고, 그래도 안 되면 그 글만 다음 폴로 넘긴다.
+      let loaded = null;
+      for (let attempt = 0; attempt < 2 && !loaded; attempt++) {
+        try {
+          const report = rowById.get(id) ?? (await fetchReport(page, id));
+          loaded = { report, list: report ? await fetchComments(page, id) : [] };
+        } catch (e) {
+          if (attempt === 1) log(`[comment] ⚠️ 글 ${id}의 댓글을 읽지 못했습니다 — 다음 폴에 다시 봅니다: ${String(e?.message ?? e).slice(0, 120)}`);
+        }
+      }
+      if (!loaded) {
+        pending.add(id);
+        failed.push(ev);
+        continue;
+      }
+      const { report, list } = loaded;
+      if (!report) continue; // 그새 지워진 글
+      // 번호만으로 읽은 글이다 — 다른 기관의 글이면 손대지 않는다(피드는 기관으로 묶여 있지만 단건 조회는 아니다).
+      // 실측(2026-10-02): 단건 응답의 `center`는 기관 번호(숫자)다. 객체로 오는 날을 대비해 `id`도 받는다.
+      const reportCenter = report.center?.id ?? report.center ?? null;
+      if (reportCenter != null && Number(reportCenter) !== Number(centerId)) {
+        log(`[comment] ⚠️ 글 ${id}는 다른 기관(${reportCenter})의 글이라 건너뜁니다`);
+        continue;
+      }
+      read.set(id, list.length);
+      if (postTooOld(report, { maxDays: EVENT_POST_MAX_AGE_DAYS })) {
+        tooOldPosts++;
+        continue;
+      }
+      const picked = pickEventComments(list, { sinceMs, maxAgeDays: MAX_AGE_DAYS });
+      if (!picked.length) continue; // 강사 답글이었거나 이미 지난 댓글
+      const className = String(report.class_name ?? "");
+      items.push({ ch: { id, className }, info: { childId: report.child ?? null, cls: report.cls ?? null, className }, picked });
+    }
+    if (tooOldPosts) log(`[comment] ${EVENT_POST_MAX_AGE_DAYS}일 지난 글의 댓글 ${tooOldPosts}건 건너뜀`);
+    if (items.length) log(`[comment] 감시 창 밖(또는 방금 올라온) 글의 새 학부모 댓글 — 글 ${items.length}건`);
+    return { items, mark: markAfterFailures(sel.top, failed, { lastCreated }), read, pending, failed: false };
+  } catch (e) {
+    log(`[comment] ⚠️ 알림 목록 확인 실패 — 오래된 글의 댓글은 다음 폴에 다시 봅니다: ${String(e?.message ?? e).slice(0, 200)}`);
+    return { ...none, failed: true };
+  }
+}
+
 /**
  * 한 주기 — 학부모 **댓글** 감지 → 담당 강사 알림. 데몬이 매 폴 부르지만 대부분 즉시 no-op(10분 가드).
  *
@@ -798,8 +910,17 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       return { ran: true, changed: 0, notified: 0 };
     }
 
-    if (!changed.length) {
-      if (!dryRun) await saveCounts(sql, tenant, pruneCounts(nextCounts, COMMENT_COUNTS_CAP));
+    // 오래된 글(30일)·이번에 처음 본 글의 댓글 — 알림 목록 신호(스냅샷 대조가 못 보는 구간). 실패해도 아래 경로는 그대로 돈다.
+    const old = await collectOldPostComments(sql, browser, tenant, { rows, counts, log });
+    for (const o of old.items) feedInfo.set(Number(o.ch.id), o.info);
+    // 처음 본 글의 기준선 — 알림 목록 경로가 읽은 글은 읽은 댓글 수로, 아직 못 읽은 글은 기준선을 미룬다(parent-comment-events.mjs).
+    settleFirstSeen(rows, counts, nextCounts, { read: old.read, pending: old.pending, failed: old.failed });
+
+    if (!changed.length && !old.items.length) {
+      if (!dryRun) {
+        await saveCounts(sql, tenant, pruneCounts(nextCounts, COMMENT_COUNTS_CAP));
+        if (old.mark) await saveEventMark(sql, tenant, old.mark);
+      }
       return { ran: true, changed: 0, notified: 0 };
     }
 
@@ -821,6 +942,59 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     const inbox = []; // 전 보드 학부모 댓글 원문(출결 분류용, 0184a) — 강사 벨 경로와 독립적으로 쌓인다
     let detected = 0;
     let tooOldCount = 0;
+    /**
+     * 새 학부모 댓글 묶음 하나를 원문 저장 목록·강사 벨 후보로 보낸다 — 스냅샷 경로와 알림 목록 경로(`fromEvent`)가 **같은 판정**을 탄다.
+     * `fromEvent` 줄은 뒤에서 이미 보낸 벨을 링크로 걸러낸다(여유 구간 때문에 같은 댓글이 다시 후보가 될 수 있다).
+     */
+    const route = async (ch, picked, fromEvent = false) => {
+      detected += picked.length;
+      const info = feedInfo.get(Number(ch.id));
+      // ── 출결 연락 원문 저장(전 보드, 0184a) — 보드 게이트와 무관하다.
+      //    게이트는 "이 보드 글을 **저 강사에게 보내도 되나**"를 보는 장치인데, 여기 저장은 발송이 아니라
+      //    **원아 id로 확정한 그 학생 본인의 기록**이라 오배달 경로가 없다(보드가 공유돼도 child는 하나다).
+      inbox.push(
+        ...picked.map((k) => ({
+          source: "comment",
+          postId: ch.id,
+          commentId: k.id,
+          childId: info?.childId ?? null,
+          cls: info?.cls ?? null,
+          className: ch.className,
+          content: k.content,
+          attachOnly: attachOnlyText(k),
+          attachments: imageAttachments(k),
+          postedAt: k.created,
+        })),
+      );
+      // 강사 벨은 **수학 1인 보드 한정 유지**(원장 결정 2026-07-15) — 영어는 강사들이 ClassNote를 직접 쓴다.
+      if (!ch.className.startsWith(group.prefix)) {
+        // 수학 **반 보드**(2026-09-29) — 그 글의 보드 번호 + 원아 id로 학생을 확정한 것만(1인 보드 게이트는 반 보드에 무의미).
+        classMap ??= await loadClassBoardChildMap(sql, tenant, keys);
+        const m = classBoardMatch(classMap, { cls: info?.cls, childId: info?.childId });
+        if (m.student) for (const k of picked) hits.push({ comment: k, student: m.student, reportId: ch.id, fromEvent });
+        else {
+          if (m.blocked) {
+            stats.gStudent += picked.length; // (1) 학생 확정 가드 — 반 전체 댓글로 간다
+            log(`[comment] 학생 미확정(반 전체로) — ${m.blocked}(${ch.className})`);
+          }
+          for (const k of picked) unmatched.push({ cls: info?.cls, className: ch.className, comment: k, reportId: ch.id, fromEvent });
+        }
+        return;
+      }
+      const g = await gateBoard(gate, board, ch.className);
+      if (!g.ok) {
+        // 게이트 차단은 안정적인 판정이라 스냅샷은 그대로 전진시킨다(매 폴 재조회해도 결론이 같다).
+        held.push(g.reason);
+        return;
+      }
+      childLinks ??= await loadChildStudentMap(sql, tenant);
+      if (oneBoardChildConflict(childLinks, info?.childId, g.student.id)) {
+        stats.gStudent += picked.length; // (1) 1인 보드인데 글 원아가 다른 학생에 연결돼 있다 — 학생을 정하지 않는다
+        held.push(`${ch.className}(원아 연결이 다른 학생 — 학생 미확정)`);
+        return;
+      }
+      for (const k of picked) hits.push({ comment: k, student: g.student, reportId: ch.id, fromEvent });
+    };
     for (const ch of changed) {
       let list;
       try {
@@ -858,58 +1032,31 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       }
       // 강사 답글만 늘었거나 삭제된 경우 — 정상. 게이트(원아 조회)를 태울 이유가 없다.
       if (!picked.length) continue;
-      detected += picked.length;
-      // ── 출결 연락 원문 저장(전 보드, 0184a) — 보드 게이트와 무관하다.
-      //    게이트는 "이 보드 글을 **저 강사에게 보내도 되나**"를 보는 장치인데, 여기 저장은 발송이 아니라
-      //    **원아 id로 확정한 그 학생 본인의 기록**이라 오배달 경로가 없다(보드가 공유돼도 child는 하나다).
-      inbox.push(
-        ...picked.map((k) => ({
-          source: "comment",
-          postId: ch.id,
-          commentId: k.id,
-          childId: feedInfo.get(Number(ch.id))?.childId ?? null,
-          className: ch.className,
-          content: k.content,
-          attachOnly: attachOnlyText(k),
-          attachments: imageAttachments(k),
-          postedAt: k.created,
-        })),
-      );
-      // 강사 벨은 **수학 1인 보드 한정 유지**(원장 결정 2026-07-15) — 영어는 강사들이 ClassNote를 직접 쓴다.
-      if (!ch.className.startsWith(group.prefix)) {
-        // 수학 **반 보드**(2026-09-29) — 그 글의 보드 번호 + 원아 id로 학생을 확정한 것만(1인 보드 게이트는 반 보드에 무의미).
-        classMap ??= await loadClassBoardChildMap(sql, tenant, keys);
-        const info = feedInfo.get(Number(ch.id));
-        const m = classBoardMatch(classMap, { cls: info?.cls, childId: info?.childId });
-        if (m.student) for (const k of picked) hits.push({ comment: k, student: m.student, reportId: ch.id });
-        else {
-          if (m.blocked) {
-            stats.gStudent += picked.length; // (1) 학생 확정 가드 — 반 전체 댓글로 간다
-            log(`[comment] 학생 미확정(반 전체로) — ${m.blocked}(${ch.className})`);
-          }
-          for (const k of picked) unmatched.push({ cls: info?.cls, className: ch.className, comment: k, reportId: ch.id });
+      await route(ch, picked);
+    }
+    // 알림 목록 경로 — 창 밖·처음 본 글의 새 학부모 댓글. 영상은 **새 댓글만** 보관 큐에 넣는다(그 글의 옛 영상까지 되살리지 않게).
+    let holdEventMark = false; // 영상 저장이 실패하면 워터마크를 세워 두고 다음 폴에 다시 본다(벨 중복은 링크로 걸러진다)
+    for (const o of old.items) {
+      if (!dryRun && videoArchiveEnabled()) {
+        try {
+          const { centerId } = await getFeedPage(browser);
+          await enqueueParentVideos(sql, tenant, centerId, o.picked,
+            { id: o.ch.id, child: o.info.childId, cls: o.info.cls, class_name: o.ch.className });
+        } catch {
+          holdEventMark = true;
+          delete nextCounts[String(o.ch.id)]; // 처음 본 글이면 기준선도 미룬다 — 다음 폴에 이 글을 다시 받는다
+          log("[영상] 오래된 글의 댓글 저장 실패 — 다음 폴에서 재시도합니다.");
+          continue;
         }
-        continue;
       }
-      const g = await gateBoard(gate, board, ch.className);
-      if (!g.ok) {
-        // 게이트 차단은 안정적인 판정이라 스냅샷은 그대로 전진시킨다(매 폴 재조회해도 결론이 같다).
-        held.push(g.reason);
-        continue;
-      }
-      childLinks ??= await loadChildStudentMap(sql, tenant);
-      if (oneBoardChildConflict(childLinks, feedInfo.get(Number(ch.id))?.childId, g.student.id)) {
-        stats.gStudent += picked.length; // (1) 1인 보드인데 글 원아가 다른 학생에 연결돼 있다 — 학생을 정하지 않는다
-        held.push(`${ch.className}(원아 연결이 다른 학생 — 학생 미확정)`);
-        continue;
-      }
-      for (const k of picked) hits.push({ comment: k, student: g.student, reportId: ch.id });
+      await route(o.ch, o.picked, true);
     }
 
     // ── 출결 연락 저장 + 분류 킥(0184a). 스냅샷 갱신 트랜잭션 **밖**에서 한다 — 저장은 멱등(유니크 인덱스)이라
     //    같은 댓글이 다음 폴에 다시 잡혀도 중복이 안 생기고, 여기서 실패해도 강사 벨 경로를 막지 않는다.
     if (inbox.length && !dryRun) {
       const childToStudent = await loadChildStudentMap(sql, tenant);
+      await attachCrossTeachers(sql, tenant, inbox, childToStudent, { recipientsFor, log });
       const stored = await storeParentMessages(sql, tenant, inbox, childToStudent).catch((e) => {
         log(`[출결] 댓글 원문 저장 실패(다음 폴 재시도): ${e.message}`);
         return 0;
@@ -925,7 +1072,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     const wideHits = await classWideTargets(sql, tenant, keys, unmatched, log, stats);
     const planRows = [];
     let noIdSeq = 0; // 댓글 id가 없으면 서로 다른 댓글이 한 키로 뭉쳐 지워지지 않게(중복 가드가 유실을 만들면 안 된다)
-    const pushPlan = (comment, name, reportId, teachers) => {
+    const pushPlan = (comment, name, reportId, teachers, fromEvent = false) => {
       const { title, body } = buildCommentNotificationText(comment, name);
       const dedupeKey = eventDedupeKey("comment", comment?.id, ++noIdSeq);
       for (const t of teachers) {
@@ -937,6 +1084,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
           body,
           link: classnotePostUrl(reportId, undefined, comment?.id), // 댓글이 달린 그 글로 직행(벨이 확인 팝업 후 새 창) — 댓글 번호를 실어 앱이 정확히 짝짓는다
           dedupeKey,
+          fromEvent, // 알림 목록 경로 표식(로그·점검용 — insert 칸 목록에는 없다)
         });
       }
     };
@@ -947,16 +1095,18 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
         held.push(`${group.prefix}${h.student.name}(지금 담당 선생님 없음)`);
         continue;
       }
-      pushPlan(h.comment, h.student.name, h.reportId, r.ids);
+      pushPlan(h.comment, h.student.name, h.reportId, r.ids, h.fromEvent);
     }
     // 반 전체 댓글(학생 미확정) — 제목엔 학생 대신 반 이름.
     for (const w of wideHits) {
       addBlocked(stats, w.result);
       if (!w.result.ids.length) held.push(`${w.className}(반 담당 강사 없음)`);
-      else pushPlan(w.comment, w.board.boardName, w.reportId, w.result.ids);
+      else pushPlan(w.comment, w.board.boardName, w.reportId, w.result.ids, w.fromEvent);
     }
-    const { rows: plan, dropped } = dedupePlanRows(planRows); // (7) 같은 댓글·같은 사람 한 줄만
-    stats.gDup += dropped;
+    const deduped = dedupePlanRows(planRows); // (7) 같은 댓글·같은 사람 한 줄만
+    // 이미 알린 댓글이 다시 후보가 될 수 있다(알림 목록 경로의 여유 구간 · 방금 올라온 글의 기준선 어긋남) — 링크(댓글 번호)로 보낸 것을 뺀다.
+    const { rows: plan, dropped: already } = await dropAlreadyBelled(sql, tenant, deduped.rows);
+    stats.gDup += deduped.dropped + already;
 
     if (dryRun) {
       log(`[comment] (점검) 댓글 수 변한 글 ${changed.length}건 → 새 학부모 댓글 ${detected}건 → 알림 ${plan.length}건 예정 · 보류 ${held.length}건`);
@@ -984,6 +1134,8 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
         await tx`insert into notifications ${tx(plan, "tenant_id", "recipient_id", "type", "title", "body", "link")}`;
       }
       await saveCounts(tx, tenant, pruneCounts(nextCounts, COMMENT_COUNTS_CAP));
+      // 알림 목록 워터마크도 **같은 트랜잭션**에서 — 벨만 들어가고 워터마크가 안 옮겨지면 다음 폴이 같은 줄을 다시 본다(링크 가드가 받치지만 한 번에 끝낸다).
+      if (old.mark && !holdEventMark) await saveEventMark(tx, tenant, old.mark);
     });
 
     if (raced) {
@@ -995,7 +1147,11 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       log(`[comment] 새 학부모 댓글 ${detected}건 감지 → 강사 알림 ${plan.length}건${held.length ? ` · 보류 ${held.length}건` : ""}`);
       for (const h of held) log(`[comment]   보류: ${h}`);
     }
-    return { ran: true, changed: changed.length, detected, notified: plan.length, held: held.length, tooOld: tooOldCount, ...stats };
+    return {
+      ran: true, changed: changed.length, detected, notified: plan.length, held: held.length, tooOld: tooOldCount,
+      oldPosts: old.items.length, // 알림 목록 경로로 잡은 글 수(감시 창 밖·이번에 처음 본 글)
+      ...stats,
+    };
   } catch (e) {
     await dropFeedPage(); // 다음 폴은 깨끗한 세션으로
     throw e;

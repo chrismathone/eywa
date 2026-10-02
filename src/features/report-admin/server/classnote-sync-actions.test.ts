@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   loadRows: vi.fn(),
   workerOk: vi.fn(),
   merge: vi.fn(),
+  report: vi.fn(),
   log: vi.fn(),
   calls: [] as { table: string; op: string; args: unknown[] }[],
   insertResult: { data: { id: "new" }, error: null } as { data: unknown; error: unknown },
@@ -30,6 +31,7 @@ vi.mock("./classnote-sync-core", () => ({
   mergeIntoPending: m.merge,
   isMissingTableError: (e: { code?: string }) => e?.code === "42P01" || e?.code === "PGRST205",
 }));
+vi.mock("./classnote-sync-report-core", () => ({ loadSyncReportSummary: m.report }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from(table: string) {
@@ -78,6 +80,31 @@ beforeEach(() => {
   m.loadRows.mockResolvedValue({ active: null, latest: null });
   m.workerOk.mockResolvedValue(true);
   m.merge.mockResolvedValue(false);
+  m.report.mockResolvedValue(null);
+});
+
+describe("동기화 보고서 요약(0329a) — 동기화 상태와 한 번에", () => {
+  const summary = { finishedAt: "2026-10-01T20:12:00Z", ok: true, changed: 2, failed: 1, held: 3, releaseNames: 3, releaseClasses: 2, dailyFailed: 0, dailyStopped: false };
+  it("보고서 쓰기 권한이 있으면 요약이 실린다 — 지점 id로 읽는다", async () => {
+    m.report.mockResolvedValue(summary);
+    const s = await getClassnoteSyncStatus();
+    expect(s.available).toBe(true);
+    expect(s.report).toEqual(summary);
+    expect(m.report).toHaveBeenCalledWith(expect.anything(), "t1");
+  });
+  it("🔴 강사는 동기화 버튼만 — 전 반의 학생·원아 이름이 든 보고서 요약을 읽지도 않는다", async () => {
+    m.user.mockResolvedValue({ id: "u2", tenantId: "t1", systemRole: "teacher", displayName: "강사" });
+    m.canWrite.mockResolvedValue(false);
+    m.report.mockResolvedValue(summary);
+    const s = await getClassnoteSyncStatus();
+    expect(s.available).toBe(true);
+    expect(s.report).toBeNull();
+    expect(m.report).not.toHaveBeenCalled();
+  });
+  it("회차 기록이 없거나 표가 없으면(null) 버튼만 빠지고 동기화 버튼은 그대로", async () => {
+    const s = await getClassnoteSyncStatus();
+    expect(s).toMatchObject({ available: true, report: null });
+  });
 });
 
 const inserts = () => m.calls.filter((c) => c.table === "classnote_sync_requests" && c.op === "insert");

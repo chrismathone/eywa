@@ -72,3 +72,53 @@ export async function writeClassBoardSnapshot(sql, tenant, plans, { keepClassIds
   }
   return out;
 }
+
+/**
+ * 반 보드별 **해제 리스트**(0329a, 원장 2026-10-02) — 그 보드엔 있는데 aywa 그 반 누구의 원아도 아닌 원아 이름(`plan.extras`).
+ * 동기화는 배정만 하고 해제는 사람이 ClassNote 화면에서 한다 → 지금까지 로그에만 남던 목록을 반 보드 행에 적어 앱이 내려받게 한다.
+ *  · 보드가 확인된 반(`exists`)만 적는다 — 방금 읽은 원아 목록이 근거라 그 반의 목록을 통째로 갈아 끼운다(없으면 빈 배열).
+ *  · 🔴 어떤 실패도 동기화를 막지 않는다 — 칸이 아직 없으면(0329a 전, #95) 이 기록만 건너뛴다. 값은 `sql.json`으로(문자열로 넣으면 이중 인코딩, #82).
+ * @param {import("postgres").Sql} sql
+ * @param {string} tenant
+ * @param {ReturnType<import("./class-board-plan.mjs").planClassBoards>} plans
+ * @param {(line: string) => void} [log]
+ * @returns {Promise<{classes:number, names:number, skipped:boolean}>}
+ */
+/**
+ * 해제 대상 한 줄 — 원아 이름. 🔴 그 반 **보류 학생**과 이름이 겹치면 표시를 붙인다: 보류 학생(1인 보드가 없거나 가드에 걸린 재원생)의
+ * 원아는 계획이 '그 반 누구의 원아'로 세지 못해 잉여로 떨어진다. 그대로 해제하면 **지금 다니는 학생**이 반 보드에서 빠지고,
+ * 보류 상태라 동기화가 다시 넣지도 않는다(적대 리뷰 2026-10-02).
+ */
+const bare = (s) => String(s ?? "").replace(/[a-zA-Z\s()]/g, "");
+export function releaseLabel(childName, hold) {
+  const name = String(childName ?? "").trim();
+  if (!name) return "";
+  const key = bare(name);
+  const twin = key.length >= 2 ? (hold ?? []).find((h) => { const k = bare(h?.name); return k.length >= 2 && (k.includes(key) || key.includes(k)); }) : null;
+  return twin ? `${name} (확인 필요 — 이 반 보류 학생 '${twin.name}'의 원아일 수 있음)` : name;
+}
+
+export async function writeReleaseNames(sql, tenant, plans, log = console.log) {
+  const out = { classes: 0, names: 0, skipped: false };
+  try {
+    for (const p of plans) {
+      if (p.board.deletedBoardId != null) {
+        // ClassNote에서 지워진 보드 — 해제할 원아도 없다. 남겨 두면 없는 보드의 목록이 보고서에 계속 뜬다.
+        await sql`update classnote_class_boards set release_names = ${sql.json([])}, release_checked_at = now()
+          where tenant_id = ${tenant} and class_id = ${p.classId}`;
+        continue;
+      }
+      if (p.board.action !== "exists" || p.board.id == null) continue;
+      const names = [...new Set((p.extras ?? []).map((n) => releaseLabel(n, p.hold)).filter(Boolean))];
+      await sql`
+        update classnote_class_boards set release_names = ${sql.json(names)}, release_checked_at = now()
+        where tenant_id = ${tenant} and class_id = ${p.classId} and board_id = ${p.board.id}`;
+      out.classes++;
+      out.names += names.length;
+    }
+  } catch (e) {
+    out.skipped = true;
+    log(`[class-board] 해제 리스트 기록 건너뜀 — ${String(e?.message ?? e).slice(0, 120)}`);
+  }
+  return out;
+}

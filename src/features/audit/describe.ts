@@ -1096,6 +1096,21 @@ export function auditDetail(
       const what = m.full === false ? `지목한 반·학생만(반 ${c ?? 0} · 학생 ${s ?? 0})` : "바뀐 반 전부";
       return m.joined === true ? `이미 요청된 동기화에 합류 — ${what}` : `${what} 동기화 요청`;
     }
+    case "classnote_board_sync_report_export":
+      return join(
+        `변동 ${num(m.changed) ?? 0}건 · 실패 ${num(m.failed) ?? 0}건 · 보류 ${num(m.held) ?? 0}건`,
+        `직접 해제 ${num(m.releaseNames) ?? 0}명(${num(m.releaseClasses) ?? 0}개 반)`,
+        m.ok === false ? "멈춘 회차" : null,
+      );
+    case "classnote_board_sync_daily":
+      return join(
+        m.ok === false ? "도중에 멈춤" : null,
+        `변동 ${num(m.changed) ?? 0}건 · 실패 ${num(m.failed) ?? 0}건 · 보류 ${num(m.held) ?? 0}건`,
+        num(m.release) ? `해제 필요 ${num(m.release)}개 반` : null,
+        m.ok === false ? str(m.error) : null,
+      );
+    case "classnote_board_enroll":
+      return join(str(m.className), m.kind === "request" ? "지금 동기화" : "정기 동기화");
     case "classnote_parent_reply_request":
       return join(`게시 명의 ${str(m.author) ?? "?"}`, num(m.length) === null ? null : `${num(m.length)}자`);
     case "classnote_parent_reply_edit_request":
