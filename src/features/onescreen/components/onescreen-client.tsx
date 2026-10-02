@@ -219,7 +219,10 @@ import { computeClientMentSource } from "../ment-source";
 import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
 import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
 import { ClassnoteOnProvider } from "./classnote-on-context";
-import { useVideoHomeworkPolicy, useVideoHomeworkSaveOk } from "@/features/video-homework/components/video-homework-provider";
+import { useSubmitLinkMode, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
+import { submitLinkChoosable } from "@/features/video-submit/link-choice";
+import { planBulkVideoCheck } from "@/features/video-homework/bulk-check";
+import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 
 /** 아직 안 불러왔을 때의 빈 결석 후보 한 벌 — 확인창은 이걸 받아 '직접 입력'만 보여 준다. */
@@ -390,6 +393,8 @@ export function OneScreenClient({
   // 영상 숙제 정책(학원설정) — 저장할 때 '오늘 영상 과제'를 실을 행을 가른다. 공급자 밖이면 null(싣지 않음).
   const videoHwPolicy = useVideoHomeworkPolicy();
   const videoHwSaveOk = useVideoHomeworkSaveOk();
+  const submitLinkMode = useSubmitLinkMode();
+  const videoHwStore = useVideoHomeworkStore();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
   // 글씨 크기 — 화면은 즉시(클릭 반응), 계정 저장은 백그라운드(실패해도 이번 세션 크기는 유지).
@@ -695,6 +700,8 @@ export function OneScreenClient({
               homeworkToday: su.homeworkToday ?? "",
               // 오늘 영상 과제 있음(0308a) — 켠 적 없는 행은 빼서 세션 모양을 그대로 둔다.
               ...(su.videoHomework != null ? { videoHomework: su.videoHomework } : {}),
+              // 영상 첨부 링크 넣기(0328a) — 고른 적 없는 행은 빼서 세션 모양을 그대로 둔다.
+              ...(su.videoSubmitLink != null ? { videoSubmitLink: su.videoSubmitLink } : {}),
               // 영어 템플릿 모드(2026-09-10) — **영어 행만** 싣는다(수학 세션 모양 불변). 로스터가 같은 키로 복원한다.
               ...(su.subjectKey === "english"
                 ? {
@@ -2155,8 +2162,22 @@ export function OneScreenClient({
   function toggleVideoHomeworkFor(studentId: string, subjectName: string) {
     patch(studentId, (s) => ({
       ...s,
-      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoHomework: !su.videoHomework } : su)),
+      // 영상 과제를 끄면 링크 넣기도 함께 끈다(토글이 사라지는데 값만 켜진 채 남지 않게). 고른 적 없는 행은 그대로 둔다.
+      subjects: s.subjects.map((su) => (su.name === subjectName
+        ? { ...su, videoHomework: !su.videoHomework, ...(su.videoHomework && su.videoSubmitLink ? { videoSubmitLink: false } : {}) }
+        : su)),
     }));
+  }
+  // 영상 첨부 링크 넣기(0328a, 원장 2026-10-02) — 행별. '영상 과제'를 켠 행에서만 토글이 뜬다. 자동저장에 실린다.
+  function toggleVideoSubmitLinkFor(studentId: string, subjectName: string) {
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((su) => (su.name === subjectName ? { ...su, videoSubmitLink: !su.videoSubmitLink } : su)),
+    }));
+  }
+  function toggleVideoSubmitLink(subjectName: string) {
+    if (!selected) return;
+    toggleVideoSubmitLinkFor(selected.id, subjectName);
   }
   function toggleVideoHomework(subjectName: string) {
     if (!selected) return;
@@ -2804,12 +2825,16 @@ export function OneScreenClient({
     progressSubjectKey: string,
     attendance: BulkAttendanceStatus | null = null,
     attendanceUnits = "", // 수업타임(시수) — 새로 만드는 출결 행에만(서버 setAttendanceBulk 규약)
+    videoCheck: VideoHomeworkStatus | null = null, // 지난 영상 숙제 검사 — 출결처럼 즉시 기록(검사 칸이 있는 행만)
   ) {
     const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
     const plan = planBulkApply(
-      rows.map((r) => ({
+      rows.map((r) => {
+        // 2026-10-02 추가 칸의 현재값은 **행 값**(row-fields.ts) — 표가 그리는 값과 같은 층을 본다.
+        const rowEval = resolveRowFields(r.student, r.subject);
+        return {
         studentId: r.student.id,
         subjectName: r.subject.name,
         subjectIndex: r.subjectIndex,
@@ -2819,6 +2844,21 @@ export function OneScreenClient({
         homework: r.student.homework,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
+        note: rowEval.note,
+        dailyScore: rowEval.tests.daily.score,
+        dailyMax: rowEval.tests.daily.max,
+        checkScore: rowEval.tests.check.score,
+        checkMax: rowEval.tests.check.max,
+        videoHomework: r.subject.videoHomework,
+        videoSubmitLink: r.subject.videoSubmitLink,
+        // 행의 토글이 그려지는 조건과 같다(VideoHomeworkToggle · VideoSubmitLinkToggle) — 토글 없는 행엔 값을 넣지 않는다.
+        videoOk:
+          videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId &&
+          isVideoHomeworkEnabled(videoHwPolicy, { classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade }),
+        linkOk:
+          videoHwSaveOk &&
+          submitLinkChoosable(submitLinkMode, videoHwPolicy, {
+            classId: r.subject.classId, subjectKey: r.subject.subjectKey, grade: r.student.grade, studentName: r.student.name }),
         // 잠긴 행(발송 완료·결석)엔 값을 밀어 넣지 않는다 — 넣으면 강사가 **지울 수 없는 값**이 남는다.
         // ⚠️ 행 목록(rows)에서 빼지는 않는다: 아래 출결 일괄 적용이 같은 목록을 쓰는데 거기서 빠지면
         //    잘못 찍은 결석을 일괄로 되돌릴 수 없다(잠금의 유일한 탈출구를 막는 꼴).
@@ -2828,7 +2868,8 @@ export function OneScreenClient({
             r.subject,
             effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus),
           ),
-      })),
+        };
+      }),
       patchFields,
       onlyEmpty,
       progressSubjectKey,
@@ -2842,6 +2883,20 @@ export function OneScreenClient({
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
+      // 2026-10-02 추가 칸 — 전부 **그 행에만**(행 값). 문항수를 먼저 바꾸고 점수를 넣는다(문항수 변경이 점수를 깎으므로).
+      if (p.set.note !== undefined) setNoteFor(p.studentId, p.subjectName, p.set.note);
+      if (p.set.dailyMax !== undefined) setMaxFor(p.studentId, p.subjectName, "daily", p.set.dailyMax);
+      if (p.set.dailyScore !== undefined) setScoreFor(p.studentId, p.subjectName, "daily", p.set.dailyScore);
+      if (p.set.checkMax !== undefined) setMaxFor(p.studentId, p.subjectName, "check", p.set.checkMax);
+      if (p.set.checkScore !== undefined) setScoreFor(p.studentId, p.subjectName, "check", p.set.checkScore);
+      const { videoHomework: bulkVideoHw, videoSubmitLink: bulkVideoLink } = p.set;
+      if (bulkVideoHw !== undefined || bulkVideoLink !== undefined)
+        patch(p.studentId, (s) => ({
+          ...s,
+          subjects: s.subjects.map((su) => (su.name === p.subjectName
+            ? { ...su, ...(bulkVideoHw !== undefined ? { videoHomework: bulkVideoHw } : {}), ...(bulkVideoLink !== undefined ? { videoSubmitLink: bulkVideoLink } : {}) }
+            : su)),
+        }));
     }
     const done: string[] = [];
     if (plan.length) done.push(tf("os.c.doneRows", { n: plan.length }));
@@ -2911,6 +2966,22 @@ export function OneScreenClient({
             return n;
           });
         }
+      }
+    }
+    // 지난 영상 숙제 검사 — 출결과 같은 성질(화면 state가 아니라 **즉시 기록**). 검사 칸이 보이는 행만(planBulkVideoCheck —
+    // 팝오버가 그 줄을 그리는 조건과 같은 함수), 여러 칸을 한 왕복으로. 열람 전용 화면에선 하지 않는다(서버도 거절한다).
+    if (videoCheck && videoHwStore && !readonlyView) {
+      const targets = planBulkVideoCheck(
+        rows.map((r) => ({
+          classId: r.subject.classId, studentId: r.student.id, subjectKey: r.subject.subjectKey,
+          grade: r.student.grade, homeworkDate: r.subject.prevReport?.date,
+        })),
+        videoHwStore,
+        { status: videoCheck, onlyEmpty },
+      );
+      if (targets.length) {
+        const res = await videoHwStore.changeMany(targets, videoCheck);
+        done.push(tf("os.c.doneVideoCheck", { n: res.applied }) + (res.failed ? tf("os.c.doneVideoCheckFail", { n: res.failed }) : ""));
       }
     }
     if (done.length === 0) {
@@ -3204,6 +3275,12 @@ export function OneScreenClient({
         ...(videoHwSaveOk && typeof su?.videoHomework === "boolean" && su.classId && videoHwPolicy &&
         isVideoHomeworkEnabled(videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey ?? "math", grade: student.grade })
           ? { videoHomework: su.videoHomework }
+          : {}),
+        // 영상 첨부 링크 넣기(0328a) — 같은 규약: 고른 값이 있고 그 행에서 고를 수 있을 때만 싣는다(토글이 안 보이는 행·단계는
+        // 싣지 않아 저장돼 있던 값을 덮지 않는다). 영상 과제가 꺼진 행은 false로 — 과제 없이 링크만 켜진 값이 남지 않게.
+        ...(videoHwSaveOk && typeof su?.videoSubmitLink === "boolean" &&
+        submitLinkChoosable(submitLinkMode, videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey, grade: student.grade, studentName: student.name })
+          ? { videoSubmitLink: su.videoSubmitLink && su.videoHomework === true }
           : {}),
         // 멘트 작성 방식(0214a) — 이번 세션 자동작성 스냅샷과 비교(최종은 서버 resolveMentSource가 sticky 판정).
         mentSource: computeClientMentSource(draft, fresh ? fresh.autoDraft : existing?.autoDraft),
@@ -4283,6 +4360,7 @@ export function OneScreenClient({
             onNote: setNoteFor,
             onMakeup: toggleMakeupFor,
             onVideoHomework: toggleVideoHomeworkFor,
+            onVideoSubmitLink: toggleVideoSubmitLinkFor,
           }}
           rowActions={{
             onSendRow: sendRow,
@@ -4435,6 +4513,7 @@ export function OneScreenClient({
                 onHomeworkToday={setHomeworkToday}
                 onMakeup={toggleMakeup}
                 onVideoHomework={toggleVideoHomework}
+                onVideoSubmitLink={toggleVideoSubmitLink}
                 onRemoveMakeup={(subjectName) => void removeMakeupRow(selected, subjectName)}
                 onPickMakeupClass={(subjectName) => void pickMakeupClass(selected, subjectName)}
                 canRemoveMakeup={(subjectName) =>

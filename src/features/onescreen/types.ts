@@ -66,6 +66,11 @@ export type Subject = {
    * 학원설정 영상 숙제 정책이 이 반을 켠 행에서만 저장된다(끈 반은 undefined로 보내 값을 건드리지 않는다).
    */
   videoHomework?: boolean;
+  /**
+   * 영상 첨부 링크 넣기(0328a, 원장 2026-10-02) — 행 단위. '영상 과제'를 켠 행에서만 고른다. 켠 보고서에만
+   * ClassNote 글에 '영상첨부 : …/v/…' 줄이 붙는다. `undefined` = 고른 적 없음(저장에 싣지 않는다 — 저장돼 있던 값을 덮지 않게).
+   */
+  videoSubmitLink?: boolean;
 
   // ── 행(수업) 단위 평가값 (2026-08-13) — 해석·폴백은 [row-fields.ts](./row-fields.ts) 단일 소스 ──
   /**

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setVideoHomeworkMark, setVideoHomeworkRound } from "./actions";
+import { setVideoHomeworkMark, setVideoHomeworkMarksBulk, setVideoHomeworkRound } from "./actions";
 
 type Call = { table: string; op: "select" | "update" | "delete" | "upsert"; filters: unknown[][]; payload?: unknown; opts?: unknown };
 const mocks = vi.hoisted(() => ({
@@ -148,5 +148,51 @@ describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
     expect(mocks.calls.some((c) => c.table === "video_homework_marks" && has(c, "is", "homework_date", null))).toBe(true);
     expect(writes().map((c) => c.op)).toEqual(["delete"]);
     expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ checkDate: "2026-09-05", status: "cleared" }) }));
+  });
+});
+
+const CLASS = "11111111-1111-4111-8111-111111111111";
+const ST = (n: number) => `2222222${n}-2222-4222-8222-222222222222`;
+const bulk = { checkDate: "2026-09-03", status: "submitted" as const,
+  cells: [{ classId: CLASS, studentId: ST(1), homeworkDate: "2026-09-01" }, { classId: CLASS, studentId: ST(2), homeworkDate: null }] };
+
+describe("원스크린 일괄 검사(setVideoHomeworkMarksBulk) — 한 왕복, 칸마다 같은 확인", () => {
+  it("통과한 칸만 적고 그 목록을 돌려준다 · 감사로그는 한 번(건수)", async () => {
+    const result = await setVideoHomeworkMarksBulk(bulk);
+    expect(result).toEqual({ ok: true, applied: [{ classId: CLASS, studentId: ST(1) }, { classId: CLASS, studentId: ST(2) }], failed: 0 });
+    expect(writes().map((c) => c.op)).toEqual(["upsert", "upsert"]);
+    expect(writes().map((c) => (c.payload as { check_date: string }).check_date)).toEqual(["2026-09-03", "2026-09-03"]);
+    expect(mocks.log).toHaveBeenCalledTimes(1);
+    expect(mocks.log).toHaveBeenCalledWith(expect.objectContaining({ action: "lesson_report_video_homework_mark",
+      metadata: expect.objectContaining({ bulk: true, count: 2, status: "submitted", checkDate: "2026-09-03" }) }));
+  });
+  it("같은 (반 × 학생)은 한 번만 · 모양이 틀린 칸·검사일보다 늦은 숙제일은 쓰지 않고 실패로 센다", async () => {
+    const result = await setVideoHomeworkMarksBulk({ ...bulk, cells: [
+      bulk.cells[0]!, bulk.cells[0]!,
+      { classId: "class-a", studentId: ST(3), homeworkDate: null },
+      { classId: CLASS, studentId: ST(4), homeworkDate: "2026-09-09" },
+    ] });
+    expect(result.applied).toEqual([{ classId: CLASS, studentId: ST(1) }]);
+    expect(result.failed).toBe(2);
+    expect(writes()).toHaveLength(1);
+  });
+  it("그날 명단에 없는 학생의 칸은 빠지고 나머지는 적힌다", async () => {
+    const base = mocks.respond;
+    mocks.respond = (call) => call.table === "enrollments" && has(call, "eq", "student_id", ST(2)) ? { data: [], error: null } : base(call);
+    const result = await setVideoHomeworkMarksBulk(bulk);
+    expect(result.applied).toEqual([{ classId: CLASS, studentId: ST(1) }]);
+    expect(result.failed).toBe(1);
+  });
+  it("읽기 전용·권한 없음·미래 수업·이상한 상태·칸 수 초과는 아무것도 쓰지 않는다", async () => {
+    mocks.readonly.mockResolvedValueOnce("읽기 전용입니다.");
+    expect((await setVideoHomeworkMarksBulk(bulk)).ok).toBe(false);
+    expect((await setVideoHomeworkMarksBulk({ ...bulk, checkDate: "2026-10-01" })).ok).toBe(false);
+    expect((await setVideoHomeworkMarksBulk({ ...bulk, status: "cleared" as never })).ok).toBe(false);
+    expect((await setVideoHomeworkMarksBulk({ ...bulk, cells: Array.from({ length: 301 }, () => bulk.cells[0]!) })).ok).toBe(false);
+    mocks.access.mockResolvedValue("read"); mocks.canWrite.mockResolvedValue(false);
+    const denied = await setVideoHomeworkMarksBulk(bulk);
+    expect(denied).toEqual({ ok: true, applied: [], failed: 2 });
+    expect(writes()).toEqual([]);
+    expect(mocks.log).not.toHaveBeenCalled();
   });
 });

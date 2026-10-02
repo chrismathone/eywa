@@ -58,9 +58,20 @@ describe("파일 이름 — 워커 videoFilename 그대로 + 원본 확장자", 
 
 describe("수업보고서 '영상 제출' 줄 — 한 함수", () => {
   const base = {
-    videoHomework: true, reportSubject: "math", revoked: false, classId: klass.class_id, classSubject: "math",
-    grade: "중1", policy: DEFAULT_VIDEO_HOMEWORK_POLICY,
+    videoHomework: true, submitLink: true as boolean | null | "no_column", reportSubject: "math", revoked: false,
+    classId: klass.class_id, classSubject: "math", grade: "중1", policy: DEFAULT_VIDEO_HOMEWORK_POLICY,
   };
+  it("강사가 '영상 첨부 링크 넣기'를 켠 보고서만 — 끔·고른 적 없음은 붙이지 않는다(0328a)", () => {
+    expect(reportGetsVideoLink({ ...base, submitLink: true })).toBe(true);
+    expect(reportGetsVideoLink({ ...base, submitLink: false })).toBe(false);
+    expect(reportGetsVideoLink({ ...base, submitLink: null })).toBe(false);
+    // 링크를 켰어도 영상 과제가 없으면 붙이지 않는다.
+    expect(reportGetsVideoLink({ ...base, submitLink: true, videoHomework: false })).toBe(false);
+  });
+  it("그 칸이 아직 없으면(SQL 적용 전) 10-01 규칙 그대로 — 영상 과제 있음이면 붙인다", () => {
+    expect(reportGetsVideoLink({ ...base, submitLink: "no_column" })).toBe(true);
+    expect(reportGetsVideoLink({ ...base, submitLink: "no_column", videoHomework: null })).toBe(false);
+  });
   it("영상 과제 있음 + 검사 대상 반일 때만", () => {
     expect(reportGetsVideoLink(base)).toBe(true);
     expect(reportGetsVideoLink({ ...base, videoHomework: null })).toBe(false);

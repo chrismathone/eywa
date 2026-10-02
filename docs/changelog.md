@@ -1,5 +1,14 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-02 — 영상 첨부 링크 넣기 토글 · 일괄 입력 추가 칸 · 보고서 글의 링크 이름
+
+- **영상 첨부 링크 넣기(0328a `lesson_reports.video_submit_link`)**: 원스크린에서 '영상 과제'를 켠 행에 둘째 토글이 뜬다(표 = 체크 칸, 카드 = 체크 알약). **켠 보고서에만** ClassNote 글에 영상 올리는 링크가 붙는다 — 10-01의 "영상 과제 있음이면 자동"을 강사 선택으로 바꿨다. 판정은 [`reportGetsVideoLink`](../src/features/video-submit/route.ts) 한 함수, 토글을 그리는 조건·일괄 입력·저장은 [`submitLinkChoosable`](../src/features/video-submit/link-choice.ts) 한 벌(영어·반 없음·정책이 끈 반·줄이 꺼진 단계엔 토글이 없다).
+- **SQL 적용 전후 둘 다 돈다(#95)**: 칸이 없으면 토글을 안 그리고 링크는 10-01 규칙 그대로. 칸 유무를 못 물어본 때(`unknown`)는 붙이지 않는다. 로스터(핫패스)는 그 칸을 모르고 [`getSubmitLinkUi`](../src/features/video-submit/server/link-choice-db.ts)가 따로 읽는다(실패 = 토글 없음 · 값 안 보냄).
+- **보고서 글 모양(워커)**: 영상 링크가 붙는 글만 두 줄에 이름을 단다 — `보고서 : …/r/…` / `영상첨부 : …/v/…`. 링크가 하나뿐인 글은 지금처럼 주소 한 줄. 본문 일치 판정([`sameReportContent`](../scripts/_classnote/report-video-line.mjs))은 세 모양(한 줄 · 10-01 `영상 제출:` · 10-02 이름 둘)을 모두 알아본다(중복 게시 방지·회수). **연동 PC 워커 zip 적용 필요** — 적용 전에는 옛 모양(`영상 제출:`)으로 나간다.
+- **일괄 입력 추가 칸**: 표 행엔 있는데 일괄 입력엔 없던 일일·확인 테스트(개수/문항수) · 지난 영상 숙제 검사(완료/미제출) · 오늘 영상 과제(있음/없음 + 영상 첨부 링크 넣기) · 특이사항. 계획은 `planBulkApply`(grid.ts) · 검사 대상은 [`planBulkVideoCheck`](../src/features/video-homework/bulk-check.ts)(화면에 검사 칸이 보이는 행만). 검사는 출결처럼 **적용 즉시 기록** — 여러 칸을 한 왕복으로 쓰는 `setVideoHomeworkMarksBulk`(칸마다 한 칸 저장과 같은 확인, 감사로그 1건). 타임(시수)은 출결과 함께만(찍힌 기록의 시수를 일괄로 덮지 않는다) · 학부모 문구·학습 추세는 대상 아님.
+- **카드 모드 '영상 과제'**: 글자만 있는 알약이라 켜고 끄는 칸으로 안 읽혔다 → 알약 안에 체크 칸. 표·카드는 같은 상태·같은 저장 경로다(가드 `link-choice.test.ts`·`video-homework-assigned.test.ts`).
+- 소비처: 발송 직전 `/api/internal/video-submit-link` → `reportVideoLinkToken`이 `video_submit_link`를 읽는다. Vercel `VIDEO_SUBMIT_REPORT_LINE`(off/test/on)이 꺼져 있으면 토글도 없다.
+
 ## 2026-10-02 — 지점 설정과 슈퍼관리자 운영 설정 분리
 
 - 지점에서는 지점 관리만 하고 슈퍼관리자 관리는 `/admin`으로 진입하는 운영자 콘솔에서 한다. 대시보드 적용 직원·근무 설정의 대시보드 배정·개인별 권한 예외·민감 기능 담당자 선택에서 운영자 계정을 제외한다.

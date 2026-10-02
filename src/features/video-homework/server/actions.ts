@@ -10,6 +10,10 @@ import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
 import { videoHomeworkColumnReady } from "./assignments";
 import { loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
 
+type Db = ReturnType<typeof createAdminClient>;
+type CheckCell = { classId: string; studentId: string; checkDate: string; homeworkDate: string | null;
+  submittedDate?: string | null; status: VideoHomeworkStatus | null };
+
 const STATUSES: readonly (VideoHomeworkStatus | null)[] = ["submitted", "missing", null];
 const badSubmittedDate = (value: string | null | undefined) =>
   value != null && (!isVideoHomeworkDate(value) || value > kstToday());
@@ -36,8 +40,14 @@ export async function setVideoHomeworkMark(input: {
   if (!STATUSES.includes(input.status)) return { ok: false, error: "유효하지 않은 상태입니다." };
   const denied = await videoHomeworkWriteError(user, input.classId, input.checkDate);
   if (denied) return { ok: false, error: denied };
+  return writeCheckedMark(createAdminClient(), { tenantId: user.tenantId, userId: user.id }, input);
+}
 
-  const db = createAdminClient();
+/**
+ * 검사 한 칸을 쓴다 — 대상(반·학생·정책)과 그날 명단을 확인한 뒤. 로그인·열람 전용·날짜 모양·반 권한은 **부르는 쪽**이 먼저 본다
+ * (한 칸 저장과 일괄 저장이 같은 확인을 지나게 한 벌로 묶었다).
+ */
+async function writeCheckedMark(db: Db, user: { tenantId: string; userId: string }, input: CheckCell): Promise<MarkWriteResult> {
   if (input.status !== null) {
     const target = await loadVideoHomeworkTarget(db, user.tenantId, input.classId, input.studentId);
     if (target.error !== null) return { ok: false, error: target.error };
@@ -70,8 +80,70 @@ export async function setVideoHomeworkMark(input: {
     if (!attendance.data?.length && !reservation.data?.length && !existing.data?.length)
       return { ok: false, error: "해당 수업 날짜의 학생을 찾을 수 없습니다." };
   }
-  return writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId, studentId: input.studentId,
+  return writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.userId, classId: input.classId, studentId: input.studentId,
     slotDate: input.checkDate, slotIsMine: true, homeworkDate: input.homeworkDate, submittedDate: input.submittedDate, status: input.status });
+}
+
+const BULK_MAX_CELLS = 300;
+const BULK_CONCURRENCY = 6;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 원스크린 일괄 입력의 '지난 영상 숙제 검사'(원장 2026-10-02 *"일괄 입력에 지금 없는거 추가"*) — 여러 칸을 **한 왕복**으로.
+ * 한 칸씩 부르면 서버 액션이 줄을 서서(클라는 액션을 차례로 보낸다) 30행에 수 초가 걸리고 그동안 자동저장이 밀린다.
+ * 칸마다 지나는 확인은 `setVideoHomeworkMark`와 같다(반 권한 · 대상 · 그날 명단). 통과한 칸만 적고 그 목록을 돌려준다 —
+ * 화면은 그 칸만 칠한다(막힌 칸을 '됐다'고 보이지 않게).
+ */
+export async function setVideoHomeworkMarksBulk(input: {
+  checkDate: string;
+  status: VideoHomeworkStatus;
+  cells: { classId: string; studentId: string; homeworkDate: string | null }[];
+}): Promise<{ ok: boolean; error?: string; applied: { classId: string; studentId: string }[]; failed: number }> {
+  const none = (error: string) => ({ ok: false, error, applied: [], failed: 0 });
+  const user = await getCurrentUser();
+  if (!user) return none("로그인이 필요합니다.");
+  const readonlyError = await readonlyTeacherViewError();
+  if (readonlyError) return none(readonlyError);
+  if (!isVideoHomeworkDate(input.checkDate)) return none("수업 날짜가 올바르지 않습니다.");
+  if (input.checkDate > kstToday()) return none("미래 수업의 숙제는 검사할 수 없습니다.");
+  if (input.status !== "submitted" && input.status !== "missing") return none("유효하지 않은 상태입니다.");
+  if (!Array.isArray(input.cells) || input.cells.length > BULK_MAX_CELLS) return none("한 번에 처리할 수 있는 칸 수를 넘었습니다.");
+  // 같은 (반 · 학생)은 한 번만 — 그날 검사 칸은 반 × 학생당 하나다. 모양이 틀린 칸은 버린다(세지 않는다).
+  const byKey = new Map<string, { classId: string; studentId: string; homeworkDate: string | null }>();
+  let failed = 0;
+  for (const cell of input.cells) {
+    const homeworkDate = cell?.homeworkDate ?? null;
+    if (typeof cell?.classId !== "string" || typeof cell?.studentId !== "string" || !UUID_RE.test(cell.classId) || !UUID_RE.test(cell.studentId) ||
+      (homeworkDate !== null && (!isVideoHomeworkDate(homeworkDate) || homeworkDate > input.checkDate))) { failed += 1; continue; }
+    byKey.set(`${cell.classId}:${cell.studentId}`, { classId: cell.classId, studentId: cell.studentId, homeworkDate });
+  }
+  const cells = [...byKey.values()];
+  if (!cells.length) return { ok: true, applied: [], failed };
+  // 반 권한은 반마다 한 번(B4) — 막힌 반의 칸은 통째로 빠진다.
+  const classIds = [...new Set(cells.map((cell) => cell.classId))];
+  const deniedList = await Promise.all(classIds.map((classId) => videoHomeworkWriteError(user, classId, input.checkDate)));
+  const allowed = new Set(classIds.filter((_, i) => !deniedList[i]));
+  const db = createAdminClient();
+  const applied: { classId: string; studentId: string }[] = [];
+  const queue = cells.filter((cell) => { if (allowed.has(cell.classId)) return true; failed += 1; return false; });
+  // 칸마다 조회 4~5개 — 한꺼번에 다 띄우지 않고 몇 개씩(연결을 몰아 쓰지 않게).
+  for (let i = 0; i < queue.length; i += BULK_CONCURRENCY) {
+    const results = await Promise.all(queue.slice(i, i + BULK_CONCURRENCY).map((cell) =>
+      writeCheckedMark(db, { tenantId: user.tenantId, userId: user.id }, { ...cell, checkDate: input.checkDate, status: input.status })
+        .catch((): MarkWriteResult => ({ ok: false }))
+        .then((result) => ({ cell, result }))));
+    for (const { cell, result } of results) {
+      if (result.ok) applied.push({ classId: cell.classId, studentId: cell.studentId });
+      else failed += 1;
+    }
+  }
+  if (applied.length) await logAction({
+    action: "lesson_report_video_homework_mark",
+    targetType: "video_homework",
+    targetLabel: `원스크린 일괄 ${applied.length}건`,
+    metadata: { bulk: true, checkDate: input.checkDate, status: input.status, count: applied.length, failed },
+  });
+  return { ok: true, applied, failed };
 }
 
 /**

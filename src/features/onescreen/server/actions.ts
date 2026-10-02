@@ -61,6 +61,7 @@ import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/r
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
+import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
 import { mentStyleDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
@@ -89,6 +90,11 @@ export type SaveLessonReportInput = {
    * 서버가 조용히 뺀다(#95). 다음 수업의 '지난 수업 영상 숙제' 검사는 false일 때만 숨는다(assignment.ts).
    */
   videoHomework?: boolean;
+  /**
+   * 영상 첨부 링크 넣기(0328a, 원장 2026-10-02) — `undefined`면 손대지 않는다. 컬럼이 아직 없으면 서버가 조용히 뺀다(#95).
+   * 발송 직전 판정(`reportGetsVideoLink`)이 이 값이 true인 보고서에만 '영상첨부' 줄을 붙인다.
+   */
+  videoSubmitLink?: boolean;
   progress: string; // "영어 Unit 8 · p.90"
   examInfo: string; // "일일 18/20, 확인 19/20" (roster prev-score 파싱용 합본 — 보존)
   homeworkScore: string; // 과제 상태
@@ -203,9 +209,11 @@ export async function saveLessonReport(
   //    푸는 방법은 공유링크 재발급(reissueShareLink — 상태 리셋 = "이 건은 무효" 선언)뿐이다.
   // ment_source(0214a) 기록 가능 여부 — 컬럼이 아직 없으면(마이그 미적용) 마커만 생략(#95, probe 캐시로 평시 왕복 0).
   // 영상 과제(0308a)도 같은 결 — 값을 실은 저장만 probe한다(나란히, B4). 적용 후엔 캐시라 왕복 0.
-  const [mentReady, videoHwReady] = await Promise.all([
+  // 영상 첨부 링크 넣기(0328a)도 같다 — 칸이 확인됐을 때만 적는다(없음·못 물어봄이면 이 값만 빠진다).
+  const [mentReady, videoHwReady, videoLinkReady] = await Promise.all([
     mentSourceColumnReady(supabase),
     input.videoHomework === undefined ? Promise.resolve(false) : videoHomeworkColumnReady(),
+    input.videoSubmitLink === undefined ? Promise.resolve(false) : videoSubmitLinkColumn().then((state) => state === "ready"),
   ]);
   const gateBase = supabase
     .from("lesson_reports")
@@ -329,6 +337,7 @@ export async function saveLessonReport(
         // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
         homework_today: normalizeNoneMarker(input.homeworkToday),
         ...(videoHwReady && typeof input.videoHomework === "boolean" ? { video_homework: input.videoHomework } : {}),
+        ...(videoLinkReady && typeof input.videoSubmitLink === "boolean" ? { video_submit_link: input.videoSubmitLink } : {}),
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: normalizeNoneMarker(input.homeworkScore),
@@ -1050,6 +1059,8 @@ export type SaveOnescreenSessionInput = {
       homeworkToday?: string;
       /** 오늘 영상 과제 있음(0308a) — 새로고침 뒤에도 켠 표시가 남게 세션에도 싣는다(로스터가 같은 키로 복원). */
       videoHomework?: boolean;
+      /** 영상 첨부 링크 넣기(0328a) — 같은 이유로 세션에도 싣는다(로스터가 같은 키로 복원). */
+      videoSubmitLink?: boolean;
       /**
        * 영어 템플릿 모드(2026-09-10) — 고른 템플릿 · 다음 시간 테스트 · 마지막 AI 인사말/코멘트.
        * **영어 행만** 싣는다(수학 세션 모양 불변). 로스터 복원(roster.ts `OnescreenSessionRow`)이 같은 키를 읽는다.

@@ -3,11 +3,13 @@ import type { FakeDb } from "./fake-db.test-util";
 import { C, ENV, OTHER_T, S, T, seedDb, settings } from "./test-fixture.test-util";
 import { hashSubmitToken } from "./token";
 
-const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown, audit: vi.fn() }));
+const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown, audit: vi.fn(), linkColumn: "ready" as "ready" | "missing" | "unknown" }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async () => m.settings }));
 vi.mock("@/features/audit/server/log", () => ({ logActionAs: m.audit }));
 vi.mock("@/features/video-homework/server/assignments", () => ({ videoHomeworkColumnReady: async () => true }));
+// 링크 넣기 칸(0328a) 유무 — 가짜 DB는 select 필드를 보지 않으므로 여기서 정한다.
+vi.mock("./link-choice-db", () => ({ videoSubmitLinkColumn: async () => m.linkColumn }));
 
 import { reportLineMode, reportVideoLinkToken } from "./report-link";
 import { _resetVideoDriveConfigForTest } from "./drive-config";
@@ -17,7 +19,7 @@ const R = "66666666-6666-4666-8666-666666666666";
 let db: FakeDb;
 const report = (over: Record<string, unknown> = {}) => ({
   id: R, tenant_id: T, student_id: S, class_id: C, subject: "math", report_date: "2026-10-01", video_homework: true, revoked_at: null,
-  share_token: "share-1", ...over,
+  video_submit_link: true, share_token: "share-1", ...over,
 });
 function setup(over: Record<string, unknown> = {}, studentName = "류태경") {
   db = seedDb();
@@ -28,6 +30,7 @@ function setup(over: Record<string, unknown> = {}, studentName = "류태경") {
 }
 beforeEach(() => {
   m.settings = settings();
+  m.linkColumn = "ready";
   m.audit.mockReset();
   for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
   _resetVideoDriveConfigForTest();
@@ -60,6 +63,22 @@ describe("보고서 글의 '영상 제출' 줄 — 앱이 정한다", () => {
     });
     expect(JSON.stringify(db.tables.homework_video_links)).not.toContain(token!);
     expect(m.audit).toHaveBeenCalledTimes(1);
+  });
+  it("강사가 '영상 첨부 링크 넣기'를 켜지 않은 보고서(끔·고른 적 없음)는 붙이지 않는다", async () => {
+    for (const over of [{ video_submit_link: false }, { video_submit_link: null }]) {
+      setup(over);
+      expect(await reportVideoLinkToken(R, "on")).toBeNull();
+      expect(db.tables.homework_video_links).toHaveLength(0);
+    }
+  });
+  it("링크 넣기 칸이 아직 없으면(SQL 적용 전) 10-01 규칙 그대로 · 칸 유무를 못 물어봤으면 붙이지 않는다", async () => {
+    m.linkColumn = "missing";
+    setup({ video_submit_link: undefined });
+    expect(await reportVideoLinkToken(R, "on")).not.toBeNull();
+    m.linkColumn = "unknown";
+    setup();
+    expect(await reportVideoLinkToken(R, "on")).toBeNull();
+    expect(db.tables.homework_video_links).toHaveLength(0);
   });
   it("영상 과제 없음·모름·영어·취소·반 없음·정책이 끈 반은 붙이지 않는다", async () => {
     for (const over of [{ video_homework: false }, { video_homework: null }, { subject: "english" }, { revoked_at: "2026-10-01T00:00:00Z" }, { class_id: null }]) {

@@ -2,7 +2,8 @@
 
 /**
  * 일괄 입력 팝오버 — 선택(없으면 표시 전체) 행을 한 번에 채운다. **채울 값을 어디서 가져오는지**만 두 갈래:
- *   ① 직접 입력 — 진도·태도·과제·교재·오늘 과제를 여기서 골라 넣는다(빈 필드는 적용 안 함 = 값 지우기 아님).
+ *   ① 직접 입력 — 진도·출결·테스트·태도·과제·영상·교재·오늘 과제·특이사항을 여기서 골라 넣는다(빈 필드는 적용 안 함 = 값 지우기 아님).
+ *      (테스트·영상·특이사항은 2026-10-02 추가 — 표 행엔 있는데 여기 없던 칸. 그리기는 bulk-apply-extras.tsx.)
  *   ② 맨 위 행 복사 — 맨 위 행의 진도·교재·오늘 과제를 아래 행에 그대로 붙인다.
  *
  * ⚠️ 원래 '값 일괄 입력'과 '맨 위 행 복사'는 **버튼 두 개**였는데, 진도가 ①에 추가되면서 둘이 같은 일(같은 대상 규약,
@@ -36,6 +37,15 @@ import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lan
 import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label";
 import { formatSessionUnits } from "@/features/attendance/session-units";
 import { ProgressSelector } from "./progress-selector";
+import type { VideoHomeworkStatus } from "@/features/video-homework/types";
+import {
+  BulkTestFields,
+  BulkVideoFields,
+  bulkCount,
+  EMPTY_BULK_TESTS,
+  EMPTY_BULK_VIDEO,
+  type BulkFieldConfig,
+} from "./bulk-apply-extras";
 
 /** 대상 행에 있는 과목 — 진도를 넣을 과목 선택지(행 수는 "몇 행에 들어가는지" 표시용). */
 export type BulkSubjectOption = { key: string; name: string; count: number };
@@ -46,7 +56,7 @@ const isMathSubject = (key: string) => (key || "math") === "math";
 export function BulkApplyPopover({
   targetCount,
   selectedCount,
-  attitudes,
+  fields,
   subjects,
   studyGrade,
   copySource,
@@ -57,7 +67,8 @@ export function BulkApplyPopover({
 }: {
   targetCount: number; // 적용 대상 행 수(선택 없으면 표시 전체)
   selectedCount: number; // 체크된 행 수(라벨용)
-  attitudes: readonly string[];
+  /** 그릴 칸의 재료 — 태도 선택지 · 테스트 사용 여부 · 영상 칸이 있는 행 수(bulk-apply-extras.tsx). */
+  fields: BulkFieldConfig;
   /** 대상 행의 과목들 — 진도 대상 과목 선택. 첫 항목이 기본값(대상이 가장 많은 과목). */
   subjects: BulkSubjectOption[];
   /** 진도 차시 선택기의 기본 학년(대상 행에서 가장 흔한 진도 학년). */
@@ -77,6 +88,8 @@ export function BulkApplyPopover({
     attendance: BulkAttendanceStatus | null,
     /** 출결 수업타임(시수) — 빈 문자열=미지정(종전과 동일, 새 행 시수 null=1). 새로 만드는 행에만 적용. */
     attendanceUnits: string,
+    /** 지난 영상 숙제 검사 — null=적용 안 함. 출결처럼 **적용 즉시 기록**된다(화면 state가 아니다). */
+    videoCheck: VideoHomeworkStatus | null,
   ) => void;
   onCopyFirstRow: (overwrite: boolean) => void;
   disabled?: boolean;
@@ -97,11 +110,24 @@ export function BulkApplyPopover({
   // 출결 수업타임(시수) — 새로 기록되는 칸에만 적용(기존 기록의 시수는 보존). 빈칸=기본(1).
   // 시수는 급여 재료라(감사 P0-2) 3시간 반(1.5) 같은 배수 반을 일괄로 찍을 때 강사가 직접 지정한다.
   const [attUnits, setAttUnits] = useState("");
+  // 2026-10-02 추가 칸 — 테스트(개수/문항수) · 영상(지난 검사 · 오늘 과제 · 링크 넣기) · 특이사항.
+  const [tests, setTests] = useState(EMPTY_BULK_TESTS);
+  const [video, setVideo] = useState(EMPTY_BULK_VIDEO);
+  const [note, setNote] = useState("");
+  const testPatch = {
+    dailyScore: fields.dailyEnabled ? bulkCount(tests.dailyScore) : undefined,
+    dailyMax: fields.dailyEnabled && fields.allowTestMax ? bulkCount(tests.dailyMax) : undefined,
+    checkScore: fields.checkEnabled ? bulkCount(tests.checkScore) : undefined,
+    checkMax: fields.checkEnabled && fields.allowTestMax ? bulkCount(tests.checkMax) : undefined,
+  };
+  const hasTest = Object.values(testPatch).some((v) => v !== undefined);
   // 모드마다 기본이 다르다(위 주석) — 직접 입력=덮어쓰기, 복사=빈 칸만.
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const canCopy = !!copySource && copySource.belowCount > 0;
   // 고른 출결의 실제 대상 — 상태·'빈 칸만'을 바꿀 때마다 다시 센다(순수 계산이라 렌더 중 안전).
   const attPlan = attendance && att ? attendance.plan(att, onlyEmpty) : null;
+  // 고른 영상 검사의 실제 대상 — 같은 규칙(검사·'빈 칸만'을 바꿀 때마다 다시 센다).
+  const videoCheckPlan = video.check && fields.videoCheckPlan ? fields.videoCheckPlan(video.check, onlyEmpty) : null;
   // 🔴 시수를 비우면 새 칸에 들어갈 값 — 수학 자동 시수(수업 길이)가 섞이면 '1'이 아니다. 안내가 저장값과
   //    같은 말을 하게 한다(보이는 기본값 = 저장될 값, 원장 2026-09-11). 전부 1이면 종전 문구 그대로.
   const blankUnits = attPlan?.newCellUnits ?? [];
@@ -110,7 +136,8 @@ export function BulkApplyPopover({
   const hasAny =
     mode === "copy"
       ? canCopy
-      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || att);
+      : !!(attitude || homework || textbook.trim() || homeworkToday.trim() || progress.trim() || att ||
+          note.trim() || hasTest || video.check || video.homework !== null);
   // 과목이 하나뿐이면 고를 것도 없다 — 그대로 그 과목.
   const activeSubject = subjects.find((s) => s.key === (subjectKey ?? subjects[0]?.key)) ?? subjects[0] ?? null;
 
@@ -127,6 +154,9 @@ export function BulkApplyPopover({
     setProgress("");
     setAtt(null); // 출결은 특히 — 남아 있다가 다음 적용에 딸려 나가면 출석부에 그대로 박힌다
     setAttUnits(""); // 시수도 같은 이유 — 급여 재료라 잔존값이 다음 반에 딸려 나가면 안 된다
+    setTests(EMPTY_BULK_TESTS);
+    setVideo(EMPTY_BULK_VIDEO); // 검사는 적용 즉시 기록된다 — 출결과 같은 이유로 남기지 않는다
+    setNote("");
     // ⚠️ 과목·진도 학년·모드는 유지 — 같은 반을 연달아 채우는 흐름에서 매번 다시 고르게 하면 손이 는다.
   };
   const apply = () => {
@@ -157,13 +187,31 @@ export function BulkApplyPopover({
         }),
       );
     }
+    // 영상 검사도 적용 즉시 기록된다 — 이미 찍힌 검사를 바꿀 때만 밝힌다('미제출'은 적어 둔 제출일까지 지운다).
+    if (video.check && videoCheckPlan && videoCheckPlan.overwrite > 0) {
+      warns.push(
+        tf("os.bulk.warnVideoCheck", {
+          n: videoCheckPlan.cells,
+          label: t(video.check === "submitted" ? "os.vh.done" : "os.vh.missing"),
+          over: videoCheckPlan.overwrite,
+        }),
+      );
+    }
     if (warns.length && !window.confirm(`${warns.join("\n\n")}\n\n${t("os.bulk.confirmTail")}`)) return;
     onApply(
-      { attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress },
+      {
+        attitude: attitude ?? undefined, homework: homework ?? undefined, textbook, homeworkToday, today: progress,
+        note,
+        ...testPatch,
+        // 영상 과제 — 고른 때만. 링크 넣기는 '있음'과 함께 켠 때만 싣는다(안 켰으면 그 값은 건드리지 않는다).
+        ...(video.homework !== null ? { videoHomework: video.homework } : {}),
+        ...(video.homework === true && video.link ? { videoSubmitLink: true } : {}),
+      },
       onlyEmpty,
       activeSubject?.key ?? "",
       att,
       att && att !== "absent" ? attUnits.trim() : "", // 결석엔 시수가 무의미(소비 0) — 안 보낸다
+      video.check,
     );
     setOpen(false);
     reset();
@@ -186,7 +234,8 @@ export function BulkApplyPopover({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
-          <Popover.Popup className="bg-card border-line shadow-card flex w-[300px] flex-col gap-2.5 rounded-lg border p-3 text-xs outline-none">
+          {/* 칸이 늘어 창 높이를 넘을 수 있다 — 화면에 남은 높이까지만 쓰고 안에서 스크롤한다(적용 버튼이 화면 밖으로 나가지 않게). */}
+          <Popover.Popup className="bg-card border-line shadow-card scrollbar-thin flex max-h-(--available-height) w-[300px] flex-col gap-2.5 overflow-y-auto rounded-lg border p-3 text-xs outline-none">
             <p className="text-text-dim text-xs">
               {t("os.bulk.targetPre")}
               <span className="text-foreground font-bold">{targetCount}</span>
@@ -368,10 +417,11 @@ export function BulkApplyPopover({
             ) : null}
             {mode === "input" ? (
               <>
+                <BulkTestFields config={fields} value={tests} onChange={setTests} />
                 <div>
                   <p className="micro text-text-faint mb-1">{t("os.col.attitude")}</p>
                   <FieldSelect
-                    options={attitudes}
+                    options={fields.attitudes}
                     value={attitude}
                     onSelect={setAttitude}
                     ariaLabel={t("os.bulk.attitudeAria")}
@@ -386,6 +436,7 @@ export function BulkApplyPopover({
                     size="lg"
                   />
                 </div>
+                <BulkVideoFields config={fields} value={video} onChange={setVideo} checkPlan={videoCheckPlan} />
                 <input
                   type="text"
                   value={textbook}
@@ -400,6 +451,14 @@ export function BulkApplyPopover({
                   onChange={(e) => setHomeworkToday(e.target.value)}
                   placeholder={t("os.bulk.hwTodayPh")}
                   aria-label={t("os.bulk.hwTodayAria")}
+                  className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
+                />
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={t("os.bulk.notePh")}
+                  aria-label={t("os.bulk.noteAria")}
                   className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                 />
                 <p className="text-text-faint text-xs">{t("os.bulk.onlyFilled")}</p>

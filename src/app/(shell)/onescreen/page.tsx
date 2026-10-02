@@ -17,6 +17,7 @@ import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries"
 import { getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
 import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
 import { assignmentOf } from "@/features/video-homework/assignment";
+import { getSubmitLinkUi } from "@/features/video-submit/server/link-choice-db";
 
 export const metadata = { title: "선생님 원스크린 — 에이와" };
 
@@ -82,10 +83,14 @@ export default async function OneScreenPage({
   // 영상 제출 현황에서 먼저 찍은 같은 숙제의 기록도 이 칸 것이다(같은 숙제 = 한 칸) — 행마다 지난 수업일로 찾는다.
   const videoHwTargets = roster.students.flatMap((st) => st.subjects.flatMap((su) =>
     su.classId ? [{ classId: su.classId, studentId: st.id, homeworkDate: su.prevReport?.date ?? null }] : []));
-  const [loadedMarks, loadedAssignments] = await Promise.all([
+  // 영상 첨부 링크 넣기(0328a) — 토글을 그릴 단계와 오늘 저장된 고르기. 실패·칸 미적용은 off(토글 없음 · 값 안 보냄).
+  const [loadedMarks, loadedAssignments, submitLinkUi] = await Promise.all([
     getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date,
       videoHwPolicy.enabled ? videoHwTargets.flatMap((t) => (t.homeworkDate ? [t.homeworkDate] : [])) : []),
     videoHwPolicy.enabled ? getVideoHomeworkAssignments(user.tenantId, rosterStudentIds, videoHwDates) : Promise.resolve({}),
+    videoHwPolicy.enabled
+      ? getSubmitLinkUi(user.tenantId, rosterStudentIds, roster.date)
+      : Promise.resolve({ mode: "off" as const, choices: {} }),
   ]);
   // null = 못 읽음 → 그 세션 동안 '영상 과제' 값을 보내지 않는다(저장돼 있던 '있음'을 '없음'으로 덮지 않게, 공급자 known=false).
   const videoHomeworkAssignments = loadedAssignments ?? {};
@@ -93,9 +98,16 @@ export default async function OneScreenPage({
   // 오늘 이미 저장한 보고서의 '영상 과제' — 세션에 값이 없을 때만 되채운다(세션 = 작업 중 편집이 이긴다, roster ⑤ 규약).
   for (const st of roster.students) {
     for (const su of st.subjects) {
-      if (su.videoHomework != null || !su.classId) continue;
-      const saved = assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId);
-      if (saved != null) su.videoHomework = saved;
+      if (!su.classId) continue;
+      if (su.videoHomework == null) {
+        const saved = assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId);
+        if (saved != null) su.videoHomework = saved;
+      }
+      // 링크 넣기도 같은 규약 — 세션에 값이 없을 때만 저장된 보고서 값으로 되채운다.
+      if (su.videoSubmitLink == null) {
+        const savedLink = assignmentOf(submitLinkUi.choices, st.id, roster.date, su.classId);
+        if (savedLink != null) su.videoSubmitLink = savedLink;
+      }
     }
   }
   return (
@@ -114,9 +126,11 @@ export default async function OneScreenPage({
         <TodayAttendanceStrip />
       </Suspense>
       {/* key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만). */}
-      <VideoHomeworkProvider initial={videoHomeworkMarks} checkDate={roster.date}
+      {/* key=대상 날짜 — 공급자는 검사 기록을 처음 한 번만 읽는다. 날짜를 옮겼는데 옛 날짜 기록이 남으면 일괄 검사가
+          "이미 찍힘"으로 건너뛰어 화면엔 찍힌 듯 보이고 새 날짜엔 기록이 없다(적대 리뷰 2026-10-02). */}
+      <VideoHomeworkProvider key={roster.date} initial={videoHomeworkMarks} checkDate={roster.date}
         policy={roster.reportSettings.videoHomeworkPolicy} assignments={videoHomeworkAssignments}
-        assignmentsKnown={loadedAssignments !== null}>
+        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode}>
       <OneScreenClient
       key={roster.date}
       initial={roster.students}

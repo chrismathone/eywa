@@ -45,6 +45,7 @@ import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
+import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import { ScoreInput } from "./score-input";
@@ -97,6 +98,8 @@ export type GridFieldHandlers = {
   onMakeup: (studentId: string, subjectName: string) => void;
   /** 오늘 영상 과제 있음/없음 켜고 끄기(0308a). 없으면 칸이 잠긴다(읽기 전용·테스트). */
   onVideoHomework?: (studentId: string, subjectName: string) => void;
+  /** 영상 첨부 링크 넣기 켜고 끄기(0328a) — '영상 과제'를 켠 행에서만 뜬다. 없으면 칸이 잠긴다. */
+  onVideoSubmitLink?: (studentId: string, subjectName: string) => void;
 };
 
 /** 행 단위 액션. */
@@ -700,6 +703,18 @@ export function GridBodyRow({
             checked={!!subject.videoHomework}
             onToggle={() => fields.onVideoHomework?.(student.id, subject.name)}
             disabled={rowLocked || !fields.onVideoHomework}
+            classId={subject.classId}
+            subjectKey={subject.subjectKey}
+            grade={student.grade}
+            studentName={student.name}
+            subjectName={subject.name}
+          />
+          {/* 영상 첨부 링크 넣기(0328a) — '영상 과제'를 켠 행에만. 켠 보고서 글에만 영상 올리는 링크가 함께 나간다. */}
+          <VideoSubmitLinkToggle
+            shown={!!subject.videoHomework}
+            checked={!!subject.videoSubmitLink}
+            onToggle={() => fields.onVideoSubmitLink?.(student.id, subject.name)}
+            disabled={rowLocked || !fields.onVideoSubmitLink}
             classId={subject.classId}
             subjectKey={subject.subjectKey}
             grade={student.grade}
