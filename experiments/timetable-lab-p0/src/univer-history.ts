@@ -1,6 +1,6 @@
 import { CommandType, IConfigService, IContextService, ICommandService, IUndoRedoService, IUniverInstanceService,
   LocalUndoRedoService, type IUndoRedoItem, type DependencyOverride } from '@univerjs/core';
-import type { DraftStore } from './store';
+import type { DraftStore } from '@/features/timetable-lab/editor/store';
 
 export const workbookId = 'english-lab-p0';
 // Replace the workbook history provider, rather than maintaining a shadow native stack.

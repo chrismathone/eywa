@@ -5,8 +5,8 @@ import coreKo from '@univerjs/preset-sheets-core/locales/ko-KR';
 import { CanceledError, ICommandService, IUndoRedoService, type ICellData, type IObjectMatrixPrimitiveType, type IStyleData } from '@univerjs/core';
 import '@univerjs/preset-sheets-core/lib/index.css';
 import { historyOverride, workbookId } from './univer-history';
-import type { DraftStore } from './store';
-import type { Draft } from './model';
+import type { DraftStore } from '@/features/timetable-lab/editor/store';
+import type { Draft } from '@/features/timetable-lab/editor/model';
 import { installNavigation } from './univer-navigation';
 
 const sheetId = 'teacher';

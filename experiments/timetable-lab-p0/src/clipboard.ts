@@ -1,4 +1,4 @@
-import { patchCells, type Cell, type Draft, type Patch } from './model';
+import { patchCells, type Cell, type Draft, type Patch } from '@/features/timetable-lab/editor/model';
 
 export type Point = { row: number; col: number };
 export type Selection = { anchor: Point; focus: Point };

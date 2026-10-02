@@ -67,6 +67,8 @@ import {
 import { canAccessTenant, canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { EcsShortcut } from "./_components/ecs-shortcut";
+import { EditorShortcut } from "./_components/editor-shortcut";
+import { canUseTimetableEditor } from "@/features/timetable-lab/server/access";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
@@ -461,6 +463,9 @@ export default async function TimetablePage({
     subject === "english" &&
     resolveSkillAreas(subjectRow).length > 0 &&
     (await canAccessTenant(user.systemRole, "ecs"));
+  // 시간표 편집기(연습본) 바로가기 — 편집기는 아직 **영어 전용**이라 영어를 볼 때만, 편집기 화면·연습본 API와
+  // **같은 판정**(`canUseTimetableEditor` = 시간표·반 관리)을 통과한 사람에게만 보인다(#77: 눌러도 튕기는 죽은 버튼 금지).
+  const showEditorShortcut = subject === "english" && (await canUseTimetableEditor(user.systemRole));
   // 통합뷰 섹션 = 커스텀 그룹(학원설정 과목별)이 켜져 있으면 그것, 아니면 "N교시 시작" 자동 그룹.
   // 엑셀·시트 빌더도 같은 해석기를 쓴다(화면과 배치 일치가 이 기능의 존재 이유).
   // 🔴 **미래 주는 그 주에 쓸 줄로 그린다**(원장 2026-08-29 *"통합뷰 그룹설정(줄)은 반영안된거같은데?"*).
@@ -1062,6 +1067,9 @@ export default async function TimetablePage({
             <EcsShortcut week={week} />
           </div>
         ) : null}
+
+        {/* 시간표 편집기(연습본) — 오른쪽 도구 묶음. 교실 지도에서는 감춘다(수업 배치를 보는 화면이 아니다). */}
+        {showEditorShortcut && !isRooms ? <EditorShortcut /> : null}
 
         {/* 편집 컨트롤 — 기본뷰·**통합뷰** + 이번/미래 주(강사뷰=읽기전용, 과거=조회 전용).
             🔴 2026-09-09: 통합뷰에도 학생 반 이동이 생겨(원장 *"통합뷰에서도 학생 드래그 기능 추가시켜"*)

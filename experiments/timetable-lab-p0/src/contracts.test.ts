@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { makeFixture, patchCells, assignStudent, lessons } from './model';
-import { DraftStore } from './store';
+import { makeFixture, patchCells, assignStudent, lessons } from '@/features/timetable-lab/editor/model';
+import { DraftStore } from '@/features/timetable-lab/editor/store';
 import { decodeTsv, encodeTsv, pasteCells, valuesOnly } from './clipboard';
-import { suggest, validate } from './constraints';
+import { suggest, validate } from '@/features/timetable-lab/editor/constraints';
 
 describe('one domain history', () => {
   it('undoes format, placement and student changes in user order without losing source IDs', () => {
