@@ -1,5 +1,6 @@
 :root { font-family: 'Malgun Gothic', system-ui, sans-serif; color: #172b43; background: #f5f7fa; font-synthesis: none; }
 * { box-sizing: border-box; }
+html, body, #root { height: 100%; }
 body { margin: 0; }
 .univer-host { height: 570px; width: 100%; overflow: hidden; border: 1px solid #d8e0e9; }
 /* Keep prototype element styles out of the candidate engine and its menus. */

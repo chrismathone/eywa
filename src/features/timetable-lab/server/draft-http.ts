@@ -1,6 +1,6 @@
 import 'server-only';
 import { getCurrentUser } from '@/lib/auth/current-user';
-import { canManageTenant } from '@/lib/auth/perm-matrix';
+import { canUseTimetableEditor } from './access';
 import { MAX_DRAFT_BYTES, boundedJson, saveDraftSchema } from '../draft-schema';
 
 export const draftHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie' };
@@ -8,8 +8,7 @@ export function draftError(error: string, status: number) { return Response.json
 export async function draftUser() {
   const user = await getCurrentUser();
   if (!user) return { error: draftError('로그인 후 연습본을 저장하거나 불러올 수 있습니다.', 401) };
-  const grants = await Promise.all([canManageTenant(user.systemRole, 'timetable'), canManageTenant(user.systemRole, 'classes')]);
-  if (grants.some(allowed => !allowed)) return { error: draftError('시간표와 반을 관리할 수 있는 계정으로 이용해 주세요.', 403) };
+  if (!(await canUseTimetableEditor(user.systemRole))) return { error: draftError('시간표와 반을 관리할 수 있는 계정으로 이용해 주세요.', 403) };
   return { user };
 }
 export async function readDraftBody(request: Request) {

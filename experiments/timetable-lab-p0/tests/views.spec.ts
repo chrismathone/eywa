@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { sourceFixture } from './source-fixture';
+import { sourceFixture } from '../../../src/features/timetable-lab/editor/source-fixture.test-support';
 
 test('source colors reach both views and local color changes undo without network writes', async ({ page }) => {
   const writes: string[] = [];

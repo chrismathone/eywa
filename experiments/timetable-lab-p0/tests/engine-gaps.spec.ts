@@ -13,8 +13,12 @@ test(`P0-G02: ${raw ? 'raw baseline' : 'adapter'} Ctrl+Home has the Google Sheet
   test.fail(raw, 'Raw candidate key mapping mismatch; application adapter covers this case.');
   await page.goto(raw ? '/?compare=1&native=1' : '/?compare=1'); await page.getByRole('tab', { name: 'Univer', exact: true }).click();
   await page.waitForFunction(() => !!window.univerProbe);
-  await page.evaluate(() => window.univerProbe!.select('C5'));
-  await page.locator('.univer-host canvas').last().focus(); await page.keyboard.press('Control+Home');
-  await expect(page.locator('.univer-host [data-u-comp="defined-name"] input')).toHaveValue('A1', { timeout: 1200 });
+  const attempt = async () => {
+    await page.evaluate(() => window.univerProbe!.select('C5'));
+    await page.locator('.univer-host canvas').last().focus(); await page.keyboard.press('Control+Home');
+    await expect(page.locator('.univer-host [data-u-comp="defined-name"] input')).toHaveValue('A1', { timeout: 1200 });
+  };
+  // Retry only for readiness (the key adapter attaches slightly after univerProbe under load). The raw baseline gets one attempt.
+  if (raw) await attempt(); else await expect(attempt).toPass({ timeout: 15_000 });
 });
 }

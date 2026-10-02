@@ -23,6 +23,8 @@ const placementFields = {
   id, sourceScheduleId: id.nullable(), classId: z.string().max(200), row: z.number().int(),
   teacherId: id.nullable().optional(), roomId: id.nullable().optional(),
   kind: z.enum(['lesson', 'seat', 'block']).optional(), studentIds: ids.optional(), labSeparate: z.boolean().optional(),
+  // 편집기가 붙이는 표시 — 잠금과 연습본 메모.
+  locked: z.boolean().optional(), note: z.string().max(300).optional(),
 };
 const lesson = z.strictObject({ ...placementFields, name: text, day: z.enum(['월', '화', '수', '목', '금', '토', '일']),
   start: minute, end: minute, teacher: text, room: text, students: ids });
@@ -35,6 +37,8 @@ export const draftSnapshotSchema = z.strictObject({
   classes: record(z.strictObject({ name: text.optional(), color: color.optional(), homeroomTeacher: text.optional() })).optional(),
   people: record(text).optional(), outside: z.array(lesson).max(20000).optional(), appearance: appearance.optional(),
   classRevision: z.number().int().nonnegative().optional(), originId: id.optional(),
+  // 강사 열의 순서(수업이 없는 새 강사 열 포함).
+  teachers: z.array(z.string().min(1).max(40)).max(500).optional(),
   studentMoves: record(record(z.strictObject({ fromClassId: id, fromName: text }))).optional(),
   operatingHours: record(z.array(z.strictObject({ start: minute, end: minute }).refine(v => v.start < v.end)).max(100)).optional(),
   source: z.strictObject({ kind: z.literal('live'), date: z.iso.date(), tenantId: z.uuid(), loadedAt: z.iso.datetime({ offset: true }),

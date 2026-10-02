@@ -268,7 +268,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 인프라 비용·소진 예측("사이버 월세" — Vercel·Supabase·AI/전사 API) 설계 → `docs/infra-cost-runway-plan.md` (⚠️ **보류 중**, 미구현. 선불 키 소진·요금 급증이 실제로 문제되면 그때 재개)
 - **도메인 구매한 날 할 일**(옛 호스트 308 켜기·env·Supabase Site URL·기기 재로그인) + 지점 하나 더 만드는 날 → [`docs/domain-cutover.md`](docs/domain-cutover.md) (코드는 전부 env로 켜지게 준비돼 있다 — 2026-09-18)
 - 탭 아이콘을 새로 만들 때(어떤 이미지 생성 모델이든 같은 세트가 나오게) → [`docs/icon-generation.md`](docs/icon-generation.md) (화풍 규격·브리프 뼈대·후처리 파이프라인 [`scripts/_icons/`](scripts/_icons)·배선 4곳·실패 사례)
-- **시간표 연습실**(다음 달 시간표를 여러 안으로 짜 보는 편집기 — 계획·검토·단계별 결과·남은 일) → [`docs/timetable-lab/README.md`](docs/timetable-lab/README.md) (편집기 본체 = `experiments/timetable-lab-p0`, 실행·시험 방법은 그 폴더 README)
+- **시간표 연습실**(다음 달 시간표를 여러 안으로 짜 보는 편집기 — 계획·검토·단계별 결과·남은 일) → [`docs/timetable-lab/README.md`](docs/timetable-lab/README.md) (앱 화면 = `/timetable/editor` · 편집기 본체 = `src/features/timetable-lab/editor` · 로그인 없이 띄우는 시험용 화면과 브라우저 시험 = `experiments/timetable-lab-p0`)
 - 기타 심층 문서 → `docs/` (audit-log · ijw-feature-port · makeedu-reverse-sync · payment-collection-plan · perf-open-window-backlog 등)
 
 > ⚠️ 새 기능·배선을 완성하면 그 요약을 `docs/changelog.md`에 한 줄 추가(진행 상황 로그). 새 함정을 만나면 `docs/gotchas.md`에 항목 추가 + 아래 인덱스에 트리거 한 줄. 새 UI 규칙은 `docs/design-conventions.md` + 디자인 인덱스.
@@ -318,6 +318,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 ### 시간표(드래그·가져오기·예약·담임·배치 이력) → [`docs/decisions/timetable.md`](docs/decisions/timetable.md)
 - 시간표 첫 과목 = 담당 과목 · 링크에는 과목을 항상 싣는다 · 담당 과목은 기본 선택에만(권한 아님)
 - 시간표 연습실 = 운영과 분리된 개인 연습본(영어 먼저) · 충돌해도 놓고 이유 표시 · 학생 반 이동은 옮겨 간 반 전체 수업 · Supabase 저장 · 운영 반영 경로는 아직 없다
+- 시간표 편집기 = 시간표 오른쪽 도구줄 버튼 → 자기 창(`/timetable/editor`) · 권한은 `canUseTimetableEditor` 한 곳(시간표·반 둘 다 관리) · 없던 것도 만든다(수업·반·회의·강사·학생) · 막는 것은 운영시간 밖과 잠근 수업뿐
 - 시간표에는 인원 숫자가 없다(2026-09-28 삭제) · 셀의 신입·반이동·대기·퇴원 표시는 30일·60일 그대로
 - 반 블록 드래그 = 화면에 보이는 블록 통째로 · 학생·강사·강의실·같은 반 넷을 보고 갈 수 있는 칸만 칠한다
 - 시간표 드래그는 화면을 다시 그리지 않는다 — 픽업이 곧 체감 성능
@@ -655,6 +656,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#137** 우리 global-error가 있는데 **Next 기본 화면**("This page couldn't load")이 뜨면 라우터 자체가 죽은 것 — 셸이 마운트 직후 부른 **서버 액션**(라우터 작업 큐)이 도는 사이 loading.tsx 아래 redirect가 하드 이동으로 처리되면 Router가 React #310(재현 약 23/100, `fetch`면 0/70) · 🔴 셸에서 저절로(마운트·폴링) 도는 조회는 **GET 라우트 + fetch**(벨 `/api/notifications`, 가드 `shell-autocall-server-actions.test.ts`) · 권한 게이트는 가능하면 loading **앞**(레이아웃 → 307) · "처음으로"는 권한을 본 홈(`useShellHome`) · ⚠️ 재현은 문서 로드로(클라 이동은 안 터진다)
 - **#138** **DB 오류를 일반 문구로 삼키면 원인이 사라진다** — 반 개명이 "저장에 실패했습니다"로만 실패(실제 23505, 종강 반이 이름을 쥠) · 로그 0줄 · 쓰기 616곳 중 563곳 로그 없음, 213곳은 영문 원문 노출 · `if (error)` 자리는 **`explainDbError(error, { scope, fallback, op })`**(코드+제약 이름 판정 · 모르면 지금 문구 · scope 로그), 이른 자리는 `logDbError` · ⚠️ 같은 코드 다른 원인(23505 유니크 여럿·42501 보호 트리거·23503 지우기↔넣기) — 새 제약은 `db-error-constraints.ts`에 한 줄
 - **#139** Supabase CLI `migration new`가 붙이는 **타임스탬프 이름**(`20261002…_x.sql`)은 가드가 실패시킨다 — 이 저장소는 `NNNNa_` 번호 이름만 쓴다(정렬 = 적용 순서 전제). CLI로 만들었으면 다음 빈 번호로 바꾸고, 그 파일을 경로로 읽는 곳은 `src`·`scripts`·**`tests/`**까지 저장소 전체에서 찾을 것
+- **#140** 한 구역을 `all: revert`로 초기화하면 **`hidden` 속성의 숨김까지 지워진다**(크로미움은 그 숨김을 표현 힌트로 건다 — 감춰 둔 이름표가 화면에 떠 있었다) → 바로 아래 `[hidden] { display: none !important }`를 함께 · 판별은 실브라우저 `getComputedStyle` · 되돌리는 선택자는 명시도 0(`:where(:scope), *`)
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)

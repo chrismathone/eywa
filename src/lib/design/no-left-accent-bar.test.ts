@@ -34,6 +34,16 @@ const ALLOWED: { file: string; line: RegExp; reason: string }[] = [
     reason: "시간표 요일 그룹 사이의 경계선 — 칸과 칸 사이를 가르는 구조선",
   },
   {
+    file: "features/timetable-lab/editor/timetable-views.css",
+    line: /\.week-teacher-heading \{.*border-left-width: 2px/,
+    reason: "시간표 편집기 강사 열 머리의 경계선 — 운영 시간표와 같은, 강사와 강사 사이를 가르는 구조선",
+  },
+  {
+    file: "features/timetable-lab/editor/timetable-views.css",
+    line: /\.teacher-start \{ border-left: 2px solid #777/,
+    reason: "시간표 편집기에서 강사가 바뀌는 첫 요일 칸의 경계선 — 칸과 칸 사이를 가르는 구조선",
+  },
+  {
     file: "app/(shell)/attendance/seat/[seat]/_components/seat-mark-extras.tsx",
     line: /border-t-\[10px\] border-l-\[10px\].*border-l-transparent/,
     reason: "모서리 삼각형 — 두 변의 테두리로 그리는 도형이지 띠가 아니다(왼쪽 변은 투명)",
