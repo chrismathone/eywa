@@ -84,7 +84,7 @@ export async function isProtectedSuperAdminTarget(actorId: string, targetId: str
   return ids.has(targetId) && !ids.has(actorId);
 }
 
-export const SUPER_ADMIN_TARGET_DENIED_MSG = "총괄 관리자 계정은 총괄 관리자만 변경할 수 있습니다";
+export const SUPER_ADMIN_TARGET_DENIED_MSG = "이 계정을 변경할 권한이 없습니다";
 
 /**
  * super_admin 계정의 **표시** 역할을 '관리자(admin)'로 위장 — 실제 role/접근/권한은 불변.
