@@ -1,6 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageHeader } from "@/components/page-header";
+import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { FaceTabs } from "@/components/face-tabs";
 import { getClassnoteQueue, getReportFilterOptions, getWeeklyWritingRates, getReportTeacherCandidates } from "@/features/report-admin/server/queries";
 import { getBoardRosterCheck } from "@/features/report-admin/server/board-roster-queries";
@@ -46,11 +47,10 @@ type Sp = Record<string, string | undefined>;
 // (미매핑 탭은 2026-07-29 제거 — Edutrix 소등으로 원본이 사라져 매핑 자체가 불가능해졌다.)
 type Tab = "writing" | "boards" | "list" | "notice" | "compose" | "recall" | "parent_replies" | "queue" | "report" | "ai_ment";
 
-// 설정 2탭(report·ai_ment)은 saveOwnerSection/savePrompt가 owner 쓰기 게이트라 — owner를 못 쓰는
-// 계정(위임 안 받은 admin/manager)에겐 폼을 보여주면 '저장 거부'가 된다. canOwner일 때만 탭을 노출.
+// 설정 2탭은 각각 메뉴 권한으로 판정한다. 읽기 전용이면 탭을 표시하고 편집만 막는다.
 // 직접 발송(compose)은 lesson_reports 쓰기 권한(canSend) 있을 때만(관리자 발송).
 // ClassNote 발송 PC에 기대는 면 — ClassNote 모듈이 꺼진 학원(새 학원 기본)에선 세우지 않는다(2026-09-22 방향 B).
-function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean, replyOn: boolean): Tab {
+function resolveTab(sp: Sp, canReportSettings: boolean, canAiMent: boolean, canSend: boolean, classnoteOn: boolean, aiOn: boolean, replyOn: boolean): Tab {
   const t = sp.tab;
   if (!classnoteOn && t && isClassnoteReportTab(t)) return "writing";
   // 학부모 글 답글·공감이 끔인 지점엔 그 면이 없다 — 주소를 직접 쳐도 없는 면과 똑같이 첫 면으로(있었는지조차 모르게).
@@ -61,22 +61,27 @@ function resolveTab(sp: Sp, canOwner: boolean, canSend: boolean, classnoteOn: bo
   // 회수(recall)는 **되돌릴 수 없는 파괴적 동작**이라 발송과 같은 쓰기 게이트(canSend)로 잠근다.
   // 서버 액션(requestReportRecall)이 최종 게이트 — 탭을 숨기는 건 게이트가 아니다(#77).
   if ((t === "compose" || t === "recall" || t === "parent_replies") && canSend) return t;
-  if ((t === "report" || t === "ai_ment") && canOwner) return t;
+  if (t === "report" && canReportSettings) return t;
+  if (t === "ai_ment" && canAiMent) return t;
   return "writing";
 }
 
 /**
  * 수업보고서(발송 관리) — ClassNote 큐는 독립 탭, 작성률·반 구성·목록은 내부 FaceTabs로 이동.
- * 보고서 표시·AI 멘트 설정(옛 학원설정 두 탭)은 뒤에 붙여 5탭 — owner 쓰기 권한이 있을 때만. 강사 작성은 /onescreen.
+ * 보고서 설정·AI 멘트는 각각 메뉴 권한을 따른다. 강사 작성은 /onescreen.
  * 활성 탭만 무거운 조회(서버 렌더).
  */
 export default async function LessonReportsPage({ searchParams }: { searchParams: Promise<Sp> }) {
-  const viewer = await requireAccess("lesson_reports");
-  const [canOwner, canSendReports] = await Promise.all([
-    canWriteTenant(viewer.systemRole, "owner"),
-    canWriteTenant(viewer.systemRole, "lesson_reports"), // 목록 탭 관리자 발송 열 노출(viewer는 열람만)
-  ]);
   const sp = await searchParams;
+  const viewer = await requireAccess(sp.tab === "report" ? "report_settings" : sp.tab === "ai_ment" ? "ai_ment" : "lesson_reports");
+  const [canReportSettings, canAiMent, canEditReportSettings, canEditAiMent, canSendReports, canReports] = await Promise.all([
+    canAccessTenant(viewer.systemRole, "report_settings"),
+    canAccessTenant(viewer.systemRole, "ai_ment"),
+    canWriteTenant(viewer.systemRole, "report_settings"),
+    canWriteTenant(viewer.systemRole, "ai_ment"),
+    canWriteTenant(viewer.systemRole, "lesson_reports"), // 목록 탭 관리자 발송 열 노출(viewer는 열람만)
+    canAccessTenant(viewer.systemRole, "lesson_reports"),
+  ]);
   if (sp.tab === "video_homework") redirect("/lesson-reports/video-homework");
   // ClassNote 모듈 — 꺼진 학원은 발송 콘솔(큐·반 구성·반 공지·직접 발송·회수)을 세우지 않는다. 침산은 켜져 있어 종전과 같다.
   // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
@@ -84,9 +89,10 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
   const classnoteOn = isModuleEnabled(tenantSettings.modules.disabled, "classnote");
   // 학부모 글 답글·공감 모드(학원 설정, 기본 끔 — 모듈이 꺼지면 끔). 끔이면 면도 조회도 없다.
   const replyMode = classnoteReplyMode(tenantSettings);
-  const tab = resolveTab(sp, canOwner, canSendReports, classnoteOn, aiOn, replyMode !== "off");
+  const tab = resolveTab(sp, canReportSettings, canAiMent, canSendReports, classnoteOn, aiOn, replyMode !== "off");
+  if (tab !== "report" && tab !== "ai_ment" && !canReports) await requireAccess("lesson_reports");
 
-  const faces = lessonReportFaces({ canOwner, canSend: canSendReports, classnoteOn, aiOn, replyOn: replyMode !== "off" });
+  const faces = lessonReportFaces({ canReportSettings, canAiMent, canSend: canSendReports, classnoteOn, aiOn, replyOn: replyMode !== "off", canReports });
 
   // 큐는 독립 탭에서만 조회·폴링한다. 다른 관리 면의 첫 화면을 차지하지 않는다.
   const queueP = tab === "queue" && classnoteOn ? getClassnoteQueue(3) : Promise.resolve(null);
@@ -160,6 +166,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       <PageHeader
         eyebrow={classnoteOn ? "발송 관리" : "보고서 관리"}
         title="수업보고서"
+        actions={<SettingRolesControl group="lesson_reports" />}
         description={
           classnoteOn
             ? "발송 현황과 보고서 작성률을 확인합니다. 강사 작성은 원스크린에서 진행합니다."
@@ -240,12 +247,12 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
       ) : null}
 
       {tab === "report" && "reportSettings" in tabData ? (
-        <ReportSection initial={tabData.reportSettings} teachers={tabData.teachers}
+        <ReportSection initial={tabData.reportSettings} canEdit={canEditReportSettings} teachers={tabData.teachers}
           staffNames={tabData.staffNames} videoClasses={tabData.videoClasses} classnoteOn={classnoteOn} />
       ) : null}
 
       {tab === "ai_ment" && "aiPrompts" in tabData ? (
-        <AiMentSection initial={tabData.aiPrompts} styles={tabData.mentStyles} />
+        <AiMentSection initial={tabData.aiPrompts} styles={tabData.mentStyles} canEdit={canEditAiMent} />
       ) : null}
     </div>
   );

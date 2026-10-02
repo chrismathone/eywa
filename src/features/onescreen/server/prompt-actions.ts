@@ -1,10 +1,9 @@
 "use server";
 
 // AI 멘트 프롬프트 오버라이드 — 원장 콘솔에서 멘트/추세 프롬프트를 런타임 편집·테스트(edutrix aiSettingsActions 이식).
-// 저장은 append-only(활성 비활성화 후 새 활성 insert = 버전 이력). 읽기는 로그인, 쓰기는 owner 메뉴 쓰기 게이트.
-import { getCurrentUser } from "@/lib/auth/current-user";
+// 저장은 append-only(활성 비활성화 후 새 활성 insert = 버전 이력). 조회·변경은 AI 멘트 메뉴 권한을 따른다.
+import { requireAiMentAccess } from "@/features/report-admin/server/ai-ment-access";
 import { logAction } from "@/features/audit/server/log";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import { generateJSON } from "@/lib/ai/generate";
@@ -69,8 +68,9 @@ function isPromptType(t: string): t is PromptType {
 
 /** 현재 테넌트 프롬프트 상태 — 타입별 활성 오버라이드(있으면) 또는 기본값. */
 export async function getActivePrompts(): Promise<{ ok: boolean; prompts?: PromptRow[]; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const gate = await requireAiMentAccess();
+  if ("error" in gate) return { ok: false, error: gate.error };
+  const { user } = gate;
   const supabase = await createClient();
   // 오버라이드 조회와 사용 모드 판정은 서로 독립 — 직렬 await 금지(B4).
   const [{ data }, modes] = await Promise.all([
@@ -96,11 +96,10 @@ export async function getActivePrompts(): Promise<{ ok: boolean; prompts?: Promp
   return { ok: true, prompts };
 }
 
-/** 프롬프트 저장 — 활성 비활성화 후 새 활성 insert(버전 append). owner 쓰기 권한 + 자리표시자 검증. */
+/** 프롬프트 저장 — 활성 비활성화 후 새 활성 insert(버전 append). AI 멘트 변경 권한 + 자리표시자 검증. */
 export async function savePrompt(type: string, text: string): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) return { ok: false, error: "학원 설정(owner) 변경 권한이 없습니다" };
+  const gate = await requireAiMentAccess(true);
+  if ("error" in gate) return { ok: false, error: gate.error };
   if (!isPromptType(type)) return { ok: false, error: "알 수 없는 프롬프트 유형" };
   const trimmed = text.trim();
   if (!trimmed) return { ok: false, error: "프롬프트가 비어 있습니다" };
@@ -109,19 +108,8 @@ export async function savePrompt(type: string, text: string): Promise<{ ok: bool
     return { ok: false, error: `프롬프트에 ${REQUIRED_PLACEHOLDER[type]} 자리표시자가 반드시 있어야 합니다` };
   }
   const supabase = await createClient();
-  await supabase
-    .from("ai_prompt_overrides")
-    .update({ is_active: false })
-    .eq("tenant_id", user.tenantId)
-    .eq("prompt_type", type)
-    .eq("is_active", true);
-  const { error } = await supabase.from("ai_prompt_overrides").insert({
-    tenant_id: user.tenantId,
-    prompt_type: type,
-    prompt_text: trimmed,
-    is_active: true,
-    created_by: user.id,
-  });
+  // 버전 교체를 한 트랜잭션으로 실행한다. 저장 실패나 권한 회수 중에도 기존 활성 버전이 사라지지 않는다.
+  const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: trimmed });
   if (error) return { ok: false, error: error.message };
   // 🔴 프롬프트는 **AI 산출물의 내용을 바꾸는 설정**이라 누가 언제 바꿨는지가 남아야 한다
   //    (본문은 남기지 않는다 — 이력은 ai_prompt_overrides 버전 목록이 들고 있다).
@@ -136,17 +124,11 @@ export async function savePrompt(type: string, text: string): Promise<{ ok: bool
 
 /** 기본값 복원 — 활성 오버라이드 비활성화(이력은 남김). 이후 기본 프롬프트 사용. */
 export async function resetPrompt(type: string): Promise<{ ok: boolean; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) return { ok: false, error: "학원 설정(owner) 변경 권한이 없습니다" };
+  const gate = await requireAiMentAccess(true);
+  if ("error" in gate) return { ok: false, error: gate.error };
   if (!isPromptType(type)) return { ok: false, error: "알 수 없는 프롬프트 유형" };
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("ai_prompt_overrides")
-    .update({ is_active: false })
-    .eq("tenant_id", user.tenantId)
-    .eq("prompt_type", type)
-    .eq("is_active", true);
+  const { error } = await supabase.rpc("save_ai_prompt_setting", { p_type: type, p_text: null });
   if (error) return { ok: false, error: error.message };
   // ⚠️ 복원은 행을 **비활성화만** 하므로 DB엔 "누가 껐는지"가 남지 않는다 — 그 사실이 여기에만 남는다.
   await logAction({
@@ -162,8 +144,9 @@ export type PromptVersion = { id: string; text: string; isActive: boolean; creat
 
 /** 버전 이력 — 최근 20건(활성 표시). 롤백은 텍스트 복사 후 저장(=새 버전). */
 export async function getPromptHistory(type: string): Promise<{ ok: boolean; versions?: PromptVersion[]; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const gate = await requireAiMentAccess();
+  if ("error" in gate) return { ok: false, error: gate.error };
+  const { user } = gate;
   if (!isPromptType(type)) return { ok: false, error: "알 수 없는 프롬프트 유형" };
   const supabase = await createClient();
   const { data } = await supabase
@@ -186,8 +169,9 @@ export type TestReportOption = { id: string; label: string };
 
 /** 테스트용 최근 보고서 목록(원스크린 저장분) — 이름·날짜·진도 앞부분 라벨. */
 export async function getRecentReportsForTest(): Promise<{ ok: boolean; reports?: TestReportOption[]; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const gate = await requireAiMentAccess();
+  if ("error" in gate) return { ok: false, error: gate.error };
+  const { user } = gate;
   const supabase = await createClient();
   const { data: reports } = await supabase
     .from("lesson_reports")
@@ -215,8 +199,9 @@ export async function testPrompt(
   text: string,
   reportId: string,
 ): Promise<{ ok: boolean; output?: string; error?: string }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
+  const gate = await requireAiMentAccess(true);
+  if ("error" in gate) return { ok: false, error: gate.error };
+  const { user } = gate;
   if (!isPromptType(type)) return { ok: false, error: "알 수 없는 프롬프트 유형" };
   if (!reportId) return { ok: false, error: "테스트할 보고서를 선택하세요" };
   const trimmed = text.trim();

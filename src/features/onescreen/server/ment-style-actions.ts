@@ -1,9 +1,8 @@
 "use server";
 
 // 강사 말투 프로파일(0262a) — 학원설정 > AI 멘트 카드의 서버 액션(목록·지금 갱신).
-// 읽기·쓰기 게이트 = 프롬프트 편집(prompt-actions.ts)과 같은 **owner 쓰기**. 주간 갱신은 cron 라우트가 같은 빌드 함수를 부른다.
-import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+// 읽기·쓰기 게이트 = 프롬프트 편집(prompt-actions.ts)과 같은 **AI 멘트 메뉴 권한**. 주간 갱신은 cron 라우트가 같은 빌드 함수를 부른다.
+import { requireAiMentAccess } from "@/features/report-admin/server/ai-ment-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportWarning } from "@/lib/observability/report-error";
 import { logAction } from "@/features/audit/server/log";
@@ -17,9 +16,9 @@ const MANUAL_BUDGET_MS = 200_000;
 
 /** 카드 목록 — 표가 없으면 tableMissing(화면이 "아직 준비 중"이라 말한다). */
 export async function getMentStyleRows(): Promise<MentStyleView> {
-  const user = await getCurrentUser();
-  if (!user) return { rows: [], tableMissing: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) return { rows: [], tableMissing: false, error: "학원 설정(owner) 권한이 없습니다" };
+  const gate = await requireAiMentAccess();
+  if ("error" in gate) return { rows: [], tableMissing: false, error: gate.error };
+  const { user } = gate;
   return listTeacherMentStyles(createAdminClient(), user.tenantId);
 }
 
@@ -29,9 +28,9 @@ export async function getMentStyleRows(): Promise<MentStyleView> {
  * 🔴 화면엔 한글 요약만 — DB·AI 원문 오류는 로그로(raw 코드 노출 금지 규약). 강사별 사유는 감사로그 metadata에 남는다.
  */
 export async function rebuildMentStylesNow(): Promise<{ ok: boolean; error?: string; summary?: RebuildSummary; view?: MentStyleView }> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) return { ok: false, error: "학원 설정(owner) 변경 권한이 없습니다" };
+  const gate = await requireAiMentAccess(true);
+  if ("error" in gate) return { ok: false, error: gate.error };
+  const { user } = gate;
   const admin = createAdminClient();
   let summary: RebuildSummary;
   try {

@@ -29,7 +29,7 @@ export async function saveTeacherComp(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   // 급여 = 원장·총괄 전용(admin/manager 불가 · 감사 D6 — 총괄은 자동 통과).
-  if (!(await canManageSalary())) return { error: "급여 정책은 원장만 설정할 수 있습니다" };
+  if (!(await canManageSalary())) return { error: "급여 정책 변경 권한이 없습니다" };
 
   const targetId = String(formData.get("userId") ?? "").trim();
   if (!targetId) return { error: "대상 강사가 지정되지 않았습니다" };

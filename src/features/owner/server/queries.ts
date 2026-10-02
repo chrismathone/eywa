@@ -39,8 +39,8 @@ const loadTenantSettingsRawCached = (tenantId: string) =>
       }
       return { data: (settingsRes.data?.data ?? null) as unknown, name: tenantRes.data?.name ?? "" };
     },
-    // 키에 v2 — 이 작업 전(옛 코드)의 항목과 모양을 섞지 않는다(배포 직후 한 번 새로 읽을 뿐이다).
-    ["tenant-settings-v2", tenantId],
+    // v3: 설정별 역할 이관 후의 위임 권한을 배포 즉시 읽는다(기존 5분 캐시와 섞지 않는다).
+    ["tenant-settings-v3", tenantId],
     // 저장 시 updateTag/revalidatePath로 즉시 무효화. revalidate는 그게 다 실패할 때의 TTL 백스톱.
     { tags: [tenantSettingsTag(tenantId)], revalidate: 300 },
   )();

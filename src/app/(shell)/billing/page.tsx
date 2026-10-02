@@ -1,7 +1,7 @@
-import { canManageSalary } from "@/features/payroll/server/salary-access";
+import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
+import { canReadSalary } from "@/features/payroll/server/salary-access";
 import { requireAccess } from "@/lib/auth/require-access";
 import { isModuleEnabled } from "@/lib/modules";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { BillingContent } from "./_components/billing-content";
 import { TextbooksFace } from "./_components/textbooks-face";
@@ -13,7 +13,7 @@ import { SessionVerificationFace } from "./_components/session-verification-face
 import { TeacherSettlementFace } from "./_components/teacher-settlement-face";
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { MakeeduSyncBadge } from "@/components/makeedu-sync-badge";
-import { canManageTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 
 type Sp = Record<string, string | undefined>;
 type BillingTab = "billing" | "textbooks" | "expenses" | "calculator" | "refunds" | "sessions" | "verify" | "payroll";
@@ -57,7 +57,7 @@ const PAYROLL_FACE: Face = { key: "payroll", label: "강사 정산", href: "/bil
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Sp> }) {
   let tab = resolveTab(await searchParams);
   // 강사 정산 탭은 원장 전용 — 비-master가 URL로 와도 제목에 "강사 정산"을 노출하지 않는다(본문도 수납으로 폴백).
-  if (tab === "payroll" && !(await canManageSalary())) tab = "billing"; // 본문 게이트와 같은 판정(D6 — super_admin 통과)
+  if (tab === "payroll" && !(await canReadSalary())) tab = "billing";
   const suffix =
     tab === "textbooks"
       ? " · 교재"
@@ -78,18 +78,20 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 }
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<Sp> }) {
-  const user = await requireAccess("billing");
   const sp = await searchParams;
   const tab = resolveTab(sp);
+  const user = await requireAccess(tab === "payroll" ? "payroll_settings" : "billing");
   // 강사 정산 탭은 원장(master)·총괄(super_admin)에게만 노출(감사 D6 — 총괄은 게이트 자동 통과). 그 밖이 URL로 오면 수납 면으로 폴백.
-  const isMaster = user.systemRole === "master" || (await isCurrentUserSuperAdmin());
+  const isMaster = await canReadSalary();
+  const canBilling = await canAccessTenant(user.systemRole, "billing");
   // 회차 정산 모듈(회차 확정·시수 검증·강사 정산) — 꺼진 학원(새 학원 기본)은 면을 세우지 않고 주소도 수납으로 떨군다.
   // 침산은 켜져 있어 종전과 같다(2026-09-22 방향 B).
   const sessionOn = isModuleEnabled((await getTenantSettings()).modules.disabled, "session_billing");
-  const baseFaces = isMaster ? [...FACES, PAYROLL_FACE] : FACES;
+  const baseFaces = [...(canBilling ? FACES : []), ...(isMaster ? [PAYROLL_FACE] : [])];
   const faces = sessionOn ? baseFaces : baseFaces.filter((f) => !SESSION_FACE_KEYS.has(f.key));
   const effectiveTab =
     (tab === "payroll" && !isMaster) || (!sessionOn && SESSION_FACE_KEYS.has(tab)) ? "billing" : tab;
+  if (effectiveTab !== "payroll" && !canBilling) await requireAccess("billing");
   // 엑셀 가져오기(원장 2026-09-29) — 수납 면 = 청구서, 지출 면 = 지출. 일괄 작업이라 billing **full**만(올리기 주소도 같은 판정).
   // 버튼은 각 면의 검색 줄(ExcelMenu — 내보내기와 한 버튼)에 선다.
   const importKind = effectiveTab === "billing" ? "invoices" : effectiveTab === "expenses" ? "expenses" : null;
@@ -105,8 +107,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
           <MakeeduSyncBadge domain={effectiveTab === "billing" ? "invoices" : "textbook_checks"} />
         </div>
       )}
-      <div className="print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <FaceTabs faces={faces} active={effectiveTab} ariaLabel="수납관리 면 전환" />
+        <SettingRolesControl group="billing" />
       </div>
       {effectiveTab === "textbooks" ? (
         <TextbooksFace sp={sp} />

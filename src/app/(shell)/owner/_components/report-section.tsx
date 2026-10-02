@@ -58,6 +58,7 @@ export function ReportSection({
   staffNames = [],
   videoClasses = [],
   classnoteOn = true,
+  canEdit = true,
 }: {
   initial: ReportSettings;
   /** 과목별 강사 라벨(작성률 예외 강사 칩 선택지) — 활성 직원으로 이미 필터됨(getReportTeacherCandidates). */
@@ -67,6 +68,7 @@ export function ReportSection({
   videoClasses?: VideoHomeworkClassOption[];
   /** ClassNote 기능(모듈) 켜짐 — 꺼지면 '발송'·'발송 예외' 탭을 세우지 않는다(저장값은 그대로, 서버·워커가 모듈로 막는다). */
   classnoteOn?: boolean;
+  canEdit?: boolean;
 }) {
   const [r, setR] = useState<ReportSettings>(initial);
   const tabs = classnoteOn ? REPORT_TABS : REPORT_TABS.filter((t) => !CLASSNOTE_REPORT_TABS.has(t.key));
@@ -121,8 +123,7 @@ export function ReportSection({
   const visibleExemptCount = r.writingExemptTeachers.filter(inStaff).length;
 
   return (
-    <SectionForm section="report" payload={r}>
-      <div className="space-y-4">
+    <SectionForm section="report" payload={r} readOnly={!canEdit} header={
         <div role="tablist" aria-label="보고서 설정 분류" onKeyDown={onTabKeyDown}
           className="border-line bg-bg-soft/40 flex w-fit max-w-full flex-wrap gap-1 rounded-lg border p-1">
           {tabs.map((tab) => <button key={tab.key} type="button" role="tab"
@@ -135,6 +136,8 @@ export function ReportSection({
             {tab.label}
           </button>)}
         </div>
+    }>
+      <div className="space-y-4">
         {classnoteOn ? (
         <ReportSettingsPanel tab="send" activeTab={activeTab} id={tabsId}>
           {/* ClassNote 실제 발송 스위치 — 오발송 안전장치. 기본 OFF(dry-run): 발송 버튼이 저장만 함.

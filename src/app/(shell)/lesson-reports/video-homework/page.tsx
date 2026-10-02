@@ -1,5 +1,7 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { PageHeader } from "@/components/page-header";
 import { FaceTabs } from "@/components/face-tabs";
 import { getVideoHomeworkLedger } from "@/features/video-homework/server/ledger-queries";
@@ -38,10 +40,12 @@ export default async function VideoHomeworkPage({ searchParams }: {
     ? requestedFrom : `${toDate.slice(0, 7)}-01`;
   const rangeTooLong = !isVideoHomeworkRange(requestedStart, toDate);
   const fromDate = rangeTooLong ? `${toDate.slice(0, 7)}-01` : requestedStart;
-  const [ledger, canEdit, canOwner, settings] = await Promise.all([
+  const [ledger, canEdit, canReportSettings, canAiMent, aiOn, settings] = await Promise.all([
     getVideoHomeworkLedger(user.tenantId, fromDate, toDate),
     canWriteTenant(user.systemRole, "lesson_reports"),
-    canWriteTenant(user.systemRole, "owner"),
+    canAccessTenant(user.systemRole, "report_settings"),
+    canAccessTenant(user.systemRole, "ai_ment"),
+    isFeatureLicensed(user.tenantId, "ai_analysis"),
     getTenantSettings(),
   ]);
   const subjectLabels = buildSubjectMaps(settings.operations.subjects);
@@ -66,8 +70,8 @@ export default async function VideoHomeworkPage({ searchParams }: {
   };
   return <main className="w-full min-w-0 space-y-4">
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
-      description="숙제가 나간 수업을 학생별 회차로 세어 제출 여부를 확인합니다." />
-    <FaceTabs faces={lessonReportFaces({ canOwner, canSend: canEdit,
+      description="숙제가 나간 수업을 학생별 회차로 세어 제출 여부를 확인합니다." actions={<SettingRolesControl group="lesson_reports" />} />
+    <FaceTabs faces={lessonReportFaces({ canReportSettings, canAiMent, aiOn, canSend: canEdit,
       classnoteOn: isModuleEnabled(settings.modules.disabled, "classnote"), replyOn: classnoteReplyMode(settings) !== "off" })}
       active="video_homework" ariaLabel="수업보고서 면" />
     {/* 담임 폴더에 직접 올렸지만 세지 못한 영상(0324a) — ClassNote 기능이 꺼진 지점엔 흔적도 없게. */}

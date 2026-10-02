@@ -2,10 +2,10 @@ import "server-only";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canManageTenant, canAccessTenant } from "@/lib/auth/perm-matrix";
 
 /**
- * 급여 정책·반별 급여·강사 정산 면의 게이트 — **원장(master) 또는 총괄(super_admin)**.
+ * 급여 정책·반별 급여·강사 정산 면의 게이트 — payroll_settings. 기본 원장, 위임 직급과 슈퍼관리자 포함.
  *
  * CLAUDE.md 결정: *"super_admin은 새로 만드는 어떤 제한 명단·게이트도 자동 통과"*(2026-08-13).
  * 종전엔 master만 비교해 총괄 계정의 역할이 master가 아니면 강사 정산 탭·반별 급여·급여 정책이 막혔다(감사 D6).
@@ -17,5 +17,11 @@ export async function canManageSalary(): Promise<boolean> {
   if (!user) return false;
   // 급여 기능(모듈)이 꺼진 학원엔 급여 화면·단가·명세서가 없다 — 총괄도 예외 없음(기능이 없는 학원, 2026-09-30).
   if (!isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return false;
-  return user.systemRole === "master" || (await isCurrentUserSuperAdmin());
+  return canManageTenant(user.systemRole, "payroll_settings");
+}
+
+export async function canReadSalary(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || !isModuleEnabled((await getTenantSettings()).modules.disabled, "payroll")) return false;
+  return canAccessTenant(user.systemRole, "payroll_settings");
 }

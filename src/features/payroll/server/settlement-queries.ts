@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canManageSalary } from "./salary-access";
+import { canReadSalary } from "./salary-access";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import {
   computeTeacherSettlements,
@@ -51,10 +51,10 @@ export async function getTeacherSettlementView(period: string): Promise<Settleme
   // 반 이름(과정 자동 판정) + 반별 수동 설정(과정·비율) — 둘 다 splits에 등장한 반만 청크 조회(B3).
   // class_salary_settings는 master 전용 RLS라 비-master가 부르면 빈 배열 → 반별 override 없이 계산된다.
   const classIds = [...new Set(splits.map((s) => s.class_id).filter(Boolean))];
-  // 원장·총괄(canManageSalary)이면 admin + 명시 tenant_id로 읽는다 — 총괄(비-master)이 RLS로 0행을 받아
+  // 원장·총괄(canReadSalary)이면 admin + 명시 tenant_id로 읽는다 — 총괄(비-master)이 RLS로 0행을 받아
   // 반별 override 없이 **조용히 다른 금액**을 보지 않게([[#104]]). 게이트 밖이면 종전처럼 빈 배열.
   const viewer = await getCurrentUser();
-  const salaryDb = viewer && (await canManageSalary()) ? createAdminClient() : null;
+  const salaryDb = viewer && (await canReadSalary()) ? createAdminClient() : null;
   const [classRows, classSettings] = await Promise.all([
     classIds.length > 0
       ? fetchInChunks<{ id: string; class_name: string | null }>(classIds, (chunk) =>

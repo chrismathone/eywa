@@ -567,7 +567,7 @@ const specialAccessSchema = z.object({
 });
 export const permissionsSchema = z
   .object({
-    overrides: z.array(permissionOverrideSchema).max(160),
+    overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),
     // .default([]) — 기존 저장분(키 없음)이 그대로 파싱되도록. 폼 저장 시엔 payload가 이 키를
     // 관통시켜야 한다(permissions-section) — 빠뜨리면 매트릭스 저장 한 번에 개인 예외가 전멸한다.
     userOverrides: z.array(userPermissionOverrideSchema).max(80).default([]),

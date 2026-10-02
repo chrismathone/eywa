@@ -55,12 +55,12 @@ describe("classnoteReplyMode — 모드를 읽는 한 곳", () => {
 
 describe("끔이면 흔적이 없다", () => {
   it("수업보고서 '학부모 글·답글' 면은 모드가 시험·전체일 때만 선다", () => {
-    const keys = (replyOn: boolean, classnoteOn = true, canSend = true) => lessonReportFaces({ canOwner: true, canSend, classnoteOn, replyOn }).map((f) => f.key);
+    const keys = (replyOn: boolean, classnoteOn = true, canSend = true) => lessonReportFaces({ canReportSettings: true, canAiMent: true, canSend, classnoteOn, replyOn }).map((f) => f.key);
     expect(keys(true)).toContain("parent_replies");
     expect(keys(false)).not.toContain("parent_replies");
     expect(keys(true, false)).not.toContain("parent_replies"); // 모듈 꺼짐
     expect(keys(true, true, false)).not.toContain("parent_replies"); // 쓰기 권한 없음
-    expect(lessonReportFaces({ canOwner: true, canSend: true, classnoteOn: true }).map((f) => f.key)).not.toContain("parent_replies"); // 안 넘기면 끔
+    expect(lessonReportFaces({ canReportSettings: true, canAiMent: true, canSend: true, classnoteOn: true }).map((f) => f.key)).not.toContain("parent_replies"); // 안 넘기면 끔
     expect(isClassnoteReportTab("parent_replies")).toBe(true);
   });
 

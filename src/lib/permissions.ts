@@ -3,6 +3,8 @@
 // accessLevel은 optional 3번째 인자 matrix를 받아 — 생략 시 하드코딩 default(기존 콜사이트 불변).
 // MenuKey/SystemRole은 튜플에서 추론(단일 소스 → Zod z.enum과 공유).
 
+import { NEW_SETTINGS_ROLE_KEYS, SETTINGS_ROLE_KEYS } from "./settings-role-catalog";
+
 export const SYSTEM_ROLES = [
   "master",
   "admin",
@@ -51,6 +53,7 @@ export const MENU_KEYS = [
   "ecs",
   "mcs",
   "lesson_reports",
+  ...NEW_SETTINGS_ROLE_KEYS,
   "staff",
   "billing",
   "textbook_requests",
@@ -95,6 +98,18 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   ecs: "영어 강사 시트",
   mcs: "수학 강사 시트",
   lesson_reports: "수업보고서",
+  report_settings: "보고서 설정",
+  ai_ment: "AI 멘트",
+  profile_settings: "프로필·브랜드 설정",
+  operations_settings: "운영·과목·시간표 설정",
+  billing_settings: "수납·청구 설정",
+  notification_settings: "알림·약관 설정",
+  consultation_settings: "상담 양식 설정",
+  navigation_settings: "탭 및 메뉴 구성",
+  integration_settings: "연동 설정",
+  popup_settings: "팝업 공지 설정",
+  attendance_salary_settings: "출석부 급여 비율 설정",
+  payroll_settings: "급여 정책 설정",
   staff: "직원관리",
   billing: "수납관리",
   textbook_requests: "교재 요청",
@@ -189,6 +204,18 @@ export const MENU_ACCESS: AccessMatrix = {
   // 좌측 독립 메뉴로 승격(옛 Edutrix 외부링크 대체). 사무실(master/admin/manager)이 관리(재발송 등 쓰기 포함),
   // 뷰어는 열람만. 강사=none(작성은 /onescreen 원스크린 담당, 여기는 전체 오버사이트라 스코핑 없음).
   lesson_reports: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "readonly", student: "none" },
+  report_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  ai_ment: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  profile_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  operations_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  billing_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  notification_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  consultation_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  navigation_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  integration_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  popup_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  attendance_salary_settings: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
+  payroll_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 강사=none — 전체 직원 목록·상세(급여·계정 등 민감)라 누수. 강사 메뉴엔 없음.
   staff: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
   billing: { master: "full", admin: "full", manager: "readonly", teacher: "none", counselor: "none", accountant: "full", viewer: "none", student: "none" },
@@ -399,7 +426,7 @@ export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Acce
   // 'student'는 '내 학습' 전용 역할(미니멀 셸) — 일반 메뉴를 부여하면 requireAccess(menu)가 통과해
   // 학생이 /billing 등에 직접 URL로 진입한다. 학생에게 줄 수 있는 일반 메뉴 자체가 없으므로 컬럼 전체를 잠근다.
   if (role === "student") return true;
-  if (role === "master" && (menu === "owner" || menu === "admin" || menu === "dashboard") && access === "none") {
+  if (role === "master" && (menu === "owner" || menu === "admin" || menu === "dashboard" || SETTINGS_ROLE_KEYS.some(key => key === menu)) && access === "none") {
     return true;
   }
   return false;
