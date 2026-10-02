@@ -51,6 +51,15 @@ describe("해제 리스트 기록", () => {
     expect(releaseLabel("민", [{ name: "김민준" }])).toBe("민"); // 한 글자는 겹침으로 보지 않는다
     expect(releaseLabel("  ", [])).toBe("");
   });
+  it("자동 해제가 보류한 원아는 이름 뒤에 그 사유를 붙인다(전 반 최신 목록에서도 왜 남았는지 보이게)", async () => {
+    const { sql, calls } = fakeSql();
+    const held = [
+      { className: "수학 A", childName: "윤현소", why: "이 반 학생 '윤정인'에 연결된 원아입니다" },
+      { className: "다른 반", childName: "최하린", why: "다른 반의 사유" },
+    ];
+    await writeReleaseNames(sql, "t1", [plan({ extras: ["윤현소", "최하린"] })], () => {}, held);
+    expect(calls[0].values[0].json).toEqual(["윤현소 (자동 해제 보류 — 이 반 학생 '윤정인'에 연결된 원아입니다)", "최하린"]);
+  });
   it("칸이 아직 없으면(0329a 전) 그 기록만 건너뛴다 — 던지지 않는다", async () => {
     const { sql } = fakeSql({ fail: true });
     const logs = [];

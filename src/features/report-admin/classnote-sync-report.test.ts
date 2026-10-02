@@ -11,7 +11,7 @@ const board = (p: Partial<ReleaseBoard>): ReleaseBoard =>
 const run = (p: Partial<SyncRun> = {}): SyncRun => {
   const events = p.events ?? [];
   const n = (g: string) => events.filter((e) => e.group === g).length;
-  return { kind: "daily", finishedAt: "2026-10-01T20:12:00Z", ok: true, error: null, truncated: false,
+  return { kind: "daily", finishedAt: "2026-10-01T20:12:00Z", ok: true, error: null, truncated: false, autoRelease: false,
     counts: { changed: n("changed"), failed: n("failed"), held: n("held") }, ...p, events };
 };
 
@@ -50,7 +50,9 @@ describe("회차 행 읽기", () => {
     expect(toSyncRun({ kind: "manual", finished_at: "2026-10-01T20:12:00Z" })).toBeNull();
     expect(toSyncRun({ kind: "daily" })).toBeNull();
     expect(toSyncRun({ kind: "request", finished_at: "2026-10-01T20:12:00Z", ok: false, error: " 멈춤 ", summary: { truncated: true }, events: [] }))
-      .toEqual({ kind: "request", finishedAt: "2026-10-01T20:12:00Z", ok: false, error: "멈춤", events: [], truncated: true, counts: { changed: 0, failed: 0, held: 0 } });
+      .toEqual({ kind: "request", finishedAt: "2026-10-01T20:12:00Z", ok: false, error: "멈춤", events: [], truncated: true, autoRelease: false, counts: { changed: 0, failed: 0, held: 0 } });
+    // 자동 해제를 한 회차인지는 워커가 적은 값만 믿는다(없으면 false — 옛 워커)
+    expect(toSyncRun({ kind: "daily", finished_at: "2026-10-01T20:12:00Z", ok: true, summary: { autoRelease: true }, events: [] })?.autoRelease).toBe(true);
   });
   it("건수는 워커가 적어 둔 숫자를 쓴다(줄이 잘린 회차도 전체 기준) — 숫자가 없으면 줄에서 센다", () => {
     const events = [{ group: "held", className: "가반", text: "박도윤: 학부모 미가입" }];
@@ -101,7 +103,7 @@ describe("내려받는 글", () => {
     expect(!text.replace(/\r\n/g, "").includes("\n")).toBe(true);
     const lines = text.split("\r\n");
     expect(lines[0]).toBe("인재원 ClassNote 반 보드 동기화 보고서");
-    expect(lines[1]).toBe("요약: 변동 3건 · 실패 1건 · 보류 1건 · 직접 해제 2명(1개 반)");
+    expect(lines[1]).toBe("요약: 변동 3건 · 실패 1건 · 보류 1건 · 해제 확인 2명(1개 반)");
     expect(lines).toContain("동기화: 2026-10-02 05:12 · 매일 정기 동기화(전체 반)");
     expect(lines).toContain("결과: 정상 완료");
     const changed = lines.indexOf("■ 변동된 것 (3건) — 이번 동기화가 ClassNote에서 실제로 바꾼 것");
@@ -113,16 +115,29 @@ describe("내려받는 글", () => {
     expect(lines).toContain("■ 변동 실패 (1건) — 하려다 안 된 것과 이유");
     expect(lines).toContain("  [중등M 중2] 반 이름 변경 실패 — HTTP 400 · 지금 \"옛 이름\"");
     expect(lines).toContain("  [초등M 초6] 박도윤: 학부모 미가입 / 1인 보드 없음");
-    const rel = lines.findIndex((l) => l.startsWith("■ 직접 해제해야 할 원아 (2명 · 1개 반)"));
+    const rel = lines.findIndex((l) => l.startsWith("■ 해제 확인이 필요한 원아 (2명 · 1개 반)"));
     const at = lines.indexOf("  [초등M 초6] 2명");
     expect(at).toBeGreaterThan(rel);
     expect(lines.slice(at + 1, at + 3)).toEqual(["    - 김민준", "    - 이서연"]);
-    // 🔴 해제 전에 재원생인지 확인하라는 경고가 목록 위에 있다(확인 못 한 원아가 섞일 수 있다)
-    expect(lines.slice(rel, at).join("\n")).toContain("해제 전에 그 반에 지금 다니는 학생이 아닌지 꼭 확인");
+    // 🔴 해제 전에 재원생인지 확인하라는 경고가 목록 위에 있다(확인 못 한 원아가 섞일 수 있다) — 자동 해제를 안 한 회차(옛 워커·꺼짐)의 안내
+    const guide = lines.slice(rel, at).join("\n");
+    expect(guide).toContain("해제 전에 그 반에 지금 다니는 학생이 아닌지 꼭 확인");
+    expect(guide).not.toContain("자동으로 해제합니다");
+  });
+  it("🔴 자동 해제를 한 회차의 목록 안내 = '해제해 주세요'가 아니라 '확인해 주세요' — 남은 것은 워커가 일부러 보류한 원아다", () => {
+    const boards = [board({ boardName: "초등M 초6", className: "초등M 초6", names: ["윤현소 (자동 해제 보류 — 이 반 학생 '윤정인'에 연결된 원아입니다)"] })];
+    const text = buildSyncReportText({ latest: run({ autoRelease: true }), lastDaily: null, boards });
+    expect(text).toContain("자동으로 해제하지 않은 원아(전 반 최신)");
+    expect(text).toContain("수강이 끝난 것이 확인된 원아는 동기화가 자동으로 해제합니다");
+    expect(text).toContain("그 반 학생이 아닌 것을 확인한 뒤에만");
+    expect(text).toContain("    - 윤현소 (자동 해제 보류 — 이 반 학생 '윤정인'에 연결된 원아입니다)");
+    // 바뀐 반만 본 회차가 맨 위면 **전 반을 본 회차**의 값으로 고른다(전 반 목록의 안내이므로)
+    const mixed = buildSyncReportText({ latest: run({ kind: "request", autoRelease: true }), lastDaily: run({ autoRelease: false }), boards });
+    expect(mixed).toContain("해제 전에 그 반에 지금 다니는 학생이 아닌지 꼭 확인");
   });
   it("아무 일도 없던 회차는 묶음마다 '없음' — 빈 파일을 내지 않는다", () => {
     const text = buildSyncReportText({ latest: run({ kind: "request" }), lastDaily: null, boards: [board({})] });
-    expect(text).toContain("요약: 변동 0건 · 실패 0건 · 보류 0건 · 직접 해제 0명(0개 반)");
+    expect(text).toContain("요약: 변동 0건 · 실패 0건 · 보류 0건 · 해제 확인 0명(0개 반)");
     expect(text).toContain("동기화: 2026-10-02 05:12 · 지금 반 보드 동기화(바뀐 반만)");
     expect(text.match(/\r\n {2}없음/g)).toHaveLength(4);
   });
@@ -179,7 +194,9 @@ describe("배선 — 워커가 적고 · 앱이 읽고 · 버튼이 그린다", 
   });
   it("워커: 동기화가 연결 기록 뒤에 해제 대상을 적는다 · 값은 sql.json으로 · 실패는 삼킨다", () => {
     const sync = read("scripts", "_classnote", "math-class-boards-sync.mjs");
-    expect(sync.indexOf("await writeReleaseNames(sql, tenant, fresh.plans, log)")).toBeGreaterThan(sync.lastIndexOf("await writeClassBoardSnapshot("));
+    expect(sync.indexOf("await writeReleaseNames(sql, tenant, fresh.plans, log, releaseListReasons(")).toBeGreaterThan(sync.lastIndexOf("await writeClassBoardSnapshot("));
+    // 🔴 자동 해제는 배정 기록(0302a) **뒤**에 돈다 — 해제 쪽이 멈춰도 방금 배정한 원아의 기록은 남는다
+    expect(sync.indexOf("await releaseChildren(")).toBeGreaterThan(sync.lastIndexOf("await writeClassBoardSnapshot("));
     const db = read("scripts", "_classnote", "math-class-boards-db.mjs");
     const body = db.slice(db.indexOf("export async function writeReleaseNames"));
     expect(body).toContain("release_names = ${sql.json(names)}");

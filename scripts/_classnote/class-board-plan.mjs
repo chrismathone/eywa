@@ -229,8 +229,10 @@ export function planClassBoards({ classes, students, boards, membersByBoard, adm
     }
     // 보류된 학생의 원아도 "그 반 학생의 가족"이라 잉여가 아니다 — 잉여 = 이 반 누구의 원아도 아닌 것.
     const planned = new Set(c.studentIds.flatMap((sid) => byStudent.get(sid).children.map((ch) => ch.id)));
-    const extras = (current ?? []).filter((m) => !planned.has(m.id)).map((m) => m.name ?? "?");
-    return { classId: c.classId, className: c.className, board, assign, hold, extras };
+    // extraChildren = 같은 목록을 번호와 함께(자동 해제가 번호로 내보낸다 — class-board-release.mjs). extras는 이름만(보고서·해제 리스트).
+    const extraChildren = (current ?? []).filter((m) => !planned.has(m.id)).map((m) => ({ id: m.id, name: m.name ?? "?" }));
+    const extras = extraChildren.map((m) => m.name);
+    return { classId: c.classId, className: c.className, board, assign, hold, extras, extraChildren };
   });
   return plans;
 }

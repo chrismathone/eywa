@@ -1099,18 +1099,24 @@ export function auditDetail(
     case "classnote_board_sync_report_export":
       return join(
         `변동 ${num(m.changed) ?? 0}건 · 실패 ${num(m.failed) ?? 0}건 · 보류 ${num(m.held) ?? 0}건`,
-        `직접 해제 ${num(m.releaseNames) ?? 0}명(${num(m.releaseClasses) ?? 0}개 반)`,
+        `해제 확인 ${num(m.releaseNames) ?? 0}명(${num(m.releaseClasses) ?? 0}개 반)`,
         m.ok === false ? "멈춘 회차" : null,
       );
     case "classnote_board_sync_daily":
       return join(
         m.ok === false ? "도중에 멈춤" : null,
         `변동 ${num(m.changed) ?? 0}건 · 실패 ${num(m.failed) ?? 0}건 · 보류 ${num(m.held) ?? 0}건`,
-        num(m.release) ? `해제 필요 ${num(m.release)}개 반` : null,
+        num(m.releasedChildren) ? `원아 해제 ${num(m.releasedChildren)}명` : null,
+        num(m.releasedTeachers) ? `담임 해제 ${num(m.releasedTeachers)}건` : null,
+        num(m.release) ? `해제 확인 필요 ${num(m.release)}개 반` : null,
         m.ok === false ? str(m.error) : null,
       );
     case "classnote_board_enroll":
       return join(str(m.className), m.kind === "request" ? "지금 동기화" : "정기 동기화");
+    case "classnote_board_release":
+      return join(str(m.className), str(m.reason), m.kind === "request" ? "지금 동기화" : "정기 동기화");
+    case "classnote_board_teacher_release":
+      return join(str(m.teacher) ? `${str(m.teacher)} 선생님 연결 해제` : "선생님 연결 해제", "지금 이 반 담당이 아님", m.kind === "request" ? "지금 동기화" : "정기 동기화");
     case "classnote_parent_reply_request":
       return join(`게시 명의 ${str(m.author) ?? "?"}`, num(m.length) === null ? null : `${num(m.length)}자`);
     case "classnote_parent_reply_edit_request":
@@ -1142,6 +1148,8 @@ export function auditDetail(
           ["이름 변경", num(m.renamed)],
           ["원아 배정", num(m.enrolled)],
           ["담임 연결", num(m.teachers)],
+          ["원아 해제", num(m.releasedChildren)],
+          ["담임 해제", num(m.releasedTeachers)],
           ["1인 보드 생성", num(m.boardsCreated)],
           ["1인 보드 배정", num(m.assigned)],
           ["보류", num(m.held)],

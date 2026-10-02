@@ -2,8 +2,8 @@
  * 테스트 보드 `(수학)학원이`에 **센터 교사를 전원 연결**한다 (원장 2026-09-02:
  * *"학원이는 배정 제외하고 classnote에 전부 배정해야돼 … 테스트 공지 등을 확인하기 위해서"*).
  *
- * 🔴 **해제는 REST에 없다** — `/api/v1/employments/{id}/` DELETE는 405, 교사 제거 라우트는 404
- *    (docs/classnote-integration.md §3). 되돌리려면 ClassNote UI에서 사람이 손으로 뺀다.
+ * 🔑 해제는 `POST kapi…/v1/employments/{번호}/out`으로 된다(2026-10-02 실측 — `/api/v1/employments/{id}/` DELETE는 405, 교사 제거 라우트는 404였다)
+ *    (docs/classnote-integration.md §3). 이 스크립트는 해제하지 않는다 — 잘못 붙였으면 ClassNote UI에서 사람이 뺀다.
  *    그래서 ① 드라이런이 기본 ② `--canary`로 1명 먼저 ③ 매 건 뒤 재조회로 확인한다.
  *
  * 🔴 **쓰기는 `POST /api/v1/employments/ {teacher, class_in_charge}` 한 가지만 쓴다**(한 건 추가).
