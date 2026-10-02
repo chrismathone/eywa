@@ -9,6 +9,7 @@ import { bulkPickLabel } from "../bulk-label";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { BulkAttendanceStatus } from "../bulk-attendance";
 import type { BulkPatch } from "../grid";
+import type { VideoHomeworkStatus } from "@/features/video-homework/types";
 
 /** 표 일괄 작업 핸들러 — keys(선택 행) 있으면 그 행만, 없으면 전체. */
 export type GridBulkActions = {
@@ -26,6 +27,8 @@ export type GridBulkActions = {
     attendance: BulkAttendanceStatus | null,
     /** 출결 수업타임(시수) — 빈 문자열=미지정. 새로 만드는 출결 행에만 적용(기존 시수 보존). */
     attendanceUnits?: string,
+    /** 지난 영상 숙제 검사(null=적용 안 함) — 출결처럼 **즉시 기록**된다(검사 칸이 있는 행만). */
+    videoCheck?: VideoHomeworkStatus | null,
   ) => void;
   // 맨 위 행의 수업 내용(진도·교재·오늘 과제)을 아래 행에 복사 — 같은 진도를 학생마다 다시 고르지 않게.
   onCopyFirstRow?: (keys: string[], overwrite: boolean) => void;

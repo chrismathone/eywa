@@ -1,38 +1,56 @@
 /**
- * 수업보고서 ClassNote 글의 **'영상 제출' 줄**(원장 2026-10-01 *"영상 제출 링크를 함께 붙이자. 링크는 일주일 후에 소멸."*).
+ * 수업보고서 ClassNote 글의 **'영상첨부' 줄**(원장 2026-10-01 *"영상 제출 링크를 함께 붙이자. 링크는 일주일 후에 소멸."*).
  *
- * 글 본문 = `{주소}/r/{공유 토큰}` 한 줄(지금까지) → 붙일 때만 둘째 줄 `영상 제출: {주소}/v/{제출 토큰}`.
- * 붙일지·토큰은 **앱이 정한다**(`POST /api/internal/video-submit-link` — 영상 과제 있음 + 검사 대상 반 + 지점 기능·Drive·SQL).
+ * 글 본문 = `{주소}/r/{공유 토큰}` 한 줄(지금까지 — 링크가 하나뿐이면 그대로) → 영상 링크를 붙일 때만 두 줄에 이름을 단다
+ * (원장 2026-10-02 *"보고서 : / 영상첨부 : 이렇게 링크 구분하게"*):
+ *     보고서 : {주소}/r/{공유 토큰}
+ *     영상첨부 : {주소}/v/{제출 토큰}
+ * 붙일지·토큰은 **앱이 정한다**(`POST /api/internal/video-submit-link` — 영상 과제 있음 + 강사가 '영상 첨부 링크 넣기'를 켬 +
+ * 검사 대상 반 + 지점 기능·Drive·SQL).
  * 🔴 어떤 실패도 보고서 발송을 막지 않는다 — 못 받으면 줄 없이 그대로 보낸다(`fetchVideoSubmitLine`은 throw하지 않는다).
  *
- * 🔴 **본문 일치 판정이 두 모양을 다 알아야 한다** — 중복 게시 방지(ⓐⓑⓒ)·반별 교차 확인·회수는 "이 보고서의 글"을
- *    본문으로 찾는다(`findChildReportId`). 줄이 붙은 글을 옛 판정(본문 === 공유 링크)으로 찾으면 못 알아봐서
- *    재시도에 **같은 글을 한 번 더** 올리고, 회수는 "이미 없음"으로 거짓 성공한다. 그래서 판정은 `sameReportContent` 하나로:
- *    첫 줄이 이 보고서의 공유 링크 **그대로**이고, 있으면 둘째 줄이 정확히 이 모양일 때만(남의 글을 우리 글로 보지 않게 엄격히).
- *    재시도마다 제출 토큰은 새로 받으므로(앱은 원문을 저장하지 않는다) 둘째 줄의 토큰 값은 비교하지 않는다 — 공유 링크가 보고서마다 고유하다.
+ * 🔴 **본문 일치 판정이 세 모양을 다 알아야 한다** — 중복 게시 방지(ⓐⓑⓒ)·반별 교차 확인·회수는 "이 보고서의 글"을
+ *    본문으로 찾는다(`findChildReportId`). 못 알아보면 재시도에 **같은 글을 한 번 더** 올리고, 회수는 "이미 없음"으로 거짓 성공한다.
+ *    그래서 판정은 `sameReportContent` 하나로: ① 공유 링크 한 줄 ② 10-01 모양(`{링크}` + `영상 제출: {주소}`)
+ *    ③ 10-02 모양(`보고서 : {링크}` + `영상첨부 : {주소}`). 공유 링크는 **글자까지 그대로**, 둘째 줄은 정확히 그 모양일 때만
+ *    (남의 글을 우리 글로 보지 않게 엄격히). 재시도마다 제출 토큰은 새로 받으므로(앱은 원문을 저장하지 않는다) 둘째 줄의 토큰 값은
+ *    비교하지 않는다 — 공유 링크가 보고서마다 고유하다.
+ *    ⚠️ 모양을 또 바꾸면 **옛 모양을 지우지 말고 더할 것** — 이미 나간 글은 옛 모양으로 ClassNote에 남아 있다.
  */
-export const VIDEO_LINE_LABEL = "영상 제출: ";
+export const REPORT_LINE_LABEL = "보고서 : ";
+export const VIDEO_LINE_LABEL = "영상첨부 : ";
+/** 10-01 ~ 10-02에 나간 글의 둘째 줄 이름 — 알아보는 데만 쓴다(새 글은 위 이름으로 나간다). */
+const LEGACY_VIDEO_LABEL = "영상 제출:";
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** 게시 본문 — 제출 주소가 없으면 공유 링크 한 줄(지금까지와 글자까지 같다). */
+/** 게시 본문 — 제출 주소가 없으면 공유 링크 한 줄(지금까지와 글자까지 같다). 있으면 두 줄에 이름을 단다. */
 export function reportPostContent(shareUrl, videoUrl) {
-  return videoUrl ? `${shareUrl}\n${VIDEO_LINE_LABEL}${videoUrl}` : shareUrl;
+  return videoUrl ? `${REPORT_LINE_LABEL}${shareUrl}\n${VIDEO_LINE_LABEL}${videoUrl}` : shareUrl;
 }
 
 /** 둘째 줄 앞의 줄 구분 — ClassNote가 저장하며 바꿀 수 있는 모양(`\r\n`·`<br>`·앞뒤 공백)을 받아 준다. */
-const LINE_SEP = String.raw`(?:[ \t]*(?:\r?\n|<br\s*/?>)[ \t]*)+`;
+// (빈칸을 반복 **밖**에 둔다 — 안팎에 겹쳐 두면 빈 줄이 여러 개인 글에서 되짚기가 폭발한다.)
+const LINE_SEP = String.raw`[ \t]*(?:(?:\r?\n|<br\s*/?>)[ \t]*)+`;
 const VIDEO_TAIL = String.raw`\s*https?://[^\s/<]+(?:/[^\s<]*)?/v/[A-Za-z0-9_-]{43}\s*$`;
+/** 이름과 쌍점 사이·뒤의 빈칸 — ClassNote가 줄이거나 nbsp(`&nbsp;` 포함)로 바꿔 저장해도 알아본다. */
+const GAP = String.raw`(?:[ \t ]|&nbsp;)*`;
+const labelRe = (label) => `${escapeRe(label.split(":")[0].trim())}${GAP}:${GAP}`;
 
 /**
- * 이 ClassNote 글이 그 공유 링크의 보고서 글인가 — 한 줄(옛 글) 또는 '영상 제출' 줄이 붙은 글.
- * 저장 모양을 실측하기 전이라 줄 구분은 너그럽게(못 알아보면 재시도가 같은 글을 또 올린다) — 첫 줄 = 공유 링크 **그대로**,
- * 둘째 줄 = 영상 제출 주소 하나뿐이라는 점은 엄격하다(남의 글을 우리 글로 보지 않게).
+ * 이 ClassNote 글이 그 공유 링크의 보고서 글인가 — 한 줄(링크만) 또는 영상 줄이 붙은 두 모양.
+ * 실측(2026-10-02, 테스트 학생 '학원이'·테스트반): 두 줄 본문은 ClassNote에 **보낸 글자 그대로**(줄바꿈 `\n`) 저장된다.
+ * 그래도 줄 구분·빈칸은 너그럽게 둔다(못 알아보면 재시도가 같은 글을 또 올린다) — 공유 링크는 **그대로**,
+ * 둘째 줄 = 영상 주소 하나뿐이라는 점은 엄격하다(남의 글을 우리 글로 보지 않게).
  */
 export function sameReportContent(content, shareUrl) {
   if (typeof content !== "string" || typeof shareUrl !== "string" || !shareUrl) return false;
   if (content === shareUrl) return true;
-  return new RegExp(`^${escapeRe(shareUrl)}${LINE_SEP}${escapeRe(VIDEO_LINE_LABEL.trim())}${VIDEO_TAIL}`).test(content);
+  const share = escapeRe(shareUrl);
+  // ③ 10-02 모양 — 두 줄 모두 이름이 붙는다.
+  if (new RegExp(`^\\s*${labelRe(REPORT_LINE_LABEL)}${share}${LINE_SEP}${labelRe(VIDEO_LINE_LABEL)}${VIDEO_TAIL}`).test(content)) return true;
+  // ② 10-01 모양 — 첫 줄은 링크 그대로, 둘째 줄만 이름이 붙는다.
+  return new RegExp(`^${share}${LINE_SEP}${escapeRe(LEGACY_VIDEO_LABEL)}${VIDEO_TAIL}`).test(content);
 }
 
 /**

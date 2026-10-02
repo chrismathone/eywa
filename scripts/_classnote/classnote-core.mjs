@@ -367,7 +367,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       }
     }
     const res = await postClassnoteReport(adminPage, {
-      // 본문 = 공유 링크 한 줄, 앱이 제출 토큰을 줬으면 '영상 제출' 줄을 더한다(report-video-line.mjs). 아래 확인들은 둘 다 알아본다.
+      // 본문 = 공유 링크 한 줄, 앱이 제출 토큰을 줬으면 두 줄('보고서 :'·'영상첨부 :')로 낸다(report-video-line.mjs). 아래 확인들은 세 모양을 다 알아본다.
       cls: boardId, child: child.id, enrollment: enrollment.id, content: reportPostContent(shareUrl, videoUrl),
       dateWritten: report.report_date, authorName: report.teacher_name || DEFAULT_AUTHOR_NAME,
       attachedImages, attachedFiles,
@@ -893,7 +893,7 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`  · ${studentName}: 게시 직전 확인 — 이미 다른 처리로 넘어간 행이라 게시 생략`);
         continue;
       }
-      // '영상 제출' 줄(원장 2026-10-01) — 앱이 정한다(영상 과제 있음 + 검사 대상 반 + 지점 기능·Drive·SQL). 못 받으면 줄 없이 보낸다
+      // '영상첨부' 줄(원장 2026-10-01) — 앱이 정한다(영상 과제 있음 + 강사가 링크 넣기를 켬 + 검사 대상 반 + 지점 기능·Drive·SQL). 못 받으면 줄 없이 보낸다
       // (10초 상한 · 실패해도 발송은 그대로). 게시 시도마다 새 7일 토큰 — 같은 보고서 재시도의 중복 판정은 첫 줄(공유 링크)로 한다.
       const videoUrl = await fetchVideoSubmitLine({ base, shareBase, reportId: r.id, secret: INTERNAL_SECRET });
       // ⏱ 게시 호출 상한 — Cloud Run 경로에 있던 AbortController(960s)를 제거하면서 **전건이 상한 없는 호출**이 됐다.
@@ -947,7 +947,7 @@ export async function processQueueOnce(sql, browser, opts) {
       if (result.ok) {
         await sql`update lesson_reports set classnote_status='success', classnote_sent_at=now(), classnote_error=null where id=${r.id}`;
         summary.success++;
-        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${videoUrl ? " · 영상 제출 줄" : ""})`);
+        log(`    → success (내부 API${classTarget ? " · 반별" : ""}${sendFiles.length ? `, 파일 ${sendFiles.length}건` : ""}${videoUrl ? " · 영상첨부 줄" : ""})`);
       } else if (result.partial) {
         // 🔴 이중 계정(부모·본인) 학생에서 **일부 원아는 이미 받았다**. 재시도하면 그 집에 같은 글이 또 간다
         // (ClassNote는 삭제·수정 불가) → 자동 재시도 없이 failed 고정, 사람이 알림장에서 확인 후 판단한다.

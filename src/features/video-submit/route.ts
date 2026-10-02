@@ -71,9 +71,14 @@ export function linkVideoFilename(route: LinkVideoRoute, startedAt: Date, ext: s
  * 수업보고서 글에 '영상 제출' 줄을 붙이나 — **한 함수**(나중에 "모든 보고서"로 넓힐 땐 여기만 바꾼다).
  * 원장 2026-10-01 *"영상 제출 링크를 함께 붙이자"* · 기본 범위: 그 보고서가 '영상 과제 있음'(0308a `video_homework = true`)이고
  * 그 반이 영상 숙제 검사 대상(학원 설정 `videoHomeworkPolicy`)일 때만. 영어(템플릿 모드 — `/r`과 같은 판정)·취소된 보고서·반 없는 보고서는 아니다.
+ *
+ * 원장 2026-10-02 *"체크하면 '영상 첨부 링크 넣기' 토글이 하나 더 생기는걸로"* — 강사가 그 행에서 **링크 넣기를 켰을 때만**
+ * (0328a `video_submit_link = true`). 고르지 않았거나(null) 끈(false) 보고서엔 붙지 않는다.
+ * `"no_column"` = 그 칸이 아직 없다(SQL 적용 전, #95) → 고를 길이 없으니 10-01 규칙 그대로(영상 과제 있음이면 붙임).
  */
 export function reportGetsVideoLink(input: {
   videoHomework: boolean | null | undefined;
+  submitLink: boolean | null | "no_column";
   reportSubject: string | null | undefined;
   revoked: boolean;
   classId: string | null | undefined;
@@ -82,6 +87,7 @@ export function reportGetsVideoLink(input: {
   policy: VideoHomeworkPolicy;
 }): boolean {
   if (input.videoHomework !== true || input.revoked || !input.classId || !input.classSubject) return false;
+  if (input.submitLink !== "no_column" && input.submitLink !== true) return false;
   if (input.reportSubject === "english") return false;
   return isVideoHomeworkEnabled(input.policy, { classId: input.classId, subjectKey: input.classSubject, grade: input.grade });
 }

@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import { toast } from "sonner";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
-import { setVideoHomeworkMark } from "../server/actions";
+import { setVideoHomeworkMark, setVideoHomeworkMarksBulk } from "../server/actions";
+import type { SubmitLinkMode } from "@/features/video-submit/link-choice";
 import type { VideoHomeworkMark, VideoHomeworkStatus } from "../types";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY, isVideoHomeworkEnabled, type VideoHomeworkPolicy } from "../policy";
 import { hidesNextCheck, type VideoHomeworkAssignments } from "../assignment";
@@ -24,19 +25,25 @@ type Store = {
   assignments: VideoHomeworkAssignments;
   /** 과제 값을 제대로 읽었나 — false(조회 실패)면 이 세션은 '오늘 영상 과제'를 저장하지 않는다(덮어쓰기 방지). */
   assignmentsKnown: boolean;
+  /** '영상 첨부 링크 넣기'를 고를 수 있는 단계(0328a) — off면 토글을 그리지 않고 그 값을 저장에 싣지도 않는다. */
+  submitLinkMode: SubmitLinkMode;
   change: (classId: string, studentId: string, status: VideoHomeworkStatus | null, homeworkDate?: string | null) => Promise<void>;
+  /** 일괄 입력 — 여러 칸을 한 왕복으로 찍는다. 화면엔 먼저 칠하고, 서버가 받지 않은 칸만 되돌린다. 찍힌 칸 수를 돌려준다. */
+  changeMany: (cells: BulkCheckCell[], status: VideoHomeworkStatus) => Promise<{ applied: number; failed: number }>;
 };
+export type BulkCheckCell = { classId: string; studentId: string; homeworkDate: string | null };
 const Context = createContext<Store | null>(null);
 const keyOf = (classId: string, studentId: string) => `${classId}:${studentId}`;
 const EMPTY: VideoHomeworkAssignments = {};
 
-export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, children }: {
+export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", children }: {
   initial: VideoHomeworkMark[]; checkDate: string; policy?: VideoHomeworkPolicy;
-  assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; children: ReactNode;
+  assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; submitLinkMode?: SubmitLinkMode; children: ReactNode;
 }) {
   const [marks, setMarks] = useState(initial);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const pendingRef = useRef(new Set<string>());
+  const t = useSheetT();
   const change = useCallback(async (classId: string, studentId: string, status: VideoHomeworkStatus | null, homeworkDate?: string | null) => {
     const key = keyOf(classId, studentId);
     if (pendingRef.current.has(key)) return;
@@ -58,8 +65,37 @@ export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VID
       setPending((current) => { const next = new Set(current); next.delete(key); return next; });
     }
   }, [checkDate, marks]);
-  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, change }),
-    [checkDate, marks, pending, policy, assignments, assignmentsKnown, change]);
+  const changeMany = useCallback(async (cells: BulkCheckCell[], status: VideoHomeworkStatus) => {
+    // 저장 중인 칸은 건드리지 않는다(한 칸 저장과 겹치면 늦게 온 응답이 화면을 뒤집는다).
+    const targets = [...new Map(cells.map((cell) => [keyOf(cell.classId, cell.studentId), cell])).entries()]
+      .filter(([key]) => !pendingRef.current.has(key));
+    if (!targets.length) return { applied: 0, failed: cells.length };
+    const keys = targets.map(([key]) => key);
+    const keySet = new Set(keys);
+    const before = new Map(marks.filter((mark) => keySet.has(keyOf(mark.classId, mark.studentId))).map((mark) => [keyOf(mark.classId, mark.studentId), mark]));
+    keys.forEach((key) => pendingRef.current.add(key));
+    setPending((current) => new Set([...current, ...keys]));
+    setMarks((current) => [...current.filter((mark) => !keySet.has(keyOf(mark.classId, mark.studentId))),
+      ...targets.map(([, cell]) => ({ classId: cell.classId, studentId: cell.studentId, checkDate, homeworkDate: cell.homeworkDate, status }))]);
+    let appliedKeys = new Set<string>();
+    try {
+      const result = await setVideoHomeworkMarksBulk({ checkDate, status, cells: targets.map(([, cell]) => cell) });
+      if (!result.ok) toast.error(result.error ?? t("os.vh.saveFail"));
+      appliedKeys = new Set(result.applied.map((cell) => keyOf(cell.classId, cell.studentId)));
+    } catch {
+      toast.error(t("os.vh.saveFail"));
+    } finally {
+      // 서버가 받지 않은 칸은 원래대로(있던 기록은 되살리고, 없던 칸은 비운다).
+      const rejected = new Set(keys.filter((key) => !appliedKeys.has(key)));
+      if (rejected.size) setMarks((current) => [...current.filter((mark) => !rejected.has(keyOf(mark.classId, mark.studentId))),
+        ...[...rejected].flatMap((key) => (before.has(key) ? [before.get(key)!] : []))]);
+      keys.forEach((key) => pendingRef.current.delete(key));
+      setPending((current) => { const next = new Set(current); keys.forEach((key) => next.delete(key)); return next; });
+    }
+    return { applied: appliedKeys.size, failed: cells.length - appliedKeys.size };
+  }, [checkDate, marks, t]);
+  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, change, changeMany }),
+    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, change, changeMany]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -72,6 +108,16 @@ export function useVideoHomeworkPolicy(): VideoHomeworkPolicy | null {
 export function useVideoHomeworkSaveOk(): boolean {
   const store = useContext(Context);
   return !!store && store.assignmentsKnown;
+}
+
+/** '영상 첨부 링크 넣기' 단계 — 공급자 밖이면 off(토글 없음 · 저장에 안 실림). */
+export function useSubmitLinkMode(): SubmitLinkMode {
+  return useContext(Context)?.submitLinkMode ?? "off";
+}
+
+/** 영상 숙제 검사 저장소 — 공급자 밖이면 null(일괄 입력이 검사 칸을 다룰 수 있는지 가른다). */
+export function useVideoHomeworkStore() {
+  return useContext(Context);
 }
 
 export function useVideoHomework() {

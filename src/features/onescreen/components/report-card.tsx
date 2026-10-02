@@ -36,6 +36,7 @@ import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
 import { VideoHomeworkCheck } from "@/features/video-homework/components/video-homework-provider";
 import { VideoHomeworkToggle } from "@/features/video-homework/components/video-homework-toggle";
+import { VideoSubmitLinkToggle } from "@/features/video-homework/components/video-submit-link-toggle";
 import { ENGLISH_DRAFT_TEXTAREA_ID, REPORT_ATTACHMENT_MAX, isImageAttachment } from "../attachment-utils";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { splitComment, joinComment } from "../comment-paragraphs";
@@ -135,6 +136,7 @@ export function ReportCard({
   onHomeworkToday,
   onMakeup,
   onVideoHomework,
+  onVideoSubmitLink,
   onRemoveMakeup,
   canRemoveMakeup,
   onPickMakeupClass,
@@ -173,6 +175,8 @@ export function ReportCard({
   onMakeup: (subjectName: string) => void;
   /** 오늘 영상 과제 있음/없음(0308a). 없으면 버튼이 잠긴다. */
   onVideoHomework?: (subjectName: string) => void;
+  /** 영상 첨부 링크 넣기(0328a) — '영상 과제'를 켠 행에서만 뜬다. 없으면 버튼이 잠긴다. */
+  onVideoSubmitLink?: (subjectName: string) => void;
   /** 보강 빼기(2026-08-18) — 출결·저장된 보강 보고서를 지운다. 없으면 배지가 표시로만 남는다. */
   onRemoveMakeup?: (subjectName: string) => void;
   /** 이 행을 뺄 수 있나 — 발송·처리 중이면 false(발송된 보강은 취소 불가, 원장 2026-08-18). */
@@ -499,14 +503,15 @@ export function ReportCard({
 
         {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
+          {/* 알약이 셋(정규+보강 · 영상 과제 · 영상 첨부 링크)까지 붙는다 — 좁은 카드에선 교재명 칸을 누르지 않고 아랫줄로 접는다. */}
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
               value={subject.textbook ?? ""}
               onChange={(e) => onTextbook(subjectName, e.target.value)}
               placeholder={t("os.card.bookPh")}
               aria-label={tf("os.card.bookAria", { subject: subjectName })}
-              className="border-line bg-card focus:border-primary h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
+              className="border-line bg-card focus:border-primary h-8 min-w-32 flex-1 rounded-lg border px-2 text-xs outline-none transition-colors"
             />
             {/* 🔴 옛 '보강' 켜고 끄기 알약은 없앴다(원장 2026-09-30 — 표 모드 체크박스와 같은 이유: 손으로 켜면 타임 없는
                 '(정규+보강)'이 생겼다). 보강은 '보강 추가'에서 정해지고, 여기엔 **합침 취소**만 남긴다. */}
@@ -535,6 +540,18 @@ export function ReportCard({
               checked={!!subject.videoHomework}
               onToggle={() => onVideoHomework?.(subjectName)}
               disabled={!onVideoHomework || locked}
+              classId={subject.classId}
+              subjectKey={subject.subjectKey}
+              grade={student.grade}
+              studentName={student.name}
+              subjectName={subjectName}
+            />
+            <VideoSubmitLinkToggle
+              size="pill"
+              shown={!!subject.videoHomework}
+              checked={!!subject.videoSubmitLink}
+              onToggle={() => onVideoSubmitLink?.(subjectName)}
+              disabled={!onVideoSubmitLink || locked}
               classId={subject.classId}
               subjectKey={subject.subjectKey}
               grade={student.grade}

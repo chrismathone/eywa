@@ -287,6 +287,18 @@ export type BulkPatch = {
   homeworkToday?: string;
   /** 오늘 진도 — 필드명은 모듈 전체 규약(planPrevFill·planCopyFirstRow)과 같은 `today`. */
   today?: string;
+  // ── 2026-10-02 추가(원장 *"일괄 입력에 지금 없는거 추가"*) — 전부 **행 단위**. 값이 없으면(undefined) 적용하지 않는다. ──
+  /** 특이사항(강사 메모). */
+  note?: string;
+  /** 일일·확인 테스트 — 맞은 개수 / 문항수. */
+  dailyScore?: number;
+  dailyMax?: number;
+  checkScore?: number;
+  checkMax?: number;
+  /** 오늘 영상 과제 있음/없음 — 영상 과제를 쓰는 행(`videoOk`)에만. */
+  videoHomework?: boolean;
+  /** 영상 첨부 링크 넣기 — 고를 수 있는 행(`linkOk`)이고 영상 과제가 켜진(이번에 켜는 것 포함) 행에만 켠다. */
+  videoSubmitLink?: boolean;
 };
 
 /** 일괄 적용 대상 행의 현재값(경량 shape — 테스트 용이). 태도·과제는 학생 단위, 교재·오늘과제·진도는 과목(행) 단위. */
@@ -302,6 +314,19 @@ export type BulkTarget = {
   homework: string;
   textbook: string;
   homeworkToday: string;
+  // ── 2026-10-02 추가분의 현재값 — 안 넘기면 그 칸은 '비어 있음'·'대상 아님'으로 본다(옛 호출부·테스트 그대로). ──
+  note?: string;
+  dailyScore?: number | null;
+  dailyMax?: number;
+  checkScore?: number | null;
+  checkMax?: number;
+  /** 지금 값 — undefined = 고른 적 없음('빈 칸'). */
+  videoHomework?: boolean;
+  videoSubmitLink?: boolean;
+  /** 이 행에 '영상 과제' 토글이 있나(반 있음 + 학원 설정이 켠 반) — 화면 토글과 같은 판정. */
+  videoOk?: boolean;
+  /** 이 행에서 '영상 첨부 링크 넣기'를 고를 수 있나(`submitLinkChoosable`). */
+  linkOk?: boolean;
   /**
    * 입력이 잠긴 행(발송 완료·결석) — 값을 **밀어 넣지 않는다**.
    * ⚠️ 행 자체를 목록에서 빼는 게 아니라 값 적용만 건너뛴다 — 같은 목록을 출결 일괄 적용이 함께 쓰는데,
@@ -314,6 +339,9 @@ const normPatchField = (v: string | undefined): string | undefined => {
   const t = v?.trim();
   return t ? t : undefined;
 };
+/** 테스트 숫자 — 0 이상의 정수만(문항수는 1~100). 그 밖은 '적용 안 함'. */
+const normCount = (v: number | undefined, min: number): number | undefined =>
+  typeof v === "number" && Number.isFinite(v) && Math.round(v) >= min ? Math.min(100, Math.round(v)) : undefined;
 
 /**
  * 값 일괄 적용 계획 — patch에 채워진 필드만, onlyEmpty면 현재값이 빈 칸인 행만.
@@ -335,6 +363,11 @@ export function planBulkApply(
     textbook: normPatchField(patch.textbook),
     homeworkToday: normPatchField(patch.homeworkToday),
     today: normPatchField(patch.today),
+    note: normPatchField(patch.note),
+    dailyScore: normCount(patch.dailyScore, 0),
+    dailyMax: normCount(patch.dailyMax, 1),
+    checkScore: normCount(patch.checkScore, 0),
+    checkMax: normCount(patch.checkMax, 1),
   };
   const out: Array<{ studentId: string; subjectName: string; subjectIndex: number; set: BulkPatch }> = [];
   const studentDone = new Set<string>(); // 학생 단위 필드(태도·과제) 중복 방지
@@ -353,6 +386,27 @@ export function planBulkApply(
       (!onlyEmpty || !t.today.trim())
     )
       set.today = p.today;
+    if (p.note !== undefined && (!onlyEmpty || !(t.note ?? "").trim())) set.note = p.note;
+    // 테스트 — '빈 칸만'은 **점수가 빈 행**에만(문항수는 늘 값이 있어 빈 칸 판정이 없다 — 점수가 찬 행의 문항수를 바꾸면 그 점수가 깎인다).
+    // 점수는 그 행의 문항수(이번에 바꾸면 그 값)를 넘지 않게 맞춘다 — 화면 점수 칸과 같은 규칙.
+    for (const which of ["daily", "check"] as const) {
+      const score = p[`${which}Score`];
+      const max = p[`${which}Max`];
+      if ((score === undefined && max === undefined) || (onlyEmpty && t[`${which}Score`] != null)) continue;
+      if (max !== undefined) set[`${which}Max`] = max;
+      const cap = max ?? t[`${which}Max`];
+      if (score !== undefined) set[`${which}Score`] = cap != null ? Math.min(score, cap) : score;
+    }
+    // 영상 과제 — 토글이 있는 행에만. '빈 칸만'은 고른 적 없는 행(undefined)에만.
+    if (patch.videoHomework !== undefined && t.videoOk && (!onlyEmpty || t.videoHomework === undefined))
+      set.videoHomework = patch.videoHomework;
+    const homeworkAfter = set.videoHomework ?? t.videoHomework;
+    // 링크 넣기 — 영상 과제가 켜져 있는(이번에 켜는 것 포함) 행에만 켠다. 과제를 끄는 행은 링크도 끈다(토글과 같은 규칙).
+    if (patch.videoSubmitLink === true && t.linkOk && homeworkAfter === true && (!onlyEmpty || t.videoSubmitLink === undefined))
+      set.videoSubmitLink = true;
+    else if (patch.videoSubmitLink === false && t.linkOk && (!onlyEmpty || t.videoSubmitLink === undefined))
+      set.videoSubmitLink = false;
+    if (set.videoHomework === false && t.videoSubmitLink) set.videoSubmitLink = false;
     studentDone.add(t.studentId);
     if (Object.keys(set).length)
       out.push({ studentId: t.studentId, subjectName: t.subjectName, subjectIndex: t.subjectIndex, set });

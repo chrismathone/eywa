@@ -16,6 +16,10 @@ import { GridToolbar, type GridBulkActions } from "./grid-toolbar";
 import { GridBodyRow, type GridConfig, type GridFieldHandlers, type GridRowActions } from "./grid-row";
 import { PrevRow } from "./prev-row";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useSubmitLinkMode, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
+import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
+import { countCheckOverwrites, hasVideoCheckCell, planBulkVideoCheck, type BulkCheckRow } from "@/features/video-homework/bulk-check";
+import { submitLinkChoosable } from "@/features/video-submit/link-choice";
 
 // 열 제목은 **가운데 정렬**(원장 2026-08-05) — 본문 값은 좌측 정렬 그대로다(읽는 흐름 유지).
 const TH = "text-text-faint px-2 py-2 text-center text-xs font-bold whitespace-nowrap";
@@ -186,6 +190,36 @@ export function OneScreenGrid({
 
   const t = useSheetT();
   const tf = useSheetTf();
+  // 일괄 입력의 영상 칸 — 대상 행 가운데 그 칸이 **실제로 있는** 행이 하나라도 있을 때만 그린다(행의 토글·검사 칸과 같은 판정).
+  // 과제 값을 못 읽은 세션(saveOk=false)은 행 토글이 잠겨 있으니 일괄로도 넣지 않는다.
+  const videoHwPolicy = useVideoHomeworkPolicy();
+  const videoHwSaveOk = useVideoHomeworkSaveOk();
+  const videoHwStore = useVideoHomeworkStore();
+  const submitLinkMode = useSubmitLinkMode();
+  const checkRowOf = (r: (typeof copyRows)[number]): BulkCheckRow => ({
+    classId: r.subject.classId, studentId: r.student.id, subjectKey: r.subject.subjectKey,
+    grade: r.student.grade, homeworkDate: r.subject.prevReport?.date,
+  });
+  const bulkVideo = {
+    videoRows: videoHwPolicy && videoHwSaveOk
+      ? copyRows.filter((r) => !!r.subject.classId && isVideoHomeworkEnabled(videoHwPolicy, {
+          classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade })).length
+      : 0,
+    linkRows: videoHwSaveOk
+      ? copyRows.filter((r) => submitLinkChoosable(submitLinkMode, videoHwPolicy, {
+          classId: r.subject.classId, subjectKey: r.subject.subjectKey, grade: r.student.grade, studentName: r.student.name })).length
+      : 0,
+    videoCheckRows: videoHwStore && !readonlyView
+      ? copyRows.filter((r) => hasVideoCheckCell(checkRowOf(r), videoHwStore)).length
+      : 0,
+    // 고른 검사의 대상·바꾸는 칸 수 — 실제 저장(onescreen-client)이 쓰는 것과 **같은 순수 계획**(화면 숫자와 기록이 어긋나지 않게).
+    videoCheckPlan: videoHwStore && !readonlyView
+      ? (status: "submitted" | "missing", onlyEmpty: boolean) => {
+          const targets = planBulkVideoCheck(copyRows.map(checkRowOf), videoHwStore, { status, onlyEmpty });
+          return { cells: targets.length, overwrite: countCheckOverwrites(targets, videoHwStore) };
+        }
+      : undefined,
+  };
 
   if (rows.length === 0) {
     return (
@@ -234,7 +268,13 @@ export function OneScreenGrid({
             <BulkApplyPopover
               targetCount={selectedKeys.length || rows.length}
               selectedCount={selectedKeys.length}
-              attitudes={config.attitudes}
+              fields={{
+                attitudes: config.attitudes,
+                dailyEnabled: config.dailyEnabled,
+                checkEnabled: config.checkEnabled,
+                allowTestMax: config.allowTestMax,
+                ...bulkVideo,
+              }}
               subjects={bulkSubjects}
               studyGrade={bulkStudyGrade}
               copySource={
@@ -263,8 +303,8 @@ export function OneScreenGrid({
                         ),
                     }
               }
-              onApply={(patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits) =>
-                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits)
+              onApply={(patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits, videoCheck) =>
+                bulkActions.onBulkApply(selectedKeys, patch, onlyEmpty, progressSubjectKey, attendance, attendanceUnits, videoCheck)
               }
               onCopyFirstRow={(overwrite) => bulkActions.onCopyFirstRow?.(selectedKeys, overwrite)}
               disabled={bulkGen}
