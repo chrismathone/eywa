@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, createHmac } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
-import { kstToday } from "@/lib/date-kst";
+import { formatShortKoreanDate, kstToday } from "@/lib/date-kst";
 import { logActionAs } from "@/features/audit/server/log";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import type { TenantSettings } from "@/features/owner/settings-types";
@@ -12,7 +12,9 @@ import { shareExpiryDate } from "@/features/onescreen/share-expiry";
 import { maskStudentName } from "../rules";
 import {
   isLast4,
+  isSiteName,
   phoneEndsWith,
+  siteNameMatches,
   siteLinkExpiresAt,
   siteLinkLastDay,
   SITE_LINKS_PER_PAIR_PER_DAY,
@@ -27,12 +29,14 @@ import {
 import { videoSubmitAvailability } from "./availability";
 import { readVideoDriveConfig } from "./drive-config";
 import { mintSubmitLink } from "./links";
+import { openHomeworkDates } from "./site-homework";
 
 type Db = ReturnType<typeof createAdminClient>;
 
 /**
- * 숙제 영상 **올리기 사이트**(`/v`, 0330a) — 뒷 4자리로 후보(학생 × 반)를 찾고, 고른 후보의 제출 링크를 그 자리에서 만든다.
- * 올리기 자체는 기존 제출 링크 길을 그대로 탄다(`/v/<토큰>` · upload-start/complete — 형식·크기·횟수 제한·Drive 대조까지 같은 코드).
+ * 숙제 영상 **올리기 사이트**(`/v`, 0330a) — 뒷 4자리 **+ 이름**으로 학생을 찾고, 선생님이 낸 **영상 숙제 중 아직 안 낸 것**을
+ * 보여 준 뒤, 고른 숙제의 제출 링크를 그 자리에서 만든다(원장 2026-10-03). 숙제가 없으면 올릴 길이 없다.
+ * 올리기 자체는 기존 제출 링크 길을 그대로 탄다(`/v/<토큰>?h=숙제일` · upload-start/complete — 형식·크기·횟수 제한·Drive 대조까지 같은 코드).
  *
  * 🔑 지점 = Drive가 묶인 지점 하나(`CLASSNOTE_VIDEO_TENANT_ID`) — 주소에 지점이 없고(멀티테넌트 C안), 영상이 들어갈 Drive가 그 학원 것이다.
  * 🔴 로그인 없는 화면이다 — 모든 조회에 그 지점 필터(admin은 RLS 우회, [[#104]]). 학생·반 번호는 화면에 내려보내지 않는다(고른 값은 지문으로만).
@@ -43,9 +47,12 @@ const ATTEMPTS = "homework_video_site_attempts";
 const UNAVAILABLE = "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요.";
 const LIMITED = "잠시 동안 너무 많이 시도했습니다. 조금 뒤에 다시 해 주세요.";
 const FAILED = "확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
-const NOT_FOUND = "그 번호로는 찾지 못했습니다. 번호를 다시 확인하거나 선생님께 알려 주세요.";
+const NAME_NEEDED = "이름을 두 글자 이상 입력해 주세요.";
+const NOT_FOUND = "번호와 이름이 맞는 학생을 찾지 못했습니다. 번호와 이름을 다시 확인하거나 선생님께 알려 주세요.";
+/** 번호·이름은 맞지만 올릴 숙제가 없다 — "찾지 못했다"와 가른다(영상 숙제가 없는 반의 학생이 검색이 안 되는 것으로 오해하지 않게, 원장 2026-10-03). */
+const NO_HOMEWORK = "지금 올릴 영상 숙제가 없습니다. 선생님이 영상 숙제를 낸 수업이 있을 때만 여기서 올릴 수 있습니다.";
 const TOO_MANY = "이 번호로는 여기서 올릴 수 없습니다. 선생님께 영상 제출 링크를 받아 주세요.";
-const STALE = "시간이 지나 다시 확인이 필요합니다. 번호를 다시 입력해 주세요.";
+const STALE = "시간이 지나 다시 확인이 필요합니다. 번호와 이름을 다시 입력해 주세요.";
 const PAIR_BLOCKED = "오늘은 여기서 더 열 수 없습니다. 선생님께 알려 주세요.";
 /** 끝자리 조회에서 받는 행의 상한 — 이보다 많이 걸리면 그 번호는 사이트에서 안내하지 않는다(조용히 자르지 않는다, B2). */
 const LOOKUP_ROW_LIMIT = 200;
@@ -93,9 +100,9 @@ export async function siteAvailability(db: Db = createAdminClient()): Promise<Si
  */
 const ipHashOf = (ip: string | null, tenantId: string) =>
   createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY || tenantId).update(`${ip ?? "unknown"}:${tenantId}`).digest("hex");
-/** 후보 지문 — 그 지점·학생·반·날짜. 화면엔 이 값만 가고, 열 때 서버가 같은 조회를 다시 해 이 지문이 그 안에 있는지 본다. */
-const choiceId = (tenantId: string, studentId: string, classId: string, day: string) =>
-  createHash("sha256").update(`${tenantId}:${studentId}:${classId}:${day}`).digest("hex").slice(0, 40);
+/** 숙제 지문 — 그 지점·학생·반·숙제일·조회한 날. 화면엔 이 값만 가고, 열 때 서버가 같은 조회를 다시 해 이 지문이 그 안에 있는지 본다. */
+const choiceId = (tenantId: string, studentId: string, classId: string, homeworkDate: string, day: string) =>
+  createHash("sha256").update(`${tenantId}:${studentId}:${classId}:${homeworkDate}:${day}`).digest("hex").slice(0, 40);
 
 /**
  * 시도 1건을 받아도 되나 — 줄을 **먼저 넣고** 한 시간 창의 횟수로 판정한다(동시에 여러 개가 와도 각자 제 줄까지 센다).
@@ -138,11 +145,14 @@ type EnrollmentRow = { student_id: string; class_id: string; start_date: string 
 type ClassRow = { id: string; class_name: string | null; subject: string | null };
 
 /**
- * 뒷 4자리 → 후보(학생 × 지금 다니는 반). 재원생만 · 학생 본인 번호 또는 보호자 번호가 그 4자리로 끝나는 학생 ·
- * 그 반이 학원 설정의 영상 숙제 대상일 때만(영상 숙제를 안 쓰는 반은 올릴 곳이 아니다).
- * `tooMany` = 그 4자리에 학생이 너무 많다(자리 채움 번호 `0000` 등) — 누구인지 가릴 수 없어 사이트에서는 안내하지 않는다.
+ * 뒷 4자리 + 이름 → 후보(학생 × 지금 다니는 반). 재원생만 · 학생 본인 번호 또는 보호자 번호가 그 4자리로 끝나고 **이름이 같은** 학생
+ * (동명이인 구분 글자·공백은 무시 — `siteNameMatches`) · 그 반이 학원 설정의 영상 숙제 대상일 때만(영상 숙제를 안 쓰는 반은 올릴 곳이 아니다).
+ * `tooMany` = 그 4자리에 학생이 너무 많다(자리 채움 번호 `0000` 등) — 번호가 확인 구실을 못 하므로 이름이 맞아도 사이트에서는 안내하지 않는다.
+ * `matched` = 번호·이름이 맞는 학생이 있는가(반·숙제와 무관) — "찾지 못했다"와 "올릴 숙제가 없다"를 가르는 값.
  */
-async function findCandidates(db: Db, tenantId: string, last4: string, day: string, settings: TenantSettings): Promise<{ tooMany: boolean; list: Candidate[] }> {
+async function findCandidates(
+  db: Db, tenantId: string, last4: string, name: string, day: string, settings: TenantSettings,
+): Promise<{ tooMany: boolean; matched: boolean; list: Candidate[] }> {
   // DB에서는 그 4자리를 **포함**하는 번호로 넓게 받고(뒤에 "(모)" 같은 글자가 붙은 저장값도 걸리게), 숫자만 남겨 끝자리를 다시 본다.
   const { data: students, error } = await db.from("students")
     .select("id,name,grade,student_phone,parent_phone")
@@ -151,16 +161,18 @@ async function findCandidates(db: Db, tenantId: string, last4: string, day: stri
     .order("id", { ascending: true }).limit(LOOKUP_ROW_LIMIT + 1);
   if (error) throw new Error("학생 조회 실패");
   const rows = (students ?? []) as StudentRow[];
-  if (rows.length > LOOKUP_ROW_LIMIT) return { tooMany: true, list: [] };
-  const matched = rows.filter((s) => phoneEndsWith(s.student_phone, last4) || phoneEndsWith(s.parent_phone, last4));
-  if (!matched.length) return { tooMany: false, list: [] };
-  if (matched.length > SITE_MAX_STUDENTS_PER_LAST4) return { tooMany: true, list: [] };
+  if (rows.length > LOOKUP_ROW_LIMIT) return { tooMany: true, matched: false, list: [] };
+  const byPhone = rows.filter((s) => phoneEndsWith(s.student_phone, last4) || phoneEndsWith(s.parent_phone, last4));
+  if (!byPhone.length) return { tooMany: false, matched: false, list: [] };
+  if (byPhone.length > SITE_MAX_STUDENTS_PER_LAST4) return { tooMany: true, matched: false, list: [] };
+  const matched = byPhone.filter((s) => siteNameMatches(s.name, name));
+  if (!matched.length) return { tooMany: false, matched: false, list: [] };
   const byId = new Map(matched.map((s) => [s.id, s]));
   const enrollments = await fetchInChunks<EnrollmentRow>([...byId.keys()], (chunk) => db.from("enrollments")
     .select("student_id,class_id,start_date,end_date,on_hold,is_transferred")
     .eq("tenant_id", tenantId).in("student_id", chunk));
   const live = enrollments.filter((e) => e.class_id && !e.on_hold && (!e.start_date || e.start_date <= day) && !isEnrollmentEndedOn(e.end_date, day, e.is_transferred === true));
-  if (!live.length) return { tooMany: false, list: [] };
+  if (!live.length) return { tooMany: false, matched: true, list: [] };
   const classes = await fetchInChunks<ClassRow>([...new Set(live.map((e) => e.class_id))], (chunk) => db.from("classes")
     .select("id,class_name,subject").eq("tenant_id", tenantId).eq("is_active", true).in("id", chunk));
   const classById = new Map(classes.map((c) => [c.id, c]));
@@ -173,27 +185,52 @@ async function findCandidates(db: Db, tenantId: string, last4: string, day: stri
     if (!isVideoHomeworkEnabled(policy, { classId: klass.id, subjectKey: klass.subject, grade: student.grade })) continue;
     out.set(`${student.id}:${klass.id}`, { studentId: student.id, classId: klass.id, studentName: student.name?.trim() || "학생", className: klass.class_name?.trim() || "수업" });
   }
-  const list = [...out.values()]
-    .sort((a, b) => a.studentName.localeCompare(b.studentName, "ko") || a.className.localeCompare(b.className, "ko"))
-    .slice(0, SITE_MAX_CHOICES);
-  return { tooMany: false, list };
+  const list = [...out.values()].sort((a, b) => a.studentName.localeCompare(b.studentName, "ko") || a.className.localeCompare(b.className, "ko"));
+  return { tooMany: false, matched: true, list };
 }
 
-/** 뒷 4자리 조회 — 후보를 **이름 가운데를 가린 채** 돌려준다(번호를 아무렇게나 넣어 남의 실명을 보지 못하게). */
-export async function lookupSite(input: { last4: unknown; ip: string | null }): Promise<SiteLookupResult> {
+type HomeworkChoice = Candidate & { homeworkDate: string };
+
+/**
+ * 후보(학생 × 반)마다 **아직 안 낸 영상 숙제**를 붙인다 — 최신 숙제부터, 상한까지. `null` = 영상 과제 값을 읽을 수 없다(잠시 못 받음).
+ * 숙제가 하나도 없으면 빈 목록 — 올릴 길이 없다(원장 2026-10-03 *"사전에 선생님이 숙제로 낸 리스트가 있어야 업로드 링크 보이도록"*).
+ */
+async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day: string): Promise<HomeworkChoice[] | null> {
+  if (!list.length) return [];
+  const open = await openHomeworkDates(db, tenantId, list.map((c) => ({ studentId: c.studentId, classId: c.classId })), day);
+  if (!open) return null;
+  return list
+    .flatMap((c) => (open.get(`${c.classId}:${c.studentId}`) ?? []).map((homeworkDate) => ({ ...c, homeworkDate })))
+    .sort((a, b) => b.homeworkDate.localeCompare(a.homeworkDate) || a.className.localeCompare(b.className, "ko") || a.studentName.localeCompare(b.studentName, "ko"))
+    .slice(0, SITE_MAX_CHOICES);
+}
+
+/**
+ * 뒷 4자리 + 이름 조회 — 그 학생이 **지금 올릴 수 있는 영상 숙제**를 돌려준다(이름은 가운데를 가린 채 — 구분 글자가 다른 동명이인을 가를 때만 쓴다).
+ * 번호·이름이 안 맞으면 "찾지 못했다", 맞는데 숙제가 없으면 "올릴 숙제가 없다" — 둘을 가른다. 🔴 가르는 값이 새는 것은 "그 이름의 학생이
+ * 그 번호를 쓴다"뿐이고, 이름과 번호를 둘 다 맞혀야 나온다(횟수 제한 뒤). 반·숙제 내용은 숙제가 있을 때만 내려간다.
+ */
+export async function lookupSite(input: { last4: unknown; name: unknown; ip: string | null }): Promise<SiteLookupResult> {
   if (!isLast4(input.last4)) return { ok: false, code: "invalid", error: "휴대폰 번호 뒷 4자리(숫자 4개)를 입력해 주세요." };
+  if (!isSiteName(input.name)) return { ok: false, code: "invalid", error: NAME_NEEDED };
   const db = createAdminClient();
   try {
     const site = await siteAvailability(db);
     if (!site.ok) return { ok: false, code: "unavailable", error: UNAVAILABLE };
     if (!(await admit(db, site.tenantId, ipHashOf(input.ip, site.tenantId), "lookup"))) return { ok: false, code: "limit", error: LIMITED };
     const day = kstToday();
-    const found = await findCandidates(db, site.tenantId, input.last4, day, site.settings);
+    const found = await findCandidates(db, site.tenantId, input.last4, input.name, day, site.settings);
     if (found.tooMany) return { ok: false, code: "invalid", error: TOO_MANY };
-    if (!found.list.length) return { ok: false, code: "invalid", error: NOT_FOUND };
+    if (!found.matched) return { ok: false, code: "invalid", error: NOT_FOUND };
+    const choices = await homeworkChoices(db, site.tenantId, found.list, day);
+    if (!choices) return { ok: false, code: "unavailable", error: UNAVAILABLE };
+    if (!choices.length) return { ok: false, code: "no_homework", error: NO_HOMEWORK };
     return {
       ok: true,
-      choices: found.list.map((c) => ({ id: choiceId(site.tenantId, c.studentId, c.classId, day), studentLabel: maskStudentName(c.studentName), className: c.className })),
+      choices: choices.map((c) => ({
+        id: choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate, day),
+        studentLabel: maskStudentName(c.studentName), className: c.className, homeworkLabel: formatShortKoreanDate(c.homeworkDate),
+      })),
     };
   } catch (error) {
     console.error(JSON.stringify({ level: "error", scope: "videoSite.lookup", message: error instanceof Error ? error.message : "unknown" }));
@@ -222,15 +259,16 @@ async function pairLinksToday(db: Db, tenantId: string, c: Candidate, day: strin
 }
 
 /**
- * 고른 후보의 제출 링크를 만든다 — 서버가 **같은 뒷 4자리로 다시 조회**해 그 후보가 실제로 그 안에 있을 때만(화면이 보낸 지문을 믿지 않는다).
+ * 고른 숙제의 제출 링크를 만든다 — 서버가 **같은 뒷 4자리·이름으로 다시 조회**해 그 숙제가 실제로 그 안에 있을 때만(화면이 보낸 지문을 믿지 않는다).
+ * 돌려주는 주소엔 고른 숙제일이 실린다(`?h=`) — 제출 화면과 업로드 시작이 그 값을 **다시 확인**해 영상을 그 숙제에 묶는다.
  * 링크는 만든 날과 다음 날까지. 한 학생 × 반이 하루에 만들 수 있는 수에 상한(링크마다 업로드 횟수 제한이 따로 있어, 새 링크로 우회하지 못하게).
  *  · 자정을 넘겨 고른 후보(어제 날짜 지문)도 받는다 — 23:59에 조회하고 00:00에 누른 학생이 막히지 않게.
  *  · 선생님이 오늘 그 학생 × 반의 사이트 링크를 끊었으면 그날은 사이트로 다시 열지 못한다('링크 끊기'가 사이트에도 효력을 갖게).
  *  · 상한은 **만든 뒤 다시 센다** — 동시에 여러 개를 보내 세기와 만들기 사이의 틈으로 상한을 넘지 못하게. 오늘 만든 줄을 오래된 순으로
  *    세워 **앞의 상한 개수 안에 든 링크만** 남긴다(서로를 보고 전부 지워 아무도 못 받는 일이 없게 — 정확히 상한만큼 남는다).
  */
-export async function openSiteLink(input: { last4: unknown; choice: unknown; ip: string | null }): Promise<SiteOpenResult> {
-  if (!isLast4(input.last4) || typeof input.choice !== "string" || !/^[0-9a-f]{40}$/.test(input.choice))
+export async function openSiteLink(input: { last4: unknown; name: unknown; choice: unknown; ip: string | null }): Promise<SiteOpenResult> {
+  if (!isLast4(input.last4) || !isSiteName(input.name) || typeof input.choice !== "string" || !/^[0-9a-f]{40}$/.test(input.choice))
     return { ok: false, code: "invalid", error: STALE };
   const db = createAdminClient();
   try {
@@ -239,8 +277,10 @@ export async function openSiteLink(input: { last4: unknown; choice: unknown; ip:
     if (!(await admit(db, site.tenantId, ipHashOf(input.ip, site.tenantId), "open"))) return { ok: false, code: "limit", error: LIMITED };
     const day = kstToday();
     const yesterday = shareExpiryDate(day, -1);
-    const found = await findCandidates(db, site.tenantId, input.last4, day, site.settings);
-    const picked = found.list.find((c) => [day, yesterday].some((d) => choiceId(site.tenantId, c.studentId, c.classId, d) === input.choice));
+    const found = await findCandidates(db, site.tenantId, input.last4, input.name, day, site.settings);
+    const choices = found.tooMany ? [] : await homeworkChoices(db, site.tenantId, found.list, day);
+    if (!choices) return { ok: false, code: "unavailable", error: UNAVAILABLE };
+    const picked = choices.find((c) => [day, yesterday].some((d) => choiceId(site.tenantId, c.studentId, c.classId, c.homeworkDate, d) === input.choice));
     if (!picked) return { ok: false, code: "invalid", error: STALE };
     const before = await pairLinksToday(db, site.tenantId, picked, day);
     if (before.revokedToday) return { ok: false, code: "limit", error: PAIR_BLOCKED };
@@ -257,9 +297,9 @@ export async function openSiteLink(input: { last4: unknown; choice: unknown; ip:
     }
     await logActionAs({ tenantId: site.tenantId, actorName: SITE_ACTOR }, {
       action: "lesson_report_video_link_issue", targetType: "student", targetLabel: `${picked.studentName} · ${picked.className}`,
-      metadata: { studentId: picked.studentId, classId: picked.classId, origin: "site", lastDay: siteLinkLastDay(day) },
+      metadata: { studentId: picked.studentId, classId: picked.classId, origin: "site", lastDay: siteLinkLastDay(day), homeworkDate: picked.homeworkDate },
     });
-    return { ok: true, url: `/v/${minted.token}` };
+    return { ok: true, url: `/v/${minted.token}?h=${picked.homeworkDate}` };
   } catch (error) {
     console.error(JSON.stringify({ level: "error", scope: "videoSite.open", message: error instanceof Error ? error.message : "unknown" }));
     return { ok: false, code: "error", error: FAILED };

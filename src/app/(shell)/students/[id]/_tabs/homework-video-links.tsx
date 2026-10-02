@@ -59,9 +59,10 @@ export async function HomeworkVideoLinks({ studentId }: { studentId: string }) {
           학부모가 로그인 없이 숙제 영상을 올리는 링크입니다(7일). 복사해서 보내 주세요. 올린 영상은 그 반 담임 폴더에 들어가고 이 탭에 바로 잡힙니다.
         </p>
         {siteUrl ? (
-          // 올리기 사이트(0330a) — 링크를 따로 보내지 않아도 학생이 직접 연다(휴대폰 뒷 4자리 → 이름·반 고르기).
+          // 올리기 사이트(0330a) — 링크를 따로 보내지 않아도 학생이 직접 연다(휴대폰 뒷 4자리 + 이름 → 선생님이 낸 영상 숙제 고르기, 2026-10-03).
           <p className="text-text-dim mt-1 text-sm break-keep">
-            링크 없이도 올릴 수 있습니다 — 학생이 <span className="text-foreground font-bold break-all">{siteUrl}</span> 에서 휴대폰 뒷 4자리를 넣고 반을 고르면 됩니다.
+            링크 없이도 올릴 수 있습니다 — 학생이 <span className="text-foreground font-bold break-all">{siteUrl}</span> 에서 휴대폰 뒷 4자리와 이름을 넣고 숙제를 고르면 됩니다.
+            원스크린에서 &lsquo;영상 과제 있음&rsquo;으로 낸 수업이 있어야 숙제가 뜹니다.
           </p>
         ) : null}
       </div>

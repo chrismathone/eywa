@@ -33,6 +33,11 @@ export type LinkVideoRoute = {
   folderName: string;
   reason: string;
   rootId: string;
+  /**
+   * 학생이 올리기 사이트에서 **고른 숙제일**(2026-10-03) — 업로드 시작 때 서버가 "그 학생 × 반에 실제로 나간 영상 숙제"인지 확인한 값만 싣는다.
+   * 업로드 기록(`route` jsonb) → 영상 줄(`route`)로 그대로 넘어가 영상 제출 현황이 그 숙제 칸에 붙인다. 없으면 게시일순 규칙.
+   */
+  homeworkDate?: string;
 };
 
 export const LINK_ROUTE_REASON = "제출 링크";

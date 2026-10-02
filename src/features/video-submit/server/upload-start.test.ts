@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HOMEWORK_VIDEO_MAX_BYTES } from "@/features/students/homework-video-limits";
+import { addDays, kstToday } from "@/lib/date-kst";
+import { _resetVideoHomeworkProbeForTest } from "@/features/video-homework/server/assignments";
 import type { FakeDb } from "./fake-db.test-util";
 import { C, ENV, FILE, FOLDER, OTHER_T, S, SESSION, T, TOKEN, fakeDrive, seedDb, settings } from "./test-fixture.test-util";
 
@@ -16,6 +18,10 @@ const req = async (over: Partial<Parameters<typeof startLinkUpload>[0]> = {}) =>
   (await startLinkUpload({ token: TOKEN, file, origin: "https://www.aywa.co.kr", host: "www.aywa.co.kr", ...over })).result;
 let db: FakeDb;
 let drive: ReturnType<typeof fakeDrive>;
+/** 오늘(KST) 그 학생 × 반에 영상 숙제가 나갔다 — 올리기 사이트 링크는 고른 숙제가 있어야 올린다(2026-10-03). */
+const TODAY = kstToday();
+const assignHomework = (date = TODAY, over: Record<string, unknown> = {}) =>
+  db.tables.lesson_reports!.push({ id: `r-${date}-${db.tables.lesson_reports!.length}`, tenant_id: T, student_id: S, class_id: C, report_date: date, video_homework: true, ...over });
 
 beforeEach(() => {
   db = seedDb();
@@ -26,6 +32,7 @@ beforeEach(() => {
   for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
   _resetVideoDriveConfigForTest();
   _resetVideoSubmitAvailabilityForTest();
+  _resetVideoHomeworkProbeForTest();
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -79,9 +86,10 @@ describe("업로드 시작 — 거절", () => {
       { id: "L9", tenant_id: T, student_id: "other-student", class_id: C, origin: "site", created_at: now, expires_at: "2099-01-01T00:00:00+09:00", revoked_at: null, token_hash: "x9" },
     );
     db.tables.homework_video_link_uploads = Array.from({ length: 10 }, (_, i) => ({ id: `u${i}`, tenant_id: T, link_id: "L9", status: "started", created_at: now }));
-    expect((await req()).ok).toBe(true);
+    assignHomework();
+    expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
     db.tables.homework_video_link_uploads = Array.from({ length: 10 }, (_, i) => ({ id: `v${i}`, tenant_id: T, link_id: "L2", status: "started", created_at: now }));
-    expect(await req()).toMatchObject({ ok: false, code: "limit" });
+    expect(await req({ homeworkDate: TODAY })).toMatchObject({ ok: false, code: "limit" });
     // 보고서·원생 탭 링크는 종전대로 그 링크 하나만 센다
     Object.assign(db.tables.homework_video_links![0]!, { origin: "manual" });
     expect((await req()).ok).toBe(true);
@@ -109,6 +117,46 @@ describe("업로드 시작 — 정상", () => {
     expect(headers["X-Upload-Content-Length"]).toBe("5000000");
     const body = JSON.parse(String(start.init!.body));
     expect(body).toMatchObject({ id: FILE, parents: [FOLDER], appProperties: { aywaSource: "link", aywaUpload: result.ok ? result.uploadId : "" } });
+  });
+  it("🔴 올리기 사이트 링크는 고른 숙제가 있어야 올린다 — 주소의 숙제일을 믿지 않고 그 학생 × 반에 실제로 나간 영상 숙제인지 확인한다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    assignHomework(TODAY);
+    assignHomework(addDays(TODAY, -3), { video_homework: false }); // 그날은 영상 숙제가 없었다
+    assignHomework(addDays(TODAY, -20)); // 2주가 지났다
+    assignHomework(addDays(TODAY, -1), { student_id: "other-student" }); // 다른 학생의 숙제
+    assignHomework(addDays(TODAY, -2), { tenant_id: OTHER_T }); // 다른 지점
+    for (const bad of [undefined, null, "", "2026-13-99", "어제", addDays(TODAY, -3), addDays(TODAY, -20), addDays(TODAY, -1), addDays(TODAY, -2), addDays(TODAY, 1), 20261003]) {
+      const r = await req({ homeworkDate: bad });
+      expect(r, String(bad)).toMatchObject({ ok: false, code: "invalid" });
+      expect(!r.ok && r.error, String(bad)).toContain("숙제를 다시 골라 주세요");
+    }
+    // 거절된 시작은 Drive 세션을 열지 않고 업로드 기록도 남기지 않는다
+    expect(drive.calls.filter((c) => c.url.includes("uploadType=resumable"))).toHaveLength(0);
+    expect(db.tables.homework_video_link_uploads).toHaveLength(0);
+    expect((await req({ homeworkDate: TODAY })).ok).toBe(true);
+    // 확인된 숙제일이 업로드 경로에 실린다 — 영상 줄로 그대로 넘어가 영상 제출 현황이 그 숙제 칸에 붙인다
+    expect(db.tables.homework_video_link_uploads![0]!.route).toMatchObject({ classId: C, studentId: S, homeworkDate: TODAY });
+  });
+  it("🔴 영상 과제 값을 읽을 수 없으면(0308a 전·순간 오류) '숙제를 다시 고르라'가 아니라 잠시 못 받음 — 학생을 처음 화면으로 돌려보내지 않는다", async () => {
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
+    db.dropTable("lesson_reports");
+    const r = await req({ homeworkDate: TODAY });
+    expect(r).toMatchObject({ ok: false, code: "error" });
+    expect(!r.ok && r.error).not.toContain("숙제를 다시 골라");
+    expect(drive.calls.filter((c) => c.url.includes("uploadType=resumable"))).toHaveLength(0);
+  });
+  it("학생 상세에서 복사한 링크는 숙제일이 없어도 예전처럼 올린다 · 확인 안 되는 숙제일은 싣지 않는다(게시일순 규칙으로 센다)", async () => {
+    // 가짜 Drive는 파일 번호가 하나라 경우마다 DB를 새로 깐다.
+    const fresh = () => { db = seedDb(); m.db = db; };
+    expect((await req()).ok).toBe(true);
+    expect(db.tables.homework_video_link_uploads![0]!.route).not.toHaveProperty("homeworkDate");
+    fresh();
+    expect((await req({ homeworkDate: addDays(TODAY, -1) })).ok).toBe(true); // 숙제가 나간 날이 아니다
+    expect(db.tables.homework_video_link_uploads![0]!.route).not.toHaveProperty("homeworkDate");
+    fresh();
+    assignHomework(addDays(TODAY, -1));
+    expect((await req({ homeworkDate: addDays(TODAY, -1) })).ok).toBe(true);
+    expect(db.tables.homework_video_link_uploads![0]!.route).toMatchObject({ homeworkDate: addDays(TODAY, -1) });
   });
   it("세션 응답에 접근 토큰·클라이언트 비밀이 실리지 않는다", async () => {
     const result = await req();

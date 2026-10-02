@@ -5,14 +5,14 @@ import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
 import { videoMatchRange } from "../rounds";
-import type { VideoArrival, VideoHomeworkMark, VideoHomeworkRosterRow, VideoHomeworkStatus } from "../types";
+import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
 import type { BlankFacts } from "../no-homework";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
-type DbVideo = { id: string; student_id: string; posted_at: string; class_id: string | null };
+type DbVideo = { id: string; student_id: string; posted_at: string; class_id: string | null; homework_date: string | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[] };
 
 /**
@@ -25,12 +25,14 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
     const db = createAdminClient();
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
       .from("student_homework_videos")
-      .select("id,student_id,posted_at,class_id:route->>classId")
+      .select("id,student_id,posted_at,class_id:route->>classId,homework_date:route->>homeworkDate")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .not("route->>classId", "is", null)
       .gte("posted_at", `${fromDate}T00:00:00+09:00`).lt("posted_at", `${addDays(toDate, 1)}T00:00:00+09:00`)
       .order("id", { ascending: true }).range(from, to));
-    return rows.map((row) => ({ id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at }));
+    // 고른 숙제일(올리기 사이트)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
+    return rows.map((row) => ({ id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at,
+      homeworkDate: row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null }));
   } catch (e) {
     console.warn(JSON.stringify({ level: "warn", scope: "videoHomeworkLedger.videos", message: e instanceof Error ? e.message : String(e) }));
     return null;

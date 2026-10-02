@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
+import { kstToday } from "@/lib/date-kst";
 import { checkVideoFile } from "../rules";
 import { linkVideoFilename, teacherFolderKey } from "../route";
 import { UPLOAD_STARTS_PER_DAY, UPLOAD_STARTS_PER_HOUR, uploadOrigin } from "../upload-checks";
@@ -10,6 +11,7 @@ import { driveRequest, generateDriveId, startResumableSession } from "./drive-ap
 import { linkFolderRegistry } from "./folder-registry";
 import { ensureLinkTeacherFolder } from "./folders";
 import { resolveSubmitToken } from "./links";
+import { isAssignedHomeworkDate } from "./site-homework";
 import { reconcileLinkUploads, type CompletedUpload } from "./upload-complete";
 import { loadLinkRoute } from "./upload-context";
 
@@ -20,6 +22,8 @@ export type StartUploadResult =
 const UNAVAILABLE = "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요.";
 const FAILED = "영상 올리기를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 const LIMITED = "잠시 동안 너무 많이 올렸습니다. 한 시간 뒤에 다시 시도해 주세요.";
+/** 올리기 사이트 링크인데 고른 숙제를 확인할 수 없다(주소의 숙제일이 빠졌거나, 그 숙제가 없어졌거나, 2주가 지났다). */
+const HOMEWORK_GONE = "올릴 숙제를 확인하지 못했습니다. 처음 화면에서 숙제를 다시 골라 주세요.";
 
 /**
  * 횟수 제한을 셀 링크들 — 보고서·원생 탭 링크는 그 링크 하나, **사이트 링크는 같은 학생 × 반의 최근 사이트 링크 전부**
@@ -41,9 +45,12 @@ async function uploadLimitLinkIds(db: ReturnType<typeof createAdminClient>, link
  * 🔴 실패 원문(Drive 상태·DB 오류)은 서버 로그에만 — 학부모 화면엔 한글 한 줄(raw 노출 금지).
  * `followUp` = 횟수 제한을 통과한 시작이면, 지난번에 못 알린 업로드를 **응답 뒤에** 대신 마무리하는 일(라우트가 `after()`로 돌리고
  *   새로 생긴 줄마다 알림·감사로그). 응답을 기다리게 하지 않고, 제한에 걸린 요청은 Drive를 부르지 않는다(재리뷰 2026-10-01).
+ * `homeworkDate` = 학생이 올리기 사이트에서 고른 숙제일(2026-10-03). 🔴 주소·요청의 값을 믿지 않는다 — 그 링크의 학생 × 반에 **실제로 나간
+ *   영상 숙제**이고 올릴 수 있는 기간 안일 때만 경로에 싣는다(영상 제출 현황이 그 숙제 칸에 붙인다). 올리기 사이트가 만든 링크는 숙제 없이는
+ *   올릴 수 없다(숙제가 있어야 올리는 문이다). 그 밖의 링크(학생 상세에서 복사한 링크)는 숙제일이 없어도 예전처럼 올린다.
  */
 export async function startLinkUpload(input: {
-  token: unknown; file: { name?: unknown; size?: unknown; type?: unknown }; origin: string | null; host: string | null;
+  token: unknown; file: { name?: unknown; size?: unknown; type?: unknown }; origin: string | null; host: string | null; homeworkDate?: unknown;
 }): Promise<{ result: StartUploadResult; followUp: (() => Promise<CompletedUpload[]>) | null }> {
   let followUp: (() => Promise<CompletedUpload[]>) | null = null;
   const fail = (code: Exclude<StartUploadResult, { ok: true }>["code"], error: string) =>
@@ -78,8 +85,12 @@ export async function startLinkUpload(input: {
     if (await overLimit(1)) return fail("limit", LIMITED);
     followUp = () => reconcileLinkUploads(db, request, link).catch(() => []);
 
-    const route = await loadLinkRoute(db, link, drive.rootId);
-    if (!route) return fail("invalid", "사용할 수 없는 링크입니다.");
+    const baseRoute = await loadLinkRoute(db, link, drive.rootId);
+    if (!baseRoute) return fail("invalid", "사용할 수 없는 링크입니다.");
+    const homeworkOk = input.homeworkDate != null
+      && (await isAssignedHomeworkDate(db, link.tenant_id, { studentId: link.student_id, classId: link.class_id }, input.homeworkDate, kstToday()));
+    if (link.origin === "site" && !homeworkOk) return fail("invalid", HOMEWORK_GONE);
+    const route = homeworkOk ? { ...baseRoute, homeworkDate: input.homeworkDate as string } : baseRoute;
     const folder = await ensureLinkTeacherFolder({
       request, registry: linkFolderRegistry(db, link.tenant_id, drive.rootId), rootId: drive.rootId,
       key: teacherFolderKey(route, centerId), folderName: route.folderName,

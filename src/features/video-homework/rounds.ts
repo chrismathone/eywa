@@ -20,6 +20,10 @@
  *     그래서 영상으로 센 칸을 확정해도, 미확인 칸을 한 번 눌러 완료로 바꿔도 **다른 칸의 판정이 흔들리지 않는다**.
  *     직접 찍은 '완료'는 그 기록이 볼 수 있었던 영상만 받는다(제출일까지 · 날짜 없는 원스크린 체크는 체크한 시각까지).
  *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 직접 찍은 기록(완료·미수행)이 늘 이긴다.
+ *  ③ 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(`homeworkDate`, 원장 2026-10-03 *"숙제 리스트에서 고르도록 해서 숙제 링크 배선"*)은
+ *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다(그 칸이 이미 영상을 받았거나 미수행으로 찍혔으면 그 영상은 세지 않는다).
+ *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 **고른 영상이 칸에 붙은 날**에 같은 반 × 학생으로
+ *     올라온 안 고른 영상은 세지 않는다(①과 같은 뜻 — 같은 영상을 사이트와 ClassNote에 함께 올려도 한 번이다).
  */
 import { addDays, kstDateOf } from "@/lib/date-kst";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "./types";
@@ -149,7 +153,25 @@ export function buildLedgerRounds(input: {
     attach(round, mark);
     if (!before) rounds.set(key, round);
   }
-  const days = videoDays(input.videos);
+  // ③ 학생이 고른 숙제 — 그 칸으로만(올린 순서대로 첫 영상이 그 칸의 영상이다).
+  const picked = input.videos.filter((v) => !!v.homeworkDate && !!v.classId).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
+  // `반:학생:게시일` — 고른 영상이 칸에 붙은 날. 그날 그 반으로 온 안 고른 영상은 세지 않는다(같은 영상을 사이트와 ClassNote에 함께 올린 것).
+  // ⚠️ 절충: 오전에 ClassNote로 올려 다른 칸이 완료(영상)로 보이던 날, 오후에 사이트로 다른 숙제를 골라 올리면 그 칸은 미확인으로 돌아간다
+  //    (직접 찍은 기록은 그대로다). 두 영상이 정말 다른 숙제였다면 선생님이 그 칸을 한 번 눌러 완료로 찍는다.
+  const pickedDays = new Set<string>();
+  for (const video of picked) {
+    const pair = roundPairKey({ classId: video.classId!, studentId: video.studentId });
+    const day = kstDateOf(video.postedAt);
+    const round = tracked.has(pair) ? all.get(pair)?.get(`h:${video.homeworkDate}`) : undefined;
+    if (!round || !day || round.videoDate || day < round.date || day > addDays(round.date, VIDEO_MATCH_WINDOW_DAYS)) continue;
+    if (round.mark && round.mark.status !== "submitted") continue; // 직접 찍은 미수행이 이긴다
+    round.videoDate = day;
+    round.videoId = video.id;
+    pickedDays.add(`${pair}:${day}`);
+    if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
+  }
+  const days = videoDays(input.videos.filter((v) =>
+    !v.homeworkDate && !(v.classId && pickedDays.has(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${kstDateOf(v.postedAt)}`))));
   for (const [pair, rounds] of all) {
     const available = tracked.has(pair) ? days.get(pair) : undefined;
     if (!available?.length) continue;

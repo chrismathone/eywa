@@ -8,8 +8,9 @@ const mark = (studentId: string, homeworkDate: string | null, status: VideoHomew
   ({ classId: "A", studentId, checkDate: homeworkDate ? "2026-10-20" : "2026-10-05", homeworkDate, status, ...extra });
 // 원스크린 체크는 실제 검사 시각이 남는다 — 기본은 한참 뒤(영상 게시 이후)라 '그 검사가 본 영상' 판정이 켜지지 않는다.
 const kst = (day: string, time = "20:00") => `${day}T${time}:00+09:00`;
-const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string } = {}): VideoArrival =>
-  ({ id: `v-${studentId}-${day}-${extra.time ?? "20:00"}`, studentId, classId: extra.classId === undefined ? "A" : extra.classId, postedAt: kst(day, extra.time) });
+const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string; homeworkDate?: string } = {}): VideoArrival =>
+  ({ id: `v-${studentId}-${day}-${extra.time ?? "20:00"}`, studentId, classId: extra.classId === undefined ? "A" : extra.classId, postedAt: kst(day, extra.time),
+    ...(extra.homeworkDate ? { homeworkDate: extra.homeworkDate } : {}) });
 const build = (input: { rows: ReturnType<typeof row>[]; marks?: VideoHomeworkMark[]; videos?: VideoArrival[]; from?: string; to?: string }) =>
   buildLedgerRounds({ rows: input.rows, marks: input.marks ?? [], videos: input.videos ?? [], fromDate: input.from ?? "2026-10-01", toDate: input.to ?? "2026-10-31" });
 const view = (rounds: ReturnType<typeof build>, pair = "A:s1") =>
@@ -158,5 +159,74 @@ describe("영상 도착 자동 집계 — 반이 확인된 영상만", () => {
     expect(markIdentity(mark("s1", "2026-10-01", "missing", { checkDate: "2026-10-02" })))
       .toBe(markIdentity(mark("s1", "2026-10-01", "submitted", { checkDate: "2026-10-06" })));
     expect(markIdentity(mark("s1", null, "missing", { checkDate: "2026-10-02" }))).toBe("A:s1:c:2026-10-02");
+  });
+});
+
+describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — 그 숙제 칸으로만 간다", () => {
+  it("🔴 고른 숙제가 완료된다 — 더 오래된 미확인 숙제가 그 영상을 가져가지 않는다", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
+    // 고르지 않은 영상이면 가장 오래된 미확인(10/1)이 가져간다(기존 규칙)
+    expect(view(build({ rows, videos: [video("s1", "2026-10-07")] }))).toEqual([
+      ["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "unchecked", null, false]]);
+    // 10/6 숙제를 골라 올렸으면 10/6 칸만 완료
+    const picked = build({ rows, videos: [video("s1", "2026-10-07", { homeworkDate: "2026-10-06" })] });
+    expect(view(picked)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    expect(picked.get("A:s1")![1]!.videoId).toBe("v-s1-2026-10-07-20:00");
+  });
+  it("고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 나머지 칸을 오래된 순으로 채운다 — 한 영상이 두 칸을 채우지 않는다", () => {
+    const rounds = build({ rows: [row("s1", ["2026-10-01", "2026-10-06"])], videos: [
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-06" }),
+      video("s1", "2026-10-08"),
+    ] });
+    expect(view(rounds)).toEqual([["2026-10-01", "submitted", "2026-10-08", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
+  });
+  it("🔴 같은 날 고른 영상과 안 고른 영상이 함께 와도 한 번이다 — 같은 영상을 사이트와 ClassNote에 함께 올려도 두 칸을 채우지 않는다", () => {
+    const rounds = build({ rows: [row("s1", ["2026-10-01", "2026-10-06"])], videos: [
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-06" }),
+      video("s1", "2026-10-07", { time: "20:30" }), // 같은 날 ClassNote로도 올라온 영상
+    ] });
+    expect(view(rounds)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    // 다른 날 올라온 안 고른 영상은 종전대로 가장 오래된 미확인 칸으로 · 다른 학생의 같은 날 영상은 무관하다
+    const next = build({ rows: [row("s1", ["2026-10-01", "2026-10-06"]), row("s2", ["2026-10-01"])], videos: [
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-06" }),
+      video("s1", "2026-10-08"),
+      video("s2", "2026-10-07"),
+    ] });
+    expect(view(next)).toEqual([["2026-10-01", "submitted", "2026-10-08", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    expect(view(next, "A:s2")).toEqual([["2026-10-01", "submitted", "2026-10-07", true]]);
+    // 고른 영상이 칸에 못 붙었으면(없는 숙제) 그날의 안 고른 영상은 종전대로 센다
+    const stray = build({ rows: [row("s1", ["2026-10-01"])], videos: [
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-05" }),
+      video("s1", "2026-10-07", { time: "20:30" }),
+    ] });
+    expect(view(stray)).toEqual([["2026-10-01", "submitted", "2026-10-07", true]]);
+  });
+  it("같은 숙제에 영상을 여러 번 올려도 한 번이고(먼저 올린 것), 남는 영상이 다른 칸으로 넘어가지 않는다", () => {
+    const rounds = build({ rows: [row("s1", ["2026-10-01", "2026-10-06"])], videos: [
+      video("s1", "2026-10-08", { homeworkDate: "2026-10-06", time: "21:00" }),
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-06" }),
+    ] });
+    expect(view(rounds)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+  });
+  it("🔴 직접 찍은 기록이 이긴다 — 미수행(✕) 칸은 그대로 · 직접 찍은 완료 칸에는 영상이 붙는다(표시는 그대로)", () => {
+    const missing = build({ rows: [row("s1", ["2026-10-06"])], marks: [mark("s1", "2026-10-06", "missing")],
+      videos: [video("s1", "2026-10-07", { homeworkDate: "2026-10-06" })] });
+    expect(view(missing)).toEqual([["2026-10-06", "missing", null, false]]);
+    expect(missing.get("A:s1")![0]!.videoId).toBeNull();
+    const done = build({ rows: [row("s1", ["2026-10-06"])], marks: [mark("s1", "2026-10-06", "submitted", { submittedDate: "2026-10-06" })],
+      videos: [video("s1", "2026-10-09", { homeworkDate: "2026-10-06" })] });
+    expect(view(done)).toEqual([["2026-10-06", "submitted", "2026-10-06", false]]);
+    expect(done.get("A:s1")![0]!.videoId).toBe("v-s1-2026-10-09-20:00");
+  });
+  it("없는 숙제·다른 반·숙제보다 먼저·2주를 넘긴 영상은 어느 칸에도 붙지 않는다(게시일순 규칙으로 되돌아가지도 않는다)", () => {
+    const rows = [row("s1", ["2026-10-06"])];
+    for (const v of [
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-05" }), // 숙제가 나가지 않은 날
+      video("s1", "2026-10-07", { homeworkDate: "2026-10-06", classId: "B" }), // 다른 반으로 분류된 영상
+      video("s1", "2026-10-05", { homeworkDate: "2026-10-06" }), // 숙제보다 먼저
+      video("s1", "2026-10-21", { homeworkDate: "2026-10-06" }), // 2주 넘김
+    ]) expect(view(build({ rows, videos: [v] })), v.id).toEqual([["2026-10-06", "unchecked", null, false]]);
+    // 영상 숙제 대상이 아닌 반(tracked 아님)은 영상으로 칸을 만들지 않는다
+    expect(view(build({ rows: [row("s1", ["2026-10-06"], { tracked: false })], videos: [video("s1", "2026-10-07", { homeworkDate: "2026-10-06" })] }))).toEqual([]);
   });
 });

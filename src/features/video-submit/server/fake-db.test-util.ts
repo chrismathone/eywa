@@ -57,7 +57,12 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
       insert(value: Row | Row[]) { op = "insert"; payload = Array.isArray(value) ? value : [value]; return builder; },
       update(value: Row) { op = "update"; patch = value; return builder; },
       delete() { op = "delete"; return builder; },
-      in(col: string, values: unknown[]) { filters.push((r) => values.includes(r[col])); return builder; },
+      // `route->>classId` 모양(jsonb 한 단계)도 받는다.
+      in(col: string, values: unknown[]) {
+        const [base, key] = col.split("->>");
+        filters.push((r) => values.includes(key ? (r[base!] as Row | null | undefined)?.[key] : r[col]));
+        return builder;
+      },
       // `a.like.%1234`(끝자리) · `a.ilike.%1234%`(포함) 모양만 — 어느 한 열이 맞으면 통과.
       or(expr: string) {
         const parts = expr.split(",").map((part) => /^([a-z_]+)\.i?like\.%(.+?)(%?)$/.exec(part));

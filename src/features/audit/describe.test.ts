@@ -1275,3 +1275,15 @@ describe("auditDetail — ClassNote 반 보드 자동 동기화(2026-10-03)", ()
     expect(auditDetail("classnote_board_sync_request", { ...blocked, source: "onescreen_send_class" }, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 동기화 요청");
   });
 });
+
+describe("auditDetail — 숙제 영상 올리기 사이트에서 연 링크(2026-10-03)", () => {
+  it("번호·이름으로 열었고 어느 수업의 숙제를 골랐는지 적는다 · 학생 상세에서 복사한 링크는 예전 그대로", () => {
+    const d = auditDetail("lesson_report_video_link_issue", { studentId: UID, classId: UID, origin: "site", lastDay: "2026-10-04", homeworkDate: "2026-10-01" }, ctx());
+    expect(d).toContain("올리기 사이트에서 번호·이름으로 엶");
+    expect(d).toContain("2026-10-01 수업 숙제");
+    expect(d).toContain("2026-10-04까지");
+    const manual = auditDetail("lesson_report_video_link_issue", { studentId: UID, classId: UID, origin: "manual", lastDay: "2026-10-09" }, ctx());
+    expect(manual).toContain("학생 상세에서 복사");
+    expect(manual).not.toContain("수업 숙제");
+  });
+});

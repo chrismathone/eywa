@@ -15,7 +15,16 @@ import { isVideoHomeworkEnabled, type VideoHomeworkPolicy } from "@/features/vid
  */
 export type SubmitLinkMode = "off" | "test" | "on";
 
+/**
+ * 🔴 원장 2026-10-03 *"기존 클래스노트에 영상숙제 링크 올라가는건 이제 필요없을듯. 그냥 영상 숙제 유무만 이전처럼"* —
+ *    보고서 글에 영상 제출 링크를 **더는 붙이지 않는다**. 학생은 올리기 사이트(`/v`)에서 선생님이 낸 숙제를 골라 올린다.
+ *    env가 무엇이든 꺼짐이다: 이 값 하나로 원스크린의 '영상 첨부 링크 넣기' 토글·일괄 입력 칸·발송 직전 링크 만들기가 함께 사라진다
+ *    (`submitLinkChoosable`·`reportVideoLinkToken`). '영상 과제 있음/없음'은 그대로다. 다시 켜려면 원장 결정.
+ */
+export const REPORT_VIDEO_LINK_RETIRED = true;
+
 export function reportLineMode(env: Record<string, string | undefined> = process.env): SubmitLinkMode {
+  if (REPORT_VIDEO_LINK_RETIRED) return "off";
   const raw = env.VIDEO_SUBMIT_REPORT_LINE?.trim().toLowerCase();
   return raw === "on" || raw === "test" ? raw : "off";
 }

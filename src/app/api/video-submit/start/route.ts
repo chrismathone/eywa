@@ -11,10 +11,11 @@ import { afterLinkUpload } from "@/features/video-submit/server/upload-notify";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as { token?: unknown; name?: unknown; size?: unknown; type?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { token?: unknown; name?: unknown; size?: unknown; type?: unknown; homeworkDate?: unknown } | null;
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   const { result, followUp } = await startLinkUpload({
     token: body?.token, file: { name: body?.name, size: body?.size, type: body?.type }, origin: request.headers.get("origin"), host,
+    homeworkDate: body?.homeworkDate,
   });
   if (followUp) after(async () => { await Promise.all((await followUp()).map((done) => afterLinkUpload(done))); });
   return NextResponse.json(result, { status: !result.ok && result.code === "limit" ? 429 : 200, headers: { "Cache-Control": "no-store" } });

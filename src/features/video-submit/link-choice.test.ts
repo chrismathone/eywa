@@ -8,11 +8,25 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
-import { reportLineMode, submitLinkChoosable, submitLinkModeAllows } from "./link-choice";
+import { REPORT_VIDEO_LINK_RETIRED, reportLineMode, submitLinkChoosable, submitLinkModeAllows } from "./link-choice";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 const row = { classId: "c1", subjectKey: "math", grade: "중1", studentName: "김민준" };
+
+describe("🔴 보고서 글의 영상 제출 링크는 더는 붙이지 않는다(원장 2026-10-03) — env가 무엇이든 꺼짐", () => {
+  it("단계 값이 늘 'off'라 토글·일괄 입력 칸·발송 직전 링크 만들기가 함께 사라진다 · '영상 과제 있음/없음'은 이 스위치와 무관하다", () => {
+    expect(REPORT_VIDEO_LINK_RETIRED).toBe(true);
+    for (const env of [{}, { VIDEO_SUBMIT_REPORT_LINE: "on" }, { VIDEO_SUBMIT_REPORT_LINE: "test" }, { VIDEO_SUBMIT_REPORT_LINE: " ON " }])
+      expect(reportLineMode(env)).toBe("off");
+    expect(submitLinkChoosable(reportLineMode({ VIDEO_SUBMIT_REPORT_LINE: "on" }), DEFAULT_VIDEO_HOMEWORK_POLICY, row)).toBe(false);
+    // 서버(발송 직전)와 원스크린 로더가 같은 값을 읽는다 — 따로 env를 읽는 곳이 없다
+    for (const f of [["src", "features", "video-submit", "server", "report-link.ts"], ["src", "features", "video-submit", "server", "link-choice-db.ts"]])
+      expect(stripComments(read(...f))).not.toContain("VIDEO_SUBMIT_REPORT_LINE");
+    // 영상 과제 토글은 이 스위치를 보지 않는다
+    expect(stripComments(read("src", "features", "video-homework", "components", "video-homework-toggle.tsx"))).not.toMatch(/reportLineMode|submitLinkMode|REPORT_VIDEO_LINK_RETIRED/);
+  });
+});
 
 describe("고를 수 있는 행 — 토글·일괄 입력·저장이 같은 판정", () => {
   it("줄이 꺼진 단계면 어느 행도 못 고른다 · 시험 단계는 '학원이'만", () => {

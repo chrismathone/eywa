@@ -35,7 +35,11 @@ export type VideoHomeworkLedgerRow = VideoHomeworkRosterRow & {
 };
 
 /** 학부모가 올린 숙제 영상 한 건 — 워커가 분류한 반(`route.classId`, 못 정했으면 null)과 게시 시각·영상 id만 내려온다(원본·주소는 안 내려온다 — id는 학생 상세 '숙제 영상' 탭으로 바로 가는 링크용). */
-export type VideoArrival = { id: string; studentId: string; classId: string | null; postedAt: string };
+export type VideoArrival = {
+  id: string; studentId: string; classId: string | null; postedAt: string;
+  /** 학생이 올리기 사이트에서 **고른 숙제일**(`route.homeworkDate`, 2026-10-03) — 있으면 그 숙제 칸으로만 간다. 없으면 게시일순 규칙. */
+  homeworkDate?: string | null;
+};
 
 export function isVideoHomeworkDate(value: string): boolean {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&

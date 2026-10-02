@@ -53,10 +53,18 @@ async function postJson(url: string, body: unknown): Promise<Record<string, unkn
 /** 공개 제출 화면 — 학부모 폰이 기본(한 열·큰 버튼). 문구는 전부 한글, 원문 오류는 내보내지 않는다. */
 export function VideoSubmitForm(props: {
   token: string; academyName: string; studentLabel: string; className: string; lastDayLabel: string; maxLabel: string;
+  /** 올리기 사이트에서 고른 숙제일(서버가 확인한 값) — 업로드 시작 때 함께 보내 영상을 그 숙제에 묶는다. 없으면 예전처럼 올린다. */
+  homeworkDate?: string | null;
+  /** 그 숙제가 나간 수업일 표기("10/1 (목)"). */
+  homeworkLabel?: string | null;
+  /** 같은 반의 다른 안 낸 영상 숙제(올리기 사이트 링크만) — 같은 링크에 숙제일만 바꿔 바로 간다. */
+  otherHomework?: { date: string; label: string }[];
 }) {
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [recovered, setRecovered] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  // 화면이 스스로 새로 고칠 때(만료·숙제 없어짐)는 아래 '닫기 붙잡기'를 건너뛴다 — 그 순간 화면은 아직 '올리는 중'이다.
+  const leaving = useRef(false);
 
   // 지난번에 못 알린 업로드가 이 기기에 남아 있으면 대신 알린다.
   useEffect(() => {
@@ -75,7 +83,7 @@ export function VideoSubmitForm(props: {
   // 올리는 중에 창을 닫으려 하면 한 번 붙잡는다(폰은 무시할 수 있다 — 그래서 화면에도 적는다).
   useEffect(() => {
     if (!busy) return;
-    const hold = (event: BeforeUnloadEvent) => event.preventDefault();
+    const hold = (event: BeforeUnloadEvent) => { if (!leaving.current) event.preventDefault(); };
     window.addEventListener("beforeunload", hold);
     return () => window.removeEventListener("beforeunload", hold);
   }, [busy]);
@@ -88,10 +96,17 @@ export function VideoSubmitForm(props: {
 
   async function upload(file: File) {
     setPhase({ kind: "uploading", file, sent: 0 });
-    const started = await postJson("/api/video-submit/start", { token: props.token, name: file.name, size: file.size, type: file.type });
+    const started = await postJson("/api/video-submit/start", {
+      token: props.token, name: file.name, size: file.size, type: file.type, ...(props.homeworkDate ? { homeworkDate: props.homeworkDate } : {}),
+    });
     if (!started?.ok || typeof started.sessionUrl !== "string" || typeof started.uploadId !== "string") {
       const message = typeof started?.error === "string" ? started.error : "연결을 확인하고 다시 시도해 주세요.";
-      if (started?.code === "expired") window.location.reload(); // 그사이 만료 — 페이지가 만료 화면으로 보낸다
+      // 그사이 만료(→ 만료 화면) · 링크가 끊겼거나 고른 숙제가 없어짐(→ 닫힌 화면 / 올리기 사이트 첫 화면) — 페이지가 맞는 곳으로 보낸다.
+      // 여기 남겨 두면 '다시 올리기'가 같은 거절만 되풀이한다.
+      if (started?.code === "expired" || started?.code === "invalid") {
+        leaving.current = true;
+        window.location.reload();
+      }
       setPhase({ kind: "error", message, file });
       return;
     }
@@ -125,6 +140,7 @@ export function VideoSubmitForm(props: {
         <p className="text-text-dim text-sm">{props.academyName}</p>
         <h1 className="text-foreground text-2xl font-bold">숙제 영상 제출</h1>
         <p className="text-foreground text-base break-keep">{props.studentLabel} 학생 · {props.className}</p>
+        {props.homeworkLabel ? <p className="text-foreground text-base font-bold break-keep">{props.homeworkLabel} 수업의 영상 숙제</p> : null}
       </header>
       {recovered ? <p className="text-foreground text-sm break-keep" aria-live="polite">지난번에 올린 영상도 제출됐습니다.</p> : null}
       <section className="bg-card border-line relative space-y-4 rounded-2xl border p-5">
@@ -160,6 +176,22 @@ export function VideoSubmitForm(props: {
             <p className="text-foreground text-base font-bold">제출했습니다. 감사합니다.</p>
             <p className="text-text-dim text-sm break-keep">담당 선생님이 확인할 수 있습니다.</p>
             <Button type="button" variant="outline" className="w-full" onClick={() => setPhase({ kind: "idle" })}>다른 영상 올리기</Button>
+          </div>
+        ) : null}
+        {!busy && props.otherHomework?.length ? (
+          <div className="border-line space-y-2 border-t pt-4">
+            <p className="text-foreground text-sm font-bold break-keep">이 반의 다른 영상 숙제</p>
+            <ul className="space-y-2">
+              {props.otherHomework.map((hw) => (
+                <li key={hw.date}>
+                  {/* 문서 이동 — 서버가 그 숙제를 다시 확인하고 이 화면을 새로 그린다. 토큰은 같은 링크다. */}
+                  <a href={`/v/${props.token}?h=${hw.date}`}
+                    className="border-line text-foreground hover:bg-muted block rounded-lg border px-4 py-3 text-base font-bold break-keep">
+                    {hw.label} 수업 숙제 올리기
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
         {phase.kind === "error" ? (

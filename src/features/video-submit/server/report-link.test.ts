@@ -39,11 +39,16 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("보고서 글의 '영상 제출' 줄 — 앱이 정한다", () => {
-  it("단계 env: 없음/이상한 값 = 꺼짐", () => {
+  it("🔴 단계 값은 env가 무엇이든 꺼짐 — 보고서 글에 영상 제출 링크를 더는 붙이지 않는다(원장 2026-10-03)", async () => {
     expect(reportLineMode({})).toBe("off");
     expect(reportLineMode({ VIDEO_SUBMIT_REPORT_LINE: "yes" })).toBe("off");
-    expect(reportLineMode({ VIDEO_SUBMIT_REPORT_LINE: " ON " })).toBe("on");
-    expect(reportLineMode({ VIDEO_SUBMIT_REPORT_LINE: "test" })).toBe("test");
+    expect(reportLineMode({ VIDEO_SUBMIT_REPORT_LINE: " ON " })).toBe("off");
+    expect(reportLineMode({ VIDEO_SUBMIT_REPORT_LINE: "test" })).toBe("off");
+    // 발송 직전 판정의 기본값이 그 값이라, env를 켜 둔 채여도 링크를 만들지 않는다(DB도 안 본다)
+    vi.stubEnv("VIDEO_SUBMIT_REPORT_LINE", "on");
+    setup();
+    expect(await reportVideoLinkToken(R)).toBeNull();
+    expect(db.tables.homework_video_links).toHaveLength(0);
   });
   it("꺼짐이면 DB도 안 본다", async () => {
     setup();
