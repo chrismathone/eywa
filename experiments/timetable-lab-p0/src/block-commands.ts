@@ -18,7 +18,8 @@ export function moveBlocks(draft: Draft, ids: string[], anchorId: string, to: Po
     { row: p.row, col: 4, cell: value(p.row, 4, p.teacher === anchor.teacher ? to.teacher : p.teacher) },
   ]));
   next.placements = next.placements.map(p => ids.includes(p.id) && (draft.cells[p.row][4].text || '담당 미정') === anchor.teacher
-    ? { ...p, teacherId: targetTeacher, kind: p.kind === 'block' ? 'block' : targetSeat ? 'seat' : 'lesson' } : p);
+    ? { ...p, teacherId: targetTeacher, kind: p.kind === 'block' ? 'block' : targetSeat ? 'seat' : 'lesson',
+      labSeparate: targetSeat && to.teacher === 'LAB' && p.labSeparate ? true : undefined } : p);
   return next;
 }
 export function copyBlocks(draft: Draft, entries: Lesson[], anchorId: string, to: Position): Draft {
@@ -28,7 +29,7 @@ export function copyBlocks(draft: Draft, entries: Lesson[], anchorId: string, to
     if (entry.id === anchorId) copiedAnchor = id;
     next.cells.push([entry.name, entry.day, timeLabel(entry.start), timeLabel(entry.end), entry.teacher, entry.room].map(text => ({ text })));
     next.placements.push({ id, row, classId: entry.classId, teacherId: entry.teacherId, roomId: entry.roomId,
-      kind: entry.kind, sourceScheduleId: null, studentIds: [...entry.students] });
+      kind: entry.kind, labSeparate: entry.labSeparate, sourceScheduleId: null, studentIds: [...entry.students] });
   }
   return moveBlocks(next, ids, copiedAnchor, to);
 }

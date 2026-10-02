@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     return Response.json({ error: '불러올 기준일을 확인해 주세요.' }, { status: 400, headers });
   }
   try {
-    return Response.json(await readLabSource(user.tenantId, thisMonday(date)), { headers });
+    return Response.json(await readLabSource(user.tenantId, thisMonday(date), user.id), { headers });
   } catch (error) {
     logDbError(error, 'timetable-lab-source');
     return Response.json({ error: '시간표를 모두 읽지 못했습니다. 잠시 후 다시 불러와 주세요. 현재 연습안은 유지됩니다.' }, { status: 503, headers });

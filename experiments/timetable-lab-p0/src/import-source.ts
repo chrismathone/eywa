@@ -21,11 +21,13 @@ export function importSource(value: LabSource): Draft {
   for (const s of value.slots) {
     const p = slot(s, draft.cells.length);
     const { id, sourceScheduleId, classId, row, teacherId, roomId, kind, studentIds } = p;
-    draft.placements.push({ id, sourceScheduleId, classId, row, teacherId, roomId, kind, studentIds });
+    draft.placements.push({ id, sourceScheduleId, classId, row, teacherId, roomId, kind, studentIds, labSeparate: s.labSeparate });
+    if (classId) (draft.classes ??= {})[classId] = { color: s.classColor ? { ...s.classColor } : undefined, homeroomTeacher: s.homeroomTeacher };
     draft.cells.push([s.name, p.day, s.start, s.end, p.teacher, s.room].map(text => ({ text })));
     if (s.classId) draft.students[s.classId] = [...new Set([...(draft.students[s.classId] ?? []), ...p.students])];
   }
   draft.outside = value.outside.map(s => slot(s, -1));
+  draft.appearance = value.appearance ? structuredClone(value.appearance) : undefined;
   draft.source = { kind: 'live', date: value.referenceDate, tenantId: value.tenantId, loadedAt: value.fetchedAt,
     academy: value.academy, notices: value.notices, uncertainties: value.uncertainties, step: [5, 10, 15, 20, 30, 60].includes(value.stepMinutes) ? value.stepMinutes : 10, teacherOrder: value.teacherOrder };
   return draft;

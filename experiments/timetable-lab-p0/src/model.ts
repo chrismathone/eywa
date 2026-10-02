@@ -1,8 +1,10 @@
+import type { LabAppearance, LabColor } from '../../../src/features/timetable-lab/types';
 // Browser draft only. Imported IDs are retained; no production mutation API exists here.
 export type Cell = { text: string; bold?: boolean; formula?: string; format?: Record<string, unknown>; richText?: Record<string, unknown> };
 export type Placement = { id: string; sourceScheduleId: string | null; classId: string; row: number;
-  teacherId?: string | null; roomId?: string | null; kind?: 'lesson' | 'seat' | 'block'; studentIds?: string[] };
+  teacherId?: string | null; roomId?: string | null; kind?: 'lesson' | 'seat' | 'block'; studentIds?: string[]; labSeparate?: boolean };
 export type Draft = { cells: Cell[][]; placements: Placement[]; students: Record<string, string[]>;
+  appearance?: LabAppearance; classes?: Record<string, { color?: LabColor; homeroomTeacher?: string }>;
   people?: Record<string, string>; outside?: Lesson[]; source?: { kind: 'live'; date: string; tenantId: string; loadedAt: string; academy: string; notices: string[]; uncertainties?: string[]; step: number; teacherOrder: string[] } };
 export const headers = ['수업', '요일', '시작', '종료', '강사', '강의실'];
 export const days = ['월', '화', '수', '목', '금', '토', '일'];

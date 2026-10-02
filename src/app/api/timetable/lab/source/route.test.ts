@@ -6,7 +6,7 @@ vi.mock('@/features/timetable-lab/server/source', () => ({ readLabSource: mocks.
 vi.mock('@/lib/supabase/db-error', () => ({ logDbError: mocks.log }));
 import { GET } from './route';
 beforeEach(() => {
-  vi.clearAllMocks(); mocks.user.mockResolvedValue({ tenantId: 'own-tenant', systemRole: 'admin' });
+  vi.clearAllMocks(); mocks.user.mockResolvedValue({ id: 'own-user', tenantId: 'own-tenant', systemRole: 'admin' });
   mocks.manage.mockResolvedValue(true); mocks.read.mockResolvedValue({ version: 1 });
 });
 describe('timetable source read authorization', () => {
@@ -20,7 +20,7 @@ describe('timetable source read authorization', () => {
   });
   it('takes tenant only from the session and returns uncached private data for the selected week', async () => {
     const response = await GET(new Request('http://localhost/api/timetable/lab/source?date=2026-10-02&tenantId=other'));
-    expect(response.status).toBe(200); expect(mocks.read).toHaveBeenCalledWith('own-tenant', '2026-09-28');
+    expect(response.status).toBe(200); expect(mocks.read).toHaveBeenCalledWith('own-tenant', '2026-09-28', 'own-user');
     expect(response.headers.get('Cache-Control')).toBe('private, no-store'); expect(response.headers.get('Vary')).toBe('Cookie');
   });
   it.each(['2026-02-30', 'hello', '2026-13-01'])('rejects invalid date %s before reading', async date => {

@@ -9,7 +9,8 @@ export type RosterRow = { id: string; class_id: string; student_id: string; star
   student: { name: string; status: string; withdrawn_at: string | null } | { name: string; status: string; withdrawn_at: string | null }[] | null };
 export type BlockRow = { id: string; teacher_label: string; day_of_week: string; start_time: string; end_time: string;
   label: string; valid_from: string | null; valid_to: string | null };
-export type TeacherRow = { id: string; display_name: string | null };
+export type TeacherRow = { id: string; display_name: string | null; english_name?: string | null;
+  status?: string | null; bg_color?: string | null; text_color?: string | null };
 const one = <T>(value: T | T[] | null) => Array.isArray(value) ? value[0] : value;
 
 export function projectSlots(slots: ScheduleSlot[], roster: RosterRow[], teachers: TeacherRow[], monday: string, map: TeacherLabelMap = {}): LabSourceSlot[] {
@@ -32,6 +33,8 @@ export function projectSlots(slots: ScheduleSlot[], roster: RosterRow[], teacher
     return { id: s.id, classId: s.classId, name: s.className, subject: s.subject, day: s.dayOfWeek,
       start: s.startTime.slice(0, 5), end: s.endTime.slice(0, 5), teacher, teacherId: ids.length === 1 && !specialSlotLabel(teacher) ? ids[0] : null,
       room: s.slotRoomLabel || s.classroomName || '', roomId: s.slotRoomId ?? s.classRoomId,
+      homeroomTeacher: resolveTeacherLabel(s.teacherName, map) || '', labSeparate: s.labSeparate === true,
+      ...(s.classBgColor ? { classColor: { bg: s.classBgColor, text: s.classTextColor || '#121212' } } : {}),
       kind: specialSlotLabel(teacher) ? 'seat' : 'lesson', students: [...students.values()] };
   });
 }

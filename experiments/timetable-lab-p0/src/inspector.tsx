@@ -4,6 +4,7 @@ import { moveBlocks } from './block-commands';
 import { moveStudent } from './student-command';
 import { suggest, validate, type Candidate } from './constraints';
 import type { DraftStore } from './store';
+import { ColorSettings } from './color-settings';
 export function Inspector({ store, selected, close, announce }: { store: DraftStore; selected: string[]; close: () => void; announce: (s: string) => void }) {
   const { draft, revision } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const all = lessons(draft).items, item = all.find(p => p.id === selected[0]), checks = validate(draft);
@@ -21,6 +22,7 @@ export function Inspector({ store, selected, close, announce }: { store: DraftSt
         <label>강사<select name="teacher" defaultValue={item.teacher}>{[...new Set(all.map(p => p.teacher))].map(t => <option key={t}>{t}</option>)}</select></label>
         <label>시작<input name="start" type="time" defaultValue={timeLabel(item.start)} required /></label>
         <button type="submit">이 위치로 옮기기</button></form>
+      <ColorSettings store={store} item={item} announce={announce} />
       <h3>배정 학생 <span>{item.students.length}명</span></h3><div className="student-chips">{item.students.map(id => <span key={id}>{people[id] ?? '이름 미확인'}</span>)}</div>
       {item.students.length > 0 && <form aria-label="학생 배정 이동" key={`student-${item.id}-${revision}`} onSubmit={e => {
         e.preventDefault(); const values = new FormData(e.currentTarget);
