@@ -20,7 +20,7 @@ export function RoleBar({
   return (
     <Toolbar>
       <ToolbarSegment label="역할" wrap>
-        {DASHBOARD_ROLES.map((r) => {
+        {DASHBOARD_ROLES.filter((r) => r !== "super").map((r) => {
           const b = ROLE_BUNDLE[r];
           const dirty = status[b].dirty || (r === "admin" && status.desk.dirty);
           return <ToolbarSegmentItem key={r} active={roleOfBundle(role) === r} onClick={() => onRole(b)} aria-label={`${DASHBOARD_ROLE_LABELS[r]} 배치${dirty ? " (저장 안 한 변경 있음)" : ""}`}>
@@ -93,7 +93,7 @@ export function EditorActions(p: {
               <EyIcon name="chevronDown" size={18} className="opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-52">
-              {BUNDLES.filter((b) => b !== p.role).map((b) => (
+              {BUNDLES.filter((b) => b !== "super" && b !== p.role).map((b) => (
                 <DropdownMenuItem key={b} onClick={() => p.onCopy(b)}>
                   {BUNDLE_LABELS[b]} 배치로 바꾸기
                 </DropdownMenuItem>
