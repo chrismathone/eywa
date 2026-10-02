@@ -23,6 +23,8 @@ import {
   summarizePrograms,
 } from "@/features/students/enrolled-composition";
 import { getWithdrawalsInWindow, type WindowWithdrawal } from "@/features/withdrawals/server/window";
+import { getSubjectEndedStudents } from "@/features/withdrawals/server/queries";
+import { includeSubjectEnds } from "./monthly-exits";
 import {
   inWithdrawalWindow,
   withdrawalMonthWindow,
@@ -190,8 +192,8 @@ async function students(
 }
 
 /**
- * KPI '퇴원생' — 이번 달 1일 ~ min(말일, 오늘)(KST). 추이 패널과 **같은 행**(loadOverview가 한 번 받은 getWithdrawalsInWindow)을
- * 퇴원관리 `range=month`와 **같은 창 판정**(withdrawalMonthWindow + inWithdrawalWindow)으로 거른다 — 카드 = 패널 이번 달 칸 = 퇴원관리.
+ * KPI '퇴원&수업종료' — 이번 달 1일 ~ min(말일, 오늘)(KST).
+ * 퇴원관리의 과목 전체 종료 기준을 더하고 학생별로 한 번 센다. 반이동·특강 종료는 제외한다.
  */
 async function monthWithdrawals(
   rowsPromise: Promise<WindowWithdrawal[]>,
@@ -200,10 +202,10 @@ async function monthWithdrawals(
 ): Promise<OverviewData["withdrawals"]> {
   const month = today.slice(0, 7);
   const win = withdrawalMonthWindow(month, today);
-  const [rows, settings] = await Promise.all([rowsPromise, settingsPromise]);
+  const [rows, settings, ended] = await Promise.all([rowsPromise, settingsPromise, getSubjectEndedStudents()]);
   return {
     month,
-    rows: rows
+    rows: includeSubjectEnds(rows
       .filter((row) =>
         inWithdrawalWindow({ withdrawnAt: row.withdrawnAt, systemBulk: false }, win.from, win.to),
       )
@@ -213,7 +215,7 @@ async function monthWithdrawals(
         schoolGrade: schoolGradeLabel(row.school, row.grade) || null,
         withdrawnAt: row.withdrawnAt,
         program: withdrawalProgram(row, settings.operations.subjects),
-      })),
+      })), ended, win, settings.operations.subjects, (school, grade) => schoolGradeLabel(school, grade) || null),
   };
 }
 
@@ -231,8 +233,8 @@ async function firstClasses(
 
 /**
  * 등록·퇴원 추이(최근 6개월).
- * 🔴 퇴원 칸은 KPI '퇴원생'·퇴원관리와 **같은 모집단**(getWithdrawalsInWindow: status=withdrawn · 시스템 정리 제외 ·
- *    마지막 종료 수강 규칙 · 강사 스코프 없음)이다 — 이번 달 칸(1일~오늘) = 카드. 등록 칸은 종전대로 강사 스코프를 건다.
+ * 퇴원 칸은 실제 퇴원만 센다(getWithdrawalsInWindow: status=withdrawn · 시스템 정리 제외).
+ * 과목 종료 후 재원 중인 학생은 인원 감소가 아니므로 추이에 더하지 않는다. 등록 칸은 강사 스코프를 건다.
  */
 async function changes(
   today: string,
@@ -560,7 +562,7 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   // 조회 계획 = 놓인 카드가 읽는 영역 ∩ 메뉴 권한(`loadPlan`, 순수 — 테스트가 역할별로 잠근다).
   const needed = loadPlan(view, new Set(allowed));
   const needs = (...areas: Area[]) => areas.some((a) => needed.has(a));
-  // 이번 달 퇴원(KPI)과 등록·퇴원 추이(6개월)가 **같은 행**을 쓴다 — 한 번만 받는다(카드 = 패널 이번 달 칸).
+  // 실제 퇴원 행은 KPI와 추이가 공유한다. 과목 종료는 KPI에서만 추가한다.
   const withdrawalRows =
     (allowed.includes("withdrawals") || allowed.includes("students")) && needs("withdrawals", "changes")
       ? getWithdrawalsInWindow(`${monthKeys(today)[0]}-01`, today)

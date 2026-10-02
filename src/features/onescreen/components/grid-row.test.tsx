@@ -110,6 +110,12 @@ function renderRow(attendanceRaw: string | null, over: RowOver = {}) {
 }
 
 describe("결석 행 — 보고서 입력은 잠긴다", () => {
+  it("표에서 출석을 다시 누르면 학생·반을 지정해 취소한다", () => {
+    fields.onAttendance.mockClear();
+    renderRow("present");
+    fireEvent.click(screen.getByRole("button", { name: /^출석/ }));
+    expect(fields.onAttendance).toHaveBeenCalledWith("s1", "c1", null, undefined);
+  });
   it("출석 행에서는 기록 칸이 전부 열려 있다", () => {
     renderRow("present");
     expect(screen.getByLabelText("학생 일일테스트")).not.toBeDisabled();
