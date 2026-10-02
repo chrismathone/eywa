@@ -248,8 +248,14 @@ export default async function StudentDetailPage({
         </div>
       </header>
 
-      {/* 예정된 변경 — 원장 지시(2026-08-28): 탭 위에 경고처럼 띄우고 우측에서 수정·취소.
-          미래 예약은 오늘 화면에 흔적이 없어 잊힌다(실측: 미래 시작 수강 28건이 어디에도 안 보였다). */}
+      <StudentTabsNav
+        studentId={student.id}
+        active={tab}
+        canSeeBilling={canSeeBilling}
+        showSrs={showSrs}
+      />
+
+      {/* 개요·수업을 포함한 모든 탭의 첫 내용으로 예약 전부와 수정·취소를 보여준다. */}
       <ScheduledChangeBanner
         changes={scheduled}
         makeups={upcomingMakeups}
@@ -260,13 +266,6 @@ export default async function StudentDetailPage({
             ? (c) => <ScheduledChangeActions change={c} today={kstToday()} />
             : undefined
         }
-      />
-
-      <StudentTabsNav
-        studentId={student.id}
-        active={tab}
-        canSeeBilling={canSeeBilling}
-        showSrs={showSrs}
       />
 
       <section>

@@ -223,7 +223,7 @@ describe("overview display contracts", () => {
   });
 });
 
-const KPI_LABELS = ["재원생", "퇴원생", "신규문의", "금일 입테", "금일 등록", "오늘첫수업", "전일 결석", "보강예정"];
+const KPI_LABELS = ["재원생", "퇴원&수업종료", "신규문의", "금일 입테", "금일 등록", "오늘첫수업", "전일 결석", "보강예정"];
 const ALL_MENUS: OverviewSnapshot["allowed"] = [
   "dashboard",
   "students",
@@ -407,7 +407,7 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
     const href = (name: string) => screen.getByRole("link", { name }).getAttribute("href");
-    expect(href("퇴원관리에서 이번 달 퇴원 보기")).toBe("/withdrawals?type=withdrawn&range=month&month=2026-09");
+    expect(href("이번 달 퇴원·수업종료 보기")).toBe("/withdrawals?type=all&range=month&month=2026-09");
     expect(href("콜&상담에서 오늘 접수 보기")).toBe("/enrollment?view=table&received=2026-09-10");
     expect(href("원생목록에서 오늘 첫 수업 보기")).toBe(
       "/students?first=2026-09-10&status=all&subject=all&grade=all&teacher=all&noenr=0&from=dashboard",
@@ -449,9 +449,9 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
   it("↗는 목적지 메뉴를 열 수 있을 때만 선다(카드는 그대로)", () => {
     mocks.data = kpiSnapshot(["dashboard", "students", "enrollment", "calendar"]);
     render(<Overview initial={mocks.data} />);
-    expect(screen.queryByRole("link", { name: "퇴원관리에서 이번 달 퇴원 보기" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "이번 달 퇴원·수업종료 보기" })).toBeNull();
     expect(screen.queryByRole("link", { name: "출석부에서 어제 9/9 (수) 결석 학생 보기" })).toBeNull();
-    expect(screen.getByRole("button", { name: /^퇴원생 2명\./ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^전일 결석 2명\./ })).toBeTruthy();
     cleanup();
   });
@@ -484,17 +484,30 @@ describe("KPI 여섯 칸 (원장 2026-09-11)", () => {
     cleanup();
   });
 
-  it("퇴원생 팝업 — 프로그램별 합 = 퇴원생 수(기타·미상 포함), 명단은 원생 상세로", () => {
+  it("퇴원&수업종료 팝업 — 프로그램별 합 = 퇴원&수업종료 수(기타·미상 포함), 명단은 원생 상세로", () => {
     mocks.data = kpiSnapshot();
     render(<Overview initial={mocks.data} />);
-    fireEvent.click(screen.getByRole("button", { name: /^퇴원생 2명\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
     const popup = screen.getByRole("dialog");
-    expect(popup.textContent).toContain("9월 퇴원생 2명");
+    expect(popup.textContent).toContain("9월 퇴원&수업종료 2명");
+    expect(popup.textContent).toContain("퇴원 2명 · 수강종료 0명");
     expect(
       within(popup).getByRole("link", { name: "EiE 1명 목록 열기" }).getAttribute("href"),
-    ).toBe("/withdrawals?type=withdrawn&range=month&month=2026-09&program=eie");
+    ).toBe("/withdrawals?type=all&range=month&month=2026-09&program=eie");
     expect(popup.textContent).toContain("기타·미상");
     expect(within(popup).getByRole("link", { name: "퇴원가 원생 상세" }).getAttribute("href")).toBe("/students/w1");
+    cleanup();
+  });
+
+  it("퇴원 팝업에서 퇴원과 과목 수강종료의 인원·학생 라벨을 구분한다", () => {
+    mocks.data = kpiSnapshot();
+    mocks.data.sections.withdrawals!.data!.rows[1]!.kind = "subject-ended";
+    render(<Overview initial={mocks.data} />);
+    fireEvent.click(screen.getByRole("button", { name: /^퇴원&수업종료 2명\./ }));
+    const popup = screen.getByRole("dialog");
+    expect(popup.textContent).toContain("퇴원 1명 · 수강종료 1명");
+    expect(within(popup).getByText("퇴원")).toBeInTheDocument();
+    expect(within(popup).getByText("수강종료")).toBeInTheDocument();
     cleanup();
   });
 

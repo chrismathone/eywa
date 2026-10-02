@@ -11,13 +11,14 @@ import {
   classifyScheduled,
   scheduledChangeLabel,
   shortDate,
+  scheduledChangesForClass,
   type ScheduledEnrollmentRow,
 } from "./scheduled-changes";
 
 const TODAY = "2026-08-29";
 
 const row = (o: Partial<ScheduledEnrollmentRow> & { enrollmentId: string }): ScheduledEnrollmentRow => ({
-  classId: "c",
+  classId: o.enrollmentId,
   className: "반",
   studentId: "st",
   studentName: "학생",
@@ -104,7 +105,7 @@ describe("classifyScheduled", () => {
     expect(res.filter((r) => r.kind === "leave")).toHaveLength(2);
   });
 
-  it("한 짝이 이미 쓰였으면 다시 쓰지 않는다", () => {
+  it("도착지가 여럿이면 임의로 짝을 고르거나 한쪽만 취소하지 않는다", () => {
     const res = classifyScheduled(
       [
         row({ enrollmentId: "old", className: "A", endDate: "2026-09-01", isTransferred: true }),
@@ -113,9 +114,47 @@ describe("classifyScheduled", () => {
       ],
       TODAY,
     );
-    // 첫 짝이 이동으로 묶이면 남은 하나는 합류다(옛 수강을 두 번 소비하지 않는다).
-    expect(res.filter((r) => r.kind === "move")).toHaveLength(1);
-    expect(res.filter((r) => r.kind === "join")).toHaveLength(1);
+    expect(res.filter((r) => r.kind === "move")).toHaveLength(0);
+    expect(res.filter((r) => r.kind === "join")).toHaveLength(2);
+    expect(res.every((r) => !r.canCancel)).toBe(true);
+  });
+
+  it("출발 반과 도착 반에서 동일한 예약을 수정·취소한다", () => {
+    const changes = classifyScheduled([
+      row({ enrollmentId: "old", endDate: "2026-09-03", isTransferred: true }),
+      row({ enrollmentId: "new", startDate: "2026-09-03", isTransferredIn: true }),
+      row({ enrollmentId: "unrelated", startDate: "2026-09-09" }),
+    ], TODAY);
+    expect(scheduledChangesForClass(changes, "old")).toEqual(scheduledChangesForClass(changes, "new"));
+    expect(scheduledChangesForClass(changes, "old")).toEqual([
+      expect.objectContaining({ enrollmentId: "new", pairedEnrollmentId: "old", canCancel: true }),
+    ]);
+  });
+
+  it("아직 시작하지 않은 이전 반도 이동 짝으로 표시한다", () => {
+    const changes = classifyScheduled([
+      row({ enrollmentId: "old", startDate: "2026-09-01", endDate: "2026-09-03", isTransferred: true }),
+      row({ enrollmentId: "new", startDate: "2026-09-03", isTransferredIn: true }),
+    ], TODAY);
+    expect(changes).toContainEqual(expect.objectContaining({ kind: "move", pairedEnrollmentId: "old", canCancel: true }));
+    expect(changes.find((c) => c.enrollmentId === "old")?.canCancel).toBe(false);
+  });
+
+  it("이동 전입인데 이전 수강이 없으면 배정 취소로 한쪽만 삭제하지 않는다", () => {
+    const [change] = classifyScheduled([row({ enrollmentId: "new", startDate: "2026-09-03", isTransferredIn: true })], TODAY);
+    expect(change.canCancel).toBe(false);
+    expect(change.blockedReason).toContain("이전 수강");
+  });
+
+  it("같은 날 신규 배정은 명시적인 이동 전입과 혼동하지 않는다", () => {
+    const changes = classifyScheduled([
+      row({ enrollmentId: "old", endDate: "2026-09-03", isTransferred: true }),
+      row({ enrollmentId: "new", startDate: "2026-09-03", isTransferredIn: true }),
+      row({ enrollmentId: "join", startDate: "2026-09-03", isTransferredIn: false }),
+    ], TODAY);
+    expect(changes).toHaveLength(2);
+    expect(changes.find((c) => c.enrollmentId === "new")?.kind).toBe("move");
+    expect(changes.find((c) => c.enrollmentId === "join")?.kind).toBe("join");
   });
 
   it("이미 시작·종료된 것은 예약이 아니다", () => {

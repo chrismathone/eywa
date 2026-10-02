@@ -12,6 +12,29 @@ describe("AttendancePills", () => {
     expect(onSet).toHaveBeenCalledWith("present");
   });
 
+  it("이미 찍힌 출석을 다시 누르면 바로 취소한다", () => {
+    const onSet = vi.fn();
+    render(<AttendancePills value="present" pending={false} onSet={onSet} studentName="학원이" />);
+    fireEvent.click(screen.getByRole("button", { name: /^출석/ }));
+    expect(onSet).toHaveBeenCalledWith(null);
+  });
+
+  it.each(["late", "absent"] as const)("%s도 사유 창에서 출결을 취소할 수 있다", (value) => {
+    const onSet = vi.fn();
+    render(<AttendancePills value={value} pending={false} onSet={onSet} studentName="학원이" />);
+    const label = value === "late" ? "지각" : "결석";
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: `${label} 취소` }));
+    expect(onSet).toHaveBeenCalledWith(null);
+  });
+
+  it("저장 중에는 출석을 재클릭해 취소하지 못한다", () => {
+    const onSet = vi.fn();
+    render(<AttendancePills value="present" pending onSet={onSet} studentName="학원이" />);
+    fireEvent.click(screen.getByRole("button", { name: /^출석/ }));
+    expect(onSet).not.toHaveBeenCalled();
+  });
+
   it("지각·결석은 **바로 저장하지 않고** 사유 창을 연다(2026-08-05 원장 요청)", () => {
     const onSet = vi.fn();
     render(<AttendancePills value={null} pending={false} onSet={onSet} studentName="학원이" />);

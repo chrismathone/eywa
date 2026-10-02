@@ -58,7 +58,7 @@ import { enrollmentTimeline } from "../enrollment-timeline";
 import { OUTCOME_LABEL, type OutcomeKey } from "@/features/enrollment/server/queries";
 import { reasonDisplay } from "@/features/withdrawals/types";
 import { groupSchedule, type ScheduleGroup } from "@/features/classes/schedule-periods";
-import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
+import { enrollmentLastDate, isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 
 /** 임포트된 상담/메모 텍스트("[제목]\n본문\n[등록자: 이름]")를 제목·본문·등록자로 분리. */
 function parseImportedNote(raw: string | null | undefined): {
@@ -907,6 +907,7 @@ export type StudentClassRow = {
   teacherName: string | null;
   startDate: string;
   endDate: string | null;
+  isTransferred: boolean;
   onHold: boolean;
   schedule: ScheduleGroup[];
   // 등원요일로 필터링된 개별 슬롯(groupSchedule과 동일 필터) — 학생 주간 시간표 그리드 소스.
@@ -936,7 +937,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
   const { data: ens } = await supabase
     .from("enrollments")
     .select(
-      `id, class_id, start_date, end_date, on_hold, attendance_days,
+      `id, class_id, start_date, end_date, on_hold, is_transferred, attendance_days,
        class:class_id ( class_name, subject, teacher:teacher_id ( display_name ), classroom:classroom_id ( name ) )`,
     )
     .eq("student_id", studentId)
@@ -1040,7 +1041,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
     const attKo = attDays.map((d) => enumDayToKo(d as DayOfWeek));
     // 유효 슬롯만(#88 — 규칙은 class-slots `liveScheduleRows`). 기준일 = 수강 중이면 오늘,
     // 지난 수강이면 **그 수강의 마지막 날**(당시 스케줄이 사실 — 오늘 기준이면 종강 반은 전멸한다).
-    const endYmd = e.end_date ? String(e.end_date).slice(0, 10) : null;
+    const endYmd = enrollmentLastDate(e.end_date ? String(e.end_date).slice(0, 10) : null, !!e.is_transferred);
     const refDate = endYmd && endYmd < today ? endYmd : today;
     // *LAB 배정으로 자리 교시를 가른다 — 켠 원생은 *LAB만, 끈 원생은 일반 LAB만(원장 2026-09-18).
     //    🔴 재료를 하나라도 모르면 `null`을 넘겨 **한 줄도 빼지 않는다**(수업이 사라지는 쪽으로 틀리지 않는다).
@@ -1071,6 +1072,7 @@ export async function getStudentClassesDetail(studentId: string): Promise<Studen
       teacherName: teacher?.display_name ?? null,
       startDate: e.start_date,
       endDate: e.end_date,
+      isTransferred: !!e.is_transferred,
       onHold: e.on_hold,
       schedule: groupSchedule(rawSlots, subject, attKo, periodsConfig),
       slots,

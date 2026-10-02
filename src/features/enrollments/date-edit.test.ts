@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyDateEdit,
+  dateEditStorageValue,
   dateEditConfirmMessage,
   dateEditConfirmTitle,
   dateEditConfirmToken,
@@ -11,6 +12,21 @@ import {
   type EnrollmentWindow,
 } from "./date-edit";
 import { isEnrollmentEndedOn } from "./eligibility";
+
+describe("화면의 마지막 수강일 저장", () => {
+  it("이전 반 10/1 종료를 그대로 저장해도 이동 경계 10/2가 보존된다", () => {
+    expect(dateEditStorageValue("end", "2026-10-01", true, true)).toBe("2026-10-02");
+  });
+  it("일반 종료·시작일·빈 종료일은 변환하지 않는다", () => {
+    expect(dateEditStorageValue("end", "2026-10-01", true, false)).toBe("2026-10-01");
+    expect(dateEditStorageValue("start", "2026-10-01", true, true)).toBe("2026-10-01");
+    expect(dateEditStorageValue("end", null, true, true)).toBeNull();
+  });
+  it("달력에 없는 날짜를 더하면서 자동 보정해 통과시키지 않는다", () => {
+    const value = dateEditStorageValue("end", "2026-02-30", true, true);
+    expect(enrollmentDateEditError("end", value, { startDate: "2026-01-01", endDate: null })).toContain("형식");
+  });
+});
 
 const win = (start: string, end: string | null, isTransferred = false): EnrollmentWindow => ({
   startDate: start,

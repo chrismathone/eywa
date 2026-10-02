@@ -1,3 +1,10 @@
+import { addDays } from "@/lib/date-kst";
+
+/** 마지막 수강일(포함). 반이동의 저장된 종료 경계는 이동일이므로 전날까지 수강한다. */
+export function enrollmentLastDate(endDate: string | null, isTransferred?: boolean): string | null {
+  return endDate && isTransferred ? addDays(endDate, -1) : endDate;
+}
+
 /**
  * 기준일에 **수강 종료가 이미 지났는지** — 종료 규약의 단일 소스.
  *

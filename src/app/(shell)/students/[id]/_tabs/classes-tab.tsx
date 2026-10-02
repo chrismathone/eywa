@@ -9,10 +9,9 @@ import {
 } from "@/features/students/server/queries";
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { enrollmentAssignBlockReason } from "@/features/enrollments/eligibility";
+import { enrollmentAssignBlockReason, enrollmentLastDate, isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 // 지난 수업의 '강사' — 그 시점 담임을 기록으로 되살린다(단일 소스, 2026-08-04 시간표와 같은 함수).
-import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-queries";
-import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
+import { getPastClassTeachers } from "@/features/students/server/past-class-teachers";
 import { buildSubjectMaps, type SubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { usedRowSubjectsOf } from "@/features/students/lib/week-grid-row-mode";
@@ -85,7 +84,7 @@ export async function ClassesTab({
   const usedRowSubjects = usedRowSubjectsOf(settings.operations.subjects);
 
   const today = kstToday();
-  const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
+  const hasEnded = (r: StudentClassRow) => isEnrollmentEndedOn(r.endDate, today, r.isTransferred);
   const current = rows.filter((r) => !hasEnded(r) && r.startDate <= today);
   const scheduled = rows.filter((r) => !hasEnded(r) && r.startDate > today);
   /**
@@ -96,20 +95,18 @@ export async function ClassesTab({
     .filter((r) => hasEnded(r))
     .sort((a, b) => (b.endDate ?? "").localeCompare(a.endDate ?? "") || b.startDate.localeCompare(a.startDate));
   /**
-   * 🔴 **지난 수업의 '강사'는 그 수업이 끝날 때의 담임**이다(원장 2026-09-07 *"종료된 수업은 종료될
-   *    타이밍의 강사가 말이 되는거 아닌가?"*). 종전엔 `classes.teacher_id`(**지금** 담임)를 그대로 찍어,
-   *    9/1에 부임한 강사가 5월에 끝난 수강의 강사로 나왔다(실측: 초등M 초6 BS2P·개별 BS2G — 8월까지
-   *    허은진, 9/1부터 허주연). 담임은 반 단위라 시간 축이 없어서 생기는 일이고, 되살리는 함수는
-   *    시간표가 쓰는 것과 **같은 단일 소스**다(인수인계 로그 = 사실 → 그 달 보고서 작성자 = 추정 순).
-   * 🔴 **못 살리면 `—`로 비운다**(원장 2026-09-07 *"살릴 수 없는 부분은 그냥 'ㅡ'로 전부 미입력 상태로
-   *    냅둬"*) — 현재 담임으로 메우면 그게 바로 지금 고치는 거짓말이다. 창(최근 2개월) 밖·기록 없는
-   *    구간이 여기 해당한다(2026-08-04 이전엔 담임 변경 이력 자체를 안 남겼다).
-   * ⚠️ 지난 수강이 없으면 **조회 자체를 안 한다**(왕복 0). 진행 중·예정 수업은 현재 담임이 정답이라 그대로.
+   * 종료일 당시 담임 이력을 우선하고, 없으면 수강 기간의 마지막 보고서 → 강사 출결 기록으로 추정한다.
+   * 반이동 당일은 새 반의 수업이므로 이전 반은 전날까지만 조회한다. 근거가 없거나 동률이면 `—`로 둔다.
+   * 추정한 이름에는 근거 날짜를 표시하며, 실제 담임 배정은 변경하지 않는다.
    */
-  const asOfIndex = past.length > 0 ? await getTeacherAsOfIndex() : null;
+  const pastTeachers = await getPastClassTeachers(past.flatMap(r => {
+    const lastDate = enrollmentLastDate(r.endDate, r.isTransferred);
+    return lastDate ? [{ enrollmentId: r.enrollmentId, classId: r.classId, startDate: r.startDate, lastDate }] : [];
+  }));
   const pastRows = past.map((r) => {
-    const at = asOfIndex && r.endDate ? resolveTeacherAsOf(asOfIndex, r.classId, r.endDate) : null;
-    return { ...r, teacherName: at?.name ?? null, teacherInferred: at?.inferred ?? false };
+    const at = pastTeachers.get(r.enrollmentId);
+    return { ...r, teacherName: at?.name ?? null, teacherInferred: at?.inferred ?? false,
+      teacherEvidence: at?.inferred ? `${at.date} ${at.source === "report" ? "수업보고서" : "출결"} 기록 기준으로 추정한 담당입니다` : undefined };
   });
 
   // 🔴 휴원·퇴원·상담 단계 학생에겐 '반 배정' 대신 **이유**를 보여준다 — 서버(createEnrollment)가
@@ -197,7 +194,7 @@ function Section({
    * ⚠️ 지난 수업 줄은 `teacherName`이 **그 시점 담임**으로 갈아끼워져 오고, 그 값이 보고서 작성자로
    *    추정한 것이면 `teacherInferred`가 붙는다(위 `pastRows` 주석). 다른 섹션은 현재 담임 그대로다.
    */
-  rows: (StudentClassRow & { teacherInferred?: boolean })[];
+  rows: (StudentClassRow & { teacherInferred?: boolean; teacherEvidence?: string })[];
   kind: "current" | "scheduled" | "past";
   studentId: string;
   subjects: SubjectMaps;
@@ -278,7 +275,7 @@ function Section({
                       kind !== "past" || !r.teacherName
                         ? undefined
                         : r.teacherInferred
-                          ? "인수인계 기록이 없어 그 시기 수업보고서 작성자로 되살린 이름입니다"
+                          ? r.teacherEvidence
                           : "인수인계 기록에 남은 이름입니다"
                     }
                   >
@@ -302,11 +299,11 @@ function Section({
                   </td>
                   <td className="px-4 py-2.5 text-xs">
                     {canEditDates ? (
-                      <EditableDateCell enrollmentId={r.enrollmentId} field="end" value={r.endDate} />
+                      <EditableDateCell enrollmentId={r.enrollmentId} field="end" value={r.endDate} isTransferred={r.isTransferred} />
                     ) : kind === "scheduled" ? (
                       <span className="text-text-faint">—</span>
                     ) : r.endDate ? (
-                      <span className="text-amber num font-medium">~{r.endDate}</span>
+                      <span className="text-amber num font-medium">~{enrollmentLastDate(r.endDate, r.isTransferred)}</span>
                     ) : (
                       /* 재원중 = positive(green) — 학생 상태 배지와 같은 뜻·같은 색. */
                       <span className="text-green font-medium">재원중</span>
@@ -341,7 +338,7 @@ function Section({
                           <DeleteEnrollmentButton
                             enrollmentId={r.enrollmentId}
                             className={r.className}
-                            periodLabel={r.endDate ? `${r.startDate} ~ ${r.endDate}` : `${r.startDate}부터`}
+                            periodLabel={r.endDate ? `${r.startDate} ~ ${enrollmentLastDate(r.endDate, r.isTransferred)}` : `${r.startDate}부터`}
                           />
                         ) : null}
                       </div>

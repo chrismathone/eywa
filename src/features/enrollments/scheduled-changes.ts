@@ -29,6 +29,7 @@ export interface ScheduledEnrollmentRow {
   startDate: string;
   endDate: string | null;
   isTransferred: boolean;
+  isTransferredIn?: boolean;
 }
 
 export interface ScheduledChange {
@@ -42,6 +43,9 @@ export interface ScheduledChange {
   className: string;
   /** move일 때 출발지 반 이름. */
   fromClassName?: string;
+  fromClassId?: string;
+  /** 이동 관계가 모호하면 한쪽만 지우지 않고 이유를 보여준다. */
+  blockedReason?: string;
   /**
    * 🔑 **쓰기 대상.** move·join = 새로 생길 수강, leave = 끝나는 수강.
    * 화면·서버가 이 값만 쓴다(관계 추론으로 대상을 고르지 않는다).
@@ -58,8 +62,8 @@ export interface ScheduledChange {
   /**
    * 취소 버튼을 붙여도 되는가.
    * 🔴 `leave`는 **false** — 짝(도착지 수강)이 이 조회 범위 밖이라 여기서 되돌리면 **한쪽만** 풀린다.
-   *    전출이 아닌 종료는 아예 **퇴원 예정**이라 되살리면 없던 재원생이 생긴다. 되돌리기는 도착지가
-   *    보이는 화면(그 학생 상세)에서 한다.
+ *    전출이 아닌 종료는 아예 **퇴원 예정**이라 되살리면 없던 재원생이 생긴다. 반 상세도 반대편 수강을
+ *    함께 조회해서 명확한 짝이 있을 때 move로 묶어 수정·취소한다.
    */
   canCancel: boolean;
 }
@@ -95,31 +99,28 @@ export function scheduledChangeLabel(
  * 미래에 걸친 수강 행들 → 예약 목록.
  *
  * ⚠️ 같은 학생의 이동 짝은 **(학생, 날짜)** 로 맞춘다 — 같은 날 두 반을 동시에 옮기는 경우가 있어
- *    (실측 권민서A·김동리가 9/1에 두 반) 날짜만으로는 어느 짝인지 모른다. 그래서 **출발지 후보가
- *    하나일 때만** 이동으로 묶고, 여럿이면 각각 join·leave로 남긴다(틀린 화살표보다 낫다).
+ *    (실측 권민서A·김동리가 9/1에 두 반) 날짜만으로는 어느 짝인지 모른다. 출발·도착 후보가
+ *    서로 하나일 때만 이동으로 묶고, 모호한 전입은 한쪽만 취소하지 못하게 한다.
  */
 export function classifyScheduled(
   rows: readonly ScheduledEnrollmentRow[],
   today: string,
 ): ScheduledChange[] {
   const upcoming = rows.filter((r) => enrollmentPhaseOn(r, today) === "upcoming");
-  const leaving = rows.filter(
-    (r) => r.endDate != null && enrollmentPhaseOn(r, today) === "leaving",
-  );
+  const leaving = rows.filter((r) => r.endDate != null && r.endDate > today);
+
+  const matches = (from: ScheduledEnrollmentRow, to: ScheduledEnrollmentRow) =>
+    from.studentId === to.studentId && from.endDate === to.startDate && from.isTransferred &&
+    from.enrollmentId !== to.enrollmentId && from.classId !== to.classId &&
+    to.isTransferredIn !== false;
 
   const usedLeaving = new Set<string>();
   const out: ScheduledChange[] = [];
 
   for (const u of upcoming) {
     // 짝 후보 = 같은 학생 · 종료일이 이 시작일과 같음 · 반이동 표식.
-    const mates = leaving.filter(
-      (l) =>
-        l.studentId === u.studentId &&
-        l.endDate === u.startDate &&
-        l.isTransferred &&
-        !usedLeaving.has(l.enrollmentId),
-    );
-    if (mates.length === 1) {
+    const mates = leaving.filter((l) => matches(l, u));
+    if (mates.length === 1 && upcoming.filter((to) => matches(mates[0]!, to)).length === 1) {
       const from = mates[0]!;
       usedLeaving.add(from.enrollmentId);
       out.push({
@@ -130,9 +131,11 @@ export function classifyScheduled(
         classId: u.classId,
         className: u.className,
         fromClassName: from.className,
+        fromClassId: from.classId,
         enrollmentId: u.enrollmentId,
         pairedEnrollmentId: from.enrollmentId,
-        canCancel: true,
+        canCancel: !u.isTransferred,
+        ...(u.isTransferred ? { blockedReason: "이후에 예약된 반 이동을 먼저 취소해 주세요." } : {}),
       });
     } else {
       out.push({
@@ -143,7 +146,10 @@ export function classifyScheduled(
         classId: u.classId,
         className: u.className,
         enrollmentId: u.enrollmentId,
-        canCancel: true,
+        canCancel: !u.isTransferredIn && mates.length === 0 && !u.isTransferred,
+        ...(u.isTransferredIn || mates.length > 0 || u.isTransferred
+          ? { blockedReason: u.isTransferred ? "이후에 예약된 반 이동을 먼저 취소해 주세요." : "반 이동의 이전 수강을 확인할 수 없습니다. 수강 내역을 확인해 주세요." }
+          : {}),
       });
     }
   }
@@ -165,4 +171,9 @@ export function classifyScheduled(
   }
 
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.studentName.localeCompare(b.studentName, "ko"));
+}
+
+/** 출발 반·도착 반 어디서 보든 같은 예약 id와 이전 수강 id로 처리한다. */
+export function scheduledChangesForClass(changes: ScheduledChange[], classId: string): ScheduledChange[] {
+  return changes.filter((change) => change.classId === classId || change.fromClassId === classId);
 }

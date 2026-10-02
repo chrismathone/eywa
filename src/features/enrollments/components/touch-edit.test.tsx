@@ -21,6 +21,13 @@ it("keyboard can open a date editor",()=>{
  fireEvent.click(screen.getByRole("button"),{detail:0});expect(container.querySelector('input[type="date"]')).not.toBeNull();
  expect(actions.dates).not.toHaveBeenCalled();
 });
+it("반 이동 종료일은 마지막 수강일로 보이며 편집할 때도 같은 날짜다",()=>{
+ const {container}=render(<EditableDateCell enrollmentId="old" field="end" value="2026-10-02" isTransferred />);
+ const button=screen.getByRole("button",{name:"~2026-10-01"});
+ fireEvent.doubleClick(button);
+ expect(container.querySelector('input[type="date"]')).toHaveValue("2026-10-01");
+ expect(container.querySelector('input[name="endDateInclusive"]')).toHaveValue("1");
+});
 it("one touch opens attendance-day selection with its current values and never auto-saves",()=>{
  render(<EditableAttendanceCell enrollmentId="e1" classDays={["mon","wed"]} attendanceDays={["wed"]}>수요일만</EditableAttendanceCell>);
  tap(screen.getByRole("button",{name:"수요일만"}));

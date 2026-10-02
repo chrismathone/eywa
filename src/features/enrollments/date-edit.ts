@@ -31,11 +31,23 @@
  *    무관한 편집마다 같은 경고가 떠서 진짜 신호가 묻힌다([[#105]] 결).
  */
 
-import { addDays } from "@/lib/date-kst";
+import { addDays, isValidYmd } from "@/lib/date-kst";
 
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export type EnrollmentDateField = "start" | "end";
+
+/** 화면의 마지막 수강일을 기존 저장 경계로 되돌린다. 전출 여부는 서버 조회값을 사용한다. */
+export function dateEditStorageValue(
+  field: EnrollmentDateField,
+  value: string | null,
+  inclusiveEnd: boolean,
+  isTransferred: boolean,
+): string | null {
+  return field === "end" && inclusiveEnd && isTransferred && value && isValidYmd(value)
+    ? addDays(value, 1)
+    : value;
+}
 
 export type EnrollmentWindow = {
   startDate: string;
@@ -71,7 +83,7 @@ export function enrollmentDateEditError(
 ): string | null {
   if (field !== "start" && field !== "end") return "잘못된 필드입니다";
   if (field === "start" && !value) return "시작일은 비울 수 없습니다";
-  if (value && !ISO_DATE.test(value)) return "날짜 형식이 올바르지 않습니다";
+  if (value && !isValidYmd(value)) return "날짜 형식이 올바르지 않습니다";
 
   const next = applyDateEdit(current, field, value);
   // ISO 문자열은 사전식 비교가 곧 날짜 비교.

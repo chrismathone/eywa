@@ -15,10 +15,11 @@ import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { enrollmentAssignBlockReason } from "../eligibility";
-import { BULK_TRANSFER_MAX, isTransferDate, type TransferSnapshot } from "../bulk-transfer";
+import { BULK_TRANSFER_MAX, isTransferDate, transferDateError, type TransferSnapshot } from "../bulk-transfer";
 import { enrollmentDeleteBlockReason, type EnrollmentRecordCounts } from "../deletable";
 import {
   applyDateEdit,
+  dateEditStorageValue,
   dateEditConfirmMessage,
   dateEditConfirmTitle,
   dateEditConfirmToken,
@@ -199,18 +200,18 @@ export async function moveEnrollmentsBatch(
     if (!effectiveDate || !isTransferDate(effectiveDate)) return { error: "올바른 이동일을 선택해 주세요" };
   }
 
-  const eff =
-    effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ? effectiveDate : null;
+  const eff = effectiveDate?.trim() || kstToday();
   // ⚠️ 과거 적용일 거부 — RPC는 이 값을 **옛 수강의 end_date와 새 수강의 start_date에 그대로** 쓰므로,
   // 과거 날짜를 넣으면 이미 지난 출결·청구 구간을 소급 조작한다. 클라 `min={dateFloor}`는 UI일 뿐
   // 게이트가 아니다(#77 — 화면에서만 잠근 것은 잠근 게 아니다). 2026-07-17 적대 감사 F6.
-  if (eff && eff < kstToday()) return { error: "적용일은 오늘 이후여야 합니다" };
+  const dateError = transferDateError(moves, eff, kstToday());
+  if (dateError) return { error: dateError };
   const supabase = await createClient();
   const payload = {
     p_moves: moves.map((m) => ({
       enrollmentId: m.enrollmentId,
       newClassId: m.newClassId,
-      startDate: m.startDate ?? null,
+      startDate: eff,
       // 유효 요일코드만(mon..sun) 요일순 — 목적지 반 스케줄 밖 요일은 표시가 알아서 걸러지므로 서버 정규화는 최소.
       attendanceDays: DAY_ORDER.filter((d) => (m.attendanceDays ?? []).includes(d)),
       ...(sourceClassId !== undefined ? { expected: m.expected } : {}),
@@ -427,8 +428,6 @@ export async function updateEnrollmentDates(
   if (!enrollmentId) return { error: "수강 ID가 누락되었습니다" };
   if (field !== "start" && field !== "end") return { error: "잘못된 필드입니다" };
 
-  const value = raw || null;
-
   const supabase = await createClient();
   const { data: current, error: fetchErr } = await supabase
     .from("enrollments")
@@ -447,6 +446,7 @@ export async function updateEnrollmentDates(
     isTransferred: (current.is_transferred as boolean | null) ?? false,
     isTransferredIn: (current.is_transferred_in as boolean | null) ?? false,
   };
+  const value = dateEditStorageValue(field, raw || null, formData.get("endDateInclusive") === "1", prevWindow.isTransferred === true);
   const invalid = enrollmentDateEditError(field, value, prevWindow);
   if (invalid) return { error: invalid };
 
@@ -454,8 +454,13 @@ export async function updateEnrollmentDates(
   const nextStart = nextWindow.startDate;
   const nextEnd = nextWindow.endDate;
 
-  // ── 저장하면 조용히 깨지는 것들을 모아 한 번에 묻는다(둘 다면 문장이 둘). ─────────────────
-  // ① 이번 편집이 **새로** 기간 밖으로 밀어내는 출결. 넓히는 편집은 구간이 비어 조회조차 안 한다(왕복 0).
+  // 예약의 한쪽 날짜만 고치면 두 반이 겹치거나 떨어진다. 예약 수정에서 양쪽을 함께 바꾼다.
+  const pair = transferPairRisk(prevWindow, field, value, kstToday());
+  if (pair) {
+    return { error: "예약된 반 이동은 상단 ‘예정된 변경’의 수정에서 날짜를 바꿔 주세요. 이전 반 종료와 새 반 시작이 함께 변경됩니다." };
+  }
+
+  // 이번 편집이 새로 기간 밖으로 밀어내는 출결은 저장 전에 확인한다. 넓히는 편집은 조회하지 않는다.
   const shrink = await countAttendanceOutside(supabase, {
     studentId: current.student_id as string,
     classId: current.class_id as string,
@@ -463,10 +468,6 @@ export async function updateEnrollmentDates(
   });
   const risks: DateEditRisk[] = [];
   if (shrink) risks.push({ kind: "attendanceOutside", shrink });
-  // ② 아직 오지 않은 반이동 짝의 기준일을 옮기는가(순수 판정 — 조회 없음).
-  //    오늘은 서버(KST)가 정한다 — 클라 시계를 믿으면 타임존이 어긋나 경고가 하루씩 밀린다.
-  const pair = transferPairRisk(prevWindow, field, value, kstToday());
-  if (pair) risks.push(pair);
 
   if (risks.length > 0) {
     const token = dateEditConfirmToken(enrollmentId, field, value, risks);
@@ -475,11 +476,11 @@ export async function updateEnrollmentDates(
       return {
         confirm: {
           token,
-          // 제목도 서버가 정한다 — 화면이 "출결이…"로 고정하면 짝만 걸린 편집에서 거짓말이 된다.
+          // 제목과 설명은 서버가 확인한 기록으로 만든다.
           title: dateEditConfirmTitle(risks),
-          message: dateEditConfirmMessage(field, value, risks),
+          message: dateEditConfirmMessage(field, raw || null, risks),
           field,
-          value,
+          value: raw || null,
         },
       };
     }
@@ -544,7 +545,6 @@ export async function updateEnrollmentDates(
       // 🔴 "깨지는 걸 알고도 저장했다"는 사실을 남긴다 — 나중에 "왜 이 학생이 그날 명단에 없지",
       //    "왜 이동이 종료로 뜨지"를 되짚을 때 이게 유일한 흔적이다(원장 규약: 변동은 모두 감사로그).
       ...(shrink ? { attendanceOutside: shrink.count, attendanceOutsideLast: shrink.lastDate } : {}),
-      ...(pair ? { transferPairBroken: pair.anchor } : {}),
     },
   });
 
@@ -747,6 +747,12 @@ export async function deleteEnrollment(
   if (!enr) return { error: "수강 정보를 찾을 수 없습니다" };
   // RLS가 이미 테넌트로 좁히지만, 파괴적 작업이라 명시적으로 한 번 더 본다.
   if (enr.tenant_id !== user.tenantId) return { error: "수강 정보를 찾을 수 없습니다" };
+
+  // 예약된 이동을 일반 삭제로 한쪽만 없애면 이전 반 복구가 빠진다.
+  if ((enr.is_transferred_in && String(enr.start_date) > kstToday()) ||
+      (enr.is_transferred && enr.end_date && String(enr.end_date) > kstToday())) {
+    return { error: "예약된 반 이동은 ‘예정된 변경’의 취소를 눌러 주세요. 이전 반 수강도 함께 복구됩니다." };
+  }
 
   const studentId = enr.student_id as string;
   const classId = enr.class_id as string;

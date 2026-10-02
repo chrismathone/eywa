@@ -30,6 +30,7 @@ import {
   SessionUnitsField,
   type AttendanceExtra,
   type BasicAttendance,
+  type AttendanceSelection,
 } from "./attendance-pills";
 import { FieldSelect } from "./field-select";
 import { HomeworkRateInput } from "./homework-rate-input";
@@ -198,7 +199,7 @@ export function ReportCard({
   // 출결 인라인 입력(2-2) — 표뷰와 동일 pill. pendingKeys=(학생::반) 저장 중 잠금.
   attendance?: {
     pendingKeys: ReadonlySet<string>;
-    onSet: (classId: string, status: BasicAttendance, extra?: AttendanceExtra) => void;
+    onSet: (classId: string, status: AttendanceSelection, extra?: AttendanceExtra) => void;
     readOnly?: boolean; // 출결 쓰기 권한 없음 — pill 대신 표시 전용 배지
   };
   // 실효 멘트 모드(강사 오버라이드 ?? 학원 기본) — 상단 토글의 하단 반영. B=수업내용·태도 2칸 분리 입력.
@@ -393,7 +394,9 @@ export function ReportCard({
             행(반) 단위(subject.classId)라 과목 알약 아래에 둔다(선택 과목이 바뀌면 이 값도 바뀐다).
             보강 행·반 모호(같은 과목 2반)는 기록할 자리가 없어 배지만(출석부에서 기록). */}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="micro text-text-faint">{t("os.card.attendance")}</span>
+          <span className="text-text-dim inline-flex" role="img" aria-label={t("os.card.attendance")} title={t("os.card.attendance")}>
+            <EyIcon name="clipboardCheck" size={16} />
+          </span>
           {attendance && !student.isMakeup && subject.classId ? (
             <>
               <AttendancePills

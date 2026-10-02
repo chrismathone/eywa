@@ -2,7 +2,7 @@
 
 /**
  * 출결 인라인 pill(2단계) — 출석/지각/결석 1클릭, 출석부(attendance_records)와 같은 기록에 저장.
- * - 활성 pill 재클릭 = no-op(삭제 아님 — 기록 지우기는 출석부에서만: status=null 삭제가 메모·시수까지 지움).
+ * - 출석 재클릭 = 출결 취소. 지각·결석은 사유 창에서 수정하거나 출결을 취소한다.
  * - raw가 3종 외(조퇴/공결/보강)면 pill 대신 한글 배지 — 축약값 되쓰기로 raw를 파괴하지 않게, 변경은 출석부에서.
  * - pending(in-flight) 동안 잠금 — 연속 클릭 응답 역전 방지.
  * (출결 status는 코드 고정 enum(운영 enum 아님) — 라벨 맵은 출석부 UI와 동일 관례.)
@@ -26,6 +26,7 @@ import { attendanceLabelOf } from "@/features/class-sheets/lib/attendance-label"
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 
 export type BasicAttendance = "present" | "late" | "absent";
+export type AttendanceSelection = BasicAttendance | null;
 /** 저장 부가값 — 넘기지 않은 필드는 서버가 기존 값을 유지한다(setAttendanceCell 규약). */
 export type AttendanceExtra = { note?: string | null; units?: string };
 
@@ -56,7 +57,7 @@ export function AttendancePills({
   /** 현재 시수(null=기본 1). */
   units?: number | null;
   pending: boolean; // 이 (학생×반) 저장 중 — 잠금
-  onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
+  onSet: (status: AttendanceSelection, extra?: AttendanceExtra) => void;
   studentName: string;
   /** 출결 쓰기 권한 없음(학원설정 역할·권한) — 누를 수 있는 것처럼 보이지 않게 표시만 한다. */
   readOnly?: boolean;
@@ -141,7 +142,7 @@ function StatusPill({
   note: string;
   pending: boolean;
   studentName: string;
-  onSet: (status: BasicAttendance, extra?: AttendanceExtra) => void;
+  onSet: (status: AttendanceSelection, extra?: AttendanceExtra) => void;
 }) {
   const [open, setOpen] = useState(false);
   const asks = NEEDS_NOTE.has(status);
@@ -155,10 +156,10 @@ function StatusPill({
       type="button"
       disabled={pending}
       onClick={() => {
-        if (asks) return setOpen(true); // 활성 재클릭도 '사유 수정'으로(재클릭 no-op은 상태 변경에만 해당)
-        if (!active) onSet(status);
+        if (asks) return setOpen(true);
+        onSet(active ? null : status);
       }}
-      onMouseEnter={asks && active ? () => setOpen(true) : undefined}
+      onMouseEnter={asks && active && !pending ? () => setOpen(true) : undefined}
       aria-pressed={active}
       title={
         asks
@@ -191,17 +192,28 @@ function StatusPill({
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="start" sideOffset={4} className="z-50">
           <Popover.Popup className="bg-card border-line shadow-card w-[240px] rounded-lg border p-2 outline-none">
-            {/* key=열릴 때마다 서버 값으로 다시 시작(남이 고친 메모가 반영되게). */}
-            <NoteForm
-              key={note}
-              initial={note}
-              label={tf("os.att.noteLabel", { name: studentName, label })}
-              onCancel={() => setOpen(false)}
-              onSave={(text) => {
-                onSet(status, { note: text.trim() || null });
-                setOpen(false);
-              }}
-            />
+            <fieldset disabled={pending}>
+              {/* key=열릴 때마다 서버 값으로 다시 시작(남이 고친 메모가 반영되게). */}
+              <NoteForm
+                key={note}
+                initial={note}
+                label={tf("os.att.noteLabel", { name: studentName, label })}
+                onCancel={() => setOpen(false)}
+                onSave={(text) => {
+                  onSet(status, { note: text.trim() || null });
+                  setOpen(false);
+                }}
+              />
+              {active ? (
+                <button
+                  type="button"
+                  onClick={() => { onSet(null); setOpen(false); }}
+                  className="text-danger border-line mt-2 w-full border-t pt-2 text-xs disabled:opacity-50"
+                >
+                  {tf("os.att.clear", { label })}
+                </button>
+              ) : null}
+            </fieldset>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

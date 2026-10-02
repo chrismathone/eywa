@@ -1,8 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
+import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import {
   classifyScheduled,
+  scheduledChangesForClass,
   type ScheduledChange,
   type ScheduledEnrollmentRow,
 } from "../scheduled-changes";
@@ -28,6 +30,7 @@ type Raw = {
   start_date: string;
   end_date: string | null;
   is_transferred: boolean | null;
+  is_transferred_in: boolean | null;
   class: { class_name?: string } | { class_name?: string }[] | null;
   student: { name?: string } | { name?: string }[] | null;
 };
@@ -44,43 +47,53 @@ function toRows(data: Raw[] | null): ScheduledEnrollmentRow[] {
     startDate: String(r.start_date),
     endDate: r.end_date ? String(r.end_date) : null,
     isTransferred: r.is_transferred ?? false,
+    isTransferredIn: r.is_transferred_in ?? false,
   }));
 }
 
-const SELECT =
-  "id, class_id, student_id, start_date, end_date, is_transferred," +
-  " class:class_id ( class_name ), student:student_id ( name )";
+const SELECT = "id, class_id, student_id, start_date, end_date, is_transferred, is_transferred_in, class:class_id ( class_name ), student:student_id ( name )";
 
 /** 이 학생에게 예약된 변경(합류·이동·종료 예정). 없으면 빈 배열. */
 export async function getScheduledForStudent(studentId: string): Promise<ScheduledChange[]> {
   const today = kstToday();
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("enrollments")
-    .select(SELECT)
-    .eq("student_id", studentId)
-    .or(`start_date.gt.${today},end_date.gt.${today}`);
-  if (error) {
+  try {
+    const data = await fetchAllPaged<Raw>((from, to) => supabase
+      .from("enrollments")
+      .select(SELECT)
+      .eq("student_id", studentId)
+      .or(`start_date.gt.${today},end_date.gt.${today}`)
+      .order("id").range(from, to));
+    return classifyScheduled(toRows(data), today);
+  } catch (error) {
     console.error("[scheduled] 학생 예약 조회 실패:", error);
     return [];
   }
-  return classifyScheduled(toRows(data as unknown as Raw[]), today);
 }
 
 /** 이 반에 예약된 변경(합류·이동·종료 예정). 없으면 빈 배열. */
 export async function getScheduledForClass(classId: string): Promise<ScheduledChange[]> {
   const today = kstToday();
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("enrollments")
-    .select(SELECT)
-    .eq("class_id", classId)
-    .or(`start_date.gt.${today},end_date.gt.${today}`);
-  if (error) {
+  try {
+    const data = await fetchAllPaged<Raw>((from, to) => supabase
+      .from("enrollments")
+      .select(SELECT)
+      .eq("class_id", classId)
+      .or(`start_date.gt.${today},end_date.gt.${today}`)
+      .order("id").range(from, to));
+    if (data.length === 0) return [];
+    // 이동 반대편까지 읽어야 이 화면에서 취소해도 이전 반을 함께 복구할 수 있다.
+    const studentIds = [...new Set(data.map((r) => r.student_id))];
+    const related = await fetchAllPagedInChunks<Raw>(studentIds, (chunk, from, to) => supabase
+      .from("enrollments")
+      .select(SELECT)
+      .in("student_id", chunk)
+      .or(`start_date.gt.${today},end_date.gt.${today}`)
+      .order("id").range(from, to));
+    return scheduledChangesForClass(classifyScheduled(toRows(related), today), classId);
+  } catch (error) {
     console.error("[scheduled] 반 예약 조회 실패:", error);
     return [];
   }
-  // ⚠️ 반 기준으로는 **이동의 한쪽만** 이 반에 있다(출발지 또는 도착지) → 짝이 없어 join·leave로
-  //    분류된다. 그게 맞다 — 이 반 화면에서 중요한 건 "누가 들어오고 누가 나가는가"이지, 상대 반이 아니다.
-  return classifyScheduled(toRows(data as unknown as Raw[]), today);
 }

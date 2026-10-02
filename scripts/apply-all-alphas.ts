@@ -1,7 +1,7 @@
 /**
  * scripts/apply-all-alphas.ts  —  `pnpm db:alphas`
  *
- * 손수 작성한 alpha 마이그레이션(`000Na_*.sql`)을 사전순으로 전부 적용한다. 드리즐 스냅샷이
+ * alpha 마이그레이션(`000Na_*.sql`)과 Supabase CLI 타임스탬프 마이그레이션을 사전순으로 적용한다. 드리즐 스냅샷이
  * `0027`에 멈춰 있어(이후는 전부 alpha) 신규 테넌트 DB 프로비저닝이 ~50개 파일 수동 적용이었고,
  * 한 파일만 놓쳐도 RLS 정책 누락(= 전사 노출 위험) 가능성이 있었다(운영적합성 감사 B4).
  *
@@ -22,8 +22,8 @@ if (!process.env.DATABASE_URL) {
 }
 
 const MIGRATIONS_DIR = "supabase/migrations";
-// 손수 alpha 파일만(0001a_…, 0027b_…, 0053a_…). 드리즐 번호본(0000_…, 0027_…)은 db:migrate 담당.
-const ALPHA = /^\d{4}[a-z][a-z0-9_]*\.sql$/;
+// alpha + CLI 생성본. 드리즐 번호본(0000_…, 0027_…)은 db:migrate 담당.
+const ALPHA = /^(?:\d{4}[a-z][a-z0-9_]*|\d{14}_[a-z0-9_]+)\.sql$/;
 
 async function main() {
   const files = readdirSync(MIGRATIONS_DIR)
