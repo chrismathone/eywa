@@ -19,7 +19,7 @@ export async function saveSettingRoles(group: SettingsRoleGroup, input: SettingR
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
   if ((actor.systemRole !== "master" && !(await isCurrentUserSuperAdmin())) || await isReadonlyTeacherView()) {
-    return { error: "원장과 슈퍼관리자만 역할을 설정할 수 있습니다" };
+    return { error: "역할 설정을 변경할 권한이 없습니다" };
   }
   if (!Object.hasOwn(SETTINGS_ROLE_GROUPS, group)) return { error: "역할 설정 대상을 확인해 주세요" };
   const menus = SETTINGS_ROLE_GROUPS[group];
