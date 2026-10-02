@@ -67,8 +67,8 @@ import { mentStyleDirective } from "../ment-style-prompt";
 import { prependParentAddress, splitParentAddress } from "../parent-address";
 import { logAction } from "@/features/audit/server/log";
 import { isSlotOnlyEnglishNotes, shouldCaptureJj } from "../jj-capture-plan";
-import { BOARD_MISSING_ERROR, classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
-import { classBoardLiveForStudent, resolveMakeupSendClass } from "./send-class";
+import { classRouteActive, NO_SEND_CLASS_ERROR, SEND_CLASS_SUBJECTS } from "../send-class";
+import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError, logDbError } from "@/lib/supabase/db-error";
@@ -541,6 +541,8 @@ export async function saveAndQueueClassnote(
   defaultClassId?: string | null;
   /** status="needs_class"일 때 — 보강 추가한 반인데 이 학생의 반 보드가 없어 다른 반으로 가야 한다(경고 한 줄). */
   makeupClassName?: string | null;
+  /** status="board_hold"·"board_hold_recheck"일 때 — 반 보드 배정이 보류된 사유 문장(강사뷰 사전의 `{reason}`). */
+  boardHoldReason?: string;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -827,7 +829,9 @@ export async function saveAndQueueClassnote(
       }
       if (!classLive) {
         await unqueue();
-        return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "board_missing", error: BOARD_MISSING_ERROR, ...warn };
+        // 까닭을 가려 안내한다(방금 배정된 신입·배정 보류·반을 떠난 학생) — 기다리면 풀리는 까닭이면 그 반·학생의 동기화도 요청한다.
+        const why = await explainBoardMissing(user.tenantId, input.classId, input.studentId, { request: true });
+        return { ok: false, id: saved.id, shareToken: saved.shareToken, status: why.status, error: why.error, boardHoldReason: why.holdReason, ...warn };
       }
     } else if (!input.makeup) {
       await unqueue();

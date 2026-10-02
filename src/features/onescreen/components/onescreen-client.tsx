@@ -35,6 +35,7 @@ import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
 import { makeupRowName } from "../makeup-label";
+import { isBoardBlockedStatus, isBoardWaitStatus } from "../send-class";
 import { MakeupAdder } from "./makeup-adder";
 import { SendWindowNotice } from "./send-window-notice";
 import { EmbedAnchor } from "@/components/embed-link";
@@ -3384,14 +3385,29 @@ export function OneScreenClient({
     const sendClassKey =
       res.status === "board_missing"
         ? "os.c.boardMissing"
-        : res.status === "no_class"
-        ? "os.c.noSendClass"
-        : res.status === "needs_class"
-          ? "os.c.chooseSendClass"
-          : res.status === "class_check_failed"
-            ? "os.c.sendClassCheckFail"
-            : null;
-    if (!res.ok && sendClassKey) res = { ...res, error: t(sendClassKey) };
+        : res.status === "board_enrolling"
+          ? "os.c.boardEnrolling"
+          : res.status === "board_enrolling_auto"
+            ? "os.c.boardEnrollingAuto"
+            : res.status === "board_class_pending"
+              ? "os.c.boardClassPending"
+              : res.status === "board_hold_recheck"
+              ? "os.c.boardHoldRecheck"
+              : res.status === "board_hold"
+                ? "os.c.boardHold"
+                : res.status === "board_hold_admin"
+                ? "os.c.boardHoldAdmin"
+                : res.status === "board_left"
+                  ? "os.c.boardLeft"
+                  : res.status === "no_class"
+                    ? "os.c.noSendClass"
+                    : res.status === "needs_class"
+                      ? "os.c.chooseSendClass"
+                      : res.status === "class_check_failed"
+                        ? "os.c.sendClassCheckFail"
+                        : null;
+    // 배정 보류 안내는 사유(연동 PC가 적은 문장)를 끼운다 — 나머지 문장엔 자리가 없어 그대로다.
+    if (!res.ok && sendClassKey) res = { ...res, error: tf(sendClassKey, { reason: res.boardHoldReason ?? "" }) };
     if (res.ok) {
       // ⚠️ 응답 status에는 DB 상태가 아닌 **결과 코드**도 섞여 있다(dry_run·subject_off·absent·already_sent).
       //    그중 `already_sent`를 그대로 배지 state에 넣으면 "success가 아니게" 되어 발송 가드가 스스로 풀린다
@@ -3814,6 +3830,7 @@ export function OneScreenClient({
     let dry = 0;
     let fail = 0;
     let noClass = 0; // 반별 발송인데 보낼 반이 없어 막힌 행(원장 2026-09-30 — 담당 반이 없으면 발송 불가)
+    let boardWait = 0; // 반 보드 배정·재확인을 기다리는 행(방금 배정된 신입 등 — 배정된 뒤 다시 보내면 된다, 2026-10-03)
     let jjWarn = 0; // 영어 그림 자료를 못 묶은 행(저장은 성공)
     let windowHint = ""; // 발송 허용 시간창 밖 큐잉 — 마지막 응답의 창 라벨(테넌트 단일 설정이라 동일)
     try {
@@ -3822,7 +3839,9 @@ export function OneScreenClient({
         const res = await queueOne(student, r.subject.name);
         if (res.ok && res.warning) jjWarn++;
         if (!res.ok) {
-          if (res.status === "no_class") noClass++;
+          // 반 보드에 배정되는 중이면 '실패'가 아니라 '기다림'으로 센다. 보류·반을 떠난 학생은 보낼 반이 없는 것이다.
+          if (isBoardWaitStatus(res.status)) boardWait++;
+          else if (res.status === "no_class" || isBoardBlockedStatus(res.status)) noClass++;
           else fail++;
         } else if (res.status === "queued") {
           queued++;
@@ -3857,6 +3876,7 @@ export function OneScreenClient({
         (skipped ? tf("os.c.bulkSkipped", { n: skipped }) : "") +
         (preSkipped ? tf("os.c.bulkPreSkipped", { n: preSkipped }) : "") +
         (jjWarn ? tf("os.tpl.jjWarnBulk", { n: jjWarn }) : "") +
+        (boardWait ? tf("os.c.bulkBoardWait", { n: boardWait }) : "") +
         (noClass ? tf("os.c.bulkNoClass", { n: noClass }) : "") +
         (fail ? tf("os.c.bulkFail", { n: fail }) : ""),
     );

@@ -1123,7 +1123,9 @@ export function auditDetail(
         return join(`달라진 반 ${c ?? 0}개 자동 동기화 요청`, shown || null);
       }
       const what = m.full === false ? `지목한 반·학생만(반 ${c ?? 0} · 학생 ${s ?? 0})` : "바뀐 반 전부";
-      return m.joined === true ? `이미 요청된 동기화에 합류 — ${what}` : `${what} 동기화 요청`;
+      // 보고서 발송이 '반 보드 배정 전'으로 막혀 그 자리에서 낸 요청(2026-10-03) — 버튼을 누른 것과 가린다.
+      const blocked = str(m.source) === "send_blocked" ? "보고서 발송이 반 보드 배정 전이라 막혀 함께 요청" : null;
+      return join(m.joined === true ? `이미 요청된 동기화에 합류 — ${what}` : `${what} 동기화 요청`, blocked);
     }
     case "classnote_board_sync_report_export":
       return join(

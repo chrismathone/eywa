@@ -17,6 +17,8 @@ export type SendClassOption = {
   candidates: { id: string; name: string }[];
   defaultId: string | null;
   blockedReason: string | null;
+  /** 막혔지만 발송을 누르면 서버가 그 반·학생의 반 보드 동기화를 요청한다(배정 중·새 반·학부모 가입 대기) — 버튼을 잠그지 않는다. */
+  requestable?: boolean;
   /** 보강 추가한 반으로 간다(needed=false, reportClassName = 그 반). */
   viaMakeup?: boolean;
   /** 보강 추가한 반인데 반 보드가 없어 다른 반으로 가야 한다 — 그 반 이름. */
@@ -57,7 +59,15 @@ export function SendClassPicker({
     return (
       <>
         {mismatch}
-        <p role="alert" className="border-danger/30 bg-danger-soft/40 text-danger rounded-md border px-3 py-2 text-xs">
+        {/* 발송을 누르면 배정을 요청하는 까닭은 '막힘'이 아니라 '안내'로 보인다(누를 수 있다). */}
+        <p
+          role="alert"
+          className={
+            option.requestable
+              ? "bg-amber-soft text-foreground rounded-md px-3 py-2 text-xs"
+              : "border-danger/30 bg-danger-soft/40 text-danger rounded-md border px-3 py-2 text-xs"
+          }
+        >
           {option.blockedReason}
         </p>
       </>

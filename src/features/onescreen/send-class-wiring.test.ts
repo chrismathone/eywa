@@ -21,8 +21,9 @@ describe("반별 발송 '보낼 반' — 세 발송 경로", () => {
       expect(src).toContain("classRouteActive(settings");
       expect(src).toContain("SEND_CLASS_SUBJECTS.has(");
       expect(src).toContain("classBoardLiveForStudent(");
-      // 🔴 정규 보고서 반 보드가 없으면 막는다(원장 결정 4) — 다른 반을 고르게 하지 않는다.
-      expect(src).toContain('status: "board_missing", error: BOARD_MISSING_ERROR');
+      // 🔴 정규 보고서 반 보드가 없으면 막는다(원장 결정 4) — 다른 반을 고르게 하지 않는다. 까닭은 가려서 말한다(2026-10-03 —
+      //    board-missing.test.ts). 까닭을 가린 결과는 언제나 ok:false다(통과시키는 길이 아니다).
+      expect(src).toMatch(/const why = await explainBoardMissing\([^)]*\{ request: true \}\);\s*return \{ ok: false,[^}]*status: why\.status, error: why\.error/);
     }
     // 관리자 일괄 경로 셋(미발송 일괄 발송·재발송·멈춤 복구)은 한 함수(blockedForNoSendClass)를 지난다.
     expect(BATCH).toContain("isSendClassRouteRow(settings"); // = classRouteActive + 수학(send-class.ts)

@@ -2,7 +2,16 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
+import { requestClassnoteBoardSync } from "@/features/report-admin/server/classnote-sync-actions";
+import { loadSyncRows } from "@/features/report-admin/server/classnote-sync-core";
+import { kstToday } from "@/lib/date-kst";
 import {
+  boardMissingNotice,
+  boardMissingPreview,
+  boardMissingWorthSync,
+  classifyBoardMissing,
+  type BoardMissingKind,
+  type BoardMissingStatus,
   decideSendClass,
   isSendCandidateClass,
   liveBoardClassIdsOf,
@@ -28,6 +37,84 @@ export async function classBoardLiveForStudent(tenantId: string, classId: string
   } catch {
     return null;
   }
+}
+
+/**
+ * 정규 보고서가 "이 학생이 받을 반 보드가 없다"로 막혔을 때 — **까닭을 가려** 안내를 고르고, 기다리면 풀리는 까닭이면
+ * 그 반·학생의 반 보드 동기화를 요청한다(원장 2026-10-03 *"해결가능한건 해결하는 방향으로"*). 예전엔 까닭이 무엇이든
+ * "반 보드가 없어 … 관리자에게 동기화를 부탁"만 떴다 — 방금 배정한 신입도, 학부모가 가입하지 않은 학생도, 반을 떠난 학생도.
+ *  · 요청은 '지금 반 보드 동기화' 버튼과 **같은 함수**(`requestClassnoteBoardSync`)다 — 권한·지점당 하나·5분 쿨다운·연동 PC 확인·
+ *    감사로그가 그대로 붙는다(강사도 누를 수 있는 버튼이다). 🔴 "요청했다"는 그 함수의 대답이 아니라 **되읽은 요청 표**로 판정한다 —
+ *    살아 있는 요청(또는 그 뒤를 잇는 범위)에 이 반이 실려 있을 때만. 합류가 범위를 못 실은 채 성공을 돌려주는 길이 있다.
+ *  · `request=false` = 미리 보기(보내려던 게 아니다) — 까닭만 가리고 요청하지 않는다. 문장도 미리 보기용이다.
+ *  · 🔴 "기다리면 풀린다"는 동기화가 실제로 그 학생을 넣을 수 있을 때만 — 워커의 대상 기준(`targetClassWhere`·
+ *    `currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 · 재원이고 테스트가 아닌 학생 · 시작일 ≤ 오늘 ≤ 종료일)을 그대로 본다.
+ * 조회 실패·예외 = 까닭 모름(옛 안내 그대로). 던지지 않는다 — 발송은 이미 막혔고 여기는 안내일 뿐이다.
+ * ⚠️ admin 클라이언트 + tenant 필터 — 돌려주는 것은 결과 코드와 안내 문장뿐이다.
+ */
+export async function explainBoardMissing(
+  tenantId: string,
+  classId: string,
+  studentId: string,
+  opts: { request: boolean },
+): Promise<{ status: BoardMissingStatus; error: string; holdReason?: string; /** 발송을 누르면 동기화를 요청할 까닭인가(미리 보기가 버튼을 잠그지 않는다) */ requestable: boolean }> {
+  const unknown = { ...boardMissingNotice("unknown", false), requestable: false };
+  let kind: BoardMissingKind = "unknown";
+  let holdReason: string | null = null;
+  const admin = createAdminClient();
+  try {
+    const today = kstToday();
+    const [enr, mem, cls, stu, link, classMembers] = await Promise.all([
+      admin.from("enrollments").select("start_date, end_date").eq("tenant_id", tenantId).eq("student_id", studentId).eq("class_id", classId),
+      admin
+        .from("classnote_class_board_members")
+        .select("status, reason")
+        .eq("tenant_id", tenantId)
+        .eq("class_id", classId)
+        .eq("student_id", studentId),
+      admin.from("classes").select("is_active, report_optout, subject, closed_at").eq("tenant_id", tenantId).eq("id", classId).maybeSingle(),
+      admin.from("students").select("status, is_test").eq("tenant_id", tenantId).eq("id", studentId).maybeSingle(),
+      admin.from("classnote_class_boards").select("class_id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("class_id", classId),
+      admin.from("classnote_class_board_members").select("student_id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("class_id", classId),
+    ]);
+    if (enr.error || mem.error || cls.error || stu.error || link.error || classMembers.error) return unknown;
+    const rows = (enr.data ?? []) as { start_date: string | null; end_date: string | null }[];
+    const members = (mem.data ?? []) as { status: string | null; reason: string | null }[];
+    const c = cls.data as { is_active: boolean | null; report_optout: boolean | null; subject: string | null; closed_at: string | null } | null;
+    const st = stu.data as { status: string | null; is_test: boolean | null } | null;
+    // 워커 `targetClassWhere`(종강일 당일까지 대상) · `currentEnrollmentOn`(재원 · 테스트 아님)과 같은 기준.
+    const classTarget = !!c && isSendCandidateClass({ subject: c.subject, is_active: c.is_active, report_optout: c.report_optout, closed_at: c.closed_at }, today);
+    const studentTarget = !!st && st.status === "enrolled" && !st.is_test;
+    holdReason = members.find((m) => m.status !== "ok")?.reason ?? null;
+    kind = classifyBoardMissing({
+      liveNow: rows.some((e) => (!e.start_date || e.start_date <= today) && (!e.end_date || e.end_date >= today)),
+      ended: rows.some((e) => !!e.end_date && e.end_date < today),
+      syncTarget: classTarget && studentTarget,
+      classLinked: (link.count ?? 0) > 0,
+      classMemberCount: classMembers.count ?? 0,
+      memberStatuses: members.map((m) => m.status),
+      holdReason,
+    });
+  } catch {
+    return unknown;
+  }
+  const requestable = boardMissingWorthSync(kind);
+  if (!opts.request) return { status: boardMissingNotice(kind, false, holdReason).status, error: boardMissingPreview(kind, holdReason), requestable };
+  let requested = false;
+  if (requestable) {
+    try {
+      const res = await requestClassnoteBoardSync({ classIds: [classId], studentIds: [studentId], source: "send_blocked" });
+      // 대답이 아니라 요청 표로 확인한다 — 살아 있는 요청(또는 실행 중 요청의 다음 범위)에 이 반이 실렸는가.
+      if (res.ok) {
+        const live = (await loadSyncRows(admin, tenantId)).active;
+        const has = (scope: { full: boolean; classIds: string[] } | null | undefined) => !!scope && (scope.full || scope.classIds.includes(classId));
+        requested = !!live && (live.status === "running" ? has(live.nextScope) || has(live.scope) : has(live.scope));
+      }
+    } catch {
+      requested = false;
+    }
+  }
+  return { ...boardMissingNotice(kind, requested, holdReason), requestable };
 }
 
 /**

@@ -1265,4 +1265,13 @@ describe("auditDetail — ClassNote 반 보드 자동 동기화(2026-10-03)", ()
     expect(auditDetail("classnote_board_sync_run", { ok: true, auto: true, noChange: true }, ctx())).toBe("자동 동기화 · 바뀐 반 없음(ClassNote 변경 없음)");
     expect(auditDetail("classnote_board_sync_run", { ok: true, classes: 2, enrolled: 1 }, ctx())).toBe("반 2 · 원아 배정 1");
   });
+  it("보고서 발송이 반 보드 배정 전이라 막혀 그 자리에서 낸 요청은 그렇게 적는다 — 버튼을 누른 요청과 가린다", () => {
+    const blocked = { requestId: UID, full: false, classCount: 1, studentCount: 1, source: "send_blocked" };
+    expect(auditDetail("classnote_board_sync_request", blocked, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 동기화 요청 · 보고서 발송이 반 보드 배정 전이라 막혀 함께 요청");
+    expect(auditDetail("classnote_board_sync_request", { ...blocked, joined: true }, ctx())).toBe(
+      "이미 요청된 동기화에 합류 — 지목한 반·학생만(반 1 · 학생 1) · 보고서 발송이 반 보드 배정 전이라 막혀 함께 요청",
+    );
+    // 버튼으로 누른 요청은 예전 그대로
+    expect(auditDetail("classnote_board_sync_request", { ...blocked, source: "onescreen_send_class" }, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 동기화 요청");
+  });
 });

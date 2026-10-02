@@ -3855,6 +3855,36 @@ export const SHEET_DICT = {
     ko: "이 반의 ClassNote 반 보드가 없어 발송하지 않았습니다(다른 반으로 보내지 않습니다) — 관리자에게 '지금 반 보드 동기화'(수업보고서 발송 큐)를 부탁한 뒤 다시 보내 주세요. 저장은 됐습니다",
     en: "Not sent — this class has no ClassNote class board (it won't go to another class). Ask an admin to press 'Sync class boards now' (report send queue), then send again. The report is saved.",
   },
+  // 반 보드가 없는 까닭을 가려 말한다(원장 2026-10-03) — 문장은 서버(send-class.ts `boardMissingNotice`)와 한 벌(테스트가 잠근다).
+  "os.c.boardEnrolling": {
+    ko: "이 학생은 아직 이 반의 ClassNote 반 보드에 배정되지 않았습니다 — 지금 배정을 요청했습니다. 몇 분 뒤 다시 보내 주세요(계속 안 되면 관리자에게 알려 주세요). 저장은 됐습니다",
+    en: "This student isn't on this class's ClassNote class board yet — an assignment was just requested. Send again in a few minutes (tell an admin if it keeps failing). The report is saved.",
+  },
+  "os.c.boardEnrollingAuto": {
+    ko: "이 학생은 아직 이 반의 ClassNote 반 보드에 배정되지 않았습니다 — 배정은 자동으로 진행됩니다(늦어도 다음 날 새벽). 배정된 뒤 다시 보내 주세요. 저장은 됐습니다",
+    en: "This student isn't on this class's ClassNote class board yet — the assignment runs automatically (by early next morning at the latest). Send again once assigned. The report is saved.",
+  },
+  "os.c.boardClassPending": {
+    ko: "이 반의 ClassNote 반 보드가 아직 없습니다 — 지금 만들기를 요청했습니다. 몇 분 뒤 다시 보내 주세요(계속 안 되면 관리자에게 알려 주세요 — 같은 이름의 보드가 이미 있으면 자동으로 만들지 않습니다). 저장은 됐습니다",
+    en: "This class doesn't have a ClassNote class board yet — creating one was just requested. Send again in a few minutes (tell an admin if it keeps failing — a board is not created automatically when one with the same name already exists). The report is saved.",
+  },
+  "os.c.boardHoldRecheck": {
+    ko: "이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다({reason}) — 지금 다시 확인을 요청했습니다. 몇 분 뒤 다시 보내 보고, 그래도 안 되면 학부모의 ClassNote 가입 여부를 확인해 주세요. 저장은 됐습니다",
+    en: "This student's assignment to this class's ClassNote class board is on hold ({reason}) — a re-check was just requested. Send again in a few minutes; if it still fails, check whether the parent has joined ClassNote. The report is saved.",
+  },
+  "os.c.boardHold": {
+    ko: "이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다({reason}) — 학부모의 ClassNote 가입 여부를 확인해 주세요. 가입이 끝나면 자동으로 배정됩니다. 저장은 됐습니다",
+    en: "This student's assignment to this class's ClassNote class board is on hold ({reason}) — check whether the parent has joined ClassNote. It will be assigned automatically once they have. The report is saved.",
+  },
+  "os.c.boardHoldAdmin": {
+    ko: "이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다({reason}) — 관리자 확인이 필요합니다. 저장은 됐습니다",
+    en: "This student's assignment to this class's ClassNote class board is on hold ({reason}) — an admin needs to check it. The report is saved.",
+  },
+  "os.c.boardLeft": {
+    ko: "이 학생은 이 반 수강이 끝나 ClassNote 반 보드에 없습니다 — 이 반으로는 보낼 수 없습니다(다른 반으로 보내지 않습니다). 저장은 됐습니다",
+    en: "This student's enrollment in this class has ended, so they are no longer on its ClassNote class board — the report can't be sent to this class (it won't go to another class). The report is saved.",
+  },
+  "os.c.bulkBoardWait": { ko: " · 반 보드 배정 대기 {n}건(배정된 뒤 다시 보내세요)", en: " · {n} waiting for class-board assignment (send again once assigned)" },
   "os.c.chooseSendClass": {
     ko: "보강 반을 골라 주세요 — 고른 반으로 발송되고 출석부 칸도 그 반에 섭니다",
     en: "Pick the make-up class — the report goes there and the attendance is recorded there.",

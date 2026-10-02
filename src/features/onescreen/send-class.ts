@@ -97,10 +97,188 @@ export const NO_SEND_CLASS_ERROR = "보낼 반이 없어 발송할 수 없습니
 
 /**
  * 정규 보고서(반 있음)의 반 보드가 없어졌을 때 — **다른 반으로 보내지 않고 막는다**(원장 결정 4, 2026-09-30).
- * 반 보드를 되살리는 일(동기화)은 사람이 한다 — 이 문장은 그 필요만 알린다(버튼 배선은 별건).
+ * 까닭을 가리지 못했을 때의 안내다 — 가릴 수 있으면 `boardMissingNotice`가 까닭에 맞는 문장을 준다.
  */
 export const BOARD_MISSING_ERROR =
   "이 반의 ClassNote 반 보드가 없어 발송하지 않았습니다(다른 반으로 보내지 않습니다) — 관리자에게 '지금 반 보드 동기화'(수업보고서 발송 큐)를 부탁한 뒤 다시 보내 주세요. 저장은 됐습니다";
+
+/**
+ * 정규 보고서가 "이 학생이 받을 반 보드가 없다"로 막힌 **까닭**(순수) — 원장 2026-10-03 *"선생님이 동기화 기능이 생기고나서 되지않는다고
+ * 생각할만한 기능"* → *"해결가능한건 해결하는 방향으로"*. 예전엔 까닭이 무엇이든 "반 보드가 없어 … 관리자에게 부탁"만 떴다.
+ *  · `enrolling`     = 지금 그 반에 다니는데 이 학생만 반 보드 기록이 없다(방금 배정된 신입·반 이동 — 동기화가 돌면 풀린다)
+ *  · `class_pending` = 그 반의 반 보드 연결 자체가 아직 없다(새 반 — 동기화가 만든다. 같은 이름 보드가 있으면 못 만든다)
+ *  · `hold_join`     = 배정 보류 — 학부모가 ClassNote에 가입하지 않았다(가입하면 풀린다)
+ *  · `hold_other`    = 배정 보류 — 그 밖의 사유(생년·전화·이름 불일치, 원아 중복 … 사람이 확인해야 풀린다)
+ *  · `left`          = 그 반 수강이 끝나 반 보드에서 빠졌다(다시 생기지 않는다 — 다른 반으로 보내지 않는다)
+ *  · `unknown`       = 그 밖 — 옛 안내 그대로(동기화 대상이 아닌 반·학생, 연결은 있는데 반 전체 기록이 빈 반 = 보드가 지워졌거나
+ *                      특정 불가, 기록이 전부 ok인데 막힘, 그 반에 다닌 적 없음)
+ * 🔴 "기다리면 풀린다"고 말하려면 **동기화가 실제로 그 학생을 넣을 수 있어야** 한다 — `syncTarget`은 워커의 대상 기준
+ *    (`targetClassWhere`·`currentEnrollmentOn`: 활성·보고서 발송·수학·종강 전 반 + 재원·테스트 아님 학생)과 같아야 하고,
+ *    `liveNow`는 그 날짜 기준(시작일 ≤ 오늘 ≤ 종료일)과 같아야 한다. 어긋나면 "배정을 요청했습니다"가 거짓말이 된다.
+ */
+export type BoardMissingKind = "enrolling" | "class_pending" | "hold_join" | "hold_other" | "left" | "unknown";
+
+/** 배정 보류 사유(연동 PC가 적은 문장) — "다음 동기화 때 배정"은 보류가 아니라 배정 중이다. */
+const ASSIGN_PENDING_REASON = /^반 보드 배정 전/;
+/** 학부모 가입이 끝나면 풀리는 보류 사유(class-board-plan.mjs `resolveStudentChildren`의 두 문장). */
+const JOIN_HOLD_REASON = /^(1인 보드 없음|ClassNote 미가입)/;
+/** 워커가 사유 여러 개를 잇는 글자(math-class-boards-db.mjs `h.reasons.join(" / ")`) — 사유가 둘 이상이면 가입만으로 풀리지 않는다. */
+const REASON_JOINER = " / ";
+
+export function classifyBoardMissing(a: {
+  /** 오늘 그 반에 다니는가(동기화 대상 날짜 기준) */
+  liveNow: boolean;
+  /** 그 반 수강이 끝난 기록이 있는가 */
+  ended: boolean;
+  /** 반·학생이 동기화 대상인가(활성·발송·수학·종강 전 반 + 재원·테스트 아님 학생) */
+  syncTarget: boolean;
+  /** 그 반의 반 보드 연결(0302a)이 있는가 */
+  classLinked: boolean;
+  /** 그 반 전체의 반 보드 기록 수(다른 학생 포함) */
+  classMemberCount: number;
+  /** 이 학생의 그 반 보드 기록 상태들 — 없으면 빈 배열 */
+  memberStatuses: readonly (string | null)[];
+  /** 보류 기록의 사유 문장 */
+  holdReason?: string | null;
+}): BoardMissingKind {
+  if (!a.liveNow) return a.ended ? "left" : "unknown";
+  if (!a.syncTarget) return "unknown";
+  if (a.memberStatuses.some((s) => s !== "ok")) {
+    const reason = (a.holdReason ?? "").trim();
+    if (ASSIGN_PENDING_REASON.test(reason)) return "enrolling";
+    return JOIN_HOLD_REASON.test(reason) && !reason.includes(REASON_JOINER) ? "hold_join" : "hold_other";
+  }
+  // 기록이 전부 ok인데도 막혔다 = 학생이 아니라 반 쪽 문제 — 기다려서 풀리는 일이 아니다.
+  if (a.memberStatuses.length) return "unknown";
+  if (!a.classLinked) return "class_pending";
+  // 연결은 있는데 반 전체 기록이 비었다 = ClassNote에서 보드가 지워졌거나 특정할 수 없는 반(동기화가 그 반 기록을 통째로 비운다).
+  if (a.classMemberCount <= 0) return "unknown";
+  return "enrolling";
+}
+
+/** 화면이 문장을 고르는 결과 코드 — 강사뷰는 이 코드로 사전(os.c.*)을 탄다. */
+export type BoardMissingStatus =
+  | "board_enrolling"
+  | "board_enrolling_auto"
+  | "board_class_pending"
+  | "board_hold_recheck"
+  | "board_hold"
+  | "board_hold_admin"
+  | "board_left"
+  | "board_missing";
+
+/** 기다리면 풀릴 수 있는 까닭인가 — 그 반·학생의 동기화를 요청할 값어치가 있다. */
+export function boardMissingWorthSync(kind: BoardMissingKind): boolean {
+  return kind === "enrolling" || kind === "class_pending" || kind === "hold_join";
+}
+
+type BoardMissingNotice = { status: BoardMissingStatus; error: string; /** 보류일 때 안내에 넣은 사유 문장(강사뷰 사전의 `{reason}`) */ holdReason?: string };
+
+/**
+ * 까닭 → 결과 코드와 안내 문장(순수 · 서버·관리자 화면의 한국어). `requested` = 그 반·학생의 동기화가 **실제로 요청돼 있는가**.
+ * 🔴 약속은 사실만 — 요청하지 못했으면(쿨다운·연동 PC 꺼짐) "요청했습니다"라고 쓰지 않는다. '배정 중'의 "자동으로 배정됩니다"는
+ *    매일 새벽 정기 동기화가 근거다(낮의 자동 동기화가 꺼져 있어도 참). 새 반은 요청하지 못했으면 옛 안내로 둔다
+ *    (같은 이름 보드 때문에 영영 못 만드는 반일 수 있어 "자동으로"를 약속하지 않는다).
+ */
+export function boardMissingNotice(kind: BoardMissingKind, requested: boolean, holdReason?: string | null): BoardMissingNotice {
+  if (kind === "enrolling")
+    return requested
+      ? {
+          status: "board_enrolling",
+          error:
+            "이 학생은 아직 이 반의 ClassNote 반 보드에 배정되지 않았습니다 — 지금 배정을 요청했습니다. 몇 분 뒤 다시 보내 주세요(계속 안 되면 관리자에게 알려 주세요). 저장은 됐습니다",
+        }
+      : {
+          status: "board_enrolling_auto",
+          error:
+            "이 학생은 아직 이 반의 ClassNote 반 보드에 배정되지 않았습니다 — 배정은 자동으로 진행됩니다(늦어도 다음 날 새벽). 배정된 뒤 다시 보내 주세요. 저장은 됐습니다",
+        };
+  if (kind === "class_pending" && requested)
+    return {
+      status: "board_class_pending",
+      error:
+        "이 반의 ClassNote 반 보드가 아직 없습니다 — 지금 만들기를 요청했습니다. 몇 분 뒤 다시 보내 주세요(계속 안 되면 관리자에게 알려 주세요 — 같은 이름의 보드가 이미 있으면 자동으로 만들지 않습니다). 저장은 됐습니다",
+    };
+  if (kind === "hold_join") {
+    const why = boardHoldReasonText(holdReason);
+    return requested
+      ? {
+          status: "board_hold_recheck",
+          holdReason: why,
+          error: `이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다(${why}) — 지금 다시 확인을 요청했습니다. 몇 분 뒤 다시 보내 보고, 그래도 안 되면 학부모의 ClassNote 가입 여부를 확인해 주세요. 저장은 됐습니다`,
+        }
+      : {
+          status: "board_hold",
+          holdReason: why,
+          error: `이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다(${why}) — 학부모의 ClassNote 가입 여부를 확인해 주세요. 가입이 끝나면 자동으로 배정됩니다. 저장은 됐습니다`,
+        };
+  }
+  if (kind === "hold_other") {
+    const why = boardHoldReasonText(holdReason);
+    return {
+      status: "board_hold_admin",
+      holdReason: why,
+      error: `이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다(${why}) — 관리자 확인이 필요합니다. 저장은 됐습니다`,
+    };
+  }
+  if (kind === "left")
+    return {
+      status: "board_left",
+      error: "이 학생은 이 반 수강이 끝나 ClassNote 반 보드에 없습니다 — 이 반으로는 보낼 수 없습니다(다른 반으로 보내지 않습니다). 저장은 됐습니다",
+    };
+  return { status: "board_missing", error: BOARD_MISSING_ERROR };
+}
+
+/**
+ * 미리 보기(관리자 직접 작성의 '보낼 반' 칸)의 안내 — 아직 보내려 한 것이 아니라 요청하지 않았다. 요청할 값어치가 있는 까닭이면
+ * "발송을 누르면 요청한다"고 알리고(발송 버튼을 잠그지 않는다 — 서버가 막으면서 요청한다), 아니면 발송 때와 같은 문장이다.
+ */
+export function boardMissingPreview(kind: BoardMissingKind, holdReason?: string | null): string {
+  if (kind === "enrolling")
+    return "이 학생은 아직 이 반의 ClassNote 반 보드에 배정되지 않았습니다 — 발송을 누르면 지금 배정을 요청합니다(배정된 뒤 다시 보내면 나갑니다).";
+  if (kind === "class_pending")
+    return "이 반의 ClassNote 반 보드가 아직 없습니다 — 발송을 누르면 지금 만들기를 요청합니다(만들어진 뒤 다시 보내면 나갑니다).";
+  if (kind === "hold_join")
+    return `이 학생은 이 반의 ClassNote 반 보드 배정이 보류돼 있습니다(${boardHoldReasonText(holdReason)}) — 발송을 누르면 다시 확인을 요청합니다. 학부모의 ClassNote 가입 여부도 확인해 주세요.`;
+  return boardMissingNotice(kind, false, holdReason).error;
+}
+
+/**
+ * 보류 사유(연동 PC가 적은 한국어 문장)를 안내에 넣을 모양으로 — 비었으면 흔한 까닭을 적는다. 내부 번호(`(id 123)`·`(#1317083)`·
+ * `#1317083`)는 뺀다(화면에 뜻 없는 숫자) · 줄바꿈은 한 칸 · 길이는 자른다.
+ */
+export function boardHoldReasonText(reason: string | null | undefined): string {
+  const r = (reason ?? "")
+    .replace(/\((?:id\s*|#)\d+\)/gi, "")
+    .replace(/#\d+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return r ? (r.length > 80 ? `${r.slice(0, 80)}…` : r) : "학부모의 ClassNote 가입·원아 확인이 끝나지 않았습니다";
+}
+
+/** 반 보드가 없어 막힌 결과 코드인가(여덟 가지 전부) — 화면·일괄 발송 집계가 쓴다. */
+export function isBoardMissingStatus(status: string | null | undefined): status is BoardMissingStatus {
+  return (
+    status === "board_enrolling" ||
+    status === "board_enrolling_auto" ||
+    status === "board_class_pending" ||
+    status === "board_hold_recheck" ||
+    status === "board_hold" ||
+    status === "board_hold_admin" ||
+    status === "board_left" ||
+    status === "board_missing"
+  );
+}
+
+/** 반 보드에 배정되면 다시 보낼 수 있는 결과인가(배정·만들기·재확인을 요청했거나 자동으로 진행 중) — 일괄 발송이 '실패'로 세지 않는다. */
+export function isBoardWaitStatus(status: string | null | undefined): boolean {
+  return status === "board_enrolling" || status === "board_enrolling_auto" || status === "board_class_pending" || status === "board_hold_recheck";
+}
+
+/** 사람이 풀어야 하는 막힘인가(보류·반을 떠남) — 일괄 발송이 '보낼 반 없음'으로 센다. */
+export function isBoardBlockedStatus(status: string | null | undefined): boolean {
+  return status === "board_hold" || status === "board_hold_admin" || status === "board_left";
+}
 
 /**
  * 메인 수업 고르기. 정할 수 없으면 null(= 강사가 고른다).

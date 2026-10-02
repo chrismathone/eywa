@@ -24,7 +24,6 @@ import { mentSourceColumnReady } from "@/features/onescreen/server/ment-source-d
 import { BOARD_PREFIX } from "../notice-targets";
 import { resolveReportClassId } from "./resolve-class";
 import {
-  BOARD_MISSING_ERROR,
   classRouteActive,
   isSendClassRouteRow,
   NO_SEND_CLASS_ERROR,
@@ -34,6 +33,7 @@ import {
 import {
   blockedForNoSendClass,
   classBoardLiveForStudent,
+  explainBoardMissing,
   reportMakeupClassId,
   resolveMakeupSendClass,
 } from "@/features/onescreen/server/send-class";
@@ -496,7 +496,9 @@ export async function saveAndQueueAdminReport(
       }
       if (!classLive) {
         await unqueue();
-        return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "board_missing", error: BOARD_MISSING_ERROR };
+        // 까닭을 가려 안내한다(원스크린과 같은 함수) — 기다리면 풀리는 까닭이면 그 반·학생의 동기화도 요청한다.
+        const why = await explainBoardMissing(user.tenantId, classId, input.studentId, { request: true });
+        return { ok: false, id: saved.id, shareToken: saved.shareToken, status: why.status, error: why.error };
       }
     } else if (!input.makeup) {
       await unqueue();
@@ -1067,6 +1069,8 @@ export async function getAdminSendClassOptions(args: {
   candidates?: { id: string; name: string }[];
   defaultId?: string | null;
   blockedReason?: string | null;
+  /** 막힌 까닭이 '배정 중·새 반·학부모 가입 대기'다 — 발송을 누르면 서버가 막으면서 그 반·학생의 동기화를 요청한다(버튼을 잠그지 않는다). */
+  requestable?: boolean;
   /** 보강 추가한 반(0171a)으로 간다 — `needed=false`와 함께(`reportClassName` = 그 반). */
   viaMakeup?: boolean;
   /** 보강 추가한 반인데 이 학생의 반 보드가 없어 다른 반으로 가야 한다 — 그 반 이름(경고 한 줄). */
@@ -1097,8 +1101,11 @@ export async function getAdminSendClassOptions(args: {
       const { data } = await supabase.from("classes").select("class_name").eq("id", classId).maybeSingle();
       const reportClassName = (data?.class_name as string | undefined) ?? null;
       // 반 보드가 없으면 다른 반으로 보내지 않는다 — 고를 반 없이 막는 사유만(반 보드 동기화 필요).
-      if (!classLive)
-        return { ok: true, applies: true, needed: true, candidates: [], defaultId: null, blockedReason: BOARD_MISSING_ERROR, reportClassName };
+      // 까닭을 가려 적는다(미리 보기라 동기화는 요청하지 않는다 — 요청은 실제로 보낼 때).
+      if (!classLive) {
+        const why = await explainBoardMissing(user.tenantId, classId, args.studentId, { request: false });
+        return { ok: true, applies: true, needed: true, candidates: [], defaultId: null, blockedReason: why.error, requestable: why.requestable, reportClassName };
+      }
       return { ok: true, applies: true, needed: false, reportClassName };
     }
     if (!args.makeup)

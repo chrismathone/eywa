@@ -116,6 +116,7 @@ export function ComposeFace({
                 candidates: res.candidates ?? [],
                 defaultId: res.defaultId ?? null,
                 blockedReason: res.blockedReason ?? null,
+                requestable: !!res.requestable,
                 viaMakeup: !!res.viaMakeup,
                 makeupClassName: res.makeupClassName ?? null,
               }
@@ -134,7 +135,8 @@ export function ComposeFace({
     };
   }, [studentId, subject, reportDate, teacherName, makeup]);
   // 반별 발송인데 보낼 반이 필요하면 — 고르지 않았거나 고를 반이 없으면 발송을 막는다(서버가 최종 게이트).
-  const sendClassBlocked = !!sendOpt?.applies && sendOpt.needed && (!sendOpt.candidates.length || !sendClassId);
+  // 🔴 막힌 까닭이 '배정 중·새 반·학부모 가입 대기'면 잠그지 않는다 — 발송을 눌러야 서버가 막으면서 그 반·학생의 동기화를 요청한다.
+  const sendClassBlocked = !!sendOpt?.applies && sendOpt.needed && !sendOpt.requestable && (!sendOpt.candidates.length || !sendClassId);
 
   // 로컬 초안 자동저장 — 길게 쓴 본문·진도·특이사항을 새로고침/창닫기에서 지킨다(저장·발송 성공 시 삭제).
   // 학생 id·이름도 스냅샷에 담는다(리뷰 지적) — 본문은 그 학생 이야기라, 복구가 학생 선택까지 같이
@@ -388,6 +390,7 @@ export function ComposeFace({
           defaultId: res.defaultClassId ?? null,
           makeupClassName: res.makeupClassName ?? null,
           blockedReason: null,
+          requestable: false, // 이제 반을 골라야 한다 — 잠금 해제 값이 남아 반 없이 열리지 않게
         });
         setSendClassId(res.defaultClassId && res.candidates.some((c) => c.id === res.defaultClassId) ? res.defaultClassId : "");
       }
@@ -615,7 +618,7 @@ export function ComposeFace({
               <span className="text-foreground text-xs">
                 <b>{ctx.student.name}</b>
                 {sendOpt?.applies
-                  ? <> · 반 <b>{sendOpt.needed ? (sendOpt.candidates.find((c) => c.id === sendClassId)?.name ?? "—") : (sendOpt.reportClassName ?? "보고서의 반")}</b></>
+                  ? <> · 반 <b>{sendOpt.needed && !sendOpt.requestable ? (sendOpt.candidates.find((c) => c.id === sendClassId)?.name ?? "—") : (sendOpt.reportClassName ?? "보고서의 반")}</b></>
                   : curSubject?.board ? <> · 보드 <b>{curSubject.board}</b></> : null} 에게 발송할까요?
                 {!sendEnabled ? " (실제 발송 OFF — 저장만 됨)" : ""}
               </span>
