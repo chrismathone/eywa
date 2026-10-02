@@ -97,6 +97,10 @@ describe("parentLegView — 학부모에게 보이는 한 줄", () => {
   it("미탑승·운행 끝났는데 기록 없음은 주의(caution)", () => {
     expect(parentLegView(leg({ status: "missed" })).tone).toBe("caution");
     expect(parentLegView(leg({ trip: "done" })).headline).toBe("탑승 기록이 없어요");
+    // 지난 날 — 기록은 그대로, "오늘"·"예정"만 바뀐다.
+    expect(parentLegView(leg({ status: "missed" }), { past: true }).headline).toBe("등원 셔틀을 타지 않았어요");
+    expect(parentLegView(leg({ trip: null }), { past: true }).headline).toBe("탑승 기록이 없어요");
+    expect(parentLegView(leg({ status: "boarded", recordedTime: "14:41" }), { past: true }).headline).toContain("14:41");
   });
 });
 

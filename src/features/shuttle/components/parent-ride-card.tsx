@@ -79,7 +79,7 @@ export function ParentRideCard({
       ) : (
         <ol className="mt-3 flex flex-col gap-2">
           {legs.map((leg, i) => {
-            const view = parentLegView(leg);
+            const view = parentLegView(leg, { past: !!onDate && !!today && onDate < today });
             // 🔑 수정 모드 key = 방향 + **그 방향 안에서의** 순번. 저장하면 구간 key(예외 id 포함)도, 시각 정렬 순서도
             //    바뀔 수 있는데(등원을 저녁 회차로 옮기면 하원보다 뒤로 간다) 그걸 key에 넣으면 모달이 다시 만들어져
             //    저장 직후 닫힌다(결과 문구를 못 본다).

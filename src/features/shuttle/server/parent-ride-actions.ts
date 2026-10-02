@@ -20,13 +20,13 @@ import {
   effectiveStopId,
   loadStates,
   otherDirection,
-  parentGate,
   refreshRideViews,
   reviveAbsentOut,
   type Admin,
   type Ctx,
   type ParentRideActionState,
 } from "./parent-ride-state";
+import { forDates, multiDates, parentDayGate } from "./parent-ride-multi";
 
 /**
  * 학부모 **그날 하루** 등하원 변경 — 학부모가 바꾸면 **바로 적용**된다(사용자 2026-09-29 "바로 적용해서 디비도 바뀌게").
@@ -39,7 +39,8 @@ import {
  *    감사로그에도 `logActionAs`로 한 줄(학부모는 직원 표에 없어 `logAction`은 조용히 건너뛴다).
  *
  * 🔴 저장 전 서버가 다시 보는 규칙([[#77]], 확인 함수는 `parent-ride-guards.ts`):
- *    · 아이·날짜 = `parentGate`(연결된 아이 · 오늘~62일 뒤 평일)
+ *    · 아이·날짜 = `parentDayGate`(연결된 아이 · 오늘~62일 뒤 평일 · **공휴일 잠금**, 사용자 2026-10-01)
+ *    · 여러 날(`dates`, 월별 달력에서 고른 날짜들) = 날짜마다 같은 규칙을 따로 통과(`forDates`)
  *    · 자리 = 우리 학원 · 학기중 회차 · 운행 중인 차의 정류장 칸
  *    · 이미 탔으면 못 바꾼다(오늘 · `rodeMessage`, 사용자 2026-09-30)
  *    · 마감 = **고른 회차 출발 10분 전**(마감된 회차**로** 바꾸는 것만 막는다)
@@ -57,8 +58,11 @@ export async function changeParentRideStop(input: {
   onDate: string;
   ioKind: string;
   runStopId: string;
+  dates?: string[];
 }): Promise<ParentRideActionState> {
-  const ctx = await parentGate(input);
+  const many = multiDates(input.dates);
+  if (many) return forDates(many, (onDate) => changeParentRideStop({ ...input, onDate, dates: undefined }));
+  const ctx = await parentDayGate(input);
   if ("error" in ctx) return ctx;
   const tenantId = ctx.viewer.tenantId;
   const admin = createAdminClient();
@@ -138,8 +142,11 @@ export async function resetParentRide(input: {
   studentId: string;
   onDate: string;
   ioKind: string;
+  dates?: string[];
 }): Promise<ParentRideActionState> {
-  const ctx = await parentGate(input);
+  const many = multiDates(input.dates);
+  if (many) return forDates(many, (onDate) => resetParentRide({ ...input, onDate, dates: undefined }));
+  const ctx = await parentDayGate(input);
   if ("error" in ctx) return ctx;
   const tenantId = ctx.viewer.tenantId;
   const admin = createAdminClient();
@@ -222,8 +229,11 @@ export async function skipParentRide(input: {
   onDate: string;
   ioKind: string;
   reason: string;
+  dates?: string[];
 }): Promise<ParentRideActionState> {
-  const ctx = await parentGate(input);
+  const many = multiDates(input.dates);
+  if (many) return forDates(many, (onDate) => skipParentRide({ ...input, onDate, dates: undefined }));
+  const ctx = await parentDayGate(input);
   if ("error" in ctx) return ctx;
   const reason = checkReason(input.reason);
   if (typeof reason !== "string") return reason;
@@ -258,8 +268,11 @@ export async function absentParentRide(input: {
   studentId: string;
   onDate: string;
   reason: string;
+  dates?: string[];
 }): Promise<ParentRideActionState> {
-  const ctx = await parentGate({ ...input, ioKind: "in" });
+  const many = multiDates(input.dates);
+  if (many) return forDates(many, (onDate) => absentParentRide({ ...input, onDate, dates: undefined }));
+  const ctx = await parentDayGate({ ...input, ioKind: "in" });
   if ("error" in ctx) return ctx;
   const reason = checkReason(input.reason);
   if (typeof reason !== "string") return reason;

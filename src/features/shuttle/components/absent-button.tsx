@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { absentParentRide } from "../server/parent-ride-actions";
 import { ReasonDialog } from "./reason-dialog";
+import { useRideDates } from "./ride-dates-context";
 
 /**
  * 학부모 [결석] — 사유를 받아 그날 **등원·하원 둘 다** 타지 않게 한다(사용자 2026-09-29).
@@ -21,12 +22,13 @@ export function AbsentButton({
   className: string;
 }) {
   const [kidId, setKidId] = useState(kids[0]?.id ?? "");
+  const dates = useRideDates();
   return (
     <ReasonDialog
       triggerClassName={className}
       trigger="결석"
       title="결석 — 등원·하원 모두 타지 않기"
-      description="이유를 짧게 남겨 주세요. 학원 선생님이 확인해요. 다시 타려면 [등원 수정하기]에서 시간을 고르면 돼요."
+      description={`${dates ? `선택한 ${dates.length}일 모두 결석으로 바뀌어요. ` : ""}이유를 짧게 남겨 주세요. 학원 선생님이 확인해요. 다시 타려면 [등원 수정하기]에서 시간을 고르면 돼요.`}
       confirmLabel="결석으로 저장"
       placeholder="예: 감기로 집에서 쉬어요"
       extra={
@@ -48,7 +50,7 @@ export function AbsentButton({
           </div>
         ) : null
       }
-      onSubmit={(reason) => absentParentRide({ studentId: kidId, onDate, reason })}
+      onSubmit={(reason) => absentParentRide({ studentId: kidId, onDate, reason, dates })}
     />
   );
 }

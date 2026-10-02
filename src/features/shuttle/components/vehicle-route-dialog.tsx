@@ -15,6 +15,7 @@ import {
   type VehicleRoute,
 } from "../parent-rides";
 import { changeParentRideStop, resetParentRide } from "../server/parent-ride-actions";
+import { useRideDates } from "./ride-dates-context";
 import { DIRECTION_LABEL } from "../types";
 import { KstClock, useKstNow } from "./kst-clock";
 import { Badge, FocusedRun, RunHeader } from "./vehicle-route-parts";
@@ -64,6 +65,8 @@ export function VehicleRouteDialog({
   /** 지난 날짜면 false — 보기만. */
   editable: boolean;
 }) {
+  /** 월별 달력에서 여러 날을 골라 열었으면 그 날짜 전부에 같은 내용을 적용한다(없으면 그날 하루). */
+  const dates = useRideDates();
   const [vehicleId, setVehicleId] = useState(leg.vehicleId);
   /** 눌러서 크게 보는 회차 — null이면 회차 목록. */
   const [focusRunId, setFocusRunId] = useState<string | null>(null);
@@ -122,7 +125,7 @@ export function VehicleRouteDialog({
     if (!focused || !pickStopId) return;
     const runStopId = pickStopId;
     startTransition(async () => {
-      const res = await changeParentRideStop({ studentId: leg.studentId, onDate, ioKind: leg.direction, runStopId });
+      const res = await changeParentRideStop({ studentId: leg.studentId, onDate, ioKind: leg.direction, runStopId, dates });
       if ("error" in res) {
         setNotice({ tone: "error", text: res.error });
         return;
@@ -134,7 +137,7 @@ export function VehicleRouteDialog({
 
   function restore() {
     startTransition(async () => {
-      const res = await resetParentRide({ studentId: leg.studentId, onDate, ioKind: leg.direction });
+      const res = await resetParentRide({ studentId: leg.studentId, onDate, ioKind: leg.direction, dates });
       if ("error" in res) {
         setNotice({ tone: "error", text: res.error });
         return;
@@ -178,6 +181,11 @@ export function VehicleRouteDialog({
           <DialogDescription>
             {dayLabel} <KstClock className="text-foreground font-bold" />
           </DialogDescription>
+          {dates ? (
+            <p className="text-danger text-xs font-bold break-keep">
+              선택한 {dates.length}일 모두 같은 내용으로 바뀌어요.
+            </p>
+          ) : null}
           {/* 마감 규칙은 늘 보인다 — 잠겼으면 왜 잠겼는지가 그 자리에 선다. */}
           <p className={`text-xs font-bold break-keep ${locked ? "text-danger" : "text-primary"}`}>
             {locked ?? (focused ? `${verb} 곳을 누른 뒤 저장하세요 · ${CUTOFF_NOTE}` : `회차를 누르면 크게 볼 수 있어요 · ${CUTOFF_NOTE}`)}

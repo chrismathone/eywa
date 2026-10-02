@@ -315,7 +315,12 @@ export const SKIPPED_HEADLINE: Record<Direction, string> = {
   out: "하원차를 탑승하지 않습니다",
 };
 
-export function parentLegView(leg: RideLeg): ParentLegView {
+/**
+ * @param opts.past 지난 날짜를 보는 중인가(요일별 화면의 지난 요일, 사용자 2026-10-02 *"지난 날은 데이터가 그대로 남게"*) —
+ *   기록(몇 시에 탔는지)은 그대로 보이고, "오늘"·"예정"처럼 그날이 아니면 틀린 말만 바꾼다.
+ */
+export function parentLegView(leg: RideLeg, opts: { past?: boolean } = {}): ParentLegView {
+  const past = opts.past === true;
   const ride = leg.direction === "in" ? "탈" : "내릴";
   // 사유는 직원 메모라 학부모 문장엔 싣지 않는다.
   if (leg.skipped) return { tone: "inert", headline: SKIPPED_HEADLINE[leg.direction], detail: null };
@@ -336,7 +341,7 @@ export function parentLegView(leg: RideLeg): ParentLegView {
   if (leg.status === "missed") {
     return {
       tone: "caution",
-      headline: leg.direction === "in" ? "오늘 등원 셔틀을 타지 않았어요" : "오늘 하원 셔틀을 타지 않았어요",
+      headline: `${past ? "" : "오늘 "}${leg.direction === "in" ? "등원" : "하원"} 셔틀을 타지 않았어요`,
       detail: "궁금한 점은 학원으로 연락해 주세요",
     };
   }
@@ -348,5 +353,7 @@ export function parentLegView(leg: RideLeg): ParentLegView {
   if (leg.trip === "done") {
     return { tone: "caution", headline: "탑승 기록이 없어요", detail: "궁금한 점은 학원으로 연락해 주세요" };
   }
+  // 지난 날인데 기록도 운행 기록도 없다 — "예정"이라 하면 거짓이다.
+  if (past) return { tone: "inert", headline: "탑승 기록이 없어요", detail: `${at(leg.plannedTime, leg.stopName)} 일정이었어요` };
   return { tone: "inert", headline: `${at(leg.plannedTime, leg.stopName)}에서 ${ride} 예정이에요`, detail: null };
 }

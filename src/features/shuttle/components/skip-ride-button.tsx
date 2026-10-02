@@ -3,6 +3,7 @@
 import { skipParentRide } from "../server/parent-ride-actions";
 import { DIRECTION_LABEL, type Direction } from "../types";
 import { ReasonDialog } from "./reason-dialog";
+import { useRideDates } from "./ride-dates-context";
 
 /**
  * 학부모 '등원만/하원만 타지 않기' — 누르면 **짧은 사유**를 받고 저장한다(사용자 2026-09-29).
@@ -18,6 +19,7 @@ export function SkipRideButton({
   direction: Direction;
 }) {
   const word = DIRECTION_LABEL[direction];
+  const dates = useRideDates();
   return (
     <ReasonDialog
       // 두 줄('등원만' / '타지 않기')로 접어 폭을 줄인다.
@@ -29,10 +31,10 @@ export function SkipRideButton({
         </>
       }
       title={`${word}만 타지 않기`}
-      description="이유를 짧게 남겨 주세요. 학원 선생님이 확인해요."
+      description={`${dates ? `선택한 ${dates.length}일 모두 같은 내용으로 바뀌어요. ` : ""}이유를 짧게 남겨 주세요. 학원 선생님이 확인해요.`}
       confirmLabel={`${word} 안 하기`}
       placeholder="예: 병원 진료가 있어 직접 데려가요"
-      onSubmit={(reason) => skipParentRide({ studentId, onDate, ioKind: direction, reason })}
+      onSubmit={(reason) => skipParentRide({ studentId, onDate, ioKind: direction, reason, dates })}
     />
   );
 }

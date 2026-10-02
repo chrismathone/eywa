@@ -35,6 +35,7 @@ export function RegularRideDialog({
   today,
   regular,
   fleet,
+  defaultOpen = false,
 }: {
   kids: { id: string; name: string }[];
   weekday: DayCode;
@@ -43,11 +44,16 @@ export function RegularRideDialog({
   today: string;
   regular: readonly RegularStop[];
   fleet: readonly VehicleFleet[];
+  /** 처음부터 열어 둔다 — 월별 화면에서 요일을 고르면 곧바로 이 창이 뜬다(사용자 2026-10-02). */
+  defaultOpen?: boolean;
 }) {
   const [kidId, setKidId] = useState(kids[0]?.id ?? "");
   const [direction, setDirection] = useState<Direction>("in");
   const current = regular.find((r) => r.studentId === kidId && r.direction === direction)?.runStopId ?? null;
-  const [vehicleId, setVehicleId] = useState(fleet[0]?.id ?? "");
+  // 처음 보이는 호차 = 지금 고정 자리의 호차(처음부터 열려 뜨는 월별 화면에서도 맞게).
+  const [vehicleId, setVehicleId] = useState(
+    () => fleet.find((v) => v.routes.some((r) => r.stops.some((s) => s.id === current)))?.id ?? fleet[0]?.id ?? "",
+  );
   const [pick, setPick] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -120,7 +126,7 @@ export function RegularRideDialog({
     `h-8 rounded-full px-3 text-sm font-bold ${active ? "bg-primary text-primary-foreground" : "bg-bg-soft text-foreground"}`;
 
   return (
-    <Dialog onOpenChange={(open) => { if (open) { setReason(""); resetFor(kidId, direction); } }}>
+    <Dialog defaultOpen={defaultOpen} onOpenChange={(open) => { if (open) { setReason(""); resetFor(kidId, direction); } }}>
       {/* 날짜·현재 시각과 한 줄에 들어가게 작게(사용자 2026-09-29 "버튼이 커서 다음 줄로 밀렸네"). */}
       <DialogTrigger className="border-primary text-primary inline-flex h-6 shrink-0 items-center rounded-full border px-2 text-[11px] font-bold whitespace-nowrap">
         고정시간 변경

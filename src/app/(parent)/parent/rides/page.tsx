@@ -9,6 +9,8 @@ import { ParentRideCard } from "@/features/shuttle/components/parent-ride-card";
 import { RegularRideDialog } from "@/features/shuttle/components/regular-ride-dialog";
 import { weekDates } from "@/features/shuttle/parent-rides";
 import { dayLabel, type DayCode } from "@/features/shuttle/types";
+import { loadAcademyHolidays, restDayName } from "@/features/shuttle/server/rest-days";
+import { ParentMonthView } from "./_components/month-view";
 
 const TITLE = "등하원 시간 변경·확인";
 export const metadata = { title: TITLE };
@@ -18,8 +20,8 @@ const PATH = "/parent/rides";
 /**
  * 학부모 탭 2 '등하원 시간 변경·확인' — 연결된 아이의 셔틀 등하원.
  *
- * 🔑 보기 전환(제목 옆): **요일별**(기본, 아래 기능 전부) / **월별**(자리만 — 사용자 2026-09-26 "일단 기능을 넣지 말아줘").
- *    `?view=month`로 가른다. 월별일 땐 셔틀 조회를 아예 하지 않는다.
+ * 🔑 보기 전환(제목 옆): **요일별**(기본, 아래 기능 전부) / **월별**(`?view=month` — 2026-10-01부터 평일 달력.
+ *    `month=YYYY-MM` · `kid=` · `dates=`(고른 날짜들의 상세), `_components/month-view.tsx`).
  * 🔑 판정·문장은 관리자 뷰와 같은 `parentLegView`다 — 관리자가 확인한 문장이 곧 학부모가 보는 문장이다.
  * 🔑 요일 칩(월~금): 오늘은 실제 기록·변경·운행 상태까지, 다른 요일은 **그 날짜의 일정**(정기 배정 + 그날 변경)과
  *    노선 — 요일마다 타는 회차·정류장이 다를 수 있어서다. 주말은 운영하지 않는다.
@@ -31,21 +33,19 @@ const PATH = "/parent/rides";
 export default async function ParentRidesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ day?: string; view?: string; edit?: string }>;
+  searchParams: Promise<{ day?: string; view?: string; edit?: string; month?: string; kid?: string; date?: string; dates?: string; fixed?: string }>;
 }) {
   const viewer = await getParentViewer();
   if (!viewer) redirect("/home");
-  const { day, view, edit } = await searchParams;
-  const editing = edit === "1";
+  const { day, view, edit, month, kid, date, dates, fixed } = await searchParams;
+  const wantEdit = edit === "1";
 
+  // 월별(사용자 2026-10-01) — 평일 달력 · 지난 날은 기록 · 앞으로는 바뀐 날만 · 날짜를 누르면 그날 상세(month-view.tsx).
   if (view === "month") {
     return (
       <>
         <TitleRow view="month" />
-        <section className="bg-card rounded-2xl p-6 text-center shadow-[var(--shadow-card)]">
-          <p className="font-bold">월별 보기는 준비 중이에요</p>
-          <p className="text-text-dim mt-1 text-sm break-keep">지금은 요일별로 확인해 주세요.</p>
-        </section>
+        <ParentMonthView viewer={viewer} today={kstToday()} month={month} kid={kid} dates={dates ?? date} fixed={fixed} />
       </>
     );
   }
@@ -56,21 +56,34 @@ export default async function ParentRidesPage({
   const todayCode = week.find((w) => w.ymd === today)?.day ?? null;
   const picked = week.find((w) => w.day === day) ?? week.find((w) => w.day === todayCode) ?? week[0]!;
   const live = picked.ymd === today;
+  // 🔴 지난 요일은 **기록 보기 전용**이다(사용자 2026-10-02) — 수정 모드 자체가 안 켜진다(주소에 edit=1을 붙여도).
+  //    그래서 지난 요일 칩에선 [고정시간 변경]도 안 뜬다(9/30의 "지난 요일 칩에도 선다"를 이 화면에서 뒤집음) —
+  //    고정시간은 오늘·앞으로의 요일 칩에서, 날짜별 수정은 월별에서 한다.
+  const pastDay = picked.ymd < today;
+  const editing = wantEdit && !pastDay;
+  // 🔑 지난 요일도 **그날의 실제 기록**(몇 시에 탔는지 · 미탑승 · 도착)을 그대로 보여 준다(사용자 2026-10-02).
+  //    앞으로의 요일은 아직 일어나지 않았으니 일정만.
+  const withRecords = picked.ymd <= today;
 
   // 수정 모드일 때만 학원의 모든 호차 노선도 읽는다('수정하기' 모달 재료). 변경 내역은 직원 전용이라 읽지 않는다.
-  const { legs, fleet, regular } = await loadRideLegsFor(
-    viewer.tenantId, viewer.children.map((c) => c.id), picked.ymd, "term", live, editing,
-  );
+  const [{ legs, fleet, regular }, academyHolidays] = await Promise.all([
+    loadRideLegsFor(viewer.tenantId, viewer.children.map((c) => c.id), picked.ymd, "term", withRecords, editing),
+    loadAcademyHolidays(viewer.tenantId),
+  ]);
   // 다른 요일도 **그 날짜**의 일정이다 — 학부모가 미리 바꾼 변경이 반영돼 있다(2026-09-29).
-  const dayText = live ? `오늘 · ${formatKoreanDate(today)}` : `${formatKoreanDate(picked.ymd)} 일정`;
+  const dayText = live ? `오늘 · ${formatKoreanDate(today)}` : `${formatKoreanDate(picked.ymd)} ${picked.ymd < today ? "기록" : "일정"}`;
   // 지난 날짜(이번 주 앞 요일)는 보기만 — 서버도 같은 판정을 한다(parent-ride-actions.ts).
-  const editable = picked.ymd >= today;
+  // 🔴 쉬는 날(법정공휴일 · 학원 휴원일)엔 일정 대신 "학원이 쉬어요"만 — 하루짜리 수정·타지 않기·결석을 잠근다
+  //    (사용자 2026-10-01, 서버 `parentDayGate`와 같은 판정). 🔑 매주 반복되는 **고정시간 변경은 그대로 된다**.
+  const restOf = (ymd: string) => restDayName(academyHolidays, ymd);
+  const closedName = restOf(picked.ymd);
+  const editable = picked.ymd >= today && !closedName;
 
   return (
     <>
       <TitleRow view="day" />
 
-      <DayChips week={week} picked={picked.day} todayCode={todayCode} />
+      <DayChips week={week.map((w) => ({ ...w, rest: restOf(w.ymd) !== null }))} picked={picked.day} todayCode={todayCode} />
 
       {/* 날짜 · 현재 시각 · [고정시간 변경] 한 줄 — 버튼은 오른쪽 끝, 좁으면 날짜 글자가 먼저 줄어든다. */}
       <div className="flex items-center gap-1.5 text-sm font-bold">
@@ -92,14 +105,29 @@ export default async function ParentRidesPage({
           </span>
         ) : null}
       </div>
-      {!live ? (
-        <p className="text-text-dim -mt-3 text-xs break-keep">실제 탑승 기록은 당일에 보여요.</p>
+      {closedName ? null : !live ? (
+        <p className="text-text-dim -mt-3 text-xs break-keep">
+          {pastDay
+            ? "그날의 탑승 기록이에요. 지난 날은 수정할 수 없어요. 앞으로의 날짜는 [월별]에서 수정해 주세요."
+            : "실제 탑승 기록은 당일에 보여요."}
+        </p>
       ) : null}
 
       {viewer.children.length === 0 ? (
         <p className="border-line text-text-dim rounded-2xl border border-dashed p-6 text-center text-sm">
           연결된 자녀가 없습니다. 학원에 문의해 주세요.
         </p>
+      ) : closedName ? (
+        <section className="bg-att-weekend border-line rounded-2xl border p-6 text-center">
+          <p className="text-danger text-lg font-bold break-keep">
+            {live ? "오늘은" : "이날은"} 학원이 쉬어요
+          </p>
+          <p className="mt-1 text-sm font-bold">{closedName}</p>
+          <p className="text-text-dim mt-2 text-xs break-keep">
+            셔틀이 다니지 않아 이날 시간은 바꿀 수 없어요. 매주 반복되는 고정시간은 [등하원 수정] → [고정시간 변경]에서
+            바꿀 수 있어요.
+          </p>
+        </section>
       ) : (
         viewer.children.map((c) => (
           <ParentRideCard
@@ -122,6 +150,7 @@ export default async function ParentRidesPage({
       <ActionRow
         dayHref={live ? PATH : `${PATH}?day=${picked.day}`}
         editing={editing}
+        pastDay={pastDay}
         kids={viewer.children.map((c) => ({ id: c.id, name: c.name }))}
         onDate={picked.ymd}
         editable={editable}
@@ -138,12 +167,15 @@ export default async function ParentRidesPage({
 function ActionRow({
   dayHref,
   editing,
+  pastDay,
   kids,
   onDate,
   editable,
 }: {
   dayHref: string;
   editing: boolean;
+  /** 지난 요일 — 수정 버튼을 잠그고 월별로 안내한다. */
+  pastDay: boolean;
   kids: { id: string; name: string }[];
   onDate: string;
   editable: boolean;
@@ -151,6 +183,14 @@ function ActionRow({
   const editHref = editing ? dayHref : `${dayHref}${dayHref.includes("?") ? "&" : "?"}edit=1`;
   const btn = "flex h-11 flex-1 items-center justify-center rounded-lg text-sm font-bold";
   const absentBtn = `${btn} border-danger text-danger bg-card border`;
+  // 지난 요일(기록 보기) — [등하원 수정]·[결석]은 없고 월별로 가는 버튼만(사용자 2026-10-02).
+  if (pastDay) {
+    return (
+      <a href={`${PATH}?view=month`} className={`${btn} bg-primary text-primary-foreground flex-none`}>
+        월별에서 다음일정 수정하기
+      </a>
+    );
+  }
   return (
     <div className="flex gap-2">
       <a
@@ -191,13 +231,13 @@ function TitleRow({ view }: { view: "day" | "month" }) {
   );
 }
 
-/** 요일 칩(월~금) — 오늘은 '오늘'. 링크라 폰에서 눌러도 전체 새로 그림(상태 없음). */
+/** 요일 칩(월~금) — 오늘은 '오늘', 쉬는 날은 회색 바탕 + 빨간 글씨(문구는 없다 — 사용자 2026-10-01). 링크라 폰에서 눌러도 전체 새로 그림(상태 없음). */
 function DayChips({
   week,
   picked,
   todayCode,
 }: {
-  week: { day: DayCode; ymd: string }[];
+  week: { day: DayCode; ymd: string; rest: boolean }[];
   picked: DayCode;
   todayCode: DayCode | null;
 }) {
@@ -211,10 +251,14 @@ function DayChips({
             href={w.day === todayCode ? PATH : `${PATH}?day=${w.day}`}
             aria-current={active ? "true" : undefined}
             className={`flex h-10 items-center justify-center rounded-lg text-sm font-bold ${
-              active ? "bg-primary text-primary-foreground" : "bg-card text-foreground shadow-[var(--shadow-card)]"
+              active
+                ? "bg-primary text-primary-foreground"
+                : w.rest
+                  ? "bg-att-weekend text-danger shadow-[var(--shadow-card)]"
+                  : "bg-card text-foreground shadow-[var(--shadow-card)]"
             }`}
           >
-            {w.day === todayCode ? "오늘" : dayLabel(w.day)}
+            <span>{w.day === todayCode ? "오늘" : dayLabel(w.day)}</span>
           </a>
         );
       })}
