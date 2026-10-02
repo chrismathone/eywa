@@ -6,18 +6,21 @@ import { hashSubmitToken, newSubmitToken } from "./token";
 type Db = ReturnType<typeof createAdminClient>;
 
 export type LinkRow = {
-  id: string; tenant_id: string; student_id: string; class_id: string; origin: "manual" | "report";
+  id: string; tenant_id: string; student_id: string; class_id: string; origin: "manual" | "report" | "site";
   report_id: string | null; report_share_hash: string | null; expires_at: string; revoked_at: string | null;
 };
 const LINK_COLUMNS = "id,tenant_id,student_id,class_id,origin,report_id,report_share_hash,expires_at,revoked_at";
 
-/** 새 링크 — 토큰 원문은 돌려주기만 하고 DB엔 해시만. 기준일 = 보고서일(보고서 줄) 또는 오늘(KST, 학생 상세). */
+/**
+ * 새 링크 — 토큰 원문은 돌려주기만 하고 DB엔 해시만. 기준일 = 보고서일(보고서 줄) 또는 오늘(KST, 학생 상세).
+ * `expiresAt`을 주면 그 순간에 끝난다(올리기 사이트가 만든 링크는 7일이 아니라 만든 날과 다음 날 — site.ts `siteLinkExpiresAt`).
+ */
 export async function mintSubmitLink(db: Db, input: {
-  tenantId: string; studentId: string; classId: string; origin: "manual" | "report";
-  baseDate: string; reportId?: string | null; reportShareToken?: string | null; createdBy?: string | null;
+  tenantId: string; studentId: string; classId: string; origin: "manual" | "report" | "site";
+  baseDate: string; reportId?: string | null; reportShareToken?: string | null; createdBy?: string | null; expiresAt?: string;
 }): Promise<{ token: string; id: string; expiresAt: string }> {
   const token = newSubmitToken();
-  const expiresAt = videoLinkExpiresAt(input.baseDate);
+  const expiresAt = input.expiresAt ?? videoLinkExpiresAt(input.baseDate);
   const { data, error } = await db.from("homework_video_links").insert({
     tenant_id: input.tenantId, student_id: input.studentId, class_id: input.classId, origin: input.origin,
     report_id: input.reportId ?? null, created_by: input.createdBy ?? null, token_hash: hashSubmitToken(token), expires_at: expiresAt,
