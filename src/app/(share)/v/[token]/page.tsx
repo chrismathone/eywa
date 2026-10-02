@@ -40,7 +40,9 @@ export default async function VideoSubmitPage({ params }: { params: Promise<{ to
   } catch {
     return UNAVAILABLE; // 표가 아직 없거나(0325a 전) 순간 DB 오류
   }
-  if (resolved.state === "expired") redirect(expiredLinkHref("video"));
+  // 올리기 사이트가 만든 링크는 수명이 이틀이고 보고서와 무관하다 — "7일 · 다음 수업보고서의 새 링크" 안내가 거짓이 된다.
+  // 사이트 첫 화면으로 돌려보내면 그 자리에서 새 링크를 만든다(주소창·방문 기록에 남은 옛 주소로 들어온 학생).
+  if (resolved.state === "expired") redirect(resolved.link.origin === "site" ? "/v" : expiredLinkHref("video"));
   if (resolved.state !== "ok")
     return <Closed title="사용할 수 없는 링크입니다" message="이 링크로는 더 이상 영상을 올릴 수 없습니다. 담당 선생님께 새 링크를 받아 주세요." />;
   const { link } = resolved;

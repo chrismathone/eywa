@@ -1,6 +1,7 @@
 /**
  * 테스트 전용 — 제출 링크 서버 코드가 쓰는 만큼만 흉내 내는 메모리 Supabase(admin) 클라이언트.
- * 지원: select(필드 무시·count head) · insert(유니크 → 23505) · update · eq/is/gt/gte/order/limit · maybeSingle/single.
+ * 지원: select(필드 무시·count head) · insert(유니크 → 23505) · update · delete · eq/is/in/gt/gte/lt/order/limit ·
+ *       or(`열.like.%끝` · `열.ilike.%포함%` — 올리기 사이트의 전화 끝자리 조회) · maybeSingle/single.
  * 🔴 운영 코드에서 import하지 말 것(테스트 파일만).
  */
 type Row = Record<string, unknown>;
@@ -15,7 +16,7 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
 
   function from(table: string) {
     const filters: Filter[] = [];
-    let op: "select" | "insert" | "update" = "select";
+    let op: "select" | "insert" | "update" | "delete" = "select";
     let payload: Row[] = [];
     let patch: Row = {};
     let head = false;
@@ -41,6 +42,10 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
         hit.forEach((r) => Object.assign(r, patch));
         return { data: returning ? hit : null, error: null, count: null };
       }
+      if (op === "delete") {
+        tables[table] = rows().filter((r) => !hit.includes(r));
+        return { data: null, error: null, count: null };
+      }
       if (head) return { data: null, error: null, count: hit.length };
       const out = hit.slice(0, limit);
       if (single === "none") return { data: out, error: null, count: null };
@@ -51,6 +56,18 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
       select(_cols?: string, opts?: { head?: boolean }) { if (op !== "select") returning = true; head = !!opts?.head; return builder; },
       insert(value: Row | Row[]) { op = "insert"; payload = Array.isArray(value) ? value : [value]; return builder; },
       update(value: Row) { op = "update"; patch = value; return builder; },
+      delete() { op = "delete"; return builder; },
+      in(col: string, values: unknown[]) { filters.push((r) => values.includes(r[col])); return builder; },
+      // `a.like.%1234`(끝자리) · `a.ilike.%1234%`(포함) 모양만 — 어느 한 열이 맞으면 통과.
+      or(expr: string) {
+        const parts = expr.split(",").map((part) => /^([a-z_]+)\.i?like\.%(.+?)(%?)$/.exec(part));
+        filters.push((r) => parts.some((m) => {
+          if (!m) return false;
+          const value = String(r[m[1]!] ?? "");
+          return m[3] ? value.includes(m[2]!) : value.endsWith(m[2]!);
+        }));
+        return builder;
+      },
       eq(col: string, v: unknown) { filters.push((r) => r[col] === v); return builder; },
       is(col: string, v: unknown) { filters.push((r) => (r[col] ?? null) === v); return builder; },
       gt(col: string, v: string) { filters.push((r) => String(r[col]) > v); return builder; },
