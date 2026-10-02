@@ -120,6 +120,8 @@ const FORBID_KEYS = new Set([
   "staff_roster_import_revert",
   // 누가 어떤 파일을 받았는지는 개인정보 접속기록이라 채널로 흘리지 않는다(보안 감사 2026-09-29).
   "data_export_download",
+  // 연습본은 작성자 본인만 읽는 개인 사본이다 — 이름을 채널로 흘리지 않는다(운영 시간표 변경으로 읽힐 수도 있다).
+  "timetable_lab_draft_save",
 ]);
 /** 대상 문구 없이 — 돈 계열(금액·계좌가 대상 라벨에 섞일 수 있다) + 연차. */
 const OPAQUE_CATEGORIES = new Set(["billing"]);

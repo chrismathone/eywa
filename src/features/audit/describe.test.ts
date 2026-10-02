@@ -497,6 +497,15 @@ describe("auditDetail — 셔틀(0225a)은 영문 enum을 그대로 내보내지
   });
 });
 
+describe("auditDetail — 시간표 연습본 저장(개인 사본)", () => {
+  it("규모만 한글로 적고 식별자·영문 키는 싣지 않는다", () => {
+    const meta = { draftId: SID, lessonCount: 12, classCount: 5, studentCount: 31, referenceDate: "2026-09-28" };
+    expect(auditDetail("timetable_lab_draft_save", meta, ctx())).toBe("개인 연습본 · 반 5개 · 수업 12개 · 학생 31명");
+    expect(auditDetail("timetable_lab_draft_save", {}, ctx())).toBe("개인 연습본");
+    expect(AUDIT_TYPE_LABEL.timetable_lab_draft).toBe("시간표 연습본");
+  });
+});
+
 describe("AUDIT_TYPE_LABEL", () => {
   it("logAction 호출부의 모든 target_type이 한글 라벨을 가진다", () => {
     // logAction 전수(2026-07-11 grep) + 실 DB target_type 전수(2026-08-03) — 후자에서 user·users·

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "inventory": "P0-shortcuts.json",
+  "scope": "Synthetic fixed-row prototype only; no complete shortcut claim",
+  "environment": { "os": "Windows", "browser": "Edge 154.0.4258.48", "channel": "msedge", "headless": true },
+  "denominator": { "officialIds": 132, "platformRows": 365, "supplemental": 26 },
+  "unlistedCases": "untested",
+  "fullFeatureValidationCount": 0,
+  "cases": [
+    { "id": "gs.common.copy", "platform": "pc", "engines": ["dom", "univer"], "status": "partial", "evidence": "editor.spec.ts: trusted 2x3 / trusted grid copy", "limits": "Cell data only; semantic lesson/student identity movement and external application roundtrip untested" },
+    { "id": "gs.common.paste", "platform": "pc", "engines": ["dom", "univer"], "status": "partial", "evidence": "editor.spec.ts: trusted 2x3 / trusted grid copy", "limits": "Merged, disjoint, filtered and styled external ranges untested" },
+    { "id": "gs.common.cut", "platform": "pc", "engines": ["dom", "univer"], "status": "partial", "evidence": "editor.spec.ts: cut failure; state-boundaries.spec.ts: cut beyond fixed boundary", "limits": "Failure preserves source; semantic multi-student cut and cross-window movement untested" },
+    { "id": "gs.common.undo", "platform": "pc", "engines": ["dom", "univer"], "status": "partial", "evidence": "editor.spec.ts: shared Undo / workbook history / trusted grid copy / trusted cell editing", "limits": "Workbook edits and app commands share history; full in-cell and grouped structural undo untested" },
+    { "id": "gs.common.redo", "platform": "pc", "engines": ["dom"], "status": "partial", "evidence": "editor.spec.ts: shared Undo/Redo", "limits": "Ctrl+Shift+Z tested; all aliases and Univer trusted redo untested" },
+    { "id": "gs.common.paste-values-only", "platform": "pc", "engines": ["dom"], "status": "partial", "evidence": "state-boundaries.spec.ts: values-only retains destination formatting", "limits": "Plain values only; formula results and cut combination are rejected with explanation" },
+    { "id": "gs.format.bold", "platform": "pc", "engines": ["dom"], "status": "partial", "evidence": "state-boundaries.spec.ts: values-only retains destination formatting", "limits": "Ctrl+B fixture cell; rich-text substrings and other formatting shortcuts untested" },
+    { "id": "gs.navigate.move-to-beginning-of-sheet", "platform": "pc", "engines": ["univer-adapter"], "status": "partial", "evidence": "engine-gaps.spec.ts: P0-G02 adapter success / raw expected failure", "limits": "Ctrl+Home in fixed unmerged grid; editing buffers deliberately bypass adapter" },
+    { "id": "gs.supplemental.name-box", "platform": "pc", "engines": ["univer"], "status": "partial", "evidence": "engine-gaps.spec.ts: P0-G01", "limits": "A2:C3 range only" },
+    { "id": "gs.supplemental.edit-without-clearing-selection", "platform": "pc", "engines": ["univer"], "status": "partial", "evidence": "editor.spec.ts: trusted cell editing", "limits": "F2, text replacement, Enter and Undo in B2; physical IME untested" },
+    { "id": "gs.supplemental.clear-contents-delete", "platform": "pc", "engines": ["dom"], "status": "partial", "evidence": "state-boundaries.spec.ts: delete cannot resurrect rich text", "limits": "Fixed cells; deletion never ends actual enrollment in this isolated prototype" },
+    { "id": "gs.supplemental.ime-hangul-enter", "platform": "pc", "engines": ["dom"], "status": "synthetic-signal-only", "evidence": "editor.spec.ts: IME composition signal protects Enter", "limits": "CDP imeSetComposition/insertText; not a physical Windows IME test" }
+  ],
+  "testSummary": { "unitPassed": 13, "browserPositivePassed": 16, "rawEngineExpectedFailureReproduced": 1, "unexpectedFailures": 0 },
+  "testDirectory": "../../experiments/timetable-lab-p0/tests/",
+  "rawBrowserReport": "../../experiments/timetable-lab-p0/.artifacts/browser-results.json"
+}
