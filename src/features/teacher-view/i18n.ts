@@ -4075,6 +4075,8 @@ export const SHEET_DICT = {
   "os.nc.count": { ko: "{n}명", en: "{n} students" },
   "os.nc.title": { ko: "제목", en: "Title" },
   "os.nc.body": { ko: "공지 내용", en: "Notice text" },
+  "os.nc.attach": { ko: "이미지 첨부 (그 반 학부모 모두에게)", en: "Attach images (every parent in the class sees them)" },
+  "os.nc.images": { ko: " · 이미지 {n}장", en: " · {n} images attached" },
   "os.nc.needClass": { ko: "받을 반을 고르세요", en: "Pick the classes to send to" },
   "os.nc.needText": { ko: "제목과 내용을 입력하세요", en: "Write a title and the notice text" },
   "os.nc.confirm": {

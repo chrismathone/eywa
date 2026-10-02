@@ -7,6 +7,7 @@
 // 🔴 반 공지는 **그 반 학부모 모두**가 본다 — 학생마다 다른 내용(개별 내용·요청서 이미지)을 넣는 칸을 두지 않는다
 //    (개인 내용은 '원생 개별 공지'로만 나간다). 고를 수 있는 반 = 서버가 준 목록뿐(담당 반 ∩ ClassNote 반 보드 연결).
 //    서버가 같은 규칙으로 다시 확인하고(`sendClassWideNotice`), 워커가 보드 원아 = 그 반 재원생을 대조한 뒤에만 올린다.
+// 이미지는 붙일 수 있다(원장 2026-10-03 *"반공지 이미지 가능하게"*) — 학생별이 아니라 **그 반 학부모 모두가 보는 공통 이미지**다.
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import { loadMyClassWideNotice, sendClassWideNotice } from "@/features/report-ad
 import { CLASS_NOTICE_BODY_MAX, CLASS_NOTICE_TITLE_MAX, type ClassNoticeRow } from "@/features/report-admin/class-notice";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
+import { NoticeAttachmentPicker } from "./notice-attachment-picker";
+import type { NoticeAttachment } from "../notice-attachments";
 
 const FIELD = "border-line bg-card text-foreground rounded-lg border px-3 py-2 text-sm w-full";
 
@@ -57,6 +60,8 @@ export function NoticeClassComposer({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<ClassNoticeRow[]>(initialRows);
+  const [atts, setAtts] = useState<NoticeAttachment[]>([]); // 그 반 학부모 모두가 보는 이미지(선택)
+  const [uploading, setUploading] = useState(false);
 
   const toggle = (id: string) =>
     setChecked((prev) => {
@@ -80,7 +85,13 @@ export function NoticeClassComposer({
     }
     if (!test && !window.confirm(tf("os.nc.confirm", { n: picked.length, names: picked.map((c) => c.name).join(", ") }))) return;
     setBusy(true);
-    const res = await sendClassWideNotice({ classIds: test ? [] : picked.map((c) => c.id), title: title.trim(), body: body.trim(), test });
+    const res = await sendClassWideNotice({
+      classIds: test ? [] : picked.map((c) => c.id),
+      title: title.trim(),
+      body: body.trim(),
+      test,
+      ...(atts.length ? { attachments: atts } : {}),
+    });
     setBusy(false);
     if (!res.ok) {
       toast.error(res.error ?? t("os.nc.fail"));
@@ -96,12 +107,14 @@ export function NoticeClassComposer({
       setChecked(new Set());
       setTitle("");
       setBody("");
+      setAtts([]);
     }
     const again = await loadMyClassWideNotice();
     if (again.ok && again.rows) setRows(again.rows);
   }
 
-  const ready = !!title.trim() && !!body.trim() && !busy;
+  // 이미지가 올라가는 중에는 보내지 않는다 — 올리던 이미지가 빠진 채 나간다.
+  const ready = !!title.trim() && !!body.trim() && !busy && !uploading;
   return (
     <div className="space-y-4">
       <section className="bg-card border-line shadow-card space-y-3 rounded-2xl border px-4 py-3">
@@ -163,9 +176,18 @@ export function NoticeClassComposer({
           aria-label={t("os.nc.body")}
           className={`${FIELD} resize-y`}
         />
+        <NoticeAttachmentPicker
+          attachments={atts}
+          onChange={setAtts}
+          uploading={uploading}
+          onUploadingChange={setUploading}
+          disabled={busy}
+          label={t("os.nc.attach")}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" disabled={!ready || picked.length === 0} onClick={() => send(false)}>
             {busy ? t("os.n.sending") : picked.length ? tf("os.nc.send", { n: picked.length }) : t("os.nc.sendNone")}
+            {atts.length ? tf("os.na.count", { n: atts.length }) : ""}
           </Button>
           <Button size="sm" variant="outline" disabled={!ready} onClick={() => send(true)} title={t("os.nc.testTitle")}>
             {t("os.nc.test")}
@@ -185,7 +207,10 @@ export function NoticeClassComposer({
                   <span className="text-foreground font-bold">{r.title}</span>
                   <span className="text-text-dim text-xs">{t(statusKey(r.status))}</span>
                 </div>
-                <p className="text-text-dim text-xs break-keep">{r.classNames.join(", ")}</p>
+                <p className="text-text-dim text-xs break-keep">
+                  {r.classNames.join(", ")}
+                  {r.imageCount ? tf("os.nc.images", { n: r.imageCount }) : ""}
+                </p>
                 {r.failures.map((f) => (
                   <p key={f} className="text-danger text-xs">
                     {f}

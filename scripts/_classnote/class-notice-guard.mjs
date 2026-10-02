@@ -33,18 +33,46 @@ export function isTestOnlyBoard(live) {
   return Array.isArray(live) && live.length > 0 && live.every((m) => String(m?.name ?? "").startsWith("학원"));
 }
 
+/** 반 공지 한 건에 붙일 수 있는 이미지 상한(앱 `NOTICE_ATTACHMENT_MAX`와 같은 값). */
+export const CLASS_NOTICE_IMAGE_MAX = 10;
+
+/**
+ * 큐 행(`classnote_class_notices`)의 **이미지 첨부**(원장 2026-10-03 *"반공지 이미지 가능하게"*).
+ * 새 칸을 만들지 않고 `targets[].attachments`에 싣는다(원생 개별 공지의 학생별 첨부와 같은 자리 — SQL 없이 간다, [[#95]]).
+ * 반 공지의 이미지는 **전 반 공통**이라 대상마다 같은 목록이 들어 있다 — 경로 기준으로 합쳐 한 벌로 돌려준다.
+ * @returns {Array<{path:string, name:string}>}
+ */
+export function classNoticeAttachments(row) {
+  const out = [];
+  const seen = new Set();
+  for (const t of Array.isArray(row?.targets) ? row.targets : []) {
+    for (const a of Array.isArray(t?.attachments) ? t.attachments : []) {
+      const path = typeof a?.path === "string" ? a.path.trim() : "";
+      if (!path || seen.has(path)) continue;
+      seen.add(path);
+      out.push({ path, name: String(a?.name ?? "").trim() || "이미지" });
+    }
+  }
+  return out;
+}
+
 /**
  * 공지 요청 본문. 🔴 대상 반은 **정확히 하나**(양의 정수) — 아니면 던진다(기관 전체 공지 사고 차단).
+ * `attachedImages` = ClassNote 내부 저장소(kage)에 올려 받은 이미지(알림장과 같은 모양 — 2026-10-03 테스트반 실측).
+ *   키가 없는 항목·상한 초과는 던진다(이미지가 조용히 빠진 공지를 올리지 않는다).
  */
-export function buildClassNoticePayload({ boardId, title, body, centerId, authorName }) {
+export function buildClassNoticePayload({ boardId, title, body, centerId, authorName, attachedImages = [] }) {
   const id = Number(boardId);
   if (!Number.isInteger(id) || id <= 0) throw new Error("반 단체 공지: 대상 반 번호가 올바르지 않습니다 — 발송 중단");
   if (!String(title ?? "").trim() || !String(body ?? "").trim()) throw new Error("반 단체 공지: 제목·내용이 비었습니다");
+  const images = Array.isArray(attachedImages) ? attachedImages : [];
+  if (images.length > CLASS_NOTICE_IMAGE_MAX) throw new Error(`반 단체 공지: 이미지는 최대 ${CLASS_NOTICE_IMAGE_MAX}장입니다`);
+  if (images.some((x) => typeof x?.access_key !== "string" || !x.access_key)) throw new Error("반 단체 공지: 올리지 못한 이미지가 있습니다 — 발송 중단");
   return {
     classes_to: [id],
     title: String(title),
     content: String(body),
-    attached_images: [],
+    attached_images: images,
     attached_video: null,
     attached_files: [],
     is_comment_on: true,

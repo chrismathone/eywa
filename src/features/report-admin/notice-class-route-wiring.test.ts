@@ -92,11 +92,62 @@ describe("워커 — 반 보드 경로는 1인 보드로 되돌아가지 않는�
   });
 });
 
+describe("반 공지 이미지 — 옛 발송 PC가 글만 올리는 것을 막는다", () => {
+  it("워커가 지원한다고 알리고(caps), 앱은 큐를 집을 수 있는 발송 PC가 전부 지원할 때만 이미지를 받는다", () => {
+    expect(read("scripts", "_classnote", "watch-classnote-queue.mjs")).toMatch(/WORKER_CAPS = \{[^}]*classNoticeImages: true/);
+    const action = read("src", "features", "report-admin", "server", "class-notice-actions.ts");
+    expect(action).toContain("pool.every((w) => workerSupportsClassNoticeImages(w.raw))");
+    expect(action).toContain("const gate = await classNoticeImageGate(");
+    // 발송 표식이 없는 옛 판도 센다(명시적 dry-run만 뺀다) · 이미지 판정은 경로로만
+    expect(action).toContain(".postMode === false");
+    expect(action).not.toContain(".postMode === true");
+    expect(action).toContain("images.some((a) => !isImageAttachment(a.path))");
+  });
+  it("워커 — 이미지는 가드·중복 확인을 통과한 뒤에 올리고, 준비가 안 되면 그 반엔 게시하지 않는다", () => {
+    const core = read("scripts", "_classnote", "classnote-class-notice-core.mjs");
+    const body = core.slice(core.indexOf("async function sendToBoard("), core.indexOf("export async function sendClassNoticeRow("));
+    const at = (needle: string) => {
+      const i = body.indexOf(needle);
+      expect(i, needle).toBeGreaterThan(-1);
+      return i;
+    };
+    expect(at("if (!guard.ok) return")).toBeLessThan(at("const dup = before.find(same);"));
+    expect(at("const dup = before.find(same);")).toBeLessThan(at("await prepareImages()"));
+    expect(at("if (!media.ok) return { ok: false")).toBeLessThan(at("await postNotice("));
+    // 이미지 공지의 중복은 **이 행이 올린 공지**일 때만 성공으로 넘긴다(장수만 세면 바꾼 이미지를 못 가린다)
+    expect(at("if (has !== null && has >= imageCount && ownNoticeIds.has(Number(dup.id))) return { ok: true")).toBeLessThan(at("await prepareImages()"));
+    // 이미지 목록을 못 받으면 한 반에도 올리지 않는다 · 결과는 호출부 배열에 반마다 쌓는다
+    expect(core).toContain("for (const n of names) results.push({ ...n, ok: false, note: fetched.error });");
+    expect(core).toContain("await sendClassNoticeRow(page, sql, row, { tenant, centerId, authorName: DEFAULT_AUTHOR_NAME, log, base, results, onProgress });");
+    // 진행 기록 — 집을 때 앞선 시도의 결과를 함께 읽고, 반마다 큐 행에 적는다
+    expect(core).toContain("returning c.id, c.title, c.body, c.targets, c.is_test, c.results`");
+    expect(core).toContain("set results=${sql.json(list)} where id=${row.id} and status='processing'");
+  });
+  it("내부 라우트 — 시크릿 게이트 · 공지가 없으면 404(빈 목록으로 얼버무리지 않는다) · 서명 전 장수를 함께 준다", () => {
+    const route = read("src", "app", "api", "internal", "class-notice-attachments", "[noticeId]", "route.ts");
+    expect(route).toContain('secretMatches(request.headers.get("x-eywa-internal"), secret)');
+    expect(route).toContain('{ error: "notice_not_found" }, { status: 404 }');
+    expect(route).toContain("expected: list.length, missing");
+    expect(route).toContain('"report_attachment", notice.tenant_id as string');
+  });
+  it("화면 — 보내는 중에는 첨부를 못 건드리고, 업로드가 끝나면 그 시점의 목록에 합친다(지운 이미지가 되살아나지 않게)", () => {
+    expect(read("src", "features", "onescreen", "components", "notice-class-composer.tsx")).toContain("disabled={busy}");
+    expect(read("src", "app", "(shell)", "lesson-reports", "_components", "class-notice-panel.tsx")).toContain("disabled={busy}");
+    const picker = read("src", "features", "onescreen", "components", "notice-attachment-picker.tsx");
+    expect(picker).toContain("const now = latest.current;");
+    expect(picker).not.toContain("onChange([...attachments, ...added])");
+  });
+});
+
 describe("화면 — 반 공지와 개별 공지를 섞지 않는다", () => {
-  it("원스크린 반 공지 작성부에는 학생별 내용·첨부 칸이 없다(반 공지는 그 반 학부모 모두가 본다)", () => {
+  it("원스크린 반 공지 작성부에는 학생별 내용 칸이 없다(반 공지는 그 반 학부모 모두가 본다) · 이미지는 전 반 공통 한 벌뿐", () => {
     const code = read("src", "features", "onescreen", "components", "notice-class-composer.tsx");
     expect(code).toContain("sendClassWideNotice(");
-    expect(code).not.toMatch(/sendOnescreenNotice|individualBody|NoticeAttachmentPicker/);
+    // 학생별 내용·학생별 첨부(요청서 이미지)는 원생 개별 공지로만 나간다
+    expect(code).not.toMatch(/sendOnescreenNotice|individualBody|studentAttachments|perStudent/);
+    // 이미지(2026-10-03) = 공통 한 벌 · 올리는 중에는 보내지 못한다(올리던 이미지가 빠진 채 나가지 않게)
+    expect(code.match(/<NoticeAttachmentPicker/g)?.length).toBe(1);
+    expect(code).toContain("const ready = !!title.trim() && !!body.trim() && !busy && !uploading;");
     // 보낼 반은 지금 보이는 목록 안에서 고른 것만
     expect(code).toContain("const picked = classes.filter((c) => checked.has(c.id));");
   });

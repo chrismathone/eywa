@@ -10,6 +10,7 @@
  *    path만으로 임의 객체를 지우는 표면을 열지 않기 때문. 상세는 notice-image-upload.ts 헤더.
  */
 
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { issueNoticeAttachmentTicket, registerNoticeAttachment } from "../server/notice-attachment-actions";
@@ -37,6 +38,12 @@ export function NoticeAttachmentPicker({
   // 라벨은 호출부가 덮을 수 있고, 안 주면 사전 기본값(관리자 화면엔 provider가 없어 한국어).
   const labelText = label ?? t("os.na.label");
   const full = attachments.length >= NOTICE_ATTACHMENT_MAX;
+  // 업로드는 몇 초 걸린다 — 끝났을 때는 **그 시점의 목록**에 합친다. 시작할 때의 목록에 합치면 그 사이에 지운 이미지가
+  // 되살아나고, 그 사이에 발송이 끝나 비운 목록에 앞 공지의 이미지가 다시 들어온다(다음 공지에 딸려 나간다).
+  const latest = useRef(attachments);
+  useEffect(() => {
+    latest.current = attachments;
+  }, [attachments]);
 
   /**
    * 순차 업로드 — 티켓 발급이 실패하면 그 자리에서 멈춰 원인을 보여준다(조용히 건너뛰지 않음).
@@ -90,7 +97,9 @@ export function NoticeAttachmentPicker({
       onUploadingChange(false);
     }
     if (added.length) {
-      onChange([...attachments, ...added]);
+      const now = latest.current;
+      const have = new Set(now.map((a) => a.path));
+      onChange([...now, ...added.filter((a) => !have.has(a.path))].slice(0, NOTICE_ATTACHMENT_MAX));
       toast.success(tf("os.na.done", { n: added.length }));
     }
   }
@@ -133,8 +142,9 @@ export function NoticeAttachmentPicker({
               </span>
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => onChange(attachments.filter((x) => x.path !== a.path))}
-                className="text-text-faint hover:text-danger shrink-0"
+                className="text-text-faint hover:text-danger shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t("os.n.delete")}
               </button>
