@@ -136,8 +136,10 @@ export type ClassStudentRow = {
   grade: string | null;
   school: string | null;
   enrolledAt: string;
-  /** 수강 종료일. null=무기한. **오늘 이후(당일 포함)** 는 아직 수강 중이라 목록에 남는다. */
+  /** 저장된 종료 경계. 일반 종료는 당일까지, 반이동은 전날까지 수강한다. null=무기한. */
   endDate: string | null;
+  isTransferred: boolean;
+  isTransferredIn: boolean;
   /**
    * 오늘 기준 위치 — `upcoming`(아직 안 옴) · `active` · `leaving`(끝날 날짜가 잡힘).
    * 🔴 화면은 `upcoming`을 **오늘 명단과 섞어 세지 말 것**(그러면 아직 안 온 학생이 재원생이 된다).
@@ -863,7 +865,7 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
   const { data } = await supabase
     .from("enrollments")
     .select(
-      `id, start_date, end_date, on_hold, is_transferred, attendance_days,
+      `id, start_date, end_date, on_hold, is_transferred, is_transferred_in, attendance_days,
        student:student_id ( id, name, grade, school )`,
     )
     .eq("class_id", classId)
@@ -896,6 +898,8 @@ export async function getClassStudents(classId: string): Promise<ClassStudentRow
         school: s.school,
         enrolledAt: e.start_date,
         endDate,
+        isTransferred,
+        isTransferredIn: !!e.is_transferred_in,
         onHold: e.on_hold,
         attendanceDays: (e.attendance_days as string[] | null) ?? [],
       } satisfies ClassStudentRow;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   enrollmentAssignBlockReason,
+  enrollmentLastDate,
+  isEnrollmentOnRosterOn,
   enrollmentOnHoldForStatus,
   enrollmentPeriodsOverlap,
   isEnrollmentActiveOn,
@@ -8,6 +10,28 @@ import {
 } from "./eligibility";
 
 const REF = "2026-07-16";
+
+describe("반 이동 날짜 경계", () => {
+  it("10/2 이동은 이전 반 10/1까지, 새 반 10/2부터이며 같은 날 두 반에 속하지 않는다", () => {
+    const old = { startDate: "2026-09-08", endDate: "2026-10-02", isTransferred: true };
+    const next = { startDate: "2026-10-02", endDate: null, isTransferred: false };
+    expect(enrollmentLastDate(old.endDate, old.isTransferred)).toBe("2026-10-01");
+    for (const day of ["2026-10-01", "2026-10-02", "2026-10-03"]) {
+      expect([old, next].filter((r) => isEnrollmentOnRosterOn(r, day))).toHaveLength(1);
+    }
+    expect(isEnrollmentOnRosterOn(old, "2026-10-02")).toBe(false);
+    expect(isEnrollmentOnRosterOn(next, "2026-10-02")).toBe(true);
+  });
+
+  it.each([["2026-10-01", "2026-09-30"], ["2027-01-01", "2026-12-31"], ["2028-03-01", "2028-02-29"]])(
+    "%s 이동의 이전 반 마지막 날은 %s", (move, last) => expect(enrollmentLastDate(move, true)).toBe(last),
+  );
+
+  it("일반 종료와 종료일이 없는 수강에는 하루를 빼지 않는다", () => {
+    expect(enrollmentLastDate("2026-10-02", false)).toBe("2026-10-02");
+    expect(enrollmentLastDate(null, true)).toBeNull();
+  });
+});
 
 describe("isEnrollmentEndedOn — 종료 규약 단일 소스", () => {
   it("종료일이 없으면 종료가 아니다", () => {

@@ -40,18 +40,21 @@ export function ScheduledChangeActions({
   const run = (fn: () => Promise<{ error?: string }>) =>
     start(async () => {
       setError(null);
-      const res = await fn();
-      if (res.error) setError(res.error);
-      else {
-        setOpen(false);
-        notifyTermPlansChanged();
-        router.refresh();
+      try {
+        const res = await fn();
+        if (res.error) setError(res.error);
+        else {
+          setOpen(false);
+          notifyTermPlansChanged();
+          router.refresh();
+        }
+      } catch {
+        setError("처리 결과를 확인하지 못했습니다. 새로고침 후 예약 상태를 확인해 주세요.");
       }
     });
 
-  if (!change.canCancel && !open) {
-    // 종료 예정 — 되돌릴 버튼을 주지 않는다. 왜 없는지는 배너 문구가 이미 말한다.
-    return null;
+  if (!change.canCancel) {
+    return change.blockedReason ? <span className="text-text-dim text-xs">{change.blockedReason}</span> : null;
   }
 
   return (
@@ -75,7 +78,7 @@ export function ScheduledChangeActions({
           )
         }
         disabled={pending}
-        title="이 예약만 되돌립니다"
+        title={change.kind === "move" ? "이 반 이동을 취소하고 이전 반 수강을 복구합니다" : "이 배정 예약을 취소합니다"}
         className="text-text-dim hover:text-danger hover:border-danger/30 hover:bg-danger/10 inline-flex items-center gap-1 rounded-lg border border-transparent px-2 py-1 text-xs whitespace-nowrap transition"
       >
         {pending ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}
@@ -101,7 +104,7 @@ export function ScheduledChangeActions({
         />
       ) : null}
       {error ? (
-        <span className="text-danger max-w-[16rem] truncate text-xs" title={error}>
+        <span role="alert" className="text-danger max-w-[24rem] text-xs">
           {error}
         </span>
       ) : null}
@@ -134,9 +137,11 @@ function EditRow({
     <span className="flex flex-wrap items-center gap-1.5">
       <input
         type="date"
+        aria-label="예약 적용일"
         value={date}
         min={min}
         onChange={(e) => setDate(e.target.value)}
+        disabled={pending}
         className="border-line bg-card rounded-lg border px-2 py-1 text-xs"
       />
       {classOptions && classOptions.length > 0 ? (

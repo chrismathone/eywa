@@ -122,7 +122,7 @@ describe("출결 밀림 확인 = 서버 게이트(#77)", () => {
   it("감사로그가 붙어 있고, 확인 후 저장이면 그 사실도 함께 남는다", () => {
     expect(actions).toContain('action: "enrollment_dates_update"');
     expect(actions).toContain("attendanceOutside");
-    expect(actions).toContain("transferPairBroken");
+    expect(actions).toContain("이전 반 종료와 새 반 시작이 함께 변경됩니다");
     // 뷰어가 영문 키 원문을 노출하지 않게 한글 설명도 함께 있어야 한다.
     const describe_ = read("src/features/audit/describe.ts");
     expect(describe_).toContain("기간 밖(확인 후 저장)");

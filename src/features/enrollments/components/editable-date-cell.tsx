@@ -1,6 +1,7 @@
 "use client";
 
 import { isDirectEditClick } from "@/lib/direct-edit";
+import { enrollmentLastDate } from "../eligibility";
 
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -28,10 +29,12 @@ export function EditableDateCell({
   field,
   value,
   emptyLabel,
+  isTransferred = false,
 }: {
   enrollmentId: string;
   field: "start" | "end";
   value: string | null;
+  isTransferred?: boolean;
   /**
    * 종료일이 비었을 때 보여 줄 말(기본 `재원중`). 호출부가 이미 쓰던 문구가 있으면 넘긴다 —
    * 편집을 여는 것과 **라벨을 바꾸는 것은 다른 일**이고, 안 쓰던 말이 명단 전 줄에 새로 서면
@@ -66,6 +69,8 @@ export function EditableDateCell({
    * ⚠️ `key`로 remount해야 uncontrolled 입력의 `defaultValue`가 실제로 갈린다.
    */
   const attempted = state?.confirm?.value ?? null;
+  const inclusiveEnd = field === "end" && isTransferred;
+  const displayValue = inclusiveEnd ? enrollmentLastDate(value, true) : value;
 
   if (!editing) {
     return (
@@ -77,9 +82,9 @@ export function EditableDateCell({
         className="hover:bg-bg-soft -mx-1 cursor-text rounded px-1 py-0.5 text-left transition"
       >
         {field === "start" ? (
-          <span className="text-text-dim num">{value}</span>
-        ) : value ? (
-          <span className="text-amber num font-medium">~{value}</span>
+          <span className="text-text-dim num">{displayValue}</span>
+        ) : displayValue ? (
+          <span className="text-amber num font-medium">~{displayValue}</span>
         ) : (
           (emptyLabel ?? <span className="text-primary font-medium">재원중</span>)
         )}
@@ -92,11 +97,12 @@ export function EditableDateCell({
       <form action={formAction} className="inline-flex items-center gap-1">
         <input type="hidden" name="enrollmentId" value={enrollmentId} />
         <input type="hidden" name="field" value={field} />
+        {inclusiveEnd ? <input type="hidden" name="endDateInclusive" value="1" /> : null}
         <input
           key={attempted ?? "original"}
           type="date"
           name="value"
-          defaultValue={attempted ?? value ?? ""}
+          defaultValue={attempted ?? displayValue ?? ""}
           autoFocus
           required={field === "start"}
           onKeyDown={(e) => {
@@ -132,6 +138,7 @@ export function EditableDateCell({
           pending={pending}
           formAction={formAction}
           onCancel={() => setDismissed(state)}
+          inclusiveEnd={inclusiveEnd}
         />
       ) : null}
     </>
@@ -151,12 +158,14 @@ function DateEditConfirmDialog({
   pending,
   formAction,
   onCancel,
+  inclusiveEnd,
 }: {
   enrollmentId: string;
   confirm: EnrollmentDateConfirm;
   pending: boolean;
   formAction: (formData: FormData) => void;
   onCancel: () => void;
+  inclusiveEnd: boolean;
 }) {
   return (
     <div
@@ -200,6 +209,7 @@ function DateEditConfirmDialog({
           <form action={formAction}>
             <input type="hidden" name="enrollmentId" value={enrollmentId} />
             <input type="hidden" name="field" value={confirm.field} />
+            {inclusiveEnd ? <input type="hidden" name="endDateInclusive" value="1" /> : null}
             <input type="hidden" name="value" value={confirm.value ?? ""} />
             <input type="hidden" name="confirm" value={confirm.token} />
             <button

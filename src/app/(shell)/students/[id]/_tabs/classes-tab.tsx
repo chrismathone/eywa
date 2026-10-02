@@ -9,7 +9,7 @@ import {
 } from "@/features/students/server/queries";
 import { getClassesList } from "@/features/classes/server/queries";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { enrollmentAssignBlockReason } from "@/features/enrollments/eligibility";
+import { enrollmentAssignBlockReason, enrollmentLastDate, isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 // 지난 수업의 '강사' — 그 시점 담임을 기록으로 되살린다(단일 소스, 2026-08-04 시간표와 같은 함수).
 import { getTeacherAsOfIndex } from "@/features/classes/server/teacher-as-of-queries";
 import { resolveTeacherAsOf } from "@/features/classes/teacher-as-of";
@@ -85,7 +85,7 @@ export async function ClassesTab({
   const usedRowSubjects = usedRowSubjectsOf(settings.operations.subjects);
 
   const today = kstToday();
-  const hasEnded = (r: StudentClassRow) => (r.endDate ? r.endDate < today : false);
+  const hasEnded = (r: StudentClassRow) => isEnrollmentEndedOn(r.endDate, today, r.isTransferred);
   const current = rows.filter((r) => !hasEnded(r) && r.startDate <= today);
   const scheduled = rows.filter((r) => !hasEnded(r) && r.startDate > today);
   /**
@@ -108,7 +108,8 @@ export async function ClassesTab({
    */
   const asOfIndex = past.length > 0 ? await getTeacherAsOfIndex() : null;
   const pastRows = past.map((r) => {
-    const at = asOfIndex && r.endDate ? resolveTeacherAsOf(asOfIndex, r.classId, r.endDate) : null;
+    const lastDate = enrollmentLastDate(r.endDate, r.isTransferred);
+    const at = asOfIndex && lastDate ? resolveTeacherAsOf(asOfIndex, r.classId, lastDate) : null;
     return { ...r, teacherName: at?.name ?? null, teacherInferred: at?.inferred ?? false };
   });
 
@@ -302,11 +303,11 @@ function Section({
                   </td>
                   <td className="px-4 py-2.5 text-xs">
                     {canEditDates ? (
-                      <EditableDateCell enrollmentId={r.enrollmentId} field="end" value={r.endDate} />
+                      <EditableDateCell enrollmentId={r.enrollmentId} field="end" value={r.endDate} isTransferred={r.isTransferred} />
                     ) : kind === "scheduled" ? (
                       <span className="text-text-faint">—</span>
                     ) : r.endDate ? (
-                      <span className="text-amber num font-medium">~{r.endDate}</span>
+                      <span className="text-amber num font-medium">~{enrollmentLastDate(r.endDate, r.isTransferred)}</span>
                     ) : (
                       /* 재원중 = positive(green) — 학생 상태 배지와 같은 뜻·같은 색. */
                       <span className="text-green font-medium">재원중</span>
@@ -341,7 +342,7 @@ function Section({
                           <DeleteEnrollmentButton
                             enrollmentId={r.enrollmentId}
                             className={r.className}
-                            periodLabel={r.endDate ? `${r.startDate} ~ ${r.endDate}` : `${r.startDate}부터`}
+                            periodLabel={r.endDate ? `${r.startDate} ~ ${enrollmentLastDate(r.endDate, r.isTransferred)}` : `${r.startDate}부터`}
                           />
                         ) : null}
                       </div>

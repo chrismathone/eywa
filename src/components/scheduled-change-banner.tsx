@@ -56,7 +56,7 @@ export function ScheduledChangeBanner({
     ...makeups.map((m) => ({ key: `m:${m.id}`, date: m.makeupDate, makeup: m })),
   ].sort((a, b) => a.date.localeCompare(b.date));
   return (
-    <div className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
+    <div role="region" aria-label={sheetT(lang, "sched.title")} className="border-blue/30 bg-blue-soft/50 rounded-xl border px-4 py-3">
       <p className="text-blue inline-flex items-center gap-1.5 text-sm font-bold">
         <CalendarClock className="size-4" aria-hidden="true" />
         {sheetT(lang, "sched.title")}{" "}
@@ -74,7 +74,7 @@ export function ScheduledChangeBanner({
                   {scheduledChangeLabel(r.change, today, lang)}
                 </span>
                 {actions ? (
-                  <span className="flex shrink-0 items-center gap-1">{actions(r.change)}</span>
+                  <span className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">{actions(r.change)}</span>
                 ) : null}
               </>
             ) : (

@@ -21,6 +21,16 @@ export function isTransferDate(value: string): boolean {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
+/** 이동일을 한 번만 정한다. 다른 시작일을 받아 이전 반과 하루라도 겹치거나 비게 만들지 않는다. */
+export function transferDateError(moves: readonly { startDate?: string }[], date: string, today: string): string | null {
+  if (!isTransferDate(date)) return "올바른 이동일을 선택해 주세요";
+  if (date < today) return "적용일은 오늘 이후여야 합니다";
+  if (moves.some((move) => move.startDate !== undefined && move.startDate !== date)) {
+    return "새 반 시작일은 반 이동일과 같아야 합니다. 이전 반은 이동 전날까지 수강합니다.";
+  }
+  return null;
+}
+
 export function transferBlockReason(snapshot: TransferSnapshot, date: string): string | null {
   if (snapshot.isTransferred) return "이미 반 이동이 처리되었거나 예약되어 있습니다";
   if (date < snapshot.startDate) return `${snapshot.startDate} 수강 시작 전입니다`;

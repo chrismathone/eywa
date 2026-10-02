@@ -20,6 +20,7 @@ const actions = stripComments(
   read("src", "features", "enrollments", "server", "scheduled-actions.ts"),
 );
 const studentPage = stripComments(read("src", "app", "(shell)", "students", "[id]", "page.tsx"));
+const rpc = read("supabase/migrations/20261002050926_scheduled_enrollment_atomic.sql");
 
 describe("예약 수정·취소 — 게이트", () => {
   it("서버 액션은 반 관리(full) 게이트를 쓴다", () => {
@@ -36,47 +37,50 @@ describe("예약 수정·취소 — 게이트", () => {
 
   it("이미 시작된 예약을 서버가 거절한다", () => {
     expect(actions).toContain("이미 시작된 수강은 예약으로 수정할 수 없습니다");
-    expect(actions).toMatch(/String\(data\.start_date\) <= kstToday\(\)/);
+    expect(rpc).toContain("upcoming.start_date <= today");
   });
 
   it("과거 날짜로 옮기지 못한다", () => {
-    expect(actions).toMatch(/nextDate <= kstToday\(\)/);
+    expect(actions).toContain("date <= kstToday()");
+    expect(rpc).toContain("next_date <= today");
   });
 });
 
 describe("예약 수정·취소 — 쓰기 대상", () => {
   it("두 액션 모두 enrollmentId로 행을 고른다", () => {
     // `.eq("id", …)`가 없으면 좌표·추론으로 대상을 고르고 있다는 뜻이다.
-    expect(actions).toMatch(/\.eq\("id", row\.id\)/);
-    expect(actions).toMatch(/\.eq\("id", input\.pairedEnrollmentId\)/);
+    expect(actions).toContain('rpc("change_scheduled_enrollment"');
+    expect(actions).toContain("p_enrollment_id: input.enrollmentId");
+    expect(actions).toContain("p_paired_enrollment_id: input.pairedEnrollmentId");
   });
 
   it("취소는 새 수강 삭제 → 옛 수강 재개방 순서다", () => {
     // 반대로 하면 두 수강이 겹쳐 GiST enrollments_no_overlap에 걸린다.
-    const del = actions.indexOf('.delete().eq("id", row.id)');
-    const reopen = actions.indexOf("end_date: null");
+    const del = rpc.indexOf("delete from public.enrollments where id = upcoming.id");
+    const reopen = rpc.indexOf("set end_date = null");
     expect(del).toBeGreaterThan(-1);
     expect(reopen).toBeGreaterThan(del);
   });
 
   it("옛 수강은 '반 이동' 흔적일 때만 되살린다", () => {
     // 그 사이 진짜 퇴원했으면 되살리지 않는다 — 되돌리기가 없던 재원생을 만들어서는 안 된다.
-    expect(actions).toMatch(/\.eq\("is_transferred", true\)/);
-    expect(actions).toMatch(/\.eq\("withdrawal_reason", "반 이동"\)/);
+    expect(rpc).toContain("not previous.is_transferred");
+    expect(rpc).toContain("previous.withdrawal_reason is distinct from '반 이동'");
   });
 
   it("짝 행 갱신이 0건이면 실패로 본다", () => {
     // 🔴 PostgREST는 매치 0을 **에러 없이** 돌려준다. 건수를 안 보면 새 시작일만 바뀌고 옛 종료일은
     //    그대로 남아(다른 반이라 GiST 미차단) 구멍·이중 등록이 된다. 취소 쪽은 반대로 그 학생이
     //    그날부터 어느 반에도 없게 된다.
-    expect(actions).toMatch(/\(paired \?\? \[\]\)\.length === 0/);
-    expect(actions).toMatch(/\(reopened \?\? \[\]\)\.length === 0/);
+    expect(rpc).toContain("get diagnostics changed = row_count");
+    expect(rpc).toContain("if changed <> 1 then raise exception");
+    expect(rpc).toContain("exception when others then");
   });
 
   it("짝 행이 같은 학생인지 확인한다", () => {
     // 짝 id는 클라가 보낸 값이다 — 확인 없이 쓰면 아무 전출 행이나 건드린다.
-    const n = (actions.match(/\.eq\("student_id", row\.student_id\)/g) ?? []).length;
-    expect(n).toBe(2);
+    expect(rpc).toContain("previous.student_id <> upcoming.student_id");
+    expect(rpc).toContain("previous.tenant_id <> upcoming.tenant_id");
   });
 
   it("학생 기록을 바꾸므로 감사로그를 남긴다", () => {

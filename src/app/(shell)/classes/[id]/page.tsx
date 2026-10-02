@@ -38,6 +38,8 @@ import { getScheduledClassChanges, scheduledClassChangeLabel } from "@/features/
 import { monthDay } from "@/features/timetable/scheduled-import";
 import { getScheduledForClass } from "@/features/enrollments/server/scheduled-queries";
 import { ScheduledChangeBanner } from "@/components/scheduled-change-banner";
+import { ScheduledChangeActions } from "@/components/scheduled-change-actions";
+import { enrollmentLastDate } from "@/features/enrollments/eligibility";
 import { DelegateAction, DelegationBanner } from "./_components/class-delegation";
 import { getClassDelegationList } from "@/features/classes/server/delegation";
 import { canWriteLoadedClass } from "@/features/classes/server/class-scope";
@@ -148,6 +150,7 @@ export default async function ClassDetailPage({
     getScheduledForClass(klass.id),
     showLabSeparate ? getClassLabSeparateEnrollmentIds(klass.id) : Promise.resolve(null),
   ]);
+  const scheduledByEnrollment = new Map(scheduledRoster.map((change) => [change.enrollmentId, change]));
   // 위임 가능 판정 = 서버 게이트(requireDelegationWrite)와 **같은 모양**이어야 한다.
   // full(원장·부원장·실장)은 학원 전체 반, scoped(강사)는 자기 담당 반만 — 결근을 아는 사람은 본인이라
   // 미리 맡기고 갈 수 있어야 한다. 두 판정이 갈라지면 "버튼은 보이는데 누르면 거절"이 된다.
@@ -369,10 +372,14 @@ export default async function ClassDetailPage({
         </div>
       ) : null}
 
-      {/* 예약된 명단 변동(합류·이동·종료 예정) — 학생 상세와 같은 컴포넌트·같은 문구.
-          🔴 여기선 수정·취소를 주지 않는다: 한 반에서 여러 학생을 한꺼번에 다루는 자리라
-             오클릭 피해가 크고, 개별 정정은 그 학생 상세에서 하는 것이 원장 확정 규약이다. */}
-      <ScheduledChangeBanner changes={scheduledRoster} today={today} subject="class" lang={lang} />
+      {/* 학생 상세로 이동하지 않고 해당 예약 줄에서 수정·취소한다. 서버와 같은 classes full 권한. */}
+      <ScheduledChangeBanner
+        changes={scheduledRoster}
+        today={today}
+        subject="class"
+        lang={lang}
+        actions={canEditSchedule ? (change) => <ScheduledChangeActions change={change} today={today} /> : undefined}
+      />
 
       {klass.pendingTeacherId ? (
         <HandoverBanner
@@ -544,12 +551,13 @@ export default async function ClassDetailPage({
                             enrollmentId={s.enrollmentId}
                             field="end"
                             value={s.endDate}
+                            isTransferred={s.isTransferred}
                             emptyLabel={openEndLabel(s.enrolledAt)}
                           />
                         ) : s.endDate ? (
                           <>
                             {"~"}
-                            <span className="num">{s.endDate}</span>
+                            <span className="num">{enrollmentLastDate(s.endDate, s.isTransferred)}</span>
                           </>
                         ) : (
                           openEndLabel(s.enrolledAt)
@@ -570,7 +578,11 @@ export default async function ClassDetailPage({
                           /* 예정(대기) 줄은 종료가 아니라 **배정 취소**다(원장 2026-09-01:
                              *"배정 취소 하면 아무일도 없던것처럼 되는거지"*) — 아직 아무 기록도 안 붙었으므로
                              행 자체를 지운다. 종료로 닫으면 시작일로 클램프돼 "하루짜리 수강"이 남는다. */
-                          <CancelAssignmentButton
+                          canEditSchedule && scheduledByEnrollment.has(s.enrollmentId) ? (
+                            <ScheduledChangeActions change={scheduledByEnrollment.get(s.enrollmentId)!} today={today} />
+                          ) : s.isTransferredIn || s.isTransferred ? (
+                            <span className="text-text-dim text-xs">반 이동 예약</span>
+                          ) : <CancelAssignmentButton
                             enrollmentId={s.enrollmentId}
                             className={klass.className}
                             startDate={s.enrolledAt}

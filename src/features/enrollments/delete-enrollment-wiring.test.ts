@@ -14,6 +14,11 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8").replace(/\r\
 const actions = read("src/features/enrollments/server/actions.ts");
 
 describe("수업 이력 삭제 게이트", () => {
+  it("미래 반 이동은 한쪽만 일반 삭제하지 못하게 한다", () => {
+    expect(actions).toContain("enr.is_transferred_in && String(enr.start_date) > kstToday()");
+    expect(actions).toContain("이전 반 수강도 함께 복구됩니다");
+    expect(actions.indexOf("이전 반 수강도 함께 복구됩니다")).toBeLessThan(actions.indexOf(".delete()\n    .eq(\"id\", enrollmentId)"));
+  });
   it("🔴 super_admin은 항상 통과한다(원장 2026-08-13 — 새 게이트에서 빼먹기 쉬운 결정)", () => {
     expect(actions).toContain("isCurrentUserSuperAdmin()");
   });
