@@ -15,6 +15,7 @@ import { loginClassnote } from "./classnote-admin-core.mjs";
 import { provisionDailyOnce } from "./classnote-provision-core.mjs";
 import { loadAywa } from "./math-class-boards-load.mjs";
 import { syncMathClassBoards } from "./math-class-boards-sync.mjs";
+import { auditEnrollments, writeSyncRun } from "./class-board-sync-report.mjs";
 import {
   MAX_PROVISION_WRITES,
   PENDING_STALE_MIN,
@@ -70,8 +71,9 @@ async function claim(sql, tenant, host) {
 /**
  * 바뀐 반만 동기화 — ClassNote 쓰기는 새벽 동기화와 같은 코드·같은 가드(class-board-plan.mjs · math-class-boards-apply.mjs ·
  * classnote-provision-core.mjs)를 탄다. 여기서 새로 하는 일은 **대상 고르기**뿐이다.
+ * `events`·`applied` = 동기화 보고서(0329a)용 빈 배열 — 이 회차의 변동·실패·보류 줄과 반별 실행 결과가 담긴다(멈춰도 남는다).
  */
-export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log = console.log }) {
+export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log = console.log, events = [], applied = [] }) {
   const scope = normalizeScope(rawScope);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
   const [aywa, linkRows, members, recentRows, childLinks] = await Promise.all([
@@ -112,13 +114,18 @@ export async function runScopedSync(sql, browser, { tenant, scope: rawScope, log
     out.boardsCreated = pr.created ?? 0;
     out.assigned = pr.assigned ?? 0;
     out.provisionRemaining = pr.remaining ?? 0;
+    // 보고서 줄 — 신입 1인 보드 준비(학생별 내역은 준비 코드가 로그에 남긴다. 여기엔 건수만).
+    if (out.boardsCreated) events.push({ group: "changed", className: "", text: `신입 1인 보드 ${out.boardsCreated}개 생성` });
+    if (out.assigned) events.push({ group: "changed", className: "", text: `신입 1인 보드 원아 배정 ${out.assigned}건` });
+    if (out.provisionRemaining) events.push({ group: "held", className: "", text: `신입 준비 ${out.provisionRemaining}건은 한 번에 할 수 있는 수를 넘어 다음 동기화로 미뤘습니다` });
   }
+  if (remaining) events.push({ group: "held", className: "", text: `바뀐 반 ${remaining}개는 한 번에 볼 수 있는 수를 넘어 다음 동기화로 미뤘습니다` });
   // ② 고른 반만 반 보드 동기화. 실패하면 ①에서 이미 한 일을 오류에 실어 보낸다(부분 실패 기록).
   if (picked.length) {
     const page = await browser.newPage();
     try {
       await loginClassnote(page);
-      const r = await syncMathClassBoards(sql, page, { tenant, apply: true, log, onlyClassIds: new Set(picked.map((p) => p.classId)) });
+      const r = await syncMathClassBoards(sql, page, { tenant, apply: true, log, onlyClassIds: new Set(picked.map((p) => p.classId)), events, applied });
       Object.assign(out, { classes: r.classes, created: r.created, renamed: r.renamed, enrolled: r.enrolled, teachers: r.teachers, held: r.held });
       for (const x of r.release ?? []) log(`[sync-now]   해제 필요(ClassNote 화면에서): ${x}`);
       for (const x of r.skipped ?? []) log(`[sync-now]   보류: ${x}`);
@@ -196,8 +203,18 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
   tableMissingAt = 0;
   if (!row) return { ran: false };
   log(`[sync-now] 요청 ${row.id} 시작`);
+  // 동기화 보고서(0329a) — 이 요청이 한 일·못 한 일을 이유와 함께 남긴다(멈춘 요청도, 바뀐 것이 없던 요청도).
+  const startedAt = new Date();
+  const events = [];
+  const applied = [];
+  let recorded = false; // 회차·배정 기록은 한 번만 — 성공을 적은 뒤 요청 마무리(finish)가 던져도 '멈춘 회차'를 한 번 더 적지 않는다
   try {
-    const result = await runScopedSync(sql, browser, { tenant, scope: row.scope, log });
+    const result = await runScopedSync(sql, browser, { tenant, scope: row.scope, log, events, applied });
+    const { classes, created, renamed, enrolled, teachers } = result;
+    await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: true, events, log,
+      summary: { classes, created, renamed, enrolled, teachers, noChange: result.noChange === true } });
+    await auditEnrollments(sql, tenant, applied, { kind: "request" });
+    recorded = true;
     const fin = await finish(sql, tenant, row.id, { status: "done", result, error: null });
     if (!fin.finished) log(`[sync-now] 요청 ${row.id}는 그 사이 시간 초과로 정리됐습니다(결과만 로그에 남김) — ${result.summary}`);
     else log(`[sync-now] 완료 — ${result.summary}${fin.requeued ? " · 실행 중에 들어온 요청을 이어서 합니다" : ""}`);
@@ -209,6 +226,11 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
     log(`[sync-now] 실패 — ${label} (${raw})`);
     // 부분 실패도 기록한다 — ClassNote에 이미 한 일(배정 등)은 되돌릴 수 없으므로, 0302a는 그 반만 다시 적는 다음 실행이 맞춘다.
     const partial = e && typeof e === "object" && e.partial ? e.partial : null;
+    // 회차를 먼저 적고 요청을 끝낸다 — 화면은 요청이 끝난 것을 보고 보고서 요약을 읽는다(순서가 뒤집히면 직전 회차를 보여 준다).
+    if (!recorded) {
+      await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: false, error: label, events, log });
+      await auditEnrollments(sql, tenant, applied, { kind: "request" }); // 멈추기 전에 이미 배정한 원아도 기록에 남긴다
+    }
     await finish(sql, tenant, row.id, { status: "failed", result: { raw, ...(partial ? { partial } : {}) }, error: label }).catch(() => {});
     await audit(sql, tenant, row.id, partial, label);
     return { ran: true, ok: false, summary: label };

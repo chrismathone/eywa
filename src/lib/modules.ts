@@ -155,7 +155,7 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
     id: "payroll",
     label: "월별 급여",
     description: "직원별 급여 정산과 지급 현황",
-    menuKeys: [],
+    menuKeys: ["attendance_salary_settings", "payroll_settings"],
   },
   staff_leaves: {
     id: "staff_leaves",

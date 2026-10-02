@@ -9,6 +9,8 @@ import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { logAction } from "@/features/audit/server/log";
 import { cooldownLeftMs, mergeScope, normalizeScope, staleReason, type SyncRequestRow } from "../classnote-sync";
 import { isMissingTableError, loadSyncRows, mergeIntoPending, workerAcceptsSyncRequests } from "./classnote-sync-core";
+import { loadSyncReportSummary } from "./classnote-sync-report-core";
+import type { SyncReportSummary } from "../classnote-sync-report";
 
 /**
  * **지금 반 보드 동기화** — 버튼(0313a). 원장 2026-09-30 *"지금 반 보드 동기화 버튼을 만들자. 보고서 설정 말고도 실제로
@@ -23,18 +25,20 @@ import { isMissingTableError, loadSyncRows, mergeIntoPending, workerAcceptsSyncR
  * [[#95]] 0313a 적용 전 = `available:false`(버튼 숨김) · 옛 워커(caps.syncRequests 없음) = 요청을 받지 않는다(아무도 안 집는 '대기 중' 방지).
  */
 
-type Gate = { ok: true; tenantId: string; userId: string } | { ok: false; error: string; hidden: boolean };
+type Gate = { ok: true; tenantId: string; userId: string; canExport: boolean } | { ok: false; error: string; hidden: boolean };
 
 async function gate(): Promise<Gate> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다", hidden: true };
   const settings = await getTenantSettings();
   if (!classnoteModuleOn(settings)) return { ok: false, error: "사용할 수 없는 기능입니다", hidden: true };
-  const allowed = user.systemRole === "teacher" || (await canWriteTenant(user.systemRole, "lesson_reports"));
+  // 보고서 쓰기 권한 = 동기화 보고서(전 반의 학생·원아 이름과 보류 사유)까지 받을 수 있다. 강사는 동기화만 누른다(0329a).
+  const canExport = await canWriteTenant(user.systemRole, "lesson_reports");
+  const allowed = user.systemRole === "teacher" || canExport;
   if (!allowed) return { ok: false, error: "반 보드 동기화 권한이 없습니다", hidden: true };
   const ro = await readonlyTeacherViewError();
   if (ro) return { ok: false, error: ro, hidden: false };
-  return { ok: true, tenantId: user.tenantId, userId: user.id };
+  return { ok: true, tenantId: user.tenantId, userId: user.id, canExport };
 }
 
 export type ClassnoteSyncStatus = {
@@ -42,10 +46,15 @@ export type ClassnoteSyncStatus = {
   workerReady: boolean;
   active: SyncRequestRow | null;
   latest: SyncRequestRow | null;
+  /**
+   * 동기화 보고서 요약(0329a) — 있으면 버튼 옆에 '동기화 보고서 다운로드'를 그린다. null = 권한 없음(강사)·표 미적용·
+   * 워커가 아직 회차를 적은 적 없음. 동기화 상태와 **한 번에** 온다(화면이 마운트 때 서버를 두 번 부르지 않게).
+   */
+  report: SyncReportSummary | null;
   nowMs: number;
 };
 
-const HIDDEN: Omit<ClassnoteSyncStatus, "nowMs"> = { available: false, workerReady: false, active: null, latest: null };
+const HIDDEN: Omit<ClassnoteSyncStatus, "nowMs"> = { available: false, workerReady: false, active: null, latest: null, report: null };
 
 /**
  * 버튼 상태 — 살아 있는 요청·마지막 결과·연동 PC 준비 여부. 읽기만 한다(멈춘 요청 정리는 요청 액션이 한다).
@@ -57,13 +66,15 @@ export async function getClassnoteSyncStatus(): Promise<ClassnoteSyncStatus> {
   if (!g.ok) return { ...HIDDEN, nowMs };
   const admin = createAdminClient();
   try {
-    const [rows, boards, workerReady] = await Promise.all([
+    const [rows, boards, workerReady, report] = await Promise.all([
       loadSyncRows(admin, g.tenantId),
       admin.from("classnote_class_boards").select("class_id", { count: "exact", head: true }).eq("tenant_id", g.tenantId),
       workerAcceptsSyncRequests(admin, g.tenantId),
+      // 동기화 보고서 요약 — 받을 수 있는 사람만 읽는다. 실패·표 없음은 null(버튼만 빠진다, 동기화 버튼은 그대로).
+      g.canExport ? loadSyncReportSummary(admin, g.tenantId) : Promise.resolve(null),
     ]);
     if (boards.error || !boards.count) return { ...HIDDEN, nowMs };
-    return { available: true, workerReady, active: rows.active, latest: rows.latest, nowMs };
+    return { available: true, workerReady, active: rows.active, latest: rows.latest, report, nowMs };
   } catch (e) {
     // 표가 없다(0313a 적용 전) = 없는 기능처럼 감춘다. 그 밖의 조회 실패도 버튼을 감춘다(버튼은 편의일 뿐 — 새벽 동기화는 그대로).
     if (!isMissingTableError(e)) console.error("[classnote-sync] 상태 조회 실패", e);

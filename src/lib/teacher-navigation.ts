@@ -1,7 +1,9 @@
 import { configuredHubGroups, type HubGroup } from "./menu-hub";
 import { isTeacherMenuEntranceOpen } from "./navigation";
 import { TEACHER_MENU_LINKS } from "./teacher-menu-links";
-import type { MenuKey } from "./permissions";
+import { MENU_LABEL, type MenuKey } from "./permissions";
+import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS } from "./settings-role-catalog";
+import { MENU_ICON } from "@/components/icons/aywa-icons";
 import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "@/features/owner/menu-layout";
 
@@ -13,6 +15,11 @@ export function teacherNavigationSource(lang: SheetLang = "ko"): HubGroup[] {
     id: TEACHER_DEFAULT_GROUP, label: sheetT(lang, "menu.trigger"), icon: "folder", kind: "hub",
     items: TEACHER_MENU_LINKS.filter((l) => isTeacherMenuEntranceOpen(l.menu)).map((l) => ({
       href: l.href, menuKey: l.menu, label: sheetT(lang, l.labelKey), icon: l.icon,
+    })),
+  }, {
+    id: "teacher-settings", label: "설정", icon: "settings", kind: "hub",
+    items: SETTINGS_ROLE_KEYS.filter(key => key !== "attendance_salary_settings").map(menuKey => ({
+      menuKey, href: SETTINGS_ROLE_HREF[menuKey], label: MENU_LABEL[menuKey], icon: MENU_ICON[menuKey],
     })),
   }];
 }

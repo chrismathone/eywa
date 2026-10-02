@@ -7,9 +7,9 @@ import type { ReportSettings } from "./settings-types";
 
 const { save } = vi.hoisted(() => ({ save: vi.fn() }));
 vi.mock("@/app/(shell)/owner/_components/section-form", () => ({
-  SectionForm: ({ payload, children }: { payload: ReportSettings; children: ReactNode }) => (
+  SectionForm: ({ payload, children, header, readOnly }: { payload: ReportSettings; children: ReactNode; header?: ReactNode; readOnly?: boolean }) => (
     <form onSubmit={(event) => { event.preventDefault(); save(payload); }}>
-      {children}<button type="submit">저장</button>
+      {header}<fieldset disabled={readOnly}>{children}</fieldset>{readOnly ? null : <button type="submit">저장</button>}
     </form>
   ),
   SettingsCard: ({ title, children }: { title: string; children: ReactNode }) => (

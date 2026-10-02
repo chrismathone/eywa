@@ -21,6 +21,8 @@ export function SectionForm({
   navigationBaseline,
   dashboardBaseline,
   footer,
+  header,
+  readOnly = false,
   children,
 }: {
   section: SectionKey;
@@ -31,6 +33,9 @@ export function SectionForm({
   dashboardBaseline?: string;
   /** 폼 밖 즉시저장 카드(예: 강의실 CRUD). 폼과 저장 바 사이에 렌더 — 중첩 <form> 없이 저장 바를 창 하단에 고정. */
   footer?: ReactNode;
+  /** 읽기 전용에서도 분류 탭은 이동할 수 있도록 폼 밖에 둔다. */
+  header?: ReactNode;
+  readOnly?: boolean;
   children: ReactNode;
 }) {
   const formId = useId();
@@ -55,6 +60,7 @@ export function SectionForm({
    * → payload를 그 자리에서 FormData로 만들어 액션을 직접 디스패치한다(리셋 없음, 항상 최신 state 제출).
    */
   const submit = () => {
+    if (readOnly) return;
     const fd = new FormData();
     fd.set("section", section);
     fd.set("data", JSON.stringify(payload));
@@ -102,6 +108,8 @@ export function SectionForm({
 
   return (
     <div className="space-y-4">
+      {header}
+      {readOnly ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
       {/* onSubmit 경유(액션 폼 아님) — 위 submit() 주석 참조. Enter 저장은 그대로 살고, 자동 리셋만 안 생긴다.
           hidden 두 칸은 이제 제출에 안 쓰이지만 **useUnsavedGuard의 dirty 감지 캐리어**라 유지한다
           (버튼→state로만 바뀌는 편집은 폼 안에 대응 input이 없어 hidden 없이는 '미저장'을 못 본다). */}
@@ -116,14 +124,14 @@ export function SectionForm({
       >
         <input type="hidden" name="section" value={section} />
         <input type="hidden" name="data" value={JSON.stringify(payload)} />
-        <fieldset disabled={pending} className="min-w-0 space-y-6 border-0 p-0 disabled:opacity-70">
+        <fieldset disabled={pending || readOnly} className="min-w-0 space-y-6 border-0 p-0 disabled:opacity-70">
           {children}
         </fieldset>
       </form>
       {/* 폼 밖 즉시저장 카드(예: 강의실 CRUD)는 폼과 저장 바 사이에 둔다 — 중첩 <form> 방지 + 저장 바가
           전체 콘텐츠의 맨 아래(창 하단)에 sticky로 붙도록. 저장 버튼은 form 속성으로 위 폼과 연결. */}
       {footer}
-      <FormActionBar>
+      {!readOnly ? <FormActionBar>
         {state?.ok ? <span className="text-primary mr-1 text-xs font-bold">저장됨 · 테넌트 전체 적용</span> : null}
         {state?.error ? <span className="text-danger mr-1 text-xs">{state.error}</span> : null}
         <button
@@ -134,7 +142,7 @@ export function SectionForm({
         >
           {pending ? "저장 중…" : "저장"}
         </button>
-      </FormActionBar>
+      </FormActionBar> : null}
     </div>
   );
 }

@@ -17,7 +17,7 @@ export type ClassroomActionState = { error?: string; ok?: boolean } | undefined;
 async function gate() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+  if (!(await canWriteTenant(user.systemRole, "operations_settings"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" as const };
   }
   return { user };

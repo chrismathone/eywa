@@ -1,6 +1,7 @@
 import { menuSearchKeywords, navItemByKey, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
+import { settingMenuForHref } from "@/lib/settings-role-catalog";
 import {
   isMenuHiddenByLayout,
   sortByMenuLayout,
@@ -22,8 +23,7 @@ import {
  *
  * 🔴 **라벨·주소·아이콘은 여기서 새로 적지 않는다** — `navItemByKey(menuKey)`로 [`NAV_GROUPS`](./navigation.ts)에서
  *    가져온다(이름을 바꿀 때 한쪽만 바뀌는 것을 구조로 막는다). 여기서 더하는 것은 **한 줄 설명**과 **묶음**뿐.
- * 🔴 면(탭) 목적지(`/billing?tab=…`·`/owner?tab=…`)는 부모 메뉴의 권한키를 그대로 쓴다 — 면에 별도 권한이
- *    없기 때문이고, 있는 것처럼 새 키를 지어내면 게이트가 두 벌이 된다.
+ * 설정 면은 settings-role-catalog의 개별 권한, 나머지 면은 부모 메뉴의 권한을 따른다.
  * 🔴 업무군은 **자식 중 하나라도 접근 가능할 때** 선다(그룹에 대표 메뉴 한 개의 권한을 재사용하지 않는다).
  *    ECS(영어)와 MCS(수학)는 **독립 권한**이라 한쪽만 있는 계정도 자기 시트 버튼을 봐야 한다.
  */
@@ -84,7 +84,7 @@ function fromMenu(menuKey: MenuKey, desc?: string, extra?: Partial<HubDest>): Hu
 function face(parent: MenuKey, href: string, label: string, desc?: string, extra?: Partial<HubDest>): HubDest | null {
   const item = navItemByKey(parent);
   if (!item) return null;
-  return { menuKey: parent, href, label, icon: item.icon, desc, ...extra };
+  return { menuKey: settingMenuForHref(href) ?? parent, href, label, icon: item.icon, desc, ...extra };
 }
 
 const keep = (xs: (HubDest | null)[]): HubDest[] => xs.filter((x): x is HubDest => x !== null);
@@ -123,6 +123,8 @@ export const HUB_GROUPS: HubGroup[] = [
       fromMenu("classes", "반 목록·반 정보 관리"),
       fromMenu("textbooks", "교재·차수별 진도·과제"),
       fromMenu("lesson_reports", "수업보고서 작성·발송"),
+      face("lesson_reports", "/lesson-reports?tab=report", "보고서 설정", undefined, { tool: true, icon: MENU_ICON.report_settings }),
+      face("lesson_reports", "/lesson-reports?tab=ai_ment", "AI 멘트", undefined, { tool: true, icon: MENU_ICON.ai_ment }),
       fromMenu("class_review", "수업 참관·평가 기록"),
       fromMenu("teacher_onescreen", "담당 학생 수업 마감", { teacherOnly: true }),
       // 출석부의 다른 면 — 자주 쓰는 자리는 위 버튼이고, 나머지는 작은 줄로.
@@ -232,24 +234,24 @@ export const SUPPORT_GROUPS: HubGroup[] = [
     // ⚠️ 인수인계의 '11 → 5 범주'는 **제안**이라 면을 합치지 않았다(면을 합치면 라우트·조회가 바뀐다).
     //    여기서는 같은 11면을 **범주 제목으로 묶어** 고르게만 한다 — 주소·권한·화면 모두 그대로다.
     items: keep([
-      face("owner", "/owner", "프로필·브랜드", undefined, { section: "학원 정보", icon: "palette" }),
+      face("owner", "/owner", "프로필·브랜드", undefined, { section: "학원 정보", icon: MENU_ICON.profile_settings }),
       // 왼쪽 탭 — 프로필·브랜드와 같은 범주에 둔다(둘 다 "이 학원 화면이 어떻게 보이나"를 정한다).
       // 🔴 이 면은 감출 수 없는 `/owner`와 함께 서므로, 무엇을 감추든 여기로 돌아올 길이 남는다.
       // 🔴 그림은 **아무도 안 쓰는 것**으로 골라야 한다(가드 `menu-glyph.test.ts`: 서로 다른 메뉴가 같은
       //    그림을 쓰면 실패). `layoutGrid`는 대시보드가, `sheetRows`는 수학 강사 시트가 이미 쓴다.
       //    실제로 남아 있는 그림은 아홉 개뿐이라(alarm·alert·calendarCheck·chart·check·percent·sparkle·trash·userX)
       //    그중 "고르는 목록"에 가장 가까운 `check`를 쓴다.
-      face("owner", "/owner?tab=navigation", "탭 및 메뉴 구성", undefined, { section: "학원 정보", icon: "check" }),
+      face("owner", "/owner?tab=navigation", "탭 및 메뉴 구성", undefined, { section: "학원 정보", icon: MENU_ICON.navigation_settings }),
       face("owner", "/owner?tab=dashboard", "대시보드 구성", undefined, { section: "학원 정보", icon: MENU_ICON.dashboard }),
       // '기능'(모듈 켜기·끄기) — **새 학원에만**(2026-09-23 전수 점검 F19: 화면 탭엔 있는데 사이드바·메뉴 판엔
       // 없었다). 면 목록 판정은 설정 화면(owner/page.tsx facesFor)과 같다 — 일반판이면 선다.
       face("owner", "/owner?tab=modules", "기능", undefined, { section: "학원 정보", icon: "sparkle", genericOnly: true }),
-      face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: "clock" }),
+      face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: MENU_ICON.operations_settings }),
       face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영", icon: "tag" }),
-      face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: "invoice" }),
-      face("owner", "/owner?tab=notifications", "알림·약관", undefined, { section: "청구·안내", icon: "bellRing" }),
-      face("owner", "/owner?tab=consultations", "상담 양식", undefined, { section: "청구·안내", icon: "formInput" }),
-      face("owner", "/owner?tab=popups", "팝업 공지", undefined, { section: "청구·안내", icon: "megaphone" }),
+      face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: MENU_ICON.billing_settings }),
+      face("owner", "/owner?tab=notifications", "알림·약관", undefined, { section: "청구·안내", icon: MENU_ICON.notification_settings }),
+      face("owner", "/owner?tab=consultations", "상담 양식", undefined, { section: "청구·안내", icon: MENU_ICON.consultation_settings }),
+      face("owner", "/owner?tab=popups", "팝업 공지", undefined, { section: "청구·안내", icon: MENU_ICON.popup_settings }),
       face("owner", "/owner?tab=permissions", "역할·권한", undefined, { section: "계정·권한", icon: "key" }),
       face("owner", "/owner?tab=data", "데이터 정리", undefined, { section: "시스템", icon: "eraser" }),
       // 엑셀로 한꺼번에 넣기 허브(원장 2026-09-29) — 데이터 정리와 같은 '시스템' 범주. 그림은 같은 메뉴(학원 설정)의 '연동'과 같은
@@ -404,7 +406,7 @@ export function frequentFor(gate: Gate, keys?: readonly MenuKey[]): HubDest[] {
  *    [`menuSearchKeywords`](./navigation.ts) 한 곳이 정한다(두 벌로 적지 않는다).
  */
 export function hubSearchKeywords(dest: HubDest, groupLabel: string): string {
-  const item = navItemByKey(dest.menuKey);
+  const item = navItemByKey(dest.href === "/owner" ? "owner" : dest.menuKey);
   const own = item && item.href === dest.href ? menuSearchKeywords(item, groupLabel) : "";
   // 면은 제 라벨 + 업무군 + 부모 권한키로 찾는다(부모 라벨은 own이 있을 때만 실린다).
   return `${dest.label} ${dest.originalLabel ?? ""} ${groupLabel} ${dest.menuKey} ${own}`.toLowerCase();

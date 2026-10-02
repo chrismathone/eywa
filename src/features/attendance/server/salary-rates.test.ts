@@ -1,8 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { accessLevel, type SystemRole } from "@/lib/permissions";
 const h = vi.hoisted(() => ({ access: vi.fn(), manage: vi.fn(), scope: vi.fn(), from: vi.fn(), replies: [] as unknown[], writes: [] as unknown[], classes: vi.fn() }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: h.access }));
-vi.mock("@/lib/auth/perm-matrix", () => ({ canManageTenant: h.manage }));
-vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: h.scope }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canManageTenant: h.manage, canAccessTenant: h.manage }));
+vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: h.scope }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: h.from }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
@@ -15,7 +16,7 @@ const rates = { regular: { 초등: 40, 중등: 45, 고등: 50 }, special: { 초�
 beforeEach(() => {
   vi.clearAllMocks(); h.replies = []; h.writes = [];
   h.access.mockResolvedValue({ id: "admin", tenantId: "tenant", systemRole: "admin" });
-  h.manage.mockResolvedValue(true); h.scope.mockResolvedValue(null); h.classes.mockResolvedValue([]);
+  h.manage.mockImplementation(async (role: SystemRole) => accessLevel(role, "attendance_salary_settings") === "full"); h.scope.mockResolvedValue(false); h.classes.mockResolvedValue([]);
   h.from.mockImplementation(() => {
     const result = h.replies.shift() ?? { data: null, error: null };
     const builder: Record<string, unknown> = {};

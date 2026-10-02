@@ -20,6 +20,13 @@ import { approvalMenuOverridesFor } from "@/features/approvals/access";
 import { capDisabledModules } from "@/lib/modules";
 // ⚠️ view-mode.ts가 아니라 view-as.ts에서 — view-mode는 teacher-scope·delegation을 물고 있어 순환 위험.
 import { isReadonlyTeacherView } from "@/lib/auth/view-as";
+import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
+import { isFeatureLicensed } from "@/lib/license/server";
+
+async function capSettingFeatures(matrix: AccessMatrix, tenantId: string, role: SystemRole): Promise<AccessMatrix> {
+  if (matrix.ai_ment[role] === "none" || await isFeatureLicensed(tenantId, "ai_analysis")) return matrix;
+  return { ...matrix, ai_ment: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" } };
+}
 
 /**
  * 현재 테넌트의 유효 권한 매트릭스 = 하드코딩 MENU_ACCESS(기본값) + owner 설정 permissions override.
@@ -82,7 +89,7 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const isSuperAdmin = await isCurrentUserSuperAdmin();
     const codeOverrides = approvalMenuOverridesFor(user.id, isSuperAdmin, isChinsanTenant(settings));
     const userOverrides = [...codeOverrides, ...settings.permissions.userOverrides];
-    if (userOverrides.length === 0) return base;
+    if (userOverrides.length === 0 && !isSuperAdmin) return capSettingFeatures(base, user.tenantId, user.systemRole);
     const applied = applyUserOverrides(base, user.id, user.systemRole, userOverrides);
     // super_admin도 **부여는 받는다**(예전엔 base로 되돌려 개인 예외가 통째로 날아갔다 — 2026-08-13
     // 수업 평가 실종의 절반). 개인 예외로 잠그는(낮추는) 것만 무시하려고 높은 쪽을 취한다.
@@ -93,9 +100,12 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     //    함께 병합해 **어느 쪽이 준 부여든** 남긴다(낮추는 것만 무시 — 위 원칙 그대로).
     if (isSuperAdmin) {
       const codeOnly = applyUserOverrides(base, user.id, user.systemRole, codeOverrides);
-      return capDisabledModules(mergeMostPermissive(mergeMostPermissive(base, applied), codeOnly), disabled);
+      const merged = mergeMostPermissive(mergeMostPermissive(base, applied), codeOnly);
+      // 슈퍼관리자는 공용 설정의 역할 제한으로 잠기지 않는다.
+      for (const menu of SETTINGS_ROLE_KEYS) merged[menu] = { ...merged[menu], [user.systemRole]: "full" };
+      return capSettingFeatures(capDisabledModules(merged, disabled), user.tenantId, user.systemRole);
     }
-    return capDisabledModules(applied, disabled);
+    return capSettingFeatures(capDisabledModules(applied, disabled), user.tenantId, user.systemRole);
   } catch (e) {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
     return base;

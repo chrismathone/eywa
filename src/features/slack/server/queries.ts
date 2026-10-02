@@ -35,7 +35,7 @@ export type SlackCardState = { kind: "off" } | { kind: "readonly" } | { kind: "m
 export async function getSlackCardState(): Promise<SlackCardState> {
   const user = await getCurrentUser();
   if (!user || !(await isFeatureOptedIn(user.tenantId, "slack"))) return { kind: "off" };
-  const g = await slackGate();
+  const g = await slackGate(false);
   if ("error" in g) return { kind: "readonly" };
   const [conn, rules, staff, health] = await Promise.all([
     loadConnection(g.tenantId),

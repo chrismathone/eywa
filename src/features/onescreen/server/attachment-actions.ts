@@ -46,6 +46,29 @@ type ReportRow = { id: string; attachments: Attachment[] | null; classnote_statu
 const SENT_LOCK_ERROR =
   "이미 학부모에게 발송된 보고서라 첨부를 바꿀 수 없습니다 — 고쳐야 하면 공유 링크를 재발급하세요";
 const isSentLocked = (row: ReportRow | null) => row?.classnote_status === "success";
+/**
+ * 리셋을 쓰는 순간의 조건 — **이미 보낸 글(success)** 과 **회수가 진행 중이거나 실패한 글**의 상태는 지우지 않는다.
+ *  · 위 `isSentLocked`는 읽은 시점의 판정이다. 읽고 쓰는 사이에 워커가 글을 올리면(success) 리셋이 그 사실을 지워
+ *    "발송된 보고서 수정 금지"가 경합에서 뚫린다 — 쓰는 순간에 다시 본다.
+ *  · 회수 요청·회수 중인 행을 리셋하면 회수 워커가 그 행을 못 집어(`recall_requested`만 집는다) 옛 글이 알림장에 남는다 —
+ *    그 뒤 다시 보내면 옛 글 옆에 새 글이 붙는다. 보강 앵커 쪽 조건(makeup-anchor-sync.ts)과 같은 취지.
+ * ⚠️ `processing`은 막지 않는다(종전 그대로): 처리 중에 첨부를 바꾸면 상태가 지워지고, 워커는 게시 직전에 상태를 다시 보고
+ *    그 발송을 접는다 — 강사가 "사진을 빠뜨렸다"를 알아챘을 때 발송을 취소하고 사진을 넣어 다시 보내는 길이다.
+ */
+const RESET_OK = "classnote_status.is.null,classnote_status.not.in.(success,recall_requested,recalling,recall_failed)";
+const RECALL_LOCK_ERROR = "회수하는 중인 보고서라 첨부를 바꿀 수 없습니다 — 회수가 끝난 뒤 다시 해 주세요";
+// 회수 실패 = 옛 글이 알림장에 그대로 있다. 여기서 상태를 지우면 회수를 다시 시도할 길이 사라진다.
+const RECALL_FAILED_LOCK_ERROR = "회수하지 못한 보고서라 첨부를 바꿀 수 없습니다 — 먼저 회수를 다시 시도해 주세요";
+const RESET_RETRY_ERROR = "보고서 상태가 바뀌어 첨부를 반영하지 못했습니다 — 잠시 뒤 다시 시도해 주세요";
+/** 리셋이 0행이었을 때의 안내 — 지금 상태를 다시 읽어 사유를 가른다. 모르는 상태를 '발송 완료'라고 지어내지 않는다. */
+async function resetBlockedError(supabase: Awaited<ReturnType<typeof createClient>>, reportId: string): Promise<string> {
+  const { data } = await supabase.from("lesson_reports").select("classnote_status").eq("id", reportId).maybeSingle();
+  const status = (data?.classnote_status as string | null) ?? null;
+  if (status === "success") return SENT_LOCK_ERROR;
+  if (status === "recall_requested" || status === "recalling") return RECALL_LOCK_ERROR;
+  if (status === "recall_failed") return RECALL_FAILED_LOCK_ERROR;
+  return RESET_RETRY_ERROR;
+}
 
 /**
  * 저장된 보고서 행 — 첨부는 저장된 행에만 붙는다. date 기본=오늘(admin 직접작성은 작성일 전달).
@@ -192,13 +215,19 @@ export async function registerReportAttachment(
     ...current,
     { path: input.path, name: input.name || "photo", size: verified.size || input.size || 0 },
   ];
-  const { error } = await g.supabase
+  const { data: resetRows, error } = await g.supabase
     .from("lesson_reports")
     .update({ attachments: next, ...CLASSNOTE_RESET })
-    .eq("id", row.id);
+    .eq("id", row.id)
+    .or(RESET_OK)
+    .select("id");
   if (error) {
     await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
     return { ok: false, error: `등록 실패: ${error.message}` };
+  }
+  if (!resetRows?.length) {
+    await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
+    return { ok: false, error: await resetBlockedError(g.supabase, row.id) };
   }
   // 감사로그 — 첨부 변경은 CLASSNOTE_RESET으로 **발송 상태를 지운다**(위 주석). 그래서 "왜 발송됨이
   // 미발송으로 돌아갔나"의 답이 이 줄뿐인 경우가 있다. 파일 이름·경로는 스토리지 대조용.
@@ -234,11 +263,14 @@ export async function removeReportAttachment(
   const current = row.attachments ?? [];
   const next = current.filter((a) => a.path !== input.path);
   if (next.length === current.length) return { ok: true, attachments: current }; // 이미 없음(멱등)
-  const { error } = await g.supabase
+  const { data: resetRows, error } = await g.supabase
     .from("lesson_reports")
     .update({ attachments: next, ...CLASSNOTE_RESET })
-    .eq("id", row.id);
+    .eq("id", row.id)
+    .or(RESET_OK)
+    .select("id");
   if (error) return { ok: false, error: `삭제 실패: ${error.message}` };
+  if (!resetRows?.length) return { ok: false, error: await resetBlockedError(g.supabase, row.id) };
   await removeObject(input.path, { bucket: BUCKET }).catch(() => {});
   // 🔴 파일은 스토리지에서 **실제로 지워진다** — 되돌릴 수 없으니 누가 지웠는지가 유일한 근거다.
   //    (위 멱등 분기 = 이미 없던 첨부는 여기 안 온다.)

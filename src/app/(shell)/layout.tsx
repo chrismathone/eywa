@@ -36,6 +36,7 @@ import { ViewAsChip } from "@/components/other-teacher-view";
 import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { ecsAssistantClassIds } from "@/features/class-sheets/server/access";
 import { canAccess, menuKeyForPath } from "@/lib/permissions";
+import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 import { findNavItem, teacherMenuKeysFor } from "@/lib/navigation";
 import { brandColorVars } from "@/lib/color-utils";
 import { WorkspaceCanvas } from "@/components/workspace/workspace-canvas";
@@ -217,7 +218,10 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (view === "teacher") {
     const pathname = (await headers()).get("x-pathname") ?? "";
     const menu = menuKeyForPath(pathname);
-    if (menu && !canAccess("teacher", menu, permMatrix)) {
+    const hasDelegatedSetting = SETTINGS_ROLE_KEYS.some(key => SETTINGS_ROLE_HREF[key].split("?")[0] === pathname
+      && canAccess("teacher", key, permMatrix) && canAccess(user.systemRole, key, permMatrix));
+    // 설정 화면의 실제 탭은 페이지에서 개별 권한을 다시 검사한다.
+    if (menu && !canAccess("teacher", menu, permMatrix) && !hasDelegatedSetting) {
       // 강사 홈은 담당 과목으로 갈린다(영어 전담=ECS·그 외=원스크린, 2026-08-07) — 하드코딩 금지.
       redirect(await teacherViewHome());
     }

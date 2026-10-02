@@ -19,7 +19,7 @@ import {
 import type { MentStyleView } from "@/features/onescreen/server/ment-style-actions";
 import { MentStyleCard } from "./ment-style-card";
 
-export function AiMentSection({ initial, styles }: { initial: PromptRow[]; styles?: MentStyleView }) {
+export function AiMentSection({ initial, styles, canEdit = true }: { initial: PromptRow[]; styles?: MentStyleView; canEdit?: boolean }) {
   const [reports, setReports] = useState<TestReportOption[]>([]);
   useEffect(() => {
     void getRecentReportsForTest().then((r) => {
@@ -37,15 +37,16 @@ export function AiMentSection({ initial, styles }: { initial: PromptRow[]; style
         으로 되돌릴 수 있어요.
       </div>
       {/* 강사 말투(0262a) — 프롬프트보다 위: 원장이 "왜 선생님마다 결이 다른가"를 여기서 먼저 본다. */}
-      {styles ? <MentStyleCard initial={styles} /> : null}
+      {!canEdit ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {styles ? <MentStyleCard initial={styles} canEdit={canEdit} /> : null}
       {initial.map((p) => (
-        <PromptEditor key={p.type} row={p} reports={reports} />
+        <PromptEditor key={p.type} row={p} reports={reports} canEdit={canEdit} />
       ))}
     </div>
   );
 }
 
-function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOption[] }) {
+function PromptEditor({ row, reports, canEdit }: { row: PromptRow; reports: TestReportOption[]; canEdit: boolean }) {
   const [text, setText] = useState(row.text);
   const [custom, setCustom] = useState(row.isCustom);
   const [saving, setSaving] = useState(false);
@@ -135,6 +136,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
       </div>
 
       <textarea
+        readOnly={!canEdit}
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={12}
@@ -158,14 +160,14 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={onSave} disabled={saving || missingPlaceholder}>
+        <Button size="sm" onClick={onSave} disabled={!canEdit || saving || missingPlaceholder}>
           {saving ? "저장 중…" : "저장"}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setText(DEFAULT_PROMPTS[row.type])} disabled={isDefault}>
+        <Button size="sm" variant="outline" onClick={() => setText(DEFAULT_PROMPTS[row.type])} disabled={!canEdit || isDefault}>
           기본값 불러오기
         </Button>
         {custom ? (
-          <Button size="sm" variant="ghost" onClick={onReset}>
+          <Button size="sm" variant="ghost" onClick={onReset} disabled={!canEdit}>
             기본값 복원(저장)
           </Button>
         ) : null}
@@ -187,7 +189,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
               </option>
             ))}
           </select>
-          <Button size="sm" variant="outline" onClick={onTest} disabled={testing || !testReport}>
+          <Button size="sm" variant="outline" onClick={onTest} disabled={!canEdit || testing || !testReport}>
             {testing ? "생성 중…" : "테스트 실행"}
           </Button>
         </div>
@@ -217,6 +219,7 @@ function PromptEditor({ row, reports }: { row: PromptRow; reports: TestReportOpt
                   <button
                     type="button"
                     onClick={() => setText(v.text)}
+                    disabled={!canEdit}
                     className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-2 py-1 text-xs font-bold"
                   >
                     이 버전 불러오기

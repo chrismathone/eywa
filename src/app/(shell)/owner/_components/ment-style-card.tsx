@@ -10,7 +10,7 @@ import { rebuildMentStylesNow, type MentStyleView } from "@/features/onescreen/s
 
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", dateStyle: "short", timeStyle: "short" }) : "—");
 
-export function MentStyleCard({ initial }: { initial: MentStyleView }) {
+export function MentStyleCard({ initial, canEdit = true }: { initial: MentStyleView; canEdit?: boolean }) {
   const [view, setView] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function MentStyleCard({ initial }: { initial: MentStyleView }) {
             직접 쓰거나 고친 멘트(최근 {MENT_STYLE_WINDOW_DAYS}일 · {MENT_STYLE_MIN_SAMPLES}건 이상)로 선생님마다 말투를 접어 자동작성에 붙입니다 · 매주 일요일 저녁 자동 갱신
           </span>
         </h2>
-        <Button size="sm" variant="outline" onClick={onRebuild} disabled={busy || view.tableMissing}>
+        <Button size="sm" variant="outline" onClick={onRebuild} disabled={!canEdit || busy || view.tableMissing}>
           {busy ? "갱신 중…" : "지금 갱신"}
         </Button>
       </div>

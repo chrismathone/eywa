@@ -9,9 +9,11 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { textbookRequestStudentIds } from "./textbook-scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { kstToday } from "@/lib/date-kst";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { BOARD_PREFIX } from "@/features/report-admin/notice-targets";
+import { resolveNoticeOwners, type NoticeClassTeacher, type NoticeOwner, type OwnerAccount } from "../textbook-notice-subject";
 import { ownsTextbookRequest } from "../textbook-ownership";
 import { workerSupportsNoticeAttachments } from "@/features/report-admin/worker-results";
 
@@ -48,37 +50,117 @@ export async function getMyTextbookMent(): Promise<string | null> {
  * 학생별 **발송 가능 과목 키** — textbook_orders엔 과목 컬럼이 없어 활성 수강(enrollments)에서 도출한다.
  * 활성 = end_date null 또는 미래(KST 오늘 기준). 보드 prefix가 없는 과목은 게시 대상이 아니라 제외.
  * 같은 보드로 가는 키(math·subject_1 → "(수학)")는 하나만 남긴다(고를 이유가 없는 선택지 제거).
+ * `classes` = 두 과목을 다 듣는 학생의 반별 과목·담당(담임 + 오늘 유효한 교시 담당) — 알림장 기본값 판정 재료.
  */
-export async function getStudentBoardSubjects(studentIds: string[]): Promise<Record<string, string[]>> {
+export type StudentBoardInfo = {
+  subjects: Record<string, string[]>;
+  classes: Record<string, NoticeClassTeacher[]>;
+};
+
+export async function getStudentBoardSubjects(studentIds: string[]): Promise<StudentBoardInfo> {
+  const empty: StudentBoardInfo = { subjects: {}, classes: {} };
   const user = await getCurrentUser();
-  if (!user) return {};
+  if (!user) return empty;
   const ids = [...new Set((studentIds ?? []).filter(Boolean))];
-  if (!ids.length) return {};
+  if (!ids.length) return empty;
   const supabase = await createClient();
   const today = kstToday();
+  type ClassRef = { id?: string | null; subject?: string | null; teacher_id?: string | null };
   // 대량 id는 청크 분할(B3) — 헬퍼가 error를 삼키지 않고 throw.
-  const rows = await fetchInChunks<{
-    student_id: string;
-    class: { subject?: string | null } | { subject?: string | null }[] | null;
-  }>(ids, (chunk) =>
+  const rows = await fetchInChunks<{ student_id: string; class: ClassRef | ClassRef[] | null }>(ids, (chunk) =>
     supabase
       .from("enrollments")
-      .select("student_id, class:class_id!inner ( subject )")
+      .select("student_id, class:class_id!inner ( id, subject, teacher_id )")
       .in("student_id", chunk)
       .or(`end_date.is.null,end_date.gte.${today}`),
   );
 
-  const out: Record<string, string[]> = {};
+  const subjects: Record<string, string[]> = {};
+  const classRows: Array<{ studentId: string; classId: string; subject: string; homeroom: string | null }> = [];
   for (const r of rows) {
     const klass = Array.isArray(r.class) ? r.class[0] : r.class;
     const subject = (klass?.subject ?? "").trim();
     if (!subject || !BOARD_PREFIX[subject]) continue;
-    const list = (out[r.student_id] ??= []);
+    if (klass?.id) classRows.push({ studentId: r.student_id, classId: klass.id, subject, homeroom: klass.teacher_id ?? null });
+    const list = (subjects[r.student_id] ??= []);
     if (list.some((s) => BOARD_PREFIX[s] === BOARD_PREFIX[subject])) continue;
     list.push(subject);
   }
-  for (const list of Object.values(out)) list.sort();
-  return out;
+  for (const list of Object.values(subjects)) list.sort();
+
+  // 알림장 기본값(textbook-notice-subject.ts) 재료 — 두 과목을 다 듣는 학생이 있을 때만 교시 담당을 읽는다(대부분은 과목 하나).
+  const needTeachers = new Set(Object.entries(subjects).filter(([, list]) => list.length > 1).map(([id]) => id));
+  const classes: Record<string, NoticeClassTeacher[]> = {};
+  if (!needTeachers.size) return { subjects, classes };
+  // 🔴 여기 실패로 발송 창을 세우지 않는다 — 기본값 재료일 뿐이라, 못 읽으면 비워 두고(로그) 화면이 고르게 한다.
+  try {
+    const wanted = classRows.filter((c) => needTeachers.has(c.studentId));
+    // 교시 표는 이력을 함께 담는다(#88) — 오늘 유효한 교시만, 청크 × 페이징으로(B2).
+    const slots = await fetchAllPagedInChunks<{ class_id: string; teacher_id: string | null }>(
+      [...new Set(wanted.map((c) => c.classId))],
+      (chunk, from, to) =>
+        supabase
+          .from("class_schedules")
+          .select("class_id, teacher_id")
+          .in("class_id", chunk)
+          .not("teacher_id", "is", null)
+          .lte("valid_from", today)
+          .or(`valid_to.is.null,valid_to.gte.${today}`)
+          .order("id")
+          .range(from, to),
+    );
+    const slotTeachers = new Map<string, Set<string>>();
+    for (const s of slots) {
+      if (!s.teacher_id) continue;
+      if (!slotTeachers.has(s.class_id)) slotTeachers.set(s.class_id, new Set());
+      slotTeachers.get(s.class_id)!.add(s.teacher_id);
+    }
+    for (const c of wanted) {
+      const teacherIds = new Set(slotTeachers.get(c.classId) ?? []);
+      if (c.homeroom) teacherIds.add(c.homeroom);
+      (classes[c.studentId] ??= []).push({ subject: c.subject, teacherIds: [...teacherIds] });
+    }
+  } catch (e) {
+    console.error("[textbook] 알림장 기본값 재료(반 담당) 조회 실패 — 반 담당 판정 없이 진행합니다", e instanceof Error ? e.message : e);
+    return { subjects, classes: {} };
+  }
+  return { subjects, classes };
+}
+
+/**
+ * 요청서 주인 후보(알림장 기본값 판정용) — 판정 규칙은 `resolveNoticeOwners`(순수) 한 곳. 여기는 그 재료(계정)만 읽는다.
+ * 🔴 실패는 삼킨다(로그) — 기본값 재료일 뿐이라 못 읽으면 주인 없음(= 화면이 고르게 한다)으로 떨어진다.
+ * 읽는 칸은 id·이름·담당 과목뿐(같은 지점) — 강사의 직원 표 읽기 범위에 기대지 않으려고 admin으로 읽는다(tenant 필터 필수).
+ */
+export async function loadNoticeOwners(
+  rows: Array<{ id: string; teacher_name: string | null; created_by: string | null }>,
+): Promise<Record<string, NoticeOwner[]>> {
+  const user = await getCurrentUser();
+  if (!user) return {};
+  const names = [...new Set(rows.map((r) => r.teacher_name?.trim()).filter((v): v is string => !!v))];
+  const creators = [...new Set(rows.map((r) => r.created_by).filter((v): v is string => !!v))];
+  if (!names.length && !creators.length) return {};
+  type Row = { id: string; display_name: string | null; subjects: string[] | null; system_role: string | null };
+  try {
+    const admin = createAdminClient();
+    const base = () =>
+      admin.from("users").select("id, display_name, subjects, system_role").eq("tenant_id", user.tenantId).eq("status", "active");
+    const [byName, byId] = await Promise.all([
+      names.length ? fetchInChunks<Row>(names, (chunk) => base().in("display_name", chunk)) : Promise.resolve([] as Row[]),
+      creators.length ? fetchInChunks<Row>(creators, (chunk) => base().in("id", chunk)) : Promise.resolve([] as Row[]),
+    ]);
+    const accounts = new Map<string, OwnerAccount>();
+    for (const u of [...byName, ...byId]) {
+      accounts.set(u.id, { id: u.id, displayName: u.display_name ?? "", subjects: u.subjects ?? [], role: u.system_role ?? "" });
+    }
+    const list = [...accounts.values()];
+    const out: Record<string, NoticeOwner[]> = {};
+    for (const r of rows) out[r.id] = resolveNoticeOwners({ teacherName: r.teacher_name, createdBy: r.created_by }, list);
+    return out;
+  } catch (e) {
+    console.error("[textbook] 알림장 기본값 재료(요청서 주인) 조회 실패 — 기본값 없이 고르게 합니다", e instanceof Error ? e.message : e);
+    return {};
+  }
 }
 
 /** 하트비트가 이 시간 안이면 "지금 돌고 있는 워커"로 본다 — 이 글을 집어갈 후보. */

@@ -34,7 +34,7 @@ async function load(tenantId: string): Promise<Existing[]> {
 const def: ImporterDef<Plan> = {
   kind: "classrooms",
   title: IMPORT_META.classrooms.title,
-  menu: "owner",
+  menu: "operations_settings",
   sheets: [SPEC],
   singleSheet: true,
   modeHelp: IMPORT_META.classrooms.modeHelp,
