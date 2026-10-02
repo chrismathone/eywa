@@ -41,6 +41,7 @@ export function SearchableSelect({
   ariaLabel,
   highlightSelected = false,
   compact = false,
+  portal = false,
   defaultOpen,
   onOpenChange,
   valuePrefix,
@@ -104,6 +105,8 @@ export function SearchableSelect({
    * 같이 적으면 이기는 쪽을 Tailwind가 CSS를 찍은 순서가 정한다 — 아래 톤 분기와 같은 이유).
    */
   compact?: boolean;
+  /** 표·스크롤 영역 안에서도 목록이 잘리지 않도록 body에 표시한다. */
+  portal?: boolean;
   /**
    * 마운트되자마자 목록을 편 채로 시작 — 더블클릭으로 나타나는 인라인 편집 칸(등록상담 목록뷰)처럼
    * "칸을 열었다 = 고르는 중"인 자리. 평소 폼·필터에선 쓰지 말 것(첫 페인트에 팝오버가 서면 놀란다).
@@ -135,7 +138,8 @@ export function SearchableSelect({
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const inScrollRow = useMobileScrollRow();
-  const Trigger = inScrollRow ? Popover.Trigger : "button";
+  const portalled = portal || inScrollRow;
+  const Trigger = portalled ? Popover.Trigger : "button";
   // 열림 상태는 이 한 곳으로만 바꾼다 — 네 갈래(토글·바깥 클릭·선택·Esc)가 전부 호출부에 알려져야 한다.
   const setOpen = useCallback(
     (next: boolean) => {
@@ -169,13 +173,13 @@ export function SearchableSelect({
   const overflow = waiting ? 0 : filtered.length - shown.length;
 
   useEffect(() => {
-    if (!open || inScrollRow) return;
+    if (!open || portalled) return;
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, setOpen, inScrollRow]);
+  }, [open, setOpen, portalled]);
 
   function choose(v: string) {
     if (multi) {
@@ -209,14 +213,14 @@ export function SearchableSelect({
   const a11yName = ariaLabel ? (a11yValue ? `${ariaLabel}: ${a11yValue}` : ariaLabel) : undefined;
 
   return (
-    <SelectFrame portalled={inScrollRow} open={open} onOpenChange={setOpen}>
+    <SelectFrame portalled={portalled} open={open} onOpenChange={setOpen}>
     <div ref={ref} className={`relative ${className ?? ""}`}>
       {name ? <input type="hidden" name={name} value={current} /> : null}
       <Trigger
         type="button"
         aria-label={a11yName}
         title={multiFull ?? undefined}
-        onClick={inScrollRow ? undefined : () => setOpen(!open)}
+        onClick={portalled ? undefined : () => setOpen(!open)}
         className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
         {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}
@@ -240,7 +244,7 @@ export function SearchableSelect({
         )}
       </Trigger>
       {open ? (
-        <SelectPopup portalled={inScrollRow}>
+        <SelectPopup portalled={portalled}>
           <div className="border-border flex items-center gap-2 border-b px-2.5 py-1.5">
             <EyIcon name="search" size={14} className="size-3.5 shrink-0 opacity-50" />
             <input

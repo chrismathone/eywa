@@ -10,8 +10,7 @@ vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () 
 vi.mock("@/features/owner/subjects", () => ({ buildSubjectMaps: () => ({ labelOf: () => "수학", colorOf: () => "blue" }) }));
 vi.mock("@/features/timetable/lib/periods", () => ({ settingsToPeriodsConfig: () => ({}) }));
 vi.mock("@/features/students/lib/week-grid-row-mode", () => ({ usedRowSubjectsOf: () => [] }));
-vi.mock("@/features/classes/server/teacher-as-of-queries", () => ({ getTeacherAsOfIndex: async () => ({}) }));
-vi.mock("@/features/classes/teacher-as-of", () => ({ resolveTeacherAsOf: mocks.teacher }));
+vi.mock("@/features/students/server/past-class-teachers", () => ({ getPastClassTeachers: mocks.teacher }));
 vi.mock("@/lib/date-kst", async (original) => ({ ...await original<object>(), kstToday: () => "2026-10-02" }));
 vi.mock("../_components/student-assign-action", () => ({ StudentAssignAction: () => null }));
 vi.mock("../_components/delete-enrollment-button", () => ({ DeleteEnrollmentButton: () => null }));
@@ -33,7 +32,7 @@ const show = async () => render(await ClassesTab({
   canEnd: false, canEditDates: false, canEditSchedule: false, canDeleteEnrollment: false,
 }));
 const section = (name: string) => within(screen.getByRole("heading", { name: new RegExp(name) }).closest("section")!);
-beforeEach(() => { vi.clearAllMocks(); mocks.teacher.mockReturnValue(null); });
+beforeEach(() => { vi.clearAllMocks(); mocks.teacher.mockResolvedValue(new Map()); });
 
 it("기존 10/2 반이동 기록은 수강 중 2개·지난 수업 1개로 표시하고 이전 반 종료는 10/1이다", async () => {
   mocks.rows = [row("BS1K", { startDate: "2026-10-02" }), row("BS1L", { endDate: "2026-10-02", isTransferred: true }), row("BS1D")];
@@ -42,7 +41,7 @@ it("기존 10/2 반이동 기록은 수강 중 2개·지난 수업 1개로 표�
   expect(section("수강 중인 수업").queryByText("BS1L")).toBeNull();
   expect(section("지난 수업").getByText("BS1L")).toBeInTheDocument();
   expect(section("지난 수업").getByText("~2026-10-01")).toBeInTheDocument();
-  expect(mocks.teacher).toHaveBeenCalledWith(expect.anything(), "BS1L", "2026-10-01");
+  expect(mocks.teacher).toHaveBeenCalledWith([{ enrollmentId: "BS1L", classId: "BS1L", startDate: "2026-09-08", lastDate: "2026-10-01" }]);
 });
 
 it("10/3 예약은 이전 반이 오늘까지 수강 중이고 새 반은 배정 예정이다", async () => {
@@ -57,4 +56,12 @@ it("일반 수강 종료는 마지막 날까지 수강 중에 남는다", async 
   mocks.rows = [row("일반 종료", { endDate: "2026-10-02" })];
   await show();
   expect(section("수강 중인 수업").getByText("~2026-10-02")).toBeInTheDocument();
+});
+
+it("지난 수업의 추정 담당과 근거 날짜를 표시한다", async () => {
+  mocks.rows = [row("지난 반", { endDate: "2026-10-02", isTransferred: true })];
+  mocks.teacher.mockResolvedValue(new Map([["지난 반", { name: "종료 당시 강사", inferred: true, source: "report", date: "2026-09-29" }]]));
+  await show();
+  expect(section("지난 수업").getByText("종료 당시 강사")).toBeInTheDocument();
+  expect(screen.getByTitle("2026-09-29 수업보고서 기록 기준으로 추정한 담당입니다")).toBeInTheDocument();
 });

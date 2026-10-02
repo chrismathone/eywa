@@ -120,17 +120,19 @@ describe("B1 — 한 번 푼 스코프·설정을 넘긴다", () => {
   });
 });
 
-describe("② 퇴원생 — 1일~오늘, 카드 = 추이 패널 = 퇴원관리", () => {
+describe("② 퇴원&수업종료 — 1일~오늘, 퇴원관리의 과목 전체 종료 기준", () => {
   const PAGE = src("src/app/(shell)/withdrawals/page.tsx");
   const QUERIES = src("src/features/withdrawals/server/queries.ts");
   const WINDOW = src("src/features/withdrawals/server/window.ts");
   const EXIT_ROWS = src("src/features/withdrawals/exit-rows.ts");
 
-  it("카드와 추이 패널은 **같은 행**(getWithdrawalsInWindow 한 번)을 쓰고, 카드는 같은 창 판정으로 거른다", () => {
+  it("카드와 추이는 실제 퇴원 조회를 공유하고, 카드는 과목 종료를 추가한다", () => {
     expect(count(SERVER, "getWithdrawalsInWindow(")).toBe(1);
     expect(SERVER).toContain("withdrawalMonthWindow(month, today)");
     expect(SERVER).toMatch(/inWithdrawalWindow\(\{ withdrawnAt: row\.withdrawnAt, systemBulk: false \}, win\.from, win\.to\)/);
     expect(SERVER).toContain("withdrawn.map((r) => r.withdrawnAt)");
+    expect(SERVER).toContain("getSubjectEndedStudents()");
+    expect(SERVER).toContain("rows: includeSubjectEnds(");
     expect(SERVER).not.toContain("datedWithdrawals");
     expect(WINDOW).toMatch(/inWithdrawalWindow\(/);
   });
@@ -156,7 +158,7 @@ describe("② 퇴원생 — 1일~오늘, 카드 = 추이 패널 = 퇴원관리",
     expect(STRIP).toContain("countWithdrawalPrograms(withdrawals.rows)");
     expect(POPUPS).toContain("countWithdrawalPrograms(data.rows)");
     expect(PAGE).not.toContain('"올해"');
-    expect(withdrawalsMonthHref("2026-09")).toBe("/withdrawals?type=withdrawn&range=month&month=2026-09");
+    expect(withdrawalsMonthHref("2026-09")).toBe("/withdrawals?type=all&range=month&month=2026-09");
   });
 
   /**

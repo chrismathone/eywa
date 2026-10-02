@@ -51,7 +51,7 @@ export function StudentsPopup({
   );
 }
 
-/** 퇴원생 팝업 — 프로그램별 인원(합 = 퇴원생 수) + 명단. */
+/** 퇴원·과목 전체 종료 팝업 — 유형별 인원 + 프로그램별 인원 + 명단. */
 export function WithdrawalsPopup({
   data,
   subjects,
@@ -67,9 +67,11 @@ export function WithdrawalsPopup({
 }) {
   if (!data) return <PopupEmpty>퇴원 정보를 불러오지 못했습니다.</PopupEmpty>;
   const counts = countWithdrawalPrograms(data.rows);
+  const endedCount = data.rows.filter(row => row.kind === "subject-ended").length;
   return (
     <>
-      <PopupTotal label={`${Number(data.month.slice(5))}월 퇴원생`} value={counts.total} unit="명" />
+      <PopupTotal label={`${Number(data.month.slice(5))}월 퇴원&수업종료`} value={counts.total} unit="명" />
+      <p className={s.popupSummary}>퇴원 {counts.total - endedCount}명 · 수강종료 {endedCount}명</p>
       <CountList
         rows={[
           ...visiblePrograms(eieOn).map((program) => ({
@@ -83,7 +85,7 @@ export function WithdrawalsPopup({
         ]}
       />
       {data.rows.length === 0 ? (
-        <PopupEmpty>이번 달 퇴원생이 없습니다.</PopupEmpty>
+        <PopupEmpty>이번 달 퇴원·수업종료 학생이 없습니다.</PopupEmpty>
       ) : (
         <ul className={s.kpiList}>
           {data.rows.map((row) => (
@@ -95,7 +97,10 @@ export function WithdrawalsPopup({
               >
                 {row.name}
               </NameCell>
-              <span className={s.kpiListMeta} style={row.program ? { color: dashboardProgramColor(row.program) } : undefined}>
+              <Tag tone={row.kind === "subject-ended" ? "info" : "caution"}>
+                {row.kind === "subject-ended" ? "수강종료" : "퇴원"}
+              </Tag>
+              <span className={s.kpiListMeta} title={row.className} style={row.program ? { color: dashboardProgramColor(row.program) } : undefined}>
                 {[row.schoolGrade, row.program ? programLabel(row.program, subjects, eieOn) : null]
                   .filter(Boolean)
                   .join(" · ")}
@@ -105,7 +110,7 @@ export function WithdrawalsPopup({
           ))}
         </ul>
       )}
-      <p className={s.footnote}>프로그램은 마지막 수강 반 기준 · 시스템 정리(퇴원일 미상)는 제외합니다.</p>
+      <p className={s.footnote}>과목 수업을 모두 종료한 학생 포함 · 반이동·특강 종료·퇴원일 미상 제외 · 학생당 1명, 프로그램은 마지막 종료 반 기준입니다.</p>
     </>
   );
 }

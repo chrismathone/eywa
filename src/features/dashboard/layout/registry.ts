@@ -122,7 +122,7 @@ const PANELS: Record<PanelId, PanelSpec> = {
 type KpiSpec = Pick<CardDef, "label"> & Partial<Pick<CardDef, "subjectScope" | "options">>;
 const KPIS: Record<KpiKey, KpiSpec> = {
   students: { label: "재원생", subjectScope: "subject" },
-  withdrawals: { label: "퇴원생", subjectScope: "subject" },
+  withdrawals: { label: "퇴원&수업종료", subjectScope: "subject" },
   intake: { label: "신규문의" },
   calendar: { label: "금일 입테", options: ["phones"] },
   enrolledToday: { label: "금일 등록" },

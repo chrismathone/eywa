@@ -221,6 +221,7 @@ export type SubjectEndedRow = {
     englishTrack: string | null;
     /** 그 과목 마지막 수강의 종료 사유 원문(`enrollments.withdrawal_reason`). */
     reason: string | null;
+    isTransferred?: boolean;
   }[];
 };
 
@@ -329,6 +330,7 @@ export async function getSubjectEndedStudents(): Promise<SubjectEndedRow[]> {
         englishTrack: best?.englishTrack ?? null,
         // 그 과목 마지막 수강의 종료 사유(원문) — 퇴원관리 사유 카드·필터가 퇴원 사유와 함께 센다.
         reason: best?.reason ?? null,
+        isTransferred: best?.isTransferred === true,
       };
     });
     rows.push({

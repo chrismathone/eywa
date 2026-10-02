@@ -67,7 +67,7 @@ export type OverviewData = {
   changes: MonthChange[];
   /** 재원생 추이(월말·연말 재원생 수, 원장 2026-09-29) — 강사 스코프면 null(지금 담당 학생으로 과거를 셀 수 없다). */
   enrolledTrend: import("./enrolled-trend-server").EnrolledTrend | null;
-  /** KPI '퇴원생' — 이번 달 1일 ~ 오늘(KST) 퇴원, 시스템 정리 제외. 프로그램 = 마지막 수강 반. */
+  /** 이번 달 퇴원 또는 과목 전체 수업종료. 학생 중복·반이동·특강 종료·시스템 정리 제외. */
   withdrawals: {
     month: string;
     rows: {
@@ -76,6 +76,8 @@ export type OverviewData = {
       schoolGrade: string | null;
       withdrawnAt: string;
       program: Program | null;
+      kind?: "withdrawn" | "subject-ended";
+      className?: string;
     }[];
   };
   /** KPI '신규문의' — 오늘(KST) 접수된 콜&상담. time = 접수 시각(KST HH:MM). */

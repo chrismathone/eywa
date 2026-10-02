@@ -135,18 +135,18 @@ export function kpiCards(snapshot: OverviewSnapshot, opts: KpiCardOptions = {}):
   if (v.withdrawals) cards.withdrawals = (
         <KpiCard
           helpKey="dash-withdrawn"
-          label="퇴원생"
+          label="퇴원&수업종료"
           rename={opts.titles?.["kpi:withdrawals"]}
           labelNote={noteOf("withdrawals", "이번 달")}
           value={count(wd?.total)}
           unit="명"
-          detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원 기준"}
+          detail={wd ? `${programLine(wd)}${wd.other > 0 ? ` · 기타 ${number(wd.other)}` : ""}` : "이번 달 퇴원·수업종료 기준"}
           icon={<MenuGlyph name="userMinus" size={20} />}
           error={v.withdrawals.error}
-          popupTitle={`이번 달(${Number(month.slice(5))}월 1일~오늘) 퇴원생`}
+          popupTitle={`이번 달(${Number(month.slice(5))}월 1일~오늘) 퇴원&수업종료`}
           jump={
             can("withdrawals")
-              ? { href: withdrawalsMonthHref(month), label: "퇴원관리에서 이번 달 퇴원 보기" }
+              ? { href: withdrawalsMonthHref(month), label: "이번 달 퇴원·수업종료 보기" }
               : null
           }
         >

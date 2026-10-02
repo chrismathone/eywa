@@ -2,8 +2,7 @@
 import { tipProps } from "@/components/hover-tip/tip";
 
 /**
- * 출결 **체크 칸** — 누를 때마다 출석 → 결석 → 지각 → 선택 안 함 (원장 2026-08-11).
- * (그전엔 드롭다운이었다. 한 반 15명을 찍는 데 매번 열고-고르고-닫는 3동작이 들었다.)
+ * 출결 드롭다운 — 상태를 직접 선택한다. 목록을 여는 것만으로 기록을 바꾸지 않는다.
  *
  * 🔴 **저장은 출석부·원스크린과 같은 액션**(`setAttendanceCell`) — 결석이 찍히면 시수·급여에 닿으므로
  *    게이트를 ECS가 따로 만들지 않는다(#77).
@@ -11,10 +10,7 @@ import { tipProps } from "@/components/hover-tip/tip";
  *    시에 시간 혹은 사유 적는 란(수학처럼) 만들 것"*). 폼은 수학(원스크린)과 **같은 것**을 그대로 쓴다
  *    ([NoteForm](../../onescreen/components/attendance-pills.tsx)) — 두 화면이 다른 낱말을 쓰면 같은
  *    기능인지 모른다.
- *    ⚠️ **창이 순환을 막지는 않는다.** 상태는 **창이 뜨기 전에 이미 저장**돼 있고(수학은 창이 저장을
- *       가로막지만 여기선 순환이 상태를 소유한다), 창은 그 위에 얹히는 후속일 뿐이다. 그래서
- *       ① 급할 땐 Esc·바깥 클릭으로 넘기면 되고(**필수 입력 아님**) ② 결석에서 지각으로 한 칸 더 가는
- *       클릭도 그대로 먹는다. 사유 창을 순환의 **앞**에 끼우면(옛 드롭다운 계약) 그 두 가지가 다 깨진다.
+ *    상태는 선택 즉시 저장하고 사유 창은 후속으로 연다. 사유는 필수가 아니므로 Esc로 닫아도 된다.
  *    · 우클릭은 **상태를 안 바꾸고** 사유만 여는 보조 경로로 남는다(이미 찍힌 칸을 고칠 때).
  *    · 사유가 있으면 칸에 점(●)이 붙어 열어보지 않아도 보인다.
  * 🔴 **수정 기간(7일)이 지나도 사유는 고칠 수 있다** — 서버가 `noteOnly` 경로로 그 면제를 이미 갖고 있고
@@ -23,8 +19,7 @@ import { tipProps } from "@/components/hover-tip/tip";
  *    사유 창만 열린다(권한·담당 반 게이트는 그대로 서버가 본다 — 면제는 '기간'뿐이다).
  * ⚠️ '선택 안 함'은 **손 안 댄 기록만** 지워진다(`ecs_clear_present` — 0169a는 present만이었고
  *    **0203a가 지각·결석까지 넓혔다**. 사유·시수가 붙었으면 여전히 서버가 거절한다).
- *    사유가 적힌 칸은 그 단계를 건너뛰고 **출석으로 이어 준다** — 순환이 막다른 길이 되면 오클릭한
- *    결석에서 빠져나올 수가 없다(gotcha #103).
+ *    사유가 적힌 칸을 지우려 하면 안내하고 기존 상태를 유지한다.
  * ⚠️ 조퇴·공결·보강처럼 3종 밖 상태는 **바꾸지 않고 보여만 준다** — 여기서 덮으면 출석부에서만 쓸 수
  *    있는 상태가 조용히 사라진다.
  */
@@ -32,8 +27,8 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Popover } from "@base-ui/react/popover";
 import { NoteForm } from "@/features/onescreen/components/attendance-pills";
-import { EyIcon, type AywaIconName } from "@/components/icons/aywa-icons";
-import { nextAttendance, type BasicAttendance } from "../lib/mark-cycle";
+import { FieldSelect } from "@/features/onescreen/components/field-select";
+import type { BasicAttendance } from "../lib/mark-cycle";
 import { attendanceLabelOf } from "../lib/attendance-label";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { SHEET_BOX, SHEET_BOX_READONLY } from "../ui-box";
@@ -42,18 +37,16 @@ import { ATT_SOFT } from "@/features/attendance/status-color";
 /**
  * 상태별 표시 — 알약(원스크린)과 **같은 색 계열**(출석=초록·지각=앰버·결석=단정색)의 옅은 판.
  * 채움은 [`ATT_SOFT`](src/features/attendance/status-color.ts) 단일 소스, 테두리만 여기서 진하게.
- * ⚠️ 표식은 **아이콘 세트**로만 — `✓`·`✕` 글자를 아이콘 자리에 세우면 구조 가드
- *    (`aywa-icon-mapping.test.ts`)가 막는다(폰트마다 모양·너비가 달라 줄이 흔들린다).
  */
-const TONE: Record<BasicAttendance, { icon: AywaIconName; cls: string }> = {
-  present: { icon: "check", cls: `border-green ${ATT_SOFT.present}` },
-  late: { icon: "clock", cls: `border-amber ${ATT_SOFT.late}` },
-  absent: { icon: "close", cls: `border-danger ${ATT_SOFT.absent}` },
+const TONE: Record<BasicAttendance, string> = {
+  present: `border-green ${ATT_SOFT.present}`,
+  late: `border-amber ${ATT_SOFT.late}`,
+  absent: `border-danger ${ATT_SOFT.absent}`,
 };
 
-const BASIC: readonly string[] = ["present", "late", "absent"];
-/** 순환으로 바꿔도 되는 상태 = 기록 없음이거나 3종 중 하나. */
-const isEditableStatus = (status: string | null) => status === null || BASIC.includes(status);
+const BASIC: readonly BasicAttendance[] = ["present", "late", "absent"];
+/** 직접 선택으로 바꿔도 되는 상태 = 기록 없음이거나 기본 3종. */
+const isEditableStatus = (status: string | null) => status === null || BASIC.some(value => value === status);
 /** 사유를 받는 상태 — 수학 알약과 **같은 계약**(출석은 즉시 저장, 창을 끼우지 않는다). */
 const asksNote = (status: string | null): status is "late" | "absent" =>
   status === "late" || status === "absent";
@@ -97,7 +90,7 @@ export function AttendanceCheck({
   const tf = useSheetTf();
   const label = attendanceLabelOf(status, lang);
 
-  /** 사유 창 — 세 갈래(순환 뒤 자동 · 우클릭 · 잠긴 칸)가 **같은 폼**을 쓴다(수학과 같은 낱말). */
+  /** 사유 창 — 선택 뒤 자동 · 우클릭 · 잠긴 칸이 같은 폼을 쓴다. */
   const notePopup = (onSave: (text: string) => void) => (
     <Popover.Portal>
       <Popover.Positioner anchor={anchorRef} side="bottom" align="start" sideOffset={4} className="z-50">
@@ -207,23 +200,19 @@ export function AttendanceCheck({
 
   const tone = status ? TONE[status as BasicAttendance] : null;
 
-  const cycle = () => {
-    const next = nextAttendance(status);
+  const selectStatus = (value: string | null) => {
+    const next = BASIC.find(option => option === value) ?? null;
     if (next === null) {
-      // 🔴 **순환은 절대 막다른 길이 되면 안 된다.** 사유가 적힌 기록은 여기서 못 지우는데(사람이 쓴
-      //    문장이라 출석부에서만), 그때 아무 일도 안 일어나면 지각 칸에서 영영 못 빠져나온다 —
-      //    오클릭한 결석에 갇히는 것이 정확히 gotcha #103이 말하는 잠긴 문이다. 이유를 말하고
-      //    **순환은 다음 칸(출석)으로 이어 준다**.
       if (note && note.trim()) {
         toast.info(t("att.clear.hasNote"));
-        return onSet("present");
+        return;
       }
       // 사유 없는 기록은 서버가 지운다(0203a로 지각·결석까지 넓힘 — 그 전엔 present만 지워지고
       // 지각·결석은 서버가 이유와 함께 거절한다. 적용되면 이 칸이 그대로 '선택 안 함'이 된다).
       setNoteOpen(false);
       return onClear();
     }
-    onSet(next);
+    if (next !== status) onSet(next);
     // 지각·결석이면 사유 창을 이어서 연다(원장 2026-08-18). 상태는 위에서 **이미 저장**됐으므로
     // 창을 닫아도 기록은 남는다 = 급할 땐 그냥 넘어가면 된다. 출석·선택 안 함은 창을 닫는다.
     setNoteOpen(asksNote(next));
@@ -231,40 +220,33 @@ export function AttendanceCheck({
 
   return (
     <Popover.Root open={noteOpen} onOpenChange={setNoteOpen}>
-      <span ref={anchorRef} className="inline-flex w-full items-center gap-0.5">
-        <button
-          type="button"
-          onClick={cycle}
-          // 우클릭 = **상태를 안 바꾸고** 사유만(이미 찍힌 칸을 고칠 때의 보조 경로).
-          onContextMenu={(e) => {
-            e.preventDefault();
-            if (asksNote(status)) setNoteOpen(true);
-            else toast.info(t("att.note.lateAbsentOnly"));
-          }}
-          aria-label={tf("att.cycle.aria", {
-            name: studentName,
-            value: label ?? t("att.cycle.none"),
-          })}
-          {...tipProps({
-            rows: [note ? [t("att.tip.reason"), note] : null],
-            lines: [t("att.cycle.tipClick"), t("att.cycle.tipNote"), t("att.cycle.tipContext")],
-          })}
-          className={`${SHEET_BOX} inline-flex w-full cursor-pointer items-center justify-center gap-0.5 px-0.5 transition ${
-            tone ? tone.cls : "text-text-faint hover:bg-bg-soft"
-          }`}
-        >
-          {tone ? (
-            <>
-              <EyIcon name={tone.icon} size={11} className="shrink-0" />
-              <span className="truncate">{label}</span>
-            </>
-          ) : (
-            // 빈 칸이라도 **누를 수 있다는 걸 모양으로** 말한다(원장 2026-08-13 "클릭할 수 있는 곳은
-            // 클릭할 수 있음을 암시하는 라벨"). '—'는 "값 없음"이지 "눌러라"가 아니었다.
-            // ⚠️ 읽기 전용 칸(권한 없음·조퇴 등)은 그대로 '—'/값이다 — 못 누르는 칸이 눌러 보이면 안 된다.
-            <span aria-hidden>{t("select.choose")}</span>
-          )}
-        </button>
+      <span
+        ref={anchorRef}
+        className="inline-flex w-full items-center gap-0.5"
+        // 우클릭 = 상태를 바꾸지 않고 사유만 여는 보조 경로.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (asksNote(status)) setNoteOpen(true);
+          else toast.info(t("att.note.lateAbsentOnly"));
+        }}
+        {...tipProps({
+          rows: [note ? [t("att.tip.reason"), note] : null],
+          lines: [t("att.select.tipClick"), t("att.cycle.tipNote"), t("att.cycle.tipContext")],
+        })}
+      >
+        <FieldSelect
+          options={BASIC}
+          value={status}
+          onSelect={selectStatus}
+          ariaLabel={tf("att.select.aria", { name: studentName })}
+          placeholder={t("select.choose")}
+          noneLabel={t("att.cycle.none")}
+          searchPlaceholder={t("select.search")}
+          labelOf={(value) => attendanceLabelOf(value, lang) ?? value}
+          className="min-w-0 flex-1"
+          box={`${SHEET_BOX} px-0.5 transition ${tone ?? "text-text-faint hover:bg-bg-soft"}`}
+          portal
+        />
         {/* 사유가 있으면 점 하나 — 열어보지 않아도 "사유가 적혀 있다"가 보인다(원스크린 알약과 같은 신호). */}
         {dot}
       </span>

@@ -200,7 +200,7 @@ import { subscribeAttendanceApplied } from "@/features/attendance/live/attendanc
 import { applyAppliedAttendance } from "../apply-applied-attendance";
 import { studentMarkFromRows } from "../attendance-mark";
 import { STATUS_TEXT, statusTextOf } from "@/features/attendance/cell-display";
-import type { BasicAttendance } from "./attendance-pills";
+import type { AttendanceSelection } from "./attendance-pills";
 import { useEditPresence, useEditingOthers } from "@/features/presence/edit-presence";
 import { dedupeEditors } from "@/features/presence/presence-state";
 import {
@@ -1829,7 +1829,7 @@ export function OneScreenClient({
       ),
     }));
   }
-  // 재클릭 no-op(삭제는 출석부에서만) + (학생×반) in-flight 잠금(연속 클릭 응답 역전 방지) + 실패 롤백.
+  // 출결 취소(null)도 같은 저장 경로를 쓴다. (학생×반) 저장 중 잠금 + 실패 시 상태·메모·시수 복구.
   // 낙관 갱신으로 pill 즉시 반응(반응속도 1순위) — 서버 검증(담당 반·수강생)은 setAttendanceCell이 강제.
   //
   // extra(2026-08-05) = 지각·결석 **사유 메모**·**수업타임(시수)**. 셋 다 출석부의 같은 행이라 한 왕복으로
@@ -1839,7 +1839,7 @@ export function OneScreenClient({
     studentId: string,
     classId: string,
     /** 알약은 3종만 보낸다 — `early_leave`는 보강 합침이 **조퇴 칸을 조퇴로 보존**하며 시수만 올릴 때뿐(`mergeStatusOf`). */
-    status: BasicAttendance | "early_leave",
+    status: AttendanceSelection | "early_leave",
     extra?: { note?: string | null; units?: string },
     opts?: {
       /**
@@ -1860,14 +1860,14 @@ export function OneScreenClient({
       units: row?.attendanceUnits ?? null,
     };
     const changesExtra = extra !== undefined && ("note" in extra || "units" in extra);
-    if (prev.raw === status && !changesExtra) return; // 상태 재클릭 no-op(삭제는 출석부에서)
+    if (prev.raw === status && !changesExtra) return;
     setAttPending((p) => new Set(p).add(key));
     /**
      * 🔴 **첫 기록 + 숫자 안 고름** = 서버가 수학 수업 길이 자동 시수를 넣는다(auto-units.ts, 2026-09-11).
      *    화면 '타임'도 같은 값으로 먼저 칠하고, 응답의 `autoUnits`(실제 저장값)로 다시 맞춘다 — 서버 조회가
      *    실패하면 null(=1)이 들어가므로 낙관값만 믿으면 화면과 기록이 갈린다. 결석은 시수를 안 쓴다.
      */
-    const autoOnInsert = prev.raw === null && !(extra && "units" in extra) && status !== "absent";
+    const autoOnInsert = status !== null && prev.raw === null && !(extra && "units" in extra) && status !== "absent";
     // 낙관 표시용 시수 — 서버가 "1이면 null로 정규화"하므로 화면도 같은 규칙으로 미리 접는다.
     const optimisticUnits =
       extra && "units" in extra
@@ -1885,6 +1885,7 @@ export function OneScreenClient({
       classId,
       status,
       {
+        ...(status === null ? { note: null, units: null } : {}),
         ...(extra && "note" in extra ? { note: extra.note ?? null } : {}),
         ...(optimisticUnits !== undefined ? { units: optimisticUnits } : {}),
       },
@@ -1901,7 +1902,7 @@ export function OneScreenClient({
         //    데스크가 그 사이 결석을 찍음) 덮지 않고 conflict로 현재 상태를 받는다(2026-08-17 감사 P0-1).
         //    화면에 상태가 보이는 행의 변경(정정)은 종전대로 덮는다 — 그건 보고 하는 편집이다.
         //    보강 흐름은 opts.overwrite로 이 보호를 끈다(위 opts 주석 — 성공 안내와 기록이 갈리는 것 방지).
-        onlyIfEmpty: prev.raw === null && !opts?.overwrite,
+        onlyIfEmpty: status !== null && prev.raw === null && !opts?.overwrite,
       });
       if ("error" in res) {
         rollbackAttendance(studentId, classId, prev);

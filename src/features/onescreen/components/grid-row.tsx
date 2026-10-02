@@ -39,6 +39,7 @@ import {
   SessionUnitsField,
   type AttendanceExtra,
   type BasicAttendance,
+  type AttendanceSelection,
 } from "./attendance-pills";
 import { handleGridNavKey } from "./grid-nav";
 import { FieldSelect } from "./field-select";
@@ -72,7 +73,7 @@ export type GridFieldHandlers = {
   onAttendance: (
     studentId: string,
     classId: string,
-    status: BasicAttendance,
+    status: AttendanceSelection,
     extra?: AttendanceExtra,
   ) => void;
   onProgress: (studentId: string, subjectIndex: number, today: string) => void;

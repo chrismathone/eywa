@@ -15,7 +15,7 @@
 //    날짜 인접으로 추론한 관계를 쓰기 대상 선정에 쓰면 남의 행을 건드린다(적대 리뷰 합의 R3).
 
 import { enrollmentPhaseOn } from "./eligibility";
-import { DEFAULT_SHEET_LANG, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
+import { DEFAULT_SHEET_LANG, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 export type ScheduledKind = "move" | "join" | "leave";
 
@@ -135,7 +135,7 @@ export function classifyScheduled(
         enrollmentId: u.enrollmentId,
         pairedEnrollmentId: from.enrollmentId,
         canCancel: !u.isTransferred,
-        ...(u.isTransferred ? { blockedReason: "이후에 예약된 반 이동을 먼저 취소해 주세요." } : {}),
+        ...(u.isTransferred ? { blockedReason: sheetT(DEFAULT_SHEET_LANG, "sched.cancelLaterFirst") } : {}),
       });
     } else {
       out.push({
@@ -148,7 +148,7 @@ export function classifyScheduled(
         enrollmentId: u.enrollmentId,
         canCancel: !u.isTransferredIn && mates.length === 0 && !u.isTransferred,
         ...(u.isTransferredIn || mates.length > 0 || u.isTransferred
-          ? { blockedReason: u.isTransferred ? "이후에 예약된 반 이동을 먼저 취소해 주세요." : "반 이동의 이전 수강을 확인할 수 없습니다. 수강 내역을 확인해 주세요." }
+          ? { blockedReason: sheetT(DEFAULT_SHEET_LANG, u.isTransferred ? "sched.cancelLaterFirst" : "sched.missingPrevious") }
           : {}),
       });
     }

@@ -1307,6 +1307,8 @@ export const SHEET_DICT = {
     en: "A reason can only be added for late or absent",
   },
   "att.cycle.aria": { ko: "{name} 출결 — {value}", en: "{name} attendance — {value}" },
+  "att.select.aria": { ko: "{name} 출결", en: "{name} attendance" },
+  "att.select.tipClick": { ko: "클릭하여 출결 선택", en: "Click to choose attendance" },
   "att.cycle.none": { ko: "선택 안 함", en: "Not set" },
   "att.cycle.tipClick": {
     ko: "클릭: 출석 → 결석 → 지각 → 선택 안 함",
@@ -2479,17 +2481,18 @@ export const SHEET_DICT = {
   },
   "os.att.group": { ko: "{name} 출결", en: "{name} attendance" },
   "os.att.editNote": {
-    ko: "{label} — 사유 메모 수정 (기록 지우기는 출석부에서)",
-    en: "{label} — edit the reason (clear the record on the attendance sheet)",
+    ko: "{label} — 사유 메모 수정 또는 출결 취소",
+    en: "{label} — edit the reason or clear attendance",
   },
   "os.att.markWithNote": {
     ko: "{label}로 기록 — 사유 메모를 적을 수 있습니다",
     en: "Record as {label} — you can add a reason",
   },
   "os.att.already": {
-    ko: "{label} (기록 지우기는 출석부에서)",
-    en: "{label} (clear the record on the attendance sheet)",
+    ko: "{label} — 다시 누르면 출결 취소",
+    en: "{label} — click again to clear attendance",
   },
+  "os.att.clear": { ko: "{label} 취소", en: "Clear {label}" },
   "os.att.mark": { ko: "{label}로 기록", en: "Record as {label}" },
   "os.att.noteLabel": { ko: "{name} · {label} 사유", en: "{name} · reason for {label}" },
   "os.att.notePh": { ko: "예: 학원버스 지연 / 병결(부모 연락)", en: "e.g. shuttle was late / sick (parent called)" },
@@ -4159,6 +4162,9 @@ export const SHEET_DICT = {
 
   // ── 예정된 변경 배너(반 상세·학생 상세 공용) ─────────────────────
   "sched.title": { ko: "예정된 변경", en: "Scheduled changes" },
+  "sched.moveReserved": { ko: "반 이동 예약", en: "Transfer scheduled" },
+  "sched.cancelLaterFirst": { ko: "이후에 예약된 반 이동을 먼저 취소해 주세요.", en: "Cancel the later scheduled transfer first." },
+  "sched.missingPrevious": { ko: "반 이동의 이전 수강을 확인할 수 없습니다. 수강 내역을 확인해 주세요.", en: "The previous enrolment could not be identified. Check the enrolment history." },
   "sched.count": { ko: "{n}건", en: "· {n}" },
 
   // 시간표 가져오기가 미뤄 둔 **반 자체** 변경(담임·강의실·반 이름) 한 줄 — 반 상세 배너.

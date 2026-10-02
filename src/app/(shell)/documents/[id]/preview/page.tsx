@@ -7,10 +7,11 @@ import { getDocumentById } from "@/features/documents/server/queries";
 import { resolveTenantReadUrl } from "@/lib/storage/media-storage";
 import { fileTypeLabel, formatFileSize } from "@/features/documents/categories";
 import { PreviewDownloadButton } from "./_components/preview-download-button";
+import { documentFileName } from "@/features/documents/file-name";
 
 export const metadata = { title: "문서 미리보기 — 에이와" };
 
-// 내부 창 미리보기 — 이미지/PDF는 서명 URL을 직접 렌더(완전 내부), Word/Excel은 MS Office 온라인
+// 내부 창 미리보기 — 이미지/PDF는 파일명을 보존하는 내부 경로, Word/Excel은 MS Office 온라인
 // 뷰어를 창 안에 임베드(⚠️ 2h 만료 서명 URL이 MS 서버로 전달됨 — 빈 서식 배포 용도라 수용).
 // HWP·기타는 웹 렌더러가 없어 안내 + 다운로드.
 export default async function DocumentPreviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,8 +34,13 @@ export default async function DocumentPreviewPage({ params }: { params: Promise<
   let resolveError: string | null = null;
   if (mode !== "none") {
     try {
-      const url = await resolveTenantReadUrl(doc.filePath, "document", user.tenantId);
-      src = mode === "office" ? `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}` : url;
+      if (mode === "office") {
+        const url = await resolveTenantReadUrl(doc.filePath, "document", user.tenantId, undefined,
+          documentFileName(doc.fileName, doc.title, doc.filePath));
+        src = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
+      } else {
+        src = `/api/documents/${encodeURIComponent(id)}/file`;
+      }
     } catch (e) {
       resolveError = e instanceof Error ? e.message : "미리보기 URL 생성 실패";
     }
