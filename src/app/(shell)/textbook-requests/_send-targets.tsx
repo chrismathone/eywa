@@ -101,6 +101,7 @@ export function SendTargetList({
               value={pick[t.studentId] ?? ""}
               options={t.subjects.map((s) => ({ value: s, label: `${labelOf(s)} 알림장` }))}
               onValueChange={(v) => onPick(t.studentId, v)}
+              placeholder="알림장 선택"
               ariaLabel={`${t.name} 알림장 과목 선택`}
             />
           )}

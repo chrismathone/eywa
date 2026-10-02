@@ -17,6 +17,7 @@ import { cardFileBase } from "@/app/(print)/textbook/[id]/print/download-card";
 import { prepareTextbookNotice, sendTextbookNotice } from "@/features/billing/server/textbook-notice-actions";
 import type { PreparedTextbookNotice, TextbookNoticeSkip } from "@/features/billing/textbook-notice-types";
 import { DEFAULT_TEXTBOOK_MENT } from "@/features/billing/textbook-notice";
+import { initialNoticePicks } from "@/features/billing/textbook-notice-subject";
 import { useMentDraft } from "@/features/billing/textbook-ment";
 import { groupTargets, SendSkipList, SendTargetList } from "./_send-targets";
 import { MentField, NoticeBanners } from "./_send-fields";
@@ -59,12 +60,9 @@ export function TextbookSendDialog({
       if (!res.ok) return;
       // 작성 폼에서 방금 쓴 문구가 있으면 그것이 우선(같은 화면에서 쓴 글이 발송창에서 바뀌면 안 된다).
       applyMent(initialMent?.trim() ? initialMent : (res.ment ?? DEFAULT_TEXTBOOK_MENT));
-      // 과목 1개=자동 확정, 2개+=첫 과목 기본 선택(비워두면 서버가 조용히 제외하므로 항상 채운다).
-      const init: Record<string, string> = {};
-      for (const o of res.orders ?? []) {
-        if (o.studentId && o.subjects[0] && !init[o.studentId]) init[o.studentId] = o.subjects[0];
-      }
-      setPick(init);
+      // 과목 1개=자동 확정, 2개+=이 요청을 낸 선생님이 가르치는 과목(서버 판정). 못 정한 학생은 비워 두고 고르게 한다 —
+      // 가나다순 첫 과목으로 채우면 수학 교재가 영어 알림장으로 나간다(2026-10-02 김지우).
+      setPick(initialNoticePicks(res.orders ?? []));
     })();
     return () => {
       cancelled = true;
@@ -96,11 +94,13 @@ export function TextbookSendDialog({
 
   const { targets, orphans } = groupTargets(prep?.orders ?? []);
   const sendable = targets.filter((t) => t.subjects.length > 0 && pick[t.studentId]);
+  const unpicked = targets.filter((t) => t.subjects.length > 1 && !pick[t.studentId]).length;
   const head = sendable[0] ?? null;
   const attachOff = prep?.showAttachments === false;
   const workerError = prep?.workerError; // 연동 PC가 구버전이면 첨부가 통째로 무시된다 → 아예 막는다
   // 이미지가 준비되기 전엔 보내지 않는다 — 요청서 없이 글자만 나가면 원장이 손으로 올리던 것과 다르다.
-  const canSend = !busy && !!head && capture.ready && !attachOff && !workerError;
+  // 알림장을 안 고른 학생이 있으면 보내지 않는다 — 그대로 보내면 그 학생이 조용히 빠진다.
+  const canSend = !busy && !!head && unpicked === 0 && capture.ready && !attachOff && !workerError;
 
   async function send(test: boolean) {
     setBusy(true);
@@ -176,6 +176,12 @@ export function TextbookSendDialog({
                 onPick={(id, v) => setPick((p) => ({ ...p, [id]: v }))}
                 labelOf={subjectMaps.labelOf}
               />
+              {unpicked > 0 ? (
+                <p className="text-danger text-xs">
+                  알림장을 고르지 않은 학생이 <span className="num">{unpicked}</span>명 있습니다 — 어느 과목 알림장으로
+                  보낼지 위 목록에서 골라 주세요.
+                </p>
+              ) : null}
             </div>
 
             <NoticePreview

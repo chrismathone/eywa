@@ -16,6 +16,11 @@ export type TextbookNoticeOrder = {
   requestDate: string | null;
   /** 발송 가능 과목 키(보드 prefix가 있는 것만). 1개=자동 확정, 2개+=선택, 0개=발송 불가. */
   subjects: string[];
+  /**
+   * 알림장 기본값 — 이 요청을 낸 선생님이 그 학생을 가르치는 과목(textbook-notice-subject.ts).
+   * null = 정하지 못함(화면이 고르게 한다). 가나다순 첫 과목으로 채우지 말 것 — 수학 교재가 영어 알림장으로 나간다.
+   */
+  defaultSubject: string | null;
 };
 
 export type TextbookNoticeSkip = {
