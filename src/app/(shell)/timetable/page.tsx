@@ -70,6 +70,7 @@ import { EcsShortcut } from "./_components/ecs-shortcut";
 import { resolveIntegrationGroups } from "@/features/timetable/lib/integration-groups";
 import { normalizePresets } from "@/features/timetable/lib/group-presets";
 import { shouldSerializeView, subjectDefaultView, viewForSubjectSwitch } from "@/features/timetable/lib/view-default";
+import { resolveTimetableSubject } from "@/features/timetable/lib/subject-default";
 import { dateOfDowInWeek, getWeekReferenceDate, mondayOf, thisMonday, weekBoundsOf, weekRelation, weekSundayOf, weekTitle } from "@/features/timetable/lib/week";
 import { pickScheduledGroupsForWeek } from "@/features/timetable/scheduled-groups";
 import { getScheduledGroupPlans } from "@/features/timetable/server/scheduled-groups-queries";
@@ -107,7 +108,7 @@ import { TimetableColorPrefSync } from "./_components/color-mode-toggle";
 import { TimetableFontPrefSync, TimetableZoomArea } from "./_components/font-size-toggle";
 import { TimetableViewSettings } from "./_components/view-settings";
 import { applyGradeFilter } from "@/features/timetable/lib/view-prefs";
-import { getMyTimetableViewPrefs } from "@/features/timetable/server/view-prefs-queries";
+import { getTimetableEntryPreferences } from "@/features/timetable/server/view-prefs-queries";
 import { WeekNav } from "./_components/week-nav";
 import { ScheduledImportBadge } from "./_components/scheduled-import-badge";
 import { getScheduledImports } from "@/features/timetable/server/scheduled-import-queries";
@@ -201,7 +202,7 @@ export default async function TimetablePage({
   const teacherId = (await effectiveTeacherId()) ?? undefined;
   // 교실뷰 = 관리자 전용 — 강사 스코프 슬롯으로 그리면 남의 반이 쓰는 교실이 전부 비어 보인다(거짓 지도).
   const roomsViewAllowed = !teacherId;
-  const [allSlots, settings, teacherColors, viewPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
+  const [allSlots, settings, teacherColors, entryPrefs, classroomsForMap, seatPins, seatMoves, labSeparateIds] = await Promise.all([
     // futureNames — 사람이 읽는 화면이라 **그 주에 불릴 반 이름**으로 그린다(원장 2026-08-29).
     // 🔴 시트·엑셀 경로는 켜지 말 것: 거기선 반 이름이 매칭 키라, 아직 DB에 없는 이름이 적히면
     //    그 시트를 되읽는 구조 가져오기가 그 반을 버리고 배치를 마감한다(fetchSlots 주석).
@@ -213,7 +214,7 @@ export default async function TimetablePage({
     paramView !== "basic" ? getTeacherColorMap() : Promise.resolve({} as TeacherColorMap),
     // 계정 귀속 뷰 설정(0146a) — 서버 첫 렌더에서 읽어야 필터 없는 화면을 그렸다가 학생이 사라지는
     // 깜빡임이 없다. 미로그인·깨진 값은 '설정 없음'으로 떨어져 무중단.
-    getMyTimetableViewPrefs(),
+    getTimetableEntryPreferences(),
     // 강의실 목록(교실뷰 컬럼 축) — 그 뷰일 때만(소형 참조 쿼리, B4로 병렬).
     // 교실뷰는 과목의 기본 뷰가 될 수 없으므로(전 과목 지도) 파라미터로만 들어온다 = 여기서 확정 가능.
     paramView === "rooms" && roomsViewAllowed ? getClassroomsLite() : Promise.resolve([]),
@@ -233,6 +234,7 @@ export default async function TimetablePage({
     // 교시 고정과 같은 판정 자리(교실뷰는 명단이 없어 왕복 안 함). fail-soft(null = 표식 없이). 🔑 병렬(B4).
     paramView === "rooms" && roomsViewAllowed ? Promise.resolve(null) : getLabSeparateEnrollmentIdSet(),
   ]);
+  const { viewPrefs, subjects: staffSubjects } = entryPrefs;
   // 표시 선호 해석 — 우선순위 **URL 파라미터 → 계정(0146a) → 쿠키(구 기기 저장) → 기본값**.
   // 계정을 쿠키보다 먼저 보는 게 이 배선의 핵심(원장 지시: 기기가 아니라 계정에 귀속). 쿠키는 계정에
   // 아직 값이 없는 사용자를 위한 **이관 폴백**으로만 남는다 — 다음 토글 때 계정으로 올라간다.
@@ -269,9 +271,7 @@ export default async function TimetablePage({
   const available = isMakeupKind(kind)
     ? subjectMaps.options.map((o) => o.value)
     : subjectMaps.options.map((o) => o.value).filter((k) => kindSlots.some((s) => s.subject === k));
-  const defaultSubject = available[0] ?? "";
-  const subject =
-    subjectParam && available.includes(subjectParam) ? subjectParam : defaultSubject;
+  const subject = resolveTimetableSubject(available, staffSubjects, subjectParam);
   // 영어 프로그램 보기 필터(전체/EiE/인재원 영어, 0176a `classes.english_track`).
   // 🔴 **영어에만 있는 축이다** — 다른 과목 반은 english_track이 항상 null이라 'eie'를 걸면 화면이 통째로
   //    빈다. 그래서 칩도 안 띄우고 값도 'all'로 못박는다(과목 칩으로 옮겨가도 필터가 따라붙지 않는다).
@@ -741,7 +741,7 @@ export default async function TimetablePage({
         <WeekNav
           currentWeek={week}
           today={today}
-          hrefForWeek={(monday) => buildHref({ view: effView, subject, defaultSubject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+          hrefForWeek={(monday) => buildHref({ view: effView, subject, kind, week: monday, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
         {/* 미래 날짜로 적용해 둔 변경 — 이번 주 화면엔 흔적이 없어 여기 상시로 붙인다(원장 2026-08-28).
             라벨=시트 열기 · ×=예약 취소. 예약이 없으면 아무것도 안 그린다(평소 비용 0). */}
@@ -787,7 +787,6 @@ export default async function TimetablePage({
                   })(),
                   defaultView: defaultViewOf(k),
                   subject: k,
-                  defaultSubject,
                   kind,
                   week,
                   thisWk,
@@ -822,7 +821,6 @@ export default async function TimetablePage({
                   view: effView,
                   defaultView: thisSubjectDefaultView,
                   subject,
-                  defaultSubject,
                   kind: k,
                   week,
                   thisWk,
@@ -852,7 +850,6 @@ export default async function TimetablePage({
                     view: effView,
                     defaultView: thisSubjectDefaultView,
                     subject,
-                    defaultSubject,
                     kind,
                     week,
                     thisWk,
@@ -888,7 +885,7 @@ export default async function TimetablePage({
           ).map((v) => ({
             value: v.key,
             label: v.label,
-            href: buildHref({ view: v.key, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
+            href: buildHref({ view: v.key, subject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView }),
           }))}
         />
         </span>
@@ -919,7 +916,7 @@ export default async function TimetablePage({
                 *"통합뷰에서 편집모드를 누르고, 통합뷰의 그 자체를 드래그하고 싶은거야"*).
                 누르면 같은 서식 그대로 **수업명 행만** 남고 그 위에서 반을 끌어 줄을 바꾼다. */}
             <ParamLink
-              href={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+              href={buildHref({ view: effView, subject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, gedit: !groupEditing, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
               title="통합뷰를 수업명만 남긴 상태로 바꿔 반을 끌어 옮깁니다"
               className={`${TOOLBAR_CHIP} gap-1.5 ${groupEditing ? TOOLBAR_CHIP_ON : TOOLBAR_CHIP_OFF}`}
             >
@@ -962,7 +959,6 @@ export default async function TimetablePage({
                   view: effView,
                   defaultView: thisSubjectDefaultView,
                   subject,
-                  defaultSubject,
                   kind,
                   week,
                   thisWk,
@@ -981,7 +977,6 @@ export default async function TimetablePage({
                   view: effView,
                   defaultView: thisSubjectDefaultView,
                   subject,
-                  defaultSubject,
                   kind,
                   week,
                   thisWk,
@@ -1002,7 +997,6 @@ export default async function TimetablePage({
                   view: effView,
                   defaultView: thisSubjectDefaultView,
                   subject,
-                  defaultSubject,
                   kind,
                   week,
                   thisWk,
@@ -1155,7 +1149,7 @@ export default async function TimetablePage({
           initialOthersTitle={subjectRow?.integrationOthersTitle ?? ""}
           initialPresets={groupPresets}
           initialCompactSections={compactList}
-          doneHref={buildHref({ view: effView, subject, defaultSubject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
+          doneHref={buildHref({ view: effView, subject, kind, week, thisWk, compact1h: compactList, hideEmptyDays, collapseEmptyPeriods, hideStudents, englishTrack: carriedTrack, defaultView: thisSubjectDefaultView })}
         />
       ) : isIntegrated ? (
         // 통합뷰 명단 이동(대기/퇴원 드롭) — 🔴 zoom 래퍼 **바깥**에 DndContext를 둔다([[#98]]: 안쪽이면
@@ -1243,7 +1237,6 @@ export default async function TimetablePage({
 function buildHref(opts: {
   view: ViewMode;
   subject: string;
-  defaultSubject: string;
   /** 정규/특강/전체. 기본(정규)이면 파라미터를 생략해 지금까지의 URL과 같게 둔다. */
   kind: TimetableKind;
   week: string; // 월요일 YYYY-MM-DD
@@ -1293,10 +1286,11 @@ function buildHref(opts: {
   const params = new URLSearchParams();
   // 🔴 생략 기준은 "basic이냐"가 아니라 **그 링크가 가리키는 과목의 기본 뷰냐**다. 예전처럼 basic만
   //    생략하면, 영어 기본 뷰가 통합뷰인 순간 '기본뷰' 칩이 파라미터 없는 URL이 되어 다시 통합뷰로
-  //    되돌아온다 = **기본뷰를 영영 못 고른다**(과목 칩의 defaultSubject 생략과 같은 규약).
+  //    되돌아온다 = **기본뷰를 영영 못 고른다**.
   if (shouldSerializeView(opts.view, opts.defaultView ?? "basic")) params.set("view", opts.view);
   if (opts.kind !== DEFAULT_TIMETABLE_KIND) params.set("kind", opts.kind);
-  if (opts.subject !== opts.defaultSubject) params.set("subject", opts.subject);
+  // 기본 과목이 사람마다 다르므로 링크에는 현재 과목을 남긴다(공유·주 이동 시 선택 유지).
+  if (opts.subject) params.set("subject", opts.subject);
   if (opts.week !== opts.thisWk) params.set("week", opts.week);
   if (opts.compact1h && opts.compact1h.length)
     params.set("compact1h", [...opts.compact1h].sort((a, b) => a - b).join(","));
