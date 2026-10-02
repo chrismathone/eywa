@@ -279,6 +279,15 @@ assign_teacher_to_classnote)을 aywa DB 기준·Playwright·**dry-run 기본**�
   보이는 글에 그냥 말을 건다** → 지연이 "응답 속도"가 아니라 **"그 아이 알림장이 얼마나 뜸한가"** 다. 보고서가
   뜸한 보드일수록 **오래된 글에 급한 용건**이 달린다(가장 늦은 두 건 169.6h·209.9h가 둘 다 급건 = 결석·상담요청).
   수학 댓글 54건: 3일 93%·4일 96%. → **감시 창 10일**(`COMMENT_WINDOW_DAYS`). "늦게 달린 건 인사겠지"는 **틀린 가설**.
+- **창 밖 글(30일까지)·방금 올라온 글 = 알림 목록 신호**(2026-10-02, [parent-comment-events.mjs](../scripts/_classnote/parent-comment-events.mjs)):
+  위 "전용 피드가 없다"는 **글·댓글 주소**에 한한 얘기였다. 학원 계정의 **알림 목록** `GET /api/v1/me/notifications/?page_size=100`
+  (다음 쪽 = `page=<next 토큰>`)에는 전 보드의 댓글 알림이 온다 — 줄 모양 `{id, created, code, summary, author_name, cls_id, child:{id,name}, object_id, count}`,
+  `code` = `report_comment`(알림장 댓글, `object_id` = 글 번호) · `notice_comment`(공지사항 댓글, `object_id` = 공지 번호 · `cls_id`·`child` 없음) ·
+  `report`(새 글, 전체의 ~90%) · `child_requested` · `notice`. 실측(이틀치 600줄): 전 종류 합쳐 하루 ~300줄.
+  ⚠️ **글 하나에 댓글 알림은 한 줄**이다 — 새 댓글이 달리면 그 줄이 `count`를 올리고 **새 번호로 맨 위에** 선다(`summary`·`author_name`은 마지막 댓글 것).
+  그래서 줄의 내용은 믿지 않고 **"그 글에 새 댓글이 있다"는 신호**로만 쓴 뒤 댓글 목록을 다시 연다. 알림 시각은 댓글 시각보다 십여 초 늦을 수 있다(실측 11~12초).
+  ⚠️ 작성자 종류가 없다(`author_name` 글자뿐) — 학부모 여부는 댓글 목록의 `author.type`으로 본다. 학원 계정이 직접 단 댓글은 알림이 오지 않는다.
+  글 하나 조회 = `GET /api/v1/reports/{id}/`(피드 행과 같은 칸 + `modified` = 마지막 댓글 시각). 공지 댓글 = `GET /api/v1/notices/{id}/comments/`(작성자 `author.id` = 학부모 계정).
 - **주기 10분**(`COMMENT_POLL_INTERVAL_MS` — 원장이 명시 수용한 지연). 새 글(1분)보다 느린 이유 = 창 전체를 매번
   다시 읽어야 한다(워터마크로 일찍 못 멈춤). ⚠️ **백스톱(`COMMENT_MAX_PAGES=30`)은 창(10일)보다 넉넉히 커야**
   age 컷오프가 먼저 걸린다 — 방학 피크엔 최근 10일=1,913행=20페이지라, 20으로 잡으면 창과 겹쳐 매 폴 경고가 뜬다.

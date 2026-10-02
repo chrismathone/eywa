@@ -30,6 +30,7 @@ export type NotificationType =
   | "class_delegation" // 결근 대체로 반을 임시 위임받음 → 대체 강사(0173a, createClassDelegation)
   // 학부모의 결석·지각·조퇴 연락(클래스노트) → **직원 설정에서 토글을 켠 계정 전원**(0184a).
   // ⚠️ 담당 반과 무관하다 — 차량(셔틀)·사무실이 "오늘 누가 안 오는지"를 담임에게 묻지 않게 하는 게 목적.
+  // + 그 학생의 **다른 과목 지금 담당 선생님**(0331a, 2026-10-02) — 영어 보드에 쓴 결석 연락을 수학 선생님이 모르는 일을 막는다.
   | "student_attendance_notice"
   // 강사가 결석을 입력한 순간 → 출결 알림 토글(users.attendance_alert_optin)을 켠 계정(2026-08-14).
   // ⚠️ 학부모 연락 분류(student_attendance_notice)와 **다른 축**이다: 저건 학부모가 먼저 알려온 것이고,
