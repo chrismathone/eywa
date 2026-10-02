@@ -1307,6 +1307,8 @@ export const SHEET_DICT = {
     en: "A reason can only be added for late or absent",
   },
   "att.cycle.aria": { ko: "{name} 출결 — {value}", en: "{name} attendance — {value}" },
+  "att.select.aria": { ko: "{name} 출결", en: "{name} attendance" },
+  "att.select.tipClick": { ko: "클릭하여 출결 선택", en: "Click to choose attendance" },
   "att.cycle.none": { ko: "선택 안 함", en: "Not set" },
   "att.cycle.tipClick": {
     ko: "클릭: 출석 → 결석 → 지각 → 선택 안 함",
@@ -4131,6 +4133,9 @@ export const SHEET_DICT = {
 
   // ── 예정된 변경 배너(반 상세·학생 상세 공용) ─────────────────────
   "sched.title": { ko: "예정된 변경", en: "Scheduled changes" },
+  "sched.moveReserved": { ko: "반 이동 예약", en: "Transfer scheduled" },
+  "sched.cancelLaterFirst": { ko: "이후에 예약된 반 이동을 먼저 취소해 주세요.", en: "Cancel the later scheduled transfer first." },
+  "sched.missingPrevious": { ko: "반 이동의 이전 수강을 확인할 수 없습니다. 수강 내역을 확인해 주세요.", en: "The previous enrolment could not be identified. Check the enrolment history." },
   "sched.count": { ko: "{n}건", en: "· {n}" },
 
   // 시간표 가져오기가 미뤄 둔 **반 자체** 변경(담임·강의실·반 이름) 한 줄 — 반 상세 배너.

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { titleWithFileExtension } from "../file-name";
+import { documentFileName, titleWithFileExtension } from "../file-name";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
@@ -353,9 +353,7 @@ export async function deleteDocument(id: string): Promise<{ ok?: boolean; error?
 
 /**
  * 열람/다운로드용 signed URL — 읽기 액션(readonly도 허용, 서식 배포가 목적). RLS가 테넌트 격리.
- * mode="download"면 attachment disposition, "view"면 inline(브라우저 미리보기).
- * ⚠️ 저장 파일명은 이 URL의 헤더가 아니라 **함께 돌려주는 `fileName`**이 정한다(`saveFileAs` — Supabase의
- * `?download=`은 percent-encoded 이름을 헤더에 넣어 일부 브라우저가 `%EA%B9%80…`로 저장한다, 2026-08-17).
+ * download는 파일명을 명시하는 같은 출처 라우트, view는 서버·외부 뷰어용 스토리지 서명 URL이다.
  */
 export async function signDocumentUrl(
   id: string,
@@ -368,16 +366,17 @@ export async function signDocumentUrl(
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("academy_documents")
-    .select("file_path, file_name")
+    .select("title, file_path, file_name")
     .eq("id", id)
     .is("staff_user_id", null) // 직원 연결 문서는 전용 서명 경로(signStaffContractFileUrl)만(#77)
     .maybeSingle();
   if (!row?.file_path) return { error: "파일이 없는 문서입니다" };
   try {
-    const fileName = row.file_name ?? row.file_path.split("/").pop() ?? "document";
-    const downloadName = mode === "download" ? fileName : undefined;
+    const fileName = documentFileName(row.file_name, row.title, row.file_path);
     return {
-      url: await resolveTenantReadUrl(row.file_path, "document", user.tenantId, undefined, downloadName),
+      url: mode === "download"
+        ? `/api/documents/${encodeURIComponent(id)}/file?download=1`
+        : await resolveTenantReadUrl(row.file_path, "document", user.tenantId),
       fileName,
     };
   } catch (e) {

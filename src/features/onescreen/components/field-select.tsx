@@ -25,6 +25,7 @@ export function FieldSelect({
   className,
   radius = "lg",
   box,
+  portal,
   labelOf,
   noneLabel = "선택 안 함",
   legacyHint = "이전 표기",
@@ -49,6 +50,8 @@ export function FieldSelect({
    * 화살표도 함께 작아진다. 미지정이면 기존 기본값 그대로 — **다른 화면 영향 0**.
    */
   box?: string;
+  /** 표 안에서 목록이 잘리지 않게 포털로 연다. */
+  portal?: boolean;
   /**
    * **저장값 → 화면 글자**(강사뷰 영어 화면). 저장·비교는 계속 원래 값으로 하고 **표시만** 바꾼다
    * — 넘기지 않으면 값이 그대로 보인다(기존 호출부 전부 무변경).
@@ -85,6 +88,7 @@ export function FieldSelect({
       className={className}
       // 박스를 통째로 받은 자리(ECS)는 그 표면의 입력칸과 한 벌이라는 뜻 → 화살표도 촘촘하게.
       compact={box !== undefined}
+      portal={portal}
       // ⚠️ 이웃 텍스트 입력과 **완전히 같은 치수**(원장 2026-07-23 "네모박스 크기가 너무 다름").
       //    표·카드·일괄 세 표면의 입력칸이 모두 `border-line bg-card h-8 px-2 text-xs`이고
       //    라운드만 다르다. 기본 트리거(py-2·px-3·text-sm)를 그대로 쓰면 한 줄에서 이 칸만 커진다.

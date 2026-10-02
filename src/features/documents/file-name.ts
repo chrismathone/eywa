@@ -14,6 +14,11 @@ export function titleWithFileExtension(title: string, fileName: string | null): 
     : title;
 }
 
+/** 옛 파일에 원본 이름이 없으면 문서 제목에 저장 객체의 확장자만 붙인다. */
+export function documentFileName(fileName: string | null, title: string, filePath: string): string {
+  return fileName?.trim() || titleWithFileExtension(title, filePath.split("/").pop() ?? null);
+}
+
 export function renamedFileName(baseName: string, originalFileName: string): { fileName: string } | { error: string } {
   const base = baseName.trim();
   if (!base || base === "." || base === "..") return { error: "파일 이름을 입력해 주세요." };

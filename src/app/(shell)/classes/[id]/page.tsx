@@ -581,7 +581,7 @@ export default async function ClassDetailPage({
                           canEditSchedule && scheduledByEnrollment.has(s.enrollmentId) ? (
                             <ScheduledChangeActions change={scheduledByEnrollment.get(s.enrollmentId)!} today={today} />
                           ) : s.isTransferredIn || s.isTransferred ? (
-                            <span className="text-text-dim text-xs">반 이동 예약</span>
+                            <span className="text-text-dim text-xs">{sheetT(lang, "sched.moveReserved")}</span>
                           ) : <CancelAssignmentButton
                             enrollmentId={s.enrollmentId}
                             className={klass.className}

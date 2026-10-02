@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SearchableSelect } from "./searchable-select";
 
 afterEach(cleanup);
@@ -8,6 +8,17 @@ const OPTIONS = [
   { value: "all", label: "전체" },
   { value: "math", label: "수학" },
 ];
+
+it("표 밖에 열린 목록에서도 마우스로 선택할 수 있다", async () => {
+  const onValueChange = vi.fn();
+  render(<SearchableSelect options={OPTIONS} value="all" ariaLabel="과목" portal onValueChange={onValueChange} />);
+  fireEvent.click(screen.getByRole("button", { name: "과목: 전체" }));
+  const option = await screen.findByRole("button", { name: "수학" });
+  fireEvent.mouseDown(option);
+  fireEvent.mouseUp(option);
+  fireEvent.click(option);
+  expect(onValueChange).toHaveBeenCalledWith("math");
+});
 
 /**
  * 🔴 `aria-label`은 **버튼 안의 글자를 덮는다** — 축 이름만 주면 낭독기가 "과목 필터"까지만 읽고
