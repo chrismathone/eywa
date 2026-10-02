@@ -53,6 +53,12 @@ describe("슬랙 활동 분류", () => {
     expect(activityCategoryOf("seat_jj_mark_edit")).toBe("sheets");
   });
 
+  it("시간표 연습본 저장은 개인 사본이라 고를 수 없다 — 같은 분류의 계획 저장은 그대로 고를 수 있다", () => {
+    expect(activityCategoryOf("timetable_lab_draft_save")).toBe("classes");
+    expect(activityGradeOf("timetable_lab_draft_save")).toBe("forbid");
+    expect(activityGradeOf("timetable_plan_slot_upsert")).toBe("safe");
+  });
+
   it("분류 안 된 키는 나가지 않는다", () => {
     expect(activityGradeOf("totally_new_thing")).toBe("forbid");
   });
