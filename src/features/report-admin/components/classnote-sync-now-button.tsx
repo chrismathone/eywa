@@ -12,14 +12,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "@/components/icons/aywa-icon-compat";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { deriveSyncView, SYNC_COOLDOWN_MIN, type SyncButtonView } from "@/features/report-admin/classnote-sync";
+import { deriveSyncView, kstHhmm, SYNC_COOLDOWN_MIN, type SyncButtonView } from "@/features/report-admin/classnote-sync";
+import { reportAttention as countReportAttention } from "@/features/report-admin/classnote-sync-report";
 import {
   getClassnoteSyncStatus,
   requestClassnoteBoardSync,
   type ClassnoteSyncStatus,
 } from "@/features/report-admin/server/classnote-sync-actions";
+import { downloadClassnoteSyncReport } from "@/features/report-admin/server/classnote-sync-report-actions";
 
 const EXPLAIN =
   "평소에는 매일 새벽 5시에 연동 PC가 ClassNote 반 보드를 aywa 반에 맞춥니다. 새 반·반 이름 변경·신입 배정을 지금 바로 맞추려면 누르세요 — " +
@@ -44,6 +47,7 @@ export function ClassnoteSyncNowButton({
 }) {
   const [status, setStatus] = useState<ClassnoteSyncStatus | null>(null);
   const [clicking, setClicking] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const skew = useRef(0); // 서버 시각 - 브라우저 시각(쿨다운·멈춤 판정을 서버 시계로)
 
@@ -101,6 +105,45 @@ export function ClassnoteSyncNowButton({
     }
   }
 
+  // 동기화 보고서(0329a) — 가장 최근 동기화의 변동·실패·보류(이유 포함)와 전 반의 해제 대상을 txt로. 글은 서버가 만든다(권한·감사로그).
+  async function onDownload() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await downloadClassnoteSyncReport();
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      // BOM — 옛 메모장도 한글을 깨뜨리지 않게. 파일 이름의 한글은 a.download가 그대로 받는다(HTTP 헤더가 아니다, B1 무관).
+      const url = URL.createObjectURL(new Blob(["\uFEFF", res.text], { type: "text/plain;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success("동기화 보고서를 내려받았습니다");
+    } catch {
+      toast.error("동기화 보고서를 내려받지 못했습니다 — 잠시 뒤 다시 시도하세요");
+    } finally {
+      setDownloading(false);
+    }
+  }
+  const report = status?.report ?? null;
+  const reportTitle = report
+    ? `가장 최근 동기화(${kstHhmm(report.finishedAt)}${report.ok ? "" : " · 도중에 멈춤"}) — 변동 ${report.changed}건 · 실패 ${report.failed}건 · 보류 ${report.held}건 · ` +
+      `직접 해제할 원아 ${report.releaseNames}명(${report.releaseClasses}개 반).` +
+      (report.dailyFailed || report.dailyStopped
+        ? ` 가장 최근 전체 동기화: ${report.dailyStopped ? "도중에 멈춤 · " : ""}실패 ${report.dailyFailed}건.`
+        : "") +
+      " 무엇이 바뀌었고 무엇이 왜 안 됐는지 이유와 함께 txt로 받습니다."
+    : "";
+  // 사람이 봐야 할 것(실패·멈춤·직접 해제)이 있으면 버튼에 숫자를 붙인다 — 내려받기 전에도 '볼 것이 있다'가 보이게.
+  // (바뀐 반만 본 '지금 동기화'가 맨 위여도 가장 최근 전체 동기화의 실패·멈춤을 함께 센다 — 새벽 실패가 가려지지 않게.)
+  const reportAttention = report ? countReportAttention(report) : 0;
+
   let label = "지금 반 보드 동기화";
   let note: string | null = null;
   let noteTitle: string | null = null;
@@ -145,6 +188,13 @@ export function ClassnoteSyncNowButton({
         <RefreshCw className={`size-3.5 shrink-0 ${view.kind === "running" ? "animate-spin" : ""}`} aria-hidden />
         {label}
       </Button>
+      {report ? (
+        <Button type="button" size="sm" variant="outline" disabled={downloading} onClick={onDownload} title={reportTitle} aria-busy={downloading}>
+          <EyIcon name="download" size={14} aria-hidden />
+          동기화 보고서 다운로드
+          {reportAttention ? <span className="num text-amber font-bold">{reportAttention}</span> : null}
+        </Button>
+      ) : null}
       {note ? (
         <span className={`${tone} break-keep text-xs`} title={noteTitle ?? undefined}>
           {note}

@@ -42,8 +42,12 @@ export function planTeacherLinks({ targets, emps }) {
   return { todo, skipped };
 }
 
-/** 실행 + 검증. 실패하면 던진다. @returns {Promise<number>} 연결 수 */
-export async function connectTeachers(page, centerId, todo, log = console.log) {
+/**
+ * 실행 + 검증. 실패하면 던진다. `linked` = 연결에 성공한 항목을 담을 배열(호출자가 넘기면 **도중에 던져도** 그때까지 연결한 담임이
+ * 호출자에게 남는다 — 동기화 보고서 0329a).
+ * @returns {Promise<number>} 연결 수
+ */
+export async function connectTeachers(page, centerId, todo, log = console.log, linked = []) {
   if (!todo.length) return 0;
   const before = await fetchEmployments(page, centerId);
   const count = (list) => {
@@ -64,6 +68,7 @@ export async function connectTeachers(page, centerId, todo, log = console.log) {
     }, [t.tid, t.boardId]);
     if (res !== 201) throw new Error(`${t.className} ← ${t.teacher}: 담임 연결 실패 HTTP ${res}`);
     added.set(t.tid, (added.get(t.tid) ?? 0) + 1);
+    linked.push(t);
     log(`  담임 연결 ${t.className} ← ${t.teacher}`);
   }
   const b = count(before);

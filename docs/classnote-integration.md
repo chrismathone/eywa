@@ -662,11 +662,24 @@ subject NULL(이관·레거시)은 게이트가 거부한다(2026-07-10 P0-2·P0
 | 담임 연결 | [`provision-math-class-teachers.mjs`](../scripts/_classnote/provision-math-class-teachers.mjs) | 확인된 대응표만(`TEACHER_MAP` — 김은정=셀린·이수진=수진T) · 선생님별 연결 수 +N 검증 |
 | 대상 반 | [`math-class-boards-load.mjs`](../scripts/_classnote/math-class-boards-load.mjs) | 활성 수학 · 보고서 발송 · **특강 포함**(2026-09-30) · **종강(closed_at) 제외**(종강 반 6개를 만들었다 지운 사고 — 이미 연결된 종강 반은 보드가 살아 있는 동안 연결 유지) |
 | 발송 경로 | [`class-route-decide.mjs`](../scripts/_classnote/class-route-decide.mjs)(순수) + [`classnote-class-route.mjs`](../scripts/_classnote/classnote-class-route.mjs) | 보고서 설정 `classnoteMathRoute` personal/class/pilot · 반별 = 저장 원아 → ClassNote 재확인 → 게시 → 같은 반 다른 원아 교차 확인(새면 **비상 정지**) |
-| 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 해제 필요는 로그만 |
+| 매일 동기화 | [`math-class-boards-sync.mjs`](../scripts/_classnote/math-class-boards-sync.mjs) + [`math-class-boards-apply.mjs`](../scripts/_classnote/math-class-boards-apply.mjs) | 워커 KST 05시 이후 하루 1회(연결표가 빈 지점은 안 돈다) · 연결표 **번호 기준**(이름 바뀌면 PATCH) · 새 반·신입 배정·담임·0302a 갱신 · 이상하면 멈추고 기록 안 함 · 회차마다 **동기화 보고서**(0329a — 변동·실패·보류 + 이유, 해제 대상)를 남긴다 → 앱 '동기화 보고서 다운로드' |
 | C.N 라벨 | [`classnote-match.ts`](../src/features/onescreen/classnote-match.ts) · [`cn-badge.tsx`](../src/features/onescreen/components/cn-badge.tsx) | 원스크린 카드·표 모드. 초록 = 확인된 배정 |
 
 - **API(실측)**: 반 생성 = DOM '반 추가하기'(또는 `POST kapi…/v1/centers/{c}/classes`) · 반 이름 변경 = `PATCH /api/v1/centers/{c}/classes/{id}/ {name}` → 200 (`/api/v1/classes/{id}/` PATCH·PUT은 405) ·
-  반 삭제 = `DELETE /api/v1/classes/{id}/` → 204, **원아·선생님 0명일 때만**(선생님 있으면 400 `teacher_exists`) · 원아·선생님 **해제는 405**(화면에서 손으로) ·
+  반 삭제 = `DELETE /api/v1/classes/{id}/` → 204, **원아·선생님 0명일 때만**(선생님 있으면 400 `teacher_exists`) ·
+  🔑 **원아·선생님 해제는 된다(2026-10-02 실측 — 그동안 "405라 화면에서 손으로"라고 적었던 것을 정정)**: 405였던 것은
+  `/api/v1/enrollments/{id}/`·`/api/v1/employments/{id}/`의 **DELETE·PATCH**였고, ClassNote 화면이 실제로 부르는 주소는 따로 있다
+  (화면 JS에서 찾음 — 원아 '소속 반 → 삭제' · 선생님 '담당 반 → 삭제'):
+  원아 해제 = `POST https://kapi.classnote.com/v1/enrollments/{배정번호}/out`(본문 없음, 쿠키 인증) → **200** · 그 반에서만 빠지고 다른 반 배정은 그대로 ·
+  다시 넣기 = 기존 `POST /api/v1/enrollments/ {child, belong_to_class}` → 201(배정번호는 새로 생긴다, 원아 번호는 그대로).
+  선생님 해제 = `POST https://kapi.classnote.com/v1/employments/{연결번호}/out` → **200** · '담당 반'에서 사라진다(연결 줄은 `is_approved:false`로 남는다 —
+  ClassNote 화면에서 지워도 같은 흔적이 남는다 · 승인 대기로 뜨지 않는다).
+  실측 대상 = 테스트 학생 '학원이'(원아 5268389) × `[수학] 테스트반`(1317083): 내보냄 → 확인 → 다시 배정(반 8개 그대로) ·
+  선생님 1763863 × 테스트반: 연결(201) → 해제(200) → '담당 반'에 없음. 배정번호는 `GET kapi…/v1_2/children/{원아}/enrollments`,
+  연결번호는 `GET kapi…/v1_2/teachers/{선생님}/employments/`에서 읽는다.
+  = **반 생성·이름 변경·삭제 + 원아·선생님 배정·해제가 전부 API로 된다** → ClassNote 화면에서 손으로 하던 정리를 자동화할 수 있다.
+  🔴 아직 워커는 해제하지 않는다 — 해제 리스트(0329a)만 적는다. 자동 해제는 원장 결정 뒤에 켠다: 동기화의 '잉여 원아'에는
+  aywa가 누구 원아인지 **모르는** 원아(이름이 달라 못 맞춘 재원생 · 사람이 손으로 넣은 원아)가 섞일 수 있어, 그대로 내보내면 정상 학생이 빠진다. ·
   반 단체 공지 = `POST https://kapi.classnote.com/v1_2/notices/ {classes_to:[반id…], title, content, is_comment_on, center, author_name, scheduled:""}` → 반마다 공지 1건. 🔴 `classes_to`가 비면 기관 전체일 수 있다 — 빈 목록·허용 밖 반이면 무조건 차단.
 - 🔴 **`"보드가 곧 매핑"` 폴백(`acceptBoardMembers`)은 반 보드 경로에서 절대 타지 않는다** — 생년만 보므로 같은 학년 반이면 전원이 통과한다(`sendReportViaApi targets`).
 - 🔴 회수(`classnote-recall-core.mjs`)는 1인 보드 **와** 반 보드를 함께 훑는다 — 한쪽만 보면 '이미 없습니다'로 거짓 성공.
