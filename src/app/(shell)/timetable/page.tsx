@@ -455,7 +455,8 @@ export default async function TimetablePage({
   // English Class Sheet 바로가기 — 지금 보는 과목이 ECS 대상일 때만. 조건은 ECS의 정식 게이트
   // (requireEcsClassAccess: english + skillAreas 비어있지 않음)와 **같은 식**이라야 "눌렀는데 빈 목록"이
   // 안 생긴다. 권한(ecs=none인 상담사·회계)까지 봐야 눌러도 튕기는 죽은 버튼이 안 된다(#77).
-  // ⚠️ searchParams.subject를 직접 보지 말 것 — 기본 과목이면 URL에 파라미터가 없다(buildHref).
+  // ⚠️ searchParams.subject를 직접 보지 말 것 — 메뉴로 처음 들어오면 URL에 과목이 없고(담당 과목으로 정해진다),
+  //    없는 과목이 적힌 링크도 들어온다. 판정은 위에서 확정한 `subject`로만.
   const showEcsShortcut =
     subject === "english" &&
     resolveSkillAreas(subjectRow).length > 0 &&
