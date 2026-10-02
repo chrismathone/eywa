@@ -375,7 +375,11 @@ export function auditDetail(
   switch (action) {
     // 숙제 영상 제출 링크(0325a) — 어느 반 · 어디서 만든 링크 · 언제까지 / 몇 개 끊었나 / 어느 폴더에 얼마나.
     case "lesson_report_video_link_issue":
-      return join(ctx.nameOf(m.classId), m.origin === "report" ? "수업보고서 발송용" : "학생 상세에서 복사", str(m.lastDay) ? `${str(m.lastDay)}까지` : null);
+      return join(
+        ctx.nameOf(m.classId),
+        m.origin === "report" ? "수업보고서 발송용" : m.origin === "site" ? "올리기 사이트에서 뒷 4자리로 엶" : "학생 상세에서 복사",
+        str(m.lastDay) ? `${str(m.lastDay)}까지` : null,
+      );
     case "lesson_report_video_link_revoke":
       return join(ctx.nameOf(m.classId), `쓰는 중인 링크 ${num(m.revoked) ?? 0}개 끊음`);
     case "lesson_report_video_link_upload": {

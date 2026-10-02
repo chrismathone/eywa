@@ -22,6 +22,20 @@ const FAILED = "영상 올리기를 시작하지 못했습니다. 잠시 후 다
 const LIMITED = "잠시 동안 너무 많이 올렸습니다. 한 시간 뒤에 다시 시도해 주세요.";
 
 /**
+ * 횟수 제한을 셀 링크들 — 보고서·원생 탭 링크는 그 링크 하나, **사이트 링크는 같은 학생 × 반의 최근 사이트 링크 전부**
+ * (사이트 링크는 만든 날과 다음 날까지라 최근 이틀이면 살아 있는 것을 다 덮는다).
+ */
+async function uploadLimitLinkIds(db: ReturnType<typeof createAdminClient>, link: { id: string; tenant_id: string; student_id: string; class_id: string; origin: string }): Promise<string[]> {
+  if (link.origin !== "site") return [link.id];
+  const { data, error } = await db.from("homework_video_links").select("id")
+    .eq("tenant_id", link.tenant_id).eq("student_id", link.student_id).eq("class_id", link.class_id).eq("origin", "site")
+    .gte("created_at", new Date(Date.now() - 2 * 86_400_000).toISOString()).limit(200);
+  if (error) throw new Error("업로드 횟수 확인 실패");
+  const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
+  return ids.includes(link.id) ? ids : [...ids, link.id];
+}
+
+/**
  * 업로드 시작 — 토큰·파일 검사 → 담임 폴더 확보 → Drive 번호를 미리 받아 기록 → 재개 가능 세션 주소만 돌려준다.
  * 🔴 영상 바이트는 서버를 지나지 않는다(Vercel 함수 본문 4.5MB 한도). 브라우저가 세션 주소로 Google에 직접 보낸다.
  * 🔴 실패 원문(Drive 상태·DB 오류)은 서버 로그에만 — 학부모 화면엔 한글 한 줄(raw 노출 금지).
@@ -52,8 +66,10 @@ export async function startLinkUpload(input: {
     // 횟수 제한 — 먼저 가볍게 세고(대부분 여기서 끝), 기록을 넣은 **뒤에 다시 센다**: 동시에 수십 개를 보내도
     // 각자 자기 기록까지 센 수를 보므로 한도를 넘는 시작은 세션을 열지 못한다(세기와 넣기 사이의 틈, 적대 리뷰 2026-10-01).
     const now = Date.now();
+    // 사이트가 만든 링크는 **그 학생 × 반의 사이트 링크 전부**를 합쳐 센다 — 링크를 새로 열어 횟수 제한을 늘리지 못하게(적대 리뷰 2026-10-02).
+    const limitLinkIds = await uploadLimitLinkIds(db, link);
     const count = (ms: number) => db.from("homework_video_link_uploads").select("id", { count: "exact", head: true })
-      .eq("tenant_id", link.tenant_id).eq("link_id", link.id).gte("created_at", new Date(now - ms).toISOString());
+      .eq("tenant_id", link.tenant_id).in("link_id", limitLinkIds).gte("created_at", new Date(now - ms).toISOString());
     const overLimit = async (extra: number) => {
       const [hour, day] = await Promise.all([count(3_600_000), count(86_400_000)]);
       if (hour.error || day.error) throw new Error("업로드 횟수 확인 실패");

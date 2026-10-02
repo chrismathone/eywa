@@ -70,6 +70,22 @@ describe("업로드 시작 — 거절", () => {
     expect(out.result).toMatchObject({ ok: false, code: "limit" });
     expect(out.followUp).toBeNull();
   });
+  it("🔴 사이트가 만든 링크는 그 학생 × 반의 사이트 링크를 합쳐 센다 — 링크를 새로 열어 횟수 제한을 늘리지 못한다", async () => {
+    const now = new Date().toISOString();
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: now });
+    // 같은 학생 × 반의 다른 사이트 링크 L2에 이미 10번 · 다른 학생의 사이트 링크 L9는 세지 않는다
+    db.tables.homework_video_links!.push(
+      { id: "L2", tenant_id: T, student_id: S, class_id: C, origin: "site", created_at: now, expires_at: "2099-01-01T00:00:00+09:00", revoked_at: null, token_hash: "x2" },
+      { id: "L9", tenant_id: T, student_id: "other-student", class_id: C, origin: "site", created_at: now, expires_at: "2099-01-01T00:00:00+09:00", revoked_at: null, token_hash: "x9" },
+    );
+    db.tables.homework_video_link_uploads = Array.from({ length: 10 }, (_, i) => ({ id: `u${i}`, tenant_id: T, link_id: "L9", status: "started", created_at: now }));
+    expect((await req()).ok).toBe(true);
+    db.tables.homework_video_link_uploads = Array.from({ length: 10 }, (_, i) => ({ id: `v${i}`, tenant_id: T, link_id: "L2", status: "started", created_at: now }));
+    expect(await req()).toMatchObject({ ok: false, code: "limit" });
+    // 보고서·원생 탭 링크는 종전대로 그 링크 하나만 센다
+    Object.assign(db.tables.homework_video_links![0]!, { origin: "manual" });
+    expect((await req()).ok).toBe(true);
+  });
   it("동시에 몰려도 한도를 넘는 시작은 세션을 열지 못한다(넣은 뒤 다시 센다)", async () => {
     const now = new Date().toISOString();
     db.tables.homework_video_link_uploads = Array.from({ length: 8 }, (_, i) => ({ id: `u${i}`, tenant_id: T, link_id: "L1", status: "failed", created_at: now }));
