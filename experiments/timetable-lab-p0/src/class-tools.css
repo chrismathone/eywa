@@ -1,0 +1,20 @@
+@scope (.timetable-workspace) {
+.class-tools { border-block: 1px solid #dbe3ec; padding-block: 14px; margin-block: 14px; }
+.class-actions { display: flex; gap: 6px; margin-block: 9px; }
+.class-actions button { flex: 1; padding-inline: 4px; }
+.duration-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.duration-presets button { padding: 6px 9px; }
+/* Same transfer-in mint/green as features/timetable/lib/student-tone.ts. */
+.integrated-roster .student-moved, .student-chips .student-moved { background: #bbf7d0; color: #14512b; font-weight: 700; }
+.class-tools summary { cursor: pointer; margin-block: 12px; }
+.class-dialog { max-height: 88vh; overflow: auto; width: min(560px, 94vw); }
+.class-dialog select { min-width: 180px; max-width: 65%; padding: 7px; }
+.class-dialog fieldset { border: 1px solid #d1dce8; margin-top: 18px; max-height: 220px; overflow: auto; }
+.class-dialog fieldset label { justify-content: flex-start; gap: 8px; padding: 5px; }
+.class-dialog li { margin-block: 6px; }
+.class-dialog footer { position: sticky; bottom: -24px; padding-block: 14px; background: white; border-top: 1px solid #dbe3ec; }
+.integrated-roster button.student-drag { cursor: grab; touch-action: none; user-select: none; }
+.student-drag::before { content: '⠿'; color: #6e8397; margin-right: 6px; }
+.integrated-class[data-student-drop=true] { outline: 3px solid #2d76c2; outline-offset: -3px; background: #edf5ff; }
+.roster-drag-ghost { position: fixed; z-index: 90; pointer-events: none; padding: 8px 12px; background: #1c4779; color: white; border-radius: 5px; box-shadow: 0 3px 14px #18324f33; }
+}

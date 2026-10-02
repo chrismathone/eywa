@@ -55,7 +55,7 @@ test('teacher placements, integrated students, suggestions and undo use the same
   await page.getByRole('button', { name: '되돌리기', exact: true }).click();
   await page.getByRole('tab', { name: '통합뷰' }).click();
   await page.getByRole('form', { name: '학생 배정 이동' }).locator('[name="target"]').selectOption('placement-2');
-  await page.getByRole('button', { name: '이 교시의 배정 옮기기' }).click();
+  await page.getByRole('button', { name: '이 시간의 학생만 옮기기' }).click();
   await expect(page.locator('[data-class-id="class-1"]')).toContainText('배정 학생 없음');
   await expect(page.locator('[data-class-id="class-2"]')).toContainText('학생 가');
   await page.getByRole('button', { name: '되돌리기', exact: true }).click(); await expect(page.locator('[data-class-id="class-2"]')).not.toContainText('학생 가');

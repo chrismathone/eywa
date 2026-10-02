@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore, type CSSProperties } from 'react';
+import { useMemo, useRef, useSyncExternalStore, type CSSProperties } from 'react';
 import { padCardDays, type GridCell, type RichCardGroup, type RichClassCard } from '../../../src/features/timetable/lib/class-grid';
 import { enumDayToKo } from '../../../src/features/timetable/lib/periods';
 import { movedByTarget, movedCellBox, visibleSpanRows } from '../../../src/features/timetable/lib/row-span';
@@ -7,18 +7,22 @@ import { integratedProjection } from './integrated-projection';
 import { validate } from './constraints';
 import { timeLabel, type Draft, type Lesson } from './model';
 import type { DraftStore } from './store';
+import { useRosterDrag } from './roster-drag';
+import { moveNote } from './student-marks';
 type Selection = { selected: string[]; select: (ids: string[]) => void; details: () => void };
-type ViewData = { draft: Draft; all: Lesson[]; byId: Map<string, Lesson>; conflicts: Set<string>; selection: Selection };
-export function IntegratedView({ store, selected, select, details, zoom, search }: Selection & { store: DraftStore; zoom: number; search: string }) {
+type ViewData = { draft: Draft; byClass: Map<string, Lesson[]>; byId: Map<string, Lesson>; conflicts: Set<string>; selection: Selection; roster: ReturnType<typeof useRosterDrag>; readOnly: boolean };
+export function IntegratedView({ store, selected, select, details, zoom, search, announce, readOnly = false }: Selection & { store: DraftStore; zoom: number; search: string; announce: (s: string) => void; readOnly?: boolean }) {
   const { draft } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const projection = useMemo(() => integratedProjection(draft), [draft]), appearance = appearanceOf(draft);
   const conflicts = useMemo(() => new Set(validate(draft).issues.flatMap(i => i.placementIds)), [draft]);
-  const data: ViewData = { draft, all: projection.all, byId: projection.byId, conflicts, selection: { selected, select, details } };
-  return <div className="schedule-scroll integrated-scroll" role="region" aria-label="통합뷰 학생 배정" tabIndex={0} onKeyDown={e => {
-    if ((e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())) { e.preventDefault(); (e.shiftKey || e.key.toLowerCase() === 'y' ? store.redo : store.undo)(); }
+  const root = useRef<HTMLDivElement>(null), ghost = useRef<HTMLDivElement>(null), roster = useRosterDrag(store, announce, root, ghost);
+  const data: ViewData = { draft, byClass: projection.byClass, byId: projection.byId, conflicts, selection: { selected, select, details }, roster, readOnly };
+  return <div ref={root} className="schedule-scroll integrated-scroll" role="region" aria-label="통합뷰 학생 배정" tabIndex={0}
+    onPointerMove={roster.move} onPointerUp={roster.up} onPointerCancel={roster.cancel} onKeyDown={e => {
+    if (!readOnly && (e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())) { e.preventDefault(); (e.shiftKey || e.key.toLowerCase() === 'y' ? store.redo : store.undo)(); }
   }}><div className="integrated-board" style={{ zoom }}>
     {projection.groups.map(group => {
-      const cards = group.cards.filter(c => !search || `${c.className} ${c.teacherName} ${c.active.map(s => s.name).join(' ')} ${projection.all.filter(p => p.classId === c.classId).map(p => p.teacher).join(' ')}`.includes(search));
+      const cards = group.cards.filter(c => !search || `${c.className} ${c.teacherName} ${c.active.map(s => s.name).join(' ')} ${projection.byClass.get(c.classId)?.map(p => p.teacher).join(' ')}`.includes(search));
       if (!cards.length) return null;
       return <section key={group.key} className="integrated-group" aria-label={group.label}>
         <div className="period-rail"><div className="class-name-row">수업명</div><div className="homeroom-row">담임</div><div className="class-day-row">교시</div>
@@ -28,12 +32,12 @@ export function IntegratedView({ store, selected, select, details, zoom, search 
       </section>;
     })}
     {projection.hiddenClasses.length > 0 && <p className="subtle">기존 그룹 설정으로 {projection.hiddenClasses.length}개 반이 숨겨져 있습니다. 강사뷰에서 모든 배치를 확인할 수 있습니다.</p>}
-  </div></div>;
+  </div><div ref={ghost} className="roster-drag-ghost" hidden aria-hidden="true" /></div>;
 }
 function ClassCard({ card, group, data }: { card: RichClassCard; group: RichCardGroup; data: ViewData }) {
-  const { draft, all, selection } = data, appearance = appearanceOf(draft), days = padCardDays(card.days);
+  const { draft, selection } = data, appearance = appearanceOf(draft), days = padCardDays(card.days);
   const gridColumns: CSSProperties = { gridTemplateColumns: `repeat(${days.length}, 1fr)` };
-  const moved = movedByTarget(group.rowPlan), placements = all.filter(p => p.classId === card.classId);
+  const moved = movedByTarget(group.rowPlan), placements = data.byClass.get(card.classId) ?? [];
   const choose = () => { selection.select(placements.map(p => p.id)); selection.details(); };
   return <article className="integrated-class" data-class-id={card.classId} style={{ width: Math.max(3, days.length) * 55 }}>
     <button className="class-name-row" onClick={choose} style={paint(draft.classes?.[card.classId]?.color ?? subjectTone(draft))}><strong>{card.className}</strong><small>{card.classroomLabel}</small></button>
@@ -48,8 +52,10 @@ function ClassCard({ card, group, data }: { card: RichClassCard; group: RichCard
       </div>)}
     </div>)}
     {!appearance.hideStudents && <div className="integrated-roster" style={{ height: group.rosterRows.active * 26 + 8 }}>
-      {card.active.map(student => <button key={student.studentId} title={`${student.name} · ${(student.attendanceDays ?? []).map(d => enumDayToKo(d as Parameters<typeof enumDayToKo>[0])).join('·')}`}
-        onClick={() => { selection.select(placements.filter(p => p.students.includes(student.studentId!)).map(p => p.id)); selection.details(); }}>{student.name}</button>)}
+      {card.active.map(student => <button key={student.studentId} className={`student-drag ${student.isTransferredIn ? 'student-moved' : ''}`} data-student-id={student.studentId}
+        title={`${student.name} · ${(student.attendanceDays ?? []).map(d => enumDayToKo(d as Parameters<typeof enumDayToKo>[0])).join('·')} · ${moveNote(draft, card.classId, student.studentId!) ?? '끌어서 다른 반으로 이동'}`}
+        onPointerDown={e => { if (!data.readOnly) data.roster.down(e, student.studentId!, student.name, card.classId); }}
+        onClick={() => { if (!data.roster.click()) return; selection.select(placements.filter(p => p.students.includes(student.studentId!)).map(p => p.id)); selection.details(); }}>{student.name}{student.isTransferredIn && <small aria-label="반 이동"> ↗</small>}</button>)}
       {!card.active.length && <span className="subtle">배정 학생 없음</span>}
     </div>}
   </article>;

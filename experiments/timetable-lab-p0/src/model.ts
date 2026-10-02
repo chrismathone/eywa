@@ -4,7 +4,9 @@ export type Cell = { text: string; bold?: boolean; formula?: string; format?: Re
 export type Placement = { id: string; sourceScheduleId: string | null; classId: string; row: number;
   teacherId?: string | null; roomId?: string | null; kind?: 'lesson' | 'seat' | 'block'; studentIds?: string[]; labSeparate?: boolean };
 export type Draft = { cells: Cell[][]; placements: Placement[]; students: Record<string, string[]>;
-  appearance?: LabAppearance; classes?: Record<string, { color?: LabColor; homeroomTeacher?: string }>;
+  appearance?: LabAppearance; classes?: Record<string, { name?: string; color?: LabColor; homeroomTeacher?: string }>;
+  classRevision?: number; originId?: string; operatingHours?: Record<string, { start: number; end: number }[]>;
+  studentMoves?: Record<string, Record<string, { fromClassId: string; fromName: string }>>;
   people?: Record<string, string>; outside?: Lesson[]; source?: { kind: 'live'; date: string; tenantId: string; loadedAt: string; academy: string; notices: string[]; uncertainties?: string[]; step: number; teacherOrder: string[] } };
 export const headers = ['수업', '요일', '시작', '종료', '강사', '강의실'];
 export const days = ['월', '화', '수', '목', '금', '토', '일'];
@@ -44,7 +46,8 @@ export function lessons(draft: Draft): { items: Lesson[]; incomplete: string[] }
   const items: Lesson[] = [], incomplete: string[] = [];
   for (const p of draft.placements) {
     const row = draft.cells[p.row] ?? [];
-    const [name, day, startText, endText, teacher, room] = row.map(c => c.text);
+    const [cellName, day, startText, endText, teacher, room] = row.map(c => c.text);
+    const name = draft.classes?.[p.classId]?.name ?? cellName;
     const start = timeMinutes(startText), end = timeMinutes(endText);
     if (!name || !days.includes(day) || start === null || end === null || start >= end) {
       incomplete.push(`${name || p.id}: 요일·시간·강사·방의 확정된 값을 확인하세요.`);

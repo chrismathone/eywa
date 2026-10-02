@@ -1,4 +1,5 @@
 import { days, lessons, patchCells, timeLabel, type Draft, type Lesson } from './model';
+import { checkOperatingTime } from './operating-times';
 export type Position = { day: string; teacher: string; start: number };
 export function moveBlocks(draft: Draft, ids: string[], anchorId: string, to: Position): Draft {
   const source = lessons(draft).items, anchor = source.find(p => p.id === anchorId);
@@ -7,6 +8,7 @@ export function moveBlocks(draft: Draft, ids: string[], anchorId: string, to: Po
   if (selected.length !== new Set(ids).size) throw new Error('미확정 수업을 먼저 확인해 주세요.');
   const delta = to.start - anchor.start, dayDelta = days.indexOf(to.day) - days.indexOf(anchor.day);
   if (selected.some(p => p.start + delta < 0 || p.end + delta >= 1440 || !days[days.indexOf(p.day) + dayDelta])) throw new Error('선택한 수업이 하루 또는 일주일 범위를 벗어납니다. 원래 위치를 유지합니다.');
+  for (const p of selected) if (p.kind !== 'block') checkOperatingTime(draft, days[days.indexOf(p.day) + dayDelta], p.start + delta, p.end + delta);
   const targetTeacher = source.find(p => p.teacher === to.teacher)?.teacherId ?? null;
   const targetSeat = source.some(p => p.teacher === to.teacher && p.kind === 'seat');
   if (selected.some(p => p.kind === 'block' && p.teacher === anchor.teacher && targetSeat)) throw new Error('비수업 일정은 강사 열에 놓아 주세요.');

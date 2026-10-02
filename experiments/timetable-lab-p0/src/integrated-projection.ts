@@ -13,7 +13,7 @@ export function integratedProjection(draft: Draft) {
     rosters.set(p.classId, roster);
   }
   const students = new Map<string, GridStudent[]>([...rosters].map(([classId, roster]) => [classId, [...roster].map(([id, attendance]) => ({
-    studentId: id, name: people[id] ?? '이름 미확인', grade: null, school: null, status: 'active', attendanceDays: [...attendance],
+    studentId: id, name: people[id] ?? '이름 미확인', grade: null, school: null, status: 'active', attendanceDays: [...attendance], isTransferredIn: !!draft.studentMoves?.[classId]?.[id],
   }))]));
   const slots: GridSlot[] = all.map(p => ({ sourceId: p.id, classId: p.classId, className: p.name, subject: 'english',
     dayOfWeek: koDayToEnum(p.day)!, startTime: timeLabel(p.start), endTime: timeLabel(p.end),
@@ -23,6 +23,8 @@ export function integratedProjection(draft: Draft) {
     students: students.get(p.classId) ?? [],
   }));
   const groups = buildRichCardGroups(slots, appearance.periods, new Set(appearance.compactSections), appearance.groups);
-  return { all, byId: new Map(all.map(p => [p.id, p])), groups,
-    hiddenClasses: [...new Set(all.map(p => p.classId))].filter(id => !groups.some(g => g.cards.some(c => c.classId === id))) };
+  const byClass = new Map<string, typeof all>();
+  for (const item of all) { const group = byClass.get(item.classId) ?? []; group.push(item); byClass.set(item.classId, group); }
+  const visible = new Set(groups.flatMap(g => g.cards.map(c => c.classId)));
+  return { all, byId: new Map(all.map(p => [p.id, p])), byClass, groups, hiddenClasses: [...byClass.keys()].filter(id => !visible.has(id)) };
 }

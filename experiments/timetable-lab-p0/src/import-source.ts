@@ -1,5 +1,6 @@
 import type { LabSource } from '../../../src/features/timetable-lab/types';
-import { days, emptyDraft, timeMinutes, type Draft, type Lesson } from './model';
+import { days, emptyDraft, lessons, timeMinutes, type Draft, type Lesson } from './model';
+import { captureOperatingHours } from './operating-times';
 
 const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export function importSource(value: LabSource): Draft {
@@ -28,6 +29,8 @@ export function importSource(value: LabSource): Draft {
   }
   draft.outside = value.outside.map(s => slot(s, -1));
   draft.appearance = value.appearance ? structuredClone(value.appearance) : undefined;
+  draft.originId = crypto.randomUUID();
+  draft.operatingHours = captureOperatingHours(draft, lessons(draft).items);
   draft.source = { kind: 'live', date: value.referenceDate, tenantId: value.tenantId, loadedAt: value.fetchedAt,
     academy: value.academy, notices: value.notices, uncertainties: value.uncertainties, step: [5, 10, 15, 20, 30, 60].includes(value.stepMinutes) ? value.stepMinutes : 10, teacherOrder: value.teacherOrder };
   return draft;

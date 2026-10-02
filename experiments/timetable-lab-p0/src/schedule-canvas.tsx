@@ -7,9 +7,9 @@ import { appearanceOf, lessonTone, teacherTone, paint } from './appearance';
 import { teacherLayout } from './teacher-layout';
 import type { DraftStore } from './store';
 type Props = { store: DraftStore; selected: string[]; select: (ids: string[]) => void;
-  details: () => void; announce: (s: string) => void; zoom: number; search: string };
+  details: () => void; announce: (s: string) => void; zoom: number; search: string; readOnly?: boolean };
 type Drag = { lesson: Lesson; ids: string[]; x: number; y: number; offset: number; displayOffset: number; revision: number; moved: boolean; to: Position | null };
-export function ScheduleCanvas({ store, selected, select, details, announce, zoom, search }: Props) {
+export function ScheduleCanvas({ store, selected, select, details, announce, zoom, search, readOnly = false }: Props) {
   const { draft } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const root = useRef<HTMLDivElement>(null), drag = useRef<Drag | null>(null);
   const [hover, setHover] = useState<(Position & { duration: number }) | null>(null), [cursor, setCursor] = useState<Position | null>(null);
@@ -31,7 +31,7 @@ export function ScheduleCanvas({ store, selected, select, details, announce, zoo
     return { day: lane.dataset.day!, teacher: lane.dataset.lane!, start: Math.max(0, Math.min(1439 - step, visualStart - offset)) };
   }
   function down(event: PointerEvent, lesson: Lesson) {
-    if (event.button !== 0) return;
+    if (readOnly || event.button !== 0) return;
     event.preventDefault(); root.current?.focus();
     const ids = event.ctrlKey || event.metaKey ? (selected.includes(lesson.id) ? selected.filter(id => id !== lesson.id) : [...selected, lesson.id]) : selected.includes(lesson.id) ? selected : [lesson.id];
     select(ids); setCursor({ day: lesson.day, start: lesson.start, teacher: lesson.teacher });
@@ -60,6 +60,7 @@ export function ScheduleCanvas({ store, selected, select, details, announce, zoo
     catch (error) { announce(error instanceof Error ? error.message : '이동할 위치를 확인하세요.'); }
   }
   function key(event: KeyboardEvent) {
+    if (readOnly) return;
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     const mod = event.ctrlKey || event.metaKey, k = event.key.toLowerCase();
     if (mod && ['c', 'v', 'x'].includes(k)) return;
@@ -78,7 +79,7 @@ export function ScheduleCanvas({ store, selected, select, details, announce, zoo
   }
   return <div className="schedule-scroll" ref={root} tabIndex={0} role="region" aria-label="시간표 편집 영역"
     onPointerMove={move} onPointerUp={up} onPointerCancel={() => { drag.current = null; setHover(null); }}
-    onKeyDown={key} onCopy={e => clipboard.copy(e, false)} onCut={e => clipboard.copy(e, true)} onPaste={clipboard.paste}>
+    onKeyDown={key} onCopy={e => { if (!readOnly) clipboard.copy(e, false); }} onCut={e => { if (!readOnly) clipboard.copy(e, true); }} onPaste={e => { if (!readOnly) clipboard.paste(e); }}>
     <div className="teacher-week-grid" style={{ gridTemplateColumns: `56px ${lanes.map(l => `${l.width}px`).join(' ')}` }}>
       <div className="week-time-heading">시간</div>{teachers.map(t => <div className="week-teacher-heading" key={t}
         style={{ gridColumn: `span ${lanes.filter(l => l.teacher === t).length}`, ...paint(teacherTone(draft, t)) }}>{t}{appearance.teacherNicknames[t] && `(${appearance.teacherNicknames[t]})`}</div>)}
@@ -86,7 +87,7 @@ export function ScheduleCanvas({ store, selected, select, details, announce, zoo
       <div className="time-axis" style={{ height, gridRow: 3 }}>{grid.rows.filter((_, i) => i % 2 === 0).map(r => <span key={r.startMin} style={{ top: (r.startMin - min) / step * unit }}>{timeLabel(r.startMin)}</span>)}</div>
       {lanes.map((lane, index) => <div key={`${lane.teacher}-${lane.day}`} className={`schedule-lane ${index === 0 || lanes[index - 1].teacher !== lane.teacher ? 'teacher-start' : ''}`}
         data-lane={lane.teacher} data-day={lane.day} style={{ height, gridRow: 3, backgroundSize: `100% ${unit}px` }}
-        onPointerDown={e => { if (e.target === e.currentTarget) { root.current?.focus(); setCursor(locate(e.clientX, e.clientY)); } }}>
+        onPointerDown={e => { if (!readOnly && e.target === e.currentTarget) { root.current?.focus(); setCursor(locate(e.clientX, e.clientY)); } }}>
         {!appearance.excludedTeachers.includes(lane.teacher) && appearance.sectionLines.filter(m => m >= min && m < max).map(m => <i key={m} className="period-rule" style={{ top: (m - min) / step * unit }} />)}
         {lane.breaks.map(b => <div className="teacher-break" key={b.startMin} style={{ top: b.index * unit, height: b.span * unit }}>쉬는 시간</div>)}
         {cursor?.teacher === lane.teacher && cursor.day === lane.day && <div className="slot-cursor" style={{ top: (cursor.start + (cursor.start < min ? lane.offset : 0) - min) / step * unit, height: unit }}><span>{timeLabel(cursor.start)}</span></div>}

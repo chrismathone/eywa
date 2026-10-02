@@ -1,7 +1,7 @@
 import type { LabSource } from '../../../src/features/timetable-lab/types';
 import { DEFAULT_PERIODS_CONFIG } from '../../../src/features/timetable/lib/periods';
 export function sourceFixture(): LabSource {
-  return { version: 1, subject: 'english', tenantId: 'test-tenant', referenceDate: '2026-09-28', fetchedAt: '2026-10-02T00:00:00Z',
+  return { version: 1, subject: 'english', tenantId: '00000000-0000-4000-8000-000000000001', referenceDate: '2026-09-28', fetchedAt: '2026-10-02T00:00:00Z',
     academy: '검증 학원', stepMinutes: 10, teacherOrder: ['강사 가', '강사 나'], notices: ['합성 시험 자료'],
     appearance: { periods: structuredClone(DEFAULT_PERIODS_CONFIG), groups: null, compactSections: [], hideEmptyDays: false,
       hideStudents: false, pxPerMin: 1.4, sectionLines: [], excludedTeachers: [], breaks: [], subjectColor: 'neutral',
