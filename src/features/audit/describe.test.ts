@@ -1238,3 +1238,22 @@ describe("auditDetail — 슬랙 규칙 '누가'(0311a)", () => {
     expect(auditDetail("slack_rule_save", { enabled: true, actorCount: 2, before: { enabled: true } }, ctx())).not.toContain("보낼 사람");
   });
 });
+
+describe("auditDetail — ClassNote 반 보드 자동 동기화(2026-10-03)", () => {
+  it("자동 요청 = 어느 반이 왜 달라졌는지 적는다(영문 키·id 없이)", () => {
+    const d = auditDetail(
+      "classnote_board_sync_request",
+      { requestId: UID, auto: true, full: false, classCount: 2, studentCount: 0, source: "auto", classes: [{ name: "초등M 개별 BS1K", reasons: ["새 학생"] }, { name: "중2A", reasons: ["반 이름 변경", "담임 변경"] }] },
+      ctx(),
+    );
+    expect(d).toBe("달라진 반 2개 자동 동기화 요청 · 초등M 개별 BS1K(새 학생) · 중2A(반 이름 변경, 담임 변경)");
+    expect(d).not.toMatch(/auto|source|requestId/);
+    // 사람이 누른 요청은 예전 문구 그대로
+    expect(auditDetail("classnote_board_sync_request", { full: true }, ctx())).toBe("바뀐 반 전부 동기화 요청");
+  });
+  it("자동 요청의 실행 결과는 앞에 '자동 동기화'를 붙인다 · 사람이 누른 것은 그대로", () => {
+    expect(auditDetail("classnote_board_sync_run", { ok: true, auto: true, classes: 2, enrolled: 1, releasedChildren: 1 }, ctx())).toBe("자동 동기화 · 반 2 · 원아 배정 1 · 원아 해제 1");
+    expect(auditDetail("classnote_board_sync_run", { ok: true, auto: true, noChange: true }, ctx())).toBe("자동 동기화 · 바뀐 반 없음(ClassNote 변경 없음)");
+    expect(auditDetail("classnote_board_sync_run", { ok: true, classes: 2, enrolled: 1 }, ctx())).toBe("반 2 · 원아 배정 1");
+  });
+});

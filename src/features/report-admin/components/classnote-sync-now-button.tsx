@@ -24,9 +24,12 @@ import {
 } from "@/features/report-admin/server/classnote-sync-actions";
 import { downloadClassnoteSyncReport } from "@/features/report-admin/server/classnote-sync-report-actions";
 
-const EXPLAIN =
-  "평소에는 매일 새벽 5시에 연동 PC가 ClassNote 반 보드를 aywa 반에 맞춥니다. 새 반·반 이름 변경·신입 배정을 지금 바로 맞추려면 누르세요 — " +
-  `바뀐 반만(한 번에 최대 15개) 동기화합니다. 한 번 누르면 끝날 때까지 모든 화면에서 잠기고, 끝난 뒤 ${SYNC_COOLDOWN_MIN}분 동안은 다시 누를 수 없습니다.`;
+const EXPLAIN_TAIL = `바뀐 반만(한 번에 최대 15개) 동기화합니다. 한 번 누르면 끝날 때까지 모든 화면에서 잠기고, 끝난 뒤 ${SYNC_COOLDOWN_MIN}분 동안은 다시 누를 수 없습니다.`;
+const EXPLAIN = "평소에는 매일 새벽 5시에 연동 PC가 ClassNote 반 보드를 aywa 반에 맞춥니다. 새 반·반 이름 변경·신입 배정을 지금 바로 맞추려면 누르세요 — " + EXPLAIN_TAIL;
+// 연동 PC가 자동 동기화를 하는 지점에서만 이 설명을 쓴다(연동 PC를 바꾸기 전·꺼 둔 지점에 없는 기능을 말하지 않는다).
+const EXPLAIN_AUTO =
+  "연동 PC가 낮 동안 달라진 반을 몇 분 안에 스스로 맞추고, 매일 새벽 5시에 전체 반을 다시 맞춥니다. 기다리지 않고 지금 바로 맞추거나 신입의 ClassNote 준비까지 함께 하려면 누르세요 — " +
+  EXPLAIN_TAIL;
 
 const POLL_ACTIVE_MS = 10_000;
 const TICK_MS = 30_000;
@@ -184,7 +187,7 @@ export function ClassnoteSyncNowButton({
 
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${className ?? ""}`}>
-      <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onClick} title={EXPLAIN} aria-busy={active || clicking}>
+      <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onClick} title={status?.autoSync ? EXPLAIN_AUTO : EXPLAIN} aria-busy={active || clicking}>
         <RefreshCw className={`size-3.5 shrink-0 ${view.kind === "running" ? "animate-spin" : ""}`} aria-hidden />
         {label}
       </Button>

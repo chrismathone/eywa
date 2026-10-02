@@ -11,7 +11,7 @@ const board = (p: Partial<ReleaseBoard>): ReleaseBoard =>
 const run = (p: Partial<SyncRun> = {}): SyncRun => {
   const events = p.events ?? [];
   const n = (g: string) => events.filter((e) => e.group === g).length;
-  return { kind: "daily", finishedAt: "2026-10-01T20:12:00Z", ok: true, error: null, truncated: false, autoRelease: false,
+  return { kind: "daily", finishedAt: "2026-10-01T20:12:00Z", ok: true, error: null, truncated: false, autoRelease: false, auto: false,
     counts: { changed: n("changed"), failed: n("failed"), held: n("held") }, ...p, events };
 };
 
@@ -50,9 +50,20 @@ describe("회차 행 읽기", () => {
     expect(toSyncRun({ kind: "manual", finished_at: "2026-10-01T20:12:00Z" })).toBeNull();
     expect(toSyncRun({ kind: "daily" })).toBeNull();
     expect(toSyncRun({ kind: "request", finished_at: "2026-10-01T20:12:00Z", ok: false, error: " 멈춤 ", summary: { truncated: true }, events: [] }))
-      .toEqual({ kind: "request", finishedAt: "2026-10-01T20:12:00Z", ok: false, error: "멈춤", events: [], truncated: true, autoRelease: false, counts: { changed: 0, failed: 0, held: 0 } });
+      .toEqual({ kind: "request", finishedAt: "2026-10-01T20:12:00Z", ok: false, error: "멈춤", events: [], truncated: true, autoRelease: false, auto: false, counts: { changed: 0, failed: 0, held: 0 } });
     // 자동 해제를 한 회차인지는 워커가 적은 값만 믿는다(없으면 false — 옛 워커)
     expect(toSyncRun({ kind: "daily", finished_at: "2026-10-01T20:12:00Z", ok: true, summary: { autoRelease: true }, events: [] })?.autoRelease).toBe(true);
+    // 연동 PC가 스스로 낸 요청의 회차(2026-10-03)도 워커가 적은 값만 믿는다 — 멈춘 회차에도 남는다
+    expect(toSyncRun({ kind: "request", finished_at: "2026-10-01T20:12:00Z", ok: false, error: "멈춤", summary: { auto: true }, events: [] })?.auto).toBe(true);
+    expect(toSyncRun({ kind: "request", finished_at: "2026-10-01T20:12:00Z", ok: true, summary: {}, events: [] })?.auto).toBe(false);
+  });
+  it("자동 동기화 회차는 보고서 머리에 '자동 동기화'로 적는다 — 사람이 누른 '지금 반 보드 동기화'와 가린다", () => {
+    const auto = buildSyncReportText({ latest: run({ kind: "request", auto: true }), lastDaily: null, boards: [] });
+    expect(auto).toContain("자동 동기화(달라진 반만)");
+    expect(auto).not.toContain("지금 반 보드 동기화(바뀐 반만)");
+    const manual = buildSyncReportText({ latest: run({ kind: "request" }), lastDaily: null, boards: [] });
+    expect(manual).toContain("지금 반 보드 동기화(바뀐 반만)");
+    expect(manual).not.toContain("자동 동기화(달라진 반만)");
   });
   it("건수는 워커가 적어 둔 숫자를 쓴다(줄이 잘린 회차도 전체 기준) — 숫자가 없으면 줄에서 센다", () => {
     const events = [{ group: "held", className: "가반", text: "박도윤: 학부모 미가입" }];

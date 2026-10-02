@@ -262,6 +262,7 @@ const SYSTEM_ACTOR_LABEL: Record<string, string> = {
   "slack-dispatch": "슬랙 발송기",
   // ClassNote 지금 반 보드 동기화(0313a) — 연동 PC 워커가 실행 결과를 직접 남긴다.
   "classnote-sync-now": "ClassNote 반 보드 동기화(연동 PC)",
+  "classnote-auto-sync": "ClassNote 반 보드 자동 동기화(연동 PC)",
   // ClassNote 학부모 답글(0317a) — 연동 PC 워커가 게시·수정·삭제 결과를 직접 남긴다.
   "classnote-parent-reply": "ClassNote 학부모 답글(연동 PC)",
 };
@@ -1097,6 +1098,19 @@ export function auditDetail(
     case "classnote_board_sync_request": {
       const c = num(m.classCount);
       const s = num(m.studentCount);
+      // 자동 동기화(연동 PC가 aywa와 지난 기록을 대조해 스스로 낸 요청, 2026-10-03) — 어느 반이 왜 달라졌는지 적는다.
+      if (m.auto === true) {
+        const list = arr(m.classes)
+          .map((x) => {
+            const o = x && typeof x === "object" ? (x as Record<string, unknown>) : {};
+            const name = str(o.name);
+            const why = arr(o.reasons).map(str).filter((r): r is string => r !== null);
+            return name ? (why.length ? `${name}(${why.join(", ")})` : name) : null;
+          })
+          .filter((x): x is string => x !== null);
+        const shown = list.slice(0, 8).join(" · ") + (list.length > 8 ? ` 외 ${list.length - 8}개` : "");
+        return join(`달라진 반 ${c ?? 0}개 자동 동기화 요청`, shown || null);
+      }
       const what = m.full === false ? `지목한 반·학생만(반 ${c ?? 0} · 학생 ${s ?? 0})` : "바뀐 반 전부";
       return m.joined === true ? `이미 요청된 동기화에 합류 — ${what}` : `${what} 동기화 요청`;
     }
@@ -1143,8 +1157,10 @@ export function auditDetail(
       return join(`ClassNote 공감 ${verb}`, str(m.author));
     }
     case "classnote_board_sync_run": {
-      if (m.ok === false) return join("동기화 실패", str(m.error));
-      if (m.noChange === true) return "바뀐 반 없음(ClassNote 변경 없음)";
+      // 자동 동기화가 낸 요청의 실행 결과는 앞에 '자동'을 붙인다(사람이 누른 것과 가린다).
+      const head = m.auto === true ? "자동 동기화" : null;
+      if (m.ok === false) return join(head, "동기화 실패", str(m.error));
+      if (m.noChange === true) return join(head, "바뀐 반 없음(ClassNote 변경 없음)");
       const bits = (
         [
           ["반", num(m.classes)],
@@ -1162,7 +1178,7 @@ export function auditDetail(
       )
         .filter(([, v]) => v !== null && v > 0)
         .map(([l, v]) => `${l} ${v}`);
-      return bits.length ? bits.join(" · ") : "동기화 완료(바뀐 것 없음)";
+      return join(head, bits.length ? bits.join(" · ") : "동기화 완료(바뀐 것 없음)");
     }
     case "classnote_report_recall": {
       const c = num(m.reportCount);

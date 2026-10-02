@@ -38,6 +38,35 @@ export function normalizeScope(raw) {
 }
 
 /**
+ * 한 반이 0302a 기록과 **무엇이 다른가** — `[우선순위, 사유]` 목록(다르지 않으면 빈 목록). 버튼(전체 대조)과 자동 동기화
+ * (auto-sync-plan.mjs)가 **같은 함수**로 판정한다 — "반 이름 변경"과 "새 반"을 두 곳에서 따로 정의하지 않는다.
+ * 🔴 개명과 새 반은 **이름이 아니라 연결표**로 가른다: 연결(반 id ↔ 보드)이 없으면 새 반, 연결이 있는데 적힌 보드 이름이
+ *    반 이름과 다르면 개명이다. 이름이 같은 다른 반이 있어도 여기서는 섞이지 않는다(반 id가 기준).
+ * @param {{classId:string, className:string, studentIds:string[]}} c
+ * @param {{boardName:string}|undefined} link  이 반의 연결(없으면 새 반)
+ * @param {Array<{student_id:string, status:string, reason:string|null}>} mem  이 반의 기록
+ * @param {Set<string>} recentStudentIds
+ * @returns {Array<[number, string]>}
+ */
+export function classDiffReasons(c, link, mem, recentStudentIds) {
+  const reasons = [];
+  const inClass = new Set(c.studentIds);
+  const recorded = new Set(mem.map((m) => m.student_id));
+  if (!link) reasons.push([2, "새 반"]);
+  else if (link.boardName !== c.className) reasons.push([3, "반 이름 변경"]);
+  if (link && c.studentIds.some((s) => !recorded.has(s))) reasons.push([4, "새 학생"]);
+  if (mem.some((m) => m.status === "hold" && String(m.reason ?? "").startsWith(WAIT_ASSIGN))) reasons.push([5, "배정 대기"]);
+  if (mem.some((m) => !inClass.has(m.student_id))) reasons.push([6, "반을 떠난 학생"]);
+  if (
+    mem.some(
+      (m) => m.status === "hold" && recentStudentIds.has(m.student_id) && inClass.has(m.student_id) && JOIN_WAIT.some((w) => String(m.reason ?? "").startsWith(w)),
+    )
+  )
+    reasons.push([7, "가입 확인"]);
+  return reasons;
+}
+
+/**
  * 동기화할 반 고르기.
  * @param {object} a
  * @param {Array<{classId:string, className:string, studentIds:string[]}>} a.classes  대상 수학 반(loadAywa — 종강·미발송 제외)
@@ -60,24 +89,7 @@ export function selectClassesToSync({ classes, links, members, recentStudentIds,
   for (const c of classes) {
     const reasons = []; // [우선순위, 사유]
     if (scopeClass.has(c.classId) || c.studentIds.some((s) => scopeStudent.has(s))) reasons.push([1, "지목한 반"]);
-    if (scope.full) {
-      const link = links.get(c.classId);
-      const mem = memByClass.get(c.classId) ?? [];
-      const inClass = new Set(c.studentIds);
-      const recorded = new Set(mem.map((m) => m.student_id));
-      if (!link) reasons.push([2, "새 반"]);
-      else if (link.boardName !== c.className) reasons.push([3, "반 이름 변경"]);
-      if (link && c.studentIds.some((s) => !recorded.has(s))) reasons.push([4, "새 학생"]);
-      if (mem.some((m) => m.status === "hold" && String(m.reason ?? "").startsWith(WAIT_ASSIGN))) reasons.push([5, "배정 대기"]);
-      if (mem.some((m) => !inClass.has(m.student_id))) reasons.push([6, "반을 떠난 학생"]);
-      if (
-        mem.some(
-          (m) =>
-            m.status === "hold" && recentStudentIds.has(m.student_id) && inClass.has(m.student_id) && JOIN_WAIT.some((w) => String(m.reason ?? "").startsWith(w)),
-        )
-      )
-        reasons.push([7, "가입 확인"]);
-    }
+    if (scope.full) reasons.push(...classDiffReasons(c, links.get(c.classId), memByClass.get(c.classId) ?? [], recentStudentIds));
     if (reasons.length) out.push({ classId: c.classId, className: c.className, rank: Math.min(...reasons.map((r) => r[0])), reasons: reasons.map((r) => r[1]) });
   }
   out.sort((x, y) => x.rank - y.rank || x.className.localeCompare(y.className, "ko"));

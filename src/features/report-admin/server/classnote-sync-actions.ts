@@ -8,7 +8,7 @@ import { getTenantSettings } from "@/features/owner/server/queries";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import { logAction } from "@/features/audit/server/log";
 import { cooldownLeftMs, mergeScope, normalizeScope, staleReason, type SyncRequestRow } from "../classnote-sync";
-import { isMissingTableError, loadSyncRows, mergeIntoPending, workerAcceptsSyncRequests } from "./classnote-sync-core";
+import { isMissingTableError, loadSyncRows, loadWorkerSyncState, mergeIntoPending, workerAcceptsSyncRequests } from "./classnote-sync-core";
 import { loadSyncReportSummary } from "./classnote-sync-report-core";
 import type { SyncReportSummary } from "../classnote-sync-report";
 
@@ -44,6 +44,8 @@ async function gate(): Promise<Gate> {
 export type ClassnoteSyncStatus = {
   available: boolean;
   workerReady: boolean;
+  /** 연동 PC가 낮 동안 달라진 반을 스스로 맞추는가(자동 동기화가 켜진 새 버전) — 버튼 설명 문구만 가른다. */
+  autoSync?: boolean;
   active: SyncRequestRow | null;
   latest: SyncRequestRow | null;
   /**
@@ -66,15 +68,15 @@ export async function getClassnoteSyncStatus(): Promise<ClassnoteSyncStatus> {
   if (!g.ok) return { ...HIDDEN, nowMs };
   const admin = createAdminClient();
   try {
-    const [rows, boards, workerReady, report] = await Promise.all([
+    const [rows, boards, worker, report] = await Promise.all([
       loadSyncRows(admin, g.tenantId),
       admin.from("classnote_class_boards").select("class_id", { count: "exact", head: true }).eq("tenant_id", g.tenantId),
-      workerAcceptsSyncRequests(admin, g.tenantId),
+      loadWorkerSyncState(admin, g.tenantId),
       // 동기화 보고서 요약 — 받을 수 있는 사람만 읽는다. 실패·표 없음은 null(버튼만 빠진다, 동기화 버튼은 그대로).
       g.canExport ? loadSyncReportSummary(admin, g.tenantId) : Promise.resolve(null),
     ]);
     if (boards.error || !boards.count) return { ...HIDDEN, nowMs };
-    return { available: true, workerReady, active: rows.active, latest: rows.latest, report, nowMs };
+    return { available: true, workerReady: worker.ready, autoSync: worker.autoSync, active: rows.active, latest: rows.latest, report, nowMs };
   } catch (e) {
     // 표가 없다(0313a 적용 전) = 없는 기능처럼 감춘다. 그 밖의 조회 실패도 버튼을 감춘다(버튼은 편의일 뿐 — 새벽 동기화는 그대로).
     if (!isMissingTableError(e)) console.error("[classnote-sync] 상태 조회 실패", e);

@@ -16,7 +16,7 @@ import { downloadClassnoteSyncReport } from "./classnote-sync-report-actions";
 const board = (p: Partial<ReleaseBoard>): ReleaseBoard =>
   ({ boardName: "중등M 중1", className: "중등M 중1", names: [], checkedAt: "2026-10-01T20:12:00Z", ...p });
 const run = (p: Partial<SyncRun> = {}): SyncRun =>
-  ({ kind: "daily", finishedAt: "2026-10-01T20:12:00Z", ok: true, error: null, truncated: false, autoRelease: false, counts: { changed: 1, failed: 0, held: 1 },
+  ({ kind: "daily", finishedAt: "2026-10-01T20:12:00Z", ok: true, error: null, truncated: false, autoRelease: false, auto: false, counts: { changed: 1, failed: 0, held: 1 },
     events: [{ group: "changed", className: "중등M 중1", text: "원아 배정: 김민준" }, { group: "held", className: "중등M 중1", text: "박도윤: 학부모 미가입" }], ...p });
 
 beforeEach(() => {

@@ -163,9 +163,10 @@ async function finish(sql, tenant, id, { status, result, error }) {
 const RUN_AUDIT = { action: "classnote_board_sync_run", actor_name: "system:classnote-sync-now" };
 
 /** 감사로그(0313a) — 사람 세션이 없어 직접 넣는다. 액션 키는 앱 AUDIT_ACTIONS에 등록돼 있다. best-effort. */
-async function audit(sql, tenant, requestId, result, error) {
+async function audit(sql, tenant, requestId, result, error, auto = false) {
   const metadata = {
     requestId,
+    ...(auto ? { auto: true } : {}),
     ok: !error,
     noChange: result?.noChange === true,
     classes: result?.classes ?? 0,
@@ -205,7 +206,9 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
   }
   tableMissingAt = 0;
   if (!row) return { ran: false };
-  log(`[sync-now] 요청 ${row.id} 시작`);
+  // 자동 동기화(classnote-auto-sync.mjs)가 넣은 요청인가 — 결과·보고서·감사로그에 '자동'으로 남긴다(사람이 누른 것과 가린다).
+  const auto = !!row.scope && typeof row.scope === "object" && !Array.isArray(row.scope) && row.scope.auto === true;
+  log(`[sync-now] 요청 ${row.id} 시작${auto ? "(자동)" : ""}`);
   // 동기화 보고서(0329a) — 이 요청이 한 일·못 한 일을 이유와 함께 남긴다(멈춘 요청도, 바뀐 것이 없던 요청도).
   const startedAt = new Date();
   const events = [];
@@ -216,14 +219,14 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
     const result = await runScopedSync(sql, browser, { tenant, scope: row.scope, log, events, applied, released });
     const { classes, created, renamed, enrolled, teachers, releasedChildren, releasedTeachers } = result;
     await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: true, events, log,
-      summary: { classes, created, renamed, enrolled, teachers, releasedChildren, releasedTeachers, noChange: result.noChange === true, autoRelease: autoReleaseEnabled() && !releaseHaltReason() } });
+      summary: { classes, created, renamed, enrolled, teachers, releasedChildren, releasedTeachers, noChange: result.noChange === true, autoRelease: autoReleaseEnabled() && !releaseHaltReason(), ...(auto ? { auto: true } : {}) } });
     await auditEnrollments(sql, tenant, applied, { kind: "request" });
     await auditReleases(sql, tenant, released, { kind: "request" });
     recorded = true;
-    const fin = await finish(sql, tenant, row.id, { status: "done", result, error: null });
+    const fin = await finish(sql, tenant, row.id, { status: "done", result: auto ? { ...result, auto: true } : result, error: null });
     if (!fin.finished) log(`[sync-now] 요청 ${row.id}는 그 사이 시간 초과로 정리됐습니다(결과만 로그에 남김) — ${result.summary}`);
     else log(`[sync-now] 완료 — ${result.summary}${fin.requeued ? " · 실행 중에 들어온 요청을 이어서 합니다" : ""}`);
-    await audit(sql, tenant, row.id, result, null);
+    await audit(sql, tenant, row.id, result, null, auto);
     return { ran: true, ok: true, noChange: !!result.noChange, summary: result.summary };
   } catch (e) {
     const raw = String(e?.message ?? e).slice(0, 300);
@@ -233,12 +236,12 @@ export async function processSyncRequestOnce(sql, browser, { tenant, post, host,
     const partial = e && typeof e === "object" && e.partial ? e.partial : null;
     // 회차를 먼저 적고 요청을 끝낸다 — 화면은 요청이 끝난 것을 보고 보고서 요약을 읽는다(순서가 뒤집히면 직전 회차를 보여 준다).
     if (!recorded) {
-      await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: false, error: label, events, log });
+      await writeSyncRun(sql, { tenant, kind: "request", requestId: row.id, startedAt, ok: false, error: label, events, log, ...(auto ? { summary: { auto: true } } : {}) });
       await auditEnrollments(sql, tenant, applied, { kind: "request" }); // 멈추기 전에 이미 배정한 원아도 기록에 남긴다
       await auditReleases(sql, tenant, released, { kind: "request" }); // 이미 해제한 원아·담임도
     }
-    await finish(sql, tenant, row.id, { status: "failed", result: { raw, ...(partial ? { partial } : {}) }, error: label }).catch(() => {});
-    await audit(sql, tenant, row.id, partial, label);
+    await finish(sql, tenant, row.id, { status: "failed", result: { raw, ...(partial ? { partial } : {}), ...(auto ? { auto: true } : {}) }, error: label }).catch(() => {});
+    await audit(sql, tenant, row.id, partial, label, auto);
     return { ran: true, ok: false, summary: label };
   }
 }

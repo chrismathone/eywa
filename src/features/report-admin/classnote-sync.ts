@@ -78,10 +78,15 @@ export function staleReason(row: Pick<SyncRequestRow, "status" | "requestedAt" |
   return null;
 }
 
-/** 쿨다운 남은 시간(ms). 시간 초과(`result.timedOut`)로 끝난 요청엔 걸지 않는다 — 이미 오래 기다렸다. */
+/**
+ * 쿨다운 남은 시간(ms). 시간 초과(`result.timedOut`)로 끝난 요청엔 걸지 않는다 — 이미 오래 기다렸다.
+ * 자동 동기화(연동 PC가 스스로 낸 요청, `result.auto`)가 끝난 것에도 걸지 않는다(2026-10-03) — 자동은 달라진 반만 돌고
+ * 신입 1인 보드 준비는 하지 않는다. 자동이 돌 때마다 버튼이 5분씩 잠기면 사람이 그 준비를 요청할 틈이 없다.
+ * (지점당 살아 있는 요청 하나 · 자동 쪽 간격은 워커가 따로 지킨다.)
+ */
 export function cooldownLeftMs(latest: Pick<SyncRequestRow, "status" | "finishedAt" | "result"> | null, nowMs: number): number {
   if (!latest || (latest.status !== "done" && latest.status !== "failed") || !latest.finishedAt) return 0;
-  if (latest.result && latest.result.timedOut === true) return 0;
+  if (latest.result && (latest.result.timedOut === true || latest.result.auto === true)) return 0;
   const left = Date.parse(latest.finishedAt) + SYNC_COOLDOWN_MIN * 60_000 - nowMs;
   return left > 0 ? left : 0;
 }
@@ -170,15 +175,32 @@ export const SYNC_WORKER_ALIVE_MIN = 5;
  * 이 기능을 아는 버전(`caps.syncRequests`)인 PC가 하나라도 있으면 true. 옛 워커는 키가 없어 false(아무도 안 집는 '대기 중' 방지).
  */
 export function workerReadyFromHeartbeats(rows: { last_seen: string | null; last_results: unknown }[], nowMs: number): boolean {
-  return rows.some((r) => {
+  return liveRequestWorkerCaps(rows, nowMs).length > 0;
+}
+
+/**
+ * 연동 PC가 **낮 동안 달라진 반을 스스로 맞추는가**(자동 동기화, 2026-10-03) — 요청을 받을 수 있는 PC가 있고, 그 PC가 **전부**
+ * `caps.autoBoardSync`를 내걸 때만 true(어느 PC가 발송 임대를 쥘지 모른다 — 하나라도 옛 버전·꺼 둔 PC면 약속하지 않는다).
+ * 버튼 설명 문구만 가른다(동작 게이트가 아니다) — 연동 PC를 바꾸기 전·자동 동기화를 꺼 둔 지점에 없는 기능을 말하지 않게.
+ */
+export function workerAutoSyncFromHeartbeats(rows: { last_seen: string | null; last_results: unknown }[], nowMs: number): boolean {
+  const caps = liveRequestWorkerCaps(rows, nowMs);
+  return caps.length > 0 && caps.every((c) => c.autoBoardSync === true);
+}
+
+/** 살아 있고 · 실게시이고 · 동기화 요청을 아는 연동 PC들의 지원 표식. */
+function liveRequestWorkerCaps(rows: { last_seen: string | null; last_results: unknown }[], nowMs: number): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const r of rows) {
     const seen = r.last_seen ? Date.parse(r.last_seen) : NaN;
-    if (!Number.isFinite(seen) || nowMs - seen > SYNC_WORKER_ALIVE_MIN * 60_000) return false;
+    if (!Number.isFinite(seen) || nowMs - seen > SYNC_WORKER_ALIVE_MIN * 60_000) continue;
     const lr = r.last_results;
-    if (!lr || typeof lr !== "object" || Array.isArray(lr)) return false;
+    if (!lr || typeof lr !== "object" || Array.isArray(lr)) continue;
     const o = lr as Record<string, unknown>;
     const caps = o.caps && typeof o.caps === "object" && !Array.isArray(o.caps) ? (o.caps as Record<string, unknown>) : {};
-    return o.postMode === true && caps.syncRequests === true;
-  });
+    if (o.postMode === true && caps.syncRequests === true) out.push(caps);
+  }
+  return out;
 }
 
 /** DB 행 → 화면 행(모르는 상태는 버린다). */

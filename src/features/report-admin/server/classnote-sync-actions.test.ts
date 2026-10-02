@@ -18,6 +18,7 @@ const m = vi.hoisted(() => ({
   calls: [] as { table: string; op: string; args: unknown[] }[],
   insertResult: { data: { id: "new" }, error: null } as { data: unknown; error: unknown },
   boardCount: 3,
+  autoSync: false,
 }));
 
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
@@ -28,6 +29,7 @@ vi.mock("@/features/audit/server/log", () => ({ logAction: m.log }));
 vi.mock("./classnote-sync-core", () => ({
   loadSyncRows: m.loadRows,
   workerAcceptsSyncRequests: m.workerOk,
+  loadWorkerSyncState: async (...a: unknown[]) => ({ ready: (await m.workerOk(...a)) === true, autoSync: m.autoSync }),
   mergeIntoPending: m.merge,
   isMissingTableError: (e: { code?: string }) => e?.code === "42P01" || e?.code === "PGRST205",
 }));
@@ -216,8 +218,12 @@ describe("상태", () => {
   });
   it("정상 — 지점 id로만 묻는다", async () => {
     const s = await getClassnoteSyncStatus();
-    expect(s).toMatchObject({ available: true, workerReady: true });
+    expect(s).toMatchObject({ available: true, workerReady: true, autoSync: false });
     expect(m.loadRows).toHaveBeenCalledWith(expect.anything(), "t1");
+    // 연동 PC가 자동 동기화를 내걸 때만 그렇다고 알린다(버튼 설명 문구가 이 값을 읽는다)
+    m.autoSync = true;
+    expect((await getClassnoteSyncStatus()).autoSync).toBe(true);
+    m.autoSync = false;
     expect(m.calls.some((c) => c.table === "classnote_class_boards" && c.op === "eq" && c.args[0] === "tenant_id" && c.args[1] === "t1")).toBe(true);
   });
 });

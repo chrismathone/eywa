@@ -7,6 +7,25 @@ import { personalBoardName, planClassBoards } from "./class-board-plan.mjs";
 
 const norm = (s) => String(s ?? "").replace(/\s/g, "");
 
+/**
+ * **대상 반** 조건(SQL 조각) — 활성 수학(math·subject_1) · 보고서 발송 반 · 종강 제외. 반 별칭은 `c`.
+ * 동기화(loadAywa)와 자동 동기화의 대조(auto-sync-load.mjs)가 **같은 조각**을 쓴다 — 두 곳에 따로 적으면 한쪽만 바뀐 날
+ * 대조는 "달라졌다"는데 동기화는 그 반을 대상 밖으로 보고 아무것도 안 한다(되풀이 요청).
+ * 🔴 종강 제외(원장 2026-09-29 — 종강 반 6개를 만들었다가 지웠다). aywa는 종강을 is_active가 아니라 closed_at(종강일)에 적는다.
+ *    판정 = overlap.ts isLiveSlot과 같은 축(closed_at < 오늘이면 종강).
+ */
+export const targetClassWhere = (sql, tenant, today) =>
+  sql`c.tenant_id = ${tenant} and c.is_active and not c.report_optout and c.subject in ('math', 'subject_1') and (c.closed_at is null or c.closed_at >= ${today})`;
+
+/**
+ * **오늘 그 반에 다니는 재원생** 수강 조건(SQL 조각) — 수강 별칭은 `e`. 테스트 학생·재원이 아닌 학생은 뺀다.
+ * 🔴 지점 필터(`e.tenant_id`)를 함께 건다 — 수강 인덱스는 (tenant_id, class_id)·(tenant_id, student_id)라 반 id만으로 조인하면
+ *    앞 칸이 빠져 전 지점 수강을 훑는다(자동 동기화가 1분마다 이 조각을 쓴다).
+ */
+export const currentEnrollmentOn = (sql, tenant, today) =>
+  sql`e.tenant_id = ${tenant} and (e.end_date is null or e.end_date >= ${today}) and (e.start_date is null or e.start_date <= ${today})
+      and exists (select 1 from students s where s.id = e.student_id and s.status = 'enrolled' and not coalesce(s.is_test, false))`;
+
 /** aywa 대상 반·학생. 대상 반 = 활성 수학(math·subject_1) · 보고서 발송 반 · 종강 제외(특강 포함 — 원장 2026-09-30). */
 export async function loadAywa(sql, tenant) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
@@ -16,13 +35,8 @@ export async function loadAywa(sql, tenant) {
     select c.id, c.class_name,
       coalesce(array_agg(distinct e.student_id) filter (where e.student_id is not null), '{}') as student_ids
     from classes c
-    left join enrollments e on e.class_id = c.id
-      and (e.end_date is null or e.end_date >= ${today}) and (e.start_date is null or e.start_date <= ${today})
-      and exists (select 1 from students s where s.id = e.student_id and s.status = 'enrolled' and not coalesce(s.is_test, false))
-    where c.tenant_id = ${tenant} and c.is_active and not c.report_optout and c.subject in ('math', 'subject_1')
-      -- 🔴 종강 제외(원장 2026-09-29 — 종강 반 6개를 만들었다가 지웠다). aywa는 종강을 is_active가 아니라
-      --    closed_at(종강일)에 적는다. 판정 = overlap.ts isLiveSlot과 같은 축(closed_at < 오늘이면 종강).
-      and (c.closed_at is null or c.closed_at >= ${today})
+    left join enrollments e on e.class_id = c.id and ${currentEnrollmentOn(sql, tenant, today)}
+    where ${targetClassWhere(sql, tenant, today)}
     group by c.id, c.class_name
     order by c.class_name`;
   const studentRows = await sql`

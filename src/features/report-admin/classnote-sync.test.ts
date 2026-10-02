@@ -13,6 +13,7 @@ import {
   staleReason,
   syncResultBrief,
   toSyncRow,
+  workerAutoSyncFromHeartbeats,
   workerReadyFromHeartbeats,
   type SyncRequestRow,
 } from "./classnote-sync";
@@ -66,6 +67,12 @@ describe("멈춘 요청 · 쿨다운", () => {
     expect(cooldownLeftMs(row({ status: "failed", finishedAt: ago(1), result: { timedOut: true } }), NOW)).toBe(0);
     expect(cooldownLeftMs(null, NOW)).toBe(0);
   });
+  it("자동 동기화(연동 PC가 스스로 낸 요청)가 끝난 것은 사람의 버튼을 잠그지 않는다 — 신입 준비를 요청할 틈을 막지 않게", () => {
+    expect(cooldownLeftMs(row({ status: "done", finishedAt: ago(1), result: { auto: true, classes: 2 } }), NOW)).toBe(0);
+    expect(cooldownLeftMs(row({ status: "failed", finishedAt: ago(1), result: { auto: true, raw: "x" } }), NOW)).toBe(0);
+    // 사람이 누른 것은 그대로 잠근다
+    expect(cooldownLeftMs(row({ status: "done", finishedAt: ago(1), result: { classes: 2 } }), NOW)).toBeGreaterThan(0);
+  });
 });
 
 describe("버튼 상태", () => {
@@ -111,6 +118,18 @@ describe("연동 PC 준비 — 살아 있고 · 실게시 · 이 기능을 아�
     expect(workerReadyFromHeartbeats([hb(1, { postMode: false, caps: { syncRequests: true } })], NOW)).toBe(false);
     expect(workerReadyFromHeartbeats([hb(30, { postMode: true, caps: { syncRequests: true } })], NOW)).toBe(false);
     expect(workerReadyFromHeartbeats([], NOW)).toBe(false);
+  });
+  it("자동 동기화 여부 — 요청을 받는 PC가 전부 그 표식을 내걸 때만(연동 PC를 바꾸기 전·꺼 둔 PC가 섞이면 약속하지 않는다)", () => {
+    const on = { postMode: true, caps: { syncRequests: true, autoBoardSync: true } };
+    const old = { postMode: true, caps: { syncRequests: true } };
+    expect(workerAutoSyncFromHeartbeats([hb(1, on)], NOW)).toBe(true);
+    expect(workerAutoSyncFromHeartbeats([hb(1, old)], NOW)).toBe(false);
+    expect(workerAutoSyncFromHeartbeats([hb(1, { postMode: true, caps: { syncRequests: true, autoBoardSync: false } })], NOW)).toBe(false);
+    expect(workerAutoSyncFromHeartbeats([hb(1, on), hb(1, old)], NOW)).toBe(false);
+    // 꺼진 PC·dry-run PC는 세지 않는다(그 PC는 요청도 자동 대조도 하지 않는다)
+    expect(workerAutoSyncFromHeartbeats([hb(1, on), hb(30, old), hb(1, { postMode: false, caps: { syncRequests: true } })], NOW)).toBe(true);
+    expect(workerAutoSyncFromHeartbeats([hb(30, on)], NOW)).toBe(false);
+    expect(workerAutoSyncFromHeartbeats([], NOW)).toBe(false);
   });
   it("모르는 상태 행은 버린다", () => {
     expect(toSyncRow({ id: "x", status: "queued", requested_at: ago(1) })).toBeNull();

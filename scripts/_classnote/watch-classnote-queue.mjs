@@ -36,6 +36,7 @@ import { videoStorageStatus } from "./video-drive-quota.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
 import { processSyncRequestOnce } from "./classnote-sync-request.mjs";
+import { autoSyncMode, autoSyncTick } from "./classnote-auto-sync.mjs";
 import { processParentRepliesOnce } from "./classnote-parent-reply-core.mjs";
 import { processParentReactionsOnce } from "./classnote-parent-reaction-core.mjs";
 
@@ -103,7 +104,7 @@ const recentIssues = [];
 // parentReply=학부모 글 답글(0317a) · parentReaction=학부모 글 공감(0319a)을 집는 버전인가. 앱은 그 키가 있을 때만 요청을 받는다.
 // parentReplySettings=답글 모드를 **학원 설정**(끔·시험·전체)에서 읽는 버전인가(2026-10-01). 이 키가 없는 옛 판은 모드가 코드 상수(시험)라
 // 설정을 '전체'로 바꿔도 실제 학부모 글의 요청을 전부 실패시킨다 — 앱은 이 키가 없으면 답글 요청을 받지 않는다.
-const WORKER_CAPS = { classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -211,6 +212,7 @@ async function main() {
     console.error("--post엔 CLASSNOTE_UPLOAD_ID/PW env 필요"); process.exit(1);
   }
   log(`데몬 시작 — mode=${POST ? "POST(실게시)" : "DRY-RUN"} host=${HOSTNAME} poll=${POLL_MS / 1000}s`);
+  if (POST) log(`반 보드 자동 동기화: ${{ on: "켜짐(달라진 반만, 1분마다 대조)", observe: "지켜보기(요청하지 않고 로그만)", off: "꺼짐" }[autoSyncMode()]}`);
   // 옛 스위치가 .env.local에 남아 있으면 **무시된다는 사실**을 로그로 남긴다(2026-07-29). 07-28 안내문이
   // "이 줄을 지우면 예전 방식으로 복귀"라고 적어 둔 탓에, 담당자가 지우고 '롤백했다'고 오인할 수 있다.
   if (process.env.CLASSNOTE_PUBLISH_MODE)
@@ -307,6 +309,13 @@ async function main() {
       }
       // 2-c) 지금 반 보드 동기화 요청(0313a) — 앱 버튼. `--post` 임대 주인만 집고, **바뀐 반만**(상한 15개) 돈다.
       //      새벽 정기 동기화(아래 3·3-a)의 '오늘 함' 표식은 건드리지 않는다(한 폴 루프라 둘이 동시에 돌 수 없다).
+      // 2-c-0) 반 보드 자동 동기화(2026-10-03) — 1분에 한 번 aywa DB만 보고, 지난 동기화 기록과 달라진 반이 있으면 **요청 한 줄**을 넣는다.
+      //        바로 아래 2-c가 그 요청을 버튼과 같은 길로 집어 실행한다. 스스로 오류를 삼킨다(대조가 실패해도 발송은 계속).
+      const asres = await autoSyncTick(db(), { tenant, post: POST, log }).catch((e) => {
+        log(`[auto-sync] 처리 오류(다음에 다시): ${e.message}`);
+        return { checked: false };
+      });
+      if (asres.requested) noteResult("autoSync", { requested: asres.requested });
       const snres = await processSyncRequestOnce(db(), b, { tenant, post: POST, host: HOSTNAME, log }).catch((e) => {
         log(`[sync-now] 처리 오류(다음 폴에서 재시도): ${e.message}`);
         noteResult("syncNow", { error: e.message });

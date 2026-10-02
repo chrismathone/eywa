@@ -1,6 +1,6 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { mergeScope, sameScope, toSyncRow, workerReadyFromHeartbeats, type SyncRequestRow, type SyncScope } from "../classnote-sync";
+import { mergeScope, sameScope, toSyncRow, workerAutoSyncFromHeartbeats, workerReadyFromHeartbeats, type SyncRequestRow, type SyncScope } from "../classnote-sync";
 
 /**
  * 지금 반 보드 동기화(0313a) — 서버 액션이 쓰는 조회·합치기(동기 export가 있어 `"use server"` 파일 밖에 둔다, [[#119]]).
@@ -36,11 +36,21 @@ export async function loadSyncRows(admin: Admin, tenantId: string): Promise<{ ac
   };
 }
 
+/**
+ * 이 지점 연동 PC의 동기화 준비 상태 — `ready` = 지금 요청을 받을 PC가 있는가 · `autoSync` = 낮 동안 달라진 반을 스스로 맞추는가.
+ * 조회 실패 = 둘 다 아니라고 본다(받을 PC를 모르면 '대기 중'을 만들지 않고, 없는 기능을 말하지 않는다).
+ */
+export async function loadWorkerSyncState(admin: Admin, tenantId: string): Promise<{ ready: boolean; autoSync: boolean }> {
+  const { data, error } = await admin.from("classnote_workers").select("last_seen, last_results").eq("tenant_id", tenantId);
+  if (error) return { ready: false, autoSync: false };
+  const rows = (data ?? []) as { last_seen: string | null; last_results: unknown }[];
+  const now = Date.now();
+  return { ready: workerReadyFromHeartbeats(rows, now), autoSync: workerAutoSyncFromHeartbeats(rows, now) };
+}
+
 /** 이 지점에 지금 요청을 받을 연동 PC가 있는가(조회 실패 = 없다고 본다 — 받을 PC를 모르면 '대기 중'을 만들지 않는다). */
 export async function workerAcceptsSyncRequests(admin: Admin, tenantId: string): Promise<boolean> {
-  const { data, error } = await admin.from("classnote_workers").select("last_seen, last_results").eq("tenant_id", tenantId);
-  if (error) return false;
-  return workerReadyFromHeartbeats((data ?? []) as { last_seen: string | null; last_results: unknown }[], Date.now());
+  return (await loadWorkerSyncState(admin, tenantId)).ready;
 }
 
 /**

@@ -28,6 +28,8 @@ export type SyncRunHead = {
   truncated: boolean;
   /** 이 회차가 자동 해제를 했나(워커 `summary.autoRelease`) — 옛 워커·꺼짐·멈춤이면 false. 해제 확인 목록의 안내 문구를 고른다. */
   autoRelease: boolean;
+  /** 연동 PC가 스스로 낸 요청의 회차인가(워커 `summary.auto`, 2026-10-03) — 사람이 누른 '지금 동기화'와 가려 적는다. */
+  auto: boolean;
 };
 export type SyncRun = SyncRunHead & { events: SyncRunEvent[] };
 
@@ -61,6 +63,7 @@ export function toSyncRunHead(row: Record<string, unknown> | null | undefined, e
     counts: { changed: count("changed"), failed: count("failed"), held: count("held") },
     truncated: summary.truncated === true,
     autoRelease: summary.autoRelease === true,
+    auto: summary.auto === true,
   };
 }
 
@@ -136,6 +139,7 @@ const KIND_LABEL: Record<SyncRun["kind"], string> = {
   daily: "매일 정기 동기화(전체 반)",
   request: "지금 반 보드 동기화(바뀐 반만)",
 };
+const AUTO_LABEL = "자동 동기화(달라진 반만)";
 const SECTION: Record<Exclude<SyncRunGroup, "release">, { title: string; note: string }> = {
   changed: { title: "변동된 것", note: "이번 동기화가 ClassNote에서 실제로 바꾼 것" },
   failed: { title: "변동 실패", note: "하려다 안 된 것과 이유" },
@@ -154,7 +158,7 @@ function sectionLines(run: SyncRun, group: Exclude<SyncRunGroup, "release">): st
 
 function runBlock(run: SyncRun): string[] {
   const lines = [
-    `동기화: ${when(run.finishedAt)} · ${KIND_LABEL[run.kind]}`,
+    `동기화: ${when(run.finishedAt)} · ${run.kind === "request" && run.auto ? AUTO_LABEL : KIND_LABEL[run.kind]}`,
     `결과: ${run.ok ? "정상 완료" : `도중에 멈췄습니다 — ${run.error ?? "사유를 남기지 못했습니다"}`}`,
   ];
   if (!run.ok) {

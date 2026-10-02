@@ -44,6 +44,20 @@ describe("지금 반 보드 동기화 버튼", () => {
     expect(b).toBeDisabled();
   });
 
+  it("설명은 연동 PC가 실제로 하는 일만 말한다 — 자동 동기화를 하는 지점에서만 '스스로 맞춘다'고 적는다", async () => {
+    m.status.mockResolvedValue(st({}));
+    const { unmount } = render(<ClassnoteSyncNowButton source="t" />);
+    const plain = await screen.findByRole("button", { name: /지금 반 보드 동기화/ });
+    expect(plain.getAttribute("title")).toContain("매일 새벽 5시");
+    expect(plain.getAttribute("title")).not.toContain("스스로 맞추고");
+    unmount();
+    m.status.mockResolvedValue(st({ autoSync: true }));
+    render(<ClassnoteSyncNowButton source="t" />);
+    const auto = await screen.findByRole("button", { name: /지금 반 보드 동기화/ });
+    expect(auto.getAttribute("title")).toContain("낮 동안 달라진 반을 몇 분 안에 스스로 맞추고");
+    expect(auto.getAttribute("title")).toContain("매일 새벽 5시");
+  });
+
   it("실행 중 = '동기화 중…' 잠김", async () => {
     m.status.mockResolvedValue(st({ active: req({ status: "running", startedAt: new Date(now - 30_000).toISOString() }) }));
     render(<ClassnoteSyncNowButton source="t" />);
