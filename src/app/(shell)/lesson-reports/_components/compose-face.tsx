@@ -29,6 +29,7 @@ import {
   type AdminSaveReportInput,
 } from "@/features/report-admin/server/compose-actions";
 import { SendClassPicker, type SendClassOption } from "./send-class-picker";
+import { defaultComposeSubject } from "@/features/report-admin/compose-default-subject";
 
 
 const INPUT = "border-border bg-card text-foreground rounded-lg border px-2.5 py-1.5 text-sm w-full";
@@ -47,6 +48,8 @@ const SEND_MESSAGE: Record<string, { kind: "success" | "info" | "warn"; text: st
   too_old: { kind: "warn", text: "저장했지만 너무 오래된 보고서라 전송하지 않았습니다." },
   revoked: { kind: "warn", text: "취소된 공유 링크입니다 — 재발급 후 발송하세요." },
   processing: { kind: "info", text: "이미 발송 처리 중인 보고서입니다." },
+  // 이미 학부모에게 나간 글 — 다시 보내지 않는다. 저장 여부는 적지 않는다(보통은 저장 전에 걸러지고, 드물게 저장 뒤에 걸러진다).
+  already_sent: { kind: "warn", text: "이미 발송된 보고서라 다시 보내지 않았습니다 — 학부모가 받은 글은 그대로입니다." },
 };
 
 export function ComposeFace({
@@ -196,6 +199,7 @@ export function ComposeFace({
     setStudentId(id);
     setCtx(null);
     setSubject("");
+    setTeacherName(""); // 과목을 못 정한 학생(두 과목 수강)에서 직전 학생의 강사명이 칸에 남지 않게 — 과목을 고르면 다시 채운다
     setSendOpt(null);
     setSendClassId("");
     setConfirmSend(false);
@@ -208,8 +212,9 @@ export function ComposeFace({
       }
       const fallback = res.sendableSubjects ?? [];
       setCtx({ student: res.student, subjects: res.subjects ?? [], sendableSubjects: fallback, nameCollision: !!res.nameCollision });
-      // 자동 선택: 수강 중인 발송가능 과목 우선 → 없으면 학원 발송과목(폴백) 첫 번째.
-      const first = (res.subjects ?? []).find((s) => s.sendable) ?? fallback[0];
+      // 자동 선택은 **고를 것이 하나뿐일 때만** — 두 과목을 다 듣는 학생을 '첫 번째 과목'으로 잡으면 수학 보고서가
+      // 영어 알림장으로 나간다(교재 발송에서 실제로 난 사고와 같은 모양, compose-default-subject.ts).
+      const first = defaultComposeSubject(res.subjects ?? [], fallback);
       if (first) {
         setSubject(first.key);
         setTeacherName(first.teacherName ?? "");
