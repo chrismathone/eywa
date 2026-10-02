@@ -20,7 +20,7 @@ const actions = stripComments(
   read("src", "features", "enrollments", "server", "scheduled-actions.ts"),
 );
 const studentPage = stripComments(read("src", "app", "(shell)", "students", "[id]", "page.tsx"));
-const rpc = read("supabase/migrations/20261002050926_scheduled_enrollment_atomic.sql");
+const rpc = read("supabase/migrations/0334a_scheduled_enrollment_atomic.sql");
 
 describe("예약 수정·취소 — 게이트", () => {
   it("서버 액션은 반 관리(full) 게이트를 쓴다", () => {
