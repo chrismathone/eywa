@@ -268,6 +268,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 인프라 비용·소진 예측("사이버 월세" — Vercel·Supabase·AI/전사 API) 설계 → `docs/infra-cost-runway-plan.md` (⚠️ **보류 중**, 미구현. 선불 키 소진·요금 급증이 실제로 문제되면 그때 재개)
 - **도메인 구매한 날 할 일**(옛 호스트 308 켜기·env·Supabase Site URL·기기 재로그인) + 지점 하나 더 만드는 날 → [`docs/domain-cutover.md`](docs/domain-cutover.md) (코드는 전부 env로 켜지게 준비돼 있다 — 2026-09-18)
 - 탭 아이콘을 새로 만들 때(어떤 이미지 생성 모델이든 같은 세트가 나오게) → [`docs/icon-generation.md`](docs/icon-generation.md) (화풍 규격·브리프 뼈대·후처리 파이프라인 [`scripts/_icons/`](scripts/_icons)·배선 4곳·실패 사례)
+- **시간표 연습실**(다음 달 시간표를 여러 안으로 짜 보는 편집기 — 계획·검토·단계별 결과·남은 일) → [`docs/timetable-lab/README.md`](docs/timetable-lab/README.md) (편집기 본체 = `experiments/timetable-lab-p0`, 실행·시험 방법은 그 폴더 README)
 - 기타 심층 문서 → `docs/` (audit-log · ijw-feature-port · makeedu-reverse-sync · payment-collection-plan · perf-open-window-backlog 등)
 
 > ⚠️ 새 기능·배선을 완성하면 그 요약을 `docs/changelog.md`에 한 줄 추가(진행 상황 로그). 새 함정을 만나면 `docs/gotchas.md`에 항목 추가 + 아래 인덱스에 트리거 한 줄. 새 UI 규칙은 `docs/design-conventions.md` + 디자인 인덱스.
@@ -315,6 +316,8 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 기간 단위 = 세션(`operating_periods`) 단일 소스, 미정의는 달력월 폴백
 
 ### 시간표(드래그·가져오기·예약·담임·배치 이력) → [`docs/decisions/timetable.md`](docs/decisions/timetable.md)
+- 시간표 첫 과목 = 담당 과목 · 링크에는 과목을 항상 싣는다 · 담당 과목은 기본 선택에만(권한 아님)
+- 시간표 연습실 = 운영과 분리된 개인 연습본(영어 먼저) · 충돌해도 놓고 이유 표시 · 학생 반 이동은 옮겨 간 반 전체 수업 · Supabase 저장 · 운영 반영 경로는 아직 없다
 - 시간표에는 인원 숫자가 없다(2026-09-28 삭제) · 셀의 신입·반이동·대기·퇴원 표시는 30일·60일 그대로
 - 반 블록 드래그 = 화면에 보이는 블록 통째로 · 학생·강사·강의실·같은 반 넷을 보고 갈 수 있는 칸만 칠한다
 - 시간표 드래그는 화면을 다시 그리지 않는다 — 픽업이 곧 체감 성능
