@@ -39,6 +39,12 @@ export type VideoArrival = {
   id: string; studentId: string; classId: string | null; postedAt: string;
   /** 학생이 올리기 사이트에서 **고른 숙제일**(`route.homeworkDate`, 2026-10-03) — 있으면 그 숙제 칸으로만 간다. 없으면 게시일순 규칙. */
   homeworkDate?: string | null;
+  /**
+   * 이 영상이 **들어온 시각** — 같은 날 고른 영상과 안 고른 영상의 앞뒤를 가른다(`videoArrivedAt`, rounds.ts가 정한다).
+   * 🔴 게시 시각(`postedAt`)은 순서가 아니다: 직접 넣은 Drive 파일은 그날 정오 고정, 사이트 업로드는 올리기를 **시작한** 시각이다.
+   * 없으면 게시 시각으로 본다.
+   */
+  arrivedAt?: string | null;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

@@ -176,6 +176,15 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     db.tables.student_homework_videos = [{ id: "v1", tenant_id: T, student_id: S, posted_at: "2026-10-02T09:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } }];
     expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
   });
+  it("🔴 먼저 들어온 ClassNote 영상은 늦게 마무리된 사이트 업로드 때문에 빠지지 않는다(들어온 시각이 영상에 실린다 — 숙제가 목록에 되살아나지 않게)", async () => {
+    db.tables.student_homework_videos = [
+      // 학부모가 09:00에 ClassNote로 올린 영상(09:03 수집) → 가장 오래된 미확인(9/29)
+      { id: "v1", tenant_id: T, student_id: S, post_id: 11, posted_at: "2026-10-02T09:00:00+09:00", created_at: "2026-10-02T09:03:00+09:00", route: { classId: C } },
+      // 08:00에 시작해 10:00에야 마무리된 사이트 업로드(10/1 숙제) — 게시 시각은 시작 시각이다
+      { id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-02T08:00:00+09:00", created_at: "2026-10-02T10:00:00+09:00", uploaded_at: "2026-10-02T10:00:00+09:00", route: { classId: C, homeworkDate: "2026-10-01" } },
+    ];
+    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+  });
   it("🔴 다른 지점의 검사 기록은 이 지점 숙제를 '낸 것'으로 만들지 않는다", async () => {
     db.tables.video_homework_marks = [{ id: "m9", tenant_id: OTHER_T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: "2026-10-02", status: "submitted", updated_at: "2026-10-02T10:00:00+09:00" }];
     expect(dates(await look())).toHaveLength(2);

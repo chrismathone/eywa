@@ -22,8 +22,10 @@
  *  🔴 숙제보다 먼저 올라온 영상·`VIDEO_MATCH_WINDOW_DAYS`를 넘겨 올라온 영상은 짝이 아니다. 직접 찍은 기록(완료·미수행)이 늘 이긴다.
  *  ③ 학생이 올리기 사이트에서 **숙제를 골라** 올린 영상(`homeworkDate`, 원장 2026-10-03 *"숙제 리스트에서 고르도록 해서 숙제 링크 배선"*)은
  *     ②의 순서를 타지 않고 **그 숙제 칸으로만** 간다 — 다른 칸을 채우지 않는다(그 칸이 이미 영상을 받았거나 미수행으로 찍혔으면 그 영상은 세지 않는다).
- *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 **고른 영상이 칸에 붙은 날**에 같은 반 × 학생으로
- *     올라온 안 고른 영상은 세지 않는다(①과 같은 뜻 — 같은 영상을 사이트와 ClassNote에 함께 올려도 한 번이다).
+ *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 고른 영상이 칸에 붙은 날, **그 영상보다 늦게 들어온**
+ *     같은 반 × 학생의 안 고른 영상은 세지 않는다(①과 같은 뜻 — 사이트에 올린 영상을 ClassNote에도 올려도 한 번이다).
+ *     🔴 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 되돌리지 않는다.
+ *     앞뒤는 게시 시각이 아니라 **줄이 생긴 시각**(`arrivedAt`)으로 가른다.
  */
 import { addDays, kstDateOf } from "@/lib/date-kst";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "./types";
@@ -122,6 +124,22 @@ function canTake(round: LedgerRound, video: VideoDay): boolean {
   return video.firstAt <= seenBy;
 }
 
+/**
+ * 영상이 **들어온 시각** — 같은 날 고른 영상과 안 고른 영상의 앞뒤를 가르는 값(`VideoArrival.arrivedAt`). 두 로더가 이 함수로 싣는다.
+ *  · 고른 영상(올리기 사이트) = 줄이 생긴 시각(`created_at`) 그대로 — 올리기가 **끝나** 장부에 보이기 시작한 때다.
+ *  · 안 고른 영상 = 줄이 생긴 시각과 그 영상의 실제 시각 중 **이른 쪽**: ClassNote(글 번호가 있다) = 학부모가 올린 시각,
+ *    직접 넣은 Drive 파일 = Drive에 파일이 생긴 시각(`uploaded_at`).
+ * 🔴 줄이 생긴 시각만 쓰지 말 것 — ClassNote 줄은 연동 PC가 수집한 때 생긴다(댓글 영상 10분 주기 · PC가 꺼져 있었으면 한참 뒤).
+ *    먼저 올린 영상이 사이트 업로드보다 늦게 수집되면 '겹쳐 올린 것'으로 빠져 영영 안 세진다. Drive 줄은 파일을 휴지통에서 되살리면 다시 생긴다.
+ * 🔴 이른 쪽을 쓰므로 값은 늘 줄이 생긴 시각 이하다 — "먼저 보이던 영상 < 나중에 생긴 고른 영상 줄"이 그대로 성립한다(되돌아감 없음).
+ * 읽을 수 있는 시각이 하나도 없으면 null(게시 시각으로 본다).
+ */
+export function videoArrivedAt(row: { createdAt?: string | null; postedAt?: string | null; uploadedAt?: string | null; fromClassnote: boolean; picked: boolean }): string | null {
+  const ms = (value?: string | null) => (value ? Date.parse(value) : NaN);
+  const times = [ms(row.createdAt), row.picked ? NaN : ms(row.fromClassnote ? row.postedAt : row.uploadedAt)].filter((t) => !Number.isNaN(t));
+  return times.length ? new Date(Math.min(...times)).toISOString() : null;
+}
+
 /** (반 × 학생)별 회차 — 조회 기간 밖 여유분까지 넣어 짝을 맞춘 뒤, 기간 안의 회차만 돌려준다. */
 export function buildLedgerRounds(input: {
   rows: PairRow[]; marks: Iterable<VideoHomeworkMark>; videos: VideoArrival[]; fromDate: string; toDate: string;
@@ -155,10 +173,16 @@ export function buildLedgerRounds(input: {
   }
   // ③ 학생이 고른 숙제 — 그 칸으로만(올린 순서대로 첫 영상이 그 칸의 영상이다).
   const picked = input.videos.filter((v) => !!v.homeworkDate && !!v.classId).sort((a, b) => Date.parse(a.postedAt) - Date.parse(b.postedAt));
-  // `반:학생:게시일` — 고른 영상이 칸에 붙은 날. 그날 그 반으로 온 안 고른 영상은 세지 않는다(같은 영상을 사이트와 ClassNote에 함께 올린 것).
-  // ⚠️ 절충: 오전에 ClassNote로 올려 다른 칸이 완료(영상)로 보이던 날, 오후에 사이트로 다른 숙제를 골라 올리면 그 칸은 미확인으로 돌아간다
-  //    (직접 찍은 기록은 그대로다). 두 영상이 정말 다른 숙제였다면 선생님이 그 칸을 한 번 눌러 완료로 찍는다.
-  const pickedDays = new Set<string>();
+  // `반:학생:게시일` → 그날 칸에 붙은 고른 영상 중 **가장 먼저 들어온 것**의 시각. 그날 그보다 늦게(같거나 뒤) 들어온 안 고른 영상은 세지 않는다
+  // (사이트에 올린 영상을 ClassNote에도 올린 것 — 한 영상이 두 칸을 채우지 않게).
+  // 🔴 그보다 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 미확인으로 되돌리지 않는다
+  //    (원장 2026-10-03 *"그거 보완해야겠는데"* — 오전에 ClassNote로 낸 숙제가 오후 사이트 업로드 뒤 미확인이 되던 것).
+  // 🔴 앞뒤는 **들어온 시각**(`videoArrivedAt`)으로 가른다(게시 시각 아님) — 장부에 먼저 보이던 영상은 늘 그 뒤에 생긴 고른 영상 줄보다 이르다.
+  const arrived = (v: VideoArrival) => {
+    const at = v.arrivedAt ? Date.parse(v.arrivedAt) : NaN;
+    return Number.isNaN(at) ? Date.parse(v.postedAt) : at;
+  };
+  const pickedAt = new Map<string, number>();
   for (const video of picked) {
     const pair = roundPairKey({ classId: video.classId!, studentId: video.studentId });
     const day = kstDateOf(video.postedAt);
@@ -167,11 +191,14 @@ export function buildLedgerRounds(input: {
     if (round.mark && round.mark.status !== "submitted") continue; // 직접 찍은 미수행이 이긴다
     round.videoDate = day;
     round.videoId = video.id;
-    pickedDays.add(`${pair}:${day}`);
+    pickedAt.set(`${pair}:${day}`, Math.min(pickedAt.get(`${pair}:${day}`) ?? Infinity, arrived(video)));
     if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
   }
-  const days = videoDays(input.videos.filter((v) =>
-    !v.homeworkDate && !(v.classId && pickedDays.has(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${kstDateOf(v.postedAt)}`))));
+  const afterPicked = (v: VideoArrival) => {
+    const at = v.classId ? pickedAt.get(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${kstDateOf(v.postedAt)}`) : undefined;
+    return at !== undefined && arrived(v) >= at;
+  };
+  const days = videoDays(input.videos.filter((v) => !v.homeworkDate && !afterPicked(v)));
   for (const [pair, rounds] of all) {
     const available = tracked.has(pair) ? days.get(pair) : undefined;
     if (!available?.length) continue;

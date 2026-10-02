@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLedgerRounds, markIdentity, roundCounts, roundWriteKey, VIDEO_MATCH_WINDOW_DAYS, videoMatchRange } from "./rounds";
+import { buildLedgerRounds, markIdentity, roundCounts, roundWriteKey, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoMatchRange } from "./rounds";
 import type { VideoArrival, VideoHomeworkMark } from "./types";
 
 const row = (studentId: string, assignedDates: string[], extra: { classId?: string; tracked?: boolean } = {}) =>
@@ -8,9 +8,9 @@ const mark = (studentId: string, homeworkDate: string | null, status: VideoHomew
   ({ classId: "A", studentId, checkDate: homeworkDate ? "2026-10-20" : "2026-10-05", homeworkDate, status, ...extra });
 // 원스크린 체크는 실제 검사 시각이 남는다 — 기본은 한참 뒤(영상 게시 이후)라 '그 검사가 본 영상' 판정이 켜지지 않는다.
 const kst = (day: string, time = "20:00") => `${day}T${time}:00+09:00`;
-const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string; homeworkDate?: string } = {}): VideoArrival =>
+const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string; homeworkDate?: string; arrivedAt?: string } = {}): VideoArrival =>
   ({ id: `v-${studentId}-${day}-${extra.time ?? "20:00"}`, studentId, classId: extra.classId === undefined ? "A" : extra.classId, postedAt: kst(day, extra.time),
-    ...(extra.homeworkDate ? { homeworkDate: extra.homeworkDate } : {}) });
+    ...(extra.homeworkDate ? { homeworkDate: extra.homeworkDate } : {}), ...(extra.arrivedAt ? { arrivedAt: extra.arrivedAt } : {}) });
 const build = (input: { rows: ReturnType<typeof row>[]; marks?: VideoHomeworkMark[]; videos?: VideoArrival[]; from?: string; to?: string }) =>
   buildLedgerRounds({ rows: input.rows, marks: input.marks ?? [], videos: input.videos ?? [], fromDate: input.from ?? "2026-10-01", toDate: input.to ?? "2026-10-31" });
 const view = (rounds: ReturnType<typeof build>, pair = "A:s1") =>
@@ -180,7 +180,80 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
     ] });
     expect(view(rounds)).toEqual([["2026-10-01", "submitted", "2026-10-08", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
   });
-  it("🔴 같은 날 고른 영상과 안 고른 영상이 함께 와도 한 번이다 — 같은 영상을 사이트와 ClassNote에 함께 올려도 두 칸을 채우지 않는다", () => {
+  it("🔴 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 미확인으로 되돌리지 않는다 — 오전 ClassNote 영상 + 오후 사이트에서 다른 숙제", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
+    const morning = video("s1", "2026-10-07", { time: "09:00" }); // ClassNote로 올린 영상 → 가장 오래된 미확인(10/1)
+    expect(view(build({ rows, videos: [morning] }))).toEqual([["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "unchecked", null, false]]);
+    // 같은 날 오후 사이트에서 10/6 숙제를 골라 올렸다 — 10/1은 완료 그대로, 10/6도 완료
+    const both = build({ rows, videos: [morning, video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06" })] });
+    expect(view(both)).toEqual([["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    expect(both.get("A:s1")!.map((r) => r.videoId)).toEqual([morning.id, "v-s1-2026-10-07-15:00"]);
+    // 고른 영상과 같은 시각이거나 그 뒤에 온 안 고른 영상만 겹쳐 올린 것으로 본다(세지 않는다)
+    const same = build({ rows, videos: [video("s1", "2026-10-07", { time: "15:00" }), video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06" })] });
+    expect(view(same)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    // 오전·오후 두 번 안 고른 영상이 와도 하루 한 번 — 오전 것만 센다
+    const three = build({ rows: [row("s1", ["2026-10-01", "2026-10-02", "2026-10-06"])], videos: [
+      morning, video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06" }), video("s1", "2026-10-07", { time: "21:00" }) ] });
+    expect(view(three)).toEqual([["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-02", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+  });
+  it("🔴 같은 날 고른 영상이 둘이면 먼저 들어온 것이 기준이다 · 칸에 못 붙은 고른 영상은 기준을 만들지 않는다", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06", "2026-10-08"])];
+    const videos = [
+      video("s1", "2026-10-09", { time: "10:00", homeworkDate: "2026-10-06" }),
+      video("s1", "2026-10-09", { time: "12:00" }),
+      video("s1", "2026-10-09", { time: "16:00", homeworkDate: "2026-10-08" }),
+    ];
+    // 12:00 영상은 10:00에 들어온 고른 영상보다 늦다 → 세지 않는다(16:00을 기준으로 삼으면 10/1이 완료로 뒤집힌다)
+    expect(view(build({ rows, videos }))).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-09", true], ["2026-10-08", "submitted", "2026-10-09", true]]);
+    // 10/6이 ✕로 찍혀 있으면 10:00 영상은 칸에 못 붙는다 → 기준은 16:00, 12:00 영상은 종전대로 10/1을 채운다
+    const blocked = build({ rows, marks: [mark("s1", "2026-10-06", "missing")], videos });
+    expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "missing"], ["2026-10-08", "submitted"]]);
+  });
+  it("🔴 기준은 게시 순서의 첫 영상이 아니라 가장 먼저 **들어온** 고른 영상이다", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06", "2026-10-08"])];
+    const rounds = build({ rows, videos: [
+      video("s1", "2026-10-09", { time: "10:00", homeworkDate: "2026-10-06", arrivedAt: kst("2026-10-09", "17:00") }), // 10:00에 시작해 17:00에야 마무리
+      video("s1", "2026-10-09", { time: "16:00", homeworkDate: "2026-10-08", arrivedAt: kst("2026-10-09", "16:02") }),
+      video("s1", "2026-10-09", { time: "16:30", arrivedAt: kst("2026-10-09", "16:31") }),
+    ] });
+    // 기준 16:02 → 16:31에 들어온 안 고른 영상은 세지 않는다(게시 순 첫 영상의 17:00을 기준으로 삼으면 10/1이 완료로 뒤집힌다)
+    expect(view(rounds).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "unchecked"], ["2026-10-06", "submitted"], ["2026-10-08", "submitted"]]);
+  });
+  it("들어온 시각 — 고른 영상은 줄이 생긴 시각 · 안 고른 영상은 줄이 생긴 시각과 실제 시각(ClassNote 게시 · Drive 파일 생성) 중 이른 쪽", () => {
+    const at = (time: string) => new Date(kst("2026-10-07", time)).toISOString();
+    // 🔴 ClassNote 영상은 늦게 수집돼도(연동 PC 꺼짐·10분 주기) 학부모가 올린 시각이 기준이다
+    expect(videoArrivedAt({ createdAt: kst("2026-10-07", "15:01"), postedAt: kst("2026-10-07", "14:52"), uploadedAt: kst("2026-10-07", "15:05"), fromClassnote: true, picked: false })).toBe(at("14:52"));
+    // 직접 넣은 Drive 파일은 게시 시각(정오 고정)이 아니라 Drive 파일 생성 시각 — 휴지통에서 되살려 줄이 다시 생겨도 같다
+    expect(videoArrivedAt({ createdAt: kst("2026-10-07", "11:10"), postedAt: kst("2026-10-07", "12:00"), uploadedAt: kst("2026-10-07", "09:00"), fromClassnote: false, picked: false })).toBe(at("09:00"));
+    // 실제 시각이 줄보다 늦게 적혀 있어도 줄이 생긴 시각을 넘지 않는다(먼저 보이던 영상은 늘 이르다)
+    expect(videoArrivedAt({ createdAt: kst("2026-10-07", "09:05"), postedAt: kst("2026-10-07", "12:00"), uploadedAt: kst("2026-10-07", "09:30"), fromClassnote: false, picked: false })).toBe(at("09:05"));
+    // 고른 영상(사이트)은 올리기를 시작한 시각이 아니라 줄이 생긴 시각
+    expect(videoArrivedAt({ createdAt: kst("2026-10-08", "08:00"), postedAt: kst("2026-10-07", "15:00"), uploadedAt: kst("2026-10-07", "23:00"), fromClassnote: false, picked: true })).toBe(new Date(kst("2026-10-08", "08:00")).toISOString());
+    // 읽을 수 있는 시각이 없으면 null(게시 시각으로 본다)
+    expect(videoArrivedAt({ createdAt: null, uploadedAt: "모름", fromClassnote: false, picked: false })).toBeNull();
+  });
+  it("🔴 앞뒤는 들어온 시각으로 가른다 — 게시 시각은 순서가 아니다(직접 넣은 Drive 파일은 정오 고정 · 사이트 업로드는 시작 시각)", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
+    const done = [["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "submitted", "2026-10-07", true]];
+    // (가) 선생님이 09:00에 넣은 Drive 파일(게시 시각은 정오) → 10/1 완료. 10:30 사이트 업로드 뒤에도 10/1은 완료 그대로
+    //     (arrivedAt은 로더가 `videoArrivedAt`으로 싣는 값이다)
+    const drive = video("s1", "2026-10-07", { time: "12:00", arrivedAt: kst("2026-10-07", "09:05") });
+    expect(view(build({ rows, videos: [drive] }))[0]).toEqual(["2026-10-01", "submitted", "2026-10-07", true]);
+    expect(view(build({ rows, videos: [drive, video("s1", "2026-10-07", { time: "10:30", homeworkDate: "2026-10-06", arrivedAt: kst("2026-10-07", "10:32") })] }))).toEqual(done);
+    // (나) 15:00에 시작한 사이트 업로드가 다음 날에야 마무리됐다 — 그사이 16:00 ClassNote 영상으로 완료된 10/1은 그대로
+    const late = video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", arrivedAt: kst("2026-10-08", "08:00") });
+    expect(view(build({ rows, videos: [video("s1", "2026-10-07", { time: "16:00", arrivedAt: kst("2026-10-07", "16:03") }), late] }))).toEqual(done);
+    // (다) 15:00 사이트 업로드 뒤 18:00에 넣은 같은 날짜 Drive 파일(게시 시각 정오)은 겹쳐 올린 것으로 본다 — 두 칸을 채우지 않는다
+    const after = build({ rows, videos: [
+      video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", arrivedAt: kst("2026-10-07", "15:02") }),
+      video("s1", "2026-10-07", { time: "12:00", arrivedAt: kst("2026-10-07", "18:05") }),
+    ] });
+    expect(view(after)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    // 줄이 생긴 시각을 읽을 수 없으면 게시 시각으로 본다
+    const broken = build({ rows, videos: [video("s1", "2026-10-07", { time: "09:00", arrivedAt: "모름" }), video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06" })] });
+    expect(view(broken)).toEqual(done);
+  });
+  it("🔴 같은 날 고른 영상 뒤에 안 고른 영상이 와도 한 번이다 — 사이트에 올린 영상을 ClassNote에도 올려도 두 칸을 채우지 않는다", () => {
     const rounds = build({ rows: [row("s1", ["2026-10-01", "2026-10-06"])], videos: [
       video("s1", "2026-10-07", { homeworkDate: "2026-10-06" }),
       video("s1", "2026-10-07", { time: "20:30" }), // 같은 날 ClassNote로도 올라온 영상

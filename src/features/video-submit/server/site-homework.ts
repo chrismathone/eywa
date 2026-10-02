@@ -1,7 +1,7 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { addDays } from "@/lib/date-kst";
-import { buildLedgerRounds, roundPairKey, videoMatchRange, VIDEO_MATCH_WINDOW_DAYS } from "@/features/video-homework/rounds";
+import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoMatchRange, VIDEO_MATCH_WINDOW_DAYS } from "@/features/video-homework/rounds";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkStatus } from "@/features/video-homework/types";
 
@@ -46,7 +46,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     db.from("video_homework_marks").select("class_id,student_id,check_date,homework_date,submitted_date,status,updated_at")
       .eq("tenant_id", tenantId).in("student_id", students).in("class_id", classes)
       .gte("check_date", wide.from).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
-    db.from("student_homework_videos").select("id,student_id,posted_at,route")
+    db.from("student_homework_videos").select("id,student_id,post_id,posted_at,created_at,uploaded_at,route")
       .eq("tenant_id", tenantId).in("student_id", students).in("route->>classId", classes)
       .gte("posted_at", `${wide.from}T00:00:00+09:00`).order("id", { ascending: true }).limit(ROW_LIMIT + 1),
   ]);
@@ -55,7 +55,8 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const reportRows = (reports.data ?? []) as Array<{ student_id: string; class_id: string | null; report_date: string }>;
   const markRows = (marks.data ?? []) as Array<{ class_id: string; student_id: string; check_date: string; homework_date: string | null;
     submitted_date: string | null; status: string; updated_at: string | null }>;
-  const videoRows = videos.error ? [] : ((videos.data ?? []) as Array<{ id: string; student_id: string; posted_at: string; route: unknown }>);
+  const videoRows = videos.error ? [] : ((videos.data ?? []) as Array<{ id: string; student_id: string; post_id?: number | null; posted_at: string;
+    created_at?: string | null; uploaded_at?: string | null; route: unknown }>);
   if (reportRows.length > ROW_LIMIT || markRows.length > ROW_LIMIT || videoRows.length > ROW_LIMIT) throw new Error("영상 숙제 조회 범위 초과");
 
   const assigned = new Map<string, Set<string>>();
@@ -68,7 +69,8 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
     const route = row.route && typeof row.route === "object" && !Array.isArray(row.route) ? (row.route as Record<string, unknown>) : {};
     const classId = typeof route.classId === "string" ? route.classId : null;
     const picked = typeof route.homeworkDate === "string" && isVideoHomeworkDate(route.homeworkDate) ? route.homeworkDate : null;
-    return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, homeworkDate: picked }] : [];
+    const arrivedAt = videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!picked });
+    return classId ? [{ id: row.id, studentId: row.student_id, classId, postedAt: row.posted_at, arrivedAt, homeworkDate: picked }] : [];
   });
   // 학생이 그 숙제를 골라 이미 올린 (반 × 학생 × 숙제일) — 칸의 상태와 무관하게 "낸 숙제"다.
   const alreadyPicked = new Set(videoArrivals.filter((v) => v.homeworkDate).map((v) => `${roundPairKey({ classId: v.classId!, studentId: v.studentId })}:${v.homeworkDate}`));

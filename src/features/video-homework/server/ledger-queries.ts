@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
-import { videoMatchRange } from "../rounds";
+import { videoArrivedAt, videoMatchRange } from "../rounds";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
@@ -12,11 +12,12 @@ import type { BlankFacts } from "../no-homework";
 
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
-type DbVideo = { id: string; student_id: string; posted_at: string; class_id: string | null; homework_date: string | null };
+type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
+  class_id: string | null; homework_date: string | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[] };
 
 /**
- * 학부모 숙제 영상(0315a `student_homework_videos`) — **반이 확인된 것만**(`route.classId`, 워커가 분류한 값)·게시 시각만 읽는다.
+ * 학부모 숙제 영상(0315a `student_homework_videos`) — **반이 확인된 것만**(`route.classId`, 워커가 분류한 값)·시각들(게시·줄 생성·Drive 생성 — 들어온 순서 판정용)만 읽는다.
  * 🔴 표가 없거나(미적용 지점) 못 읽으면 null — 자동 집계만 빠지고 장부는 그대로 돈다(화면이 그 사실을 알린다).
  */
 async function loadClassVideos(tenantId: string, studentIds: string[], fromDate: string, toDate: string): Promise<VideoArrival[] | null> {
@@ -25,14 +26,17 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
     const db = createAdminClient();
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
       .from("student_homework_videos")
-      .select("id,student_id,posted_at,class_id:route->>classId,homework_date:route->>homeworkDate")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,class_id:route->>classId,homework_date:route->>homeworkDate")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .not("route->>classId", "is", null)
       .gte("posted_at", `${fromDate}T00:00:00+09:00`).lt("posted_at", `${addDays(toDate, 1)}T00:00:00+09:00`)
       .order("id", { ascending: true }).range(from, to));
     // 고른 숙제일(올리기 사이트)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
-    return rows.map((row) => ({ id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at,
-      homeworkDate: row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null }));
+    return rows.map((row) => {
+      const homeworkDate = row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null;
+      return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate,
+        arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };
+    });
   } catch (e) {
     console.warn(JSON.stringify({ level: "warn", scope: "videoHomeworkLedger.videos", message: e instanceof Error ? e.message : String(e) }));
     return null;
