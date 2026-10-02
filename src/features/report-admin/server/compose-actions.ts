@@ -41,6 +41,29 @@ import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from
 import { ensureMakeupAttendanceForReport, resolveMakeupOwner } from "@/features/attendance/server/makeup-pool";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
+/**
+ * 발송 상태를 쓸 때의 조건 — **워커가 집지도(processing) 보내지도(success) 않은 행만**(원스크린 actions.ts와 같은 값).
+ * 🔴 맨 위의 processing·success 확인과 실제 쓰기 사이에 워커가 첫 글을 올릴 수 있다. 조건 없이 쓰면 success를 queued로 되돌려
+ *    **같은 글이 한 번 더** 나간다(9/29 박세욱 — 강사 경로에서 실제로 난 사고. 관리자 경로에는 이 방어가 빠져 있었다).
+ */
+const CLASSNOTE_REQUEUE_OK = "classnote_status.is.null,classnote_status.not.in.(processing,success)";
+
+/**
+ * 조건부 쓰기가 0행이었을 때 — 지금 상태를 다시 읽어 **그 상태 그대로** 답한다(처리 중 / 이미 발송).
+ * 그 밖(행이 사라짐·상태를 못 읽음)은 "이미 발송"이라고 지어내지 않고 오류로 돌려준다.
+ */
+async function unqueuedStatus(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  reportId: string,
+  shareToken: string | undefined,
+): Promise<{ ok: boolean; id?: string; shareToken?: string; status?: string; error?: string }> {
+  const { data: now } = await supabase.from("lesson_reports").select("classnote_status").eq("id", reportId).maybeSingle();
+  const st = (now?.classnote_status as string | null) ?? null;
+  if (st === "processing" || st === "success")
+    return { ok: true, id: reportId, shareToken, status: st === "processing" ? "processing" : "already_sent" };
+  return { ok: false, id: reportId, shareToken, error: "발송 상태를 확인하지 못했습니다 — 저장은 됐습니다. 잠시 뒤 다시 시도하세요" };
+}
+
 export type AdminSaveReportInput = {
   studentId: string;
   reportDate?: string; // 대상 날짜(YYYY-MM-DD) — 빈값=오늘. 과거 날짜 작성·발송용(report_date=카드·ClassNote 게시일).
@@ -427,14 +450,18 @@ export async function saveAndQueueAdminReport(
   }
   // 동명이인 — 자동 발송 차단(name_conflict 마킹). classnote_name 접미사로 구분 후 재시도.
   if (await hasClassnoteNameCollision(supabase, input.studentId)) {
-    await supabase
+    const { data: conflictRows } = await supabase
       .from("lesson_reports")
       .update({
         classnote_status: "name_conflict",
         classnote_queued_at: null,
         classnote_error: "동명이인 감지 — 자동 발송 차단",
       })
-      .eq("id", saved.id);
+      .eq("id", saved.id)
+      // 그새 워커가 집었거나 보낸 행은 덮지 않는다 — 보낸 글을 '차단됨'으로 거짓 표시하지 않게(그 행을 '재발송'하면 중복 게시가 된다).
+      .or(CLASSNOTE_REQUEUE_OK)
+      .select("id");
+    if (!conflictRows?.length) return await unqueuedStatus(supabase, saved.id, saved.shareToken);
     return { ok: true, id: saved.id, shareToken: saved.shareToken, status: "name_conflict" };
   }
   // 반별 발송(ClassNote 모듈 + '수학 발송 경로') — 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(원스크린과 같은 규칙).
@@ -505,7 +532,8 @@ export async function saveAndQueueAdminReport(
   }
   // too_old(전 달 1일 이전) 아니면 queued. 오늘 저장은 항상 통과하나 규약상 명시.
   const allowed = isClassnoteAllowed(reportDate);
-  const { error } = await supabase
+  // 🔴 조건부 적재(compare-and-set) — 그새 워커가 집었거나 보냈으면 0행이고, 다시 올리지 않는다.
+  const { data: queuedRows, error } = await supabase
     .from("lesson_reports")
     .update({
       classnote_status: allowed ? "queued" : "too_old",
@@ -513,8 +541,11 @@ export async function saveAndQueueAdminReport(
       classnote_retry_count: 0,
       classnote_error: null,
     })
-    .eq("id", saved.id);
+    .eq("id", saved.id)
+    .or(CLASSNOTE_REQUEUE_OK)
+    .select("id");
   if (error) return { ok: false, error: humanizeDbError(error.message, "발송") };
+  if (!queuedRows?.length) return await unqueuedStatus(supabase, saved.id, saved.shareToken);
   // 🔴 학부모에게 나가는 순간 — 위 조기 반환들(dry_run·subject_off·absent·name_conflict·already_sent·
   //    processing·revoked)은 아무것도 안 나간 것이라 여기 안 온다(강사 경로와 같은 규약).
   await logAction({
