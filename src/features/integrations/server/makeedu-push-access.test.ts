@@ -25,6 +25,7 @@ vi.mock("@/lib/auth/current-user", () => ({
 }));
 vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => g.superAdmin }));
 vi.mock("@/lib/auth/view-as", () => ({ isReadonlyTeacherView: async () => g.readonlyView }));
+vi.mock("@/lib/license/server", () => ({ isFeatureLicensed: async () => true }));
 
 import { canPushToMakeedu } from "./makeedu-push-access";
 import type { SystemRole } from "@/lib/permissions";

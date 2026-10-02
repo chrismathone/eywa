@@ -2,6 +2,7 @@ import type { LucideIcon } from "@/components/icons/aywa-icon-compat";
 import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import { canAccess, TEACHER_MENU_KEYS, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { OWNER_TABS } from "@/features/owner/tabs";
+import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 
 export type NavItem = {
   href: string;
@@ -368,7 +369,7 @@ export function navItemByKey(menuKey: MenuKey): NavItem | undefined {
  * ⚠️ 담당 과목 축(영어·수학 시트는 그 과목을 맡았을 때만)은 여기가 아니라 레이아웃의 `showEcs`/`showMcs`다.
  */
 export function teacherMenuKeysFor(realRole: SystemRole, matrix: AccessMatrix): MenuKey[] {
-  return TEACHER_MENU_KEYS.filter(
+  return [...TEACHER_MENU_KEYS, ...SETTINGS_ROLE_KEYS].filter(
     (menu) =>
       canAccess("teacher", menu, matrix) &&
       (menu === "teacher_onescreen" || canAccess(realRole, menu, matrix)) &&

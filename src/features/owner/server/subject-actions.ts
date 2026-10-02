@@ -53,7 +53,7 @@ type OwnerWriteGate =
 async function requireOwnerWrite(): Promise<OwnerWriteGate> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(actor.systemRole, "owner"))) {
+  if (!(await canWriteTenant(actor.systemRole, "operations_settings"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
   return { actor };

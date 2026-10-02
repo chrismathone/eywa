@@ -20,6 +20,7 @@ import { validateDashboardAssignments } from "./dashboard-assignments";
 import { navigationRevision } from "../normalize-navigation";
 import { logDbError } from "@/lib/supabase/db-error";
 import { platformSettingsError } from "./platform-settings";
+import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
@@ -39,12 +40,11 @@ export async function issueBrandingUploadTicket(
 ): Promise<IssueBrandingTicketState> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(actor.systemRole, "owner"))) {
-    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
-  }
-
   const slot = String(formData.get("slot") ?? "");
   if (!BRANDING_SLOTS.has(slot)) return { error: "잘못된 슬롯입니다" };
+  if (!(await canWriteTenant(actor.systemRole, slot === "popup" ? "popup_settings" : "profile_settings"))) {
+    return { error: "이미지 설정 변경 권한이 없습니다" };
+  }
   const contentType = String(formData.get("contentType") ?? "");
   if (!MEDIA_KIND.branding.allowCT(contentType)) return { error: "이미지 파일만 업로드할 수 있습니다" };
   const size = Number(formData.get("size") ?? 0);
@@ -70,17 +70,18 @@ export async function saveOwnerSection(
   if (!actor) return { error: "로그인이 필요합니다" };
 
   const section = String(formData.get("section") ?? "") as SectionKey;
+  if (!Object.hasOwn(SECTION_SCHEMAS, section)) return { error: "알 수 없는 설정 섹션입니다" };
   const schema = SECTION_SCHEMAS[section];
   if (!schema) return { error: "알 수 없는 설정 섹션입니다" };
 
   // 역할·권한(permissions) 섹션 = 항상 master 전용(self-escalation 차단 — 위임받은 역할이 자기/타인 권한을
   // 못 바꿈, 0080a DB 트리거 이중 방어). 그 외 섹션 = owner 메뉴 쓰기 권한(override 반영 — 위임 가능).
   if (section === "permissions") {
-    if (actor.systemRole !== "master") {
+    if (actor.systemRole !== "master" || !(await canWriteTenant(actor.systemRole, "owner"))) {
       return { error: "역할·권한은 원장(master)만 변경할 수 있습니다" };
     }
-  } else if (!(await canWriteTenant(actor.systemRole, "owner"))) {
-    return { error: "학원 설정 변경 권한이 없습니다" };
+  } else if (!(await canWriteTenant(actor.systemRole, section in OWNER_SECTION_MENU ? OWNER_SECTION_MENU[section as keyof typeof OWNER_SECTION_MENU] : "owner"))) {
+    return { error: section === "report" ? "보고서 설정 변경 권한이 없습니다" : "학원 설정 변경 권한이 없습니다" };
   }
   // '기능 켜기·끄기'는 권한처럼 "무엇이 있나"를 정하는 층이라 위임 계정엔 안 연다 — 원장 + 총괄(super_admin 자동 통과 규약).
   // 0281a 트리거가 같은 선을 DB에서 긋는다(이중 방어, [[#77]]).

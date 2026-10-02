@@ -1,3 +1,4 @@
+import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { ParamLink } from "./_components/param-link";
 import { isModuleEnabled } from "@/lib/modules";
 import { ParamSelect } from "./_components/param-select";
@@ -501,7 +502,7 @@ export default async function TimetablePage({
         : view;
   // 통합뷰 '그룹 설정' = 학원설정(과목별)을 쓰므로 게이트도 **owner 쓰기**. 시간표에 있다고 시간표
   // 권한으로 열면 학원설정 우회 뒷문이 된다(서버 액션도 같은 게이트로 2차 방어, #77).
-  const canEditGroups = effView === "integrated" && (await canWriteTenant(user.systemRole, "owner"));
+  const canEditGroups = effView === "integrated" && (await canWriteTenant(user.systemRole, "operations_settings"));
   // 통합뷰 '배치 편집' 모드 — 실제 표 위에서 반을 끌어 줄을 바꾼다. URL 파라미터라 창을 다시 열면
   // 자동으로 읽기 전용으로 돌아온다(편집 상태가 눌러앉지 않게). 권한 없으면 파라미터를 무시.
   const groupEditing = canEditGroups && geditRaw === "1";
@@ -619,7 +620,7 @@ export default async function TimetablePage({
     : NO_VIRTUAL_LABS;
   // 교실뷰 인라인 정원 편집 — 강의실은 owner 도메인이라 게이트도 owner 쓰기(그룹 설정과 동일 논리,
   // 서버 액션 updateClassroomCapacity가 같은 게이트로 2차 방어).
-  const canEditRoomCapacity = isRooms && (await canWriteTenant(user.systemRole, "owner"));
+  const canEditRoomCapacity = isRooms && (await canWriteTenant(user.systemRole, "operations_settings"));
   // 교실뷰 데이터 — **전 과목·전 구분(특강 포함)** 슬롯을 경량화(학생 명단 대신 재원 수만 = PII·페이로드
   // 축소). kind·과목·학년 필터를 일부러 안 태운다 — 어떤 필터든 "그 교실이 그 시간에 비어 있다"는 거짓을
   // 만든다(위 ViewMode 주석. 유일한 예외 = 뷰 안 '특강 숨김' 토글, 원장 요청 08-03 — 지도·지표 동시 제외라
@@ -730,6 +731,7 @@ export default async function TimetablePage({
       <PageMaximizeToolbar>
       <Toolbar rail={false} gap="gap-3 compact-chrome:gap-1">
         <ToolbarRow>
+          <SettingRolesControl group="timetable" />
         {/* 모바일에서는 주간 이동을 필터와 별도의 짧은 레일에 둔다. */}
         {/* 왼쪽 묶음(필터·검색·설정·엑셀) / 오른쪽 묶음(집계·ECS·편집) — 창을 줄이면 **묶음 단위로** 줄이 바뀐다
             (원장 2026-09-04 *"창 크기를 조절했을때도 헤더 정렬이 이루어질 수 있게"* — 종전엔 항목 하나(엑셀·시트)만 둘째 줄

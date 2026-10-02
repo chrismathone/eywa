@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { permissionAccountIds, platformAccountIds } from "@/features/owner/server/platform-settings";
-import { canManageTenant } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant, canManageTenant } from "@/lib/auth/perm-matrix";
+import { OWNER_TAB_MENU } from "@/lib/settings-role-catalog";
+import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions } from "@/features/owner/server/queries";
@@ -98,7 +100,20 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {
-  const viewer = await requireAccess("owner");
+  const sp = await searchParams;
+  // 옛 설정 탭은 권한 검사에 앞서 현재 주소로 보낸다. 도착 화면이 해당 설정 권한을 검사한다.
+  if (sp.tab === "report_mgmt") redirect("/lesson-reports");
+  if (sp.tab === "report") redirect("/lesson-reports?tab=report");
+  if (sp.tab === "ai_ment") redirect("/lesson-reports?tab=ai_ment");
+  if (sp.tab === "sessions") redirect("/owner?tab=subjects");
+  const requested = resolveTab(sp);
+  const menu = requested in OWNER_TAB_MENU ? OWNER_TAB_MENU[requested as keyof typeof OWNER_TAB_MENU] : "owner";
+  const viewer = await requireAccess(menu);
+  const canEditSettings = await canWriteTenant(viewer.systemRole, menu);
+  const allowedEntries = await Promise.all(OWNER_TABS.map(async face => [face.key,
+    await canAccessTenant(viewer.systemRole, face.key in OWNER_TAB_MENU ? OWNER_TAB_MENU[face.key as keyof typeof OWNER_TAB_MENU] : "owner"),
+  ] as const));
+  const allowedTabs = new Map(allowedEntries);
   // 역할·권한(permissions) 편집은 항상 master 전용(self-escalation 차단 — saveOwnerSection·0080a 트리거와 동일).
   // 위임받은 admin/manager는 다른 설정 면은 편집 가능하되 이 면만 안내로 대체(저장이 실패할 폼을 보여주지 않음).
   const isMaster = viewer.systemRole === "master";
@@ -106,20 +121,12 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   // 자동 통과한다"*(원장 2026-08-13). 🔴 `systemRole === "master"`만 보면 총괄이 자기 시스템에서 잠긴다
   // (실측: 총괄 2명 중 1명의 users.system_role은 'admin'이다).
   const canReadAudit = isMaster || (await isCurrentUserSuperAdmin());
-  const sp = await searchParams;
-  // 옛 "보고서 관리" 면(?tab=report_mgmt)은 좌측 독립 메뉴 /lesson-reports로 승격 — 기존 북마크 리다이렉트.
-  if (sp.tab === "report_mgmt") redirect("/lesson-reports");
-  // 보고서 표시·AI 멘트 설정 면은 수업보고서 탭으로 이관(2026-07-10) — 옛 ?tab=report·ai_ment 북마크 리다이렉트.
-  if (sp.tab === "report") redirect("/lesson-reports?tab=report");
-  if (sp.tab === "ai_ment") redirect("/lesson-reports?tab=ai_ment");
-  // 세션 기간 면은 과목 운영 안으로 들어갔다(2026-08-07 원장 지시) — 옛 북마크가 프로필로 떨어지지 않게.
-  if (sp.tab === "sessions") redirect("/owner?tab=subjects");
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   const tab = effectiveTab(sp, settings);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
-  // 강의실 엑셀로 넣기 — 강의실 CRUD와 같은 메뉴(owner)의 full만(올리기 주소 `gateImport`와 같은 판정).
-  const canImportClassrooms = tab === "operations" ? await canManageTenant(viewer.systemRole, "owner") : false;
+  // 강의실 엑셀로 넣기 — 운영 설정의 full만(올리기 주소 `gateImport`와 같은 판정).
+  const canImportClassrooms = tab === "operations" ? await canManageTenant(viewer.systemRole, "operations_settings") : false;
   // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
   const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
   // 개인 예외(userOverrides) 이름 매핑 — 역할·권한 면에서만 로드(다른 면 진입 비용 0).
@@ -152,14 +159,16 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
         // ⚠️ 상단 바 브랜드는 `logoText`라 `profile.name`과 다를 수 있다 → 컴팩트 행에 학원명을 남긴다.
         embedLabel={`${settings.profile.name || "학원"} 설정 — 변경은 원장·위임 계정만`}
-        actions={<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p>}
+        actions={<><SettingRolesControl group={tab === "sheets" ? "integrations" : "owner"} /><p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p></>}
       />
 
       </div>
       <PageMaximizeToolbar>
-        <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+        <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings)).filter(face => face.key === "modules" ? canReadAudit : allowedTabs.get(face.key as OwnerTab))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
       </PageMaximizeToolbar>
 
+      {!canEditSettings ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (
         <OperationsSection initial={settings.operations} classrooms={classrooms} canImportClassrooms={canImportClassrooms} />
@@ -270,6 +279,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           isEmbed={isEmbed}
         />
       ) : null}
+      </fieldset>
     </div>
   );
 }

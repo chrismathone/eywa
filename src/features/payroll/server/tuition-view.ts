@@ -7,7 +7,7 @@ import type { createClient } from "@/lib/supabase/server";
 import type { PayslipData } from "@/features/payroll/payslip-view";
 import type { SalaryType } from "../settlement";
 import { parseGroupRates, type GroupRates } from "../salary-group";
-import { canManageSalary } from "./salary-access";
+import { canReadSalary } from "./salary-access";
 import { appliedRatesOf } from "./tuition";
 import { collectTierRows } from "./tier-rows";
 import { computeTierSettlement } from "@/features/payroll/tier-settlement";
@@ -40,13 +40,13 @@ type Db = Awaited<ReturnType<typeof createClient>>;
  * 수납 '강사 정산' 면 — **급여명세서와 같은 수업료**를 강사마다(원장 2026-09-28 *"급여는 출석부에서 맞춰놓은것을 기준으로"*).
  * 계산은 [`computeTeacherTuition`](./tuition.ts) 한 벌(출석부 하단 정산액과 같은 `collectTierRows` 조립) · 발행된 명세서는
  * 스냅샷 금액을 그대로 싣는다(명세서 화면과 같은 규칙 — 지급·서명이 끝난 달이 출결 정정으로 흔들리지 않게).
- * 🔴 급여 = 원장·총괄 전용(`canManageSalary`) — 게이트를 지난 뒤에만 admin(+ tenant_id 필터)으로 읽는다(단가표·명세서는 master RLS).
+ * 🔴 급여 = 원장·총괄 전용(`canReadSalary`) — 게이트를 지난 뒤에만 admin(+ tenant_id 필터)으로 읽는다(단가표·명세서는 master RLS).
  * 대상 = 담임인 활성 반이 있는 강사.
  */
 export async function getTeacherTuitionView(period: string): Promise<TuitionView> {
   const empty: TuitionView = { rows: [], total: 0, computedCount: 0, pendingCount: 0 };
   const user = await getCurrentUser();
-  if (!user || !(await canManageSalary())) return empty;
+  if (!user || !(await canReadSalary())) return empty;
   const admin = createAdminClient();
   const db = admin as unknown as Db;
   const tenantId = user.tenantId;

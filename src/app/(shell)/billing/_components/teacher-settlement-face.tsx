@@ -1,4 +1,4 @@
-import { canManageSalary } from "@/features/payroll/server/salary-access";
+import { canManageSalary, canReadSalary } from "@/features/payroll/server/salary-access";
 import { currentPeriod } from "@/features/billing/calc";
 import { getTeacherTuitionView } from "@/features/payroll/server/tuition-view";
 import { getClassSalaryRows } from "@/features/payroll/server/class-salary-queries";
@@ -24,14 +24,15 @@ const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
  */
 export async function TeacherSettlementFace({ period }: { period?: string }) {
   // 급여 = 원장·총괄 전용 PII(감사 D6). 그 밖에는 화면 자체를 막는다.
-  if (!(await canManageSalary())) {
+  if (!(await canReadSalary())) {
     return (
       <div className="border-line text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
-        강사 정산(급여)은 <b>원장</b>만 열람할 수 있습니다.
+        강사 정산(급여) 열람 권한이 없습니다.
       </div>
     );
   }
 
+  const canEdit = await canManageSalary();
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
   const user = await getCurrentUser();
   const [view, classRows, canPayslip] = await Promise.all([
@@ -43,7 +44,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
   const hrefFor = (per: string) => `/billing?tab=payroll&period=${per}`;
 
   return (
-    <section className="space-y-4">
+    <fieldset disabled={!canEdit} className="min-w-0 space-y-4 border-0 p-0">
       {/* 툴바(지시서 §10) — 월 이동은 공용 BillingMonthNav · 집계는 값으로 오른쪽에. */}
       <div className="flex flex-wrap items-center gap-2.5 px-1">
         <BillingMonthNav period={p} hrefFor={hrefFor} ariaLabel="정산 월 선택" />
@@ -176,6 +177,6 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
           </table>
         </div>
       </details>
-    </section>
+    </fieldset>
   );
 }

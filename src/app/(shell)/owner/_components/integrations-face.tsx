@@ -28,7 +28,7 @@ export async function IntegrationsFace({
   isEmbed: boolean;
 }) {
   // 슬랙 탭 = 설정 게이트와 같은 판정(지점 스위치 ∧ 원장·총괄) — 위임 관리자에게 빈 슬랙 탭이 첫 탭으로 뜨지 않게.
-  const gate = await slackGate();
+  const gate = await slackGate(false);
   const slackOn = !("error" in gate);
   const available: IntegrationSub[] = [
     ...(slackOn ? (["slack"] as const) : []),

@@ -169,7 +169,7 @@ export async function setSheetsExportEnabled(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!isSheetExportSubject(subject)) return { error: "지원하지 않는 과목입니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+  if (!(await canWriteTenant(user.systemRole, "integration_settings"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
   if (await moduleOff("sheet_sync")) return { error: MODULE_OFF_MSG };
@@ -211,7 +211,7 @@ export async function setSubjectSheetTarget(
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!isSheetExportSubject(subject)) return { error: "지원하지 않는 과목입니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+  if (!(await canWriteTenant(user.systemRole, "integration_settings"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
   if (await moduleOff("sheet_sync")) return { error: MODULE_OFF_MSG };
@@ -249,7 +249,7 @@ export async function setSubjectSheetTarget(
 export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleState> {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
-  if (!(await canWriteTenant(user.systemRole, "owner"))) {
+  if (!(await canWriteTenant(user.systemRole, "integration_settings"))) {
     return { error: "학원 설정(owner) 변경 권한이 없습니다" };
   }
   if (await moduleOff("makeedu")) return { error: MODULE_OFF_MSG };
