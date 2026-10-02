@@ -1,5 +1,11 @@
 import { expect, it } from "vitest";
-import { renamedFileName, splitFileName, titleWithFileExtension } from "./file-name";
+import { documentFileName, renamedFileName, splitFileName, titleWithFileExtension } from "./file-name";
+
+it("다운로드 이름은 원본을 보존하고 이름 없는 옛 파일은 제목과 확장자를 쓴다", () => {
+  expect(documentFileName("한글 문서 (최종).PDF", "다른 제목", "tenant/documents/uuid.pdf")).toBe("한글 문서 (최종).PDF");
+  expect(documentFileName(null, "수업 양식", "tenant/documents/uuid.xlsx")).toBe("수업 양식.xlsx");
+  expect(documentFileName("", "수업 양식.PDF", "tenant/documents/uuid.pdf")).toBe("수업 양식.PDF");
+});
 
 it("표시 제목에 원본 파일 확장자를 한 번만 붙인다", () => {
   expect(titleWithFileExtension("중간 시험지", "원본.PDF")).toBe("중간 시험지.PDF");

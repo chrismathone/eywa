@@ -307,7 +307,7 @@ describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () =
     expect(sheetT("en", "select.choose")).toBe("Choose");
     const att = codeOnly(read("features", "class-sheets", "components", "attendance-check.tsx"));
     expect(att).toContain('t("select.choose")');
-    expect(att).toContain("att.cycle.tipClick");
+    expect(att).toContain("att.select.tipClick");
     expect(att).toContain("att.makeup.removeConfirm");
     expect(att).not.toContain("선택 안 함");
     expect(att).not.toContain("출결 없음");
@@ -1443,7 +1443,7 @@ describe("🔴 수업 상세 — 한글 리터럴 0", () => {
     expect(src).toContain("lang = DEFAULT_SHEET_LANG");
     expect(src).not.toContain("getTeacherViewLang");
     const cls = read("app", "(shell)", "classes", "[id]", "page.tsx");
-    expect(cls).toContain('subject="class" lang={lang}');
+    expect(cls).toMatch(/subject="class"\s+lang=\{lang\}/);
   });
 
   it("🔴 ko 결과가 옛 문자열과 글자까지 같다", () => {
