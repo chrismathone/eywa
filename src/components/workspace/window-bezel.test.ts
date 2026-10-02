@@ -92,7 +92,7 @@ describe("`.edge-to-edge` — 베젤 0이 필요한 화면은 마커로 말한�
   });
 
   function rootClassOf(src: string): string {
-    return /<div className="([^"]*\bedge-to-edge\b[^"]*)">/.exec(src)?.[1] ?? "";
+    return /<div\b[^>]*\bclassName="([^"]*\bedge-to-edge\b[^"]*)"[^>]*>/.exec(src)?.[1] ?? "";
   }
 
   it("시간표 page.tsx 루트와 loading.tsx 루트가 같은 마커·같은 className을 단다", () => {

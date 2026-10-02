@@ -1,0 +1,1600 @@
+{
+  "createdAt": "2026-10-01T17:26:55.900Z",
+  "summary": {
+    "dataset": "24 synthetic cases; date parser prototype, not production integration; no DeepSeek calls",
+    "count": 24,
+    "categoryCorrect": 23,
+    "datesCorrect": 22,
+    "exactMatch": 21,
+    "review": 10,
+    "wrongWithoutReview": [],
+    "p50Ms": 201,
+    "p95Ms": 349,
+    "inputTokens": 42930,
+    "estimatedUsdAtPublishedRate": 0.0018030600000000002
+  },
+  "results": [
+    {
+      "id": "a01",
+      "text": "오늘 아파서 결석합니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-02:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "오늘",
+          "date": "2026-10-02",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-02:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 349,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "mixed": 0,
+            "early_leave": 0,
+            "late": 0,
+            "none": 0.01,
+            "unclear": 0,
+            "correction": 0,
+            "absence": 0.99
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.92,
+          "probabilities": {
+            "late": 0,
+            "early_leave": 0,
+            "none": 0.06,
+            "absence": 0.94
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1608,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a02",
+      "text": "내일 30분 늦게 갈게요.",
+      "category": "late",
+      "events": [
+        "2026-10-03:late"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "내일",
+          "date": "2026-10-03",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "late",
+      "predictedEvents": [
+        "2026-10-03:late"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 320,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 0,
+            "late": 1,
+            "none": 0,
+            "unclear": 0,
+            "correction": 0,
+            "mixed": 0,
+            "early_leave": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.97,
+          "probabilities": {
+            "absence": 0,
+            "late": 0.98,
+            "none": 0.02,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1615,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a03",
+      "text": "모레 수업 중간에 먼저 데리러 갑니다.",
+      "category": "early_leave",
+      "events": [
+        "2026-10-04:early_leave"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "모레",
+          "date": "2026-10-04",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "early_leave",
+      "predictedEvents": [
+        "2026-10-04:early_leave"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 331,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0,
+            "unclear": 0,
+            "early_leave": 0.99,
+            "correction": 0,
+            "none": 0.01,
+            "absence": 0,
+            "mixed": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.95,
+          "probabilities": {
+            "none": 0.04,
+            "late": 0,
+            "early_leave": 0.96,
+            "absence": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1619,
+        "output_tokens": 132
+      }
+    },
+    {
+      "id": "a04",
+      "text": "10월 5일부터 8일까지 가족 여행으로 결석합니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-05:absence",
+        "2026-10-06:absence",
+        "2026-10-07:absence",
+        "2026-10-08:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "10월 5일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "8일",
+          "date": "2026-10-08",
+          "offset": 9
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-05:absence",
+        "2026-10-06:absence",
+        "2026-10-07:absence",
+        "2026-10-08:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 206,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "none": 0,
+            "unclear": 0,
+            "early_leave": 0,
+            "correction": 0,
+            "absence": 1,
+            "late": 0,
+            "mixed": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.95
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "none": 0.01,
+            "late": 0,
+            "early_leave": 0,
+            "absence": 0.99
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0,
+            "none": 0.01,
+            "early_leave": 0,
+            "absence": 0.99
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2120,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a05",
+      "text": "10월 5일과 8일만 결석하고 6일은 정상 등원해요.",
+      "category": "absence",
+      "events": [
+        "2026-10-05:absence",
+        "2026-10-08:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "10월 5일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "8일",
+          "date": "2026-10-08",
+          "offset": 8
+        },
+        {
+          "id": "d2",
+          "literal": "6일",
+          "date": "2026-10-06",
+          "offset": 17
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-05:absence",
+        "2026-10-08:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 195,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.85,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "unclear": 0,
+            "mixed": 0.09,
+            "absence": 0.88,
+            "none": 0.02,
+            "correction": 0.01
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.07
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "none": 0.02,
+            "absence": 0.98
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.96,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "none": 0.03,
+            "absence": 0.97
+          }
+        },
+        "d2": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "none": 1,
+            "absence": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2618,
+        "output_tokens": 218
+      }
+    },
+    {
+      "id": "a06",
+      "text": "10월 5일은 결석하고 6일은 20분 늦게 갑니다.",
+      "category": "mixed",
+      "events": [
+        "2026-10-05:absence",
+        "2026-10-06:late"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "10월 5일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "6일",
+          "date": "2026-10-06",
+          "offset": 13
+        }
+      ],
+      "predictedCategory": "mixed",
+      "predictedEvents": [
+        "2026-10-05:absence",
+        "2026-10-06:late"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": false,
+      "latencyMs": 205,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "mixed",
+          "confidence": 0.97,
+          "probabilities": {
+            "correction": 0,
+            "none": 0.01,
+            "unclear": 0,
+            "mixed": 0.99,
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0.01,
+            "absence": 0.99,
+            "late": 0
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.97,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0.02,
+            "absence": 0,
+            "late": 0.98
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2133,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a07",
+      "text": "오늘 결석 취소합니다. 정상 등원해요.",
+      "category": "correction",
+      "events": [],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "오늘",
+          "date": "2026-10-02",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "correction",
+      "predictedEvents": [],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": false,
+      "latencyMs": 202,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "correction",
+          "confidence": 0.96,
+          "probabilities": {
+            "unclear": 0,
+            "late": 0,
+            "early_leave": 0,
+            "correction": 0.97,
+            "none": 0.03,
+            "absence": 0,
+            "mixed": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "none": 1,
+            "absence": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1620,
+        "output_tokens": 132
+      }
+    },
+    {
+      "id": "a08",
+      "text": "오늘 결석은 아니고 10분 늦습니다.",
+      "category": "late",
+      "events": [
+        "2026-10-02:late"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "오늘",
+          "date": "2026-10-02",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "late",
+      "predictedEvents": [
+        "2026-10-02:late"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 191,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "absence": 0,
+            "none": 0,
+            "correction": 0,
+            "late": 1
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0.99,
+            "absence": 0,
+            "none": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1622,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a09",
+      "text": "지난주 못 갔던 수업 보강 언제 할 수 있나요?",
+      "category": "none",
+      "events": [],
+      "candidates": [],
+      "predictedCategory": "none",
+      "predictedEvents": [],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 483,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "mixed": 0,
+            "absence": 0,
+            "late": 0,
+            "none": 1,
+            "early_leave": 0,
+            "correction": 0,
+            "unclear": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        }
+      },
+      "usage": {
+        "input_tokens": 1138,
+        "output_tokens": 87
+      }
+    },
+    {
+      "id": "a10",
+      "text": "10월 5일 보강 가능한가요? 8일은 결석합니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-08:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "10월 5일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "8일",
+          "date": "2026-10-08",
+          "offset": 17
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-08:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 201,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "unclear": 0.01,
+            "mixed": 0.01,
+            "none": 0,
+            "absence": 0.98,
+            "correction": 0,
+            "early_leave": 0,
+            "late": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.06
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 1,
+            "absence": 0,
+            "late": 0
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0.01,
+            "absence": 0.99,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2129,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a11",
+      "text": "10월 5일, 6일에 못 갑니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-05:absence",
+        "2026-10-06:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "10월 5일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "6일",
+          "date": "2026-10-06",
+          "offset": 8
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-05:absence",
+        "2026-10-06:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 197,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "mixed": 0,
+            "absence": 1,
+            "correction": 0,
+            "none": 0,
+            "late": 0,
+            "unclear": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.1
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.95,
+          "probabilities": {
+            "absence": 0.97,
+            "early_leave": 0,
+            "none": 0.03,
+            "late": 0
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.94,
+          "probabilities": {
+            "absence": 0.95,
+            "early_leave": 0,
+            "none": 0.05,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2112,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a12",
+      "text": "다음 주 월요일에는 가족 일정으로 쉽니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-05:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "다음 주 월요일",
+          "date": "2026-10-05",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-05:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": false,
+      "latencyMs": 201,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "none": 0.01,
+            "mixed": 0,
+            "absence": 0.98,
+            "early_leave": 0.01,
+            "correction": 0,
+            "unclear": 0,
+            "late": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.76,
+          "probabilities": {
+            "none": 0.1,
+            "absence": 0.83,
+            "early_leave": 0.07,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1629,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a13",
+      "text": "내일 결석할게요.",
+      "base": "2026-12-31",
+      "category": "absence",
+      "events": [
+        "2027-01-01:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "내일",
+          "date": "2027-01-01",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2027-01-01:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 195,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "unclear": 0,
+            "mixed": 0,
+            "correction": 0,
+            "none": 0,
+            "late": 0,
+            "absence": 1,
+            "early_leave": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.95,
+          "probabilities": {
+            "late": 0,
+            "none": 0.04,
+            "absence": 0.96,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1605,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a14",
+      "text": "오늘 오후 5시에 먼저 데려갑니다.",
+      "category": "early_leave",
+      "events": [
+        "2026-10-02:early_leave"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "오늘",
+          "date": "2026-10-02",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "early_leave",
+      "predictedEvents": [
+        "2026-10-02:early_leave"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": false,
+      "latencyMs": 200,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.95,
+          "probabilities": {
+            "early_leave": 0.96,
+            "mixed": 0,
+            "absence": 0,
+            "correction": 0,
+            "none": 0.03,
+            "late": 0,
+            "unclear": 0.01
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.78,
+          "probabilities": {
+            "absence": 0.01,
+            "early_leave": 0.83,
+            "none": 0.16,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1614,
+        "output_tokens": 132
+      }
+    },
+    {
+      "id": "a15",
+      "text": "개인 사정으로 결석합니다.",
+      "category": "absence",
+      "events": [],
+      "review": true,
+      "candidates": [],
+      "predictedCategory": "absence",
+      "predictedEvents": [],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": true,
+      "latencyMs": 185,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "absence": 1,
+            "unclear": 0,
+            "none": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "correction": 0,
+            "late": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        }
+      },
+      "usage": {
+        "input_tokens": 1126,
+        "output_tokens": 87
+      }
+    },
+    {
+      "id": "a16",
+      "text": "2월 30일에 결석합니다.",
+      "base": "2026-02-01",
+      "category": "absence",
+      "events": [],
+      "review": true,
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "2월 30일",
+          "date": null,
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": true,
+      "latencyMs": 198,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "unclear": 0.01,
+            "mixed": 0,
+            "late": 0,
+            "none": 0.01,
+            "correction": 0,
+            "absence": 0.98,
+            "early_leave": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.6,
+          "probabilities": {
+            "late": 0,
+            "none": 0.3,
+            "absence": 0.7,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1619,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a17",
+      "text": "다음 주 월요일부터 다음 주 수요일까지 못 갑니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-05:absence",
+        "2026-10-06:absence",
+        "2026-10-07:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "다음 주 월요일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "다음 주 수요일",
+          "date": "2026-10-07",
+          "offset": 11
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-05:absence",
+        "2026-10-06:absence",
+        "2026-10-07:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 197,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "mixed": 0,
+            "absence": 1,
+            "late": 0,
+            "early_leave": 0,
+            "none": 0,
+            "correction": 0,
+            "unclear": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "absence": 0.98,
+            "late": 0,
+            "early_leave": 0,
+            "none": 0.02
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.94,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "absence": 0.96,
+            "none": 0.04
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2125,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a18",
+      "context": "강사: 내일 결석 처리해드릴까요?",
+      "text": "네 그렇게 해주세요.",
+      "category": "absence",
+      "events": [
+        "2026-10-03:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "내일",
+          "date": "2026-10-03",
+          "offset": 4
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-03:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 204,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.96,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "none": 0.01,
+            "mixed": 0,
+            "absence": 0.97,
+            "unclear": 0.02,
+            "correction": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.04
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.83,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "none": 0.13,
+            "absence": 0.87
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1634,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a19",
+      "text": "오늘 수학은 정상 출석하고 영어만 결석합니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-02:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "오늘",
+          "date": "2026-10-02",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "mixed",
+      "predictedEvents": [
+        "2026-10-02:absence"
+      ],
+      "categoryCorrect": false,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": false,
+      "latencyMs": 208,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "mixed",
+          "confidence": 0.5,
+          "probabilities": {
+            "mixed": 0.57,
+            "early_leave": 0,
+            "absence": 0.42,
+            "none": 0.01,
+            "late": 0,
+            "unclear": 0,
+            "correction": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.47,
+          "probabilities": {
+            "early_leave": 0,
+            "absence": 0.6,
+            "none": 0.4,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1624,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a20",
+      "text": "10월 5일은 빠지지 않고 8일만 쉽니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-08:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "10월 5일",
+          "date": "2026-10-05",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "8일",
+          "date": "2026-10-08",
+          "offset": 15
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [],
+      "categoryCorrect": true,
+      "datesCorrect": false,
+      "needsReview": true,
+      "expectedReview": false,
+      "latencyMs": 195,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.38,
+          "probabilities": {
+            "unclear": 0.17,
+            "late": 0,
+            "mixed": 0.01,
+            "absence": 0.45999999999999996,
+            "early_leave": 0.05,
+            "correction": 0.01,
+            "none": 0.3
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.12
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.56,
+          "probabilities": {
+            "absence": 0.22,
+            "none": 0.68,
+            "late": 0,
+            "early_leave": 0.1
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.75,
+          "probabilities": {
+            "absence": 0.16,
+            "late": 0,
+            "early_leave": 0.03,
+            "none": 0.81
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2121,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a21",
+      "text": "내일 상태 봐서 결석할 수도 있는데 확정되면 다시 연락드릴게요.",
+      "category": "unclear",
+      "events": [],
+      "review": true,
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "내일",
+          "date": "2026-10-03",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "unclear",
+      "predictedEvents": [],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": true,
+      "expectedReview": true,
+      "latencyMs": 193,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.99,
+          "probabilities": {
+            "mixed": 0,
+            "none": 0,
+            "late": 0,
+            "correction": 0,
+            "early_leave": 0,
+            "unclear": 1,
+            "absence": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.05
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.98,
+          "probabilities": {
+            "none": 0.98,
+            "late": 0,
+            "early_leave": 0,
+            "absence": 0.02
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1635,
+        "output_tokens": 131
+      }
+    },
+    {
+      "id": "a22",
+      "text": "오늘부터 3일 동안 결석합니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-02:absence",
+        "2026-10-03:absence",
+        "2026-10-04:absence"
+      ],
+      "review": true,
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "오늘",
+          "date": "2026-10-02",
+          "offset": 0
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-02:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": false,
+      "needsReview": true,
+      "expectedReview": true,
+      "latencyMs": 192,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 1,
+            "mixed": 0,
+            "late": 0,
+            "none": 0,
+            "correction": 0,
+            "unclear": 0,
+            "early_leave": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.6
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0,
+            "none": 0.02,
+            "absence": 0.98,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 1616,
+        "output_tokens": 130
+      }
+    },
+    {
+      "id": "a23",
+      "text": "12월 31일부터 1월 2일까지 결석합니다.",
+      "base": "2026-12-29",
+      "category": "absence",
+      "events": [
+        "2026-12-31:absence",
+        "2027-01-01:absence",
+        "2027-01-02:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "12월 31일",
+          "date": "2026-12-31",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "1월 2일",
+          "date": "2027-01-02",
+          "offset": 10
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-12-31:absence",
+        "2027-01-01:absence",
+        "2027-01-02:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 232,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "unclear": 0,
+            "none": 0,
+            "correction": 0,
+            "late": 0,
+            "absence": 1,
+            "mixed": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.94
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "none": 0.01,
+            "late": 0,
+            "absence": 0.99,
+            "early_leave": 0
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "none": 0.02,
+            "late": 0,
+            "absence": 0.98,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2123,
+        "output_tokens": 174
+      }
+    },
+    {
+      "id": "a24",
+      "text": "내일 결석한다고 썼는데 아니에요. 모레 결석입니다.",
+      "category": "absence",
+      "events": [
+        "2026-10-04:absence"
+      ],
+      "candidates": [
+        {
+          "id": "d0",
+          "literal": "내일",
+          "date": "2026-10-03",
+          "offset": 0
+        },
+        {
+          "id": "d1",
+          "literal": "모레",
+          "date": "2026-10-04",
+          "offset": 19
+        }
+      ],
+      "predictedCategory": "absence",
+      "predictedEvents": [
+        "2026-10-04:absence"
+      ],
+      "categoryCorrect": true,
+      "datesCorrect": true,
+      "needsReview": false,
+      "expectedReview": false,
+      "latencyMs": 201,
+      "answers": {
+        "category": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.93,
+          "probabilities": {
+            "absence": 0.95,
+            "unclear": 0,
+            "early_leave": 0,
+            "none": 0,
+            "mixed": 0,
+            "correction": 0.05,
+            "late": 0
+          }
+        },
+        "continuous": {
+          "type": "noul",
+          "noul": 0.08
+        },
+        "d0": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.94,
+          "probabilities": {
+            "absence": 0.05,
+            "none": 0.95,
+            "early_leave": 0,
+            "late": 0
+          }
+        },
+        "d1": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "absence": 0.98,
+            "early_leave": 0,
+            "none": 0.02,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2125,
+        "output_tokens": 174
+      }
+    }
+  ]
+}

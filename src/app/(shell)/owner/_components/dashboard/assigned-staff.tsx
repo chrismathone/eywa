@@ -18,6 +18,6 @@ export function AssignedStaff({ members, bundle }: { members: DashboardMembers; 
         </li>)}
       </ul>
     ) : <p className="text-text-dim text-xs">현재 이 배치가 적용되는 직원이 없습니다.</p>}
-    <p className="text-text-faint mt-2 text-[11px]">이름을 누르면 담당 범위와 배치를 지정할 수 있습니다.</p>
+    <p className="text-text-faint mt-2 text-xs">이름을 누르면 담당 범위와 배치를 지정할 수 있습니다.</p>
   </aside>;
 }

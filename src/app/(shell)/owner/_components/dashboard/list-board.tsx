@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import type { MenuKey } from "@/lib/permissions";
 import { moveTo, placedIds, removeItem } from "@/features/dashboard/layout/engine";
 import { cardDef, presetOf } from "@/features/dashboard/layout/registry";
@@ -53,10 +54,10 @@ export function ListBoard({
               </small>
             ) : null}
             <Button size="icon-sm" variant="ghost" aria-label={`${name} 앞으로`} disabled={idx === 0} onClick={() => onCommit(moveTo(items, it.id, idx - 1))}>
-              ▲
+              <EyIcon name="chevronUp" size={14} />
             </Button>
             <Button size="icon-sm" variant="ghost" aria-label={`${name} 뒤로`} disabled={idx === items.length - 1} onClick={() => onCommit(moveTo(items, it.id, idx + 1))}>
-              ▼
+              <EyIcon name="chevronDown" size={14} />
             </Button>
             <Button
               size="icon-sm"

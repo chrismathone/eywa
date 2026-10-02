@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Popover } from "@base-ui/react/popover";
 import { ChevronDown, ChevronUp, Check, X } from "@/components/icons/aywa-icon-compat";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { LABEL_OF, moveColumn, normalizeOrder, STAFF_COLUMNS, type StaffColumnKey } from "@/features/staff/columns";
@@ -22,28 +23,21 @@ export function StaffColumnPicker() {
   const shownCount = order.filter((k) => !off.has(k)).length;
 
   return (
-    <div className="relative">
-      <button
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
         type="button"
-        onClick={() => setOpen((v) => !v)}
         // 치수는 control-scale(높이 = 라벨 + 4) — 세로 패딩으로 높이를 만들지 않는다(v5).
         className={`${CONTROL_H} ${CONTROL_LABEL} border-line bg-card text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 transition`}
         aria-expanded={open}
       >
         열 {shownCount}/{STAFF_COLUMNS.length}
         {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-      </button>
+      </Popover.Trigger>
 
       {open ? (
-        <>
-          {/* 바깥 클릭으로 닫기 — 화면 전체를 덮되 팝오버보다 아래. */}
-          <button
-            type="button"
-            aria-label="닫기"
-            className="fixed inset-0 z-40 cursor-default"
-            onClick={() => setOpen(false)}
-          />
-          <div className="border-line bg-card shadow-modal absolute top-full right-0 z-50 mt-1 w-60 rounded-xl border p-2">
+        <Popover.Portal>
+          <Popover.Positioner side="bottom" align="end" sideOffset={4} collisionPadding={8} className="z-50">
+          <Popover.Popup className="border-line bg-card shadow-modal w-60 max-w-(--available-width) rounded-xl border p-2 outline-none">
             <div className="mb-1.5 flex items-center justify-between px-1">
               <span className="micro">표시할 열 · 순서</span>
               <button
@@ -112,9 +106,10 @@ export function StaffColumnPicker() {
                 <X className="size-3" /> 닫기
               </button>
             </div>
-          </div>
-        </>
+          </Popover.Popup>
+          </Popover.Positioner>
+        </Popover.Portal>
       ) : null}
-    </div>
+    </Popover.Root>
   );
 }

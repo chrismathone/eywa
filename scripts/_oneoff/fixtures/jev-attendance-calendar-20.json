@@ -1,0 +1,22 @@
+[
+  {"id":"calendar-01","group":"cross-midnight","messageDate":"2026-10-03","date":"2026-10-03","history":["내일 결석해요"],"historyDates":["2026-10-02"],"text":"어제 말씀드린 결석은 취소하고 오늘 정상 등원해요","expected":"normal"},
+  {"id":"calendar-02","group":"cross-midnight","messageDate":"2026-10-03","date":"2026-10-03","history":["내일 결석해요","결석 대신 내일 지각할게요"],"historyDates":["2026-10-02","2026-10-02"],"text":"다시 정정해요. 오늘은 아예 결석할게요","expected":"absence"},
+  {"id":"calendar-03","group":"cross-midnight","messageDate":"2026-10-03","date":"2026-10-03","history":["오늘 결석해요"],"historyDates":["2026-10-02"],"text":"오늘은 10분 지각합니다","expected":"late"},
+  {"id":"calendar-04","group":"cross-midnight","messageDate":"2026-10-03","date":"2026-10-02","history":["오늘 결석해요"],"historyDates":["2026-10-02"],"text":"오늘은 정상 출석해요. 어제 결석 통보는 맞아요","expected":"absence"},
+  {"id":"calendar-05","group":"cross-midnight","messageDate":"2026-10-03","date":"2026-10-04","history":["모레 결석할게요"],"historyDates":["2026-10-02"],"text":"내일 결석은 취소하고 10분만 늦어요","expected":"late"},
+  {"id":"calendar-06","group":"month-rollover","messageDate":"2026-11-01","date":"2026-11-01","history":["내일 결석해요"],"historyDates":["2026-10-31"],"text":"오늘은 결석 대신 정상 출석합니다","expected":"normal"},
+  {"id":"calendar-07","group":"month-rollover","messageDate":"2026-10-31","date":"2026-11-01","text":"내일 민준이 결석합니다","expected":"absence"},
+  {"id":"calendar-08","group":"month-rollover","messageDate":"2026-10-31","date":"2026-10-31","text":"오늘은 제시간에 가고 내일은 결석해요","expected":"normal"},
+  {"id":"calendar-09","group":"year-rollover","messageDate":"2027-01-01","date":"2027-01-01","history":["내일 결석해요"],"historyDates":["2026-12-31"],"text":"어제 말한 결석 취소요. 오늘 지각합니다","expected":"late"},
+  {"id":"calendar-10","group":"year-rollover","messageDate":"2026-12-31","date":"2027-01-02","text":"모레 수업은 결석하겠습니다","expected":"absence"},
+  {"id":"calendar-11","group":"leap-year","messageDate":"2028-02-28","date":"2028-02-29","text":"내일 수업 중간에 먼저 데리러 갈게요","expected":"early_leave"},
+  {"id":"calendar-12","group":"leap-year","messageDate":"2028-02-29","date":"2028-03-01","history":["모레 결석해요"],"historyDates":["2028-02-28"],"text":"내일 결석은 취소합니다. 내일 정상 출석해요","expected":"normal"},
+  {"id":"calendar-13","group":"multi-day-correction","messageDate":"2026-10-04","date":"2026-10-05","history":["3일 뒤인 10월 5일 결석해요","모레는 지각할게요. 결석은 취소요"],"historyDates":["2026-10-02","2026-10-03"],"text":"내일은 지각도 취소하고 제시간에 등원해요","expected":"normal"},
+  {"id":"calendar-14","group":"multi-day-correction","messageDate":"2026-10-04","date":"2026-10-05","history":["10월 5일 결석해요","모레 정상 등원해요. 결석 취소요"],"historyDates":["2026-10-02","2026-10-03"],"text":"내일 정상 등원은 취소합니다. 결석이 맞아요","expected":"absence"},
+  {"id":"calendar-15","group":"multi-day-correction","messageDate":"2026-10-03","date":"2026-10-03","history":["내일 결석해요"],"historyDates":["2026-10-02"],"text":"확인 감사합니다","expected":"absence"},
+  {"id":"calendar-16","group":"scope-and-date","messageDate":"2026-10-03","date":"2026-10-03","student":"서연","history":["서연이는 내일 결석해요. 민준이는 정상 등원해요"],"historyDates":["2026-10-02"],"text":"민준이는 오늘 10분 늦어요. 서연이는 어제 말씀드린 대로 결석합니다","expected":"absence"},
+  {"id":"calendar-17","group":"scope-and-date","messageDate":"2026-10-03","date":"2026-10-03","subject":"영어","history":["내일 영어는 결석, 수학은 정상 출석이에요"],"historyDates":["2026-10-02"],"text":"오늘 수학은 늦게 갑니다. 영어 결석은 그대로예요","expected":"absence"},
+  {"id":"calendar-18","group":"range-exception","messageDate":"2026-10-31","date":"2026-11-01","text":"10월 31일부터 11월 2일까지 결석합니다. 단 11월 1일 수업만 정상 출석해요","expected":"normal"},
+  {"id":"calendar-19","group":"range-exception","messageDate":"2026-12-31","date":"2027-01-01","text":"12월 31일부터 1월 2일까지 결석해요. 1월 1일에는 지각해서라도 갑니다","expected":"late"},
+  {"id":"calendar-20","group":"unresolved-reference","messageDate":"2026-10-03","date":"2026-10-03","text":"어제 얘기한 건 취소하고 두 번째 얘기대로 할게요","expected":"unclear"}
+]

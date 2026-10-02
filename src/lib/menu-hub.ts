@@ -240,6 +240,7 @@ export const SUPPORT_GROUPS: HubGroup[] = [
       //    실제로 남아 있는 그림은 아홉 개뿐이라(alarm·alert·calendarCheck·chart·check·percent·sparkle·trash·userX)
       //    그중 "고르는 목록"에 가장 가까운 `check`를 쓴다.
       face("owner", "/owner?tab=navigation", "탭 및 메뉴 구성", undefined, { section: "학원 정보", icon: "check" }),
+      face("owner", "/owner?tab=dashboard", "대시보드 구성", undefined, { section: "학원 정보", icon: MENU_ICON.dashboard }),
       // '기능'(모듈 켜기·끄기) — **새 학원에만**(2026-09-23 전수 점검 F19: 화면 탭엔 있는데 사이드바·메뉴 판엔
       // 없었다). 면 목록 판정은 설정 화면(owner/page.tsx facesFor)과 같다 — 일반판이면 선다.
       face("owner", "/owner?tab=modules", "기능", undefined, { section: "학원 정보", icon: "sparkle", genericOnly: true }),

@@ -13,6 +13,8 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { CONTROL_H, CONTROL_LABEL } from "@/components/ui/control-scale";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
+import { MobileScrollRow } from "@/components/ui/mobile-scroll-row";
+import rowStyles from "./staff-rows.module.css";
 import { FilterSelect } from "@/components/filter-select";
 import { SearchToggle } from "@/components/search-toggle";
 import { Toolbar } from "@/components/toolbar";
@@ -257,6 +259,7 @@ export default async function StaffPage({
     <div className="space-y-5">
       {savedFilters ? <StaffRememberPrefs current={current} saved={savedFilters} /> : null}
       {/* 머리 — 지시서 §10: 상시 버튼 = Primary '직원 등록' + 텍스트 '등록 QR', 그리고 조정 담당에게만 '연차 관리'(급여·옛 휴가 관리는 플래그가 꺼져 있다). 설명 문장은 뺐다(§4). */}
+      <MobileScrollRow className={rowStyles.header}>
       <PageHeader
         eyebrow="운영"
         title="직원관리"
@@ -292,14 +295,19 @@ export default async function StaffPage({
         }
       />
 
+      </MobileScrollRow>
+
       {/* 직원 대시보드(원장 요청 2026-07-28) — 전직원 수 · 근무형태별 · 과목별 */}
+      <MobileScrollRow className={rowStyles.stats}>
       <StatStrip>
         <BigStat label="전직원" value={onDuty.length} unit="명" tone="primary" icon={<Users size={16} strokeWidth={1.8} />} />
         {EMPLOYMENT_TYPES.map((t) => (
           <BigStat key={t} label={t} value={empCount(t)} unit="명" tone="neutral" />
         ))}
       </StatStrip>
+      </MobileScrollRow>
       {subjectStats.length > 0 ? (
+        <MobileScrollRow>
         <section className="border-line flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-1 pb-2">
           <span className="micro">과목별</span>
           {subjectStats.map((s) => (
@@ -313,22 +321,16 @@ export default async function StaffPage({
             <span className="text-text-faint ml-auto text-xs">근무형태 미입력 {empUnset}명</span>
           ) : null}
         </section>
+        </MobileScrollRow>
       ) : null}
 
       {/* 필터 — 라벨 하나씩(드롭다운, §10). 옛 세그먼트 칩 5묶음(역할 7·상태 4·과목 N·근무형태 4·정렬 5)을 걷었다.
           🔴 이 표는 볼 열과 순서를 사용자가 고르므로(열을 숨길 수 있다) 열 머리에 필터를 심지 않는다 — 숨긴 열에 걸린 필터를
              되돌릴 자리가 사라진다. 등록상담과 같은 "라벨 드롭다운 한 줄" 형이다. 검색은 눌러야 나온다.
           "전체"도 URL에 명시(explicitAll) — 저장값을 이기려면 값이어야 한다. 상태만 저장 안 함(기본 재직, 전체는 status=all). */}
-      {/* 줄은 공용 부품 [Toolbar](@/components/toolbar) — 치수(높이·라운드·여백)를 이 화면이 손으로 적지
-          않는다(원장 2026-09-01 *"앞으로 탭을 추가하더라도 일관성 생길 수 있게"*).
-          🔴 **레일(`rail`)은 끈다** — 폰·좁은 창에서 레일은 `overflow-x:auto / overflow-y:hidden` 스크롤
-             상자가 되는데, 여기 컨트롤의 팝업은 base-ui Portal이 아니라 **인라인 `absolute`**다
-             (FilterSelect→SearchableSelect, 아래 '열 고르기'). 레일 안에 두면 목록이 잘려 **필터가 아예
-             안 열린다**(href-select 주석·[[#128]]). 대신 폭에 따라 감긴다 = 원장이 요청한 "한 줄/두 줄".
-          🔑 좌·우 **묶음**으로 감는다(원장 2026-09-04 시간표에서 정한 규약) — 종전엔 검색에 `ml-auto`가
-             걸려 있어 줄이 바뀌는 순간 검색 하나만 둘째 줄 **맨 오른쪽**에 떨어지고 그 왼쪽이 통째로 비었다.
-          ⚠️ `ml-auto`를 스페이서가 아니라 **오른쪽 묶음 자신**에 건다 — 좁은 화면에서 `.toolbar-group`은
-             `display:contents`가 되어 박스가 사라지므로 그 여백도 함께 사라진다(항목 단위로 자연스럽게 감긴다). */}
+      {/* 모바일도 한 줄 + 숨긴 스크롤바 + 가장자리 페이드. 필터와 열 선택 팝업은 Portal로 띄워 잘리지 않는다.
+          스크롤은 MobileScrollRow 한 곳에서만 담당하므로 Toolbar의 중첩 레일은 끈다. */}
+      <MobileScrollRow className={rowStyles.toolbar}>
       <Toolbar rail={false}>
         <div className="toolbar-group flex min-w-0 flex-wrap items-center gap-3">
         <FilterSelect
@@ -398,8 +400,7 @@ export default async function StaffPage({
         </div>
         {/* 오른쪽 묶음 = 결과 숫자 + 표 보기 설정 셋(표시 수·글자 크기·볼 열) + 검색 — 한 줄(원장 2026-09-22 *"넓은 화면까지
             2행일 필요가 없어보임"*). 종전엔 이 셋이 따로 둘째 줄이라 넓은 창에서 두 줄 모두 대부분 비어 있었다.
-            좁아지면 묶음째 다음 줄로 감긴다(위 주석의 좌·우 묶음 규약). ⚠️ '열 고르기'도 인라인 `absolute` 겹판이라
-            레일에 넣으면 잘린다(위 주석) — 그래서 `rail={false}` 그대로. 보기 설정 둘은 계정에 저장된다(§10 "설정은 한 곳"). */}
+            좁은 화면에서는 같은 행을 가로로 스크롤한다. 보기 설정 둘은 계정에 저장된다(§10 "설정은 한 곳"). */}
         <div className="toolbar-group ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
         <p className="text-text-dim text-sm whitespace-nowrap">
           결과 <span className="text-foreground font-bold">{total}</span>명
@@ -423,6 +424,7 @@ export default async function StaffPage({
         {canImport ? <ExcelMenu importKind="staff" /> : null}
         </div>
       </Toolbar>
+      </MobileScrollRow>
 
       {invited ? (
         <p className="border-primary/30 bg-primary-soft text-primary inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">

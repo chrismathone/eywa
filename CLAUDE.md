@@ -86,6 +86,10 @@ aywa는 메뉴=플로팅 창=same-origin iframe이라 **창마다 셸 레이아�
 ## AI 모델 정책
 
 **모든 AI(JSON) 호출은 단일 진입점 `src/lib/ai/generate.ts`의 `generateJSON()`을 거친다.**
+
+TypeSafe Jev의 제한된 선택지 판정도 `generateJSON({ mode: "decision", state, questions, meta })`를 사용한다.
+문장 생성 provider/폴백에는 넣지 않는다. `TYPESAFE_API_KEY_<그룹>` → `TYPESAFE_API_KEY` 순서이며,
+현재 `parent_attendance_jev_shadow`는 수동 비교 전용이다. 지점 allowlist가 없으면 꺼져 있고 분류 변경·발송은 하지 않는다.
 직접 `getAnthropic`/`getUpstage`를 부르지 말 것 — provider 라우팅·파싱·폴백이 한 곳에 모여 있다.
 
 - **⚠️ 사실 원칙은 모든 AI 호출에 예외 없이 붙는다 (원장 지시 2026-07-23, 불변)**: *"'팩트' '환각금지'
@@ -146,7 +150,7 @@ provider/모델 레지스트리는 `src/lib/ai/models.ts`의 `AI_MODELS`(티어�
 | `ENROLLMENT` | enrollment_analysis · enrollment_form_extract · enrollment_prep_brief | DeepSeek(분석·브리프) · Claude(폼) |
 | `CONSULTATIONS` | consultation_analysis · student_care | DeepSeek(분석) · Claude(케어) |
 | `BRIEFING` | daily_briefing | Claude |
-| `ATTENDANCE` | attendance_recap · parent_attendance_intent | DeepSeek |
+| `ATTENDANCE` | attendance_recap · parent_attendance_intent · parent_attendance_jev_shadow | DeepSeek · TypeSafe(비교 전용) |
 | `NOTICE` | notice_translate | DeepSeek |
 | `STAFF` | staff_contract_pdf · staff_contract_pdf_ocr | Claude(OCR은 **Claude 전용**) |
 

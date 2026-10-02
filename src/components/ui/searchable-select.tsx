@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { Popover } from "@base-ui/react/popover";
+import { useMobileScrollRow } from "./mobile-scroll-row";
 
 export type ComboOption = {
   value: string;
@@ -132,6 +134,8 @@ export function SearchableSelect({
   const [open, setOpenState] = useState(defaultOpen ?? false);
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const inScrollRow = useMobileScrollRow();
+  const Trigger = inScrollRow ? Popover.Trigger : "button";
   // 열림 상태는 이 한 곳으로만 바꾼다 — 네 갈래(토글·바깥 클릭·선택·Esc)가 전부 호출부에 알려져야 한다.
   const setOpen = useCallback(
     (next: boolean) => {
@@ -165,13 +169,13 @@ export function SearchableSelect({
   const overflow = waiting ? 0 : filtered.length - shown.length;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || inScrollRow) return;
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, setOpen]);
+  }, [open, setOpen, inScrollRow]);
 
   function choose(v: string) {
     if (multi) {
@@ -205,13 +209,14 @@ export function SearchableSelect({
   const a11yName = ariaLabel ? (a11yValue ? `${ariaLabel}: ${a11yValue}` : ariaLabel) : undefined;
 
   return (
+    <SelectFrame portalled={inScrollRow} open={open} onOpenChange={setOpen}>
     <div ref={ref} className={`relative ${className ?? ""}`}>
       {name ? <input type="hidden" name={name} value={current} /> : null}
-      <button
+      <Trigger
         type="button"
         aria-label={a11yName}
         title={multiFull ?? undefined}
-        onClick={() => setOpen(!open)}
+        onClick={inScrollRow ? undefined : () => setOpen(!open)}
         className={`flex w-full cursor-pointer items-center justify-between ${compact ? "gap-1" : "gap-2"} ${triggerBox}`}
       >
         {/* 굵기는 박스 스타일과 안 겹쳐서 triggerClassName을 넘긴 호출부에서도 안전하게 붙는다. */}
@@ -233,9 +238,9 @@ export function SearchableSelect({
         ) : (
           <EyIcon name="chevronDown" size={16} className="size-4 shrink-0 opacity-50" />
         )}
-      </button>
+      </Trigger>
       {open ? (
-        <div className="border-border bg-card absolute z-50 mt-1 w-full min-w-[12rem] overflow-hidden rounded-md border shadow-lg">
+        <SelectPopup portalled={inScrollRow}>
           <div className="border-border flex items-center gap-2 border-b px-2.5 py-1.5">
             <EyIcon name="search" size={14} className="size-3.5 shrink-0 opacity-50" />
             <input
@@ -328,8 +333,29 @@ export function SearchableSelect({
               </li>
             ) : null}
           </ul>
-        </div>
+        </SelectPopup>
       ) : null}
     </div>
+    </SelectFrame>
+  );
+}
+
+function SelectFrame({ portalled, children, open, onOpenChange }: {
+  portalled: boolean; children: ReactNode; open: boolean; onOpenChange: (open: boolean) => void;
+}) {
+  return portalled ? <Popover.Root open={open} onOpenChange={onOpenChange}>{children}</Popover.Root> : children;
+}
+
+function SelectPopup({ portalled, children }: { portalled: boolean; children: ReactNode }) {
+  const panel = "border-border bg-card min-w-[12rem] overflow-hidden rounded-md border shadow-lg";
+  if (!portalled) return <div className={`${panel} absolute z-50 mt-1 w-full`}>{children}</div>;
+  return (
+    <Popover.Portal>
+      <Popover.Positioner side="bottom" align="start" sideOffset={4} collisionPadding={8} className="z-50">
+        <Popover.Popup className={`${panel} w-(--anchor-width) max-w-(--available-width) outline-none`}>
+          {children}
+        </Popover.Popup>
+      </Popover.Positioner>
+    </Popover.Portal>
   );
 }

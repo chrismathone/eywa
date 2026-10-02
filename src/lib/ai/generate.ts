@@ -16,6 +16,7 @@ import {
   type AiTier,
 } from "./models";
 import { reportWarning } from "@/lib/observability/report-error";
+import { callJev, JevError, JEV_MODEL, type DecisionQuestions, type DecisionResult } from "./jev";
 
 /**
  * DeepSeek(v4-pro 등 추론형) 전용 max_tokens 하한. 추론형은 reasoning_content가 max_tokens를 함께 소모해
@@ -143,7 +144,7 @@ type ProviderCall = { text: string; usage: ProviderUsage; truncated: boolean };
  */
 export async function recordUsage(entry: {
   meta?: GenerateJSONOptions["meta"];
-  provider: AiProvider;
+  provider: AiProvider | "typesafe";
   model: string;
   /** 실제로 불린 키의 짧은 이름('ment' · 'consultations' · 'default') — 기본 키로 넘어간 호출이 드러난다. */
   keyName: string;
@@ -387,7 +388,48 @@ async function callProvider(
   };
 }
 
-export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ data: T; model: string }> {
+export type GenerateDecisionOptions = {
+  mode: "decision";
+  state: unknown;
+  questions: DecisionQuestions;
+  meta: GenerateJSONOptions["meta"];
+};
+
+async function requireAiLicense(meta: GenerateJSONOptions["meta"]): Promise<void> {
+  const tenantId = typeof meta?.tenantId === "string" ? meta.tenantId.trim() : "";
+  if (!tenantId) throw new Error(AI_TENANT_MISSING_MESSAGE);
+  const { isFeatureLicensed } = await import("@/lib/license/server");
+  if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) throw new Error(LICENSE_BLOCKED_MESSAGE.ai_analysis);
+}
+
+/** Decision mode uses the same license, fact guard, feature key groups and usage ledger. */
+async function generateDecision(opts: GenerateDecisionOptions): Promise<DecisionResult> {
+  await requireAiLicense(opts.meta);
+  const group = keyGroupOf(opts.meta.feature);
+  const groupEnv = group ? `TYPESAFE_API_KEY_${group.toUpperCase()}` : null;
+  const envName = groupEnv && process.env[groupEnv] ? groupEnv : "TYPESAFE_API_KEY";
+  const keyName = envName === "TYPESAFE_API_KEY" ? "default" : group!;
+  const questions = Object.fromEntries(Object.entries(opts.questions).map(([id, question]) =>
+    [id, { ...question, instructions: withFactGuard(question.instructions) }],
+  ));
+  try {
+    const result = await callJev({ state: opts.state, questions, apiKey: process.env[envName] ?? "" });
+    await recordUsage({ meta: opts.meta, provider: "typesafe", model: result.model, keyName, usage: result.usage, ok: true });
+    return result;
+  } catch (error) {
+    const message = error instanceof JevError ? error.message : "Jev 판정 실패";
+    await recordUsage({ meta: opts.meta, provider: "typesafe", model: JEV_MODEL, keyName,
+      usage: error instanceof JevError ? error.usage : undefined, ok: false, error: message });
+    throw new JevError(message);
+  }
+}
+
+export function generateJSON(rawOpts: GenerateDecisionOptions): Promise<DecisionResult>;
+export function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ data: T; model: string }>;
+export async function generateJSON(rawOpts: GenerateJSONOptions | GenerateDecisionOptions): Promise<{ data: unknown; model: string }> {
+  if ("mode" in rawOpts && rawOpts.mode === "decision") return generateDecision(rawOpts);
+  // The decision overload deliberately never participates in the text-generation fallback chain.
+  if (!("prompt" in rawOpts)) throw new Error("AI 호출 모드가 올바르지 않습니다");
   // 🔴 사실 원칙(팩트·환각금지·창작금지·추측금지)은 **모든 AI 호출에 예외 없이** 붙는다(원장 2026-07-23).
   //    호출부 프롬프트가 아니라 이 단일 관문에 두는 이유·삭제 금지 사유는 fact-guard.ts 주석 참조
   //    (요약: 프롬프트 본문은 원장이 화면에서 편집 가능 = 가드가 지워질 수 있는 자리다).
@@ -398,14 +440,7 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
   //    🔴 지점을 모르는 호출은 **거절한다**(fail-closed) — 통과시키면 꺼진 지점의 AI가 그 틈으로 나간다(원장 "빈틈 매꿀것").
   //       타입이 `meta.tenantId: string` 필수라 정상 코드는 여기 오지 않는다 — any·빈 문자열 같은 뒷문만 막는다.
   //    막히면 폴백 사다리를 타지 않고 바로 던진다(다른 회사로 넘긴다고 풀릴 문제가 아니다).
-  const tenantId = typeof opts.meta?.tenantId === "string" ? opts.meta.tenantId.trim() : "";
-  if (!tenantId) throw new Error(AI_TENANT_MISSING_MESSAGE);
-  {
-    const { isFeatureLicensed } = await import("@/lib/license/server");
-    if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) {
-      throw new Error(LICENSE_BLOCKED_MESSAGE.ai_analysis);
-    }
-  }
+  await requireAiLicense(opts.meta);
   const tier = opts.tier ?? "balanced";
   const keyName = opts.keyName ?? "default";
   // 기능별 키 그룹(원장 2026-09-15) — 호출부 식별자에서 도출. 표에 없는 기능이면 null(옛 버킷·기본 키로).
@@ -460,7 +495,7 @@ export async function generateJSON<T>(rawOpts: GenerateJSONOptions): Promise<{ d
     // provider 호출 성공 = 토큰은 이미 소비됨 — 파싱 실패 여부와 무관하게 usage를 기록.
     await recordUsage({ meta: opts.meta, provider, model, keyName: keyLabel(provider), usage: call.usage, ok: true });
     try {
-      return { data: parseJsonLoose<T>(call.text), model };
+      return { data: parseJsonLoose(call.text), model };
     } catch (e) {
       // 잘린 응답의 파싱 실패는 "모델이 이상한 걸 뱉었다"가 아니라 "한도가 모자랐다"이다 —
       // 원인을 라우트·화면 오류 문구까지 그대로 들고 가야 max_tokens를 올릴 생각을 한다.

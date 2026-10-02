@@ -64,6 +64,7 @@ export const FEATURE_KEY_GROUP: Readonly<Record<string, AiKeyGroup>> = {
   // 출결 — 요약 · 학부모 결석 문자 판별
   attendance_recap: "attendance",
   parent_attendance_intent: "attendance",
+  parent_attendance_jev_shadow: "attendance",
   // 공지 번역
   notice_translate: "notice",
   // 직원 계약서 — 글자 PDF 추출 · 스캔 OCR(Claude 전용)

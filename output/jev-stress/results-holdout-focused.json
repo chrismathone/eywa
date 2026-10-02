@@ -1,0 +1,2370 @@
+{
+  "createdAt": "2026-10-01T17:35:10.781Z",
+  "summary": {
+    "uniqueCases": 50,
+    "succeeded": 50,
+    "failed": 0,
+    "model": "jev-1.13.0",
+    "focused": true,
+    "datasetHash": "1d5c139f3588e100daf3d7aeef26fc185dd8fa91a3376b1dfbd34d4c3d12f13a",
+    "modes": {
+      "korean": {
+        "correct": 47,
+        "total": 50,
+        "confusion": {
+          "absence": {
+            "absence": 15,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 1,
+            "mixed": 0
+          },
+          "late": {
+            "absence": 0,
+            "late": 9,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          },
+          "early_leave": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 2,
+            "normal": 1,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          },
+          "normal": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 12,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          },
+          "unclear": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 4,
+            "none": 1,
+            "mixed": 0
+          },
+          "none": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 4,
+            "mixed": 0
+          },
+          "mixed": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 1
+          }
+        },
+        "byGroup": {
+          "fourth-correction": {
+            "correct": 9,
+            "total": 10
+          },
+          "colloquial-negation": {
+            "correct": 10,
+            "total": 10
+          },
+          "target-scope": {
+            "correct": 9,
+            "total": 10
+          },
+          "quotation-uncertainty": {
+            "correct": 10,
+            "total": 10
+          },
+          "context-adversarial": {
+            "correct": 9,
+            "total": 10
+          }
+        },
+        "thresholds": [
+          {
+            "threshold": 0.6,
+            "accepted": 45,
+            "correct": 43,
+            "errors": [
+              "holdout-04",
+              "holdout-25"
+            ]
+          },
+          {
+            "threshold": 0.7,
+            "accepted": 44,
+            "correct": 43,
+            "errors": [
+              "holdout-25"
+            ]
+          },
+          {
+            "threshold": 0.8,
+            "accepted": 42,
+            "correct": 41,
+            "errors": [
+              "holdout-25"
+            ]
+          },
+          {
+            "threshold": 0.9,
+            "accepted": 39,
+            "correct": 39,
+            "errors": []
+          },
+          {
+            "threshold": 0.95,
+            "accepted": 35,
+            "correct": 35,
+            "errors": []
+          }
+        ],
+        "inventedAbsence": [],
+        "missedAbsence": [
+          "holdout-25"
+        ],
+        "errors": [
+          {
+            "id": "holdout-04",
+            "expected": "early_leave",
+            "predicted": "normal",
+            "confidence": 0.67
+          },
+          {
+            "id": "holdout-25",
+            "expected": "absence",
+            "predicted": "none",
+            "confidence": 0.88
+          },
+          {
+            "id": "holdout-43",
+            "expected": "unclear",
+            "predicted": "none",
+            "confidence": 0.46
+          }
+        ]
+      },
+      "english": {
+        "correct": 48,
+        "total": 50,
+        "confusion": {
+          "absence": {
+            "absence": 15,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 1,
+            "mixed": 0
+          },
+          "late": {
+            "absence": 0,
+            "late": 9,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          },
+          "early_leave": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 3,
+            "normal": 0,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          },
+          "normal": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 12,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          },
+          "unclear": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 5,
+            "none": 0,
+            "mixed": 0
+          },
+          "none": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 1,
+            "none": 3,
+            "mixed": 0
+          },
+          "mixed": {
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 1
+          }
+        },
+        "byGroup": {
+          "fourth-correction": {
+            "correct": 10,
+            "total": 10
+          },
+          "colloquial-negation": {
+            "correct": 10,
+            "total": 10
+          },
+          "target-scope": {
+            "correct": 9,
+            "total": 10
+          },
+          "quotation-uncertainty": {
+            "correct": 9,
+            "total": 10
+          },
+          "context-adversarial": {
+            "correct": 10,
+            "total": 10
+          }
+        },
+        "thresholds": [
+          {
+            "threshold": 0.6,
+            "accepted": 45,
+            "correct": 43,
+            "errors": [
+              "holdout-25",
+              "holdout-35"
+            ]
+          },
+          {
+            "threshold": 0.7,
+            "accepted": 43,
+            "correct": 42,
+            "errors": [
+              "holdout-25"
+            ]
+          },
+          {
+            "threshold": 0.8,
+            "accepted": 41,
+            "correct": 41,
+            "errors": []
+          },
+          {
+            "threshold": 0.9,
+            "accepted": 39,
+            "correct": 39,
+            "errors": []
+          },
+          {
+            "threshold": 0.95,
+            "accepted": 34,
+            "correct": 34,
+            "errors": []
+          }
+        ],
+        "inventedAbsence": [],
+        "missedAbsence": [
+          "holdout-25"
+        ],
+        "errors": [
+          {
+            "id": "holdout-25",
+            "expected": "absence",
+            "predicted": "none",
+            "confidence": 0.77
+          },
+          {
+            "id": "holdout-35",
+            "expected": "none",
+            "predicted": "unclear",
+            "confidence": 0.69
+          }
+        ]
+      }
+    },
+    "p50Ms": 208,
+    "p95Ms": 285,
+    "wallMs": 2758,
+    "inputTokens": 144074,
+    "estimatedUsdAtPublishedRate": 0.006051108
+  },
+  "results": [
+    {
+      "id": "holdout-01",
+      "group": "fourth-correction",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 326,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.54,
+          "probabilities": {
+            "early_leave": 0.06,
+            "none": 0,
+            "late": 0.61,
+            "absence": 0,
+            "unclear": 0.01,
+            "mixed": 0,
+            "normal": 0.32
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.41,
+          "probabilities": {
+            "early_leave": 0.04,
+            "late": 0.49,
+            "none": 0,
+            "absence": 0,
+            "unclear": 0.02,
+            "mixed": 0.01,
+            "normal": 0.44
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2844,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-02",
+      "group": "fourth-correction",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 282,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.95,
+          "probabilities": {
+            "normal": 0.03,
+            "absence": 0.96,
+            "none": 0.01,
+            "late": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.93,
+          "probabilities": {
+            "normal": 0.03,
+            "absence": 0.95,
+            "late": 0,
+            "none": 0.01,
+            "early_leave": 0,
+            "mixed": 0,
+            "unclear": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2835,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-03",
+      "group": "fourth-correction",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 285,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "absence": 0,
+            "early_leave": 0,
+            "none": 0,
+            "normal": 1,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "absence": 0,
+            "early_leave": 0,
+            "none": 0,
+            "normal": 1,
+            "unclear": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2885,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-04",
+      "group": "fourth-correction",
+      "expected": "early_leave",
+      "model": "jev-1.13.0",
+      "latencyMs": 292,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.67,
+          "probabilities": {
+            "late": 0,
+            "unclear": 0.01,
+            "mixed": 0.03,
+            "normal": 0.72,
+            "absence": 0,
+            "early_leave": 0.24,
+            "none": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.37,
+          "probabilities": {
+            "late": 0,
+            "unclear": 0.01,
+            "mixed": 0.07,
+            "normal": 0.45,
+            "absence": 0,
+            "early_leave": 0.47000000000000003,
+            "none": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2835,
+        "output_tokens": 135
+      }
+    },
+    {
+      "id": "holdout-05",
+      "group": "fourth-correction",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 199,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "normal": 0,
+            "absence": 1,
+            "early_leave": 0,
+            "late": 0,
+            "unclear": 0,
+            "none": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "late": 0,
+            "unclear": 0,
+            "normal": 0,
+            "absence": 1,
+            "early_leave": 0,
+            "mixed": 0,
+            "none": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2857,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-06",
+      "group": "fourth-correction",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 207,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "mixed": 0,
+            "absence": 0,
+            "normal": 0,
+            "unclear": 0,
+            "early_leave": 0,
+            "none": 0,
+            "late": 1
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 0,
+            "none": 0,
+            "normal": 0,
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "late": 1
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-07",
+      "group": "fourth-correction",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 191,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.93,
+          "probabilities": {
+            "early_leave": 0,
+            "normal": 0.94,
+            "absence": 0.01,
+            "none": 0.03,
+            "unclear": 0.02,
+            "late": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.96,
+          "probabilities": {
+            "early_leave": 0,
+            "normal": 0.97,
+            "absence": 0.01,
+            "none": 0.01,
+            "unclear": 0.01,
+            "late": 0,
+            "mixed": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-08",
+      "group": "fourth-correction",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 202,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "normal": 0.01,
+            "absence": 0.98,
+            "unclear": 0,
+            "none": 0.01,
+            "mixed": 0,
+            "early_leave": 0,
+            "late": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "normal": 0.01,
+            "absence": 0.97,
+            "none": 0.01,
+            "unclear": 0.01,
+            "mixed": 0,
+            "early_leave": 0,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2823,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-09",
+      "group": "fourth-correction",
+      "expected": "unclear",
+      "model": "jev-1.13.0",
+      "latencyMs": 201,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.85,
+          "probabilities": {
+            "absence": 0.05,
+            "late": 0,
+            "early_leave": 0,
+            "none": 0.08,
+            "unclear": 0.87,
+            "mixed": 0,
+            "normal": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.94,
+          "probabilities": {
+            "absence": 0.02,
+            "late": 0,
+            "early_leave": 0,
+            "none": 0.03,
+            "unclear": 0.95,
+            "mixed": 0,
+            "normal": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2824,
+        "output_tokens": 136
+      }
+    },
+    {
+      "id": "holdout-10",
+      "group": "fourth-correction",
+      "expected": "early_leave",
+      "model": "jev-1.13.0",
+      "latencyMs": 209,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 1,
+            "late": 0,
+            "none": 0,
+            "absence": 0,
+            "unclear": 0,
+            "normal": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 1,
+            "late": 0,
+            "none": 0,
+            "unclear": 0,
+            "absence": 0,
+            "normal": 0,
+            "mixed": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2822,
+        "output_tokens": 136
+      }
+    },
+    {
+      "id": "holdout-11",
+      "group": "colloquial-negation",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 221,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.82,
+          "probabilities": {
+            "none": 0.11,
+            "mixed": 0,
+            "early_leave": 0,
+            "late": 0,
+            "absence": 0.85,
+            "normal": 0.01,
+            "unclear": 0.03
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.9,
+          "probabilities": {
+            "none": 0.03,
+            "mixed": 0,
+            "early_leave": 0,
+            "late": 0,
+            "absence": 0.92,
+            "normal": 0,
+            "unclear": 0.05
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2811,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-12",
+      "group": "colloquial-negation",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 221,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.95,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0.02,
+            "late": 0,
+            "mixed": 0,
+            "absence": 0.96,
+            "normal": 0,
+            "unclear": 0.02
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.95,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0.01,
+            "late": 0,
+            "mixed": 0,
+            "absence": 0.96,
+            "normal": 0,
+            "unclear": 0.03
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2801,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-13",
+      "group": "colloquial-negation",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 199,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0,
+            "late": 1,
+            "absence": 0,
+            "normal": 0,
+            "mixed": 0,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0,
+            "late": 1,
+            "mixed": 0,
+            "absence": 0,
+            "normal": 0,
+            "unclear": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2809,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-14",
+      "group": "colloquial-negation",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 221,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "absence": 0,
+            "early_leave": 0,
+            "none": 0.01,
+            "normal": 0.99,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.96,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "absence": 0.01,
+            "early_leave": 0,
+            "none": 0.01,
+            "normal": 0.97,
+            "unclear": 0.01
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2811,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-15",
+      "group": "colloquial-negation",
+      "expected": "early_leave",
+      "model": "jev-1.13.0",
+      "latencyMs": 212,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.96,
+          "probabilities": {
+            "normal": 0,
+            "unclear": 0.01,
+            "absence": 0.01,
+            "mixed": 0,
+            "none": 0.01,
+            "early_leave": 0.96,
+            "late": 0.01
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "early_leave",
+          "confidence": 0.88,
+          "probabilities": {
+            "normal": 0,
+            "unclear": 0.03,
+            "absence": 0.05,
+            "mixed": 0,
+            "none": 0.01,
+            "early_leave": 0.91,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2813,
+        "output_tokens": 136
+      }
+    },
+    {
+      "id": "holdout-16",
+      "group": "colloquial-negation",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 193,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.59,
+          "probabilities": {
+            "late": 0,
+            "normal": 0.01,
+            "unclear": 0.23,
+            "absence": 0.65,
+            "mixed": 0,
+            "none": 0.11,
+            "early_leave": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.59,
+          "probabilities": {
+            "late": 0,
+            "normal": 0.02,
+            "unclear": 0.27,
+            "none": 0.06,
+            "absence": 0.65,
+            "mixed": 0,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2818,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-17",
+      "group": "colloquial-negation",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 187,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.78,
+          "probabilities": {
+            "normal": 0.81,
+            "late": 0,
+            "unclear": 0.05,
+            "early_leave": 0,
+            "none": 0.11,
+            "absence": 0.02,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.72,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "normal": 0.76,
+            "unclear": 0.1,
+            "none": 0.1,
+            "absence": 0.04,
+            "mixed": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2819,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-18",
+      "group": "colloquial-negation",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 211,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.99,
+          "probabilities": {
+            "absence": 0,
+            "mixed": 0,
+            "none": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0,
+            "late": 1
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "mixed": 0,
+            "unclear": 0,
+            "absence": 0,
+            "normal": 0,
+            "none": 0,
+            "late": 1
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2821,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-19",
+      "group": "colloquial-negation",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 208,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "unclear": 0,
+            "absence": 1,
+            "mixed": 0,
+            "none": 0,
+            "late": 0,
+            "normal": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "mixed": 0,
+            "absence": 1,
+            "none": 0,
+            "unclear": 0,
+            "normal": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2810,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-20",
+      "group": "colloquial-negation",
+      "expected": "unclear",
+      "model": "jev-1.13.0",
+      "latencyMs": 211,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.99,
+          "probabilities": {
+            "normal": 0,
+            "none": 0.01,
+            "late": 0,
+            "mixed": 0,
+            "early_leave": 0,
+            "absence": 0,
+            "unclear": 0.99
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 1,
+          "probabilities": {
+            "normal": 0,
+            "none": 0,
+            "late": 0,
+            "mixed": 0,
+            "early_leave": 0,
+            "absence": 0,
+            "unclear": 1
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2813,
+        "output_tokens": 136
+      }
+    },
+    {
+      "id": "holdout-21",
+      "group": "target-scope",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 215,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 1,
+            "none": 0,
+            "mixed": 0,
+            "unclear": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 1,
+            "none": 0,
+            "mixed": 0,
+            "unclear": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2815,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-22",
+      "group": "target-scope",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 188,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 0,
+            "early_leave": 0,
+            "late": 1,
+            "normal": 0,
+            "none": 0,
+            "mixed": 0,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "absence": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "normal": 0,
+            "none": 0,
+            "late": 1,
+            "unclear": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2815,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-23",
+      "group": "target-scope",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 212,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "unclear": 0,
+            "none": 0,
+            "absence": 0,
+            "late": 0,
+            "mixed": 0,
+            "normal": 1
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "unclear": 0,
+            "mixed": 0,
+            "none": 0,
+            "absence": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 1
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2815,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-24",
+      "group": "target-scope",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 201,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.93,
+          "probabilities": {
+            "mixed": 0.01,
+            "normal": 0.94,
+            "absence": 0.02,
+            "none": 0,
+            "unclear": 0.03,
+            "late": 0,
+            "early_leave": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.93,
+          "probabilities": {
+            "mixed": 0.01,
+            "unclear": 0.03,
+            "absence": 0.02,
+            "none": 0,
+            "normal": 0.94,
+            "late": 0,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2830,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-25",
+      "group": "target-scope",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 190,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.88,
+          "probabilities": {
+            "normal": 0.02,
+            "early_leave": 0,
+            "unclear": 0.02,
+            "late": 0,
+            "absence": 0.07,
+            "none": 0.89,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.77,
+          "probabilities": {
+            "mixed": 0,
+            "none": 0.81,
+            "unclear": 0.05,
+            "late": 0,
+            "absence": 0.12,
+            "early_leave": 0,
+            "normal": 0.02
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2832,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-26",
+      "group": "target-scope",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 213,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "late": 1,
+            "mixed": 0,
+            "unclear": 0,
+            "early_leave": 0,
+            "none": 0,
+            "absence": 0,
+            "normal": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.99,
+          "probabilities": {
+            "mixed": 0,
+            "absence": 0,
+            "unclear": 0,
+            "early_leave": 0,
+            "none": 0,
+            "late": 1,
+            "normal": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-27",
+      "group": "target-scope",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 202,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.99,
+          "probabilities": {
+            "late": 0,
+            "absence": 1,
+            "unclear": 0,
+            "none": 0,
+            "normal": 0,
+            "early_leave": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "unclear": 0,
+            "none": 0,
+            "normal": 0,
+            "early_leave": 0,
+            "absence": 1
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-28",
+      "group": "target-scope",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 213,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "absence": 0,
+            "mixed": 0,
+            "normal": 1,
+            "none": 0,
+            "late": 0,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "late": 0,
+            "absence": 0,
+            "mixed": 0,
+            "normal": 1,
+            "none": 0,
+            "early_leave": 0,
+            "unclear": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2828,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-29",
+      "group": "target-scope",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 194,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "absence": 0.98,
+            "none": 0,
+            "normal": 0.02,
+            "late": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.97,
+          "probabilities": {
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "absence": 0.98,
+            "none": 0,
+            "normal": 0.02,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2823,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-30",
+      "group": "target-scope",
+      "expected": "none",
+      "model": "jev-1.13.0",
+      "latencyMs": 196,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.99,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "normal": 0,
+            "unclear": 0,
+            "absence": 0,
+            "none": 1,
+            "early_leave": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.99,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "normal": 0,
+            "unclear": 0,
+            "absence": 0,
+            "none": 1,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2816,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-31",
+      "group": "quotation-uncertainty",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 255,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.98,
+          "probabilities": {
+            "normal": 0,
+            "none": 0.02,
+            "early_leave": 0,
+            "unclear": 0.01,
+            "absence": 0.97,
+            "mixed": 0,
+            "late": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.62,
+          "probabilities": {
+            "normal": 0,
+            "none": 0.28,
+            "early_leave": 0,
+            "absence": 0.67,
+            "unclear": 0.05,
+            "late": 0,
+            "mixed": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2821,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-32",
+      "group": "quotation-uncertainty",
+      "expected": "none",
+      "model": "jev-1.13.0",
+      "latencyMs": 262,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.98,
+          "probabilities": {
+            "normal": 0,
+            "early_leave": 0,
+            "late": 0,
+            "unclear": 0.01,
+            "mixed": 0,
+            "none": 0.99,
+            "absence": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 1,
+          "probabilities": {
+            "late": 0,
+            "none": 1,
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "normal": 0,
+            "absence": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-33",
+      "group": "quotation-uncertainty",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 201,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "mixed": 0,
+            "early_leave": 0,
+            "absence": 0,
+            "none": 0,
+            "late": 1,
+            "unclear": 0,
+            "normal": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 1,
+          "probabilities": {
+            "mixed": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "none": 0,
+            "late": 1,
+            "unclear": 0,
+            "absence": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2825,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-34",
+      "group": "quotation-uncertainty",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 188,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "unclear": 0,
+            "absence": 0,
+            "normal": 1,
+            "none": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "unclear": 0,
+            "late": 0,
+            "mixed": 0,
+            "absence": 0,
+            "normal": 1,
+            "none": 0,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2817,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-35",
+      "group": "quotation-uncertainty",
+      "expected": "none",
+      "model": "jev-1.13.0",
+      "latencyMs": 218,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.58,
+          "probabilities": {
+            "absence": 0,
+            "mixed": 0,
+            "late": 0,
+            "none": 0.65,
+            "normal": 0,
+            "unclear": 0.35,
+            "early_leave": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.69,
+          "probabilities": {
+            "unclear": 0.74,
+            "mixed": 0,
+            "late": 0,
+            "none": 0.25,
+            "normal": 0,
+            "absence": 0.01,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2822,
+        "output_tokens": 135
+      }
+    },
+    {
+      "id": "holdout-36",
+      "group": "quotation-uncertainty",
+      "expected": "unclear",
+      "model": "jev-1.13.0",
+      "latencyMs": 214,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.93,
+          "probabilities": {
+            "absence": 0.01,
+            "none": 0.05,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0.94,
+            "mixed": 0,
+            "late": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.97,
+          "probabilities": {
+            "absence": 0.01,
+            "mixed": 0,
+            "early_leave": 0,
+            "normal": 0,
+            "unclear": 0.97,
+            "none": 0.02,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2819,
+        "output_tokens": 136
+      }
+    },
+    {
+      "id": "holdout-37",
+      "group": "quotation-uncertainty",
+      "expected": "none",
+      "model": "jev-1.13.0",
+      "latencyMs": 232,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.96,
+          "probabilities": {
+            "late": 0.01,
+            "mixed": 0,
+            "unclear": 0.01,
+            "absence": 0,
+            "none": 0.97,
+            "normal": 0.01,
+            "early_leave": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.8,
+          "probabilities": {
+            "late": 0.01,
+            "normal": 0.08,
+            "mixed": 0,
+            "absence": 0,
+            "none": 0.83,
+            "unclear": 0.08,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2820,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-38",
+      "group": "quotation-uncertainty",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 191,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "late": 0,
+            "absence": 0,
+            "mixed": 0,
+            "none": 0,
+            "unclear": 0,
+            "normal": 1
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "unclear": 0,
+            "absence": 0,
+            "mixed": 0,
+            "none": 0,
+            "late": 0,
+            "normal": 1
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2820,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-39",
+      "group": "quotation-uncertainty",
+      "expected": "unclear",
+      "model": "jev-1.13.0",
+      "latencyMs": 214,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.97,
+          "probabilities": {
+            "absence": 0,
+            "unclear": 0.97,
+            "normal": 0,
+            "late": 0,
+            "none": 0.03,
+            "early_leave": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.98,
+          "probabilities": {
+            "unclear": 0.99,
+            "normal": 0,
+            "late": 0,
+            "absence": 0,
+            "none": 0.01,
+            "early_leave": 0,
+            "mixed": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2819,
+        "output_tokens": 136
+      }
+    },
+    {
+      "id": "holdout-40",
+      "group": "quotation-uncertainty",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 184,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.99,
+          "probabilities": {
+            "normal": 0,
+            "none": 0,
+            "absence": 0,
+            "late": 1,
+            "mixed": 0,
+            "early_leave": 0,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.99,
+          "probabilities": {
+            "late": 1,
+            "early_leave": 0,
+            "none": 0,
+            "absence": 0,
+            "mixed": 0,
+            "normal": 0,
+            "unclear": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-41",
+      "group": "context-adversarial",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 190,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "none": 0,
+            "unclear": 0,
+            "normal": 0,
+            "absence": 1,
+            "late": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "mixed": 0,
+            "none": 0,
+            "unclear": 0,
+            "normal": 0,
+            "absence": 1,
+            "late": 0,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2860,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-42",
+      "group": "context-adversarial",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 212,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "absence": 0,
+            "late": 0,
+            "normal": 1,
+            "none": 0,
+            "mixed": 0,
+            "unclear": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "late": 0,
+            "absence": 0,
+            "mixed": 0,
+            "normal": 1,
+            "none": 0,
+            "early_leave": 0,
+            "unclear": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2834,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-43",
+      "group": "context-adversarial",
+      "expected": "unclear",
+      "model": "jev-1.13.0",
+      "latencyMs": 199,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "none",
+          "confidence": 0.46,
+          "probabilities": {
+            "late": 0,
+            "normal": 0.04,
+            "none": 0.54,
+            "mixed": 0,
+            "unclear": 0.4,
+            "absence": 0.01,
+            "early_leave": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "unclear",
+          "confidence": 0.57,
+          "probabilities": {
+            "late": 0,
+            "unclear": 0.64,
+            "none": 0.24,
+            "mixed": 0,
+            "normal": 0.08,
+            "absence": 0.04,
+            "early_leave": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2810,
+        "output_tokens": 135
+      }
+    },
+    {
+      "id": "holdout-44",
+      "group": "context-adversarial",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 198,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.93,
+          "probabilities": {
+            "late": 0,
+            "mixed": 0,
+            "unclear": 0,
+            "none": 0.01,
+            "normal": 0.05,
+            "early_leave": 0,
+            "absence": 0.94
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.95,
+          "probabilities": {
+            "absence": 0.96,
+            "mixed": 0,
+            "unclear": 0.01,
+            "none": 0.01,
+            "normal": 0.02,
+            "early_leave": 0,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2825,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-45",
+      "group": "context-adversarial",
+      "expected": "late",
+      "model": "jev-1.13.0",
+      "latencyMs": 254,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0.99,
+            "none": 0.01,
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "normal": 0,
+            "absence": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "late",
+          "confidence": 0.98,
+          "probabilities": {
+            "late": 0.99,
+            "none": 0.01,
+            "unclear": 0,
+            "early_leave": 0,
+            "mixed": 0,
+            "normal": 0,
+            "absence": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2822,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-46",
+      "group": "context-adversarial",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 213,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.76,
+          "probabilities": {
+            "unclear": 0.09,
+            "early_leave": 0,
+            "mixed": 0.09,
+            "absence": 0.02,
+            "none": 0.01,
+            "normal": 0.79,
+            "late": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 0.95,
+          "probabilities": {
+            "unclear": 0.02,
+            "early_leave": 0,
+            "mixed": 0.01,
+            "absence": 0,
+            "none": 0,
+            "normal": 0.97,
+            "late": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2810,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-47",
+      "group": "context-adversarial",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 192,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.49,
+          "probabilities": {
+            "normal": 0.05,
+            "none": 0.11,
+            "late": 0,
+            "mixed": 0.03,
+            "early_leave": 0,
+            "unclear": 0.25,
+            "absence": 0.56
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 0.49,
+          "probabilities": {
+            "normal": 0.06,
+            "none": 0.12,
+            "late": 0,
+            "mixed": 0.01,
+            "early_leave": 0,
+            "absence": 0.56,
+            "unclear": 0.25
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2806,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-48",
+      "group": "context-adversarial",
+      "expected": "mixed",
+      "model": "jev-1.13.0",
+      "latencyMs": 200,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "mixed",
+          "confidence": 0.97,
+          "probabilities": {
+            "mixed": 0.98,
+            "early_leave": 0.01,
+            "normal": 0,
+            "unclear": 0.01,
+            "none": 0,
+            "late": 0,
+            "absence": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "mixed",
+          "confidence": 0.93,
+          "probabilities": {
+            "mixed": 0.95,
+            "early_leave": 0.01,
+            "none": 0,
+            "unclear": 0.02,
+            "normal": 0,
+            "late": 0,
+            "absence": 0.02
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2827,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-49",
+      "group": "context-adversarial",
+      "expected": "absence",
+      "model": "jev-1.13.0",
+      "latencyMs": 207,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "normal": 0,
+            "mixed": 0,
+            "early_leave": 0,
+            "absence": 1,
+            "unclear": 0,
+            "late": 0,
+            "none": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "absence",
+          "confidence": 1,
+          "probabilities": {
+            "early_leave": 0,
+            "mixed": 0,
+            "normal": 0,
+            "unclear": 0,
+            "absence": 1,
+            "late": 0,
+            "none": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 5689,
+        "output_tokens": 134
+      }
+    },
+    {
+      "id": "holdout-50",
+      "group": "context-adversarial",
+      "expected": "normal",
+      "model": "jev-1.13.0",
+      "latencyMs": 189,
+      "answers": {
+        "korean": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "normal": 1,
+            "late": 0,
+            "early_leave": 0,
+            "unclear": 0,
+            "none": 0,
+            "absence": 0,
+            "mixed": 0
+          }
+        },
+        "english": {
+          "type": "choice",
+          "choice": "normal",
+          "confidence": 1,
+          "probabilities": {
+            "unclear": 0,
+            "late": 0,
+            "early_leave": 0,
+            "normal": 1,
+            "none": 0,
+            "absence": 0,
+            "mixed": 0
+          }
+        }
+      },
+      "usage": {
+        "input_tokens": 2829,
+        "output_tokens": 134
+      }
+    }
+  ]
+}

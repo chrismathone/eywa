@@ -130,6 +130,10 @@ const ALLOWED: Record<string, string[]> = {
   "src/features/classnote-reply/components/use-reply-thread.ts -> src/features/classnote-reply/server/reply-actions.ts": [
     "getParentReplyContext",
   ],
+  // 같은 답글 창을 알림에서 열 때 사용한다. 닫힌 셸에서는 마운트되지 않고, 열린 대화의 원문 복구만 폴링한다.
+  "src/features/classnote-reply/components/use-reply-thread.ts -> src/features/classnote-reply/server/notification-reply.ts": [
+    "getNotificationReplyContext",
+  ],
   "src/features/classnote-reply/components/reply-thread.tsx -> src/features/classnote-reply/server/reply-actions.ts": [
     "requestParentReply",
     "requestParentReplyDelete",
