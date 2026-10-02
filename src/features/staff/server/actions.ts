@@ -14,6 +14,7 @@ import {
   SUPER_ADMIN_TARGET_DENIED_MSG,
 } from "@/lib/auth/super-admin";
 import { isFullShellRole } from "@/lib/auth/view-as";
+import { protectionStatus } from "@/lib/auth/protected-accounts";
 import { accessLevelTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "./subject-scope";
 import { isAssignableTeacherRole } from "@/lib/permissions";
@@ -362,9 +363,8 @@ export async function updateStaff(
     text_color: input.textColor,
     attendance_alert_optin: input.attendanceAlertOptin,
   };
-  // '강사뷰 접근'(0224a)은 master(+super_admin)만 저장 — 아니면 컬럼을 아예 안 건드린다(폼에도 미노출이라
-  // 미체크=off가 실려 오는데, 그대로 쓰면 남이 부여한 접근이 조용히 지워진다). 부여·회수는 감사로그 대상.
-  const canGrantTeacherView = actor.systemRole === "master" || (await isCurrentUserSuperAdmin());
+  // 운영자 계정에는 지점에서 강사뷰 접근을 부여·회수하지 않는다. 숨긴 체크박스가 off로 저장되지 않게 한다.
+  const canGrantTeacherView = (actor.systemRole === "master" || (await isCurrentUserSuperAdmin())) && (await protectionStatus(id)) === "clear";
   // 강사·학생 역할엔 부여 불가(소비처 없음) — 켜서 저장하려 하면 명시 거절(조용한 드롭 = 거짓 약속).
   if (canGrantTeacherView && input.teacherViewAccess && !isFullShellRole(target.system_role as SystemRole)) {
     return { error: "강사·학생 역할에는 '강사뷰 접근'을 줄 수 없습니다 (관리자 계열 전용)" };

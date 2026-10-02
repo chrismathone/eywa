@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { getSuperAdminIds } from "@/lib/auth/super-admin";
+import { platformAccountIds } from "@/features/owner/server/platform-settings";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
@@ -13,13 +13,11 @@ import { DashboardEditorLazy } from "./dashboard-editor-lazy";
 async function assignedMembers(settings: TenantSettings, tenantId: string): Promise<DashboardMembers> {
   try {
     const db = await createClient();
-    const [rows, superIds] = await Promise.all([
-      fetchAllPaged<MemberRow>((from, to) =>
-        db.from("users").select("id, display_name, system_role, subjects, status").eq("tenant_id", tenantId).eq("status", "active").neq("system_role", "student").order("id").range(from, to),
-      ),
-      getSuperAdminIds(),
-    ]);
-    return { people: dashboardMembers(rows, superIds, settings), failed: false };
+    const rows = await fetchAllPaged<MemberRow>((from, to) =>
+      db.from("users").select("id, display_name, system_role, subjects, status").eq("tenant_id", tenantId).eq("status", "active").neq("system_role", "student").order("id").range(from, to),
+    );
+    const superIds = await platformAccountIds(rows.map((row) => row.id));
+    return { people: dashboardMembers(rows, superIds, settings).filter((person) => person.bundle !== "super"), failed: false };
   } catch (error) {
     reportError(error, { scope: "owner.dashboard-face.counts" });
   }

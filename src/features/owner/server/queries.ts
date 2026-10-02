@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveSettings } from "../resolve";
 import type { TenantSettings } from "../settings-types";
+import { platformAccountIds } from "./platform-settings";
 
 /** owner 설정 캐시 무효화 태그(tenantId별). saveOwnerSection 저장 시 revalidateTag로 비운다. */
 export function tenantSettingsTag(tenantId: string): string {
@@ -143,5 +144,6 @@ export async function getPermissionStaffOptions(): Promise<{ id: string; name: s
     .order("display_name")
     .limit(1000);
   if (error) throw error;
-  return (data ?? []).map((u) => ({ id: String(u.id), name: String(u.display_name ?? "(이름 없음)"), role: String(u.system_role) }));
+  const protectedIds = await platformAccountIds((data ?? []).map((u) => String(u.id)));
+  return (data ?? []).filter((u) => !protectedIds.has(String(u.id))).map((u) => ({ id: String(u.id), name: String(u.display_name ?? "(이름 없음)"), role: String(u.system_role) }));
 }

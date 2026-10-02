@@ -19,6 +19,7 @@ import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { validateDashboardAssignments } from "./dashboard-assignments";
 import { navigationRevision } from "../normalize-navigation";
 import { logDbError } from "@/lib/supabase/db-error";
+import { platformSettingsError } from "./platform-settings";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
@@ -177,6 +178,12 @@ export async function saveOwnerSection(
     section === "dashboard"
       ? normalizeDashboard({ ...result.data, assignments: (result.data as { assignments?: unknown }).assignments ?? normalizeDashboard(base.dashboard).assignments }, { dropDefaults: true })
       : prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
+  try {
+    const boundaryError = await platformSettingsError(section, sectionData, base[section]);
+    if (boundaryError) return { error: boundaryError };
+  } catch {
+    return { error: "운영 설정 보호 여부를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
+  }
   const nextData: Record<string, unknown> = { ...base, version: 1, [section]: sectionData };
   // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.
   if (preset === "generic") nextData.preset = "generic";

@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   stored: { data: { profile: { name: "학원" }, navigation: { menus: [], groups: [], teacherMenus: [] } }, updated_at: "2026-09-29T12:00:00Z" } as unknown,
   error: null as unknown, rows: [{ tenant_id: "tenant-a" }] as unknown[],
   write: vi.fn(), filters: vi.fn(), audit: vi.fn(), updateTag: vi.fn(), revalidatePath: vi.fn(), assignments: vi.fn(),
+  protectedIds: new Set<string>(), protectionError: false,
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.actor }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => m.allowed }));
@@ -13,7 +14,9 @@ vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => 
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("./queries", () => ({ tenantSettingsTag: (id: string) => `settings:${id}` }));
 vi.mock("next/cache", () => ({ updateTag: m.updateTag, revalidatePath: m.revalidatePath }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: () => ({ in: async (_key: string, ids: string[]) => ({
+  data: ids.filter((id) => m.protectedIds.has(id)).map((id) => ({ id })), error: m.protectionError ? { message: "lookup failed" } : null,
+}) }) }) }) }));
 vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: m.assignments }));
 vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () => {
@@ -34,6 +37,7 @@ function form(value = configuration, baseline = navigationRevision(empty)) {
 beforeEach(() => {
   vi.clearAllMocks(); m.actor.systemRole = "master"; m.allowed = true; m.error = null; m.rows = [{ tenant_id: "tenant-a" }];
   m.assignments.mockResolvedValue(null);
+  m.protectedIds.clear(); m.protectionError = false;
   m.stored = { data: { profile: { name: "학원" }, navigation: empty }, updated_at: "2026-09-29T12:00:00Z" };
 });
 describe("실제 학원 설정 저장 액션", () => {
@@ -43,6 +47,28 @@ describe("실제 학원 설정 저장 액션", () => {
     const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [] }));
     expect((await saveOwnerSection(undefined, fd))?.ok).toBe(true);
     expect(m.write).toHaveBeenCalledWith("update", expect.objectContaining({ data: expect.objectContaining({ dashboard: { version: 1, layouts: [], assignments: [assignment] } }) }));
+  });
+  it("지점에서 운영자 배치를 새로 만드는 직접 요청을 거절한다", async () => {
+    const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [{ role: "super", items: [{ id: "panel:notices", w: 6, h: 1 }] }] }));
+    expect((await saveOwnerSection(undefined, fd))?.error).toContain("지점에서 변경할 수 없습니다");
+    expect(m.write).not.toHaveBeenCalled();
+  });
+  it("운영자 개인의 배정과 권한 예외는 직접 요청으로도 추가할 수 없다", async () => {
+    m.protectedIds.add(assignment.userId);
+    for (const [section, data] of [
+      ["dashboard", { version: 1, layouts: [], assignments: [assignment] }],
+      ["permissions", { overrides: [], userOverrides: [{ userId: assignment.userId, menu: "staff", access: "full" }] }],
+    ] as const) {
+      const fd = new FormData(); fd.set("section", section); fd.set("data", JSON.stringify(data));
+      expect((await saveOwnerSection(undefined, fd))?.error).toContain("지점에서 변경할 수 없습니다");
+    }
+    expect(m.write).not.toHaveBeenCalled();
+  });
+  it("운영자 명단 조회 실패 때 저장과 성공 감사를 하지 않는다", async () => {
+    m.protectionError = true;
+    const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [], assignments: [assignment] }));
+    expect((await saveOwnerSection(undefined, fd))?.error).toContain("확인하지 못했습니다");
+    expect(m.write).not.toHaveBeenCalled(); expect(m.audit).not.toHaveBeenCalled();
   });
   it("다른 창이 바꾼 배정·배치를 옛 폼으로 덮지 않는다", async () => {
     const fd = new FormData(); fd.set("section", "dashboard"); fd.set("data", JSON.stringify({ version: 1, layouts: [] })); fd.set("dashboardBaseline", JSON.stringify({ version: 1, layouts: [], assignments: [assignment] }));

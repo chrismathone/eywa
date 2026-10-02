@@ -7,7 +7,8 @@ import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { BackLink } from "@/components/back-link";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getStaffById } from "@/features/staff/server/queries";
-import { getSuperAdminIds, isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { protectionStatus } from "@/lib/auth/protected-accounts";
 import { isFullShellRole } from "@/lib/auth/view-as";
 import { StaffForm } from "../../_components/staff-form";
 import { isPayrollEnabled, isStaffLeavesEnabled } from "@/features/payroll/config";
@@ -37,8 +38,8 @@ export default async function EditStaffPage({
   // '강사뷰 접근' 토글(0224a) — master(+super_admin)에게만 노출(서버 액션이 같은 자격으로 이중 게이트).
   // 강사·학생 역할에겐 소비처가 없어(풀셸 전용) 숨긴다 — 서버도 같은 조건으로 거절(이중 게이트).
   const canAssignDashboard = user.systemRole === "master" || (await isCurrentUserSuperAdmin());
-  const superIds = canAssignDashboard ? await getSuperAdminIds() : new Set<string>();
-  const canGrantTeacherView = canAssignDashboard &&
+  const canAssignTarget = canAssignDashboard && (await protectionStatus(staff.id)) === "clear";
+  const canGrantTeacherView = canAssignTarget &&
     isFullShellRole(staff.systemRole);
 
   return (
@@ -78,9 +79,9 @@ export default async function EditStaffPage({
         </div>
       </header>
 
-      {canAssignDashboard ? <DashboardAssignmentForm
+      {canAssignTarget ? <DashboardAssignmentForm
         key={staff.id}
-        user={{ id: staff.id, systemRole: staff.systemRole, subjects: staff.subjects, isSuperAdmin: superIds.has(staff.id) }}
+        user={{ id: staff.id, systemRole: staff.systemRole, subjects: staff.subjects, isSuperAdmin: false }}
         initial={settings.dashboard.assignments?.find((a) => a.userId === staff.id)}
         subjects={settings.operations.subjects}
       /> : null}

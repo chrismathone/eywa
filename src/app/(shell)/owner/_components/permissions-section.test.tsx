@@ -101,4 +101,19 @@ describe("일반판 권한 설정", () => {
     expect(screen.queryByText("민감 기능 담당자")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("직원 선택")).not.toBeInTheDocument();
   });
+
+  it("운영자 계정은 선택·기존 예외·담당자에서 숨기고 지점 저장은 숨겨진 값을 보존한다", () => {
+    const operator = { id: "22222222-2222-4222-8222-222222222222", name: "운영 계정", role: "master" };
+    const hiddenOverride = { userId: operator.id, menu: "staff" as const, access: "full" as const };
+    render(<PermissionsSection initial={{ ...EMPTY, userOverrides: [hiddenOverride], specialAccess: { payslipViewerIds: [operator.id], leaveAdjusterIds: [operator.id] } }}
+      generic staffOptions={[...staff, operator]} hiddenUserIds={[operator.id]} />);
+    expect(screen.queryByText(operator.name)).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: operator.name })).not.toBeInTheDocument();
+    expect(screen.getByText("개인별 메뉴 권한 0건")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("직원 선택"), { target: { value: staff[0].id } });
+    fireEvent.click(screen.getByRole("button", { name: "추가·변경" }));
+    expect(payload().userOverrides).toContainEqual(hiddenOverride);
+    expect(payload().userOverrides).toContainEqual({ userId: staff[0].id, menu: "staff", access: "full" });
+    expect(payload().specialAccess).toEqual({ payslipViewerIds: [operator.id], leaveAdjusterIds: [operator.id] });
+  });
 });

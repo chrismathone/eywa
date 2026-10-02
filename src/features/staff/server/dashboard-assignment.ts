@@ -2,6 +2,7 @@
 
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { protectionStatus } from "@/lib/auth/protected-accounts";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantSettings } from "@/features/owner/server/queries";
@@ -19,6 +20,8 @@ export async function saveStaffDashboardAssignment(input: unknown, baseline: str
     db.from("users").select("id, system_role").eq("tenant_id", user.tenantId).eq("id", parsed.data.userId).eq("status", "active").neq("system_role", "student").maybeSingle(),
   ]);
   if (error || !target) return { error: "현재 지점의 재직 직원을 찾지 못했습니다" };
+  const protection = await protectionStatus(target.id);
+  if (protection !== "clear") return { error: protection === "unknown" ? "계정 정보를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." : "이 계정의 운영 설정은 지점에서 변경할 수 없습니다." };
   const current = settings.dashboard.assignments ?? [];
   if (JSON.stringify(current.find((a) => a.userId === target.id) ?? null) !== baseline) return { error: "다른 창에서 이 직원의 배정이 변경되었습니다. 새로고침해 주세요." };
   const keys = new Set(settings.operations.subjects.map((s) => s.key));

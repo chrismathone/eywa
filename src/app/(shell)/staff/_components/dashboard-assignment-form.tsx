@@ -19,7 +19,8 @@ export function DashboardAssignmentForm({ user, initial, subjects }: {
   const [note, setNote] = useState<{ error?: string; ok?: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const fixed = user.isSuperAdmin || user.systemRole === "master";
+  if (user.isSuperAdmin) return null;
+  const fixed = user.systemRole === "master";
   return <form className="border-line space-y-3 rounded-xl border p-4" onSubmit={(e) => {
     e.preventDefault();
     startTransition(async () => {
@@ -33,7 +34,7 @@ export function DashboardAssignmentForm({ user, initial, subjects }: {
   }}>
     <h2 className="font-bold">대시보드 담당 범위·배치</h2>
     <p className="text-text-dim text-xs">대시보드 집계에 적용할 범위입니다. 실제 열람에는 메뉴 권한도 적용됩니다.</p>
-    {fixed ? <p className="text-sm">{user.isSuperAdmin ? "슈퍼관리자" : "원장"} 배치 · 전 과목</p> : <>
+    {fixed ? <p className="text-sm">원장 배치 · 전 과목</p> : <>
       <fieldset disabled={pending} className="space-y-3">
         <legend className="sr-only">대시보드 배정</legend>
         <div className="flex flex-wrap gap-3 text-sm">
