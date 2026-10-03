@@ -7,6 +7,7 @@ import { POST as controlPost } from "@/app/api/integrations/todays-math/v2/contr
 import { POST as snapshotPost } from "@/app/api/integrations/todays-math/v2/snapshots/route";
 import { POST as tokenPost } from "@/app/api/integrations/todays-math/v2/token/route";
 import { GET as authorizeGet } from "@/app/api/connected-apps/todays-math/authorize/route";
+import { GET as cronGet, POST as wakePost } from "@/app/api/cron/todays-math-sync/route";
 import { dispatchSyncEvents, sourceBindingForTenant } from "./sync-server";
 import { signedHeaders, type BindingConfig, type Control, type SecretPurpose, type SyncEvent } from "./sync-contract";
 
@@ -21,6 +22,67 @@ function request(endpoint: string, value: unknown, purpose: SecretPurpose = "con
 }
 beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now); vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", JSON.stringify([config])); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+describe("authenticated configuration diagnostics", () => {
+  const wakeSecret = "wake".repeat(10);
+  function diagnosticRequest(secret?: string) {
+    return new Request("https://source.example/api/cron/todays-math-sync?diagnostics=1", {
+      method: "POST", headers: secret ? { authorization: `Bearer ${secret}` } : {},
+    });
+  }
+  beforeEach(() => {
+    vi.stubEnv("TODAYS_MATH_SYNC_WAKE_SECRET", wakeSecret);
+    vi.stubEnv("CRON_SECRET", "cron".repeat(10));
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", undefined);
+  });
+  it("requires the method-specific credential before returning diagnostics", async () => {
+    for (const secret of [undefined, "wrong", "cron".repeat(10)]) {
+      const response = await wakePost(diagnosticRequest(secret));
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: "unauthorized" });
+    }
+    expect((await cronGet(diagnosticRequest(wakeSecret))).status).toBe(401);
+    vi.stubEnv("TODAYS_MATH_SYNC_WAKE_SECRET", undefined);
+    expect((await wakePost(diagnosticRequest(wakeSecret))).status).toBe(401);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("reports configured and absent settings without dispatching or returning values", async () => {
+    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+    const response = await wakePost(diagnosticRequest(wakeSecret));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      EYWA_SYNC_BINDINGS_JSON: { configured: true, valid: true, count: 1 },
+      EYWA_SYNC_AUTO_JSON: { configured: false, valid: true, count: 0 },
+    });
+    expect(rpc).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("identifies malformed legacy JSON independently of valid automatic settings", async () => {
+    vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", 'broken-secret-value');
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config]));
+    const response = await wakePost(diagnosticRequest(wakeSecret));
+    expect(await response.json()).toEqual({
+      EYWA_SYNC_BINDINGS_JSON: { configured: true, valid: false, error: "invalid_json" },
+      EYWA_SYNC_AUTO_JSON: { configured: true, valid: true, count: 1 },
+    });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("returns only schema issue paths and codes without input or validation messages", async () => {
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([{ ...config, controlSecret: "sensitive-too-short" }]));
+    const response = await wakePost(diagnosticRequest(wakeSecret));
+    const body = await response.text();
+    expect(JSON.parse(body).EYWA_SYNC_AUTO_JSON).toEqual({
+      configured: true, valid: false, error: "invalid_schema", issues: [{ path: [0, "controlSecret"], code: "too_small" }],
+    });
+    for (const secret of ["sensitive-too-short", config.webhookSecret, config.ssoSecret, config.sourceBaseUrl]) expect(body).not.toContain(secret);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("classifies conflicting automatic entries without exposing keys", async () => {
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config, config]));
+    const response = await wakePost(diagnosticRequest(wakeSecret));
+    expect((await response.json()).EYWA_SYNC_AUTO_JSON).toEqual({ configured: true, valid: false, error: "duplicate_automatic_key" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+});
 describe("automatic source dispatch", () => {
   it("bootstraps ON tenants, sweeps retained OFF bindings, and reserves explicit tenant mappings", async () => {
     vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config]));
