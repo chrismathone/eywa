@@ -99,6 +99,7 @@ Vercel Project → Settings → Environment Variables에서 입력한 후 새 �
 
 ## 장애·중지·복구
 
+- 환경변수 검증 오류는 기존 wake 인증으로 `POST /api/cron/todays-math-sync?diagnostics=1`을 호출해 확인한다. GET은 기존 cron 인증을 사용한다. 설정 유무·문법/스키마 오류 항목만 응답하며 원본 값과 비밀키는 포함하지 않고, 동기화도 실행하지 않는다. `invalid_json`이면 해당 Vercel Value의 전체 JSON 문법을 수정하고 재배포한다. 비밀값을 로그나 대화에 붙여 넣지 않는다.
 - 즉시 업무 중지: 에이와 오늘의수학 OFF. 원본 자체가 장애라면 오늘의수학 운영 화면에서 **새 연결·쓰기 중지** 또는 **연결 종료**. 대상의 로컬 중지는 원본 응답을 기다리지 않고 관리 세션을 무효화한다. 삭제 작업은 아니다.
 - OFF 이유와 수동 정지는 분리되어 있으므로 DB에서 `suspendedAt`만 임의로 지우지 않는다.
 - 충돌을 해결한 뒤 오늘의수학 **재처리 요청**. 에이와 outbox 재요청은 `todays-math-sync-admin.mjs retry --event=UUID --apply`. source/target의 상태가 모두 수렴했는지 확인한다.
