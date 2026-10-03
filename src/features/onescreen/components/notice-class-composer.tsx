@@ -15,6 +15,7 @@ import { loadMyClassWideNotice, sendClassWideNotice } from "@/features/report-ad
 import { CLASS_NOTICE_BODY_MAX, CLASS_NOTICE_TITLE_MAX, type ClassNoticeRow } from "@/features/report-admin/class-notice";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import type { SheetDictKey } from "@/features/teacher-view/i18n";
+import { NoticeHistory, NoticeHistoryItem } from "./notice-history";
 import { NoticeAttachmentPicker } from "./notice-attachment-picker";
 import type { NoticeAttachment } from "../notice-attachments";
 
@@ -195,18 +196,9 @@ export function NoticeClassComposer({
         </div>
       </section>
 
-      <section className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
-        <p className="text-foreground mb-2 text-sm font-bold">{t("os.nc.history")}</p>
-        {rows.length === 0 ? (
-          <p className="text-text-faint text-xs">{t("os.nc.historyEmpty")}</p>
-        ) : (
-          <ul className="divide-line divide-y">
-            {rows.map((r) => (
-              <li key={r.id} className="py-2 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-foreground font-bold">{r.title}</span>
-                  <span className="text-text-dim text-xs">{t(statusKey(r.status))}</span>
-                </div>
+      <NoticeHistory title={t("os.nc.history")} empty={t("os.nc.historyEmpty")} rows={rows}>
+            {(r) => (
+              <NoticeHistoryItem title={r.title} status={t(statusKey(r.status))}>
                 <p className="text-text-dim text-xs break-keep">
                   {r.classNames.join(", ")}
                   {r.imageCount ? tf("os.nc.images", { n: r.imageCount }) : ""}
@@ -217,11 +209,9 @@ export function NoticeClassComposer({
                   </p>
                 ))}
                 {r.error ? <p className="text-danger text-xs">{r.error}</p> : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              </NoticeHistoryItem>
+            )}
+      </NoticeHistory>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import type { ComponentProps } from "react";
 import type { OneScreenStudent, Subject } from "../types";
 
 afterEach(cleanup);
-const subject = (className: string): Subject => ({ name: `수학 · ${className}`, className, classId: className, prev: "", today: "", subjectKey: "math" });
+const subject = (className: string): Subject => ({ name: `수학 · ${className}`, subjectLabel: "수학", className, classId: className, prev: "", today: "", subjectKey: "math" });
 const student = (id: string, name: string, classes: string[]): OneScreenStudent => ({
   id, name, grade: "중3", tag: classes[0], attendance: "출석", subjects: classes.map(subject),
   tests: { daily: { score: null, max: 20, prevScore: null }, check: { score: null, max: 20, prevScore: null } },
@@ -26,6 +26,7 @@ it("학생 수와 보고서 건수를 구분하고 반별로 같은 학생의 �
   expect(screen.getByText(/학생 2명 · 보고서 3건/)).toBeTruthy();
   expect(screen.getAllByRole("rowheader").map(e => e.textContent)).toEqual(["오전반2명", "오후반1명"]);
   expect([...container.querySelectorAll("tbody tr")].filter(e => e.querySelector('input[type="checkbox"]')).map(e => e.textContent?.match(/안하나|김두나/)?.[0])).toEqual(["안하나", "김두나", "안하나"]);
+  expect([...container.querySelectorAll("tbody td")].some(e => /오전반|오후반/.test(e.textContent ?? ""))).toBe(false);
   fireEvent.click(screen.getAllByRole("button", { name: "상세" })[2]);
   expect(props.rowActions.onOpenCard).toHaveBeenLastCalledWith("a", "수학 · 오후반");
 });
@@ -36,6 +37,7 @@ it("가나다 정렬은 반 헤더 없이 이름순이며 해당 수업의 편�
   </DisplayOptionsProvider>);
   expect(screen.queryByRole("rowheader")).toBeNull();
   expect([...container.querySelectorAll("tbody tr")].map(e => e.textContent?.match(/안하나|김두나/)?.[0])).toEqual(["김두나", "안하나", "안하나"]);
+  expect([...container.querySelectorAll("tbody td")].some(e => /오전반|오후반/.test(e.textContent ?? ""))).toBe(true);
   fireEvent.click(screen.getAllByRole("button", { name: "상세" })[2]);
   expect(props.rowActions.onOpenCard).toHaveBeenLastCalledWith("a", "수학 · 오후반");
 });

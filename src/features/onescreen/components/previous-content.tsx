@@ -13,7 +13,8 @@ export function PreviousText({ text }: { text: string }) {
     <TooltipTrigger render={<span tabIndex={0} />} className="block min-w-0 cursor-help">
       <span className="line-clamp-2 whitespace-pre-line break-words">{text}</span>
     </TooltipTrigger>
-    <TooltipContent className="max-h-[70vh] max-w-[min(36rem,90vw)] overflow-y-auto whitespace-pre-wrap break-words" side="top">
+    {/* 셀 사이를 옮길 때 이전 팝업의 축소 애니메이션이 겹치지 않게 전문은 고정 크기로 표시한다. */}
+    <TooltipContent className="block w-max max-h-[70vh] max-w-[min(36rem,90vw)] overflow-y-auto whitespace-pre-wrap break-words" style={{ animation: "none" }} side="top">
       {text}
     </TooltipContent>
   </Tooltip>;

@@ -1407,7 +1407,7 @@ ${style}` : body) });
     // ⚠️ 이 tier 지정은 **멘트 호출에만** — 등록상담·회의록 분석은 balanced(Sonnet 5) 유지. Haiku도 Anthropic 키가 살아야 동작(아니면 Solar).
     const { data } = await generateJSON<Record<string, string>>({
       prompt: assembleCombined(sections),
-      maxTokens: 1000,
+      maxTokens: safeInput.specialNote || safeInput.classNotice ? 1800 : 1000,
       keyName: "default",
       tier: "fast",
       meta: { feature: "classnote_ment", tenantId: user.tenantId },

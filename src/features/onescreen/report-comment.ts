@@ -10,6 +10,7 @@ import { normalizeHomeworkPages } from "./homework-pages";
 import { homeworkFactValue } from "./homework-rate";
 import { resolveRowFields } from "./row-fields";
 import { splitNoticeFromNote } from "./class-notice";
+import { withTeacherNoteFidelity } from "./teacher-note-fidelity";
 
 const EMPTY_NOTICES: ReadonlyMap<string, string> = new Map();
 import { DEFAULT_PROMPTS, interpolate, assembleSingle } from "./prompt-defaults";
@@ -177,7 +178,7 @@ export function buildFactBlock(input: ReportCommentInput): string {
  */
 /** 멘트 본문(출력 계약 없음) — 통합 호출 섹션용. template=원장 오버라이드. */
 export function commentBody(input: ReportCommentInput, template?: string | null): string {
-  return interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) });
+  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment, { facts: buildFactBlock(input) }), input);
 }
 
 /** 멘트 단일 프롬프트(본문 + {comment} 출력 계약) — 미리보기·개별 테스트용. */
@@ -233,7 +234,7 @@ export function commentP1Body(input: ReportCommentInput, template?: string | nul
 export function commentP2Body(input: ReportCommentInput, template?: string | null): string | null {
   const p2facts = buildP2FactBlock(input);
   if (!p2facts) return null;
-  return interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts });
+  return withTeacherNoteFidelity(interpolate(template || DEFAULT_PROMPTS.comment_p2, { p2facts }), input);
 }
 
 /** 모드 B P1 단일 프롬프트(본문 + {comment} 계약) — 미리보기·개별 테스트용. 사실 없으면 null. */
