@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   assertControlBinding, controlSchema, eventSchema, eventResultSchema, manifestSchema, pageSchema,
-  parseBindingConfigs, readBoundedBody, signedHeaders, verifySignedRequest,
+  parseBindingConfigs, parseAutomaticConfigs, resolveBindingConfigs, readBoundedBody, signedHeaders, verifySignedRequest, uuidSchema,
   type BindingConfig, type SecretPurpose, type SyncEvent,
 } from "./sync-contract";
 
@@ -11,12 +11,16 @@ export const NO_STORE = { "Cache-Control": "no-store", "Referrer-Policy": "no-re
 export class SyncHttpError extends Error {
   constructor(public readonly status: number, public readonly code: string) { super(code); }
 }
-export function syncBindings(): BindingConfig[] {
-  try { return parseBindingConfigs(process.env.EYWA_SYNC_BINDINGS_JSON); }
+export function syncBindings(bindingId?: string): BindingConfig[] {
+  try {
+    const manual = parseBindingConfigs(process.env.EYWA_SYNC_BINDINGS_JSON);
+    const automatic = parseAutomaticConfigs(process.env.EYWA_SYNC_AUTO_JSON);
+    return bindingId ? resolveBindingConfigs(manual, automatic, bindingId) : manual;
+  }
   catch { throw new SyncHttpError(503, "sync_configuration_invalid"); }
 }
 export function sourceBindingForTenant(tenantId: string): BindingConfig | undefined {
-  return syncBindings().find((config) => config.tenantId === tenantId);
+  return syncBindings().find((config) => config.tenantId === tenantId) ?? syncBindings(tenantId).find((config) => config.tenantId === tenantId);
 }
 /** RPCs grant EXECUTE exclusively to service_role; every call includes the fixed binding. */
 export async function syncRpc(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
@@ -33,7 +37,7 @@ export async function authenticateSyncRequest(request: Request, purpose: SecretP
   let body: string;
   try { body = await readBoundedBody(request); }
   catch { throw new SyncHttpError(413, "invalid_request_body"); }
-  const configs = syncBindings();
+  const configs = syncBindings(request.headers.get("x-eywa-binding") ?? "");
   if (!configs.length) throw new SyncHttpError(503, "sync_not_configured");
   let verified;
   try { verified = verifySignedRequest(request, body, configs, purpose); }
@@ -91,6 +95,14 @@ export type DispatchResult = { claimed: number; applied: number; received: numbe
 export async function dispatchSyncEvents(): Promise<DispatchResult> {
   const configs = syncBindings();
   const result: DispatchResult = { claimed: 0, applied: 0, received: 0, conflict: 0, superseded: 0, retry: 0, leaseLost: 0, receiverSweeps: 0, receiverUnavailable: 0 };
+  if (parseAutomaticConfigs(process.env.EYWA_SYNC_AUTO_JSON).length) {
+    // The first cron enables automatic onboarding; later ON writes bootstrap
+    // the durable binding inside the same database transaction as the toggle.
+    const ids = z.array(uuidSchema).parse(await syncRpc("tm_sync_configure_automatic", {
+      p_enabled: true, p_excluded_tenants: [...new Set(configs.map((c) => c.tenantId))],
+    }));
+    for (const id of ids) if (!configs.some((c) => c.bindingId === id)) configs.push(...syncBindings(id));
+  }
   if (!configs.length) return result;
   await syncRpc("tm_sync_reconcile");
   const claims = claimSchema.parse(await syncRpc("tm_sync_claim_events", { p_limit: 12 }));

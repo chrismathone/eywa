@@ -44,6 +44,7 @@ try {
     console.log('PASS migration and rerun against actual source DDL'); checks++;
   }
   await sqlTest('transactional lifecycle, scopes, exports, PKCE and privileges','supabase/tests/todays_math_sync.sql');
+  await sqlTest('automatic first ON, repeated bootstrap, OFF/ON identity, operator stop and privileges','supabase/tests/todays_math_sync_automatic.sql');
   const one = new Client(config); const two = new Client(config);
   await one.connect(); await two.connect();
   const bid='30000000-0000-0000-0000-000000000001';

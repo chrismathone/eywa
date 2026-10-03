@@ -2,6 +2,8 @@
 
 2026-10-03. Source-only implementation; no live database, environment, binding, account, or deployment was changed.
 
+Coordinator follow-up: automatic onboarding was added at the user's request. `tm_sync_configure_automatic` is service-only and opts the installation into first-ON creation, preserving explicit mappings and operator shadow stops. The source tenant UUID is the stable binding and target branch UUID; control now includes the source tenant name. The first cron backfills already-ON licenses, and later ON changes register the binding and durable outbox in the license transaction. OFF/expiry/deletion preserve identities and generation history. `supabase/tests/todays_math_sync_automatic.sql` covers bootstrap, repeated calls, first ON, OFF/ON, explicit exclusions, expired licenses, rename and grants. The final runner now passes **11 SQL groups**, including the prior concurrency and wire-byte checks.
+
 ## Files and migration provenance
 
 - `supabase/migrations/0337a_todays_math_sync_v2.sql`: additive, transactional, repeatable alpha migration. Created with `npx --yes supabase@2.81.3 migration new todays_math_sync_v2` as `20261003083350_todays_math_sync_v2.sql`, then moved to the repository's next alpha number after 0336. It must be applied through the existing alpha deployment procedure; Drizzle's numbered journal does not apply it.

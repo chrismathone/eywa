@@ -7,7 +7,7 @@ import { POST as controlPost } from "@/app/api/integrations/todays-math/v2/contr
 import { POST as snapshotPost } from "@/app/api/integrations/todays-math/v2/snapshots/route";
 import { POST as tokenPost } from "@/app/api/integrations/todays-math/v2/token/route";
 import { GET as authorizeGet } from "@/app/api/connected-apps/todays-math/authorize/route";
-import { dispatchSyncEvents } from "./sync-server";
+import { dispatchSyncEvents, sourceBindingForTenant } from "./sync-server";
 import { signedHeaders, type BindingConfig, type Control, type SecretPurpose, type SyncEvent } from "./sync-contract";
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -21,7 +21,45 @@ function request(endpoint: string, value: unknown, purpose: SecretPurpose = "con
 }
 beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(now); vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", JSON.stringify([config])); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+describe("automatic source dispatch", () => {
+  it("bootstraps ON tenants, sweeps retained OFF bindings, and reserves explicit tenant mappings", async () => {
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config]));
+    rpc.mockImplementation(async (name: string) => ({ error: null, data: name === "tm_sync_configure_automatic" ? [id(8)] : name === "tm_sync_claim_events" ? [] : true }));
+    const fetcher = vi.fn().mockImplementation(async () => Response.json({ busy: false, results: [] }));
+    vi.stubGlobal("fetch", fetcher);
+    const result = await dispatchSyncEvents();
+    expect(rpc).toHaveBeenNthCalledWith(1, "tm_sync_configure_automatic", { p_enabled: true, p_excluded_tenants: [config.tenantId] });
+    expect(result.receiverSweeps).toBe(2);
+    expect(fetcher.mock.calls.map((call) => JSON.parse(call[1].body).bindingId).sort()).toEqual([config.bindingId, id(8)].sort());
+  });
+  it("does not send when automatic discovery fails or contains invalid identity data", async () => {
+    vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", "[]");
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config]));
+    rpc.mockResolvedValue({ error: null, data: ["invalid"] });
+    const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
+    await expect(dispatchSyncEvents()).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+});
 describe("source control API security", () => {
+  it("resolves a new tenant from installation trust and verifies its exact signed identity", async () => {
+    vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", "[]");
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config]));
+    const automatic = sourceBindingForTenant(id(8))!;
+    expect(automatic).toMatchObject({ bindingId: id(8), tenantId: id(8), targetBranchId: id(8) });
+    const path = "/api/integrations/todays-math/v2/control";
+    const body = JSON.stringify({ bindingId: id(8) });
+    rpc.mockResolvedValue({ data: { ...control, bindingId: id(8), tenantId: id(8), targetBranchId: id(8), tenantName: "침산" }, error: null });
+    const signed = new Request(config.sourceBaseUrl + path, { method: "POST", body, headers: signedHeaders(automatic, "control", "POST", path, body, now) });
+    expect((await controlPost(signed)).status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("tm_sync_control", { p_binding_id: id(8), p_user_id: null });
+    rpc.mockClear();
+    const invalid = new Request(config.sourceBaseUrl + path, { method: "POST", body, headers: signedHeaders(automatic, "control", "POST", path, body, now) });
+    invalid.headers.set("x-eywa-binding", id(9));
+    expect((await controlPost(invalid)).status).toBe(401);
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it("reports explicit OFF as authoritative 200 and leaves reads without nonce writes", async () => {
     rpc.mockResolvedValue({ data: control, error: null });
     const response = await controlPost(request("control", { bindingId: id(1) }));

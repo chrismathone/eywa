@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
-  COLLECTION_KINDS, controlLeaseExpiresAt, manifestSchema, normalizeEmail, normalizeName, parseBindingConfigs,
+  COLLECTION_KINDS, controlLeaseExpiresAt, manifestSchema, normalizeEmail, normalizeName, parseBindingConfigs, parseAutomaticConfigs, resolveBindingConfigs,
   readBoundedBody, sha256, signAssertion, signedHeaders, validateCompleteSnapshot, verifyAssertion, verifySignedRequest,
   type BindingConfig, type Control, type Manifest, type SnapshotPage, type SsoAssertion,
 } from "./sync-contract";
@@ -27,6 +27,18 @@ function studentSnapshot(): { snapshot: Manifest; page: SnapshotPage } {
   return { snapshot, page: { bindingId: id(1), snapshotId: id(5), kind: "students", page: 0, json, sha256: sha256(json) } };
 }
 describe("signed v2 transport", () => {
+  it("derives stable automatic identities and preserves explicit mappings and key rotation", () => {
+    const automatic = parseAutomaticConfigs(JSON.stringify([config, { ...config, keyId: "next" }]));
+    const resolved = resolveBindingConfigs([], automatic, id(8));
+    expect(resolved).toHaveLength(2);
+    expect(resolved[0]).toMatchObject({ bindingId: id(8), tenantId: id(8), targetBranchId: id(8), provision: "automatic" });
+    expect(resolveBindingConfigs([config], automatic, config.bindingId)).toEqual([config]);
+    expect(resolveBindingConfigs([config], automatic, config.tenantId)).toEqual([]);
+    expect(resolveBindingConfigs([config], automatic, config.targetBranchId)).toEqual([]);
+    expect(resolveBindingConfigs([], automatic, "untrusted-name")).toEqual([]);
+    expect(() => parseAutomaticConfigs(JSON.stringify([config, config]))).toThrow("duplicate_automatic_key");
+    expect(() => parseAutomaticConfigs(JSON.stringify([config, { ...config, keyId: "next", targetBaseUrl: "https://other.example" }]))).toThrow("automatic_origin_mismatch");
+  });
   const path = "/api/integrations/todays-math/v2/control";
   const body = JSON.stringify({ bindingId: id(1) });
   const request = () => new Request(config.sourceBaseUrl + path, { method: "POST", body, headers: signedHeaders(config, "control", "POST", path, body, now, id(6)) });

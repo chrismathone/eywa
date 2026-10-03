@@ -180,7 +180,7 @@ language sql stable set search_path = '' as $$
   where t.oid is null or t.tgenabled not in ('O','A')
     or tm_sync_private.hash(pg_get_triggerdef(t.oid)) <> e.definition_hash
     or tm_sync_private.hash(pg_get_functiondef(t.tgfoid)) <> e.function_hash
- ) and (select count(*) from tm_sync_private.function_contract)=9
+ ) and (select count(*) from tm_sync_private.function_contract)=11
  and not exists(select 1 from tm_sync_private.function_contract f
    where to_regprocedure(f.signature) is null
     or tm_sync_private.hash(pg_get_functiondef(to_regprocedure(f.signature)))<>f.definition_hash)
@@ -280,6 +280,7 @@ returns jsonb language sql stable security definer set search_path = '' as $$
   from access_rows group by user_id,class_id,revision
  )
  select jsonb_build_object('schemaVersion',2,'bindingId',b.id,'tenantId',b.tenant_id,
+  'tenantName',(select t.name from public.tenants t where t.id=b.tenant_id),
   'targetBranchId',b.target_branch_id,'sourceEpoch',b.source_epoch,'securityRevision',b.security_revision::text,
   'tenantRevocationGeneration',b.tenant_generation::text,'enabled',b.enabled,'mode',b.mode,
   'validatedAt',tm_sync_private.iso(statement_timestamp()),'nextEffectiveAt',tm_sync_private.iso(tm_sync_private.next_effective(b.tenant_id,statement_timestamp())),
@@ -374,6 +375,10 @@ begin
  end if;
  if tg_table_name='tenant_licenses' and coalesce(o->>'feature','')<>'todays_math'
     and coalesce(n->>'feature','')<>'todays_math' then return coalesce(new,old); end if;
+ if tg_table_name='tenant_licenses' and n->>'feature'='todays_math' and (n->>'is_active')::boolean
+    and ((n->>'expires_at') is null or (n->>'expires_at')::timestamptz>statement_timestamp()) then
+  perform tm_sync_private.ensure_auto_binding((n->>'tenant_id')::uuid);
+ end if;
  if tg_table_schema='auth' or tg_table_name='super_admins' then
   who := coalesce((n->>'id')::uuid,(o->>'id')::uuid);
   select array_agg(distinct t) into tids from (
@@ -651,6 +656,48 @@ begin
   'mode',p_mode,'applied',p_apply,'existing',b.id is not null,'healthy',tm_sync_private.healthy());
 end; $$;
 
+-- A single installation opt-in; no per-tenant credential or manual target branch is required.
+-- The private flag remains false until the configured application explicitly enables it.
+create table if not exists tm_sync_private.automatic_settings (
+ singleton boolean primary key default true check(singleton),
+ enabled boolean not null default false,
+ excluded_tenants uuid[] not null default '{}'
+);
+insert into tm_sync_private.automatic_settings(singleton) values(true) on conflict do nothing;
+
+create or replace function tm_sync_private.ensure_auto_binding(p_tenant_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+ if not exists(select 1 from tm_sync_private.automatic_settings where enabled and not (p_tenant_id=any(excluded_tenants))) then return; end if;
+ -- Same lock key as explicit configuration; recheck after a concurrent first ON.
+ perform pg_advisory_xact_lock(hashtextextended('tm-sync-binding:'||p_tenant_id::text,0));
+ if exists(select 1 from tm_sync_private.bindings where tenant_id=p_tenant_id) then return; end if;
+ if not exists(select 1 from public.tenant_licenses l join public.tenants t on t.id=l.tenant_id
+   where l.tenant_id=p_tenant_id and l.feature='todays_math' and l.is_active
+   and (l.expires_at is null or l.expires_at>statement_timestamp())) then return; end if;
+ perform public.tm_sync_configure_binding(p_tenant_id,p_tenant_id,p_tenant_id::text,'shadow',true);
+ perform public.tm_sync_configure_binding(p_tenant_id,p_tenant_id,p_tenant_id::text,'active',true);
+end; $$;
+
+create or replace function public.tm_sync_configure_automatic(p_enabled boolean,p_excluded_tenants uuid[] default '{}')
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare tid uuid;
+begin
+ if p_enabled is null or p_excluded_tenants is null or array_position(p_excluded_tenants,null) is not null then raise exception 'Invalid automatic configuration'; end if;
+ update tm_sync_private.automatic_settings set enabled=p_enabled,excluded_tenants=p_excluded_tenants
+  where enabled is distinct from p_enabled or excluded_tenants is distinct from p_excluded_tenants;
+ if p_enabled then
+  for tid in select distinct l.tenant_id from public.tenant_licenses l
+   where l.feature='todays_math' and l.is_active and (l.expires_at is null or l.expires_at>statement_timestamp())
+   order by l.tenant_id loop
+   perform tm_sync_private.ensure_auto_binding(tid);
+  end loop;
+ end if;
+ -- Include OFF bindings so their outbox, suspension, and later reactivation keep flowing.
+ return (select coalesce(jsonb_agg(id order by id),'[]'::jsonb) from tm_sync_private.bindings
+  where id=tenant_id and target_branch_id=id::text and not (tenant_id=any(p_excluded_tenants)));
+end; $$;
+
 create or replace function public.tm_sync_schema_health()
 returns jsonb language sql stable security definer set search_path = '' as $$
  select jsonb_build_object('schemaVersion',2,'healthy',tm_sync_private.healthy(),
@@ -775,7 +822,7 @@ do $$
 declare r record; rel text; fn text; row_trigger text; trunc_trigger text;
 begin
  for r in select * from (values
-  ('public.tenants','id'),
+  ('public.tenants','id,name'),
   ('public.tenant_licenses','tenant_id,feature,is_active,expires_at'),
   ('public.users','id,tenant_id,status,system_role,subjects'),
   ('auth.users','id,banned_until,deleted_at,role'),
@@ -818,6 +865,7 @@ insert into tm_sync_private.function_contract(signature,definition_hash)
   'public.tm_sync_control(uuid,uuid)', 'tm_sync_private.security_hash(uuid)',
   'tm_sync_private.export_rows(uuid)', 'tm_sync_private.next_effective(uuid,timestamp with time zone)',
   'public.class_period_closed_end(uuid)'
+  ,'tm_sync_private.ensure_auto_binding(uuid)', 'public.tm_sync_configure_automatic(boolean,uuid[])'
  ]) signature
  on conflict(signature) do update set definition_hash=excluded.definition_hash;
 

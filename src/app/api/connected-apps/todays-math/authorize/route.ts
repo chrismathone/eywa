@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const input = parseSyncBody(inputSchema, JSON.stringify(Object.fromEntries(url.searchParams)));
-    const config = syncBindings().find((value) => value.bindingId === input.bindingId);
+    const config = syncBindings(input.bindingId).find((value) => value.bindingId === input.bindingId);
     if (!config) throw new SyncHttpError(503, "sync_not_configured");
     if (url.origin !== config.sourceBaseUrl) throw new SyncHttpError(401, "source_origin_mismatch");
     const user = await getCurrentUser();

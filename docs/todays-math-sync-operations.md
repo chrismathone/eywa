@@ -1,10 +1,11 @@
 # 에이와 ↔ 오늘의수학 운영 적용 안내
 
-2026-10-03. 사용자가 Vercel 환경변수를 직접 입력한다. 이 문서는 비밀 값이 없는 설정·배포 안내다. 로컬 구현/검증과 운영 적용은 구분한다. 운영 URL·실제 지점 매핑 확인 전에는 로컬의 데모 지점을 운영 대상으로 사용하지 않는다.
+2026-10-03. 사용자가 Vercel 환경변수를 직접 입력한다. 운영 주소는 **에이와 `https://aywa.co.kr` / 오늘의수학 `https://today.aywa.co.kr`**, 최초 사용 지점은 **침산**이다. 사용자의 추가 요청에 따라 **토글 ON 시 지점 자동 생성**을 기본 경로로 한다. 기존 데모 지점에 침산을 임의 연결하지 않는다. 이 문서는 비밀 값이 없는 설정·배포 안내다. 운영에는 아직 적용하지 않았다.
 
 ## 이번에 제공하는 동작
 
 - 에이와에서 오늘의수학이 활성화된 지점의 재직 수학 교사를 관리한다. 영어 전담·학생·보호 계정은 자동 교사 발급에서 제외한다.
+- 공통 연결 설정을 한 번 넣으면 이후 지점은 에이와 토글만으로 생성된다. 원본 지점 UUID를 연결 ID와 대상 지점 UUID로 사용하며 이름으로 기존 지점을 합치지 않는다. OFF/ON은 같은 지점·원장·기록을 재사용한다. 이미 ON인 지점도 최초 cron에서 수집하므로 초기 적용 전에 활성 지점 목록을 확인한다.
 - 신규 교사는 최소 권한으로 발급한다. 기존 이메일/이름 일치는 후보로만 등록한다. 본인 비밀번호 재확인 또는 권한 있는 운영자의 독립적인 소유권 확인 후 연결·지점 이동을 승인한다. 불일치·중복·정지 등은 기존 계정을 보존하고 보류한다.
 - 기능 OFF·퇴사·자격 상실은 연결된 신규/기존 교사의 접근과 기존 세션을 정지한다. 사용자·학생·반·학습 기록을 삭제하지 않는다. 운영자가 별도로 정지한 계정은 ON/재입사로 자동 해제하지 않는다.
 - 반 담당/교시 담당/대강과 기간, 반 이동, 학생 복수 수강·휴원·종료를 반영한다. 교사 이동으로 과거 자료의 지점이 바뀌지 않는다.
@@ -15,22 +16,20 @@
 
 | 변수 | 에이와 | 오늘의수학 | 입력 원칙 |
 | --- | --- | --- | --- |
-| `EYWA_SYNC_BINDINGS_JSON` | 필수 | 필수 | **양쪽에 완전히 동일한 JSON 배열**. 서버 전용. |
+| `EYWA_SYNC_AUTO_JSON` | 필수 | 필수 | **양쪽에 완전히 동일한 JSON 배열**. 서버 전용, 설치 전체의 자동 연결 신뢰 설정. |
+| `EYWA_SYNC_BINDINGS_JSON` | 선택 | 선택 | 이미 운영 중인 명시적 매핑 예외용. 새 자동 연결에는 필요 없음. |
 | `TODAYS_MATH_SYNC_WAKE_SECRET` | 필수 | 없음 | 즉시 전송을 깨우는 별도 키. DB wake 설정에도 같은 값. |
 | `CRON_SECRET` | 기존 값 유지, 없으면 생성 | 이 기능 때문에 추가하지 않음 | 기존 에이와 cron도 사용하므로 임의 교체하지 않는다. |
 
 기존 DB·Supabase·Auth 환경변수는 유지한다. 오늘의수학의 `AUTH_URL`/`NEXTAUTH_URL`은 실제 오늘의수학 운영 origin과 맞아야 한다. `NEXT_PUBLIC_` 접두사를 붙이지 않는다. Production에만 넣고 Preview/Development에 운영 연결 설정을 복사하지 않는다.
 
-`EYWA_SYNC_BINDINGS_JSON` 모양(아래는 **입력 예시이며 실제 값이 아님**):
+`EYWA_SYNC_AUTO_JSON` 모양(아래는 **입력 예시이며 실제 비밀 값이 아님**):
 
 ```json
 [
   {
-    "bindingId": "새로 생성한 소문자 UUID",
-    "tenantId": "에이와의 실제 지점 UUID",
-    "targetBranchId": "오늘의수학의 실제 지점 ID",
-    "sourceBaseUrl": "https://에이와-운영-도메인",
-    "targetBaseUrl": "https://오늘의수학-운영-도메인",
+    "sourceBaseUrl": "https://aywa.co.kr",
+    "targetBaseUrl": "https://today.aywa.co.kr",
     "keyId": "initial-2026-10-03",
     "controlSecret": "서로 다른 무작위 비밀키 1",
     "webhookSecret": "서로 다른 무작위 비밀키 2",
@@ -39,15 +38,15 @@
 ]
 ```
 
-origin은 경로 없이 `https://도메인`만 사용한다. `bindingId`는 두 서비스의 연결을 식별하는 새 ID로, tenant/branch ID와 다르다. 키는 각 32자 이상이며 아래 생성기는 각각 32바이트 난수로 만든다. 기존 `EYWA_SSO_SECRET`과 v2의 `ssoSecret`은 다른 설정이다.
+origin은 경로 없이 `https://도메인`만 사용한다. 자동 연결에서는 지점 ID를 입력하지 않는다. 지점 이름은 서명된 요청을 검증한 뒤 원본 제어 API에서 조회한다. 키는 각 32자 이상이며 아래 생성기는 각각 32바이트 난수로 만든다. 기존 `EYWA_SSO_SECRET`과 v2의 `ssoSecret`은 다른 설정이다.
 
 에이와 체크아웃에서 기존 Node 24와 설치된 의존성만 사용해 파일을 준비할 수 있다:
 
 ```powershell
-node scripts/todays-math-sync-setup.mjs --tenant=실제-UUID --target-branch=실제-ID --source-origin=https://실제-에이와-주소 --target-origin=https://실제-오늘의수학-주소
+node scripts/todays-math-sync-setup.mjs --automatic --source-origin=https://aywa.co.kr --target-origin=https://today.aywa.co.kr
 ```
 
-`CRON_SECRET`이 아직 없을 때만 `--new-cron`을 붙인다. 기존 연결을 준비하는 경우 `--binding=기존-UUID`를 명시한다. **이미 운영 중인 키 회전에는 이 초기 생성기를 그대로 쓰지 않는다.** 실행할 때마다 새 키가 생긴다.
+`--new-cron`은 별도의 선택 파일 `.env.eywa-cron-if-missing.local`을 만든다. **Vercel Production에 `CRON_SECRET`이 없을 때만** 이 값을 추가한다. 로컬 파일에 값이 없다는 사실만으로 운영 값이 없다고 판단하지 않는다. **이미 운영 중인 키 회전에는 이 초기 생성기를 그대로 쓰지 않는다.** 실행할 때마다 새 키가 생긴다. 예외적으로 기존 대상 지점을 연결하는 수동 모드는 `--automatic` 대신 `--tenant=UUID --target-branch=UUID [--binding=UUID]`를 사용하고 별도의 검토 절차를 거친다.
 
 결과는 Git에서 제외되는 `work/todays-math-sync-<UUID>/`의 `.env.eywa.local`, `.env.todays-math.local`에 저장된다. 기존 파일은 덮어쓰지 않고 비밀 값은 터미널에 출력하지 않는다. Vercel 입력란에는 각 줄의 `=` 오른쪽 값만 넣는다. JSON 바깥에 따옴표를 추가하지 않는다. 생성 파일을 채팅·Git·일반 문서로 공유하지 않는다.
 
@@ -55,19 +54,19 @@ Vercel Project → Settings → Environment Variables에서 입력한 후 새 �
 
 ## 적용 순서
 
-1. 양쪽 변경을 통합하고 **관리 계정 차단 기능이 포함된 복구용 버전**을 확보한다. 대상 운영 DB와 지점 ID를 먼저 확인한다. 학생·반의 과거 지점 귀속과 기존 계정 후보를 검토한다.
+1. 양쪽 변경을 통합하고 **관리 계정 차단 기능이 포함된 복구용 버전**을 확보한다. 대상 운영 DB를 확인하고 에이와의 현재 ON 지점 목록을 검토한다. 오늘의수학에 지점을 미리 만들 필요는 없다. 기존 계정·자료의 지점 귀속은 자동으로 합치지 않는다.
 2. 에이와 DB에 `supabase/migrations/0337a_todays_math_sync_v2.sql`을 적용한다. 파일 자체가 트랜잭션을 포함한다. 관련 없는 미적용 alpha까지 일괄 실행하지 않는다. 적용 후 `select public.tm_sync_schema_health();`의 `healthy`와 모든 check가 true인지 확인한다. 이 단계는 binding을 만들거나 사용자를 활성화하지 않는다.
 3. 오늘의수학에서는 `prisma migrate status`로 미적용 목록을 확인한 뒤 프로젝트 기존 절차로 `prisma/migrations/20261003085222_eywa_managed_sync/migration.sql`을 적용한다. 운영에 `db push`를 사용하지 않는다. 새 테이블을 조회하는 코드는 **DB 적용 후** 배포한다.
-4. 두 프로젝트의 Production 환경변수를 입력하고 새 코드를 배포한다. `EYWA_SYNC_BINDINGS_JSON`이 지정된 지점은 이전 동기화/SSO 경로가 차단되므로, 초기 shadow 검토와 활성화 사이의 바로가기 공백을 고려하여 전환한다. 기존 독립 계정의 일반 로그인은 기존 정책을 유지한다.
-5. 에이와 binding을 **shadow로 최초 등록**한다. 아래의 `<기존-서버-env>`에는 기존 Supabase 서버 설정이, `<생성한-에이와-env>`에는 새 연동 값이 들어 있어야 한다. 두 파일을 공개하지 않는다.
+4. 두 프로젝트의 Production 환경변수를 입력한다. 오늘의수학 수신 코드를 먼저 배포하고 에이와 발신 코드를 배포한다. 자동 연결 신뢰가 설정된 지점은 이전 동기화/SSO 경로로 우회하지 않는다. 기존 독립 계정의 일반 로그인은 기존 정책을 유지한다.
+5. 첫 cron이 이미 ON인 지점을 자동 등록하고 대상에 전송한다. 이후 ON은 토글 저장과 같은 트랜잭션에서 연결 원장과 발신 사건을 만든다. 최초 작업을 기다리지 않고 실행하거나 확인하려면 아래를 사용한다. `<기존-서버-env>`는 기존 Supabase 서버 설정이며 두 파일 모두 비공개로 유지한다.
 
    ```powershell
-   node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs configure --mode=shadow
-   node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs configure --mode=shadow --apply
+   node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs automatic
+   node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs automatic --apply
    node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs status
    ```
 
-6. 오늘의수학 `/admin/eywa-sync`에서 설정된 연결을 **미리보기 연결 등록**한다. 반에 매핑된 교사가 없을 때 기록을 보관할 담당 계정은 해당 지점에서 명시적으로 선택한다. 이 계정 ID를 생략하면 담당 없는 반은 임의 사용자에게 귀속되지 않고 검토 대상으로 남는다. **변경 없이 미리보기**로 신규/확인 후보/충돌 수를 검토한다.
+6. 오늘의수학은 서명·고정 주소를 검증하고 원본의 현재 ON·정상 상태와 지점 이름을 확인한 후 **지점과 연결을 한 번만 자동 생성**한다. `/admin/eywa-sync`에서 신규/확인 후보/충돌을 확인한다. 매핑 가능한 담당 교사가 전혀 없는 반은 임의 사용자에게 귀속하지 않고 검토 대상으로 남는다. 기존 동일 이메일 계정 승인은 별도다.
 7. 에이와의 즉시 wake를 설정한다:
 
    ```powershell
@@ -76,12 +75,7 @@ Vercel Project → Settings → Environment Variables에서 입력한 후 새 �
    ```
 
    `transportInstalled=true`인지 확인한다. false면 기존 Supabase DB에서 제공하는 `pg_net` 확장을 활성화한 뒤 재확인한다. DB의 `net.http_post`가 에이와의 `POST /api/cron/todays-math-sync`를 호출한다. Vercel Deployment Protection/방화벽이 있다면 해당 서버 경로의 정상 호출이 허용되어야 한다. 별도 서버 설치는 필요 없다. 실제 wake HTTP 왕복은 운영에서 확인해야 한다. [Supabase pg_net](https://supabase.com/docs/guides/database/extensions/pg_net)
-8. 오늘의수학 관리 화면에서 연결 활성화 → 에이와 binding을 active로 전환한다. 에이와의 해당 지점 오늘의수학 라이선스도 ON이어야 한다.
-
-   ```powershell
-   node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs configure --mode=active
-   node --env-file=<기존-서버-env> --env-file=<생성한-에이와-env> scripts/todays-math-sync-admin.mjs configure --mode=active --apply
-   ```
+8. 침산 지점의 오늘의수학 토글 ON → 지점/교사/반/학생 연결을 확인한다. 자동 연결에는 별도의 지점 등록·활성화 버튼 조작이 필요 없다. OFF → 같은 계정의 접근 정지와 기록 보존, ON → 같은 지점 재사용을 확인한다. 운영자가 별도로 연결을 shadow/종료한 경우 자동 ON으로 풀지 않는다.
 
 9. 에이와 cron `/api/cron/todays-math-sync`가 매분 실행되는지 확인한다. 즉시 wake와 cron은 같은 durable outbox를 사용하고, 중복 실행은 lease로 조정한다. 오늘의수학의 운영자 승인·재처리도 에이와에 새 변경이 없어도 cron이 수신 큐를 깨운다. 설정 연결이 3개를 넘으면 보조 sweep은 분마다 최대 3개를 순환하지만 신규 source 이벤트는 발신 즉시 처리 요청한다.
 10. 양쪽 상태 화면에서 `received`와 `applied`를 구분한다. 충돌은 해당 항목만 보류하고 운영자가 해결한다. 기존 계정은 `/account/eywa-managed`에서 본인이 재확인하거나 `/admin/eywa-sync`에서 적격 운영자가 확인 근거를 남겨 승인한다. 최초 연결·반 이동의 효과가 실제 조회와 로그인에서 확인되어야 운영 완료다.

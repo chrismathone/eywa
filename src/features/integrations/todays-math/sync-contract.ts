@@ -24,6 +24,7 @@ export const controlUserSchema = z.object({
 });
 export const controlSchema = z.object({
   schemaVersion: z.literal(2), bindingId: uuidSchema, tenantId: uuidSchema, targetBranchId: z.string().min(1).max(200),
+  tenantName: z.string().min(1).max(100).nullable().optional(),
   sourceEpoch: uuidSchema, securityRevision: revisionSchema, tenantRevocationGeneration: revisionSchema,
   enabled: z.boolean(), mode: z.enum(["shadow", "active"]), validatedAt: timestampSchema,
   nextEffectiveAt: timestampSchema.nullable(), healthy: z.boolean(), users: z.array(controlUserSchema),
@@ -100,6 +101,7 @@ export const bindingConfigSchema = z.object({
   bindingId: uuidSchema, tenantId: uuidSchema, targetBranchId: z.string().min(1).max(200),
   sourceBaseUrl: originSchema, targetBaseUrl: originSchema, keyId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
   controlSecret: secretSchema, webhookSecret: secretSchema, ssoSecret: secretSchema,
+  provision: z.literal("automatic").optional(),
 });
 export type BindingConfig = z.infer<typeof bindingConfigSchema>;
 export type SecretPurpose = "control" | "webhook" | "sso";
@@ -124,6 +126,23 @@ export function parseBindingConfigs(raw: string | undefined): BindingConfig[] {
     bindings.set(config.bindingId, config);
   }
   return configs;
+}
+/** One installation-wide trust configuration; a tenant is still checked against live source control. */
+const automaticConfigSchema = bindingConfigSchema.omit({ bindingId: true, tenantId: true, targetBranchId: true, provision: true });
+export type AutomaticConfig = z.infer<typeof automaticConfigSchema>;
+export function parseAutomaticConfigs(raw: string | undefined): AutomaticConfig[] {
+  if (!raw?.trim()) return [];
+  const configs = z.array(automaticConfigSchema).parse(JSON.parse(raw));
+  if (new Set(configs.map((c) => c.keyId)).size !== configs.length) throw new Error("duplicate_automatic_key");
+  if (configs.some((c) => c.sourceBaseUrl !== configs[0].sourceBaseUrl || c.targetBaseUrl !== configs[0].targetBaseUrl)) throw new Error("automatic_origin_mismatch");
+  return configs;
+}
+/** UUIDs are copied across distinct identity tables, never inferred from branch display names. */
+export function resolveBindingConfigs(manual: BindingConfig[], automatic: AutomaticConfig[], bindingId: string): BindingConfig[] {
+  const configured = manual.filter((c) => c.bindingId === bindingId);
+  if (configured.length) return configured;
+  if (!uuidSchema.safeParse(bindingId).success || manual.some((c) => c.tenantId === bindingId || c.targetBranchId === bindingId)) return [];
+  return automatic.map((c) => ({ ...c, bindingId, tenantId: bindingId, targetBranchId: bindingId, provision: "automatic" as const }));
 }
 export function sha256(value: string | Uint8Array): string { return createHash("sha256").update(value).digest("hex"); }
 export function s256(verifier: string): string { return createHash("sha256").update(verifier).digest("base64url"); }
