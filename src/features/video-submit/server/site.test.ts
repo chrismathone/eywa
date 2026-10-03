@@ -110,6 +110,10 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     // 김민수 — 영어(학원 설정이 끈 과목) 반의 숙제는 없다
     expect(dates(await look("김민수"))).toEqual([`${label("2026-10-01")}|LT4`]);
   });
+  it("🔴 올릴 수 있는 숙제 = 숙제일 + 7일까지(원장 '숙제날짜 기준 7일') — 오늘(10/2)이면 9/25 숙제까지 · 9/24 숙제는 없다", async () => {
+    db.tables.lesson_reports!.push(report("r8", S, C, "2026-09-25"), report("r9", S, C, "2026-09-24"));
+    expect(dates(await look())).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`, `${label("2026-09-25")}|LT4`]);
+  });
   it("🔴 이름이 틀리면 '찾지 못했다' — 번호만 맞아서는 아무것도 안 나온다(다른 지점의 같은 이름도)", async () => {
     for (const name of ["류태영", "김태경", "박퇴원", "류태경이"]) {
       const r = await look(name);
@@ -258,7 +262,8 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     }
     const r = await look("자리1", "0000");
     expect(r).toMatchObject({ ok: false, code: "invalid" });
-    expect(!r.ok && r.error).toContain("선생님께 영상 제출 링크를 받아 주세요");
+    // 학생마다 링크를 새로 만들지 않으므로 "선생님께 링크를 받으라"는 막다른 안내를 하지 않는다(2026-10-03)
+    expect(!r.ok && r.error).toContain("ClassNote 알림장에 올려 주세요");
   });
   it("번호 뒤에 글자가 붙은 저장값(`…5678(모)`)도 찾는다 · 가운데에만 그 숫자가 든 번호는 아니다", async () => {
     Object.assign(db.tables.students![0]!, { student_phone: null, parent_phone: "010-1234-5678(모)" });
@@ -281,18 +286,19 @@ describe("링크 열기 — 고른 숙제", () => {
   };
   const open = (choice: unknown, over: { last4?: unknown; name?: unknown; ip?: string } = {}) =>
     openSiteLink({ last4: over.last4 ?? "5678", name: over.name ?? "류태경", choice, ip: over.ip ?? "1.1.1.1" });
-  it("고른 숙제의 제출 링크를 만든다 — 주소에 숙제일 · 출처 site · 만든 날과 다음 날까지 · 토큰 원문은 응답에만 · 감사로그", async () => {
+  it("고른 숙제의 제출 링크를 만든다 — 주소에 숙제일 · 출처 site · 그 반의 가장 늦은 안 낸 숙제 + 7일까지 · 토큰 원문은 응답에만 · 감사로그", async () => {
     const r = await open(await pick("2026-09-29"));
     expect(r.ok && r.url).toMatch(/^\/v\/[A-Za-z0-9_-]{43}\?h=2026-09-29$/);
     const token = r.ok ? r.url.slice(3, 46) : "";
     expect(db.tables.homework_video_links).toHaveLength(1);
     expect(db.tables.homework_video_links![0]).toMatchObject({
-      tenant_id: T, student_id: S, class_id: C, origin: "site", expires_at: "2026-10-04T00:00:00+09:00", token_hash: hashSubmitToken(token),
+      // 9/29 숙제를 골랐어도 링크는 같은 반의 가장 늦은 안 낸 숙제(10/1) + 7일 = 10/8까지(같은 링크로 다른 숙제도 올린다)
+      tenant_id: T, student_id: S, class_id: C, origin: "site", expires_at: "2026-10-09T00:00:00+09:00", token_hash: hashSubmitToken(token),
     });
     expect(JSON.stringify(db.tables.homework_video_links)).not.toContain(token);
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ tenantId: T }), expect.objectContaining({
       action: "lesson_report_video_link_issue", targetLabel: "류태경 · LT4",
-      metadata: expect.objectContaining({ studentId: S, classId: C, origin: "site", lastDay: "2026-10-03", homeworkDate: "2026-09-29" }),
+      metadata: expect.objectContaining({ studentId: S, classId: C, origin: "site", lastDay: "2026-10-08", homeworkDate: "2026-09-29" }),
     }));
   });
   it("🔴 다른 번호·다른 이름·지어낸 지문으로는 만들지 않는다(서버가 같은 번호·이름으로 다시 조회한다)", async () => {
@@ -353,6 +359,12 @@ describe("링크 열기 — 고른 숙제", () => {
     db.tables.homework_video_links = [{ ...base, id: "y1", token_hash: "h1", created_at: "2026-10-01T10:00:00+09:00", revoked_at: "2026-10-01T12:00:00+09:00" }];
     expect((await open(choice)).ok).toBe(true);
     db.tables.homework_video_links = [{ ...base, id: "y2", token_hash: "h2", created_at: "2026-10-01T10:00:00+09:00", revoked_at: "2026-10-02T09:00:00+09:00" }];
+    expect(await open(choice)).toMatchObject({ ok: false, code: "limit" });
+  });
+  it("🔴 며칠 전 사이트로 연 링크(숙제 기한까지 살아 있다)를 오늘 끊어도 그날은 다시 못 연다 — 살아 있을 수 있는 링크를 다 본다", async () => {
+    const choice = await pick();
+    const base = { tenant_id: T, student_id: S, class_id: C, origin: "site", expires_at: "2026-10-09T00:00:00+09:00" };
+    db.tables.homework_video_links = [{ ...base, id: "d5", token_hash: "h5", created_at: "2026-09-27T10:00:00+09:00", revoked_at: "2026-10-02T09:00:00+09:00" }];
     expect(await open(choice)).toMatchObject({ ok: false, code: "limit" });
   });
   it("자정을 넘겨 고른 숙제(어제 날짜 지문)도 받는다 · 그보다 오래된 지문은 받지 않는다 · 지문은 숙제마다 다르다", async () => {

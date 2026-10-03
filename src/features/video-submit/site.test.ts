@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isLast4, isSiteName, phoneEndsWith, siteLinkExpiresAt, siteLinkLastDay, siteNameKey, siteNameMatches } from "./site";
+import { isLast4, isSiteName, phoneEndsWith, SITE_HOMEWORK_DAYS, siteHomeworkLastDay, siteLinkExpiresAt, siteNameKey, siteNameMatches, uploadLastDay } from "./site";
 
 const read = (...p: string[]) => readFileSync(join(process.cwd(), ...p), "utf8");
 
@@ -43,11 +43,18 @@ describe("이름 — 번호와 함께 넣어야 한다(원장 2026-10-03)", () =
   });
 });
 
-describe("사이트가 만든 링크의 수명 — 만든 날과 다음 날", () => {
-  it("끝나는 순간은 이틀 뒤 0시(KST) · 마지막으로 쓸 수 있는 날은 다음 날", () => {
-    expect(siteLinkExpiresAt("2026-10-02")).toBe("2026-10-04T00:00:00+09:00");
-    expect(siteLinkLastDay("2026-10-02")).toBe("2026-10-03");
-    expect(siteLinkExpiresAt("2026-12-31")).toBe("2027-01-02T00:00:00+09:00");
+describe("사이트로 올리는 기한 — 숙제일 + 7일(원장 2026-10-03 \"숙제날짜 기준 7일\")", () => {
+  it("10/1 숙제는 10/8까지 · 링크는 마지막 날 다음 날 0시(KST)에 끝난다 · 해·달을 넘긴다", () => {
+    expect(SITE_HOMEWORK_DAYS).toBe(7);
+    expect(siteHomeworkLastDay("2026-10-01")).toBe("2026-10-08");
+    expect(siteLinkExpiresAt("2026-10-08")).toBe("2026-10-09T00:00:00+09:00");
+    expect(siteHomeworkLastDay("2026-12-28")).toBe("2027-01-04");
+    expect(siteLinkExpiresAt("2026-12-31")).toBe("2027-01-01T00:00:00+09:00");
+  });
+  it("제출 화면의 '언제까지' = 고른 숙제의 기한과 링크가 끝나는 날 중 이른 날 · 숙제가 없으면 링크가 끝나는 날", () => {
+    expect(uploadLastDay("2026-10-11T00:00:00+09:00", "2026-10-01")).toBe("2026-10-08"); // 링크는 더 늦은 숙제까지 산다
+    expect(uploadLastDay("2026-10-04T00:00:00+09:00", "2026-10-01")).toBe("2026-10-03"); // 예전 규칙(만든 날 + 다음 날)으로 만든 링크
+    expect(uploadLastDay("2026-10-10T00:00:00+09:00", null)).toBe("2026-10-09");
   });
 });
 

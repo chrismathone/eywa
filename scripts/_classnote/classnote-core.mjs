@@ -368,7 +368,7 @@ export async function sendReportViaApi(adminPage, { report, studentName, boardId
       }
     }
     const res = await postClassnoteReport(adminPage, {
-      // 본문 = 공유 링크 한 줄, 앱이 제출 토큰을 줬으면 두 줄('보고서 :'·'영상첨부 :')로 낸다(report-video-line.mjs). 아래 확인들은 세 모양을 다 알아본다.
+      // 본문 = 공유 링크 한 줄, 앱이 영상 줄을 주면 두 줄('보고서 :'·'영상첨부 :' — 2026-10-03부터 올리기 사이트 주소 `/v`)로 낸다(report-video-line.mjs). 아래 확인들은 세 모양을 다 알아본다.
       cls: boardId, child: child.id, enrollment: enrollment.id, content: reportPostContent(shareUrl, videoUrl),
       dateWritten: report.report_date, authorName: report.teacher_name || DEFAULT_AUTHOR_NAME,
       attachedImages, attachedFiles,
@@ -895,8 +895,8 @@ export async function processQueueOnce(sql, browser, opts) {
         log(`  · ${studentName}: 게시 직전 확인 — 이미 다른 처리로 넘어간 행이라 게시 생략`);
         continue;
       }
-      // '영상첨부' 줄(원장 2026-10-01) — 앱이 정한다(영상 과제 있음 + 강사가 링크 넣기를 켬 + 검사 대상 반 + 지점 기능·Drive·SQL). 못 받으면 줄 없이 보낸다
-      // (10초 상한 · 실패해도 발송은 그대로). 게시 시도마다 새 7일 토큰 — 같은 보고서 재시도의 중복 판정은 첫 줄(공유 링크)로 한다.
+      // '영상첨부' 줄(원장 2026-10-01 → 10-03 올리기 사이트 주소 `/v` 한 줄) — 앱이 정한다(영상 과제 있음 + 검사 대상 반 + 숙제 기한 안 + 사이트를 쓰는 지점).
+      // 못 받으면 줄 없이 보낸다(10초 상한 · 실패해도 발송은 그대로). 같은 보고서 재시도의 중복 판정은 첫 줄(공유 링크)로 한다.
       const videoUrl = await fetchVideoSubmitLine({ base, shareBase, reportId: r.id, secret: INTERNAL_SECRET });
       // ⏱ 게시 호출 상한 — Cloud Run 경로에 있던 AbortController(960s)를 제거하면서 **전건이 상한 없는 호출**이 됐다.
       // kage 업로드·API 응답이 영영 안 오면 데몬이 그 건에서 멈춰 큐 전체가 정지한다(폴이 다음으로 못 넘어감).

@@ -12,6 +12,7 @@ import { linkFolderRegistry } from "./folder-registry";
 import { ensureLinkTeacherFolder } from "./folders";
 import { resolveSubmitToken } from "./links";
 import { isAssignedHomeworkDate } from "./site-homework";
+import { SITE_LINK_LOOKBACK_DAYS } from "../site";
 import { reconcileLinkUploads, type CompletedUpload } from "./upload-complete";
 import { loadLinkRoute } from "./upload-context";
 
@@ -22,19 +23,20 @@ export type StartUploadResult =
 const UNAVAILABLE = "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요.";
 const FAILED = "영상 올리기를 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 const LIMITED = "잠시 동안 너무 많이 올렸습니다. 한 시간 뒤에 다시 시도해 주세요.";
-/** 올리기 사이트 링크인데 고른 숙제를 확인할 수 없다(주소의 숙제일이 빠졌거나, 그 숙제가 없어졌거나, 2주가 지났다). */
+/** 올리기 사이트 링크인데 고른 숙제를 확인할 수 없다(주소의 숙제일이 빠졌거나, 그 숙제가 없어졌거나, 숙제일 + 7일이 지났다). */
 const HOMEWORK_GONE = "올릴 숙제를 확인하지 못했습니다. 처음 화면에서 숙제를 다시 골라 주세요.";
 
 /**
  * 횟수 제한을 셀 링크들 — 보고서·원생 탭 링크는 그 링크 하나, **사이트 링크는 같은 학생 × 반의 최근 사이트 링크 전부**
- * (사이트 링크는 만든 날과 다음 날까지라 최근 이틀이면 살아 있는 것을 다 덮는다).
+ * (사이트 링크는 숙제일 + 7일까지 살아 만든 날에서 길어야 8일 — `SITE_LINK_LOOKBACK_DAYS`면 살아 있는 것을 다 덮는다).
  */
 async function uploadLimitLinkIds(db: ReturnType<typeof createAdminClient>, link: { id: string; tenant_id: string; student_id: string; class_id: string; origin: string }): Promise<string[]> {
   if (link.origin !== "site") return [link.id];
   const { data, error } = await db.from("homework_video_links").select("id")
     .eq("tenant_id", link.tenant_id).eq("student_id", link.student_id).eq("class_id", link.class_id).eq("origin", "site")
-    .gte("created_at", new Date(Date.now() - 2 * 86_400_000).toISOString()).limit(200);
+    .gte("created_at", new Date(Date.now() - SITE_LINK_LOOKBACK_DAYS * 86_400_000).toISOString()).limit(201);
   if (error) throw new Error("업로드 횟수 확인 실패");
+  if ((data ?? []).length > 200) throw new Error("업로드 횟수 확인 범위 초과"); // 조용히 잘라 합산을 줄이지 않는다(하루 상한 × 9일 ≈ 60줄)
   const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
   return ids.includes(link.id) ? ids : [...ids, link.id];
 }

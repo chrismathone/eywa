@@ -13,7 +13,8 @@ const LINK_COLUMNS = "id,tenant_id,student_id,class_id,origin,report_id,report_s
 
 /**
  * 새 링크 — 토큰 원문은 돌려주기만 하고 DB엔 해시만. 기준일 = 보고서일(보고서 줄) 또는 오늘(KST, 학생 상세).
- * `expiresAt`을 주면 그 순간에 끝난다(올리기 사이트가 만든 링크는 7일이 아니라 만든 날과 다음 날 — site.ts `siteLinkExpiresAt`).
+ * `expiresAt`을 주면 그 순간에 끝난다(올리기 사이트가 만든 링크는 7일이 아니라 같은 반의 가장 늦은 안 낸 숙제 + 7일 — site.ts `siteLinkExpiresAt`).
+ * 🔴 2026-10-03부터 이 함수를 부르는 곳은 올리기 사이트 하나다(학생 상세·보고서 줄의 학생별 링크는 거뒀다 — 가드 report-link.test.ts).
  */
 export async function mintSubmitLink(db: Db, input: {
   tenantId: string; studentId: string; classId: string; origin: "manual" | "report" | "site";

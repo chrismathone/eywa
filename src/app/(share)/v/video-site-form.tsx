@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { isLast4, isSiteName, SITE_NAME_MAX, type SiteChoice, type SiteLookupResult, type SiteOpenResult } from "@/features/video-submit/site";
+import { isLast4, isSiteName, SITE_HOMEWORK_DAYS, SITE_NAME_MAX, type SiteChoice, type SiteLookupResult, type SiteOpenResult } from "@/features/video-submit/site";
 
 type Asked = { last4: string; name: string };
 type Phase =
@@ -144,7 +144,7 @@ export function VideoSiteForm({ academyName, maxLabel }: { academyName: string; 
                 </li>
               ))}
             </ul>
-            <p className="text-text-dim text-sm break-keep">찾는 숙제가 없으면 담당 선생님께 알려 주세요. 이미 낸 숙제와 2주가 지난 숙제는 나오지 않습니다.</p>
+            <p className="text-text-dim text-sm break-keep">찾는 숙제가 없으면 담당 선생님께 알려 주세요. 이미 낸 숙제와 수업일에서 {SITE_HOMEWORK_DAYS}일이 넘은 숙제는 나오지 않습니다.</p>
             <Button type="button" variant="ghost" className="w-full" disabled={phase.kind === "opening"}
               onClick={() => { setPhase({ kind: "ask" }); setError(null); setNotice(null); }}>
               처음으로
