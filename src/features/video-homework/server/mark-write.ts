@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTeachingClassIds } from "@/features/classes/server/delegation";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isVideoHomeworkEnabled } from "../policy";
+import { isOwnVideoHomework } from "./own-homework";
 import type { VideoHomeworkStatus } from "../types";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -18,6 +19,26 @@ export async function videoHomeworkWriteError(user: CurrentUser, classId: string
   if (!(await canWriteTenant(user.systemRole, "teacher_onescreen"))) return "수정 권한이 없습니다.";
   const classes = await getTeachingClassIds(await createClient(), user.id, date);
   return classes.all.includes(classId) ? null : "담당 반만 수정할 수 있습니다.";
+}
+
+/**
+ * 영상 제출 현황(장부)의 칸을 찍을 수 있나 — 수업보고서 **전체 권한**이면 모든 칸, 아니면 **강사 쓰기 권한 + 자기가 낸 숙제 칸**만
+ * (원장 2026-10-03 *"강사뷰에서도 수동 체크. 관리자와 동일하게 스스로 낸 숙제만 체크 하게"*). 낸 사람 = 그 보고서의 작성 계정(`created_by`).
+ * 🔑 "그날 그 반 담당" 검사(`videoHomeworkWriteError`)는 장부에선 이것으로 대신한다 — 담임이 바뀐 반의 내 숙제도 내가 찍는다(그 판정은
+ *    지금 담임을 봐서, 보이는 칸이 저장 때 "담당 반만"으로 거절됐다). 관리자 화면도 이 판정이라 편집 칸은 전체 권한일 때만 연다.
+ * 숙제일 없는 옛 기록(c:)은 낸 사람을 몰라 강사는 찍지 않는다. 원스크린 검사(`setVideoHomeworkMark`)는 이 판정을 타지 않는다(예전 그대로).
+ */
+export async function ledgerRoundWriteError(db: Db, user: CurrentUser, input: { classId: string; studentId: string; homeworkDate: string | null }): Promise<string | null> {
+  if ((await accessLevelTenant(user.systemRole, "lesson_reports")) === "full") return null;
+  if (!(await canWriteTenant(user.systemRole, "teacher_onescreen"))) return "수정 권한이 없습니다.";
+  const NOT_MINE = "내가 낸 숙제만 기록할 수 있습니다.";
+  if (!input.homeworkDate) return "숙제일이 없는 옛 기록이라 여기서는 고칠 수 없습니다. 사무실에 알려 주세요.";
+  try {
+    return (await isOwnVideoHomework(db, { tenantId: user.tenantId, userId: user.id, classId: input.classId, studentId: input.studentId, date: input.homeworkDate }))
+      ? null : NOT_MINE;
+  } catch {
+    return "숙제를 낸 사람을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  }
 }
 
 /** 그 반·학생이 있고 지금 설정으로 검사 대상인가 — 통과하면 감사로그에 쓸 이름을 돌려준다. */

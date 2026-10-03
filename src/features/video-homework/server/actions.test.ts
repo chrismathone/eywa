@@ -37,12 +37,14 @@ vi.mock("@/lib/supabase/admin", () => ({
 const has = (call: Call, ...filter: unknown[]) => call.filters.some((f) => JSON.stringify(f) === JSON.stringify(filter));
 const writes = () => mocks.calls.filter((call) => call.op !== "select");
 /** 기본 세계: 반·학생이 있고 정규 수강 중 · 같은 숙제 기록 없음 · 그날 보고서에 '영상 과제 있음'. */
-function world(over: { sameHomework?: { id: string }[]; assigned?: boolean } = {}) {
+function world(over: { sameHomework?: { id: string }[]; assigned?: boolean; own?: boolean } = {}) {
   mocks.respond = (call) => {
     if (call.op !== "select") return { data: null, error: null };
     if (call.table === "classes") return { data: { subject: "math", class_name: "수학 A" }, error: null };
     if (call.table === "students") return { data: { grade: "중1", name: "김민준" }, error: null };
     if (call.table === "enrollments") return { data: [{ start_date: "2026-01-01", end_date: null, on_hold: false, is_transferred: false }], error: null };
+    // 낸 사람 확인(created_by)은 따로 답한다 — 기본은 내가 낸 숙제.
+    if (call.table === "lesson_reports" && call.filters.some((f) => f[1] === "created_by")) return { data: over.own === false ? [] : [{ id: "r1" }], error: null };
     if (call.table === "lesson_reports") return { data: over.assigned === false ? [] : [{ id: "r1" }], error: null };
     if (call.table === "video_homework_marks") return { data: call.filters.some((f) => f[1] === "homework_date") ? over.sameHomework ?? [] : [], error: null };
     return { data: [], error: null };
@@ -139,6 +141,34 @@ describe("영상 제출 현황 회차(setVideoHomeworkRound)", () => {
   ])("%o → 거절", async (patch, error) => {
     expect(await setVideoHomeworkRound({ ...round, ...patch })).toEqual({ ok: false, error });
     expect(writes()).toEqual([]);
+  });
+  it("🔴 강사(수업보고서 전체 권한 아님)는 자기가 낸 숙제 칸만 찍는다 — 남이 낸 숙제·숙제일 없는 옛 기록은 거절(원장 2026-10-03 \"스스로 낸 숙제만 체크\")", async () => {
+    // 담당 반 검사(지금 담임)는 장부에서 묻지 않는다 — 담임이 바뀐 반의 내 숙제도 내가 찍는다.
+    mocks.user.mockResolvedValue({ id: "teacher-a", tenantId: "tenant-a", systemRole: "teacher" });
+    mocks.access.mockResolvedValue("scoped");
+    mocks.canWrite.mockResolvedValue(true);
+    world();
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
+    const ownCheck = mocks.calls.find((c) => c.table === "lesson_reports" && has(c, "eq", "created_by", "teacher-a"))!;
+    expect(has(ownCheck, "eq", "report_date", "2026-09-29") && has(ownCheck, "eq", "video_homework", true) && has(ownCheck, "eq", "tenant_id", "tenant-a")).toBe(true);
+    mocks.calls = [];
+    world({ own: false });
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "내가 낸 숙제만 기록할 수 있습니다." });
+    expect(writes()).toEqual([]);
+    world();
+    expect(await setVideoHomeworkRound({ ...round, roundKey: "c:2026-09-05" })).toEqual({ ok: false, error: "숙제일이 없는 옛 기록이라 여기서는 고칠 수 없습니다. 사무실에 알려 주세요." });
+    expect(writes()).toEqual([]);
+    // 강사 쓰기 권한이 없으면(상담사 등) 낸 사람을 묻기 전에 거절
+    mocks.canWrite.mockResolvedValue(false);
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: false, error: "수정 권한이 없습니다." });
+    mocks.canWrite.mockResolvedValue(true);
+    // 관리자(전체 권한)는 그대로 — 낸 사람을 묻지도 않는다
+    mocks.user.mockResolvedValue({ id: "staff-a", tenantId: "tenant-a", systemRole: "master" });
+    mocks.access.mockResolvedValue("full");
+    mocks.calls = [];
+    world({ own: false });
+    expect(await setVideoHomeworkRound(round)).toEqual({ ok: true });
+    expect(mocks.calls.some((c) => has(c, "eq", "created_by", "staff-a"))).toBe(false);
   });
   it("숙제일 없는 옛 기록(c:검사일)은 그 검사일 자리 그대로 · 미확인으로 되돌리면 지운다", async () => {
     mocks.respond = (call) => call.table === "video_homework_marks" && call.op === "select" ? { data: [{ id: "old" }], error: null }

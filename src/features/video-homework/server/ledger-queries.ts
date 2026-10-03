@@ -49,7 +49,9 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
  * 회차와 완료 판정은 `rounds.ts`가 한다(여기는 재료만). 짝을 맞추려면 기간 앞뒤의 숙제·영상도 알아야 해서
  * 숙제·기록·영상은 `videoMatchRange`(오늘 기준 고정 시작점 ~ 기간 끝 + 2주)로 넓혀 읽는다 — 화면에는 기간 안의 회차만 선다.
  */
-export async function getVideoHomeworkLedger(tenantId: string, fromDate: string, toDate: string): Promise<{
+export async function getVideoHomeworkLedger(tenantId: string, fromDate: string, toDate: string,
+  /** 읽을 반 × 학생(`반:학생`)만 — 강사뷰(내가 낸 숙제가 있는 줄). 명단·영상·출결을 이 줄만 읽는다(판정은 반 × 학생 단위라 결과는 같다). */
+  scope?: { pairs: ReadonlySet<string> }): Promise<{
   rows: VideoHomeworkLedgerBaseRow[]; marks: VideoHomeworkMark[]; videos: VideoArrival[];
   /** 빈 칸 사유(결석·숙제없음) — `classId:studentId` → 날짜 → 사유. 못 읽었으면 빈 객체(그 칸은 '—'). */
   blankFacts: BlankFacts;
@@ -91,7 +93,7 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
   const activeClasses = new Set(occurrences.filter((row) => row.date >= fromDate && row.date <= toDate).map((row) => row.class_id));
   // 명단 = 기간에 그 반 수업이 있는 수강생 + (수강이 끝났어도) 기간 안에 숙제·기록이 있는 학생.
   const pairs = buildVideoHomeworkLessonPairs({ classes, enrollments, schedules, fromDate, toDate, today, occurrences })
-    .filter((pair) => activeClasses.has(pair.classId));
+    .filter((pair) => activeClasses.has(pair.classId) && (!scope || scope.pairs.has(`${pair.classId}:${pair.studentId}`)));
   const assignedByPair = new Map<string, string[]>();
   for (const row of assigned ?? []) {
     const key = `${row.classId}:${row.studentId}`;

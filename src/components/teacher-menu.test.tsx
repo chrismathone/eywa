@@ -81,11 +81,13 @@ function menuHrefs(role: SystemRole, matrix: AccessMatrix): string[] {
 
 /**
  * 누르면 그 화면이 **실제로 열리는가** — 페이지 `requireAccess(menu)`와 같은 판정(실제 역할 × 사용자 매트릭스).
- * 원스크린만 예외: 그 페이지는 역할이 아니라 뷰(강사 미니셸인가)로 연다.
+ * 예외 = 역할이 아니라 뷰(강사 미니셸인가)로 여는 화면 — 원스크린 · 영상 제출 현황(둘 다 `getShellView()==="teacher"` 게이트).
+ * 🔴 menuKey(`teacher_onescreen`)로 통째로 빼지 말 것 — 같은 키를 쓰는 새 화면이 역할 게이트로 열리면 여기서 못 잡는다.
  */
+const VIEW_GATED_HREFS = new Set(["/onescreen", "/onescreen/video-homework"]);
 function opens(role: SystemRole, matrix: AccessMatrix, href: string): boolean {
   const key = menuKeyForPath(href);
-  if (!key || key === "teacher_onescreen") return true;
+  if (!key || VIEW_GATED_HREFS.has(href)) return true;
   return canAccess(role, key, matrix);
 }
 
@@ -114,10 +116,19 @@ describe("강사 '내 메뉴' — 누르면 튕기는 항목이 없다", () => {
     expect(menuHrefs("admin", m)).not.toContain("/class-review");
   });
 
+  it("뷰로 여는 두 화면은 실제로 뷰 게이트다(역할 requireAccess로 바뀌면 겸직이 튕긴다)", () => {
+    for (const file of ["src/app/(shell)/onescreen/page.tsx", "src/app/(shell)/onescreen/video-homework/page.tsx"]) {
+      const code = readFileSync(join(process.cwd(), file), "utf8");
+      expect(code, file).toContain('(await getShellView()) !== "teacher"');
+      expect(code, file).not.toContain('requireAccess("teacher_onescreen")');
+    }
+  });
+
   it("실 강사는 달라지는 게 없다 — 강사 행이 연 메뉴가 원래 순서대로 선다(메뉴에서 뺀 캘린더만 빠진다)", () => {
     expect(menuHrefs("teacher", DEFAULTS)).toEqual([
       "/attendance/quick",
       "/onescreen",
+      "/onescreen/video-homework",
       "/ecs",
       "/mcs",
       "/students",

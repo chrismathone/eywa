@@ -15,6 +15,19 @@ export const ledgerPairKey = roundPairKey;
 export type LedgerRounds = ReadonlyMap<string, LedgerRound[]>;
 const NO_ROUNDS: LedgerRound[] = [];
 export const roundsOf = (rounds: LedgerRounds, row: { classId: string; studentId: string }) => rounds.get(roundPairKey(row)) ?? NO_ROUNDS;
+
+/** 보일 회차 하나의 열쇠 — `반:학생:숙제일`. */
+export const ownRoundKey = (pair: { classId: string; studentId: string }, homeworkDate: string) => `${roundPairKey(pair)}:${homeworkDate}`;
+
+/**
+ * 화면에 세울 회차만 남긴다 — 강사뷰 '영상 제출 현황'(원장 2026-10-03 *"각 강사뷰에서는 내가 출제한것만"*).
+ * 🔴 판정(영상 짝·같은 날 규칙·지문)은 **전체 회차로 먼저** 하고(`buildLedgerRounds`) 보이는 칸만 거른다 — 거른 뒤에 짝을 지으면
+ *    남이 낸 숙제 칸이 빠진 자리로 영상이 옮겨 붙어 관리자 화면과 판정이 갈린다. 숙제일 없는 옛 기록(c:)은 낸 사람을 몰라 빠진다.
+ *    회차 번호(1회·2회)는 남은 칸끼리의 순서다.
+ */
+export function keepLedgerRounds(rounds: LedgerRounds, keep: ReadonlySet<string>): LedgerRounds {
+  return new Map([...rounds].map(([pair, list]) => [pair, list.filter((round) => !!round.homeworkDate && keep.has(`${pair}:${round.homeworkDate}`))]));
+}
 export const ledgerCounts = (row: VideoHomeworkLedgerRow, rounds: LedgerRounds) => roundCounts(roundsOf(rounds, row));
 /** 칸·CSV·읽어 주는 이름이 같이 쓰는 상태 글자. */
 /** ▶(영상 바로가기)·'수동' 표시 — 완료 칸만. 영상이 짝지어졌으면 영상, 없으면 사람이 영상 없이 찍은 손 기록('수동'). */

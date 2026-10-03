@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, ledgerCsv, ledgerPairKey, ledgerSummary, type LedgerFilters } from "../ledger";
+import { DEFAULT_LEDGER_FILTERS, filterLedgerRows, groupLedgerRows, keepLedgerRounds, ledgerCsv, ledgerPairKey, ledgerSummary, type LedgerFilters } from "../ledger";
 import { buildLedgerRounds } from "../rounds";
 import type { BlankFacts } from "../no-homework";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "../types";
@@ -17,9 +17,11 @@ const NO_VIDEOS: VideoArrival[] = [];
 const NO_FACTS: BlankFacts = {};
 const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b, "ko", { numeric: true })).map((value) => ({ value, label: value }));
 
-export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS }: {
+export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS, blankFacts = NO_FACTS, videosKnown = true, fromDate, toDate, today, initialFilters = DEFAULT_LEDGER_FILTERS, keepRounds }: {
   rows: VideoHomeworkLedgerRow[]; initialMarks: VideoHomeworkMark[]; videos?: VideoArrival[]; blankFacts?: BlankFacts; videosKnown?: boolean;
   fromDate: string; toDate: string; today: string; initialFilters?: LedgerFilters;
+  /** 보일 회차(`반:학생:숙제일`, `ownRoundKey`) — 주면 그 칸만 세운다(강사뷰 = 내가 낸 숙제). 없으면 전부(관리자 화면). */
+  keepRounds?: readonly string[];
 }) {
   const [filters, setFilters] = useState(initialFilters);
   const query = useDeferredValue(filters.query);
@@ -28,7 +30,12 @@ export function VideoHomeworkManagement({ rows, initialMarks, videos = NO_VIDEOS
   const { marks, progress, save } = useLedgerMarks(initialMarks);
   const busy = progress !== null;
   // 회차·완료 판정은 한 벌 — 표·요약·필터·CSV가 전부 이 결과를 읽는다(저장 직후에도 같은 규칙으로 다시 센다).
-  const rounds = useMemo(() => buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate, toDate }), [rows, marks, videos, fromDate, toDate]);
+  const keep = useMemo(() => (keepRounds ? new Set(keepRounds) : null), [keepRounds]);
+  // 판정은 전체 회차로 먼저 하고, 보일 칸만 거른다(keepLedgerRounds — 거른 뒤 짝을 지으면 관리자 화면과 판정이 갈린다).
+  const rounds = useMemo(() => {
+    const all = buildLedgerRounds({ rows, marks: marks.values(), videos, fromDate, toDate });
+    return keep ? keepLedgerRounds(all, keep) : all;
+  }, [rows, marks, videos, fromDate, toDate, keep]);
   const groups = useMemo(() => groupLedgerRows(rows, rounds), [rows, rounds]);
   const visible = useMemo(() => filterLedgerRows(rows, rounds, { ...filters, query }), [rows, rounds, filters, query]);
   const classCounts = useMemo(() => {

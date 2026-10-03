@@ -136,6 +136,8 @@ export const SHEET_DICT = {
   "menu.toAdmin": { ko: "관리자뷰로 전환", en: "Switch to admin view" },
   "menu.item.attendanceQuick": { ko: "출결 모드", en: "Quick attendance" },
   "menu.item.teacher_onescreen": { ko: "수업 마감 (원스크린)", en: "Lesson wrap-up (One Screen)" },
+  // 원스크린과 같은 menuKey를 쓰는 둘째 줄 — 출결 모드처럼 따로 이름을 단다.
+  "menu.item.videoHomework": { ko: "영상 제출 현황", en: "Video homework" },
   "menu.item.ecs": { ko: "영어 강사 시트", en: "English Teacher Sheet" },
   "menu.item.mcs": { ko: "수학 강사 시트", en: "Math Teacher Sheet" },
   "menu.item.students": { ko: "내 학생", en: "My students" },

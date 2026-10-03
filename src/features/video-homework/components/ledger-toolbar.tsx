@@ -10,6 +10,7 @@ import { DEFAULT_LEDGER_FILTERS, type LedgerFilters } from "../ledger";
 import { isVideoHomeworkRange } from "../ledger-roster";
 import { LEDGER_STATUS_OPTIONS } from "./round-editor";
 import styles from "./video-homework-management.module.css";
+import { usePathname } from "next/navigation";
 
 type Option = { value: string; label: string };
 const ALL = "all";
@@ -32,6 +33,7 @@ export function LedgerToolbar({ filters, update, reset, classes, options, fromDa
   options: { subjects: Option[]; schools: Option[]; grades: Option[] };
   fromDate: string; toDate: string; today: string; busy: boolean; onDownload: (() => void) | null;
 }) {
+  const pathname = usePathname();
   const [rangeError, setRangeError] = useState("");
   function validateRange(event: FormEvent<HTMLFormElement>) {
     const data = new FormData(event.currentTarget);
@@ -45,7 +47,8 @@ export function LedgerToolbar({ filters, update, reset, classes, options, fromDa
     const next = filters.classIds.includes(value) ? filters.classIds.filter((id) => id !== value) : [...filters.classIds, value];
     update("classIds", next.sort((a, b) => order.indexOf(a) - order.indexOf(b)));
   }
-  return <form className={styles.filters} action="/lesson-reports/video-homework" method="get" onSubmit={validateRange}>
+  // 기간 조회는 **지금 화면 주소로** — 관리자 화면과 강사뷰(`/onescreen/video-homework`)가 같은 툴바를 쓴다(고정 주소면 강사가 관리자 화면으로 튕긴다).
+  return <form className={styles.filters} action={pathname} method="get" onSubmit={validateRange}>
     <EmbedHiddenInput />
     {/* 반 선택은 폼 제출에도 실린다(기간 조회 뒤에도 고른 반이 남게). */}
     {filters.classIds.length ? <input type="hidden" name="class" value={filters.classIds.join(",")} /> : null}

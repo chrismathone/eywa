@@ -25,6 +25,10 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   // 🔴 출석부와 **다른 그림**이어야 한다 — 같은 드롭다운에 나란히 선다(menu-hub의 출결 모드와 같은 listChecks).
   { href: "/attendance/quick", labelKey: "menu.item.attendanceQuick", icon: "listChecks", menu: "attendance" },
   { href: "/onescreen", labelKey: "menu.item.teacher_onescreen", icon: MENU_ICON.teacher_onescreen, menu: "teacher_onescreen" },
+  // 영상 제출 현황 — 관리자 화면과 같은 장부를 **내가 낸 영상 숙제만**(원장 2026-10-03 *"강사뷰에 새 매뉴 추가 … 내가 출제한것만"*).
+  //   ⚠️ 권한 키는 원스크린과 같은 `teacher_onescreen`(원스크린에서 낸 숙제를 보는 화면) — 새 메뉴 키를 만들면 auth_menu_access DEFAULTS
+  //   누락으로 잠긴다(출결 모드와 같은 규약). 스코프는 화면이 보고서 작성 계정으로 좁힌다(`getOwnVideoHomework`).
+  { href: "/onescreen/video-homework", labelKey: "menu.item.videoHomework", icon: MENU_ICON.lesson_reports, menu: "teacher_onescreen" },
   // English Class Sheet — 영어 반별 주간 수업계획서/출석부(scoped: 담당 반만. requireEcsClassAccess 게이트).
   { href: "/ecs", labelKey: "menu.item.ecs", icon: MENU_ICON.ecs, menu: "ecs" },
   // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만. requireMcsClassAccess 게이트).

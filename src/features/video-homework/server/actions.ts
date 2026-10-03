@@ -8,7 +8,7 @@ import { logAction } from "@/features/audit/server/log";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
 import { videoHomeworkColumnReady } from "./assignments";
-import { loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
+import { ledgerRoundWriteError, loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
 
 type Db = ReturnType<typeof createAdminClient>;
 type CheckCell = { classId: string; studentId: string; checkDate: string; homeworkDate: string | null;
@@ -169,10 +169,10 @@ export async function setVideoHomeworkRound(input: {
   const homeworkDate = kind === "h:" ? date : null;
   if (homeworkDate && input.submittedDate && input.submittedDate < homeworkDate)
     return { ok: false, error: "제출일은 숙제가 나간 날보다 빠를 수 없습니다." };
-  const denied = await videoHomeworkWriteError(user, input.classId, date);
-  if (denied) return { ok: false, error: denied };
-
   const db = createAdminClient();
+  // 수업보고서 전체 권한이면 모든 칸, 아니면 강사 쓰기 + 자기가 낸 숙제 칸만(강사뷰 '영상 제출 현황', 2026-10-03 — ledgerRoundWriteError).
+  const denied = await ledgerRoundWriteError(db, user, { classId: input.classId, studentId: input.studentId, homeworkDate });
+  if (denied) return { ok: false, error: denied };
   const target = await loadVideoHomeworkTarget(db, user.tenantId, input.classId, input.studentId);
   if (target.error !== null) return { ok: false, error: target.error };
   if (input.status !== null && !target.enabled)

@@ -1,5 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
-import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
+import { accessLevelTenant, canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { isFeatureLicensed } from "@/lib/license/server";
 import { PageHeader } from "@/components/page-header";
@@ -9,16 +9,14 @@ import { VideoHomeworkManagement } from "@/features/video-homework/components/vi
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { kstToday } from "@/lib/date-kst";
-import { parseMulti } from "@/lib/multi-value";
-import { isVideoHomeworkDate } from "@/features/video-homework/types";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
 import { lessonReportFaces } from "@/features/report-admin/lesson-report-faces";
 import { Suspense } from "react";
 import { isModuleEnabled } from "@/lib/modules";
 import { ManualDriveReviewNote } from "@/features/video-homework/components/manual-drive-review-note";
 import { classnoteReplyMode } from "@/features/owner/classnote-gate";
-import { DEFAULT_LEDGER_FILTERS, ledgerPairKey, type LedgerFilters } from "@/features/video-homework/ledger";
-import { isVideoHomeworkRange } from "@/features/video-homework/ledger-roster";
+import { ledgerPairKey } from "@/features/video-homework/ledger";
+import { ledgerInitialFilters, ledgerPeriod } from "@/features/video-homework/ledger-period";
 import { buildLedgerRounds } from "@/features/video-homework/rounds";
 
 export const dynamic = "force-dynamic";
@@ -32,22 +30,19 @@ export default async function VideoHomeworkPage({ searchParams }: {
   const user = await requireAccess("lesson_reports");
   const params = await searchParams;
   const param = (name: string) => typeof params[name] === "string" ? params[name] as string : "";
-  const requestedDate = param("date"), requestedFrom = param("from"), requestedTo = param("to");
   const today = kstToday();
-  const checkDate = requestedDate && isVideoHomeworkDate(requestedDate) && requestedDate <= today ? requestedDate : today;
-  const toDate = requestedTo && isVideoHomeworkDate(requestedTo) && requestedTo <= today ? requestedTo : checkDate;
-  const requestedStart = requestedFrom && isVideoHomeworkDate(requestedFrom) && requestedFrom <= toDate
-    ? requestedFrom : `${toDate.slice(0, 7)}-01`;
-  const rangeTooLong = !isVideoHomeworkRange(requestedStart, toDate);
-  const fromDate = rangeTooLong ? `${toDate.slice(0, 7)}-01` : requestedStart;
-  const [ledger, canEdit, canReportSettings, canAiMent, aiOn, settings] = await Promise.all([
+  const { fromDate, toDate, rangeTooLong } = ledgerPeriod(param, today);
+  const [ledger, canSend, lessonReportsLevel, canReportSettings, canAiMent, aiOn, settings] = await Promise.all([
     getVideoHomeworkLedger(user.tenantId, fromDate, toDate),
     canWriteTenant(user.systemRole, "lesson_reports"),
+    accessLevelTenant(user.systemRole, "lesson_reports"),
     canAccessTenant(user.systemRole, "report_settings"),
     canAccessTenant(user.systemRole, "ai_ment"),
     isFeatureLicensed(user.tenantId, "ai_analysis"),
     getTenantSettings(),
   ]);
+  // 칸 편집 = 수업보고서 전체 권한(서버 ledgerRoundWriteError와 같다 — 담당 권한은 강사뷰에서 자기가 낸 숙제만 찍는다).
+  const canEdit = lessonReportsLevel === "full";
   const subjectLabels = buildSubjectMaps(settings.operations.subjects);
   const candidates = ledger.rows.map((row) => {
     const tracked = isVideoHomeworkEnabled(settings.report.videoHomeworkPolicy, {
@@ -62,16 +57,11 @@ export default async function VideoHomeworkPage({ searchParams }: {
   // 기간 안에 회차가 하나도 없는 반은 세우지 않는다(숙제가 나간 날만 회차 — 원장 2026-10-01). 그 반 명단은 회차가 있는 반만.
   const activeClasses = new Set(displayRows.filter((row) => rounds.get(ledgerPairKey(row))?.length).map((row) => row.classId));
   const ledgerRows = displayRows.filter((row) => activeClasses.has(row.classId));
-  const initialFilters: LedgerFilters = { ...DEFAULT_LEDGER_FILTERS,
-    // 이 기간에 없는 반(다른 기간에서 골라 둔 반)은 버린다 — 버튼은 '전체 반'인데 목록이 비는 일이 없게.
-    classIds: parseMulti(param("class"), "all").filter((id) => activeClasses.has(id)), subject: param("subject") || "all", school: param("school") || "all", grade: param("grade") || "all", query: param("q"),
-    status: ["submitted", "missing", "unchecked"].includes(param("status")) ? param("status") as LedgerFilters["status"] : "all",
-    sort: ["missing", "completion"].includes(param("sort")) ? param("sort") as LedgerFilters["sort"] : "name",
-  };
+  const initialFilters = ledgerInitialFilters(param, activeClasses);
   return <main className="w-full min-w-0 space-y-4">
     <PageHeader eyebrow="수업보고서 · 학습 관리" title="영상숙제 확인"
       description="숙제가 나간 수업을 학생별 회차로 세어 제출 여부를 확인합니다." actions={<SettingRolesControl group="lesson_reports" />} />
-    <FaceTabs faces={lessonReportFaces({ canReportSettings, canAiMent, aiOn, canSend: canEdit,
+    <FaceTabs faces={lessonReportFaces({ canReportSettings, canAiMent, aiOn, canSend,
       classnoteOn: isModuleEnabled(settings.modules.disabled, "classnote"), replyOn: classnoteReplyMode(settings) !== "off" })}
       active="video_homework" ariaLabel="수업보고서 면" />
     {/* 담임 폴더에 직접 올렸지만 세지 못한 영상(0324a) — ClassNote 기능이 꺼진 지점엔 흔적도 없게. */}

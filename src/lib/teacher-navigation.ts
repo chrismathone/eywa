@@ -8,12 +8,15 @@ import { sheetT, type SheetLang } from "@/features/teacher-view/i18n";
 import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "@/features/owner/menu-layout";
 
 export const TEACHER_DEFAULT_GROUP = "teacher-main";
+/** 화면 문구가 한국어뿐인 강사 메뉴 — 영어 화면에선 감춘다. */
+const KOREAN_ONLY_HREFS: ReadonlySet<string> = new Set(["/onescreen/video-homework"]);
 
 /** 강사 스코프가 있는 원본 목적지만 제공한다. 기본 라벨은 기존 한/영 사전을 따른다. */
 export function teacherNavigationSource(lang: SheetLang = "ko"): HubGroup[] {
   return [{
     id: TEACHER_DEFAULT_GROUP, label: sheetT(lang, "menu.trigger"), icon: "folder", kind: "hub",
-    items: TEACHER_MENU_LINKS.filter((l) => isTeacherMenuEntranceOpen(l.menu)).map((l) => ({
+    // 영상 제출 현황은 화면이 한국어뿐이라 영어 화면을 쓰는 선생님에겐 세우지 않는다(메뉴만 영어인 화면 금지).
+    items: TEACHER_MENU_LINKS.filter((l) => isTeacherMenuEntranceOpen(l.menu) && !(lang === "en" && KOREAN_ONLY_HREFS.has(l.href))).map((l) => ({
       href: l.href, menuKey: l.menu, label: sheetT(lang, l.labelKey), icon: l.icon,
     })),
   }, {
