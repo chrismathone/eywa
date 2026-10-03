@@ -56,7 +56,7 @@ Vercel Project → Settings → Environment Variables에서 입력한 후 새 �
 
 1. 양쪽 변경을 통합하고 **관리 계정 차단 기능이 포함된 복구용 버전**을 확보한다. 대상 운영 DB를 확인하고 에이와의 현재 ON 지점 목록을 검토한다. 오늘의수학에 지점을 미리 만들 필요는 없다. 기존 계정·자료의 지점 귀속은 자동으로 합치지 않는다.
 2. 에이와 DB에 `supabase/migrations/0337a_todays_math_sync_v2.sql`을 적용한다. 파일 자체가 트랜잭션을 포함한다. 관련 없는 미적용 alpha까지 일괄 실행하지 않는다. 적용 후 `select public.tm_sync_schema_health();`의 `healthy`와 모든 check가 true인지 확인한다. 이 단계는 binding을 만들거나 사용자를 활성화하지 않는다.
-3. 오늘의수학에서는 `prisma migrate status`로 미적용 목록을 확인한 뒤 프로젝트 기존 절차로 `prisma/migrations/20261003085222_eywa_managed_sync/migration.sql`을 적용한다. 운영에 `db push`를 사용하지 않는다. 새 테이블을 조회하는 코드는 **DB 적용 후** 배포한다.
+3. 오늘의수학에서는 `prisma migrate status`로 미적용 목록을 확인한 뒤 프로젝트 기존 절차로 `prisma/migrations/20261003085222_eywa_managed_sync/migration.sql`, `prisma/migrations/20261003103000_eywa_auto_branch/migration.sql` 순서로 적용한다. 운영에 `db push`를 사용하지 않는다. 새 테이블을 조회하는 코드는 **DB 적용 후** 배포한다.
 4. 두 프로젝트의 Production 환경변수를 입력한다. 오늘의수학 수신 코드를 먼저 배포하고 에이와 발신 코드를 배포한다. 자동 연결 신뢰가 설정된 지점은 이전 동기화/SSO 경로로 우회하지 않는다. 기존 독립 계정의 일반 로그인은 기존 정책을 유지한다.
 5. 첫 cron이 이미 ON인 지점을 자동 등록하고 대상에 전송한다. 이후 ON은 토글 저장과 같은 트랜잭션에서 연결 원장과 발신 사건을 만든다. 최초 작업을 기다리지 않고 실행하거나 확인하려면 아래를 사용한다. `<기존-서버-env>`는 기존 Supabase 서버 설정이며 두 파일 모두 비공개로 유지한다.
 
