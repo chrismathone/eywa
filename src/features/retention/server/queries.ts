@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { kstToday } from "@/lib/date-kst";
+import { retentionNotStartedStudentIds } from "../not-started";
 import {
   buildRoster,
   toIsoDate,
@@ -125,7 +127,9 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
     fetchAllPagedInChunks(ids, (c, from, to) =>
       admin
         .from("enrollments")
-        .select("student_id, end_date, on_hold, class:class_id ( teacher_id, teacher:teacher_id ( display_name ) )")
+        // `start_date` — '실시간 재원생' 판정 재료(아래 notStarted). 🔴 조회에서 시작일로 거르지 않는다:
+        //   아직 안 시작한 수강만 가진 학생이 누구인지 알려면 그 줄도 받아야 한다(원생목록과 같은 규칙).
+        .select("student_id, start_date, end_date, on_hold, class:class_id ( teacher_id, teacher:teacher_id ( display_name ) )")
         .eq("tenant_id", tenantId)
         .in("student_id", c)
         .order("id", { ascending: true })
@@ -155,10 +159,24 @@ export async function computeRetentionRoster(tenantId: string, teacherId?: strin
     }
   }
 
+  /**
+   * 🔴 **재원생 = '실시간'**(원장 2026-09-16 — docs/decisions/students.md): 아직 한 과목도 시작 안 한 학생은 명단에서 뺀다.
+   *    원생목록·운영실·슈퍼관리자 화면은 이미 그렇게 세는데 리텐션만 상태가 재원인 학생 전원이라 "재원생 335명"과
+   *    원생목록 "334명"이 갈렸다(운영점검 2026-10-03 A02). 판정은 새로 짓지 않고 원생목록과 **같은 함수**
+   *    (`notYetStartedStudentIds`)·같은 재료 조건(종료 안 됨 · 휴원 아님)·같은 기준일(KST 오늘)을 쓴다.
+   *    화면의 숫자("재원생 N명")는 이 명단의 길이라 숫자와 목록이 같은 집합이다 — 브리핑 cron도 이 함수를 그대로 탄다.
+   * ⚠️ 수강이 아예 없는 재원생·시작일을 모르는 수강은 남는다(모름을 '미시작'으로 읽지 않는다).
+   */
+  const notStarted = retentionNotStartedStudentIds(
+    enrollments as { student_id: string; start_date: string | null; end_date: string | null; on_hold: boolean | null }[],
+    kstToday(),
+  );
+  const startedStudents = notStarted.size > 0 ? students.filter((s) => !notStarted.has(s.id)) : students;
+
   // 담당 강사 필터 → 그 강사 반에 수강 중인 학생만.
   const scopedStudents = teacherId
-    ? students.filter((s) => teacherIdsByStudent.get(s.id)?.has(teacherId))
-    : students;
+    ? startedStudents.filter((s) => teacherIdsByStudent.get(s.id)?.has(teacherId))
+    : startedStudents;
 
   const raw: RetentionRawData = {
     students: scopedStudents.map((s) => ({

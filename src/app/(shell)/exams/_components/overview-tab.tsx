@@ -18,8 +18,8 @@ function MoverList({ rows, href, empty }: { rows: UnifiedRow[]; href: Href; empt
 }
 
 /** 전체 현황 — 지표 5칸 · 학원 추이 · 시험 종류별 평균 · 하락/상승 학생. 숫자는 전부 대시보드와 같은 rows에서. */
-export function OverviewTab({ rows, studentCount, academy, missingCount, href }: {
-  rows: UnifiedRow[]; studentCount: number; academy: Aggregate | undefined; missingCount: number; href: Href;
+export function OverviewTab({ rows, studentCount, academy, missingCount, href, scoped }: {
+  rows: UnifiedRow[]; studentCount: number; academy: Aggregate | undefined; missingCount: number; href: Href; scoped: boolean;
 }) {
   const ups = rows.filter((r) => (r.delta ?? 0) > 0);
   const downs = rows.filter((r) => (r.delta ?? 0) < 0);
@@ -28,6 +28,7 @@ export function OverviewTab({ rows, studentCount, academy, missingCount, href }:
     return { kind, count: list.length, average: averagePercent(list) };
   }).filter((k) => k.count > 0);
   return <div className="space-y-4">
+    <p className="text-text-dim text-xs">{scoped ? "담당 반 · " : ""}선택한 기간·과목·시험의 기록이 있는 학생 기준입니다.</p>
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
       <BigStat label="응시 학생" value={studentCount} unit="명" tone="blue" sub={`기록 ${rows.length}건`} />
       <BigStat label="평균 정답률" value={academy?.average ?? "—"} unit={academy?.average == null ? undefined : "%"} tone="primary" sub="만점 대비 맞힌 비율" />
@@ -37,7 +38,7 @@ export function OverviewTab({ rows, studentCount, academy, missingCount, href }:
         sub={missingCount ? <Link href={href({ tab: "records", missing: "1", page: "1" })} className="text-primary hover:underline">성적 현황에서 채우기 →</Link> : "모두 입력됨"} />
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-      <Panel title="학원 통합 추이" sub="월별 평균 정답률"><TrendChart points={academy?.points ?? []} /></Panel>
+      <Panel title={scoped ? "담당 반 통합 추이" : "학원 통합 추이"} sub="월별 평균 정답률"><TrendChart points={academy?.points ?? []} /></Panel>
       <Panel title="시험 종류별 평균" sub="기록 수와 평균 정답률">
         {kinds.length ? <div className="space-y-1">{kinds.map((k) => <Link key={k.kind} href={href({ tab: "records", kind: k.kind, page: "1" })} className="block">
           <BarRow label={KIND_LABEL[k.kind]} sub={`${k.count}건`} value={k.average} bar={KIND_SOLID[k.kind]} /></Link>)}</div>

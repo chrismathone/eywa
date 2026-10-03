@@ -5,14 +5,17 @@ import { useMenuPresentation, useNavigationSettings } from "@/features/owner/nav
 import { MenuGlyph } from "@/components/icons/menu-glyph";
 import { hubDestinationForPath } from "@/lib/menu-hub";
 import { useEffect, useRef, useState } from "react";
+import { EyIcon } from "@/components/icons/aywa-icons";
 import { useEmbed, withEmbed } from "@/components/workspace/embed-context";
+import { faceTabOverflow, faceTabScrollTo } from "@/components/face-tab-scroll";
 
 /**
  * 면 전환 — 한 창 안에서 여러 "면"을 바꾸는 표준 상단 가로 탭바. 수납관리·학생상세·학원설정 등
  * 다면 창 전부 이걸로 통일한다(디자인 시스템 § 다면 창 = 상단 가로 탭바). 메커니즘은 URL `?tab=`
  * (면마다 서버렌더 → 무거운 면만 지연 로딩, 딥링크·창 타이틀 동기·뒤로가기 공짜).
  *
- * - 넘치면 **스크롤바 없이** 가로 스크롤 + **넘치는 쪽만 좌우 페이드**(더 있음을 알림). 긴 라벨·많은 면 OK.
+ * - 넘치면 **스크롤바 없이** 가로 스크롤하고, 좌우 버튼을 그 방향으로만 켠다. 버튼은 넘칠 때
+ *   둘 다 자리를 유지한다(끝에서 치우면 너비가 늘어 다시 넘친다). 넘치는 쪽만 페이드.
  * - 마운트 시 **활성 탭을 보이게** 스크롤(딥링크로 오른쪽 끝 면에 들어와도 잘림 방지).
  * - `replace`로 전환해 탭 클릭이 창 뒤로(←) 스택을 더럽히지 않는다.
  * - **embed(창) 모드면 href에 자동으로 embed=1 유지**(useEmbed) → 창 안 크롬리스 유지.
@@ -35,15 +38,13 @@ export function FaceTabs({
   const presentation = useMenuPresentation();
   const { menus, source } = useNavigationSettings();
   const scrollerRef = useRef<HTMLElement>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
+  const [edges, setEdges] = useState({ overflow: false, left: false, right: false });
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const update = () => {
-      setCanLeft(el.scrollLeft > 1);
-      setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+      setEdges(faceTabOverflow(el.scrollWidth, el.clientWidth, el.scrollLeft));
     };
     // 마운트 시 활성 탭이 화면 밖이면 보이게 스크롤(페이지 세로 스크롤 없이 nav만).
     const activeEl = el.querySelector<HTMLElement>('[aria-current="page"]');
@@ -61,8 +62,18 @@ export function FaceTabs({
     };
   }, [faces.length, active]);
 
+  const scrollByDir = (direction: -1 | 1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ left: faceTabScrollTo(el.scrollLeft, el.clientWidth, el.scrollWidth, direction), behavior: "smooth" });
+  };
+
   return (
-    <div className="relative">
+    <div className="flex min-w-0 items-stretch">
+      {edges.overflow ? (
+        <TabScrollButton direction={-1} enabled={edges.left} onClick={() => scrollByDir(-1)} />
+      ) : null}
+      <div className="relative min-w-0 flex-1">
       <nav
         ref={scrollerRef}
         aria-label={ariaLabel}
@@ -101,19 +112,47 @@ export function FaceTabs({
           );
         })}
       </nav>
-      {/* 넘치는 쪽만 페이드 — 스크롤 더 있음을 알림. bg-card에서 투명으로(경계·라운드 안쪽). 클릭 통과. */}
-      {canLeft ? (
+      {/* 넘치는 쪽만 페이드 — 스크롤 더 있음을 알림. 클릭 통과. */}
+      {edges.left ? (
         <div
           aria-hidden
           className="from-background pointer-events-none absolute inset-y-px left-px w-10 rounded-l-lg bg-gradient-to-r to-transparent"
         />
       ) : null}
-      {canRight ? (
+      {edges.right ? (
         <div
           aria-hidden
           className="from-background pointer-events-none absolute inset-y-px right-px w-10 rounded-r-lg bg-gradient-to-l to-transparent"
         />
       ) : null}
+      </div>
+      {edges.overflow ? (
+        <TabScrollButton direction={1} enabled={edges.right} onClick={() => scrollByDir(1)} />
+      ) : null}
     </div>
+  );
+}
+
+function TabScrollButton({
+  direction,
+  enabled,
+  onClick,
+}: {
+  direction: -1 | 1;
+  enabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={direction < 0 ? "앞쪽 탭 보기" : "뒤쪽 탭 보기"}
+      aria-hidden={enabled ? undefined : true}
+      tabIndex={enabled ? 0 : -1}
+      disabled={!enabled}
+      onClick={onClick}
+      className={`text-text-dim hover:text-foreground inline-flex h-(--control-h) w-8 shrink-0 items-center justify-center rounded-md disabled:pointer-events-none ${enabled ? "" : "invisible"}`}
+    >
+      <EyIcon name={direction < 0 ? "chevronLeft" : "chevronRight"} size={16} />
+    </button>
   );
 }

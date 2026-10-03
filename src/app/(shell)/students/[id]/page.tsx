@@ -276,7 +276,12 @@ export default async function StudentDetailPage({
 
       <section>
         {tab === "overview" ? (
-          <OverviewTab student={student} />
+          <>
+            {requestedTab === "billing" && !canSeeBilling ? (
+              <p className="text-text-dim mb-3 text-sm" role="status">수납 내역을 볼 권한이 없어 학생 개요를 표시합니다.</p>
+            ) : null}
+            <OverviewTab student={student} canSeeBilling={canSeeBilling} />
+          </>
         ) : tab === "classes" ? (
           <ClassesTab
             student={student}

@@ -3,7 +3,8 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { permissionAccountIds, platformAccountIds } from "@/features/owner/server/platform-settings";
 import { canAccessTenant, canWriteTenant, canManageTenant } from "@/lib/auth/perm-matrix";
-import { OWNER_TAB_MENU } from "@/lib/settings-role-catalog";
+import { OWNER_SECTION_MENU, OWNER_TAB_MENU } from "@/lib/settings-role-catalog";
+import { operationsForViewer, seatPinStatus } from "@/features/owner/seat-pin-view";
 import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
@@ -123,6 +124,16 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const canReadAudit = isMaster || (await isCurrentUserSuperAdmin());
   const [settings, meta] = await Promise.all([getTenantSettings(), getSettingsMeta()]);
   const tab = effectiveTab(sp, settings);
+  /**
+   * 운영 섹션을 클라이언트로 넘기는 두 면(운영 체계 · 과목 운영) — **저장할 수 없는 열람자에게는 자리 PIN 값을 지우고** 넘긴다.
+   * 🔴 판정은 저장 액션과 같은 함수·같은 키(`canWriteTenant` × 운영 섹션의 메뉴)다 — 화면의 '읽기 전용' 표시와 따로 놀면
+   *    값을 지운 payload를 받은 사람이 저장할 수 있게 된다. 다른 면에서는 운영 섹션을 내려보내지 않는다.
+   * 🔴 `settings.operations`를 이 두 면에 **직접 넘기지 말 것** — prop과 숨은 입력(JSON)에 값이 그대로 실린다
+   *    (가드 `seat-pin-view.test.ts`).
+   */
+  const showsOperations = tab === "operations" || tab === "subjects";
+  const canEditOperations = showsOperations ? await canWriteTenant(viewer.systemRole, OWNER_SECTION_MENU.operations) : false;
+  const operationsForClient = operationsForViewer(settings.operations, canEditOperations);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 강의실 엑셀로 넣기 — 운영 설정의 full만(올리기 주소 `gateImport`와 같은 판정).
@@ -167,15 +178,23 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings)).filter(face => face.key === "modules" ? canReadAudit : allowedTabs.get(face.key as OwnerTab))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
       </PageMaximizeToolbar>
 
-      {!canEditSettings ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}
+      {!canEditSettings && !showsOperations ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (
-        <OperationsSection initial={settings.operations} classrooms={classrooms} canImportClassrooms={canImportClassrooms} />
+        <OperationsSection
+          initial={operationsForClient}
+          classrooms={classrooms}
+          canImportClassrooms={canImportClassrooms}
+          readOnly={!canEditOperations}
+          seatPinStatus={seatPinStatus(settings.operations)}
+        />
       ) : null}
       {tab === "subjects" ? (
         <SubjectsSection
-          initial={settings.operations}
+          initial={operationsForClient}
+          readOnly={!canEditOperations}
           teacherLabels={teacherLabelsBySubject}
           periodDefs={periodDefs}
           sessionYear={sessionYear}

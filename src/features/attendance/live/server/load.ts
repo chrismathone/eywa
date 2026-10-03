@@ -11,9 +11,8 @@ import "server-only";
  */
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
-import { getTenantSettings } from "@/features/owner/server/queries";
-import { buildHolidayMap } from "@/features/attendance/calendar";
-import { fixedHolidaysForYear } from "@/features/billing/tuition-calc";
+// 휴원일 판정은 출결 공용 한 곳(학원설정 휴일 목록만) — 여기서 다시 짓지 않는다.
+import { holidayNameOf } from "@/features/attendance/server/holiday";
 import { enrollmentAttendsOnDay, isEnrollmentActiveOn } from "@/features/enrollments/eligibility";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -40,22 +39,15 @@ const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 /**
  * 그날이 쉬는 날이면 이름(아니면 null) — 호출부가 "휴원일입니다"로 화면을 대신 채운다.
  *
- * 🔴 학원설정 `operations.holidays`**만** 보면 안 된다 — 실측(2026-08-14) 그 목록엔 **2건**(둘 다 과거)뿐이라
- *    사실상 비어 있다. 같은 리포의 청구는 법정공휴일을 코드로 갖고 있어(`fixedHolidaysForYear`) **돈 쪽은
- *    쉬는 날로 빼는데** 이 화면만 수업으로 그리면, 8/15·10/3·10/9 같은 날 그날 열리는 슬롯 전체가
- *    "출결 미입력"으로 데스크에 쏟아진다(10/9은 금요일이라 104슬롯 전부).
- * ⚠️ 음력 명절(설·추석)은 양쪽 다 모른다 — **학원설정 휴일에 등록**해야 잡힌다(운영 조건).
- * ⚠️ 학원설정이 이긴다: 법정공휴일이어도 학원이 수업하면 그날을 목록에서 빼는 게 아니라… 반대로
- *    "쉬는 날인데 수업한다"는 표현 수단이 지금 스키마엔 없다. 그런 날은 화면이 비므로 사람이
- *    월별 출석부에서 찍는다(오탐으로 전화가 나가는 것보다 안전한 방향).
+ * 🔴 판정은 [`server/holiday.ts`](../../server/holiday.ts) **한 곳**이고 자료는 학원설정 `operations.holidays`뿐이다
+ *    (2026-10-03 — 처리 현황·출석부 요약·운영실과 같은 함수). 2026-08-14의 양력 고정 공휴일 폴백은 걷어냈다:
+ *    그때는 목록이 2건뿐이었지만 2026-09-01에 휴일이 등록되면서 전제가 사라졌고, 폴백이 남으면 수업하는
+ *    공휴일을 목록에서 빼도 이 화면이 계속 비었다. 🔴 청구의 공휴일 표를 여기로 다시 가져오지 말 것(가드 테스트).
+ * ⚠️ 목록에 없는 날은 평일과 같은 보드가 선다 — 쉬는 날은 학원설정 휴일에 등록해야 한다(음력 명절 포함).
+ * ⚠️ "쉬는 날인데 수업한다"는 목록에서 그날을 빼는 것으로 표현한다. 목록에 남겨 둔 채 수업했다면 그날 입력은
+ *    월별 출석부에서 하고, 이 화면은 입력된 기록을 읽기 전용으로만 보여 준다(`holiday-activity`).
  */
-export async function holidayNameOf(date: string): Promise<string | null> {
-  const settings = await getTenantSettings();
-  const named = buildHolidayMap(settings.operations.holidays)[date];
-  if (named) return named;
-  const year = Number(date.slice(0, 4));
-  return Number.isFinite(year) && fixedHolidaysForYear(year).includes(date) ? "공휴일" : null;
-}
+export { holidayNameOf };
 
 type SlotRow = {
   /** 배치 행 id — '따로 수업(*LAB)' 표식(0271a)이 행 id 명단으로 오므로 필요하다. */

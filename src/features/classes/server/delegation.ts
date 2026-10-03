@@ -2,7 +2,7 @@ import "server-only";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { kstToday } from "@/lib/date-kst";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { delegationOverlapsRange, isDelegationActiveOn } from "../delegation-window";
 
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>;
@@ -79,14 +79,15 @@ type DelegationRow = {
  *    이 값에 닿을 규모면 위임이 아니라 인수인계로 운영해야 한다는 신호다.
  * 최종 판정은 SQL이 아니라 **순수함수**가 한다(조건이 두 벌이면 갈라진다 — delegation-window.ts 주석).
  */
-async function fetchActiveDelegations(supabase: ServerClient, date: string): Promise<DelegationRow[]> {
-  const { data } = await supabase
+async function fetchActiveDelegations(supabase: ServerClient, date: string, strict = false): Promise<DelegationRow[]> {
+  const { data, error } = await supabase
     .from("class_delegations")
     .select("class_id, delegate_user_id, from_date, to_date, revoked_at")
     .is("revoked_at", null)
     .lte("from_date", date)
     .gte("to_date", date)
     .limit(500);
+  if (strict && error) throw error;
   return ((data ?? []) as DelegationRow[]).filter((r) =>
     isDelegationActiveOn({ fromDate: r.from_date, toDate: r.to_date, revokedAt: r.revoked_at }, date),
   );
@@ -173,14 +174,17 @@ export async function getTeachingClasses(
   supabase: ServerClient,
   userId: string,
   date: string = kstToday(),
+  /** 정확한 집계 소비처는 조회 실패를 빈 명단으로 받지 않는다. 기존 호출부 동작은 유지한다. */
+  strict = false,
 ): Promise<TeachingClassRow[]> {
+  const ownQuery = () => supabase.from("classes")
+    .select("id, class_name, subject, is_special, report_optout, closed_at")
+    .eq("teacher_id", userId).eq("is_active", true);
   const [ownRes, active] = await Promise.all([
-    supabase
-      .from("classes")
-      .select("id, class_name, subject, is_special, report_optout, closed_at")
-      .eq("teacher_id", userId)
-      .eq("is_active", true),
-    fetchActiveDelegations(supabase, date),
+    strict
+      ? fetchAllPaged((from, to) => ownQuery().order("id").range(from, to)).then((data) => ({ data }))
+      : ownQuery(),
+    fetchActiveDelegations(supabase, date, strict),
   ]);
   const ownRows = ownRes.data ?? [];
   const ownSet = new Set(ownRows.map((c) => c.id as string));

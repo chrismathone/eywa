@@ -11,6 +11,11 @@ import { loadLiveViewPrefs } from "@/features/attendance/live/server/prefs-actio
 import { getRangeRecap, getSavedRecapBrief } from "@/features/attendance/recap/server/queries";
 import { recapDatesFor, recapRangeDates } from "@/features/attendance/recap/range";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
+import { getHolidayDayActivity } from "@/features/attendance/server/holiday-activity";
+import { HolidayActivityPanel } from "@/features/attendance/live/components/holiday-activity-panel";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { reportError } from "@/lib/observability/report-error";
 import type { LiveBoard } from "@/features/attendance/live/types";
 import { SeatingChart } from "@/features/attendance/live/components/seating-chart";
 import { DeskView } from "./_components/desk-view";
@@ -55,7 +60,10 @@ export default async function AttendanceLivePage({
   const recapDates = tab === "recap" ? recapRangeDates(recapFrom, date) : [];
 
   const holiday = await holidayNameOf(date);
-  const [board, queue, carryOver, recap, recapAi, prefs] = await Promise.all([
+  // 휴원일 화면이 그릴 것 — 그날 **실제로 입력된** 출결·보강 예약(읽기 전용)과 과목 라벨. 휴원일이 아니면 조회하지 않는다.
+  // 🔴 실패를 "0명"으로 접지 않는다 — null이면 화면이 "불러오지 못했습니다"라고 적는다.
+  const showHolidayScreen = !!holiday && tab !== "recap";
+  const [board, queue, carryOver, recap, recapAi, prefs, holidayActivity, holidaySettings] = await Promise.all([
     holiday ? null : getLiveBoard(date),
     holiday || !isDesk ? null : getDeskQueue(date),
     holiday || !isDesk || tab !== "desk" ? null : getCarryOverAbsences(date),
@@ -68,6 +76,13 @@ export default async function AttendanceLivePage({
     // 과목 필터(계정 귀속, 2026-08-20) — 세 탭이 같은 값을 초기값으로 받는다. 저장된 과목이 지금 학원설정에
     // 없으면 화면이 '전체'로 되돌린다(`resolveSubjectFilter`) — 여기서는 모양만 읽는다.
     loadLiveViewPrefs(),
+    showHolidayScreen
+      ? getHolidayDayActivity(date).catch((error: unknown) => {
+          reportError(error, { scope: "attendance.live.holidayActivity", date });
+          return null;
+        })
+      : undefined,
+    showHolidayScreen ? getTenantSettings() : undefined,
   ]);
 
   const pending = queue ? queue.counts.students + queue.counts.classes : 0;
@@ -92,13 +107,22 @@ export default async function AttendanceLivePage({
       />
 
       {holiday && tab !== "recap" ? (
-        // 🔴 휴원일엔 아무 것도 계산하지 않는다 — 시간표는 요일 반복이라 슬롯이 살아 있고, 그날 출결은
-        //    당연히 비어 있다. 가드가 없으면 명절에 전교생이 '미확인'으로 뜬다.
-        <EmptyState
-          icon={CalendarDays}
-          title={`${holiday} — 휴원일`}
-          description="이 날은 수업이 없어 출결을 확인하지 않습니다. 학원설정의 휴일 목록을 따릅니다."
-        />
+        // 🔴 휴원일엔 좌석표·확인 큐를 계산하지 않는다 — 시간표는 요일 반복이라 슬롯이 살아 있고, 가드가 없으면
+        //    명절에 전교생이 '미확인'으로 뜬다. 판정 자료는 학원설정 휴일 목록 하나뿐이다(법정공휴일 폴백 없음).
+        // 🔴 문구는 "수업이 없어"라고 단정하지 않는다 — 휴일로 등록된 날에 수업하고 찍은 기록이 있을 수 있다.
+        //    그 기록·보강 예약은 아래 읽기 전용 목록이 날짜 기준으로 보여 준다(예정 명단·큐는 되살리지 않는다).
+        <>
+          <EmptyState
+            icon={CalendarDays}
+            title={`${holiday} — 휴원일`}
+            description="학원설정에 등록된 휴일이라 예정 명단과 확인 큐를 만들지 않습니다. 이 날 수업을 했다면 출결은 월별 출석부에서 입력합니다."
+          />
+          <HolidayActivityPanel
+            activity={holidayActivity ?? null}
+            date={date}
+            labelOf={buildSubjectMaps(holidaySettings?.operations.subjects ?? []).labelOf}
+          />
+        </>
       ) : (
         <>
 

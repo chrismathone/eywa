@@ -133,7 +133,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
               )
           : tab === "parent_replies"
             ? // 학부모 글·답글(0317a) — 최근 14일 원문 + 답글 상태. 조회 실패는 빈 목록 대신 안내(아래).
-              listParentThreads({ mode: replyMode, user: viewer }).then((parentThreads) => ({ parentThreads }), () => ({ parentThreads: null }))
+              listParentThreads({ mode: replyMode, user: viewer, page: sp.page }).then((parentThreads) => ({ parentThreads }), () => ({ parentThreads: null }))
           : tab === "recall"
             ? // 회수는 **검색해서 찾는** 화면이라 첫 페인트에 목록을 싣지 않는다(전건을 띄우면 오클릭 거리만 는다).
               getReportFilterOptions().then((filterOptions) => ({ recallOptions: filterOptions }))

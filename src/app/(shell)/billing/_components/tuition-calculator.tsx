@@ -285,8 +285,8 @@ export function TuitionCalculator({
               <input className={inputCls} placeholder="학생 이름" value={student.name} onChange={(e) => setStudent({ ...student, name: e.target.value })} />
             </label>
             <div className="grid grid-cols-2 gap-2">
-              <input className={inputCls} placeholder="학교" value={student.school} onChange={(e) => setStudent({ ...student, school: e.target.value })} />
-              <input className={inputCls} placeholder="학년" value={student.grade} onChange={(e) => setStudent({ ...student, grade: e.target.value })} />
+              <input className={inputCls} aria-label="학교" placeholder="학교" value={student.school} onChange={(e) => setStudent({ ...student, school: e.target.value })} />
+              <input className={inputCls} aria-label="학년" placeholder="학년" value={student.grade} onChange={(e) => setStudent({ ...student, grade: e.target.value })} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -299,7 +299,7 @@ export function TuitionCalculator({
               <input type="date" className={inputCls} value={student.endDate} onChange={(e) => setPeriod("endDate", e.target.value)} />
             </label>
           </div>
-          <input className={inputCls} placeholder="상담자" value={student.consultant} onChange={(e) => setStudent({ ...student, consultant: e.target.value })} />
+          <input className={inputCls} aria-label="상담자" placeholder="상담자" value={student.consultant} onChange={(e) => setStudent({ ...student, consultant: e.target.value })} />
           {/* 안내문 헤더 표시 — 로고 이미지에 학원명이 들어가 있으면 하나만 켜서 중복 제거. */}
           <div className="border-line flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3">
             <span className="text-text-faint text-xs">안내문 헤더</span>
@@ -394,12 +394,14 @@ export function TuitionCalculator({
               <div className="grid grid-cols-2 gap-2">
                 <input
                   className={inputCls}
+                  aria-label="은행"
                   placeholder="은행"
                   value={account.bank}
                   onChange={(e) => setAccount({ ...account, bank: e.target.value })}
                 />
                 <input
                   className={inputCls}
+                  aria-label="예금주"
                   placeholder="예금주"
                   value={account.holder}
                   onChange={(e) => setAccount({ ...account, holder: e.target.value })}
@@ -407,6 +409,7 @@ export function TuitionCalculator({
               </div>
               <input
                 className={inputCls}
+                aria-label="계좌번호"
                 placeholder="계좌번호"
                 value={account.number}
                 onChange={(e) => setAccount({ ...account, number: e.target.value })}

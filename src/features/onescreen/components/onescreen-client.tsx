@@ -116,6 +116,16 @@ import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { reportOptoutNotice } from "@/features/classes/report-optout";
 import { useSheetLang, useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { ReportPreview, type ReportPreviewContext } from "./report-preview";
+import {
+  ONESCREEN_CARD_FRAME,
+  ONESCREEN_CARD_GRID,
+  ONESCREEN_EMPTY_SPAN,
+  ONESCREEN_PREVIEW_BUTTON,
+  ONESCREEN_PREVIEW_DIALOG_SCROLL,
+  ONESCREEN_PREVIEW_SCROLL,
+  ONESCREEN_PREVIEW_SLOT,
+  ONESCREEN_PREVIEW_WIDTH_PX,
+} from "./onescreen-card-layout";
 import type { TrendReportRow } from "../report-trend";
 import type { ReportSettings } from "@/features/owner/settings-types";
 /**
@@ -414,6 +424,8 @@ export function OneScreenClient({
   const displaySettings = useDisplayOptionsState(initialDisplayOptions, readonlyView);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  // 좁은 카드 뷰의 학부모 미리보기. 폭은 CSS가 가르므로 이 값은 열 배치에 쓰지 않는다.
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [fontSize, setFontSize] = useState<OnescreenFontSize>(initialFontSize);
   const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
@@ -3187,6 +3199,7 @@ export function OneScreenClient({
   function changeView(next: OneScreenView) {
     setDetailsOpen(false);
     setBulkOpen(false);
+    setPreviewOpen(false);
     setView(next);
   }
   function openCard(studentId: string) {
@@ -4310,12 +4323,11 @@ export function OneScreenClient({
           bulkGen={bulkGen || bulkBusy === "save"}
         />
   );
-  const reportDetails = (
+  const reportColumn = (
 selected ? (
-          <>
-            {/* 가운데(보고서 작성) — 넘치면 **이 열만** 스크롤. 좁은 화면(<lg)에선 열이 세로로 쌓이므로
-                높이를 묶지 않는다(그땐 페이지가 통째로 스크롤되는 게 자연스럽다). */}
-            <div className="scrollbar-thin flex flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+            /* 가운데(보고서 작성) — 넘치면 이 열만 스크롤. 열 개수는 배율 상자 안 컨테이너 폭이 정한다.
+               한 열로 쌓이면 높이를 압축하지 않고 페이지가 스크롤된다. 표의 상세 창은 기존 열 스크롤을 쓴다. */
+            <div className="scrollbar-thin flex min-h-0 min-w-0 flex-col gap-3 lg:min-h-0 lg:overflow-y-auto lg:pr-1 @max-[846px]/oscard:overflow-visible">
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-bold">{t("os.c.reportHeading")}</h2>
@@ -4485,39 +4497,35 @@ selected ? (
                 />
               ) : null}
             </div>
-
-            {/* 4열째 — 학부모가 받는 화면 그대로(실시간). ≥1680px에서만 옆에 서고, 그보다 좁으면
-                아래 전체폭 행으로 내려간다(나란히 둘 자리가 없을 때 억지로 끼우면 양쪽 다 찌그러진다). */}
-            {previewCtx && previewSubject ? (
-              <div className="scrollbar-thin lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-                <ReportPreview
-                  ctx={previewCtx}
-                  student={selected}
-                  subject={previewSubject}
-                  draft={
-                    previewSubject.subjectKey === "english"
-                      ? englishPreviewDraft(selected, previewSubject, previewReport)
-                      : (previewReport?.draft ?? "")
-                  }
-                  trendDraft={previewReport?.trendDraft}
-                  trendHidden={isTrendHiddenFor(selected.id, previewSubject.name)}
-                  attachments={previewReport?.attachments ?? []}
-                  attachmentUrls={attUrls}
-                  trendRows={trendRows}
-                  // 영어 행 = 템플릿 글만 싣는 카드(학부모 /r·인쇄와 같은 판정: subject === "english").
-                  templateMode={previewSubject.subjectKey === "english"}
-                  // 그림 자리 줄에 그릴 인재원 하루치(화면이 받아 둔 것) — 발송본은 저장 때 다시 받은 것으로 그린다.
-                  jj={previewSubject.subjectKey === "english" ? englishJjSnapshotOf(selected.id) : null}
-                />
-              </div>
-            ) : null}
-          </>
         ) : (
-          <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm lg:col-span-2">
+          <div className={`bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm ${ONESCREEN_EMPTY_SPAN}`}>
             {t("os.c.pickStudent")}
           </div>
         )
   );
+  // 미리보기는 부모 상태만 그린다. 호출마다 새 요소라 인라인 열과 대화상자가 같은 입력 카드를 나누지 않는다.
+  const renderPreview = () => {
+    if (!selected || !previewCtx || !previewSubject) return null;
+    return (
+      <ReportPreview
+        ctx={previewCtx}
+        student={selected}
+        subject={previewSubject}
+        draft={
+          previewSubject.subjectKey === "english"
+            ? englishPreviewDraft(selected, previewSubject, previewReport)
+            : (previewReport?.draft ?? "")
+        }
+        trendDraft={previewReport?.trendDraft}
+        trendHidden={isTrendHiddenFor(selected.id, previewSubject.name)}
+        attachments={previewReport?.attachments ?? []}
+        attachmentUrls={attUrls}
+        trendRows={trendRows}
+        templateMode={previewSubject.subjectKey === "english"}
+        jj={previewSubject.subjectKey === "english" ? englishJjSnapshotOf(selected.id) : null}
+      />
+    );
+  };
 
   return (
     // 🔴 한 화면 고정(2026-08-06 원장): *"전체 창 크기를 가운데 보고서에 맞추고, 넘치는 부분은 스크롤 처리하도록
@@ -4638,7 +4646,7 @@ selected ? (
       {/* 글씨 크기 — 목록·표 영역만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤 자체가 같이 커지면 어지럽다).
           ⚠️ `font-size`가 아니라 `zoom`인 이유는 font-size.ts 주석 참조(칸마다 px 글자가 박힌 조밀한 표).
           기본('작음')은 배율 1이라 **스타일 자체를 붙이지 않는다** — 손대지 않은 강사의 렌더는 완전 무변경. */}
-      <div className={view === "card" ? "flex flex-col lg:min-h-0 lg:flex-1" : "pb-3"} style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
+      <div className={view === "card" ? "flex min-w-0 flex-col lg:min-h-0 lg:flex-1" : "pb-3"} style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
       {view === "grid" ? (
         reportGrid
       ) : view === "status" ? (
@@ -4659,21 +4667,28 @@ selected ? (
           onSent={() => setNoticeSeed(null)}
         />
       ) : (
-      /* 열 = **학생 · 보고서 · 학부모 미리보기**(2026-08-05 통합).
-         진도·테스트를 따로 세우지 않는다 — 원장: *"이걸 하나의 섹션으로 합쳐버리면 안되나? 공간낭비
-         최소화할 수 있게? 굳이 따로 할 필요 있나?"* 그 열은 콘텐츠보다 훨씬 길어 아래가 통째로 비었고,
-         보고서 카드 맨 위 요약이 **같은 값을 두 번** 보여주고 있었다. 이제 보고서 카드 안에서
-         `@container` 폭에 따라 1 → 2 → 3열(진도·테스트 / 그 밖의 입력 / 문장·발송)로 펼쳐진다.
-         미리보기 열(≥1680px)은 **544px 고정** — 학부모가 받는 실제 이미지 폭(512px + 패딩)이라 늘리거나
-         줄이면 "실제 크기"가 거짓이 된다. 그보다 좁으면 미리보기는 아래 전체폭 행으로 내려간다. */
-      /* 🔴 **미리보기는 항상 우측**(원장 2026-08-05: 좁은 창에서 아래로 밀리는 게 싫다 — "아래쪽보다
-         우측에 있어서 스크롤처리하고싶네"). 그래서 `lg` 이상에선 3열을 **고정 폭으로 유지**하고, 창이
-         좁으면 열을 접는 대신 **가로로 스크롤**된다(`lg:min-w`). 세로로 접히는 건 진짜 작은 화면(<lg)뿐.
-         ⚠️ 스크롤 래퍼를 새로 만들면 안 된다 — 셸의 `<main>`이 이미 `overflow-auto` 스크롤 컨테이너라
-            여기에 `overflow-x-auto`를 하나 더 두면 **학생목록의 `lg:sticky`가 그 래퍼 기준이 되어 깨진다**
-            (높이가 콘텐츠만큼이라 붙을 자리가 없다). min-w만 주면 main이 알아서 가로 스크롤한다.
-         최소폭 = 학생 240 + 보고서 590(카드 좌우 패딩 24 + 내부 2열 분기 560) + 미리보기 544 + gap 32 + 여유. */
-      <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:min-w-[1420px] lg:flex-1 lg:grid-cols-[300px_minmax(530px,1fr)_544px] lg:items-stretch">
+      /* 열 = 학생 · 보고서 · 학부모 미리보기(2026-08-05 통합, 2026-10-03 좁은 폭 개정).
+         보고서 카드 안쪽의 1→2→3열은 그 카드의 @container다. 여기 열 개수는 이 배율 상자 안
+         `@container/oscard` 폭이다(사이드바·창·글자 배율이 폭에 이미 들어 있다). 1420 이상이면
+         3열이고 미리보기는 우측 544(실제 발송 이미지 폭). 그보다 좁으면 — 휴대폰 포함 — 미리보기를
+         아래로 쌓거나 본문을 가로로 밀지 않고 버튼으로 연다. 2026-08-05 "항상 우측"은 3열이 들어갈 때만.
+         ⚠️ 가로 스크롤 래퍼를 새로 만들지 않는다. 학생 목록 헤더 sticky의 기준이 그 래퍼로 바뀐다.
+         보고서 카드는 이 그리드의 두 번째 칸에 그대로 둔다. 폭이 바뀌어도 다시 마운트하지 않는다. */
+      <div className={ONESCREEN_CARD_FRAME}>
+      {selected && previewCtx && previewSubject ? (
+        <div className={ONESCREEN_PREVIEW_BUTTON}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-fit"
+            onClick={() => setPreviewOpen(true)}
+          >
+            {t("os.preview.title")}
+          </Button>
+        </div>
+      ) : null}
+      <div className={ONESCREEN_CARD_GRID}>
         <StudentList
           students={visible}
           bulkPresent={bulkPresentProps}
@@ -4703,7 +4718,14 @@ selected ? (
           emptyLabel={emptyByWriteFilter}
         />
 
-        {reportDetails}
+        {reportColumn}
+        {selected && previewCtx && previewSubject ? (
+          <div className={ONESCREEN_PREVIEW_SLOT} data-onescreen-preview="inline">
+            {/* 숨겨진 인라인 SVG와 대화상자의 gradient id가 겹치지 않게 한 면만 렌더한다. */}
+            {previewOpen ? null : renderPreview()}
+          </div>
+        ) : null}
+      </div>
       </div>
       )}
       </div>
@@ -4711,7 +4733,35 @@ selected ? (
       <Dialog open={view === "grid" && detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[1500px]" aria-describedby={undefined}>
           <DialogTitle>{t("os.card.details")}</DialogTitle>
-          <div className="grid gap-4 lg:grid-cols-[minmax(530px,1fr)_544px]" style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>{reportDetails}</div>
+          {view === "grid" ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(530px,1fr)_544px]" style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
+              {reportColumn}
+              {selected && previewCtx && previewSubject ? (
+                <div className={ONESCREEN_PREVIEW_SCROLL}>{renderPreview()}</div>
+              ) : null}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={view === "card" && previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent
+          className="w-[calc(100vw-2rem)]"
+          // p-4 양쪽 32px + 데스크톱의 세로 스크롤바 여유 16px.
+          style={{ maxWidth: Math.ceil(ONESCREEN_PREVIEW_WIDTH_PX * fontZoom) + 48 }}
+          aria-describedby={undefined}
+        >
+          <DialogTitle>{t("os.preview.title")}</DialogTitle>
+          <div className={ONESCREEN_PREVIEW_DIALOG_SCROLL} data-onescreen-preview="dialog">
+            <div
+              style={
+                fontZoom === 1
+                  ? { width: ONESCREEN_PREVIEW_WIDTH_PX }
+                  : { width: ONESCREEN_PREVIEW_WIDTH_PX, zoom: fontZoom }
+              }
+            >
+              {previewOpen ? renderPreview() : null}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={view === "card" && bulkOpen} onOpenChange={setBulkOpen}>

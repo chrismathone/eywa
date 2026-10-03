@@ -8,6 +8,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getReviewPrivileges, listClassReviews } from "@/features/class-review/server/queries";
 import { gradeOf } from "@/features/class-review/checklist";
 import { BoardTable, type BoardGroup } from "../_components/board-table";
+import { areaLegendLabel, stripLeadingCircledNumber } from "../area-legend";
 
 export const metadata = { title: "직원 평가 종합 — 에이와" };
 
@@ -60,7 +61,8 @@ export default async function ClassReviewBoardPage() {
   const maxAreaCount = Math.max(areas.length, ...rows.map((r) => r.averages?.areaSubtotals.length ?? 0));
   const areaHeads = Array.from({ length: maxAreaCount }, (_, i) => ({
     short: String.fromCharCode(0x2460 + i), // ①②③…
-    title: areas[i]?.title ?? `영역 ${i + 1}`,
+    // 표시만 벗긴다. 저장된 문항 제목(areas)은 그대로 둔다.
+    title: stripLeadingCircledNumber(areas[i]?.title ?? "") || `영역 ${i + 1}`,
     max: areas[i] ? areas[i].items.length * 4 : 0,
   }));
 
@@ -91,7 +93,7 @@ export default async function ClassReviewBoardPage() {
 
       <p className="text-text-dim text-xs">
         영역 소계는 제출된 채점들의 문항 평균 기준 ·{" "}
-        {areaHeads.map((h) => `${h.short} ${h.title}${h.max ? `(${h.max}점)` : ""}`).join(" · ")} — 다른 문항
+        {areaHeads.map((h) => areaLegendLabel(h.short, h.title, h.max)).join(" · ")} — 다른 문항
         세트로 만든 평가지의 영역 구성은 각 건 상세에서 확인하세요.
       </p>
     </div>

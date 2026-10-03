@@ -23,6 +23,8 @@ type RawSchedule = { id: string; class_id: string; day_of_week: string; valid_fr
 
 export type UnifiedStudent = { id: string; name: string; school: string | null; grade: string | null };
 export type UnifiedData = {
+  /** 기록을 거르는 바로 그 강사 범위 판정. 표시 제목도 같은 범위를 사용한다. */
+  scoped: boolean;
   records: UnifiedRecord[];
   students: UnifiedStudent[];
   classes: UnifiedClass[];
@@ -30,7 +32,7 @@ export type UnifiedData = {
   studentClasses: Record<string, UnifiedClass[]>;
 };
 
-const EMPTY: UnifiedData = { records: [], students: [], classes: [], subjects: [], studentClasses: {} };
+const EMPTY: UnifiedData = { scoped: false, records: [], students: [], classes: [], subjects: [], studentClasses: {} };
 
 /**
  * 통합 성적 기록 — 성적 입력(student_grades) + 수업보고서 일일·확인테스트 + 레벨테스트를 한 모양으로.
@@ -51,7 +53,7 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
   const myClassIds = new Set(teacherId ? await gradeTeacherClassIds(teacherId) : []);
   const visibleClasses = scope ? classRows.filter((row) => myClassIds.has(row.id) && (!scope.subjects || scope.subjects.includes(row.subject))) : classRows;
   const classIds = visibleClasses.map((row) => row.id);
-  if (scope && classIds.length === 0) return EMPTY;
+  if (scope && classIds.length === 0) return { ...EMPTY, scoped: true };
   const lookback = isoDaysBefore(from, 180);
   const classAnchor = kstToday();
   // 학생 하나로 좁힐 땐 tenant_id 조건 자리에 student_id를 한 번 더 건다(tenant_id는 따로 이미 걸려 있다).
@@ -216,6 +218,7 @@ export async function getUnifiedGrades(from: string, to: string, opts: { student
     }
   }
   return {
+    scoped: !!scope,
     records, students: students.sort((a, b) => a.name.localeCompare(b.name, "ko")), classes: classOrder([...classById.values()]),
     subjects: [...new Set(visibleClasses.map((row) => row.subject))],
     studentClasses,

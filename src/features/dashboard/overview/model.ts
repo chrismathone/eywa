@@ -101,6 +101,16 @@ export type OverviewData = {
   absent: AbsentDay & { date: string };
   attendance: AttendanceSnapshot | null;
   processing: ClassProcessing[];
+  /**
+   * 오늘이 **학원설정 휴원일**일 때만 값이 있다(평일은 null) — 2026-10-03.
+   * 휴원일엔 `processing`이 빈 목록이라(예정 분모를 만들지 않는다) 출결 카드가 "미처리 0건 · 입력 중 0반"과 빈 막대를 그렸다.
+   * 그 자리에 휴일 이름과 **실제로 입력된 것**(학생 수·반 수·보강 예약 건수)만 적는다 — 분모·완료율 없음.
+   * `counts: null` = 입력 현황 조회 실패(0명으로 접지 않는다). 숫자만 싣는다(이름·목록은 내려보내지 않는다).
+   */
+  holidayAttendance: {
+    name: string;
+    counts: import("@/features/attendance/holiday-activity").HolidayActivityCounts | null;
+  } | null;
   attendanceTrend: { date: string; rate: number | null; total: number }[];
   billing: BillingSummary[];
   expenses: ExpenseSummary;

@@ -25,6 +25,7 @@ export const AREA_MENUS: Record<Area, readonly MenuKey[]> = {
   absent: ["attendance"],
   attendance: ["attendance"],
   processing: ["attendance"],
+  holidayAttendance: ["attendance"],
   attendanceTrend: ["attendance"],
   billing: ["billing"],
   expenses: ["billing"],
@@ -94,7 +95,7 @@ const TREND_S = [Z.summary, Z.one, Z.wide, Z.full];
 
 const PANELS: Record<PanelId, PanelSpec> = {
   studentsComp: { label: "재원생 구성", group: "학생·재원", thumb: "donut", areas: ["students"], sizes: CHART_S },
-  attendance: { label: "출결 현황", group: "출결·수업", thumb: "donut", areas: ["attendance", "processing"], sizes: CHART_S },
+  attendance: { label: "출결 현황", group: "출결·수업", thumb: "donut", areas: ["attendance", "processing", "holidayAttendance"], sizes: CHART_S },
   billingMonth: { label: "이번 달 수납 현황", group: "수납·지출", thumb: "donut", areas: ["billing"], options: ["amounts"], sizes: CHART_S },
   newcomerStages: { label: "신규생 단계별 관리", group: "상담·신입", thumb: "bars", areas: ["newcomers"], sizes: LIST_S },
   changes: { label: "등록 · 퇴원 추이", group: "학생·재원", thumb: "columns", areas: ["changes"], size: { w: 12, h: 1 }, sizes: TREND_S },

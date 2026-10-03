@@ -8,6 +8,12 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { formatKoreanDate, kstToday } from "@/lib/date-kst";
 import { getLiveBoard } from "@/features/attendance/live/server/queries";
 import { holidayNameOf } from "@/features/attendance/live/server/load";
+import { getHolidayDayActivity } from "@/features/attendance/server/holiday-activity";
+import { HolidayActivityPanel } from "@/features/attendance/live/components/holiday-activity-panel";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { buildSubjectMaps } from "@/features/owner/subjects";
+import { classNameFor } from "@/features/teacher-view/class-name";
+import { reportError } from "@/lib/observability/report-error";
 import { quickClasses } from "@/features/attendance/quick/board";
 // 강사 미니셸이면 화면 언어를 따른다(원장 2026-09-04 "강사가 접근 가능한 모든 메뉴를 전환").
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
@@ -42,6 +48,16 @@ export default async function AttendanceQuickPage() {
   ]);
 
   if (holiday) {
+    // 휴원일엔 명단을 만들지 않는다. 그래도 이 강사 반에 그날 입력된 출결·보강 예약이 있으면 읽기 전용으로 보여 주고,
+    // 입력할 곳(월별 출석부)으로 보낸다 — 수업한 휴원일에 빈 화면에서 멈추지 않게.
+    // 🔴 범위는 **내 수업만**(selfOnly) — 이 화면은 관리자 계열이 열어도 자기 반만 본다. 일별 출석부 링크는 없다.
+    const [activity, settings] = await Promise.all([
+      getHolidayDayActivity(today, true).catch((error: unknown) => {
+        reportError(error, { scope: "attendance.quick.holidayActivity", date: today });
+        return null;
+      }),
+      getTenantSettings(),
+    ]);
     return (
       <div className="space-y-4">
         <Header date={today} lang={lang} homeHref={homeHref} />
@@ -50,6 +66,21 @@ export default async function AttendanceQuickPage() {
           icon={CalendarDays}
           title={sheetTf(lang, "quick.holiday.title", { name: holiday })}
           description={sheetT(lang, "quick.holiday.desc")}
+          action={
+            <EmbedLink
+              href={`/attendance?month=${today.slice(0, 7)}`}
+              className="text-primary text-sm font-bold underline underline-offset-2"
+            >
+              {sheetT(lang, "quick.holiday.monthly")}
+            </EmbedLink>
+          }
+        />
+        <HolidayActivityPanel
+          activity={activity}
+          date={today}
+          lang={lang}
+          labelOf={buildSubjectMaps(settings.operations.subjects).labelOf}
+          classNameOf={(name) => classNameFor(name, lang)}
         />
       </div>
     );

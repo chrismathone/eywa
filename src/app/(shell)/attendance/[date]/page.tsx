@@ -18,6 +18,8 @@ import {
   type AttendanceStatusKey,
 } from "@/features/attendance/status-color";
 import { getTenantSettings } from "@/features/owner/server/queries";
+// 휴원일 판정 — 처리 현황(`getDailyProcessingStatus`)이 쓰는 것과 같은 함수(학원설정 휴일 목록만, fail-soft).
+import { holidayNameOrNull } from "@/features/attendance/server/holiday";
 import { buildSubjectMaps, subjectLabelRecord } from "@/features/owner/subjects";
 import { getScopedAbsentStudents } from "@/features/dashboard/server/absent-students";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
@@ -70,10 +72,13 @@ export default async function AttendanceByDatePage({
       />
     );
   }
-  const [records, processing, { operations }] = await Promise.all([
+  const [records, processing, { operations }, holiday] = await Promise.all([
     getAttendanceForDate(date),
     getDailyProcessingStatus(date),
     getTenantSettings(),
+    // 🔴 휴원일이면 위 처리 현황은 **빈 목록**으로 온다(예정 분모를 만들지 않는다) — 그 사실을 한 줄로 밝힌다.
+    //    안 밝히면 "처리 현황이 왜 없지"가 되고, 기록이 없는 날은 "예정된 수업이 없습니다"라는 틀린 이유가 뜬다.
+    isValidYmd(date) ? holidayNameOrNull(date) : null,
   ]);
   const subjectMaps = buildSubjectMaps(operations.subjects);
 
@@ -125,6 +130,15 @@ export default async function AttendanceByDatePage({
             </p>
           ) : null}
         </div>
+      ) : null}
+
+      {/* 휴원일 — 처리 현황(예정 인원·완료율·'완료')을 그리지 않는다. 입력된 기록은 아래 목록에 그대로 남는다. */}
+      {holiday ? (
+        <p className="border-line bg-bg-soft text-text-dim rounded-xl border px-4 py-3 text-sm break-keep" data-holiday-notice="">
+          <span className="text-foreground font-bold">{holiday} — 휴원일</span>
+          {" · "}학원설정에 등록된 휴일이라 예정 명단과 완료율을 만들지 않습니다.
+          {records.length > 0 ? " 아래는 이 날 실제로 입력된 기록입니다." : ""}
+        </p>
       ) : null}
 
       {/* 처리 현황 — 오늘 어느 반이 출결 미입력인지 추적(예정 학생 vs 기록). ijw DailyAttendance 이식. */}
@@ -200,7 +214,11 @@ export default async function AttendanceByDatePage({
           image="attendance"
           icon={ClipboardCheck}
           title="이 날짜의 출석 기록이 없습니다"
-          description="이 날짜에 예정된 수업이 없습니다. 다른 날짜를 선택해 주세요."
+          description={
+            holiday
+              ? "휴원일이라 예정 명단을 만들지 않았고, 입력된 출결도 없습니다. 이 날 수업을 했다면 월별 출석부에서 입력해 주세요."
+              : "이 날짜에 예정된 수업이 없습니다. 다른 날짜를 선택해 주세요."
+          }
         />
       ) : records.length === 0 ? null : (
         <>

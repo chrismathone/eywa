@@ -8,7 +8,8 @@ import type { OperationsSettings } from "@/features/owner/settings-types";
 import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SectionForm, SettingsCard } from "./section-form";
-import { TextField } from "./fields";
+import type { SeatPinStatus } from "@/features/owner/seat-pin-view";
+import { SeatPinField, SeatPinStatusRow } from "./seat-pin-field";
 import { ClassroomManager } from "./classroom-manager";
 import {
   HolidayListEditor,
@@ -23,11 +24,21 @@ export function OperationsSection({
   initial,
   classrooms,
   canImportClassrooms = false,
+  readOnly = false,
+  seatPinStatus,
 }: {
+  /**
+   * 🔴 읽기 전용 열람자에게는 **자리 PIN 값이 지워진** 사본이 온다(서버 `operationsForViewer`) — 이 객체는 통째로
+   *    폼의 숨은 입력(JSON)에 실리므로, 값을 여기서 가리는 것으로는 부족하다. 편집자는 실제 값을 받는다.
+   */
   initial: OperationsSettings;
   classrooms: ClassroomRow[];
   /** 강의실 엑셀로 넣기 버튼 — 서버가 canManageTenant(owner)로 정한 값. */
   canImportClassrooms?: boolean;
+  /** 운영 설정 저장 권한이 없는 열람자 — 저장 바가 없고 자리 PIN 칸 대신 '설정됨 / 꺼짐'만 선다. */
+  readOnly?: boolean;
+  /** 자리별 공개 접속이 켜져 있는가(값 없이) — 읽기 전용 화면이 그리는 유일한 PIN 정보. */
+  seatPinStatus?: SeatPinStatus;
 }) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
@@ -38,7 +49,7 @@ export function OperationsSection({
   return (
     // 강의실은 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(중첩 <form> 방지 위해 폼 밖).
     // footer로 넘겨 저장 바가 강의실 카드 아래(전체 콘텐츠 맨 끝)에 sticky로 붙게 한다(창 하단 고정).
-    <SectionForm section="operations" payload={o} footer={<ClassroomManager rooms={classrooms} canImport={canImportClassrooms} />}>
+    <SectionForm section="operations" payload={o} readOnly={readOnly} footer={<ClassroomManager rooms={classrooms} canImport={canImportClassrooms} />}>
       {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장.
           카드 배치는 키가 비슷한 것끼리 짝(평일|주말 = 교시 목록, 학년|직급 = 칩 목록) — 2열 그리드 빈 구멍 방지. */}
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 min-[860px]:grid-cols-2 [&>section]:min-w-0 [&>section[data-span-all]]:col-span-full">
@@ -113,7 +124,7 @@ export function OperationsSection({
 
       <SettingsCard
         title="공휴일·휴원일"
-        description="수강료 계산 시 수업일에서 제외됩니다. 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다."
+        description="수강료 계산 시 수업일에서 제외됩니다. 이 목록에 있는 날은 오늘 출결의 예정 명단과 확인 큐도 만들지 않습니다(수업하는 날은 목록에서 빼 주세요). 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다."
         span2
       >
         <HolidayListEditor value={o.holidays} onChange={(v) => set({ holidays: v })} />
@@ -134,22 +145,29 @@ export function OperationsSection({
         description="로그인 없이 태블릿으로 들어와 그 자리 오늘 출결을 찍을 때 쓰는 비밀번호입니다. 비우면 그 자리 공개 접속이 꺼집니다."
         span2
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <TextField
-            label="랩실(603호) 비밀번호"
-            hint="주소 /seat/lab · 숫자만이 아니어도 됩니다."
-            value={o.seatPins?.lab ?? ""}
-            onChange={(lab) => set({ seatPins: { ...o.seatPins, lab } })}
-            placeholder="0000"
-          />
-          <TextField
-            label="JJ실(305호) 비밀번호"
-            hint="주소 /seat/jj · 비우면 이 자리만 꺼집니다."
-            value={o.seatPins?.jj ?? ""}
-            onChange={(jj) => set({ seatPins: { ...o.seatPins, jj } })}
-            placeholder="0000"
-          />
-        </div>
+        {readOnly ? (
+          // 🔴 읽기 전용 = 값이 없다(서버가 지우고 보냈다). 칸을 세우지 않고 켜짐 여부만 적는다.
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SeatPinStatusRow label="랩실(603호)" on={seatPinStatus?.lab ?? false} />
+            <SeatPinStatusRow label="JJ실(305호)" on={seatPinStatus?.jj ?? false} />
+          </div>
+        ) : (
+          // 기본 마스킹 + 자동완성 방지(SeatPinField) — 저장해 둔 로그인 비밀번호가 이 칸에 채워지면 안 된다.
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SeatPinField
+              label="랩실(603호) 비밀번호"
+              hint="주소 /seat/lab · 숫자만이 아니어도 됩니다."
+              value={o.seatPins?.lab ?? ""}
+              onChange={(lab) => set({ seatPins: { ...o.seatPins, lab } })}
+            />
+            <SeatPinField
+              label="JJ실(305호) 비밀번호"
+              hint="주소 /seat/jj · 비우면 이 자리만 꺼집니다."
+              value={o.seatPins?.jj ?? ""}
+              onChange={(jj) => set({ seatPins: { ...o.seatPins, jj } })}
+            />
+          </div>
+        )}
       </SettingsCard>
       ) : null}
       </div>

@@ -138,7 +138,7 @@ export async function UnifiedDashboard({ searchParams }: { searchParams: Params 
         students={data.students} initialOpen={entryMode} classNamesOf={classNamesOf} classes={[...entryClasses.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))} />}
       kindOptions={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
 
-    {tab === "overview" ? <OverviewTab rows={rows} studentCount={students.length} academy={aggregateBy(rows, "academy")[0]} missingCount={missingCount} href={href} /> : null}
+    {tab === "overview" ? <OverviewTab rows={rows} studentCount={students.length} academy={aggregateBy(rows, "academy")[0]} missingCount={missingCount} href={href} scoped={data.scoped} /> : null}
 
     {tab === "records" ? <div className="space-y-3">
       <RecordsPager page={page} pageSize={PAGE_SIZE} total={ledgerRows.length} href={ledgerHref} note={showMissing ? "미입력 포함" : undefined} />

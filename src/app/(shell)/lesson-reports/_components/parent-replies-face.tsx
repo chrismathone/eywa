@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Pagination } from "@/components/pagination";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Pill } from "@/components/atoms/pill";
 import { Button } from "@/components/ui/button";
 import { toneColor } from "@/lib/design/semantic-color";
@@ -22,12 +23,20 @@ function kstDateTime(iso: string | null): string {
  */
 export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const pageHref = (page: number) => {
+    const query = new URLSearchParams(params?.toString());
+    query.set("tab", "parent_replies");
+    if (page > 1) query.set("page", String(page)); else query.delete("page");
+    return `${pathname}?${query}`;
+  };
   const [open, setOpen] = useState<string | null>(null);
   const shown = view.rows.length;
   return (
     <section className="space-y-3">
       <p className="text-text-dim text-xs break-keep">
-        최근 {view.days}일 학부모 글·댓글 {view.total}건{view.total > shown ? ` 중 최근 ${shown}건` : ""} · 답글은 연동 PC가 ClassNote 그 글에 댓글로 올립니다.
+        최근 {view.days}일 학부모 글·댓글 {view.total}건{view.total > shown ? ` 중 ${view.page}쪽 ${shown}건` : ""} · 답글은 연동 PC가 ClassNote 그 글에 댓글로 올립니다.
         {view.replyReady && view.testOnly ? " 지금은 시험 단계라 학원이 테스트 보드의 글에만 답글을 쓸 수 있습니다." : ""}
       </p>
       {shown === 0 ? (
@@ -61,6 +70,7 @@ export function ParentRepliesFace({ view }: { view: ParentThreadsView }) {
           ))}
         </ul>
       )}
+      <Pagination page={view.page} totalPages={view.totalPages} total={view.total} hrefForPage={pageHref} />
       {open ? (
         <ParentReplyDialog
           key={open}

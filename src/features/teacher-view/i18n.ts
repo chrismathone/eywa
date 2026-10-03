@@ -898,8 +898,8 @@ export const SHEET_DICT = {
   },
   "fill.title": { ko: "교재 배정 — {class}", en: "Assign a textbook — {class}" },
   "fill.desc": {
-    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 **월간계획**에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 전체 가져오기]를 누를 때만 채워집니다.",
-    en: "Pick periods and a book and the lessons line up on the **monthly plan**, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
+    ko: "교시와 교재를 고르면 그 시각의 수업일마다 차수가 순서대로 월간계획에 섭니다. 연휴는 건너뜁니다. 실제 시트는 강사가 [월간계획 전체 가져오기]를 누를 때만 채워집니다.",
+    en: "Pick periods and a book and the lessons line up on the monthly plan, class day by class day (holidays skipped). The actual sheet is filled only when a teacher presses [Import plan].",
   },
   "fill.slots": { ko: "교시 — 고른 시각에 차수가 들어갑니다", en: "Periods — lessons go into the times you pick" },
   "fill.slots.oneTeacher": {
@@ -1427,10 +1427,12 @@ export const SHEET_DICT = {
   "quick.header.desc": { ko: "{date} · 내 수업", en: "{date} · my classes" },
   "quick.embed": { ko: "출결 모드 · {date}", en: "Attendance mode · {date}" },
   "quick.holiday.title": { ko: "{name} — 휴원일", en: "{name} — academy closed" },
+  // 기록이 있는 휴원일에는 "수업이 없어"가 사실이 아니다(2026-10-03) — 이 화면이 왜 비는지와 입력할 곳만 말한다.
   "quick.holiday.desc": {
-    ko: "이 날은 수업이 없어 출결을 입력하지 않습니다. 학원설정의 휴일 목록을 따릅니다.",
-    en: "There are no classes on this day, so attendance is not recorded. This follows the academy's holiday list.",
+    ko: "학원설정에 등록된 휴일이라 오늘 명단을 만들지 않습니다. 이 날 수업을 했다면 월별 출석부에서 입력해 주세요.",
+    en: "This day is on the academy's holiday list, so today's roster isn't built. If you taught today, record it on the monthly sheet.",
   },
+  "quick.holiday.monthly": { ko: "월별 출석부 열기", en: "Open monthly sheet" },
   "quick.empty.title": { ko: "오늘은 담당 수업이 없습니다", en: "You have no classes today" },
   "quick.empty.desc": {
     ko: "시간표에 오늘 열린 내 수업이 없습니다. 지난 날짜는 월별 출석부에서 고칠 수 있습니다.",
@@ -1625,6 +1627,38 @@ export const SHEET_DICT = {
   "att.hub.today.c": { ko: "명 · 완료 ", en: " recorded · " },
   "att.hub.today.d": { ko: "개 반", en: " done" },
   "att.hub.noClasses": { ko: "{date} — 오늘 예정된 수업이 없습니다", en: "{date} — no classes scheduled today" },
+  // 학원설정 휴원일(2026-10-03) — 예정 인원·완료 수(분모)를 적지 않는다. 실제로 입력된 것만 "입력 N명 · M개 반"으로.
+  "att.hub.holiday": { ko: "{date} — {name} 휴원일", en: "{date} — {name} (academy closed)" },
+  "att.hub.holiday.recorded": {
+    ko: " · 입력된 출결 {students}명 · {classes}개 반",
+    en: " · {students} students recorded · {classes} classes",
+  },
+  "att.hub.holiday.reserved": { ko: " · 보강 예약 {n}건", en: " · {n} makeup bookings" },
+  "att.hub.holiday.none": { ko: " · 입력된 출결 없음", en: " · nothing recorded" },
+  "att.hub.holiday.failed": { ko: " · 입력 현황을 불러오지 못했습니다", en: " · couldn't load what was recorded" },
+  // 휴원일 읽기 전용 목록(오늘 출결 휴원일 화면 · 강사 출결 모드) — 입력·수정 버튼이 없는 사실 목록이다.
+  "att.holiday.listTitle": { ko: "이 날 입력된 기록 (읽기 전용)", en: "Recorded on this day (read-only)" },
+  "att.holiday.counts": {
+    ko: "입력된 출결 {students}명 · {classes}개 반",
+    en: "{students} students recorded · {classes} classes",
+  },
+  "att.holiday.reservations": { ko: "보강 예약 {n}건", en: "{n} makeup bookings" },
+  "att.holiday.scope.all": { ko: "학원 전체", en: "whole academy" },
+  "att.holiday.scope.mine": { ko: "내 수업", en: "my classes" },
+  "att.holiday.openDaily": { ko: "일별 출석부에서 보기", en: "Open daily sheet" },
+  "att.holiday.openMonthly": { ko: "월별 출석부 열기", en: "Open monthly sheet" },
+  "att.holiday.testNote": {
+    ko: "테스트 학생 기록 {n}칸은 세지 않았습니다. 일별 출석부에는 함께 보입니다.",
+    en: "{n} test-student entries are not counted here. They still appear on the daily sheet.",
+  },
+  "att.holiday.classStudents": { ko: "{n}명", en: "{n} students" },
+  "att.holiday.reservedLabel": { ko: "보강 예약", en: "Makeup bookings" },
+  "att.holiday.unknownClass": { ko: "이름 없는 반", en: "Unnamed class" },
+  "att.holiday.unknownStudent": { ko: "이름 없음", en: "No name" },
+  "att.holiday.loadFailed": {
+    ko: "이 날 입력된 출결을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.",
+    en: "Couldn't load what was recorded on this day. Please try again shortly.",
+  },
   "att.hub.hint": {
     ko: "강사를 고르면 그 강사의 모든 반이 한 표로 열립니다 · 개별 반은 위 ‘반’ 목록에서 검색",
     en: "Pick a teacher to open all of their classes in one sheet · for a single class, search the ‘Class’ list above",

@@ -1,0 +1,47 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+const m = vi.hoisted(() => ({ preview: vi.fn(), send: vi.fn(), list: vi.fn(async () => ({ok:true,rows:[]})) }));
+vi.mock("@/features/report-admin/server/notice-actions", () => ({ previewClassNotice: m.preview, sendClassNotice: m.send, listClassNotices: m.list }));
+vi.mock("@/features/onescreen/server/notice-actions", () => ({ cancelOnescreenNotice: vi.fn(), editPostedNotice: vi.fn() }));
+vi.mock("@/features/onescreen/components/notice-attachment-picker", () => ({ NoticeAttachmentPicker: () => null }));
+vi.mock("@/components/forms/use-state-draft", () => ({ useStateDraft: () => ({draftSavedAt:null,clear:vi.fn()}) }));
+vi.mock("@/features/owner/operations-context", () => ({ useSubjectMaps: () => ({labelOf:(s:string)=>s === "math" ? "수학" : "영어"}) }));
+vi.mock("./class-notice-panel", () => ({ ClassNoticePanel: () => null }));
+import { NoticeFace } from "./notice-face";
+const classes = ["가반", "나반", "다반"].map((name,i)=>({id:`c${i}`,name,subject:"math",studentCount:1,reportOptout:false,students:[{id:`s${i}`,name:`학생${i}`,grade:"중1"}]}));
+beforeEach(()=>{ vi.clearAllMocks(); m.preview.mockResolvedValue({ok:true,preview:{fingerprint:"fp",classCount:1,studentCount:1,individualCount:0,attachmentCount:0,targets:[{name:"학생0"}],skipped:[]}});m.send.mockResolvedValue({ok:true,queued:1}); });
+it("visible select and deselect keep selections outside the search result",()=>{
+ render(<NoticeFace classes={classes} initial={[]} canSend />);
+ fireEvent.click(screen.getByLabelText(/가반/));
+ fireEvent.change(screen.getByRole("textbox",{name:"공지 대상 반·과목 검색"}),{target:{value:"나반"}});
+ fireEvent.click(screen.getByRole("button",{name:"보이는 반 선택"}));
+ expect(screen.getByText(/선택 2반/)).toHaveTextContent("현재 목록 밖 1반 포함");
+ fireEvent.click(screen.getByRole("button",{name:"보이는 반 해제"}));
+ fireEvent.change(screen.getByRole("textbox",{name:"공지 대상 반·과목 검색"}),{target:{value:""}});
+ expect(screen.getByLabelText(/가반/)).toBeChecked(); expect(screen.getByLabelText(/나반/)).not.toBeChecked();
+});
+it("requires an explicit preview confirmation before enqueue",async()=>{
+ render(<NoticeFace classes={classes} initial={[]} canSend />);
+ fireEvent.click(screen.getByLabelText(/가반/));
+ fireEvent.change(screen.getByPlaceholderText(/공지 내용/),{target:{value:"합성 확인"}});
+ fireEvent.click(screen.getByRole("button",{name:/^발송 \(/}));
+ await screen.findByRole("heading",{name:"공지 발송 대상 확인"});
+ expect(m.preview).toHaveBeenCalledWith(expect.objectContaining({classIds:["c0"],body:"합성 확인"}));
+ expect(m.send).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole("button",{name:"1건 발송 요청"}));
+ await waitFor(()=>expect(m.send).toHaveBeenCalledWith(expect.objectContaining({previewFingerprint:"fp",classIds:["c0"]})));
+});
+it("closes uncertain send confirmation, refreshes history and retains draft instead of offering immediate retry",async()=>{
+ m.send.mockRejectedValueOnce(new Error("response lost after enqueue"));
+ render(<NoticeFace classes={classes} initial={[]} canSend />);
+ fireEvent.click(screen.getByLabelText(/가반/));
+ fireEvent.change(screen.getByPlaceholderText(/공지 내용/),{target:{value:"응답 유실 확인"}});
+ fireEvent.click(screen.getByRole("button",{name:/^발송 \(/}));
+ await screen.findByRole("heading",{name:"공지 발송 대상 확인"});
+ fireEvent.click(screen.getByRole("button",{name:"1건 발송 요청"}));
+ await waitFor(()=>expect(m.list).toHaveBeenCalledOnce());
+ await waitFor(()=>expect(screen.queryByRole("button",{name:"1건 발송 요청"})).toBeNull());
+ expect(m.send).toHaveBeenCalledOnce();
+ expect(screen.getByPlaceholderText(/공지 내용/)).toHaveValue("응답 유실 확인");
+ expect(screen.getByLabelText(/가반/)).toBeChecked();
+});

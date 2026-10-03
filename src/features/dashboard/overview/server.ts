@@ -41,6 +41,10 @@ import { getUpcomingMakeupOverview } from "@/features/dashboard/server/makeup-up
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { getRecentAnnouncements } from "@/features/dashboard/server/queries";
 import { getDailyProcessingStatus } from "@/features/attendance/server/queries";
+// 휴원일 판정(학원설정 휴일 목록만 — 처리 현황과 같은 함수)과 그날 실제 입력(분모 없는 사실만).
+import { holidayNameOrNull } from "@/features/attendance/server/holiday";
+import { getHolidayDayActivity } from "@/features/attendance/server/holiday-activity";
+import { holidayActivityCounts } from "@/features/attendance/holiday-activity";
 import {
   effectiveAttendanceRecords,
   type EffectiveAttendanceRecord,
@@ -634,6 +638,20 @@ export async function loadOverview(options: LoadOverviewOptions = {}): Promise<O
   }));
   add("attendance", ["attendance"], async () => (await history)!.snapshot);
   add("processing", ["attendance"], () => getDailyProcessingStatus(today));
+  // 휴원일(학원설정 휴일 목록)이면 위 처리 현황은 빈 목록이다 — 그날 **실제로 입력된 것**만 따로 센다(분모·완료율 없음).
+  // 오늘 출결 휴원일 화면·출석부 요약과 같은 조회라 세 화면이 같은 "입력 N명 · M반"을 말한다(강사뷰면 그 강사 반만).
+  // 평일은 null(조회 없음). 입력 현황 조회가 실패하면 휴일 이름은 살리고 숫자만 비운다(0명으로 접지 않는다).
+  add("holidayAttendance", ["attendance"], async () => {
+    const name = await holidayNameOrNull(today);
+    if (!name) return null;
+    const counts = await getHolidayDayActivity(today)
+      .then(holidayActivityCounts)
+      .catch((error: unknown) => {
+        reportError(error, { scope: "dashboard.holiday-attendance", date: today });
+        return null;
+      });
+    return { name, counts };
+  });
   add("attendanceTrend", ["attendance"], async () => (await history)!.trend);
   add("billing", ["billing"], () => billing(today, user.tenantId));
   add("expenses", ["billing"], async () =>

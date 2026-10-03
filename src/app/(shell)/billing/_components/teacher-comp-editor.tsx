@@ -6,6 +6,7 @@ import { Check, Loader2, Pencil } from "@/components/icons/aywa-icon-compat";
 import { saveTeacherComp, type SaveCompState } from "@/features/payroll/server/comp-actions";
 import type { SalaryType } from "@/features/payroll/settlement";
 import { SALARY_GROUPS, type GroupRates } from "@/features/payroll/salary-group";
+import { teacherCompSummary } from "./teacher-comp-summary";
 
 const TYPE_LABEL: Record<SalaryType, string> = {
   commission: "비율제",
@@ -55,16 +56,12 @@ export function TeacherCompEditor({
     if (open) setOpen(false);
   }
 
-  const summary =
-    salaryType === null
-      ? "미설정"
-      : salaryType === "fixed"
-        ? `급여제 ${monthlyBase.toLocaleString("ko-KR")}원`
-        : salaryType === "hybrid"
-          ? `혼합 ${monthlyBase.toLocaleString("ko-KR")}원+${commissionRate ?? "?"}%`
-          : `비율제 ${commissionRate ?? "?"}%`;
-  // 과정별이 하나라도 있으면 요약에 알린다 — 기본 비율만 보고 "45%네" 하고 오해하지 않게.
-  const groupCount = groupRates ? Object.keys(groupRates).length : 0;
+  const { text: summary, groupSpan } = teacherCompSummary({
+    salaryType,
+    commissionRate,
+    monthlyBase,
+    groupRates,
+  });
 
   if (!open) {
     return (
@@ -76,7 +73,7 @@ export function TeacherCompEditor({
       >
         <Pencil className="size-3" />
         {summary}
-        {groupCount > 0 ? <span className="text-text-faint">· 과정별 {groupCount}</span> : null}
+        {groupSpan ? <span className="text-text-faint">{groupSpan}</span> : null}
       </button>
     );
   }

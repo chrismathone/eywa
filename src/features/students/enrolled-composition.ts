@@ -44,7 +44,7 @@ const classOf = (row: ActiveEnrollmentRow) => (Array.isArray(row.class) ? row.cl
  * 이 수강이 **오늘 기준 이미 시작했나**. `today`를 안 주면(옛 호출부) 전부 시작한 것으로 본다.
  * 🔴 `start_date`가 비면 시작한 것으로 본다 — 모름을 '미시작'으로 읽으면 재원생이 조용히 사라진다.
  */
-function hasStarted(row: ActiveEnrollmentRow, today?: string): boolean {
+function hasStarted(row: Pick<ActiveEnrollmentRow, "start_date">, today?: string): boolean {
   if (!today) return true;
   const start = row.start_date ?? null;
   return !start || start.slice(0, 10) <= today;
@@ -61,9 +61,12 @@ function hasStarted(row: ActiveEnrollmentRow, today?: string): boolean {
  * 🔴 **수강이 아예 없는 재원생은 여기 안 들어간다**(반 배정 전 신입 — 실측 3명). 그들까지 빼면 335가 되는데,
  *    원장이 고른 값은 338이다: "아직 안 다니는 게 **확정된** 사람"만 뺀다.
  * ⚠️ 이 집합은 날짜가 지나면 저절로 빈다(10/1이 되면 우지윤은 재원생으로 합류) — 저장하지 않는다.
+ * 🔴 `rows`는 **종료 안 됨 · 휴원 아님**인 수강만 넘긴다(위 `ActiveEnrollmentRow` 조건). 끝난 수강까지 넘기면
+ *    "끝난 옛 수강 + 미래 시작 수강"을 가진 학생이 '이미 시작'으로 읽혀 한 명이 어긋난다.
+ * 필요한 칸은 학생·시작일 둘뿐이라 그 둘만 가진 줄도 받는다(리텐션 명단이 같은 판정을 쓴다 — 2026-10-03).
  */
 export function notYetStartedStudentIds(
-  rows: readonly ActiveEnrollmentRow[],
+  rows: readonly Pick<ActiveEnrollmentRow, "student_id" | "start_date">[],
   today: string,
 ): Set<string> {
   const any = new Set<string>();

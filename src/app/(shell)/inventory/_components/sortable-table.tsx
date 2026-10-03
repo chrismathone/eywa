@@ -132,11 +132,22 @@ export function SortableTable<T>({
             visible.map((row) => (
               <tr
                 key={rowKey(row)}
+                tabIndex={onRowDoubleClick ? 0 : undefined}
+                onKeyDown={
+                  onRowDoubleClick
+                    ? (event) => {
+                        // Enter는 행 자체에 포커스가 있을 때만. 안의 버튼·입력은 자기 동작을 그대로 한다.
+                        if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+                        event.preventDefault();
+                        onRowDoubleClick(row);
+                      }
+                    : undefined
+                }
                 onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
                 onClick={onRowDoubleClick ? (event) => {
                   if (event.target instanceof Element && !event.target.closest("button,a,input,select,textarea") && isDirectEditClick(event)) onRowDoubleClick(row);
                 } : undefined}
-                className={`border-line-faint border-b ${rowClassName?.(row) || "hover:bg-bg-soft/60"}`}
+                className={`border-line-faint border-b focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary ${rowClassName?.(row) || "hover:bg-bg-soft/60"}`}
               >
                 {columns.map((c) => (
                   <td

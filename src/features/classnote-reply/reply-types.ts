@@ -143,4 +143,4 @@ export type ParentThreadRow = {
 };
 
 /** `testOnly` = 시험 모드(학원이 테스트 보드의 글에만 쓸 수 있다는 안내를 단다). */
-export type ParentThreadsView = { rows: ParentThreadRow[]; total: number; days: number; replyReady: boolean; testOnly: boolean };
+export type ParentThreadsView = { page: number; totalPages: number; rows: ParentThreadRow[]; total: number; days: number; replyReady: boolean; testOnly: boolean };

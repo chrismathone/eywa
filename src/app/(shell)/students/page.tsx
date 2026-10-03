@@ -11,6 +11,7 @@ import { EditingBadge } from "@/features/presence/editing-badge";
 import { FilterSelect } from "@/components/filter-select";
 import { HeaderFilter } from "@/components/header-filter";
 import { SearchToggle } from "@/components/search-toggle";
+import { EmbedLink } from "@/components/embed-link";
 import { ToolbarChip } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -252,6 +253,8 @@ export default async function StudentsPage({
       /** 운영실 '재원생 구성' 조각(학교급·수강 구성) — null이면 둘 다 푼다(칩 하나). */
       composition?: null;
       leave?: boolean;
+      /** 검색어(q)만 뺀다. 저장된 필터·페이지 언어는 그대로 둔다. */
+      clearQ?: boolean;
     } = {},
   ) => {
     const params = new URLSearchParams();
@@ -283,8 +286,8 @@ export default async function StudentsPage({
     else if (!leaving && (excludeNoEnrollment || sp.noenr !== undefined)) {
       params.set("noenr", excludeNoEnrollment ? "1" : "0");
     }
-    if (q) params.set("q", q);
-    if ((patch.page ?? 1) > 1) params.set("page", String(patch.page));
+    if (q && !patch.clearQ) params.set("q", q);
+    if (!patch.clearQ && (patch.page ?? 1) > 1) params.set("page", String(patch.page));
     const s = params.toString();
     return s ? `/students?${s}` : "/students";
   };
@@ -400,6 +403,7 @@ export default async function StudentsPage({
           ) : null}
           <span data-help="st-search">
           <SearchToggle
+            key={q}
             placeholder={sheetT(lang, "stu.filter.searchPh")}
             defaultValue={q}
             extra={
@@ -544,11 +548,21 @@ export default async function StudentsPage({
                 {rows.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-3 py-4">
-                      {/* 설명 문장 없이 제목만(§4) — 되돌릴 필터는 바로 위 열 머리에 보인다. */}
+                      {/* 설명 문장은 넣지 않는다(§4). 검색어만 0건을 만들면 그 q만 지우고, 저장된 필터는 둔다. */}
                       <EmptyState
                         image={q ? "search" : "students"}
                         icon={() => <Users size={32} strokeWidth={1.8} />}
                         title={sheetT(lang, "stu.empty.title")}
+                        action={
+                          q ? (
+                            <EmbedLink
+                              href={listParams({ clearQ: true })}
+                              className="border-line text-text-dim hover:text-foreground hover:bg-bg-soft inline-flex rounded-full border px-2.5 py-0.5 text-xs transition"
+                            >
+                              {sheetT(lang, "att.search.clear")}
+                            </EmbedLink>
+                          ) : null
+                        }
                       />
                     </td>
                   </tr>

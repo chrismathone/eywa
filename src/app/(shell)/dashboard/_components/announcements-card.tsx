@@ -27,7 +27,7 @@ export function AnnouncementsCard({
 }) {
   return (
     <DashCard
-      title="공지"
+      title="학원 공지"
       action={
         canManage ? <AnnouncementsManager items={manageItems} unavailable={manageUnavailable} /> : undefined
       }

@@ -328,6 +328,8 @@ export function ClassForm({
         <Field label="과목" error={fieldErrs.subject}>
           <select
             name="subject"
+            aria-label="과목"
+            aria-invalid={fieldErrs.subject ? true : undefined}
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
@@ -343,6 +345,7 @@ export function ClassForm({
         <Field label="강사">
           <select
             name="teacherId"
+            aria-label="강사"
             value={teacherId}
             onChange={(e) => setTeacherId(e.target.value)}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
@@ -359,6 +362,7 @@ export function ClassForm({
         <Field label="강의실">
           <select
             name="classroomId"
+            aria-label="강의실"
             defaultValue={defaults?.classroomId ?? ""}
             className="border-border bg-card text-foreground w-full rounded-md border px-3 py-2 text-sm"
           >

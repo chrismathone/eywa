@@ -10,7 +10,7 @@ import { DraftBanner } from "@/components/forms/draft-banner";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 import { useSubjectMaps } from "@/features/owner/operations-context";
-import { listClassNotices, sendClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
+import { listClassNotices, sendClassNotice, previewClassNotice, type NoticeClassOption, type NoticeRow } from "@/features/report-admin/server/notice-actions";
 import { cancelOnescreenNotice, editPostedNotice } from "@/features/onescreen/server/notice-actions";
 import { NoticeAttachmentPicker } from "@/features/onescreen/components/notice-attachment-picker";
 import { humanizeClassnoteError } from "@/features/report-admin/classnote-error";
@@ -19,6 +19,7 @@ import type { NoticeAttachment } from "@/features/onescreen/notice-attachments";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import type { ClassNoticeRow } from "@/features/report-admin/class-notice";
+import { NoticePreviewDialog, type NoticeReview } from "./notice-preview-dialog";
 import { ClassNoticePanel } from "./class-notice-panel";
 
 // 공지 상태 한글 라벨(raw 코드 UI 노출 금지) — 워커 처리 상태와 동기.
@@ -97,6 +98,12 @@ function EachNoticeFace({
 }) {
   const subjects = useSubjectMaps();
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [selectedOnly, setSelectedOnly] = useState(false);
+  const [review, setReview] = useState<NoticeReview | null>(null);
+  const visibleClasses = classes.filter((c) => (!selectedOnly || checked.has(c.id))
+    && `${c.name} ${subjects.labelOf(c.subject ?? "")}`.toLocaleLowerCase("ko").includes(search.trim().toLocaleLowerCase("ko")));
+  const hiddenCheckedCount = [...checked].filter((id) => !visibleClasses.some((c) => c.id === id)).length;
   const [body, setBody] = useState(""); // 공통 내용
   const [individual, setIndividual] = useState<Record<string, string>>({}); // studentId → 개별 내용(공통 뒤 덧붙임)
   const [showIndividual, setShowIndividual] = useState(false);
@@ -151,8 +158,12 @@ function EachNoticeFace({
   }
 
   // 전체 선택/해제 — 반 목록 전부(=발송 가능한 모든 재원생). 학원 전체 공지를 반마다 클릭하지 않게.
-  const allChecked = classes.length > 0 && classes.every((c) => checked.has(c.id));
-  const toggleAll = () => setChecked(allChecked ? new Set() : new Set(classes.map((c) => c.id)));
+  const allChecked = visibleClasses.length > 0 && visibleClasses.every((c) => checked.has(c.id));
+  const toggleAll = () => setChecked((previous) => {
+    const next = new Set(previous);
+    for (const c of visibleClasses) { if (allChecked) next.delete(c.id); else next.add(c.id); }
+    return next;
+  });
 
   async function refresh() {
     const res = await listClassNotices();
@@ -196,7 +207,7 @@ function EachNoticeFace({
     refresh();
   }
 
-  async function doSend(test: boolean) {
+  async function doSend(test: boolean, confirmed?: NoticeReview) {
     // 개별 내용은 현재 선택된 학생 것만 추림(반 해제 후 남은 잔여 입력 제외).
     const indiv: Record<string, string> = {};
     for (const s of selectedStudents) {
@@ -204,13 +215,30 @@ function EachNoticeFace({
       if (t) indiv[s.id] = t;
     }
     setBusy(true);
-    const res = await sendClassNotice({
-      classIds: [...checked],
-      body,
-      individual: indiv,
-      test,
-      ...(atts.length ? { attachments: atts } : {}),
-    });
+    const input = confirmed?.input ?? { classIds: [...checked], body, individual: indiv, test,
+      ...(atts.length ? { attachments: atts } : {}) };
+    if (!test && !confirmed) {
+      try {
+        const result = await previewClassNotice(input);
+        if (result.ok) setReview({ input, preview: result.preview });
+        else toast.error(result.error);
+      } catch { toast.error("발송 대상을 확인하지 못했습니다. 다시 시도하세요"); }
+      finally { setBusy(false); }
+      return;
+    }
+    let res: Awaited<ReturnType<typeof sendClassNotice>>;
+    try {
+      res = await sendClassNotice({ ...input, test, previewFingerprint: confirmed?.preview.fingerprint });
+    } catch {
+      // 응답 유실은 큐 적재 실패를 뜻하지 않는다. 같은 확인 창에서 재시도해 중복 발송하지 않게 닫는다.
+      setReview(null);
+      toast.error("공지 발송 요청을 확인하지 못했습니다. 다시 보내기 전에 발송 이력을 확인하세요");
+      try { await refresh(); }
+      catch { toast.error("발송 이력을 불러오지 못했습니다. 화면을 새로고침해 확인하세요"); }
+      finally { setBusy(false); }
+      return;
+    }
+    setReview(null);
     setBusy(false);
     if (res.ok && res.dryRun) {
       toast.message("dry-run — '보고서 설정' 탭에서 'ClassNote 실제 발송'을 켜야 큐에 올라갑니다");
@@ -220,7 +248,7 @@ function EachNoticeFace({
       toast.error(res.error ?? "공지 발송 요청에 실패했습니다");
       return;
     }
-    const parts = [`${res.queued ?? 0}명 발송 대기(발송 PC가 순차 게시)`];
+    const parts = [`${res.queued ?? 0}건 발송 대기(발송 PC가 순차 게시)`];
     if (!test && indivCount) parts.push(`개별 내용 ${indivCount}명`);
     const collisions = (res.skipped ?? []).filter((s) => s.reason === "name_collision");
     if (collisions.length) parts.push(`동명이인 제외 ${collisions.length}명(${collisions.map((s) => s.name).join(", ")})`);
@@ -242,6 +270,7 @@ function EachNoticeFace({
   return (
     <div className="space-y-6">
       <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
+        <fieldset disabled={busy} className="min-w-0 border-0 p-0">
         {localDraft.draftSavedAt ? (
           <div className="mb-3">
             <DraftBanner
@@ -273,14 +302,18 @@ function EachNoticeFace({
                     onClick={toggleAll}
                     className="text-primary shrink-0 text-xs font-medium hover:underline"
                   >
-                    {allChecked ? "전체 해제" : "전체 선택"}
+                    {allChecked ? "보이는 반 해제" : "보이는 반 선택"}
                   </button>
                 </div>
               ) : null}
-              {classes.length === 0 ? (
-                <p className="text-text-faint p-2 text-xs">발송 허용 과목의 활성 반이 없습니다.</p>
+              <input aria-label="공지 대상 반·과목 검색" placeholder="반·과목 검색" value={search}
+                onChange={(e) => setSearch(e.target.value)} className="border-line mb-2 w-full rounded border px-2 py-1 text-sm" />
+              <label className="mb-2 flex items-center gap-1 text-xs"><input type="checkbox" checked={selectedOnly} onChange={(e) => setSelectedOnly(e.target.checked)} />선택 반만 보기</label>
+              <p className="text-text-dim mb-1 text-xs">선택 {checked.size}반{hiddenCheckedCount ? ` · 현재 목록 밖 ${hiddenCheckedCount}반 포함` : ""}</p>
+              {visibleClasses.length === 0 ? (
+                <p className="text-text-faint p-2 text-xs">{classes.length === 0 ? "발송 허용 과목의 활성 반이 없습니다." : "조건에 맞는 반이 없습니다."}</p>
               ) : (
-                classes.map((c) => (
+                visibleClasses.map((c) => (
                   <label key={c.id} className="hover:bg-bg-soft flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm">
                     <input type="checkbox" checked={checked.has(c.id)} onChange={() => toggle(c.id)} disabled={!canSend} />
                     <span className="text-foreground min-w-0 flex-1 truncate">{c.name}</span>
@@ -359,18 +392,18 @@ function EachNoticeFace({
 
             {canSend ? (
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" disabled={busy || !body.trim() || checked.size === 0} onClick={() => doSend(false)}>
+                <Button size="sm" disabled={busy || uploading || !body.trim() || checked.size === 0} onClick={() => doSend(false)}>
                   발송 {selectedCount > 0 ? `(${selectedCount}명${indivCount ? ` · 개별 ${indivCount}` : ""})` : ""}
                   {atts.length ? ` · 이미지 ${atts.length}` : ""}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy || !body.trim()}
+                  disabled={busy || uploading || !body.trim()}
                   onClick={() => doSend(true)}
                   title="실 학부모에게 가지 않는 테스트 학생(학원이)의 알림장으로만 발송해 봅니다"
                 >
-                  테스트 발송(학원이)
+                  테스트 발송(선택 반 제외 · 학원이)
                 </Button>
                 <span className="text-text-faint text-xs">발송 전 내용을 한 번 더 확인하세요 — 게시 후 회수·수정은 아래 발송 이력에서 요청</span>
               </div>
@@ -379,8 +412,10 @@ function EachNoticeFace({
             )}
           </div>
         </div>
+        </fieldset>
       </section>
 
+      {review ? <NoticePreviewDialog review={review} busy={busy} onClose={() => { if (!busy) setReview(null); }} onConfirm={() => doSend(false, review)} /> : null}
       {/* 발송 이력 */}
       <section className="bg-card border-line shadow-card rounded-2xl border px-5 py-4">
         <h2 className="text-foreground mb-3 text-base font-bold">공지 발송 이력</h2>

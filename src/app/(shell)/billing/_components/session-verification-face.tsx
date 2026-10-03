@@ -9,6 +9,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { currentPeriod } from "@/features/billing/calc";
 import { Pagination } from "@/components/pagination";
 import Link from "next/link";
+import { SearchToggle } from "@/components/search-toggle";
 import { FilterSelect } from "@/components/filter-select";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
@@ -45,10 +46,16 @@ export async function SessionVerificationFace({
   period,
   subject,
   page,
+  query,
+  status,
+  params = {},
 }: {
   period?: string;
   subject?: string;
   page?: string;
+  query?: string;
+  status?: string;
+  params?: Record<string, string | undefined>;
 }) {
   const p = period && /^\d{4}-\d{2}$/.test(period) ? period : currentPeriod();
   const [view, settings, savedSplits] = await Promise.all([
@@ -67,12 +74,16 @@ export async function SessionVerificationFace({
   const activeSubject = subject && presentSubjects.includes(subject) ? subject : null;
   const scoped = activeSubject ? allRows.filter((r) => r.subject === activeSubject) : allRows;
 
-  const sorted = [...scoped].sort(
+  const q = (query ?? "").trim().toLocaleLowerCase("ko");
+  const activeStatus = status && Object.hasOwn(STATUS_META, status) ? status as VerificationStatus : null;
+  const filtered = scoped.filter((row) => (!activeStatus || row.status === activeStatus)
+    && (!q || `${row.studentName} ${row.className ?? ""}`.toLocaleLowerCase("ko").includes(q)));
+  const sorted = [...filtered].sort(
     (a, b) => RANK[a.status] - RANK[b.status] || a.studentName.localeCompare(b.studentName, "ko"),
   );
   const c = view.counts;
   // 그 달 출석 기록이 통째로 없으면(월중·미입력) 전 행 실=0이 되어 고장처럼 보임 → 명시적 안내.
-  const noAttendanceYet = sorted.length > 0 && sorted.every((r) => r.actualConsumed === 0);
+  const noAttendanceYet = scoped.length > 0 && scoped.every((r) => r.actualConsumed === 0);
 
   // 강사별 분배(참고) — 현재 과목 필터가 적용된 행을 반 담당 강사(id) 단위로 집계(표시 전용, 저장 없음).
   // 전부 0(미확정·출석 0)인 강사 행은 노이즈라 제외 — 신호 있는 강사가 없으면 섹션 자체를 숨긴다.
@@ -102,11 +113,15 @@ export async function SessionVerificationFace({
   );
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const curPage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+  const curPage = Math.min(Math.max(1, Math.floor(Number(page)) || 1), totalPages);
   const rows = sorted.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
   // 과목 필터를 보존한 채 월·page만 바꾸는 href.
-  const hrefFor = (per: string, n = 1) => {
-    const qs = new URLSearchParams({ tab: "verify", period: per });
+  const hrefFor = (per: string, n = 1, clearDisplayFilters = false) => {
+    const qs = new URLSearchParams(Object.entries(params).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    qs.set("tab", "verify");
+    qs.set("period", per);
+    qs.delete("page");
+    if (clearDisplayFilters) { qs.delete("q"); qs.delete("status"); }
     if (activeSubject) qs.set("subject", activeSubject);
     if (n > 1) qs.set("page", String(n));
     return `/billing?${qs.toString()}`;
@@ -130,7 +145,12 @@ export async function SessionVerificationFace({
             triggerClassName={TOOLBAR_SELECT}
           />
         ) : null}
+        <SearchToggle key={query} placeholder="학생·반 검색" defaultValue={query} />
+        <FilterSelect paramName="status" value={activeStatus ?? ""} axisLabel="판정" ariaLabel="시수 판정 필터"
+          options={Object.entries(STATUS_META).map(([value, meta]) => ({ value, label: meta.label }))}
+          className="w-auto" triggerClassName={TOOLBAR_SELECT} />
         <div className="ml-auto flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-text-dim">월 전체</span>
           {(["over", "short", "matched", "monthly", "unconfirmed"] as VerificationStatus[]).map((s) => (
             <span key={s} className={`rounded-full border px-2 py-0.5 ${STATUS_META[s].chip}`}>
               {STATUS_META[s].label} <span className="num font-bold">{c[s]}</span>
@@ -159,7 +179,7 @@ export async function SessionVerificationFace({
         </div>
       ) : null}
 
-      {sorted.length === 0 ? (
+      {scoped.length === 0 ? (
         <div className="border-border text-text-dim rounded-2xl border border-dashed p-10 text-center text-sm">
           이 달의 회차 데이터가 없습니다. <b>회차 확정</b>에서 계획 회차를 생성·확정하면 여기서 실 출석과 대조됩니다.
         </div>
@@ -241,6 +261,12 @@ export async function SessionVerificationFace({
             </section>
           ) : null}
 
+          {sorted.length === 0 ? (
+            <div className="border-border text-text-dim rounded-2xl border border-dashed p-6 text-center text-sm">
+              조건에 맞는 학생이 없습니다.{" "}
+              <Link href={hrefFor(p, 1, true)} className="text-primary underline">검색·판정 해제</Link>
+            </div>
+          ) : null}
           <DragScrollArea className="border-line rounded-2xl border">
             <table className="w-full min-w-[46rem] text-sm">
               <thead>

@@ -16,7 +16,7 @@ describe("앱 — 보낼 반은 한 함수가 정한다", () => {
   it("원스크린 강사 공지·사무실 원생 개별 공지가 routeNoticeCandidates를 지나고, 반 보드 대상을 이름 가드 뒤에 합친다", () => {
     for (const file of [
       ["src", "features", "onescreen", "server", "notice-actions.ts"],
-      ["src", "features", "report-admin", "server", "notice-actions.ts"],
+      ["src", "features", "report-admin", "server", "prepare-class-notice.ts"],
     ]) {
       const code = read(...file);
       expect(code, file.join("/")).toContain("await routeNoticeCandidates({");

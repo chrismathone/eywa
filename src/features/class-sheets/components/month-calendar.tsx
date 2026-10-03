@@ -297,20 +297,39 @@ function DayCell({
                       {(["skip", "advance"] as const).map((kind) => {
                         const on = shift === kind;
                         return (
-                          <button
+                          <span
                             key={kind}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             aria-pressed={on}
                             title={t(kind === "skip" ? "month.shift.skip.title" : "month.shift.advance.title")}
-                            onClick={() => onShift(date, slot.slotStart, on ? null : kind)}
-                            className={`cursor-pointer rounded-full border px-1.5 text-xs font-bold ${
+                            // 날짜 칸은 이미 native button이다. 중첩 button은 SSR 파서를 깨뜨려
+                            // 달력 조각이 셸 밖에 남으므로 내부 조작은 PlanCompareButton과 같은 형태로 둔다.
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onShift(date, slot.slotStart, on ? null : kind);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                if (!e.repeat) onShift(date, slot.slotStart, on ? null : kind);
+                              }
+                            }}
+                            onKeyUp={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.stopPropagation();
+                                e.preventDefault();
+                              }
+                            }}
+                            className={`cursor-pointer rounded-full border px-1.5 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
                               on
                                 ? "border-primary bg-primary text-primary-foreground"
                                 : "border-line text-text-faint hover:border-primary hover:text-foreground"
                             }`}
                           >
                             {t(kind === "skip" ? "month.shift.skip" : "month.shift.advance")}
-                          </button>
+                          </span>
                         );
                       })}
                     </div>

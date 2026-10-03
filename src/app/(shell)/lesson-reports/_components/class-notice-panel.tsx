@@ -1,5 +1,6 @@
 "use client";
 
+import { useSubjectMaps } from "@/features/owner/operations-context";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -42,8 +43,11 @@ export function ClassNoticePanel({
   initial: ClassNoticeRow[];
   canSend: boolean;
 }) {
+  const subjects = useSubjectMaps();
+  const [search, setSearch] = useState("");
   const withBoard = new Set(boardClassIds);
   const options = classes.filter((c) => withBoard.has(c.id)).sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const visible = options.filter((c) => `${c.name} ${subjects.labelOf(c.subject ?? "")}`.toLocaleLowerCase("ko").includes(search.trim().toLocaleLowerCase("ko")));
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -105,11 +109,14 @@ export function ClassNoticePanel({
         </div>
         {/* 새로 만든 반은 반 보드가 연결된 뒤에야 여기 뜬다 — 새벽 동기화를 기다리지 않고 지금 맞춘다(0313a). */}
         <ClassnoteSyncNowButton source="class_notice" className="mb-2" />
-        {options.length === 0 ? (
-          <p className="text-text-faint text-sm">ClassNote 반 연결이 있는 반이 없습니다.</p>
+        <input aria-label="반 단체 공지 반·과목 검색" placeholder="반·과목 검색" value={search}
+          onChange={(e) => setSearch(e.target.value)} className="border-line mb-2 w-full max-w-sm rounded border px-3 py-1.5 text-sm" />
+        <p className="text-text-dim mb-2 text-xs">선택 {checked.size}반 · 현재 목록 밖 {[...checked].filter((id) => !visible.some((c) => c.id === id)).length}반</p>
+        {visible.length === 0 ? (
+          <p className="text-text-faint text-sm">{options.length === 0 ? "ClassNote 반 연결이 있는 반이 없습니다." : "조건에 맞는 반이 없습니다."}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {options.map((c) => {
+            {visible.map((c) => {
               const on = checked.has(c.id);
               return (
                 <button

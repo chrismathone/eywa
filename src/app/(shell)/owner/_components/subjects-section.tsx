@@ -51,7 +51,13 @@ export function SubjectsSection({
   periodDefs = [],
   sessionYear,
   holidays = [],
+  readOnly = false,
 }: {
+  /**
+   * 운영 섹션 **전체**(여기선 과목만 고치고 나머지는 그대로 통과시켜 저장한다).
+   * 🔴 읽기 전용 열람자에게는 자리 PIN 값이 지워진 사본이 온다(서버 `operationsForViewer`) — 이 객체가 폼의 숨은
+   *    입력에 통째로 실리기 때문이다. 편집자는 실제 값을 받아 그대로 되돌려 보내므로 과목만 고쳐 저장해도 PIN이 보존된다.
+   */
   initial: OperationsSettings;
   /** 과목별 강사 라벨(강사뷰 '가로줄 제외 강사' 칩 선택지) — getTeacherLabelsBySubject. */
   teacherLabels?: Record<string, string[]>;
@@ -60,6 +66,8 @@ export function SubjectsSection({
   sessionYear: number;
   /** 공휴일·휴원일(운영 체계 탭) — 세션 수업 횟수 검산에서 뺀다. */
   holidays?: string[];
+  /** 운영 설정 저장 권한이 없는 열람자 — 저장 바가 없고 제출도 막힌다. */
+  readOnly?: boolean;
 }) {
   const [o, setO] = useState<OperationsSettings>(initial);
   const setSubjects = (v: SubjectSetting[]) => setO((prev) => ({ ...prev, subjects: v }));
@@ -75,7 +83,7 @@ export function SubjectsSection({
   const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
 
   return (
-    <SectionForm section="operations" payload={o} savedNonce={savedNonce}>
+    <SectionForm section="operations" payload={o} savedNonce={savedNonce} readOnly={readOnly}>
       <div className="space-y-5">
         <SettingsCard
           title="요일 병합 묶음"

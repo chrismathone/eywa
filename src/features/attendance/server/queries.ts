@@ -62,6 +62,8 @@ import {
 } from "./makeup-reservation-queries";
 // 테스트 학생(`students.is_test`) — 처리현황 명단에서 뺀다(원장 2026-09-14, 오늘 출결과 같은 축). 공용 한 벌.
 import { getTestStudentIds } from "@/features/students/server/test-students";
+// 휴원일 판정(학원설정 휴일 목록만) — 오늘 출결과 같은 함수. 처리 현황은 fail-soft 판을 쓴다.
+import { holidayNameOrNull } from "./holiday";
 
 const DOW_ENUM = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 
@@ -83,10 +85,19 @@ export type ClassProcessing = {
  * 🔑 **요청 캐시**(React `cache`) — 운영실 한 화면에서 헤더의 `처리 중 N/M`과 '오늘 출석 미기록' 신호가
  *    같은 날짜로 각각 부른다. 캐시가 없으면 **같은 무거운 계산이 한 요청에 두 번** 돈다(반응속도 1순위).
  *    인자(date)가 키라 스냅샷 날짜 조회는 그대로 따로 돈다.
+ *
+ * 🔴 **학원설정 휴원일이면 빈 목록이다**(2026-10-03) — 시간표는 요일 반복이라 휴원일에도 슬롯이 살아 있고, 그대로 세면
+ *    "5/22명 · 완료 0개 반" 같은 **정규 예정 분모**가 쉬는 날에 선다(오늘 출결은 같은 날 통째로 비어 있어 두 화면이 어긋났다).
+ *    정본에서 한 번 비우면 소비처 다섯 곳(출석부 요약 · 일별 출석부 · 운영실 출결 카드 · 운영실 오늘 타일 · '오늘 출결 처리'
+ *    신호)이 함께 맞는다 — 소비처마다 접으면 한 곳을 빠뜨리고, 분모만 0으로 넣으면 아래 `rate`가 스스로 100%를 만든다.
+ *    그날 **실제로 입력된 기록**은 여기서 나오지 않는다 → [`getHolidayDayActivity`](./holiday-activity.ts)(날짜 기준 별도 조회).
+ *    ⚠️ 대가: 휴원일의 일별 출석부에서 '기록 없는 반'의 입력 링크가 사라진다(기록 있는 반은 남는다). 입력은 월별 출석부.
+ *    ⚠️ 설정 조회가 실패하면 휴원일이 아닌 것으로 보고 계속 간다(fail-soft — 설정 하나로 처리 현황 전체가 죽지 않게).
  */
 export const getDailyProcessingStatus = cache(async function getDailyProcessingStatus(
   date: string,
 ): Promise<ClassProcessing[]> {
+  if (await holidayNameOrNull(date)) return [];
   const supabase = await createClient();
   const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
   const dayEnum = DOW_ENUM[dow];

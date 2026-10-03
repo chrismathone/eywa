@@ -11,7 +11,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
-import { getTeachingClasses } from "@/features/classes/server/delegation";
+import { liveTeacherClassIds } from "./scope";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { reportError } from "@/lib/observability/report-error";
@@ -103,18 +103,8 @@ export const getLiveBoard = cache(async (date: string = kstToday(), selfOnly = f
     //    담당이 따로 붙는 편성이 흔해서(실측 2026-08-14: 오늘 담당 교시 4개인데 담임 반은 0개인 강사가
     //    실재), 그 강사에겐 보드도 스트립도 영영 비어 있는데 **데스크 레인 A는 그에게 전화하라고 한다.**
     //    ECS 접근 규약이 이미 `class_schedules.teacher_id`를 포함하므로(원장 2026-07-29 승인) 같은 축으로 맞춘다.
-    const [teaching, slotRes] = await Promise.all([
-      getTeachingClasses(supabase, scopedTeacherId, date),
-      supabase
-        .from("class_schedules")
-        .select("class_id")
-        .eq("teacher_id", scopedTeacherId)
-        .lte("valid_from", date)
-        .or(`valid_to.is.null,valid_to.gte.${date}`),
-    ]);
-    classIds = [
-      ...new Set([...teaching.map((c) => c.id), ...(slotRes.data ?? []).map((r) => r.class_id as string)]),
-    ];
+    //    반 집합 규칙은 `scope.ts` 한 곳 — 휴원일 입력 요약도 같은 함수로 좁힌다(같은 강사의 숫자가 갈리지 않게).
+    classIds = await liveTeacherClassIds(supabase, scopedTeacherId, date);
     if (classIds.length === 0) {
       return { ...empty, scopedToSelf: true, canEdit: level === "scoped" || level === "full" };
     }

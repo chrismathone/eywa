@@ -240,6 +240,8 @@ export function Overview({
   const processing = v.processing?.data
     ? processingSummary(v.processing.data)
     : null;
+  // 오늘이 학원설정 휴원일이면 값이 있다 — 그날은 예정 분모가 없어 '미처리 N건'·입력 막대 대신 실제 입력만 적는다.
+  const holidayAttendance = v.holidayAttendance?.data ?? null;
   const care = v.newcomers?.data;
   const schedule = v.schedule?.data;
   const consultations = v.consultations?.data;
@@ -291,7 +293,7 @@ export function Overview({
       title={t("attendance", "출결 현황")}
       note="오늘 · 학생·반·교시별 출결 칸"
       href="/attendance/live"
-      sections={[v.attendance, v.processing]}
+      sections={[v.attendance, v.processing, v.holidayAttendance]}
     >
       {attendance ? (
         <Donut
@@ -328,10 +330,35 @@ export function Overview({
         <p className={s.empty}>
           {v.attendance?.error
             ? "출결 조회 실패"
-            : "오늘 출결 기록이 아직 없습니다."}
+            : holidayAttendance
+              ? "휴원일 — 오늘 입력된 출결이 없습니다."
+              : "오늘 출결 기록이 아직 없습니다."}
         </p>
       )}
-      {processing && (
+      {holidayAttendance ? (
+        // 🔴 휴원일 = 분모 없음. '예정학생 미처리 N건'·'입력 중 N반'·입력 막대(기록/미처리)를 그리지 않는다 —
+        //    예정 명단을 만들지 않는 날에 0건·빈 막대는 "다 처리했다"로 읽힌다. 실제로 입력된 것만 따로 적는다.
+        <div className={s.smallStats} data-holiday-attendance="">
+          <span>
+            <b>{holidayAttendance.name}</b> 휴원일
+          </span>
+          {holidayAttendance.counts === null ? (
+            <span>입력 현황을 불러오지 못했습니다</span>
+          ) : (
+            <>
+              <span>
+                입력된 출결 <b>{number(holidayAttendance.counts.students)}명</b> ·{" "}
+                <b>{number(holidayAttendance.counts.classes)}반</b>
+              </span>
+              {holidayAttendance.counts.reservations > 0 ? (
+                <span>
+                  보강 예약 <b>{number(holidayAttendance.counts.reservations)}건</b>
+                </span>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : processing && (
         <>
           <div className={s.smallStats}>
             <span>

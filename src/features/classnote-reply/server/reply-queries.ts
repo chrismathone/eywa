@@ -19,15 +19,23 @@ import { loadReactions, reactionReady, toReactionView, type ReactionRow } from "
 export const PARENT_THREAD_DAYS = 14;
 export const PARENT_THREAD_LIMIT = 100;
 
-export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser }): Promise<ParentThreadsView> {
+export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser; page?: string }): Promise<ParentThreadsView> {
   const supabase = await createClient();
   const since = new Date(Date.now() - PARENT_THREAD_DAYS * 86_400_000).toISOString();
-  const { data, count, error } = await supabase
-    .from("classnote_parent_messages")
-    .select("id, source, classnote_post_id, classnote_comment_id, child_id, student_id, class_name, content, posted_at", { count: "exact" })
+  const { count, error: countError } = await supabase.from("classnote_parent_messages")
+    // HEAD는 표가 없는 환경의 오류 본문을 잃을 수 있다(#95). 최소 한 행 GET으로 같은 count를 받는다.
+    .select("id", { count: "exact" }).gte("posted_at", since).limit(1);
+  if (countError) throw countError;
+  const totalPages = Math.max(1, Math.ceil((count ?? 0) / PARENT_THREAD_LIMIT));
+  const requested = Number(a.page);
+  const page = Math.min(totalPages, Number.isSafeInteger(requested) && requested > 0 ? requested : 1);
+  const from = (page - 1) * PARENT_THREAD_LIMIT;
+  const { data, error } = await supabase.from("classnote_parent_messages")
+    .select("id, source, classnote_post_id, classnote_comment_id, child_id, student_id, class_name, content, posted_at")
     .gte("posted_at", since)
     .order("posted_at", { ascending: false })
-    .limit(PARENT_THREAD_LIMIT);
+    .order("id", { ascending: false })
+    .range(from, from + PARENT_THREAD_LIMIT - 1);
   if (error) throw error;
   const messages = (data ?? []).map((r) => toMessage(r as Record<string, unknown>));
   const ids = messages.map((m) => m.id);
@@ -70,5 +78,5 @@ export async function listParentThreads(a: { mode: ReplyMode; user: CurrentUser 
       reaction: replyable && reactions ? toReactionView(m.id, reactions.get(m.id) ?? null, a.user, manager, readonly) : null,
     };
   });
-  return { rows, total: count ?? rows.length, days: PARENT_THREAD_DAYS, replyReady: replies.ok, testOnly: a.mode === "test" };
+  return { rows, page, totalPages, total: count ?? rows.length, days: PARENT_THREAD_DAYS, replyReady: replies.ok, testOnly: a.mode === "test" };
 }

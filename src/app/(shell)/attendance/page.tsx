@@ -52,7 +52,12 @@ import { isGroupedSort, sortAttendanceRows } from "@/features/attendance/sort-ro
 import { getSubjectSessionsByStudent, roleFor } from "@/features/attendance/server/subject-sessions";
 import { AttendanceSortSelect } from "./_components/sort-select";
 import { HideRetiredToggle } from "./_components/hide-retired-toggle";
-import { AttendanceHub, type HubTeacher } from "./_components/attendance-hub";
+import { AttendanceHub, type HubHoliday, type HubTeacher } from "./_components/attendance-hub";
+// 휴원일 판정(학원설정 휴일 목록만)과 그날 실제 입력 — 오늘 출결·운영실과 같은 두 함수.
+import { holidayNameOrNull } from "@/features/attendance/server/holiday";
+import { getHolidayDayActivity } from "@/features/attendance/server/holiday-activity";
+import { holidayActivityCounts } from "@/features/attendance/holiday-activity";
+import { reportError } from "@/lib/observability/report-error";
 import { MatrixTable, buildGridSource, type MatrixGroup } from "./_components/matrix-table";
 import { AttendanceLegend } from "./_components/attendance-legend";
 import { GridProvider } from "./_components/grid-context";
@@ -206,6 +211,29 @@ async function buildHubTeachers(
       }),
     }))
     .sort((a, b) => Number(a.retired) - Number(b.retired) || a.name.localeCompare(b.name, "ko"));
+}
+
+/**
+ * 요약 허브의 **휴원일 줄** — 오늘이 학원설정 휴일이면 그 이름과 "실제로 입력된 것"(학생 수·반 수·보강 예약 건수).
+ *
+ * 🔴 휴원일엔 처리 현황(`getDailyProcessingStatus`)이 비어서 예정 인원·완료 수가 없다. 그 자리에 분모 없이 입력된 사실만
+ *    적는다 — "5/22명"·"완료 0개 반"·100% 같은 표기는 쉬는 날에 맞지 않는다(오늘 출결은 같은 날 통째로 비어 있다).
+ * 🔴 숫자는 오늘 출결 휴원일 화면·운영실과 **같은 조회**(`getHolidayDayActivity`)다 — 강사(겸직 강사뷰 포함)는 자기 반만,
+ *    과목 칩을 골랐으면 그 과목 반만 센다(이 화면이 보여 주는 반 범위와 같게).
+ * ⚠️ 조회 실패는 `activity: null`로 내려가 "불러오지 못했습니다"로 적힌다(0명으로 접지 않는다). 휴일 판정 실패는
+ *    평일로 본다(처리 현황과 같은 fail-soft — 두 판정이 갈리지 않게 같은 함수).
+ */
+async function loadHubHoliday(subject: string | null): Promise<HubHoliday | null> {
+  const today = kstToday();
+  const name = await holidayNameOrNull(today);
+  if (!name) return null;
+  const activity = await getHolidayDayActivity(today, false, subject)
+    .then(holidayActivityCounts)
+    .catch((error: unknown) => {
+      reportError(error, { scope: "attendance.hub.holidayActivity", date: today });
+      return null;
+    });
+  return { name, activity };
 }
 
 export default async function AttendancePage({
@@ -946,6 +974,12 @@ export default async function AttendancePage({
         ? classOptions.find((o) => o.value === effectiveClassId)?.label
         : undefined;
 
+  // 요약 허브(강사·반 미선택)에서만 도는 조회 둘 — 강사별 오늘 현황과 휴원일 줄. 서로 독립이라 함께(B4).
+  const [hubTeachers, hubHoliday] =
+    allGroups.length === 0
+      ? await Promise.all([buildHubTeachers(classesForFilters, subjectOptions), loadHubHoliday(effectiveSubject)])
+      : [[] as HubTeacher[], null];
+
   return (
     // 🔴 **스크롤은 격자 하나뿐**이다(원장 지시 2026-08-06) — 페이지(<main>)는 안 움직이고 화면 높이에 딱 맞춘 뒤
     // 남는 높이를 격자가 통째로 가져간다(`min-h-0 flex-1`). 이 배치라야 표 헤더 sticky가 성립한다
@@ -1158,9 +1192,8 @@ export default async function AttendancePage({
         <AttendanceHub
           tools={sheetTools}
           // 허브 카드도 같은 렌즈를 쓴다 — 드롭다운에선 감췄는데 카드로는 보이면 설정이 거짓말이 된다.
-          teachers={(await buildHubTeachers(classesForFilters, subjectOptions)).filter(
-            (t) => !viewPrefs.hideRetired || !t.retired,
-          )}
+          teachers={hubTeachers.filter((t) => !viewPrefs.hideRetired || !t.retired)}
+          holiday={hubHoliday}
           // 자리 묶음 = 드롭다운과 같은 순서·같은 조건(과목이 영어일 때만). 목록이 두 곳에서 달라 보이면 안 된다.
           seats={
             showSeats

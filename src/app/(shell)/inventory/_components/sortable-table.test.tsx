@@ -31,3 +31,20 @@ it("touch edits only the intended cell or row; nested buttons never open the row
   fireEvent.click(screen.getByText("자산 1"), {detail:1}); expect(rowEdit).toHaveBeenCalledTimes(1);
   fireEvent.doubleClick(screen.getByText("자산 1")); expect(rowEdit).toHaveBeenCalledTimes(2);
 });
+
+it("Enter opens the focused row and does not steal Enter from a button inside it", () => {
+  const rowEdit = vi.fn();
+  const action = vi.fn();
+  render(<SortableTable rows={rows.slice(0, 1)} rowKey={(r) => String(r.id)} sort={{ key: "id", dir: "asc" }} onSort={vi.fn()} emptyText="없음" onRowDoubleClick={rowEdit}
+    columns={[{ key: "name", label: "이름", render: (r) => r.name }]}
+    actions={() => <button onClick={action}>QR 보기</button>} />);
+  const row = screen.getByText("자산 1").closest("tr");
+  expect(row).not.toBeNull();
+  fireEvent.keyDown(row!, { key: "Enter" });
+  expect(rowEdit).toHaveBeenCalledTimes(1);
+  fireEvent.keyDown(screen.getByRole("button", { name: "QR 보기" }), { key: "Enter" });
+  expect(rowEdit).toHaveBeenCalledTimes(1);
+  expect(action).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("자산 1"), { detail: 1 });
+  expect(rowEdit).toHaveBeenCalledTimes(1);
+});

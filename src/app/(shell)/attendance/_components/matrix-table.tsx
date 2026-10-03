@@ -558,7 +558,7 @@ export function MatrixTable({
                   title={holiday ?? undefined}
                   className={`border-line num sticky top-0 ${HEAD_Z} ${HEAD_UNDERLINE} min-w-[22px] border-r px-0.5 py-1 text-center text-xs ${bg} ${fg}`}
                 >
-                  <div className="font-bold">{d.day}</div>
+                  <div className="font-bold whitespace-nowrap">{d.day}</div>
                   <div className="opacity-70">{d.label}</div>
                 </th>
               );

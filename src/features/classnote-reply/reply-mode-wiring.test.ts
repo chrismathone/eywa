@@ -69,7 +69,7 @@ describe("끔이면 흔적이 없다", () => {
     expect(page).toMatch(/if \(!replyOn && t === "parent_replies"\) return "writing";/);
     expect(page).toMatch(/const replyMode = classnoteReplyMode\(tenantSettings\);/);
     expect(page).toMatch(/replyOn: replyMode !== "off"/);
-    expect(page).toMatch(/listParentThreads\(\{ mode: replyMode, user: viewer \}\)/);
+    expect(page).toMatch(/listParentThreads\(\{ mode: replyMode, user: viewer, page: sp.page \}\)/);
     expect(read("src/app/(shell)/lesson-reports/video-homework/page.tsx")).toMatch(/replyOn: classnoteReplyMode\(settings\) !== "off"/);
   });
 

@@ -98,7 +98,9 @@ export default async function ApprovalsPage({
     label:
       t.key === "waiting" && boxes.waiting.length > 0
         ? `결재 대기 ${boxes.waiting.length}`
-        : t.label,
+        : t.key === "academy" && Array.isArray(boxes.academyPending)
+          ? `학원 전체 진행 ${boxes.academyPending.length}`
+          : t.label,
     href: t.key === "waiting" ? "/approvals" : `/approvals?tab=${t.key}`,
   }));
 
@@ -119,7 +121,7 @@ export default async function ApprovalsPage({
   //    숫자다(`getApprovalBoxes`는 실패해도 `ready=true`인 빈 함을 돌려준다, 적대 리뷰 2026-09-04). 머리는 제목만 남는다.
   const boxSummary =
     boxes.ready && !boxes.loadError
-      ? `결재 대기 ${boxes.waiting.length}건 · 진행 ${boxes.inProgress.length}건 · 완료 ${boxes.completed.length}건`
+      ? `내 결재함 · 결재 대기 ${boxes.waiting.length}건 · 진행 ${boxes.inProgress.length}건 · 완료 ${boxes.completed.length}건`
       : undefined;
   // '결재 대기'엔 내 차례 문서와 **부재중 후결로 넘어가 확인이 필요한 문서**가 섞인다 — 후자는 진행 열이 "남의 차례"·
   // "승인"으로 읽혀 왜 여기 있는지 안 보인다(옛 설명 문단이 그걸 말했다). 문장 대신 그 행의 진행 열에 값으로 적는다.

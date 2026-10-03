@@ -97,7 +97,7 @@ export function RefundSheet({
   const field = (
     name: string,
     value: string,
-    opts: { ph?: string; type?: string; align?: "left" | "center"; required?: boolean } = {},
+    opts: { label: string; ph?: string; type?: string; align?: "left" | "center"; required?: boolean },
   ) =>
     editing ? (
       <input
@@ -106,15 +106,24 @@ export function RefundSheet({
         placeholder={opts.ph}
         type={opts.type ?? "text"}
         required={opts.required}
+        aria-label={opts.label}
+        aria-required={opts.required ? true : undefined}
         className={`${inputBase} ${opts.align === "center" ? "text-center" : ""}`}
       />
     ) : (
       <>{V(value)}</>
     );
 
-  const areaField = (name: string, value: string, rows: number, ph?: string) =>
+  const areaField = (name: string, value: string, rows: number, label: string, ph?: string) =>
     editing ? (
-      <textarea name={name} defaultValue={value} rows={rows} placeholder={ph} className={`${inputBase} resize-y`} />
+      <textarea
+        name={name}
+        defaultValue={value}
+        rows={rows}
+        placeholder={ph}
+        aria-label={label}
+        className={`${inputBase} resize-y`}
+      />
     ) : (
       <div className="min-h-[1.5em] whitespace-pre-wrap">{V(value)}</div>
     );
@@ -145,6 +154,7 @@ export function RefundSheet({
                     name={`a_${a.key}`}
                     defaultValue={data.approval[a.key]}
                     placeholder="(서명)"
+                    aria-label={`${a.label} 서명`}
                     className={`${inputBase} text-center`}
                   />
                 ) : (
@@ -166,43 +176,43 @@ export function RefundSheet({
             <th className={`${head} w-28`}>
               이 름{editing ? <span className="text-danger"> *</span> : null}
             </th>
-            <td className={cell}>{field("s_name", s.name, { ph: "학생 이름", required: true })}</td>
+            <td className={cell}>{field("s_name", s.name, { label: "이름", ph: "학생 이름", required: true })}</td>
           </tr>
           <tr>
             <th className={head}>학교/학년</th>
-            <td className={cell}>{field("s_schoolGrade", s.schoolGrade, { ph: "예: 경명중 2" })}</td>
+            <td className={cell}>{field("s_schoolGrade", s.schoolGrade, { label: "학교/학년", ph: "예: 경명중 2" })}</td>
           </tr>
           <tr>
             <th className={head}>주소</th>
-            <td className={cell}>{field("s_address", s.address)}</td>
+            <td className={cell}>{field("s_address", s.address, { label: "주소" })}</td>
           </tr>
           <tr>
             <th className={head}>환불사유</th>
-            <td className={cell}>{areaField("s_reason", s.reason, 5, "환불 사유를 입력하세요")}</td>
+            <td className={cell}>{areaField("s_reason", s.reason, 5, "환불사유", "환불 사유를 입력하세요")}</td>
           </tr>
           <tr>
             <th className={head}>담임선생님</th>
-            <td className={cell}>{field("s_homeroomTeacher", s.homeroomTeacher)}</td>
+            <td className={cell}>{field("s_homeroomTeacher", s.homeroomTeacher, { label: "담임선생님" })}</td>
           </tr>
           <tr>
             <th className={head}>수강반</th>
-            <td className={cell}>{areaField("s_className", s.className, 2)}</td>
+            <td className={cell}>{areaField("s_className", s.className, 2, "수강반")}</td>
           </tr>
           <tr>
             <th className={head}>담당선생님</th>
-            <td className={cell}>{field("s_staffTeacher", s.staffTeacher)}</td>
+            <td className={cell}>{field("s_staffTeacher", s.staffTeacher, { label: "담당선생님" })}</td>
           </tr>
           <tr>
             <th className={head}>수업날짜</th>
-            <td className={`${cell} num`}>{field("s_classDate", s.classDate, { ph: "예: 2026-06-01 ~ 06-30" })}</td>
+            <td className={`${cell} num`}>{field("s_classDate", s.classDate, { label: "수업날짜", ph: "예: 2026-06-01 ~ 06-30" })}</td>
           </tr>
           <tr>
             <th className={head}>총수업횟수</th>
-            <td className={`${cell} num`}>{field("s_totalSessions", s.totalSessions, { ph: "예: 12회" })}</td>
+            <td className={`${cell} num`}>{field("s_totalSessions", s.totalSessions, { label: "총수업횟수", ph: "예: 12회" })}</td>
           </tr>
           <tr>
             <th className={head}>환불요청일자</th>
-            <td className={`${cell} num`}>{field("s_requestDate", s.requestDate, { type: "date" })}</td>
+            <td className={`${cell} num`}>{field("s_requestDate", s.requestDate, { label: "환불요청일자", type: "date" })}</td>
           </tr>
         </tbody>
       </table>
@@ -217,19 +227,19 @@ export function RefundSheet({
             <th className={`${head} w-28`}>결제내역</th>
             <td className={cell} colSpan={2}>
               {/* 자동입력이 월×항목별로 줄을 만들어 길다 — 8줄 기본(더 길면 resize-y로 늘린다). */}
-              {areaField("r_paymentDetails", r.paymentDetails, 8, "결제 내역(월·금액·결제수단 등)")}
+              {areaField("r_paymentDetails", r.paymentDetails, 8, "결제내역", "결제 내역(월·금액·결제수단 등)")}
             </td>
           </tr>
           <tr>
             <th className={head}>미환불금액</th>
             <td className={cell} colSpan={2}>
-              {areaField("r_deductionDetails", r.deductionDetails, 4, "미환불금액(수강 회차·교재비 등)")}
+              {areaField("r_deductionDetails", r.deductionDetails, 4, "미환불금액", "미환불금액(수강 회차·교재비 등)")}
             </td>
           </tr>
           <tr>
             <th className={head}>총 환불금액</th>
             <td className={`${cell} num font-bold`} colSpan={2}>
-              {field("r_totalAmount", r.totalAmount, { ph: "예: 200,000원" })}
+              {field("r_totalAmount", r.totalAmount, { label: "총 환불금액", ph: "예: 200,000원" })}
             </td>
           </tr>
           {REFUND_METHODS.map((m, i) => (
@@ -241,7 +251,7 @@ export function RefundSheet({
               ) : null}
               <th className={`${head} w-28`}>{m.label}</th>
               <td className={`${cell} num`}>
-                {field(`m_${m.key}`, r.method[m.key], { ph: m.key === "account" ? "은행·계좌번호" : "" })}
+                {field(`m_${m.key}`, r.method[m.key], { label: m.label, ph: m.key === "account" ? "은행·계좌번호" : "" })}
               </td>
             </tr>
           ))}
@@ -256,19 +266,19 @@ export function RefundSheet({
               처리결과
             </th>
             <th className={`${head} w-28`}>환불처리일자</th>
-            <td className={`${cell} num`}>{field("res_processedDate", res.processedDate, { type: "date" })}</td>
+            <td className={`${cell} num`}>{field("res_processedDate", res.processedDate, { label: "환불처리일자", type: "date" })}</td>
           </tr>
           <tr>
             <th className={head}>전산처리여부</th>
-            <td className={cell}>{field("res_systemProcessed", res.systemProcessed, { ph: "예: 완료 / 미처리" })}</td>
+            <td className={cell}>{field("res_systemProcessed", res.systemProcessed, { label: "전산처리여부", ph: "예: 완료 / 미처리" })}</td>
           </tr>
           <tr>
             <th className={head}>담당자</th>
-            <td className={cell}>{field("res_manager", res.manager)}</td>
+            <td className={cell}>{field("res_manager", res.manager, { label: "담당자" })}</td>
           </tr>
           <tr>
             <th className={head}>환불완료일자</th>
-            <td className={`${cell} num`}>{field("res_completedDate", res.completedDate, { type: "date" })}</td>
+            <td className={`${cell} num`}>{field("res_completedDate", res.completedDate, { label: "환불완료일자", type: "date" })}</td>
           </tr>
           <tr>
             {/* 완료 처리자 = 환불완료일자 저장 시 서버가 자동 기록(읽기 전용, 위조 불가) */}

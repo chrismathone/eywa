@@ -34,14 +34,14 @@ const PRIORITY_LABEL: Record<CareFocus["priority"], string> = {
   low: "낮음",
 };
 
-export async function OverviewTab({ student }: { student: StudentDetail }) {
+export async function OverviewTab({ student, canSeeBilling }: { student: StudentDetail; canSeeBilling: boolean }) {
   const sid = student.id;
   const [attendance, enrollments, grades, invoices, consultations, memos, settings] = await Promise.all([
     getStudentAttendanceStats(sid, 30),
     getStudentEnrollments(sid),
     // 성적 탭·통합 성적관리와 같은 기록(수업보고서 일일·확인테스트 포함 — 원장 2026-09-24).
     getStudentUnifiedRows(sid),
-    getStudentInvoices(sid),
+    canSeeBilling ? getStudentInvoices(sid) : Promise.resolve([]),
     getStudentConsultationHistory(sid),
     getStudentMemos(sid),
     getTenantSettings(),
@@ -165,7 +165,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
           )}
         </DigestCard>
 
-        <DigestCard title="수납 현황" more={<TabLink href={`${base}?tab=billing`}>수납</TabLink>}>
+        {canSeeBilling ? <DigestCard title="수납 현황" more={<TabLink href={`${base}?tab=billing`}>수납</TabLink>}>
           {invoices.length === 0 ? (
             <Empty>청구 내역 없음</Empty>
           ) : (
@@ -179,7 +179,7 @@ export async function OverviewTab({ student }: { student: StudentDetail }) {
               {invoices[0] ? <DigestRow left="최근" right={invoices[0].period} mono /> : null}
             </>
           )}
-        </DigestCard>
+        </DigestCard> : null}
 
         <DigestCard title="최근 상담" more={<TabLink href={`${base}?tab=consultations`}>상담</TabLink>}>
           {consultations.length === 0 ? (

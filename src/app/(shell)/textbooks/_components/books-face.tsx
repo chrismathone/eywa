@@ -63,7 +63,8 @@ export function BooksFace({
 
   return (
     <div className="flex min-h-0 flex-col gap-2">
-      <Toolbar>
+      <div className="flex min-w-0 items-center gap-2">
+      <Toolbar className="min-w-0 flex-1">
         <form
           className="flex shrink-0 items-center gap-1.5"
           onSubmit={(e) => {
@@ -93,13 +94,13 @@ export function BooksFace({
             </ToolbarSegmentItem>
           ))}
         </ToolbarSegment>
-
-        {canWrite ? (
-          <ToolbarButton variant="primary" className="ml-auto" onClick={() => setOpen({ mode: "create" })}>
-            교재 등록
-          </ToolbarButton>
-        ) : null}
       </Toolbar>
+      {canWrite ? (
+        <ToolbarButton variant="primary" className="shrink-0" onClick={() => setOpen({ mode: "create" })}>
+          교재 등록
+        </ToolbarButton>
+      ) : null}
+      </div>
 
       {rows.length === 0 ? (
         <p className="text-text-dim px-1 py-8 text-center text-xs">

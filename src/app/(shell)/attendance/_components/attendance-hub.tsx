@@ -8,6 +8,14 @@ import { attHref } from "./att-href";
 // 화면 언어는 **페이지가 정해 넘긴다**(같은 요청에서 두 번 판정하지 않는다).
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
+import { hasHolidayActivity, type HolidayActivityCounts } from "@/features/attendance/holiday-activity";
+
+/**
+ * 오늘이 **학원설정 휴원일**일 때의 요약 줄 재료(2026-10-03). `activity: null` = 입력 현황 조회 실패.
+ * 🔴 숫자만 온다(이름·목록 없음) — 분모(예정 인원·완료 수)는 휴원일에 만들지 않는다.
+ */
+export type HubHoliday = { name: string; activity: HolidayActivityCounts | null };
+
 /** 요약 허브의 강사 한 줄 — 서버(page.tsx)가 조립한다. */
 export type HubTeacher = {
   id: string;
@@ -43,6 +51,7 @@ export function AttendanceHub({
   todayLabel,
   lang,
   tools,
+  holiday = null,
 }: {
   teachers: HubTeacher[];
   /** 강사 목록과 퇴직 사이에 놓이는 자리 묶음(원장 2026-08-14: 선생님 / LAB·JJ / 퇴직 순). */
@@ -58,6 +67,8 @@ export function AttendanceHub({
   lang: SheetLang;
   /** 시수 마스터·결석 통보 접수. 요약 줄 오른쪽 — 툴바에 두면 빈 둘째 줄이 된다. */
   tools?: ReactNode;
+  /** 오늘이 학원설정 휴원일이면 그 줄 재료(아니면 null) — 서버가 판정한다. */
+  holiday?: HubHoliday | null;
 }) {
   const active = teachers.filter((t) => !t.retired);
   const retired = teachers.filter((t) => t.retired);
@@ -92,7 +103,8 @@ export function AttendanceHub({
           <span className="text-text-dim block text-xs">
             <span className="num">{t.classCount}</span>
             {sheetT(lang, "att.hub.classesSuffix")}
-            {t.today ? (
+            {/* 휴원일엔 강사 줄에도 a/b(예정 대비 입력)를 그리지 않는다 — 분모가 없는 날이다. */}
+            {t.today && !holiday ? (
               <>
                 {sheetT(lang, "att.hub.todayPre")}
                 {/* 기록/예정 — 오늘 수업이 있는 반의 학생 기준. 다 채워지면 초록. */}
@@ -119,7 +131,29 @@ export function AttendanceHub({
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <p className="text-foreground shrink-0 text-sm font-bold">{sheetT(lang, "att.hub.title")}</p>
             {/* 오늘 입력 현황 한 줄 — "요약 화면"의 핵심 숫자. 오늘 수업이 없으면(일요일 등) 조용히 생략. */}
-            {todayTotal.classes > 0 ? (
+            {holiday ? (
+              // 🔴 휴원일 = 분모 없음. "a/b명"·"완료 N개 반"을 그리지 않고 실제로 입력된 것만 적는다.
+              //    기록이 0이어도 "수업 없음"이 아니라 휴원일이라고 말한다(왜 비었는지가 사실이다).
+              <p className="text-text-dim text-xs" data-hub-holiday="">
+                {sheetTf(lang, "att.hub.holiday", { date: todayLabel, name: holiday.name })}
+                {holiday.activity === null
+                  ? sheetT(lang, "att.hub.holiday.failed")
+                  : hasHolidayActivity(holiday.activity)
+                    ? `${
+                        holiday.activity.students > 0
+                          ? sheetTf(lang, "att.hub.holiday.recorded", {
+                              students: holiday.activity.students,
+                              classes: holiday.activity.classes,
+                            })
+                          : ""
+                      }${
+                        holiday.activity.reservations > 0
+                          ? sheetTf(lang, "att.hub.holiday.reserved", { n: holiday.activity.reservations })
+                          : ""
+                      }`
+                    : sheetT(lang, "att.hub.holiday.none")}
+              </p>
+            ) : todayTotal.classes > 0 ? (
               <p className="text-text-dim text-xs">
                 {sheetTf(lang, "att.hub.today.a", { date: todayLabel })}
                 <span className="num font-bold">{todayTotal.classes}</span>

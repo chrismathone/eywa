@@ -211,8 +211,9 @@ export function StudentList({
        사라진 뒤에도 그 220px을 계속 비워 둬 목록만 일찍 잘렸다.
        → 2026-08-06부터 넓은 화면은 **3열 한 화면 배치**라 이 카드가 열 높이를 그대로 채우고(`lg:h-full`)
        안쪽 목록만 스크롤한다(sticky 불필요 — 페이지가 아예 안 굴러간다). 좁은 화면(세로 적층)에선
-       60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
-    <div className="bg-card border-line shadow-card flex flex-col overflow-hidden rounded-2xl border lg:h-full lg:min-h-0">
+       60vh까지만 차지하고 나머지는 페이지가 스크롤한다.
+       글자 확대·사이드바로 oscard가 846px 미만이면 viewport lg여도 같은 세로 적층 규칙을 쓴다. */
+    <div className="bg-card border-line shadow-card flex flex-col overflow-hidden rounded-2xl border lg:h-full lg:min-h-0 @max-[846px]/oscard:h-auto">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">{t(options.sort === "name" ? "os.stat.students" : "os.list.caption")}</p>
         <div className="flex items-center gap-2">
@@ -231,7 +232,7 @@ export function StudentList({
           </p>
         </div>
       </header>
-      <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2 lg:max-h-none [scrollbar-gutter:stable]">
+      <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2 lg:max-h-none @max-[846px]/oscard:max-h-[60vh] [scrollbar-gutter:stable]">
         {students.length === 0 ? (
           <p className="text-text-faint px-2 py-6 text-center text-xs">
             {emptyLabel ?? t("os.list.empty")}

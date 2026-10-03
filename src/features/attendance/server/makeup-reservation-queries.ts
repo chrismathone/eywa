@@ -13,7 +13,7 @@ import "server-only";
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { weekBoundsOf } from "@/features/timetable/lib/week";
 import type { MakeupReservation } from "../makeup-reservation";
 
@@ -122,6 +122,34 @@ export const getReservationsOn = cache(async function getReservationsOn(
     return soft("날짜", e as { code?: string; message?: string });
   }
 });
+
+/**
+ * **지점 전체**의 한 날짜 예약 — 반 집합 없이 날짜로만 읽는다(휴원일 입력 요약의 사무실 범위).
+ *
+ * `getReservationsOn`은 반 집합을 받는데, 호출부가 "그 요일에 수업이 있는 반"만 넘기면 정규 교시가 없는 날·시각에
+ * 잡힌 보강이 빠진다. 사무실 범위는 반으로 좁힐 이유가 없으므로 날짜 하나로 읽는다(RLS = 지점 격리).
+ * 🔴 강사 범위에서는 쓰지 않는다 — 남의 반 예약이 섞인다. 강사는 자기 반 집합을 `getReservationsOn`에 넘긴다(#77).
+ * 페이징(B2 — 건수를 세는 데 쓴다) · fail-soft(표 없음·조회 실패 = 예약 없음, 위 규약 그대로).
+ */
+export async function getReservationsOnDate(date: string): Promise<MakeupReservation[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+  const supabase = await createClient();
+  try {
+    const rows = await fetchAllPaged<Row>((from, to) =>
+      supabase
+        .from("makeup_reservations")
+        .select(SELECT)
+        .eq("makeup_date", date)
+        .eq("status", "reserved")
+        .order("slot_start")
+        .order("id")
+        .range(from, to),
+    );
+    return rows.map(toReservation);
+  } catch (e) {
+    return soft("날짜(지점 전체)", e as { code?: string; message?: string });
+  }
+}
 
 /**
  * 여러 반의 **기간** 예약 — 시간표 '보강' 탭(주)과 운영실 '보강예정' 카드(오늘부터 한 달 + 지난 미이행)가 **같은 조회**를 쓴다

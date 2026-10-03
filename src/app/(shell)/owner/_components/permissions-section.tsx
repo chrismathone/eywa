@@ -1,4 +1,5 @@
 "use client";
+import { nextPermissionAccess, PERMISSION_ACCESS_CYCLE as CYCLE } from "@/features/owner/permission-edit";
 import { DASHBOARD_ROLE_LABELS } from "@/features/dashboard/layout/roles";
 
 import { useMemo, useRef, useState } from "react";
@@ -29,7 +30,7 @@ const TEACHER_TOGGLE_KEYS = TEACHER_MENU_KEYS.filter(isTeacherMenuEntranceOpen);
 
 const ROLE_LABEL: Record<SystemRole, string> = DASHBOARD_ROLE_LABELS;
 
-const CYCLE: Access[] = ["full", "scoped", "readonly", "none"];
+
 const ACCESS_LABEL: Record<Access, string> = { full: "전체", scoped: "담당", readonly: "읽기", none: "없음" };
 const ACCESS_CLS: Record<Access, string> = {
   full: "bg-primary/10 text-primary",
@@ -78,6 +79,10 @@ export function PermissionsSection({
 }) {
   const [matrix, setMatrix] = useState<AccessMatrix>(() => resolveMatrix(initial.overrides));
   const overrides = useMemo(() => diffOverrides(matrix), [matrix]);
+  const savedMatrix = useMemo(() => resolveMatrix(initial.overrides), [initial.overrides]);
+  const changes = MENU_KEYS.flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
+    matrix[menu][role] === savedMatrix[menu][role] ? [] : [{ menu, role, before: savedMatrix[menu][role], after: matrix[menu][role] }],
+  ));
   const [userOverrides, setUserOverrides] = useState<UserPermissionOverride[]>(initial.userOverrides);
   const [specialAccess, setSpecialAccess] = useState(initial.specialAccess);
   const [pickedUser, setPickedUser] = useState("");
@@ -111,7 +116,7 @@ export function PermissionsSection({
   }
 
   function cycle(menu: MenuKey, role: SystemRole) {
-    const next = CYCLE[(CYCLE.indexOf(matrix[menu][role]) + 1) % CYCLE.length];
+    const next = nextPermissionAccess(menu, role, matrix[menu][role]);
     if (isPermissionLocked(menu, role, next)) return; // 가드레일 셀은 변경 거부
     setMatrix((m) => ({ ...m, [menu]: { ...m[menu], [role]: next } }));
   }
@@ -186,9 +191,19 @@ export function PermissionsSection({
         <h3 className="text-foreground text-sm font-bold">역할별 메뉴 권한</h3>
         <p className="text-text-dim mt-1 text-xs leading-relaxed">
           셀을 클릭하면 <b>전체 → 담당 → 읽기 → 없음</b> 순으로 바뀝니다. 기본값과 다른 셀만 저장됩니다
-          (현재 {overrides.length}개 변경). 선생님 원스크린·내 학습은 역할 전용이라 고정이고, 학생 역할과
+          (기본값과 다른 셀 {overrides.length}개). 선생님 원스크린·내 학습은 역할 전용이라 고정이고, 학생 역할과
           원장의 설정·관리자 도구·대시보드 접근은 잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
         </p>
+        {changes.length ? (
+          <details className="border-amber/30 bg-amber-soft mt-3 rounded-md border px-3 py-2 text-xs">
+            <summary className="cursor-pointer font-bold">저장 전 변경 {changes.length}개</summary>
+            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+              {changes.map(({ menu, role, before, after }) => <li key={`${menu}:${role}`}>
+                {MENU_LABEL[menu]} · {ROLE_LABEL[role]}: {ACCESS_LABEL[before]} → {ACCESS_LABEL[after]}
+              </li>)}
+            </ul>
+          </details>
+        ) : null}
         <DragScrollArea className="border-border mt-4 rounded-md border">
           <table className="w-full border-collapse text-xs">
             <thead>
@@ -212,14 +227,15 @@ export function PermissionsSection({
                   {SYSTEM_ROLES.map((role) => {
                     const a = matrix[menu][role];
                     const locked = isCellLocked(menu, role);
+                    const changed = a !== savedMatrix[menu][role];
                     return (
                       <td key={role} className="px-1.5 py-1.5 text-center">
                         <button
                           type="button"
                           disabled={locked}
                           onClick={() => cycle(menu, role)}
-                          title={locked ? "고정" : "클릭하여 변경"}
-                          className={`w-full min-w-[3rem] rounded px-1.5 py-1 text-xs font-medium transition ${ACCESS_CLS[a]} ${
+                          title={locked ? "고정" : changed ? `${ACCESS_LABEL[savedMatrix[menu][role]]} → ${ACCESS_LABEL[a]} · 저장 전 변경` : "클릭하여 변경"}
+                          className={`w-full min-w-[3rem] rounded px-1.5 py-1 text-xs font-medium transition ${ACCESS_CLS[a]} ${changed ? "ring-2 ring-amber" : ""} ${
                             locked ? "cursor-default opacity-40" : "hover:ring-primary/40 hover:ring-1"
                           }`}
                         >
