@@ -50,7 +50,7 @@ describe("authenticated configuration diagnostics", () => {
     const response = await wakePost(diagnosticRequest(wakeSecret));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       EYWA_SYNC_BINDINGS_JSON: { configured: true, valid: true, count: 1 },
       EYWA_SYNC_AUTO_JSON: { configured: false, valid: true, count: 0 },
     });
@@ -60,11 +60,30 @@ describe("authenticated configuration diagnostics", () => {
     vi.stubEnv("EYWA_SYNC_BINDINGS_JSON", 'broken-secret-value');
     vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([config]));
     const response = await wakePost(diagnosticRequest(wakeSecret));
-    expect(await response.json()).toEqual({
+    expect(await response.json()).toMatchObject({
       EYWA_SYNC_BINDINGS_JSON: { configured: true, valid: false, error: "invalid_json" },
       EYWA_SYNC_AUTO_JSON: { configured: true, valid: true, count: 1 },
     });
     expect(rpc).not.toHaveBeenCalled();
+  });
+  it("identifies quote escaping and truncation without echoing malformed contents", async () => {
+    vi.stubEnv("EYWA_SYNC_AUTO_JSON", '[{\\"controlSecret\\":\\"private-fragment');
+    const response = await wakePost(diagnosticRequest(wakeSecret));
+    const body = await response.text();
+    expect(JSON.parse(body).EYWA_SYNC_AUTO_JSON.syntax).toMatchObject({
+      startsWithArray: true, endsWithArray: false, hasByteOrderMark: false,
+      hasSmartQuotes: false, hasEscapedQuotes: true,
+    });
+    expect(body).not.toContain("private-fragment");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("returns only validated deployment identifiers", async () => {
+    vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "a".repeat(40));
+    vi.stubEnv("VERCEL_URL", "eywa-test-team.vercel.app");
+    expect((await (await wakePost(diagnosticRequest(wakeSecret))).json()).deployment).toEqual({ revision: "a".repeat(40), hostname: "eywa-test-team.vercel.app" });
+    vi.stubEnv("VERCEL_GIT_COMMIT_SHA", "unexpected-private-value");
+    vi.stubEnv("VERCEL_URL", "unexpected-private-value");
+    expect((await (await wakePost(diagnosticRequest(wakeSecret))).json()).deployment).toEqual({ revision: null, hostname: null });
   });
   it("returns only schema issue paths and codes without input or validation messages", async () => {
     vi.stubEnv("EYWA_SYNC_AUTO_JSON", JSON.stringify([{ ...config, controlSecret: "sensitive-too-short" }]));

@@ -16,7 +16,17 @@ function inspect(raw: string | undefined, parse: (raw: string | undefined) => un
   const configured = Boolean(raw?.trim());
   try { return { configured, valid: true, count: parse(raw).length }; }
   catch (error) {
-    if (error instanceof SyntaxError) return { configured, valid: false, error: "invalid_json" };
+    if (error instanceof SyntaxError) {
+      const position = /\bposition (\d+)\b/.exec(error.message)?.[1];
+      return { configured, valid: false, error: "invalid_json", syntax: {
+        startsWithArray: raw?.trimStart().startsWith("[") ?? false,
+        endsWithArray: raw?.trimEnd().endsWith("]") ?? false,
+        hasByteOrderMark: raw?.charCodeAt(0) === 0xfeff,
+        hasSmartQuotes: /[\u201c\u201d]/.test(raw ?? ""),
+        hasEscapedQuotes: /\\"/.test(raw ?? ""),
+        position: position === undefined ? null : Number(position),
+      } };
+    }
     if (error instanceof z.ZodError) return {
       configured, valid: false, error: "invalid_schema",
       issues: error.issues.slice(0, 20).map((issue) => ({
@@ -31,6 +41,10 @@ function inspect(raw: string | undefined, parse: (raw: string | undefined) => un
 
 export function syncConfigDiagnostics() {
   return {
+    deployment: {
+      revision: /^[a-f0-9]{40}$/.test(process.env.VERCEL_GIT_COMMIT_SHA ?? "") ? process.env.VERCEL_GIT_COMMIT_SHA : null,
+      hostname: /^[a-z0-9-]+\.vercel\.app$/.test(process.env.VERCEL_URL ?? "") ? process.env.VERCEL_URL : null,
+    },
     EYWA_SYNC_BINDINGS_JSON: inspect(process.env.EYWA_SYNC_BINDINGS_JSON, parseBindingConfigs),
     EYWA_SYNC_AUTO_JSON: inspect(process.env.EYWA_SYNC_AUTO_JSON, parseAutomaticConfigs),
   };
