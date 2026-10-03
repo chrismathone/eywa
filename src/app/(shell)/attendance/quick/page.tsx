@@ -1,4 +1,7 @@
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { EmbedLink } from "@/components/embed-link";
+import { teacherViewHome } from "@/lib/auth/teacher-home";
 import { EmptyState } from "@/components/empty-state";
 import { CalendarDays } from "@/components/icons/aywa-icon-compat";
 import { requireAccess } from "@/lib/auth/require-access";
@@ -31,16 +34,17 @@ export default async function AttendanceQuickPage() {
   await requireAccess("attendance");
   const today = kstToday();
   // 휴원일 판정과 보드 적재는 서로 독립이라 병렬(B4). 화면 언어는 쿠키 한 번이라 같이 묶는다.
-  const [board, holiday, lang] = await Promise.all([
+  const [board, holiday, lang, homeHref] = await Promise.all([
     getLiveBoard(today, true),
     holidayNameOf(today),
     getTeacherViewLang(),
+    teacherViewHome(),
   ]);
 
   if (holiday) {
     return (
       <div className="space-y-4">
-        <Header date={today} lang={lang} />
+        <Header date={today} lang={lang} homeHref={homeHref} />
         {/* 🔴 휴일 **이름**은 학원설정에 적힌 그대로 — 옮길 표가 없다(지어내지 않는다). */}
         <EmptyState
           icon={CalendarDays}
@@ -58,13 +62,13 @@ export default async function AttendanceQuickPage() {
 
   return (
     <div className="space-y-4">
-      <Header date={today} lang={lang} />
+      <Header date={today} lang={lang} homeHref={homeHref} />
       <QuickBoard date={today} classes={classes} canEdit={board.canEdit} />
     </div>
   );
 }
 
-function Header({ date, lang }: { date: string; lang: SheetLang }) {
+function Header({ date, lang, homeHref }: { date: string; lang: SheetLang; homeHref: string }) {
   // 날짜 표기도 화면 언어를 따른다 — 한국어는 앱 전역 `formatKoreanDate`가 정본이다.
   const label = sheetDateLabel(date, formatKoreanDate(date), lang);
   return (
@@ -73,6 +77,7 @@ function Header({ date, lang }: { date: string; lang: SheetLang }) {
       title={sheetT(lang, "quick.title")}
       description={sheetTf(lang, "quick.header.desc", { date: label })}
       embedLabel={sheetTf(lang, "quick.embed", { date: label })}
+      actions={<Button render={<EmbedLink href={homeHref} />}>{sheetT(lang, "quick.exit")}</Button>}
     />
   );
 }

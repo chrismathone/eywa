@@ -1,4 +1,6 @@
 import "server-only";
+import { DEFAULT_DISPLAY_OPTIONS, readDisplayOptions, type DisplayOptions } from "../display-options";
+import { lessonEndsByClass } from "../send-mark";
 import { readTrendOptOut } from "../trend-optout";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -69,6 +71,7 @@ export type TodayClass = {
    */
   subjectKey: string;
   startTime: string | null; // "16:20"
+  endTime?: string | null; // 오늘 마지막 교시 종료 시각(미발송 안내)
   studentCount: number;
   /**
    * 이 반이 **위임받은 반**인가(0173a — 결근 대체 수업). 내 담당 반이면 false.
@@ -130,6 +133,7 @@ export type TeacherRoster = {
   // 강사 개인 '글씨 크기'(작음/보통/큼) — users.ui_prefs.onescreen.fontSize(계정 귀속, 기기 아님).
   // 미설정=작음(지금 화면 그대로)이라 아무도 손대지 않으면 렌더가 바뀌지 않는다.
   fontSize: OnescreenFontSize;
+  displayOptions: DisplayOptions;
   // '학습 추세 미발송'으로 켠 `반:학생` 키(원장 2026-09-18) — 글씨 크기와 **같은 행**(ui_prefs)에서 읽어 왕복 0.
   trendOptOut: string[];
   // ── 카드 뷰 '학부모 미리보기'(2026-08-05 원장 요청) — 오른쪽에 실제 발송물을 그대로 그린다 ──
@@ -206,6 +210,7 @@ type RosterSettings = Pick<
   | "showAttachments"
   | "canEditAttendance"
   | "fontSize"
+  | "displayOptions"
   | "trendOptOut"
   | "reportSettings"
   | "academyName"
@@ -312,6 +317,7 @@ function emptyRoster(today: string, date: string, teacherName: string, config: R
     showAttachments: true,
     canEditAttendance: false,
     fontSize: DEFAULT_ONESCREEN_FONT_SIZE,
+    displayOptions: DEFAULT_DISPLAY_OPTIONS,
     trendOptOut: [],
     // 미리보기 재료의 폴백 — 학원설정을 못 읽은 경로(비로그인)에서도 타입이 완전해야 한다.
     // 실제 값은 위 config가 덮는다(학생 0명 로스터도 '보강 학생 추가'로 보고서를 쓰므로 하드코딩 금지).
@@ -371,6 +377,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   );
   const noticeMode = ((meRow?.report_notice_mode as "A" | "B" | null | undefined) ?? null);
   const fontSize = readOnescreenFontSize(meRow?.ui_prefs);
+  const displayOptions = readDisplayOptions(meRow?.ui_prefs);
   const trendOptOut = readTrendOptOut(meRow?.ui_prefs);
 
   // 학원설정·강사설정에서 온 값 — 빈 로스터를 포함해 **모든 반환 경로가 이걸 그대로 쓴다**(emptyRoster 주석 참조).
@@ -395,6 +402,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     showAttachments: settings.report.showAttachments,
     canEditAttendance,
     fontSize,
+    displayOptions,
     trendOptOut,
     // 카드 뷰 '학부모 미리보기'(2026-08-05) — /r·인쇄와 **같은 컴포넌트**(ParentReportCard)에 넘길 재료.
     // 표시 토글까지 그대로 실어야 미리보기가 발송본과 같은 것을 보여준다(토글 off 항목은 미리보기에도 안 뜬다).
@@ -477,6 +485,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     return emptyRoster(today, targetDate, teacherName, config);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
+  const endByClass = lessonEndsByClass(scheds);
   const startByClass = new Map<string, string | null>();
   for (const s of scheds) {
     const t = s.start_time ? String(s.start_time).slice(0, 5) : null;
@@ -1547,6 +1556,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       subject: subjects.labelOf(c.subject),
       subjectKey: c.subject ?? "",
       startTime: startByClass.get(c.id) ?? null,
+      endTime: endByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
       reportOptout: !!c.report_optout,
       delegated: c.delegated,

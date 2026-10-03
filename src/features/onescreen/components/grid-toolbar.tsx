@@ -1,5 +1,6 @@
 "use client";
 
+import { DisplaySettings } from "./display-settings";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { AttachPicker } from "./grid-attach";
@@ -52,6 +53,7 @@ export function GridToolbar({
   // sendable=진도+결석 제외(발송·자동작성 대상), saveable=진도만(저장 대상 — 결석 포함, 2-3 작업별 분리).
   counts: {
     total: number;
+    students?: number;
     sendable: number;
     /** 실제로 발송되는 행 = sendable + 멘트 있음. 상단 숫자·발송 버튼은 **이 값**을 쓴다(행 라벨과 일치). */
     sendReady: number;
@@ -84,7 +86,7 @@ export function GridToolbar({
   return (
     <div data-help="os-save" className="bg-card border-line shadow-card flex flex-wrap items-center gap-2 rounded-2xl border px-4 py-2.5">
       <span className="text-text-dim text-xs">
-        {t("os.bar.shown")} <span className="text-foreground font-bold">{total}</span> ·{" "}
+        {tf("os.bar.peopleRows", { students: counts.students ?? total, rows: total })} ·{" "}
         {t("os.bar.sendable")} <span className="text-foreground font-bold">{sendReady}</span>
         {sendable > sendReady ? (
           <span className="text-text-faint">
@@ -122,6 +124,7 @@ export function GridToolbar({
           {t("os.prev.face")}
         </label>
       ) : null}
+      <DisplaySettings />
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {children}
         {/* G5 얕은판 — 이전 회차 값으로 빈 칸 일괄 채우기. 값 일괄(팝오버=children) 옆이 자연 위치.

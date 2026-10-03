@@ -31,6 +31,12 @@ import {
   setMyOnescreenFontSize,
   setMyTrendOptOut,
 } from "../server/actions";
+import { DisplayOptionsProvider, useDisplayOptionsState } from "./display-options-context";
+import { orderReportRows } from "../report-row-order";
+import type { DisplayOptions } from "../display-options";
+import { PreviousContent } from "./previous-content";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { isTrendOptedOut, trendOptOutKey } from "../trend-optout";
 import { removeMakeupEntry } from "../server/makeup-remove-actions";
 import { canRemoveMakeupRow, makeupRemoveBlockReason } from "../makeup-remove-plan";
@@ -52,7 +58,9 @@ import type { CellState, OneScreenStudent, Subject } from "../types";
 import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
 import { CLASS_TAG_ALL } from "../class-tags";
-import { StudentList, type SendMark } from "./student-list";
+import { StudentList } from "./student-list";
+import { buildSendMark } from "../send-mark";
+import { SentReportNotice } from "./sent-report-notice";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { SheetSourceCard } from "./sheet-source-card";
@@ -325,6 +333,7 @@ export function OneScreenClient({
   initialView = "card",
   initialFontSize = DEFAULT_ONESCREEN_FONT_SIZE,
   initialTrendOptOut = [],
+  initialDisplayOptions,
   initialClassName = null,
   initialStudentId = null,
   noClassesToday = false,
@@ -364,6 +373,7 @@ export function OneScreenClient({
   initialFontSize?: OnescreenFontSize;
   /** '학습 추세 미발송'으로 켠 `반:학생` 키(내 계정 ui_prefs, 원장 2026-09-18) — 글씨 크기와 같은 행에서 온다. */
   initialTrendOptOut?: string[];
+  initialDisplayOptions?: DisplayOptions;
   /**
    * 진입 시 고를 반 이름(`?class=<반 id>`를 서버가 이름으로 해석해 내림) — '오늘 ECS' 카드에서 넘어올 때
    * 그 반에서 시작한다. null = 전체. ⚠️ **id가 아니라 이름**인 건 반 필터 state가 이름 기반이기 때문
@@ -401,6 +411,9 @@ export function OneScreenClient({
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
   const [noticeMode, setNoticeMode] = useState<"A" | "B" | null>(initialNoticeMode);
   // 글씨 크기 — 화면은 즉시(클릭 반응), 계정 저장은 백그라운드(실패해도 이번 세션 크기는 유지).
+  const displaySettings = useDisplayOptionsState(initialDisplayOptions, readonlyView);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [fontSize, setFontSize] = useState<OnescreenFontSize>(initialFontSize);
   const fontZoom = ONESCREEN_FONT_SIZE_ZOOM[fontSize];
   // 보강 학생 중 '이전 진도'를 이미 불러온 학생 id — 버튼 숨김·재요청 방지.
@@ -910,17 +923,6 @@ export function OneScreenClient({
   //    '수업보고서 미발송' 반(0174a) 행도 같은 이유로 뺀다(2026-08-19) — 그 반은 발송이 **영구히** 없어서
   //    남기면 그 학생 표시가 영원히 안 채워진다.
   const sendMarkLabel = classnoteSendEnabled ? t("os.c.markSend") : t("os.c.markSave");
-  const sendMarkById: Record<string, SendMark> = {};
-  for (const s of students) {
-    const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent" && !isReportOptoutRow(su));
-    const sent = rows.filter((su) => {
-      const rep = reports[s.id]?.[su.name];
-      return classnoteSendEnabled
-        ? isAlreadySent(effectiveClassnoteStatus(rep?.classnoteStatus, su.classnoteStatus))
-        : rep?.sent === true;
-    }).length;
-    sendMarkById[s.id] = { sent, total: rows.length, label: sendMarkLabel };
-  }
   /**
    * 마감 분모 = **쓸 보고서가 있는 학생**. '수업보고서 미발송' 반만 듣는 학생은 진도·테스트·보고서 입력이
    * 전부 잠겨 있어(grid.ts) 강사가 채울 수단이 없다 — 분모에 남기면 그 날의 마감이 **영영 0/N**이 된다
@@ -949,7 +951,11 @@ export function OneScreenClient({
     students: reportableStudents.length,
     progressDone: reportableStudents.filter((s) => s.progressConfirmed).length,
     testDone: reportableStudents.filter((s) => studentStatus(s, testCfg).test === "ok").length,
-    reportDone: reportableStudents.filter((s) => reportCellById[s.id] === "ok").length,
+    reportDone: reportableStudents.filter((s) => {
+      const mark = buildSendMark({ subjects: s.subjects, reports: reports[s.id], delivery: classnoteSendEnabled,
+        label: sendMarkLabel, date: activeDate, now: null, lessons: [] });
+      return mark.total > 0 && mark.sent >= mark.total;
+    }).length,
   };
 
   function patch(id: string, fn: (s: OneScreenStudent) => OneScreenStudent) {
@@ -2032,15 +2038,6 @@ export function OneScreenClient({
   function setNoteFor(studentId: string, subjectName: string, text: string) {
     patchRowEval(studentId, subjectName, (su) => ({ ...su, note: text }));
   }
-  /**
-   * 일괄 적용 전용 — 그 학생의 **모든 행**에 같은 값을 넣는다(보강 행 포함).
-   * 🔴 원장 2026-08-13: *"일괄 적용은 말 그대로 일괄 적용이기 때문에 보강에도 적용시켜. 다만 선생님이
-   *    수정할 수 있겠지. 일괄 적용됐는데 보강만 적용 안 된다는건 일괄 적용이 아님."*
-   *    적용 후 행별로 다르게 하고 싶으면 강사가 그 행에서 고친다.
-   */
-  function applyToAllRows(studentId: string, up: (su: Subject) => Subject) {
-    patch(studentId, (s) => ({ ...s, subjects: s.subjects.map((su) => up(seedRowFields(s, su))) }));
-  }
   /** 카드 뷰가 지금 보고 있는 행 — 카드엔 과목 선택 탭이 있어 대상이 명확하다(표와 같은 행 단위 규약). */
   const cardRowName = () => previewSubject?.name ?? null;
   function setNote(text: string) {
@@ -2757,7 +2754,7 @@ export function OneScreenClient({
   // ⚠️ action별 판정(2-3, isRowActionable): save=결석 포함(기록 보존), send/autowrite=결석 제외(발송·AI 무의미).
   //    send는 **이미 발송된 행도 제외**(중복 게시 차단, 2026-07-22) — 최신 상태를 override로 넘긴다.
   function selectRows(action: RowAction, keys?: string[]) {
-    const all = buildGridRows(visible)
+    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL))
       .filter((r) => rowInClass(r.subject, activeClassFilter)) // 특정 반이면 그 반 행만(타 반 혼입 차단)
       .filter((r) =>
         isRowActionable(
@@ -2831,7 +2828,7 @@ export function OneScreenClient({
     attendanceUnits = "", // 수업타임(시수) — 새로 만드는 출결 행에만(서버 setAttendanceBulk 규약)
     videoCheck: VideoHomeworkStatus | null = null, // 지난 영상 숙제 검사 — 출결처럼 즉시 기록(검사 칸이 있는 행만)
   ) {
-    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
     const plan = planBulkApply(
@@ -2844,8 +2841,8 @@ export function OneScreenClient({
         subjectIndex: r.subjectIndex,
         subjectKey: r.subject.subjectKey ?? "math",
         today: r.subject.today ?? "",
-        attitude: r.student.attitude,
-        homework: r.student.homework,
+        attitude: rowEval.attitude,
+        homework: rowEval.homework,
         textbook: r.subject.textbook ?? "",
         homeworkToday: r.subject.homeworkToday ?? "",
         note: rowEval.note,
@@ -2883,8 +2880,8 @@ export function OneScreenClient({
     for (const p of plan) {
       // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
       //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
-      if (p.set.attitude !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, attitude: p.set.attitude! }));
-      if (p.set.homework !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, homework: p.set.homework! }));
+      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
+      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
       if (p.set.textbook !== undefined) setTextbookFor(p.studentId, p.subjectName, p.set.textbook);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
@@ -3002,7 +2999,7 @@ export function OneScreenClient({
    */
   function copyFirstRowDown(keys: string[], overwrite: boolean) {
     if (readonlyBlocked()) return; // #103 세 뒷문 중 하나 — 잠긴 화면에 값을 밀어 넣는 경로
-    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys);
     const rows = keys.length ? all.filter((r) => keySet.has(r.key)) : all;
     const [first, ...rest] = rows;
@@ -3082,13 +3079,14 @@ export function OneScreenClient({
     if (readonlyBlocked()) return; // 참고행 '가져오기' — LOCK_FS 밖 버튼이라 여기서 끊는다
     const idx = student.subjects.findIndex((su) => su.name === subjectName);
     const su = student.subjects[idx];
-    if (!su) return;
+    if (!su || bulkGen || bulkBusy || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(student.id, subjectName), su.classnoteStatus))) return;
+    const rowEval = resolveRowFields(student, su);
     const fill = planPrevFill({
       prev: su.prevReport,
       current: {
         today: su.today,
-        attitude: student.attitude,
-        homework: student.homework,
+        attitude: rowEval.attitude,
+        homework: rowEval.homework,
         homeworkToday: su.homeworkToday ?? "",
       },
       attitudes: ATTITUDE,
@@ -3099,8 +3097,8 @@ export function OneScreenClient({
       return;
     }
     if (fill.today !== undefined) setProgressFor(student.id, idx, fill.today);
-    if (fill.attitude !== undefined) applyToAllRows(student.id, (su) => ({ ...su, attitude: fill.attitude! }));
-    if (fill.homework !== undefined) applyToAllRows(student.id, (su) => ({ ...su, homework: fill.homework! }));
+    if (fill.attitude !== undefined) setAttitudeValue(student.id, subjectName, fill.attitude);
+    if (fill.homework !== undefined) setHomeworkValue(student.id, subjectName, fill.homework);
     if (fill.homeworkToday !== undefined) setHomeworkTodayFor(student.id, subjectName, fill.homeworkToday);
     toast.success(tf("os.c.prevFillOne", { n: count }));
   }
@@ -3111,12 +3109,11 @@ export function OneScreenClient({
   // ⚠️ 멘트(학부모 문구)만 예외로 **확인 다이얼로그**를 거친다 — 나머지 칸은 강사가 오늘 값을 고르는 입력이지만
   // 멘트는 직전에 이미 학부모에게 나간 문장이라, 오늘 진도·점수와 어긋난 채 그대로 발송될 위험이 있다(원장 지시 07-21).
   function bulkImportPrev(keys?: string[]) {
-    if (readonlyBlocked()) return; // 값 계획은 locked로 0건이지만 **멘트 계획**은 별도 경로라 입구에서 차단
-    const all = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    if (readonlyBlocked() || bulkGen || bulkBusy) return;
+    const all = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = new Set(keys ?? []);
     const rows = keySet.size ? all.filter((r) => keySet.has(r.key)) : all;
-    // 계획은 순수 함수(planBulkPrevFill)가 세운다 — 태도·과제는 **학생 단위** 값이라 다과목 학생에서
-    // 과목 행마다 덮어쓰지 않도록 학생당 1회로 dedup(자세한 배경은 grid.ts 주석).
+    // 선택된 수업 행별 현재값으로 계획한다. 다른 반·보강 행과 평가값을 공유하지 않는다.
     const plan = planBulkPrevFill(
       rows.flatMap((r) => {
         const subjectIndex = r.student.subjects.findIndex((su) => su.name === r.subject.name);
@@ -3130,8 +3127,8 @@ export function OneScreenClient({
             prev: su.prevReport,
             current: {
               today: su.today,
-              attitude: r.student.attitude,
-              homework: r.student.homework,
+              attitude: resolveRowFields(r.student, su).attitude,
+              homework: resolveRowFields(r.student, su).homework,
               homeworkToday: su.homeworkToday ?? "",
             },
             // 잠긴 행(발송 완료·결석)은 채우지 않는다(위 일괄 적용과 같은 이유).
@@ -3150,7 +3147,7 @@ export function OneScreenClient({
     // 🔴 영어 행은 뺀다 — 영어 글은 템플릿이 **지난 회차 진도·점수**까지 담은 전문이라, 가져오면 오늘 기록과 다른 글이
     //    그대로 나간다(적대 재리뷰 2026-09-10). 영어는 자동작성·다시 채우기로 새로 만든다.
     const commentPlan = planPrevComments(
-      rows.filter((r) => r.subject.subjectKey !== "english").map((r) => ({
+      rows.filter((r) => r.subject.subjectKey !== "english" && isRowInputEditable(r.subject, effectiveClassnoteStatus(liveClassnoteStatus(r.student.id, r.subject.name), r.subject.classnoteStatus))).map((r) => ({
         studentId: r.student.id,
         subjectName: r.subject.name,
         prevNote: r.student.subjects.find((su) => su.name === r.subject.name)?.prevReport?.note,
@@ -3167,8 +3164,8 @@ export function OneScreenClient({
       if (p.set.today !== undefined) setProgressFor(p.studentId, p.subjectIndex, p.set.today);
       // 🔴 일괄 적용은 **보강 행에도** 적용한다(원장 2026-08-13) — "일괄 적용됐는데 보강만 적용 안 된다는건
       //    일괄 적용이 아님". 이후 강사가 행별로 고치는 건 강사 몫이다.
-      if (p.set.attitude !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, attitude: p.set.attitude! }));
-      if (p.set.homework !== undefined) applyToAllRows(p.studentId, (su) => ({ ...su, homework: p.set.homework! }));
+      if (p.set.attitude !== undefined) setAttitudeValue(p.studentId, p.subjectName, p.set.attitude);
+      if (p.set.homework !== undefined) setHomeworkValue(p.studentId, p.subjectName, p.set.homework);
       if (p.set.homeworkToday !== undefined) setHomeworkTodayFor(p.studentId, p.subjectName, p.set.homeworkToday);
       filledCells += Object.keys(p.set).length;
     }
@@ -3185,8 +3182,11 @@ export function OneScreenClient({
     // 🔴 복사 삽입도 autoDraft 스냅샷을 함께 남긴다(0214a, 적대 리뷰 확정) — 직전 회차 문구는 AI 유래일 수
     //    있고 아니어도 "지금 직접 쓴" 문장이 아니다. setDraftFor(초안만)로 넣으면 그대로 저장 시 manual로
     //    오표기돼 말투 코퍼스가 오염된다(중복 유입 포함). 스냅샷을 남기면 그대로=auto, 고치면=auto_edited.
-    for (const p of plan)
-      patchReport(p.studentId, p.subjectName, (r) => ({ ...r, draft: p.comment, autoDraft: p.comment }));
+    for (const p of plan) {
+      const su = studentsRef.current.find(s => s.id === p.studentId)?.subjects.find(s => s.name === p.subjectName);
+      if (!su || !isRowInputEditable(su, effectiveClassnoteStatus(liveClassnoteStatus(p.studentId, p.subjectName), su.classnoteStatus))) continue;
+      patchReport(p.studentId, p.subjectName, r => r.draft.trim() ? r : ({ ...r, draft: p.comment, autoDraft: p.comment }));
+    }
     toast.success(tf("os.c.prevComments", { n: plan.length }));
   }
   // 학생 순서 저장(3-2) — (강사×반) 영구 저장 + 성공 시 클라 state에도 즉시 반영(다음 로드는 roster가 적용).
@@ -3202,15 +3202,27 @@ export function OneScreenClient({
     return true;
   }
   // 표 행 → 카드로 열기(그 학생 선택 + 카드 뷰). 본문 편집·첨부·링크 관리·PDF는 카드에서.
+  function openReportDetails(studentId: string, subjectName?: string) {
+    setSelId(studentId);
+    const idx = visible.find(s => s.id === studentId)?.subjects.findIndex(su => su.name === subjectName) ?? -1;
+    setCardSubject({ id: studentId, idx: Math.max(0, idx) });
+    setBulkOpen(false);
+    if (view === "grid") setDetailsOpen(true);
+  }
+  function changeView(next: OneScreenView) {
+    setDetailsOpen(false);
+    setBulkOpen(false);
+    setView(next);
+  }
   function openCard(studentId: string) {
     setSelId(studentId);
-    setView("card");
+    changeView("card");
   }
   // 학부모 공지 진입 — 카드=선택 학생 1명, 표=선택 행(없으면 보이는 전체) 학생. 공지 뷰로 전환하며 대상 seed.
   function openNoticeForStudent(studentId: string) {
     if (readonlyBlocked()) return; // 공지 뷰는 순수 작성 화면 — 열람 전용에선 열 이유가 없다(발송은 서버도 거절)
     setNoticeSeed([studentId]);
-    setView("notice");
+    changeView("notice");
   }
   function openNoticeForRows(keys?: string[]) {
     if (readonlyBlocked()) return; // openNoticeForStudent와 동일
@@ -3219,7 +3231,7 @@ export function OneScreenClient({
         ? [...new Set(keys.map((k) => k.split("::")[0]!))]
         : visible.map((s) => s.id);
     setNoticeSeed(ids);
-    setView("notice");
+    changeView("notice");
   }
   /**
    * 저장 입력(보고서 필드)을 (학생,과목)별로 조립 — 카드/표 공용.
@@ -3720,7 +3732,7 @@ export function OneScreenClient({
     // ⚠️ 이 수치는 "일괄 발송을 다시 눌러도 안 나가는 이유"라 반드시 보여준다(무언 제외 = 사고 은폐).
     // ⚠️ `selectRows`로 세면 **항상 0**이 된다 — 발송 완료건은 save 게이트에서도 이미 빠지기 때문
     //    (2026-07-22 '수정도 금지'로 강화된 뒤의 함정). 그래서 게이트 이전의 원본 행에서 센다.
-    const allRows = buildGridRows(visible).filter((r) => rowInClass(r.subject, activeClassFilter));
+    const allRows = orderReportRows(buildGridRows(visible), displaySettings.options.sort, classTags.filter(tag => tag !== CLASS_TAG_ALL)).filter((r) => rowInClass(r.subject, activeClassFilter));
     const keySet = keys?.length ? new Set(keys) : null;
     const alreadySentRows = allRows.filter(
       (r) =>
@@ -4228,153 +4240,8 @@ export function OneScreenClient({
     }
   }
 
-  return (
-    // 🔴 한 화면 고정(2026-08-06 원장): *"전체 창 크기를 가운데 보고서에 맞추고, 넘치는 부분은 스크롤 처리하도록
-    //    각 섹션을 3개화"*. 셸 <main>이 이미 높이가 확정된 스크롤 컨테이너라 여기서 `h-full`로 그 높이를 받고,
-    //    아래 3열이 남은 높이를 통째로 가져간 뒤 **열마다 따로** 스크롤한다(출석부 '한 화면 시트'와 같은 배치).
-    //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
-    <ClassnoteOnProvider value={classnoteOn}>
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      {sendClassAsk ? <SendClassDialog ask={sendClassAsk} onClose={() => setSendClassAsk(null)} /> : null}
-      <OneScreenTopBar
-        readonlyView={readonlyView}
-        classnoteOn={classnoteOn}
-        today={today}
-        date={activeDate}
-        todayYmd={todayYmd}
-        onDateChange={goToDate}
-        classTags={classTags}
-        classFilter={classFilter}
-        onFilter={setClassFilter}
-        writeFilter={writeFilter}
-        writeCounts={writeCounts}
-        onWriteFilter={changeWriteFilter}
-        doneCount={doneCount}
-        total={reportableStudents.length}
-        view={view}
-        onView={setView}
-        stats={hubStats}
-        todayClasses={todayClasses}
-        noticeMode={noticeMode}
-        academyNoticeMode={academyNoticeMode}
-        onNoticeMode={changeNoticeMode}
-        fontSize={fontSize}
-        onFontSize={changeFontSize}
-        makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
-      />
-
-      {/* 발송 시간창 안내 — **지금이 창 밖일 때만**(KST, 분 단위 재판정 — 원장 지시 2026-07-29).
-          창 안에선 발송이 그냥 나가므로 상시 안내는 노이즈. 실제 지연은 워커 게이트가 담당. */}
-      {sendWindow ? <SendWindowNotice start={sendWindow.start} end={sendWindow.end} /> : null}
-
-      {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
-          반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}
-      {noClassesToday && !showingAll ? (
-        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
-          <span className="text-foreground font-bold">{t("os.c.noClassTitle")}</span>
-          <span>{t("os.c.noClassBody")}</span>
-          <EmbedAnchor
-            href={`/onescreen?date=${date}&all=1${view === "card" ? "" : `&view=${view}`}`}
-            className="text-primary font-bold underline underline-offset-2"
-          >
-            {t("os.c.showAll")}
-          </EmbedAnchor>
-        </div>
-      ) : null}
-      {showingAll ? (
-        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
-          <span className="font-bold">{t("os.c.showingAllTitle")}</span>
-          <span>{t("os.c.showingAllBody")}</span>
-          <EmbedAnchor
-            href={`/onescreen?date=${date}${view === "card" ? "" : `&view=${view}`}`}
-            className="font-bold underline underline-offset-2"
-          >
-            {t("os.c.showTodayOnly")}
-          </EmbedAnchor>
-        </div>
-      ) : null}
-
-      {/* 발송 완료 안내(2026-07-22 원장 지시) — **과거 날짜로 돌아갔을 때가 핵심**이다.
-          그 날짜는 대부분 이미 발송이 끝나 있는데, 화면은 평소와 똑같이 보이고 발송 버튼도 그냥 거기 있다
-          → "왜 안 나가지?" 하며 계속 누르거나, 반대로 눌러서 학부모 게시판에 글이 하나 더 붙는다.
-          ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없으므로, 이 날짜에 이미 나간 게 몇 건인지 먼저 말한다. */}
-      {sentRowCount > 0 ? (
-        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
-          <span className="font-bold">
-            {tf("os.c.sentBannerTitle", { n: sentRowCount })}
-          </span>
-          {/* ⚠️ 탈출구를 **실제로 화면에 있는 것**으로 적는다. 2026-08-06부터 게시된 보고서에는
-              '공유 링크 재발급'이 아예 안 뜬다(게시글은 이미지라 링크를 만져도 학부모 화면이 그대로여서
-              반쪽 수습을 고를 수 없게 감췄다) — 그런데 이 안내만 옛 경로를 가리키고 있었다.
-              문구는 카드 안 배너(report-card.tsx)와 **같은 말**로 맞춘다(두 곳이 다르면 어느 쪽이 맞는지 모른다). */}
-          <span className="text-text-dim">
-            {t("os.c.sentBannerA")}
-            <b>{t("os.c.sentBannerB")}</b>
-            {t("os.c.sentBannerC")}
-            <b>{t("os.card.sentLockRecall")}</b>
-            {t("os.c.sentBannerD")}
-            <b>{t("os.card.queue")}</b>
-            {t("os.c.sentBannerE")}
-          </span>
-        </div>
-      ) : null}
-
-      {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 빈 창이 잘 쓴 창을 덮지는 않는다(session-write.ts). */}
-      {sameDateEditors.length > 0 ? (
-        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
-          <span className="font-bold">{t("os.c.presenceTitle")}</span>
-          <span>{t("os.c.presenceBody")}</span>
-        </div>
-      ) : null}
-
-      {/* 작성 필터 안내(월간 발송 뷰는 목록을 안 쓰므로 제외).
-          ① 조건과 어긋난 채 남아 있는 학생 = 입력 중 사라지지 않게 고정한 결과라는 사실을 밝힌다(무언 잔류 금지).
-          ② 필터 결과가 0명이면 왜 비었는지 말하고 되돌아갈 문을 준다(빈 화면 막다른 길 금지). */}
-      {writeFilter !== "all" && view !== "history" ? (
-        staleCount > 0 ? (
-          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
-            <span>
-              <b className="text-foreground">
-                {tf("os.c.staleCount", {
-                  label:
-                    writeFilter === "unwritten" ? t("os.c.staleWritten") : t("os.c.staleEmptied"),
-                  n: staleCount,
-                })}
-              </b>{" "}
-              {t("os.c.staleBody")}
-            </span>
-            <button
-              type="button"
-              onClick={() => changeWriteFilter(writeFilter)}
-              className="text-primary font-bold underline underline-offset-2"
-            >
-              {t("os.c.staleClear")}
-            </button>
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
-            <span className="text-foreground font-bold">
-              {writeFilter === "unwritten"
-                ? t("os.c.emptyUnwrittenAll")
-                : t("os.c.emptyWrittenNone")}
-            </span>
-            <button
-              type="button"
-              onClick={() => changeWriteFilter("all")}
-              className="text-primary font-bold underline underline-offset-2"
-            >
-              {t("os.c.showAllFilter")}
-            </button>
-          </div>
-        ) : null
-      ) : null}
-
-      {/* 글씨 크기 — 목록·표 영역만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤 자체가 같이 커지면 어지럽다).
-          ⚠️ `font-size`가 아니라 `zoom`인 이유는 font-size.ts 주석 참조(칸마다 px 글자가 박힌 조밀한 표).
-          기본('작음')은 배율 1이라 **스타일 자체를 붙이지 않는다** — 손대지 않은 강사의 렌더는 완전 무변경. */}
-      <div style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
-      {view === "grid" ? (
-        <OneScreenGrid
+  const reportGrid = (
+<OneScreenGrid
           readonlyView={readonlyView}
           students={visible}
           bulkPresent={bulkPresentProps}
@@ -4414,7 +4281,7 @@ export function OneScreenClient({
           rowActions={{
             onSendRow: sendRow,
             onAutoWrite: autoWriteRow,
-            onOpenCard: openCard,
+            onOpenCard: openReportDetails,
             onImportPrev: importPrevFor,
             onAttach: (student, subjectName, files) => void addAttachmentsFor(student, subjectName, files),
             onRemoveAttachment: (student, subjectName, path) =>
@@ -4441,6 +4308,7 @@ export function OneScreenClient({
           uploadingAttKey={uploadingAttKey}
           order={orderClass && !readonlyView ? { classId: orderClass.id, onSave: saveOrderForClass } : undefined}
           classFilter={activeClassFilter}
+          classOrder={classTags.filter(tag => tag !== CLASS_TAG_ALL)}
           // 반 서술(G6) — 순서 기능과 동일한 동명 반 가드(orderClass = 이름 매칭이 유일할 때만).
           // 키 = classId: 이름 키면 동명 두 반(수학·영어)에 서술이 교차 주입됨(리뷰 확정 major).
           narrative={{
@@ -4466,72 +4334,9 @@ export function OneScreenClient({
           // 있었으므로(화면만 눌리는 척했다) 표시를 실제 동작에 맞춘 것.
           bulkGen={bulkGen || bulkBusy === "save"}
         />
-      ) : view === "status" ? (
-        <StatusBoard
-          students={visible}
-          reports={reports}
-          onOpenCard={openCard}
-          emptyLabel={emptyByWriteFilter}
-        />
-      ) : view === "history" ? (
-        <SendCalendarBoard todayYmd={todayYmd} />
-      ) : view === "notice" ? (
-        <NoticeComposer
-          key={`notice-${noticeSeed?.join(",") ?? ""}`}
-          students={visible}
-          seedStudentIds={noticeSeed}
-          sendEnabled={classnoteSendEnabled}
-          onSent={() => setNoticeSeed(null)}
-        />
-      ) : (
-      /* 열 = **학생 · 보고서 · 학부모 미리보기**(2026-08-05 통합).
-         진도·테스트를 따로 세우지 않는다 — 원장: *"이걸 하나의 섹션으로 합쳐버리면 안되나? 공간낭비
-         최소화할 수 있게? 굳이 따로 할 필요 있나?"* 그 열은 콘텐츠보다 훨씬 길어 아래가 통째로 비었고,
-         보고서 카드 맨 위 요약이 **같은 값을 두 번** 보여주고 있었다. 이제 보고서 카드 안에서
-         `@container` 폭에 따라 1 → 2 → 3열(진도·테스트 / 그 밖의 입력 / 문장·발송)로 펼쳐진다.
-         미리보기 열(≥1680px)은 **544px 고정** — 학부모가 받는 실제 이미지 폭(512px + 패딩)이라 늘리거나
-         줄이면 "실제 크기"가 거짓이 된다. 그보다 좁으면 미리보기는 아래 전체폭 행으로 내려간다. */
-      /* 🔴 **미리보기는 항상 우측**(원장 2026-08-05: 좁은 창에서 아래로 밀리는 게 싫다 — "아래쪽보다
-         우측에 있어서 스크롤처리하고싶네"). 그래서 `lg` 이상에선 3열을 **고정 폭으로 유지**하고, 창이
-         좁으면 열을 접는 대신 **가로로 스크롤**된다(`lg:min-w`). 세로로 접히는 건 진짜 작은 화면(<lg)뿐.
-         ⚠️ 스크롤 래퍼를 새로 만들면 안 된다 — 셸의 `<main>`이 이미 `overflow-auto` 스크롤 컨테이너라
-            여기에 `overflow-x-auto`를 하나 더 두면 **학생목록의 `lg:sticky`가 그 래퍼 기준이 되어 깨진다**
-            (높이가 콘텐츠만큼이라 붙을 자리가 없다). min-w만 주면 main이 알아서 가로 스크롤한다.
-         최소폭 = 학생 240 + 보고서 590(카드 좌우 패딩 24 + 내부 2열 분기 560) + 미리보기 544 + gap 32 + 여유. */
-      <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:min-w-[1420px] lg:flex-1 lg:grid-cols-[300px_minmax(530px,1fr)_544px] lg:items-stretch">
-        <StudentList
-          students={visible}
-          bulkPresent={bulkPresentProps}
-          selId={effectiveId}
-          selectedSubjectName={previewSubject?.name}
-          onSelect={(id, subjectName) => {
-            setSelId(id);
-            const idx = students.find(s => s.id === id)?.subjects.findIndex(su => su.name === subjectName) ?? 0;
-            setCardSubject({ id, idx: Math.max(0, idx) });
-          }}
-          statusForStudent={(student) => {
-            const rows = student.subjects.filter(su => !isReportOptoutRow(su));
-            const rowReports = Object.fromEntries(rows.map(su => [su.name, reports[student.id]?.[su.name]]).filter(([, rep]) => !!rep));
-            const sendable = rows.filter(su => su.attendanceRaw !== "absent");
-            const sent = sendable.filter(su => classnoteSendEnabled
-              ? isAlreadySent(effectiveClassnoteStatus(reports[student.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))
-              : reports[student.id]?.[su.name]?.sent === true).length;
-            // ClassNote 반 매칭 — 목록 행(반 그룹)의 수학 과목 줄 기준. 보강 행(classId 없음)은 라벨 없음.
-            const cnRow = rows.find(su => !!su.classId && CN_SUBJECT_KEYS.has(su.subjectKey ?? ""));
-            return {
-              reportCell: reportCell(rowReports, rows.length),
-              sendMark: { sent, total: sendable.length, label: sendMarkLabel },
-              cn: cnRow ? cnLabelFor(classnoteMatch, { classId: cnRow.classId, subjectKey: cnRow.subjectKey, studentId: student.id }) : null,
-            };
-          }}
-          reportCellById={reportCellById}
-          sendMarkById={sendMarkById}
-          classOrder={classTags.filter((tag) => tag !== CLASS_TAG_ALL)}
-          testConfig={testCfg}
-          emptyLabel={emptyByWriteFilter}
-        />
-
-        {selected ? (
+  );
+  const reportDetails = (
+selected ? (
           <>
             {/* 가운데(보고서 작성) — 넘치면 **이 열만** 스크롤. 좁은 화면(<lg)에선 열이 세로로 쌓이므로
                 높이를 묶지 않는다(그땐 페이지가 통째로 스크롤되는 게 자연스럽다). */}
@@ -4539,6 +4344,7 @@ export function OneScreenClient({
               <header className="flex items-center gap-1.5">
                 <EyIcon name="report" size={14} className="text-primary" />
                 <h2 className="text-foreground text-sm font-bold">{t("os.c.reportHeading")}</h2>
+                {view === "card" ? <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>{t("os.card.bulk")}</Button> : null}
                 {classnoteOn ? (
                   <button
                     type="button"
@@ -4611,9 +4417,13 @@ export function OneScreenClient({
                         onApply={() => applySheetDraft(subjectIdx)}
                       />
                     ) : null}
+                    {previewSubject ? <PreviousContent subject={previewSubject}
+                      onImport={!readonlyView && !bulkGen && isRowInputEditable(previewSubject, effectiveClassnoteStatus(previewReport?.classnoteStatus, previewSubject.classnoteStatus))
+                        ? () => importPrevFor(selected, previewSubject.name) : undefined} /> : null}
                     <ProgressCard
                       embedded
                       student={selected}
+                      lockedSubjects={selected.subjects.filter(su => !isRowInputEditable(su, effectiveClassnoteStatus(reports[selected.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))).map(su => su.name)}
                       onConfirm={confirmProgress}
                       onProgress={setProgress}
                       onProgressMode={setProgressMode}
@@ -4626,7 +4436,7 @@ export function OneScreenClient({
                     />
                     <TestCard
                       embedded
-                      student={selected}
+                      student={{ ...selected, subjects: previewSubject ? [previewSubject] : [] }}
                       // 선택된 행의 점수를 보여준다 — 쓰기(setScore)도 그 행에 간다(row-fields.ts).
                       tests={resolveRowFields(selected, previewSubject).tests}
                       onScore={setScore}
@@ -4731,10 +4541,213 @@ export function OneScreenClient({
           <div className="bg-card border-line shadow-card text-text-faint flex items-center justify-center rounded-2xl border p-10 text-sm lg:col-span-2">
             {t("os.c.pickStudent")}
           </div>
-        )}
+        )
+  );
+
+  return (
+    // 🔴 한 화면 고정(2026-08-06 원장): *"전체 창 크기를 가운데 보고서에 맞추고, 넘치는 부분은 스크롤 처리하도록
+    //    각 섹션을 3개화"*. 셸 <main>이 이미 높이가 확정된 스크롤 컨테이너라 여기서 `h-full`로 그 높이를 받고,
+    //    아래 3열이 남은 높이를 통째로 가져간 뒤 **열마다 따로** 스크롤한다(출석부 '한 화면 시트'와 같은 배치).
+    //    ⚠️ `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠라 열이 창을 넘겨 밀어낸다.
+    <DisplayOptionsProvider value={displaySettings}>
+    <ClassnoteOnProvider value={classnoteOn}>
+    <div className="flex h-full min-h-0 flex-col gap-4 pb-3">
+      {sendClassAsk ? <SendClassDialog ask={sendClassAsk} onClose={() => setSendClassAsk(null)} /> : null}
+      <OneScreenTopBar
+        readonlyView={readonlyView}
+        classnoteOn={classnoteOn}
+        today={today}
+        date={activeDate}
+        todayYmd={todayYmd}
+        onDateChange={goToDate}
+        classTags={classTags}
+        classFilter={classFilter}
+        onFilter={setClassFilter}
+        writeFilter={writeFilter}
+        writeCounts={writeCounts}
+        onWriteFilter={changeWriteFilter}
+        doneCount={doneCount}
+        total={reportableStudents.length}
+        view={view}
+        onView={changeView}
+        stats={hubStats}
+        todayClasses={todayClasses}
+        noticeMode={noticeMode}
+        academyNoticeMode={academyNoticeMode}
+        onNoticeMode={changeNoticeMode}
+        fontSize={fontSize}
+        onFontSize={changeFontSize}
+        makeupAdder={<MakeupAdder onAdd={addMakeupStudent} />}
+      />
+
+      {/* 발송 시간창 안내 — **지금이 창 밖일 때만**(KST, 분 단위 재판정 — 원장 지시 2026-07-29).
+          창 안에선 발송이 그냥 나가므로 상시 안내는 노이즈. 실제 지연은 워커 게이트가 담당. */}
+      {sendWindow ? <SendWindowNotice start={sendWindow.start} end={sendWindow.end} /> : null}
+
+      {/* 그 요일에 담당 수업이 없을 때 — 예전엔 담당 반 전체가 '오늘 목록'처럼 떴다(2026-07-22 이수진 수요일:
+          반 7개·학생 37명). 이제 목록 대신 사실을 말하고, 전체 보기는 **누를 때만** 연다. */}
+      {noClassesToday && !showingAll ? (
+        <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
+          <span className="text-foreground font-bold">{t("os.c.noClassTitle")}</span>
+          <span>{t("os.c.noClassBody")}</span>
+          <EmbedAnchor
+            href={`/onescreen?date=${date}&all=1${view === "card" ? "" : `&view=${view}`}`}
+            className="text-primary font-bold underline underline-offset-2"
+          >
+            {t("os.c.showAll")}
+          </EmbedAnchor>
+        </div>
+      ) : null}
+      {showingAll ? (
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
+          <span className="font-bold">{t("os.c.showingAllTitle")}</span>
+          <span>{t("os.c.showingAllBody")}</span>
+          <EmbedAnchor
+            href={`/onescreen?date=${date}${view === "card" ? "" : `&view=${view}`}`}
+            className="font-bold underline underline-offset-2"
+          >
+            {t("os.c.showTodayOnly")}
+          </EmbedAnchor>
+        </div>
+      ) : null}
+
+      <SentReportNotice count={sentRowCount} />
+
+      {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 빈 창이 잘 쓴 창을 덮지는 않는다(session-write.ts). */}
+      {sameDateEditors.length > 0 ? (
+        <div className="border-amber/40 bg-amber/5 text-amber flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
+          <span className="font-bold">{t("os.c.presenceTitle")}</span>
+          <span>{t("os.c.presenceBody")}</span>
+        </div>
+      ) : null}
+
+      {/* 작성 필터 안내(월간 발송 뷰는 목록을 안 쓰므로 제외).
+          ① 조건과 어긋난 채 남아 있는 학생 = 입력 중 사라지지 않게 고정한 결과라는 사실을 밝힌다(무언 잔류 금지).
+          ② 필터 결과가 0명이면 왜 비었는지 말하고 되돌아갈 문을 준다(빈 화면 막다른 길 금지). */}
+      {writeFilter !== "all" && view !== "history" ? (
+        staleCount > 0 ? (
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
+            <span>
+              <b className="text-foreground">
+                {tf("os.c.staleCount", {
+                  label:
+                    writeFilter === "unwritten" ? t("os.c.staleWritten") : t("os.c.staleEmptied"),
+                  n: staleCount,
+                })}
+              </b>{" "}
+              {t("os.c.staleBody")}
+            </span>
+            <button
+              type="button"
+              onClick={() => changeWriteFilter(writeFilter)}
+              className="text-primary font-bold underline underline-offset-2"
+            >
+              {t("os.c.staleClear")}
+            </button>
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="border-line bg-bg-soft text-text-dim flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 text-xs">
+            <span className="text-foreground font-bold">
+              {writeFilter === "unwritten"
+                ? t("os.c.emptyUnwrittenAll")
+                : t("os.c.emptyWrittenNone")}
+            </span>
+            <button
+              type="button"
+              onClick={() => changeWriteFilter("all")}
+              className="text-primary font-bold underline underline-offset-2"
+            >
+              {t("os.c.showAllFilter")}
+            </button>
+          </div>
+        ) : null
+      ) : null}
+
+      {/* 글씨 크기 — 목록·표 영역만 감싼다(상단 바는 그대로: 크기를 고르는 컨트롤 자체가 같이 커지면 어지럽다).
+          ⚠️ `font-size`가 아니라 `zoom`인 이유는 font-size.ts 주석 참조(칸마다 px 글자가 박힌 조밀한 표).
+          기본('작음')은 배율 1이라 **스타일 자체를 붙이지 않는다** — 손대지 않은 강사의 렌더는 완전 무변경. */}
+      <div className={view === "card" ? "flex flex-col lg:min-h-0 lg:flex-1" : "pb-3"} style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>
+      {view === "grid" ? (
+        reportGrid
+      ) : view === "status" ? (
+        <StatusBoard
+          students={visible}
+          reports={reports}
+          onOpenCard={openCard}
+          emptyLabel={emptyByWriteFilter}
+        />
+      ) : view === "history" ? (
+        <SendCalendarBoard todayYmd={todayYmd} />
+      ) : view === "notice" ? (
+        <NoticeComposer
+          key={`notice-${noticeSeed?.join(",") ?? ""}`}
+          students={visible}
+          seedStudentIds={noticeSeed}
+          sendEnabled={classnoteSendEnabled}
+          onSent={() => setNoticeSeed(null)}
+        />
+      ) : (
+      /* 열 = **학생 · 보고서 · 학부모 미리보기**(2026-08-05 통합).
+         진도·테스트를 따로 세우지 않는다 — 원장: *"이걸 하나의 섹션으로 합쳐버리면 안되나? 공간낭비
+         최소화할 수 있게? 굳이 따로 할 필요 있나?"* 그 열은 콘텐츠보다 훨씬 길어 아래가 통째로 비었고,
+         보고서 카드 맨 위 요약이 **같은 값을 두 번** 보여주고 있었다. 이제 보고서 카드 안에서
+         `@container` 폭에 따라 1 → 2 → 3열(진도·테스트 / 그 밖의 입력 / 문장·발송)로 펼쳐진다.
+         미리보기 열(≥1680px)은 **544px 고정** — 학부모가 받는 실제 이미지 폭(512px + 패딩)이라 늘리거나
+         줄이면 "실제 크기"가 거짓이 된다. 그보다 좁으면 미리보기는 아래 전체폭 행으로 내려간다. */
+      /* 🔴 **미리보기는 항상 우측**(원장 2026-08-05: 좁은 창에서 아래로 밀리는 게 싫다 — "아래쪽보다
+         우측에 있어서 스크롤처리하고싶네"). 그래서 `lg` 이상에선 3열을 **고정 폭으로 유지**하고, 창이
+         좁으면 열을 접는 대신 **가로로 스크롤**된다(`lg:min-w`). 세로로 접히는 건 진짜 작은 화면(<lg)뿐.
+         ⚠️ 스크롤 래퍼를 새로 만들면 안 된다 — 셸의 `<main>`이 이미 `overflow-auto` 스크롤 컨테이너라
+            여기에 `overflow-x-auto`를 하나 더 두면 **학생목록의 `lg:sticky`가 그 래퍼 기준이 되어 깨진다**
+            (높이가 콘텐츠만큼이라 붙을 자리가 없다). min-w만 주면 main이 알아서 가로 스크롤한다.
+         최소폭 = 학생 240 + 보고서 590(카드 좌우 패딩 24 + 내부 2열 분기 560) + 미리보기 544 + gap 32 + 여유. */
+      <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:min-w-[1420px] lg:flex-1 lg:grid-cols-[300px_minmax(530px,1fr)_544px] lg:items-stretch">
+        <StudentList
+          students={visible}
+          bulkPresent={bulkPresentProps}
+          selId={effectiveId}
+          selectedSubjectName={previewSubject?.name}
+          onSelect={(id, subjectName) => {
+            setSelId(id);
+            const idx = students.find(s => s.id === id)?.subjects.findIndex(su => su.name === subjectName) ?? 0;
+            setCardSubject({ id, idx: Math.max(0, idx) });
+          }}
+          statusForStudent={(student, lessonNow) => {
+            const rows = student.subjects.filter(su => !isReportOptoutRow(su));
+            const rowReports = Object.fromEntries(rows.map(su => [su.name, reports[student.id]?.[su.name]]).filter(([, rep]) => !!rep));
+            // ClassNote 반 매칭 — 목록 행(반 그룹)의 수학 과목 줄 기준. 보강 행(classId 없음)은 라벨 없음.
+            const cnRow = rows.find(su => !!su.classId && CN_SUBJECT_KEYS.has(su.subjectKey ?? ""));
+            return {
+              reportCell: reportCell(rowReports, rows.length),
+              sendMark: buildSendMark({ subjects: rows, reports: reports[student.id], delivery: classnoteSendEnabled,
+                label: sendMarkLabel, date: activeDate, now: lessonNow, lessons: todayClasses, showingAll }),
+              cn: cnRow ? cnLabelFor(classnoteMatch, { classId: cnRow.classId, subjectKey: cnRow.subjectKey, studentId: student.id }) : null,
+            };
+          }}
+          reportCellById={reportCellById}
+          classFilter={activeClassFilter}
+          classOrder={classTags.filter((tag) => tag !== CLASS_TAG_ALL)}
+          testConfig={testCfg}
+          emptyLabel={emptyByWriteFilter}
+        />
+
+        {reportDetails}
       </div>
       )}
       </div>
+
+      <Dialog open={view === "grid" && detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[1500px]" aria-describedby={undefined}>
+          <DialogTitle>{t("os.card.details")}</DialogTitle>
+          <div className="grid gap-4 lg:grid-cols-[minmax(530px,1fr)_544px]" style={fontZoom === 1 ? undefined : { zoom: fontZoom }}>{reportDetails}</div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={view === "card" && bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[1800px]" aria-describedby={undefined}>
+          <DialogTitle>{t("os.card.bulk")}</DialogTitle>
+          {reportGrid}
+        </DialogContent>
+      </Dialog>
 
       {/* '이전값 일괄 가져오기' 뒤 멘트 확인 — 나머지 칸은 이미 채워졌고, 여기 확인해야 학부모 문구까지 채운다.
           닫힘(취소)은 계획을 버리기만 한다(다른 칸 되돌리지 않음 — 그 칸들은 오늘 값 입력이라 문제 없음). */}
@@ -4772,5 +4785,6 @@ export function OneScreenClient({
       ) : null}
     </div>
     </ClassnoteOnProvider>
+    </DisplayOptionsProvider>
   );
 }

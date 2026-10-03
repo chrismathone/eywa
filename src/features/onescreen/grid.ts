@@ -345,7 +345,7 @@ const normCount = (v: number | undefined, min: number): number | undefined =>
 
 /**
  * 값 일괄 적용 계획 — patch에 채워진 필드만, onlyEmpty면 현재값이 빈 칸인 행만.
- * 태도·과제는 학생 단위 필드라 같은 학생의 두 번째 행부터는 중복 적용하지 않는다.
+ * 태도·과제도 보고서 행 단위다. 선택된 행만 각각 채우며 다른 수업의 값을 덮지 않는다.
  *
  * ⚠️ **진도(today)는 `progressSubjectKey`와 같은 과목 행에만** 넣는다 — 수학 진도가 영어 행에 들어가면
  * 그대로 학부모에게 나간다(planCopyFirstRow의 과목 가드와 같은 이유). 키를 안 주면 진도는 적용하지 않는다
@@ -370,13 +370,11 @@ export function planBulkApply(
     checkMax: normCount(patch.checkMax, 1),
   };
   const out: Array<{ studentId: string; subjectName: string; subjectIndex: number; set: BulkPatch }> = [];
-  const studentDone = new Set<string>(); // 학생 단위 필드(태도·과제) 중복 방지
   for (const t of targets) {
     if (t.locked) continue; // 잠긴 행엔 아무 값도 넣지 않는다(지울 수 없는 값이 남는다)
     const set: BulkPatch = {};
-    const firstRowOfStudent = !studentDone.has(t.studentId);
-    if (p.attitude !== undefined && firstRowOfStudent && (!onlyEmpty || !t.attitude)) set.attitude = p.attitude;
-    if (p.homework !== undefined && firstRowOfStudent && (!onlyEmpty || !t.homework)) set.homework = p.homework;
+    if (p.attitude !== undefined && (!onlyEmpty || !t.attitude)) set.attitude = p.attitude;
+    if (p.homework !== undefined && (!onlyEmpty || !t.homework)) set.homework = p.homework;
     if (p.textbook !== undefined && (!onlyEmpty || !t.textbook.trim())) set.textbook = p.textbook;
     if (p.homeworkToday !== undefined && (!onlyEmpty || !t.homeworkToday.trim())) set.homeworkToday = p.homeworkToday;
     if (
@@ -407,7 +405,6 @@ export function planBulkApply(
     else if (patch.videoSubmitLink === false && t.linkOk && (!onlyEmpty || t.videoSubmitLink === undefined))
       set.videoSubmitLink = false;
     if (set.videoHomework === false && t.videoSubmitLink) set.videoSubmitLink = false;
-    studentDone.add(t.studentId);
     if (Object.keys(set).length)
       out.push({ studentId: t.studentId, subjectName: t.subjectName, subjectIndex: t.subjectIndex, set });
   }
@@ -501,25 +498,12 @@ export type PrevFillRow = {
 /** 일괄 채우기 계획 1건 — 그 행에 실제로 적용할 필드만 담긴다(빈 fill 행은 결과에서 제외). */
 export type PrevFillPlan = { studentId: string; subjectName: string; subjectIndex: number; set: PrevFill };
 
-/**
- * 이전 회차 **일괄** 채우기 계획 — 행 순서대로 planPrevFill을 돌리되 **학생 단위 필드(태도·과제)는 학생당 1회**만.
- *
- * ⚠️ 이 dedup이 핵심이다. 태도·과제는 학생 단위 값인데 행은 (학생×과목)이고, 호출부의 행 스냅샷은 루프 중
- * 갱신되지 않는다 → dedup이 없으면 다과목 학생의 모든 과목 행이 "아직 비었다"고 보고 각자의 직전 태도로
- * 덮어써 **마지막 과목 행이 이기는** 비결정 결과가 된다(채운 칸 수도 중복 계수). 첫 과목 행 값으로 확정한다.
- */
+/** 선택된 각 수업의 이전값으로 그 수업의 빈 칸만 채운다. */
 export function planBulkPrevFill(rows: readonly PrevFillRow[], attitudes: readonly string[]): PrevFillPlan[] {
-  const studentFieldDone = new Set<string>();
   const out: PrevFillPlan[] = [];
   for (const r of rows) {
     if (r.locked) continue;
     const set = planPrevFill({ prev: r.prev, current: r.current, attitudes });
-    for (const f of ["attitude", "homework"] as const) {
-      if (set[f] === undefined) continue;
-      const k = `${r.studentId}::${f}`;
-      if (studentFieldDone.has(k)) delete set[f];
-      else studentFieldDone.add(k);
-    }
     if (Object.keys(set).length) {
       out.push({ studentId: r.studentId, subjectName: r.subjectName, subjectIndex: r.subjectIndex, set });
     }

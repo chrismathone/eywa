@@ -84,7 +84,6 @@ export type GridFieldHandlers = {
   //    한다(원장 제보). 그래서 학생 id만이 아니라 **행 이름**까지 받는다. 해석·폴백은 row-fields.ts 단일 소스.
   onScore: (studentId: string, subjectName: string, which: "daily" | "check", v: number | null) => void;
   onMax: (studentId: string, subjectName: string, which: "daily" | "check", v: number) => void;
-  // ⚠️ 모드 전환(onMode)은 그리드에 없다 — 열이 88px 고정이라 셀이 넘친다(2026-07-24). 카드(TestCard)에서만 전환.
   onAttitude: (studentId: string, subjectName: string, a: string | null) => void;
   onHomework: (studentId: string, subjectName: string, h: string) => void;
   onTextbook: (studentId: string, subjectName: string, text: string) => void;
@@ -107,7 +106,7 @@ export type GridFieldHandlers = {
 export type GridRowActions = {
   onSendRow: (student: OneScreenStudent, subjectName: string) => void;
   onAutoWrite: (student: OneScreenStudent, subjectName: string) => void; // 행별 AI 멘트 자동작성
-  onOpenCard: (studentId: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
+  onOpenCard: (studentId: string, subjectName?: string) => void; // 그 학생을 카드 뷰로 열기(본문·첨부·링크 편집)
   onImportPrev: (student: OneScreenStudent, subjectName: string) => void; // 이전 회차 값 → 빈 칸 채움(1-3)
   // 첨부(표 모드) — 클립 팝오버·행 드롭이 공유. 게이트(진도 미입력)·저장보장은 부모 핸들러가 담당.
   onAttach: (student: OneScreenStudent, subjectName: string, files: File[]) => void;
@@ -398,7 +397,7 @@ export function GridBodyRow({
           {/* ClassNote 반 보드 매칭(원장 2026-09-29) — 카드 모드와 같은 부품·같은 판정. 수학 반 행만. */}
           <CnBadge
             label={cnLabelFor(config.classnoteMatch, { classId: subject.classId, subjectKey: subject.subjectKey, studentId: student.id })}
-            className={student.className}
+            className={subject.className ?? student.className}
           />
           {/* 보강 배지 = **빼는 문**(원장 2026-08-18 *"다 삭제"*). 추가만 있고 빼는 길이 없어 잘못 추가한
               보강이 화면에 눌러앉았다(영어 ECS는 같은 칸을 이미 버튼으로 열어 뒀다). 확인 후에만 지운다. */}
@@ -511,10 +510,10 @@ export function GridBodyRow({
               </span>
             )
           ) : null}
-          {subject.subjectLabel && subject.name !== subject.subjectLabel && subject.className ? (
+          {subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>
           ) : null}
-          <span className="text-text-faint text-xs">{student.tag}</span>
+          <span className="text-text-faint text-xs">{student.grade}</span>
         </div>
         {/* 출결 인라인 입력(2-2) — 행(반) 단위. 보강(수동추가)·반 모호(같은 과목 2반)는 pill 불가 → 배지만. */}
         <div className="mt-1">
@@ -890,7 +889,7 @@ export function GridBodyRow({
             />
             <button
               type="button"
-              onClick={() => actions.onOpenCard(student.id)}
+              onClick={() => actions.onOpenCard(student.id, subject.name)}
               title={t("os.row.cardTitle")}
               className="border-line text-text-dim hover:bg-bg-soft shrink-0 rounded-sm border px-1.5 py-1 text-xs font-bold"
             >

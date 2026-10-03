@@ -164,6 +164,7 @@ export default async function OneScreenPage({
       readonlyView={!!viewAs}
       // 글씨 크기(작음/보통/큼) — 계정 저장값. 서버가 확정해 내리므로 첫 렌더부터 정확하다(하이드레이션 안전).
       initialFontSize={roster.fontSize}
+      initialDisplayOptions={roster.displayOptions}
       initialTrendOptOut={roster.trendOptOut}
       noClassesToday={roster.noClassesToday}
       showingAll={roster.showingAll}
