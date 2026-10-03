@@ -1,3 +1,4 @@
+import { useDisplayOptions } from "./display-options-context";
 import { pct } from "../report";
 import { displayLessons } from "../curriculum";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -29,6 +30,7 @@ function ScoreBlock({
   const t = useSheetT();
   const tf = useSheetTf();
   const empty = test.score == null;
+  const { options } = useDisplayOptions();
   const setVal = (raw: string | number) => {
     if (raw === "") return onChange(null);
     const n = typeof raw === "number" ? raw : parseInt(raw, 10);
@@ -85,7 +87,7 @@ function ScoreBlock({
             <EyIcon name="chevronDown" size={9} strokeWidth={1.8} />
           </button>
         </div>
-        {!empty ? <DeltaChip score={test.score} prev={test.prevScore} /> : null}
+        {!empty && !options.hidePrevious ? <DeltaChip score={test.score} prev={test.prevScore} /> : null}
         {!empty ? (
           <span className="text-text-dim tabular ml-auto text-xs font-bold">
             {pct(test.score ?? 0, test.max)}%
@@ -124,6 +126,7 @@ export function TestCard({
   const t = useSheetT();
   const tf = useSheetTf();
   const shown = tests ?? student.tests;
+  const { options } = useDisplayOptions();
   // 다중 차시도 한 줄로 이어 표시(", "). '·'로 쪼개던 옛 로직은 다중차시(개행)에서 깨져 제거.
   const prevRange = student.subjects.map((s) => displayLessons(s.prev) || s.prev).filter(Boolean).join(" / ");
   const todayRange = student.subjects.map((s) => displayLessons(s.today) || s.today).filter(Boolean).join(" / ");
@@ -151,7 +154,7 @@ export function TestCard({
         {dailyEnabled ? (
           <ScoreBlock
             kicker={t("os.test.daily")}
-            range={tf("os.test.prevRange", { range: prevRange })}
+            range={options.hidePrevious ? "" : tf("os.test.prevRange", { range: prevRange })}
             test={shown.daily}
             onChange={(v) => onScore("daily", v)}
             allowMax={allowMax}

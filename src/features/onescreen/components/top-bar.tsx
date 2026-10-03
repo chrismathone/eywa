@@ -1,7 +1,7 @@
 // 날짜·수업과 출결·보기는 바로 노출하고, 드문 설정은 팝오버로 접는다.
 // 폰에서는 두 개의 가로 레일, 데스크톱에서는 한 줄로 배치한다.
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { EmbedLink } from "@/components/embed-link";
 import { DatePickerButton } from "@/components/date-picker-button";
 import { HrefSelect } from "@/components/href-select";
 import { PeriodNav } from "@/components/period-nav";
@@ -127,6 +127,7 @@ export function OneScreenTopBar({
         <div className="flex shrink-0 items-center gap-1.5" data-help="os-date">
           <PeriodNav
             label={today}
+            labelControl={<DatePickerButton label={today} value={date} max={todayYmd} onChange={onDateChange} title={t("os.date.pick")} ariaLabel={t("os.date.pick")} />}
             prevHref={addDays(date, -1)}
             nextHref={addDays(date, 1)}
             currentHref={todayYmd}
@@ -143,12 +144,6 @@ export function OneScreenTopBar({
             nextDisabled={isToday}
             onNavigate={(ymd) => onDateChange(ymd)}
             labelWidth={DAY_LABEL_W}
-          />
-          <DatePickerButton
-            value={date}
-            max={todayYmd}
-            onChange={onDateChange}
-            title={t("os.date.pick")}
           />
         </div>
 
@@ -237,8 +232,9 @@ export function OneScreenTopBar({
         {readonlyView ? null : (
           <span data-help="os-quick">
             <Button
+              variant="outline"
               render={
-                <Link href="/attendance/quick" title={t("os.quick.title")} />
+                <EmbedLink href="/attendance/quick" title={t("os.quick.title")} />
               }
               className="shrink-0"
             >

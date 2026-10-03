@@ -1,6 +1,7 @@
 "use client";
 
 import { EyIcon } from "@/components/icons/aywa-icons";
+import { PreviousText } from "./previous-content";
 import { displayLessons } from "../curriculum";
 import type { Subject } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
@@ -57,25 +58,20 @@ export function PrevRow({
         <span className="text-text-faint">·</span>
       </td>
       <td className={td}>
-        <span className="line-clamp-3 whitespace-pre-line">{prog}</span>
+        <PreviousText text={prog} />
       </td>
       {testCols > 0 ? (
         <td className={`${td} text-center`} colSpan={testCols}>
-          {p.examInfo || "—"}
+          <PreviousText text={p.examInfo || "—"} />
         </td>
       ) : null}
-      <td className={td}>{p.attitude || "—"}</td>
-      <td className={td}>{p.homeworkScore || "—"}</td>
+      <td className={td}><PreviousText text={p.attitude || "—"} /></td>
+      <td className={td}><PreviousText text={p.homeworkScore || "—"} /></td>
       <td className={td}>
-        <span className="line-clamp-2">{p.textbook || "—"}</span>
-        {p.homeworkToday ? (
-          <span className="text-text-faint mt-0.5 block line-clamp-2">
-            {tf("os.prev.homework", { text: p.homeworkToday })}
-          </span>
-        ) : null}
+        <PreviousText text={[p.textbook, p.homeworkToday ? tf("os.prev.homework", { text: p.homeworkToday }) : ""].filter(Boolean).join("\n") || "—"} />
       </td>
       <td className={td}>
-        <span className="line-clamp-2">{p.note || "—"}</span>
+        <PreviousText text={p.note || "—"} />
       </td>
       <td className={td}>
         {onImport ? (

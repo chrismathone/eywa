@@ -6,6 +6,7 @@ import { ProgressModePills } from "./progress-mode-pills";
 import { ProgressSelector } from "./progress-selector";
 import type { OneScreenStudent } from "../types";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
+import { useDisplayOptions } from "./display-options-context";
 
 /**
  * 진도 카드 — 과목별 오늘 진도를 **다중 차시**로 선택(edutrix 진도선택창, ProgressSelector).
@@ -21,6 +22,7 @@ export function ProgressCard({
   onStudyGrade,
   onLoadPrev,
   embedded,
+  lockedSubjects = [],
 }: {
   student: OneScreenStudent;
   onConfirm: () => void;
@@ -31,8 +33,10 @@ export function ProgressCard({
   onLoadPrev?: () => void; // 보강 학생 '이전 진도 불러오기'(있을 때만 노출) — 직전 회차를 당겨온다.
   /** 보고서 카드 안에 들어간 상태 — 카드 속 카드로 겹쳐 보이지 않게 그림자·배경을 뺀 얇은 테두리로(2026-08-05 통합). */
   embedded?: boolean;
+  lockedSubjects?: readonly string[];
 }) {
   const t = useSheetT();
+  const { options } = useDisplayOptions();
   const tf = useSheetTf();
   const studyGrade = resolveStudyGrade(student.studyGrade ?? student.grade);
   const isMathSubject = (key: string | undefined) => (key ?? "math") === "math";
@@ -79,16 +83,16 @@ export function ProgressCard({
           const { tone } = subjectTone(su.name);
           const isMath = isMathSubject(su.subjectKey);
           return (
-            <div key={i} className="flex items-start gap-3">
+            <fieldset key={i} disabled={lockedSubjects.includes(su.name)} className="flex min-w-0 items-start gap-3 disabled:opacity-60">
               <span className={`mt-1 h-9 w-1 rounded-pill ${toneSolidClass(tone)}`} aria-hidden />
               <div className="min-w-0 flex-1">
                 <p className={`text-sm font-bold ${toneTextClass(tone)}`}>{su.name}</p>
                 <div className="mt-1 space-y-1 text-xs">
-                  <p className="text-text-faint truncate">
+                  {!options.hidePrevious ? <p className="text-text-faint truncate">
                     {tf("os.pc.prev", {
                       text: displayLessons(su.prev) || su.prev || t("os.pc.noRecord"),
                     })}
-                  </p>
+                  </p> : null}
                   <div className="flex items-center gap-1.5">
                     <span className={`inline-flex shrink-0 items-center gap-0.5 font-bold ${toneTextClass(tone)}`}>
                       {t("os.pc.today")} <EyIcon name="arrowRight" size={11} />
@@ -132,7 +136,7 @@ export function ProgressCard({
                   ) : null}
                 </div>
               </div>
-            </div>
+            </fieldset>
           );
         })}
       </div>

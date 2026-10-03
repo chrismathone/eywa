@@ -49,7 +49,7 @@ const student = (over: Partial<OneScreenStudent>): OneScreenStudent =>
   }) as OneScreenStudent;
 
 /**
- * 이름 옆 발송 표시 배지 — 없으면 null.
+ * 보고서 라벨 발송 표시 배지 — 없으면 null.
  *
  * ⚠️ 예전엔 `[title*="발송"]`으로 **행 안의 아무 요소나** 잡았다. title에 '발송'이 들어가는 다른 것이
  *    생기면(2026-08-07 진행 상태 칸이 '보고서 작성·발송 여부'가 됐다) 배지가 없어도 걸려 **엉뚱한 실패**가
@@ -61,7 +61,7 @@ function sendBadge(name: string): HTMLElement | null {
   return withTitle.find((el) => /이 수업 보고서/.test(el.getAttribute("title") ?? "")) ?? null;
 }
 
-describe("StudentList 이름 옆 발송 표시", () => {
+describe("StudentList 보고서 라벨 발송 표시", () => {
   const students = [
     student({ id: "a", name: "최주원" }),
     student({ id: "b", name: "안서준", subjects: [subject({ name: "수학" }), subject({ name: "영어" })] }),
@@ -73,19 +73,21 @@ describe("StudentList 이름 옆 발송 표시", () => {
     c: { sent: 0, total: 1, label: "학부모 발송" },
   };
 
-  it("전부 나간 학생은 초록 발송 완료 표시", () => {
+  it("전부 나간 학생은 보고서 라벨만 초록색", () => {
     render(<StudentList students={students} selId="a" onSelect={vi.fn()} sendMarkById={marks} />);
     const badge = sendBadge("최주원");
     expect(badge).not.toBeNull();
     expect(badge!.getAttribute("title")).toBe("학부모 발송: 이 수업 보고서 1건 중 1건");
-    expect(badge!.textContent).toBe("발송 완료");
+    expect(badge!.textContent).toBe("보고서");
+    expect(screen.queryByText("발송 완료")).toBeNull();
     expect(badge).toHaveClass("text-green");
   });
 
   it("일부만 나갔으면 남은 수를 숫자로 밝힌다(N/M)", () => {
     render(<StudentList students={students} selId="a" onSelect={vi.fn()} sendMarkById={marks} />);
     const badge = sendBadge("안서준");
-    expect(badge?.textContent).toBe("발송 1/2");
+    expect(badge?.textContent).toBe("보고서");
+    expect(badge).toHaveClass("text-amber");
     expect(badge?.getAttribute("title")).toBe("학부모 발송: 이 수업 보고서 2건 중 1건");
   });
 
@@ -231,7 +233,7 @@ describe("같은 학생의 정규·특강을 왼쪽에서도 각각 선택", () 
     const rows = screen.getAllByText("학원이").map(el => el.closest("button")!);
     expect(rows).toHaveLength(2);
     expect(rows.map(row => row.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
-    expect(within(rows[0]).getByText("발송 완료")).toHaveClass("text-green");
+    expect(within(rows[0]).getByText("보고서")).toHaveClass("text-green");
     expect(within(rows[1]).queryByText("발송 완료")).toBeNull();
     expect(within(rows[0]).queryByText("결석")).toBeNull();
     expect(within(rows[1]).getByText("결석")).toBeTruthy();
@@ -248,10 +250,11 @@ describe("같은 학생의 정규·특강을 왼쪽에서도 각각 선택", () 
     expect(screen.getAllByText("학원이")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /오전반/ })).toBeNull();
   });
-  it("종료 후 미발송은 글자와 보고서 칩 모두 붉게 표시한다", () => {
+  it("종료 후 미발송은 보고서 칩만 붉게 표시한다", () => {
     render(<StudentList students={[student({ name: "미발송학생" })]} selId="" onSelect={vi.fn()}
       reportCellById={{ s1: "ok" }} sendMarkById={{ s1: { sent: 0, total: 1, overdue: 1, delivery: true, label: "학부모 발송" } }} />);
-    expect(screen.getByText("수업 종료 · 미발송")).toHaveClass("text-danger");
+    expect(screen.queryByText("수업 종료 · 미발송")).toBeNull();
+    expect(screen.getByText("보고서")).toHaveAttribute("title", "수업 종료 · 미발송");
     expect(screen.getByText("보고서")).toHaveClass("text-danger");
   });
 });

@@ -1,8 +1,11 @@
 "use client";
 
+import { useDisplayOptions } from "./display-options-context";
+import { orderReportRows, reportRowGroup } from "../report-row-order";
+import { CLASS_GROUP_MAKEUP, CLASS_GROUP_OTHER } from "../class-tags";
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { buildGridRows, buildRowRenderMeta, isRowActionable, rowInClass } from "../grid";
+import { buildGridRows, buildRowRenderMeta, effectiveClassnoteStatus, isRowActionable, isRowInputEditable, rowInClass } from "../grid";
 import { hasTextBesidesMarkers } from "@/features/report-templates/image-slots";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
 import { planBulkAttendance } from "../bulk-attendance";
@@ -41,6 +44,7 @@ export function OneScreenGrid({
   bulkActions,
   order,
   classFilter,
+  classOrder = [],
   narrative,
   attPending,
   attReadOnly,
@@ -58,6 +62,7 @@ export function OneScreenGrid({
   bulkActions: GridBulkActions;
   // 학생 순서변경(3-2) — 단일 반 필터일 때만 전달(전체 필터에선 undefined=버튼 숨김). onSave 성공 시 true.
   order?: { classId: string; onSave: (classId: string, studentIds: string[]) => Promise<boolean> };
+  classOrder?: readonly string[];
   classFilter: string | null; // 특정 반이면 그 반 소속 과목 행만 표시(다반 학생 타 반 행 혼입 차단)
   // 반 공통 서술(G6) — activeClass=특정된 단일 반 이름(전체·동명 모호=null → 비활성+안내, 순서 기능과 동일 가드).
   // value=현재 반 서술, onSave=저장(빈값=삭제). 키는 부모(client)가 classId로 관리.
@@ -76,7 +81,14 @@ export function OneScreenGrid({
    */
   bulkPresent?: BulkPresentProps;
 }) {
-  const rows = buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter));
+  const { options, change } = useDisplayOptions();
+  const rows = orderReportRows(buildGridRows(students).filter((r) => rowInClass(r.subject, classFilter)), options.sort, classOrder);
+  const groupStudents = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const key = reportRowGroup(row);
+    if (!groupStudents.has(key)) groupStudents.set(key, new Set());
+    groupStudents.get(key)!.add(row.student.id);
+  }
   // 작업별 대상(2-3): 발송·자동작성=진도+결석 제외, 저장=진도만(결석 포함 — 기록 보존).
   const sendableRows = rows.filter((r) =>
     isRowActionable(r.subject, "send", undefined, { attendanceReadOnly: attReadOnly }),
@@ -91,7 +103,7 @@ export function OneScreenGrid({
   // 행 선택(체크) — 일괄 작업 대상. **표시된 모든 행**을 선택 가능(진도 유무 무관).
   // 실제 처리는 client의 selectRows가 발송가능(진도 입력) 행만 걸러내므로, 진도 없는 행은 안전히 건너뜀.
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [showPrev, setShowPrev] = useState(true); // 이전 회차 참고행 토글(기본 켜짐)
+  const showPrev = !options.hidePrevious;
   // 순서 모드(3-2) — 학생 묶음(과목 행 아님)을 ↑↓로 재배열해 (강사×반)에 영구 저장.
   const [orderMode, setOrderMode] = useState(false);
   const [draftOrder, setDraftOrder] = useState<string[]>([]);
@@ -182,7 +194,10 @@ export function OneScreenGrid({
     setSavingOrder(true);
     try {
       const ok = await order.onSave(order.classId, draftOrder);
-      if (ok) setOrderMode(false);
+      if (ok) {
+        change({ sort: "class" });
+        setOrderMode(false);
+      }
     } finally {
       setSavingOrder(false);
     }
@@ -235,6 +250,7 @@ export function OneScreenGrid({
       <GridToolbar
         counts={{
           total: rows.length,
+          students: new Set(rows.map(r => r.student.id)).size,
           sendable: sendableRows.length,
           sendReady: sendReadyRows.length,
           saveable: saveableRows.length,
@@ -244,7 +260,7 @@ export function OneScreenGrid({
           selectedAutoWritable,
         }}
         selectedKeys={selectedKeys}
-        prev={{ has: hasPrev, show: showPrev, onToggle: () => setShowPrev((v) => !v) }}
+        prev={{ has: hasPrev, show: showPrev, onToggle: () => change({ hidePrevious: showPrev }) }}
         // '이전값 일괄 가져오기'도 참고행 토글과 **같은 게이트**(hasPrev) — planPrevFill은 prev가 없으면
         // 그대로 `{}`를 돌려주므로, 참고행이 0건인 화면에서 이 버튼은 눌러도 아무 일이 없는 죽은 컨트롤이다.
         // (과목 분리 2026-07-29 이후 영어 강사 화면이 정상적으로 이전 회차 0건 = 이 상태에 항상 해당.)
@@ -438,6 +454,14 @@ export function OneScreenGrid({
               ) : undefined;
               return (
                 <Fragment key={row.key}>
+                  {options.sort === "class" && !orderMode && (i === 0 || reportRowGroup(displayRows[i - 1]) !== reportRowGroup(row)) ? (
+                    <tr className="bg-primary-soft/50">
+                      <th scope="rowgroup" colSpan={9 + Number(config.dailyEnabled) + Number(config.checkEnabled)} className="border-line border-t px-3 py-2 text-left">
+                        {reportRowGroup(row) === CLASS_GROUP_MAKEUP ? t("os.list.makeup") : reportRowGroup(row) === CLASS_GROUP_OTHER ? t("os.list.noClass") : reportRowGroup(row)}
+                        <span className="ml-2 font-normal">{tf("os.list.count", { n: groupStudents.get(reportRowGroup(row))!.size })}</span>
+                      </th>
+                    </tr>
+                  ) : null}
                   {/* 학생 구분선 — 묶음의 **첫 렌더 행**만 굵은 회색 상단선. 참고행이 켜져 있고 그 학생에
                       참고 데이터가 있으면 참고행이 첫 행이므로 그쪽이 받는다(선이 두 번 그어지지 않게 배타). */}
                   {showPrev && !orderMode ? (
@@ -445,7 +469,8 @@ export function OneScreenGrid({
                       subject={row.subject}
                       dailyEnabled={config.dailyEnabled}
                       checkEnabled={config.checkEnabled}
-                      onImport={() => rowActions.onImportPrev(row.student, row.subject.name)}
+                      onImport={readonlyView || bulkGen || !isRowInputEditable(row.subject, effectiveClassnoteStatus(reports[row.student.id]?.[row.subject.name]?.classnoteStatus, row.subject.classnoteStatus))
+                        ? undefined : () => rowActions.onImportPrev(row.student, row.subject.name)}
                       groupStart={firstOfStudent}
                     />
                   ) : null}

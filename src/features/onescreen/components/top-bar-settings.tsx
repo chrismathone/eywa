@@ -14,6 +14,7 @@ import {
   type OnescreenFontSize,
 } from "../font-size";
 import { setSentNoticeHidden, useSentNoticeHidden } from "./use-sent-notice";
+import { DisplaySettingsFields } from "./display-settings";
 
 export function TopBarSettings({
   noticeMode,
@@ -50,6 +51,7 @@ export function TopBarSettings({
             className="border-line bg-card flex max-w-[calc(100vw-24px)] flex-col gap-3 rounded-lg border p-3 shadow-lg outline-none"
             aria-label={t("os.toolbar.settings")}
           >
+            <DisplaySettingsFields />
             <HrefSelect
               axisLabel={t("os.ment.axis")}
               ariaLabel={t("os.ment.title")}

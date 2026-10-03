@@ -423,7 +423,7 @@ describe("planBulkApply", () => {
     ]);
   });
 
-  it("태도·과제(학생 단위)는 같은 학생의 두 번째 행부터 중복 적용하지 않는다", () => {
+  it("태도·과제도 선택된 수업마다 독립적으로 적용한다", () => {
     const plan = planBulkApply(
       [target({ subjectName: "수학" }), target({ subjectName: "영어" })],
       { attitude: "좋음", homeworkToday: "복습" },
@@ -431,7 +431,7 @@ describe("planBulkApply", () => {
     );
     expect(plan).toEqual([
       { studentId: "a", subjectName: "수학", subjectIndex: 0, set: { attitude: "좋음", homeworkToday: "복습" } },
-      { studentId: "a", subjectName: "영어", subjectIndex: 0, set: { homeworkToday: "복습" } },
+      { studentId: "a", subjectName: "영어", subjectIndex: 0, set: { attitude: "좋음", homeworkToday: "복습" } },
     ]);
   });
 
@@ -593,7 +593,7 @@ describe("planBulkPrevFill", () => {
     ]);
   });
 
-  it("다과목 학생 — 학생 단위(태도·과제)는 **첫 과목 행**만, 둘째 과목이 덮어쓰지 않는다", () => {
+  it("다과목 학생의 이전 태도·과제는 각 수업의 값으로 계획한다", () => {
     const plan = planBulkPrevFill(
       [
         row("a", "수학", 0, prevReport({ attitude: "좋음", homeworkScore: "100%", progress: "수학진도" })),
@@ -603,8 +603,8 @@ describe("planBulkPrevFill", () => {
     );
     expect(plan[0]!.set.attitude).toBe("좋음");
     expect(plan[0]!.set.homework).toBe("100%");
-    expect(plan[1]!.set.attitude).toBeUndefined();
-    expect(plan[1]!.set.homework).toBeUndefined();
+    expect(plan[1]!.set.attitude).toBe("산만함");
+    expect(plan[1]!.set.homework).toBe("0%");
     // 과목 단위(진도·오늘 과제)는 과목마다 그대로 채운다.
     expect(plan[0]!.set.today).toBe("수학진도");
     expect(plan[1]!.set.today).toBe("영어진도");

@@ -1,15 +1,9 @@
 "use client";
 
 /**
- * 달력 아이콘 버튼 — `<input type="date">`를 아이콘 하나로 접은 공용 부품(디자인 v5 18단계).
- *
- * 🔴 크로미움은 **달력 아이콘을 눌러야** 달력이 열린다 → ① 클릭 때 `showPicker()` 직접 호출 + ② 달력 아이콘을
- *    입력 전체로 늘려 이중 보장(원장 확인 2026-07-23, 원스크린 상단 바 규약). 크기는 control-scale 정사각
- *    (`CONTROL_SQUARE` — 옆에 서는 PeriodNav·Button과 같은 높이).
- * 값을 고르면 `onChange(ymd)` 한 번 — 이동(URL push·콜백)은 호출부 몫이라 이 부품은 라우터를 모른다.
- * 소비처: 원스크린 상단 바(`top-bar.tsx`) · ECS 오늘 면(`today-date-picker.tsx`). 같은 강사가 오가는 두 화면이라
- * 크기·아이콘이 갈리면 안 된다 — 그전엔 ECS만 아이콘 버튼(`h-8 w-8`)이었고 원스크린은 **날짜 글자 자체가**
- * 달력 트리거였다(라벨을 `PeriodNav`가 가져가면서 달력만 여는 버튼으로 분리됐다).
+ * 공용 날짜 선택기. label을 넘기면 PeriodNav 가운데 날짜가 트리거이며, 없으면 달력 아이콘이다.
+ * Chromium은 네이티브 달력 표시기를 입력 전체로 넓혀 어디를 눌러도 열린다. 지원 브라우저에서는
+ * showPicker도 호출하며 값 선택 후 이동은 onChange 호출부가 담당한다.
  */
 import { useRef } from "react";
 import { EyIcon } from "@/components/icons/aywa-icons";
@@ -22,6 +16,7 @@ export function DatePickerButton({
   onChange,
   title = "달력에서 날짜 선택",
   ariaLabel = "날짜 선택",
+  label,
 }: {
   value: string;
   min?: string;
@@ -29,11 +24,13 @@ export function DatePickerButton({
   onChange: (ymd: string) => void;
   title?: string;
   ariaLabel?: string;
+  /** PeriodNav 가운데 날짜를 직접 눌러 여는 표시. 생략하면 기존 아이콘 버튼. */
+  label?: string;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   return (
     <label
-      className={`${CONTROL_SQUARE} border-line text-text-dim hover:text-foreground hover:bg-bg-soft relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg border transition`}
+      className={`${label ? "h-full w-full px-2 font-bold text-foreground whitespace-nowrap" : `${CONTROL_SQUARE} border-line text-text-dim rounded-lg border`} hover:text-foreground hover:bg-bg-soft focus-within:ring-2 focus-within:ring-primary relative inline-flex shrink-0 cursor-pointer items-center justify-center transition`}
       title={title}
       onClick={() => {
         // showPicker는 사용자 제스처 밖이거나 미지원이면 throw — 실패해도 아래 CSS 폴백이 받는다.
@@ -44,7 +41,7 @@ export function DatePickerButton({
         }
       }}
     >
-      <EyIcon name="calendar" size={14} strokeWidth={2.25} />
+      {label ?? <EyIcon name="calendar" size={14} strokeWidth={2.25} />}
       <input
         ref={ref}
         type="date"

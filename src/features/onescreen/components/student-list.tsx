@@ -4,9 +4,9 @@ import { MakeupClassTag } from "./makeup-class-tag";
 import { useState } from "react";
 import { ChevronDown } from "@/components/icons/aywa-icon-compat";
 import { BulkPresentButton, type BulkPresentProps } from "./bulk-present-button";
-import { StudentSendMark } from "./student-send-mark";
 import { studentListGroups } from "../student-list-groups";
 import { useLessonClock } from "./use-lesson-clock";
+import { useDisplayOptions } from "./display-options-context";
 import type { SendMark } from "../send-mark";
 export type { SendMark } from "../send-mark";
 import { studentStatus, type TestConfig } from "../report";
@@ -45,6 +45,7 @@ function StudentRow({
   cn,
   onClick,
   testConfig,
+  showClass = false,
 }: {
   st: OneScreenStudent;
   active: boolean;
@@ -54,10 +55,14 @@ function StudentRow({
   cn?: { ok: boolean; match: CnMatch | null } | null;
   onClick: () => void;
   testConfig?: TestConfig;
+  showClass?: boolean;
 }) {
   const lang = useSheetLang();
   const t = useSheetT();
   const s = studentStatus(st, testConfig);
+  const tf = useSheetTf();
+  const reportTitle = (sendMark?.overdue ?? 0) > 0 ? t("os.list.overdue")
+    : sendMark && sendMark.sent > 0 ? tf("os.list.sendDetail", { label: sendMark.label, sent: sendMark.sent, total: sendMark.total }) : t("os.chip.rep.title");
   // 보(보고서) 셀은 과목별 발송 상태로 재정의 가능 (클라이언트가 reportCellById로 전달).
   const cellState = (key: "prog" | "test" | "rep"): CellState =>
     key === "rep" ? (reportCell ?? s.rep) : s[key];
@@ -74,7 +79,7 @@ function StudentRow({
         <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
           <span className="text-foreground max-w-full break-all text-sm font-bold">{st.name}</span>
           <CnBadge label={cn ?? null} className={st.className} />
-          <StudentSendMark mark={sendMark} />
+          {showClass ? <span className="text-text-faint truncate text-xs">{st.subjects[0]?.className ?? st.className}</span> : null}
         </div>
         {/* 둘째 줄 = 학년 · 과목 점 · **출결 배지**.
             🔴 배지가 여기로 내려온 이유(원장 2026-08-18 *"이거 왜 짤리지?"*): 목록 열은 **폭이 고정**이고
@@ -116,7 +121,7 @@ function StudentRow({
         {CELLS.map((c) => (
           <span
             key={c.key}
-            title={c.key === "rep" && (sendMark?.overdue ?? 0) > 0 ? t("os.list.overdue") : t(c.title)}
+            title={c.key === "rep" ? reportTitle : t(c.title)}
             // 낱말이 들어가므로 정사각(size-5)이 아니라 **글자 폭을 따라가는 알약**으로. shrink-0 =
             // 이름이 길어도 이 칸이 찌그러져 글자가 깨지지 않게(찌그러지면 축약보다 못하다).
             className={`shrink-0 rounded-sm px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${c.key === "rep" && sendMark && sendMark.total > 0
@@ -158,7 +163,7 @@ export function StudentList({
     cn?: { ok: boolean; match: CnMatch | null } | null;
   };
   reportCellById?: Record<string, CellState>;
-  /** 이름 옆 발송 표시 — 학생 id → {나간 행 수, 나갈 수 있는 행 수, 기준 라벨}. */
+  /** 보고서 라벨의 색·툴팁 — 학생 id → 발송한 행 수·전체 행 수. */
   sendMarkById?: Record<string, SendMark>;
   /** 빈 목록 문구 — 반이 아니라 **작성 필터** 때문에 비었을 때 사실과 다른 말을 하지 않도록 호출부가 덮어쓴다.
    *  안 넘기면 사전 기본값. */
@@ -179,7 +184,11 @@ export function StudentList({
   const t = useSheetT();
   const tf = useSheetTf();
   const now = useLessonClock();
-  const groups = studentListGroups(students, classFilter);
+  const { options } = useDisplayOptions();
+  const byClass = studentListGroups(students, classFilter);
+  const groups = options.sort === "name"
+    ? new Map([["__name__", [...byClass.values()].flat().sort((a, b) => a.name.localeCompare(b.name, "ko"))]])
+    : byClass;
   const orderedKeys = [
     ...(classOrder ?? []).filter((k) => groups.has(k)),
     ...[...groups.keys()].filter((k) => !(classOrder ?? []).includes(k)),
@@ -205,7 +214,7 @@ export function StudentList({
        60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
     <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border lg:h-full lg:min-h-0">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
-        <p className="micro text-text-faint">{t("os.list.caption")}</p>
+        <p className="micro text-text-faint">{t(options.sort === "name" ? "os.stat.students" : "os.list.caption")}</p>
         <div className="flex items-center gap-2">
           {bulkPresent ? <BulkPresentButton {...bulkPresent} /> : null}
           {orderedKeys.length > 1 ? (
@@ -247,7 +256,7 @@ export function StudentList({
                     />
                     <span className="text-text-dim truncate text-xs font-bold">
                       {/* 🔴 반 이름은 한국어 그대로 — 원스크린은 학부모 보고서를 짓는 표면이다. */}
-                      {key === CLASS_GROUP_OTHER
+                      {key === "__name__" ? t("os.display.byName") : key === CLASS_GROUP_OTHER
                         ? t("os.list.noClass")
                         : key === CLASS_GROUP_MAKEUP
                           ? t("os.list.makeup")
@@ -255,7 +264,7 @@ export function StudentList({
                     </span>
                   </span>
                   <span className="text-text-faint shrink-0 font-mono text-xs">
-                    {tf("os.list.count", { n: rows.length })}
+                    {tf("os.list.count", { n: new Set(rows.map(row => row.id)).size })}
                   </span>
                 </button>
                 {!isCollapsed
@@ -271,6 +280,7 @@ export function StudentList({
                           cn={rowStatus?.cn}
                           onClick={() => onSelect(st.id, st.subjects[0]?.name)}
                           testConfig={testConfig}
+                          showClass={options.sort === "name"}
                         />
                       );
                     })
