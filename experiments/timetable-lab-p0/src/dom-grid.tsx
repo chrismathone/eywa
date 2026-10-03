@@ -1,7 +1,7 @@
 import { useRef, useState, useSyncExternalStore, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { bounds, decodeTsv, encodeTsv, pasteCells, selectionCells, valuesOnly, type Point, type Selection } from './clipboard';
-import { patchCells, type Cell } from './model';
-import type { DraftStore } from './store';
+import { patchCells, type Cell } from '@/features/timetable-lab/editor/model';
+import type { DraftStore } from '@/features/timetable-lab/editor/store';
 
 type PendingCut = { token: string; revision: number; selection: Selection; cells: Cell[][]; isCut: boolean };
 const mime = 'application/x-eywa-p0-cut';

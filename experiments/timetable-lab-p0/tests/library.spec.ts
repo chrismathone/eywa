@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { Draft } from '../src/model';
-import type { DraftSummary } from '../src/draft-api';
-import { sourceFixture } from './source-fixture';
+import type { Draft } from '../../../src/features/timetable-lab/editor/model';
+import type { DraftSummary } from '../../../src/features/timetable-lab/editor/draft-api';
+import { sourceFixture } from '../../../src/features/timetable-lab/editor/source-fixture.test-support';
 const libraryButton = (page: Page) => page.getByRole('button', { name: '연습본 저장·불러오기·비교' });
 test('saves multiple DB snapshots, survives reload, compares readonly and loads with one undo', async ({ page }) => {
   const saved: { item: DraftSummary; snapshot: Draft }[] = [], writes: string[] = [];

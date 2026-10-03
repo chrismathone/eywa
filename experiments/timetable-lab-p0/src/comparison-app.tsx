@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useState, useSyncExternalStore } from 'react';
 import { DomGrid } from './dom-grid';
-import { DraftStore } from './store';
-import { assignStudent, lessons, studentLabels, timeLabel } from './model';
-import { suggest, validate, type Candidate } from './constraints';
+import { DraftStore } from '@/features/timetable-lab/editor/store';
+import { assignStudent, lessons, studentLabels, timeLabel } from '@/features/timetable-lab/editor/model';
+import { suggest, validate, type Candidate } from '@/features/timetable-lab/editor/constraints';
 const UniverGrid = lazy(() => import('./univer-grid'));
 
 const store = new DraftStore();
