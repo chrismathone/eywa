@@ -3,7 +3,7 @@
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context";
 import { isVideoHomeworkEnabled } from "../policy";
-import { useVideoHomeworkPolicy, useVideoHomeworkSaveOk } from "./video-homework-provider";
+import { useVideoHomeworkOthersReport, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkSavedToday } from "./video-homework-provider";
 
 /** 카드 모드의 체크 알약 — '영상 과제'·'영상 첨부 링크 넣기'가 같은 모양을 쓴다. */
 export const pillCheckClass = (checked: boolean, locked: boolean | undefined) =>
@@ -15,11 +15,14 @@ export const pillCheckClass = (checked: boolean, locked: boolean | undefined) =>
  * "오늘 영상 과제 있음/없음"(0308a, 원장 2026-09-30 *"영상과제 있음 없음 체크할 수 있게 영상아이콘으로"*).
  * 켜면 다음 수업의 '지난 수업 영상 숙제' ✓/✕ 검사가 뜨고, 끈 채 저장한 수업의 다음 검사는 숨는다.
  * 학원설정 영상 숙제 정책이 이 반을 끈 행·반 없는 행(보강)은 그리지 않는다(저장도 안 실린다 — onescreen-client).
+ * 🔴 오늘 이 줄을 **다른 선생님이 처음 썼으면** 잠근다(원장 2026-10-03, report-owner.ts 화면 겹 — 저장 관문·DB 트리거가 한 번씩 더 막는다).
  */
-export function VideoHomeworkToggle({ checked, onToggle, disabled, classId, subjectKey, grade, studentName, subjectName, size = "sm" }: {
+export function VideoHomeworkToggle({ checked, onToggle, disabled, studentId, classId, subjectKey, grade, studentName, subjectName, size = "sm" }: {
   checked: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  /** 남이 쓴 줄 판정용(없으면 판정 안 함 — 서버가 막는다). */
+  studentId?: string;
   classId: string | null | undefined;
   subjectKey: string | undefined;
   grade: string | null;
@@ -31,15 +34,21 @@ export function VideoHomeworkToggle({ checked, onToggle, disabled, classId, subj
   const tf = useSheetTf();
   const policy = useVideoHomeworkPolicy();
   const saveOk = useVideoHomeworkSaveOk();
+  const othersReport = useVideoHomeworkOthersReport();
+  const savedToday = useVideoHomeworkSavedToday();
   if (!classId || !policy || !isVideoHomeworkEnabled(policy, { classId, subjectKey: subjectKey ?? "math", grade })) return null;
   // 과제 값을 못 읽은 세션은 잠근다 — 눌러도 저장되지 않으니(덮어쓰기 방지) 누를 수 있게 두면 거짓말이다.
-  const locked = disabled || !saveOk;
-  const tip = saveOk ? t("os.row.videoHwTip") : t("os.row.videoHwUnknown");
+  // 다른 선생님이 처음 쓴 줄도 같다 — 저장 관문이 그 값을 적지 않는다.
+  const byOther = !!studentId && othersReport(studentId, classId);
+  const locked = disabled || !saveOk || byOther;
+  // 남이 쓴 줄의 체크 표시는 **저장된 값** — 화면을 연 뒤 잠긴 줄은 내 화면 값이 내가 누른 값으로 남아 있다.
+  const shown = byOther && studentId ? savedToday(studentId, classId) === true : checked;
+  const tip = !saveOk ? t("os.row.videoHwUnknown") : byOther ? t("os.row.videoHwOther") : t("os.row.videoHwTip");
   if (size === "pill") {
     // 카드 모드 — 알약 안에 **체크 칸**을 함께 둔다(원장 2026-10-02 *"카드모드에서는 영상 과제 체크가 없나본데?"* —
     // 글자만 있는 알약은 켜고 끄는 칸으로 읽히지 않았다. 표 모드와 같은 체크 칸이라 두 화면이 같은 것으로 보인다).
-    return <label title={tip} className={pillCheckClass(checked, locked)}>
-      <input type="checkbox" checked={checked} onChange={onToggle} disabled={locked}
+    return <label title={tip} className={pillCheckClass(shown, locked)}>
+      <input type="checkbox" checked={shown} onChange={onToggle} disabled={locked}
         className="accent-primary size-3.5 shrink-0"
         aria-label={tf("os.row.videoHwAria", { name: studentName, subject: subjectName })} />
       <span title={tip} className="inline-flex shrink-0"><EyIcon name="play" size={12} aria-hidden /></span>
@@ -47,7 +56,7 @@ export function VideoHomeworkToggle({ checked, onToggle, disabled, classId, subj
     </label>;
   }
   return <label className="text-text-dim flex w-fit cursor-pointer items-center gap-1 text-xs" title={tip}>
-    <input type="checkbox" checked={checked} onChange={onToggle} disabled={locked}
+    <input type="checkbox" checked={shown} onChange={onToggle} disabled={locked}
       className="accent-primary size-3.5 disabled:opacity-50"
       aria-label={tf("os.row.videoHwAria", { name: studentName, subject: subjectName })} />
     <span title={tip} className="inline-flex shrink-0"><EyIcon name="play" size={12} aria-hidden /></span>

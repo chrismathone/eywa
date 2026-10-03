@@ -79,6 +79,41 @@ export async function getVideoHomeworkAssignments(
 }
 
 /**
+ * 원스크린용 — 그날 이 학생들의 보고서 중 **다른 선생님이 처음 쓴 줄**(작성 계정 0172a ≠ 나)을 `학생|날짜|반` 키로.
+ * 영상 과제 토글을 잠그는 **화면 겹**이다([`report-owner.ts`] — 저장 관문과 DB 트리거(0336a)가 같은 판정을 한 번씩 더 한다).
+ * 실패는 빈 목록(잠그지 않음) — 실제로 막는 건 서버다. 작성 계정은 이미 있는 칸이라 #95 위험이 없다.
+ */
+export async function getOthersReportKeys(
+  tenantId: string,
+  studentIds: string[],
+  date: string,
+  ownerId: string,
+): Promise<string[]> {
+  if (!studentIds.length || !date) return [];
+  try {
+    const db = createAdminClient();
+    const rows = await fetchAllPagedInChunks<{ student_id: string; class_id: string | null; report_date: string }>(
+      [...new Set(studentIds)],
+      (chunk, from, to) => db
+        .from("lesson_reports")
+        .select("student_id,class_id,report_date")
+        .eq("tenant_id", tenantId)
+        .in("student_id", chunk)
+        .eq("report_date", date)
+        .not("class_id", "is", null)
+        .not("created_by", "is", null)
+        .neq("created_by", ownerId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    );
+    return rows.flatMap((r) => (r.class_id ? [assignmentKey(r.student_id, r.report_date, r.class_id)] : []));
+  } catch (e) {
+    console.warn(JSON.stringify({ level: "warn", scope: "getOthersReportKeys", message: e instanceof Error ? e.message : String(e) }));
+    return [];
+  }
+}
+
+/**
  * 영상 제출 현황용 — 기간 안에 **영상 과제가 나간 수업**(`video_homework = true`, 반이 있는 보고서만)을 (반, 학생, 날짜)로.
  * 이 목록이 곧 회차다(원장 2026-10-01 *"숙제 나간 날만 횟수가 늘어나는걸로"*) — 없음(false)·모름(null)인 수업은 회차가 아니다.
  * 컬럼 미적용·probe 실패는 **null**(= 모른다) — 화면이 "기록만 보인다"고 알린다. 조회 자체의 오류는 그대로 던진다

@@ -2597,6 +2597,14 @@ export const SHEET_DICT = {
     ko: "영상 과제 기록을 읽지 못했습니다 — 새로고침하면 다시 저장할 수 있습니다",
     en: "Could not read video homework records — refresh to save again",
   },
+  "os.c.videoHwKept": {
+    ko: "영상 과제는 이 보고서를 처음 쓴 선생님만 바꿀 수 있어 그대로 두었습니다(나머지는 저장했습니다)",
+    en: "Only the teacher who first wrote this report can change the video homework — kept as is (the rest was saved)",
+  },
+  "os.row.videoHwOther": {
+    ko: "다른 선생님이 먼저 쓴 보고서라 영상 과제는 그 선생님만 바꿀 수 있습니다",
+    en: "Another teacher wrote this report first — only they can change the video homework",
+  },
   "os.row.videoLink": { ko: "영상 첨부 링크 넣기", en: "Add video upload link" },
   "os.row.videoLinkTip": {
     ko: "켜면 이 보고서 글에 학생이 숙제 영상을 올리는 링크(7일)가 함께 나갑니다",

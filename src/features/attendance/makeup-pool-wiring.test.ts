@@ -98,7 +98,8 @@ describe("보이지 않는 '보강' 반", () => {
   it("🔴 라이브 훅은 **저장자가 아니라 보고서 소유자**에게 귀속한다(사무실 대리 저장 예방, 2026-09-02)", () => {
     const os = read("features", "onescreen", "server", "actions.ts");
     // 저장된 행의 소유 컬럼을 되받아 규칙(resolveMakeupOwner → pickMakeupOwner)에 넘긴다.
-    expect(os).toContain('.select("id, share_token, teacher_name, created_by")');
+    // (2026-10-03: 영상 과제 값도 함께 되받게 되어 select가 두 리터럴 중 하나다 — 둘 다 소유 컬럼을 담는다.)
+    expect(os).toMatch(/\.select\(videoHwReady \? "id, share_token, teacher_name, created_by, video_homework" : "id, share_token, teacher_name, created_by"\)/);
     expect(os).toContain("resolveMakeupOwner(");
     const hook = os.slice(os.indexOf("await ensureMakeupAttendanceForReport({"));
     const call = hook.slice(0, hook.indexOf("});"));

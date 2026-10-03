@@ -61,6 +61,7 @@ import { LEGACY_REPORT_SUBJECT, reportSubject } from "@/features/timetable/lib/r
 import { resolveMentSource, type MentSource } from "../ment-source";
 import { mentSourceColumnReady } from "./ment-source-db";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
+import { videoHomeworkKept } from "@/features/video-homework/report-owner";
 import { videoSubmitLinkColumn } from "@/features/video-submit/server/link-choice-db";
 import { loadTeacherMentStyle } from "./ment-style-db";
 import { mentStyleDirective } from "../ment-style-prompt";
@@ -157,6 +158,8 @@ export async function saveLessonReport(
   makeupClassId?: string | null;
   /** 반 미정 보강이라 저장을 막았다(`MAKEUP_ANCHOR_REQUIRED_ERROR`) — 화면이 보강 반을 고르게 한다. */
   needsAnchor?: boolean;
+  /** 영상 과제 값을 작성 선생님 것으로 두었다([`report-owner.ts`]) — 화면이 이 값으로 되돌린다(나머지는 저장됨). */
+  keptVideoHomework?: boolean | null;
 }> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "로그인이 필요합니다" };
@@ -219,10 +222,11 @@ export async function saveLessonReport(
     .from("lesson_reports")
     // 멘트 작성 방식 판정 재료(notes, ment_source)를 게이트 pre-read에 **합승**시킨다 — 별도 왕복 없음(B4).
     // 보강 앵커 판정 재료(옛 앵커·게시 기록·소유자)도 같은 pre-read에 합승한다 — 반을 옮길 때 칸을 먼저 확인해야 해서.
+    // 영상 과제 작성자 판정 재료(지금 값)도 합승한다 — 값을 실은 저장이고 칸이 확인됐을 때만(#95).
     .select(
-      mentReady
+      (mentReady
         ? "id, classnote_status, classnote_sent_at, makeup_class_id, created_by, notes, ment_source"
-        : "id, classnote_status, classnote_sent_at, makeup_class_id, created_by",
+        : "id, classnote_status, classnote_sent_at, makeup_class_id, created_by") + (videoHwReady ? ", video_homework" : ""),
     )
     .eq("student_id", input.studentId)
     .eq("report_date", reportDate);
@@ -259,6 +263,7 @@ export async function saveLessonReport(
         created_by?: string | null;
         notes?: string | null;
         ment_source?: string | null;
+        video_homework?: boolean | null;
       }
     | undefined;
   if (priorRow?.classnote_status === "success") {
@@ -268,6 +273,14 @@ export async function saveLessonReport(
       error: "이미 학부모에게 발송된 보고서라 수정할 수 없습니다 — 고쳐야 하면 공유링크를 재발급하세요",
     };
   }
+  // 🔴 영상 과제 있음/없음은 이 줄을 처음 쓴 선생님만 바꾼다(원장 2026-10-03, [`report-owner.ts`]) — 강사뷰 '영상 제출 현황'이
+  //    작성 계정으로 "내가 낸 숙제"를 가르므로, 다른 선생님이 켜면 켠 사람 장부에 안 뜬다. **거절하지 않고** 그 값만 두고
+  //    나머지를 저장한다(거절하면 세션이 바꾼 값을 쥐고 있어 그 줄의 저장·발송이 계속 막힌다) — 둔 값은 화면에 돌려준다.
+  const keptVideoHw = videoHomeworkKept({
+    prior: priorRow ? { createdBy: priorRow.created_by ?? null, videoHomework: priorRow.video_homework ?? null } : null,
+    wanted: videoHwReady ? input.videoHomework : undefined,
+    userId: user.id,
+  });
 
   /**
    * 🔴 보강 앵커(`makeup_class_id`) — **보고서 반 = 출석부 반 = 발송 반**의 단일 소스(원장 2026-09-30, [`makeup-anchor.ts`](../makeup-anchor.ts)).
@@ -322,7 +335,7 @@ export async function saveLessonReport(
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는
   //    supabase-js upsert가 타깃으로 못 잡아서(0083a 교훈) 생성열로 평범한 컬럼처럼 만들어 둔 것이다.
   // share_token은 update 시 payload에 없어 미변경(안정 링크). classnote_* 도 미변경(별도 saveAndQueueClassnote가 관리).
-  const { data, error } = await supabase
+  const { data: savedData, error } = await supabase
     .from("lesson_reports")
     .upsert(
       {
@@ -336,8 +349,9 @@ export async function saveLessonReport(
         // 자유입력 자리표시자(`-`·`X` 등)를 "없음" 하나로 표준화(none-marker.ts 규약, 원장 2026-07-23) —
         // 그대로 두면 학부모 카드에 "오늘 과제: -"가 나가고 AI 멘트가 그걸 사실로 받는다.
         homework_today: normalizeNoneMarker(input.homeworkToday),
-        ...(videoHwReady && typeof input.videoHomework === "boolean" ? { video_homework: input.videoHomework } : {}),
-        ...(videoLinkReady && typeof input.videoSubmitLink === "boolean" ? { video_submit_link: input.videoSubmitLink } : {}),
+        // 작성 선생님이 아니면 영상 과제(와 거기 딸린 첨부 링크 선택)는 적지 않는다(keptVideoHw, 위).
+        ...(videoHwReady && typeof input.videoHomework === "boolean" && !keptVideoHw ? { video_homework: input.videoHomework } : {}),
+        ...(videoLinkReady && typeof input.videoSubmitLink === "boolean" && !keptVideoHw ? { video_submit_link: input.videoSubmitLink } : {}),
         progress: input.progress || null,
         exam_info: input.examInfo || null,
         homework_score: normalizeNoneMarker(input.homeworkScore),
@@ -375,8 +389,17 @@ export async function saveLessonReport(
     // teacher_name은 진도 점프 경고의 "같은 선생님" 축(2026-08-20) — 넘길 값을 여기서 다시 조립하지 말고
     // **저장된 그 값**을 되받는다(갱신 시 DB가 원 작성자를 보존하는 경로가 있어 화면 값과 갈릴 수 있다).
     // created_by도 되받는다 — 보강 출석부 칸의 **귀속 강사**(아래 훅)는 저장자가 아니라 이 소유 계정이다.
-    .select("id, share_token, teacher_name, created_by")
+    // 영상 과제 값도 되받는다(칸이 확인됐을 때만) — 동시 첫 저장에서 DB 트리거(0336a)가 남의 값을 지켰는지 본다(아래 raceKept).
+    .select(videoHwReady ? "id, share_token, teacher_name, created_by, video_homework" : "id, share_token, teacher_name, created_by")
     .single();
+  // select가 두 리터럴 중 하나라 결과 타입을 추론하지 못한다 — 되받는 칸을 여기 적는다(위 select와 같이 고칠 것).
+  const data = savedData as unknown as {
+    id: string;
+    share_token: string;
+    teacher_name: string | null;
+    created_by: string | null;
+    video_homework?: boolean | null;
+  } | null;
   if (error || !data) {
     // 먼저 바꿔 둔 반(claimMakeupAnchorChange)을 되돌린다 — 저장이 안 됐는데 반만 바뀌면 칸과 갈린다.
     if (priorRow && makeupAnchor && makeupAnchor !== priorAnchor)
@@ -481,6 +504,15 @@ export async function saveLessonReport(
     }
   }
 
+  // 동시 첫 저장 — 사전 조회 땐 줄이 없었는데(또는 값이 같았는데) 그새 다른 선생님이 먼저 썼다. DB 트리거(0336a)가 그 값을 지켰으면
+  // 저장된 값이 보낸 값과 다르다 → 화면이 그 값으로 되돌리게 알린다. (트리거 적용 전엔 내 값이 들어가 같다 — 그 경합은 트리거만 막는다.)
+  const raceKept =
+    !keptVideoHw && videoHwReady && typeof input.videoHomework === "boolean" &&
+    !!data.created_by && data.created_by !== user.id && (data.video_homework ?? null) !== input.videoHomework
+      ? { kept: data.video_homework ?? null }
+      : null;
+  const keptVideoHwFinal = keptVideoHw ?? raceKept;
+
   /**
    * 감사로그 — **누가 이 보고서를 고쳤나**의 유일한 근거다.
    * 🔴 `lesson_reports`에는 `updated_by`가 없고, `created_by`는 갱신 때 DB 트리거가 **원 작성자를
@@ -502,11 +534,21 @@ export async function saveLessonReport(
       created: !priorRow,
       ...(input.makeup ? { makeup: true } : {}),
       ...(isMakeupRow ? { makeupClassId: makeupAnchor } : {}),
+      // 작성 선생님이 아니라 영상 과제 값을 두었다(바꾸려던 값은 적지 않았다).
+      ...(keptVideoHwFinal ? { videoHomeworkKept: true } : {}),
     },
   });
 
+  // `warning`은 영어 그림 자료 전용이다(일괄 저장이 그 건수로 센다) — 영상 과제를 둔 사실은 keptVideoHomework로만 알린다.
   const warning = jjCapture ? await jjCapture : null;
-  return { ok: true, id: data.id, shareToken: data.share_token, makeupClassId: makeupAnchor, ...(warning ? { warning } : {}) };
+  return {
+    ok: true,
+    id: data.id,
+    shareToken: data.share_token,
+    makeupClassId: makeupAnchor,
+    ...(warning ? { warning } : {}),
+    ...(keptVideoHwFinal ? { keptVideoHomework: keptVideoHwFinal.kept } : {}),
+  };
 }
 
 /**
@@ -535,6 +577,8 @@ export async function saveAndQueueClassnote(
   sendWindowHint?: string;
   /** 저장 단계의 알림(영어 그림 자료를 못 묶음 — saveLessonReport `warning` 그대로). */
   warning?: string;
+  /** 저장 단계에서 영상 과제 값을 작성 선생님 것으로 두었다(saveLessonReport 그대로) — 화면이 이 값으로 되돌린다. */
+  keptVideoHomework?: boolean | null;
   /** status="needs_class"일 때 — 고를 수 있는 반(반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'). */
   candidates?: { id: string; name: string }[];
   /** status="needs_class"일 때 — 처음 골라 둘 반(메인 수업). */
@@ -630,8 +674,11 @@ export async function saveAndQueueClassnote(
     return { ok: false, status: pick && !pick.ok ? "no_class" : undefined, error: pick && !pick.ok ? NO_SEND_CLASS_ERROR : saved.error };
   }
   if (!saved.ok || !saved.id) return { ok: false, error: saved.error ?? "보고서 저장에 실패했습니다" };
-  // 저장 단계 알림(영어 그림 자료) — 아래 어느 결과로 끝나든 함께 돌려준다(저장은 이미 끝났다).
-  const warn = saved.warning ? { warning: saved.warning } : {};
+  // 저장 단계 알림(영어 그림 자료 · 영상 과제 값을 둠) — 아래 어느 결과로 끝나든 함께 돌려준다(저장은 이미 끝났다).
+  const warn = {
+    ...(saved.warning ? { warning: saved.warning } : {}),
+    ...(saved.keptVideoHomework !== undefined ? { keptVideoHomework: saved.keptVideoHomework } : {}),
+  };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.
   // 공유 DB + 라이브 워커라 승인 전 실발송 방지(classnote_status 미변경 → 워커가 안 잡음).
@@ -772,7 +819,7 @@ export async function saveAndQueueClassnote(
           // best-effort — 위 주석 참조
         }
       }
-      return { ok: false, error: "출결 확인에 실패해 발송하지 않았습니다 — 저장은 완료됐어요. 다시 시도해 주세요" };
+      return { ok: false, error: "출결 확인에 실패해 발송하지 않았습니다 — 저장은 완료됐어요. 다시 시도해 주세요", ...warn };
     }
   }
 
@@ -886,7 +933,7 @@ export async function saveAndQueueClassnote(
     .eq("id", saved.id)
     .or(CLASSNOTE_REQUEUE_OK)
     .select("id");
-  if (error) return { ok: false, error: humanizeDbError(error.message, "발송 요청") };
+  if (error) return { ok: false, error: humanizeDbError(error.message, "발송 요청"), ...warn };
   if (!queuedRows?.length) {
     // 그새 워커가 집었거나(processing) 이미 보냈다(success) — 다시 올리지 않는다. 화면은 그 상태를 그대로 보여 준다.
     const { data: now } = await supabase.from("lesson_reports").select("classnote_status").eq("id", saved.id).maybeSingle();

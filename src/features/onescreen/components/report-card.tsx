@@ -540,6 +540,7 @@ export function ReportCard({
               checked={!!subject.videoHomework}
               onToggle={() => onVideoHomework?.(subjectName)}
               disabled={!onVideoHomework || locked}
+              studentId={student.id}
               classId={subject.classId}
               subjectKey={subject.subjectKey}
               grade={student.grade}

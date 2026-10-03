@@ -8,7 +8,7 @@ import { setVideoHomeworkMark, setVideoHomeworkMarksBulk } from "../server/actio
 import type { SubmitLinkMode } from "@/features/video-submit/link-choice";
 import type { VideoHomeworkMark, VideoHomeworkStatus } from "../types";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY, isVideoHomeworkEnabled, type VideoHomeworkPolicy } from "../policy";
-import { hidesNextCheck, type VideoHomeworkAssignments } from "../assignment";
+import { assignmentKey, assignmentOf, hidesNextCheck, type VideoHomeworkAssignments } from "../assignment";
 
 // 라벨은 강사뷰 사전(os.vh.*)에서 — 영어 강사 화면에 한국어가 새지 않게.
 const STATUS = [
@@ -27,6 +27,14 @@ type Store = {
   assignmentsKnown: boolean;
   /** '영상 첨부 링크 넣기'를 고를 수 있는 단계(0328a) — off면 토글을 그리지 않고 그 값을 저장에 싣지도 않는다. */
   submitLinkMode: SubmitLinkMode;
+  /** 오늘(checkDate) 다른 선생님이 처음 쓴 보고서 줄(`학생|날짜|반`) — 그 줄의 '영상 과제'는 잠근다(report-owner.ts 화면 겹). */
+  othersReports: ReadonlySet<string>;
+  /**
+   * 저장 관문이 "작성 선생님 값으로 두었다"고 알려 준 줄(`학생|날짜|반` → 둔 값) — 화면을 연 뒤에 남이 먼저 쓴 줄이다.
+   * 잠금에 더하고(다시 눌러 또 되돌려지지 않게) 그 값을 표시값으로 쓴다(처음 읽은 과제 값보다 새롭다).
+   */
+  keptToday: Readonly<Record<string, boolean | null>>;
+  markKept: (studentId: string, classId: string, kept: boolean | null) => void;
   change: (classId: string, studentId: string, status: VideoHomeworkStatus | null, homeworkDate?: string | null) => Promise<void>;
   /** 일괄 입력 — 여러 칸을 한 왕복으로 찍는다. 화면엔 먼저 칠하고, 서버가 받지 않은 칸만 되돌린다. 찍힌 칸 수를 돌려준다. */
   changeMany: (cells: BulkCheckCell[], status: VideoHomeworkStatus) => Promise<{ applied: number; failed: number }>;
@@ -35,11 +43,17 @@ export type BulkCheckCell = { classId: string; studentId: string; homeworkDate: 
 const Context = createContext<Store | null>(null);
 const keyOf = (classId: string, studentId: string) => `${classId}:${studentId}`;
 const EMPTY: VideoHomeworkAssignments = {};
+const NONE: readonly string[] = [];
 
-export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", children }: {
+export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VIDEO_HOMEWORK_POLICY, assignments = EMPTY, assignmentsKnown = true, submitLinkMode = "off", othersReports: othersReportList = NONE, children }: {
   initial: VideoHomeworkMark[]; checkDate: string; policy?: VideoHomeworkPolicy;
-  assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; submitLinkMode?: SubmitLinkMode; children: ReactNode;
+  assignments?: VideoHomeworkAssignments; assignmentsKnown?: boolean; submitLinkMode?: SubmitLinkMode;
+  othersReports?: readonly string[]; children: ReactNode;
 }) {
+  const othersReports = useMemo(() => new Set(othersReportList), [othersReportList]);
+  const [keptToday, setKeptToday] = useState<Readonly<Record<string, boolean | null>>>({});
+  const markKept = useCallback((studentId: string, classId: string, kept: boolean | null) =>
+    setKeptToday((current) => ({ ...current, [assignmentKey(studentId, checkDate, classId)]: kept })), [checkDate]);
   const [marks, setMarks] = useState(initial);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const pendingRef = useRef(new Set<string>());
@@ -94,8 +108,8 @@ export function VideoHomeworkProvider({ initial, checkDate, policy = DEFAULT_VID
     }
     return { applied: appliedKeys.size, failed: cells.length - appliedKeys.size };
   }, [checkDate, marks, t]);
-  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, change, changeMany }),
-    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, change, changeMany]);
+  const value = useMemo(() => ({ checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, othersReports, keptToday, markKept, change, changeMany }),
+    [checkDate, marks, pending, policy, assignments, assignmentsKnown, submitLinkMode, othersReports, keptToday, markKept, change, changeMany]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -108,6 +122,38 @@ export function useVideoHomeworkPolicy(): VideoHomeworkPolicy | null {
 export function useVideoHomeworkSaveOk(): boolean {
   const store = useContext(Context);
   return !!store && store.assignmentsKnown;
+}
+
+/**
+ * 이 줄의 '영상 과제'를 다른 선생님이 처음 썼나(작성 계정 ≠ 나) — 맞으면 토글을 잠그고 저장에 싣지 않는다
+ * (report-owner.ts 화면 겹 · 저장 관문과 DB 트리거가 한 번씩 더 막는다). 공급자 밖이면 false.
+ */
+export function useVideoHomeworkOthersReport(): (studentId: string, classId: string | null | undefined) => boolean {
+  const store = useContext(Context);
+  return useCallback(
+    (studentId: string, classId: string | null | undefined) => {
+      if (!store || !classId) return false;
+      const key = assignmentKey(studentId, store.checkDate, classId);
+      return store.othersReports.has(key) || key in store.keptToday;
+    },
+    [store],
+  );
+}
+
+/**
+ * 남이 처음 쓴 줄의 **저장된** 영상 과제 값(없음·모름은 false/null) — 잠긴 줄의 체크 표시는 내 화면 값이 아니라 이 값이다.
+ * 화면을 연 뒤에 남이 먼저 저장해 잠긴 줄은 내 화면 상태가 내가 누른 값으로 남아 있다(새로 읽은 과제 값·저장 관문이 알려 준 값이 맞다, 적대 재리뷰).
+ */
+export function useVideoHomeworkSavedToday(): (studentId: string, classId: string) => boolean | null {
+  const store = useContext(Context);
+  return useCallback(
+    (studentId: string, classId: string) => {
+      if (!store) return null;
+      const key = assignmentKey(studentId, store.checkDate, classId);
+      return key in store.keptToday ? store.keptToday[key] : assignmentOf(store.assignments, studentId, store.checkDate, classId);
+    },
+    [store],
+  );
 }
 
 /** '영상 첨부 링크 넣기' 단계 — 공급자 밖이면 off(토글 없음 · 저장에 안 실림). */

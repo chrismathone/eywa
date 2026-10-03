@@ -75,12 +75,14 @@ describe("핫패스 가드 — 로스터는 video_submit_link를 모른다", () 
 describe("배선 — 화면에서 고른 값이 저장되고, 발송 직전 판정이 그 값을 읽는다", () => {
   it("🔴 손대지 않은 행은 보내지 않는다 — 값이 있고 그 행에서 고를 수 있을 때만", () => {
     const code = stripComments(read("src", "features", "onescreen", "components", "onescreen-client.tsx"));
-    expect(code).toMatch(/videoHwSaveOk && typeof su\?\.videoSubmitLink === "boolean" &&\s*submitLinkChoosable\(/);
+    // 다른 선생님이 처음 쓴 줄도 싣지 않는다(2026-10-03, video-homework/report-owner.ts).
+    expect(code).toMatch(/videoHwSaveOk && typeof su\?\.videoSubmitLink === "boolean" && !videoHwByOther\(student\.id, su\?\.classId\) &&\s*submitLinkChoosable\(/);
     expect(code).not.toMatch(/videoSubmitLink: !!su\.videoSubmitLink/);
   });
   it("저장은 칸이 확인됐고 값이 있을 때만 싣는다", () => {
     const code = stripComments(read("src", "features", "onescreen", "server", "actions.ts"));
-    expect(code).toMatch(/videoLinkReady && typeof input\.videoSubmitLink === "boolean" \? \{ video_submit_link: input\.videoSubmitLink \}/);
+    // 작성 선생님이 아니라 영상 과제 값을 두는 저장(keptVideoHw)은 링크 선택도 적지 않는다.
+    expect(code).toMatch(/videoLinkReady && typeof input\.videoSubmitLink === "boolean" && !keptVideoHw \? \{ video_submit_link: input\.videoSubmitLink \}/);
   });
   it("표·카드 모두 토글이 있다 — '영상 과제'를 켠 행에서만 뜬다", () => {
     const grid = read("src", "features", "onescreen", "components", "grid-row.tsx");

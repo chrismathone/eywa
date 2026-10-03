@@ -704,6 +704,7 @@ export function GridBodyRow({
             checked={!!subject.videoHomework}
             onToggle={() => fields.onVideoHomework?.(student.id, subject.name)}
             disabled={rowLocked || !fields.onVideoHomework}
+            studentId={student.id}
             classId={subject.classId}
             subjectKey={subject.subjectKey}
             grade={student.grade}

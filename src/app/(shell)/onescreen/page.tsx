@@ -14,9 +14,9 @@ import { OneScreenClient } from "@/features/onescreen/components/onescreen-clien
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
 import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
-import { getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
+import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
 import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
-import { assignmentOf } from "@/features/video-homework/assignment";
+import { assignmentKey, assignmentOf } from "@/features/video-homework/assignment";
 import { getSubmitLinkUi } from "@/features/video-submit/server/link-choice-db";
 
 export const metadata = { title: "선생님 원스크린 — 에이와" };
@@ -84,14 +84,19 @@ export default async function OneScreenPage({
   const videoHwTargets = roster.students.flatMap((st) => st.subjects.flatMap((su) =>
     su.classId ? [{ classId: su.classId, studentId: st.id, homeworkDate: su.prevReport?.date ?? null }] : []));
   // 영상 첨부 링크 넣기(0328a) — 토글을 그릴 단계와 오늘 저장된 고르기. 실패·칸 미적용은 off(토글 없음 · 값 안 보냄).
-  const [loadedMarks, loadedAssignments, submitLinkUi] = await Promise.all([
+  // 다른 선생님이 처음 쓴 오늘 보고서 줄(작성 계정 0172a) — 그 줄의 '영상 과제'는 잠근다(report-owner.ts 화면 겹, 실패 = 안 잠금).
+  const [loadedMarks, loadedAssignments, submitLinkUi, othersReportKeys] = await Promise.all([
     getVideoHomeworkMarks(user.tenantId, rosterStudentIds, roster.date,
       videoHwPolicy.enabled ? videoHwTargets.flatMap((t) => (t.homeworkDate ? [t.homeworkDate] : [])) : []),
     videoHwPolicy.enabled ? getVideoHomeworkAssignments(user.tenantId, rosterStudentIds, videoHwDates) : Promise.resolve({}),
     videoHwPolicy.enabled
       ? getSubmitLinkUi(user.tenantId, rosterStudentIds, roster.date)
       : Promise.resolve({ mode: "off" as const, choices: {} }),
+    videoHwPolicy.enabled
+      ? getOthersReportKeys(user.tenantId, rosterStudentIds, roster.date, viewAs?.id ?? user.id)
+      : Promise.resolve([] as string[]),
   ]);
+  const othersReports = new Set(othersReportKeys);
   // null = 못 읽음 → 그 세션 동안 '영상 과제' 값을 보내지 않는다(저장돼 있던 '있음'을 '없음'으로 덮지 않게, 공급자 known=false).
   const videoHomeworkAssignments = loadedAssignments ?? {};
   const videoHomeworkMarks = pickLessonMarks(loadedMarks, videoHwTargets, roster.date);
@@ -99,6 +104,13 @@ export default async function OneScreenPage({
   for (const st of roster.students) {
     for (const su of st.subjects) {
       if (!su.classId) continue;
+      // 🔴 다른 선생님이 처음 쓴 줄은 **저장된 값이 이긴다** — 내 세션이 쥔 값(이 가드 전에 눌렀던 값)을 보여 주면
+      //    화면과 실제가 갈린다(저장 관문이 그 값을 적지 않는다, report-owner.ts).
+      if (othersReports.has(assignmentKey(st.id, roster.date, su.classId))) {
+        su.videoHomework = assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId) ?? undefined;
+        su.videoSubmitLink = assignmentOf(submitLinkUi.choices, st.id, roster.date, su.classId) ?? undefined;
+        continue;
+      }
       if (su.videoHomework == null) {
         const saved = assignmentOf(videoHomeworkAssignments, st.id, roster.date, su.classId);
         if (saved != null) su.videoHomework = saved;
@@ -130,7 +142,7 @@ export default async function OneScreenPage({
           "이미 찍힘"으로 건너뛰어 화면엔 찍힌 듯 보이고 새 날짜엔 기록이 없다(적대 리뷰 2026-10-02). */}
       <VideoHomeworkProvider key={roster.date} initial={videoHomeworkMarks} checkDate={roster.date}
         policy={roster.reportSettings.videoHomeworkPolicy} assignments={videoHomeworkAssignments}
-        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode}>
+        assignmentsKnown={loadedAssignments !== null} submitLinkMode={submitLinkUi.mode} othersReports={othersReportKeys}>
       <OneScreenClient
       key={roster.date}
       initial={roster.students}

@@ -56,7 +56,8 @@ describe("핫패스 가드 — 로스터는 video_homework를 모른다", () => 
   });
   it("저장은 컬럼 probe가 참이고 값이 있을 때만 싣는다", () => {
     const code = stripComments(read("src", "features", "onescreen", "server", "actions.ts"));
-    expect(code).toMatch(/videoHwReady && typeof input\.videoHomework === "boolean" \? \{ video_homework: input\.videoHomework \}/);
+    // 작성 선생님이 아닌 저장은 값을 두고 적지 않는다(keptVideoHw, 2026-10-03 report-owner.ts).
+    expect(code).toMatch(/videoHwReady && typeof input\.videoHomework === "boolean" && !keptVideoHw \? \{ video_homework: input\.videoHomework \}/);
   });
 });
 

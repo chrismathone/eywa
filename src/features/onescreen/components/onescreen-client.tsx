@@ -220,7 +220,7 @@ import { computeClientMentSource } from "../ment-source";
 import { cnLabelFor, CN_SUBJECT_KEYS, type CnMatchMap } from "../classnote-match";
 import { SendClassDialog, type SendClassAsk } from "./send-class-dialog";
 import { ClassnoteOnProvider } from "./classnote-on-context";
-import { useSubmitLinkMode, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
+import { useSubmitLinkMode, useVideoHomeworkOthersReport, useVideoHomeworkPolicy, useVideoHomeworkSaveOk, useVideoHomeworkStore } from "@/features/video-homework/components/video-homework-provider";
 import { submitLinkChoosable } from "@/features/video-submit/link-choice";
 import { planBulkVideoCheck } from "@/features/video-homework/bulk-check";
 import type { VideoHomeworkStatus } from "@/features/video-homework/types";
@@ -394,6 +394,8 @@ export function OneScreenClient({
   // 영상 숙제 정책(학원설정) — 저장할 때 '오늘 영상 과제'를 실을 행을 가른다. 공급자 밖이면 null(싣지 않음).
   const videoHwPolicy = useVideoHomeworkPolicy();
   const videoHwSaveOk = useVideoHomeworkSaveOk();
+  // 다른 선생님이 처음 쓴 줄 — '영상 과제'를 싣지 않는다(토글도 잠김, report-owner.ts 화면 겹).
+  const videoHwByOther = useVideoHomeworkOthersReport();
   const submitLinkMode = useSubmitLinkMode();
   const videoHwStore = useVideoHomeworkStore();
   const [students, setStudents] = useState<OneScreenStudent[]>(initial);
@@ -2854,11 +2856,12 @@ export function OneScreenClient({
         videoHomework: r.subject.videoHomework,
         videoSubmitLink: r.subject.videoSubmitLink,
         // 행의 토글이 그려지는 조건과 같다(VideoHomeworkToggle · VideoSubmitLinkToggle) — 토글 없는 행엔 값을 넣지 않는다.
+        // 다른 선생님이 처음 쓴 줄은 토글이 잠겨 있다 — 일괄 적용도 값을 넣지 않는다.
         videoOk:
-          videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId &&
+          videoHwSaveOk && !!videoHwPolicy && !!r.subject.classId && !videoHwByOther(r.student.id, r.subject.classId) &&
           isVideoHomeworkEnabled(videoHwPolicy, { classId: r.subject.classId, subjectKey: r.subject.subjectKey ?? "math", grade: r.student.grade }),
         linkOk:
-          videoHwSaveOk &&
+          videoHwSaveOk && !videoHwByOther(r.student.id, r.subject.classId) &&
           submitLinkChoosable(submitLinkMode, videoHwPolicy, {
             classId: r.subject.classId, subjectKey: r.subject.subjectKey, grade: r.student.grade, studentName: r.student.name }),
         // 잠긴 행(발송 완료·결석)엔 값을 밀어 넣지 않는다 — 넣으면 강사가 **지울 수 없는 값**이 남는다.
@@ -3274,13 +3277,15 @@ export function OneScreenClient({
         // 오늘 영상 과제(0308a) — 🔴 **값이 있을 때만** 싣는다(DB·세션에서 읽었거나 강사가 눌렀을 때). 손대지 않은 행을
         // false로 적으면 '모름'이 '없음'이 되어 다음 수업 검사가 조용히 사라진다(적대 리뷰 High). 정책이 끈 반·반 없는 행·
         // 과제 값을 못 읽은 세션(videoHwSaveOk=false — 저장돼 있던 '있음'을 덮는다)도 싣지 않는다.
+        // 다른 선생님이 처음 쓴 줄도 싣지 않는다(그 선생님만 바꾼다 — 서버·DB도 한 번씩 더 막는다).
         ...(videoHwSaveOk && typeof su?.videoHomework === "boolean" && su.classId && videoHwPolicy &&
+        !videoHwByOther(student.id, su.classId) &&
         isVideoHomeworkEnabled(videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey ?? "math", grade: student.grade })
           ? { videoHomework: su.videoHomework }
           : {}),
         // 영상 첨부 링크 넣기(0328a) — 같은 규약: 고른 값이 있고 그 행에서 고를 수 있을 때만 싣는다(토글이 안 보이는 행·단계는
         // 싣지 않아 저장돼 있던 값을 덮지 않는다). 영상 과제가 꺼진 행은 false로 — 과제 없이 링크만 켜진 값이 남지 않게.
-        ...(videoHwSaveOk && typeof su?.videoSubmitLink === "boolean" &&
+        ...(videoHwSaveOk && typeof su?.videoSubmitLink === "boolean" && !videoHwByOther(student.id, su?.classId) &&
         submitLinkChoosable(submitLinkMode, videoHwPolicy, { classId: su.classId, subjectKey: su.subjectKey, grade: student.grade, studentName: student.name })
           ? { videoSubmitLink: su.videoSubmitLink && su.videoHomework === true }
           : {}),
@@ -3329,6 +3334,26 @@ export function OneScreenClient({
     const cur = studentsRef.current.find((s) => s.id === studentId);
     if (cur && !cur.progressConfirmed) patch(studentId, (s) => ({ ...s, progressConfirmed: true }));
   }
+  /**
+   * 서버가 '영상 과제' 값을 작성 선생님 것으로 두었다(report-owner.ts — 나머지는 저장됨) → 화면도 그 값으로 되돌린다.
+   * 🔴 안 되돌리면 세션(임시저장)이 내 값을 쥐고 있어 새로 고쳐도 같은 값이 다시 실린다(적대 리뷰). patch가 세션도 고친다.
+   */
+  function applyKeptVideoHomework(studentId: string, subjectName: string, res: { keptVideoHomework?: boolean | null }) {
+    if (res.keptVideoHomework === undefined) return;
+    const kept = res.keptVideoHomework;
+    // 화면 겹(토글 잠금)을 지나 여기 온 건 그사이 남이 먼저 쓴 경우뿐이라 드물다 — 일괄 저장이어도 행마다 알린다.
+    toast.message(t("os.c.videoHwKept"));
+    // 그 줄을 잠금에 더한다 — 열어 두면 다시 눌러 또 되돌려진다(잠긴 줄의 체크 표시는 공급자의 저장된 값).
+    const keptClassId = studentsRef.current.find((s) => s.id === studentId)?.subjects.find((x) => x.name === subjectName)?.classId;
+    if (keptClassId) videoHwStore?.markKept(studentId, keptClassId, kept);
+    patch(studentId, (s) => ({
+      ...s,
+      subjects: s.subjects.map((x) =>
+        // 모름(null)은 화면 모양대로 undefined — 세션에서도 빠져 저장된 값(모름)을 따른다.
+        x.name === subjectName ? { ...x, videoHomework: kept ?? undefined, ...(kept !== true ? { videoSubmitLink: false } : {}) } : x,
+      ),
+    }));
+  }
   // ── 저장·발송 코어(카드·표 공용) — (학생,과목) 저장/큐잉 + reports state 반영. ──
   async function saveRecord(student: OneScreenStudent, subjectName: string) {
     // 이중 방어(진입부들이 이미 막지만 새 진입부 대비) — 호출부가 res를 바로 쓰므로 실패 객체로 반환.
@@ -3336,6 +3361,7 @@ export function OneScreenClient({
     const waited = await refreshJjBeforeOutput(student, subjectName);
     const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
     const res = await saveLessonReport(built.input);
+    applyKeptVideoHomework(student.id, subjectName, res);
     if (res.ok) {
       // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
       // 🔴 **초안은 건드리지 않는다** — 저장은 화면 값을 DB로 옮기는 일이지 멘트를 새로 쓰는 일이 아니다.
@@ -3381,6 +3407,7 @@ export function OneScreenClient({
         }
       }
     }
+    applyKeptVideoHomework(student.id, subjectName, res);
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.
     const sendClassKey =
       res.status === "board_missing"
@@ -4007,6 +4034,7 @@ export function OneScreenClient({
           return 0;
         }
         const saved = await saveLessonReport(built.input);
+        applyKeptVideoHomework(studentId, subjectName, saved);
         if (!saved.ok || !saved.id) {
           toast.error(saved.error ?? t("os.c.saveFail"));
           return 0;
