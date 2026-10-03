@@ -1,9 +1,10 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { addDays } from "@/lib/date-kst";
-import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoFingerprint, videoMatchRange, VIDEO_MATCH_WINDOW_DAYS } from "@/features/video-homework/rounds";
+import { buildLedgerRounds, roundPairKey, videoArrivedAt, videoFingerprint, videoMatchRange } from "@/features/video-homework/rounds";
 import { videoHomeworkColumnReady } from "@/features/video-homework/server/assignments";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkStatus } from "@/features/video-homework/types";
+import { SITE_HOMEWORK_DAYS } from "../site";
 
 type Db = ReturnType<typeof createAdminClient>;
 export type HomeworkPair = { studentId: string; classId: string };
@@ -21,10 +22,11 @@ const ROW_LIMIT = 500;
  * 🔑 판정은 영상 제출 현황과 **같은 함수**(`buildLedgerRounds`)다 — 숙제 = 보고서의 '영상 과제 있음'(`video_homework = true`),
  *    낸 것 = 직접 찍은 '완료' 또는 짝지어진 영상. 재료도 같은 범위(`videoMatchRange`)로 읽어야 "가장 오래된 미확인 숙제부터"의
  *    짝이 장부와 같게 나온다(범위가 다르면 사이트는 안 냈다는데 장부는 냈다고 한다).
- *  · 올릴 수 있는 숙제 = 숙제일이 오늘에서 `VIDEO_MATCH_WINDOW_DAYS`(2주) 안 — 그보다 늦게 올린 영상은 장부가 그 숙제로 세지 않는다.
+ *  · 올릴 수 있는 숙제 = 숙제일이 오늘에서 `SITE_HOMEWORK_DAYS`(7일) 안(원장 2026-10-03 *"숙제날짜 기준 7일"*) — 장부가 영상을 그 숙제로
+ *    세는 창(`VIDEO_MATCH_WINDOW_DAYS`, 2주)보다 짧아, 사이트로 올린 영상은 늘 그 숙제 칸에 닿는다.
  *  · 미수행(✕)으로 찍힌 숙제도 목록에 선다(늦게라도 올릴 수 있다 — 칸의 표시는 선생님이 찍은 기록이 그대로 이긴다).
  *    🔴 다만 **그 숙제를 골라 올린 영상이 이미 있으면 뺀다** — ✕ 칸은 영상을 받아도 완료로 바뀌지 않아(직접 찍은 기록이 이긴다),
- *    빼지 않으면 올린 숙제가 2주 내내 목록에 남아 학생이 같은 영상을 되풀이해 올린다(화면은 "이미 낸 숙제는 나오지 않는다"고 말한다).
+ *    빼지 않으면 올린 숙제가 기한 내내 목록에 남아 학생이 같은 영상을 되풀이해 올린다(화면은 "이미 낸 숙제는 나오지 않는다"고 말한다).
  * 🔴 로그인 없는 화면이 부른다 — 전부 그 지점·그 학생·그 반으로 좁힌다(admin은 RLS를 우회한다, [[#104]]).
  * `null` = 보고서의 영상 과제 칸을 읽을 수 없다(0308a 전, [[#95]]) — 호출부는 "지금은 받을 수 없다"로 닫는다(숙제 없음으로 읽지 않는다).
  * 영상 표를 못 읽으면 영상 없이 판정한다(장부와 같다 — 이미 낸 숙제가 목록에 남을 수 있을 뿐이다).
@@ -37,7 +39,7 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
   const students = [...new Set(pairs.map((p) => p.studentId))];
   const classes = [...new Set(pairs.map((p) => p.classId))];
   const wanted = new Set(pairs.map(roundPairKey));
-  const from = addDays(today, -VIDEO_MATCH_WINDOW_DAYS);
+  const from = addDays(today, -SITE_HOMEWORK_DAYS);
   const wide = videoMatchRange(from, today, today);
   const [reports, marks, videos] = await Promise.all([
     db.from("lesson_reports").select("student_id,class_id,report_date")
@@ -95,14 +97,14 @@ export async function openHomeworkDates(db: Db, tenantId: string, pairs: readonl
 }
 
 /**
- * 그날이 그 학생 × 반에 **실제로 나간 영상 숙제**이고 아직 올릴 수 있는 기간(2주) 안인가 — 업로드 시작·제출 화면이 주소의 숙제일을
+ * 그날이 그 학생 × 반에 **실제로 나간 영상 숙제**이고 아직 올릴 수 있는 기간(숙제일 + 7일) 안인가 — 업로드 시작·제출 화면이 주소의 숙제일을
  * 그대로 믿지 않고 여기서 다시 확인한다. 이미 낸 숙제여도 참이다(같은 숙제에 영상을 한 번 더 올리는 것을 막지 않는다).
  * 🔴 영상 과제 칸을 읽을 수 없으면(0308a 전·순간 오류) **던진다** — "숙제가 아니다"로 읽으면 올리기 사이트 링크가 "숙제를 다시 고르라"며
  *    학생을 돌려보낸다(조회 쪽은 같은 상황을 "지금은 받을 수 없다"로 닫는다 — 같은 원칙).
  */
 export async function isAssignedHomeworkDate(db: Db, tenantId: string, pair: HomeworkPair, date: unknown, today: string): Promise<boolean> {
   if (typeof date !== "string" || !isVideoHomeworkDate(date)) return false;
-  if (date > today || date < addDays(today, -VIDEO_MATCH_WINDOW_DAYS)) return false;
+  if (date > today || date < addDays(today, -SITE_HOMEWORK_DAYS)) return false;
   if (!(await videoHomeworkColumnReady(db))) throw new Error("영상 과제 값을 읽을 수 없습니다");
   const { data, error } = await db.from("lesson_reports").select("id")
     .eq("tenant_id", tenantId).eq("student_id", pair.studentId).eq("class_id", pair.classId)

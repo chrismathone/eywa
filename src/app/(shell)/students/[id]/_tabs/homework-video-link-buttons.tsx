@@ -3,71 +3,37 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { issueVideoSubmitLink, revokeVideoSubmitLinks } from "@/features/video-submit/server/actions";
-import { formatShortKoreanDate } from "@/lib/date-kst";
-
-type Issued = Awaited<ReturnType<typeof issueVideoSubmitLink>>;
+import { revokeVideoSubmitLinks } from "@/features/video-submit/server/actions";
 
 /**
- * 반 한 줄의 '제출 링크 복사' · '링크 끊기'. 복사 = 누를 때마다 **새 7일 링크**(만든 날 + 7일).
- * 🔑 Safari는 await 뒤 클립보드 쓰기를 막는다 — 누르는 순간 `ClipboardItem`에 "곧 올 주소"를 약속으로 넘긴다.
- *    그래도 못 쓰면 주소를 화면에 보여 손으로 복사하게 한다(링크는 이미 만들어졌다).
+ * 반 한 줄의 '링크 끊기' — 이미 나간 제출 링크(그 학생 × 반의 살아 있는 링크 전부)를 닫는다.
+ * 🔴 '제출 링크 복사'는 거뒀다(원장 2026-10-03 *"학생영상 개별링크는 더이상 생성하지않고"*) — 학생은 올리기 사이트(`/v`)나 ClassNote로 올린다.
  */
-export function HomeworkVideoLinkButtons(props: { studentId: string; classId: string; classLabel: string; hasActive: boolean }) {
+export function HomeworkVideoLinkButtons(props: { studentId: string; classId: string; classLabel: string; count: number; until: string | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
-  const [manualUrl, setManualUrl] = useState<string | null>(null);
-
-  async function copy() {
-    setMessage(null);
-    setManualUrl(null);
-    let issued: Issued | null = null;
-    const urlPromise = issueVideoSubmitLink(props.studentId, props.classId).then((result) => {
-      issued = result;
-      if (!result.ok) throw new Error(result.error);
-      return result.url;
-    });
-    try {
-      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
-        await navigator.clipboard.write([new ClipboardItem({ "text/plain": urlPromise.then((url) => new Blob([url], { type: "text/plain" })) })]);
-      } else {
-        await navigator.clipboard.writeText(await urlPromise);
-      }
-      const done = issued as Issued | null;
-      setMessage(done?.ok ? `복사했습니다 — ${formatShortKoreanDate(done.lastDay)}까지 쓸 수 있습니다.` : "복사했습니다.");
-    } catch {
-      await urlPromise.catch(() => undefined);
-      const done = issued as Issued | null;
-      if (done?.ok) {
-        setManualUrl(done.url);
-        setMessage("자동 복사가 막혔습니다. 아래 주소를 길게 눌러 복사해 주세요.");
-      } else {
-        setMessage(done && !done.ok ? done.error : "제출 링크를 만들지 못했습니다.");
-      }
-    }
-    router.refresh();
-  }
+  // 끊은 뒤엔 새로 그리지 않는다 — 다시 그리면 끊을 링크가 없는 반의 줄이 빠지면서 결과 문구도 함께 사라진다(리뷰 2026-10-03).
+  const [done, setDone] = useState(false);
 
   function revoke() {
     if (!window.confirm(`${props.classLabel} 제출 링크를 모두 끊을까요? 이미 보낸 링크로는 더 이상 올릴 수 없습니다.`)) return;
     startTransition(async () => {
       const result = await revokeVideoSubmitLinks(props.studentId, props.classId);
-      setManualUrl(null);
-      setMessage(result.ok ? `링크 ${result.revoked}개를 끊었습니다.` : result.error);
-      router.refresh();
+      setMessage(!result.ok ? result.error : result.revoked ? `링크 ${result.revoked}개를 끊었습니다.` : "끊을 링크가 없습니다(이미 끝났거나 끊겼습니다).");
+      if (result.ok) setDone(true);
+      else router.refresh();
     });
   }
 
   return (
-    <div className="flex basis-full flex-col items-end gap-1 sm:basis-auto">
-      <div className="flex gap-2">
-        <Button type="button" size="sm" disabled={pending} onClick={() => startTransition(copy)}>제출 링크 복사</Button>
-        {props.hasActive ? <Button type="button" size="sm" variant="outline" disabled={pending} onClick={revoke}>링크 끊기</Button> : null}
+    <>
+      {/* 끊은 뒤엔 '쓰는 중'을 지운다 — 결과 문구와 어긋나지 않게(새로 그리지 않으므로 여기서 바꾼다). */}
+      {done ? null : <span className="text-text-dim text-sm">{`쓰는 중 ${props.count}개 · ${props.until ?? ""}까지`}</span>}
+      <div className="flex basis-full flex-col items-end gap-1 sm:basis-auto">
+        {done ? null : <Button type="button" size="sm" variant="outline" disabled={pending} onClick={revoke}>링크 끊기</Button>}
+        {message ? <p className="text-text-dim text-xs break-keep" aria-live="polite">{message}</p> : null}
       </div>
-      {message ? <p className="text-text-dim text-xs break-keep" aria-live="polite">{message}</p> : null}
-      {manualUrl ? <input readOnly value={manualUrl} onFocus={(event) => event.currentTarget.select()} aria-label="제출 링크 주소"
-        className="border-line w-full rounded-lg border px-2 py-1 text-xs" /> : null}
-    </div>
+    </>
   );
 }

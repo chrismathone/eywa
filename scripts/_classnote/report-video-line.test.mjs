@@ -61,6 +61,17 @@ describe("본문 일치 — 세 모양 다, 엄격하게", () => {
     expect(sameReportContent(reportPostContent(SHARE, VIDEO), SHARE.replace("60", "61"))).toBe(false);
     expect(sameReportContent(null, SHARE)).toBe(false);
   });
+  it("🔴 올리기 사이트 안내 줄(`…/v`, 2026-10-03~)도 같은 보고서로 본다 — 못 알아보면 재시도가 같은 글을 또 올리고 회수가 거짓 성공한다", () => {
+    const SITE = "https://www.aywa.co.kr/v";
+    expect(reportPostContent(SHARE, SITE)).toBe(`보고서 : ${SHARE}\n영상첨부 : ${SITE}`);
+    expect(sameReportContent(reportPostContent(SHARE, SITE), SHARE)).toBe(true);
+    expect(sameReportContent(`보고서 : ${SHARE}<br>영상첨부 : ${SITE}`, SHARE)).toBe(true);
+    expect(sameReportContent(`보고서: ${SHARE}\r\n영상첨부:&nbsp;${SITE} \n`, SHARE)).toBe(true);
+    // 꼬리가 사이트 주소·토큰 주소가 아니면 우리 글이 아니다
+    for (const tail of [`${SITE}x`, `${SITE}/`, `${SITE}/짧은토큰`, `${SITE}?h=2026-10-01`, "https://www.aywa.co.kr/vv", `${SITE} 추가`])
+      expect(sameReportContent(`보고서 : ${SHARE}\n영상첨부 : ${tail}`, SHARE), tail).toBe(false);
+    expect(sameReportContent(reportPostContent(SHARE, SITE), SHARE.replace("60", "61"))).toBe(false);
+  });
   it("주소의 특수문자를 정규식으로 해석하지 않는다", () => {
     expect(sameReportContent(`https://wwwXaywa.co.kr/r/a\n영상 제출: ${VIDEO}`, "https://www.aywa.co.kr/r/a")).toBe(false);
   });
@@ -69,6 +80,11 @@ describe("본문 일치 — 세 모양 다, 엄격하게", () => {
 describe("중복 확인·교차 확인·회수가 줄 붙은 글을 알아본다(findChildReportId 한 곳)", () => {
   const page = (list) => ({ evaluate: async () => list });
   const posted = reportPostContent(SHARE, VIDEO);
+  it("올리기 사이트 안내 줄이 붙은 글도 재시도 선확인이 찾는다", async () => {
+    const site = reportPostContent(SHARE, "https://www.aywa.co.kr/v");
+    const r = await findChildReportId(page([{ id: 9, cls: 111, child: 5, content: site }]), 1, { cls: null, child: 5, content: shareUrlVariants(SHARE) });
+    expect(r).toEqual({ ok: true, id: 9 });
+  });
   it("재시도 선확인(옛·새 주소 후보)이 줄 붙은 글을 찾는다 — 못 찾으면 같은 글을 또 올린다", async () => {
     const r = await findChildReportId(page([{ id: 9, cls: 111, child: 5, content: posted }]), 1, { cls: null, child: 5, content: shareUrlVariants(SHARE) });
     expect(r).toEqual({ ok: true, id: 9 });
@@ -92,6 +108,13 @@ describe("앱 문의 — 실패해도 줄 없이 보낸다", () => {
     expect(url).toBe("https://www.aywa.co.kr/api/internal/video-submit-link");
     expect(init.headers["x-eywa-internal"]).toBe("s");
     expect(JSON.parse(init.body)).toEqual({ reportId: "r1" });
+  });
+  it("🔴 앱이 사이트 안내(site: true)를 주면 공유 주소 기준 `/v` 한 줄 — 학생마다 토큰은 없다(2026-10-03)", async () => {
+    expect(await fetchVideoSubmitLine({ ...args, fetchImpl: async () => ({ ok: true, json: async () => ({ token: null, site: true }) }) }))
+      .toBe("https://www.aywa.co.kr/v");
+    // 사이트 안내가 아니면(false·없음) 예전처럼 토큰을 본다
+    expect(await fetchVideoSubmitLine({ ...args, fetchImpl: async () => ({ ok: true, json: async () => ({ token: null, site: false }) }) })).toBeNull();
+    expect(await fetchVideoSubmitLine({ ...args, fetchImpl: async () => ({ ok: true, json: async () => ({ token: null, site: "true" }) }) })).toBeNull();
   });
   it("null 토큰·이상한 토큰·HTTP 오류·네트워크 오류·시크릿 없음은 전부 null", async () => {
     expect(await fetchVideoSubmitLine({ ...args, fetchImpl: async () => ({ ok: true, json: async () => ({ token: null }) }) })).toBeNull();

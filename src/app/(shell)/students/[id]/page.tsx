@@ -294,7 +294,7 @@ export default async function StudentDetailPage({
             back={isInternalPath(backParam) ? backParam : null}
           />
         ) : tab === "homework-videos" ? (
-          // 위 = 영상 제출 링크(복사·끊기, 쓸 수 없는 학원에선 안 그린다) · 아래 = 보관된 영상 목록.
+          // 위 = 올리기 사이트 안내 + 남은 제출 링크 끊기(쓸 수 없는 학원에선 안 그린다) · 아래 = 보관된 영상 목록.
           <div className="space-y-6">
             <HomeworkVideoLinks studentId={student.id} />
             <HomeworkVideosTab studentId={student.id} videoId={typeof sp.video === "string" ? sp.video : null} />

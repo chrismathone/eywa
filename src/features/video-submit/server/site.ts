@@ -15,8 +15,9 @@ import {
   isSiteName,
   phoneEndsWith,
   siteNameMatches,
+  SITE_LINK_LOOKBACK_DAYS,
+  siteHomeworkLastDay,
   siteLinkExpiresAt,
-  siteLinkLastDay,
   SITE_LINKS_PER_PAIR_PER_DAY,
   SITE_LOOKUPS_PER_HOUR,
   SITE_LOOKUPS_PER_HOUR_TENANT,
@@ -51,7 +52,7 @@ const NAME_NEEDED = "이름을 두 글자 이상 입력해 주세요.";
 const NOT_FOUND = "번호와 이름이 맞는 학생을 찾지 못했습니다. 번호와 이름을 다시 확인하거나 선생님께 알려 주세요.";
 /** 번호·이름은 맞지만 올릴 숙제가 없다 — "찾지 못했다"와 가른다(영상 숙제가 없는 반의 학생이 검색이 안 되는 것으로 오해하지 않게, 원장 2026-10-03). */
 const NO_HOMEWORK = "지금 올릴 영상 숙제가 없습니다. 선생님이 영상 숙제를 낸 수업이 있을 때만 여기서 올릴 수 있습니다.";
-const TOO_MANY = "이 번호로는 여기서 올릴 수 없습니다. 선생님께 영상 제출 링크를 받아 주세요.";
+const TOO_MANY = "이 번호로는 여기서 찾을 수 없습니다. 숙제 영상은 ClassNote 알림장에 올려 주세요.";
 const STALE = "시간이 지나 다시 확인이 필요합니다. 번호와 이름을 다시 입력해 주세요.";
 const PAIR_BLOCKED = "오늘은 여기서 더 열 수 없습니다. 선생님께 알려 주세요.";
 /** 끝자리 조회에서 받는 행의 상한 — 이보다 많이 걸리면 그 번호는 사이트에서 안내하지 않는다(조용히 자르지 않는다, B2). */
@@ -240,16 +241,21 @@ export async function lookupSite(input: { last4: unknown; name: unknown; ip: str
 
 /**
  * 그 학생 × 반의 최근 사이트 링크 — **오늘 만든 것**(오래된 순, 끊긴 것 포함)과, **오늘 선생님이 끊은 것**이 있는지.
- * 끊김은 만든 날이 아니라 끊은 날로 본다: 어제 사이트로 연 링크(오늘까지 살아 있다)를 오늘 끊어도 그날은 사이트로 다시 못 연다.
+ * 끊김은 만든 날이 아니라 끊은 날로 본다: 며칠 전 사이트로 연 링크(숙제 기한까지 살아 있다)를 오늘 끊어도 그날은 사이트로 다시 못 연다.
+ * 🔴 살아 있을 수 있는 링크를 전부 읽는다(`SITE_LINK_LOOKBACK_DAYS` — 링크는 숙제일 + 7일까지 산다). 하루에 만들 수 있는 수에 상한이 있어
+ *    줄 수는 작다 — 상한을 넘으면 조용히 자르지 않고 던진다(오늘 줄이 잘려 하루 상한이 새면 안 된다).
  */
+/** 한 학생 × 반의 살아 있을 수 있는 사이트 링크 줄 상한 — 하루 상한 × 거슬러 보는 날수보다 넉넉하다. */
+const PAIR_LINK_ROWS = 200;
 async function pairLinksToday(db: Db, tenantId: string, c: Candidate, day: string): Promise<{ todayIds: string[]; revokedToday: boolean }> {
   const dayStart = `${day}T00:00:00+09:00`;
   const { data, error } = await db.from("homework_video_links").select("id,created_at,revoked_at")
     .eq("tenant_id", tenantId).eq("student_id", c.studentId).eq("class_id", c.classId).eq("origin", "site")
-    .gte("created_at", `${shareExpiryDate(day, -1)}T00:00:00+09:00`)
-    .order("created_at", { ascending: true }).order("id", { ascending: true }).limit(SITE_LINKS_PER_PAIR_PER_DAY * 8);
+    .gte("created_at", `${shareExpiryDate(day, -SITE_LINK_LOOKBACK_DAYS)}T00:00:00+09:00`)
+    .order("created_at", { ascending: true }).order("id", { ascending: true }).limit(PAIR_LINK_ROWS + 1);
   if (error) throw new Error("링크 수 확인 실패");
   const rows = (data ?? []) as Array<{ id: string; created_at: string; revoked_at: string | null }>;
+  if (rows.length > PAIR_LINK_ROWS) throw new Error("링크 수 확인 범위 초과");
   const startMs = Date.parse(dayStart);
   const onOrAfter = (iso: string | null) => !!iso && Date.parse(iso) >= startMs;
   return {
@@ -261,7 +267,8 @@ async function pairLinksToday(db: Db, tenantId: string, c: Candidate, day: strin
 /**
  * 고른 숙제의 제출 링크를 만든다 — 서버가 **같은 뒷 4자리·이름으로 다시 조회**해 그 숙제가 실제로 그 안에 있을 때만(화면이 보낸 지문을 믿지 않는다).
  * 돌려주는 주소엔 고른 숙제일이 실린다(`?h=`) — 제출 화면과 업로드 시작이 그 값을 **다시 확인**해 영상을 그 숙제에 묶는다.
- * 링크는 만든 날과 다음 날까지. 한 학생 × 반이 하루에 만들 수 있는 수에 상한(링크마다 업로드 횟수 제한이 따로 있어, 새 링크로 우회하지 못하게).
+ * 링크는 그 학생 × 반의 안 낸 숙제 중 가장 늦게 끝나는 것의 기한(숙제일 + 7일)까지 — 숙제마다의 기한은 업로드 시작이 따로 막는다.
+ * 한 학생 × 반이 하루에 만들 수 있는 수에 상한(링크마다 업로드 횟수 제한이 따로 있어, 새 링크로 우회하지 못하게).
  *  · 자정을 넘겨 고른 후보(어제 날짜 지문)도 받는다 — 23:59에 조회하고 00:00에 누른 학생이 막히지 않게.
  *  · 선생님이 오늘 그 학생 × 반의 사이트 링크를 끊었으면 그날은 사이트로 다시 열지 못한다('링크 끊기'가 사이트에도 효력을 갖게).
  *  · 상한은 **만든 뒤 다시 센다** — 동시에 여러 개를 보내 세기와 만들기 사이의 틈으로 상한을 넘지 못하게. 오늘 만든 줄을 오래된 순으로
@@ -285,8 +292,12 @@ export async function openSiteLink(input: { last4: unknown; name: unknown; choic
     const before = await pairLinksToday(db, site.tenantId, picked, day);
     if (before.revokedToday) return { ok: false, code: "limit", error: PAIR_BLOCKED };
     if (before.todayIds.length >= SITE_LINKS_PER_PAIR_PER_DAY) return { ok: false, code: "limit", error: PAIR_BLOCKED };
+    // 링크는 그 학생 × 반의 안 낸 숙제 중 가장 늦게 끝나는 것까지 산다(고른 숙제가 그중 하나다).
+    const newest = choices.filter((c) => c.studentId === picked.studentId && c.classId === picked.classId)
+      .reduce((max, c) => (c.homeworkDate > max ? c.homeworkDate : max), picked.homeworkDate);
+    const lastDay = siteHomeworkLastDay(newest);
     const minted = await mintSubmitLink(db, {
-      tenantId: site.tenantId, studentId: picked.studentId, classId: picked.classId, origin: "site", baseDate: day, expiresAt: siteLinkExpiresAt(day),
+      tenantId: site.tenantId, studentId: picked.studentId, classId: picked.classId, origin: "site", baseDate: day, expiresAt: siteLinkExpiresAt(lastDay),
     });
     const after = await pairLinksToday(db, site.tenantId, picked, day);
     if (!after.todayIds.slice(0, SITE_LINKS_PER_PAIR_PER_DAY).includes(minted.id)) {
@@ -297,7 +308,7 @@ export async function openSiteLink(input: { last4: unknown; name: unknown; choic
     }
     await logActionAs({ tenantId: site.tenantId, actorName: SITE_ACTOR }, {
       action: "lesson_report_video_link_issue", targetType: "student", targetLabel: `${picked.studentName} · ${picked.className}`,
-      metadata: { studentId: picked.studentId, classId: picked.classId, origin: "site", lastDay: siteLinkLastDay(day), homeworkDate: picked.homeworkDate },
+      metadata: { studentId: picked.studentId, classId: picked.classId, origin: "site", lastDay, homeworkDate: picked.homeworkDate },
     });
     return { ok: true, url: `/v/${minted.token}?h=${picked.homeworkDate}` };
   } catch (error) {

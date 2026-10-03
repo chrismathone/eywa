@@ -122,10 +122,11 @@ describe("업로드 시작 — 정상", () => {
     Object.assign(db.tables.homework_video_links![0]!, { origin: "site", created_at: new Date().toISOString() });
     assignHomework(TODAY);
     assignHomework(addDays(TODAY, -3), { video_homework: false }); // 그날은 영상 숙제가 없었다
-    assignHomework(addDays(TODAY, -20)); // 2주가 지났다
+    assignHomework(addDays(TODAY, -20)); // 오래전 숙제
+    assignHomework(addDays(TODAY, -8)); // 숙제일 + 7일이 지났다(원장 "숙제날짜 기준 7일")
     assignHomework(addDays(TODAY, -1), { student_id: "other-student" }); // 다른 학생의 숙제
     assignHomework(addDays(TODAY, -2), { tenant_id: OTHER_T }); // 다른 지점
-    for (const bad of [undefined, null, "", "2026-13-99", "어제", addDays(TODAY, -3), addDays(TODAY, -20), addDays(TODAY, -1), addDays(TODAY, -2), addDays(TODAY, 1), 20261003]) {
+    for (const bad of [undefined, null, "", "2026-13-99", "어제", addDays(TODAY, -3), addDays(TODAY, -20), addDays(TODAY, -8), addDays(TODAY, -1), addDays(TODAY, -2), addDays(TODAY, 1), 20261003]) {
       const r = await req({ homeworkDate: bad });
       expect(r, String(bad)).toMatchObject({ ok: false, code: "invalid" });
       expect(!r.ok && r.error, String(bad)).toContain("숙제를 다시 골라 주세요");

@@ -2,18 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { C, S, T } from "./test-fixture.test-util";
 
 const m = vi.hoisted(() => ({
-  access: vi.fn(), student: vi.fn(), enrollments: vi.fn(), available: vi.fn(), mint: vi.fn(), revoke: vi.fn(), audit: vi.fn(),
+  access: vi.fn(), student: vi.fn(), enrollments: vi.fn(), available: vi.fn(), revoke: vi.fn(), audit: vi.fn(),
 }));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: m.access }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
-vi.mock("@/lib/config/app-url", () => ({ getAppUrl: () => "https://www.aywa.co.kr" }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
 vi.mock("@/features/students/server/queries", () => ({ getStudentById: m.student, getStudentEnrollments: m.enrollments }));
 vi.mock("./availability", () => ({ videoSubmitAvailability: m.available }));
-vi.mock("./links", () => ({ mintSubmitLink: m.mint, revokeSubmitLinks: m.revoke }));
+vi.mock("./links", () => ({ revokeSubmitLinks: m.revoke }));
 
-import { issueVideoSubmitLink, revokeVideoSubmitLinks } from "./actions";
+import * as actions from "./actions";
+import { revokeVideoSubmitLinks } from "./actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -21,40 +21,26 @@ beforeEach(() => {
   m.student.mockResolvedValue({ id: S, name: "류태경" });
   m.enrollments.mockResolvedValue([{ classId: C, className: "LT4", endDate: null, isTransferred: false }]);
   m.available.mockResolvedValue({ ok: true });
-  m.mint.mockResolvedValue({ token: "T".repeat(43), id: "L1", expiresAt: "x" });
   m.revoke.mockResolvedValue(2);
 });
 
-describe("학생 상세 — 제출 링크 복사·끊기", () => {
-  it("볼 수 있는 학생 × 지금 다니는 반이면 새 7일 링크(만든 날 기준)를 주고 감사로그를 남긴다", async () => {
-    const r = await issueVideoSubmitLink(S, C);
-    expect(r).toMatchObject({ ok: true, url: `https://www.aywa.co.kr/v/${"T".repeat(43)}` });
-    expect(m.mint).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tenantId: T, studentId: S, classId: C, origin: "manual", createdBy: "user-1" }));
-    expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "lesson_report_video_link_issue" }));
-  });
-  it("볼 수 없는 학생(담당 아님·다른 지점)이면 만들지 않는다", async () => {
-    m.student.mockResolvedValue(null);
-    expect(await issueVideoSubmitLink(S, C)).toMatchObject({ ok: false });
-    expect(m.mint).not.toHaveBeenCalled();
-  });
-  it("그 학생이 다니지 않는 반·끝난 수강의 반이면 만들지 않는다", async () => {
-    expect(await issueVideoSubmitLink(S, "77777777-7777-4777-8777-777777777777")).toMatchObject({ ok: false, error: "지금 다니는 반이 아닙니다." });
-    m.enrollments.mockResolvedValue([{ classId: C, className: "LT4", endDate: "2020-01-01", isTransferred: false }]);
-    expect(await issueVideoSubmitLink(S, C)).toMatchObject({ ok: false });
-    expect(m.mint).not.toHaveBeenCalled();
-  });
-  it("기능을 쓸 수 없는 학원이면 만들지 않는다", async () => {
-    m.available.mockResolvedValue({ ok: false, reason: "no_config" });
-    expect(await issueVideoSubmitLink(S, C)).toMatchObject({ ok: false });
-    expect(m.mint).not.toHaveBeenCalled();
-  });
-  it("모양이 다른 번호는 DB를 묻지 않는다", async () => {
-    expect(await issueVideoSubmitLink("x", C)).toMatchObject({ ok: false });
-    expect(m.student).not.toHaveBeenCalled();
+describe("학생 상세 — 이미 나간 제출 링크 끊기", () => {
+  it("🔴 학생마다 링크를 새로 만드는 길은 없다(원장 2026-10-03 \"개별링크는 더이상 생성하지않고\") — 이 파일엔 끊기만 남았다", () => {
+    // 링크를 만드는 곳 전수는 report-link.test.ts의 `mintSubmitLink(` 호출부 가드가 본다(올리기 사이트 하나뿐).
+    expect(Object.keys(actions)).toEqual(["revokeVideoSubmitLinks"]);
   });
   it("끊기 = 그 학생 × 반 전부, 감사로그에 개수", async () => {
     expect(await revokeVideoSubmitLinks(S, C)).toEqual({ ok: true, revoked: 2 });
     expect(m.revoke).toHaveBeenCalledWith(expect.anything(), { tenantId: T, studentId: S, classId: C, userId: "user-1" });
     expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ action: "lesson_report_video_link_revoke", metadata: expect.objectContaining({ revoked: 2 }) }));
+  });
+  it("볼 수 없는 학생·다니지 않는 반·기능을 쓸 수 없는 학원·모양이 다른 번호면 끊지 않는다", async () => {
+    m.student.mockResolvedValueOnce(null);
+    expect(await revokeVideoSubmitLinks(S, C)).toMatchObject({ ok: false });
+    expect(await revokeVideoSubmitLinks(S, "77777777-7777-4777-8777-777777777777")).toMatchObject({ ok: false, error: "지금 다니는 반이 아닙니다." });
+    m.available.mockResolvedValueOnce({ ok: false, reason: "no_config" });
+    expect(await revokeVideoSubmitLinks(S, C)).toMatchObject({ ok: false });
+    expect(await revokeVideoSubmitLinks("x", C)).toMatchObject({ ok: false });
+    expect(m.revoke).not.toHaveBeenCalled();
   });
 });

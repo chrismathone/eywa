@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import { VIDEO_SUBMIT_LINK_DAYS } from "@/features/link-expired/kinds";
+import { SITE_LINK_LOOKBACK_DAYS } from "../site";
 import { startedWhileLinkOpen, UPLOAD_NOT_READY, verifyUploadedFile, type StartedUpload } from "../upload-checks";
 import type { LinkVideoRoute } from "../route";
 import { videoSubmitAvailability } from "./availability";
@@ -140,14 +141,15 @@ export async function completeLinkUpload(input: { token: unknown; uploadId: unkn
 
 /**
  * 끝까지 올라갔는데 "끝났다"를 못 알린 업로드(폰을 닫음) — 같은 링크로 다시 시작할 때(횟수 제한을 통과한 뒤, 응답 뒤에)
- * 서버가 대신 마무리한다. 2분~7일 전 '시작됨' 업로드 중 **오래된 것부터** 3개(하루 넘게 파일이 없으면 버려진 것으로 정리돼
+ * 서버가 대신 마무리한다. 2분 전 ~ 링크가 살 수 있는 가장 긴 기간(사이트 링크 최대 8일 + 하루) 안의 '시작됨' 업로드 중 **오래된 것부터** 3개(하루 넘게 파일이 없으면 버려진 것으로 정리돼
  * 빠진다 — 버려진 행이 진짜 못 알린 업로드를 밀어내지 않게). 실패는 삼킨다.
  */
 export async function reconcileLinkUploads(db: Db, request: DriveRequest, link: LinkRow): Promise<CompletedUpload[]> {
   const now = Date.now();
   const { data, error } = await db.from("homework_video_link_uploads").select(UPLOAD_COLUMNS)
     .eq("tenant_id", link.tenant_id).eq("link_id", link.id).eq("status", "started")
-    .gte("created_at", new Date(now - VIDEO_SUBMIT_LINK_DAYS * 86_400_000).toISOString()).lt("created_at", new Date(now - 120_000).toISOString())
+    // 링크가 살 수 있는 가장 긴 기간만큼 거슬러 본다 — 사이트 링크는 숙제 기한까지(만든 날에서 길어야 8일) 산다.
+    .gte("created_at", new Date(now - Math.max(VIDEO_SUBMIT_LINK_DAYS, SITE_LINK_LOOKBACK_DAYS) * 86_400_000).toISOString()).lt("created_at", new Date(now - 120_000).toISOString())
     .order("created_at", { ascending: true }).limit(3);
   if (error || !data?.length) return [];
   const results = await Promise.all((data as UploadRow[]).map((upload) =>

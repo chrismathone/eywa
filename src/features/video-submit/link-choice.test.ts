@@ -60,9 +60,10 @@ describe("핫패스 가드 — 로스터는 video_submit_link를 모른다", () 
     expect(body).toMatch(/catch \(e\)[\s\S]*return OFF;/);
     expect(body).toContain('.eq("report_date", date)');
   });
-  it("칸 유무를 못 물어본 것(unknown)을 없음(missing)으로 읽지 않는다 — 예전 규칙으로 떨어지면 강사가 끈 링크가 붙는다", () => {
+  it("🔴 보고서 글의 영상 줄은 이제 행마다 고른 값(video_submit_link)을 보지 않는다 — 영상 과제 있음이면 올리기 사이트 안내(원장 2026-10-03)", () => {
     const code = stripComments(read("src", "features", "video-submit", "server", "report-link.ts"));
-    expect(code).toMatch(/linkColumn === "unknown"\) return null/);
+    expect(code).not.toContain("video_submit_link");
+    expect(code).toContain('submitLink: "no_column"');
   });
   it("원스크린 페이지 — 영상 숙제가 꺼진 학원은 읽지 않고, 공급자에 단계를 넘긴다", () => {
     const code = read("src", "app", "(shell)", "onescreen", "page.tsx");
@@ -100,9 +101,9 @@ describe("배선 — 화면에서 고른 값이 저장되고, 발송 직전 판�
     const code = read("src", "app", "(shell)", "onescreen", "page.tsx");
     expect(code).toContain("<VideoHomeworkProvider key={roster.date}");
   });
-  it("발송 직전 판정이 그 칸을 읽어 한 함수에 넘긴다", () => {
+  it("발송 직전 판정은 한 함수(reportGetsVideoLink)로 — 영상 과제·반·영어·취소·학원 설정이 같은 규칙", () => {
     const code = stripComments(read("src", "features", "video-submit", "server", "report-link.ts"));
-    expect(code).toContain('.select("video_submit_link")');
-    expect(code).toMatch(/submitLink: choice \?/);
+    expect(code).toContain("const eligible = reportGetsVideoLink({");
+    expect(code).toContain("siteAvailability(db)");
   });
 });

@@ -383,7 +383,8 @@ export function auditDetail(
         m.origin === "report" ? "수업보고서 발송용" : m.origin === "site" ? "올리기 사이트에서 번호·이름으로 엶" : "학생 상세에서 복사",
         // 올리기 사이트에서 고른 숙제(2026-10-03) — 어느 수업의 숙제인가.
         str(m.homeworkDate) ? `${str(m.homeworkDate)} 수업 숙제` : null,
-        str(m.lastDay) ? `${str(m.lastDay)}까지` : null,
+        // 사이트 링크는 같은 반의 가장 늦은 숙제까지 산다 — 고른 숙제의 기한으로 읽히지 않게 '링크'를 붙인다.
+        str(m.lastDay) ? (m.origin === "site" ? `링크 ${str(m.lastDay)}까지` : `${str(m.lastDay)}까지`) : null,
       );
     case "lesson_report_video_link_revoke":
       return join(ctx.nameOf(m.classId), `쓰는 중인 링크 ${num(m.revoked) ?? 0}개 끊음`);
