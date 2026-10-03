@@ -1,4 +1,5 @@
 import "server-only";
+import { lessonEndsByClass } from "../send-mark";
 import { readTrendOptOut } from "../trend-optout";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -69,6 +70,7 @@ export type TodayClass = {
    */
   subjectKey: string;
   startTime: string | null; // "16:20"
+  endTime?: string | null; // 오늘 마지막 교시 종료 시각(미발송 안내)
   studentCount: number;
   /**
    * 이 반이 **위임받은 반**인가(0173a — 결근 대체 수업). 내 담당 반이면 false.
@@ -477,6 +479,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     return emptyRoster(today, targetDate, teacherName, config);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
+  const endByClass = lessonEndsByClass(scheds);
   const startByClass = new Map<string, string | null>();
   for (const s of scheds) {
     const t = s.start_time ? String(s.start_time).slice(0, 5) : null;
@@ -1547,6 +1550,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
       subject: subjects.labelOf(c.subject),
       subjectKey: c.subject ?? "",
       startTime: startByClass.get(c.id) ?? null,
+      endTime: endByClass.get(c.id) ?? null,
       studentCount: countByClass.get(c.id) ?? 0,
       reportOptout: !!c.report_optout,
       delegated: c.delegated,

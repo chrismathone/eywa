@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StudentList } from "./student-list";
 import type { OneScreenStudent } from "../types";
@@ -8,13 +8,14 @@ afterEach(cleanup);
 describe("정규와 분리한 보강 선택", () => {
   it("같은 학생을 보강 그룹에도 표시하고 실제 학생 id와 보강 과목을 선택한다", () => {
     const onSelect = vi.fn();
-    render(<StudentList students={[student({ id: "s1", name: "학원이", className: "테스트 반", subjects: [
+    render(<StudentList students={[student({ id: "s1", name: "학원이", attendance: "결석", className: "테스트 반", subjects: [
       subject({ classId: "c1" }), subject({ name: "수학 (보강)", makeup: true, classId: null }),
     ] })]} selId="s1" selectedSubjectName="수학 (보강)" onSelect={onSelect} />);
     expect(screen.getAllByText("학원이")).toHaveLength(2);
     expect(screen.getByText("보강")).toBeTruthy();
     const rows = screen.getAllByText("학원이").map(e => e.closest("button")!);
     expect(rows.map(e => e.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    expect(within(rows[1]).queryByText("결석")).toBeNull();
     fireEvent.click(rows[1]);
     expect(onSelect).toHaveBeenCalledWith("s1", "수학 (보강)");
     fireEvent.click(rows[0]);
@@ -57,7 +58,7 @@ const student = (over: Partial<OneScreenStudent>): OneScreenStudent =>
 function sendBadge(name: string): HTMLElement | null {
   const row = screen.getByText(name).closest("button");
   const withTitle = [...(row?.querySelectorAll<HTMLElement>("[title]") ?? [])];
-  return withTitle.find((el) => /\d+\/\d+\s*$/.test(el.getAttribute("title") ?? "")) ?? null;
+  return withTitle.find((el) => /이 수업 보고서/.test(el.getAttribute("title") ?? "")) ?? null;
 }
 
 describe("StudentList 이름 옆 발송 표시", () => {
@@ -72,19 +73,20 @@ describe("StudentList 이름 옆 발송 표시", () => {
     c: { sent: 0, total: 1, label: "학부모 발송" },
   };
 
-  it("전부 나간 학생만 숫자 없는 체크(완료 표시)", () => {
+  it("전부 나간 학생은 초록 발송 완료 표시", () => {
     render(<StudentList students={students} selId="a" onSelect={vi.fn()} sendMarkById={marks} />);
     const badge = sendBadge("최주원");
     expect(badge).not.toBeNull();
-    expect(badge!.getAttribute("title")).toBe("학부모 발송 1/1");
-    expect(badge!.textContent).toBe(""); // 완료는 체크만(숫자 없음)
+    expect(badge!.getAttribute("title")).toBe("학부모 발송: 이 수업 보고서 1건 중 1건");
+    expect(badge!.textContent).toBe("발송 완료");
+    expect(badge).toHaveClass("text-green");
   });
 
   it("일부만 나갔으면 남은 수를 숫자로 밝힌다(N/M)", () => {
     render(<StudentList students={students} selId="a" onSelect={vi.fn()} sendMarkById={marks} />);
     const badge = sendBadge("안서준");
-    expect(badge?.textContent).toBe("1/2");
-    expect(badge?.getAttribute("title")).toBe("학부모 발송 1/2");
+    expect(badge?.textContent).toBe("발송 1/2");
+    expect(badge?.getAttribute("title")).toBe("학부모 발송: 이 수업 보고서 2건 중 1건");
   });
 
   it("🔴 하나도 안 나갔으면 아무 표시도 없다 — 없음=미발송(거짓 안심 금지)", () => {
@@ -103,10 +105,10 @@ describe("StudentList 이름 옆 발송 표시", () => {
         students={students}
         selId="a"
         onSelect={vi.fn()}
-        sendMarkById={{ a: { sent: 1, total: 1, label: "보고서 저장" } }}
+        sendMarkById={{ a: { sent: 1, total: 1, label: "보고서 저장", delivery: false } }}
       />,
     );
-    expect(sendBadge("최주원")?.getAttribute("title")).toBe("보고서 저장 1/1");
+    expect(sendBadge("최주원")?.getAttribute("title")).toBe("보고서 저장: 이 수업 보고서 1건 중 1건");
   });
 });
 
@@ -212,5 +214,44 @@ describe("출결 배지가 쪼개지지 않는다", () => {
     render(<StudentList students={[student({ id: "x", name: "김학생" })]} selId="x" onSelect={vi.fn()} />);
     expect(screen.queryByText("출석")).toBeNull();
     expect(badge("김학생")).toBeNull();
+  });
+});
+
+
+describe("같은 학생의 정규·특강을 왼쪽에서도 각각 선택", () => {
+  const multi = student({ id: "same", name: "학원이", progressConfirmed: true, className: "오전반", subjects: [
+    subject({ name: "수학 · 오전반", classId: "am", className: "오전반", attendanceRaw: "present" }),
+    subject({ name: "수학 · 오후특강", classId: "pm", className: "오후특강", today: "", attendanceRaw: "absent" }),
+  ] });
+  it("두 반 아래에 각각 표시하고 눌렀던 수업을 선택한다", () => {
+    const onSelect = vi.fn();
+    render(<StudentList students={[multi]} selId="same" selectedSubjectName="수학 · 오후특강"
+      onSelect={onSelect} classOrder={["오전반", "오후특강"]}
+      statusForStudent={st => ({ reportCell: "todo", sendMark: { total: 1, sent: st.subjects[0].classId === "am" ? 1 : 0, label: "학부모 발송", delivery: true } })} />);
+    const rows = screen.getAllByText("학원이").map(el => el.closest("button")!);
+    expect(rows).toHaveLength(2);
+    expect(rows.map(row => row.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    expect(within(rows[0]).getByText("발송 완료")).toHaveClass("text-green");
+    expect(within(rows[1]).queryByText("발송 완료")).toBeNull();
+    expect(within(rows[0]).queryByText("결석")).toBeNull();
+    expect(within(rows[1]).getByText("결석")).toBeTruthy();
+    expect(within(rows[0]).getByText("진도")).toHaveClass("text-primary");
+    expect(within(rows[1]).getByText("진도")).toHaveClass("text-text-faint");
+    fireEvent.click(rows[1]);
+    expect(onSelect).toHaveBeenCalledWith("same", "수학 · 오후특강");
+    fireEvent.click(rows[0]);
+    expect(onSelect).toHaveBeenLastCalledWith("same", "수학 · 오전반");
+    expect(document.querySelector("header")?.textContent).toContain("1명");
+  });
+  it("특정 반 필터를 고르면 다른 수업은 목록에 섞이지 않는다", () => {
+    render(<StudentList students={[multi]} selId="same" onSelect={vi.fn()} classFilter="오후특강" />);
+    expect(screen.getAllByText("학원이")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /오전반/ })).toBeNull();
+  });
+  it("종료 후 미발송은 글자와 보고서 칩 모두 붉게 표시한다", () => {
+    render(<StudentList students={[student({ name: "미발송학생" })]} selId="" onSelect={vi.fn()}
+      reportCellById={{ s1: "ok" }} sendMarkById={{ s1: { sent: 0, total: 1, overdue: 1, delivery: true, label: "학부모 발송" } }} />);
+    expect(screen.getByText("수업 종료 · 미발송")).toHaveClass("text-danger");
+    expect(screen.getByText("보고서")).toHaveClass("text-danger");
   });
 });

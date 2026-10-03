@@ -52,7 +52,9 @@ import type { CellState, OneScreenStudent, Subject } from "../types";
 import dynamic from "next/dynamic";
 import { OneScreenTopBar } from "./top-bar";
 import { CLASS_TAG_ALL } from "../class-tags";
-import { StudentList, type SendMark } from "./student-list";
+import { StudentList } from "./student-list";
+import { buildSendMark } from "../send-mark";
+import { SentReportNotice } from "./sent-report-notice";
 import type { TodayClass } from "../server/roster";
 import { ProgressCard } from "./progress-card";
 import { SheetSourceCard } from "./sheet-source-card";
@@ -910,17 +912,6 @@ export function OneScreenClient({
   //    '수업보고서 미발송' 반(0174a) 행도 같은 이유로 뺀다(2026-08-19) — 그 반은 발송이 **영구히** 없어서
   //    남기면 그 학생 표시가 영원히 안 채워진다.
   const sendMarkLabel = classnoteSendEnabled ? t("os.c.markSend") : t("os.c.markSave");
-  const sendMarkById: Record<string, SendMark> = {};
-  for (const s of students) {
-    const rows = s.subjects.filter((su) => su.attendanceRaw !== "absent" && !isReportOptoutRow(su));
-    const sent = rows.filter((su) => {
-      const rep = reports[s.id]?.[su.name];
-      return classnoteSendEnabled
-        ? isAlreadySent(effectiveClassnoteStatus(rep?.classnoteStatus, su.classnoteStatus))
-        : rep?.sent === true;
-    }).length;
-    sendMarkById[s.id] = { sent, total: rows.length, label: sendMarkLabel };
-  }
   /**
    * 마감 분모 = **쓸 보고서가 있는 학생**. '수업보고서 미발송' 반만 듣는 학생은 진도·테스트·보고서 입력이
    * 전부 잠겨 있어(grid.ts) 강사가 채울 수단이 없다 — 분모에 남기면 그 날의 마감이 **영영 0/N**이 된다
@@ -949,7 +940,11 @@ export function OneScreenClient({
     students: reportableStudents.length,
     progressDone: reportableStudents.filter((s) => s.progressConfirmed).length,
     testDone: reportableStudents.filter((s) => studentStatus(s, testCfg).test === "ok").length,
-    reportDone: reportableStudents.filter((s) => reportCellById[s.id] === "ok").length,
+    reportDone: reportableStudents.filter((s) => {
+      const mark = buildSendMark({ subjects: s.subjects, reports: reports[s.id], delivery: classnoteSendEnabled,
+        label: sendMarkLabel, date: activeDate, now: null, lessons: [] });
+      return mark.total > 0 && mark.sent >= mark.total;
+    }).length,
   };
 
   function patch(id: string, fn: (s: OneScreenStudent) => OneScreenStudent) {
@@ -4294,30 +4289,7 @@ export function OneScreenClient({
         </div>
       ) : null}
 
-      {/* 발송 완료 안내(2026-07-22 원장 지시) — **과거 날짜로 돌아갔을 때가 핵심**이다.
-          그 날짜는 대부분 이미 발송이 끝나 있는데, 화면은 평소와 똑같이 보이고 발송 버튼도 그냥 거기 있다
-          → "왜 안 나가지?" 하며 계속 누르거나, 반대로 눌러서 학부모 게시판에 글이 하나 더 붙는다.
-          ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없으므로, 이 날짜에 이미 나간 게 몇 건인지 먼저 말한다. */}
-      {sentRowCount > 0 ? (
-        <div className="border-primary/30 bg-primary-soft/40 text-text flex flex-wrap items-center gap-x-1.5 rounded-md border px-3 py-2 text-xs">
-          <span className="font-bold">
-            {tf("os.c.sentBannerTitle", { n: sentRowCount })}
-          </span>
-          {/* ⚠️ 탈출구를 **실제로 화면에 있는 것**으로 적는다. 2026-08-06부터 게시된 보고서에는
-              '공유 링크 재발급'이 아예 안 뜬다(게시글은 이미지라 링크를 만져도 학부모 화면이 그대로여서
-              반쪽 수습을 고를 수 없게 감췄다) — 그런데 이 안내만 옛 경로를 가리키고 있었다.
-              문구는 카드 안 배너(report-card.tsx)와 **같은 말**로 맞춘다(두 곳이 다르면 어느 쪽이 맞는지 모른다). */}
-          <span className="text-text-dim">
-            {t("os.c.sentBannerA")}
-            <b>{t("os.c.sentBannerB")}</b>
-            {t("os.c.sentBannerC")}
-            <b>{t("os.card.sentLockRecall")}</b>
-            {t("os.c.sentBannerD")}
-            <b>{t("os.card.queue")}</b>
-            {t("os.c.sentBannerE")}
-          </span>
-        </div>
-      ) : null}
+      <SentReportNotice count={sentRowCount} />
 
       {/* 다른 창/기기 동시 열림 경고(3-3) — 소프트(락 아님). 빈 창이 잘 쓴 창을 덮지는 않는다(session-write.ts). */}
       {sameDateEditors.length > 0 ? (
@@ -4509,23 +4481,20 @@ export function OneScreenClient({
             const idx = students.find(s => s.id === id)?.subjects.findIndex(su => su.name === subjectName) ?? 0;
             setCardSubject({ id, idx: Math.max(0, idx) });
           }}
-          statusForStudent={(student) => {
+          statusForStudent={(student, lessonNow) => {
             const rows = student.subjects.filter(su => !isReportOptoutRow(su));
             const rowReports = Object.fromEntries(rows.map(su => [su.name, reports[student.id]?.[su.name]]).filter(([, rep]) => !!rep));
-            const sendable = rows.filter(su => su.attendanceRaw !== "absent");
-            const sent = sendable.filter(su => classnoteSendEnabled
-              ? isAlreadySent(effectiveClassnoteStatus(reports[student.id]?.[su.name]?.classnoteStatus, su.classnoteStatus))
-              : reports[student.id]?.[su.name]?.sent === true).length;
             // ClassNote 반 매칭 — 목록 행(반 그룹)의 수학 과목 줄 기준. 보강 행(classId 없음)은 라벨 없음.
             const cnRow = rows.find(su => !!su.classId && CN_SUBJECT_KEYS.has(su.subjectKey ?? ""));
             return {
               reportCell: reportCell(rowReports, rows.length),
-              sendMark: { sent, total: sendable.length, label: sendMarkLabel },
+              sendMark: buildSendMark({ subjects: rows, reports: reports[student.id], delivery: classnoteSendEnabled,
+                label: sendMarkLabel, date: activeDate, now: lessonNow, lessons: todayClasses, showingAll }),
               cn: cnRow ? cnLabelFor(classnoteMatch, { classId: cnRow.classId, subjectKey: cnRow.subjectKey, studentId: student.id }) : null,
             };
           }}
           reportCellById={reportCellById}
-          sendMarkById={sendMarkById}
+          classFilter={activeClassFilter}
           classOrder={classTags.filter((tag) => tag !== CLASS_TAG_ALL)}
           testConfig={testCfg}
           emptyLabel={emptyByWriteFilter}
