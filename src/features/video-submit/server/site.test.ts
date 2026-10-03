@@ -185,6 +185,17 @@ describe("뒷 4자리 + 이름 조회 — 선생님이 낸 영상 숙제 중 아
     ];
     expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
   });
+  it("🔴 같은 파일을 ClassNote에 먼저, 사이트에도 올렸으면 ClassNote 사본이 채웠던 숙제가 목록에 다시 선다(지문이 영상에 실린다)", async () => {
+    const md5 = "0123456789abcdef0123456789abcdef";
+    db.tables.student_homework_videos = [
+      { id: "v1", tenant_id: T, student_id: S, post_id: 11, posted_at: "2026-10-02T09:00:00+09:00", created_at: "2026-10-02T09:03:00+09:00", md5, bytes: 34795724, route: { classId: C } },
+      { id: "v2", tenant_id: T, student_id: S, posted_at: "2026-10-02T15:00:00+09:00", created_at: "2026-10-02T15:02:00+09:00", md5, bytes: 34795724, route: { classId: C, homeworkDate: "2026-10-01" } },
+    ];
+    expect(dates(await look())).toEqual([`${label("2026-09-29")}|LT4`]);
+    // 파일이 다르면 ClassNote 영상이 9/29를 그대로 채운다
+    db.tables.student_homework_videos[0]!.md5 = "fedcba9876543210fedcba9876543210";
+    expect(await look()).toMatchObject({ ok: false, code: "no_homework" });
+  });
   it("🔴 다른 지점의 검사 기록은 이 지점 숙제를 '낸 것'으로 만들지 않는다", async () => {
     db.tables.video_homework_marks = [{ id: "m9", tenant_id: OTHER_T, class_id: C, student_id: S, check_date: "2026-10-02", homework_date: "2026-10-01", submitted_date: "2026-10-02", status: "submitted", updated_at: "2026-10-02T10:00:00+09:00" }];
     expect(dates(await look())).toHaveLength(2);

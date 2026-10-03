@@ -25,7 +25,12 @@
  *     고른 영상을 먼저 붙이고, 남은 영상(ClassNote·옛 링크)이 ②로 나머지 칸을 채운다. 단 고른 영상이 칸에 붙은 날, **그 영상보다 늦게 들어온**
  *     같은 반 × 학생의 안 고른 영상은 세지 않는다(①과 같은 뜻 — 사이트에 올린 영상을 ClassNote에도 올려도 한 번이다).
  *     🔴 **먼저 들어와 있던** 안 고른 영상은 종전대로 센다 — 나중에 올린 영상이 이미 완료(영상)로 보이던 칸을 되돌리지 않는다.
- *     앞뒤는 게시 시각이 아니라 **줄이 생긴 시각**(`arrivedAt`)으로 가른다.
+ *     앞뒤는 게시 시각이 아니라 **들어온 시각**(`arrivedAt`, `videoArrivedAt`)으로 가른다.
+ *     🔴 단 하나의 예외 = **같은 파일**(`fingerprint` — md5 + 용량이 같다): 칸에 붙은 고른 영상과 같은 반 × 학생의 같은 파일인 안 고른 영상은,
+ *     그 숙제일 이후에 올라왔으면 들어온 순서와 상관없이 세지 않는다(원장 2026-10-03 *"영상 정보를 확인할 방법이 있나? 메타데이터 등이나
+ *     용량 등으로"* → *"그렇게하자"*). 학생이 그 파일을 어느 숙제로 냈는지 밝혔으니, 먼저 ClassNote로 올라와 다른 칸을 채웠던 같은 파일은
+ *     그 칸에서 빠진다(그 칸은 정말로 아직 안 낸 숙제다). 숙제일 **전에** 이미 올라와 있던 사본은 그 숙제의 영상일 수 없어 종전대로 센다
+ *     (옛 영상을 다시 고른 것 — ②의 "숙제보다 먼저 올라온 영상은 짝이 아니다"와 같은 뜻).
  */
 import { addDays, kstDateOf } from "@/lib/date-kst";
 import type { VideoArrival, VideoHomeworkLedgerRow, VideoHomeworkMark } from "./types";
@@ -140,6 +145,19 @@ export function videoArrivedAt(row: { createdAt?: string | null; postedAt?: stri
   return times.length ? new Date(Math.min(...times)).toISOString() : null;
 }
 
+/**
+ * 같은 파일 판정용 지문 — 영상 줄의 md5(ClassNote = 연동 PC가 내려받은 원본, 사이트·링크 = Drive가 알려 준 값,
+ * 직접 넣은 Drive 파일 = 연동 PC가 훑을 때 Drive가 알려 준 값)와 용량(바이트).
+ * 둘 다 같으면 같은 파일이다. 화면까지 내려가는 값이라 md5는 앞 16자만 싣는다(같은 학생의 영상끼리 견주는 데는 충분하다).
+ * 모양이 틀리거나 비면 null — 판정하지 않는다(시각 규칙만 탄다).
+ */
+export function videoFingerprint(md5: unknown, bytes: unknown): string | null {
+  const hex = typeof md5 === "string" ? md5.trim().toLowerCase() : "";
+  const size = typeof bytes === "string" && /^\d+$/.test(bytes) ? Number(bytes) : bytes;
+  if (!/^[0-9a-f]{32}$/.test(hex) || typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0) return null;
+  return `${hex.slice(0, 16)}:${size}`;
+}
+
 /** (반 × 학생)별 회차 — 조회 기간 밖 여유분까지 넣어 짝을 맞춘 뒤, 기간 안의 회차만 돌려준다. */
 export function buildLedgerRounds(input: {
   rows: PairRow[]; marks: Iterable<VideoHomeworkMark>; videos: VideoArrival[]; fromDate: string; toDate: string;
@@ -183,6 +201,10 @@ export function buildLedgerRounds(input: {
     return Number.isNaN(at) ? Date.parse(v.postedAt) : at;
   };
   const pickedAt = new Map<string, number>();
+  // `반:학생:지문` → 그 파일을 골라 칸에 붙인 숙제일(여럿이면 가장 이른 날). 그날 이후에 올라온 같은 파일의 안 고른 사본은 세지 않는다.
+  // 🔴 반 × 학생 단위다(⓪과 같다) — 학생 단위로 넓히면 장부(기간에 회차가 있는 반만 읽는다)·올리기 사이트(그 반만 읽는다)·제출 화면이
+  //    서로 다른 고른 영상을 보게 돼 같은 칸 판정이 화면마다 갈린다.
+  const pickedFiles = new Map<string, string>();
   for (const video of picked) {
     const pair = roundPairKey({ classId: video.classId!, studentId: video.studentId });
     const day = kstDateOf(video.postedAt);
@@ -192,13 +214,23 @@ export function buildLedgerRounds(input: {
     round.videoDate = day;
     round.videoId = video.id;
     pickedAt.set(`${pair}:${day}`, Math.min(pickedAt.get(`${pair}:${day}`) ?? Infinity, arrived(video)));
+    if (video.fingerprint) {
+      const file = `${pair}:${video.fingerprint}`;
+      const since = pickedFiles.get(file);
+      if (!since || round.date < since) pickedFiles.set(file, round.date);
+    }
     if (!round.mark) Object.assign(round, { auto: true, status: "submitted", submittedDate: day });
   }
   const afterPicked = (v: VideoArrival) => {
     const at = v.classId ? pickedAt.get(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${kstDateOf(v.postedAt)}`) : undefined;
     return at !== undefined && arrived(v) >= at;
   };
-  const days = videoDays(input.videos.filter((v) => !v.homeworkDate && !afterPicked(v)));
+  const sameFile = (v: VideoArrival) => {
+    const since = v.fingerprint && v.classId ? pickedFiles.get(`${roundPairKey({ classId: v.classId, studentId: v.studentId })}:${v.fingerprint}`) : undefined;
+    const day = since ? kstDateOf(v.postedAt) : null;
+    return !!since && !!day && day >= since;
+  };
+  const days = videoDays(input.videos.filter((v) => !v.homeworkDate && !afterPicked(v) && !sameFile(v)));
   for (const [pair, rounds] of all) {
     const available = tracked.has(pair) ? days.get(pair) : undefined;
     if (!available?.length) continue;

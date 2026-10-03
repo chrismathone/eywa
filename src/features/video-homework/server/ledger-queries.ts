@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { buildVideoHomeworkLessonPairs, type LedgerClass, type LedgerEnrollment, type LedgerSchedule } from "../ledger-roster";
-import { videoArrivedAt, videoMatchRange } from "../rounds";
+import { VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "../rounds";
 import { isVideoHomeworkDate, type VideoArrival, type VideoHomeworkMark, type VideoHomeworkRosterRow, type VideoHomeworkStatus } from "../types";
 import { getAssignedVideoHomework } from "./assignments";
 import { loadBlankFacts } from "./blank-facts";
@@ -13,11 +13,12 @@ import type { BlankFacts } from "../no-homework";
 type DbMark = { class_id: string; student_id: string; check_date: string; homework_date: string | null;
   submitted_date: string | null; status: string; updated_at: string | null };
 type DbVideo = { id: string; student_id: string; post_id: number | null; posted_at: string; created_at: string | null; uploaded_at: string | null;
+  md5: string | null; bytes: number | string | null;
   class_id: string | null; homework_date: string | null };
 export type VideoHomeworkLedgerBaseRow = VideoHomeworkRosterRow & { assignedDates: string[] };
 
 /**
- * 학부모 숙제 영상(0315a `student_homework_videos`) — **반이 확인된 것만**(`route.classId`, 워커가 분류한 값)·시각들(게시·줄 생성·Drive 생성 — 들어온 순서 판정용)만 읽는다.
+ * 학부모 숙제 영상(0315a `student_homework_videos`) — **반이 확인된 것만**(`route.classId`, 워커가 분류한 값)·시각들(게시·줄 생성·Drive 생성 — 들어온 순서 판정용)·파일 지문(md5·용량 — 같은 파일 판정용)만 읽는다.
  * 🔴 표가 없거나(미적용 지점) 못 읽으면 null — 자동 집계만 빠지고 장부는 그대로 돈다(화면이 그 사실을 알린다).
  */
 async function loadClassVideos(tenantId: string, studentIds: string[], fromDate: string, toDate: string): Promise<VideoArrival[] | null> {
@@ -26,7 +27,7 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
     const db = createAdminClient();
     const rows = await fetchAllPagedInChunks<DbVideo>(studentIds, (chunk, from, to) => db
       .from("student_homework_videos")
-      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,class_id:route->>classId,homework_date:route->>homeworkDate")
+      .select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,class_id:route->>classId,homework_date:route->>homeworkDate")
       .eq("tenant_id", tenantId).in("student_id", chunk)
       .not("route->>classId", "is", null)
       .gte("posted_at", `${fromDate}T00:00:00+09:00`).lt("posted_at", `${addDays(toDate, 1)}T00:00:00+09:00`)
@@ -34,7 +35,7 @@ async function loadClassVideos(tenantId: string, studentIds: string[], fromDate:
     // 고른 숙제일(올리기 사이트)은 날짜 모양일 때만 믿는다 — 아니면 게시일순 규칙으로 센다.
     return rows.map((row) => {
       const homeworkDate = row.homework_date && isVideoHomeworkDate(row.homework_date) ? row.homework_date : null;
-      return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate,
+      return { id: row.id, studentId: row.student_id, classId: row.class_id, postedAt: row.posted_at, homeworkDate, fingerprint: videoFingerprint(row.md5, row.bytes),
         arrivedAt: videoArrivedAt({ createdAt: row.created_at, postedAt: row.posted_at, uploadedAt: row.uploaded_at, fromClassnote: row.post_id != null, picked: !!homeworkDate }) };
     });
   } catch (e) {
@@ -115,7 +116,9 @@ export async function getVideoHomeworkLedger(tenantId: string, fromDate: string,
     fetchAllPagedInChunks<{ id: string; name: string; school: string | null; grade: string | null }>(studentIds,
       (chunk, from, to) => db.from("students").select("id,name,school,grade").eq("tenant_id", tenantId)
         .in("id", chunk).order("id").range(from, to)),
-    loadClassVideos(tenantId, homeworkStudents, wideFrom, wideTo),
+    // 영상은 짝 범위 끝 + 2주까지 읽는다 — 범위 끝 무렵 숙제를 골라 그 뒤에 올린 영상이 있어야, 지난 기간을 볼 때도 같은 파일의 사본을
+    // 지금 보기와 똑같이 뺀다. 더 늦은 영상은 화면 칸에 닿지 못한다(칸은 숙제일 + 2주까지만 영상을 받는다).
+    loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS)),
     loadBlankFacts(tenantId, { classDates, ownDates: new Map([...ownDates].filter(([pair]) => shownPairs.has(pair))), enrollments }),
   ]);
   const byClass = new Map(classes.map((row) => [row.id, row]));

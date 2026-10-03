@@ -45,6 +45,11 @@ export type VideoArrival = {
    * 없으면 게시 시각으로 본다.
    */
   arrivedAt?: string | null;
+  /**
+   * 같은 파일 판정용 지문(`videoFingerprint` — md5 앞 16자 + 용량). 고른 영상과 지문이 같은 안 고른 영상은 같은 파일이라 세지 않는다.
+   * 🔑 같으면 같은 파일이지만, 다르다고 다른 영상인 것은 아니다(폰·브라우저가 다시 압축하면 달라진다). 없으면 판정하지 않는다.
+   */
+  fingerprint?: string | null;
 };
 
 export function isVideoHomeworkDate(value: string): boolean {

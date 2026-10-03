@@ -103,6 +103,16 @@ describe("배선 가드", () => {
     // 뒤로 가기로 되살아난 처음 화면이 '여는 중…'으로 잠겨 있지 않다
     expect(read("src", "app", "(share)", "v", "video-site-form.tsx")).toContain('window.addEventListener("pageshow", back);');
   });
+  it("🔴 두 로더가 영상 지문(md5·용량)과 들어온 시각 재료를 함께 읽는다 — 빠지면 같은 파일 판정·같은 날 규칙이 조용히 꺼진다(가짜 DB는 select 칸을 안 본다)", () => {
+    const ledger = read("src", "features", "video-homework", "server", "ledger-queries.ts");
+    expect(ledger).toContain('.select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,class_id:route->>classId,homework_date:route->>homeworkDate")');
+    expect(ledger).toContain("fingerprint: videoFingerprint(row.md5, row.bytes)");
+    // 지난 기간을 봐도 지금 보기와 같은 판정 — 고른 영상을 짝 범위 끝 + 2주까지 읽는다
+    expect(ledger).toContain("loadClassVideos(tenantId, homeworkStudents, wideFrom, addDays(wideTo, VIDEO_MATCH_WINDOW_DAYS))");
+    const site = read("src", "features", "video-submit", "server", "site-homework.ts");
+    expect(site).toContain('select("id,student_id,post_id,posted_at,created_at,uploaded_at,md5,bytes,route")');
+    expect(site).toContain("fingerprint: videoFingerprint(row.md5, row.bytes)");
+  });
   it("화면은 이름까지 받아 보낸다 · '올릴 숙제 없음'은 오류가 아니라 안내로 보인다", () => {
     const form = read("src", "app", "(share)", "v", "video-site-form.tsx");
     expect(form).toContain('op: "lookup", last4: digits, name');

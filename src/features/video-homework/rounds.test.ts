@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLedgerRounds, markIdentity, roundCounts, roundWriteKey, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoMatchRange } from "./rounds";
+import { buildLedgerRounds, markIdentity, roundCounts, roundWriteKey, VIDEO_MATCH_WINDOW_DAYS, videoArrivedAt, videoFingerprint, videoMatchRange } from "./rounds";
 import type { VideoArrival, VideoHomeworkMark } from "./types";
 
 const row = (studentId: string, assignedDates: string[], extra: { classId?: string; tracked?: boolean } = {}) =>
@@ -8,9 +8,10 @@ const mark = (studentId: string, homeworkDate: string | null, status: VideoHomew
   ({ classId: "A", studentId, checkDate: homeworkDate ? "2026-10-20" : "2026-10-05", homeworkDate, status, ...extra });
 // 원스크린 체크는 실제 검사 시각이 남는다 — 기본은 한참 뒤(영상 게시 이후)라 '그 검사가 본 영상' 판정이 켜지지 않는다.
 const kst = (day: string, time = "20:00") => `${day}T${time}:00+09:00`;
-const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string; homeworkDate?: string; arrivedAt?: string } = {}): VideoArrival =>
+const video = (studentId: string, day: string, extra: { classId?: string | null; time?: string; homeworkDate?: string; arrivedAt?: string; fingerprint?: string } = {}): VideoArrival =>
   ({ id: `v-${studentId}-${day}-${extra.time ?? "20:00"}`, studentId, classId: extra.classId === undefined ? "A" : extra.classId, postedAt: kst(day, extra.time),
-    ...(extra.homeworkDate ? { homeworkDate: extra.homeworkDate } : {}), ...(extra.arrivedAt ? { arrivedAt: extra.arrivedAt } : {}) });
+    ...(extra.homeworkDate ? { homeworkDate: extra.homeworkDate } : {}), ...(extra.arrivedAt ? { arrivedAt: extra.arrivedAt } : {}),
+    ...(extra.fingerprint ? { fingerprint: extra.fingerprint } : {}) });
 const build = (input: { rows: ReturnType<typeof row>[]; marks?: VideoHomeworkMark[]; videos?: VideoArrival[]; from?: string; to?: string }) =>
   buildLedgerRounds({ rows: input.rows, marks: input.marks ?? [], videos: input.videos ?? [], fromDate: input.from ?? "2026-10-01", toDate: input.to ?? "2026-10-31" });
 const view = (rounds: ReturnType<typeof build>, pair = "A:s1") =>
@@ -208,6 +209,64 @@ describe("학생이 고른 숙제(올리기 사이트, 원장 2026-10-03) — �
     // 10/6이 ✕로 찍혀 있으면 10:00 영상은 칸에 못 붙는다 → 기준은 16:00, 12:00 영상은 종전대로 10/1을 채운다
     const blocked = build({ rows, marks: [mark("s1", "2026-10-06", "missing")], videos });
     expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "missing"], ["2026-10-08", "submitted"]]);
+  });
+  it("🔴 같은 파일(지문이 같다)이면 순서·날짜와 상관없이 한 번이다 — 먼저 ClassNote로 올라와 다른 칸을 채웠던 같은 파일은 그 칸에서 빠진다", () => {
+    const rows = [row("s1", ["2026-10-01", "2026-10-06"])];
+    const F = "0123456789abcdef:34795724";
+    // 오전 ClassNote(10/1을 채웠다) → 오후 같은 파일을 사이트에서 10/6으로 골라 올렸다 → 10/1은 정말로 아직 안 낸 숙제
+    const same = build({ rows, videos: [
+      video("s1", "2026-10-07", { time: "09:00", fingerprint: F }),
+      video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+    ] });
+    expect(view(same)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    // 숙제일 이후 다른 날 올라온 같은 파일도 다시 세지 않는다 · 다른 반으로 분류된 같은 파일은 무관하다(반 × 학생 단위 — 화면마다 판정이 갈리지 않게)
+    const otherDay = build({ rows: [row("s1", ["2026-10-01", "2026-10-06"]), row("s1", ["2026-10-02"], { classId: "B" })], videos: [
+      video("s1", "2026-10-06", { time: "21:00", fingerprint: F }),
+      video("s1", "2026-10-08", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+      video("s1", "2026-10-07", { classId: "B", fingerprint: F }), // 숙제일(10/6) 뒤 — 학생 단위로 묶으면 여기서 빠진다
+    ] });
+    expect(view(otherDay)).toEqual([["2026-10-01", "unchecked", null, false], ["2026-10-06", "submitted", "2026-10-08", true]]);
+    expect(view(otherDay, "B:s1")).toEqual([["2026-10-02", "submitted", "2026-10-07", true]]);
+    // 🔴 그 숙제가 나가기 **전에** 이미 올라와 있던 사본은 그 숙제의 영상일 수 없다(옛 영상을 다시 고른 것) — 낸 칸(10/1)을 지우지 않는다
+    const reused = build({ rows, videos: [
+      video("s1", "2026-10-02", { fingerprint: F }),
+      video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+    ] });
+    expect(view(reused)).toEqual([["2026-10-01", "submitted", "2026-10-02", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    // 같은 파일을 두 숙제에 골라 올리면 가장 이른 숙제일이 기준이다(고른 영상은 학생이 고른 칸에 그대로 붙는다)
+    const twice = build({ rows: [row("s1", ["2026-10-01", "2026-10-03", "2026-10-06"])], videos: [
+      video("s1", "2026-10-04", { time: "09:00", fingerprint: F }),
+      video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+      video("s1", "2026-10-07", { time: "16:00", homeworkDate: "2026-10-03", fingerprint: F }),
+    ] });
+    expect(view(twice).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "unchecked"], ["2026-10-03", "submitted"], ["2026-10-06", "submitted"]]);
+    // 파일이 다르거나(다시 압축된 사본 포함) 지문이 없으면 종전 시각 규칙 — 먼저 들어온 영상은 그대로 센다
+    for (const fingerprint of ["fedcba9876543210:34795724", undefined]) {
+      const other = build({ rows, videos: [
+        video("s1", "2026-10-07", { time: "09:00", ...(fingerprint ? { fingerprint } : {}) }),
+        video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+      ] });
+      expect(view(other)).toEqual([["2026-10-01", "submitted", "2026-10-07", true], ["2026-10-06", "submitted", "2026-10-07", true]]);
+    }
+    // 고른 영상이 칸에 못 붙었으면(✕) 그 파일은 어디에도 안 쓰였다 — 같은 파일의 ClassNote 사본은 종전대로 센다
+    const blocked = build({ rows, marks: [mark("s1", "2026-10-06", "missing")], videos: [
+      video("s1", "2026-10-07", { time: "09:00", fingerprint: F }),
+      video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+    ] });
+    expect(view(blocked).map((r) => r.slice(0, 2))).toEqual([["2026-10-01", "submitted"], ["2026-10-06", "missing"]]);
+    // 다른 학생의 같은 지문은 무관하다
+    const twoKids = build({ rows: [row("s1", ["2026-10-06"]), row("s2", ["2026-10-01"])], videos: [
+      video("s1", "2026-10-07", { time: "15:00", homeworkDate: "2026-10-06", fingerprint: F }),
+      video("s2", "2026-10-07", { time: "09:00", fingerprint: F }),
+    ] });
+    expect(view(twoKids, "A:s2")).toEqual([["2026-10-01", "submitted", "2026-10-07", true]]);
+  });
+  it("지문 = md5 앞 16자 + 용량 · 모양이 틀리면 판정하지 않는다", () => {
+    expect(videoFingerprint("0123456789ABCDEF0123456789abcdef", 34795724)).toBe("0123456789abcdef:34795724");
+    expect(videoFingerprint(" 0123456789abcdef0123456789abcdef ", "34795724")).toBe("0123456789abcdef:34795724");
+    for (const [md5, bytes] of [[null, 1], ["0123", 1], ["0123456789abcdef0123456789abcdeg", 1], ["0123456789abcdef0123456789abcdef", 0],
+      ["0123456789abcdef0123456789abcdef", null], ["0123456789abcdef0123456789abcdef", "12a"], ["0123456789abcdef0123456789abcdef", 1.5]] as const)
+      expect(videoFingerprint(md5, bytes)).toBeNull();
   });
   it("🔴 기준은 게시 순서의 첫 영상이 아니라 가장 먼저 **들어온** 고른 영상이다", () => {
     const rows = [row("s1", ["2026-10-01", "2026-10-06", "2026-10-08"])];
