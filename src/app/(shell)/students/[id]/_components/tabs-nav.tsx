@@ -10,6 +10,7 @@ export const STUDENT_TABS = [
   // 라벨은 **`SRS` 한 단어**다(원장 2026-09-28: *"얘는 그냥 SRS로 변경"*) — 옆의 '성적' 탭과 나란히
   // 서면 "성적이 둘"로 읽혔다. 무엇을 담는지는 탭 안 제목이 말한다.
   { key: "srs", label: "SRS" },
+  { key: "todays-math", label: "오늘의수학" },
   { key: "progress", label: "진도" },
   { key: "homework-videos", label: "숙제 영상" },
   { key: "attendance", label: "출결" },
@@ -33,15 +34,17 @@ export function StudentTabsNav({
   active,
   canSeeBilling,
   showSrs,
+  showTodaysMath = false,
 }: {
   studentId: string;
   active: StudentTabKey;
   canSeeBilling: boolean;
   /** 인재원 짝이 걸린 학생인가 — 아니면 'SRS 성적' 탭을 아예 안 그린다(빈 탭을 만들지 않는다). */
   showSrs: boolean;
+  showTodaysMath?: boolean;
 }) {
   const faces: Face[] = STUDENT_TABS.filter(
-    (t) => (t.key !== "billing" || canSeeBilling) && (t.key !== "srs" || showSrs),
+    (t) => (t.key !== "billing" || canSeeBilling) && (t.key !== "srs" || showSrs) && (t.key !== "todays-math" || showTodaysMath),
   ).map((t) => ({
     key: t.key,
     label: t.label,

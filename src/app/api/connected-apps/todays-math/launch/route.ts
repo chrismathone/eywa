@@ -4,18 +4,20 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { CONNECTED_APPS } from "@/features/connected-apps/apps";
 import { getMyConnectedApps } from "@/features/connected-apps/server/visible";
 import { signSsoToken, usableSsoSecret } from "@/features/connected-apps/sso";
+import { sourceBindingForTenant, sourceControl, syncErrorResponse } from "@/features/integrations/todays-math/sync-server";
 
 /**
  * 사이드바 '연결 앱 → 오늘의 수학'의 출발점 — 로그인한 사람의 자동 로그인 표를 붙여 오늘의 수학으로 보낸다(302).
  *
- * 원장 2026-09-26 — 표의 신원은 **eywa 사용자 id(`sub`)**. 받는 쪽은 그 id가 연결된 오늘의 수학 계정에만 로그인시키고,
- * 처음이면 오늘의 수학 비밀번호로 한 번 로그인해 연결한다(자동 가입 없음, 이메일은 표시용 — [`sso.ts`](@/features/connected-apps/sso.ts)).
+ * 활성 v2 binding은 대상 서비스의 state/PKCE 시작 경로로 보낸다. 신규 교사 발급과 기존 계정 확인은 관리 원장에서 처리한다.
+ * binding 미설정 때는 기존 v1 연결을 유지한다. shadow는 대상 첫 화면으로 보내며, 관리 대상의 v1 우회는 대상에서 차단한다.
+ * v1 표의 신원은 eywa 사용자 id(`sub`)이며 이메일만으로 계정을 연결하지 않는다.
  * - 비로그인 → eywa 로그인 화면.
  * - 학생 계정 → 표 없이 오늘의 수학 첫 화면(학생은 오늘의 수학 원장 계정과 연결할 일이 없다 — 연결 시도 자체를 안 연다).
  * - 이 사람에게 링크가 안 서면 → 그 사람의 홈(`/home`). 판정은 메뉴와 같은 `getMyConnectedApps` — 지점이 꺼져 있거나
- *   (슈퍼관리자 스위치) 영어 선생님이면(담당 과목이 영어뿐, 원장 2026-09-26) 주소를 쳐도 표를 받지 못한다([[#77]]).
- * - `EYWA_SSO_SECRET`이 없거나 짧으면 → 표 없이 오늘의 수학 첫 화면(평소 로그인). 기능이 조용히 꺼질 뿐 막히지 않는다.
- * 🔴 표는 주소에 실리므로 캐시·리퍼러에 남기지 않는다(no-store · no-referrer). 수명은 60초(`sso.ts`).
+ *   영어 전담 선생님이면 주소를 쳐도 표를 받지 못한다.
+ * - v1 `EYWA_SSO_SECRET`이 없거나 짧으면 → 표 없이 오늘의 수학 첫 화면. v2 설정/제어 오류는 거절한다.
+ * 코드와 v1 표는 캐시·리퍼러에 남기지 않는다(no-store · no-referrer). 수명은 60초.
  */
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,21 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.redirect(new URL("/login", req.url), { headers: HEADERS });
   if (!(await getMyConnectedApps()).some((a) => a.feature === app.feature)) {
     return NextResponse.redirect(new URL("/home", req.url), { headers: HEADERS });
+  }
+  if (user.systemRole !== "student") {
+    try {
+      const binding = sourceBindingForTenant(user.tenantId);
+      if (binding) {
+        const control = await sourceControl(binding, user.id);
+        if (control.mode === "active") {
+          // Target creates the browser's state/PKCE cookie before source authorization.
+          const target = new URL("/api/sso/eywa/v2/start", binding.targetBaseUrl);
+          target.searchParams.set("bindingId", binding.bindingId);
+          return NextResponse.redirect(target, { headers: HEADERS });
+        }
+        return NextResponse.redirect(new URL(binding.targetBaseUrl), { headers: HEADERS });
+      }
+    } catch (error) { return syncErrorResponse(error); }
   }
   const secret = usableSsoSecret(process.env.EYWA_SSO_SECRET);
   if (!secret || user.systemRole === "student") return NextResponse.redirect(app.href, { headers: HEADERS });

@@ -6,6 +6,10 @@
   "ignoreCommand": "git rev-parse -q --verify HEAD^2 >/dev/null && exit 1 || git diff --quiet HEAD^ HEAD -- ':(exclude)docs' ':(exclude)scripts' ':(exclude).claude' ':(exclude)*.md'",
   "crons": [
     {
+      "path": "/api/cron/todays-math-sync",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/demo-refresh",
       "schedule": "5 21 * * *"
     },

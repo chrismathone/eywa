@@ -19,6 +19,7 @@ import { LicenseSection } from "./_license-section";
 import { AccountsPanel } from "./_accounts-panel";
 import { protectedAccountIds } from "@/lib/auth/protected-accounts";
 import { TenantTabs, parseTenantTab } from "./_tabs";
+import { TodaysMathSyncStatus } from "./_todays-math-sync-status";
 
 export const metadata = { title: "슈퍼관리자 · 학원 상세 — 에이와" };
 
@@ -114,13 +115,14 @@ export default async function TenantDetailPage({
 
       {/* 이름↔스위치가 한 줄 양 끝이라 넓은 화면에서 멀어지지 않게 폭을 묶는다. */}
       {tab === "license" && licenses ? (
-        <div className="lg:max-w-3xl">
+        <div className="space-y-5 lg:max-w-3xl">
           <LicenseSection
             tenantId={detail.id}
             tenantName={detail.name}
             licenses={licenses}
             enrolledCount={detail.studentCount}
           />
+          <TodaysMathSyncStatus tenantId={detail.id} />
         </div>
       ) : null}
 

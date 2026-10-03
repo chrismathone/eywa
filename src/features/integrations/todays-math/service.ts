@@ -2,6 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { kstToday } from "@/lib/date-kst";
+import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
 import {
   PROGRESS_PAGE_SIZE,
   type ProgressRow,
@@ -29,6 +31,8 @@ function one<T>(value: T | T[] | null | undefined): T | null {
 interface EnrollmentRow {
   student_id: string;
   start_date: string | null;
+  end_date: string | null;
+  is_transferred: boolean | null;
   class:
     | { id?: string; class_name?: string }
     | { id?: string; class_name?: string }[]
@@ -53,25 +57,28 @@ export async function fetchRoster(
   admin: SupabaseClient,
   tenantId: string,
 ): Promise<RosterStudent[]> {
+  const today = kstToday();
   // ① 활성 수학반의 유효 수강 — 전건은 B2(1000행 silent 절단) 위험이라 페이징.
   const enrollments = await fetchAllPaged<EnrollmentRow>((from, to) =>
     admin
       .from("enrollments")
       .select(
-        "student_id, start_date, class:class_id!inner(id, class_name, subject, is_active, closed_at, tenant_id)",
+        "student_id, start_date, end_date, is_transferred, class:class_id!inner(id, class_name, subject, is_active, closed_at, tenant_id)",
       )
       .eq("tenant_id", tenantId)
       .eq("class.tenant_id", tenantId)
       .eq("class.subject", "math")
       .eq("class.is_active", true)
       .is("class.closed_at", null)
-      .is("end_date", null)
+      .lte("start_date", today)
+      .or(`end_date.is.null,end_date.gte.${today}`)
       .order("id", { ascending: true })
       .range(from, to),
   );
 
   const byStudent = new Map<string, Array<{ id: string; name: string; startDate: string | null }>>();
   for (const row of enrollments) {
+    if (!row.start_date || !isEnrollmentOnRosterOn({ startDate: row.start_date, endDate: row.end_date, isTransferred: row.is_transferred === true }, today)) continue;
     const cls = one(row.class);
     if (!cls?.id || !cls.class_name) continue;
     const list = byStudent.get(row.student_id) ?? [];

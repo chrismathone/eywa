@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-10-03 오늘의수학 v2 원본 SQL (격리 검증 완료, 운영 미적용)
+
+`0337a_todays_math_sync_v2.sql`은 원본 제어·권한 세대·트랜잭션 outbox·동결 스냅샷·일회 SSO 코드와 서비스 역할 전용 RPC를 추가한다. Supabase CLI 2.81.3이 만든 `20261003083350_todays_math_sync_v2.sql`을 아래 alpha 규칙의 다음 번호로 옮겼다. 기존 업무 컬럼은 변경하지 않으며 최초 binding은 shadow, 구성 RPC는 기본 미리보기이다. 실제 PostgreSQL 17 격리 검증 및 재실행을 통과했고 **라이브 DB에는 적용하지 않았다**. 인터페이스·적용 전 조건·검증은 [원본 SQL 보고서](../../docs/todays-math-sync-source-sql-report.md)를 참조한다.
+
 ## 2026-09-23 수학 내신 통합
 
 `0289a_math_school_grade_alias.sql`은 공유 DB에 적용했다. 기존 수학 `midterm` 1건이 `school`로 이동했고, 충돌 0건·점수/만점/시험일 변경 0건을 확인했다.

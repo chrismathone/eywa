@@ -27,6 +27,8 @@ import { ClassesTab } from "./_tabs/classes-tab";
 import { BillingTab } from "./_tabs/billing-tab";
 import { GradesTab } from "./_tabs/grades-tab";
 import { SrsTab } from "./_tabs/srs-tab";
+import { TodaysMathTab } from "./_tabs/todays-math-tab";
+import { isFeatureOptedIn } from "@/lib/license/server";
 import { ijwConfigFor } from "@/features/ijw/server/client";
 import { getJjAccess, hasIjwLink } from "@/features/ijw/server/queries";
 import { ProgressTab } from "./_tabs/progress-tab";
@@ -89,12 +91,15 @@ export default async function StudentDetailPage({
   // 되돌린다(화면에서 감추는 것만으로는 게이트가 아니다, [[#77]]). 인재원을 부르지 않는 가벼운 판정이다.
   const jjAccess = await getJjAccess();
   const showSrs = !!jjAccess && !!ijwConfigFor(jjAccess.tenantId) && (await hasIjwLink(jjAccess.tenantId, id));
+  const showTodaysMath = await isFeatureOptedIn(user.tenantId, "todays_math");
   const tab =
     requestedTab === "billing" && !canSeeBilling
       ? "overview"
       : requestedTab === "srs" && !showSrs
         ? "overview"
-        : requestedTab;
+        : requestedTab === "todays-math" && !showTodaysMath
+          ? "overview"
+          : requestedTab;
 
   const student = await getStudentById(id);
   if (!student) {
@@ -253,6 +258,7 @@ export default async function StudentDetailPage({
         active={tab}
         canSeeBilling={canSeeBilling}
         showSrs={showSrs}
+        showTodaysMath={showTodaysMath}
       />
 
       {/* 개요·수업을 포함한 모든 탭의 첫 내용으로 예약 전부와 수정·취소를 보여준다. */}
@@ -284,6 +290,8 @@ export default async function StudentDetailPage({
             query={{ subject: sp.subject, kind: sp.kind, sort: sp.sort, dir: sp.dir, fScore: sp.fScore, fDelta: sp.fDelta, page: pageParam }} />
         ) : tab === "srs" ? (
           <SrsTab studentId={student.id} jjFrom={jjFrom} jjTo={jjTo} />
+        ) : tab === "todays-math" ? (
+          <TodaysMathTab studentId={student.id} />
         ) : tab === "progress" ? (
           <ProgressTab
             studentId={student.id}
