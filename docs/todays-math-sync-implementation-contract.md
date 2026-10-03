@@ -1,5 +1,7 @@
 # 승인된 동기화의 구현 계약
 
+**후속 사용자 지시:** [운영 확인 후 확정 정책](todays-math-sync-policy-update-2026-10-03.md)을 우선 적용한다. 이메일이 유일하게 일치하는 기존 교사는 이름 비교나 소유권 승인 없이 자동 연결·지점 이전하며 ID·비밀번호·기록을 유지한다. 해당 교사 소유의 이전 가능한 반·학생도 함께 이전한다. 학생 로그인 계정은 동기화로 생성하지 않고 지점 관리자 이상만 명시적으로 발급한다. 계정명 옆 연결/미연결 고리와 지점/사유 안내를 제공한다. 다른 신원 점유·보호 계정·수동 정지는 계속 보호한다.
+
 2026-10-03. `todays-math-sync-plan-2026-10-03.md` 승인 이후 구현자 공통 계약. 변경은 조정자에게 알린 뒤 양쪽에 동시에 반영한다. 이 문서와 TypeScript 계약은 제품 동작의 명세이며 비밀 값은 담지 않는다.
 
 사용자의 후속 지시로 자동 지점 생성이 추가되었다. 기본 설치는 `EYWA_SYNC_AUTO_JSON: {sourceBaseUrl,targetBaseUrl,keyId,controlSecret,webhookSecret,ssoSecret}[]`를 양쪽에 동일하게 설정한다. 원본 지점 UUID를 binding/targetBranch UUID로 사용하며 명시적 기존 매핑은 우선한다. 최초 cron이 ON인 지점을 등록하고 이후 토글 ON은 같은 DB 트랜잭션에서 연결/outbox를 만든다. 원본의 새 연결만 shadow 생성 후 active로 승격하며 이미 존재하는 shadow/종료는 자동 해제하지 않는다. 대상은 HMAC·고정 origin을 검증한 뒤 최신 원본 control의 ON/active/healthy와 `tenantName`을 확인하여 새 지점/연결을 원자적으로 만든다. 같은 이름의 기존 지점은 병합하지 않는다. 동시 요청은 멱등 처리한다. `tenantName`은 삭제된 원본 지점에서는 null이며 OFF 처리가 우선한다. 구체적 운영 순서는 `todays-math-sync-operations.md`를 따른다.
