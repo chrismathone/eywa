@@ -235,7 +235,7 @@ export function BulkApplyPopover({
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={4} className="z-50">
           {/* 칸이 늘어 창 높이를 넘을 수 있다 — 화면에 남은 높이까지만 쓰고 안에서 스크롤한다(적용 버튼이 화면 밖으로 나가지 않게). */}
-          <Popover.Popup className="bg-card border-line shadow-card scrollbar-thin flex max-h-(--available-height) w-[300px] flex-col gap-2.5 overflow-y-auto rounded-lg border p-3 text-xs outline-none">
+          <Popover.Popup className="bg-card border-line shadow-card flex max-h-[min(85dvh,var(--available-height))] w-[min(640px,calc(100vw-24px))] flex-col gap-2.5 overflow-hidden rounded-lg border p-3 text-xs outline-none">
             <p className="text-text-dim text-xs">
               {t("os.bulk.targetPre")}
               <span className="text-foreground font-bold">{targetCount}</span>
@@ -243,7 +243,7 @@ export function BulkApplyPopover({
               {selectedCount ? t("os.bulk.targetSel") : t("os.bulk.targetAll")}
             </p>
             {/* 값 출처 — 버튼 두 개(값 일괄 입력·맨 위 행 복사)를 합친 자리(2026-07-23 원장 "겹치는 것 같은데"). */}
-            <div className="border-line bg-background inline-flex overflow-hidden rounded-lg border">
+            <div className="border-line bg-background inline-flex shrink-0 overflow-hidden rounded-lg border">
               {(
                 [
                   { key: "input" as const, label: t("os.bulk.modeInput") },
@@ -264,8 +264,9 @@ export function BulkApplyPopover({
                 </button>
               ))}
             </div>
+            <div className="grid min-h-0 grid-cols-1 items-start gap-3 overflow-y-auto overscroll-contain sm:grid-cols-2">
             {mode === "copy" ? (
-              <div className="border-line bg-bg-soft rounded-md border px-2.5 py-2">
+              <div className="border-line bg-bg-soft rounded-md border px-2.5 py-2 sm:col-span-2">
                 <p className="text-text-dim text-xs">
                   {canCopy ? (
                     <>
@@ -417,6 +418,7 @@ export function BulkApplyPopover({
             ) : null}
             {mode === "input" ? (
               <>
+                <div className="flex flex-col gap-2.5">
                 <BulkTestFields config={fields} value={tests} onChange={setTests} />
                 <div>
                   <p className="micro text-text-faint mb-1">{t("os.col.attitude")}</p>
@@ -436,6 +438,8 @@ export function BulkApplyPopover({
                     size="lg"
                   />
                 </div>
+                </div>
+                <div className="flex flex-col gap-2.5">
                 <BulkVideoFields config={fields} value={video} onChange={setVideo} checkPlan={videoCheckPlan} />
                 <input
                   type="text"
@@ -462,9 +466,11 @@ export function BulkApplyPopover({
                   className="border-line bg-card focus:border-primary h-8 w-full rounded-lg border px-2 text-xs outline-none"
                 />
                 <p className="text-text-faint text-xs">{t("os.bulk.onlyFilled")}</p>
+                </div>
               </>
             ) : null}
-            <div className="flex items-center justify-between">
+            </div>
+            <div className="border-line flex shrink-0 items-center justify-between border-t pt-2">
               <label className="text-text-dim flex cursor-pointer items-center gap-1 text-xs">
                 <input
                   type="checkbox"

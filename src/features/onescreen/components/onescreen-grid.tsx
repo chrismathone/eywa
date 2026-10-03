@@ -260,7 +260,6 @@ export function OneScreenGrid({
           selectedAutoWritable,
         }}
         selectedKeys={selectedKeys}
-        prev={{ has: hasPrev, show: showPrev, onToggle: () => change({ hidePrevious: showPrev }) }}
         // '이전값 일괄 가져오기'도 참고행 토글과 **같은 게이트**(hasPrev) — planPrevFill은 prev가 없으면
         // 그대로 `{}`를 돌려주므로, 참고행이 0건인 화면에서 이 버튼은 눌러도 아무 일이 없는 죽은 컨트롤이다.
         // (과목 분리 2026-07-29 이후 영어 강사 화면이 정상적으로 이전 회차 0건 = 이 상태에 항상 해당.)
@@ -476,6 +475,7 @@ export function OneScreenGrid({
                   ) : null}
                   <GridBodyRow
                     groupStart={firstOfStudent && !(showPrev && !orderMode && !!row.subject.prevReport)}
+                    showClass={options.sort !== "class" || orderMode}
                     row={row}
                     checked={checked.has(row.key)}
                     onToggle={toggleRow}

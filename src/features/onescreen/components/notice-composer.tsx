@@ -25,6 +25,7 @@ import {
   type NoticeStudent,
   type OnescreenNoticeRow,
 } from "../server/notice-actions";
+import { NoticeHistory, NoticeHistoryItem } from "./notice-history";
 import { NoticeAttachmentPicker } from "./notice-attachment-picker";
 import { NoticeClassComposer, type ClassNoticeTarget } from "./notice-class-composer";
 import { loadMyClassWideNotice } from "@/features/report-admin/server/class-notice-actions";
@@ -535,17 +536,12 @@ export function NoticeComposer({
         </section>
 
         {/* 내가 보낸 공지 이력 — 대기건은 수정/삭제 */}
-        <section className="bg-card border-line shadow-card rounded-2xl border px-4 py-3">
-          <p className="text-foreground mb-2 text-sm font-bold">{t("os.n.history")}</p>
-          {rows.length === 0 ? (
-            <p className="text-text-faint text-xs">{t("os.n.historyEmpty")}</p>
-          ) : (
-            <ul className="divide-line divide-y">
-              {rows.map((r) => {
+        <NoticeHistory title={t("os.n.history")} empty={t("os.n.historyEmpty")} rows={rows}>
+              {(r) => {
                 const st = statusLabel(r.status);
                 const editing = editingId === r.id;
                 return (
-                  <li key={r.id} className="py-2">
+                  <NoticeHistoryItem title={r.body} status={<span className={st.cls}>{st.key ? t(st.key) : st.raw}{tf("os.n.rowTargets", { n: r.targetCount })}</span>}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         {editing ? (
@@ -556,12 +552,8 @@ export function NoticeComposer({
                             className={BODY}
                           />
                         ) : (
-                          <p className="text-foreground line-clamp-2 text-xs whitespace-pre-wrap">{r.body}</p>
+                          <p className="text-foreground text-xs whitespace-pre-wrap break-words">{r.body}</p>
                         )}
-                        <p className="text-text-faint mt-0.5 text-xs">
-                          <span className={st.cls}>{st.key ? t(st.key) : st.raw}</span>
-                          {tf("os.n.rowTargets", { n: r.targetCount })}
-                        </p>
                         {/* 공지 단위 사유(교차 확인 이상·전 대상 실패·회수 실패 등) — 워커가 한글로 적는다. 상태 색과 무관하게 항상 보인다. */}
                         {r.error ? <p className="text-danger mt-0.5 text-xs break-keep">{r.error}</p> : null}
                         {/* 게시된 리포트 — **학생 이름**으로 링크(원장 요청: #1 #2로는 누구 글인지 알 수 없음).
@@ -637,12 +629,10 @@ export function NoticeComposer({
                         ) : null}
                       </div>
                     </div>
-                  </li>
+                  </NoticeHistoryItem>
                 );
-              })}
-            </ul>
-          )}
-        </section>
+              }}
+        </NoticeHistory>
       </div>
     </div>
     </div>

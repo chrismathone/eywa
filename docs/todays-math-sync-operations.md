@@ -1,6 +1,6 @@
 # 에이와 ↔ 오늘의수학 운영 적용 안내
 
-2026-10-03. 사용자가 Vercel 환경변수를 직접 입력한다. 운영 주소는 **에이와 `https://aywa.co.kr` / 오늘의수학 `https://today.aywa.co.kr`**, 최초 사용 지점은 **침산**이다. 사용자의 추가 요청에 따라 **토글 ON 시 지점 자동 생성**을 기본 경로로 한다. 기존 데모 지점에 침산을 임의 연결하지 않는다. 이 문서는 비밀 값이 없는 설정·배포 안내다. 운영에는 아직 적용하지 않았다.
+2026-10-03. 사용자가 Vercel 환경변수를 직접 입력한다. 운영 주소는 **에이와 `https://www.aywa.co.kr` / 오늘의수학 `https://today.aywa.co.kr`**, 최초 사용 지점은 **침산**이다. `https://aywa.co.kr`은 www 주소로 이동하므로 서명 요청의 고정 주소에는 www를 사용한다. 사용자의 추가 요청에 따라 **토글 ON 시 지점 자동 생성**을 기본 경로로 한다. 기존 데모 지점에 침산을 임의 연결하지 않는다. 이 문서는 비밀 값이 없는 설정·배포 안내다. 실제 적용 상태는 [운영 적용 기록](todays-math-sync-production-2026-10-03.md)을 따른다.
 
 ## 이번에 제공하는 동작
 
@@ -21,14 +21,14 @@
 | `TODAYS_MATH_SYNC_WAKE_SECRET` | 필수 | 없음 | 즉시 전송을 깨우는 별도 키. DB wake 설정에도 같은 값. |
 | `CRON_SECRET` | 기존 값 유지, 없으면 생성 | 이 기능 때문에 추가하지 않음 | 기존 에이와 cron도 사용하므로 임의 교체하지 않는다. |
 
-기존 DB·Supabase·Auth 환경변수는 유지한다. 오늘의수학의 `AUTH_URL`/`NEXTAUTH_URL`은 실제 오늘의수학 운영 origin과 맞아야 한다. `NEXT_PUBLIC_` 접두사를 붙이지 않는다. Production에만 넣고 Preview/Development에 운영 연결 설정을 복사하지 않는다.
+기존 DB·Supabase·Auth 환경변수는 유지한다. 오늘의수학은 `trustHost`와 요청 주소를 사용하는 기존 운영 구성이므로, 없는 `AUTH_URL`/`NEXTAUTH_URL`을 새로 추가하지 않는다. 이미 설정된 경우에만 실제 운영 origin과의 일치를 확인한다. `AUTH_SECRET`을 변경하지 않는다. `NEXT_PUBLIC_` 접두사를 붙이지 않는다. Production에만 넣고 Preview/Development에 운영 연결 설정을 복사하지 않는다.
 
 `EYWA_SYNC_AUTO_JSON` 모양(아래는 **입력 예시이며 실제 비밀 값이 아님**):
 
 ```json
 [
   {
-    "sourceBaseUrl": "https://aywa.co.kr",
+    "sourceBaseUrl": "https://www.aywa.co.kr",
     "targetBaseUrl": "https://today.aywa.co.kr",
     "keyId": "initial-2026-10-03",
     "controlSecret": "서로 다른 무작위 비밀키 1",
@@ -43,7 +43,7 @@ origin은 경로 없이 `https://도메인`만 사용한다. 자동 연결에서
 에이와 체크아웃에서 기존 Node 24와 설치된 의존성만 사용해 파일을 준비할 수 있다:
 
 ```powershell
-node scripts/todays-math-sync-setup.mjs --automatic --source-origin=https://aywa.co.kr --target-origin=https://today.aywa.co.kr
+node scripts/todays-math-sync-setup.mjs --automatic --source-origin=https://www.aywa.co.kr --target-origin=https://today.aywa.co.kr
 ```
 
 `--new-cron`은 별도의 선택 파일 `.env.eywa-cron-if-missing.local`을 만든다. **Vercel Production에 `CRON_SECRET`이 없을 때만** 이 값을 추가한다. 로컬 파일에 값이 없다는 사실만으로 운영 값이 없다고 판단하지 않는다. **이미 운영 중인 키 회전에는 이 초기 생성기를 그대로 쓰지 않는다.** 실행할 때마다 새 키가 생긴다. 예외적으로 기존 대상 지점을 연결하는 수동 모드는 `--automatic` 대신 `--tenant=UUID --target-branch=UUID [--binding=UUID]`를 사용하고 별도의 검토 절차를 거친다.

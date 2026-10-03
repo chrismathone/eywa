@@ -49,11 +49,8 @@ export function OneScreenTopBar({
   writeFilter,
   writeCounts,
   onWriteFilter,
-  doneCount,
-  total,
   view,
   onView,
-  stats,
   todayClasses,
   noticeMode,
   academyNoticeMode,
@@ -74,16 +71,8 @@ export function OneScreenTopBar({
   writeFilter: WriteFilter; // 작성 상태 필터(전체/작성/미작성)
   writeCounts: { written: number; unwritten: number }; // 지금 조건에 맞는 학생 수(실시간)
   onWriteFilter: (f: WriteFilter) => void; // 같은 값을 다시 누르면 목록 재계산(정리)
-  doneCount: number;
-  total: number;
   view: OneScreenView;
   onView: (v: OneScreenView) => void;
-  stats: {
-    students: number;
-    progressDone: number;
-    testDone: number;
-    reportDone: number;
-  };
   todayClasses: TodayClass[];
   noticeMode: "A" | "B" | null; // 강사 본인 멘트 모드(null=학원 기본)
   academyNoticeMode: "A" | "B"; // 학원 기본 멘트 모드
@@ -266,32 +255,6 @@ export function OneScreenTopBar({
           classnoteOn={classnoteOn}
         />
         <div className="ml-auto flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <div className="text-text-dim flex items-center gap-x-2.5 text-sm">
-            <span>
-              {t("os.stat.students")}{" "}
-              <b className="text-foreground tabular">{stats.students}</b>
-            </span>
-            <span>
-              {t("os.stat.progress")}{" "}
-              <b className="text-primary tabular">{stats.progressDone}</b>
-              <span className="text-text-faint">/{stats.students}</span>
-            </span>
-            <span>
-              {t("os.stat.test")}{" "}
-              <b className="text-blue tabular">{stats.testDone}</b>
-              <span className="text-text-faint">/{stats.students}</span>
-            </span>
-            <span>
-              {t("today.report.sent")}{" "}
-              <b className="text-green tabular">{stats.reportDone}</b>
-              <span className="text-text-faint">/{stats.students}</span>
-            </span>
-            <span className="border-line rounded-full border px-1.5 py-0.5">
-              {t("os.stat.done")}{" "}
-              <b className="text-foreground tabular">{doneCount}</b>
-              <span className="text-text-faint">/{total}</span>
-            </span>
-          </div>
           {makeupAdder}
         </div>
       </div>

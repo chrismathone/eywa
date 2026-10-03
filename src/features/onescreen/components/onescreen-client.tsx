@@ -13,7 +13,7 @@ import { usePrintWindow } from "@/components/workspace/print-window";
 import { CLASS_TAGS, TODAY } from "../data";
 import { ATTITUDE } from "../attitude";
 import { CLASSNOTE_ONLY_VIEWS, type OneScreenView } from "../view";
-import { buildSubjectReport, studentStatus } from "../report";
+import { buildSubjectReport } from "../report";
 import { buildReportCommentInput } from "../report-comment";
 // 저장·미리보기 공용 필드 조립(단일 소스) — 미리보기가 발송본과 갈라지지 않게.
 import { buildExamInfo as buildExamInfoOf, buildReportFields } from "../report-fields";
@@ -923,20 +923,6 @@ export function OneScreenClient({
   //    '수업보고서 미발송' 반(0174a) 행도 같은 이유로 뺀다(2026-08-19) — 그 반은 발송이 **영구히** 없어서
   //    남기면 그 학생 표시가 영원히 안 채워진다.
   const sendMarkLabel = classnoteSendEnabled ? t("os.c.markSend") : t("os.c.markSave");
-  /**
-   * 마감 분모 = **쓸 보고서가 있는 학생**. '수업보고서 미발송' 반만 듣는 학생은 진도·테스트·보고서 입력이
-   * 전부 잠겨 있어(grid.ts) 강사가 채울 수단이 없다 — 분모에 남기면 그 날의 마감이 **영영 0/N**이 된다
-   * (#77: 행동을 재촉하는 표시는 그 행동의 실제 게이트와 같은 조건이어야 한다). 2026-08-19.
-   * ⚠️ 그 학생이 화면에서 사라지는 게 아니다 — 출결을 찍으라고 로스터에 있는 것이고, 여기서 빼는 건
-   *    **숫자의 분모**뿐이다.
-   */
-  const reportableStudents = students.filter((s) => s.subjects.some((su) => !isReportOptoutRow(su)));
-  const doneCount = reportableStudents.filter((s) => {
-    const st = studentStatus(s, testCfg);
-    return st.prog === "ok" && st.test === "ok" && reportCellById[s.id] === "ok";
-  }).length;
-
-  // 허브 통계(B2) — 오늘 마감 진행 현황.
   // 이 날짜에 **이미 학부모에게 나간** 행 수 — 상단 안내 + "왜 수정/발송이 막혔나"의 근거.
   // ⚠️ 화면 state(reports)를 본다: 로스터 스냅샷만 보면 세션 중 방금 보낸 건이 안 세어진다.
   const sentRowCount = visible.reduce(
@@ -946,17 +932,6 @@ export function OneScreenClient({
         .length,
     0,
   );
-
-  const hubStats = {
-    students: reportableStudents.length,
-    progressDone: reportableStudents.filter((s) => s.progressConfirmed).length,
-    testDone: reportableStudents.filter((s) => studentStatus(s, testCfg).test === "ok").length,
-    reportDone: reportableStudents.filter((s) => {
-      const mark = buildSendMark({ subjects: s.subjects, reports: reports[s.id], delivery: classnoteSendEnabled,
-        label: sendMarkLabel, date: activeDate, now: null, lessons: [] });
-      return mark.total > 0 && mark.sent >= mark.total;
-    }).length,
-  };
 
   function patch(id: string, fn: (s: OneScreenStudent) => OneScreenStudent) {
     setStudents((prev) => prev.map((s) => (s.id === id ? fn(s) : s)));
@@ -4566,11 +4541,8 @@ selected ? (
         writeFilter={writeFilter}
         writeCounts={writeCounts}
         onWriteFilter={changeWriteFilter}
-        doneCount={doneCount}
-        total={reportableStudents.length}
         view={view}
         onView={changeView}
-        stats={hubStats}
         todayClasses={todayClasses}
         noticeMode={noticeMode}
         academyNoticeMode={academyNoticeMode}

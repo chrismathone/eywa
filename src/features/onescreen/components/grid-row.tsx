@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { EyIcon } from "@/components/icons/aywa-icons";
-import { TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
+import { TEXTAREA_AUTOSIZE, TEXTAREA_AUTOSIZE_RESIZABLE } from "@/lib/ui/textarea";
 import { joinComment, splitComment } from "../comment-paragraphs";
 import { normalizeHomeworkPages } from "../homework-pages";
 import { resolveStudyGrade } from "../curriculum";
@@ -182,7 +182,7 @@ function GridProgressCell({
           placeholder={t("os.row.progressPh")}
           aria-label={tf("os.row.progressAria", { name: student.name, subject: su.name })}
           title={su.today.includes("\n") ? su.today : undefined}
-          className={`border-line focus:border-primary scrollbar-thin h-8 w-full resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none ${
+          className={`border-line focus:border-primary ${TEXTAREA_AUTOSIZE} min-h-8 w-full rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none ${
             locked ? "bg-bg-soft text-text-dim" : "bg-card"
           }`}
         />
@@ -225,6 +225,7 @@ export function GridBodyRow({
   nav,
   orderControls,
   groupStart = false,
+  showClass = true,
 }: {
   row: GridRow;
   checked: boolean;
@@ -247,6 +248,7 @@ export function GridBodyRow({
   // row=과목 단위 열(교재·오늘과제), studentRow=학생 단위 열(점수 — 학생 묶음 첫 행만, 중복 칸 스킵).
   nav: { row: number; studentRow?: number };
   orderControls?: React.ReactNode; // 순서 모드(3-2) — 선택 체크박스 자리에 ↑↓(학생 묶음 첫 행만)
+  showClass?: boolean;
   groupStart?: boolean; // 학생 묶음의 첫 렌더 행 — 위쪽에 굵은 구분선(참고행이 켜져 있으면 그쪽이 받는다)
 }) {
   const { student, subject, subjectIndex, key } = row;
@@ -510,7 +512,7 @@ export function GridBodyRow({
               </span>
             )
           ) : null}
-          {subject.className ? (
+          {showClass && subject.className ? (
             <span className="text-text-faint text-xs">{subject.className}</span>
           ) : null}
           <span className="text-text-faint text-xs">{student.grade}</span>
@@ -692,7 +694,7 @@ export function GridBodyRow({
             data-nav-col="homeworkToday"
             data-nav-row={nav.row}
             onKeyDown={handleGridNavKey}
-            className="border-line bg-card focus:border-primary scrollbar-thin h-8 w-full min-w-0 resize-none rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none"
+            className={`${TEXTAREA_AUTOSIZE} border-line bg-card focus:border-primary min-h-8 w-full min-w-0 rounded-sm border px-2 py-[0.3rem] text-xs leading-[1.2] outline-none`}
           />
           </div>
           {/* 🔴 '보강' 체크박스는 없앴다(원장 2026-09-30 *"옛 기능이 필요있는지 철저히 검수하고 필요없으면 제거"*).

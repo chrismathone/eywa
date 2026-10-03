@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { MakeupClassTag } from "./makeup-class-tag";
+import { TEXTAREA_AUTOSIZE } from "@/lib/ui/textarea";
 import { useClassnoteOn } from "./classnote-on-context";
 import { useLicenseOn } from "@/features/owner/operations-context";
 import { toast } from "sonner";
@@ -467,7 +468,7 @@ export function ReportCard({
       </header>
 
       {/* 카드 폭(@container)에 따라 1 → 2 → 3열. 세로로만 쌓으면 보고서 열만 끝없이 길어진다(원장 지적 07-21).
-          2열(@2xl≥672px) = **입력 전부(진도·테스트·교재·태도·과제·메모) / 문장 작성·발송**.
+          2열 = **진도·테스트·교재·태도·과제 / 특이사항·문장 작성·발송**.
           🔴 3열이었다가 2열로 되돌렸다(2026-08-05 원장): 열을 셋으로 벌리면 카드가 넓어야 해서
              **미리보기가 우측에 설 폭이 안 나온다**. 문장·발송 열은 0.78fr로 **좁게** 둔다(원장:
              "멘트 자동완성 및 첨부 섹션은 가로 너비를 좀 줄여서") — 그만큼이 미리보기 몫이 된다.
@@ -498,7 +499,7 @@ export function ReportCard({
         <div className="flex flex-col gap-3">
         {/* 오늘 진도·테스트 — **입력 열의 맨 위**. 원장 2026-08-05: *"메모 입력파트까지 1개의 섹션으로
             합쳐도 될거같고"* — 진도·테스트를 따로 세우면 열이 하나 더 필요해 미리보기가 우측에 설 폭이
-            안 나온다. 입력은 진도→테스트→교재→태도→과제→메모까지 **한 열**로 세로 흐름. */}
+            안 나온다. 입력은 진도→테스트→교재→태도→과제 순서. 특이사항은 오른쪽 생성 문구 바로 위에 둔다. */}
         {todayInputs}
 
         {/* 교재명·보강·출결 — edutrix 강사 필드 패리티(0089a). 교재명은 학부모 카드에도 표시(설정 토글). */}
@@ -602,28 +603,27 @@ export function ReportCard({
           />
         </div>
 
-        {/* 특이사항(강사 메모) — AI 멘트 입력(4c). 자유서술. 학부모엔 생성 문구만 나감. */}
-        <div className="flex flex-col gap-1.5">
-          <p className="micro text-text-faint">{t("os.card.note")}</p>
-          <textarea
-            value={cardEval.note}
-            onChange={(e) => onNote(e.target.value)}
-            placeholder={t("os.card.notePh")}
-            className="border-line focus:border-primary scrollbar-thin min-h-[52px] resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none"
-          />
-        </div>
         </div>
         </fieldset>
 
-        {/* 우측 열 — 문장 작성(멘트·추세) + 발송·첨부·공유링크. */}
+        {/* 우측 열 — 특이사항 → 자동작성 문구·추세 → 발송·첨부·공유링크. */}
         <div className="flex flex-1 flex-col gap-3">
-        {/* ⚠️ 결석이면 이 열만 잠근다(원장 2026-08-07, 표 모드와 같은 계약) — 결석 행은 발송 게이트가
-            구조적으로 막으므로 여기 쓴 문장은 어디로도 안 나간다(다 쓰고 발송에서 막히는 헛수고).
-            왼쪽 열(진도·테스트·태도·과제·메모)은 **기록**이라 결석해도 계속 입력할 수 있어야 한다. */}
+        {/* 특이사항을 옮겨도 기존과 같은 locked 판정으로 두 입력 열을 함께 보호한다. */}
         <fieldset
           disabled={locked}
           className="contents [&_input:disabled]:opacity-50 [&_textarea:disabled]:opacity-50 [&_select:disabled]:opacity-50 [&_button:disabled]:opacity-50 [&:disabled_*]:cursor-not-allowed"
         >
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`teacher-note-${student.id}`} className="micro text-text-faint">{t("os.card.note")}</label>
+          <textarea
+            id={`teacher-note-${student.id}`}
+            rows={3}
+            value={cardEval.note}
+            onChange={(e) => onNote(e.target.value)}
+            placeholder={t("os.card.notePh")}
+            className={`${TEXTAREA_AUTOSIZE} border-line focus:border-primary min-h-20 rounded-lg border bg-background px-3 py-2 text-sm leading-relaxed outline-none`}
+          />
+        </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
             <div className="flex flex-wrap items-center gap-1.5">

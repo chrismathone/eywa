@@ -212,7 +212,7 @@ export function StudentList({
        → 2026-08-06부터 넓은 화면은 **3열 한 화면 배치**라 이 카드가 열 높이를 그대로 채우고(`lg:h-full`)
        안쪽 목록만 스크롤한다(sticky 불필요 — 페이지가 아예 안 굴러간다). 좁은 화면(세로 적층)에선
        60vh까지만 차지하고 나머지는 페이지가 스크롤한다. */
-    <div className="bg-card border-line shadow-card flex flex-col rounded-2xl border lg:h-full lg:min-h-0">
+    <div className="bg-card border-line shadow-card flex flex-col overflow-hidden rounded-2xl border lg:h-full lg:min-h-0">
       <header className="border-line flex items-center justify-between gap-2 border-b px-3 py-2.5">
         <p className="micro text-text-faint">{t(options.sort === "name" ? "os.stat.students" : "os.list.caption")}</p>
         <div className="flex items-center gap-2">
@@ -231,7 +231,7 @@ export function StudentList({
           </p>
         </div>
       </header>
-      <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2 lg:max-h-none [scrollbar-gutter:stable]">
+      <div className="scrollbar-thin flex max-h-[60vh] min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2 lg:max-h-none [scrollbar-gutter:stable]">
         {students.length === 0 ? (
           <p className="text-text-faint px-2 py-6 text-center text-xs">
             {emptyLabel ?? t("os.list.empty")}
@@ -247,7 +247,7 @@ export function StudentList({
                   type="button"
                   onClick={() => toggle(key)}
                   aria-expanded={!isCollapsed}
-                  className="bg-card/95 hover:bg-bg-soft sticky top-0 z-10 flex items-center justify-between gap-1.5 rounded-sm px-1.5 py-0.5 text-left backdrop-blur transition"
+                  className="bg-card hover:bg-bg-soft border-line sticky top-0 z-10 flex items-center justify-between gap-1.5 border-b px-1.5 py-2 text-left transition-colors"
                 >
                   <span className="flex min-w-0 items-center gap-1">
                     <ChevronDown

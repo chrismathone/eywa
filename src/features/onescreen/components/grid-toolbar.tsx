@@ -43,7 +43,6 @@ export type GridBulkActions = {
 export function GridToolbar({
   counts,
   selectedKeys,
-  prev,
   actions,
   bulkGen,
   locked,
@@ -65,7 +64,6 @@ export function GridToolbar({
     selectedAutoWritable: number;
   };
   selectedKeys: string[];
-  prev: { has: boolean; show: boolean; onToggle: () => void };
   actions: GridBulkActions;
   bulkGen?: boolean;
   locked?: boolean; // 순서 모드 중 — 선택이 ↑↓로 가려져 있어 일괄 액션 버튼을 잠근다(#24)
@@ -112,17 +110,6 @@ export function GridToolbar({
         <span className="text-text-faint hidden text-xs lg:inline">
           · {t("os.bar.keyHint")}
         </span>
-      ) : null}
-      {prev.has ? (
-        <label className="text-text-dim ml-1 flex cursor-pointer items-center gap-1 text-xs">
-          <input
-            type="checkbox"
-            checked={prev.show}
-            onChange={prev.onToggle}
-            className="accent-primary size-3.5"
-          />
-          {t("os.prev.face")}
-        </label>
       ) : null}
       <DisplaySettings />
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
