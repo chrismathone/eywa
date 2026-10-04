@@ -126,12 +126,36 @@ describe("배선 가드", () => {
     expect(form).toContain('op: "open", last4: asked.last4, name: asked.name, choice: id');
     expect(form).toContain('if (res?.code === "no_homework") setNotice(res.error);');
     const route = read("src", "app", "api", "video-submit", "site", "route.ts");
-    expect(route).toContain("lookupSite({ last4: body?.last4, name: body?.name, ip })");
-    expect(route).toContain("openSiteLink({ last4: body.last4, name: body.name, choice: body.choice, ip })");
+    expect(route).toContain("lookupSite({ last4: body?.last4, name: body?.name, tenant: body?.tenant, ip })");
+    expect(route).toContain("openSiteLink({ last4: body.last4, name: body.name, choice: body.choice, tenant: body.tenant, ip })");
   });
-  it("학생 상세의 사이트 주소 안내는 그 지점이 사이트를 쓸 수 있을 때만", () => {
+  it("🔴 지점은 화면에서 고른다(주소에 넣지 않는다) — 고른 지점을 조회·열기에 함께 보내고, 서버가 다시 고르라면 그 자리에서 고르게 한다", () => {
+    const form = read("src", "app", "(share)", "v", "video-site-form.tsx");
+    // 조회는 지금 고른 지점으로, 열기는 그 조회와 같은 지점으로
+    expect(form).toContain('op: "lookup", last4: digits, name, tenant }');
+    expect(form).toContain("choice: id, tenant: asked.tenant }");
+    expect(form).toContain('if (res?.code === "branch") return branchNeeded(res);');
+    // 기억해 둔 지점은 하이드레이션 뒤에 읽는다(서버 렌더와 첫 클라 렌더가 같아야 한다)
+    expect(form).toContain("useSyncExternalStore(subscribeNever, readRemembered, () => null)");
+    // 주소로 지점을 받지 않는다 — 공개 화면·폼 어디에도 주소의 지점 값을 읽는 코드가 없다
+    const page = read("src", "app", "(share)", "v", "page.tsx");
+    for (const code of [form, page]) expect(code).not.toMatch(/searchParams|useSearchParams|location\.search/);
+    // 하나뿐이어도 그 지점을 넘긴다(요청을 그 지점에 고정) — 판정하지 못한 지점이 있으면 하나여도 고르게 한다
+    expect(page).toContain("const only = directory.sites.length === 1 && !directory.partial ? directory.sites[0]! : null;");
+    expect(page).toContain("branches={directory.sites.map((site) => ({ id: site.tenantId, name: site.branchName }))}");
+    expect(page).toContain("mustChoose={!only}");
+    // 하나뿐일 때 폼은 그 지점에 고정한다 · 서버가 다시 고르라면 지점 수와 무관하게 직접 고르게 한다
+    expect(form).toContain(": branchList[0] ?? null;");
+    expect(form).toContain("setForceChoose(true);");
+    // 서버: 공개 요청의 지점은 한 함수가 정한다 — 조회·열기 둘 다 그 함수를 지난 뒤에만 학생을 찾는다
+    const server = read("src", "features", "video-submit", "server", "site.ts");
+    expect(server.match(/await resolveSiteRequest\(db, input\.tenant\)/g)).toHaveLength(2);
+  });
+  it("학생 상세의 사이트 주소 안내는 그 지점이 사이트를 쓸 수 있을 때만 — 로그인한 계정의 지점으로 묻는다", () => {
     const code = read("src", "app", "(shell)", "students", "[id]", "_tabs", "homework-video-links.tsx");
-    expect(code).toContain("site?.ok && site.tenantId === user.tenantId");
+    expect(code).toContain("siteAvailability(undefined, user.tenantId)");
     expect(code).toContain("{siteUrl ? (");
+    // 끊긴 링크의 안내도 그 링크의 지점으로 묻는다
+    expect(read("src", "app", "(share)", "v", "[token]", "page.tsx")).toContain("siteAvailability(db, link.tenant_id)");
   });
 });

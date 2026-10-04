@@ -4,6 +4,22 @@
 작업 스케줄러 `eywa-classnote-worker`, 로그인 세션, PC 임대, 재시작 절차를 그대로 사용한다.
 웹 배포만으로 연동 PC의 코드가 바뀌지는 않는다. `scripts/_classnote` 전체 ZIP을 교체해야 한다.
 
+## 지점별 저장 폴더 지정 (2026-10-04)
+
+1. `0338a_homework_video_drive_tenant_config.sql` 적용 후 새 워커 ZIP의 `scripts/_classnote` 전체를 덮어쓰고 `발송PC-지정.bat`을 실행한다.
+2. **학원 설정 → 연동 → 숙제영상 드라이브**에서 해당 지점의 폴더 주소 또는 번호를 저장한다. 새로 지정하는 폴더는 비어 있어야 하고,
+   영상 보관 계정에 파일 추가 권한이 있어야 한다. 다른 지점과 동일하거나 상하위인 폴더는 지정할 수 없다. 공통 부모 아래의 형제 폴더는 가능하다.
+3. 발송 큐 현황에서 새 워커가 연결됐는지 확인하고, `check-video-worker.mjs`로 지점 설정의 실제 폴더가 적용됐는지 확인한다.
+   다른 폴더로 바꾸기 전에 온라인 구버전 워커가 있으면 먼저 업데이트한다.
+
+저장 위치는 지점별 DB 설정이 정본이다. 새 지점의 폴더를 PC 환경변수로 지정하지 않는다. 기존 등록부에서 가져온 지점의 환경값은
+설정 행이 없는 동안만 유지하며, 연결 해제 후 환경값으로 다시 켜지지 않는다. 기존 파일·영상 기록은 이동하거나 삭제하지 않는다.
+폴더 변경 전에 시작한 작업은 원래 폴더에서 완료하므로 기존 폴더의 접근 권한도 유지한다. 직접 제출 스캔은 새 루트만 훑는다.
+
+웹과 발송 PC는 같은 Google 보관 계정 인증을 사용한다. 인증 값 파일은 인증 세 키만 바꾸며 저장 폴더를 바꾸지 않는다.
+지점별 폴더 분리는 별도 Google 계정이나 용량 분리가 아니다. 파일의 소유 계정·공유 권한은 기존 Google 설정을 따른다.
+학생의 제출 주소는 모든 지점에서 `/v` 하나다. 사용 가능한 지점이 여러 곳이면 먼저 지점을 고르고, 한 곳이면 바로 학생 정보를 입력한다.
+
 ## 이번 학원 설정
 
 - 저장 위치: [학생동영상](https://drive.google.com/drive/folders/1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK).
@@ -57,21 +73,20 @@ node --env-file=.env.local scripts/_classnote/check-video-worker.mjs
 2. 아무 PC의 저장소 루트에서(연동 PC가 아니어도 된다):
 
    ```powershell
-   node scripts/_classnote/video-oauth-login.mjs --client=<client_secret_….json> --account=chrismathone@gmail.com --folder=1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK
+   node scripts/_classnote/video-oauth-login.mjs --client=<client_secret_….json> --account=chrismathone@gmail.com
    ```
 
-   브라우저에서 그 계정으로 허용 → 계정·폴더 쓰기 권한을 확인한 뒤 다운로드 폴더에 `aywa-video-oauth.txt`가 생긴다.
+   브라우저에서 그 계정으로 허용 → 계정을 확인한 뒤 다운로드 폴더에 `aywa-video-oauth.txt`가 생긴다.
 3. 그 파일을 연동 PC의 **다운로드 폴더**로 옮기고 `scripts/_classnote/발송PC-영상연결-OAuth.bat`을 더블클릭한다.
-   값으로 폴더를 다시 확인 → `.env.local` 백업·저장(gcloud 키는 지운다) → 값 파일 삭제 → 워커 재시작 → 적용 확인.
+   인증 확인 → `.env.local` 백업·저장(gcloud 키는 지운다) → 값 파일 삭제 → 워커 재시작 → 지점 저장 폴더 적용 확인.
    저장 뒤 재시작·확인에서 멈췄으면 같은 bat을 다시 누른다(값 파일 없이 이어 간다).
 
-설정: `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN`.
+설정: `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN`.
 우선순위는 gcloud 계정 > 갱신 토큰 > 서비스계정이다. 갱신은 `fetch`만 쓴다(연동 PC에 googleapis가 없어도 된다).
 
 - 🔴 값 파일·클라이언트 JSON을 저장소나 `scripts/_classnote`에 두지 말 것 — 워커 zip은 그 폴더를 통째로 담는다
   (zip 빌드가 발견하면 멈추고, `.gitignore`도 두 이름을 막는다).
-- 🔴 저장 폴더를 바꾸지 말 것 — 영상마다 처음 정한 폴더를 기억해서, 바뀌면 대기 중인 영상이 전부 실패한다
-  (값 파일의 폴더가 지금 것과 다르면 적용을 거절한다. 정말 바꿀 때만 `-AllowFolderChange`).
+- 저장 폴더 변경은 학원 설정의 연동 화면에서 한다. 인증 파일에 들어 있는 옛 폴더 줄은 무시하고 기존 환경값도 덮어쓰지 않는다.
 - 로그인 스크립트를 다시 돌려도 기존 연결은 그대로다. 스크립트는 허락을 자동으로 취소하지 않는다
   (취소는 그 계정의 허락 전체를 없애 연동 PC가 쓰던 토큰까지 죽인다 — 필요 없는 허락은 myaccount.google.com/permissions 에서 직접).
 - 연결이 끊기면(허락 취소·만료) 워커 로그에 `[영상] Drive 인증 실패 — …`가 찍히고 영상 작업을 집지 않는다. 1~3을 다시 하면 된다.
@@ -191,12 +206,13 @@ ClassNote에 올리기 힘든 숙제 영상을 학부모가 로그인 없이 `ht
 ### 켜는 순서 (원장)
 
 1. SQL: `0324a`(영상 출처 칸, 다른 브랜치) → `0325a_homework_video_submit_links.sql`. 둘 다 없으면 기능이 숨는다.
-2. Vercel 환경변수(Production) — 발송 PC `.env.local`과 **같은 값**:
-   `CLASSNOTE_VIDEO_TENANT_ID`(이 Drive를 쓰는 지점 번호 — 침산) · `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID` · `GOOGLE_DRIVE_CLIENT_ID` · `GOOGLE_DRIVE_CLIENT_SECRET` · `GOOGLE_DRIVE_REFRESH_TOKEN`.
-   하나라도 없거나 다른 지점이면 기능 전체가 없는 것처럼 숨는다(버튼 없음·보고서 줄 없음·링크 화면은 "지금은 제출을 받을 수 없습니다").
+2. Vercel 환경변수(Production) — 발송 PC와 같은 보관 계정의
+   `GOOGLE_DRIVE_CLIENT_ID` · `GOOGLE_DRIVE_CLIENT_SECRET` · `GOOGLE_DRIVE_REFRESH_TOKEN`을 연결한다.
+   지점별 저장 위치는 위 연동 화면에서 지정한다(`0338a` 필요). 기존 `CLASSNOTE_VIDEO_TENANT_ID` · `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`는
+   등록된 기존 지점의 이전 연결에만 사용한다. 인증·저장 위치가 준비되지 않으면 제출 화면에는 "지금은 제출을 받을 수 없습니다"가 뜬다.
 3. 재배포 → 학생 상세 '숙제 영상' 탭 위에 올리기 사이트 주소(`…/v`) 안내가 보이면 켜진 것이다.
 4. ~~보고서 글 줄~~(2026-10-03 거둠 — env 값과 무관하게 붙이지 않는다. 이력): 연동 PC에 **새 워커 zip**(`report-video-line.mjs` 포함) 적용 → Vercel `VIDEO_SUBMIT_REPORT_LINE=test`(테스트 학생 '학원이' 보고서에만) → 학원이 보드에서 확인 → `on`(조건에 맞는 모든 보고서). 없거나 다른 값이면 붙이지 않는다.
-- 🔴 이 Drive 값은 워커와 **같은 계정·같은 저장 폴더**여야 한다(다르면 같은 담임 폴더가 둘이 된다). 워커가 이 지점 영상을 한 번도 보관하지 않았으면 담임 폴더 열쇠(기관 번호)를 몰라 열리지 않는다.
+- 웹과 워커는 **같은 보관 계정**을 사용하고 같은 지점 DB 설정에서 저장 폴더를 읽는다. 워커의 기관 번호가 준비되지 않으면 제출이 열리지 않는다.
 - 🔴 업로드한 파일은 그 Google 계정의 Drive 용량을 쓴다(1GB × 학생 수).
 
 ## 직접 올리는 법 (ClassNote에 못 올린 영상, 2026-10-01)
@@ -217,7 +233,7 @@ ClassNote에 올리기 힘든 숙제 영상을 학부모가 로그인 없이 `ht
 - 붙이는 규칙(추측 금지): 이름·학교학년이 같은 학생이 **한 명**일 때만(여럿이면 그 날짜 수강생 한 명으로만 좁힌다). 퇴원생은 그 날짜에
   학원생이었던 기록이 있을 때만. 접미사만 다른 학생(`김근우`·`김근우A`)이 함께 다니면 이름만으로 고르지 않고 반으로만 가른다.
   반 칸을 적었는데 그 날짜에 그 이름의 반을 다닌 기록이 없으면 반 없이 넣지 않는다(반 이동은 이동일부터 새 반, 휴원·종강 뒤는 아님).
-- 못 붙인 파일은 수업보고서 → **영상숙제 확인** 위 안내(펼치면 파일 이름·사유·Drive 열기)에 남는다. Drive에서 이름을 고치면
+- 못 붙인 파일은 수업보고서 → **영상숙제 확인** 위 안내(펼치면 파일 이름·사유)에 남는다. Drive에서 이름을 고치면
   10분 안에 다시 판정한다. 같은 학생의 같은 내용(MD5·크기)이 이미 반까지 정해져 보관돼 있으면(ClassNote 수집분 등) 따로 세지 않고
   안내에 '사본'으로 따로 센다(지워도 된다). 압축돼 내용이 달라진 사본(카톡으로 받은 영상 등)은 알아보지 못한다 — 같은 숙제를
   ClassNote로도 받았으면 직접 올린 쪽을 지울 것.

@@ -13,13 +13,16 @@ describe("직접 올린 영상 확인 필요 안내", () => {
     expect(render(<ManualDriveReviewList review={{ fixable: 0, duplicates: 0, items: [] }} />).container).toBeEmptyDOMElement();
     expect(render(<ManualDriveReviewList review={null} />).container).toBeEmptyDOMElement();
   });
-  it("고칠 것과 같은 영상 사본을 따로 세고, 펼치면 파일 이름·사유·폴더·Drive 열기", () => {
+  it("고칠 것과 같은 영상 사본을 따로 세고, 펼치면 파일 이름·사유·폴더 이름(Drive로 나가는 링크는 없다)", () => {
     render(<ManualDriveReviewList review={{ fixable: 31, duplicates: 2, items: [item] }} />);
     expect(screen.getByText("31")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText(/지워도 됩니다/)).toBeInTheDocument();
     expect(screen.getByText("엉뚱한 이름.mp4")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Drive 열기" })).toHaveAttribute("href", "https://drive.google.com/file/d/driveFile00001/view");
+    expect(screen.getByText("이수진 선생님")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(document.body.innerHTML).not.toContain("drive.google.com");
+    expect(document.body.innerHTML).not.toContain("driveFile00001");
     expect(screen.getByText("최근 1개만 보입니다.")).toBeInTheDocument();
   });
   it("사본만 있으면 '이름을 고치면' 안내를 하지 않는다", () => {

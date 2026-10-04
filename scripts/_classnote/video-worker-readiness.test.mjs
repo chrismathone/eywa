@@ -21,4 +21,13 @@ describe("영상 워커 적용 확인", () => {
     expect(videoWorkerReadiness({ ...row, last_seen: "2026-09-30T11:50:00Z" }, options).ready).toBe(false);
     expect(videoWorkerReadiness(null, options).ready).toBe(false);
   });
+  it("지점 폴더를 아는 워커는 하트비트 폴더를 저장된 루트와 비교하고, 구워커는 env 폴더와 비교한다", () => {
+    const caps = { homeworkVideoArchive: true, homeworkVideoTenantFolders: true };
+    const current = { ...row, last_results: { ...row.last_results, caps, videoArchive: { enabled: true, folderId: "saved-root" } } };
+    expect(videoWorkerReadiness(current, { ...options, folderId: "env-folder", savedRootId: "saved-root" }).ready).toBe(true);
+    expect(videoWorkerReadiness(current, { ...options, folderId: "saved-root", savedRootId: "other-root" }).ready).toBe(false);
+    expect(videoWorkerReadiness(current, { ...options, folderId: "env-folder", savedRootId: null }).ready).toBe(false);
+    expect(videoWorkerReadiness(row, { ...options, folderId: "folder", savedRootId: "saved-root" }).ready).toBe(true);
+    expect(videoWorkerReadiness(row, { ...options, folderId: "env-folder", savedRootId: "folder" }).ready).toBe(false);
+  });
 });

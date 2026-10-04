@@ -55,6 +55,36 @@ describe("담임별 Drive 폴더", () => {
     expect((await ensureTeacherFolder(rootId, route, "12", stateDir, options(next))).id).toBe(folder.id);
     expect(next.mock.calls.every(([, init]) => !init.method)).toBe(true);
   });
+  it("환경 담임 폴더는 그 환경 루트에서만 이어받고, 다른 루트는 새로 만든다", async () => {
+    const savedRoot = process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID;
+    const savedMap = process.env.CLASSNOTE_VIDEO_TEACHER_FOLDERS;
+    const envFolder = "envTeacherFold1";
+    process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID = rootId;
+    process.env.CLASSNOTE_VIDEO_TEACHER_FOLDERS = JSON.stringify({ [key]: envFolder });
+    try {
+      const bound = vi.fn().mockResolvedValueOnce(json(root)).mockResolvedValueOnce(json({ ...folder, id: envFolder, appProperties: {} }));
+      expect((await ensureTeacherFolder(rootId, route, "12", await dir(), options(bound))).id).toBe(envFolder);
+      expect(bound.mock.calls[1][0]).toContain(`/files/${envFolder}`);
+      const otherRootId = "otherRootFolder1";
+      const created = { ...folder, id: "newTeacherFold1", parents: [otherRootId] };
+      const fresh = vi.fn().mockResolvedValueOnce(json({ ...root, id: otherRootId })).mockResolvedValueOnce(json({ files: [] }))
+        .mockResolvedValueOnce(json({ ids: [created.id] })).mockResolvedValueOnce(json({}, 404))
+        .mockResolvedValueOnce(json({ id: created.id }, 201)).mockResolvedValueOnce(json(created));
+      expect((await ensureTeacherFolder(otherRootId, route, "12", await dir(), options(fresh))).id).toBe(created.id);
+      expect(fresh.mock.calls.map((call) => String(call[0])).join("\n")).not.toContain(envFolder);
+      expect(JSON.parse(fresh.mock.calls[4][1].body).parents).toEqual([otherRootId]);
+      const explicitEmpty = vi.fn().mockResolvedValueOnce(json(root)).mockResolvedValueOnce(json({ files: [] }))
+        .mockResolvedValueOnce(json({ ids: [folder.id] })).mockResolvedValueOnce(json({}, 404))
+        .mockResolvedValueOnce(json({ id: folder.id }, 201)).mockResolvedValueOnce(json(folder));
+      await ensureTeacherFolder(rootId, route, "12", await dir(), { ...options(explicitEmpty), teacherFolders: {} });
+      expect(explicitEmpty.mock.calls.map((call) => String(call[0])).join("\n")).not.toContain(envFolder);
+    } finally {
+      if (savedRoot === undefined) delete process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID;
+      else process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID = savedRoot;
+      if (savedMap === undefined) delete process.env.CLASSNOTE_VIDEO_TEACHER_FOLDERS;
+      else process.env.CLASSNOTE_VIDEO_TEACHER_FOLDERS = savedMap;
+    }
+  });
   it("중복 폴더·다른 부모·틀린 담당자·권한 없음은 저장 대상으로 사용하지 않는다", async () => {
     const duplicate = vi.fn().mockResolvedValueOnce(json(root)).mockResolvedValueOnce(json({ files: [folder, folder] }));
     await expect(ensureTeacherFolder(rootId, route, "12", await dir(), options(duplicate))).rejects.toThrow("여러 개");

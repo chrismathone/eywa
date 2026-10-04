@@ -12,9 +12,9 @@ const dateLabel = (value: string | null, dateOnly = false) => value
 /** 직접 제출 영상의 게시 시각은 파일 이름의 날짜(정오로 둔 값)뿐이라 시각을 보이지 않는다. */
 const rowDate = (row: Pick<HomeworkVideo, "posted_at" | "source">) => dateLabel(row.posted_at, row.source === "drive");
 
-/** `showDriveLink` = 관리자뷰일 때만 'Drive 열기'(원장 2026-10-01 *"drive 열기는 관리자뷰에서만"*). */
-export function HomeworkVideosView({ rows, subjectLabels, showDriveLink, initialVideoId = null }: {
-  rows: HomeworkVideo[]; subjectLabels: Record<string, string>; showDriveLink: boolean;
+/** 영상은 이 화면에서만 재생한다 — Drive로 나가는 링크는 두지 않는다(원장 2026-10-04, 10-01의 "관리자뷰에서만 Drive 열기"를 거뒀다). */
+export function HomeworkVideosView({ rows, subjectLabels, initialVideoId = null }: {
+  rows: HomeworkVideo[]; subjectLabels: Record<string, string>;
   /** 영상 제출 현황의 ▶가 넘긴 `?video=` — 이 학생의 영상 목록에 있는 id만 미리 고른다(없는 id·남의 영상 id는 무시). */
   initialVideoId?: string | null;
 }) {
@@ -48,7 +48,6 @@ export function HomeworkVideosView({ rows, subjectLabels, showDriveLink, initial
                   <span className="block text-sm font-bold">{rowDate(row)}</span>
                   <span className="mt-1 block text-xs">{homeworkVideoOrigin(row)} · {HOMEWORK_VIDEO_STATUS[row.status] ?? "확인 중"}</span>
                 </button>
-                {playable && showDriveLink ? <a href={rowLinks.view} target="_blank" rel="noopener noreferrer" className="shrink-0 text-sm text-primary underline underline-offset-4">Drive 열기</a> : null}
               </li>;
             })}
           </ul>

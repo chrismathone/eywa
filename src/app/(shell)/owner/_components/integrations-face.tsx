@@ -1,18 +1,21 @@
 import { FaceTabs, type Face } from "@/components/face-tabs";
 import { slackGate } from "@/features/slack/server/gate";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { SheetsFace } from "./sheets-face";
 import { SlackCard } from "./slack-card";
+import { VideoDriveCard } from "./video-drive-card";
 
 /**
  * 학원 설정 '연동' 면 = **켜진 연동만 내부 탭으로**(원장 2026-09-28 *"연동 탭이 좀 깔끔해지도록 (현재 너무 세로스크롤이
  * 길어짐) admin이 on/off 한 항목에 따라 적절한 내부탭 디자인화"*). 예전엔 슬랙·makeedu·구글 시트가 한 면에 세로로 쌓였다.
- * 탭 = 슬랙 설정 게이트(`slackGate` — 지점 스위치 ∧ 원장·총괄) · 학원 기능(makeedu·sheet_sync 모듈). 꺼진 연동은 탭도 조회도 없다.
- * 주소 `?tab=sheets&sub=slack|makeedu|sheets` — 고른 탭만 서버에서 읽는다(무거운 면 지연, FaceTabs 규약).
+ * 탭 = 슬랙 설정 게이트(`slackGate` — 지점 스위치 ∧ 원장·총괄) · 학원 기능(makeedu·sheet_sync 모듈) · 숙제영상 드라이브(ClassNote 모듈,
+ * 2026-10-04 — 숙제 영상을 받는 기능이 그 모듈에 있다). 꺼진 연동은 탭도 조회도 없다.
+ * 주소 `?tab=sheets&sub=slack|makeedu|sheets|video` — 고른 탭만 서버에서 읽는다(무거운 면 지연, FaceTabs 규약).
  */
-export type IntegrationSub = "slack" | "makeedu" | "sheets";
+export type IntegrationSub = "slack" | "makeedu" | "sheets" | "video";
 
-const LABEL: Record<IntegrationSub, string> = { slack: "슬랙", makeedu: "makeedu 동기화", sheets: "구글 시트" };
+const LABEL: Record<IntegrationSub, string> = { slack: "슬랙", makeedu: "makeedu 동기화", sheets: "구글 시트", video: "숙제영상 드라이브" };
 
 export async function IntegrationsFace({
   sub,
@@ -34,6 +37,8 @@ export async function IntegrationsFace({
     ...(slackOn ? (["slack"] as const) : []),
     ...(modulesOn.makeedu ? (["makeedu"] as const) : []),
     ...(modulesOn.sheets ? (["sheets"] as const) : []),
+    // 숙제영상 드라이브 = ClassNote 기능이 있는 지점만(조회·저장 서버 게이트와 같은 판정 — drive-settings-actions).
+    ...(classnoteModuleOn(settings) ? (["video"] as const) : []),
   ];
   if (available.length === 0) {
     return (
@@ -61,6 +66,7 @@ export async function IntegrationsFace({
           sheetsOn={active === "sheets"}
         />
       ) : null}
+      {active === "video" ? <VideoDriveCard /> : null}
     </div>
   );
 }

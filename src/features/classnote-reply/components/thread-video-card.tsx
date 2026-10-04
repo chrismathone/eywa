@@ -46,7 +46,7 @@ export function VideoStatusLine({ video }: { video: ThreadVideo }) {
 
 /**
  * 영상 팝업 — 이 창 위에 iframe(Drive 미리보기)으로 바로 재생. 재생기는 학생 '숙제 영상' 탭과 같은 `HomeworkVideoPlayer`
- * (접근 확인·권한 없음 문구 포함). 'Drive 열기'는 서버가 관리자뷰일 때만 주소를 준다.
+ * (접근 확인·권한 없음 문구 포함). Drive로 나가는 링크는 두지 않는다(원장 2026-10-04).
  */
 export function VideoDialog({ video, number, title, onClose }: { video: ThreadVideo | null; number: number; title: string; onClose: () => void }) {
   const links = video?.playable ? video.links : null;
@@ -58,14 +58,7 @@ export function VideoDialog({ video, number, title, onClose }: { video: ThreadVi
           <DialogDescription>학부모가 ClassNote에 올린 영상입니다.</DialogDescription>
         </DialogHeader>
         {links && video ? (
-          <>
-            <HomeworkVideoPlayer preview={links.preview} thumbnail={links.thumbnail} uploadedAt={video.uploadedAt} title={`${title} 영상 ${number}`} />
-            {links.view ? (
-              <a href={links.view} target="_blank" rel="noopener noreferrer" className="text-primary justify-self-start text-sm underline underline-offset-4">
-                Drive 열기
-              </a>
-            ) : null}
-          </>
+          <HomeworkVideoPlayer preview={links.preview} thumbnail={links.thumbnail} uploadedAt={video.uploadedAt} title={`${title} 영상 ${number}`} />
         ) : null}
       </DialogContent>
     </Dialog>

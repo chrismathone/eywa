@@ -6,7 +6,8 @@ import { kstToday } from "@/lib/date-kst";
 import { checkVideoFile } from "../rules";
 import { linkVideoFilename, teacherFolderKey } from "../route";
 import { UPLOAD_STARTS_PER_DAY, UPLOAD_STARTS_PER_HOUR, uploadOrigin } from "../upload-checks";
-import { videoSubmitAvailability } from "./availability";
+import { videoSubmitAvailability, videoSubmitSchemaReady } from "./availability";
+import { readVideoDriveAuth } from "./drive-config";
 import { driveRequest, generateDriveId, startResumableSession } from "./drive-api";
 import { linkFolderRegistry } from "./folder-registry";
 import { ensureLinkTeacherFolder } from "./folders";
@@ -68,9 +69,11 @@ export async function startLinkUpload(input: {
     const file = checkVideoFile(input.file);
     if (!file.ok) return fail("file", file.error);
     const availability = await videoSubmitAvailability(link.tenant_id, await getTenantSettingsByTenantId(link.tenant_id), db);
-    if (!availability.ok) return fail("unavailable", UNAVAILABLE);
-    const { drive, centerId } = availability;
-    const request = driveRequest(drive.accessToken);
+    const auth = readVideoDriveAuth();
+    // 새 업로드를 꺼도 이전에 시작한 업로드의 완료 확인은 유지한다. 기능·스키마·인증 검사는 그대로 적용한다.
+    if (!availability.ok && (availability.reason === "module_off" || availability.reason === "no_schema" || !auth || !(await videoSubmitSchemaReady(db))))
+      return fail("unavailable", UNAVAILABLE);
+    const request = driveRequest(availability.ok ? availability.drive.accessToken : auth!.accessToken);
 
     // 횟수 제한 — 먼저 가볍게 세고(대부분 여기서 끝), 기록을 넣은 **뒤에 다시 센다**: 동시에 수십 개를 보내도
     // 각자 자기 기록까지 센 수를 보므로 한도를 넘는 시작은 세션을 열지 못한다(세기와 넣기 사이의 틈, 적대 리뷰 2026-10-01).
@@ -86,6 +89,8 @@ export async function startLinkUpload(input: {
     };
     if (await overLimit(1)) return fail("limit", LIMITED);
     followUp = () => reconcileLinkUploads(db, request, link).catch(() => []);
+    if (!availability.ok) return fail("unavailable", UNAVAILABLE);
+    const { drive, centerId } = availability;
 
     const baseRoute = await loadLinkRoute(db, link, drive.rootId);
     if (!baseRoute) return fail("invalid", "사용할 수 없는 링크입니다.");

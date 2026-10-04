@@ -71,10 +71,13 @@ describe("쓰레드 영상 — 열람 게이트(학생 숙제 영상 탭과 같�
     expect(none.byMessage.size).toBe(0);
   });
 
-  it("Drive 열기 주소는 관리자뷰에서만 — 강사뷰(effectiveTeacherId 있음)엔 싣지 않는다", async () => {
-    expect((await run()).byMessage.get("m-post")?.[0]?.links?.view).toContain("/view");
-    h.teacher = "teacher-1";
-    expect((await run()).byMessage.get("m-post")?.[0]?.links?.view).toBeNull();
+  it("🔴 Drive에서 여는 주소는 어느 뷰에도 싣지 않는다 — 재생 주소(미리보기·썸네일)만", async () => {
+    for (const teacher of [null, "teacher-1"]) {
+      h.teacher = teacher;
+      const links = (await run()).byMessage.get("m-post")?.[0]?.links;
+      expect(Object.keys(links ?? {}).sort()).toEqual(["preview", "thumbnail"]);
+      expect(JSON.stringify(links)).not.toContain("/view");
+    }
   });
 
   it("영상 표가 없는 DB(0315a 전)는 빈 목록 — 화면을 죽이지 않는다 · 그 밖의 오류도 영상만 빠진다", async () => {

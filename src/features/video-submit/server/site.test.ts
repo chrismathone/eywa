@@ -6,9 +6,16 @@ import { C, ENV, OTHER_T, S, T, seedDb, settings } from "./test-fixture.test-uti
  * 숙제 영상 올리기 사이트(0330a) — 뒷 4자리 + 이름 조회 · 선생님이 낸 영상 숙제 목록 · 링크 열기 · 횟수 제한 · 지점 격리.
  * 원장 2026-10-03: 이름까지 넣어야 하고, 선생님이 낸 영상 숙제가 있어야 올릴 수 있으며, 고른 숙제에 영상이 묶인다.
  */
-const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown, audit: vi.fn() }));
+const m = vi.hoisted(() => ({
+  db: null as unknown, settings: null as unknown, audit: vi.fn(),
+  /** 공개 지점 목록(자리 PIN과 같은 목록) — 기본은 지점 하나(지금까지의 환경). */
+  branches: [] as { id: string; name: string }[],
+  /** 지점별 학원 설정 — 없으면 `settings`(전 지점 공통). */
+  settingsOf: {} as Record<string, unknown>,
+}));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
-vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async () => m.settings }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async (tenantId: string) => m.settingsOf[tenantId] ?? m.settings }));
+vi.mock("@/features/owner/server/public-branding", () => ({ listPublicBranchChoices: async () => m.branches }));
 vi.mock("@/features/audit/server/log", () => ({ logActionAs: m.audit }));
 vi.mock("@/lib/date-kst", async (load) => ({ ...(await load<typeof import("@/lib/date-kst")>()), kstToday: () => "2026-10-02" }));
 
@@ -18,7 +25,7 @@ import { SITE_LINKS_PER_PAIR_PER_DAY, SITE_LOOKUPS_PER_HOUR, SITE_LOOKUPS_PER_HO
 import { _resetVideoSubmitAvailabilityForTest } from "./availability";
 import { _resetVideoDriveConfigForTest } from "./drive-config";
 import { hashSubmitToken } from "./token";
-import { _resetVideoSiteForTest, lookupSite, openSiteLink, siteAvailability } from "./site";
+import { _resetVideoSiteForTest, lookupSite, openSiteLink, siteAvailability, siteDirectory } from "./site";
 
 const S2 = "55555555-5555-4555-8555-555555555555";
 const C2 = "66666666-6666-4666-8666-666666666666";
@@ -71,6 +78,8 @@ const label = formatShortKoreanDate;
 
 beforeEach(() => {
   m.settings = withEnglishOff();
+  m.settingsOf = {};
+  m.branches = [{ id: T, name: "인재원 침산" }];
   m.audit.mockReset();
   for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
   _resetVideoDriveConfigForTest();
@@ -82,8 +91,20 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("사이트를 열 수 있나", () => {
-  it("Drive가 묶인 지점 + 기능·표가 갖춰졌을 때만", async () => {
+  it("저장 폴더가 있는 지점 + 기능·표가 갖춰졌을 때만 — 지점이 하나면 고르지 않아도 그 지점", async () => {
     expect(await siteAvailability()).toMatchObject({ ok: true, tenantId: T, academyName: "인재원" });
+    expect(await siteAvailability(undefined, T)).toMatchObject({ ok: true, tenantId: T });
+    expect(await siteDirectory()).toMatchObject({ ok: true, sites: [{ tenantId: T, branchName: "인재원 침산" }] });
+  });
+  it("🔴 지점을 정해 물으면 그 지점만 본다 — 저장 폴더가 없는 지점은 다른 지점이 써도 없는 주소(none) · 모양이 틀린 지점 번호도", async () => {
+    expect(await siteAvailability(undefined, OTHER_T)).toEqual({ ok: false, reason: "none" });
+    expect(await siteAvailability(undefined, "not-a-uuid")).toEqual({ ok: false, reason: "none" });
+    expect(await siteAvailability(undefined, "")).toEqual({ ok: false, reason: "none" });
+  });
+  it("지점 목록을 못 읽으면(빈 목록) 없는 주소로 단정하지 않고 잠시 못 받음", async () => {
+    m.branches = [];
+    expect(await siteAvailability()).toEqual({ ok: false, reason: "unavailable" });
+    expect(await siteDirectory()).toEqual({ ok: false, reason: "unavailable" });
   });
   it("Drive 값이 없거나 ClassNote 기능이 꺼졌으면 없는 주소(none) · 시도 표가 없으면(0330a 전) 잠시 못 받음", async () => {
     vi.stubEnv("CLASSNOTE_VIDEO_TENANT_ID", "");
@@ -374,5 +395,152 @@ describe("링크 열기 — 고른 숙제", () => {
     expect(r.ok && r.url.endsWith("?h=2026-09-29")).toBe(true);
     expect(await open(idOn("2026-09-30"))).toMatchObject({ ok: false, code: "invalid" });
     expect(await open(idOn("2026-10-02", "2026-09-30"))).toMatchObject({ ok: false, code: "invalid" }); // 숙제가 나가지 않은 날
+  });
+});
+
+describe("지점이 여럿일 때 — 주소는 하나(/v), 지점은 화면에서 고른다(원장 2026-10-04 · 멀티테넌트 C안)", () => {
+  const THIRD_T = "88888888-8888-4888-8888-888888888888";
+  const C_OTHER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const OTHER_ROOT = "OTHER_BRANCH_ROOT_1";
+  /** 둘째 지점(OTHER_T)에 저장 폴더를 정해 준다 — 저장된 지점 설정(0338a) + 그 지점 워커 기록 + 그 지점의 반·수강·숙제. */
+  function enableOther(enabled = true) {
+    m.branches = [{ id: T, name: "인재원 침산" }, { id: OTHER_T, name: "인재원 수성" }];
+    db.tables.homework_video_drive_settings = [{ tenant_id: OTHER_T, enabled, root_folder_id: enabled ? OTHER_ROOT : null, version: "12121212-1212-4121-8121-121212121212" }];
+    // 첫 지점(T)의 기존 루트 소유 행은 그대로 둔다 — 소유권 표가 있으면 거기 등록된 루트만 기존 연결로 인정한다.
+    db.tables.homework_video_drive_roots = [
+      ...(db.tables.homework_video_drive_roots ?? []).filter((row) => row.root_folder_id !== OTHER_ROOT),
+      { root_folder_id: OTHER_ROOT, tenant_id: OTHER_T, folder_name: "수성 숙제영상" },
+    ];
+    db.tables.classnote_video_history = [{ tenant_id: T, center_id: 96575 }, { tenant_id: OTHER_T, center_id: 77777 }];
+    db.tables.classes = [...db.tables.classes!.filter((c) => c.id !== C_OTHER), { id: C_OTHER, tenant_id: OTHER_T, class_name: "수성 A", subject: "math", teacher_id: null, is_active: true }];
+    db.tables.enrollments = [...db.tables.enrollments!.filter((e) => e.class_id !== C_OTHER), { tenant_id: OTHER_T, student_id: "s-other", class_id: C_OTHER, start_date: "2026-09-01", end_date: null, on_hold: false, is_transferred: false }];
+    db.tables.lesson_reports = [...db.tables.lesson_reports!.filter((r) => r.id !== "r-other"), report("r-other", "s-other", C_OTHER, "2026-10-01", true, OTHER_T)];
+  }
+  const lookIn = (tenant: unknown, name = "류태경", ip = "1.1.1.1") => lookupSite({ last4: "5678", name, ip, tenant });
+  const openIn = (tenant: unknown, choice: unknown, ip = "1.1.1.1") => openSiteLink({ last4: "5678", name: "류태경", choice, ip, tenant });
+
+  it("쓸 수 있는 지점만 목록에 선다 · 지점 없이 물으면 '골라야 한다' · 정해 물으면 그 지점", async () => {
+    enableOther();
+    expect(await siteDirectory()).toMatchObject({ ok: true, sites: [{ tenantId: T, branchName: "인재원 침산" }, { tenantId: OTHER_T, branchName: "인재원 수성" }] });
+    expect(await siteAvailability()).toEqual({ ok: false, reason: "choose" });
+    expect(await siteAvailability(undefined, OTHER_T)).toMatchObject({ ok: true, tenantId: OTHER_T });
+    expect(await siteAvailability(undefined, T)).toMatchObject({ ok: true, tenantId: T });
+  });
+  it("🔴 지점을 고르지 않은 조회·열기는 거절한다 — 옛 지점으로 떨어뜨리지 않는다 · 시도 기록도 학생 조회도 없다 · 고를 지점 목록을 함께 준다", async () => {
+    enableOther();
+    for (const tenant of [undefined, null, ""]) {
+      const r = await lookIn(tenant);
+      expect(r).toMatchObject({ ok: false, code: "branch" });
+      expect(!r.ok && r.code === "branch" && r.branches.map((b) => b.id).sort()).toEqual([T, OTHER_T].sort());
+      expect(JSON.stringify(r)).not.toMatch(/류|LT4|수성 A/);
+    }
+    expect(await openIn(undefined, "a".repeat(40))).toMatchObject({ ok: false, code: "branch" });
+    expect(db.tables.homework_video_site_attempts).toHaveLength(0);
+    expect(db.tables.homework_video_links).toHaveLength(0);
+  });
+  it("🔴 목록 밖 지점 번호·모양이 틀린 값·사이트를 안 쓰는 지점은 거절한다(지어낸 값으로 다른 지점을 열지 못한다)", async () => {
+    enableOther();
+    m.branches.push({ id: THIRD_T, name: "인재원 달서" }); // 공개 목록엔 있지만 저장 폴더가 없는 지점
+    for (const tenant of ["12345678-1234-4234-8234-123456789012", "x", 5, {}, [T], ` ${T}`, THIRD_T]) {
+      const r = await lookIn(tenant);
+      expect(r, String(tenant)).toMatchObject({ ok: false, code: "branch" });
+      // 꺼진 지점(달서)은 고를 지점 목록에도 없다
+      expect(!r.ok && r.code === "branch" && r.branches.map((b) => b.name).sort()).toEqual(["인재원 수성", "인재원 침산"]);
+    }
+    expect(db.tables.homework_video_site_attempts).toHaveLength(0);
+  });
+  it("🔴 고른 지점 안에서만 학생을 찾는다 — 같은 이름·같은 뒷자리가 두 지점에 있어도 섞이지 않고, 숙제 지문도 지점마다 다르다", async () => {
+    enableOther();
+    const mine = await lookIn(T);
+    expect(dates(mine)).toEqual([`${label("2026-10-01")}|LT4`, `${label("2026-09-29")}|LT4`]);
+    const theirs = await lookIn(OTHER_T);
+    expect(dates(theirs)).toEqual([`${label("2026-10-01")}|수성 A`]);
+    const ids = (r: typeof mine) => (r.ok ? r.choices.map((c) => c.id) : []);
+    expect(ids(mine).some((id) => ids(theirs).includes(id))).toBe(false);
+    // 시도 기록은 고른 지점에만 남는다
+    expect(db.tables.homework_video_site_attempts!.map((a) => a.tenant_id)).toEqual([T, OTHER_T]);
+  });
+  it("🔴 다른 지점에서 받은 숙제 지문으로는 열지 못한다 · 고른 지점의 링크는 그 지점 것으로만 만들어진다", async () => {
+    enableOther();
+    const theirs = await lookIn(OTHER_T);
+    const choice = theirs.ok ? theirs.choices[0]!.id : "";
+    expect(await openIn(T, choice)).toMatchObject({ ok: false, code: "invalid" });
+    expect(db.tables.homework_video_links).toHaveLength(0);
+    const opened = await openIn(OTHER_T, choice);
+    expect(opened.ok && opened.url).toMatch(/^\/v\/[A-Za-z0-9_-]{43}\?h=2026-10-01$/);
+    expect(db.tables.homework_video_links).toHaveLength(1);
+    expect(db.tables.homework_video_links![0]).toMatchObject({ tenant_id: OTHER_T, student_id: "s-other", class_id: C_OTHER, origin: "site" });
+    expect(m.audit).toHaveBeenCalledWith(expect.objectContaining({ tenantId: OTHER_T }), expect.anything());
+  });
+  it("횟수 제한은 고른 지점 안에서만 센다 — 한 지점의 한도가 다른 지점 학생을 막지 않는다", async () => {
+    enableOther();
+    for (let i = 0; i < SITE_LOOKUPS_PER_HOUR; i++) await lookIn(T);
+    expect(await lookIn(T)).toMatchObject({ ok: false, code: "limit" });
+    expect((await lookIn(OTHER_T)).ok).toBe(true);
+  });
+  it("공개 지점은 여럿이어도 사이트를 쓰는 지점이 하나면 고르지 않는다(지금까지와 같다) — 그 지점을 골라 보내도 된다", async () => {
+    m.branches = [{ id: T, name: "인재원 침산" }, { id: OTHER_T, name: "인재원 수성" }];
+    expect(await siteAvailability()).toMatchObject({ ok: true, tenantId: T });
+    expect(dates(await lookIn(undefined))).toHaveLength(2);
+    expect(dates(await lookIn(T))).toHaveLength(2);
+    // 저장 폴더가 없는 지점을 고르면 거절 — 남은 한 지점만 목록에 온다
+    const r = await lookIn(OTHER_T);
+    expect(r).toMatchObject({ ok: false, code: "branch", branches: [{ id: T, name: "인재원 침산" }] });
+  });
+  it("🔴 저장 폴더 연결을 해제한 지점·ClassNote 기능을 끈 지점은 목록에서 빠진다(있었는지조차 모르게)", async () => {
+    enableOther(false);
+    expect(await siteDirectory()).toMatchObject({ ok: true, sites: [{ tenantId: T }] });
+    expect(await siteAvailability(undefined, OTHER_T)).toEqual({ ok: false, reason: "none" });
+    enableOther();
+    m.settingsOf = { [OTHER_T]: { ...withEnglishOff(), modules: { disabled: ["classnote"] } } };
+    const directory = await siteDirectory();
+    expect(directory.ok && directory.sites.map((site) => site.tenantId)).toEqual([T]);
+    expect(await lookIn(OTHER_T)).toMatchObject({ ok: false, code: "branch" });
+  });
+  it("🔴 판정하지 못한 지점(잠시 못 받음)이 있으면 고르지 않은 요청을 남은 지점으로 정하지 않는다 — 고른 지점은 그 지점만 보고 통과한다", async () => {
+    enableOther();
+    // 둘째 지점은 저장 폴더는 있지만 워커 기록이 아직 없다(잠시 못 받음) — 쓸 수 있는 지점은 침산 하나뿐이다
+    db.tables.classnote_video_history = [{ tenant_id: T, center_id: 96575 }];
+    expect(await siteDirectory()).toMatchObject({ ok: true, partial: true, sites: [{ tenantId: T }] });
+    expect(await siteAvailability()).toEqual({ ok: false, reason: "choose" });
+    // 고르지 않은 요청 — 그 지점 학생일 수 있으므로 침산에서 찾지 않는다(같은 이름·같은 뒷자리가 침산에 있다)
+    expect(await lookIn(undefined)).toMatchObject({ ok: false, code: "unavailable" });
+    expect(await openIn(undefined, "a".repeat(40))).toMatchObject({ ok: false, code: "unavailable" });
+    expect(db.tables.homework_video_site_attempts).toHaveLength(0);
+    // 침산을 골라 보낸 요청은 그대로 된다(다른 지점의 상태와 무관하다)
+    expect(dates(await lookIn(T))).toHaveLength(2);
+    // 못 받는 지점을 골라 보내면 그 지점으로도, 남은 지점으로도 가지 않는다 — 고를 수 있는 지점만 돌려준다
+    const r = await lookIn(OTHER_T);
+    expect(r).toMatchObject({ ok: false, code: "branch", branches: [{ id: T, name: "인재원 침산" }] });
+    expect(JSON.stringify(r)).not.toMatch(/류|LT4/);
+    // 판정하지 못한 지점이 없으면(저장 폴더가 아예 없는 지점) 종전대로 남은 한 지점이 곧 유일한 지점이다
+    db.tables.homework_video_drive_settings = [];
+    expect(await siteDirectory()).toMatchObject({ ok: true, partial: false, sites: [{ tenantId: T }] });
+    expect(dates(await lookIn(undefined))).toHaveLength(2);
+  });
+  it("한 지점의 설정을 못 읽어도 다른 지점은 그대로 선다(고른 요청만) · 전부 못 읽으면 잠시 못 받음(없는 주소로 단정하지 않는다)", async () => {
+    enableOther();
+    const broken = new Proxy({}, { get() { throw new Error("boom"); } });
+    m.settingsOf = { [OTHER_T]: broken };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const directory = await siteDirectory();
+    expect(directory.ok && directory.sites.map((site) => site.tenantId)).toEqual([T]);
+    expect(directory.ok && directory.partial).toBe(true);
+    // 🔴 고르지 않은 요청은 남은 지점으로 정하지 않는다 — 조회 오류였으니 "잠시 후 다시"
+    expect(await lookIn(undefined)).toMatchObject({ ok: false, code: "error" });
+    expect(db.tables.homework_video_site_attempts).toHaveLength(0);
+    // 침산을 골라 보낸 요청은 된다
+    expect(dates(await lookIn(T))).toHaveLength(2);
+    m.settingsOf = { [OTHER_T]: broken, [T]: broken };
+    expect(await siteDirectory()).toEqual({ ok: false, reason: "unavailable" });
+    // 공개 조회는 순간 오류를 "받을 수 없다"로 바꿔 말하지 않는다 — "잠시 후 다시"(지점을 골랐든 안 골랐든)
+    for (const tenant of [undefined, T]) {
+      const r = await lookIn(tenant);
+      expect(r).toMatchObject({ ok: false, code: "error" });
+      expect(!r.ok && r.error).toContain("잠시 후 다시");
+    }
+    // 실패한 조회는 시도로 남지 않는다 — 위에서 침산을 골라 성공한 조회 한 건뿐이다
+    expect(db.tables.homework_video_site_attempts).toHaveLength(1);
+    errors.mockRestore();
   });
 });

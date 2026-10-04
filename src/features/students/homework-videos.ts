@@ -50,10 +50,13 @@ export function dedupeHomeworkVideos(rows: readonly (HomeworkVideo & { md5?: str
   });
 }
 
+/**
+ * 재생에 쓰는 주소 둘(미리보기·접근 확인용 썸네일). 🔴 Drive에서 파일을 여는 주소(`/view`)는 만들지 않는다 —
+ * 화면 어디에도 'Drive 열기'가 없다(원장 2026-10-04). 재생은 지금처럼 보는 사람의 Google 계정 권한으로 열린다.
+ */
 export function homeworkVideoLinks(fileId: string | null) {
   if (!fileId || !/^[A-Za-z0-9_-]{10,}$/.test(fileId)) return null;
   return {
-    view: `https://drive.google.com/file/d/${fileId}/view`,
     preview: `https://drive.google.com/file/d/${fileId}/preview`,
     // 재생 전 접근 확인용(homework-video-player) — 권한이 있는 구글 계정에만 이미지가 온다.
     thumbnail: `https://drive.google.com/thumbnail?id=${fileId}&sz=w64`,

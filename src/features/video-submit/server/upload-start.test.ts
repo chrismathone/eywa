@@ -3,7 +3,7 @@ import { HOMEWORK_VIDEO_MAX_BYTES } from "@/features/students/homework-video-lim
 import { addDays, kstToday } from "@/lib/date-kst";
 import { _resetVideoHomeworkProbeForTest } from "@/features/video-homework/server/assignments";
 import type { FakeDb } from "./fake-db.test-util";
-import { C, ENV, FILE, FOLDER, OTHER_T, S, SESSION, T, TOKEN, fakeDrive, seedDb, settings } from "./test-fixture.test-util";
+import { C, ENV, FILE, FOLDER, OTHER_T, ROOT, S, SESSION, T, TOKEN, fakeDrive, seedDb, settings } from "./test-fixture.test-util";
 
 const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
@@ -169,7 +169,7 @@ describe("못 알린 지난 업로드 — 다시 시작할 때 서버가 대신 
   it("2분 넘게 '시작됨'인 업로드가 Drive에 다 있으면 줄을 만들고 돌려준다", async () => {
     db.tables.homework_video_link_uploads = [{
       id: "55555555-5555-4555-8555-555555555555", tenant_id: T, link_id: "L1", drive_file_id: FILE, drive_folder_id: FOLDER, bytes: 77,
-      status: "started", video_id: null, route: { classId: C, studentId: S }, created_at: new Date(Date.now() - 5 * 60_000).toISOString(),
+      status: "started", video_id: null, route: { rootId: ROOT, classId: C, studentId: S }, created_at: new Date(Date.now() - 5 * 60_000).toISOString(),
     }];
     drive = fakeDrive({ uploaded: {
       id: FILE, size: "77", md5Checksum: "0123456789abcdef0123456789abcdef", parents: [FOLDER], trashed: false,
@@ -181,5 +181,19 @@ describe("못 알린 지난 업로드 — 다시 시작할 때 서버가 대신 
     expect(await followUp!()).toHaveLength(1);
     expect(db.tables.student_homework_videos).toHaveLength(1);
     expect(JSON.stringify(result)).not.toContain(S); // 마무리 결과(학생·반)는 응답에 싣지 않는다
+  });
+  it("연결 해제 후 새 시작은 거절하지만 이미 올라간 소유 루트의 파일은 응답 뒤 마무리한다", async () => {
+    const uploadId="55555555-5555-4555-8555-555555555555";
+    db.tables.homework_video_drive_settings=[{tenant_id:T,enabled:false}];
+    db.tables.homework_video_link_uploads=[{id:uploadId,tenant_id:T,link_id:"L1",drive_file_id:FILE,drive_folder_id:FOLDER,bytes:77,
+      status:"started",video_id:null,route:{rootId:ROOT,classId:C,studentId:S},created_at:new Date(Date.now()-5*60_000).toISOString()}];
+    drive=fakeDrive({uploaded:{id:FILE,size:"77",md5Checksum:"0123456789abcdef0123456789abcdef",parents:[FOLDER],trashed:false,
+      appProperties:{aywaSource:"link",aywaUpload:uploadId}}});
+    vi.stubGlobal("fetch",vi.fn(drive.impl));
+    const out=await startLinkUpload({token:TOKEN,file,origin:"https://www.aywa.co.kr",host:"www.aywa.co.kr"});
+    expect(out.result).toMatchObject({ok:false,code:"unavailable"});
+    expect(await out.followUp!()).toHaveLength(1);
+    expect(db.tables.student_homework_videos).toHaveLength(1);
+    expect(drive.calls.some(c=>c.url.includes("uploadType=resumable"))).toBe(false);
   });
 });

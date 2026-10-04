@@ -21,7 +21,10 @@ const nothingToRead = (post) => !(post.attached_video && post.author?.type === "
  *    있는 글 = 큐 저장·댓글 조회)만 센다. 한 번 호출에 새로 읽는 목록 쪽 수는 `maxPages`까지.
  *    (글을 하나씩 세던 옛 방식은 분당 10건이라 하루 1만 4천 건 — 하루 저녁에만 수백 건이 쌓여 몇 주가 걸렸다.)
  */
-export async function scanVideoHistory(sql, page, tenant, centerId, { limit = 10, maxPages = 3, log = console.log } = {}) {
+export async function scanVideoHistory(sql, page, tenant, centerId, { limit = 10, maxPages = 3, log = console.log, archiveEnabled, env } = {}) {
+  const videoOpts = {};
+  if (typeof archiveEnabled === "boolean") videoOpts.enabled = archiveEnabled;
+  if (env) videoOpts.env = env;
   await sql`insert into classnote_video_history (tenant_id,center_id) values (${tenant},${centerId}) on conflict do nothing`;
   let [row] = await sql`select state,revision from classnote_video_history where tenant_id=${tenant} and center_id=${centerId}`;
   let state = row.state;
@@ -58,11 +61,11 @@ export async function scanVideoHistory(sql, page, tenant, centerId, { limit = 10
       }
       if (busy >= limit) break;
       busy++;
-      added += await enqueueParentVideos(sql, tenant, centerId, [post]);
+      added += await enqueueParentVideos(sql, tenant, centerId, [post], null, videoOpts);
       if (Number(post.num_comments) > 0) {
         try {
           const comments = await allVideoComments(page, post.id);
-          added += await enqueueParentVideos(sql, tenant, centerId, comments, post);
+          added += await enqueueParentVideos(sql, tenant, centerId, comments, post, videoOpts);
         } catch (error) {
           // ⚠️ `$`로 끝을 요구하지 말 것 — Playwright는 `page.evaluate: Error: …HTTP 404\n    at eval (…)`처럼 뒤에 스택을 붙인다.
           if (!/영상 기록 조회 HTTP (404|410)(?!\d)/.test(String(error?.message ?? ""))) throw error;

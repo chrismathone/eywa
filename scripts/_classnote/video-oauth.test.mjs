@@ -1,3 +1,6 @@
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { videoDriveAuth } from "./video-drive-auth.mjs";
 import { buildAuthUrl, exchangeCode, newLoginAttempt, readClientJson } from "./video-oauth-flow.mjs";
@@ -8,7 +11,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 const creds = { clientId: "cid.apps.googleusercontent.com", clientSecret: "SECRET-abc", refreshToken: "1//REFRESH-xyz" };
 const values = {
   GOOGLE_DRIVE_CLIENT_ID: creds.clientId, GOOGLE_DRIVE_CLIENT_SECRET: creds.clientSecret,
-  GOOGLE_DRIVE_REFRESH_TOKEN: creds.refreshToken, CLASSNOTE_VIDEO_DRIVE_FOLDER_ID: "1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK",
+  GOOGLE_DRIVE_REFRESH_TOKEN: creds.refreshToken,
 };
 
 describe("Drive OAuth 갱신 토큰 인증", () => {
@@ -81,13 +84,19 @@ describe("Drive OAuth 값 파일", () => {
 
   it("키가 빠졌거나 모르는 키가 있거나 값 모양이 이상하면 거절하고, 값은 말하지 않는다", () => {
     const lines = formatOauthValues(values).trimEnd().split("\n");
-    expect(() => parseOauthValues(lines.slice(0, -1).join("\n"))).toThrow("CLASSNOTE_VIDEO_DRIVE_FOLDER_ID");
+    expect(() => parseOauthValues(lines.slice(0, -1).join("\n"))).toThrow("GOOGLE_DRIVE_REFRESH_TOKEN");
     expect(() => parseOauthValues(`${lines.join("\n")}\nDATABASE_URL=postgres://x`)).toThrow("영상 연결용 값 파일이 아닙니다");
     expect(() => parseOauthValues("그냥 글")).toThrow("줄 모양");
     const bad = (() => { try { parseOauthValues(lines.join("\n").replace(creds.clientSecret, "SEC RET")); return ""; } catch (e) { return e.message; } })();
     expect(bad).toContain("GOOGLE_DRIVE_CLIENT_SECRET");
     expect(bad).not.toContain("SEC RET");
-    expect(() => formatOauthValues({ ...values, CLASSNOTE_VIDEO_DRIVE_FOLDER_ID: "짧음" })).toThrow();
+  });
+
+  it("값 파일에 남은 저장 폴더 줄은 인증 값으로 받지 않는다", () => {
+    const text = `${formatOauthValues(values)}CLASSNOTE_VIDEO_DRIVE_FOLDER_ID=1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK\n`;
+    expect(parseOauthValues(text)).toEqual(values);
+    expect(parseOauthValues(`${text}CLASSNOTE_VIDEO_DRIVE_FOLDER_ID=짧음\n`)).toEqual(values);
+    expect(formatOauthValues({ ...values, CLASSNOTE_VIDEO_DRIVE_FOLDER_ID: "1r4PhTUJoCqLdlbdfGN8IhnGrokKK5DmK" })).not.toContain("CLASSNOTE_VIDEO_DRIVE_FOLDER_ID");
   });
 
   it(".env.local에 넣을 때 같은 키의 옛 줄과 gcloud 키는 지우고 나머지는 그대로 둔다", () => {
@@ -100,9 +109,16 @@ describe("Drive OAuth 값 파일", () => {
     expect(after).toContain("CLASSNOTE_UPLOAD_ID=keep-me");
     expect(after).not.toContain("GCLOUD");
     expect(after).not.toContain("old-token");
-    expect(after).not.toContain("oldFolder12345");
-    for (const [key, value] of Object.entries(values)) expect(after.match(new RegExp(`^${key}=`, "gm"))).toHaveLength(1), expect(after).toContain(`${key}='${value}'`);
+    expect(after).toContain("CLASSNOTE_VIDEO_DRIVE_FOLDER_ID='oldFolder12345'");
+    expect(after.match(/^CLASSNOTE_VIDEO_DRIVE_FOLDER_ID=/gm)).toHaveLength(1);
+    for (const [key, value] of Object.entries(values)) {
+      expect(after.match(new RegExp(`^${key}=`, "gm"))).toHaveLength(1);
+      expect(after).toContain(`${key}='${value}'`);
+    }
     expect(mergeOauthEnv(after, values)).toBe(after); // 다시 적용해도 같다
+    const sneaky = mergeOauthEnv(before, { ...values, CLASSNOTE_VIDEO_DRIVE_FOLDER_ID: "sneakyFolder123" });
+    expect(sneaky).not.toContain("sneakyFolder123");
+    expect(sneaky).toContain("oldFolder12345");
   });
 
   it("손으로 고친 줄(공백·export)도 지우고, 이름만 비슷한 키와 주석은 건드리지 않는다", () => {
@@ -150,5 +166,35 @@ describe("Drive OAuth 최초 허락", () => {
     await expect(exchangeCode({ ...args, fetchImpl: vi.fn().mockResolvedValue(json({ access_token: "at", scope: DRIVE_SCOPE })) })).rejects.toThrow("갱신 토큰");
     await expect(exchangeCode({ ...args, fetchImpl: vi.fn().mockResolvedValue(json({ access_token: "at", refresh_token: "rt", scope: "openid" })) })).rejects.toThrow("Drive 권한");
     await expect(exchangeCode({ ...args, fetchImpl: vi.fn().mockResolvedValue(json({ error: "invalid_grant" }, 400)) })).rejects.toThrow();
+  });
+});
+
+describe("인증 적용은 폴더를 값으로 다루지 않는다", () => {
+  it("로그인 안내와 저장 스크립트는 폴더를 묻거나 덮어쓰지 않는다", () => {
+    const read = (name) => readFileSync(path.join(process.cwd(), "scripts/_classnote", name), "utf8");
+    const login = read("video-oauth-login.mjs");
+    const save = read("video-save-oauth-settings.mjs");
+    expect(login).not.toContain("--folder=<Drive 폴더 ID>");
+    expect(login).not.toContain("CLASSNOTE_VIDEO_DRIVE_FOLDER_ID");
+    expect(login).not.toContain("checkDriveFolder");
+    expect(save).not.toContain("checkDriveFolder");
+    expect(save).not.toContain("CLASSNOTE_VIDEO_DRIVE_FOLDER_ID");
+    expect(save).toContain("mergeOauthEnv");
+    expect(save).toContain("oauthRefreshAuth");
+    expect(save).toContain("process.exitCode = 1");
+    const setup = read("setup-video-drive-oauth.ps1");
+    expect(setup).not.toContain("AllowFolderChange");
+    expect(setup).not.toContain("--allow-folder-change");
+    expect(setup).toContain("check-video-drive.mjs");
+  });
+
+  it("값 파일을 읽지 못하면 저장 스크립트는 실패로 끝난다", () => {
+    const missing = path.join(process.cwd(), "scripts/_classnote", "__missing-oauth-values__.txt");
+    const result = spawnSync(process.execPath, [
+      path.join(process.cwd(), "scripts/_classnote", "video-save-oauth-settings.mjs"),
+      `--values=${missing}`,
+    ], { encoding: "utf8", cwd: process.cwd() });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("값 파일을 찾지 못했습니다");
   });
 });

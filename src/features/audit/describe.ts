@@ -537,6 +537,8 @@ export function auditDetail(
       // 시트 ID는 외부 문서 식별자라 값 자체를 남기지 않는다(설정 변경 요약과 같은 규약).
       return m.cleared === true ? "대상 시트 해제" : "대상 시트 지정";
     }
+    case "integration_video_drive_setting":
+      return m.enabled === true ? join("저장 폴더 지정", str(m.folderName)) : "연결 해제";
     case "integration_sync_now":
       return "지금 동기화 실행";
     case "data_export_download":

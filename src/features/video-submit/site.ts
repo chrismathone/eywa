@@ -105,10 +105,27 @@ export const SITE_LINK_LOOKBACK_DAYS = SITE_HOMEWORK_DAYS + 2;
  */
 export type SiteChoice = { id: string; studentLabel: string; className: string; homeworkLabel: string };
 
+/**
+ * 올리기 사이트를 쓰는 지점 한 곳(화면의 지점 선택지) — 번호와 이름만. 주소에는 지점을 넣지 않는다(멀티테넌트 C안):
+ * 쓰는 지점이 하나면 고르지 않고, 여럿이면 화면에서 고른다(자리 PIN과 같은 방식, 원장 2026-10-04).
+ */
+export type SiteBranch = { id: string; name: string };
+/**
+ * 지점을 골라야 한다 — 쓰는 지점이 여럿인데 고르지 않았거나, 고른 지점이 목록에 없다(그사이 꺼졌다 · 지어낸 값).
+ * 🔴 서버는 고르지 않은 요청을 어느 한 지점으로 떨어뜨리지 않는다(다른 지점의 같은 이름·같은 뒷자리 학생에게 올리게 된다).
+ * `branches` = 지금 고를 수 있는 지점(화면이 그 자리에서 선택지를 다시 세운다).
+ */
+export type SiteBranchNeeded = { ok: false; code: "branch"; error: string; branches: SiteBranch[] };
+export const SITE_BRANCH_NEEDED = "지점을 골라 주세요.";
+/** 이 기기에서 마지막으로 고른 지점(번호만) — 다음에 열 때 미리 골라 둔다. 계정이 없는 공개 화면이라 브라우저에만 둔다. */
+export const SITE_BRANCH_STORAGE_KEY = "eywa-video-site-branch";
+
 export type SiteLookupResult =
   | { ok: true; choices: SiteChoice[] }
   /** `no_homework` = 번호·이름은 맞지만 지금 올릴 영상 숙제가 없다(영상 숙제가 없는 반·이미 다 냄). */
-  | { ok: false; code: "invalid" | "no_homework" | "limit" | "unavailable" | "error"; error: string };
+  | { ok: false; code: "invalid" | "no_homework" | "limit" | "unavailable" | "error"; error: string }
+  | SiteBranchNeeded;
 export type SiteOpenResult =
   | { ok: true; url: string }
-  | { ok: false; code: "invalid" | "limit" | "unavailable" | "error"; error: string };
+  | { ok: false; code: "invalid" | "limit" | "unavailable" | "error"; error: string }
+  | SiteBranchNeeded;

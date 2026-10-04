@@ -2,8 +2,7 @@
 # 값 파일은 다른 PC에서 `node scripts/_classnote/video-oauth-login.mjs`로 만든다. 적용이 끝나면 값 파일은 지워진다.
 # 🔴 값 파일은 **다운로드 폴더**에 둔다 — 저장소·워커 폴더에 두면 다음 워커 zip에 비밀이 실려 나간다(그래서 거기는 찾지 않는다).
 param(
-  [string]$ValuesFile = "",
-  [switch]$AllowFolderChange
+  [string]$ValuesFile = ""
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -37,7 +36,6 @@ if ($ValuesFile) {
 if ($ValuesFile) {
   Write-Host "값 파일: $ValuesFile"
   $saveArgs = @('--env-file=.env.local', 'scripts/_classnote/video-save-oauth-settings.mjs', "--values=$ValuesFile")
-  if ($AllowFolderChange) { $saveArgs += '--allow-folder-change' }
   & node @saveArgs
   if ($LASTEXITCODE -ne 0) { throw "값 확인 또는 설정 저장에 실패했습니다. 위 메시지를 확인하세요." }
   # 적용한 것보다 오래된 값 파일은 쓸모없는 비밀이다 — 함께 지운다.

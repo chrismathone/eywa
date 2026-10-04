@@ -59,7 +59,7 @@ function db({ rows = [], workerFiles = [], duplicates = [], registry = [], share
     if (q.includes("from enrollments")) return [{ student_id: STUDENT, class_id: CLASS, class_name: "LT4", subject: "english",
       teacher_id: TEACHER, start_date: "2026-03-01", end_date: null }];
     if (q.includes("md5 = ?") && q.includes("as class_id")) return duplicates;
-    if (q.startsWith("insert into student_homework_videos")) { writes.push({ kind: "upsert", args }); return []; }
+    if (q.startsWith("insert into student_homework_videos")) { writes.push({ kind: "upsert", args, query: q }); return []; }
     if (q.startsWith("update student_homework_videos d")) return [];
     if (q.startsWith("delete from student_homework_videos")) { writes.push({ kind: "delete", ids: args[1] }); return args[1].map((id) => ({ id })); }
     throw new Error(`예상 밖 질의: ${q.slice(0, 60)}`);
@@ -92,6 +92,7 @@ describe("담임 폴더 직접 업로드 훑기", () => {
     ]);
     expect(calls.every((c) => c.method === "GET")).toBe(true);
     expect(calls.some((c) => c.url.includes("otherFolder001"))).toBe(false); // 남의 지점 폴더는 보지 않는다
+    expect(writes.find((w) => w.kind === "upsert").query).toContain("student_homework_videos.route->>'rootId'");
   });
 
   it("이름·폴더가 그대로인 연결 행은 다시 쓰지 않고, 확인 필요 행은 결과가 같으면 조용하다", async () => {
@@ -154,7 +155,7 @@ describe("담임 폴더 직접 업로드 훑기", () => {
     const run = async (shared) => {
       const { auth, calls } = drive(folders, { rootFolders });
       const { sql, writes } = db({ shared, rows: [{ id: "r-hand", source_ref: "inGoneHand01", status: "uploaded", student_id: STUDENT,
-        drive_folder_id: "goneHandMade1", route: {} }] });
+        drive_folder_id: "goneHandMade1", route: { rootId: ROOT } }] });
       const result = await scanManualDriveVideos(sql, TENANT, { rootId: ROOT, auth, now: NOW, ...quiet });
       return { result, writes, calls };
     };
@@ -165,6 +166,26 @@ describe("담임 폴더 직접 업로드 훑기", () => {
     const shared = await run(true);
     expect(shared.calls.some((c) => c.url.includes(HANDMADE) || c.url.includes("otherTenantF01"))).toBe(false);
     expect(shared.result).toMatchObject({ linked: 0, removed: 1 });
+  });
+
+  it("예전 저장 폴더의 공유가 사라져도 그 기록은 조회하거나 지우지 않는다", async () => {
+    const retiredFolder = "retiredFolder01";
+    const { auth, calls } = drive({ [FOLDER]: [], [HOLD]: [] });
+    const { sql, writes } = db({ rows: [{ id: "r-retired", source_ref: "retiredFile0001", status: "uploaded", student_id: STUDENT,
+      drive_folder_id: retiredFolder, route: { rootId: "retiredRoot0001" } }] });
+    expect(await scanManualDriveVideos(sql, TENANT, { rootId: ROOT, auth, now: NOW, ...quiet })).toMatchObject({ removed: 0 });
+    expect(writes.find((w) => w.kind === "delete")).toBeUndefined();
+    expect(calls.some((c) => c.url.includes(retiredFolder))).toBe(false);
+  });
+
+  it("저장 폴더 설정을 읽지 못하면 직접 제출 기록을 지우지 않는다", async () => {
+    const { auth } = drive({ [FOLDER]: [], [HOLD]: [] });
+    const { sql, writes } = db({ rows: [{ id: "r1", source_ref: "manualFile0001", status: "uploaded", student_id: STUDENT,
+      drive_folder_id: FOLDER, route: { rootId: ROOT } }] });
+    const log = vi.fn();
+    expect(await runManualDriveScan(TENANT, { log, now: 5_000_000, authFactory: async () => auth, sqlFactory: () => sql })).toBeNull();
+    expect(writes).toEqual([]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("저장 폴더 설정을 확인하지 못해"));
   });
 
   it("폴더 하나라도 못 읽으면 아무것도 지우지 않고 멈춘다 · 진입점은 던지지 않고 같은 사유는 한 번만 알린다", async () => {
@@ -192,5 +213,22 @@ describe("담임 폴더 직접 업로드 훑기", () => {
     expect(authFactory).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toContain("0324a 적용 전");
+  });
+
+  it("저장된 설정이 꺼져 있으면 env 폴더를 훑지 않는다", async () => {
+    const sql = async (parts) => {
+      const q = parts.join("?");
+      if (q.includes("information_schema")) return [{ n: 2 }];
+      if (q.includes("homework_video_drive_settings")) return [{ enabled: false, root_folder_id: ROOT, owner_id: TENANT }];
+      throw new Error(`예상 밖 질의: ${q.slice(0, 40)}`);
+    };
+    sql.end = async () => {};
+    const authFactory = vi.fn();
+    const result = await runManualDriveScan(TENANT, {
+      log: () => {}, now: 5_000, authFactory, sqlFactory: () => sql,
+      env: { CLASSNOTE_VIDEO_DRIVE_FOLDER_ID: ROOT, CLASSNOTE_VIDEO_TENANT_ID: TENANT },
+    });
+    expect(result).toBeNull();
+    expect(authFactory).not.toHaveBeenCalled();
   });
 });

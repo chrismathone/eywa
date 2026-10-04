@@ -106,6 +106,8 @@ describe("배선 — 화면에서 고른 값이 저장되고, 발송 직전 판�
   it("발송 직전 판정은 한 함수(reportGetsVideoLink)로 — 영상 과제·반·영어·취소·학원 설정이 같은 규칙", () => {
     const code = stripComments(read("src", "features", "video-submit", "server", "report-link.ts"));
     expect(code).toContain("const eligible = reportGetsVideoLink({");
-    expect(code).toContain("siteAvailability(db)");
+    // 🔴 지점을 넘겨 묻는다 — 지점 없이 물으면 지점이 여럿일 때 줄이 통째로 빠진다
+    expect(code).toContain("siteAvailability(db, tenantId)");
+    expect(code).not.toContain("siteAvailability(db)");
   });
 });

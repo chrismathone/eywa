@@ -32,6 +32,7 @@ import { syncMathClassBoardsDaily } from "./math-class-boards-sync.mjs";
 import { syncChildMapOnce } from "./classnote-childmap-core.mjs";
 import { pollParentCommentsOnce, pollParentPostsOnce } from "./classnote-feed-core.mjs";
 import { kickVideoWorker } from "./video-worker.mjs";
+import { loadWorkerVideoDriveSetting, videoArchiveHeartbeat } from "./video-drive-settings.mjs";
 import { videoStorageStatus } from "./video-drive-quota.mjs";
 import { pollReportReadsOnce } from "./classnote-read-core.mjs";
 import { snapshotBoardRosterOnce } from "./classnote-roster-core.mjs";
@@ -104,7 +105,9 @@ const recentIssues = [];
 // parentReply=학부모 글 답글(0317a) · parentReaction=학부모 글 공감(0319a)을 집는 버전인가. 앱은 그 키가 있을 때만 요청을 받는다.
 // parentReplySettings=답글 모드를 **학원 설정**(끔·시험·전체)에서 읽는 버전인가(2026-10-01). 이 키가 없는 옛 판은 모드가 코드 상수(시험)라
 // 설정을 '전체'로 바꿔도 실제 학부모 글의 요청을 전부 실패시킨다 — 앱은 이 키가 없으면 답글 요청을 받지 않는다.
-const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
+// homeworkVideoTenantFolders=지점별 저장 폴더 설정을 읽는 버전인가. 이 키가 없는 워커는 env 폴더만 안다.
+// 새 PC 번들 전에는 키 부재만으로 준비 안 됨으로 보면 안 된다(지금 도는 워커가 막힌다). 다른 루트 첫 각인은 DB 가드가 거절한다.
+const WORKER_CAPS = { autoBoardSync: POST && autoSyncMode() === "on", classNoticeImages: true, noticeClassRoute: true, noticeAttachments: true, nativePublish: true, reportRecall: true, kageFailReasons: true, mathClassRoute: true, classWideNotice: true, classBoardSync: true, syncRequests: true, homeworkVideoArchive: true, homeworkVideoTenantFolders: true, parentReply: true, parentReplySettings: true, parentReaction: true, attachmentMessageRepair: true };
 
 // 로그 타임스탬프 = KST(UTC+9) 고정 오프셋 — 연동 PC의 시스템 로케일/타임존과 무관하게 "YYYY-MM-DD HH:MM:SS".
 // watch.log이 UTC(…Z)로 찍혀 실제 시각과 9시간 어긋나 보이던 문제(2026-07-22 원장 제보). DB/하트비트는 ISO 유지(기계용).
@@ -179,15 +182,14 @@ function noteResult(key, value) {
 }
 
 // 심장박동(0084a) — 이 PC가 발송 담당·살아있음을 매 폴마다 기록. best-effort(실패해도 처리 계속).
-async function heartbeat(tenant) {
+async function heartbeat(tenant, driveSetting) {
   const s = db();
   // env 진단(logDir·recent)을 함께 실어 보낸다 — 연동 PC가 물리적으로 다른 컴퓨터라, 웹에서 못 보면
   // 원인 추적이 불가능해진다(2026-07-21 로그 미생성 사고에서 실제로 막혔다).
   const payload = {
     ...lastResults,
     caps: WORKER_CAPS, // 이 워커가 지원하는 기능(앱의 발송 전 롤아웃 가드가 읽는다)
-    videoArchive: { enabled: !!process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID,
-      folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID || null },
+    videoArchive: videoArchiveHeartbeat(driveSetting),
     videoStorage: videoStorageStatus(), // Drive 남은 공간·업로드 멈춤·압축 결과(앱 '영상 보관' 줄)
     postMode: POST, // 실게시 PC 표식 — 지점당 한 대 임대(worker-lease.mjs)가 이 값을 센다(dry-run PC는 주인이 안 된다)
     env: {
@@ -219,6 +221,7 @@ async function main() {
     log(`[안내] CLASSNOTE_PUBLISH_MODE=${process.env.CLASSNOTE_PUBLISH_MODE} 는 무시됩니다 — 게시 경로는 워커 내장 하나뿐(2026-07-29 폴백 제거).`);
   let moduleOffLogged = false; // 모듈 꺼짐 안내는 바뀔 때 한 번만
   let leaseHolderLogged = null; // "다른 PC가 담당" 안내는 바뀔 때 한 번만
+  let driveSettingUnreadLogged = false; // 저장 폴더 조회 실패 안내는 풀릴 때까지 한 번만
   // 임대 유지 — 한 폴이 몇 분 걸려도(매일 동기화·밀린 배치) 하트비트가 끊기지 않게 폴과 따로 last_seen만 갱신한다.
   if (POST)
     setInterval(() => {
@@ -232,8 +235,12 @@ async function main() {
       const tenant = await getTenant();
       // 같은 PC 두 번째 워커 창은 하트비트도 쓰지 않는다(같은 행을 덮어 시작 시각이 바뀌면 PC 사이 순서가 흔들린다).
       localLockHeld = acquireLocalWorkerLock(stateFile("worker.lock"));
-      // 0) 심장박동 — best-effort라 실패해도 처리 계속.
-      if (localLockHeld) await heartbeat(tenant).catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
+      // 이 폴의 영상 설정. 폴마다 다시 읽는다 — 프로세스 수명의 캐시는 해제 뒤에도 큐에 넣는다.
+      let driveSetting = { enabled: false, rootId: null, source: "none" };
+      try { driveSetting = await loadWorkerVideoDriveSetting(db(), tenant); }
+      catch { driveSetting = { enabled: false, rootId: null, source: "unknown", error: true }; }
+      // 0) 심장박동 — best-effort라 실패해도 처리 계속. 루트는 이번 폴의 실제 설정이다.
+      if (localLockHeld) await heartbeat(tenant, driveSetting).catch((e) => log(`heartbeat 실패(무시): ${e.message}`));
       // 0-a) 이 학원에서 ClassNote 기능(모듈)이 꺼져 있으면 아무것도 하지 않는다(발송·공지·회수·동기화·피드·읽음 전부).
       //      원장 2026-09-30 "꺼지면 있었는지조차 모르게". 켜지면 다음 폴부터 그대로 이어서 처리한다(큐 보존).
       if (!(await isClassnoteModuleEnabled(db(), tenant))) {
@@ -363,24 +370,32 @@ async function main() {
         return { ran: false };
       });
       if (mres.ran) noteResult("childmap", { ...mres, samples: undefined });
-      // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
-      //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
-      const fres = await pollParentPostsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
-        log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
-        noteResult("posts", { error: e.message });
-        return { ran: false };
-      });
-      if (fres.ran) noteResult("posts", fres);
-      // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 10분 가드 내장.
-      //    ⚠️ 4)와 별 폴러인 이유 = 감지 방식이 다르다(글=워터마크 1페이지 / 댓글=감시 창 전체 재조회).
-      //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
-      const cres = await pollParentCommentsOnce(db(), b, { tenant, post: POST, log }).catch((e) => {
-        log(`[comment] 오류(다음 폴에서 재시도): ${e.message}`);
-        noteResult("comments", { error: e.message });
-        return { ran: false };
-      });
-      if (cres.ran) noteResult("comments", cres);
-      if (POST) kickVideoWorker(b, tenant, log);
+      // 4·5) 학부모 글·댓글. 저장 폴더 설정을 읽지 못한 폴은 이 둘만 건너뛴다.
+      //    켜진 것으로 넘기면 큐는 건너뛰고 워터마크·댓글 수만 앞으로 간다. 꺼짐과 구분해서 아예 호출하지 않는다.
+      if (driveSetting.error) {
+        if (!driveSettingUnreadLogged) log("[영상] 저장 폴더 설정을 확인하지 못해 이번 학부모 글·댓글 수집은 건너뜁니다. 다음 주기에 다시 확인합니다.");
+        driveSettingUnreadLogged = true;
+      } else {
+        driveSettingUnreadLogged = false;
+        // 4) 학부모 새 글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 1분 가드 내장이라 대부분 즉시 no-op.
+        //    ClassNote에 아무것도 쓰지 않는다. 실패해도 발송 큐와 독립.
+        const fres = await pollParentPostsOnce(db(), b, { tenant, post: POST, log, archiveEnabled: driveSetting.enabled }).catch((e) => {
+          log(`[feed] 오류(다음 폴에서 재시도): ${e.message}`);
+          noteResult("posts", { error: e.message });
+          return { ran: false };
+        });
+        if (fres.ran) noteResult("posts", fres);
+        // 5) 학부모 댓글 감지(인바운드, 읽기 전용) → 담당 강사 aywa 알림. 10분 가드 내장.
+        //    ⚠️ 4)와 별 폴러인 이유 = 감지 방식이 다르다(글=워터마크 1페이지 / 댓글=감시 창 전체 재조회).
+        //    실측상 학부모 연락의 다수가 댓글로 온다(댓글 12건/일 vs 새 글 4.2건/일). 실패해도 나머지와 독립.
+        const cres = await pollParentCommentsOnce(db(), b, { tenant, post: POST, log, archiveEnabled: driveSetting.enabled }).catch((e) => {
+          log(`[comment] 오류(다음 폴에서 재시도): ${e.message}`);
+          noteResult("comments", { error: e.message });
+          return { ran: false };
+        });
+        if (cres.ran) noteResult("comments", cres);
+      }
+      if (POST) kickVideoWorker(b, tenant, log, { setting: driveSetting });
       // 6) 학부모 읽음 동기화(0122a, 읽기 전용 GET) → aywa lesson_reports.classnote_read_at.
       //    ⚠️ ClassNote에 아무것도 쓰지 않으므로 --post와 무관하게 돈다(읽음은 사실 데이터).
       //    30분 가드 내장. 읽음은 발송 뒤 며칠에 걸쳐 채워져 워터마크 없이 창(14일)을 매번 재조회한다.

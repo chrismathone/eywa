@@ -20,7 +20,7 @@ beforeAll(() => {
 afterAll(() => { settings.disableIframePageLoading = previous; consoleSpy.mockRestore(); });
 describe("학생 숙제 영상 뷰어", () => {
   it("과목·출처로 목록을 나누고, 선택한 영상은 Drive 접근을 확인한 뒤에만 불러온다", () => {
-    const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink />);
+    const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} />);
     expect(screen.getByRole("region", { name: "영어 숙제 영상" })).toBeInTheDocument();
     expect(container.querySelector("iframe")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
@@ -43,7 +43,7 @@ describe("학생 숙제 영상 뷰어", () => {
     render(<HomeworkVideosView rows={[
       { ...row, id: "drive", source: "drive", comment_id: null, posted_at: "2026-09-30T03:00:00Z", drive_file_id: "drivefile99999" },
       { ...row, id: "link", source: "link", comment_id: null },
-    ]} subjectLabels={{ english: "영어" }} showDriveLink={false} />);
+    ]} subjectLabels={{ english: "영어" }} />);
     const drive = screen.getByRole("button", { name: /직접 제출/ });
     expect(drive).toHaveTextContent("2026. 09. 30.");
     expect(drive).not.toHaveTextContent(/오후|오전/);
@@ -59,7 +59,7 @@ describe("학생 숙제 영상 뷰어", () => {
     expect(result.every((r) => !("md5" in r))).toBe(true);
   });
   it("구글 계정에 권한이 없으면 영상 자리에 권한 없음 안내를 띄운다", () => {
-    const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink={false} />);
+    const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} />);
     fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
     fireEvent.error(container.querySelector("img")!);
     expect(screen.getByRole("status")).toHaveTextContent("권한이 없어서 영상을 재생할 수 없습니다.");
@@ -67,30 +67,32 @@ describe("학생 숙제 영상 뷰어", () => {
   });
   it("막 올라간 영상은 썸네일이 아직 없으니 확인 없이 바로 연다", () => {
     const fresh = { ...row, uploaded_at: new Date(Date.now() - 10 * 60_000).toISOString() };
-    const { container } = render(<HomeworkVideosView rows={[fresh]} subjectLabels={{ english: "영어" }} showDriveLink={false} />);
+    const { container } = render(<HomeworkVideosView rows={[fresh]} subjectLabels={{ english: "영어" }} />);
     fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("iframe")?.className).not.toContain("invisible");
   });
-  it("'Drive 열기'는 관리자뷰에서만 보인다", () => {
-    const { unmount } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink={false} />);
+  it("🔴 Drive로 나가는 링크는 어디에도 없다 — 재생 주소(미리보기·썸네일)만 만든다", () => {
+    const { container } = render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} />);
     expect(screen.queryByText("Drive 열기")).toBeNull();
-    unmount();
-    render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink />);
-    expect(screen.getByText("Drive 열기")).toHaveAttribute("href", "https://drive.google.com/file/d/drivefile12345/view");
+    expect(container.querySelector("a")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /학부모 댓글/ }));
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.innerHTML).not.toContain("/view");
+    expect(Object.keys(homeworkVideoLinks("drivefile12345")!).sort()).toEqual(["preview", "thumbnail"]);
   });
   it("영상 제출 현황의 ▶ — `video`로 넘어온 id의 영상이 미리 골라진 채 열린다(이 학생 영상이 아닌 id는 무시)", () => {
     const other: HomeworkVideo = { ...row, id: "video-2", posted_at: "2026-09-29T04:36:00Z", drive_file_id: "otherfile12345" };
-    const { container, unmount } = render(<HomeworkVideosView rows={[row, other]} subjectLabels={{ english: "영어" }} showDriveLink initialVideoId="video-2" />);
+    const { container, unmount } = render(<HomeworkVideosView rows={[row, other]} subjectLabels={{ english: "영어" }} initialVideoId="video-2" />);
     expect(screen.getByRole("region", { name: "숙제 영상 뷰어" })).toBeInTheDocument();
     expect(container.querySelector("img")?.getAttribute("src")).toContain("otherfile12345");
     unmount();
-    render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} showDriveLink initialVideoId="남의-영상-id" />);
+    render(<HomeworkVideosView rows={[row]} subjectLabels={{ english: "영어" }} initialVideoId="남의-영상-id" />);
     expect(screen.queryByRole("region", { name: "숙제 영상 뷰어" })).toBeNull();
     expect(screen.getByText("목록에서 재생할 영상을 선택하세요.")).toBeInTheDocument();
   });
   it("전송 대기 중인 영상은 재생 링크를 만들지 않는다", () => {
-    render(<HomeworkVideosView rows={[{ ...row, status: "queued", drive_file_id: null }]} subjectLabels={{ english: "영어" }} showDriveLink />);
+    render(<HomeworkVideosView rows={[{ ...row, status: "queued", drive_file_id: null }]} subjectLabels={{ english: "영어" }} />);
     expect(screen.getByRole("button", { name: /업로드 대기/ })).toBeDisabled();
     expect(screen.queryByText("Drive 열기")).toBeNull();
     expect(homeworkVideoLinks("//evil.example/video")).toBeNull();
