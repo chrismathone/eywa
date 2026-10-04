@@ -9,7 +9,7 @@ import { sourceBindingForTenant, sourceControl, syncErrorResponse } from "@/feat
 /**
  * 사이드바 '연결 앱 → 오늘의 수학'의 출발점 — 로그인한 사람의 자동 로그인 표를 붙여 오늘의 수학으로 보낸다(302).
  *
- * 활성 v2 binding은 대상 서비스의 state/PKCE 시작 경로로 보낸다. 신규 교사 발급과 기존 계정 확인은 관리 원장에서 처리한다.
+ * 활성 v2 binding의 연동 대상은 서비스의 state/PKCE 시작 경로로 보낸다. 연동 대상이 아니면 대상 로그인 화면으로 보낸다.
  * binding 미설정 때는 기존 v1 연결을 유지한다. shadow는 대상 첫 화면으로 보내며, 관리 대상의 v1 우회는 대상에서 차단한다.
  * v1 표의 신원은 eywa 사용자 id(`sub`)이며 이메일만으로 계정을 연결하지 않는다.
  * - 비로그인 → eywa 로그인 화면.
@@ -36,6 +36,9 @@ export async function GET(req: Request) {
       if (binding) {
         const control = await sourceControl(binding, user.id);
         if (control.mode === "active") {
+          if (control.healthy && control.enabled && !control.users.some((entry) => entry.id === user.id && entry.eligible)) {
+            return NextResponse.redirect(new URL("/login?eywa=not-linked", binding.targetBaseUrl), { headers: HEADERS });
+          }
           // Target creates the browser's state/PKCE cookie before source authorization.
           const target = new URL("/api/sso/eywa/v2/start", binding.targetBaseUrl);
           target.searchParams.set("bindingId", binding.bindingId);
