@@ -41,10 +41,13 @@ try {
       '0274a_class_period_enrollment_end']) await apply(`supabase/migrations/${name}.sql`);
     await apply(migration);
     await apply(migration); // alpha rerun safety
+    await apply('supabase/migrations/20261004060214_todays_math_student_phone_tail.sql');
+    await apply('supabase/migrations/20261004060214_todays_math_student_phone_tail.sql');
     console.log('PASS migration and rerun against actual source DDL'); checks++;
   }
   await sqlTest('transactional lifecycle, scopes, exports, PKCE and privileges','supabase/tests/todays_math_sync.sql');
   await sqlTest('automatic first ON, repeated bootstrap, OFF/ON identity, operator stop and privileges','supabase/tests/todays_math_sync_automatic.sql');
+  await sqlTest('contact tail selection, content refresh, privacy and schema health','supabase/tests/todays_math_student_phone_tail.sql');
   const one = new Client(config); const two = new Client(config);
   await one.connect(); await two.connect();
   const bid='30000000-0000-0000-0000-000000000001';
