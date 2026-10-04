@@ -15,6 +15,7 @@ import "server-only";
  */
 import Link from "next/link";
 import { kstToday } from "@/lib/date-kst";
+import { cn } from "@/lib/utils";
 import { reportError } from "@/lib/observability/report-error";
 import { groupAdjacentSlots } from "../seating";
 import { isSpecialSlotLabel } from "@/features/timetable/lib/teacher-label";
@@ -24,7 +25,7 @@ import { sheetT, sheetTf } from "@/features/teacher-view/i18n";
 import { getTeacherViewLang } from "@/features/teacher-view/server/lang";
 import { StripSlot } from "./strip-slot";
 
-export async function TodayAttendanceStrip() {
+export async function TodayAttendanceStrip({ className }: { className?: string } = {}) {
   // 🔴 **내 수업만**(selfOnly) — 관리자 계열도 여기선 자기 반만 본다. 안 그러면 원스크린을 여는 것만으로
   //    전체 보드를 읽고(느려짐), 남의 반에 「전원 출석」이 붙는다. 전체는 /attendance/live에서 본다.
   // ⚠️ 실패는 삼키되 **소리 없이 삼키지 않는다**(#89) — 이 스트립은 실패하면 그냥 안 보이므로, 조회가
@@ -56,7 +57,7 @@ export async function TodayAttendanceStrip() {
   const missing = slots.reduce((n, s) => n + (s.students.length - s.recordedCount), 0);
 
   return (
-    <section className="border-amber/40 bg-amber/5 space-y-2 rounded-2xl border p-3">
+    <section className={cn("border-amber/40 bg-amber/5 space-y-2 rounded-2xl border p-3", className)}>
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h2 className="text-amber text-sm font-bold">{sheetT(lang, "strip.title")}</h2>
         {/* 🔴 수가 든 문구는 **문장 전체**를 사전에서 받는다 — 조각으로 이으면 영어 어순이 무너진다. */}

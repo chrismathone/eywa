@@ -135,7 +135,7 @@ export default async function OneScreenPage({
           옮기는 자리. ⚠️ Suspense로 감싼다: 전원이 매일 여는 hot path라 이 조회가 첫 페인트를 막으면 안
           된다(B7). 다 찍은 날엔 컴포넌트가 스스로 null을 돌려 아무 것도 그리지 않는다. */}
       <Suspense fallback={null}>
-        <TodayAttendanceStrip />
+        <TodayAttendanceStrip className="mb-4" />
       </Suspense>
       {/* key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만). */}
       {/* key=대상 날짜 — 공급자는 검사 기록을 처음 한 번만 읽는다. 날짜를 옮겼는데 옛 날짜 기록이 남으면 일괄 검사가
