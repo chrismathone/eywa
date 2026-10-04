@@ -62,6 +62,30 @@ insert into tm_sync_private.function_contract(signature,definition_hash)
  from unnest(array['tm_sync_private.export_rows(uuid)','tm_sync_private.contact_phone_last4(text,text)']) signature
  on conflict(signature) do update set definition_hash=excluded.definition_hash;
 
+-- Preserve the exact-count guard and include the newly fingerprinted helper.
+create or replace function tm_sync_private.healthy() returns boolean
+language sql stable set search_path = '' as $$
+ select (select count(*) from tm_sync_private.trigger_contract) = 20
+ and not exists (
+  select 1 from tm_sync_private.trigger_contract e
+  left join pg_class c on c.oid=to_regclass(e.relation_name)
+  left join pg_trigger t on t.tgrelid=c.oid and t.tgname=e.trigger_name and not t.tgisinternal
+  where t.oid is null or t.tgenabled not in ('O','A')
+    or tm_sync_private.hash(pg_get_triggerdef(t.oid)) <> e.definition_hash
+    or tm_sync_private.hash(pg_get_functiondef(t.tgfoid)) <> e.function_hash
+ ) and (select count(*) from tm_sync_private.function_contract)=12
+ and not exists(select 1 from tm_sync_private.function_contract f
+   where to_regprocedure(f.signature) is null
+    or tm_sync_private.hash(pg_get_functiondef(to_regprocedure(f.signature)))<>f.definition_hash)
+ and to_regprocedure('public.class_period_closed_end(uuid)') is not null;
+$$;
+
+do $$ begin
+ if not tm_sync_private.healthy() then
+  raise exception 'Contact projection health check failed';
+ end if;
+end; $$;
+
 insert into tm_sync_private.content_dirty(binding_id) select id from tm_sync_private.bindings
  on conflict(binding_id) do update set changed_at=clock_timestamp();
 select tm_sync_private.wake(id) from tm_sync_private.bindings;
