@@ -24,7 +24,10 @@ export async function GET(request: Request) {
     }
     if (user.tenantId !== config.tenantId || user.systemRole === "student") throw new SyncHttpError(403, "account_not_eligible");
     const control = await sourceControl(config, user.id);
-    if (!control.healthy || !control.enabled || control.mode !== "active" || !control.users.some((entry) => entry.id === user.id && entry.eligible)) throw new SyncHttpError(403, "account_not_eligible");
+    if (!control.healthy || !control.enabled || control.mode !== "active") throw new SyncHttpError(403, "account_not_eligible");
+    if (!control.users.some((entry) => entry.id === user.id && entry.eligible)) {
+      return NextResponse.redirect(new URL("/login?eywa=not-linked", config.targetBaseUrl), { headers: NO_STORE });
+    }
     const code = randomBytes(32).toString("base64url");
     const issued = await syncRpc("tm_sync_issue_code", {
       p_binding_id: config.bindingId, p_user_id: user.id, p_code_hash: sha256(code),
