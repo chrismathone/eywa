@@ -1,6 +1,8 @@
 -- Additive v2 contact projection for manager-triggered student account issuance.
 -- Existing snapshots remain valid. Export only four digits, never full phone numbers.
 begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '45s';
 create or replace function tm_sync_private.contact_phone_last4(p_student_phone text, p_parent_phone text)
 returns text language sql immutable set search_path = '' as $$
  select case

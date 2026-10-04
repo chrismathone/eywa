@@ -1,8 +1,12 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
-## 2026-10-03 오늘의수학 v2 원본 SQL (격리 검증 완료, 운영 미적용)
+## 2026-10-04 오늘의수학 v2 원본 SQL (운영 적용 완료)
 
-`0337a_todays_math_sync_v2.sql`은 원본 제어·권한 세대·트랜잭션 outbox·동결 스냅샷·일회 SSO 코드와 서비스 역할 전용 RPC를 추가한다. Supabase CLI 2.81.3이 만든 `20261003083350_todays_math_sync_v2.sql`을 아래 alpha 규칙의 다음 번호로 옮겼다. 기존 업무 컬럼은 변경하지 않으며 최초 binding은 shadow, 구성 RPC는 기본 미리보기이다. 실제 PostgreSQL 17 격리 검증 및 재실행을 통과했고 **라이브 DB에는 적용하지 않았다**. 인터페이스·적용 전 조건·검증은 [원본 SQL 보고서](../../docs/todays-math-sync-source-sql-report.md)를 참조한다.
+`0337a_todays_math_sync_v2.sql`은 원본 제어·권한 세대·트랜잭션 outbox·동결 스냅샷·일회 SSO 코드와 서비스 역할 전용 RPC를 추가한다. Supabase CLI 2.81.3이 만든 `20261003083350_todays_math_sync_v2.sql`을 아래 alpha 규칙의 다음 번호로 옮겼다. 기존 업무 컬럼은 변경하지 않으며 최초 binding은 shadow, 구성 RPC는 기본 미리보기이다. 실제 PostgreSQL 17 격리 검증 및 운영 적용을 완료했다. 인터페이스·적용 전 조건·검증은 [원본 SQL 보고서](../../docs/todays-math-sync-source-sql-report.md), 현재 상태는 [운영 적용 기록](../../docs/todays-math-sync-production-2026-10-03.md)을 참조한다.
+
+`0339a_todays_math_student_phone_tail.sql`은 학생 연락처 끝 4자리·연락처 변경 알림과 정확한 함수 지문 12개 검사를 추가한다. CLI 생성 이름 `20261004060214_todays_math_student_phone_tail.sql`로 2026-10-04 운영 적용한 뒤 기존 alpha 번호 규칙으로 이름만 옮겼다. 파일명 변경 때문에 운영 SQL을 다시 실행할 필요는 없다.
+
+연락처 변경이 적용된 운영 DB에 `0337a`를 단독 재실행하거나 `pnpm db:alphas`로 전 파일을 다시 적용하지 않는다. `0337a`가 이전의 함수 개수·export·학생 트리거를 복원하면 후속 파일 실행 전 건강 검사가 실패하고 접근 중단 및 기록 공백 판정이 발생할 수 있다. 신규 빈 DB의 전체 설치와 이미 운영 중인 DB의 대상 migration 적용을 구분한다. `0337a`만 다시 실행하는 것은 롤백이 아니다.
 
 ## 2026-09-23 수학 내신 통합
 
@@ -26,9 +30,9 @@ alpha는 건드리지 않는다 → alpha는 사람이 직접 돌려야 한다.
 
 ## 2. 멱등성 — 재실행 안전
 
-모든 alpha 파일은 재실행 안전하게 작성: `create extension if not exists`, `create or replace function`,
+alpha 파일은 멱등 구문으로 작성: `create extension if not exists`, `create or replace function`,
 `create index if not exists`, `drop policy if exists … create policy`, `drop trigger if exists … create trigger`.
-→ 이미 적용된 DB에 다시 돌려도 에러 없이 no-op. (그래도 **번호 순서대로** 돌릴 것 — 뒤 파일이 앞 객체에 의존.)
+→ 같은 파일의 재실행은 지원하되, 이전 버전 파일이 후속 정의를 덮어쓸 수 있으므로 전체 재적용을 무조건 안전하다고 판단하지 않는다. 특히 위의 `0337a`/`0339a` 운영 적용 규칙을 따른다.
 
 ## 2-1. 🔴 번호는 **겹치면 안 된다** — 같은 번호를 두 작업이 쓰면 "이거 돌렸나"를 아무도 못 센다
 

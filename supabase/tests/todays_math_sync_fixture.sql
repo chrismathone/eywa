@@ -20,3 +20,9 @@ $$;
 create function auth.uid() returns uuid language sql stable as $$
  select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;
 $$;
+-- Runtime trigger prerequisite from 0001a; business DDL comes from 0027a.
+create function public.tg_set_updated_at() returns trigger language plpgsql as $$
+begin
+ new.updated_at := now();
+ return new;
+end; $$;

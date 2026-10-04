@@ -33,7 +33,7 @@ try {
     await apply('supabase/tests/todays_math_sync_fixture.sql');
     // Exact existing migrations, rather than invented source-table projections.
     for (const name of ['0000_fair_amazoness','0001_parallel_meggan','0013_last_swarm',
-      '0021_fat_gideon','0023_amazing_doctor_faustus','0027_big_swordsman',
+      '0021_fat_gideon','0023_amazing_doctor_faustus','0027_big_swordsman','0027a_kiosk_attendance',
       '0044a_class_teacher_handover','0049a_lesson_reports','0059a_class_closed_at',
       '0075a_mirror_trigger_role_hardening','0083a_lesson_reports_classnote',
       '0089a_lesson_reports_textbook_makeup','0134a_lesson_reports_class_id',
@@ -41,8 +41,8 @@ try {
       '0274a_class_period_enrollment_end']) await apply(`supabase/migrations/${name}.sql`);
     await apply(migration);
     await apply(migration); // alpha rerun safety
-    await apply('supabase/migrations/20261004060214_todays_math_student_phone_tail.sql');
-    await apply('supabase/migrations/20261004060214_todays_math_student_phone_tail.sql');
+    await apply('supabase/migrations/0339a_todays_math_student_phone_tail.sql');
+    await apply('supabase/migrations/0339a_todays_math_student_phone_tail.sql');
     console.log('PASS migration and rerun against actual source DDL'); checks++;
   }
   await sqlTest('transactional lifecycle, scopes, exports, PKCE and privileges','supabase/tests/todays_math_sync.sql');

@@ -50,7 +50,7 @@ Manifest: `{schemaVersion:2,snapshotId,bindingId,tenantId,targetBranchId,sourceE
 - staff: ControlUser 동일.
 - classes: `{id,name,subject,grade:string|null,active:boolean,closedAt:string|null,teacherId:string|null,permissionRevision}`.
 - memberships: `{id,classId,userId,role:'homeroom'|'slot'|'delegate',startsOn:string|null,endsOn:string|null,revokedAt:string|null,capabilities:string[]}`. 대강 양끝 포함. homeroom/slot/delegate 권한은 독립; delegate 기본 read만.
-- students: `{id,name,grade:string|null,school:string|null,status,isTest:boolean}`. 학생별 단일 identity, 과거 데이터 보존.
+- students: `{id,name,grade:string|null,school:string|null,status,isTest:boolean,phoneLast4?:string|null}`. 학생별 단일 identity, 과거 데이터 보존. 연락처는 끝 4자리만 전달하며 학생 전화 우선·보호자 전화 대체, 누락 시 null이다. 이전 snapshot의 필드 생략을 허용하고 학생 계정 발급은 현재 수강 자격 및 관리자의 명시적 실행을 별도로 검사한다.
 - enrollments: `{id,studentId,classId,startsOn:string,endsOn:string|null,onHold:boolean,isTransferred:boolean,attendanceDays:string[]}`. 예정/종료/휴원 포함; 판정은 기존 eligibility 함수와 동일.
 - progress: `{id,studentId,classId:string|null,makeupClassId:string|null,reportDate:string,createdAt:string,progress:string}`. 이름으로 학생 연결 금지. 전역 삭제 금지; null class 귀속이 애매하면 보류.
 
