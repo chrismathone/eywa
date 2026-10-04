@@ -47,7 +47,7 @@ export const membershipSchema = z.object({
   role: z.enum(["homeroom", "slot", "delegate"]), startsOn: dateSchema.nullable(), endsOn: dateSchema.nullable(),
   revokedAt: timestampSchema.nullable(), capabilities: z.array(z.enum(CAPABILITIES)),
 });
-export const studentSchema = z.object({ id: uuidSchema, name: text, grade: text.nullable(), school: text.nullable(), status: text, isTest: z.boolean() });
+export const studentSchema = z.object({ id: uuidSchema, name: text, grade: text.nullable(), school: text.nullable(), status: text, isTest: z.boolean(), phoneLast4: z.string().regex(/^[0-9]{4}$/).nullable().optional() });
 export const enrollmentSchema = z.object({
   id: uuidSchema, studentId: uuidSchema, classId: uuidSchema, startsOn: dateSchema, endsOn: dateSchema.nullable(),
   onHold: z.boolean(), isTransferred: z.boolean(), attendanceDays: z.array(text),

@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { kstToday } from "@/lib/date-kst";
 import { isEnrollmentOnRosterOn } from "@/features/enrollments/eligibility";
+import { contactPhoneLast4 } from "./contactPhoneTail";
 import {
   PROGRESS_PAGE_SIZE,
   type ProgressRow,
@@ -44,6 +45,8 @@ interface StudentRow {
   name: string;
   grade: string | null;
   school: string | null;
+  student_phone: string | null;
+  parent_phone: string | null;
 }
 
 /**
@@ -92,7 +95,7 @@ export async function fetchRoster(
   const students = await fetchInChunks<StudentRow>([...byStudent.keys()], (chunk) =>
     admin
       .from("students")
-      .select("id, name, grade, school")
+      .select("id, name, grade, school, student_phone, parent_phone")
       .eq("tenant_id", tenantId)
       .eq("status", "enrolled")
       // 테스트 전용 학생(`학원이`, 0141a) — 집계 제외 대상이라 안 준다.
@@ -106,6 +109,7 @@ export async function fetchRoster(
     name: s.name,
     grade: s.grade,
     school: s.school,
+    phoneLast4: contactPhoneLast4(s.student_phone, s.parent_phone),
     status: "enrolled" as const,
     classes: byStudent.get(s.id) ?? [],
   }));

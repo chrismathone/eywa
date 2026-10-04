@@ -75,12 +75,13 @@ export function isAuthorized(header: string | null, expectedKey: string | undefi
   return secretMatches(header, `Bearer ${expectedKey}`);
 }
 
-/** 로스터 응답의 학생 한 행 — 계약 모양. 연락처·성적·상담·수납은 **없다**. */
+/** The roster carries only the contact tail needed for explicit student account issuance, never full phone numbers. */
 export interface RosterStudent {
   id: string;
   name: string;
   grade: string | null;
   school: string | null;
+  phoneLast4?: string | null;
   status: "enrolled";
   classes: Array<{ id: string; name: string; startDate: string | null }>;
 }
