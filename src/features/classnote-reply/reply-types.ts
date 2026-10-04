@@ -72,8 +72,8 @@ export type ThreadVideo = {
   pending: boolean;
   /** 한글 상태 문구 */
   label: string;
-  /** 재생 주소 — playable일 때만. `view`(Drive 열기)는 관리자뷰에서만 */
-  links: { preview: string; thumbnail: string; view: string | null } | null;
+  /** 재생 주소(미리보기·썸네일) — playable일 때만. Drive에서 여는 주소는 싣지 않는다(2026-10-04) */
+  links: { preview: string; thumbnail: string } | null;
   uploadedAt: string | null;
 };
 

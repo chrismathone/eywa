@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeDb } from "./fake-db.test-util";
-import { C, ENV, FILE, FOLDER, S, T, TOKEN, fakeDrive, seedDb, settings } from "./test-fixture.test-util";
+import { C, ENV, FILE, FOLDER, ROOT, S, T, TOKEN, fakeDrive, seedDb, settings } from "./test-fixture.test-util";
 import { hashSubmitToken } from "./token";
 
 const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown }));
@@ -12,7 +12,7 @@ import { _resetVideoDriveConfigForTest } from "./drive-config";
 import { _resetVideoSubmitAvailabilityForTest } from "./availability";
 
 const UPLOAD = "55555555-5555-4555-8555-555555555555";
-const route = { tenantId: T, studentId: S, classId: C, className: "LT4", subject: "math", teacherId: "t", folderName: "이수진 선생님", reason: "제출 링크" };
+const route = { tenantId: T, rootId: ROOT, studentId: S, classId: C, className: "LT4", subject: "math", teacherId: "t", folderName: "이수진 선생님", reason: "제출 링크" };
 const good = {
   id: FILE, size: "1234", md5Checksum: "0123456789abcdef0123456789abcdef", parents: [FOLDER], trashed: false,
   appProperties: { aywaSource: "link", aywaUpload: UPLOAD },
@@ -39,6 +39,14 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("완료 확인 — Drive를 다시 읽어 맞을 때만 줄을 만든다", () => {
+  it("저장 폴더를 바꾸거나 해제한 뒤에도 시작한 업로드는 원래 소유 폴더에서 완료한다", async () => {
+    for (const enabled of [true, false]) {
+      setup(good);
+      db.tables.homework_video_drive_roots = [{tenant_id:T,root_folder_id:ROOT}];
+      db.tables.homework_video_drive_settings = [{tenant_id:T,enabled,root_folder_id:enabled?"CHANGED_ROOT_123":null}];
+      expect(await completeLinkUpload({token:TOKEN,uploadId:UPLOAD})).toMatchObject({ok:true});
+    }
+  });
   it("맞으면 출처 'link' 한 줄(학생·반·게시 시각) — 두 번 불러도 한 줄", async () => {
     setup(good);
     const first = await completeLinkUpload({ token: TOKEN, uploadId: UPLOAD });

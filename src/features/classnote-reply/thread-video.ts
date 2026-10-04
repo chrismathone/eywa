@@ -9,12 +9,12 @@ export type VideoRow = { id: string; status: string; drive_file_id: string | nul
 
 export const VIDEO_PENDING_TEXT = "영상을 보관하는 중입니다. 잠시 후 재생할 수 있습니다.";
 
-export function toThreadVideo(row: VideoRow, opts: { canView: boolean; showDriveLink: boolean }): ThreadVideo {
+export function toThreadVideo(row: VideoRow, opts: { canView: boolean }): ThreadVideo {
   const base = { id: row.id, uploadedAt: row.uploaded_at, links: null as ThreadVideo["links"] };
   if (!opts.canView) return { ...base, playable: false, pending: false, label: "영상을 볼 권한이 없습니다" };
   if (row.status === "uploaded") {
     const l = homeworkVideoLinks(row.drive_file_id);
-    if (l) return { ...base, playable: true, pending: false, label: "영상 보기", links: { preview: l.preview, thumbnail: l.thumbnail, view: opts.showDriveLink ? l.view : null } };
+    if (l) return { ...base, playable: true, pending: false, label: "영상 보기", links: { preview: l.preview, thumbnail: l.thumbnail } };
     return { ...base, playable: false, pending: true, label: "영상 주소를 확인하는 중입니다. 잠시 후 다시 확인합니다." };
   }
   if (row.status === "queued" || row.status === "processing") return { ...base, playable: false, pending: true, label: VIDEO_PENDING_TEXT };

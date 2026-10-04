@@ -35,8 +35,9 @@ async function loadRows(studentId: string): Promise<{ rows: LinkRow[]; siteUrl: 
       const until = formatShortKoreanDate(kstDateOf(new Date(Date.parse(active.lastExpiresAt) - 1)) ?? "");
       rows.set(e.classId, { classId: e.classId, className: e.className, count: active.count, until });
     }
-    const site = await siteAvailability().catch(() => null);
-    const siteUrl = site?.ok && site.tenantId === user.tenantId ? `${getAppUrl()}/v` : null;
+    // 로그인한 계정의 지점으로 본다 — 지점마다 저장 폴더가 따로라, 다른 지점이 사이트를 쓴다고 이 지점에 주소를 적지 않는다.
+    const site = await siteAvailability(undefined, user.tenantId).catch(() => null);
+    const siteUrl = site?.ok ? `${getAppUrl()}/v` : null;
     return { rows: [...rows.values()], siteUrl };
   } catch (error) {
     console.warn(JSON.stringify({ level: "warn", scope: "videoSubmit.studentTab", message: error instanceof Error ? error.message : "unknown" }));

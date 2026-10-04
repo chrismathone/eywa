@@ -2,7 +2,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
 import type { TenantSettings } from "@/features/owner/settings-types";
-import { videoDriveConfigFor, type VideoDriveConfig } from "./drive-config";
+import { type VideoDriveConfig } from "./drive-config";
+import { videoDriveForTenant } from "./drive-settings";
 import { resolveVideoCenterId } from "./folder-registry";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -37,7 +38,7 @@ export async function videoSubmitAvailability(
   tenantId: string, settings: Pick<TenantSettings, "modules">, db: Db = createAdminClient(),
 ): Promise<SubmitAvailability> {
   if (!classnoteModuleOn(settings)) return { ok: false, reason: "module_off" };
-  const drive = videoDriveConfigFor(tenantId);
+  const drive = await videoDriveForTenant(tenantId, db);
   if (!drive) return { ok: false, reason: "no_config" };
   if (!(await videoSubmitSchemaReady(db))) return { ok: false, reason: "no_schema" };
   const known = centerByTenant.get(`${tenantId}:${drive.rootId}`);

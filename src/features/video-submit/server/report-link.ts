@@ -18,7 +18,8 @@ export { reportLineMode, TEST_STUDENT_NAME } from "../link-choice";
  * /v 링크로만 업로드"* — 학생마다 링크를 만들지 않는다(예전 `reportVideoLinkToken`은 거뒀다). 주소 하나를 안내하고, 학생이 번호·이름으로
  * 선생님이 낸 숙제를 골라 올린다.
  * 조건 = 영상 과제 있음 + 검사 대상 반(영어·취소·반 없음 제외 — `reportGetsVideoLink`. 강사가 행마다 켜던 '영상 첨부 링크 넣기'는 거둬서
- * 영상 과제 있음이면 붙인다) + 이 지점이 올리기 사이트를 쓸 수 있음(없는 주소를 안내하지 않게).
+ * 영상 과제 있음이면 붙인다) + **이 보고서의 지점**이 올리기 사이트를 쓸 수 있음(없는 주소를 안내하지 않게 — 지점마다 따로 본다).
+ * 글의 주소는 지점과 무관하게 `/v` 그대로다(주소에 지점을 넣지 않는다 — 지점이 여럿이면 학생이 화면에서 고른다).
  * 숙제 기한(보고서일 + 7일)이 이미 지난 보고서(기한 지난 지정 발송·재발송)엔 붙이지 않는다 — 들어가도 그 숙제는 목록에 없다.
  * 🔴 어떤 실패도 false(줄 없이 발송) — 이 판정이 보고서 발송을 막으면 안 된다. 쓰는 것이 없어 감사로그도 없다(링크를 만들지 않는다).
  */
@@ -44,9 +45,10 @@ export async function reportSiteLine(reportId: unknown): Promise<boolean> {
     grade: studentRes.data.grade as string | null, policy: settings.report.videoHomeworkPolicy,
   });
   if (!eligible) return false;
-  const site = await siteAvailability(db);
-  if (!site.ok || site.tenantId !== tenantId) {
-    console.warn(JSON.stringify({ level: "warn", scope: "videoSubmit.reportSiteLine.skipped", reportId, reason: site.ok ? "other_tenant" : site.reason }));
+  // 🔴 **이 보고서의 지점**이 사이트를 쓸 수 있나 — 다른 지점이 쓴다고 주소를 안내하지 않는다(그 지점 학생은 거기서 숙제를 못 찾는다).
+  const site = await siteAvailability(db, tenantId);
+  if (!site.ok) {
+    console.warn(JSON.stringify({ level: "warn", scope: "videoSubmit.reportSiteLine.skipped", reportId, reason: site.reason }));
     return false;
   }
   return true;

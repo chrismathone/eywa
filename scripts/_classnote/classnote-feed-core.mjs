@@ -44,8 +44,8 @@ import {
   norm,
 } from "./classnote-admin-core.mjs";
 import { kickClassify, loadChildStudentMap, storeParentMessages } from "./classnote-inbox-store.mjs";
-import { enqueueParentVideos, videoArchiveEnabled } from "./video-inbox.mjs";
-import { incomingVideo } from "./video-inbox.mjs";
+import { enqueueParentVideos, incomingVideo } from "./video-inbox.mjs";
+import { loadWorkerVideoDriveSetting } from "./video-drive-settings.mjs";
 import { kickAttachmentRepair } from "./repair-attachment-messages.mjs";
 import {
   classBoardClassOf,
@@ -506,13 +506,24 @@ export function oneBoardChildConflict(childLinks, childId, studentId) {
   return !!linked && linked !== studentId;
 }
 
+async function videoArchiveOn(sql, tenant, archiveEnabled, env) {
+  if (typeof archiveEnabled === "boolean") return archiveEnabled;
+  const setting = await loadWorkerVideoDriveSetting(sql, tenant, env ? { env } : {});
+  if (setting.error) throw new Error("영상 저장 폴더 설정을 확인하지 못했습니다.");
+  return setting.enabled === true;
+}
+
 /**
  * 한 주기 — 학부모 새 글 감지 → 담당 강사 알림. 데몬이 매 폴 부르지만 대부분 즉시 no-op(60초 가드).
- * @param {object} opts - { tenant, post, log, force, dryRun }
+ * 옵션: tenant, post, log, force, dryRun, archiveEnabled, env.
  *   dryRun=true면 감지·매핑까지만 하고 **insert도 워터마크 전진도 안 함**(점검용 one-shot).
+ *   archiveEnabled 를 넘기면 그 폴에서 읽은 영상 설정을 쓴다. 없으면 여기서 설정을 읽는다.
+ * @param {object} sql
+ * @param {object} browser
+ * @param {{ tenant?: string, post?: boolean, log?: Function, force?: boolean, dryRun?: boolean, archiveEnabled?: boolean, env?: {[key: string]: string | undefined} }} [opts]
  * @returns {Promise<{ran:boolean, detected?:number, notified?:number, held?:number, tooOld?:number, plan?:Array}>}
  */
-export async function pollParentPostsOnce(sql, browser, { tenant, post, log = console.log, force = false, dryRun = false }) {
+export async function pollParentPostsOnce(sql, browser, { tenant, post, log = console.log, force = false, dryRun = false, archiveEnabled, env } = {}) {
   if (!force) {
     if (!post) return { ran: false };
     if (Date.now() - lastRunAt < POLL_INTERVAL_MS) return { ran: false };
@@ -524,6 +535,7 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
     log("[feed] 이 학원의 ClassNote 기능이 꺼져 있거나 지점을 알 수 없어 건너뜁니다");
     return { ran: false, moduleOff: 1 };
   }
+  const archiveOn = !dryRun && await videoArchiveOn(sql, tenant, archiveEnabled, env);
 
 
   // 대상 = 수학 보드 그룹. 발송 opt-in(classnoteSubjects)에 **묶지 않는다** — 인바운드 감지는 발송이 아니고,
@@ -550,9 +562,9 @@ export async function pollParentPostsOnce(sql, browser, { tenant, post, log = co
 
     // [영상] 글: 알림의 나이·본문 유무와 별개로 이미 읽은 첨부를 보관 큐에 넣는다.
     // 실패하면 워터마크를 전진시키지 않아 다음 폴에서 다시 등록한다.
-    if (!dryRun && videoArchiveEnabled()) {
+    if (archiveOn) {
       const { centerId } = await getFeedPage(browser);
-      await enqueueParentVideos(sql, tenant, centerId, rows);
+      await enqueueParentVideos(sql, tenant, centerId, rows, null, { enabled: true, env });
     }
 
     // 콜드 스타트 — 과거 글 전체를 알림으로 쏟지 않는다. 현재 위치만 기록하고 다음 폴부터 진짜 새 글만.
@@ -858,11 +870,15 @@ async function collectOldPostComments(sql, browser, tenant, { rows, counts, log 
  *   그 글의 댓글 API를 연다(하루 ~12~24회) → **새로 달린 학부모 댓글**만(강사 답글도 수를 올리므로 걸러짐) →
  *   보드 게이트 → 담당 강사 → notifications insert + 스냅샷 갱신(**같은 트랜잭션**).
  *
- * @param {object} opts - { tenant, post, log, force, dryRun }
+ * 옵션: tenant, post, log, force, dryRun, archiveEnabled, env.
  *   dryRun=true면 감지·매핑까지만 하고 **insert도 스냅샷 갱신도 안 함**(점검용 one-shot).
+ *   archiveEnabled 를 넘기면 그 폴에서 읽은 영상 설정을 쓴다. 없으면 여기서 설정을 읽는다.
+ * @param {object} sql
+ * @param {object} browser
+ * @param {{ tenant?: string, post?: boolean, log?: Function, force?: boolean, dryRun?: boolean, archiveEnabled?: boolean, env?: {[key: string]: string | undefined} }} [opts]
  * @returns {Promise<{ran:boolean, changed?:number, detected?:number, notified?:number, held?:number, tooOld?:number, plan?:Array}>}
  */
-export async function pollParentCommentsOnce(sql, browser, { tenant, post, log = console.log, force = false, dryRun = false }) {
+export async function pollParentCommentsOnce(sql, browser, { tenant, post, log = console.log, force = false, dryRun = false, archiveEnabled, env } = {}) {
   if (!force) {
     if (!post) return { ran: false };
     if (Date.now() - lastCommentRunAt < COMMENT_POLL_INTERVAL_MS) return { ran: false };
@@ -873,6 +889,7 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     log("[comment] 이 학원의 ClassNote 기능이 꺼져 있거나 지점을 알 수 없어 건너뜁니다");
     return { ran: false, moduleOff: 1 };
   }
+  const archiveOn = !dryRun && await videoArchiveOn(sql, tenant, archiveEnabled, env);
 
   const group = BOARD_GROUPS.math;
   const keys = group.subjectKeys;
@@ -1018,12 +1035,12 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
       }
       tooOldCount += tooOld.length;
       // [영상] 댓글: [영상] 문구를 만든 실제 첨부를 사용한다. 텍스트 없는 댓글도 포함.
-      if (!dryRun && videoArchiveEnabled()) {
+      if (archiveOn) {
         const info = feedInfo.get(Number(ch.id));
         try {
           const { centerId } = await getFeedPage(browser);
           await enqueueParentVideos(sql, tenant, centerId, list,
-            { id: ch.id, child: info?.childId, cls: info?.cls, class_name: ch.className });
+            { id: ch.id, child: info?.childId, cls: info?.cls, class_name: ch.className }, { enabled: true, env });
         } catch {
           nextCounts[String(ch.id)] = ch.knownCount;
           log("[영상] 댓글 저장 실패 — 다음 폴에서 재시도합니다.");
@@ -1037,11 +1054,11 @@ export async function pollParentCommentsOnce(sql, browser, { tenant, post, log =
     // 알림 목록 경로 — 창 밖·처음 본 글의 새 학부모 댓글. 영상은 **새 댓글만** 보관 큐에 넣는다(그 글의 옛 영상까지 되살리지 않게).
     let holdEventMark = false; // 영상 저장이 실패하면 워터마크를 세워 두고 다음 폴에 다시 본다(벨 중복은 링크로 걸러진다)
     for (const o of old.items) {
-      if (!dryRun && videoArchiveEnabled()) {
+      if (archiveOn) {
         try {
           const { centerId } = await getFeedPage(browser);
           await enqueueParentVideos(sql, tenant, centerId, o.picked,
-            { id: o.ch.id, child: o.info.childId, cls: o.info.cls, class_name: o.ch.className });
+            { id: o.ch.id, child: o.info.childId, cls: o.info.cls, class_name: o.ch.className }, { enabled: true, env });
         } catch {
           holdEventMark = true;
           delete nextCounts[String(o.ch.id)]; // 처음 본 글이면 기준선도 미룬다 — 다음 폴에 이 글을 다시 받는다

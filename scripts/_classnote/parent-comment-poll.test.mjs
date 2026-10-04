@@ -113,7 +113,7 @@ function fakeDb({ counts, eventState = null, bells = [] }) {
   return { sql: run, db };
 }
 
-const poll = (sql) => pollParentCommentsOnce(sql, browser, { tenant: "t1", post: true, force: true, log: () => {} });
+const poll = (sql) => pollParentCommentsOnce(sql, browser, { tenant: "t1", post: true, force: true, log: () => {}, archiveEnabled: false });
 const parent = (id, min, content = "오늘 학원 쉽니다") => ({ id, created: ago(min), author: { type: "parent" }, content });
 const teacher = (id, min) => ({ id, created: ago(min), author: { type: "teacher" }, content: "네 알겠습니다" });
 
@@ -127,6 +127,19 @@ beforeEach(() => {
   m.stored = [];
   m.cross = vi.fn(async () => {});
   m.recipients = new Map([["stu-1", { ids: ["t-math"], blocked: { subject: 0, verify: 0, cap: 0 }, narrowed: false }]]);
+});
+
+describe("저장 폴더 설정을 읽지 못한 일회 수집", () => {
+  it("댓글 수와 워터마크를 전진하지 않고 멈춘다", async () => {
+    m.feedRows[0].num_comments = 2;
+    m.comments[500] = [parent(21, 3)];
+    const { sql, db } = fakeDb({ counts: { 500: 1 }, eventState: { last_seen_post_id: 100, counts: { lastCreated: ago(30) } } });
+    await expect(pollParentCommentsOnce(sql, browser, { tenant: "t1", post: true, force: true, log: () => {} }))
+      .rejects.toThrow("영상 저장 폴더 설정을 확인하지 못했습니다.");
+    expect(db.savedCounts).toBe(0);
+    expect(db.eventState).toEqual({ last_seen_post_id: 100, counts: { lastCreated: ago(30) } });
+    expect(db.inserted).toEqual([]);
+  });
 });
 
 describe("스냅샷 경로(종전) — 감시 창 안 글", () => {

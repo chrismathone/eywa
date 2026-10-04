@@ -2,7 +2,6 @@ import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
-import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { getStudentById } from "@/features/students/server/queries";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import type { ReplyView, ThreadEntry, ThreadPhoto, ThreadVideo } from "../reply-types";
@@ -62,10 +61,10 @@ type VideoArgs = { tenantId: string; postId: number; studentId: string | null; m
 /** 게이트를 통과한 뒤에만 부른다 — 메시지 id → 그 글·댓글의 영상(화면 모델). 글 = comment_id 없는 영상, 댓글 = 그 댓글 번호의 영상. */
 async function videosByMessage(admin: Admin, a: VideoArgs): Promise<Map<string, ThreadVideo[]>> {
   const byMessage = new Map<string, ThreadVideo[]>();
-  const [rows, teacherView] = await Promise.all([loadPostVideos(admin, a.tenantId, a.postId, a.studentId, a.allowUnmatched === true).catch(() => []), effectiveTeacherId().catch(() => null)]);
+  const rows = await loadPostVideos(admin, a.tenantId, a.postId, a.studentId, a.allowUnmatched === true).catch(() => []);
   for (const m of a.messages) {
     const mine = rows.filter((r) => (m.source === "post" ? r.comment_id == null : r.comment_id != null && Number(r.comment_id) === m.classnoteCommentId));
-    if (mine.length) byMessage.set(m.id, mine.map((r) => toThreadVideo(r, { canView: true, showDriveLink: !teacherView })));
+    if (mine.length) byMessage.set(m.id, mine.map((r) => toThreadVideo(r, { canView: true })));
   }
   return byMessage;
 }

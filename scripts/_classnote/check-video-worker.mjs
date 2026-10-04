@@ -1,6 +1,7 @@
 import os from "node:os";
 import postgres from "postgres";
 import { resolveTenant } from "./classnote-core.mjs";
+import { loadWorkerVideoDriveSetting } from "./video-drive-settings.mjs";
 import { videoWorkerReadiness } from "./video-worker-readiness.mjs";
 
 const option = (key) => process.argv.find((arg) => arg.startsWith(`--${key}=`))?.slice(key.length + 3);
@@ -15,7 +16,13 @@ try {
   do {
     const [row] = await sql`select last_seen,started_at,last_results from classnote_workers
       where tenant_id=${tenant} and hostname=${hostname}`;
-    result = videoWorkerReadiness(row, { folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID, startedAfter });
+    const setting = await loadWorkerVideoDriveSetting(sql, tenant);
+    if (setting.error) throw new Error("영상 저장 폴더 설정을 확인하지 못했습니다.");
+    result = videoWorkerReadiness(row, {
+      folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID,
+      savedRootId: setting.enabled ? setting.rootId : null,
+      startedAfter,
+    });
     if (result.ready || Date.now() >= deadline) break;
     await new Promise((resolve) => setTimeout(resolve, 5_000));
   } while (Date.now() <= deadline);
@@ -25,5 +32,9 @@ try {
     from classnote_video_history where tenant_id=${tenant}`;
   console.log(JSON.stringify({ ready: result.ready, videos: counts, history }));
   if (!result.ready) process.exitCode = 1;
-} catch { console.error("워커 적용 확인 실패 — DB 연결과 지점 설정을 확인하세요."); process.exitCode = 1; }
+} catch (error) {
+  const message = String(error?.message ?? "");
+  console.error(/[가-힣]/.test(message) ? message : "워커 적용 확인 실패 — DB 연결과 지점 설정을 확인하세요.");
+  process.exitCode = 1;
+}
 finally { await sql.end(); }

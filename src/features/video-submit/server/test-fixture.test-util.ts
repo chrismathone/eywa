@@ -37,6 +37,7 @@ export function seedDb(over: { link?: Record<string, unknown> } = {}) {
     student_homework_videos: [],
     lesson_reports: [],
     classnote_video_history: [{ tenant_id: T, center_id: 96575 }],
+    homework_video_drive_roots: [{ tenant_id:T, root_folder_id:ROOT }],
     classnote_video_folders: [{ tenant_id: T, root_folder_id: ROOT, route_key: `${T}:96575:${TEACHER}`, drive_folder_id: FOLDER }],
     students: [{ id: S, tenant_id: T, name: "류태경", school: "칠성초", grade: "초3" }],
     classes: [{ id: C, tenant_id: T, class_name: "LT4", subject: "math", teacher_id: TEACHER }],

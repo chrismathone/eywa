@@ -3,6 +3,7 @@ import { videoDriveAuth } from "./video-drive-auth.mjs";
 import { DRIVE_API as API, driveClient, driveJson } from "./video-drive-http.mjs";
 import { decideManualVideo, DUPLICATE_REASON, isVideoFile, manualPostedAt, MANUAL_NAME_SINCE, markDuplicate, namedStudents,
   parseManualVideoName } from "./video-manual-name.mjs";
+import { loadWorkerVideoDriveSetting } from "./video-drive-settings.mjs";
 
 /**
  * 담임 폴더에 **사람이 직접 올린** 숙제 영상을 훑어 학생·반에 붙인다(원장 2026-10-01 — 학부모가 ClassNote에 못 올린 영상을
@@ -101,7 +102,9 @@ export async function scanManualDriveVideos(sql, tenant, { rootId, auth, log = c
   const today = kstToday(now);
   const rows = await sql`select id, source_ref, status, student_id, drive_folder_id, route from student_homework_videos
     where tenant_id = ${tenant} and source = 'drive'`;
-  const { folders, vanished } = await scanFolders(sql, request, tenant, rootId, rows.map((row) => row.drive_folder_id));
+  // 사라진 폴더 확인은 이번 루트의 등록부와, 이번 루트로 찍힌 직접 제출 행만. 예전 루트 기록은 공유가 빠져도 지우지 않는다.
+  const currentRootFolderIds = rows.filter((row) => row.route?.rootId === rootId).map((row) => row.drive_folder_id);
+  const { folders, vanished } = await scanFolders(sql, request, tenant, rootId, currentRootFolderIds);
   const listed = new Map();
   // 폴더 하나라도 못 읽으면 여기서 멈춘다(아래 '사라진 파일 정리'가 못 읽은 폴더의 행을 지우지 않게).
   for (const folder of folders)
@@ -153,7 +156,10 @@ export async function scanManualDriveVideos(sql, tenant, { rootId, auth, log = c
         ${sql.json(route)}, ${file.createdTime ?? null})
       on conflict (tenant_id, source, source_ref) do update set student_id = excluded.student_id, subject = excluded.subject,
         teacher_id = excluded.teacher_id, posted_at = excluded.posted_at, status = excluded.status,
-        drive_folder_id = excluded.drive_folder_id, bytes = excluded.bytes, md5 = excluded.md5, route = excluded.route,
+        drive_folder_id = excluded.drive_folder_id, bytes = excluded.bytes, md5 = excluded.md5,
+        route = case when coalesce(student_homework_videos.route->>'rootId', '') <> ''
+          then jsonb_set(excluded.route, '{rootId}', to_jsonb(student_homework_videos.route->>'rootId'))
+          else excluded.route end,
         error = null, updated_at = now()`;
     result[decision.status === "uploaded" ? "linked" : "review"]++;
   }
@@ -190,10 +196,10 @@ let lastNotice = null;
 
 /**
  * 워커 주기에서 부르는 진입점 — 10분마다 한 번, 실패해도 던지지 않는다(ClassNote 영상 작업을 막지 않게).
- * 게이트는 부르는 쪽(kickVideoWorker)이 이미 지난 것: `--post` 임대 주인 · ClassNote 모듈 켜짐 · 영상 보관 설정.
+ * rootId 가 없으면 저장된 활성 루트만 훑는다. env 폴더는 기본값이 아니다.
  * 같은 안내(DB 준비 전·실패 사유)는 바뀔 때 한 번만 로그에 남긴다.
  */
-export async function runManualDriveScan(tenant, { log = console.log, authFactory = videoDriveAuth, sqlFactory, now = Date.now(), rootId = process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID } = {}) {
+export async function runManualDriveScan(tenant, { log = console.log, authFactory = videoDriveAuth, sqlFactory, now = Date.now(), rootId, env } = {}) {
   if (now < nextScanAt) return null;
   nextScanAt = now + MANUAL_SCAN_INTERVAL_MS;
   const notice = (text) => { if (text !== lastNotice) log(text); lastNotice = text; };
@@ -203,8 +209,18 @@ export async function runManualDriveScan(tenant, { log = console.log, authFactor
       notice("[영상 직접 제출] DB 준비 전(0324a 적용 전)이라 건너뜁니다 — 적용되면 자동으로 시작합니다.");
       return null;
     }
+    let folderId = rootId;
+    if (!folderId) {
+      const setting = await loadWorkerVideoDriveSetting(sql, tenant, env ? { env } : {});
+      if (setting.error) {
+        notice("[영상 직접 제출] 저장 폴더 설정을 확인하지 못해 이번 훑기를 건너뜁니다.");
+        return null;
+      }
+      if (!setting.enabled || !setting.rootId) return null;
+      folderId = setting.rootId;
+    }
     const auth = await authFactory();
-    const result = await scanManualDriveVideos(sql, tenant, { rootId, auth, log, now: new Date(now) });
+    const result = await scanManualDriveVideos(sql, tenant, { rootId: folderId, auth, log, now: new Date(now) });
     lastNotice = null;
     return result;
   } catch (error) {

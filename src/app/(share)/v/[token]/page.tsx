@@ -38,8 +38,9 @@ const CLASSNOTE_ONLY = "숙제 영상은 ClassNote 알림장에 올려 주세요
  * ClassNote만 안내한다(`openSiteLink`의 끊김 판정과 같다).
  */
 async function closedElsewhere(db: ReturnType<typeof createAdminClient>, link: LinkRow, lead: string) {
-  const site = link.origin === "site" ? null : await siteAvailability(db).catch(() => null);
-  const toSite = !!site?.ok && site.tenantId === link.tenant_id;
+  // 링크 행의 지점(토큰이 정한 값)으로 본다 — 다른 지점이 사이트를 쓴다고 이 학생에게 권하지 않는다.
+  const site = link.origin === "site" ? null : await siteAvailability(db, link.tenant_id).catch(() => null);
+  const toSite = !!site?.ok;
   return <Closed title="사용할 수 없는 링크입니다" message={`${lead}${toSite ? VIDEO_UPLOAD_OTHER_WAYS : CLASSNOTE_ONLY}`} toSite={toSite} />;
 }
 
@@ -71,8 +72,17 @@ export default async function VideoSubmitPage({ params, searchParams }: { params
     return <Closed title="사용할 수 없는 링크입니다" message="이 링크로는 영상을 올릴 수 없습니다. 담당 선생님께 알려 주세요." />;
   const { link } = resolved;
   // 끊긴 링크도 지점 기능부터 본다 — 꺼진 지점은 없는 주소와 똑같이(흔적 없이), 갈 길 안내는 그 뒤에.
-  const settings = await getTenantSettingsByTenantId(link.tenant_id);
-  const availability = await videoSubmitAvailability(link.tenant_id, settings, db);
+  // 🔴 지점 설정·저장 폴더 설정을 못 읽으면(순간 DB 오류) 오류 화면이 아니라 "지금은 받을 수 없다"로 받는다 — 가용성 판정은
+  //    조회 실패를 다른 폴더로 폴백하지 않고 **던진다**(지점별 저장 폴더, 2026-10-04). `notFound()`는 이 try 밖에 둔다(삼키지 않게).
+  let settings: Awaited<ReturnType<typeof getTenantSettingsByTenantId>>;
+  let availability: Awaited<ReturnType<typeof videoSubmitAvailability>>;
+  try {
+    settings = await getTenantSettingsByTenantId(link.tenant_id);
+    availability = await videoSubmitAvailability(link.tenant_id, settings, db);
+  } catch (error) {
+    console.error(JSON.stringify({ level: "error", scope: "videoSubmit.page", message: error instanceof Error ? error.message : "unknown" }));
+    return UNAVAILABLE;
+  }
   if (!availability.ok && availability.reason === "module_off") notFound();
   if (!availability.ok) return UNAVAILABLE;
   if (resolved.state === "revoked") return closedElsewhere(db, link, "이 링크로는 더 이상 영상을 올릴 수 없습니다. ");

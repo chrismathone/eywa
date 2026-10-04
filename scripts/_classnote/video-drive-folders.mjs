@@ -23,7 +23,10 @@ export async function ensureTeacherFolder(rootId, route, centerId, stateDir, opt
     return { id: folder.id, name: folder.name, webViewLink: folder.webViewLink };
   };
   // 연결된 Drive 앱으로 먼저 만든 시험 폴더는 확정 ID로만 이어받는다. 이름 검색으로 기존 폴더를 채택하지 않는다.
-  const bindings = options.teacherFolders ?? JSON.parse(process.env.CLASSNOTE_VIDEO_TEACHER_FOLDERS || "{}");
+  // 환경 목록은 그 목록을 만든 env 루트에서만 쓴다. 지점 설정의 다른 루트는 그 폴더를 재사용하지 않고 새로 만든다.
+  const explicit = options.teacherFolders;
+  const envRoot = String(process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID ?? "").trim();
+  const bindings = explicit ?? (rootId === envRoot ? JSON.parse(process.env.CLASSNOTE_VIDEO_TEACHER_FOLDERS || "{}") : {});
   const boundId = bindings[key];
   if (boundId) {
     if (!/^[A-Za-z0-9_-]{10,}$/.test(boundId)) throw new Error("지정된 담임 폴더 ID가 올바르지 않습니다.");

@@ -5,7 +5,9 @@ import { VIDEO_SUBMIT_LINK_DAYS } from "@/features/link-expired/kinds";
 import { SITE_LINK_LOOKBACK_DAYS } from "../site";
 import { startedWhileLinkOpen, UPLOAD_NOT_READY, verifyUploadedFile, type StartedUpload } from "../upload-checks";
 import type { LinkVideoRoute } from "../route";
-import { videoSubmitAvailability } from "./availability";
+import { classnoteModuleOn } from "@/features/owner/classnote-gate";
+import { readVideoDriveAuth } from "./drive-config";
+import { videoDriveOwnsRoot } from "./drive-settings";
 import { driveRequest, getDriveFile, trashDriveFile, type DriveFile, type DriveRequest } from "./drive-api";
 import { resolveSubmitToken, type LinkRow } from "./links";
 
@@ -130,9 +132,12 @@ export async function completeLinkUpload(input: { token: unknown; uploadId: unkn
       .eq("tenant_id", link.tenant_id).eq("link_id", link.id).eq("id", input.uploadId).maybeSingle();
     if (error) throw new Error("업로드 기록 조회 실패");
     if (!upload) return { ok: false, code: "invalid", error: FAILED };
-    const availability = await videoSubmitAvailability(link.tenant_id, await getTenantSettingsByTenantId(link.tenant_id), db);
-    if (!availability.ok) return { ok: false, code: "unavailable", error: "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요." };
-    return await finalizeUpload(db, driveRequest(availability.drive.accessToken), link, resolved.state !== "revoked", upload as UploadRow);
+    const auth = readVideoDriveAuth();
+    const rootId = (upload.route as LinkVideoRoute)?.rootId;
+    if (!auth || !classnoteModuleOn(await getTenantSettingsByTenantId(link.tenant_id)) || !rootId ||
+      !(await videoDriveOwnsRoot(link.tenant_id, rootId, db)))
+      return { ok: false, code: "unavailable", error: "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요." };
+    return await finalizeUpload(db, driveRequest(auth.accessToken), link, resolved.state !== "revoked", upload as UploadRow);
   } catch (error) {
     console.error(JSON.stringify({ level: "error", scope: "videoSubmit.complete", message: error instanceof Error ? error.message : "unknown" }));
     return { ok: false, code: "error", error: FAILED };
@@ -152,7 +157,11 @@ export async function reconcileLinkUploads(db: Db, request: DriveRequest, link: 
     .gte("created_at", new Date(now - Math.max(VIDEO_SUBMIT_LINK_DAYS, SITE_LINK_LOOKBACK_DAYS) * 86_400_000).toISOString()).lt("created_at", new Date(now - 120_000).toISOString())
     .order("created_at", { ascending: true }).limit(3);
   if (error || !data?.length) return [];
-  const results = await Promise.all((data as UploadRow[]).map((upload) =>
-    finalizeUpload(db, request, link, true, upload).catch(() => null)));
+  const results = await Promise.all((data as UploadRow[]).map(async (upload) => {
+    try {
+      if (!upload.route?.rootId || !(await videoDriveOwnsRoot(link.tenant_id, upload.route.rootId, db))) return null;
+      return await finalizeUpload(db, request, link, true, upload);
+    } catch { return null; }
+  }));
   return results.flatMap((r) => (r?.ok && r.created ? [r] : []));
 }

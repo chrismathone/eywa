@@ -4,12 +4,15 @@ import path from "node:path";
 import type { FakeDb } from "./fake-db.test-util";
 import { C, ENV, OTHER_T, S, T, seedDb, settings } from "./test-fixture.test-util";
 
-const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown, site: null as unknown, homeworkReady: true }));
+const m = vi.hoisted(() => ({ db: null as unknown, settings: null as unknown, sites: {} as Record<string, unknown>, asked: [] as unknown[], homeworkReady: true }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => m.db }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettingsByTenantId: async () => m.settings }));
 vi.mock("@/features/video-homework/server/assignments", () => ({ videoHomeworkColumnReady: async () => m.homeworkReady }));
-// 올리기 사이트를 쓸 수 있나(Drive·SQL·지점) — 사이트 판정 자체는 site.test.ts가 본다.
-vi.mock("./site", () => ({ siteAvailability: async () => m.site }));
+// 올리기 사이트를 쓸 수 있나(저장 폴더·SQL·지점) — 사이트 판정 자체는 site.test.ts가 본다. 🔴 **물어본 지점**의 답만 돌려준다(지점마다 따로다).
+vi.mock("./site", () => ({ siteAvailability: async (_db: unknown, tenantId?: string | null) => {
+  m.asked.push(tenantId);
+  return (tenantId && m.sites[tenantId]) || { ok: false, reason: "none" };
+} }));
 vi.mock("@/lib/date-kst", async (load) => ({ ...(await load<typeof import("@/lib/date-kst")>()), kstToday: () => "2026-10-02" }));
 
 import { reportLineMode, reportSiteLine } from "./report-link";
@@ -28,7 +31,8 @@ function setup(over: Record<string, unknown> = {}) {
 }
 beforeEach(() => {
   m.settings = settings();
-  m.site = { ok: true, tenantId: T };
+  m.sites = { [T]: { ok: true, tenantId: T } };
+  m.asked = [];
   m.homeworkReady = true;
   for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
 });
@@ -61,12 +65,19 @@ describe("보고서 글의 '영상첨부' 줄 = 올리기 사이트 주소 안�
     m.settings = { ...settings(), report: { videoHomeworkPolicy: { ...settings().report.videoHomeworkPolicy, disabledClassIds: [C] } } };
     expect(await reportSiteLine(R)).toBe(false);
   });
-  it("🔴 올리기 사이트를 못 쓰는 지점(Drive·SQL·기능 꺼짐) · 다른 지점의 사이트면 붙이지 않는다 — 없는 주소를 안내하지 않는다", async () => {
+  it("🔴 올리기 사이트를 못 쓰는 지점(저장 폴더·SQL·기능 꺼짐)이면 붙이지 않는다 — 없는 주소를 안내하지 않는다", async () => {
     setup();
-    m.site = { ok: false, reason: "unavailable" };
+    m.sites = { [T]: { ok: false, reason: "unavailable" } };
     expect(await reportSiteLine(R)).toBe(false);
-    m.site = { ok: true, tenantId: OTHER_T };
+  });
+  it("🔴 판정은 **이 보고서의 지점**으로 한다 — 다른 지점만 사이트를 쓰면 붙이지 않고, 다른 지점이 함께 써도 이 지점이 쓰면 붙인다", async () => {
+    setup();
+    m.sites = { [OTHER_T]: { ok: true, tenantId: OTHER_T } };
     expect(await reportSiteLine(R)).toBe(false);
+    m.sites = { [T]: { ok: true, tenantId: T }, [OTHER_T]: { ok: true, tenantId: OTHER_T } };
+    expect(await reportSiteLine(R)).toBe(true);
+    // 지점 없이 묻지 않는다(지점이 여럿이면 '고르라'가 돌아와 줄이 빠진다) — 늘 보고서 행의 지점으로 묻는다
+    expect(m.asked).toEqual([T, T]);
   });
   it("반이 그 지점 것이 아니면 · 영상 과제 칸을 못 읽으면 · 모양이 다른 보고서 번호면 붙이지 않는다", async () => {
     setup();

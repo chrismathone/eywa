@@ -4,7 +4,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchInChunks } from "@/lib/supabase/batch";
 import { formatShortKoreanDate, kstToday } from "@/lib/date-kst";
 import { logActionAs } from "@/features/audit/server/log";
-import { getTenantSettingsByTenantId } from "@/features/owner/server/queries";
 import type { TenantSettings } from "@/features/owner/settings-types";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { isVideoHomeworkEnabled } from "@/features/video-homework/policy";
@@ -27,9 +26,8 @@ import {
   type SiteLookupResult,
   type SiteOpenResult,
 } from "../site";
-import { videoSubmitAvailability } from "./availability";
-import { readVideoDriveConfig } from "./drive-config";
 import { mintSubmitLink } from "./links";
+import { resolveSiteRequest, SITE_ATTEMPTS_TABLE } from "./site-branches";
 import { openHomeworkDates } from "./site-homework";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -39,12 +37,16 @@ type Db = ReturnType<typeof createAdminClient>;
  * 보여 준 뒤, 고른 숙제의 제출 링크를 그 자리에서 만든다(원장 2026-10-03). 숙제가 없으면 올릴 길이 없다.
  * 올리기 자체는 기존 제출 링크 길을 그대로 탄다(`/v/<토큰>?h=숙제일` · upload-start/complete — 형식·크기·횟수 제한·Drive 대조까지 같은 코드).
  *
- * 🔑 지점 = Drive가 묶인 지점 하나(`CLASSNOTE_VIDEO_TENANT_ID`) — 주소에 지점이 없고(멀티테넌트 C안), 영상이 들어갈 Drive가 그 학원 것이다.
- * 🔴 로그인 없는 화면이다 — 모든 조회에 그 지점 필터(admin은 RLS 우회, [[#104]]). 학생·반 번호는 화면에 내려보내지 않는다(고른 값은 지문으로만).
+ * 🔑 지점 = **숙제 영상 저장 폴더가 있는 지점**(지점마다 따로 정한다 — 2026-10-04). 주소에 지점을 넣지 않는다(멀티테넌트 C안):
+ *    사이트를 쓸 수 있는 지점이 하나면 그 지점, 여럿이면 화면에서 고른다(자리 PIN과 같은 방식). 고르지 않은 요청을 한 지점으로 떨어뜨리지 않는다.
+ * 🔴 로그인 없는 화면이다 — 모든 조회에 **고른 지점** 필터(admin은 RLS 우회, [[#104]]). 학생 후보·숙제 지문·횟수 제한이 전부 그 지점 안에서만 돈다.
+ *    학생·반 번호는 화면에 내려보내지 않는다(고른 값은 지문으로만).
  * 🔴 실패 원문은 서버 로그에만. 화면엔 한글 한 줄.
  */
 export const SITE_ACTOR = "숙제 영상 올리기 사이트(학생)";
-const ATTEMPTS = "homework_video_site_attempts";
+// 어느 지점이 사이트를 쓰나·공개 요청의 지점 정하기는 한 모듈(site-branches.ts)에 모았다 — 옛 import 경로는 그대로 둔다.
+export { _resetVideoSiteForTest, siteAvailability, siteDirectory, type ActiveSite, type SiteAvailability, type SiteDirectory } from "./site-branches";
+const ATTEMPTS = SITE_ATTEMPTS_TABLE;
 const UNAVAILABLE = "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요.";
 const LIMITED = "잠시 동안 너무 많이 시도했습니다. 조금 뒤에 다시 해 주세요.";
 const FAILED = "확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
@@ -57,43 +59,6 @@ const STALE = "시간이 지나 다시 확인이 필요합니다. 번호와 이�
 const PAIR_BLOCKED = "오늘은 여기서 더 열 수 없습니다. 선생님께 알려 주세요.";
 /** 끝자리 조회에서 받는 행의 상한 — 이보다 많이 걸리면 그 번호는 사이트에서 안내하지 않는다(조용히 자르지 않는다, B2). */
 const LOOKUP_ROW_LIMIT = 200;
-
-/** 사이트가 쓰는 지점 — Drive 값이 없으면 null(사이트 자체가 없다). */
-export function siteTenantId(): string | null {
-  return readVideoDriveConfig()?.tenantId ?? null;
-}
-
-let attemptsTableReady = false;
-/** 시도 표(0330a)가 있나 — 있으면 기억한다(생기기만 한다). 없으면 사이트를 열지 않는다(횟수 제한 없이 조회를 받지 않는다). */
-async function siteSchemaReady(db: Db): Promise<boolean> {
-  if (attemptsTableReady) return true;
-  const { error } = await db.from(ATTEMPTS).select("id").limit(1);
-  attemptsTableReady = !error;
-  return attemptsTableReady;
-}
-
-/** 테스트 전용 — 기억 리셋. */
-export function _resetVideoSiteForTest(): void {
-  attemptsTableReady = false;
-}
-
-export type SiteAvailability =
-  | { ok: true; tenantId: string; academyName: string | null; settings: TenantSettings }
-  | { ok: false; reason: "none" | "unavailable" };
-
-/**
- * 사이트를 열 수 있나 — 지점이 없거나 ClassNote 기능이 꺼졌으면 `none`(없는 주소처럼), Drive·SQL이 아직이면 `unavailable`.
- * 읽은 지점 설정을 함께 돌려준다(후보 판정이 같은 값을 쓴다 — 한 요청에서 두 번 읽지 않는다).
- */
-export async function siteAvailability(db: Db = createAdminClient()): Promise<SiteAvailability> {
-  const tenantId = siteTenantId();
-  if (!tenantId) return { ok: false, reason: "none" };
-  const settings = await getTenantSettingsByTenantId(tenantId);
-  const availability = await videoSubmitAvailability(tenantId, settings, db);
-  if (!availability.ok) return { ok: false, reason: availability.reason === "module_off" ? "none" : "unavailable" };
-  if (!(await siteSchemaReady(db))) return { ok: false, reason: "unavailable" };
-  return { ok: true, tenantId, academyName: settings.profile.name?.trim() || null, settings };
-}
 
 /**
  * IP 지문 — 서버 비밀값으로 서명한 해시(원본 IP는 저장하지 않는다). 소금 없는 해시는 IPv4 전수 대입으로 되돌릴 수 있어
@@ -211,13 +176,14 @@ async function homeworkChoices(db: Db, tenantId: string, list: Candidate[], day:
  * 번호·이름이 안 맞으면 "찾지 못했다", 맞는데 숙제가 없으면 "올릴 숙제가 없다" — 둘을 가른다. 🔴 가르는 값이 새는 것은 "그 이름의 학생이
  * 그 번호를 쓴다"뿐이고, 이름과 번호를 둘 다 맞혀야 나온다(횟수 제한 뒤). 반·숙제 내용은 숙제가 있을 때만 내려간다.
  */
-export async function lookupSite(input: { last4: unknown; name: unknown; ip: string | null }): Promise<SiteLookupResult> {
+export async function lookupSite(input: { last4: unknown; name: unknown; ip: string | null; tenant?: unknown }): Promise<SiteLookupResult> {
   if (!isLast4(input.last4)) return { ok: false, code: "invalid", error: "휴대폰 번호 뒷 4자리(숫자 4개)를 입력해 주세요." };
   if (!isSiteName(input.name)) return { ok: false, code: "invalid", error: NAME_NEEDED };
   const db = createAdminClient();
   try {
-    const site = await siteAvailability(db);
-    if (!site.ok) return { ok: false, code: "unavailable", error: UNAVAILABLE };
+    const request = await resolveSiteRequest(db, input.tenant);
+    if (!request.ok) return "unavailable" in request ? { ok: false, code: "unavailable", error: UNAVAILABLE } : request;
+    const { site } = request;
     if (!(await admit(db, site.tenantId, ipHashOf(input.ip, site.tenantId), "lookup"))) return { ok: false, code: "limit", error: LIMITED };
     const day = kstToday();
     const found = await findCandidates(db, site.tenantId, input.last4, input.name, day, site.settings);
@@ -274,13 +240,14 @@ async function pairLinksToday(db: Db, tenantId: string, c: Candidate, day: strin
  *  · 상한은 **만든 뒤 다시 센다** — 동시에 여러 개를 보내 세기와 만들기 사이의 틈으로 상한을 넘지 못하게. 오늘 만든 줄을 오래된 순으로
  *    세워 **앞의 상한 개수 안에 든 링크만** 남긴다(서로를 보고 전부 지워 아무도 못 받는 일이 없게 — 정확히 상한만큼 남는다).
  */
-export async function openSiteLink(input: { last4: unknown; name: unknown; choice: unknown; ip: string | null }): Promise<SiteOpenResult> {
+export async function openSiteLink(input: { last4: unknown; name: unknown; choice: unknown; ip: string | null; tenant?: unknown }): Promise<SiteOpenResult> {
   if (!isLast4(input.last4) || !isSiteName(input.name) || typeof input.choice !== "string" || !/^[0-9a-f]{40}$/.test(input.choice))
     return { ok: false, code: "invalid", error: STALE };
   const db = createAdminClient();
   try {
-    const site = await siteAvailability(db);
-    if (!site.ok) return { ok: false, code: "unavailable", error: UNAVAILABLE };
+    const request = await resolveSiteRequest(db, input.tenant);
+    if (!request.ok) return "unavailable" in request ? { ok: false, code: "unavailable", error: UNAVAILABLE } : request;
+    const { site } = request;
     if (!(await admit(db, site.tenantId, ipHashOf(input.ip, site.tenantId), "open"))) return { ok: false, code: "limit", error: LIMITED };
     const day = kstToday();
     const yesterday = shareExpiryDate(day, -1);

@@ -22,15 +22,22 @@ let cached: { fingerprint: string; auth: { accessToken(): Promise<string> } } | 
 export function readVideoDriveConfig(env: Env = process.env): VideoDriveConfig | null {
   const tenantId = env.CLASSNOTE_VIDEO_TENANT_ID?.trim() ?? "";
   const rootId = env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID?.trim() ?? "";
+  const auth = readVideoDriveAuth(env);
+  if (!UUID_RE.test(tenantId) || !DRIVE_ID_RE.test(rootId) || !auth) return null;
+  return { tenantId: tenantId.toLowerCase(), rootId, accessToken: auth.accessToken };
+}
+
+/** 인증은 공용 연결, 저장 폴더는 지점 설정으로 따로 결정한다. 비밀 값은 서버에만 둔다. */
+export function readVideoDriveAuth(env: Env = process.env): { accessToken: () => Promise<string> } | null {
   const clientId = env.GOOGLE_DRIVE_CLIENT_ID?.trim() ?? "";
   const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET?.trim() ?? "";
   const refreshToken = env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim() ?? "";
-  if (!UUID_RE.test(tenantId) || !DRIVE_ID_RE.test(rootId) || !clientId || !clientSecret || !refreshToken) return null;
+  if (!clientId || !clientSecret || !refreshToken) return null;
   const fingerprint = `${clientId}\n${clientSecret}\n${refreshToken}`;
   if (cached?.fingerprint !== fingerprint)
     cached = { fingerprint, auth: oauthRefreshAuth({ clientId, clientSecret, refreshToken }) };
   const auth = cached.auth;
-  return { tenantId: tenantId.toLowerCase(), rootId, accessToken: () => auth.accessToken() };
+  return { accessToken: () => auth.accessToken() };
 }
 
 /** 이 지점에 연결된 Drive 설정 — 다른 지점이면 null. */

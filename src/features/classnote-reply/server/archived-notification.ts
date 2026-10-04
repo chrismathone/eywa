@@ -1,7 +1,6 @@
 import "server-only";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import type { createAdminClient } from "@/lib/supabase/admin";
-import { effectiveTeacherId } from "@/lib/auth/view-mode";
 import { REPLY_BODY_MAX } from "../reply-policy";
 import type { ReplyContext } from "../reply-types";
 import { toThreadVideo, type VideoRow } from "../thread-video";
@@ -24,10 +23,8 @@ export async function archivedNotificationContext(admin: ReturnType<typeof creat
     const rows = (data ?? []) as unknown as (VideoRow & { student_id: string | null })[];
     // 부분 조회·학생 불명·서로 다른 학생이 섞이면 주소를 내보내지 않는다.
     const studentId = rows[0]?.student_id;
-    if (!error && rows.length <= 50 && studentId && rows.every((r) => r.student_id === studentId) && await canWatchThreadVideos(user, studentId)) {
-      const teacherView = await effectiveTeacherId();
-      videos = rows.map((r) => toThreadVideo(r, { canView: true, showDriveLink: !teacherView }));
-    }
+    if (!error && rows.length <= 50 && studentId && rows.every((r) => r.student_id === studentId) && await canWatchThreadVideos(user, studentId))
+      videos = rows.map((r) => toThreadVideo(r, { canView: true }));
   }
   return {
     ok: true, message: { id, source, content, boardName: null, postedAt: input.createdAt },

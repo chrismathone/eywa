@@ -74,6 +74,7 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
         return builder;
       },
       eq(col: string, v: unknown) { filters.push((r) => r[col] === v); return builder; },
+      neq(col: string, v: unknown) { filters.push((r) => r[col] != null && r[col] !== v); return builder; },
       is(col: string, v: unknown) { filters.push((r) => (r[col] ?? null) === v); return builder; },
       gt(col: string, v: string) { filters.push((r) => String(r[col]) > v); return builder; },
       gte(col: string, v: string) { filters.push((r) => String(r[col]) >= v); return builder; },

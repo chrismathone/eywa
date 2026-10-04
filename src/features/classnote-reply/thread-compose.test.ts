@@ -47,22 +47,22 @@ describe("쓰레드 조립 — 학부모 글·댓글과 우리 답글을 시간�
 
 describe("영상 화면 모델 — 상태별 한글 문구와 주소 노출", () => {
   const row = (status: string, fileId: string | null = "1AbCdEfGhIjKlMn") => ({ id: "v", status, drive_file_id: fileId, uploaded_at: "2026-10-01T00:00:00Z" });
-  it("보관 완료 = 재생 가능(주소 포함) · Drive 열기는 관리자뷰에서만", () => {
-    const admin = toThreadVideo(row("uploaded"), { canView: true, showDriveLink: true });
-    expect(admin).toMatchObject({ playable: true, pending: false });
-    expect(admin.links?.preview).toContain("/preview");
-    expect(admin.links?.view).toContain("/view");
-    expect(toThreadVideo(row("uploaded"), { canView: true, showDriveLink: false }).links?.view).toBeNull();
+  it("보관 완료 = 재생 가능(미리보기·썸네일 주소만) · 🔴 Drive에서 여는 주소는 싣지 않는다", () => {
+    const video = toThreadVideo(row("uploaded"), { canView: true });
+    expect(video).toMatchObject({ playable: true, pending: false });
+    expect(video.links?.preview).toContain("/preview");
+    expect(Object.keys(video.links ?? {}).sort()).toEqual(["preview", "thumbnail"]);
+    expect(JSON.stringify(video)).not.toContain("/view");
   });
   it("수집·업로드 중·재시도 = 보관 중 안내(다시 확인 대상) · 확인 필요 = 폴링 안 함 · 주소는 없다", () => {
-    for (const s of ["queued", "processing"]) expect(toThreadVideo(row(s), { canView: true, showDriveLink: false })).toMatchObject({ playable: false, pending: true, label: VIDEO_PENDING_TEXT, links: null });
-    expect(toThreadVideo(row("failed"), { canView: true, showDriveLink: false })).toMatchObject({ playable: false, pending: true, links: null });
-    expect(toThreadVideo(row("review"), { canView: true, showDriveLink: false })).toMatchObject({ playable: false, pending: false, links: null });
+    for (const s of ["queued", "processing"]) expect(toThreadVideo(row(s), { canView: true })).toMatchObject({ playable: false, pending: true, label: VIDEO_PENDING_TEXT, links: null });
+    expect(toThreadVideo(row("failed"), { canView: true })).toMatchObject({ playable: false, pending: true, links: null });
+    expect(toThreadVideo(row("review"), { canView: true })).toMatchObject({ playable: false, pending: false, links: null });
     // 보관 완료인데 파일 주소가 이상하면 재생을 열지 않고 다시 확인한다.
-    expect(toThreadVideo(row("uploaded", "x"), { canView: true, showDriveLink: false })).toMatchObject({ playable: false, pending: true, links: null });
+    expect(toThreadVideo(row("uploaded", "x"), { canView: true })).toMatchObject({ playable: false, pending: true, links: null });
   });
   it("🔴 열람 게이트를 못 넘으면 상태와 무관하게 주소를 싣지 않는다", () => {
-    const v = toThreadVideo(row("uploaded"), { canView: false, showDriveLink: true });
+    const v = toThreadVideo(row("uploaded"), { canView: false });
     expect(v).toMatchObject({ playable: false, pending: false, links: null });
     expect(JSON.stringify(v)).not.toContain("drive.google.com");
     expect(JSON.stringify(v)).not.toContain("1AbCdEfGhIjKlMn");
