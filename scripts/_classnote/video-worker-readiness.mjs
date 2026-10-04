@@ -1,7 +1,8 @@
 /** 하트비트가 살아 있다는 이유만으로 구버전·다른 저장 폴더를 적용 완료로 표시하지 않는다.
  *  homeworkVideoTenantFolders 가 있으면 하트비트 폴더를 저장된 지점 루트(savedRootId)와 비교한다.
- *  그 키가 없는 구워커는 env 폴더(folderId)와 비교한다. 키 부재만으로 준비 안 됨이 되지 않는다. */
-export function videoWorkerReadiness(row, { now = Date.now(), folderId, savedRootId = null, startedAfter = null } = {}) {
+ *  그 키가 없는 구워커는 env 폴더(folderId)와 비교한다. 키 부재만으로 준비 안 됨이 되지 않는다.
+ *  연결이 있는 계정만 homeworkVideoTenantAccounts 와 같은 connectionId 를 요구한다. */
+export function videoWorkerReadiness(row, { now = Date.now(), folderId, savedRootId = null, savedConnectionId = null, startedAfter = null } = {}) {
   if (!row) return { ready: false, reason: "이 PC의 워커 기록이 없습니다." };
   const lastSeen = row.last_seen ? new Date(row.last_seen).getTime() : NaN;
   if (!Number.isFinite(lastSeen) || now - lastSeen > 90_000 || lastSeen > now + 90_000)
@@ -18,5 +19,11 @@ export function videoWorkerReadiness(row, { now = Date.now(), folderId, savedRoo
   const expected = tenantFolders ? savedRootId : folderId;
   if (!expected || result.videoArchive.folderId !== expected)
     return { ready: false, reason: tenantFolders ? "워커의 영상 저장 폴더가 지점 설정과 다릅니다." : "워커의 영상 저장 폴더가 요청한 폴더와 다릅니다." };
+  if (savedConnectionId) {
+    if (result.caps?.homeworkVideoTenantAccounts !== true)
+      return { ready: false, reason: "지점 Google 계정을 아는 워커가 아닙니다." };
+    if (result.videoArchive.connectionId !== savedConnectionId)
+      return { ready: false, reason: "워커의 영상 저장 계정이 지점 설정과 다릅니다." };
+  }
   return { ready: true, reason: "새 워커와 영상 저장 폴더 적용을 확인했습니다." };
 }

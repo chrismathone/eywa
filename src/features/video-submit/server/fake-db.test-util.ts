@@ -1,7 +1,8 @@
 /**
  * 테스트 전용 — 제출 링크 서버 코드가 쓰는 만큼만 흉내 내는 메모리 Supabase(admin) 클라이언트.
  * 지원: select(필드 무시·count head) · insert(유니크 → 23505) · update · delete · eq/is/in/gt/gte/lt/order/limit ·
- *       or(`열.like.%끝` · `열.ilike.%포함%` — 올리기 사이트의 전화 끝자리 조회) · maybeSingle/single.
+ *       or(`열.like.%끝` · `열.ilike.%포함%` — 올리기 사이트의 전화 끝자리 조회 · `열.eq.값`) · maybeSingle/single.
+ *       rpc(등록한 함수만 — 없으면 PGRST202 = 그 SQL이 아직 없는 DB) · dropColumn(없는 칸을 고르면 42703 = 칸이 아직 없는 DB).
  * 🔴 운영 코드에서 import하지 말 것(테스트 파일만).
  */
 type Row = Record<string, unknown>;
@@ -12,6 +13,9 @@ export type FakeDb = ReturnType<typeof createFakeDb>;
 export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string, string[][]> = {}) {
   const tables: Record<string, Row[]> = Object.fromEntries(Object.entries(seed).map(([k, v]) => [k, v.map((r) => ({ ...r }))]));
   const missing = new Set<string>();
+  const missingColumns: Record<string, Set<string>> = {};
+  const rpcs: Record<string, (args: Record<string, unknown>) => unknown> = {};
+  const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
   let seq = 0;
 
   function from(table: string) {
@@ -22,9 +26,12 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
     let head = false;
     let returning = false;
     let limit = Infinity;
+    let selected = "";
     const rows = () => (tables[table] ??= []);
     const run = (single: "none" | "maybe" | "one") => {
       if (missing.has(table)) return { data: null, error: { code: "PGRST205", message: "missing" }, count: null };
+      if (selected.split(",").some((col) => missingColumns[table]?.has(col.trim())))
+        return { data: null, error: { code: "42703", message: "missing column" }, count: null };
       if (op === "insert") {
         for (const r of payload) {
           const row: Row = { id: r.id ?? `id-${++seq}`, created_at: r.created_at ?? new Date().toISOString(), ...r };
@@ -53,7 +60,7 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
       return { data: out[0] ?? null, error: null, count: null };
     };
     const builder = {
-      select(_cols?: string, opts?: { head?: boolean }) { if (op !== "select") returning = true; head = !!opts?.head; return builder; },
+      select(cols?: string, opts?: { head?: boolean }) { if (op !== "select") returning = true; selected = cols ?? ""; head = !!opts?.head; return builder; },
       insert(value: Row | Row[]) { op = "insert"; payload = Array.isArray(value) ? value : [value]; return builder; },
       update(value: Row) { op = "update"; patch = value; return builder; },
       delete() { op = "delete"; return builder; },
@@ -63,13 +70,14 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
         filters.push((r) => values.includes(key ? (r[base!] as Row | null | undefined)?.[key] : r[col]));
         return builder;
       },
-      // `a.like.%1234`(끝자리) · `a.ilike.%1234%`(포함) 모양만 — 어느 한 열이 맞으면 통과.
+      // `a.like.%1234`(끝자리) · `a.ilike.%1234%`(포함) · `a.eq.false`(같음 — 칸이 없는 행은 안 맞는다) — 어느 한 조건이 맞으면 통과.
       or(expr: string) {
-        const parts = expr.split(",").map((part) => /^([a-z_]+)\.i?like\.%(.+?)(%?)$/.exec(part));
-        filters.push((r) => parts.some((m) => {
-          if (!m) return false;
-          const value = String(r[m[1]!] ?? "");
-          return m[3] ? value.includes(m[2]!) : value.endsWith(m[2]!);
+        const parts = expr.split(",").map((part) => ({ like: /^([a-z_]+)\.i?like\.%(.+?)(%?)$/.exec(part), eq: /^([a-z_]+)\.eq\.(.+)$/.exec(part) }));
+        filters.push((r) => parts.some(({ like, eq }) => {
+          if (eq) return r[eq[1]!] !== undefined && String(r[eq[1]!]) === eq[2];
+          if (!like) return false;
+          const value = String(r[like[1]!] ?? "");
+          return like[3] ? value.includes(like[2]!) : value.endsWith(like[2]!);
         }));
         return builder;
       },
@@ -87,5 +95,21 @@ export function createFakeDb(seed: Record<string, Row[]>, unique: Record<string,
     };
     return builder;
   }
-  return { from, tables, dropTable: (t: string) => missing.add(t) };
+  /** 등록한 함수만 답한다. 함수가 던지면 `{ code, message }`를 오류로 돌려준다(코드 없으면 P0001 — DB가 한글 사유로 거절한 경우). */
+  async function rpc(name: string, args: Record<string, unknown> = {}) {
+    rpcCalls.push({ name, args });
+    const fn = rpcs[name];
+    if (!fn) return { data: null, error: { code: "PGRST202", message: "missing function" } };
+    try {
+      return { data: (await fn(args)) ?? null, error: null };
+    } catch (thrown) {
+      const error = thrown as { code?: string; message?: string };
+      return { data: null, error: { code: error.code ?? "P0001", message: error.message ?? "" } };
+    }
+  }
+  return {
+    from, rpc, rpcCalls, tables, dropTable: (t: string) => missing.add(t),
+    dropColumn: (t: string, column: string) => (missingColumns[t] ??= new Set()).add(column),
+    defineRpc: (name: string, fn: (args: Record<string, unknown>) => unknown) => { rpcs[name] = fn; },
+  };
 }

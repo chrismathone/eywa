@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeDb } from "./fake-db.test-util";
 import { C, ENV, OTHER_T, S, T, seedDb, settings } from "./test-fixture.test-util";
+import { CONN, WEB_ENV, addConnection, withAccountSchema } from "./account-fixture.test-util";
 
 /**
  * 숙제 영상 올리기 사이트(0330a) — 뒷 4자리 + 이름 조회 · 선생님이 낸 영상 숙제 목록 · 링크 열기 · 횟수 제한 · 지점 격리.
@@ -402,14 +403,21 @@ describe("지점이 여럿일 때 — 주소는 하나(/v), 지점은 화면에�
   const THIRD_T = "88888888-8888-4888-8888-888888888888";
   const C_OTHER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const OTHER_ROOT = "OTHER_BRANCH_ROOT_1";
-  /** 둘째 지점(OTHER_T)에 저장 폴더를 정해 준다 — 저장된 지점 설정(0338a) + 그 지점 워커 기록 + 그 지점의 반·수강·숙제. */
+  /**
+   * 둘째 지점(OTHER_T)이 **자기 Google 계정을 연결하고** 저장 폴더를 정했다 — 계정 연결 + 저장된 지점 설정 + 그 지점 워커 기록 + 그 지점의 반·수강·숙제.
+   * 🔴 계정 연결 없이 폴더만 정한 지점은 사이트를 쓰지 못한다(첫 지점의 기존 연결을 남의 지점이 쓰지 않는다 — 아래 따로 잠근다).
+   */
   function enableOther(enabled = true) {
     m.branches = [{ id: T, name: "인재원 침산" }, { id: OTHER_T, name: "인재원 수성" }];
-    db.tables.homework_video_drive_settings = [{ tenant_id: OTHER_T, enabled, root_folder_id: enabled ? OTHER_ROOT : null, version: "12121212-1212-4121-8121-121212121212" }];
+    for (const [key, value] of Object.entries(WEB_ENV)) vi.stubEnv(key, value);
+    withAccountSchema(db);
+    if (!db.tables.homework_video_drive_connections!.some((row) => row.tenant_id === OTHER_T)) addConnection(db, OTHER_T);
+    // 꺼진 상태 = **연결 해제**(DB 함수가 폴더와 연결을 함께 비운다). 계정은 골랐고 폴더만 없는 상태는 따로 본다(site-setup-pending.test.ts).
+    db.tables.homework_video_drive_settings = [{ tenant_id: OTHER_T, enabled, root_folder_id: enabled ? OTHER_ROOT : null, connection_id: enabled ? CONN : null, version: "12121212-1212-4121-8121-121212121212" }];
     // 첫 지점(T)의 기존 루트 소유 행은 그대로 둔다 — 소유권 표가 있으면 거기 등록된 루트만 기존 연결로 인정한다.
     db.tables.homework_video_drive_roots = [
       ...(db.tables.homework_video_drive_roots ?? []).filter((row) => row.root_folder_id !== OTHER_ROOT),
-      { root_folder_id: OTHER_ROOT, tenant_id: OTHER_T, folder_name: "수성 숙제영상" },
+      { root_folder_id: OTHER_ROOT, tenant_id: OTHER_T, folder_name: "수성 숙제영상", connection_id: CONN },
     ];
     db.tables.classnote_video_history = [{ tenant_id: T, center_id: 96575 }, { tenant_id: OTHER_T, center_id: 77777 }];
     db.tables.classes = [...db.tables.classes!.filter((c) => c.id !== C_OTHER), { id: C_OTHER, tenant_id: OTHER_T, class_name: "수성 A", subject: "math", teacher_id: null, is_active: true }];
@@ -542,5 +550,24 @@ describe("지점이 여럿일 때 — 주소는 하나(/v), 지점은 화면에�
     // 실패한 조회는 시도로 남지 않는다 — 위에서 침산을 골라 성공한 조회 한 건뿐이다
     expect(db.tables.homework_video_site_attempts).toHaveLength(1);
     errors.mockRestore();
+  });
+  it("🔴 계정을 연결하지 않고 폴더만 정한 지점은 사이트를 쓰지 못한다 — 첫 지점의 기존 연결(env 자격)을 남의 지점이 쓰지 않는다", async () => {
+    enableOther();
+    // 둘째 지점의 연결을 지우고 폴더만 남긴다(예전 '공용 계정 + 폴더 분리' 모양).
+    db.tables.homework_video_drive_connections = [];
+    db.tables.homework_video_drive_settings = [{ tenant_id: OTHER_T, enabled: true, root_folder_id: OTHER_ROOT, connection_id: null, version: "12121212-1212-4121-8121-121212121212" }];
+    db.tables.homework_video_drive_roots = db.tables.homework_video_drive_roots!.map((row) => (row.root_folder_id === OTHER_ROOT ? { ...row, connection_id: null } : row));
+    expect(await siteAvailability(undefined, OTHER_T)).toMatchObject({ ok: false });
+    const directory = await siteDirectory();
+    expect(directory.ok && directory.sites.map((site) => site.tenantId)).toEqual([T]);
+    // 첫 지점은 그대로 받는다.
+    expect(await siteAvailability(undefined, T)).toMatchObject({ ok: true, tenantId: T });
+  });
+  it("연결한 계정을 다시 연결해야 하는 지점은 '없는 지점'이 아니라 '잠시 못 받음' — 남은 지점으로 저절로 정하지 않는다", async () => {
+    enableOther();
+    db.tables.homework_video_drive_connections![0]!.status = "needs_reauth";
+    expect(await siteAvailability(undefined, OTHER_T)).toEqual({ ok: false, reason: "unavailable" });
+    expect(await siteDirectory()).toMatchObject({ ok: true, partial: true, sites: [{ tenantId: T }] });
+    expect(await siteAvailability()).toEqual({ ok: false, reason: "choose" });
   });
 });

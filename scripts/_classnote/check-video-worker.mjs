@@ -21,6 +21,7 @@ try {
     result = videoWorkerReadiness(row, {
       folderId: process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID,
       savedRootId: setting.enabled ? setting.rootId : null,
+      savedConnectionId: setting.schema === "complete" ? setting.connectionId : null,
       startedAfter,
     });
     if (result.ready || Date.now() >= deadline) break;

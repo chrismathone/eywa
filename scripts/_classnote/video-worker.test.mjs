@@ -31,10 +31,12 @@ const { removeArchiveLeftovers } = await import("./video-compress.mjs");
 const { ensureTeacherFolder } = await import("./video-drive-folders.mjs");
 const { loadVideoTeacher } = await import("./video-teacher-route.mjs");
 import { readFileSync } from "node:fs";
+import { resetVideoJobPick } from "./video-job-pick.mjs";
 const candidate = { centerId: "12", videoId: "34", postId: "56", boardName: "보드", postedAt: "2026-10-01T01:00:00Z", sources: [] };
 
 function fakeSql(job, { setting = { enabled: true, root_folder_id: SAVED, owner_id: TENANT }, owners = {}, rootsError = null } = {}) {
   const calls = [];
+  let opened = false;
   const sql = (strings, ...values) => {
     const text = strings.join("?"); calls.push({ text, values });
     if (text.includes("homework_video_drive_settings")) return Promise.resolve(setting ? [setting] : []);
@@ -46,10 +48,14 @@ function fakeSql(job, { setting = { enabled: true, root_folder_id: SAVED, owner_
       return Promise.resolve([]);
     }
     if (text.includes("classnote_video_folders")) return Promise.resolve([]);
-    const acceptNew = values.some((value) => value === true);
-    const eligible = !!(job?.route?.rootId || acceptNew);
-    if (text.includes("select 1 as one")) return Promise.resolve(eligible ? [{ one: 1 }] : []);
-    if (text.includes("set status = 'processing'")) return Promise.resolve(eligible && job ? [job] : []);
+    if (text.includes("homework_video_drive_connections")) return Promise.resolve([]);
+    if (text.includes("order by available_at, id")) {
+      const acceptNew = values.some((value) => value === true);
+      opened = !!(job?.route?.rootId || acceptNew);
+      return Promise.resolve(opened && job ? [job] : []);
+    }
+    if (text.includes("select 1 as one")) return Promise.resolve(opened ? [{ one: 1 }] : []);
+    if (text.includes("set status = 'processing'")) return Promise.resolve(opened && job ? [job] : []);
     if (text.includes("set status = 'uploaded'")) return Promise.resolve([{ id: job.id }]);
     return Promise.resolve([]);
   };
@@ -59,6 +65,7 @@ function fakeSql(job, { setting = { enabled: true, root_folder_id: SAVED, owner_
 }
 const rootIds = (calls) => calls.flatMap((call) => call.values.filter((value) => value?.json?.rootId).map((value) => value.json.rootId));
 beforeEach(async () => {
+  resetVideoJobPick();
   h.dir = await mkdtemp(path.join(os.tmpdir(), "aywa-video-worker-")); h.paused = false;
   process.env.CLASSNOTE_VIDEO_DRIVE_FOLDER_ID = ENV_ROOT;
   process.env.DATABASE_URL = "postgres://test-only";
@@ -129,7 +136,9 @@ describe("영상 작업 배선", () => {
     await expect(processVideoJob(null, TENANT, () => {})).rejects.toThrow("재시도 대기");
     expect(uploadVideoToDrive).not.toHaveBeenCalled();
     expect(ensureTeacherFolder).not.toHaveBeenCalled();
-    expect(foreign.calls.some((call) => call.text.includes("set status = 'failed'"))).toBe(true);
+    const failed = foreign.calls.find((call) => call.text.includes("set status = 'failed'"));
+    expect(failed.text).toContain("locked_at < now() - interval '10 minutes'");
+    expect(failed.text).not.toContain("status in ('queued', 'failed', 'processing')");
 
     const fresh = fakeSql({ id: "job2", payload: candidate, route: null }, { setting: { enabled: false, root_folder_id: null, owner_id: null } });
     h.sql = fresh.sql;
@@ -154,7 +163,9 @@ describe("영상 작업 배선", () => {
     expect(uploadVideoToDrive).not.toHaveBeenCalled();
     expect(ensureTeacherFolder).not.toHaveBeenCalled();
     expect(db.calls.some((call) => call.text.includes("set status = 'failed'"))).toBe(false);
-    expect(db.calls.some((call) => call.text.includes("set status = 'queued'"))).toBe(true);
+    const requeued = db.calls.find((call) => call.text.includes("set status = 'queued'"));
+    expect(requeued.text).toContain("locked_at < now() - interval '10 minutes'");
+    expect(requeued.text).not.toContain("status in ('queued', 'failed', 'processing')");
   });
 
   it("저장 폴더 설정을 읽지 못하면 새 수집과 직접 제출 훑기를 돌리지 않는다", async () => {

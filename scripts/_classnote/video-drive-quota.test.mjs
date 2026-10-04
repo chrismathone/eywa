@@ -65,4 +65,27 @@ describe("Drive 남은 공간 감시", () => {
     expect(formatGB(512 * GB)).toBe("512GB");
     expect(formatGB(18.25 * GB)).toBe("18.3GB");
   });
+
+  it("새 계정은 1GB와 한도의 10% 중 작은 값이고, 적어 둔 문턱은 줄이지 않는다", async () => {
+    const account = { kind: "tenant-oauth", connectionId: "33333333-3333-4333-8333-333333333333", tokenVersion: 2, accessToken: async () => "test-only" };
+    const limited = (freeGb, limitGb) => new Response(JSON.stringify({ storageQuota: { limit: String(limitGb * GB), usage: String((limitGb - freeGb) * GB) } }), { status: 200 });
+    expect(await driveQuotaPaused(account, { log: () => {}, env: {}, fetchImpl: vi.fn().mockResolvedValue(limited(2, 15)) })).toBe(false);
+    expect(videoStorageStatus({}, `${account.connectionId}:2`).minFreeBytes).toBe(1 * GB);
+    resetDriveQuota();
+    expect(await driveQuotaPaused(account, { log: () => {}, env: {}, fetchImpl: vi.fn().mockResolvedValue(limited(0.4, 5)) })).toBe(true);
+    expect(videoStorageStatus({}, `${account.connectionId}:2`).minFreeBytes).toBe(0.5 * GB);
+    resetDriveQuota();
+    expect(await driveQuotaPaused(account, { log: () => {}, env: { CLASSNOTE_VIDEO_DRIVE_ACCOUNT_MIN_FREE_GB: "8" }, fetchImpl: vi.fn().mockResolvedValue(limited(9, 15)) })).toBe(false);
+    expect(videoStorageStatus({}, `${account.connectionId}:2`).minFreeBytes).toBe(8 * GB);
+    resetDriveQuota();
+    expect(await driveQuotaPaused(account, { log: () => {}, env: { CLASSNOTE_VIDEO_DRIVE_MIN_FREE_GB: "20" }, fetchImpl: vi.fn().mockResolvedValue(limited(2, 15)) })).toBe(false);
+    expect(videoStorageStatus({ CLASSNOTE_VIDEO_DRIVE_MIN_FREE_GB: "20" }, `${account.connectionId}:2`).minFreeBytes).toBe(1 * GB);
+    resetDriveQuota();
+    const unlimited = new Response(JSON.stringify({ storageQuota: { usage: String(3 * GB) } }), { status: 200 });
+    expect(await driveQuotaPaused(account, { log: () => {}, env: { CLASSNOTE_VIDEO_DRIVE_ACCOUNT_MIN_FREE_GB: "" }, fetchImpl: vi.fn().mockResolvedValue(unlimited) })).toBe(false);
+    expect(videoStorageStatus({}, `${account.connectionId}:2`).minFreeBytes).toBe(null);
+    resetDriveQuota();
+    expect(await driveQuotaPaused(account, { log: () => {}, env: { CLASSNOTE_VIDEO_DRIVE_ACCOUNT_MIN_FREE_GB: "0" }, fetchImpl: vi.fn().mockResolvedValue(limited(0.1, 15)) })).toBe(false);
+    expect(videoStorageStatus({}, `${account.connectionId}:2`).minFreeBytes).toBe(0);
+  });
 });

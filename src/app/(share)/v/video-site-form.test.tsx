@@ -89,6 +89,32 @@ describe("올리기 사이트 — 지점", () => {
     render(<VideoSiteForm academyName="학원" branches={[BRANCHES[0]!]} mustChoose maxLabel="1GB" />);
     expect(screen.getByText("다니는 지점을 골라 주세요")).toBeInTheDocument();
   });
+  it("🔴 기억해 둔 지점이 목록에서 빠졌으면(그 지점이 계정을 바꾸는 중·해제) 남은 지점이 하나여도 저절로 옮겨 가지 않는다 — 직접 고른 뒤에만 보낸다", async () => {
+    replies = [{ ok: true, choices: [CHOICE] }];
+    window.localStorage.setItem(SITE_BRANCH_STORAGE_KEY, B);
+    // 서버가 그린 화면: 쓸 수 있는 지점은 침산 하나, 판정 못 한 지점 없음(mustChoose 아님) — 예전엔 묻지 않고 침산으로 보냈다.
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    expect(screen.getByText("다니는 지점을 골라 주세요")).toBeInTheDocument();
+    expect(screen.queryByLabelText("내 이름")).toBeNull(); // 고르기 전엔 번호·이름을 넣을 수 없다
+    expect(screen.queryByRole("button", { name: "인재원 수성" })).toBeNull(); // 빠진 지점은 선택지에 없다
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "인재원 침산" }));
+    fill();
+    await screen.findByText("올릴 숙제를 골라 주세요");
+    expect(bodies()).toEqual([{ op: "lookup", last4: "5678", name: "류태경", tenant: A }]);
+    expect(window.localStorage.getItem(SITE_BRANCH_STORAGE_KEY)).toBe(A); // 직접 고른 지점을 새로 기억한다
+  });
+  it("기억해 둔 지점이 그 하나뿐인 지점이면(또는 기억한 것이 없으면) 종전대로 묻지 않는다", () => {
+    window.localStorage.setItem(SITE_BRANCH_STORAGE_KEY, A);
+    const { unmount } = render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    expect(screen.queryByText("다니는 지점을 골라 주세요")).toBeNull();
+    expect(screen.getByLabelText("내 이름")).toBeInTheDocument();
+    unmount();
+    window.localStorage.clear();
+    render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);
+    expect(screen.queryByText("다니는 지점을 골라 주세요")).toBeNull();
+    expect(screen.getByLabelText("내 이름")).toBeInTheDocument();
+  });
   it("🔴 고정해 둔 지점이 그사이 꺼지고 다른 지점만 남아도 그 지점으로 저절로 옮겨 가지 않는다 — 서버가 준 목록에서 직접 고르게 한다", async () => {
     replies = [{ ok: false, code: "branch", error: "지점을 골라 주세요.", branches: [BRANCHES[1]] }, { ok: true, choices: [CHOICE] }];
     render(<VideoSiteForm academyName="인재원" branches={[BRANCHES[0]!]} maxLabel="1GB" />);

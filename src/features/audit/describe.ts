@@ -539,6 +539,8 @@ export function auditDetail(
     }
     case "integration_video_drive_setting":
       return m.enabled === true ? join("저장 폴더 지정", str(m.folderName)) : "연결 해제";
+    case "integration_video_drive_account":
+      return join(m.intent === "reconnect" ? "Google 계정 다시 연결" : "Google 계정 연결", str(m.email));
     case "integration_sync_now":
       return "지금 동기화 실행";
     case "data_export_download":

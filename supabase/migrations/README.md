@@ -8,6 +8,14 @@
 
 연락처 변경이 적용된 운영 DB에 `0337a`를 단독 재실행하거나 `pnpm db:alphas`로 전 파일을 다시 적용하지 않는다. `0337a`가 이전의 함수 개수·export·학생 트리거를 복원하면 후속 파일 실행 전 건강 검사가 실패하고 접근 중단 및 기록 공백 판정이 발생할 수 있다. 신규 빈 DB의 전체 설치와 이미 운영 중인 DB의 대상 migration 적용을 구분한다. `0337a`만 다시 실행하는 것은 롤백이 아니다.
 
+## 2026-10-04 숙제영상 지점별 Google 계정
+
+새 계정 연결 코드의 배포를 확인한 뒤, `0338a_homework_video_drive_tenant_config.sql`과 `0340a_homework_video_drive_accounts.sql` → `0341a_homework_video_drive_account_credentials.sql` → `0342a_homework_video_drive_account_routes.sql`을 **한 트랜잭션으로** 적용한다. 파일 안의 `begin`·`commit`을 바깥 트랜잭션으로 합치고 마지막에 PostgREST 스키마를 갱신한다. `0338a`만 따로 적용하거나 후속 정의가 있는 환경에 단독 재실행하지 않는다. 이미 `0338a`가 적용된 환경은 새 세 파일을 한 트랜잭션으로 적용한다. 지점 계정의 저장 폴더를 켜기 전에 발송 PC에 새 워커 전체 ZIP을 적용하고 온라인 상태를 확인한다. 오늘의수학 `0339a`는 이 묶음과 별개다.
+
+기존 영상과 Drive 파일은 옮기지 않는다. 기존 루트는 연결 번호 없이 유지하고, 새 루트는 지점과 Google 연결 번호를 함께 고정한다. 계정을 바꾸거나 연결을 해제해도 이미 시작한 작업의 이전 계정 자격은 유지한다. 갱신 토큰은 Vault, 웹 클라이언트 비밀은 Vercel 환경변수에만 둔다. 계정 표와 RPC는 서비스 역할만 접근하며 일반 API 역할에는 노출하지 않는다.
+
+`scripts/check-homework-video-drive-accounts.cjs`는 대상 DB에서 이 묶음의 재실행, 권한, 연결 버전, 다른 지점 접근 거부, 이전 업로드 완료 및 실제 워커 SQL의 작업 임대 보호를 검증한 뒤 전부 되돌린다. 실제 Google 로그인과 영상 이동은 하지 않는다. 운영 적용은 코드 배포 확인 뒤에 수행하며, 각 지점의 Google 로그인은 연동 화면에서 별도로 마친다.
+
 ## 2026-09-23 수학 내신 통합
 
 `0289a_math_school_grade_alias.sql`은 공유 DB에 적용했다. 기존 수학 `midterm` 1건이 `school`로 이동했고, 충돌 0건·점수/만점/시험일 변경 0건을 확인했다.
@@ -228,6 +236,10 @@ pnpm db:alphas
 | `0312a_protect_super_admin_accounts_hardening` | **0309a 보강(원장 2026-09-30 *"2,3중이상으로 해도 되니까"*)** — ① auth.users 트리거가 소프트 삭제(`deleted_at`)·auth `role` 변경도 막는다(운영 DB 되돌림 실측에서 소프트 삭제만 통과했다) ② 권한 층: super_admins의 update·delete·truncate와 users의 truncate를 API 역할(anon·authenticated·service_role)에서 회수 — 트리거가 꺼져도 API 키로는 명단을 못 건드린다(INSERT·SELECT 유지) ③ `protected_guard_triggers()`(service_role 전용) — 매일 점검 크론이 가드 트리거 5개의 존재·활성을 본다. 앱은 미적용이어도 돈다(트리거 확인만 빠짐). |
 | `0316a_attendance_taught_by` | **출결 칸의 대신 보강 귀속 강사** — `attendance_records.taught_by uuid null`(users FK, on delete set null) + 부분 인덱스(`taught_by is not null`). 원장 2026-09-30 결정: 위임 없이 남의 반 학생을 대신 보강하면 보고서·출석부 반은 학생의 원래 반(B반), 그 칸의 시수는 보강한 강사(A) 몫. 보강 보고서 저장 훅이 보강한 강사가 그 반을 담당하지 않을 때만 적는다(나머지는 NULL = 종전 축). 판정 단일 소스 `teacher-axis.ts`(`ownsAttendanceSlot` `taughtBy` · `resolveRecordTaughtBy`). ⚠️ 앱은 칸이 없어도 돈다([[#95]] — probe 뒤 따로 읽고, 쓰기는 칸이 없으면 귀속만 뺀다). 원스크린 로스터 select엔 넣지 않는다. |
 | `0318a_student_consultation_class` | **원생상담 ↔ 반 매핑 + 상담 통계 RPC**(원장 2026-09-30 *"상담자와 매핑되는 반으로 알아서 스마트하게. 없으면 미매핑. 관리자도 미매핑."* · *"우측에 상담 통계 고도화"*) — ① `student_consultations.class_id`(FK 이름 `student_consultations_class_id_fkey`, on delete set null — 임베드는 이 이름을 명시, [[#94]]) + `class_source`(auto·manual·null, CHECK). 🔑 출처 칸이 따로 있는 이유 = 사람이 고른 '미매핑'과 아직 판정 안 한 옛 행이 둘 다 null이라, 없으면 자동 판정이 사람 선택을 덮는다. ② `consultation_class_candidates(학생[], 날짜[])` = 그날 수강 반 + 가르치는 사람(담임 ∪ 그날 교시 담당) — 판정 규칙은 `scripts/_makeedu/consultation-class.cjs` 한 벌, 워커는 같은 조건의 SQL을 직접 돈다(가드 테스트가 두 SQL을 대조). ③ `consultation_stats(...)` jsonb = 목록 필터 그대로의 합계·월/주 12버킷·6축 분해(상위 12 + 작은 추이) ④ `consultation_gap_students(...)` = 30·60·90일+ 상담 공백 재원생(운영실과 같은 '실시간 재원생' — 아직 시작 안 한 수강만 가진 학생 제외). 🔑 후보 RPC는 집합 반환이라 앱이 120쌍씩 나눠 부른다(PostgREST 1,000행 절단 방지). 전부 security invoker + `auth_tenant_id()`, anon 실행 회수. 🔴 앱은 미적용이어도 돈다([[#95]] — 반 열·반 칸이 숨고 패널은 건수 카드만). 기존 1,903건은 **백필 드라이런만**(`scripts/_oneoff/backfill-consultation-classes.mjs`, `--apply`는 빈 칸만+감사로그 — 원장 승인 후). |
+
+| `0340a_homework_video_drive_accounts` | 지점별 Google 계정 소유 등록, 연결·OAuth 시도 표, 기존 루트·설정의 연결 FK. RLS 및 서비스 역할 전용 권한. |
+| `0341a_homework_video_drive_account_credentials` | Vault 갱신 토큰 저장, 동일 계정 재연결 버전 갱신, 지점·루트·연결이 일치하는 자격 조회 RPC. 웹 클라이언트 비밀은 저장하지 않는다. |
+| `0342a_homework_video_drive_account_routes` | 연결 번호를 포함한 폴더 저장, 시작한 영상의 지점·루트·계정 변경 금지, 이전 저장 RPC 차단. 위의 원자 적용 순서를 따른다. |
 
 새 alpha를 추가할 때: 다음 번호의 `000Na_*` 또는 `000Nb_*`로 만들고, 멱등 패턴을 지키고, **이 표에 추가**한다.
 상세 흐름은 [`../../CLAUDE.md`](../../CLAUDE.md) "마이그레이션 & 시드 흐름" 참고.

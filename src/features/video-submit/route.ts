@@ -34,6 +34,11 @@ export type LinkVideoRoute = {
   reason: string;
   rootId: string;
   /**
+   * 그 저장 폴더에 묶인 **Google 계정 연결**(2026-10-04) — 폴더와 함께 각인해, 계정을 바꾸거나 해제한 뒤에도 이 업로드는 처음 계정으로 끝낸다.
+   * 기존 env 연결의 폴더에는 이 칸이 **없다**(예전 기록과 같은 모양). 한 번 적힌 폴더·연결은 바꾸지 않는다.
+   */
+  connectionId?: string;
+  /**
    * 학생이 올리기 사이트에서 **고른 숙제일**(2026-10-03) — 업로드 시작 때 서버가 "그 학생 × 반에 실제로 나간 영상 숙제"인지 확인한 값만 싣는다.
    * 업로드 기록(`route` jsonb) → 영상 줄(`route`)로 그대로 넘어가 영상 제출 현황이 그 숙제 칸에 붙인다. 없으면 게시일순 규칙.
    */
@@ -45,12 +50,13 @@ export const LINK_ROUTE_REASON = "제출 링크";
 export const UNASSIGNED_FOLDER = "담임 확인 필요";
 
 /** 링크는 반을 안다 — 그 반의 지금 담임 폴더. 담임이 없거나 퇴사·이름 없음이면 '담임 확인 필요'(워커와 같다). */
-export function linkVideoRoute(input: { tenantId: string; rootId: string; student: VideoStudent; klass: VideoClassRow }): LinkVideoRoute {
+export function linkVideoRoute(input: { tenantId: string; rootId: string; connectionId?: string | null; student: VideoStudent; klass: VideoClassRow }): LinkVideoRoute {
   const { tenantId, rootId, student, klass } = input;
   const base = {
     tenantId, studentId: student.id, subject: klass.subject ?? null,
     studentName: student.name ?? null, school: student.school ?? null, grade: student.grade ?? null,
     classId: klass.class_id, className: klass.class_name ?? null, rootId,
+    ...(input.connectionId ? { connectionId: input.connectionId } : {}),
   };
   if (!klass.teacher_id || klass.teacher_status !== "active" || !klass.teacher_name?.trim())
     return { ...base, teacherId: null, folderName: UNASSIGNED_FOLDER, reason: `${LINK_ROUTE_REASON} — 현재 담임이 미지정이거나 비활성 상태입니다.` };

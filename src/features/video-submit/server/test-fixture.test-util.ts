@@ -49,12 +49,18 @@ export function seedDb(over: { link?: Record<string, unknown> } = {}) {
   });
 }
 
-const folder = (id: string, appProperties: Record<string, string>) => ({
-  id, mimeType: "application/vnd.google-apps.folder", parents: [ROOT], trashed: false, appProperties, capabilities: { canAddChildren: true },
+const folder = (id: string, appProperties: Record<string, string>, parent = ROOT) => ({
+  id, mimeType: "application/vnd.google-apps.folder", parents: [parent], trashed: false, appProperties, capabilities: { canAddChildren: true },
 });
 
-/** URL로 갈라 답하는 가짜 fetch — `uploaded`가 있으면 완료된 파일 조회에 그 메타를 돌려준다. */
-export function fakeDrive(opts: { uploaded?: Record<string, unknown> | null } = {}) {
+/**
+ * URL로 갈라 답하는 가짜 fetch — `uploaded`가 있으면 완료된 파일 조회에 그 메타를 돌려준다.
+ * 토큰 서버는 **갱신 토큰마다 다른 접근 토큰**을 준다(기존 env 토큰 `refresh` → `access`, 그 밖 → `access:<갱신 토큰>`) —
+ * 어느 계정의 자격으로 Drive를 불렀는지 `Authorization`으로 확인할 수 있다. `quota`가 있으면 용량 조회에 그 값을 준다(없으면 조회 실패).
+ * `root` = 저장 폴더 번호(기본 `ROOT`) — 담임 폴더는 그 폴더 바로 아래에 있다.
+ */
+export function fakeDrive(opts: { uploaded?: Record<string, unknown> | null; quota?: { limit?: number; usage: number } | null; root?: string } = {}) {
+  const root = opts.root ?? ROOT;
   const calls: { url: string; init?: RequestInit }[] = [];
   const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
@@ -62,9 +68,14 @@ export function fakeDrive(opts: { uploaded?: Record<string, unknown> | null } = 
     const url = String(input);
     calls.push({ url, init });
     if (init?.method === "PATCH") return json({ id: "patched" });
-    if (url.startsWith("https://oauth2.googleapis.com/token")) return json({ access_token: "access", expires_in: 3600 });
-    if (url.includes(`/files/${ROOT}?`)) return json({ ...folder(ROOT, {}), parents: ["drive-root"] });
-    if (url.includes(`/files/${FOLDER}?`)) return json(folder(FOLDER, { aywaTeacher: `${T}:96575:${TEACHER}` }));
+    if (url.startsWith("https://oauth2.googleapis.com/token")) {
+      const refresh = new URLSearchParams(String(init?.body ?? "")).get("refresh_token");
+      return json({ access_token: !refresh || refresh === "refresh" ? "access" : `access:${refresh}`, expires_in: 3600 });
+    }
+    if (url.includes("/about?") && opts.quota)
+      return json({ storageQuota: { ...(opts.quota.limit === undefined ? {} : { limit: String(opts.quota.limit) }), usage: String(opts.quota.usage) } });
+    if (url.includes(`/files/${root}?`)) return json({ ...folder(root, {}), parents: ["drive-root"] });
+    if (url.includes(`/files/${FOLDER}?`)) return json(folder(FOLDER, { aywaTeacher: `${T}:96575:${TEACHER}` }, root));
     if (url.includes("/files/generateIds")) return json({ ids: [FILE] });
     if (url.startsWith("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable")) return json({}, 200, { location: SESSION });
     if (url.includes(`/files/${FILE}?`)) return opts.uploaded ? json(opts.uploaded) : json({ error: "nf" }, 404);

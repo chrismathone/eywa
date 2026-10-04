@@ -7,8 +7,8 @@ import { checkVideoFile } from "../rules";
 import { linkVideoFilename, teacherFolderKey } from "../route";
 import { UPLOAD_STARTS_PER_DAY, UPLOAD_STARTS_PER_HOUR, uploadOrigin } from "../upload-checks";
 import { videoSubmitAvailability, videoSubmitSchemaReady } from "./availability";
-import { readVideoDriveAuth } from "./drive-config";
 import { driveRequest, generateDriveId, startResumableSession } from "./drive-api";
+import { videoDriveHasRoom } from "./drive-quota";
 import { linkFolderRegistry } from "./folder-registry";
 import { ensureLinkTeacherFolder } from "./folders";
 import { resolveSubmitToken } from "./links";
@@ -44,6 +44,8 @@ async function uploadLimitLinkIds(db: ReturnType<typeof createAdminClient>, link
 
 /**
  * 업로드 시작 — 토큰·파일 검사 → 담임 폴더 확보 → Drive 번호를 미리 받아 기록 → 재개 가능 세션 주소만 돌려준다.
+ * 🔴 자격은 **그 지점의 지금 저장 폴더에 묶인 계정** 하나다(기존 env 연결 또는 지점이 연결한 Google 계정). 경로에 폴더와 연결을 함께 각인한다 —
+ *    이후 계정을 바꾸거나 해제해도 이 업로드는 처음 계정으로 끝난다. 그 계정의 남은 공간이 모자라면 새 업로드를 열지 않는다.
  * 🔴 영상 바이트는 서버를 지나지 않는다(Vercel 함수 본문 4.5MB 한도). 브라우저가 세션 주소로 Google에 직접 보낸다.
  * 🔴 실패 원문(Drive 상태·DB 오류)은 서버 로그에만 — 학부모 화면엔 한글 한 줄(raw 노출 금지).
  * `followUp` = 횟수 제한을 통과한 시작이면, 지난번에 못 알린 업로드를 **응답 뒤에** 대신 마무리하는 일(라우트가 `after()`로 돌리고
@@ -69,11 +71,9 @@ export async function startLinkUpload(input: {
     const file = checkVideoFile(input.file);
     if (!file.ok) return fail("file", file.error);
     const availability = await videoSubmitAvailability(link.tenant_id, await getTenantSettingsByTenantId(link.tenant_id), db);
-    const auth = readVideoDriveAuth();
-    // 새 업로드를 꺼도 이전에 시작한 업로드의 완료 확인은 유지한다. 기능·스키마·인증 검사는 그대로 적용한다.
-    if (!availability.ok && (availability.reason === "module_off" || availability.reason === "no_schema" || !auth || !(await videoSubmitSchemaReady(db))))
+    // 새 업로드를 꺼도 이전에 시작한 업로드의 완료 확인은 유지한다. 기능·스키마 검사는 그대로 적용한다.
+    if (!availability.ok && (availability.reason === "module_off" || availability.reason === "no_schema" || !(await videoSubmitSchemaReady(db))))
       return fail("unavailable", UNAVAILABLE);
-    const request = driveRequest(availability.ok ? availability.drive.accessToken : auth!.accessToken);
 
     // 횟수 제한 — 먼저 가볍게 세고(대부분 여기서 끝), 기록을 넣은 **뒤에 다시 센다**: 동시에 수십 개를 보내도
     // 각자 자기 기록까지 센 수를 보므로 한도를 넘는 시작은 세션을 열지 못한다(세기와 넣기 사이의 틈, 적대 리뷰 2026-10-01).
@@ -88,11 +88,15 @@ export async function startLinkUpload(input: {
       return (hour.count ?? 0) + extra > UPLOAD_STARTS_PER_HOUR || (day.count ?? 0) + extra > UPLOAD_STARTS_PER_DAY;
     };
     if (await overLimit(1)) return fail("limit", LIMITED);
-    followUp = () => reconcileLinkUploads(db, request, link).catch(() => []);
+    // 지난 업로드는 **각자 각인된 폴더·계정의 자격**으로 마무리한다(지금 계정으로 끝내지 않는다).
+    followUp = () => reconcileLinkUploads(db, link).catch(() => []);
     if (!availability.ok) return fail("unavailable", UNAVAILABLE);
     const { drive, centerId } = availability;
+    const request = driveRequest(drive.accessToken);
+    const bytes = Number(input.file.size);
+    if (!(await videoDriveHasRoom({ db, target: drive, request, bytes }))) return fail("unavailable", UNAVAILABLE);
 
-    const baseRoute = await loadLinkRoute(db, link, drive.rootId);
+    const baseRoute = await loadLinkRoute(db, link, drive.rootId, drive.connectionId);
     if (!baseRoute) return fail("invalid", "사용할 수 없는 링크입니다.");
     const homeworkOk = input.homeworkDate != null
       && (await isAssignedHomeworkDate(db, link.tenant_id, { studentId: link.student_id, classId: link.class_id }, input.homeworkDate, kstToday()));
@@ -106,7 +110,6 @@ export async function startLinkUpload(input: {
     const uploadId = randomUUID();
     const startedAt = new Date();
     const fileName = linkVideoFilename(route, startedAt, file.ext);
-    const bytes = Number(input.file.size);
     const markFailed = (error: string) => db.from("homework_video_link_uploads").update({ status: "failed", error })
       .eq("tenant_id", link.tenant_id).eq("id", uploadId);
     const inserted = await db.from("homework_video_link_uploads").insert({

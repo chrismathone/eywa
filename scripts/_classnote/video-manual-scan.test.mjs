@@ -24,8 +24,9 @@ function drive(folders, { rootFolders = [{ id: FOLDER, name: "이수진 선생�
     calls.push({ url, method: options.method ?? "GET" });
     if ((options.method ?? "GET") !== "GET") throw new Error("Drive 쓰기 요청 금지");
     const q = new URL(url).searchParams.get("q");
-    if (!q) { // files.get — 루트에서 빠진 등록부 폴더 확인
+    if (!q) { // files.get — 루트 확인, 또는 루트에서 빠진 등록부 폴더 확인
       const id = new URL(url).pathname.split("/").pop();
+      if (id === ROOT) return Response.json({ id, trashed: false });
       if (id === TRASHED) return Response.json({ id, trashed: true });
       if (id === MOVED) return Response.json({ id, trashed: false });
       if (id === "goneHandMade1") return new Response("{}", { status: 404 });
@@ -93,6 +94,7 @@ describe("담임 폴더 직접 업로드 훑기", () => {
     expect(calls.every((c) => c.method === "GET")).toBe(true);
     expect(calls.some((c) => c.url.includes("otherFolder001"))).toBe(false); // 남의 지점 폴더는 보지 않는다
     expect(writes.find((w) => w.kind === "upsert").query).toContain("student_homework_videos.route->>'rootId'");
+    expect(writes.find((w) => w.kind === "upsert").query).toContain(" - 'connectionId'");
   });
 
   it("이름·폴더가 그대로인 연결 행은 다시 쓰지 않고, 확인 필요 행은 결과가 같으면 조용하다", async () => {
@@ -200,6 +202,29 @@ describe("담임 폴더 직접 업로드 훑기", () => {
     expect(await run(1 + 10 * 60_000)).toBeNull();
     expect(log).toHaveBeenCalledTimes(1);
     expect(log.mock.calls[0][0]).toContain("[영상 직접 제출] 폴더 확인 실패");
+  });
+
+  it("저장 루트 자체가 거절되면 다른 폴더의 직접 제출 행을 지우지 않는다", async () => {
+    const fetchImpl = async (url) => {
+      const id = new URL(url).pathname.split("/").pop();
+      return new Response("{}", { status: id === ROOT ? 403 : 404 });
+    };
+    const { sql, writes } = db({ rows: [{ id: "r1", source_ref: "manualFile0001", status: "uploaded", student_id: STUDENT, drive_folder_id: FOLDER, route: { rootId: ROOT } }] });
+    await expect(scanManualDriveVideos(sql, TENANT, { rootId: ROOT, auth: { accessToken: async () => "token", fetchImpl }, now: NOW, ...quiet }))
+      .rejects.toThrow("저장 폴더를 확인하지 못했습니다.");
+    expect(writes).toEqual([]);
+  });
+
+  it("다른 계정에 찍힌 직접 제출 행은 파일이 없어도 지우지 않는다", async () => {
+    const ours = "33333333-3333-4333-8333-333333333333";
+    const theirs = "44444444-4444-4444-8444-444444444444";
+    const { auth } = drive({ [FOLDER]: [], [HOLD]: [] });
+    const { sql, writes } = db({ rows: [
+      { id: "ours", source_ref: "fileOurs00000001", status: "uploaded", student_id: STUDENT, drive_folder_id: FOLDER, route: { rootId: ROOT, connectionId: ours } },
+      { id: "theirs", source_ref: "fileTheirs000001", status: "uploaded", student_id: STUDENT, drive_folder_id: FOLDER, route: { rootId: ROOT, connectionId: theirs } },
+    ] });
+    await expect(scanManualDriveVideos(sql, TENANT, { rootId: ROOT, connectionId: ours, auth, now: NOW, ...quiet })).resolves.toMatchObject({ removed: 1 });
+    expect(writes.find((w) => w.kind === "delete").ids).toEqual(["ours"]);
   });
 
   it("0324a 전 DB에서는 Drive를 부르지 않고 한 번만 알린다", async () => {

@@ -9,7 +9,7 @@ type Db = ReturnType<typeof createAdminClient>;
  * 링크의 학생·반·지금 담임 → 담임 폴더 판정 재료. 🔴 전부 **링크 행의 지점**으로 좁힌다(admin 클라는 RLS를 우회한다 — #104).
  * 반·학생이 그 지점 것이 아니면 null(링크를 쓰지 않는다).
  */
-export async function loadLinkRoute(db: Db, link: LinkRow, rootId: string): Promise<LinkVideoRoute | null> {
+export async function loadLinkRoute(db: Db, link: LinkRow, rootId: string, connectionId: string | null = null): Promise<LinkVideoRoute | null> {
   const [studentRes, classRes] = await Promise.all([
     db.from("students").select("id,name,school,grade").eq("tenant_id", link.tenant_id).eq("id", link.student_id).maybeSingle(),
     db.from("classes").select("id,class_name,subject,teacher_id").eq("tenant_id", link.tenant_id).eq("id", link.class_id).maybeSingle(),
@@ -39,7 +39,7 @@ export async function loadLinkRoute(db: Db, link: LinkRow, rootId: string): Prom
   };
   const s = studentRes.data;
   return linkVideoRoute({
-    tenantId: link.tenant_id, rootId,
+    tenantId: link.tenant_id, rootId, connectionId,
     student: { id: s.id as string, name: (s.name as string | null) ?? null, school: (s.school as string | null) ?? null, grade: (s.grade as string | null) ?? null },
     klass,
   });

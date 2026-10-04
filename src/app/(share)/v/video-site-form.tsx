@@ -53,6 +53,7 @@ const remember = (id: string) => {
  * 지점(2026-10-04): 주소에는 지점을 넣지 않는다. `branches` = 지금 사이트를 쓸 수 있는 지점.
  *  · 하나뿐이면 묻지 않고 **그 지점에 고정**한다(화면은 지금까지와 같다) — 요청마다 그 지점을 실어 보낸다.
  *  · 여럿이거나 `mustChoose`(판정하지 못한 지점이 있다)면 맨 먼저 지점을 고른다. 고른 지점은 이 기기에 기억해 다음엔 미리 골라 둔다(바꿀 수 있다).
+ *  · 기억해 둔 지점이 목록에서 빠졌으면 하나만 남았어도 직접 고르게 한다(다른 지점으로 저절로 옮겨 가지 않는다).
  * 🔴 보낸 지점은 서버가 다시 확인한다. 그 지점이 그사이 꺼졌거나 목록이 바뀌었으면 서버가 `code: "branch"`와 새 목록을 주고,
  *    화면은 **지점 수와 무관하게 다시 고르게 한다** — 남은 지점이 하나뿐이어도 그 지점으로 저절로 옮겨 가지 않는다(다른 학원의 학생을 찾게 된다).
  */
@@ -72,7 +73,10 @@ export function VideoSiteForm({ academyName, branches = [], mustChoose = false, 
   const [picked, setPicked] = useState<string | null | undefined>(undefined);
   // 기억해 둔 지점은 하이드레이션 뒤에 읽는다(서버 렌더와 첫 클라 렌더가 같아야 한다 — [[#75]]).
   const remembered = useSyncExternalStore(subscribeNever, readRemembered, () => null);
-  const choosing = forceChoose || branchList.length > 1;
+  // 🔴 이 기기가 기억해 둔 지점이 목록에 없다(그 지점이 그사이 빠졌다) — 남은 지점이 하나여도 저절로 그 지점으로 가지 않는다.
+  //    직접 고르게 해야 "내 지점이 없다"를 알 수 있다(안 그러면 다른 지점의 같은 이름 학생을 찾게 된다).
+  const rememberedMissing = remembered !== null && !branchList.some((b) => b.id === remembered);
+  const choosing = forceChoose || branchList.length > 1 || rememberedMissing;
   // 고르는 화면이 아니면(하나뿐) 그 지점에 고정한다. 고르는 화면이면 고른 지점(없으면 기억해 둔 지점 — 목록에 있을 때만).
   const branch = choosing ? branchList.find((b) => b.id === (picked === undefined ? remembered : picked)) ?? null : branchList[0] ?? null;
 

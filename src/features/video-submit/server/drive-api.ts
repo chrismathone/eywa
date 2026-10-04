@@ -8,13 +8,15 @@ import { DRIVE_ID_RE } from "./drive-config";
 export const DRIVE_API = "https://www.googleapis.com/drive/v3";
 export const DRIVE_UPLOAD_API = "https://www.googleapis.com/upload/drive/v3/files";
 export const FILE_FIELDS = "id,name,size,md5Checksum,parents,trashed,mimeType,appProperties";
-const FOLDER_FIELDS = "id,name,mimeType,parents,trashed,appProperties,capabilities(canAddChildren)";
+const FOLDER_FIELDS = "id,name,mimeType,parents,trashed,appProperties,driveId,capabilities(canAddChildren)";
 export const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 export type DriveRequest = (url: string, init?: RequestInit) => Promise<Response>;
 export type DriveFile = {
   id: string; name?: string; size?: string; md5Checksum?: string; parents?: string[]; trashed?: boolean;
   mimeType?: string; appProperties?: Record<string, string>; capabilities?: { canAddChildren?: boolean };
+  /** 공유 드라이브 안의 항목이면 그 드라이브 번호(공유 드라이브 최상위 폴더는 번호가 이 값과 같다). */
+  driveId?: string;
 };
 
 export function driveRequest(accessToken: () => Promise<string>, fetchImpl: typeof fetch = fetch): DriveRequest {

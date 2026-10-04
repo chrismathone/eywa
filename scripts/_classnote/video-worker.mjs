@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { stateDir } from "./classnote-paths.mjs";
 import { loadVideoTeacher } from "./video-teacher-route.mjs";
 import { downloadVideo } from "./video-download.mjs";
-import { videoDriveAuth } from "./video-drive-auth.mjs";
 import { ensureTeacherFolder } from "./video-drive-folders.mjs";
 import { uploadVideoToDrive } from "./video-drive.mjs";
 import { reloadArchivedVideo, videoFeedSession } from "./classnote-feed-core.mjs";
@@ -15,7 +14,9 @@ import { scanVideoHistory } from "./video-history.mjs";
 import { runManualDriveScan } from "./video-manual-scan.mjs";
 import { archiveUploadPreparer, removeArchiveLeftovers } from "./video-compress.mjs";
 import { driveQuotaPaused } from "./video-drive-quota.mjs";
-import { loadWorkerVideoDriveSetting, resolveVideoJobRoot, workerVideoRootOwned } from "./video-drive-settings.mjs";
+import { loadWorkerVideoDriveSetting, resolveVideoJobRoot, workerVideoTargetMatches } from "./video-drive-settings.mjs";
+import { credentialForVideoTarget, rejectCachedTenantToken } from "./video-drive-token.mjs";
+import { pickVideoJob } from "./video-job-pick.mjs";
 
 let running = null;
 let nextPoll = 0;
@@ -49,7 +50,7 @@ export function kickVideoWorker(browser, tenant, log = console.log, options = {}
             const { page, centerId } = await videoFeedSession(browser);
             await scanVideoHistory(sql, page, tenant, centerId, { log, archiveEnabled: true, env });
           } catch { log("[영상 이력] 수집 재시도 대기 — 저장된 위치부터 이어갑니다."); }
-          await runManualDriveScan(tenant, { log, rootId: setting.rootId, env });
+          await runManualDriveScan(tenant, { log, rootId: setting.rootId, connectionId: setting.connectionId, schema: setting.schema, env });
         }
       }
     } finally { await sql.end(); }
@@ -65,57 +66,71 @@ export async function processVideoJob(browser, tenant, log = console.log, option
   const env = envBag(options);
   let job;
   let timer;
+  let credentials;
   let leaseLost = false;
   const token = randomUUID();
   try {
     const setting = await loadWorkerVideoDriveSetting(sql, tenant, { env });
     const acceptNew = setting.enabled === true && !!setting.rootId;
-    // ClassNote 수집분(post_id 있음)만 집는다 — 직접 업로드·제출 링크 행은 ClassNote에서 다시 받을 원본이 없다.
-    // 새 각인은 활성 설정이 있을 때만. 이미 rootId 가 있는 작업은 설정이 꺼져도 집는다.
-    // 집을 작업이 있을 때만 토큰을 받는다 — 영상이 없는 평소엔 분마다 토큰 서버를 부르지 않는다.
-    const [waiting] = await sql`select 1 as one from student_homework_videos where tenant_id = ${tenant} and post_id is not null
+    // ClassNote 수집분(post_id 있음)만. 새 각인은 활성 설정이 있을 때만. 이미 rootId 가 있으면 설정이 꺼져도 집는다.
+    // 앞쪽 8건만 보고 계정마다 고른다. 멈춘 계정의 새 작업은 실패로 두지 않는다.
+    const candidates = await sql`select id, status, route, payload from student_homework_videos where tenant_id = ${tenant} and post_id is not null
       and ((status in ('queued', 'failed') and available_at <= now())
         or (status = 'processing' and locked_at < now() - interval '10 minutes'))
-      and (coalesce(route->>'rootId', '') <> '' or ${acceptNew}) limit 1`;
-    if (!waiting) return;
-    const credentials = await videoDriveAuth();
-    try { await credentials.accessToken(); authFailure = null; }
-    catch (error) {
-      const reason = credentials.kind === "oauth" && error?.message ? error.message : "연결을 다시 확인하세요.";
-      if (reason !== authFailure) log(`[영상] Drive 인증 실패 — ${reason}`);
-      authFailure = reason;
-      return;
-    }
-    if (await driveQuotaPaused(credentials, { log })) return;
-    [job] = await sql`update student_homework_videos set status = 'processing', lock_token = ${token},
-        locked_at = now(), attempts = attempts + 1, updated_at = now()
-      where id = (select id from student_homework_videos where tenant_id = ${tenant} and post_id is not null
+      and (coalesce(route->>'rootId', '') <> '' or ${acceptNew})
+      order by available_at, id limit 8`;
+    if (!candidates.length) return;
+    // 선점 전 변경은 지금 집어도 되는 행만. 다른 PC가 방금 잠근 작업의 lock_token 은 풀지 않는다.
+    const picked = await pickVideoJob(candidates, {
+      resolve: (row) => resolveVideoJobRoot(setting, row.route),
+      owned: (decision) => workerVideoTargetMatches(sql, tenant, decision, setting, { env }),
+      auth: async (decision) => {
+        const credentials = await credentialForVideoTarget({
+          tenantId: tenant, rootId: decision.rootId, connectionId: decision.connectionId, schema: setting.schema,
+        }, { env, sql });
+        try { await credentials.accessToken(); authFailure = null; }
+        catch (error) {
+          const reason = error?.message || "연결을 다시 확인하세요.";
+          if (reason !== authFailure) log(`[영상] Drive 인증 실패 — ${reason}`);
+          authFailure = reason;
+          throw error;
+        }
+        return credentials;
+      },
+      paused: (auth) => driveQuotaPaused(auth, { log, env }),
+      claim: async (row) => {
+        const [claimed] = await sql`update student_homework_videos set status = 'processing', lock_token = ${token},
+          locked_at = now(), attempts = attempts + 1, updated_at = now()
+          where id = ${row.id} and tenant_id = ${tenant}
+          and ((status in ('queued', 'failed') and available_at <= now())
+            or (status = 'processing' and locked_at < now() - interval '10 minutes'))
+          returning *`;
+        return claimed ?? null;
+      },
+      fail: (row) => sql`update student_homework_videos set status = 'failed',
+        error = '영상 전송을 완료하지 못했습니다. 워커 인증·원본·폴더 설정을 확인하세요.',
+        available_at = now() + interval '15 minutes', updated_at = now(), locked_at = null, lock_token = null
+        where id = ${row.id} and tenant_id = ${tenant}
         and ((status in ('queued', 'failed') and available_at <= now())
-          or (status = 'processing' and locked_at < now() - interval '10 minutes'))
-        and (coalesce(route->>'rootId', '') <> '' or ${acceptNew})
-        order by available_at, id for update skip locked limit 1)
-      returning *`;
-    if (!job) return;
-    const decision = resolveVideoJobRoot(setting, job.route);
-    if (decision.kind === "skip") {
-      await sql`update student_homework_videos set status = 'queued', lock_token = null, locked_at = null, updated_at = now()
-        where id = ${job.id} and tenant_id = ${tenant} and lock_token = ${token}`;
-      job = undefined;
+          or (status = 'processing' and locked_at < now() - interval '10 minutes'))`,
+      requeue: (row) => sql`update student_homework_videos set status = 'queued', lock_token = null, locked_at = null,
+        available_at = now() + interval '5 minutes', updated_at = now()
+        where id = ${row.id} and tenant_id = ${tenant}
+        and ((status in ('queued', 'failed') and available_at <= now())
+          or (status = 'processing' and locked_at < now() - interval '10 minutes'))`,
+      defer: (row) => sql`update student_homework_videos set status = ${row.status === "failed" ? "failed" : "queued"},
+        lock_token = null, locked_at = null, available_at = now() + interval '5 minutes', updated_at = now()
+        where id = ${row.id} and tenant_id = ${tenant}
+        and ((status in ('queued', 'failed') and available_at <= now())
+          or (status = 'processing' and locked_at < now() - interval '10 minutes'))`,
+    });
+    if (!picked.job) {
+      if (picked.mismatched) throw new Error("영상 업로드 재시도 대기");
       return;
     }
-    if (decision.kind === "pinned") {
-      let owned = false;
-      try {
-        owned = await workerVideoRootOwned(sql, tenant, decision.rootId, { env });
-      } catch {
-        // 조회가 안 되면 미소유가 아니다. 실패로 15분 멈추지 않고 대기 줄로 되돌린다.
-        await sql`update student_homework_videos set status = 'queued', lock_token = null, locked_at = null, updated_at = now()
-          where id = ${job.id} and tenant_id = ${tenant} and lock_token = ${token}`;
-        job = undefined;
-        return;
-      }
-      if (!owned) throw new Error("이 지점의 저장 폴더가 아닙니다.");
-    }
+    job = picked.job;
+    const decision = picked.decision;
+    credentials = picked.auth;
     const workRoot = decision.rootId;
     timer = setInterval(() => {
       sql`update student_homework_videos set locked_at = now() where id = ${job.id}
@@ -129,9 +144,10 @@ export async function processVideoJob(browser, tenant, log = console.log, option
     await mkdir(out, { recursive: true });
     const candidate = await reloadArchivedVideo(browser, job.payload);
     // 이미 찍힌 rootId 는 활성 설정으로 바꾸지 않는다. 없는 작업만 지금 루트를 찍는다.
+    const connectionStamp = decision.connectionId ? { connectionId: decision.connectionId } : {};
     const route = decision.kind === "pinned"
-      ? { ...job.route, rootId: workRoot }
-      : { ...await loadVideoTeacher(sql, tenant, candidate), rootId: workRoot };
+      ? { ...job.route, rootId: workRoot, ...connectionStamp }
+      : { ...await loadVideoTeacher(sql, tenant, candidate), rootId: workRoot, ...connectionStamp };
     const auth = { ...credentials, fileRegistry: videoFileRegistry(sql, tenant), folderRegistry: videoFolderRegistry(sql, tenant, workRoot), accessToken: async () => {
       if (leaseLost) throw new Error("영상 작업 연결이 끊겼습니다.");
       return credentials.accessToken();
@@ -156,7 +172,8 @@ export async function processVideoJob(browser, tenant, log = console.log, option
       catch (error) { if (error.code !== "ENOENT") log("[영상] 임시 파일 정리 실패 — Drive 보관은 완료됐습니다."); }
     }
     await removeArchiveLeftovers(local.filePath);
-  } catch {
+  } catch (error) {
+    if (/HTTP 401/.test(String(error?.message ?? "")) && credentials) rejectCachedTenantToken(credentials.connectionId, credentials.tokenVersion);
     if (job) await sql`update student_homework_videos set status = 'failed',
       error = '영상 전송을 완료하지 못했습니다. 워커 인증·원본·폴더 설정을 확인하세요.',
       available_at = now() + interval '15 minutes', updated_at = now(), locked_at = null, lock_token = null

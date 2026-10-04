@@ -30,4 +30,13 @@ describe("영상 워커 적용 확인", () => {
     expect(videoWorkerReadiness(row, { ...options, folderId: "folder", savedRootId: "saved-root" }).ready).toBe(true);
     expect(videoWorkerReadiness(row, { ...options, folderId: "env-folder", savedRootId: "folder" }).ready).toBe(false);
   });
+  it("연결이 있는 계정은 지원 표시와 같은 연결을 요구하고, 연결 없는 기존 폴더는 그 키 없이도 준비된다", () => {
+    const caps = { homeworkVideoArchive: true, homeworkVideoTenantFolders: true, homeworkVideoTenantAccounts: true };
+    const linked = { ...row, last_results: { ...row.last_results, caps, videoArchive: { enabled: true, folderId: "saved-root", connectionId: "conn-1" } } };
+    expect(videoWorkerReadiness(linked, { ...options, savedRootId: "saved-root", savedConnectionId: "conn-1" }).ready).toBe(true);
+    expect(videoWorkerReadiness(linked, { ...options, savedRootId: "saved-root", savedConnectionId: "conn-2" }).ready).toBe(false);
+    const oldCaps = { ...linked, last_results: { ...linked.last_results, caps: { homeworkVideoArchive: true, homeworkVideoTenantFolders: true } } };
+    expect(videoWorkerReadiness(oldCaps, { ...options, savedRootId: "saved-root", savedConnectionId: "conn-1" }).ready).toBe(false);
+    expect(videoWorkerReadiness(row, { ...options, savedConnectionId: null }).ready).toBe(true);
+  });
 });

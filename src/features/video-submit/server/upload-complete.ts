@@ -6,9 +6,8 @@ import { SITE_LINK_LOOKBACK_DAYS } from "../site";
 import { startedWhileLinkOpen, UPLOAD_NOT_READY, verifyUploadedFile, type StartedUpload } from "../upload-checks";
 import type { LinkVideoRoute } from "../route";
 import { classnoteModuleOn } from "@/features/owner/classnote-gate";
-import { readVideoDriveAuth } from "./drive-config";
-import { videoDriveOwnsRoot } from "./drive-settings";
 import { driveRequest, getDriveFile, trashDriveFile, type DriveFile, type DriveRequest } from "./drive-api";
+import { readPinnedVideoDriveCredential } from "./drive-credentials";
 import { resolveSubmitToken, type LinkRow } from "./links";
 
 type Db = ReturnType<typeof createAdminClient>;
@@ -23,6 +22,16 @@ const FAILED = "올린 영상을 확인하지 못했습니다. 잠시 후 다시
 const UPLOAD_COLUMNS = "id,drive_file_id,drive_folder_id,bytes,created_at,status,route,video_id";
 /** 하루가 지나도 Drive에 파일이 없으면 버려진 업로드다(화면은 새로고침하면 처음부터 다시 연다). */
 const ABANDON_MS = 86_400_000;
+
+/**
+ * 그 업로드에 **각인된 `(저장 폴더, 연결)`의 자격**으로 Drive 요청을 만든다 — 지금 고른 계정이 아니라 시작할 때의 계정이다.
+ * 계정을 바꾸거나 해제한 뒤에도 나온다. 세 값(지점·폴더·연결)이 안 맞으면 null(다른 자격으로 넘어가지 않는다).
+ */
+async function pinnedRequest(db: Db, tenantId: string, route: LinkVideoRoute | null | undefined): Promise<DriveRequest | null> {
+  if (!route?.rootId) return null;
+  const credential = await readPinnedVideoDriveCredential(db, tenantId, route.rootId, route.connectionId ?? null);
+  return credential ? driveRequest(credential.accessToken) : null;
+}
 
 /** 우리가 연 그 업로드의 파일인가 — 우리 폴더 + 그 업로드 표식. 사람이 옮기거나 바꾼 파일은 손대지 않는다. */
 const ours = (file: DriveFile | null, upload: UploadRow): file is DriveFile =>
@@ -132,12 +141,10 @@ export async function completeLinkUpload(input: { token: unknown; uploadId: unkn
       .eq("tenant_id", link.tenant_id).eq("link_id", link.id).eq("id", input.uploadId).maybeSingle();
     if (error) throw new Error("업로드 기록 조회 실패");
     if (!upload) return { ok: false, code: "invalid", error: FAILED };
-    const auth = readVideoDriveAuth();
-    const rootId = (upload.route as LinkVideoRoute)?.rootId;
-    if (!auth || !classnoteModuleOn(await getTenantSettingsByTenantId(link.tenant_id)) || !rootId ||
-      !(await videoDriveOwnsRoot(link.tenant_id, rootId, db)))
-      return { ok: false, code: "unavailable", error: "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요." };
-    return await finalizeUpload(db, driveRequest(auth.accessToken), link, resolved.state !== "revoked", upload as UploadRow);
+    const request = classnoteModuleOn(await getTenantSettingsByTenantId(link.tenant_id))
+      ? await pinnedRequest(db, link.tenant_id, upload.route as LinkVideoRoute) : null;
+    if (!request) return { ok: false, code: "unavailable", error: "지금은 영상을 받을 수 없습니다. 선생님께 알려 주세요." };
+    return await finalizeUpload(db, request, link, resolved.state !== "revoked", upload as UploadRow);
   } catch (error) {
     console.error(JSON.stringify({ level: "error", scope: "videoSubmit.complete", message: error instanceof Error ? error.message : "unknown" }));
     return { ok: false, code: "error", error: FAILED };
@@ -148,8 +155,9 @@ export async function completeLinkUpload(input: { token: unknown; uploadId: unkn
  * 끝까지 올라갔는데 "끝났다"를 못 알린 업로드(폰을 닫음) — 같은 링크로 다시 시작할 때(횟수 제한을 통과한 뒤, 응답 뒤에)
  * 서버가 대신 마무리한다. 2분 전 ~ 링크가 살 수 있는 가장 긴 기간(사이트 링크 최대 8일 + 하루) 안의 '시작됨' 업로드 중 **오래된 것부터** 3개(하루 넘게 파일이 없으면 버려진 것으로 정리돼
  * 빠진다 — 버려진 행이 진짜 못 알린 업로드를 밀어내지 않게). 실패는 삼킨다.
+ * 🔴 업로드마다 **각자 각인된 폴더·계정의 자격**을 쓴다 — 그사이 계정이 바뀌었으면 줄마다 계정이 다르다(한 요청을 돌려쓰지 않는다).
  */
-export async function reconcileLinkUploads(db: Db, request: DriveRequest, link: LinkRow): Promise<CompletedUpload[]> {
+export async function reconcileLinkUploads(db: Db, link: LinkRow): Promise<CompletedUpload[]> {
   const now = Date.now();
   const { data, error } = await db.from("homework_video_link_uploads").select(UPLOAD_COLUMNS)
     .eq("tenant_id", link.tenant_id).eq("link_id", link.id).eq("status", "started")
@@ -159,8 +167,8 @@ export async function reconcileLinkUploads(db: Db, request: DriveRequest, link: 
   if (error || !data?.length) return [];
   const results = await Promise.all((data as UploadRow[]).map(async (upload) => {
     try {
-      if (!upload.route?.rootId || !(await videoDriveOwnsRoot(link.tenant_id, upload.route.rootId, db))) return null;
-      return await finalizeUpload(db, request, link, true, upload);
+      const request = await pinnedRequest(db, link.tenant_id, upload.route);
+      return request ? await finalizeUpload(db, request, link, true, upload) : null;
     } catch { return null; }
   }));
   return results.flatMap((r) => (r?.ok && r.created ? [r] : []));

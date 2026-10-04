@@ -1,5 +1,6 @@
 import postgres from "postgres";
 import { videoDriveAuth } from "./video-drive-auth.mjs";
+import { credentialForVideoTarget } from "./video-drive-token.mjs";
 import { DRIVE_API as API, driveClient, driveJson } from "./video-drive-http.mjs";
 import { decideManualVideo, DUPLICATE_REASON, isVideoFile, manualPostedAt, MANUAL_NAME_SINCE, markDuplicate, namedStudents,
   parseManualVideoName } from "./video-manual-name.mjs";
@@ -95,15 +96,26 @@ const sameOutcome = (row, decision, file, folder) => row.status === decision.sta
  * 한 바퀴. 반환 = { linked, review, removed, ignored } (이번에 바뀐 것만 센다).
  * @param auth videoDriveAuth() 결과(accessToken만 쓴다 — 읽기 요청뿐)
  */
-export async function scanManualDriveVideos(sql, tenant, { rootId, auth, log = console.log, now = new Date() }) {
+export async function scanManualDriveVideos(sql, tenant, { rootId, connectionId = null, auth, log = console.log, now = new Date() }) {
   if (!UUID.test(tenant)) throw new Error("지점 식별자가 올바르지 않습니다.");
   if (!DRIVE_ID.test(rootId ?? "")) throw new Error("영상 저장 폴더 ID가 필요합니다.");
+  if (connectionId != null && !UUID.test(connectionId)) throw new Error("영상 저장 계정 연결이 올바르지 않습니다.");
   const request = driveClient(auth);
+  const rootProbe = await request(`${API}/files/${rootId}?supportsAllDrives=true&fields=id,trashed`);
+  if (rootProbe.status === 404 || rootProbe.status === 403) throw new Error("저장 폴더를 확인하지 못했습니다.");
+  if (!rootProbe.ok) throw new Error(`저장 폴더 확인 HTTP ${rootProbe.status}`);
+  if ((await rootProbe.json())?.trashed) throw new Error("저장 폴더를 확인하지 못했습니다.");
   const today = kstToday(now);
+  const sameAccount = (row) => {
+    const stampedRoot = row.route?.rootId;
+    const stamped = row.route?.connectionId || null;
+    if (stampedRoot && stampedRoot !== rootId) return false;
+    return connectionId ? stamped === connectionId : !stamped;
+  };
   const rows = await sql`select id, source_ref, status, student_id, drive_folder_id, route from student_homework_videos
     where tenant_id = ${tenant} and source = 'drive'`;
-  // 사라진 폴더 확인은 이번 루트의 등록부와, 이번 루트로 찍힌 직접 제출 행만. 예전 루트 기록은 공유가 빠져도 지우지 않는다.
-  const currentRootFolderIds = rows.filter((row) => row.route?.rootId === rootId).map((row) => row.drive_folder_id);
+  // 사라진 폴더 확인은 이번 루트·이번 계정의 행만. 다른 계정이나 예전 루트는 404여도 지우지 않는다.
+  const currentRootFolderIds = rows.filter((row) => sameAccount(row) && row.route?.rootId === rootId).map((row) => row.drive_folder_id);
   const { folders, vanished } = await scanFolders(sql, request, tenant, rootId, currentRootFolderIds);
   const listed = new Map();
   // 폴더 하나라도 못 읽으면 여기서 멈춘다(아래 '사라진 파일 정리'가 못 읽은 폴더의 행을 지우지 않게).
@@ -145,7 +157,7 @@ export async function scanManualDriveVideos(sql, tenant, { rootId, auth, log = c
         where tenant_id = ${tenant} and md5 = ${md5} and bytes = ${bytes} and status <> 'review' and student_id = ${decision.studentId}
           and not (source = 'drive' and source_ref = ${file.id}) order by created_at, id`);
     if (row && sameOutcome(row, decision, file, folder)) continue;
-    const route = { tenantId: tenant, rootId, source: "drive", fileName: file.name, folderId: folder.id, folderName: folder.name,
+    const route = { tenantId: tenant, rootId, ...(connectionId ? { connectionId } : {}), source: "drive", fileName: file.name, folderId: folder.id, folderName: folder.name,
       date: parsed.ok ? parsed.date : null, studentId: decision.studentId, studentName: decision.studentName, school: decision.school,
       grade: decision.grade, subject: decision.subject, classId: decision.classId, className: decision.className,
       teacherId: decision.teacherId, reason: decision.reason, duplicateOf: decision.duplicateOf ?? null };
@@ -157,9 +169,16 @@ export async function scanManualDriveVideos(sql, tenant, { rootId, auth, log = c
       on conflict (tenant_id, source, source_ref) do update set student_id = excluded.student_id, subject = excluded.subject,
         teacher_id = excluded.teacher_id, posted_at = excluded.posted_at, status = excluded.status,
         drive_folder_id = excluded.drive_folder_id, bytes = excluded.bytes, md5 = excluded.md5,
-        route = case when coalesce(student_homework_videos.route->>'rootId', '') <> ''
-          then jsonb_set(excluded.route, '{rootId}', to_jsonb(student_homework_videos.route->>'rootId'))
-          else excluded.route end,
+        route = case
+          when coalesce(student_homework_videos.route->>'connectionId', '') <> ''
+            then jsonb_set(
+              case when coalesce(student_homework_videos.route->>'rootId', '') <> ''
+                then jsonb_set(excluded.route, '{rootId}', to_jsonb(student_homework_videos.route->>'rootId'))
+                else excluded.route end,
+              '{connectionId}', to_jsonb(student_homework_videos.route->>'connectionId'))
+          else (case when coalesce(student_homework_videos.route->>'rootId', '') <> ''
+            then jsonb_set(excluded.route, '{rootId}', to_jsonb(student_homework_videos.route->>'rootId'))
+            else excluded.route end) - 'connectionId' end,
         error = null, updated_at = now()`;
     result[decision.status === "uploaded" ? "linked" : "review"]++;
   }
@@ -179,7 +198,7 @@ export async function scanManualDriveVideos(sql, tenant, { rootId, auth, log = c
   // (+ 이번에 못 본 폴더 중 휴지통·없어진 것)에 있던 행만**(루트 밖으로 옮겨졌을 뿐인 폴더의 파일은 사라진 게 아니다).
   const scanned = new Set([...folders.map((folder) => folder.id), ...vanished]);
   const present = new Set(manual.map(({ file }) => file.id));
-  const gone = rows.filter((row) => scanned.has(row.drive_folder_id) && !present.has(row.source_ref)).map((row) => row.id);
+  const gone = rows.filter((row) => sameAccount(row) && scanned.has(row.drive_folder_id) && !present.has(row.source_ref)).map((row) => row.id);
   if (gone.length) {
     const removed = await sql`delete from student_homework_videos where tenant_id = ${tenant} and source = 'drive'
       and id = any(${gone}::uuid[]) returning id`;
@@ -199,7 +218,14 @@ let lastNotice = null;
  * rootId 가 없으면 저장된 활성 루트만 훑는다. env 폴더는 기본값이 아니다.
  * 같은 안내(DB 준비 전·실패 사유)는 바뀔 때 한 번만 로그에 남긴다.
  */
-export async function runManualDriveScan(tenant, { log = console.log, authFactory = videoDriveAuth, sqlFactory, now = Date.now(), rootId, env } = {}) {
+async function scanAuth(tenant, folderId, connectionId, schema, env, authFactory, sql) {
+  if (authFactory) return authFactory();
+  if (connectionId || schema === "complete")
+    return credentialForVideoTarget({ tenantId: tenant, rootId: folderId, connectionId: connectionId ?? null, schema: schema ?? "complete" }, { env, sql });
+  return videoDriveAuth(env ?? process.env);
+}
+
+export async function runManualDriveScan(tenant, { log = console.log, authFactory, sqlFactory, now = Date.now(), rootId, connectionId = null, schema = null, env } = {}) {
   if (now < nextScanAt) return null;
   nextScanAt = now + MANUAL_SCAN_INTERVAL_MS;
   const notice = (text) => { if (text !== lastNotice) log(text); lastNotice = text; };
@@ -210,6 +236,8 @@ export async function runManualDriveScan(tenant, { log = console.log, authFactor
       return null;
     }
     let folderId = rootId;
+    let accountId = connectionId;
+    let accountSchema = schema;
     if (!folderId) {
       const setting = await loadWorkerVideoDriveSetting(sql, tenant, env ? { env } : {});
       if (setting.error) {
@@ -218,9 +246,13 @@ export async function runManualDriveScan(tenant, { log = console.log, authFactor
       }
       if (!setting.enabled || !setting.rootId) return null;
       folderId = setting.rootId;
+      accountId = setting.connectionId;
+      accountSchema = setting.schema;
     }
-    const auth = await authFactory();
-    const result = await scanManualDriveVideos(sql, tenant, { rootId: folderId, auth, log, now: new Date(now) });
+    const auth = await scanAuth(tenant, folderId, accountId, accountSchema, env, authFactory, sql);
+    const result = await scanManualDriveVideos(sql, tenant, {
+      rootId: folderId, connectionId: accountSchema === "complete" ? accountId : accountId || null, auth, log, now: new Date(now),
+    });
     lastNotice = null;
     return result;
   } catch (error) {

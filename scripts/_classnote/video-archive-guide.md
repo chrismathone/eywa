@@ -4,21 +4,29 @@
 작업 스케줄러 `eywa-classnote-worker`, 로그인 세션, PC 임대, 재시작 절차를 그대로 사용한다.
 웹 배포만으로 연동 PC의 코드가 바뀌지는 않는다. `scripts/_classnote` 전체 ZIP을 교체해야 한다.
 
-## 지점별 저장 폴더 지정 (2026-10-04)
+## 지점별 저장 계정 (2026-10-04)
 
-1. `0338a_homework_video_drive_tenant_config.sql` 적용 후 새 워커 ZIP의 `scripts/_classnote` 전체를 덮어쓰고 `발송PC-지정.bat`을 실행한다.
-2. **학원 설정 → 연동 → 숙제영상 드라이브**에서 해당 지점의 폴더 주소 또는 번호를 저장한다. 새로 지정하는 폴더는 비어 있어야 하고,
-   영상 보관 계정에 파일 추가 권한이 있어야 한다. 다른 지점과 동일하거나 상하위인 폴더는 지정할 수 없다. 공통 부모 아래의 형제 폴더는 가능하다.
-3. 발송 큐 현황에서 새 워커가 연결됐는지 확인하고, `check-video-worker.mjs`로 지점 설정의 실제 폴더가 적용됐는지 확인한다.
-   다른 폴더로 바꾸기 전에 온라인 구버전 워커가 있으면 먼저 업데이트한다.
+켜는 순서는 코드 확인 → SQL 한 묶음 → 워커 전체 교체 → 그 다음 계정이다. SQL을 코드보다 먼저 적용하지 않는다.
 
-저장 위치는 지점별 DB 설정이 정본이다. 새 지점의 폴더를 PC 환경변수로 지정하지 않는다. 기존 등록부에서 가져온 지점의 환경값은
-설정 행이 없는 동안만 유지하며, 연결 해제 후 환경값으로 다시 켜지지 않는다. 기존 파일·영상 기록은 이동하거나 삭제하지 않는다.
-폴더 변경 전에 시작한 작업은 원래 폴더에서 완료하므로 기존 폴더의 접근 권한도 유지한다. 직접 제출 스캔은 새 루트만 훑는다.
+1. 계정 연결을 아는 웹 코드를 배포하고 확인한다. 구글 클라우드에 이미 있는 OAuth 클라이언트가 웹 애플리케이션이면 그것을 그대로 쓴다. 지금 있는 것이 데스크톱 앱이면 같은 프로젝트에 웹 애플리케이션 클라이언트를 하나 추가하고, 기존 데스크톱 클라이언트는 남겨 둔다. 웹 클라이언트는 모든 지점이 하나이고, 각 지점은 그 클라이언트로 자기 Google 계정에 로그인한다. Vercel에만 다음 세 값을 둔다.
+   `HOMEWORK_VIDEO_GOOGLE_CLIENT_ID` · `HOMEWORK_VIDEO_GOOGLE_CLIENT_SECRET` · `HOMEWORK_VIDEO_GOOGLE_REDIRECT_URI`.
+   `REDIRECT_URI`는 구글 콘솔에 등록한 고정 콜백 전체 주소다. 경로는 `/api/integrations/homework-video-drive/callback`이고, 운영은 `https://www.aywa.co.kr/api/integrations/homework-video-drive/callback`이다. 쿼리·해시·사용자 정보는 붙이지 않는다. 이 비밀은 발송 PC에 복사하지 않는다.
+   예전 데스크톱 값 `GOOGLE_DRIVE_CLIENT_ID` · `GOOGLE_DRIVE_CLIENT_SECRET` · `GOOGLE_DRIVE_REFRESH_TOKEN`은 연결 번호가 없는 기존 계정 전용이다. 지점 계정의 Vercel 값으로 넣지 않는다.
+2. 코드가 확인된 뒤에 `0338a_homework_video_drive_tenant_config.sql`, `0340a_homework_video_drive_accounts.sql`, `0341a_homework_video_drive_account_credentials.sql`, `0342a_homework_video_drive_account_routes.sql`을 **한 트랜잭션**으로 적용한다. 파일 안의 `begin`·`commit`을 바깥 트랜잭션으로 합치고, 마지막에 PostgREST 스키마를 갱신한다. `0338a`만 따로 적용하지 않는다. 이미 `0338a`만 있는 환경은 남은 세 파일을 한 트랜잭션으로 적용한다. 오늘의수학 `0339a`는 이 묶음과 별개다.
+3. `scripts/_classnote` **전체 ZIP**을 덮어쓰고 `발송PC-지정.bat`을 실행한다. 계정 루트를 켜기 전에 이 워커가 온라인이어야 한다.
+4. **학원 설정 → 연동 → 숙제영상 드라이브**에서 그 지점의 Google 계정과 빈 폴더를 지정한다. 새로 지정하는 폴더는 비어 있어야 하고,
+   그 계정에 파일 추가 권한이 있어야 한다. 다른 지점과 동일하거나 상하위인 폴더는 지정할 수 없다. 공통 부모 아래의 형제 폴더는 가능하다.
+5. 발송 큐 현황에서 새 워커가 연결됐는지 확인하고, `check-video-worker.mjs`로 지점 폴더와 계정이 맞는지 확인한다.
+   `homeworkVideoTenantAccounts`가 없는 온라인 PC가 있으면 새 계정은 켜지지 않는다. 폴더만 바꿀 때도 폴더 지원이 없는 온라인 PC는 먼저 업데이트한다.
 
-웹과 발송 PC는 같은 Google 보관 계정 인증을 사용한다. 인증 값 파일은 인증 세 키만 바꾸며 저장 폴더를 바꾸지 않는다.
-지점별 폴더 분리는 별도 Google 계정이나 용량 분리가 아니다. 파일의 소유 계정·공유 권한은 기존 Google 설정을 따른다.
+저장 위치는 지점별 DB 설정이 정본이다. 새 지점의 폴더를 PC 환경변수로 지정하지 않는다. 발송 PC에 새 클라이언트 비밀을 넣지 않는다.
+계정 표가 생기기 전에는 기존 등록부에서 가져온 지점의 환경값이 설정 행이 없는 동안만 유지되며, 연결 해제 후 환경값으로 다시 켜지지 않는다.
+계정 표가 있어도 연결 없는 기존 루트는, 그 루트가 이 지점 소유로 확인된 뒤에 발송 PC의 기존 인증을 쓴다. 발송 PC의 `GOOGLE_DRIVE_*` 세 키는 그 연결 없는 계정만 담당한다. 연결이 있는 계정만 서버의 짧은 접근 토큰을 받고, 그 조회가 실패해도 PC 인증으로 돌아가지 않는다.
+기존 파일·영상 기록은 이동하거나 삭제하지 않는다. 바꾸기 전에 시작한 작업은 처음 찍힌 폴더와 계정에서 완료한다. 직접 제출 스캔은 그 계정의 루트만 본다.
+
+PC가 서버에 토큰을 요청할 때 쓰는 `CLASSNOTE_INTERNAL_SECRET`은 발송 PC가 함께 알고, PC는 DB에도 직접 붙는다. 살아 있는 호스트 이름 확인은 지점·폴더·연결이 우연히 섞이지 않게 하는 장치다. 그 이름은 요청 본문에 있으므로 흉내 낼 수 있다. 서버는 호출한 쪽이 그 컴퓨터임을 증명하지 못한다. 시크릿과 DB 접근을 가진 PC에 대한 격리가 아니다. 그 지점 안에서는 지금 고른 계정이 아니어도, 이미 시작한 작업의 이전 연결까지 토큰을 받을 수 있다.
 학생의 제출 주소는 모든 지점에서 `/v` 하나다. 사용 가능한 지점이 여러 곳이면 먼저 지점을 고르고, 한 곳이면 바로 학생 정보를 입력한다.
+앱은 Drive 공유 권한을 바꾸지 않으며, 재생은 보는 사람의 Google 권한을 따른다.
 
 ## 이번 학원 설정
 
@@ -64,7 +72,9 @@ node --env-file=.env.local scripts/_classnote/check-video-worker.mjs
 서비스계정은 Workspace **공유 드라이브**만 지원한다(개인 Drive에서는 저장 한도가 0이라 올리지 못한다).
 개인 Drive의 공유 폴더는 Workspace 공유 드라이브와 다르다.
 
-### 연동 PC에 Google 로그인·CLI를 두지 않는 길 — OAuth 값 파일 (2026-09-30)
+### 연동 PC에 Google 로그인·CLI를 두지 않는 길 — OAuth 값 파일 (2026-09-30, 연결 없는 기존 계정)
+
+이 절은 연결 번호가 없는 기존 계정만 다룬다. 우선순위 gcloud 계정 > 갱신 토큰 > 서비스계정은 그 PC 인증에만 적용된다. 연결 번호가 있는 지점 계정은 서버의 짧은 접근 토큰만 받고, 실패해도 이 PC 값으로 돌아가지 않는다. 아래 절차는 기존 계정을 위해 그대로 둔다.
 
 올린 파일의 주인은 허락한 계정 그대로다(gcloud 방식과 결과가 같다). 로그인은 **다른 PC**에서 한 번만 한다.
 
@@ -153,11 +163,12 @@ node --env-file=.env.local scripts/_classnote/check-video-worker.mjs
   이미 압축본이 올라간 영상의 재시도·중복이 영구 실패하고, 압축본으로 시작한 업로드 재개 기록과도 어긋난다.
 - 라이선스: 이 ffmpeg 빌드는 GPLv3(libx264가 GPL)다. 별도 프로그램으로 실행만 하므로 aywa 코드에 GPL이 옮지 않고, 각 PC가 winget으로 직접
   받으니 우리가 바이너리를 배포하지 않는다. 다른 학원에 워커를 줄 때도 zip에 넣지 말고 같은 방식으로 각자 설치하게 할 것.
-- **Drive 남은 공간 감시**(`video-drive-quota.mjs`): 남은 공간이 **20GB** 아래면 새 영상 작업을 집지 않는다(큐는 대기, 공간이 생기면 자동 재개,
-  로그 `[영상] ⚠ Drive 남은 공간 …`). 확인은 대기 영상이 있을 때 1시간마다, 문턱의 2배(40GB) 아래면 5분마다.
-  근거: 지금 약 1TB가 남았고 들어오는 양은 한 달 1~3GB(2026-09 58건 3.2GB)라, 20GB는 여러 달치 여유이면서 같은 계정을 쓰는 Gmail·사진이
-  멈추기 전에 선다. 5분 사이 최악(영상 5건×500MB)도 2.5GB라 넘치지 않는다. 바꾸려면 `.env.local`의 `CLASSNOTE_VIDEO_DRIVE_MIN_FREE_GB`.
-  서비스계정(공유 드라이브)은 계정 용량이 아니라 보지 않는다. 앱 '발송 큐 현황'의 워커 줄에 `영상 보관 · Drive 남은 …`이 뜨고, 멈추면 붉게.
+- **Drive 남은 공간 감시**(`video-drive-quota.mjs`): 계정마다 따로 본다. 연결 없는 기존 계정은 남은 공간이 **20GB** 아래면 새 영상 작업을 집지 않는다
+  (`.env.local`의 `CLASSNOTE_VIDEO_DRIVE_MIN_FREE_GB`가 0보다 크면 그 값. 근거는 그 계정의 여유와 한 달 1~3GB 유입). 한도가 있는 새 계정은
+  **1GB와 한도의 10% 중 작은 값**이 기본이다(15GB 계정은 1GB). `CLASSNOTE_VIDEO_DRIVE_ACCOUNT_MIN_FREE_GB`를 적으면 그 값을 줄이지 않고 그대로 쓴다.
+  빈 값은 0이 아니다. 한도가 없는 계정은 이 검사로 멈추지 않는다. 멈춘 계정은 새 작업만 미루고, 이미 폴더가 찍힌 작업은 이어서 올린다.
+  큐는 대기하고 공간이 생기면 자동 재개한다(로그 `[영상] ⚠ Drive 남은 공간 …`). 확인은 그 계정에 대기 영상이 있을 때 1시간마다, 문턱의 2배 아래면 5분마다.
+  서비스계정(공유 드라이브)은 계정 용량이 아니라 보지 않는다. 앱 '발송 큐 현황'의 워커 줄에는 그 계정의 실제 문턱이 실린다.
 
 ### 다음 일(설계만) — 링크·직접 올린 영상의 사후 압축
 
@@ -205,10 +216,13 @@ ClassNote에 올리기 힘든 숙제 영상을 학부모가 로그인 없이 `ht
 
 ### 켜는 순서 (원장)
 
-1. SQL: `0324a`(영상 출처 칸, 다른 브랜치) → `0325a_homework_video_submit_links.sql`. 둘 다 없으면 기능이 숨는다.
-2. Vercel 환경변수(Production) — 발송 PC와 같은 보관 계정의
+아래 1–4는 올리기 사이트를 처음 켤 때의 이전 순서다. 연결 없는 기존 보관 계정은 Vercel의 `GOOGLE_DRIVE_CLIENT_ID` · `GOOGLE_DRIVE_CLIENT_SECRET` · `GOOGLE_DRIVE_REFRESH_TOKEN`을 그대로 쓴다. 지점마다 Google 계정을 나누는 순서는 위 「지점별 저장 계정」이 정본이다. 그 순서는 계정 연결 코드를 확인한 뒤 `0338a`·`0340a`·`0341a`·`0342a`를 한 트랜잭션으로 적용하고, 웹에는 `HOMEWORK_VIDEO_GOOGLE_CLIENT_ID` · `HOMEWORK_VIDEO_GOOGLE_CLIENT_SECRET` · `HOMEWORK_VIDEO_GOOGLE_REDIRECT_URI`만 둔다. 콜백은 `https://www.aywa.co.kr/api/integrations/homework-video-drive/callback` 전체 주소다. `0338a`만 적용하지 않는다.
+
+1. SQL: `0324a`(영상 출처 칸, 다른 브랜치) → `0325a_homework_video_submit_links.sql`. 둘 다 없으면 기능이 숨는다. 이 두 파일은 지점 계정 묶음과 별개다.
+2. Vercel 환경변수(Production) — **연결 없는 기존 보관 계정**에 한해 발송 PC와 같은
    `GOOGLE_DRIVE_CLIENT_ID` · `GOOGLE_DRIVE_CLIENT_SECRET` · `GOOGLE_DRIVE_REFRESH_TOKEN`을 연결한다.
-   지점별 저장 위치는 위 연동 화면에서 지정한다(`0338a` 필요). 기존 `CLASSNOTE_VIDEO_TENANT_ID` · `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`는
+   지점 계정을 켜려면 이 세 값 대신 위 웹 클라이언트 세 값을 쓰고, `0338a`·`0340a`·`0341a`·`0342a`를 한 트랜잭션으로 적용한다. `0338a`만 따로 적용하지 않는다.
+   기존 `CLASSNOTE_VIDEO_TENANT_ID` · `CLASSNOTE_VIDEO_DRIVE_FOLDER_ID`는
    등록된 기존 지점의 이전 연결에만 사용한다. 인증·저장 위치가 준비되지 않으면 제출 화면에는 "지금은 제출을 받을 수 없습니다"가 뜬다.
 3. 재배포 → 학생 상세 '숙제 영상' 탭 위에 올리기 사이트 주소(`…/v`) 안내가 보이면 켜진 것이다.
 4. ~~보고서 글 줄~~(2026-10-03 거둠 — env 값과 무관하게 붙이지 않는다. 이력): 연동 PC에 **새 워커 zip**(`report-video-line.mjs` 포함) 적용 → Vercel `VIDEO_SUBMIT_REPORT_LINE=test`(테스트 학생 '학원이' 보고서에만) → 학원이 보드에서 확인 → `on`(조건에 맞는 모든 보고서). 없거나 다른 값이면 붙이지 않는다.

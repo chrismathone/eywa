@@ -15,6 +15,7 @@ export const AUDIT_ACTIONS = {
   integration_sheets_toggle: "구글 시트 내보내기 토글",
   integration_sheet_target: "구글 시트 대상 지정",
   integration_video_drive_setting: "숙제영상 저장 폴더 지정",
+  integration_video_drive_account: "숙제영상 Google 계정 연결",
   integration_sync_now: "makeedu 지금 동기화",
   slack_connection_token: "슬랙 봇 토큰 등록",
   slack_connection_disconnect: "슬랙 알림 연결 해제",
