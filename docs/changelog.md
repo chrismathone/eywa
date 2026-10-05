@@ -1,5 +1,11 @@
 # aywa — 진행 상황 (변경 로그, Tier 1)
 
+## 2026-10-05 — 디자인 lint(@shadcn/lint) 도입
+
+- `@shadcn/lint` 0.2.0(버전 고정)을 `eslint.config.mjs`에 등록하고 `shadcn/no-raw-colors`·`shadcn/no-unknown-classes`를 `warn`으로 켰다. 자체 CSS로 그리는 화면(랜딩·학원 소개·시간표 편집기)은 클래스 검사에서, 개발 사본(`timetable-dev`)은 두 규칙 모두에서, 학부모 보고서 그래프(캡처용 hex)는 색 검사에서 뺐다. 규칙 둘의 비용은 전체 lint 3~5분 중 약 19초다.
+- 첫 실측에서 선언된 적 없는 색 토큰을 쓰는 클래스 15곳이 나왔다(`text-text`·`bg-surface-soft`·`bg-surface`·`bg-success-soft`·`text-success` — lint 14곳 + lint가 못 보는 문자열 반환 1곳). 기존 `dead-color-class.test.ts`는 한 글자 접두로 시작하는 이름을 건너뛰어 이들을 놓쳤다. 이번에는 고치지 않았다 — 남은 경고 107건의 분류와 수정 지시는 `docs/design-lint.md`.
+- 패키지가 없는 `node_modules`에서는 lint가 이 규칙만 건너뛰고 첫 줄에 알린다(CI는 실패). main을 받은 뒤 `pnpm install`을 한다.
+
 ## 2026-10-04 — 지점별 숙제영상 Google 계정
 
 - 지점은 공유 폴더가 아니라 자기 Google 계정을 연결한다. 새 계정은 짧은 접근 토큰만 받고 웹 클라이언트 비밀은 서버에만 둔다. 연결 없는 기존 계정은 소유가 확인된 뒤 발송 PC의 기존 인증을 쓴다. 새 워커 묶음은 `homeworkVideoTenantAccounts`를 알린다.
