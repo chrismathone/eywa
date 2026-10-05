@@ -28,6 +28,7 @@ import {
 import type { TrendReportRow } from "../report-trend";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { makeupReportUpsertBlock } from "@/features/makeups/server/adapters/gates";
+import type { MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
@@ -157,6 +158,11 @@ export async function saveLessonReport(
   warning?: string;
   /** 실제로 저장된 보강 앵커(`makeup_class_id`) — 서버가 확인한 값(발송의 '보낼 반' 판정이 이 값을 쓴다). */
   makeupClassId?: string | null;
+  /**
+   * 보고서와 출결 칸은 저장됐지만 **보강 기록 반영이 남았다** — 화면이 저장 성공과 나눠 알린다(되돌리지 않는다, 다시 보내지 않는다).
+   * 평소엔 없다. 보강 칸을 세우거나 옮긴 저장에서만 온다(makeup-anchor-cells.ts).
+   */
+  makeupEffect?: MakeupEffectNotice;
   /** 반 미정 보강이라 저장을 막았다(`MAKEUP_ANCHOR_REQUIRED_ERROR`) — 화면이 보강 반을 고르게 한다. */
   needsAnchor?: boolean;
   /** 영상 과제 값을 작성 선생님 것으로 두었다([`report-owner.ts`]) — 화면이 이 값으로 되돌린다(나머지는 저장됨). */
@@ -293,6 +299,7 @@ export async function saveLessonReport(
    *  · 앵커가 바뀌면 출결 칸을 **함께** 옮긴다 — 칸에서 막힐 일은 **저장 전에** 확인한다(보고서만 바뀌면 둘이 갈린다).
    */
   const isMakeupRow = !!input.makeup && !input.classId;
+  let makeupEffect: MakeupEffectNotice | undefined;
   let makeupAnchor: string | null = null;
   let priorAnchor: string | null = null;
   let anchorMove: Extract<Awaited<ReturnType<typeof prepareMakeupAnchor>>, { ok: true }>["move"] = null;
@@ -486,6 +493,7 @@ export async function saveLessonReport(
           makeupClassId: anchorMove ? priorAnchor : makeupAnchor,
           error: fin.error,
         };
+      makeupEffect = fin.makeupEffect;
     } else if (owner) {
       try {
         const placed = await ensureMakeupAttendanceForReport({
@@ -555,6 +563,7 @@ export async function saveLessonReport(
     makeupClassId: makeupAnchor,
     ...(warning ? { warning } : {}),
     ...(keptVideoHwFinal ? { keptVideoHomework: keptVideoHwFinal.kept } : {}),
+    ...(makeupEffect ? { makeupEffect } : {}),
   };
 }
 
@@ -586,6 +595,8 @@ export async function saveAndQueueClassnote(
   warning?: string;
   /** 저장 단계에서 영상 과제 값을 작성 선생님 것으로 두었다(saveLessonReport 그대로) — 화면이 이 값으로 되돌린다. */
   keptVideoHomework?: boolean | null;
+  /** 저장 단계의 보강 기록 반영 알림(saveLessonReport `makeupEffect` 그대로) — 발송 결과와 무관하게 알린다. */
+  makeupEffect?: MakeupEffectNotice;
   /** status="needs_class"일 때 — 고를 수 있는 반(반 정보 없는 보강 보고서의 'ClassNote로 보낼 반'). */
   candidates?: { id: string; name: string }[];
   /** status="needs_class"일 때 — 처음 골라 둘 반(메인 수업). */
@@ -685,6 +696,7 @@ export async function saveAndQueueClassnote(
   const warn = {
     ...(saved.warning ? { warning: saved.warning } : {}),
     ...(saved.keptVideoHomework !== undefined ? { keptVideoHomework: saved.keptVideoHomework } : {}),
+    ...(saved.makeupEffect ? { makeupEffect: saved.makeupEffect } : {}),
   };
 
   // 발송 안전 스위치 — 기본 OFF(dry-run). 원장이 승인(설정 토글)하기 전까지 **저장만** 하고 실제 큐잉(발송) 안 함.

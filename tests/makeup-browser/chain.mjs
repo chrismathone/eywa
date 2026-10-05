@@ -44,7 +44,7 @@ try {
       delete result.message;
     } catch (error) { await db.unsafe("rollback"); result.message = error.message; }
   }
-  const newFiles = results.filter(result => /^034[3-9][a-z]_makeup_/.test(result.file));
+  const newFiles = results.filter(result => /^(?:034[3-9]|0350)[a-z]_makeup_/.test(result.file));
   const failures = results.filter(result => result.status === "failed");
   const summary = { boundary: "Actual app migration chain; synthetic Supabase auth/storage platform; owned makeup_chain DB only",
     base: base.length, alpha: alpha.length, newApplied: newFiles.filter(result => result.status === "applied").length,

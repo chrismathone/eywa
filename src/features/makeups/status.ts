@@ -55,3 +55,10 @@ export const MAKEUP_EVIDENCE: Record<string, string> = {
   no_show_with_attendance: "불참으로 기록했지만 보강 시수가 남아 있습니다", anchor_missing: "출결·보고서 반을 지정해 주세요",
 };
 export const makeupText = (map: Record<string, string>, key: string) => map[key] ?? "확인 필요";
+export const MAKEUP_BLOCK: Record<string, string> = {
+  read_only: "열람 권한으로는 변경할 수 없습니다", draining: "운영 정리 중에는 새 일정을 예약할 수 없습니다",
+  not_conductor: "이 회차를 맡은 강사가 처리할 수 있습니다", out_of_scope: "담당 범위의 학생만 처리할 수 있습니다",
+  participant_cancelled: "취소된 예약입니다", session_closed: "종료되거나 변경된 회차입니다",
+  future_session: "실시 날짜가 된 후 기록할 수 있습니다", verified: "이미 인정된 기록입니다",
+  already_recorded: "참여 기록이 있어 예약을 변경할 수 없습니다", no_open_record: "제출할 초안이나 보완 요청 기록이 없습니다",
+};

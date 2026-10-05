@@ -35,7 +35,7 @@ try {
   const [{ name }] = await db`select current_database() as name`;
   assert.equal(name, database);
   const migrations = (await readdir(path.join(root, 'supabase/migrations')))
-    .filter((f) => /^034[3-9][a-z]_makeup_.*\.sql$/.test(f))
+    .filter((f) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(f))
     .sort();
   // 정적 대조 ①: 원장 SQL은 출결·보고서·청구를 쓰지 않고 0267a 산식을 다시 정의하지 않는다.
   const forbidden =

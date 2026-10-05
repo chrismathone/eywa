@@ -32,6 +32,7 @@ import {
 import { makeupMemo } from "../makeup-absence-link";
 import { makeupSessionEntries } from "../makeup-session";
 import { logAction } from "@/features/audit/server/log";
+import type { MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -148,7 +149,7 @@ export async function syncAnchorCells(input: {
   move: { plan: MoveCellsPlan; fromClassId: string | null } | null;
   units?: number | null;
   note?: string | null;
-}): Promise<{ ok: true; moved: number; created: boolean } | { ok: false; error: string }> {
+}): Promise<{ ok: true; moved: number; created: boolean; makeupEffect?: MakeupEffectNotice } | { ok: false; error: string }> {
   const admin = createAdminClient();
   const mine = input.ownerId
     ? await ownerTeachesClassOn(admin, { tenantId: input.tenantId, ownerId: input.ownerId, classId: input.anchor, date: input.date })
@@ -169,6 +170,7 @@ export async function syncAnchorCells(input: {
     if (!r.ok) return r;
     moved = r.moved;
     // 옮긴 칸이 곧 앵커 반의 칸이다 — 여기서 '세우기' 조회가 실패해 오류를 돌려주면 호출부가 보고서만 되돌려 칸과 갈린다(적대 리뷰 2026-09-30).
+    if (moved > 0 && r.makeupEffect) return { ok: true, moved, created: false, makeupEffect: r.makeupEffect };
     if (moved > 0) return { ok: true, moved, created: false };
   }
   const ensured = await ensureMakeupAnchorCell({
@@ -182,7 +184,7 @@ export async function syncAnchorCells(input: {
     note: input.note ?? null,
   });
   if (!ensured.ok) return ensured;
-  return { ok: true, moved, created: ensured.created };
+  return { ok: true, moved, created: ensured.created, ...(ensured.makeupEffect ? { makeupEffect: ensured.makeupEffect } : {}) };
 }
 
 /**
@@ -365,7 +367,7 @@ export async function finishMakeupAnchor(
     ownerId: string | null;
     via: "report_save" | "admin_compose";
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; makeupEffect?: MakeupEffectNotice } | { ok: false; error: string }> {
   const entry = input.ownerId
     ? await supabase
         .from("onescreen_daily_sessions")
@@ -417,5 +419,6 @@ export async function finishMakeupAnchor(
         via: input.via,
       },
     });
-  return { ok: true };
+  // 출결 칸은 섰다. 보강 기록 반영이 남았으면 그 사실만 올린다(저장은 성공이다).
+  return { ok: true, ...(synced.makeupEffect ? { makeupEffect: synced.makeupEffect } : {}) };
 }

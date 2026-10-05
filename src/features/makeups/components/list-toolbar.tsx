@@ -1,15 +1,25 @@
 import { Toolbar } from "@/components/toolbar";
 import { EmbedHiddenInput } from "@/components/embed-link";
+import { EmbedLink as Link } from "@/components/embed-link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MAKEUP_FLAG } from "../status";
 import type { SubjectSetting } from "@/features/owner/settings-types";
+import { makeupListHref } from "./list-navigation";
 
 export function MakeupListToolbar({ filter, subjects }: {
   filter: Record<string, string>; subjects: SubjectSetting[];
 }) {
   return <form action="/makeups" method="get" data-help="makeups-filter">
     <EmbedHiddenInput />
+    {(["owner_id", "student_id"] as const).map(key => filter[key] ? <input key={key} type="hidden" name={key} value={filter[key]} /> : null)}
+    {filter.owner_id || filter.student_id ? <div className="mb-2 flex flex-wrap gap-3 text-sm">
+      {(["owner_id", "student_id"] as const).map(key => filter[key] ? <Link key={key}
+        href={makeupListHref(filter, { [key]: "", page: "1" })} className="border-line inline-flex min-h-8 items-center rounded-md border px-2"
+        aria-label={key === "owner_id" ? "담당자 조건 해제" : "학생 조건 해제"}>
+        {key === "owner_id" ? "담당자 지정 조건" : "학생 지정 조건"} ×
+      </Link> : null)}
+    </div> : null}
     <Toolbar rail={false}>
       <label className="flex items-center gap-2">상태
         <select name="tab" defaultValue={filter.tab || "active"} className="border-line min-h-8 rounded-md border bg-white px-2">

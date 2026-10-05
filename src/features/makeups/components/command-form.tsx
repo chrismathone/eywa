@@ -6,6 +6,7 @@ import { useUnsavedGuard } from "@/components/workspace/use-unsaved-guard";
 import { publishMutation } from "@/lib/realtime/mutation-signal";
 import { executeMakeupCommand } from "../server/actions";
 import { useCaseDetailReload } from "./case-detail-context";
+import { toast } from "sonner";
 
 type Message = { error?: string; saved?: boolean; followUp?: string; readFailed?: boolean };
 
@@ -64,9 +65,22 @@ export function CommandForm({ action, revision = null, payload, label, onSaved, 
       // A failed read keeps the command id: pressing again with the same fields replays the saved command, no new write.
       if (shown) request.current = null;
       const state = result.result.projection_state;
+      const anchorVerification = result.result.anchor_verification;
+      const anchorState = anchorVerification && typeof anchorVerification === "object"
+        ? (anchorVerification as Record<string, unknown>).state : null;
+      const anchorCode = anchorVerification && typeof anchorVerification === "object"
+        ? (anchorVerification as Record<string, unknown>).code : null;
+      const anchorNotice = anchorState === "pending" && anchorCode === "attendance_missing"
+        ? "연결할 반을 저장했습니다. 아직 출결 기록이 없으며, 실제 실시 후 출결·참여 기록을 입력할 수 있습니다."
+        : anchorState === "failed" || anchorState === "pending"
+        ? "연결할 반은 저장했습니다. 출결·시수 연결 상태에 확인할 항목이 남아 있습니다. 대사·복구에서 확인해 주세요."
+        : anchorState === "done" ? "연결할 반과 기존 출결·시수의 연결 상태를 확인했습니다. 출결·시수 값은 자동 변경하지 않았습니다." : undefined;
+      // Resolved rows disappear on reload. Keep the observed result visible after this form unmounts.
+      if (anchorNotice) toast.message(anchorNotice);
       const notes = [
         state === "failed" ? "출결·시수 반영을 확인하지 못했습니다. 대사·복구에서 다시 확인해 주세요."
           : state === "pending" ? "출결·시수 반영은 대기 중입니다. 연결된 기록을 확인해 주세요." : undefined,
+        anchorNotice,
         shown ? undefined : "바뀐 내용을 불러오지 못했습니다. 새로고침해 확인해 주세요.",
       ].filter(Boolean);
       settled.current = { saved: true };

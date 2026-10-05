@@ -17,7 +17,7 @@ vi.mock("./case-decisions", () => ({ CaseDecisions: function Decisions() {
   const view = useCaseDetailReload();
   const [result, setResult] = useState("");
   return <div><label>메모<input defaultValue="" /></label>
-    <button onClick={async () => setResult(String(await view?.reload()))}>다시 읽기</button><span>결과 {result}</span></div>;
+    <button onClick={async () => setResult(String(await view?.reload()))}>다시 읽기</button><span>결과 {result}</span><span>갱신 {view?.version ?? 0}</span></div>;
 } }));
 
 const CASE = "00000000-0000-4000-8000-000000000061";
@@ -39,6 +39,7 @@ describe("보강 상세 — 저장 뒤 페이지 재렌더 없이 건 데이터�
     expect(await screen.findByText("기록 approved r2")).toBeTruthy();
     expect(screen.getByText("예정 회차 예약")).toBeTruthy();
     expect(screen.getByText("결과 true")).toBeTruthy();
+    expect(screen.getByText("갱신 1")).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "메모" })).toHaveValue("작성 중");
   });
   it("다시 읽기가 실패하면 기존 데이터를 지키고 실패를 알린다", async () => {
@@ -49,6 +50,7 @@ describe("보강 상세 — 저장 뒤 페이지 재렌더 없이 건 데이터�
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "다시 읽기" })); });
     expect(screen.getByText("결과 false")).toBeTruthy();
     expect(screen.getByText("기록 pending r1")).toBeTruthy();
+    expect(screen.getByText("갱신 0")).toBeTruthy();
   });
   it("새 서버 데이터(이동·창 새로고침)가 오면 다시 읽은 사본 대신 그것을 쓴다", async () => {
     calls.reload.mockResolvedValue({ data: detail("approved", 2) });
@@ -57,6 +59,7 @@ describe("보강 상세 — 저장 뒤 페이지 재렌더 없이 건 데이터�
     expect(await screen.findByText("기록 approved r2")).toBeTruthy();
     screenView.rerender(view(detail("approved", 3)));
     expect(screen.getByText("기록 approved r3")).toBeTruthy();
+    expect(screen.getByText("갱신 2")).toBeTruthy();
   });
   it("연달아 저장해 다시 읽기가 겹치면 늦게 끝난 옛 응답이 새 응답을 덮지 않는다", async () => {
     let older!: (value: unknown) => void;
@@ -67,6 +70,7 @@ describe("보강 상세 — 저장 뒤 페이지 재렌더 없이 건 데이터�
     expect(await screen.findByText("기록 approved r3")).toBeTruthy();
     await act(async () => { older({ data: detail("approved", 2) }); });
     expect(screen.getByText("기록 approved r3")).toBeTruthy();
+    expect(screen.getByText("갱신 1")).toBeTruthy();
   });
   it("이동 전에 시작한 다시 읽기는 새로 열린 다른 건을 덮지 않는다", async () => {
     let older!: (value: unknown) => void;
@@ -86,5 +90,6 @@ describe("보강 상세 — 저장 뒤 페이지 재렌더 없이 건 데이터�
     rendered.rerender(view(detail("approved", 4)));
     await act(async () => { older({ data: detail("approved", 2) }); });
     expect(screen.getByText("기록 approved r4")).toBeTruthy();
+    expect(screen.getByText("갱신 1")).toBeTruthy();
   });
 });

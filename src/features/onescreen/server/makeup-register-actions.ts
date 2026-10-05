@@ -16,6 +16,7 @@ import { makeupMemo } from "../makeup-absence-link";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { isWithinAttendanceEditWindow } from "@/features/attendance/edit-window";
 import { logAction } from "@/features/audit/server/log";
+import { mergeEffectNotice, type MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
 
 /**
  * 확인창 한 줄 — 세션 항목 + **지금 출석부 칸을 세울지**(`recordCell`).
@@ -36,7 +37,7 @@ type MakeupRegisterEntry = MakeupSessionEntry & { recordCell?: boolean };
 export async function registerMakeupEntries(input: {
   studentId: string; date: string; entries: MakeupRegisterEntry[];
 }): Promise<
-  | { ok: true; updatedAt: string; previousUpdatedAt: string | null; cellError?: string }
+  | { ok: true; updatedAt: string; previousUpdatedAt: string | null; cellError?: string; makeupEffect?: MakeupEffectNotice }
   | { ok: false; error: string }
 > {
   const user = await getCurrentUser();
@@ -94,6 +95,8 @@ export async function registerMakeupEntries(input: {
   if (!(await canWriteTenant(user.systemRole, "attendance"))) return saved;
   if (user.systemRole === "teacher" && !isWithinAttendanceEditWindow(input.date, kstToday())) return saved;
   const errors: string[] = [];
+  // 칸은 섰지만 보강 기록 반영이 남은 경우 — 명단 등록도 출결도 되돌리지 않고 알리기만 한다.
+  let makeupEffect: MakeupEffectNotice | null = null;
   for (const [subject, want] of cellWanted) {
     if (!added.has(subject)) continue;
     const r = await syncAnchorCells({
@@ -110,6 +113,7 @@ export async function registerMakeupEntries(input: {
       errors.push(r.error);
       continue;
     }
+    makeupEffect = mergeEffectNotice(makeupEffect, r.makeupEffect);
     // 출결을 새로 세웠으면 감사로그 — 옛 즉시 쓰기(`setAttendanceCell`)가 남기던 것과 같은 액션 키(기능 추가·변동은 모두 감사로그).
     if (r.created)
       await logAction({
@@ -125,5 +129,5 @@ export async function registerMakeupEntries(input: {
         },
       });
   }
-  return errors.length ? { ...saved, cellError: errors[0] } : saved;
+  return { ...saved, ...(errors.length ? { cellError: errors[0] } : {}), ...(makeupEffect ? { makeupEffect } : {}) };
 }

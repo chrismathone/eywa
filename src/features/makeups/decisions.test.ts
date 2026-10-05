@@ -136,6 +136,9 @@ describe("사건·권한·참여", () => {
     expect(parseMakeupCommand({ command_id: id, action: "participation", expected_revision: null, payload: { participant_id: "p", status: "no_show", actual_minutes: 0 } }).ok).toBe(true);
     expect(parseMakeupCommand({ command_id: id, action: "participation", expected_revision: null, payload: { participant_id: "p", status: "partial", actual_minutes: 30 } }).ok).toBe(false);
     expect(parseMakeupCommand({ command_id: id, action: "participation", expected_revision: null, payload: { participant_id: "p", status: "partial", actual_minutes: 30, learning_summary: "교재 12쪽을 같이 풀었다" } }).ok).toBe(true);
+    // 제출: 저장해 둔 근거를 그대로 낼 수 있다 — 근거가 있는지는 DB가 판정한다. 참여 번호만 필수다.
+    expect(parseMakeupCommand({ command_id: id, action: "submit", expected_revision: 2, payload: { participant_id: "p", report_id: null, learning_summary: "", homework: "" } }).ok).toBe(true);
+    expect(parseMakeupCommand({ command_id: id, action: "submit", expected_revision: 2, payload: { report_id: "r", learning_summary: "교재 12쪽" } }).ok).toBe(false);
     expect(REVISION_REQUIRED.has("participation")).toBe(false);
     expect(REVISION_REQUIRED.has("reserve")).toBe(false);
     expect(REVISION_REQUIRED.has("cancel")).toBe(true);

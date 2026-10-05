@@ -58,7 +58,7 @@ const TRIGGER_TABLES = ['attendance_records', 'tenant_settings', 'class_schedule
 export async function applyOnRealChain({ db, root, assert }) {
   const dir = path.join(root, 'supabase/migrations');
   const all = (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort();
-  const mine = all.filter((f) => /^034[3-9][a-z]_makeup_.*\.sql$/.test(f));
+  const mine = all.filter((f) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(f));
   const real = all.filter((f) => !mine.includes(f));
   await db.unsafe(PLATFORM);
   const skipped = [];

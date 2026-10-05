@@ -3,13 +3,15 @@
 import { useId } from "react";
 import { Input } from "@/components/ui/input";
 
-export function TextField({ name, label, type = "text", required = false, initial, min, max, step }: {
+export function TextField({ name, label, type = "text", required = false, initial, min, max, step, onChange }: {
   name: string; label: string; type?: string; required?: boolean;
   initial?: string | number; min?: number; max?: number; step?: number;
+  onChange?: (value: string) => void;
 }) {
   const id = useId();
   return <div className="space-y-1"><label htmlFor={id} className="block font-medium">{label}</label>
-    <Input id={id} name={name} type={type} required={required} defaultValue={initial} min={min} max={max} step={step} />
+    <Input id={id} name={name} type={type} required={required} defaultValue={initial} min={min} max={max} step={step}
+      onChange={onChange ? event => onChange(event.target.value) : undefined} />
   </div>;
 }
 

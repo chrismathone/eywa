@@ -8,6 +8,7 @@ import { dryRunJourney } from "./dry-run-journey.mjs";
 import { workspaceJourney } from "./workspace-journey.mjs";
 import { framedSurface } from "./framed-surface.mjs";
 import { workspaceSurface, mobileEmbed } from "./workspace-surface.mjs";
+import { usabilityJourney } from "./usability-journey.mjs";
 
 const origin = "http://127.0.0.1:3045";
 const output = process.argv[2];
@@ -55,14 +56,15 @@ try {
   assert.equal((await db`select current_database() as name`)[0].name, "makeup_browser");
   await mkdir(output, { recursive: true });
   const [date] = await db`select mt.d(0)::text as today, mt.d(${originalOffset})::text as original`;
-  const admin = await contextFor(22), page = active = await workspaceSurface(admin, "/makeups/new");
+  const admin = await contextFor(22);
+  let page = active = await workspaceSurface(admin, "/makeups/new");
   console.log("Synthetic intake frame loaded");
   page.page().on("pageerror", error => errors.push(error.message));
   await option(page.locator("form").last(), "student_id", uid(62));
   console.log("Synthetic student options loaded");
+  await page.locator('input[name="original_date"]').fill(date.original);
   await option(page.locator("form").last(), "original_class_id", uid(51));
   console.log("Synthetic class options loaded");
-  await page.locator('input[name="original_date"]').fill(date.original);
   await page.locator('textarea[name="note"]').fill("합성 UI 테스트: 결석 근거 수동 접수");
   await page.getByRole("button", { name: "보강 접수" }).click();
   console.log("Synthetic intake submitted");
@@ -76,6 +78,7 @@ try {
   form = page.locator("form").filter({ has: page.getByRole("button", { name: "예약 확정" }) });
   await option(form, "teacher_id", uid(25));
   await option(form, "classroom_id", uid(41));
+  await option(form, "anchor_class_id", uid(51));
   await form.locator('input[name="period_ids"]').nth(2).check();
   await form.locator('input[name="period_ids"]').nth(3).check();
   await form.locator(`input[name="allocation:${caseId}"]`).fill("110");
@@ -123,10 +126,14 @@ try {
   await phone.screenshot({ path: `${output}/mobile-teacher-detail.png`, fullPage: true });
   results.push("390px actual teacher shell shows scoped detail and hides self-review");
   const unassigned = await contextFor(26), scoped = await framedSurface(unassigned, `/makeups/${caseId}?embed=1`);
+  const actor = await unassigned.request.get("http://127.0.0.1:55445/auth/v1/user", { headers: { authorization: `Bearer ${session(26).access_token}` } });
+  assert.equal(actor.status(), 200); assert.equal((await actor.json()).id, uid(26));
   assert.equal(await scoped.getByText("가상학생B", { exact: false }).count(), 0);
   results.push("same-tenant unassigned teacher cannot expose case student");
+  // A direct frame.goto is not a workspace bridge navigation; the workspace can replace that frame.
+  // The command journey above uses the actual workspace. Read-only queue probes use a fixed embed host.
+  page = active = await framedSurface(admin, "/makeups/reconciliation?embed=1");
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`${origin}/makeups/reconciliation?embed=1`);
   await expect(page.getByRole("heading", { name: "대사 실행 상태" })).toBeVisible();
   await page.getByText("현재 기록 다시 대사", { exact: true }).focus();
   await page.keyboard.press("Enter");
@@ -138,6 +145,7 @@ try {
   assert.equal((await db`select session_units from attendance_records where id=${attendance.id}`)[0].session_units, null);
   await mobileEmbed(admin, "/makeups/reconciliation?embed=1", `${output}/mobile-reconciliation.png`, framedSurface);
   results.push("keyboard opens reconciliation; UI scan succeeded without quantity/money changes; 390px queue fits");
+  results.push(...await usabilityJourney({ db, uid, context: admin, caseId, output, option, framedSurface }));
   results.push(await dryRunJourney({ db, page, saved, uid, output, mobileProbe: (path, file) => mobileEmbed(admin, path, file, framedSurface) }));
   const other = await contextFor(31), foreign = await framedSurface(other, `/makeups/${caseId}?embed=1`);
   assert.equal(await foreign.getByText("가상학생B", { exact: false }).count(), 0);

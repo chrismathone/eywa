@@ -73,7 +73,8 @@ function missingKeys(action: MakeupAction, payload: Record<string, unknown>): bo
     const needsEvidence = status === "present" || status === "partial";
     return blank(payload.participant_id) || !["present", "partial", "no_show"].includes(status) || !minutesOk || (needsEvidence && !evidence);
   }
-  if (action === "submit") return blank(payload.participant_id) || (blank(payload.report_id) && blank(payload.learning_summary));
+  // 근거는 DB가 판정한다: 저장해 둔 보고서·지도 근거가 있으면 다시 넣지 않아도 제출된다(없을 때만 DB가 구체적으로 거절한다).
+  if (action === "submit") return blank(payload.participant_id);
   if (action === "verify") return blank(payload.fulfillment_id) || (payload.status !== "returned" && !Array.isArray(payload.recognitions));
   if (action === "reverse") return blank(payload.fulfillment_id) || blank(payload.reason);
   if (action === "waive") return blank(payload.case_id) || blank(payload.reason) || !Number.isInteger(payload.minutes);

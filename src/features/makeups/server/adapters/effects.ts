@@ -37,6 +37,25 @@ export function effectGapsOf(units: object): EffectGap[] {
   return Array.isArray(raw) ? raw : [];
 }
 
+/**
+ * 출결은 저장됐지만 보강 기록 반영이 남았다는 알림. 호출부는 출결을 되돌리지 않고, 반영을 다시 보내지도 않는다 — 알리기만 한다.
+ * pending = 반영이 대기·보류로 남았다 · unknown = 반영을 확인하지 못했다. queued = 대사·복구 목록에 남았는가.
+ */
+export type MakeupEffectNotice = { state: "pending" | "unknown"; queued: boolean };
+
+/** 알릴 것만 고른다. 관측(observation)은 설계된 대기라 알리지 않는다 — 단 목록에 넣지 못한 것은 종류와 무관하게 알린다. */
+export function effectNoticeOf(gaps: readonly EffectGap[], unknown = false): MakeupEffectNotice | null {
+  if (unknown) return { state: "unknown", queued: false };
+  const shown = gaps.filter((gap) => gap.kind !== "observation" || !gap.queued);
+  return shown.length === 0 ? null : { state: "pending", queued: shown.every((gap) => gap.queued) };
+}
+
+/** 여러 칸의 알림을 하나로: 확인하지 못한 것이 하나라도 있으면 unknown, 목록에 빠진 것이 하나라도 있으면 queued = false. */
+export function mergeEffectNotice(a: MakeupEffectNotice | null | undefined, b: MakeupEffectNotice | null | undefined): MakeupEffectNotice | null {
+  if (!a || !b) return a ?? b ?? null;
+  return { state: a.state === "unknown" || b.state === "unknown" ? "unknown" : "pending", queued: a.queued && b.queued };
+}
+
 export type ParticipationSend =
   | { ok: true; replayed: boolean; projectionState: "pending" | "done" | "failed" | null; verificationCode: string | null; verificationOk: boolean }
   | { ok: false; error: string };

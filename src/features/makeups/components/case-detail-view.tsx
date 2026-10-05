@@ -17,11 +17,12 @@ import { ReconciliationPanel } from "./reconciliation-panel";
  * New server props (navigation, window refresh) replace the reloaded copy. Inputs keep their values across reloads
  * because the sections stay mounted.
  */
-export function CaseDetailView({ initial, periods, actorId, reserveOn }: {
+export function CaseDetailView({ initial, periods, actorId, reserveOn, recordView = "attendance" }: {
   initial: MakeupCaseDetail; periods: PeriodsConfig; actorId: string; reserveOn: boolean;
+  recordView?: "teacher" | "attendance";
 }) {
-  const [state, setState] = useState({ base: initial, detail: initial });
-  if (state.base !== initial) setState({ base: initial, detail: initial });
+  const [state, setState] = useState({ base: initial, detail: initial, version: 0 });
+  if (state.base !== initial) setState({ base: initial, detail: initial, version: state.version + 1 });
   const base = state.base === initial ? state.base : initial;
   const detail = state.base === initial ? state.detail : initial;
   const latest = useRef(0);
@@ -34,19 +35,19 @@ export function CaseDetailView({ initial, periods, actorId, reserveOn }: {
       // Applied only to the server props it was started from, and only if no later read started since:
       // a slower older read, a read from the previous case after navigation, or newer server props all win over it.
       startTransition(() => setState(current => current.base === base && mine === latest.current && fresh.case.id === base.case.id
-        ? { base, detail: fresh } : current));
+        ? { base, detail: fresh, version: current.version + 1 } : current));
       return true;
     } catch {
       return false;
     }
   }, [base]);
-  const value = useMemo(() => ({ reload }), [reload]);
-  const reserve = detail.permissions.reserve && detail.case.eligibility === "approved" && detail.case.lifecycle === "open" && reserveOn;
+  const value = useMemo(() => ({ reload, version: state.version }), [reload, state.version]);
+  const reserve = detail.case.reason !== "additional" && detail.permissions.reserve && detail.case.eligibility === "approved" && detail.case.lifecycle === "open" && reserveOn;
   return <CaseDetailReloadContext value={value}>
     <CaseRecords detail={detail} />
     <ReconciliationPanel detail={detail} />
     <CaseDecisions detail={detail} />
     {reserve ? <ReserveForm row={detail.case} periods={periods} /> : null}
-    <SessionOperations detail={detail} periods={periods} actorId={actorId} />
+    <SessionOperations detail={detail} periods={periods} actorId={actorId} recordView={recordView} />
   </CaseDetailReloadContext>;
 }

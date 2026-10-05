@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export const SECRET = "makeup-browser-local-test-key-20261005-only";
 export const uid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 export const credentials = {
-  "master@a.test": 21, "admin1@a.test": 22, "teacher1@a.test": 25,
+  "master@a.test": 21, "admin1@a.test": 22, "teacher1@a.test": 25, "teacher2@a.test": 26,
   "desk@a.test": 27, "viewer@a.test": 28, "gone@a.test": 29, "master@b.test": 31,
 };
 export function token(role = "authenticated", n = 22) {
