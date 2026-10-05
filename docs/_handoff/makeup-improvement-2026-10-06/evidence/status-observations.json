@@ -1,0 +1,91 @@
+{
+  "boundary": "Synthetic local app database only; financial values are unchanged by manual reconciliation.",
+  "completed": {
+    "caseId": "a2d7840f-f295-4400-82c8-303f3e48c518",
+    "participantId": "f27d48ad-51f6-47c1-b9aa-461e7d954195",
+    "fulfillmentState": "verified",
+    "case": {
+      "id": "a2d7840f-f295-4400-82c8-303f3e48c518",
+      "note": null,
+      "flags": [],
+      "reason": "absence",
+      "due_date": null,
+      "owner_id": null,
+      "revision": 5,
+      "closed_at": "2026-10-06T01:05:23.630336+09:00",
+      "lifecycle": "closed",
+      "unit_kind": "minutes",
+      "created_at": "2026-10-06T01:02:37.810704+09:00",
+      "owner_name": null,
+      "student_id": "00000000-0000-4000-8000-000000000064",
+      "updated_at": "2026-10-06T01:05:23.630336+09:00",
+      "eligibility": "approved",
+      "hold_reason": null,
+      "merged_into": null,
+      "next_action": "none",
+      "subject_key": "math",
+      "student_name": "가상학생D",
+      "original_date": "2026-07-27",
+      "closure_reason": "completed",
+      "hold_review_at": null,
+      "occurrence_key": "day:00000000-0000-4000-8000-000000000064:00000000-0000-4000-8000-000000000052:2026-07-27",
+      "target_minutes": 110,
+      "waived_minutes": 0,
+      "absence_planned": false,
+      "adjusted_minutes": 0,
+      "committed_minutes": 0,
+      "next_session_date": null,
+      "original_class_id": "00000000-0000-4000-8000-000000000052",
+      "policy_version_id": "f1417d77-a3e1-4a5a-9f00-ce502acba810",
+      "recognized_minutes": 110,
+      "reservable_minutes": 0,
+      "imported_commitment": false,
+      "original_class_name": "수학 나반",
+      "outstanding_minutes": 0
+    },
+    "legacyStatus": "done",
+    "participantRead": [
+      {
+        "id": "f27d48ad-51f6-47c1-b9aa-461e7d954195",
+        "status": "present",
+        "case_ids": [
+          "a2d7840f-f295-4400-82c8-303f3e48c518"
+        ],
+        "class_id": "00000000-0000-4000-8000-000000000052",
+        "end_time": "16:20",
+        "revision": 4,
+        "report_id": null,
+        "period_ids": [
+          "1",
+          "2"
+        ],
+        "session_id": "073f9074-0eb7-43fa-bb2c-15397e94a390",
+        "start_time": "14:30",
+        "student_id": "00000000-0000-4000-8000-000000000064",
+        "teacher_id": "00000000-0000-4000-8000-000000000025",
+        "subject_key": "math",
+        "classroom_id": "00000000-0000-4000-8000-000000000041",
+        "session_date": "2026-10-05",
+        "host_class_id": null,
+        "original_date": "2026-07-27",
+        "session_state": "finished",
+        "actual_minutes": 110,
+        "anchor_class_id": "00000000-0000-4000-8000-000000000052",
+        "planned_minutes": 110,
+        "session_revision": 3,
+        "attendance_record_id": "f9563c6c-eb2d-48b8-adf8-4c21088670eb",
+        "legacy_reservation_id": "ae8e137d-5c7b-4df6-9a29-b2f841e14209"
+      }
+    ]
+  },
+  "legacyRegistration": {
+    "sourceId": "f9db18ac-59ce-4853-a5c2-fd0d98e46a83",
+    "caseCountBefore": 4,
+    "caseCountAfter": 4,
+    "nativeMappings": 0
+  },
+  "resolvedPreconditions": [
+    "billing_review",
+    "units_mismatch"
+  ]
+}

@@ -1,0 +1,2 @@
+# Preserve the exact bytes of the hashed plans and archived review documents.
+*.md -text
