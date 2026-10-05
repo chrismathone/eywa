@@ -1,13 +1,15 @@
 import { redirect } from "next/navigation";
 import { requireAccess } from "@/lib/auth/require-access";
+import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { permissionAccountIds, platformAccountIds } from "@/features/owner/server/platform-settings";
-import { canAccessTenant, canWriteTenant, canManageTenant } from "@/lib/auth/perm-matrix";
-import { OWNER_SECTION_MENU, OWNER_TAB_MENU } from "@/lib/settings-role-catalog";
+import { canAccessTenant, canWriteTenant, canManageTenant, getUserPermMatrix } from "@/lib/auth/perm-matrix";
+import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
+import { fallbackOwnerFace, ownerFaceHref, ownerFaceMenu } from "@/features/owner/face-access";
 import { operationsForViewer, seatPinStatus } from "@/features/owner/seat-pin-view";
 import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { kstToday } from "@/lib/date-kst";
-import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
+import { OWNER_FACES, ownerTabLabel, resolveOwnerTab, type OwnerFaceKey, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
 import { operationsFaceTokens } from "@/features/owner/server/operations-save";
 import { permissionsToken } from "@/features/owner/server/permissions-save";
@@ -29,7 +31,7 @@ import { ModulesSection } from "./_components/modules-section";
 import { MakeupsSection } from "./_components/makeups-section";
 import { isGenericTenant } from "@/features/owner/preset";
 import { capDisabledModules, isModuleEnabled } from "@/lib/modules";
-import { resolveMatrix } from "@/lib/permissions";
+import { canAccess, resolveMatrix } from "@/lib/permissions";
 import { teacherMenuKeysFor } from "@/lib/navigation";
 import { DataFace } from "./_components/data-face";
 import { DuplicatesFace } from "./_components/duplicates-face";
@@ -44,9 +46,8 @@ import { DashboardFace } from "./_components/dashboard/dashboard-face";
 export const dynamic = "force-dynamic";
 
 type Sp = Record<string, string | undefined>;
-// 면 목록은 **단일 소스**(src/features/owner/tabs.ts) — 상단 FaceTabs와 왼쪽 사이드바 하부탭이
+// 면 목록은 **단일 소스**(src/features/owner/tabs.ts) — 상단 FaceTabs · 왼쪽 사이드바 하부탭 · 설정 메뉴 판이
 // 같은 배열에서 파생된다. 여기에 목록을 다시 적지 말 것(원장 2026-08-07: 한쪽만 고쳐 사이드바가 stale).
-const TAB_LABEL = Object.fromEntries(OWNER_TABS.map((t) => [t.key, t.label])) as Record<OwnerTab, string>;
 /**
  * 🔴 감사로그 면은 **원장(master)·총괄(super_admin) 전용**(원장 2026-09-09 *"감사로그는 마스터 이상급으러만"*).
  *    같은 날 DB 정책도 그렇게 좁혔다(0253a·0253b) — 그래서 위임받은 admin·manager에게 이 면을 세워 두면
@@ -54,23 +55,21 @@ const TAB_LABEL = Object.fromEntries(OWNER_TABS.map((t) => [t.key, t.label])) as
  *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
  */
 function facesFor(canReadAudit: boolean, showModules: boolean): Face[] {
-  // 감사로그·대시보드 관리 = 원장·총괄만(위임 계정엔 면 자체를 세우지 않는다 — 주소로 와도 안내 문구, 아래 본문).
-  const faces: Face[] = OWNER_TABS.filter((t) => (t.key !== "audit" && t.key !== "dashboard") || canReadAudit).map((t) => ({
-    key: t.key,
-    label: t.label,
-    href: t.href,
-    group: t.group,
+  // 원장 위에게만 서는 면(감사로그 · 대시보드 관리 · 기능)은 위임 계정엔 세우지 않는다 — 주소로 와도 안내 문구(아래 본문).
+  // '기능'(모듈 켜기·끄기) 면은 **새 학원(일반판)에만** 선다 — 침산 설정 화면은 이 면이 생기기 전과 같아야 한다(원장 2026-09-22).
+  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules)).map((f) => ({
+    key: f.key,
+    label: f.label,
+    href: f.href,
+    group: f.group,
   }));
-  // '기능'(모듈 켜기·끄기) 면은 **새 학원(일반판)에만** 선다 — 침산 설정 화면은 이 작업 전과 같아야 한다(원장 2026-09-22).
-  // OWNER_TABS(사이드바·메뉴 판이 파생하는 단일 소스)에 넣지 않은 이유도 같다 — 넣으면 침산 메뉴 판에 버튼이 생긴다.
-  if (showModules) {
-    const at = faces.findIndex((f) => f.key === "navigation");
-    faces.splice(at + 1, 0, { key: "modules", label: MODULES_TAB_LABEL, href: "/owner?tab=modules", group: "설정" });
-  }
-  return faces;
 }
 
-const MODULES_TAB_LABEL = "기능";
+/**
+ * **자체 판정을 하는 면** — 학원 설정 쓰기 권한(페이지의 fieldset 잠금 · '읽기 전용' 안내)을 따르지 않는다.
+ * 고치는 것이 없거나(감사로그), 다른 권한으로 버튼을 세우는 면이다(데이터 정리 · 데이터 가져오기).
+ */
+const SELF_GATED_TABS: ReadonlySet<OwnerTab | "modules"> = new Set(["data", "import", "audit"]);
 
 /** 요청한 면 + 학원 설정 → 실제로 보일 면. '기능' 면은 일반판 학원에서만 열리고, 침산에선 기본 면(프로필)으로 떨어진다. */
 function effectiveTab(sp: Sp, settings: { preset: "chinsan" | "generic" }): OwnerTab | "modules" {
@@ -100,7 +99,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   // '기능' 면 판정에만 설정이 필요하다 — 그 외엔 종전처럼 조회 없이(요청 캐시라 본문과 같은 조회를 나눠 쓴다).
   const tab = sp.tab === "modules" ? effectiveTab(sp, await getTenantSettings()) : resolveTab(sp);
-  return { title: `학원 설정 · ${tab === "modules" ? MODULES_TAB_LABEL : TAB_LABEL[tab]} — 에이와` };
+  return { title: `학원 설정 · ${ownerTabLabel(tab)} — 에이와` };
 }
 
 export default async function OwnerSettingsPage({ searchParams }: { searchParams: Promise<Sp> }) {
@@ -111,13 +110,34 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   if (sp.tab === "ai_ment") redirect("/lesson-reports?tab=ai_ment");
   if (sp.tab === "sessions") redirect("/owner?tab=subjects");
   const requested = resolveTab(sp);
-  const menu = requested in OWNER_TAB_MENU ? OWNER_TAB_MENU[requested as keyof typeof OWNER_TAB_MENU] : "owner";
+  // '기능' 면은 새 학원(일반판)에서만 선다 — 침산에서 그 주소로 오면 기본 면으로 떨어지고, 게이트도 기본 면의 것이다.
+  // 일반판에서는 이 면의 권한 키가 학원 설정(owner)이다(전에는 기본 면의 키로 들어와 본문에서만 걸렀다).
+  const requestedFace: OwnerFaceKey =
+    sp.tab === "modules" && isGenericTenant(await getTenantSettings()) ? "modules" : requested;
+  const menu = ownerFaceMenu(requestedFace);
+  // 요청한 면의 권한이 없어도 **다른 면을 맡은 사람**은 그 면으로 보낸다 — 설정은 면마다 권한이 따로라, 운영 설정만 맡은 사람이
+  // 왼쪽 '설정'(기본 면 = 프로필)을 누르면 맡은 면이 있는데도 운영실로 튕겼다. 보낼 면이 없으면 아래 가드가 종전처럼 처리한다.
+  // ⚠️ 권한이 있는 평소 경로에서는 여기서 더 조회하지 않는다(사용자·권한 표는 요청 안에서 한 번만 읽힌다).
+  const actor = await getCurrentUser();
+  if (actor) {
+    const matrix = await getUserPermMatrix();
+    if (!canAccess(actor.systemRole, menu, matrix)) {
+      const fallback = fallbackOwnerFace(requestedFace, {
+        systemRole: actor.systemRole,
+        matrix,
+        isMasterLevel: actor.systemRole === "master" || (await isCurrentUserSuperAdmin()),
+        isGeneric: isGenericTenant(await getTenantSettings()),
+      });
+      // 창(embed) 안에서 보낼 때는 embed 표식을 유지한다(빼면 창 안에 전체 화면 틀이 뜬다).
+      if (fallback) redirect(ownerFaceHref(fallback, sp.embed === "1"));
+    }
+  }
   const viewer = await requireAccess(menu);
   const canEditSettings = await canWriteTenant(viewer.systemRole, menu);
-  const allowedEntries = await Promise.all(OWNER_TABS.map(async face => [face.key,
-    await canAccessTenant(viewer.systemRole, face.key in OWNER_TAB_MENU ? OWNER_TAB_MENU[face.key as keyof typeof OWNER_TAB_MENU] : "owner"),
-  ] as const));
-  const allowedTabs = new Map(allowedEntries);
+  const allowedEntries = await Promise.all(
+    OWNER_FACES.map(async (face) => [face.key, await canAccessTenant(viewer.systemRole, ownerFaceMenu(face.key))] as const),
+  );
+  const allowedTabs = new Map<OwnerFaceKey, boolean>(allowedEntries);
   // 역할·권한(permissions) 편집은 항상 master 전용(self-escalation 차단 — saveOwnerSection·0080a 트리거와 동일).
   // 위임받은 admin/manager는 다른 설정 면은 편집 가능하되 이 면만 안내로 대체(저장이 실패할 폼을 보여주지 않음).
   const isMaster = viewer.systemRole === "master";
@@ -201,12 +221,12 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
 
       </div>
       <PageMaximizeToolbar>
-        <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings)).filter(face => face.key === "modules" ? canReadAudit : allowedTabs.get(face.key as OwnerTab))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+        <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings)).filter((face) => allowedTabs.get(face.key as OwnerFaceKey))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
       </PageMaximizeToolbar>
 
       {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}
-      {/* 데이터 정리 면은 자체 판정이다(위 canManageData) — 설정 '읽기 전용' 안내도, 아래 fieldset 잠금도 받지 않는다. */}
-      {!canEditSettings && !showsOperations && tab !== "data" ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {/* 자체 판정을 하는 면(SELF_GATED_TABS)은 설정 '읽기 전용' 안내도, 아래 fieldset 잠금도 받지 않는다. */}
+      {!canEditSettings && !showsOperations && !SELF_GATED_TABS.has(tab) ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {settingsUnreadable ? (
@@ -312,22 +332,6 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         )
       ) : null}
       {tab === "popups" ? <PopupsFace /> : null}
-      {tab === "import" ? <ImportHubFace /> : null}
-      {/* 🔴 주소를 직접 쳐도 열리지 않는다 — 면을 감추기만 하면 그건 게이트가 아니다([[#77]]).
-          권한이 없으면 조회 자체를 안 한다(빈 표를 보여 주고 "기록 없음"이라 적으면 거짓말이 된다). */}
-      {tab === "audit" ? (
-        canReadAudit ? (
-          <AuditFace action={sp.action} q={sp.q} from={sp.from} to={sp.to} page={page} isEmbed={isEmbed} />
-        ) : (
-          <div className="bg-card border-line rounded-2xl border p-6">
-            <p className="text-foreground text-sm font-bold">감사로그는 원장만 볼 수 있습니다</p>
-            <p className="text-text-dim mt-1 text-sm">
-              누가 무엇을 바꿨는지에는 급여·지출·환불처럼 민감한 기록이 함께 담겨 있어, 학원 설정을 위임받은
-              계정으로도 열 수 없습니다. 나머지 관리 면(팝업 공지·데이터 정리·연동)은 그대로 쓸 수 있어요.
-            </p>
-          </div>
-        )
-      ) : null}
       {/* 연동 = 켜진 연동만 내부 탭(슬랙 · makeedu · 구글 시트) — 원장 2026-09-28 "세로 스크롤이 너무 길어짐". */}
       {tab === "sheets" ? (
         <IntegrationsFace
@@ -343,14 +347,33 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         />
       ) : null}
       </fieldset>
-      {/* 🔴 데이터 정리 면은 위 fieldset **밖**에 둔다 — 그 fieldset은 학원 설정 쓰기 권한으로 잠기는데, 이 면의 버튼은
-          다른 권한(관리자 도구)을 따른다. 안에 두면 정리 권한이 있어도 버튼이 잠긴다. 버튼은 면이 canManageData로 직접 가린다. */}
+      {/* 🔴 자체 판정을 하는 면은 위 fieldset **밖**에 둔다(SELF_GATED_TABS) — 그 fieldset은 학원 설정 쓰기 권한으로 잠기는데,
+          이 면들의 버튼·입력은 다른 판정을 따른다. 안에 두면 권한이 있어도 잠긴다.
+          · 데이터 정리: 버튼은 '관리자 도구' 권한(canManageData)으로 면이 직접 가린다.
+          · 데이터 가져오기: 줄마다 그 메뉴의 전체 권한으로 버튼이 선다(올리기 주소도 같은 판정).
+          · 감사로그: 고치는 것이 없다 — 조회 조건(기간·검색) 입력이 설정 읽기 전용 때문에 잠기면 안 된다. */}
       {tab === "data" ? (
         <div className="space-y-10">
           <DataFace canManage={canManageData} />
           <DuplicatesFace page={page} isEmbed={isEmbed} canManage={canManageData} />
           <SameNameFace />
         </div>
+      ) : null}
+      {tab === "import" ? <ImportHubFace /> : null}
+      {/* 🔴 주소를 직접 쳐도 열리지 않는다 — 면을 감추기만 하면 그건 게이트가 아니다([[#77]]).
+          권한이 없으면 조회 자체를 안 한다(빈 표를 보여 주고 "기록 없음"이라 적으면 거짓말이 된다). */}
+      {tab === "audit" ? (
+        canReadAudit ? (
+          <AuditFace action={sp.action} q={sp.q} from={sp.from} to={sp.to} page={page} isEmbed={isEmbed} />
+        ) : (
+          <div className="bg-card border-line rounded-2xl border p-6">
+            <p className="text-foreground text-sm font-bold">감사로그는 원장만 볼 수 있습니다</p>
+            <p className="text-text-dim mt-1 text-sm">
+              누가 무엇을 바꿨는지에는 급여·지출·환불처럼 민감한 기록이 함께 담겨 있어, 학원 설정을 위임받은
+              계정으로도 열 수 없습니다. 나머지 관리 면(팝업 공지·데이터 정리·연동)은 그대로 쓸 수 있어요.
+            </p>
+          </div>
+        )
       ) : null}
     </div>
   );

@@ -397,8 +397,9 @@ describe("배선", () => {
     expect(fieldsetEnd).toBeGreaterThan(-1);
     expect(page.indexOf("<DataFace ")).toBeGreaterThan(fieldsetEnd);
     expect(page.indexOf("<DuplicatesFace ")).toBeGreaterThan(fieldsetEnd);
-    // 설정 '읽기 전용' 안내도 이 면에는 서지 않는다(면이 자기 안내를 한다).
-    expect(page).toContain('!canEditSettings && !showsOperations && tab !== "data"');
+    // 설정 '읽기 전용' 안내도 이 면에는 서지 않는다(면이 자기 안내를 한다) — 자체 판정 면의 목록에 들어 있다.
+    expect(page).toContain("!canEditSettings && !showsOperations && !SELF_GATED_TABS.has(tab)");
+    expect(page).toMatch(/const SELF_GATED_TABS[^=]*= new Set\(\[[^\]]*"data"/);
   });
 
   it("🔴 화면 안내와 병합 액션이 같은 목록에서 '옮기는 기록'을 적는다 — \"모든 기록\"이라고 적지 않는다", () => {

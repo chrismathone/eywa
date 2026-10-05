@@ -2,6 +2,7 @@ import { menuSearchKeywords, navItemByKey, SUBTABS_BY_MENU, type NavItem } from 
 import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import { settingMenuForHref } from "@/lib/settings-role-catalog";
+import { OWNER_FACES, type OwnerFaceKey } from "@/features/owner/tabs";
 import {
   isMenuHiddenByLayout,
   sortByMenuLayout,
@@ -215,6 +216,32 @@ export const HUB_GROUPS: HubGroup[] = [
   },
 ];
 
+/**
+ * 설정 면마다의 그림 — 면 목록(tabs.ts)은 순수 상수 모듈이라 그림은 여기서 붙인다(면을 더하면 타입이 이 표를 요구한다).
+ * ⚠️ 부모(설정) 그림을 물려받으면 버튼이 전부 같은 톱니가 된다(원장 캡처 2026-09-07).
+ * 🔴 그림은 **다른 메뉴가 안 쓰는 것**으로 고른다(가드 `menu-glyph.test.ts`). 같은 메뉴(학원 설정) 안의 '데이터 가져오기'와
+ *    '연동'은 같은 `sync`를 쓴다 — "옮겨 오기"에 맞는 남은 그림이 없다(upload는 탭 그림 파일이 없다).
+ * 🔴 값을 `{ icon: "…" }` 모양으로 적는 것은 그 가드 때문이다 — 가드는 이 파일의 `icon: "이름"`을 읽어 그림이 있는지 ·
+ *    다른 메뉴와 겹치는지를 본다. 값을 맨 문자열로 적으면 가드가 이 표를 못 본다(적대 리뷰 4 C2).
+ */
+const OWNER_FACE_ICON: Record<OwnerFaceKey, { icon: AywaIconName }> = {
+  profile: { icon: MENU_ICON.profile_settings },
+  operations: { icon: MENU_ICON.operations_settings },
+  subjects: { icon: "tag" },
+  billing: { icon: MENU_ICON.billing_settings },
+  notifications: { icon: MENU_ICON.notification_settings },
+  consultations: { icon: MENU_ICON.consultation_settings },
+  permissions: { icon: "key" },
+  navigation: { icon: MENU_ICON.navigation_settings },
+  modules: { icon: "sparkle" },
+  dashboard: { icon: MENU_ICON.dashboard },
+  popups: { icon: MENU_ICON.popup_settings },
+  data: { icon: "eraser" },
+  import: { icon: "sync" },
+  audit: { icon: "history" },
+  sheets: { icon: "sync" },
+};
+
 /** 하단 지원 줄 — 고객센터 · 설정(면이 많아 허브) · 도움말(바로 연다). */
 export const SUPPORT_GROUPS: HubGroup[] = [
   // 고객센터(0294a) — 지원 묶음 **맨 위**(원장 2026-09-28 *"고객센터, 지원, 도움말 순서로"* → 고객센터 · 설정 · 도움말).
@@ -232,42 +259,19 @@ export const SUPPORT_GROUPS: HubGroup[] = [
     icon: MENU_ICON.owner,
     kind: "hub",
     note: "학원 설정을 범주별로 고릅니다.",
-    // ⚠️ 인수인계의 '11 → 5 범주'는 **제안**이라 면을 합치지 않았다(면을 합치면 라우트·조회가 바뀐다).
-    //    여기서는 같은 11면을 **범주 제목으로 묶어** 고르게만 한다 — 주소·권한·화면 모두 그대로다.
-    items: keep([
-      face("owner", "/owner", "프로필·브랜드", undefined, { section: "학원 정보", icon: MENU_ICON.profile_settings }),
-      // 왼쪽 탭 — 프로필·브랜드와 같은 범주에 둔다(둘 다 "이 학원 화면이 어떻게 보이나"를 정한다).
-      // 🔴 이 면은 감출 수 없는 `/owner`와 함께 서므로, 무엇을 감추든 여기로 돌아올 길이 남는다.
-      // 🔴 그림은 **아무도 안 쓰는 것**으로 골라야 한다(가드 `menu-glyph.test.ts`: 서로 다른 메뉴가 같은
-      //    그림을 쓰면 실패). `layoutGrid`는 대시보드가, `sheetRows`는 수학 강사 시트가 이미 쓴다.
-      //    실제로 남아 있는 그림은 아홉 개뿐이라(alarm·alert·calendarCheck·chart·check·percent·sparkle·trash·userX)
-      //    그중 "고르는 목록"에 가장 가까운 `check`를 쓴다.
-      face("owner", "/owner?tab=navigation", "탭 및 메뉴 구성", undefined, { section: "학원 정보", icon: MENU_ICON.navigation_settings }),
-      face("owner", "/owner?tab=dashboard", "대시보드 구성", undefined, { section: "학원 정보", icon: MENU_ICON.dashboard }),
-      // '기능'(모듈 켜기·끄기) — **새 학원에만**(2026-09-23 전수 점검 F19: 화면 탭엔 있는데 사이드바·메뉴 판엔
-      // 없었다). 면 목록 판정은 설정 화면(owner/page.tsx facesFor)과 같다 — 일반판이면 선다.
-      face("owner", "/owner?tab=modules", "기능", undefined, { section: "학원 정보", icon: "sparkle", genericOnly: true }),
-      face("owner", "/owner?tab=operations", "운영 체계", undefined, { section: "수업·운영", icon: MENU_ICON.operations_settings }),
-      face("owner", "/owner?tab=subjects", "과목 운영", undefined, { section: "수업·운영", icon: "tag" }),
-      face("owner", "/owner?tab=billing", "수납·청구", undefined, { section: "청구·안내", icon: MENU_ICON.billing_settings }),
-      face("owner", "/owner?tab=notifications", "알림·약관", undefined, { section: "청구·안내", icon: MENU_ICON.notification_settings }),
-      face("owner", "/owner?tab=consultations", "상담 양식", undefined, { section: "청구·안내", icon: MENU_ICON.consultation_settings }),
-      face("owner", "/owner?tab=popups", "팝업 공지", undefined, { section: "청구·안내", icon: MENU_ICON.popup_settings }),
-      face("owner", "/owner?tab=permissions", "역할·권한", undefined, { section: "계정·권한", icon: "key" }),
-      face("owner", "/owner?tab=data", "데이터 정리", undefined, { section: "시스템", icon: "eraser" }),
-      // 엑셀로 한꺼번에 넣기 허브(원장 2026-09-29) — 데이터 정리와 같은 '시스템' 범주. 그림은 같은 메뉴(학원 설정)의 '연동'과 같은
-      // sync — 다른 메뉴와 겹치지 않는 남은 그림 중 "옮겨 오기"에 맞는 것이 없다(upload는 탭 그림 파일이 없다).
-      face("owner", "/owner?tab=import", "데이터 가져오기", undefined, { section: "시스템", icon: "sync" }),
-      // 🔴 **원장 전용**(원장 2026-09-09 *"감사로그는 마스터 이상급으러만"*) — 같은 날 DB 정책도
-      //    master·super_admin으로 좁혔다(0253a). 여기서 감추는 건 화면 정리일 뿐 게이트가 아니고,
-      //    진짜 자물쇠는 RLS다([[#77]]) — 남에게 보여 봐야 빈 목록이라 입구를 아예 안 세운다.
-      face("owner", "/owner?tab=audit", "감사로그", undefined, {
-        section: "시스템",
-        icon: "history",
-        masterOnly: true,
-      }),
-      face("owner", "/owner?tab=sheets", "연동", undefined, { section: "시스템", icon: "sync" }),
-    ]),
+    // 🔴 버튼·범주는 **설정 면 목록**(`OWNER_FACES`, features/owner/tabs.ts)에서 파생한다 — 여기에 면을 다시 적지 않는다.
+    //    전에는 이 판이 같은 면을 제 목록으로 따로 들고 있어 라벨과 묶음이 화면 탭과 갈렸다. 주소·권한·화면은 그대로다
+    //    (면을 합치지 않는다 — 합치면 라우트·조회가 바뀐다). 권한 키는 `face()`가 주소에서 정한다(면별 설정 권한).
+    items: keep(
+      OWNER_FACES.map((f) =>
+        face("owner", f.href, f.label, undefined, {
+          section: f.category,
+          icon: OWNER_FACE_ICON[f.key].icon,
+          ...(f.masterOnly ? { masterOnly: true } : {}),
+          ...(f.genericOnly ? { genericOnly: true } : {}),
+        }),
+      ),
+    ),
   },
   {
     id: "help",

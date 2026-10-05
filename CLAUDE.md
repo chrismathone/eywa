@@ -252,6 +252,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   ⚠️ **새 subject 컬럼/jsonb를 추가하면 subject-actions.ts의 SCALAR_TABLES(또는 RPC)에도 추가**(놓치면 raw 키 누출).
 
 ### 배선 현황·DB 미구현 목록 → [`docs/decisions/settings-wiring.md`](docs/decisions/settings-wiring.md)
+- 🔴 설정 면(탭)을 더하거나 이름·묶음을 바꿀 땐 [`OWNER_FACES`](src/features/owner/tabs.ts) 한 곳만 — 화면 탭 · 사이드바 · 설정 메뉴 판이 파생한다(그 파일의 '설정 면 목록 = 한 곳 · 범주 5개').
 - 🔴 운영 섹션(`operations`)을 저장하는 코드를 만지기 전 그 파일의 '운영 섹션 저장 계약'을 읽을 것 — 요청 형식 넷 · 통째 교체 금지 · 순번은 섹션 안([[#142]]).
 - 설정 필드를 "동작 예시"로 인용하거나 새 설정을 추가할 땐 그 파일의 ✅/🚫 목록을 먼저 확인. 비로그인 화면의 학원 브랜드는 `getPublicBranding()`(세션 없는 `getTenantSettings()` 금지).
 
