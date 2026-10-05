@@ -52,7 +52,7 @@ export function LoginForm({ next }: { next?: string }) {
   return (
     <form method="post" onSubmit={handleSubmit} className={styles.loginForm} aria-busy={pending} aria-describedby={error ? "login-error" : undefined}>
       <div className={styles.formField}>
-        <label htmlFor="email">이메일 또는 관리자 ID</label>
+        <label htmlFor="email">이메일</label>
         <input id="email" name="email" type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required placeholder="name@academy.kr" disabled={pending} />
       </div>
       <div className={styles.formField}>

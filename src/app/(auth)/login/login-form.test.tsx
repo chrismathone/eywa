@@ -7,7 +7,7 @@ const { signInWithPassword } = vi.hoisted(() => ({ signInWithPassword: vi.fn() }
 vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({ auth: { signInWithPassword } }) }));
 
 function submitCredentials() {
-  fireEvent.change(screen.getByLabelText("이메일 또는 관리자 ID"), { target: { value: "teacher@academy.kr" } });
+  fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "teacher@academy.kr" } });
   fireEvent.change(screen.getByLabelText("비밀번호", { exact: true }), { target: { value: "example-password" } });
   fireEvent.submit(screen.getByRole("button", { name: "로그인" }).closest("form")!);
 }
@@ -39,7 +39,7 @@ describe("LoginForm", () => {
     render(<LoginForm />);
     submitCredentials();
     expect(await screen.findByRole("alert")).toHaveTextContent("연결 상태를 확인");
-    expect(screen.getByLabelText("이메일 또는 관리자 ID")).toBeEnabled();
+    expect(screen.getByLabelText("이메일")).toBeEnabled();
   });
 
   it.each([[undefined, "/home?login=1"], ["//example.com", "/home?login=1"], ["/login", "/home?login=1"], ["/attendance?view=live", "/home?login=1&next=%2Fattendance%3Fview%3Dlive"]])("navigates with a fresh document after login: %s", async (next, destination) => {
@@ -55,7 +55,7 @@ describe("LoginForm", () => {
     signInWithPassword.mockReturnValue(new Promise(() => {}));
     render(<LoginForm />);
     submitCredentials();
-    fireEvent.submit(screen.getByLabelText("이메일 또는 관리자 ID").closest("form")!);
+    fireEvent.submit(screen.getByLabelText("이메일").closest("form")!);
     expect(signInWithPassword).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "로그인 중…" })).toBeDisabled();
   });
@@ -74,7 +74,7 @@ describe("LoginForm", () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
     signInWithPassword.mockResolvedValue({ error: null });
     render(<LoginForm next="/attendance" />);
-    fireEvent.change(screen.getByLabelText("이메일 또는 관리자 ID"), { target: { value: "admin7099" } });
+    fireEvent.change(screen.getByLabelText("이메일"), { target: { value: "admin7099" } });
     fireEvent.change(screen.getByLabelText("비밀번호", { exact: true }), { target: { value: "example-password" } });
     fireEvent.submit(screen.getByRole("button", { name: "로그인" }).closest("form")!);
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/home?login=1&next=%2Fadmin"));
