@@ -23,7 +23,8 @@ import { logAction } from "@/features/audit/server/log";
 import { countPeriodsForSubject, moveSubjectPeriods } from "@/features/periods/server/queries";
 import { resolveSettings } from "../resolve";
 import { isValidSubjectKey } from "../subject-absorb";
-import type { IntegrationGroupPresetSetting } from "../settings-types";
+import { cleanPreset, sanitizeGroups, sanitizeTeacherOrder } from "../subject-fields";
+import type { IntegrationGroupPresetSetting, OperationsSettings } from "../settings-types";
 import { saveOwnerSection } from "./actions";
 import { logDbError } from "@/lib/supabase/db-error";
 
@@ -138,20 +139,49 @@ async function readFreshOperations(supabase: Supabase, tenantId: string) {
   return resolveSettings(existing?.data ?? null, { name: "" }).operations;
 }
 
-/** 설정 subjects에서 key 행 제거 — saveOwnerSection 경유(단일 쓰기 경로). 행이 없으면 no-op. */
-async function removeSubjectRowFromSettings(supabase: Supabase, tenantId: string, key: string) {
-  const operations = await readFreshOperations(supabase, tenantId);
-  if (!operations.subjects.some((s) => s.key === key)) return { ok: true as const };
-  const nextOperations = { ...operations, subjects: operations.subjects.filter((s) => s.key !== key) };
+/**
+ * 운영 섹션의 **제 몫만** 저장한다 — saveOwnerSection 경유(단일 쓰기 경로).
+ * 🔴 운영 섹션 전체를 읽어서 되돌려 보내지 않는다 — 읽은 뒤 저장되기 전에 다른 곳이 바꾼 값을 되돌리게 된다.
+ *    요청은 "무엇을 바꾸는지"만 싣고, 적용은 저장 액션이 방금 읽은 값 위에서 한다(operations-slice.ts).
+ */
+async function saveOperationsIntent(intent: "subject-fields" | "subject-remove", data: unknown) {
   const fd = new FormData();
   fd.set("section", "operations");
-  fd.set("data", JSON.stringify(nextOperations));
-  const res = await saveOwnerSection(undefined, fd);
-  if (res?.error) return { error: res.error };
-  return { ok: true as const };
+  fd.set("operationsFace", intent);
+  fd.set("data", JSON.stringify(data));
+  return saveOwnerSection(undefined, fd);
 }
 
-export type AbsorbResult = { ok?: boolean; moved?: number; error?: string };
+/** 과목 삭제가 확정한 과목 운영 면의 값과 그 값의 기준 token — 화면은 **둘을 함께** 채택한다. */
+export type SubjectsFaceResult = {
+  snapshot: Pick<OperationsSettings, "subjects" | "weekdayGroupings" | "hiddenBuiltinWeekdayGroupings">;
+  token: string;
+  /** 이 상태를 쓴 저장의 순번 — 화면이 이보다 먼저 읽힌 값을 받지 않는다. */
+  version: number | undefined;
+};
+
+/** 설정 subjects에서 key 행 제거. 행이 이미 없어도 지금 확정 상태를 돌려준다. */
+async function removeSubjectRowFromSettings(key: string): Promise<{ error: string } | { subjectsFace?: SubjectsFaceResult }> {
+  const res = await saveOperationsIntent("subject-remove", { key });
+  if (res?.error) return { error: res.error };
+  const reply = res?.operations;
+  return {
+    subjectsFace: reply?.subjectsFace
+      ? { snapshot: reply.subjectsFace, token: reply.tokens.subjects, version: res?.version }
+      : undefined,
+  };
+}
+
+export type AbsorbResult = {
+  ok?: boolean;
+  moved?: number;
+  error?: string;
+  /**
+   * 삭제 뒤의 과목 운영 면 확정 상태. 🔴 화면은 자기 목록에서 행만 빼지 말고 이 값을 통째로 받는다 —
+   * 화면이 깨끗해 보여도 그사이 다른 창이 다른 과목을 고쳤을 수 있고, 옛 목록에 새 token을 붙이면 그 변경을 되돌린다.
+   */
+  subjectsFace?: SubjectsFaceResult;
+};
 
 /**
  * 보관함 저장 결과 — **서버가 찍은 '누가·언제'를 그대로 돌려준다.**
@@ -264,9 +294,9 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
     }
   }
 
-  // 3) 설정에서 from 과목 행 제거 — 저장 직전 fresh 재읽기(흡수 진행 중 다른 창의 설정 저장분 보존)
-  const removed = await removeSubjectRowFromSettings(supabase, t, from);
-  if ("error" in removed && removed.error) {
+  // 3) 설정에서 from 과목 행 제거 — 저장 액션이 방금 읽은 값에서 그 행만 뺀다(흡수 진행 중 다른 창의 설정 저장분 보존)
+  const removed = await removeSubjectRowFromSettings(from);
+  if ("error" in removed) {
     return { error: `데이터는 옮겼지만 설정 저장 실패: ${removed.error}` };
   }
 
@@ -277,7 +307,7 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
     metadata: { from, to, moved, detail },
   });
 
-  return { ok: true, moved };
+  return { ok: true, moved, subjectsFace: removed.subjectsFace };
 }
 
 /**
@@ -300,8 +330,8 @@ export async function removeUnusedSubject(key: string): Promise<AbsorbResult> {
     return { error: e instanceof Error ? e.message : "사용량 재검증 실패" };
   }
 
-  const removed = await removeSubjectRowFromSettings(supabase, t, key);
-  if ("error" in removed && removed.error) return { error: removed.error };
+  const removed = await removeSubjectRowFromSettings(key);
+  if ("error" in removed) return { error: removed.error };
 
   await logAction({
     action: "owner_subject_delete",
@@ -310,7 +340,7 @@ export async function removeUnusedSubject(key: string): Promise<AbsorbResult> {
     metadata: { key },
   });
 
-  return { ok: true, moved: 0 };
+  return { ok: true, moved: 0, subjectsFace: removed.subjectsFace };
 }
 
 export type IntegrationGroupsInput = {
@@ -342,8 +372,8 @@ export type IntegrationGroupsInput = {
  * 머지·감사로그·캐시 무효화를 그대로 재사용하고, tenant_settings 직접 쓰기를 만들지 않는다([[#59]]).
  * 게이트도 owner 쓰기 — 시간표 화면에 있다고 시간표 권한으로 열면 학원설정을 우회하는 뒷문이 된다(#77).
  *
- * ⚠️ read-modify-write라 fresh 읽기(readFreshOperations) 후 **그 과목 행만** 교체한다. 폼 전체를
- * 덮어쓰면 같은 시각 과목 운영 탭에서 저장한 다른 설정이 날아간다.
+ * ⚠️ **그 과목의 시간표 칸만** 보낸다(`subject-fields`) — 적용은 저장 액션이 방금 읽은 값 위에서 한다.
+ * 운영 섹션 전체를 읽어 되돌려 보내면 그사이 과목 운영 탭에서 저장한 다른 설정이 날아간다.
  */
 /**
  * 강사뷰 **컬럼(강사) 순서** 저장 — 학원설정(과목별). 원장 2026-08-04:
@@ -361,34 +391,16 @@ export async function saveTeacherViewOrder(input: {
   const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   if (!isValidSubjectKey(input.subject)) return { error: "잘못된 과목 키입니다" };
-  const supabase = await createClient();
-
-  let operations;
-  try {
-    operations = await readFreshOperations(supabase, gate.actor.tenantId);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "설정 읽기 실패" };
-  }
-  if (!operations.subjects.some((s) => s.key === input.subject)) {
-    return { error: "학원 설정에 없는 과목입니다" };
-  }
 
   // 빈 값·중복 제거(먼저 나온 것이 이긴다) — 중복이 있으면 정렬 인덱스가 갈려 순서가 흔들린다.
-  const seen = new Set<string>();
-  const order = input.order
-    .map((n) => n.trim())
-    .filter((n) => n && !seen.has(n) && (seen.add(n), true));
+  // (저장 액션도 같은 규칙으로 다시 다듬는다 — 여기는 요청을 스키마에 맞추고 로그의 개수를 맞추기 위한 것.)
+  const order = sanitizeTeacherOrder(input.order);
 
-  const nextOperations = {
-    ...operations,
-    subjects: operations.subjects.map((s) =>
-      s.key === input.subject ? { ...s, teacherViewOrder: order.length ? order : undefined } : s,
-    ),
-  };
-  const fd = new FormData();
-  fd.set("section", "operations");
-  fd.set("data", JSON.stringify(nextOperations));
-  const res = await saveOwnerSection(undefined, fd);
+  // 빈 순서 = 그 칸을 지운다(null). 과목이 설정에 없으면 저장 액션이 거절한다(없는 과목을 만들지 않는다).
+  const res = await saveOperationsIntent("subject-fields", {
+    subject: input.subject,
+    fields: { teacherViewOrder: order.length ? order : null },
+  });
   if (res?.error) return { error: res.error };
 
   await logAction({
@@ -400,103 +412,35 @@ export async function saveTeacherViewOrder(input: {
   return { ok: true };
 }
 
-/**
- * 빈 제목 줄은 저장 단계에서 버린다(화면에서 이름 없는 섹션이 생기지 않게). 반 중복 배정도 여기서
- * 정리 — 먼저 나온 줄이 갖는다(렌더 규칙 applyCustomGroups와 같은 순서라 화면·저장이 안 어긋난다).
- * 현재 배치와 보관함(프리셋)이 **같은 규칙**을 타야 불러왔을 때 화면이 달라지지 않는다.
- */
-function sanitizeGroups(groups: { id: string; title: string; classIds: string[] }[]) {
-  const seen = new Set<string>();
-  return groups
-    .map((g) => ({ ...g, title: g.title.trim() }))
-    .filter((g) => g.title)
-    .map((g) => ({
-      id: g.id,
-      title: g.title,
-      classIds: g.classIds.filter((id) => (seen.has(id) ? false : (seen.add(id), true))),
-    }));
-}
-
 export async function saveIntegrationGroups(input: IntegrationGroupsInput): Promise<IntegrationGroupsResult> {
   const gate = await requireOwnerWrite();
   if (gate.error !== undefined) return { error: gate.error };
   if (!isValidSubjectKey(input.subject)) return { error: "잘못된 과목 키입니다" };
-  const supabase = await createClient();
 
-  let operations;
-  try {
-    operations = await readFreshOperations(supabase, gate.actor.tenantId);
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "설정 읽기 실패" };
-  }
-  if (!operations.subjects.some((s) => s.key === input.subject)) {
-    return { error: "학원 설정에 없는 과목입니다" };
-  }
-
+  // 빈 제목 줄·줄 사이 반 중복·이름 없는 보관함 항목은 보내기 전에 걷어 낸다(요청 스키마가 빈 제목을 거절한다).
+  // 🔴 같은 다듬기와 보관함의 '누가·언제' 도장은 **저장 액션이 방금 읽은 값으로** 다시 확정한다(subject-fields.ts) —
+  //    여기서 도장을 찍어 보내지 않는다(보낸 도장은 버려진다). 현재 배치와 보관함이 같은 규칙을 타야 불러왔을 때 화면이 같다.
   const groups = sanitizeGroups(input.groups);
+  const presets = input.presets?.flatMap((p) => {
+    const cleaned = cleanPreset(p);
+    return cleaned ? [cleaned] : [];
+  });
 
-  // 보관함(프리셋) — 저장 시점에 같은 위생 규칙을 태운다(빈 제목 줄 제거·줄 안 반 중복 제거).
-  // 이름 없는 프리셋은 버린다(목록에서 고를 수 없는 유령 항목이 된다).
-  //
-  // 🔴 '누가·언제'는 **서버가 찍는다** — 클라가 보낸 savedBy를 그대로 믿으면 남의 이름으로 저장한 것처럼
-  //    꾸밀 수 있다. 내용이 그대로인 프리셋은 **기존 도장을 유지**한다(다른 프리셋을 하나 만들었다고
-  //    나머지 전부의 저장 시각이 오늘로 바뀌면 "언제 만든 배치인지"가 통째로 거짓이 된다).
-  const prevPresets = operations.subjects.find((s) => s.key === input.subject)?.integrationGroupPresets ?? [];
-  const prevById = new Map(prevPresets.map((p) => [p.id, p]));
-  const stampedAt = new Date().toISOString();
-  // ⚠️ 객체를 그대로 stringify하면 **키 순서**에 걸린다 — 저장본은 jsonb라 Postgres가 키를 재정렬해
-  //    돌려주므로, JS 리터럴 순서와 우연히 같지 않으면 "안 바뀐 프리셋"이 매번 바뀐 걸로 잡혀
-  //    저장 시각이 계속 갱신된다. 배열로 눕혀 순서를 못박는다.
-  const bodyOf = (p: {
-    name: string;
-    groups?: { id: string; title: string; classIds?: string[] }[];
-    showOthers?: boolean;
-    othersTitle?: string;
-  }) =>
-    JSON.stringify([
-      p.name,
-      (p.groups ?? []).map((g) => [g.id, g.title, g.classIds ?? []]),
-      p.showOthers !== false,
-      p.othersTitle ?? "",
-    ]);
-  const presets = input.presets
-    ?.map((p) => {
-      const cleaned = {
-        id: p.id,
-        name: p.name.trim(),
-        groups: sanitizeGroups(p.groups),
-        showOthers: p.showOthers,
-        othersTitle: p.othersTitle?.trim() || undefined,
-      };
-      const before = prevById.get(p.id);
-      const unchanged = before && bodyOf(before) === bodyOf(cleaned);
-      return unchanged
-        ? { ...cleaned, savedBy: before.savedBy, savedAt: before.savedAt }
-        : { ...cleaned, savedBy: gate.actor.displayName ?? undefined, savedAt: stampedAt };
-    })
-    .filter((p) => p.name);
-
-  const nextOperations = {
-    ...operations,
-    subjects: operations.subjects.map((s) =>
-      s.key === input.subject
-        ? {
-            ...s,
-            integrationGroups: groups,
-            integrationGroupsEnabled: input.enabled,
-            integrationShowOthers: input.showOthers,
-            integrationOthersTitle: input.othersTitle.trim() || undefined,
-            // undefined = "안 넘겼다" → 기존 보관함 보존. 빈 배열은 "다 지웠다"라 그대로 반영.
-            integrationGroupPresets: presets ?? s.integrationGroupPresets,
-          }
-        : s,
-    ),
-  };
-  const fd = new FormData();
-  fd.set("section", "operations");
-  fd.set("data", JSON.stringify(nextOperations));
-  const res = await saveOwnerSection(undefined, fd);
+  const res = await saveOperationsIntent("subject-fields", {
+    subject: input.subject,
+    fields: {
+      integrationGroups: groups,
+      integrationGroupsEnabled: input.enabled,
+      integrationShowOthers: input.showOthers,
+      // 빈 제목 = 그 칸을 지운다(null).
+      integrationOthersTitle: input.othersTitle.trim() || null,
+      // 안 넘겼으면 칸을 싣지 않는다 → 기존 보관함 보존. 빈 배열은 "다 지웠다"라 그대로 반영.
+      ...(presets ? { integrationGroupPresets: presets } : {}),
+    },
+  });
   if (res?.error) return { error: res.error };
+  // 서버가 도장을 찍어 저장한 보관함 — 화면이 방금 저장한 항목의 '누가·언제'를 바로 그린다.
+  const stamped = presets ? res?.operations?.presets : undefined;
 
   await logAction({
     action: "owner_integration_groups_update",
@@ -511,5 +455,5 @@ export async function saveIntegrationGroups(input: IntegrationGroupsInput): Prom
   });
   // 🔴 도장이 찍힌 보관함을 **돌려준다** — 안 돌려주면 화면이 방금 저장한 항목을 "저장자 미상 ·
   //    시각 없음"으로 그린다(클라엔 도장이 없다). 새로고침해야 보이는 값은 없는 값이나 마찬가지.
-  return { ok: true, presets: presets ?? undefined };
+  return { ok: true, presets: stamped };
 }

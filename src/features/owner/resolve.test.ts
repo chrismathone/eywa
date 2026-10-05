@@ -113,6 +113,49 @@ describe("resolveSettings", () => {
     expect(r.billing.account).toEqual({ label: "", bank: "", holder: "", number: "", targets: [] });
   });
 
+  // 부서별 직급 = 열린 키(record). 종전엔 기본값의 키만 순회해 일반판(기본 {})의 저장값이 읽을 때 전부 사라졌다.
+  describe("부서별 직급(jobTitlesByDepartment)", () => {
+    const generic = (jobTitlesByDepartment: unknown) =>
+      resolveSettings({ preset: "generic", operations: { jobTitlesByDepartment } }, { name: "새 학원" }).operations
+        .jobTitlesByDepartment;
+    const chinsan = (jobTitlesByDepartment: unknown) =>
+      resolveSettings({ operations: { jobTitlesByDepartment } }, { name: "학원" }).operations.jobTitlesByDepartment;
+
+    it("🔴 일반판 — 저장한 부서가 읽을 때 남는다(기본값이 빈 객체여도)", () => {
+      expect(generic({ 영어과: ["원장", "강사"], 관리팀: ["실장"] })).toEqual({ 영어과: ["원장", "강사"], 관리팀: ["실장"] });
+    });
+
+    it("침산 — 저장한 부서는 기본값을 덮고, 안 적은 부서는 기본값 그대로", () => {
+      const r = chinsan({ 영어과: ["강사"] });
+      expect(r.영어과).toEqual(["강사"]);
+      expect(r.수학과).toEqual(DEFAULT_SETTINGS.operations.jobTitlesByDepartment.수학과);
+    });
+
+    it("침산 — 기본값에 없는 부서도 저장돼 있으면 남는다", () => {
+      expect(chinsan({ 신설팀: ["팀장"] }).신설팀).toEqual(["팀장"]);
+    });
+
+    it("빈 배열은 명시값으로 보존한다(그 부서는 공통 직급으로 폴백한다는 뜻)", () => {
+      expect(chinsan({ 영어과: [] }).영어과).toEqual([]);
+      expect(generic({ 영어과: [] })).toEqual({ 영어과: [] });
+    });
+
+    it("잘못된 저장형식은 버리고 기본값으로 — 배열·숫자·null·문자열 아닌 원소", () => {
+      for (const bad of [["원장"], 3, null, "원장"]) {
+        expect(chinsan(bad)).toEqual(DEFAULT_SETTINGS.operations.jobTitlesByDepartment);
+        expect(generic(bad)).toEqual({});
+      }
+      expect(generic({ 영어과: "강사", 수학과: [1, 2], 관리팀: ["실장"] })).toEqual({ 관리팀: ["실장"] });
+    });
+
+    it("기본 객체를 변형하지 않는다", () => {
+      const before = JSON.stringify(DEFAULT_SETTINGS.operations.jobTitlesByDepartment);
+      const r = chinsan({ 영어과: ["강사"], 신설팀: ["팀장"] });
+      r.영어과!.push("X");
+      expect(JSON.stringify(DEFAULT_SETTINGS.operations.jobTitlesByDepartment)).toBe(before);
+    });
+  });
+
   it("기본 객체를 변형하지 않는다(공유 참조 안전)", () => {
     resolveSettings({ profile: { name: "A" } }, { name: "B" });
     // 다음 호출에 이전 호출의 name이 새어나오면 안 됨

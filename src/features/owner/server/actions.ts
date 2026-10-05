@@ -22,8 +22,29 @@ import { logDbError } from "@/lib/supabase/db-error";
 import { platformSettingsError } from "./platform-settings";
 import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
 import { configureMakeupSettings } from "@/features/makeups/server/settings";
+import { resolveSettings } from "../resolve";
+import { nextSettingsStamp, settingsRevOf, withoutSettingsRev } from "../settings-stamp";
+import type { OperationsSettings } from "../settings-types";
+import {
+  buildOperationsSave,
+  operationsReply,
+  readOperationsRequest,
+  type OperationsReply,
+  type OperationsRequest,
+} from "./operations-save";
 
-export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
+/**
+ * `operations` = 운영 섹션 저장이 확정한 상태(면별 기준 token · 과목 삭제는 그 면의 값도) — 화면이 다음 저장의 기준으로 쓴다.
+ * `version` = 이 저장이 쓴 운영 섹션의 저장 순번(`data.operations.rev`) — 화면이 "내려온 값이 이 저장보다 먼저 읽힌 것인가"를 가린다.
+ */
+export type OwnerSaveState =
+  | { ok?: boolean; error?: string; nonce?: number; operations?: OperationsReply; version?: number }
+  | undefined;
+
+const validationError = (issue: { path: PropertyKey[]; message: string } | undefined) => {
+  const path = issue?.path.join(".");
+  return `입력값 오류${path ? ` (${path})` : ""}: ${issue?.message ?? "검증 실패"}`;
+};
 
 /**
  * 학원 설정 섹션 1개 저장. 게이트 = 역할·권한 매트릭스(owner 메뉴, override 반영 — #58) —
@@ -103,13 +124,19 @@ export async function saveOwnerSection(
     return { error: "설정 데이터 형식이 올바르지 않습니다" };
   }
 
-  const result = schema.safeParse(parsedJson);
-  if (!result.success) {
-    const first = result.error.issues[0];
-    const path = first?.path.join(".");
-    return { error: `입력값 오류${path ? ` (${path})` : ""}: ${first?.message ?? "검증 실패"}` };
+  // 🔴 운영 섹션은 요청 형식이 정해져 있다(두 면 · 시간표 칸 · 과목 삭제) — 섹션을 통째로 갈아끼우는 저장은 받지 않는다.
+  //    쓰는 곳이 여럿이라(두 면·시간표·cron·시트 반영) 통째 교체는 먼저 한 저장을 조용히 되돌렸다(operations-slice.ts).
+  let operationsRequest: OperationsRequest | undefined;
+  if (section === "operations") {
+    const read = readOperationsRequest(formData, parsedJson);
+    if ("error" in read) return { error: read.error };
+    operationsRequest = read.request;
   }
-  if (section === "makeups") return configureMakeupSettings(result.data);
+  // 시간표 칸·과목 삭제 요청은 data가 섹션 전체가 아니다 — 방금 읽은 값에 적용한 뒤 아래에서 검증한다.
+  const sendsWholeSection = !operationsRequest || operationsRequest.kind === "face";
+  const result = sendsWholeSection ? schema.safeParse(parsedJson) : null;
+  if (result && !result.success) return { error: validationError(result.error.issues[0]) };
+  if (section === "makeups" && result) return configureMakeupSettings(result.data);
 
   const supabase = await createClient();
   // 기존 문서 읽어 섹션만 교체(다른 섹션 보존). RLS로 자기 테넌트만.
@@ -131,7 +158,7 @@ export async function saveOwnerSection(
     return { error: "이 학원은 기능 켜기·끄기를 쓰지 않습니다" };
   }
   if (section === "permissions" && preset === "generic") {
-    const p = result.data as PermissionsSettings;
+    const p = result?.data as PermissionsSettings;
     const ids = [...new Set([
       ...p.userOverrides.map((r) => r.userId),
       ...p.specialAccess.payslipViewerIds,
@@ -164,8 +191,8 @@ export async function saveOwnerSection(
     if (typeof expected === "string" && expected !== JSON.stringify(normalizeDashboard(base.dashboard))) {
       return { error: "다른 창에서 대시보드 설정이 변경되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
     }
-    const assignments = normalizeDashboard(result.data).assignments;
-    if ((result.data as { assignments?: unknown }).assignments !== undefined && assignments?.length) {
+    const assignments = normalizeDashboard(result?.data).assignments;
+    if ((result?.data as { assignments?: unknown }).assignments !== undefined && assignments?.length) {
       const error = await validateDashboardAssignments(actor.tenantId, assignments);
       if (error) return { error };
     }
@@ -176,18 +203,41 @@ export async function saveOwnerSection(
       return { error: "다른 창에서 메뉴 구성이 변경되었습니다. 현재 편집 내용은 유지했습니다. 최신 구성을 새로고침한 뒤 다시 저장해 주세요." };
     }
   }
-  // 대시보드 배치는 걸러서(모르는 카드·이탈 좌표) 저장하고, 기본 배치와 같은 역할은 저장값을 만들지 않는다(기본 개선이 따라오게).
-  const sectionData =
-    section === "dashboard"
-      ? normalizeDashboard({ ...result.data, assignments: (result.data as { assignments?: unknown }).assignments ?? normalizeDashboard(base.dashboard).assignments }, { dropDefaults: true })
-      : prepareSectionForSave(preset, section, parsedJson, result.data, base[section]);
+  let sectionData: unknown;
+  if (operationsRequest) {
+    // 방금 읽은 운영 섹션 위에 이 요청이 맡은 칸만 얹는다. 두 면은 그 면의 기준 token이 다르면(그사이 같은 면이 바뀜) 거절.
+    const fresh = resolveSettings(existing?.data ?? null, { name: "" }).operations;
+    const built = buildOperationsSave(operationsRequest, fresh, result?.data as OperationsSettings | undefined, {
+      by: actor.displayName ?? undefined,
+      at: new Date().toISOString(),
+    });
+    if ("error" in built) return { error: built.issue ? validationError(built.issue) : built.error };
+    // 이미 없는 과목의 삭제 — 쓰지 않고 지금 상태를 돌려준다(화면이 그 값으로 맞춘다).
+    if ("unchanged" in built) {
+      return { ok: true, nonce: Date.now(), operations: operationsReply(fresh, operationsRequest), version: settingsRevOf(base.operations) };
+    }
+    // 새 칸 둘(periodStyle·schoolSaveAliases)은 어느 요청도 맡지 않아 값이 늘 fresh에서 온다 — 침산은 지우고 일반판은 그대로 둔다.
+    sectionData = prepareSectionForSave(preset, section, built.raw, built.parsed, base[section]);
+  } else if (section === "dashboard") {
+    // 대시보드 배치는 걸러서(모르는 카드·이탈 좌표) 저장하고, 기본 배치와 같은 역할은 저장값을 만들지 않는다(기본 개선이 따라오게).
+    const submitted = result?.data as { assignments?: unknown };
+    sectionData = normalizeDashboard({ ...submitted, assignments: submitted.assignments ?? normalizeDashboard(base.dashboard).assignments }, { dropDefaults: true });
+  } else {
+    sectionData = prepareSectionForSave(preset, section, parsedJson, result?.data, base[section]);
+  }
   try {
     const boundaryError = await platformSettingsError(section, sectionData, base[section]);
     if (boundaryError) return { error: boundaryError };
   } catch {
     return { error: "운영 설정 보호 여부를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
   }
-  const nextData: Record<string, unknown> = { ...base, version: 1, [section]: sectionData };
+  // 운영 섹션은 저장 순번(`rev`)을 **섹션 안에** 함께 쓴다 — 편집 폼이 "내 저장보다 먼저 읽힌 값"을 가려내는 순서다(settings-stamp.ts).
+  // 🔴 문서 최상위에 새 키를 두지 않는다 — DB의 쓰기 가드(0335a `guard_tenant_settings_write`)는 개별 설정만 위임받은 사람에게
+  //    "맡은 섹션 밖은 그대로일 것"을 요구한다. 최상위에 순번이 생기면 그 사람들의 저장이 전부 거절된다.
+  //    감사 기록의 변경 내역(아래 `sectionData`)에는 순번을 싣지 않는다.
+  const operationsRev = operationsRequest ? settingsRevOf(base.operations) + 1 : undefined;
+  const storedSection = operationsRev === undefined ? sectionData : { ...(sectionData as Record<string, unknown>), rev: operationsRev };
+  const nextData: Record<string, unknown> = { ...base, version: 1, [section]: storedSection };
   // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.
   if (preset === "generic") nextData.preset = "generic";
 
@@ -195,7 +245,8 @@ export async function saveOwnerSection(
       tenant_id: actor.tenantId,
       data: nextData,
       updated_by: actor.id,
-      updated_at: new Date().toISOString(),
+      // 직전 표식과 반드시 다른 값으로(settings-stamp.ts) — 저장 직전 "읽은 뒤 누가 먼저 썼나"의 판정에 쓴다.
+      updated_at: nextSettingsStamp(existing?.updated_at),
   };
   // 조회 이후 다른 설정 섹션이 먼저 저장돼도 그 문서를 덮지 않는다. 초기 생성의 동시 충돌도 insert로 막는다.
   const resultWrite = existing
@@ -207,7 +258,8 @@ export async function saveOwnerSection(
 
   // 🔴 **무엇이 바뀌었는지**를 함께 남긴다(원장 점검 2026-08-27) — 종전엔 `{section}`뿐이라
   //    "누가 언제 운영 체계를 저장했다"만 남고 되짚을 근거가 없었다. 비밀값·미등록 필드는 실리지 않는다.
-  const diff = diffSettingsSection(section, (base as Record<string, unknown>)[section], sectionData);
+  // 저장 순번은 설정이 아니라 장부다 — 변경 내역에는 싣지 않는다(안 빼면 저장할 때마다 "외 1건"이 붙는다).
+  const diff = diffSettingsSection(section, withoutSettingsRev((base as Record<string, unknown>)[section]), sectionData);
   await logAction({
     action: "owner_settings_update",
     targetType: "tenant_settings",
@@ -232,6 +284,10 @@ export async function saveOwnerSection(
   // 보고서·AI 멘트 설정 면은 /lesson-reports로 이관됨 — 그 라우트도 명시 갱신해야 저장 직후 값이 반영된다
   // (안 하면 report 섹션 저장 후 화면이 stale하게 옛 값으로 되돌아 보임 — 예: '강사 문항수 변경 허용' 체크 풀림).
   revalidatePath("/lesson-reports");
+  // 운영 섹션은 **실제로 저장한 값**(다듬기까지 거친 뒤 다시 풀어 읽은 값)의 기준 token을 돌려준다 — 화면의 다음 저장 기준.
+  const operations = operationsRequest
+    ? operationsReply(resolveSettings(nextData, { name: "" }).operations, operationsRequest)
+    : undefined;
   // nonce — in-window 저장이라 연속 저장마다 폼 effect가 동시편집 신호를 1회씩 발화하도록(B-2).
-  return { ok: true, nonce: Date.now() };
+  return { ok: true, nonce: Date.now(), ...(operations ? { operations, version: operationsRev } : {}) };
 }

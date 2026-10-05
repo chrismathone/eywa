@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { resolveSettings } from "../resolve";
+import { settingsRevOf } from "../settings-stamp";
 import type { TenantSettings } from "../settings-types";
 import { platformAccountIds } from "./platform-settings";
 
@@ -103,6 +104,33 @@ export async function getTenantSettingsByTenantId(tenantId: string, options?: { 
   // 조회 실패는 침산 기본값으로 — storedForResolve와 같은 규약.
   const stored = settingsRes.error ? {} : (settingsRes.data?.data ?? null);
   return resolveSettings(stored, { name: tenantRes.data?.name ?? "" });
+}
+
+/**
+ * 편집 폼용 — **캐시를 거치지 않고** 지금 저장된 값을 읽는다. 못 읽으면 null(기본값으로 폼을 채우지 않는다).
+ * 🔴 편집 폼의 초기값과 기준 token은 DB의 지금 값이어야 한다 — 위 캐시는 TTL이 300초라 스크립트·cron·시트 반영 뒤
+ *    낡을 수 있고, 낡은 token은 "새로고침해도 계속 저장이 거절되는" 화면을 만든다.
+ */
+export async function getTenantSettingsForEdit(
+  tenantId: string,
+): Promise<{
+  settings: TenantSettings;
+  /** 읽은 운영 섹션의 저장 순번 — 폼이 읽기와 저장의 선후를 가린다. 행·섹션이 아직 없으면 0(첫 저장보다 앞선 상태로 구별된다). */
+  version: number;
+} | null> {
+  const admin = createAdminClient();
+  const [settingsRes, tenantRes] = await Promise.all([
+    admin.from("tenant_settings").select("data").eq("tenant_id", tenantId).maybeSingle(),
+    admin.from("tenants").select("name").eq("id", tenantId).maybeSingle(),
+  ]);
+  if (settingsRes.error) {
+    console.error("[owner/queries] tenant_settings 조회 오류(편집용)", settingsRes.error);
+    return null;
+  }
+  return {
+    settings: resolveSettings(settingsRes.data?.data ?? null, { name: tenantRes.data?.name ?? "" }),
+    version: settingsRevOf((settingsRes.data?.data as { operations?: unknown } | null | undefined)?.operations),
+  };
 }
 
 /** 저장된 마지막 수정 메타(콘솔 헤더 표시용). 없으면 null. */

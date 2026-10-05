@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { withEmbed } from "@/components/workspace/embed-context";
 import { useModuleOn } from "@/features/owner/operations-context";
 import { useInFrame } from "@/components/workspace/use-in-frame";
@@ -8,6 +7,7 @@ import type { OperationsSettings } from "@/features/owner/settings-types";
 import { RESUME_DEPARTMENTS } from "@/features/staff/resume";
 import type { ClassroomRow } from "@/features/owner/server/classroom-queries";
 import { SectionForm, SettingsCard } from "./section-form";
+import { useSectionDraft } from "./use-section-draft";
 import type { SeatPinStatus } from "@/features/owner/seat-pin-view";
 import { SeatPinField, SeatPinStatusRow } from "./seat-pin-field";
 import { ClassroomManager } from "./classroom-manager";
@@ -26,6 +26,8 @@ export function OperationsSection({
   canImportClassrooms = false,
   readOnly = false,
   seatPinStatus,
+  baselineToken,
+  baselineVersion,
 }: {
   /**
    * 🔴 읽기 전용 열람자에게는 **자리 PIN 값이 지워진** 사본이 온다(서버 `operationsForViewer`) — 이 객체는 통째로
@@ -39,8 +41,17 @@ export function OperationsSection({
   readOnly?: boolean;
   /** 자리별 공개 접속이 켜져 있는가(값 없이) — 읽기 전용 화면이 그리는 유일한 PIN 정보. */
   seatPinStatus?: SeatPinStatus;
+  /**
+   * 이 면(운영 체계)이 맡는 값의 기준 token — 서버가 **저장할 수 있는 사람에게만** 내려준다(자리 PIN에서 나온 값이다).
+   * 저장 요청에 실려, 그사이 같은 면이 다른 곳에서 바뀌었으면 저장이 거절된다.
+   */
+  baselineToken?: string;
+  /** 이 값을 읽은 문서의 저장 순번 — 내 저장보다 먼저 읽힌 값이 뒤늦게 내려와도 받지 않는다(useSectionDraft). */
+  baselineVersion?: number;
 }) {
-  const [o, setO] = useState<OperationsSettings>(initial);
+  // 🔴 저장은 이 면이 맡는 칸만 반영된다(과목·시간표 칸은 서버가 방금 읽은 값을 그대로 둔다 — operations-slice.ts).
+  const { draft: o, setDraft: setO, baseline, noteSubmitted, confirmSaved, noteSaveFailed, adoptions } =
+    useSectionDraft(initial, baselineToken, baselineVersion);
   const set = (patch: Partial<OperationsSettings>) => setO((prev) => ({ ...prev, ...patch }));
   const shuttleOn = useModuleOn("shuttle");
   const seatOn = useModuleOn("seat_attendance");
@@ -49,7 +60,17 @@ export function OperationsSection({
   return (
     // 강의실은 관계형 테이블(classrooms) — jsonb 설정과 달리 자체 CRUD로 즉시 저장(중첩 <form> 방지 위해 폼 밖).
     // footer로 넘겨 저장 바가 강의실 카드 아래(전체 콘텐츠 맨 끝)에 sticky로 붙게 한다(창 하단 고정).
-    <SectionForm section="operations" payload={o} readOnly={readOnly} footer={<ClassroomManager rooms={classrooms} canImport={canImportClassrooms} />}>
+    <SectionForm
+      section="operations"
+      payload={o}
+      readOnly={readOnly}
+      extraFields={{ operationsFace: "operations", operationsBaseline: baseline }}
+      onSubmit={noteSubmitted}
+      onSaved={(state) => confirmSaved(state.operations?.tokens.operations, state.version)}
+      onSaveFailed={noteSaveFailed}
+      rebaselineNonce={adoptions}
+      footer={<ClassroomManager rooms={classrooms} canImport={canImportClassrooms} />}
+    >
       {/* 운영 과목(이름·색·요일병합 + 과목별 교시·강사뷰)은 "과목 운영" 탭으로 이동 — 같은 operations 섹션에 저장.
           카드 배치는 키가 비슷한 것끼리 짝(평일|주말 = 교시 목록, 학년|직급 = 칩 목록) — 2열 그리드 빈 구멍 방지. */}
       <div className="grid min-w-0 grid-cols-1 items-start gap-4 min-[860px]:grid-cols-2 [&>section]:min-w-0 [&>section[data-span-all]]:col-span-full">

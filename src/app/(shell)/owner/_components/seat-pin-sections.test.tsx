@@ -14,7 +14,7 @@ vi.mock("@/features/owner/server/subject-actions", () => ({
   removeUnusedSubject: vi.fn(),
 }));
 vi.mock("@/components/workspace/use-concurrent-edit-guard", () => ({
-  useConcurrentEditGuard: () => ({ notifySaved: () => undefined }),
+  useConcurrentEditGuard: () => ({ notifySaved: () => undefined, rebaseline: () => undefined }),
 }));
 vi.mock("@/components/workspace/use-unsaved-guard", () => ({ useUnsavedGuard: () => ({ markSaved: () => undefined }) }));
 vi.mock("@/components/workspace/use-in-frame", () => ({ useInFrame: () => false }));

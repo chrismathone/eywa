@@ -79,7 +79,7 @@ async function enableNewcomers(tx: Tx, tenantId: string, scenarioId: string) {
   }
   await tx.execute(sql`
     update tenant_settings
-    set data = jsonb_set(
+    set updated_at = greatest(now(), updated_at + interval '1 millisecond'), data = jsonb_set(
       jsonb_set(
         coalesce(data, '{}'::jsonb),
         '{modules}',
@@ -97,7 +97,7 @@ async function enableNewcomers(tx: Tx, tenantId: string, scenarioId: string) {
   `);
   await tx.execute(sql`
     update tenant_settings
-    set data = jsonb_set(
+    set updated_at = greatest(now(), updated_at + interval '1 millisecond'), data = jsonb_set(
       jsonb_set(
         coalesce(data, '{}'::jsonb),
         '{profile}',

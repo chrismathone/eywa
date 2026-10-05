@@ -1,0 +1,136 @@
+# 학원 설정(`/owner`) 정리 — 최종 계획 (v3 · Claude·codex 합의본)
+
+> 합의 경과: v1 → codex 검토 1(조건부) → v2 → codex 검토 2(조건부: N1 삭제 응답 계약 · N2 cron 충돌 정책 · N3 writer 보호 범위) → **v3에서 세 조건을 codex가 제시한 대로 반영**. codex는 검토 2에서 "이 세 계약이 반영되면 추가 이견 없음, 구현 진행과 커밋 전 적대적 리뷰에 동의"라고 답했다. 받아들이지 않은 조건은 없다.
+> 근거: 2026-10-05 전수 검수(코드 기준 — 화면 실행 없음). 프로덕션 행 수·SQL 적용 상태·실제 화면은 확인하지 못했다.
+
+## 0. 지켜야 할 것
+
+- `injaewon`(침산) = 프로덕션 실데이터. 설정 저장 경로 변경은 **저장값 유실 0**이 최우선.
+- **DB 마이그레이션 없음**(SQL은 원장이 손으로 적용 — gotchas #95). 앱 코드만 고친다.
+- 침산 화면·저장 행은 프리셋 관련 변경 전후가 같아야 한다(`preset.ts`). `settings.preset` 직접 비교 금지.
+- 일반 지점 화면 문구에 플랫폼 내부 역할·원시 코드를 노출하지 않는다(AGENTS.md 2026-10-02). 실제 권한·계정 보호 로직은 유지.
+- 커밋마다: typecheck · eslint · vitest → **codex 적대적 리뷰** → 결함 수리·재검증 → 커밋. push 전 `git fetch` + `merge origin/main`.
+- 새 로직은 순수 함수 모듈 + Vitest. 큰 파일 분할은 범위 밖.
+
+## 1. 확인된 사실 (v1에서 고친 표현만)
+
+- F1: 경합 구간을 "몇 ms"로 단정하지 않는다 — 액션의 `updated_at` 검사는 **액션이 읽은 뒤**의 변경만 본다. 시간표 쪽 과목 저장(`subject-actions.ts:368-391,428-498`)은 6개 필드만 바꾸려는 의도지만 **실제로는 운영 섹션 전체를 다시 보낸다**. cron(`scheduled-groups.ts:46-95`)은 `data` 전체를 읽어 교체하고 `updated_at`을 읽지도 갱신하지도 않는다. 시트 반영(`master-sheet-store.ts:370`)은 `jsonb_set`이지만 `updated_at`을 갱신하지 않는다 → 그사이의 `saveOwnerSection` CAS가 이 변경을 못 본다.
+- F2: 대화상자 체크는 **이전 값이 none일 때만 full**을 준다(`setting-roles.ts:23`) — 기존 readonly·scoped는 보존.
+- F3: `class_schedules` 1,000행 초과는 CLAUDE.md #88의 기록(1,068행)이고 이번에 직접 재지는 않았다. `student_id` 20개 표는 `schema.ts` 기준이며 실제 DB 전체 참조 수는 미확인.
+- F4: 침산에서도 기본 record에 없는 부서 키는 떨어진다.
+- F5: "2026-09-07 당시 11면"은 `docs/_handoff/menu-compact-2026-09-07/`의 기록이다.
+
+(F1~F5의 나머지 사실은 v1과 같고 codex가 코드로 대조해 동의했다 — `CODEX-REVIEW-1.md` §1.)
+
+## 2. 계획 (순서: P1-D → P1-A → P1-B → P1-C → 2단계 → 3단계)
+
+### P1-D. 부서별 직급 읽기 (먼저 — P1-A가 resolve한 값을 저장 재료로 쓰므로)
+- `resolve.ts`: `jobTitlesByDepartment`만 좁게 고친다. 저장값이 plain object일 때 **값이 문자열 배열인 키만** 기본값 위에 얹는다(`{ ...base, ...유효한 저장 키 }`). 빈 배열은 명시값으로 보존, 기본 객체는 변형하지 않는다.
+- 테스트(`resolve.test.ts`): 일반판 새 부서 · 침산 기존 부서 덮기 · 침산 추가 부서 · 잘못된 저장형식(배열·숫자·null).
+
+### P1-A. 운영 섹션 — "의도만 적용" 단일 계약 + 기준값 (F1)
+
+**원칙: `operations` 섹션에 쓰는 **앱 안(`src/`)의 모든 경로**는 "새로 읽은 값 위에 제 몫만 얹는다". 통째 교체 경로를 남기지 않는다.** 운영자가 손으로 돌리는 `scripts/` 아래 스크립트(권한 부여·과목 기본뷰 등)는 이번 보호 범위 밖이다 — 설정 저장·cron·시트 반영과 **동시에 돌리지 않는다는 전제**를 문서(결정 로그)에 적는다.
+
+1. **요청 형식(서버가 검증)** — `saveOwnerSection`의 `section=operations`는 `operationsFace`가 **필수**다. 값은 넷뿐이고, 없거나 모르는 값이면 저장하지 않고 "화면이 오래되었습니다. 새로고침한 뒤 다시 저장해 주세요"로 거절한다(구폼 전체교체 경로 폐지 — 배포 뒤 옛 폼은 어차피 새로 읽어야 한다).
+   - `operations`(운영 체계 면) · `subjects`(과목 운영 면): `data` = 지금처럼 운영 섹션 전체, `operationsBaseline` 필수.
+   - `subject-fields`(시간표 쪽 서버 호출): `data = { subject, fields }` — `fields`는 시간표 소유 6개 키만 허용(값 `null` = 키 삭제).
+   - `subject-remove`(흡수·미사용 삭제 뒤 서버 호출): `data = { key }`.
+   - face 문자열은 권한 근거가 아니다 — 권한 검사(`operations_settings` 쓰기)는 지금 그대로 먼저 한다. baseline은 충돌 방지 정보이지 인증 수단이 아니다.
+2. **순수 모듈 `src/features/owner/operations-slice.ts`**
+   - `FACE_KEYS`: `operations` = weekdayPeriods·weekendPeriods·gradeLevels·jobTitles·jobTitlesByDepartment·holidays·shuttle·seatPins / `subjects` = subjects·weekdayGroupings·hiddenBuiltinWeekdayGroupings.
+   - `TIMETABLE_SUBJECT_KEYS` = teacherViewOrder·integrationGroups·integrationGroupsEnabled·integrationShowOthers·integrationOthersTitle·integrationGroupPresets.
+   - `applyFace(fresh, incoming, face)`: fresh 위에 그 면의 키만 얹는다. `subjects` 면은 incoming 과목 행에서 6개 키를 **먼저 지운 뒤** fresh 같은 `key` 행의 값·**부재**를 복사한다(fresh에 없는 키는 없는 채 — 옛 순서 부활 금지). fresh에 없는 새 과목은 6개 키 없이 받는다.
+   - `applySubjectFields(fresh, subject, fields)` · `removeSubject(fresh, key)`.
+   - `faceCanonical(ops, face)`: ① `operationsSchema`로 정규화(스키마 기본값 `testMax`·`weekdayGrouping` 등의 "부재 ↔ 기본값"을 같은 값으로) — 파싱 실패 시 원본 그대로 ② 그 면 키만(과목은 6개 키 제외) ③ 객체 키 정렬(배열 순서는 의미가 있으므로 유지) 직렬화. **서버 두 곳(화면·액션)이 같은 함수**를 쓴다.
+3. **서버 흐름**(`saveOwnerSection`, 운영 섹션): 권한 → 요청 형식 검증 → 두 면은 **원 요청 전체를 지금처럼 스키마 검증**(가려진 PIN 13자 표식은 여기서 종전처럼 떨어진다 — `seat-pin-save.test.ts:120`의 기대 유지) → `existing` 읽기 → fresh = `resolveSettings(existing.data).operations` → 두 면은 `operationsBaseline !== token(fresh, face)`면 거절 → 의도 적용 → **병합 결과를 다시 스키마 검증** → `prepareSectionForSave(preset, "operations", 병합 결과, 파싱값, base.operations)`(침산은 새 키 2개 제거, 일반판은 fresh 값 유지 — 두 면 모두 그 키를 소유하지 않으므로 값은 항상 fresh에서 온다) → 운영 설정 경계 검사 → `updated_at` CAS 쓰기 → 감사 diff → 캐시 무효화. 성공 응답에 **두 면의 새 token**을 싣는다.
+   - token = `sha256(faceCanonical(...))`(서버 모듈). 평문 PIN이 FormData·prop에 baseline으로 실리지 않는다.
+   - **같은 면의 동시 편집은 통째로 거절한다**(공휴일 ↔ PIN, 과목 A ↔ 과목 B도 충돌) — 보수적 제품 선택으로 명시. 행·필드 단위 patch는 후속.
+4. **화면(page.tsx)**: 운영 체계·과목 운영·역할·권한 면은 편집자에게 **캐시 없이 새로 읽은** 설정으로 `initial`과 token을 만든다(설정 캐시는 TTL 300초라 스크립트·cron·시트 반영 뒤 낡을 수 있고, 낡은 token은 "새로고침해도 계속 거절"을 만든다). 읽기 실패 시 편집 폼 대신 오류 안내. **token은 저장 권한이 있을 때만 내려준다**(읽기 전용 열람자에겐 PIN에서 파생된 값을 보내지 않는다).
+5. **클라이언트 — draft와 token은 한 쌍**(`useSectionDraft` 훅, 운영 체계·과목 운영·역할·권한이 공유):
+   - 상태 = draft · 확정 스냅샷(JSON) · token. 서버가 새 `initial`/token을 내려보내면 **draft가 깨끗할 때만**(= 확정 스냅샷과 같을 때) 셋을 함께 바꾼다. 수정 중이면 셋 다 그대로 → 그사이 같은 면이 바뀌었으면 저장이 거절된다. token만 최신으로 갈아끼우는 경로는 없다.
+   - 저장 성공은 **제출한 스냅샷**에 대해 확정한다: 확정 스냅샷 = 제출한 JSON, token = 응답의 새 token. 저장 도중 더 고친 것은 계속 '미저장'이다.
+   - 렌더 중 파생 패턴(effect 안 setState 금지 #25).
+6. **과목 삭제(흡수)**: 다른 미저장 변경이 있으면 먼저 저장하도록 막는다("저장하지 않은 변경이 있습니다. 먼저 저장한 뒤 삭제해 주세요"). 삭제가 진행되는 동안 폼은 잠근다. 삭제 성공 응답은 **삭제로 확정된 `subjects` 면 전체 스냅샷(subjects·weekdayGroupings·hiddenBuiltinWeekdayGroupings)과 그 스냅샷의 token을 한 쌍으로** 돌려주고, 클라는 둘을 함께 채택한다(draft·확정 스냅샷·token 동시 교체). **로컬에서 행만 빼고 새 token을 붙이는 처리는 하지 않는다**(로컬 clean은 서버 최신을 뜻하지 않는다 — 다른 창의 과목 변경·추가·삭제가 조용히 되돌아간다, 검토 2 N1). `savedNonce`가 다른 미저장 편집까지 저장됨으로 표시하던 문제도 함께 사라진다. 다른 창의 옛 과목 목록은 token 불일치로 계속 거절(삭제된 과목 부활 금지).
+7. **현행 서버 호출자 이전**: `subject-actions.ts`의 세 호출(`removeSubjectRow`·강사 순서·통합뷰 그룹/프리셋)을 `subject-remove`·`subject-fields` 의도로 바꾼다 — 더는 전체 operations를 보내지 않는다.
+8. **앱 안의 다른 writer(전부 수정 표식 `updated_at`을 갱신한다)**
+   - `scheduled-groups.ts`(cron): `updated_at`을 함께 읽고 CAS update(`.select()`로 **0행도 충돌**로 판정) + `updated_at` 갱신. 충돌이면 **같은 실행 안에서** 새로 읽기 → `shouldApplyGroups` 재판정 → CAS를 최대 3회. 끝내 실패하면 `status:"error"` + 사유("설정이 동시에 바뀌어 반영하지 못했습니다")를 돌려준다. 호출부(`api/cron/apply-due-class-updates/route.ts:223-242`)는 그룹 결과가 error여도 완료 표식을 남기고 다음 실행은 그 스냅샷을 통째로 건너뛰므로 **다음 날 자동 재시도는 없다 — 이것이 기존 계약이고 이번에 바꾸지 않는다**(표식을 없애면 끝난 반 이름·담임 변경이 재생된다). 실패는 완료 표식의 groups 결과에 그대로 기록된다. (v2의 "다음 실행이 다시 판단"은 틀린 서술이었다 — 검토 2 N2.)
+   - `master-sheet-store.ts:370`(영어 시트 반영) · `demo-roster/demo-weekday.ts:21` · `demo-roster/dashboard-apply.ts:81,99`(데모 구성): 같은 UPDATE 문장에 `updated_at = now()`를 더한다(트랜잭션 안, 한 문장).
+   - 가드 테스트: `src/`에서 `tenant_settings`를 UPDATE하는 곳은 전부 `updated_at`을 함께 쓴다(소스 대조). 캐시 무효화 책임은 지금처럼 호출부.
+9. **테스트(필수 사례)** — 순수 함수 + 실제 액션(모의 DB, `seat-pin-save.test.ts` 모양) + 훅:
+   - 다른 면 동시 저장(둘 다 보존) · 같은 면 동시 저장(거절) · 자기 저장 후 재저장 · 저장 중 추가 편집 · 수정 중 외부 refresh(기준 유지) · 깨끗할 때 외부 refresh(함께 갱신).
+   - 레거시 과목(testMax·weekdayGrouping 부재)의 시간표 저장 전후 token 동일 · english 읽기 주입 · 일반판 과목에 침산 필드 미주입.
+   - 시간표 키가 fresh에서 없어졌을 때 옛 값 부활 금지 · 새 과목·순서 변경 · 다른 창 흡수 뒤 저장 거절 · 자체 삭제 뒤 저장 통과.
+   - **N1**: 깨끗한 A → B가 다른 과목을 변경/추가/삭제 → A가 자체 삭제 → A 재저장 = B의 변경 보존 · 흡수 진행 중 B 저장 = 보존.
+   - **N2·N3**: cron CAS가 error 없이 0행일 때 재시도·재판정 · 3회 실패 시 error 사유 · 완료 표식 뒤 다음 실행이 그 스냅샷을 건너뜀(기존 계약 확인) · 중앙 액션이 읽은 뒤 데모/시트 writer가 커밋하면 중앙 저장이 거절됨.
+   - PIN: 읽기 전용에 token 없음 · 가려진 payload 거절 유지 · `subjects` 면 저장이 PIN 보존 · 빈 문자열 = 끄기 그대로.
+   - prepare: 침산 새 키 제거 · 일반판 저장값 보존 · 부서 record·terms 보존 · face 없음/모르는 face/baseline 누락 거절 · `subject-fields`가 6개 밖 키 거절.
+   - 기존 `seat-pin-save.test.ts`는 face+token을 보내도록 갱신하되 **기대(거절·보존)는 그대로**.
+
+### P1-B. 역할·권한 (F2)
+- 역할·권한 면에서는 머리글 '역할 설정' 버튼을 그리지 않는다.
+- baseline은 **실제로 저장되는 전체**(overrides + userOverrides + specialAccess, resolve한 값의 canonical → sha256). `section=permissions` 저장은 `permissionsBaseline` 필수. 화면은 새로 읽은 값으로 만든다(침산 개인 예외는 스크립트로 바뀐다).
+- `PermissionsSection`은 `useSectionDraft`로 세 상태를 한 draft로 다룬다 — 깨끗하면 셋을 함께 갱신, 수정 중이면 유지. 역할 토글 복원 ref(`:128`)도 확정 상태와 맞춘다.
+- 기존 보호(침산 `specialAccess` 제거·구폼 누락 보존 `preset.ts:64-79`, 운영 설정 경계 `platform-settings.ts`)는 그대로.
+- 대화상자 문구: "새로 체크한 직급은 이 설정을 바꿀 수 있습니다. 기존 조회 전용 권한과 개인별 예외는 유지됩니다."
+- 테스트: 다른 창이 개인 예외·민감 명단만 바꾼 뒤 저장 거절 · 대화상자 저장 뒤 깨끗한 표 갱신 · 자기 저장 후 재저장 · 숨은 운영 설정 변경 거절 유지.
+
+### P1-C. 데이터 정리 면 (F3)
+- 액션 게이트는 `admin` 유지. `page.tsx`가 `canWriteTenant(role,"admin")`을 면에 넘기고 **변이 버튼에만** 적용(동명이인 조회·상세 링크는 그대로). 이 면은 페이지의 `owner` fieldset에서 뺀다(자체 판정). UI만 `canManage`로 바꾸지 않는다.
+- 병합: ① 두 학생이 모두 조회되는지(2행) 먼저 확인, 아니면 중단 ② 뒤 3개 update도 error 확인 ③ 중간 실패 시 **옮겨진 범위와 실패 단계**를 감사로그에 남기고 목록 갱신 ④ 2단 확인 — 보존/퇴원 대상의 이름·학교·학년을 문장에 적는다 ⑤ 안내 문구를 실제로 옮기는 것에 맞춘다. 표 확장·트랜잭션(RPC)은 §4.
+- `closeOrphanEnrollments`: 2단 확인 + 감사로그(중간 실패 시 그때까지의 건수 포함) + `owner-audit-wiring.test.ts` 등록. 일괄 퇴원도 2단 확인.
+- `findOrphans`: 반 = `fetchAllPaged`, 스케줄 = `fetchAllPagedInChunks`(둘 다 `.order("id")`), error는 throw하고 `DataFace`가 **면 안에서** 오류 상태로 받는다. 판정 의미(유효기간 무시)는 그대로 두고 문구를 "스케줄 기록이 하나도 없는 반"으로 맞춘다 — 날짜 판정 변경은 §4.
+
+### 2단계 — 입구·이름·게이트 (경계별로 커밋을 나눈다)
+- **P2-A 범주·라벨 단일 소스**: 설정 면 공용 목록(일반판 전용 '기능' 포함 — `genericOnly`·`masterOnly`·icon·개별 menuKey 보존)을 한 곳에 두고 `tabs.ts`·`menu-hub.ts`·`page.tsx`가 파생. 범주 5개 = `학원 정보`(프로필·브랜드) / `수업·운영`(운영 체계·과목 운영) / `청구·안내`(수납·청구·알림·약관·상담 양식) / `권한·화면`(역할·권한·탭 및 메뉴 구성·[기능]·대시보드 관리) / `관리`(팝업 공지·데이터 정리·데이터 가져오기·감사로그·연동). **상단 탭의 지금 순서를 유지**(일반판은 navigation → modules → dashboard). '대시보드 구성' → '대시보드 관리'. 사용자 지정 이름·배치는 계속 기본 라벨 위에 적용. 주소·권한 키·창 식별 불변.
+- **P2-B 게이트**: ① 요청한 면에 권한이 없으면, 로그인 확인 뒤 **최종 권한(`getUserPermMatrix` — 개인 예외·꺼진 모듈 반영)**으로 실제로 열 수 있는 면(감사로그·대시보드 관리의 원장급 조건, '기능'의 일반판+원장급 조건 포함)만 후보로 골라 첫 후보로 보내고, 도착 면에서 `requireAccess`를 다시 적용. 후보가 없으면 기존 가드 그대로. 자기 주소 리다이렉트 금지, embed 유지, 꺼진 모듈의 404 정책 불변. ② '기능' 면은 화면도 `owner` 키 + 기존 일반판·원장급 조건. ③ `audit`·`import`·`data`를 페이지 fieldset에서 뺀다(쓰기는 각 자체 게이트 — 가져오기 허브 진입 자체는 지금처럼 `owner`). 순수 함수 테스트: 개별 설정만 위임·readonly·개인 예외·전용 면·일반판/침산·후보 없음·embed.
+- **P2-C 문구**: F5 문구 전부. 검증 오류는 안전한 path→라벨 헬퍼(모르는 경로는 싣지 않음) + Zod message 안의 원시 코드(`settings-types.ts:585,588`) 교정. `actions.ts:205`는 `explainDbError(...).message`. 한글 트리거 원문에 든 플랫폼 역할 이름은 앱에서 매핑(SQL 불변). 감사 diff 라벨 확장 시 PIN 값이 실리지 않게 유지. 사실과 다른 힌트(청구서·성적표)는 실제 소비처(등록 서류·상담 준비 서류)로.
+- **P2-D 소소한 정리**: 가져오기 허브에서 **꺼진 모듈의 줄만** 제거("권한 없음" 줄은 그대로) · `menu-order-row.tsx` 삭제(전체 참조 재검색 후) · 키오스크 설정을 별도 목적지(menuKey `kiosk_settings`, 모듈 조건 그대로)로 설정 메뉴 판에 추가 · 월간 계획서 문구 구획은 소비처(영어/EiE)가 있는 과목에만 표시(저장된 다른 과목 값은 지우지 않는다).
+- **P2-E 문서**: 도움말 `owner.ts`, `settings-wiring.md`(로고·사업자번호·역할·권한 구현 반영 — 영업시간은 미확인으로 구분), `docs/changelog.md`, 결정 로그(범주 5개 · 운영 섹션 저장 계약).
+
+### 3단계 — 화면 안 구조 (눈으로 확인한 뒤에만 main 반영)
+- 상단 14칸 탭 → 범주 5 + 그 범주의 면. 먼저 정할 것: 범주 전환 시 미저장 draft 정책, 권한으로 빈 범주, 사용자 지정 라벨, iframe·좁은 창·키보드·직접 `?tab=` 주소.
+- 화면 확인 수단이 없으면 브랜치에 남기고 원장 확인을 받는다.
+
+## 3. 역할 분담·절차
+
+- 구현 = Claude(워크트리 `BIGSHOL/setting-tab`). codex = 계획 공동 검토 + **커밋 전 적대적 리뷰어**(읽기 전용, 단계마다 diff 공격).
+- 커밋 단위: P1-D+P1-A / P1-B / P1-C / P2-A / P2-B / P2-C+D+E. 각 커밋 전 codex 리뷰 → 수리 → 재검증.
+- push: 1단계가 끝나면, 2단계가 끝나면 각각 `fetch` → `merge origin/main` → 검증 → `git push origin HEAD:main`(상시 승인 범위: 검증·리뷰 통과분). 3단계는 위 조건.
+
+## 4. 이번에 하지 않는 것 (원장 결정 또는 별도 작업)
+
+- 병합이 옮기는 표 확장(13개 표의 충돌 정책) · 병합의 트랜잭션화(RPC = 마이그레이션).
+- 스케줄 진단의 날짜 판정(오늘 유효/미래 예약 인정 여부) · `bulkDeleteStudents`의 청구 조회 페이징(FK restrict가 삭제를 막아 주므로 후속).
+- 같은 면 안의 행·필드 단위 병합 · 데이터 정리 액션의 scoped 허용 여부.
+- 죽은 스키마 필드 제거 · 연동 면 주소 키 `sheets` 개명 · 면 합치기/라우트 분리 · 큰 파일 분할 · 섹션 간 필드 이동 · `/owner` 밖 설정의 이동.
+
+## 5. 구현 시 유의 (검토 2 §4 — 설계 이견이 아니라 구현 규칙으로 채택)
+
+- 성공 응답의 token은 **prepare를 거친 실제 저장 후보를 resolve·canonical한 값**에서 만든다(파싱 직후 값으로 만들면 침산 `specialAccess` 제거·일반판 누락 보존 때문에 자기 재저장이 어긋난다). 두 면 token을 받아도 클라는 **제출한 면의 token만** 전진시킨다.
+- `subject-fields`도 서버 액션 입력이다 — 허용 키 밖 속성 거절, 값 검증, 없는 과목을 만들지 않음, `null`(삭제)과 생략(no-op) 구분. 보관함 서버 도장·위생 처리·`presets` 생략 보존 유지. 전체 fresh payload를 patch에 담는 식으로 옮기지 않는다.
+- 제출분 확정 규칙을 창 닫기·이탈 dirty 안내(`use-unsaved-guard`의 `markSaved`)까지 잇는다. refresh와 성공 응답의 도착 순서, 중복 제출의 응답 대응을 통합 테스트에서 다룬다.
+- canonical의 파싱 실패 fallback도 화면·액션이 같은 경로. 레거시 기본값 사례에 color·testMax·weekdayGrouping 포함. malformed 값을 통과시키려고 검사를 우회하지 않는다.
+- "다른 면 동시 저장 둘 다 보존"을 최종 CAS 충돌까지 성공으로 숨긴다는 뜻으로 구현하지 않는다(충돌은 거절·재시도 안내).
+
+## 6. 합의 기록
+
+- 검토 1: `CODEX-REVIEW-1.md`(조건부) → v2. 검토 2: `CODEX-REVIEW-2.md`(조건부 — N1·N2·N3) → v3에서 세 조건 반영.
+- codex는 이후 **커밋 전 적대적 리뷰어**를 맡는다. 첫 리뷰(P1-D+P1-A)에서 v3의 N1~N3 반영 여부도 함께 확인한다.
+
+## 7. 구현 기록
+
+### P1-D + P1-A (2026-10-06)
+
+codex 적대 리뷰 6회(`CODEX-CODE-REVIEW-1.md` · `1b` · `1c` · `1d` · `1e` · `1f`) — 다섯 번 "수리 필요", 여섯 번째 "커밋 가능". 계획에서 달라지거나 구체화된 것:
+
+- **보관함 도장·다듬기는 중앙 저장이 정한다**(리뷰 1 C1) — `subject-fields.ts`. 저장 요청을 직접 보내도 '누가·언제'를 꾸밀 수 없다.
+- **편집 폼은 저장이 도는 동안 내려온 값을 미뤄 두고, 응답(성공·실패)을 먼저 반영한다**(리뷰 1b B1·B2) — `use-section-draft.ts`의 `inFlight`.
+- **읽기와 저장의 선후는 운영 섹션 안의 저장 순번(`data.operations.rev`)으로 가린다**(리뷰 1c N1 → 1d D1·D2 → 1e E1).
+  - 시각(`updated_at`)으로 가리면 DB 안에서 직접 쓰는 곳이 자기 시계로 순서를 뒤집는다(1d D1).
+  - 문서 최상위에 순번을 두면 개별 설정만 위임받은 계정의 저장이 DB 쓰기 가드(0335a)에 전부 거절된다(1e E1) → 섹션 안에 둔다.
+  - 행이 아직 없는 읽기는 0이라 첫 저장(1)보다 앞선 것으로 구별된다(1d D2).
+- 미저장 가드·동시 편집 가드는 **제출 시점의 폼**을 기준으로 삼는다(리뷰 1 C4).
+- `tenant_settings`를 쓰는 앱 코드는 `updated_at`을 직전 값과 다른 값으로 갱신한다(`nextSettingsStamp` · SQL은 `greatest(now(), updated_at + interval '1 millisecond')`).
+
+남긴 것(후속): 데모 구성의 요일 병합 SQL이 순번을 올리지 않는다(리뷰 1e E2 — 데모 지점 한정) · 같은 면 안의 칸 단위 병합 · 다른 면의 저장이 났을 때 뜨는 동시 편집 경고 문구(지금은 다른 면의 저장에도 "덮어쓰일 수 있어요"라고 뜬다 — 실제로는 덮지 않는다).

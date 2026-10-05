@@ -27,11 +27,13 @@ import {
   absorbSubject,
   getSubjectUsage,
   removeUnusedSubject,
+  type AbsorbResult,
   type SubjectUsage,
 } from "@/features/owner/server/subject-actions";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SectionForm, SettingsCard } from "./section-form";
+import { useSectionDraft } from "./use-section-draft";
 import { PeriodListEditor, SubjectListEditor } from "./list-editors";
 import { WeekdayGroupingEditor } from "./weekday-grouping-editor";
 import { weekdayGroupingChoices } from "@/features/timetable/lib/weekday-groups";
@@ -52,6 +54,8 @@ export function SubjectsSection({
   sessionYear,
   holidays = [],
   readOnly = false,
+  baselineToken,
+  baselineVersion,
 }: {
   /**
    * 운영 섹션 **전체**(여기선 과목만 고치고 나머지는 그대로 통과시켜 저장한다).
@@ -68,22 +72,42 @@ export function SubjectsSection({
   holidays?: string[];
   /** 운영 설정 저장 권한이 없는 열람자 — 저장 바가 없고 제출도 막힌다. */
   readOnly?: boolean;
+  /** 이 면(과목 운영)이 맡는 값의 기준 token — 저장 요청에 실린다. 서버가 저장할 수 있는 사람에게만 내려준다. */
+  baselineToken?: string;
+  /** 이 값을 읽은 문서의 저장 순번 — 내 저장보다 먼저 읽힌 값이 뒤늦게 내려와도 받지 않는다(useSectionDraft). */
+  baselineVersion?: number;
 }) {
-  const [o, setO] = useState<OperationsSettings>(initial);
+  // 🔴 저장은 이 면이 맡는 칸(과목·요일 병합)만 반영된다. 과목 행의 시간표 칸(강사 순서·통합뷰 그룹)과
+  //    운영 체계 면의 칸은 서버가 방금 읽은 값을 그대로 둔다(operations-slice.ts).
+  const { draft: o, setDraft: setO, baseline, isDirty, noteSubmitted, confirmSaved, noteSaveFailed, adopt, adoptions } =
+    useSectionDraft(initial, baselineToken, baselineVersion);
+  // 삭제는 서버에서 즉시 확정된다 — 다른 미저장 변경이 섞여 있으면 먼저 저장하게 한다(아래 onRemove).
+  const [removeBlocked, setRemoveBlocked] = useState(false);
   const setSubjects = (v: SubjectSetting[]) => setO((prev) => ({ ...prev, subjects: v }));
   const patchSubject = (i: number, patch: Partial<SubjectSetting>) =>
     setSubjects(o.subjects.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   // 삭제 = 흡수 다이얼로그(조건부 마운트 — 닫히면 언마운트로 state 리셋, #67 안전)
   const [removing, setRemoving] = useState<{ index: number; key: string; label: string } | null>(null);
-  const removeRowLocal = (index: number) =>
-    setO((prev) => ({ ...prev, subjects: prev.subjects.filter((_, j) => j !== index) }));
   // 흡수/미사용 삭제는 서버 즉시 확정 → SectionForm baseline 재스냅샷 신호(거짓 '미저장' 확인 방지).
   const [savedNonce, setSavedNonce] = useState(0);
   // 펼쳐진 과목 — 세션 달력을 그 과목에만 마운트하기 위해(성능).
   const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
 
   return (
-    <SectionForm section="operations" payload={o} savedNonce={savedNonce} readOnly={readOnly}>
+    <SectionForm
+      section="operations"
+      payload={o}
+      savedNonce={savedNonce}
+      readOnly={readOnly}
+      extraFields={{ operationsFace: "subjects", operationsBaseline: baseline }}
+      onSubmit={noteSubmitted}
+      onSaved={(state) => {
+        confirmSaved(state.operations?.tokens.subjects, state.version);
+        setRemoveBlocked(false);
+      }}
+      onSaveFailed={noteSaveFailed}
+      rebaselineNonce={adoptions}
+    >
       <div className="space-y-5">
         <SettingsCard
           title="요일 병합 묶음"
@@ -109,10 +133,21 @@ export function SubjectsSection({
             onChange={setSubjects}
             groupingChoices={weekdayGroupingChoices(o.weekdayGroupings, o.hiddenBuiltinWeekdayGroupings)}
             onRemove={(i) => {
+              // 삭제는 서버에서 즉시 확정되고 화면은 그 결과를 통째로 받는다 — 작성 중인 변경이 있으면 그게 사라진다.
+              if (isDirty()) {
+                setRemoveBlocked(true);
+                return;
+              }
+              setRemoveBlocked(false);
               const s = o.subjects[i];
               setRemoving({ index: i, key: s.key, label: s.label.trim() || s.key });
             }}
           />
+          {removeBlocked ? (
+            <p role="alert" className="text-danger mt-2 text-xs">
+              저장하지 않은 변경이 있습니다. 먼저 저장한 뒤 삭제해 주세요.
+            </p>
+          ) : null}
 
           <div className="border-line divide-line mt-5 divide-y border-t pt-2">
             {o.subjects.map((s, i) => (
@@ -393,9 +428,16 @@ export function SubjectsSection({
             .filter((s) => s.key !== removing.key)
             .map((s) => ({ value: s.key, label: s.label.trim() || s.key }))}
           onClose={() => setRemoving(null)}
-          onRemoved={() => {
-            removeRowLocal(removing.index);
+          onRemoved={(result) => {
             setRemoving(null);
+            // 🔴 자기 목록에서 행만 빼지 않는다 — 서버가 확정한 이 면의 값과 그 값의 token을 **함께** 받는다.
+            //    화면이 깨끗해 보여도 그사이 다른 창이 다른 과목을 고쳤을 수 있고, 옛 목록에 새 token을 붙이면
+            //    다음 저장이 그 변경을 되돌린다.
+            if (!result.subjectsFace) {
+              window.location.reload();
+              return;
+            }
+            adopt({ ...o, ...result.subjectsFace.snapshot }, result.subjectsFace.token, result.subjectsFace.version);
             setSavedNonce(Date.now());
           }}
         />
@@ -420,7 +462,7 @@ function AbsorbDialog({
   from: { key: string; label: string };
   targets: { value: string; label: string }[];
   onClose: () => void;
-  onRemoved: () => void;
+  onRemoved: (result: AbsorbResult) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [usage, setUsage] = useState<SubjectUsage | null>(null);
@@ -450,7 +492,7 @@ function AbsorbDialog({
   }, [from.key]);
 
   // 실행 공통 래퍼 — 네트워크 단절 등 reject에도 busy가 고착되지 않게(취소 불능 방지).
-  const run = async (fn: () => Promise<{ ok?: boolean; error?: string }>) => {
+  const run = async (fn: () => Promise<AbsorbResult>) => {
     setBusy(true);
     setError(null);
     try {
@@ -459,7 +501,7 @@ function AbsorbDialog({
         setError(res.error);
         return;
       }
-      onRemoved();
+      onRemoved(res);
     } catch {
       setError("실행 결과를 확인하지 못했습니다(네트워크 오류 등). 다시 시도해 주세요 — 재실행은 안전합니다.");
     } finally {

@@ -13,6 +13,8 @@ import { useEditPresence } from "@/features/presence/edit-presence";
  * - dirty 판정: 마운트 시 FormData 스냅샷(baseline) ↔ 메시지 수신 시 현재 스냅샷 비교(버튼 변경까지 포착).
  * - notifySaved(): **저장 성공 확정 후** 호출 — 다른 창에 알리고 baseline을 재스냅샷(자기 dirty 해제).
  *   publish가 성공 확정 후라, 토스트의 "새로고침"이 commit된 데이터를 읽어 안전하다.
+ *   `snapshot`(제출 시점의 serializeForm 문자열)을 주면 그 값을 기준으로 삼는다 — 저장이 도는 동안 더 고친 내용은
+ *   계속 dirty로 남아 다른 창의 저장 경고를 받는다(미저장 가드 `markSaved`와 같은 규칙). 문자열이 아닌 인자는 무시.
  */
 export function useConcurrentEditGuard({
   scope,
@@ -52,11 +54,16 @@ export function useConcurrentEditGuard({
     });
   }, [scope, formRef]);
 
-  const notifySaved = useCallback(() => {
+  const notifySaved = useCallback((snapshot?: unknown) => {
     if (!scope) return;
     publishRecordSaved(scope);
-    if (formRef.current) baseline.current = serializeForm(formRef.current);
+    if (formRef.current) baseline.current = typeof snapshot === "string" ? snapshot : serializeForm(formRef.current);
   }, [scope, formRef]);
 
-  return { notifySaved };
+  /** 다른 창에 알리지 않고 기준만 지금 폼으로 다시 잡는다 — 서버 값으로 폼을 갈아끼운 뒤(저장이 아니다). */
+  const rebaseline = useCallback(() => {
+    if (scope && formRef.current) baseline.current = serializeForm(formRef.current);
+  }, [scope, formRef]);
+
+  return { notifySaved, rebaseline };
 }

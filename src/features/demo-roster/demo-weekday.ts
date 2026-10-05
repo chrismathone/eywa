@@ -19,7 +19,7 @@ export async function writeDemoWeekdayGrouping(tx: SqlTx, tenantId: string, scen
   const grouping = demoWeekdayGrouping(scenarioId);
   await tx.execute(sql`
     update tenant_settings
-    set data = jsonb_set(
+    set updated_at = greatest(now(), updated_at + interval '1 millisecond'), data = jsonb_set(
       coalesce(data, '{}'::jsonb),
       '{operations,subjects}',
       (

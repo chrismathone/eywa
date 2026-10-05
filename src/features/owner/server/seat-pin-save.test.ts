@@ -56,15 +56,22 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 import { saveOwnerSection } from "./actions";
+import { operationsFaceToken } from "./operations-save";
+import { resolveSettings } from "../resolve";
+import type { OperationsFace } from "../operations-slice";
 
 const storedOperations = (): OperationsSettings => ({
   ...DEFAULT_SETTINGS.operations,
   seatPins: { lab: SYNTHETIC_LAB, jj: SYNTHETIC_JJ },
 });
-const form = (data: unknown) => {
+/** 화면이 보내는 그대로 — 면과, 그 면을 연 시점(= 지금 저장돼 있는 값)의 기준 token을 싣는다. */
+const form = (data: unknown, face: OperationsFace = "operations") => {
   const fd = new FormData();
   fd.set("section", "operations");
   fd.set("data", JSON.stringify(data));
+  fd.set("operationsFace", face);
+  const stored = (m.stored as { data: unknown }).data;
+  fd.set("operationsBaseline", operationsFaceToken(resolveSettings(stored, { name: "" }).operations, face));
   return fd;
 };
 const savedOperations = () =>
@@ -104,7 +111,7 @@ describe("편집자", () => {
       ...edited,
       subjects: edited.subjects.map((s, i) => (i === 0 ? { ...s, label: `${s.label}X` } : s)),
     };
-    const result = await saveOwnerSection(undefined, form(submitted));
+    const result = await saveOwnerSection(undefined, form(submitted, "subjects"));
     expect(result?.ok).toBe(true);
     expect(m.write).toHaveBeenCalledTimes(1);
     expect(savedOperations().seatPins).toEqual({ lab: SYNTHETIC_LAB, jj: SYNTHETIC_JJ });
@@ -122,6 +129,21 @@ describe("편집자", () => {
     expect(result?.ok).toBeUndefined();
     expect(result?.error).toContain("seatPins");
     expect(m.write).not.toHaveBeenCalled();
+  });
+
+  it("🔴 과목 운영 면은 PIN을 맡지 않는다 — 다른 값을 실어 보내도 저장된 PIN이 그대로다", async () => {
+    const submitted = { ...storedOperations(), seatPins: { lab: "9999", jj: "" } };
+    const result = await saveOwnerSection(undefined, form(submitted, "subjects"));
+    expect(result?.ok).toBe(true);
+    expect(savedOperations().seatPins).toEqual({ lab: SYNTHETIC_LAB, jj: SYNTHETIC_JJ });
+  });
+
+  it("저장 응답의 기준 token에도 PIN 값이 실리지 않는다", async () => {
+    const result = await saveOwnerSection(undefined, form({ ...storedOperations(), seatPins: { lab: "N3w!pin", jj: SYNTHETIC_JJ } }));
+    expect(result?.ok).toBe(true);
+    const reply = JSON.stringify(result);
+    expect(reply).not.toContain("N3w!pin");
+    expect(reply).not.toContain(SYNTHETIC_JJ);
   });
 
   it("감사 기록에 PIN 값이 실리지 않는다", async () => {

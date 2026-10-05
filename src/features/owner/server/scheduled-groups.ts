@@ -1,5 +1,6 @@
 import "server-only";
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { nextSettingsStamp, settingsRevOf } from "../settings-stamp";
 import {
   groupLayoutSignature,
   shouldApplyGroups,
@@ -38,14 +39,35 @@ function subjectsOf(data: unknown): Record<string, unknown>[] | null {
   return Array.isArray(subjects) ? (subjects as Record<string, unknown>[]) : null;
 }
 
+/** 그사이 설정이 바뀌어 쓰기가 밀렸을 때 **같은 실행 안에서** 다시 읽어 판단하는 횟수. */
+const MAX_ATTEMPTS = 3;
+
+/**
+ * 🔴 충돌하면 다음 날이 아니라 **지금** 다시 시도한다 — 호출부(cron 라우트)는 그룹 결과가 error여도 그 예약의
+ *    완료 표식을 남기고, 다음 실행은 표식이 있는 예약을 통째로 건너뛴다(표식을 안 남기면 이미 끝난 반 이름·담임
+ *    변경이 재생된다). 그래서 여기서 못 쓰면 그 예약의 그룹 반영은 자동으로 다시 오지 않는다.
+ *    매번 새로 읽어 `shouldApplyGroups`를 다시 묻는다 — 그사이 사람이 그룹을 정했으면 덮지 않고 건너뛴다.
+ */
 export async function applyScheduledGroupPlan(
   supabase: Admin,
   tenantId: string,
   plan: ScheduledGroupPlan,
 ): Promise<ApplyScheduledGroupsResult> {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const result = await applyOnce(supabase, tenantId, plan);
+    if (result !== "conflict") return result;
+  }
+  return { status: "error", reason: "설정이 동시에 바뀌어 그룹 배치를 반영하지 못했습니다" };
+}
+
+async function applyOnce(
+  supabase: Admin,
+  tenantId: string,
+  plan: ScheduledGroupPlan,
+): Promise<ApplyScheduledGroupsResult | "conflict"> {
   const { data: row, error } = await supabase
     .from("tenant_settings")
-    .select("data")
+    .select("data, updated_at")
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (error) return { status: "error", reason: "학원 설정을 읽지 못했습니다" };
@@ -72,8 +94,8 @@ export async function applyScheduledGroupPlan(
     return { status: "applied", groups: plan.groups.length, reason: "이미 같은 배치였습니다" };
   }
 
-  // ⚠️ 읽고-고쳐-쓰기다(jsonb 통째 교체) — `saveOwnerSection`도 같은 모양이다. 00:30 cron이라 사람이
-  //    동시에 저장할 창이 사실상 없고, 그래도 어긋나면 `shouldApplyGroups`가 다음 날 막는다.
+  // ⚠️ 읽고-고쳐-쓰기다(jsonb 통째 교체) — 그래서 **읽은 그대로일 때만** 쓴다(아래 `updated_at` 조건).
+  //    읽은 뒤 화면 저장이 끼어들었으면 0행이 되고, 위 루프가 새로 읽어 다시 판단한다(그 저장을 덮지 않는다).
   const nextSubjects = subjects.map((s, i) =>
     i === idx
       ? {
@@ -84,15 +106,23 @@ export async function applyScheduledGroupPlan(
         }
       : s,
   );
+  const storedOperations = (data as { operations?: Record<string, unknown> }).operations ?? {};
   const nextData = {
     ...(data ?? {}),
-    operations: { ...((data as { operations?: object }).operations ?? {}), subjects: nextSubjects },
+    // 운영 섹션을 다시 쓰므로 그 섹션의 저장 순번도 올린다 — 열려 있는 설정 폼이 이 반영보다 먼저 읽힌 값을 가려낸다(settings-stamp.ts).
+    operations: { ...storedOperations, rev: settingsRevOf(storedOperations) + 1, subjects: nextSubjects },
   };
 
-  const { error: writeErr } = await supabase
+  // 🔴 `updated_at`도 함께 갱신한다 — 화면 저장(`saveOwnerSection`)이 같은 값으로 "그사이 바뀌었나"를 본다.
+  //    갱신하지 않으면 화면이 이 변경을 못 보고 자기가 읽어 둔 문서로 덮는다.
+  const { data: written, error: writeErr } = await supabase
     .from("tenant_settings")
-    .update({ data: nextData })
-    .eq("tenant_id", tenantId);
+    .update({ data: nextData, updated_at: nextSettingsStamp(row.updated_at) })
+    .eq("tenant_id", tenantId)
+    .eq("updated_at", row.updated_at)
+    .select("tenant_id");
   if (writeErr) return { status: "error", reason: "학원 설정을 저장하지 못했습니다" };
+  // 오류 없이 0행 = 읽은 뒤 누군가 먼저 저장했다.
+  if (!written?.length) return "conflict";
   return { status: "applied", groups: plan.groups.length };
 }

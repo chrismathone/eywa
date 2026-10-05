@@ -29,6 +29,20 @@ function deepMerge<T>(base: T, stored: unknown): T {
   return out as T;
 }
 
+/**
+ * 부서별 직급은 **열린 키(record)** 다 — deepMerge는 기본값의 키만 순회하므로, 기본값이 `{}`인 일반판에서는
+ * 저장한 부서가 읽을 때 전부 떨어졌다(저장 토스트는 뜨고 새로 열면 빈 칸). 이 칸만 좁게 다시 얹는다:
+ * 저장값이 객체일 때 **값이 문자열 배열인 키만** 기본값 위에 덮는다(빈 배열은 명시값으로 보존). 기본 객체는 변형하지 않는다.
+ */
+function mergeDepartmentTitles(base: Record<string, string[]>, stored: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = { ...base };
+  if (!isPlainObject(stored)) return out;
+  for (const [department, titles] of Object.entries(stored)) {
+    if (Array.isArray(titles) && titles.every((t) => typeof t === "string")) out[department] = titles as string[];
+  }
+  return out;
+}
+
 // 공휴일 역호환 — 옛 저장형식 string[]("YYYY-MM-DD")를 {date,name}로 승격. 신형식 객체는 그대로.
 // (deepMerge는 배열을 통째 교체하므로 옛 데이터가 그대로 흘러옴 → 여기서 형태 보장.)
 function normalizeHolidays(arr: unknown): { date: string; name: string }[] {
@@ -99,6 +113,7 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
   const preset = presetOfStored(stored);
   const base = baseSettingsFor(preset);
   const merged = deepMerge(base, stored);
+  const storedOperations = isPlainObject(stored) && isPlainObject(stored.operations) ? stored.operations : undefined;
   return {
     ...merged,
     // 프리셋은 저장값이 아니라 판정 결과다 — 행에 preset이 없어도(침산) 판정값을 싣는다.
@@ -108,6 +123,10 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
       ...merged.operations,
       subjects: normalizeSubjects(merged.operations.subjects, base),
       holidays: normalizeHolidays(merged.operations.holidays),
+      jobTitlesByDepartment: mergeDepartmentTitles(
+        base.operations.jobTitlesByDepartment,
+        storedOperations?.jobTitlesByDepartment,
+      ),
     },
     billing: normalizeBilling(merged.billing),
     navigation: normalizeNavigationSettings(merged.navigation),

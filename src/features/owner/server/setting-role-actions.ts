@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { tenantSettingsTag } from "./queries";
 import { resolveSettings } from "../resolve";
+import { nextSettingsStamp } from "../settings-stamp";
 import { SYSTEM_ROLES } from "@/lib/permissions";
 import { SETTINGS_ROLE_GROUPS, type SettingsRoleGroup } from "@/lib/settings-role-catalog";
 import { applySettingRoles, settingRoleSelection, type SettingRoleSelection } from "../setting-roles";
@@ -35,7 +36,7 @@ export async function saveSettingRoles(group: SettingsRoleGroup, input: SettingR
   if (JSON.stringify(before) !== baseline) return { error: "다른 창에서 역할을 변경했습니다. 새로고침한 뒤 다시 설정해 주세요." };
   const overrides = applySettingRoles(group, settings.permissions.overrides, parsed.data);
   const next = { ...row.data, permissions: { ...row.data.permissions, overrides } };
-  const write = await db.from("tenant_settings").update({ data: next, updated_by: actor.id, updated_at: new Date().toISOString() })
+  const write = await db.from("tenant_settings").update({ data: next, updated_by: actor.id, updated_at: nextSettingsStamp(row.updated_at) })
     .eq("tenant_id", actor.tenantId).eq("updated_at", row.updated_at).select("tenant_id");
   if (write.error) return { error: "역할 설정을 저장하지 못했습니다" };
   if (!write.data?.length) return { error: "다른 창에서 설정이 변경되었습니다. 새로고침해 주세요." };

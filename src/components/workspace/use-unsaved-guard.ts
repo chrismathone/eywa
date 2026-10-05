@@ -31,7 +31,7 @@ export function useUnsavedGuard({
   formRef: RefObject<HTMLFormElement | null>;
   enabled?: boolean;
   group?: string;
-}): { markSaved: () => void } {
+}): { markSaved: (snapshot?: unknown) => void } {
   const baseline = useRef<string | null>(null);
   const dirtyRef = useRef(false);
   const token = useRef({});
@@ -105,12 +105,18 @@ export function useUnsavedGuard({
     };
   }, [enabled, formRef, report]);
 
-  const markSaved = useCallback(() => {
+  /**
+   * 저장됨으로 표시. 인자 없이 부르면 **지금 폼**을 기준으로 삼는다(종전 동작).
+   * `snapshot`(제출 시점의 `serializeForm` 문자열)을 주면 그 값을 기준으로 삼는다 — 저장이 도는 동안 더 고친 내용은
+   * 계속 '미저장'으로 남는다. ⚠️ 문자열이 아닌 인자(이벤트 객체 등 — `onClick={markSaved}`)는 무시한다.
+   */
+  const markSaved = useCallback((snapshot?: unknown) => {
     const form = formRef.current;
-    if (form) baseline.current = serializeForm(form);
-    if (dirtyRef.current) {
-      dirtyRef.current = false;
-      report(false);
+    if (form) baseline.current = typeof snapshot === "string" ? snapshot : serializeForm(form);
+    const dirty = !!form && baseline.current !== null && serializeForm(form) !== baseline.current;
+    if (dirty !== dirtyRef.current) {
+      dirtyRef.current = dirty;
+      report(dirty);
     }
   }, [formRef, report]);
 

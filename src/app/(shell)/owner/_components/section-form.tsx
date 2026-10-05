@@ -9,6 +9,7 @@ import { FormActionBar } from "@/components/forms/form-action-bar";
 import { useNavigationSettings } from "@/features/owner/navigation-context";
 import { publishRecordSaved } from "@/lib/realtime/record-channel";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
+import { serializeForm } from "@/lib/realtime/form-snapshot";
 
 /**
  * 섹션 폼 공통 래퍼 — 편집 상태(payload)를 hidden JSON으로 직렬화해 saveOwnerSection 호출.
@@ -20,6 +21,11 @@ export function SectionForm({
   savedNonce,
   navigationBaseline,
   dashboardBaseline,
+  extraFields,
+  onSubmit,
+  onSaved,
+  onSaveFailed,
+  rebaselineNonce,
   footer,
   header,
   readOnly = false,
@@ -31,6 +37,16 @@ export function SectionForm({
   savedNonce?: number;
   navigationBaseline?: string;
   dashboardBaseline?: string;
+  /** 저장 요청에 함께 싣는 칸(운영 섹션의 면·기준 token 등). 값이 없는 칸은 싣지 않는다. */
+  extraFields?: Record<string, string | undefined>;
+  /** 제출 직전 — 면이 "지금 값이 제출한 값"임을 적어 둔다(useSectionDraft.noteSubmitted). */
+  onSubmit?: () => void;
+  /** 저장 성공 확정 — 서버가 돌려준 상태(새 기준 token 등)를 면에 넘긴다. */
+  onSaved?: (state: NonNullable<OwnerSaveState>) => void;
+  /** 저장 실패(오류 응답) — 면이 제출 중 상태를 푼다(useSectionDraft.noteSaveFailed). */
+  onSaveFailed?: () => void;
+  /** 면이 서버 값으로 폼을 갈아끼웠다는 신호 — 미저장 가드의 기준을 지금 폼으로 다시 잡는다(다른 창엔 알리지 않는다). */
+  rebaselineNonce?: number;
   /** 폼 밖 즉시저장 카드(예: 강의실 CRUD). 폼과 저장 바 사이에 렌더 — 중첩 <form> 없이 저장 바를 창 하단에 고정. */
   footer?: ReactNode;
   /** 읽기 전용에서도 분류 탭은 이동할 수 있도록 폼 밖에 둔다. */
@@ -47,7 +63,7 @@ export function SectionForm({
   const formRef = useRef<HTMLFormElement>(null);
   const dashboardRevision = useRef(dashboardBaseline);
   const dashboardSubmitted = useRef(dashboardBaseline);
-  const { notifySaved } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
+  const { notifySaved, rebaseline } = useConcurrentEditGuard({ scope: `tenant-settings:${section}`, formRef });
   const { markSaved } = useUnsavedGuard({ formRef });
 
   /**
@@ -59,11 +75,27 @@ export function SectionForm({
    * 아무것도 안 고치고 저장을 한 번 더 누르면 **직전 저장이 되돌아간다**.
    * → payload를 그 자리에서 FormData로 만들어 액션을 직접 디스패치한다(리셋 없음, 항상 최신 state 제출).
    */
+  // 제출 시점의 폼 스냅샷 — 저장이 도는 동안 더 고친 내용까지 '저장됨'으로 치지 않기 위해 따로 잡아 둔다.
+  const submittedSnapshot = useRef<string | undefined>(undefined);
+  const onSavedRef = useRef(onSaved);
+  const onSaveFailedRef = useRef(onSaveFailed);
+  useEffect(() => {
+    onSavedRef.current = onSaved;
+    onSaveFailedRef.current = onSaveFailed;
+  });
+  // 오류 응답마다 한 번(응답은 매번 새 객체다) — 면이 "제출 중"에서 풀려 미뤄 둔 서버 값을 다시 본다.
+  useEffect(() => {
+    if (state?.error) onSaveFailedRef.current?.();
+  }, [state]);
   const submit = () => {
-    if (readOnly) return;
+    // 저장이 도는 중의 재제출(Enter)은 받지 않는다 — 응답과 제출분의 짝이 어긋난다.
+    if (readOnly || pending) return;
+    onSubmit?.();
+    submittedSnapshot.current = formRef.current ? serializeForm(formRef.current) : undefined;
     const fd = new FormData();
     fd.set("section", section);
     fd.set("data", JSON.stringify(payload));
+    for (const [name, value] of Object.entries(extraFields ?? {})) if (value !== undefined) fd.set(name, value);
     if (navigationBaseline !== undefined) fd.set("navigationBaseline", navigationBaseline);
     if (dashboardRevision.current !== undefined) {
       fd.set("dashboardBaseline", dashboardRevision.current);
@@ -80,8 +112,10 @@ export function SectionForm({
     if (state?.ok && state.nonce && state.nonce !== handledNonce.current) {
       handledNonce.current = state.nonce;
       dashboardRevision.current = dashboardSubmitted.current;
-      notifySaved();
-      markSaved();
+      onSavedRef.current?.(state);
+      // 두 가드 모두 **제출한 스냅샷**을 기준으로 — 저장 도중 더 고친 것은 계속 '미저장'으로 남는다.
+      notifySaved(submittedSnapshot.current);
+      markSaved(submittedSnapshot.current);
       if (section === "navigation" && tenantId) publishRecordSaved(`navigation:${tenantId}`);
     }
   }, [state, notifySaved, markSaved, section, tenantId]);
@@ -105,6 +139,16 @@ export function SectionForm({
       notifySaved();
     }
   }, [savedNonce, markSaved, notifySaved]);
+
+  // 면이 서버 값으로 폼을 갈아끼운 뒤(저장이 아니다) — 그 값이 곧 서버 상태라 가드의 기준을 다시 잡는다.
+  const handledRebaseline = useRef(rebaselineNonce);
+  useEffect(() => {
+    if (rebaselineNonce !== handledRebaseline.current) {
+      handledRebaseline.current = rebaselineNonce;
+      markSaved();
+      rebaseline();
+    }
+  }, [rebaselineNonce, markSaved, rebaseline]);
 
   return (
     <div className="space-y-4">

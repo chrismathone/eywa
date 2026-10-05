@@ -8,7 +8,8 @@ import { operationsForViewer, seatPinStatus } from "@/features/owner/seat-pin-vi
 import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
-import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions } from "@/features/owner/server/queries";
+import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
+import { operationsFaceTokens } from "@/features/owner/server/operations-save";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
@@ -134,7 +135,16 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
    */
   const showsOperations = tab === "operations" || tab === "subjects";
   const canEditOperations = showsOperations ? await canWriteTenant(viewer.systemRole, OWNER_SECTION_MENU.operations) : false;
-  const operationsForClient = operationsForViewer(settings.operations, canEditOperations);
+  /**
+   * 편집자에게는 **캐시 없이 방금 읽은** 운영 섹션으로 폼과 기준 token을 만든다(설정 캐시는 낡을 수 있다 — queries.ts).
+   * 못 읽으면 폼을 세우지 않는다(기본값 위에서 편집하게 두지 않는다).
+   * 🔴 token은 **저장할 수 있는 사람에게만** 만든다 — 운영 체계 면의 token은 자리 PIN에서 나온 값이라 읽기 전용 열람자에겐 보내지 않는다.
+   */
+  const editable = showsOperations && canEditOperations ? await getTenantSettingsForEdit(viewer.tenantId) : undefined;
+  const operationsUnreadable = editable === null;
+  const operationsSource = editable?.settings.operations ?? settings.operations;
+  const operationsTokens = editable ? operationsFaceTokens(editable.settings.operations) : undefined;
+  const operationsForClient = operationsForViewer(operationsSource, canEditOperations);
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 강의실 엑셀로 넣기 — 운영 설정의 full만(올리기 주소 `gateImport`와 같은 판정).
@@ -183,26 +193,36 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {!canEditSettings && !showsOperations ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
-      {tab === "operations" ? (
+      {showsOperations && operationsUnreadable ? (
+        <div className="bg-card border-line rounded-2xl border p-6">
+          <p className="text-foreground text-sm font-bold">설정을 불러오지 못했습니다</p>
+          <p className="text-text-dim mt-1 text-sm">저장된 값을 확인하지 못해 편집 화면을 열지 않았습니다. 잠시 뒤 새로고침해 주세요.</p>
+        </div>
+      ) : null}
+      {tab === "operations" && !operationsUnreadable ? (
         <>
         <OperationsSection
           initial={operationsForClient}
           classrooms={classrooms}
           canImportClassrooms={canImportClassrooms}
           readOnly={!canEditOperations}
-          seatPinStatus={seatPinStatus(settings.operations)}
+          seatPinStatus={seatPinStatus(operationsSource)}
+          baselineToken={operationsTokens?.operations}
+          baselineVersion={editable?.version}
         />
         {canReadAudit ? <MakeupsSection initial={settings.makeups} /> : null}
         </>
       ) : null}
-      {tab === "subjects" ? (
+      {tab === "subjects" && !operationsUnreadable ? (
         <SubjectsSection
           initial={operationsForClient}
           readOnly={!canEditOperations}
           teacherLabels={teacherLabelsBySubject}
           periodDefs={periodDefs}
           sessionYear={sessionYear}
-          holidays={settings.operations.holidays.map((h) => h.date)}
+          holidays={operationsSource.holidays.map((h) => h.date)}
+          baselineToken={operationsTokens?.subjects}
+          baselineVersion={editable?.version}
         />
       ) : null}
       {tab === "billing" ? (

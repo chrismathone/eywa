@@ -83,7 +83,20 @@ describe("학원 설정 페이지 배선", () => {
   it("🔴 운영 체계·과목 운영 두 면 모두 지운 사본을 받는다 — 원본을 직접 넘기지 않는다", () => {
     expect(code).not.toMatch(/initial=\{settings\.operations\}/);
     expect(code.match(/initial=\{operationsForClient\}/g)?.length).toBe(2);
-    expect(code).toContain("const operationsForClient = operationsForViewer(settings.operations, canEditOperations);");
+    // 원본은 편집자면 방금 읽은 값, 아니면 캐시된 값 — 어느 쪽이든 내려가기 전에 같은 판정으로 걸러진다.
+    expect(code).toContain("const operationsSource = editable?.settings.operations ?? settings.operations;");
+    expect(code).toContain("const operationsForClient = operationsForViewer(operationsSource, canEditOperations);");
+  });
+
+  it("🔴 기준 token은 저장할 수 있는 사람에게만 만든다 — 운영 체계 면의 token은 PIN에서 나온 값이다", () => {
+    // 새로 읽기 자체가 편집자 한정이고, token은 그 값에서만 만든다(읽기 전용이면 undefined).
+    expect(code).toContain(
+      "const editable = showsOperations && canEditOperations ? await getTenantSettingsForEdit(viewer.tenantId) : undefined;",
+    );
+    expect(code).toContain("const operationsTokens = editable ? operationsFaceTokens(editable.settings.operations) : undefined;");
+    expect(code.match(/operationsFaceTokens\(/g)?.length).toBe(1);
+    expect(code).toContain("baselineToken={operationsTokens?.operations}");
+    expect(code).toContain("baselineToken={operationsTokens?.subjects}");
   });
 
   it("지우는 판정은 저장 액션과 같은 함수·같은 권한 키다", () => {
@@ -97,6 +110,6 @@ describe("학원 설정 페이지 배선", () => {
 
   it("두 면 모두 읽기 전용이면 폼 제출이 막힌다", () => {
     expect(code.match(/readOnly=\{!canEditOperations\}/g)?.length).toBe(2);
-    expect(code).toContain("seatPinStatus={seatPinStatus(settings.operations)}");
+    expect(code).toContain("seatPinStatus={seatPinStatus(operationsSource)}");
   });
 });

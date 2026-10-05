@@ -252,6 +252,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
   ⚠️ **새 subject 컬럼/jsonb를 추가하면 subject-actions.ts의 SCALAR_TABLES(또는 RPC)에도 추가**(놓치면 raw 키 누출).
 
 ### 배선 현황·DB 미구현 목록 → [`docs/decisions/settings-wiring.md`](docs/decisions/settings-wiring.md)
+- 🔴 운영 섹션(`operations`)을 저장하는 코드를 만지기 전 그 파일의 '운영 섹션 저장 계약'을 읽을 것 — 요청 형식 넷 · 통째 교체 금지 · 순번은 섹션 안([[#142]]).
 - 설정 필드를 "동작 예시"로 인용하거나 새 설정을 추가할 땐 그 파일의 ✅/🚫 목록을 먼저 확인. 비로그인 화면의 학원 브랜드는 `getPublicBranding()`(세션 없는 `getTenantSettings()` 금지).
 
 ## 📂 상세 문서 (필요할 때만 Read — 포인터, `@import` 아님)
@@ -663,6 +664,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - **#139** Supabase CLI `migration new`가 붙이는 **타임스탬프 이름**(`20261002…_x.sql`)은 가드가 실패시킨다 — 이 저장소는 `NNNNa_` 번호 이름만 쓴다(정렬 = 적용 순서 전제). CLI로 만들었으면 다음 빈 번호로 바꾸고, 그 파일을 경로로 읽는 곳은 `src`·`scripts`·**`tests/`**까지 저장소 전체에서 찾을 것
 - **#140** 한 구역을 `all: revert`로 초기화하면 **`hidden` 속성의 숨김까지 지워진다**(크로미움은 그 숨김을 표현 힌트로 건다 — 감춰 둔 이름표가 화면에 떠 있었다) → 바로 아래 `[hidden] { display: none !important }`를 함께 · 판별은 실브라우저 `getComputedStyle` · 되돌리는 선택자는 명시도 0(`:where(:scope), *`)
 - **#141** ECS 월간 날짜 button 안의 button → SSR 파서가 셸 밖 노드를 남김 · 직접 진입 후 소프트 이동으로 검증
+- **#142** 설정 문서의 한 섹션을 **통째로 갈아끼우면** 먼저 한 저장이 조용히 되돌아간다(쓰는 곳이 여럿인 `operations` — 설정 두 면·시간표·cron·시트 반영) → 방금 읽은 값 위에 제 몫만 · 🔴 문서 **최상위에 새 키 금지**(DB 쓰기 가드가 위임 계정의 저장을 전부 거절 — 원장 계정·모의 DB로는 재현 안 됨) · 🔴 순서는 시각이 아니라 값 안의 순번으로 · 🔴 화면에 내려오는 값은 도착 순서 ≠ 읽힌 순서
 - **#82** postgres.js에서 `${JSON.stringify(v)}::jsonb` = **이중 인코딩**(`"#153e75"` 9자 저장 → 검증 실패 → 설정 침묵 무시). 스칼라는 `to_jsonb(${v}::text)`·객체는 `sql.json(obj)`, 검증은 **길이까지** (⚠️ 눈으로 따옴표 구분 안 됨)
 
 ## 🎨 디자인 규칙 인덱스 (상세는 `docs/design-conventions.md`)
