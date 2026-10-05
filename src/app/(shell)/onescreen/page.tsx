@@ -18,6 +18,8 @@ import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/vid
 import { pickLessonMarks } from "@/features/video-homework/lesson-marks";
 import { assignmentKey, assignmentOf } from "@/features/video-homework/assignment";
 import { getSubmitLinkUi } from "@/features/video-submit/server/link-choice-db";
+import { EmbedLink } from "@/components/embed-link";
+import { makeupRecordBack } from "@/features/makeups/components/list-navigation";
 
 export const metadata = { title: "선생님 원스크린 — 에이와" };
 
@@ -44,14 +46,15 @@ export const maxDuration = 300;
 export default async function OneScreenPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; view?: string; all?: string; class?: string; student?: string }>;
+  searchParams: Promise<{ date?: string; view?: string; all?: string; class?: string; student?: string; return?: string }>;
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if ((await getShellView()) !== "teacher") {
     redirect(roleHome(user.systemRole, await getPermMatrix()));
   }
-  const { date, view, all, class: classId, student: studentId } = await searchParams;
+  const { date, view, all, class: classId, student: studentId, return: returnTo } = await searchParams;
+  const makeupBack = makeupRecordBack(returnTo);
   // all=1 = 강사가 '담당 반 전체 보기'를 명시로 고른 상태. 기본은 그 요일 수업만(폴백 금지).
   // 발송용 이름(0217a)은 병렬 fail-soft 조회(B4) — **이 화면에서 지금 저장하는 보고서**(teacher_name=
   // 본인 실명 기록)의 발송 표기와 미리보기를 맞춘다. ⚠️ 옛 별칭 보강 행(pre-0172a, teacher_name이 실명이
@@ -124,6 +127,8 @@ export default async function OneScreenPage({
   }
   return (
     <>
+      {makeupBack ? <EmbedLink href={makeupBack} className="text-primary mb-3 inline-block min-h-6 underline">보강 상세로 돌아가기</EmbedLink> : null}
+      {roster.makeupNotice ? <p role="status" className="border-line mb-3 rounded-lg border p-3 text-sm">{roster.makeupNotice}</p> : null}
       {/* '다른 강사 뷰' 열람 배너 — 이 화면의 입력·발송은 서버가 전부 거절한다(perm-matrix 캡 +
           readonlyTeacherViewError). 배너가 없으면 타이핑해 놓고 저장이 안 되는 이유를 알 수 없다. */}
       {viewAs ? (

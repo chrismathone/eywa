@@ -14,7 +14,7 @@ try {
   await db.unsafe("drop schema if exists makeup_private cascade; drop schema if exists mt cascade; drop schema if exists auth cascade; drop schema public cascade; create schema public;");
   await db.unsafe(await read("tests/makeup-db/fixture.sql"));
   await db.unsafe(await read("supabase/migrations/0264a_makeup_reservations.sql"));
-  const files = (await readdir(path.join(root, "supabase/migrations"))).filter(file => /^034[3-9][a-z]_makeup_.*\.sql$/.test(file)).sort();
+  const files = (await readdir(path.join(root, "supabase/migrations"))).filter(file => /^(?:034[3-9]|0350)[a-z]_makeup_.*\.sql$/.test(file)).sort();
   for (const file of files) await db.unsafe(await read(`supabase/migrations/${file}`));
   await db.unsafe(await read("tests/makeup-db/seed.sql"));
   await db.unsafe(await read("tests/makeup-browser/shell-fixture.sql"));

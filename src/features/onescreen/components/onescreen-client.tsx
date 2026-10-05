@@ -1,6 +1,7 @@
 "use client";
 
 import { registerMakeupEntries } from "../server/makeup-register-actions";
+import { notifyMakeupEffect } from "./makeup-effect-toast";
 import { setMakeupClass } from "../server/makeup-class-actions";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -1445,6 +1446,7 @@ export function OneScreenClient({
         });
         if (!result.ok) { toast.error(result.error); return; }
         if (result.cellError) toast.error(tf("os.c.anchorFail", { error: result.cellError }));
+        notifyMakeupEffect(result.makeupEffect);
         // 내 리비전에 명단만 더한 경우에만 자동저장 기준도 전진시킨다. 다른 창의 내용에는 소유권을 얻지 않는다.
         if (existing && (existing.sessionUpdatedAt ?? null) === result.previousUpdatedAt) {
           applySessionSaveResult(existing.id, result);
@@ -3363,6 +3365,7 @@ export function OneScreenClient({
     const res = await saveLessonReport(built.input);
     applyKeptVideoHomework(student.id, subjectName, res);
     if (res.ok) {
+      notifyMakeupEffect(res.makeupEffect);
       // shareToken 보존 → report-card가 학부모 공개 링크(/r/[token])를 노출·복사. 기존 첨부·상태는 유지(merge).
       // 🔴 **초안은 건드리지 않는다** — 저장은 화면 값을 DB로 옮기는 일이지 멘트를 새로 쓰는 일이 아니다.
       //    예전엔 `built.draft`를 되써 넣었고, 멘트가 빈 행에선 그게 **템플릿을 몰래 채우는 통로**였다
@@ -3409,6 +3412,7 @@ export function OneScreenClient({
     }
     applyKeptVideoHomework(student.id, subjectName, res);
     // 보낼 반 안내는 강사뷰 언어로(서버 문장은 한국어 폴백) — status로 사전 키를 고른다.
+    notifyMakeupEffect(res.makeupEffect);
     const sendClassKey =
       res.status === "board_missing"
         ? "os.c.boardMissing"
@@ -4042,6 +4046,7 @@ export function OneScreenClient({
         // 영어 그림 자료를 못 묶었으면 여기서도 알린다 — 첨부가 저장을 대신했을 뿐 같은 사실이다(적대 재리뷰).
         // 일괄 첨부(silent)는 행마다 띄우지 않는다(인재원이 멈추면 토스트가 쏟아진다).
         if (saved.warning && !opts?.silent) toast.message(saved.warning);
+        notifyMakeupEffect(saved.makeupEffect);
         // 초안은 화면 값 그대로 둔다(위 saveRecord와 같은 이유 — 저장이 멘트를 쓰지 않는다).
         patchReport(studentId, subjectName, (r) => ({
           ...r,

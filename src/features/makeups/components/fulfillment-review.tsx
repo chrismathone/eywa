@@ -20,10 +20,11 @@ export function FulfillmentReview({ fulfillment, detail, actorId }: { fulfillmen
         reason: formText(data, "reason"), release_remainder: true,
       })}>
         {allocations.map(row => <TextField key={String(row.id)} name={`recognition:${row.case_id}`}
-          label={`원수업 ${typeof row.original_date === "string" ? row.original_date : "배정 건"} 인정(분)`} type="number" min={0} step={1}
-          max={Number(row.allocated_minutes) - Number(row.released_minutes || 0)} required />)}
+          label={`원수업 ${typeof row.original_date === "string" ? row.original_date : "배정 건"} 인정(분)${typeof row.recognizable_minutes === "number" ? ` · 최대 ${row.recognizable_minutes}분` : ""}`} type="number" min={0} step={1}
+          max={typeof row.recognizable_minutes === "number" ? row.recognizable_minutes : undefined} required />)}
         <ReasonField label="검토 근거" />
         <p className="text-sm">인정량 합계는 실제 지도 분량을 넘을 수 없습니다. 미실시 잔여 배정은 함께 해제합니다.</p>
+        <p className="text-sm">인정 정정 후 다시 인정할 수 있는 분량을 표시합니다. 취소된 예약 좌석은 자동으로 복원되지 않습니다.</p>
       </CommandForm>
       <CommandForm action="verify" revision={fulfillment.revision} label="보완 요청" payload={data => ({ fulfillment_id: fulfillment.id, status: "returned", reason: formText(data, "reason") })}>
         <ReasonField label="보완할 내용" />

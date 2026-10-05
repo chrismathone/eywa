@@ -37,6 +37,7 @@ export function CaseDecisions({ detail }: { detail: MakeupCaseDetail }) {
       </CommandForm>
     </section> : null}
     {permissions.deny && row.eligibility === "pending" ? <details className="border-line rounded-lg border p-4"><summary className="min-h-6 cursor-pointer font-bold">자격 거절</summary>
+      <p className="mt-3 text-sm">자격을 거절하면 이 건은 종결되며 화면에서 재개할 수 없습니다. 같은 결석을 다시 접수해도 기존 건으로 연결됩니다.</p>
       <CommandForm action="deny" revision={row.revision} label="자격 거절" payload={data => ({ ...base, reason: formText(data, "reason") })}><ReasonField /></CommandForm>
     </details> : null}
     {permissions.waive && row.eligibility === "approved" ? <details className="border-line rounded-lg border p-4"><summary className="min-h-6 cursor-pointer font-bold">미실시 분량 면제</summary>

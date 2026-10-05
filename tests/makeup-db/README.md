@@ -1,6 +1,6 @@
 # 보강 원장 SQL — 계약과 검증
 
-마이그레이션 `supabase/migrations/0343a ~ 0349f`(43개, 각 200줄 이하)의 외부 계약과 로컬 검증 방법이다.
+마이그레이션 `supabase/migrations/0343a ~ 0350f`(49개, 각 200줄 이하)의 외부 계약과 로컬 검증 방법이다.
 운영 DB에는 적용하지 않았다. 여기 데이터는 전부 합성이다.
 
 ## 1. 구조
@@ -14,6 +14,7 @@
 | 0347a | 진입점 `public.makeup_command` |
 | 0348a–i | 읽기 RPC 9개(가져오기 미리 보기 포함) + 반영 실패 기록 RPC + 읽기 출력 정리(범위·수납 가림) |
 | 0349a–f | 기존 예약·보고서 보호, 출결·시간표·직원·인계·보고서 관측 트리거, 대사 실행 |
+| 0350a–f | 사용성 보완(2026-10-05): 상세의 파생 값 helper(다시 인정할 수 있는 분량·출결 연결·참여별 할 수 있는 일) · 상세·선택지·대사 출력에 칸 추가 · 일정 변경(다 비운 옛 회차를 먼저 닫음) · 출결 반 복구 뒤 관측. 앞 파일의 같은 함수를 바꿔 끼운다 — **0346d·0346k·0348b·0348d·0348h를 다시 실행했으면 0350도 다시 실행한다** |
 
 - 새 표는 직접 쓰지도 읽지도 못한다. `anon`·`authenticated`는 표 권한 0, `service_role`은 SELECT만.
 - 쓰기는 `makeup_command` 하나(+ 실패 표시를 남기는 `makeup_note_effect_gap`). 핵심 표는 명령 밖 쓰기를 트리거가 거절한다.
@@ -85,11 +86,11 @@
 | RPC | 반환 |
 |---|---|
 | `makeup_list_cases(p_filter)` | `{mode, total, page, page_size, rows[], counts{}, last_success_at}` |
-| `makeup_case_detail(p_case_id)` | `{mode, case, policy, quantities, sources[], sessions[], participants[], allocations[], fulfillments[], recognitions[], adjustments[], events[](최근 50), events_total, reconciliation[], projection_jobs[], legacy_maps[], permissions{}}` |
+| `makeup_case_detail(p_case_id)` | `{mode, today, case, policy, quantities, sources[], sessions[], participants[], allocations[], fulfillments[], recognitions[], adjustments[], events[](최근 50), events_total, reconciliation[], projection_jobs[], legacy_maps[], permissions{}}` — 0350: `participants[].actions{record,submit,cancel,reschedule}` · `blocked{…: 까닭 코드\|null}` · `anchor_class_name` · `attendance_link`(linked·pending·failed·none), `allocations[].recognizable_minutes`(검토가 받아 주는 최대 분 — 검토와 같은 식), `fulfillments[].evidence_kind`, 추가 지도 건은 `permissions.reserve = false` |
 | `makeup_case_events(p_case_id, p_filter{page, page_size≤100})` | `{rows[{id, event_type, actor_name, reason, occurred_at, …}], total, page, page_size}` |
 | `makeup_list_participants(p_filter)` | `{mode, participants[], legacy_maps[], truncated, total, page, page_size, next_after}` |
 | `makeup_list_reconciliation(p_filter)` | `{mode, total, page, page_size, rows[], projection_jobs[], projection_total, projection_page, projection_page_size, projection_pending, projection_failed, last_success_at, last_run, permissions{resolve_reconciliation, reconcile, accept_manual_units}}` |
-| `makeup_options(p_filter)` | `{rows[{id, name, …}], total, page, page_size}` — staff는 강사 범위에서 본인만 · policies는 원장·관리자만 |
+| `makeup_options(p_filter)` | `{rows[{id, name, …}], total, page, page_size}` — staff는 강사 범위에서 본인만 · policies는 원장·관리자만. 0350: students 줄에 `school · grade · class_names[]`, classes 줄에 `active`. `purpose`(classes 전용 · `student_id`+`session_date` 필수): `anchor` = 출결 반 후보(`resolve_anchor`와 같은 조건) · `original` = 원수업 반 후보(접수와 같은 조건 — 지금 종료된 반 포함) |
 | `makeup_candidates(p_filter)` | `{rows[], total, page, page_size, date_from, date_to}` — 기간을 주지 않으면 전 기간 |
 | `makeup_legacy_dry_run(p_filter)` | `{rows[…, source_hash, occurrence_key, evidence_grade(A~E), duplicate_count, review_note], total, page, page_size(≤200), counts{A,B,C,D,E}, writes: 0}` — 연결 안 된 기존 예약의 가져오기 미리 보기(읽기 전용). B = 이행 + 그 칸의 최신 유효 출결 + 유효한 보강 보고서 **둘 다**(하나뿐이면 C). 예약·학생·반이 같은 지점일 때만 나온다 |
 | `makeup_projection_evidence(p_effect_key)` | `{effect_key, participant_id, state, verification, evidence}` — 읽기 전용 |
@@ -100,6 +101,8 @@
   커서 모양이 틀리면 거절한다.
 - **반영 실패 표시**(`makeup_note_effect_gap`): `{effect_key, kind, participant_id, reservation_id, error}`. 사용자 세션만(관리자
   클라이언트는 실행 권한 없음). (effect_key, kind)에 멱등. 닿는 케이스의 종결을 막고, 서버 검증이 맞게 끝나면 스스로 닫힌다.
+- 출결 반 확인(anchor_missing) 줄에는 `anchor_context{student_id, subject_key, session_date}`가 온다(그 참여가 범위 안일 때만 — 0350f).
+  `resolve_reconciliation`에 `anchor_class_id`를 주면 결과에 `anchor_class_id` · `anchor_verification{state, ok, code}`가 온다(관측만 — 0350e).
 - 대사 `kind`: source_conflict · units_review · units_mismatch · attendance_observed · evidence_removed · quantity_drift(이상 종결 차단) ·
   timetable_conflict · owner_inactive · teacher_inactive · handover_review · anchor_missing · legacy_done_review ·
   legacy_multi_same_day · legacy_checksum_conflict · billing_review. 행마다 `summary`(화면용 한 줄)와 `case_ids`가 온다.
@@ -161,6 +164,11 @@ MAKEUP_DB_NAME=makeup_claude node tests/makeup-db/run.mjs --real-chain   # 실�
 | 22_closed_evidence_guards | MU-010·031·034·053·075, X16·X17(닫힌 건의 증거 변경 · 보고서 회수/삭제 · 연결 칸) |
 | 23_legacy_dry_run | MU-054·055·056·074(가져오기 미리 보기 · 등급 · 1,001건 넘겨 읽기 · 바뀐 예약 연결 거절) |
 | 24_dry_run_evidence_tenant | MU-023·054·056(B = 출결 + 유효 보고서 둘 다 · 다른 지점을 가리키는 예약의 비노출·연결 거절) |
+| 26_reschedule_vacate | 사용성 감사 A02(강의실만 바꾸기 · 남은 학생이 있을 때의 진짜 충돌 · 실패 시 전부 되돌림) |
+| 27_recognizable | 사용성 감사 A01(반전 뒤 다시 인정할 수 있는 분량 = 검토의 식 · 새 예약이 잡은 분량 침범 없음 · 재시도 한 번만) |
+| 28_detail_actions | 사용성 감사 A11·A10·R01(참여별 할 수 있는 일과 명령의 판정 일치 · 추가 지도 예약 힌트 · 출결 연결 표시 · 옛 칸 보존) |
+| 29_anchor_resolve | 사용성 감사 A03(출결 반 후보 · 잘못된 반 거절 · 맞는 반 저장 + 관측 · anchor_context 범위) |
+| 30_options_disambiguation | 사용성 감사 A04·R04(동명이인 단서 · 원수업 반 후보 — 종료된 반 포함 · 옛 호출 그대로) |
 | concurrency/01_races · 02_restore_race · 03_close_locks | MU-001·015·020·053·066·067, X13·X16·X17(두 연결) |
 
 시나리오 날짜는 전부 "오늘(KST) + n일"이다. `mt.backdate`·`mt.as_command`는 검증 전용 경로다(운영에는 없다).

@@ -72,6 +72,8 @@ export async function searchMakeupOptions(input: unknown): ReturnType<typeof get
     q: z.string().max(80).optional(), subject_key: z.string().max(40).optional(),
     student_id: z.string().uuid().optional(), session_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     class_id: z.string().uuid().optional(),
+    // Class candidates for one student and one date: "anchor" = attendance class, "original" = class of the absence.
+    purpose: z.enum(["anchor", "original"]).optional(),
     page: z.number().int().positive().max(10_000).default(1),
     page_size: z.number().int().positive().max(50).default(30),
   }).safeParse(input);

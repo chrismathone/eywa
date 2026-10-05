@@ -2,9 +2,101 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
+// @shadcn/lint — Tailwind 디자인 시스템 규칙. 테마·컴포넌트는 components.json에서 읽는다.
+// 고치는 법·예외 기준·남은 경고 목록은 docs/design-lint.md.
+// ⚠️ 패키지가 아직 없는 node_modules(본체 것을 정션으로 빌려 쓰는 워크트리 등)에서 lint 전체가 죽지 않게,
+//    없으면 이 규칙만 건너뛰고 알린다. CI에서는 건너뛰지 않고 실패시킨다(신호가 조용히 빠지지 않게).
+async function loadShadcnPlugin() {
+  try {
+    return (await import("@shadcn/lint")).plugin;
+  } catch (error) {
+    // 이 패키지 자체가 없을 때만 넘어간다 — 안쪽 의존성이 빠진 경우 등은 원인을 가리지 않게 그대로 던진다.
+    const missingItself =
+      error?.code === "ERR_MODULE_NOT_FOUND" && String(error.message).includes("'@shadcn/lint'");
+    if (process.env.CI || !missingItself) throw error;
+    console.warn(
+      "[eslint] @shadcn/lint가 설치돼 있지 않아 shadcn/* 규칙을 건너뜁니다. pnpm install 뒤 다시 실행하세요.",
+    );
+    return null;
+  }
+}
+
+const shadcn = await loadShadcnPlugin();
+
+// 패키지가 없을 때 세우는 빈 규칙 — 소스의 `eslint-disable shadcn/…` 주석이 "없는 규칙" 오류로 바뀌지 않게 이름만 둔다.
+const shadcnStub = {
+  rules: Object.fromEntries(
+    [
+      "no-arbitrary-values",
+      "no-inline-styles",
+      "no-raw-colors",
+      "no-restyle",
+      "no-unknown-classes",
+      "require-static-classes",
+    ].map((name) => [name, { create: () => ({}) }]),
+  ),
+};
+
+const SHADCN_FILES = ["src/**/*.{ts,tsx}"];
+
+const shadcnConfig = !shadcn
+  ? [
+      {
+        files: SHADCN_FILES,
+        plugins: { shadcn: shadcnStub },
+        // 빈 규칙은 아무것도 보고하지 않아 예외 주석이 '안 쓰는 주석'으로 잡힌다 — `--fix`가 그 주석을 지우지 않게 끈다.
+        linterOptions: { reportUnusedDisableDirectives: "off" },
+      },
+    ]
+  : [
+      {
+        files: SHADCN_FILES,
+        plugins: { shadcn },
+        settings: {
+          // 모든 shadcn/* 경고 끝에 붙는다.
+          shadcn: { note: "고치는 법과 예외 기준: docs/design-lint.md" },
+        },
+        rules: {
+          "shadcn/no-raw-colors": "warn",
+          "shadcn/no-unknown-classes": [
+            "warn",
+            {
+              // 스타일 없이 이름으로만 찾는 표식 클래스 — 찾는 쪽을 함께 적는다.
+              allow: [
+                "cf-turnstile", // Cloudflare Turnstile 스크립트가 이 div를 찾아 위젯을 그린다
+                "report-capture", // ClassNote 워커의 보고서 캡처 대상
+                "tt-editing", // 시간표의 `[.tt-editing_&]` 변형
+                "ecs-slot-edge", // today-roster-table의 `:not(.ecs-slot-edge)` 선택자
+              ],
+            },
+          ],
+        },
+      },
+      // 자체 CSS로 그리는 화면(랜딩·학원 소개·시간표 편집기) — 테마 밖 클래스가 정상이다.
+      {
+        files: [
+          "src/app/(marketing)/**",
+          "src/app/(academy)/**",
+          "src/features/timetable-lab/editor/**",
+        ],
+        rules: { "shadcn/no-unknown-classes": "off" },
+      },
+      // 개발 사본 — 손대지 않는 폴더라 경고를 내도 고칠 수 없다(다른 디자인 가드도 대상 밖).
+      {
+        files: ["src/app/(shell)/timetable-dev/**"],
+        rules: { "shadcn/no-raw-colors": "off", "shadcn/no-unknown-classes": "off" },
+      },
+      // 학부모 보고서 그래프 — ClassNote 워커 캡처에는 앱 스타일시트가 없어 색을 일부러 hex로 적는다.
+      {
+        files: ["src/features/onescreen/components/report-trend-graph.tsx"],
+        rules: { "shadcn/no-raw-colors": "off" },
+      },
+    ];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  ...shadcnConfig,
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

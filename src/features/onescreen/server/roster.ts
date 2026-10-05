@@ -28,8 +28,9 @@ import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { CLASS_TAG_ALL } from "../class-tags";
-import { addedClassPairs } from "@/features/makeups/roster-merge";
+import { conductedPairs, foreignClassIds, rosterNativePairs } from "@/features/makeups/roster-merge";
 import { loadNativeParticipants, participantsOrLegacy } from "@/features/makeups/server/adapters/participants";
+import type { ParticipantRead, ReadOutcome } from "@/features/makeups/types";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
 import { makeupSessionEntries } from "../makeup-session";
@@ -113,6 +114,11 @@ export type TeacherRoster = {
   noClassesToday: boolean;
   /** 지금 '담당 반 전체 보기'로 보고 있는가(요일 조건 미적용) — 화면이 그 사실을 밝힌다. */
   showingAll: boolean;
+  /**
+   * 맡은 보강 배정을 읽지 못했다 — 화면이 그대로 알린다(빈 명단을 "오늘 할 일 없음"으로 읽지 않게). 평소엔 없다.
+   * 수업이 없는 날에도 온다: 그날 화면에 설 사람이 맡은 보강 학생뿐일 수 있어서다.
+   */
+  makeupNotice?: string | null;
   allowTeacherTestMax: boolean; // 강사가 테스트 문항수(/N) 직접 변경 허용(report 설정) — 원스크린 입력 UI 분기
   // 일일/확인테스트 사용 여부 = 보고서 '표시 항목' 토글(showDailyTest/showCheckTest) 재사용. off면 원스크린
   // 점수 입력칸을 숨겨(입력 안 함) + 학부모 보고서에도 미표시(parent-report-card). 표시·입력 단일 스위치.
@@ -218,7 +224,7 @@ type RosterSettings = Pick<
   | "academyName"
   | "logoSrc"
 >;
-type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll">>;
+type RosterConfig = Partial<RosterSettings & Pick<TeacherRoster, "noClassesToday" | "showingAll" | "makeupNotice">>;
 
 /**
  * 빈 로스터(학생 0명).
@@ -297,6 +303,9 @@ async function fetchMyMakeupReports(
   }
   return [...reports, ...sessionRows];
 }
+
+/** 맡은 보강 배정을 읽지 못했을 때 화면에 그대로 싣는 안내(원문·코드 없이). */
+const MAKEUP_UNREAD_NOTICE = "보강 배정을 확인하지 못했습니다. 새로고침해 다시 확인해 주세요.";
 
 function emptyRoster(today: string, date: string, teacherName: string, config: RosterConfig = {}): TeacherRoster {
   return {
@@ -444,7 +453,11 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
   // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
   //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
-  const nativePromise = loadNativeParticipants({ session_date: targetDate, limit: 500 }, { sharedRead: true });
+  // 🔴 던지지 않게 받는다 — 아래 '빈 명단' 반환보다 **먼저** 읽어야 해서(맡은 보강 학생만 있는 날), 실패가 수업 없는 강사의
+  //    화면까지 죽이면 안 된다. 실패는 결과로 들고 가서, 빈 명단엔 알림으로 싣고 명단을 합칠 땐 종전대로 던진다.
+  const nativePromise = loadNativeParticipants({ session_date: targetDate, limit: 500 }, { sharedRead: true }).catch(
+    (): ReadOutcome<ParticipantRead> => ({ status: "failed", error: MAKEUP_UNREAD_NOTICE }),
+  );
   const [scheds, makeupReports, makeupAttRows, reservedToday] = await Promise.all([
     // end_time·자리 라벨·유효구간·요일은 **수학 자동 시수**(수업 길이, auto-units.ts) 재료 — 같은 행이라 왕복 0.
     fetchInChunks<{
@@ -484,8 +497,24 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     //    이 로스터는 강사 전원의 hot path라 새 컬럼·표를 본문 select에 섞지 않는다([[#95]]).
     getReservationsOn(targetDate, allIds),
   ]);
-  if (allClasses.length === 0 && makeupReports.length === 0 && makeupAttRows.length === 0 && reservedToday.length === 0)
-    return emptyRoster(today, targetDate, teacherName, config);
+  /**
+   * **내가 맡은 보강 회차의 학생**(보강관리 배정) — 원반 담임·위임이 아니어도, 담당 반이 하나도 없어도 이 화면에 서야 한다.
+   * 예전엔 아래 두 '빈 명단' 반환이 이 조회를 보기도 전에 끝났다(배정은 됐는데 기록 화면에 학생이 없다).
+   * 조회는 위에서 이미 떠 있어 왕복이 늘지 않는다. 강사 축은 `teacherId`(다른 강사 뷰면 그 강사).
+   */
+  const nativeOutcome = await nativePromise;
+  const nativeUnread = nativeOutcome.status === "failed" || (nativeOutcome.status === "ok" && nativeOutcome.value.truncated);
+  const conducted = conductedPairs(nativeOutcome.status === "ok" && !nativeUnread ? nativeOutcome.value.participants : [], teacherId);
+  // 못 읽은 날의 빈 명단은 그 사실을 싣는다 — "맡은 학생 없음"과 "확인하지 못함"은 다른 말이다.
+  const emptyConfig: RosterConfig = nativeUnread ? { ...config, makeupNotice: MAKEUP_UNREAD_NOTICE } : config;
+  if (
+    allClasses.length === 0 &&
+    makeupReports.length === 0 &&
+    makeupAttRows.length === 0 &&
+    reservedToday.length === 0 &&
+    conducted.length === 0
+  )
+    return emptyRoster(today, targetDate, teacherName, emptyConfig);
   const todayIds = new Set(scheds.map((s) => s.class_id));
   // 반별 오늘 최초 시작시각(HH:MM)
   const endByClass = lessonEndsByClass(scheds);
@@ -530,9 +559,10 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     !showAll &&
     makeupReports.length === 0 &&
     makeupAttRows.length === 0 &&
-    reservedToday.length === 0
+    reservedToday.length === 0 &&
+    conducted.length === 0
   ) {
-    return emptyRoster(today, targetDate, teacherName, { ...config, noClassesToday: true });
+    return emptyRoster(today, targetDate, teacherName, { ...emptyConfig, noClassesToday: true });
   }
   const activeClasses = noClassesToday
     ? showAll
@@ -624,10 +654,43 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     const cls = allClasses.find((c) => c.id === r.classId);
     if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
   }
-  for (const row of addedClassPairs(alreadyMakeup, participantsOrLegacy(await nativePromise))) {
-    alreadyMakeup.add(`${row.studentId}|${row.classId}`);
-    attMakeup.push(row);
-    const cls = allClasses.find((c) => c.id === row.classId);
+  /**
+   * **보강관리의 참여** — 내 담당 반의 참여(종전) ∪ **내가 맡은 회차의 참여**(반이 내 반이 아니어도, `rosterNativePairs`).
+   * 🔴 남의 반은 **그 학생만** 세운다. 반을 `activeIds`·`allClasses`에 넣지 않는다(위 되살리기와 같은 규칙 — 넣으면 그 반 전원이 뜬다).
+   *    이름·과목만 따로 읽어 `classById`(조회 전용)에 둔다. 남의 반의 다른 참여는 이름을 알아도 세우지 않는다.
+   * 🔴 저장 관문은 건드리지 않는다: 그 반의 출결 칸을 직접 쓰는 길은 종전대로 담당 반만이고(`setAttendanceCell`), 맡은 강사의 칸은
+   *    보강 보고서 저장이 세운다(`syncAnchorCells` — 귀속 = 보강한 강사). 이 행은 기존 보강 행처럼 `classId=null`이라 직접 출결 조작이 없다.
+   */
+  const ownClassIds = new Set(allIds);
+  const nativePairs = rosterNativePairs(alreadyMakeup, participantsOrLegacy(nativeOutcome), teacherId, ownClassIds);
+  const foreignIds = foreignClassIds(nativePairs.filter((pair) => pair.foreign), ownClassIds);
+  let makeupNotice: string | null = null;
+  let foreignClasses: (typeof allClasses)[number][] = [];
+  if (foreignIds.length > 0) {
+    // 평소엔 0건이라 왕복이 없다(맡은 남의 반 보강이 있는 날에만 한 번). 실패는 그 학생만 빼고 알린다 — 명단 전체를 죽이지 않는다.
+    try {
+      const rows = await fetchInChunks<{ id: string; class_name: string; subject: string }>(foreignIds, (chunk) =>
+        supabase.from("classes").select("id, class_name, subject").eq("tenant_id", user.tenantId).in("id", chunk),
+      );
+      foreignClasses = rows.map((c) => ({
+        id: c.id, class_name: c.class_name, subject: c.subject, is_special: false, report_optout: false,
+        delegated: false, ownerName: null, delegatedAwayTo: null,
+      }));
+    } catch {
+      makeupNotice = MAKEUP_UNREAD_NOTICE;
+    }
+  }
+  const foreignById = new Map(foreignClasses.map((c) => [c.id, c]));
+  for (const row of nativePairs) {
+    const key = `${row.studentId}|${row.classId}`;
+    const cls = row.foreign ? foreignById.get(row.classId) : allClasses.find((c) => c.id === row.classId);
+    if (row.foreign && !cls) {
+      // 반 이름을 못 읽었다(조회 실패 · 지워진 반) — 그 학생은 세우지 못하니 그 사실을 알린다.
+      makeupNotice = MAKEUP_UNREAD_NOTICE;
+      continue;
+    }
+    alreadyMakeup.add(key);
+    attMakeup.push({ studentId: row.studentId, classId: row.classId });
     if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
   }
 
@@ -642,6 +705,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   if (studentIds.length === 0)
     return emptyRoster(today, targetDate, teacherName, {
       ...config,
+      ...(makeupNotice ? { makeupNotice } : {}),
       noClassesToday,
       showingAll: noClassesToday && showAll,
     });
@@ -714,7 +778,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   // ⚠️ 여기서 만든 행은 `classId=null·makeup=true`라 정규 행과 저장 단위(unit_key)가 분리된다(0134a).
   //    행 이름에 "(보강)"을 붙여 정규 행과 화면 state 키가 겹치지 않게 한다(아래 유일화가 한 번 더 보장).
   if (makeupReports.length) {
-    const classNameById = new Map(allClasses.map((c) => [c.id, c.class_name]));
+    const classNameById = new Map([...allClasses, ...foreignClasses].map((c) => [c.id, c.class_name]));
     for (const mr of makeupReports) {
       const stu = studById.get(mr.student_id);
       if (!stu) continue; // 학생 조회 실패(삭제 등) — 행을 만들 수 없다
@@ -1624,6 +1688,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     students,
     todayClasses,
     ...config,
+    ...(makeupNotice ? { makeupNotice } : {}),
     noClassesToday,
     showingAll: noClassesToday && showAll,
   };

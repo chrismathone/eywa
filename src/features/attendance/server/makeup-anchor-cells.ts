@@ -11,7 +11,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDelegationActiveOn } from "@/features/classes/delegation-window";
 import { planMakeupCellMove, substituteTaughtBy, type MoveCellRow, type MoveCellsPlan } from "@/features/onescreen/makeup-anchor";
-import { completeMakeupReservations } from "./makeup-reservation-complete";
+import { completeMakeupReservations, effectGapsOf, type CompletionCell } from "./makeup-reservation-complete";
+import { effectNoticeOf, type MakeupEffectNotice } from "@/features/makeups/server/adapters/effects";
 import { taughtByColumnReady } from "./taught-by-db";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -44,6 +45,19 @@ export async function ownerTeachesClassOn(
       input.date,
     ),
   );
+}
+
+/**
+ * 앵커 칸을 세우거나 옮긴 뒤의 **보강 예약 이행**. 출결은 이미 저장됐다 — 이행이 남긴 반영 대기·보류와 예외를 버리지 않고
+ * 알림으로 돌려준다(예전엔 결과와 예외를 둘 다 버려, 출결 저장 성공이 원장 반영까지 끝난 것처럼 보였다).
+ * 🔴 출결을 되돌리지 않고 반영을 다시 보내지도 않는다. 대기·실패는 이행 쪽이 대사·복구 목록에 남긴다.
+ */
+async function completeAnchorCell(tenantId: string, cell: CompletionCell): Promise<MakeupEffectNotice | null> {
+  try {
+    return effectNoticeOf(effectGapsOf(await completeMakeupReservations({ tenantId }, [cell])));
+  } catch {
+    return effectNoticeOf([], true);
+  }
 }
 
 /** 그날 그 학생·그 반의 출결 행 전부(정정 이력 포함) — 옮기기·확인 재료. 실패는 throw. */
@@ -80,7 +94,7 @@ export async function ensureMakeupAnchorCell(input: {
   units?: number | null;
   /** 새로 세울 때 붙일 메모(결석분 연결 — `makeupMemo`). 있는 칸엔 안 붙인다. */
   note?: string | null;
-}): Promise<{ ok: true; created: boolean } | { ok: false; error: string }> {
+}): Promise<{ ok: true; created: boolean; makeupEffect?: MakeupEffectNotice } | { ok: false; error: string }> {
   const admin = createAdminClient();
   let existing: MoveCellRow[];
   try {
@@ -103,10 +117,10 @@ export async function ensureMakeupAnchorCell(input: {
   });
   if (error) return { ok: false, error: error.message };
   // 그 반·그날 **보강 예약**이 있으면 이행한다(예약이 영영 reserved로 남지 않게 — 종전 예약 반 분기와 같은 호출).
-  await completeMakeupReservations({ tenantId: input.tenantId }, [
-    { studentId: input.studentId, classId: input.classId, date: input.date, status: "makeup", unitsExplicit: input.units != null, created: true },
-  ]).catch(() => undefined);
-  return { ok: true, created: true };
+  const makeupEffect = await completeAnchorCell(input.tenantId, {
+    studentId: input.studentId, classId: input.classId, date: input.date, status: "makeup", unitsExplicit: input.units != null, created: true,
+  });
+  return { ok: true, created: true, ...(makeupEffect ? { makeupEffect } : {}) };
 }
 
 /**
@@ -144,7 +158,7 @@ export async function applyAnchorMove(input: {
   taughtBy: string | null;
   /** 보강 소유 강사 — 일부만 옮겨졌을 때 옛 반 기준 귀속을 다시 적는 재료(없으면 귀속은 비운다). */
   ownerId?: string | null;
-}): Promise<{ ok: true; moved: number } | { ok: false; error: string }> {
+}): Promise<{ ok: true; moved: number; makeupEffect?: MakeupEffectNotice } | { ok: false; error: string }> {
   if (input.ids.length === 0) return { ok: true, moved: 0 };
   const admin = createAdminClient();
   const withTaughtBy = await taughtByColumnReady(admin, { fresh: true });
@@ -182,10 +196,10 @@ export async function applyAnchorMove(input: {
     }
     return { ok: false, error: "출석부 칸이 그새 바뀌었습니다 — 새로고침 뒤 다시 시도해 주세요" };
   }
-  await completeMakeupReservations({ tenantId: input.tenantId }, [
-    { studentId: input.studentId, classId: input.toClassId, date: input.date, status: "makeup", unitsExplicit: true, created: false },
-  ]).catch(() => undefined);
-  return { ok: true, moved: data!.length };
+  const makeupEffect = await completeAnchorCell(input.tenantId, {
+    studentId: input.studentId, classId: input.toClassId, date: input.date, status: "makeup", unitsExplicit: true, created: false,
+  });
+  return { ok: true, moved: data!.length, ...(makeupEffect ? { makeupEffect } : {}) };
 }
 
 /**

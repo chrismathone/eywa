@@ -7,15 +7,13 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { getMakeupCases } from "@/features/makeups/server/queries";
 import { MakeupListToolbar } from "@/features/makeups/components/list-toolbar";
 import { MakeupCaseTable } from "@/features/makeups/components/case-list";
+import { makeupListFilter } from "@/features/makeups/components/list-navigation";
 
 export const metadata = { title: "보강관리 — 에이와" };
 export default async function MakeupsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const actor = await requireAccess("makeups");
   const [params, settings, canWrite] = await Promise.all([searchParams, getTenantSettings(), canWriteTenant(actor.systemRole, "makeups")]);
-  const filter: Record<string, string> = {};
-  for (const key of ["tab", "flag", "subject_key", "owner_id", "student_id", "q", "page"]) {
-    const value = params[key]; if (typeof value === "string" && value.length <= 100) filter[key] = value;
-  }
+  const filter = makeupListFilter(params);
   const rawPage = Number(filter.page || 1);
   const page = Number.isInteger(rawPage) && rawPage > 0 ? Math.min(rawPage, 100_000) : 1;
   const result = await getMakeupCases({ ...filter, page, page_size: 30 });

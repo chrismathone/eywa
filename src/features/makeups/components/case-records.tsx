@@ -10,6 +10,7 @@ export function CaseRecords({ detail }: { detail: MakeupCaseDetail }) {
   const row = detail.case;
   return <section className="border-line space-y-4 rounded-lg border p-4">
     <h2 className="font-bold">보강 접수 내역</h2>
+    {row.reason === "additional" ? <p className="text-sm">추가 보강은 접수·승인할 수 있습니다. 예약은 아직 지원하지 않습니다.</p> : null}
     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {[ ["학생", row.student_name], ["보강 사유", makeupText(MAKEUP_REASON, row.reason)], [row.reason === "additional" ? "수업" : row.reason === "class_cancelled" ? "휴강 수업" : "결석 수업", `${row.original_class_name ?? (row.reason === "additional" ? "결석분 아님" : "반 미지정")} · ${row.original_date ?? "—"}`],
         ["자격·진행", `${makeupText(MAKEUP_STATE, row.eligibility)} · ${makeupText(MAKEUP_STATE, row.lifecycle)}`],

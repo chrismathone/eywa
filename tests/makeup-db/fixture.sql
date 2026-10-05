@@ -68,6 +68,7 @@ create table public.classes (id uuid primary key default gen_random_uuid(),
   closed_at date, created_at timestamptz not null default now());
 create table public.students (id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references public.tenants(id) on delete cascade, name text not null,
+  school text, grade text,
   status text not null default 'enrolled', created_at timestamptz not null default now(),
   updated_at timestamptz not null default now());
 create unique index classes_tenant_id_id_uq on public.classes (tenant_id, id);

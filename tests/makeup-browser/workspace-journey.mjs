@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { expect } from "@playwright/test";
 
 export async function workspaceJourney({ contextFor, db, uid, output, errors, option, originalOffset = -12 }) {
+  // Earlier scenarios persist a workspace for this synthetic actor. Start this independent
+  // intake/bridge scenario from a blank synthetic preference, rather than restoring that detail.
+  await db`delete from user_preferences where user_id=${uid(22)}`;
   const context = await contextFor(22), page = await context.newPage();
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("http://127.0.0.1:3045/makeups/new");
@@ -15,9 +18,9 @@ export async function workspaceJourney({ contextFor, db, uid, output, errors, op
   await frame.locator('select[name="student_id"]').waitFor({ state: "visible", timeout: 45000 });
   const form = frame.locator("form").last();
   await option(form, "student_id", uid(61));
-  await option(form, "original_class_id", uid(51));
   const [date] = await db`select mt.d(${originalOffset})::text as original`;
   await form.locator('input[name="original_date"]').fill(date.original);
+  await option(form, "original_class_id", uid(51));
   await form.locator('textarea[name="note"]').fill("합성 실제 워크스페이스: 같은 창 접수·이동·새로고침 확인");
   await form.getByRole("button", { name: "보강 접수", exact: true }).click();
   await frame.waitForURL(url => /^\/makeups\/[0-9a-f-]{36}$/.test(url.pathname));

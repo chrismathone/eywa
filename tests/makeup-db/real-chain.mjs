@@ -80,7 +80,7 @@ const empty = () => ({ tables: new Map(), enums: new Map(), functions: new Set()
 /** fixture가 실제 체인의 부분집합인지 대조한다. 어긋난 목록(문장 배열)을 돌려준다 — 비어 있으면 통과. */
 export async function checkRealChain(root) {
   const dir = path.join(root, 'supabase/migrations');
-  const files = (await readdir(dir)).filter((f) => f.endsWith('.sql') && !/^034[3-9][a-z]_makeup_/.test(f)).sort();
+  const files = (await readdir(dir)).filter((f) => f.endsWith('.sql') && !/^03(?:4[3-9]|5\d)[a-z]_makeup_/.test(f)).sort();
   const real = empty();
   for (const f of files) absorb(real, await readFile(path.join(dir, f), 'utf8'));
   const fixture = absorb(empty(), await readFile(path.join(root, 'tests/makeup-db/fixture.sql'), 'utf8'));
@@ -113,7 +113,7 @@ export async function checkRealChain(root) {
   const notes = [];
   const drizzle = await readFile(path.join(root, 'src/lib/db/schema.ts'), 'utf8');
   const ledger = [];
-  for (const f of (await readdir(dir)).filter((n) => /^034[3-9][a-z]_makeup_.*\.sql$/.test(n))) ledger.push(strip(await readFile(path.join(dir, f), 'utf8')));
+  for (const f of (await readdir(dir)).filter((n) => /^03(?:4[3-9]|5\d)[a-z]_makeup_.*\.sql$/.test(n))) ledger.push(strip(await readFile(path.join(dir, f), 'utf8')));
   const outOfChain = [{
     problem: "enum public.system_role 값 'student': 실제 마이그레이션에 없다",
     inDrizzle: /systemRoleEnum = pgEnum\("system_role", \[[^\]]*"student"/.test(drizzle),

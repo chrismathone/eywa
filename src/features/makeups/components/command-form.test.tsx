@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CommandForm } from "./command-form";
 import { CaseDetailReloadContext } from "./case-detail-context";
 
-const calls = vi.hoisted(() => ({ execute: vi.fn(), refresh: vi.fn(), saved: vi.fn(), publish: vi.fn(), reload: vi.fn(), onSaved: vi.fn() }));
+const calls = vi.hoisted(() => ({ execute: vi.fn(), refresh: vi.fn(), saved: vi.fn(), publish: vi.fn(), reload: vi.fn(), onSaved: vi.fn(), notice: vi.fn() }));
+vi.mock("sonner", () => ({ toast: { message: calls.notice } }));
 vi.mock("../server/actions", () => ({ executeMakeupCommand: calls.execute }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: calls.refresh }) }));
 vi.mock("@/components/workspace/use-unsaved-guard", () => ({ useUnsavedGuard: () => ({ markSaved: calls.saved }) }));
@@ -64,6 +65,20 @@ describe("명령 재시도와 변경 보호", () => {
     await screen.findByText(/저장했습니다 · 출결·시수 반영을 확인하지 못했습니다/);
     // The saved baseline is taken once the form is enabled again (post-commit), not inside the pending transition.
     await waitFor(() => expect(calls.saved).toHaveBeenCalledOnce());
+  });
+  it("반 복구 저장과 관측 확인을 구별하고 실제 출결·시수 변경으로 안내하지 않는다", async () => {
+    calls.execute.mockResolvedValue({ ok: true, result: { anchor_verification: { state: "done", ok: true } } });
+    mount(); submit();
+    await screen.findByText(/출결·시수 값은 자동 변경하지 않았습니다/);
+    expect(calls.notice).toHaveBeenCalledWith(expect.stringMatching(/자동 변경하지 않았습니다/));
+    await waitFor(() => expect(calls.saved).toHaveBeenCalledOnce());
+  });
+  it("아직 출결이 없는 회차의 정상 복구를 복구할 문제가 있는 것처럼 안내하지 않는다", async () => {
+    calls.execute.mockResolvedValue({ ok: true, result: { anchor_verification: { state: "pending", ok: false, code: "attendance_missing" } } });
+    mount(); submit();
+    await screen.findByText(/아직 출결 기록이 없으며/);
+    expect(calls.notice).toHaveBeenCalledWith(expect.stringMatching(/실제 실시 후/));
+    expect(calls.notice.mock.calls[0][0]).not.toMatch(/대사·복구에서 확인/);
   });
 });
 
