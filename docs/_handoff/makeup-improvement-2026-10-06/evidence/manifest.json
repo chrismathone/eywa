@@ -1,0 +1,67 @@
+{
+  "source": "F:/eywa-review/makeup-objective-audit-20261006",
+  "source_commit": "fe45e47ad38a4e3bb5862fcc75c251871b0a189a",
+  "environment": "production app with isolated synthetic database",
+  "files": [
+    {
+      "name": "admin-list-1440.png",
+      "bytes": 89458,
+      "sha256": "24de218b2de55a117a46a93b7f3d1c1b55481b6b561776de08db496abaeadeb9"
+    },
+    {
+      "name": "admin-reservation-1440.png",
+      "bytes": 47259,
+      "sha256": "9f19a42a67638495c721efd30474906168ccdabab63cbfc8a42206b3de522c80"
+    },
+    {
+      "name": "completed-still-upcoming-1440.png",
+      "bytes": 237602,
+      "sha256": "e3ea663f6be1c5c4f7639b066bde9b4f2f8509df5235e4ff7027fe9da053b109"
+    },
+    {
+      "name": "ledger-all-states-1440.png",
+      "bytes": 98199,
+      "sha256": "c7fc352943daf759661ed60afa7a125ee351239d9a8ad711805c885c7268fd43"
+    },
+    {
+      "name": "legacy-unlinked-candidates-1440.png",
+      "bytes": 43357,
+      "sha256": "c7e75f548cc8bb1a4a0cfa4f27c68001e43ac284414e7af48cbba042881abbb3"
+    },
+    {
+      "name": "observations.json",
+      "bytes": 14284,
+      "sha256": "c2a56a4f4e8f1f0a5ee3dd900705123bb6371d6aae1c1101a70d1e3968a494b6"
+    },
+    {
+      "name": "review.md",
+      "bytes": 14049,
+      "sha256": "fd442e3440569249ee96d20edb0a8a3f931add3b248954d9f71f23a021a86600"
+    },
+    {
+      "name": "status-observations.json",
+      "bytes": 3143,
+      "sha256": "bfab0bcd75712705f39db3bb1da8b42b4271812f0fff6c754ec6fccce8db8793"
+    },
+    {
+      "name": "teacher-intake-1440.png",
+      "bytes": 46904,
+      "sha256": "f3293184242da86380bb054794afb43a09f77c74d7e95cb813797c4f48ff897a"
+    },
+    {
+      "name": "teacher-pending-390.png",
+      "bytes": 51311,
+      "sha256": "ca1fee7e222e7ee5e1353afc6575ca26cc2f6712b2118b2b746f312b5e5cf411"
+    },
+    {
+      "name": "timetable-makeup-1440.png",
+      "bytes": 36572,
+      "sha256": "9ecbffdcd9715c03cf5bd3051cb610f651836ec2f50afb4a9e3741fcb1946e1c"
+    },
+    {
+      "name": "view-observations.json",
+      "bytes": 12004,
+      "sha256": "86f4acd3f46438a173049d1071677703017e41e2a7f6c21dc5aa6fe57fcafe48"
+    }
+  ]
+}

@@ -1,0 +1,235 @@
+{
+  "boundary": "Current production build on real app schema; synthetic local Auth and students only. No production requests or application edits.",
+  "findings": [
+    {
+      "check": "teacher_intake",
+      "result": "PASS",
+      "caseId": "158ddfa3-8bff-4695-8005-09eba0324571",
+      "ownerAutomatic": true,
+      "approvalHidden": true,
+      "entryFields": [
+        "과목",
+        "사유",
+        "학생",
+        "결석일",
+        "반",
+        "메모"
+      ]
+    },
+    {
+      "check": "teacher_case_list",
+      "result": "PASS",
+      "body": "가로 88px이 모자랍니다 — 이 화면은 폭 478px이 필요한데 지금 390px입니다. 잘린 부분은 가로 스크롤로 밀어 보실 수 있습니다. 세로는 스크롤로 보시면 됩니다.\n창 최대화\n숨기기\n접수·예약·실시 검토와 미처리 업무\n미연결 근거\n도입 사전 점검\n대사·복구\n보강 접수\n상태\n미처리 전체\n진행 중\n보류\n종결\n전체\n다음 업무\n전체\n승인 대기\n담당 미지정\n예약 필요\n기한 임박\n기한 경과\n실시 기록 필요\n검토 대기\n대사 필요\n보류 재검토\n과목\n전체\n수학\n수학(심화)\n영어\n과학\n국어\n조회\n미처리\n3\n승인 대기\n1\n담당 미지정\n2\n예약 필요\n0\n기한 임박\n0\n기한 경과\n0\n실시 기록 필요\n0\n검토 대기\n0\n대사 필요\n0\n보류 재검토\n0\n\n조회 3건 · 마지막 성공 2026. 10. 6. 오전 12:56:44\n\n보강 접수·잔량·다음 업무 목록\n가상학생C\n\n수학 · 수학 가반\n\n2026-08-07 · 결석\n\n진행\n승인 대기\n\n진행 중\n\n의무 잔량 / 예약 중 / 예약 가능\n미정 / 0분 / 미정\n다음 업무\n승인 검토\n\n승인 대기\n\n담당·기한\n강사가\n\n기한 미지정\n\n가상학생A\n\n수학 · 수학 가반\n\n2026-08-16 · 결석\n\n진행\n승인됨\n\n진행 중\n\n의무 잔량 / 예약 중 / 예약 가능\n120분 / 50분 / 70분\n다음 업무\n담당 지정\n\n담당 미지정\n\n다음 예약 2026-10-06\n\n담당·기한\n미지정\n\n기한 미지정\n\n가상학생B\n\n수학 · 수학 가반\n\n2026-08-17 · 결석\n\n진행\n승인됨\n\n진행 중\n\n의무 잔량 / 예약 중 / 예약 가능\n120분 / 50분 / 70분\n다음 업무\n담당 지정\n\n담당 미지정\n\n다음 예약 2026-10-06\n\n담당·기한\n미지정\n\n기한 미지정\n\n1 / 1"
+    },
+    {
+      "check": "admin_list",
+      "result": "OBSERVED",
+      "columnHeaders": [
+        "학생·원수업",
+        "진행",
+        "의무 잔량 / 예약 중 / 예약 가능",
+        "다음 업무",
+        "담당·기한"
+      ],
+      "filters": [
+        {
+          "name": "tab",
+          "options": [
+            "미처리 전체",
+            "진행 중",
+            "보류",
+            "종결",
+            "전체"
+          ]
+        },
+        {
+          "name": "flag",
+          "options": [
+            "전체",
+            "승인 대기",
+            "담당 미지정",
+            "예약 필요",
+            "기한 임박",
+            "기한 경과",
+            "실시 기록 필요",
+            "검토 대기",
+            "대사 필요",
+            "보류 재검토"
+          ]
+        },
+        {
+          "name": "subject_key",
+          "options": [
+            "전체",
+            "수학",
+            "수학(심화)",
+            "영어",
+            "과학",
+            "국어"
+          ]
+        }
+      ],
+      "body": "접수·예약·실시 검토와 미처리 업무\n미연결 근거\n도입 사전 점검\n대사·복구\n보강 접수\n상태\n미처리 전체\n진행 중\n보류\n종결\n전체\n다음 업무\n전체\n승인 대기\n담당 미지정\n예약 필요\n기한 임박\n기한 경과\n실시 기록 필요\n검토 대기\n대사 필요\n보류 재검토\n과목\n전체\n수학\n수학(심화)\n영어\n과학\n국어\n조회\n미처리\n3\n승인 대기\n1\n담당 미지정\n2\n예약 필요\n0\n기한 임박\n0\n기한 경과\n0\n실시 기록 필요\n0\n검토 대기\n0\n대사 필요\n0\n보류 재검토\n0\n\n조회 3건 · 마지막 성공 2026. 10. 6. 오전 12:56:45\n\n보강 접수·잔량·다음 업무 목록\n학생·원수업\t진행\t의무 잔량 / 예약 중 / 예약 가능\t다음 업무\t담당·기한\n가상학생C\n\n수학 · 수학 가반\n\n2026-08-07 · 결석\n\n\t승인 대기\n\n진행 중\n\n\t미정 / 0분 / 미정\t승인 검토\n\n승인 대기\n\n\t강사가\n\n기한 미지정\n\n\n가상학생A\n\n수학 · 수학 가반\n\n2026-08-16 · 결석\n\n\t승인됨\n\n진행 중\n\n\t120분 / 50분 / 70분\t담당 지정\n\n담당 미지정\n\n다음 예약 2026-10-06\n\n\t미지정\n\n기한 미지정\n\n\n가상학생B\n\n수학 · 수학 가반\n\n2026-08-17 · 결석\n\n\t승인됨\n\n진행 중\n\n\t120분 / 50분 / 70분\t담당 지정\n\n담당 미지정\n\n다음 예약 2026-10-06\n\n\t미지정\n\n기한 미지정\n\n1 / 1"
+    },
+    {
+      "check": "reservation_form",
+      "result": "OBSERVED",
+      "fields": [
+        {
+          "tag": "INPUT",
+          "name": "session_date",
+          "type": "date",
+          "value": "2026-10-06",
+          "required": true
+        },
+        {
+          "tag": "SELECT",
+          "name": "session_mode",
+          "type": "select-one",
+          "value": "new",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "required": false
+        },
+        {
+          "tag": "SELECT",
+          "name": "teacher_id",
+          "type": "select-one",
+          "value": "",
+          "required": true
+        },
+        {
+          "tag": "INPUT",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "required": false
+        },
+        {
+          "tag": "SELECT",
+          "name": "classroom_id",
+          "type": "select-one",
+          "value": "",
+          "required": true
+        },
+        {
+          "tag": "INPUT",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "required": false
+        },
+        {
+          "tag": "SELECT",
+          "name": "class_id",
+          "type": "select-one",
+          "value": "",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "1",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "2",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "3",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "4",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "5",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "6",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "7",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "period_ids",
+          "type": "checkbox",
+          "value": "8",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "required": false
+        },
+        {
+          "tag": "SELECT",
+          "name": "anchor_class_id",
+          "type": "select-one",
+          "value": "",
+          "required": true
+        },
+        {
+          "tag": "INPUT",
+          "name": "",
+          "type": "checkbox",
+          "value": "on",
+          "required": false
+        },
+        {
+          "tag": "INPUT",
+          "name": "allocation:158ddfa3-8bff-4695-8005-09eba0324571",
+          "type": "number",
+          "value": "60",
+          "required": true
+        },
+        {
+          "tag": "TEXTAREA",
+          "name": "reason",
+          "type": "textarea",
+          "value": "",
+          "required": false
+        }
+      ],
+      "text": "실시 날짜\n회차\n새 회차\n기존 회차에 합류\n실시 강사\n검색\n선택해 주세요\n강의실\n검색\n선택해 주세요\n합류 수업 반(있는 경우)\n검색\n선택해 주세요\n연속 교시 선택\n1-1 · 14:30–15:25\n1-2 · 15:25–16:20\n2-1 · 16:20–17:15\n2-2 · 17:15–18:10\n3-1 · 18:20–19:15\n3-2 · 19:15–20:10\n4-1 · 20:10–21:05\n4-2 · 21:05–22:00\n실제 출결·보고서 반\n검색\n선택해 주세요\n\n실시 날짜에 수강 중인 반을 선택해 주세요. 날짜를 바꾸면 반을 다시 확인합니다.\n\n원수업별 분량 배정\n2026-08-07 · 수학 가반\n배정(분)\n예약 가능 60분\n같은 학생의 다른 미처리 건 찾기\n예약 메모\n\n같은 학생·과목·날짜의 보강은 한 회차만 가능합니다. 분할 보강은 다른 날짜로 예약해 주세요.\n\n예약 확정"
+    },
+    {
+      "check": "admin_dashboard",
+      "result": "OBSERVED",
+      "body": "학원 전체 현황\n2026.10.06\n강의실 2D/3D\n자동 갱신\n00:56 확인 · 30초 주기\n재원생\n현재\n0명\n퇴원&수업종료\n이번 달\n0명\n신규문의\n오늘\n0건\n금일 입테\n0건\n금일 등록\n0명\n오늘첫수업\n0명\n전일 결석\n0명\n보강예정\n한 달\n2건\n학원 운영 한눈에\n\n재원 · 출결 · 수납 · 신규생\n\n재원생 구성\n\n현재 · 초·중·고 · 영어·동시수강·수학\n\n재원생 구성\n상세\n전체 재원생\n0명\n초등\n0명\n중등\n0명\n고등\n0명\n미수강\n0명\n영어만\n동시수강\n수학만\n출결 현황\n\n오늘 · 학생·반·교시별 출결 칸\n\n출결 현황\n상세\n\n오늘 출결 기록이 아직 없습니다.\n\n예정학생 미처리 0건\n입력 중 0반\n10월 수납 현황\n\n이번 달 청구서 · 취소 청구 제외\n\n10월 수납 현황\n상세\n0\n청구서\n완납\n0건\n—\n부분납\n0건\n—\n미납\n0건\n—\n기타 상태\n0건\n—\n미납·부분납 건수\n0건\n신규생 단계별 관리\n\n등록 후 90일 · 재원·휴원 학생\n\n신규생 단계별 관리\n상세\n0–7일\n0명\n8–30일\n0명\n31–60일\n0명\n61–90일\n0명\n영어만\n동시수강\n수학만\n기한 경과 0건\n3일 내 기한 0건\n등록 · 퇴원 추이\n\n최근 6개월 · 당월은 오늘까지\n\n막대\n꺾은선\n등록 · 퇴원 추이\n상세\n10월 순증 0명\n0명\n1명\n2명\n0\n0\n26.05\n0\n0\n26.06\n0\n0\n26.07\n0\n0\n26.08\n0\n0\n26.09\n0\n0\n26.10\n등록\n퇴원\n+\n차트 수치 보기\n재원생 추이\n\n최근 12개월 · 달마다 말일 기준(이번 달은 오늘) · 휴원 제외\n\n막대\n꺾은선\n재원생 추이\n상세\n오늘 재원생 0명\n2026년(오늘) 0명\n0명\n1명\n2명\n0\n25.11\n0\n25.12\n0\n26.01\n0\n26.02\n0\n26.03\n0\n26.04\n0\n26.05\n0\n26.06\n0\n26.07\n0\n26.08\n0\n26.09\n0\n26.10\n재원생\n+\n차트 수치 보기\n학생 · 학습 · 상담\n\n학생 구성과 학습·상담 신호\n\n과목별 수강\n\n현재 재원생 · 과목별 수강과 동시 수강\n\n과목별 수강\n상세\n동시 수강(영어+수학)\n0명\n학년별 재원생\n\n현재 재원생 · 학원설정 학년 순 · 영어·수학 수강 구성\n\n학년별 재원생\n상세\n미수강\n0명\n영어만\n동시수강\n수학만\n학교별 학생\n\n현재 재원생 · 초등·중등·고등\n\n학교별 학생\n상세\n초등\n0명\n\n재원생이 없습니다.\n\n중등\n0명\n\n재원생이 없습니다.\n\n고등\n0명\n\n재원생이 없습니다.\n\n콜&상담 전환\n\n지난달 · 이번 달 · 상담일 기준\n\n9월\n지난달\n—\n\n등록 전환율\n\n10월\n이번 달\n—\n\n등록 전환율\n\n접수 기준\t9월\t10월\n전체 접수\t0건\t0건\n등록\t0건\t0건\n진행\t0건\t0건\n미등록\t0건\t0건\n미방문\t0건\t0건\n9월 접수 보기\n10월 접수 보기\n반복 결석 학생\n\n최근 14일 · 사전 통보 제외\n\n확인이 필요한 학생\n0명\n\n이 기준에 해당하는 학생이 없습니다.\n\n최근 14일 등원율\n\n오늘 포함 14일 · (출석 + 지각) / 유효 출결 칸\n\n최근 14일 등원율\n상세\n0%\n50%\n100%\n09/23\n09/26\n09/29\n10/02\n10/06\n+\n날짜별 수치 보기\n상담 진행\n\n상담일 기준 9/7부터 · 접수 → 수업 시작\n\n상담 진행\n상세\n\n최근 30일 콜&상담이 없습니다.\n\n멈춘 상담 0건\n\n멈춘 상담이 없습니다.\n\n단계는 각자 닿은 수입니다(입테 없이 등록하면 입테가 등록보다 적을 수 있습니다). 멈춘 상담 = 상담 완료 7일 넘게 결정 없음 · 입테 뒤 3일 넘게 등록 없음(최근 60일).\n\n수업과 학원 운영\n\n신규생 체크 · 강사 시트 · 일정과 행정\n\n신규생 체크 진행\n\n등록 후 90일 · 필수 6항목 · 2개월 콜은 선택\n\n신규생 체크 진행\n상세\n사전 콜\n0/0\n첫 수업 안내\n0/0\nOJT\n0/0\n첫 수업 후 콜\n0/0\n1개월 콜\n0/0\n2개월 콜선택\n0/0\n3개월 콜\n0/0\n완료\n기한 경과\n3일 내\n\n회색: 예정·기한 미정·기능 시작 전 항목\n\n현재 수업 현황\n\n오늘 00:56 기준 · 과목별\n\n현재 수업 현황\n상세\n\n오늘 예정된 수업이 없습니다.\n\n레벨테스트 및 첫수업 일정\n\n오늘부터 한 달 · 11/5 (목)까지\n\n입학 테스트\n0건\n첫 수업\n0건\n\n오늘부터 11/5 (목)까지 레벨테스트·첫 수업 일정이 없습니다.\n\n행정 · 자산\n\n현재 · 누적 건수 · 열람 가능한 업무 기준\n\n회의록\n0건\n공용 문서\n0건\n운행 차량\n0대\n등록 자산\n0개\n소모품 품목\n0종\n학원 공지\n\n최근 공지 · 대상 권한 반영\n\n학원 공지\n상세\n\n등록된 공지가 없습니다.\n\n공지 관리 열기\n에이와 / OVERVIEW"
+    }
+  ],
+  "errors": []
+}
