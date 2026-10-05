@@ -180,7 +180,7 @@ describe("배선 — 설정 화면의 탭도 같은 판정이다", () => {
   it("화면 탭은 면 목록에서, 메뉴 판과 같은 두 표식으로 거른다", () => {
     const page = readFileSync(join(process.cwd(), "src", "app", "(shell)", "owner", "page.tsx"), "utf8");
     expect(page).toContain(
-      "return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules)).map((f) => ({",
+      "return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules));",
     );
     // 면 목록·라벨을 화면 파일에 다시 적지 않는다.
     expect(page).not.toContain('label: "기능"');

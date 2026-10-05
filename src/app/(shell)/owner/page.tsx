@@ -9,14 +9,14 @@ import { fallbackOwnerFace, ownerFaceHref, ownerFaceMenu } from "@/features/owne
 import { operationsForViewer, seatPinStatus } from "@/features/owner/seat-pin-view";
 import { SettingRolesControl } from "@/features/owner/components/setting-roles-control";
 import { kstToday } from "@/lib/date-kst";
-import { OWNER_FACES, ownerTabLabel, resolveOwnerTab, type OwnerFaceKey, type OwnerTab } from "@/features/owner/tabs";
+import { OWNER_FACES, ownerTabLabel, resolveOwnerTab, type OwnerFaceDef, type OwnerFaceKey, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
 import { operationsFaceTokens } from "@/features/owner/server/operations-save";
 import { permissionsToken } from "@/features/owner/server/permissions-save";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
-import { FaceTabs, type Face } from "@/components/face-tabs";
+import { OwnerTabBar } from "./_components/owner-tab-bar";
 import { PageHeader } from "@/components/page-header";
 import { PageMaximizeToolbar } from "@/components/page-maximize/page-maximize-toolbar";
 import { ProfileSection } from "./_components/profile-section";
@@ -54,15 +54,10 @@ type Sp = Record<string, string | undefined>;
  *    **에러 없이 늘 빈 목록**이 뜬다(조용한 거짓말). 자물쇠는 RLS고([[#77]]) 여기서 감추는 건 그 사실을
  *    화면에 반영하는 것이다. ⚠️ 이 학원은 `owner` 메뉴를 admin·manager에게 위임해 뒀다(실측 활성 11명).
  */
-function facesFor(canReadAudit: boolean, showModules: boolean): Face[] {
+function facesFor(canReadAudit: boolean, showModules: boolean): OwnerFaceDef[] {
   // 원장 위에게만 서는 면(감사로그 · 대시보드 관리 · 기능)은 위임 계정엔 세우지 않는다 — 주소로 와도 안내 문구(아래 본문).
   // '기능'(모듈 켜기·끄기) 면은 **새 학원(일반판)에만** 선다 — 침산 설정 화면은 이 면이 생기기 전과 같아야 한다(원장 2026-09-22).
-  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules)).map((f) => ({
-    key: f.key,
-    label: f.label,
-    href: f.href,
-    group: f.group,
-  }));
+  return OWNER_FACES.filter((f) => (!f.masterOnly || canReadAudit) && (!f.genericOnly || showModules));
 }
 
 /**
@@ -221,7 +216,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
 
       </div>
       <PageMaximizeToolbar>
-        <FaceTabs faces={facesFor(canReadAudit, isGenericTenant(settings)).filter((face) => allowedTabs.get(face.key as OwnerFaceKey))} active={tab} ariaLabel="학원 설정·관리 면 전환" />
+        {/* 면이 많으면 범주 줄 + 그 범주의 면 줄, 적으면 종전처럼 한 줄(`ownerTabRows`). 주소는 면마다 `?tab=` 그대로다. */}
+        <OwnerTabBar faces={facesFor(canReadAudit, isGenericTenant(settings)).filter((face) => allowedTabs.get(face.key))} active={tab} />
       </PageMaximizeToolbar>
 
       {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}

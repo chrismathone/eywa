@@ -20,6 +20,8 @@ import { faceTabOverflow, faceTabScrollTo } from "@/components/face-tab-scroll";
  * - `replace`로 전환해 탭 클릭이 창 뒤로(←) 스택을 더럽히지 않는다.
  * - **embed(창) 모드면 href에 자동으로 embed=1 유지**(useEmbed) → 창 안 크롬리스 유지.
  * - `group`이 바뀌는 경계에 세로 구분선(설정 ┃ 관리 식 영역 분리).
+ * - `customLabels={false}` — 칸이 목적지가 아니라 **묶음**(범주)일 때. 그 주소에 붙인 사용자 지정 이름·아이콘을 따라가지 않는다
+ *   (묶음의 주소는 그 안의 첫 면이라, 그 면을 개명하면 묶음 이름까지 바뀌어 버린다).
  */
 export type Face = { key: string; label: string; href: string; group?: string };
 
@@ -28,11 +30,13 @@ export function FaceTabs({
   active,
   ariaLabel = "면 전환",
   level = "primary",
+  customLabels = true,
 }: {
   faces: Face[];
   active: string;
   ariaLabel?: string;
   level?: "primary" | "secondary";
+  customLabels?: boolean;
 }) {
   const embed = useEmbed();
   const presentation = useMenuPresentation();
@@ -89,7 +93,7 @@ export function FaceTabs({
           const base = destination ? new URL(destination.href, url.origin) : null;
           // 날짜/필터가 붙은 같은 면은 개명하되 상세 레코드의 다른 면까지 부모 이름으로 덮지 않는다.
           const sameFace = base?.pathname === url.pathname && (!url.searchParams.has("tab") || base.searchParams.get("tab") === url.searchParams.get("tab"));
-          const override = sameFace ? menus.find((r) => r.href === destination?.href) : undefined;
+          const override = customLabels && sameFace ? menus.find((r) => r.href === destination?.href) : undefined;
           const custom = override ? presentation(f.href) : undefined;
           const newGroup = i > 0 && f.group !== faces[i - 1].group;
           return (

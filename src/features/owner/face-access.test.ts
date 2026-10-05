@@ -157,7 +157,7 @@ describe("배선 — 설정 화면", () => {
 
   it("탭 목록도 같은 권한 키로 거른다('기능' 포함)", () => {
     expect(code).toContain("OWNER_FACES.map(async (face) => [face.key, await canAccessTenant(viewer.systemRole, ownerFaceMenu(face.key))] as const)");
-    expect(code).toContain(".filter((face) => allowedTabs.get(face.key as OwnerFaceKey))");
+    expect(code).toContain(".filter((face) => allowedTabs.get(face.key))");
   });
 
   it("🔴 자체 판정을 하는 면(데이터 정리 · 데이터 가져오기 · 감사로그)은 학원 설정 fieldset 밖에 선다", () => {
