@@ -1,0 +1,97 @@
+{
+  "status": "three_party_consensus_reached",
+  "scope": "implementation plan only",
+  "recorded_at": "2026-10-05T03:05:41.0239952+09:00",
+  "source_head": "b7a43db4bfce21d866e7c1b7270dd119ef67e164",
+  "run_id": "run_47ae82476540",
+  "plan": "최종_구현계획.md",
+  "reviewed_plan": "구현계획_v3.md",
+  "plan_sha256": "DBE9426AD191391C6BA3A6E569D6E40A61C9FCD24F628A2B45CDAD3568348C05",
+  "signoffs": [
+    {
+      "task_id": null,
+      "dispatch_id": null,
+      "plan_sha256": "DBE9426AD191391C6BA3A6E569D6E40A61C9FCD24F628A2B45CDAD3568348C05",
+      "report_sha256": "2C7AD313B1E0FB3F4333A356B9257DC0CCB94D8E10BF6A56077C9D6214960323",
+      "provider": "codex",
+      "decision": "APPROVE",
+      "report": "final-review-codex-v3.md"
+    },
+    {
+      "task_id": "task_e50be40354f5",
+      "dispatch_id": "ctx_37fb718c14a4",
+      "plan_sha256": "DBE9426AD191391C6BA3A6E569D6E40A61C9FCD24F628A2B45CDAD3568348C05",
+      "report_sha256": "C0A582815A7D5F636AEE7ECFC5811F7D806C4E9E8F64711F1898FF23AEFEB594",
+      "provider": "claude",
+      "decision": "APPROVE",
+      "report": "final-review-claude-v3.md"
+    },
+    {
+      "task_id": "task_11b13495b3cd",
+      "dispatch_id": "ctx_a1ef7ab4759a",
+      "plan_sha256": "DBE9426AD191391C6BA3A6E569D6E40A61C9FCD24F628A2B45CDAD3568348C05",
+      "report_sha256": "94352347BD4006DC2F18EE270A515924C0FE07DE5221E4D3A54351078F03D2D5",
+      "provider": "grok",
+      "decision": "APPROVE",
+      "report": "final-review-grok-v3.md"
+    }
+  ],
+  "unresolved_plan_blockers": 0,
+  "nonblocking_p0_notes": [
+    "수납 확인 큐 생성 조건을 quantity_basis/실시 날짜/청구월별 확정",
+    "수기 시수 차이와 노쇼 선반영 시수 검토의 종결 관문 통일",
+    "추가 지도 운영 결정 지연 시 MU-065/MU-X06을 확정 거절 회귀로 재분류",
+    "복수 케이스에 배분한 참여의 미결 대사가 모든 연결 케이스 종결을 막는 범위 정의"
+  ],
+  "acceptance_tests": {
+    "original": 81,
+    "additional": 19,
+    "executed": 0,
+    "original_pilot_or_common": 70,
+    "original_later": 11
+  },
+  "cleanup": {
+    "created_agent_terminals": 2,
+    "released_agent_terminals": 2,
+    "dispatches_completed": 7,
+    "reclaimable_workers": 0,
+    "unrelated_worktrees_or_terminals_touched": false
+  },
+  "application_code_changed": false,
+  "database_accessed": false,
+  "deployment_performed": false,
+  "auxiliary_artifacts": [
+    {
+      "file": "수용테스트_단계매핑.csv",
+      "sha256": "7074BE5528BDB41F23DBB75F3D083C29A716A2791E783E709FC256F44F3FC9AC"
+    },
+    {
+      "file": "추가수용테스트.csv",
+      "sha256": "F2CFC6C3F652BDEC9B6A9DDA8C8C24E8F91EA954F672F28E15CCE1FC6E5FA29E"
+    },
+    {
+      "file": "inbox-v3-approvals.json",
+      "sha256": "7D758CD71A5EF3859D875B61E1551326D186011E88D76BF3243B3A61FEA3C2E0"
+    },
+    {
+      "file": "archive-final-claude.json",
+      "sha256": "6EFBAD458CC2463282853F9BE6A97E70262F32627235C9060D26578FCED77661"
+    },
+    {
+      "file": "archive-final-grok.json",
+      "sha256": "97E09BE6CF99F0A188DC7DFF5ADC6D738299B921DD67BC061937BA61DBF3E5EE"
+    },
+    {
+      "file": "release-claude-final.json",
+      "sha256": "2BFB674C8D75276A17D27BB6511CB281E772A86F5349933EBE4D5809E4EAA6B8"
+    },
+    {
+      "file": "release-grok-final.json",
+      "sha256": "2A32D7EE2425B3EB1096E5CD89730C7EC04C909D9CC0E70B0CE64A02B9C1852D"
+    },
+    {
+      "file": "workers-final.json",
+      "sha256": "374430ACC4F1723F9375CC13A659ECB4DE4F1C9A47F4E231254D8728E270F990"
+    }
+  ]
+}

@@ -447,7 +447,7 @@ async function insertSeatFill(
   if (error) return { error: error.message };
   // 보강 예약 이행(0264a) — 자리에서 찍은 칸도 그 (학생·반·날짜)의 예약을 다시 판정한다(fail-soft).
   await completeMakeupReservations(
-    { tenantId: p.tenantId },
+    { tenantId: p.tenantId, observeOnly: true },
     rows.map((r) => ({ studentId: r.student_id, classId: r.class_id, date: p.date, status: (r as { status?: string | null }).status ?? null, created: true })),
   );
   return { rows, skipped: built.length - rows.length };
@@ -616,7 +616,7 @@ async function writeOne(
         if (err) return err;
       }
       // 보강 예약 이행·되돌림(0264a) — 자리 칸의 상태 변경도 그 (학생·반·날짜)의 예약을 다시 판정한다(fail-soft).
-      await completeMakeupReservations({ tenantId: p.tenantId }, [{ studentId: p.studentId, classId: p.classId, date: p.date, status: p.status }]);
+      await completeMakeupReservations({ tenantId: p.tenantId, observeOnly: true }, [{ studentId: p.studentId, classId: p.classId, date: p.date, status: p.status }]);
       return updateIds.length + promoteIds.length;
     }
   }
@@ -655,6 +655,6 @@ async function writeOne(
       : first.error;
   if (error) return error.message;
   // 보강 예약 이행(0264a) — 자리에서 새로 찍은 칸(fail-soft).
-  await completeMakeupReservations({ tenantId: p.tenantId }, [{ studentId: p.studentId, classId: p.classId, date: p.date, status: p.status, created: true }]);
+  await completeMakeupReservations({ tenantId: p.tenantId, observeOnly: true }, [{ studentId: p.studentId, classId: p.classId, date: p.date, status: p.status, created: true }]);
   return 1;
 }

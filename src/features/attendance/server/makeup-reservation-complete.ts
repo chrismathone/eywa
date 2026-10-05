@@ -47,6 +47,13 @@ import {
 import { effectiveAttendanceRecords } from "../effective-records";
 import { round1 } from "../session-units";
 import { isMissingReservationTable, toReservation } from "./makeup-reservation-queries";
+import { classifyLegacyReservations } from "@/features/makeups/server/adapters/completion";
+import { effectGapsOf, noteEffectGap, type EffectGap } from "@/features/makeups/server/adapters/effects";
+import { handleMappedAbsence, handleMappedFulfill } from "@/features/makeups/server/adapters/mapped-save";
+import { loadRegularAttendanceTeacher } from "@/features/makeups/server/adapters/regular-attendance";
+import { calendarTeacherHold, loadCurrentCalendar } from "./calendar-teacher";
+import { fetchAllPaged } from "@/lib/supabase/batch";
+import { taughtByColumnReady } from "./taught-by-db";
 
 export type CompletionCell = {
   studentId: string;
@@ -86,14 +93,18 @@ type AttRow = {
 
 const ATT_SELECT = "id, student_id, class_id, session_date, slot_start, status, note, session_units, recorded_at";
 
-/** 그날 그 반의 **정규 수강생으로 오는 날**인가 — 로스터와 같은 판정(수강 유효 + 분리등원 요일). */
-async function isRegularAttendee(admin: Admin, tenantId: string, r: MakeupReservation): Promise<boolean> {
-  const { data } = await admin
+/**
+ * 그날 그 반의 **정규 수강생으로 오는 날**인가 — 로스터와 같은 판정(수강 유효 + 분리등원 요일).
+ * null = 조회 실패. 연결 경로는 그때 시수를 쓰지 않고, 미연결 이행은 예전처럼 정규가 아닌 것으로 둔다.
+ */
+async function isRegularAttendee(admin: Admin, tenantId: string, r: MakeupReservation): Promise<boolean | null> {
+  const { data, error } = await admin
     .from("enrollments")
     .select("start_date, end_date, on_hold, is_transferred, attendance_days")
     .eq("tenant_id", tenantId)
     .eq("class_id", r.classId)
     .eq("student_id", r.studentId);
+  if (error) return null;
   const dow = DOW_KEYS[weekdayIndexOf(r.makeupDate)] ?? "";
   return (data ?? []).some(
     (e) =>
@@ -127,34 +138,105 @@ async function classDayMinutes(admin: Admin, tenantId: string, classId: string, 
   return total;
 }
 
-/** 그날 그 칸의 행 전부(정정 이력 포함) → 유효 행. 실패는 null(그 예약은 건너뛴다). */
+const SCHEDULE_SELECT = "day_of_week, start_time, end_time, valid_from, valid_to, slot_teacher_label";
+
+/** 연결 시수의 수업 길이. 페이지가 하나라도 실패하면 null(없는 수업으로 보지 않는다). */
+async function mappedClassMinutes(admin: Admin, tenantId: string, classId: string, date: string): Promise<number | null> {
+  try {
+    const rows = await fetchAllPaged<{
+      day_of_week: string; start_time: string; end_time: string; valid_from: string; valid_to: string | null; slot_teacher_label: string | null;
+    }>((from, to) =>
+      admin.from("class_schedules").select(SCHEDULE_SELECT)
+        .eq("tenant_id", tenantId).eq("class_id", classId).lte("valid_from", date)
+        .or(`valid_to.is.null,valid_to.gte.${date}`).order("id").range(from, to),
+    );
+    let total = 0;
+    for (const minutes of liveSlotMinutesOn(date, rows.map(toAutoUnitsSchedule)).values()) total += minutes;
+    return total;
+  } catch {
+    return null;
+  }
+}
+
+/** 그날 그 칸의 행 전부(정정 이력 포함) → 유효 행. 한 페이지가 실패하면 null(없는 출결로 보지 않는다). */
 async function loadDay(admin: Admin, tenantId: string, r: MakeupReservation, date: string): Promise<AttRow[] | null> {
-  const { data, error } = await admin
-    .from("attendance_records")
-    .select(ATT_SELECT)
-    .eq("tenant_id", tenantId)
-    .eq("class_id", r.classId)
-    .eq("student_id", r.studentId)
-    .eq("session_date", date);
-  if (error) return null;
-  return effectiveAttendanceRecords((data ?? []) as AttRow[]);
+  try {
+    const rows = await fetchAllPaged<AttRow>((from, to) =>
+      admin
+        .from("attendance_records")
+        .select(ATT_SELECT)
+        .eq("tenant_id", tenantId)
+        .eq("class_id", r.classId)
+        .eq("student_id", r.studentId)
+        .eq("session_date", date)
+        .order("id")
+        .range(from, to),
+    );
+    return effectiveAttendanceRecords(rows);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * 찍힌·지운 칸들 중 예약이 걸린 것을 이행하거나 되돌린다. 시수를 바꾼 칸을 돌려준다(호출부는 무시해도 된다).
  * @param cells 이번 저장이 손댄 칸 — 상태가 무엇이든 그 (학생·반·날짜)의 예약을 DB 행으로 다시 판정한다.
  */
+export { effectGapsOf };
+
+const MIXED_TEACHERS = "같은 날 정규 수업의 담당이 서로 달라 같은 날에 함께 기록할 수 없습니다";
+const UNKNOWN_TEACHERS = "정규 출결을 확인하지 못해 보강 시수와 참여를 기록하지 않았습니다";
+const DAY_UNREAD = "출결 기록을 확인하지 못해 보강 시수와 참여를 기록하지 않았습니다";
+const ACTUAL_DIFFERS = "출결에 찍힌 담당 강사가 보강 강사와 달라 시수와 참여를 기록하지 않았습니다";
+const ENROLLMENT_UNREAD = "수강 정보를 확인하지 못해 보강 시수와 참여를 기록하지 않았습니다";
+const MINUTES_UNREAD = "수업 시간을 확인하지 못해 보강 시수와 참여를 기록하지 않았습니다";
+
+type CountedTeacher = { teacherId: string | null; hold: string | null; stamped: boolean };
+
+/** 연결 효과 전에 그날의 현재 교시 담당을 모두 본다. taught_by 칸이 아직 없으면 반 담임으로 둔다. */
+async function regularTeacherOf(
+  admin: Admin,
+  tenantId: string,
+  classTeacherId: string | null,
+  studentId: string,
+  classId: string,
+  date: string,
+): Promise<CountedTeacher> {
+  if (!(await taughtByColumnReady(admin))) return { teacherId: classTeacherId, hold: null, stamped: false };
+  const found = await loadRegularAttendanceTeacher(admin, tenantId, studentId, classId, date);
+  if (found.status === "conflict") return { teacherId: null, hold: MIXED_TEACHERS, stamped: true };
+  if (found.status === "unknown") return { teacherId: null, hold: UNKNOWN_TEACHERS, stamped: true };
+  if (found.status === "none") return { teacherId: classTeacherId, hold: null, stamped: false };
+  return { teacherId: found.teacherId, hold: null, stamped: true };
+}
+
+/** 찍힌 담당이 보강 강사와 다르거나 비어 있으면 시수 앞에 멈춘다. 정규일만 비교하지 않는다. */
+function countedTeacherHold(teacher: CountedTeacher, makeupTeacherId: string | null): string | null {
+  if (teacher.hold) return teacher.hold;
+  if (teacher.stamped) {
+    if (!teacher.teacherId || teacher.teacherId !== makeupTeacherId) return teacher.teacherId ? ACTUAL_DIFFERS : UNKNOWN_TEACHERS;
+    return null;
+  }
+  return teacher.teacherId ? null : UNKNOWN_TEACHERS;
+}
+
+function withGaps(units: CompletionUnits, gaps: EffectGap[]): CompletionUnits {
+  Object.defineProperty(units, "effectGaps", { value: gaps, enumerable: false });
+  return units;
+}
+
 export async function completeMakeupReservations(
-  ctx: { tenantId: string },
+  ctx: { tenantId: string; observeOnly?: boolean },
   cells: readonly CompletionCell[],
 ): Promise<CompletionUnits> {
   const changedUnits: CompletionUnits = new Map();
-  if (cells.length === 0) return changedUnits;
+  const gaps: EffectGap[] = [];
+  if (cells.length === 0) return withGaps(changedUnits, gaps);
   let admin: Admin;
   try {
     admin = createAdminClient();
   } catch {
-    return changedUnits;
+    return withGaps(changedUnits, gaps);
   }
   // (반·날짜)로 묶어 학생 id 목록으로 묻는다 — 단건 저장은 1행, 일괄 저장은 반 하나에 수십 명.
   const byClassDate = new Map<string, { classId: string; date: string; cells: Map<string, CompletionCell> }>();
@@ -184,7 +266,7 @@ export async function completeMakeupReservations(
     if (list.length === 0) continue;
     // 시수 자동값 재료(과목)·감사로그 '대상'(학생 · 반) — 반 하나에 한 번.
     const [{ data: cls }, { data: stus }] = await Promise.all([
-      admin.from("classes").select("subject, class_name").eq("tenant_id", ctx.tenantId).eq("id", g.classId).maybeSingle(),
+      admin.from("classes").select("subject, class_name, teacher_id").eq("tenant_id", ctx.tenantId).eq("id", g.classId).maybeSingle(),
       admin
         .from("students")
         .select("id, name")
@@ -198,27 +280,152 @@ export async function completeMakeupReservations(
       const name = nameOf.get(r.studentId);
       return name && className ? { targetLabel: `${name} · ${className}` } : {};
     };
+    const disposition = await classifyLegacyReservations(ctx.tenantId, list.map((r) => ({
+      id: r.id, studentId: r.studentId, classId: r.classId, makeupDate: r.makeupDate,
+    })));
+    const calendar = disposition.kind === "split"
+      ? await loadCurrentCalendar(admin, ctx.tenantId, g.classId, g.date)
+      : null;
 
     for (const r of list) {
       try {
         const live = await loadDay(admin, ctx.tenantId, r, r.makeupDate);
-        if (!live) continue;
+        if (!live) {
+          if (disposition.kind === "split") {
+            const missed = disposition.project.get(r.id);
+            gaps.push(await noteEffectGap({
+              effectKey: missed?.effectKey ?? `day:${r.id}`, kind: "teacher_hold",
+              participantId: missed?.participantId ?? null, reservationId: r.id, error: DAY_UNREAD,
+            }));
+          }
+          continue;
+        }
         const cell = pickFulfillingRow(
           live.map((x) => ({ ...x, slotStart: x.slot_start, recordedAt: x.recorded_at })),
           r,
         );
         if (cell && r.status === "reserved") {
+          if (disposition.kind === "blocked") {
+            gaps.push(await noteEffectGap({
+              effectKey: `kiosk:${r.studentId}:${r.classId}:${r.makeupDate}`, kind: ctx.observeOnly ? "observation" : "classify_blocked",
+              participantId: null, reservationId: r.id, error: disposition.error,
+            }));
+            if (!ctx.observeOnly) continue;
+          }
+          if (disposition.kind === "split" && disposition.hold.has(r.id)) {
+            gaps.push(await noteEffectGap({
+              effectKey: `hold:${r.id}`, kind: "split_hold", participantId: null, reservationId: r.id,
+              error: "같은 학생의 연결 예약이 둘이라 이행을 멈추었습니다",
+            }));
+            continue;
+          }
+          const projected = disposition.kind === "split" ? disposition.project.get(r.id) : undefined;
+          if (projected && disposition.kind === "split") {
+            const src = g.cells.get(r.studentId);
+            const makeupUnits = calendar && calendar.status !== "unknown" && calendar.profile.autoUnits
+              ? reservationAutoUnits(r, subject) : null;
+            const storedNumber = typeof cell.session_units === "number" ? cell.session_units : Number(cell.session_units);
+            const storedUnits = cell.session_units == null || cell.session_units === "" || !Number.isFinite(storedNumber) ? null : storedNumber;
+            const teacher = await regularTeacherOf(
+              admin, ctx.tenantId, (cls?.teacher_id as string | null) ?? null, r.studentId, r.classId, r.makeupDate,
+            );
+            const teacherHold = countedTeacherHold(teacher, projected.teacherId);
+            if (teacherHold) {
+              gaps.push(await noteEffectGap({
+                effectKey: projected.effectKey, kind: "teacher_hold", participantId: projected.participantId,
+                reservationId: r.id, error: teacherHold,
+              }));
+              continue;
+            }
+            // 휴강·휴원·현재 교시 없음은 보강 시수만. 시간표를 모르면 수강 여부와 상관없이 시수 앞에 멈춘다.
+            if (calendar?.status === "unknown") {
+              const calendarHold = calendarTeacherHold(calendar, projected.teacherId);
+              if (calendarHold) {
+                gaps.push(await noteEffectGap({
+                  effectKey: projected.effectKey, kind: "teacher_hold", participantId: projected.participantId,
+                  reservationId: r.id, error: calendarHold,
+                }));
+                continue;
+              }
+            }
+            let enrolled = false;
+            if (calendar?.status === "ready" && subject) {
+              const regular = await isRegularAttendee(admin, ctx.tenantId, r);
+              if (regular === null) {
+                gaps.push(await noteEffectGap({
+                  effectKey: projected.effectKey, kind: "teacher_hold", participantId: projected.participantId,
+                  reservationId: r.id, error: ENROLLMENT_UNREAD,
+                }));
+                continue;
+              }
+              enrolled = regular;
+            }
+            if (enrolled && calendar) {
+              const calendarHold = calendarTeacherHold(calendar, projected.teacherId);
+              if (calendarHold) {
+                gaps.push(await noteEffectGap({
+                  effectKey: projected.effectKey, kind: "teacher_hold", participantId: projected.participantId,
+                  reservationId: r.id, error: calendarHold,
+                }));
+                continue;
+              }
+            }
+            const classMinutes = enrolled ? await mappedClassMinutes(admin, ctx.tenantId, r.classId, r.makeupDate) : 0;
+            if (enrolled && classMinutes === null) {
+              gaps.push(await noteEffectGap({
+                effectKey: projected.effectKey, kind: "teacher_hold", participantId: projected.participantId,
+                reservationId: r.id, error: MINUTES_UNREAD,
+              }));
+              continue;
+            }
+            const saved = await handleMappedFulfill({
+              observeOnly: ctx.observeOnly === true, mode: disposition.mode, pilotSubjects: disposition.pilotSubjects,
+              subject, regularTeacherId: teacher.teacherId,
+              projected, reservationId: r.id, studentId: r.studentId, classId: r.classId, makeupDate: r.makeupDate,
+              slotStart: r.slotStart, slotEnd: r.slotEnd,
+              cell: { id: cell.id, status: cell.status, slotStart: cell.slot_start, sessionUnits: storedUnits },
+              unitsExplicit: src?.unitsExplicit === true, created: src?.created === true, makeupUnits,
+              regularAttendee: enrolled, classMinutes,
+              patchUnits: async (units) => {
+                const { error: patchErr } = await admin.from("attendance_records").update({ session_units: units }).eq("tenant_id", ctx.tenantId).eq("id", cell.id);
+                return !patchErr;
+              },
+            });
+            if (saved.units !== undefined) changedUnits.set(completionKey({ studentId: r.studentId, classId: r.classId, date: r.makeupDate }), saved.units);
+            if (saved.gap) gaps.push(saved.gap);
+            continue;
+          }
           const units = await fulfil(admin, ctx.tenantId, r, cell, g.cells.get(r.studentId), subject, labelOf(r));
           if (units !== undefined) changedUnits.set(completionKey({ studentId: r.studentId, classId: r.classId, date: r.makeupDate }), units);
         } else if (!cell && r.status === "done") {
+          const projected = disposition.kind === "split" ? disposition.project.get(r.id) : undefined;
+          if (disposition.kind === "blocked" && !ctx.observeOnly) {
+            gaps.push(await noteEffectGap({
+              effectKey: `classify:${r.id}`, kind: "classify_blocked", participantId: null, reservationId: r.id, error: disposition.error,
+            }));
+            continue;
+          }
+          if (projected) {
+            const absent = live.find((row) => row.status === "absent" || row.status === "excused");
+            const missed = await handleMappedAbsence({
+              observeOnly: ctx.observeOnly === true, projected, reservationId: r.id, studentId: r.studentId,
+              subject, classId: r.classId, makeupDate: r.makeupDate, attendanceRecordId: absent?.id ?? null,
+            });
+            if (missed) gaps.push(missed);
+            continue;
+          }
           await revert(admin, ctx.tenantId, r, live, labelOf(r));
         }
       } catch (e) {
+        const message = e instanceof Error ? e.message : "보강 이행을 마치지 못했습니다";
+        gaps.push(await noteEffectGap({
+          effectKey: `complete:${r.id}`, kind: "complete_failed", participantId: null, reservationId: r.id, error: message,
+        }));
         console.error("[makeup-reservation] 이행·되돌림 실패", e);
       }
     }
   }
-  return changedUnits;
+  return withGaps(changedUnits, gaps);
 }
 
 /** 이행 — 예약 `done` + 보강 칸 메모·시수 + 결석 칸 "예정 → 완료" + 감사로그. 시수를 바꿨으면 그 값(null = 1). */

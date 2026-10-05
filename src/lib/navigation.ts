@@ -212,6 +212,7 @@ export const NAV_GROUPS: NavGroup[] = [
       //    아니라 **강사 축의 한 갈래**다. 라우트(/attendance/seat/*)와 권한 키는 그대로 있고
       //    진입만 그 드롭다운으로 좁힌다.
       { href: "/classes", label: "수업목록", icon: MENU_ICON.classes, menuKey: "classes", aliases: ["반 목록"] },
+      { href: "/makeups", label: "보강관리", icon: MENU_ICON.makeups, menuKey: "makeups" },
       // 교재목록 — 교재(구분·페이지/시간·차수)와 차수별 진도·과제. 영어 강사 시트에 차수별로 자동기입하는
       // 재료다(원장 2026-09-16). ⚠️ 수납관리의 **교재 단가표**(textbook_catalog)와 다른 물건이다 —
       // 그쪽은 금액 표(makeedu 동기화)고 이쪽은 커리큘럼이다. 라벨을 서로 바꿔 부르지 말 것.

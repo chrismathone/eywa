@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { weekBoundsOf } from "@/features/timetable/lib/week";
 import type { MakeupReservation } from "../makeup-reservation";
+import { loadNativeParticipants } from "@/features/makeups/server/adapters/participants";
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
 
@@ -48,7 +49,11 @@ type Row = {
 type ClassRef = { class_name?: string | null };
 
 /** 학생 상세 '예정된 변경' 배너가 읽는 한 줄 — 예약 + **원반 이름**(모르면 null, 지어내지 않는다). */
-export type StudentUpcomingReservation = MakeupReservation & { className: string | null };
+export type StudentUpcomingReservation = MakeupReservation & {
+  className: string | null;
+  origin?: "reservation" | "native" | "additional";
+  caseId?: string | null;
+};
 
 const hhmm = (t: string | null | undefined) => String(t ?? "").slice(0, 5);
 
@@ -217,10 +222,37 @@ export async function getStudentUpcomingReservations(
     soft("학생", error);
     return [];
   }
-  return ((data ?? []) as (Row & { class?: ClassRef | ClassRef[] | null })[]).map((r) => ({
+  const legacy = ((data ?? []) as (Row & { class?: ClassRef | ClassRef[] | null })[]).map((r) => ({
     ...toReservation(r),
     className: (Array.isArray(r.class) ? r.class[0] : r.class)?.class_name ?? null,
+    origin: "reservation" as const,
+    caseId: null as string | null,
   }));
+  const nativeOutcome = await loadNativeParticipants({ student_id: studentId, date_from: today }, { sharedRead: true });
+  if (nativeOutcome.status === "off" || nativeOutcome.status === "schema_missing") return legacy;
+  if (nativeOutcome.status === "ok") {
+    for (const map of nativeOutcome.value.legacyMaps) {
+      const row = legacy.find((item) => item.id === map.legacyReservationId);
+      if (row && map.caseId) row.caseId = map.caseId;
+    }
+  }
+  if (nativeOutcome.status === "failed" || nativeOutcome.value.truncated) {
+    throw new Error(nativeOutcome.status === "failed" ? nativeOutcome.error : "보강 참여 목록이 잘렸습니다");
+  }
+  const seen = new Set(legacy.map((row) => `${row.classId}|${row.makeupDate}|${row.slotStart}`));
+  const native = nativeOutcome.value.participants.flatMap((row) => {
+    if (row.status === "cancelled" || row.sessionDate < today) return [];
+    const slotStart = (row.startTime ?? "").slice(0, 5);
+    const key = `${row.classId ?? ""}|${row.sessionDate}|${slotStart}`;
+    if (seen.has(key)) return [];
+    return [{
+      id: row.id, studentId: row.studentId, classId: row.classId ?? "", absenceDate: row.originalDate ?? "",
+      makeupDate: row.sessionDate, slotStart, slotEnd: (row.endTime ?? "").slice(0, 5),
+      periodLabel: null, note: null, status: "reserved" as const, createdBy: null, className: null,
+      origin: "native" as const, caseId: row.caseIds[0] ?? null,
+    }];
+  });
+  return [...legacy, ...native];
 }
 
 /**

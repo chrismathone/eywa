@@ -28,6 +28,8 @@ import { classnoteSendWindowLabel } from "../classnote-guard";
 import { applyStudentOrder } from "../student-order";
 import { rosterIncludesEnrollment } from "../roster-filter";
 import { CLASS_TAG_ALL } from "../class-tags";
+import { addedClassPairs } from "@/features/makeups/roster-merge";
+import { loadNativeParticipants, participantsOrLegacy } from "@/features/makeups/server/adapters/participants";
 import { matchReportsToRows } from "../report-unit";
 import { ownsMakeupReport } from "../makeup-owner";
 import { makeupSessionEntries } from "../makeup-session";
@@ -442,6 +444,7 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
   //    종료일 뒤에도 로스터에 영원히 남는다. 시간표(fetchSlots)와 같은 규약으로 맞춘다.
   // ⚠️ 보강 보고서 조회는 반과 무관하다 — 스케줄과 **병렬**로(B4: 독립 await는 Promise.all).
   //    그날 내가 쓴 보강(수업외) 보고서 = 아래 수강생 로스터엔 절대 안 잡히는 행들의 유일한 원천.
+  const nativePromise = loadNativeParticipants({ session_date: targetDate, limit: 500 }, { sharedRead: true });
   const [scheds, makeupReports, makeupAttRows, reservedToday] = await Promise.all([
     // end_time·자리 라벨·유효구간·요일은 **수학 자동 시수**(수업 길이, auto-units.ts) 재료 — 같은 행이라 왕복 0.
     fetchInChunks<{
@@ -619,6 +622,12 @@ export async function getTeacherRoster(rawDate?: string, showAll = false): Promi
     alreadyMakeup.add(key);
     attMakeup.push({ studentId: r.studentId, classId: r.classId });
     const cls = allClasses.find((c) => c.id === r.classId);
+    if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
+  }
+  for (const row of addedClassPairs(alreadyMakeup, participantsOrLegacy(await nativePromise))) {
+    alreadyMakeup.add(`${row.studentId}|${row.classId}`);
+    attMakeup.push(row);
+    const cls = allClasses.find((c) => c.id === row.classId);
     if (cls && !classById.has(cls.id)) classById.set(cls.id, cls);
   }
 

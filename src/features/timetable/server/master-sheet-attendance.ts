@@ -95,6 +95,7 @@ export async function rollbackAttendanceMoves(
   tx: postgres.TransactionSql,
   tenant: string,
   backups: AttendanceBackup[],
+  extraLinks: AttendanceLink[] = [],
 ) {
   if (!backups.length) return;
   const ids = backups.map((b) => String(b.before.id));
@@ -108,11 +109,14 @@ export async function rollbackAttendanceMoves(
     throw new Error(
       "이관 이후 출결이 추가되어 예약을 취소할 수 없습니다. 출결을 먼저 확인해 주세요.",
     );
-  const links = await loadAttendanceLinks(
-    tx,
-    tenant,
-    backups.map((b) => String(b.before.session_date)).sort()[0]!,
-  );
+  const links = [
+    ...(await loadAttendanceLinks(
+      tx,
+      tenant,
+      backups.map((b) => String(b.before.session_date)).sort()[0]!,
+    )),
+    ...extraLinks,
+  ];
   if (
     links.some((l) =>
       backups.some(

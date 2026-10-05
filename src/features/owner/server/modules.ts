@@ -15,9 +15,9 @@ export const isModuleOnForTenant = cache(async (tenantId: string, id: ModuleId):
   try {
     const raw = await loadTenantSettingsRaw(tenantId);
     const settings = resolveSettings(storedForResolve(raw), { name: raw.name });
-    return isModuleEnabled(settings.modules.disabled, id);
+    return isModuleEnabled(settings.modules.disabled, id) && (id !== "makeups" || settings.makeups.mode !== "off");
   } catch (e) {
     console.error("[owner/modules] 모듈 판정 실패 — 켜진 것으로 본다", e);
-    return true;
+    return id !== "makeups";
   }
 });

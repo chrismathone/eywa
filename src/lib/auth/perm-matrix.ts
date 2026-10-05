@@ -22,6 +22,7 @@ import { capDisabledModules } from "@/lib/modules";
 import { isReadonlyTeacherView } from "@/lib/auth/view-as";
 import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 import { isFeatureLicensed } from "@/lib/license/server";
+import { capMakeupMode, normalizeMakeupSettings } from "@/features/makeups/config";
 
 async function capSettingFeatures(matrix: AccessMatrix, tenantId: string, role: SystemRole): Promise<AccessMatrix> {
   if (matrix.ai_ment[role] === "none" || await isFeatureLicensed(tenantId, "ai_analysis")) return matrix;
@@ -47,15 +48,16 @@ async function capSettingFeatures(matrix: AccessMatrix, tenantId: string, role: 
 export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
   try {
     const settings = await getTenantSettings();
+    const makeupMode = normalizeMakeupSettings(settings.makeups).mode;
     const overrides = settings.permissions.overrides;
     // 🔴 꺼진 모듈(기능 묶음)은 **맨 끝에서** 전원 none — super_admin 병합으로도 안 열린다(그 학원엔 없는 기능이다).
     //    침산은 꺼진 모듈이 없어 capDisabledModules가 받은 매트릭스를 그대로 돌려준다(오늘과 같다).
     const disabled = settings.modules.disabled;
     if (overrides.length > 0 && (await isCurrentUserSuperAdmin())) {
       // 잠금은 무시(기본값이 살아남고), 부여는 보존(원장이 연 셀은 그대로) — mergeMostPermissive 주석 참조.
-      return capDisabledModules(mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides)), disabled);
+      return capMakeupMode(capDisabledModules(mergeMostPermissive(resolveMatrix([]), resolveMatrix(overrides)), disabled), makeupMode);
     }
-    return capDisabledModules(resolveMatrix(overrides), disabled);
+    return capMakeupMode(capDisabledModules(resolveMatrix(overrides), disabled), makeupMode);
   } catch (e) {
     // ⚠️ fail-open(코드 기본값 복귀) = revoke override가 일시 무효화되는 방향 — 의도적·최종 결정이다.
     // 이유: fail-closed(차단)는 설정 조회 장애 시 master까지 /owner에 못 들어가 **복구 불능 락아웃**이 된다
@@ -63,7 +65,7 @@ export const getPermMatrix = cache(async (): Promise<AccessMatrix> => {
     // self-escalation(비-master가 override 자기부여)은 0038a tenant_settings master-guard 트리거로 DB레벨 차단됨 →
     // override는 항상 master가 정당히 설정한 값이고, 일시 무효는 캐시 회복 시 자가복구되는 낮은 위험. 관측성 위해 로깅.
     console.error("[perm-matrix] getTenantSettings 실패 — 코드 기본 권한으로 폴백(override 일시 미적용)", e);
-    return resolveMatrix([]);
+    return capMakeupMode(resolveMatrix([]), "off");
   }
 });
 
@@ -83,6 +85,7 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
     const user = await getCurrentUser();
     if (!user) return base;
     const settings = await getTenantSettings(); // getPermMatrix와 같은 요청 캐시 — 추가 라운드트립 0
+    const makeupMode = normalizeMakeupSettings(settings.makeups).mode;
     // 파일럿 명단 판정에 super_admin 여부가 필요하다(명단에 없어도 통과 — 원장 지시 2026-08-13).
     // 명단 자체는 침산 전용이다. 일반 프리셋은 저장된 개인 예외만 사용한다.
     // 요청 캐시된 PK 조회 1회이고, override가 있는 테넌트는 getPermMatrix에서 이미 부른 그 캐시다.
@@ -103,9 +106,9 @@ export const getUserPermMatrix = cache(async (): Promise<AccessMatrix> => {
       const merged = mergeMostPermissive(mergeMostPermissive(base, applied), codeOnly);
       // 슈퍼관리자는 공용 설정의 역할 제한으로 잠기지 않는다.
       for (const menu of SETTINGS_ROLE_KEYS) merged[menu] = { ...merged[menu], [user.systemRole]: "full" };
-      return capSettingFeatures(capDisabledModules(merged, disabled), user.tenantId, user.systemRole);
+      return capSettingFeatures(capMakeupMode(capDisabledModules(merged, disabled), makeupMode), user.tenantId, user.systemRole);
     }
-    return capSettingFeatures(capDisabledModules(applied, disabled), user.tenantId, user.systemRole);
+    return capSettingFeatures(capMakeupMode(capDisabledModules(applied, disabled), makeupMode), user.tenantId, user.systemRole);
   } catch (e) {
     console.error("[perm-matrix] 개인 예외 적용 실패 — 테넌트 매트릭스로 폴백", e);
     return base;

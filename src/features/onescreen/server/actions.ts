@@ -27,6 +27,7 @@ import {
 } from "./score-history";
 import type { TrendReportRow } from "../report-trend";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { makeupReportUpsertBlock } from "@/features/makeups/server/adapters/gates";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { classnoteSendWindowHint, isClassnoteAllowed, isClassnoteSubjectEnabled } from "../classnote-guard";
 import { hasClassnoteNameCollision, teacherOwnsStudent } from "./scope";
@@ -330,6 +331,12 @@ export async function saveLessonReport(
       if (!claimed.ok) return { ok: false, id: priorRow.id, error: claimed.error };
     }
   }
+
+  const reportBlock = await makeupReportUpsertBlock({
+    makeup: isMakeupRow, classId: input.classId || null, subject: input.subject ?? "",
+    studentId: input.studentId, date: reportDate, creating: !priorRow, existingReportId: priorRow?.id ?? null,
+  });
+  if (reportBlock) return { ok: false, ...(priorRow ? { id: priorRow.id } : {}), error: reportBlock };
 
   // (student, date, 반|과목) 1행 upsert — 재저장 시 같은 행 갱신(0134a `unit_key` 유니크).
   // ⚠️ onConflict 타깃은 **생성열 unit_key**(= coalesce(class_id::text, subject)) — 부분·표현식 인덱스는

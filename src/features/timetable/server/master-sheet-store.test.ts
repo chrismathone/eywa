@@ -1,3 +1,4 @@
+import "./master-native-read-double";
 import { describe, expect, it } from "vitest";
 import { applyMasterTransaction, masterPreview } from "./master-sheet-store";
 import { fixture, database } from "./master-sheet-test-fixture";

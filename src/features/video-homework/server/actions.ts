@@ -9,6 +9,7 @@ import { addDays, kstToday } from "@/lib/date-kst";
 import { isVideoHomeworkDate, type VideoHomeworkStatus } from "../types";
 import { videoHomeworkColumnReady } from "./assignments";
 import { ledgerRoundWriteError, loadVideoHomeworkTarget, videoHomeworkWriteError, writeVideoHomeworkMark, type MarkWriteResult } from "./mark-write";
+import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 
 type Db = ReturnType<typeof createAdminClient>;
 type CheckCell = { classId: string; studentId: string; checkDate: string; homeworkDate: string | null;
@@ -77,8 +78,11 @@ async function writeCheckedMark(db: Db, user: { tenantId: string; userId: string
     ]);
     if (attendance.error || reservation.error || existing.error)
       return { ok: false, error: attendance.error?.message ?? reservation.error?.message ?? existing.error?.message };
-    if (!attendance.data?.length && !reservation.data?.length && !existing.data?.length)
-      return { ok: false, error: "해당 수업 날짜의 학생을 찾을 수 없습니다." };
+    if (!attendance.data?.length && !reservation.data?.length && !existing.data?.length) {
+      const native = await nativeWriteAllowance({ studentId: input.studentId, classId: input.classId, sessionDate: input.checkDate });
+      if (native.error) return { ok: false, error: native.error };
+      if (!native.allow) return { ok: false, error: "해당 수업 날짜의 학생을 찾을 수 없습니다." };
+    }
   }
   return writeVideoHomeworkMark(db, { tenantId: user.tenantId, userId: user.userId, classId: input.classId, studentId: input.studentId,
     slotDate: input.checkDate, slotIsMine: true, homeworkDate: input.homeworkDate, submittedDate: input.submittedDate, status: input.status });

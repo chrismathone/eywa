@@ -26,6 +26,7 @@ import {
   type SystemRole,
 } from "@/lib/permissions";
 import { TeacherMenu } from "./teacher-menu";
+import { capMakeupMode } from "@/features/makeups/config";
 
 // 드롭다운은 평평하게 — base-ui 팝업은 열려야 그려지는데, 여기서 보려는 건 '무엇이 서는가'뿐이다.
 vi.mock("@/components/ui/dropdown-menu", async () => {
@@ -124,7 +125,7 @@ describe("강사 '내 메뉴' — 누르면 튕기는 항목이 없다", () => {
     }
   });
 
-  it("실 강사는 달라지는 게 없다 — 강사 행이 연 메뉴가 원래 순서대로 선다(메뉴에서 뺀 캘린더만 빠진다)", () => {
+  it("강사 행이 연 메뉴가 기존 순서대로 서고 출석부 뒤에 보강관리가 선다", () => {
     expect(menuHrefs("teacher", DEFAULTS)).toEqual([
       "/attendance/quick",
       "/onescreen",
@@ -133,6 +134,7 @@ describe("강사 '내 메뉴' — 누르면 튕기는 항목이 없다", () => {
       "/mcs",
       "/students",
       "/attendance",
+      "/makeups",
       "/classes",
       "/timetable",
       "/exams",
@@ -141,6 +143,10 @@ describe("강사 '내 메뉴' — 누르면 튕기는 항목이 없다", () => {
       "/expense-requests",
       "/documents",
     ]);
+  });
+  it("보강 운영이 꺼져 있으면 기존 강사 메뉴 순서를 유지한다", () => {
+    expect(menuHrefs("teacher", capMakeupMode(DEFAULTS, "off")))
+      .toEqual(menuHrefs("teacher", DEFAULTS).filter(href => href !== "/makeups"));
   });
 });
 

@@ -38,6 +38,7 @@ import {
   resolveMakeupSendClass,
 } from "@/features/onescreen/server/send-class";
 import { claimMakeupAnchorChange, finishMakeupAnchor, prepareMakeupAnchor } from "@/features/onescreen/server/makeup-anchor-sync";
+import { makeupReportUpsertBlock } from "@/features/makeups/server/adapters/gates";
 import { ensureMakeupAttendanceForReport, resolveMakeupOwner } from "@/features/attendance/server/makeup-pool";
 import { classnoteSendOn } from "@/features/owner/classnote-gate";
 
@@ -197,6 +198,12 @@ async function upsertAdminReport(
       if (!claimed.ok) return { ok: false, id: prior.id, error: claimed.error };
     }
   }
+
+  const reportBlock = await makeupReportUpsertBlock({
+    makeup: isMakeupRow, classId: input.classId || null, subject: input.subject,
+    studentId: input.studentId, date: reportDate, creating: !prior, existingReportId: prior?.id ?? null,
+  });
+  if (reportBlock) return { ok: false, ...(prior ? { id: prior.id } : {}), error: reportBlock };
 
   const { data, error } = await supabase
     .from("lesson_reports")

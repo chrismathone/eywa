@@ -285,6 +285,12 @@ describe("보강 예약 — 학생 상세 '예정된 변경' 배너 한 줄", ()
     expect(s).toContain("9/17 (Thu)");
     expect(s).not.toContain("(목)");
     expect(s).toContain("고등M 개별 TP4E");
+    expect(scheduledMakeupLabel({ ...line, origin: "reservation" }, "2026-09-14")).toBe(scheduledMakeupLabel(line, "2026-09-14"));
+    const native = scheduledMakeupLabel({ ...line, origin: "native" }, "2026-09-14", "en");
+    expect(native).toContain("participation");
+    expect(scheduledMakeupLabel({ ...line, origin: "native" }, "2026-09-14")).toContain("보강 참여");
+    expect(native).not.toContain("보강 참여");
+    expect(scheduledMakeupLabel({ ...line, origin: "additional" }, "2026-09-14")).toContain("추가 지도");
   });
 
   it("툴팁은 칸·시간표와 **같은 함수** — 교시·원반·메모까지 담는다", () => {

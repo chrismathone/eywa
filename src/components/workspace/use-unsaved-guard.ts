@@ -18,16 +18,23 @@ import { windowDirtyMessage } from "./window-bridge";
  * - 저장 성공 후 markSaved()로 baseline 재스냅샷 + dirty 해제(닫아도 확인 안 뜨게).
  *
  * 생성/수정 모두 사용(scope 불필요) — 작성 중 새 내용도 보호. enabled=false면 완전 비활성.
+ * - group(선택): 같은 문서에서 group이 같은 폼들은 미저장 상태를 **합쳐서** 알린다 — 한 폼을 저장하거나 닫아도
+ *   다른 폼이 아직 작성 중이면 창은 계속 '미저장'이다. group이 없으면 종전대로 폼마다 따로 보낸다.
  */
+const groupDirty = new Map<string, Set<object>>();
+
 export function useUnsavedGuard({
   formRef,
   enabled = true,
+  group,
 }: {
   formRef: RefObject<HTMLFormElement | null>;
   enabled?: boolean;
+  group?: string;
 }): { markSaved: () => void } {
   const baseline = useRef<string | null>(null);
   const dirtyRef = useRef(false);
+  const token = useRef({});
 
   const send = useCallback((dirty: boolean) => {
     if (typeof window === "undefined" || window.parent === window) return; // 창(iframe) 안에서만
@@ -37,6 +44,19 @@ export function useUnsavedGuard({
       /* cross-origin 등 — 무시 */
     }
   }, []);
+  /** group이 있으면 묶음 전체가 바뀔 때만 보낸다(마지막 작성 중 폼이 깨끗해질 때 false). */
+  const report = useCallback(
+    (dirty: boolean) => {
+      if (!group) return send(dirty);
+      const dirtyForms = groupDirty.get(group) ?? new Set<object>();
+      groupDirty.set(group, dirtyForms);
+      const before = dirtyForms.size > 0;
+      if (dirty) dirtyForms.add(token.current);
+      else dirtyForms.delete(token.current);
+      if (before !== dirtyForms.size > 0) send(dirtyForms.size > 0);
+    },
+    [group, send],
+  );
 
   useEffect(() => {
     const form = formRef.current;
@@ -47,7 +67,7 @@ export function useUnsavedGuard({
     const publish = (dirty: boolean) => {
       if (dirty === dirtyRef.current) return; // 전이 시에만
       dirtyRef.current = dirty;
-      send(dirty);
+      report(dirty);
     };
     const recompute = () =>
       publish(baseline.current !== null && serializeForm(form) !== baseline.current);
@@ -81,18 +101,18 @@ export function useUnsavedGuard({
       form.removeEventListener("change", schedule);
       window.removeEventListener("beforeunload", onBeforeUnload);
       // 언마운트(창 닫힘/드릴백/네비) 시 확실히 해제 — 부모가 stale dirty로 다음을 잘못 잠그는 것 방지.
-      if (dirtyRef.current) send(false);
+      if (dirtyRef.current) report(false);
     };
-  }, [enabled, formRef, send]);
+  }, [enabled, formRef, report]);
 
   const markSaved = useCallback(() => {
     const form = formRef.current;
     if (form) baseline.current = serializeForm(form);
     if (dirtyRef.current) {
       dirtyRef.current = false;
-      send(false);
+      report(false);
     }
-  }, [formRef, send]);
+  }, [formRef, report]);
 
   return { markSaved };
 }

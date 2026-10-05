@@ -28,6 +28,7 @@ import { buildSubjectMaps } from "@/features/owner/subjects";
 import { settingsToPeriodsConfig } from "@/features/timetable/lib/periods";
 import { appendMemo, hasMemoLine } from "@/features/onescreen/makeup-absence-link";
 import { userTaughtClassSet } from "@/features/attendance/live/server/write-policy";
+import { mappedCancelCommand, mappedReservationMutationBlock } from "@/features/makeups/server/adapters/gates";
 import { effectiveAttendanceRecords } from "../effective-records";
 import { isAutoUnitsSubject } from "../auto-units";
 import { getLessonProfile } from "@/features/owner/server/lesson-profile";
@@ -352,6 +353,8 @@ export async function cancelMakeupReservation(input: { id: string }): Promise<Ca
   const r = await loadReservationById(user.tenantId, input.id);
   if (!r) return { error: "예약을 찾지 못했습니다(이미 취소됐을 수 있습니다)" };
   if (r.status === "done") return { error: "이미 이행된 예약은 취소할 수 없습니다 — 보강일 출결을 고치세요" };
+  const mappedBlock = await mappedReservationMutationBlock(mappedCancelCommand(r.id));
+  if (mappedBlock) return { error: mappedBlock };
 
   const supabase = await createClient();
   if ((await accessLevelTenant(user.systemRole, "attendance")) === "scoped") {

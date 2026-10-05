@@ -24,6 +24,7 @@ import { ConsultationsSection } from "./_components/consultations-section";
 import { PermissionsSection } from "./_components/permissions-section";
 import { NavigationSection } from "./_components/navigation-section";
 import { ModulesSection } from "./_components/modules-section";
+import { MakeupsSection } from "./_components/makeups-section";
 import { isGenericTenant } from "@/features/owner/preset";
 import { capDisabledModules, isModuleEnabled } from "@/lib/modules";
 import { resolveMatrix } from "@/lib/permissions";
@@ -183,6 +184,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {tab === "operations" ? (
+        <>
         <OperationsSection
           initial={operationsForClient}
           classrooms={classrooms}
@@ -190,6 +192,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           readOnly={!canEditOperations}
           seatPinStatus={seatPinStatus(settings.operations)}
         />
+        {canReadAudit ? <MakeupsSection initial={settings.makeups} /> : null}
+        </>
       ) : null}
       {tab === "subjects" ? (
         <SubjectsSection

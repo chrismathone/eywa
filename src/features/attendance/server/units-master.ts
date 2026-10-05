@@ -18,6 +18,8 @@ import type { CurrentUser } from "@/lib/auth/current-user";
 import { shiftDays } from "@/features/timetable/lib/week";
 import { enrollmentAttendsOnDay, isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { axisDowOf } from "../teacher-axis";
+import { nativeLessonDraft } from "@/features/makeups/roster-merge";
+import { loadNativeParticipants, participantsOrLegacy } from "@/features/makeups/server/adapters/participants";
 
 export function canViewUnitsMaster(role: CurrentUser["systemRole"], teacherId: string | null): boolean {
   return ["master", "admin", "manager"].includes(role) && !teacherId;
@@ -77,6 +79,7 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
   const enrollmentsByClass = groupBy(enrollments, (e) => e.class_id);
   const schedulesByClass = groupBy(schedules, (s) => s.class_id);
   const reservationsByClass = groupBy(reservations, (r) => r.class_id);
+  const nativeRows = participantsOrLegacy(await loadNativeParticipants({ date_from: from, date_to: to, limit: 500 }, { sharedRead: true }));
   const roster = classes.map((c) => {
     const w = windows.get(c.id)!;
     return { classId: c.id, className: c.class_name, studentIds: [...new Set([
@@ -84,6 +87,7 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
       ...(recordsByClass.get(c.id) ?? []).filter((r) => r.session_date >= w.start && r.session_date <= w.end).map((r) => r.student_id),
       ...(termsByClass.get(c.id) ?? []).flatMap((t) => studentByInvoice.get(t.invoice_id) ?? []),
       ...(reservationsByClass.get(c.id) ?? []).map((r) => r.student_id),
+      ...nativeRows.filter((row) => row.classId === c.id).map((row) => row.studentId),
     ])] };
   });
   const studentIds = [...new Set(roster.flatMap((r) => r.studentIds))];
@@ -135,10 +139,23 @@ export async function loadUnitsMaster(requestedMonth: string): Promise<UnitsMast
           const minutes = Number(end.slice(0, 2)) * 60 + Number(end.slice(3)) - Number(start.slice(0, 2)) * 60 - Number(start.slice(3));
           return { date: r.makeup_date, start, end, owner: masterOwner(slots, c.teacher_id, r.makeup_date, start), units: unitsFromMinutes(minutes, basis40 ? "eie" : "injaewon") ?? 1 };
         });
+      const nativeReviews: string[] = [];
+      for (const piece of nativeRows.filter((row) => row.classId === c.id && row.studentId === id && row.sessionDate >= w.start && row.sessionDate <= w.end)) {
+        const draft = nativeLessonDraft(piece);
+        if (!draft || !("date" in draft)) {
+          if (draft && "review" in draft) nativeReviews.push(draft.review);
+          continue;
+        }
+        if (upcoming.some((lesson) => lesson.date === draft.date && lesson.start === draft.start)) continue;
+        const minutes = Number(draft.end.slice(0, 2)) * 60 + Number(draft.end.slice(3)) - Number(draft.start.slice(0, 2)) * 60 - Number(draft.start.slice(3));
+        upcoming.push({ date: draft.date, start: draft.start, end: draft.end, owner: masterOwner(slots, c.teacher_id, draft.date, draft.start), units: unitsFromMinutes(minutes, basis40 ? "eie" : "injaewon") ?? 1 });
+      }
       const row = buildMasterStudent({ student: { id, name: s.name, school: schoolGradeLabel(s.school, s.grade) },
         records: recordsByClass.get(c.id) ?? [], schedules: slots, enrollments: enrollment, plan, allocation,
         term: confirmed[rowKey(c.id, id)], invoice: invoiceStates[id], homeroomTeacherId: c.teacher_id,
         from: w.start, to: w.end, asOf, sessionUnmapped, reservations: upcoming });
+      for (const message of nativeReviews) row.review.push(message);
+      if (nativeReviews.length && row.target !== null) row.status = "review";
       if (enrollmentRows.some((e) => e.on_hold)) {
         row.review.push("현재 휴원 상태입니다. 해당 기간의 출결을 확인해 주세요");
         if (row.target !== null) row.status = "review";

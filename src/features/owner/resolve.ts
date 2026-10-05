@@ -6,6 +6,7 @@ import { normalizeDisabledModules } from "@/lib/modules";
 import { normalizeNavigationSettings } from "./normalize-navigation";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import type { AccountSetting, BillingSettings, SubjectSetting, TenantSettings } from "./settings-types";
+import { normalizeMakeupSettings } from "@/features/makeups/config";
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -112,6 +113,7 @@ export function resolveSettings(stored: unknown, tenant: { name: string }): Tena
     navigation: normalizeNavigationSettings(merged.navigation),
     // 모르는 모듈 id는 버린다(유령 id가 게이트를 흔들지 않게).
     modules: { disabled: normalizeDisabledModules(merged.modules.disabled) },
+    makeups: normalizeMakeupSettings(merged.makeups),
     // 운영실 배치 — 판 번호가 다르거나 깨진 역할 배치는 버려 기본 배치로 돌아가고, 모르는 카드·이탈 좌표는 걸러 낸다.
     dashboard: normalizeDashboard(merged.dashboard),
   };

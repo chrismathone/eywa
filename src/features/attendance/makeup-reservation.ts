@@ -30,6 +30,7 @@ import {
   subjectWeekendPeriods,
   type PeriodsConfig,
 } from "@/features/timetable/lib/periods";
+import { rosterOriginLabel } from "@/features/makeups/roster-merge";
 import { isAutoUnitsSubject, unitsFromMinutes } from "./auto-units";
 import { daysBetween } from "./edit-window";
 import { COUNTABLE_STATUSES } from "./session-units";
@@ -467,6 +468,10 @@ export type ScheduledMakeupLine = Pick<
 > & {
   /** 원반 이름. 모르면 null — 문장에서 그 조각이 빠진다(지어내지 않는다). */
   className: string | null;
+  /** 없으면 기존 예약 문장 그대로. 참여·추가 지도만 구분을 붙인다. */
+  origin?: "reservation" | "native" | "additional";
+  /** 보강 상세로 가는 케이스. 없으면 링크를 만들지 않는다. */
+  caseId?: string | null;
 };
 
 /**
@@ -513,9 +518,11 @@ export function scheduledMakeupLabel(
   const time = `${r.slotStart}~${r.slotEnd}`;
   const absence = absenceDayLabel(r.absenceDate, today);
   const name = r.className?.trim();
-  return name
+  const base = name
     ? sheetTf(lang, "sched.makeup", { when, time, absence, name })
     : sheetTf(lang, "sched.makeupNoClass", { when, time, absence });
+  if (!r.origin || r.origin === "reservation") return base;
+  return `${base} · ${rosterOriginLabel(r.origin, lang === "en" ? "en" : "ko")}`;
 }
 
 /** 그 줄의 툴팁 — 교시·메모까지(칸·시간표 줄과 **같은 함수**라 표면마다 문장이 갈리지 않는다). */

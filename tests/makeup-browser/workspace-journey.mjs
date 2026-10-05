@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { expect } from "@playwright/test";
+
+export async function workspaceJourney({ contextFor, db, uid, output, errors, option, originalOffset = -12 }) {
+  const context = await contextFor(22), page = await context.newPage();
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("http://127.0.0.1:3045/makeups/new");
+  const coach = page.getByRole("dialog", { name: "워크스페이스 안내" });
+  await expect(coach).toBeVisible();
+  await coach.getByRole("button", { name: "시작하기", exact: true }).click();
+  await expect.poll(() => page.frames().some(frame => /\/makeups\/new\?embed=1/.test(frame.url())), { timeout: 45000 }).toBe(true);
+  const frame = page.frames().find(frame => /\/makeups\/new\?embed=1/.test(frame.url()));
+  assert.ok(frame);
+  await frame.waitForLoadState("domcontentloaded", { timeout: 45000 });
+  await frame.locator('select[name="student_id"]').waitFor({ state: "visible", timeout: 45000 });
+  const form = frame.locator("form").last();
+  await option(form, "student_id", uid(61));
+  await option(form, "original_class_id", uid(51));
+  const [date] = await db`select mt.d(${originalOffset})::text as original`;
+  await form.locator('input[name="original_date"]').fill(date.original);
+  await form.locator('textarea[name="note"]').fill("합성 실제 워크스페이스: 같은 창 접수·이동·새로고침 확인");
+  await form.getByRole("button", { name: "접수 · 승인 대기로 저장", exact: true }).click();
+  await frame.waitForURL(url => /^\/makeups\/[0-9a-f-]{36}$/.test(url.pathname));
+  assert.equal(new URL(frame.url()).searchParams.get("embed"), "1");
+  await expect(frame.locator("main.embed-main")).toBeVisible();
+  assert.equal(await frame.locator("iframe").count(), 0);
+  await frame.getByRole("link", { name: "목록", exact: true }).click();
+  await frame.waitForURL(url => url.pathname === "/makeups");
+  await frame.getByRole("button", { name: "조회", exact: true }).click();
+  await frame.waitForURL(url => url.pathname === "/makeups" && url.searchParams.has("tab"));
+  assert.equal(new URL(frame.url()).searchParams.get("embed"), "1");
+  await frame.getByRole("link", { name: "가상학생A", exact: true }).first().click();
+  await frame.waitForURL(url => /^\/makeups\/[0-9a-f-]{36}$/.test(url.pathname));
+  assert.equal(new URL(frame.url()).searchParams.get("embed"), "1");
+  await frame.evaluate(() => location.reload());
+  await expect(frame.locator("main.embed-main")).toBeVisible();
+  assert.equal(await frame.locator("iframe").count(), 0);
+  await page.screenshot({ path: `${output}/desktop-workspace.png`, fullPage: true });
+  return "actual workspace iframe intake → list GET filter → detail → reload preserves embed; no nested shell";
+}

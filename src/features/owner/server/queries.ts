@@ -91,13 +91,15 @@ export const getTenantSettings = cache(async (): Promise<TenantSettings> => {
  * 의존해 RLS 컨텍스트가 없는 곳에선 못 쓰므로, tenantId를 받아 admin으로 직접 읽어 해석한다.
  * React cache 밖이라 호출당 조회 1회. 호출부에서 tenantId는 신뢰된 경로(쿠키 검증된 기기 등)로만.
  */
-export async function getTenantSettingsByTenantId(tenantId: string): Promise<TenantSettings> {
+export async function getTenantSettingsByTenantId(tenantId: string, options?: { failOnReadError?: boolean }): Promise<TenantSettings> {
   const admin = createAdminClient();
   const [settingsRes, tenantRes] = await Promise.all([
     admin.from("tenant_settings").select("data").eq("tenant_id", tenantId).maybeSingle(),
     admin.from("tenants").select("name").eq("id", tenantId).maybeSingle(),
   ]);
   if (settingsRes.error) console.error("[owner/queries] tenant_settings 조회 오류", settingsRes.error);
+  // 시수처럼 읽기 성공이 필수인 소비처는 기본값으로 실패를 감추지 않는다.
+  if (settingsRes.error && options?.failOnReadError) throw new Error("학원 설정을 확인하지 못했습니다");
   // 조회 실패는 침산 기본값으로 — storedForResolve와 같은 규약.
   const stored = settingsRes.error ? {} : (settingsRes.data?.data ?? null);
   return resolveSettings(stored, { name: tenantRes.data?.name ?? "" });

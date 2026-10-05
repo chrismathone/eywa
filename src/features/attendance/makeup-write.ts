@@ -12,6 +12,8 @@ export function canWriteAttendanceStudent(input: {
   enrolled: boolean;
   hasRecord: boolean;
   allowMakeup: boolean;
+  /** 새 보강 참여가 그 반·날짜에 있을 때만. 조회 실패는 호출부가 먼저 돌려보낸다. */
+  nativeParticipant?: boolean;
 }): boolean {
-  return input.enrolled || input.hasRecord || input.allowMakeup;
+  return input.enrolled || input.hasRecord || input.allowMakeup || input.nativeParticipant === true;
 }

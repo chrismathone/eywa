@@ -13,6 +13,7 @@ import { TEACHER_NAV_GROUPS, TEACHER_DEFAULT_GROUP } from "@/lib/teacher-navigat
 import { MAX_GROUP_PRESETS } from "@/features/timetable/lib/group-presets";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { MODULE_IDS } from "@/lib/modules";
+import { makeupSettingsSchema } from "@/features/makeups/config";
 import { BUNDLES, DASHBOARD_VERSION, GRID_COLS, MAX_ITEMS, MAX_ROW_SPAN } from "@/features/dashboard/layout/types";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { DEFAULT_VIDEO_HOMEWORK_POLICY } from "@/features/video-homework/policy";
@@ -761,6 +762,7 @@ export const tenantSettingsSchema = z.object({
   navigation: navigationSchema,
   modules: modulesSchema,
   dashboard: dashboardSchema,
+  makeups: makeupSettingsSchema,
 });
 export type TenantSettings = z.infer<typeof tenantSettingsSchema>;
 
@@ -776,6 +778,7 @@ export const SECTION_SCHEMAS = {
   navigation: navigationSchema,
   modules: modulesSchema,
   dashboard: dashboardSchema,
+  makeups: makeupSettingsSchema,
 } as const;
 export type SectionKey = keyof typeof SECTION_SCHEMAS;
 
@@ -791,4 +794,5 @@ export const SECTION_LABELS: Record<SectionKey, string> = {
   navigation: "탭 및 메뉴 구성",
   modules: "기능 켜기·끄기",
   dashboard: "대시보드 배치",
+  makeups: "보강관리 운영",
 };

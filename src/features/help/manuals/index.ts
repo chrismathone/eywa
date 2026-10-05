@@ -4,6 +4,7 @@ import { dashboard } from "./dashboard";
 import { onescreen } from "./onescreen";
 import { timetable } from "./timetable";
 import { attendance } from "./attendance";
+import { makeups } from "./makeups";
 import { attendanceLive } from "./attendance-live";
 import { attendanceQuick } from "./attendance-quick";
 import { attendanceSeat } from "./attendance-seat";
@@ -41,6 +42,7 @@ export const MANUALS: HelpManual[] = [
   onescreen,
   timetable,
   attendance,
+  makeups,
   attendanceLive,
   attendanceQuick,
   attendanceSeat,

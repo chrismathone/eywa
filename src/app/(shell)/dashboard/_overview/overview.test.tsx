@@ -273,6 +273,7 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
               createdByName: "예약강사",
               absenceDate: "2026-09-03",
               overdue: false,
+              origin: "reservation",
             },
             {
               id: "m2",
@@ -287,6 +288,7 @@ function kpiSnapshot(allowed = ALL_MENUS): OverviewSnapshot {
               createdByName: null,
               absenceDate: "2026-09-01",
               overdue: true,
+              origin: "native",
             },
           ],
           later: 1,

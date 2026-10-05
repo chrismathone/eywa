@@ -34,10 +34,11 @@ function setup(canManage = true) {
 }
 it("다른 폴더에 놓으면 그 폴더의 하위로, 전체 문서에 놓으면 최상위로 이동한다", async () => {
   mocks.move.mockResolvedValue({ ok: true });
-  const { drag } = setup();
+  const { drag, target } = setup();
   drag("child", "other");
   await waitFor(() => expect(mocks.move).toHaveBeenCalledWith("child", "other"));
   await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce());
+  await waitFor(() => expect(target("leaf")).toHaveAttribute("draggable", "true"));
   drag("leaf", "__root");
   await waitFor(() => expect(mocks.move).toHaveBeenCalledWith("leaf", null));
 });

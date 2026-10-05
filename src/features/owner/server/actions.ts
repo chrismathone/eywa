@@ -21,6 +21,7 @@ import { navigationRevision } from "../normalize-navigation";
 import { logDbError } from "@/lib/supabase/db-error";
 import { platformSettingsError } from "./platform-settings";
 import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
+import { configureMakeupSettings } from "@/features/makeups/server/settings";
 
 export type OwnerSaveState = { ok?: boolean; error?: string; nonce?: number } | undefined;
 
@@ -108,6 +109,7 @@ export async function saveOwnerSection(
     const path = first?.path.join(".");
     return { error: `입력값 오류${path ? ` (${path})` : ""}: ${first?.message ?? "검증 실패"}` };
   }
+  if (section === "makeups") return configureMakeupSettings(result.data);
 
   const supabase = await createClient();
   // 기존 문서 읽어 섹션만 교체(다른 섹션 보존). RLS로 자기 테넌트만.

@@ -15,6 +15,7 @@ import { getClassNameAsOfIndex } from "@/features/classes/server/class-name-as-o
 import { resolveClassNameAsOf } from "@/features/classes/class-name-as-of";
 import { settingsToPeriodsConfig, weekdayTableFor } from "@/features/timetable/lib/periods";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { loadNativeParticipants, participantsOrLegacy } from "@/features/makeups/server/adapters/participants";
 import { isModuleEnabled } from "@/lib/modules";
 import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import type { SkillAreaSetting } from "@/features/owner/settings-types";
@@ -326,6 +327,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
 
   // 그날 보강 예약(0264a, fail-soft) — 독립 조회라 아래 큰 Promise.all과 함께 달리게 프라미스만 만들어 둔다(B4).
   const reservedTodayPromise = getReservationsOn(date, todayIds);
+  const nativePromise = loadNativeParticipants({ session_date: date, limit: 500 }, { sharedRead: true });
   // 오늘 Shouting 체크(0230a) — EiE 카드의 교시 줄에 그린다.
   // 🔴 **여기가 강사 전원의 홈**이라 실패해도 죽으면 안 된다([[#95]]) — 표가 없으면 빈 맵으로 떨어진다.
   //    그래서 fetchInChunks(throw 규약)가 아니라 직접 청크를 돌며 error를 삼킨다.
@@ -495,12 +497,14 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   // 🔴 **보강 예약**(0264a)된 학생도 같은 자리에 미리 선다(원장 2026-09-14 *"보강 추가 할 필요없이 미리 학생이 추가되어
   //    있어야"*) — 출결이 아직 없어도 오기로 한 사람이다. 조회는 fail-soft(표 없음 = 예약 없음).
   const reservedToday = await reservedTodayPromise;
+  const nativeToday = participantsOrLegacy(await nativePromise);
   const attMakeupIds = new Set<string>();
   for (const classId of todayIds) {
     const enrolled = enrollments.filter((e) => e.class_id === classId).map((e) => e.student_id);
     const recorded = [
       ...attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id),
       ...reservedToday.filter((r) => r.classId === classId).map((r) => r.studentId),
+      ...nativeToday.filter((r) => r.classId === classId).map((r) => r.studentId),
     ];
     for (const id of makeupStudentIds(recorded, enrolled)) attMakeupIds.add(id);
   }
@@ -783,6 +787,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
       const recordedIds = [
         ...attendanceRaw.filter((r) => r.class_id === classId).map((r) => r.student_id),
         ...reservedToday.filter((r) => r.classId === classId).map((r) => r.studentId),
+        ...nativeToday.filter((r) => r.classId === classId).map((r) => r.studentId),
       ];
       const reportMakeupIds = anchoredMakeupReports
         .filter((r) => r.makeup_class_id === classId)

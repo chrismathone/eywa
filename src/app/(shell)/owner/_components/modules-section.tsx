@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MODULES, MODULE_IDS, type ModuleId } from "@/lib/modules";
 import type { ModulesSettings } from "@/features/owner/settings-types";
 import { SectionForm, SettingsCard } from "./section-form";
+import { EmbedLink as Link } from "@/components/embed-link";
 
 /**
  * 기능 켜기·끄기(모듈) — 원장 2026-09-22 방향 B(*"'침산'은 그대로 두고 … 새로 시작하는 지점만 일반화"*).
@@ -36,6 +37,12 @@ export function ModulesSection({ initial }: { initial: ModulesSettings }) {
         <ul className="grid gap-2 sm:grid-cols-2">
           {MODULE_IDS.map((id) => {
             const m = MODULES[id];
+            if (id === "makeups") return (
+              <li key={id} className="border-line rounded-lg border px-3 py-2">
+                <Link href="/owner?tab=operations" className="text-primary underline">보강관리 운영 모드 설정</Link>
+                <p className="text-sm">새 접수 중지·기존 업무 처리·종료는 운영 모드에서 변경합니다.</p>
+              </li>
+            );
             const on = !disabled.has(id);
             return (
               <li key={id} className="border-line flex items-start gap-2 rounded-lg border px-3 py-2">

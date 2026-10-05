@@ -37,6 +37,7 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   { href: "/mcs", labelKey: "menu.item.mcs", icon: MENU_ICON.mcs, menu: "mcs" },
   { href: "/students", labelKey: "menu.item.students", icon: MENU_ICON.students, menu: "students" },
   { href: "/attendance", labelKey: "menu.item.attendance", icon: MENU_ICON.attendance, menu: "attendance" },
+  { href: "/makeups", labelKey: "menu.item.makeups", icon: MENU_ICON.makeups, menu: "makeups" },
   { href: "/classes", labelKey: "menu.item.classes", icon: MENU_ICON.classes, menu: "classes" },
   { href: "/timetable", labelKey: "menu.item.timetable", icon: MENU_ICON.timetable, menu: "timetable" },
   { href: "/exams", labelKey: "menu.item.exams", icon: MENU_ICON.exams, menu: "exams" },

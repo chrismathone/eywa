@@ -186,8 +186,10 @@ describe("일반판 — 새로 연 학원", () => {
     expect(eng.teacherViewLines).toBeUndefined();
   });
 
-  it("모듈은 전부 꺼진 채 태어나고, 수업 규칙은 중립(자동 시수 끔·교시마다 한 줄)", () => {
-    expect([...g.modules.disabled].sort()).toEqual([...MODULE_IDS].sort());
+  it("모듈은 꺼진 채 태어나고, 보강은 독립 운영 모드로 꺼져 있으며 수업 규칙은 중립", () => {
+    expect([...g.modules.disabled].sort()).toEqual(MODULE_IDS.filter(id => id !== "makeups").sort());
+    expect(g.makeups.mode).toBe("off");
+    expect(DEFAULT_SETTINGS.makeups.mode).toBe("off");
     expect(lessonProfileOf(g).autoUnits).toBe(false);
     const cfg = settingsToPeriodsConfig(g.operations);
     expect(cfg.plain).toBe(true);

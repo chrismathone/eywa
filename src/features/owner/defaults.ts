@@ -8,6 +8,7 @@ import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
 import { DEFAULT_TEACHER_VIEW_LINES } from "@/features/timetable/lib/ten-minute-grid";
 import { DEFAULT_MONTH_PLAN_TEXTS } from "./month-plan-texts";
 import type { TenantSettings } from "./settings-types";
+import { DEFAULT_MAKEUP_SETTINGS } from "@/features/makeups/config";
 import { DEFAULT_EIE_MONTHLY_PRICE, DEFAULT_SESSION_PRICES } from "@/features/billing/session-pricing";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 
@@ -260,6 +261,7 @@ export const DEFAULT_SETTINGS: TenantSettings = {
   navigation: { menus: [], teacherMenus: [], groups: [], teacherGroups: [] },
   // 기능 켜기·끄기도 sparse — 침산 프리셋은 **아무것도 끄지 않는다**(오늘과 같다). 일반판은 generic-defaults.ts.
   modules: { disabled: [] },
+  makeups: DEFAULT_MAKEUP_SETTINGS,
   // 운영실 배치 — 저장값 없음 = 역할마다 코드의 기본 배치(features/dashboard/layout/defaults.ts). 원장은 지금 운영실 그대로.
   dashboard: { version: 1, layouts: [], assignments: [] },
 };

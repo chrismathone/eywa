@@ -1,16 +1,37 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const h = vi.hoisted(() => ({ access: vi.fn(), scope: vi.fn(), from: vi.fn(), tables: {} as Record<string, Record<string, unknown>[]>, reads: [] as { table: string; filters: [string, unknown][] }[], fail: "" }));
+const h = vi.hoisted(() => ({
+  access: vi.fn(), scope: vi.fn(), from: vi.fn(),
+  tables: {} as Record<string, Record<string, unknown>[]>,
+  reads: [] as { table: string; filters: [string, unknown][] }[],
+  fail: "",
+  mode: "off" as "off" | "on" | "draining",
+  rpcError: null as { message: string } | null,
+  participants: [] as Record<string, unknown>[],
+  rpcCalls: 0,
+}));
 vi.mock("@/lib/auth/require-access", () => ({ requireAccess: h.access }));
 vi.mock("@/lib/auth/view-mode", () => ({ effectiveTeacherId: h.scope }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: h.from }) }));
-vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ operations: { holidays: [] } }) }));
+vi.mock("@/features/owner/server/queries", () => ({
+  getTenantSettings: async () => ({ operations: { holidays: [] }, makeups: { mode: h.mode, allowAdditional: false, pilotSubjects: ["math"] } }),
+}));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({
+    rpc: async () => {
+      h.rpcCalls += 1;
+      if (h.rpcError) return { data: null, error: h.rpcError };
+      return { data: { participants: h.participants, legacy_maps: [], truncated: false }, error: null };
+    },
+  }),
+}));
 vi.mock("@/features/periods/server/queries", () => ({ getPeriodDefs: async () => [] }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 import { canViewUnitsMaster, loadUnitsMaster } from "./units-master";
 
 beforeEach(() => {
   vi.clearAllMocks(); h.reads = []; h.fail = "";
+  h.mode = "off"; h.rpcError = null; h.participants = []; h.rpcCalls = 0;
   h.access.mockResolvedValue({ id: "admin", tenantId: "tenant", systemRole: "admin" }); h.scope.mockResolvedValue(null);
   h.tables = {
     classes: [{ id: "c", class_name: "영어반", subject: "english", teacher_id: "t", english_track: "injaewon" }],
@@ -63,4 +84,24 @@ it("fails instead of displaying partial attendance or missing *LAB data", async 
   await expect(loadUnitsMaster("2026-09")).rejects.toThrow();
   h.fail = "class_schedules";
   await expect(loadUnitsMaster("2026-09")).rejects.toThrow();
+});
+it("keeps the legacy row when native makeup is off and does not call the participant rpc", async () => {
+  const data = await loadUnitsMaster("2026-09");
+  expect(h.rpcCalls).toBe(0);
+  expect(data.classes[0].students[0]).toMatchObject({ target: 1, actual: 1, remaining: 0, status: "complete" });
+  expect(JSON.stringify(data)).not.toMatch(/unit_price|line_items|commission_rate/);
+});
+it("marks the row for review when a live native lesson has no start time", async () => {
+  h.mode = "on";
+  h.participants = [{ id: "p", student_id: "s", session_date: "2026-09-15", class_id: "c", status: "present", subject_key: "math" }];
+  const row = (await loadUnitsMaster("2026-09")).classes[0].students[0];
+  expect(h.rpcCalls).toBe(1);
+  expect(row.review).toContain("보강 시작 시각을 확인해 주세요");
+  expect(row.status).toBe("review");
+  expect(row).toMatchObject({ target: 1, actual: 1 });
+});
+it("throws the native read failure instead of returning a partial class", async () => {
+  h.mode = "on";
+  h.rpcError = { message: "db down" };
+  await expect(loadUnitsMaster("2026-09")).rejects.toThrow("보강 참여를 확인하지 못했습니다");
 });

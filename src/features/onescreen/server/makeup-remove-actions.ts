@@ -42,6 +42,7 @@ import { ownsMakeupReport } from "../makeup-owner";
 import { makeupSessionEntries } from "../makeup-session";
 import { changeMakeupSession } from "./makeup-session-store";
 import { makeupRemoveBlockReason, makeupRemoveMessage, planMakeupRemoval } from "../makeup-remove-plan";
+import { mappedMakeupDeleteBlock } from "@/features/makeups/server/adapters/gates";
 
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -122,6 +123,11 @@ export async function removeMakeupEntry(input: {
   if (!isAdmin && notMine > 0 && mine.length === 0) {
     return { ok: false, error: "내가 작성한 보강만 뺄 수 있습니다" };
   }
+
+  const mappedBlock = await mappedMakeupDeleteBlock({
+    studentId: input.studentId, classId: input.classId ?? null, date: input.date,
+  });
+  if (mappedBlock) return { ok: false, error: mappedBlock };
 
   const plan = planMakeupRemoval(
     mine.map((r) => ({

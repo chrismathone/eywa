@@ -46,6 +46,7 @@ import { isGoalAreaAllowed } from "../lib/goal-areas";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
 import { hasReservedMakeup } from "@/features/attendance/server/makeup-reservation-queries";
+import { mappedMakeupDeleteBlock, nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 // 계획 줄 쓰기의 밑바닥 — 공개 자리 PIN 경로도 **같은 함수**를 부른다(문만 다르고 규칙은 한 벌).
 import {
   applyPlanPatches,
@@ -603,6 +604,9 @@ async function checkStudentEligibleOn(
   if ((count ?? 0) > 0) return { ok: true };
   // 보강 **예약**(0264a)된 학생 — 출결이 아직 없어도 그날 이 반에 오기로 한 사람(오늘 보드가 미리 세운다). 출결 게이트와 같은 문.
   if (await hasReservedMakeup(tenantId, { studentId, classId, date })) return { ok: true };
+  const native = await nativeWriteAllowance({ studentId, classId, sessionDate: date });
+  if (native.error) return { ok: false, error: native.error };
+  if (native.allow) return { ok: true };
   return { ok: false, error: "그 날짜에 이 반을 수강하지 않는 학생입니다(기록 행은 읽기 전용)" };
 }
 
@@ -671,6 +675,8 @@ export async function removeMakeupAttendee(input: {
   //    보고서와 칸을 함께 지운다. 여기서 칸만 지우면 보고서는 이 반을 가리키는데 출석부엔 칸이 없다.
   const anchoredBlock = await makeupAnchorDeleteBlock(tenantId, [{ studentId: input.studentId, classId: input.classId, date: input.date }]);
   if (anchoredBlock) return { ok: false, error: anchoredBlock };
+  const mappedBlock = await mappedMakeupDeleteBlock({ studentId: input.studentId, classId: input.classId, date: input.date });
+  if (mappedBlock) return { ok: false, error: mappedBlock };
 
   const { error: delAtt } = await admin
     .from("attendance_records")

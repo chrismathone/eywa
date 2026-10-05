@@ -96,6 +96,12 @@
           ]
         },
         {
+          "slug": "makeups",
+          "title": "보강관리",
+          "module": "makeups",
+          "faces": [{ "slug": "overview", "title": "접수·예약·실시 검토" }]
+        },
+        {
           "slug": "classes",
           "title": "수업목록",
           "faces": [

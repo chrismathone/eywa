@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks } from "@/lib/supabase/batch";
 import { kstToday, weekdayIndexOf } from "@/lib/date-kst";
 import { rosterIncludesEnrollment } from "@/features/onescreen/roster-filter";
+import { addedClassPairs } from "@/features/makeups/roster-merge";
+import { loadNativeParticipants, participantsOrLegacy } from "@/features/makeups/server/adapters/participants";
 import type { VideoHomeworkHistoryRow, VideoHomeworkMark, VideoHomeworkRosterRow, VideoHomeworkStatus } from "../types";
 export type { VideoHomeworkHistoryRow, VideoHomeworkRosterRow } from "../types";
 
@@ -88,6 +90,7 @@ export async function getVideoHomeworkRoster(tenantId: string, checkDate: string
   const db = createAdminClient();
   const today = checkDate;
   const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][weekdayIndexOf(checkDate)];
+  const nativePromise = loadNativeParticipants({ session_date: checkDate, limit: 500 }, { sharedRead: true });
   const [classes, enrollments, schedules, attendance, reservations, markRows] = await Promise.all([
     fetchAllPaged<{ id: string; class_name: string; subject: string; is_active: boolean }>((from, to) => db
       .from("classes").select("id,class_name,subject,is_active").eq("tenant_id", tenantId)
@@ -127,6 +130,10 @@ export async function getVideoHomeworkRoster(tenantId: string, checkDate: string
   );
   for (const row of [...attendance, ...reservations, ...markRows]) {
     if (byClass.has(row.class_id)) pairs.set(`${row.class_id}:${row.student_id}`, row);
+  }
+  const paired = new Set([...pairs.values()].map((row) => `${row.student_id}|${row.class_id}`));
+  for (const row of addedClassPairs(paired, participantsOrLegacy(await nativePromise))) {
+    if (byClass.has(row.classId)) pairs.set(`${row.classId}:${row.studentId}`, { class_id: row.classId, student_id: row.studentId });
   }
   const studentIds = [...new Set([...pairs.values()].map((row) => row.student_id))];
   const students = await (

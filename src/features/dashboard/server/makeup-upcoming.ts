@@ -21,6 +21,7 @@ import { shiftDays, weekBoundsOf } from "@/features/timetable/lib/week";
 import { listMakeupScopeClasses } from "@/features/attendance/server/makeup-reservation-scope";
 import { getReservationsInRange } from "@/features/attendance/server/makeup-reservation-queries";
 import { monthAheadWindow, type DateWindow } from "@/features/dashboard/overview/upcoming-window";
+import { loadNativeParticipants, rowsOrThrow } from "@/features/makeups/server/adapters/participants";
 
 /** 지난 미이행 예약을 되짚는 창(일) — 두 달 전 보강을 아직 안 했으면 데스크가 정리할 일이지 매번 카드에 실을 일은 아니다. */
 const OVERDUE_LOOKBACK_DAYS = 60;
@@ -43,6 +44,7 @@ export type UpcomingMakeupRow = {
   absenceDate: string;
   /** 오늘 이전인데 아직 이행 안 됨 — 팝업이 '지남'으로 표시한다. */
   overdue: boolean;
+  origin: "reservation" | "native" | "additional";
 };
 
 export type UpcomingMakeupOverview = {
@@ -84,12 +86,16 @@ export async function getUpcomingMakeupOverview(today: string, teacherId: string
   const classIds = classes.map((c) => c.id);
   const classById = new Map(classes.map((c) => [c.id, c]));
   const supabase = await createClient();
-  const [reservations, later] = await Promise.all([
+  const [reservations, later, nativeOutcome] = await Promise.all([
     // 지난 60일(미이행) ~ 창 끝을 **한 조회**로 — 오늘 이전 날짜가 곧 `overdue`다. 시간표 탭과 같은 함수(fail-soft).
     getReservationsInRange(shiftDays(today, -OVERDUE_LOOKBACK_DAYS), range.end, classIds),
     countLater(supabase, range.end, classIds).catch(() => 0),
+    loadNativeParticipants({ date_from: shiftDays(today, -OVERDUE_LOOKBACK_DAYS), date_to: range.end, limit: 500 }, { sharedRead: true }),
   ]);
-  const studentIds = [...new Set(reservations.map((r) => r.studentId))];
+  const native = (nativeOutcome.status === "off" || nativeOutcome.status === "schema_missing"
+    ? []
+    : rowsOrThrow(nativeOutcome)).filter((row) => row.classId && classIds.includes(row.classId) && row.status !== "cancelled");
+  const studentIds = [...new Set([...reservations.map((r) => r.studentId), ...native.map((row) => row.studentId)])];
   const creatorIds = [...new Set(reservations.flatMap((r) => r.createdBy ? [r.createdBy] : []))];
   // 🔴 이름 조회 실패는 **삼키지 않는다** — 빈 배열로 접으면 모든 줄이 걸러져 카드가 "0건", 팝업이 "예약이 없습니다"라는
   //    거짓 사실을 말한다(적대 리뷰 2026-09-16). 던지면 이 칸만 "조회 실패"로 뜬다(운영실 영역 단위 실패 규약).
@@ -124,9 +130,27 @@ export async function getUpcomingMakeupOverview(today: string, teacherId: string
         createdByName: r.createdBy ? creatorById.get(r.createdBy) ?? null : null,
         absenceDate: r.absenceDate,
         overdue: r.makeupDate < today,
+        origin: "reservation",
       },
     ];
   });
+  const seen = new Set(rows.map((row) => `${row.studentId}|${row.classId}|${row.makeupDate}|${row.slotStart}`));
+  for (const row of native) {
+    const stu = studentById.get(row.studentId);
+    const cls = row.classId ? classById.get(row.classId) : undefined;
+    if (!stu || !cls) throw new Error("보강 참여 학생을 확인하지 못했습니다");
+    const slotStart = (row.startTime ?? "").slice(0, 5);
+    const key = `${row.studentId}|${row.classId}|${row.sessionDate}|${slotStart}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      id: row.id, studentId: row.studentId, name: stu.name,
+      schoolGrade: schoolGradeLabel(stu.school, stu.grade) || null,
+      classId: row.classId!, className: cls.className, makeupDate: row.sessionDate,
+      slotStart, slotEnd: (row.endTime ?? "").slice(0, 5), createdByName: null,
+      absenceDate: row.originalDate ?? "", overdue: row.sessionDate < today, origin: "native",
+    });
+  }
   rows.sort((a, b) => a.makeupDate.localeCompare(b.makeupDate) || a.slotStart.localeCompare(b.slotStart) || a.name.localeCompare(b.name, "ko"));
   return { range, rows, later };
 }

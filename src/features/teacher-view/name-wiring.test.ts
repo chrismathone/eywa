@@ -1442,6 +1442,7 @@ describe("🔴 수업 상세 — 한글 리터럴 0", () => {
     const src = read("components", "scheduled-change-banner.tsx");
     expect(src).toContain("lang = DEFAULT_SHEET_LANG");
     expect(src).not.toContain("getTeacherViewLang");
+    expect(src).toContain('title={sheetT(lang, "sched.makeupDetail")}');
     const cls = read("app", "(shell)", "classes", "[id]", "page.tsx");
     expect(cls).toMatch(/subject="class"\s+lang=\{lang\}/);
   });
@@ -1487,6 +1488,8 @@ describe("🔴 수업 상세 — 한글 리터럴 0", () => {
     expect(sheetT("ko", "cls.hist.title")).toBe("이력");
     expect(sheetT("ko", "cls.hist.src.report")).toBe("보고서");
     expect(sheetT("ko", "sched.title")).toBe("예정된 변경");
+    expect(sheetT("ko", "sched.makeupDetail")).toBe("보강 상세");
+    expect(sheetT("en", "sched.makeupDetail")).toBe("Makeup detail");
     expect(sheetTf("ko", "sched.classChange", { md: "9/1", what: "담임", from: "김", to: "이" })).toBe(
       "9/1부터 담임 김 → 이",
     );

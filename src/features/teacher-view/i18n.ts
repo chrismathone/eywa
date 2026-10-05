@@ -142,6 +142,7 @@ export const SHEET_DICT = {
   "menu.item.mcs": { ko: "수학 강사 시트", en: "Math Teacher Sheet" },
   "menu.item.students": { ko: "내 학생", en: "My students" },
   "menu.item.attendance": { ko: "출석부", en: "Attendance book" },
+  "menu.item.makeups": { ko: "보강관리", en: "Makeup lessons" },
   "menu.item.classes": { ko: "내 수업", en: "My classes" },
   "menu.item.timetable": { ko: "시간표", en: "Timetable" },
   "menu.item.exams": { ko: "성적관리", en: "Grades" },
@@ -2755,7 +2756,7 @@ export const SHEET_DICT = {
     ko: "상세 편집·미리보기·PDF·공유 링크 관리",
     en: "Open details, preview, PDF and share link controls",
   },
-  "os.row.card": { ko: "상세", en: "Details" },
+  "os.row.card": { ko: "상세", en: "Open card" },
   "os.row.bulkGenBusy": {
     ko: "전체 자동작성 중 — 완료 후 발송",
     en: "Auto-writing everything — send when it finishes",
@@ -3969,8 +3970,8 @@ export const SHEET_DICT = {
   "os.c.showTodayOnly": { ko: "오늘 수업만 보기", en: "Show today's lessons only" },
   "os.toolbar.settings": { ko: "설정", en: "Settings" },
   "os.display.sort": { ko: "정렬", en: "Sort" },
-  "os.display.byClass": { ko: "반별 정렬", en: "By class" },
-  "os.display.byName": { ko: "가나다 정렬", en: "By name" },
+  "os.display.byClass": { ko: "반별 정렬", en: "Sort by class" },
+  "os.display.byName": { ko: "가나다 정렬", en: "Sort by name" },
   "os.display.hidePrevious": { ko: "이전 내용 숨기기", en: "Hide previous content" },
   "os.display.saveFail": { ko: "표시 설정을 저장하지 못했습니다", en: "Could not save display settings" },
   "os.bar.peopleRows": { ko: "학생 {students}명 · 보고서 {rows}건", en: "{students} students · {rows} reports" },
@@ -4136,7 +4137,7 @@ export const SHEET_DICT = {
   "os.n.test": { ko: "테스트 발송(학원이)", en: "Test send" },
   "os.n.historyPrev": { ko: "이전 공지 목록", en: "Previous notices" },
   "os.n.historyNext": { ko: "다음 공지 목록", en: "Next notices" },
-  "os.n.historyDetails": { ko: "상세", en: "Details" },
+  "os.n.historyDetails": { ko: "상세", en: "Notice detail" },
   "os.n.historyClose": { ko: "접기", en: "Collapse" },
   "os.n.history": { ko: "내가 보낸 공지", en: "Notices I sent" },
   "os.n.historyEmpty": { ko: "아직 보낸 공지가 없습니다.", en: "You have not sent a notice yet." },
@@ -4337,6 +4338,8 @@ export const SHEET_DICT = {
   "sched.makeup": { ko: "{when} {time} 보강 예약 · {absence} 결석분 · {name}", en: "Makeup {when} {time} · for {absence} absence · {name}" },
 
   "sched.makeupNoClass": { ko: "{when} {time} 보강 예약 · {absence} 결석분", en: "Makeup {when} {time} · for {absence} absence" },
+
+  "sched.makeupDetail": { ko: "보강 상세", en: "Makeup detail" },
 
   "sched.classChange": { ko: "{md}부터 {what} {from} → {to}", en: "From {md}, {what}: {from} → {to}" },
 

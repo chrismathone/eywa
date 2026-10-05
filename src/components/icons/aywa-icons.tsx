@@ -1250,6 +1250,7 @@ export const MENU_ICON = {
   dashboard: "layoutGrid",
   timetable: "weekGrid",
   attendance: "clipboardCheck",
+  makeups: "alarm",
   // 자리(랩실·JJ실) 출석부 — 출석부와 같은 일이지만 축이 '방'이라 공간 기호를 쓴다.
   // 🔴 2026-09-08부터 **뜻이 다르면 그림도 다르다**(원장 "같은 아이콘을 안쓰면 좋겠는데") — 아이콘 공유 선례를 새로 만들지 말 것.
   seat_attendance: "seatGrid",

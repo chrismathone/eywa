@@ -18,6 +18,7 @@ import type { Access, AccessMatrix, MenuKey, SystemRole } from "@/lib/permission
 export const MODULE_IDS = [
   "ecs",
   "mcs",
+  "makeups",
   "seat_attendance",
   "textbooks",
   "shuttle",
@@ -49,6 +50,12 @@ export type ModuleDef = {
 };
 
 export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
+  makeups: {
+    id: "makeups",
+    label: "보강관리",
+    description: "보강 접수·예정 회차·실시 검토와 미처리 업무 관리",
+    menuKeys: ["makeups"],
+  },
   ecs: {
     id: "ecs",
     label: "영어 강사 시트",
@@ -169,7 +176,8 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
  * 새로 여는 학원(일반판)이 **끈 채 태어나는** 모듈 = 첫 학원(침산)의 운영 방식에 묶인 기능들.
  * 원장이 설정 '기능' 면에서 하나씩 켤 수 있다. 침산은 이 목록과 무관하게 전부 켜져 있다.
  */
-export const GENERIC_DISABLED_MODULES: readonly ModuleId[] = MODULE_IDS;
+// 보강은 별도의 안전한 운영 모드로 켠다. 두 활성 스위치가 서로 어긋나지 않게 한다.
+export const GENERIC_DISABLED_MODULES: readonly ModuleId[] = MODULE_IDS.filter(id => id !== "makeups");
 
 const MODULE_ID_SET: ReadonlySet<string> = new Set(MODULE_IDS);
 

@@ -30,6 +30,7 @@ export default defineConfig({
         "src/lib/calc/**": { lines: 80, functions: 80 },
         "src/features/billing/calc.ts": { lines: 80, functions: 80 },
         "src/features/payroll/calc.ts": { lines: 80, functions: 80 },
+        "src/features/makeups/quantity.ts": { lines: 80, functions: 80 },
       },
     },
   },

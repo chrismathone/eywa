@@ -10,11 +10,19 @@ const statusSchema = z.array(z.object({ bindingId: z.string(), tenantId: z.strin
 /** Restricted operations console; no credentials or individual student/staff records. */
 export async function TodaysMathSyncStatus({ tenantId }: { tenantId: string }) {
   await requireSuperAdmin();
+  let configured = false;
+  let status: z.infer<typeof statusSchema>[number] | undefined;
   try {
     const binding = sourceBindingForTenant(tenantId);
-    if (!binding) return <Panel title="오늘의수학 동기화"><p className="text-text-dim text-sm">이 지점의 연결 설정이 아직 등록되지 않았습니다.</p></Panel>;
-    const statuses = statusSchema.parse(await syncRpc("tm_sync_status", { p_binding_id: binding.bindingId }));
-    const status = statuses.find((item) => item.bindingId === binding.bindingId && item.tenantId === tenantId);
+    if (binding) {
+      configured = true;
+      const statuses = statusSchema.parse(await syncRpc("tm_sync_status", { p_binding_id: binding.bindingId }));
+      status = statuses.find((item) => item.bindingId === binding.bindingId && item.tenantId === tenantId);
+    }
+  } catch {
+    return <Panel title="오늘의수학 동기화"><p className="text-danger text-sm">동기화 상태를 확인하지 못했습니다. 연결 설정과 DB 적용 상태를 확인해 주세요.</p></Panel>;
+  }
+  if (!configured) return <Panel title="오늘의수학 동기화"><p className="text-text-dim text-sm">이 지점의 연결 설정이 아직 등록되지 않았습니다.</p></Panel>;
     if (!status) return <Panel title="오늘의수학 동기화"><p className="text-text-dim text-sm">연결 등록 전입니다. 미리보기 검증 후 등록해 주세요.</p></Panel>;
     const pending = ["pending", "leased", "received", "retry"].reduce((sum, key) => sum + (status.outbox[key] ?? 0), 0);
     return <Panel title="오늘의수학 동기화" description="계정과 수강 정보 전달 상태입니다. 서비스 사용 여부는 위 라이선스 스위치를 따릅니다.">
@@ -28,7 +36,4 @@ export async function TodaysMathSyncStatus({ tenantId }: { tenantId: string }) {
       </dl>
       {status.historyGap ? <p className="text-danger mt-3 text-sm">변경 이력 확인이 필요하여 새 권한 부여를 보류했습니다.</p> : null}
     </Panel>;
-  } catch {
-    return <Panel title="오늘의수학 동기화"><p className="text-danger text-sm">동기화 상태를 확인하지 못했습니다. 연결 설정과 DB 적용 상태를 확인해 주세요.</p></Panel>;
-  }
 }

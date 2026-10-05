@@ -41,6 +41,7 @@ export const MENU_KEYS = [
   "dashboard",
   "timetable",
   "attendance",
+  "makeups",
   "seat_attendance",
   "classes",
   "students",
@@ -86,6 +87,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   dashboard: "대시보드",
   timetable: "시간표",
   attendance: "출석부",
+  makeups: "보강관리",
   seat_attendance: "랩실·JJ실 출석부",
   classes: "수업목록",
   students: "원생목록",
@@ -145,6 +147,7 @@ export const TEACHER_MENU_KEYS = [
   "mcs", // Math Class Sheet — 수학 반별 월간 진도표(scoped: 담당 반만)
   "students",
   "attendance",
+  "makeups",
   "classes",
   "timetable",
   "exams",
@@ -168,6 +171,7 @@ export const MENU_ACCESS: AccessMatrix = {
   dashboard: { master: "full", admin: "full", manager: "full", teacher: "none", counselor: "scoped", accountant: "scoped", viewer: "readonly", student: "none" },
   timetable: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "readonly", accountant: "readonly", viewer: "readonly", student: "none" },
   attendance: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "readonly", viewer: "readonly", student: "none" },
+  makeups: { master: "full", admin: "full", manager: "full", teacher: "scoped", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 자리(랩실·JJ실) 출석부 — 여러 반이 동시에 들어오는 **방**을 축으로 출석만 찍는 면(0208a).
   // 🔴 attendance와 **별개 키**인 이유: 자리 당번은 아르바이트(현재 viewer)라 출석 쓰기를 통째로 주면
   //    학원 전체 출석부가 함께 열린다(#77). "이 기능만 다른 권한"은 menuKey 승격이 정석
@@ -368,6 +372,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   // 권한을 따로 떼야 할 이유가 생기면 그때 SQL DEFAULTS까지 함께 추가할 것.
   "timetable-dev": "timetable",
   attendance: "attendance",
+  makeups: "makeups",
   classes: "classes",
   students: "students",
   exams: "exams",

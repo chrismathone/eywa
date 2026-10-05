@@ -9,7 +9,7 @@ import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "@/f
 
 export const TEACHER_DEFAULT_GROUP = "teacher-main";
 /** 화면 문구가 한국어뿐인 강사 메뉴 — 영어 화면에선 감춘다. */
-const KOREAN_ONLY_HREFS: ReadonlySet<string> = new Set(["/onescreen/video-homework"]);
+const KOREAN_ONLY_HREFS: ReadonlySet<string> = new Set(["/onescreen/video-homework", "/makeups"]);
 
 /** 강사 스코프가 있는 원본 목적지만 제공한다. 기본 라벨은 기존 한/영 사전을 따른다. */
 export function teacherNavigationSource(lang: SheetLang = "ko"): HubGroup[] {

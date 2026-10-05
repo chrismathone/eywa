@@ -23,6 +23,7 @@ import {
   lockAttendanceMigration,
   type AttendanceBackup,
 } from "./master-sheet-attendance";
+import { nativeAttendanceLinks } from "@/features/makeups/server/adapters/participants";
 
 export function openMasterDb() {
   if (!process.env.DATABASE_URL)
@@ -92,6 +93,7 @@ export async function loadMasterContext(
     throw new Error(
       "학원 설정에서 영어 과목을 찾을 수 없습니다. 과목 설정을 확인해 주세요.",
     );
+  const nativeLinks = await nativeAttendanceLinks(date);
   return {
     classes,
     teachers,
@@ -103,7 +105,7 @@ export async function loadMasterContext(
     blocks,
     attendance,
     pending,
-    attendanceLinks,
+    attendanceLinks: [...attendanceLinks, ...nativeLinks],
   };
 }
 
@@ -409,7 +411,9 @@ export async function rollbackMasterBlocks(
     if (!actor) throw new Error("종강 예약을 취소할 사용자 정보를 확인해 주세요.");
     await rollbackClassTerms(tx, actor, snap.source.terms);
   }
-  await rollbackAttendanceMoves(tx, tenant, snap.source.attendance ?? []);
+  const firstAttendanceDate = (snap.source.attendance ?? []).map((row) => String(row.before.session_date)).sort()[0];
+  const nativeLinks = firstAttendanceDate ? await nativeAttendanceLinks(firstAttendanceDate) : [];
+  await rollbackAttendanceMoves(tx, tenant, snap.source.attendance ?? [], nativeLinks);
   if (snap.source.blockIds.length)
     await tx`delete from teacher_schedule_blocks where tenant_id=${tenant} and id=any(${snap.source.blockIds}::uuid[])`;
   for (const row of snap.source.beforeBlocks) {

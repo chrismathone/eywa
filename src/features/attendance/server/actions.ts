@@ -71,6 +71,7 @@ import { canWriteAttendanceStudent } from "../makeup-write";
 // 보강 예약(0264a) — 예약된 학생의 그날 칸은 수강행이 없어도 연다(`hasReservedMakeup`), 시수를 쓰는 출결이 찍히면
 // 예약을 이행 처리한다(`completeMakeupReservations`). 둘 다 fail-soft — 표가 없어도 출결 저장은 종전 그대로.
 import { hasReservedMakeup, reservedCellKey, reservedCellKeys } from "./makeup-reservation-queries";
+import { nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 import { completeMakeupReservations, completionKey } from "./makeup-reservation-complete";
 import { kstToday } from "@/lib/date-kst";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
@@ -671,7 +672,9 @@ export async function setAttendanceCell(input: {
             (await hasReservedMakeup(user.tenantId, { studentId, classId, date: sessionDate }))),
       })
     ) {
-      return { error: "이 반 수강생이 아닙니다" };
+      const native = await nativeWriteAllowance({ studentId, classId, sessionDate });
+      if (native.error) return { error: native.error };
+      if (!native.allow) return { error: "이 반 수강생이 아닙니다" };
     }
   }
 

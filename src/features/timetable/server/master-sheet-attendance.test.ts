@@ -1,3 +1,4 @@
+import "./master-native-read-double";
 import { describe, expect, it } from "vitest";
 import type postgres from "postgres";
 import {

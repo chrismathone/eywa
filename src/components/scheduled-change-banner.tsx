@@ -1,10 +1,12 @@
 import { CalendarClock } from "@/components/icons/aywa-icon-compat";
+import { WindowLink } from "@/components/workspace/window-link";
 import { scheduledChangeLabel, type ScheduledChange } from "@/features/enrollments/scheduled-changes";
 import {
   scheduledMakeupLabel,
   scheduledMakeupTitle,
   type ScheduledMakeupLine,
 } from "@/features/attendance/makeup-reservation";
+import { makeupCaseHref } from "@/features/makeups/case-link";
 import { DEFAULT_SHEET_LANG, sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
 
 /** 배너 한 줄 — 수강 변경(수정·취소 대상) 또는 보강 예약(읽기 전용). 날짜 하나로 함께 줄 세운다. */
@@ -77,6 +79,10 @@ export function ScheduledChangeBanner({
                   <span className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1">{actions(r.change)}</span>
                 ) : null}
               </>
+            ) : makeupCaseHref(r.makeup.caseId) ? (
+              <WindowLink href={makeupCaseHref(r.makeup.caseId)!} title={sheetT(lang, "sched.makeupDetail")} className="text-foreground min-w-0 text-sm underline">
+                <span title={scheduledMakeupTitle(r.makeup)}>{scheduledMakeupLabel(r.makeup, today, lang)}</span>
+              </WindowLink>
             ) : (
               <span className="text-foreground min-w-0 text-sm" title={scheduledMakeupTitle(r.makeup)}>
                 {scheduledMakeupLabel(r.makeup, today, lang)}

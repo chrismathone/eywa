@@ -5,6 +5,7 @@ import { WindowLink } from "@/components/workspace/window-link";
 import type { OverviewData } from "@/features/dashboard/overview/model";
 import { windowUntilLabel } from "@/features/dashboard/overview/upcoming-window";
 import { ABSENT_STATUS_LABEL } from "@/features/dashboard/absent-students";
+import { rosterOriginLabel } from "@/features/makeups/roster-merge";
 import { NameCell, PopupEmpty, PopupTotal, Tag } from "./kpi-popup-parts";
 import { isCancelledAdmissionsRow, type todayLevelTestList } from "@/features/dashboard/overview/display";
 import { ConsultStageChip } from "./consult-progress";
@@ -129,6 +130,7 @@ export function MakeupPopup({
                 {row.className} · {row.absenceDate.slice(5).replace("-", "/")} 결석분
                 {row.createdByName ? ` · 예약: ${row.createdByName}` : " · 예약자 미상"}
               </span>
+              {row.origin === "native" || row.origin === "additional" ? <Tag tone={row.origin === "additional" ? "muted" : "info"}>{rosterOriginLabel(row.origin, "ko")}</Tag> : null}
               {row.overdue ? <Tag tone="caution">지남</Tag> : row.makeupDate === today ? <Tag tone="info">오늘</Tag> : null}
             </li>
           ))}
