@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
  *
  * ① 전부 `updated_at`을 함께, 직전 값과 다른 값으로 쓴다 — 화면 저장(`saveOwnerSection`)이 "읽은 뒤 문서가 바뀌었나"를
  *    이 값으로 본다. 갱신하지 않으면 화면 저장이 그 변경을 못 보고 자기가 읽어 둔 문서로 덮는다(cron·시트 반영·데모 구성이 그랬다).
- * ② **운영 섹션을 다시 쓰는** 앱 저장은 그 섹션의 저장 순번(`data.operations.rev`)을 올린다 — 편집 폼이 "내려온 값이 내 저장보다
- *    먼저 읽힌 것인가"를 가리는 순서다. 한 칸만 고치는 SQL(`jsonb_set`)은 순번을 그대로 둔다(줄이지 않으면 된다).
+ * ② **운영 · 역할·권한 섹션을 다시 쓰는** 앱 저장은 그 섹션의 저장 순번(`data.<섹션>.rev`)을 올린다 — 편집 폼이 "내려온 값이
+ *    내 저장보다 먼저 읽힌 것인가"를 가리는 순서다. 한 칸만 고치는 SQL(`jsonb_set`)은 순번을 그대로 둔다(줄이지 않으면 된다).
  *    🔴 순번을 문서 최상위에 두지 않는다 — DB의 쓰기 가드(0335a)가 개별 설정만 위임받은 사람의 저장을 전부 거절하게 된다.
  * 새 writer를 만들면 아래 목록에 올리고 같은 규칙을 지킬 것.
  * ⚠️ DB 함수(RPC) 안의 쓰기와 운영자가 손으로 돌리는 `scripts/`는 이 가드가 보지 못한다. 그쪽은 순번을 올리지 않아도 되지만
@@ -62,16 +62,23 @@ describe("tenant_settings writer는 수정 표식을 갱신한다", () => {
     for (const statement of statements) expect(statement).toMatch(forward);
   });
 
-  it("🔴 운영 섹션을 다시 쓰는 앱 저장은 그 섹션의 저장 순번을 올린다 — 문서 최상위에는 두지 않는다", () => {
+  it("🔴 운영 · 역할·권한 섹션을 다시 쓰는 앱 저장은 그 섹션의 저장 순번을 올린다 — 문서 최상위에는 두지 않는다", () => {
     const code = (path: string) => files.find((f) => f.path === path)!.code;
-    expect(code("features/owner/server/actions.ts")).toMatch(/settingsRevOf\(base\.operations\) \+ 1/);
+    // 중앙 저장: 순번을 쓰는 섹션은 이 둘이고, 올리는 값은 **그 섹션의** 직전 순번 + 1이다.
+    expect(code("features/owner/server/actions.ts")).toMatch(/const REV_SECTIONS: readonly SectionKey\[\] = \["operations", "permissions"\];/);
+    expect(code("features/owner/server/actions.ts")).toMatch(
+      /const sectionRev = REV_SECTIONS\.includes\(section\) \? settingsRevOf\(base\[section\]\) \+ 1 : undefined;/,
+    );
     expect(code("features/owner/server/scheduled-groups.ts")).toMatch(/rev: settingsRevOf\(storedOperations\) \+ 1/);
     // 최상위에 순번을 쓰는 코드가 없다(DB 쓰기 가드와 충돌한다) — 문서를 펼친 바로 그 층에는 `rev`가 없다.
     expect(code("features/owner/server/actions.ts")).toMatch(/const nextData: Record<string, unknown> = \{ \.\.\.base, version: 1, \[section\]: storedSection \};/);
     expect(code("features/owner/server/scheduled-groups.ts")).toMatch(
       /const nextData = \{\s*\.\.\.\(data \?\? \{\}\),\s*operations: \{ \.\.\.storedOperations, rev: settingsRevOf\(storedOperations\) \+ 1, subjects: nextSubjects \},\s*\};/,
     );
-    expect(code("features/owner/server/setting-role-actions.ts")).not.toMatch(/\brev\b/);
+    // '역할 설정' 대화상자: 역할·권한 섹션을 다시 쓰므로 그 섹션 안의 순번을 올린다(문서 최상위가 아니다).
+    expect(code("features/owner/server/setting-role-actions.ts")).toMatch(
+      /const next = \{ \.\.\.row\.data, permissions: \{ \.\.\.row\.data\.permissions, overrides, rev: settingsRevOf\(row\.data\.permissions\) \+ 1 \} \};/,
+    );
   });
 
   it("한 칸만 고치는 SQL은 문서의 다른 칸(저장 순번 포함)을 그대로 둔다 — `data`를 통째로 갈아끼우지 않는다", () => {

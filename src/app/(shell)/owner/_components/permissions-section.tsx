@@ -2,9 +2,10 @@
 import { nextPermissionAccess, PERMISSION_ACCESS_CYCLE as CYCLE } from "@/features/owner/permission-edit";
 import { DASHBOARD_ROLE_LABELS } from "@/features/dashboard/layout/roles";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { DragScrollArea } from "@/components/ui/drag-scroll-area";
 import { SectionForm } from "./section-form";
+import { useSectionDraft } from "./use-section-draft";
 import {
   MENU_ACCESS,
   MENU_KEYS,
@@ -21,6 +22,7 @@ import {
   type UserPermissionOverride,
 } from "@/lib/permissions";
 import type { PermissionsSettings } from "@/features/owner/settings-types";
+import { ambiguousRoleCells } from "@/features/owner/permissions-canonical";
 import { isTeacherMenuEntranceOpen } from "@/lib/navigation";
 
 // '강사 내 메뉴 표시' 빠른 토글에 세울 탭 — 강사 '내 메뉴'와 **같은 입구 정책**(isTeacherMenuEntranceOpen)으로 거른다.
@@ -63,28 +65,74 @@ function diffOverrides(matrix: AccessMatrix): PermissionOverride[] {
   return out;
 }
 
+/** 이 면이 고치는 세 칸 — 저장도 셋을 함께 보낸다(한 칸만 따로 저장하는 길은 없다). */
+type PermissionsDraft = {
+  /** 역할별 권한 — 저장되는 목록(sparse)이 아니라 실제로 적용되는 표로 들고 편집한다. */
+  matrix: AccessMatrix;
+  userOverrides: UserPermissionOverride[];
+  specialAccess: PermissionsSettings["specialAccess"];
+};
+const toDraft = (p: PermissionsSettings): PermissionsDraft => ({
+  matrix: resolveMatrix(p.overrides),
+  userOverrides: p.userOverrides,
+  specialAccess: p.specialAccess,
+});
+const teacherAccessOf = (matrix: AccessMatrix) =>
+  Object.fromEntries(TEACHER_MENU_KEYS.map((k) => [k, matrix[k].teacher])) as Record<string, Access>;
+
 export function PermissionsSection({
   initial,
   userOverrideNames = {},
   staffOptions = [],
   hiddenUserIds = [],
   generic = false,
+  baselineToken,
+  baselineVersion,
 }: {
+  /** 서버가 **방금 읽은** 역할·권한(page.tsx) — 설정 캐시의 값이 아니다. */
   initial: PermissionsSettings;
   /** 개인 예외 표시용 userId→이름(서버에서 해석). 이름 없는 id는 축약 id로 표시. */
   userOverrideNames?: Record<string, string>;
   staffOptions?: { id: string; name: string; role: string }[];
   hiddenUserIds?: string[];
   generic?: boolean;
+  /**
+   * 이 화면이 연 시점의 역할·권한을 가리키는 기준 token — 저장 요청에 실려, 그사이 다른 곳(다른 창 · '역할 설정' 대화상자 ·
+   * 운영자 스크립트)이 바꿨으면 저장이 거절된다. 없으면 저장할 수 없다(서버가 받지 않는다).
+   */
+  baselineToken?: string;
+  /** 이 값을 읽은 문서의 저장 순번 — 내 저장보다 먼저 읽힌 값이 뒤늦게 내려와도 받지 않는다(useSectionDraft). */
+  baselineVersion?: number;
 }) {
-  const [matrix, setMatrix] = useState<AccessMatrix>(() => resolveMatrix(initial.overrides));
+  // 🔴 세 칸은 **한 묶음**으로 다룬다 — 서버가 새 값을 내려보내면 깨끗할 때만 셋을 함께 받고, 수정 중이면 셋 다 그대로 둔다.
+  //    (전에는 표가 화면을 연 때의 값에 머물러, 대화상자로 바꾼 직급을 다음 저장이 되돌렸다.)
+  const initialDraft = useMemo(() => toDraft(initial), [initial]);
+  const { draft, setDraft, baseline, confirmed, noteSubmitted, confirmSaved, noteSaveFailed, adoptions } =
+    useSectionDraft(initialDraft, baselineToken, baselineVersion);
+  const { matrix, userOverrides, specialAccess } = draft;
+  const setMatrix = (next: (m: AccessMatrix) => AccessMatrix) => setDraft((d) => ({ ...d, matrix: next(d.matrix) }));
+  const setUserOverrides = (next: (rows: UserPermissionOverride[]) => UserPermissionOverride[]) =>
+    setDraft((d) => ({ ...d, userOverrides: next(d.userOverrides) }));
+  const setSpecialAccess = (next: (v: PermissionsDraft["specialAccess"]) => PermissionsDraft["specialAccess"]) =>
+    setDraft((d) => ({ ...d, specialAccess: next(d.specialAccess) }));
   const overrides = useMemo(() => diffOverrides(matrix), [matrix]);
-  const savedMatrix = useMemo(() => resolveMatrix(initial.overrides), [initial.overrides]);
+  // 같은 칸이 서로 다른 값으로 두 번 저장돼 있으면(손으로 넣은 값·스크립트) 알린다 — 표는 마지막 줄을 보여 주고,
+  // 저장하면 표의 값 하나로 정리된다. 말없이 정리하지 않는다(그 전까지 읽는 곳에 따라 다른 값이 적용될 수 있었다).
+  // 🔴 안내의 기준도 **이 화면이 받아들인 서버 상태**(기준 token)다 — 서버 prop을 그대로 읽으면, 저장으로 정리한 뒤에도
+  //    prop이 아직 옛것이거나 내 저장보다 먼저 읽힌 값이 뒤늦게 내려올 때 이미 정리된 안내가 되살아난다(적대 리뷰 2b N1).
+  //    기준 token이 바뀐 렌더에서만 다시 본다: 내 저장이 바꾼 것이면 정리된 것이고, 받아들인 서버 값이면 그 값에서 다시 센다.
+  // ⚠️ 표(draft)가 갈아끼워진 횟수로 가리지 않는다 — 다른 곳이 넣은 중복 줄은 표를 바꾸지 않을 수 있다(마지막 줄이 같은 값).
+  const [savedToken, setSavedToken] = useState<string>();
+  const [notice, setNotice] = useState(() => ({ baseline, cells: ambiguousRoleCells(initial.overrides) }));
+  if (notice.baseline !== baseline) {
+    setNotice({ baseline, cells: baseline !== undefined && baseline === savedToken ? [] : ambiguousRoleCells(initial.overrides) });
+  }
+  const ambiguous = notice.cells;
+  // '저장 전 변경'의 기준은 **확정 상태**다(서버 prop이 아니다 — 저장 직후엔 prop이 잠깐 옛 값이라 방금 저장한 칸이 변경으로 남는다).
+  const savedMatrix = useMemo(() => (JSON.parse(confirmed) as PermissionsDraft).matrix, [confirmed]);
   const changes = MENU_KEYS.flatMap((menu) => SYSTEM_ROLES.flatMap((role) =>
     matrix[menu][role] === savedMatrix[menu][role] ? [] : [{ menu, role, before: savedMatrix[menu][role], after: matrix[menu][role] }],
   ));
-  const [userOverrides, setUserOverrides] = useState<UserPermissionOverride[]>(initial.userOverrides);
-  const [specialAccess, setSpecialAccess] = useState(initial.specialAccess);
   const [pickedUser, setPickedUser] = useState("");
   const [pickedMenu, setPickedMenu] = useState<MenuKey>("staff");
   const [pickedAccess, setPickedAccess] = useState<Access>("full");
@@ -122,32 +170,40 @@ export function PermissionsSection({
   }
 
   // '강사 내 메뉴 표시' 빠른 토글 — 같은 matrix 상태를 편집(별도 저장/필드 없음, 아래 표와 한 폼).
-  // 켜기 복원값 = '끄기 직전의 실제 강사 접근값'(세션 중 매트릭스로 바꾼 readonly 등도 보존). 마운트 값으로 초기화.
-  // ⚠️ 마운트 값 고정으로 복원하면 세션 중 매트릭스 편집이 off/on 사이클에 유실됨 → 끄기 시점에 live 값을 캡처.
+  // 켜기 복원값 = '끄기 직전의 실제 강사 접근값'(세션 중 매트릭스로 바꾼 readonly 등도 보존). 화면을 연 때의 값으로 시작한다.
+  // ⚠️ 연 때의 값 고정으로 복원하면 세션 중 매트릭스 편집이 off/on 사이클에 유실됨 → 끄기 시점에 live 값을 캡처.
   // 처음부터 '없음'이던 탭을 켜면 코드 기본값(scoped/full). 끄기=none → 탭 숨김 + 페이지 접근 차단.
-  const prevTeacherAccessRef = useRef<Record<string, Access> | null>(null);
-  if (prevTeacherAccessRef.current === null) {
-    prevTeacherAccessRef.current = Object.fromEntries(
-      TEACHER_MENU_KEYS.map((k) => [k, matrix[k].teacher]),
-    ) as Record<string, Access>;
-  }
+  // 서버 값으로 표를 갈아끼우면(`adoptions`) 기억도 그 표로 다시 잡는다 — 옛 표에서 기억한 값을 새 표에 되살리지 않는다.
+  // ⚠️ ref가 아니라 state다(렌더 중 ref 갱신 금지) — 갈아끼운 렌더에서 파생한다(effect 안 setState 금지 #25).
+  const [restore, setRestore] = useState(() => ({ adoptions, values: teacherAccessOf(matrix) }));
+  if (restore.adoptions !== adoptions) setRestore({ adoptions, values: teacherAccessOf(matrix) });
   function setTeacherShown(menu: MenuKey, shown: boolean) {
     if (menu === "teacher_onescreen") return; // 강사 홈 — 항상 표시(ROLE_LOCKED)
-    setMatrix((m) => {
-      const prev = prevTeacherAccessRef.current!;
-      if (!shown) {
-        // 끄기 직전의 비-none 값을 기억 → 다시 켤 때 복원(매트릭스로 방금 바꾼 값 유실 방지)
-        if (m[menu].teacher !== "none") prev[menu] = m[menu].teacher;
-        return { ...m, [menu]: { ...m[menu], teacher: "none" } };
-      }
-      const restore = prev[menu];
-      const next: Access = restore && restore !== "none" ? restore : MENU_ACCESS[menu].teacher;
-      return { ...m, [menu]: { ...m[menu], teacher: next } };
-    });
+    if (!shown) {
+      // 끄기 직전의 비-none 값을 기억 → 다시 켤 때 복원(매트릭스로 방금 바꾼 값 유실 방지)
+      const current = matrix[menu].teacher;
+      if (current !== "none") setRestore((r) => ({ ...r, values: { ...r.values, [menu]: current } }));
+      setMatrix((m) => ({ ...m, [menu]: { ...m[menu], teacher: "none" } }));
+      return;
+    }
+    const remembered = restore.values[menu];
+    const next: Access = remembered && remembered !== "none" ? remembered : MENU_ACCESS[menu].teacher;
+    setMatrix((m) => ({ ...m, [menu]: { ...m[menu], teacher: next } }));
   }
 
   return (
-    <SectionForm section="permissions" payload={{ overrides, userOverrides, specialAccess }}>
+    <SectionForm
+      section="permissions"
+      payload={{ overrides, userOverrides, specialAccess }}
+      extraFields={{ permissionsBaseline: baseline }}
+      onSubmit={noteSubmitted}
+      onSaved={(state) => {
+        setSavedToken(state.permissions?.token);
+        confirmSaved(state.permissions?.token, state.version);
+      }}
+      onSaveFailed={noteSaveFailed}
+      rebaselineNonce={adoptions}
+    >
       <>
       <section className="border-border bg-card rounded-2xl border p-5">
         <h3 className="text-foreground text-sm font-bold">강사 &lsquo;내 메뉴&rsquo; 표시</h3>
@@ -194,6 +250,13 @@ export function PermissionsSection({
           (기본값과 다른 셀 {overrides.length}개). 선생님 원스크린·내 학습은 역할 전용이라 고정이고, 학생 역할과
           원장의 설정·관리자 도구·대시보드 접근은 잠글 수 없습니다. 강사 대시보드는 담당 범위 집계가 없어 비활성화됩니다.
         </p>
+        {ambiguous.length ? (
+          <p role="status" className="border-amber/30 bg-amber-soft mt-3 rounded-md border px-3 py-2 text-xs leading-relaxed">
+            <b>같은 칸이 서로 다른 값으로 여러 번 저장되어 있습니다</b> —{" "}
+            {ambiguous.map(({ menu, role }) => `${MENU_LABEL[menu]} · ${ROLE_LABEL[role]}`).join(", ")}. 화면에 따라 다른 값이
+            적용될 수 있습니다. 아래 표의 값을 확인한 뒤 저장하면 표의 값 하나로 정리됩니다.
+          </p>
+        ) : null}
         {changes.length ? (
           <details className="border-amber/30 bg-amber-soft mt-3 rounded-md border px-3 py-2 text-xs">
             <summary className="cursor-pointer font-bold">저장 전 변경 {changes.length}개</summary>

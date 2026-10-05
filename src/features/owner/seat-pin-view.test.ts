@@ -90,10 +90,12 @@ describe("학원 설정 페이지 배선", () => {
 
   it("🔴 기준 token은 저장할 수 있는 사람에게만 만든다 — 운영 체계 면의 token은 PIN에서 나온 값이다", () => {
     // 새로 읽기 자체가 편집자 한정이고, token은 그 값에서만 만든다(읽기 전용이면 undefined).
+    // (역할·권한 면도 새로 읽지만 그 면은 운영 섹션을 내려보내지 않는다 — token은 운영 설정을 저장할 수 있을 때만 만든다.)
+    expect(code).toContain("const needsFreshRead = (showsOperations && canEditOperations) || showsPermissions;");
+    expect(code).toContain("const editable = needsFreshRead ? await getTenantSettingsForEdit(viewer.tenantId) : undefined;");
     expect(code).toContain(
-      "const editable = showsOperations && canEditOperations ? await getTenantSettingsForEdit(viewer.tenantId) : undefined;",
+      "const operationsTokens = editable && canEditOperations ? operationsFaceTokens(editable.settings.operations) : undefined;",
     );
-    expect(code).toContain("const operationsTokens = editable ? operationsFaceTokens(editable.settings.operations) : undefined;");
     expect(code.match(/operationsFaceTokens\(/g)?.length).toBe(1);
     expect(code).toContain("baselineToken={operationsTokens?.operations}");
     expect(code).toContain("baselineToken={operationsTokens?.subjects}");

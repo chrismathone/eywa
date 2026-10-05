@@ -1,0 +1,415 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MENU_ACCESS, resolveMatrix } from "@/lib/permissions";
+import { resolveSettings } from "../resolve";
+import { applySettingRoles, settingRoleSelection } from "../setting-roles";
+import type { PermissionsSettings } from "../settings-types";
+
+/**
+ * 역할·권한 저장 계약(2026-10-06) — 실제 저장 액션을 **상태를 가진 모의 DB**로 돌려, 여러 곳이 번갈아 쓰는 경우를 확인한다.
+ *  · 역할·권한 면은 화면을 연 시점의 값 전체를 되돌려 보낸다. 그사이 다른 곳(다른 창 · '역할 설정' 대화상자 · 운영자 스크립트)이
+ *    바꿨으면 저장하지 않는다(기준 token) — 받으면 그 변경이 조용히 되돌아간다.
+ *  · 기준은 저장되는 세 칸 전부(역할별 · 개인별 · 담당자)의 **저장된 줄 그대로**다(차례만 무시). 적용하면 같은 표여도
+ *    줄이 달라졌으면 다른 저장이다 — 같은 줄을 앱과 DB가 다르게 읽는 자리가 있다(적대 리뷰 2 C1).
+ *  · 기존 보호(침산 담당자 칸 미저장 · 운영 설정 보호 · 원장 전용)는 그대로다.
+ * 합성 값만 쓴다.
+ */
+const STAFF_A = "11111111-1111-4111-8111-111111111111";
+const STAFF_B = "22222222-2222-4222-8222-222222222222";
+const OPERATOR = "99999999-9999-4999-8999-999999999999";
+
+const m = vi.hoisted(() => ({
+  actor: { id: "actor", tenantId: "tenant-a", systemRole: "master", displayName: "원장" },
+  allowed: true,
+  row: null as null | { data: Record<string, unknown>; updated_at: string },
+  /** 액션이 읽은 뒤·쓰기 직전에 끼어드는 다른 writer. */
+  beforeWrite: null as null | (() => void),
+  /** 운영자 계정(지점에서 바꿀 수 없는 대상). */
+  platformIds: new Set<string>(),
+  staff: [] as { id: string; system_role: string; status: string }[],
+  writes: 0,
+  audit: vi.fn(),
+}));
+vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.actor }));
+vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: async () => m.allowed }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => false }));
+vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
+vi.mock("./queries", () => ({ tenantSettingsTag: (id: string) => `settings:${id}` }));
+vi.mock("next/cache", () => ({ updateTag: vi.fn(), revalidatePath: vi.fn() }));
+vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: vi.fn() }));
+vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: () => ({
+    from: (table: string) => ({
+      select: () => {
+        if (table === "super_admins") {
+          return { in: async (_column: string, ids: string[]) => ({ data: ids.filter((id) => m.platformIds.has(id)).map((id) => ({ id })), error: null }) };
+        }
+        // users — 권한 대상이 현재 지점의 재직 직원인지 확인하는 조회.
+        let wanted: string[] = [];
+        const chain = {
+          eq: () => chain,
+          in: (_column: string, ids: string[]) => {
+            wanted = ids;
+            return chain;
+          },
+          limit: async () => ({ data: m.staff.filter((u) => wanted.includes(u.id)), error: null }),
+        };
+        return chain;
+      },
+    }),
+  }),
+}));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: async () => ({
+    from: () => ({
+      select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: m.row ? structuredClone(m.row) : null, error: null }) }) }),
+      update: (value: { data: Record<string, unknown>; updated_at: string }) => {
+        const conditions: Record<string, unknown> = {};
+        const writer = {
+          eq: (column: string, expected: unknown) => {
+            conditions[column] = expected;
+            return writer;
+          },
+          select: async () => {
+            m.beforeWrite?.();
+            m.beforeWrite = null;
+            if (!m.row || conditions.updated_at !== m.row.updated_at) return { data: [], error: null };
+            m.writes += 1;
+            m.row = { data: structuredClone(value.data), updated_at: value.updated_at };
+            return { data: [{ tenant_id: "tenant-a" }], error: null };
+          },
+        };
+        return writer;
+      },
+      insert: (value: { data: Record<string, unknown>; updated_at: string }) => ({
+        select: async () => {
+          m.writes += 1;
+          m.row = { data: structuredClone(value.data), updated_at: value.updated_at };
+          return { data: [{ tenant_id: "tenant-a" }], error: null };
+        },
+      }),
+    }),
+  }),
+}));
+import { saveOwnerSection } from "./actions";
+import { CHANGED_ELSEWHERE_ERROR, STALE_FORM_ERROR } from "./operations-save";
+import { permissionsToken } from "./permissions-save";
+
+/** 지금 DB에 있는 역할·권한(화면·저장이 읽는 것과 같은 해석). */
+const stored = (): PermissionsSettings => resolveSettings(m.row?.data ?? null, { name: "" }).permissions;
+const rawStored = () => (m.row!.data.permissions ?? {}) as Record<string, unknown>;
+/** 다른 곳의 쓰기 — 문서를 바꾸고 수정 표식을 옮긴다(실제 writer는 전부 그렇게 한다 — tenant-settings-writers.test.ts). */
+function otherWriter(change: (permissions: Record<string, unknown>) => Record<string, unknown>) {
+  m.row = {
+    data: { ...m.row!.data, permissions: change(rawStored()) },
+    updated_at: new Date(Date.parse(m.row!.updated_at) + 500).toISOString(),
+  };
+}
+const call = (fd: FormData) => {
+  vi.setSystemTime(new Date(Date.now() + 1000));
+  return saveOwnerSection(undefined, fd);
+};
+/** 한 창이 역할·권한 면을 연 순간 — 그때의 값과 기준 token을 들고 있다가 나중에 저장한다. */
+function openWindow() {
+  const draft = stored();
+  const baseline = permissionsToken(draft);
+  return {
+    draft,
+    baseline,
+    save: (data: unknown, token: string | null = baseline) => {
+      const fd = new FormData();
+      fd.set("section", "permissions");
+      fd.set("data", JSON.stringify(data));
+      if (token !== null) fd.set("permissionsBaseline", token);
+      return call(fd);
+    },
+  };
+}
+
+const START = { overrides: [{ menu: "staff", role: "teacher", access: "readonly" }], userOverrides: [{ userId: STAFF_A, menu: "staff", access: "full" }] };
+function seed(preset: "chinsan" | "generic", permissions: Record<string, unknown> = START) {
+  m.row = {
+    data: {
+      version: 1,
+      ...(preset === "generic" ? { preset: "generic" } : {}),
+      profile: { name: "학원" },
+      permissions: structuredClone(permissions),
+    },
+    updated_at: "2026-10-06T00:00:00.000Z",
+  };
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-10-06T01:00:00.000Z"));
+  vi.clearAllMocks();
+  m.actor = { id: "actor", tenantId: "tenant-a", systemRole: "master", displayName: "원장" };
+  m.allowed = true;
+  m.beforeWrite = null;
+  m.platformIds = new Set();
+  m.staff = [STAFF_A, STAFF_B, OPERATOR].map((id) => ({ id, system_role: "admin", status: "active" }));
+  m.writes = 0;
+  seed("chinsan");
+});
+afterEach(() => vi.useRealTimers());
+
+describe("기준 token이 있어야 저장한다", () => {
+  it("🔴 기준 없이 온 저장(배포 전에 열어 둔 화면 · 직접 만든 요청)은 받지 않는다", async () => {
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, overrides: [] }, null))?.error).toBe(STALE_FORM_ERROR);
+    expect((await w.save({ ...w.draft, overrides: [] }, ""))?.error).toBe(STALE_FORM_ERROR);
+    expect(m.writes).toBe(0);
+    expect(stored().overrides).toEqual(START.overrides);
+  });
+
+  it("연 뒤 아무도 안 바꿨으면 저장한다", async () => {
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, overrides: [{ menu: "staff", role: "teacher", access: "full" }] });
+    expect(res?.ok).toBe(true);
+    expect(stored().overrides).toEqual([{ menu: "staff", role: "teacher", access: "full" }]);
+    expect(stored().userOverrides).toEqual(START.userOverrides);
+  });
+
+  it("기준이 맞아도 원장이 아니면 저장하지 못한다 — token은 권한 근거가 아니다", async () => {
+    const w = openWindow();
+    m.actor = { ...m.actor, systemRole: "admin" };
+    expect((await w.save(w.draft))?.error).toContain("원장");
+    expect(m.writes).toBe(0);
+  });
+});
+
+describe("🔴 연 뒤 다른 곳이 바꿨으면 저장하지 않는다 — 그 변경을 되돌리지 않는다", () => {
+  it("운영자 스크립트가 개인별 예외만 바꿨다 → 표만 고친 저장도 거절(개인 예외를 옛 값으로 덮게 된다)", async () => {
+    const w = openWindow();
+    otherWriter((p) => ({ ...p, userOverrides: [...START.userOverrides, { userId: STAFF_B, menu: "billing", access: "readonly" }] }));
+    const res = await w.save({ ...w.draft, overrides: [{ menu: "staff", role: "teacher", access: "full" }] });
+    expect(res?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    expect(m.writes).toBe(0);
+    expect(stored().userOverrides).toHaveLength(2);
+  });
+
+  it("'역할 설정' 대화상자가 직급을 바꿨다 → 옛 표의 저장을 거절하고 대화상자의 변경이 남는다", async () => {
+    const w = openWindow();
+    // 다른 화면의 대화상자가 '운영 설정'의 관리자 체크를 뒤집었다(대화상자의 저장과 같은 계산).
+    const selection = settingRoleSelection("timetable", w.draft.overrides);
+    const roles = selection.operations_settings ?? [];
+    const afterDialog = applySettingRoles("timetable", w.draft.overrides, {
+      ...selection,
+      operations_settings: roles.includes("admin") ? roles.filter((role) => role !== "admin") : [...roles, "admin"],
+    });
+    otherWriter((p) => ({ ...p, overrides: afterDialog, rev: 1 }));
+    expect(resolveSettings(m.row!.data, { name: "" }).permissions.overrides).toEqual(afterDialog);
+    expect(permissionsToken(stored())).not.toBe(w.baseline);
+
+    expect((await w.save({ ...w.draft, overrides: [{ menu: "staff", role: "teacher", access: "full" }] }))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    expect(stored().overrides).toEqual(afterDialog);
+  });
+
+  it("일반판 — 다른 창이 담당자 명단만 바꿨다 → 거절", async () => {
+    seed("generic", { ...START, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [] } });
+    const w = openWindow();
+    otherWriter((p) => ({ ...p, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [STAFF_B] } }));
+    expect((await w.save({ ...w.draft, overrides: [] }))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    expect(stored().specialAccess.leaveAdjusterIds).toEqual([STAFF_B]);
+  });
+
+  it("거절된 뒤 새로 열면(새 기준) 저장된다", async () => {
+    const stale = openWindow();
+    otherWriter((p) => ({ ...p, userOverrides: [] }));
+    expect((await stale.save(stale.draft))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    const fresh = openWindow();
+    expect((await fresh.save({ ...fresh.draft, overrides: [] }))?.ok).toBe(true);
+    expect(stored()).toMatchObject({ overrides: [], userOverrides: [] });
+  });
+
+  it("액션이 읽은 뒤·쓰기 직전에 끼어든 변경은 최종 쓰기가 거절한다(수정 표식)", async () => {
+    const w = openWindow();
+    m.beforeWrite = () => otherWriter((p) => ({ ...p, userOverrides: [] }));
+    expect((await w.save({ ...w.draft, overrides: [] }))?.error).toContain("먼저 저장되었습니다");
+    expect(stored().overrides).toEqual(START.overrides);
+    expect(stored().userOverrides).toEqual([]);
+  });
+});
+
+describe("🔴 적용하면 같은 표여도, 저장된 줄이 달라졌으면 거절한다 — 앱과 DB가 그 줄을 다르게 읽는다", () => {
+  it("연 뒤 다른 곳이 같은 칸을 두 줄로 썼다(앱의 표는 그대로다) → 옛 화면의 저장이 그 줄을 지우지 못한다", async () => {
+    const w = openWindow();
+    // 앱은 마지막 줄(기본값과 같다)을 쓰니 표는 그대로다. DB의 권한 함수는 먼저 걸리는 줄('없음')을 쓴다.
+    const added = [{ menu: "billing", role: "admin", access: "none" }, { menu: "billing", role: "admin", access: MENU_ACCESS.billing.admin }];
+    otherWriter((p) => ({ ...p, overrides: [...START.overrides, ...added] }));
+    expect(resolveMatrix(stored().overrides)).toEqual(resolveMatrix(w.draft.overrides));
+
+    const res = await w.save({ ...w.draft, overrides: [{ menu: "staff", role: "teacher", access: "full" }] });
+    expect(res?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    expect(m.writes).toBe(0);
+    expect(stored().overrides).toEqual([...START.overrides, ...added]);
+  });
+
+  it("연 뒤 다른 곳이 기본값과 같은 줄을 더 적었다('역할 설정' 대화상자가 그렇게 쓴다) → 거절", async () => {
+    const w = openWindow();
+    otherWriter((p) => ({ ...p, overrides: [...START.overrides, { menu: "staff", role: "master", access: MENU_ACCESS.staff.master }] }));
+    expect(resolveMatrix(stored().overrides)).toEqual(resolveMatrix(w.draft.overrides));
+    expect((await w.save({ ...w.draft, overrides: [] }))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    expect(stored().overrides).toHaveLength(START.overrides.length + 1);
+  });
+
+  it("줄의 차례만 바뀐 것은 같은 저장값이다 → 저장된다", async () => {
+    seed("chinsan", {
+      overrides: [...START.overrides, { menu: "billing", role: "manager", access: "full" }],
+      userOverrides: [...START.userOverrides, { userId: STAFF_B, menu: "billing", access: "readonly" }],
+    });
+    const w = openWindow();
+    otherWriter((p) => ({ ...p, overrides: [...(p.overrides as unknown[])].reverse(), userOverrides: [...(p.userOverrides as unknown[])].reverse() }));
+    expect((await w.save({ ...w.draft, overrides: [{ menu: "staff", role: "teacher", access: "full" }] }))?.ok).toBe(true);
+  });
+});
+
+describe("같은 칸(메뉴·직급)을 두 번 지정한 요청", () => {
+  it("🔴 받지 않는다 — 어느 줄이 적용될지가 읽는 곳마다 다르다(값이 같아도 거절)", async () => {
+    const w = openWindow();
+    for (const second of ["full", "none"] as const) {
+      const res = await w.save({
+        ...w.draft,
+        overrides: [{ menu: "billing", role: "admin", access: "none" }, { menu: "billing", role: "admin", access: second }],
+      });
+      expect(res?.error).toContain("두 번 지정할 수 없습니다");
+    }
+    expect(m.writes).toBe(0);
+    expect(stored().overrides).toEqual(START.overrides);
+  });
+
+  it("이미 그렇게 저장돼 있어도(손으로 넣은 값·스크립트) 면은 열리고 저장된다 — 저장하면 표의 값 하나로 정리된다", async () => {
+    // 스키마로 막으면 이런 값이 저장된 학원은 역할·권한을 고칠 수 없게 된다 → 요청만 거절하고 저장값은 읽는다.
+    seed("chinsan", { ...START, overrides: [...START.overrides, { menu: "billing", role: "admin", access: "none" }, { menu: "billing", role: "admin", access: "readonly" }] });
+    const w = openWindow();
+    // 화면의 표 = 마지막 줄('읽기'). 화면은 표에서 기본값과 다른 칸만 한 줄씩 보낸다.
+    const fromTable = [...START.overrides, { menu: "billing", role: "admin", access: "readonly" }];
+    const res = await w.save({ ...w.draft, overrides: fromTable });
+    expect(res?.ok).toBe(true);
+    expect(stored().overrides).toEqual(fromTable);
+    expect(res?.permissions?.token).toBe(permissionsToken(stored()));
+  });
+});
+
+describe("깨진 저장값", () => {
+  it("줄이 null인 저장값에도 저장 액션이 던지지 않는다 — 기준 비교는 값을 돌려주고, 저장은 구조화된 오류로 끝난다", async () => {
+    seed("chinsan", { ...START, userOverrides: [...START.userOverrides, null] });
+    const fd = new FormData();
+    fd.set("section", "permissions");
+    fd.set("data", JSON.stringify({ ...START, specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } }));
+    // 화면이 받았을 기준(같은 함수) — 깨진 줄을 없는 셈 치지 않는다.
+    const broken = resolveSettings(m.row!.data, { name: "" }).permissions;
+    expect(() => permissionsToken(broken)).not.toThrow();
+    expect(permissionsToken(broken)).not.toBe(permissionsToken({ ...broken, userOverrides: START.userOverrides } as PermissionsSettings));
+    fd.set("permissionsBaseline", permissionsToken(broken));
+    const res = await call(fd);
+    // 뒤따르는 보호 검사가 저장값을 스키마로 읽다 실패한다 — 던지지 않고 안내로 끝나며, 쓰지 않는다.
+    expect(res?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+  });
+});
+
+describe("자기 저장 뒤 재저장", () => {
+  it("응답의 token이 다음 저장의 기준이다 — 새로 열지 않고 이어서 저장할 수 있다", async () => {
+    const w = openWindow();
+    const first = await w.save({ ...w.draft, overrides: [{ menu: "staff", role: "teacher", access: "full" }] });
+    expect(first?.ok).toBe(true);
+    // 응답의 token = 지금 저장된 값을 다시 읽어 만든 token(화면이 새로 열 때 받는 값과 같다).
+    expect(first?.permissions?.token).toBe(permissionsToken(stored()));
+    // 옛 기준으로는 더 저장할 수 없다(내 저장도 변경이다).
+    expect((await w.save({ ...w.draft, overrides: [] }))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    const second = await w.save({ ...w.draft, overrides: [] }, first!.permissions!.token);
+    expect(second?.ok).toBe(true);
+    expect(stored().overrides).toEqual([]);
+  });
+
+  it("🔴 침산 — 담당자 칸을 보내도 저장 행에 남지 않고, 응답 token은 그렇게 저장된 값의 것이다(어긋나면 재저장이 막힌다)", async () => {
+    const w = openWindow();
+    // 직접 만든 요청이 담당자를 실어 보냈다 — 침산은 이 칸을 저장하지 않는다(preset.ts).
+    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [] } };
+    const res = await w.save(sent);
+    expect(res?.ok).toBe(true);
+    expect(rawStored()).not.toHaveProperty("specialAccess");
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [] });
+    // 보낸 값의 token이 아니다 — 보낸 값으로 만들면 다음 저장이 '다른 곳에서 바뀜'으로 막힌다.
+    expect(res?.permissions?.token).not.toBe(permissionsToken(sent as PermissionsSettings));
+    expect(res?.permissions?.token).toBe(permissionsToken(stored()));
+    expect((await w.save({ ...w.draft, overrides: [] }, res!.permissions!.token))?.ok).toBe(true);
+  });
+
+  it("일반판 — 담당자 명단을 저장하고 이어서 다시 저장한다", async () => {
+    seed("generic");
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] } });
+    expect(res?.ok).toBe(true);
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] });
+    expect(res?.permissions?.token).toBe(permissionsToken(stored()));
+    const again = await w.save({ ...stored(), userOverrides: [] }, res!.permissions!.token);
+    expect(again?.ok).toBe(true);
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] });
+  });
+});
+
+describe("저장 순번", () => {
+  it("🔴 역할·권한 섹션 **안에** 쓰고 저장마다 1씩 올린다 — 문서 최상위에는 두지 않는다(DB 쓰기 가드가 위임 계정의 저장을 거절한다)", async () => {
+    const w = openWindow();
+    const first = await w.save({ ...w.draft, overrides: [] });
+    expect(first?.version).toBe(1);
+    expect(rawStored().rev).toBe(1);
+    expect(m.row!.data).not.toHaveProperty("rev");
+    const second = await w.save({ ...w.draft, overrides: START.overrides }, first!.permissions!.token);
+    expect(second?.version).toBe(2);
+    expect(rawStored().rev).toBe(2);
+  });
+
+  it("순번은 설정이 아니다 — 풀어 읽은 값과 변경 내역(감사 기록)에 섞이지 않는다", async () => {
+    const w = openWindow();
+    await w.save({ ...w.draft, overrides: [] });
+    expect(stored()).not.toHaveProperty("rev");
+    expect(JSON.stringify(m.audit.mock.calls)).not.toContain("rev");
+    // 순번만 다른 문서는 같은 설정이다(기준 token이 같다).
+    const before = permissionsToken(stored());
+    otherWriter((p) => ({ ...p, rev: 41 }));
+    expect(permissionsToken(stored())).toBe(before);
+  });
+
+  it("다른 섹션의 저장은 역할·권한의 순번을 건드리지 않는다", async () => {
+    const w = openWindow();
+    await w.save({ ...w.draft, overrides: [] });
+    const fd = new FormData();
+    fd.set("section", "profile");
+    fd.set("data", JSON.stringify(resolveSettings(m.row!.data, { name: "" }).profile));
+    expect((await call(fd))?.ok).toBe(true);
+    expect(rawStored().rev).toBe(1);
+    expect(m.row!.data.profile).not.toHaveProperty("rev");
+  });
+});
+
+describe("기존 보호는 그대로다", () => {
+  it("일반판 — 운영자 계정의 개인 예외를 지우는 저장은 기준이 맞아도 거절한다", async () => {
+    seed("generic", { ...START, userOverrides: [...START.userOverrides, { userId: OPERATOR, menu: "staff", access: "full" }] });
+    m.platformIds = new Set([OPERATOR]);
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, userOverrides: START.userOverrides }))?.error).toContain("지점에서 변경할 수 없습니다");
+    expect(m.writes).toBe(0);
+    // 그대로 전달하면(화면은 숨긴 채 보존한다) 저장된다.
+    expect((await w.save({ ...w.draft, overrides: [] }))?.ok).toBe(true);
+    expect(stored().userOverrides).toContainEqual({ userId: OPERATOR, menu: "staff", access: "full" });
+  });
+
+  it("일반판 — 다른 지점·퇴직 직원은 권한 대상으로 받지 않는다", async () => {
+    seed("generic");
+    m.staff = m.staff.filter((u) => u.id !== STAFF_B);
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, userOverrides: [...START.userOverrides, { userId: STAFF_B, menu: "billing", access: "full" }] });
+    expect(res?.error).toContain("재직 직원");
+    expect(m.writes).toBe(0);
+  });
+
+  it("스키마가 막는 값(원장의 설정 접근 잠금)은 기준이 맞아도 저장하지 않는다", async () => {
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, overrides: [{ menu: "owner", role: "master", access: "none" }] });
+    expect(res?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+  });
+});

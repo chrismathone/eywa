@@ -80,6 +80,19 @@ it("원장 역할이 아닌 슈퍼관리자도 자기 학원에서만 저장하�
   expect(m.audit).toHaveBeenCalledOnce();
   expect(m.tag).toHaveBeenCalledWith("settings:tenant-a");
 });
+it("🔴 역할·권한 섹션의 저장 순번을 올린다 — 섹션 안에만 쓰고 문서 최상위에는 두지 않는다", async () => {
+  // 열려 있는 역할·권한 면이 "이 저장보다 먼저 읽힌 값"을 가려내는 순서다(settings-stamp.ts).
+  expect((await saveSettingRoles("lesson_reports", selection(), baseline())).error).toBeUndefined();
+  const first = m.write.mock.calls.at(-1)![0] as { data: Record<string, unknown> & { permissions: { rev: number } } };
+  expect(first.data.permissions.rev).toBe(1);
+  // 문서 최상위에 순번을 두면 개별 설정만 위임받은 계정의 저장이 DB 쓰기 가드에 전부 거절된다.
+  expect(first.data).not.toHaveProperty("rev");
+
+  m.data = { ...m.data, permissions: { ...(m.data.permissions as object), rev: 7 } };
+  expect((await saveSettingRoles("lesson_reports", selection(), baseline())).error).toBeUndefined();
+  const second = m.write.mock.calls.at(-1)![0] as { data: { permissions: { rev: number } } };
+  expect(second.data.permissions.rev).toBe(8);
+});
 it("열어 둔 사이 역할이 바뀌었으면 덮어쓰지 않는다", async () => {
   m.data.permissions = { overrides: [{ menu: "ai_ment", role: "manager", access: "full" }] };
   expect((await saveSettingRoles("lesson_reports", selection(), baseline())).error).toContain("다른 창");

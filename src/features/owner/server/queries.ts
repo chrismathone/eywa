@@ -115,8 +115,8 @@ export async function getTenantSettingsForEdit(
   tenantId: string,
 ): Promise<{
   settings: TenantSettings;
-  /** 읽은 운영 섹션의 저장 순번 — 폼이 읽기와 저장의 선후를 가린다. 행·섹션이 아직 없으면 0(첫 저장보다 앞선 상태로 구별된다). */
-  version: number;
+  /** 읽은 섹션의 저장 순번 — 폼이 읽기와 저장의 선후를 가린다. 행·섹션이 아직 없으면 0(첫 저장보다 앞선 상태로 구별된다). */
+  versions: { operations: number; permissions: number };
 } | null> {
   const admin = createAdminClient();
   const [settingsRes, tenantRes] = await Promise.all([
@@ -127,9 +127,10 @@ export async function getTenantSettingsForEdit(
     console.error("[owner/queries] tenant_settings 조회 오류(편집용)", settingsRes.error);
     return null;
   }
+  const stored = settingsRes.data?.data as { operations?: unknown; permissions?: unknown } | null | undefined;
   return {
     settings: resolveSettings(settingsRes.data?.data ?? null, { name: tenantRes.data?.name ?? "" }),
-    version: settingsRevOf((settingsRes.data?.data as { operations?: unknown } | null | undefined)?.operations),
+    versions: { operations: settingsRevOf(stored?.operations), permissions: settingsRevOf(stored?.permissions) },
   };
 }
 

@@ -23,7 +23,8 @@ export function SettingRolesButton({ group, initial, hidden = [] }: { group: Set
     <Dialog open={open} onOpenChange={value => { if (!pending) setOpen(value); }}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
         <DialogTitle>설정을 보여줄 직급</DialogTitle>
-        <DialogDescription>항목마다 사용할 직급을 선택하세요. 개인별 예외와 기존 조회 전용 권한은 유지됩니다.</DialogDescription>
+        {/* 체크는 '보기'가 아니라 **바꿀 수 있음**까지 준다(전에 권한이 없던 직급은 전체 권한을 받는다 — setting-roles.ts). */}
+        <DialogDescription>항목마다 사용할 직급을 선택하세요. 새로 체크한 직급은 이 설정을 바꿀 수 있습니다. 기존 조회 전용 권한과 개인별 예외는 유지됩니다.</DialogDescription>
         <form onSubmit={event => {
           event.preventDefault();
           startTransition(async () => {

@@ -10,6 +10,7 @@ import { kstToday } from "@/lib/date-kst";
 import { OWNER_TABS, resolveOwnerTab, type OwnerTab } from "@/features/owner/tabs";
 import { getTenantSettings, getSettingsMeta, getUserDisplayNames, getPermissionStaffOptions, getTenantSettingsForEdit } from "@/features/owner/server/queries";
 import { operationsFaceTokens } from "@/features/owner/server/operations-save";
+import { permissionsToken } from "@/features/owner/server/permissions-save";
 import { getClassroomsWithUsage } from "@/features/owner/server/classroom-queries";
 import { getTeacherLabelsBySubject } from "@/features/timetable/server/queries";
 import { getPeriodDefsForEditor } from "@/features/periods/server/queries";
@@ -140,24 +141,30 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
    * 못 읽으면 폼을 세우지 않는다(기본값 위에서 편집하게 두지 않는다).
    * 🔴 token은 **저장할 수 있는 사람에게만** 만든다 — 운영 체계 면의 token은 자리 PIN에서 나온 값이라 읽기 전용 열람자에겐 보내지 않는다.
    */
-  const editable = showsOperations && canEditOperations ? await getTenantSettingsForEdit(viewer.tenantId) : undefined;
-  const operationsUnreadable = editable === null;
+  // 역할·권한 면도 같다 — 원장에게만 편집 폼이 서고, 그 폼과 기준 token은 방금 읽은 값으로 만든다
+  // (개인별 예외는 운영자 스크립트로도 바뀐다 — 낡은 값으로 폼을 열면 저장이 그 변경을 되돌리려다 거절된다).
+  const showsPermissions = tab === "permissions" && isMaster;
+  const needsFreshRead = (showsOperations && canEditOperations) || showsPermissions;
+  const editable = needsFreshRead ? await getTenantSettingsForEdit(viewer.tenantId) : undefined;
+  const settingsUnreadable = editable === null;
   const operationsSource = editable?.settings.operations ?? settings.operations;
-  const operationsTokens = editable ? operationsFaceTokens(editable.settings.operations) : undefined;
+  const operationsTokens = editable && canEditOperations ? operationsFaceTokens(editable.settings.operations) : undefined;
   const operationsForClient = operationsForViewer(operationsSource, canEditOperations);
+  // 못 읽었으면 undefined — 아래에서 폼 대신 오류 안내가 선다(캐시된 값으로 폼을 열지 않는다).
+  const permissionsSource = showsPermissions ? editable?.settings.permissions : undefined;
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 강의실 엑셀로 넣기 — 운영 설정의 full만(올리기 주소 `gateImport`와 같은 판정).
   const canImportClassrooms = tab === "operations" ? await canManageTenant(viewer.systemRole, "operations_settings") : false;
   // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
   const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
-  // 개인 예외(userOverrides) 이름 매핑 — 역할·권한 면에서만 로드(다른 면 진입 비용 0).
+  // 개인 예외(userOverrides) 이름 매핑 — 역할·권한 편집 폼이 설 때만 로드(다른 면 진입 비용 0). 폼과 같은 값에서 뽑는다.
   const [userOverrideNames, permissionStaff, hiddenPermissionIds] = await Promise.all([
-    tab === "permissions" && settings.permissions.userOverrides.length > 0
-      ? getUserDisplayNames(settings.permissions.userOverrides.map((o) => o.userId))
+    permissionsSource && permissionsSource.userOverrides.length > 0
+      ? getUserDisplayNames(permissionsSource.userOverrides.map((o) => o.userId))
       : {},
-    tab === "permissions" && isMaster && isGenericTenant(settings) ? getPermissionStaffOptions() : [],
-    tab === "permissions" && isMaster ? platformAccountIds(permissionAccountIds(settings.permissions)).then((ids) => [...ids]) : [],
+    permissionsSource && isGenericTenant(settings) ? getPermissionStaffOptions() : [],
+    permissionsSource ? platformAccountIds(permissionAccountIds(permissionsSource)).then((ids) => [...ids]) : [],
   ]);
   // 세션 기간(과목 운영 안)의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
   const thisYear = Number(kstToday().slice(0, 4));
@@ -181,7 +188,9 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
         // ⚠️ 상단 바 브랜드는 `logoText`라 `profile.name`과 다를 수 있다 → 컴팩트 행에 학원명을 남긴다.
         embedLabel={`${settings.profile.name || "학원"} 설정 — 변경은 원장·위임 계정만`}
-        actions={<><SettingRolesControl group={tab === "sheets" ? "integrations" : "owner"} /><p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p></>}
+        // 역할·권한 면에는 '역할 설정' 버튼을 세우지 않는다 — 그 면의 표가 같은 칸을 고친다. 한 화면에 같은 값을 고치는 곳이
+        // 둘이면 대화상자로 바꾼 직급을 아래 표의 저장이 되돌리려 든다(지금은 거절되지만, 왜 거절됐는지 알기 어렵다).
+        actions={<>{tab === "permissions" ? null : <SettingRolesControl group={tab === "sheets" ? "integrations" : "owner"} />}<p className="text-text-faint text-xs">최근 저장: {fmt(meta?.updatedAt ?? null)}</p></>}
       />
 
       </div>
@@ -193,13 +202,13 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {!canEditSettings && !showsOperations ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
-      {showsOperations && operationsUnreadable ? (
+      {settingsUnreadable ? (
         <div className="bg-card border-line rounded-2xl border p-6">
           <p className="text-foreground text-sm font-bold">설정을 불러오지 못했습니다</p>
           <p className="text-text-dim mt-1 text-sm">저장된 값을 확인하지 못해 편집 화면을 열지 않았습니다. 잠시 뒤 새로고침해 주세요.</p>
         </div>
       ) : null}
-      {tab === "operations" && !operationsUnreadable ? (
+      {tab === "operations" && !settingsUnreadable ? (
         <>
         <OperationsSection
           initial={operationsForClient}
@@ -208,12 +217,12 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           readOnly={!canEditOperations}
           seatPinStatus={seatPinStatus(operationsSource)}
           baselineToken={operationsTokens?.operations}
-          baselineVersion={editable?.version}
+          baselineVersion={editable?.versions.operations}
         />
         {canReadAudit ? <MakeupsSection initial={settings.makeups} /> : null}
         </>
       ) : null}
-      {tab === "subjects" && !operationsUnreadable ? (
+      {tab === "subjects" && !settingsUnreadable ? (
         <SubjectsSection
           initial={operationsForClient}
           readOnly={!canEditOperations}
@@ -222,7 +231,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           sessionYear={sessionYear}
           holidays={operationsSource.holidays.map((h) => h.date)}
           baselineToken={operationsTokens?.subjects}
-          baselineVersion={editable?.version}
+          baselineVersion={editable?.versions.operations}
         />
       ) : null}
       {tab === "billing" ? (
@@ -232,7 +241,18 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       {tab === "consultations" ? <ConsultationsSection initial={settings.consultations} /> : null}
       {tab === "permissions" ? (
         isMaster ? (
-          <PermissionsSection initial={settings.permissions} userOverrideNames={userOverrideNames} staffOptions={permissionStaff} hiddenUserIds={hiddenPermissionIds} generic={isGenericTenant(settings)} />
+          // 못 읽었으면(permissionsSource 없음) 위의 '불러오지 못했습니다' 안내만 선다.
+          permissionsSource ? (
+            <PermissionsSection
+              initial={permissionsSource}
+              userOverrideNames={userOverrideNames}
+              staffOptions={permissionStaff}
+              hiddenUserIds={hiddenPermissionIds}
+              generic={isGenericTenant(settings)}
+              baselineToken={permissionsToken(permissionsSource)}
+              baselineVersion={editable?.versions.permissions}
+            />
+          ) : null
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
             <p className="text-foreground text-sm font-bold">역할·권한은 원장(master)만 변경할 수 있습니다</p>

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { navigationRevision } from "../normalize-navigation";
+import { resolveSettings } from "../resolve";
 
 const m = vi.hoisted(() => ({
   actor: { id: "actor", tenantId: "tenant-a", systemRole: "master" }, allowed: true,
@@ -28,6 +29,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () 
   };
 } }) }));
 import { saveOwnerSection } from "./actions";
+import { permissionsToken } from "./permissions-save";
 
 const empty = { menus: [], groups: [], teacherMenus: [] };
 const configuration = { menus: [{ href: "/students", label: "우리 아이들", icon: "star", groupId: "custom-team" }], groups: [{ id: "custom-team", label: "교무실", icon: "folder" }], teacherMenus: [] };
@@ -60,6 +62,10 @@ describe("실제 학원 설정 저장 액션", () => {
       ["permissions", { overrides: [], userOverrides: [{ userId: assignment.userId, menu: "staff", access: "full" }] }],
     ] as const) {
       const fd = new FormData(); fd.set("section", section); fd.set("data", JSON.stringify(data));
+      // 역할·권한 저장은 화면이 연 시점의 기준 token이 있어야 여기(운영 설정 보호 검사)까지 온다.
+      if (section === "permissions") {
+        fd.set("permissionsBaseline", permissionsToken(resolveSettings((m.stored as { data: unknown }).data, { name: "" }).permissions));
+      }
       expect((await saveOwnerSection(undefined, fd))?.error).toContain("지점에서 변경할 수 없습니다");
     }
     expect(m.write).not.toHaveBeenCalled();

@@ -29,6 +29,11 @@ export function useSectionDraft<T>(initial: T, token: string | undefined, versio
   setDraft: Dispatch<SetStateAction<T>>;
   /** 이 draft가 출발한 서버 상태의 표식 — 저장 요청에 싣는다. */
   baseline: string | undefined;
+  /**
+   * 확정 스냅샷(키를 정렬한 JSON) — 면이 "저장된 값"과 작성 중 값을 견줘 보여 줄 때 쓴다(저장 전 변경 표시).
+   * 서버가 내려준 값(prop)이 아니라 이것과 견줄 것 — prop은 저장 직후 잠깐 옛 값이고, 내 저장보다 먼저 읽힌 값일 수도 있다.
+   */
+  confirmed: string;
   /** 확정 스냅샷과 다른가(작성 중인 변경이 있나). */
   isDirty: () => boolean;
   /** 제출 직전에 부른다 — 지금 draft가 "제출한 값"이고, 응답이 올 때까지 서버 값 받기를 미룬다. */
@@ -89,5 +94,5 @@ export function useSectionDraft<T>(initial: T, token: string | undefined, versio
     setAdoptions((n) => n + 1);
   }, []);
 
-  return { draft, setDraft, baseline, isDirty, noteSubmitted, confirmSaved, noteSaveFailed, adopt, adoptions };
+  return { draft, setDraft, baseline, confirmed, isDirty, noteSubmitted, confirmSaved, noteSaveFailed, adopt, adoptions };
 }

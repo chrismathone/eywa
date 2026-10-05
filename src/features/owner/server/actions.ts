@@ -26,20 +26,28 @@ import { resolveSettings } from "../resolve";
 import { nextSettingsStamp, settingsRevOf, withoutSettingsRev } from "../settings-stamp";
 import type { OperationsSettings } from "../settings-types";
 import {
+  CHANGED_ELSEWHERE_ERROR,
+  STALE_FORM_ERROR,
   buildOperationsSave,
   operationsReply,
   readOperationsRequest,
   type OperationsReply,
   type OperationsRequest,
 } from "./operations-save";
+import { permissionsToken } from "./permissions-save";
+import { hasDuplicateRoleCells } from "../permissions-canonical";
 
 /**
  * `operations` = 운영 섹션 저장이 확정한 상태(면별 기준 token · 과목 삭제는 그 면의 값도) — 화면이 다음 저장의 기준으로 쓴다.
- * `version` = 이 저장이 쓴 운영 섹션의 저장 순번(`data.operations.rev`) — 화면이 "내려온 값이 이 저장보다 먼저 읽힌 것인가"를 가린다.
+ * `permissions` = 역할·권한 저장이 확정한 상태의 기준 token(같은 쓰임).
+ * `version` = 이 저장이 쓴 그 섹션의 저장 순번(`data.<섹션>.rev` — 운영 · 역할·권한) — 화면이 "내려온 값이 이 저장보다 먼저 읽힌 것인가"를 가린다.
  */
 export type OwnerSaveState =
-  | { ok?: boolean; error?: string; nonce?: number; operations?: OperationsReply; version?: number }
+  | { ok?: boolean; error?: string; nonce?: number; operations?: OperationsReply; permissions?: { token: string }; version?: number }
   | undefined;
+
+/** 저장 순번(`rev`)을 섹션 안에 함께 쓰는 섹션 — 쓰는 곳이 여럿이라 편집 폼이 읽기와 저장의 선후를 가려야 하는 둘. */
+const REV_SECTIONS: readonly SectionKey[] = ["operations", "permissions"];
 
 const validationError = (issue: { path: PropertyKey[]; message: string } | undefined) => {
   const path = issue?.path.join(".");
@@ -132,11 +140,24 @@ export async function saveOwnerSection(
     if ("error" in read) return { error: read.error };
     operationsRequest = read.request;
   }
+  // 🔴 역할·권한은 **화면이 연 시점의 기준 token**이 있어야 저장한다 — 섹션 전체를 되돌려 보내는 저장이라, 그사이 다른 곳
+  //    (다른 창 · '역할 설정' 대화상자 · 운영자 스크립트)의 변경을 조용히 되돌리지 않으려면 기준이 필요하다(permissions-save.ts).
+  const permissionsBaseline = section === "permissions" ? formData.get("permissionsBaseline") : null;
+  if (section === "permissions" && (typeof permissionsBaseline !== "string" || !permissionsBaseline)) {
+    return { error: STALE_FORM_ERROR };
+  }
   // 시간표 칸·과목 삭제 요청은 data가 섹션 전체가 아니다 — 방금 읽은 값에 적용한 뒤 아래에서 검증한다.
   const sendsWholeSection = !operationsRequest || operationsRequest.kind === "face";
   const result = sendsWholeSection ? schema.safeParse(parsedJson) : null;
   if (result && !result.success) return { error: validationError(result.error.issues[0]) };
   if (section === "makeups" && result) return configureMakeupSettings(result.data);
+  // 같은 칸(메뉴·직급)을 두 번 지정한 요청은 받지 않는다 — 어느 줄이 적용될지가 읽는 곳마다 다르다
+  // (앱은 마지막 줄, DB의 권한 함수는 먼저 걸리는 줄). 화면의 저장은 이런 요청을 만들지 않는다.
+  // ⚠️ 스키마가 아니라 여기서 본다 — 스키마는 **이미 저장된 값**을 읽는 데도 쓰여서(운영 설정 보호 검사), 거기서 막으면
+  //    그런 줄이 저장돼 있는 학원은 역할·권한을 아예 고칠 수 없게 된다.
+  if (section === "permissions" && result && hasDuplicateRoleCells((result.data as PermissionsSettings).overrides)) {
+    return { error: "같은 메뉴·직급의 권한을 두 번 지정할 수 없습니다" };
+  }
 
   const supabase = await createClient();
   // 기존 문서 읽어 섹션만 교체(다른 섹션 보존). RLS로 자기 테넌트만.
@@ -156,6 +177,10 @@ export async function saveOwnerSection(
   // (받으면 owner 쓰기를 위임받은 사람이 요청을 만들어 침산 모듈을 끌 수 있고, 침산엔 되돌릴 화면이 없다.)
   if (section === "modules" && preset !== "generic") {
     return { error: "이 학원은 기능 켜기·끄기를 쓰지 않습니다" };
+  }
+  // 화면을 연 뒤 역할·권한이 바뀌었으면(역할별 · 개인별 · 담당자 중 무엇이든) 저장하지 않는다.
+  if (section === "permissions" && permissionsBaseline !== permissionsToken(resolveSettings(existing?.data ?? null, { name: "" }).permissions)) {
+    return { error: CHANGED_ELSEWHERE_ERROR };
   }
   if (section === "permissions" && preset === "generic") {
     const p = result?.data as PermissionsSettings;
@@ -231,12 +256,12 @@ export async function saveOwnerSection(
   } catch {
     return { error: "운영 설정 보호 여부를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
   }
-  // 운영 섹션은 저장 순번(`rev`)을 **섹션 안에** 함께 쓴다 — 편집 폼이 "내 저장보다 먼저 읽힌 값"을 가려내는 순서다(settings-stamp.ts).
+  // 운영 · 역할·권한 섹션은 저장 순번(`rev`)을 **섹션 안에** 함께 쓴다 — 편집 폼이 "내 저장보다 먼저 읽힌 값"을 가려내는 순서다(settings-stamp.ts).
   // 🔴 문서 최상위에 새 키를 두지 않는다 — DB의 쓰기 가드(0335a `guard_tenant_settings_write`)는 개별 설정만 위임받은 사람에게
   //    "맡은 섹션 밖은 그대로일 것"을 요구한다. 최상위에 순번이 생기면 그 사람들의 저장이 전부 거절된다.
   //    감사 기록의 변경 내역(아래 `sectionData`)에는 순번을 싣지 않는다.
-  const operationsRev = operationsRequest ? settingsRevOf(base.operations) + 1 : undefined;
-  const storedSection = operationsRev === undefined ? sectionData : { ...(sectionData as Record<string, unknown>), rev: operationsRev };
+  const sectionRev = REV_SECTIONS.includes(section) ? settingsRevOf(base[section]) + 1 : undefined;
+  const storedSection = sectionRev === undefined ? sectionData : { ...(sectionData as Record<string, unknown>), rev: sectionRev };
   const nextData: Record<string, unknown> = { ...base, version: 1, [section]: storedSection };
   // 일반판 표식은 base에 이미 있다(학원 추가가 만든 행) — 한 번 더 못박아 둔다. 침산 행엔 아무것도 더하지 않는다.
   if (preset === "generic") nextData.preset = "generic";
@@ -284,10 +309,17 @@ export async function saveOwnerSection(
   // 보고서·AI 멘트 설정 면은 /lesson-reports로 이관됨 — 그 라우트도 명시 갱신해야 저장 직후 값이 반영된다
   // (안 하면 report 섹션 저장 후 화면이 stale하게 옛 값으로 되돌아 보임 — 예: '강사 문항수 변경 허용' 체크 풀림).
   revalidatePath("/lesson-reports");
-  // 운영 섹션은 **실제로 저장한 값**(다듬기까지 거친 뒤 다시 풀어 읽은 값)의 기준 token을 돌려준다 — 화면의 다음 저장 기준.
-  const operations = operationsRequest
-    ? operationsReply(resolveSettings(nextData, { name: "" }).operations, operationsRequest)
-    : undefined;
+  // 운영 · 역할·권한 섹션은 **실제로 저장한 값**(다듬기까지 거친 뒤 다시 풀어 읽은 값)의 기준 token을 돌려준다 — 화면의 다음 저장 기준.
+  //   (보낸 값 그대로가 아니다 — 침산은 담당자 명단 칸이 저장에서 빠지는 등 저장 전 다듬기가 값을 바꾼다.)
+  const saved = sectionRev === undefined ? undefined : resolveSettings(nextData, { name: "" });
+  const operations = saved && operationsRequest ? operationsReply(saved.operations, operationsRequest) : undefined;
+  const permissions = saved && section === "permissions" ? { token: permissionsToken(saved.permissions) } : undefined;
   // nonce — in-window 저장이라 연속 저장마다 폼 effect가 동시편집 신호를 1회씩 발화하도록(B-2).
-  return { ok: true, nonce: Date.now(), ...(operations ? { operations, version: operationsRev } : {}) };
+  return {
+    ok: true,
+    nonce: Date.now(),
+    ...(operations ? { operations } : {}),
+    ...(permissions ? { permissions } : {}),
+    ...(sectionRev === undefined ? {} : { version: sectionRev }),
+  };
 }

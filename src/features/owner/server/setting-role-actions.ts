@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAction } from "@/features/audit/server/log";
 import { tenantSettingsTag } from "./queries";
 import { resolveSettings } from "../resolve";
-import { nextSettingsStamp } from "../settings-stamp";
+import { nextSettingsStamp, settingsRevOf } from "../settings-stamp";
 import { SYSTEM_ROLES } from "@/lib/permissions";
 import { SETTINGS_ROLE_GROUPS, type SettingsRoleGroup } from "@/lib/settings-role-catalog";
 import { applySettingRoles, settingRoleSelection, type SettingRoleSelection } from "../setting-roles";
@@ -35,7 +35,9 @@ export async function saveSettingRoles(group: SettingsRoleGroup, input: SettingR
   const before = settingRoleSelection(group, settings.permissions.overrides);
   if (JSON.stringify(before) !== baseline) return { error: "다른 창에서 역할을 변경했습니다. 새로고침한 뒤 다시 설정해 주세요." };
   const overrides = applySettingRoles(group, settings.permissions.overrides, parsed.data);
-  const next = { ...row.data, permissions: { ...row.data.permissions, overrides } };
+  // 역할·권한 섹션을 다시 쓰므로 그 섹션의 저장 순번도 올린다 — 열려 있는 역할·권한 면이 이 저장보다 먼저 읽힌 값을
+  // 가려낸다(settings-stamp.ts). 🔴 순번은 섹션 안에만 둔다(문서 최상위에 두면 DB 쓰기 가드가 위임 계정의 저장을 거절한다).
+  const next = { ...row.data, permissions: { ...row.data.permissions, overrides, rev: settingsRevOf(row.data.permissions) + 1 } };
   const write = await db.from("tenant_settings").update({ data: next, updated_by: actor.id, updated_at: nextSettingsStamp(row.updated_at) })
     .eq("tenant_id", actor.tenantId).eq("updated_at", row.updated_at).select("tenant_id");
   if (write.error) return { error: "역할 설정을 저장하지 못했습니다" };
