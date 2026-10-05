@@ -506,6 +506,48 @@ describe("auditDetail — 시간표 연습본 저장(개인 사본)", () => {
   });
 });
 
+describe("auditDetail — 데이터 정리 도구(2026-10-06)", () => {
+  it("enrollment_orphan_close: 몇 건을 언제 처리했는지 — 종료일은 수강마다 달라 '처리일'로 적는다", () => {
+    expect(auditDetail("enrollment_orphan_close", { count: 12, processedOn: "2026-10-06" }, ctx())).toBe(
+      "12건 (관리 도구 · 퇴원 학생의 남은 수강) · 처리일 2026-10-06",
+    );
+    // 아직 시작 전이던 수강은 처리일이 아니라 그 시작일로 닫힌다 — 그 건수를 따로 적는다.
+    expect(auditDetail("enrollment_orphan_close", { count: 12, processedOn: "2026-10-06", futureCount: 2 }, ctx())).toBe(
+      "12건 (관리 도구 · 퇴원 학생의 남은 수강) · 처리일 2026-10-06 · 시작 전 수강 2건은 시작일로 종료",
+    );
+    expect(auditDetail("enrollment_orphan_close", {}, ctx())).toBeNull();
+  });
+
+  it("enrollment_orphan_close: 중간에 멈춘 것과 응답을 받지 못한 것(적용 여부 미확인)을 구별해 적는다", () => {
+    expect(auditDetail("enrollment_orphan_close", { count: 7, processedOn: "2026-10-06", partial: true }, ctx())).toBe(
+      "7건 (관리 도구 · 퇴원 학생의 남은 수강) · 처리일 2026-10-06 · 중간에 멈춤",
+    );
+    expect(auditDetail("enrollment_orphan_close", { count: 0, processedOn: "2026-10-06", partial: true, uncertain: true }, ctx())).toBe(
+      "0건 (관리 도구 · 퇴원 학생의 남은 수강) · 처리일 2026-10-06 · 응답을 받지 못함(적용 여부 미확인)",
+    );
+  });
+
+  it("student_merge: 끝난 병합은 종전 그대로, 중간에 멈춘 병합은 멈춘 자리를 함께 적는다", () => {
+    const names = ctx({ [SID]: "권민서A" });
+    expect(auditDetail("student_merge", { studentId: SID, mergedName: "권민서B", mergedRows: 34 }, names)).toBe("권민서A · ← 권민서B 병합");
+    expect(
+      auditDetail("student_merge", { studentId: SID, mergedName: "권민서B", mergedRows: 32, partial: true, failedStep: "청구 기록 옮기기" }, names),
+    ).toBe("권민서A · ← 권민서B 병합 · 중간에 멈춤(청구 기록 옮기기)");
+    expect(auditDetail("student_merge", { studentId: SID, mergedName: "권민서B", partial: true }, names)).toBe("권민서A · ← 권민서B 병합 · 중간에 멈춤");
+  });
+
+  it("student_merge: 응답을 받지 못한 단계는 '멈췄다'가 아니라 적용 여부를 모른다고 적는다", () => {
+    const names = ctx({ [SID]: "권민서A" });
+    expect(
+      auditDetail(
+        "student_merge",
+        { studentId: SID, mergedName: "권민서B", mergedRows: 0, partial: true, uncertain: true, failedStep: "수강 기록 옮기기" },
+        names,
+      ),
+    ).toBe("권민서A · ← 권민서B 병합 · 응답을 받지 못함(수강 기록 옮기기) — 적용 여부 미확인");
+  });
+});
+
 describe("AUDIT_TYPE_LABEL", () => {
   it("logAction 호출부의 모든 target_type이 한글 라벨을 가진다", () => {
     // logAction 전수(2026-07-11 grep) + 실 DB target_type 전수(2026-08-03) — 후자에서 user·users·

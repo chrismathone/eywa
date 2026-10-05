@@ -152,6 +152,12 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const operationsForClient = operationsForViewer(operationsSource, canEditOperations);
   // 못 읽었으면 undefined — 아래에서 폼 대신 오류 안내가 선다(캐시된 값으로 폼을 열지 않는다).
   const permissionsSource = showsPermissions ? editable?.settings.permissions : undefined;
+  /**
+   * 데이터 정리 면의 정리 작업(퇴원 · 삭제 · 수강 종료 · 병합) — **각 액션과 같은 판정**(관리자 도구 쓰기)으로 버튼을 세운다.
+   * 🔴 이 면은 학원 설정 쓰기 권한(아래 fieldset)과 무관하다: 설정은 고칠 수 있어도 정리 권한이 없는 사람에겐 눌러도 거절될
+   *    버튼이 서 있었고, 정리 권한은 있는데 설정이 읽기 전용인 사람은 버튼이 통째로 잠겨 있었다. 조회·링크는 누구에게나 그대로다.
+   */
+  const canManageData = tab === "data" ? await canWriteTenant(viewer.systemRole, "admin") : false;
   // 강의실(관계형 테이블)은 운영 체계 면에서만 로드 — 다른 면 진입 비용 0.
   const classrooms = tab === "operations" ? await getClassroomsWithUsage() : [];
   // 강의실 엑셀로 넣기 — 운영 설정의 full만(올리기 주소 `gateImport`와 같은 판정).
@@ -199,7 +205,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       </PageMaximizeToolbar>
 
       {/* 운영 체계·과목 운영 면은 섹션 폼이 같은 안내를 직접 적는다(읽기 전용 폼) — 두 번 적지 않는다. */}
-      {!canEditSettings && !showsOperations ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
+      {/* 데이터 정리 면은 자체 판정이다(위 canManageData) — 설정 '읽기 전용' 안내도, 아래 fieldset 잠금도 받지 않는다. */}
+      {!canEditSettings && !showsOperations && tab !== "data" ? <p className="text-text-faint text-xs">읽기 전용입니다.</p> : null}
       <fieldset disabled={!canEditSettings} className="min-w-0 space-y-4 border-0 p-0">
       {tab === "profile" ? <ProfileSection initial={settings.profile} /> : null}
       {settingsUnreadable ? (
@@ -305,13 +312,6 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         )
       ) : null}
       {tab === "popups" ? <PopupsFace /> : null}
-      {tab === "data" ? (
-        <div className="space-y-10">
-          <DataFace />
-          <DuplicatesFace page={page} isEmbed={isEmbed} />
-          <SameNameFace />
-        </div>
-      ) : null}
       {tab === "import" ? <ImportHubFace /> : null}
       {/* 🔴 주소를 직접 쳐도 열리지 않는다 — 면을 감추기만 하면 그건 게이트가 아니다([[#77]]).
           권한이 없으면 조회 자체를 안 한다(빈 표를 보여 주고 "기록 없음"이라 적으면 거짓말이 된다). */}
@@ -343,6 +343,15 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         />
       ) : null}
       </fieldset>
+      {/* 🔴 데이터 정리 면은 위 fieldset **밖**에 둔다 — 그 fieldset은 학원 설정 쓰기 권한으로 잠기는데, 이 면의 버튼은
+          다른 권한(관리자 도구)을 따른다. 안에 두면 정리 권한이 있어도 버튼이 잠긴다. 버튼은 면이 canManageData로 직접 가린다. */}
+      {tab === "data" ? (
+        <div className="space-y-10">
+          <DataFace canManage={canManageData} />
+          <DuplicatesFace page={page} isEmbed={isEmbed} canManage={canManageData} />
+          <SameNameFace />
+        </div>
+      ) : null}
     </div>
   );
 }

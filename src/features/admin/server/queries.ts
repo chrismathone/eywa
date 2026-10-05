@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
+import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstToday } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { buildSubjectMaps } from "@/features/owner/subjects";
@@ -214,22 +214,28 @@ export async function findOrphans(): Promise<OrphanReport> {
   //   ⚠️ 과거엔 enrolledIds(수백 개)를 .in()에 넣어 URL이 HTTP 414로 실패→error를 삼켜 전원
   //   오탐했음(F8/F1). 쿼리를 뒤집어 활성 enrollment의 student_id 집합을 먼저 받아 메모리 차집합을
   //   구한다. ⚠️ 그 집합/학생 목록이 무페이징이면 1000행 silent 절단으로 정합성 깨짐 → fetchAllPaged
-  //   로 전건(셋 다 독립이라 병렬).
-  const [enrolled, allEnrollments, withdrawnStudents] = await Promise.all([
+  //   로 전건(넷 다 독립이라 병렬). 페이지를 넘겨 읽는 조회는 **id 순**으로 고정한다 — 순서가 없으면 페이지 경계에서
+  //   같은 행이 두 번 나오거나 빠질 수 있다.
+  const [enrolled, allEnrollments, withdrawnStudents, classes] = await Promise.all([
     fetchAllPaged<{ id: string; name: string; status: string; enrolled_at: string | null }>(
       (from, to) =>
         supabase
           .from("students")
           .select("id, name, status, enrolled_at")
           .eq("status", "enrolled")
+          .order("id")
           .range(from, to),
     ),
     // 활성 판정 + 마지막 종료일(30일 게이트)을 한 번에 — end_date가 둘 다에 필요해 전건을 한 번만 읽는다.
     fetchAllPaged<{ student_id: string; end_date: string | null }>((from, to) =>
-      supabase.from("enrollments").select("student_id, end_date").range(from, to),
+      supabase.from("enrollments").select("student_id, end_date").order("id").range(from, to),
     ),
     fetchAllPaged<{ id: string }>((from, to) =>
-      supabase.from("students").select("id").eq("status", "withdrawn").range(from, to),
+      supabase.from("students").select("id").eq("status", "withdrawn").order("id").range(from, to),
+    ),
+    // 운영 중인 반 — 종전엔 무페이징이라 1,000개에서 조용히 잘렸고, 조회 오류도 빈 목록으로 삼켰다.
+    fetchAllPaged<{ id: string; class_name: string; is_active: boolean }>((from, to) =>
+      supabase.from("classes").select("id, class_name, is_active").eq("is_active", true).order("id").range(from, to),
     ),
   ]);
 
@@ -262,18 +268,17 @@ export async function findOrphans(): Promise<OrphanReport> {
     cutoff,
   );
 
-  // 2) is_active=true 반 중 schedule 0개
-  const { data: classes } = await supabase
-    .from("classes")
-    .select("id, class_name, is_active")
-    .eq("is_active", true);
-  const classIds = (classes ?? []).map((c) => c.id);
-  const { data: schedules } = await supabase
-    .from("class_schedules")
-    .select("class_id")
-    .in("class_id", classIds);
-  const withSchedule = new Set((schedules ?? []).map((s) => s.class_id));
-  const classesWithoutSchedules = (classes ?? [])
+  // 2) 운영 중인 반 가운데 스케줄 기록이 **한 줄도 없는** 반(지난 기록까지 포함 — 유효 기간은 보지 않는다).
+  // 🔴 `class_schedules`는 이력을 함께 담아([[#88]]) 100반 묶음 하나가 1,000행을 넘는다. 종전의 단일 `.in()` 무페이징 조회는
+  //    ① 반이 많으면 주소가 너무 길어 실패하고(414) 그 오류를 삼켜 **모든 반이 '스케줄 없음'**으로 나왔고([[#53]]),
+  //    ② 1,000행에서 잘려 꼬리에 걸린 반이 '스케줄 없음'으로 나왔다([[#54]]). 묶음 × 페이지로 전건을 읽고 오류는 던진다
+  //    (면이 받아 "불러오지 못했습니다"로 안내한다 — 잘못된 목록을 보여 주지 않는다).
+  const classIds = classes.map((c) => c.id);
+  const schedules = await fetchAllPagedInChunks<{ class_id: string }>(classIds, (chunk, from, to) =>
+    supabase.from("class_schedules").select("class_id").in("class_id", chunk).order("id").range(from, to),
+  );
+  const withSchedule = new Set(schedules.map((s) => s.class_id));
+  const classesWithoutSchedules = classes
     .filter((c) => !withSchedule.has(c.id))
     .map((c) => ({ id: c.id, className: c.class_name, isActive: c.is_active }));
 

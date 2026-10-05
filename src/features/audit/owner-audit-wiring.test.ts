@@ -45,6 +45,12 @@ const MUST_LOG: { file: string; fn: string }[] = [
   { file: "src/features/attendance/kiosk/server/actions.ts", fn: "registerKioskDevice" },
   { file: "src/features/attendance/kiosk/server/actions.ts", fn: "revokeKioskDevice" },
   { file: "src/features/attendance/kiosk/server/actions.ts", fn: "saveKakaoChannel" },
+  // 데이터 정리 면(학원 설정 → 데이터 정리) — 여러 학생의 기록을 한꺼번에 바꾸는 도구라 전부 남긴다.
+  // 2026-10-06: 퇴원 학생의 남은 수강 일괄 종료(closeOrphanEnrollments)가 무기록이었다.
+  { file: "src/features/admin/server/actions.ts", fn: "mergeStudents" },
+  { file: "src/features/admin/server/actions.ts", fn: "closeOrphanEnrollments" },
+  { file: "src/features/admin/server/actions.ts", fn: "bulkWithdrawStudents" },
+  { file: "src/features/admin/server/actions.ts", fn: "bulkDeleteStudents" },
 ];
 
 /** `export async function <fn>(` 부터 다음 최상위 `export ` 전까지를 그 함수 본문으로 본다. */

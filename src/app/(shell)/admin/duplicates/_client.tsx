@@ -1,15 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { useFormStatus } from "react-dom";
 import { GitMerge, Loader2 } from "@/components/icons/aywa-icon-compat";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/atoms/pill";
 import { DupSuspectTag } from "@/components/dup-suspect-tag";
 import { DUPLICATE_REASON_LABEL } from "@/features/admin/duplicate-candidates";
+import { MERGE_SCOPE_LABEL } from "@/features/admin/merge-scope";
 import { mergeStudents, type MergeStudentsState } from "@/features/admin/server/actions";
 import type { DuplicateGroup } from "@/features/admin/server/queries";
 import { notifyTermPlansChanged } from "@/features/billing/session-terms/plan-change-signal";
+import { MENU_LABEL } from "@/lib/permissions";
 
 /**
  * 병합은 수강(enrollments)을 남길 학생 앞으로 옮기고 다른 학생을 퇴원시킨다 — 끝나면 열린 회차 확정 창에 알린다
@@ -34,6 +35,14 @@ function statusLabel(s: string): string {
   return STATUS_LABEL[s] ?? s;
 }
 
+type Student = DuplicateGroup["students"][number];
+
+/** 이름 + 학년·학교 — 확인 문장과 선택지가 같은 모양으로 적는다(어느 학생인지 헷갈리지 않게). */
+function whoLabel(s: Student): string {
+  const where = [s.grade, s.school].filter(Boolean).join(" · ");
+  return `${s.name}${where ? ` (${where})` : ""}`;
+}
+
 /**
  * 보존/중복 선택지 라벨 — **이름을 먼저** 적는다.
  *
@@ -41,38 +50,51 @@ function statusLabel(s: string): string {
  *    접미사 신호(2026-09-10)가 붙으면서 `권민서A`/`권민서B`처럼 **이름이 다른 쌍**이 올라온다 —
  *    어느 쪽을 남기느냐가 곧 살아남을 이름이라, id 앞자리만 보고 고르면 잘못 합친다(되돌릴 수 없다).
  */
-function optionLabel(s: DuplicateGroup["students"][number]): string {
-  const where = [s.grade, s.school].filter(Boolean).join(" · ");
-  return `${s.name}${where ? ` (${where})` : ""} · ${statusLabel(s.status)} · ${s.id.slice(0, 8)}`;
+function optionLabel(s: Student): string {
+  return `${whoLabel(s)} · ${statusLabel(s.status)} · ${s.id.slice(0, 8)}`;
 }
 
-function MergeBtn() {
-  const { pending } = useFormStatus();
-  return (
-    <Button type="submit" disabled={pending}>
-      {pending ? <Loader2 className="size-4 animate-spin" /> : <GitMerge className="size-4" />}
-      병합
-    </Button>
-  );
-}
-
-export function DuplicatesClient({ groups }: { groups: DuplicateGroup[] }) {
+export function DuplicatesClient({
+  groups,
+  canManage,
+}: {
+  groups: DuplicateGroup[];
+  /**
+   * 병합할 수 있는가 — 서버가 **병합 액션과 같은 판정**으로 정한다(page.tsx). 후보 목록·근거는 이 값과 무관하게 보인다.
+   * (화면을 맞추는 값일 뿐 게이트가 아니다 — 자물쇠는 액션의 권한 검사다.)
+   */
+  canManage: boolean;
+}) {
   return (
     <ul className="space-y-3">
       {groups.map((g) => (
-        <GroupCard key={g.key} group={g} />
+        <GroupCard key={g.key} group={g} canManage={canManage} />
       ))}
     </ul>
   );
 }
 
-function GroupCard({ group }: { group: DuplicateGroup }) {
+function GroupCard({ group, canManage }: { group: DuplicateGroup; canManage: boolean }) {
   const [keeperId, setKeeperId] = useState(group.students[0].id);
   const [mergeeId, setMergeeId] = useState(group.students[1]?.id ?? "");
-  const [state, action] = useActionState<MergeStudentsState, FormData>(
+  // 🔴 병합은 되돌릴 수 없다 — **두 번 눌러야** 실행되고, 두 번째 화면이 누구의 기록을 누구에게 옮기는지 이름으로 적는다.
+  //    🔴 확인은 **확인한 그 쌍의 한 번의 실행에만** 쓴다 — 확인할 때의 쌍(남길 학생·진 쪽)을 함께 기억하고, 지금의 쌍이
+  //       그것과 다르면 확인이 저절로 풀린다. 쌍은 선택을 바꿀 때만이 아니라 **목록이 새로 읽힐 때도** 바뀐다(세 명 묶음에서
+  //       다른 창이 한 명을 처리하면 진 쪽이 다음 학생으로 넘어간다) — 그때 확인이 남아 있으면 확인 문장을 본 적 없는
+  //       학생이 첫 클릭 없이 병합된다. 제출하는 순간에도 내린다.
+  const [confirmedPair, setConfirmedPair] = useState<{ keeperId: string; mergeeId: string } | null>(null);
+  const [state, action, pending] = useActionState<MergeStudentsState, FormData>(
     mergeStudentsWithSignal,
     undefined,
   );
+  // 고른 학생이 목록에서 빠지면(다른 창의 처리) 화면에 보이는 첫 선택지가 실제로 보낼 값이다 — 상태와 화면이 어긋나지 않게.
+  const effectiveKeeperId = group.students.some((s) => s.id === keeperId) ? keeperId : (group.students[0]?.id ?? "");
+  const mergeeOptions = group.students.filter((s) => s.id !== effectiveKeeperId);
+  const effectiveMergeeId = mergeeOptions.some((s) => s.id === mergeeId) ? mergeeId : (mergeeOptions[0]?.id ?? "");
+  const keeper = group.students.find((s) => s.id === effectiveKeeperId);
+  const mergee = group.students.find((s) => s.id === effectiveMergeeId);
+  const confirming =
+    !!confirmedPair && confirmedPair.keeperId === effectiveKeeperId && confirmedPair.mergeeId === effectiveMergeeId;
 
   return (
     <li className="bg-card border-border rounded-md border p-4">
@@ -117,45 +139,104 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
         ))}
       </ul>
 
-      <form action={action} className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
-        <div className="space-y-1">
-          <label className="text-muted-foreground block text-xs font-medium">
-            보존할 학생 (통합 후 유지)
-          </label>
-          <select
-            name="keeperId"
-            value={keeperId}
-            onChange={(e) => setKeeperId(e.target.value)}
-            className="border-border bg-card text-foreground rounded-md border px-2 py-1.5 text-xs"
-          >
-            {group.students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {optionLabel(s)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-muted-foreground block text-xs font-medium">
-            중복 학생 (통합 후 퇴원)
-          </label>
-          <select
-            name="mergeeId"
-            value={mergeeId}
-            onChange={(e) => setMergeeId(e.target.value)}
-            className="border-border bg-card text-foreground rounded-md border px-2 py-1.5 text-xs"
-          >
-            {group.students
-              .filter((s) => s.id !== keeperId)
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {optionLabel(s)}
-                </option>
-              ))}
-          </select>
-        </div>
-        <MergeBtn />
-      </form>
+      {canManage ? (
+        <form
+          action={action}
+          onSubmit={(event) => {
+            // 저장이 도는 중의 재제출 · 확인이 풀린 뒤의 제출(Enter 등)은 받지 않는다.
+            if (pending || !confirming) event.preventDefault();
+            setConfirmedPair(null);
+          }}
+          className="mt-3 space-y-2 border-t pt-3"
+        >
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <label className="text-muted-foreground block text-xs font-medium">
+                보존할 학생 (통합 후 유지)
+              </label>
+              <select
+                name="keeperId"
+                value={effectiveKeeperId}
+                disabled={pending}
+                onChange={(e) => {
+                  setKeeperId(e.target.value);
+                  setConfirmedPair(null);
+                }}
+                className="border-border bg-card text-foreground rounded-md border px-2 py-1.5 text-xs"
+              >
+                {group.students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {optionLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-muted-foreground block text-xs font-medium">
+                중복 학생 (통합 후 퇴원)
+              </label>
+              <select
+                name="mergeeId"
+                value={effectiveMergeeId}
+                disabled={pending}
+                onChange={(e) => {
+                  setMergeeId(e.target.value);
+                  setConfirmedPair(null);
+                }}
+                className="border-border bg-card text-foreground rounded-md border px-2 py-1.5 text-xs"
+              >
+                {mergeeOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {optionLabel(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {confirming || pending ? null : (
+              <Button
+                type="button"
+                disabled={!keeper || !mergee}
+                onClick={() => setConfirmedPair({ keeperId: effectiveKeeperId, mergeeId: effectiveMergeeId })}
+              >
+                <GitMerge className="size-4" />
+                병합
+              </Button>
+            )}
+          </div>
+          {/* 저장이 도는 동안에는 대상 문장을 적지 않는다 — 그사이 목록이 새로 읽히면 화면의 '지금 쌍'이 보낸 쌍과 달라져,
+              보내지 않은 학생을 처리하는 것처럼 읽힌다(적대 리뷰 3b B2). */}
+          {pending ? (
+            <p role="status" className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+              <Loader2 className="size-3.5 animate-spin" />
+              병합 처리 중…
+            </p>
+          ) : confirming && keeper && mergee ? (
+            <div role="alert" className="border-amber/30 bg-amber-soft space-y-2 rounded-md border px-3 py-2 text-xs leading-relaxed">
+              <p>
+                <b>{whoLabel(mergee)}</b>의 {MERGE_SCOPE_LABEL} 기록을 <b>{whoLabel(keeper)}</b>에게 옮기고,{" "}
+                <b>{mergee.name}</b>은(는) 퇴원 처리합니다. <b>되돌릴 수 없습니다.</b>
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" size="sm">
+                  <GitMerge className="size-3.5" />
+                  병합 확정
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmedPair(null)}
+                  className="text-text-faint hover:text-foreground text-xs"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </form>
+      ) : (
+        <p className="text-text-faint mt-3 border-t pt-3 text-xs">
+          병합은 &lsquo;{MENU_LABEL.admin}&rsquo; 권한이 있는 계정만 할 수 있습니다.
+        </p>
+      )}
 
       {state?.error ? <p className="text-chart-4 mt-2 text-xs">{state.error}</p> : null}
       {state?.mergedRows !== undefined ? (
@@ -163,6 +244,7 @@ function GroupCard({ group }: { group: DuplicateGroup }) {
           {state.mergedRows}개 항목 이전 완료 — 통합된 학생은 목록에서 사라집니다.
         </p>
       ) : null}
+      {state?.warning ? <p className="text-chart-4 mt-2 text-xs">{state.warning}</p> : null}
     </li>
   );
 }

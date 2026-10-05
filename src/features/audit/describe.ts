@@ -942,6 +942,18 @@ export function auditDetail(
       const n = num(m.count);
       return n === null ? null : `${n}명 (관리 도구 · 수강 없는 학생 정리)`;
     }
+    case "enrollment_orphan_close": {
+      const n = num(m.count);
+      // 종료일은 수강마다 다를 수 있다 — 시작한 수강은 처리한 날로, 아직 시작 전인 수강은 그 시작일로 닫는다.
+      // 그래서 "종료일"이 아니라 처리한 날을 적고, 시작일로 닫은 건수를 따로 적는다.
+      const future = num(m.futureCount);
+      return join(
+        n === null ? null : `${n}건 (관리 도구 · 퇴원 학생의 남은 수강)`,
+        str(m.processedOn) ? `처리일 ${str(m.processedOn)}` : null,
+        future && future > 0 ? `시작 전 수강 ${future}건은 시작일로 종료` : null,
+        m.uncertain === true ? "응답을 받지 못함(적용 여부 미확인)" : m.partial === true ? "중간에 멈춤" : null,
+      );
+    }
     case "newcomer_check":
     case "newcomer_uncheck": {
       // 항목 이름은 신규생 체크리스트 정의가 단일 소스 — 여기 라벨을 다시 적으면 항목을 바꿀 때 갈린다.
@@ -992,7 +1004,15 @@ export function auditDetail(
     }
     case "student_merge": {
       const merged = str(m.mergedName);
-      return join(ctx.nameOf(m.studentId), merged ? `← ${merged} 병합` : null);
+      // 표를 하나씩 옮기다 멈춘 병합 — 앞 단계는 이미 옮겨진 채라, 멈춘 자리를 함께 적는다.
+      const failed = str(m.failedStep);
+      // 응답을 받지 못한 단계는 적용됐는지 모른다 — "멈췄다"고만 적으면 바뀐 것이 없다고 읽힌다.
+      const where = failed ? `(${failed})` : "";
+      return join(
+        ctx.nameOf(m.studentId),
+        merged ? `← ${merged} 병합` : null,
+        m.uncertain === true ? `응답을 받지 못함${where} — 적용 여부 미확인` : m.partial === true ? `중간에 멈춤${where}` : null,
+      );
     }
     case "class_end_term": {
       const d = str(m.closedAt);
