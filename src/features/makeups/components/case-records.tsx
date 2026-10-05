@@ -9,9 +9,9 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 export function CaseRecords({ detail }: { detail: MakeupCaseDetail }) {
   const row = detail.case;
   return <section className="border-line space-y-4 rounded-lg border p-4">
-    <h2 className="font-bold">원수업·접수 근거</h2>
+    <h2 className="font-bold">보강 접수 내역</h2>
     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {[ ["학생", row.student_name], ["발생 사유", makeupText(MAKEUP_REASON, row.reason)], ["원수업", `${row.original_class_name ?? "원결석 없음"} · ${row.original_date ?? "—"}`],
+      {[ ["학생", row.student_name], ["보강 사유", makeupText(MAKEUP_REASON, row.reason)], [row.reason === "additional" ? "수업" : row.reason === "class_cancelled" ? "휴강 수업" : "결석 수업", `${row.original_class_name ?? (row.reason === "additional" ? "결석분 아님" : "반 미지정")} · ${row.original_date ?? "—"}`],
         ["자격·진행", `${makeupText(MAKEUP_STATE, row.eligibility)} · ${makeupText(MAKEUP_STATE, row.lifecycle)}`],
         ["다음 담당·기한", `${row.owner_name ?? "미지정"} · ${row.due_date ?? "미지정"}`],
       ].map(([label, value]) => <div key={label}><dt className="font-medium">{label}</dt><dd>{value}</dd></div>)}

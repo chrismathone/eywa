@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { searchMakeupOptions } from "../server/actions";
 import type { MakeupOption } from "../server/read-types";
 
-export function OptionPicker({ kind, name, label, subject, initial, required = false, onSelect, filter }: {
+export function OptionPicker({ kind, name, label, searchPlaceholder, subject, initial, required = false, onSelect, filter }: {
   kind: "students" | "classes" | "staff" | "classrooms" | "policies" | "attendance" | "reports" | "sessions";
-  name: string; label: string; subject?: string; initial?: MakeupOption; required?: boolean;
+  name: string; label: string; searchPlaceholder?: string; subject?: string; initial?: MakeupOption; required?: boolean;
   onSelect?: (value: MakeupOption | undefined) => void;
   filter?: { student_id?: string; session_date?: string; class_id?: string };
 }) {
@@ -38,7 +38,7 @@ export function OptionPicker({ kind, name, label, subject, initial, required = f
     <div className="space-y-2">
       <label htmlFor={inputId} className="block font-medium">{label}</label>
       <div className="flex gap-2">
-        <Input aria-label={`${label} 검색어`} value={query} onChange={e => setQuery(e.target.value)}
+        <Input aria-label={`${label} 검색어`} placeholder={searchPlaceholder} value={query} onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); load(1); } }} />
         <Button type="button" variant="outline" disabled={pending} onClick={() => load(1)}>{pending ? "조회 중…" : "검색"}</Button>
       </div>

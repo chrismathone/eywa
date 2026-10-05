@@ -63,14 +63,14 @@ async function round(index, offset) {
     await frame.locator('input[name="original_date"]').fill(date.original);
     await frame.locator('textarea[name="note"]').fill(`합성 반복 승인 검사 ${index}`);
     await hydrated(frame.locator("form").filter({ has: frame.locator('input[name="original_date"]') }), "onSubmit");
-    await frame.getByRole("button", { name: "접수 · 승인 대기로 저장", exact: true }).click();
+    await frame.getByRole("button", { name: "보강 접수", exact: true }).click();
     await frame.waitForURL(url => /^\/makeups\/[0-9a-f-]{36}$/.test(url.pathname) && url.searchParams.get("embed") === "1", { waitUntil: "domcontentloaded" });
     caseId = new URL(frame.url()).pathname.split("/").pop();
-    const form = frame.locator("form").filter({ has: frame.getByRole("button", { name: "분량 승인", exact: true }) });
+    const form = frame.locator("form").filter({ has: frame.getByRole("button", { name: "보강 시간 승인", exact: true }) });
     await form.locator('input[name="target_minutes"]').fill("110");
     await form.locator('textarea[name="note"]').fill("합성 승인 110분");
     await hydrated(form, "onSubmit");
-    await form.getByRole("button", { name: "분량 승인", exact: true }).click();
+    await form.getByRole("button", { name: "보강 시간 승인", exact: true }).click();
     await expect(frame.getByText("예정 회차 예약", { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(frame.getByRole("button", { name: "처리 중…" })).toHaveCount(0);
     const [row] = await db`select eligibility, target_minutes from makeup_cases where id = ${caseId}`;

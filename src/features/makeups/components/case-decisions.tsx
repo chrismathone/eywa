@@ -4,7 +4,7 @@ import type { MakeupCaseDetail } from "../server/read-types";
 import { CommandForm } from "./command-form";
 import { OptionPicker } from "./option-picker";
 import { ReasonField, TextField, formMinutes, formText } from "./form-fields";
-import { MAKEUP_CLOSURE } from "../status";
+import { MAKEUP_ACTION, MAKEUP_CLOSURE } from "../status";
 import { useState } from "react";
 import { MergeCasePicker } from "./merge-case-picker";
 
@@ -14,12 +14,12 @@ export function CaseDecisions({ detail }: { detail: MakeupCaseDetail }) {
   const base = { case_id: row.id };
   return <div className="grid items-start gap-4 lg:grid-cols-2">
     {permissions.approve && row.eligibility === "pending" ? <section className="border-line space-y-3 rounded-lg border p-4">
-      <h2 className="font-bold">자격·분량 승인</h2>
-      <CommandForm action="approve" revision={row.revision} label="분량 승인" payload={data => ({ ...base,
+      <h2 className="font-bold">보강 시간 승인</h2>
+      <CommandForm action="approve" revision={row.revision} label={MAKEUP_ACTION.approve} payload={data => ({ ...base,
         target_minutes: formMinutes(data, "target_minutes"), note: formText(data, "note"),
         ...(formText(data, "policy_version_id") ? { policy_version_id: formText(data, "policy_version_id") } : {}),
       })}>
-        <TextField name="target_minutes" label="승인 분량(분)" type="number" min={1} step={1} required />
+        <TextField name="target_minutes" label="보강 시간(분)" type="number" min={1} step={1} required />
         <OptionPicker kind="policies" name="policy_version_id" label="정책 버전" />
         <p className="text-sm">정책을 선택하지 않으면 분 단위·자동 소멸 없음·실시 검토 기준의 기본 정책을 승인 기록에 고정합니다.</p>
         <ReasonField name="note" label="승인 근거" />

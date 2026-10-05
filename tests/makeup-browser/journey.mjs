@@ -42,7 +42,7 @@ const saved = async form => {
   assert.ok(originalForm);
   const response = form.page().waitForResponse(result => result.request().method() === "POST"
     && (result.request().postData() ?? "").includes('"command_id"'));
-  await form.getByRole("button", { name: /^(분량 승인|예약 확정|참여 기록|검토 제출|실시 인정|종결|대사 실행|기존 약속 연결)$/ }).click();
+  await form.getByRole("button", { name: /^(보강 시간 승인|예약 확정|참여 기록|검토 제출|실시 인정|종결|대사 실행|기존 보강 예약 연결)$/ }).click();
   const result = await response;
   assert.equal(result.status(), 200);
   // Keep the actual form: a locator filtered by its submit label disappears while the label is "처리 중…".
@@ -64,11 +64,11 @@ try {
   console.log("Synthetic class options loaded");
   await page.locator('input[name="original_date"]').fill(date.original);
   await page.locator('textarea[name="note"]').fill("합성 UI 테스트: 결석 근거 수동 접수");
-  await page.getByRole("button", { name: "접수 · 승인 대기로 저장" }).click();
+  await page.getByRole("button", { name: "보강 접수" }).click();
   console.log("Synthetic intake submitted");
   await page.waitForURL(url => /^\/makeups\/[0-9a-f-]{36}$/.test(url.pathname), { waitUntil: "domcontentloaded" });
   const caseId = new URL(page.url()).pathname.split("/").pop();
-  let form = page.locator("form").filter({ has: page.getByRole("button", { name: "분량 승인" }) });
+  let form = page.locator("form").filter({ has: page.getByRole("button", { name: "보강 시간 승인" }) });
   await form.locator('input[name="target_minutes"]').fill("110");
   await form.locator('textarea[name="note"]').fill("가상 운영 정책: 110분 개별 승인");
   await saved(form);

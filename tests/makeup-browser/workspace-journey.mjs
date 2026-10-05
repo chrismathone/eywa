@@ -19,7 +19,7 @@ export async function workspaceJourney({ contextFor, db, uid, output, errors, op
   const [date] = await db`select mt.d(${originalOffset})::text as original`;
   await form.locator('input[name="original_date"]').fill(date.original);
   await form.locator('textarea[name="note"]').fill("합성 실제 워크스페이스: 같은 창 접수·이동·새로고침 확인");
-  await form.getByRole("button", { name: "접수 · 승인 대기로 저장", exact: true }).click();
+  await form.getByRole("button", { name: "보강 접수", exact: true }).click();
   await frame.waitForURL(url => /^\/makeups\/[0-9a-f-]{36}$/.test(url.pathname));
   assert.equal(new URL(frame.url()).searchParams.get("embed"), "1");
   await expect(frame.locator("main.embed-main")).toBeVisible();
