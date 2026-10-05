@@ -26,7 +26,16 @@ import { isValidSubjectKey } from "../subject-absorb";
 import { cleanPreset, sanitizeGroups, sanitizeTeacherOrder } from "../subject-fields";
 import type { IntegrationGroupPresetSetting, OperationsSettings } from "../settings-types";
 import { saveOwnerSection } from "./actions";
-import { logDbError } from "@/lib/supabase/db-error";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
+import { MENU_LABEL } from "@/lib/permissions";
+
+/** 조회 실패의 화면 문구 — 표 이름·DB 원문은 화면으로 올리지 않고 로그에만 남긴다. */
+const USAGE_READ_FAILED = "과목 사용 현황을 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+/** 조회 단계에서 던져진 오류 → 화면 문구. 원문은 여기서 로그로 남기고 문구는 하나로 답한다. */
+function readFailureMessage(error: unknown, scope: string): string {
+  console.error(`[owner/subject-actions] ${scope} 실패`, error);
+  return USAGE_READ_FAILED;
+}
 
 const SCALAR_TABLES = [
   { table: "classes", label: "반" },
@@ -55,7 +64,7 @@ async function requireOwnerWrite(): Promise<OwnerWriteGate> {
   const actor = await getCurrentUser();
   if (!actor) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(actor.systemRole, "operations_settings"))) {
-    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+    return { error: `${MENU_LABEL.operations_settings} 변경 권한이 없습니다` };
   }
   return { actor };
 }
@@ -71,7 +80,11 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
         .select("*", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
         .eq("subject", key);
-      if (error) throw new Error(`${table}: ${error.message}`);
+      // 표 이름·DB 원문을 화면으로 올리지 않는다 — 원문은 로그에만(호출부가 안내 문구로 바꾼다).
+      if (error) {
+        logDbError(error, "owner.subjectUsage", { table });
+        throw new Error(USAGE_READ_FAILED);
+      }
       return { label, count: count ?? 0 };
     }),
   );
@@ -102,9 +115,12 @@ async function countSubjectUsage(supabase: Supabase, tenantId: string, key: stri
     onescreenCount,
     periodCount,
   ]);
-  if (tc.error) throw new Error(`users: ${tc.error.message}`);
-  if (dc.error) throw new Error(`subject_details: ${dc.error.message}`);
-  if (oc.error) throw new Error(`subject_progress: ${oc.error.message}`);
+  for (const [table, res] of [["users", tc], ["subject_details", dc], ["subject_progress", oc]] as const) {
+    if (res.error) {
+      logDbError(res.error, "owner.subjectUsage", { table });
+      throw new Error(USAGE_READ_FAILED);
+    }
+  }
   const items = [
     ...scalars,
     { label: "담당 강사", count: tc.count ?? 0 },
@@ -123,7 +139,7 @@ export async function getSubjectUsage(key: string): Promise<SubjectUsage | { err
   try {
     return await countSubjectUsage(await createClient(), gate.actor.tenantId, key);
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "사용량 조회 실패" };
+    return { error: readFailureMessage(e, "과목 사용량 조회") };
   }
 }
 
@@ -134,7 +150,10 @@ async function readFreshOperations(supabase: Supabase, tenantId: string) {
     .select("data")
     .eq("tenant_id", tenantId)
     .maybeSingle();
-  if (error) throw new Error(`tenant_settings: ${error.message}`);
+  if (error) {
+    logDbError(error, "owner.readFreshOperations");
+    throw new Error(USAGE_READ_FAILED);
+  }
   // resolveSettings는 순수(profile.name 폴백만 tenant명 사용 — operations에 무관).
   return resolveSettings(existing?.data ?? null, { name: "" }).operations;
 }
@@ -233,11 +252,26 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
       };
     }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "반 이름 충돌 점검 실패" };
+    return { error: readFailureMessage(e, "반 이름 충돌 점검") };
   }
 
   let moved = 0;
   const detail: Record<string, number> = {};
+  /** 이 요청이 쓰기를 한 번이라도 끝냈는가 — 그 뒤의 실패는 "앞의 것은 이미 옮겨졌을 수 있다"고 알려야 한다. */
+  let wrote = false;
+  /**
+   * 쓰기 실패의 화면 문구 — 표 이름·DB 원문 대신 한글 사유(원문은 로그에).
+   * 앞 쓰기가 이미 끝났거나, DB가 거절했다고 알려 주지 않은 실패(응답을 못 받음)면 일부가 옮겨졌을 수 있다고 알린다.
+   * 첫 쓰기를 DB가 거절한 것이면(오류 코드가 있다) 옮겨진 것이 없다 — 그렇게 말한다(적대 리뷰 5b B3).
+   */
+  const writeFailure = (error: unknown, scope: string, context?: Record<string, unknown>): string => {
+    const info = explainDbError(error, { scope, fallback: "과목을 옮기지 못했습니다", context });
+    const code = (error as { code?: unknown } | null)?.code;
+    const rejected = typeof code === "string" && code.length > 0;
+    return wrote || !rejected
+      ? `${info.message} — 일부 기록은 이미 옮겨졌을 수 있습니다. 새로고침한 뒤 다시 시도해 주세요.`
+      : `${info.message} — 옮겨진 기록은 없습니다.`;
+  };
 
   // 1) 스칼라 subject 컬럼 9테이블 일괄 치환(테이블당 단일 원자 UPDATE)
   for (const { table } of SCALAR_TABLES) {
@@ -252,8 +286,9 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
         logDbError(error, "owner.absorbSubject");
         return { error: "그 사이 같은 이름의 반이 생겨 흡수할 수 없습니다 — 반 이름을 바꾼 뒤 다시 시도해 주세요." };
       }
-      return { error: `${table}: ${error.message}` };
+      return { error: writeFailure(error, "owner.absorbSubject", { table }) };
     }
+    wrote = true;
     if (count) {
       moved += count;
       detail[table] = count;
@@ -263,7 +298,7 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
   // 2) users.subjects[] + jsonb 2곳 — 0077a RPC(원자 단일 문, 현재 행 값 기준)로 일괄 이동
   {
     const { data, error } = await supabase.rpc("absorb_subject_key", { p_from: from, p_to: to });
-    if (error) return { error: `absorb_subject_key: ${error.message}` };
+    if (error) return { error: writeFailure(error, "owner.absorbSubject.rpc") };
     const counts = (data ?? {}) as Record<string, number>;
     for (const [k, n] of Object.entries(counts)) {
       if (typeof n === "number" && n > 0) {
@@ -281,7 +316,8 @@ export async function absorbSubject(input: { from: string; to: string }): Promis
     try {
       periods = await moveSubjectPeriods(t, from, to);
     } catch (e) {
-      return { error: e instanceof Error ? e.message : "세션 기간 이동 실패" };
+      console.error("[owner/subject-actions] 세션 기간 이동 실패", e);
+      return { error: "세션 기간을 옮기지 못했습니다 — 일부 기록은 이미 옮겨졌을 수 있습니다. 새로고침한 뒤 다시 시도해 주세요." };
     }
     if ("conflicts" in periods) {
       return {
@@ -327,7 +363,7 @@ export async function removeUnusedSubject(key: string): Promise<AbsorbResult> {
       return { error: `그 사이 이 과목을 쓰는 데이터가 ${usage.total}건 생겼습니다 — 흡수 삭제를 사용해 주세요.` };
     }
   } catch (e) {
-    return { error: e instanceof Error ? e.message : "사용량 재검증 실패" };
+    return { error: readFailureMessage(e, "과목 사용량 재확인") };
   }
 
   const removed = await removeSubjectRowFromSettings(key);

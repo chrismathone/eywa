@@ -14,6 +14,7 @@ import {
 } from "../operations-slice";
 import { operationsSchema, type IntegrationGroupPresetSetting, type OperationsSettings } from "../settings-types";
 import { normalizeSubjectFields } from "../subject-fields";
+import type { SettingsIssue } from "../settings-error";
 
 /**
  * 운영 섹션 저장 요청 — `saveOwnerSection`이 받는 형식은 이 넷뿐이다(없거나 모르는 값은 저장하지 않는다).
@@ -84,9 +85,9 @@ export function readOperationsRequest(
   return { error: STALE_FORM_ERROR };
 }
 
-type Issue = { path: PropertyKey[]; message: string };
 export type OperationsBuild =
-  | { error: string; issue?: Issue }
+  /** `issue` = 병합 결과의 검증 오류, `checked` = 그때 검사한 값(오류 문구가 그 줄의 이름을 찾는 데 쓴다). */
+  | { error: string; issue?: SettingsIssue; checked?: unknown }
   /** 바꿀 것이 없다(이미 없는 과목 삭제) — 쓰지 않고 지금 상태를 돌려준다. */
   | { unchanged: true }
   /** `raw` = 병합 결과(저장 전 다듬기의 원 요청 자리), `parsed` = 스키마를 통과한 값. */
@@ -122,7 +123,8 @@ export function buildOperationsSave(
   const parsed = operationsSchema.safeParse(merged);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
-    return { error: first?.message ?? "검증 실패", issue: first ? { path: [...first.path], message: first.message } : undefined };
+    // 오류의 종류·한도까지 넘긴다 — 화면 문구가 "몇 자 이내" 같은 사유를 만든다(settings-error.ts).
+    return { error: first?.message ?? "검증 실패", issue: first ? ({ ...first, path: [...first.path] } as SettingsIssue) : undefined, checked: merged };
   }
   return { raw: merged, parsed: parsed.data };
 }

@@ -9,6 +9,7 @@ import os from "node:os";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { MENU_LABEL } from "@/lib/permissions";
 import { canManageSheetSync, SHEET_ACCESS_DENIED_MSG } from "@/features/integrations/server/sheet-access";
 import { canPushToMakeedu } from "@/features/integrations/server/makeedu-push-access";
 import { isPushableConsultation } from "@/features/integrations/push-eligibility";
@@ -170,7 +171,7 @@ export async function setSheetsExportEnabled(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!isSheetExportSubject(subject)) return { error: "지원하지 않는 과목입니다" };
   if (!(await canWriteTenant(user.systemRole, "integration_settings"))) {
-    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+    return { error: `${MENU_LABEL.integration_settings} 변경 권한이 없습니다` };
   }
   if (await moduleOff("sheet_sync")) return { error: MODULE_OFF_MSG };
 
@@ -212,7 +213,7 @@ export async function setSubjectSheetTarget(
   if (!user) return { error: "로그인이 필요합니다" };
   if (!isSheetExportSubject(subject)) return { error: "지원하지 않는 과목입니다" };
   if (!(await canWriteTenant(user.systemRole, "integration_settings"))) {
-    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+    return { error: `${MENU_LABEL.integration_settings} 변경 권한이 없습니다` };
   }
   if (await moduleOff("sheet_sync")) return { error: MODULE_OFF_MSG };
 
@@ -250,7 +251,7 @@ export async function setMakeeduSyncEnabled(enabled: boolean): Promise<ToggleSta
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" };
   if (!(await canWriteTenant(user.systemRole, "integration_settings"))) {
-    return { error: "학원 설정(owner) 변경 권한이 없습니다" };
+    return { error: `${MENU_LABEL.integration_settings} 변경 권한이 없습니다` };
   }
   if (await moduleOff("makeedu")) return { error: MODULE_OFF_MSG };
 

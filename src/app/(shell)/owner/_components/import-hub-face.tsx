@@ -3,22 +3,34 @@ import { canManageTenant } from "@/lib/auth/perm-matrix";
 import { ExcelImportButton } from "@/components/excel-import/excel-import-button";
 import { IMPORT_KINDS, IMPORT_META } from "@/features/excel-import/kinds";
 import { loadImporter } from "@/features/excel-import/server/registry";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled, moduleOfMenuKey } from "@/lib/modules";
 
 /**
  * 학원 설정 › 데이터 가져오기 — 새 지점이 옛 시스템 자료를 **도입 순서대로** 엑셀로 옮기는 한 화면
  * (원장 2026-09-29 *"다른 지점에서 업로드용 엑셀 양식을 다운로드 받고 업로드를 통해 모든 데이터 업로드 가능하게"*).
  * 각 줄의 버튼은 그 탭의 '엑셀로 넣기'와 **같은 창·같은 주소**다(두 벌이 아니다).
  * 🔴 버튼은 그 메뉴의 전체 권한이 있을 때만 — 올리기 주소도 같은 `canManageTenant`로 막는다([[#77]]).
+ * 🔴 **이 학원에서 끈 기능의 줄은 세우지 않는다** — 줄을 세워 두고 "권한이 없습니다"라고 적으면 그 기능이 있다는 것을 알리는 셈이다
+ *    (끈 기능은 있었는지조차 모르게 — 원장 2026-09-30). 켜져 있는데 권한만 없는 줄은 그대로 선다(누구에게 부탁할지 알 수 있다).
  */
 export async function ImportHubFace() {
-  const user = await getCurrentUser();
-  const kinds = [...IMPORT_KINDS].sort((a, b) => IMPORT_META[a].step - IMPORT_META[b].step);
-  const allowed = await Promise.all(
-    kinds.map(async (k) => {
-      const def = await loadImporter(k);
-      return !!user && !!def && (await canManageTenant(user.systemRole, def.menu));
+  const [user, settings] = await Promise.all([getCurrentUser(), getTenantSettings()]);
+  const ordered = [...IMPORT_KINDS].sort((a, b) => IMPORT_META[a].step - IMPORT_META[b].step);
+  const rows = await Promise.all(
+    ordered.map(async (kind) => {
+      const def = await loadImporter(kind);
+      const moduleId = def ? moduleOfMenuKey(def.menu) : null;
+      return {
+        kind,
+        off: !!moduleId && !isModuleEnabled(settings.modules.disabled, moduleId),
+        allowed: !!user && !!def && (await canManageTenant(user.systemRole, def.menu)),
+      };
     }),
   );
+  const visible = rows.filter((row) => !row.off);
+  const kinds = visible.map((row) => row.kind);
+  const allowed = visible.map((row) => row.allowed);
   return (
     <div className="flex flex-col gap-4">
       <section className="bg-card border-line rounded-2xl border p-5">

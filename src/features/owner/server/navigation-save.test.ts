@@ -136,8 +136,11 @@ describe("실제 학원 설정 저장 액션", () => {
     expect(m.write).toHaveBeenCalledWith("insert", expect.objectContaining({ tenant_id: "tenant-a" }));
   });
   it("DB 저장 실패는 성공 신호/캐시 갱신으로 이어지지 않는다", async () => {
+    // DB 원문은 화면에 내보내지 않는다 — 모르는 오류는 기본 문구로.
+    m.error = { message: "connection terminated unexpectedly" };
+    expect((await saveOwnerSection(undefined, form()))?.error).toBe("설정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
     m.error = { message: "저장 실패" };
-    expect((await saveOwnerSection(undefined, form()))?.error).toBe("저장 실패");
+    expect((await saveOwnerSection(undefined, form()))?.error).not.toBe("저장 실패");
     expect(m.audit).not.toHaveBeenCalled(); expect(m.updateTag).not.toHaveBeenCalled();
   });
 });

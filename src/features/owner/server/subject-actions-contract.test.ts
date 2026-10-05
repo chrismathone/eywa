@@ -17,6 +17,12 @@ const m = vi.hoisted(() => ({
   duringAbsorb: null as null | (() => Promise<unknown>),
   /** 미사용 삭제가 사용량을 다시 세는 중에 끼어드는 다른 창의 저장. */
   duringRecount: null as null | (() => Promise<unknown>),
+  /** 그 표의 **쓰기(update)** 만 이 오류로 끝난다 — 읽기는 그대로 빈 결과. */
+  writeFault: null as null | { table: string; error: unknown },
+  /** 배열·jsonb 를 옮기는 RPC 가 이 오류로 끝난다. */
+  rpcFault: null as null | unknown,
+  /** 쓰기를 시도한 표(차례대로). */
+  writes: [] as string[],
   audit: vi.fn(),
 }));
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: async () => m.actor }));
@@ -48,15 +54,36 @@ vi.mock("@/lib/supabase/server", () => ({
       };
       return new Proxy(chain, { get: (target, prop) => (prop in target ? target[prop as string] : () => emptyTable()) });
     };
+    /** 쓰기를 기록하는 표 — update 를 부르면 그 표 이름을 적고, 오류가 걸려 있으면 그 오류로 끝난다. */
+    const dataTable = (table: string): unknown => {
+      const failed = (error: unknown): unknown => {
+        const chain: Record<string, unknown> = {
+          then: (resolve: (value: unknown) => void) => resolve({ data: null, error, count: null }),
+        };
+        return new Proxy(chain, { get: (target, prop) => (prop in target ? target[prop as string] : () => failed(error)) });
+      };
+      const base = emptyTable() as Record<string, unknown>;
+      return new Proxy(base, {
+        get: (target, prop) => {
+          if (prop !== "update") return target[prop as string];
+          return () => {
+            m.writes.push(table);
+            return m.writeFault?.table === table ? failed(m.writeFault.error) : emptyTable();
+          };
+        },
+      });
+    };
     return {
       rpc: async () => {
+        m.writes.push("rpc");
+        if (m.rpcFault) return { data: null, error: m.rpcFault };
         const interleave = m.duringAbsorb;
         m.duringAbsorb = null;
         await interleave?.();
         return { data: {}, error: null };
       },
       from: (table: string) => {
-        if (table !== "tenant_settings") return emptyTable();
+        if (table !== "tenant_settings") return dataTable(table);
         return {
           select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: m.row ? structuredClone(m.row) : null, error: null }) }) }),
           update: (value: { data: Record<string, unknown>; updated_at: string }) => {
@@ -132,6 +159,9 @@ beforeEach(() => {
   m.actor.displayName = "원장";
   m.duringAbsorb = null;
   m.duringRecount = null;
+  m.writeFault = null;
+  m.rpcFault = null;
+  m.writes = [];
   m.row = { data: { operations: structuredClone(DEFAULT_SETTINGS.operations) }, updated_at: "2026-10-05T00:00:00Z" };
 });
 afterEach(() => {
@@ -281,5 +311,70 @@ describe("시간표 쪽 서버 액션 — 제 칸만 보내고, 다듬기·도�
     expect(saved?.ok).toBe(true);
     expect(labels().math).toBe("수학B");
     expect(english().integrationGroups).toEqual(groups);
+  });
+});
+
+describe("흡수가 쓰다가 실패하면 — 무엇이 옮겨졌는지 사실대로 말한다(적대 리뷰 5b B3)", () => {
+  /** 권한 거절 — DB가 거절했다고 알려 준 실패(오류 코드가 있다). */
+  const REJECTED = { code: "42501", message: 'permission denied for table "classes"' };
+  /** 응답을 못 받은 실패 — 오류 코드가 없다(쓰기가 됐는지 모른다). */
+  const NO_ANSWER = { message: "TypeError: fetch failed" };
+  const NONE_MOVED = "옮겨진 기록은 없습니다";
+  const MAYBE_MOVED = "일부 기록은 이미 옮겨졌을 수 있습니다";
+  const run = async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    tick();
+    const result = await absorbSubject({ from: "science", to: "math" });
+    spy.mockRestore();
+    if (!("error" in result) || !result.error) throw new Error("실패해야 하는 사례가 성공했다");
+    return result.error;
+  };
+  /** 실패한 흡수는 설정의 과목 행을 지우지 않는다 — 다시 시도할 수 있어야 한다. */
+  const expectSubjectKept = () => expect("science" in labels()).toBe(true);
+
+  it("🔴 첫 쓰기를 DB가 거절했다 → 옮겨진 기록이 없다고 말한다(있지도 않은 부분 이동을 알리지 않는다)", async () => {
+    m.writeFault = { table: "classes", error: REJECTED };
+    const message = await run();
+    expect(m.writes).toEqual(["classes"]);
+    expect(message).toContain(NONE_MOVED);
+    expect(message).not.toContain(MAYBE_MOVED);
+    expect(message).not.toMatch(/classes|permission denied/);
+    expectSubjectKept();
+  });
+
+  it("🔴 앞 표의 쓰기가 끝난 뒤 거절됐다 → 일부가 옮겨졌을 수 있다고 알린다", async () => {
+    m.writeFault = { table: "student_grades", error: REJECTED };
+    const message = await run();
+    expect(m.writes).toEqual(["classes", "enrollment_consultations", "student_consultations", "student_grades"]);
+    expect(message).toContain(MAYBE_MOVED);
+    expect(message).not.toContain(NONE_MOVED);
+    expect(message).not.toMatch(/student_grades|permission denied/);
+    expectSubjectKept();
+  });
+
+  it("🔴 첫 쓰기라도 응답을 못 받았다 → 옮겨진 것이 없다고 단정하지 않는다", async () => {
+    m.writeFault = { table: "classes", error: NO_ANSWER };
+    const message = await run();
+    expect(m.writes).toEqual(["classes"]);
+    expect(message).toContain(MAYBE_MOVED);
+    expect(message).not.toContain(NONE_MOVED);
+    expect(message).not.toMatch(/fetch failed|TypeError/);
+    expectSubjectKept();
+  });
+
+  it("표를 다 옮긴 뒤 배열·기록 이동이 거절됐다 → 일부가 옮겨졌을 수 있다고 알린다", async () => {
+    m.rpcFault = { code: "42501", message: "permission denied for function absorb_subject_key" };
+    const message = await run();
+    expect(m.writes.at(-1)).toBe("rpc");
+    expect(m.writes).toHaveLength(10);
+    expect(message).toContain(MAYBE_MOVED);
+    expect(message).not.toMatch(/absorb_subject_key|permission denied/);
+    expectSubjectKept();
+  });
+
+  it("그 사이 같은 이름의 반이 생겼다(유니크 충돌) → 전용 안내 그대로", async () => {
+    m.writeFault = { table: "classes", error: { code: "23505", message: 'duplicate key value violates unique constraint "classes_name_key"' } };
+    expect(await run()).toBe("그 사이 같은 이름의 반이 생겨 흡수할 수 없습니다 — 반 이름을 바꾼 뒤 다시 시도해 주세요.");
+    expectSubjectKept();
   });
 });

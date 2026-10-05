@@ -18,7 +18,8 @@ import { prepareSectionForSave, presetOfStored } from "../preset";
 import { normalizeDashboard } from "@/features/dashboard/layout/normalize";
 import { validateDashboardAssignments } from "./dashboard-assignments";
 import { navigationRevision } from "../normalize-navigation";
-import { logDbError } from "@/lib/supabase/db-error";
+import { explainDbError, logDbError } from "@/lib/supabase/db-error";
+import { plainSettingsReason, settingsValidationError } from "../settings-error";
 import { platformSettingsError } from "./platform-settings";
 import { OWNER_SECTION_MENU } from "@/lib/settings-role-catalog";
 import { configureMakeupSettings } from "@/features/makeups/server/settings";
@@ -49,10 +50,6 @@ export type OwnerSaveState =
 /** 저장 순번(`rev`)을 섹션 안에 함께 쓰는 섹션 — 쓰는 곳이 여럿이라 편집 폼이 읽기와 저장의 선후를 가려야 하는 둘. */
 const REV_SECTIONS: readonly SectionKey[] = ["operations", "permissions"];
 
-const validationError = (issue: { path: PropertyKey[]; message: string } | undefined) => {
-  const path = issue?.path.join(".");
-  return `입력값 오류${path ? ` (${path})` : ""}: ${issue?.message ?? "검증 실패"}`;
-};
 
 /**
  * 학원 설정 섹션 1개 저장. 게이트 = 역할·권한 매트릭스(owner 메뉴, override 반영 — #58) —
@@ -108,7 +105,7 @@ export async function saveOwnerSection(
   // 못 바꿈, 0080a DB 트리거 이중 방어). 그 외 섹션 = owner 메뉴 쓰기 권한(override 반영 — 위임 가능).
   if (section === "permissions") {
     if (actor.systemRole !== "master" || !(await canWriteTenant(actor.systemRole, "owner"))) {
-      return { error: "역할·권한은 원장(master)만 변경할 수 있습니다" };
+      return { error: "역할·권한은 원장만 변경할 수 있습니다" };
     }
   } else if (!(await canWriteTenant(actor.systemRole, section in OWNER_SECTION_MENU ? OWNER_SECTION_MENU[section as keyof typeof OWNER_SECTION_MENU] : "owner"))) {
     return { error: section === "report" ? "보고서 설정 변경 권한이 없습니다" : "학원 설정 변경 권한이 없습니다" };
@@ -149,7 +146,7 @@ export async function saveOwnerSection(
   // 시간표 칸·과목 삭제 요청은 data가 섹션 전체가 아니다 — 방금 읽은 값에 적용한 뒤 아래에서 검증한다.
   const sendsWholeSection = !operationsRequest || operationsRequest.kind === "face";
   const result = sendsWholeSection ? schema.safeParse(parsedJson) : null;
-  if (result && !result.success) return { error: validationError(result.error.issues[0]) };
+  if (result && !result.success) return { error: settingsValidationError(section, result.error.issues[0], parsedJson) };
   if (section === "makeups" && result) return configureMakeupSettings(result.data);
   // 같은 칸(메뉴·직급)을 두 번 지정한 요청은 받지 않는다 — 어느 줄이 적용될지가 읽는 곳마다 다르다
   // (앱은 마지막 줄, DB의 권한 함수는 먼저 걸리는 줄). 화면의 저장은 이런 요청을 만들지 않는다.
@@ -236,7 +233,7 @@ export async function saveOwnerSection(
       by: actor.displayName ?? undefined,
       at: new Date().toISOString(),
     });
-    if ("error" in built) return { error: built.issue ? validationError(built.issue) : built.error };
+    if ("error" in built) return { error: built.issue ? settingsValidationError(section, built.issue, built.checked) : built.error };
     // 이미 없는 과목의 삭제 — 쓰지 않고 지금 상태를 돌려준다(화면이 그 값으로 맞춘다).
     if ("unchanged" in built) {
       return { ok: true, nonce: Date.now(), operations: operationsReply(fresh, operationsRequest), version: settingsRevOf(base.operations) };
@@ -278,7 +275,10 @@ export async function saveOwnerSection(
     ? await supabase.from("tenant_settings").update(write).eq("tenant_id", actor.tenantId).eq("updated_at", existing.updated_at).select("tenant_id")
     : await supabase.from("tenant_settings").insert(write).select("tenant_id");
   const { error } = resultWrite;
-  if (error) return { error: error.message };
+  // DB 원문(영문 · 표 이름)을 그대로 내보내지 않는다 — 쓰기 가드가 돌려준 한글 사유는 지점 화면 문구로 다듬어 보여 준다.
+  if (error) {
+    return { error: plainSettingsReason(explainDbError(error, { scope: "owner.saveOwnerSection", fallback: "설정을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요." }).message) };
+  }
   if (!resultWrite.data?.length) return { error: "다른 창에서 설정이 먼저 저장되었습니다. 새로고침한 뒤 다시 저장해 주세요." };
 
   // 🔴 **무엇이 바뀌었는지**를 함께 남긴다(원장 점검 2026-08-27) — 종전엔 `{section}`뿐이라

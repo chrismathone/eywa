@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SUPPORT_GROUPS, hubGroupsFor } from "@/lib/menu-hub";
 import { SUBTABS_BY_MENU } from "@/lib/navigation";
-import { MENU_ACCESS, resolveMatrix, type SystemRole } from "@/lib/permissions";
+import { MENU_ACCESS, MENU_LABEL, resolveMatrix, type SystemRole } from "@/lib/permissions";
 import { OWNER_FACES, OWNER_TABS, ownerTabLabel, resolveOwnerTab } from "./tabs";
 
 /**
@@ -64,13 +64,25 @@ describe("면 목록", () => {
 describe("파생 — 세 표면이 같은 목록을 쓴다", () => {
   const ownerHub = SUPPORT_GROUPS.find((g) => g.id === "owner")!;
 
-  it("🔴 설정 메뉴 판의 버튼 = 면 목록(주소 · 라벨 · 범주 · 순서)", () => {
-    expect(ownerHub.items.map((d) => ({ href: d.href, label: d.label, section: d.section }))).toEqual(
-      OWNER_FACES.map((f) => ({ href: f.href, label: f.label, section: f.category })),
-    );
+  /** 설정의 면이 아니라 따로 선 화면인데 입구를 설정 메뉴 판에 둔 것 — 면 목록 뒤에 선다. */
+  const EXTRA = [{ href: "/kiosk-settings", label: MENU_LABEL.kiosk_settings, section: "관리" }];
+  const faceButtons = ownerHub.items.filter((d) => d.href.startsWith("/owner"));
+
+  it("🔴 설정 메뉴 판의 버튼 = 면 목록(주소 · 라벨 · 범주 · 순서) + 따로 선 설정 화면", () => {
+    expect(ownerHub.items.map((d) => ({ href: d.href, label: d.label, section: d.section }))).toEqual([
+      ...OWNER_FACES.map((f) => ({ href: f.href, label: f.label, section: f.category })),
+      ...EXTRA,
+    ]);
+  });
+
+  it("키오스크 설정의 입구 — 권한 키는 제 것(kiosk_settings)이고, 창은 링크·딥링크와 같은 화면으로 열린다", () => {
+    const kiosk = ownerHub.items.find((d) => d.href === "/kiosk-settings")!;
+    expect(kiosk.menuKey).toBe("kiosk_settings");
+    expect(kiosk.icon).not.toBe(ownerHub.icon);
   });
 
   it("🔴 원장 위 전용 · 일반판 전용 표식도 면 목록에서 온다", () => {
+    expect(faceButtons).toHaveLength(OWNER_FACES.length);
     for (const face of OWNER_FACES) {
       const dest = ownerHub.items.find((d) => d.href === face.href)!;
       expect(!!dest.masterOnly, `${face.key}: masterOnly`).toBe(!!face.masterOnly);
@@ -133,12 +145,20 @@ describe("메뉴 판에서 누구에게 어떤 버튼이 서나", () => {
       .find((g) => g.id === "owner")
       ?.items.map((d) => d.href) ?? [];
 
-  it("원장(침산) — 일반판 전용 면만 빼고 전부", () => {
-    expect(hrefs({ systemRole: "master", isMaster: true })).toEqual(OWNER_TABS.map((t) => t.href));
+  it("원장(침산) — 일반판 전용 면만 빼고 전부 + 키오스크 설정", () => {
+    expect(hrefs({ systemRole: "master", isMaster: true })).toEqual([...OWNER_TABS.map((t) => t.href), "/kiosk-settings"]);
   });
 
   it("원장(일반판) — '기능'까지 전부, 면 목록 순서 그대로", () => {
-    expect(hrefs({ systemRole: "master", isMaster: true, isGenericTenant: true })).toEqual(OWNER_FACES.map((f) => f.href));
+    expect(hrefs({ systemRole: "master", isMaster: true, isGenericTenant: true })).toEqual([...OWNER_FACES.map((f) => f.href), "/kiosk-settings"]);
+  });
+
+  it("키오스크 설정 버튼은 그 권한이 있는 사람에게만 선다 — 설정을 위임받았다고 서지 않는다", () => {
+    expect(hrefs({ systemRole: "admin" })).not.toContain("/kiosk-settings");
+    const granted = resolveMatrix([{ menu: "kiosk_settings", role: "admin", access: "full" }]);
+    const seen = hubGroupsFor(SUPPORT_GROUPS, { systemRole: "admin", permMatrix: granted }).find((g) => g.id === "owner")?.items.map((d) => d.href);
+    // 그 권한만 있어도 설정 묶음이 서고, 그 버튼 하나가 선다.
+    expect(seen).toEqual(["/kiosk-settings"]);
   });
 
   it("🔴 위임받은 계정 — 원장 위 전용 면(감사로그 · 대시보드 관리 · 기능)의 버튼은 서지 않는다(눌러도 안내뿐인 입구)", () => {

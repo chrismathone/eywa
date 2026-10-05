@@ -17,6 +17,12 @@
  */
 import type { SubjectSetting } from "./settings-types";
 
+/**
+ * 월간 계획서 문구를 **읽는 과목** — 인쇄물과 계획(MP) 화면은 영어 강사 시트의 것이라 이 과목의 값만 읽는다.
+ * 편집 칸(학원 설정 → 과목 운영)도 이 과목에만 선다 — 다른 과목에 세우면 적어도 어디에도 안 나오는 칸이 된다.
+ */
+export const MONTH_PLAN_SUBJECT_KEY = "english";
+
 export type MonthPlanTexts = {
   /** 교재 약어 범례 — 시트 우측 상단(줄바꿈으로 나눈다: `SB: …` / `WB: …` / `PB: …`). */
   bookLegend: string;

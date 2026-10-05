@@ -104,6 +104,14 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
 };
 
+/** 섹션의 칸 이름(한글) — 모르는 칸이면 undefined(화면에 내부 키를 대신 내보내지 않는다). */
+export function settingFieldLabel(section: string, field: string): string | undefined {
+  // 제 속성만 읽는다 — `constructor`·`toString` 같은 키가 들어와도 상속된 값을 이름으로 돌려주지 않는다.
+  if (!Object.hasOwn(FIELD_LABELS, section)) return undefined;
+  const labels = FIELD_LABELS[section]!;
+  return Object.hasOwn(labels, field) ? labels[field] : undefined;
+}
+
 /** 값이 코드(영문)인 칸의 한글 표기 — 섹션 → 칸 → 값. */
 const VALUE_LABELS: Record<string, Record<string, Record<string, string>>> = {
   report: { classnoteParentReplyMode: { off: "끔", test: "시험(학원이만)", on: "전체" } },

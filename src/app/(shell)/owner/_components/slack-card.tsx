@@ -24,7 +24,7 @@ export async function SlackCard() {
       {state.kind === "readonly" ? (
         <p className="text-text-dim text-sm">슬랙 연동은 원장만 설정할 수 있습니다.</p>
       ) : state.kind === "missing_table" ? (
-        <p className="text-danger text-sm">슬랙 연동 표가 아직 DB에 없습니다 — 0297a·0298a SQL을 적용한 뒤 설정할 수 있습니다.</p>
+        <p className="text-danger text-sm">슬랙 연동을 아직 쓸 수 없는 상태입니다. 준비가 끝나면 여기서 설정할 수 있습니다 — 계속 이렇게 보이면 고객센터로 알려 주세요.</p>
       ) : state.kind === "error" ? (
         <p className="text-danger text-sm">슬랙 설정을 읽지 못했습니다. 잠시 후 새로고침해 주세요.</p>
       ) : (

@@ -127,7 +127,9 @@ describe("편집자", () => {
   it("🔴 값이 지워진 payload는 편집 권한이 있어도 검증에서 떨어진다 — PIN을 덮어쓰지 못한다", async () => {
     const result = await saveOwnerSection(undefined, form(operationsForViewer(storedOperations(), false)));
     expect(result?.ok).toBeUndefined();
-    expect(result?.error).toContain("seatPins");
+    // 어느 칸에서 떨어졌는지는 화면용 이름으로 적힌다(내부 키를 내보내지 않는다).
+    expect(result?.error).toContain("자리 출석부 비밀번호");
+    expect(result?.error).not.toContain("seatPins");
     expect(m.write).not.toHaveBeenCalled();
   });
 

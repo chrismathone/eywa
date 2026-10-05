@@ -32,10 +32,10 @@ export function NotificationsSection({ initial }: { initial: NotificationsSettin
       </SettingsCard>
       ) : null}
 
-      <SettingsCard title="인쇄물" description="청구서·성적표 등 인쇄물 상단 머리글.">
+      <SettingsCard title="인쇄물" description="등록 상담지·상담 준비 서류 상단에 찍히는 머리글.">
         <TextField
           label="인쇄물 머리글"
-          hint="청구서·성적표 상단"
+          hint="등록 상담지·상담 준비 서류 상단"
           value={n.printHeader}
           onChange={(v) => set({ printHeader: v })}
         />

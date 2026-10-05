@@ -58,7 +58,8 @@ vi.mock("@/lib/supabase/server", () => ({
               const rest = (data: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries(data).filter(([k]) => !editable.includes(k)).sort()));
               const changedSections = editable.filter((k) => k !== "version" && JSON.stringify(value.data[k]) !== JSON.stringify(m.row!.data[k]));
               if (rest(value.data) !== rest(m.row.data) || changedSections.some((k) => !m.delegatedSections!.includes(k))) {
-                return { data: null, error: { message: "학원 설정 변경 권한이 없습니다" } };
+                // 쓰기 가드는 사유를 한글 문장으로 RAISE한다(코드 P0001) — 화면엔 그 문장이 그대로 나온다.
+                return { data: null, error: { code: "P0001", message: "학원 설정 변경 권한이 없습니다" } };
               }
             }
             m.writes += 1;
@@ -562,3 +563,21 @@ describe("최종 쓰기 직전의 충돌", () => {
     expect(m.audit).not.toHaveBeenCalled();
   });
 });
+
+describe("검증 오류의 화면 문구 — 어느 과목의 어느 칸인지와 한도를 말한다", () => {
+  it("🔴 영어 과목의 월간 계획서 안내가 600자를 넘으면, 과목 이름 · 칸 이름 · 한도가 실린다(내부 경로·영문 원문은 없다)", async () => {
+    const window = openWindow("subjects");
+    const english = subject(window.draft, "english");
+    const data: OperationsSettings = {
+      ...window.draft,
+      subjects: window.draft.subjects.map((s) =>
+        s.key === "english" ? { ...s, monthPlan: { bookLegend: "", notices: "가".repeat(601), slogan: "", prepTitle: "", prepNotes: "" } } : s,
+      ),
+    };
+    const res = await window.save(data);
+    expect(res?.error).toBe(`입력값 오류 (과목 '${english.label}' · 월간 계획서 · 표 위 안내): 600자 이내로 입력해 주세요`);
+    expect(res?.error).not.toMatch(/subjects|monthPlan|notices|Too big|expected/);
+    expect(m.writes).toBe(0);
+  });
+});
+

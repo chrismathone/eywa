@@ -38,7 +38,15 @@ const routePath = (href: string) => href.split(/[?#]/, 1)[0] ?? href;
  * 창은 여전히 부모 메뉴 하나여야 하므로(같은 화면 = 같은 창), 권한키를 그 면이 놓인 부모 메뉴로 되돌려 비교한다.
  * 🔴 `windowIdForHref`와 같은 조회를 쓰지 않는다 — 같은 함수로 기대값을 만들면 검사가 스스로를 확인할 뿐이다.
  */
+/**
+ * 메뉴 목록 밖이지만 창으로 여는 화면 — 창 id는 메뉴 키가 아니라 **경로**다(창 링크·딥링크가 쓰던 id 그대로).
+ * 2026-10-06 키오스크 설정을 설정 메뉴 판에 올리면서 메뉴 판의 목적지에도 이런 화면이 생겼다.
+ */
+const PATH_ID_DESTS: Record<string, string> = { "/kiosk-settings": "kiosk-settings" };
+
 function ownerMenuOf(d: HubDest): string {
+  const byPath = PATH_ID_DESTS[routePath(d.href)];
+  if (byPath) return byPath;
   if (settingMenuForHref(d.href) !== d.menuKey) return d.menuKey;
   const parent = (Object.keys(SETTINGS_ROLE_GROUPS) as MenuKey[]).find((k) => navItemByKey(k)?.href === routePath(d.href));
   return parent ?? d.menuKey;

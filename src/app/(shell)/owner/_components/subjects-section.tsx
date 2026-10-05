@@ -19,7 +19,8 @@ import {
   type SubjectSetting,
 } from "@/features/owner/settings-types";
 import { SUBJECT_COLOR_LABEL } from "@/features/owner/subject-color-label";
-import { DEFAULT_MONTH_PLAN_TEXTS } from "@/features/owner/month-plan-texts";
+import { DEFAULT_MONTH_PLAN_TEXTS, MONTH_PLAN_SUBJECT_KEY } from "@/features/owner/month-plan-texts";
+import { useModuleOn } from "@/features/owner/operations-context";
 import { DEFAULT_ENGLISH_SKILL_AREAS, skillAreaColorOf } from "@/features/owner/skill-areas";
 import { SUBJECT_SOLID } from "@/features/owner/subjects";
 import { ENGLISH_WEEKDAY_PERIOD_LIST } from "@/features/timetable/lib/periods";
@@ -81,6 +82,8 @@ export function SubjectsSection({
   //    운영 체계 면의 칸은 서버가 방금 읽은 값을 그대로 둔다(operations-slice.ts).
   const { draft: o, setDraft: setO, baseline, isDirty, noteSubmitted, confirmSaved, noteSaveFailed, adopt, adoptions } =
     useSectionDraft(initial, baselineToken, baselineVersion);
+  // 월간 계획서 문구 편집 칸은 영어 강사 시트 기능이 켜져 있을 때만 선다(읽는 화면이 그 기능의 것이다).
+  const ecsOn = useModuleOn("ecs");
   // 삭제는 서버에서 즉시 확정된다 — 다른 미저장 변경이 섞여 있으면 먼저 저장하게 한다(아래 onRemove).
   const [removeBlocked, setRemoveBlocked] = useState(false);
   const setSubjects = (v: SubjectSetting[]) => setO((prev) => ({ ...prev, subjects: v }));
@@ -271,11 +274,15 @@ export function SubjectsSection({
                   </div>
 
                   {/* 월간 계획서(MP) 인쇄물 문구 — 반이 달라도 같은 문구라 과목 단위(원본 구글 시트 그대로).
-                      🔴 소비처 = (print)/ecs/[classId]/month-plan. 비운 블록은 인쇄에서 통째로 생략된다. */}
-                  <MonthPlanTextsEditor
-                    value={s.monthPlan}
-                    onChange={(v) => patchSubject(i, { monthPlan: v })}
-                  />
+                      🔴 소비처 = (print)/ecs/[classId]/month-plan · 계획(MP) 화면 — 둘 다 **영어 과목의 값**만 읽는다
+                         (month-plan-chrome.ts). 그래서 편집 칸도 영어 과목에만, 영어 강사 시트 기능이 켜져 있을 때만 세운다 —
+                         다른 과목에 세우면 적어도 어디에도 안 나오는 칸이 된다. 다른 과목에 이미 저장된 값은 지우지 않는다. */}
+                  {s.key === MONTH_PLAN_SUBJECT_KEY && ecsOn ? (
+                    <MonthPlanTextsEditor
+                      value={s.monthPlan}
+                      onChange={(v) => patchSubject(i, { monthPlan: v })}
+                    />
+                  ) : null}
 
                   {/* 평일 교시(과목 전용) — 미설정이면 전역(운영 체계 탭) 폴백. 주말 교시는 전역 공통. */}
                   <div className="space-y-2">

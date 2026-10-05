@@ -2,7 +2,7 @@
 // 저장은 tenant_settings.data jsonb. 빈 키는 DEFAULT_SETTINGS로 폴백(resolve.ts).
 // 섹션별 부분 저장(saveOwnerSection)이라 SECTION_SCHEMAS로 섹션 단위 검증.
 import { z } from "zod";
-import { MENU_KEYS, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { MENU_KEYS, MENU_LABEL, SYSTEM_ROLES, type MenuKey, type SystemRole } from "@/lib/permissions";
 // 감출 수 없는 목적지 판정 — 스키마(저장 거부)와 적용(isMenuHiddenByLayout)이 **같은 함수**를 본다.
 import { isLayoutHideLocked, isFixedDestination, FIXED_GROUP_IDS, MAX_NAV_GROUPS } from "./menu-layout";
 import { hasMenuGlyph } from "@/components/icons/menu-glyph";
@@ -288,7 +288,12 @@ export const operationsSchema = z
     v.subjects.forEach((s, i) => {
       const k = s.key.trim();
       if (k && keys.has(k)) {
-        ctx.addIssue({ code: "custom", message: `과목 내부 ID가 중복됩니다: ${k}`, path: ["subjects", i, "key"] });
+        // 내부 식별자를 문구에 싣지 않는다 — 사용자가 아는 것은 과목 이름이다.
+        ctx.addIssue({
+          code: "custom",
+          message: "다른 과목과 같은 과목으로 저장되어 있습니다. 이 과목 줄을 지우고 다시 추가해 주세요",
+          path: ["subjects", i, "key"],
+        });
       }
       keys.add(k);
       const l = s.label.trim();
@@ -303,7 +308,11 @@ export const operationsSchema = z
         s.skillAreas.forEach((a, j) => {
           const ak = a.key.trim();
           if (ak && areaKeys.has(ak)) {
-            ctx.addIssue({ code: "custom", message: `영역 ID가 중복됩니다: ${ak}`, path: ["subjects", i, "skillAreas", j, "key"] });
+            ctx.addIssue({
+              code: "custom",
+              message: "다른 영역과 같은 영역으로 저장되어 있습니다. 이 영역 줄을 지우고 다시 추가해 주세요",
+              path: ["subjects", i, "skillAreas", j, "key"],
+            });
           }
           areaKeys.add(ak);
           const al = a.label.trim();
@@ -453,7 +462,12 @@ export const consultationsSchema = z
     v.templates.forEach((t, i) => {
       const k = t.key.trim();
       if (k && keys.has(k)) {
-        ctx.addIssue({ code: "custom", message: `양식 ID가 중복됩니다: ${k}`, path: ["templates", i, "key"] });
+        // 내부 식별자를 문구에 싣지 않는다 — 어느 양식인지는 오류 문구가 그 줄의 이름으로 가리킨다(settings-error.ts).
+        ctx.addIssue({
+          code: "custom",
+          message: "다른 양식과 같은 양식으로 저장되어 있습니다. 이 양식 줄을 지우고 다시 추가해 주세요",
+          path: ["templates", i, "key"],
+        });
       }
       keys.add(k);
       if (t.isDefault) defaults += 1;
@@ -582,10 +596,13 @@ export const permissionsSchema = z
         ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 편집할 수 없습니다" });
       }
       if (r.role === "student") {
-        ctx.addIssue({ code: "custom", message: "학생(student)은 '내 학습' 전용 역할이라 메뉴 권한을 부여할 수 없습니다" });
+        ctx.addIssue({ code: "custom", message: "학생 계정은 '내 학습' 전용이라 메뉴 권한을 줄 수 없습니다" });
       }
       if (r.role === "master" && (r.menu === "owner" || r.menu === "admin" || r.menu === "dashboard") && r.access === "none") {
-        ctx.addIssue({ code: "custom", message: "원장(master)의 owner/admin/오늘 접근은 잠글 수 없습니다" });
+        ctx.addIssue({
+          code: "custom",
+          message: `원장의 ${MENU_LABEL.owner} · ${MENU_LABEL.admin} · ${MENU_LABEL.dashboard} 접근은 잠글 수 없습니다`,
+        });
       }
     }
     for (const r of v.userOverrides) {
@@ -644,6 +661,7 @@ export const navigationSchema = z
   .superRefine((v, ctx) => {
     const knownGroups = new Set([...HUB_GROUPS, ...SUPPORT_GROUPS].map((g) => g.id));
     const knownHrefs = new Set([...HUB_GROUPS, ...SUPPORT_GROUPS].flatMap((g) => g.items.map((d) => d.href)));
+    const menuLabelOf = new Map([...HUB_GROUPS, ...SUPPORT_GROUPS].flatMap((g) => g.items.map((d) => [d.href, d.label] as const)));
     const groupIds = new Set<string>();
     for (const g of v.groups ?? []) {
       if (groupIds.has(g.id)) ctx.addIssue({ code: "custom", message: "같은 탭이 두 번 담겼습니다" });
@@ -654,7 +672,9 @@ export const navigationSchema = z
     const seen = new Set<string>();
     for (const r of v.menus) {
       if (seen.has(r.href)) {
-        ctx.addIssue({ code: "custom", message: `같은 메뉴가 두 번 담겼습니다 (${r.href})` });
+        // 주소 대신 그 메뉴의 이름을 적는다(모르는 주소면 이름 없이).
+        const name = menuLabelOf.get(r.href);
+        ctx.addIssue({ code: "custom", message: `같은 메뉴가 두 번 담겼습니다${name ? ` (${name})` : ""}` });
       }
       seen.add(r.href);
       if ((r.label || r.icon || r.groupId) && !knownHrefs.has(r.href)) ctx.addIssue({ code: "custom", message: "현재 사용할 수 없는 메뉴입니다. 화면을 새로고침해 주세요" });
@@ -674,10 +694,12 @@ export const navigationSchema = z
       if (g.id !== TEACHER_DEFAULT_GROUP && (!g.id.startsWith("custom-") || !g.label)) ctx.addIssue({ code: "custom", message: "강사뷰의 새 탭 이름을 입력해 주세요" });
     }
     const teacherHrefs = new Set(TEACHER_NAV_GROUPS.flatMap((g) => g.items.map((d) => d.href)));
+    const teacherLabelOf = new Map(TEACHER_NAV_GROUPS.flatMap((g) => g.items.map((d) => [d.href, d.label] as const)));
     const seenTeacher = new Set<string>();
     for (const r of v.teacherMenus) {
       if (seenTeacher.has(r.href)) {
-        ctx.addIssue({ code: "custom", message: `강사뷰에 같은 메뉴가 두 번 담겼습니다 (${r.href})` });
+        const name = teacherLabelOf.get(r.href);
+        ctx.addIssue({ code: "custom", message: `강사뷰에 같은 메뉴가 두 번 담겼습니다${name ? ` (${name})` : ""}` });
       }
       seenTeacher.add(r.href);
       if ((r.label || r.icon || r.groupId) && !teacherHrefs.has(r.href)) ctx.addIssue({ code: "custom", message: "강사뷰에서 사용할 수 없는 메뉴입니다" });

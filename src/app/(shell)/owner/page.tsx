@@ -210,7 +210,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
       <PageHeader
         eyebrow="학원 설정"
         title={`${settings.profile.name || "학원"} 설정`}
-        description="학원에 관한 모든 설정과 관리 도구를 여기서 관리하면 해당 학원(테넌트) 전체에 적용됩니다. 원장(master)과 역할·권한에서 위임받은 계정만 변경할 수 있고, 역할·권한 면은 원장 전용입니다."
+        description="학원에 관한 모든 설정과 관리 도구입니다. 여기서 바꾼 내용은 학원 전체에 적용됩니다. 원장과, 역할·권한에서 맡긴 계정만 바꿀 수 있고 역할·권한 면은 원장만 바꿉니다."
         // 창 컴팩트 행은 1행이 규칙 — 위 안내문(~110자)은 창 폭에서 2~3줄로 감겨 짧은 라벨로 대체(적대 리뷰).
         // ⚠️ 상단 바 브랜드는 `logoText`라 `profile.name`과 다를 수 있다 → 컴팩트 행에 학원명을 남긴다.
         embedLabel={`${settings.profile.name || "학원"} 설정 — 변경은 원장·위임 계정만`}
@@ -282,7 +282,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           ) : null
         ) : (
           <div className="bg-card border-line rounded-2xl border p-6">
-            <p className="text-foreground text-sm font-bold">역할·권한은 원장(master)만 변경할 수 있습니다</p>
+            <p className="text-foreground text-sm font-bold">역할·권한은 원장만 변경할 수 있습니다</p>
             <p className="text-text-dim mt-1 text-sm">
               위임받은 계정으로도 이 면(역할·권한)은 편집할 수 없어요 — 권한 자체를 바꾸는 일은 원장 계정 전용입니다.
               나머지 설정 면(프로필·운영 체계·과목·수납·알림)은 그대로 편집할 수 있습니다.

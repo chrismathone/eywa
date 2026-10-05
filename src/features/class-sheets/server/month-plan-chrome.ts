@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { getPeriodWindow } from "@/features/periods/server/queries";
-import { resolveMonthPlanTexts, type MonthPlanTexts } from "@/features/owner/month-plan-texts";
+import { MONTH_PLAN_SUBJECT_KEY, resolveMonthPlanTexts, type MonthPlanTexts } from "@/features/owner/month-plan-texts";
 import { mpPeriodRangeLabel } from "../lib/month-plan";
 
 /**
@@ -45,7 +45,7 @@ export async function getMonthPlanChrome(input: {
       : Promise.resolve({ data: null }),
   ]);
 
-  const subject = settings.operations.subjects.find((s) => s.key === "english");
+  const subject = settings.operations.subjects.find((s) => s.key === MONTH_PLAN_SUBJECT_KEY);
   // ⚠️ 원본 시트는 강사를 **영어 닉네임**으로 적는다(`Daniella`). 없으면 표시 이름으로 폴백하고,
   //    그것도 없으면 빈 자리로 둔다.
   const english = (teacherRow?.data?.english_name as string | null)?.trim();

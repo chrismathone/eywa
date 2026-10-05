@@ -361,7 +361,7 @@ export function ReportSection({
             <div className="space-y-4">
               <SettingsCard
                 title="테스트 문항수"
-                description="일일·확인테스트 만점(/N)은 과목별로 설정합니다(학원 운영 > 과목). 아래를 켜면 강사가 원스크린에서 직접 바꿀 수 있습니다."
+                description="일일·확인테스트 만점(/N)은 과목별로 설정합니다(설정 > 과목 운영). 아래를 켜면 강사가 원스크린에서 직접 바꿀 수 있습니다."
               >
                 <ToggleField
                   label="강사가 문항수 직접 변경 허용"
@@ -373,7 +373,7 @@ export function ReportSection({
 
               <SettingsCard
                 title="AI 멘트 공지 모드"
-                description="자동작성 학부모 멘트의 문단 구성입니다. 프롬프트 세부는 학원 운영 > AI 멘트에서 편집합니다."
+                description="자동작성 학부모 멘트의 문단 구성입니다. 프롬프트 세부는 이 화면의 ‘AI 멘트’ 탭에서 편집합니다."
               >
                 <div className="flex flex-col gap-2">
                   {(

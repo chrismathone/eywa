@@ -1,5 +1,5 @@
 import { menuSearchKeywords, navItemByKey, SUBTABS_BY_MENU, type NavItem } from "@/lib/navigation";
-import { canAccess, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
+import { canAccess, MENU_LABEL, type AccessMatrix, type MenuKey, type SystemRole } from "@/lib/permissions";
 import { MENU_ICON, type AywaIconName } from "@/components/icons/aywa-icons";
 import { settingMenuForHref } from "@/lib/settings-role-catalog";
 import { OWNER_FACES, type OwnerFaceKey } from "@/features/owner/tabs";
@@ -262,8 +262,8 @@ export const SUPPORT_GROUPS: HubGroup[] = [
     // 🔴 버튼·범주는 **설정 면 목록**(`OWNER_FACES`, features/owner/tabs.ts)에서 파생한다 — 여기에 면을 다시 적지 않는다.
     //    전에는 이 판이 같은 면을 제 목록으로 따로 들고 있어 라벨과 묶음이 화면 탭과 갈렸다. 주소·권한·화면은 그대로다
     //    (면을 합치지 않는다 — 합치면 라우트·조회가 바뀐다). 권한 키는 `face()`가 주소에서 정한다(면별 설정 권한).
-    items: keep(
-      OWNER_FACES.map((f) =>
+    items: keep([
+      ...OWNER_FACES.map((f) =>
         face("owner", f.href, f.label, undefined, {
           section: f.category,
           icon: OWNER_FACE_ICON[f.key].icon,
@@ -271,7 +271,11 @@ export const SUPPORT_GROUPS: HubGroup[] = [
           ...(f.genericOnly ? { genericOnly: true } : {}),
         }),
       ),
-    ),
+      // 키오스크 설정 — 설정의 면이 아니라 따로 선 화면(`/kiosk-settings`)이고 권한도 따로다(`kiosk_settings`).
+      // 입구가 키오스크 화면 안의 링크 하나뿐이라 관리 화면에서는 갈 길이 없었다(2026-10-06). 기능을 끈 학원에서는 그 권한이
+      // 닫혀 버튼이 서지 않는다(권한 표가 꺼진 기능을 반영한다).
+      { menuKey: "kiosk_settings", href: "/kiosk-settings", label: MENU_LABEL.kiosk_settings, icon: MENU_ICON.kiosk_settings, section: "관리" },
+    ]),
   },
   {
     id: "help",

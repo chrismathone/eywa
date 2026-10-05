@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { revalidatePath, updateTag } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { MENU_LABEL } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { logAction } from "@/features/audit/server/log";
 import { normalizeNoticeAudience, POPUP_POSITIONS } from "../audience";
@@ -52,7 +53,7 @@ async function gate() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
   if (!(await canWriteTenant(user.systemRole, "popup_settings"))) {
-    return { error: "학원 설정(owner) 변경 권한이 없습니다" as const };
+    return { error: `${MENU_LABEL.popup_settings} 변경 권한이 없습니다` };
   }
   return { user };
 }

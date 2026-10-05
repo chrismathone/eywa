@@ -176,7 +176,7 @@ export function SectionForm({
           전체 콘텐츠의 맨 아래(창 하단)에 sticky로 붙도록. 저장 버튼은 form 속성으로 위 폼과 연결. */}
       {footer}
       {!readOnly ? <FormActionBar>
-        {state?.ok ? <span className="text-primary mr-1 text-xs font-bold">저장됨 · 테넌트 전체 적용</span> : null}
+        {state?.ok ? <span className="text-primary mr-1 text-xs font-bold">저장됨 · 학원 전체에 적용</span> : null}
         {state?.error ? <span className="text-danger mr-1 text-xs">{state.error}</span> : null}
         <button
           type="submit"

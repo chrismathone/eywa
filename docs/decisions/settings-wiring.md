@@ -73,13 +73,20 @@
 - 그대로인 것 — 원장 전용(저장 액션 · DB 트리거) · 침산의 담당자 칸 미저장과 옛 화면 누락 보존(`preset.ts`) · 운영자 계정 보호(`platform-settings.ts`). token은 충돌을 알아채는 값일 뿐 권한 근거가 아니다.
 
 ### DB가 필요한데 없는 것 (jsonb로 못 담는 것 포함)
-`tenant_settings.data`는 텍스트/숫자/배열만 담는다 — **이미지·파일은 Supabase Storage 버킷이 별도 필요**:
-- 로고 **이미지**(현재 `logoText` 텍스트 워드마크뿐)·직인/도장 이미지 → Storage 버킷 + `…profile.logoUrl`/`sealUrl` 경로.
-- 사업자등록번호·운영시간(영업시간, 교시와 별개) → jsonb 필드 추가만으로 가능(스키마 확장).
+`tenant_settings.data`는 텍스트/숫자/배열만 담는다 — **이미지·파일은 Supabase Storage 버킷이 별도 필요**.
+
+2026-10-06 코드 대조로 고친 상태(이 목록은 오래 낡아 있었다 — 아래 셋은 이미 구현돼 있다):
+- ~~로고 **이미지**·직인 이미지~~ → **✅ 구현됨**: `profile.logoUrl`·`sealUrl`(Storage `branding` 버킷, 업로드 티켓 `issueBrandingUploadTicket`). 소비처 = **로고**: 등록 상담지 · 수업 보고서 · 교재 요청서 인쇄(`(print)/enrollment|lesson_reports|textbook/…/print`) / **직인**: 등록 상담지 인쇄. 로그인 화면은 학원 이미지를 쓰지 않는다(제품 표식 고정 — 비로그인 브랜드 헬퍼는 글자만 읽는다).
+- ~~사업자등록번호~~ → **✅ 구현됨**: `profile.bizRegNo`. 소비처 = 등록 상담지 인쇄 하단 · 급여명세서(`payslip-queries.ts`).
+- ~~**역할/권한 편집**~~ → **✅ 구현됨**: `…data.permissions`(역할별 `overrides` · 개인별 `userOverrides` · 일반판의 `specialAccess`) + 학원 설정 > 역할·권한 · 화면마다의 '역할 설정' 대화상자. DB 쪽 판정은 `auth_menu_access`(0170a)와 쓰기 가드(0335a). 저장 규칙은 위 '역할·권한 저장 계약'.
 - ~~**과목별 교시 세트**~~ → **✅ 완료(2026-07-06)**: `subjects[].weekdayPeriods`(jsonb, 마이그 0) + 과목 운영 탭 편집기
   + `weekdayTableFor` 폴백 체인(과목 전용→english 내장→전역). 시간표 기본뷰·통합뷰·강사뷰·학생 상세 라벨 전부 소비.
-- **역할/권한 편집**(현재 `permissions.ts` 코드 하드코딩 — ijw 패리티 갭) → `tenant_role_permissions` 테이블 또는
-  `…data.permissions` jsonb + 편집 UI(RLS와의 경계 설계 필요).
+- 운영시간(영업시간, 교시와 별개) → **미확인**(스키마에 칸이 없다 — 필요해지면 jsonb 필드 추가만으로 가능).
+
+### 소비처에 맞춘 칸 (2026-10-06)
+- **notifications `printHeader`(인쇄물 머리글)** 의 소비처는 등록 상담지 · 상담 준비 서류 인쇄 둘이다(`(print)/enrollment/[id]/print|prep`). 화면 안내도 그렇게 적는다(전에는 "청구서·성적표 상단"이라고 적혀 있었다 — 그 두 인쇄물은 이 값을 읽지 않는다).
+- **`subjects[].monthPlan`(월간 계획서 인쇄 문구)** 은 영어 과목의 값만 읽힌다(`MONTH_PLAN_SUBJECT_KEY` — 인쇄물과 계획(MP) 화면). 편집 칸도 그 과목에만, 영어 강사 시트 기능이 켜져 있을 때만 선다. 다른 과목에 이미 저장된 값은 지우지 않는다.
+- **데이터 가져오기** 는 이 학원에서 끈 기능의 줄을 세우지 않는다(켜져 있고 권한만 없는 줄은 선다).
 
 ---
 

@@ -1,4 +1,5 @@
 import type { MenuKey } from "@/lib/permissions";
+import { SETTINGS_ROLE_KEYS } from "@/lib/settings-role-catalog";
 
 /**
  * **자주 방문한 메뉴** — 왼쪽 맨 위에 자동으로 올라가는 목록(원장 2026-09-07:
@@ -19,10 +20,13 @@ import type { MenuKey } from "@/lib/permissions";
  * 🔴 셋 다 **"자주 가니까 위에 올려 두면 편한 메뉴"가 아니다** — 대시보드는 곧 배경 화면 자체가 되고,
  *    설정·도움말은 이미 사이드바 아래 '지원' 줄에 **고정**으로 서 있다. 세면 항상 상위를 차지해
  *    정작 자주 쓰는 업무 메뉴를 **네 줄 밖으로 밀어낸다**(그 목록의 존재 이유가 사라진다).
+ * 🔴 **'설정'에는 면마다의 권한 키도 든다**(2026-10-06) — 설정 버튼은 면별 권한 키(`operations_settings` · `kiosk_settings` 등)로
+ *    방문이 기록되는데, 그 키들은 메뉴 목록에 없어 '자주 방문한 메뉴'가 목적지로 바꾸지 못하고 버렸다. 그러면 상위 네 칸 가운데
+ *    한 칸이 빈 채로 사라져 실제 업무 메뉴가 줄어든다. 설정은 세지 않는다는 규칙 그대로, 그 키들도 함께 뺀다.
  * ⚠️ 기록 시점(`recordMenuVisit`)과 표시 시점(`topVisitedMenus`) **둘 다** 이 집합을 본다 —
  *    기록만 막으면 **이미 쌓인 횟수**가 남아 그 메뉴가 계속 목록에 뜨고, 표시만 막으면 jsonb가 계속 자란다.
  */
-export const MENU_VISIT_EXCLUDED: ReadonlySet<string> = new Set(["dashboard", "owner", "help"]);
+export const MENU_VISIT_EXCLUDED: ReadonlySet<string> = new Set(["dashboard", "owner", "help", ...SETTINGS_ROLE_KEYS]);
 
 /** 이 메뉴를 '자주 방문한 메뉴'에 세는가. */
 export function isVisitCounted(menuKey: string): boolean {
