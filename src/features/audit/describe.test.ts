@@ -1300,7 +1300,7 @@ describe("auditDetail — ClassNote 반 보드 자동 동기화(2026-10-03)", ()
     expect(d).toBe("달라진 반 2개 자동 동기화 요청 · 초등M 개별 BS1K(새 학생) · 중2A(반 이름 변경, 담임 변경)");
     expect(d).not.toMatch(/auto|source|requestId/);
     // 사람이 누른 요청은 예전 문구 그대로
-    expect(auditDetail("classnote_board_sync_request", { full: true }, ctx())).toBe("바뀐 반 전부 동기화 요청");
+    expect(auditDetail("classnote_board_sync_request", { full: true }, ctx())).toBe("바뀐 반 전부 수동 동기화 요청");
   });
   it("자동 요청의 실행 결과는 앞에 '자동 동기화'를 붙인다 · 사람이 누른 것은 그대로", () => {
     expect(auditDetail("classnote_board_sync_run", { ok: true, auto: true, classes: 2, enrolled: 1, releasedChildren: 1 }, ctx())).toBe("자동 동기화 · 반 2 · 원아 배정 1 · 원아 해제 1");
@@ -1309,12 +1309,25 @@ describe("auditDetail — ClassNote 반 보드 자동 동기화(2026-10-03)", ()
   });
   it("보고서 발송이 반 보드 배정 전이라 막혀 그 자리에서 낸 요청은 그렇게 적는다 — 버튼을 누른 요청과 가린다", () => {
     const blocked = { requestId: UID, full: false, classCount: 1, studentCount: 1, source: "send_blocked" };
-    expect(auditDetail("classnote_board_sync_request", blocked, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 동기화 요청 · 보고서 발송이 반 보드 배정 전이라 막혀 함께 요청");
+    expect(auditDetail("classnote_board_sync_request", blocked, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 자동 동기화 요청 · 보고서 발송이 반 보드 배정 전이라 막혀 자동으로 요청");
     expect(auditDetail("classnote_board_sync_request", { ...blocked, joined: true }, ctx())).toBe(
-      "이미 요청된 동기화에 합류 — 지목한 반·학생만(반 1 · 학생 1) · 보고서 발송이 반 보드 배정 전이라 막혀 함께 요청",
+      "이미 요청된 동기화에 자동 합류 — 지목한 반·학생만(반 1 · 학생 1) · 보고서 발송이 반 보드 배정 전이라 막혀 자동으로 요청",
     );
     // 버튼으로 누른 요청은 예전 그대로
-    expect(auditDetail("classnote_board_sync_request", { ...blocked, source: "onescreen_send_class" }, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 동기화 요청");
+    expect(auditDetail("classnote_board_sync_request", { ...blocked, source: "onescreen_send_class" }, ctx())).toBe("지목한 반·학생만(반 1 · 학생 1) 수동 동기화 요청");
+  });
+  it("🔴 새 행은 서버가 적은 구분(trigger)으로 읽는다 — 호출자가 준 source보다 앞선다", () => {
+    const base = { requestId: UID, full: false, classCount: 1, studentCount: 1 };
+    // 버튼을 누른 사람이 source를 꾸며도 수동으로 읽힌다.
+    const forged = auditDetail("classnote_board_sync_request", { ...base, trigger: "manual", source: "send_blocked" }, ctx());
+    expect(forged).toBe("지목한 반·학생만(반 1 · 학생 1) 수동 동기화 요청");
+    expect(auditDetail("classnote_board_sync_request", { ...base, trigger: "auto", source: "send_blocked" }, ctx())).toBe(
+      "지목한 반·학생만(반 1 · 학생 1) 자동 동기화 요청 · 보고서 발송이 반 보드 배정 전이라 막혀 자동으로 요청",
+    );
+    expect(auditDetail("classnote_board_sync_request", { ...base, trigger: "manual", joined: true }, ctx())).toBe(
+      "이미 요청된 동기화에 수동 합류 — 지목한 반·학생만(반 1 · 학생 1)",
+    );
+    expect(forged).not.toMatch(/trigger|manual|auto/);
   });
 });
 

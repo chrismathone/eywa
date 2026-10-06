@@ -19,10 +19,12 @@ const m = vi.hoisted(() => ({
   insertResult: { data: { id: "new" }, error: null } as { data: unknown; error: unknown },
   boardCount: 3,
   autoSync: false,
+  superAdmin: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
 vi.mock("@/lib/auth/perm-matrix", () => ({ canWriteTenant: m.canWrite }));
+vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: m.superAdmin }));
 vi.mock("@/lib/auth/view-mode", () => ({ readonlyTeacherViewError: m.readonly }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: m.settings }));
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.log }));
@@ -54,7 +56,10 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 import { getClassnoteSyncStatus, requestClassnoteBoardSync } from "./classnote-sync-actions";
+import { runAsAutoSyncRequest } from "./classnote-sync-auto";
 
+const CLASS_ID = "11111111-1111-4111-8111-111111111111";
+const STUDENT_ID = "22222222-2222-4222-8222-222222222222";
 const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
 const row = (p: Partial<SyncRequestRow>): SyncRequestRow => ({
   id: "r1",
@@ -78,6 +83,7 @@ beforeEach(() => {
   m.user.mockResolvedValue({ id: "u1", tenantId: "t1", systemRole: "admin", displayName: "관리자" });
   m.settings.mockResolvedValue({ modules: { disabled: [] }, report: {} });
   m.canWrite.mockResolvedValue(true);
+  m.superAdmin.mockResolvedValue(false);
   m.readonly.mockResolvedValue(null);
   m.loadRows.mockResolvedValue({ active: null, latest: null });
   m.workerOk.mockResolvedValue(true);
@@ -94,14 +100,15 @@ describe("동기화 보고서 요약(0329a) — 동기화 상태와 한 번에",
     expect(s.report).toEqual(summary);
     expect(m.report).toHaveBeenCalledWith(expect.anything(), "t1");
   });
-  it("🔴 강사는 동기화 버튼만 — 전 반의 학생·원아 이름이 든 보고서 요약을 읽지도 않는다", async () => {
+  it("🔴 강사에게는 버튼이 서지 않는다 — 상태도, 전 반의 학생·원아 이름이 든 보고서 요약도 읽지 않는다", async () => {
     m.user.mockResolvedValue({ id: "u2", tenantId: "t1", systemRole: "teacher", displayName: "강사" });
     m.canWrite.mockResolvedValue(false);
     m.report.mockResolvedValue(summary);
     const s = await getClassnoteSyncStatus();
-    expect(s.available).toBe(true);
+    expect(s.available).toBe(false);
     expect(s.report).toBeNull();
     expect(m.report).not.toHaveBeenCalled();
+    expect(m.loadRows).not.toHaveBeenCalled();
   });
   it("회차 기록이 없거나 표가 없으면(null) 버튼만 빠지고 동기화 버튼은 그대로", async () => {
     const s = await getClassnoteSyncStatus();
@@ -193,10 +200,66 @@ describe("요청", () => {
     expect(inserts()).toHaveLength(0);
   });
 
-  it("강사는 보고서 쓰기 권한이 없어도 요청할 수 있다(원스크린 '보낼 반' 고르기)", async () => {
-    m.user.mockResolvedValue({ id: "u3", tenantId: "t1", systemRole: "teacher" });
-    m.canWrite.mockResolvedValue(false);
-    expect((await requestClassnoteBoardSync()).ok).toBe(true);
+  // 원장 2026-10-06 *"선생님 버튼은 자동 동기화 요청에 의한 건 아니면 누를 수 없게"*.
+  describe("강사(보고서 쓰기 권한 없음)", () => {
+    beforeEach(() => {
+      m.user.mockResolvedValue({ id: "u3", tenantId: "t1", systemRole: "teacher" });
+      m.canWrite.mockResolvedValue(false);
+    });
+
+    it("🔴 직접 요청은 거절한다 — 요청 행도 감사로그도 남지 않는다", async () => {
+      const res = await requestClassnoteBoardSync({ classIds: ["c1"], studentIds: ["s1"], source: "onescreen_send_class" });
+      expect(res).toMatchObject({ ok: false, error: expect.stringContaining("직접 동기화를 요청할 수 없습니다") });
+      expect(inserts()).toHaveLength(0);
+      expect(m.log).not.toHaveBeenCalled();
+    });
+
+    it("🔴 '자동 요청'이라고 값을 꾸며 보내도 거절한다 — 구분은 인자가 아니라 서버의 실행 문맥이다", async () => {
+      const res = await requestClassnoteBoardSync({ classIds: ["c1"], studentIds: ["s1"], source: "send_blocked" });
+      expect(res.ok).toBe(false);
+      expect(inserts()).toHaveLength(0);
+    });
+
+    it("발송이 막혀 서버가 대신 내는 요청(runAsAutoSyncRequest)은 받는다 — 그 반·학생만, 자동으로 기록된다", async () => {
+      const res = await runAsAutoSyncRequest(() => requestClassnoteBoardSync({ classIds: [CLASS_ID], studentIds: [STUDENT_ID], source: "send_blocked" }));
+      expect(res.ok).toBe(true);
+      // 요청 안에서 다시 읽는 상태도 문맥 안이라 숨겨지지 않는다.
+      expect(res.ok && res.status.available).toBe(true);
+      expect(inserts()).toHaveLength(1);
+      expect(inserts()[0]!.args[0]).toMatchObject({ scope: { full: false, classIds: [CLASS_ID], studentIds: [STUDENT_ID] } });
+      expect(m.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "classnote_board_sync_request", metadata: expect.objectContaining({ source: "send_blocked", trigger: "auto", full: false }) }),
+      );
+    });
+
+    it("🔴 운영자 계정은 역할이 강사여도 이 제한에 걸리지 않는다", async () => {
+      m.superAdmin.mockResolvedValue(true);
+      expect((await getClassnoteSyncStatus()).available).toBe(true);
+      expect((await requestClassnoteBoardSync()).ok).toBe(true);
+    });
+
+    it("그 문맥은 그 요청 안에서만 유효하다 — 끝난 뒤의 직접 요청은 다시 거절된다", async () => {
+      await runAsAutoSyncRequest(() => requestClassnoteBoardSync({ classIds: ["c1"], studentIds: ["s1"], source: "send_blocked" }));
+      expect((await requestClassnoteBoardSync()).ok).toBe(false);
+    });
+  });
+
+  it("보고서 쓰기 권한이 있는 계정은 종전처럼 버튼으로 요청한다(역할이 강사여도) — 수동으로 기록된다", async () => {
+    m.user.mockResolvedValue({ id: "u4", tenantId: "t1", systemRole: "teacher" });
+    m.canWrite.mockResolvedValue(true);
+    expect((await requestClassnoteBoardSync({ source: "lesson_reports_queue" })).ok).toBe(true);
+    expect(m.log).toHaveBeenCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ trigger: "manual", source: "lesson_reports_queue" }) }));
+    // 권한이 있으면 운영자 여부를 조회하지 않는다(평소 경로에 조회를 더하지 않는다).
+    expect(m.superAdmin).not.toHaveBeenCalled();
+  });
+
+  it("🔴 버튼을 누른 사람이 '자동 요청' 값을 꾸며 보내도 수동으로 남는다 — 새 요청이든 합류든", async () => {
+    expect((await requestClassnoteBoardSync({ classIds: [CLASS_ID], source: "send_blocked" })).ok).toBe(true);
+    expect(m.log).toHaveBeenLastCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ trigger: "manual", source: null }) }));
+    // 이미 살아 있는 요청에 합류하는 경우도 같다.
+    m.loadRows.mockResolvedValue({ active: row({ status: "pending", requestedAt: iso(0) }), latest: null });
+    expect((await requestClassnoteBoardSync({ classIds: [CLASS_ID], source: "send_blocked" })).ok).toBe(true);
+    expect(m.log).toHaveBeenLastCalledWith(expect.objectContaining({ metadata: expect.objectContaining({ joined: true, trigger: "manual", source: null }) }));
   });
 
   it("0313a 적용 전(표 없음) = 없는 기능", async () => {

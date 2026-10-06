@@ -4056,8 +4056,8 @@ export const SHEET_DICT = {
   "os.n.skip.name_collision": { ko: "동명이인 — 오발송 방지로 제외", en: "Same name as another student — left out to be safe" },
   "os.n.skip.no_name": { ko: "이름 없음", en: "The student has no name on file" },
   "os.n.skip.no_class_board": {
-    ko: "ClassNote 반 보드에 연결된 원아가 없음 — '지금 반 보드 동기화' 뒤 다시 보내 주세요",
-    en: "Not linked to a ClassNote class yet — run the class sync, then send again",
+    ko: "ClassNote 반 보드에 연결된 원아가 없음 — 관리자에게 '지금 반 보드 동기화'를 부탁한 뒤 다시 보내 주세요",
+    en: "Not linked to a ClassNote class yet — ask an admin to press 'Sync class boards now', then send again",
   },
   "os.n.skip.not_my_class": { ko: "내 담당 반 학생이 아님", en: "Not a student in one of your classes" },
   "os.n.editFail": { ko: "수정에 실패했습니다", en: "The edit failed" },

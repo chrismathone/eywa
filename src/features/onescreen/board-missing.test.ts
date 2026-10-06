@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sheetTf } from "@/features/teacher-view/i18n";
+import { isAutoSyncRequest } from "@/features/report-admin/server/classnote-sync-auto";
 // 워커 .mjs — "기다리면 풀린다"의 근거(동기화 대상 기준)가 앱 판정과 같은 조건을 쓰는지 원문으로 고정한다.
 import {
   BOARD_MISSING_ERROR,
@@ -28,6 +29,8 @@ const m = vi.hoisted(() => ({
   filters: [] as { table: string; col: string; val: unknown }[],
   request: vi.fn(),
   loadRows: vi.fn(),
+  /** 요청이 불린 순간 '서버가 대신 내는 요청' 문맥 안이었는가 — 감싸기를 걷으면 선생님의 요청이 거절된다. */
+  requestedAsAuto: [] as boolean[],
 }));
 
 vi.mock("server-only", () => ({}));
@@ -75,7 +78,11 @@ beforeEach(() => {
   m.failTable = null;
   m.filters = [];
   m.request.mockReset();
-  m.request.mockResolvedValue({ ok: true, message: "요청했습니다" });
+  m.requestedAsAuto.length = 0;
+  m.request.mockImplementation(async () => {
+    m.requestedAsAuto.push(isAutoSyncRequest());
+    return { ok: true, message: "요청했습니다" };
+  });
   m.loadRows.mockReset();
   m.loadRows.mockResolvedValue({ active: LIVE_REQUEST, latest: null });
 });
@@ -226,6 +233,9 @@ describe("서버 — 까닭을 읽고, 풀릴 수 있으면 그 반·학생의 �
     expect(await explain()).toMatchObject({ status: "board_enrolling", requestable: true });
     expect(m.request).toHaveBeenCalledTimes(1);
     expect(m.request).toHaveBeenCalledWith({ classIds: ["c1"], studentIds: ["s1"], source: "send_blocked" });
+    // 🔴 이 요청은 '서버가 대신 내는 요청' 문맥 안에서 나간다 — 선생님은 그 문맥 밖에서는 요청할 수 없다(2026-10-06).
+    expect(m.requestedAsAuto).toEqual([true]);
+    expect(isAutoSyncRequest()).toBe(false);
     // 🔴 admin 조회는 전부 지점으로 좁힌다(RLS 우회) — 반·학생으로도
     for (const table of ["enrollments", "classnote_class_board_members", "classes", "students", "classnote_class_boards"])
       expect(m.filters.some((f) => f.table === table && f.col === "tenant_id" && f.val === "t1"), table).toBe(true);

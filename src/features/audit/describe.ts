@@ -1151,8 +1151,13 @@ export function auditDetail(
       }
       const what = m.full === false ? `지목한 반·학생만(반 ${c ?? 0} · 학생 ${s ?? 0})` : "바뀐 반 전부";
       // 보고서 발송이 '반 보드 배정 전'으로 막혀 그 자리에서 낸 요청(2026-10-03) — 버튼을 누른 것과 가린다.
-      const blocked = str(m.source) === "send_blocked" ? "보고서 발송이 반 보드 배정 전이라 막혀 함께 요청" : null;
-      return join(m.joined === true ? `이미 요청된 동기화에 합류 — ${what}` : `${what} 동기화 요청`, blocked);
+      // 🔴 자동(시스템이 대신 낸 요청)과 수동(사람이 버튼으로 누른 요청)을 문구로 가른다(원장 2026-10-06).
+      // 새 행은 서버가 적은 `trigger`로 판정한다(호출자가 준 source는 꾸밀 수 있다). 그 값이 없는 옛 행만 source로 읽는다.
+      const trigger = str(m.trigger);
+      const isAuto = trigger ? trigger === "auto" : str(m.source) === "send_blocked";
+      const blocked = isAuto && str(m.source) === "send_blocked" ? "보고서 발송이 반 보드 배정 전이라 막혀 자동으로 요청" : null;
+      const kind = isAuto ? "자동" : "수동";
+      return join(m.joined === true ? `이미 요청된 동기화에 ${kind} 합류 — ${what}` : `${what} ${kind} 동기화 요청`, blocked);
     }
     case "classnote_board_sync_report_export":
       return join(

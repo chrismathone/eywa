@@ -61,7 +61,9 @@ export function SendClassDialog({ ask, onClose }: { ask: SendClassAsk; onClose: 
             </label>
           ))}
         </div>
-        {/* 반 보드가 새벽 동기화 전이라 없는 경우 — 지금 맞춘다(0313a). 끝나면 다시 발송을 누르면 된다. */}
+        {/* 반 보드가 새벽 동기화 전이라 없는 경우 — 지금 맞춘다(0313a). 끝나면 다시 발송을 누르면 된다.
+            보고서 쓰기 권한이 있는 계정에게만 선다 — 선생님에게는 버튼이 그려지지 않는다(2026-10-06, 서버가 상태를 숨긴다).
+            선생님은 발송이 배정 보류로 막힐 때 서버가 그 반·학생만 대신 요청한다(send-class.ts). */}
         <ClassnoteSyncNowButton source="onescreen_send_class" className="mt-2" />
         <div className="mt-3 flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => finish(null)}>

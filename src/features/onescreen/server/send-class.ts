@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEnrollmentEndedOn } from "@/features/enrollments/eligibility";
 import { requestClassnoteBoardSync } from "@/features/report-admin/server/classnote-sync-actions";
+import { runAsAutoSyncRequest } from "@/features/report-admin/server/classnote-sync-auto";
 import { loadSyncRows } from "@/features/report-admin/server/classnote-sync-core";
 import { kstToday } from "@/lib/date-kst";
 import {
@@ -103,7 +104,7 @@ export async function explainBoardMissing(
   let requested = false;
   if (requestable) {
     try {
-      const res = await requestClassnoteBoardSync({ classIds: [classId], studentIds: [studentId], source: "send_blocked" });
+      const res = await runAsAutoSyncRequest(() => requestClassnoteBoardSync({ classIds: [classId], studentIds: [studentId], source: "send_blocked" }));
       // 대답이 아니라 요청 표로 확인한다 — 살아 있는 요청(또는 실행 중 요청의 다음 범위)에 이 반이 실렸는가.
       if (res.ok) {
         const live = (await loadSyncRows(admin, tenantId)).active;

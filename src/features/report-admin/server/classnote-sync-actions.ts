@@ -1,6 +1,8 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { isAutoSyncRequest } from "./classnote-sync-auto";
+import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { readonlyTeacherViewError } from "@/lib/auth/view-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,6 +27,11 @@ import type { SyncReportSummary } from "../classnote-sync-report";
  * [[#95]] 0313a 적용 전 = `available:false`(버튼 숨김) · 옛 워커(caps.syncRequests 없음) = 요청을 받지 않는다(아무도 안 집는 '대기 중' 방지).
  */
 
+/** 발송이 막혀 서버가 대신 낸 요청의 source 값 — 자동 요청 문맥 안에서만 기록된다. */
+const AUTO_SOURCE = "send_blocked";
+/** 누가 낸 요청인가 — 감사로그가 이 값으로 자동/수동을 가른다(서버가 실행 문맥으로 정한다). */
+type SyncTrigger = "auto" | "manual";
+
 type Gate = { ok: true; tenantId: string; userId: string; canExport: boolean } | { ok: false; error: string; hidden: boolean };
 
 async function gate(): Promise<Gate> {
@@ -34,8 +41,15 @@ async function gate(): Promise<Gate> {
   if (!classnoteModuleOn(settings)) return { ok: false, error: "사용할 수 없는 기능입니다", hidden: true };
   // 보고서 쓰기 권한 = 동기화 보고서(전 반의 학생·원아 이름과 보류 사유)까지 받을 수 있다. 강사는 동기화만 누른다(0329a).
   const canExport = await canWriteTenant(user.systemRole, "lesson_reports");
-  const allowed = user.systemRole === "teacher" || canExport;
-  if (!allowed) return { ok: false, error: "반 보드 동기화 권한이 없습니다", hidden: true };
+  // 선생님(보고서 쓰기 권한이 없는 강사)은 버튼으로 직접 요청할 수 없다 — 원스크린 발송이 배정 보류로 막혔을 때 서버가
+  // 대신 내는 요청(runAsAutoSyncRequest)만 받는다. 상태 조회는 늘 숨겨 버튼 자체가 그려지지 않는다.
+  // 운영자 계정은 이 제한에 걸리지 않는다(역할이 강사여도 — 새 제한은 운영자를 막지 않는다는 저장소 규칙). 그 조회는
+  // 제한에 걸릴 계정에만 한다(평소 경로에 조회를 더하지 않는다).
+  const teacherWithoutWrite = user.systemRole === "teacher" && !canExport;
+  if (!canExport && !teacherWithoutWrite) return { ok: false, error: "반 보드 동기화 권한이 없습니다", hidden: true };
+  if (teacherWithoutWrite && !isAutoSyncRequest() && !(await isCurrentUserSuperAdmin())) {
+    return { ok: false, error: "선생님은 직접 동기화를 요청할 수 없습니다 — 발송이 막히면 자동으로 요청됩니다", hidden: true };
+  }
   const ro = await readonlyTeacherViewError();
   if (ro) return { ok: false, error: ro, hidden: false };
   return { ok: true, tenantId: user.tenantId, userId: user.id, canExport };
@@ -97,7 +111,12 @@ export async function requestClassnoteBoardSync(input?: { classIds?: string[]; s
   if (!g.ok) return { ok: false, error: g.error };
   const admin = createAdminClient();
   let scope = normalizeScope({ classIds: input?.classIds, studentIds: input?.studentIds });
-  const source = typeof input?.source === "string" ? input.source.slice(0, 40) : null;
+  // 🔴 자동 요청인지는 **서버가 정한다** — 호출자가 준 source로 가르면 버튼을 누른 사람이 값을 꾸며 '자동'으로 남길 수 있다.
+  //    문맥 밖(사람이 낸 요청)에서 자동 요청 전용 값이 오면 싣지 않는다.
+  const auto = isAutoSyncRequest();
+  const rawSource = typeof input?.source === "string" ? input.source.slice(0, 40) : null;
+  const source = !auto && rawSource === AUTO_SOURCE ? null : rawSource;
+  const trigger: SyncTrigger = auto ? "auto" : "manual";
   const now = Date.now();
 
   let rows: Awaited<ReturnType<typeof loadSyncRows>>;
@@ -127,7 +146,7 @@ export async function requestClassnoteBoardSync(input?: { classIds?: string[]; s
   // ② 이미 살아 있는 요청 — 새로 만들지 않는다. 대기 중이면 범위를 합치고, 실행 중이면 next_scope에 적어 끝난 뒤 이어서 돈다.
   if (rows.active && !staleReason(rows.active, now)) {
     const merged = await mergeIntoPending(admin, g.tenantId, rows.active, scope);
-    await logJoin(rows.active.id, scope, source);
+    await logJoin(rows.active.id, scope, source, trigger);
     const status = await getClassnoteSyncStatus();
     return {
       ok: true,
@@ -160,7 +179,7 @@ export async function requestClassnoteBoardSync(input?: { classIds?: string[]; s
       const again = await loadSyncRows(admin, g.tenantId).catch(() => null);
       if (again?.active) {
         await mergeIntoPending(admin, g.tenantId, again.active, scope);
-        await logJoin(again.active.id, scope, source);
+        await logJoin(again.active.id, scope, source, trigger);
       }
       return { ok: true, status: await getClassnoteSyncStatus(), message: "다른 곳에서 먼저 요청해 그 요청과 함께 동기화합니다" };
     }
@@ -172,17 +191,17 @@ export async function requestClassnoteBoardSync(input?: { classIds?: string[]; s
     action: "classnote_board_sync_request",
     targetType: "classnote_sync",
     targetLabel: scope.full ? "반 보드 동기화(바뀐 반 전부)" : `반 보드 동기화(반 ${scope.classIds.length} · 학생 ${scope.studentIds.length})`,
-    metadata: { requestId: data?.id ?? null, full: scope.full, classCount: scope.classIds.length, studentCount: scope.studentIds.length, source },
+    metadata: { requestId: data?.id ?? null, full: scope.full, classCount: scope.classIds.length, studentCount: scope.studentIds.length, source, trigger },
   });
   return { ok: true, status: await getClassnoteSyncStatus(), message: "요청했습니다 — 연동 PC가 곧 바뀐 반만 동기화합니다" };
 }
 
 /** 이미 살아 있는 요청에 합류한 것도 남긴다 — 누가 눌렀는지가 사실이다(makeedu 지금 동기화와 같은 규약). */
-async function logJoin(requestId: string, scope: ReturnType<typeof normalizeScope>, source: string | null): Promise<void> {
+async function logJoin(requestId: string, scope: ReturnType<typeof normalizeScope>, source: string | null, trigger: SyncTrigger): Promise<void> {
   await logAction({
     action: "classnote_board_sync_request",
     targetType: "classnote_sync",
     targetLabel: "반 보드 동기화(이미 요청된 동기화에 합류)",
-    metadata: { requestId, joined: true, full: scope.full, classCount: scope.classIds.length, studentCount: scope.studentIds.length, source },
+    metadata: { requestId, joined: true, full: scope.full, classCount: scope.classIds.length, studentCount: scope.studentIds.length, source, trigger },
   });
 }
