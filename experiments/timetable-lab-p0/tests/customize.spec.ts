@@ -156,7 +156,7 @@ test('students: create, enrol in a second class, choose which days they come, an
   await roster.getByLabel('학생 가 수 18:00 수업').uncheck();
   expect((await draftOf(page)).placements.find(p => p.id === 'a-wed')!.studentIds).toEqual([]);
   expect((await draftOf(page)).placements.find(p => p.id === 'placement-1')!.studentIds).toEqual(['s1']);
-  await roster.getByLabel('넣을 학생').selectOption({ label: '학생 다' }); await roster.getByRole('button', { name: '이 반에 넣기' }).click();
+  await roster.getByLabel('넣을 학생 찾기').fill('다'); await roster.getByRole('button', { name: '학생 다 이 반에 넣기' }).click();
   await expect(roster.getByRole('button', { name: '학생 다', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '요약', exact: true }).click();
   await expect(page.getByRole('complementary', { name: '연습본 요약' })).toContainText('두 반 이상 2명');
