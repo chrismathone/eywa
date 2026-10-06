@@ -14,7 +14,7 @@ import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { EDIT_SHEET_NAME, parseEditSheet, rowsToEditRows } from "@/features/timetable/import/parse";
 import { computeImportDiff, importDiffHash } from "@/features/timetable/import/diff";
 import { normalizeEffectiveDate } from "@/features/timetable/import/effective-date";
-import { getTenantSettings } from "@/features/owner/server/queries";
+import { resolveImportSheet } from "./sheet-target";
 import { readSheetTabRows } from "@/features/integrations/google-sheets";
 import { sheetsProvider, supportsTimetableImport } from "@/features/integrations/sheets-provider";
 import {
@@ -49,6 +49,7 @@ async function loadContext(): Promise<Ctx> {
       class_id: string;
       student_id: string;
       start_date: string | null;
+      created_at: string | null;
       class?: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[];
       student?:
         | { name?: string; school?: string | null; grade?: string | null }
@@ -57,7 +58,7 @@ async function loadContext(): Promise<Ctx> {
       supabase
         .from("enrollments")
         .select(
-          "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
+          "id, class_id, student_id, start_date, created_at, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
         )
         .is("end_date", null)
         .order("id")
@@ -98,6 +99,7 @@ async function loadContext(): Promise<Ctx> {
       className: cls?.class_name ?? "",
       subject: cls?.subject ?? "",
       startDate: e.start_date ?? null,
+      createdAt: e.created_at ?? null,
     };
   });
 
@@ -170,21 +172,10 @@ export async function previewTimetableImport(formData: FormData): Promise<Previe
  * apply는 이 결과의 hash를 클라 미리보기 hash와 대조하고, 이 결과로 적용한다(클라 diff 불신).
  */
 async function computeFreshFromSheet(subject: string): Promise<{ error: string } | { diff: ImportDiff }> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("user_integrations")
-    .select("spreadsheet_id, sync_enabled, last_synced_at")
-    .eq("provider", sheetsProvider(subject))
-    .maybeSingle();
-  if (data?.sync_enabled !== true) {
-    return { error: "구글 시트 연동이 꺼져 있습니다(학원 설정 › 연동에서 켜세요)" };
-  }
-  const legacyFallback =
-    subject === "math" ? (await getTenantSettings()).notifications.googleSheetId.trim() : "";
-  const spreadsheetId = data?.spreadsheet_id?.trim() || legacyFallback;
-  if (!spreadsheetId) return { error: "대상 구글 시트가 설정되지 않았습니다(관리자에게 문의)" };
+  const target = await resolveImportSheet(subject);
+  if ("error" in target) return target;
 
-  const grid = await readSheetTabRows(spreadsheetId, EDIT_SHEET_NAME);
+  const grid = await readSheetTabRows(target.spreadsheetId, EDIT_SHEET_NAME);
   const parsed = rowsToEditRows(grid);
   if (parsed.length === 0) {
     return { error: "'수강편집' 탭에 데이터가 없습니다(시트를 확인하세요)." };
@@ -192,7 +183,7 @@ async function computeFreshFromSheet(subject: string): Promise<{ error: string }
   const ctx = await loadContext();
   // stale-drift 보호: 시트 push(last_synced_at) 이후 등록된 수강은 삭제 후보에서 제외.
   const diff = computeImportDiff(parsed, ctx.current, ctx.classes, ctx.students, {
-    protectNewerThan: data?.last_synced_at ?? null,
+    protectNewerThan: target.lastSyncedAt,
   });
   return { diff };
 }

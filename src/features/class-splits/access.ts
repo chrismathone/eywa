@@ -22,11 +22,19 @@ export const CLASS_SPLITTER_USER_IDS: readonly string[] = [
 
 export const CLASS_SPLIT_DENIED_MSG = "수업 나누기는 지정된 계정만 할 수 있습니다";
 
+/**
+ * 🔴 **기능 스위치 — 지금은 꺼 둠**(원장 2026-10-06 *"나눔 이거 기능 일단 숨겨서 못쓰게 하고"*). 끄면 시간표 팝업의
+ * `수업 나누기` 전환·반 블록 나누기·서버 저장/해제가 전부 닫힌다(모두 이 게이트를 지난다, [[#77]]). 표·출석부 배선은 남아 있지만
+ * 나눔 행이 0건이면 아무 화면도 바뀌지 않는다. 다시 열 땐 이 값만 true로.
+ */
+export const CLASS_SPLIT_ENABLED = false;
+
 /** 나누기 게이트(순수) — 실제 호출은 `canSplitClassNow()`(server/gate.ts)가 super_admin·학원 판정을 채워 부른다. */
 export function canSplitClass(
   user: { id: string; systemRole: SystemRole },
   policy: { isSuperAdmin: boolean; isChinsanTenant: boolean },
 ): boolean {
+  if (!CLASS_SPLIT_ENABLED) return false;
   if (policy.isSuperAdmin) return true;
   return policy.isChinsanTenant ? CLASS_SPLITTER_USER_IDS.includes(user.id) : user.systemRole === "master";
 }
