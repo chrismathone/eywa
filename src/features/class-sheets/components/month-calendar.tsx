@@ -19,6 +19,7 @@ import type { ClassSheetMonthData } from "../server/month-queries";
 import { compareCell } from "@/features/textbooks/plan-compare";
 import { getSlotPlanCompare } from "@/features/textbooks/server/compare-actions";
 import { PlanCompareButton } from "./plan-compare-dialog";
+import { planHoverOf } from "../lib/plan-hover";
 
 
 /**
@@ -251,8 +252,25 @@ function DayCell({
                 isFuture: date > data.today,
               })
             : null;
+        // 마우스 오버 = 지금 일정 ⇔ 원래 계획(원장 2026-10-06) — 교시 줄 어디에 올려도 뜬다(안쪽 칩·시각은 제 툴팁이 이긴다).
+        // 칸 전체의 "누르면 고칩니다" 안내 대신 이 줄에선 계획 비교가 보인다.
+        const hover = planHoverOf(planned, data.scheduledBySlot?.[cellKey], (n) =>
+          tf("month.plannedNo", { n }),
+        );
+        const hoverTitle = !hover
+          ? undefined
+          : hover.kind === "same"
+            ? tf("month.hover.same", { plan: hover.plan })
+            : tf("month.hover.diff", {
+                now: hover.now || t("month.hover.none"),
+                base: hover.base || t("month.hover.none"),
+              });
         return (
-          <div key={slot.slotStart} className="border-line-faint grid grid-cols-[46px_minmax(0,1fr)] gap-1.5 border-t border-dashed pt-1 first:border-0 first:pt-0">
+          <div
+            key={slot.slotStart}
+            title={hoverTitle}
+            className="border-line-faint grid grid-cols-[46px_minmax(0,1fr)] gap-1.5 border-t border-dashed pt-1 first:border-0 first:pt-0"
+          >
             <span
               className="text-text-faint num pt-0.5 text-xs font-bold"
               // 교시 이름은 학원설정이 단일 소스 — 칸이 좁아 본문엔 못 적고 툴팁으로 준다.

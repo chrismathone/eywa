@@ -45,4 +45,33 @@ describe("월간 달력 내부 조작", () => {
     fireEvent.click(container.querySelector("button")!);
     expect(onOpenDay).toHaveBeenCalledExactlyOnceWith("2026-10-07");
   });
+
+  it("교시 줄에 마우스를 올리면 지금 일정 ⇔ 원래 계획(원장 2026-10-06)", () => {
+    const pl = (lessonNo: number) => ({
+      lessonNo, date: "2026-10-07", slotStart: "16:00", skillArea: "vocab", title: "Vocab Up",
+      pageTime: null, progress: null, homework: null, termMode: "regular" as const,
+    });
+    const withPlan = {
+      ...data,
+      plannedBySlot: { "2026-10-07|16:00": [pl(3)] },
+      scheduledBySlot: { "2026-10-07|16:00": [pl(4)] },
+    } as unknown as ClassSheetMonthData;
+    const { container } = render(<MonthCalendar {...props} data={withPlan} onOpenDay={vi.fn()} onShift={vi.fn()} />);
+    const titles = [...container.querySelectorAll("[title]")].map((el) => el.getAttribute("title"));
+    expect(titles).toContain("지금 일정(미룸·당김 반영): Vocab Up 4차수\n⇔ 원래 계획: Vocab Up 3차수");
+  });
+
+  it("같으면 한 줄, 일정을 안 실은 옛 데이터면 툴팁 없음", () => {
+    const pl = { lessonNo: 3, date: "2026-10-07", slotStart: "16:00", skillArea: "vocab", title: "Vocab Up",
+      pageTime: null, progress: null, homework: null, termMode: "regular" as const };
+    const same = { ...data, plannedBySlot: { "2026-10-07|16:00": [pl] }, scheduledBySlot: { "2026-10-07|16:00": [pl] } } as unknown as ClassSheetMonthData;
+    const r1 = render(<MonthCalendar {...props} data={same} onOpenDay={vi.fn()} onShift={vi.fn()} />);
+    expect([...r1.container.querySelectorAll("[title]")].map((el) => el.getAttribute("title"))).toContain(
+      "지금 일정 = 원래 계획\nVocab Up 3차수",
+    );
+    cleanup();
+    const old = { ...data, plannedBySlot: { "2026-10-07|16:00": [pl] } } as unknown as ClassSheetMonthData;
+    const r2 = render(<MonthCalendar {...props} data={old} onOpenDay={vi.fn()} onShift={vi.fn()} />);
+    expect([...r2.container.querySelectorAll("[title]")].some((el) => el.getAttribute("title")?.includes("원래 계획"))).toBe(false);
+  });
 });

@@ -98,6 +98,12 @@ export type ClassSheetMonthData = {
    *    [월간계획 가져오기]뿐이다. 그래서 달력은 둘을 **다른 자리에 다른 색**으로 그린다.
    */
   plannedBySlot: Record<string, PlannedLine[]>;
+  /**
+   * **지금 일정**(미룸·당김 반영) — 원래 계획과 같은 키. 🔑 달력 교시 줄의 마우스 오버("지금 ⇔ 원래 계획",
+   * 원장 2026-10-06)만 쓴다 — '계획' 표식·비교 배지의 기준은 여전히 위 원래 계획이다. 같은 계산의 다른 결과라 조회는 0번 더.
+   * 선택 칸인 이유: 테스트 픽스처·옛 호출부가 안 실어도 화면이 산다(툴팁만 안 뜬다).
+   */
+  scheduledBySlot?: Record<string, PlannedLine[]>;
   /** 배정 교재들의 차수표 — 실제 진도 → 차수(달력 비교 배지의 늦음·빠름, plan-compare). */
   lessonIndex: LessonIndex;
   /** 미루기·당기기 표식(0282a) — `"날짜|교시"` → `skip` | `advance`. 달력의 토글 상태다. */
@@ -545,6 +551,7 @@ export async function getClassSheetMonth(
       // 🔑 **원래 계획**을 싣는다(원장 2026-09-28 *"계획 놔두고 일정만 밀리게"*) — 미루기는 가져오기(일정)에만
       //    반영되고 달력의 '계획' 표식·비교 배지는 처음 배정한 그대로를 기준으로 선다.
       plannedBySlot: plannedRes.baselineByCell,
+      scheduledBySlot: plannedRes.byCell,
       lessonIndex: plannedRes.lessonIndex,
       shiftBySlot: plannedRes.shiftByCell,
       lines,

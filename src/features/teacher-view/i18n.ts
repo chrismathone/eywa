@@ -1062,6 +1062,13 @@ export const SHEET_DICT = {
   "month.importAll.truncated": { ko: " · {n}줄은 칸의 20줄 상한이라 못 넣었습니다", en: " · {n} rows skipped (20-row limit per cell)" },
   "month.plannedTag": { ko: "계획", en: "Plan" },
   "month.plannedNo": { ko: "{n}차수", en: "lesson {n}" },
+  // 교시 줄 마우스 오버 — 지금 일정(미룸·당김 반영) ⇔ 원래 계획(원장 2026-10-06).
+  "month.hover.same": { ko: "지금 일정 = 원래 계획\n{plan}", en: "Current schedule = original plan\n{plan}" },
+  "month.hover.diff": {
+    ko: "지금 일정(미룸·당김 반영): {now}\n⇔ 원래 계획: {base}",
+    en: "Current schedule (with push/pull): {now}\n⇔ Original plan: {base}",
+  },
+  "month.hover.none": { ko: "없음", en: "none" },
   "month.unwritten": { ko: "미작성", en: "Not written" },
   "month.unwrittenN": { ko: "미작성 {n}", en: "Not written {n}" },
   "month.allWritten.title": {
