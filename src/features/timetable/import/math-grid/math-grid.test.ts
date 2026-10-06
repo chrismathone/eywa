@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeGridDelta, type KnownClass } from "./delta";
 import { parseMathGrid } from "./parse-cells";
 import { parseMeta } from "./parse-meta";
+import { scheduleChanges } from "./schedule-diff";
 import { exportToSheet, findText, insertColumn, setText, student } from "./test-fixture";
 import type { MathGridInput } from "./types";
 
@@ -94,10 +95,13 @@ describe("수학 격자 되읽기", () => {
   });
 
   it("손대지 않은 시트는 변경이 0건이다(거짓 이동·빠짐 없음)", async () => {
-    const { grid, meta } = await exportToSheet(SPECS);
+    const { grid, meta, exported } = await exportToSheet(SPECS);
     const d = deltaOf(grid, meta);
-    expect([d.newClasses, d.placedClasses, d.moves, d.adds, d.removes, d.notes, d.warnings]).toEqual([[], [], [], [], [], [], []]);
+    expect([d.newClasses, d.placedClasses, d.moves, d.adds, d.removes, d.ignored, d.notes, d.warnings]).toEqual([[], [], [], [], [], [], [], []]);
     expect(d.stats.classCells).toBe(8);
+    // 기존 반의 자리도 수업목록(익스포터가 그린 모양)과 그대로다 — 거짓 '시간·강사가 다릅니다' 없음
+    expect(d.classSlots).toHaveLength(SPECS.length);
+    expect(scheduleChanges(d.classSlots, exported)).toEqual([]);
   });
 
   it("열을 끼워 새 반을 만들고 학생을 옮기면 새 반 + 이동으로 읽는다(자리 번호가 밀려도)", async () => {
@@ -136,7 +140,7 @@ describe("수학 격자 되읽기", () => {
       ["s4", "초등M B", "초등M 새반", null],
       ["s6", "중등M C", "초등M 새반", null],
     ]);
-    expect(d.adds).toEqual([{ student: { studentId: null, text: "신입생/3옥산초" }, to: { classId: null, name: "초등M 새반" } }]);
+    expect(d.adds).toEqual([{ student: { studentId: null, text: "신입생/3옥산초" }, to: { classId: null, name: "초등M 새반" }, days: [] }]);
     expect([d.removes, d.warnings]).toEqual([[], []]);
     // 손으로 적은 이름은 병합 없이 윗줄에만 놓인다 — 새 반이면 교시 전체로 읽고 그렇게 읽었다고 알린다
     expect(d.notes).toEqual(['"초등M 새반" — 반 이름이 한 줄에만 적혀 있어 교시 전체로 읽었습니다.']);
@@ -177,9 +181,10 @@ describe("수학 격자 되읽기", () => {
     const name = findText(grid, "초등M B")[0]!;
     setText(grid, name.row, name.col, "초등M B2");
     const d = deltaOf(grid, meta);
-    expect(d.removes).toEqual([]);
-    expect(d.newClasses.map((n) => n.name)).toEqual(["초등M B2"]);
-    expect(d.warnings.join("\n")).toContain('"초등M B" 반이 격자에서 보이지 않습니다');
+    // 🔴 새 반으로 읽으면 사고다 — 원래 반은 건드리지 않으므로 같은 학생들이 두 반에 있게 된다.
+    expect([d.removes, d.adds, d.newClasses]).toEqual([[], [], []]);
+    expect(d.ignored.map((i) => i.what)).toEqual(['반 이름 "초등M B" → "초등M B2"']);
+    expect(d.warnings.join(" ")).toContain('"초등M B" 반이 격자에서 보이지 않습니다');
   });
 
   it("같은 반의 한 칸에서만 지운 것은 빠짐이 아니라 참고로 알린다", async () => {
@@ -189,7 +194,7 @@ describe("수학 격자 되읽기", () => {
     setText(grid, cells[1]!.row, cells[1]!.col, "");
     const d = deltaOf(grid, meta);
     expect(d.removes).toEqual([]);
-    expect(d.notes.join("\n")).toContain("일부 칸에서만 빠졌습니다");
+    expect(d.ignored.map((i) => i.what)).toEqual(['서열셋/5옥산초 — "초등M H"의 일부 칸에서만 빠짐']);
   });
 
   it("재원 14줄이 꽉 찬 반에 한 명을 더 적으면(비어 있던 대기 머리 행) 그 학생도 읽는다", async () => {
@@ -205,7 +210,7 @@ describe("수학 격자 되읽기", () => {
     expect(cell.students).toHaveLength(14);
     setText(grid, block.end - 5, cell.col, "신입생/3옥산초");
     const d = computeGridDelta(parseMathGrid(grid), parseMeta(meta), [{ id: "c-full", name: "초등M 꽉찬" }]);
-    expect(d.adds).toEqual([{ student: { studentId: null, text: "신입생/3옥산초" }, to: { classId: "c-full", name: "초등M 꽉찬" } }]);
+    expect(d.adds).toEqual([{ student: { studentId: null, text: "신입생/3옥산초" }, to: { classId: "c-full", name: "초등M 꽉찬" }, days: [] }]);
     expect(d.removes).toEqual([]);
   });
 

@@ -44,7 +44,7 @@ export function parseMeta(rows: string[][]): ParsedMeta {
     const row = rows[r] ?? [];
     const kind = get(row, "kind");
     if (kind === "class_name") {
-      if (prevKind !== "class_name") cells.push((current = { primaryClassId: "", row: -1, col: -1, students: [] }));
+      if (prevKind !== "class_name") cells.push((current = { primaryClassId: "", row: -1, col: -1, room: "", students: [] }));
       const id = get(row, "classId");
       const name = get(row, "classNameSnapshot");
       if (id && name && !classNameById.has(id)) classNameById.set(id, name);
@@ -54,6 +54,7 @@ export function parseMeta(rows: string[][]): ParsedMeta {
         // 강의실 줄은 늘 이름 윗줄의 두 줄 아래다(평일·주말 공통) — 위·아래로 나뉜 칸도 같은 기준으로 맞춘다.
         current.row = Number(get(row, "row")) - 3;
         current.col = Number(get(row, "startCol")) - 1;
+        current.room = get(row, "roomSnapshot");
       }
     } else if (kind === "student" && current) {
       const studentId = get(row, "studentId");

@@ -75,6 +75,11 @@ export interface ParsedMathGrid {
   columns: GridColumn[];
   blocks: GridBlock[];
   cells: GridClassCell[];
+  /**
+   * 교시 블록 줄에 적힌 글자 **전부**(읽지 못한 열·인원 줄 포함) — "빠진 줄 알았던 학생이 사실은 못 읽은 자리에
+   * 적혀 있다"를 가려내는 데만 쓴다. 반 칸으로 읽힌 것만 보면 옮겨 적은 학생이 '빠짐'으로 남는다.
+   */
+  written: { row: number; col: number; text: string }[];
   warnings: string[];
 }
 
@@ -97,6 +102,8 @@ export interface MetaCell {
    */
   row: number;
   col: number;
+  /** 내보낼 때 그 칸에 적은 강의실 글자(합반이면 "A / B"). */
+  room: string;
   students: MetaStudent[];
 }
 
@@ -130,15 +137,33 @@ export interface DeltaSlot {
   room: string;
 }
 
+/** 읽기는 했지만 시트로는 반영하지 않는 것 — 무엇을, 왜. 화면의 '적용하지 않는 것' 목록이 된다. */
+export interface DeltaIgnored {
+  what: string;
+  why: string;
+}
+
 export interface GridDelta {
   /** 수업목록에 없는 이름으로 놓인 반. */
   newClasses: { name: string; slots: DeltaSlot[]; students: DeltaStudent[] }[];
   /** 수업목록엔 있는데 내보낸 격자엔 없던 반(배치가 새로 생긴 것). */
   placedClasses: { classId: string; name: string; slots: DeltaSlot[] }[];
-  moves: { student: DeltaStudent; from: DeltaClassRef; to: DeltaClassRef }[];
-  adds: { student: DeltaStudent; to: DeltaClassRef }[];
+  /**
+   * `days` = 옮겨 간 반에서 그 학생이 적힌 요일. **그 반의 모든 요일이면 빈 배열**(= 전 요일 등원),
+   * 일부 요일 열에만 적었으면 그 요일들(분리등원).
+   * `toHold` = 옮겨 간(추가된) 칸에서 전부 대기 구역에 적혔다. `wasHeld` = 원래 반에서 전부 대기 구역이었다.
+   */
+  moves: { student: DeltaStudent; from: DeltaClassRef; to: DeltaClassRef; days: string[]; toHold?: boolean; wasHeld?: boolean }[];
+  adds: { student: DeltaStudent; to: DeltaClassRef; days: string[]; toHold?: boolean }[];
   removes: { student: DeltaStudent; from: DeltaClassRef }[];
-  /** 읽기는 했지만 반영 대상으로 잡지 않은 것(사람이 알아야 할 것). */
+  /**
+   * 격자에 서 있는 기존 반들의 자리 — 수업목록의 배치와 견줘 "시간·강사를 바꿨는가"를 본다.
+   * `roomWas` = 내보낼 때 그 반 칸에 적혀 있던 강의실(합반 칸 제외). 강의실은 **시트끼리** 견준다 — 수업목록과 견주면
+   * 시트를 보낸 뒤 앱에서 강의실을 바꾼 반이 전부 "시트에서 바꿨다"로 뜬다(실측 3건).
+   */
+  classSlots: { classId: string; name: string; slots: DeltaSlot[]; roomWas: string[] }[];
+  ignored: DeltaIgnored[];
+  /** 읽은 방식에 대한 알림(예: 교시 전체로 읽음). */
   notes: string[];
   /** 못 읽은 것 — 적용에서 빠진다. */
   warnings: string[];

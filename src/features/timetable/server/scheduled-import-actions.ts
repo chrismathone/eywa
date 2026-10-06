@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
-import { canWriteTenant } from "@/lib/auth/perm-matrix";
+import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import {
   canManageSheetSync,
   SHEET_ACCESS_DENIED_MSG,
@@ -12,6 +12,13 @@ import { kstToday } from "@/lib/date-kst";
 import { getScheduledImports } from "./scheduled-import-queries";
 import { canManageTimetableImport } from "./import-access";
 import { logDbError } from "@/lib/supabase/db-error";
+import type { GridCreatedClass } from "@/features/timetable/import/math-grid/apply-plan";
+import {
+  keptClassesText,
+  logGridCancel,
+  removeGridCreatedClasses,
+  type KeptGridClass,
+} from "./math-grid-cancel";
 
 export type CancelScheduledState = {
   error?: string;
@@ -62,12 +69,26 @@ export async function cancelScheduledImport(
   // including those blocks, instead of leaving a half-restored timetable.
   const { data: masterRows, error: masterError } = await supabase
     .from("timetable_snapshots")
-    .select("source:payload->apply->masterSource")
+    .select("source:payload->apply->masterSource, gridClasses:payload->gridClasses")
     .in("id", group.snapshotIds);
   if (masterError) {
     logDbError(masterError, "timetable.cancelScheduledImport");
     return { error: "예약 내용을 확인하지 못했습니다. 다시 시도해 주세요." };
   }
+  // 수학 시트 격자 가져오기가 만든 반 — 취소가 그 반을 지우므로 **반 만들기와 같은 자격**을 요구한다(적용 게이트와 대칭, #77).
+  const allGridClasses = (masterRows ?? []).flatMap((r) =>
+    Array.isArray(r.gridClasses) ? (r.gridClasses as GridCreatedClass[]) : [],
+  );
+  if (
+    allGridClasses.length > 0 &&
+    !(await canManageTenant(user.systemRole, "classes"))
+  )
+    return { error: "학원 전체 반 설정은 관리자만 할 수 있습니다" };
+  const logCancel = (
+    tried: GridCreatedClass[],
+    kept: KeptGridClass[],
+    extra: Record<string, unknown>,
+  ) => logGridCancel(date, group.snapshotIds, tried, kept, extra);
   if (masterRows?.some((r) => r.source)) {
     if (!(await canManageTimetableImport(user.systemRole)))
       return { error: "반 일괄 관리 권한이 필요합니다." };
@@ -78,6 +99,14 @@ export async function cancelScheduledImport(
     try {
       sql = openMasterDb();
       const reverted = await cancelMasterDate(sql, user, date);
+      // 🔴 같은 날짜에 묶인 수학 격자 가져오기의 수강은 위에서 함께 되돌렸지만(남은 수강이 있으면 통째로 중단된다),
+      //    그 함수는 격자가 **만든 반**을 모른다 — 여기서 지우지 않으면 학생 0명인 반이 남고, 배지가 사라져 다시 취소할 길도 없다.
+      const kept =
+        allGridClasses.length > 0
+          ? await removeGridCreatedClasses(supabase, allGridClasses)
+          : [];
+      if (allGridClasses.length > 0)
+        await logCancel(allGridClasses, kept, { withMasterSheet: true });
       try {
         revalidatePath("/timetable");
         revalidatePath("/classes");
@@ -90,7 +119,9 @@ export async function cancelScheduledImport(
           e instanceof Error ? e.message : "failed",
         );
       }
-      return { reverted };
+      return kept.length > 0
+        ? { reverted, error: `예약을 되돌렸지만 ${keptClassesText(kept)}` }
+        : { reverted };
     } catch (e) {
       console.error(
         "[master-sheet] cancel",
@@ -111,6 +142,10 @@ export async function cancelScheduledImport(
   let done = 0;
   // 되돌리지 못하고 남긴 수강 수(이미 시작된 것) — 0이 아니면 취소가 부분적이다.
   let leftover = 0;
+  // 수학 시트 격자 가져오기가 만든 반 중 지우지 못한 것(수강이 붙어 있거나 다른 기록이 가리킨다).
+  const keptClasses: KeptGridClass[] = [];
+  // 지금까지 되돌린 스냅샷이 만든 반(지웠거나 남겼거나) — 중간에 멈춰도 여기까지는 기록한다.
+  const triedClasses: GridCreatedClass[] = [];
   for (const id of group.snapshotIds) {
     // 종류는 스냅샷 payload가 정한다 — 배치는 0087a/0231a, 반이동은 0233a.
     const { data: snap } = await supabase
@@ -134,6 +169,9 @@ export async function cancelScheduledImport(
       //    되돌리기가 **멱등**이기 때문 — 이미 되돌린 스냅샷은 0건 처리된다. 그 사실을 문구에 담는다.
       const rest = group.snapshotIds.length - done;
       console.error("[scheduled-import] 취소 실패:", error);
+      // 앞 스냅샷에서 이미 지운 반은 여기서 기록한다 — 다시 누를 때 그 스냅샷은 목록에 없어 기록할 기회가 없다.
+      if (triedClasses.length > 0)
+        await logCancel(triedClasses, keptClasses, { reverted: done, aborted: true });
       return {
         error: missing
           ? "취소에 필요한 DB 함수가 아직 적용되지 않았습니다. 관리자에게 SQL 적용(0233a·0236a)을 요청하세요."
@@ -147,10 +185,29 @@ export async function cancelScheduledImport(
     //    그걸 성공으로 삼키면 "모든 게 무로 돌아갔다"가 거짓말이 된다 — 남은 것을 정확히 말한다.
     const skipped = Number((res as { skipped?: number } | null)?.skipped ?? 0);
     if (skipped > 0) leftover += skipped;
+    // 수학 시트 격자 가져오기는 반도 만든다 — "아무것도 안 한 것처럼"이 되려면 그 반도 사라져야 한다.
+    // 수강을 **전부** 되돌린 뒤에만 지운다(남은 수강이 있으면 그 반은 이미 쓰이고 있다).
+    const gridClasses = (payload as { gridClasses?: GridCreatedClass[] } | null | undefined)?.gridClasses;
+    if (Array.isArray(gridClasses)) triedClasses.push(...gridClasses);
+    if (skipped === 0 && Array.isArray(gridClasses) && gridClasses.length > 0) {
+      keptClasses.push(...(await removeGridCreatedClasses(supabase, gridClasses)));
+      revalidatePath("/classes");
+    } else if (Array.isArray(gridClasses) && gridClasses.length > 0) {
+      // 이미 시작된 수강이 남아 되돌리지 못했다 — 그 반은 쓰이고 있으니 남긴다.
+      keptClasses.push(...gridClasses.map((c): KeptGridClass => ({ name: c.name, why: "enrolled" })));
+    }
     done += 1;
   }
 
   revalidatePath("/timetable");
+  if (triedClasses.length > 0)
+    await logCancel(triedClasses, keptClasses, { reverted: done, leftover });
+  if (keptClasses.length > 0 && leftover === 0) {
+    return {
+      reverted: { snapshots: done },
+      error: `예약을 되돌렸지만 ${keptClassesText(keptClasses)}`,
+    };
+  }
   if (leftover > 0) {
     return {
       reverted: { snapshots: done },

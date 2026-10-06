@@ -32,5 +32,13 @@ export function parseMathGrid(
     isRoomName: (text) => rooms.has(norm(text)),
     isStudentText: (text) => studentTexts.has(norm(text)),
   };
-  return { columns, blocks, cells: [...readWeekdayCells(ctx), ...readWeekendCells(ctx)], warnings };
+  // 교시 블록 줄의 글자 전부 — 읽지 못한 열(강사·요일 머리가 빈 열)에 적은 것까지 남긴다(types.ts `written`).
+  const written: ParsedMathGrid["written"] = [];
+  for (let r = blocks[0]!.start; r < cells.length; r++) {
+    (cells[r] ?? []).forEach((raw, c) => {
+      const text = (raw ?? "").trim();
+      if (c > 0 && text) written.push({ row: r, col: c, text });
+    });
+  }
+  return { columns, blocks, cells: [...readWeekdayCells(ctx), ...readWeekendCells(ctx)], written, warnings };
 }

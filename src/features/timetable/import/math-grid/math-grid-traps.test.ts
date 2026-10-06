@@ -120,6 +120,6 @@ describe("수학 격자 — 조용히 틀리는 입력", () => {
     const sat = parseMathGrid(grid).cells.find((c) => c.weekend)!;
     setText(grid, sat.row + 12, sat.col, "퇴원생/5옥산초");
     const d = run(grid, meta, knownOf(specs));
-    expect([counts(d), d.notes, d.warnings]).toEqual([[0, 0, 0, 0], [], []]);
+    expect([counts(d), d.ignored, d.notes, d.warnings]).toEqual([[0, 0, 0, 0], [], [], []]);
   });
 });

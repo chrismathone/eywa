@@ -14,8 +14,8 @@ export interface ResolvedCell {
 }
 
 export interface BeforeState {
-  /** 반 id → 학생 id → 글자·그 반 칸들에 적힌 횟수. */
-  rosters: Map<string, Map<string, { text: string; count: number }>>;
+  /** 반 id → 학생 id → 글자·그 반 칸들에 적힌 횟수·전부 대기 구역이었는지. */
+  rosters: Map<string, Map<string, { text: string; count: number; held: boolean }>>;
   /** 명단을 믿을 수 없는 반(비교 키) — 그 반의 빠짐·추가는 내지 않는다. */
   skipKeys: Set<string>;
   /** 어느 반이었는지 되찾지 못한 학생 — 다른 반의 '추가'로 읽지 않는다. */
@@ -78,8 +78,13 @@ export function buildBefore(
         orphanIds.add(s.studentId);
         continue;
       }
-      const roster = rosters.get(classId) ?? new Map<string, { text: string; count: number }>();
-      roster.set(s.studentId, { text: s.text, count: (roster.get(s.studentId)?.count ?? 0) + 1 });
+      const roster = rosters.get(classId) ?? new Map<string, { text: string; count: number; held: boolean }>();
+      const prev = roster.get(s.studentId);
+      roster.set(s.studentId, {
+        text: s.text,
+        count: (prev?.count ?? 0) + 1,
+        held: (prev?.held ?? true) && s.section === "hold",
+      });
       rosters.set(classId, roster);
     }
   }

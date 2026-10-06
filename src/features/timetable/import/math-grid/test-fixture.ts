@@ -7,6 +7,7 @@ import { exportMathTimetableToExcel } from "@/features/exports/math-timetable/ex
 import type { ScheduleSlotWithStudents, StudentLine } from "@/features/timetable/server/queries";
 import type { SheetGridMerge } from "../structure/types";
 import { META_TAB_NAME } from "./parse-meta";
+import type { ExportedClass } from "./schedule-diff";
 import type { MathGridInput } from "./types";
 
 export const MONDAY = new Date(2026, 5, 22); // 2026-06-22(월)
@@ -81,8 +82,10 @@ export function worksheetToGrid(ws: ExcelJS.Worksheet): MathGridInput {
   return { cells, merges };
 }
 
-/** 반 목록 → 시트로 보낸 직후의 격자 + `_meta` 행. */
-export async function exportToSheet(specs: ClassSpec[]): Promise<{ grid: MathGridInput; meta: string[][] }> {
+/** 반 목록 → 시트로 보낸 직후의 격자 + `_meta` 행 + 익스포터가 그린 반 목록(배치 비교의 상대). */
+export async function exportToSheet(
+  specs: ClassSpec[],
+): Promise<{ grid: MathGridInput; meta: string[][]; exported: ExportedClass[] }> {
   const params = assembleMathParams(specs.flatMap(slotsOf), { referenceMonday: MONDAY });
   const buffer = (await exportMathTimetableToExcel({ ...params, returnBufferOnly: true })) as ArrayBuffer;
   const wb = new ExcelJS.Workbook();
@@ -94,7 +97,7 @@ export async function exportToSheet(specs: ClassSpec[]): Promise<{ grid: MathGri
     meta.push(values.map((v) => (v == null ? "" : String(v))));
   });
   const main = wb.getWorksheet(meta[1]![4]!)!;
-  return { grid: worksheetToGrid(main), meta };
+  return { grid: worksheetToGrid(main), meta, exported: params.filteredClasses };
 }
 
 /** 열 하나를 끼운다 — 그 자리를 가로지르는 병합은 늘어나고 오른쪽 병합은 한 칸씩 밀린다(구글 시트와 같은 규칙). */

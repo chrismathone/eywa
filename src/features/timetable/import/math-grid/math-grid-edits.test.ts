@@ -1,8 +1,6 @@
 // 사람이 격자를 고치는 흔한 방식(행·열 끼우기, 손으로 칸 만들기, 칸에 반 덧적기)에서 **없는 '빠짐'을 만들지 않는지**.
 // 2026-10-06 적대적 리뷰가 실제로 재현한 입력을 그대로 옮겨 잠갔다 — 원칙: 확실하지 않으면 빠짐을 내지 않고 알린다.
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PERIODS_CONFIG } from "@/features/timetable/lib/periods";
-import { buildMathGridPreview, type PreviewContext } from "./build-preview";
 import { computeGridDelta } from "./delta";
 import { parseMathGrid } from "./parse-cells";
 import { parseMeta } from "./parse-meta";
@@ -165,29 +163,5 @@ describe("수학 격자 — 손으로 고친 시트", () => {
     const d = run(wrong, exported.meta);
     expect(counts(d)).toEqual([0, 0, 0, 0]);
     expect(d.warnings.join(" ")).toContain("주말 요일이 평일 구역에");
-  });
-
-  it("미리보기: 학교까지 적은 글자가 명부와 다르면 같은 이름의 기존 학생에게 잇지 않는다", () => {
-    const ctx: PreviewContext = {
-      classes: [{ id: "a", name: "초등M A", active: true }],
-      students: [{ id: "s1", name: "김하나", school: "옥산초", grade: "초5", status: "enrolled" }],
-      teacherNames: [],
-      roomNames: [],
-      enrolled: new Set(["s1:a"]),
-      periods: { weekday: DEFAULT_PERIODS_CONFIG.weekday, weekend: DEFAULT_PERIODS_CONFIG.weekend },
-    };
-    const to = { classId: "a", name: "초등M A" };
-    const p = buildMathGridPreview(
-      {
-        newClasses: [], placedClasses: [], moves: [], removes: [], notes: [], warnings: [],
-        adds: [{ student: { studentId: null, text: "김하나/3칠성초" }, to }, { student: { studentId: null, text: "김하나" }, to }],
-        stats: { classCells: 1, students: 2 },
-      },
-      ctx,
-      "수학 탭",
-    );
-    // 다른 아이(3칠성초)는 '학생 명부에 없음'으로 남고, 이름만 적은 쪽만 기존 학생으로 보아 걸러진다
-    expect(p.adds).toEqual([{ student: "김하나/3칠성초", to: "초등M A", toNew: false, state: "unknown" }]);
-    expect(p.notes).toEqual(['김하나 — 이미 "초등M A" 수강 중이라 추가에서 뺐습니다.']);
   });
 });

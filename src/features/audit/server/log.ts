@@ -495,6 +495,7 @@ export const AUDIT_ACTIONS = {
   timetable_import_apply: "시간표 가져오기 반영",
   timetable_structure_apply: "영어 시트 구조 반영",
   timetable_structure_rollback: "영어 시트 구조 되돌림",
+  timetable_import_cancel: "시간표 가져오기 예약 취소",
 
   // 공지·브리핑
   announcement_create: "직원 공지 등록",

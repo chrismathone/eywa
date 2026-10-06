@@ -49,6 +49,7 @@ async function loadContext(): Promise<Ctx> {
       class_id: string;
       student_id: string;
       start_date: string | null;
+      created_at: string | null;
       class?: { class_name?: string; subject?: string } | { class_name?: string; subject?: string }[];
       student?:
         | { name?: string; school?: string | null; grade?: string | null }
@@ -57,7 +58,7 @@ async function loadContext(): Promise<Ctx> {
       supabase
         .from("enrollments")
         .select(
-          "id, class_id, student_id, start_date, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
+          "id, class_id, student_id, start_date, created_at, class:class_id ( class_name, subject ), student:student_id ( name, school, grade )",
         )
         .is("end_date", null)
         .order("id")
@@ -98,6 +99,7 @@ async function loadContext(): Promise<Ctx> {
       className: cls?.class_name ?? "",
       subject: cls?.subject ?? "",
       startDate: e.start_date ?? null,
+      createdAt: e.created_at ?? null,
     };
   });
 
