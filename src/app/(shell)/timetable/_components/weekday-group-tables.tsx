@@ -48,6 +48,7 @@ import { ClassCell, HAPBAN_BADGE_H, HEADER_H } from "./class-cell";
 import { ReservedSection } from "./reserved-section";
 import { strayAnchorRowIndex } from "@/features/timetable/lib/stray-reserved";
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
+import { uniqueSplits } from "@/features/class-splits/lines";
 // ⚠️ **타입만** 가져온다 — 저 모듈은 `server-only`라 값을 import하면 클라 번들에서 터진다([[#61]]).
 import type { StrayReservedBlock } from "@/features/timetable/server/reserved-lines";
 
@@ -290,6 +291,8 @@ function SubSlotContent({
    * 거기서 뽑으면 목요일에 걸린 그 반의 예약이 통째로 사라진다(원장 2026-09-15 병합 유지 결정으로 드러난 결함).
    */
   const reservedLines = uniqueReserved(slots);
+  // 수업 나누기(0351a) 줄 — 보강 줄과 같은 규칙(원래 슬롯에서 모아 병합 칸의 모든 요일을 덮는다).
+  const splitLines = uniqueSplits(slots);
   return (
     // 학생 검색 — 걸린 반이 하나도 없는 칸은 **아예 안 그린다**(격자 축은 그대로).
     // 🔑 판정 단위가 '칸'이 아니라 '칸이 담은 반들'이라 합반 칸은 **한 반만 걸려도 통째로** 남는다 —
@@ -312,6 +315,7 @@ function SubSlotContent({
           coveringDays={coveringDays}
           roster={hideStudents ? "none" : "names"}
           reserved={reservedLines}
+          splits={splitLines}
         />
       ) : (
         <ClassCell
@@ -322,6 +326,7 @@ function SubSlotContent({
           moveParts={parts}
           reserved={reservedLines}
           strayReserved={strayLines}
+          splits={splitLines}
         />
       )}
     </div>

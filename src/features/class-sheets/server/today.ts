@@ -44,6 +44,9 @@ import { ecsDelegatedClassIds, ecsVisibleClassFilter } from "./access";
 import { appendMakeupStudents, makeupStudentIds } from "../lib/makeup-roster";
 // 보강 예약(0264a) — 그날 이 반에 예약된 학생을 보강 행으로 미리 세운다(fail-soft).
 import { getReservationsOn } from "@/features/attendance/server/makeup-reservation-queries";
+// 수업 나누기(0351a) — 그날 이 반으로 오는/나가는 학생(fail-soft).
+import { getSplitsOnDate } from "@/features/class-splits/server/queries";
+import { applySplitsToCard, splitIncomingIds } from "../lib/split-card";
 
 /**
  * **오늘 ECS** — 영어 강사의 원스크린(원장 지시 2026-08-07 "영어 강사는 ECS를 기반으로 한 원스크린").
@@ -132,6 +135,11 @@ export type TodayStudent = {
   marks: Record<string, SheetMark>;
   /** 이 반 수강생이 아닌데 그날 출결이 있는 보강(수업외) 학생. */
   isMakeup?: boolean;
+  /**
+   * 수업 나누기(0351a) — `in` = 그 시간 이 반으로 오는 학생 · `out` = 그 시간 다른 반으로 가는 학생. `note`는 화면 문장.
+   * 판정은 [`split-card.ts`](../lib/split-card.ts) 한 곳(주간·오늘 시트는 `split-roster.ts`).
+   */
+  split?: { dir: "in" | "out"; note: string };
 };
 
 export type TodayClassCard = {
@@ -327,6 +335,8 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
 
   // 그날 보강 예약(0264a, fail-soft) — 독립 조회라 아래 큰 Promise.all과 함께 달리게 프라미스만 만들어 둔다(B4).
   const reservedTodayPromise = getReservationsOn(date, todayIds);
+  // 수업 나누기(0351a, fail-soft) — 위와 같은 이유로 프라미스만 먼저(B4).
+  const splitsTodayPromise = getSplitsOnDate(date, todayIds);
   const nativePromise = loadNativeParticipants({ session_date: date, limit: 500 }, { sharedRead: true });
   // 오늘 Shouting 체크(0230a) — EiE 카드의 교시 줄에 그린다.
   // 🔴 **여기가 강사 전원의 홈**이라 실패해도 죽으면 안 된다([[#95]]) — 표가 없으면 빈 맵으로 떨어진다.
@@ -497,6 +507,7 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   // 🔴 **보강 예약**(0264a)된 학생도 같은 자리에 미리 선다(원장 2026-09-14 *"보강 추가 할 필요없이 미리 학생이 추가되어
   //    있어야"*) — 출결이 아직 없어도 오기로 한 사람이다. 조회는 fail-soft(표 없음 = 예약 없음).
   const reservedToday = await reservedTodayPromise;
+  const splitsToday = await splitsTodayPromise;
   const nativeToday = participantsOrLegacy(await nativePromise);
   const attMakeupIds = new Set<string>();
   for (const classId of todayIds) {
@@ -510,7 +521,9 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
   }
 
   // 학생 이름은 수강 목록(+보강 출결)이 나온 뒤에야 알 수 있다 — 여기만 순차.
-  const studentIds = [...new Set([...enrollments.map((e) => e.student_id), ...attMakeupIds])];
+  const studentIds = [
+    ...new Set([...enrollments.map((e) => e.student_id), ...attMakeupIds, ...splitIncomingIds(todayIds, date, splitsToday.splits)]),
+  ];
   const studentRows = await fetchInChunks<{
     id: string;
     name: string;
@@ -828,7 +841,35 @@ export async function getEcsToday(dateParam?: string | null): Promise<EcsTodayRe
         startsAt: slots[0]?.slotStart ?? "00:00",
         endsAt: slots.at(-1)?.slotEnd ?? null,
         slots,
-        students: appendMakeupStudents(roster, makeupRows),
+        // 수업 나누기 — 원래 반 행엔 표식/제외, 받는 반엔 행 추가(split-card.ts 단일 규약).
+        students: applySplitsToCard({
+          classId,
+          date,
+          slots: slots.map((sl) => ({ start: sl.slotStart, end: sl.slotEnd })),
+          students: appendMakeupStudents(roster, makeupRows),
+          splits: splitsToday.splits,
+          names: splitsToday.classNames,
+          hasRecord: (sid) => attByKey.has(`${classId}|${sid}`) || marksByStudent.has(`${classId}|${sid}`),
+          makeRow: (sid) => {
+            const meta = studentMeta.get(sid);
+            const att = attByKey.get(`${classId}|${sid}`);
+            const rep = reportByKey.get(`${classId}|${sid}`);
+            return {
+              studentId: sid,
+              name: meta?.name ?? "(이름 없음)",
+              englishName: meta?.english_name ?? null,
+              school: meta?.school ?? null,
+              grade: meta?.grade ?? null,
+              attendance: att?.status ?? null,
+              attendanceNote: att?.note ?? null,
+              attendanceSlots: attSlotsByKey.get(`${classId}|${sid}`) ?? [],
+              reportWritten: rep?.written ?? false,
+              reportSent: rep?.sent ?? false,
+              marks: marksByStudent.get(`${classId}|${sid}`) ?? {},
+              isMakeup: false,
+            };
+          },
+        }),
         fill: { total: slots.length, filled: slots.filter((s) => s.lines.some((l) => l.filled)).length },
         canMarkAttendance: attendanceWritable && (teachingSet === null || teachingSet.has(classId)),
         // 담임이 나면 위임이 아니다 — 주간 시트·랜딩 카드와 같은 판정.

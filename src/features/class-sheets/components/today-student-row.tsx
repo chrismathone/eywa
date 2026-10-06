@@ -5,6 +5,7 @@
  * today-board.tsx에서 분리(한 파일 200줄 규칙) — 저장 경로·계약은 그대로다(#77: 출결은
  * setAttendanceCell/clearPresentAttendance 두 경로만, 보고서는 원스크린 링크만).
  */
+import { SplitBadge } from "./split-badge";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -70,6 +71,7 @@ export function StudentRow({
           <span className="text-text-dim ml-1 text-xs">{names.secondary}</span>
         ) : null}
         {student.grade ? <span className="text-text-dim ml-1 text-xs">{student.grade}</span> : null}
+        <SplitBadge split={student.split} />
       </span>
       <span>
         {/* 드롭다운 배제(원장 2026-08-11) — 1클릭 알약. 저장 경로(onSet/onClear)는 그대로다. */}

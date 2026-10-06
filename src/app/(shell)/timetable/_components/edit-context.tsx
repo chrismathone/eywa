@@ -132,6 +132,8 @@ export type IncomingStudent = {
  */
 export type MoveDateTarget = {
   enrollmentId: string;
+  /** 학생 id — 같은 팝업의 '수업 나누기' 쪽이 쓴다(0351a). 없으면 나누기 전환이 안 선다. */
+  studentId?: string;
   fromClassId: string;
   fromClassName: string;
   toClassId: string;

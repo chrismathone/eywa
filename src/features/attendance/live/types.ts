@@ -54,6 +54,11 @@ export type LiveStudent = {
    * 좌석표가 이름 알약에 보라 점선 링을 두르고 hover에 결석분을 적는다. 출결을 찍으면 예약은 서버가 이행 처리한다.
    */
   reservedMakeup?: { absenceDate: string; periodLabel: string | null };
+  /**
+   * **수업 나누기**(0351a) 표식 — `in` = 그 시간 이 반으로 온 학생(수강행 없이 선다), `out` = 그 시간 다른 반에 가 있는
+   * 학생인데 이 교시에 이미 기록이 있어 남은 줄. `note`는 한글 문장(`splitRowNote`) 그대로 hover에 싣는다.
+   */
+  splitMark?: { dir: "in" | "out"; note: string };
 };
 
 export type LiveSlot = {

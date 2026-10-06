@@ -43,7 +43,9 @@ export function planQuickPresent(
 ): QuickPresentPlan {
   const rows = students.flatMap((s) =>
     s.subjects
-      .filter((su) => rowInClass(su, classFilter))
+      // 수업 나누기로 온 행(0351a)은 빼고 알약으로 한 칸씩 찍는다 — 일괄 저장 게이트(수강생·기록·예약)를 못 지나
+      // "N칸 출석"이 실제 기록과 갈린다(거짓 집계). 단건 알약은 `allowMakeup`으로 연다(onescreen-client).
+      .filter((su) => rowInClass(su, classFilter) && !su.splitIn)
       .map((su) => ({
         studentId: s.id,
         classId: su.classId,

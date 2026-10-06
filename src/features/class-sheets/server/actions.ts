@@ -46,6 +46,7 @@ import { isGoalAreaAllowed } from "../lib/goal-areas";
 import { dowKeyOf, HHMM_RE, normalizePeriodStart, YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
 import { hasReservedMakeup } from "@/features/attendance/server/makeup-reservation-queries";
+import { hasSplitInto } from "./split-week";
 import { mappedMakeupDeleteBlock, nativeWriteAllowance } from "@/features/makeups/server/adapters/gates";
 // 계획 줄 쓰기의 밑바닥 — 공개 자리 PIN 경로도 **같은 함수**를 부른다(문만 다르고 규칙은 한 벌).
 import {
@@ -604,6 +605,8 @@ async function checkStudentEligibleOn(
   if ((count ?? 0) > 0) return { ok: true };
   // 보강 **예약**(0264a)된 학생 — 출결이 아직 없어도 그날 이 반에 오기로 한 사람(오늘 보드가 미리 세운다). 출결 게이트와 같은 문.
   if (await hasReservedMakeup(tenantId, { studentId, classId, date })) return { ok: true };
+  // 수업 나누기(0351a)로 그날 이 반에 오는 학생 — 수강행 없이 그 시간 출결·태도를 이 반에서 받는다(조회 실패 = 불허).
+  if (await hasSplitInto(classId, studentId, date)) return { ok: true };
   const native = await nativeWriteAllowance({ studentId, classId, sessionDate: date });
   if (native.error) return { ok: false, error: native.error };
   if (native.allow) return { ok: true };
