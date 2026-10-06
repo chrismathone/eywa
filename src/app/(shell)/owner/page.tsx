@@ -232,7 +232,6 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
         </div>
       ) : null}
       {tab === "operations" && !settingsUnreadable ? (
-        <>
         <OperationsSection
           initial={operationsForClient}
           classrooms={classrooms}
@@ -242,8 +241,20 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           baselineToken={operationsTokens?.operations}
           baselineVersion={editable?.versions.operations}
         />
-        {canReadAudit ? <MakeupsSection initial={settings.makeups} /> : null}
-        </>
+      ) : null}
+      {/* 보강 운영 = 운영 설정과 다른 묶음(저장 경로 · 권한이 따로)이라 제 면에 둔다 — 운영 체계 면 아래에 저장 버튼이
+          하나 더 서 있던 것을 옮겼다(원장 2026-10-06). 원장 위만 바꾼다(저장 액션 `configureMakeupSettings`와 같은 선). */}
+      {tab === "makeups" ? (
+        canReadAudit ? (
+          <MakeupsSection initial={settings.makeups} />
+        ) : (
+          <div className="bg-card border-line rounded-2xl border p-6">
+            <p className="text-foreground text-sm font-bold">보강 운영은 원장만 바꿀 수 있습니다</p>
+            <p className="text-text-dim mt-1 text-sm">
+              보강관리를 켜고 끄는 일은 원장 계정에서 정합니다. 나머지 설정 면은 그대로 편집할 수 있습니다.
+            </p>
+          </div>
+        )
       ) : null}
       {tab === "subjects" && !settingsUnreadable ? (
         <SubjectsSection

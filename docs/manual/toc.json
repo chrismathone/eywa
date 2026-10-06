@@ -453,6 +453,7 @@
               "slug": "subjects",
               "title": "과목 운영"
             },
+            { "slug": "makeups", "title": "보강 운영" },
             {
               "slug": "billing",
               "title": "수납·청구"

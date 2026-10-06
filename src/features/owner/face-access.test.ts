@@ -99,8 +99,8 @@ describe("요청한 면의 권한이 없을 때 보낼 면", () => {
 
     it("원장 위 계정(역할은 관리자)에게도 역할·권한 본문은 안내뿐이다 — 폼의 조건은 '역할이 원장'이다", () => {
       const level = gate("admin", resolveMatrix(grant("admin", ["owner"])), { isMasterLevel: true });
-      // 원장 위 전용 면(대시보드 관리)은 쓸 수 있으므로 그리로 간다.
-      expect(fallbackOwnerFace("profile", level)?.key).toBe("dashboard");
+      // 원장 위 전용 면은 쓸 수 있으므로 그리로 간다 — 목록에서 먼저 나오는 보강 운영.
+      expect(fallbackOwnerFace("profile", level)?.key).toBe("makeups");
     });
 
     it("원장 위(역할은 관리자) → 원장 위 전용 면도 열 수 있다", () => {

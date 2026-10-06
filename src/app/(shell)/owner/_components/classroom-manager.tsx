@@ -190,6 +190,8 @@ export function ClassroomManager({ rooms, canImport = false }: { rooms: Classroo
       title="강의실"
       description="강의실명·정원을 등록·수정합니다(추가·수정·숨김은 즉시 반영 — 운영 설정 '저장' 버튼과 별개). 반/시간표의 강의실 선택지로 쓰입니다. 안 쓰는 강의실은 '숨기기'로 목록에서만 빼세요 — 이미 배정된 반·시간표는 그대로 남습니다. 삭제는 쓰는 곳이 하나도 없는 강의실만 가능합니다."
       span2
+      collapsible
+      summary={`${live.length}개`}
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <AddForm />

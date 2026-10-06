@@ -228,6 +228,7 @@ const OWNER_FACE_ICON: Record<OwnerFaceKey, { icon: AywaIconName }> = {
   profile: { icon: MENU_ICON.profile_settings },
   operations: { icon: MENU_ICON.operations_settings },
   subjects: { icon: "tag" },
+  makeups: { icon: MENU_ICON.makeups },
   billing: { icon: MENU_ICON.billing_settings },
   notifications: { icon: MENU_ICON.notification_settings },
   consultations: { icon: MENU_ICON.consultation_settings },

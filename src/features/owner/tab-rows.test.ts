@@ -6,7 +6,7 @@ import { OWNER_FACES, type OwnerFaceKey } from "./tabs";
  * 학원 설정 상단 탭의 줄 구성(2026-10-06, 설정 정리 3단계) — 면이 많으면 범주 줄 + 그 범주의 면 줄, 적으면 종전처럼 한 줄.
  * 주소는 면마다 `?tab=` 그대로라, 범주는 지금 면에서 읽는다.
  */
-const CHINSAN = OWNER_FACES.filter((f) => !f.genericOnly); // 침산 원장: 14면
+const CHINSAN = OWNER_FACES.filter((f) => !f.genericOnly); // 침산 원장: 일반판 전용 면('기능')을 뺀 전부
 const DELEGATED = CHINSAN.filter((f) => !f.masterOnly); // 설정 전체를 위임받은 계정: 원장 위 전용 면이 빠진다
 const pick = (...keys: OwnerFaceKey[]) => OWNER_FACES.filter((f) => keys.includes(f.key));
 const labels = (chips: { label: string }[]) => chips.map((c) => c.label);
@@ -24,11 +24,11 @@ describe("범주", () => {
 });
 
 describe("두 줄 — 범주 줄 + 지금 범주의 면 줄", () => {
-  it("원장(14면): 범주 다섯, 둘째 줄에는 지금 범주의 면만", () => {
+  it("원장: 범주 다섯, 둘째 줄에는 지금 범주의 면만", () => {
     const rows = category(CHINSAN, "subjects");
     expect(labels(rows.categories)).toEqual(["학원 정보", "수업·운영", "청구·안내", "권한·화면", "관리"]);
     expect(rows.activeCategory).toBe("수업·운영");
-    expect(labels(rows.faces)).toEqual(["운영 체계", "과목 운영"]);
+    expect(labels(rows.faces)).toEqual(["운영 체계", "과목 운영", "보강 운영"]);
   });
 
   it("범주를 누르면 그 범주의 첫 면으로 간다 — 주소는 면의 주소 그대로다(범주는 주소에 없다)", () => {
@@ -59,7 +59,7 @@ describe("두 줄 — 범주 줄 + 지금 범주의 면 줄", () => {
     expect(rows.categories.map((c) => c.group)).toEqual(["설정", "설정", "설정", "설정", "관리"]);
   });
 
-  it("일반판(15면): '기능'이 권한·화면 범주 안에, 목록 순서대로 선다", () => {
+  it("일반판: '기능'이 권한·화면 범주 안에, 목록 순서대로 선다", () => {
     const rows = category([...OWNER_FACES], "modules");
     expect(rows.activeCategory).toBe("권한·화면");
     expect(labels(rows.faces)).toEqual(["역할·권한", "탭 및 메뉴 구성", "기능", "대시보드 관리"]);

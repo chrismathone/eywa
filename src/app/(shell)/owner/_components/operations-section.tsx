@@ -147,6 +147,8 @@ export function OperationsSection({
         title="공휴일·휴원일"
         description="수강료 계산 시 수업일에서 제외됩니다. 이 목록에 있는 날은 오늘 출결의 예정 명단과 확인 큐도 만들지 않습니다(수업하는 날은 목록에서 빼 주세요). 공휴일명을 함께 적으면 견적·공휴일 면에 표시됩니다."
         span2
+        collapsible
+        summary={`${o.holidays.length}일`}
       >
         <HolidayListEditor value={o.holidays} onChange={(v) => set({ holidays: v })} />
       </SettingsCard>

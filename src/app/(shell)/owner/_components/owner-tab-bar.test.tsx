@@ -65,6 +65,11 @@ describe("두 줄", () => {
     );
     expect(names(screen.getByRole("navigation", { name: CATEGORY_NAV }))).toEqual(["학원 정보", "수업·운영", "청구·안내", "권한·화면", "관리"]);
     // 면 줄은 종전 그대로 — 설정의 면은 개명 대상이 아니다.
+    expect(names(screen.getByRole("navigation", { name: FACE_NAV }))).toEqual(["운영 체계", "과목 운영", "보강 운영"]);
+  });
+
+  it("원장 위에게만 서는 면(보강 운영)은 위임 계정의 면 줄에 없다", () => {
+    render(<OwnerTabBar faces={CHINSAN.filter((f) => !f.masterOnly)} active="operations" />);
     expect(names(screen.getByRole("navigation", { name: FACE_NAV }))).toEqual(["운영 체계", "과목 운영"]);
   });
 

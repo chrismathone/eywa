@@ -39,7 +39,8 @@ export function ModulesSection({ initial }: { initial: ModulesSettings }) {
             const m = MODULES[id];
             if (id === "makeups") return (
               <li key={id} className="border-line rounded-lg border px-3 py-2">
-                <Link href="/owner?tab=operations" className="text-primary underline">보강관리 운영 모드 설정</Link>
+                {/* 보강 운영은 제 면이다(2026-10-06 — 전에는 운영 체계 면 아래에 있었다). */}
+                <Link href="/owner?tab=makeups" className="text-primary underline">보강관리 운영 모드 설정</Link>
                 <p className="text-sm">새 접수 중지·기존 업무 처리·종료는 운영 모드에서 변경합니다.</p>
               </li>
             );

@@ -15,6 +15,7 @@ export type OwnerTab =
   | "profile"
   | "operations"
   | "subjects"
+  | "makeups"
   | "billing"
   | "notifications"
   | "consultations"
@@ -70,6 +71,10 @@ export const OWNER_FACES: readonly OwnerFaceDef[] = [
   { key: "profile", label: "프로필·브랜드", href: "/owner", group: "설정", category: "학원 정보" },
   { key: "operations", label: "운영 체계", href: "/owner?tab=operations", group: "설정", category: "수업·운영" },
   { key: "subjects", label: "과목 운영", href: "/owner?tab=subjects", group: "설정", category: "수업·운영" },
+  // 보강 운영 = 보강관리를 켜고 끄는 운영 모드(원장 2026-10-06 *"수업 운영에 '보강 운영'을 새로 만들어서 넣어줘"*).
+  // 전에는 운영 체계 면 맨 아래에 제 저장 버튼을 달고 붙어 있었다 — 운영 설정과 다른 묶음이라 저장 경로가 따로다
+  // (운영 모드 전환은 DB가 열린 보강 건을 확인하며 원자적으로 바꾼다). 원장 위만 바꾼다(저장 액션과 같은 선).
+  { key: "makeups", label: "보강 운영", href: "/owner?tab=makeups", group: "설정", category: "수업·운영", masterOnly: true },
   { key: "billing", label: "수납·청구", href: "/owner?tab=billing", group: "설정", category: "청구·안내" },
   { key: "notifications", label: "알림·약관", href: "/owner?tab=notifications", group: "설정", category: "청구·안내" },
   { key: "consultations", label: "상담 양식", href: "/owner?tab=consultations", group: "설정", category: "청구·안내" },
