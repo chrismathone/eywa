@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import {
   intersectWindows,
+  splitBoundaries,
   isSplitDay,
   splitUnitMinutes,
   toMin,
@@ -41,6 +42,8 @@ export type SplitContext = {
   enrollment: { id: string; attendanceDays: string[] } | null;
   /** 요일 → 두 반이 같이 도는 구간(그 주 기준). 비어 있는 요일은 나눌 수 없다. */
   windows: Partial<Record<SplitDay, TimeWindow[]>>;
+  /** 요일 → 겹치는 구간을 **교시 칸**으로 자른 경계(`splitBoundaries`). 선택지·저장 검증이 이것만 본다. */
+  bounds: Partial<Record<SplitDay, number[][]>>;
   /** 받는 반의 그 주 배치(강의실 정원 확인용). */
   targetRows: ScheduleRow[];
   unit: number;
@@ -113,11 +116,18 @@ export async function loadSplitContext(
     live
       .filter((r) => r.class_id === classId && r.day_of_week === day)
       .map((r) => ({ start: toMin(r.start_time), end: toMin(r.end_time) }));
+  const unit = splitUnitMinutes([source, target]);
   const windows: Partial<Record<SplitDay, TimeWindow[]>> = {};
+  const bounds: Partial<Record<SplitDay, number[][]>> = {};
   for (const day of new Set(live.map((r) => r.day_of_week))) {
     if (!isSplitDay(day)) continue;
     const both = intersectWindows(windowsOf(source.id, day), windowsOf(target.id, day));
-    if (both.length > 0) windows[day] = both;
+    if (both.length === 0) continue;
+    windows[day] = both;
+    // 교시 경계 = 두 반 배치 행의 시작·끝(그날 행만) — 칸이 곧 단위다(수학 55분 교시 = '1시간').
+    const edges = [...windowsOf(source.id, day), ...windowsOf(target.id, day)].flatMap((w) => [w.start, w.end]);
+    const b = splitBoundaries(both, edges, unit);
+    if (b.length > 0) bounds[day] = b;
   }
 
   return {
@@ -126,7 +136,8 @@ export async function loadSplitContext(
     student: { id: student.data.id, name: student.data.name },
     enrollment: open ? { id: open.id, attendanceDays: (open.attendance_days as string[] | null) ?? [] } : null,
     windows,
+    bounds,
     targetRows: live.filter((r) => r.class_id === target.id),
-    unit: splitUnitMinutes([source, target]),
+    unit,
   };
 }

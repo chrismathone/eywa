@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition, type ReactNode } from "rea
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "@/components/icons/aywa-icon-compat";
-import { durationLabel, SPLIT_DAY_KO, toHm, toMin, type SplitDay } from "@/features/class-splits/rules";
+import { durationLabel, SPLIT_DAY_KO, toMin, type SplitDay } from "@/features/class-splits/rules";
 import { addDays, dowOf } from "@/features/class-splits/period";
 import { createClassSplit, previewClassSplit, type SplitPreview } from "@/features/class-splits/server/actions";
 import { SplitPeriodFields, type PeriodChoice } from "./class-split-period";
@@ -90,7 +90,11 @@ export function ClassSplitDialog({
     ? dayRows[0]!.starts.filter((s) => dayRows.every((r) => r.starts.some((x) => x.time === s.time)))
     : [];
   // 시작을 못 골랐으면 길이 선택지도 없다(빈 배열의 min은 Infinity라 거짓 선택지가 선다).
-  const maxUnits = dayRows.length ? Math.min(...dayRows.map((r) => r.starts.find((x) => x.time === start)?.maxUnits ?? 0)) : 0;
+  // 길이 선택지 = 고른 요일 전부에서 **끝 시각이 같은** 칸 수만(끝은 교시 경계 — 수학 55분 교시라 분으로 더하지 않는다).
+  const endsOf = (r: (typeof dayRows)[number]) => r.starts.find((x) => x.time === start)?.ends ?? [];
+  const firstEnds = dayRows.length ? endsOf(dayRows[0]!) : [];
+  let maxUnits = 0;
+  while (maxUnits < firstEnds.length && dayRows.every((r) => endsOf(r)[maxUnits] === firstEnds[maxUnits])) maxUnits++;
   const startOk = commonStarts.some((s) => s.time === start);
   const canSave = !!ready && !!period && activeDays.length > 0 && startOk && units >= 1 && units <= maxUnits;
 
@@ -108,7 +112,7 @@ export function ClassSplitDialog({
     });
   }
 
-  const end = startOk ? toHm(toMin(start) + units * (ready?.unit ?? 60)) : "";
+  const end = startOk ? (firstEnds[units - 1] ?? "") : "";
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" onClick={onCancel}>
       <div
@@ -179,7 +183,7 @@ export function ClassSplitDialog({
             <Row label="길이">
               {Array.from({ length: Math.max(0, Math.min(maxUnits, 6)) }, (_, i) => i + 1).map((n) => (
                 <Chip key={n} on={n === units} onClick={() => setUnits(n)}>
-                  {durationLabel(n * ready!.unit)}
+                  {durationLabel(toMin(firstEnds[n - 1] ?? start) - toMin(start))}
                 </Chip>
               ))}
             </Row>

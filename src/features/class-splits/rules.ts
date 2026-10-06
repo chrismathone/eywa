@@ -104,28 +104,55 @@ export function intersectWindows(a: readonly TimeWindow[], b: readonly TimeWindo
 }
 
 /**
- * 고를 수 있는 **시작 시각** — 겹치는 구간의 시작에서 단위만큼씩, 한 단위가 통째로 들어가는 자리만.
- * 예: 16:20~19:20 · 60분 → 16:20·17:20·18:20.
+ * 겹치는 구간을 **교시 칸**으로 자른 경계 목록(구간마다 한 줄) — 단위는 고정 분이 아니라 **실제 시간표 칸**이다.
+ * 🔴 수학 한 교시는 **55분**이다(1-1~4-2, 원장 2026-09-14 *"55분 수업이어도 1시간으로"*). 60분 고정으로 자르면
+ *    20:10~21:05처럼 한 교시만 겹치는 두 반이 "같이 도는 시간이 없다"로 거절된다(원장 제보 2026-10-06 —
+ *    고등M 단체 BS4F → 중등M 중3 BS3Q, 화·금 20:10~21:05).
+ * 경계 = 두 반 배치 행의 시작·끝(구간 안쪽만). 한 행이 여러 교시를 통째로 담고 있으면(3시간 한 줄) 명목 단위로 더 자른다.
+ * 명목 단위의 절반보다 짧은 겹침(10~20분 어긋남)은 나눌 시간으로 보지 않는다.
  */
-export function startOptions(windows: readonly TimeWindow[], unit: number): number[] {
+export function splitBoundaries(windows: readonly TimeWindow[], rowEdges: readonly number[], unit: number): number[][] {
   if (!(unit > 0)) return [];
-  const out: number[] = [];
+  const out: number[][] = [];
   for (const w of mergeWindows(windows)) {
-    for (let s = w.start; s + unit <= w.end; s += unit) out.push(s);
+    if (w.end - w.start < unit / 2) continue;
+    const edges = [...new Set([w.start, w.end, ...rowEdges.filter((e) => e > w.start && e < w.end)])].sort((a, b) => a - b);
+    const bounds: number[] = [edges[0]!];
+    for (let k = 1; k < edges.length; k++) {
+      // 긴 칸은 명목 단위로 쪼갠다(남는 꼬리가 단위의 절반 미만이면 마지막 칸에 붙는다).
+      let cur = bounds[bounds.length - 1]!;
+      while (edges[k]! - cur >= unit * 1.5) {
+        cur += unit;
+        bounds.push(cur);
+      }
+      bounds.push(edges[k]!);
+    }
+    out.push(bounds);
   }
   return out;
 }
 
-/** 그 시작에서 고를 수 있는 **최대 단위 수**(그 구간 끝까지). 시작이 어느 구간에도 없으면 0. */
-export function maxUnitsFrom(windows: readonly TimeWindow[], start: number, unit: number): number {
-  if (!(unit > 0)) return 0;
-  const w = mergeWindows(windows).find((x) => start >= x.start && start < x.end);
-  if (!w) return 0;
-  return Math.floor((w.end - start) / unit);
+/** 고를 수 있는 **시작 시각**과 그 자리에서 고를 수 있는 최대 칸 수(그 구간 끝까지). */
+export function startOptions(bounds: readonly (readonly number[])[]): { start: number; maxUnits: number }[] {
+  return bounds.flatMap((b) => b.slice(0, -1).map((start, i) => ({ start, maxUnits: b.length - 1 - i })));
 }
 
-/** 길이(분) 표시 — 60의 배수면 "N시간", 아니면 "N분"(EiE 40분·80분). */
+/** 시작 + 칸 수 → 끝 시각. 그 시작이 경계가 아니거나 칸 수가 넘치면 null. */
+export function endAfter(bounds: readonly (readonly number[])[], start: number, units: number): number | null {
+  if (!(units >= 1)) return null;
+  for (const b of bounds) {
+    const i = b.indexOf(start);
+    if (i >= 0 && i < b.length - 1) return b[i + units] ?? null;
+  }
+  return null;
+}
+
+/**
+ * 길이(분) 표시 — 60의 배수면 "N시간", 40의 배수면 "N분"(EiE 40분·80분), 그 밖(수학 55분 교시 = 55·110·165)은
+ * **교시 수를 시간으로**(55분 → "1시간", 원장 2026-09-14 *"55분 수업이어도 1시간으로"*).
+ */
 export function durationLabel(minutes: number): string {
   if (minutes % 60 === 0) return `${minutes / 60}시간`;
-  return `${minutes}분`;
+  if (minutes % 40 === 0) return `${minutes}분`;
+  return `${Math.max(1, Math.round(minutes / 60))}시간`;
 }
