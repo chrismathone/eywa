@@ -151,6 +151,27 @@ describe("computeImportDiff", () => {
     const d2 = computeImportDiff(parsed, current, CLASSES, STUDENTS);
     expect(d2.removes.map((r) => r.enrollmentId)).toEqual(["eNew"]);
   });
+
+  it("protectNewerThan: 시트를 보낸 **같은 날** 그 뒤에 만들어진 수강도 삭제 제외(시각으로 견준다)", () => {
+    // 오전 10시(KST)에 시트를 보내고 오후에 앱(또는 시간표 탭 가져오기)이 학생을 옮겼다 — 새 수강의 시작일이 시트 날짜와 같다.
+    const row = (id: string, createdAt: string): EnrollmentSnapshotRow => ({
+      enrollmentId: id, studentId: "s2", studentName: "이서연", school: "한빛중", grade: "중2",
+      classId: "cA", className: "DP3", subject: "english", startDate: "2026-06-30", createdAt,
+    });
+    const current: EnrollmentSnapshotRow[] = [
+      { enrollmentId: "e1", studentId: "s1", studentName: "김민준", school: "선린중", grade: "중1", classId: "cA", className: "DP3", subject: "english", startDate: "2026-06-01" },
+      row("eAfter", "2026-06-30T05:00:00.123456+00:00"),
+      row("eBefore", "2026-06-30T00:30:00+00:00"),
+    ];
+    const parsed: ParsedEditRow[] = [
+      { enrollmentId: "e1", studentName: "김민준", school: "선린중", grade: "중1", className: "DP3" },
+    ];
+    const sheet = computeImportDiff(parsed, current, CLASSES, STUDENTS, { protectNewerThan: "2026-06-30T01:00:00.000Z" });
+    expect(sheet.removes.map((r) => r.enrollmentId)).toEqual(["eBefore"]); // 시트를 보내기 전에 있던 수강은 종전대로 삭제 후보
+    // 날짜만 아는 경로(파일)는 시각을 견주지 않는다 — 종전 그대로
+    const file = computeImportDiff(parsed, current, CLASSES, STUDENTS, { protectNewerThan: "2026-06-30" });
+    expect(file.removes.map((r) => r.enrollmentId).sort()).toEqual(["eAfter", "eBefore"]);
+  });
 });
 
 describe("importDiffHash (apply 서버 재검증용)", () => {

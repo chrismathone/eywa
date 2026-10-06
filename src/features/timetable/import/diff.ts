@@ -19,12 +19,16 @@ export function computeImportDiff(
     /**
      * 구글 시트 경로 stale-drift 보호 — 이 시각(보통 시트 push=last_synced_at) 이후 **시작된** 수강은
      * 시트가 알 수 없으므로 '삭제'로 잡지 않는다. 날짜(YYYY-MM-DD)만 비교. 파일 경로는 미전달(보호 없음).
+     * 시각까지 있는 값(구글 시트의 last_synced_at)이면 그 시각 이후에 **만들어진** 수강도 보호한다(같은 날 보호).
      */
     protectNewerThan?: string | null;
   },
 ): ImportDiff {
   const diff: ImportDiff = { moves: [], removes: [], adds: [], unchanged: 0, warnings: [] };
   const cutoffDate = opts?.protectNewerThan ? opts.protectNewerThan.slice(0, 10) : null;
+  // 날짜만 있는 값(파일 경로)은 시각 비교를 하지 않는다 — 그날 자정으로 읽혀 보호가 하루 전체로 넓어진다.
+  const cutoffAt =
+    opts?.protectNewerThan && opts.protectNewerThan.length > 10 ? Date.parse(opts.protectNewerThan) : Number.NaN;
 
   const currentById = new Map(current.map((c) => [c.enrollmentId, c]));
   const classSubjectById = new Map(classes.map((c) => [c.classId, c.subject]));
@@ -98,7 +102,11 @@ export function computeImportDiff(
     // (영어 수강편집 시트로 수학 수강이 종료되는 사고 차단). presentSubjects가 비면 어떤 것도 종료 안 함(안전).
     if (!presentSubjects.has(cur.subject)) continue;
     // 시트 생성 시점 이후 시작된 수강은 시트가 알 수 없음 → 삭제 후보에서 제외(stale-drift 보호).
-    if (cutoffDate && cur.startDate && cur.startDate.slice(0, 10) > cutoffDate) {
+    // 🔴 날짜만 견주면 **같은 날** 만들어진 수강이 빠진다: 오전에 시트를 보내고 오후에 앱(또는 시간표 탭 가져오기)이
+    //    학생을 옮기면, 시작일이 시트 날짜와 같아 그 새 수강이 '삭제' 후보가 됐다(낡은 수강편집 탭이 방금 한 이동을 지운다).
+    const madeAt = cur.createdAt ? Date.parse(cur.createdAt) : Number.NaN;
+    const madeAfterSheet = Number.isFinite(cutoffAt) && Number.isFinite(madeAt) && madeAt > cutoffAt;
+    if (madeAfterSheet || (cutoffDate && cur.startDate && cur.startDate.slice(0, 10) > cutoffDate)) {
       diff.warnings.push(
         `"${cur.studentName}"(${cur.className})은 시트 생성 이후 등록돼 삭제하지 않았습니다(시트가 모르는 신규).`,
       );

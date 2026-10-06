@@ -11,7 +11,11 @@ import {
   previewTimetableImport,
   type ApplyState,
 } from "@/features/timetable/server/import-actions";
-import { supportsStructureImport } from "@/features/integrations/sheets-provider";
+import { applyMathGridImport, previewMathSheetBundle } from "@/features/timetable/server/math-grid-import-actions";
+import type { GridApplyState } from "@/features/timetable/import/math-grid/apply-plan";
+import { supportsGridImport, supportsStructureImport } from "@/features/integrations/sheets-provider";
+import type { MathGridPreview } from "@/features/timetable/import/math-grid/build-preview";
+import { MathGridPreviewSection } from "./math-grid-preview";
 import type { ImportDiff } from "@/features/timetable/import/types";
 import { effectiveDateLabel, isImmediate } from "@/features/timetable/import/effective-date";
 import { EffectiveDateField } from "./effective-date-field";
@@ -52,6 +56,8 @@ export function TimetableImportDialog({
   hideTrigger?: boolean;
 }) {
   const sheet = mode === "sheet";
+  // 시간표 격자 탭까지 읽는 과목(수학) — 숨겨진 '수강편집' 탭만 읽으면 사람이 격자에서 고친 것이 통째로 무시된다.
+  const readsGrid = sheet && supportsGridImport(subject);
   const router = useRouter();
   // ⚠️ controlled 하이브리드(2026-07-24) — 툴바가 이 다이얼로그를 '엑셀·시트' 팝오버 항목에서 열기 위해
   // open을 부모가 소유할 수 있게 한다. prop을 안 주면 종전대로 자기 상태로 동작(완전 하위호환).
@@ -71,6 +77,11 @@ export function TimetableImportDialog({
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ApplyState | null>(null);
+  // 시간표 격자 탭에서 읽은 변경과 그 적용 결과. 수강편집 diff와 따로 든다(적용 버튼도 따로다).
+  const [gridPreview, setGridPreview] = useState<MathGridPreview | null>(null);
+  const [gridError, setGridError] = useState<string | null>(null);
+  const [gridResult, setGridResult] = useState<GridApplyState | null>(null);
+  const [gridApplying, startGridApply] = useTransition();
   const [previewing, startPreview] = useTransition();
   const [applying, startApply] = useTransition();
   // 적용일 — 기본은 오늘(종전 동작). 반이동은 이 날짜로 옛 수강을 끝내고 새 수강을 시작한다.
@@ -78,7 +89,8 @@ export function TimetableImportDialog({
 
   const total = diff ? diff.moves.length + diff.removes.length + diff.adds.length : 0;
   // 미리보기했으나 아직 적용/닫기 전 = 휘발 위험 상태.
-  const pending = open && !!diff && total > 0 && !result;
+  const pending =
+    open && ((!!diff && total > 0 && !result) || (!!gridPreview && gridPreview.total > 0 && !gridResult?.applied));
 
   // 미적용 미리보기가 있는데 새로고침/이탈 시 경고(ijw useUnsavedChangesGuard 대응).
   useEffect(() => {
@@ -97,6 +109,9 @@ export function TimetableImportDialog({
     setHash(null);
     setError(null);
     setResult(null);
+    setGridPreview(null);
+    setGridError(null);
+    setGridResult(null);
   }
   function close() {
     // 미리보기한 변경을 적용 안 하고 닫으면 사라짐 → 한 번 더 확인.
@@ -110,9 +125,18 @@ export function TimetableImportDialog({
     setResult(null);
     setDiff(null);
     setHash(null);
+    setGridPreview(null);
+    setGridError(null);
+    setGridResult(null);
     if (sheet) {
       startPreview(async () => {
-        const res = await previewSheetImport(subject);
+        // 격자까지 읽는 과목은 두 탭을 **서버에서 한꺼번에** 읽는다 — 클라가 액션 둘을 부르면 줄지어 돈다.
+        const bundle = readsGrid ? await previewMathSheetBundle(subject) : null;
+        const res = bundle ? bundle.edit : await previewSheetImport(subject);
+        if (bundle) {
+          setGridPreview(bundle.grid.preview ?? null);
+          setGridError(bundle.grid.error ?? null);
+        }
         if (res.error) setError(res.error);
         else {
           setDiff(res.diff ?? null);
@@ -130,6 +154,41 @@ export function TimetableImportDialog({
       else {
         setDiff(res.diff ?? null);
         setHash(res.hash ?? null);
+      }
+    });
+  }
+
+  /** 시간표 격자 탭 변경 적용 — 반 만들기 + 학생 이동·추가·종료. 서버가 시트·DB를 다시 읽어 해시를 대조한 뒤 쓴다. */
+  function applyGrid() {
+    if (!gridPreview || gridPreview.total === 0) return;
+    const when = isImmediate(effective, today) ? "지금" : `${effectiveDateLabel(effective)}부터`;
+    const lines = [
+      `시간표 탭 변경 ${gridPreview.total}건을 ${when} 적용합니다.`,
+      `· 새 반 ${gridPreview.classes.length} · 이동 ${gridPreview.moves.length} · 추가 ${gridPreview.adds.length} · 수강 종료 ${gridPreview.removes.length}`,
+    ];
+    const left = gridPreview.skipped.length + gridPreview.warnings.length;
+    if (left > 0) lines.push(`· ${left}건은 적용하지 않습니다(목록에 이유가 있습니다).`);
+    lines.push("진행할까요?");
+    if (!confirm(lines.join("\n"))) return;
+    const expected = gridPreview.hash;
+    startGridApply(async () => {
+      const res = await applyMathGridImport(expected, subject, effective);
+      if (res.staleHash) {
+        // 미리보기 이후 시트나 수강이 바뀌었다 — 낡은 미리보기를 지우고 다시 불러오게 한다.
+        setGridPreview(null);
+        setGridResult(null);
+        setGridError(res.error ?? "미리보기 이후 변경되었습니다. 다시 불러온 뒤 적용하세요.");
+        return;
+      }
+      setGridResult(res);
+      // 중단된 적용도 일부가 이미 반영됐을 수 있다 — 회차 확정 창에 알린다.
+      if (!res.error || res.snapshotId) notifyTermPlansChanged();
+      if (res.applied) {
+        // 수강이 바뀌었다 — 두 미리보기 모두 낡았다(적용한 목록을 그대로 두면 한 번 더 누르게 된다).
+        setGridPreview(null);
+        setDiff(null);
+        setHash(null);
+        router.refresh();
       }
     });
   }
@@ -180,6 +239,10 @@ export function TimetableImportDialog({
       if (!res.error) {
         setDiff(null);
         setHash(null);
+        // 적용으로 수강이 바뀌었다 — 격자 미리보기의 "이미 그렇게 돼 있는 변경" 판정이 낡았으니 지운다(다시 불러오면 새로 읽는다).
+        setGridPreview(null);
+        setGridError(null);
+        setGridResult(null);
         router.refresh();
       }
     });
@@ -204,7 +267,7 @@ export function TimetableImportDialog({
         <>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={close} aria-hidden />
           <div
-            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl border p-5"
+            className="bg-card border-line shadow-modal fixed top-1/2 left-1/2 z-50 max-h-[90dvh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border p-5"
             role="dialog"
             aria-label={sheet ? "구글 시트에서 가져오기" : "엑셀 가져오기"}
           >
@@ -219,9 +282,16 @@ export function TimetableImportDialog({
 
             {sheet ? (
               <>
-                <p className="text-text-dim mt-1 text-xs">
-                  연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요.
-                </p>
+                {readsGrid ? (
+                  <p className="text-text-dim mt-1 text-xs break-keep">
+                    연결된 구글 시트를 읽어 옵니다. <b>시간표 탭</b>에서 반을 새로 만들거나 학생을 옮긴 것을 읽어
+                    아래 적용일부터 반영합니다(숨겨진 <b>수강편집</b> 탭에서 반만 바꾼 것도 함께 읽습니다).
+                  </p>
+                ) : (
+                  <p className="text-text-dim mt-1 text-xs">
+                    연결된 구글 시트의 <b>수강편집</b> 탭에서 학생의 <b>반</b>만 바꾼 뒤 불러오세요.
+                  </p>
+                )}
                 <p className="text-text-faint mt-1 flex items-start gap-1 text-xs">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
                   <span>시트에서 편집했으면 <b>‘시트로 보내기’를 다시 누르지 마세요</b> — 전체 덮어쓰기라 편집분이 사라집니다.</span>
@@ -296,7 +366,7 @@ export function TimetableImportDialog({
               value={effective}
               onChange={setEffective}
               today={today}
-              disabled={applying || !!result?.applied}
+              disabled={applying || gridApplying || !!result?.applied || !!gridResult?.applied}
             />
 
             {error ? <p className="text-chart-4 mt-3 text-xs">{error}</p> : null}
@@ -380,7 +450,9 @@ export function TimetableImportDialog({
                 ) : null}
 
                 {total === 0 ? (
-                  <p className="text-text-faint text-xs">가져올 변경이 없습니다.</p>
+                  <p className="text-text-faint text-xs">
+                    {readsGrid ? "수강편집 탭에는 가져올 변경이 없습니다." : "가져올 변경이 없습니다."}
+                  </p>
                 ) : null}
 
                 <button
@@ -393,6 +465,19 @@ export function TimetableImportDialog({
                   {total > 0 ? `${total}건 적용` : "변경 없음"}
                 </button>
               </div>
+            ) : null}
+
+            {gridError ? (
+              <p className="text-chart-4 mt-3 text-xs break-keep">시간표 탭을 읽지 못했습니다 — {sanitizeErrorText(gridError)}</p>
+            ) : null}
+            {gridPreview || gridResult ? (
+              <MathGridPreviewSection
+                preview={gridPreview}
+                when={isImmediate(effective, today) ? "지금" : `${effectiveDateLabel(effective)}부터`}
+                applying={gridApplying}
+                onApply={applyGrid}
+                result={gridResult}
+              />
             ) : null}
 
             {result ? (
