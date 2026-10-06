@@ -91,7 +91,10 @@ export function TimetableZoomArea({ children }: { children: ReactNode }) {
   const zoom = UI_FONT_SIZE_ZOOM[usePrefs((s) => s.timetableFontSize)];
   if (zoom === 1) return <>{children}</>;
   return (
-    <div className="min-h-0 flex-1" style={{ zoom }}>
+    // 🔴 `flex flex-col` 필수 — 안쪽 판(`min-h-0 flex-1` 스크롤 영역)이 높이를 받는 사슬이 여기서 끊기면
+    //    표가 제 높이만큼 늘어나 **페이지가** 스크롤된다: 강사·요일 sticky 헤더가 안 붙고, 가로 스크롤바가
+    //    표 맨 아래로 밀려난다(원장 제보 2026-10-06 — 글씨 크기를 키운 계정에서만 났다. 기본 '작음'은 이 래퍼가 없다).
+    <div className="flex min-h-0 flex-1 flex-col" style={{ zoom }}>
       {children}
     </div>
   );
