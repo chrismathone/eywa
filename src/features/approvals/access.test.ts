@@ -1,23 +1,26 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { MENU_ACCESS, SYSTEM_ROLES, applyUserOverrides, resolveMatrix } from "@/lib/permissions";
-import { APPROVAL_PILOT_USER_IDS, approvalMenuOverridesFor, isApprovalPilotUser } from "./access";
+import { approvalMenuOverridesFor } from "./access";
 import { docYear, formatDocNo, nextDocNo } from "./doc-no";
 import { stepRoleLabels } from "./types";
 
-const [SEUNGYEOP, YEWON] = APPROVAL_PILOT_USER_IDS;
+const STAFF = "11111111-1111-4111-8111-111111111111";
 const OUTSIDER = "00000000-0000-4000-8000-000000000000";
 
-describe("파일럿 명단", () => {
-  it("이승엽·김예원·테스터·엄소윤 네 계정뿐", () => {
-    expect(APPROVAL_PILOT_USER_IDS).toHaveLength(4);
-    expect(isApprovalPilotUser(SEUNGYEOP!)).toBe(true);
-    expect(isApprovalPilotUser(OUTSIDER)).toBe(false);
-  });
-
-  it("기본 권한은 전 역할 차단 — 명단 없이는 아무도 못 본다", () => {
+describe("전자결재 메뉴 — 역할 권한이 기본, 개인에게는 저장된 개인별 권한으로(원장 2026-10-06)", () => {
+  it("기본 권한은 전 역할 차단 — 역할 표나 개인별 메뉴 권한으로 열어야 보인다", () => {
     for (const role of SYSTEM_ROLES) {
       expect(MENU_ACCESS.approvals[role]).toBe("none");
     }
+  });
+
+  it("🔴 코드에 계정 명단이 없다 — 권한을 보는 곳(역할·권한 면)과 정하는 곳이 갈리지 않는다", () => {
+    const source = readFileSync(join(process.cwd(), "src", "features", "approvals", "access.ts"), "utf8");
+    // 계정 id(UUID) 문자열이 한 줄도 없어야 한다 — 다시 생기면 그 화면에 안 보이는 권한이 생긴다.
+    expect(source).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    expect(source).not.toMatch(/pilot/i);
   });
 });
 
@@ -52,33 +55,27 @@ describe("문서번호", () => {
   });
 });
 
-describe("권한 매트릭스에 얹히는 개인 예외", () => {
-  it("명단에 있으면 approvals가 full로 열린다", () => {
-    const matrix = applyUserOverrides(
-      resolveMatrix([]),
-      YEWON!,
-      "admin",
-      approvalMenuOverridesFor(YEWON!, false, true),
-    );
+describe("권한 매트릭스에 얹히는 예외", () => {
+  it("개인에게는 저장된 개인별 권한으로 연다 — 그 사람의 그 메뉴만 열린다", () => {
+    const stored = [{ userId: STAFF, menu: "approvals" as const, access: "full" as const }];
+    const matrix = applyUserOverrides(resolveMatrix([]), STAFF, "admin", [...approvalMenuOverridesFor(STAFF, false), ...stored]);
     expect(matrix.approvals.admin).toBe("full");
     expect(matrix.staff.admin).toBe(MENU_ACCESS.staff.admin); // 다른 메뉴는 그대로
+    // 줄이 없는 사람은 그대로 닫혀 있다.
+    expect(applyUserOverrides(resolveMatrix([]), OUTSIDER, "admin", stored).approvals.admin).toBe("none");
   });
 
-  it("명단 밖은 예외가 생기지 않는다", () => {
-    expect(approvalMenuOverridesFor(OUTSIDER, false, true)).toEqual([]);
+  it("역할 표에서 열면 그 역할 전원에게 열린다", () => {
+    expect(resolveMatrix([{ menu: "approvals", role: "admin", access: "full" }]).approvals.admin).toBe("full");
   });
 
-  it("같은 파일럿 계정도 일반 지점에서는 코드 명단으로 열리지 않는다", () => {
-    expect(approvalMenuOverridesFor(YEWON!, false, false)).toEqual([]);
+  it("🔴 코드가 얹는 예외는 없다 — 어느 계정이든(전에 파일럿이던 계정 포함) 저장값 없이는 닫혀 있다", () => {
+    expect(approvalMenuOverridesFor(STAFF, false)).toEqual([]);
+    expect(approvalMenuOverridesFor(OUTSIDER, false)).toEqual([]);
   });
 
-  it("super_admin은 명단에 없어도 통과(원장 지시 2026-08-13)", () => {
-    const matrix = applyUserOverrides(
-      resolveMatrix([]),
-      OUTSIDER,
-      "master",
-      approvalMenuOverridesFor(OUTSIDER, true, false),
-    );
+  it("super_admin은 저장값 없이도 통과(원장 지시 2026-08-13)", () => {
+    const matrix = applyUserOverrides(resolveMatrix([]), OUTSIDER, "master", approvalMenuOverridesFor(OUTSIDER, true));
     expect(matrix.approvals.master).toBe("full");
   });
 });

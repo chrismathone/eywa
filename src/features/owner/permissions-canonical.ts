@@ -15,7 +15,7 @@ import type { PermissionsSettings } from "./settings-types";
  *    조용히 지운다(적대 리뷰 2 C1). 모양이 달라졌으면 다른 저장으로 보고 거절하는 쪽이 안전하다.
  *  · 줄의 차례: 서로 다른 칸의 줄은 차례가 뜻이 없어 칸 순으로 놓는다. **같은 칸의 줄끼리는 저장된 차례를 지킨다**(위 이유).
  *  · 담당자 명단은 포함 여부만 뜻이 있어 정렬한다.
- * ⚠️ 저장되는 세 칸(역할별 · 개인별 · 담당자) 전부가 들어간다 — 한 칸이라도 빠지면 그 칸의 다른 저장이 조용히 되돌아간다.
+ * ⚠️ 저장되는 칸(역할별 · 개인별 메뉴 · 개인별 기능의 네 칸) 전부가 들어간다 — 한 칸이라도 빠지면 그 칸의 다른 저장이 조용히 되돌아간다.
  * ⚠️ 저장값은 스키마를 거치지 않고 읽힌다(resolve.ts) — 깨진 줄(null 등)에도 던지지 않고, 그 줄을 그대로 실어 다른 값으로 본다.
  */
 export function permissionsCanonical(permissions: PermissionsSettings): string {
@@ -24,6 +24,8 @@ export function permissionsCanonical(permissions: PermissionsSettings): string {
     people: rowsByCell(permissions?.userOverrides, ["userId", "menu"]),
     payslip: sortedIds(permissions?.specialAccess?.payslipViewerIds),
     leave: sortedIds(permissions?.specialAccess?.leaveAdjusterIds),
+    split: sortedIds(permissions?.specialAccess?.classSplitterIds),
+    scopes: rowsByCell(permissions?.specialAccess?.staffSubjectScopes, ["userId"]),
   });
 }
 

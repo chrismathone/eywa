@@ -57,7 +57,7 @@ const VALIDATION_ONLY_LABELS: Record<string, Record<string, string>> = {
   permissions: {
     overrides: "역할별 메뉴 권한",
     userOverrides: "개인별 메뉴 권한",
-    specialAccess: "민감 기능 담당자",
+    specialAccess: "개인별 기능 권한",
   },
   dashboard: {
     layouts: "역할별 배치",

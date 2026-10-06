@@ -29,7 +29,6 @@ import { canAdjustLeave } from "@/features/leave/access";
 import { getStaffList, type StaffRow } from "@/features/staff/server/queries";
 import { getSuperAdminIds, displayRoleFor } from "@/lib/auth/super-admin";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { isChinsanTenant } from "@/features/owner/preset";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { EMPLOYMENT_TYPES } from "@/features/staff/resume";
 import { loadStaffListPrefs } from "@/features/staff/server/list-prefs";
@@ -278,9 +277,9 @@ export default async function StaffPage({
             ) : null}
             {/* 연차 관리 — 연차 **부여 일수**(이월·특별휴가·정산)를 고치는 자리(원장 2026-09-09:
                 *"직원관리에 버튼 연동해주지 전자결재에 있는게 연차를 관리하는게 이상하자나"*).
-                휴가 신청·결재는 여전히 전자결재다. 명단(박소선·이승엽·김예원)+super_admin에게만 보이고
+                휴가 신청·결재는 여전히 전자결재다. 원장과 학원 설정 '역할·권한'에서 연차 조정으로 지정한 사람에게만 보이고
                 실제 차단은 그 페이지·서버 액션이 같은 함수로 한다([[#77]]). */}
-            {canAdjustLeave(user.id, isSuperAdmin, { isChinsanTenant: isChinsanTenant(settings), adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds }) ? (
+            {canAdjustLeave(user, isSuperAdmin, { adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds }) ? (
               <Button variant="outline" render={<WindowLink href="/staff/annual-leave" title="연차 관리" />}>
                 {/* 아이콘은 옛 '휴가 관리'(CalendarClock)와 **다른 것**으로 — 그 플래그를 되살리면
                     두 버튼이 나란히 서는데 같은 그림이면 무엇이 무엇인지 못 가린다. */}

@@ -67,13 +67,22 @@ export function prepareSectionForSave(
       if (isPlainObject(storedSection) && "userOverrides" in storedSection) out.userOverrides = storedSection.userOverrides;
       else delete out.userOverrides;
     }
-    // 침산의 기존 민감 기능 명단은 이 새 설정 화면이 절대 덮지 않는다.
-    if (preset !== "generic") delete out.specialAccess;
-    // 배포 전 열린 폼이 새 칸을 보내지 않아도 저장된 담당자 명단을 지키고,
-    // 이전 화면이 개인 예외를 누락했다면 그것도 보존한다.
-    else if (!isPlainObject(rawInput) || !("specialAccess" in rawInput)) {
-      if (isPlainObject(storedSection) && "specialAccess" in storedSection) out.specialAccess = storedSection.specialAccess;
+    // 개인별 기능 권한(담당자 명단 · 과목 범위)은 어느 학원에서나 저장한다(원장 2026-10-06 — 전에는 침산 저장에서 뺐다).
+    // 요청에 **없던** 칸은 저장돼 있던 값으로 둔다 — 배포 전에 열어 둔 화면은 새 칸을 모르고, 스키마 기본값([])이 채워진 채
+    // 저장하면 지정해 둔 사람이 조용히 지워진다. 칸 단위로 본다(명단 전체가 없을 때 · 명단은 있는데 새 칸만 없을 때).
+    // 🔴 **저장값 위에 요청이 보낸 칸만 얹는다** — 이 코드가 모르는 저장 칸(더 새 판이 만든 칸 — 배포를 되돌린 경우)도 지우지 않는다.
+    //    (스키마가 아는 칸만 돌며 다시 만들면, 칸을 하나 더한 뒤 되돌린 배포가 저장 한 번으로 그 칸을 지운다.)
+    const storedSpecial = isPlainObject(storedSection) && isPlainObject(storedSection.specialAccess) ? storedSection.specialAccess : null;
+    const sentSpecial = isPlainObject(rawInput) && isPlainObject(rawInput.specialAccess) ? rawInput.specialAccess : null;
+    if (!sentSpecial) {
+      if (storedSpecial) out.specialAccess = storedSpecial;
       else delete out.specialAccess;
+    } else if (isPlainObject(out.specialAccess)) {
+      const special: Record<string, unknown> = { ...(storedSpecial ?? {}) };
+      for (const [key, value] of Object.entries(out.specialAccess)) {
+        if (key in sentSpecial) special[key] = value;
+      }
+      out.specialAccess = special;
     }
     return out;
   }

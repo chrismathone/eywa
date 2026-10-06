@@ -15,9 +15,17 @@ vi.mock("@/lib/auth/super-admin", () => ({ isCurrentUserSuperAdmin: async () => 
 vi.mock("@/features/audit/server/log", () => ({ logAction: m.audit }));
 vi.mock("./queries", () => ({ tenantSettingsTag: (id: string) => `settings:${id}` }));
 vi.mock("next/cache", () => ({ updateTag: m.updateTag, revalidatePath: m.revalidatePath }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => ({ select: () => ({ in: async (_key: string, ids: string[]) => ({
-  data: ids.filter((id) => m.protectedIds.has(id)).map((id) => ({ id })), error: m.protectionError ? { message: "lookup failed" } : null,
-}) }) }) }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: (table: string) => ({ select: () => {
+  // 직원 조회(users) — 개인별 권한의 대상이 이 지점의 재직 직원인지 확인하는 조회. 물어본 사람은 전부 재직 관리자라고 답한다.
+  if (table === "users") {
+    let wanted: string[] = [];
+    const chain = { eq: () => chain, in: (_key: string, ids: string[]) => { wanted = ids; return chain; }, limit: async () => ({ data: wanted.map((id) => ({ id, system_role: "admin", status: "active" })), error: null }) };
+    return chain;
+  }
+  return { in: async (_key: string, ids: string[]) => ({
+    data: ids.filter((id) => m.protectedIds.has(id)).map((id) => ({ id })), error: m.protectionError ? { message: "lookup failed" } : null,
+  }) };
+} }) }) }));
 vi.mock("./dashboard-assignments", () => ({ validateDashboardAssignments: m.assignments }));
 vi.mock("@/lib/storage/media-storage", () => ({ createUploadTicket: vi.fn(), MEDIA_KIND: {} }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: () => {

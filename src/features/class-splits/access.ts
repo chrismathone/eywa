@@ -1,24 +1,16 @@
 /**
- * 수업 나누기 자격 — **이름이 적힌 사람만**(원장 2026-10-06: *"나누는 건 부원장, 관리자 등 매우 상급자만"* →
- * 역할(admin)로 주면 데스크 직원까지 열린다는 설명을 듣고 **B안(명단)** 선택 → *"명단은 기존에 자주 나왔던 예외인들만"*).
+ * 수업 나누기 자격 — **원장 역할 + 학원 설정 '역할·권한'의 개인별 기능 권한에서 지정한 사람**
+ * (`permissions.specialAccess.classSplitterIds`).
  *
- * 🔑 명단 = 급여명세서 열람 명단(`payslip-access.ts`)과 **같은 다섯 명** — 원장이 가리킨 "자주 나온 예외인"이다.
- *    ⚠️ 그래도 **복사본을 둔다**(그쪽을 import하지 않는다): 급여명세서 명단이 바뀔 때 이 권한이 조용히 따라
- *    움직이면 안 된다. 사람이 바뀌면 **여기 한 곳**만 고친다(시간표 팝업·서버 액션이 같은 함수를 통과한다, [[#77]]).
- * 🔑 user id로 잠근다(개명·동명이인에 안 흔들린다 — payslip-access.ts와 같은 규약).
- * 🔑 super_admin은 자동 통과(원장 2026-08-13 *"superadmin은 앞으로 뭘 안해도 그냥 넣고봐"*).
- * ⚠️ 침산이 아닌 학원(일반판)은 명단을 설정할 화면이 아직 없어 **원장(master)만** 연다 — 넓히지 않는 쪽으로.
+ * 원장 2026-10-06: *"나누는 건 부원장, 관리자 등 매우 상급자만"* → 역할(관리자)로 주면 데스크 직원까지 열린다는 설명을 듣고
+ * 명단을 골랐고, 같은 날 *"전부다 역할 권한을 기본으로 … 필요한건 개인 권한을 따로 편집기에서"* · *"개인 역할은 전부다 편집기"*.
+ * 전에는 이 파일이 계정 명단 다섯을 들고 있었다 — 그중 넷이 원장 역할이라 **원장 역할은 기본으로 열고**, 나머지는 화면에서 지정한다.
+ *
+ * 🔴 여기에 계정 명단을 다시 만들지 말 것(가드: rules.test.ts).
+ * 🔑 운영 계정은 자동 통과(원장 2026-08-13 *"superadmin은 앞으로 뭘 안해도 그냥 넣고봐"*).
+ * ⚠️ 시간표 팝업(보이기)과 서버 액션(쓰기)이 같은 함수를 통과한다([[#77]]) — 실제 호출은 `canSplitClassNow()`(server/gate.ts).
  */
 import type { SystemRole } from "@/lib/permissions";
-
-/** 나누기 허용 계정. 주석의 이름·역할은 2026-10-06 기준(설명용이며 판정에 쓰지 않는다). */
-export const CLASS_SPLITTER_USER_IDS: readonly string[] = [
-  "fcf735fa-edf7-4095-8fa6-724285a018ed", // 박소선 (master)
-  "94007db7-12d3-4b5d-97f2-39071446536b", // 원일 (master)
-  "44626c09-22d9-445f-a350-b792d6afdf75", // 설현 (admin)
-  "8bb70f71-a8c3-450c-9236-561e9b43ca4f", // 김예원 (admin)
-  "477950d4-9cb0-4c02-9ac4-f00d42754d55", // 이승엽 (admin · super_admin)
-];
 
 export const CLASS_SPLIT_DENIED_MSG = "수업 나누기는 지정된 계정만 할 수 있습니다";
 
@@ -26,15 +18,17 @@ export const CLASS_SPLIT_DENIED_MSG = "수업 나누기는 지정된 계정만 �
  * 🔴 **기능 스위치 — 지금은 꺼 둠**(원장 2026-10-06 *"나눔 이거 기능 일단 숨겨서 못쓰게 하고"*). 끄면 시간표 팝업의
  * `수업 나누기` 전환·반 블록 나누기·서버 저장/해제가 전부 닫힌다(모두 이 게이트를 지난다, [[#77]]). 표·출석부 배선은 남아 있지만
  * 나눔 행이 0건이면 아무 화면도 바뀌지 않는다. 다시 열 땐 이 값만 true로.
+ * 꺼져 있는 동안 역할·권한 면의 '수업 나누기' 담당자 칸도 서지 않는다(저장값은 그대로 실려 간다 — 다시 켜면 그 사람들이 그대로 보인다).
  */
 export const CLASS_SPLIT_ENABLED = false;
 
-/** 나누기 게이트(순수) — 실제 호출은 `canSplitClassNow()`(server/gate.ts)가 super_admin·학원 판정을 채워 부른다. */
+/** 나누기 게이트(순수). */
 export function canSplitClass(
   user: { id: string; systemRole: SystemRole },
-  policy: { isSuperAdmin: boolean; isChinsanTenant: boolean },
+  policy: { isSuperAdmin: boolean; splitterIds: readonly string[] },
 ): boolean {
   if (!CLASS_SPLIT_ENABLED) return false;
-  if (policy.isSuperAdmin) return true;
-  return policy.isChinsanTenant ? CLASS_SPLITTER_USER_IDS.includes(user.id) : user.systemRole === "master";
+  if (policy.isSuperAdmin || user.systemRole === "master") return true;
+  // 저장값은 스키마를 거치지 않고 읽힌다 — 목록이 아니면(손으로 넣은 값) 지정된 사람이 없는 것으로 본다.
+  return Array.isArray(policy.splitterIds) && policy.splitterIds.includes(user.id);
 }

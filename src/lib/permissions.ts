@@ -154,7 +154,7 @@ export const TEACHER_MENU_KEYS = [
   "consultations",
   "textbook_requests",
   "expense_requests", // 지출결의서 — 강사가 본인 지출을 작성·제출(사무실은 /billing 지출 면에서 결재)
-  "approvals", // 전자결재 — 기본 none(파일럿 개인 예외 계정에만 보인다). 문서 스코프는 결재선·RLS.
+  "approvals", // 전자결재 — 기본 none(역할 표나 개인별 메뉴 권한으로 연 계정에만 보인다). 문서 스코프는 결재선·RLS.
   "calendar", // 캘린더 — 학원 공용 일정(강사 readonly 열람)
   // 수업 평가 — 강사에겐 **자기 평가 전용**(본인 평가지의 본인 채점만, self-only.ts). 기본값 none이라
   // 학원설정에서 열어야 보인다. 남의 평가지·평가자 점수는 조회 초크포인트에서 잘려 나간다.
@@ -240,7 +240,8 @@ export const MENU_ACCESS: AccessMatrix = {
   //   · 원장직급(master) = 역할 override — ⚠️ **여기 기본값이 none이라 원장도 이 행이 없으면 못 들어간다**
   //     (2026-08-13 실측: 원장이 "원장은 풀려 있을 텐데"라고 여긴 3주간 실제로는 막혀 있었다).
   //   · 개별 인원 = 개인 예외(userOverrides) — 같은 역할 전원이 따라 열리는 것을 막으려고 개인으로만.
-  // 명단·개방은 scripts/staff-access/grant-class-review.mjs(드라이런→--apply, --revoke로 원복) 단일 소스.
+  // 개인에게 여는 자리 = 학원 설정 → 역할·권한 → '개인별 메뉴 권한'(2026-10-06부터 원장이 화면에서 주고 거둔다).
+  // 예전 명단 스크립트(scripts/staff-access/grant-class-review.mjs)는 다시 돌리지 말 것 — 거둔 명단이 되살아난다.
   // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
   class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // 캘린더(학원 공용 일정, 원장 2026-08-18 "일단 캘린더 탭으로 일정부터 관리") — 일정 등록·수정은
@@ -263,11 +264,10 @@ export const MENU_ACCESS: AccessMatrix = {
   //    자기 반에는 교재를 태울 수 있다.
   // ⚠️ 기본값이 full인 셀이 있으므로 super_admin은 mergeMostPermissive로 자동 통과한다.
   textbooks: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "none", accountant: "none", viewer: "none", student: "none" },
-  // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **테스트 단계라 기본 전원 차단**.
-  // 개방은 코드 명단([`access.ts`](../features/approvals/access.ts) = 이승엽·김예원)이 개인 예외로
-  // 얹는다(class_review와 같은 결이되, 그쪽은 tenant_settings 데이터·이쪽은 코드 상수 — 이 PC에서
-  // DB에 넣을 경로가 없어서다). ⚠️ 파일럿을 끝내고 전 직원에게 열 땐 명단을 늘리는 게 아니라
-  // **이 행의 기본값을 올려라**(결재는 결국 모든 직원의 기능이다. student는 계속 none).
+  // 전자결재(기안·결재함, 원장 지시 2026-08-14 — 첫 양식 = 휴가신청서) — **기본 전원 차단**.
+  // 여는 길은 둘뿐이다: 역할·권한 표에서 그 역할의 칸을 열거나, '개인별 메뉴 권한'에서 그 사람에게 준다
+  // (원장 2026-10-06 — 전에 있던 코드 명단은 없앴다, [`access.ts`](../features/approvals/access.ts)).
+  // ⚠️ 전 직원에게 열 땐 **이 행의 기본값을 올려라**(결재는 결국 모든 직원의 기능이다. student는 계속 none).
   approvals: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
   // makeedu 연동 조작 — '지금 동기화'(정방향 릴레이 트리거)·'makeedu로 보내기'(역동기화 큐잉) 실행 권한.
   // 사이드바 메뉴가 아니라 **액션 권한 키**(hidden) — 버튼 노출(목록 ↻ 배지 옆·등록상담 전송 카드)과 서버 액션
@@ -297,6 +297,10 @@ export const MENU_ACCESS: AccessMatrix = {
   kiosk_settings: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", student: "none" },
 };
 
+// 🔴 **새 권한 키의 기본값 = 원장 '전체' · 나머지 '없음'**(원장 2026-10-06: *"새 권한을 넣으면 '원장' 전체가 디폴트로 하고 나머진 없음을
+//    디폴트로"*). 다른 역할에게 여는 것은 원장이 역할·권한 면에서 한다 — 코드 기본값으로 미리 열어 두지 않는다.
+//    위 표에서 그 모양이 아닌 줄은 이 규칙 전에 정해진 것이다(바꾸면 쓰고 있는 학원의 접근이 바뀐다 — 가드 permissions.test.ts가 그 목록을 잠근다).
+//    ⚠️ 새 키는 DB의 권한 함수 기본값(auth_menu_access)과 권한 표의 자리(permission-rows.ts)도 함께 정할 것.
 export function canAccess(role: SystemRole, menu: MenuKey, matrix: AccessMatrix = MENU_ACCESS): boolean {
   return matrix[menu][role] !== "none";
 }
@@ -423,6 +427,10 @@ export type PermissionOverride = { menu: MenuKey; role: SystemRole; access: Acce
 // 1) 역할 전용 특수 화면은 override 자체 무효. 2) master는 자기 콘솔(owner/admin/대시보드)을 잠글 수 없음.
 // 3) student는 '내 학습' 전용 역할이라 일반 메뉴 부여 자체를 막는다(아래).
 const ROLE_LOCKED_MENUS = new Set<MenuKey>(["teacher_onescreen", "my_learning"]);
+/** 역할 전용 화면인가(선생님 원스크린 = 강사 · 내 학습 = 학생) — 어느 역할의 칸도 바꿀 수 없어 권한 표 · 개인별 권한에 세우지 않는다. */
+export function isRoleOnlyMenu(menu: MenuKey): boolean {
+  return ROLE_LOCKED_MENUS.has(menu);
+}
 export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Access): boolean {
   if (ROLE_LOCKED_MENUS.has(menu)) return true;
   // 대시보드 집계는 테넌트 전체 데이터다. 강사 scoped 쿼리가 마련되기 전까지는

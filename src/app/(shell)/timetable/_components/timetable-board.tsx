@@ -125,7 +125,7 @@ export function TimetableEditProvider({
   weekMonday,
 }: {
   children: ReactNode;
-  /** 수업 나누기 권한(0351a, 특수 권한 명단) — 켜지면 드롭 팝업에 '수업 나누기' 쪽이 선다. 게이트는 서버 액션이 다시 본다(#77). */
+  /** 수업 나누기 권한(0351a — 원장 역할 또는 학원 설정에서 지정한 사람 + 수업 관리 권한) — 켜지면 드롭 팝업에 '수업 나누기' 쪽이 선다. 게이트는 서버 액션이 다시 본다(#77). */
   canSplit?: boolean;
   /** 보고 있는 주의 월요일 — 나누기 선택지를 그 주 배치로 만든다. */
   weekMonday?: string;

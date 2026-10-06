@@ -1,3 +1,5 @@
+// 🔴 2026-10-06: 원장 지시로 개인별 메뉴 권한을 전부 거뒀다 — 이 스크립트를 다시 돌리면 그때의 명단이 되살아난다.
+//    다시 줄 땐 학원 설정 → 역할·권한 → 개인별 메뉴 권한에서 원장이 직접 준다(docs/decisions/staff.md).
 // 수업 평가 체크리스트(class_review) 접근 개방 — 테스트 단계 명단 관리(원장 지시).
 //   node scripts/staff-access/grant-class-review.mjs --tenant cs            # 드라이런(현재↔목표 비교만)
 //   node scripts/staff-access/grant-class-review.mjs --tenant cs --apply     # 적용

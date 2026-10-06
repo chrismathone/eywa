@@ -10,6 +10,7 @@ import {
   resolveMatrix,
   SYSTEM_ROLES,
   roleHome,
+  type MenuKey,
   type UserPermissionOverride,
 } from "./permissions";
 
@@ -204,5 +205,32 @@ describe("mergeMostPermissive — super_admin은 잠금만 무시하고 부여�
         expect(rank[merged[menu][role]]).toBeGreaterThanOrEqual(rank[MENU_ACCESS[menu][role]]);
       }
     }
+  });
+});
+
+describe("새 권한의 기본값 = 원장 '전체' · 나머지 '없음'(원장 2026-10-06)", () => {
+  // 이 규칙 전에 정해진 권한 — 기본값이 그 모양이 아니다(바꾸면 쓰고 있는 학원의 접근이 바뀐다).
+  // 🔴 여기에 새 키를 더하지 말 것. 새 권한은 원장만 '전체'로 시작하고, 다른 역할에게는 원장이 역할·권한 면에서 연다.
+  const BEFORE_RULE: readonly string[] = [
+    "dashboard", "timetable", "attendance", "makeups", "seat_attendance", "classes", "students", "exams", "enrollment",
+    "consultations", "withdrawals", "retention", "newcomers", "ecs", "mcs", "lesson_reports", "attendance_salary_settings",
+    "staff", "billing", "textbook_requests", "expense_requests", "meetings", "documents", "class_review", "approvals",
+    "calendar", "shuttle", "inventory", "textbooks", "integrations", "sheet_sync", "help", "support", "teacher_onescreen", "my_learning",
+  ];
+  const expected = Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"]));
+
+  it("🔴 목록 밖의 권한은 원장만 '전체'로 시작한다 — 새 권한을 다른 역할에게 코드 기본값으로 열어 두지 않는다", () => {
+    for (const menu of MENU_KEYS) {
+      if (BEFORE_RULE.includes(menu)) continue;
+      expect(MENU_ACCESS[menu], menu).toEqual(expected);
+    }
+  });
+
+  it("목록은 지금 있는 권한만 가리키고, 규칙대로인 권한은 들지 않는다(목록이 면제 자리로 자라지 않게)", () => {
+    for (const menu of BEFORE_RULE) {
+      expect(MENU_KEYS as readonly string[], menu).toContain(menu);
+      expect(MENU_ACCESS[menu as MenuKey], menu).not.toEqual(expected);
+    }
+    expect(new Set(BEFORE_RULE).size).toBe(BEFORE_RULE.length);
   });
 });

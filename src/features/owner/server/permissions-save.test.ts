@@ -10,7 +10,7 @@ import type { PermissionsSettings } from "../settings-types";
  *    바꿨으면 저장하지 않는다(기준 token) — 받으면 그 변경이 조용히 되돌아간다.
  *  · 기준은 저장되는 세 칸 전부(역할별 · 개인별 · 담당자)의 **저장된 줄 그대로**다(차례만 무시). 적용하면 같은 표여도
  *    줄이 달라졌으면 다른 저장이다 — 같은 줄을 앱과 DB가 다르게 읽는 자리가 있다(적대 리뷰 2 C1).
- *  · 기존 보호(침산 담당자 칸 미저장 · 운영 설정 보호 · 원장 전용)는 그대로다.
+ *  · 기존 보호(운영 설정 보호 · 원장 전용)는 그대로다. 개인별 기능 권한(담당자 · 과목 범위)은 어느 학원에서나 저장된다(원장 2026-10-06).
  * 합성 값만 쓴다.
  */
 const STAFF_A = "11111111-1111-4111-8111-111111111111";
@@ -206,9 +206,9 @@ describe("🔴 연 뒤 다른 곳이 바꿨으면 저장하지 않는다 — 그
   });
 
   it("일반판 — 다른 창이 담당자 명단만 바꿨다 → 거절", async () => {
-    seed("generic", { ...START, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [] } });
+    seed("generic", { ...START, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] } });
     const w = openWindow();
-    otherWriter((p) => ({ ...p, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [STAFF_B] } }));
+    otherWriter((p) => ({ ...p, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [STAFF_B], classSplitterIds: [], staffSubjectScopes: [] } }));
     expect((await w.save({ ...w.draft, overrides: [] }))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
     expect(stored().specialAccess.leaveAdjusterIds).toEqual([STAFF_B]);
   });
@@ -296,7 +296,7 @@ describe("깨진 저장값", () => {
     seed("chinsan", { ...START, userOverrides: [...START.userOverrides, null] });
     const fd = new FormData();
     fd.set("section", "permissions");
-    fd.set("data", JSON.stringify({ ...START, specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } }));
+    fd.set("data", JSON.stringify({ ...START, specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] } }));
     // 화면이 받았을 기준(같은 함수) — 깨진 줄을 없는 셈 치지 않는다.
     const broken = resolveSettings(m.row!.data, { name: "" }).permissions;
     expect(() => permissionsToken(broken)).not.toThrow();
@@ -323,30 +323,29 @@ describe("자기 저장 뒤 재저장", () => {
     expect(stored().overrides).toEqual([]);
   });
 
-  it("🔴 침산 — 담당자 칸을 보내도 저장 행에 남지 않고, 응답 token은 그렇게 저장된 값의 것이다(어긋나면 재저장이 막힌다)", async () => {
+  it("침산 — 개인별 기능 권한을 저장하고, 응답 token은 그렇게 저장된 값의 것이다(어긋나면 재저장이 막힌다)", async () => {
     const w = openWindow();
-    // 직접 만든 요청이 담당자를 실어 보냈다 — 침산은 이 칸을 저장하지 않는다(preset.ts).
-    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [] } };
+    const sent = { ...w.draft, specialAccess: { payslipViewerIds: [STAFF_A], leaveAdjusterIds: [], classSplitterIds: [STAFF_B], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["english"] }] } };
     const res = await w.save(sent);
     expect(res?.ok).toBe(true);
-    expect(rawStored()).not.toHaveProperty("specialAccess");
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [], leaveAdjusterIds: [] });
-    // 보낸 값의 token이 아니다 — 보낸 값으로 만들면 다음 저장이 '다른 곳에서 바뀜'으로 막힌다.
-    expect(res?.permissions?.token).not.toBe(permissionsToken(sent as PermissionsSettings));
+    expect(stored().specialAccess).toEqual(sent.specialAccess);
     expect(res?.permissions?.token).toBe(permissionsToken(stored()));
-    expect((await w.save({ ...w.draft, overrides: [] }, res!.permissions!.token))?.ok).toBe(true);
+    // 옛 기준으로는 더 저장할 수 없고, 응답의 token으로 이어서 저장한다 — 지정은 그대로 남는다.
+    expect((await w.save({ ...w.draft, overrides: [] }))?.error).toBe(CHANGED_ELSEWHERE_ERROR);
+    expect((await w.save({ ...stored(), overrides: [] }, res!.permissions!.token))?.ok).toBe(true);
+    expect(stored().specialAccess).toEqual(sent.specialAccess);
   });
 
   it("일반판 — 담당자 명단을 저장하고 이어서 다시 저장한다", async () => {
     seed("generic");
     const w = openWindow();
-    const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] } });
+    const res = await w.save({ ...w.draft, specialAccess: { payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] } });
     expect(res?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] });
     expect(res?.permissions?.token).toBe(permissionsToken(stored()));
     const again = await w.save({ ...stored(), userOverrides: [] }, res!.permissions!.token);
     expect(again?.ok).toBe(true);
-    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] });
+    expect(stored().specialAccess).toEqual({ payslipViewerIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], classSplitterIds: [], staffSubjectScopes: [] });
   });
 });
 
@@ -411,5 +410,147 @@ describe("기존 보호는 그대로다", () => {
     const res = await w.save({ ...w.draft, overrides: [{ menu: "owner", role: "master", access: "none" }] });
     expect(res?.error).toBeTruthy();
     expect(m.writes).toBe(0);
+  });
+});
+
+describe("개인별 기능 권한 — 어느 학원에서나 화면에서 지정한다(원장 2026-10-06)", () => {
+  const none = { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] };
+
+  it("🔴 새로 지정하는 사람은 지금 이 학원의 재직 직원이어야 한다 — 칸마다 본다", async () => {
+    seed("chinsan");
+    m.staff = m.staff.filter((u) => u.id !== STAFF_B);
+    const w = openWindow();
+    for (const special of [
+      { ...none, payslipViewerIds: [STAFF_B] },
+      { ...none, leaveAdjusterIds: [STAFF_B] },
+      { ...none, classSplitterIds: [STAFF_B] },
+      { ...none, staffSubjectScopes: [{ userId: STAFF_B, subjects: ["math"] }] },
+    ]) {
+      expect((await w.save({ ...w.draft, specialAccess: special }))?.error).toContain("재직 직원");
+    }
+    expect(m.writes).toBe(0);
+  });
+
+  it("🔴 이미 지정돼 있던 사람은 퇴직했어도 다른 저장을 막지 않는다 — 다른 칸에 새로 넣는 것만 막는다", async () => {
+    seed("chinsan", { ...START, specialAccess: { ...none, payslipViewerIds: [STAFF_B] } });
+    m.staff = m.staff.filter((u) => u.id !== STAFF_B);
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, overrides: [] }))?.ok).toBe(true);
+    expect(stored().specialAccess.payslipViewerIds).toEqual([STAFF_B]);
+    const again = openWindow();
+    expect((await again.save({ ...again.draft, specialAccess: { ...again.draft.specialAccess, classSplitterIds: [STAFF_B] } }))?.error).toContain("재직 직원");
+    // 거두는 것은 된다.
+    expect((await again.save({ ...again.draft, specialAccess: none }))?.ok).toBe(true);
+    expect(stored().specialAccess.payslipViewerIds).toEqual([]);
+  });
+
+  it("🔴 과목 범위에는 학원 설정에 있는 과목만 — 없는 과목은 그 사람에게 직원이 한 명도 안 보이게 만든다", async () => {
+    seed("chinsan");
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, specialAccess: { ...none, staffSubjectScopes: [{ userId: STAFF_B, subjects: ["math", "no_such_subject"] }] } });
+    expect(res?.error).toContain("학원 설정에 있는 과목");
+    expect(m.writes).toBe(0);
+  });
+
+  it("이미 저장돼 있던 범위는 그 과목이 없어졌어도 다른 저장을 막지 않는다", async () => {
+    const scopes = [{ userId: STAFF_B, subjects: ["no_such_subject"] }];
+    seed("chinsan", { ...START, specialAccess: { ...none, staffSubjectScopes: scopes } });
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, overrides: [] }))?.ok).toBe(true);
+    expect(stored().specialAccess.staffSubjectScopes).toEqual(scopes);
+  });
+
+  it("🔴 새 학원(일반판)도 같다 — 범위의 과목이 없어졌거나(과목 흡수) 지정한 사람이 퇴직해도 역할 표 저장이 막히지 않는다", async () => {
+    const special = { ...none, payslipViewerIds: [STAFF_B], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["no_such_subject"] }] };
+    seed("generic", { ...START, specialAccess: special });
+    m.staff = m.staff.filter((u) => u.id !== STAFF_B);
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, overrides: [] }))?.ok).toBe(true);
+    expect(stored().specialAccess).toEqual(special);
+    // 새로 지정하는 것은 일반판에서도 본다.
+    const again = openWindow();
+    expect((await again.save({ ...again.draft, specialAccess: { ...again.draft.specialAccess, leaveAdjusterIds: [STAFF_B] } }))?.error).toContain("재직 직원");
+  });
+
+  it("🔴 이 코드가 모르는 저장 칸(더 새 판이 만든 칸)은 저장해도 남는다 — 되돌린 배포가 지우지 않는다", async () => {
+    seed("chinsan", { ...START, specialAccess: { ...none, classSplitterIds: [STAFF_B], futureKeyIds: [STAFF_A] } });
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: { ...none, classSplitterIds: [STAFF_B], leaveAdjusterIds: [STAFF_A] } }))?.ok).toBe(true);
+    expect(rawStored().specialAccess).toEqual({ ...none, classSplitterIds: [STAFF_B], leaveAdjusterIds: [STAFF_A], futureKeyIds: [STAFF_A] });
+  });
+
+  it("🔴 새 칸을 모르는 옛 화면의 저장이 지정해 둔 사람을 지우지 않는다", async () => {
+    const special = { ...none, classSplitterIds: [STAFF_B], staffSubjectScopes: [{ userId: STAFF_B, subjects: ["math"] }] };
+    seed("chinsan", { ...START, specialAccess: special });
+    const w = openWindow();
+    // 옛 화면은 담당자 두 칸만 안다(그 둘은 화면에 있던 값 그대로 보낸다).
+    const res = await w.save({ overrides: [], userOverrides: w.draft.userOverrides, specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] } });
+    expect(res?.ok).toBe(true);
+    expect(stored().specialAccess).toEqual(special);
+  });
+
+  it("운영자 계정의 지정은 지우거나 더할 수 없다(그대로 실어 보내면 저장된다)", async () => {
+    seed("chinsan", { ...START, specialAccess: { ...none, classSplitterIds: [OPERATOR] } });
+    m.platformIds = new Set([OPERATOR]);
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, specialAccess: none }))?.error).toBeTruthy();
+    expect(m.writes).toBe(0);
+    expect((await w.save({ ...w.draft, specialAccess: { ...w.draft.specialAccess, classSplitterIds: [OPERATOR, STAFF_B] } }))?.ok).toBe(true);
+    expect(stored().specialAccess.classSplitterIds).toEqual([OPERATOR, STAFF_B]);
+  });
+});
+
+describe("침산 — 개인별 메뉴 권한을 화면에서 준다(원장 2026-10-06)", () => {
+  it("재직 직원에게 새로 주는 줄은 저장된다 — 역할 표와 함께 한 번에", async () => {
+    seed("chinsan");
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, userOverrides: [...START.userOverrides, { userId: STAFF_B, menu: "billing", access: "readonly" }] });
+    expect(res?.ok).toBe(true);
+    expect(stored().userOverrides).toContainEqual({ userId: STAFF_B, menu: "billing", access: "readonly" });
+    expect(stored().overrides).toEqual(START.overrides);
+  });
+
+  it("🔴 다른 지점·퇴직 직원에게 새로 주는 줄은 받지 않는다 — 침산도 대상을 확인한다", async () => {
+    seed("chinsan");
+    m.staff = m.staff.filter((u) => u.id !== STAFF_B);
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, userOverrides: [...START.userOverrides, { userId: STAFF_B, menu: "billing", access: "full" }] });
+    expect(res?.error).toContain("재직 직원");
+    expect(m.writes).toBe(0);
+  });
+
+  it("🔴 이미 저장돼 있던 줄은 그 사람이 퇴직했어도 다른 저장을 막지 않는다(그 줄을 바꾸는 것만 막는다)", async () => {
+    seed("chinsan");
+    m.staff = m.staff.map((u) => (u.id === STAFF_A ? { ...u, status: "inactive" } : u));
+    const w = openWindow();
+    // 역할 표만 고친 저장 — 퇴직자의 줄은 그대로 실려 간다.
+    expect((await w.save({ ...w.draft, overrides: [] }))?.ok).toBe(true);
+    expect(stored().userOverrides).toEqual(START.userOverrides);
+    // 그 줄의 값을 바꾸는 것은 새로 주는 것과 같다 → 거절.
+    const again = openWindow();
+    const res = await again.save({ ...again.draft, userOverrides: [{ userId: STAFF_A, menu: "staff", access: "readonly" }] });
+    expect(res?.error).toContain("재직 직원");
+    // 거두는 것은 된다.
+    expect((await again.save({ ...again.draft, userOverrides: [] }))?.ok).toBe(true);
+    expect(stored().userOverrides).toEqual([]);
+  });
+
+  it("역할 전용 화면처럼 잠긴 칸은 개인에게도 줄 수 없다", async () => {
+    seed("chinsan");
+    m.staff = m.staff.map((u) => (u.id === STAFF_B ? { ...u, system_role: "teacher" } : u));
+    const w = openWindow();
+    const res = await w.save({ ...w.draft, userOverrides: [...START.userOverrides, { userId: STAFF_B, menu: "dashboard", access: "full" }] });
+    expect(res?.error).toContain("잠긴 메뉴 권한");
+    expect(m.writes).toBe(0);
+  });
+
+  it("운영자 계정의 줄은 침산에서도 지우거나 더할 수 없다(그대로 실어 보내면 저장된다)", async () => {
+    seed("chinsan", { ...START, userOverrides: [...START.userOverrides, { userId: OPERATOR, menu: "staff", access: "full" }] });
+    m.platformIds = new Set([OPERATOR]);
+    const w = openWindow();
+    expect((await w.save({ ...w.draft, userOverrides: START.userOverrides }))?.error).toContain("지점에서 변경할 수 없습니다");
+    expect(m.writes).toBe(0);
+    expect((await w.save({ ...w.draft, userOverrides: [{ userId: OPERATOR, menu: "staff", access: "full" }] }))?.ok).toBe(true);
+    expect(stored().userOverrides).toEqual([{ userId: OPERATOR, menu: "staff", access: "full" }]);
   });
 });

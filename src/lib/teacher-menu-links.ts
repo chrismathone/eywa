@@ -50,7 +50,7 @@ export const TEACHER_MENU_LINKS: readonly TeacherMenuLink[] = [
   // 🔴 지금은 **메뉴에서 뺀 항목**이라 서지 않는다(원장 2026-09-10 "캘린더 탭은 메뉴에서 제외") — NAV 표의 `hidden`을
   //    teacherMenuKeysFor가 따른다. 되살릴 땐 그 표의 `hidden`만 푼다(이 줄은 그대로 둔다 — 입구 정책은 한 곳).
   { href: "/calendar", labelKey: "menu.item.calendar", icon: MENU_ICON.calendar, menu: "calendar" },
-  // 전자결재 — 기본 teacher=none이라 파일럿 개인 예외 계정(테스터)에만 보인다. 문서 스코프는
+  // 전자결재 — 기본 teacher=none이라 학원 설정에서 강사에게(또는 그 사람에게) 연 경우에만 보인다. 문서 스코프는
   // 결재선·RLS가 정하므로(본인 관련 문서만) 미스코프 누수 없음.
   { href: "/approvals", labelKey: "menu.item.approvals", icon: MENU_ICON.approvals, menu: "approvals" },
   // 수업 평가 — 강사는 **자기 평가 전용**(본인 평가지의 본인 채점만 보이고 쓸 수 있다, 원장 2026-08-19).

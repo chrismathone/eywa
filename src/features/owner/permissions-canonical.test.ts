@@ -19,7 +19,7 @@ const base = (patch: Partial<PermissionsSettings> = {}): PermissionsSettings => 
     { userId: A, menu: "staff", access: "full" },
     { userId: B, menu: "billing", access: "readonly" },
   ],
-  specialAccess: { payslipViewerIds: [A, B], leaveAdjusterIds: [B] },
+  specialAccess: { payslipViewerIds: [A, B], leaveAdjusterIds: [B], classSplitterIds: [], staffSubjectScopes: [] },
   ...patch,
 });
 /** 스키마를 거치지 않은 저장값(손으로 넣은 값·스크립트)을 그대로 넘긴다. */
@@ -28,7 +28,7 @@ const raw = (value: unknown) => value as PermissionsSettings;
 describe("같은 저장값이면 같다 — 차례만 무시한다", () => {
   it("서로 다른 칸의 줄 차례 · 사람 차례 · 담당자 차례 · 객체 키 차례(jsonb가 바꿔 돌려준다)", () => {
     const shuffled: PermissionsSettings = {
-      specialAccess: { leaveAdjusterIds: [B], payslipViewerIds: [B, A] },
+      specialAccess: { leaveAdjusterIds: [B], payslipViewerIds: [B, A], classSplitterIds: [], staffSubjectScopes: [] },
       userOverrides: [
         { access: "readonly", menu: "billing", userId: B },
         { userId: A, menu: "staff", access: "full" },
@@ -42,7 +42,7 @@ describe("같은 저장값이면 같다 — 차례만 무시한다", () => {
   });
 
   it("입력을 바꾸지 않는다(정렬은 사본에서 한다)", () => {
-    const value = base({ specialAccess: { payslipViewerIds: [B, A], leaveAdjusterIds: [B] } });
+    const value = base({ specialAccess: { payslipViewerIds: [B, A], leaveAdjusterIds: [B], classSplitterIds: [], staffSubjectScopes: [] } });
     const copy = structuredClone(value);
     permissionsCanonical(value);
     expect(value).toEqual(copy);
@@ -105,10 +105,24 @@ describe("🔴 저장되는 세 칸 중 무엇이든 달라지면 다르다", ()
   });
 
   it("담당자 명단 — 두 명단은 서로 다른 칸이다(같은 사람이 옮겨 가도 다르다)", () => {
-    expect(permissionsCanonical(base({ specialAccess: { payslipViewerIds: [A], leaveAdjusterIds: [B] } }))).not.toBe(before);
-    expect(permissionsCanonical(base({ specialAccess: { payslipViewerIds: [A, B], leaveAdjusterIds: [] } }))).not.toBe(before);
-    expect(permissionsCanonical(base({ specialAccess: { payslipViewerIds: [B], leaveAdjusterIds: [A, B] } }))).not.toBe(
-      permissionsCanonical(base({ specialAccess: { payslipViewerIds: [A, B], leaveAdjusterIds: [B] } })),
+    expect(permissionsCanonical(base({ specialAccess: { payslipViewerIds: [A], leaveAdjusterIds: [B], classSplitterIds: [], staffSubjectScopes: [] } }))).not.toBe(before);
+    expect(permissionsCanonical(base({ specialAccess: { payslipViewerIds: [A, B], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] } }))).not.toBe(before);
+    expect(permissionsCanonical(base({ specialAccess: { payslipViewerIds: [B], leaveAdjusterIds: [A, B], classSplitterIds: [], staffSubjectScopes: [] } }))).not.toBe(
+      permissionsCanonical(base({ specialAccess: { payslipViewerIds: [A, B], leaveAdjusterIds: [B], classSplitterIds: [], staffSubjectScopes: [] } })),
+    );
+  });
+
+  it("수업 나누기 · 직원관리 과목 범위도 기준에 든다 — 빠지면 그 칸의 다른 저장이 조용히 되돌아간다", () => {
+    const special = base().specialAccess;
+    expect(permissionsCanonical(base({ specialAccess: { ...special, classSplitterIds: [A] } }))).not.toBe(before);
+    const scoped = permissionsCanonical(base({ specialAccess: { ...special, staffSubjectScopes: [{ userId: A, subjects: ["math"] }] } }));
+    expect(scoped).not.toBe(before);
+    // 같은 사람의 과목만 바뀌어도 다른 저장이다.
+    expect(permissionsCanonical(base({ specialAccess: { ...special, staffSubjectScopes: [{ userId: A, subjects: ["english"] }] } }))).not.toBe(scoped);
+    // 줄의 차례는 뜻이 없다.
+    const two = [{ userId: A, subjects: ["math"] }, { userId: B, subjects: ["english"] }];
+    expect(permissionsCanonical(base({ specialAccess: { ...special, staffSubjectScopes: two } }))).toBe(
+      permissionsCanonical(base({ specialAccess: { ...special, staffSubjectScopes: [...two].reverse() } })),
     );
   });
 });

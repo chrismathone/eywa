@@ -576,18 +576,33 @@ export const userPermissionOverrideSchema = z.object({
   menu: z.enum(MENU_KEYS as unknown as [MenuKey, ...MenuKey[]]),
   access: accessEnum,
 });
+/** 직원관리 과목 범위 한 줄 — 이 사람은 직원관리에서 고른 과목의 선생님만 본다(과목 키 = `operations.subjects[].key`). */
+const staffSubjectScopeSchema = z.object({
+  userId: z.string().uuid(),
+  subjects: z.array(z.string().trim().min(1).max(64)).min(1, "과목을 하나 이상 골라 주세요").max(30),
+});
+/**
+ * 개인별 기능 권한 — 메뉴 권한과 별개로 **사람을 지정해서** 여는 기능(원장 2026-10-06 *"개인 역할은 전부다 편집기"*).
+ * 코드에 계정 명단을 두지 않는다 — 급여명세서 열람 · 연차 조정 · 수업 나누기 · 직원관리 과목 범위가 전부 여기서 정해진다.
+ * 🔴 칸을 더하면 함께 고칠 곳: 기본값 둘(defaults · generic-defaults) · 기준 token(permissions-canonical) · 운영 계정 보호(platform-settings)
+ *    · 옛 화면 저장 보존(preset.ts prepareSectionForSave — 요청에 없던 칸은 저장값을 지킨다) · 변경 내역 라벨(settings-diff).
+ */
 const specialAccessSchema = z.object({
   payslipViewerIds: z.array(z.string().uuid()).max(80).default([]),
   leaveAdjusterIds: z.array(z.string().uuid()).max(80).default([]),
+  classSplitterIds: z.array(z.string().uuid()).max(80).default([]),
+  staffSubjectScopes: z.array(staffSubjectScopeSchema).max(80).default([]),
 });
+/** 사람 id 목록인 칸(과목 범위는 줄 모양이 달라 따로 다룬다). */
+export const SPECIAL_ACCESS_ID_LISTS = ["payslipViewerIds", "leaveAdjusterIds", "classSplitterIds"] as const;
 export const permissionsSchema = z
   .object({
     overrides: z.array(permissionOverrideSchema).max(MENU_KEYS.length * SYSTEM_ROLES.length),
     // .default([]) — 기존 저장분(키 없음)이 그대로 파싱되도록. 폼 저장 시엔 payload가 이 키를
     // 관통시켜야 한다(permissions-section) — 빠뜨리면 매트릭스 저장 한 번에 개인 예외가 전멸한다.
     userOverrides: z.array(userPermissionOverrideSchema).max(80).default([]),
-    // 일반판의 민감 기능은 메뉴 권한과 별도로 사람을 지정한다. 침산은 기존 명단을 유지한다.
-    specialAccess: specialAccessSchema.default({ payslipViewerIds: [], leaveAdjusterIds: [] }),
+    // 사람을 지정해서 여는 기능(어느 학원에서나) — 메뉴 권한과 별개의 문이다.
+    specialAccess: specialAccessSchema.default({ payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] }),
   })
   .superRefine((v, ctx) => {
     // 가드레일을 스키마에서 강제(저장 자체 거부) — resolveMatrix 적용 단계와 이중 방어.
@@ -612,10 +627,18 @@ export const permissionsSchema = z
         ctx.addIssue({ code: "custom", message: "역할 전용 화면(원스크린/내 학습)은 개인 예외로 편집할 수 없습니다" });
       }
     }
-    for (const ids of [v.specialAccess.payslipViewerIds, v.specialAccess.leaveAdjusterIds]) {
+    for (const key of SPECIAL_ACCESS_ID_LISTS) {
+      const ids = v.specialAccess[key];
       if (new Set(ids).size !== ids.length) {
         ctx.addIssue({ code: "custom", message: "담당자를 중복 지정할 수 없습니다" });
       }
+    }
+    const scoped = v.specialAccess.staffSubjectScopes.map((r) => r.userId);
+    if (new Set(scoped).size !== scoped.length) {
+      ctx.addIssue({ code: "custom", message: "같은 사람의 과목 범위를 두 번 지정할 수 없습니다" });
+    }
+    if (v.specialAccess.staffSubjectScopes.some((r) => new Set(r.subjects).size !== r.subjects.length)) {
+      ctx.addIssue({ code: "custom", message: "과목 범위에 같은 과목을 두 번 넣을 수 없습니다" });
     }
     const menuCells = v.userOverrides.map((r) => `${r.userId}:${r.menu}`);
     if (new Set(menuCells).size !== menuCells.length) {

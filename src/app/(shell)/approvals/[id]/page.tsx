@@ -129,8 +129,11 @@ function buildTimeline(doc: NonNullable<Awaited<ReturnType<typeof getApprovalDoc
  */
 export default async function ApprovalDocPage({ params }: { params: Promise<{ id: string }> }) {
   // ⚠️ 메뉴 게이트(requireAccess)를 **일부러 안 건다** — 결재자 후보가 전 직원이 되면서(원장 2026-08-14)
-  //    파일럿 명단 밖 직원도 벨 알림 링크로 이 문서에 들어와 결재해야 한다. 열람 자격은 메뉴가 아니라
+  //    전자결재 메뉴가 없는 직원도 벨 알림 링크로 이 문서에 들어와 결재해야 한다. 열람 자격은 메뉴가 아니라
   //    RLS(기안자·결재선·참조·원장)가 정하고, 못 보는 사람은 조회가 비어 notFound로 떨어진다.
+  // ⚠️ 강사 역할은 사정이 다르다 — 강사 화면의 가드((shell)/layout.tsx)가 이 주소도 전자결재 메뉴로 판정해, 그 칸이
+  //    '없음'이면 **문서를 새로 열 때**(주소 입력 · 새로고침) 강사 홈으로 보낸다. 그 가드는 화면 전체를 받을 때만 돌아서
+  //    벨 알림으로 넘어온 이동에서는 열릴 수 있다 — 믿을 수 있는 길이 아니니, 강사가 결재·기안하게 하려면 전자결재 권한을 준다.
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const { id } = await params;

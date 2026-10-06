@@ -1,0 +1,182 @@
+/**
+ * 역할·권한 면의 **줄 구성** — 왼쪽 탭과 그 탭을 눌렀을 때 나오는 내부 메뉴의 차례 그대로. 순수(Vitest).
+ *
+ * 원장 2026-10-06: *"권한도 실제 좌측 탭과 탭 클릭시 나오는 내부메뉴에 맞게 권한 정렬해줄것. 이건 탭 및 메뉴구성과
+ * 배선을 일치화 시켜서 구조를 철저히 맞출것."* 전에는 권한 표가 코드의 권한 키 차례(`MENU_KEYS`)로 서 있어서, 화면에서
+ * 보는 메뉴 차례와 표의 줄 차례가 서로 달랐다.
+ *
+ * 🔴 차례·묶음·이름은 여기서 새로 적지 않는다 — 사이드바·메뉴 판·'탭 및 메뉴 구성' 편집기가 쓰는 **같은 해석**
+ *    ([`configuredHubGroups`](@/lib/menu-hub))을 그대로 부른다. 원장이 탭을 옮기거나 이름을 바꾸면 이 표도 따라 바뀐다.
+ * 🔴 줄의 단위는 **권한 키**다(목적지가 아니다) — 수납의 일곱 면은 권한이 하나라 줄도 하나다. 그 줄이 함께 여는 내부 메뉴는
+ *    `covers`에 이름으로 적는다(무엇이 열리는지 표에서 보이게).
+ * 🔴 메뉴 구성에서 감춘 줄도 **지우지 않는다** — 감추는 것은 입구뿐이고 권한은 그대로다(주소를 치면 열린다, [[#77]]).
+ *    표에서 빠지면 그 권한을 고칠 자리가 사라진다. `hiddenInMenu` 표식만 단다.
+ * 🔴 화면(표 · 개인별 메뉴 권한의 메뉴 고르기)은 `editablePermissionRowGroups`를 쓴다 — **탭 및 메뉴 구성에 있는 화면의 권한만** 세운다
+ *    (원장 2026-10-06 *"탭 및 메뉴 구성에 사용중인 역할만 역할 권한에 넣을것"*). 어느 메뉴에도 없는 화면(④)과, 어느 역할의 칸도 바꿀 수
+ *    없는 역할 전용 화면 둘(선생님 원스크린 · 내 학습 — *"역할 필요없어 보이는데"*)은 세우지 않는다.
+ * 강사 '내 메뉴' 표시 칸의 차례는 [`teacher-toggle-rows.ts`](./teacher-toggle-rows.ts)가 같은 방식으로 정한다.
+ */
+import { configuredHubGroups, HUB_GROUPS, hubDestinationForPath, SUPPORT_GROUPS, type HubDest } from "@/lib/menu-hub";
+import { navItemByKey } from "@/lib/navigation";
+import { isRoleOnlyMenu, MENU_KEYS, MENU_LABEL, type MenuKey } from "@/lib/permissions";
+import { SETTINGS_ROLE_HREF, SETTINGS_ROLE_KEYS, type SettingsRoleKey } from "@/lib/settings-role-catalog";
+import { teacherNavigationSource } from "@/lib/teacher-navigation";
+import { isMenuHiddenByLayout, type MenuGroupLayout, type MenuLayout } from "./menu-layout";
+
+/** 권한 표가 읽는 메뉴 구성 — 학원 설정 '탭 및 메뉴 구성'의 저장 값(관리자뷰 · 강사뷰). */
+export type PermissionNavigation = {
+  menus?: MenuLayout;
+  groups?: MenuGroupLayout;
+  teacherMenus?: MenuLayout;
+  teacherGroups?: MenuGroupLayout;
+};
+
+export type PermissionRow = {
+  menu: MenuKey;
+  /** 권한 이름 — 화면과 감사 기록이 같은 말을 쓴다(`MENU_LABEL`). */
+  label: string;
+  /** 이 권한 하나로 함께 열리는 내부 메뉴(메뉴 구성의 이름 그대로). 둘 이상이거나 이름을 바꿨을 때만 채운다. */
+  covers: string[];
+  /** 메뉴 구성에서 이 권한의 입구를 전부 감췄다(권한은 그대로다). */
+  hiddenInMenu: boolean;
+  /** 메뉴 버튼 없이 다른 화면 **안에서** 쓰는 권한 — 그 화면의 줄 바로 아래에 들여 세운다. */
+  inner: boolean;
+};
+
+export type PermissionRowGroup = {
+  id: string;
+  /** 왼쪽 탭 이름(원장이 바꿨으면 바꾼 이름). */
+  label: string;
+  /** 왼쪽 탭 자체를 감췄다. */
+  hiddenInMenu: boolean;
+  rows: PermissionRow[];
+};
+
+/** 강사 '내 메뉴'에만 입구가 있는 권한 · 어느 메뉴에도 입구가 없는 권한의 묶음 이름. */
+export const TEACHER_ONLY_GROUP = { id: "teacher-menu", label: "강사 ‘내 메뉴’ 전용" } as const;
+export const NO_MENU_GROUP = { id: "no-menu", label: "메뉴에 없는 화면" } as const;
+
+/**
+ * 메뉴 버튼이 없는 권한이 속한 화면 — **다른 화면 안의 버튼·드롭다운으로만 닿는 것**만 손으로 적는다. 설정 권한은 그 설정의
+ * 주소가 속한 메뉴에서 저절로 정해진다(`SETTINGS_ROLE_HREF`).
+ * ⚠️ 새 권한 키가 어디에도 속하지 않으면 '메뉴에 없는 화면'으로 떨어지고, 가드(`permission-rows.test.ts`)가 그 목록을 잠근다.
+ */
+const INNER_PARENT: Partial<Record<MenuKey, MenuKey>> = {
+  seat_attendance: "attendance", // 출석부 안 강사 드롭다운의 랩실·JJ실
+  sheet_sync: "timetable", // 시간표의 '시트 반영' · '시트에서 가져오기'
+  integrations: "students", // 원생목록의 '지금 동기화'(콜&상담의 '보내기'도 이 권한)
+};
+
+/** `listed` = '이 권한으로 열리는 메뉴'에 이름을 적는 목적지(원장만 들어가는 면은 적지 않는다 — 감춤 판정에는 센다). */
+type PlacedDest = { label: string; renamed: boolean; hidden: boolean; listed: boolean };
+type Placed = { row: PermissionRow; dests: PlacedDest[] };
+
+function finish(placed: Placed): PermissionRow {
+  const listed = placed.dests.filter((d) => d.listed);
+  const covers = listed.length > 1 ? listed.map((d) => d.label) : listed[0]?.renamed ? [listed[0].label] : [];
+  return { ...placed.row, covers, hiddenInMenu: placed.dests.length > 0 && placed.dests.every((d) => d.hidden) };
+}
+
+const newRow = (menu: MenuKey, inner = false): PermissionRow => ({ menu, label: MENU_LABEL[menu], covers: [], hiddenInMenu: false, inner });
+const renamed = (d: HubDest) => !!d.originalLabel && d.originalLabel !== d.label;
+
+/**
+ * 권한 표의 묶음과 줄 — **모든 권한 키가 정확히 한 번** 선다.
+ *  ① 왼쪽 탭(관리자뷰 구성) 차례대로, 탭 안에서는 내부 메뉴 차례대로. 줄은 그 권한의 대표 화면이 있는 자리에 선다.
+ *  ② 메뉴 버튼이 없는 권한은 그 권한을 쓰는 화면의 줄 아래.
+ *  ③ 강사 '내 메뉴'에만 입구가 있는 권한(강사뷰 구성 차례).
+ *  ④ 어느 메뉴에도 입구가 없는 화면.
+ */
+export function permissionRowGroups(navigation?: PermissionNavigation, options?: { generic?: boolean }): PermissionRowGroup[] {
+  const source = [...HUB_GROUPS, ...SUPPORT_GROUPS];
+  const menus = navigation?.menus;
+  const visible = (d: HubDest) => !d.genericOnly || options?.generic === true;
+  const sourceDests = source.flatMap((g) => g.items.filter(visible));
+
+  // 권한마다의 대표 화면 — 그 메뉴 **자신의 주소**(예: 학원 설정 = /owner)에 목적지가 있으면 거기, 없으면 그 권한을 쓰는 첫 목적지.
+  // 메뉴 자신의 주소에 선 목적지가 다른 권한을 쓰는 경우(학원 설정의 첫 면 = 프로필·브랜드 설정)에도 그 메뉴의 줄은 그 자리에 선다.
+  const used = new Set(sourceDests.map((d) => d.menuKey));
+  const primary = new Map<MenuKey, string>();
+  for (const menu of used) {
+    const own = navItemByKey(menu)?.href;
+    primary.set(menu, own && sourceDests.some((d) => d.href === own) ? own : sourceDests.find((d) => d.menuKey === menu)!.href);
+  }
+  // 한 자리에 두 줄이 서면 그 주소의 주인(메뉴 자신)이 먼저다.
+  const rowsAt = (d: HubDest): MenuKey[] =>
+    [...used].filter((menu) => primary.get(menu) === d.href).sort((a, b) => Number(b !== d.menuKey) - Number(a !== d.menuKey));
+
+  const configured = configuredHubGroups(source, menus, navigation?.groups, true);
+  const placed = new Map<MenuKey, Placed>();
+  const groups: { id: string; label: string; hidden: boolean; keys: MenuKey[] }[] = [];
+  for (const g of configured) {
+    const keys: MenuKey[] = [];
+    for (const d of g.items) {
+      if (!visible(d)) continue;
+      const at = placed.get(d.menuKey) ?? { row: newRow(d.menuKey), dests: [] };
+      // 원장만 들어가는 면은 "이 권한으로 열리는 메뉴"로 적지 않는다 — 다른 역할에게 이 줄을 열어도 그 면은 안 열린다.
+      at.dests.push({ label: d.label, renamed: renamed(d), hidden: g.hidden === true || isMenuHiddenByLayout(d.href, menus), listed: !d.masterOnly });
+      placed.set(d.menuKey, at);
+      keys.push(...rowsAt(d));
+    }
+    groups.push({ id: g.id, label: g.label, hidden: g.hidden === true, keys });
+  }
+
+  // ② 메뉴 버튼이 없는 권한 → 그 권한을 쓰는 화면의 줄 아래(권한 키 차례).
+  const allDests = configured.flatMap((g) => g.items.filter(visible));
+  const parentOf = (menu: MenuKey): MenuKey | undefined => {
+    if (INNER_PARENT[menu]) return INNER_PARENT[menu];
+    if (!(SETTINGS_ROLE_KEYS as readonly string[]).includes(menu)) return undefined;
+    return hubDestinationForPath(SETTINGS_ROLE_HREF[menu as SettingsRoleKey], allDests)?.menuKey;
+  };
+  const innerOf = new Map<MenuKey, MenuKey[]>();
+  for (const menu of MENU_KEYS) {
+    if (placed.has(menu)) continue;
+    const parent = parentOf(menu);
+    if (!parent || parent === menu || !placed.has(parent)) continue;
+    innerOf.set(parent, [...(innerOf.get(parent) ?? []), menu]);
+  }
+  const taken = new Set<MenuKey>([...placed.keys(), ...[...innerOf.values()].flat()]);
+
+  const out: PermissionRowGroup[] = groups
+    .map((g) => ({
+      id: g.id,
+      label: g.label,
+      hiddenInMenu: g.hidden,
+      rows: g.keys.flatMap((menu) => [finish(placed.get(menu)!), ...(innerOf.get(menu) ?? []).map((inner) => newRow(inner, true))]),
+    }))
+    .filter((g) => g.rows.length > 0);
+
+  // ③ 강사 '내 메뉴'에만 입구가 있는 권한 — 강사뷰 구성 차례.
+  const teacherMenus = navigation?.teacherMenus;
+  const teacherOnly = new Map<MenuKey, Placed>();
+  for (const g of configuredHubGroups(teacherNavigationSource(), teacherMenus, navigation?.teacherGroups, true)) {
+    for (const d of g.items) {
+      if (taken.has(d.menuKey)) continue;
+      const at = teacherOnly.get(d.menuKey) ?? { row: newRow(d.menuKey), dests: [] };
+      at.dests.push({ label: d.label, renamed: renamed(d), hidden: g.hidden === true || isMenuHiddenByLayout(d.href, teacherMenus), listed: true });
+      teacherOnly.set(d.menuKey, at);
+    }
+  }
+  if (teacherOnly.size > 0) out.push({ ...TEACHER_ONLY_GROUP, hiddenInMenu: false, rows: [...teacherOnly.values()].map(finish) });
+  for (const menu of teacherOnly.keys()) taken.add(menu);
+
+  // ④ 어느 메뉴에도 입구가 없는 화면(메뉴에서 뺀 화면 · 다른 역할 전용 화면).
+  const rest = MENU_KEYS.filter((menu) => !taken.has(menu));
+  if (rest.length > 0) out.push({ ...NO_MENU_GROUP, hiddenInMenu: false, rows: rest.map((menu) => newRow(menu)) });
+  return out;
+}
+
+/**
+ * **화면에 세우는** 묶음과 줄 — 탭 및 메뉴 구성(관리자뷰 · 강사뷰)에 있는 화면의 권한만. 위 목록에서 둘을 뺀다:
+ *  · '메뉴에 없는 화면' 묶음(④) — 메뉴에서 뺀 화면 · 옮겨진 옛 화면. 구성에 없는 화면의 줄은 표에 세우지 않는다.
+ *  · 역할 전용 화면(선생님 원스크린 · 내 학습) — 강사 · 학생의 홈 화면이라 어느 역할의 칸도 바꿀 수 없다.
+ * 권한 자체와 저장된 값은 그대로다(표가 실제로 적용되는 값 전체를 들고 저장한다 — 줄을 안 세울 뿐이다).
+ * ⚠️ 메뉴 구성에서 **감춘** 메뉴의 줄은 남는다('메뉴에서 감춤' 표식) — 감춘 것은 입구뿐이라 주소로는 열리고, 그 권한을 고칠 자리가 있어야 한다.
+ * ⚠️ 새 권한 키는 메뉴에 세우거나 `INNER_PARENT`에 속할 화면을 적어야 표에 선다(가드 `permission-rows.test.ts`가 ④의 목록을 잠근다).
+ */
+export function editablePermissionRowGroups(navigation?: PermissionNavigation, options?: { generic?: boolean }): PermissionRowGroup[] {
+  return permissionRowGroups(navigation, options)
+    .filter((group) => group.id !== NO_MENU_GROUP.id)
+    .map((group) => ({ ...group, rows: group.rows.filter((row) => !isRoleOnlyMenu(row.menu)) }))
+    .filter((group) => group.rows.length > 0);
+}

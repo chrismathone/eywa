@@ -179,13 +179,14 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const canImportClassrooms = tab === "operations" ? await canManageTenant(viewer.systemRole, "operations_settings") : false;
   // 과목별 강사 라벨(과목 운영 '가로줄 제외 강사' 칩)은 해당 면에서만 로드.
   const teacherLabelsBySubject = tab === "subjects" ? await getTeacherLabelsBySubject() : {};
-  // 개인 예외(userOverrides) 이름 매핑 — 역할·권한 편집 폼이 설 때만 로드(다른 면 진입 비용 0). 폼과 같은 값에서 뽑는다.
+  // 개인별 권한에 이름이 올라 있는 계정의 이름 — 역할·권한 편집 폼이 설 때만 로드(다른 면 진입 비용 0). 폼과 같은 값에서 뽑는다.
+  // 메뉴 권한뿐 아니라 기능 권한(담당자 · 과목 범위)의 사람도 함께 푼다 — 퇴직해 선택지에서 빠진 사람도 이름으로 보여야 거둘 수 있다.
+  const permissionPeople = permissionsSource ? permissionAccountIds(permissionsSource) : [];
   const [userOverrideNames, permissionStaff, hiddenPermissionIds] = await Promise.all([
-    permissionsSource && permissionsSource.userOverrides.length > 0
-      ? getUserDisplayNames(permissionsSource.userOverrides.map((o) => o.userId))
-      : {},
-    permissionsSource && isGenericTenant(settings) ? getPermissionStaffOptions() : [],
-    permissionsSource ? platformAccountIds(permissionAccountIds(permissionsSource)).then((ids) => [...ids]) : [],
+    permissionPeople.length > 0 ? getUserDisplayNames(permissionPeople) : {},
+    // 개인별 메뉴 권한을 주고 거두는 구획의 직원 선택지 — 어느 학원에서나 선다(원장 2026-10-06).
+    permissionsSource ? getPermissionStaffOptions() : [],
+    permissionsSource ? platformAccountIds(permissionPeople).then((ids) => [...ids]) : [],
   ]);
   // 세션 기간(과목 운영 안)의 연도. 기본은 KST 올해(세션은 연 단위로 편집한다).
   const thisYear = Number(kstToday().slice(0, 4));
@@ -279,6 +280,8 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
           permissionsSource ? (
             <PermissionsSection
               initial={permissionsSource}
+              // 표의 줄 · 강사 내 메뉴 칸은 학원의 메뉴 구성(왼쪽 탭과 그 내부 메뉴) 차례로 선다.
+              navigation={settings.navigation}
               userOverrideNames={userOverrideNames}
               staffOptions={permissionStaff}
               hiddenUserIds={hiddenPermissionIds}

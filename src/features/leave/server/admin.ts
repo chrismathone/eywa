@@ -75,6 +75,7 @@ type StaffRaw = {
   display_name: string | null;
   job_title: string | null;
   hire_date: string | null;
+  subjects: string[] | null;
 };
 
 type FormRaw = {
@@ -124,7 +125,7 @@ async function activeStaff(tenantId: string): Promise<StaffRaw[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("users")
-    .select("id, display_name, job_title, hire_date")
+    .select("id, display_name, job_title, hire_date, subjects")
     .eq("tenant_id", tenantId)
     .neq("status", "inactive")
     .neq("system_role", "student")
@@ -180,11 +181,18 @@ async function loadAdjustments(tenantId: string, userIds: string[]): Promise<Adj
   }
 }
 
-export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview> {
+export async function getLeaveOverview(
+  tenantId: string,
+  /** 보는 사람에게 보이는 직원인가 — 직원관리 과목 범위가 걸린 사람에게만 넘긴다(없으면 전원). 조회 전에 거른다. */
+  visible?: (staff: { id: string; subjects: readonly string[] }) => boolean,
+): Promise<LeaveOverview> {
   const today = kstToday();
   let staff: StaffRaw[];
+  // 조정 줄의 기록자 이름은 **거르기 전** 직원 전체에서 찾는다 — 보이는 직원으로만 만들면 범위 밖 사람이 적은 줄의 이름이 빈다.
+  let everyone: StaffRaw[];
   try {
-    staff = await activeStaff(tenantId);
+    everyone = await activeStaff(tenantId);
+    staff = visible ? everyone.filter((s) => visible({ id: s.id, subjects: Array.isArray(s.subjects) ? s.subjects : [] })) : everyone;
   } catch (e) {
     return { rows: [], tableReady: false, usedRangeReady: false, loadError: describeOverviewError(e) };
   }
@@ -221,7 +229,7 @@ export async function getLeaveOverview(tenantId: string): Promise<LeaveOverview>
   // 아래 판정·반환이 읽는 이름은 그대로 둔다(`tableReady: adjRows !== null`) — 조회 결과를 감싸는
   // 그릇만 바뀌었고 "표가 있었나"의 뜻은 같다.
   const adjRows = adjLoad.rows;
-  const nameById = new Map(staff.map((s) => [s.id, (s.display_name ?? "").trim() || "(이름 없음)"]));
+  const nameById = new Map(everyone.map((s) => [s.id, (s.display_name ?? "").trim() || "(이름 없음)"]));
 
   const rows: LeaveOverviewRow[] = staff.map((s) => {
     const hireDate = s.hire_date ?? null;

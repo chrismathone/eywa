@@ -41,7 +41,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   const supabase = await createClient();
   /**
    * 🔴 단가표(`salary_tiers`)·명세서(`payslips`)·계약(`staff_contracts`)은 **master 전용 RLS**다.
-   *    명단의 설현·김예원은 admin이라 세션 클라이언트로는 **에러 없이 0행**을 받고(정책 미매치),
+   *    지정된 사람이 원장 역할이 아니면 세션 클라이언트로는 **에러 없이 0행**을 받고(정책 미매치),
    *    화면엔 조용히 "산정 불가"만 뜬다([[#104]] — 정책에 안 걸리면 0행이지 에러가 아니다).
    *    그래서 **앱 게이트를 통과한 뒤에만** admin 클라이언트로 읽는다(contract-queries.ts 선례).
    * ⚠️ admin은 RLS를 우회하므로 **tenant_id를 명시 필터**해야 한다 — 아래 모든 admin 조회에 걸려 있다.

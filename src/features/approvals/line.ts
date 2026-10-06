@@ -33,7 +33,7 @@ export function normalizeRefs(
 
 /**
  * 결재선 검증 — 통과하면 null, 아니면 **한글 메시지**(화면에 그대로 띄운다).
- * `candidateIds` = 결재자로 고를 수 있는 사람(파일럿 동안은 파일럿 명단, 전사 개방 시 활성 직원).
+ * `candidateIds` = 결재자로 고를 수 있는 사람(활성 직원 — 전자결재 메뉴 권한과 무관하다).
  */
 export function validateApprovalLine(args: {
   drafterId: string;

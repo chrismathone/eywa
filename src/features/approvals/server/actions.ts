@@ -42,8 +42,8 @@ import {
  * 🔴 **쓰기는 모두 여기서만** — 0213a는 authenticated 쓰기 정책을 두지 않았다(RLS는 읽기 격리 전용).
  *    ① 잔여 연차 검증과 ② 순차 단계 진행이 서버 판단이라, 클라가 행을 직접 만들 수 있으면 규칙이 뚫린다.
  * ⚠️ admin(service_role)은 RLS를 우회하므로 **모든 쿼리에 `tenant_id` 명시 필터**([[#104]]).
- * ⚠️ 게이트는 화면과 **같은 함수**(`canWriteTenant(role, "approvals")`) — 파일럿 명단이 권한 매트릭스에
- *    개인 예외로 얹혀 있어 사이드바·페이지·액션이 한 판정을 공유한다([[#77]]).
+ * ⚠️ 게이트는 화면과 **같은 함수**(`canWriteTenant(role, "approvals")`) — 역할별 권한과 개인별 메뉴 권한이 한 매트릭스에
+ *    합쳐져 있어 사이드바·페이지·액션이 한 판정을 공유한다([[#77]]).
  */
 
 /** `docId` = 상신 성공 시 만들어진 문서 — 클라가 그 문서로 이동한다(#102: router.push 금지, window.location.assign). */
@@ -112,7 +112,7 @@ function parseTitle(raw: FormDataEntryValue | null): { title: string } | { error
   return { title };
 }
 
-/** 기안·템플릿용 게이트 — 파일럿 동안 **기안은** 메뉴가 열린 사람(이승엽·김예원)만 한다. */
+/** 기안·템플릿용 게이트 — **기안은** 전자결재 메뉴가 열린 사람만 한다(역할 칸 또는 개인별 메뉴 권한). */
 async function requireApprovalWriter() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
@@ -124,9 +124,10 @@ async function requireApprovalWriter() {
 
 /**
  * 결재·회수용 게이트 — **메뉴를 보지 않는다.** 결재 자격의 근거는 명단이 아니라 동결된 결재선 +
- * current_step(결정 로그)이고, 후보 풀이 전 직원이라(원장 2026-08-14) 파일럿 명단 밖 직원도 자기
+ * current_step(결정 로그)이고, 후보 풀이 전 직원이라(원장 2026-08-14) 전자결재 메뉴가 없는 직원도 자기
  * 차례의 문서는 벨 알림 링크로 들어와 결재해야 한다. 실제 자격 판정(내 차례인가/내 기안인가)은
  * 각 액션 본문이 문서·결재선 행으로 한다 — 여기는 로그인 확인만.
+ * (강사 역할은 문서 화면 자체가 전자결재 권한을 요구한다 — 강사 화면의 가드가 그 주소를 메뉴로 판정한다.)
  */
 async function requireSignedIn() {
   const user = await getCurrentUser();
