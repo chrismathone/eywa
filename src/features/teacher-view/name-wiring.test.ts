@@ -298,8 +298,8 @@ describe("🔴 오늘 면(카드·요약·학생 줄)도 사전을 탄다", () =
     const src = read("features", "class-sheets", "server", "today.ts");
     expect(src).toContain("englishName: string | null");
     expect(src).toContain("english_name");
-    // 같은 값을 넣는 두 조립 지점(정규 수강 · 보강 방문자)에 **둘 다** 실려야 한다.
-    expect((src.match(/englishName: meta\?\.english_name \?\? null/g) ?? []).length).toBe(2);
+    // 같은 값을 넣는 세 조립 지점(정규 수강 · 보강 방문자 · 수업 나누기로 들어온 학생)에 **전부** 실려야 한다.
+    expect((src.match(/englishName: meta\?\.english_name \?\? null/g) ?? []).length).toBe(3);
   });
 
   it("출결·태도 빈 칸 '선택'은 사전(select.choose) — 영어 화면에 한글이 안 남는다", () => {

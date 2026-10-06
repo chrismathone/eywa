@@ -174,9 +174,9 @@ export function MatrixRow({
           {splitNotes.length > 0 ? (
             <span
               className={`${BADGE_BASE} bg-blue-soft text-blue shrink-0 cursor-help`}
-              {...tipProps({ title: "수업 나누기", lines: splitNotes })}
+              {...tipProps({ title: sheetT(lang, "att.row.split.title"), lines: splitNotes })}
             >
-              나눔
+              {sheetT(lang, "att.row.split.mark")}
             </span>
           ) : null}
         </span>

@@ -395,7 +395,7 @@ export function ReportCard({
                   className="border-line text-text-dim rounded-pill border px-1.5 py-px text-xs font-bold"
                   title={lockNotice}
                 >
-                  {subject.splitIn ? "나눔" : reportOptoutShort(lang)}
+                  {subject.splitIn ? t("os.row.splitIn") : reportOptoutShort(lang)}
                 </span>
               ) : null}
             </div>

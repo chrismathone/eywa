@@ -1750,6 +1750,10 @@ export const SHEET_DICT = {
     ko: "이 달 청구서가 취소(void)됐습니다 — 확정·배분할 수납이 없습니다.",
     en: "This month's bill was voided — there is no payment to confirm or allocate.",
   },
+  // 수업 나누기(0351a) — 이름 칸 알약과 그 카드 제목. 문장(누가 · 언제 · 어디로)은 서버가 만든다.
+  "att.row.split.mark": { ko: "나눔", en: "Split" },
+  "att.row.split.title": { ko: "수업 나누기", en: "Class split" },
+
   // 월별 출석부 열(원장 2026-09-17) — 출석부에서 센 '수업 차수'와 회차 확정에서 확정한 '등록 차수'를 나란히.
   // ⚠️ 영어 라벨은 **열 폭 안에 들어가는 한 낱말**이다(가드 `name-wiring.test.ts`) — 뜻은 `*Title` 툴팁이 편다.
   "att.col.lessonCount": { ko: "수업 차수", en: "Attended" },
@@ -2638,6 +2642,8 @@ export const SHEET_DICT = {
     en: "A jump or overlap was found in the progress record — a jump is measured against the previous entry by the same teacher (entries by another teacher are not flagged). Check it under Student details → Progress.",
   },
   "os.row.jump": { ko: "진도 확인 필요", en: "Check the progress" },
+  // 수업 나누기로 이 반에 들어온 학생의 행 — 보고서는 원래 반 담임이 쓰므로 잠긴다(잠금 알약 글자).
+  "os.row.splitIn": { ko: "나눔", en: "Split" },
   "os.units.noPerm": {
     ko: "출결 입력 권한이 없어 수업타임을 고칠 수 없습니다",
     en: "You cannot change class units without attendance permission",
