@@ -74,15 +74,15 @@ export function ClassSplitDialog({
       const pick = target.dropDay && avail.includes(target.dropDay as SplitDay) ? [target.dropDay as SplitDay] : avail;
       setDays(new Set(pick));
       setStart(p.days.find((d) => d.day === pick[0])?.starts[0]?.time ?? "");
-      // 기본 기간 = 일별 · 그 요일의 가장 가까운 날(오늘 포함).
-      let date = p.today;
-      for (let i = 0; i < 7 && pick[0] && dowOf(date) !== pick[0]; i++) date = addDays(date, 1);
+      // 기본 기간 = 일별 · **보고 있는 주**의 그 요일(원장 제보 2026-10-06 — 11/3 주에서 끌었는데 오늘(10/6)로 저장돼
+      // 화면에 안 보였다). 보고 있는 주가 이미 지났으면 오늘부터 가장 가까운 그 요일.
+      const date = nearestDow(splitAnchor(weekMonday, p.today), pick[0]);
       setPeriod({ kind: "day", date });
     });
     return () => {
       alive = false;
     };
-  }, [req, target.dropDay]);
+  }, [req, target.dropDay, weekMonday]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
@@ -161,7 +161,7 @@ export function ClassSplitDialog({
           </div>
         ) : (
           <div className="mt-3 space-y-3 text-sm">
-            <SplitPeriodFields value={period} onChange={setPeriod} today={ready!.today} />
+            <SplitPeriodFields value={period} onChange={setPeriod} today={ready!.today} anchor={nearestDow(splitAnchor(weekMonday, ready!.today), [...days][0])} />
             {period?.kind !== "day" ? (
               <Row label="요일">
                 {ready!.days.map((d) => {
@@ -231,6 +231,18 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
       <div className="flex flex-wrap gap-1">{children}</div>
     </div>
   );
+}
+
+/** 기간 기본값의 기준일 — 보고 있는 주의 월요일, 단 오늘보다 앞이면 오늘(과거로는 못 나눈다). */
+function splitAnchor(weekMonday: string, today: string): string {
+  return weekMonday < today ? today : weekMonday;
+}
+
+/** 기준일부터 그 요일이 처음 오는 날(기준일 포함). 요일을 모르면 기준일. */
+function nearestDow(from: string, day: SplitDay | undefined): string {
+  let date = from;
+  for (let i = 0; i < 7 && day && dowOf(date) !== day; i++) date = addDays(date, 1);
+  return date;
 }
 
 export function Chip({ on, disabled, title, onClick, children }: {
