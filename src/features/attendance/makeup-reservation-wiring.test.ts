@@ -121,7 +121,8 @@ describe("③ 명단 표면이 예약 조회 한 벌을 읽는다", () => {
   });
   it("시간표 기본뷰 반 칸 = '보강' 줄(대기·퇴원 아래) — 기본뷰 격자에만 얹고 명단·엑셀·이동 판정엔 안 실린다", () => {
     const page = strip(read("app/(shell)/timetable/page.tsx"));
-    expect(page).toContain("await attachReservedLines(slots, referenceDate)");
+    // 수업 나누기(0351a)와 **함께**(Promise.all) 읽는다 — 서로 독립이라 직렬 await를 두지 않는다(B4).
+    expect(page).toContain("attachReservedLines(slots, referenceDate)");
     expect(page).toContain("slots={basicSlots}");
     expect(count(page, "basicSlots")).toBe(2);
     const tables = strip(read("app/(shell)/timetable/_components/weekday-group-tables.tsx"));

@@ -2289,6 +2289,8 @@ export const SHEET_DICT = {
   "res.f.jobTitle": { ko: "직급", en: "Job title" },
   "res.f.manager": { ko: "처리담당자", en: "Processed by" },
   "res.f.workDays": { ko: "근무요일", en: "Working days" },
+  "res.f.workHours": { ko: "근무시간", en: "Working hours" },
+  "res.ph.workHours": { ko: "예: 월~금 14:00~22:00 / 토 10:00~18:00", en: "e.g. Mon–Fri 14:00–22:00" },
   "res.f.pay": { ko: "급여 계약", en: "Pay" },
   "res.f.empType": { ko: "근무형태", en: "Employment type" },
   "res.f.account": { ko: "계좌번호", en: "Bank account" },

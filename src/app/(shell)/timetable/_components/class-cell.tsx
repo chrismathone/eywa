@@ -14,6 +14,8 @@ import { ClassInfoCard, HoverCard } from "./hover-cards";
 import { DraggableStudentRow, StudentRow, metaLabel, ROW_CLASS, type StudentQuick } from "./student-rows";
 import { StudentSection, DayDropZone } from "./student-section";
 import { ReservedSection } from "./reserved-section";
+import { SplitSection } from "./split-section";
+import type { TimetableSplitLine } from "@/features/class-splits/lines";
 import type { TimetableReservedLine } from "@/features/attendance/makeup-reservation";
 import type { MovePart } from "@/features/timetable/lib/class-move";
 import {
@@ -127,6 +129,7 @@ export function ClassCell({
   moveParts,
   reserved = [],
   strayReserved = [],
+  splits = [],
 }: {
   slot: ClassDetailQuick;
   /** 셀 안 명단 표시: full=캡8(통합뷰), names=캡15(기본뷰 — 전체 가까이), none=숨김. */
@@ -155,6 +158,8 @@ export function ClassCell({
    *    툴팁으로 대신하지 말 것(서식·이유는 [reserved-section.tsx](./reserved-section.tsx) 머리 주석과 한 몸이다).
    */
   strayReserved?: TimetableReservedLine[];
+  /** 수업 나누기(0351a) 줄 — 표시 전용(격자가 병합 슬롯에서 모아 넘긴다). */
+  splits?: TimetableSplitLine[];
 }) {
   const { canDrag, incoming, classMoves } = useTimetableEdit();
   const subjects = useSubjectMaps();
@@ -202,7 +207,7 @@ export function ClassCell({
   //    꼬리표 없이 퇴원 블록과 같은 모양이다(교시·결석일만 줄 툴팁 몫).
   const reservedAll = strayReserved.length === 0 ? reserved : [...reserved, ...strayReserved];
   const showRoster =
-    roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0 || reservedAll.length > 0);
+    roster !== "none" && (slot.students.length > 0 || incomingHere.length > 0 || reservedAll.length > 0 || splits.length > 0);
   // 분리등원 요일 칸 표시 여부 — 2요일+ 셀에서 일부요일 재원이 있거나, 편집 모드(요일 드롭존 상시 노출).
   // 🔴 요일 칸(분리등원 존)은 **드래그 시작에 새로 만들지 않는다** — dnd-kit은 드롭존 집합이 바뀌면 전부
   //    다시 잰다(`droppableRects` lazy memo). 픽업 순간 200개 존이 한꺼번에 생기면 그 재측정이 통째로
@@ -529,6 +534,8 @@ export function ClassCell({
             {/* 보강 — 그 요일 칸 날짜의 예약(0264a). 대기·퇴원과 같은 고정 박스. 이 반 예약 + 원반 칸이 없어
                 이 담임 열에 선 남의 반 예약을 **한 박스**로(남의 반 줄엔 원반 이름이 글자로 붙는다). */}
             <ReservedSection lines={reservedAll} coveringDays={covers} />
+            {/* 수업 나누기(0351a) — 이 반에서 그 시간 빠지는 학생(→) · 그 시간 이 반으로 오는 학생(←). 표시 전용. */}
+            <SplitSection lines={splits} coveringDays={covers} />
           </div>
         ) : null}
       </div>

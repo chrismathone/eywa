@@ -126,6 +126,11 @@ export type RosterEntry = {
    * '퇴원'이 아니라 **'종강' 섹션** 행이다. 판정은 월별 출석부 뱃지와 같은 `continuesIn`.
    */
   endedContinuesIn?: string | null;
+  /**
+   * 수업 나누기(0351a) 표식 — `in` = 그 시간 이 반으로 온 학생(입력 가능), `out` = 그 시간 다른 반으로 간 학생인데
+   * 이미 기록이 있어 남은 행. `note`는 화면 문장(`splitRowNote`). 얹는 곳은 [`split-roster.ts`](./split-roster.ts) 한 곳.
+   */
+  split?: { dir: "in" | "out"; note: string };
 };
 
 export type GridSlot = {

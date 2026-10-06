@@ -98,6 +98,9 @@ export function MatrixRow({
 }) {
   const marks = matrix.marks[student.id] ?? {};
   const units = matrix.units[student.id] ?? {};
+  // 수업 나누기(0351a) 칸 표식 — 값이 아니다(시수·합계 무관). 이름 칸 알약은 그 달 문장들을 한 번씩만 모아 카드로.
+  const splitMarks = matrix.splits?.[student.id] ?? {};
+  const splitNotes = [...new Set(Object.values(splitMarks).map((m) => m.note))];
   const attendDows = new Set(student.attendDows);
   // 강사 전체 보기 — 그 강사가 이 반을 수업하는 날(원장 2026-09-17 *"담당하는 날만 표시"*). 반별 보기는 null(전부).
   const ownDates = matrix.ownDates ? new Set(matrix.ownDates) : null;
@@ -168,6 +171,14 @@ export function MatrixRow({
           <span className="min-w-0 truncate text-xs leading-tight font-bold" title={student.name}>
             {student.name}
           </span>
+          {splitNotes.length > 0 ? (
+            <span
+              className={`${BADGE_BASE} bg-blue-soft text-blue shrink-0 cursor-help`}
+              {...tipProps({ title: "수업 나누기", lines: splitNotes })}
+            >
+              나눔
+            </span>
+          ) : null}
         </span>
         {/* 첫 줄은 이름뿐, 아랫줄은 등원요일 + 「단가」(원장 2026-09-14 *"이름이 짤리는건 최악"*).
             🔴 신입·퇴원·전입·전출·종강 표식은 2026-09-18부터 이 칸에 없다 — 수강 기간 양옆 **회색 날짜 칸**에 선다
@@ -370,6 +381,16 @@ export function MatrixRow({
                    쌓임 맥락을 안 만들어서, 10 이상을 주면 가로로 스크롤할 때 이 칩이 **고정된 이름 열 위로 떠오른다**.
                    반대로 z가 없으면 오른쪽 칸의 버튼(`absolute`, DOM 순서가 뒤)이 넘친 부분을 덮는다.
                 ⚠️ 덮개라 `title`(반이동 "A반 → B반")은 못 띄운다 — 그 설명은 이름 열에 남는 표식에만 있다. */}
+            {/* 수업 나누기 칸 — 왼쪽 위 작은 파란 삼각(받는 반=진하게, 원래 반=옅게). 입력을 막지 않게 포인터는 통과시킨다.
+                문장은 이름 칸 '나눔' 알약의 카드에 있다(덮개라 title을 못 띄운다). */}
+            {splitMarks[d.date] ? (
+              <span
+                aria-hidden
+                className={`pointer-events-none absolute top-0 left-0 z-[8] size-0 border-t-[7px] border-r-[7px] border-r-transparent ${
+                  splitMarks[d.date]!.dir === "in" ? "border-t-blue" : "border-t-blue/40"
+                }`}
+              />
+            ) : null}
             {badgesOnDate.get(d.date) ? (
               // 시작 표식은 칸 **오른쪽 끝**에 붙어 왼쪽(회색)으로, 끝 표식은 **왼쪽 끝**에 붙어 오른쪽(회색)으로 넘친다 —
               // 가운데에 두면 반대편 값 칸을 덮는다.

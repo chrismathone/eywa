@@ -18,7 +18,7 @@ export type StaffColumnKey =
   | "hireDate"
   | "phone"
   | "contract"
-  | "contractTerms"
+  | "workHours"
   | "contractEnd"
   | "contractFile"
   | "subjects"
@@ -37,7 +37,8 @@ export const STAFF_COLUMNS: { key: StaffColumnKey; label: string; align?: "right
   { key: "hireDate", label: "입사일" },
   { key: "phone", label: "전화번호" },
   { key: "contract", label: "현재 계약" },
-  { key: "contractTerms", label: "계약조건" },
+  // 근무시간 = 이력서 '근무시간' 한 줄(원장 2026-10-06 — 계약조건 열을 이 열로 교체). 계약조건은 직원 상세 계약현황에 남는다.
+  { key: "workHours", label: "근무시간" },
   { key: "contractEnd", label: "계약갱신일" },
   { key: "contractFile", label: "계약서" },
   { key: "subjects", label: "과목" },
@@ -49,6 +50,15 @@ export const STAFF_COLUMNS: { key: StaffColumnKey; label: string; align?: "right
 ];
 
 const ALL_KEYS = STAFF_COLUMNS.map((c) => c.key);
+
+/**
+ * 바뀐 열 키 — 저장된 보기 설정(순서·숨김)이 **같은 자리**를 이어받게 옮긴다.
+ * 안 옮기면 옛 키는 '모르는 키'로 버려지고 새 열은 맨 뒤에 붙어, 쓰던 자리에서 열이 사라진 것처럼 보인다.
+ */
+const RENAMED_KEYS: Record<string, StaffColumnKey> = { contractTerms: "workHours" };
+export function renameLegacyColumnKey(k: string): string {
+  return RENAMED_KEYS[k] ?? k;
+}
 const KNOWN = new Set<string>(ALL_KEYS);
 export const LABEL_OF: Record<StaffColumnKey, string> = Object.fromEntries(
   STAFF_COLUMNS.map((c) => [c.key, c.label]),

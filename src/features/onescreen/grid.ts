@@ -195,6 +195,9 @@ export function isRowActionable(
   // 그래서 save·send·autowrite **전부** 막는다(예전엔 save만 열려 있었다).
   // 푸는 유일한 문 = 공유링크 재발급(그 건을 무효화 선언). 서버 saveLessonReport가 같은 규칙을 강제한다.
   if (isAlreadySent(statusOverride ?? subject.classnoteStatus)) return false;
+  // 수업 나누기로 온 행(0351a) = 저장·발송·자동작성 **전부** 대상이 아니다 — 그 학생의 보고서는 원래 반 담임이 쓴다
+  // (원장 2026-10-06). 미발송 반과 달리 지켜야 할 '지난 보고서'도 없다(이 반 수강생이 아니다).
+  if (subject.splitIn) return false;
   if (action === "save") return true;
   // 미발송 반 = 발송·자동작성 대상이 아니다(save는 위에서 이미 통과했다 — 기록은 보존).
   if (isReportOptoutRow(subject)) return false;

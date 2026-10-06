@@ -1,6 +1,6 @@
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
 import { EMPLOYMENT_TYPES } from "./resume";
-import { STAFF_COLUMNS } from "./columns";
+import { renameLegacyColumnKey, STAFF_COLUMNS } from "./columns";
 
 /**
  * 직원목록 **보기 설정**(`users.ui_prefs.staff`) — 역할·과목·계약구분·정렬·표시 수 + 볼 열(순서·숨김)·표 글자 크기.
@@ -159,7 +159,9 @@ export function parseStaffListPrefs(raw: unknown): StaffListPrefs {
     emp: parseStaffEmp(o.emp),
     sort: parseStaffSort(o.sort),
     // 모르는 키(지운 열)만 버린다 — 빠진 새 열은 그릴 때 normalizeOrder가 뒤에 붙인다(columns.ts 주석).
-    columnOrder: strList(o.columnOrder).filter((k) => known.has(k)),
+    // 바뀐 열 키(계약조건 → 근무시간)는 **순서만** 새 키로 옮긴다(쓰던 자리를 이어받게). 숨김은 안 옮긴다 —
+    // 내용이 다른 새 열이라, 옛 계약조건을 꺼 둔 사람에게도 근무시간은 한 번 보여야 한다(그다음 끄는 건 본인 몫).
+    columnOrder: strList(o.columnOrder).map(renameLegacyColumnKey).filter((k) => known.has(k)),
     columnHidden: strList(o.columnHidden).filter((k) => known.has(k)),
     tableScale: clampTableScale(o.tableScale ?? 100),
     rev: Number.isFinite(Number(o.rev)) ? Math.max(0, Math.floor(Number(o.rev))) : 0,
