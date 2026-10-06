@@ -41,6 +41,7 @@ export function MatrixTotalsSummary({
   countByRow,
   money,
   moneyNote,
+  settlementNote,
   showLegacySettlement = true,
   trailing,
 }: {
@@ -53,6 +54,12 @@ export function MatrixTotalsSummary({
   /** 원장 전용 금액. null이면 금액 부분을 통째로 안 그린다. */
   money?: TeacherMoney | null;
   moneyNote?: string | null;
+  /**
+   * **정산액**에 든 표 밖 시수 안내(다른 반 대신 보강 · 그 달 뒤에 담임이 된 반) — 정산액을 그릴 때만 보인다.
+   * 🔴 정산액을 감춘 표(프리랜서 — 실수업액·실급여 열)에 띄우면 감춘 숫자를 설명하면서 그 사람 명세서(출석부 실급여)와
+   *    반대 사실을 말한다.
+   */
+  settlementNote?: string | null;
   showLegacySettlement?: boolean;
   /**
    * 합계 **뒤에 이어 붙이는** 한 조각(조작 안내, 원장 2026-09-14 *"2행은 1행 우측 끝으로 간략하게"*).
@@ -129,6 +136,7 @@ export function MatrixTotalsSummary({
               {moneyNote}
             </span>
           ) : null}
+          {showLegacySettlement && settlementNote ? <span className="text-amber text-xs">{settlementNote}</span> : null}
           {totals.sharedStudents > 0 ? (
             <span
               className="text-amber text-xs"

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { foldedReason } from "@/lib/folded-read";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import {
@@ -671,6 +672,12 @@ export type AttendanceMatrix = {
    *    넘어가 여기서 사라지고 그 칸은 평범한 출결 칸이 된다. ⚠️ 선택 필드 — 없으면(옛 픽스처) 예약 없음과 같다.
    */
   reservations?: Record<string, Record<string, MatrixReservation>>;
+  /**
+   * 이 표가 **못 읽어 접은 재료**(담임 변경 기록 · 학원 설정) — 접힌 것이 없으면 키가 없다(`folded-read.ts`).
+   * 🔴 화면은 읽지 않는다(종전 그대로 그린다). 이 표를 **금액**으로 쓰는 자리(`loadTeacherSheet`)만 보고 산정을 멈춘다 —
+   *    이력이 비면 넘긴 뒤의 칸까지 그 강사 몫이 되고, 설정이 비면 휴일에 쓴 보고서가 출석으로 살아난다.
+   */
+  degraded?: string[];
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -861,7 +868,12 @@ export async function getMonthlyAttendanceMatrix(
   // 강사(또는 겸직 강사뷰)면 **자기가 가르치는 반**으로 좁힌다 — 담임 반 ∪ 그 달 교시 담당 반.
   // 🔴 좁히는 판정은 `loadVisibleClassAxisRows` **한 곳**뿐이다(허브 학생 검색도 같은 함수를 쓴다) —
   //    표면마다 따로 적으면 한쪽이 담임 축으로 되돌아가 교시 담당 강사의 반이 조용히 사라진다([[#77]]).
-  const classes = (await loadVisibleClassAxisRows(axisRange.from, axisRange.to))
+  const axisRows = await loadVisibleClassAxisRows(axisRange.from, axisRange.to);
+  // 못 읽어 접은 재료 — 금액 조립(`loadTeacherSheet`)이 보고 멈춘다. 화면은 읽지 않는다.
+  const degraded: string[] = [];
+  const axisFolded = foldedReason(axisRows);
+  if (axisFolded) degraded.push(axisFolded);
+  const classes = axisRows
     .map((c) => ({
       id: c.id,
       className: c.className,
@@ -911,6 +923,7 @@ export async function getMonthlyAttendanceMatrix(
       dayAxis: {},
       derived: {},
       derivedActive: false,
+      ...(degraded.length > 0 ? { degraded } : {}),
       stats: {
         totalStudents: 0,
         presentRate: 0,
@@ -1483,6 +1496,9 @@ export async function getMonthlyAttendanceMatrix(
       set.add(r.report_date);
       target.set(r.student_id, set);
     }
+    // 설정을 못 읽어 기본값이면 휴일이 0개다 — 휴일에 쓴 보고서가 '출석'으로 선다. 표는 그대로 그리고 표식만 싣는다.
+    const settingsFolded = foldedReason(settings);
+    if (settingsFolded) degraded.push(settingsFolded);
     const holidays = buildHolidayMap(settings.operations.holidays);
     const todayIso = kstToday();
     const realDays = days
@@ -1577,6 +1593,7 @@ export async function getMonthlyAttendanceMatrix(
     })) } : {}),
     // 보강 예약 칸(0264a) — 있을 때만 싣는다(강사 전체 보기는 반마다 매트릭스라 빈 객체도 곱이 된다).
     ...(Object.keys(reservations).length > 0 ? { reservations } : {}),
+    ...(degraded.length > 0 ? { degraded } : {}),
     stats: {
       totalStudents: students.filter((st) => !reservedOnlyIds.has(st.id)).length,
       presentRate,

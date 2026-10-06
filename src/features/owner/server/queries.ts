@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { markFolded } from "@/lib/folded-read";
 import { resolveSettings } from "../resolve";
 import { settingsRevOf } from "../settings-stamp";
 import type { TenantSettings } from "../settings-types";
@@ -84,7 +85,9 @@ export const getTenantSettings = cache(async (): Promise<TenantSettings> => {
   // 로그인 전(학원을 모른다) = 이 작업 전과 같은 침산 기본값(`{}`). null이면 일반판으로 읽힌다(preset.ts).
   if (!user) return resolveSettings({}, { name: "" });
   const raw = await loadTenantSettingsRaw(user.tenantId);
-  return resolveSettings(storedForResolve(raw), { name: raw.name });
+  const settings = resolveSettings(storedForResolve(raw), { name: raw.name });
+  // 못 읽어 기본값으로 접은 설정엔 표식을 남긴다 — 화면은 종전 그대로 쓰고, 금액 조립만 `foldedReason`으로 보고 멈춘다.
+  return raw.failed ? markFolded(settings, "학원 설정을 읽지 못했습니다") : settings;
 });
 
 /**

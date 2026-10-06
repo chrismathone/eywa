@@ -8,7 +8,7 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: h.fro
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: async () => ({ modules: { disabled: [] } }) }));
 vi.mock("./teacher-axis-queries", () => ({ loadClassAxisRows: h.classes }));
-import { getAttendanceSalaryRates } from "./salary-rates";
+import { getAttendanceSalaryRates, loadAttendanceSalaryRates } from "./salary-rates";
 import { saveAttendanceSalaryRates } from "./salary-rates-actions";
 const teacherId = "aaaaaaaa-1111-1111-1111-111111111111";
 const rates = { regular: { 초등: 40, 중등: 45, 고등: 50 }, special: { 초등: 55, 중등: 60, 고등: 65 }, classes: {} };
@@ -56,4 +56,14 @@ it("rejects a rate for an unrelated class and invalid ranges without saving", as
 it("loads saved six-way rates without reverting to legacy rates", async () => {
   h.replies = [{ data: { employment_type: "프리랜서", commission_rate: 10, commission_rates: {} }, error: null }, { data: { rates, updated_at: "2026-09-21" }, error: null }];
   expect(await getAttendanceSalaryRates(teacherId)).toMatchObject({ rates });
+});
+it("🔴 강사 정보 조회 실패 — 명세서(공용 로더)는 던지고 화면은 실급여 열만 비운다", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  // 명세서가 null을 받으면 '프리랜서 아님'으로 읽혀 종전 티어 정산으로 떨어진다 — 다른 식의 금액이 나온다.
+  h.replies = [{ data: null, error: { message: "timeout" } }];
+  await expect(loadAttendanceSalaryRates("tenant", teacherId)).rejects.toThrow("강사 정보를 불러오지 못했습니다");
+  // 화면은 일시 오류 한 번에 출석부가 통째로 죽지 않게 접는다(종전 동작).
+  h.replies = [{ data: null, error: { message: "timeout" } }];
+  expect(await getAttendanceSalaryRates(teacherId)).toBeNull();
+  spy.mockRestore();
 });

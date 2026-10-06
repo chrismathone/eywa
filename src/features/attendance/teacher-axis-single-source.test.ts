@@ -7,8 +7,10 @@
  *  · 당일 출결 보드 = 교시 담당 → 없으면 담임(맞는 규칙인데 **인라인**이라 다른 화면이 못 따라 썼다).
  * → 규칙은 `teacher-axis.ts` 한 곳에만 두고, 표시·스코프 소비처는 전부 그 모듈을 거친다.
  *
- * ⚠️ **일부러 대상에서 뺀 곳 = 돈**(`server/teacher-money.ts` · `payroll/server/payslip-queries.ts`).
- *    금액·정산액은 여전히 **담임 축**이다 — 시트 대조로 맞춰 둔 프리랜서 4인 금액과 골든마스터가
+ * ⚠️ **일부러 대상에서 뺀 곳 = 돈**(`server/teacher-money.ts` · `payroll/server/payslip-queries.ts`)의 **티어 정산**.
+ *    🔑 2026-10-06 원장 *"전부 통일 출석부 그대로"* · *"프리랜서만."* — **프리랜서**의 명세서·정산 면은 그 강사 출석부의 실급여 합계다
+ *    (`payroll/server/sheet-tuition.ts` → `attendance/server/teacher-sheet.ts`, 화면과 같은 조립이라 교시 축·담임 이력을 그대로 탄다).
+ *    그 밖의 강사(티어 정산)의 금액·정산액은 여전히 **담임 축**이다 — 시트 대조로 맞춰 둔 프리랜서 4인 금액과 골든마스터가
  *    그 집합에 걸려 있어서다(`teaching-scope-single-source.test.ts`의 같은 예외와 짝). 교시 축 배분은
  *    별건이고, 그 사실은 출석부 합계 줄(moneyNote)이 화면에 밝힌다.
  */
@@ -26,7 +28,9 @@ function stripComments(src: string): string {
 const CONSUMERS = [
   join("src", "features", "attendance", "server", "queries.ts"),
   join("src", "features", "attendance", "live", "server", "load.ts"),
-  join("src", "app", "(shell)", "attendance", "page.tsx"),
+  // 출석부 화면의 강사 전체 보기 반 목록(가르치는 반 · 역할 · 담임 시작일) — 2026-10-06부터 화면이 아니라 이 공용 모듈이 정한다
+  // (프리랜서 명세서가 같은 목록으로 그 강사 출석부를 조립한다). 화면은 이 모듈을 거친다(아래 별도 검사).
+  join("src", "features", "attendance", "teacher-sheet-classes.ts"),
   // 결석 통보 접수 미리보기(2026-08-19) — 칸마다 "누가 가르치나"를 적는 화면이라 같은 축을 거쳐야 한다.
   // (담임을 직접 적었다가 교시마다 담당이 다른 영어 반에서 둘 다 담임 이름으로 표시된 회귀가 있었다.)
   join("src", "features", "attendance", "intake", "server", "queries.ts"),
@@ -51,6 +55,13 @@ describe("출결 강사 귀속 축 단일 소스", () => {
       src.includes(AXIS_MODULE) || src.includes("./teacher-axis-queries"),
       `${rel}: 강사 축은 ${AXIS_MODULE} 한 곳에서만 정한다 — 화면마다 따로 고르면 같은 출결이 화면마다 다른 사람의 것이 된다`,
     ).toBe(true);
+  });
+
+  it("출석부 화면은 강사 전체 보기 반 목록을 공용 모듈에서 받는다 — 역할·담임 판정을 화면에 다시 적지 않는다", () => {
+    const page = stripComments(readFileSync(join(process.cwd(), "src", "app", "(shell)", "attendance", "page.tsx"), "utf8"));
+    expect(page).toContain('from "@/features/attendance/teacher-sheet-classes"');
+    expect(page).toContain("teacherSheetClasses({");
+    expect(/classTeacherRole\(/.test(page), "역할 판정을 화면에 다시 적으면 명세서 조립과 갈린다").toBe(false);
   });
 
   it("당일 출결 보드에 인라인 담임 폴백이 남아 있지 않다", () => {
@@ -79,10 +90,12 @@ describe("출결 강사 귀속 축 단일 소스", () => {
    */
   describe("담임 시작일 필터 — 적용 범위", () => {
     const page = readFileSync(join(process.cwd(), "src", "app", "(shell)", "attendance", "page.tsx"), "utf8");
+    // 강사 전체 보기의 담임 시작일은 2026-10-06부터 공용 모듈이 정한다(화면·명세서 공용).
+    const sheetClasses = readFileSync(join(process.cwd(), "src", "features", "attendance", "teacher-sheet-classes.ts"), "utf8");
 
     it("🔴 담임 폴백으로 잡힌 반에만 건다 — 교시 담당 반은 그 사람이 실제로 가르쳤다", () => {
       expect(
-        /teacherRoles\.get\(c\.id\)\s*===\s*"homeroom"/.test(page),
+        /roles\.get\(c\.id\)\s*===\s*"homeroom"\s*\?\s*homeroomSinceOf\(/.test(sheetClasses),
         "담임 시작일 필터가 역할을 안 보고 걸리고 있습니다 — 교시 담당(slot)·겸임(both) 반까지 가리면 " +
           "2026-08-18에 넓힌 '교시 담당 강사도 자기 출석부를 본다'가 도로 깨집니다.",
       ).toBe(true);
@@ -113,7 +126,7 @@ describe("출결 강사 귀속 축 단일 소스", () => {
       );
       expect(
         /getMonthlyAttendanceMatrix\(period,\s*c\.id,\s*"month"\)/.test(payslip),
-        "급여 별지 호출에 강사 스코프·담임 시작일이 붙었습니다 — 돈 축은 담임 그대로가 확정입니다(골든마스터).",
+        "티어 정산 별지 호출에 강사 스코프·담임 시작일이 붙었습니다 — 그 갈래의 돈 축은 담임 그대로입니다(프리랜서 별지는 출석부 조립을 그대로 붙입니다).",
       ).toBe(true);
     });
 
@@ -129,7 +142,7 @@ describe("출결 강사 귀속 축 단일 소스", () => {
     });
   });
 
-  it("돈(정산·명세서)은 담임 축을 그대로 쓴다 — 의도적 예외라 축 모듈을 안 거친다", () => {
+  it("돈(정산·명세서)의 티어 정산은 담임 축을 그대로 쓴다 — 의도적 예외라 축 모듈을 안 거친다(프리랜서는 출석부 조립을 거친다)", () => {
     for (const rel of [
       join("src", "features", "attendance", "server", "teacher-money.ts"),
       join("src", "features", "payroll", "server", "payslip-queries.ts"),
@@ -137,6 +150,10 @@ describe("출결 강사 귀속 축 단일 소스", () => {
       const src = readFileSync(join(process.cwd(), rel), "utf8");
       expect(src.includes(AXIS_MODULE), `${rel}: 돈 축을 옮기려면 골든마스터부터 설명할 것`).toBe(false);
     }
+    // 프리랜서의 출석부 기준은 축 판정을 **손으로 다시 적지 않고** 출석부 조립 한 곳을 부른다.
+    const sheetTuition = readFileSync(join(process.cwd(), "src", "features", "payroll", "server", "sheet-tuition.ts"), "utf8");
+    expect(sheetTuition).toContain("loadTeacherSheet(");
+    expect(sheetTuition.includes(AXIS_MODULE)).toBe(false);
   });
 
   describe("출결 알림 벨 수신자 — 그날 그 교시 담당 + 담임(원장 결정 2026-09-14)", () => {

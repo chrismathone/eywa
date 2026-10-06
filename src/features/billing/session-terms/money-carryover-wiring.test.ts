@@ -22,7 +22,11 @@ describe("금액 이월 배선", () => {
 
   it("출석부 금액 열도 같은 이월을 싣는다(보낸·받은 이월을 함께 넘긴다)", () => {
     const server = read("src/features/attendance/server/class-billing.ts");
-    expect(server).toMatch(/attendanceClassBilledAmounts\(classes, invoices, terms, carry\)/);
+    // 2026-10-06부터 본체 `attendanceClassBilledDetail`을 부른다(청구액 + 이월 표식을 같은 한 번의 계산에서) — 넘기는 이월은 같다.
+    expect(server).toMatch(/attendanceClassBilledDetail\(classes, invoices, terms, carry\)/);
+    expect(server).toContain("billed: detail.billed");
+    // 🔴 이월 표식도 그 계산이 낸 값만 쓴다 — 표식이 따로 판정하면 '칠해졌는데 금액은 그대로'가 된다.
+    expect(server).toMatch(/attendanceCarryMarks\(classes, carry, detail, confirmedPrices\)/);
     expect(server).toContain("loadMoneyCarryOuts(admin");
     expect(server).toContain("loadMoneyCarryIns(admin");
   });

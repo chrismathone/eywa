@@ -276,6 +276,61 @@ describe("학교·학년 오른쪽 반별 청구액", () => {
     expect(container.querySelector("tfoot tr:first-child td:nth-child(3)")).toHaveTextContent("4.5");
   });
 
+  it("금액 이월이 걸린 줄은 등록 차수 칸이 주황 + 카드에 몇 회차인지 — 이월 없는 줄은 종전 연파랑(원장 2026-10-06)", () => {
+    render(<MatrixTable groups={[{ ...LESSON_GROUP, unitSuffix: "U" }]} days={DAYS} holidays={{}} showGroups={true} ordered={[]}
+      classBilledAmounts={{}} termSessionsByRow={{
+        [rowKey(C, S1)]: { units: 21, daysBasis: false, classUnits: 26 },
+        [rowKey(C, S2)]: { units: 19, daysBasis: false, classUnits: 24 },
+      }} carryMarksByRow={{
+        [rowKey(C, S1)]: { ins: [{ amount: 25000, period: "2026-08", units: 2 }], inState: "pending", out: null },
+      }} />);
+    const carried = within(screen.getByText("이도윤").closest("tr")!).getAllByRole("cell")[4]!;
+    expect(carried).toHaveTextContent("21.0 U");
+    expect(carried.className).toContain("bg-att-col-carry");
+    expect(carried.className).not.toContain("bg-att-col-sessions");
+    expect(carried).toHaveAttribute("data-att-carry");
+    const tip = carried.getAttribute("data-tip");
+    expect(tipRow(tip, "8월에서 받음")).toBe("2.0 U · 25,000원");
+    // 아직 청구액에 안 실린 이월은 이유를 적고, 칸이 원래 띄우던 강사 몫 설명은 카드 줄로 옮겨 싣는다.
+    expect(tipText(tip)).toContain("아직 청구액에 실리지 않았습니다");
+    expect(tipText(tip)).toContain("반 전체 등록 26.0 U 중 이 선생님 담당 21.0 U");
+    // 🔴 카드를 띄우는 칸엔 `title`이 없다 — 둘 다 달면 회색 메모 상자가 카드 옆에 겹쳐 뜬다.
+    expect(carried.querySelector("[title]")).toBeNull();
+    // 색·마우스 오버가 안 닿는 사람에게도 글자로 전한다.
+    expect(carried).toHaveTextContent("금액 이월 있음");
+
+    const plain = within(screen.getByText("박서준").closest("tr")!).getAllByRole("cell")[4]!;
+    expect(plain.className).toContain("bg-att-col-sessions");
+    expect(plain).not.toHaveAttribute("data-att-carry");
+    expect(plain).not.toHaveAttribute("data-tip");
+    expect(plain.querySelector("span[title]")!.getAttribute("title")).toContain("반 전체 등록 24.0 U");
+  });
+
+  it("이월 카드가 뜨는 칸은 안쪽 설명(배분 확인 · 일수 기준 · 미확정)을 카드 줄로 옮긴다 — 설명이 사라지지도 겹치지도 않는다", () => {
+    const mark = { ins: [{ amount: 25000, period: "2026-08", units: null }], inState: "applied" as const, out: null };
+    render(<MatrixTable groups={[LESSON_GROUP]} days={DAYS} holidays={{}} showGroups={true} ordered={[]}
+      classBilledAmounts={{}} termSessionsByRow={{
+        [rowKey(C, S1)]: { units: 21, daysBasis: false, classUnits: 21, allocationPending: true },
+        [rowKey(C, S2)]: { units: 6, daysBasis: true },
+      }} carryMarksByRow={{ [rowKey(C, S1)]: mark, [rowKey(C, S2)]: mark, [rowKey(C, S3)]: mark }} />);
+    const cellOf = (name: string) => within(screen.getByText(name).closest("tr")!).getAllByRole("cell")[4]!;
+    // 배분 확인 — 글자는 그대로, 설명은 카드로.
+    const pending = cellOf("이도윤");
+    expect(pending).toHaveTextContent("배분 확인");
+    expect(pending.querySelector("[title]")).toBeNull();
+    expect(tipText(pending.getAttribute("data-tip"))).toContain("배분을 확인해야 합니다");
+    // 일수 기준 — 붉은 숫자는 그대로, 안쪽 카드는 떼고(카드가 둘이면 어느 쪽이 뜰지 자리에 따라 갈린다) 설명은 칸 카드로.
+    const days = cellOf("박서준");
+    expect(days.querySelector(".text-danger")).toBeTruthy();
+    expect(days.querySelectorAll("[data-tip]")).toHaveLength(0);
+    expect(tipText(days.getAttribute("data-tip"))).toContain("이 숫자는 시수가 아닙니다");
+    // 🔴 등록 차수가 미확정인 줄도 주황 + 카드(배분만 저장해도 받은 이월은 청구액에 실린다) — 회차 없이 금액만.
+    const unconfirmed = cellOf("한가온");
+    expect(unconfirmed).toHaveTextContent("미확정");
+    expect(unconfirmed.className).toContain("bg-att-col-carry");
+    expect(tipRow(unconfirmed.getAttribute("data-tip"), "8월에서 받음")).toBe("25,000원");
+  });
+
   it("🔴 옛 일수 기준 확정값은 붉은 숫자 + 마우스 오버 카드 — 감추지도 '미확정'으로 바꾸지도 않는다", () => {
     render(
       <MatrixTable

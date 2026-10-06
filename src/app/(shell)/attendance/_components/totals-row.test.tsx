@@ -291,3 +291,38 @@ describe("「단가」 표식 ↔ 회차 확정 단가 (원장 2026-09-18)", () 
     expect(badgeOf(container)?.textContent).toBe("단가");
   });
 });
+
+describe("합계 줄 안내 두 갈래 — 청구·납입 범위 / 정산액에 든 표 밖 시수", () => {
+  const sheet = (extra: Record<string, unknown>) => {
+    const src = buildGridSource(GROUPS, DAYS, ORDERED);
+    return render(
+      <AttendanceSearchProvider rows={SEARCH_ROWS}>
+        <GridProvider rows={src.rows} cols={src.cols} initial={src.initial} lockBefore={null}>
+          <MatrixTable
+            groups={GROUPS}
+            days={DAYS}
+            holidays={{}}
+            showGroups
+            money={MONEY}
+            ordered={ORDERED}
+            moneyNote="담임 반 2개 기준"
+            settlementNote="정산액에 표 밖 시수 3"
+            {...extra}
+          />
+        </GridProvider>
+      </AttendanceSearchProvider>,
+    ).container;
+  };
+
+  it("정산액을 그리는 표엔 둘 다 선다", () => {
+    const text = flat(sheet({}));
+    expect(text).toContain("담임 반 2개 기준");
+    expect(text).toContain("정산액에 표 밖 시수 3");
+  });
+
+  it("🔴 정산액을 감춘 표(프리랜서 — 실수업액·실급여 열)엔 정산액 안내가 없다 — 명세서(출석부 실급여)와 반대 사실을 말하지 않는다", () => {
+    const text = flat(sheet({ showActualAmount: true, salaryView: true }));
+    expect(text).toContain("담임 반 2개 기준");
+    expect(text).not.toContain("정산액에 표 밖 시수 3");
+  });
+});
