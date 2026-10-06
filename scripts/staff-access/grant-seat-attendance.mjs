@@ -1,3 +1,5 @@
+// 🔴 2026-10-06: 원장 지시로 개인별 메뉴 권한을 전부 거뒀다 — 이 스크립트를 다시 돌리면 그때의 명단이 되살아난다.
+//    다시 줄 땐 학원 설정 → 역할·권한 → 개인별 메뉴 권한에서 원장이 직접 준다(docs/decisions/staff.md).
 // 랩실·JJ실 출석부(seat_attendance) — 자리 담당자 개인 예외 부여(원장 지시 2026-08-14
 //   "랩실 아르바이트 선생님이 출결 체크").
 //   드라이런: node scripts/staff-access/grant-seat-attendance.mjs --tenant cs

@@ -10,6 +10,8 @@
 //   배열 1:   users.subjects[] (강사 담당 과목)                               (RPC absorb_subject_key)
 //   jsonb 2:  enrollment_consultations.subject_details · onescreen_daily_sessions.subject_progress (RPC)
 //   설정 1:   tenant_settings.data.operations.subjects (행 제거)
+//   옮기지 않는 설정 1: permissions.specialAccess.staffSubjectScopes(직원관리 과목 범위) — 역할·권한은 원장만 저장하는 섹션이라
+//             여기서 대신 고치지 않는다. 없어진 키는 아무와도 안 맞아 **좁은 쪽**으로 남고, 역할·권한 면이 '(없어진 과목)'으로 보여 준다.
 // 의도적 제외: consultation_ai_analysis.print_payload 등 동결 스냅샷(불변 설계) · tuition_catalog.category(라벨 분류, 키 아님).
 //
 // users/jsonb 이동은 0077a RPC(absorb_subject_key, security invoker + auth_tenant_id 이중격리)로

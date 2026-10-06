@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { intersectWindows, maxUnitsFrom, splitUnitMinutes, startOptions, toMin, durationLabel } from "./rules";
 import { hasDayInRange, periodText, resolvePeriod, splitActiveOn, splitsCollide } from "./period";
 import { splitLinesForCell, uniqueSplits } from "./lines";
-import { canSplitClass, CLASS_SPLITTER_USER_IDS } from "./access";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { canSplitClass, CLASS_SPLIT_ENABLED } from "./access";
 import type { ClassSplit } from "./rules";
 
 const w = (a: string, b: string) => ({ start: toMin(a), end: toMin(b) });
@@ -132,14 +134,43 @@ describe("시간표 줄 — 원래 반엔 →, 받는 반엔 ←", () => {
   });
 });
 
-describe("권한 — 명단 + super_admin", () => {
-  it("침산은 명단만(master여도 명단 밖이면 불가)", () => {
-    expect(canSplitClass({ id: CLASS_SPLITTER_USER_IDS[0]!, systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: true })).toBe(true);
-    expect(canSplitClass({ id: "someone", systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: true })).toBe(false);
-    expect(canSplitClass({ id: "someone", systemRole: "teacher" }, { isSuperAdmin: true, isChinsanTenant: true })).toBe(true);
+// 기능이 꺼져 있으면(원장 2026-10-06) 누구도 못 나눈다 — 아래 판정은 켜졌을 때의 규칙이다.
+describe.skipIf(!CLASS_SPLIT_ENABLED)("권한 — 원장 역할 + 학원 설정에서 지정한 사람(원장 2026-10-06)", () => {
+  const policy = { isSuperAdmin: false, splitterIds: ["picked"] };
+  it("원장 역할은 지정 없이 연다", () => {
+    expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: false, splitterIds: [] })).toBe(true);
   });
-  it("일반판은 원장만", () => {
-    expect(canSplitClass({ id: "x", systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: false })).toBe(true);
-    expect(canSplitClass({ id: "x", systemRole: "admin" }, { isSuperAdmin: false, isChinsanTenant: false })).toBe(false);
+  it("그 밖의 역할은 지정된 사람만", () => {
+    expect(canSplitClass({ id: "picked", systemRole: "admin" }, policy)).toBe(true);
+    for (const role of ["admin", "manager", "teacher", "counselor", "accountant", "viewer"] as const) {
+      expect(canSplitClass({ id: "someone", systemRole: role }, policy)).toBe(false);
+    }
+    // 저장값이 목록이 아니면(손으로 넣은 값) 지정된 사람이 없는 것으로 본다.
+    expect(canSplitClass({ id: "picked", systemRole: "admin" }, { isSuperAdmin: false, splitterIds: "xpickedx" as unknown as string[] })).toBe(false);
+  });
+  it("운영 계정은 지정 없이 통과", () => {
+    expect(canSplitClass({ id: "someone", systemRole: "teacher" }, { isSuperAdmin: true, splitterIds: [] })).toBe(true);
+  });
+});
+
+describe("권한 — 배선과 기능 스위치", () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf-8");
+  it("🔴 코드에 계정 명단을 두지 않는다 — 게이트는 학원 설정의 지정값을 읽는다", () => {
+    const access = read("src/features/class-splits/access.ts");
+    expect(access).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    expect(access).not.toMatch(/_IDS\b/);
+    expect(read("src/features/class-splits/server/gate.ts")).toContain("settings.permissions.specialAccess.classSplitterIds");
+  });
+  it("🔴 서버 게이트가 수업 관리 권한도 함께 본다 — 지정만으로는 수업을 못 고치는 사람이 나눌 수 없다", () => {
+    // 시간표는 수업 관리 권한이 있을 때만 나누기 팝업을 세운다. 서버가 지정만 보면 화면에 없는 길이 요청으로 열린다([[#77]]).
+    const gate = read("src/features/class-splits/server/gate.ts").replace(/\s+/g, " ");
+    expect(gate).toContain('canManageTenant(user.systemRole, "classes")');
+    expect(gate).toContain("if (!canManageClasses) return false;");
+  });
+  it("🔴 꺼져 있으면 운영 계정 · 원장 역할 · 지정된 사람 모두 못 나눈다", () => {
+    if (CLASS_SPLIT_ENABLED) return;
+    const policy = { isSuperAdmin: true, splitterIds: ["picked"] };
+    expect(canSplitClass({ id: "picked", systemRole: "master" }, policy)).toBe(false);
+    expect(canSplitClass({ id: "picked", systemRole: "admin" }, policy)).toBe(false);
   });
 });

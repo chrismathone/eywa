@@ -22,8 +22,8 @@ export const metadata = { title: "전자결재 — 에이와" };
  * 양식은 늘어날 자리다(지금은 휴가신청서 하나) — 문서 껍데기(`approval_documents`)와 양식 상세
  * (`leave_forms`)가 분리돼 있어 새 양식은 상세 표 + 폼만 더하면 된다.
  *
- * 접근은 `approvals` 메뉴 게이트 — 기본값이 전 역할 `none`이고 코드 명단(이승엽·김예원)이 개인
- * 예외로 얹힌다(파일럿). 상세는 [`access.ts`](../../../features/approvals/access.ts).
+ * 접근은 `approvals` 메뉴 게이트 — 기본값이 전 역할 `none`이고, 역할·권한 표나 '개인별 메뉴 권한'으로 연 계정만
+ * 들어온다(코드 명단 없음). 상세는 [`access.ts`](../../../features/approvals/access.ts).
  */
 
 /** 탭(하이웍스 문서함) 정의 — 빈 상태 문구까지 여기 한 곳(함 설명 문단은 §4로 걷었다 — 라벨이 곧 뜻이다). */

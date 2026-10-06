@@ -38,7 +38,7 @@ export async function TeacherSettlementFace({ period }: { period?: string }) {
   const [view, classRows, canPayslip] = await Promise.all([
     getTeacherTuitionView(p),
     getClassSalaryRows(),
-    // 명세서는 하드 픽스 명단 + super_admin만(급여명세서 열람 결정) — 못 여는 사람에겐 링크를 안 세운다.
+    // 명세서는 원장 역할 · 학원 설정에서 지정한 사람 + super_admin만(급여명세서 열람 결정) — 못 여는 사람에겐 링크를 안 세운다.
     user ? canViewPayslipNow(user) : Promise.resolve(false),
   ]);
   const hrefFor = (per: string) => `/billing?tab=payroll&period=${per}`;

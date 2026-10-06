@@ -5,28 +5,35 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { canAdjustLeave } from "@/features/leave/access";
 import { getTenantSettings } from "@/features/owner/server/queries";
-import { isChinsanTenant } from "@/features/owner/preset";
 import { getLeaveOverview } from "@/features/leave/server/admin";
+import { getViewerStaffScope } from "@/features/staff/server/subject-scope";
+import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
 import { AdjustTable } from "./_adjust-table";
 
 export const metadata = { title: "연차 관리 — 에이와" };
 
 /**
  * 연차 관리 — 직원별 연차 **부여 일수 조정**(원장 2026-09-08: *"관리자랑 김예원이 직원들의 연차갯수를
- * 조정해야하는데 해당 기능이 없음"*, 관리자 = 박소선·이승엽·김예원).
+ * 조정해야하는데 해당 기능이 없음"*). 누가 조정하는지는 학원 설정 '역할·권한'의 개인별 기능 권한에서 지정한다(원장 2026-10-06).
  *
  * 🔑 자리는 **직원관리**다(원장 2026-09-09: *"직원관리에 버튼 연동해주지 전자결재에 있는게 연차를
  *    관리하는게 이상하자나"*). 휴가 **신청·결재**는 전자결재, 연차 **부여 일수**는 직원 정보다.
- * 🔴 게이트가 **둘**이다 — 직원관리 메뉴(`requireAccess("staff")`)를 통과해도 조정 명단
- *    (`canAdjustLeave`)에 없으면 목록으로 돌려보낸다. 화면에서만 감추면 주소를 직접 치면
- *    열린다([[#77]]) — 서버 액션도 같은 함수를 한 번 더 통과한다.
+ * 🔴 게이트가 **둘**이다 — 직원관리 메뉴(`requireAccess("staff")`)를 통과해도 조정 담당으로 지정
+ *    (`canAdjustLeave`)되지 않았으면 목록으로 돌려보낸다. 화면에서만 감추면 주소를 직접 치면
+ *    열린다([[#77]]) — 서버 액션도 같은 두 문을 한 번 더 통과한다.
+ * 🔴 직원관리 과목 범위가 걸린 사람에겐 **범위 안의 직원(과 본인)만** 선다 — 직원관리의 다른 화면과 같은 판정이고,
+ *    서버 액션도 범위 밖 직원의 조정을 거절한다.
  */
 export default async function AnnualLeavePage() {
   const user = await requireAccess("staff");
   const [settings, isSuperAdmin] = await Promise.all([getTenantSettings(), isCurrentUserSuperAdmin()]);
-  if (!canAdjustLeave(user.id, isSuperAdmin, { isChinsanTenant: isChinsanTenant(settings), adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) redirect("/staff");
+  if (!canAdjustLeave(user, isSuperAdmin, { adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) redirect("/staff");
 
-  const overview = await getLeaveOverview(user.tenantId);
+  const scope = await getViewerStaffScope(user);
+  const overview = await getLeaveOverview(
+    user.tenantId,
+    scope ? (staff) => staff.id === user.id || isStaffInSubjectScope(scope, staff.subjects) : undefined,
+  );
   const adjusted = overview.rows.filter((r) => r.adjustment !== 0).length;
   // 🔴 조회가 실패했으면 건수를 **안 적는다** — 빈 배열의 길이 0을 "0명"이라 찍으면 거짓 숫자다
   //    (결재함 머리(`page.tsx`)와 같은 규약).

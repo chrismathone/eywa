@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
+import { canAccessTenant } from "@/lib/auth/perm-matrix";
+import { canSeeStaffMember, STAFF_SCOPE_DENIED_MSG } from "@/features/staff/server/subject-scope";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isChinsanTenant } from "@/features/owner/preset";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -29,9 +31,10 @@ import type { LeaveActionState } from "../action-state";
 /**
  * 연차 조정 쓰기 — 이월·특별휴가 부여와 정산 차감(원장 2026-09-08).
  *
- * 🔴 게이트는 **화면과 같은 함수**(`canAdjustLeave`) — 직원관리를 볼 수 있다고 남의 연차까지 고칠 수
- *    있는 건 아니다([[#77]]). 직원관리 메뉴는 데스크 직원 여럿에게 열려 있으니, 이 액션이 좁은 명단을
- *    한 번 더 본다.
+ * 🔴 게이트는 **화면과 같은 두 문**이다 — 직원관리 메뉴 + 지정(`canAdjustLeave`). 직원관리를 볼 수 있다고 남의
+ *    연차까지 고칠 수 있는 건 아니고([[#77]]), 지정됐다고 직원관리가 닫힌 사람이 요청을 만들어 고칠 수 있는 것도 아니다
+ *    (지정은 원장이 화면에서 누구에게나 줄 수 있다 — 연차 관리 화면은 직원관리 메뉴 안에 있다).
+ * 🔴 직원관리 과목 범위가 걸린 사람은 **범위 안의 직원만** 조정한다 — 연차 관리 표가 범위 안만 보여 주는 것과 같은 판정이다.
  * 🔴 **구간·현재값은 클라를 믿지 않고 서버가 다시 계산한다** — 폼이 보낸 period나 "현재 총 부여"를
  *    그대로 쓰면 오래된 화면(다른 사람이 그 사이 조정한 경우)이 남의 조정을 덮어 쓴 값을 적는다.
  * ⚠️ admin(service_role)은 RLS 우회 — 모든 쿼리에 `tenant_id` 명시 필터([[#104]]).
@@ -53,8 +56,12 @@ const REASON_REQUIRED_MSG =
 async function requireAdjuster() {
   const user = await getCurrentUser();
   if (!user) return { error: "로그인이 필요합니다" as const };
-  const [settings, isSuperAdmin] = await Promise.all([getTenantSettings(), isCurrentUserSuperAdmin()]);
-  if (!canAdjustLeave(user.id, isSuperAdmin, { isChinsanTenant: isChinsanTenant(settings), adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) {
+  const [settings, isSuperAdmin, canOpenStaff] = await Promise.all([
+    getTenantSettings(),
+    isCurrentUserSuperAdmin(),
+    canAccessTenant(user.systemRole, "staff"),
+  ]);
+  if (!canOpenStaff || !canAdjustLeave(user, isSuperAdmin, { adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds })) {
     return { error: LEAVE_ADJUST_DENIED_MSG as string };
   }
   return { user };
@@ -118,6 +125,7 @@ export async function addLeaveAdjustment(
 
   const userId = String(formData.get("userId") ?? "").trim();
   if (!UUID_RE.test(userId)) return { error: "대상 직원을 선택하세요" };
+  if (!(await canSeeStaffMember(user, userId))) return { error: STAFF_SCOPE_DENIED_MSG };
 
   // 사유는 **선택**이다(원장 2026-09-21: *"연차관리에 사유없어도 조정기록 되게해줘"*). 0252a는 필수로
   // 잠가 뒀었지만 — 적을 말이 없어 조정을 못 하는 쪽이 더 나쁘다는 판단 — 칸은 두고 비울 수 있게만 했다.
@@ -290,6 +298,7 @@ export async function deleteLeaveAdjustment(
   if (!row) return { error: "이미 삭제된 조정입니다" };
 
   const targetId = String(row.user_id);
+  if (!(await canSeeStaffMember(user, targetId))) return { error: STAFF_SCOPE_DENIED_MSG };
   const { data: person } = await admin
     .from("users")
     .select("display_name, hire_date")

@@ -260,11 +260,19 @@ function diffPermissions(before: unknown, after: unknown): SettingsDiff {
       for (const [key, label] of [
         ["payslipViewerIds", "급여명세서 열람"],
         ["leaveAdjusterIds", "연차 조정"],
+        ["classSplitterIds", "수업 나누기"],
       ] as const) {
         for (const id of Array.isArray(v.specialAccess[key]) ? v.specialAccess[key] : []) {
           if (typeof id !== "string") continue;
           out.set(`special:${key}:${id}`, { label: `${label} · ${id.slice(0, 8)}`, access: "full" });
         }
+      }
+      // 직원관리 과목 범위 — 걸려 있다는 사실만 싣는다(과목 키는 내부 값이라 기록 문구에 넣지 않는다 — 원문은 저장값에 있다).
+      // 과목을 바꾸면 다른 줄로 잡혀 '해제 → 지정'으로 남는다.
+      for (const row of Array.isArray(v.specialAccess.staffSubjectScopes) ? v.specialAccess.staffSubjectScopes : []) {
+        if (!isObj(row) || typeof row.userId !== "string") continue;
+        const subjects = Array.isArray(row.subjects) ? row.subjects.filter((s): s is string => typeof s === "string").sort().join("|") : "";
+        out.set(`special:staffScope:${row.userId}:${subjects}`, { label: `직원관리 과목 범위 · ${row.userId.slice(0, 8)}`, access: "scoped" });
       }
     }
     return out;

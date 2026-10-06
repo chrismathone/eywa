@@ -37,6 +37,7 @@ import {
 } from "./operations-save";
 import { permissionsToken } from "./permissions-save";
 import { hasDuplicateRoleCells } from "../permissions-canonical";
+import { specialAccessTargets } from "../special-access";
 
 /**
  * `operations` = 운영 섹션 저장이 확정한 상태(면별 기준 token · 과목 삭제는 그 면의 값도) — 화면이 다음 저장의 기준으로 쓴다.
@@ -179,13 +180,32 @@ export async function saveOwnerSection(
   if (section === "permissions" && permissionsBaseline !== permissionsToken(resolveSettings(existing?.data ?? null, { name: "" }).permissions)) {
     return { error: CHANGED_ELSEWHERE_ERROR };
   }
-  if (section === "permissions" && preset === "generic") {
+  // 개인별 메뉴 권한의 대상 확인 — 어느 학원에서나 한다(침산도 역할 표 아래에서 개인별 권한을 준다, 원장 2026-10-06).
+  //  · 개인별 메뉴 권한 — 새 학원(일반판): 종전대로 요청의 모든 줄을 본다. 침산: **새로 주거나 바꾸는 줄만** 본다 —
+  //    이미 저장돼 있던 줄은 그대로 둘 수 있다. 전에 준 사람이 그 뒤 퇴직했다고 역할 표 저장까지 막히면, 화면에 안 보이는
+  //    줄(지점에서 못 지우는 줄)이 하나만 그래도 이 면을 영영 저장할 수 없다.
+  //  · 개인별 기능 권한(담당자 · 과목 범위) — **어느 학원에서나** 새로 지정하거나 바꾼 것만 본다(special-access.ts — 칸마다).
+  //    전부를 다시 보면, 범위의 과목이 그 뒤 없어졌거나(과목 흡수) 지정한 사람이 퇴직한 학원은 역할 표 저장까지 막힌다.
+  if (section === "permissions") {
     const p = result?.data as PermissionsSettings;
-    const ids = [...new Set([
-      ...p.userOverrides.map((r) => r.userId),
-      ...p.specialAccess.payslipViewerIds,
-      ...p.specialAccess.leaveAdjusterIds,
-    ])];
+    const fresh = resolveSettings(existing?.data ?? null, { name: "" });
+    const rowKey = (r: { userId: string; menu: string; access: string }) => `${r.userId}:${r.menu}:${r.access}`;
+    // 저장돼 있던 줄은 깨져 있을 수 있다(손으로 넣은 값 — 줄이 null) — 읽을 수 있는 줄만 "그대로 둔 줄"로 친다.
+    const storedRows: unknown[] = preset === "generic" ? [] : fresh.permissions.userOverrides;
+    const special = specialAccessTargets(p.specialAccess, fresh.permissions.specialAccess);
+    // 과목 범위의 과목은 학원 설정에 있는 과목이어야 한다 — 없는 키는 아무와도 안 맞아 그 사람에게 직원이 한 명도 안 보인다.
+    const knownSubjects = new Set(fresh.operations.subjects.map((s) => s.key));
+    if (special.subjects.some((key) => !knownSubjects.has(key))) {
+      return { error: "과목 범위에는 학원 설정에 있는 과목만 넣을 수 있습니다" };
+    }
+    const kept = new Set(storedRows.flatMap((r) => {
+      const row = r as { userId?: unknown; menu?: unknown; access?: unknown } | null;
+      return row && typeof row.userId === "string" && typeof row.menu === "string" && typeof row.access === "string"
+        ? [rowKey({ userId: row.userId, menu: row.menu, access: row.access })]
+        : [];
+    }));
+    const checkedRows = p.userOverrides.filter((r) => !kept.has(rowKey(r)));
+    const ids = [...new Set([...checkedRows.map((r) => r.userId), ...special.userIds])];
     if (ids.length > 0) {
       const { data: people, error: peopleError } = await createAdminClient()
         .from("users")
@@ -202,7 +222,7 @@ export async function saveOwnerSection(
         .map((u) => u.id));
       if (ids.some((id) => !validIds.has(id))) return { error: "현재 지점의 재직 직원만 권한 대상에 지정할 수 있습니다" };
       const roles = new Map((people ?? []).map((u) => [u.id, u.system_role as SystemRole]));
-      if (p.userOverrides.some((r) => isPermissionLocked(r.menu, roles.get(r.userId)!, r.access))) {
+      if (checkedRows.some((r) => isPermissionLocked(r.menu, roles.get(r.userId)!, r.access))) {
         return { error: "이 역할에서 잠긴 메뉴 권한은 변경할 수 없습니다" };
       }
     }
@@ -310,7 +330,7 @@ export async function saveOwnerSection(
   // (안 하면 report 섹션 저장 후 화면이 stale하게 옛 값으로 되돌아 보임 — 예: '강사 문항수 변경 허용' 체크 풀림).
   revalidatePath("/lesson-reports");
   // 운영 · 역할·권한 섹션은 **실제로 저장한 값**(다듬기까지 거친 뒤 다시 풀어 읽은 값)의 기준 token을 돌려준다 — 화면의 다음 저장 기준.
-  //   (보낸 값 그대로가 아니다 — 침산은 담당자 명단 칸이 저장에서 빠지는 등 저장 전 다듬기가 값을 바꾼다.)
+  //   (보낸 값 그대로가 아니다 — 요청에 없던 칸은 저장돼 있던 값으로 남는 등 저장 전 다듬기가 값을 바꾼다.)
   const saved = sectionRev === undefined ? undefined : resolveSettings(nextData, { name: "" });
   const operations = saved && operationsRequest ? operationsReply(saved.operations, operationsRequest) : undefined;
   const permissions = saved && section === "permissions" ? { token: permissionsToken(saved.permissions) } : undefined;

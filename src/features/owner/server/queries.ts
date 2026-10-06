@@ -161,7 +161,7 @@ export async function getUserDisplayNames(ids: readonly string[]): Promise<Recor
   return Object.fromEntries((data ?? []).map((u) => [u.id as string, (u.display_name as string) ?? ""]));
 }
 
-/** 일반판 권한 설정에서 선택할 현재 지점의 재직 직원. 호출처는 원장 전용 설정 면이다. */
+/** 역할·권한 면의 개인별 메뉴 권한 · 담당자 지정에서 고를 직원(재직 · 학생 제외). 어느 학원에서나 쓴다. 화면에 세우지 않는 계정은 뺀다. */
 export async function getPermissionStaffOptions(): Promise<{ id: string; name: string; role: string }[]> {
   const viewer = await getCurrentUser();
   if (!viewer || viewer.systemRole !== "master") return [];

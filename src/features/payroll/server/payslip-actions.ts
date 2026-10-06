@@ -7,7 +7,7 @@
 //   · 🔴 안 남긴다: 금액·인센티브·공제·시급·배분율·패널티 수치 — **하나도**.
 //   이유: 급여는 **본 것 자체가 사고**인 값이라 자물쇠 하나에 기대지 않는다. (2026-09-09에 감사로그
 //   읽기를 master·super_admin으로 좁혔다[0253a] — 그전까지는 로그인한 전 직원이 읽을 수 있었다.) 반면
-//   payslips는 master 전용 RLS + 하드 픽스 명단(payslip-access.ts)으로 잠근 표다. 금액을 metadata에
+//   payslips는 master 전용 RLS + 원장 역할 · 학원 설정에서 지정한 사람(payslip-access.ts)으로 잠근 표다. 금액을 metadata에
 //   실으면 그 잠금 두 겹이 **한 줄로 무의미해진다.**
 //   이 갈래는 새로 지어낸 규칙이 아니라 0120a(`log_activity` redact: hourly_rate·monthly_base·
 //   salary_type·commission_rate)가 이미 쓰던 규약 그대로다 — **바뀐 사실은 기록하되 값은 가린다.**
@@ -94,7 +94,7 @@ export async function savePayslipAdjustments(
 
   const memo = String(formData.get("memo") ?? "").trim() || null;
 
-  // 🔴 payslips는 master 전용 RLS — 명단의 admin(설현·김예원)은 세션 클라이언트로 0행을 받는다([[#104]]).
+  // 🔴 payslips는 master 전용 RLS — 지정된 사람이 원장 역할이 아니면 세션 클라이언트로 0행을 받는다([[#104]]).
   //    앱 게이트를 통과한 뒤 admin으로 쓰되 tenant_id를 명시한다(RLS 우회이므로).
   const supabase = createAdminClient();
   // 발행(issued)된 명세서는 동결이다 — 조정을 다시 쓰면 서명된 문서와 값이 갈린다.

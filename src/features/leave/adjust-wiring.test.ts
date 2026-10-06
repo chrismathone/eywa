@@ -2,15 +2,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MENU_ACCESS } from "@/lib/permissions";
-import { APPROVAL_PILOT_USER_IDS } from "@/features/approvals/access";
-import { LEAVE_ADJUSTER_USER_IDS, canAdjustLeave } from "@/features/leave/access";
+import { canAdjustLeave } from "@/features/leave/access";
 
 /**
  * 구조 가드 — 연차 조정(원장 2026-09-08 *"관리자랑 김예원이 직원들의 연차갯수를 조정해야하는데"*)이
  * ① 화면에서만 잠기거나([[#77]]) ② 잔여 산식이 표면마다 갈리지 않게 못 박는다.
  *
  * 지키는 것 넷:
- *  · 조정 자격은 명단 + super_admin **한 함수**(canAdjustLeave)로만 난다 — 화면·서버 액션 공용.
+ *  · 조정 자격은 원장 역할 · 학원 설정에서 지정한 사람 + super_admin **한 함수**(canAdjustLeave)로만 난다 — 화면·서버 액션 공용.
  *  · 자리는 **직원관리**다(원장 2026-09-09) — 전자결재 메뉴를 열어 주지 않는다.
  *  · 잔여 = 부여 + 조정 − 사용 − 결재중을 **세 표면**(내 현황·기안 거절·관리자 표)이 같은
  *    순수 함수(balance.ts)로 계산한다.
@@ -20,43 +19,54 @@ import { LEAVE_ADJUSTER_USER_IDS, canAdjustLeave } from "@/features/leave/access
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(join(ROOT, p), "utf-8");
 
-const SOSUN = "fcf735fa-edf7-4095-8fa6-724285a018ed"; // 박소선 (master)
-const YEWON = "8bb70f71-a8c3-450c-9236-561e9b43ca4f"; // 김예원 (admin)
+const ADJUSTER = "11111111-1111-4111-8111-111111111111";
 const OUTSIDER = "00000000-0000-4000-8000-000000000000";
-const chinsan = { isChinsanTenant: true, adjusterIds: [] };
+const policy = { adjusterIds: [ADJUSTER] };
+const admin = (id: string) => ({ id, systemRole: "admin" as const });
 
 describe("연차 조정 자격", () => {
-  it("명단 = 박소선·이승엽·김예원 세 사람", () => {
-    expect(LEAVE_ADJUSTER_USER_IDS).toHaveLength(3);
-    expect(LEAVE_ADJUSTER_USER_IDS).toContain(SOSUN);
-    expect(LEAVE_ADJUSTER_USER_IDS).toContain(YEWON);
+  it("🔴 코드에 계정 명단을 두지 않는다 — 지정은 역할·권한 화면에서만(원장 2026-10-06)", () => {
+    const access = read("src/features/leave/access.ts");
+    expect(access).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    expect(access).not.toMatch(/_IDS\b/);
   });
 
-  it("명단 밖은 막고, super_admin은 명단 없이 통과(원장 2026-08-13)", () => {
-    expect(canAdjustLeave(YEWON, false, chinsan)).toBe(true);
-    expect(canAdjustLeave(OUTSIDER, false, chinsan)).toBe(false);
-    expect(canAdjustLeave(OUTSIDER, true, chinsan)).toBe(true);
-    expect(canAdjustLeave(YEWON, false, { isChinsanTenant: false, adjusterIds: [] })).toBe(false);
-    expect(canAdjustLeave(YEWON, false, { isChinsanTenant: false, adjusterIds: [YEWON] })).toBe(true);
+  it("지정되지 않은 사람은 막고, super_admin은 지정 없이 통과(원장 2026-08-13)", () => {
+    expect(canAdjustLeave(admin(ADJUSTER), false, policy)).toBe(true);
+    expect(canAdjustLeave(admin(OUTSIDER), false, policy)).toBe(false);
+    expect(canAdjustLeave(admin(OUTSIDER), true, policy)).toBe(true);
+    expect(canAdjustLeave(admin(ADJUSTER), false, { adjusterIds: [] })).toBe(false);
+    // 저장값이 목록이 아니면(손으로 넣은 값) 지정된 사람이 없는 것으로 본다.
+    expect(canAdjustLeave(admin(ADJUSTER), false, { adjusterIds: `x${ADJUSTER}` as unknown as string[] })).toBe(false);
   });
 
-  it("🔴 파일럿 명단과 섞이지 않는다 — 테스터는 결재를 써 보지만 남의 연차는 못 고친다", () => {
-    const tester = APPROVAL_PILOT_USER_IDS.find((id) => !LEAVE_ADJUSTER_USER_IDS.includes(id));
-    expect(tester).toBeTruthy();
-    expect(canAdjustLeave(tester!, false, chinsan)).toBe(false);
+  it("🔴 원장 역할은 지정 없이 조정한다 — 원장은 그 지점의 전부를 한다(원장 2026-10-06)", () => {
+    expect(canAdjustLeave({ id: OUTSIDER, systemRole: "master" }, false, { adjusterIds: [] })).toBe(true);
+    // 그 밖의 역할은 지정이 있어야 한다(관리자여도).
+    for (const role of ["admin", "manager", "teacher", "counselor", "accountant", "viewer"] as const) {
+      expect(canAdjustLeave({ id: OUTSIDER, systemRole: role }, false, policy)).toBe(false);
+    }
   });
 
-  it("🔴 연차 조정 명단이 전자결재 메뉴를 열지 않는다 — 자리는 직원관리다(원장 2026-09-09)", () => {
-    // 박소선은 결재 파일럿이 아니다. 조정 화면이 /staff로 옮겨졌으니 전자결재를 열어 줄 이유가 없다
-    // (열어 두면 "연차 고치라고 준 권한"이 남의 결재 문서 열람까지 넓어진다).
-    expect(APPROVAL_PILOT_USER_IDS).not.toContain(SOSUN);
+  it("🔴 메뉴 권한과 섞이지 않는다 — 자격 판정이 권한 표를 읽지 않는다", () => {
+    // 조정 자격은 메뉴 권한(전자결재 · 직원관리)이 아니라 지정이 정한다 — 메뉴를 열어 줘도 자격이 따라오지 않는다.
+    const access = read("src/features/leave/access.ts");
+    expect(access).not.toContain("perm-matrix");
+    expect(access).not.toContain("MENU_ACCESS");
+  });
+
+  it("🔴 연차 조정 지정이 전자결재 메뉴를 열지 않는다 — 자리는 직원관리다(원장 2026-09-09)", () => {
+    // 조정 화면이 /staff로 옮겨졌으니 전자결재를 열어 줄 이유가 없다
+    // (열어 두면 "연차 고치라고 준 권한"이 남의 결재 문서 열람까지 넓어진다). 전자결재 접근 파일은 계정을 하나도 들지 않는다.
     expect(MENU_ACCESS.approvals.master).toBe("none");
     const access = read("src/features/approvals/access.ts");
     expect(access).not.toContain("canAdjustLeave");
+    // 전자결재 접근 판정이 연차 쪽 모듈을 끌어오지도 않는다(조정 담당을 가져다 메뉴를 여는 우회).
+    expect(access).not.toContain("features/leave");
     // 대신 직원관리 목록이 같은 함수로 버튼을 낸다.
     const staffPage = read("src/app/(shell)/staff/page.tsx");
     expect(staffPage).toContain('from "@/features/leave/access"');
-    expect(staffPage).toContain("canAdjustLeave(user.id, isSuperAdmin,");
+    expect(staffPage).toContain("canAdjustLeave(user, isSuperAdmin,");
     expect(staffPage).toContain('href="/staff/annual-leave"');
   });
 });
@@ -70,6 +80,18 @@ describe("게이트 배선", () => {
 
     const actions = read("src/features/leave/server/actions.ts");
     expect(actions).toContain("canAdjustLeave");
+    // 둘 다 학원 설정의 같은 칸을 읽는다(한쪽만 다른 값을 보면 버튼은 뜨는데 저장이 거절된다).
+    for (const src of [page, actions, read("src/app/(shell)/staff/page.tsx")]) {
+      expect(src).toContain("{ adjusterIds: settings.permissions.specialAccess.leaveAdjusterIds }");
+    }
+    // 🔴 서버 액션도 화면과 같은 두 문이다 — 직원관리 메뉴 + 지정. 지정만 보면 메뉴가 닫힌 사람이 요청을 만들어 고친다.
+    const flat = actions.replace(/\s+/g, " ");
+    expect(flat).toContain('canAccessTenant(user.systemRole, "staff")');
+    expect(flat).toContain("if (!canOpenStaff || !canAdjustLeave(user, isSuperAdmin,");
+    // 🔴 직원관리 과목 범위 — 표(조회)와 추가·삭제(쓰기) 세 곳이 같은 판정을 지난다.
+    expect(page).toContain("getViewerStaffScope(user)");
+    expect(flat).toContain("if (!(await canSeeStaffMember(user, userId))) return { error: STAFF_SCOPE_DENIED_MSG };");
+    expect(flat).toContain("if (!(await canSeeStaffMember(user, targetId))) return { error: STAFF_SCOPE_DENIED_MSG };");
     // 쓰기 두 갈래(추가·삭제)가 각각 게이트를 지난다 — 한쪽만 막으면 POST로 우회된다.
     expect(actions.match(/requireAdjuster\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });

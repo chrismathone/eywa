@@ -109,7 +109,7 @@ describe("파생 — 세 표면이 같은 목록을 쓴다", () => {
   it("🔴 그림 표는 그림 가드가 읽는 모양(`icon: \"이름\"`)으로 적는다 — 맨 문자열로 적으면 가드가 이 표를 못 본다", () => {
     const src = readFileSync(join(process.cwd(), "src", "lib", "menu-hub.ts"), "utf8");
     const table = src.slice(src.indexOf("const OWNER_FACE_ICON"), src.indexOf("};", src.indexOf("const OWNER_FACE_ICON")));
-    const rows = table.split("\n").filter((line) => /^\s+\w+: /.test(line));
+    const rows = table.split(/\r?\n/).filter((line) => /^\s+\w+: /.test(line));
     expect(rows.length).toBe(OWNER_FACES.length);
     for (const row of rows) expect(row, row.trim()).toMatch(/^\s+\w+: \{ icon: (?:"\w+"|MENU_ICON\.\w+) \},$/);
     // 문자열로 직접 적은 그림은 그림 가드의 추출식에 걸린다.

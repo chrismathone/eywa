@@ -34,7 +34,7 @@ import { PermissionsSection } from "./permissions-section";
 const settings = (overrides: PermissionsSettings["overrides"] = []): PermissionsSettings => ({
   overrides,
   userOverrides: [],
-  specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] },
+  specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] },
 });
 const payload = (container: HTMLElement) =>
   JSON.parse((container.querySelector('input[type="hidden"][name="data"]') as HTMLInputElement).value) as PermissionsSettings;
@@ -80,7 +80,7 @@ describe("저장 요청", () => {
     expect(JSON.parse(String(lastRequest().get("data")))).toEqual({
       overrides: [{ menu: "staff", role: "admin", access: STAFF_ADMIN_NEXT }],
       userOverrides: [],
-      specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [] },
+      specialAccess: { payslipViewerIds: [], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] },
     });
   });
 
@@ -144,7 +144,7 @@ describe("🔴 서버가 새 값을 내려보냈을 때 — 표 · 개인별 · 
     const { container, rerender } = render(<PermissionsSection initial={settings()} baselineToken="P0" baselineVersion={0} generic />);
     rerender(
       <PermissionsSection
-        initial={{ ...settings(), userOverrides: [{ userId: person, menu: "staff", access: "full" }], specialAccess: { payslipViewerIds: [person], leaveAdjusterIds: [] } }}
+        initial={{ ...settings(), userOverrides: [{ userId: person, menu: "staff", access: "full" }], specialAccess: { payslipViewerIds: [person], leaveAdjusterIds: [], classSplitterIds: [], staffSubjectScopes: [] } }}
         baselineToken="P1"
         baselineVersion={1}
         generic
