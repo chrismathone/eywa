@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { durationLabel, endAfter, intersectWindows, splitBoundaries, splitUnitMinutes, startOptions, toMin } from "./rules";
 import { hasDayInRange, periodText, resolvePeriod, splitActiveOn, splitsCollide } from "./period";
 import { groupSplitLines, splitLinesForCell, uniqueSplits } from "./lines";
-import { canSplitClass, CLASS_SPLITTER_USER_IDS } from "./access";
+import { canSplitClass, CLASS_SPLIT_ENABLED, CLASS_SPLITTER_USER_IDS } from "./access";
 import type { ClassSplit } from "./rules";
 
 const w = (a: string, b: string) => ({ start: toMin(a), end: toMin(b) });
@@ -151,7 +151,8 @@ describe("시간표 줄 — 원래 반엔 →, 받는 반엔 ←", () => {
   });
 });
 
-describe("권한 — 명단 + super_admin", () => {
+// 기능이 꺼져 있으면(원장 2026-10-06) 누구도 못 나눈다 — 명단 판정은 켜졌을 때의 규칙이다.
+describe.skipIf(!CLASS_SPLIT_ENABLED)("권한 — 명단 + super_admin", () => {
   it("침산은 명단만(master여도 명단 밖이면 불가)", () => {
     expect(canSplitClass({ id: CLASS_SPLITTER_USER_IDS[0]!, systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: true })).toBe(true);
     expect(canSplitClass({ id: "someone", systemRole: "master" }, { isSuperAdmin: false, isChinsanTenant: true })).toBe(false);
@@ -175,5 +176,12 @@ describe("툴바 목록 — 반 전체 나누기는 한 건으로 묶는다", ()
     expect(groups).toHaveLength(1);
     expect(groups[0]!.splitIds.sort()).toEqual(["x1", "x2"]);
     expect(groups[0]!.hereClassName).toBe("고등M 단체 BS4F");
+  });
+});
+
+describe("기능 스위치", () => {
+  it("꺼져 있으면 super_admin·명단도 못 나눈다", () => {
+    if (CLASS_SPLIT_ENABLED) return;
+    expect(canSplitClass({ id: CLASS_SPLITTER_USER_IDS[0]!, systemRole: "master" }, { isSuperAdmin: true, isChinsanTenant: true })).toBe(false);
   });
 });
