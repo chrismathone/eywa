@@ -48,7 +48,7 @@ function billShape(value: unknown): string {
 }
 
 /** 객체 키 순서나 할인·납부 기록 갱신은 배분 근거(청구액·항목명)를 바꾸지 않는다. */
-function sameBill(a: unknown, b: unknown): boolean {
+export function sameBill(a: unknown, b: unknown): boolean {
   return a != null && b != null && billShape(a) === billShape(b);
 }
 
@@ -75,7 +75,7 @@ export function distributeReceipt(total: number, rows: { id: string; amount: num
  * 🔴 저장 뒤 **수업 수납 항목**이 바뀌면(새 수납이 들어오는 등) 0원을 그대로 믿지 않는다 — 연결한 반이 항목이 바뀌면 재확인으로 가는 것과 같은 결.
  *    교재·셔틀 같은 수업 아닌 항목과 순서는 보지 않는다(그것만 바뀌어도 재확인이 되면 그 달 분배 저장이 통째로 막힌다 — 리뷰 2026-09-17).
  */
-function sameTuitionLines(snapshot: unknown, lines: ReceiptLine[]): boolean {
+export function sameTuitionLines(snapshot: unknown, lines: ReceiptLine[]): boolean {
   if (!Array.isArray(snapshot)) return false;
   const shapes = (values: unknown[]) => values.filter((v) => v != null && isTuitionReceipt(v)).map(billShape).sort();
   const before = shapes(snapshot);

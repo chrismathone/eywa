@@ -20,6 +20,7 @@ import { loadLivePlans } from "./live-plans";
 import { isVirtualTermId, monthRosterKey, parseVirtualTermId, virtualTermId } from "../month-roster";
 import { loadMonthRoster, type MonthRoster } from "./month-roster";
 import { MATERIALIZE_ERROR, materializeVirtualTerms } from "./term-materialize";
+import { autoReallocateAfterConfirm } from "./auto-reallocate";
 
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
@@ -400,6 +401,8 @@ export async function confirmClassTerms(
     confirmed += saved?.length ?? 0;
   }
   if (confirmed === 0) return { error: "확정할 대상을 찾을 수 없습니다", ...extra };
+  // 배분을 저장해 둔 청구서는 사람이 다시 저장할 일만 대신한다(원장 2026-10-06) — 응답 전에 끝내야 화면이 다시 읽을 때 정상이다.
+  await autoReallocateAfterConfirm(supabase, terms.map((t) => t.id), "confirm_class");
 
   // 🔴 한 번에 반 전체 청구 회차·단가를 못박는 자리 = 돈이 실제로 결정되는 지점. 단가·회차를 남긴다
   //    (`invoice_create`가 amountTotal을 남기는 것과 같은 결 — 금액 없이 "누가 눌렀다"만 남기면
@@ -484,6 +487,7 @@ export async function confirmSessionTerm(
     .eq("id", id).select("id").maybeSingle();
   if (error) return { error: error.message };
   if (!saved) return { error: "확정할 대상을 찾을 수 없습니다" };
+  await autoReallocateAfterConfirm(supabase, [id], "confirm");
 
   const hadPrev = before?.confirmed_sessions !== null && before?.confirmed_sessions !== undefined;
   finishTermMutation({

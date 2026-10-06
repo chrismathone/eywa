@@ -445,6 +445,7 @@ key(DB 식별자)는 **자동 확정**: 과목명 입력 후 blur 시 1회 — �
 - 알림 경로는 둘이고 서로 다른 물건이다 (2026-08-07, 0188a).
 
 ### 수납·회차·정산·급여 → [`docs/decisions/billing.md`](docs/decisions/billing.md)
+- 시수 확정 뒤 배분 자동 재확정 = 사람이 그대로 다시 저장할 일만(혼자 받는 항목 · 이름이 맞는 빈 항목이 딱 하나인 새 반) · 나누는 항목·바뀐 청구 항목은 사람 몫 · 저장은 같은 DB 함수
 - 프리랜서 명세서·강사 정산 면 수업료 = 그 강사 출석부의 실급여 합계(`computeSheetTuition`) · 그 밖은 티어 정산 그대로 · 화면 조립을 바꾸면 `teacher-sheet.ts`도 같이
 - 수납 '강사 정산' 면 = 급여명세서 수업료와 같은 함수(`computeTeacherTuition`) · splits 산식은 화면에서 뺐다
 - 🏁 D:\attendance "쏙쏙 이전" 이식 = 완결 (2026-07-17, main a9f5dab).

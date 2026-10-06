@@ -479,6 +479,12 @@ export function auditDetail(
       const n = arr(m.allocations).filter((a) => (num((a as { amount?: unknown })?.amount) ?? 0) > 0).length;
       return join(str(m.period), total !== null && sum !== null ? `수업 청구액 ${won(total)} 중 ${won(sum)} 배분${total > sum ? `(남김 ${won(total - sum)})` : ""}` : null, n ? `${n}개 반` : null);
     }
+    case "session_term_receipt_allocate_auto": {
+      // 시수 확정 뒤 자동 재확정(2026-10-06) — 몇 반을 그대로 두고, 새로 확정한 반 몇을 비어 있던 항목에 붙였나.
+      const linked = arr(m.linkedTermIds).length;
+      const kept = Math.max(0, arr(m.allocations).length - linked);
+      return join(kept ? `${kept}개 반 배분 유지` : null, linked ? `새로 확정한 ${linked}개 반을 남은 수업 항목에 연결` : null);
+    }
     case "session_term_money_carryover":
     case "session_term_money_carryover_cancel": {
       // 금액 이월(0278a) — 어느 달 어느 반에서 얼마를 다음 달 어느 반으로. 이름은 저장 시점 스냅샷(반 이름이 바뀌어도 그대로 읽힌다).

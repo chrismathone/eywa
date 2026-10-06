@@ -14,6 +14,7 @@ import { monthRange } from "../plan";
 import { isVirtualTermId } from "../month-roster";
 import type { SessionTermPatch } from "./actions";
 import { materializeVirtualTerms } from "./term-materialize";
+import { autoReallocateAfterConfirm } from "./auto-reallocate";
 
 /** `monthly` = 화면이 이 행을 EiE 월 정액으로 보고 있었는가(서버 판정과 다르면 그 행은 쓰지 않는다). */
 export type SelectedTermInput = { id: string; sessions: number; unitPrice: number; monthly: boolean };
@@ -178,6 +179,8 @@ export async function confirmSelectedTerms(
   const failedIds = failures.map((f) => f.id);
   const skipped = items.length - terms.length - failures.length;
   if (terms.length > 0) {
+    // 배분을 저장해 둔 청구서는 사람이 다시 저장할 일만 대신한다(원장 2026-10-06) — 응답 전에 끝낸다.
+    await autoReallocateAfterConfirm(supabase, terms.map((t) => t.id), "confirm_selected");
     // 돈이 결정되는 자리 — 학생마다 시수·단가·금액을 남긴다(반 일괄 확정은 한 값이라 한 줄이지만 여기선 행마다 다르다).
     after(async () => {
       revalidatePath("/billing");
