@@ -93,6 +93,9 @@ export type ResumeCareer = { company: string; period: string; duties: string; sa
 export type ResumeCert = { name: string; date: string; issuer: string };
 export type ResumeLanguage = { name: string; testDate: string; score: string };
 
+/** 근무시간 한 줄 최대 길이 — 목록 칸에 들어갈 한 줄이라 짧게 자른다. */
+export const WORK_HOURS_MAX = 100;
+
 export type StaffResumeData = {
   personal: { name: string; nameEn: string; residentId: string; address: string; phone: string; email: string };
   /** 증명사진 스토리지 경로(최대 RESUME_PHOTO_SLOTS장) — 열람은 재인증 게이트 뒤 signed URL. */
@@ -109,6 +112,8 @@ export type StaffResumeData = {
     jobTitle: string; // 직급 — 자유입력(2026-07-28 추가, 직원 등록 시 users.job_title로)
     manager: string; // 담당자(회사 측 채용 담당) — 자유입력
     workDays: string[]; // WORKDAYS key 배열
+    /** 근무시간 — 한 줄 자유 텍스트(원장 2026-10-06 "한줄공통, 텍스트로 기록"). 직원 목록 '근무시간' 열의 단일 소스. */
+    workHours: string;
     salaryMonthly: string;
     salaryAnnual: string;
     employmentType: string; // EMPLOYMENT_TYPES 중 하나 또는 ""
@@ -143,6 +148,7 @@ export function emptyResume(): StaffResumeData {
       jobTitle: "",
       manager: "",
       workDays: [],
+      workHours: "",
       salaryMonthly: "",
       salaryAnnual: "",
       employmentType: "",
@@ -248,6 +254,7 @@ export function parseResumeForm(fd: FormData): StaffResumeData {
       jobTitle: s("c_jobTitle"),
       manager: s("c_manager"),
       workDays: WORKDAYS.filter((d) => fd.get(`c_workday_${d.key}`)).map((d) => d.key),
+      workHours: s("c_workHours").slice(0, WORK_HOURS_MAX),
       salaryMonthly: s("c_salaryMonthly"),
       salaryAnnual: s("c_salaryAnnual"),
       employmentType: pick(s("c_employmentType"), EMPLOYMENT_TYPES),
@@ -326,6 +333,7 @@ export function normalizeResume(v: unknown): StaffResumeData {
       jobTitle: str(c.jobTitle),
       manager: str(c.manager),
       workDays: Array.isArray(c.workDays) ? c.workDays.map(String).filter((d) => validDays.has(d)) : [],
+      workHours: str(c.workHours),
       salaryMonthly: str(c.salaryMonthly),
       salaryAnnual: str(c.salaryAnnual),
       employmentType: pick(str(c.employmentType), EMPLOYMENT_TYPES),

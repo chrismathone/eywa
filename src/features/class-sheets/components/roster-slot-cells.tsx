@@ -17,6 +17,7 @@
  * ⚠️ 화면에 없는 칸(예: JJ 교시의 시험 점수)은 **서버로 안 보낸다** = 지금 값 유지. 폼이 바뀌었다고
  *    저장된 값을 지우지 않는다(roster-form.ts 규약).
  */
+import { SplitBadge } from "./split-badge";
 import { schoolGradeLabel } from "@/lib/format/school-grade";
 // 사유는 표준 코드(other·schedule…)일 수 있다 — 한글화를 거치지 않으면 raw enum이 화면에 샌다(반복 지적).
 import { reasonDisplay } from "@/features/withdrawals/types";
@@ -115,6 +116,7 @@ export function RosterNameCell({ entry, meta }: { entry: RosterEntry; meta: Stud
             </span>
           ) : null}
         </span>
+        <SplitBadge split={entry.split} />
         {entry.endedOn ? (
           <span className="text-text-dim num shrink-0 text-sm" title={`${entry.endedOn} 수강 종료`}>
             {entry.endedOn.slice(5)}

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { addDays, kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { foldedReason } from "@/lib/folded-read";
 import { attendanceRate, attendedCount } from "@/lib/calc/attendance";
 import { effectiveAttendanceRecords } from "@/features/attendance/effective-records";
 import {
@@ -49,6 +50,9 @@ import {
   reportEvidenceKind,
 } from "@/features/attendance/derive-from-reports";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { getSplitsOnDate, getSplitsTouchingClasses } from "@/features/class-splits/server/queries";
+import { splitDayOf, splitRowNote } from "@/features/class-splits/attendance";
+import { splitDateMarks, type SplitDateMark } from "@/features/attendance/split-marks";
 import { teacherProcessing, type ProcessingRecord, type TeacherProcessing } from "../teacher-processing";
 import { autoUnitsByDate, autoUnitsKey, isAutoUnitsSubject, toAutoUnitsSchedule } from "../auto-units";
 import { resolveAutoUnits } from "./auto-units";
@@ -289,6 +293,11 @@ export type AttendanceInputRow = {
    * 행으로). 출결을 찍으면 서버가 예약을 이행 처리한다. 없으면 키 없음(대부분의 행).
    */
   reserved?: { id: string; absenceDate: string; slotStart: string; slotEnd: string; periodLabel: string | null; note: string | null };
+  /**
+   * 그날 **수업 나누기**(0351a) — in = 다른 반 학생이 그 시간 이 반에서 수업(수강행 없이 미리 선다, isMakeup 행) ·
+   * out = 이 반 학생이 그 시간만 다른 반(명단엔 남는다 — 나머지 시간은 여기서 수업). 없으면 키 없음.
+   */
+  split?: { dir: "in" | "out"; note: string };
 };
 
 export async function getClassMeta(classId: string): Promise<ClassMeta | null> {
@@ -336,7 +345,7 @@ export async function getAttendanceInputRows(
   // 반·날짜 단위 조회라 학생 필터 없이 받는다(한 반 명단 규모라 절단 위험 없음) — 등원요일 밖에
   // 이미 찍힌 기록을 알아야 그 행을 남길지 판단할 수 있어, 명단보다 **먼저** 읽는다.
   // 보강 예약(0264a)도 함께 — 그날 이 반에 예약된 학생은 '보강 추가' 없이 미리 선다(fail-soft, 표 없음 = 없음).
-  const [{ data: enrollments }, { data: records }, reserved] = await Promise.all([
+  const [{ data: enrollments }, { data: records }, reserved, splitsToday] = await Promise.all([
     supabase
       .from("enrollments")
       .select(
@@ -356,7 +365,18 @@ export async function getAttendanceInputRows(
       // id desc = 동률 tie-break(저장 `pickSaveTargets`·월간 조회와 같은 규약) — 빗금 칸 입력은 여러 행에 같은 시각을 찍는다.
       .order("id", { ascending: false }),
     getReservationsOn(date, [classId]),
+    // 수업 나누기(0351a) — 받는 반이면 미리 서고, 원래 반이면 표식만(fail-soft).
+    getSplitsOnDate(date, [classId]),
   ]);
+  const splitDay = splitDayOf(classId, date, splitsToday.splits);
+  /** 학생 → 그날 나눔 표식(교시 둘이면 이른 것 — 행은 학생당 한 줄). */
+  const splitOf = new Map<string, NonNullable<AttendanceInputRow["split"]>>();
+  for (const v of splitDay.incoming) {
+    if (!splitOf.has(v.studentId)) splitOf.set(v.studentId, { dir: "in", note: splitRowNote("in", v, splitsToday.classNames.get(v.otherClassId)) });
+  }
+  for (const v of splitDay.outgoing) {
+    if (!splitOf.has(v.studentId)) splitOf.set(v.studentId, { dir: "out", note: splitRowNote("out", v, splitsToday.classNames.get(v.otherClassId)) });
+  }
   /** 학생 → 그날 예약(교시 둘이면 이른 것) — 행에 얹는다. */
   const reservedOf = new Map<string, AttendanceInputRow["reserved"]>();
   for (const r of reserved) {
@@ -434,8 +454,10 @@ export async function getAttendanceInputRows(
     const existing = recordMap.get(studentId);
     const day = existing ? rollupDay(existing.slots) : null;
     const reservedHere = reservedOf.get(studentId);
+    const splitHere = splitOf.get(studentId);
     return {
       ...(reservedHere ? { reserved: reservedHere } : {}),
+      ...(splitHere ? { split: splitHere } : {}),
       recordIds: existing?.ids ?? [],
       existingRecordId: existing?.ids[0] ?? null,
       status: (day?.status as AttendanceStatus | undefined) ?? null,
@@ -486,7 +508,14 @@ export async function getAttendanceInputRows(
   );
   // 🔴 그날 **보강 예약된** 학생도 같은 규약으로 합친다 — 기록이 아직 없어도 오기로 한 사람이라 미리 선다
   //    (원장 2026-09-14 *"보강 추가 할 필요없이 미리 학생이 추가되어있어야"*). 수강생이면 정규 행에 예약 표식만 붙는다.
-  const makeupIds = makeupStudentIds([...recordMap.keys(), ...reservedOf.keys()], [...enrolledIds]);
+  // 🔴 그날 이 반으로 **나눠 오는** 학생(0351a)도 같은 규약 — 수강행 없이 미리 선다(출결은 이 반 몫).
+  //    같은 판정 함수를 한 번 더 통과시켜 합친다(예약 줄의 판정 식은 그대로 둔다 — 가드가 그 식을 잠근다).
+  const makeupIds = [
+    ...new Set([
+      ...makeupStudentIds([...recordMap.keys(), ...reservedOf.keys()], [...enrolledIds]),
+      ...makeupStudentIds(splitDay.incoming.map((v) => v.studentId), [...enrolledIds]),
+    ]),
+  ];
   let makeupRows: AttendanceInputRow[] = [];
   if (makeupIds.length > 0) {
     const students = await fetchInChunks<{ id: string; name: string; grade: string | null }>(
@@ -671,6 +700,17 @@ export type AttendanceMatrix = {
    *    넘어가 여기서 사라지고 그 칸은 평범한 출결 칸이 된다. ⚠️ 선택 필드 — 없으면(옛 픽스처) 예약 없음과 같다.
    */
   reservations?: Record<string, Record<string, MatrixReservation>>;
+  /**
+   * studentId → date → **수업 나누기** 표식(0351a) — in = 그 시간 이 반에서 수업(수강행 없어도 명단에 선다) ·
+   * out = 그 시간만 다른 반. 🔴 값이 아니다(시수·출석률·합계 무관). ⚠️ 선택 필드 — 없으면 나눔 없음.
+   */
+  splits?: Record<string, Record<string, SplitDateMark>>;
+  /**
+   * 이 표가 **못 읽어 접은 재료**(담임 변경 기록 · 학원 설정) — 접힌 것이 없으면 키가 없다(`folded-read.ts`).
+   * 🔴 화면은 읽지 않는다(종전 그대로 그린다). 이 표를 **금액**으로 쓰는 자리(`loadTeacherSheet`)만 보고 산정을 멈춘다 —
+   *    이력이 비면 넘긴 뒤의 칸까지 그 강사 몫이 되고, 설정이 비면 휴일에 쓴 보고서가 출석으로 살아난다.
+   */
+  degraded?: string[];
   stats: {
     totalStudents: number;
     presentRate: number;
@@ -861,7 +901,12 @@ export async function getMonthlyAttendanceMatrix(
   // 강사(또는 겸직 강사뷰)면 **자기가 가르치는 반**으로 좁힌다 — 담임 반 ∪ 그 달 교시 담당 반.
   // 🔴 좁히는 판정은 `loadVisibleClassAxisRows` **한 곳**뿐이다(허브 학생 검색도 같은 함수를 쓴다) —
   //    표면마다 따로 적으면 한쪽이 담임 축으로 되돌아가 교시 담당 강사의 반이 조용히 사라진다([[#77]]).
-  const classes = (await loadVisibleClassAxisRows(axisRange.from, axisRange.to))
+  const axisRows = await loadVisibleClassAxisRows(axisRange.from, axisRange.to);
+  // 못 읽어 접은 재료 — 금액 조립(`loadTeacherSheet`)이 보고 멈춘다. 화면은 읽지 않는다.
+  const degraded: string[] = [];
+  const axisFolded = foldedReason(axisRows);
+  if (axisFolded) degraded.push(axisFolded);
+  const classes = axisRows
     .map((c) => ({
       id: c.id,
       className: c.className,
@@ -911,6 +956,7 @@ export async function getMonthlyAttendanceMatrix(
       dayAxis: {},
       derived: {},
       derivedActive: false,
+      ...(degraded.length > 0 ? { degraded } : {}),
       stats: {
         totalStudents: 0,
         presentRate: 0,
@@ -929,7 +975,7 @@ export async function getMonthlyAttendanceMatrix(
   // 해당 반의 활성 학생 + 그 반의 수업요일 + 이 기간에 기록을 남긴 학생 + 보강 예약 — 서로 독립이라 병렬로(B4).
   // 대신 보강 귀속(`taught_by`, 0316a) — 칸이 있을 때만 읽는다([[#95]]). 강사 보기의 몫 판정만 쓰므로 반별 보기는 안 본다.
   const withTaughtBy = scopeTeacherId ? await taughtByColumnReady().catch(() => false) : false;
-  const [enrollRes, scheduleRes, recordedRows, reservedRows] = await Promise.all([
+  const [enrollRes, scheduleRes, recordedRows, reservedRows, monthSplits] = await Promise.all([
     supabase
       .from("enrollments")
       .select(
@@ -984,6 +1030,8 @@ export async function getMonthlyAttendanceMatrix(
      * 조회는 fail-soft(표 없음·실패 = 빈 목록) — 부가 표시 하나 때문에 출석부가 죽지 않는다.
      */
     getClassReservationsInRange(classId, startIso, endIso),
+    // 수업 나누기(0351a) — 이 반이 보내거나 받는 나눔(fail-soft: 표 없음·실패 = 빈 목록).
+    getSplitsTouchingClasses([classId], startIso, endIso),
   ]);
 
   /**
@@ -1170,14 +1218,37 @@ export async function getMonthlyAttendanceMatrix(
     scopeTeacherId && homeroomTeacherId !== scopeTeacherId
       ? recordedRows.filter((r) => ownsSlot(r.session_date, r.slot_start, r.seat_label, r.recorded_via, r.taught_by ?? null))
       : recordedRows;
+  // 🔴 그 달 이 반으로 **나눠 오는** 학생(0351a)도 같은 규약 — 기록이 없어도 그 시간 출결이 이 반 몫이라 명단에 선다.
+  //    상대 반 이름은 표식 문장에만 쓴다(나눔이 있을 때만 묻는다 — 평소 왕복 0).
+  const splitClassNames = new Map<string, { name: string; teacherName: string | null }>();
+  if (monthSplits.length > 0) {
+    type Cls = { id: string; class_name: string; teacher?: { display_name?: string } | { display_name?: string }[] | null };
+    const otherIds = [...new Set(monthSplits.flatMap((x) => [x.sourceClassId, x.targetClassId]))];
+    const cls = await fetchInChunks<Cls>(otherIds, (chunk) =>
+      supabase.from("classes").select("id, class_name, teacher:teacher_id ( display_name )").in("id", chunk),
+    ).catch(() => [] as Cls[]);
+    for (const c of cls) {
+      const t = Array.isArray(c.teacher) ? c.teacher[0] : c.teacher;
+      splitClassNames.set(c.id, { name: c.class_name, teacherName: t?.display_name ?? null });
+    }
+  }
+  const splitView = splitDateMarks(
+    classId,
+    days.filter((d) => !d.placeholder).map((d) => d.date),
+    monthSplits,
+    splitClassNames,
+  );
   const extraIds = recordedOnlyStudentIds(
-    [...visitorRows.map((r) => r.student_id), ...reservedRows.map((r) => r.studentId)],
+    [...visitorRows.map((r) => r.student_id), ...reservedRows.map((r) => r.studentId), ...splitView.incomingIds],
     enrolledStudentIds,
   );
   // 예약만 있는 학생(기록 없음·수강 없음) — 명단엔 서되 **총원엔 안 센다**(아직 안 온 사람, 적대 리뷰 2026-09-14).
   const recordedIdSet = new Set(visitorRows.map((r) => r.student_id));
+  // 나눔으로만 서는 학생(기록 없음·수강 없음)도 같다 — 아직 안 온 사람이라 총원엔 안 센다.
   const reservedOnlyIds = new Set(
-    reservedRows.map((r) => r.studentId).filter((id) => !enrolledStudentIds.includes(id) && !recordedIdSet.has(id)),
+    [...reservedRows.map((r) => r.studentId), ...splitView.incomingIds].filter(
+      (id) => !enrolledStudentIds.includes(id) && !recordedIdSet.has(id),
+    ),
   );
   if (extraIds.length > 0) {
     const extras = await fetchInChunks<{
@@ -1483,6 +1554,9 @@ export async function getMonthlyAttendanceMatrix(
       set.add(r.report_date);
       target.set(r.student_id, set);
     }
+    // 설정을 못 읽어 기본값이면 휴일이 0개다 — 휴일에 쓴 보고서가 '출석'으로 선다. 표는 그대로 그리고 표식만 싣는다.
+    const settingsFolded = foldedReason(settings);
+    if (settingsFolded) degraded.push(settingsFolded);
     const holidays = buildHolidayMap(settings.operations.holidays);
     const todayIso = kstToday();
     const realDays = days
@@ -1577,6 +1651,9 @@ export async function getMonthlyAttendanceMatrix(
     })) } : {}),
     // 보강 예약 칸(0264a) — 있을 때만 싣는다(강사 전체 보기는 반마다 매트릭스라 빈 객체도 곱이 된다).
     ...(Object.keys(reservations).length > 0 ? { reservations } : {}),
+    // 수업 나누기 칸(0351a) — 있을 때만(강사 전체 보기는 반마다 매트릭스라 빈 객체도 곱이 된다).
+    ...(Object.keys(splitView.marks).length > 0 ? { splits: splitView.marks } : {}),
+    ...(degraded.length > 0 ? { degraded } : {}),
     stats: {
       totalStudents: students.filter((st) => !reservedOnlyIds.has(st.id)).length,
       presentRate,

@@ -1,18 +1,21 @@
 import "server-only";
 import { requireAccess } from "@/lib/auth/require-access";
-import { monthRange } from "@/lib/date-kst";
+import { monthRange, shiftMonth } from "@/lib/date-kst";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPagedInChunks } from "@/lib/supabase/batch";
+import { foldedReason } from "@/lib/folded-read";
 import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
 import { loadTeacherTermWeights, type TeacherTermScope } from "./teacher-term-share";
 import { teacherTermSessions } from "../teacher-term-share";
 import { loadMoneyCarryIns, loadMoneyCarryOuts } from "@/features/billing/session-terms/server/money-carryover-queries";
 import {
-  attendanceClassBilledAmounts,
+  attendanceCarryMarks,
+  attendanceClassBilledDetail,
   attendanceClassConfirmedSessions,
   attendanceClassConfirmedPrices,
   attendanceInvoiceStateByStudent,
   type AttendanceBillingTerm,
+  type AttendanceCarryMark,
   type AttendanceInvoice,
   type AttendanceInvoiceState,
   type AttendanceTermSessions,
@@ -24,7 +27,7 @@ import {
  * 🔴 **매번 새로 만든다** — 모듈 전역 하나를 돌려주면 호출부가 그 객체에 쓰는 순간 요청·테넌트를 넘어 샌다.
  * ⚠️ `invoiceStateByStudent`도 빈 맵이다 — 판정을 안 했으면 '청구서 없음'(`—`)이 아니라 종전 '미확정'이다.
  */
-const empty = (): AttendanceClassBilling => ({ billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {} });
+const empty = (): AttendanceClassBilling => ({ billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {}, carryMarks: {} });
 
 export type AttendanceClassBilling = {
   billed: Record<string, number>;
@@ -37,6 +40,16 @@ export type AttendanceClassBilling = {
    * 가르는 재료. 출석부가 물어본 학생(허용된 반)만 키가 있다. 판정은 순수 `attendanceNoInvoiceRows`.
    */
   invoiceStateByStudent: Record<string, AttendanceInvoiceState>;
+  /**
+   * 금액 이월(0278a)이 걸린 줄(`rowKey`) → 표식 재료(원장 2026-10-06) — 등록 차수 칸의 주황 틴트·마우스 오버 카드.
+   * 청구액(`billed`)과 **같은 한 번의 계산**에서 나온다. 표시 전용 — 어떤 숫자도 이 값을 읽지 않는다.
+   */
+  carryMarks: Record<string, AttendanceCarryMark>;
+  /**
+   * 이 판정을 만들며 **읽지 못해 접은 재료**(한글 사유) — 화면은 종전대로 그리지만(표시), 같은 값을 **금액**에 쓰는 자리
+   * (프리랜서 명세서)는 이 목록이 있으면 산정하지 않는다. 없으면 키 자체가 없다.
+   */
+  degraded?: string[];
 };
 
 /**
@@ -62,7 +75,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
  * ⚠️ id는 호출부가 푼 몇 개뿐(강사당 보강 반 1개)이라 `.in()` 한 번이면 된다(B3 대상 아님). admin은 RLS 우회라 `tenant_id` 필수([[#104]]).
  * ⚠️ 실패는 fail-soft — 허용 반만 판정에서 빠진다(그 줄은 종전 '미확정'). 담당 반의 청구 판정은 그대로 간다.
  */
-async function loadAllowedClassNames(admin: AdminClient, tenantId: string, ids: readonly string[]): Promise<Map<string, string>> {
+async function loadAllowedClassNames(admin: AdminClient, tenantId: string, ids: readonly string[], degraded: string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
   const { data, error } = await admin
     .from("classes")
@@ -72,6 +85,7 @@ async function loadAllowedClassNames(admin: AdminClient, tenantId: string, ids: 
     .in("id", [...ids]);
   if (error) {
     console.error("[attendance-billing] 보강 반 이름 조회 실패", error.message);
+    degraded.push("보강 반의 청구 정보를 읽지 못했습니다");
     return new Map();
   }
   const rows = (data ?? []) as { id: string; class_name: string | null }[];
@@ -89,21 +103,28 @@ export async function getAttendanceClassBilledAmounts(
   const { from, to } = monthRange(month);
   const admin = createAdminClient();
   const allow = new Set(options.allowClassIds ?? []);
+  const degraded: string[] = [];
   const allowedInRoster = [...new Set(roster.map((c) => c.classId).filter((id) => allow.has(id)))];
   // 두 재료는 서로 독립이라 나란히 읽는다(B4). 강사 축은 허용 목록 밖 반이 있을 때만 본다(보강 반만 묻는 호출은 건너뛴다).
   const [visible, allowed] = await Promise.all([
     roster.some((c) => !allow.has(c.classId))
       // 출석부와 동일한 권한·강사 축(요청 캐시). 표시용 번역 이름 대신 원래 반명으로 매칭한다.
-      ? loadVisibleClassAxisRows(from, to).then((rows) => new Map(rows.map((c) => [c.id, c.className])))
+      ? loadVisibleClassAxisRows(from, to).then((rows) => {
+          // 담임 이력을 못 읽은 목록이면(강사 보기에서 이전 담임 반이 빠진다) 그 반의 청구가 말없이 빈다 — 표식으로 싣는다.
+          const folded = foldedReason(rows);
+          if (folded) degraded.push(folded);
+          return new Map(rows.map((c) => [c.id, c.className]));
+        })
       : Promise.resolve(new Map<string, string>()),
-    loadAllowedClassNames(admin, user.tenantId, allowedInRoster),
+    loadAllowedClassNames(admin, user.tenantId, allowedInRoster, degraded),
   ]);
   const classes = roster.flatMap((c) => {
     const className = visible.get(c.classId) ?? allowed.get(c.classId);
     return className ? [{ ...c, className }] : [];
   });
   const studentIds = [...new Set(classes.flatMap((c) => c.studentIds))];
-  if (studentIds.length === 0) return empty();
+  // 허용 반(보강 반) 이름을 못 읽어 줄이 통째로 빠진 경우도 '없음'으로 접히지 않게 표식은 싣는다.
+  if (studentIds.length === 0) return degraded.length > 0 ? { ...empty(), degraded } : empty();
 
   // invoices의 원문은 강사 RLS로 차단되어 있다. 인증·반 스코프 검증 후 테넌트/학생/월로 한정한다.
   // 🔴 **void 포함**으로 읽는다(2026-09-18) — 청구서가 "없다"와 "취소됐다"를 가르려면 취소분을 봐야 한다(`neq status void`로
@@ -135,7 +156,8 @@ export async function getAttendanceClassBilledAmounts(
   // 두 값은 **같은 조회**에서 나온다 — 청구액(배분 우선)과 등록 차수(확정 시수)가 서로 다른 재료를 보면
   // 한 줄에서 숫자가 어긋난다(원장 2026-09-17 '등록 차수' 열).
   // 출석부 금액 열은 표시라 실패해도 이월 없이 그린다(분배 저장 거절은 회차 확정·시수 검증 쪽이 한다).
-  const carry = { outs: new Map([...carryOuts.map].map(([id, c]) => [id, c.amount] as const)), ins: carryIns.map };
+  if (carryOuts.failed || carryIns.failed) degraded.push("금액 이월 내역을 읽지 못했습니다");
+  const carry = { outs: new Map([...carryOuts.map].map(([id, c]) => [id, c.amount] as const)), ins: carryIns.map, outPeriod: shiftMonth(month, 1) };
   const confirmedPrices = attendanceClassConfirmedPrices(classes, invoices, terms);
   const confirmedSessions = attendanceClassConfirmedSessions(classes, invoices, terms);
   if (options.teacherScope) {
@@ -143,13 +165,17 @@ export async function getAttendanceClassBilledAmounts(
       if (confirmedSessions[key]) confirmedSessions[key] = teacherTermSessions(confirmedSessions[key], options.teacherScope.teacherId, share);
     }
   }
+  const detail = attendanceClassBilledDetail(classes, invoices, terms, carry);
   return {
-    billed: attendanceClassBilledAmounts(classes, invoices, terms, carry),
+    billed: detail.billed,
+    // 이월 표식(원장 2026-10-06) — 금액과 **같은 한 번의 계산**(`detail`)에서 나온다. 미확정 줄에도 선다(금액만 적는다).
+    carryMarks: attendanceCarryMarks(classes, carry, detail, confirmedPrices),
     confirmedSessions,
     confirmedPrices,
     priceConfirmed: Object.keys(confirmedPrices),
     // 상태 판정만 취소분까지 본다 — 허용된 반의 학생 전원에게 키가 선다(청구서가 없으면 `none`).
     invoiceStateByStudent: attendanceInvoiceStateByStudent(studentIds, allInvoices),
+    ...(degraded.length > 0 ? { degraded } : {}),
   };
 }
 
@@ -171,6 +197,8 @@ export function mergeAttendanceClassBilling(...parts: readonly AttendanceClassBi
     Object.assign(out.billed, part.billed);
     Object.assign(out.confirmedSessions, part.confirmedSessions);
     Object.assign(out.confirmedPrices, part.confirmedPrices);
+    Object.assign(out.carryMarks, part.carryMarks);
+    if (part.degraded?.length) out.degraded = [...new Set([...(out.degraded ?? []), ...part.degraded])];
     for (const key of part.priceConfirmed) priced.add(key);
     for (const [studentId, state] of Object.entries(part.invoiceStateByStudent)) {
       const prev = out.invoiceStateByStudent[studentId];

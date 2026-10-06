@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllPaged, fetchInChunks } from "@/lib/supabase/batch";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
+import { carryFolded } from "@/lib/folded-read";
 import { classTeacherIdsInRange, slotOverlapsRange, type AxisSlot } from "../teacher-axis";
 import { getHomeroomHistoryIndex } from "@/features/classes/server/teacher-as-of-queries";
 import { homeroomTeachersInRange, type HomeroomPeriod } from "@/features/classes/teacher-as-of";
@@ -167,7 +168,9 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
     ]),
   ]);
 
-  return liveRows.map((c) => {
+  // 담임 이력을 못 읽은 채 만든 목록이면 표식을 옮겨 싣는다(`folded-read.ts`) — 이전 담임 축(`taughtBy`·`homeroomHistory`)이
+  // 빈 채라, 이 목록을 금액으로 쓰는 자리(프리랜서 명세서)는 넘긴 뒤의 칸까지 그 사람 몫으로 센다. 화면은 읽지 않는다.
+  return carryFolded(historyIndex, liveRows.map((c) => {
     const teacher = (Array.isArray(c.teacher) ? c.teacher[0] : c.teacher) as
       | { id?: string; display_name?: string; status?: string }
       | undefined;
@@ -192,7 +195,7 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
         .filter((t): t is AxisTeacher => !!t),
       taughtBy: [...new Set([...classTeacherIdsInRange({ homeroomTeacherId, slots, from, to }), ...historicalIds])],
     };
-  });
+  }));
 });
 
 /**
@@ -209,5 +212,6 @@ export const loadClassAxisRows = cache(async (from: string, to: string): Promise
 export async function loadVisibleClassAxisRows(from: string, to: string): Promise<ClassAxisRow[]> {
   const tId = await effectiveTeacherId();
   const rows = await loadClassAxisRows(from, to);
-  return tId ? rows.filter((c) => c.taughtBy.includes(tId)) : rows;
+  // 좁힌 목록은 새 배열이라 접힘 표식을 옮겨 싣는다(이력을 못 읽으면 이전 담임 반이 이 필터에서 빠진다).
+  return tId ? carryFolded(rows, rows.filter((c) => c.taughtBy.includes(tId))) : rows;
 }

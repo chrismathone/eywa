@@ -2,7 +2,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { slotLiveOnDate } from "@/features/timetable/lib/week";
 import {
-  intersectWindows,
+  mergeWindows,
+  splitBoundaries,
   isSplitDay,
   splitUnitMinutes,
   toMin,
@@ -39,10 +40,14 @@ export type SplitContext = {
   student: { id: string; name: string };
   /** 원래 반에서 지금 열린 수강(없으면 null — 나눌 수 없다). */
   enrollment: { id: string; attendanceDays: string[] } | null;
-  /** 요일 → 두 반이 같이 도는 구간(그 주 기준). 비어 있는 요일은 나눌 수 없다. */
+  /** 요일 → 받는 반의 그날 수업 구간(두 반이 둘 다 도는 요일만, 그 주 기준). 비어 있는 요일은 나눌 수 없다. */
   windows: Partial<Record<SplitDay, TimeWindow[]>>;
+  /** 요일 → 겹치는 구간을 **교시 칸**으로 자른 경계(`splitBoundaries`). 선택지·저장 검증이 이것만 본다. */
+  bounds: Partial<Record<SplitDay, number[][]>>;
   /** 받는 반의 그 주 배치(강의실 정원 확인용). */
   targetRows: ScheduleRow[];
+  /** 원래 반의 그 주 배치(고른 시간이 원래 수업 밖인지 알리는 데). */
+  sourceRows: ScheduleRow[];
   unit: number;
 };
 
@@ -62,6 +67,7 @@ export async function loadSplitContext(
   tenantId: string,
   args: { studentId: string; sourceClassId: string; targetClassId: string; refDate: string; onDate: string },
 ): Promise<SplitContext | { error: string }> {
+  const whole = !args.studentId;
   const [classes, schedules, student, enrollments] = await Promise.all([
     sb
       .from("classes")
@@ -73,13 +79,18 @@ export async function loadSplitContext(
       .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, classroom_id")
       .eq("tenant_id", tenantId)
       .in("class_id", [args.sourceClassId, args.targetClassId]),
-    sb.from("students").select("id, name").eq("tenant_id", tenantId).eq("id", args.studentId).maybeSingle(),
-    sb
-      .from("enrollments")
-      .select("id, start_date, end_date, attendance_days")
-      .eq("tenant_id", tenantId)
-      .eq("student_id", args.studentId)
-      .eq("class_id", args.sourceClassId),
+    // 반 전체 나누기(studentId 없음)면 학생·수강 조회를 건너뛴다 — 명단은 `loadClassRoster`가 따로 읽는다.
+    whole
+      ? Promise.resolve({ data: { id: "", name: "" }, error: null })
+      : sb.from("students").select("id, name").eq("tenant_id", tenantId).eq("id", args.studentId).maybeSingle(),
+    whole
+      ? Promise.resolve({ data: [{ id: "", start_date: "0000-01-01", end_date: null, attendance_days: [] }], error: null })
+      : sb
+          .from("enrollments")
+          .select("id, start_date, end_date, attendance_days")
+          .eq("tenant_id", tenantId)
+          .eq("student_id", args.studentId)
+          .eq("class_id", args.sourceClassId),
   ]);
   if (classes.error || schedules.error || student.error || enrollments.error) {
     return { error: "반·학생 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
@@ -113,11 +124,23 @@ export async function loadSplitContext(
     live
       .filter((r) => r.class_id === classId && r.day_of_week === day)
       .map((r) => ({ start: toMin(r.start_time), end: toMin(r.end_time) }));
+  const unit = splitUnitMinutes([source, target]);
   const windows: Partial<Record<SplitDay, TimeWindow[]>> = {};
+  const bounds: Partial<Record<SplitDay, number[][]>> = {};
   for (const day of new Set(live.map((r) => r.day_of_week))) {
     if (!isSplitDay(day)) continue;
-    const both = intersectWindows(windowsOf(source.id, day), windowsOf(target.id, day));
-    if (both.length > 0) windows[day] = both;
+    // 🔑 요일 = 두 반이 **둘 다 도는 날**(그날 수업의 일부를 다른 반에서) · 시간 = **받는 반의 수업 시간 안**.
+    //    원장 2026-10-06 *"유형숙은 18시부터 22시까진데 20시부터 된다는데 — 옮겨지는 쌤 시간 내에서"* — 두 반이
+    //    겹치는 구간으로 좁히면 받는 선생님 반의 앞 교시를 못 고른다. 원래 반과 안 겹치는 시간도 고를 수 있다
+    //    (그 시간 원래 반 출결은 그대로다 — 출석부 규약이 겹치는 교시만 뺀다).
+    const sourceWins = windowsOf(source.id, day);
+    const targetWins = windowsOf(target.id, day);
+    if (sourceWins.length === 0 || targetWins.length === 0) continue;
+    const targetSpan = mergeWindows(targetWins);
+    windows[day] = targetSpan;
+    // 교시 경계 = 받는 반 배치 행의 시작·끝 — 칸이 곧 단위다(수학 55분 교시 = '1시간').
+    const b = splitBoundaries(targetSpan, targetWins.flatMap((w) => [w.start, w.end]), unit);
+    if (b.length > 0) bounds[day] = b;
   }
 
   return {
@@ -126,7 +149,37 @@ export async function loadSplitContext(
     student: { id: student.data.id, name: student.data.name },
     enrollment: open ? { id: open.id, attendanceDays: (open.attendance_days as string[] | null) ?? [] } : null,
     windows,
+    bounds,
     targetRows: live.filter((r) => r.class_id === target.id),
-    unit: splitUnitMinutes([source, target]),
+    sourceRows: live.filter((r) => r.class_id === source.id),
+    unit,
   };
+}
+
+/**
+ * **반 전체 나누기**의 대상 = 그날(onDate) 원래 반에 수강이 열린 재원생(휴원 제외) + 등원 요일.
+ * 🔴 휴원(on_hold) 학생은 빼고, 고른 요일에 안 오는 학생(분리등원)은 호출부가 요일마다 거른다.
+ */
+export async function loadClassRoster(
+  sb: SupabaseClient,
+  tenantId: string,
+  classId: string,
+  onDate: string,
+): Promise<{ id: string; name: string; attendanceDays: string[] }[] | { error: string }> {
+  const { data, error } = await sb
+    .from("enrollments")
+    .select("student_id, start_date, end_date, on_hold, attendance_days, student:student_id ( id, name )")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId);
+  if (error) return { error: "반 명단을 불러오지 못했습니다." };
+  type Row = { student_id: string; start_date: string; end_date: string | null; on_hold: boolean | null; attendance_days: string[] | null; student?: { id: string; name: string } | { id: string; name: string }[] | null };
+  const out = new Map<string, { id: string; name: string; attendanceDays: string[] }>();
+  for (const r of (data ?? []) as Row[]) {
+    if (r.on_hold) continue;
+    if (!(r.start_date <= onDate && (r.end_date === null || r.end_date > onDate))) continue;
+    const stu = one(r.student);
+    if (!stu || out.has(stu.id)) continue;
+    out.set(stu.id, { id: stu.id, name: stu.name, attendanceDays: r.attendance_days ?? [] });
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }

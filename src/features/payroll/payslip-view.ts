@@ -72,7 +72,17 @@ export type PayslipData = {
     excludedUnits: number;
     missingTierStudents: string[];
     missingPriceTiers: string[];
+    /**
+     * 총 시수 뒤 단위 글자 — 출석부 기준(프리랜서) 명세서만 싣는다: 영어만 `U` · 수학만 `T` · 섞이면 null(글자 없음).
+     * 없으면(종전 티어 정산 · 옛 발행 스냅샷) 화면이 종전대로 `T`를 붙인다.
+     */
+    unitSuffix?: "U" | "T" | null;
   } | null;
+  /**
+   * 수업료의 근거 — `sheet` = 그 강사 **출석부(강사 전체 보기)의 실급여 합계**(프리랜서, 원장 2026-10-06) · `tier` = 티어 정산(그 밖).
+   * 없으면(옛 발행 스냅샷) `tier`다. 별지가 어느 출석부를 붙일지도 이 값으로 정한다.
+   */
+  tuitionBasis?: "sheet" | "tier";
   rates: {
     base: GroupRates;
     baseDefault: number | null;

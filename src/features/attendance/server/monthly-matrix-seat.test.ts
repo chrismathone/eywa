@@ -89,6 +89,8 @@ vi.mock("@/features/owner/server/queries", () => ({
 }));
 
 import { getMonthlyAttendanceMatrix } from "./queries";
+import { loadVisibleClassAxisRows } from "./teacher-axis-queries";
+import { markFolded } from "@/lib/folded-read";
 
 const D = "2026-09-10"; // 목요일
 
@@ -342,5 +344,24 @@ describe("getMonthlyAttendanceMatrix — 강사 보기는 그 강사가 수업�
     expect(m.ownDates).toBeUndefined();
     expect(m.marks[h.S1]?.[D]).toBe("present");
     expect(m.slots[h.S1]?.[D]?.length).toBe(2);
+  });
+
+  /**
+   * 🔴 화면은 담임 이력을 못 읽어도 표를 그린다(전부 보여 준다). 같은 표가 **금액**(프리랜서 명세서)이 되면 넘긴 뒤의 칸까지
+   *    그 강사 몫이 되므로, 매트릭스가 "접은 재료"를 `degraded`로 실어 금액 조립이 멈추게 한다(재리뷰 2026-10-06).
+   *    서버 액션(명세서 발행) 안에선 반마다 부르는 매트릭스가 이력을 각자 다시 읽어 머리 확인 한 번으로는 못 잡는다.
+   */
+  it("접힌 반 목록(담임 이력을 못 읽음)은 `degraded`로 싣고, 멀쩡하면 키가 없다 — 칸 값은 종전 그대로", async () => {
+    h.state.records = [rec("r-1720", "17:20:00")];
+    const clean = await matrixForCharlie();
+    expect(clean.degraded).toBeUndefined();
+    const rows = await loadVisibleClassAxisRows("2026-09-01", "2026-09-30");
+    vi.mocked(loadVisibleClassAxisRows).mockResolvedValueOnce(markFolded([...rows], "담임 변경 기록을 읽지 못했습니다"));
+    const folded = await matrixForCharlie();
+    expect(folded.degraded).toEqual(["담임 변경 기록을 읽지 못했습니다"]);
+    expect(folded.marks).toEqual(clean.marks);
+    // 반을 안 고른 호출(반 목록만 받는 기본 조회)도 같은 표식을 싣는다.
+    vi.mocked(loadVisibleClassAxisRows).mockResolvedValueOnce(markFolded([...rows], "담임 변경 기록을 읽지 못했습니다"));
+    expect((await getMonthlyAttendanceMatrix("2026-09", null)).degraded).toEqual(["담임 변경 기록을 읽지 못했습니다"]);
   });
 });

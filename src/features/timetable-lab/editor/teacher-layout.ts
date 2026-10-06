@@ -16,7 +16,10 @@ export function teacherLayout(draft: Draft, all: Lesson[], zoom: number) {
     const used = all.some(p => p.teacher === teacher && p.day === day);
     // 수업이 하나도 없는 강사 열(방금 더한 강사)은 접지 않는다 — 평일 칸이 있어야 수업을 놓을 수 있다.
     if (!all.some(p => p.teacher === teacher)) return day !== '토' && day !== '일';
-    return appearance.hideEmptyDays || day === '일' ? used : true;
+    // 수업이 있는 요일은 어떤 보기 설정으로도 감추지 않는다 — 안 보이는 수업이 겹침을 만들면 찾을 길이 없다.
+    if (used) return true;
+    if (appearance.hideEmptyDays) return false;
+    return day === '토' ? !appearance.hideSaturday : day === '일' ? !!appearance.showSunday : true;
   }).map(day => {
     const items = all.filter(p => p.teacher === teacher && p.day === day);
     // Visual shift follows the operating teacher view; actual times remain intact.

@@ -84,6 +84,18 @@ export function moveTeacher(draft: Draft, name: string, step: -1 | 1): Draft {
   [columns[at], columns[to]] = [columns[to], columns[at]];
   return next;
 }
+/** 강사 열을 통째로 다른 열 앞에 놓는다(머리를 끌어다 놓기). `before`가 null이면 맨 뒤. 자리가 그대로면 연습본을 건드리지 않는다. */
+export function placeTeacher(draft: Draft, name: string, before: string | null): Draft {
+  const { next, columns } = prepared(draft);
+  requireColumn(columns, name);
+  if (before !== null) requireColumn(columns, before);
+  if (before === name) return draft;
+  const rest = columns.filter(t => t !== name);
+  rest.splice(before === null ? rest.length : rest.indexOf(before), 0, name);
+  if (rest.every((t, i) => t === columns[i])) return draft;
+  next.teachers = rest;
+  return next;
+}
 /** 한 강사의 수업·일정을 모두 다른 강사에게 넘긴다. 요일·시간·학생은 그대로다. */
 export function reassignTeacher(draft: Draft, from: string, to: string): Draft {
   return exchange(draft, from, to, false);

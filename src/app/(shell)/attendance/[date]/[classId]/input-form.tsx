@@ -383,7 +383,24 @@ export function AttendanceInputForm({
                     {/* 학년이 없는 학생도 칸은 남긴다 — 안 그러면 그 행만 배지가 앞으로 당겨진다. */}
                     <span className="text-text-dim min-w-[64px] text-xs">{r.studentGrade ?? ""}</span>
                     {/* 보강 = 이 반 수강생이 아님. 표식이 없으면 명단에 섞여 "이 반 학생"으로 오인된다. */}
-                    {r.isMakeup ? (
+                    {/* 수업 나누기(0351a) — 받는 반(in)이면 '보강' 대신 '나눔'으로 선다(이 시간 출결이 이 반 몫).
+                        원래 반(out)이면 학생은 그대로 두고 그 시간이 다른 반이라는 것만 알린다. */}
+                    {r.split ? (
+                      <span
+                        className={`rounded-full border px-1.5 py-0.5 text-xs font-medium ${
+                          r.split.dir === "in" ? "bg-blue-soft text-blue border-blue/30" : "bg-bg-soft text-text-dim border-line"
+                        }`}
+                        title={
+                          r.split.dir === "in"
+                            ? `${r.split.note} — 수업 나누기로 이 시간만 이 반에서 수업합니다(수강료·보고서는 원래 반)`
+                            : `${r.split.note} — 이 시간은 다른 반에서 수업합니다(그 시간 출결은 그 반 출석부에서)`
+                        }
+                      >
+                        {r.split.dir === "in" ? "나눔" : "일부 다른 반"}
+                        <span className="num ml-1 font-normal">{r.split.note.replace(/^나눔 /, "")}</span>
+                      </span>
+                    ) : null}
+                    {r.isMakeup && r.split?.dir !== "in" ? (
                       <span
                         className="bg-purple/10 text-purple border-purple/20 rounded-full border px-1.5 py-0.5 text-xs font-medium"
                         title="이 반 수강생이 아닌 보강(수업외) 참석 — 처리현황 '예정' 인원에는 포함되지 않습니다"

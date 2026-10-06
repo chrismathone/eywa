@@ -8,7 +8,7 @@ import {
 } from "@/features/attendance/unit-suffix";
 import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { actualLessonAmount } from "@/features/attendance/actual-amount";
-import { actualLessonSalary, actualSalaryBase, salaryBilledCap } from "@/features/attendance/salary-rates";
+import { actualLessonSalary, actualSalaryBase, salaryBilledCap, sumSalaryAmounts } from "@/features/attendance/salary-rates";
 import { AttendanceColSpan } from "./columns";
 import { tipProps } from "@/components/hover-tip/tip";
 import { sheetT, sheetTf, type SheetLang } from "@/features/teacher-view/i18n";
@@ -102,16 +102,18 @@ function ActualAmountTotalCell({ rows, prices, fallback, lang, rates, billed, te
   terms?: Record<string, AttendanceTermSessions | null>;
 }) {
   const live = useRowCounts(rows);
-  let total = 0;
-  let any = false;
+  const amounts: number[] = [];
   for (const row of rows) {
     const count = live?.[row] ?? fallback?.[row];
     const amount = count ? rates ? actualLessonSalary(prices?.[row], count.units, rates[row], salaryBilledCap(billed?.[row], terms?.[row])) : actualLessonAmount(prices?.[row], count.units) : null;
-    if (amount !== null) { total += amount; any = true; }
+    if (amount !== null) amounts.push(amount);
   }
+  const any = amounts.length > 0;
+  // 🔴 실급여 합계는 `sumSalaryAmounts` 한 곳 — 프리랜서 명세서가 같은 함수로 같은 값을 낸다(줄 순서와 무관).
+  const total = rates ? sumSalaryAmounts(amounts) : amounts.reduce((sum, amount) => sum + amount, 0);
   return <td data-att-column={rates ? "actualSalary" : "actualAmount"} className="border-line num bg-att-col-billed border-t-2 border-r px-1 py-1.5 text-right text-xs font-bold whitespace-nowrap"
     title={sheetT(lang, rates ? "att.col.actualSalaryTitle" : "att.col.actualAmountTitle")}>
-    {any ? formatMoney(rates ? Math.floor(total) : total) : "—"}
+    {any ? formatMoney(total) : "—"}
   </td>;
 }
 

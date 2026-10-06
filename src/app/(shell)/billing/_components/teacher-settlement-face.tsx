@@ -21,6 +21,8 @@ const fmtUnits = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
  * (원장 2026-09-28 *"급여는 출석부에서 맞춰놓은것을 기준으로"* — 예전 면은 청구 분배 스냅샷(splits) × 수수료 × 비율이라
  * 명세서와 다른 금액을 말했다). 출석부 하단 정산액과 같은 조립(시수 × 회차 확정 단가 ?? 티어 단가 × 0.911 × 배분율).
  * 발행된 명세서는 발행 금액 그대로 · 블로그 패널티는 그 달 명세서 값.
+ * 🔑 **프리랜서 줄은 2026-10-06부터 그 강사 출석부의 실급여 합계**다(명세서와 같은 `computeSheetTuition` — 조립은 `getTeacherTuitionView`).
+ *    위 티어 산식은 그 밖의 강사에게만 해당한다. 줄마다 '출석부 실급여 기준'과 발행 전 확인 사항이 비고에 선다.
  */
 export async function TeacherSettlementFace({ period }: { period?: string }) {
   // 급여 = 원장·총괄 전용 PII(감사 D6). 그 밖에는 화면 자체를 막는다.

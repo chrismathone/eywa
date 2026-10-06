@@ -184,7 +184,9 @@ export async function GET(req: Request) {
           scheduledFrom: snap.effectiveDate,
           snapshotId: snap.snapshotId,
           ...(skipped.length ? { skipped } : {}),
-          ...(patch.teacher_id ? { newTeacherId: patch.teacher_id } : {}),
+          // 이전 담임도 함께 — 없으면 담임 이력이 "이 날부터 새 담임"만 알아, 그 전 구간을 맡았던 사람이 이력에서 빠진다
+          // (손으로 바꾼 로그·시트 가져오기 로그는 이미 남긴다. 출석부가 '그 달에 담임이었나'를 이 이력으로 본다).
+          ...(patch.teacher_id ? { newTeacherId: patch.teacher_id, previousTeacherId: cur.teacher_id ?? null } : {}),
         },
       });
       // 기록 실패가 본 작업을 되돌리진 않는다(logAction과 같은 best-effort) — 대신 보이게 남긴다.

@@ -42,3 +42,13 @@ export function supportsTimetableImport(subject: string): boolean {
 export function supportsStructureImport(subject: string): boolean {
   return subject === "english";
 }
+
+/**
+ * '시트에서 가져오기'가 **시간표 격자 탭**(강사·요일 × 교시 블록, 사람이 눈으로 보고 고치는 그 탭)까지 읽는 과목.
+ * 수학은 '수강편집' 탭이 숨겨져 있어 사람이 격자에서 고친 것(열을 끼워 새 반을 만들고 학생을 옮긴 것)이
+ * 통째로 무시됐다(원장 2026-10-06). 영어는 강사별 탭 구조 가져오기(supportsStructureImport)가 따로 있다.
+ * ⚠️ 지금은 **읽어서 보여 주기까지**다 — 반을 만들거나 수강을 바꾸는 적용 경로는 아직 없다.
+ */
+export function supportsGridImport(subject: string): boolean {
+  return subject === "math";
+}

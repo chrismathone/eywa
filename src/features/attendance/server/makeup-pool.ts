@@ -148,8 +148,10 @@ export async function ensureMakeupPoolClass(input: {
 /**
  * 그 강사의 보강 반 id — **만들지 않는다**(읽기 전용 화면용). 없으면 null.
  * 출석부가 묶음을 그릴 때 쓴다: 보강을 한 적 없는 강사에겐 반이 없고, 그러면 묶음도 안 선다(정상).
+ * @param opts.strict 조회 실패를 **던진다** — 이 묶음을 금액에 쓰는 자리(프리랜서 명세서)용. 화면은 종전대로 접는다
+ *   ("없음"과 "못 읽음"을 같은 null로 접으면 보강 묶음의 실급여가 말없이 빠진다).
  */
-export async function findMakeupPoolClass(tenantId: string, teacherId: string): Promise<string | null> {
+export async function findMakeupPoolClass(tenantId: string, teacherId: string, opts: { strict?: boolean } = {}): Promise<string | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("classes")
@@ -158,7 +160,10 @@ export async function findMakeupPoolClass(tenantId: string, teacherId: string): 
     .eq("teacher_id", teacherId)
     .eq("is_makeup_pool", true)
     .maybeSingle();
-  if (error) return null; // 미적용·실패 = 묶음 없음(화면은 종전과 같다).
+  if (error) {
+    if (opts.strict) throw new Error(`보강 반 조회 실패: ${error.message}`);
+    return null; // 미적용·실패 = 묶음 없음(화면은 종전과 같다).
+  }
   return (data?.id as string | undefined) ?? null;
 }
 

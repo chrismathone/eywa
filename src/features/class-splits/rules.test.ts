@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { intersectWindows, maxUnitsFrom, splitUnitMinutes, startOptions, toMin, durationLabel } from "./rules";
+import { durationLabel, endAfter, intersectWindows, splitBoundaries, splitUnitMinutes, startOptions, toMin } from "./rules";
 import { hasDayInRange, periodText, resolvePeriod, splitActiveOn, splitsCollide } from "./period";
-import { splitLinesForCell, uniqueSplits } from "./lines";
+import { groupSplitLines, splitLinesForCell, uniqueSplits } from "./lines";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canSplitClass, CLASS_SPLIT_ENABLED } from "./access";
@@ -23,26 +23,43 @@ describe("시간 단위 — 수학 1시간 · EiE 40분(원장 2026-10-06)", () 
   });
 });
 
-describe("고를 수 있는 시작 시각 = 두 반이 같이 도는 구간 안", () => {
-  it("이성우 3시간(교시마다 행) × 유형숙 1시간 → 17:20 한 자리", () => {
-    const source = [w("16:20", "17:20"), w("17:20", "18:20"), w("18:20", "19:20")];
-    const target = [w("17:20", "18:20")];
-    const both = intersectWindows(source, target);
-    expect(both).toEqual([w("17:20", "18:20")]);
-    expect(startOptions(both, 60)).toEqual([toMin("17:20")]);
-    expect(maxUnitsFrom(both, toMin("17:20"), 60)).toBe(1);
+describe("교시 칸 경계(splitBoundaries)", () => {
+  const edgesOf = (...ws: { start: number; end: number }[]) => ws.flatMap((x) => [x.start, x.end]);
+  const opts = (source: { start: number; end: number }[], target: { start: number; end: number }[], unit: number) =>
+    splitBoundaries(intersectWindows(source, target), edgesOf(...source, ...target), unit);
+
+  it("원장 제보 2026-10-06 — 수학 55분 교시가 한 칸만 겹쳐도 나눌 수 있다(고등M 단체 BS4F → 중등M 중3 BS3Q)", () => {
+    const source = [w("20:10", "21:05"), w("21:05", "22:00")];
+    const target = [w("18:20", "19:15"), w("19:15", "20:10"), w("20:10", "21:05")];
+    const b = opts(source, target, 60);
+    expect(startOptions(b)).toEqual([{ start: toMin("20:10"), maxUnits: 1 }]);
+    expect(endAfter(b, toMin("20:10"), 1)).toBe(toMin("21:05"));
+    expect(durationLabel(55)).toBe("1시간");
   });
-  it("같은 3시간끼리면 16:20·17:20·18:20, 앞에서 고르면 최대 3시간", () => {
-    const both = intersectWindows([w("16:20", "19:20")], [w("16:20", "19:20")]);
-    expect(startOptions(both, 60)).toEqual(["16:20", "17:20", "18:20"].map(toMin));
-    expect(maxUnitsFrom(both, toMin("16:20"), 60)).toBe(3);
-    expect(maxUnitsFrom(both, toMin("18:20"), 60)).toBe(1);
+  it("교시마다 행인 3교시 × 같은 3교시 → 세 자리, 앞에서 고르면 최대 3칸", () => {
+    const rows = [w("18:20", "19:15"), w("19:15", "20:10"), w("20:10", "21:05")];
+    const b = opts(rows, rows, 60);
+    expect(startOptions(b).map((s) => s.start)).toEqual(["18:20", "19:15", "20:10"].map(toMin));
+    expect(startOptions(b)[0]!.maxUnits).toBe(3);
+    expect(endAfter(b, toMin("18:20"), 2)).toBe(toMin("20:10"));
   });
-  it("EiE 40분 — 한 단위가 통째로 들어가는 자리만", () => {
-    expect(startOptions([w("16:20", "18:00")], 40)).toEqual(["16:20", "17:00"].map(toMin));
+  it("3시간 한 줄짜리 행은 명목 단위로 자른다", () => {
+    const b = opts([w("16:20", "19:20")], [w("16:20", "19:20")], 60);
+    expect(startOptions(b).map((s) => s.start)).toEqual(["16:20", "17:20", "18:20"].map(toMin));
   });
-  it("안 겹치면 선택지가 없다", () => {
+  it("EiE 40분 교시", () => {
+    const rows = [w("16:20", "17:00"), w("17:00", "17:40")];
+    const b = opts(rows, rows, 40);
+    expect(startOptions(b).map((s) => s.start)).toEqual(["16:20", "17:00"].map(toMin));
+    expect(durationLabel(80)).toBe("80분");
+  });
+  it("10~20분 어긋난 겹침·안 겹침은 선택지가 없다", () => {
+    expect(opts([w("19:00", "20:00")], [w("19:45", "20:45")], 60)).toEqual([]);
     expect(intersectWindows([w("14:00", "15:00")], [w("16:00", "17:00")])).toEqual([]);
+  });
+  it("범위를 넘는 길이는 끝이 없다", () => {
+    const b = opts([w("20:10", "21:05")], [w("20:10", "21:05")], 60);
+    expect(endAfter(b, toMin("20:10"), 2)).toBeNull();
   });
 });
 
@@ -121,8 +138,10 @@ describe("시간표 줄 — 원래 반엔 →, 받는 반엔 ←", () => {
     expect(l?.dir).toBe("in");
     expect(l?.otherLabel).toBe("이성우");
   });
-  it("시간이 안 겹치는 칸·다른 요일엔 안 선다", () => {
-    expect(splitLinesForCell({ classId: "A", dayOfWeek: "tue", startTime: "14:20", endTime: "16:20" }, [split()], names)).toEqual([]);
+  it("받는 반은 그 시간 칸에만 · 원래 반은 그날 칸이면 시간이 달라도 선다 · 다른 요일엔 안 선다", () => {
+    expect(splitLinesForCell({ classId: "B", dayOfWeek: "tue", startTime: "14:20", endTime: "16:20" }, [split()], names)).toEqual([]);
+    // 나눈 시간은 받는 반 시간표 기준이라 원래 반 수업 밖일 수 있다(원장 2026-10-06).
+    expect(splitLinesForCell({ classId: "A", dayOfWeek: "tue", startTime: "14:20", endTime: "16:20" }, [split()], names)).toHaveLength(1);
     expect(splitLinesForCell({ classId: "A", dayOfWeek: "fri", startTime: "16:20", endTime: "19:20" }, [split()], names)).toEqual([]);
   });
   it("모르는 반이면 지어내지 않는다", () => {
@@ -172,5 +191,20 @@ describe("권한 — 배선과 기능 스위치", () => {
     const policy = { isSuperAdmin: true, splitterIds: ["picked"] };
     expect(canSplitClass({ id: "picked", systemRole: "master" }, policy)).toBe(false);
     expect(canSplitClass({ id: "picked", systemRole: "admin" }, policy)).toBe(false);
+  });
+});
+
+describe("툴바 목록 — 반 전체 나누기는 한 건으로 묶는다", () => {
+  const names = {
+    student: (id: string) => ({ name: id === "s1" ? "가" : "나", grade: null, school: null }),
+    klass: (id: string) => (id === "A" ? { name: "고등M 단체 BS4F", teacherName: "이성우" } : { name: "중등M 중3 BS3Q", teacherName: "유형숙" }),
+  };
+  it("같은 반→반·요일·시간·기간이면 한 건, 해제는 id 전부", () => {
+    const cell = { classId: "A", dayOfWeek: "tue", startTime: "20:10", endTime: "22:00" };
+    const lines = splitLinesForCell(cell, [split({ id: "x1", studentId: "s1" }), split({ id: "x2", studentId: "s2" })], names);
+    const groups = groupSplitLines(lines);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.splitIds.sort()).toEqual(["x1", "x2"]);
+    expect(groups[0]!.hereClassName).toBe("고등M 단체 BS4F");
   });
 });

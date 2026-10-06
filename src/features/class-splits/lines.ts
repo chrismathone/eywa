@@ -25,6 +25,8 @@ export type TimetableSplitLine = {
   /** 상대 쪽 선생님(없으면 반 이름) — 줄 꼬리표(`→유형숙`). */
   otherLabel: string;
   otherClassName: string;
+  /** 이 칸의 반 이름(툴바 목록이 "어느 반 → 어느 반"으로 묶는 데). 모르면 빈 문자열. */
+  hereClassName: string;
   periodText: string;
 };
 
@@ -45,9 +47,11 @@ export function splitLinesForCell(
   const out: TimetableSplitLine[] = [];
   for (const s of splits) {
     if (s.dayOfWeek !== cell.dayOfWeek) continue;
-    if (!(toMin(s.startTime) < ce && cs < toMin(s.endTime))) continue;
     const dir = s.sourceClassId === cell.classId ? "out" : s.targetClassId === cell.classId ? "in" : null;
     if (!dir) continue;
+    // 받는 반은 그 시간 칸에만 선다. 원래 반은 **그날 칸이면 어디든** 선다 — 나눈 시간은 받는 반 시간표 기준이라
+    // 원래 반 수업 시간 밖일 수 있다(원장 2026-10-06 *"옮겨지는 쌤 시간 내에서"*). 시간으로 거르면 원래 반에선 안 보인다.
+    if (dir === "in" && !(toMin(s.startTime) < ce && cs < toMin(s.endTime))) continue;
     const stu = names.student(s.studentId);
     const other = names.klass(dir === "out" ? s.targetClassId : s.sourceClassId);
     if (!stu || !other) continue;
@@ -64,6 +68,7 @@ export function splitLinesForCell(
       endTime: s.endTime,
       otherLabel: other.teacherName?.trim() || other.name,
       otherClassName: other.name,
+      hereClassName: names.klass(cell.classId)?.name ?? "",
       periodText: periodText(s),
     });
   }
@@ -98,4 +103,44 @@ export function uniqueSplits(slots: readonly { splits?: TimetableSplitLine[] }[]
     }
   }
   return out;
+}
+
+export type SplitLineGroup = {
+  key: string;
+  splitIds: string[];
+  names: string[];
+  hereClassName: string;
+  otherClassName: string;
+  otherLabel: string;
+  day: TimetableSplitLine["day"];
+  startTime: string;
+  endTime: string;
+  periodText: string;
+};
+
+/** 툴바 목록용 — 같은 반 → 같은 반 · 같은 요일·시간·기간을 한 건으로(반 전체 나누기는 학생 수만큼 줄이 생긴다). */
+export function groupSplitLines(lines: readonly TimetableSplitLine[]): SplitLineGroup[] {
+  const map = new Map<string, SplitLineGroup>();
+  for (const l of lines) {
+    const key = [l.hereClassName, l.otherClassName, l.day, l.startTime, l.endTime, l.periodText].join("|");
+    const g = map.get(key);
+    if (g) {
+      g.splitIds.push(l.splitId);
+      g.names.push(l.name);
+      continue;
+    }
+    map.set(key, {
+      key,
+      splitIds: [l.splitId],
+      names: [l.name],
+      hereClassName: l.hereClassName,
+      otherClassName: l.otherClassName,
+      otherLabel: l.otherLabel,
+      day: l.day,
+      startTime: l.startTime,
+      endTime: l.endTime,
+      periodText: l.periodText,
+    });
+  }
+  return [...map.values()];
 }

@@ -32,7 +32,8 @@ beforeEach(() => {
       : [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: null, confirmed_sessions: null, allocation_line_index: null }]);
     const error = mocks.errors[table] ?? null;
     const builder: Record<string, unknown> = {};
-    for (const method of ["select", "eq", "neq", "in", "order", "range", "lte", "or"]) {
+    // `gt` = 금액 이월 조회(`allocation_carry_out > 0`)가 쓴다 — 기본 응답엔 이월 칸이 없어 '이월 없음'으로 읽힌다.
+    for (const method of ["select", "eq", "neq", "in", "order", "range", "lte", "or", "gt"]) {
       builder[method] = (...args: unknown[]) => { query.calls.push([method, args]); return builder; };
     }
     builder.then = (resolve: (result: unknown) => unknown) => Promise.resolve(resolve(error ? { data: null, error } : { data, error: null }));
@@ -146,7 +147,7 @@ describe("강사 출석부 청구액 조회 범위", () => {
 
   it("허용된 반이 없으면 청구서를 조회하지 않는다", async () => {
     expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "forbidden", studentIds: ["s1"] }])).toEqual({
-      billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {},
+      billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {}, carryMarks: {},
     });
     expect(mocks.from).not.toHaveBeenCalled();
   });
@@ -162,6 +163,69 @@ describe("강사 출석부 청구액 조회 범위", () => {
  * 보이지 않는 '보강' 반(0241a) — 강사 축(활성 반만) 밖이라 종전엔 청구 판정에서 통째로 빠져 확정한 뒤에도 '미확정'이었다(2026-09-18).
  * 출석부 page가 스스로 푼 보강 반 id만 `allowClassIds`로 넘긴다.
  */
+describe("이월 표식 배선(원장 2026-10-06)", () => {
+  it("금액 이월이 걸린 줄은 등록 차수에 표식이 실린다 — 청구액과 같은 조회·같은 판정, 보낸 달은 다음 달", async () => {
+    const line = { description: "고등M TP4E", amount: 160000 };
+    mocks.tables.invoices = [{ id: "i1", student_id: "s1", status: "issued", line_items: [line] }];
+    mocks.tables.classes = [{ id: "c1", class_name: "고등M TP4E" }];
+    // 목은 필터를 안 보므로 같은 행이 '이 달에 보낸 이월'이자 '지난 달에서 받은 이월'로 읽힌다(배선만 본다).
+    mocks.tables.invoice_session_terms = [{
+      id: "t1", invoice_id: "i1", class_id: "c1", amount: 150000, confirmed_sessions: 5, unit_price: 30000,
+      quantity_basis: "attendance_units", pricing_mode: "per_session",
+      allocation_line_index: 0, allocation_amount: 160000, allocation_source: line, allocation_base_amount: 150000,
+      allocation_carry_out: 10000, allocation_carry_class_id: "c1", allocation_carry_note: null, allocation_carry_at: null,
+      class: { class_name: "고등M TP4E" }, invoice: { student_id: "s1", status: "issued", line_items: [line], period: "2026-09" },
+    }];
+    const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }]);
+    const key = rowKey("c1", "s1");
+    // 160,000 − 보낸 10,000 + 받은 10,000.
+    expect(result.billed[key]).toBe(160000);
+    // 🔴 등록 차수 값은 그대로다 — 표식은 따로 실린다(표시 전용).
+    expect(result.confirmedSessions[key]).toEqual({ units: 5, daysBasis: false });
+    expect(result.carryMarks).toEqual({
+      [key]: {
+        ins: [{ amount: 10000, period: "2026-08", units: 10000 / 30000 }],
+        inState: "applied",
+        out: { amount: 10000, period: "2026-10", units: 10000 / 30000 },
+      },
+    });
+    // 강사 몫 보기(등록 차수를 교시 담당별로 나눈다)여도 표식은 같은 줄에 같은 값으로 선다 — 등록 차수 계산과 서로 건드리지 않는다.
+    mocks.tables.classes = [{ id: "c1", class_name: "고등M TP4E", teacher_id: "home", english_track: "injaewon" }];
+    mocks.tables.class_schedules = [];
+    mocks.tables.enrollments = [];
+    const scoped = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }], {
+      teacherScope: { teacherId: "home", classIds: ["c1"], holidays: [] },
+    });
+    expect(scoped.carryMarks).toEqual(result.carryMarks);
+    expect(scoped.confirmedSessions[key]!.classUnits).toBe(5);
+  });
+
+  it("🔴 이월 조회가 실패하면 접힌 사실을 싣는다(`degraded`) — 화면은 그대로 그리고, 금액으로 쓰는 자리는 이 표식을 보고 멈춘다", async () => {
+    // 이월 조회만 깨뜨린다(`gt`가 없는 응답 = 조회 예외) — 청구서·회차 행은 정상이다.
+    const base = mocks.from.getMockImplementation()!;
+    mocks.from.mockImplementation((table: string) => {
+      const builder = base(table) as Record<string, unknown>;
+      delete builder.gt;
+      return builder;
+    });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }]);
+    expect(result.billed).toEqual({ [rowKey("c1", "s1")]: 210000 });
+    expect(result.degraded).toEqual(["금액 이월 내역을 읽지 못했습니다"]);
+    spy.mockRestore();
+    // 정상 조회에는 키 자체가 없다.
+    mocks.from.mockImplementation(base);
+    expect(await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }])).not.toHaveProperty("degraded");
+  });
+
+  it("이월이 없으면 표식이 없다 — 등록 차수 모양도 종전 그대로", async () => {
+    mocks.tables.invoice_session_terms = [{ id: "t1", invoice_id: "i1", class_id: "c1", amount: 150000, confirmed_sessions: 5, unit_price: 30000, quantity_basis: "attendance_units", pricing_mode: "per_session", allocation_line_index: null }];
+    const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "c1", studentIds: ["s1"] }]);
+    expect(result.confirmedSessions[rowKey("c1", "s1")]).toEqual({ units: 5, daysBasis: false });
+    expect(result.carryMarks).toEqual({});
+  });
+});
+
 describe("허용 반(allowClassIds) — 출석부 보강 묶음", () => {
   const POOL_NAME = "보강 (김선생)";
   const usePoolData = () => {
@@ -221,7 +285,7 @@ describe("허용 반(allowClassIds) — 출석부 보강 묶음", () => {
     const result = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "other", studentIds: ["s1"] }], {
       allowClassIds: ["other"],
     });
-    expect(result).toEqual({ billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {} });
+    expect(result).toEqual({ billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {}, carryMarks: {} });
     expect(mocks.queries.some((q) => q.table === "invoices")).toBe(false);
   });
 
@@ -236,6 +300,11 @@ describe("허용 반(allowClassIds) — 출석부 보강 묶음", () => {
     expect(result.billed).toEqual({ [rowKey("c1", "s1")]: 210000 });
     expect(result.invoiceStateByStudent).toEqual({ s1: "ok" });
     expect(spy).toHaveBeenCalled();
+    // 빠진 사실은 싣는다 — 보강 반만 물은 호출(줄이 통째로 빠져 빈 결과)도 마찬가지다.
+    expect(result.degraded).toEqual(["보강 반의 청구 정보를 읽지 못했습니다"]);
+    const poolOnly = await getAttendanceClassBilledAmounts("2026-09", [{ classId: "pool", studentIds: ["s7"] }], { allowClassIds: ["pool"] });
+    expect(poolOnly.billed).toEqual({});
+    expect(poolOnly.degraded).toEqual(["보강 반의 청구 정보를 읽지 못했습니다"]);
     spy.mockRestore();
   });
 });
@@ -249,6 +318,7 @@ describe("청구 판정 합치기(mergeAttendanceClassBilling)", () => {
         confirmedPrices: {},
         priceConfirmed: [rowKey("c1", "s1")],
         invoiceStateByStudent: { s1: "ok", s2: "none" },
+        carryMarks: { [rowKey("c1", "s1")]: { ins: [{ amount: 25000, period: "2026-08", units: 2 }], inState: "applied", out: null } },
       },
       {
         billed: { [rowKey("pool", "s1")]: 45000 },
@@ -256,6 +326,7 @@ describe("청구 판정 합치기(mergeAttendanceClassBilling)", () => {
         confirmedPrices: {},
         priceConfirmed: [rowKey("pool", "s1"), rowKey("c1", "s1")],
         invoiceStateByStudent: { s1: "ok", s3: "void" },
+        carryMarks: {},
       },
     );
     expect(merged.billed).toEqual({ [rowKey("c1", "s1")]: 210000, [rowKey("pool", "s1")]: 45000 });
@@ -265,11 +336,19 @@ describe("청구 판정 합치기(mergeAttendanceClassBilling)", () => {
     });
     expect([...merged.priceConfirmed].sort()).toEqual([rowKey("c1", "s1"), rowKey("pool", "s1")].sort());
     expect(merged.invoiceStateByStudent).toEqual({ s1: "ok", s2: "none", s3: "void" });
+    // 이월 표식도 줄 키 그대로 합쳐진다(담당 반의 표식이 보강 반 조회에 덮여 사라지지 않는다).
+    expect(Object.keys(merged.carryMarks)).toEqual([rowKey("c1", "s1")]);
+  });
+
+  it("접힌 재료 표식은 합쳐도 남는다 — 한 벌이라도 접혔으면 합친 결과도 접힌 것이다", () => {
+    const blank = { billed: {}, confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], invoiceStateByStudent: {}, carryMarks: {} };
+    expect(mergeAttendanceClassBilling(blank, { ...blank, degraded: ["금액 이월 내역을 읽지 못했습니다"] }).degraded).toEqual(["금액 이월 내역을 읽지 못했습니다"]);
+    expect(mergeAttendanceClassBilling(blank, blank)).not.toHaveProperty("degraded");
   });
 
   it("같은 줄이 두 벌에 있으면 더하지 않는다(같은 청구서를 두 번 읽은 같은 사실) · 학생 상태가 갈리면 살아 있는 쪽", () => {
     const key = rowKey("c1", "s1");
-    const base = { confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [] };
+    const base = { confirmedSessions: {}, confirmedPrices: {}, priceConfirmed: [], carryMarks: {} };
     const merged = mergeAttendanceClassBilling(
       { ...base, billed: { [key]: 1000 }, invoiceStateByStudent: { s1: "none", s2: "ok" } },
       { ...base, billed: { [key]: 1000 }, invoiceStateByStudent: { s1: "ok", s2: "void" } },

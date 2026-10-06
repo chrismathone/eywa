@@ -151,6 +151,14 @@ export type Subject = {
    * ⚠️ 출결·수업타임·결석 사유는 **잠그지 않는다** — 이 반이 화면에 돌아온 이유가 그것이다.
    */
   reportOptout?: boolean;
+  /**
+   * **수업 나누기로 그 시간 이 반에 온 학생**의 행(0351a) — 값은 표식 문구(`나눔 17:20~18:20 ← 이성우(중1 수학)`).
+   * 수강행이 없는 행이라 `reportOptout: true`가 함께 실려 보고서 쪽이 잠긴다(보고서는 원래 반 담임 몫 — 원장 2026-10-06).
+   * 출결 알약은 열린다(이 반에 찍힌다 = 받는 선생님 몫). 판정·문구는 [split-rows.ts](./split-rows.ts).
+   */
+  splitIn?: string;
+  /** **원래 반** 행인데 그날 일부 시간이 다른 반으로 나눠짐 — 표식 문구(`17:20~18:20 → 유형숙(중1 개별)`). 표시 전용. */
+  splitOut?: string;
   // 이 반의 대상 날짜 raw status(present/late/absent/early_leave/excused/makeup). null=기록 없음.
   // ⚠️ 표시 축약(toMark)과 별개로 raw를 보존 — 조퇴·공결·보강을 pill이 축약값으로 되쓰는 사고 방지.
   attendanceRaw?: string | null;

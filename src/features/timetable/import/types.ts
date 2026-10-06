@@ -15,6 +15,8 @@ export interface EnrollmentSnapshotRow {
   subject: string;
   /** 수강 시작일(YYYY-MM-DD). 시트 stale-drift 보호용 — 시트 생성 시점 이후 시작한 수강은 삭제 후보에서 제외. */
   startDate?: string | null;
+  /** 수강 행이 만들어진 시각(ISO). 시트를 보낸 **시각** 이후에 만들어진 수강을 삭제 후보에서 빼는 데 쓴다(같은 날 보호). */
+  createdAt?: string | null;
 }
 
 /** 운영자가 편집해 다시 올린 '수강편집' 시트의 한 행. enrollmentId 없으면 신규 추가. */

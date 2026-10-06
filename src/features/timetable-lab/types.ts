@@ -7,6 +7,8 @@ export type LabAppearance = {
   hideEmptyDays: boolean; hideStudents: boolean; pxPerMin: number;
   sectionLines: number[]; excludedTeachers: string[]; breaks: { start: string; end: string }[];
   subjectColor: string;
+  /** 강사뷰의 주말 칸 — 토요일은 기본으로 보이고(숨길 수 있다) 일요일은 기본으로 접혀 있다(펼 수 있다). 수업이 있는 칸은 늘 보인다. */
+  hideSaturday?: boolean; showSunday?: boolean;
 };
 /** Read-only source snapshot. Importing creates a separate browser draft, never an operating write. */
 export type LabSourceSlot = {

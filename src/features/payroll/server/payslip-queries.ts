@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { kstMonth } from "@/lib/date-kst";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { appliedRatesOf, computeTeacherTuition } from "@/features/payroll/server/tuition";
+import { computeSheetTuition } from "@/features/payroll/server/sheet-tuition";
 import { computePayslipAmounts } from "@/features/payroll/payslip";
 import {
   studentIdsInMonth,
@@ -22,8 +23,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /**
  * 급여명세서 데이터 조립 — **원장(master) 전용**.
  *
- * 🔴 금액의 단일 소스는 0199a 티어 정산이다(출석부 하단 정산액과 **같은 조립 코드** collectTierRows).
- *    /billing?tab=payroll(강사 정산 면)도 2026-09-28부터 **같은 함수**(tuition.ts)를 쓴다 — splits 산식은 화면에서 뺐다.
+ * 🔴 금액의 단일 소스는 **고용 형태로 갈린다**(원장 2026-10-06 *"전부 통일 출석부 그대로"* · *"프리랜서만."*):
+ *    · **프리랜서** = 그 강사 출석부(강사 전체 보기)의 **실급여 합계** — [`computeSheetTuition`](./sheet-tuition.ts).
+ *      화면 합계 칸과 같은 조립·같은 식이라 출석부에서 맞춘 숫자가 그대로 명세서에 선다(영어도 산정된다).
+ *    · **그 밖** = 종전 0199a 티어 정산(출석부 하단 정산액과 같은 조립 코드 collectTierRows).
+ *    /billing?tab=payroll(강사 정산 면)도 **같은 갈림**이다 — 프리랜서 줄은 같은 `computeSheetTuition`, 그 밖은 티어 정산(tuition-view.ts).
+ *    출석부를 금액으로 쓸 수 없는 상태(다른 강사의 보기 · 재료 조회 실패)는 티어로 떨어지지 않고 '산정 불가' + 사유다.
  * 🔴 게이트는 `user.systemRole !== "master"` 직접 비교다 — canWriteTenant("billing")은 admin·accountant를
  *    통과시켜(권한 매트릭스 실측) 급여 PII 게이트로 못 쓴다(class-salary-actions.ts와 같은 선례).
  * 🔴 실패하면 **던진다**. 0원짜리 명세서를 뽑느니 안 뽑는 게 낫다(출석부는 화면을 살리려 접지만 여기는 반대).
@@ -125,7 +130,8 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   // ── 정산 · 지표 · 신상 ───────────────────────────────────────────────────────
   // 셋은 서로 독립이라 병렬(B4) — 직렬로 두면 명세서 첫 페인트가 세 왕복을 합산한다.
   // ⚠️ 신상(academy_documents)은 명세서 성패를 좌우하지 않으므로 실패해도 접는다(지어내진 않는다).
-  const [settlement, metrics, resume] = await Promise.all([
+  // 티어 정산(종전) — 프리랜서가 아닌 사람, 그리고 출석부로 산정할 수 없는 학원(회차 정산 꺼짐)의 폴백.
+  const tierTuition = () =>
     // 수업료 = 정산 면과 같은 함수(`computeTeacherTuition` — collectTierRows 조립 + computeTierSettlement).
     computeTeacherTuition(admin, {
       teacherId,
@@ -134,7 +140,21 @@ export async function getPayslipData(teacherId: string, period: string): Promise
       tenantId: user.tenantId,
       subjects: settings.operations.subjects,
       rates: { groupRates: appliedRates, defaultRate: appliedDefault },
-    }),
+    });
+  /**
+   * 🔴 프리랜서 = 출석부 실급여 합계(원장 2026-10-06). 판정은 출석부가 실급여 열을 세우는 것과 같은 값(`users.employment_type`)이다
+   *    — 이력서의 표시용 계약 형태(`rContract.employmentType`)로 가르지 않는다(둘이 다르면 화면과 명세서가 갈린다).
+   *    `computeSheetTuition`이 null이면(프리랜서 아님 · 회차 정산 꺼짐) 종전 티어 정산으로 떨어진다.
+   */
+  const isFreelancer = (teacher.employment_type as string | null) === "프리랜서";
+  const tuitionOf = async () => {
+    const sheet = isFreelancer
+      ? await computeSheetTuition({ tenantId: user.tenantId, teacherId, period, penaltyPoints: penalty, contractRates: baseRates })
+      : null;
+    return sheet ? { sheet, tier: null } : { sheet: null, tier: await tierTuition() };
+  };
+  const [tuition, metrics, resume] = await Promise.all([
+    tuitionOf(),
     loadMetrics(supabase, classIds, period, year),
     supabase
       .from("academy_documents")
@@ -151,7 +171,10 @@ export async function getPayslipData(teacherId: string, period: string): Promise
       ),
   ]);
 
-  if (classIds.length === 0) warnings.push("담당 반이 없어 수업료를 산정할 수 없습니다.");
+  const settlement = tuition.tier;
+  const sheet = tuition.sheet;
+  if (sheet) warnings.push(...sheet.warnings);
+  else if (classIds.length === 0) warnings.push("담당 반이 없어 수업료를 산정할 수 없습니다.");
   else if (!settlement) warnings.push("그 달 출결이 없거나 단가표가 비어 있어 수업료를 산정할 수 없습니다.");
   else {
     if (settlement.missingTierStudents.length > 0)
@@ -165,7 +188,7 @@ export async function getPayslipData(teacherId: string, period: string): Promise
   }
 
   const amounts = computePayslipAmounts({
-    tuition: settlement?.total ?? 0,
+    tuition: (sheet ? sheet.settlement?.total : settlement?.total) ?? 0,
     incentive: adjustments.incentive,
     otherDeduction: adjustments.otherDeduction,
   });
@@ -180,7 +203,9 @@ export async function getPayslipData(teacherId: string, period: string): Promise
    *    그래서 지난 달을 뽑을 땐, 그 사이 인수인계·폐강이 있었으면 금액이 옮겨 다닌다 —
    *    조용히 틀리게 두느니 그럴 수 있다고 적는다. (시점 복원은 후속: features/classes/teacher-as-of.ts)
    */
-  if (period < kstMonth())
+  // ⚠️ 출석부 기준(프리랜서)엔 해당 없다 — 그 조립은 그 달에 실제로 가르친 반·교시를 담임 이력으로 가린다.
+  //    그 대신 담임이 바뀐 반이 있으면 `computeSheetTuition`이 반 이름을 적어 알린다(상대 선생님 명세서와 겹침·누락 확인).
+  if (!sheet && period < kstMonth())
     warnings.push(
       "지난 달 명세서입니다 — 반 소유는 현재 담임·활성 반 기준이라, 그 뒤 인수인계·폐강이 있었다면 금액이 달라질 수 있습니다.",
     );
@@ -230,7 +255,10 @@ export async function getPayslipData(teacherId: string, period: string): Promise
     // 🔴 total===null(산정 가능한 행 0)이면 **settlement를 통째로 null**로 내린다 —
     //    `settlement?.total ?? 0`로 0을 채우면 화면 가드가 객체 존재만 보고 통과해
     //    "₩0 · 0T"인 겉보기 정상 명세서가 인쇄된다(적대 리뷰가 잡은 치명 버그).
-    settlement: settlement && settlement.total !== null
+    tuitionBasis: sheet ? "sheet" : "tier",
+    settlement: sheet
+      ? sheet.settlement
+      : settlement && settlement.total !== null
       ? {
           total: settlement.total,
           lines: settlement.lines,
@@ -242,7 +270,10 @@ export async function getPayslipData(teacherId: string, period: string): Promise
           missingPriceTiers: settlement.missingPriceTiers,
         }
       : null,
-    rates: { base: baseRates, baseDefault, applied: appliedRates, appliedDefault, penaltyPoints: penalty },
+    // 프리랜서는 출석부 비율표를 과정으로 옮긴 값(저장된 표가 없으면 계약 비율과 같다) — 계산에 실제로 쓴 비율을 찍는다.
+    rates: sheet
+      ? { base: sheet.rates.base, baseDefault, applied: sheet.rates.applied, appliedDefault, penaltyPoints: penalty }
+      : { base: baseRates, baseDefault, applied: appliedRates, appliedDefault, penaltyPoints: penalty },
     metrics: metrics.value,
     adjustments,
     warnings,

@@ -16,7 +16,8 @@ import { findMakeupPoolClass } from "@/features/attendance/server/makeup-pool";
 import { MAKEUP_POOL_PREFIX } from "@/features/classes/makeup-pool";
 import { EmptyState } from "@/components/empty-state";
 import { FilterSelect } from "@/components/filter-select";
-import { kstMonth, kstToday } from "@/lib/date-kst";
+import { kstMonth, kstToday, monthRange } from "@/lib/date-kst";
+import { classTaughtBy, teacherSheetClasses } from "@/features/attendance/teacher-sheet-classes";
 import { requireAccess } from "@/lib/auth/require-access";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
@@ -42,7 +43,6 @@ import { AbsenceIntakeButton } from "./_components/absence-intake-button";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { effectiveTeacherId } from "@/lib/auth/view-mode";
 // 출결 강사 귀속 축 단일 소스 — 담임(classes.teacher_id)만 보면 교시 담당 강사가 자기 수업을 못 본다.
-import { classTeacherRole, type ClassTeacherRole } from "@/features/attendance/teacher-axis";
 import { getHomeroomSinceIndex } from "@/features/classes/server/teacher-as-of-queries";
 import { homeroomSinceOf } from "@/features/classes/teacher-as-of";
 import { loadAttendanceViewPrefs } from "@/features/attendance/server/prefs-actions";
@@ -141,16 +141,6 @@ function classTeachers(c: AttendanceMatrix["classes"][number]): { id: string; na
   return [...out.values()];
 }
 
-/** 그 기간에 맡았던 담임·교시 담당 반은 인계 후에도 출석부에 남긴다. */
-function classTaughtBy(c: AttendanceMatrix["classes"][number], teacherId: string): boolean {
-  return (
-    classTeacherRole({
-      homeroomTeacherId: c.teacherId,
-      slotTeacherIds: c.slotTeachers.map((t) => t.id),
-      teacherId,
-    }) !== null || !!c.historicalTeachers?.some((t) => t.id === teacherId)
-  );
-}
 
 /**
  * 요약 허브(강사 미선택)의 강사 목록 — 강사별 반 수·과목·**오늘 입력 현황**.
@@ -412,23 +402,14 @@ export default async function AttendancePage({
   // 🔴 **담임 반이 아니라 "그 강사가 가르치는 반"**(담임 ∪ 교시 담당, 2026-08-18 원장 제보 수정).
   //    영어는 한 반의 교시를 여러 강사가 나눠 맡아서, 담임으로만 묶으면 실제로 출결을 찍은 강사의
   //    출석부엔 그 반이 없고 담임 출석부에만 있다("담임 출결로 인정"으로 보이던 것의 정체).
-  const teacherClasses = effectiveTeacher
+  // 🔑 판정은 [`teacher-sheet-classes.ts`](@/features/attendance/teacher-sheet-classes) 한 벌 — 프리랜서 명세서가 같은 목록으로
+  //    그 강사 출석부를 조립한다(화면 합계와 명세서 금액이 갈리지 않게).
+  const taughtClasses = effectiveTeacher
     ? classesForSubject.filter((c) => classTaughtBy(c, effectiveTeacher))
     : [];
-  // 반별 역할 표식(담임 / 교시 담당) — 반 머리행에 붙어 "왜 이 반이 여기 있나"를 밝힌다.
-  const teacherRoles = new Map<string, ClassTeacherRole | null>(
-    teacherClasses.map((c) => [
-      c.id,
-      effectiveTeacher
-        ? classTeacherRole({
-            homeroomTeacherId: c.teacherId,
-            slotTeacherIds: c.slotTeachers.map((t) => t.id),
-            teacherId: effectiveTeacher,
-          })
-        : null,
-    ]),
-  );
-  const mode: ViewMode = requestedMode === "teacher" && teacherClasses.length > 0 ? "teacher" : "class";
+  // 보기 모드는 **가르치는 반이 있는가**로 정한다(종전 그대로) — 아래에서 그 달 표에 설 반을 더 거르더라도 강사 보기는 유지한다
+  // (그 달 반이 전부 빠진 강사도 보강 묶음·대신 보강 목록은 이 보기에서만 보인다).
+  const mode: ViewMode = requestedMode === "teacher" && taughtClasses.length > 0 ? "teacher" : "class";
   /**
    * 강사 계정의 **반별 보기**도 그 강사 출석부다(원장 2026-09-17 *"내 출석부에서 고치는건데 남의 출석부를 건드리는건
    * 아니지. 그냥 내 출석부 상에서 자유롭게 숫자 설정만 하는거야."*) — 반 하나를 골라도 강사 전체 보기와 **같은 렌즈**
@@ -451,14 +432,27 @@ export default async function AttendancePage({
    */
   const homeroomSinceIdx =
     (mode === "teacher" && effectiveTeacher) || classScopeTeacher ? await getHomeroomSinceIndex() : null;
-  const sinceByClass = new Map<string, string | null>(
-    teacherClasses.map((c) => [
-      c.id,
-      homeroomSinceIdx && teacherRoles.get(c.id) === "homeroom"
-        ? homeroomSinceOf(homeroomSinceIdx, c.id, effectiveTeacher)
-        : null,
-    ]),
-  );
+  /**
+   * 강사 전체 보기의 **반 목록** — 역할(담임 / 교시 담당) · 담임 시작일 · 표에 설 반을 한 번에 정한다(`teacherSheetClasses`).
+   *
+   * 🔴 **그 달이 끝난 뒤에 담임이 된 반은 표에 세우지 않는다**(원장 2026-10-06, 9월 표에 `10/6부터 담임` 반이 선 캡처:
+   *    *"10/6부터 담임인데 왜 벌써 출석부에 나오는거야? … 월내에 포함되지 않는 수업은 출석부에서 미표시하도록"*).
+   *    그 달엔 그 사람 칸이 하나도 없는데(담임 전 날짜는 이미 뺀다) 반 줄·청구액·등록 차수만 서서 차이확인이 전부 빨강이었다.
+   *    담임 폴백 반만 해당하고(교시 담당·그 달의 이전 담임은 그대로), 인수인계 기록이 없으면 아무것도 빼지 않는다.
+   * 🔴 **표시만 거른다** — 아래 티어 정산액(`money`)의 반 범위는 종전 그대로 현재 담임 반 전부다(`moneyClasses`, 명세서·정산 면과
+   *    같은 집합이라야 금액이 맞는다). 표에 없는 반의 시수가 정산액에 들어 있으면 `moneyNote`가 그 사실을 적는다.
+   */
+  const sheetScope = teacherSheetClasses({
+    classes: classesForSubject,
+    teacherId: effectiveTeacher,
+    window: monthRange(month),
+    sinceIdx: homeroomSinceIdx,
+  });
+  const teacherRoles = sheetScope.roles;
+  const sinceByClass = sheetScope.sinceByClass;
+  const teacherClasses = sheetScope.classes;
+  /** 표에서 뺀 반(그 달 뒤에 담임이 된 반) — 표시는 안 하지만 티어 정산액의 반 범위에는 종전대로 남는다. */
+  const laterClasses = taughtClasses.filter((c) => !teacherClasses.includes(c));
   const teacherMatrices =
     mode === "teacher"
       // ⚠️ 강사 전체 보기는 여러 반을 **한 표**에 그리는데 세션은 과목별이라 반마다 기간이 다를 수 있다.
@@ -469,6 +463,15 @@ export default async function AttendancePage({
       //    출석부에 3 — 실제 이다교 몫은 1). 귀속 판정은 resolveTaughtBy 단일 소스가 한다.
       ? await Promise.all(
           teacherClasses.map((c) =>
+            getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher, sinceByClass.get(c.id) ?? null),
+          ),
+        )
+      : [];
+  // 표에서 뺀 반의 명단 — 티어 정산액(원장 전용)이 종전과 같은 학생 집합을 보게 하는 재료일 뿐이다(그리지 않는다). 대부분 0개.
+  const laterMatrices =
+    mode === "teacher" && user.systemRole === "master" && payrollOn
+      ? await Promise.all(
+          laterClasses.map((c) =>
             getMonthlyAttendanceMatrix(month, c.id, "month", effectiveTeacher, sinceByClass.get(c.id) ?? null),
           ),
         )
@@ -488,13 +491,24 @@ export default async function AttendancePage({
         .map((c, i) => ({ c, i }))
         .filter(({ c }) => c.teacherId === effectiveTeacher)
     : [];
+  /**
+   * 티어 정산액의 반 범위 = **현재 담임인 반 전부**(종전 그대로 — 표에서 뺀 반 포함, 가르치는 반 목록의 원래 순서).
+   * 🔴 순서를 바꾸지 말 것 — 정산은 줄의 소수 합을 내림하므로 순서가 달라지면 정수 경계에서 1원이 갈릴 수 있다.
+   */
+  const matrixByClass = new Map<string, AttendanceMatrix>([
+    ...teacherClasses.map((c, i) => [c.id, teacherMatrices[i]!] as const),
+    ...laterClasses.flatMap((c, i) => (laterMatrices[i] ? [[c.id, laterMatrices[i]!] as const] : [])),
+  ]);
+  const moneyClasses = effectiveTeacher
+    ? taughtClasses.filter((c) => c.teacherId === effectiveTeacher && matrixByClass.has(c.id))
+    : [];
   const money =
     mode === "teacher" && user.systemRole === "master" && effectiveTeacher && payrollOn
       ? await getTeacherMoney(
           month,
           effectiveTeacher,
-          [...new Set(homeroomClasses.flatMap(({ i }) => teacherMatrices[i]!.students.map((s) => s.id)))],
-          homeroomClasses.map(({ c }) => c.id), // 티어 정산(0199a) — 시수·티어를 이 반들에서 읽는다
+          [...new Set(moneyClasses.flatMap((c) => matrixByClass.get(c.id)!.students.map((s) => s.id)))],
+          moneyClasses.map((c) => c.id), // 티어 정산(0199a) — 시수·티어를 이 반들에서 읽는다
         )
       : null;
   const slotOnlyCount = teacherClasses.length - homeroomClasses.length;
@@ -503,14 +517,23 @@ export default async function AttendancePage({
    *    표 아래 읽기 전용 목록(`SubstituteCellsNote`)으로 보인다. 말없이 정산액만 커지면 화면 시수와 금액이 갈려 보인다(적대 리뷰 2026-09-30).
    */
   const shownClassIds = new Set(teacherClasses.map((c) => c.id));
-  const outsideUnits =
-    money?.tierSettlement.status === "ready"
-      ? Object.entries(money.tierSettlement.unitsByClass ?? {}).reduce((s, [cid, u]) => (shownClassIds.has(cid) ? s : s + u), 0)
-      : 0;
-  const moneyNote =
+  const laterClassIds = new Set(laterClasses.map((c) => c.id));
+  const unitsByMoneyClass =
+    money?.tierSettlement.status === "ready" ? Object.entries(money.tierSettlement.unitsByClass ?? {}) : [];
+  // 표에 없는 반의 정산 시수 — 대신 보강(남의 반)과 '그 달 뒤에 담임이 된 반'을 가른다(같은 문구로 묶으면 거짓 설명이 된다).
+  const outsideUnits = unitsByMoneyClass.reduce((s, [cid, u]) => (shownClassIds.has(cid) || laterClassIds.has(cid) ? s : s + u), 0);
+  const laterUnits = unitsByMoneyClass.reduce((s, [cid, u]) => (laterClassIds.has(cid) ? s + u : s), 0);
+  // 청구·납입 합계의 범위 안내 — 합계 줄에 늘 선다.
+  const moneyNote = money && slotOnlyCount > 0 ? sheetTf(lang, "att.moneyNote", { n: moneyClasses.length, m: slotOnlyCount }) : null;
+  /**
+   * 티어 **정산액**에 든 표 밖 시수 안내 — 정산액을 그릴 때만 선다(`settlementNote`, 합계 줄이 `showLegacySettlement`로 가린다).
+   * 🔴 프리랜서 표(실수업액·실급여 열)는 정산액을 감추고 명세서도 출석부 실급여로 낸다 — 거기에 "정산액에 …시수가 들어 있습니다"를
+   *    띄우면 그 사람 명세서와 **반대 사실**을 말한다(적대 리뷰 2026-10-06: 그 달 뒤에 받은 반·대신 보강은 실급여에 없다).
+   */
+  const settlementNote =
     [
-      money && slotOnlyCount > 0 ? sheetTf(lang, "att.moneyNote", { n: homeroomClasses.length, m: slotOnlyCount }) : null,
       money && outsideUnits > 0 ? sheetTf(lang, "att.moneyNote.substitute", { units: formatSessionUnits(outsideUnits) }) : null,
+      money && laterUnits > 0 ? sheetTf(lang, "att.moneyNote.later", { n: laterClasses.length, units: formatSessionUnits(laterUnits) }) : null,
     ]
       .filter(Boolean)
       .join(" · ") || null;
@@ -701,6 +724,18 @@ export default async function AttendancePage({
     mode === "teacher"
       ? new Set(teacherMatrices.flatMap((m) => m.students.map((s) => s.id))).size
       : matrix.stats.totalStudents;
+  /**
+   * 표에 세울 줄이 하나도 없나 — 담당 반 학생 0명 **이고** 보강 묶음도 없을 때만.
+   * 🔴 `totalStudents`만 보면 담당 반이 전부 표에서 빠진 강사(그 달 뒤에 담임이 된 반뿐 · 학생 없는 반뿐)의 보강 묶음이
+   *    빈 화면에 가려진다 — 그 줄의 실급여는 명세서에 들어가므로 화면과 명세서가 갈린다(적대 리뷰 2026-10-06).
+   */
+  const sheetEmpty = totalStudents === 0 && !makeupGroup;
+  /**
+   * 요약 허브(강사·반 미선택)를 그리나 — 묶음이 하나도 없고 **강사 보기가 아닐 때만**.
+   * 🔴 강사 보기인데 표에 설 반이 0개일 수 있다(가르치는 반이 전부 조회 달 뒤에 담임이 된 반 · 보강 묶음도 없음). 묶음 수만 보면
+   *    강사 드롭다운엔 이름이 찍혀 있는데 본문은 '강사 미선택' 요약이 된다 — 그 보기는 빈 상태 + 대신 보강 목록으로 보낸다(재리뷰 2026-10-06).
+   */
+  const hubShown = allGroups.length === 0 && mode !== "teacher";
 
   // 드롭다운 표시값 — 반 선택 시 그 반의 과목·강사를 강제로 채운다(누구 선생님인지 바로 보이게).
   const subjectValue = selectedClass ? selectedClass.subject : effectiveSubject;
@@ -789,12 +824,13 @@ export default async function AttendancePage({
    * · 허브(강사 미선택) — 도구는 요약 줄 오른쪽. 툴바에 두면 왼쪽이 빈 둘째 줄이 된다.
    * · 빈 반 — 요약 줄도 표 위 줄도 없으므로 툴바에 둔다(버튼이 사라지면 안 된다).
    */
-  const gridShown = allGroups.length > 0 && totalStudents > 0;
+  const gridShown = allGroups.length > 0 && !sheetEmpty;
   // 전체 영어 시수 도구는 강사·반을 고르기 전 요약 화면에서 연다.
-  const showUnitsMaster = allGroups.length === 0 && canViewUnitsMaster(user.systemRole, myTeacherId);
+  const showUnitsMaster = hubShown && canViewUnitsMaster(user.systemRole, myTeacherId);
   // 결석 통보 접수 — 데스크가 학부모 전화를 받는 자리(원장 2026-08-19). 당일 출결 화면에도 같은 버튼.
-  // 급여명세서 — 이 화면의 '정산액'을 그대로 쓰는 문서라 **여기**가 진입점이다(수납관리 강사 정산 면도
-  // 2026-09-28부터 같은 계산 — 명세서 열람 명단에게 거기서도 명세서 버튼이 선다). 원장 + 강사 전체 보기일 때만.
+  // 급여명세서 — 이 화면의 금액을 그대로 쓰는 문서라 **여기**가 진입점이다: 프리랜서는 이 표의 실급여 합계(2026-10-06),
+  // 그 밖은 합계 줄의 '정산액'(수납관리 강사 정산 면도 같은 계산 — 명세서 열람 명단에게 거기서도 명세서 버튼이 선다).
+  // 원장 + 강사 전체 보기일 때만.
   // 반별 A4 인쇄(감사 N1) — 반을 골라 표가 서 있을 때만. 화면과 같은 표를 찍도록 날짜축·강사 렌즈를 싣는다.
   const printClass = mode === "class" && effectiveClassId && selectedClass && matrix.students.length > 0 ? selectedClass : null;
   const sheetTools =
@@ -843,7 +879,7 @@ export default async function AttendancePage({
    * ⚠️ 게이트·스코프 판정은 조회 본체가 한다(클라 액션과 **같은 함수**, #77).
    */
   const hubSearchSeeded =
-    allGroups.length === 0 && searchSeed ? await loadHubStudentSearch({ query: searchSeed, month }) : null;
+    hubShown && searchSeed ? await loadHubStudentSearch({ query: searchSeed, month }) : null;
 
   // 시트 격자의 좌표·초기값 — 표보다 위(상단 스탯)까지 감싸야 해서 여기서 만든다.
   const gridSource = buildGridSource(allGroups, visibleDays, orderedRows);
@@ -893,7 +929,7 @@ export default async function AttendancePage({
    */
   const noticeClass = "text-text-dim bg-bg-soft/60 border-line rounded-xl border px-3 py-2 text-xs break-keep";
   const notices =
-    allGroups.length === 0 || totalStudents === 0
+    allGroups.length === 0 || sheetEmpty
       ? []
       : [
           lockBefore ? (
@@ -976,7 +1012,7 @@ export default async function AttendancePage({
 
   // 요약 허브(강사·반 미선택)에서만 도는 조회 둘 — 강사별 오늘 현황과 휴원일 줄. 서로 독립이라 함께(B4).
   const [hubTeachers, hubHoliday] =
-    allGroups.length === 0
+    hubShown
       ? await Promise.all([buildHubTeachers(classesForFilters, subjectOptions), loadHubHoliday(effectiveSubject)])
       : [[] as HubTeacher[], null];
 
@@ -1169,7 +1205,7 @@ export default async function AttendancePage({
         {/* 우측 — 살아있는 합계 + 안내 토글. **새 줄을 만들지 않고** 툴바의 남는 가로 여백을 쓴다. */}
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-3 [&>button]:shrink-0">
           {/* 도구·칸 안내 — 표는 표 위 줄, 허브는 요약 줄. 빈 반만 여기(위 `gridShown` 주석). */}
-          {!gridShown && allGroups.length > 0 ? sheetTools : null}
+          {!gridShown && !hubShown ? sheetTools : null}
           {!gridShown ? scopeChip : null}
           {allGroups.length > 0 ? <LiveStats totalStudents={totalStudents} fallback={statsCount} /> : null}
           {notices.length > 0 ? (
@@ -1186,7 +1222,7 @@ export default async function AttendancePage({
         </div>
       </div>
 
-      {allGroups.length === 0 ? (
+      {hubShown ? (
         // 강사 미선택 허브 = **출석부 요약**(원장 2026-08-10). 무거운 매트릭스는 여전히 안 불러온다.
         // 강사를 고르면 바로 그 강사 전체 출석부(기본 보기 = 강사 전체, resolveViewMode).
         <AttendanceHub
@@ -1222,7 +1258,7 @@ export default async function AttendancePage({
             }).format(new Date())
           }
         />
-      ) : totalStudents === 0 ? (
+      ) : sheetEmpty ? (
         <div className="min-h-0 flex-1 overflow-auto">
           <EmptyState
             image="students"
@@ -1233,6 +1269,8 @@ export default async function AttendancePage({
             )}
             description={sheetT(lang, "att.empty.desc")}
           />
+          {/* 표가 비어도 대신 보강 목록은 선다 — 이 보기에서만 보이는 칸이다(강사 보기가 아니면 빈 목록이라 아무것도 안 그린다). */}
+          <SubstituteCellsNote cells={substituteCells} lang={lang} />
         </div>
       ) : (
         // 남은 높이를 전부 격자에 — `min-h-0`이 없으면 flex 아이템의 최소 크기가 콘텐츠(수십 행)라
@@ -1253,6 +1291,7 @@ export default async function AttendancePage({
             // 반 머리행은 **반별 정렬 + 강사 전체 보기**일 때만. 가나다·학년·담임순은 반 구분을 없앤다.
             showGroups={showGroups}
             classBilledAmounts={classBilledAmounts.billed}
+            carryMarksByRow={sessionBillingOn ? classBilledAmounts.carryMarks : {}}
             showActualAmount={showActualAmount}
             // 🔴 실급여 열은 **'실급여 보이기'를 켰을 때만**(원장 2026-09-21) — 꺼 두면 급여 값을 아예 싣지 않는다
             //    (화면에서 감추는 게 아니라 서버가 안 보낸다). 권한 판정(salaryConfig)은 종전 그대로.
@@ -1285,6 +1324,7 @@ export default async function AttendancePage({
             noInvoiceRows={noInvoiceRows}
             money={money}
             moneyNote={moneyNote}
+            settlementNote={settlementNote}
             lang={lang}
             lockBefore={lockBefore}
             // 공휴일은 학원설정(operations.holidays)이 단일 소스 — 헤더 빨간 날짜·셀 회색 처리에 동기화.

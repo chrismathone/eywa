@@ -12,7 +12,7 @@ type StaffOption = { id: string; name: string; role: string };
 type ListKey = "payslipViewerIds" | "leaveAdjusterIds" | "classSplitterIds";
 const MAX_PEOPLE = 80;
 const LISTS: readonly { key: ListKey; label: string; hint: string }[] = [
-  { key: "payslipViewerIds", label: "급여명세서 열람", hint: "급여명세서를 열람 · 작성 · 발행할 수 있는 사람입니다. 원장과 여기서 지정한 사람만 봅니다." },
+  { key: "payslipViewerIds", label: "급여명세서 열람", hint: "급여명세서를 열람 · 작성 · 발행할 수 있는 사람입니다. 원장과 여기서 지정한 사람만 봅니다. 지정한 사람은 출석부 메뉴 권한도 있어야 합니다." },
   { key: "leaveAdjusterIds", label: "연차 조정", hint: "직원의 연차 부여 일수를 고칠 수 있는 사람입니다. 직원관리 메뉴 권한도 있어야 합니다." },
   { key: "classSplitterIds", label: "수업 나누기", hint: "시간표에서 수업을 나눌 수 있는 사람입니다. 수업 관리 권한도 있어야 합니다." },
 ];

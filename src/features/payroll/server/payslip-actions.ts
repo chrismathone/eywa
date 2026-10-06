@@ -19,6 +19,7 @@
 //   ⚠️ 이 파일에 새 액션을 더할 때도 같은 규칙 — metadata에 숫자를 넣기 전에 위 이유를 다시 읽을 것.
 
 import { revalidatePath } from "next/cache";
+import { unstable_rethrow } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { logAction } from "@/features/audit/server/log";
 import { resolvePenaltyPoints } from "../payslip";
@@ -162,6 +163,9 @@ export async function issuePayslip(
   try {
     data = await getPayslipData(teacherId, period);
   } catch (e) {
+    // 이동(redirect) 같은 프레임워크 신호는 삼키지 않는다 — 프리랜서 명세서는 출석부 조회(권한 확인 포함)를 지나므로
+    // 여기서 삼키면 이동 신호의 원문이 오류 문구로 화면에 뜬다.
+    unstable_rethrow(e);
     return { error: e instanceof Error ? e.message : "명세서를 계산할 수 없습니다" };
   }
   if (!data.settlement) return { error: "수업료를 산정할 수 없어 발행할 수 없습니다. 위 경고를 먼저 해결하세요." };

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  attendanceCarryMarks,
   attendanceClassBilledAmounts,
+  attendanceClassBilledDetail,
   attendanceClassConfirmedSessions,
   attendanceClassConfirmedPrices,
   attendanceClassPriceConfirmedRows,
@@ -82,6 +84,60 @@ describe("출석부 이 반 청구액", () => {
     // 같은 학생·반이 청구서 두 장이어도 받은 이월은 한 번만.
     const twice = [allocated, { ...allocated, id: "t9", invoice_id: "i9" }];
     expect(attendanceClassBilledAmounts(classes, [inv, { ...inv, id: "i9" }], twice, { outs: new Map(), ins })[key]).toBe(160000 * 2 + 5000);
+  });
+
+  it("이월 표식(원장 2026-10-06) — 금액과 같은 판정으로 받은·보낸 이월을 줄마다 내고, 단가로 나눠 회차를 적는다", () => {
+    const paid = { ...line, amount: 160000 };
+    const allocated = term({ unit_price: 30000, allocation_line_index: 0, allocation_amount: 160000, allocation_source: paid, allocation_base_amount: 150000 });
+    const inv = { ...invoice, line_items: [paid] };
+    const prices = attendanceClassConfirmedPrices(classes, [inv], [allocated]);
+    const carryIn = (amount: number, over: object = {}) => ({ amount, fromPeriod: "2026-08", fromClassName: "고등M 개별 TP4E", note: null, valid: true, ...over });
+    const marks = (carry: Parameters<typeof attendanceCarryMarks>[1], terms = [allocated], invoices = [inv], p = prices) =>
+      attendanceCarryMarks(classes, carry, attendanceClassBilledDetail(classes, invoices, terms, carry), p);
+
+    // 받은 이월 — 유효한 것만 담고(무효·받을 반 없음은 뺀다), 30,000원 단가로 나눠 회차를 적는다.
+    const ins = new Map([["s1|c1", [carryIn(60000), carryIn(7000, { valid: false }), carryIn(9000, { orphan: true })]]]);
+    expect(marks({ outs: new Map(), ins })).toEqual({
+      [key]: { ins: [{ amount: 60000, period: "2026-08", units: 2 }], inState: "applied", out: null },
+    });
+    // 보낸 이월 — 청구액에서 실제로 뺀 것만. 가는 달은 호출부가 준 값.
+    expect(marks({ outs: new Map([["t1", 10000]]), ins: new Map(), outPeriod: "2026-10" })[key]).toEqual({
+      ins: [], inState: "pending", out: { amount: 10000, period: "2026-10", units: 10000 / 30000 },
+    });
+    // 더 받은 몫보다 큰 이월은 무효 — 금액에서 안 뺐으니 표식도 없다.
+    expect(marks({ outs: new Map([["t1", 20000]]), ins: new Map() })).toEqual({});
+    // 🔴 배분이 무효면(확정액이 바뀌어 재확인) 받은 이월이 청구액에 안 실린다 — 표식은 남기고 '안 실렸다'고 적는다.
+    const stale = [{ ...allocated, amount: 180000, confirmed_sessions: 6 }];
+    expect(attendanceClassBilledDetail(classes, [inv], stale, { outs: new Map(), ins }).billed).toEqual({ [key]: 160000 });
+    expect(marks({ outs: new Map(), ins }, stale)[key]).toEqual({ ins: [{ amount: 60000, period: "2026-08", units: 2 }], inState: "pending", out: null });
+    // 🔴 받는 줄이 전액 환불이면 배분을 다시 저장해도 안 실린다 — '환불'로 갈라 적는다(할 일이 다르다).
+    const refundedLine = { ...paid, refunds: [{ status: "active", type: "full", amount: 160000 }] };
+    const refundedTerm = { ...allocated, allocation_source: refundedLine };
+    expect(marks({ outs: new Map(), ins }, [refundedTerm], [{ ...invoice, line_items: [refundedLine] }])[key]!.inState).toBe("refunded");
+    // 같은 학생·반이 청구서 두 장이어도 받은 이월 표식은 한 줄에 한 번(금액도 한 번만 더했다).
+    const twice = [allocated, { ...allocated, id: "t9", invoice_id: "i9" }];
+    expect(marks({ outs: new Map(), ins }, twice, [inv, { ...inv, id: "i9" }])[key]).toEqual({ ins: [{ amount: 60000, period: "2026-08", units: 2 }], inState: "applied", out: null });
+    // 보낸 이월은 청구서마다 뺀 만큼 합친다.
+    expect(marks({ outs: new Map([["t1", 10000], ["t9", 10000]]), ins: new Map(), outPeriod: "2026-10" }, twice, [inv, { ...inv, id: "i9" }])[key]!.out!.amount).toBe(20000);
+    // 등록 차수가 미확정인 줄(단가 없음)도 표식은 선다 — 회차 없이 금액만.
+    const unconfirmed = [{ ...allocated, amount: null, confirmed_sessions: null, unit_price: null, allocation_base_amount: null }];
+    expect(marks({ outs: new Map(), ins }, unconfirmed, [inv], attendanceClassConfirmedPrices(classes, [inv], unconfirmed))[key]).toEqual({
+      ins: [{ amount: 60000, period: "2026-08", units: null }], inState: "applied", out: null,
+    });
+    // 이월이 없는 줄은 키를 만들지 않는다.
+    expect(marks({ outs: new Map(), ins: new Map() })).toEqual({});
+  });
+
+  it("이월 회차는 그 줄 확정 단가가 회당 하나일 때만 — 월 정액·옛 일수 기준·단가 여럿·미확정은 금액만", () => {
+    const ins = new Map([["s1|c1", [{ amount: 60000, fromPeriod: "2026-08", fromClassName: null, note: null, valid: true }]]]);
+    const detail = { carryInApplied: new Set<string>(), carryInRefunded: new Set<string>(), carryOut: {} };
+    const unitsOf = (p: Parameters<typeof attendanceCarryMarks>[3]) => attendanceCarryMarks(classes, { outs: new Map(), ins }, detail, p)[key]!.ins[0]!.units;
+    expect(unitsOf({ [key]: [{ unitPrice: 30000, monthly: false, daysBasis: false }] })).toBe(2);
+    expect(unitsOf({ [key]: [{ unitPrice: 250000, monthly: true, daysBasis: false }] })).toBeNull();
+    expect(unitsOf({ [key]: [{ unitPrice: 30000, monthly: false, daysBasis: true }] })).toBeNull();
+    expect(unitsOf({ [key]: [{ unitPrice: 30000, monthly: false, daysBasis: false }, { unitPrice: 25000, monthly: false, daysBasis: false }] })).toBeNull();
+    expect(unitsOf({ [key]: [{ unitPrice: 0, monthly: false, daysBasis: false }] })).toBeNull();
+    expect(unitsOf({})).toBeNull();
   });
 
   it("같은 학생의 반을 구분하고 회차×단가 대신 해당 반 청구 항목을 표시한다", () => {

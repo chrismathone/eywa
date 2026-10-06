@@ -14,7 +14,7 @@ import { attendanceSalaryRate, type AttendanceSalaryRates } from "@/features/att
 import type { ReactNode } from "react";
 import { suppressedTransferRows, transferRowKey } from "@/features/attendance/transfer-badge";
 import { countMarks, sumCounts, type Counted } from "@/features/attendance/grid/totals";
-import type { AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
+import type { AttendanceCarryMark, AttendanceConfirmedPrice, AttendanceInvoiceGap, AttendanceTermSessions } from "@/features/attendance/class-billing";
 import { ClassGroupBody, CollapseAllButton } from "./class-group";
 import { ClassSearchCount, SearchEmptyRow, SearchedRow } from "./search-context";
 import { LiveRecords, MatrixColumnTotalsRow } from "./live-totals";
@@ -80,7 +80,8 @@ const HEAD_CORNER_Z = "z-[60]";
 //    🔴 짧게 고를 땐 **다른 뜻이 이미 쓰는 영어**를 피할 것(`School`·`Enrolled`로 한 번 lang-wiring 가드를 깼다).
 //    `name-wiring.test.ts`가 이 상수를 **읽어** 한·영 라벨 길이를 잠근다.
 //    🔴 48px(옛 `시수` 두 글자 자리)로 되돌리지 말 것.
-const COL_W = { name: 88, school: 72, unitPrice: 96, classBilled: 76, actualAmount: 80, actualSalary: 80, units: 76, termSessions: 76, diff: 64, day: 22 } as const;
+// 금액 세 열은 96 — 합계 행의 여덟 자리 금액(`10,636,250`)이 옆 칸에 닿지 않게(원장 2026-10-06 *"청구액, 실수업액, 실급여 너무 겹쳐버리네"*, 종전 76·80).
+const COL_W = { name: 88, school: 72, unitPrice: 96, classBilled: 96, actualAmount: 96, actualSalary: 96, units: 76, termSessions: 76, diff: 64, day: 22 } as const;
 
 /** 표에 쌓이는 한 덩어리 = 한 반. 반별 보기는 1개, 강사 전체 보기는 그 강사의 모든 반. */
 export type MatrixGroup = {
@@ -215,6 +216,7 @@ export function MatrixTable({
   showGroups,
   classBilledAmounts,
   termSessionsByRow,
+  carryMarksByRow,
   confirmedPricesByRow,
   showActualAmount = false,
   salaryRates,
@@ -226,6 +228,7 @@ export function MatrixTable({
   noInvoiceRows,
   money,
   moneyNote,
+  settlementNote,
   lockBefore,
   ordered,
   lang = "ko",
@@ -262,6 +265,8 @@ export function MatrixTable({
    * 키가 없으면 '미확정'(0을 지어내지 않는다). `daysBasis`면 그 숫자는 시수가 아니라 옛 **출석 일수**다.
    */
   termSessionsByRow?: Record<string, AttendanceTermSessions>;
+  /** 금액 이월이 걸린 줄(`rowKey`) → 표식 재료 — 등록 차수 칸의 주황 틴트·카드(원장 2026-10-06). 등록 차수 열이 설 때만 쓴다. */
+  carryMarksByRow?: Record<string, AttendanceCarryMark>;
   /**
    * 회차 확정에서 **단가까지 확정된** 학생×반 줄(`rowKey`) — 이 줄엔 「단가」 표식을 달지 않는다(원장 2026-09-18
    * *"회차 확정의 단가가 확정되었으면 출석부 단가 라벨 지울것"*). 표시 전용 — 수학 줄은 정산 자체가 회차 단가를 읽어
@@ -281,6 +286,8 @@ export function MatrixTable({
    * (표시 축은 담임 ∪ 교시 담당, 금액 축은 담임뿐). 없으면 아무것도 안 그린다.
    */
   moneyNote?: string | null;
+  /** 티어 정산액에 든 표 밖 시수 안내 — 합계 줄이 정산액을 그릴 때만 보인다(프리랜서 표엔 안 선다). */
+  settlementNote?: string | null;
   /** 이 날짜 이전 칸은 강사가 수정 못 함(7일 창). null = 관리자 이상이라 제한 없음. */
   lockBefore?: string | null;
   /**
@@ -587,6 +594,7 @@ export function MatrixTable({
                     actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
                     classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                     termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    carryMark={showTermSessions ? carryMarksByRow?.[rowKey(g.classId, s.id)] ?? null : null}
                     noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
                     noInvoice={noInvoiceRows?.get(rowKey(g.classId, s.id)) ?? null}
                     unitSuffix={g.unitSuffix ?? null}
@@ -617,6 +625,7 @@ export function MatrixTable({
                 actualSalaryRate={salaryRatesByRow?.[rowKey(g.classId, s.id)]}
                 classBilled={showClassBilled ? billedView?.[rowKey(g.classId, s.id)] ?? null : undefined}
                 termSessions={showTermSessions ? termView?.[rowKey(g.classId, s.id)] ?? null : undefined}
+                    carryMark={showTermSessions ? carryMarksByRow?.[rowKey(g.classId, s.id)] ?? null : null}
                 noLessonZero={noLesson.zeroRows.has(rowKey(g.classId, s.id))}
                 noInvoice={noInvoiceRows?.get(rowKey(g.classId, s.id)) ?? null}
                 unitSuffix={g.unitSuffix ?? null}
@@ -726,6 +735,7 @@ export function MatrixTable({
                   money={money}
                   showLegacySettlement={!(showActualAmount && (salaryView || showActualSalary))}
                   moneyNote={moneyNote}
+                  settlementNote={settlementNote}
                   trailing={<ControlGuide countByRow={countByRow} fallback={totalCount} lang={lang} />}
                 />
               ) : (

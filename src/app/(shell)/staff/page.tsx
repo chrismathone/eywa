@@ -21,6 +21,7 @@ import { Toolbar } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
 import { ROLE_HIERARCHY } from "@/lib/auth/role-hierarchy";
+import { jobTitleRank } from "@/features/approvals/job-rank";
 import { canManageTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { ExcelMenu } from "@/components/excel-import/excel-menu";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
@@ -165,10 +166,14 @@ export default async function StaffPage({
       systemRole: displayRoleFor(s.id, s.systemRole, superAdminIds),
     }))
     // 배지뿐 아니라 정렬도 위장 role 기준으로 — 안 그러면 super_admin이 실제 role(master)로
-    // 맨 위(owner 위)에 뜨는데 배지는 '관리자'라 어긋난다(위장 role로 재정렬 → admin 그룹 이름순).
+    // 맨 위(owner 위)에 뜨는데 배지는 '관리자'라 어긋난다(위장 role로 재정렬).
+    // 같은 역할 안에서는 **직급 서열**(학원설정 직급 순서, 결재선 후보와 같은 규칙) → 이름(원장 2026-10-06
+    // "왜 부원장은 안 보여" — 이름순이면 정·허로 시작하는 부원장 둘이 관리자 그룹 맨 뒤라 다음 쪽으로 밀렸다).
     .sort(
       (a, b) =>
         ROLE_HIERARCHY[a.systemRole] - ROLE_HIERARCHY[b.systemRole] ||
+        jobTitleRank(a.jobTitle, settings.operations.jobTitles) -
+          jobTitleRank(b.jobTitle, settings.operations.jobTitles) ||
         a.displayName.localeCompare(b.displayName, "ko"),
     );
   let staff = all;

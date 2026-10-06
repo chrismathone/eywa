@@ -112,6 +112,11 @@ describe("buildHomeroomSinceIndex / homeroomSinceOf", () => {
     expect(homeroomSinceOf(i, "c1", "u1")).toBe("2026-08-01");
   });
 
+  it("원자료를 못 읽었으면 표식을 싣는다(`incomplete`) — 정상일 땐 키가 없다", () => {
+    expect(buildHomeroomSinceIndex([], "2026-06-01", true).incomplete).toBe(true);
+    expect(buildHomeroomSinceIndex([], "2026-06-01")).not.toHaveProperty("incomplete");
+  });
+
   it("반마다 따로 센다", () => {
     const i = buildHomeroomSinceIndex([tr("c1", "2026-08-10", "u1"), tr("c2", "2026-08-14", "u1")], "2026-06-01");
     expect(homeroomSinceOf(i, "c1", "u1")).toBe("2026-08-10");
