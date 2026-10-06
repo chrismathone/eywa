@@ -8,6 +8,7 @@ import type { SystemRole } from "@/lib/permissions";
 import { getSeatDuties } from "@/features/attendance/seat/server/duty";
 import { getDeskAttendanceOptin } from "@/features/attendance/live/server/desk-optin";
 import { isStaffInSubjectScope } from "@/features/staff/subject-scope";
+import { RESUME_FORM_TYPE } from "@/features/staff/resume";
 import { canSeeStaffMember, getViewerStaffScope } from "./subject-scope";
 import {
   WORK_DAYS,
@@ -39,6 +40,8 @@ export type StaffRow = {
   contractStart: string | null;
   contractEnd: string | null;
   contractTerms: string | null;
+  /** 근무시간 — 연결된 이력서의 '근무시간' 한 줄(원장 2026-10-06). 목록 '근무시간' 열. 이력서가 없거나 비었으면 null. */
+  workHours: string | null;
   contractSeq: number | null;
   /** 계약서 파일 첨부 여부(academy_documents kind='file' + staff_user_id) — 목록 '계약서' 열. */
   contractFile: boolean;
@@ -51,6 +54,21 @@ export type StaffRow = {
   bgColor: string | null;
   textColor: string | null;
 };
+
+type WorkHourRow = { staff_user_id: string; updated_at: string | null; work_hours: string | null };
+
+/** 직원별 근무시간 — 이력서가 둘 이상이면 가장 최근에 고친 것. 빈 값은 '없음'(null)으로 친다. */
+function latestWorkHoursByStaff(rows: readonly WorkHourRow[]): Map<string, string> {
+  const best = new Map<string, { at: string; text: string | null }>();
+  for (const r of rows) {
+    const at = r.updated_at ?? "";
+    const prev = best.get(r.staff_user_id);
+    if (!prev || at > prev.at) best.set(r.staff_user_id, { at, text: (r.work_hours ?? "").trim() || null });
+  }
+  const out = new Map<string, string>();
+  for (const [id, v] of best) if (v.text) out.set(id, v.text);
+  return out;
+}
 
 export async function getStaffList(): Promise<StaffRow[]> {
   const supabase = await createClient();
@@ -66,7 +84,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
   // 절단 위험 없음(현재 users 39·classes 129·enrolled 524).
   // 🔴 조회 실패는 던진다(2026-09-23 전수 점검 E4) — 종전엔 users 실패가 "직원 없음", 계약 실패가
   //    `.catch(() => [])`로 "계약 없음"처럼 정상 화면으로 보였다. 던지면 셸 error.tsx가 한글로 알린다.
-  const [{ data: users, error: usersErr }, { data: teaching, error: teachingErr }, contracts, contractFileRows] = await Promise.all([
+  const [{ data: users, error: usersErr }, { data: teaching, error: teachingErr }, contracts, contractFileRows, workHourRows] = await Promise.all([
     // 🔴 퇴사자(inactive)도 가져온다 — 종전 `.neq("status","inactive")`가 목록에서 통째로 빼는 바람에
     // 상태 칩 '퇴사'를 눌러도 **항상 0명**이었다(원장 제보 2026-08-07, 필터가 아니라 데이터가 없던 것).
     // 기본 화면은 페이지 쪽 기본 상태 필터(재직)가 좁힌다 — 여기서 자르면 필터가 영원히 못 본다.
@@ -107,6 +125,21 @@ export async function getStaffList(): Promise<StaffRow[]> {
             if (error) throw new Error(`계약서 파일 조회 실패: ${error.message}`);
             return (data ?? []) as { staff_user_id: string }[];
           }),
+    // 근무시간 — 직원 연결 이력서에서 **그 한 칸만** 뽑는다(form_data 통째 = 주민번호·계좌가 실린 문서라 안 끌어온다).
+    // 이력서는 restricted 행이라 게이트·클라이언트 규약은 위 계약 열과 같다(admin + tenant 명시).
+    !canSeeContracts
+      ? Promise.resolve([] as WorkHourRow[])
+      : admin
+          .from("academy_documents")
+          .select("staff_user_id, updated_at, work_hours:form_data->contract->>workHours")
+          .eq("tenant_id", viewer.tenantId)
+          .eq("form_type", RESUME_FORM_TYPE)
+          .not("staff_user_id", "is", null)
+          .limit(1000)
+          .then(({ data, error }) => {
+            if (error) throw new Error(`근무시간 조회 실패: ${error.message}`);
+            return (data ?? []) as unknown as WorkHourRow[];
+          }),
   ]);
 
   if (usersErr) throw new Error(`직원 목록 조회 실패: ${usersErr.message}`);
@@ -123,6 +156,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
       )
     : users;
   const hasContractFile = new Set(contractFileRows.map((r) => r.staff_user_id));
+  const workHoursOf = latestWorkHoursByStaff(workHourRows);
 
   // 사람별 현재 계약 = 가장 큰 차수(위에서 seq 오름차순이라 마지막 것이 최신).
   const currentContractOf = new Map<string, (typeof contracts)[number]>();
@@ -171,6 +205,7 @@ export async function getStaffList(): Promise<StaffRow[]> {
     contractEnd: currentContractOf.get(u.id)?.end_date ?? null,
     contractTerms: currentContractOf.get(u.id)?.terms ?? null,
     contractSeq: currentContractOf.get(u.id)?.seq ?? null,
+    workHours: workHoursOf.get(u.id) ?? null,
     contractFile: hasContractFile.has(u.id),
     updatedAt: ((u as { updated_at?: string | null }).updated_at ?? null),
     bgColor: ((u as { bg_color?: string | null }).bg_color ?? null),
