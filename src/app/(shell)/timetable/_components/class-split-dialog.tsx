@@ -11,7 +11,10 @@ import { SplitPeriodFields, type PeriodChoice } from "./class-split-period";
 import { DropModeTabs } from "./drop-mode-tabs";
 
 export type ClassSplitTarget = {
+  /** 학생 한 명이면 그 학생 id, 반 전체면 "". */
   studentId: string;
+  /** 반 전체 나누기(반 블록을 다른 반 칸에 놓았을 때) — 그날 재원생 전원에게 같은 나눔. */
+  wholeClass?: boolean;
   name: string;
   fromClassId: string;
   fromClassName: string;
@@ -50,7 +53,13 @@ export function ClassSplitDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, run] = useTransition();
   const req = useMemo(
-    () => ({ studentId: target.studentId, sourceClassId: target.fromClassId, targetClassId: target.toClassId, refDate: weekMonday }),
+    () => ({
+      studentId: target.studentId,
+      sourceClassId: target.fromClassId,
+      targetClassId: target.toClassId,
+      refDate: weekMonday,
+      wholeClass: target.wholeClass === true,
+    }),
     [target, weekMonday],
   );
 
@@ -124,7 +133,11 @@ export function ClassSplitDialog({
       >
         <DropModeTabs mode="split" onMove={onSwitchToMove} />
         <p className="text-foreground mt-3 text-sm font-bold">
-          <span className="text-text-dim font-normal">{target.name} · </span>수업 나누기
+          <span className="text-text-dim font-normal">
+            {target.name}
+            {ready?.studentCount ? ` ${ready.studentCount}명` : ""} ·{" "}
+          </span>
+          수업 나누기
         </p>
         <p className="text-text-faint mt-1 text-xs">
           <b className="text-text-dim">{target.fromClassName}</b>은 그대로 두고, 고른 시간만{" "}

@@ -67,6 +67,7 @@ export async function loadSplitContext(
   tenantId: string,
   args: { studentId: string; sourceClassId: string; targetClassId: string; refDate: string; onDate: string },
 ): Promise<SplitContext | { error: string }> {
+  const whole = !args.studentId;
   const [classes, schedules, student, enrollments] = await Promise.all([
     sb
       .from("classes")
@@ -78,13 +79,18 @@ export async function loadSplitContext(
       .select("class_id, day_of_week, start_time, end_time, valid_from, valid_to, classroom_id")
       .eq("tenant_id", tenantId)
       .in("class_id", [args.sourceClassId, args.targetClassId]),
-    sb.from("students").select("id, name").eq("tenant_id", tenantId).eq("id", args.studentId).maybeSingle(),
-    sb
-      .from("enrollments")
-      .select("id, start_date, end_date, attendance_days")
-      .eq("tenant_id", tenantId)
-      .eq("student_id", args.studentId)
-      .eq("class_id", args.sourceClassId),
+    // 반 전체 나누기(studentId 없음)면 학생·수강 조회를 건너뛴다 — 명단은 `loadClassRoster`가 따로 읽는다.
+    whole
+      ? Promise.resolve({ data: { id: "", name: "" }, error: null })
+      : sb.from("students").select("id, name").eq("tenant_id", tenantId).eq("id", args.studentId).maybeSingle(),
+    whole
+      ? Promise.resolve({ data: [{ id: "", start_date: "0000-01-01", end_date: null, attendance_days: [] }], error: null })
+      : sb
+          .from("enrollments")
+          .select("id, start_date, end_date, attendance_days")
+          .eq("tenant_id", tenantId)
+          .eq("student_id", args.studentId)
+          .eq("class_id", args.sourceClassId),
   ]);
   if (classes.error || schedules.error || student.error || enrollments.error) {
     return { error: "반·학생 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요." };
@@ -148,4 +154,32 @@ export async function loadSplitContext(
     sourceRows: live.filter((r) => r.class_id === source.id),
     unit,
   };
+}
+
+/**
+ * **반 전체 나누기**의 대상 = 그날(onDate) 원래 반에 수강이 열린 재원생(휴원 제외) + 등원 요일.
+ * 🔴 휴원(on_hold) 학생은 빼고, 고른 요일에 안 오는 학생(분리등원)은 호출부가 요일마다 거른다.
+ */
+export async function loadClassRoster(
+  sb: SupabaseClient,
+  tenantId: string,
+  classId: string,
+  onDate: string,
+): Promise<{ id: string; name: string; attendanceDays: string[] }[] | { error: string }> {
+  const { data, error } = await sb
+    .from("enrollments")
+    .select("student_id, start_date, end_date, on_hold, attendance_days, student:student_id ( id, name )")
+    .eq("tenant_id", tenantId)
+    .eq("class_id", classId);
+  if (error) return { error: "반 명단을 불러오지 못했습니다." };
+  type Row = { student_id: string; start_date: string; end_date: string | null; on_hold: boolean | null; attendance_days: string[] | null; student?: { id: string; name: string } | { id: string; name: string }[] | null };
+  const out = new Map<string, { id: string; name: string; attendanceDays: string[] }>();
+  for (const r of (data ?? []) as Row[]) {
+    if (r.on_hold) continue;
+    if (!(r.start_date <= onDate && (r.end_date === null || r.end_date > onDate))) continue;
+    const stu = one(r.student);
+    if (!stu || out.has(stu.id)) continue;
+    out.set(stu.id, { id: stu.id, name: stu.name, attendanceDays: r.attendance_days ?? [] });
+  }
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
